@@ -32,7 +32,14 @@ install_agentic_deps
 wait_for_agentic_servers_idle() {
     local timeout_seconds="${AIPERF_DRAIN_TIMEOUT_SECONDS:-1800}"
     local poll_seconds="${AIPERF_DRAIN_POLL_SECONDS:-10}"
-    local frontend_metrics_url="http://localhost:${PORT}/metrics"
+    local frontend_metrics_url=""
+
+    # Dynamo exposes its own active-request gauge. Native static routers do
+    # not promise a metrics endpoint, so their drain signal comes entirely
+    # from the explicit logical worker endpoints supplied by srt-slurm.
+    case "$FRAMEWORK" in
+        dynamo-*) frontend_metrics_url="http://localhost:${PORT}/metrics" ;;
+    esac
 
     "$AIPERF_PYTHON" - \
         "$timeout_seconds" \
@@ -70,13 +77,19 @@ def metric_sum(metrics: str, name: str) -> float:
 
 while time.monotonic() < deadline:
     try:
-        frontend_metrics = fetch_metrics(frontend_url)
-        frontend_active = metric_sum(frontend_metrics, "dynamo_frontend_active_requests")
+        frontend_active = 0.0
+        if frontend_url:
+            frontend_metrics = fetch_metrics(frontend_url)
+            frontend_active = metric_sum(
+                frontend_metrics, "dynamo_frontend_active_requests"
+            )
         worker_active = 0.0
         for worker_url in worker_urls:
             worker_metrics = fetch_metrics(worker_url)
             worker_active += metric_sum(worker_metrics, "vllm:num_requests_running")
             worker_active += metric_sum(worker_metrics, "vllm:num_requests_waiting")
+            worker_active += metric_sum(worker_metrics, "sglang:num_requests_running")
+            worker_active += metric_sum(worker_metrics, "sglang:num_requests_waiting")
         print(
             f"Agentic drain status: frontend_active={frontend_active:g} "
             f"worker_running_or_waiting={worker_active:g}",

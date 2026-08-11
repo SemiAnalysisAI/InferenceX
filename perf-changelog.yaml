@@ -5727,6 +5727,30 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2520
 
 - config-keys:
+    - dsr1-fp4-gb200-vllm-router-agentic-agg
+    - dsr1-fp4-gb200-vllm-router-agentic-agg-dep8
+    - dsr1-fp4-gb200-vllm-router-agentic-disagg
+    - dsr1-fp4-gb200-vllm-router-agentic-disagg-2p2d
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Validate first-class vLLM Router 0.1.15 through srt-slurm on GB200 without a Dynamo request plane."
+    - "Exercise three focused AgentX-fast topologies: single-node aggregate DEP4, two-node aggregate DEP8, and disaggregated one-prefill/two-decode with DEP4 on every logical endpoint."
+    - "Follow the official vLLM DeepSeek R1 Blackwell recipe: the staged nvidia/DeepSeek-R1-0528-NVFP4-v2 checkpoint, vLLM 0.25.1, DEP4 with expert parallelism, FP8 KV cache, and explicit prefix caching."
+    - "Pin the test deployment to exact SemiAnalysisAI/srt-slurm PR head b4bf6eb0abefa16c5108b339dabb903214a4c806, preserve each node-local backend Prometheus endpoint for AIPerf, and require the vllm: metric family before accepting results."
+    - "Launch one native vLLM hybrid data-parallel server per node-local pool and let the official Router expand each base URL into DP ranks through intra-node-data-parallel-size, matching vLLM's supported X-Data-Parallel-Rank contract."
+    - "Use consistent-hash routing for aggregate traffic and for both prefill and decode selection in the 1P/2D case; map AIPerf's stable conversation correlation ID to X-Session-ID so every turn returns to the same DP rank and reuses its conversation KV cache."
+    - "Use the 062126-256k AgentX corpus while enforcing the checkpoint's supported 163,840-token maximum in vLLM and through an explicit AIPERF_MAX_CONTEXT_LENGTH recipe contract, so trace selection cannot dispatch a context the server must reject."
+    - "Reserve 15% of GB200 HBM outside vLLM's KV-cache budget so long-context AgentX prefills retain activation workspace; the initial 0.90 setting left only 0.9-2.1 GiB free and reproducibly OOMed on 2.4-4.0 GiB runtime allocations."
+    - "Remove unsupported NCCL symmetric-memory and UCX overrides that invalidated CUDA graph capture before the Router could be exercised; retain the official FlashInfer FP4 MoE path."
+    - "Enable vLLM prompt-token details on both native Router deployments so AgentX captures response-level prompt-cache usage in addition to each logical backend's Prometheus metrics."
+    - "Verify the terminal Slurm state and exit code after log streaming so a failed benchmark cannot be reported as a successful GitHub job merely because its log tail ended cleanly."
+    - "Classify sgl-router and vllm-router as explicit runtime criteria in the CI scheduler, matching the router-specific framework keys before their broader engine prefixes."
+    - "Drain sequential native-router AgentX points from all explicit logical worker metrics without requiring a Dynamo frontend gauge; recognize both vllm:num_requests_* and sglang:num_requests_* worker families."
+    - "Require every logical vLLM backend URL advertised to Router to pass direct /health readiness after Router's expanded /workers count succeeds, closing the startup race where Router reports all configured ranks after only one healthy host per P/D pool."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2549
+
+- config-keys:
     - dsv4-fp4-gb300-dynamo-sglang-agentic-agg
     - dsv4-fp4-gb300-dynamo-sglang-agentic-disagg
   description:

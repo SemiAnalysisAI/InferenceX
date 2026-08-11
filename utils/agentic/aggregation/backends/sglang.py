@@ -27,7 +27,7 @@ class SglangBackend(ServerMetricsBackend):
     def matches(self, metrics: dict[str, dict[str, Any]], framework: str) -> bool:
         metric_names = set(metrics)
         return any(name.startswith("sglang:") for name in metric_names) or (
-            not metrics and framework.lower() == "sglang"
+            not metrics and framework.lower() in {"sglang", "sgl-router"}
         )
 
     def populate(

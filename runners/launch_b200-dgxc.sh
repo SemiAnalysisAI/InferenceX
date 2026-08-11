@@ -4,6 +4,8 @@
 SLURM_PARTITION="${SLURM_PARTITION:-gpu-2}"
 SLURM_ACCOUNT="${SLURM_ACCOUNT:-benchmark}"
 
+source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
+
 set -x
 
 # MODEL_PATH: Override with pre-downloaded paths on cluster-accessible storage.
@@ -145,14 +147,15 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     fi
 
     # Validate framework
-    if [[ $FRAMEWORK != "dynamo-sglang" && $FRAMEWORK != "dynamo-trt" && $FRAMEWORK != "dynamo-vllm" ]]; then
-        echo "Unsupported framework: $FRAMEWORK. Supported frameworks are: dynamo-trt, dynamo-sglang, dynamo-vllm"
+    if [[ $FRAMEWORK != "dynamo-sglang" && $FRAMEWORK != "dynamo-trt" && $FRAMEWORK != "dynamo-vllm" && $FRAMEWORK != "sgl-router" && $FRAMEWORK != "vllm-router" ]]; then
+        echo "Unsupported framework: $FRAMEWORK. Supported frameworks are: dynamo-trt, dynamo-sglang, dynamo-vllm, sgl-router, vllm-router"
         exit 1
     fi
 
-    # Multinode dsv4 currently only ships with the dynamo-vllm recipe
-    if [[ $MODEL_PREFIX == "dsv4" && $FRAMEWORK != "dynamo-vllm" ]]; then
-        echo "Unsupported framework for multinode dsv4: $FRAMEWORK (only dynamo-vllm)"
+    # Multinode dsv4 currently ships with Dynamo vLLM and the two native
+    # static-router integrations under test in this PR.
+    if [[ $MODEL_PREFIX == "dsv4" && $FRAMEWORK != "dynamo-vllm" && $FRAMEWORK != "sgl-router" && $FRAMEWORK != "vllm-router" ]]; then
+        echo "Unsupported framework for multinode dsv4: $FRAMEWORK"
         exit 1
     fi
 
@@ -165,10 +168,29 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         rm -rf "$SRT_REPO_DIR"
     fi
 
+    if [[ -n "${SRT_SLURM_REPOSITORY:-}" || -n "${SRT_SLURM_REF:-}" ]]; then
+        if [[ -z "${SRT_SLURM_REPOSITORY:-}" || -z "${SRT_SLURM_REF:-}" ]]; then
+            echo "SRT_SLURM_REPOSITORY and SRT_SLURM_REF must be set together" >&2
+            exit 1
+        fi
+        git clone "$SRT_SLURM_REPOSITORY" "$SRT_REPO_DIR" || exit 1
+        cd "$SRT_REPO_DIR" || exit 1
+        git checkout --detach "$SRT_SLURM_REF" || exit 1
+        if [[ "$(git rev-parse HEAD)" != "$SRT_SLURM_REF" ]]; then
+            echo "srt-slurm checkout does not match requested exact commit: $SRT_SLURM_REF" >&2
+            exit 1
+        fi
+        mkdir -p recipes/vllm/deepseek-v4 recipes/sglang/deepseek-v4 configs || exit 1
+        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" \
+            recipes/vllm/deepseek-v4 || exit 1
+        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4" \
+            recipes/sglang/deepseek-v4 || exit 1
+        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs" \
+            configs || exit 1
     # TODO(CJQ): make first class upon srt-slurm upstream refactor
-    if [[ "$IS_AGENTIC" == "1" && $MODEL_PREFIX == "kimik3" ]]; then
+    elif [[ "$IS_AGENTIC" == "1" && $MODEL_PREFIX == "kimik3" ]]; then
         # Direct-vLLM agentic experiment (Variant D): srt-slurm PR #278
-        # (kylliang/direct-aggregate-vllm) adds frontend.type: vllm — `vllm
+        # (kylliang/direct-aggregate-vllm, frontend.type: vllm) adds direct `vllm
         # serve` owns the OpenAI port itself, no Dynamo layer. The fork branch
         # carries PR #278 plus the multi-node extension (vLLM-native
         # --master-addr/--nnodes/--node-rank serve + headless non-leader
@@ -332,6 +354,8 @@ containers:
   dynamo-trtllm: "${SQUASH_FILE}"
   dynamo-sglang: "${SQUASH_FILE}"
   dynamo-vllm: "${SQUASH_FILE}"
+  sgl-router: "${SQUASH_FILE}"
+  vllm-router: "${SQUASH_FILE}"
   sglang-v0.5.11-cu130: "${SQUASH_FILE}"
   "${IMAGE}": "${SQUASH_FILE}"
   nginx-sqsh: "${NGINX_SQUASH_FILE}"
@@ -416,6 +440,12 @@ EOF
     tail -F -s 2 -n+1 "$LOG_FILE" --pid=$POLL_PID 2>/dev/null
 
     wait $POLL_PID
+
+    # Native router validation is all-or-nothing. Other B200 workflows retain
+    # the launcher's historical result-collection behavior.
+    if [[ "$FRAMEWORK" == "sgl-router" || "$FRAMEWORK" == "vllm-router" ]]; then
+        wait_for_slurm_job_success "$JOB_ID" || exit 1
+    fi
 
     set -x
 
