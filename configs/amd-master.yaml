@@ -884,6 +884,31 @@ kimik3-fp4-mi355x-vllm-agentic-mtp-dspark-prepatched-syn-curve:
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [1, 4, 10, 16], spec-decoding: mtp}
 
+kimik3-fp4-mi355x-vllm-agentic-mtp-dspark-prepatched-syn-c1:
+  # c1 retry, split out of the ladder.
+  #
+  # First attempt ran the full 3600 s and then aborted on the error gate:
+  # 8/74 profiling requests failed (10.8% vs a 10% limit). The failures were 6
+  # ConnectionRefusedError plus 2 InvalidInferenceResultError -- the server went
+  # away, it did not return bad answers.
+  #
+  # c1 is structurally fragile against a ratio gate: only ~74 requests fit in an
+  # hour at concurrency 1, so a handful of tail errors from a dying server is
+  # 10.8% where the same absolute count at c8 would be under 2%. The gate is not
+  # wrong, but at c1 it converts a late server death into a total loss.
+  image: aigmkt/kimi-k3-agentx@sha256:6eed69f39f036df3c7a61a2263159935a00a7c988a328677d502476a541c5c08
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: none, conc-list: [1], spec-decoding: mtp}
+
 kimik3-fp4-mi355x-vllm-agentic-mtp-dspark-prepatched-syn-c16:
   # c16 retry, split out of the ladder so it does not block the other points.
   #
