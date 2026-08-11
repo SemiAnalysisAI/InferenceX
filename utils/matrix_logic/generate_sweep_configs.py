@@ -191,6 +191,35 @@ def agentic_kv_offload_suffix(
     return f"kv{kv_offloading}-{kv_offload_backend['name']}"
 
 
+def multinode_agentic_exp_name(
+    model_code: str,
+    prefill: dict,
+    decode: dict,
+    conc_batch: list[int],
+    offload_suffix: str,
+) -> str:
+    """Build a multinode agentic exp-name that encodes topology, not just TP."""
+
+    def _worker_tag(worker: dict, role_prefix: str) -> str:
+        ep = worker.get(Fields.EP.value, 1)
+        dpa = worker.get(Fields.DP_ATTN.value, False)
+        tag = (
+            f"{role_prefix}{worker[Fields.NUM_WORKER.value]}"
+            f"x{worker[Fields.TP.value]}"
+        )
+        if ep != 1:
+            tag += f"ep{ep}"
+        if dpa:
+            tag += "dpa"
+        return tag
+
+    return (
+        f"{model_code}_{_worker_tag(prefill, 'p')}_{_worker_tag(decode, 'd')}"
+        f"_conc{'x'.join(str(c) for c in conc_batch)}"
+        f"{offload_suffix}"
+    )
+
+
 def component_metadata(benchmark: dict, config: dict) -> dict:
     """Resolve optional component metadata from its validated scope."""
     metadata = {}
@@ -220,13 +249,22 @@ def _freeze_matrix_value(value):
 
 
 def _multinode_parallelism_key(entry: dict) -> tuple:
-    """Identify a multi-node config independently of eval/concurrency fields."""
+    """Identify a multi-node config independently of eval/concurrency fields.
+
+    exp-name is derived from (and ignored alongside) conc: fixed-seq-len
+    exp-names never embed conc, but agentic exp-names do (each concurrency
+    gets its own single-conc allocation, per
+    MAX_MULTINODE_AGENTIC_CONCURRENCIES_PER_ALLOCATION), so entries for the
+    same topology at different concurrencies would otherwise falsely land in
+    different groups.
+    """
     ignored_fields = {
         Fields.CONC.value,
         Fields.RUN_EVAL.value,
         Fields.EVAL_ONLY.value,
         Fields.EVAL_CONC.value,
         Fields.EVAL_ALL_CONCS.value,
+        Fields.EXP_NAME.value,
     }
     return tuple(sorted(
         (key, _freeze_matrix_value(value))
@@ -247,8 +285,14 @@ def mark_eval_entries(matrix_values: list[dict], include_agentic: bool = False) 
         - Ignore entries with all conc values < MIN_EVAL_CONC
         - Mark the entry containing its highest eligible concurrency
         - Set eval-conc to that highest eligible concurrency
-    - Agentic evals are opt-in to preserve default throughput coverage. They
-      run GSM8K through the same lm-eval path as fixed-sequence 8k1k evals.
+    - Agentic evals are opt-in to preserve default throughput coverage.
+      - Single-node: run GSM8K through the same lm-eval path as fixed-sequence
+        8k1k evals, marking the highest-conc entry per (model, runner,
+        framework, precision) group.
+      - Multi-node: same policy as the fixed-seq-len multi-node case above
+        (highest eligible conc per distinct parallelism config, via
+        eval-conc), using SWE-bench since it doesn't support batched
+        concurrencies.
     """
     from collections import defaultdict
 
@@ -314,11 +358,19 @@ def mark_eval_entries(matrix_values: list[dict], include_agentic: bool = False) 
     # Default sweeps preserve every agentic throughput result.
     if include_agentic:
         ag_sn_groups = defaultdict(list)
+        # Multi-node agentic: same "highest eligible conc per distinct
+        # parallelism config" policy as the fixed-seq-len mn_groups above.
+        # SWE-bench doesn't support batched concurrencies (unlike lm-eval),
+        # so exactly one conc is picked per group, never the full list.
+        ag_mn_groups = defaultdict(list)
         for i, entry in enumerate(matrix_values):
             if entry.get(Fields.SCENARIO_TYPE.value) != 'agentic-coding':
                 continue
-            # Multi-node agentic eval is unsupported.
             if Fields.PREFILL.value in entry:
+                eval_concs = _eligible_eval_concs(entry)
+                if not eval_concs:
+                    continue
+                ag_mn_groups[_multinode_parallelism_key(entry)].append((i, eval_concs[-1]))
                 continue
             conc = entry[Fields.CONC.value]
             conc_val = max(conc) if isinstance(conc, list) else conc
@@ -331,6 +383,10 @@ def mark_eval_entries(matrix_values: list[dict], include_agentic: bool = False) 
             ag_sn_groups[key].append((i, conc_val))
         for entries in ag_sn_groups.values():
             eval_indices.add(max(entries, key=lambda item: item[1])[0])
+        for entries in ag_mn_groups.values():
+            best_idx, best_eval_conc = max(entries, key=lambda item: item[1])
+            eval_indices.add(best_idx)
+            mn_eval_conc[best_idx] = best_eval_conc
 
     for i, entry in enumerate(matrix_values):
         entry[Fields.RUN_EVAL.value] = i in eval_indices
@@ -346,12 +402,19 @@ def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
     Evals only run at 8k1k (matching mark_eval_entries), so entries at other
     sequence lengths (e.g. 1k1k) are passed through untouched rather than
     expanded into eval rows.
-    Single-node agentic entries use GSM8K; multi-node eval is unsupported.
-    Multi-node rows with the same engine topology are merged into one eval row
-    whose full concurrency list is run sequentially against the same engine.
+    Single-node agentic entries use GSM8K through the same lm-eval path as
+    fixed-sequence 8k1k evals. Multi-node agentic entries use SWE-bench,
+    which doesn't support batched concurrencies (unlike lm-eval): multi-node
+    agentic rows with the same topology are merged (to recombine any chunking
+    split), but only the highest resulting conc is marked for eval via
+    eval-conc, not the full list.
+    Multi-node fixed-seq-len rows with the same engine topology are merged
+    into one eval row whose full concurrency list is run sequentially
+    against the same engine.
     """
     expanded_entries: list[dict] = []
     multinode_indices: dict[tuple, int] = {}
+    multinode_agentic_indices: dict[tuple, int] = {}
 
     target_isl, target_osl = seq_len_stoi["8k1k"]
 
@@ -359,7 +422,27 @@ def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
         if entry.get(Fields.SCENARIO_TYPE.value) == 'agentic-coding':
             if Fields.PREFILL.value not in entry:
                 entry[Fields.RUN_EVAL.value] = True
-            expanded_entries.append(entry)
+                expanded_entries.append(entry)
+                continue
+
+            conc = entry[Fields.CONC.value]
+            conc_values = conc if isinstance(conc, list) else [conc]
+            parallelism_key = _multinode_parallelism_key(entry)
+            if parallelism_key in multinode_agentic_indices:
+                existing = expanded_entries[multinode_agentic_indices[parallelism_key]]
+                merged_conc = sorted(set(existing[Fields.CONC.value] + conc_values))
+                existing[Fields.CONC.value] = merged_conc
+                existing[Fields.EVAL_CONC.value] = max(merged_conc)
+                continue
+
+            eval_entry = {
+                **entry,
+                Fields.CONC.value: sorted(set(conc_values)),
+                Fields.RUN_EVAL.value: True,
+                Fields.EVAL_CONC.value: max(conc_values),
+            }
+            multinode_agentic_indices[parallelism_key] = len(expanded_entries)
+            expanded_entries.append(eval_entry)
             continue
 
         # Only 8k1k is eligible for evals; leave other sequence lengths as-is
@@ -776,11 +859,8 @@ def generate_full_sweep(args, all_config_data, runner_data):
                                 Fields.KV_OFFLOADING.value: kv_offloading,
                                 Fields.TOTAL_CPU_DRAM_GB.value: total_cpu_dram_gb,
                                 Fields.DURATION.value: duration,
-                                Fields.EXP_NAME.value: (
-                                    f"{model_code}_p{prefill[Fields.NUM_WORKER.value]}x{prefill[Fields.TP.value]}"
-                                    f"_d{decode[Fields.NUM_WORKER.value]}x{decode[Fields.TP.value]}"
-                                    f"_conc{'x'.join(str(c) for c in conc_batch)}"
-                                    f"{offload_suffix}"
+                                Fields.EXP_NAME.value: multinode_agentic_exp_name(
+                                    model_code, prefill, decode, conc_batch, offload_suffix
                                 ),
                                 Fields.DISAGG.value: disagg,
                                 Fields.SCENARIO_TYPE.value: "agentic-coding",
@@ -1074,11 +1154,8 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                                 Fields.KV_OFFLOADING.value: kv_offloading,
                                 Fields.TOTAL_CPU_DRAM_GB.value: total_cpu_dram_gb,
                                 Fields.DURATION.value: duration,
-                                Fields.EXP_NAME.value: (
-                                    f"{model_code}_p{prefill[Fields.NUM_WORKER.value]}x{prefill[Fields.TP.value]}"
-                                    f"_d{decode[Fields.NUM_WORKER.value]}x{decode[Fields.TP.value]}"
-                                    f"_conc{'x'.join(str(c) for c in conc_batch)}"
-                                    f"{offload_suffix}"
+                                Fields.EXP_NAME.value: multinode_agentic_exp_name(
+                                    model_code, prefill, decode, conc_batch, offload_suffix
                                 ),
                                 Fields.DISAGG.value: disagg,
                                 Fields.SCENARIO_TYPE.value: "agentic-coding",
