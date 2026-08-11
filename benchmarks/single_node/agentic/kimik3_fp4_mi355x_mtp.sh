@@ -260,21 +260,29 @@ mkdir -p "$RESULT_DIR"
 
 SERVER_PID=""
 LMCACHE_PID=""
+# One entry per LMCache MP server shard; see LMCACHE_N_SERVERS below. Stays a
+# single element (mirroring LMCACHE_PID) when sharding is off.
+LMCACHE_PIDS=()
 
 cleanup_agentic_services() {
     local exit_code=$?
     trap - EXIT INT TERM
     set +e
     stop_background_process_tree "$SERVER_PID" "vLLM server" 60
-    stop_background_process_tree "$LMCACHE_PID" "LMCache server"
+    local _i
+    for _i in "${!LMCACHE_PIDS[@]}"; do
+        stop_background_process_tree "${LMCACHE_PIDS[$_i]}" "LMCache server $_i"
+    done
     exit "$exit_code"
 }
 trap cleanup_agentic_services EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
+# wait_for_lmcache_ready <http_port> <pid> <log>
 wait_for_lmcache_ready() {
     { set +x; } 2>/dev/null
+    local http_port="$1" pid="$2" log="$3"
     # Generous by default. With memory pinning unavailable on ROCm, LMCache
     # disables its LazyMemoryAllocator and allocates the whole L1 pool UP FRONT,
     # so "ready" can be minutes away and scales with --l1-size-gb. A 180s budget
@@ -288,26 +296,26 @@ wait_for_lmcache_ready() {
     for ((i = 1; i <= attempts; i++)); do
         for p in "${paths[@]}"; do
             if curl --output /dev/null --silent --fail \
-                    "http://127.0.0.1:${LMCACHE_HTTP_PORT}${p}"; then
-                echo "LMCache server healthy after ${i}s (endpoint ${p})"
+                    "http://127.0.0.1:${http_port}${p}"; then
+                echo "LMCache server on :${http_port} healthy after ${i}s (endpoint ${p})"
                 set -x
                 return 0
             fi
         done
-        if [[ -n "$LMCACHE_PID" ]] && ! kill -0 "$LMCACHE_PID" 2>/dev/null; then
-            echo "LMCache server died before becoming healthy. Log follows:" >&2
-            cat "$LMCACHE_LOG" >&2 || true
+        if [[ -n "$pid" ]] && ! kill -0 "$pid" 2>/dev/null; then
+            echo "LMCache server on :${http_port} died before becoming healthy. Log follows:" >&2
+            cat "$log" >&2 || true
             exit 1
         fi
         # Heartbeat so a slow eager allocation is visibly distinct from a hang.
         if (( i % 60 == 0 )); then
-            echo "  ... still waiting for LMCache (${i}s / ${attempts}s), L1=${LMCACHE_L1_SIZE_GB:-?}GB"
+            echo "  ... still waiting for LMCache :${http_port} (${i}s / ${attempts}s), L1=${LMCACHE_L1_SHARD_GB:-${LMCACHE_L1_SIZE_GB:-?}}GB"
         fi
         sleep 1
     done
     echo "Timed out after ${attempts}s waiting for LMCache healthcheck." >&2
-    echo "Tried endpoints: ${paths[*]} on port ${LMCACHE_HTTP_PORT}. Log follows:" >&2
-    cat "$LMCACHE_LOG" >&2 || true
+    echo "Tried endpoints: ${paths[*]} on port ${http_port}. Log follows:" >&2
+    cat "$log" >&2 || true
     exit 1
 }
 
@@ -627,6 +635,63 @@ PYEOF
     LMCACHE_PORT="${LMCACHE_PORT:-5555}"
     LMCACHE_HTTP_PORT="${LMCACHE_HTTP_PORT:-8080}"
 
+    # Shard the MP server: one server PROCESS per TP rank, not one process for
+    # all of them.
+    #
+    # Measured on run 31471603763 (c10, synthetic 2.51, LMCache v0.5.3, one
+    # server): the arm scored 1210.96 tok/s/GPU against 1923.49 for the
+    # GPU-only c10 sibling, with TTFT p50 63.2s vs 4.65s. It was not the
+    # offload tier that lost -- it was the server process.
+    #
+    #   STORE     76,921 ops, 3,072 tokens each, p50 0.156s
+    #   RETRIEVE   2,488 ops,  ~30,167 tokens each, p50 0.148s
+    #
+    # 10x the payload in the same wall time means the store path is entirely
+    # fixed per-op cost, not bandwidth. And the ops are 1 chunk each because
+    # GetStoreMetadata stages `num_staging_tokens // chunk_size` chunks while
+    # num_staging_tokens grows by at most max_num_batched_tokens per scheduler
+    # step -- with mnbt 3000 and chunk 3072 that is one chunk, forever. mnbt
+    # cannot be raised: validate_mamba_step_alignment requires
+    # mnbt < 2 * block_size, and block_size 1536 is derived by vLLM from the
+    # fp8 page-size match, not settable from the command line.
+    #
+    # So the op count is fixed and each op costs what it costs. The remaining
+    # lever is where those ops run. The server logs:
+    #   Created AffinityThreadPool 'affinity-pool-0' with 8 worker slots:
+    #   up to 8 distinct affinity keys each bind to their own thread
+    # and exactly 8 distinct keys appeared -- one per TP rank, 1:1 with slots.
+    # Raising --max-workers adds slots that nothing binds to. All 8 threads
+    # live in ONE CPython process, so the per-op Python work (key hashing,
+    # reserve_write, event-bus publishes, future bookkeeping) serializes on
+    # one GIL. Total measured op time was 13,838s store + 787s retrieve =
+    # 14,625s inside a 3,628s run: the process was oversubscribed 4.03x.
+    # A retrieve that gates a request's scheduling queues behind that, which
+    # is exactly what the engine reported -- Deferred up to 9, Waiting 7.76
+    # vs 3.21 GPU-only, Running 5.64 vs 8.83, idle on 51% of steps vs 33%.
+    #
+    # n_servers=TP gives each rank its own process and its own GIL, taking the
+    # per-process load from 4.03x wall clock to ~0.50x. The connector supports
+    # it directly: lmcache.mp.server_urls is a list and n_servers is derived
+    # from its length (world_size % n_servers == 0 is asserted; 8 % 8 == 0).
+    # With n_servers == tp_size, kv_world_size becomes 1 and each rank is
+    # kv_worker_id 0 against its own server, so no key can collide.
+    #
+    # This does NOT fix the other half of the story: mla_only() is False for
+    # K3 because it is hybrid (MLA + KDA), so is_kv_writer is True on every
+    # rank and all 8 store the replicated MLA latent. That is an 8x write
+    # amplification which also cuts effective L1 from ~10M to ~1.26M unique
+    # tokens and drove the 275 eviction rounds seen in the log. Fixing it
+    # means making the MLA object group a rank-0-only writer upstream; do NOT
+    # paper over it by forcing mla_only=True, because the KDA state IS
+    # TP-sharded and every non-zero rank would read back rank 0's state.
+    #
+    # Set LMCACHE_N_SERVERS=1 to get the old single-process behaviour back.
+    LMCACHE_N_SERVERS="${LMCACHE_N_SERVERS:-$TP}"
+    if [ "$LMCACHE_N_SERVERS" -lt 1 ] || [ $(( TP % LMCACHE_N_SERVERS )) -ne 0 ]; then
+        echo "Error: LMCACHE_N_SERVERS=$LMCACHE_N_SERVERS must be >=1 and divide TP=$TP." >&2
+        exit 1
+    fi
+
     # L1 is SHM-backed: if it exceeds free /dev/shm, LMCache silently disables
     # SHM and falls back to a pickle path that crashes at load. Cap at 90% of
     # free /dev/shm so SHM stays enabled, and say so loudly -- the capped value
@@ -727,6 +792,22 @@ PYEOF
         fi
     fi
 
+    # Split the (already capped) host budget evenly across the shards, so the
+    # aggregate pinned pool is unchanged and stays inside the 512-907 GB range
+    # this fleet is known to tolerate. Each shard backs exactly the ranks bound
+    # to it, and every rank stores a comparable volume, so an even split is the
+    # right one -- there is no cross-shard borrowing to lose.
+    LMCACHE_L1_SHARD_GB=$(( LMCACHE_L1_SIZE_GB / LMCACHE_N_SERVERS ))
+    if [ "$LMCACHE_L1_SHARD_GB" -lt 1 ]; then
+        echo "Error: L1 ${LMCACHE_L1_SIZE_GB}G over $LMCACHE_N_SERVERS shards is under 1G per shard." >&2
+        exit 1
+    fi
+    # Ranks per shard. At the default n_servers=TP this is 1, so a shard needs
+    # only its own affinity slot plus one spare; the old 8 was sized for all
+    # eight ranks landing on one process.
+    LMCACHE_RANKS_PER_SERVER=$(( TP / LMCACHE_N_SERVERS ))
+    LMCACHE_WORKERS_PER_SERVER="${LMCACHE_WORKERS_PER_SERVER:-$(( LMCACHE_RANKS_PER_SERVER + 1 ))}"
+
     LMCACHE_L1_INIT_SIZE_GB="${LMCACHE_L1_INIT_SIZE_GB:-20}"
     # --max-gpu-workers 1 avoids concurrent-GPU-transfer stalls under heavy
     # async-load pressure; CPU-side workers stay at 8.
@@ -749,59 +830,44 @@ PYEOF
     # --max-gpu-workers/--max-cpu-workers, and --l1-read-ttl-seconds in
     # lmcache/v1/distributed/config.py.
     LMCACHE_PROFILE="${LMCACHE_PROFILE:-reference}"
-    echo "Starting LMCache MP server (profile=$LMCACHE_PROFILE, L1=${LMCACHE_L1_SIZE_GB}GB)..."
+    echo "Starting $LMCACHE_N_SERVERS LMCache MP server shard(s)" \
+         "(profile=$LMCACHE_PROFILE, L1=${LMCACHE_L1_SHARD_GB}GB each," \
+         "${LMCACHE_L1_SIZE_GB}GB total, ${LMCACHE_RANKS_PER_SERVER} rank(s)/shard)..."
+    # Profile args are everything that is IDENTICAL across shards; --port,
+    # --http-port and --l1-size-gb are appended per shard in the launch loop.
     case "$LMCACHE_PROFILE" in
       k2.7)
         export LMCACHE_BLOCKING_TIMEOUT_SECS="${LMCACHE_BLOCKING_TIMEOUT_SECS:-60}"
-        LMCACHE_CMD=(
-            lmcache server
-            --host "$LMCACHE_HOST"
-            --port "$LMCACHE_PORT"
-            --http-host "$LMCACHE_HOST"
-            --http-port "$LMCACHE_HTTP_PORT"
-            --l1-size-gb "$LMCACHE_L1_SIZE_GB"
+        LMCACHE_PROFILE_ARGS=(
             --l1-init-size-gb "$LMCACHE_L1_INIT_SIZE_GB"
             --l1-read-ttl-seconds "${LMCACHE_L1_READ_TTL_SECONDS:-7200}"
             --chunk-size "${LMCACHE_CHUNK_SIZE_K27:-256}"
-            --max-workers "${LMCACHE_MAX_WORKERS:-$((TP * 2))}"
+            --max-workers "${LMCACHE_MAX_WORKERS:-$(( LMCACHE_WORKERS_PER_SERVER * 2 ))}"
             --eviction-policy LRU
         )
         ;;
       k3upstream)
         # Upstream's validated K3 command, plus the worker and eviction tuning
         # needed by this TP8 agentic workload. The pinned LMCache revision
-        # supports these flags, and four workers serialize pairs of TP ranks.
+        # supports these flags.
         # Upstream's original command was:
         #   lmcache server --port 6555 --chunk-size 768 --max-workers 4 \
         #                  --l1-size-gb 100 --eviction-policy LRU
         # --chunk-size comes from the N derivation above (1536 under fp8, not
-        # upstream's bf16 768). L1 defaults to upstream's 100 GB here rather
-        # than the reference 512 GB: memory pinning is unavailable in the ROCm
-        # container, so LMCache allocates the WHOLE L1 pool before serving,
-        # and a smaller pool means a much shorter and more predictable
-        # bring-up. Raise it via LMCACHE_L1_SIZE_GB once the arm is green.
-        LMCACHE_CMD=(
-            lmcache server
-            --host "$LMCACHE_HOST"
-            --port "$LMCACHE_PORT"
-            --http-host "$LMCACHE_HOST"
-            --http-port "$LMCACHE_HTTP_PORT"
+        # upstream's bf16 768). --max-workers is now per SHARD: with one shard
+        # per rank a shard sees a single affinity key, so slots beyond that
+        # never bind (see the LMCACHE_N_SERVERS note above for the measurement
+        # that showed the old flat 8 was slots-in-one-GIL, not parallelism).
+        LMCACHE_PROFILE_ARGS=(
             --chunk-size "$LMCACHE_CHUNK_SIZE"
-            --max-workers "${LMCACHE_MAX_WORKERS:-$TP}"
-            --l1-size-gb "$LMCACHE_L1_SIZE_GB"
+            --max-workers "${LMCACHE_MAX_WORKERS:-$LMCACHE_WORKERS_PER_SERVER}"
             --eviction-trigger-watermark "$LMCACHE_EVICTION_WATERMARK"
             --eviction-ratio "$LMCACHE_EVICTION_RATIO"
             --eviction-policy LRU
         )
         ;;
       reference)
-        LMCACHE_CMD=(
-            lmcache server
-            --host "$LMCACHE_HOST"
-            --port "$LMCACHE_PORT"
-            --http-host "$LMCACHE_HOST"
-            --http-port "$LMCACHE_HTTP_PORT"
-            --l1-size-gb "$LMCACHE_L1_SIZE_GB"
+        LMCACHE_PROFILE_ARGS=(
             --l1-init-size-gb "$LMCACHE_L1_INIT_SIZE_GB"
             --max-gpu-workers "$LMCACHE_MAX_GPU_WORKERS"
             --max-cpu-workers "$LMCACHE_MAX_CPU_WORKERS"
@@ -818,27 +884,69 @@ PYEOF
         exit 1
         ;;
     esac
-    printf '%q ' "${LMCACHE_CMD[@]}" > "$RESULT_DIR/lmcache_command.txt"
-    printf '\n' >> "$RESULT_DIR/lmcache_command.txt"
-    "${LMCACHE_CMD[@]}" > "$LMCACHE_LOG" 2>&1 &
-    LMCACHE_PID=$!
-    echo "LMCache server PID: $LMCACHE_PID"
-    wait_for_lmcache_ready
+
+    # Launch every shard first, THEN wait. The eager L1 allocation is the long
+    # pole (minutes, and it scales with pool size); starting them serially and
+    # health-checking each in turn would add up to N x that. Sharding also cuts
+    # each pool to 1/N, so the allocations are shorter as well as concurrent.
+    : > "$RESULT_DIR/lmcache_command.txt"
+    LMCACHE_SERVER_URLS=""
+    LMCACHE_HTTP_PORTS=()
+    LMCACHE_LOGS=()
+    for _shard in $(seq 0 $(( LMCACHE_N_SERVERS - 1 ))); do
+        _shard_port=$(( LMCACHE_PORT + _shard ))
+        _shard_http=$(( LMCACHE_HTTP_PORT + _shard ))
+        if [ "$LMCACHE_N_SERVERS" -eq 1 ]; then
+            _shard_log="$LMCACHE_LOG"
+        else
+            _shard_log="${LMCACHE_LOG%.log}_${_shard}.log"
+        fi
+        LMCACHE_CMD=(
+            lmcache server
+            --host "$LMCACHE_HOST"
+            --port "$_shard_port"
+            --http-host "$LMCACHE_HOST"
+            --http-port "$_shard_http"
+            --l1-size-gb "$LMCACHE_L1_SHARD_GB"
+            "${LMCACHE_PROFILE_ARGS[@]}"
+        )
+        printf '%q ' "${LMCACHE_CMD[@]}" >> "$RESULT_DIR/lmcache_command.txt"
+        printf '\n' >> "$RESULT_DIR/lmcache_command.txt"
+        "${LMCACHE_CMD[@]}" > "$_shard_log" 2>&1 &
+        LMCACHE_PIDS+=($!)
+        LMCACHE_HTTP_PORTS+=("$_shard_http")
+        LMCACHE_LOGS+=("$_shard_log")
+        LMCACHE_SERVER_URLS="${LMCACHE_SERVER_URLS:+$LMCACHE_SERVER_URLS,}tcp://${LMCACHE_HOST}:${_shard_port}"
+        echo "LMCache shard $_shard PID ${LMCACHE_PIDS[-1]} on :${_shard_port} (http :${_shard_http})"
+    done
+    # Kept for the single-shard log messages and for anything downstream that
+    # still reads the scalar.
+    LMCACHE_PID="${LMCACHE_PIDS[0]}"
+    for _shard in "${!LMCACHE_PIDS[@]}"; do
+        wait_for_lmcache_ready "${LMCACHE_HTTP_PORTS[$_shard]}" \
+                               "${LMCACHE_PIDS[$_shard]}" \
+                               "${LMCACHE_LOGS[$_shard]}"
+    done
 
     # LMCacheMPConnector is registered in this image's vLLM (verified against
     # KVConnectorFactory), so the reference profile needs no
     # kv_connector_module_path. The k2.7 profile passes it (and the ZMQ-style
     # lmcache.mp.host) exactly as kimik2.7_fp4_mi355x.sh does.
+    #
+    # Both profiles address the shards through lmcache.mp.server_urls rather
+    # than the scalar lmcache.mp.port: the connector derives n_servers from the
+    # length of that list, and asserts world_size % n_servers == 0. It is a
+    # comma-separated string here (the connector accepts a list or a string)
+    # because this has to survive a JSON round trip through the serve command.
     if [ "$LMCACHE_PROFILE" = "k2.7" ]; then
-        LMCACHE_CONNECT_HOST="${LMCACHE_CONNECT_HOST:-tcp://$LMCACHE_HOST}"
         OFFLOAD_ARGS=(
             --kv-transfer-config
-            "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_connector_module_path\":\"lmcache.integration.vllm.lmcache_mp_connector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.host\":\"$LMCACHE_CONNECT_HOST\",\"lmcache.mp.port\":$LMCACHE_PORT}}"
+            "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_connector_module_path\":\"lmcache.integration.vllm.lmcache_mp_connector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.server_urls\":\"$LMCACHE_SERVER_URLS\"}}"
         )
     else
         OFFLOAD_ARGS=(
             --kv-transfer-config
-            "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.port\":$LMCACHE_PORT,\"lmcache.mp.mq_timeout\":$LMCACHE_MQ_TIMEOUT}}"
+            "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.server_urls\":\"$LMCACHE_SERVER_URLS\",\"lmcache.mp.mq_timeout\":$LMCACHE_MQ_TIMEOUT}}"
         )
     fi
     ;;

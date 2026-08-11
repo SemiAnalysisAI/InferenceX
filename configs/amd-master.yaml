@@ -1005,12 +1005,27 @@ kimik3-fp4-mi355x-vllm-agentic-mtp-dspark-prepatched-syn-lmc-c10:
   # LMCache is v0.5.3, the first release containing the Kimi-K3 MLA hotfix this
   # recipe used to pin by commit.
   #
-  # fp8 KV is why this arm is worth retrying. Under bf16 the unified block N is
-  # 768, `align` requires N <= max_num_batched_tokens < 2N, and the resulting
-  # 1464-token prefill chunk collided with the spec-decode clamp and serialised
-  # the engine to Running:1. fp8 lifts N to 1536 and the chunk to ~3000, the
-  # specific condition predicted to clear it. If Running still pins at 1, the
-  # chunk size was not the cause.
+  # Second attempt. The first (run 31471603763) scored 1210.96 tok/s/GPU
+  # against 1923.49 for the GPU-only c10 sibling, TTFT p50 63.2s vs 4.65s.
+  #
+  # It was not the prefill chunk and not the offload tier. fp8 did lift the
+  # unified block N to 1536 and the chunk to 3000 as predicted, and Running did
+  # not pin at 1 -- it averaged 5.64. The loss was the LMCache server PROCESS:
+  # 76,921 single-chunk STOREs at p50 0.156s each, against 2,488 RETRIEVEs
+  # carrying ~10x the payload in the same 0.148s, i.e. pure per-op cost. All of
+  # it ran on eight affinity threads inside one CPython process -- 14,625s of
+  # measured op time in a 3,628s run, a 4.03x oversubscribed GIL. Async loads
+  # queued behind it and the engine idled on 51% of steps (Deferred up to 9,
+  # Waiting 7.76 vs 3.21).
+  #
+  # The recipe now shards the MP server one process per TP rank via
+  # lmcache.mp.server_urls, taking each process to ~0.50x wall clock. The
+  # aggregate L1 pool is unchanged (907GB total, 8 x ~113GB).
+  #
+  # Read Waiting/Deferred and the engine idle fraction before the throughput
+  # number. If Deferred is still non-zero, the remaining term is the 8x write
+  # amplification from mla_only() being False on this hybrid model, which is an
+  # upstream fix, not a tuning one.
   image: aigmkt/kimi-k3-agentx@sha256:6eed69f39f036df3c7a61a2263159935a00a7c988a328677d502476a541c5c08
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
