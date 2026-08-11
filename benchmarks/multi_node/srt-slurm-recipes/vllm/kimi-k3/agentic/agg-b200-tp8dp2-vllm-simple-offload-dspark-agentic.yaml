@@ -1,10 +1,9 @@
-name: "kimik3-vllm-agg-b200-tep16-simple-offload-dspark-agentic"
+name: "kimik3-vllm-agg-b200-tp8dp2-simple-offload-dspark-agentic"
 
-# Official balanced multi_node_tep profile for two 8xB200 nodes. TP16 shards
-# attention and dense layers across all GPUs while EP16 shards MoE experts,
-# keeping vLLM's cross-node-unsupported latent-MoE fused tail out of the
-# selected as-shipped code path without modifying the serving engine.
-# https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=b200&nodes=2&strategy=multi_node_tep
+# Two-node DEP profile: TP8 stays within each NVSwitch node, DP2 replicates
+# attention/dense across nodes, and EP16 shards the 896 experts across all GPUs.
+# This keeps FlashInfer fused collectives node-local while using shipped vLLM.
+# https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=b200&nodes=2&strategy=multi_node_dep
 model:
   path: "kimik3"
   container: "vllm/vllm-openai:nightly-b22afe45ac797ae58e67a7a3ad79ee5714024420@sha256:144356af876edbb3a4bfee23e1444b196cc3fdadd0a0c1a7f11f721756972a21"
@@ -45,10 +44,9 @@ backend:
   type: vllm
   connector: null
   aggregated_environment:
-    # These are shipped vLLM controls for the portable cross-node TP
-    # collectives used by attention and dense layers on the B200 RDMA fabric.
-    VLLM_ALLREDUCE_USE_FLASHINFER: "0"
-    VLLM_ALLREDUCE_USE_SYMM_MEM: "0"
+    # TP8 collectives stay within each B200 NVSwitch domain.
+    VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION: "1"
+    VLLM_ALLREDUCE_USE_FLASHINFER: "1"
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
     VLLM_USE_V2_MODEL_RUNNER: "1"
@@ -65,7 +63,8 @@ backend:
   vllm_config:
     aggregated:
       served-model-name: "moonshotai/Kimi-K3"
-      tensor-parallel-size: 16
+      tensor-parallel-size: 8
+      data-parallel-size: 2
       enable-expert-parallel: true
       trust-remote-code: true
       load-format: fastsafetensors
@@ -73,11 +72,6 @@ backend:
       # Keep headroom for the first FlashInfer MXFP4 MoE workspace.
       gpu-memory-utilization: 0.90
       no-enable-flashinfer-autotune: true
-      # Avoid the custom communicator's MNNVL probe on the cross-node group.
-      disable-custom-all-reduce: true
-      # Cross-node B200 has no MNNVL workspace. Upstream eager mode avoids
-      # tracing the unsupported FlashInfer all-reduce fusion during graph capture.
-      enforce-eager: true
       max-model-len: 1048576
       kv-cache-dtype: fp8
       attention-config: '{"use_prefill_query_quantization":true,"mla_prefill_backend":"flashinfer"}'
