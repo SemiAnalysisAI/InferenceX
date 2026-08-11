@@ -5786,3 +5786,9 @@
     - "Use the digest-pinned 2026-08-10 upstream vLLM nightly and direct Inferact/Kimi-K3-DSpark model ID as shipped, with no local compatibility layer or installed serving-engine rewrite"
     - "Use node-local TP8 FlashInfer collectives and cross-node DP2/EP16 so the digest-pinned upstream serving engine runs without a compatibility layer or source rewrite"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2475
+
+- config-keys:
+    - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
+  description:
+    - "Extend the SimpleCPUOffloadConnector grid to c8/c12/c16/c20/c24/c28/c32/c48/c64 to locate its crossover against the resident curve"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2475
