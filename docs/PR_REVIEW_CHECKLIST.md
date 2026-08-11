@@ -8,9 +8,9 @@
 
 When [CODEOWNER](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/CODEOWNERS) from the respective hardware AI chip company is reviewing & approving their respective PRs, please fill in the following form in your approval comment before pinging an core maintainer for final approval
 
-We welcome InferenceX partners & the community to submit PRs for reasonable additions to this checklist — or deletions — that follow the principles of InferenceX, and the general principle that deleting a guideline should be as easy a process as adding a new one.
+We welcome InferenceX partners and the community to submit PRs that make reasonable additions to or deletions from this checklist, provided they follow the principles of InferenceX. The general principle is that deleting a guideline should be as easy as adding one.
 
-We also welcome InferenceX partners & the ML community to improve [codeowner-signoff-verify.yml](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/workflows/codeowner-signoff-verify.yml) — the CI bot that independently verifies these sign-offs — and make it more rigorous too.
+We also welcome InferenceX partners and the ML community to improve [codeowner-signoff-verify.yml](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/workflows/codeowner-signoff-verify.yml), the CI bot that independently verifies these sign-offs, and make it more rigorous too.
 
 ## Template
 ```
