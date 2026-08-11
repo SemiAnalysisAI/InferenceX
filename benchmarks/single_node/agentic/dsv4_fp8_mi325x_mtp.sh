@@ -37,7 +37,13 @@ export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="vllm:"
 export VLLM_ENGINE_READY_TIMEOUT_S=10800
 export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_USE_AITER_MOE=1
-export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
+if (( EP_SIZE > 1 )); then
+    # Isolate the INT4 Quick Reduce path as the next TEP correctness variable.
+    # Pure TP keeps the previously measured optimization unchanged.
+    unset VLLM_ROCM_QUICK_REDUCE_QUANTIZATION
+else
+    export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
+fi
 export PYTHONNOUSERSITE=1
 
 SERVER_LOG="$RESULT_DIR/server.log"
@@ -184,14 +190,6 @@ if (( EP_SIZE > 1 )); then
     EP_ARGS=(--enable-expert-parallel)
 fi
 
-GRAPH_ARGS=(--compilation-config '{"mode":3,"cudagraph_mode":"FULL_DECODE_ONLY"}')
-if (( EP_SIZE > 1 )); then
-    # Match vLLM's upstream MI325X expert-parallel correctness recipes. The
-    # graph-enabled TEP path returns intermittent metadata-only responses for
-    # this model, while pure TP retains the measured decode-graph fast path.
-    GRAPH_ARGS=(--enforce-eager)
-fi
-
 USE_VLLM_ROUTER=false
 VLLM_BACKEND_PORT="$PORT"
 if [[ "$DP_ATTENTION" == "true" ]]; then
@@ -256,7 +254,7 @@ VLLM_CMD=(
     --block-size 256
     --max-num-batched-tokens 8192
     --max-num-seqs "$MAX_NUM_SEQS"
-    "${GRAPH_ARGS[@]}"
+    --compilation-config '{"mode":3,"cudagraph_mode":"FULL_DECODE_ONLY"}'
     --speculative-config "$SPEC_CONFIG"
     --tokenizer-mode deepseek_v4
     --tool-call-parser deepseek_v4
