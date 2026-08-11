@@ -7,6 +7,10 @@ PARTITION="compute"
 SQUASH_DIR="/raid/hf-hub-cache/runtime-cache/enroot"
 SQUASH_FILE="$SQUASH_DIR/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 LOCK_FILE="${SQUASH_FILE}.lock"
+# Some MI300X compute images do not provision the login user's /run/user/$UID
+# directory. Keep Enroot's runtime state node-local instead of inheriting the
+# controller's XDG_RUNTIME_DIR, which is not valid on those compute nodes.
+export XDG_RUNTIME_DIR="/tmp/enroot-runtime-${UID}"
 
 # Route spec-decoding=mtp configs to the _mtp benchmark script (parity with
 # the h200 launchers, which have carried SPEC_SUFFIX since #392).
@@ -50,6 +54,8 @@ tar -C "$GITHUB_WORKSPACE" \
 sbcast --jobid="$JOB_ID" --force "$LOCAL_WORKSPACE_TAR" "$REMOTE_WORKSPACE_TAR"
 srun --jobid="$JOB_ID" --job-name="$RUNNER_NAME" bash -c "
     set -euo pipefail
+    mkdir -p '$XDG_RUNTIME_DIR'
+    chmod 700 '$XDG_RUNTIME_DIR'
     rm -rf '$REMOTE_WORKSPACE'
     mkdir -p '$REMOTE_WORKSPACE'
     tar -C '$REMOTE_WORKSPACE' -xzf '$REMOTE_WORKSPACE_TAR'
