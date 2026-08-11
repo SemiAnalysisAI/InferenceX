@@ -5727,6 +5727,24 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2520
 
 - config-keys:
+    - qwen3-0.6b-fp16-mi300x-vllm-srt-agg
+    - qwen3-0.6b-fp16-mi300x-vllm-srt-disagg
+    - qwen3-0.6b-fp16-mi355x-sglang-srt-agg
+    - qwen3-0.6b-fp16-mi355x-sglang-srt-disagg
+    - qwen3.5-fp8-mi355x-sglang-srt-disagg
+  description:
+    - "Add native AMD orchestration to srt-slurm and validate aggregate plus disaggregated serving on MI300X and MI355X without Dynamo, NIXL, NATS, or etcd."
+    - "Use the native vLLM Router with MoRIIO for MI300X disaggregation and the native SGLang Router with AMD MoRI for MI355X disaggregation; aggregate paths use the corresponding direct backend."
+    - "Run the repository's unchanged utils/bench_serving/benchmark_serving.py through srt-slurm's custom benchmark contract for fixed-sequence validation."
+    - "Port the production Qwen3.5-397B-A17B-FP8 MI355X topology as two full TP8 nodes, one prefill and one decode, using lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260809, SGLang Router, MoRI, AITer attention, FP8 KV cache, and an 8192-input/1024-output concurrency-8 workload."
+    - "Use the current steady ROCm image because its MoRI IO path contains the merged automatic dma-buf fallback for large GPU memory registrations; the prior 20260728 image used plain ibv_reg_mr and failed reproducibly above 3.75 GiB."
+    - "Propagate runtime Slurm options to native static routers so the router inherits the same writable/remapped container contract as workers and benchmarks."
+    - "Pin the InferenceX launcher to the exact srt-slurm AMD runtime commit and validate model, container, backend, router, and MoRI package identity before serving."
+    - "Stage every MI355X model into the standard $HF_HOME/hub layout used by all aggregate, prefill, decode, and benchmark processes, avoiding a second flat cache tree on cold clusters."
+    - "Recreate missing MI300X engine and router squashfs files from their pinned public vLLM images under per-node locks, validate each temporary squashfs, and publish it atomically before submission."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2542
+
+- config-keys:
     - dsv4-fp4-gb300-dynamo-sglang-agentic-agg
     - dsv4-fp4-gb300-dynamo-sglang-agentic-disagg
   description:
