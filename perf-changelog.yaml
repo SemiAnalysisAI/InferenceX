@@ -5790,6 +5790,12 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2309
 
 - config-keys:
+    - dsv4-fp4-b300-vllm-agentic-mtp
+  description:
+    - "Update the B300 DSV4 AgentX MTP image and SimpleCPU sweep through c576."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2536
+
+- config-keys:
     - qwen3-0.6b-fp16-mi300x-atom-infera-srt-agg
     - qwen3-0.6b-fp16-mi300x-atom-infera-srt-disagg
     - qwen3-0.6b-fp16-mi355x-atom-infera-srt-agg
