@@ -246,7 +246,11 @@ SELECTED_NODELIST_STR=$(echo "$SELECTED_NODES" | tr '\n' ',' | sed 's/,$//')
 
 # Docker privilege detection — evaluated per-node since group membership varies.
 # Exported as a snippet so every srun participant resolves it locally.
-export DOCKER_CMD_DETECT='if docker ps &>/dev/null 2>&1; then DOCKER_CMD=docker; else DOCKER_CMD="sudo docker"; fi'
+# Order: (1) plain docker if the socket is reachable; (2) sg-docker wrapper if the
+# user is a docker-group member but Slurm didn't activate the group in the step's
+# credentials (common here); (3) sudo docker as a last resort.
+SG_DOCKER_WRAPPER="${DI_REPO_DIR}/benchmarks/multi_node/amd_utils/docker_sg.sh"
+export DOCKER_CMD_DETECT="if docker ps &>/dev/null 2>&1; then DOCKER_CMD=docker; elif sg docker -c 'docker ps' &>/dev/null 2>&1; then DOCKER_CMD='${SG_DOCKER_WRAPPER}'; else DOCKER_CMD='sudo docker'; fi"
 
 # Update SLURM environment variables
 export SLURM_NNODES=$NUM_NODES

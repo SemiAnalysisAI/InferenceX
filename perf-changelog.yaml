@@ -5770,3 +5770,13 @@
     - "models.yaml: add mtp_flags (--speculative-algorithm EAGLE --speculative-eagle-topk 1) to DeepSeek-V4-Pro-AgentX; num-steps/num-draft-tokens are derived from DECODE_MTP_SIZE in server_sglang.sh. DeepSeek-V4's MTP head is a native NextN/EAGLE draft shipped with the model, so no --speculative-draft-model-path is needed."
     - "Two search-space arms: TP8/EP1 no-DP at conc-list [2,4,8,16,32], and TP8/EP8/DPA (ep=8, dp-attn=true) at conc-list [64,96,128], both on image lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260719."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2309
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-sglang-disagg
+    - qwen3.5-fp8-mi355x-sglang-disagg-mtp
+  description:
+    - "Bump qwen3.5-fp8-mi355x-sglang-disagg image from v0.5.14 to v0.5.16 (3-5% throughput improvement) and switch from TP8P+TP8D (16 GPU) to TP4P+TP8D (12 GPU) — TP4 prefill delivers identical decode interactivity with 24-31% better throughput/GPU."
+    - "Add qwen3.5-fp8-mi355x-sglang-disagg-mtp: EAGLE speculative decoding (MTP depth 3) on the TP4P+TP8D topology. MTP improves TPOT by 3-14% at conc≤64; at conc=128 the decode TP8 bottleneck causes MTP collapse (-38% tput/GPU), which is resolved by switching to TP4D (see Section 13 of the Qwen3.5 DI perf tuning analysis)."
+    - "models.yaml: add mtp_flags (--speculative-algorithm EAGLE --speculative-eagle-topk 1) to Qwen3.5-397B-A17B-FP8."
+    - "Infra: add docker_sg.sh wrapper and update job.slurm DOCKER_CMD_DETECT to use sg-docker fallback for nodes where Slurm doesn't activate the docker supplementary group."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2557
