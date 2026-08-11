@@ -117,23 +117,34 @@ srun --ntasks-per-node=1 bash -c '
     flock -u "\$lock_fd"
     exec {lock_fd}>&-
   }
+  ensure_git_checkout() {
+    local target="\$1"
+    local repository="\$2"
+    local commit="\$3"
+    local temporary="\${target}.tmp.\${SLURM_JOB_ID}.\${BASHPID}"
+    local quarantine="\${target}.incomplete.\${SLURM_JOB_ID}.\${BASHPID}"
+    if [[ ! -d "\$target/.git" ]]; then
+      if [[ -e "\$target" ]]; then
+        mv "\$target" "\$quarantine"
+      fi
+      git clone --quiet "\$repository" "\$temporary"
+      git -C "\$temporary" fetch --quiet origin "\$commit"
+      git -C "\$temporary" checkout --quiet --detach "\$commit"
+      test "\$(git -C "\$temporary" rev-parse HEAD)" = "\$commit"
+      mv "\$temporary" "\$target"
+    else
+      git -C "\$target" fetch --quiet origin "\$commit"
+      git -C "\$target" checkout --quiet --detach "\$commit"
+      test "\$(git -C "\$target" rev-parse HEAD)" = "\$commit"
+    fi
+  }
   ensure_container_image "${ENGINE_SQSH}" "${ENGINE_IMAGE}"
   if [[ -n "${AUX_IMAGE}" ]]; then
     ensure_container_image "${AUX_SQSH}" "${AUX_IMAGE}"
   fi
-  if [[ ! -d "\$srt_runtime/.git" ]]; then
-    git clone --quiet "${SRT_SLURM_REPOSITORY}" "\$srt_runtime"
-  fi
-  git -C "\$srt_runtime" fetch --quiet origin "${SRT_SLURM_COMMIT}"
-  git -C "\$srt_runtime" checkout --quiet --detach "${SRT_SLURM_COMMIT}"
-  test "\$(git -C "\$srt_runtime" rev-parse HEAD)" = "${SRT_SLURM_COMMIT}"
+  ensure_git_checkout "\$srt_runtime" "${SRT_SLURM_REPOSITORY}" "${SRT_SLURM_COMMIT}"
   make -C "\$srt_runtime" --no-print-directory setup ARCH=x86_64
-  if [[ ! -d "\$infera_runtime/.git" ]]; then
-    git clone --quiet "${INFERA_REPOSITORY}" "\$infera_runtime"
-  fi
-  git -C "\$infera_runtime" fetch --quiet origin "${INFERA_COMMIT}"
-  git -C "\$infera_runtime" checkout --quiet --detach "${INFERA_COMMIT}"
-  test "\$(git -C "\$infera_runtime" rev-parse HEAD)" = "${INFERA_COMMIT}"
+  ensure_git_checkout "\$infera_runtime" "${INFERA_REPOSITORY}" "${INFERA_COMMIT}"
   tar -xzf "/tmp/inferencex-benchmark-\${SLURM_JOB_ID}.tar.gz" -C "\$runtime"
   printf "%s\\n" "${GITHUB_SHA:-unknown}" > "\$runtime/.inferencex-source-head"
 '

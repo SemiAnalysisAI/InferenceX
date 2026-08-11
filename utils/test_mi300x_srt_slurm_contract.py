@@ -113,10 +113,17 @@ def test_official_matrix_routes_disagg_through_the_pinned_srt_launcher():
     assert 'unsquashfs -s "\\$tmp"' in launcher
     assert 'mv "\\$tmp" "\\$target"' in launcher
     assert 'REMOTE_SRT_RUNTIME="${REMOTE_BASE}/runtime/srt-slurm-${SRT_SLURM_COMMIT}"' in launcher
-    assert 'git -C "\\$srt_runtime" checkout --quiet --detach "${SRT_SLURM_COMMIT}"' in launcher
+    assert (
+        'ensure_git_checkout "\\$srt_runtime" "${SRT_SLURM_REPOSITORY}" '
+        '"${SRT_SLURM_COMMIT}"'
+        in launcher
+    )
     assert 'make -C "\\$srt_runtime" --no-print-directory setup ARCH=x86_64' in launcher
     assert 'export SRTCTL_RUNTIME_SOURCE_DIR="$REMOTE_SRT_RUNTIME"' in launcher
     assert '#SBATCH --nodes=7' in launcher
+    assert 'ensure_git_checkout()' in launcher
+    assert 'mv "\\$target" "\\$quarantine"' in launcher
+    assert 'mv "\\$temporary" "\\$target"' in launcher
     assert "scancel" not in launcher
 
 
