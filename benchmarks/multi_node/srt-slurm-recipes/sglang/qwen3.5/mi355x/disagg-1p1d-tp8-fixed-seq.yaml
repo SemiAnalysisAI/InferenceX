@@ -40,7 +40,7 @@ resources:
   gpus_per_decode: 8
 
 frontend:
-  type: sgl-router
+  type: sglang
   enable_multiple_frontends: false
   args:
     policy: round_robin

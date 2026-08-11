@@ -28,7 +28,7 @@ resources:
   gpus_per_agg: 1
 
 frontend:
-  type: sgl-router
+  type: sglang
   enable_multiple_frontends: false
   args:
     policy: round_robin
