@@ -92,7 +92,7 @@ For multi-node configurations, `--all-evals` creates one eval job per engine top
 
 Single-node fixed-sequence results may include `power_valid`, `avg_power_w`, `avg_total_gpu_power_w`, `total_gpu_energy_j`, and joules per query/input/output/total token. Invalid telemetry records `power_valid: 0` without energy metrics and fails only with `REQUIRE_POWER=1`.
 
-Multinode disaggregated results add `prefill_gpu_energy_j`, `decode_gpu_energy_j`, `prefill_joules_per_input_token`, and `decode_joules_per_output_token`. Role energy covers the full formal benchmark window, not kernel-level phases.
+Multinode disaggregated results add `prefill_gpu_energy_j`, `decode_gpu_energy_j`, `prefill_avg_power_w`, `decode_avg_power_w`, `prefill_joules_per_input_token`, and `decode_joules_per_output_token`. Role energy covers the full formal benchmark window, not kernel-level phases, and the role watts are that energy divided by the same window and by the role's GPU count.
 
 For srt-slurm recipes, `telemetry: {provider: dcgm-power}` enables official energy collection. `runners/launch_gb200-nv.sh` and `runners/launch_gb300-nv.sh` are the source of truth for `POWER_SRT_SLURM_PIN`. CI derives `POWER_PRODUCER_SHA` from the launcher stamp. `utils/test_gb200_power_official_contract.py` and `utils/test_gb300_power_official_contract.py` enforce the recipe/launcher contract. Only `PRECISION=fp8` dcgm-power lanes are validated.
 
