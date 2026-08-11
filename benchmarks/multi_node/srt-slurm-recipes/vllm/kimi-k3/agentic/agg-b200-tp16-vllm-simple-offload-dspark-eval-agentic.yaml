@@ -73,8 +73,9 @@ backend:
       no-enable-flashinfer-autotune: true
       # Avoid the custom communicator's MNNVL probe on the cross-node group.
       disable-custom-all-reduce: true
-      # Keep all-reduce/RMS fusion on the portable collective path.
-      compilation-config: '{"pass_config":{"fuse_allreduce_rms":false}}'
+      # Cross-node B200 has no MNNVL workspace. Upstream eager mode avoids
+      # tracing the unsupported FlashInfer all-reduce fusion during graph capture.
+      enforce-eager: true
       max-model-len: 1048576
       kv-cache-dtype: fp8
       attention-config: '{"use_prefill_query_quantization":true,"mla_prefill_backend":"flashinfer"}'

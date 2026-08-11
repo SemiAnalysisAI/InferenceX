@@ -5780,4 +5780,5 @@
     - "Keep throughput on DSpark level 7 probabilistic drafting with committed golden synthetic AL 3.84; EVAL_ONLY selects committed rejection_sample_method=block recipes for real target verification"
     - "Use the digest-pinned 2026-08-10 upstream vLLM nightly and direct Inferact/Kimi-K3-DSpark model ID as shipped, with no local compatibility layer or installed serving-engine rewrite"
     - "Use vLLM expert parallelism and shipped portable-collective controls to avoid the cross-node latent-MoE symmetric-memory path"
+    - "Run the two-node B200 TEP path in upstream eager mode so graph capture does not probe the unavailable cross-node MNNVL workspace"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2475
