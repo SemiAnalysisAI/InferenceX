@@ -146,6 +146,17 @@ if k3_patches_preapplied; then
     done
     unset _infx_var _infx_shadow
 
+    # AIPERF_RUNTIME_DIR=/workspace/results/aiperf_runtime is the same class of
+    # problem with a different symptom. benchmark_lib defaults this to
+    # /tmp/inferencex-agentic-$SLURM_JOB_ID, deliberately OUTSIDE the workspace;
+    # the image's value puts the aiperf venv inside results/, which the
+    # "Upload agentic raw results" step globs as results/**. The container
+    # writes it as root, so the runner user then cannot stat venv/bin/python
+    # and the upload step fails the job after a perfectly good benchmark --
+    # and we would be uploading a Python venv as a result artifact. No shadow
+    # needed: the harness never sets this, so unsetting restores the default.
+    unset AIPERF_RUNTIME_DIR
+
     # Clear both and let the harness decide, as it does for every other key.
     unset MODEL_PATH DRAFT_MODEL_PATH
     unset SPEC_REJECTION_METHOD SPEC_SYNTHETIC_ACCEPTANCE_LENGTH
