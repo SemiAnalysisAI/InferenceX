@@ -928,7 +928,26 @@ SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-3}"
 # so 2.45 sits ~38% above the current default-methodology result.
 #
 # Set SPEC_REJECTION_METHOD=block to restore real verification.
-SPEC_REJECTION_METHOD="${SPEC_REJECTION_METHOD:-synthetic}"
+#
+# EVAL_ONLY forces block regardless. Synthetic commits drafted tokens without
+# consulting the target's logits, so the generated text is not the target
+# model's and any accuracy gate scores ~0 by construction -- an eval run under
+# synthetic measures nothing. dsv4_fp4_b300_vllm_mtp.sh makes the same split;
+# kimik2.5_fp4_b300_mtp.sh omits it. Follow dsv4.
+#
+# vLLM also rejects synthetic_acceptance_length unless the method is
+# 'synthetic', so the key must be dropped, not just ignored -- handled below.
+if [ "${EVAL_ONLY:-false}" = "true" ]; then
+    SPEC_REJECTION_METHOD="${SPEC_REJECTION_METHOD:-block}"
+    if [ "$SPEC_REJECTION_METHOD" = "synthetic" ]; then
+        echo "ERROR: EVAL_ONLY=true with SPEC_REJECTION_METHOD=synthetic." >&2
+        echo "       Drafts would never be verified against the target, so the" >&2
+        echo "       eval would score ~0 and measure nothing. Refusing to run." >&2
+        exit 1
+    fi
+else
+    SPEC_REJECTION_METHOD="${SPEC_REJECTION_METHOD:-synthetic}"
+fi
 SPEC_SYNTHETIC_ACCEPTANCE_LENGTH="${SPEC_SYNTHETIC_ACCEPTANCE_LENGTH:-2.51}"
 
 SPEC_CFG="{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"$SPEC_REJECTION_METHOD\""
