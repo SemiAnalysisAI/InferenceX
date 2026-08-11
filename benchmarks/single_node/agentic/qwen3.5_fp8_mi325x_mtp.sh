@@ -83,6 +83,14 @@ MAX_RUNNING_REQUESTS=$((2 * CONC))
 CUDA_GRAPH_MAX_BS="$CONC"
 [ "$CUDA_GRAPH_MAX_BS" -gt 64 ] && CUDA_GRAPH_MAX_BS=64
 
+# With EAGLE enabled, SGLang reserves 0.12 of GPU memory for the draft model.
+# TP2 needs the remaining target-model budget raised from 0.68 to 0.78 to fit
+# Qwen3.5's hybrid state cache; TP4/TP8 retain the established 0.68 budget.
+MEM_FRACTION_STATIC=0.80
+if [ "$TP" -eq 2 ]; then
+    MEM_FRACTION_STATIC=0.90
+fi
+
 export PYTHONNOUSERSITE=1
 export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
 export SGLANG_USE_AITER=1
@@ -110,7 +118,7 @@ SGLANG_CMD=(
     --quantization fp8
     --kv-cache-dtype fp8_e4m3
     --mamba-ssm-dtype bfloat16
-    --mem-fraction-static 0.80
+    --mem-fraction-static "$MEM_FRACTION_STATIC"
     --model-loader-extra-config '{"enable_multithread_load": true}'
     --watchdog-timeout 1200
     --enable-aiter-allreduce-fusion
