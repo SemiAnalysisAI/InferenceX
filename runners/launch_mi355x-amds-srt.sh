@@ -71,7 +71,18 @@ if ! unsquashfs -s "$SHARED_IMAGE" >/dev/null 2>&1; then
     if [[ -n "${LOCAL_FALLBACK_IMAGE}" ]] && unsquashfs -s "${LOCAL_FALLBACK_IMAGE}" >/dev/null 2>&1; then
         cp --sparse=always "${LOCAL_FALLBACK_IMAGE}" "\$tmp"
     else
-        enroot import -o "\$tmp" "docker://${RUNTIME_IMAGE}"
+        for attempt in 1 2 3; do
+            rm -f "\$tmp"
+            if enroot import -o "\$tmp" "docker://${RUNTIME_IMAGE}"; then
+                break
+            fi
+            if [[ "\$attempt" -eq 3 ]]; then
+                echo "Failed to import ${RUNTIME_IMAGE} after \${attempt} attempts" >&2
+                exit 1
+            fi
+            echo "Retrying ${RUNTIME_IMAGE} import after attempt \${attempt}" >&2
+            sleep "\$((attempt * 10))"
+        done
     fi
     unsquashfs -s "\$tmp" >/dev/null
     mv "\$tmp" "$SHARED_IMAGE"

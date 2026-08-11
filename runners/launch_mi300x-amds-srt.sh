@@ -94,8 +94,18 @@ srun --ntasks-per-node=1 bash -c '
     flock -w 2400 "\$lock_fd"
     if ! unsquashfs -s "\$target" >/dev/null 2>&1; then
       tmp="\${target}.tmp.\${SLURM_JOB_ID}"
-      rm -f "\$tmp"
-      enroot import -o "\$tmp" "docker://\${image}"
+      for attempt in 1 2 3; do
+        rm -f "\$tmp"
+        if enroot import -o "\$tmp" "docker://\${image}"; then
+          break
+        fi
+        if [[ "\$attempt" -eq 3 ]]; then
+          echo "Failed to import \${image} after \${attempt} attempts" >&2
+          return 1
+        fi
+        echo "Retrying \${image} import after attempt \${attempt}" >&2
+        sleep "\$((attempt * 10))"
+      done
       unsquashfs -s "\$tmp" >/dev/null
       mv "\$tmp" "\$target"
     fi
