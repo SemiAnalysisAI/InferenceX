@@ -47,6 +47,7 @@ def test_disaggregate_uses_one_prefill_one_decode_and_mooncake():
     assert recipe["resources"]["decode_nodes"] == 1
     assert recipe["backend"]["type"] == "atom"
     assert recipe["backend"]["connector"] == "mooncake"
+    assert recipe["backend"]["mooncake_protocol"] == "tcp"
     assert recipe["backend"]["enable_kv_events"] is True
     assert recipe["backend"]["prefill_environment"]["PYTHONPATH"] == (
         "/infera-source"
@@ -73,6 +74,6 @@ def test_matrix_rows_route_only_through_the_atom_srt_launcher():
     ]["additional-settings"] == [
         "CONFIG_FILE=recipes/atom/qwen3-0.6b/mi355x/disagg-1p1d-fixed-seq.yaml"
     ]
-    assert "f71cbb1cd7a4247ce50d54d84254c1842258b6e3" in launcher
+    assert "83ef50ba6bf0bf4a91341d31fdcded141fdaa1b4" in launcher
     assert "8ed8f1728c745d4e91ba9eaa09ed81159aa57e41" in launcher
     assert "scancel" not in launcher

@@ -1,5 +1,5 @@
 # Small two-node ATOM P/D correctness lane. Infera discovers both workers,
-# routes the completions API, and ATOM transfers KV through Mooncake RDMA.
+# routes the completions API, and ATOM transfers KV through Mooncake.
 
 name: "mi300x-atom-qwen3-0.6b-disagg-1p1d-fixed-seq"
 
@@ -42,10 +42,10 @@ frontend:
 backend:
   type: atom
   connector: mooncake
-  # The MI300X private fabric is mlx5_1. ATOM's generic GPU-index heuristic
-  # selects a nonexistent rdma0 alias on this cluster and silently falls back
-  # to TCP, so pin the actual HCA for the P/D correctness lane.
-  mooncake_ib_device: mlx5_1
+  # The stable atom-v0.1.1 image bundles Mooncake before ROCm DMA-BUF memory
+  # registration support. Use its supported TCP transport for this correctness
+  # lane; connection pooling is supplied by the srt-slurm ATOM adapter.
+  mooncake_protocol: tcp
   enable_kv_events: true
   prefill_environment: &worker_environment
     HF_HOME: "/hf_hub_cache"
