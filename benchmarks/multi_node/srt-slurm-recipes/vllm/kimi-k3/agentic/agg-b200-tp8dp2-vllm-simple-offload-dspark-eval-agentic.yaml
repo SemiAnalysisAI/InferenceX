@@ -75,6 +75,7 @@ backend:
       kv-cache-dtype: fp8
       attention-config: '{"use_prefill_query_quantization":true,"mla_prefill_backend":"flashinfer"}'
       enable-prefix-caching: true
+      enable-prompt-tokens-details: true
       enable-auto-tool-choice: true
       tool-call-parser: kimi_k3
       reasoning-parser: kimi_k3
@@ -93,11 +94,13 @@ srun_options:
 
 benchmark:
   type: custom
+  aiperf_server_metrics: true
   command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
   env:
     INFMAX_CONTAINER_WORKSPACE: "/infmax-workspace"
     AIPERF_TRACE_IDLE_GAP_CAP_SECONDS: "300"
     AIPERF_LIVE_FAILED_REQUEST_THRESHOLD: "0.25"
+    AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:"
     RESULT_DIR: "/logs/agentic"
     PORT: "8000"
     IS_MULTINODE: "true"
