@@ -1233,7 +1233,7 @@ qwen3.5-fp8-mi355x-sglang-agentic-hicache:
 # DEP4 cells even when dominated. The fast pass is a functionality gate;
 # Pareto optimality is deliberately not required for inclusion.
 dsv4-fp4-mi355x-vllm-agentic-mtp:
-  image: vllm/vllm-openai-rocm:v0.26.0
+  image: vllm/vllm-openai-rocm:v0.27.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:mi355x-amds
@@ -1244,11 +1244,7 @@ dsv4-fp4-mi355x-vllm-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.60
       search-space:
-      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 6, 8, 12] }
-      - { tp: 8, ep: 8, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [16, 24, 32, 40, 48, 52, 56, 60, 64, 68] }
-      - { tp: 8, ep: 8, dp-attn: false, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, spec-decoding: mtp, conc-list: [52, 60, 68] }
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [64, 128, 192, 224], router: { name: vllm-router, version: "0.1.14" } }
-      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [4, 8], router: { name: vllm-router, version: "0.1.14" } }
+      - { tp: 8, ep: 8, dp-attn: false, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, spec-decoding: mtp, conc-list: [52] }
       # DEP4 previously had only 12.09 GiB/GPU available for the native
       # 1,048,576-token context versus a 14.88 GiB minimum. Retain two cells in
       # the fast gate to reconfirm whether the current base can now initialize;
