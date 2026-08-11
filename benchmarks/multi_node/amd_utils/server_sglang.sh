@@ -537,12 +537,6 @@ if [[ "$KV_OFFLOADING" != "none" && "$KV_OFFLOAD_BACKEND" == "hicache" ]]; then
     # per-node DRAM budget computed by the sweep generator (enforcement); fall
     # back to --hicache-ratio (relative to the GPU KV pool) when no budget is
     # provided, keeping configs that predate the budget unchanged.
-    # FORCE_HICACHE_RATIO lets a recipe opt into ratio-based sizing without
-    # unsetting TOTAL_CPU_DRAM_GB — that var is also the shared client-side
-    # gate (benchmark_lib.sh requires it whenever KV_OFFLOADING=dram) and is
-    # forwarded verbatim into client.env below, so unsetting it here would
-    # make the aiperf client container fail its own env validation before
-    # ever sending a request.
     HICACHE_RATIO="${HICACHE_RATIO:-5}"
     HICACHE_SIZING_FLAGS="--hicache-ratio ${HICACHE_RATIO}"
     # DeepSeek V4's hybrid HiCache pool rejects --hicache-size (requires
@@ -550,9 +544,7 @@ if [[ "$KV_OFFLOADING" != "none" && "$KV_OFFLOAD_BACKEND" == "hicache" ]]; then
     # See sglang _deepseek_v4_num_host_pages() (raises ValueError when
     # server_args.hicache_size > 0):
     # https://github.com/sgl-project/sglang/blob/9dd57ef8c48e2cd82292d849f01e2130c5203e67/python/sglang/srt/mem_cache/hybrid_cache/hybrid_pool_assembler.py#L262-L266
-    # FORCE_HICACHE_RATIO additionally lets a recipe opt into ratio-based sizing
-    # for any other model without unsetting TOTAL_CPU_DRAM_GB (see comment above).
-    if [[ "${FORCE_HICACHE_RATIO:-0}" != "1" && -n "${TOTAL_CPU_DRAM_GB:-}" && "${TOTAL_CPU_DRAM_GB}" -gt 0 && "${MODEL_NAME}" != *DeepSeek-V4* ]]; then
+    if [[ -n "${TOTAL_CPU_DRAM_GB:-}" && "${TOTAL_CPU_DRAM_GB}" -gt 0 && "${MODEL_NAME}" != *DeepSeek-V4* ]]; then
         # TOTAL_CPU_DRAM_GB is the prefill worker's per-node budget (only prefill
         # offloads KV to CPU DRAM today); --hicache-size is per rank per host
         # pool. A prefill server may span nodes (PREFILL_TP_SIZE is its total
@@ -791,13 +783,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         # across the agentic trace; round_robin decode keeps the single decode worker
         # fed evenly. Override via ROUTER_RESILIENCE_FLAGS / ROUTER_POLICY_FLAGS.
         ROUTER_RESILIENCE_FLAGS="${ROUTER_RESILIENCE_FLAGS:---disable-circuit-breaker --health-failure-threshold 100 --health-check-timeout-secs 600 --health-check-interval-secs 30}"
-        # server_sglang.sh previously read ROUTER_PREFILL_POLICY, but the recipe
-        # scripts export PREFILL_ROUTER_POLICY, so the recipe's policy override was
-        # silently ignored and the router always fell back to this hardcoded
-        # default. Also comment out ROUTER_DECODE_POLICY for now (superseded by
-        # --dp-aware below).
-        ROUTER_PREFILL_POLICY="${PREFILL_ROUTER_POLICY:-consistent_hashing}"
-        # ROUTER_DECODE_POLICY="${ROUTER_DECODE_POLICY:-round_robin}"
+        ROUTER_PREFILL_POLICY="consistent_hashing"
         ROUTER_CACHE_THRESHOLD="${ROUTER_CACHE_THRESHOLD:-0.3}"
         ROUTER_BALANCE_ABS_THRESHOLD="${ROUTER_BALANCE_ABS_THRESHOLD:-2}"
         ROUTER_BALANCE_REL_THRESHOLD="${ROUTER_BALANCE_REL_THRESHOLD:-1.1}"
@@ -1275,35 +1261,7 @@ else
     fi
     set +x
 
-    # Agentic trace replay doesn't reproduce real token-by-token traffic, so
-    # measured MTP/EAGLE acceptance there isn't representative (PR #2309
-    # review: https://github.com/SemiAnalysisAI/InferenceX/pull/2309#pullrequestreview-4778348624).
-    # Per the AgentX fairness guidelines (golden_al_distribution/README.md),
-    # agentic throughput benchmarks simulate acceptance at the model's
-    # committed golden AL instead of measuring real (non-representative)
-    # acceptance. Eval runs (RUN_EVAL / EVAL_ONLY) need real acceptance so
-    # GSM8K scores reflect actual MTP behavior. Golden curve source:
-    # golden_al_distribution/dsv4_mtp.yaml (thinking_on).
-    DECODE_SIM_ACC_ENV=""
-    if [[ "$DECODE_MTP_SIZE" -gt 0 ]] && { [[ "${IS_AGENTIC:-0}" == "1" ]] || [[ "${IS_AGENTIC:-}" == "true" ]]; }; then
-        if [[ "${EVAL_ONLY:-false}" == "true" ]] || [[ "${RUN_EVAL:-false}" == "true" ]]; then
-            echo "[INFO] Eval mode: synthetic MTP disabled (using real acceptance)"
-        else
-            DSV4_GOLDEN_AL=""
-            case "${MODEL_NAME}:${DECODE_MTP_SIZE}" in
-                *DeepSeek-V4*:1) DSV4_GOLDEN_AL=1.79 ;;
-                *DeepSeek-V4*:2) DSV4_GOLDEN_AL=2.27 ;;
-                *DeepSeek-V4*:3) DSV4_GOLDEN_AL=2.49 ;;
-            esac
-            if [[ -n "$DSV4_GOLDEN_AL" ]]; then
-                DECODE_SIM_ACC_ENV="SGLANG_SIMULATE_ACC_LEN=${DSV4_GOLDEN_AL} SGLANG_SIMULATE_ACC_METHOD=match-expected SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token"
-            else
-                echo "WARNING: agentic MTP run (model=${MODEL_NAME}, DECODE_MTP_SIZE=${DECODE_MTP_SIZE}) has no golden AL wired in server_sglang.sh -- falling back to real (unsimulated, non-representative) acceptance. Add a case in server_sglang.sh and golden_al_distribution/ before shipping this arm. See golden_al_distribution/README.md." >&2
-            fi
-        fi
-    fi
-
-    DECODE_CMD="SGLANG_MORI_COMBINE_DTYPE=${MORI_COMBINE_DTYPE_DECODE} ${DECODE_MORI_MOE_ENV} SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK_DECODE:-${MORI_MAX_DISPATCH_TOKENS_DECODE}} MORI_IO_SQ_BACKOFF_TIMEOUT_US=${MORI_IO_SQ_BACKOFF_TIMEOUT_US} MORI_IO_QP_MAX_SEND_WR=${MORI_IO_QP_MAX_SEND_WR} ${DECODE_SIM_ACC_ENV} ${LAUNCH_PREFIX:-} python3 -m sglang.launch_server \
+    DECODE_CMD="SGLANG_MORI_COMBINE_DTYPE=${MORI_COMBINE_DTYPE_DECODE} ${DECODE_MORI_MOE_ENV} SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK_DECODE:-${MORI_MAX_DISPATCH_TOKENS_DECODE}} MORI_IO_SQ_BACKOFF_TIMEOUT_US=${MORI_IO_SQ_BACKOFF_TIMEOUT_US} MORI_IO_QP_MAX_SEND_WR=${MORI_IO_QP_MAX_SEND_WR} ${LAUNCH_PREFIX:-} python3 -m sglang.launch_server \
         --model-path ${MODEL_DIR}/${MODEL_NAME} \
         --disaggregation-mode decode \
         --disaggregation-ib-device ${IBDEVICES} \
