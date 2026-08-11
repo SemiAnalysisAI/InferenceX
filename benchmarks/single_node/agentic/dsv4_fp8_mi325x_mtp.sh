@@ -185,9 +185,11 @@ if (( EP_SIZE > 1 )); then
 fi
 
 SCHEDULING_ARGS=(--async-scheduling)
+COLLECTIVE_ARGS=()
 if (( EP_SIZE > 1 )); then
-    # Isolate async MTP scheduling as the next TEP correctness variable.
-    SCHEDULING_ARGS=(--no-async-scheduling)
+    # Isolate the custom TP all-reduce path while keeping the otherwise normal
+    # TEP recipe (async scheduling, CUDA graphs, and INT4 Quick Reduce).
+    COLLECTIVE_ARGS=(--disable-custom-all-reduce)
 fi
 
 USE_VLLM_ROUTER=false
@@ -245,6 +247,7 @@ VLLM_CMD=(
     --port "$VLLM_BACKEND_PORT"
     --trust-remote-code
     "${SCHEDULING_ARGS[@]}"
+    "${COLLECTIVE_ARGS[@]}"
     --distributed-executor-backend mp
     --quantization deepseek_v4_fp8
     --kv-cache-dtype fp8
