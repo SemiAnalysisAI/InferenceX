@@ -884,6 +884,33 @@ kimik3-fp4-mi355x-vllm-agentic-mtp-dspark-prepatched-syn-curve:
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [1, 4, 10, 16], spec-decoding: mtp}
 
+kimik3-fp4-mi355x-vllm-agentic-mtp-dspark-prepatched-syn-c8:
+  # c8 rerun on the synthetic ladder, purely to recover the interactivity point.
+  #
+  # The original synthetic c8 (run 31449509032) produced 3074 tok/s/GPU but its
+  # "Upload agentic raw results" step failed on the EACCES from the root-owned
+  # results/aiperf_runtime venv, so aiperf_artifacts/profile_export_aiperf.csv
+  # was never uploaded. P90 interactivity is defined as the p10 of per-request
+  # E2E output token throughput, and the console summary prints avg/min/max then
+  # jumps to p99 -- p10 exists only in that CSV. So the number is unrecoverable
+  # from the surviving artifacts rather than merely inconvenient to extract.
+  #
+  # This branch carries cecbe9105 and e9906efa3, which keep the venv out of
+  # results/, so the artifact uploads. Second benefit: an independent sample
+  # against 3074 on the ladder's peak point.
+  image: aigmkt/kimi-k3-agentx@sha256:6eed69f39f036df3c7a61a2263159935a00a7c988a328677d502476a541c5c08
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: none, conc-list: [8], spec-decoding: mtp}
+
 kimik3-fp4-mi355x-vllm-agentic-mtp-dspark-prepatched-syn-c1:
   # c1 retry, split out of the ladder.
   #
