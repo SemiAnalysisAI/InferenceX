@@ -966,6 +966,37 @@ kimik3-fp4-mi355x-vllm-agentic-mtp-dspark-prepatched-syn-c16:
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [16], spec-decoding: mtp}
 
+kimik3-fp4-mi355x-vllm-agentic-mtp-dspark-prepatched-syn-lmc-c16:
+  # LMCache at c16 -- the concurrency where the host tier has its best case.
+  #
+  # At c10 LMCache lost badly: 1210.96 vs 1923.58 GPU-only, and P90
+  # interactivity 0.91 vs 2.92. But GPU KV there sat at 82% of 3,136,736 tokens,
+  # so the working set largely fit on-GPU and the offload tier had little to
+  # add while still paying the connector's prefill cost. That is the wrong
+  # regime to judge it in.
+  #
+  # c16 is the right one: more concurrent requests against the same GPU KV, so
+  # if LMCache ever pays on this trace it should be here. The GPU-only c16
+  # baseline is 1199.36 tok/s/GPU with interactivity 0.81 and TTFT p50 107 s --
+  # already deep into queueing, which is exactly the pressure an offload tier
+  # is supposed to relieve.
+  #
+  # Read GPU KV utilisation and the CPU/offload hit rate first. If GPU KV is
+  # not materially more pressured than c10's 82%, the comparison says nothing
+  # new and LMCache should be dropped for this workload.
+  image: aigmkt/kimi-k3-agentx@sha256:6eed69f39f036df3c7a61a2263159935a00a7c988a328677d502476a541c5c08
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-k3, version: "git" }, conc-list: [16], spec-decoding: mtp}
+
 kimik3-fp4-mi355x-vllm-agentic-mtp-dspark-prepatched-syn-lmc-c10:
   # LMCache sibling of the synthetic ladder's c10 point. Same image, same
   # synthetic 2.51, same k=2 and fp8 KV, so the host memory tier is the only
