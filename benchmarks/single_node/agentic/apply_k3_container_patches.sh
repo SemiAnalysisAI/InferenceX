@@ -19,17 +19,26 @@
 #                fallback gate: gpu/attn_utils.py, gpu/model_runner.py,
 #                kimi_k3/nvidia/mla.py  (rocm_aiter_mla.py hunks NOT taken --
 #                they conflict with the #50578/#51011 asm strategy)
-#   vllm  #51682 give the AMD packed KDA decode kernel the state-index stride:
-#                pass stride_state_indices and load state_indices with it
-#                (matches the NVIDIA copy). With spec decode the KDA slot is
-#                block_table[:, 0], a strided view (1+num_spec_blocks wide) --
-#                the unit-stride assumption OOB-faulted; replaces the earlier
-#                reshape(-1) coercion.
-#   HYBRID verify: route small-head fp8 DSpark verify to the Gluon flatten
-#                (use_gluon_verify) + mla_gluon bh16bn128 batch<=256 relax +
-#                fp8-query dequant. Fixes the asm fp8 q-row-fold verify HSA
-#                0x1016 fault seen during DSpark agentic serving; decode
-#                (qlen==1) stays on the asm path.
+#   vllm  #51682 KDA packed decode: pass the state-index stride to the kernel so
+#                a non-contiguous 1-D state_indices is handled natively (only
+#                requires ndim==1). Replaces the earlier reshape/coerce
+#                workaround. NOTE: not strictly needed by this stack (it boots
+#                under FULL_AND_PIECEWISE without it) -- kept for robustness.
+#   aiter #4521  fp8 cp round-robin asm MLA verify kernels: adds the qh16/qh32
+#                qseqlen4 gqaratio16/32 cprr .co + mla_asm.csv + asm_mla.cu +
+#                v1_2_device.cuh + aiter/mla.py + aiter/ops/attention.py, then
+#                rebuilds module_mla_asm.  [NEEDS NETWORK + hipcc + a GPU:
+#                unlike the offline Python diffs, this fetches the binary .co
+#                and recompiles the asm module.]
+#   DSpark PS verify: route the small-head fp8 DSpark TARGET VERIFY to the ASM
+#                persistent (PS) decode instead of the Gluon flatten. Two edits
+#                on rocm_aiter_mla.py: (a) use_gluon_verify returns False for
+#                fp8 KV so the verify is NOT swallowed by the flatten, (b)
+#                _mtp_decode_qlen is sized for DSpark (1 + num_spec) so the PS
+#                gate opens. Needs aiter #4521 for the fp8 qseqlen4 verify
+#                kernels. SUPERSEDES the earlier HYBRID (gluon-flatten) verify.
+#                mla_gluon bh16bn128 batch<=256 relax + fp8-query dequant are
+#                kept (used by the bf16 verify path).
 #   triton 3.7.0 (AMD ROCm 7.2.0) + tabulate + lm_eval[api]==0.4.12
 #
 # Run INSIDE a fresh container of that image:
@@ -57,7 +66,7 @@ echo "[embed] ROOT=$ROOT"
 WS="${WS:-/tmp/k3_embed}"; mkdir -p "$WS"
 say(){ echo; echo "=================== $* ==================="; }
 
-say "1/3 triton 3.7.0 + tabulate + lm_eval"
+say "1/4 triton 3.7.0 + tabulate + lm_eval"
 python -m pip install --extra-index-url https://pypi.amd.com/triton/release/rocm-7.2.0/simple/ triton==3.7.0 2>&1 | tail -2
 python -m pip install tabulate 2>&1 | tail -1
 if [ "${WITH_LM_EVAL:-1}" = "1" ]; then
@@ -76,7 +85,7 @@ apply_one(){ # $1=relpath  $2=marker  $3=difffile
   fi
 }
 
-say "2/3 apply embedded code changes"
+say "2/4 apply embedded code changes"
 cat > "$WS/MLA_GLUON.diff" <<'DIFF_MLA_GLUON'
 diff --git a/aiter/ops/triton/gluon/mla_gluon.py b/aiter/ops/triton/gluon/mla_gluon.py
 --- a/aiter/ops/triton/gluon/mla_gluon.py
@@ -857,7 +866,65 @@ diff --git a/vllm/v1/attention/backends/mla/rocm_aiter_mla.py b/vllm/v1/attentio
              return o, None
  
 DIFF_ROCM_AITER_MLA
-apply_one "vllm/v1/attention/backends/mla/rocm_aiter_mla.py" "asm fp8 q-row-fold verify faults" "$WS/ROCM_AITER_MLA.diff"
+apply_one "vllm/v1/attention/backends/mla/rocm_aiter_mla.py" "flat_kv_indices" "$WS/ROCM_AITER_MLA.diff"
+
+# --- DSpark PS verify: supersede the HYBRID gluon-flatten verify -------------
+# Two edits on the file the diff above just produced (HYBRID). Done as exact
+# string replacements (not a context diff) so whitespace/line-drift can't break
+# it, and idempotent via the "Local DSpark PS extension" guard. The base marker
+# above was changed to "flat_kv_indices" (untouched here) so re-runs still skip.
+#   (a) use_gluon_verify -> False for fp8 KV: the small-head multi-token verify
+#       is no longer swallowed by the Gluon flatten and falls through to the ASM
+#       persistent (PS) decode (aiter #4521 qseqlen4 cprr kernels).
+#   (b) size _mtp_decode_qlen for DSpark (1 + num_spec) so the PS gate opens.
+python - "$ROOT/vllm/v1/attention/backends/mla/rocm_aiter_mla.py" <<'PYDSPARK'
+import ast, sys
+F = sys.argv[1]
+src = open(F).read()
+if "Local DSpark PS extension" in src:
+    print("  rocm_aiter_mla.py (DSpark PS): already present (skip)"); sys.exit(0)
+OLD1 = "        self._mtp_decode_qlen = self.reorder_batch_threshold or 1\n"
+NEW1 = (
+    OLD1
+    + "        # Local DSpark PS extension: reorder_batch_threshold's method\n"
+    + "        # whitelist does not size DSpark, leaving its verify (qlen =\n"
+    + "        # 1 + num_spec) at 1 so the persistent gate below never opens. Size\n"
+    + "        # it explicitly so the ASM PS fp8 verify (qh16/qh32 qseqlen4 cprr\n"
+    + "        # kernels, aiter #4521) is reachable.\n"
+    + "        _spec = vllm_config.speculative_config\n"
+    + "        if _spec is not None and (\n"
+    + "            getattr(_spec, \"use_dspark\", False)\n"
+    + "            or getattr(_spec, \"method\", None) == \"dspark\"\n"
+    + "        ):\n"
+    + "            self._mtp_decode_qlen = max(\n"
+    + "                self._mtp_decode_qlen, 1 + int(_spec.num_speculative_tokens or 0)\n"
+    + "            )\n"
+)
+OLD2 = (
+    "        # HYBRID: small-head multi-token verify always uses the Gluon flatten,\n"
+    "        # independent of kv dtype and VLLM_ROCM_AITER_MLA_ASM_PADDING. fp8 KV is\n"
+    "        # served by the batch<=256 + fp8-query-dequant mla_gluon relaxation; the\n"
+    "        # asm fp8 q-row-fold verify faults on gfx950 (HSA 0x1016 in DSpark).\n"
+    "        return _gluon_mla_decode_supported()\n"
+)
+NEW2 = (
+    "        # Local DSpark PS extension: with aiter #4521 the asm fp8 q-row-fold\n"
+    "        # verify (qh16/qh32 qseqlen4 cprr kernels) works on gfx950, so an fp8\n"
+    "        # KV small-head multi-token verify must NOT be swallowed by the Gluon\n"
+    "        # flatten -- let it fall through to the ASM persistent (PS) path.\n"
+    "        if is_quantized_kv_cache(kv_cache_dtype):\n"
+    "            return False\n"
+    "        return _gluon_mla_decode_supported()\n"
+)
+for tag, OLD in (("mtp_qlen sizing", OLD1), ("use_gluon_verify", OLD2)):
+    if src.count(OLD) != 1:
+        print(f"  rocm_aiter_mla.py (DSpark PS): ABORT {tag} (found {src.count(OLD)})")
+        sys.exit(2)
+src = src.replace(OLD1, NEW1, 1).replace(OLD2, NEW2, 1)
+ast.parse(src)
+open(F, "w").write(src)
+print("  rocm_aiter_mla.py (DSpark PS): APPLIED")
+PYDSPARK
 
 cat > "$WS/TRITON_MLA.diff" <<'DIFF_TRITON_MLA'
 diff --git a/vllm/v1/attention/backends/mla/triton_mla.py b/vllm/v1/attention/backends/mla/triton_mla.py
@@ -1087,9 +1154,10 @@ apply_one "vllm/v1/worker/gpu/model_runner.py" "cg_support_exclude_layers" "$WS/
 
 cat > "$WS/KDA_FUSED_RECURRENT.diff" <<'DIFF_KDA_FUSED_RECURRENT'
 diff --git a/vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py b/vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py
+index 2f512df62643..db519fb6f0db 100644
 --- a/vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py
 +++ b/vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py
-@@ -459,6 +459,7 @@
+@@ -459,6 +459,7 @@ def fused_recurrent_kda_packed_decode_kernel(
      stride_g_token: tl.constexpr,
      stride_beta_token: tl.constexpr,
      stride_state_token: tl.constexpr,
@@ -1097,7 +1165,7 @@ diff --git a/vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py b/vl
      H: tl.constexpr,
      K: tl.constexpr,
      V: tl.constexpr,
-@@ -476,7 +477,7 @@
+@@ -476,7 +477,7 @@ def fused_recurrent_kda_packed_decode_kernel(
      mask_v = o_v < V
      mask_state = mask_v[:, None] & mask_k[None, :]
 
@@ -1106,7 +1174,8 @@ diff --git a/vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py b/vl
      p_out = out + (i_n * H + i_h) * V + o_v
      if state_idx <= 0:
          tl.store(p_out, tl.zeros([BV], dtype=tl.float32), mask=mask_v)
-@@ -560,7 +561,7 @@
+@@ -560,8 +561,8 @@ def fused_recurrent_kda_packed_decode(
+         raise ValueError("`raw_beta` heads must be contiguous.")
      if initial_state.stride()[1:] != (V * K, K, 1):
          raise ValueError("`initial_state` must be contiguous within each cache slot.")
 -    if state_indices.ndim != 1 or state_indices.stride(0) != 1:
@@ -1116,7 +1185,7 @@ diff --git a/vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py b/vl
      if A_log.ndim != 1 or not A_log.is_contiguous():
          raise ValueError("`A_log` must be contiguous and one-dimensional.")
      if not dt_bias.is_contiguous():
-@@ -608,6 +609,7 @@
+@@ -608,6 +609,7 @@ def fused_recurrent_kda_packed_decode(
          stride_g_token=raw_g.stride(1),
          stride_beta_token=raw_beta.stride(1),
          stride_state_token=initial_state.stride(0),
@@ -1128,17 +1197,79 @@ DIFF_KDA_FUSED_RECURRENT
 apply_one "vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py" "stride_state_indices" "$WS/KDA_FUSED_RECURRENT.diff"
 
 
-say "3/3 verify markers + py_compile + import"
+say "3/4 aiter #4521 (fp8 cp round-robin asm MLA verify kernels)  [needs network + hipcc + GPU]"
+# Unlike the offline Python diffs above, #4521 ships BINARY .co kernels (not in
+# the GitHub .diff) and a C++ asm_mla.cu change that must be recompiled, so this
+# section fetches from GitHub and rebuilds module_mla_asm (which imports aiter ->
+# needs a GPU). Skipped-idempotent via the csv marker.
+PR4521_SHA="0cbedbb1bc5b3b254dd12ca4e8d3c7638b86830b"   # merged head of ROCm/aiter#4521
+PR4521_RAW="https://raw.githubusercontent.com/ROCm/aiter/$PR4521_SHA"
+META="$ROOT/aiter_meta"; MLADIR="$META/hsa/gfx950/mla"
+if grep -qF "mla_a8w8_qh16_qseqlen4_gqaratio16_cprr_v3_ps.co" "$MLADIR/mla_asm.csv" 2>/dev/null; then
+  echo "  #4521: already present (skip)"
+elif [ "${WITH_PR4521:-1}" != "1" ]; then
+  echo "  #4521: SKIPPED (WITH_PR4521!=1)"
+else
+  # 1) binary .co verify kernels (4 new cprr + 4 updated); leave orphans, csv gates load
+  for f in \
+    mla_a8w8_qh16_qseqlen4_gqaratio16_cprr_v3_ps.co \
+    mla_a8w8_qh16_qseqlen4_gqaratio16_lse_cprr_v3_ps.co \
+    mla_a8w8_qh16_qseqlen4_gqaratio16_lse_v3_ps.co \
+    mla_a8w8_qh16_qseqlen4_gqaratio16_v3_ps.co \
+    mla_a8w8_qh32_qseqlen4_gqaratio32_cprr_ps.co \
+    mla_a8w8_qh32_qseqlen4_gqaratio32_lse_cprr_ps.co \
+    mla_a8w8_qh32_qseqlen4_gqaratio32_lse_ps.co \
+    mla_a8w8_qh32_qseqlen4_gqaratio32_ps.co ; do
+    if curl -ksSL -o "$MLADIR/$f.new" "$PR4521_RAW/hsa/gfx950/mla/$f" \
+       && [ "$(stat -c %s "$MLADIR/$f.new" 2>/dev/null || echo 0)" -gt 1000 ]; then
+      mv "$MLADIR/$f.new" "$MLADIR/$f"; echo "  co OK   $f"
+    else
+      rm -f "$MLADIR/$f.new"; echo "  co FAIL $f"
+    fi
+  done
+  # 2) text diffs. Two install roots: aiter/*.py -> $ROOT ; csrc + mla_asm.csv -> $META
+  curl -ksSL -o "$WS/pr4521.diff" "https://github.com/ROCm/aiter/pull/4521.diff"
+  awk -v A="$WS/pr4521_A.diff" -v B="$WS/pr4521_B.diff" '
+    /^diff --git /{p=$0; sub(/^diff --git a\//,"",p); sub(/ .*/,"",p); a=0; b=0;
+      if (p ~ /^aiter\//) a=1;
+      else if (p ~ /^csrc\// || p=="hsa/gfx950/mla/mla_asm.csv") b=1 }
+    { if (a) print > A; else if (b) print > B }
+  ' "$WS/pr4521.diff"
+  git apply --directory="$ROOT" -p1 --unsafe-paths --whitespace=nowarn "$WS/pr4521_A.diff" 2>/dev/null \
+    || patch -p1 -d "$ROOT" --fuzz=3 --forward --no-backup-if-mismatch < "$WS/pr4521_A.diff"
+  git apply --directory="$META" -p1 --unsafe-paths --whitespace=nowarn "$WS/pr4521_B.diff" 2>/dev/null \
+    || patch -p1 -d "$META" --fuzz=3 --forward --no-backup-if-mismatch < "$WS/pr4521_B.diff"
+  # 3) force module_mla_asm rebuild (aiter JIT only rebuilds when the .so is gone)
+  rm -f "$ROOT/aiter/jit/module_mla_asm.so"
+  UJ="$(python -c 'from aiter.jit.core import get_user_jit_dir as g; print(g())' 2>/dev/null)"
+  [ -n "$UJ" ] && rm -f "$UJ/module_mla_asm.so"
+  python - <<'PYBUILD'
+from aiter.jit.core import get_args_of_build, build_module
+d = get_args_of_build("module_mla_asm")
+build_module("module_mla_asm", d["srcs"], d["flags_extra_cc"], d["flags_extra_hip"],
+             d["blob_gen_cmd"], d["extra_include"], d["extra_ldflags"], d["verbose"],
+             d["is_python_module"], d["is_standalone"], d["torch_exclude"],
+             d.get("third_party", []), d.get("hipify", False),
+             d.get("flags_extra_hip_per_source", {}))
+print("  module_mla_asm rebuilt")
+PYBUILD
+  echo "  #4521: APPLIED"
+fi
+
+say "4/4 verify markers + py_compile + import"
 echo "chk mla_gluon.py               = $(grep -c '1 <= batch_size <= 256' "$ROOT/aiter/ops/triton/gluon/mla_gluon.py")"
 echo "chk gemm_op_a16w16.py          = $(grep -c 'is_current_stream_capturing' "$ROOT/aiter/ops/gemm_op_a16w16.py")"
-echo "chk rocm_aiter_mla.py          = $(grep -c 'asm fp8 q-row-fold verify faults' "$ROOT/vllm/v1/attention/backends/mla/rocm_aiter_mla.py")"
+echo "chk rocm_aiter_mla.py (base)   = $(grep -c 'flat_kv_indices' "$ROOT/vllm/v1/attention/backends/mla/rocm_aiter_mla.py")"
+echo "chk rocm_aiter_mla.py (DSpark) = $(grep -c 'Local DSpark PS extension' "$ROOT/vllm/v1/attention/backends/mla/rocm_aiter_mla.py")  (expect 2)"
+echo "chk #4521 mla_asm.csv          = $(grep -c 'qh16_qseqlen4_gqaratio16_cprr' "$ROOT/aiter_meta/hsa/gfx950/mla/mla_asm.csv" 2>/dev/null)  (expect 2; 0 if WITH_PR4521=0)"
+echo "chk #4521 module_mla_asm.so    = $([ -f "$ROOT/aiter/jit/module_mla_asm.so" ] && echo present || echo MISSING)"
 echo "chk triton_mla.py              = $(grep -c 'get_cudagraph_support' "$ROOT/vllm/v1/attention/backends/mla/triton_mla.py")"
 echo "chk gpu_worker.py              = $(grep -c 'import get_kv_cache_capacity' "$ROOT/vllm/v1/worker/gpu_worker.py")"
 echo "chk envs.py                    = $(grep -c 'VLLM_ROCM_AITER_MLA_ASM_PADDING' "$ROOT/vllm/envs.py")"
 echo "chk mla.py                     = $(grep -c 'if not self.impl.supports_quant_query_input' "$ROOT/vllm/models/kimi_k3/nvidia/mla.py")"
 echo "chk attn_utils.py              = $(grep -c 'cg_support_exclude_layers' "$ROOT/vllm/v1/worker/gpu/attn_utils.py")"
 echo "chk model_runner.py            = $(grep -c 'cg_support_exclude_layers' "$ROOT/vllm/v1/worker/gpu/model_runner.py")"
-echo "chk fused_recurrent.py         = $(grep -c 'stride_state_indices' "$ROOT/vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py")"
+echo "chk fused_recurrent.py         = $(grep -c 'reshape(-1).contiguous()' "$ROOT/vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py")"
 echo "triton          = $(python -c 'import triton; print(triton.__version__)')  (expect 3.7.0*)"
 python -m py_compile "$ROOT/aiter/ops/triton/gluon/mla_gluon.py" \
   "$ROOT/aiter/ops/gemm_op_a16w16.py" \
