@@ -1104,6 +1104,40 @@ dsr1-fp4-gb200-vllm-router-agentic-disagg:
           ep: 4
           dp-attn: true
 
+# Focused four-worker request-plane validation: two independent DEP4 prefill
+# workers and two independent DEP4 decode workers, each occupying one GB200
+# node and exposed to AIPerf as a separate server-metrics endpoint.
+dsr1-fp4-gb200-vllm-router-agentic-disagg-2p2d:
+  image: vllm/vllm-openai:v0.25.1
+  model: nvidia/DeepSeek-R1-0528-NVFP4-v2
+  model-prefix: dsr1
+  runner: cluster:gb200-nv
+  precision: fp4
+  framework: vllm-router
+  router: { name: vllm-router, version: "0.1.15" }
+  kv-p2p-transfer: nixl
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - spec-decoding: none
+        conc-list: [16]
+        prefill:
+          num-worker: 2
+          tp: 1
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "SRT_SLURM_REPOSITORY=https://github.com/SemiAnalysisAI/srt-slurm.git"
+          - "SRT_SLURM_REF=cebe610b92eae59fa4220bd9d455e520ef805c3c"
+          - "CONFIG_FILE=recipes/vllm/deepseek-r1/agentic/disagg-gb200-2p2d-dep4-vllm-router-agentic.yaml"
+        decode:
+          num-worker: 2
+          tp: 1
+          ep: 4
+          dp-attn: true
+
 dsv4-fp4-b200-sgl-router-agentic-agg:
   image: lmsysorg/sglang:v0.5.16-cu130
   model: deepseek-ai/DeepSeek-V4-Pro
