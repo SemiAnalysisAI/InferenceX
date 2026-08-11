@@ -5794,3 +5794,14 @@
     - "Keep DSpark K=2 probabilistic throughput on synthetic golden AL 2.51 while the generated EVAL_ONLY row uses real block verification"
     - "Cap the GPU-resident search at concurrency 8 after concurrency 16 failed to complete deterministic warmup; retain concurrency 16 for the DRAM-offload capacity tier"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2476
+
+- config-keys:
+    - qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GB200 Qwen3.5-397B-A17B NVFP4 SGLang MTP AgentX coverage across TP4 and TP2/EP2, with GPU-resident and bounded HiCache discovery arms."
+    - "Use stable SGLang v0.5.17-cu130 and NVIDIA/srt-slurm v1.0.45."
+    - "Enable SGLang metrics/cache reporting and require nonempty sglang: server metrics before publishing results."
+    - "Use K=3 golden synthetic acceptance length 3.39 for throughput; eval retains real MTP verification."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2568
