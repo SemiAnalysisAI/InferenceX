@@ -74,7 +74,7 @@ def test_matrix_rows_route_only_through_the_atom_srt_launcher():
     ]["additional-settings"] == [
         "CONFIG_FILE=recipes/atom/qwen3-0.6b/mi355x/disagg-1p1d-fixed-seq.yaml"
     ]
-    assert "141f035b5539fa8bbc1b4018ae4817283093092d" in launcher
+    assert "5ecfb13d1ba0960045482f1ef006312d8729d37a" in launcher
     assert "8ed8f1728c745d4e91ba9eaa09ed81159aa57e41" in launcher
     assert "2ab42bc2c64d1ad04f698c396da48473e71a6dbb" in launcher
     assert "scancel" not in launcher

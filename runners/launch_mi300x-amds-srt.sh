@@ -4,7 +4,7 @@ set -euo pipefail
 # MI300X srt-slurm validation path. The existing launcher remains the default;
 # matrix rows opt in by exporting CONFIG_FILE through additional-settings.
 SRT_SLURM_REPOSITORY="https://github.com/SemiAnalysisAI/srt-slurm.git"
-SRT_SLURM_COMMIT="141f035b5539fa8bbc1b4018ae4817283093092d"
+SRT_SLURM_COMMIT="5ecfb13d1ba0960045482f1ef006312d8729d37a"
 INFERA_REPOSITORY="https://github.com/cquil11/Infera.git"
 INFERA_COMMIT="8ed8f1728c745d4e91ba9eaa09ed81159aa57e41"
 ATOM_REPOSITORY="https://github.com/cquil11/ATOM.git"

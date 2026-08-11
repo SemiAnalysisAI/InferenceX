@@ -97,7 +97,7 @@ def test_official_matrix_routes_disagg_through_the_pinned_srt_launcher():
         "CONFIG_FILE=recipes/vllm/qwen3-0.6b/mi300x/"
         "disagg-1p1d-fixed-seq.yaml"
     ]
-    assert "141f035b5539fa8bbc1b4018ae4817283093092d" in launcher
+    assert "5ecfb13d1ba0960045482f1ef006312d8729d37a" in launcher
     assert launcher.count("setup ARCH=x86_64") == 2
     assert "--no-preflight" in launcher
     assert 'ENROOT_RUNTIME_PATH="\\${TMPDIR:-/tmp}/enroot-runtime-\\${UID}"' in launcher
