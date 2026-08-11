@@ -417,6 +417,14 @@ def test_e2e_workflow_cannot_dispatch_database_ingest() -> None:
     assert "INFX_FRONTEND_PAT" not in workflow
 
 
+def test_e2e_workflow_defines_every_emitted_matrix_variable() -> None:
+    workflow = (REPO_ROOT / ".github/workflows/e2e-tests.yml").read_text()
+    assigned = set(re.findall(r"^\s+([A-Z_]+)=", workflow, re.MULTILINE))
+    emitted = set(re.findall(r'echo "[a-z-]+=\$([A-Z_]+)"', workflow))
+
+    assert emitted <= assigned
+
+
 def test_priority_classifier_runs_for_enabled_actions() -> None:
     scenario = {
         **_PR,
