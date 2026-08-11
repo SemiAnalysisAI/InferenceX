@@ -200,14 +200,6 @@ if [[ "$DP_ATTENTION" == "true" ]]; then
     agentic_pip_install --quiet 'vllm-router==0.1.14'
 fi
 
-if (( EP_SIZE > 1 )) && [[ "$DP_ATTENTION" != "true" ]]; then
-    # TEP's correlated low-concurrency trajectories contain a few deterministic
-    # metadata-only turns. Do not let three early turns abort a one-hour run
-    # before the sample is representative; the unchanged strict 10% post-run
-    # validator remains authoritative for the completed result.
-    AIPERF_LIVE_FAILED_REQUEST_THRESHOLD=0.50
-fi
-
 # The 16K prefill budget and 4*CONC sequence-cap probes were neutral, while
 # piecewise graphs regressed. Restore the official 8K/2*CONC/FULL_DECODE_ONLY
 # baseline before isolating INT4 Quick Reduce.
