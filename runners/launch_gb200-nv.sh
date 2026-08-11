@@ -388,8 +388,21 @@ if [ -d "$SRT_REPO_DIR" ]; then
     rm -rf "$SRT_REPO_DIR"
 fi
 
-# TODO(CJQ): make first class upon srt-slurm upstream refactor
-if [[ "$IS_AGENTIC" == "1" ]]; then
+# Agentic DeepSeek-V4 uses the latest released srt-slurm. v1.0.45 carries
+# custom-benchmark support plus ordered logical-worker Prometheus endpoint
+# injection, so disaggregated AIPerf runs receive every P/D metrics URL.
+if [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" == "dynamo-vllm" ]]; then
+    git clone --branch v1.0.45 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    test "$(git rev-parse HEAD)" = "9d8d92b20c350a5d42f0709f5a0b64e30eb37d33" || {
+        echo "Error: NVIDIA/srt-slurm v1.0.45 resolved to an unexpected commit" >&2
+        exit 1
+    }
+    mkdir -p recipes/vllm/deepseek-v4/agentic
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
+        recipes/vllm/deepseek-v4/agentic
+# TODO(CJQ): migrate the remaining Agentic model paths to released srt-slurm.
+elif [[ "$IS_AGENTIC" == "1" ]]; then
     # Agentic multi-node pins cquil11/srt-slurm-nv revisions that provide:
     #   - BenchmarkType.CUSTOM + benchmark.command + benchmark.env
     #     (the hook that hands off to benchmarks/multi_node/agentic_srt.sh)

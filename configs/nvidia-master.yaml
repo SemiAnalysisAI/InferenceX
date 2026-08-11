@@ -7330,6 +7330,105 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-2p1d-dep8-dep8:
           ep: 8
           dp-attn: true
 
+dsv4-fp4-gb200-dynamo-vllm-agentic-mtp-agg:
+  image: vllm/vllm-openai:v0.27.1
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: cluster:gb200-nv
+  precision: fp4
+  framework: dynamo-vllm
+  router: { name: dynamo-router, version: "1.3.1" }
+  multinode: true
+  disagg: false
+  scenarios:
+    agentic-coding:
+    - search-space:
+      # The checkpoint needs two GB200 NVL4 trays. TP8 anchors latency; DEP8
+      # follows the public vLLM recommendation and probes the throughput curve.
+      - spec-decoding: mtp
+        conc-list: [1, 2, 4, 8]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/agentic/agg-gb200-tp8-mtp-agentic.yaml"
+        decode:
+          num-worker: 0
+          tp: 8
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        conc-list: [4, 8, 16, 24, 32, 48, 64, 96]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/agentic/agg-gb200-dep8-mtp-agentic.yaml"
+        decode:
+          num-worker: 0
+          tp: 8
+          ep: 8
+          dp-attn: true
+
+dsv4-fp4-gb200-dynamo-vllm-agentic-mtp-disagg:
+  image: vllm/vllm-openai:v0.27.1
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: cluster:gb200-nv
+  precision: fp4
+  framework: dynamo-vllm
+  router: { name: dynamo-router, version: "1.3.1" }
+  kv-p2p-transfer: nixl
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - search-space:
+      # Public-recipe baseline: one two-tray DEP8 prefill worker and one
+      # two-tray DEP8 decode worker. Dense sampling finds the MTP knee.
+      - spec-decoding: mtp
+        conc-list: [32, 64, 96, 128, 192, 256, 384]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/agentic/disagg-gb200-1p1d-dep8-dep8-mtp-agentic.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+      # Add prefill capacity only after the balanced baseline reaches its
+      # high-concurrency region; this separates prefill from decode scaling.
+      - spec-decoding: mtp
+        conc-list: [192, 256, 384, 512]
+        prefill:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/agentic/disagg-gb200-2p1d-dep8-dep8-mtp-agentic.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+
 dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-agg:
   image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-426e59f
   model: deepseek-ai/DeepSeek-V4-Pro
