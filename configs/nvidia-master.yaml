@@ -1049,13 +1049,27 @@ dsr1-fp4-gb200-vllm-router-agentic-agg:
           dp-attn: true
           additional-settings:
           - "SRT_SLURM_REPOSITORY=https://github.com/SemiAnalysisAI/srt-slurm.git"
-          - "SRT_SLURM_REF=cebe610b92eae59fa4220bd9d455e520ef805c3c"
+          - "SRT_SLURM_REF=b4bf6eb0abefa16c5108b339dabb903214a4c806"
           - "CONFIG_FILE=recipes/vllm/deepseek-r1/agentic/agg-gb200-dep4-vllm-router-agentic.yaml"
         decode:
           num-worker: 0
           tp: 1
           ep: 4
           dp-attn: true
+
+dsr1-fp4-gb200-vllm-router-agentic-agg-dep8:
+  image: vllm/vllm-openai:v0.25.1
+  model: nvidia/DeepSeek-R1-0528-NVFP4-v2
+  model-prefix: dsr1
+  runner: cluster:gb200-nv
+  precision: fp4
+  framework: vllm-router
+  router: { name: vllm-router, version: "0.1.15" }
+  multinode: true
+  disagg: false
+  scenarios:
+    agentic-coding:
+    - search-space:
       - spec-decoding: none
         conc-list: [16]
         prefill:
@@ -1065,7 +1079,7 @@ dsr1-fp4-gb200-vllm-router-agentic-agg:
           dp-attn: true
           additional-settings:
           - "SRT_SLURM_REPOSITORY=https://github.com/SemiAnalysisAI/srt-slurm.git"
-          - "SRT_SLURM_REF=cebe610b92eae59fa4220bd9d455e520ef805c3c"
+          - "SRT_SLURM_REF=b4bf6eb0abefa16c5108b339dabb903214a4c806"
           - "CONFIG_FILE=recipes/vllm/deepseek-r1/agentic/agg-gb200-dep8-vllm-router-agentic.yaml"
         decode:
           num-worker: 0
@@ -1096,7 +1110,7 @@ dsr1-fp4-gb200-vllm-router-agentic-disagg:
           dp-attn: true
           additional-settings:
           - "SRT_SLURM_REPOSITORY=https://github.com/SemiAnalysisAI/srt-slurm.git"
-          - "SRT_SLURM_REF=cebe610b92eae59fa4220bd9d455e520ef805c3c"
+          - "SRT_SLURM_REF=b4bf6eb0abefa16c5108b339dabb903214a4c806"
           - "CONFIG_FILE=recipes/vllm/deepseek-r1/agentic/disagg-gb200-1p2d-dep4-vllm-router-agentic.yaml"
         decode:
           num-worker: 2
