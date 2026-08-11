@@ -120,6 +120,32 @@ if k3_patches_preapplied; then
     #   `block` further down never applies and an accuracy run would either
     #   score ~0 or trip its own guard.
     #
+    # Worse than "falls through": under pyxis the image ENV BEATS
+    # --export=ALL, so names the harness does set are silently reverted to the
+    # snapshot's values. Measured on run 31446703002 -- job env vs container:
+    #   DURATION        3600 -> 1        1-second profile, no result JSON
+    #   EVAL_ONLY       true -> false    the accuracy cell ran a benchmark,
+    #                                    under synthetic, instead of gsm8k
+    #   HF_HUB_CACHE    /mnt/hf_hub_cache -> /hfcache   unmounted, so the
+    #                                    checkpoint downloaded again
+    #   RESULT_FILENAME <cell name> -> k3-image-patch-only
+    #   PORT            8891 -> 8890
+    #
+    # These are consumed by benchmark_lib and by the workflow contract, not by
+    # this file, so unsetting them here would just leave them empty. Restore
+    # them from INFX_* shadows, which the launcher exports under names no
+    # image defines and therefore cannot be clobbered.
+    for _infx_var in DURATION EVAL_ONLY PORT HF_HUB_CACHE RESULT_FILENAME CONC; do
+        _infx_shadow="INFX_${_infx_var}"
+        if [ -n "${!_infx_shadow:-}" ]; then
+            if [ "${!_infx_var:-}" != "${!_infx_shadow}" ]; then
+                echo "restored $_infx_var=${!_infx_shadow} (image ENV had '${!_infx_var:-}')"
+            fi
+            export "$_infx_var=${!_infx_shadow}"
+        fi
+    done
+    unset _infx_var _infx_shadow
+
     # Clear both and let the harness decide, as it does for every other key.
     unset MODEL_PATH DRAFT_MODEL_PATH
     unset SPEC_REJECTION_METHOD SPEC_SYNTHETIC_ACCEPTANCE_LENGTH

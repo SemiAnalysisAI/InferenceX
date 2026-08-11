@@ -315,6 +315,14 @@ else
         BENCHMARK_SCRIPT="$SCRIPT_FALLBACK"
     fi
 
+    # Shadow copies of the values the HARNESS owns, under names no image
+    # defines. An image built with `docker commit` carries the whole
+    # environment of the container it was snapshotted from as image ENV, and
+    # under pyxis that ENV beats --export=ALL -- so DURATION, EVAL_ONLY,
+    # HF_HUB_CACHE, RESULT_FILENAME and PORT silently revert to whatever the
+    # snapshot had. Recipes restore from these; see K3_BASE_PATCHES_PREAPPLIED
+    # in kimik3_fp4_mi355x_mtp.sh. Harmless for normal images: nothing reads
+    # INFX_* unless it opts in.
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
         --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache \
@@ -322,7 +330,7 @@ else
         --container-writable \
         --container-workdir=/workspace/ \
         --container-remap-root \
-        --no-container-entrypoint --export=ALL,AIPERF_DATASET_MMAP_CACHE_DIR=/aiperf_mmap_cache \
+        --no-container-entrypoint --export=ALL,AIPERF_DATASET_MMAP_CACHE_DIR=/aiperf_mmap_cache,INFX_DURATION=$DURATION,INFX_EVAL_ONLY=$EVAL_ONLY,INFX_PORT=$PORT,INFX_HF_HUB_CACHE=$HF_HUB_CACHE,INFX_RESULT_FILENAME=$RESULT_FILENAME,INFX_CONC=$CONC \
         bash "$BENCHMARK_SCRIPT"
 
     scancel $JOB_ID
