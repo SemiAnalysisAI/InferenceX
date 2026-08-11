@@ -243,12 +243,6 @@ labels:
     - b200-dgxc_07
     - b200-dgxc_08
     - b200-dgxc_09
-  cluster:b300-cw:
-    - b300-cw_0
-    - b300-cw_01
-    - b300-cw_02
-    - b300-cw_03
-    - b300-cw_04
   cluster:b300-nv:
     - b300-nv_01
     - b300-nv_02
