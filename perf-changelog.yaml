@@ -5784,3 +5784,13 @@
     - "Update the B300 DSV4 AgentX MTP image and SimpleCPU sweep through c576."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2536
   
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  description:
+    - "Refresh B300 Kimi K3 DSpark submission with corrected AgentX harness"
+    - "Use the pinned 2026-08-10 vLLM nightly with upstream Kimi K3 and DSpark support"
+    - "Match the current published upstream Kimi K3 FP8-KV profile by using flashinfer MLA prefill with prefill query quantization"
+    - "Keep DSpark K=2 probabilistic throughput on synthetic golden AL 2.51 while the generated EVAL_ONLY row uses real block verification"
+    - "Cap the GPU-resident search at concurrency 8 after concurrency 16 failed to complete deterministic warmup; retain concurrency 16 for the DRAM-offload capacity tier"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2476
