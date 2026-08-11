@@ -159,6 +159,16 @@ if k3_patches_preapplied; then
     PR51011="${PR51011:-0}"
     PR51040="${PR51040:-0}"
     CUDAGRAPH_CAPTURE_STEP="${CUDAGRAPH_CAPTURE_STEP:-$(( SPEC_NUM_TOKENS + 1 ))}"
+    # BLOCK ARM. This branch answers "does aiter #4521 pay on the REAL path?",
+    # against run 31148006934: same k=2, same trace, same cluster, same 3600 s,
+    # also block -- but on the stock nightly, where the query stayed bf16 and
+    # aiter loaded a16w8. Here #4521 plus the forced-PS fp8-query extension put
+    # it on a8w8 with a native qLen=3 dispatch and no qlen padding.
+    #
+    # Block, not synthetic, is the whole point: acceptance is measured rather
+    # than asserted, so the throughput is a measurement and not a cost model.
+    SPEC_REJECTION_METHOD="${SPEC_REJECTION_METHOD:-block}"
+
     # Runtime-only switches; an image cannot carry these.
     export VLLM_ROCM_SKIP_V2_KERNEL_WARMUP=1
     export HSA_NO_SCRATCH_RECLAIM=1
