@@ -59,9 +59,9 @@ def test_recipes_use_native_sglang_router_and_only_disagg_uses_mori():
         "agg_workers": 1,
         "gpus_per_agg": 1,
     }
-    assert agg["frontend"]["type"] == "sgl-router"
+    assert agg["frontend"]["type"] == "sglang"
     assert agg["backend"]["type"] == "sglang"
-    assert disagg["frontend"]["type"] == "sgl-router"
+    assert disagg["frontend"]["type"] == "sglang"
     assert disagg["backend"]["type"] == "sglang"
     for role in ("prefill", "decode"):
         assert disagg["backend"]["sglang_config"][role][
@@ -123,7 +123,7 @@ def test_launcher_pins_runtime_and_preserves_legacy_default():
     launcher = LAUNCHER.read_text()
     legacy = LEGACY_LAUNCHER.read_text()
 
-    assert "315e4b06a7e0806194a646ea21832e750e896a46" in launcher
+    assert "31e72da43ed21fe941c039be51b2cad1a3cf428a" in launcher
     assert "v0.5.17-rocm720-mi35x-20260809" in launcher
     assert "make setup-compute ARCH=x86_64" in launcher
     assert "SRTCTL_RUNTIME_SOURCE_DIR" in launcher
@@ -216,7 +216,7 @@ def test_production_disagg_recipe_uses_two_full_nodes_and_the_existing_workload(
         "cpus-per-task": "128",
         "mem": "0",
     }
-    assert recipe["frontend"]["type"] == "sgl-router"
+    assert recipe["frontend"]["type"] == "sglang"
     for role in ("prefill", "decode"):
         environment = recipe["backend"][f"{role}_environment"]
         assert environment["HF_HOME"] == "/hf_hub_cache"
