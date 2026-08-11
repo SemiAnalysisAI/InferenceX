@@ -40,7 +40,7 @@ InferenceX-e2e 运行在数量固定且有限的 GPU 资源池上，并由一支
 
 **2026 年 8 月 6 日（星期四）**为 **Kimi-K2.5/2.6/2.7-Code**（`kimik2.5`）**单轮 8k1k** 场景的最后运行日，此后该场景对这些模型弃用。原因：Kimi-K3 已于 2026 年 7 月 27 日发布，GPU 集群时间将转向更新的前沿模型。叠加上文的智能体编码弃用，`kimik2.5` 将不再有任何启用场景。该模型将于 **2026 年 8 月 6 日后完全退役**。
 
-**已于 2026-08-07 执行**（[#2527](https://github.com/SemiAnalysisAI/InferenceX/pull/2527)）：从启用的主配置中移除 17 个 `kimik2.5` 配置项，归档至 [`configs/deprecated/`](configs/deprecated/)，分别为 `nvidia-kimik2.5-8k1k-master.yaml`（10 个）与 `amd-kimik2.5-8k1k-master.yaml`（7 个）。对应的 12 个基准测试脚本移入同级 `deprecated/` 目录。此后 `kimik2.5` 在所有主配置中**均无启用配置**，正式完全退役。同一 PR 还归档了 `kimik2.5-int4-h100-vllm`。#2493 将其脚本移入 `benchmarks/single_node/agentic/deprecated/` 时，该智能体编码配置项被遗留在 `nvidia-master.yaml` 中。后续清理在生产结果删除后永久移除了这些已归档的 AgentX 配置和脚本。SPEED-Bench 接受长度脚本 `benchmarks/single_node/speedbench/kimik2.5_fp4_b300_vllm.sh` 予以保留。Speedbench 由 `speedbench-al.yml` 驱动，不经过主配置，与 #2493 处理 MiniMax-M3 的方式一致。
+**已于 2026-08-07 执行**（[#2527](https://github.com/SemiAnalysisAI/InferenceX/pull/2527)）：从启用的主配置中移除 17 个 `kimik2.5` 配置项，归档至 [`configs/deprecated/`](configs/deprecated/)，分别为 `nvidia-kimik2.5-8k1k-master.yaml`（10 个）与 `amd-kimik2.5-8k1k-master.yaml`（7 个）。对应的 12 个基准测试脚本移入同级 `deprecated/` 目录。此后 `kimik2.5` 在所有主配置中**均无启用配置**，正式完全退役。同一 PR 还归档了 `kimik2.5-int4-h100-vllm`。#2493 将其脚本移入 `benchmarks/single_node/agentic/deprecated/` 时，该智能体编码配置项被遗留在 `nvidia-master.yaml` 中，现已与同类项一并归入 `nvidia-kimik2.5-agentic-master.yaml`。SPEED-Bench 接受长度脚本 `benchmarks/single_node/speedbench/kimik2.5_fp4_b300_vllm.sh` 予以保留。Speedbench 由 `speedbench-al.yml` 驱动，不经过主配置，与 #2493 处理 MiniMax-M3 的方式一致。
 
 ## 场景
 
