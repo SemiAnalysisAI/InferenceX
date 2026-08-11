@@ -1,4 +1,4 @@
-# Qwen3.5-397B-A17B-NVFP4 Disaggregated 5P1D wide-EP
+# Qwen3.5-397B-A17B-NVFP4-V2 Disaggregated 5P1D wide-EP
 # Prefill: 5 workers @ TP4/DP4/EP4 with DP-attn (per-node, DEP4)
 # Decode:  1 worker  @ TP16/DP16/EP16 with DP-attn + TBO (DEP16, 4 nodes)
 # Total: 36 GB300 GPUs (5*4 + 4*4); 8k1k concurrency 1024/2048/3072.
@@ -93,7 +93,7 @@ backend:
 
   sglang_config:
     prefill:
-      served-model-name: "nvidia/Qwen3.5-397B-A17B-NVFP4"
+      served-model-name: "nvidia/Qwen3.5-397B-A17B-NVFP4-V2"
       model-path: "/model/"
       trust-remote-code: true
 
@@ -128,7 +128,7 @@ backend:
       linear-attn-decode-backend: "flashinfer"
 
     decode:
-      served-model-name: "nvidia/Qwen3.5-397B-A17B-NVFP4"
+      served-model-name: "nvidia/Qwen3.5-397B-A17B-NVFP4-V2"
       model-path: "/model/"
       trust-remote-code: true
 
