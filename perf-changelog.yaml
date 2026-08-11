@@ -5796,4 +5796,5 @@
     - "Add srt-slurm correctness lanes for the ROCm ATOM engine and the open-source Infera successor to ATOMesh."
     - "Validate two aggregate ATOM workers behind Infera KV-aware routing and a two-node 1P/1D ATOM deployment using Mooncake RDMA."
     - "Use rocm/infera:atom-v0.1.1 with Qwen3-0.6B fixed-sequence requests on MI300X and pin the combined AMD, vLLM Router, ATOM, and Infera srt-slurm branch."
+    - "Overlay the exact upstream Infera KV-event decoder fix from AMD-AGI/Infera#114 so ATOM's tagged-map events populate the router cache view during pre-release hardware validation."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2558

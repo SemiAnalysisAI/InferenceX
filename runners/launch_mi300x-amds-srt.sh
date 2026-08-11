@@ -5,6 +5,8 @@ set -euo pipefail
 # matrix rows opt in by exporting CONFIG_FILE through additional-settings.
 SRT_SLURM_REPOSITORY="https://github.com/SemiAnalysisAI/srt-slurm.git"
 SRT_SLURM_COMMIT="297da661ad058bb1ea4bad06be528ce4a0bbe9e2"
+INFERA_REPOSITORY="https://github.com/cquil11/Infera.git"
+INFERA_COMMIT="8ed8f1728c745d4e91ba9eaa09ed81159aa57e41"
 SLURM_PARTITION="compute"
 EXCLUDED_NODES="chi-mi300x-049,chi-mi300x-121"
 REMOTE_BASE="/raid/hf-hub-cache/inferencex/srt-slurm"
@@ -48,6 +50,7 @@ CLUSTER_PROFILE="${GITHUB_WORKSPACE}/benchmarks/multi_node/srt-slurm-recipes/clu
 RUN_KEY="${GITHUB_RUN_ID:-manual}-${GITHUB_RUN_ATTEMPT:-0}-${RUNNER_NAME:-runner}"
 REMOTE_RUNTIME="${REMOTE_BASE}/runtime/inferencex-${RUN_KEY}"
 REMOTE_SRT_RUNTIME="${REMOTE_BASE}/runtime/srt-slurm-${SRT_SLURM_COMMIT}"
+REMOTE_INFERA_RUNTIME="${REMOTE_BASE}/runtime/infera-${INFERA_COMMIT}"
 REMOTE_RESULTS="${REMOTE_BASE}/results"
 WORK_DIR="${GITHUB_WORKSPACE}/.srt-slurm-${RUN_KEY}"
 SRT_REPO_DIR="${WORK_DIR}/srt-slurm"
@@ -79,6 +82,7 @@ srun --ntasks-per-node=1 bash -c '
   set -euo pipefail
   runtime="${REMOTE_RUNTIME}"
   srt_runtime="${REMOTE_SRT_RUNTIME}"
+  infera_runtime="${REMOTE_INFERA_RUNTIME}"
   export ENROOT_RUNTIME_PATH="\${TMPDIR:-/tmp}/enroot-runtime-\${UID}"
   mkdir -p "\$ENROOT_RUNTIME_PATH" "\$runtime" "${REMOTE_RESULTS}" "${REMOTE_BASE}/containers"
   chmod 700 "\$ENROOT_RUNTIME_PATH"
@@ -123,6 +127,12 @@ srun --ntasks-per-node=1 bash -c '
   git -C "\$srt_runtime" checkout --quiet --detach "${SRT_SLURM_COMMIT}"
   test "\$(git -C "\$srt_runtime" rev-parse HEAD)" = "${SRT_SLURM_COMMIT}"
   make -C "\$srt_runtime" --no-print-directory setup ARCH=x86_64
+  if [[ ! -d "\$infera_runtime/.git" ]]; then
+    git clone --quiet "${INFERA_REPOSITORY}" "\$infera_runtime"
+  fi
+  git -C "\$infera_runtime" fetch --quiet origin "${INFERA_COMMIT}"
+  git -C "\$infera_runtime" checkout --quiet --detach "${INFERA_COMMIT}"
+  test "\$(git -C "\$infera_runtime" rev-parse HEAD)" = "${INFERA_COMMIT}"
   tar -xzf "/tmp/inferencex-benchmark-\${SLURM_JOB_ID}.tar.gz" -C "\$runtime"
   printf "%s\\n" "${GITHUB_SHA:-unknown}" > "\$runtime/.inferencex-source-head"
 '
@@ -141,12 +151,12 @@ ACTUAL_SRT_COMMIT=$(git -C "$SRT_REPO_DIR" rev-parse HEAD)
 mkdir -p "${SRT_REPO_DIR}/$(dirname "$CONFIG_PATH")"
 cp "$LOCAL_RECIPE" "${SRT_REPO_DIR}/${CONFIG_PATH}"
 cp "$CLUSTER_PROFILE" "${WORK_DIR}/srtslurm.yaml"
-python3 - "${WORK_DIR}/srtslurm.yaml" "$REMOTE_RUNTIME" "$REMOTE_RESULTS" <<'PY'
+python3 - "${WORK_DIR}/srtslurm.yaml" "$REMOTE_RUNTIME" "$REMOTE_RESULTS" "$REMOTE_INFERA_RUNTIME" <<'PY'
 import sys
 from pathlib import Path
 
 path = Path(sys.argv[1])
-runtime, results = sys.argv[2:]
+runtime, results, infera_runtime = sys.argv[2:]
 needle = "  /raid/hf-hub-cache: /hf_hub_cache\n"
 text = path.read_text()
 if text.count(needle) != 1:
@@ -154,7 +164,10 @@ if text.count(needle) != 1:
 path.write_text(
     text.replace(
         needle,
-        needle + f"  {runtime}: /infmax-workspace\n  {results}: /results\n",
+        needle
+        + f"  {runtime}: /infmax-workspace\n"
+        + f"  {results}: /results\n"
+        + f"  {infera_runtime}: /infera-source\n",
     )
 )
 PY

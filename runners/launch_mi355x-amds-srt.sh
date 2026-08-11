@@ -6,12 +6,15 @@ set -euo pipefail
 # unchanged for every other row.
 SRT_SLURM_REPOSITORY="https://github.com/SemiAnalysisAI/srt-slurm.git"
 SRT_SLURM_COMMIT="297da661ad058bb1ea4bad06be528ce4a0bbe9e2"
+INFERA_REPOSITORY="https://github.com/cquil11/Infera.git"
+INFERA_COMMIT="8ed8f1728c745d4e91ba9eaa09ed81159aa57e41"
 SLURM_PARTITION="compute"
 SGLANG_IMAGE="lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260809"
 ATOM_IMAGE="rocm/infera:atom-v0.1.1"
 SHARED_BASE="/it-share/gharunners2/srt-slurm"
 SHARED_HF_CACHE="/it-share/hf-hub-cache"
 SHARED_RESULTS="${SHARED_BASE}/results"
+SHARED_INFERA_RUNTIME="${SHARED_BASE}/runtime/infera-${INFERA_COMMIT}"
 
 : "${GITHUB_WORKSPACE:?GITHUB_WORKSPACE must be set by Actions}"
 : "${RESULT_FILENAME:?RESULT_FILENAME must be set by the benchmark workflow}"
@@ -63,6 +66,12 @@ set -euo pipefail
 export ENROOT_RUNTIME_PATH="\${TMPDIR:-/tmp}/enroot-runtime-\${UID}"
 mkdir -p "\$ENROOT_RUNTIME_PATH" "$(dirname "$SHARED_IMAGE")" "$SHARED_HF_CACHE"
 chmod 700 "\$ENROOT_RUNTIME_PATH"
+if [[ ! -d "${SHARED_INFERA_RUNTIME}/.git" ]]; then
+    git clone --quiet "${INFERA_REPOSITORY}" "${SHARED_INFERA_RUNTIME}"
+fi
+git -C "${SHARED_INFERA_RUNTIME}" fetch --quiet origin "${INFERA_COMMIT}"
+git -C "${SHARED_INFERA_RUNTIME}" checkout --quiet --detach "${INFERA_COMMIT}"
+test "\$(git -C "${SHARED_INFERA_RUNTIME}" rev-parse HEAD)" = "${INFERA_COMMIT}"
 exec 9>"${SHARED_IMAGE}.lock"
 flock -w 2400 9
 if ! unsquashfs -s "$SHARED_IMAGE" >/dev/null 2>&1; then
@@ -110,12 +119,12 @@ ACTUAL_SRT_COMMIT=$(git -C "$SRT_REPO_DIR" rev-parse HEAD)
 mkdir -p "${SRT_REPO_DIR}/$(dirname "$CONFIG_PATH")"
 cp "$LOCAL_RECIPE" "${SRT_REPO_DIR}/${CONFIG_PATH}"
 cp "$CLUSTER_PROFILE" "${WORK_DIR}/srtslurm.yaml"
-python3 - "${WORK_DIR}/srtslurm.yaml" "$GITHUB_WORKSPACE" "$SHARED_RESULTS" <<'PY'
+python3 - "${WORK_DIR}/srtslurm.yaml" "$GITHUB_WORKSPACE" "$SHARED_RESULTS" "$SHARED_INFERA_RUNTIME" <<'PY'
 import sys
 from pathlib import Path
 
 path = Path(sys.argv[1])
-workspace, results = sys.argv[2:]
+workspace, results, infera_runtime = sys.argv[2:]
 needle = "  /it-share/hf-hub-cache: /hf_hub_cache\n"
 text = path.read_text()
 if text.count(needle) != 1:
@@ -123,7 +132,10 @@ if text.count(needle) != 1:
 path.write_text(
     text.replace(
         needle,
-        needle + f"  {workspace}: /infmax-workspace\n  {results}: /results\n",
+        needle
+        + f"  {workspace}: /infmax-workspace\n"
+        + f"  {results}: /results\n"
+        + f"  {infera_runtime}: /infera-source\n",
     )
 )
 PY
