@@ -49,6 +49,9 @@ backend:
     HF_HUB_CACHE: "/hf_hub_cache/hub"
     HUGGINGFACE_HUB_CACHE: "/hf_hub_cache/hub"
     PYTHONUNBUFFERED: "1"
+    # Slurm owns CPU placement for each worker task. The ROCm image may inherit
+    # SGLang affinity settings that target CPUs outside the task cpuset.
+    SGLANG_SET_CPU_AFFINITY: "0"
     IBDEVICES: "rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7"
     MORI_RDMA_TC: "104"
     MORI_IO_SQ_BACKOFF_TIMEOUT_US: "500000"
