@@ -1224,6 +1224,8 @@ class TestMultinodePower:
         assert agg["power_valid"] == 1
         assert agg["prefill_gpu_energy_j"] == 48000.0
         assert agg["decode_gpu_energy_j"] == 36000.0
+        assert agg["prefill_avg_power_w"] == 400.0
+        assert agg["decode_avg_power_w"] == 300.0
         assert (tmp_path / "power_validation_benchmark_result.json").is_file()
 
     def test_missing_package_is_best_effort(self, tmp_path, power_env):
