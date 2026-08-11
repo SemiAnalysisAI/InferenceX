@@ -44,13 +44,13 @@ Fail-fast is matrix-scoped: one matrix failure does not cancel other matrices, a
 
 Sweeps do not trigger while a PR has merge conflicts. For `perf-changelog.yaml` conflicts, follow `KLAUD_DEBUG.md` section 1.1: merge `origin/main`, restore the file byte-for-byte from `origin/main`, then append only the PR's entry at the tail. Never 3-way merge the changelog.
 
-Pushes to `main` always enter sweep setup and either reuse approved artifacts or run an untrimmed full sweep. `[skip-sweep]` only skips PR benchmark setup; it never skips a main-branch sweep. It still permits changelog validation and reuse authorization checks.
+Pushes to `main` always enter sweep setup and either reuse approved artifacts or run an untrimmed full sweep. `[skip-sweep]` only skips PR benchmark setup. It never skips a main-branch sweep. It still permits changelog validation and reuse authorization checks.
 
 Artifact reuse excludes runs with `evals-only` or `agentx-fast`. See `.github/workflows/README.md` and `utils/merge_with_reuse.sh` for eligibility and merge behavior.
 
 ## Workflow dispatch and monitoring
 
-One-offs dispatch `.github/workflows/e2e-tests.yml`; `.github/workflows/run-sweep.yml` is push/PR-triggered and is not dispatchable.
+One-offs dispatch `.github/workflows/e2e-tests.yml`. `.github/workflows/run-sweep.yml` is push/PR-triggered and is not dispatchable.
 
 ```bash
 gh api -X POST \
@@ -62,7 +62,7 @@ gh api -X POST \
   -f 'inputs[duration-override]='
 ```
 
-The top-level `ref` selects the workflow definition and is normally `main`; `inputs[ref]` selects the repository revision under test. Direct config dispatches set `inputs[generate-cli-command]`. Trusted changelog-driven dispatches instead set both `inputs[changelog-base-ref]` and `inputs[changelog-head-ref]`. `duration-override` replaces per-config seconds, and `require-power` makes invalid fixed-sequence power telemetry fatal.
+The top-level `ref` selects the workflow definition and is normally `main`. `inputs[ref]` selects the repository revision under test. Direct config dispatches set `inputs[generate-cli-command]`. Trusted changelog-driven dispatches instead set both `inputs[changelog-base-ref]` and `inputs[changelog-head-ref]`. `duration-override` replaces per-config seconds, and `require-power` makes invalid fixed-sequence power telemetry fatal.
 
 For AgentX preflight, add `-F 'inputs[agentx-fast]=true'`. Official runs use 10 warmup requests per lane and a one-hour profile.
 
@@ -84,9 +84,9 @@ Full details live in `utils/evals/EVALS.md`.
 
 - `--no-evals`: skip evals.
 - `--evals-only`: run the default selected eval subset and suppress throughput.
-- `--all-evals`: expand selection to every generated fixed-sequence configuration; it composes with `--evals-only`.
+- `--all-evals`: expand selection to every generated fixed-sequence configuration. It composes with `--evals-only`.
 
-For multi-node configurations, `--all-evals` creates one eval job per engine topology and runs every distinct `conc-list` value sequentially against that engine. Changelog `all-evals: true` suppresses throughput for that entry. The PR `all-evals` label expands selection only; the `evals-only` label suppresses throughput. `utils/collect_eval_results.py` produces aggregated output.
+For multi-node configurations, `--all-evals` creates one eval job per engine topology and runs every distinct `conc-list` value sequentially against that engine. Changelog `all-evals: true` suppresses throughput for that entry. The PR `all-evals` label expands selection only, while the `evals-only` label suppresses throughput. `utils/collect_eval_results.py` produces aggregated output.
 
 ## Power telemetry
 
@@ -94,7 +94,7 @@ Single-node fixed-sequence results may include `power_valid`, `avg_power_w`, `av
 
 Multinode disaggregated results add `prefill_gpu_energy_j`, `decode_gpu_energy_j`, `prefill_joules_per_input_token`, and `decode_joules_per_output_token`. Role energy covers the full formal benchmark window, not kernel-level phases.
 
-For srt-slurm recipes, `telemetry: {provider: dcgm-power}` enables official energy collection. `runners/launch_gb200-nv.sh` and `runners/launch_gb300-nv.sh` are the source of truth for `POWER_SRT_SLURM_PIN`; CI derives `POWER_PRODUCER_SHA` from the launcher stamp. `utils/test_gb200_power_official_contract.py` and `utils/test_gb300_power_official_contract.py` enforce the recipe/launcher contract. Only `PRECISION=fp8` dcgm-power lanes are validated.
+For srt-slurm recipes, `telemetry: {provider: dcgm-power}` enables official energy collection. `runners/launch_gb200-nv.sh` and `runners/launch_gb300-nv.sh` are the source of truth for `POWER_SRT_SLURM_PIN`. CI derives `POWER_PRODUCER_SHA` from the launcher stamp. `utils/test_gb200_power_official_contract.py` and `utils/test_gb300_power_official_contract.py` enforce the recipe/launcher contract. Only `PRECISION=fp8` dcgm-power lanes are validated.
 
 Power audit artifacts are named `power_audit_<result>` and contain `power_validation_<result>.json` for single-node runs or `power_validation_<result>_*.json` for multinode runs. They are uploaded even when validation fails.
 
@@ -112,7 +112,7 @@ Never dump raw result JSON. Core metrics are `tput_per_gpu`, `output_tput_per_gp
 Artifacts:
 
 - `results_bmk`: `agg_bmk.json`.
-- `results_all`: all aggregated results; may not exist.
-- `eval_results_all`: `agg_eval_all.json`; may not exist.
+- `results_all`: all aggregated results, which may not exist.
+- `eval_results_all`: `agg_eval_all.json`, which may not exist.
 - `run-stats`: `run_stats.json`, containing nodes run and success status.
 - `power_audit_<result>`: canonical power validity verdict and reason codes.

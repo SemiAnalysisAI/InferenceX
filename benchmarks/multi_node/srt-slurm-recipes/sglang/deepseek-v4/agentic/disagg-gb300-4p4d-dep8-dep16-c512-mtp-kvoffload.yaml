@@ -1,7 +1,7 @@
-name: "disagg-gb300-4p4d-dep8-dep16-c256-mtp-kvoffload"
+name: "disagg-gb300-4p4d-dep8-dep16-c512-mtp-kvoffload"
 
 # Agentic-coding SGLang disaggregated recipe for DeepSeek-V4-Pro on GB300
-# (4P x DEP8 / 4D x DEP16, MTP + hierarchical-cache KV offload), tuned for concurrency 256.
+# (4P x DEP8 / 4D x DEP16, MTP + hierarchical-cache KV offload), tuned for concurrency 512.
 #
 # DEP8-prefill variant aligned with the measured Pareto point: prefill uses
 # tp/dp/ep 8, four nodes, and SGLANG_DSV4_MHC_PREWARM=1.
@@ -15,7 +15,7 @@ model:
 
 dynamo:
   install: true
-  wheel: "1.3.0.dev1"
+  wheel: "1.3.0.dev20260718"
 
 slurm:
   time_limit: "8:00:00"
@@ -40,15 +40,14 @@ infra:
 frontend:
   type: dynamo
   nginx_session_affinity: true
-  nginx_session_affinity_header: X-Correlation-ID
+  nginx_session_affinity_header: X-Dynamo-Session-ID
   enable_multiple_frontends: true
   num_additional_frontends: 4
   env:
-    DYN_ROUTER_TEMPERATURE: "10000000"
     PIP_BREAK_SYSTEM_PACKAGES: "1"
   args:
     router-mode: "kv"
-    router-reset-states: true
+    router-session-affinity-ttl-secs: "3600"
     active-decode-blocks-threshold: "None"
     active-prefill-tokens-threshold: "None"
     active-prefill-tokens-threshold-frac: "None"
