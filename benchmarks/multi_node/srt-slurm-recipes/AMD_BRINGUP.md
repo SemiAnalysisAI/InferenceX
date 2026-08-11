@@ -5,11 +5,15 @@ This document tracks the work-in-progress integration of
 InferenceX AMD Slurm clusters. The project is a functional orchestration
 bring-up, not a performance-tuning exercise.
 
-Current development pin for both AMD launchers:
+Current development pins:
 
 - repository: `SemiAnalysisAI/srt-slurm`
-- branch: `agent/amd-multinode-runtime`
-- commit: `315e4b06a7e0806194a646ea21832e750e896a46`
+- MI300X commit: `dd0109d4043141072ad37c043f1100332008b77f`
+- MI355X commit: `5c0d5a718194198447e8ceea5c37048c2fb8eaf5`
+
+The MI355X pin includes the SGLang-router readiness gate: srt-slurm waits for
+every advertised prefill and decode HTTP health endpoint before starting the
+model gateway.
 
 The MI300X launcher uses srt-slurm's supported `--no-preflight` submission mode
 because the immutable squashfs files live on compute-node-local RAID rather
@@ -57,6 +61,21 @@ override. The submitter continues to validate against its local pinned checkout.
 The launcher will continue to exclude compute nodes already documented as
 unsuitable. It must not resume down nodes, cancel or preempt existing jobs, or
 alter unrelated shared software.
+
+## MI355X MoRI fabric contract
+
+The MI355X DeepSeek V4 disaggregated path uses MoRI with DSCP traffic class
+104. Each Ionic data NIC must therefore classify DSCP 26 as priority 3, enable
+lossless PFC for priority 3, and keep the port in PFC pause mode with RX and TX
+pause enabled. The cluster's management traffic additionally maps DSCP 48 to
+strict priority 6. The expected scheduler split is 10% priority 0, 90%
+priority 3, and a 10 Gbps rate limit for strict priority 6.
+
+Before admitting a node to a MoRI validation run, verify all eight NICs with
+`nicctl show qos` and `nicctl show port`, and verify all eight RDMA links report
+`ACTIVE` / `LINK_UP`. A node that does not match this contract must be drained
+before repair and resumed only after every NIC and RDMA link passes the same
+checks. Do not alter QoS while a Slurm allocation is using the node.
 
 ## Acceptance criteria
 
