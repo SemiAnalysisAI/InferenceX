@@ -97,7 +97,7 @@ def test_official_matrix_routes_disagg_through_the_pinned_srt_launcher():
         "CONFIG_FILE=recipes/vllm/qwen3-0.6b/mi300x/"
         "disagg-1p1d-fixed-seq.yaml"
     ]
-    assert "297da661ad058bb1ea4bad06be528ce4a0bbe9e2" in launcher
+    assert "f71cbb1cd7a4247ce50d54d84254c1842258b6e3" in launcher
     assert launcher.count("setup ARCH=x86_64") == 2
     assert "--no-preflight" in launcher
     assert 'ENROOT_RUNTIME_PATH="\\${TMPDIR:-/tmp}/enroot-runtime-\\${UID}"' in launcher
@@ -225,6 +225,7 @@ def test_atom_recipes_use_infera_and_keep_worker_metrics_honest():
         assert "--backend openai" in command
         assert "--endpoint /v1/completions" in command
     assert disaggregate["backend"]["connector"] == "mooncake"
+    assert disaggregate["backend"]["mooncake_ib_device"] == "mlx5_1"
     assert 'ATOM_IMAGE="rocm/infera:atom-v0.1.1"' in launcher
     assert 'INFERA_COMMIT="8ed8f1728c745d4e91ba9eaa09ed81159aa57e41"' in launcher
     assert 'REMOTE_INFERA_RUNTIME="${REMOTE_BASE}/runtime/infera-${INFERA_COMMIT}"' in launcher
