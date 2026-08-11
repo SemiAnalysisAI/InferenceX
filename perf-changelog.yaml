@@ -5775,9 +5775,9 @@
 - config-keys:
     - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
   description:
-    - "Add Kimi K3 B200 AgentX latency, balanced, and throughput tiers on the PP-free TP16 DSpark topology"
-    - "Add a TP16 SimpleCPUOffloadConnector capacity tier with 220 GiB of host KV per rank"
-    - "Run DSpark level 7 with probabilistic drafting and the committed synthetic acceptance length 3.84"
-    - "Use the pinned 2026-08-10 vLLM nightly with upstream Kimi K3 and DSpark support"
-    - "Use the portable PyNCCL latent-MoE path because cross-node B200 cannot rendezvous the SM100 fused tail"
+    - "Add Kimi K3 B200 AgentX latency, balanced, and throughput tiers on the two-node upstream TP16+EP16 DSpark topology"
+    - "Add a TP16+EP16 SimpleCPUOffloadConnector capacity tier with 220 GiB of host KV per rank"
+    - "Keep throughput on DSpark level 7 probabilistic drafting with committed golden synthetic AL 3.84; EVAL_ONLY selects committed rejection_sample_method=block recipes for real target verification"
+    - "Use the digest-pinned 2026-08-10 upstream vLLM nightly and direct Inferact/Kimi-K3-DSpark model ID as shipped, with no local compatibility layer or installed serving-engine rewrite"
+    - "Use vLLM expert parallelism and shipped portable-collective controls to avoid the cross-node latent-MoE symmetric-memory path"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2475

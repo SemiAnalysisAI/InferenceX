@@ -1,10 +1,8 @@
-name: "kimik3-vllm-agg-b200-tep16-latency-dspark-agentic"
+name: "kimik3-vllm-agg-b200-tep16-simple-offload-dspark-eval-agentic"
 
-# Official balanced multi_node_tep profile for two 8xB200 nodes. TP16 shards
-# attention and dense layers across all GPUs while EP16 shards MoE experts,
-# keeping vLLM's cross-node-unsupported latent-MoE fused tail out of the
-# selected as-shipped code path without modifying the serving engine.
-# https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=b200&nodes=2&strategy=multi_node_tep
+# Real-verification eval counterpart to the B200 DSpark offload throughput
+# recipe. It keeps the official multi_node_tep topology and CPU KV connector;
+# only DSpark acceptance changes from synthetic golden AL to verified block.
 model:
   path: "kimik3"
   container: "vllm/vllm-openai:nightly-b22afe45ac797ae58e67a7a3ad79ee5714024420@sha256:144356af876edbb3a4bfee23e1444b196cc3fdadd0a0c1a7f11f721756972a21"
@@ -87,9 +85,9 @@ backend:
       language-model-only: true
       max-num-seqs: 8
       max-num-batched-tokens: 8192
-      # Throughput runs use the committed K7 golden synthetic AL 3.84. Eval
-      # selects the paired real-verification recipe instead.
-      speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":7,"method":"dspark","attention_backend":"FLASHINFER_MLA","draft_sample_method":"probabilistic","rejection_sample_method":"synthetic","synthetic_acceptance_length":3.84}'
+      # Eval must verify every draft against real target logits.
+      speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":7,"method":"dspark","attention_backend":"FLASHINFER_MLA","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+      kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":236223201280,"lazy_offload":false}}'
 
 sbatch_directives:
   segment: "1"

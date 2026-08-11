@@ -172,11 +172,9 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         git clone --branch klaud/direct-vllm-multinode --single-branch https://github.com/functionstackx/srt-slurm-nv.git "$SRT_REPO_DIR" || exit 1
         cd "$SRT_REPO_DIR" || exit 1
         git checkout df5baa93f4caf5169dea2a4236ad2cc742fe40e7 || exit 1
-        mkdir -p recipes/vllm/kimi-k3/agentic configs || exit 1
+        mkdir -p recipes/vllm/kimi-k3/agentic || exit 1
         cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
             recipes/vllm/kimi-k3/agentic || exit 1
-        cp "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/kimik3-dspark-config-compat.sh" \
-            configs/kimik3-dspark-config-compat.sh || exit 1
     elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
         git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR" || exit 1
@@ -348,6 +346,15 @@ EOF
     echo "Submitting job with srtctl..."
     echo "MODEL_PATH=$MODEL_PATH (exists=$(test -d "$MODEL_PATH" && echo yes || echo NO))"
     ls -ld "$MODEL_PATH" 2>&1 || ls /lustre/fsw/models/ 2>&1 | head -40
+
+    # An eval row may point at a committed real-verification recipe while its
+    # throughput row keeps synthetic golden acceptance. Only configs that set
+    # EVAL_CONFIG_FILE opt into this selection; all other configs keep using
+    # CONFIG_FILE unchanged.
+    if [[ "${EVAL_ONLY:-false}" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
+        CONFIG_FILE="$EVAL_CONFIG_FILE"
+        echo "EVAL_ONLY=true: selecting real-verification recipe $CONFIG_FILE"
+    fi
 
     if [[ -z "$CONFIG_FILE" ]]; then
         echo "Error: CONFIG_FILE is not set. The srt-slurm path requires a CONFIG_FILE in additional-settings." >&2

@@ -8002,11 +8002,10 @@ kimik3-fp4-b200-dynamo-vllm-agentic:
           ep: 1
           dp-attn: false
 
-# DSpark's K3DSparkModel does not implement pipeline parallelism, so Kimi K3
-# DSpark must use the official PP1 TP16 layout across all 16 B200s. Keep plain
-# TP because the latency and capacity objectives do not require expert
-# parallelism. Split the same serving topology into latency, balanced,
-# throughput, and CPU KV-offloaded capacity tiers.
+# DSpark does not compose with pipeline parallelism, so use the official
+# two-node TP16+EP16 profile. Expert parallel keeps each MoE layer's internal
+# TP size at one and therefore avoids the fused latent-MoE symmetric-memory
+# path while all 16 GPUs still participate in attention/dense TP.
 kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
   image: vllm/vllm-openai:nightly-b22afe45ac797ae58e67a7a3ad79ee5714024420@sha256:144356af876edbb3a4bfee23e1444b196cc3fdadd0a0c1a7f11f721756972a21
   model: moonshotai/Kimi-K3
@@ -8026,14 +8025,15 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
         prefill:
           num-worker: 1
           tp: 16
-          ep: 1
+          ep: 16
           dp-attn: false
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-b200-tp16-latency-dspark-agentic.yaml"
+          - "EVAL_CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-b200-tp16-latency-dspark-eval-agentic.yaml"
         decode:
           num-worker: 0
           tp: 16
-          ep: 1
+          ep: 16
           dp-attn: false
       # Balanced medium-concurrency points.
       - spec-decoding: mtp
@@ -8041,14 +8041,15 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
         prefill:
           num-worker: 1
           tp: 16
-          ep: 1
+          ep: 16
           dp-attn: false
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-b200-tp16-latency-dspark-agentic.yaml"
+          - "EVAL_CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-b200-tp16-latency-dspark-eval-agentic.yaml"
         decode:
           num-worker: 0
           tp: 16
-          ep: 1
+          ep: 16
           dp-attn: false
       # GPU-resident throughput points around the prior c16-c32 KV cliff.
       - spec-decoding: mtp
@@ -8056,14 +8057,15 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
         prefill:
           num-worker: 1
           tp: 16
-          ep: 1
+          ep: 16
           dp-attn: false
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-b200-tp16-latency-dspark-agentic.yaml"
+          - "EVAL_CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-b200-tp16-latency-dspark-eval-agentic.yaml"
         decode:
           num-worker: 0
           tp: 16
-          ep: 1
+          ep: 16
           dp-attn: false
       # CPU KV-offloaded capacity points beyond the GPU-resident cliff.
       - spec-decoding: mtp
@@ -8073,14 +8075,15 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
         prefill:
           num-worker: 1
           tp: 16
-          ep: 1
+          ep: 16
           dp-attn: false
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-b200-tp16-vllm-simple-offload-dspark-agentic.yaml"
+          - "EVAL_CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-b200-tp16-vllm-simple-offload-dspark-eval-agentic.yaml"
         decode:
           num-worker: 0
           tp: 16
-          ep: 1
+          ep: 16
           dp-attn: false
 
 qwen3.5-fp8-gb300-dynamo-sglang-mtp:
