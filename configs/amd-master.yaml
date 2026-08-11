@@ -328,9 +328,9 @@ qwen3.5-fp8-mi355x-sglang-disagg-mtp:
     - isl: 8192
       osl: 1024
       search-space:
-      # 1P+1D TP4P+TP8D/EP1, EAGLE MTP depth 3 (num-steps 3).
+      # 1P+1D TP4P+TP8D/EP1, EAGLE MTP depth 3 — conc 8-64.
       - spec-decoding: "mtp"
-        conc-list: [ 8, 16, 32, 64, 128 ]
+        conc-list: [ 8, 16, 32, 64 ]
         prefill:
           num-worker: 1
           tp: 4
@@ -341,6 +341,28 @@ qwen3.5-fp8-mi355x-sglang-disagg-mtp:
         decode:
           num-worker: 1
           tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=3"
+      # 1P+1D TP4P+TP4D/EP1, EAGLE MTP depth 3 — conc 128.
+      # At conc=128, TP8 decode bottlenecks MTP (draft verification
+      # saturates 8 GPUs, causing -38% tput/GPU and TTFT explosion).
+      # Switching to TP4D resolves the collapse: +83% tput/GPU, 7.5x
+      # better TTFT vs TP8D, while interactivity converges (39.5 vs 49.5).
+      - spec-decoding: "mtp"
+        conc-list: [ 128 ]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 4
           ep: 1
           dp-attn: false
           additional-settings:
