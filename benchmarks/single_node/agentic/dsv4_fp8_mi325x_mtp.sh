@@ -204,13 +204,13 @@ fi
 # piecewise graphs regressed. Restore the official 8K/2*CONC/FULL_DECODE_ONLY
 # baseline before isolating INT4 Quick Reduce.
 MAX_NUM_SEQS=$((2 * CONC))
-# The existing MI300X/MI325X fixed-sequence recipes use K=2. Keep that MTP
-# depth and its measured golden acceptance length for every AgentX point.
-NUM_SPEC_TOKENS=2
+# Isolated TEP functionality probe: retain real MTP target verification while
+# reducing only the speculative depth from K=2 to K=1.
+NUM_SPEC_TOKENS=1
 SYNTHETIC_ACCEPT_LEN=2.27
 if [[ "${EVAL_ONLY:-false}" == "true" ]] || { (( EP_SIZE > 1 )) && [[ "$DP_ATTENTION" != "true" ]]; }; then
-    # Isolate real target verification for TEP without changing MTP depth,
-    # topology, scheduler, collectives, graph mode, or AgentX workload.
+    # Isolate real target verification for TEP without changing topology,
+    # scheduler, collectives, graph mode, or the AgentX workload.
     SPEC_CONFIG="{\"method\":\"mtp\",\"num_speculative_tokens\":${NUM_SPEC_TOKENS}}"
 else
     SPEC_CONFIG="{\"method\":\"mtp\",\"num_speculative_tokens\":${NUM_SPEC_TOKENS},\"rejection_sample_method\":\"synthetic\",\"synthetic_acceptance_length\":${SYNTHETIC_ACCEPT_LEN}}"
