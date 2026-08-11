@@ -855,6 +855,62 @@ kimik3-fp4-mi355x-vllm-agentic-mtp-pytorch-private-0809-c8:
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [8], spec-decoding: mtp}
 
+kimik3-fp4-mi355x-vllm-agentic-mtp-dspark-prepatched-syn-curve:
+  # Concurrency ladder on the prepatched image under SYNTHETIC acceptance 2.51,
+  # matching the c8 cell that measured 3074 tok/s/GPU. Directly comparable to
+  # the published reference ladder, which is synthetic throughout.
+  #
+  # THIS IS A COST MODEL, NOT A MEASUREMENT. rejection_sample_method=synthetic
+  # commits drafted tokens on a calibrated probability and never compares them
+  # to the target, so acceptance echoes 2.51 rather than being earned. On this
+  # same trace, block rejection measured 1.665 at c8 and produced 2513.57
+  # tok/s/GPU -- about 18% below the synthetic figure. Every point here carries
+  # that same optimism; do not quote them as achievable throughput.
+  #
+  # MNS_PIN holds max_num_seqs at 16 for c4, c10 and c16 alike, so only c1
+  # differs at mns 2. c16 therefore runs 1x scheduler headroom where c8 had 2x,
+  # and the capture ladder is identical across the top three points instead of
+  # scaling with load. These are not four samples of one configuration.
+  image: aigmkt/kimi-k3-agentx@sha256:6eed69f39f036df3c7a61a2263159935a00a7c988a328677d502476a541c5c08
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: none, conc-list: [1, 4, 10, 16], spec-decoding: mtp}
+
+kimik3-fp4-mi355x-vllm-agentic-mtp-dspark-prepatched-syn-lmc-c10:
+  # LMCache sibling of the synthetic ladder's c10 point. Same image, same
+  # synthetic 2.51, same k=2 and fp8 KV, so the host memory tier is the only
+  # variable and the pairing against the GPU-only c10 cell is clean.
+  #
+  # LMCache is v0.5.3, the first release containing the Kimi-K3 MLA hotfix this
+  # recipe used to pin by commit.
+  #
+  # fp8 KV is why this arm is worth retrying. Under bf16 the unified block N is
+  # 768, `align` requires N <= max_num_batched_tokens < 2N, and the resulting
+  # 1464-token prefill chunk collided with the spec-decode clamp and serialised
+  # the engine to Running:1. fp8 lifts N to 1536 and the chunk to ~3000, the
+  # specific condition predicted to clear it. If Running still pins at 1, the
+  # chunk size was not the cause.
+  image: aigmkt/kimi-k3-agentx@sha256:6eed69f39f036df3c7a61a2263159935a00a7c988a328677d502476a541c5c08
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-k3, version: "git" }, conc-list: [10], spec-decoding: mtp}
+
 kimik3-fp4-mi355x-vllm-agentic-mtp-dspark-prepatched-c8:
   # Official-sweep reproduction of a c8 DSpark result that was produced by hand,
   # via sbatch out of a private worktree, rather than through this harness.
