@@ -1,0 +1,80 @@
+diff --git a/aiter/mla.py b/aiter/mla.py
+index 978e4b74526..48cb14ec6ec 100644
+--- a/aiter/mla.py
++++ b/aiter/mla.py
+@@ -530,18 +530,7 @@ def mla_decode_fwd(
+                 get_gfx() == "gfx950"
+                 and q.dtype == dtypes.fp8
+                 and kv_buffer.dtype == dtypes.fp8
+-                and (
+-                    (nhead == 32 and max_seqlen_q >= 4)
+-                    or (nhead == 64)
+-                    or (nhead == 128)
+-                )
+-            )
+-            or (
+-                get_gfx() == "gfx950"
+-                and nhead == 32
+-                and q.dtype == dtypes.fp8
+-                and kv_buffer.dtype == dtypes.fp8
+-                and max_seqlen_q == 2
++                and ((nhead == 32) or (nhead == 64) or (nhead == 128))
+             )
+             or (
+                 get_gfx() == "gfx950"
+@@ -558,19 +547,12 @@ def mla_decode_fwd(
+                 and max_seqlen_q == 2
+             )
+             or (
+-                get_gfx() in ("gfx942", "gfx950")
++                get_gfx() == "gfx942"
+                 and nhead == 64
+                 and q.dtype == dtypes.fp8
+                 and kv_buffer.dtype == dtypes.fp8
+                 and max_seqlen_q == 1
+             )
+-            or (
+-                get_gfx() == "gfx950"
+-                and nhead == 32
+-                and q.dtype == dtypes.fp8
+-                and kv_buffer.dtype == dtypes.fp8
+-                and max_seqlen_q == 1
+-            )
+             or (
+                 get_gfx() == "gfx950"
+                 and q.dtype == dtypes.bf16
+diff --git a/aiter/ops/attention.py b/aiter/ops/attention.py
+index 2e854ed97d3..d4bd2332ba0 100644
+--- a/aiter/ops/attention.py
++++ b/aiter/ops/attention.py
+@@ -847,7 +847,7 @@ def mla_decode_v4_asm(
+     kv_page_indices: torch.Tensor,
+     # [num_seqs+1]
+     split_indptr: torch.Tensor,
+-    # [num_heads] FP32 — attention sink logit. Loaded by the kernel via
++    # [num_heads] FP32 -- attention sink logit. Loaded by the kernel via
+     # kernarg slot 18 (byte offset 0x120). Caller must ALWAYS pass a real
+     # tensor; there is no nullable-sink convention on the C ABI. Pass
+     # torch.full((num_heads,), float("-inf")) for "no sink" math.
+@@ -1169,6 +1169,12 @@ def get_mla_metadata_info_v1(
+         and packed_qo_len >= 64
+         and num_head_qo <= 64
+         and (packed_qo_len < 128 or num_head_qo == 48)
++    ) or (
++        get_gfx() == "gfx950"
++        and q_dtype == dtypes.fp8
++        and kv_dtype == dtypes.fp8
++        and (num_head_qo == 32)
++        and (effective_seqlen_qo == 3)
+     ):
+         if num_head_qo * 2 > 64:
+             # e.g. nhead=48: C++ does  `return seqlen_qo`  (not ceil)
+@@ -1505,7 +1511,7 @@ def mla_reduce_v1(
+         max_seqlen_q: max query length (tokens) per decode step.
+         num_kv_splits: sizing hint for the reducer's per-split LDS scratch
+             (``max_splits = max(device_cu_count, num_kv_splits)``).
+-            **``0`` means auto** — size to the device CU count. Pass a value
++            **``0`` means auto** -- size to the device CU count. Pass a value
+             larger than the CU count only to force a bigger split budget;
+             values <= CU count (incl. 0) are clamped up to it.
+         final_output: [bs, h, dv]. Combined, normalized output (written

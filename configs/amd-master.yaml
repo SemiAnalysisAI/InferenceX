@@ -855,6 +855,35 @@ kimik3-fp4-mi355x-vllm-agentic-mtp-pytorch-private-0809-c8:
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [8], spec-decoding: mtp}
 
+kimik3-fp4-mi355x-vllm-agentic-mtp-aiter4521-block-c8:
+  # Attribution arm: which change actually bought the c8 speedup?
+  #
+  # This is run 31148006934's cell, unchanged -- STOCK cb810 nightly, the same
+  # in-container source patches, k=2, block rejection, MLA_FORCE_PS=1,
+  # MLA_QLEN_PAD=1, capture ceiling 48 -- with exactly one addition:
+  # ROCm/aiter #4521, vendored under patches/aiter_pr4521_gfx950 and applied by
+  # patches/apply_aiter_pr4521.sh.
+  #
+  # That baseline loaded the bf16-query a16w8 kernel. Not because vLLM withheld
+  # an fp8 query, but because base aiter has no fp8/fp8 persistent branch at
+  # gqa_ratio 16, so the selector fell back. #4521 adds it.
+  #
+  # Read the kernel line first: a8w8 means the PR engaged and the throughput
+  # delta is attributable to it; a16w8 means it did not and the number says
+  # nothing. Block rejection throughout, so acceptance is measured, not assumed.
+  image: vllm/vllm-openai-rocm:nightly-cb8104839c141609d99f1254459ef3a4f1bd4263
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: none, conc-list: [8], spec-decoding: mtp}
+
 kimik3-fp4-mi355x-vllm-agentic-mtp-dspark-prepatched-c8:
   # Official-sweep reproduction of a c8 DSpark result that was produced by hand,
   # via sbatch out of a private worktree, rather than through this harness.

@@ -927,6 +927,15 @@ else
     bash "$(dirname "$0")/apply_k3_container_patches.sh"
 fi
 
+# ROCm/aiter #4521: fp8/fp8 persistent branch at gqa_ratio 16, qLen 3 and 4.
+# Opt-in; the prepatched image already carries it, so skip there.
+if [ "${AITER_PR4521:-0}" = "1" ] && ! k3_patches_preapplied; then
+    bash "$(dirname "$0")/patches/apply_aiter_pr4521.sh" \
+        2>&1 | tee "$RESULT_DIR/aiter_pr4521.log"
+elif [ "${AITER_PR4521:-0}" = "1" ]; then
+    echo "AITER_PR4521=1 (no-op): already in the prepatched image"
+fi
+
 # ---- Parallelism ------------------------------------------------------------
 # TP8 or TEP8. No DP-attention arm: upstream strategy_min_gpus.multi_node_dep is
 # 16, so DEP is not a single-node strategy for this model.
@@ -1157,6 +1166,24 @@ GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.9}"
 # presented as 100% acceptance, which looks like a win.
 # Default ON for this branch -- it exists to test the PS ASM route. Every other
 # branch leaves it at 0.
+# ---- aiter #4521 attribution arm ---------------------------------------------
+# Reproduce run 31148006934 bit for bit -- stock cb810 nightly, k=2, block,
+# MLA_FORCE_PS=1, MLA_QLEN_PAD=1, capture ceiling mns*(k+1)=48, PR51011/51040
+# off (they postdate that commit) -- and change exactly one thing: apply
+# ROCm/aiter #4521. That run loaded the bf16-query a16w8 kernel and reached
+# 903.21 tok/s/GPU. If #4521 alone moves it onto a8w8 and lifts throughput,
+# the PR owns the gap; if it does not, the gap is elsewhere in the image.
+#
+# QLEN_PAD deliberately stays 1. Turning it off at the same time would change
+# two variables, and #4521's branch covers max_seqlen_q 3 AND 4, so the padded
+# qlen=4 verify reaches the same fp8 kernel.
+SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-2}"
+SPEC_REJECTION_METHOD="${SPEC_REJECTION_METHOD:-block}"
+MLA_QLEN_PAD="${MLA_QLEN_PAD:-1}"
+PR51011="${PR51011:-0}"
+PR51040="${PR51040:-0}"
+AITER_PR4521="${AITER_PR4521:-1}"
+
 MLA_FORCE_PS="${MLA_FORCE_PS:-1}"
 if [ "$MLA_FORCE_PS" = "1" ] && k3_patches_preapplied; then
     # #51088 and the DSpark-PS extension are already in the image; only the
