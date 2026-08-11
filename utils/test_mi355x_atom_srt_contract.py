@@ -31,7 +31,7 @@ def test_aggregate_exercises_two_atom_workers_and_kv_aware_infera():
     assert recipe["backend"]["type"] == "atom"
     assert recipe["backend"]["enable_kv_events"] is True
     assert recipe["backend"]["aggregated_environment"]["PYTHONPATH"] == (
-        "/infera-source"
+        "/atom-source:/infera-source"
     )
     command = recipe["benchmark"]["command"]
     assert "--random-prefix-len 96" in command
@@ -50,7 +50,7 @@ def test_disaggregate_uses_one_prefill_one_decode_and_mooncake():
     assert recipe["backend"]["mooncake_protocol"] == "tcp"
     assert recipe["backend"]["enable_kv_events"] is True
     assert recipe["backend"]["prefill_environment"]["PYTHONPATH"] == (
-        "/infera-source"
+        "/atom-source:/infera-source"
     )
 
 
@@ -76,4 +76,5 @@ def test_matrix_rows_route_only_through_the_atom_srt_launcher():
     ]
     assert "141f035b5539fa8bbc1b4018ae4817283093092d" in launcher
     assert "8ed8f1728c745d4e91ba9eaa09ed81159aa57e41" in launcher
+    assert "2ab42bcd9473095206d2bd2df263c56a0b6430d9" in launcher
     assert "scancel" not in launcher

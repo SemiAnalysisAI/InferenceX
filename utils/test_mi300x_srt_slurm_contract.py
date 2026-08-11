@@ -228,16 +228,22 @@ def test_atom_recipes_use_infera_and_keep_worker_metrics_honest():
     assert disaggregate["backend"]["mooncake_protocol"] == "tcp"
     assert 'ATOM_IMAGE="rocm/infera:atom-v0.1.1"' in launcher
     assert 'INFERA_COMMIT="8ed8f1728c745d4e91ba9eaa09ed81159aa57e41"' in launcher
+    assert 'ATOM_COMMIT="2ab42bcd9473095206d2bd2df263c56a0b6430d9"' in launcher
     assert 'REMOTE_INFERA_RUNTIME="${REMOTE_BASE}/runtime/infera-${INFERA_COMMIT}"' in launcher
     for recipe in (aggregate, disaggregate):
-        assert recipe["frontend"]["env"]["PYTHONPATH"] == "/infera-source"
+        assert recipe["frontend"]["env"]["PYTHONPATH"] == (
+            "/atom-source:/infera-source"
+        )
         role_environments = [
             value
             for key, value in recipe["backend"].items()
             if key.endswith("_environment")
         ]
         assert role_environments
-        assert all(env["PYTHONPATH"] == "/infera-source" for env in role_environments)
+        assert all(
+            env["PYTHONPATH"] == "/atom-source:/infera-source"
+            for env in role_environments
+        )
 
 
 def test_fixed_sequence_commands_keep_all_arguments_attached(tmp_path):

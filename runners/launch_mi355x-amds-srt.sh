@@ -8,6 +8,8 @@ SRT_SLURM_REPOSITORY="https://github.com/SemiAnalysisAI/srt-slurm.git"
 SRT_SLURM_COMMIT="141f035b5539fa8bbc1b4018ae4817283093092d"
 INFERA_REPOSITORY="https://github.com/cquil11/Infera.git"
 INFERA_COMMIT="8ed8f1728c745d4e91ba9eaa09ed81159aa57e41"
+ATOM_REPOSITORY="https://github.com/cquil11/ATOM.git"
+ATOM_COMMIT="2ab42bcd9473095206d2bd2df263c56a0b6430d9"
 SLURM_PARTITION="compute"
 SGLANG_IMAGE="lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260809"
 ATOM_IMAGE="rocm/infera:atom-v0.1.1"
@@ -15,6 +17,7 @@ SHARED_BASE="/it-share/gharunners2/srt-slurm"
 SHARED_HF_CACHE="/it-share/hf-hub-cache"
 SHARED_RESULTS="${SHARED_BASE}/results"
 SHARED_INFERA_RUNTIME="${SHARED_BASE}/runtime/infera-${INFERA_COMMIT}"
+SHARED_ATOM_RUNTIME="${SHARED_BASE}/runtime/atom-${ATOM_COMMIT}"
 
 : "${GITHUB_WORKSPACE:?GITHUB_WORKSPACE must be set by Actions}"
 : "${RESULT_FILENAME:?RESULT_FILENAME must be set by the benchmark workflow}"
@@ -72,6 +75,12 @@ fi
 git -C "${SHARED_INFERA_RUNTIME}" fetch --quiet origin "${INFERA_COMMIT}"
 git -C "${SHARED_INFERA_RUNTIME}" checkout --quiet --detach "${INFERA_COMMIT}"
 test "\$(git -C "${SHARED_INFERA_RUNTIME}" rev-parse HEAD)" = "${INFERA_COMMIT}"
+if [[ ! -d "${SHARED_ATOM_RUNTIME}/.git" ]]; then
+    git clone --quiet "${ATOM_REPOSITORY}" "${SHARED_ATOM_RUNTIME}"
+fi
+git -C "${SHARED_ATOM_RUNTIME}" fetch --quiet origin "${ATOM_COMMIT}"
+git -C "${SHARED_ATOM_RUNTIME}" checkout --quiet --detach "${ATOM_COMMIT}"
+test "\$(git -C "${SHARED_ATOM_RUNTIME}" rev-parse HEAD)" = "${ATOM_COMMIT}"
 exec 9>"${SHARED_IMAGE}.lock"
 flock -w 2400 9
 if ! unsquashfs -s "$SHARED_IMAGE" >/dev/null 2>&1; then
@@ -119,12 +128,12 @@ ACTUAL_SRT_COMMIT=$(git -C "$SRT_REPO_DIR" rev-parse HEAD)
 mkdir -p "${SRT_REPO_DIR}/$(dirname "$CONFIG_PATH")"
 cp "$LOCAL_RECIPE" "${SRT_REPO_DIR}/${CONFIG_PATH}"
 cp "$CLUSTER_PROFILE" "${WORK_DIR}/srtslurm.yaml"
-python3 - "${WORK_DIR}/srtslurm.yaml" "$GITHUB_WORKSPACE" "$SHARED_RESULTS" "$SHARED_INFERA_RUNTIME" <<'PY'
+python3 - "${WORK_DIR}/srtslurm.yaml" "$GITHUB_WORKSPACE" "$SHARED_RESULTS" "$SHARED_INFERA_RUNTIME" "$SHARED_ATOM_RUNTIME" <<'PY'
 import sys
 from pathlib import Path
 
 path = Path(sys.argv[1])
-workspace, results, infera_runtime = sys.argv[2:]
+workspace, results, infera_runtime, atom_runtime = sys.argv[2:]
 needle = "  /it-share/hf-hub-cache: /hf_hub_cache\n"
 text = path.read_text()
 if text.count(needle) != 1:
@@ -135,7 +144,8 @@ path.write_text(
         needle
         + f"  {workspace}: /infmax-workspace\n"
         + f"  {results}: /results\n"
-        + f"  {infera_runtime}: /infera-source\n",
+        + f"  {infera_runtime}: /infera-source\n"
+        + f"  {atom_runtime}: /atom-source\n",
     )
 )
 PY

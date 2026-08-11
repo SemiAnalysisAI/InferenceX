@@ -34,7 +34,7 @@ frontend:
   type: infera
   enable_multiple_frontends: false
   env:
-    PYTHONPATH: "/infera-source"
+    PYTHONPATH: "/atom-source:/infera-source"
   args:
     router-policy: kv-aware
 
@@ -50,7 +50,7 @@ backend:
     HF_HOME: "/hf_hub_cache"
     HF_HUB_CACHE: "/hf_hub_cache/hub"
     HUGGINGFACE_HUB_CACHE: "/hf_hub_cache/hub"
-    PYTHONPATH: "/infera-source"
+    PYTHONPATH: "/atom-source:/infera-source"
     PYTHONUNBUFFERED: "1"
     OMP_NUM_THREADS: "1"
   decode_environment: *worker_environment

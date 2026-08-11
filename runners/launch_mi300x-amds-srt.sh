@@ -7,6 +7,8 @@ SRT_SLURM_REPOSITORY="https://github.com/SemiAnalysisAI/srt-slurm.git"
 SRT_SLURM_COMMIT="141f035b5539fa8bbc1b4018ae4817283093092d"
 INFERA_REPOSITORY="https://github.com/cquil11/Infera.git"
 INFERA_COMMIT="8ed8f1728c745d4e91ba9eaa09ed81159aa57e41"
+ATOM_REPOSITORY="https://github.com/cquil11/ATOM.git"
+ATOM_COMMIT="2ab42bcd9473095206d2bd2df263c56a0b6430d9"
 SLURM_PARTITION="compute"
 EXCLUDED_NODES="chi-mi300x-049,chi-mi300x-121"
 REMOTE_BASE="/raid/hf-hub-cache/inferencex/srt-slurm"
@@ -51,6 +53,7 @@ RUN_KEY="${GITHUB_RUN_ID:-manual}-${GITHUB_RUN_ATTEMPT:-0}-${RUNNER_NAME:-runner
 REMOTE_RUNTIME="${REMOTE_BASE}/runtime/inferencex-${RUN_KEY}"
 REMOTE_SRT_RUNTIME="${REMOTE_BASE}/runtime/srt-slurm-${SRT_SLURM_COMMIT}"
 REMOTE_INFERA_RUNTIME="${REMOTE_BASE}/runtime/infera-${INFERA_COMMIT}"
+REMOTE_ATOM_RUNTIME="${REMOTE_BASE}/runtime/atom-${ATOM_COMMIT}"
 REMOTE_RESULTS="${REMOTE_BASE}/results"
 WORK_DIR="${GITHUB_WORKSPACE}/.srt-slurm-${RUN_KEY}"
 SRT_REPO_DIR="${WORK_DIR}/srt-slurm"
@@ -84,6 +87,7 @@ srun --ntasks-per-node=1 bash -c '
   runtime="${REMOTE_RUNTIME}"
   srt_runtime="${REMOTE_SRT_RUNTIME}"
   infera_runtime="${REMOTE_INFERA_RUNTIME}"
+  atom_runtime="${REMOTE_ATOM_RUNTIME}"
   export ENROOT_RUNTIME_PATH="\${TMPDIR:-/tmp}/enroot-runtime-\${UID}"
   mkdir -p "\$ENROOT_RUNTIME_PATH" "\$runtime" "${REMOTE_RESULTS}" "${REMOTE_BASE}/containers"
   chmod 700 "\$ENROOT_RUNTIME_PATH"
@@ -145,6 +149,7 @@ srun --ntasks-per-node=1 bash -c '
   ensure_git_checkout "\$srt_runtime" "${SRT_SLURM_REPOSITORY}" "${SRT_SLURM_COMMIT}"
   make -C "\$srt_runtime" --no-print-directory setup ARCH=x86_64
   ensure_git_checkout "\$infera_runtime" "${INFERA_REPOSITORY}" "${INFERA_COMMIT}"
+  ensure_git_checkout "\$atom_runtime" "${ATOM_REPOSITORY}" "${ATOM_COMMIT}"
   tar -xzf "/tmp/inferencex-benchmark-\${SLURM_JOB_ID}.tar.gz" -C "\$runtime"
   printf "%s\\n" "${GITHUB_SHA:-unknown}" > "\$runtime/.inferencex-source-head"
 '
@@ -163,12 +168,12 @@ ACTUAL_SRT_COMMIT=$(git -C "$SRT_REPO_DIR" rev-parse HEAD)
 mkdir -p "${SRT_REPO_DIR}/$(dirname "$CONFIG_PATH")"
 cp "$LOCAL_RECIPE" "${SRT_REPO_DIR}/${CONFIG_PATH}"
 cp "$CLUSTER_PROFILE" "${WORK_DIR}/srtslurm.yaml"
-python3 - "${WORK_DIR}/srtslurm.yaml" "$REMOTE_RUNTIME" "$REMOTE_RESULTS" "$REMOTE_INFERA_RUNTIME" <<'PY'
+python3 - "${WORK_DIR}/srtslurm.yaml" "$REMOTE_RUNTIME" "$REMOTE_RESULTS" "$REMOTE_INFERA_RUNTIME" "$REMOTE_ATOM_RUNTIME" <<'PY'
 import sys
 from pathlib import Path
 
 path = Path(sys.argv[1])
-runtime, results, infera_runtime = sys.argv[2:]
+runtime, results, infera_runtime, atom_runtime = sys.argv[2:]
 needle = "  /raid/hf-hub-cache: /hf_hub_cache\n"
 text = path.read_text()
 if text.count(needle) != 1:
@@ -179,7 +184,8 @@ path.write_text(
         needle
         + f"  {runtime}: /infmax-workspace\n"
         + f"  {results}: /results\n"
-        + f"  {infera_runtime}: /infera-source\n",
+        + f"  {infera_runtime}: /infera-source\n"
+        + f"  {atom_runtime}: /atom-source\n",
     )
 )
 PY
