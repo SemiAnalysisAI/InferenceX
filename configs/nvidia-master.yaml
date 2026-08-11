@@ -1521,7 +1521,7 @@ kimik3-fp4-b300-vllm-agentic-dspark:
   # its native window is 32k YaRN-stretched to 1M, and the same image/draft/config
   # reaches AL 4.18 on short-context work. These throughput numbers measure the
   # system at a prescribed acceptance, not the draft's fitness at 100k+ context.
-  image: vllm/vllm-openai:kimi-k3
+  image: vllm/vllm-openai:nightly-b22afe45ac797ae58e67a7a3ad79ee5714024420@sha256:144356af876edbb3a4bfee23e1444b196cc3fdadd0a0c1a7f11f721756972a21
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:b300-nv
@@ -1533,17 +1533,15 @@ kimik3-fp4-b300-vllm-agentic-dspark:
     agentic-coding:
     - dram-utilization: 0.63
       search-space:
-      # Mirrors the non-MTP entry's KV arms so the spec-decoding delta is
-      # readable at equal concurrency, but stops at conc 16 rather than 24: the
-      # non-MTP bring-up sweep (run 30326393603) showed the GPU-resident arm
-      # already thrashing at conc >= 16 (prefix cache hit 2.7%, TTFT p50 86-191s)
-      # because GPU KV holds only ~3.1 max-length requests, so conc 24 costs a
-      # full job per arm to re-measure that regime. conc 16 still exercises the
-      # DRAM tier meaningfully (62% external prefix cache hit rate there).
-      # TP8-only for the same memory reason: a ~1.5 TB MXFP4 checkpoint does not
-      # fit below 8 GPUs.
+      # Keep equal resident/offload points through conc 8. The digest-pinned
+      # bring-up sweep (run 31404943911) confirmed that resident conc 16
+      # remained in warmup after 1,770 seconds (96/177 requests), while conc 8
+      # entered profiling. The offload conc 16 arm completed warmup in 804
+      # seconds and exercised the external KV tier, so retain it as the
+      # capacity endpoint.
+      # TP8-only: a ~1.5 TB MXFP4 checkpoint does not fit below 8 GPUs.
       # TP8 GPU-resident
-      - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8, 16] }
+      - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8] }
       # TP8 SimpleCPUOffload (host DRAM)
       - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [1, 2, 4, 8, 16] }
 
@@ -1725,7 +1723,7 @@ dsv4-fp4-b300-vllm:
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 2048, conc-end: 2048 }
 
 dsv4-fp4-b300-vllm-agentic-mtp:
-  image: vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-904e4ec
+  image: vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-426e59f
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:b300-nv
@@ -1734,18 +1732,18 @@ dsv4-fp4-b300-vllm-agentic-mtp:
   multinode: false
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
+    - dram-utilization: 0.95
       search-space:
       # TP8 GPU-resident + MTP (num_speculative_tokens=3)
-      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 6, 8] }
+      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4] }
       # TP4 GPU-resident + MTP (num_speculative_tokens=3)
-      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 6, 8, 12, 16, 20] }
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [8] }
       # TP4 SimpleCPU + MTP (num_speculative_tokens=3)
-      - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [20, 24, 28, 32, 36, 40] }
+      - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [16] }
       # DEP4 SimpleCPU + MTP (num_speculative_tokens=3)
-      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [32, 40, 48, 56], router: { name: vllm-router, version: "0.1.14" } }
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [48, 64], router: { name: vllm-router, version: "0.1.14" } }
       # DEP8 SimpleCPU + MTP (num_speculative_tokens=3)
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [64, 96, 112, 128, 144, 160, 176, 192, 224], router: { name: vllm-router, version: "0.1.14" } }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [128, 256, 384, 512, 576], router: { name: vllm-router, version: "0.1.14" } }
 
 dsv4-fp4-b300-trt:
   image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066
