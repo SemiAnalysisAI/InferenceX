@@ -334,6 +334,13 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     disagg: bool
     scenario_type: str = Field(alias=Fields.SCENARIO_TYPE.value)
+    # Agentic eval rows (SWE-bench) carry run-eval/eval-only/eval-conc;
+    # benchmark rows omit them, and exclude_none keeps them out of dumped
+    # throughput output. SWE-bench doesn't support batched concurrencies
+    # (unlike lm-eval), so there is no eval-all-concs field here.
+    run_eval: Optional[bool] = Field(default=None, alias=Fields.RUN_EVAL.value)
+    eval_only: Optional[bool] = Field(default=None, alias=Fields.EVAL_ONLY.value)
+    eval_conc: Optional[int] = Field(default=None, alias=Fields.EVAL_CONC.value)
 
     @model_validator(mode='after')
     def validate_worker_hardware_pair(self):
@@ -868,6 +875,13 @@ class ChangelogEntry(BaseModel):
     pr_link: str = Field(alias="pr-link")
     evals_only: bool = Field(alias="evals-only", default=False)
     all_evals: bool = Field(alias="all-evals", default=False)
+    eval_min_prefill_ep: Optional[int] = Field(
+        alias="eval-min-prefill-ep", default=None, ge=1,
+        description=(
+            "When set, multinode eval rows whose prefill.ep is below this "
+            "threshold are dropped after eval selection."
+        ),
+    )
     scenario_type: Optional[List[Literal["fixed-seq-len", "agentic-coding"]]] = Field(
         alias="scenario-type", default=None, min_length=1,
         description="Restrict to specific scenario types (e.g., ['fixed-seq-len', 'agentic-coding'])"
@@ -903,6 +917,12 @@ class ChangelogMatrixEntry(BaseModel):
     agentic_evals: list[SingleNodeAgenticMatrixEntry] = Field(
         default_factory=list)
     multinode_evals: list[MultiNodeMatrixEntry] = Field(default_factory=list)
+    # Multi-node agentic (SWE-bench) eval rows, split out of multinode_evals
+    # the same way agentic_evals is split out of evals: they carry the
+    # agentic input shape (scenario-type, kv-offloading, ...) rather than
+    # the fixed-seq-len shape (isl/osl/max-model-len) multinode_evals rows do.
+    multinode_agentic_evals: list[MultiNodeAgenticMatrixEntry] = Field(
+        default_factory=list)
     changelog_metadata: ChangelogMetadata
 
 

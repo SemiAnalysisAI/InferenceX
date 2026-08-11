@@ -107,6 +107,12 @@ RESULT_FILENAME_BASE="${RESULT_FILENAME:-agentic_bench}"
 
 mkdir -p "$RESULT_DIR"
 
+if [ "$PREFILL_ENABLE_DP" = "true" ]; then
+    set -x
+    export AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID=true
+    set +x
+fi
+
 resolve_trace_source
 install_agentic_deps
 

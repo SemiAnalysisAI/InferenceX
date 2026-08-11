@@ -180,8 +180,18 @@ PY
             shopt -s nullglob
             for eval_file in "$EVAL_DIR"/*; do
                 [ -f "$eval_file" ] || continue
-                cp "$eval_file" "$GITHUB_WORKSPACE/"
-                echo "Copied eval artifact: $(basename "$eval_file")"
+                eval_dest="$GITHUB_WORKSPACE/$(basename "$eval_file")"
+                rm -f "$eval_dest"
+                # Eval artifacts are created as root inside the container; sudo
+                # is required to overwrite any stale root-owned files in the
+                # workspace from prior runs on this runner.
+                if sudo cp "$eval_file" "$eval_dest"; then
+                    sudo chown "$(id -u):$(id -g)" "$eval_dest" 2>/dev/null || true
+                    echo "Copied eval artifact: $(basename "$eval_file")"
+                else
+                    echo "ERROR: failed to copy eval artifact: $(basename "$eval_file")" >&2
+                    exit 1
+                fi
             done
             shopt -u nullglob
         else
@@ -210,20 +220,8 @@ PY
                 echo "Staging agentic raw artifacts from $AGENTIC_SRC"
                 mkdir -p "$GITHUB_WORKSPACE/LOGS/agentic"
                 cp -r "$AGENTIC_SRC"/. "$GITHUB_WORKSPACE/LOGS/agentic/"
-                # The source artifacts are created inside the container as root
-                # (--container-remap-root), so depending on how the runner
-                # invokes this script the copies can end up root-owned and/or
-                # read-only (aiperf/server_sglang make some dirs mode 0555). If
-                # the staged tree isn't owned+writable by the runner user, the
-                # next checkout's `git clean` fails with
-                #   EACCES: permission denied, rmdir '.../LOGS/agentic'.
-                # chown to the invoking user (the same one that runs git clean)
-                # via sudo (already passwordless here for rm -rf). The follow-up
-                # chmod uses a+rwX (not just u+rwX): the *next* job against this
-                # same $GITHUB_WORKSPACE may be picked up by a different runner
-                # process running as a different OS user, which would otherwise
-                # fall outside the owner bits and still fail the same
-                # `git clean` with EACCES despite the chown above.
+                # Container artifacts arrive root-owned; chown/chmod so git clean
+                # and later jobs (possibly a different runner user) can remove LOGS/.
                 sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE/LOGS" 2>/dev/null || true
                 chmod -R a+rwX "$GITHUB_WORKSPACE/LOGS" 2>/dev/null || true
                 ls -laR "$GITHUB_WORKSPACE/LOGS/agentic"

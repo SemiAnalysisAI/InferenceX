@@ -668,3 +668,66 @@ def test_eval_rows_split_into_fixed_and_agentic_buckets(
     assert [r["exp-name"] for r in output["evals"]] == ["fixed_eval"]
     assert [r["exp-name"] for r in output["agentic_evals"]] == ["agentic_eval"]
     assert output["multinode_evals"] == []
+
+
+def test_eval_rows_split_into_multinode_fixed_and_agentic_buckets(
+    monkeypatch,
+    capsys,
+):
+    """Multi-node eval rows must split the same way single-node rows do:
+    fixed-seq-len rows in `multinode_evals`, agentic (SWE-bench) rows in
+    `multinode_agentic_evals`."""
+    added_yaml = """
+- config-keys:
+    - test-config
+  description:
+    - Mixed multi-node fixed-seq-len and agentic eval selection
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1
+"""
+    common = {
+        "image": "lmsysorg/sglang-rocm:v0.5.15", "model": "deepseek-ai/DeepSeek-V4-Pro",
+        "model-prefix": "dsv4", "precision": "fp4", "framework": "sglang-disagg",
+        "spec-decoding": "none", "runner": "cluster:mi355x-amds",
+        "prefill": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
+        "decode": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
+        "disagg": True, "kv-p2p-transfer": "mori",
+        "run-eval": True, "eval-only": True,
+    }
+    multinode_fixed_eval_row = {
+        **common, "isl": 8192, "osl": 1024, "max-model-len": 10240,
+        "conc": [64], "eval-conc": 64, "exp-name": "multinode_fixed_eval",
+    }
+    multinode_agentic_eval_row = {
+        **common, "kv-offloading": "dram",
+        "kv-offload-backend": {"name": "hicache"},
+        "total-cpu-dram-gb": 2399, "duration": 3600,
+        "scenario-type": "agentic-coding",
+        "conc": [32], "eval-conc": 32, "exp-name": "multinode_agentic_eval",
+    }
+
+    monkeypatch.setattr(
+        process_changelog, "get_added_lines", lambda *_: added_yaml)
+    monkeypatch.setattr(
+        process_changelog, "load_config_files", lambda _: {"test-config": {}})
+
+    def fake_run(command, **kwargs):
+        is_evals = "--evals-only" in command
+        rows = (
+            [multinode_fixed_eval_row, multinode_agentic_eval_row]
+            if is_evals else []
+        )
+        return SimpleNamespace(stdout=json.dumps(rows))
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(sys, "argv", [
+        "process_changelog.py", "--base-ref", "base", "--head-ref", "head",
+        "--changelog-file", "perf-changelog.yaml",
+    ])
+
+    process_changelog.main()
+
+    output = json.loads(capsys.readouterr().out)
+    assert [r["exp-name"] for r in output["multinode_evals"]] == ["multinode_fixed_eval"]
+    assert [r["exp-name"] for r in output["multinode_agentic_evals"]] == ["multinode_agentic_eval"]
+    assert output["evals"] == []
+    assert output["agentic_evals"] == []

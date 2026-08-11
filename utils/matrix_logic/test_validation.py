@@ -8,6 +8,7 @@ from validation import (
     SingleNodeMatrixEntry,
     SingleNodeAgenticMatrixEntry,
     MultiNodeMatrixEntry,
+    MultiNodeAgenticMatrixEntry,
     WorkerConfig,
     SingleNodeSearchSpaceEntry,
     AgenticCodingConfig,
@@ -20,6 +21,7 @@ from validation import (
     ChangelogEntry,
     ChangelogMatrixEntry,
     validate_matrix_entry,
+    validate_agentic_matrix_entry,
     validate_master_config,
     validate_runner_config,
     load_config_files,
@@ -1415,6 +1417,20 @@ AGENTIC_EVAL_ROW = {
     "scenario-type": "agentic-coding", "run-eval": True, "eval-only": True,
 }
 
+MULTINODE_AGENTIC_EVAL_ROW = {
+    "image": "lmsysorg/sglang-rocm:v0.5.15", "model": "deepseek-ai/DeepSeek-V4-Pro",
+    "model-prefix": "dsv4", "precision": "fp4", "framework": "sglang-disagg",
+    "spec-decoding": "none", "runner": "cluster:mi355x-amds",
+    "prefill": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
+    "decode": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
+    "conc": [32], "kv-offloading": "dram",
+    "kv-offload-backend": {"name": "hicache"}, "kv-p2p-transfer": "mori",
+    "total-cpu-dram-gb": 2399, "duration": 3600,
+    "exp-name": "dsv4_p1x8_d1x8_conc32_kvdram-hicache", "disagg": True,
+    "scenario-type": "agentic-coding", "run-eval": True, "eval-only": True,
+    "eval-conc": 32,
+}
+
 CHANGELOG_METADATA = {
     "base_ref": "base", "head_ref": "head",
     "entries": [{
@@ -1442,6 +1458,59 @@ class TestChangelogMatrixEntry:
                 "evals": [AGENTIC_EVAL_ROW],
                 "changelog_metadata": CHANGELOG_METADATA,
             })
+
+    def test_multinode_agentic_eval_rows_live_in_multinode_agentic_evals_only(self):
+        """multinode_evals is dispatched with fixed-seq-len inputs (isl/osl/
+        max-model-len), so multi-node agentic rows must only validate in
+        multinode_agentic_evals."""
+        entry = ChangelogMatrixEntry.model_validate({
+            "multinode_agentic_evals": [MULTINODE_AGENTIC_EVAL_ROW],
+            "changelog_metadata": CHANGELOG_METADATA,
+        })
+        assert entry.multinode_agentic_evals[0].run_eval is True
+        assert entry.multinode_agentic_evals[0].eval_only is True
+        assert entry.multinode_agentic_evals[0].eval_conc == 32
+
+        with pytest.raises(ValueError):
+            ChangelogMatrixEntry.model_validate({
+                "multinode_evals": [MULTINODE_AGENTIC_EVAL_ROW],
+                "changelog_metadata": CHANGELOG_METADATA,
+            })
+
+
+class TestMultiNodeAgenticMatrixEntry:
+    """Tests for multi-node agentic (SWE-bench) matrix entry validation."""
+
+    def test_throughput_row_omits_eval_fields(self):
+        entry = MultiNodeAgenticMatrixEntry(**{
+            k: v for k, v in MULTINODE_AGENTIC_EVAL_ROW.items()
+            if k not in ("run-eval", "eval-only", "eval-conc")
+        })
+        assert entry.run_eval is None
+        assert entry.eval_only is None
+        assert entry.eval_conc is None
+
+    def test_eval_row_carries_run_eval_eval_only_and_eval_conc(self):
+        entry = MultiNodeAgenticMatrixEntry(**MULTINODE_AGENTIC_EVAL_ROW)
+        assert entry.run_eval is True
+        assert entry.eval_only is True
+        assert entry.eval_conc == 32
+
+    def test_validate_agentic_matrix_entry_dispatches_on_prefill_key(self):
+        """The dispatcher in validate_agentic_matrix_entry() picks
+        MultiNodeAgenticMatrixEntry vs SingleNodeAgenticMatrixEntry based on
+        whether the entry has a `prefill` key."""
+        validate_agentic_matrix_entry(dict(MULTINODE_AGENTIC_EVAL_ROW))
+
+        without_prefill = {
+            k: v for k, v in MULTINODE_AGENTIC_EVAL_ROW.items()
+            if k not in ("prefill", "decode")
+        }
+        with pytest.raises(ValueError):
+            # Missing single-node-required fields (tp, pp, ...) and conc is a
+            # list rather than a scalar, so this must fail as a single-node
+            # agentic entry rather than silently validating.
+            validate_agentic_matrix_entry(without_prefill)
 
 
 # =============================================================================

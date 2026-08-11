@@ -1,4 +1,4 @@
-# Qwen3.5-397B-A17B-NVFP4 Disaggregated 1P1D: TP4 Prefill + TP4 Decode
+# Qwen3.5-397B-A17B-NVFP4-V2 Disaggregated 1P1D: TP4 Prefill + TP4 Decode
 # Pure tensor parallel, no expert parallel (STP)
 # 8k1k sa-bench concurrency sweep on GB300
 #
@@ -83,7 +83,7 @@ backend:
 
   sglang_config:
     prefill:
-      served-model-name: "nvidia/Qwen3.5-397B-A17B-NVFP4"
+      served-model-name: "nvidia/Qwen3.5-397B-A17B-NVFP4-V2"
       model-path: "/model/"
       trust-remote-code: true
 
@@ -125,7 +125,7 @@ backend:
       log-level: "info"
 
     decode:
-      served-model-name: "nvidia/Qwen3.5-397B-A17B-NVFP4"
+      served-model-name: "nvidia/Qwen3.5-397B-A17B-NVFP4-V2"
       model-path: "/model/"
       trust-remote-code: true
 

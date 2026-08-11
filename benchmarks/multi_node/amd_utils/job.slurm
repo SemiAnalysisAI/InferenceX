@@ -330,6 +330,12 @@ export RUNNER_TYPE="${RUNNER_TYPE:-}"
 export RESULT_FILENAME="${RESULT_FILENAME:-}"
 export SPEC_DECODING="${SPEC_DECODING:-}"
 export IS_MULTINODE="${IS_MULTINODE:-false}"
+export SWEBENCH_USE_MODAL="${SWEBENCH_USE_MODAL:-false}"
+export MODAL_TOKEN_ID="${MODAL_TOKEN_ID:-}"
+export MODAL_TOKEN_SECRET="${MODAL_TOKEN_SECRET:-}"
+export HF_TOKEN="${HF_TOKEN:-}"
+export SCENARIO_TYPE="${SCENARIO_TYPE:-}"
+export EVAL_LIMIT="${EVAL_LIMIT:-}"
 
 SANITIZED_USER=$(echo "$USER_NAME" | tr -c 'a-zA-Z0-9_.-' '_')
 export DOCKER_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_${MODEL_NAME}_${SLURM_JOB_ID}"
@@ -344,6 +350,29 @@ CLIENT_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_client_${SLURM_JOB_ID}"
 export RUN_FILE_FULL="$WS_PATH/${RUN_FILE}"
 
 SELECTED_NODELIST_SRUN=$(echo "$SELECTED_NODES" | paste -sd,)
+
+# =============================================================================
+# RDMA QoS / DCQCN Pre-flight Check
+# =============================================================================
+# Gate the run on NIC QoS (PFC/DSCP) and DCQCN config on every node before
+# any container/GPU time is spent. Runs on the bare host (nicctl is a host
+# tool). See rdma_check.sh for details.
+RDMA_CHECK_SCRIPT="$(pwd)/helpers/rdma_check.sh"
+if [[ "${SKIP_RDMA_CHECK:-0}" == "1" ]]; then
+    echo "[INFO] SKIP_RDMA_CHECK=1 set; skipping RDMA QoS/DCQCN pre-flight check"
+elif [[ -f "$RDMA_CHECK_SCRIPT" ]]; then
+    echo "Checking RDMA QoS/DCQCN configuration on all $NUM_NODES allocated node(s)..."
+    srun --nodelist="$SELECTED_NODELIST_SRUN" --ntasks=$NUM_NODES bash "$RDMA_CHECK_SCRIPT"
+    RDMA_CHECK_RC=$?
+    if [[ $RDMA_CHECK_RC -ne 0 ]]; then
+        echo "FATAL: RDMA QoS/DCQCN pre-flight check failed on one or more nodes (see [FAIL] lines above)."
+        echo "       Set SKIP_RDMA_CHECK=1 to bypass (not recommended -- MoRI cross-node transfers would run unprotected by PFC/DCQCN)."
+        exit 1
+    fi
+    echo "RDMA QoS/DCQCN pre-flight check passed on all $NUM_NODES node(s)"
+else
+    echo "[WARN] $RDMA_CHECK_SCRIPT not found; skipping RDMA QoS/DCQCN pre-flight check"
+fi
 
 cleanup() {
   echo "[${SLURM_JOB_ID}] termination received on $(hostname); cleaning up container + stale logs..."
@@ -422,10 +451,14 @@ DOCKER_ENV_COMMON=(
     -e PREFILL_NUM_WORKERS=\$PREFILL_NUM_WORKERS
     -e PREFILL_ENABLE_EP=\$PREFILL_ENABLE_EP
     -e PREFILL_ENABLE_DP=\$PREFILL_ENABLE_DP
+    # process_agentic_result.py reads these (distinct from the ENABLE_* launch
+    # booleans above) for agg_bmk.json's parallelism metadata; without them it
+    # defaulted to ep=1/dp_attention=false even for DEP8 arms.
+    -e PREFILL_EP=\${PREFILL_EP:-1}
+    -e PREFILL_DP_ATTN=\${PREFILL_DP_ATTN:-false}
     -e PREFILL_CONTEXT_LENGTH=\${PREFILL_CONTEXT_LENGTH:-}
     -e PREFILL_CHUNKED_PREFILL_SIZE=\${PREFILL_CHUNKED_PREFILL_SIZE:-}
-    -e SGLANG_AITER_MLA_PERSIST=\${SGLANG_AITER_MLA_PERSIST:-0}
-    -e DISABLE_CUSTOM_ALL_REDUCE=\${DISABLE_CUSTOM_ALL_REDUCE:-0}
+    -e DISABLE_CUSTOM_ALL_REDUCE=\${DISABLE_CUSTOM_ALL_REDUCE:-}
     -e MAX_MODEL_LEN=\${MAX_MODEL_LEN:-}
     -e DURATION=\${DURATION:-1800}
     -e IS_AGENTIC=\${IS_AGENTIC:-0}
@@ -443,9 +476,20 @@ DOCKER_ENV_COMMON=(
     -e DECODE_NUM_WORKERS=\$DECODE_NUM_WORKERS
     -e DECODE_ENABLE_EP=\$DECODE_ENABLE_EP
     -e DECODE_ENABLE_DP=\$DECODE_ENABLE_DP
+    # See PREFILL_EP/PREFILL_DP_ATTN comment above -- decode counterpart.
+    -e DECODE_EP=\${DECODE_EP:-1}
+    -e DECODE_DP_ATTN=\${DECODE_DP_ATTN:-false}
     -e DECODE_MTP_SIZE=\$DECODE_MTP_SIZE
     -e IS_MULTINODE=\$IS_MULTINODE
     -e DRY_RUN=\${DRY_RUN:-0}
+    # SWE-bench agentic eval runs inside this container and needs Modal/HF
+    # credentials to launch sandboxes and download datasets.
+    -e SWEBENCH_USE_MODAL=\${SWEBENCH_USE_MODAL:-false}
+    -e MODAL_TOKEN_ID=\${MODAL_TOKEN_ID:-}
+    -e MODAL_TOKEN_SECRET=\${MODAL_TOKEN_SECRET:-}
+    -e HF_TOKEN=\${HF_TOKEN:-}
+    -e SCENARIO_TYPE=\${SCENARIO_TYPE:-}
+    -e \"EVAL_LIMIT=\${EVAL_LIMIT:-}\"
 )
 
 # Engine-specific env vars
@@ -494,6 +538,7 @@ fi
 HICACHE_MC_CONFIG="${BENCHMARK_LOGS_DIR}/hicache_mc_${SLURM_JOB_ID}.env"
 cat > "$HICACHE_MC_CONFIG" <<EOF
 HICACHE_RATIO=${HICACHE_RATIO:-}
+FORCE_HICACHE_RATIO=${FORCE_HICACHE_RATIO:-}
 HICACHE_HOST_POOL_COUNT=${HICACHE_HOST_POOL_COUNT:-}
 HICACHE_PAGE_SIZE=${HICACHE_PAGE_SIZE:-}
 HICACHE_IO_BACKEND=${HICACHE_IO_BACKEND:-}
@@ -631,9 +676,22 @@ else
 fi
 fi  # end: if ENGINE == atom-disagg
 
-# Pre-clean (idempotent)
+# Pre-clean (idempotent): stop then force-remove so GPU VRAM is released before
+# the sanity gate. stop-only left containers in Created/Exited state on some nodes.
 \$DOCKER_CMD ps -aq --filter \"$CONT_FILTER\" | xargs -r \$DOCKER_CMD rm -f || true
-\$DOCKER_CMD ps -aq | xargs -r \$DOCKER_CMD stop || true
+\$DOCKER_CMD ps -aq | xargs -r \$DOCKER_CMD stop -t 15 || true
+\$DOCKER_CMD ps -aq | xargs -r \$DOCKER_CMD rm -f || true
+sleep 2
+
+# GPU sanity gate: containers are stopped, so any remaining VRAM use is a bare
+# (non-containerized) process hogging the GPU -- fail fast (and name it)
+# instead of OOMing in model load ~30 min later. set -e + --kill-on-bad-exit
+# tears down the whole job on non-zero exit.
+if [[ \"${SKIP_GPU_SANITY:-0}\" == \"1\" ]]; then
+    echo \"[INFO] SKIP_GPU_SANITY=1 set; skipping GPU sanity pre-flight check\"
+else
+    bash \"$DI_REPO_DIR/benchmarks/multi_node/amd_utils/helpers/gpu_sanity.sh\"
+fi
 
 # Start vLLM external router container on node 0
 if [[ \"$ENGINE\" == \"vllm-disagg\" && \"$ROUTER_TYPE\" == \"vllm-router\" && \"\$SLURM_PROCID\" == \"0\" ]]; then
