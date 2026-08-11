@@ -788,7 +788,8 @@ else
     )
 fi
 
-MAX_NUM_SEQS=$((2 * CONC))
+#MAX_NUM_SEQS=$((2 * CONC))
+MAX_NUM_SEQS=20
 # Capture cudagraphs up to the DSpark MTP verify batch. The served slot cap is
 # MAX_NUM_SEQS (1*CONC), but capture is sized off 2*CONC decode slots, each
 # expanding to (1 + SPEC_NUM_TOKENS) rows during verify -> 2*CONC*(1+SPEC_NUM_TOKENS)
@@ -796,7 +797,7 @@ MAX_NUM_SEQS=$((2 * CONC))
 # Fixed contiguous capture list covering all concurrencies up to the largest
 # verify batch (conc=16 -> 2*16*(1+2)=96). Pinned so every config shares one
 # capture set; max_cudagraph_capture_size must equal max(cudagraph_capture_sizes).
-MAX_CUDAGRAPH_CAPTURE_SIZE=44
+MAX_CUDAGRAPH_CAPTURE_SIZE=46
 CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 1 "$MAX_CUDAGRAPH_CAPTURE_SIZE")"
 #COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"]}")
 COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}")
