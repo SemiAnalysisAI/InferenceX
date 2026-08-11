@@ -225,9 +225,9 @@ SGLANG_CMD=(
     --max-running-requests "$MAX_RUNNING_REQUESTS"
     --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
     --speculative-algorithm EAGLE
-    --speculative-num-steps 5
+    --speculative-num-steps 3
     --speculative-eagle-topk 1
-    --speculative-num-draft-tokens 6
+    --speculative-num-draft-tokens 4
     "${CACHE_ARGS[@]}"
     --watchdog-timeout 1800
     --enable-metrics
