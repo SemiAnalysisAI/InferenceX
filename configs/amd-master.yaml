@@ -884,6 +884,36 @@ kimik3-fp4-mi355x-vllm-agentic-mtp-dspark-prepatched-syn-curve:
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [1, 4, 10, 16], spec-decoding: mtp}
 
+kimik3-fp4-mi355x-vllm-agentic-mtp-dspark-prepatched-syn-c16:
+  # c16 retry, split out of the ladder so it does not block the other points.
+  #
+  # First attempt (run 31462180842) got FURTHER than c16 ever has: the engine
+  # initialised, the KV cache allocated at 3,028,838 tokens, cudagraph capture
+  # completed and the server answered requests 200 OK. The old failure mode was
+  # hipErrorIllegalAddress during capture, so the image's KDA .contiguous() fix
+  # and V2 warmup guard did clear that.
+  #
+  # It then died at the first real forward pass: two of eight workers exited at
+  # 08:03:36, the executor began shutting the rest down, six ignored SIGTERM and
+  # took SIGKILL, and the engine surfaced RuntimeError: cancelled. aiperf saw
+  # connection-reset and aborted on warmup_failure.
+  #
+  # So this is a c16-specific death at first execution, not at capture. One
+  # retry to establish whether it is deterministic; if it dies the same way,
+  # c16 needs a real fix (mns/headroom) rather than another node-hour.
+  image: aigmkt/kimi-k3-agentx@sha256:6eed69f39f036df3c7a61a2263159935a00a7c988a328677d502476a541c5c08
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: none, conc-list: [16], spec-decoding: mtp}
+
 kimik3-fp4-mi355x-vllm-agentic-mtp-dspark-prepatched-syn-lmc-c10:
   # LMCache sibling of the synthetic ladder's c10 point. Same image, same
   # synthetic 2.51, same k=2 and fp8 KV, so the host memory tier is the only
