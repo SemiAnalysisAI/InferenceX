@@ -1512,7 +1512,7 @@ minimaxm3-fp4-mi355x-vllm-agentic:
       - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [1, 4, 8, 16] }
 
 dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260719
+  image: lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260811
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:mi355x-amds
