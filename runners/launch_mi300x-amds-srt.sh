@@ -4,7 +4,7 @@ set -euo pipefail
 # MI300X srt-slurm validation path. The existing launcher remains the default;
 # matrix rows opt in by exporting CONFIG_FILE through additional-settings.
 SRT_SLURM_REPOSITORY="https://github.com/SemiAnalysisAI/srt-slurm.git"
-SRT_SLURM_COMMIT="f94026bd08612ed9f7677fdf0a42f8d8391fd736"
+SRT_SLURM_COMMIT="dd0109d4043141072ad37c043f1100332008b77f"
 SLURM_PARTITION="compute"
 EXCLUDED_NODES="chi-mi300x-049,chi-mi300x-121"
 REMOTE_BASE="/raid/hf-hub-cache/inferencex/srt-slurm"

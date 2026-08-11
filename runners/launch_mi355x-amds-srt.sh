@@ -5,7 +5,7 @@ set -euo pipefail
 # in explicitly with CONFIG_FILE; all existing MI355X launch behavior remains
 # unchanged for every other row.
 SRT_SLURM_REPOSITORY="https://github.com/SemiAnalysisAI/srt-slurm.git"
-SRT_SLURM_COMMIT="f94026bd08612ed9f7677fdf0a42f8d8391fd736"
+SRT_SLURM_COMMIT="dd0109d4043141072ad37c043f1100332008b77f"
 SLURM_PARTITION="compute"
 SGLANG_IMAGE="lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260809"
 SHARED_BASE="/it-share/gharunners2/srt-slurm"
