@@ -1,4 +1,4 @@
-name: "disagg-b200-8k1k-mid-curve-1p2d-dep8-dep8-mtp"
+name: "disagg-b200-8k1k-mid-curve-1p1d-dep8-dep8-mtp"
 
 frontend:
   type: dynamo
@@ -24,8 +24,8 @@ resources:
   prefill_nodes: 1
   prefill_workers: 1
   gpus_per_prefill: 8
-  decode_nodes: 2
-  decode_workers: 2
+  decode_nodes: 1
+  decode_workers: 1
   gpus_per_decode: 8
 
 health_check:
@@ -46,7 +46,6 @@ backend:
     SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_FP4_ACTS: "1"
     SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_MXF4_KIND: "1"
     SGLANG_OPT_FIX_MEGA_MOE_MEMORY: "1"
-
     NCCL_CUMEM_ENABLE: "1"
     UCX_TLS: "rc,cuda_ipc,cuda_copy,tcp,self"
     SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
@@ -61,11 +60,10 @@ backend:
     SGLANG_DSV4_REASONING_EFFORT: "max"
     SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
     SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN: "1"
-    SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "2048"
+    SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "4096"
     SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_FP4_ACTS: "1"
     SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_MXF4_KIND: "1"
     SGLANG_OPT_FIX_MEGA_MOE_MEMORY: "1"
-
     NCCL_CUMEM_ENABLE: "1"
     UCX_TLS: "rc,cuda_ipc,cuda_copy,tcp,self"
     SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
@@ -81,20 +79,16 @@ backend:
       tool-call-parser: deepseekv4
       disaggregation-mode: "prefill"
       disaggregation-transfer-backend: nixl
-
       tensor-parallel-size: 8
       data-parallel-size: 8
       expert-parallel-size: 8
-
       enable-dp-attention: true
       enable-dp-lm-head: true
-
       moe-a2a-backend: "megamoe"
       deepep-config: '{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
-
       mem-fraction-static: 0.8
-      max-running-requests: 512
-      cuda-graph-max-bs: 512
+      max-running-requests: 1024
+      cuda-graph-max-bs: 1024
       chunked-prefill-size: 65536
       stream-interval: 60
 
@@ -105,25 +99,20 @@ backend:
       tool-call-parser: deepseekv4
       disaggregation-mode: "decode"
       disaggregation-transfer-backend: nixl
-
       tensor-parallel-size: 8
       data-parallel-size: 8
       expert-parallel-size: 8
-
       enable-dp-attention: true
       enable-dp-lm-head: true
-
       moe-a2a-backend: "megamoe"
       deepep-config: '{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
-
       speculative-algo: "EAGLE"
       speculative-num-steps: 3
       speculative-eagle-topk: 1
       speculative-num-draft-tokens: 4
-
-      mem-fraction-static: 0.85
-      max-running-requests: 1024
-      cuda-graph-max-bs: 512
+      mem-fraction-static: 0.9
+      max-running-requests: 1536
+      cuda-graph-max-bs: 1024
       swa-full-tokens-ratio: 0.15
       context-length: 16384
       stream-interval: 60
@@ -133,7 +122,7 @@ benchmark:
   isl: 8192
   osl: 1024
   random_range_ratio: 0.8
-  concurrencies: "256"
+  concurrencies: "256x1024"
   req_rate: "inf"
   use_chat_template: true
   custom_tokenizer: "sa_bench_tokenizers.sglang_deepseek_v4.SGLangDeepseekV4Tokenizer"

@@ -5774,7 +5774,7 @@
 - config-keys:
     - dsv4-fp4-b200-dynamo-sglang-mtp
   description:
-    - "Add a focused DeepSeek-V4-Pro FP4 Dynamo-SGLang MTP configuration on the B200 nscale runner."
-    - "Keep UCX RC transport while disabling GPU-direct RDMA registration and enabling host-staged protocol emulation for CUDA buffers."
+    - "Add a DeepSeek-V4-Pro FP4 Dynamo-SGLang MTP configuration for B200 with five 8k/1k disaggregated topologies."
+    - "Use NIXL for KV transfer with EAGLE speculative decoding and chat-formatted benchmark inputs."
     - "Image: lmsysorg/sglang:nightly-dev-cu13-20260710-cfc66e05"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2554

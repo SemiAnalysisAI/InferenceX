@@ -64,8 +64,7 @@ rm -rf "$SRT_REPO_DIR"
 if [[ $MODEL_PREFIX == "dsv4" && $FRAMEWORK == "dynamo-sglang" ]]; then
     git clone --branch main --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
     cd "$SRT_REPO_DIR" || exit 1
-    # Pin srt-slurm so this focused run changes only the runner and UCX
-    # transport behavior.
+    # Pin the srt-slurm revision used by these checked-in recipes.
     git checkout 04e87fcc505d6d851451781a5499ca19a02ec2b4 || exit 1
     mkdir -p recipes/sglang/deepseek-v4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4" recipes/sglang/deepseek-v4
