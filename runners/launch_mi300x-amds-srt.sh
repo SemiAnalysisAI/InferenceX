@@ -122,7 +122,7 @@ srun --ntasks-per-node=1 bash -c '
   git -C "\$srt_runtime" fetch --quiet origin "${SRT_SLURM_COMMIT}"
   git -C "\$srt_runtime" checkout --quiet --detach "${SRT_SLURM_COMMIT}"
   test "\$(git -C "\$srt_runtime" rev-parse HEAD)" = "${SRT_SLURM_COMMIT}"
-  make -C "\$srt_runtime" --no-print-directory setup-compute ARCH=x86_64
+  make -C "\$srt_runtime" --no-print-directory setup ARCH=x86_64
   tar -xzf "/tmp/inferencex-benchmark-\${SLURM_JOB_ID}.tar.gz" -C "\$runtime"
   printf "%s\\n" "${GITHUB_SHA:-unknown}" > "\$runtime/.inferencex-source-head"
 '

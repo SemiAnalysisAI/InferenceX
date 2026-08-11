@@ -98,8 +98,7 @@ def test_official_matrix_routes_disagg_through_the_pinned_srt_launcher():
         "disagg-1p1d-fixed-seq.yaml"
     ]
     assert "d93b48165ff60c6441feb5dd04504337f0bd7bc5" in launcher
-    assert "setup-compute ARCH=x86_64" in launcher
-    assert "\nmake setup ARCH=x86_64\n" in launcher
+    assert launcher.count("setup ARCH=x86_64") == 2
     assert "--no-preflight" in launcher
     assert 'ENROOT_RUNTIME_PATH="\\${TMPDIR:-/tmp}/enroot-runtime-\\${UID}"' in launcher
     assert "for attempt in 1 2 3" in launcher
@@ -115,7 +114,7 @@ def test_official_matrix_routes_disagg_through_the_pinned_srt_launcher():
     assert 'mv "\\$tmp" "\\$target"' in launcher
     assert 'REMOTE_SRT_RUNTIME="${REMOTE_BASE}/runtime/srt-slurm-${SRT_SLURM_COMMIT}"' in launcher
     assert 'git -C "\\$srt_runtime" checkout --quiet --detach "${SRT_SLURM_COMMIT}"' in launcher
-    assert 'make -C "\\$srt_runtime" --no-print-directory setup-compute ARCH=x86_64' in launcher
+    assert 'make -C "\\$srt_runtime" --no-print-directory setup ARCH=x86_64' in launcher
     assert 'export SRTCTL_RUNTIME_SOURCE_DIR="$REMOTE_SRT_RUNTIME"' in launcher
     assert "scancel" not in launcher
 
