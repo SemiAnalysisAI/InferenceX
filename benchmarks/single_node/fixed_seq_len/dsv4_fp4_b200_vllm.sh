@@ -60,6 +60,10 @@ fi
 MAX_CUDAGRAPH_CAPTURE_SIZE=2048
 
 BENCHMARK_MAX_MODEL_LEN="$MAX_MODEL_LEN"
+# Cap MAX_MODEL_LEN to free CUDA-graph memory and give more headroom for KV blocks
+if [ "${BENCHMARK_MAX_MODEL_LEN}" -gt 12288 ]; then
+    BENCHMARK_MAX_MODEL_LEN=12288
+fi
 
 if [ "${EVAL_ONLY}" = "true" ]; then
     EVAL_MAX_MODEL_LEN=$(compute_eval_context_length "$MODEL" "$BENCHMARK_MAX_MODEL_LEN")
@@ -91,6 +95,7 @@ vllm serve "$MODEL" --host 0.0.0.0 --port "$PORT" \
     --enable-auto-tool-choice \
     --reasoning-parser deepseek_v4 \
     --max-cudagraph-capture-size "$MAX_CUDAGRAPH_CAPTURE_SIZE" \
+    --gpu-memory-utilization 0.95 \
     --max-model-len "$SERVE_MAX_MODEL_LEN" \
     --max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS" > "$SERVER_LOG" 2>&1 &
 
