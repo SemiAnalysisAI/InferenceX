@@ -593,12 +593,13 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
   multinode: false
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
+    - dram-utilization: 0.60
       search-space:
       #- { tp: 8, kv-offloading: none, conc-list: [1, 4, 8, 10, 14] , spec-decoding: mtp}
       #- { tp: 8, kv-offloading: none, conc-list: [1, 4, 8] , spec-decoding: mtp}
       #- { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-k3, version: "git" }, conc-list: [12], spec-decoding: mtp}
-      - { tp: 8, kv-offloading: none, conc-list: [8] , spec-decoding: mtp}
+      #- { tp: 8, kv-offloading: none, conc-list: [8] , spec-decoding: mtp}
+      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [10] }
 
 dsr1-fp4-mi355x-sglang-disagg:
   image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519

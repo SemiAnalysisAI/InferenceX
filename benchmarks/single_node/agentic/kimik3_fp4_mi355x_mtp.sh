@@ -664,58 +664,11 @@ PYEOF
         )
     fi
     ;;
-  vllm-simple|vllm-simple-fp8|vllm-simple-fp8-lazy)
+  vllm-simple)
     require_agentic_kv_offload_backend "$KV_OFFLOAD_BACKEND"
-    # vllm-simple-fp8-lazy is vllm-simple-fp8 with lazy offload. In eager mode
-    # the connector stores every completed block to CPU immediately; in lazy
-    # mode it only stores under GPU-block pressure (manager.py _lazy_mode /
-    # _estimate_lazy_target_blocks walk the GPU free queue). Every fp8+connector
-    # cell so far has died while the GPU pool was nearly EMPTY -- 11.6% usage
-    # with a 0.0% external hit rate in run 30505656455, i.e. mid store-storm
-    # with nothing yet to gain from the host tier -- so the store path is where
-    # to look, and lazy removes almost all of it in that regime.
-    #
-    # Also the mode Wenyao's kimik3_fp4_mi355x_mtp.sh pins (SIMPLE_LAZY_OFFLOAD
-    # =true) as part of the gfx950 bundle validated in PR #2367 against an
-    # eight-rank GPU memory access fault.
-    if [ "$KV_OFFLOAD_BACKEND" = "vllm-simple-fp8-lazy" ]; then
-        SIMPLE_LAZY_OFFLOAD="${SIMPLE_LAZY_OFFLOAD:-true}"
-    fi
-    # vllm-simple-fp8 is the same connector with an fp8 KV cache. fp8 halves
-    # bytes/token in the GPU pool, which on this KV-bound corpus moves the
-    # eviction wall itself rather than just adding headroom (measured: the pool
-    # peaks at 98.6-99.8% usage even at c8). ROCm maps fp8 -> fp8_e4m3.
-    # UNVALIDATED on K3's hybrid geometry: the pool spans Kimi Delta Attention
-    # state and gated-MLA latent, and fp8 support across both spec types is
-    # unconfirmed on this build.
-    case "$KV_OFFLOAD_BACKEND" in
-      vllm-simple-fp8|vllm-simple-fp8-lazy)
-        KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-fp8}"
-        ;;
-    esac
-    # vLLM's own SimpleCPUOffloadConnector -- the AMD reference's native
-    # offload path. Unlike LMCache it does not go through the Mamba
-    # [conv_state, ssm_state] adapter that K3's Kimi Delta Attention breaks
-    # ("expected a Mamba [conv_state, ssm_state] tensor list, got Tensor",
-    # runs 30350911388), so it is the only offload tier that can currently
-    # initialise on this model.
-    #
-    # cpu_bytes_to_use is server-wide; cpu_bytes_to_use_per_rank overrides it
-    # per rank (simple_cpu_offload_connector.py:66). The agentic README requires
-    # consuming TOTAL_CPU_DRAM_GB, so derive it rather than hardcode the
-    # reference's 236223201280 (= 220 GiB/rank, 1760 GiB across 8 ranks).
-    SIMPLE_RANKS="${GPU_COUNT:-$TP}"
-    CPU_BYTES_PER_RANK="${SIMPLE_CPU_BYTES_PER_RANK:-$(( TOTAL_CPU_DRAM_GB * 1000 * 1000 * 1000 / SIMPLE_RANKS ))}"
+    CPU_BYTES_PER_RANK=$(( TOTAL_CPU_DRAM_GB * 1000 * 1000 * 1000 / TP ))
     # Identical prefixes must hash to identical block keys across ranks.
     export PYTHONHASHSEED=42
-    # lazy_offload MUST be a JSON boolean. The reference command passes the
-    # STRING "false", and the connector does
-    #   lazy_offload = bool(extra_config.get("lazy_offload", False))
-    # (simple_cpu_offload_connector.py:77) -- bool("false") is True in Python,
-    # so the string silently selects LAZY, the opposite of what it reads as.
-    # Default to real eager offload; SIMPLE_LAZY_OFFLOAD=true swaps it.
-    # The connector logs "lazy"/"eager" at line 95, so server.log confirms which
-    # mode actually engaged.
     SIMPLE_LAZY_OFFLOAD="${SIMPLE_LAZY_OFFLOAD:-false}"
     OFFLOAD_ARGS=(
         --kv-transfer-config
@@ -725,9 +678,6 @@ PYEOF
     ;;
   vllm-native)
     require_agentic_kv_offload_backend vllm-native
-    # OffloadingConnector, vLLM's other native tier. --kv_offloading_size is
-    # GiB (vllm/config/vllm.py multiplies by 1<<30) while TOTAL_CPU_DRAM_GB is
-    # decimal GB, so convert or we over-request by ~7.4%.
     unset VLLM_USE_SIMPLE_KV_OFFLOAD
     KV_OFFLOAD_GIB=$(( TOTAL_CPU_DRAM_GB * 1000000000 / 1073741824 ))
     OFFLOAD_ARGS=(
@@ -788,18 +738,9 @@ else
     )
 fi
 
-#MAX_NUM_SEQS=$((2 * CONC))
 MAX_NUM_SEQS=20
-# Capture cudagraphs up to the DSpark MTP verify batch. The served slot cap is
-# MAX_NUM_SEQS (1*CONC), but capture is sized off 2*CONC decode slots, each
-# expanding to (1 + SPEC_NUM_TOKENS) rows during verify -> 2*CONC*(1+SPEC_NUM_TOKENS)
-# (6*CONC at spec=2). Decoupled from MAX_NUM_SEQS so the capture range matches the
-# Fixed contiguous capture list covering all concurrencies up to the largest
-# verify batch (conc=16 -> 2*16*(1+2)=96). Pinned so every config shares one
-# capture set; max_cudagraph_capture_size must equal max(cudagraph_capture_sizes).
-MAX_CUDAGRAPH_CAPTURE_SIZE=46
+MAX_CUDAGRAPH_CAPTURE_SIZE=60
 CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 1 "$MAX_CUDAGRAPH_CAPTURE_SIZE")"
-#COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"]}")
 COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}")
 
 GPU_MEM_UTIL="0.9"
