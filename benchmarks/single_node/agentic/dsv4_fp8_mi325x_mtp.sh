@@ -4,7 +4,7 @@ set -euo pipefail
 # DeepSeek-V4-Pro FP8 AgentX replay on one 8xMI325X node. The checkpoint is
 # dequantized to FP8 because gfx942 has no native MXFP4 support. The published
 # path is pure TP8. TEP8 remains in the requested collection matrix while its
-# prefix-cache interaction is isolated for correctness.
+# synthetic MTP rejection path is isolated for correctness.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -185,12 +185,6 @@ if (( EP_SIZE > 1 )); then
 fi
 
 SCHEDULING_ARGS=(--async-scheduling)
-PREFIX_CACHE_ARGS=(--enable-prefix-caching)
-if (( EP_SIZE > 1 )) && [[ "$DP_ATTENTION" != "true" ]]; then
-    # Isolate EP+MTP prefix reuse without changing the model, topology,
-    # scheduler, collectives, graph mode, or AgentX workload.
-    PREFIX_CACHE_ARGS=(--no-enable-prefix-caching)
-fi
 
 USE_VLLM_ROUTER=false
 VLLM_BACKEND_PORT="$PORT"
@@ -222,7 +216,9 @@ MAX_NUM_SEQS=$((2 * CONC))
 # depth and its measured golden acceptance length for every AgentX point.
 NUM_SPEC_TOKENS=2
 SYNTHETIC_ACCEPT_LEN=2.27
-if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
+if [[ "${EVAL_ONLY:-false}" == "true" ]] || { (( EP_SIZE > 1 )) && [[ "$DP_ATTENTION" != "true" ]]; }; then
+    # Isolate real target verification for TEP without changing MTP depth,
+    # topology, scheduler, collectives, graph mode, or AgentX workload.
     SPEC_CONFIG="{\"method\":\"mtp\",\"num_speculative_tokens\":${NUM_SPEC_TOKENS}}"
 else
     SPEC_CONFIG="{\"method\":\"mtp\",\"num_speculative_tokens\":${NUM_SPEC_TOKENS},\"rejection_sample_method\":\"synthetic\",\"synthetic_acceptance_length\":${SYNTHETIC_ACCEPT_LEN}}"
@@ -262,7 +258,7 @@ VLLM_CMD=(
     --tool-call-parser deepseek_v4
     --reasoning-parser deepseek_v4
     --enable-auto-tool-choice
-    "${PREFIX_CACHE_ARGS[@]}"
+    --enable-prefix-caching
     --enable-prompt-tokens-details
     --no-disable-hybrid-kv-cache-manager
     "${OFFLOAD_ARGS[@]}"
