@@ -228,7 +228,7 @@ def test_atom_recipes_use_infera_and_keep_worker_metrics_honest():
     assert disaggregate["backend"]["mooncake_protocol"] == "tcp"
     assert 'ATOM_IMAGE="rocm/infera:atom-v0.1.1"' in launcher
     assert 'INFERA_COMMIT="8ed8f1728c745d4e91ba9eaa09ed81159aa57e41"' in launcher
-    assert 'ATOM_COMMIT="2ab42bcd9473095206d2bd2df263c56a0b6430d9"' in launcher
+    assert 'ATOM_COMMIT="2ab42bc2c64d1ad04f698c396da48473e71a6dbb"' in launcher
     assert 'REMOTE_INFERA_RUNTIME="${REMOTE_BASE}/runtime/infera-${INFERA_COMMIT}"' in launcher
     for recipe in (aggregate, disaggregate):
         assert recipe["frontend"]["env"]["PYTHONPATH"] == (

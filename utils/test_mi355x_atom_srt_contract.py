@@ -76,5 +76,5 @@ def test_matrix_rows_route_only_through_the_atom_srt_launcher():
     ]
     assert "141f035b5539fa8bbc1b4018ae4817283093092d" in launcher
     assert "8ed8f1728c745d4e91ba9eaa09ed81159aa57e41" in launcher
-    assert "2ab42bcd9473095206d2bd2df263c56a0b6430d9" in launcher
+    assert "2ab42bc2c64d1ad04f698c396da48473e71a6dbb" in launcher
     assert "scancel" not in launcher
