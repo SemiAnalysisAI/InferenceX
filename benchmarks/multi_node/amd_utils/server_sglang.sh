@@ -537,6 +537,12 @@ if [[ "$KV_OFFLOADING" != "none" && "$KV_OFFLOAD_BACKEND" == "hicache" ]]; then
     # per-node DRAM budget computed by the sweep generator (enforcement); fall
     # back to --hicache-ratio (relative to the GPU KV pool) when no budget is
     # provided, keeping configs that predate the budget unchanged.
+    # FORCE_HICACHE_RATIO lets a recipe opt into ratio-based sizing without
+    # unsetting TOTAL_CPU_DRAM_GB — that var is also the shared client-side
+    # gate (benchmark_lib.sh requires it whenever KV_OFFLOADING=dram) and is
+    # forwarded verbatim into client.env below, so unsetting it here would
+    # make the aiperf client container fail its own env validation before
+    # ever sending a request.
     HICACHE_RATIO="${HICACHE_RATIO:-5}"
     HICACHE_SIZING_FLAGS="--hicache-ratio ${HICACHE_RATIO}"
     # DeepSeek V4's hybrid HiCache pool rejects --hicache-size (requires
@@ -544,7 +550,9 @@ if [[ "$KV_OFFLOADING" != "none" && "$KV_OFFLOAD_BACKEND" == "hicache" ]]; then
     # See sglang _deepseek_v4_num_host_pages() (raises ValueError when
     # server_args.hicache_size > 0):
     # https://github.com/sgl-project/sglang/blob/9dd57ef8c48e2cd82292d849f01e2130c5203e67/python/sglang/srt/mem_cache/hybrid_cache/hybrid_pool_assembler.py#L262-L266
-    if [[ -n "${TOTAL_CPU_DRAM_GB:-}" && "${TOTAL_CPU_DRAM_GB}" -gt 0 && "${MODEL_NAME}" != *DeepSeek-V4* ]]; then
+    # FORCE_HICACHE_RATIO additionally lets a recipe opt into ratio-based sizing
+    # for any other model without unsetting TOTAL_CPU_DRAM_GB (see comment above).
+    if [[ "${FORCE_HICACHE_RATIO:-0}" != "1" && -n "${TOTAL_CPU_DRAM_GB:-}" && "${TOTAL_CPU_DRAM_GB}" -gt 0 && "${MODEL_NAME}" != *DeepSeek-V4* ]]; then
         # TOTAL_CPU_DRAM_GB is the prefill worker's per-node budget (only prefill
         # offloads KV to CPU DRAM today); --hicache-size is per rank per host
         # pool. A prefill server may span nodes (PREFILL_TP_SIZE is its total
@@ -783,12 +791,17 @@ if [ "$NODE_RANK" -eq 0 ]; then
         # across the agentic trace; round_robin decode keeps the single decode worker
         # fed evenly. Override via ROUTER_RESILIENCE_FLAGS / ROUTER_POLICY_FLAGS.
         ROUTER_RESILIENCE_FLAGS="${ROUTER_RESILIENCE_FLAGS:---disable-circuit-breaker --health-failure-threshold 100 --health-check-timeout-secs 600 --health-check-interval-secs 30}"
-        ROUTER_PREFILL_POLICY="${ROUTER_PREFILL_POLICY:-cache_aware}"
-        ROUTER_DECODE_POLICY="${ROUTER_DECODE_POLICY:-round_robin}"
+        # server_sglang.sh previously read ROUTER_PREFILL_POLICY, but the recipe
+        # scripts export PREFILL_ROUTER_POLICY, so the recipe's policy override was
+        # silently ignored and the router always fell back to this hardcoded
+        # default. Also comment out ROUTER_DECODE_POLICY for now (superseded by
+        # --dp-aware below).
+        ROUTER_PREFILL_POLICY="${PREFILL_ROUTER_POLICY:-consistent_hashing}"
+        # ROUTER_DECODE_POLICY="${ROUTER_DECODE_POLICY:-round_robin}"
         ROUTER_CACHE_THRESHOLD="${ROUTER_CACHE_THRESHOLD:-0.3}"
         ROUTER_BALANCE_ABS_THRESHOLD="${ROUTER_BALANCE_ABS_THRESHOLD:-2}"
         ROUTER_BALANCE_REL_THRESHOLD="${ROUTER_BALANCE_REL_THRESHOLD:-1.1}"
-        ROUTER_POLICY_FLAGS="${ROUTER_POLICY_FLAGS:---policy ${ROUTER_PREFILL_POLICY} --prefill-policy ${ROUTER_PREFILL_POLICY} --decode-policy ${ROUTER_DECODE_POLICY} --cache-threshold ${ROUTER_CACHE_THRESHOLD} --balance-abs-threshold ${ROUTER_BALANCE_ABS_THRESHOLD} --balance-rel-threshold ${ROUTER_BALANCE_REL_THRESHOLD}}"
+        ROUTER_POLICY_FLAGS="${ROUTER_POLICY_FLAGS:---policy ${ROUTER_PREFILL_POLICY} --dp-aware --cache-threshold ${ROUTER_CACHE_THRESHOLD} --balance-abs-threshold ${ROUTER_BALANCE_ABS_THRESHOLD} --balance-rel-threshold ${ROUTER_BALANCE_REL_THRESHOLD}}"
     else
         # DI router config (8k1k branch, run 28696443568): with defaults the per-worker
         # circuit stays OPEN for cb-timeout-duration-secs=60 before a half-open retrial.
@@ -982,8 +995,8 @@ if [ "$NODE_RANK" -eq 0 ]; then
                       ENABLE_METRICS IS_AGENTIC CLEAR_CACHE_BETWEEN_CONC \
                       DISAGG IS_MULTINODE \
                       TP EP_SIZE DP_ATTENTION DCP_SIZE PCP_SIZE \
-                      PREFILL_NUM_WORKERS PREFILL_TP PREFILL_EP PREFILL_DP_ATTN PREFILL_HARDWARE \
-                      DECODE_NUM_WORKERS DECODE_TP DECODE_EP DECODE_DP_ATTN DECODE_HARDWARE \
+                      PREFILL_NUM_WORKERS PREFILL_TP PREFILL_EP PREFILL_DP_ATTN PREFILL_ENABLE_DP PREFILL_HARDWARE \
+                      DECODE_NUM_WORKERS DECODE_TP DECODE_EP DECODE_DP_ATTN DECODE_ENABLE_DP DECODE_HARDWARE \
                       KV_OFFLOADING KV_OFFLOAD_BACKEND KV_OFFLOAD_BACKEND_METADATA TOTAL_CPU_DRAM_GB KV_P2P_TRANSFER \
                       WEKA_LOADER_OVERRIDE AIPERF_FAILED_REQUEST_THRESHOLD \
                       AIPERF_WARMUP_REQUESTS_PER_LANE AIPERF_TRACE_IDLE_GAP_CAP_SECONDS \
@@ -1057,7 +1070,7 @@ print(json.dumps(json.loads(sys.stdin.read())))' <<<"$_val")" || {
 
     # Run evaluation if requested (before killing router)
     if [[ "${RUN_EVAL:-false}" == "true" ]]; then
-        echo "Running lm-eval evaluation on Node 0..."
+        echo "Running lm-eval (GSM8K) evaluation on Node 0..."
 
         # Health check: verify the router is still serving before running eval.
         # The throughput benchmark may have crashed/exhausted decode workers.
@@ -1074,28 +1087,34 @@ print(json.dumps(json.loads(sys.stdin.read())))' <<<"$_val")" || {
         if [[ "$EVAL_HEALTH_OK" != "true" ]]; then
             echo "WARNING: Router health check failed after 3 attempts. Skipping eval."
         else
-            # Must run from repo root so utils/evals/${task}.yaml resolves
+            # Must run from repo root so utils/evals/gsm8k.yaml resolves
             pushd /workspace
 
-            # Source eval functions from benchmark_lib.sh
             source /workspace/benchmarks/benchmark_lib.sh
 
-            # Use EVAL_CONC from workflow if set, otherwise fall back to max of conc list
+            # Use EVAL_CONC from workflow if set, otherwise fall back to max of conc list.
+            # Export CONC before run_eval so meta_env.json matches validate_scores.py.
             if [[ -n "${EVAL_CONC:-}" ]]; then
                 export EVAL_CONCURRENT_REQUESTS="${EVAL_CONC}"
             else
                 export EVAL_CONCURRENT_REQUESTS=$(echo "$BENCH_MAX_CONCURRENCY" | tr 'x' '\n' | sort -n | tail -1)
             fi
+            export CONC="${EVAL_CONCURRENT_REQUESTS}"
 
             # Override eval context length with model's configured context_length
             if [[ -n "$prefill_context_length" ]]; then
                 export EVAL_MAX_MODEL_LEN="$prefill_context_length"
             fi
 
+            export ISL="${BENCH_INPUT_LEN:-0}"
+            export OSL="${BENCH_OUTPUT_LEN:-0}"
+            bridge_disagg_eval_metadata
+            # IS_MULTINODE, FRAMEWORK, PRECISION, MODEL_PREFIX, RUNNER_TYPE,
+            # RESULT_FILENAME are already set via Docker -e flags from job.slurm
+
             if [[ "$DRY_RUN" -eq 1 ]]; then
                 echo "DRY RUN: run_eval --framework lm-eval --port 30000 (conc=${EVAL_CONCURRENT_REQUESTS}, ctx=${EVAL_MAX_MODEL_LEN:-auto})"
             else
-                # Run lm-eval against the router on port 30000
                 run_eval --framework lm-eval --port 30000
                 eval_rc=$?
 
@@ -1103,37 +1122,21 @@ print(json.dumps(json.loads(sys.stdin.read())))' <<<"$_val")" || {
                     echo "ERROR: run_eval exited rc=$eval_rc; skipping metadata write and eval artifact staging" >&2
                     EVAL_FAILED=1
                 else
-                    # Set metadata env vars for append_lm_eval_summary
-                    export TP="${PREFILL_TP_SIZE}"
-                    export CONC="${EVAL_CONCURRENT_REQUESTS}"
-                    export EP_SIZE=1
-                    [[ "${PREFILL_ENABLE_EP}" == "true" ]] && EP_SIZE="${PREFILL_TP_SIZE}"
-                    export PREFILL_TP="${PREFILL_TP_SIZE}"
-                    export PREFILL_EP=1
-                    [[ "${PREFILL_ENABLE_EP}" == "true" ]] && PREFILL_EP="${PREFILL_TP_SIZE}"
-                    export PREFILL_NUM_WORKERS="${xP}"
-                    export DECODE_TP="${DECODE_TP_SIZE}"
-                    export DECODE_EP=1
-                    [[ "${DECODE_ENABLE_EP}" == "true" ]] && DECODE_EP="${DECODE_TP_SIZE}"
-                    export DECODE_NUM_WORKERS="${yD}"
-                    export DP_ATTENTION="${PREFILL_ENABLE_DP}"
-                    export PREFILL_DP_ATTENTION="${PREFILL_ENABLE_DP}"
-                    export DECODE_DP_ATTENTION="${DECODE_ENABLE_DP}"
-                    export ISL="${BENCH_INPUT_LEN}"
-                    export OSL="${BENCH_OUTPUT_LEN}"
-                    # IS_MULTINODE, FRAMEWORK, PRECISION, MODEL_PREFIX, RUNNER_TYPE,
-                    # RESULT_FILENAME are already set via Docker -e flags from job.slurm
+                    # Always rewrite meta_env.json so EP/DPA match the workflow
+                    # topology even when run_eval() staged artifacts internally.
+                    rewrite_lm_eval_meta_env
 
-                    append_lm_eval_summary
-                    # Files (meta_env.json, results*.json, sample*.jsonl) are now in /workspace
+                    # Fixed-seq-len post-bench eval still needs append to move
+                    # results out of the temp EVAL_RESULT_DIR.
+                    if [[ "${EVAL_ONLY:-false}" != "true" || "$IS_AGENTIC_RUN" != "1" ]]; then
+                        append_lm_eval_summary
+                    fi
 
-                    # Copy eval artifacts to run_logs for NFS extraction by runner
                     EVAL_COPY_DIR="/run_logs/slurm_job-${SLURM_JOB_ID}/eval_results"
                     mkdir -p "$EVAL_COPY_DIR"
                     for f in meta_env.json; do
                         [ -e "/workspace/$f" ] && cp -f "/workspace/$f" "$EVAL_COPY_DIR/"
                     done
-                    # Use find for glob patterns to avoid "no match" errors
                     find /workspace -maxdepth 1 -name 'results*.json' -exec cp -f {} "$EVAL_COPY_DIR/" \;
                     find /workspace -maxdepth 1 -name 'sample*.jsonl' -exec cp -f {} "$EVAL_COPY_DIR/" \;
 
@@ -1271,7 +1274,36 @@ else
         DECODE_MORI_MOE_ENV="SGLANG_MORI_MOE_MAX_INPUT_TOKENS=${MORI_MOE_MAX_INPUT_TOKENS_DECODE}"
     fi
     set +x
-    DECODE_CMD="SGLANG_MORI_COMBINE_DTYPE=${MORI_COMBINE_DTYPE_DECODE} ${DECODE_MORI_MOE_ENV} SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK_DECODE:-${MORI_MAX_DISPATCH_TOKENS_DECODE}} MORI_IO_SQ_BACKOFF_TIMEOUT_US=${MORI_IO_SQ_BACKOFF_TIMEOUT_US} MORI_IO_QP_MAX_SEND_WR=${MORI_IO_QP_MAX_SEND_WR} ${LAUNCH_PREFIX:-} python3 -m sglang.launch_server \
+
+    # Agentic trace replay doesn't reproduce real token-by-token traffic, so
+    # measured MTP/EAGLE acceptance there isn't representative (PR #2309
+    # review: https://github.com/SemiAnalysisAI/InferenceX/pull/2309#pullrequestreview-4778348624).
+    # Per the AgentX fairness guidelines (golden_al_distribution/README.md),
+    # agentic throughput benchmarks simulate acceptance at the model's
+    # committed golden AL instead of measuring real (non-representative)
+    # acceptance. Eval runs (RUN_EVAL / EVAL_ONLY) need real acceptance so
+    # GSM8K scores reflect actual MTP behavior. Golden curve source:
+    # golden_al_distribution/dsv4_mtp.yaml (thinking_on).
+    DECODE_SIM_ACC_ENV=""
+    if [[ "$DECODE_MTP_SIZE" -gt 0 ]] && { [[ "${IS_AGENTIC:-0}" == "1" ]] || [[ "${IS_AGENTIC:-}" == "true" ]]; }; then
+        if [[ "${EVAL_ONLY:-false}" == "true" ]] || [[ "${RUN_EVAL:-false}" == "true" ]]; then
+            echo "[INFO] Eval mode: synthetic MTP disabled (using real acceptance)"
+        else
+            DSV4_GOLDEN_AL=""
+            case "${MODEL_NAME}:${DECODE_MTP_SIZE}" in
+                *DeepSeek-V4*:1) DSV4_GOLDEN_AL=1.79 ;;
+                *DeepSeek-V4*:2) DSV4_GOLDEN_AL=2.27 ;;
+                *DeepSeek-V4*:3) DSV4_GOLDEN_AL=2.49 ;;
+            esac
+            if [[ -n "$DSV4_GOLDEN_AL" ]]; then
+                DECODE_SIM_ACC_ENV="SGLANG_SIMULATE_ACC_LEN=${DSV4_GOLDEN_AL} SGLANG_SIMULATE_ACC_METHOD=match-expected SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token"
+            else
+                echo "WARNING: agentic MTP run (model=${MODEL_NAME}, DECODE_MTP_SIZE=${DECODE_MTP_SIZE}) has no golden AL wired in server_sglang.sh -- falling back to real (unsimulated, non-representative) acceptance. Add a case in server_sglang.sh and golden_al_distribution/ before shipping this arm. See golden_al_distribution/README.md." >&2
+            fi
+        fi
+    fi
+
+    DECODE_CMD="SGLANG_MORI_COMBINE_DTYPE=${MORI_COMBINE_DTYPE_DECODE} ${DECODE_MORI_MOE_ENV} SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK_DECODE:-${MORI_MAX_DISPATCH_TOKENS_DECODE}} MORI_IO_SQ_BACKOFF_TIMEOUT_US=${MORI_IO_SQ_BACKOFF_TIMEOUT_US} MORI_IO_QP_MAX_SEND_WR=${MORI_IO_QP_MAX_SEND_WR} ${DECODE_SIM_ACC_ENV} ${LAUNCH_PREFIX:-} python3 -m sglang.launch_server \
         --model-path ${MODEL_DIR}/${MODEL_NAME} \
         --disaggregation-mode decode \
         --disaggregation-ib-device ${IBDEVICES} \
