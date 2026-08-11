@@ -5798,6 +5798,6 @@
 - config-keys:
     - minimaxm3-fp4-mi355x-vllm-agentic-mtp
   description:
-    - "Add MiniMax-M3 FP4 vLLM single-node AgentX MTP support on MI355X."
-    - "Use EAGLE3 with the committed thinking-on golden acceptance length for throughput and real target verification for evaluation."
+    - "Add MiniMax-M3 FP4 vLLM single-node AgentX MTP support on MI355X with TP4/TP2 GPU-resident coverage and TP-sharded LMCache MP DRAM offload near the capacity knee."
+    - "Use vLLM v0.27.1, EAGLE3 with the committed thinking-on golden acceptance length for throughput, real target verification for evaluation, and validated vLLM Prometheus metrics."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2487

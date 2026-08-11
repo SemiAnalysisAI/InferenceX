@@ -1617,7 +1617,7 @@ dsv4-fp8-mi325x-vllm-mtp:
       - { tp: 8, conc-start: 4, conc-end: 128, spec-decoding: mtp }
 
 minimaxm3-fp4-mi355x-vllm-agentic-mtp:
-  image: vllm/vllm-openai-rocm:nightly-5e35a6f4f9bbc217c599692157ca985c894373f7
+  image: vllm/vllm-openai-rocm:v0.27.1
   model: amd/MiniMax-M3-MXFP4
   model-prefix: minimaxm3
   runner: cluster:mi355x-amds
@@ -1628,7 +1628,9 @@ minimaxm3-fp4-mi355x-vllm-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.20
       search-space:
-      - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: vllm-native }, conc-list: [28], spec-decoding: mtp }
+      - { tp: 4, kv-offloading: none, conc-list: [1, 2, 4, 5, 8, 10, 12, 15, 20, 24, 28, 32], spec-decoding: mtp }
+      - { tp: 2, kv-offloading: none, conc-list: [1, 2, 5], spec-decoding: mtp }
+      - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.3" }, conc-list: [32, 40], spec-decoding: mtp }
 
 # GLM-5.2 FP4 agentic-coding benchmark on MI355X via SGLang with MTP speculative
 # decoding. TP=4 EP=4 with KV offloading to DRAM (hicache backend) to support

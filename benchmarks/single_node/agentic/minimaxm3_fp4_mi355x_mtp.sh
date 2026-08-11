@@ -6,7 +6,7 @@ set -x
 # EAGLE3 speculative decoding.
 #
 # Required env vars:
-#   MODEL, MODEL_PATH, TP, CONC, KV_OFFLOADING,
+#   MODEL, MODEL_PATH, TP, CONC, KV_OFFLOADING, KV_OFFLOAD_BACKEND,
 #   TOTAL_CPU_DRAM_GB, RESULT_DIR, DURATION, EP_SIZE, DP_ATTENTION
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
@@ -54,16 +54,27 @@ amd-smi || true
 resolve_trace_source
 install_agentic_deps
 
+# Require the vLLM Prometheus stream in every official result. AIPerf
+# deduplicates this endpoint against its automatic localhost discovery.
+export AIPERF_SERVER_METRICS_URLS="http://localhost:${PORT}/metrics"
+export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="vllm:"
+
 # ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
+LMCACHE_LOG="$RESULT_DIR/lmcache_server.log"
 mkdir -p "$RESULT_DIR"
 
 SERVER_PID=""
+LMCACHE_PIDS=()
 cleanup_agentic_services() {
     local exit_code=$?
     trap - EXIT INT TERM
     set +e
     stop_background_process_tree "$SERVER_PID" "vLLM server" 60
+    local i
+    for i in "${!LMCACHE_PIDS[@]}"; do
+        stop_background_process_tree "${LMCACHE_PIDS[$i]}" "LMCache server $i"
+    done
     exit "$exit_code"
 }
 trap cleanup_agentic_services EXIT
@@ -92,13 +103,107 @@ case "${KV_OFFLOAD_BACKEND:-}" in
 
         # Remove --disable-hybrid-kv-cache-manager and enable hybrid kv cache manager (default)
         # This gives extra cache hit than disabling hybrid kv cache manager
+        TOTAL_CPU_DRAM_PARTITION_GB=$((TOTAL_CPU_DRAM_GB / (8 / TP)))
         OFFLOAD_ARGS=(
             --kv_offloading_backend native
-            --kv_offloading_size "$TOTAL_CPU_DRAM_GB"
+            --kv_offloading_size "$TOTAL_CPU_DRAM_PARTITION_GB"
+        )
+        ;;
+    lmcache)
+        require_agentic_kv_offload_backend lmcache
+        unset VLLM_USE_SIMPLE_KV_OFFLOAD
+
+        # LMCache v0.5.3 publishes an official Python 3.12 ROCm wheel for
+        # gfx942/gfx950 and validates MiniMax-M3 with LMCacheMPConnector.
+        # --no-deps preserves the vLLM image's tested torch/ROCm stack.
+        LMCACHE_VERSION="0.5.3"
+        LMCACHE_ROCM_INDEX="https://github.com/LMCache/LMCache/releases/expanded_assets/v${LMCACHE_VERSION}-rocm"
+        agentic_pip_install --quiet --no-cache-dir --no-deps \
+            "lmcache==${LMCACHE_VERSION}" --find-links "$LMCACHE_ROCM_INDEX"
+        python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null
+
+        # One MP server process per TP rank avoids putting every rank's Python
+        # store/retrieve bookkeeping behind one GIL. The configured node-level
+        # DRAM budget is split evenly, so sharding does not increase memory.
+        LMCACHE_N_SERVERS="$TP"
+        LMCACHE_L1_SIZE_GB="$TOTAL_CPU_DRAM_GB"
+        SHM_FREE_GB=$(df -BG --output=avail /dev/shm 2>/dev/null | tail -1 | tr -dc '0-9')
+        if [ -n "$SHM_FREE_GB" ] && [ "$SHM_FREE_GB" -gt 0 ]; then
+            SHM_CAP_GB=$((SHM_FREE_GB * 90 / 100))
+            if [ "$LMCACHE_L1_SIZE_GB" -gt "$SHM_CAP_GB" ]; then
+                echo "Error: LMCache L1 ${LMCACHE_L1_SIZE_GB} GB exceeds 90% of free /dev/shm (${SHM_CAP_GB} GB)." >&2
+                exit 1
+            fi
+        fi
+        LMCACHE_L1_SHARD_GB=$((LMCACHE_L1_SIZE_GB / LMCACHE_N_SERVERS))
+        if [ "$LMCACHE_L1_SHARD_GB" -lt 1 ]; then
+            echo "Error: LMCache DRAM budget is less than 1 GB per TP rank." >&2
+            exit 1
+        fi
+
+        wait_for_lmcache_ready() {
+            local http_port="$1"
+            local pid="$2"
+            local log="$3"
+            local i
+            for ((i = 1; i <= 600; i++)); do
+                if curl --output /dev/null --silent --fail \
+                        "http://127.0.0.1:${http_port}/healthcheck"; then
+                    return 0
+                fi
+                if ! kill -0 "$pid" 2>/dev/null; then
+                    echo "LMCache server on HTTP port $http_port exited during startup." >&2
+                    cat "$log" >&2 || true
+                    exit 1
+                fi
+                sleep 1
+            done
+            echo "Timed out waiting for LMCache server on HTTP port $http_port." >&2
+            cat "$log" >&2 || true
+            exit 1
+        }
+
+        LMCACHE_SERVER_URLS=""
+        LMCACHE_HTTP_PORTS=()
+        LMCACHE_LOGS=()
+        : > "$RESULT_DIR/lmcache_command.txt"
+        for shard in $(seq 0 $((LMCACHE_N_SERVERS - 1))); do
+            shard_port=$((5555 + shard))
+            shard_http_port=$((8080 + shard))
+            shard_log="${LMCACHE_LOG%.log}_${shard}.log"
+            LMCACHE_CMD=(
+                lmcache server
+                --host 127.0.0.1
+                --port "$shard_port"
+                --http-host 127.0.0.1
+                --http-port "$shard_http_port"
+                --l1-size-gb "$LMCACHE_L1_SHARD_GB"
+                --l1-init-size-gb 10
+                --l1-read-ttl-seconds 7200
+                --chunk-size 256
+                --max-workers 2
+                --eviction-policy LRU
+                --supported-transfer-mode lmcache_driven
+            )
+            printf '%q ' "${LMCACHE_CMD[@]}" >> "$RESULT_DIR/lmcache_command.txt"
+            printf '\n' >> "$RESULT_DIR/lmcache_command.txt"
+            "${LMCACHE_CMD[@]}" > "$shard_log" 2>&1 &
+            LMCACHE_PIDS+=($!)
+            LMCACHE_HTTP_PORTS+=("$shard_http_port")
+            LMCACHE_LOGS+=("$shard_log")
+            LMCACHE_SERVER_URLS="${LMCACHE_SERVER_URLS:+$LMCACHE_SERVER_URLS,}tcp://127.0.0.1:${shard_port}"
+        done
+        for shard in "${!LMCACHE_PIDS[@]}"; do
+            wait_for_lmcache_ready "${LMCACHE_HTTP_PORTS[$shard]}" \
+                "${LMCACHE_PIDS[$shard]}" "${LMCACHE_LOGS[$shard]}"
+        done
+        OFFLOAD_ARGS=(
+            --kv-transfer-config
+            "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_connector_module_path\":\"lmcache.integration.vllm.lmcache_mp_connector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.server_urls\":\"$LMCACHE_SERVER_URLS\",\"lmcache.mp.mq_timeout\":6000.0}}"
         )
         ;;
     *)
-        echo "Unsupported KV_OFFLOAD_BACKEND: ${KV_OFFLOAD_BACKEND:-}" >&2
+        echo "Unsupported KV_OFFLOAD_BACKEND: ${KV_OFFLOAD_BACKEND:-} (expected: vllm-native or lmcache)" >&2
         exit 1
         ;;
 esac
@@ -150,10 +255,10 @@ VLLM_CMD=(
     --tool-call-parser minimax_m3
     --enable-auto-tool-choice
     --default-chat-template-kwargs '{"thinking_mode":"enabled"}'
-    --max-num-seqs "$CONC"
+    --max-num-seqs "$((2 * CONC))"
     --stream-interval 20
     --hf-overrides '{"text_config": {"use_index_cache": true, "index_topk_freq": 4}}'
-    # --speculative-config "$SPEC_CONFIG"
+    --speculative-config "$SPEC_CONFIG"
     "${OFFLOAD_ARGS[@]}"
 )
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
@@ -169,5 +274,6 @@ if [ "${EVAL_ONLY}" = "true" ]; then
     run_eval --port "$PORT"
 else
     build_replay_cmd "$RESULT_DIR"
+    REPLAY_CMD+=" --use-chat-template"
     run_agentic_replay_and_write_outputs "$RESULT_DIR"
 fi
