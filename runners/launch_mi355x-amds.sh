@@ -330,7 +330,7 @@ else
         --container-writable \
         --container-workdir=/workspace/ \
         --container-remap-root \
-        --no-container-entrypoint --export=ALL,AIPERF_DATASET_MMAP_CACHE_DIR=/aiperf_mmap_cache,INFX_DURATION=$DURATION,INFX_EVAL_ONLY=$EVAL_ONLY,INFX_PORT=$PORT,INFX_HF_HUB_CACHE=$HF_HUB_CACHE,INFX_RESULT_FILENAME=$RESULT_FILENAME,INFX_CONC=$CONC \
+        --no-container-entrypoint --export=ALL,AIPERF_DATASET_MMAP_CACHE_DIR=/aiperf_mmap_cache,INFX_DURATION=$DURATION,INFX_EVAL_ONLY=$EVAL_ONLY,INFX_PORT=$PORT,INFX_HF_HUB_CACHE=$HF_HUB_CACHE,INFX_RESULT_FILENAME=$RESULT_FILENAME,INFX_CONC=$CONC,INFX_KV_OFFLOADING=$KV_OFFLOADING,INFX_TOTAL_CPU_DRAM_GB=$TOTAL_CPU_DRAM_GB \
         bash "$BENCHMARK_SCRIPT"
 
     scancel $JOB_ID

@@ -108,7 +108,8 @@ if k3_patches_preapplied; then
     # this file, so unsetting them here would just leave them empty. Restore
     # them from INFX_* shadows, which the launcher exports under names no
     # image defines and therefore cannot be clobbered.
-    for _infx_var in DURATION EVAL_ONLY PORT HF_HUB_CACHE RESULT_FILENAME CONC; do
+    for _infx_var in DURATION EVAL_ONLY PORT HF_HUB_CACHE RESULT_FILENAME CONC \
+                     KV_OFFLOADING TOTAL_CPU_DRAM_GB; do
         _infx_shadow="INFX_${_infx_var}"
         if [ -n "${!_infx_shadow:-}" ]; then
             if [ "${!_infx_var:-}" != "${!_infx_shadow}" ]; then
