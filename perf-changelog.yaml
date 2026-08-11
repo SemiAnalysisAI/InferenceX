@@ -5801,3 +5801,9 @@
     - "Declare the exact SGLang and AMD MoRI runtime fingerprint reported by the pinned ROCm image so srt-slurm identity verification is reproducible."
     - "Rebase the AMD runtime on the active native-router branch and wait for every advertised SGLang HTTP worker to become healthy before launching Model Gateway, preventing slow ROCm startup from permanently dropping a static prefill worker after the router's one-shot registration timeout."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2555
+
+- config-keys:
+    - dsv4-fp4-b300-vllm-agentic-mtp
+  description:
+    - "Update the B300 DSV4 AgentX MTP image and SimpleCPU sweep through c576."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2536
