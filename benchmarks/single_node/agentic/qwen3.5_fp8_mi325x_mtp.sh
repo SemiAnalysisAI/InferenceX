@@ -83,12 +83,12 @@ MAX_RUNNING_REQUESTS=$((2 * CONC))
 CUDA_GRAPH_MAX_BS="$CONC"
 [ "$CUDA_GRAPH_MAX_BS" -gt 64 ] && CUDA_GRAPH_MAX_BS=64
 
-# With EAGLE enabled, SGLang reserves 0.12 of GPU memory for the draft model.
-# TP2 needs the remaining target-model budget raised from 0.68 to 0.78 to fit
-# Qwen3.5's hybrid state cache; TP4/TP8 retain the established 0.68 budget.
+# With EAGLE enabled, SGLang reserves 15% of this budget for the draft model.
+# TP2 needs an effective 0.8075 target-model budget to fit Qwen3.5's weights,
+# hybrid state, and KV pools; TP4/TP8 retain the established 0.68 budget.
 MEM_FRACTION_STATIC=0.80
 if [ "$TP" -eq 2 ]; then
-    MEM_FRACTION_STATIC=0.90
+    MEM_FRACTION_STATIC=0.95
 fi
 
 export PYTHONNOUSERSITE=1
