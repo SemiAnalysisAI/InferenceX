@@ -9,9 +9,8 @@ set -x
 # --kv-cache-dtype fp8, TRITON_ATTN, minimax_m3 parsers, vllm-router for
 # DP-attention), so the spec-decode delta is readable at equal concurrency.
 #
-# Speculative config: Inferact/MiniMax-M3-EAGLE3 draft head, 3 speculative
-# tokens — the same draft/level every merged MiniMax-M3 MTP recipe uses
-# (fixed_seq_len/minimaxm3_fp8_{h100,h200,mi300x,mi325x}_mtp.sh).
+# Speculative config: the current Inferact/MiniMax-M3-EAGLE3-GQA draft head
+# with three speculative tokens and the committed thinking-on golden AL.
 #
 # The drafter is pinned to FLASH_ATTN, as on every CUDA MiniMax-M3 MTP recipe:
 # the EAGLE3 head is MHA and FlashInfer only serves page size 128 through its
@@ -26,7 +25,7 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
 
-DRAFT_MODEL="Inferact/MiniMax-M3-EAGLE3"
+DRAFT_MODEL="Inferact/MiniMax-M3-EAGLE3-GQA"
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -126,31 +125,40 @@ if [[ "$DP_ATTENTION" == "true" ]]; then
     agentic_pip_install --quiet 'vllm-router==0.1.14'
 fi
 
+# The public endpoint is the router for DEP, so explicitly scrape the engine
+# endpoint. Pure TP/TEP deduplicates this URL against the automatic scrape.
+export AIPERF_SERVER_METRICS_URLS="http://localhost:${VLLM_BACKEND_PORT}/metrics"
+export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="vllm:"
+
 # use 3 speculative tokens for all configs, matching the MiniMax-M3 MTP recipes
 NUM_SPEC_TOKENS=3
 TOKENS_PER_SEQ=$((1 + NUM_SPEC_TOKENS))
 
 # AgentX pins acceptance to the committed golden AL so submissions are compared
 # on system performance at a fixed acceptance target rather than on draft-head
-# quality (golden_al_distribution/README.md). 2.83 is the MiniMax-M3 EAGLE3
-# curve at num_speculative_tokens=3, thinking_on
-# (golden_al_distribution/minimaxm3_eagle3.yaml). The separate
-# minimaxm3_eagle3_gqa.yaml curve belongs to the Inferact/MiniMax-M3-EAGLE3-GQA
-# draft and is not mixed in here.
+# quality. 2.78 is minimaxm3_eagle3_gqa.yaml thinking_on[3].
 #
 # EVAL_ONLY switches back to real verification: synthetic acceptance commits
 # drafted tokens regardless of the target logits, so generated text is wrong and
 # the eval would score ~0 (same split as dsv4_fp4_b*_vllm_mtp.sh).
-SYNTHETIC_ACCEPT_LEN=2.83
+SYNTHETIC_ACCEPT_LEN=2.78
 if [ "${EVAL_ONLY:-false}" = "true" ]; then
     SPEC_CONFIG="{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"FLASH_ATTN\"}"
 else
     SPEC_CONFIG="{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"FLASH_ATTN\", \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
 fi
 
-# AgentX concurrency counts live session trees, not individual requests, so keep
-# the non-MTP recipe's 2x scheduler headroom for subagent fan-out.
-MAX_NUM_SEQS=$((2 * CONC))
+# AgentX concurrency counts live session trees, not individual requests. DEP
+# splits those trees across eight data-parallel ranks; TP/TEP keeps them local.
+if [[ "$DP_ATTENTION" == "true" ]]; then
+    if (( 2 * CONC % TP != 0 )); then
+        echo "DEP requires 2*CONC divisible by TP (CONC=$CONC TP=$TP)" >&2
+        exit 1
+    fi
+    MAX_NUM_SEQS=$((2 * CONC / TP))
+else
+    MAX_NUM_SEQS=$((2 * CONC))
+fi
 # Cudagraph capture sizes are in TOKENS: a decode batch of S sequences verifies
 # S*(1+NUM_SPEC_TOKENS) tokens, so cap capture at MAX_NUM_SEQS*(1+N) or the
 # FULL_DECODE_ONLY ladder tops out at MAX_NUM_SEQS/(1+N) sequences and the
@@ -162,13 +170,15 @@ vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
     --port "$VLLM_BACKEND_PORT" \
     "${PARALLEL_ARGS[@]}" \
     "${EP_ARGS[@]}" \
-    --gpu-memory-utilization 0.95 \
+    --gpu-memory-utilization 0.90 \
     --cpu-offload-gb "$MODEL_CPU_OFFLOAD_GB" \
     --kv-cache-dtype fp8 \
     --attention-backend TRITON_ATTN \
     --block-size 128 \
     --language-model-only \
     --enable-prefix-caching \
+    --enable-prompt-tokens-details \
+    --default-chat-template-kwargs '{"thinking_mode":"enabled"}' \
     --max-num-seqs "$MAX_NUM_SEQS" \
     --max-cudagraph-capture-size "$MAX_CUDAGRAPH_CAPTURE_SIZE" \
     --speculative-config "$SPEC_CONFIG" \

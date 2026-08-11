@@ -7116,7 +7116,7 @@ minimaxm3-fp8-h100-vllm-agentic:
 # eat into the same HBM budget that already puts the GPU-resident cliff near
 # conc 6 on 80 GB H100s.
 minimaxm3-fp8-h100-vllm-agentic-mtp:
-  image: vllm/vllm-openai:nightly-04c2a8deac44fdb1ca3e2b5ec3e6bf16f3f6a914
+  image: vllm/vllm-openai:v0.27.1
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: cluster:h100-dgxc
@@ -7125,12 +7125,17 @@ minimaxm3-fp8-h100-vllm-agentic-mtp:
   multinode: false
   scenarios:
     agentic-coding:
+    # Fast discovery covers latency-oriented TP8, expert-parallel TEP8, and
+    # session-routed DEP8. Mooncake starts before the tight H100 HBM knee and
+    # extends each viable topology far enough to expose its host-tier tail.
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12] }
-      - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12] }
-      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [3, 4, 5, 6, 7, 8, 9, 10, 12, 14] }
-      - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [3, 4, 5, 6, 7, 8, 9, 10, 12, 14] }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 8, 10] }
+      - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 8, 10] }
+      - { tp: 8, ep: 8, dp-attn: true, spec-decoding: mtp, kv-offloading: none, conc-list: [8, 12, 16, 24, 32] }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [2, 4, 6, 8, 10, 12, 16] }
+      - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [2, 4, 6, 8, 10, 12, 16] }
+      - { tp: 8, ep: 8, dp-attn: true, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [16, 24, 32] }
 
 minimaxm3-fp8-h200-vllm-agentic:
   image: vllm/vllm-openai:nightly-04c2a8deac44fdb1ca3e2b5ec3e6bf16f3f6a914
