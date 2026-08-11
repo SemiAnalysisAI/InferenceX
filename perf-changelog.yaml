@@ -5794,3 +5794,15 @@
     - "Keep DSpark K=2 probabilistic throughput on synthetic golden AL 2.51 while the generated EVAL_ONLY row uses real block verification"
     - "Cap the GPU-resident search at concurrency 8 after concurrency 16 failed to complete deterministic warmup; retain concurrency 16 for the DRAM-offload capacity tier"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2476
+
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-vllm-agentic-mtp-agg
+    - dsv4-fp4-gb200-dynamo-vllm-agentic-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GB200 DeepSeek-V4-Pro FP4 Dynamo-vLLM MTP AgentX coverage across TP8, DEP8, 1P1D, and 2P1D discovery arms."
+    - "Use released vLLM v0.27.1, Dynamo 1.3.1, and NVIDIA/srt-slurm v1.0.45."
+    - "Collect every logical vLLM prefill/decode leader endpoint and require nonempty vllm: server metrics before publishing results."
+    - "Use K=3 golden synthetic acceptance length 2.49 for throughput; eval retains real MTP verification."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2567
