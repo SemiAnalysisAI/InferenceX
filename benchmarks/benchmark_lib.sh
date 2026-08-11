@@ -1048,6 +1048,142 @@ _eval_concs_to_json() {
     printf '[%s]' "$joined"
 }
 
+_env_is_true() {
+    case "${1,,}" in
+        1|true|yes|on) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+_resolve_disagg_ep() {
+    local ep="${1:-1}"
+    local enable_flag="${2:-false}"
+    local tp_size="${3:-1}"
+    if [[ "$ep" == "1" ]] && _env_is_true "$enable_flag"; then
+        echo "$tp_size"
+    else
+        echo "$ep"
+    fi
+}
+
+_normalize_bool_json() {
+    if _env_is_true "${1:-false}"; then
+        echo "true"
+    else
+        echo "false"
+    fi
+}
+
+# Export TP/EP/DP metadata for append_lm_eval_summary / meta_env.json.
+# Prefer workflow PREFILL_EP/DECODE_EP and *_DP_ATTN (from job.slurm) over
+# ENABLE_* launch booleans so DEP8/DPA arms record the correct topology.
+bridge_disagg_eval_metadata() {
+    export TP="${PREFILL_TP:-${PREFILL_TP_SIZE:-${TP:-1}}}"
+    export PREFILL_TP="${PREFILL_TP:-${PREFILL_TP_SIZE:-${TP:-1}}}"
+    export PREFILL_EP="$(_resolve_disagg_ep "${PREFILL_EP:-1}" "${PREFILL_ENABLE_EP:-false}" "${PREFILL_TP_SIZE:-${PREFILL_TP:-1}}")"
+    export EP_SIZE="${PREFILL_EP}"
+    export PREFILL_NUM_WORKERS="${PREFILL_NUM_WORKERS:-${xP:-1}}"
+    export DECODE_TP="${DECODE_TP:-${DECODE_TP_SIZE:-${TP:-1}}}"
+    export DECODE_EP="$(_resolve_disagg_ep "${DECODE_EP:-1}" "${DECODE_ENABLE_EP:-false}" "${DECODE_TP_SIZE:-${DECODE_TP:-1}}")"
+    export DECODE_NUM_WORKERS="${DECODE_NUM_WORKERS:-${yD:-1}}"
+
+    local prefill_dp="${PREFILL_DP_ATTN:-${PREFILL_DP_ATTENTION:-${PREFILL_ENABLE_DP:-false}}}"
+    local decode_dp="${DECODE_DP_ATTN:-${DECODE_DP_ATTENTION:-${DECODE_ENABLE_DP:-false}}}"
+    export DP_ATTENTION="$(_normalize_bool_json "$prefill_dp")"
+    export PREFILL_DP_ATTENTION="$(_normalize_bool_json "$prefill_dp")"
+    export DECODE_DP_ATTENTION="$(_normalize_bool_json "$decode_dp")"
+}
+
+_write_lm_eval_meta_json() {
+    local meta_json="$1"
+    local batch_metadata="${2:-}"
+    local metadata_conc="${3:-${CONC:-1}}"
+
+    bridge_disagg_eval_metadata
+
+    local model_name="${MODEL_NAME:-$MODEL}"
+    local is_multinode_json="false"
+    if [ "${IS_MULTINODE:-false}" = "true" ]; then
+        is_multinode_json="true"
+    fi
+
+    local prefill_tp="${PREFILL_TP:-${TP:-1}}"
+    local prefill_pp="${PREFILL_PP_SIZE:-${PP_SIZE:-1}}"
+    local prefill_dcp_size="${PREFILL_DCP_SIZE:-${DCP_SIZE:-1}}"
+    local prefill_pcp_size="${PREFILL_PCP_SIZE:-${PCP_SIZE:-1}}"
+    local prefill_ep="${PREFILL_EP:-${EP_SIZE:-1}}"
+    local prefill_num_workers="${PREFILL_NUM_WORKERS:-1}"
+    local decode_tp="${DECODE_TP:-${TP:-1}}"
+    local decode_pp="${DECODE_PP_SIZE:-${PP_SIZE:-1}}"
+    local decode_dcp_size="${DECODE_DCP_SIZE:-${DCP_SIZE:-1}}"
+    local decode_pcp_size="${DECODE_PCP_SIZE:-${PCP_SIZE:-1}}"
+    local decode_ep="${DECODE_EP:-${EP_SIZE:-1}}"
+    local decode_num_workers="${DECODE_NUM_WORKERS:-1}"
+
+    local dp_json
+    dp_json="$(_normalize_bool_json "${DP_ATTENTION:-false}")"
+    local prefill_dp_json
+    prefill_dp_json="$(_normalize_bool_json "${PREFILL_DP_ATTENTION:-${DP_ATTENTION:-false}}")"
+    local decode_dp_json
+    decode_dp_json="$(_normalize_bool_json "${DECODE_DP_ATTENTION:-${DP_ATTENTION:-false}}")"
+
+    local fw="${FRAMEWORK:-}"
+    local prec="${PRECISION:-}"
+    if [[ -z "$fw" || -z "$prec" ]]; then
+        if [[ -n "${RESULT_FILENAME:-}" ]]; then
+            local parsed
+            parsed=$(echo "${RESULT_FILENAME}" | sed -n 's/.*_\([^_][^_]*\)_\([^_][^_]*\)_tp.*/\1 \2/p')
+            local p1="${parsed%% *}"
+            local p2="${parsed#* }"
+            if [[ -z "$prec" && -n "$p1" && "$p1" != "$parsed" ]]; then
+                prec="$p1"
+            fi
+            if [[ -z "$fw" && -n "$p2" && "$p2" != "$parsed" ]]; then
+                fw="$p2"
+            fi
+        fi
+    fi
+
+    cat > "${meta_json}" <<META
+{
+  "is_multinode": ${is_multinode_json},
+  "framework": "${fw:-unknown}",
+  "precision": "${prec:-unknown}",
+  "spec_decoding": "${SPEC_DECODING:-}",
+  "tp": ${TP:-1},
+  "pp": ${PP_SIZE:-1},
+  "dcp_size": ${DCP_SIZE:-1},
+  "pcp_size": ${PCP_SIZE:-1},
+  "conc": ${metadata_conc},
+${batch_metadata}  "ep": ${EP_SIZE:-1},
+  "dp_attention": ${dp_json},
+  "prefill_tp": ${prefill_tp},
+  "prefill_pp": ${prefill_pp},
+  "prefill_dcp_size": ${prefill_dcp_size},
+  "prefill_pcp_size": ${prefill_pcp_size},
+  "prefill_ep": ${prefill_ep},
+  "prefill_dp_attention": ${prefill_dp_json},
+  "prefill_num_workers": ${prefill_num_workers},
+  "decode_tp": ${decode_tp},
+  "decode_pp": ${decode_pp},
+  "decode_dcp_size": ${decode_dcp_size},
+  "decode_pcp_size": ${decode_pcp_size},
+  "decode_ep": ${decode_ep},
+  "decode_dp_attention": ${decode_dp_json},
+  "decode_num_workers": ${decode_num_workers},
+  "model": "${model_name:-}",
+  "infmax_model_prefix": "${MODEL_PREFIX:-unknown}",
+  "hw": "${RUNNER_TYPE:-unknown}",
+  "isl": "${ISL:-0}",
+  "osl": "${OSL:-0}"
+}
+META
+}
+
+rewrite_lm_eval_meta_env() {
+    _write_lm_eval_meta_json "./meta_env.json" "" "${CONC:-1}"
+}
+
 append_lm_eval_summary() {
     local batch_concs="${EVAL_BATCHED_CONCS:-}"
     local results_dir="${EVAL_RESULT_DIR:-}"
@@ -1085,96 +1221,7 @@ append_lm_eval_summary() {
         meta_json="${out_dir}/meta_env.json"
     fi
 
-    # Write minimal meta for collectors that expect it
-    local model_name="${MODEL_NAME:-$MODEL}"
-    local is_multinode_json="false"
-    if [ "${IS_MULTINODE:-false}" = "true" ]; then
-        is_multinode_json="true"
-    fi
-
-    local prefill_tp="${PREFILL_TP:-${TP:-1}}"
-    local prefill_pp="${PREFILL_PP_SIZE:-${PP_SIZE:-1}}"
-    local prefill_dcp_size="${PREFILL_DCP_SIZE:-${DCP_SIZE:-1}}"
-    local prefill_pcp_size="${PREFILL_PCP_SIZE:-${PCP_SIZE:-1}}"
-    local prefill_ep="${PREFILL_EP:-${EP_SIZE:-1}}"
-    local prefill_num_workers="${PREFILL_NUM_WORKERS:-1}"
-    local decode_tp="${DECODE_TP:-${TP:-1}}"
-    local decode_pp="${DECODE_PP_SIZE:-${PP_SIZE:-1}}"
-    local decode_dcp_size="${DECODE_DCP_SIZE:-${DCP_SIZE:-1}}"
-    local decode_pcp_size="${DECODE_PCP_SIZE:-${PCP_SIZE:-1}}"
-    local decode_ep="${DECODE_EP:-${EP_SIZE:-1}}"
-    local decode_num_workers="${DECODE_NUM_WORKERS:-1}"
-
-    local dp_json="false"
-    if [ "${DP_ATTENTION:-false}" = "true" ]; then dp_json="true"; fi
-    local prefill_dp_json="$dp_json"
-    if [ "${PREFILL_DP_ATTENTION:-${DP_ATTENTION:-false}}" = "true" ]; then
-        prefill_dp_json="true"
-    else
-        prefill_dp_json="false"
-    fi
-    local decode_dp_json="$dp_json"
-    if [ "${DECODE_DP_ATTENTION:-${DP_ATTENTION:-false}}" = "true" ]; then
-        decode_dp_json="true"
-    else
-        decode_dp_json="false"
-    fi
-
-    # Derive framework/precision from env, fallback to parsing RESULT_FILENAME
-    # RESULT_FILENAME format (from workflow):
-    #   <exp_name>_<precision>_<framework>_tp<...>_ep<...>_dpa_<...>_conc<...>_<runner>
-    local fw="${FRAMEWORK:-}"
-    local prec="${PRECISION:-}"
-    if [[ -z "$fw" || -z "$prec" ]]; then
-        if [[ -n "${RESULT_FILENAME:-}" ]]; then
-            # Extract the two fields immediately before "_tp"
-            # Handles arbitrary underscores in exp_name by matching from the end
-            local parsed
-            parsed=$(echo "${RESULT_FILENAME}" | sed -n 's/.*_\([^_][^_]*\)_\([^_][^_]*\)_tp.*/\1 \2/p')
-            local p1="${parsed%% *}"
-            local p2="${parsed#* }"
-            if [[ -z "$prec" && -n "$p1" && "$p1" != "$parsed" ]]; then
-                prec="$p1"
-            fi
-            if [[ -z "$fw" && -n "$p2" && "$p2" != "$parsed" ]]; then
-                fw="$p2"
-            fi
-        fi
-    fi
-    cat > "${meta_json}" <<META
-{
-  "is_multinode": ${is_multinode_json},
-  "framework": "${fw:-unknown}",
-  "precision": "${prec:-unknown}",
-  "spec_decoding": "${SPEC_DECODING:-}",
-  "tp": ${TP:-1},
-  "pp": ${PP_SIZE:-1},
-  "dcp_size": ${DCP_SIZE:-1},
-  "pcp_size": ${PCP_SIZE:-1},
-  "conc": ${metadata_conc},
-${batch_metadata}  "ep": ${EP_SIZE:-1},
-  "dp_attention": ${dp_json},
-  "prefill_tp": ${prefill_tp},
-  "prefill_pp": ${prefill_pp},
-  "prefill_dcp_size": ${prefill_dcp_size},
-  "prefill_pcp_size": ${prefill_pcp_size},
-  "prefill_ep": ${prefill_ep},
-  "prefill_dp_attention": ${prefill_dp_json},
-  "prefill_num_workers": ${prefill_num_workers},
-  "decode_tp": ${decode_tp},
-  "decode_pp": ${decode_pp},
-  "decode_dcp_size": ${decode_dcp_size},
-  "decode_pcp_size": ${decode_pcp_size},
-  "decode_ep": ${decode_ep},
-  "decode_dp_attention": ${decode_dp_json},
-  "decode_num_workers": ${decode_num_workers},
-  "model": "${model_name:-}",
-  "infmax_model_prefix": "${MODEL_PREFIX:-unknown}",
-  "hw": "${RUNNER_TYPE:-unknown}",
-  "isl": "${ISL:-0}",
-  "osl": "${OSL:-0}"
-}
-META
+    _write_lm_eval_meta_json "$meta_json" "$batch_metadata" "$metadata_conc"
 
     if [ -n "$batch_concs" ]; then
         echo "Prepared batched eval artifacts in: $(pwd)"
@@ -1230,7 +1277,12 @@ _patch_swebench_scoring() {
 
 # SWE-bench requires ~/.modal.toml despite env credentials.
 _ensure_modal_credentials() {
-    if [ "${SWEBENCH_USE_MODAL:-false}" != "true" ]; then return 0; fi
+    # Agentic generation uses swerex_modal sandboxes even when scoring is local.
+    if [ "${SWEBENCH_USE_MODAL:-false}" != "true" ] \
+        && [ "${IS_AGENTIC:-0}" != "1" ] \
+        && [ "${SCENARIO_TYPE:-}" != "agentic-coding" ]; then
+        return 0
+    fi
     # CI secrets may include whitespace or quotes.
     if [ -n "${MODAL_TOKEN_ID:-}" ]; then
         MODAL_TOKEN_ID=$(printf %s "$MODAL_TOKEN_ID" | tr -d "[:space:]\"'")
@@ -1253,7 +1305,7 @@ _ensure_modal_credentials() {
         chmod 600 "$HOME/.modal.toml"
         echo "[swebench] wrote ~/.modal.toml from MODAL_TOKEN_ID/MODAL_TOKEN_SECRET env"
     else
-        echo "WARN: SWEBENCH_USE_MODAL=true but no ~/.modal.toml and no MODAL_TOKEN_ID/MODAL_TOKEN_SECRET env; Modal scoring will fail credential validation" >&2
+        echo "WARN: Modal credentials required but no ~/.modal.toml and no MODAL_TOKEN_ID/MODAL_TOKEN_SECRET env; Modal sandboxes will fail authentication" >&2
     fi
 }
 
@@ -1670,6 +1722,7 @@ AIPERF_CLI="${AIPERF_VENV}/bin/aiperf"
 AIPERF_HF_CLI="${AIPERF_VENV}/bin/hf"
 AIPERF_DEPS_READY=0
 AIPERF_FAILED_REQUEST_THRESHOLD="${AIPERF_FAILED_REQUEST_THRESHOLD:-0.10}"
+AIPERF_LIVE_FAILED_REQUEST_THRESHOLD="${AIPERF_LIVE_FAILED_REQUEST_THRESHOLD:-$AIPERF_FAILED_REQUEST_THRESHOLD}"
 AIPERF_TRACE_IDLE_GAP_CAP_SECONDS="${AIPERF_TRACE_IDLE_GAP_CAP_SECONDS:-300}"
 
 agentic_pip_install() {
@@ -1717,6 +1770,17 @@ install_agentic_deps() {
     rm -rf "$AIPERF_VENV"
     mkdir -p "$AIPERF_UV_CACHE_DIR"
 
+    # Request an explicit interpreter version rather than binding to whatever
+    # `python3` resolves to in the server container. aiperf's pyproject.toml
+    # dropped Python 3.10 support (SemiAnalysisAI/aiperf#1107); the sglang-rocm
+    # /vllm-rocm images still ship 3.10.12 as their default python3, so
+    # `--python "$(command -v python3)"` pinned the venv to an interpreter that
+    # can no longer satisfy `requires-python = ">=3.11,<3.14"`, leaving the venv
+    # without aiperf/hf installed (silent until the aiperf/hf calls below hit
+    # "No such file or directory"). uv auto-downloads a standalone build of the
+    # requested version when the system doesn't have one (same network path
+    # already used to fetch uv itself above), so this doesn't depend on the
+    # container image bundling a new-enough Python.
     UV_CACHE_DIR="$AIPERF_UV_CACHE_DIR" \
         "$AIPERF_UV_BIN" venv --python "${AIPERF_PYTHON_VERSION:-3.11}" "$AIPERF_VENV"
     UV_CACHE_DIR="$AIPERF_UV_CACHE_DIR" \
@@ -1870,11 +1934,11 @@ build_replay_cmd() {
     REPLAY_CMD+=" --benchmark-duration $duration"
     REPLAY_CMD+=" --stats-interval 30"
     REPLAY_CMD+=" --random-seed 42"
-    # Fail runs once more than 10% of requests error. This keeps known
-    # transient low-rate failures from killing long sweeps while still
-    # catching malformed payloads or server crashes before they get aggregated
-    # as benchmarkable data.
-    REPLAY_CMD+=" --failed-request-threshold $AIPERF_FAILED_REQUEST_THRESHOLD"
+    # Fail runs early once the live error ratio crosses the configured limit.
+    # Recipes with correlated low-concurrency trajectories may allow a larger
+    # live sample while retaining AIPERF_FAILED_REQUEST_THRESHOLD as the strict
+    # post-run validity gate below.
+    REPLAY_CMD+=" --failed-request-threshold $AIPERF_LIVE_FAILED_REQUEST_THRESHOLD"
     # Sample each trajectory's warmup start position uniformly from
     # [25%, 75%] of the trace's turn count, clamped by AIPerf to leave at
     # least one profile turn after warmup.
@@ -2006,6 +2070,36 @@ write_agentic_result_json() {
     "$AIPERF_PYTHON" "$INFMAX_CONTAINER_WORKSPACE/utils/generate_aiperf_plots.py" "$result_dir" 2>&1 || true
 }
 
+validate_required_agentic_server_metrics() {
+    local result_dir="$1"
+    local required_prefix="${AIPERF_REQUIRED_SERVER_METRIC_PREFIX:-}"
+    local metrics_dir="$result_dir/aiperf_artifacts"
+    local metrics_json="$metrics_dir/server_metrics_export.json"
+    local metrics_csv="$metrics_dir/server_metrics_export.csv"
+
+    # Opt-in so existing AgentX configurations retain their current contract.
+    # Recipes that require trace charts set a metric prefix (for example
+    # `sglang:`) and fail loudly instead of publishing a partial trace artifact.
+    if [ -z "$required_prefix" ]; then
+        return 0
+    fi
+
+    if [ ! -s "$metrics_json" ] || [ ! -s "$metrics_csv" ]; then
+        echo "ERROR: required AIPerf server metrics artifacts are missing or empty in $metrics_dir" >&2
+        return 1
+    fi
+
+    # Avoid parsing the potentially multi-GiB JSON into memory. AIPerf writes
+    # metric names as JSON object keys, so a fixed-string scan establishes that
+    # backend engine metrics—not only frontend/router metrics—were captured.
+    if ! grep -F -m 1 -q "\"${required_prefix}" "$metrics_json"; then
+        echo "ERROR: $metrics_json contains no metric with required prefix '$required_prefix'" >&2
+        return 1
+    fi
+
+    echo "Validated required AIPerf server metrics prefix '$required_prefix'"
+}
+
 run_agentic_replay_and_write_outputs() {
     local result_dir="$1"
     local replay_rc
@@ -2044,4 +2138,6 @@ run_agentic_replay_and_write_outputs() {
         echo "ERROR: agentic trace replay produced invalid results after writing available artifacts" >&2
         return "$validation_rc"
     fi
+
+    validate_required_agentic_server_metrics "$result_dir"
 }

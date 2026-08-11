@@ -138,6 +138,16 @@ on:
         type: string
         required: false
         default: ""
+      eval-limit:
+        description: "Eval instance count: empty/full = whole split (default); N = first-N smoke slice"
+        required: false
+        type: string
+        default: ""
+      swebench-gen-mode:
+        description: "SWE-bench generation mode (single-shot | agentic). Empty = agentic (single-shot is an explicit debugging escape hatch)."
+        required: false
+        type: string
+        default: ""
       require-power:
         description: "Fail fixed-sequence result processing when GPU power is invalid"
         type: boolean
@@ -223,6 +233,12 @@ env:
   RUN_EVAL: ${{ inputs.run-eval }}
   EVAL_ONLY: ${{ inputs.eval-only }}
   EVAL_CONC: ${{ inputs.eval-conc }}
+  EVAL_LIMIT: ${{ inputs.eval-limit }}
+  SWEBENCH_GEN_MODE: ${{ inputs.swebench-gen-mode }}
+  # GPU/multi-node runners lack Docker for SWE-bench scoring.
+  SWEBENCH_USE_MODAL: 'true'
+  MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+  MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
   REQUIRE_POWER: ${{ inputs.require-power && '1' || '0' }}
   POWER_PRODUCER_SHA: ${{ inputs.power-producer-sha }}
   # Agentic-coding env. Fixed-seq-len jobs leave these empty.
@@ -283,7 +299,10 @@ jobs:
         ) ||
         format('[{0}]', toJSON(inputs.runner))
       ) }}
-    timeout-minutes: 480
+    # Full-context AgentX warmup can legitimately exceed the fixed-sequence
+    # eight-hour envelope at high concurrency. Keep one hour beyond the
+    # recipe's 12-hour Slurm limit for checkout, staging, and artifact upload.
+    timeout-minutes: ${{ inputs.scenario-type == 'agentic-coding' && 780 || 480 }}
     name: >-
       p${{ inputs.priority }} | ${{ inputs.model-prefix }} ${{ inputs.precision }} ${{ inputs.runner }} ${{ inputs.framework == 'sglang' && 'sgl' || inputs.framework == 'dynamo-sglang' && 'dyn-sgl' || inputs.framework == 'sglang-disagg' && 'sgl-disagg' || inputs.framework }}
       ${{ inputs.disagg == 'true' && format('{0}P ', inputs.prefill-num-worker) || '' }}(TP${{ inputs.prefill-tp }}${{ inputs.prefill-pp != '' && inputs.prefill-pp != '1' && format('/PP{0}', inputs.prefill-pp) || '' }}${{ inputs.prefill-dcp-size != '' && inputs.prefill-dcp-size != '1' && format('/DCP{0}', inputs.prefill-dcp-size) || '' }}${{ inputs.prefill-pcp-size != '' && inputs.prefill-pcp-size != '1' && format('/PCP{0}', inputs.prefill-pcp-size) || '' }}${{ inputs.prefill-ep != '' && inputs.prefill-ep != '1' && format('/EP{0}', inputs.prefill-ep) || '' }}${{ inputs.prefill-dp-attn == 'true' && '/DPA' || '' }})
@@ -298,7 +317,7 @@ jobs:
         run: &slurm-cleanup |
           if command -v squeue >/dev/null 2>&1; then
             echo "[Slurm] Cleaning up jobs named: ${{ runner.name }} ..."
-            scancel --name="${{ runner.name }}" || true
+            scancel --user="$USER" --name="${{ runner.name }}" || true
             while [ -n "$(squeue --user="$USER" --name='${{ runner.name }}' --noheader --format='%i')" ]; do
               squeue --user="$USER" --name="${{ runner.name }}"
               sleep 5
@@ -453,6 +472,10 @@ jobs:
             meta_env.json
             results*.json
             sample*.jsonl
+            agent_preds.json
+            predictions.jsonl
+            swebench_report_*.json
+            *.traj*
           if-no-files-found: ${{ inputs.eval-only && 'error' || 'ignore' }}
 
       - name: Verify eval scores
@@ -470,6 +493,7 @@ jobs:
           rm -f meta_env.json || true
           rm -f results*.json || true
           rm -f sample*.jsonl || true
+          rm -f agent_preds.json predictions.jsonl swebench_report_*.json *.traj* || true
 
       - name: Slurm cleanup (post-run)
         if: always()

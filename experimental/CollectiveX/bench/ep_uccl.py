@@ -134,8 +134,8 @@ class UCCLEPBackend(EPBackend):
     SUPPORTED_MODES = ("normal", "low-latency")
     SUPPORTED_PRECISIONS = ("bf16", "fp8")
     stage_device_work = False
-    combine_needs_redispatch = False
-    dispatch_needs_combine_cleanup = False
+    requires_fresh_pair = False
+    receive_layout = "token-rank"
     combine_weight_semantics = "unweighted-rank-sum"
 
     def __init__(self, args, rank, world_size, local_rank, device):
@@ -155,15 +155,18 @@ class UCCLEPBackend(EPBackend):
             )
             self.dispatch_value_bytes = 1
             self.dispatch_scale_bytes_per_copy = ((args.hidden + 127) // 128) * 4
+            # Normal/HT quantises inside the timed dispatch with the compiled form; low-latency
+            # keeps the eager helper, whose bits its in-kernel cast matches. See fused_quantize.
+            self._quant = self.fused_quantize(per_token_cast_to_fp8)
         if self.mode == "low-latency":
             # Legacy low-latency decode path: a distinct kernel family whose combine multiplies
             # by the gate at the source (weighted), not an unweighted rank sum. LL result tensors
             # are double-buffered and single-use per dispatch, so every timed combine needs a
             # fresh dispatch and every timed dispatch must be drained by its combine.
             self.kernel_generation = "uccl-legacy-buffer-ll"
+            self.receive_layout = "token-expert"
             self.combine_weight_semantics = "weighted-kernel-sum"
-            self.combine_needs_redispatch = True
-            self.dispatch_needs_combine_cleanup = True
+            self.requires_fresh_pair = True
 
     def buffer_cap(self, args):
         if self.mode == "low-latency":
@@ -273,20 +276,13 @@ class UCCLEPBackend(EPBackend):
     def semantic_payload(self, x):
         if not self._fp8:
             return x
-        return per_token_cast_back(*per_token_cast_to_fp8(x))
+        # Same callable the wire uses, so sender and oracle cannot disagree by construction.
+        return per_token_cast_back(*self._quant(x))
 
-    def _encode_dispatch(self, x):
-        if not self._fp8:
-            return x, None
-        if self.mode == "low-latency":
-            # low_latency_dispatch takes BF16 x and casts to e4m3 inside the kernel, so send x
-            # unquantized; expose the host round-trip as the oracle semantic.
-            return x, per_token_cast_back(*per_token_cast_to_fp8(x))
-        fp8, scales = per_token_cast_to_fp8(x)
-        # Column-major (TMA-compatible) scale layout the dispatch kernel expects, matching UCCL's
-        # own bench (`scales.T.contiguous().T`) and the LL scale-contiguity note below.
-        quantized = (fp8, scales.T.contiguous().T)
-        return quantized, per_token_cast_back(fp8, scales)
+    def _validate_quantizer(self, x):
+        # Low-latency keeps the eager quantize; nothing to cross-check there.
+        if self._fp8 and self.mode != "low-latency":
+            self.assert_quantize_identity(per_token_cast_to_fp8, self._quant, x)
 
     def _ll_recv_bf16(self, recv_x):
         """The padded per-expert receive as BF16 [num_local_experts, cap*num_ranks, hidden].
@@ -325,8 +321,16 @@ class UCCLEPBackend(EPBackend):
         # it through so the same call serves both scopes.
         (num_tokens_per_rank, num_tokens_per_rdma_rank, num_tokens_per_expert,
          is_token_in_rank, _) = self.buffer.get_dispatch_layout(p.topk_idx, self.args.experts)
+        # Quantise here, not in make_problem: production runs one fused bf16->fp8 kernel per forward
+        # pass right before this collective. The scales need UCCL's column-major (TMA-compatible)
+        # layout, which production's kernel emits directly -- so timing the transpose over-states
+        # by one small copy.
+        dispatch_x = p.dispatch_x
+        if self._fp8:
+            fp8, scales = self._quant(dispatch_x)
+            dispatch_x = (fp8, scales.T.contiguous().T)
         recv_x, recv_topk_idx, recv_topk_weights, _counts, handle, _event = self.buffer.dispatch(
-            x=p.dispatch_x,
+            x=dispatch_x,
             num_tokens_per_rank=num_tokens_per_rank,
             num_tokens_per_rdma_rank=num_tokens_per_rdma_rank,
             is_token_in_rank=is_token_in_rank,
