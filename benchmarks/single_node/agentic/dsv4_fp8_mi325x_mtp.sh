@@ -3,8 +3,8 @@ set -euo pipefail
 
 # DeepSeek-V4-Pro FP8 AgentX replay on one 8xMI325X node. The checkpoint is
 # dequantized to FP8 because gfx942 has no native MXFP4 support. The published
-# path is pure TP8: current stable and nightly vLLM builds both return invalid
-# empty-content responses with expert parallelism on this model/SKU.
+# path is pure TP8. TEP8 remains in the requested collection matrix and uses a
+# pinned upstream DeepSeek V4 graph fix while its correctness is validated.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -30,6 +30,30 @@ fi
 resolve_trace_source
 install_agentic_deps
 agentic_pip_install --quiet Pillow fastapi uvicorn
+
+install_vllm_dsv4_graph_fix() {
+    # vLLM PR #51430 narrows DeepSeek V4's eager CUDA-graph region and reports
+    # clean real-model MTP + expert-parallel evaluation. Keep v0.27.0's ROCm
+    # binaries and install only that exact merged Python source revision.
+    local graph_commit="1795b1ba7505aca16121c3eb3b319503863e1f9a"
+    local graph_src="/tmp/vllm-dsv4-graph-fix"
+    rm -rf "$graph_src"
+    git clone --depth 1 --branch test/v027-dsv4-graph-fix-20260811 \
+        https://github.com/cquil11/vllm.git "$graph_src"
+    if [[ "$(git -C "$graph_src" rev-parse HEAD)" != "$graph_commit" ]]; then
+        echo "Unexpected vLLM DeepSeek V4 graph-fix revision" >&2
+        exit 1
+    fi
+    VLLM_USE_PRECOMPILED=1 \
+    VLLM_ROCM_WHEEL_INDEX=https://wheels.vllm.ai/rocm/0.27.0/rocm723 \
+        uv pip install --system --no-deps --no-build-isolation --editable \
+        "$graph_src"
+    python3 -c 'import vllm; print("vLLM source:", vllm.__file__)'
+}
+
+if (( EP_SIZE > 1 )) && [[ "$DP_ATTENTION" != "true" ]]; then
+    install_vllm_dsv4_graph_fix
+fi
 
 export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
 export AIPERF_SERVER_METRICS_URLS="http://localhost:${PORT}/metrics"
@@ -185,12 +209,6 @@ if (( EP_SIZE > 1 )); then
 fi
 
 SCHEDULING_ARGS=(--async-scheduling)
-COLLECTIVE_ARGS=()
-if (( EP_SIZE > 1 )); then
-    # Isolate the custom TP all-reduce path while keeping the otherwise normal
-    # TEP recipe (async scheduling, CUDA graphs, and INT4 Quick Reduce).
-    COLLECTIVE_ARGS=(--disable-custom-all-reduce)
-fi
 
 USE_VLLM_ROUTER=false
 VLLM_BACKEND_PORT="$PORT"
@@ -247,7 +265,6 @@ VLLM_CMD=(
     --port "$VLLM_BACKEND_PORT"
     --trust-remote-code
     "${SCHEDULING_ARGS[@]}"
-    "${COLLECTIVE_ARGS[@]}"
     --distributed-executor-backend mp
     --quantization deepseek_v4_fp8
     --kv-cache-dtype fp8
