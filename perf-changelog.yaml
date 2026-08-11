@@ -5828,4 +5828,4 @@
     - "Use a broad agentx-fast discovery grid across TP8/EP1, TP8/EP8, and high-concurrency HiCache arms before pruning to the final Pareto sweep"
     - "Collect and require SGLang Prometheus metrics from the aggregate engine endpoint"
     - "Image: lmsysorg/sglang-rocm:v0.5.16-rocm720-mi30x-20260730"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2563
