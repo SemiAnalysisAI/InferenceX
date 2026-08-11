@@ -2,9 +2,9 @@
 set -euo pipefail
 
 # DeepSeek-V4-Pro FP8 AgentX replay on one 8xMI325X node. The checkpoint is
-# dequantized to FP8 because gfx942 has no native MXFP4 support. The published
-# path is pure TP8: current stable and nightly vLLM builds both return invalid
-# empty-content responses with expert parallelism on this model/SKU.
+# dequantized to FP8 because gfx942 has no native MXFP4 support. The collection
+# includes pure TP8, TP8/EP8, and Mooncake DRAM-offload points explicitly, even
+# where the latter two do not improve the Pareto frontier.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -30,6 +30,26 @@ fi
 resolve_trace_source
 install_agentic_deps
 agentic_pip_install --quiet Pillow fastapi uvicorn
+
+install_vllm_hybrid_kv_recovery() {
+    # vLLM PR #45497 fixes hybrid-KV connector load failures by recomputing the
+    # complete request when any KV group is unavailable. Keep v0.27.0's ROCm
+    # binaries and install only the pinned Python scheduler source revision.
+    local recovery_commit="cb1917efe34f16423de2ceb7f210fd015d53459a"
+    local recovery_src="/tmp/vllm-hybrid-kv-recovery"
+    rm -rf "$recovery_src"
+    git clone --depth 1 --branch test/v027-hybrid-kv-recovery \
+        https://github.com/cquil11/vllm.git "$recovery_src"
+    if [[ "$(git -C "$recovery_src" rev-parse HEAD)" != "$recovery_commit" ]]; then
+        echo "Unexpected vLLM hybrid-KV recovery revision" >&2
+        exit 1
+    fi
+    VLLM_USE_PRECOMPILED=1 \
+    VLLM_ROCM_WHEEL_INDEX=https://wheels.vllm.ai/rocm/0.27.0/rocm723 \
+        uv pip install --system --no-deps --no-build-isolation --editable \
+        "$recovery_src"
+    python3 -c 'import vllm; print("vLLM source:", vllm.__file__)'
+}
 
 export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
 export AIPERF_SERVER_METRICS_URLS="http://localhost:${PORT}/metrics"
@@ -121,6 +141,7 @@ install_mooncake_rocm() {
 OFFLOAD_ARGS=()
 if agentic_kv_offload_enabled; then
     require_agentic_kv_offload_backend mooncake
+    install_vllm_hybrid_kv_recovery
     # TOTAL_CPU_DRAM_GB is the generator-capped aggregate node budget.
     # Embedded Mooncake contributes one segment per rank, so divide it here.
     PER_RANK_GB=$((TOTAL_CPU_DRAM_GB / TP))
@@ -168,7 +189,7 @@ EOF
     kill -0 "$MOONCAKE_MASTER_PID"
     OFFLOAD_ARGS=(
         --kv-transfer-config
-        '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true}}'
+        '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true}}'
     )
 else
     require_agentic_kv_offload_none
@@ -196,14 +217,6 @@ if [[ "$DP_ATTENTION" == "true" ]]; then
     export AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID=1
     export AIPERF_SERVER_METRICS_URLS="http://localhost:${VLLM_BACKEND_PORT}/metrics"
     agentic_pip_install --quiet 'vllm-router==0.1.14'
-fi
-
-if (( EP_SIZE > 1 )) && [[ "$DP_ATTENTION" != "true" ]]; then
-    # TEP's correlated low-concurrency trajectories contain a few deterministic
-    # metadata-only turns. Do not let three early turns abort a one-hour run
-    # before the sample is representative; the unchanged strict 10% post-run
-    # validator remains authoritative for the completed result.
-    AIPERF_LIVE_FAILED_REQUEST_THRESHOLD=0.50
 fi
 
 # The 16K prefill budget and 4*CONC sequence-cap probes were neutral, while

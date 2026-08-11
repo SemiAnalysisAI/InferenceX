@@ -1474,13 +1474,13 @@ glm5.2-fp8-mi325x-sglang-agentic-mtp:
 # DeepSeek-V4-Pro FP8 full-context AgentX frontier on one MI325X node. The
 # dequantized checkpoint is roughly 1.05 TB, so TP8 fits comfortably in the
 # node's 2 TB of HBM while TP4 does not have enough per-rank model headroom.
-# Stable v0.26.0 and the current immutable nightly both produced empty-content
-# responses on earlier expert-parallel probes. Retain c4-c6 TEP8 explicitly in
-# this collection sweep so that behavior is represented beside the pure-TP
-# points. Mooncake uses the standard generated aggregate host-DRAM cap and the
-# pinned ROCm build convention already exercised by MI325X AgentX recipes.
+# Stable v0.26.0 and v0.27.0 both produced empty-content responses on earlier
+# expert-parallel probes. Retain c4-c6 TEP8 explicitly in this collection sweep
+# so that behavior is represented beside the pure-TP points. Mooncake uses the
+# generated aggregate host-DRAM cap, the pinned ROCm build convention, and the
+# upstream hybrid-KV load-recovery scheduler fix validated against v0.27.0.
 dsv4-fp8-mi325x-vllm-agentic-mtp:
-  image: vllm/vllm-openai-rocm:nightly-f8d03e77416bf90c49acbe50e233275722f02c4b
+  image: vllm/vllm-openai-rocm:v0.27.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:mi325x-amds
