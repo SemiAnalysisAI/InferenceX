@@ -634,10 +634,78 @@ EOF
     MOONCAKE_SETUP_DONE=1
 }
 
+# Kimi-K3 agentic DRAM offload, LMCache MP instead of Mooncake. Node-local `lmcache server` plus
+# LMCacheMPConnector as the second child of the MultiConnector; MoRIIOConnector still owns P/D.
+#
+# Prefill-only by default. Decode's KV arrives over MoRIIO already computed, so a decode-side tier
+# has almost nothing to load -- measured on the Mooncake tier as load_get=0 with saves only, where
+# the "100% external hit rate" decode reported came from the MoRIIO transfer, not the tier.
+# LMCACHE_ON_DECODE=true attaches it on both sides for an A/B.
+#
+# The numeric couplings (N, chunk % N, [N,2N), fp8) live in lmcache_mp.sh and are validated by
+# test_lmcache_mp_geometry.sh; every one of them has a run that died at engine init, i.e. after the
+# weight load, so they are checked before launch rather than discovered afterwards.
+ensure_lmcache_kv_offload() {
+    local tp_size="$1"
+    local mori_role="${2:-}"
+    if [[ "${KV_OFFLOADING:-none}" != "dram" || "${KV_OFFLOAD_BACKEND:-}" != "lmcache-k3" ]]; then
+        return 0
+    fi
+    if [[ -n "${LMCACHE_SETUP_DONE:-}" ]]; then
+        return 0
+    fi
+
+    # kv_consumer is the decode role. Skip the tier there unless explicitly asked for it, and skip it
+    # without failing: the connector chain builder makes the same decision, so the two stay in step.
+    if [[ "$mori_role" == "kv_consumer" && "${LMCACHE_ON_DECODE:-false}" != "true" ]]; then
+        echo "[lmcache] decode role: tier not attached (LMCACHE_ON_DECODE=${LMCACHE_ON_DECODE:-false})"
+        LMCACHE_SETUP_DONE=1
+        return 0
+    fi
+
+    # shellcheck source=/dev/null
+    . "$(dirname "${BASH_SOURCE[0]}")/lmcache_mp.sh"
+
+    # fp8 is not a tuning choice on this path. Under bf16 the unified block N is 768, `align` pins
+    # max_num_batched_tokens into [768, 1536), and the resulting 1464-token prefill chunk collided
+    # with the spec-decode clamp and serialised the engine to Running:1. fp8 lifts N to 1536 and the
+    # chunk to ~3000. Set KV_CACHE_DTYPE=auto deliberately for a bf16 A/B, knowing that.
+    KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-fp8}"
+    export KV_CACHE_DTYPE
+
+    lmcache_mp_export_env
+    lmcache_mp_derive_geometry "$tp_size" || exit 1
+    lmcache_mp_size_l1 || exit 1
+    lmcache_mp_install || exit 1
+    lmcache_mp_assert_hybrid_ok || true
+    lmcache_mp_start "$tp_size" "/run_logs/slurm_job-${SLURM_JOB_ID}" "${host_name}" || exit 1
+
+    echo "Applied LMCache DRAM KV offload on ${host_name}: role=${mori_role:-<none>} tp=${tp_size}" \
+         "L1=${LMCACHE_L1_SIZE_GB}GB N=${LMCACHE_UNIFIED_BLOCK} chunk=${LMCACHE_CHUNK_SIZE}" \
+         "mnbt=${LMCACHE_MNBT} port=${LMCACHE_PORT}"
+    LMCACHE_SETUP_DONE=1
+}
+
 build_kv_transfer_config_json() {
     local mori_role="$1"
-    if [[ "${KV_OFFLOADING:-none}" == "dram" && "${KV_OFFLOAD_BACKEND:-}" == "mooncake" ]]; then
-        NODE0_ADDR="$NODE0_ADDR" PROXY_PING_PORT="$PROXY_PING_PORT" SERVER_PORT="$SERVER_PORT" \
+    # Both tier backends take the same shape: MoRIIO first, the tier second. MoRIIO leads because on
+    # decode it is the only thing that can produce the KDA recurrent state -- that state is not
+    # prefix-cacheable and cannot come out of a content-addressed DRAM tier -- and MultiConnector
+    # loads from the first child that reports matched tokens. The reverse order would let the tier
+    # claim MLA blocks for a request whose KDA state MoRIIO is still fetching, which is exactly the
+    # half-restored state the Mooncake fault points at.
+    local _tier_backend="${KV_OFFLOAD_BACKEND:-}"
+    if [[ "${KV_OFFLOADING:-none}" == "dram" && ( "$_tier_backend" == "mooncake" || "$_tier_backend" == "lmcache-k3" ) ]]; then
+        local _lmcache_child=""
+        if [[ "$_tier_backend" == "lmcache-k3" ]]; then
+            if [[ "$mori_role" != "kv_consumer" || "${LMCACHE_ON_DECODE:-false}" == "true" ]]; then
+                # shellcheck source=/dev/null
+                . "$(dirname "${BASH_SOURCE[0]}")/lmcache_mp.sh"
+                _lmcache_child="$(lmcache_mp_connector_json)"
+            fi
+        fi
+        LMCACHE_CHILD_JSON="$_lmcache_child" KV_TIER_BACKEND="$_tier_backend" \
+            NODE0_ADDR="$NODE0_ADDR" PROXY_PING_PORT="$PROXY_PING_PORT" SERVER_PORT="$SERVER_PORT" \
             MORI_KV_ROLE="$mori_role" python3 -c '
 import json, os, sys
 
@@ -669,14 +737,27 @@ _connectors = [
         "kv_connector_extra_config": mori_extra,
     }
 ]
-if os.environ["MORI_KV_ROLE"] != "kv_consumer" or (
-    os.environ.get("MOONCAKE_DECODE_STORE") or "1"
-) == "1":
-    _connectors.append(_mooncake_entry)
-sys.stderr.write(
-    "[mc-role] role=%s mooncake_store=%s\n"
-    % (os.environ["MORI_KV_ROLE"], len(_connectors) > 1)
-)
+# The tier is the second child, whichever tier it is. Selecting it here rather than by editing the
+# connector list per backend keeps one code path for the ordering guarantee that matters: MoRIIO
+# first, tier second.
+_backend = os.environ.get("KV_TIER_BACKEND") or "mooncake"
+_role = os.environ["MORI_KV_ROLE"]
+if _backend == "lmcache-k3":
+    # ensure_lmcache_kv_offload made the same prefill-only decision, and hands the child dict in
+    # already-rendered so its shape lives in exactly one place (lmcache_mp.sh). Empty means the tier
+    # is deliberately absent on this role.
+    _child = os.environ.get("LMCACHE_CHILD_JSON") or ""
+    if _child:
+        _connectors.append(json.loads(_child))
+    sys.stderr.write(
+        "[tier] backend=lmcache-k3 role=%s attached=%s\n" % (_role, bool(_child))
+    )
+else:
+    if _role != "kv_consumer" or (os.environ.get("MOONCAKE_DECODE_STORE") or "1") == "1":
+        _connectors.append(_mooncake_entry)
+    sys.stderr.write(
+        "[mc-role] role=%s mooncake_store=%s\n" % (_role, len(_connectors) > 1)
+    )
 print(json.dumps({
     "kv_connector": "MultiConnector",
     "kv_role": "kv_both",
@@ -713,10 +794,51 @@ print(json.dumps({
 EOF
 }
 
-if [[ "${KV_OFFLOADING:-none}" == "dram" && "${KV_OFFLOAD_BACKEND:-}" == "native" ]]; then
-    echo "ERROR: KV_OFFLOAD_BACKEND=native is not supported for vLLM disagg (use mooncake for MiniMax-M3 agentic DRAM offload)" >&2
-    exit 1
+if [[ "${KV_OFFLOADING:-none}" == "dram" ]]; then
+    case "${KV_OFFLOAD_BACKEND:-}" in
+        mooncake|lmcache-k3) ;;
+        native)
+            echo "ERROR: KV_OFFLOAD_BACKEND=native is not supported for vLLM disagg" >&2
+            exit 1
+            ;;
+        *)
+            # Fail loudly on an unknown backend rather than silently running with no tier: an arm that
+            # was meant to exercise the tier and quietly did not is worse than one that refuses to
+            # start, and several rounds were lost to exactly that (clean results with load_get=0).
+            echo "ERROR: KV_OFFLOADING=dram needs KV_OFFLOAD_BACKEND=mooncake or lmcache-k3," \
+                 "got '${KV_OFFLOAD_BACKEND:-<unset>}'" >&2
+            exit 1
+            ;;
+    esac
 fi
+
+# Append the tier's serve-arg overrides to a role's config string. Scoped to the LMCache arm so the
+# Mooncake and no-offload curves are untouched: the values (align, [N,2N) budget, halved max_num_seqs,
+# lower gpu_memory_utilization) are only correct with LMCacheMPConnector attached.
+apply_lmcache_serve_args() {
+    local cfg="$1"
+    [[ "${KV_OFFLOADING:-none}" == "dram" && "${KV_OFFLOAD_BACKEND:-}" == "lmcache-k3" ]] || {
+        printf '%s' "$cfg"; return 0
+    }
+    [[ -n "${LMCACHE_MNBT:-}" ]] || { printf '%s' "$cfg"; return 0; }
+    local extra
+    extra="$(lmcache_mp_serve_args | paste -sd' ')"
+    # --kv-cache-dtype is not optional here; see ensure_lmcache_kv_offload for why bf16 serialises
+    # the engine. Only add it if the recipe has not already pinned one.
+    if [[ "$cfg" != *"--kv-cache-dtype"* ]]; then
+        extra="$extra --kv-cache-dtype ${KV_CACHE_DTYPE:-fp8}"
+    fi
+    # A recipe-supplied value wins over ours for anything already present, so strip our duplicate
+    # rather than passing the flag twice and relying on argparse's last-wins.
+    local flag
+    for flag in --max-num-batched-tokens --mamba-cache-mode --max-num-seqs --gpu-memory-utilization; do
+        if [[ "$cfg" == *"$flag"* ]]; then
+            extra="$(printf '%s' "$extra" | sed -E "s/(^| )${flag} [^ ]+//g")"
+            echo "[lmcache] recipe already sets $flag; keeping the recipe value" >&2
+        fi
+    done
+    printf '%s %s' "$cfg" "$extra"
+}
 
 # vLLM #46240: skip stale KV xfer completions instead of assert-killing EngineCore.
 # https://github.com/vllm-project/vllm/issues/46240
@@ -875,6 +997,8 @@ if [ "$NODE_RANK" -eq 0 ]; then
 
     setup_vllm_env
     ensure_mooncake_kv_offload "$PREFILL_TP_SIZE"
+    ensure_lmcache_kv_offload "$PREFILL_TP_SIZE" kv_producer
+    PREFILL_SERVER_CONFIG="$(apply_lmcache_serve_args "$PREFILL_SERVER_CONFIG")"
     KV_TRANSFER_JSON=$(build_kv_transfer_config_json kv_producer)
 
     for env_pair in ${PREFILL_MODEL_ENVS}; do
@@ -1094,6 +1218,8 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$xP" ]; then
 
     setup_vllm_env
     ensure_mooncake_kv_offload "$PREFILL_TP_SIZE"
+    ensure_lmcache_kv_offload "$PREFILL_TP_SIZE" kv_producer
+    PREFILL_SERVER_CONFIG="$(apply_lmcache_serve_args "$PREFILL_SERVER_CONFIG")"
     KV_TRANSFER_JSON=$(build_kv_transfer_config_json kv_producer)
 
     for env_pair in ${PREFILL_MODEL_ENVS}; do
@@ -1152,6 +1278,8 @@ else
 
     setup_vllm_env
     ensure_mooncake_kv_offload "$DECODE_TP_SIZE"
+    ensure_lmcache_kv_offload "$DECODE_TP_SIZE" kv_consumer
+    DECODE_SERVER_CONFIG="$(apply_lmcache_serve_args "$DECODE_SERVER_CONFIG")"
     KV_TRANSFER_JSON=$(build_kv_transfer_config_json kv_consumer)
 
     for env_pair in ${DECODE_MODEL_ENVS}; do

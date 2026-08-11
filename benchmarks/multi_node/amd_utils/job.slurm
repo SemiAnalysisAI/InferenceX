@@ -379,6 +379,36 @@ export MC_TCP_SLICE_SIZE="${MC_TCP_SLICE_SIZE:-}"
 export MOONCAKE_PREFERRED_SEGMENT="${MOONCAKE_PREFERRED_SEGMENT:-}"
 export MOONCAKE_DIAG_REPLICA_SAMPLE="${MOONCAKE_DIAG_REPLICA_SAMPLE:-}"
 
+# LMCache MP tier (KV_OFFLOAD_BACKEND=lmcache-k3). /dev/shm is the hard cap on the L1 pool, so the
+# container needs a bigger one than the 128G default when the tier is attached: LMCache cannot pin
+# memory on ROCm, so it allocates the whole pool up front out of shm.
+export DOCKER_SHM_SIZE="${DOCKER_SHM_SIZE:-}"
+if [[ -z "$DOCKER_SHM_SIZE" ]]; then
+    if [[ "${KV_OFFLOADING:-none}" == "dram" && "${KV_OFFLOAD_BACKEND:-}" == "lmcache-k3" ]]; then
+        DOCKER_SHM_SIZE=640G
+    else
+        DOCKER_SHM_SIZE=128G
+    fi
+fi
+export DOCKER_SHM_SIZE
+export LMCACHE_ON_DECODE="${LMCACHE_ON_DECODE:-}"
+export LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-}"
+export LMCACHE_L1_SHM_FRACTION="${LMCACHE_L1_SHM_FRACTION:-}"
+export LMCACHE_L1_DEFAULT_GB="${LMCACHE_L1_DEFAULT_GB:-}"
+export LMCACHE_GIT_REF="${LMCACHE_GIT_REF:-}"
+export LMCACHE_MQ_TIMEOUT="${LMCACHE_MQ_TIMEOUT:-}"
+export LMCACHE_MAX_WORKERS="${LMCACHE_MAX_WORKERS:-}"
+export LMCACHE_EVICTION_WATERMARK="${LMCACHE_EVICTION_WATERMARK:-}"
+export LMCACHE_EVICTION_RATIO="${LMCACHE_EVICTION_RATIO:-}"
+export LMCACHE_UNIFIED_BLOCK="${LMCACHE_UNIFIED_BLOCK:-}"
+export LMCACHE_CHUNK_SIZE_OVERRIDE="${LMCACHE_CHUNK_SIZE_OVERRIDE:-}"
+export LMCACHE_MAX_NUM_BATCHED_TOKENS="${LMCACHE_MAX_NUM_BATCHED_TOKENS:-}"
+export LMCACHE_MAX_NUM_SEQS="${LMCACHE_MAX_NUM_SEQS:-}"
+export LMCACHE_GPU_MEM_UTIL="${LMCACHE_GPU_MEM_UTIL:-}"
+export LMCACHE_CONNECTOR_MODULE_PATH="${LMCACHE_CONNECTOR_MODULE_PATH:-}"
+export LMCACHE_READY_ATTEMPTS="${LMCACHE_READY_ATTEMPTS:-}"
+export VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION="${VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION:-}"
+
 SANITIZED_USER=$(echo "$USER_NAME" | tr -c 'a-zA-Z0-9_.-' '_')
 export DOCKER_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_${MODEL_NAME}_${SLURM_JOB_ID}"
 
@@ -533,6 +563,26 @@ DOCKER_ENV_COMMON=(
     # Diagnostic: sample every Nth put and log which segment actually holds the key, to
     # tell a hard placement guarantee from a soft hint. Off unless set.
     -e MOONCAKE_DIAG_REPLICA_SAMPLE=\${MOONCAKE_DIAG_REPLICA_SAMPLE:-}
+    # LMCache MP tier. Geometry overrides are here so an arm can pin N by hand when the engine's own
+    # "Setting attention block size to N tokens" disagrees with the derivation, which is the one
+    # failure the derivation cannot catch itself.
+    -e LMCACHE_ON_DECODE=\${LMCACHE_ON_DECODE:-}
+    -e LMCACHE_L1_SIZE_GB=\${LMCACHE_L1_SIZE_GB:-}
+    -e LMCACHE_L1_SHM_FRACTION=\${LMCACHE_L1_SHM_FRACTION:-}
+    -e LMCACHE_L1_DEFAULT_GB=\${LMCACHE_L1_DEFAULT_GB:-}
+    -e LMCACHE_GIT_REF=\${LMCACHE_GIT_REF:-}
+    -e LMCACHE_MQ_TIMEOUT=\${LMCACHE_MQ_TIMEOUT:-}
+    -e LMCACHE_MAX_WORKERS=\${LMCACHE_MAX_WORKERS:-}
+    -e LMCACHE_EVICTION_WATERMARK=\${LMCACHE_EVICTION_WATERMARK:-}
+    -e LMCACHE_EVICTION_RATIO=\${LMCACHE_EVICTION_RATIO:-}
+    -e LMCACHE_UNIFIED_BLOCK=\${LMCACHE_UNIFIED_BLOCK:-}
+    -e LMCACHE_CHUNK_SIZE_OVERRIDE=\${LMCACHE_CHUNK_SIZE_OVERRIDE:-}
+    -e LMCACHE_MAX_NUM_BATCHED_TOKENS=\${LMCACHE_MAX_NUM_BATCHED_TOKENS:-}
+    -e LMCACHE_MAX_NUM_SEQS=\${LMCACHE_MAX_NUM_SEQS:-}
+    -e LMCACHE_GPU_MEM_UTIL=\${LMCACHE_GPU_MEM_UTIL:-}
+    -e LMCACHE_CONNECTOR_MODULE_PATH=\${LMCACHE_CONNECTOR_MODULE_PATH:-}
+    -e LMCACHE_READY_ATTEMPTS=\${LMCACHE_READY_ATTEMPTS:-}
+    -e VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION=\${VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION:-}
     -e TOTAL_CPU_DRAM_GB=\${TOTAL_CPU_DRAM_GB:-}
     -e SERVER_UP_TIMEOUT=\${SERVER_UP_TIMEOUT:-}
     -e HF_HUB_CACHE=\${HF_HUB_CACHE:-/tmp/mooncake-hf-cache}
@@ -892,7 +942,7 @@ fi
     $(command -v nicctl >/dev/null 2>&1 && echo "-v $(which nicctl):/usr/sbin/nicctl") \
     -v ${MODEL_DIR}:/models \
     -v \$HOME/.ssh:/root/.ssh \
-    --shm-size 128G \
+    --shm-size ${DOCKER_SHM_SIZE} \
     -v /tmp:/run_logs \
     -v ${COREDUMP_DIR}:/coredumps \
     -v ${BENCHMARK_LOGS_DIR}:/benchmark_logs \
