@@ -5809,3 +5809,9 @@
     - "Refresh the MI355X MiniMax-M3 AgentX MTP submission with vLLM v0.27.1 and the committed thinking-on golden acceptance length."
     - "Expand TP4/TP2 GPU-resident coverage with topology-compatible AITER/Triton sparse attention, and add TP-sharded LMCache MP DRAM-offload points near the capacity knee with validated vLLM Prometheus metrics."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2487
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-vllm-agentic-mtp
+  description:
+    - "Install LMCache v0.5.3's pinned sortedcontainers runtime dependency explicitly while preserving vLLM's tested torch/ROCm stack."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2487

@@ -115,10 +115,13 @@ case "${KV_OFFLOAD_BACKEND:-}" in
 
         # LMCache v0.5.3 publishes an official Python 3.12 ROCm wheel for
         # gfx942/gfx950 and validates MiniMax-M3 with LMCacheMPConnector.
-        # --no-deps preserves the vLLM image's tested torch/ROCm stack.
+        # --no-deps preserves the vLLM image's tested torch/ROCm stack. Install
+        # the wheel's pure-Python SortedList dependency explicitly; LMCache's
+        # CPU memory manager imports it during MP connector initialization.
         LMCACHE_VERSION="0.5.3"
         LMCACHE_ROCM_INDEX="https://github.com/LMCache/LMCache/releases/expanded_assets/v${LMCACHE_VERSION}-rocm"
         agentic_pip_install --quiet --no-cache-dir --no-deps \
+            "sortedcontainers==2.4.0" \
             "lmcache==${LMCACHE_VERSION}" --find-links "$LMCACHE_ROCM_INDEX"
         python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null
 
