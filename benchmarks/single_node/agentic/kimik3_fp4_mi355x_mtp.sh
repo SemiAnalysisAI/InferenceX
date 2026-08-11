@@ -50,33 +50,6 @@ set -x
 #   SPEC_DECODE              true   (this is the _mtp DSpark recipe; =false for a no-spec A/B)
 #   SPEC_NUM_TOKENS          2      (DSpark draft length; validated by the _mtp config)
 
-source "$(dirname "$0")/../../benchmark_lib.sh"
-
-# Force the eval framework to lm-eval, matching minimaxm3_fp4_mi355x.sh.
-# run_eval derives its default as swebench for agentic scenarios
-# (scenario_default=swebench when IS_AGENTIC/SCENARIO_TYPE=agentic-coding), but
-# EVAL_FRAMEWORK takes precedence over that default
-# (benchmark_lib.sh:1471 framework=${EVAL_FRAMEWORK:-...}). Left overridable so
-# the SWE-bench path below can still be selected with EVAL_FRAMEWORK=swebench.
-export EVAL_FRAMEWORK="${EVAL_FRAMEWORK:-lm-eval}"
-
-check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE
-
-if [[ -n "${SLURM_JOB_ID:-}" ]]; then
-    echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
-fi
-
-if [ "$TP" -ne 8 ]; then
-    echo "Error: Kimi-K3 MXFP4 is a 1.56 TB checkpoint and only fits at TP=8 on" >&2
-    echo "       288 GB gfx950 parts (~195 GB/GPU). Got TP=$TP." >&2
-    exit 1
-fi
-
-# ROCR/HIP visibility for vLLM 0.14+
-if [ -n "${ROCR_VISIBLE_DEVICES:-}" ]; then
-    export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
-fi
-
 # ---- Prepatched-image mode ---------------------------------------------------
 # aigmkt/kimi-k3-agentx is a prebuilt child of the cb810 nightly that already
 # carries every filesystem edit this recipe applies below, plus three with no
@@ -164,7 +137,7 @@ if k3_patches_preapplied; then
     # value buries the aggregate one level down in results/, so the loop times
     # out and the cell is marked failed after a full 3600 s benchmark has
     # already produced a valid number.
-    unset AGENTIC_OUTPUT_DIR INFMAX_CONTAINER_WORKSPACE
+    unset AGENTIC_OUTPUT_DIR
 
     # Clear both and let the harness decide, as it does for every other key.
     unset MODEL_PATH DRAFT_MODEL_PATH
@@ -190,6 +163,33 @@ if k3_patches_preapplied; then
     export VLLM_ROCM_SKIP_V2_KERNEL_WARMUP=1
     export HSA_NO_SCRATCH_RECLAIM=1
     echo "K3_BASE_PATCHES_PREAPPLIED=1: skipping all in-container source patching"
+fi
+
+source "$(dirname "$0")/../../benchmark_lib.sh"
+
+# Force the eval framework to lm-eval, matching minimaxm3_fp4_mi355x.sh.
+# run_eval derives its default as swebench for agentic scenarios
+# (scenario_default=swebench when IS_AGENTIC/SCENARIO_TYPE=agentic-coding), but
+# EVAL_FRAMEWORK takes precedence over that default
+# (benchmark_lib.sh:1471 framework=${EVAL_FRAMEWORK:-...}). Left overridable so
+# the SWE-bench path below can still be selected with EVAL_FRAMEWORK=swebench.
+export EVAL_FRAMEWORK="${EVAL_FRAMEWORK:-lm-eval}"
+
+check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE
+
+if [[ -n "${SLURM_JOB_ID:-}" ]]; then
+    echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
+fi
+
+if [ "$TP" -ne 8 ]; then
+    echo "Error: Kimi-K3 MXFP4 is a 1.56 TB checkpoint and only fits at TP=8 on" >&2
+    echo "       288 GB gfx950 parts (~195 GB/GPU). Got TP=$TP." >&2
+    exit 1
+fi
+
+# ROCR/HIP visibility for vLLM 0.14+
+if [ -n "${ROCR_VISIBLE_DEVICES:-}" ]; then
+    export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
 fi
 
 # `hf download` creates the target dir if missing and is itself idempotent. The
