@@ -5799,4 +5799,5 @@
     - "Allocate all 128 logical CPUs per MI355X backend node so SGLang TP8 affinity follows the complete host topology, and pin srt-slurm diagnostics that preserve failure-log tails containing non-UTF-8 ROCm compiler output."
     - "Move the known-green DeepSeek V4 ROCm kernel-routing contract into each self-contained srt-slurm recipe; this avoids the unsupported AITer fused-MoE heuristic dispatch path while keeping legacy harness-only environment indirection removed."
     - "Declare the exact SGLang and AMD MoRI runtime fingerprint reported by the pinned ROCm image so srt-slurm identity verification is reproducible."
+    - "Rebase the AMD runtime on the active native-router branch and wait for every advertised SGLang HTTP worker to become healthy before launching Model Gateway, preventing slow ROCm startup from permanently dropping a static prefill worker after the router's one-shot registration timeout."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2555
