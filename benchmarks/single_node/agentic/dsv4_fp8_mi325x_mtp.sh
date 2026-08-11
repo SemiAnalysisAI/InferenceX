@@ -37,13 +37,7 @@ export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="vllm:"
 export VLLM_ENGINE_READY_TIMEOUT_S=10800
 export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_USE_AITER_MOE=1
-if (( EP_SIZE > 1 )); then
-    # Isolate the INT4 Quick Reduce path as the next TEP correctness variable.
-    # Pure TP keeps the previously measured optimization unchanged.
-    unset VLLM_ROCM_QUICK_REDUCE_QUANTIZATION
-else
-    export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
-fi
+export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 export PYTHONNOUSERSITE=1
 
 SERVER_LOG="$RESULT_DIR/server.log"
@@ -190,6 +184,12 @@ if (( EP_SIZE > 1 )); then
     EP_ARGS=(--enable-expert-parallel)
 fi
 
+SCHEDULING_ARGS=(--async-scheduling)
+if (( EP_SIZE > 1 )); then
+    # Isolate async MTP scheduling as the next TEP correctness variable.
+    SCHEDULING_ARGS=(--no-async-scheduling)
+fi
+
 USE_VLLM_ROUTER=false
 VLLM_BACKEND_PORT="$PORT"
 if [[ "$DP_ATTENTION" == "true" ]]; then
@@ -244,7 +244,7 @@ VLLM_CMD=(
     --host 0.0.0.0
     --port "$VLLM_BACKEND_PORT"
     --trust-remote-code
-    --async-scheduling
+    "${SCHEDULING_ARGS[@]}"
     --distributed-executor-backend mp
     --quantization deepseek_v4_fp8
     --kv-cache-dtype fp8
