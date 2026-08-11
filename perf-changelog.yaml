@@ -5787,17 +5787,25 @@
 
 - config-keys:
     - kimik3-fp4-b300-vllm-agentic-dspark
-   description:
-     - "Refresh B300 Kimi K3 DSpark submission with corrected AgentX harness"
+  description:
+    - "Refresh B300 Kimi K3 DSpark submission with corrected AgentX harness"
     - "Use the pinned 2026-08-10 vLLM nightly with upstream Kimi K3 and DSpark support"
     - "Match the current published upstream Kimi K3 FP8-KV profile by using flashinfer MLA prefill with prefill query quantization"
     - "Keep DSpark K=2 probabilistic throughput on synthetic golden AL 2.51 while the generated EVAL_ONLY row uses real block verification"
-     - "Cap the GPU-resident search at concurrency 8 after concurrency 16 failed to complete deterministic warmup; retain concurrency 16 for the DRAM-offload capacity tier"
-   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2476
+    - "Cap the GPU-resident search at concurrency 8 after concurrency 16 failed to complete deterministic warmup; retain concurrency 16 for the DRAM-offload capacity tier"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2476
 
 - config-keys:
     - minimaxm3-fp4-mi355x-vllm-agentic-mtp
   description:
-    - "Add MiniMax-M3 FP4 vLLM single-node AgentX MTP support on MI355X with TP4/TP2 GPU-resident coverage and TP-sharded LMCache MP DRAM offload near the capacity knee."
-    - "Use vLLM v0.27.1, EAGLE3 with the committed thinking-on golden acceptance length for throughput, real target verification for evaluation, and validated vLLM Prometheus metrics."
+    - "Add Minimax-M3 FP4 vLLM Single Node Agentic Support"
+    - "Image: vllm/vllm-openai-rocm:nightly-cb8104839c141609d99f1254459ef3a4f1bd4263"
+    - "Throughput runs use synthetic EAGLE3 acceptance pinned to the minimax-m3 golden AL (thinking_on, num_speculative_tokens=5, AL=3.35); EVAL_ONLY accuracy runs keep real target verification"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2487
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-vllm-agentic-mtp
+  description:
+    - "Refresh the MI355X MiniMax-M3 AgentX MTP submission with vLLM v0.27.1 and the committed thinking-on golden acceptance length."
+    - "Expand TP4/TP2 GPU-resident coverage and add TP-sharded LMCache MP DRAM-offload points near the capacity knee with validated vLLM Prometheus metrics."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2487
