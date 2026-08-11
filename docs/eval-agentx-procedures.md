@@ -97,7 +97,7 @@ Set `EVAL_ONLY=true` **before server launch**. It is not merely a switch inside 
 4. Throughput returns immediately or is skipped.
 5. `run_eval` and artifact staging run.
 
-Relevant implementation: [context setup](../benchmarks/benchmark_lib.sh#L1049-L1078), [eval dispatch and failure policy](../benchmarks/benchmark_lib.sh#L1789-L1908), and [workflow inputs](../.github/workflows/benchmark-tmpl.yml#L79-L97).
+Relevant implementation: [context setup](../benchmarks/benchmark_lib.sh#L1049-L1078), [eval dispatch and failure policy](../benchmarks/benchmark_lib.sh#L1789-L1923), and [workflow inputs](../.github/workflows/benchmark-tmpl.yml#L79-L97).
 
 Do not toggle `EVAL_ONLY` after a throughput-sized server is already running and assume the context changed. Restart through the recipe. In eval-only mode an eval failure is returned after available artifacts are staged. In a workflow, upload happens with `always()` before score validation so failed evidence survives ([single-node upload and gate](../.github/workflows/benchmark-tmpl.yml#L399-L417), [multi-node upload and gate](../.github/workflows/benchmark-multinode-tmpl.yml#L466-L488)).
 
@@ -121,7 +121,7 @@ The batch runner creates a fresh temporary output directory per point, stages fi
 - `completed_eval_concs`: eval and staging both succeeded.
 - `failed_eval_concs`: either eval or staging failed.
 
-A failed point is deferred so artifacts from every attempted point can upload. The post-upload validator then fails the job. Batched mode accepts positive integers and supports only `lm-eval`. See [`run_eval` batching](../benchmarks/benchmark_lib.sh#L1824-L1885), [artifact suffixing](../benchmarks/benchmark_lib.sh#L1163-L1222), and [manifest validation](../utils/evals/validate_scores.py#L72-L171).
+A failed point is deferred so artifacts from every attempted point can upload. The post-upload validator then fails the job. Batched mode accepts positive integers and supports only `lm-eval`. See [`run_eval` batching](../benchmarks/benchmark_lib.sh#L1839-L1900), [artifact suffixing](../benchmarks/benchmark_lib.sh#L1163-L1222), and [manifest validation](../utils/evals/validate_scores.py#L72-L171).
 
 For multi-node `all-evals`, the workflow constructs `EVAL_CONC` by joining the topology's concurrency list ([dispatch](../.github/workflows/e2e-tests.yml#L397-L400)). Never compare a point if its `_conc<N>` result or completed-manifest entry is missing.
 
@@ -173,7 +173,7 @@ Retain `meta_env.json`, `results*.json`, and `sample*.jsonl`. Agentic SWE-bench 
 
 ## 7. Run AgentX: fast feedback versus canonical evidence
 
-AgentX is AIPerf `inferencex-agentx-mvp` trace replay, not a fixed-token synthetic benchmark. The checked-in default uses ten additional warmup requests per trajectory lane and the recipe's configured profile duration. `agentx-fast` forces one warmup request per lane and a 1,200-second profile. It affects single- and multi-node AgentX throughput only. Fixed-sequence throughput and evals remain canonical. Fast runs are not eligible for artifact reuse ([workflow policy](../.github/workflows/README.md#agentx-fast-mode), [fast replay settings](../benchmarks/benchmark_lib.sh#L2089-L2113)).
+AgentX is AIPerf `inferencex-agentx-mvp` trace replay, not a fixed-token synthetic benchmark. The checked-in default uses ten additional warmup requests per trajectory lane and the recipe's configured profile duration. `agentx-fast` forces one warmup request per lane and a 1,200-second profile. It affects single- and multi-node AgentX throughput only. Fixed-sequence throughput and evals remain canonical. Fast runs are not eligible for artifact reuse ([workflow policy](../.github/workflows/README.md#agentx-fast-mode), [fast replay settings](../benchmarks/benchmark_lib.sh#L2104-L2128)).
 
 Targeted canonical run (configured duration and warmup, with fast and duration overrides omitted):
 
@@ -206,11 +206,11 @@ gh workflow run e2e-tests.yml --repo SemiAnalysisAI/InferenceX --ref "$REF" \
 
 For a publishable SWE-bench score, omit `eval-limit`. Do not use `single-shot`, which is only a debugging escape hatch. SWE-bench generation/scoring controls and its `0.50` full-split threshold are documented next to the implementation in [`utils/evals/EVALS.md`](../utils/evals/EVALS.md#swe-bench-lite---framework-swebench).
 
-Treat fast results as bring-up evidence, never as a replacement for the canonical candidate. A duration below 900 seconds or `AIPERF_UNSAFE_OVERRIDE=true` adds AIPerf's `--unsafe-override` and flags the submission invalid. Use it only for smoke diagnosis ([source](../benchmarks/benchmark_lib.sh#L2251-L2253)). After a fast run is healthy, run the exact candidate canonically before claiming benchmark success.
+Treat fast results as bring-up evidence, never as a replacement for the canonical candidate. A duration below 900 seconds or `AIPERF_UNSAFE_OVERRIDE=true` adds AIPerf's `--unsafe-override` and flags the submission invalid. Use it only for smoke diagnosis ([source](../benchmarks/benchmark_lib.sh#L2266-L2268)). After a fast run is healthy, run the exact candidate canonically before claiming benchmark success.
 
 ## 8. Preserve trace and run provenance
 
-AgentX defaults to recorded assistant-response replay. Live server outputs are measured but discarded when constructing later turns. Set `AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES=1` only for an explicitly different live-assistant experiment. The selected trace corpus is model-family dependent unless `WEKA_LOADER_OVERRIDE` pins it. The resolver logs both loader and Hugging Face dataset ([trace resolution](../benchmarks/benchmark_lib.sh#L2008-L2087), [replay semantics](../benchmarks/benchmark_lib.sh#L2089-L2255)).
+AgentX defaults to recorded assistant-response replay. Live server outputs are measured but discarded when constructing later turns. Set `AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES=1` only for an explicitly different live-assistant experiment. The selected trace corpus is model-family dependent unless `WEKA_LOADER_OVERRIDE` pins it. The resolver logs both loader and Hugging Face dataset ([trace resolution](../benchmarks/benchmark_lib.sh#L2023-L2102), [replay semantics](../benchmarks/benchmark_lib.sh#L2104-L2270)).
 
 Capture orchestration provenance immediately:
 
@@ -242,7 +242,7 @@ For each concurrency retain:
 - server/frontend logs and every metrics endpoint represented.
 - run URL/ID, attempt, head SHA, recipe/config identity, image, topology, fast flag, and any override.
 
-The runner writes the command before replay and validates raw results after aggregation ([execution path](../benchmarks/benchmark_lib.sh#L2305-L2345)). Aggregation preserves dataset provenance and hardware/model/topology fields ([aggregate construction](../utils/agentic/aggregation/process_agentic_result.py#L194-L272)). Raw workflow uploads intentionally omit very large `inputs.json` and `profile_export_raw.jsonl`. If those are required for an investigation, preserve them from the live allocation before cleanup ([single-node artifact contract](../.github/workflows/benchmark-tmpl.yml#L349-L358), [multi-node contract](../.github/workflows/benchmark-multinode-tmpl.yml#L455-L464)).
+The runner writes the command before replay and validates raw results after aggregation ([execution path](../benchmarks/benchmark_lib.sh#L2320-L2360)). Aggregation preserves dataset provenance and hardware/model/topology fields ([aggregate construction](../utils/agentic/aggregation/process_agentic_result.py#L194-L272)). Raw workflow uploads intentionally omit very large `inputs.json` and `profile_export_raw.jsonl`. If those are required for an investigation, preserve them from the live allocation before cleanup ([single-node artifact contract](../.github/workflows/benchmark-tmpl.yml#L349-L358), [multi-node contract](../.github/workflows/benchmark-multinode-tmpl.yml#L455-L464)).
 
 ## 9. Debug long AgentX runs from live evidence
 
@@ -291,7 +291,7 @@ curl -fsS '<METRICS_URL>' | \
   rg -i 'request|queue|cache|token|prefill|decode|error|fail'
 ```
 
-Track trends over repeated samples: running/waiting requests, KV usage, prefix hits, input/output token rates, completed/cancelled/errored requests, frontend routing balance, and disaggregated KV transfer. AIPerf records endpoint identity for every server series ([metrics wiring](../benchmarks/benchmark_lib.sh#L2221-L2245)).
+Track trends over repeated samples: running/waiting requests, KV usage, prefix hits, input/output token rates, completed/cancelled/errored requests, frontend routing balance, and disaggregated KV transfer. AIPerf records endpoint identity for every server series ([metrics wiring](../benchmarks/benchmark_lib.sh#L2236-L2260)).
 
 Use phase markers, not total Slurm age:
 

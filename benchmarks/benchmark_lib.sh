@@ -1789,6 +1789,8 @@ run_swebench_eval() {
 run_eval() {
     local cli_framework=""
     local forwarded=()
+    # Keep runner-selected suite identity scoped to this invocation.
+    local EVAL_SUITE="${EVAL_SUITE:-}"
 
     while [[ $# -gt 0 ]]; do
         case "$1" in

@@ -188,6 +188,39 @@ def test_run_eval_rejects_suite_override_for_lm_eval() -> None:
     assert "only supported with EVAL_FRAMEWORK=kimi-vendor" in result.stderr
 
 
+def test_run_eval_scopes_runner_selected_suite_to_one_call() -> None:
+    script = r'''
+source "$BENCHMARK_LIB"
+run_kimi_vendor_eval() {
+    export EVAL_SUITE=kimi_tool_call_schema
+    echo "DISPATCH=kimi-vendor SUITE=$EVAL_SUITE"
+}
+run_lm_eval() { echo "DISPATCH=lm-eval SUITE=${EVAL_SUITE:-unset}"; }
+export EVAL_MAX_MODEL_LEN=16384
+export EVAL_CONCURRENT_REQUESTS=""
+export EVAL_ONLY=false
+export IS_AGENTIC=0
+unset EVAL_SUITE
+export EVAL_FRAMEWORK=kimi-vendor
+run_eval --port 8888
+export EVAL_FRAMEWORK=lm-eval
+run_eval --port 8888
+printf 'FINAL_SUITE=%s\n' "${EVAL_SUITE-unset}"
+'''
+    result = subprocess.run(
+        ["bash", "-c", script],
+        env={**os.environ, "BENCHMARK_LIB": str(BENCHMARK_LIB)},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "DISPATCH=kimi-vendor SUITE=kimi_tool_call_schema" in result.stdout
+    assert "DISPATCH=lm-eval SUITE=unset" in result.stdout
+    assert "FINAL_SUITE=unset" in result.stdout
+
+
 def test_kimi_vendor_rejects_batched_concurrency() -> None:
     result = _run_invalid_call(
         "EVAL_MAX_MODEL_LEN=16384 "
