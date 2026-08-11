@@ -58,8 +58,9 @@ mkdir -p "$WORK_DIR"
 
 # The login and compute nodes do not share a filesystem. Stage only the
 # unchanged InferenceX benchmark client and immutable public container images
-# onto every eligible node. The batch job exits normally; it does not cancel or
-# preempt any allocation.
+# onto every eligible node. The cluster has eight nodes and this validation
+# excludes two, so the staging allocation must cover all six remaining nodes.
+# The batch job exits normally; it does not cancel or preempt any allocation.
 RUNTIME_ARCHIVE="${WORK_DIR}/inferencex-benchmark.tar.gz"
 tar -C "$GITHUB_WORKSPACE" -czf "$RUNTIME_ARCHIVE" utils/bench_serving
 RUNTIME_PAYLOAD=$(base64 -w0 "$RUNTIME_ARCHIVE")
@@ -67,7 +68,7 @@ STAGE_SCRIPT="${WORK_DIR}/stage-runtime.sbatch"
 cat > "$STAGE_SCRIPT" <<EOF
 #!/usr/bin/env bash
 #SBATCH --partition=${SLURM_PARTITION}
-#SBATCH --nodes=5
+#SBATCH --nodes=6
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=1
 #SBATCH --time=00:45:00
