@@ -5796,4 +5796,5 @@
     - "Use srt-slurm's native SGLang Router frontend and AMD MoRI transport without Dynamo, NATS, etcd, or NIXL."
     - "Preserve TP8/EP1 c1,c2,c4,c8,c16,c32 and TP8/EP8/DPA c96,c128, EAGLE MTP, the golden simulated average length, HiCache settings, and logical prefill/decode server-metrics collection through the custom AgentX benchmark."
     - "Remove the superseded DSV4-specific amd_utils benchmark wrapper, model stanza, HiCache override plumbing, and hard-coded synthetic-acceptance injection; the srt-slurm recipes now own those settings directly."
+    - "Allocate all 128 logical CPUs per MI355X backend node so SGLang TP8 affinity follows the complete host topology, and pin srt-slurm diagnostics that preserve failure-log tails containing non-UTF-8 ROCm compiler output."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2555
