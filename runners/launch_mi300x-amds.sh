@@ -7,6 +7,7 @@ PARTITION="compute"
 SQUASH_DIR="/raid/hf-hub-cache/runtime-cache/enroot"
 SQUASH_FILE="$SQUASH_DIR/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 LOCK_FILE="${SQUASH_FILE}.lock"
+COMPUTE_TMPDIR="$SQUASH_DIR/tmp-${UID}"
 # Some MI300X compute images do not provision the login user's /run/user/$UID
 # directory. Keep Enroot's runtime state node-local instead of inheriting the
 # controller's XDG_RUNTIME_DIR, which is not valid on those compute nodes.
@@ -56,6 +57,8 @@ srun --jobid="$JOB_ID" --job-name="$RUNNER_NAME" bash -c "
     set -euo pipefail
     mkdir -p '$XDG_RUNTIME_DIR'
     chmod 700 '$XDG_RUNTIME_DIR'
+    mkdir -p '$COMPUTE_TMPDIR'
+    chmod 700 '$COMPUTE_TMPDIR'
     rm -rf '$REMOTE_WORKSPACE'
     mkdir -p '$REMOTE_WORKSPACE'
     tar -C '$REMOTE_WORKSPACE' -xzf '$REMOTE_WORKSPACE_TAR'
@@ -64,6 +67,7 @@ srun --jobid="$JOB_ID" --job-name="$RUNNER_NAME" bash -c "
 # Use flock to serialize concurrent imports to the same squash file
 srun --jobid="$JOB_ID" --job-name="$RUNNER_NAME" bash -c "
     set -euo pipefail
+    export TMPDIR='$COMPUTE_TMPDIR'
     mkdir -p '$SQUASH_DIR'
     exec 9>\"$LOCK_FILE\"
     flock -w 600 9 || { echo 'Failed to acquire lock for $SQUASH_FILE'; exit 1; }
