@@ -77,6 +77,75 @@ if [ -n "${ROCR_VISIBLE_DEVICES:-}" ]; then
     export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
 fi
 
+# ---- Prepatched-image mode ---------------------------------------------------
+# aigmkt/kimi-k3-agentx is a prebuilt child of the cb810 nightly that already
+# carries every filesystem edit this recipe applies below, plus three with no
+# patch asset in this tree: the qh16 subset of aiter #4521 (native gfx950
+# fp8-query/fp8-KV qLen=3 dispatch), the forced-PS fp8-query extension, and the
+# V2 post-capture warmup guard.
+#
+# Reapplying is not merely redundant -- the anchor-matched patchers here fail
+# loudly on an already-patched file by design, so a re-run aborts the cell.
+# Hence one gate that skips ALL source patching while still exporting the
+# runtime switches, which an image cannot carry.
+#
+# Auto-selects on the image name so the config key stays self-describing.
+K3_BASE_PATCHES_PREAPPLIED="${K3_BASE_PATCHES_PREAPPLIED:-0}"
+if [ "$K3_BASE_PATCHES_PREAPPLIED" = "0" ] && \
+   [[ "${IMAGE:-}" == *aigmkt/kimi-k3-agentx* ]]; then
+    K3_BASE_PATCHES_PREAPPLIED=1
+    echo "K3_BASE_PATCHES_PREAPPLIED=1 auto-selected from IMAGE=${IMAGE:-}"
+fi
+
+# True when the running image already carries the filesystem edits, so every
+# patcher below should be a no-op while its runtime env still gets exported.
+k3_patches_preapplied() { [ "$K3_BASE_PATCHES_PREAPPLIED" = "1" ]; }
+
+if k3_patches_preapplied; then
+    # This image was built with `docker commit`, so the ENTIRE environment of
+    # the TensorWave container it was snapshotted from is frozen into it as
+    # image ENV. Under pyxis the harness's own env (--export=ALL) wins for any
+    # name the workflow sets, but everything the workflow does NOT set falls
+    # through to the image, silently, with no diff to point at.
+    #
+    # Two of those actually break the run here:
+    #
+    #   MODEL_PATH=/models/Kimi-K3 (and DRAFT_MODEL_PATH). TensorWave
+    #   bind-mounted the checkpoints there. This harness mounts nothing at
+    #   /models and never sets MODEL_PATH, so the dir is empty and the block
+    #   below re-downloads a 1.56 TB checkpoint into the container's writable
+    #   layer -- per run, while the staged copy under HF_HUB_CACHE sits unused.
+    #
+    #   SPEC_REJECTION_METHOD=synthetic. Non-empty, so the EVAL_ONLY default of
+    #   `block` further down never applies and an accuracy run would either
+    #   score ~0 or trip its own guard.
+    #
+    # Clear both and let the harness decide, as it does for every other key.
+    unset MODEL_PATH DRAFT_MODEL_PATH
+    unset SPEC_REJECTION_METHOD SPEC_SYNTHETIC_ACCEPTANCE_LENGTH
+    # The image's SPEC_NUM_TOKENS/GPU_MEM_UTIL/MLA_QLEN_PAD/MLA_FORCE_PS happen
+    # to match the values below, but leave nothing to coincidence: pin them here
+    # so the arm is defined by this file and not by a snapshot's leftovers.
+    unset SPEC_NUM_TOKENS GPU_MEM_UTIL MLA_QLEN_PAD MLA_FORCE_PS
+    unset MAX_CUDAGRAPH_CAPTURE_SIZE_OVERRIDE CUDAGRAPH_CAPTURE_SIZES_OVERRIDE
+
+    # This arm differs from the recipe defaults in four places:
+    #   k=2   the image's #4521 qh16 kernel dispatches qLen=3 natively, so the
+    #         registry argument for k=3 below no longer applies.
+    #   pad 0 padding exists to reach a qLen=4 kernel, which #4521 makes moot.
+    #   51011 / 51040 are later open-PR experiments, not in this image.
+    SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-2}"
+    GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.915}"
+    MLA_QLEN_PAD="${MLA_QLEN_PAD:-0}"
+    PR51011="${PR51011:-0}"
+    PR51040="${PR51040:-0}"
+    CUDAGRAPH_CAPTURE_STEP="${CUDAGRAPH_CAPTURE_STEP:-$(( SPEC_NUM_TOKENS + 1 ))}"
+    # Runtime-only switches; an image cannot carry these.
+    export VLLM_ROCM_SKIP_V2_KERNEL_WARMUP=1
+    export HSA_NO_SCRATCH_RECLAIM=1
+    echo "K3_BASE_PATCHES_PREAPPLIED=1: skipping all in-container source patching"
+fi
+
 # `hf download` creates the target dir if missing and is itself idempotent. The
 # 1.56 TB checkpoint is normally pre-staged, so these calls are a no-op there.
 if [[ -n "${MODEL_PATH:-}" ]]; then
@@ -136,48 +205,6 @@ export VLLM_ENGINE_READY_TIMEOUT_S="${VLLM_ENGINE_READY_TIMEOUT_S:-7200}"
 # Long agentic turns against a 1M context: keep the client from timing out
 # mid-request while the server is prefill-bound.
 export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
-
-# ---- Prepatched-image mode ---------------------------------------------------
-# aigmkt/kimi-k3-agentx is a prebuilt child of the cb810 nightly that already
-# carries every filesystem edit this recipe applies below, plus three with no
-# patch asset in this tree: the qh16 subset of aiter #4521 (native gfx950
-# fp8-query/fp8-KV qLen=3 dispatch), the forced-PS fp8-query extension, and the
-# V2 post-capture warmup guard.
-#
-# Reapplying is not merely redundant -- the anchor-matched patchers here fail
-# loudly on an already-patched file by design, so a re-run aborts the cell.
-# Hence one gate that skips ALL source patching while still exporting the
-# runtime switches, which an image cannot carry.
-#
-# Auto-selects on the image name so the config key stays self-describing.
-K3_BASE_PATCHES_PREAPPLIED="${K3_BASE_PATCHES_PREAPPLIED:-0}"
-if [ "$K3_BASE_PATCHES_PREAPPLIED" = "0" ] && \
-   [[ "${IMAGE:-}" == *aigmkt/kimi-k3-agentx* ]]; then
-    K3_BASE_PATCHES_PREAPPLIED=1
-    echo "K3_BASE_PATCHES_PREAPPLIED=1 auto-selected from IMAGE=${IMAGE:-}"
-fi
-
-# True when the running image already carries the filesystem edits, so every
-# patcher below should be a no-op while its runtime env still gets exported.
-k3_patches_preapplied() { [ "$K3_BASE_PATCHES_PREAPPLIED" = "1" ]; }
-
-if k3_patches_preapplied; then
-    # This arm differs from the recipe defaults in four places:
-    #   k=2   the image's #4521 qh16 kernel dispatches qLen=3 natively, so the
-    #         registry argument for k=3 below no longer applies.
-    #   pad 0 padding exists to reach a qLen=4 kernel, which #4521 makes moot.
-    #   51011 / 51040 are later open-PR experiments, not in this image.
-    SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-2}"
-    GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.915}"
-    MLA_QLEN_PAD="${MLA_QLEN_PAD:-0}"
-    PR51011="${PR51011:-0}"
-    PR51040="${PR51040:-0}"
-    CUDAGRAPH_CAPTURE_STEP="${CUDAGRAPH_CAPTURE_STEP:-$(( SPEC_NUM_TOKENS + 1 ))}"
-    # Runtime-only switches; an image cannot carry these.
-    export VLLM_ROCM_SKIP_V2_KERNEL_WARMUP=1
-    export HSA_NO_SCRATCH_RECLAIM=1
-    echo "K3_BASE_PATCHES_PREAPPLIED=1: skipping all in-container source patching"
-fi
 
 # ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
