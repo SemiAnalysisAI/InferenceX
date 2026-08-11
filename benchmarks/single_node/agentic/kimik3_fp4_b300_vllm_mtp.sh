@@ -181,7 +181,7 @@ SYNTHETIC_ACCEPT_LEN=2.51
 # real target verification instead. Synthetic acceptance commits drafted tokens
 # regardless of the target's logits, so the generated text is wrong and the
 # SWE-bench eval scores 0.0000 -- the same split dsv4_fp4_b300_vllm_mtp.sh makes
-# (and which kimik2.5_fp4_b300_mtp.sh omits; follow dsv4, not kimik2.5).
+# (follow the DSV4 MTP precedent for this split).
 # rejection_sample_method=block does real verification, so it is what EVAL_ONLY
 # uses. vLLM rejects synthetic_acceptance_length unless the method is 'synthetic'.
 if [ "${EVAL_ONLY:-false}" = "true" ]; then
