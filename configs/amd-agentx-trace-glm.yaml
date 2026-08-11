@@ -22,6 +22,31 @@
 #     --config-keys glm5.2-fp4-mi355x-sglang-disagg-agentic-p8dp8-hicache-stp-trace \
 #     --conc 48
 #
+# STP, asymmetric 1P1D: prefill plain TP8 (no EP/DP — EP8 on prefill was found to
+# cause a GPU memory-access fault plus MoRI-EP bootstrap-ring timeouts under real
+# long-context load), decode TP8+EP8+DP8+DP-attn, HiCache L2 (ratio 2,
+# write_through_selective) on prefill, decode routed via consistent_hashing.
+# Validated stable (0 errors) at conc 8/16/40 — e.g. conc 20:
+#   test-config --config-files configs/amd-agentx-trace-glm.yaml \
+#     --config-keys glm5.2-fp4-mi355x-sglang-disagg-agentic-p-tp8-d-tp8ep8dp8dpa-hicache-stp-chash-trace \
+#     --conc 20
+#
+# Same asymmetric topology as above, MTP enabled (DECODE_MTP_SIZE=2; the recipe
+# script auto-applies simulated-acceptance defaults matching
+# golden_al_distribution/glm5.2_mtp.yaml: thinking_on, num_speculative_tokens=2,
+# AL~2.50 — EVAL_ONLY runs switch to real draft-model MTP instead) — e.g. conc 8:
+#   test-config --config-files configs/amd-agentx-trace-glm.yaml \
+#     --config-keys glm5.2-fp4-mi355x-sglang-disagg-agentic-p-tp8-d-tp8ep8dp8dpa-hicache-mtp-chash-trace \
+#     --conc 8
+# conc-list is intentionally limited to [8]: this decode topology (EP8+DP8)
+# passes --max-running-requests=conc, which SGLang divides by dp_size(8) inside
+# the scheduler to get each DP rank's capacity. Confirmed via a live conc=2
+# smoke test (2026-08-11) that conc < 8 floors that per-rank capacity to 0 and
+# crashes decode startup with `AssertionError: max_running_request is zero`
+# (sglang/srt/managers/tp_worker.py:384) — only conc=8 is viable with this
+# decode topology; conc 2/4/6 need a non-DP decode topology instead (e.g.
+# ep:1, dp-attn:false) to be runnable.
+#
 # Recipe: benchmarks/multi_node/agentic/glm5.2_fp4_mi355x_sglang-disagg.sh
 
 glm5.2-fp4-mi355x-sglang-disagg-agentic-tp8-nohicache-stp-trace:
@@ -182,3 +207,87 @@ glm5.2-fp4-mi355x-sglang-disagg-agentic-p8dp8-hicache-stp-trace:
           additional-settings:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=0"
+
+glm5.2-fp4-mi355x-sglang-disagg-agentic-p-tp8-d-tp8ep8dp8dpa-hicache-stp-chash-trace:
+  image: lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260729
+  model: amd/GLM-5.2-MXFP4
+  model-prefix: glm5.2
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: sglang-disagg
+  kv-p2p-transfer: mori
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - spec-decoding: "none"
+        conc-list: [ 8, 16, 20, 24, 28, 32, 36, 40 ]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260729"
+          - "HICACHE_RATIO=2"
+          - "HICACHE_WRITE_POLICY=write_through_selective"
+          - "HICACHE_PREFETCH_POLICY=best_effort"
+          - "HICACHE_MEM_LAYOUT=page_first_direct"
+          - "HICACHE_IO_BACKEND=direct"
+          - "HICACHE_PAGE_SIZE=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=0"
+          - "ROUTER_DECODE_POLICY=consistent_hashing"
+
+glm5.2-fp4-mi355x-sglang-disagg-agentic-p-tp8-d-tp8ep8dp8dpa-hicache-mtp-chash-trace:
+  image: lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260729
+  model: amd/GLM-5.2-MXFP4
+  model-prefix: glm5.2
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: sglang-disagg
+  kv-p2p-transfer: mori
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - spec-decoding: "mtp"
+        conc-list: [8, 10, 12 ]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260729"
+          - "HICACHE_RATIO=2"
+          - "HICACHE_WRITE_POLICY=write_through_selective"
+          - "HICACHE_PREFETCH_POLICY=best_effort"
+          - "HICACHE_MEM_LAYOUT=page_first_direct"
+          - "HICACHE_IO_BACKEND=direct"
+          - "HICACHE_PAGE_SIZE=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=2"
+          - "ROUTER_DECODE_POLICY=consistent_hashing"
