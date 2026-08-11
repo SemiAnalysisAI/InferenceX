@@ -116,7 +116,7 @@ def test_official_matrix_routes_disagg_through_the_pinned_srt_launcher():
     assert 'git -C "\\$srt_runtime" checkout --quiet --detach "${SRT_SLURM_COMMIT}"' in launcher
     assert 'make -C "\\$srt_runtime" --no-print-directory setup ARCH=x86_64' in launcher
     assert 'export SRTCTL_RUNTIME_SOURCE_DIR="$REMOTE_SRT_RUNTIME"' in launcher
-    assert '#SBATCH --nodes=6' in launcher
+    assert '#SBATCH --nodes=7' in launcher
     assert "scancel" not in launcher
 
 
