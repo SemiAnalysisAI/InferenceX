@@ -1240,8 +1240,8 @@ _eval_concs_to_json() {
 }
 
 _env_is_true() {
-    case "${1,,}" in
-        1|true|yes|on) return 0 ;;
+    case "${1:-}" in
+        1|[Tt][Rr][Uu][Ee]|[Yy][Ee][Ss]|[Oo][Nn]) return 0 ;;
         *) return 1 ;;
     esac
 }
@@ -1899,7 +1899,7 @@ run_eval() {
 
     if [ "$eval_rc" -ne 0 ]; then
         echo "ERROR: run_eval failed with exit code $eval_rc" >&2
-        if [ "${EVAL_ONLY}" = "true" ]; then
+        if [ "${EVAL_ONLY:-false}" = "true" ]; then
             echo "Eval-only mode: failing after artifact collection" >&2
             return "$eval_rc"
         fi

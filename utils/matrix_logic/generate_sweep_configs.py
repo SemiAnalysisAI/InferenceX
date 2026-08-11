@@ -289,10 +289,9 @@ def mark_eval_entries(matrix_values: list[dict], include_agentic: bool = False) 
       - Single-node: run GSM8K through the same lm-eval path as fixed-sequence
         8k1k evals, marking the highest-conc entry per (model, runner,
         framework, precision) group.
-      - Multi-node: same policy as the fixed-seq-len multi-node case above
-        (highest eligible conc per distinct parallelism config, via
-        eval-conc), using SWE-bench since it doesn't support batched
-        concurrencies.
+      - Multi-node: run GSM8K through the same lm-eval path, selecting the
+        highest eligible concurrency per distinct parallelism config via
+        eval-conc.
     """
     from collections import defaultdict
 
@@ -360,8 +359,7 @@ def mark_eval_entries(matrix_values: list[dict], include_agentic: bool = False) 
         ag_sn_groups = defaultdict(list)
         # Multi-node agentic: same "highest eligible conc per distinct
         # parallelism config" policy as the fixed-seq-len mn_groups above.
-        # SWE-bench doesn't support batched concurrencies (unlike lm-eval),
-        # so exactly one conc is picked per group, never the full list.
+        # The selected eval subset uses exactly one conc per group.
         ag_mn_groups = defaultdict(list)
         for i, entry in enumerate(matrix_values):
             if entry.get(Fields.SCENARIO_TYPE.value) != 'agentic-coding':
@@ -402,12 +400,10 @@ def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
     Evals only run at 8k1k (matching mark_eval_entries), so entries at other
     sequence lengths (e.g. 1k1k) are passed through untouched rather than
     expanded into eval rows.
-    Single-node agentic entries use GSM8K through the same lm-eval path as
-    fixed-sequence 8k1k evals. Multi-node agentic entries use SWE-bench,
-    which doesn't support batched concurrencies (unlike lm-eval): multi-node
-    agentic rows with the same topology are merged (to recombine any chunking
-    split), but only the highest resulting conc is marked for eval via
-    eval-conc, not the full list.
+    Single- and multi-node agentic entries use GSM8K through lm-eval.
+    Multi-node agentic rows with the same topology are merged (to recombine
+    any chunking split), but only the highest resulting conc is marked for
+    eval via eval-conc, matching the default agentic selection policy.
     Multi-node fixed-seq-len rows with the same engine topology are merged
     into one eval row whose full concurrency list is run sequentially
     against the same engine.

@@ -11,11 +11,10 @@ from throughput. Selection lives in `mark_eval_entries()` in
   runner, framework, precision, TP, and decoding configuration.
 - **Multi-node:** 8k1k only, with one job per parallelism topology at its highest
   eligible concurrency. Rows differing only by concurrency share a topology.
-- **Agentic (SWE-bench), single-node:** highest-conc entry per (model,
-  runner, framework, precision) group.
-- **Agentic (SWE-bench), multi-node:** same policy as multi-node fixed-seq-len
-  above (highest eligible conc per parallelism topology), since SWE-bench
-  doesn't support batched concurrencies the way lm-eval does.
+- **Agentic (GSM8K), single-node:** highest-conc entry per (model, runner,
+  framework, precision) group.
+- **Agentic (GSM8K), multi-node:** highest eligible concurrency per
+  parallelism topology.
 
 Generator eval modes:
 
@@ -128,14 +127,14 @@ Key eval functions in `benchmarks/benchmark_lib.sh`:
 | `run_kimi_vendor_eval` | Selects and runs a pinned Kimi Vendor Verifier suite |
 | `append_lm_eval_summary` | Writes `meta_env.json` and moves eval artifacts to workspace |
 | `_install_lm_eval_deps` | Installs lm-eval dependencies |
-| `_prepare_kimi_vendor_runtime` | Installs the minimal pinned runtime in an isolated temp path |
+| `_prepare_kimi_vendor_runtime` | Installs the pinned verifier dependencies in an isolated temp path |
 | `_prepare_kimi_vendor_verifier` | Fetches a fresh pinned sparse checkout |
 | `_patch_lm_eval` | Patches lm-eval for reasoning tokens and TRT compatibility |
 | `compute_eval_context_length` | Computes eval context length (requested benchmark context, capped at model native max) |
 | `get_native_max_context_length` | Extracts model's native max context length from HF config |
 
 ### Single-node
-In eval-only mode (`EVAL_ONLY=true`), the benchmark script computes `EVAL_MAX_MODEL_LEN` via `compute_eval_context_length`, starts the server with that context length, skips throughput, and runs lm-eval directly. Each framework wires that context differently (`--context-length` for SGLang, `--max_seq_len` for TRT-LLM).
+For default lm-eval jobs in eval-only mode (`EVAL_ONLY=true`), the benchmark script computes `EVAL_MAX_MODEL_LEN` via `compute_eval_context_length`, starts the server with that context length, skips throughput, and runs lm-eval. Each framework wires that context differently (`--context-length` for SGLang, `--max_seq_len` for TRT-LLM).
 
 ### Multi-node
 Multi-node evals support two hardware paths:
@@ -143,13 +142,13 @@ Multi-node evals support two hardware paths:
 **MI355X (AMD)** — `benchmarks/multi_node/amd_utils/server_sglang.sh`
 - Skips throughput when `EVAL_ONLY=true`
 - Fixed-seq-len: runs lm-eval via `run_eval --framework lm-eval` against the router on port 30000
-- Agentic-coding (disaggregated, `IS_AGENTIC=1`): runs SWE-bench via `run_eval --port 30000` (no
-  `--framework` override, same auto-selection as single-node agentic eval-only). Since there's no
-  single "TP" for a disaggregated topology, and the workflow spells a couple of metadata fields
-  differently (`PREFILL_DP_ATTN`/`DECODE_DP_ATTN`) than `append_lm_eval_summary` expects
-  (`PREFILL_DP_ATTENTION`/`DECODE_DP_ATTENTION`), the agentic branch bridges those before calling
-  `run_eval`; `append_lm_eval_summary` itself runs automatically inside `run_eval()` (same
-  `EVAL_ONLY=true && IS_AGENTIC` auto-staging as single-node), not as a separate call.
+- Agentic-coding (disaggregated, `IS_AGENTIC=1`): follows the same GSM8K/lm-eval path via
+  `run_eval --framework lm-eval`. Since there's no single "TP" for a disaggregated topology,
+  and the workflow spells a couple of metadata fields differently
+  (`PREFILL_DP_ATTN`/`DECODE_DP_ATTN`) than `append_lm_eval_summary` expects
+  (`PREFILL_DP_ATTENTION`/`DECODE_DP_ATTENTION`), the agentic branch bridges those before
+  calling `run_eval`; `append_lm_eval_summary` itself runs automatically inside `run_eval()`
+  (same `EVAL_ONLY=true && IS_AGENTIC` auto-staging as single-node), not as a separate call.
 - Concurrency uses workflow-provided `EVAL_CONC` when set, otherwise falls back to max of `BENCH_MAX_CONCURRENCY` (x-separated values)
 - Eval artifacts copied to `/run_logs/slurm_job-*/eval_results/`
 - `runners/launch_mi355x-amds.sh` skips benchmark result collection when `EVAL_ONLY=true` and uses `find` to locate eval results

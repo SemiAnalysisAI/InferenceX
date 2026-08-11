@@ -118,6 +118,30 @@ run_eval --port 8888
     assert "UNEXPECTED_CONTEXT_LOAD" not in result.stdout
 
 
+def test_kimi_failure_preserves_rc_without_eval_only() -> None:
+    script = r'''
+set -u
+source "$BENCHMARK_LIB"
+run_kimi_vendor_eval() { return 7; }
+export EVAL_FRAMEWORK=kimi-vendor
+export EVAL_CONCURRENT_REQUESTS=""
+export EVAL_MAX_MODEL_LEN=16384
+export IS_AGENTIC=0
+unset EVAL_ONLY
+run_eval --port 8888
+'''
+    result = subprocess.run(
+        ["bash", "-c", script],
+        env={**os.environ, "BENCHMARK_LIB": str(BENCHMARK_LIB)},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 7
+    assert "unbound variable" not in result.stderr
+
+
 
 
 def test_recipe_lm_eval_arg_still_lm_eval_on_fixed_seqlen():
@@ -507,6 +531,50 @@ def test_summary_metadata_prefers_explicit_suite_then_task_basename(
 
     assert from_task["eval_suite"] == "custom_reasoning"
     assert explicit["eval_suite"] == "kimi_tool_call_schema"
+
+
+def test_env_is_true_is_case_insensitive_and_unset_safe() -> None:
+    script = r'''
+set -u
+source "$BENCHMARK_LIB"
+for value in TrUe yEs oN 1 false 0; do
+    if _env_is_true "$value"; then
+        echo true
+    else
+        echo false
+    fi
+done
+for empty_call in with-argument without-argument; do
+    if [ "$empty_call" = "with-argument" ]; then
+        _env_is_true ""
+    else
+        _env_is_true
+    fi
+    if [ "$?" -eq 0 ]; then
+        echo true
+    else
+        echo false
+    fi
+done
+'''
+    result = subprocess.run(
+        ["bash", "-c", script],
+        env={**os.environ, "BENCHMARK_LIB": str(BENCHMARK_LIB)},
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+    assert result.stdout.splitlines() == [
+        "true",
+        "true",
+        "true",
+        "true",
+        "false",
+        "false",
+        "false",
+        "false",
+    ]
 
 
 
