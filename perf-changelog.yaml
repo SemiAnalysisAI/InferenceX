@@ -5818,3 +5818,13 @@
   description:
     - "Extend the SimpleCPUOffloadConnector grid to c8/c12/c16/c20/c24/c28/c32/c48/c64 to locate its crossover against the resident curve"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2475
+
+- config-keys:
+    - qwen3.5-fp8-mi325x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add MI325X Qwen3.5 FP8 AgentX with SGLang native EAGLE MTP and golden synthetic acceptance length 3.39"
+    - "Use lmsysorg/sglang:v0.5.16-rocm720-mi30x, FP8 KV cache, AITER attention, and required SGLang Prometheus metrics"
+    - "Select the official TP2/EP2, TP4, TEP4, TP8, and TEP8 matrix from the complete 62-point fast discovery sweep"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2566

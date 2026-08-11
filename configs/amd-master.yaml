@@ -228,6 +228,28 @@ qwen3.5-fp8-mi355x-sglang-agentic:
     - search-space:
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
 
+# MI325X fast-discovery grid for Qwen3.5's native one-layer MTP head. The
+# model is 378 GiB on disk, so TP2 is the smallest plausible serving shape on
+# 256 GiB GPUs. TP4/TP8 provide progressively more KV capacity; matching EP
+# arms test whether expert sharding repays its communication cost on xGMI.
+qwen3.5-fp8-mi325x-sglang-agentic-mtp:
+  image: lmsysorg/sglang:v0.5.16-rocm720-mi30x
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  runner: cluster:mi325x-amds
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 6, 8, 10, 12, 16, 20, 24, 28, 32] }
+      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 20, 24, 28, 32, 40, 48, 56, 64] }
+      - { tp: 4, ep: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [2, 4, 8, 12, 16, 20, 24, 28, 32, 40, 48, 56, 64] }
+      - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 40, 48, 64, 80, 96] }
+      - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [2, 4, 8, 12, 16, 24, 32, 40, 48, 64] }
+
 qwen3.5-fp8-mi355x-atom:
   image: rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511
   model: Qwen/Qwen3.5-397B-A17B-FP8
@@ -1633,4 +1655,3 @@ glm5.2-fp4-mi355x-sglang-agentic-mtp:
       search-space:
       - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 2, 4, 8, 10, 12, 16], spec-decoding: mtp }
       - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 2, 4], spec-decoding: mtp }
-
