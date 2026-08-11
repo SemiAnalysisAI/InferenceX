@@ -855,6 +855,33 @@ kimik3-fp4-mi355x-vllm-agentic-mtp-pytorch-private-0809-c8:
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [8], spec-decoding: mtp}
 
+kimik3-fp4-mi355x-vllm-agentic-mtp-dspark-prepatched-block-lmc-c10:
+  # LMCache sibling of the measured-acceptance curve, at c10.
+  #
+  # Everything is held against the GPU-only c10 point -- prepatched image,
+  # block rejection, k=2, fp8 KV -- so the only variable is the host memory
+  # tier. LMCache is v0.5.3, the first release containing the Kimi-K3 MLA
+  # hotfix this recipe used to pin by commit.
+  #
+  # fp8 KV is what makes this arm worth running now. Under bf16 the unified
+  # block N is 768, LMCache's `align` requires N <= max_num_batched_tokens < 2N,
+  # and that 1464-token prefill chunk collided with the spec-decode clamp and
+  # serialised the engine to Running:1. fp8 lifts N to 1536 and the chunk to
+  # ~3000, which is the specific condition that was predicted to clear it.
+  # If Running still pins at 1, the throttle is not the chunk size.
+  image: aigmkt/kimi-k3-agentx@sha256:6eed69f39f036df3c7a61a2263159935a00a7c988a328677d502476a541c5c08
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-k3, version: "git" }, conc-list: [10], spec-decoding: mtp}
+
 kimik3-fp4-mi355x-vllm-agentic-mtp-dspark-prepatched-block-curve:
   # Concurrency curve for the arm measured at c8 by run 31455295710:
   # prepatched image, BLOCK rejection, k=2, so acceptance is measured rather

@@ -564,7 +564,16 @@ except Exception:
     # than dev HEAD so the build is reproducible and cannot drift under us.
     # A config-supplied `version` that looks like a release (0.5.3+) still
     # installs from PyPI once such a release exists.
-    LMCACHE_GIT_REF="${LMCACHE_GIT_REF:-1dfa07772b8b2ae79653c830d63e297da39c970f}"
+    # v0.5.3 (2026-08-05), the first tagged release that CONTAINS the Kimi-K3
+    # hotfix we used to pin directly: 1dfa0777 "[Hotfix] KV cache shape edit for
+    # Kimi K3 MLA layers (#4278)" is a direct ancestor, 50 commits back, nothing
+    # divergent. So this is a straight upgrade, not a change of branch.
+    #
+    # Built from source rather than `pip install lmcache==0.5.3` on purpose:
+    # upstream tags ROCm builds separately (v0.5.3rc4-rocm), so PyPI is not
+    # reliably a gfx950 wheel, and the source path already sets
+    # PYTORCH_ROCM_ARCH and BUILD_WITH_HIP=1.
+    LMCACHE_GIT_REF="${LMCACHE_GIT_REF:-140819c9d57a975dbc5678a6459a218e544cb58b}"
     LMCACHE_VERSION="${LMCACHE_VERSION:-${LMCACHE_CFG_VERSION:-git}}"
     if ! python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null 2>&1; then
         if [ "$LMCACHE_VERSION" = "git" ]; then
