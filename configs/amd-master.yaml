@@ -855,6 +855,39 @@ kimik3-fp4-mi355x-vllm-agentic-mtp-pytorch-private-0809-c8:
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [8], spec-decoding: mtp}
 
+kimik3-fp4-mi355x-vllm-agentic-mtp-dspark-prepatched-block-curve:
+  # Concurrency curve for the arm measured at c8 by run 31455295710:
+  # prepatched image, BLOCK rejection, k=2, so acceptance is measured rather
+  # than assumed. That cell gave 2513.57 tok/s/GPU at measured acceptance 1.67,
+  # against 903.21 for the same arm without aiter #4521.
+  #
+  # Nothing here changes but concurrency. Two things to watch:
+  #
+  #   max_num_seqs is PINNED to 16 by MNS_PIN for every cell whose 2*CONC lands
+  #   at 4 or above, so c4, c10 and c16 all run mns 16. Only c1 differs (mns 2).
+  #   That means c16 has 1x scheduler headroom where c8 had 2x -- c16 is not
+  #   "the c8 config at higher concurrency", and the capture ladder is
+  #   identical across c4/c8/c10/c16 rather than scaling with load.
+  #
+  #   c4 and c16 have a crash history on the pre-image stack: c4 failed 3/3 in
+  #   KimiGDNLinearAttention capture and c16 faulted in warmup decode, both
+  #   hipErrorIllegalAddress. The image carries the two local fixes aimed at
+  #   exactly those -- the KDA .contiguous() decode-state-indices fix and the
+  #   V2 post-capture warmup guard -- so this curve is also the first real test
+  #   of whether they hold.
+  image: aigmkt/kimi-k3-agentx@sha256:6eed69f39f036df3c7a61a2263159935a00a7c988a328677d502476a541c5c08
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: none, conc-list: [1, 4, 10, 16], spec-decoding: mtp}
+
 kimik3-fp4-mi355x-vllm-agentic-mtp-dspark-prepatched-c8:
   # Official-sweep reproduction of a c8 DSpark result that was produced by hand,
   # via sbatch out of a private worktree, rather than through this harness.
