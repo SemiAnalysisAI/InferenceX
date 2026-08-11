@@ -197,6 +197,12 @@ fi
 MAX_RUNNING_REQUESTS=$((1 * CONC))
 [ "$MAX_RUNNING_REQUESTS" -gt 256 ] && MAX_RUNNING_REQUESTS=256
 CUDA_GRAPH_MAX_BS=$MAX_RUNNING_REQUESTS
+
+if [ "${EVAL_ONLY:-false}" != "true" ]; then
+    export SGLANG_SIMULATE_ACC_LEN=2.99
+    export SGLANG_SIMULATE_ACC_METHOD=match-expected
+    export SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token
+fi
  
 SGLANG_CMD=(
     python3 -m sglang.launch_server
