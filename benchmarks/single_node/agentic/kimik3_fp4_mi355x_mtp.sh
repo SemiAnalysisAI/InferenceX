@@ -137,6 +137,48 @@ export VLLM_ENGINE_READY_TIMEOUT_S="${VLLM_ENGINE_READY_TIMEOUT_S:-7200}"
 # mid-request while the server is prefill-bound.
 export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
 
+# ---- Prepatched-image mode ---------------------------------------------------
+# aigmkt/kimi-k3-agentx is a prebuilt child of the cb810 nightly that already
+# carries every filesystem edit this recipe applies below, plus three with no
+# patch asset in this tree: the qh16 subset of aiter #4521 (native gfx950
+# fp8-query/fp8-KV qLen=3 dispatch), the forced-PS fp8-query extension, and the
+# V2 post-capture warmup guard.
+#
+# Reapplying is not merely redundant -- the anchor-matched patchers here fail
+# loudly on an already-patched file by design, so a re-run aborts the cell.
+# Hence one gate that skips ALL source patching while still exporting the
+# runtime switches, which an image cannot carry.
+#
+# Auto-selects on the image name so the config key stays self-describing.
+K3_BASE_PATCHES_PREAPPLIED="${K3_BASE_PATCHES_PREAPPLIED:-0}"
+if [ "$K3_BASE_PATCHES_PREAPPLIED" = "0" ] && \
+   [[ "${IMAGE:-}" == *aigmkt/kimi-k3-agentx* ]]; then
+    K3_BASE_PATCHES_PREAPPLIED=1
+    echo "K3_BASE_PATCHES_PREAPPLIED=1 auto-selected from IMAGE=${IMAGE:-}"
+fi
+
+# True when the running image already carries the filesystem edits, so every
+# patcher below should be a no-op while its runtime env still gets exported.
+k3_patches_preapplied() { [ "$K3_BASE_PATCHES_PREAPPLIED" = "1" ]; }
+
+if k3_patches_preapplied; then
+    # This arm differs from the recipe defaults in four places:
+    #   k=2   the image's #4521 qh16 kernel dispatches qLen=3 natively, so the
+    #         registry argument for k=3 below no longer applies.
+    #   pad 0 padding exists to reach a qLen=4 kernel, which #4521 makes moot.
+    #   51011 / 51040 are later open-PR experiments, not in this image.
+    SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-2}"
+    GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.915}"
+    MLA_QLEN_PAD="${MLA_QLEN_PAD:-0}"
+    PR51011="${PR51011:-0}"
+    PR51040="${PR51040:-0}"
+    CUDAGRAPH_CAPTURE_STEP="${CUDAGRAPH_CAPTURE_STEP:-$(( SPEC_NUM_TOKENS + 1 ))}"
+    # Runtime-only switches; an image cannot carry these.
+    export VLLM_ROCM_SKIP_V2_KERNEL_WARMUP=1
+    export HSA_NO_SCRATCH_RECLAIM=1
+    echo "K3_BASE_PATCHES_PREAPPLIED=1: skipping all in-container source patching"
+fi
+
 # ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
 LMCACHE_LOG="$RESULT_DIR/lmcache_server.log"
@@ -806,7 +848,11 @@ fi
 # Apply the in-container filesystem patches this MTP recipe depends on (vLLM
 # PR #50619 K3 fp8 MLA verify, aiter mla_gluon batch relax + PR #4474 int64 KV
 # stride, Triton 3.7.0). The script is idempotent, so re-runs are safe.
-bash "$(dirname "$0")/apply_k3_container_patches.sh"
+if k3_patches_preapplied; then
+    echo "K3_BASE_PATCHES_PREAPPLIED=1: apply_k3_container_patches.sh skipped"
+else
+    bash "$(dirname "$0")/apply_k3_container_patches.sh"
+fi
 
 # ---- Parallelism ------------------------------------------------------------
 # TP8 or TEP8. No DP-attention arm: upstream strategy_min_gpus.multi_node_dep is
@@ -974,7 +1020,19 @@ MAX_CUDAGRAPH_CAPTURE_SIZE=$(( MAX_NUM_SEQS * (SPEC_NUM_TOKENS + 1) ))
 if [ "$MAX_NUM_SEQS" -ne "$MNS_BASE" ]; then
     echo "MNS_PIN=$MNS_PIN: max_num_seqs $MNS_BASE -> $MAX_NUM_SEQS (KDA illegal-address workaround)"
 fi
-COMPILATION_CONFIG_ARGS=(--compilation-config "{\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"custom_ops\":[\"+fused_rms_norm_gated\"]}")
+# CUDAGRAPH_CAPTURE_STEP>0 pins an explicit capture ladder at that stride
+# instead of letting vLLM derive one. A FULL spec graph is only usable at sizes
+# divisible by k+1, which vLLM's derived ladder (1,2,4 then multiples of 8)
+# mostly misses. 0 keeps the derived ladder.
+CUDAGRAPH_CAPTURE_STEP="${CUDAGRAPH_CAPTURE_STEP:-0}"
+CUDAGRAPH_CAPTURE_SIZES_JSON=""
+if [ "$CUDAGRAPH_CAPTURE_STEP" -gt 0 ]; then
+    CUDAGRAPH_CAPTURE_SIZES_JSON=",\"cudagraph_capture_sizes\":[$(seq \
+        "$CUDAGRAPH_CAPTURE_STEP" "$CUDAGRAPH_CAPTURE_STEP" \
+        "$MAX_CUDAGRAPH_CAPTURE_SIZE" | paste -sd,)]"
+    echo "CUDAGRAPH_CAPTURE_STEP=$CUDAGRAPH_CAPTURE_STEP: capture ladder pinned to${CUDAGRAPH_CAPTURE_SIZES_JSON#,\"cudagraph_capture_sizes\":}"
+fi
+COMPILATION_CONFIG_ARGS=(--compilation-config "{\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"custom_ops\":[\"+fused_rms_norm_gated\"]$CUDAGRAPH_CAPTURE_SIZES_JSON}")
 GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.9}"
 
 # vllm-project/vllm#51088 -- "[ROCm][MLA] Add small-head PS ASM decode route".
@@ -1008,7 +1066,12 @@ GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.9}"
 # Default ON for this branch -- it exists to test the PS ASM route. Every other
 # branch leaves it at 0.
 MLA_FORCE_PS="${MLA_FORCE_PS:-1}"
-if [ "$MLA_FORCE_PS" = "1" ]; then
+if [ "$MLA_FORCE_PS" = "1" ] && k3_patches_preapplied; then
+    # #51088 and the DSpark-PS extension are already in the image; only the
+    # runtime switch is ours to set, and it is still required per launch.
+    export VLLM_ROCM_MLA_FORCE_PS=1
+    echo "MLA_FORCE_PS=1 (env only): #51088 + DSpark-PS already in the image"
+elif [ "$MLA_FORCE_PS" = "1" ]; then
     # Absolute: the patch runs inside `cd "$VLLM_ROOT"`, and the `<` redirect is
     # resolved after that cd, so a relative path here resolves against
     # site-packages and fails (run 30970159866).
@@ -1122,7 +1185,9 @@ python3 -c "import ast,sys;ast.parse(open(sys.argv[1]).read())" \
 # (kv_cache_interface.py:397, OR'd across the group by MLAAttentionSpec.merge at
 # 458), so this is not a no-op.
 MLA_TRITON_CG="${MLA_TRITON_CG:-1}"
-if [ "$MLA_TRITON_CG" = "1" ]; then
+if [ "$MLA_TRITON_CG" = "1" ] && k3_patches_preapplied; then
+    echo "MLA_TRITON_CG=1 (no-op): the #51171 triton_mla hunk is already in the image"
+elif [ "$MLA_TRITON_CG" = "1" ]; then
     TRITON_CG_DIFF="$(cd "$(dirname "$0")/patches" && pwd)/vllm_pr51171_triton_mla_cg.diff"
     TCG_ROOT="$(python3 -c 'import vllm,os;print(os.path.dirname(os.path.dirname(vllm.__file__)))')"
     [ -f "$TRITON_CG_DIFF" ] || { echo "ERROR: $TRITON_CG_DIFF missing" >&2; exit 1; }

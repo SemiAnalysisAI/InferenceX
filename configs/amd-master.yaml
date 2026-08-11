@@ -855,6 +855,37 @@ kimik3-fp4-mi355x-vllm-agentic-mtp-pytorch-private-0809-c8:
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [8], spec-decoding: mtp}
 
+kimik3-fp4-mi355x-vllm-agentic-mtp-dspark-prepatched-c8:
+  # Official-sweep reproduction of a c8 DSpark result that was produced by hand,
+  # via sbatch out of a private worktree, rather than through this harness.
+  #
+  # The image is the variable under test. aigmkt/kimi-k3-agentx is a child of
+  # the cb810 nightly every other key here pins, with the filesystem edits baked
+  # in; three of them have no patch asset in this tree, so the image is the only
+  # route to that build. Pinned by digest.
+  #
+  # The recipe derives the rest of the arm from the image name -- see
+  # K3_BASE_PATCHES_PREAPPLIED in kimik3_fp4_mi355x_mtp.sh.
+  #
+  # The node is NOT held: the reference pinned one, the sweep takes what the
+  # cluster gives it, and node-to-node variance on this cluster is real.
+  #
+  # Throughput here is SIMULATED -- rejection_sample_method=synthetic never
+  # compares drafts to the target. This reproduces a number, it does not
+  # validate one; the gsm8k arm under block rejection is what would.
+  image: aigmkt/kimi-k3-agentx@sha256:6eed69f39f036df3c7a61a2263159935a00a7c988a328677d502476a541c5c08
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: none, conc-list: [8], spec-decoding: mtp}
+
 kimik3-fp4-mi355x-vllm-agentic-mtp-asm-k3-c8:
   # bf16 + asm + DSpark: route the multi-token VERIFY step to the PS ASM kernel.
   #
