@@ -5461,6 +5461,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2328
   
 - config-keys:
+    - dsv4-fp4-gb200-llmd-vllm
+  description:
+    - "Decode: gpu-memory-utilization 0.85->0.9, add max-model-len 9280, disable NCCL symmetric memory, add no-enable-flashinfer-autotune, drop stream-interval (unsupported by rust frontend)"
+    - "Prefill: gpu-memory-utilization 0.9->0.95, add max-model-len 9280, add max-num-seqs 16 + max-num-batched-tokens 32768, enable rust frontend, enable randomize-dp-dummy-inputs"
+    - "EPP: switch from max-score-picker to weighted-random-picker for better load distribution under high concurrency"
+    - "Low-latency recipe: same prefill optimizations, decode NCCL symmetric memory disabled + rust frontend enabled, drop stream-interval"
+    - "Sweep: drop low-middle point (c256/512, 1P×4D) from llmd-vllm key; low-latency recipe runs at c1 only"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2498
+
+- config-keys:
     - qwen3.5-fp4-mi355x-sglang
     - qwen3.5-fp4-mi355x-sglang-mtp
   description:
@@ -5623,6 +5633,12 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2513
 
 - config-keys:
+    - dsv4-fp4-gb200-llmd-vllm
+  description:
+    - "Sweep: drop 2P×1D DEP8 conc=4096; j-llm-d characterized 2P at c512/1024/2048 with Pareto at c1024, and c4096 hit DeepGEMM NVLink barrier timeouts under sustained load"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2498
+
+- config-keys:
     - minimaxm3-fp4-b200-vllm-agentic-mtp
   scenario-type:
     - agentic-coding
@@ -5727,3 +5743,48 @@
     - "Stage every MI355X model into the standard $HF_HOME/hub layout used by all aggregate, prefill, decode, and benchmark processes, avoiding a second flat cache tree on cold clusters."
     - "Recreate missing MI300X engine and router squashfs files from their pinned public vLLM images under per-node locks, validate each temporary squashfs, and publish it atomically before submission."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2542
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-agg
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-disagg
+  description:
+    - "Upgrade Dynamo from 1.3.0.dev1 to 1.3.0.dev20260718 so router queueing is disabled by default at high concurrency"
+    - "Migrate AgentX session affinity from nvext.session_control to X-Dynamo-Session-ID headers with a 3600-second router TTL"
+    - "Remove the DYN_ROUTER_TEMPERATURE=10000000 override and restore Dynamo's deterministic 0.0 default"
+    - "Upgrade SGLang from nightly-dev-cu13-20260711-7de33ce8 to nightly-dev-cu13-20260719-99f5a6f4, the latest nightly before the scheduler WAR-barrier regression in SGLang #31687"
+    - "Restore the pre-watchdog AgentX concurrency grid and use AIPerf's default 300-second per-trajectory idle-gap cap"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2319
+
+- config-keys:
+    - qwen3.5-fp4-b200-sglang
+    - qwen3.5-fp4-b200-sglang-mtp
+    - qwen3.5-fp4-b300-sglang
+    - qwen3.5-fp4-b300-sglang-mtp
+  description:
+    - "Switch Qwen3.5 FP4 SGLang configs to the nvidia/Qwen3.5-397B-A17B-NVFP4-V2 checkpoint"
+    - "Model pre-staged on all clusters as Qwen3.5-397B-A17B-NVFP4-V2"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2205
+
+- config-keys:
+    - qwen3.5-fp4-gb300-dynamo-trt
+  description:
+    - "Add Qwen3.5-397B-A17B-NVFP4 GB300 disaggregated multinode TensorRT-LLM+Dynamo benchmarks (STP, no MTP) for 8k1k."
+    - "Image: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc18 with Dynamo installed at runtime (version 1.3.0.dev20260708, TCP request plane)."
+    - "8k1k: 9 STP configs spanning 1P13D DEP2+13D TP4 (conc 78), 1P4D DEP2+4D TEP16 (conc 24), 1P8D DEP2+8D TEP8 (conc 48), 2P15D DEP2+15D TP4 (conc 180/216), 3P1D DEP2+1D DEP4 (conc 1536), 7P12D DEP2+12D TEP4 (conc 1152), 8P9D DEP2+9D TEP4 (conc 1728), 10P3D DEP2+3D DEP8 (conc 4608)."
+    - "Runner: launch_gb300-nv.sh updated to clone NVIDIA/srt-slurm@v1.0.29 and overlay local recipes from benchmarks/multi_node/srt-slurm-recipes/trtllm/qwen3.5/gb300-fp4/disagg/ for the dynamo-trt+qwen3.5+fp4 path, and to skip srtctl preflight for this path."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2206
+
+- config-keys:
+    - qwen3.5-fp4-gb300-dynamo-sglang
+  description:
+    - "Bump SGLang image to v0.5.14-cu130 for the Qwen3.5 FP4 GB300 disaggregated dynamo-sglang config"
+    - "Switch to the nvidia/Qwen3.5-397B-A17B-NVFP4-V2 checkpoint (model pre-staged on cluster as Qwen3.5-397B-A17B-NVFP4-V2)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2238
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp
+  description:
+    - "Add EAGLE/MTP speculative-decoding arm for the DSv4 MI355X agentic disagg HiCache benchmark, mirroring the existing dsv4-fp4-mi355x-sglang-disagg-agentic-hicache TP8/EP1 and TP8/EP8/DPA topologies with spec-decoding=mtp and DECODE_MTP_SIZE=3."
+    - "models.yaml: add mtp_flags (--speculative-algorithm EAGLE --speculative-eagle-topk 1) to DeepSeek-V4-Pro-AgentX; num-steps/num-draft-tokens are derived from DECODE_MTP_SIZE in server_sglang.sh. DeepSeek-V4's MTP head is a native NextN/EAGLE draft shipped with the model, so no --speculative-draft-model-path is needed."
+    - "Two search-space arms: TP8/EP1 no-DP at conc-list [2,4,8,16,32], and TP8/EP8/DPA (ep=8, dp-attn=true) at conc-list [64,96,128], both on image lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260719."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2309
