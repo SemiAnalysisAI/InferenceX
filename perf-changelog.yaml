@@ -5800,7 +5800,7 @@
     - "Move the known-green DeepSeek V4 ROCm kernel-routing contract into each self-contained srt-slurm recipe; this avoids the unsupported AITer fused-MoE heuristic dispatch path while keeping legacy harness-only environment indirection removed."
     - "Declare the exact SGLang and AMD MoRI runtime fingerprint reported by the pinned ROCm image so srt-slurm identity verification is reproducible."
     - "Rebase the AMD runtime on the active native-router branch and wait for every advertised SGLang HTTP worker to become healthy before launching Model Gateway, preventing slow ROCm startup from permanently dropping a static prefill worker after the router's one-shot registration timeout."
-    - "Pin the MI355X launcher to SemiAnalysisAI/srt-slurm commit 5c0d5a718194198447e8ceea5c37048c2fb8eaf5, including the native-router base and SGLang worker-readiness gate."
+    - "Pin the MI355X launcher to SemiAnalysisAI/srt-slurm commit c609754b5622f96d5c12a93149e245308d4f1e9b, including the native-router base, SGLang worker-readiness gate, and benchmark-stage frontend registry fix."
     - "Document the MI355X Ionic DSCP/PFC and RDMA health contract required by MoRI, including the drain-before-repair and verify-before-resume procedure."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2555
 

@@ -9,7 +9,7 @@ Current development pins:
 
 - repository: `SemiAnalysisAI/srt-slurm`
 - MI300X commit: `dd0109d4043141072ad37c043f1100332008b77f`
-- MI355X commit: `5c0d5a718194198447e8ceea5c37048c2fb8eaf5`
+- MI355X commit: `c609754b5622f96d5c12a93149e245308d4f1e9b`
 
 The MI355X pin includes the SGLang-router readiness gate: srt-slurm waits for
 every advertised prefill and decode HTTP health endpoint before starting the
