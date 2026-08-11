@@ -13,6 +13,11 @@ RECIPE_PATH = (
     / "benchmarks/multi_node/srt-slurm-recipes/vllm/qwen3-0.6b/mi300x/agg-fixed-seq.yaml"
 )
 DISAGG_RECIPE_PATH = RECIPE_PATH.with_name("disagg-1p1d-fixed-seq.yaml")
+ATOM_RECIPE_PATH = (
+    REPO_ROOT
+    / "benchmarks/multi_node/srt-slurm-recipes/atom/qwen3-0.6b/mi300x/agg-2w-fixed-seq.yaml"
+)
+ATOM_DISAGG_RECIPE_PATH = ATOM_RECIPE_PATH.with_name("disagg-1p1d-fixed-seq.yaml")
 CLUSTER_PATH = (
     REPO_ROOT
     / "benchmarks/multi_node/srt-slurm-recipes/cluster-configs/mi300x-amds.yaml"
@@ -92,7 +97,7 @@ def test_official_matrix_routes_disagg_through_the_pinned_srt_launcher():
         "CONFIG_FILE=recipes/vllm/qwen3-0.6b/mi300x/"
         "disagg-1p1d-fixed-seq.yaml"
     ]
-    assert "315e4b06a7e0806194a646ea21832e750e896a46" in launcher
+    assert "d93b48165ff60c6441feb5dd04504337f0bd7bc5" in launcher
     assert "make setup-compute ARCH=x86_64" in launcher
     assert "--no-preflight" in launcher
     assert 'VLLM_IMAGE="vllm/vllm-openai-rocm:v0.26.0"' in launcher
@@ -187,6 +192,32 @@ def test_fixed_sequence_recipe_uses_inferencex_custom_benchmark():
     assert "sa-bench" not in command
 
 
+def test_atom_recipes_use_infera_and_keep_worker_metrics_honest():
+    cluster = yaml.safe_load(CLUSTER_PATH.read_text())
+    aggregate = yaml.safe_load(ATOM_RECIPE_PATH.read_text())
+    disaggregate = yaml.safe_load(ATOM_DISAGG_RECIPE_PATH.read_text())
+    launcher = SRT_LAUNCHER_PATH.read_text()
+
+    assert cluster["containers"]["infera-atom-v0.1.1"].endswith(
+        "/infera-atom-v0.1.1.sqsh"
+    )
+    assert aggregate["resources"]["agg_workers"] == 2
+    for recipe in (aggregate, disaggregate):
+        assert recipe["model"]["container"] == "infera-atom-v0.1.1"
+        assert recipe["identity"]["container"]["image"] == (
+            "rocm/infera:atom-v0.1.1"
+        )
+        assert recipe["frontend"]["type"] == "infera"
+        assert recipe["frontend"]["args"]["router-policy"] == "kv-aware"
+        assert recipe["backend"]["type"] == "atom"
+        assert recipe["backend"]["enable_kv_events"] is True
+        command = recipe["benchmark"]["command"]
+        assert "--backend openai" in command
+        assert "--endpoint /v1/completions" in command
+    assert disaggregate["backend"]["connector"] == "mooncake"
+    assert 'ATOM_IMAGE="rocm/infera:atom-v0.1.1"' in launcher
+
+
 def test_fixed_sequence_commands_keep_all_arguments_attached(tmp_path):
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
@@ -198,14 +229,20 @@ def test_fixed_sequence_commands_keep_all_arguments_attached(tmp_path):
     )
     fake_python.chmod(0o755)
 
-    for recipe_path in (RECIPE_PATH, DISAGG_RECIPE_PATH):
+    recipe_paths = (
+        RECIPE_PATH,
+        DISAGG_RECIPE_PATH,
+        ATOM_RECIPE_PATH,
+        ATOM_DISAGG_RECIPE_PATH,
+    )
+    for index, recipe_path in enumerate(recipe_paths):
         command = yaml.safe_load(recipe_path.read_text())["benchmark"]["command"]
-        result_dir = tmp_path / recipe_path.stem
+        result_dir = tmp_path / f"recipe-{index}"
         command = command.replace(
             'result_root="/results/${SLURM_JOB_ID}"',
             f'result_root="{result_dir}"',
         )
-        args_log = tmp_path / f"{recipe_path.stem}.args"
+        args_log = tmp_path / f"recipe-{index}.args"
         env = {
             **os.environ,
             "PATH": f"{fake_bin}:{os.environ['PATH']}",

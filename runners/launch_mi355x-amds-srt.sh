@@ -5,11 +5,11 @@ set -euo pipefail
 # in explicitly with CONFIG_FILE; all existing MI355X launch behavior remains
 # unchanged for every other row.
 SRT_SLURM_REPOSITORY="https://github.com/SemiAnalysisAI/srt-slurm.git"
-SRT_SLURM_COMMIT="31e72da43ed21fe941c039be51b2cad1a3cf428a"
+SRT_SLURM_COMMIT="d93b48165ff60c6441feb5dd04504337f0bd7bc5"
 SLURM_PARTITION="compute"
 SGLANG_IMAGE="lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260809"
+ATOM_IMAGE="rocm/infera:atom-v0.1.1"
 SHARED_BASE="/it-share/gharunners2/srt-slurm"
-SHARED_IMAGE="${SHARED_BASE}/containers/sglang-rocm-v0.5.17-mi35x-20260809.sqsh"
 SHARED_HF_CACHE="/it-share/hf-hub-cache"
 SHARED_RESULTS="${SHARED_BASE}/results"
 
@@ -17,6 +17,23 @@ SHARED_RESULTS="${SHARED_BASE}/results"
 : "${RESULT_FILENAME:?RESULT_FILENAME must be set by the benchmark workflow}"
 : "${CONFIG_FILE:?CONFIG_FILE must name an srt-slurm recipe}"
 : "${MODEL:?MODEL must identify the Hugging Face model}"
+
+case "${IMAGE:?IMAGE must identify the recipe container}" in
+    "$SGLANG_IMAGE")
+        RUNTIME_IMAGE="$SGLANG_IMAGE"
+        SHARED_IMAGE="${SHARED_BASE}/containers/sglang-rocm-v0.5.17-mi35x-20260809.sqsh"
+        LOCAL_FALLBACK_IMAGE="/var/lib/squash/lmsysorg_sglang-rocm_v0.5.17-rocm720-mi35x-20260809.sqsh"
+        ;;
+    "$ATOM_IMAGE")
+        RUNTIME_IMAGE="$ATOM_IMAGE"
+        SHARED_IMAGE="${SHARED_BASE}/containers/infera-atom-v0.1.1.sqsh"
+        LOCAL_FALLBACK_IMAGE=""
+        ;;
+    *)
+        echo "Unsupported MI355X srt-slurm image: $IMAGE" >&2
+        exit 1
+        ;;
+esac
 
 CONFIG_PATH="${CONFIG_FILE%%:*}"
 LOCAL_RECIPE="${GITHUB_WORKSPACE}/benchmarks/multi_node/srt-slurm-recipes/${CONFIG_PATH#recipes/}"
@@ -49,11 +66,10 @@ flock -w 2400 9
 if ! unsquashfs -s "$SHARED_IMAGE" >/dev/null 2>&1; then
     tmp="${SHARED_IMAGE}.tmp.\${SLURM_JOB_ID}"
     rm -f "\$tmp"
-    local_image="/var/lib/squash/lmsysorg_sglang-rocm_v0.5.17-rocm720-mi35x-20260809.sqsh"
-    if unsquashfs -s "\$local_image" >/dev/null 2>&1; then
-        cp --sparse=always "\$local_image" "\$tmp"
+    if [[ -n "${LOCAL_FALLBACK_IMAGE}" ]] && unsquashfs -s "${LOCAL_FALLBACK_IMAGE}" >/dev/null 2>&1; then
+        cp --sparse=always "${LOCAL_FALLBACK_IMAGE}" "\$tmp"
     else
-        enroot import -o "\$tmp" "docker://${SGLANG_IMAGE}"
+        enroot import -o "\$tmp" "docker://${RUNTIME_IMAGE}"
     fi
     unsquashfs -s "\$tmp" >/dev/null
     mv "\$tmp" "$SHARED_IMAGE"

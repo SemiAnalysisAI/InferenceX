@@ -5788,3 +5788,12 @@
     - "models.yaml: add mtp_flags (--speculative-algorithm EAGLE --speculative-eagle-topk 1) to DeepSeek-V4-Pro-AgentX; num-steps/num-draft-tokens are derived from DECODE_MTP_SIZE in server_sglang.sh. DeepSeek-V4's MTP head is a native NextN/EAGLE draft shipped with the model, so no --speculative-draft-model-path is needed."
     - "Two search-space arms: TP8/EP1 no-DP at conc-list [2,4,8,16,32], and TP8/EP8/DPA (ep=8, dp-attn=true) at conc-list [64,96,128], both on image lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260719."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2309
+
+- config-keys:
+    - qwen3-0.6b-fp16-mi300x-atom-infera-srt-agg
+    - qwen3-0.6b-fp16-mi300x-atom-infera-srt-disagg
+  description:
+    - "Add srt-slurm correctness lanes for the ROCm ATOM engine and the open-source Infera successor to ATOMesh."
+    - "Validate two aggregate ATOM workers behind Infera KV-aware routing and a two-node 1P/1D ATOM deployment using Mooncake RDMA."
+    - "Use rocm/infera:atom-v0.1.1 with Qwen3-0.6B fixed-sequence requests on MI300X and pin the combined AMD, vLLM Router, ATOM, and Infera srt-slurm branch."
+  pr-link: TBD

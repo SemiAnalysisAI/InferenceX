@@ -4,19 +4,40 @@ set -euo pipefail
 # MI300X srt-slurm validation path. The existing launcher remains the default;
 # matrix rows opt in by exporting CONFIG_FILE through additional-settings.
 SRT_SLURM_REPOSITORY="https://github.com/SemiAnalysisAI/srt-slurm.git"
-SRT_SLURM_COMMIT="dd0109d4043141072ad37c043f1100332008b77f"
+SRT_SLURM_COMMIT="d93b48165ff60c6441feb5dd04504337f0bd7bc5"
 SLURM_PARTITION="compute"
 EXCLUDED_NODES="chi-mi300x-049,chi-mi300x-121"
 REMOTE_BASE="/raid/hf-hub-cache/inferencex/srt-slurm"
 VLLM_IMAGE="vllm/vllm-openai-rocm:v0.26.0"
 VLLM_ROUTER_IMAGE="vllm/vllm-router:nightly-20260809-d2ba586"
+ATOM_IMAGE="rocm/infera:atom-v0.1.1"
 VLLM_SQSH="${REMOTE_BASE}/containers/vllm-openai-rocm-v0.26.0.sqsh"
 VLLM_ROUTER_SQSH="${REMOTE_BASE}/containers/vllm-router-nightly-20260809-d2ba586.sqsh"
+ATOM_SQSH="${REMOTE_BASE}/containers/infera-atom-v0.1.1.sqsh"
 
 : "${GITHUB_WORKSPACE:?GITHUB_WORKSPACE must be set by Actions}"
 : "${RESULT_FILENAME:?RESULT_FILENAME must be set by the benchmark workflow}"
 
 : "${CONFIG_FILE:?CONFIG_FILE must name an srt-slurm recipe}"
+
+case "${IMAGE:?IMAGE must identify the recipe container}" in
+    "$VLLM_IMAGE")
+        ENGINE_IMAGE="$VLLM_IMAGE"
+        ENGINE_SQSH="$VLLM_SQSH"
+        AUX_IMAGE="$VLLM_ROUTER_IMAGE"
+        AUX_SQSH="$VLLM_ROUTER_SQSH"
+        ;;
+    "$ATOM_IMAGE")
+        ENGINE_IMAGE="$ATOM_IMAGE"
+        ENGINE_SQSH="$ATOM_SQSH"
+        AUX_IMAGE=""
+        AUX_SQSH=""
+        ;;
+    *)
+        echo "Unsupported MI300X srt-slurm image: $IMAGE" >&2
+        exit 1
+        ;;
+esac
 
 CONFIG_PATH="${CONFIG_FILE%%:*}"
 LOCAL_RECIPE="${GITHUB_WORKSPACE}/benchmarks/multi_node/srt-slurm-recipes/${CONFIG_PATH#recipes/}"
@@ -79,8 +100,10 @@ srun --ntasks-per-node=1 bash -c '
     flock -u "\$lock_fd"
     exec {lock_fd}>&-
   }
-  ensure_container_image "${VLLM_SQSH}" "${VLLM_IMAGE}"
-  ensure_container_image "${VLLM_ROUTER_SQSH}" "${VLLM_ROUTER_IMAGE}"
+  ensure_container_image "${ENGINE_SQSH}" "${ENGINE_IMAGE}"
+  if [[ -n "${AUX_IMAGE}" ]]; then
+    ensure_container_image "${AUX_SQSH}" "${AUX_IMAGE}"
+  fi
   if [[ ! -d "\$srt_runtime/.git" ]]; then
     git clone --quiet "${SRT_SLURM_REPOSITORY}" "\$srt_runtime"
   fi

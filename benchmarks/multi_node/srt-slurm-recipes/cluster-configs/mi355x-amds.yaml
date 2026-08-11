@@ -28,5 +28,6 @@ default_mounts:
 
 containers:
   sglang-rocm-v0.5.17-mi35x: /it-share/gharunners2/srt-slurm/containers/sglang-rocm-v0.5.17-mi35x-20260809.sqsh
+  infera-atom-v0.1.1: /it-share/gharunners2/srt-slurm/containers/infera-atom-v0.1.1.sqsh
 
 nginx_raise_ulimit: false
