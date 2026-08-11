@@ -226,9 +226,10 @@ VLLM_CMD=(
     # --no-enable-flashinfer-autotune, VLLM_USE_V2_MODEL_RUNNER=1) killed the
     # engine core on every concurrency with an assertion in the FlashInfer MoE
     # runner's shared-experts output buffer
-    # (fused_moe/runner/shared_experts.py:165, all 8 TP ranks at once). Only
-    # mla_prefill_backend=TRTLLM_RAGGED is retained from that set; the rest stay
-    # on the values that ran 12/12 green in run 30326393603.
+    # (fused_moe/runner/shared_experts.py:165, all 8 TP ranks at once). Those
+    # unrelated values stay on the settings that ran 12/12 green in run
+    # 30326393603; the isolated MLA prefill choice below follows the current
+    # published Kimi-K3 FP8-KV profile.
     --gpu-memory-utilization 0.90
     --max-num-seqs "$MAX_NUM_SEQS"
     --max-model-len 1048576
@@ -240,9 +241,9 @@ VLLM_CMD=(
     --reasoning-parser kimi_k3
     --tool-call-parser kimi_k3
     --enable-auto-tool-choice
-    # FP8 KV cache requires the prefill query quantization flag. MLA prefill
-    # runs on TRTLLM_RAGGED per the upstream Blackwell override.
-    --attention-config '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true}'
+    # FP8 KV cache requires prefill query quantization. Use FlashInfer MLA
+    # prefill, matching the current published upstream Kimi-K3 recipe.
+    --attention-config '{"mla_prefill_backend":"flashinfer","use_prefill_query_quantization":true}'
     --speculative-config "$SPEC_CONFIG"
     --compilation-config "$COMPILATION_CONFIG"
     --disable-uvicorn-access-log
