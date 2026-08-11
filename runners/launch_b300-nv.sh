@@ -481,8 +481,21 @@ else
 
     export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
 
-    SALLOC_TIME_LIMIT="${SALLOC_TIME_LIMIT:-480}"
-    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT -N 1 --gres=gpu:$GPU_COUNT --exclusive --mem=0 --time="$SALLOC_TIME_LIMIT" --no-shell --job-name="$RUNNER_NAME"
+    SALLOC_ARGS=(
+        --partition="$SLURM_PARTITION"
+        --account="$SLURM_ACCOUNT"
+        -N 1
+        --gres="gpu:$GPU_COUNT"
+        --exclusive
+        --mem=0
+        --time="${SALLOC_TIME_LIMIT:-480}"
+        --no-shell
+        --job-name="$RUNNER_NAME"
+    )
+    if [[ -n "${SALLOC_EXCLUDE:-}" ]]; then
+        SALLOC_ARGS+=(--exclude="$SALLOC_EXCLUDE")
+    fi
+    salloc "${SALLOC_ARGS[@]}"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
 
     srun --jobid=$JOB_ID \
