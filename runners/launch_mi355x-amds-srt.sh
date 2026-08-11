@@ -5,7 +5,7 @@ set -euo pipefail
 # in explicitly with CONFIG_FILE; all existing MI355X launch behavior remains
 # unchanged for every other row.
 SRT_SLURM_REPOSITORY="https://github.com/SemiAnalysisAI/srt-slurm.git"
-SRT_SLURM_COMMIT="d93b48165ff60c6441feb5dd04504337f0bd7bc5"
+SRT_SLURM_COMMIT="297da661ad058bb1ea4bad06be528ce4a0bbe9e2"
 SLURM_PARTITION="compute"
 SGLANG_IMAGE="lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260809"
 ATOM_IMAGE="rocm/infera:atom-v0.1.1"
@@ -132,7 +132,7 @@ export PATH="$HOME/.local/bin:$PATH"
 cd "$SRT_REPO_DIR"
 uv venv --python 3.12
 uv pip install -e .
-make setup-compute ARCH=x86_64
+make setup ARCH=x86_64
 source .venv/bin/activate
 export SRTSLURM_CONFIG="${WORK_DIR}/srtslurm.yaml"
 export SRTCTL_RUNTIME_SOURCE_DIR="$SRT_REPO_DIR"
