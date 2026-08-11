@@ -1815,6 +1815,19 @@ run_eval() {
 
     local framework="${EVAL_FRAMEWORK:-${cli_framework:-$scenario_default}}"
 
+    case "${EVAL_SUITE:-}" in
+        "") ;;
+        *[!A-Za-z0-9_.-]*)
+            echo "ERROR: EVAL_SUITE may contain only letters, digits, '.', '_', and '-'" >&2
+            return 2
+            ;;
+    esac
+
+    if [ -n "${EVAL_SUITE:-}" ] && [ "$framework" != "kimi-vendor" ]; then
+        echo "ERROR: EVAL_SUITE is only supported with EVAL_FRAMEWORK=kimi-vendor" >&2
+        return 2
+    fi
+
     # Kimi Vendor Verifier uses a fixed request budget and does not consume
     # EVAL_MAX_MODEL_LEN, so avoid loading model configuration for that path.
     if [ "$framework" != "kimi-vendor" ] && [ -z "${EVAL_MAX_MODEL_LEN:-}" ]; then

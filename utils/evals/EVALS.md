@@ -50,11 +50,16 @@ The default eval framework is [lm-evaluation-harness](https://github.com/Eleuthe
 
 The Phase 1 Kimi smoke is opt-in and single-node only. Select
 `eval-framework: kimi-vendor` and `eval-suite: kimi_tool_call_schema` on
-`e2e-tests.yml`, or invoke it after a server is ready:
+`e2e-tests.yml`, or invoke it from the repository root after a server is ready:
 
 ```bash
-EVAL_FRAMEWORK=kimi-vendor EVAL_SUITE=kimi_tool_call_schema \
-  run_eval --port "$PORT"
+source benchmarks/benchmark_lib.sh
+export EVAL_FRAMEWORK=kimi-vendor
+export EVAL_SUITE=kimi_tool_call_schema
+export EVAL_RESULT_DIR="$(mktemp -d /tmp/eval_out-XXXXXX)"
+run_eval --port "$PORT"
+append_lm_eval_summary
+python3 utils/evals/validate_scores.py
 ```
 
 The framework selects a provider-specific subprocess adapter, while the suite
@@ -218,7 +223,7 @@ cat ./evals/agg_eval_all.json | jq '[.[] | select(.hw == "B200")]'
 | `RUN_EVAL` | `false` | Enable eval after throughput benchmark |
 | `EVAL_ONLY` | `false` | Skip throughput, only run evals (set by workflow) |
 | `EVAL_FRAMEWORK` | `lm-eval` | Eval runner (`lm-eval`, `swebench`, or `kimi-vendor`) |
-| `EVAL_SUITE` | basename of `EVAL_TASKS_DIR`, else `gsm8k` | Runner-specific suite selector and artifact identity; the workflow `eval-suite` input sets it explicitly |
+| `EVAL_SUITE` | basename of `EVAL_TASKS_DIR`, else `gsm8k` | Provider suite selector and artifact identity. External override is currently supported only by `kimi-vendor`; other runners derive it from their task |
 | `EVAL_TASKS_DIR` | `utils/evals/gsm8k.yaml` | Path to lm-eval task YAML |
 | `EVAL_RESULT_DIR` | `/tmp/eval_out-*` | Output directory for eval results |
 | `EVAL_MAX_MODEL_LEN` | `16384` | Max context for eval (set by `compute_eval_context_length`) |

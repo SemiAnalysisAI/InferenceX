@@ -91,7 +91,7 @@ on:
         required: false
         default: "lm-eval"
       eval-suite:
-        description: "Suite interpreted by the selected eval runner"
+        description: "Kimi Vendor Verifier suite; leave empty for other eval runners"
         type: string
         required: false
         default: ""

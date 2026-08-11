@@ -25,6 +25,12 @@ def _report(stream_status: str = "passed") -> dict[str, Any]:
     }
 
 
+def _report_with_inconsistent_counts() -> dict[str, Any]:
+    report = _report("failed")
+    report["summary"]["by_status"]["failed"] = 2
+    return report
+
+
 def _result(output_dir: Path) -> dict[str, Any]:
     paths = list(output_dir.glob(kve.COMPATIBILITY_GLOB))
     assert len(paths) == 1
@@ -134,6 +140,8 @@ def test_projects_upstream_outcomes(
         (None, "FileNotFoundError"),
         ("{bad-json", "JSONDecodeError"),
         (OSError("boom"), "OSError"),
+        (json.dumps(_report("skipped")), "ValueError"),
+        (json.dumps(_report_with_inconsistent_counts()), "ValueError"),
         (
             subprocess.TimeoutExpired("pytest", kve.DEFAULT_TIMEOUT_SECONDS),
             "TimeoutExpired",

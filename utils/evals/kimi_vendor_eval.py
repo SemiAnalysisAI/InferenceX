@@ -74,16 +74,19 @@ def _project_report(model: str, report: Any) -> tuple[dict[str, Any], bool]:
 
     total = summary.get("total")
     by_status = _mapping(summary.get("by_status"), "report.summary.by_status")
-    passed = by_status.get("passed", 0)
-    if (
-        not isinstance(total, int)
-        or isinstance(total, bool)
-        or not isinstance(passed, int)
-        or isinstance(passed, bool)
-        or passed < 0
-        or passed > 2
-    ):
+    if not isinstance(total, int) or isinstance(total, bool):
         raise ValueError("report summary contains invalid counts")
+    for status, count in by_status.items():
+        if (
+            status not in {"passed", "failed"}
+            or not isinstance(count, int)
+            or isinstance(count, bool)
+            or count < 0
+        ):
+            raise ValueError("report summary contains invalid counts")
+    if sum(by_status.values()) != total:
+        raise ValueError("report summary does not match total")
+    passed = by_status.get("passed", 0)
 
     modes: list[str] = []
     result_passes = 0
@@ -91,7 +94,11 @@ def _project_report(model: str, report: Any) -> tuple[dict[str, Any], bool]:
         record = _mapping(result, f"report.results[{index}]")
         mode = record.get("mode")
         status = record.get("status")
-        if not isinstance(mode, str) or not isinstance(status, str):
+        if (
+            not isinstance(mode, str)
+            or not isinstance(status, str)
+            or status not in {"passed", "failed"}
+        ):
             raise ValueError(f"report.results[{index}] has invalid mode or status")
         modes.append(mode)
         result_passes += status == "passed"

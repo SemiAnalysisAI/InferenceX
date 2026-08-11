@@ -170,6 +170,24 @@ def test_run_eval_rejects_missing_framework_value():
     assert "--framework requires a value" in result.stderr
 
 
+def test_run_eval_rejects_unsafe_suite_name() -> None:
+    result = _run_invalid_call(
+        "EVAL_SUITE='kimi\"suite' run_eval --framework kimi-vendor"
+    )
+
+    assert result.returncode == 2
+    assert "EVAL_SUITE may contain only" in result.stderr
+
+
+def test_run_eval_rejects_suite_override_for_lm_eval() -> None:
+    result = _run_invalid_call(
+        "EVAL_SUITE=gpqa_diamond run_eval --framework lm-eval"
+    )
+
+    assert result.returncode == 2
+    assert "only supported with EVAL_FRAMEWORK=kimi-vendor" in result.stderr
+
+
 def test_kimi_vendor_rejects_batched_concurrency() -> None:
     result = _run_invalid_call(
         "EVAL_MAX_MODEL_LEN=16384 "
@@ -1081,3 +1099,20 @@ def test_agentic_eval_workflow_forwards_runner_contract() -> None:
     assert forwarded["spec-decoding"] == "${{ matrix.config.spec-decoding }}"
     assert forwarded["eval-framework"] == "${{ inputs.eval-framework }}"
     assert forwarded["eval-suite"] == "${{ inputs.eval-suite }}"
+
+
+
+def test_trusted_changelog_matrix_keeps_multinode_agentic_evals() -> None:
+    workflow = yaml.safe_load(E2E_WORKFLOW.read_text())
+    get_jobs = next(
+        step
+        for step in workflow["jobs"]["get-jobs"]["steps"]
+        if step.get("id") == "get-jobs"
+    )
+    flatten_command = next(
+        line
+        for line in get_jobs["run"].splitlines()
+        if "rows.extend" in line
+    )
+
+    assert '"multinode_agentic_evals"' in flatten_command

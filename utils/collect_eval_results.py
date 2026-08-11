@@ -408,7 +408,7 @@ def main():
                     f"{pct(r['score'])}{se(r['score_se'])}",
                     f"{pct(r['em_strict'])}{se(r['em_strict_se'])}",
                     f"{pct(r['em_flexible'])}{se(r['em_flexible_se'])}",
-                    r['n_eff'] or '',
+                    r['n_eff'] if r['n_eff'] is not None else '',
                     r['model'],
                 ]
                 for r in single_node_rows
@@ -446,7 +446,7 @@ def main():
                     f"{pct(r['score'])}{se(r['score_se'])}",
                     f"{pct(r['em_strict'])}{se(r['em_strict_se'])}",
                     f"{pct(r['em_flexible'])}{se(r['em_flexible_se'])}",
-                    r['n_eff'] or '',
+                    r['n_eff'] if r['n_eff'] is not None else '',
                     r['model'],
                 ]
                 for r in multinode_rows

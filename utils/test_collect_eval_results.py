@@ -1,9 +1,15 @@
 """Tests for eval result aggregation."""
 
 import json
+import sys
 from pathlib import Path
 
-from collect_eval_results import EVAL_RESULT_FORMAT, build_row, collect_eval_rows
+from collect_eval_results import (
+    EVAL_RESULT_FORMAT,
+    build_row,
+    collect_eval_rows,
+    main as collect_main,
+)
 from evals.kimi_vendor_eval import RESULT_FORMAT as KIMI_VENDOR_RESULT_FORMAT
 
 
@@ -145,3 +151,41 @@ def test_collect_eval_rows_accepts_neutral_result_format(tmp_path: Path) -> None
     assert len(rows) == 1
     assert rows[0]["score"] == 1.0
     assert rows[0]["eval_suite"] == "provider_smoke"
+
+
+def test_main_renders_zero_effective_samples(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    for name, is_multinode in (("single", False), ("multi", True)):
+        artifact_dir = tmp_path / f"eval_{name}"
+        artifact_dir.mkdir()
+        (artifact_dir / "meta_env.json").write_text(json.dumps({
+            "is_multinode": is_multinode,
+            "eval_suite": "gsm8k",
+        }))
+        result_path = artifact_dir / f"results_{name}.json"
+        _write_lm_eval_result(result_path, 0.0)
+        result = json.loads(result_path.read_text())
+        result["n-samples"]["gsm8k"]["effective"] = 0
+        result_path.write_text(json.dumps(result))
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["collect_eval_results.py", str(tmp_path), "zero-samples"],
+    )
+
+    collect_main()
+
+    task_rows = [
+        line
+        for line in capsys.readouterr().out.splitlines()
+        if "| gsm8k " in line
+    ]
+    assert len(task_rows) == 2
+    for row in task_rows:
+        cells = [cell.strip() for cell in row.split("|")[1:-1]]
+        assert cells[-2] == "0"

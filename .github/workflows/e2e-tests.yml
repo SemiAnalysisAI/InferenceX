@@ -46,12 +46,12 @@ on:
                 type: string
                 default: ""
             eval-framework:
-                description: "Agentic eval runner (lm-eval, swebench, or kimi-vendor)"
+                description: "Single-node agentic eval runner (lm-eval, swebench, or kimi-vendor)"
                 required: false
                 type: string
                 default: "lm-eval"
             eval-suite:
-                description: "Agentic eval suite interpreted by the selected runner"
+                description: "Single-node Kimi Vendor Verifier suite; empty for other runners"
                 required: false
                 type: string
                 default: ""
@@ -136,12 +136,12 @@ on:
                 type: string
                 default: ""
             eval-framework:
-                description: "Agentic eval runner (lm-eval, swebench, or kimi-vendor)"
+                description: "Single-node agentic eval runner (lm-eval, swebench, or kimi-vendor)"
                 required: false
                 type: string
                 default: "lm-eval"
             eval-suite:
-                description: "Agentic eval suite interpreted by the selected runner"
+                description: "Single-node Kimi Vendor Verifier suite; empty for other runners"
                 required: false
                 type: string
                 default: ""
@@ -256,7 +256,7 @@ jobs:
                       CMD+=(--evals-only)
                     fi
                     RAW_CONFIG_JSON=$("${CMD[@]}")
-                    CONFIG_JSON=$(python3 -c 'import json,sys; data=json.load(sys.stdin); rows=[row for family in ("single_node","multi_node") for group in data.get(family,{}).values() for row in group]; rows.extend(row for family in ("evals","agentic_evals","multinode_evals") for row in data.get(family,[])); print(json.dumps(rows))' <<<"$RAW_CONFIG_JSON")
+                    CONFIG_JSON=$(python3 -c 'import json,sys; data=json.load(sys.stdin); rows=[row for family in ("single_node","multi_node") for group in data.get(family,{}).values() for row in group]; rows.extend(row for family in ("evals","agentic_evals","multinode_evals","multinode_agentic_evals") for row in data.get(family,[])); print(json.dumps(rows))' <<<"$RAW_CONFIG_JSON")
                   else
                     GENERATE_COMMAND="${{ inputs.generate-cli-command || github.event.inputs.generate-cli-command }}"
                     if [ -z "$GENERATE_COMMAND" ]; then
