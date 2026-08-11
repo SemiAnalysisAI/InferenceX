@@ -239,6 +239,8 @@ class TestValidPackage:
         assert agg["joules_per_total_token"] == round(84000 / 36864, 6)
         assert agg["prefill_gpu_energy_j"] == 48000.0
         assert agg["decode_gpu_energy_j"] == 36000.0
+        assert agg["prefill_avg_power_w"] == 400.0
+        assert agg["decode_avg_power_w"] == 300.0
         assert agg["prefill_joules_per_input_token"] == round(48000 / 32768, 6)
         assert agg["decode_joules_per_output_token"] == round(36000 / 4096, 6)
 
@@ -257,6 +259,23 @@ class TestValidPackage:
             "node-p/GPU-node-p-1": "prefill",
         }
         assert set(sidecar["per_gpu_energy_j"]) == set(sidecar["per_gpu_role"])
+
+    def test_role_watts_close_over_the_whole_deployment(self, tmp_path):
+        """Role watts weighted by their GPU counts must reproduce the whole-
+        deployment watts -- the topology gate makes the role partition
+        exhaustive. Catches dividing by the total device count."""
+
+        def ramp(host, idx, ts):
+            if (host, idx) == ("node-d", 0):
+                return 300.0 + (ts - FIRST_TS)
+            return dict(((h, i), w) for h, i, _r, _g, w in DEVICES)[(host, idx)]
+
+        pkg = build_package(tmp_path, power_fn=ramp)
+        assert pkg.run() == 0
+        agg = pkg.agg()
+        weighted = 2 * agg["prefill_avg_power_w"] + 2 * agg["decode_avg_power_w"]
+        assert weighted == pytest.approx(agg["avg_total_gpu_power_w"], abs=1e-3)
+        assert weighted / 4 == pytest.approx(agg["avg_power_w"], abs=1e-3)
 
     def test_strict_mode_passes_on_valid_package(self, tmp_path):
         pkg = build_package(tmp_path)
@@ -444,6 +463,8 @@ class TestTopologyGates:
         assert agg["power_valid"] == 1
         assert agg["prefill_gpu_energy_j"] == 48000.0
         assert agg["decode_gpu_energy_j"] == 36000.0
+        assert agg["prefill_avg_power_w"] == 400.0
+        assert agg["decode_avg_power_w"] == 300.0
 
     def test_mixed_none_and_real_het_groups_rejected(self, tmp_path):
         pkg = build_package(tmp_path)
