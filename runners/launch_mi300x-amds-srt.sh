@@ -163,7 +163,7 @@ export PATH="$HOME/.local/bin:$PATH"
 cd "$SRT_REPO_DIR"
 uv venv --python 3.12
 uv pip install -e .
-make setup-compute ARCH=x86_64
+make setup ARCH=x86_64
 source .venv/bin/activate
 export SRTSLURM_CONFIG="${WORK_DIR}/srtslurm.yaml"
 export SRTCTL_RUNTIME_SOURCE_DIR="$REMOTE_SRT_RUNTIME"
