@@ -409,6 +409,14 @@ export LMCACHE_CONNECTOR_MODULE_PATH="${LMCACHE_CONNECTOR_MODULE_PATH:-}"
 export LMCACHE_READY_ATTEMPTS="${LMCACHE_READY_ATTEMPTS:-}"
 export VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION="${VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION:-}"
 
+# Runtime optimisation patch set (k3_opt_patches.sh): four upstream PRs plus the K3 enablement
+# scripts, carried separately because they are not in the nightly the fork is rebased onto. Off unless
+# K3_OPT_PATCHES=1, and each step is individually skippable via K3_OPT_SKIP_<LABEL> so they can be
+# A/B'd one at a time.
+export K3_OPT_PATCHES="${K3_OPT_PATCHES:-}"
+export K3_BASE_PATCHES_PREAPPLIED="${K3_BASE_PATCHES_PREAPPLIED:-}"
+export K3_OPT_SKIP_BASE="${K3_OPT_SKIP_BASE:-}"
+
 SANITIZED_USER=$(echo "$USER_NAME" | tr -c 'a-zA-Z0-9_.-' '_')
 export DOCKER_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_${MODEL_NAME}_${SLURM_JOB_ID}"
 
@@ -583,6 +591,11 @@ DOCKER_ENV_COMMON=(
     -e LMCACHE_CONNECTOR_MODULE_PATH=\${LMCACHE_CONNECTOR_MODULE_PATH:-}
     -e LMCACHE_READY_ATTEMPTS=\${LMCACHE_READY_ATTEMPTS:-}
     -e VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION=\${VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION:-}
+    # Runtime optimisation patch set. Off unless K3_OPT_PATCHES=1; individual steps are skippable via
+    # K3_OPT_SKIP_<LABEL> so one PR at a time can be attributed.
+    -e K3_OPT_PATCHES=\${K3_OPT_PATCHES:-}
+    -e K3_BASE_PATCHES_PREAPPLIED=\${K3_BASE_PATCHES_PREAPPLIED:-}
+    -e K3_OPT_SKIP_BASE=\${K3_OPT_SKIP_BASE:-}
     -e TOTAL_CPU_DRAM_GB=\${TOTAL_CPU_DRAM_GB:-}
     -e SERVER_UP_TIMEOUT=\${SERVER_UP_TIMEOUT:-}
     -e HF_HUB_CACHE=\${HF_HUB_CACHE:-/tmp/mooncake-hf-cache}

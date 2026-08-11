@@ -840,6 +840,18 @@ apply_lmcache_serve_args() {
     printf '%s %s' "$cfg" "$extra"
 }
 
+# Kimi-K3 runtime optimisation patches (four upstream PRs plus the K3 enablement scripts), carried
+# separately from the fork branch because they are NOT in cb8104839c -- the nightly our branch is
+# rebased onto and the prepatched image is built from. Rebasing gave us that image's base, not its
+# patches. Opt-in via K3_OPT_PATCHES=1, and each step is individually skippable so they can be A/B'd
+# one at a time against the numbers already measured on the unpatched base.
+if [[ -f "$(dirname "${BASH_SOURCE[0]}")/k3_opt_patches.sh" ]]; then
+    # shellcheck source=/dev/null
+    . "$(dirname "${BASH_SOURCE[0]}")/k3_opt_patches.sh"
+    k3_opt_patches_apply || exit 1
+    [[ "${K3_OPT_PATCHES:-0}" == "1" ]] && k3_opt_patches_expected_markers
+fi
+
 # vLLM #46240: skip stale KV xfer completions instead of assert-killing EngineCore.
 # https://github.com/vllm-project/vllm/issues/46240
 if [[ "${VLLM_PATCH_46240:-${KV_OFFLOADING:-none}}" == "dram" || "${VLLM_PATCH_46240:-}" == "1" ]]; then
