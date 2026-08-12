@@ -5866,3 +5866,11 @@
     - "Use lmsysorg/sglang:v0.5.16-rocm720-mi30x, FP8 KV cache, AITER attention, and required SGLang Prometheus metrics"
     - "Select a 32-point official TP2/EP2, TP4, TEP4, TP8, and TEP8 matrix from the complete 62-point fast discovery sweep"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2566
+
+- config-keys:
+    - minimaxm3-fp8-h200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add MiniMax-M3 MXFP8 AgentX on H200 with vLLM v0.27.1, EAGLE3 golden AL 2.78, resident TP8 c1/c2/c4/c6/c8/c10, and Mooncake DRAM offload c12/c14."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2565
