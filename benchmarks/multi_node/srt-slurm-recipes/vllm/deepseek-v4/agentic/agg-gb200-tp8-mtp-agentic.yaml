@@ -66,6 +66,7 @@ backend:
   vllm_config:
     aggregated:
       served-model-name: deepseek-ai/DeepSeek-V4-Pro
+      enable-prompt-tokens-details: true
       kv-cache-dtype: fp8
       tensor-parallel-size: 8
       pipeline-parallel-size: 1
