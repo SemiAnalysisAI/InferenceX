@@ -24,6 +24,9 @@
 #                requires ndim==1). Replaces the earlier reshape/coerce
 #                workaround. NOTE: not strictly needed by this stack (it boots
 #                under FULL_AND_PIECEWISE without it) -- kept for robustness.
+#   vllm  #42615 deduplicate BlockPool.free_blocks inputs by object identity so
+#                hybrid-cache block reuse cannot decrement or enqueue the same
+#                physical block twice and corrupt the free-block queue.
 #   aiter #4521  fp8 cp round-robin asm MLA verify kernels: adds the qh16/qh32
 #                qseqlen4 gqaratio16/32 cprr .co + mla_asm.csv + asm_mla.cu +
 #                v1_2_device.cuh + aiter/mla.py + aiter/ops/attention.py, then
@@ -1196,6 +1199,56 @@ index 2f512df62643..db519fb6f0db 100644
 DIFF_KDA_FUSED_RECURRENT
 apply_one "vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py" "stride_state_indices" "$WS/KDA_FUSED_RECURRENT.diff"
 
+cat > "$WS/BLOCK_POOL_FREE_DEDUP.diff.in" <<'DIFF_BLOCK_POOL_FREE_DEDUP'
+diff --git a/vllm/v1/core/block_pool.py b/vllm/v1/core/block_pool.py
+--- a/vllm/v1/core/block_pool.py
++++ b/vllm/v1/core/block_pool.py
+@@ -724,11 +724,21 @@ class BlockPool:
+             ordered_blocks: A list of blocks to free ordered by their eviction
+                 priority.
+         """
++        # Deduplicate by object identity to prevent double-free when the same
++        # physical block appears more than once in a request's block list.
++        # Keep first-seen order so eviction priority remains unchanged.
++        seen: set[int] = set()
++        num_duplicates = 0
+         # Identify blocks with hash (LRU cache) and without it (never match APC)
+         blocks_with_hash = []
+         blocks_without_hash = []
+         for block in ordered_blocks:
++            block_obj_id = id(block)
++            if block_obj_id in seen:
++                num_duplicates += 1
++                continue
++            seen.add(block_obj_id)
+             block.ref_cnt -= 1
+             if block.ref_cnt == 0 and not block.is_null:
+                 # When caching is disabled we always append for better
+                 # GPU cache locality from reusing recently used blocks
+@@ -737,6 +747,13 @@ class BlockPool:
+                 else:
+                     blocks_with_hash.append(block)
+__BLANK_CONTEXT__
++        if num_duplicates > 0:
++            logger.warning(
++                "free_blocks() ignored %d duplicate block reference(s); "
++                "the same KVCacheBlock appeared multiple times in one call.",
++                num_duplicates,
++            )
++
+         # Blocks without hash get evicted first - prepend them last to the tail
+         self.free_block_queue.prepend_n(blocks_without_hash)
+         self.free_block_queue.append_n(blocks_with_hash)
+DIFF_BLOCK_POOL_FREE_DEDUP
+sed 's/^__BLANK_CONTEXT__$/ /' "$WS/BLOCK_POOL_FREE_DEDUP.diff.in" \
+  > "$WS/BLOCK_POOL_FREE_DEDUP.diff"
+apply_one "vllm/v1/core/block_pool.py" "Deduplicate by object identity to prevent double-free" "$WS/BLOCK_POOL_FREE_DEDUP.diff"
+if ! grep -qF "Deduplicate by object identity to prevent double-free" \
+        "$ROOT/vllm/v1/core/block_pool.py"; then
+  echo "ERROR: vLLM #42615 BlockPool.free_blocks dedup patch did not apply"
+  exit 1
+fi
+
 
 say "3/4 aiter #4521 (fp8 cp round-robin asm MLA verify kernels)  [needs network + hipcc + GPU]"
 # Unlike the offline Python diffs above, #4521 ships BINARY .co kernels (not in
@@ -1270,6 +1323,7 @@ echo "chk mla.py                     = $(grep -c 'if not self.impl.supports_quan
 echo "chk attn_utils.py              = $(grep -c 'cg_support_exclude_layers' "$ROOT/vllm/v1/worker/gpu/attn_utils.py")"
 echo "chk model_runner.py            = $(grep -c 'cg_support_exclude_layers' "$ROOT/vllm/v1/worker/gpu/model_runner.py")"
 echo "chk fused_recurrent.py         = $(grep -c 'reshape(-1).contiguous()' "$ROOT/vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py")"
+echo "chk block_pool.py dedup         = $(grep -c 'Deduplicate by object identity to prevent double-free' "$ROOT/vllm/v1/core/block_pool.py")"
 echo "triton          = $(python -c 'import triton; print(triton.__version__)')  (expect 3.7.0*)"
 python -m py_compile "$ROOT/aiter/ops/triton/gluon/mla_gluon.py" \
   "$ROOT/aiter/ops/gemm_op_a16w16.py" \
@@ -1280,6 +1334,7 @@ python -m py_compile "$ROOT/aiter/ops/triton/gluon/mla_gluon.py" \
   "$ROOT/vllm/models/kimi_k3/nvidia/mla.py" \
   "$ROOT/vllm/v1/worker/gpu/attn_utils.py" \
   "$ROOT/vllm/v1/worker/gpu/model_runner.py" \
+  "$ROOT/vllm/v1/core/block_pool.py" \
   "$ROOT/vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py" && echo "PY_COMPILE_OK" || { echo "PY_COMPILE_FAIL"; exit 1; }
 # Runtime import needs a GPU (aiter probes rocminfo); best-effort.
 python - <<'PYEOF'
