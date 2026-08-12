@@ -839,7 +839,8 @@ _install_kimi_vendor_eval_deps() {
         "httpx[http2]==0.28.1" \
         "openai==2.14.0" \
         "jsonschema==4.25.1" \
-        "pytest==8.4.2"
+        "pytest==8.4.2" \
+        "pytest-rerunfailures==16.4"
 }
 
 _prepare_kimi_vendor_runtime() {
@@ -1144,15 +1145,6 @@ _run_kimi_tool_call_schema_eval() {
     local adapter_path="${INFERENCEX_REPO_ROOT}/utils/evals/kimi_vendor_eval.py"
     local runtime_dir=""
     local checkout_dir=""
-    local diagnostic_args=()
-    if [[ "${KIMI_TOOL_CALL_DIAGNOSTIC:-false}" == "true" ]]; then
-        diagnostic_args+=(--diagnostic)
-        diagnostic_args+=(
-            --diagnostic-temperature "${KIMI_TOOL_CALL_DIAGNOSTIC_TEMPERATURE:-0}"
-            --diagnostic-seed "${KIMI_TOOL_CALL_DIAGNOSTIC_SEED:-1}"
-            --diagnostic-sequence "${KIMI_TOOL_CALL_DIAGNOSTIC_SEQUENCE:-unary,unary,stream,stream,stream,unary}"
-        )
-    fi
 
     mkdir -p "$results_dir" || return $?
     export EVAL_RESULT_DIR="$results_dir"
@@ -1197,7 +1189,6 @@ _run_kimi_tool_call_schema_eval() {
             --api-key EMPTY \
             --model "$model_name" \
             --output-dir "$results_dir" \
-            "${diagnostic_args[@]}" \
             || eval_rc=$?
     _cleanup_kimi_vendor_eval "$runtime_dir" "$checkout_dir"
     return "$eval_rc"
@@ -1547,7 +1538,7 @@ _write_lm_eval_meta_json() {
             fi
         fi
     fi
-    local eval_suite="${EVAL_SUITE:-}"
+    local eval_suite="${EVAL_COMPLETED_SUITE:-${EVAL_SUITE:-}}"
     if [ -z "$eval_suite" ] && [ -n "${EVAL_TASKS_DIR:-}" ]; then
         eval_suite="$(basename "${EVAL_TASKS_DIR}")"
         eval_suite="${eval_suite%.yaml}"
@@ -2004,6 +1995,7 @@ run_eval() {
     local forwarded=()
     # Keep runner-selected suite identity scoped to this invocation.
     local EVAL_SUITE="${EVAL_SUITE:-}"
+    unset EVAL_COMPLETED_SUITE
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -2122,6 +2114,10 @@ run_eval() {
         kimi-vendor)     run_kimi_vendor_eval "${forwarded[@]}" || eval_rc=$? ;;
         *)               echo "Unknown framework '${framework}'"; eval_rc=1 ;;
     esac
+
+    if [ "$framework" = "kimi-vendor" ]; then
+        export EVAL_COMPLETED_SUITE="$EVAL_SUITE"
+    fi
 
     # Agentic eval-only recipes have no separate staging step.
     if [ "${EVAL_ONLY:-false}" = "true" ] && [ "$scenario_is_agentic" = "1" ]; then

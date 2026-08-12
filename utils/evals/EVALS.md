@@ -78,25 +78,32 @@ The smoke runs the unmodified
 at commit `b9ed3a6665bdff2c943246f7d2903cd003d6ddd6`. Each run downloads the
 fresh pinned GitHub source archive and safely extracts only the upstream pytest
 configuration, tool-call schema tests, and bundled Walle cases. InferenceX does
-not install the verifier package or reimplement its request, streaming, retry,
-or validation logic.
+not install the verifier package or reimplement its request, streaming, or
+validation logic.
 
 Python 3.12 or newer is required. The runner installs the minimal pinned runtime
-(`httpx[http2]`, `openai`, `jsonschema`, and `pytest`) into a temporary isolated
-package directory, then runs upstream
+(`httpx[http2]`, `openai`, `jsonschema`, `pytest`, and
+`pytest-rerunfailures`) into a temporary isolated package directory, then runs
+upstream
 `tests/tool_call_json_schema/test_tool_call_json_schema.py` with:
 
 - the local OpenAI-compatible endpoint, `EMPTY` API key, and served model name;
 - `--think-mode none --selection object --max-cases 1 --max-tokens 2048`;
+- the upstream-recommended `--reruns 3 --reruns-delay 2`;
 - the bundled Walle case directory and `--tool-json-report`.
 
 The selection is `TestAdditionalProperties:1`, parametrized upstream in
-non-streaming and streaming modes. The unchanged native report is uploaded as
-`kimi_vendor_report.json`. `utils/evals/kimi_vendor_eval.py` only projects its
-two outcomes into the existing eval result shape. Both must pass, so the
-`kimi_tool_call_schema` threshold is `1.0`. Setup, timeout, and collection
-failures emit a zero-score result with error metadata. The adapter bounds the
-upstream pytest process to 900 seconds.
+non-streaming and streaming modes. Pytest makes one initial attempt and up to
+three reruns of each failing mode, with a two-second delay before each rerun.
+These retries reduce transient transport and model-sampling flakes; they do not
+make the smoke deterministic. The unchanged native report remains one final
+outcome per mode because the upstream report deduplicates rerun records by case
+and mode. It is uploaded as `kimi_vendor_report.json`, and
+`utils/evals/kimi_vendor_eval.py` projects those two outcomes into the existing
+eval result shape. Both must pass, so the `kimi_tool_call_schema` threshold is
+`1.0`. Setup, timeout, and collection failures emit a zero-score result with
+error metadata. The adapter's 900-second global timeout bounds the entire
+upstream pytest process, including all attempts and rerun delays.
 
 This smoke validates one object-schema tool call. It does not cover tool choice,
 parallel calls, multi-turn execution, or general agent quality. Multi-value

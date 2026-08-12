@@ -95,26 +95,6 @@ on:
         type: string
         required: false
         default: ""
-      kimi-tool-call-diagnostic:
-        description: "Run temporary ordered Kimi tool-call diagnostics"
-        type: boolean
-        required: false
-        default: false
-      kimi-tool-call-diagnostic-temperature:
-        description: "Temperature for temporary Kimi diagnostics"
-        type: string
-        required: false
-        default: "0"
-      kimi-tool-call-diagnostic-seed:
-        description: "Seed for temporary Kimi diagnostics"
-        type: string
-        required: false
-        default: "1"
-      kimi-tool-call-diagnostic-sequence:
-        description: "Comma-separated unary/stream diagnostic order"
-        type: string
-        required: false
-        default: "unary,unary,stream,stream,stream,unary"
       random-range-ratio:
         required: false
         type: string
@@ -205,10 +185,6 @@ env:
   EVAL_ONLY: ${{ inputs.eval-only }}
   EVAL_FRAMEWORK: ${{ inputs.eval-framework }}
   EVAL_SUITE: ${{ inputs.eval-suite }}
-  KIMI_TOOL_CALL_DIAGNOSTIC: ${{ inputs.kimi-tool-call-diagnostic }}
-  KIMI_TOOL_CALL_DIAGNOSTIC_TEMPERATURE: ${{ inputs.kimi-tool-call-diagnostic-temperature }}
-  KIMI_TOOL_CALL_DIAGNOSTIC_SEED: ${{ inputs.kimi-tool-call-diagnostic-seed }}
-  KIMI_TOOL_CALL_DIAGNOSTIC_SEQUENCE: ${{ inputs.kimi-tool-call-diagnostic-sequence }}
   # Agentic-coding env. Fixed-seq-len jobs leave these empty.
   SCENARIO_TYPE: ${{ inputs.scenario-type }}
   SCENARIO_SUBDIR: ${{ inputs.scenario-type == 'agentic-coding' && 'agentic/' || 'fixed_seq_len/' }}
@@ -429,7 +405,6 @@ jobs:
             meta_env.json
             results*.json
             *_vendor_report.json
-            eval_kimi_tool_call_diagnostic.json
             sample*.jsonl
             agent_preds.json
             predictions.jsonl
@@ -448,7 +423,6 @@ jobs:
           # Remove any eval results JSONs that were moved into workspace
           rm -f results*.json || true
           rm -f -- ./*_vendor_report.json || true
-          rm -f eval_kimi_tool_call_diagnostic.json || true
           rm -f sample*.jsonl || true
           rm -f agent_preds.json predictions.jsonl swebench_report_*.json *.traj* || true
           

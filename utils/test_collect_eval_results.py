@@ -42,23 +42,27 @@ def test_build_row_preserves_explicit_eval_suite() -> None:
     assert row["eval_suite"] == "kimi_tool_call_schema"
 
 
-def _write_lm_eval_result(path: Path, score: float) -> None:
+def _write_lm_eval_result(
+    path: Path,
+    score: float,
+    task: str = "gsm8k",
+) -> None:
     path.write_text(json.dumps({
         "lm_eval_version": "0.4.0",
         "model_name": "test-model",
         "results": {
-            "gsm8k": {
+            task: {
                 "exact_match,strict-match": score,
                 "exact_match_stderr,strict-match": 0.01,
             },
         },
         "configs": {
-            "gsm8k": {
+            task: {
                 "metric_list": [{"metric": "exact_match"}],
                 "filter_list": [{"name": "strict-match"}],
             },
         },
-        "n-samples": {"gsm8k": {"effective": 10}},
+        "n-samples": {task: {"effective": 10}},
     }))
 
 
@@ -208,19 +212,23 @@ def test_collect_eval_rows_does_not_resurrect_stale_valid_result(
     artifact_dir = tmp_path / "eval_retry"
     artifact_dir.mkdir()
     (artifact_dir / "meta_env.json").write_text(json.dumps({
-        "eval_suite": "gsm8k",
+        "eval_suite": "kimi_tool_call_schema",
     }))
-    stale_path = artifact_dir / "results_older.json"
-    _write_lm_eval_result(stale_path, 1.0)
-    current_path = artifact_dir / "results_current.json"
-    _write_lm_eval_result(current_path, 0.0)
+    stale_path = (
+        artifact_dir / "results_kimi_vendor_2026-08-12T01-00-00.000000.json"
+    )
+    _write_lm_eval_result(stale_path, 1.0, task="kimi_tool_call_schema")
+    current_path = (
+        artifact_dir / "results_kimi_vendor_2026-08-12T02-00-00.000000.json"
+    )
+    _write_lm_eval_result(current_path, 0.0, task="kimi_tool_call_schema")
     result = json.loads(current_path.read_text())
     result["integration_error"] = {
         "type": "RuntimeError",
         "message": "vendor verifier checkout failed",
     }
     current_path.write_text(json.dumps(result))
-    stale_path.touch()
     current_path.touch()
+    stale_path.touch()
 
     assert collect_eval_rows(tmp_path) == []

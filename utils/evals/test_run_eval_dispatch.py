@@ -202,7 +202,12 @@ run_kimi_vendor_eval() {
     export EVAL_SUITE=kimi_tool_call_schema
     echo "DISPATCH=kimi-vendor SUITE=$EVAL_SUITE"
 }
-run_lm_eval() { echo "DISPATCH=lm-eval SUITE=${EVAL_SUITE:-unset}"; }
+run_lm_eval() {
+    echo "DISPATCH=lm-eval SUITE=${EVAL_SUITE:-unset} COMPLETED=${EVAL_COMPLETED_SUITE:-unset}"
+}
+append_lm_eval_summary() {
+    echo "METADATA=${EVAL_COMPLETED_SUITE:-gsm8k}"
+}
 export EVAL_MAX_MODEL_LEN=16384
 export EVAL_CONCURRENT_REQUESTS=""
 export EVAL_ONLY=false
@@ -210,8 +215,12 @@ export IS_AGENTIC=0
 unset EVAL_SUITE
 export EVAL_FRAMEWORK=kimi-vendor
 run_eval --port 8888
+printf 'KIMI_COMPLETED=%s\n' "${EVAL_COMPLETED_SUITE:-unset}"
+append_lm_eval_summary
 export EVAL_FRAMEWORK=lm-eval
 run_eval --port 8888
+printf 'LM_COMPLETED=%s\n' "${EVAL_COMPLETED_SUITE:-unset}"
+append_lm_eval_summary
 printf 'FINAL_SUITE=%s\n' "${EVAL_SUITE-unset}"
 '''
     result = subprocess.run(
@@ -224,7 +233,11 @@ printf 'FINAL_SUITE=%s\n' "${EVAL_SUITE-unset}"
 
     assert result.returncode == 0, result.stderr
     assert "DISPATCH=kimi-vendor SUITE=kimi_tool_call_schema" in result.stdout
-    assert "DISPATCH=lm-eval SUITE=unset" in result.stdout
+    assert "KIMI_COMPLETED=kimi_tool_call_schema" in result.stdout
+    assert "METADATA=kimi_tool_call_schema" in result.stdout
+    assert "DISPATCH=lm-eval SUITE=unset COMPLETED=unset" in result.stdout
+    assert "LM_COMPLETED=unset" in result.stdout
+    assert "METADATA=gsm8k" in result.stdout
     assert "FINAL_SUITE=unset" in result.stdout
 
 
@@ -232,7 +245,7 @@ def test_kimi_default_suite_reaches_eval_only_metadata() -> None:
     script = r'''
 source "$BENCHMARK_LIB"
 run_kimi_vendor_eval() { echo "DISPATCH=$EVAL_SUITE"; }
-append_lm_eval_summary() { echo "METADATA=$EVAL_SUITE"; }
+append_lm_eval_summary() { echo "METADATA=$EVAL_COMPLETED_SUITE"; }
 export EVAL_FRAMEWORK=kimi-vendor
 export EVAL_ONLY=true
 export IS_AGENTIC=1
@@ -535,6 +548,7 @@ _install_kimi_vendor_eval_deps "$RUNTIME_DIR"
 
     assert "PYTHON_ARG=<--target>" in result.stdout
     assert f"PYTHON_ARG=<{runtime_dir}>" in result.stdout
+    assert "PYTHON_ARG=<pytest-rerunfailures==16.4>" in result.stdout
     assert "--break-system-packages" not in result.stdout
 
 
@@ -740,7 +754,7 @@ append_lm_eval_summary >/dev/null
         "CONC": "7",
         "KV_OFFLOADING": "none",
     }
-    for key in ("EVAL_SUITE", "EVAL_TASKS_DIR"):
+    for key in ("EVAL_COMPLETED_SUITE", "EVAL_SUITE", "EVAL_TASKS_DIR"):
         env.pop(key, None)
     env.update(overrides)
     subprocess.run(["bash", "-c", script], env=env, check=True)
@@ -798,6 +812,17 @@ def test_summary_metadata_prefers_explicit_suite_then_task_basename(
 
     assert from_task["eval_suite"] == "custom_reasoning"
     assert explicit["eval_suite"] == "kimi_tool_call_schema"
+
+
+def test_summary_metadata_prefers_completed_eval_identity(tmp_path: Path) -> None:
+    meta = _summary_metadata(
+        tmp_path,
+        EVAL_COMPLETED_SUITE="kimi_tool_call_schema",
+        EVAL_SUITE="stale_input_selector",
+        EVAL_TASKS_DIR="/tmp/ignored.yaml",
+    )
+
+    assert meta["eval_suite"] == "kimi_tool_call_schema"
 
 
 def test_env_is_true_is_case_insensitive_and_unset_safe() -> None:
