@@ -165,21 +165,16 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         rm -rf "$SRT_REPO_DIR"
     fi
 
-    # TODO(CJQ): make first class upon srt-slurm upstream refactor
+    # Kimi K3 aggregate profiles use the srt-slurm fork that supports direct
+    # multi-node vLLM. Pin the tested renderer so branch movement cannot change
+    # generated rank commands between sweep points.
     if [[ "$IS_AGENTIC" == "1" && $MODEL_PREFIX == "kimik3" ]]; then
-        # Direct-vLLM agentic experiment (Variant D): srt-slurm PR #278
-        # (kylliang/direct-aggregate-vllm) adds frontend.type: vllm — `vllm
-        # serve` owns the OpenAI port itself, no Dynamo layer. The fork branch
-        # carries PR #278 plus the multi-node extension (vLLM-native
-        # --master-addr/--nnodes/--node-rank serve + headless non-leader
-        # ranks) so the 2-node TP8xPP2 topology can run.
         git clone --branch klaud/direct-vllm-multinode --single-branch https://github.com/functionstackx/srt-slurm-nv.git "$SRT_REPO_DIR" || exit 1
         cd "$SRT_REPO_DIR" || exit 1
-        if [[ $MODEL_PREFIX == "kimik3" ]]; then
-            mkdir -p recipes/vllm/kimi-k3/agentic || exit 1
-            cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
-                recipes/vllm/kimi-k3/agentic || exit 1
-        fi
+        git checkout df5baa93f4caf5169dea2a4236ad2cc742fe40e7 || exit 1
+        mkdir -p recipes/vllm/kimi-k3/agentic || exit 1
+        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
+            recipes/vllm/kimi-k3/agentic || exit 1
     elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
         git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR" || exit 1
@@ -354,6 +349,15 @@ EOF
     echo "Submitting job with srtctl..."
     echo "MODEL_PATH=$MODEL_PATH (exists=$(test -d "$MODEL_PATH" && echo yes || echo NO))"
     ls -ld "$MODEL_PATH" 2>&1 || ls /lustre/fsw/models/ 2>&1 | head -40
+
+    # An eval row may point at a committed real-verification recipe while its
+    # throughput row keeps synthetic golden acceptance. Only configs that set
+    # EVAL_CONFIG_FILE opt into this selection; all other configs keep using
+    # CONFIG_FILE unchanged.
+    if [[ "${EVAL_ONLY:-false}" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
+        CONFIG_FILE="$EVAL_CONFIG_FILE"
+        echo "EVAL_ONLY=true: selecting real-verification recipe $CONFIG_FILE"
+    fi
 
     if [[ -z "$CONFIG_FILE" ]]; then
         echo "Error: CONFIG_FILE is not set. The srt-slurm path requires a CONFIG_FILE in additional-settings." >&2

@@ -4,6 +4,8 @@ set -eo pipefail
 # System-specific configuration for H200 DGXC Slurm cluster
 SLURM_PARTITION="main"
 SLURM_ACCOUNT="sa-shared"
+HF_HUB_CACHE_MOUNT="${HF_HUB_CACHE_MOUNT:-/models/gharunners/hf-hub-cache}"
+AIPERF_MMAP_CACHE_HOST_PATH="${AIPERF_MMAP_CACHE_HOST_PATH:-/home/sa-shared/gharunners/ai-perf-cache}"
 
 set -x
 
@@ -22,7 +24,15 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     # The yaml files specify HuggingFace model IDs for portability, but we use
     # local paths to avoid repeated downloading on the shared H200 cluster.
     if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
-        if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
+        if [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp8" ]]; then
+            # The shared HF cache already contains the H200 FP8 checkpoint;
+            # default to that local path (overridable via DSV4_MODEL_PATH) so
+            # srtctl preflight finds the directory instead of trying to pull the
+            # hf: model ID, which fails on the compute node ("path is
+            # unavailable. Pull or register the model yourself").
+            export MODEL_PATH="${DSV4_MODEL_PATH:-${HF_HUB_CACHE_MOUNT}/DeepSeek-V4-Pro}"
+            export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
+        elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
             export MODEL_PATH="/models/DeepSeek-R1-0528"
             export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
         elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp8" ]]; then
@@ -76,6 +86,18 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         mkdir -p recipes/vllm/kimi-k3/agentic
         cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
             recipes/vllm/kimi-k3/agentic
+    elif [[ $IS_AGENTIC == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
+        # Overlay the single H200 aggregated recipe on the upstream release
+        # that provides custom benchmarks, Dynamo wheels, and affinity config.
+        # v1.0.38 also injects every logical SGLang worker leader's /metrics URL
+        # into AIPERF_SERVER_METRICS_URLS for custom benchmarks; v1.0.10 wired
+        # that only for built-in AIPerf runners, so the AgentX trace artifacts
+        # came back with no backend engine series behind them.
+        git clone --branch v1.0.38 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+        cd "$SRT_REPO_DIR"
+        mkdir -p recipes/sglang/deepseek-v4/agentic
+        cp "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/agentic/agg-h200-tp8-mtp-kvoffload.yaml" \
+            recipes/sglang/deepseek-v4/agentic/
     elif [[ "$IS_AGENTIC" == "1" ]]; then
         git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR"
@@ -171,6 +193,11 @@ gpus_per_node: 8
 network_interface: ""
 # Path to srtctl repo root (where the configs live)
 srtctl_root: "${SRTCTL_ROOT}"
+# Persistent AgentX dataset and Hugging Face caches mounted into every
+# server and benchmark container.
+default_mounts:
+  "${AIPERF_MMAP_CACHE_HOST_PATH}": "/aiperf_mmap_cache"
+  "${HF_HUB_CACHE_MOUNT}": "/hf_hub_cache"
 # Model path aliases
 model_paths:
   "${SRT_SLURM_MODEL_PREFIX}": "${MODEL_PATH}"
@@ -328,9 +355,6 @@ EOF
     find . -name '.nfs*' -delete 2>/dev/null || true
 
 else
-
-    HF_HUB_CACHE_MOUNT="/models/gharunners/hf-hub-cache"
-    AIPERF_MMAP_CACHE_HOST_PATH="/home/sa-shared/gharunners/ai-perf-cache"
     SQUASH_FILE="/data/gharunners/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
     # Convert pyxis image format (nvcr.io#path) to docker format (nvcr.io/path) for enroot import
