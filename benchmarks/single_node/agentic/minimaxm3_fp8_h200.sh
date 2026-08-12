@@ -85,21 +85,7 @@ MOONCAKE_MASTER_LOG="$RESULT_DIR/mooncake_master.log"
 mkdir -p "$RESULT_DIR"
 
 OFFLOAD_ARGS=()
-case "${KV_OFFLOAD_BACKEND:-}" in
-    "")
-        require_agentic_kv_offload_none
-        ;;
-    vllm-simple)
-        require_agentic_kv_offload_backend vllm-simple
-        CPU_BYTES_PER_RANK=$((TOTAL_CPU_DRAM_GB * 1000 * 1000 * 1000 / TP))
-        export PYTHONHASHSEED=42
-        OFFLOAD_ARGS=(
-            --kv-transfer-config
-            "{\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use_per_rank\":${CPU_BYTES_PER_RANK},\"lazy_offload\":false}}"
-        )
-        ;;
-    mooncake)
-        require_agentic_kv_offload_backend mooncake
+if require_agentic_kv_offload_backend mooncake; then
         PER_RANK_GB=$((TOTAL_CPU_DRAM_GB / TP))
         MOONCAKE_VERSION=0.3.11.post1
         agentic_pip_install --quiet --no-cache-dir --no-deps \
@@ -131,12 +117,7 @@ EOF
             --kv-transfer-config
             '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true}}'
         )
-        ;;
-    *)
-        echo "Error: unsupported KV_OFFLOAD_BACKEND='$KV_OFFLOAD_BACKEND'" >&2
-        exit 1
-        ;;
-esac
+fi
 
 PARALLEL_ARGS=(--tensor-parallel-size "$TP" --data-parallel-size 1)
 if [[ "$DP_ATTENTION" == "true" ]]; then
