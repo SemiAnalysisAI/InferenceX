@@ -584,6 +584,14 @@ if [[ -n "${CLIENT_IMAGE:-}" ]]; then
     srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c 'eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD pull '"$CLIENT_IMAGE"' >/dev/null 2>&1 || true' 2>/dev/null || true
 fi
 
+# Pre-pull the main Docker image on every node so the container creation
+# barrier (300s) doesn't race against a multi-GB image download on nodes
+# where the image isn't cached. Best-effort: failure here is non-fatal
+# since docker run will pull as a fallback.
+echo "[pre-pull] Pulling $DOCKER_IMAGE_NAME on all nodes..."
+srun --nodelist="$SELECTED_NODELIST_SRUN" \
+  bash -c 'eval "$DOCKER_CMD_DETECT"; echo "[pre-pull] $(hostname): pulling..."; $DOCKER_CMD pull '"$DOCKER_IMAGE_NAME"' && echo "[pre-pull] $(hostname): done" || echo "[pre-pull] $(hostname): pull failed (will retry on docker run)"' || true
+
 srun \
   --nodelist="$SELECTED_NODELIST_SRUN" \
   --kill-on-bad-exit=1 \
