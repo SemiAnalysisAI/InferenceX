@@ -5909,3 +5909,13 @@
     - "Increase MTP speculative steps from 3 to 5 (num-draft-tokens 4→6) and raise SGLANG_SIMULATE_ACC_LEN from 2.99 to 3.61 to reflect higher measured acceptance rate, targeting ~15% throughput improvement"
     - "Replace the TP8/EP8 low-concurrency arm (conc [1,2,4]) hicache offload with kv-offloading: none to reduce per-request latency at low load; conc [1,2,4] are now tested on both tp=4+hicache and tp=8+no-offload so SemiAnalysis can select the Pareto-optimal point per concurrency"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2570
+
+- config-keys:
+    - qwen3.5-fp4-gb300-dynamo-trt-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Qwen3.5-397B-A17B-NVFP4-V2 GB300 TRT-LLM disaggregated AgentX with Dynamo router 1.4.0.dev20260807 and NIXL KV transfer."
+    - "Cover 9 disaggregated topologies (1P1D through 19P1D/17P3D) with MTP speculative decoding across conc 6-1452 using TRT-LLM release:1.3.0rc24."
+    - "Attention-DP enabled (dep shapes) and disabled (tep shapes) variants, with recipe CONFIG_FILEs from recipes/trtllm/qwen3.5-fp4/agentx/submission/."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TODO

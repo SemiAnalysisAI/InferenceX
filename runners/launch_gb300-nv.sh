@@ -184,7 +184,14 @@ SRT_REPO_DIR="${GITHUB_WORKSPACE}/srt-slurm-${GITHUB_RUN_ID:-manual}-${GITHUB_RU
 SRTCTL_SETUP_SCRIPT=""
 rm -rf "$SRT_REPO_DIR"
 
-if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "qwen3.5" ]]; then
+if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "qwen3.5" ]]; then
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    git checkout v1.0.48
+    mkdir -p recipes/trtllm/qwen3.5/gb300-fp4/disagg/agentx
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/qwen3.5/gb300-fp4/disagg/agentx" \
+        recipes/trtllm/qwen3.5/gb300-fp4/disagg/agentx
+elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "qwen3.5" ]]; then
     # Qwen3.5 agentic uses NVIDIA/srt-slurm v1.0.38: the two features the
     # cquil11 fork was pinned for are merged upstream (present in v1.0.36) —
     #   - `srtctl apply --no-preflight` (skip the in-process model FS check):
