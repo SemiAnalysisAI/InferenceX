@@ -255,6 +255,7 @@ if [ "${#METRICS_ARGS[@]}" -gt 0 ]; then
 fi
 
 if [ "${EVAL_ONLY}" = "true" ]; then
+    git config --global --add safe.directory "$INFMAX_CONTAINER_WORKSPACE"
     run_eval --port "$PORT"
 else
     build_replay_cmd "$RESULT_DIR"
