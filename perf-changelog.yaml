@@ -5909,3 +5909,12 @@
     - "Increase MTP speculative steps from 3 to 5 (num-draft-tokens 4→6) and raise SGLANG_SIMULATE_ACC_LEN from 2.99 to 3.61 to reflect higher measured acceptance rate, targeting ~15% throughput improvement"
     - "Replace the TP8/EP8 low-concurrency arm (conc [1,2,4]) hicache offload with kv-offloading: none to reduce per-request latency at low load; conc [1,2,4] are now tested on both tp=4+hicache and tp=8+no-offload so SemiAnalysis can select the Pareto-optimal point per concurrency"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2570
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add an LMCache 0.5.4rc1 DRAM KV-offload arm at TP8 conc 10 on top of the DSpark MTP stack, mirroring the vllm-simple offload point for a direct backend comparison."
+    - "Run one LMCache MP server per node with chunk size 768 (the K3 unified block size at 8 GPUs) and --separate-object-groups for the hybrid KDA/MLA two-group KV layout."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2583
