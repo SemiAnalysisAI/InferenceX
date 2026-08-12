@@ -9,7 +9,7 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 export EVAL_FRAMEWORK="lm-eval"
 
 check_env_vars \
-    MODEL TP CONC EP_SIZE KV_OFFLOADING \
+    MODEL TP CONC EP_SIZE KV_OFFLOADING PORT EVAL_ONLY \
     RESULT_DIR DURATION
 
 require_agentic_kv_offload_none
@@ -85,7 +85,9 @@ SGLANG_CMD=(
     --context-length 1048576
     --max-total-tokens 1048576
     --chunked-prefill-size 131072
-    --mem-fraction-static 0.85
+    # Full 131072-token DSA prefills need transient workspace beyond the KV
+    # pool; 0.80 leaves enough headroom on 192 GB MI300X ranks.
+    --mem-fraction-static 0.80
     --max-running-requests "$MAX_RUNNING_REQUESTS"
     --cuda-graph-max-bs "$MAX_RUNNING_REQUESTS"
     --speculative-algorithm EAGLE
