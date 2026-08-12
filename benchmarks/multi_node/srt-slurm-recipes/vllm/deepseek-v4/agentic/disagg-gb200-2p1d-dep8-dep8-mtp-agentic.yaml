@@ -63,24 +63,26 @@ backend:
       data-parallel-size: 8
       enable-expert-parallel: true
       enable-ep-weight-filter: true
-      attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"use_fp4_indexer_cache":true}'
+      moe-backend: deep_gemm_mega_moe
+      attention-config: '{"use_fp4_indexer_cache":true}'
       max-model-len: 1048576
-      max-num-seqs: 64
-      max-num-batched-tokens: 8192
+      max-num-seqs: 16
+      max-num-batched-tokens: 16384
       trust-remote-code: true
-      no-enable-flashinfer-autotune: true
+      enforce-eager: true
       block-size: 256
       gpu-memory-utilization: 0.90
       no-disable-hybrid-kv-cache-manager: true
+      enable-sleep-mode: true
       tokenizer-mode: deepseek_v4
-      speculative-config: '{"method":"mtp","num_speculative_tokens":3}'
+      speculative-config: '{"method":"mtp","num_speculative_tokens":2}'
     decode:
       <<: *dep8_config
-      attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_fp4_indexer_cache":true}'
-      max-num-seqs: 512
+      enforce-eager: false
+      max-num-seqs: 1024
       max-num-batched-tokens: 1024
-      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
-      max-cudagraph-capture-size: 512
+      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY"}'
+      max-cudagraph-capture-size: 1024
       stream-interval: 10
 
 sbatch_directives: { cpus-per-task: "144", mem: "0" }
