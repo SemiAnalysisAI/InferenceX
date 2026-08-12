@@ -1310,28 +1310,74 @@ cat > "$WS/BLOCK_POOL_REFCNT.diff" <<'DIFF_BLOCK_POOL_REFCNT'
 diff --git a/vllm/v1/core/block_pool.py b/vllm/v1/core/block_pool.py
 --- a/vllm/v1/core/block_pool.py
 +++ b/vllm/v1/core/block_pool.py
-@@ -726,12 +726,29 @@ class BlockPool:
+@@ -26,12 +26,18 @@ from vllm.v1.core.kv_cache_utils import (
+     resolve_block_hashes,
+ )
+ from vllm.v1.request import Request
+ 
+ logger = init_logger(__name__)
+ 
++# Each underflow report carries a stack, so an unbounded stream both floods the
++# engine log (64k reports produced a 500 MB log in one hour) and slows the very
++# step it is diagnosing. The path is identical every time, so a handful is
++# enough to identify it; the rest are counted and surfaced by get_usage.
++_MAX_REFCNT_UNDERFLOW_REPORTS = 20
++
+ 
+ class BlockHashToBlockMap:
+     """
+     Cache of blocks that are used for prefix caching. It caches blocks
+     from hash directly to a block or multiple blocks
+     (i.e. {block_hash: KVCacheBlocks})
+@@ -187,12 +193,16 @@ class BlockPool:
+         # To represent a placeholder block with block_id=0.
+         # The ref_cnt of null_block is not maintained, needs special care to
+         # avoid freeing it.
+         self.null_block = self.free_block_queue.popleft()
+         self.null_block.is_null = True
+ 
++        # Diagnostics for the negative-KV-usage investigation.
++        self._refcnt_underflows = 0
++        self._negative_usage_reports = 0
++
+         self.enable_kv_cache_events = enable_kv_cache_events
+         self.kv_event_queue: list[KVCacheEvent] = []
+ 
+         self.metrics_collector = metrics_collector
+ 
+     def get_cached_block(
+@@ -726,12 +736,39 @@ class BlockPool:
          """
          # Identify blocks with hash (LRU cache) and without it (never match APC)
          blocks_with_hash = []
          blocks_without_hash = []
          for block in ordered_blocks:
              block.ref_cnt -= 1
-+            if block.ref_cnt < 0:
-+                # A block freed once too often. Left unreported this is silent
-+                # rather than harmless: the block is already in the free queue,
-+                # and touch() only unlinks at ref_cnt == 0, so the next prefix
-+                # hit raises it to 0 and leaves it queued while a request owns
-+                # it -- get_new_blocks' ref_cnt == 0 assertion then passes and
-+                # hands the same block to a second request.
-+                logger.error(
-+                    "Block %d freed with ref_cnt already 0 (now %d); the "
-+                    "block is in the free queue while still referenced. "
-+                    "Clamping to 0.",
-+                    block.block_id,
-+                    block.ref_cnt,
-+                    stack_info=True,
-+                )
++            if block.ref_cnt < 0 and not block.is_null:
++                # A real block freed once too often. Left unreported this is
++                # silent rather than harmless: the block is already in the free
++                # queue, and touch() only unlinks at ref_cnt == 0, so the next
++                # prefix hit raises it to 0 and leaves it queued while a request
++                # owns it -- get_new_blocks' ref_cnt == 0 assertion then passes
++                # and hands the same block to a second request.
++                #
++                # The null block is excluded because it is *supposed* to go
++                # negative: it is never touched, so it sits at ref_cnt 0, and
++                # hybrid models free null-filled slots constantly (see
++                # remove_skipped_blocks). Counting those produced ~64k reports
++                # per engine in one hour, all for block 0.
++                self._refcnt_underflows += 1
++                if self._refcnt_underflows <= _MAX_REFCNT_UNDERFLOW_REPORTS:
++                    logger.error(
++                        "Block %d freed with ref_cnt already 0 (now %d); the "
++                        "block is in the free queue while still referenced. "
++                        "Clamping to 0. (report %d/%d)",
++                        block.block_id,
++                        block.ref_cnt,
++                        self._refcnt_underflows,
++                        _MAX_REFCNT_UNDERFLOW_REPORTS,
++                        stack_info=True,
++                    )
 +                block.ref_cnt = 0
 +                continue
              if block.ref_cnt == 0 and not block.is_null:
@@ -1340,8 +1386,59 @@ diff --git a/vllm/v1/core/block_pool.py b/vllm/v1/core/block_pool.py
                  if block.block_hash is None and self.enable_caching:
                      blocks_without_hash.append(block)
                  else:
+@@ -812,13 +849,49 @@ class BlockPool:
+         """
+ 
+         # Subtract 1 to account for null block.
+         total_gpu_blocks = self.num_gpu_blocks - 1
+         if not total_gpu_blocks:
+             return 0
+-        return 1.0 - (self.get_num_free_blocks() / total_gpu_blocks)
++        num_free = self.get_num_free_blocks()
++        usage = 1.0 - (num_free / total_gpu_blocks)
++        if usage < 0:
++            self._report_negative_usage(num_free, total_gpu_blocks)
++        return usage
++
++    def _report_negative_usage(self, num_free: int, total_gpu_blocks: int) -> None:
++        """Explain a negative usage reading at the moment it is computed.
++
++        Negative usage means the counter claims more free blocks than the pool
++        can hold, so it is always a bookkeeping fault. Comparing the counter
++        against an actual walk of the list separates the two possible causes:
++        equal means the list really does hold an extra block (something was
++        inserted that should not have been), while a shorter walk means the
++        counter drifted from the list (an insert or removal updated one and not
++        the other). Without this the only evidence is a rounded percentage in a
++        metrics line.
++        """
++        self._negative_usage_reports += 1
++        if self._negative_usage_reports > _MAX_REFCNT_UNDERFLOW_REPORTS:
++            return
++        walked = len(self.free_block_queue.get_all_free_blocks())
++        logger.error(
++            "Negative KV cache usage: num_free_blocks=%d exceeds usable pool "
++            "%d (null block excluded). Walking the free list found %d blocks, "
++            "so the %s. ref_cnt underflows so far: %d.",
++            num_free,
++            total_gpu_blocks,
++            walked,
++            (
++                "list genuinely holds an extra block"
++                if walked == num_free
++                else "counter has drifted from the list"
++            ),
++            self._refcnt_underflows,
++            stack_info=True,
++        )
+ 
+     def take_events(self) -> list[KVCacheEvent]:
+         """Atomically takes all events and clears the queue.
+ 
+         Returns:
+             A list of KV cache events.
 DIFF_BLOCK_POOL_REFCNT
-apply_one "vllm/v1/core/block_pool.py" "freed with ref_cnt already 0" "$WS/BLOCK_POOL_REFCNT.diff"
+apply_one "vllm/v1/core/block_pool.py" "_report_negative_usage" "$WS/BLOCK_POOL_REFCNT.diff"
 
 
 say "3/4 aiter #4521 (fp8 cp round-robin asm MLA verify kernels)  [needs network + hipcc + GPU]"
