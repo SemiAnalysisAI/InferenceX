@@ -47,6 +47,8 @@ backend:
     VLLM_RPC_TIMEOUT: "600000"
     VLLM_LOG_STATS_INTERVAL: "1"
     VLLM_SERVER_DEV_MODE: "1"
+    VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
+    VLLM_USE_NCCL_SYMM_MEM: "1"
     NCCL_CUMEM_ENABLE: "1"
     NCCL_MNNVL_ENABLE: "1"
     NCCL_NVLS_ENABLE: "1"
@@ -70,8 +72,7 @@ backend:
       max-num-batched-tokens: 8192
       trust-remote-code: true
       block-size: 256
-      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
-      max-cudagraph-capture-size: 256
+      compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}'
       speculative-config: '{"method":"mtp","num_speculative_tokens":2}'
       gpu-memory-utilization: 0.90
       stream-interval: 10
