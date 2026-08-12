@@ -29,6 +29,12 @@ if [[ -f /config/hicache_mc.env ]]; then
     echo "[env.sh] sourced HiCache config from /config/hicache_mc.env (HICACHE_PAGE_SIZE=${HICACHE_PAGE_SIZE:-unset})"
 fi
 
+# Router policy: master yaml / recipe export ROUTER_* names; job.slurm historically
+# forwarded only PREFILL_ROUTER_POLICY/DECODE_ROUTER_POLICY via docker -e (which
+# server_sglang.sh never reads). Prefer ROUTER_*; fall back to legacy names.
+export ROUTER_PREFILL_POLICY="${ROUTER_PREFILL_POLICY:-${PREFILL_ROUTER_POLICY:-}}"
+export ROUTER_DECODE_POLICY="${ROUTER_DECODE_POLICY:-${DECODE_ROUTER_POLICY:-}}"
+
 # =============================================================================
 # Shared: IBDEVICES detection
 # =============================================================================

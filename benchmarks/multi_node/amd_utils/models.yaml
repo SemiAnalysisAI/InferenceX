@@ -285,7 +285,7 @@ GLM-5.2-MXFP4-AgentX:
       chunked_prefill_size: 65536
       context_length: 1048576
   decode:
-    mem_fraction_static: 0.85
+    mem_fraction_static: 0.80
     prefill_round_robin_balance: true
     disagg_decode_enable_radix_cache: false
     dp:

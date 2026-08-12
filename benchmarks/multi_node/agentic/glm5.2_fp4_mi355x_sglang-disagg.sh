@@ -107,6 +107,7 @@ fi
 # and DISAGG=true (ionic MSN-safe overrides; other models/topologies unchanged).
 
 export ROUTER_PREFILL_POLICY="${ROUTER_PREFILL_POLICY:-${PREFILL_ROUTER_POLICY:-cache_aware}}"
+export ROUTER_DECODE_POLICY="${ROUTER_DECODE_POLICY:-${DECODE_ROUTER_POLICY:-}}"
 export ENABLE_METRICS="${ENABLE_METRICS:-1}"
 
 if [[ "${SPEC_DECODING:-none}" == "mtp" || "${DECODE_MTP_SIZE:-0}" -gt 0 ]]; then
