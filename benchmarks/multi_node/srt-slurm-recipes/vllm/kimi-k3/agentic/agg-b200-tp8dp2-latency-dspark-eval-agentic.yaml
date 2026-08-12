@@ -93,12 +93,12 @@ srun_options:
 
 benchmark:
   type: custom
-  aiperf_server_metrics: true
   command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
   env:
     INFMAX_CONTAINER_WORKSPACE: "/infmax-workspace"
     AIPERF_TRACE_IDLE_GAP_CAP_SECONDS: "300"
     AIPERF_LIVE_FAILED_REQUEST_THRESHOLD: "0.25"
+    AIPERF_SERVER_METRICS_URLS: "http://localhost:8000/metrics"
     AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:"
     RESULT_DIR: "/logs/agentic"
     PORT: "8000"
