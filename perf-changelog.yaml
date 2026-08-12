@@ -5823,4 +5823,5 @@
     - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
   description:
     - "Fix AIPerf server-metrics configuration for the pinned Kimi K3 srt-slurm renderer by passing the aggregate vLLM endpoint through the supported custom-benchmark environment contract"
+    - "After the complete 19-point AgentX-fast search, retain resident c2/c4/c8/c12 and SimpleCPUOffloadConnector c8/c12/c16/c28/c32/c48 for the full-duration latency curve, knee, cliff boundary, and high-capacity controls"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2569
