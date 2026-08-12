@@ -220,7 +220,7 @@ python3 $WS_PATH/sync.py barrier \
     --node-ips ${IPADDRS} \
     --node-ports 5000 \
     --wait-for-all-ports \
-    --timeout 600
+    --timeout 600 || exit 1
 
 # =============================================================================
 # Cluster Topology Configuration
