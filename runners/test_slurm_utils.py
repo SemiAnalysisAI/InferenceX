@@ -2,8 +2,8 @@ import json
 import os
 import subprocess
 from pathlib import Path
-import yaml
 
+import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SLURM_UTILS = REPO_ROOT / "runners" / "slurm_utils.sh"
@@ -242,7 +242,6 @@ def test_gb200_kimi_compilation_config_preserves_all_settings() -> None:
         assert compilation_config["pass_config"]["fuse_allreduce_rms"] is False
 
 
-
 def test_gb200_dynamo_kimi_recipes_enable_structural_tool_constraints() -> None:
     recipe_dir = (
         REPO_ROOT / "benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic"
@@ -259,6 +258,7 @@ def test_gb200_dynamo_kimi_recipes_enable_structural_tool_constraints() -> None:
         config = recipe["backend"]["vllm_config"]["aggregated"]
         assert config["dyn-tool-call-parser"] == "kimi_k3"
         assert config["dyn-enable-structural-tag"] is True
+
 
 def test_b200_kimi_recipe_uses_available_roce_devices() -> None:
     recipe_path = (
