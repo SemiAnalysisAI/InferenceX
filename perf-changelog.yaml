@@ -5903,4 +5903,4 @@
     - "Add HiCache DRAM KV-offload arms mirroring the resident TP2/EP2 and TP4 EAGLE MTP concurrency points, so every measured resident point has a host-tier counterpart."
     - "Run the HiCache arms at page size 64 with kernel io-backend and page_first layout, sized to 80 percent of the workflow DRAM budget at a 180 GB per-rank ceiling."
     - "Patch sgl-project/sglang#34560 into the container for the HiCache arms only: Qwen3.5 leaves num_nextn_predict_layers unset on hf_text_config, which misroutes the MTP draft cache to the sidecar path and aborts startup."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PENDING
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2582
