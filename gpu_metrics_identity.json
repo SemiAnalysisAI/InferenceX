@@ -1,0 +1,2540 @@
+{
+    "gpu_data": [
+        {
+            "gpu": 0,
+            "asic": {
+                "market_name": "AMD Instinct MI355X",
+                "vendor_id": "0x1002",
+                "vendor_name": "Advanced Micro Devices Inc. [AMD/ATI]",
+                "subvendor_id": "0x1002",
+                "device_id": "0x75a3",
+                "subsystem_id": "0x75a3",
+                "rev_id": "0x00",
+                "asic_serial": "0x75E3FD74AAB3F72C",
+                "oam_id": 6,
+                "num_compute_units": 256,
+                "target_graphics_version": "gfx950"
+            },
+            "bus": {
+                "bdf": "0000:05:00.0",
+                "max_pcie_width": 16,
+                "max_pcie_speed": {
+                    "value": 32,
+                    "unit": "GT/s"
+                },
+                "pcie_levels": "N/A",
+                "pcie_interface_version": "Gen 5",
+                "slot_type": "OAM"
+            },
+            "ifwi": {
+                "name": "AMD MI355X",
+                "build_date": "2025/10/23 15:17",
+                "part_number": "113-M355-01-1K1-010C",
+                "version": "00167319"
+            },
+            "limit": {
+                "ppt0": {
+                    "max_power_limit": {
+                        "value": 1400,
+                        "unit": "W"
+                    },
+                    "min_power_limit": {
+                        "value": 0,
+                        "unit": "W"
+                    },
+                    "socket_power_limit": {
+                        "value": 1400,
+                        "unit": "W"
+                    }
+                },
+                "ppt1": {
+                    "max_power_limit": "N/A",
+                    "min_power_limit": "N/A",
+                    "socket_power_limit": "N/A"
+                },
+                "slowdown_edge_temperature": "N/A",
+                "slowdown_hotspot_temperature": {
+                    "value": 100,
+                    "unit": "C"
+                },
+                "slowdown_vram_temperature": {
+                    "value": 115,
+                    "unit": "C"
+                },
+                "shutdown_edge_temperature": "N/A",
+                "shutdown_hotspot_temperature": {
+                    "value": 112,
+                    "unit": "C"
+                },
+                "shutdown_vram_temperature": {
+                    "value": 125,
+                    "unit": "C"
+                },
+                "ptl_state": "N/A",
+                "ptl_format": "N/A"
+            },
+            "driver": {
+                "name": "amdgpu",
+                "version": "6.16.6"
+            },
+            "board": {
+                "model_number": "102-G36220-0C",
+                "product_serial": "692526014242",
+                "fru_id": "113-AMDG362200C90-100-300000193",
+                "product_name": "AMD Instinct MI355 OAM",
+                "manufacturer_name": "AMD"
+            },
+            "ras": {
+                "eeprom_version": "0x30000",
+                "bad_page_threshold": "N/A",
+                "bad_page_threshold_exceeded": "N/A",
+                "parity_schema": "DISABLED",
+                "single_bit_schema": "DISABLED",
+                "double_bit_schema": "DISABLED",
+                "poison_schema": "ENABLED",
+                "ecc_block_state": {
+                    "UMC": "ENABLED",
+                    "SDMA": "ENABLED",
+                    "GFX": "ENABLED",
+                    "MMHUB": "ENABLED",
+                    "ATHUB": "ENABLED",
+                    "PCIE_BIF": "ENABLED",
+                    "HDP": "ENABLED",
+                    "XGMI_WAFL": "ENABLED",
+                    "DF": "ENABLED",
+                    "SMN": "ENABLED",
+                    "SEM": "DISABLED",
+                    "MP0": "ENABLED",
+                    "MP1": "ENABLED",
+                    "FUSE": "DISABLED",
+                    "MCA": "ENABLED",
+                    "VCN": "ENABLED",
+                    "JPEG": "ENABLED",
+                    "IH": "ENABLED",
+                    "MPIO": "ENABLED"
+                }
+            },
+            "soc_pstate": "N/A",
+            "xgmi_plpd": "N/A",
+            "process_isolation": "Disabled",
+            "numa": {
+                "node": 0,
+                "affinity": 0,
+                "cpu_affinity": {
+                    "cpu_list_0": {
+                        "bitmask": "FFFFFFFFFFFFFFFF",
+                        "cpu_cores_affinity": "0-63"
+                    },
+                    "cpu_list_1": {
+                        "bitmask": "0000000000000000",
+                        "cpu_cores_affinity": "N/A"
+                    }
+                },
+                "socket_affinity": {
+                    "cpu_list_0": {
+                        "bitmask": "FFFFFFFFFFFFFFFF",
+                        "cpu_cores_affinity": "0-63"
+                    },
+                    "cpu_list_1": {
+                        "bitmask": "0000000000000000",
+                        "cpu_cores_affinity": "N/A"
+                    }
+                }
+            },
+            "vram": {
+                "type": "HBM3E",
+                "vendor": "SAMSUNG",
+                "size": {
+                    "value": 294896,
+                    "unit": "MB"
+                },
+                "bit_width": 8192,
+                "max_bandwidth": {
+                    "value": 8192,
+                    "unit": "GB/s"
+                }
+            },
+            "cache_info": [
+                {
+                    "cache": 0,
+                    "cache_properties": [
+                        "DATA_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 32,
+                        "unit": "KB"
+                    },
+                    "cache_level": 1,
+                    "max_num_cu_shared": 1,
+                    "num_cache_instance": 256
+                },
+                {
+                    "cache": 1,
+                    "cache_properties": [
+                        "INST_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 64,
+                        "unit": "KB"
+                    },
+                    "cache_level": 1,
+                    "max_num_cu_shared": 2,
+                    "num_cache_instance": 112
+                },
+                {
+                    "cache": 2,
+                    "cache_properties": [
+                        "INST_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 64,
+                        "unit": "KB"
+                    },
+                    "cache_level": 1,
+                    "max_num_cu_shared": 1,
+                    "num_cache_instance": 32
+                },
+                {
+                    "cache": 3,
+                    "cache_properties": [
+                        "DATA_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 16,
+                        "unit": "KB"
+                    },
+                    "cache_level": 1,
+                    "max_num_cu_shared": 2,
+                    "num_cache_instance": 112
+                },
+                {
+                    "cache": 4,
+                    "cache_properties": [
+                        "DATA_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 16,
+                        "unit": "KB"
+                    },
+                    "cache_level": 1,
+                    "max_num_cu_shared": 1,
+                    "num_cache_instance": 32
+                },
+                {
+                    "cache": 5,
+                    "cache_properties": [
+                        "DATA_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 4096,
+                        "unit": "KB"
+                    },
+                    "cache_level": 2,
+                    "max_num_cu_shared": 256,
+                    "num_cache_instance": 1
+                },
+                {
+                    "cache": 6,
+                    "cache_properties": [
+                        "DATA_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 262144,
+                        "unit": "KB"
+                    },
+                    "cache_level": 3,
+                    "max_num_cu_shared": 256,
+                    "num_cache_instance": 1
+                }
+            ],
+            "clock": {
+                "sys": {
+                    "current_level": 0,
+                    "current_frequency": "95MHz",
+                    "frequency_levels": {
+                        "Level 0": "95 MHz",
+                        "Level 1": "500 MHz",
+                        "Level 2": "2400 MHz"
+                    }
+                },
+                "mem": {
+                    "current_level": 0,
+                    "current_frequency": "2000MHz",
+                    "frequency_levels": {
+                        "Level 0": "2000 MHz"
+                    }
+                },
+                "df": {
+                    "current_level": 0,
+                    "current_frequency": "1250MHz",
+                    "frequency_levels": {
+                        "Level 0": "1250 MHz"
+                    }
+                },
+                "soc": {
+                    "current_level": 0,
+                    "current_frequency": "42MHz",
+                    "frequency_levels": {
+                        "Level 0": "42 MHz",
+                        "Level 1": "1200 MHz"
+                    }
+                },
+                "dcef": "N/A",
+                "vclk0": {
+                    "current_level": 0,
+                    "current_frequency": "59MHz",
+                    "frequency_levels": {
+                        "Level 0": "59 MHz"
+                    }
+                },
+                "vclk1": {
+                    "current_level": 0,
+                    "current_frequency": "59MHz",
+                    "frequency_levels": {
+                        "Level 0": "59 MHz"
+                    }
+                },
+                "dclk0": {
+                    "current_level": 0,
+                    "current_frequency": "48MHz",
+                    "frequency_levels": {
+                        "Level 0": "48 MHz"
+                    }
+                },
+                "dclk1": {
+                    "current_level": 0,
+                    "current_frequency": "48MHz",
+                    "frequency_levels": {
+                        "Level 0": "48 MHz"
+                    }
+                }
+            }
+        },
+        {
+            "gpu": 1,
+            "asic": {
+                "market_name": "AMD Instinct MI355X",
+                "vendor_id": "0x1002",
+                "vendor_name": "Advanced Micro Devices Inc. [AMD/ATI]",
+                "subvendor_id": "0x1002",
+                "device_id": "0x75a3",
+                "subsystem_id": "0x75a3",
+                "rev_id": "0x00",
+                "asic_serial": "0x6889743843AFE909",
+                "oam_id": 7,
+                "num_compute_units": 256,
+                "target_graphics_version": "gfx950"
+            },
+            "bus": {
+                "bdf": "0000:15:00.0",
+                "max_pcie_width": 16,
+                "max_pcie_speed": {
+                    "value": 32,
+                    "unit": "GT/s"
+                },
+                "pcie_levels": "N/A",
+                "pcie_interface_version": "Gen 5",
+                "slot_type": "OAM"
+            },
+            "ifwi": {
+                "name": "AMD MI355X",
+                "build_date": "2025/10/23 15:17",
+                "part_number": "113-M355-01-1K1-010C",
+                "version": "00167319"
+            },
+            "limit": {
+                "ppt0": {
+                    "max_power_limit": {
+                        "value": 1400,
+                        "unit": "W"
+                    },
+                    "min_power_limit": {
+                        "value": 0,
+                        "unit": "W"
+                    },
+                    "socket_power_limit": {
+                        "value": 1400,
+                        "unit": "W"
+                    }
+                },
+                "ppt1": {
+                    "max_power_limit": "N/A",
+                    "min_power_limit": "N/A",
+                    "socket_power_limit": "N/A"
+                },
+                "slowdown_edge_temperature": "N/A",
+                "slowdown_hotspot_temperature": {
+                    "value": 100,
+                    "unit": "C"
+                },
+                "slowdown_vram_temperature": {
+                    "value": 115,
+                    "unit": "C"
+                },
+                "shutdown_edge_temperature": "N/A",
+                "shutdown_hotspot_temperature": {
+                    "value": 112,
+                    "unit": "C"
+                },
+                "shutdown_vram_temperature": {
+                    "value": 125,
+                    "unit": "C"
+                },
+                "ptl_state": "N/A",
+                "ptl_format": "N/A"
+            },
+            "driver": {
+                "name": "amdgpu",
+                "version": "6.16.6"
+            },
+            "board": {
+                "model_number": "102-G36221-0C",
+                "product_serial": "692526018761",
+                "fru_id": "113-AMDG362210C90-100-300000193",
+                "product_name": "AMD Instinct MI355 OAM",
+                "manufacturer_name": "AMD"
+            },
+            "ras": {
+                "eeprom_version": "0x30000",
+                "bad_page_threshold": "N/A",
+                "bad_page_threshold_exceeded": "N/A",
+                "parity_schema": "DISABLED",
+                "single_bit_schema": "DISABLED",
+                "double_bit_schema": "DISABLED",
+                "poison_schema": "ENABLED",
+                "ecc_block_state": {
+                    "UMC": "ENABLED",
+                    "SDMA": "ENABLED",
+                    "GFX": "ENABLED",
+                    "MMHUB": "ENABLED",
+                    "ATHUB": "ENABLED",
+                    "PCIE_BIF": "ENABLED",
+                    "HDP": "ENABLED",
+                    "XGMI_WAFL": "ENABLED",
+                    "DF": "ENABLED",
+                    "SMN": "ENABLED",
+                    "SEM": "DISABLED",
+                    "MP0": "ENABLED",
+                    "MP1": "ENABLED",
+                    "FUSE": "DISABLED",
+                    "MCA": "ENABLED",
+                    "VCN": "ENABLED",
+                    "JPEG": "ENABLED",
+                    "IH": "ENABLED",
+                    "MPIO": "ENABLED"
+                }
+            },
+            "soc_pstate": "N/A",
+            "xgmi_plpd": "N/A",
+            "process_isolation": "Disabled",
+            "numa": {
+                "node": 0,
+                "affinity": 0,
+                "cpu_affinity": {
+                    "cpu_list_0": {
+                        "bitmask": "FFFFFFFFFFFFFFFF",
+                        "cpu_cores_affinity": "0-63"
+                    },
+                    "cpu_list_1": {
+                        "bitmask": "0000000000000000",
+                        "cpu_cores_affinity": "N/A"
+                    }
+                },
+                "socket_affinity": {
+                    "cpu_list_0": {
+                        "bitmask": "FFFFFFFFFFFFFFFF",
+                        "cpu_cores_affinity": "0-63"
+                    },
+                    "cpu_list_1": {
+                        "bitmask": "0000000000000000",
+                        "cpu_cores_affinity": "N/A"
+                    }
+                }
+            },
+            "vram": {
+                "type": "HBM3E",
+                "vendor": "SAMSUNG",
+                "size": {
+                    "value": 294896,
+                    "unit": "MB"
+                },
+                "bit_width": 8192,
+                "max_bandwidth": {
+                    "value": 8192,
+                    "unit": "GB/s"
+                }
+            },
+            "cache_info": [
+                {
+                    "cache": 0,
+                    "cache_properties": [
+                        "DATA_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 32,
+                        "unit": "KB"
+                    },
+                    "cache_level": 1,
+                    "max_num_cu_shared": 1,
+                    "num_cache_instance": 256
+                },
+                {
+                    "cache": 1,
+                    "cache_properties": [
+                        "INST_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 64,
+                        "unit": "KB"
+                    },
+                    "cache_level": 1,
+                    "max_num_cu_shared": 2,
+                    "num_cache_instance": 112
+                },
+                {
+                    "cache": 2,
+                    "cache_properties": [
+                        "INST_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 64,
+                        "unit": "KB"
+                    },
+                    "cache_level": 1,
+                    "max_num_cu_shared": 1,
+                    "num_cache_instance": 32
+                },
+                {
+                    "cache": 3,
+                    "cache_properties": [
+                        "DATA_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 16,
+                        "unit": "KB"
+                    },
+                    "cache_level": 1,
+                    "max_num_cu_shared": 2,
+                    "num_cache_instance": 112
+                },
+                {
+                    "cache": 4,
+                    "cache_properties": [
+                        "DATA_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 16,
+                        "unit": "KB"
+                    },
+                    "cache_level": 1,
+                    "max_num_cu_shared": 1,
+                    "num_cache_instance": 32
+                },
+                {
+                    "cache": 5,
+                    "cache_properties": [
+                        "DATA_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 4096,
+                        "unit": "KB"
+                    },
+                    "cache_level": 2,
+                    "max_num_cu_shared": 256,
+                    "num_cache_instance": 1
+                },
+                {
+                    "cache": 6,
+                    "cache_properties": [
+                        "DATA_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 262144,
+                        "unit": "KB"
+                    },
+                    "cache_level": 3,
+                    "max_num_cu_shared": 256,
+                    "num_cache_instance": 1
+                }
+            ],
+            "clock": {
+                "sys": {
+                    "current_level": 0,
+                    "current_frequency": "95MHz",
+                    "frequency_levels": {
+                        "Level 0": "95 MHz",
+                        "Level 1": "500 MHz",
+                        "Level 2": "2400 MHz"
+                    }
+                },
+                "mem": {
+                    "current_level": 0,
+                    "current_frequency": "2000MHz",
+                    "frequency_levels": {
+                        "Level 0": "2000 MHz"
+                    }
+                },
+                "df": {
+                    "current_level": 0,
+                    "current_frequency": "1250MHz",
+                    "frequency_levels": {
+                        "Level 0": "1250 MHz"
+                    }
+                },
+                "soc": {
+                    "current_level": 0,
+                    "current_frequency": "42MHz",
+                    "frequency_levels": {
+                        "Level 0": "42 MHz",
+                        "Level 1": "1200 MHz"
+                    }
+                },
+                "dcef": "N/A",
+                "vclk0": {
+                    "current_level": 0,
+                    "current_frequency": "59MHz",
+                    "frequency_levels": {
+                        "Level 0": "59 MHz"
+                    }
+                },
+                "vclk1": {
+                    "current_level": 0,
+                    "current_frequency": "59MHz",
+                    "frequency_levels": {
+                        "Level 0": "59 MHz"
+                    }
+                },
+                "dclk0": {
+                    "current_level": 0,
+                    "current_frequency": "48MHz",
+                    "frequency_levels": {
+                        "Level 0": "48 MHz"
+                    }
+                },
+                "dclk1": {
+                    "current_level": 0,
+                    "current_frequency": "48MHz",
+                    "frequency_levels": {
+                        "Level 0": "48 MHz"
+                    }
+                }
+            }
+        },
+        {
+            "gpu": 2,
+            "asic": {
+                "market_name": "AMD Instinct MI355X",
+                "vendor_id": "0x1002",
+                "vendor_name": "Advanced Micro Devices Inc. [AMD/ATI]",
+                "subvendor_id": "0x1002",
+                "device_id": "0x75a3",
+                "subsystem_id": "0x75a3",
+                "rev_id": "0x00",
+                "asic_serial": "0x2669ED28AAB4D3F3",
+                "oam_id": 5,
+                "num_compute_units": 256,
+                "target_graphics_version": "gfx950"
+            },
+            "bus": {
+                "bdf": "0000:65:00.0",
+                "max_pcie_width": 16,
+                "max_pcie_speed": {
+                    "value": 32,
+                    "unit": "GT/s"
+                },
+                "pcie_levels": "N/A",
+                "pcie_interface_version": "Gen 5",
+                "slot_type": "OAM"
+            },
+            "ifwi": {
+                "name": "AMD MI355X",
+                "build_date": "2025/10/23 15:17",
+                "part_number": "113-M355-01-1K1-010C",
+                "version": "00167319"
+            },
+            "limit": {
+                "ppt0": {
+                    "max_power_limit": {
+                        "value": 1400,
+                        "unit": "W"
+                    },
+                    "min_power_limit": {
+                        "value": 0,
+                        "unit": "W"
+                    },
+                    "socket_power_limit": {
+                        "value": 1400,
+                        "unit": "W"
+                    }
+                },
+                "ppt1": {
+                    "max_power_limit": "N/A",
+                    "min_power_limit": "N/A",
+                    "socket_power_limit": "N/A"
+                },
+                "slowdown_edge_temperature": "N/A",
+                "slowdown_hotspot_temperature": {
+                    "value": 100,
+                    "unit": "C"
+                },
+                "slowdown_vram_temperature": {
+                    "value": 115,
+                    "unit": "C"
+                },
+                "shutdown_edge_temperature": "N/A",
+                "shutdown_hotspot_temperature": {
+                    "value": 112,
+                    "unit": "C"
+                },
+                "shutdown_vram_temperature": {
+                    "value": 125,
+                    "unit": "C"
+                },
+                "ptl_state": "N/A",
+                "ptl_format": "N/A"
+            },
+            "driver": {
+                "name": "amdgpu",
+                "version": "6.16.6"
+            },
+            "board": {
+                "model_number": "102-G36220-0C",
+                "product_serial": "692526014230",
+                "fru_id": "113-AMDG362200C90-100-300000193",
+                "product_name": "AMD Instinct MI355 OAM",
+                "manufacturer_name": "AMD"
+            },
+            "ras": {
+                "eeprom_version": "0x30000",
+                "bad_page_threshold": "N/A",
+                "bad_page_threshold_exceeded": "N/A",
+                "parity_schema": "DISABLED",
+                "single_bit_schema": "DISABLED",
+                "double_bit_schema": "DISABLED",
+                "poison_schema": "ENABLED",
+                "ecc_block_state": {
+                    "UMC": "ENABLED",
+                    "SDMA": "ENABLED",
+                    "GFX": "ENABLED",
+                    "MMHUB": "ENABLED",
+                    "ATHUB": "ENABLED",
+                    "PCIE_BIF": "ENABLED",
+                    "HDP": "ENABLED",
+                    "XGMI_WAFL": "ENABLED",
+                    "DF": "ENABLED",
+                    "SMN": "ENABLED",
+                    "SEM": "DISABLED",
+                    "MP0": "ENABLED",
+                    "MP1": "ENABLED",
+                    "FUSE": "DISABLED",
+                    "MCA": "ENABLED",
+                    "VCN": "ENABLED",
+                    "JPEG": "ENABLED",
+                    "IH": "ENABLED",
+                    "MPIO": "ENABLED"
+                }
+            },
+            "soc_pstate": "N/A",
+            "xgmi_plpd": "N/A",
+            "process_isolation": "Disabled",
+            "numa": {
+                "node": 0,
+                "affinity": 0,
+                "cpu_affinity": {
+                    "cpu_list_0": {
+                        "bitmask": "FFFFFFFFFFFFFFFF",
+                        "cpu_cores_affinity": "0-63"
+                    },
+                    "cpu_list_1": {
+                        "bitmask": "0000000000000000",
+                        "cpu_cores_affinity": "N/A"
+                    }
+                },
+                "socket_affinity": {
+                    "cpu_list_0": {
+                        "bitmask": "FFFFFFFFFFFFFFFF",
+                        "cpu_cores_affinity": "0-63"
+                    },
+                    "cpu_list_1": {
+                        "bitmask": "0000000000000000",
+                        "cpu_cores_affinity": "N/A"
+                    }
+                }
+            },
+            "vram": {
+                "type": "HBM3E",
+                "vendor": "SAMSUNG",
+                "size": {
+                    "value": 294896,
+                    "unit": "MB"
+                },
+                "bit_width": 8192,
+                "max_bandwidth": {
+                    "value": 8192,
+                    "unit": "GB/s"
+                }
+            },
+            "cache_info": [
+                {
+                    "cache": 0,
+                    "cache_properties": [
+                        "DATA_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 32,
+                        "unit": "KB"
+                    },
+                    "cache_level": 1,
+                    "max_num_cu_shared": 1,
+                    "num_cache_instance": 256
+                },
+                {
+                    "cache": 1,
+                    "cache_properties": [
+                        "INST_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 64,
+                        "unit": "KB"
+                    },
+                    "cache_level": 1,
+                    "max_num_cu_shared": 2,
+                    "num_cache_instance": 112
+                },
+                {
+                    "cache": 2,
+                    "cache_properties": [
+                        "INST_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 64,
+                        "unit": "KB"
+                    },
+                    "cache_level": 1,
+                    "max_num_cu_shared": 1,
+                    "num_cache_instance": 32
+                },
+                {
+                    "cache": 3,
+                    "cache_properties": [
+                        "DATA_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 16,
+                        "unit": "KB"
+                    },
+                    "cache_level": 1,
+                    "max_num_cu_shared": 2,
+                    "num_cache_instance": 112
+                },
+                {
+                    "cache": 4,
+                    "cache_properties": [
+                        "DATA_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 16,
+                        "unit": "KB"
+                    },
+                    "cache_level": 1,
+                    "max_num_cu_shared": 1,
+                    "num_cache_instance": 32
+                },
+                {
+                    "cache": 5,
+                    "cache_properties": [
+                        "DATA_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 4096,
+                        "unit": "KB"
+                    },
+                    "cache_level": 2,
+                    "max_num_cu_shared": 256,
+                    "num_cache_instance": 1
+                },
+                {
+                    "cache": 6,
+                    "cache_properties": [
+                        "DATA_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 262144,
+                        "unit": "KB"
+                    },
+                    "cache_level": 3,
+                    "max_num_cu_shared": 256,
+                    "num_cache_instance": 1
+                }
+            ],
+            "clock": {
+                "sys": {
+                    "current_level": 0,
+                    "current_frequency": "94MHz",
+                    "frequency_levels": {
+                        "Level 0": "94 MHz",
+                        "Level 1": "500 MHz",
+                        "Level 2": "2400 MHz"
+                    }
+                },
+                "mem": {
+                    "current_level": 0,
+                    "current_frequency": "2000MHz",
+                    "frequency_levels": {
+                        "Level 0": "2000 MHz"
+                    }
+                },
+                "df": {
+                    "current_level": 0,
+                    "current_frequency": "1250MHz",
+                    "frequency_levels": {
+                        "Level 0": "1250 MHz"
+                    }
+                },
+                "soc": {
+                    "current_level": 0,
+                    "current_frequency": "41MHz",
+                    "frequency_levels": {
+                        "Level 0": "41 MHz",
+                        "Level 1": "1200 MHz"
+                    }
+                },
+                "dcef": "N/A",
+                "vclk0": {
+                    "current_level": 0,
+                    "current_frequency": "59MHz",
+                    "frequency_levels": {
+                        "Level 0": "59 MHz"
+                    }
+                },
+                "vclk1": {
+                    "current_level": 0,
+                    "current_frequency": "59MHz",
+                    "frequency_levels": {
+                        "Level 0": "59 MHz"
+                    }
+                },
+                "dclk0": {
+                    "current_level": 0,
+                    "current_frequency": "48MHz",
+                    "frequency_levels": {
+                        "Level 0": "48 MHz"
+                    }
+                },
+                "dclk1": {
+                    "current_level": 0,
+                    "current_frequency": "48MHz",
+                    "frequency_levels": {
+                        "Level 0": "48 MHz"
+                    }
+                }
+            }
+        },
+        {
+            "gpu": 3,
+            "asic": {
+                "market_name": "AMD Instinct MI355X",
+                "vendor_id": "0x1002",
+                "vendor_name": "Advanced Micro Devices Inc. [AMD/ATI]",
+                "subvendor_id": "0x1002",
+                "device_id": "0x75a3",
+                "subsystem_id": "0x75a3",
+                "rev_id": "0x00",
+                "asic_serial": "0xB21043F908AF94C1",
+                "oam_id": 4,
+                "num_compute_units": 256,
+                "target_graphics_version": "gfx950"
+            },
+            "bus": {
+                "bdf": "0000:75:00.0",
+                "max_pcie_width": 16,
+                "max_pcie_speed": {
+                    "value": 32,
+                    "unit": "GT/s"
+                },
+                "pcie_levels": "N/A",
+                "pcie_interface_version": "Gen 5",
+                "slot_type": "OAM"
+            },
+            "ifwi": {
+                "name": "AMD MI355X",
+                "build_date": "2025/10/23 15:17",
+                "part_number": "113-M355-01-1K1-010C",
+                "version": "00167319"
+            },
+            "limit": {
+                "ppt0": {
+                    "max_power_limit": {
+                        "value": 1400,
+                        "unit": "W"
+                    },
+                    "min_power_limit": {
+                        "value": 0,
+                        "unit": "W"
+                    },
+                    "socket_power_limit": {
+                        "value": 1400,
+                        "unit": "W"
+                    }
+                },
+                "ppt1": {
+                    "max_power_limit": "N/A",
+                    "min_power_limit": "N/A",
+                    "socket_power_limit": "N/A"
+                },
+                "slowdown_edge_temperature": "N/A",
+                "slowdown_hotspot_temperature": {
+                    "value": 100,
+                    "unit": "C"
+                },
+                "slowdown_vram_temperature": {
+                    "value": 115,
+                    "unit": "C"
+                },
+                "shutdown_edge_temperature": "N/A",
+                "shutdown_hotspot_temperature": {
+                    "value": 112,
+                    "unit": "C"
+                },
+                "shutdown_vram_temperature": {
+                    "value": 125,
+                    "unit": "C"
+                },
+                "ptl_state": "N/A",
+                "ptl_format": "N/A"
+            },
+            "driver": {
+                "name": "amdgpu",
+                "version": "6.16.6"
+            },
+            "board": {
+                "model_number": "102-G36221-0C",
+                "product_serial": "692526018597",
+                "fru_id": "113-AMDG362210C90-100-300000193",
+                "product_name": "AMD Instinct MI355 OAM",
+                "manufacturer_name": "AMD"
+            },
+            "ras": {
+                "eeprom_version": "0x30000",
+                "bad_page_threshold": "N/A",
+                "bad_page_threshold_exceeded": "N/A",
+                "parity_schema": "DISABLED",
+                "single_bit_schema": "DISABLED",
+                "double_bit_schema": "DISABLED",
+                "poison_schema": "ENABLED",
+                "ecc_block_state": {
+                    "UMC": "ENABLED",
+                    "SDMA": "ENABLED",
+                    "GFX": "ENABLED",
+                    "MMHUB": "ENABLED",
+                    "ATHUB": "ENABLED",
+                    "PCIE_BIF": "ENABLED",
+                    "HDP": "ENABLED",
+                    "XGMI_WAFL": "ENABLED",
+                    "DF": "ENABLED",
+                    "SMN": "ENABLED",
+                    "SEM": "DISABLED",
+                    "MP0": "ENABLED",
+                    "MP1": "ENABLED",
+                    "FUSE": "DISABLED",
+                    "MCA": "ENABLED",
+                    "VCN": "ENABLED",
+                    "JPEG": "ENABLED",
+                    "IH": "ENABLED",
+                    "MPIO": "ENABLED"
+                }
+            },
+            "soc_pstate": "N/A",
+            "xgmi_plpd": "N/A",
+            "process_isolation": "Disabled",
+            "numa": {
+                "node": 0,
+                "affinity": 0,
+                "cpu_affinity": {
+                    "cpu_list_0": {
+                        "bitmask": "FFFFFFFFFFFFFFFF",
+                        "cpu_cores_affinity": "0-63"
+                    },
+                    "cpu_list_1": {
+                        "bitmask": "0000000000000000",
+                        "cpu_cores_affinity": "N/A"
+                    }
+                },
+                "socket_affinity": {
+                    "cpu_list_0": {
+                        "bitmask": "FFFFFFFFFFFFFFFF",
+                        "cpu_cores_affinity": "0-63"
+                    },
+                    "cpu_list_1": {
+                        "bitmask": "0000000000000000",
+                        "cpu_cores_affinity": "N/A"
+                    }
+                }
+            },
+            "vram": {
+                "type": "HBM3E",
+                "vendor": "SAMSUNG",
+                "size": {
+                    "value": 294896,
+                    "unit": "MB"
+                },
+                "bit_width": 8192,
+                "max_bandwidth": {
+                    "value": 8192,
+                    "unit": "GB/s"
+                }
+            },
+            "cache_info": [
+                {
+                    "cache": 0,
+                    "cache_properties": [
+                        "DATA_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 32,
+                        "unit": "KB"
+                    },
+                    "cache_level": 1,
+                    "max_num_cu_shared": 1,
+                    "num_cache_instance": 256
+                },
+                {
+                    "cache": 1,
+                    "cache_properties": [
+                        "INST_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 64,
+                        "unit": "KB"
+                    },
+                    "cache_level": 1,
+                    "max_num_cu_shared": 2,
+                    "num_cache_instance": 112
+                },
+                {
+                    "cache": 2,
+                    "cache_properties": [
+                        "INST_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 64,
+                        "unit": "KB"
+                    },
+                    "cache_level": 1,
+                    "max_num_cu_shared": 1,
+                    "num_cache_instance": 32
+                },
+                {
+                    "cache": 3,
+                    "cache_properties": [
+                        "DATA_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 16,
+                        "unit": "KB"
+                    },
+                    "cache_level": 1,
+                    "max_num_cu_shared": 2,
+                    "num_cache_instance": 112
+                },
+                {
+                    "cache": 4,
+                    "cache_properties": [
+                        "DATA_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 16,
+                        "unit": "KB"
+                    },
+                    "cache_level": 1,
+                    "max_num_cu_shared": 1,
+                    "num_cache_instance": 32
+                },
+                {
+                    "cache": 5,
+                    "cache_properties": [
+                        "DATA_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 4096,
+                        "unit": "KB"
+                    },
+                    "cache_level": 2,
+                    "max_num_cu_shared": 256,
+                    "num_cache_instance": 1
+                },
+                {
+                    "cache": 6,
+                    "cache_properties": [
+                        "DATA_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 262144,
+                        "unit": "KB"
+                    },
+                    "cache_level": 3,
+                    "max_num_cu_shared": 256,
+                    "num_cache_instance": 1
+                }
+            ],
+            "clock": {
+                "sys": {
+                    "current_level": 0,
+                    "current_frequency": "111MHz",
+                    "frequency_levels": {
+                        "Level 0": "111 MHz",
+                        "Level 1": "500 MHz",
+                        "Level 2": "2400 MHz"
+                    }
+                },
+                "mem": {
+                    "current_level": 0,
+                    "current_frequency": "2000MHz",
+                    "frequency_levels": {
+                        "Level 0": "2000 MHz"
+                    }
+                },
+                "df": {
+                    "current_level": 0,
+                    "current_frequency": "1250MHz",
+                    "frequency_levels": {
+                        "Level 0": "1250 MHz"
+                    }
+                },
+                "soc": {
+                    "current_level": 0,
+                    "current_frequency": "42MHz",
+                    "frequency_levels": {
+                        "Level 0": "42 MHz",
+                        "Level 1": "1200 MHz"
+                    }
+                },
+                "dcef": "N/A",
+                "vclk0": {
+                    "current_level": 0,
+                    "current_frequency": "59MHz",
+                    "frequency_levels": {
+                        "Level 0": "59 MHz"
+                    }
+                },
+                "vclk1": {
+                    "current_level": 0,
+                    "current_frequency": "59MHz",
+                    "frequency_levels": {
+                        "Level 0": "59 MHz"
+                    }
+                },
+                "dclk0": {
+                    "current_level": 0,
+                    "current_frequency": "48MHz",
+                    "frequency_levels": {
+                        "Level 0": "48 MHz"
+                    }
+                },
+                "dclk1": {
+                    "current_level": 0,
+                    "current_frequency": "48MHz",
+                    "frequency_levels": {
+                        "Level 0": "48 MHz"
+                    }
+                }
+            }
+        },
+        {
+            "gpu": 4,
+            "asic": {
+                "market_name": "AMD Instinct MI355X",
+                "vendor_id": "0x1002",
+                "vendor_name": "Advanced Micro Devices Inc. [AMD/ATI]",
+                "subvendor_id": "0x1002",
+                "device_id": "0x75a3",
+                "subsystem_id": "0x75a3",
+                "rev_id": "0x00",
+                "asic_serial": "0xA8A92024D6327110",
+                "oam_id": 2,
+                "num_compute_units": 256,
+                "target_graphics_version": "gfx950"
+            },
+            "bus": {
+                "bdf": "0000:85:00.0",
+                "max_pcie_width": 16,
+                "max_pcie_speed": {
+                    "value": 32,
+                    "unit": "GT/s"
+                },
+                "pcie_levels": "N/A",
+                "pcie_interface_version": "Gen 5",
+                "slot_type": "OAM"
+            },
+            "ifwi": {
+                "name": "AMD MI355X",
+                "build_date": "2025/10/23 15:17",
+                "part_number": "113-M355-01-1K1-010C",
+                "version": "00167319"
+            },
+            "limit": {
+                "ppt0": {
+                    "max_power_limit": {
+                        "value": 1400,
+                        "unit": "W"
+                    },
+                    "min_power_limit": {
+                        "value": 0,
+                        "unit": "W"
+                    },
+                    "socket_power_limit": {
+                        "value": 1400,
+                        "unit": "W"
+                    }
+                },
+                "ppt1": {
+                    "max_power_limit": "N/A",
+                    "min_power_limit": "N/A",
+                    "socket_power_limit": "N/A"
+                },
+                "slowdown_edge_temperature": "N/A",
+                "slowdown_hotspot_temperature": {
+                    "value": 100,
+                    "unit": "C"
+                },
+                "slowdown_vram_temperature": {
+                    "value": 115,
+                    "unit": "C"
+                },
+                "shutdown_edge_temperature": "N/A",
+                "shutdown_hotspot_temperature": {
+                    "value": 112,
+                    "unit": "C"
+                },
+                "shutdown_vram_temperature": {
+                    "value": 125,
+                    "unit": "C"
+                },
+                "ptl_state": "N/A",
+                "ptl_format": "N/A"
+            },
+            "driver": {
+                "name": "amdgpu",
+                "version": "6.16.6"
+            },
+            "board": {
+                "model_number": "102-G36220-0C",
+                "product_serial": "692526013982",
+                "fru_id": "113-AMDG362200C90-100-300000193",
+                "product_name": "AMD Instinct MI355 OAM",
+                "manufacturer_name": "AMD"
+            },
+            "ras": {
+                "eeprom_version": "0x30000",
+                "bad_page_threshold": "N/A",
+                "bad_page_threshold_exceeded": "N/A",
+                "parity_schema": "DISABLED",
+                "single_bit_schema": "DISABLED",
+                "double_bit_schema": "DISABLED",
+                "poison_schema": "ENABLED",
+                "ecc_block_state": {
+                    "UMC": "ENABLED",
+                    "SDMA": "ENABLED",
+                    "GFX": "ENABLED",
+                    "MMHUB": "ENABLED",
+                    "ATHUB": "ENABLED",
+                    "PCIE_BIF": "ENABLED",
+                    "HDP": "ENABLED",
+                    "XGMI_WAFL": "ENABLED",
+                    "DF": "ENABLED",
+                    "SMN": "ENABLED",
+                    "SEM": "DISABLED",
+                    "MP0": "ENABLED",
+                    "MP1": "ENABLED",
+                    "FUSE": "DISABLED",
+                    "MCA": "ENABLED",
+                    "VCN": "ENABLED",
+                    "JPEG": "ENABLED",
+                    "IH": "ENABLED",
+                    "MPIO": "ENABLED"
+                }
+            },
+            "soc_pstate": "N/A",
+            "xgmi_plpd": "N/A",
+            "process_isolation": "Disabled",
+            "numa": {
+                "node": 1,
+                "affinity": 1,
+                "cpu_affinity": {
+                    "cpu_list_0": {
+                        "bitmask": "0000000000000000",
+                        "cpu_cores_affinity": "N/A"
+                    },
+                    "cpu_list_1": {
+                        "bitmask": "FFFFFFFFFFFFFFFF",
+                        "cpu_cores_affinity": "64-127"
+                    }
+                },
+                "socket_affinity": {
+                    "cpu_list_0": {
+                        "bitmask": "0000000000000000",
+                        "cpu_cores_affinity": "N/A"
+                    },
+                    "cpu_list_1": {
+                        "bitmask": "FFFFFFFFFFFFFFFF",
+                        "cpu_cores_affinity": "64-127"
+                    }
+                }
+            },
+            "vram": {
+                "type": "HBM3E",
+                "vendor": "SAMSUNG",
+                "size": {
+                    "value": 294896,
+                    "unit": "MB"
+                },
+                "bit_width": 8192,
+                "max_bandwidth": {
+                    "value": 8192,
+                    "unit": "GB/s"
+                }
+            },
+            "cache_info": [
+                {
+                    "cache": 0,
+                    "cache_properties": [
+                        "DATA_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 32,
+                        "unit": "KB"
+                    },
+                    "cache_level": 1,
+                    "max_num_cu_shared": 1,
+                    "num_cache_instance": 256
+                },
+                {
+                    "cache": 1,
+                    "cache_properties": [
+                        "INST_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 64,
+                        "unit": "KB"
+                    },
+                    "cache_level": 1,
+                    "max_num_cu_shared": 2,
+                    "num_cache_instance": 112
+                },
+                {
+                    "cache": 2,
+                    "cache_properties": [
+                        "INST_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 64,
+                        "unit": "KB"
+                    },
+                    "cache_level": 1,
+                    "max_num_cu_shared": 1,
+                    "num_cache_instance": 32
+                },
+                {
+                    "cache": 3,
+                    "cache_properties": [
+                        "DATA_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 16,
+                        "unit": "KB"
+                    },
+                    "cache_level": 1,
+                    "max_num_cu_shared": 2,
+                    "num_cache_instance": 112
+                },
+                {
+                    "cache": 4,
+                    "cache_properties": [
+                        "DATA_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 16,
+                        "unit": "KB"
+                    },
+                    "cache_level": 1,
+                    "max_num_cu_shared": 1,
+                    "num_cache_instance": 32
+                },
+                {
+                    "cache": 5,
+                    "cache_properties": [
+                        "DATA_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 4096,
+                        "unit": "KB"
+                    },
+                    "cache_level": 2,
+                    "max_num_cu_shared": 256,
+                    "num_cache_instance": 1
+                },
+                {
+                    "cache": 6,
+                    "cache_properties": [
+                        "DATA_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 262144,
+                        "unit": "KB"
+                    },
+                    "cache_level": 3,
+                    "max_num_cu_shared": 256,
+                    "num_cache_instance": 1
+                }
+            ],
+            "clock": {
+                "sys": {
+                    "current_level": 0,
+                    "current_frequency": "108MHz",
+                    "frequency_levels": {
+                        "Level 0": "108 MHz",
+                        "Level 1": "500 MHz",
+                        "Level 2": "2400 MHz"
+                    }
+                },
+                "mem": {
+                    "current_level": 0,
+                    "current_frequency": "2000MHz",
+                    "frequency_levels": {
+                        "Level 0": "2000 MHz"
+                    }
+                },
+                "df": {
+                    "current_level": 0,
+                    "current_frequency": "1250MHz",
+                    "frequency_levels": {
+                        "Level 0": "1250 MHz"
+                    }
+                },
+                "soc": {
+                    "current_level": 0,
+                    "current_frequency": "41MHz",
+                    "frequency_levels": {
+                        "Level 0": "41 MHz",
+                        "Level 1": "1200 MHz"
+                    }
+                },
+                "dcef": "N/A",
+                "vclk0": {
+                    "current_level": 0,
+                    "current_frequency": "59MHz",
+                    "frequency_levels": {
+                        "Level 0": "59 MHz"
+                    }
+                },
+                "vclk1": {
+                    "current_level": 0,
+                    "current_frequency": "59MHz",
+                    "frequency_levels": {
+                        "Level 0": "59 MHz"
+                    }
+                },
+                "dclk0": {
+                    "current_level": 0,
+                    "current_frequency": "48MHz",
+                    "frequency_levels": {
+                        "Level 0": "48 MHz"
+                    }
+                },
+                "dclk1": {
+                    "current_level": 0,
+                    "current_frequency": "48MHz",
+                    "frequency_levels": {
+                        "Level 0": "48 MHz"
+                    }
+                }
+            }
+        },
+        {
+            "gpu": 5,
+            "asic": {
+                "market_name": "AMD Instinct MI355X",
+                "vendor_id": "0x1002",
+                "vendor_name": "Advanced Micro Devices Inc. [AMD/ATI]",
+                "subvendor_id": "0x1002",
+                "device_id": "0x75a3",
+                "subsystem_id": "0x75a3",
+                "rev_id": "0x00",
+                "asic_serial": "0xE847D72B28D4BE32",
+                "oam_id": 3,
+                "num_compute_units": 256,
+                "target_graphics_version": "gfx950"
+            },
+            "bus": {
+                "bdf": "0000:95:00.0",
+                "max_pcie_width": 16,
+                "max_pcie_speed": {
+                    "value": 32,
+                    "unit": "GT/s"
+                },
+                "pcie_levels": "N/A",
+                "pcie_interface_version": "Gen 5",
+                "slot_type": "OAM"
+            },
+            "ifwi": {
+                "name": "AMD MI355X",
+                "build_date": "2025/10/23 15:17",
+                "part_number": "113-M355-01-1K1-010C",
+                "version": "00167319"
+            },
+            "limit": {
+                "ppt0": {
+                    "max_power_limit": {
+                        "value": 1400,
+                        "unit": "W"
+                    },
+                    "min_power_limit": {
+                        "value": 0,
+                        "unit": "W"
+                    },
+                    "socket_power_limit": {
+                        "value": 1400,
+                        "unit": "W"
+                    }
+                },
+                "ppt1": {
+                    "max_power_limit": "N/A",
+                    "min_power_limit": "N/A",
+                    "socket_power_limit": "N/A"
+                },
+                "slowdown_edge_temperature": "N/A",
+                "slowdown_hotspot_temperature": {
+                    "value": 100,
+                    "unit": "C"
+                },
+                "slowdown_vram_temperature": {
+                    "value": 115,
+                    "unit": "C"
+                },
+                "shutdown_edge_temperature": "N/A",
+                "shutdown_hotspot_temperature": {
+                    "value": 112,
+                    "unit": "C"
+                },
+                "shutdown_vram_temperature": {
+                    "value": 125,
+                    "unit": "C"
+                },
+                "ptl_state": "N/A",
+                "ptl_format": "N/A"
+            },
+            "driver": {
+                "name": "amdgpu",
+                "version": "6.16.6"
+            },
+            "board": {
+                "model_number": "102-G36221-0C",
+                "product_serial": "692526018689",
+                "fru_id": "113-AMDG362210C90-100-300000193",
+                "product_name": "AMD Instinct MI355 OAM",
+                "manufacturer_name": "AMD"
+            },
+            "ras": {
+                "eeprom_version": "0x30000",
+                "bad_page_threshold": "N/A",
+                "bad_page_threshold_exceeded": "N/A",
+                "parity_schema": "DISABLED",
+                "single_bit_schema": "DISABLED",
+                "double_bit_schema": "DISABLED",
+                "poison_schema": "ENABLED",
+                "ecc_block_state": {
+                    "UMC": "ENABLED",
+                    "SDMA": "ENABLED",
+                    "GFX": "ENABLED",
+                    "MMHUB": "ENABLED",
+                    "ATHUB": "ENABLED",
+                    "PCIE_BIF": "ENABLED",
+                    "HDP": "ENABLED",
+                    "XGMI_WAFL": "ENABLED",
+                    "DF": "ENABLED",
+                    "SMN": "ENABLED",
+                    "SEM": "DISABLED",
+                    "MP0": "ENABLED",
+                    "MP1": "ENABLED",
+                    "FUSE": "DISABLED",
+                    "MCA": "ENABLED",
+                    "VCN": "ENABLED",
+                    "JPEG": "ENABLED",
+                    "IH": "ENABLED",
+                    "MPIO": "ENABLED"
+                }
+            },
+            "soc_pstate": "N/A",
+            "xgmi_plpd": "N/A",
+            "process_isolation": "Disabled",
+            "numa": {
+                "node": 1,
+                "affinity": 1,
+                "cpu_affinity": {
+                    "cpu_list_0": {
+                        "bitmask": "0000000000000000",
+                        "cpu_cores_affinity": "N/A"
+                    },
+                    "cpu_list_1": {
+                        "bitmask": "FFFFFFFFFFFFFFFF",
+                        "cpu_cores_affinity": "64-127"
+                    }
+                },
+                "socket_affinity": {
+                    "cpu_list_0": {
+                        "bitmask": "0000000000000000",
+                        "cpu_cores_affinity": "N/A"
+                    },
+                    "cpu_list_1": {
+                        "bitmask": "FFFFFFFFFFFFFFFF",
+                        "cpu_cores_affinity": "64-127"
+                    }
+                }
+            },
+            "vram": {
+                "type": "HBM3E",
+                "vendor": "SAMSUNG",
+                "size": {
+                    "value": 294896,
+                    "unit": "MB"
+                },
+                "bit_width": 8192,
+                "max_bandwidth": {
+                    "value": 8192,
+                    "unit": "GB/s"
+                }
+            },
+            "cache_info": [
+                {
+                    "cache": 0,
+                    "cache_properties": [
+                        "DATA_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 32,
+                        "unit": "KB"
+                    },
+                    "cache_level": 1,
+                    "max_num_cu_shared": 1,
+                    "num_cache_instance": 256
+                },
+                {
+                    "cache": 1,
+                    "cache_properties": [
+                        "INST_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 64,
+                        "unit": "KB"
+                    },
+                    "cache_level": 1,
+                    "max_num_cu_shared": 2,
+                    "num_cache_instance": 112
+                },
+                {
+                    "cache": 2,
+                    "cache_properties": [
+                        "INST_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 64,
+                        "unit": "KB"
+                    },
+                    "cache_level": 1,
+                    "max_num_cu_shared": 1,
+                    "num_cache_instance": 32
+                },
+                {
+                    "cache": 3,
+                    "cache_properties": [
+                        "DATA_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 16,
+                        "unit": "KB"
+                    },
+                    "cache_level": 1,
+                    "max_num_cu_shared": 2,
+                    "num_cache_instance": 112
+                },
+                {
+                    "cache": 4,
+                    "cache_properties": [
+                        "DATA_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 16,
+                        "unit": "KB"
+                    },
+                    "cache_level": 1,
+                    "max_num_cu_shared": 1,
+                    "num_cache_instance": 32
+                },
+                {
+                    "cache": 5,
+                    "cache_properties": [
+                        "DATA_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 4096,
+                        "unit": "KB"
+                    },
+                    "cache_level": 2,
+                    "max_num_cu_shared": 256,
+                    "num_cache_instance": 1
+                },
+                {
+                    "cache": 6,
+                    "cache_properties": [
+                        "DATA_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 262144,
+                        "unit": "KB"
+                    },
+                    "cache_level": 3,
+                    "max_num_cu_shared": 256,
+                    "num_cache_instance": 1
+                }
+            ],
+            "clock": {
+                "sys": {
+                    "current_level": 0,
+                    "current_frequency": "95MHz",
+                    "frequency_levels": {
+                        "Level 0": "95 MHz",
+                        "Level 1": "500 MHz",
+                        "Level 2": "2400 MHz"
+                    }
+                },
+                "mem": {
+                    "current_level": 0,
+                    "current_frequency": "2000MHz",
+                    "frequency_levels": {
+                        "Level 0": "2000 MHz"
+                    }
+                },
+                "df": {
+                    "current_level": 0,
+                    "current_frequency": "1250MHz",
+                    "frequency_levels": {
+                        "Level 0": "1250 MHz"
+                    }
+                },
+                "soc": {
+                    "current_level": 0,
+                    "current_frequency": "41MHz",
+                    "frequency_levels": {
+                        "Level 0": "41 MHz",
+                        "Level 1": "1200 MHz"
+                    }
+                },
+                "dcef": "N/A",
+                "vclk0": {
+                    "current_level": 0,
+                    "current_frequency": "59MHz",
+                    "frequency_levels": {
+                        "Level 0": "59 MHz"
+                    }
+                },
+                "vclk1": {
+                    "current_level": 0,
+                    "current_frequency": "59MHz",
+                    "frequency_levels": {
+                        "Level 0": "59 MHz"
+                    }
+                },
+                "dclk0": {
+                    "current_level": 0,
+                    "current_frequency": "48MHz",
+                    "frequency_levels": {
+                        "Level 0": "48 MHz"
+                    }
+                },
+                "dclk1": {
+                    "current_level": 0,
+                    "current_frequency": "48MHz",
+                    "frequency_levels": {
+                        "Level 0": "48 MHz"
+                    }
+                }
+            }
+        },
+        {
+            "gpu": 6,
+            "asic": {
+                "market_name": "AMD Instinct MI355X",
+                "vendor_id": "0x1002",
+                "vendor_name": "Advanced Micro Devices Inc. [AMD/ATI]",
+                "subvendor_id": "0x1002",
+                "device_id": "0x75a3",
+                "subsystem_id": "0x75a3",
+                "rev_id": "0x00",
+                "asic_serial": "0x387C775A88814FC9",
+                "oam_id": 1,
+                "num_compute_units": 256,
+                "target_graphics_version": "gfx950"
+            },
+            "bus": {
+                "bdf": "0000:e5:00.0",
+                "max_pcie_width": 16,
+                "max_pcie_speed": {
+                    "value": 32,
+                    "unit": "GT/s"
+                },
+                "pcie_levels": "N/A",
+                "pcie_interface_version": "Gen 5",
+                "slot_type": "OAM"
+            },
+            "ifwi": {
+                "name": "AMD MI355X",
+                "build_date": "2025/10/23 15:17",
+                "part_number": "113-M355-01-1K1-010C",
+                "version": "00167319"
+            },
+            "limit": {
+                "ppt0": {
+                    "max_power_limit": {
+                        "value": 1400,
+                        "unit": "W"
+                    },
+                    "min_power_limit": {
+                        "value": 0,
+                        "unit": "W"
+                    },
+                    "socket_power_limit": {
+                        "value": 1400,
+                        "unit": "W"
+                    }
+                },
+                "ppt1": {
+                    "max_power_limit": "N/A",
+                    "min_power_limit": "N/A",
+                    "socket_power_limit": "N/A"
+                },
+                "slowdown_edge_temperature": "N/A",
+                "slowdown_hotspot_temperature": {
+                    "value": 100,
+                    "unit": "C"
+                },
+                "slowdown_vram_temperature": {
+                    "value": 115,
+                    "unit": "C"
+                },
+                "shutdown_edge_temperature": "N/A",
+                "shutdown_hotspot_temperature": {
+                    "value": 112,
+                    "unit": "C"
+                },
+                "shutdown_vram_temperature": {
+                    "value": 125,
+                    "unit": "C"
+                },
+                "ptl_state": "N/A",
+                "ptl_format": "N/A"
+            },
+            "driver": {
+                "name": "amdgpu",
+                "version": "6.16.6"
+            },
+            "board": {
+                "model_number": "102-G36220-0C",
+                "product_serial": "692526014270",
+                "fru_id": "113-AMDG362200C90-100-300000193",
+                "product_name": "AMD Instinct MI355 OAM",
+                "manufacturer_name": "AMD"
+            },
+            "ras": {
+                "eeprom_version": "0x30000",
+                "bad_page_threshold": "N/A",
+                "bad_page_threshold_exceeded": "N/A",
+                "parity_schema": "DISABLED",
+                "single_bit_schema": "DISABLED",
+                "double_bit_schema": "DISABLED",
+                "poison_schema": "ENABLED",
+                "ecc_block_state": {
+                    "UMC": "ENABLED",
+                    "SDMA": "ENABLED",
+                    "GFX": "ENABLED",
+                    "MMHUB": "ENABLED",
+                    "ATHUB": "ENABLED",
+                    "PCIE_BIF": "ENABLED",
+                    "HDP": "ENABLED",
+                    "XGMI_WAFL": "ENABLED",
+                    "DF": "ENABLED",
+                    "SMN": "ENABLED",
+                    "SEM": "DISABLED",
+                    "MP0": "ENABLED",
+                    "MP1": "ENABLED",
+                    "FUSE": "DISABLED",
+                    "MCA": "ENABLED",
+                    "VCN": "ENABLED",
+                    "JPEG": "ENABLED",
+                    "IH": "ENABLED",
+                    "MPIO": "ENABLED"
+                }
+            },
+            "soc_pstate": "N/A",
+            "xgmi_plpd": "N/A",
+            "process_isolation": "Disabled",
+            "numa": {
+                "node": 1,
+                "affinity": 1,
+                "cpu_affinity": {
+                    "cpu_list_0": {
+                        "bitmask": "0000000000000000",
+                        "cpu_cores_affinity": "N/A"
+                    },
+                    "cpu_list_1": {
+                        "bitmask": "FFFFFFFFFFFFFFFF",
+                        "cpu_cores_affinity": "64-127"
+                    }
+                },
+                "socket_affinity": {
+                    "cpu_list_0": {
+                        "bitmask": "0000000000000000",
+                        "cpu_cores_affinity": "N/A"
+                    },
+                    "cpu_list_1": {
+                        "bitmask": "FFFFFFFFFFFFFFFF",
+                        "cpu_cores_affinity": "64-127"
+                    }
+                }
+            },
+            "vram": {
+                "type": "HBM3E",
+                "vendor": "SAMSUNG",
+                "size": {
+                    "value": 294896,
+                    "unit": "MB"
+                },
+                "bit_width": 8192,
+                "max_bandwidth": {
+                    "value": 8192,
+                    "unit": "GB/s"
+                }
+            },
+            "cache_info": [
+                {
+                    "cache": 0,
+                    "cache_properties": [
+                        "DATA_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 32,
+                        "unit": "KB"
+                    },
+                    "cache_level": 1,
+                    "max_num_cu_shared": 1,
+                    "num_cache_instance": 256
+                },
+                {
+                    "cache": 1,
+                    "cache_properties": [
+                        "INST_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 64,
+                        "unit": "KB"
+                    },
+                    "cache_level": 1,
+                    "max_num_cu_shared": 2,
+                    "num_cache_instance": 112
+                },
+                {
+                    "cache": 2,
+                    "cache_properties": [
+                        "INST_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 64,
+                        "unit": "KB"
+                    },
+                    "cache_level": 1,
+                    "max_num_cu_shared": 1,
+                    "num_cache_instance": 32
+                },
+                {
+                    "cache": 3,
+                    "cache_properties": [
+                        "DATA_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 16,
+                        "unit": "KB"
+                    },
+                    "cache_level": 1,
+                    "max_num_cu_shared": 2,
+                    "num_cache_instance": 112
+                },
+                {
+                    "cache": 4,
+                    "cache_properties": [
+                        "DATA_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 16,
+                        "unit": "KB"
+                    },
+                    "cache_level": 1,
+                    "max_num_cu_shared": 1,
+                    "num_cache_instance": 32
+                },
+                {
+                    "cache": 5,
+                    "cache_properties": [
+                        "DATA_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 4096,
+                        "unit": "KB"
+                    },
+                    "cache_level": 2,
+                    "max_num_cu_shared": 256,
+                    "num_cache_instance": 1
+                },
+                {
+                    "cache": 6,
+                    "cache_properties": [
+                        "DATA_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 262144,
+                        "unit": "KB"
+                    },
+                    "cache_level": 3,
+                    "max_num_cu_shared": 256,
+                    "num_cache_instance": 1
+                }
+            ],
+            "clock": {
+                "sys": {
+                    "current_level": 0,
+                    "current_frequency": "95MHz",
+                    "frequency_levels": {
+                        "Level 0": "95 MHz",
+                        "Level 1": "500 MHz",
+                        "Level 2": "2400 MHz"
+                    }
+                },
+                "mem": {
+                    "current_level": 0,
+                    "current_frequency": "2000MHz",
+                    "frequency_levels": {
+                        "Level 0": "2000 MHz"
+                    }
+                },
+                "df": {
+                    "current_level": 0,
+                    "current_frequency": "1250MHz",
+                    "frequency_levels": {
+                        "Level 0": "1250 MHz"
+                    }
+                },
+                "soc": {
+                    "current_level": 0,
+                    "current_frequency": "41MHz",
+                    "frequency_levels": {
+                        "Level 0": "41 MHz",
+                        "Level 1": "1200 MHz"
+                    }
+                },
+                "dcef": "N/A",
+                "vclk0": {
+                    "current_level": 0,
+                    "current_frequency": "59MHz",
+                    "frequency_levels": {
+                        "Level 0": "59 MHz"
+                    }
+                },
+                "vclk1": {
+                    "current_level": 0,
+                    "current_frequency": "59MHz",
+                    "frequency_levels": {
+                        "Level 0": "59 MHz"
+                    }
+                },
+                "dclk0": {
+                    "current_level": 0,
+                    "current_frequency": "48MHz",
+                    "frequency_levels": {
+                        "Level 0": "48 MHz"
+                    }
+                },
+                "dclk1": {
+                    "current_level": 0,
+                    "current_frequency": "48MHz",
+                    "frequency_levels": {
+                        "Level 0": "48 MHz"
+                    }
+                }
+            }
+        },
+        {
+            "gpu": 7,
+            "asic": {
+                "market_name": "AMD Instinct MI355X",
+                "vendor_id": "0x1002",
+                "vendor_name": "Advanced Micro Devices Inc. [AMD/ATI]",
+                "subvendor_id": "0x1002",
+                "device_id": "0x75a3",
+                "subsystem_id": "0x75a3",
+                "rev_id": "0x00",
+                "asic_serial": "0x2B6A776B76E7E306",
+                "oam_id": 0,
+                "num_compute_units": 256,
+                "target_graphics_version": "gfx950"
+            },
+            "bus": {
+                "bdf": "0000:f5:00.0",
+                "max_pcie_width": 16,
+                "max_pcie_speed": {
+                    "value": 32,
+                    "unit": "GT/s"
+                },
+                "pcie_levels": "N/A",
+                "pcie_interface_version": "Gen 5",
+                "slot_type": "OAM"
+            },
+            "ifwi": {
+                "name": "AMD MI355X",
+                "build_date": "2025/10/23 15:17",
+                "part_number": "113-M355-01-1K1-010C",
+                "version": "00167319"
+            },
+            "limit": {
+                "ppt0": {
+                    "max_power_limit": {
+                        "value": 1400,
+                        "unit": "W"
+                    },
+                    "min_power_limit": {
+                        "value": 0,
+                        "unit": "W"
+                    },
+                    "socket_power_limit": {
+                        "value": 1400,
+                        "unit": "W"
+                    }
+                },
+                "ppt1": {
+                    "max_power_limit": "N/A",
+                    "min_power_limit": "N/A",
+                    "socket_power_limit": "N/A"
+                },
+                "slowdown_edge_temperature": "N/A",
+                "slowdown_hotspot_temperature": {
+                    "value": 100,
+                    "unit": "C"
+                },
+                "slowdown_vram_temperature": {
+                    "value": 115,
+                    "unit": "C"
+                },
+                "shutdown_edge_temperature": "N/A",
+                "shutdown_hotspot_temperature": {
+                    "value": 112,
+                    "unit": "C"
+                },
+                "shutdown_vram_temperature": {
+                    "value": 125,
+                    "unit": "C"
+                },
+                "ptl_state": "N/A",
+                "ptl_format": "N/A"
+            },
+            "driver": {
+                "name": "amdgpu",
+                "version": "6.16.6"
+            },
+            "board": {
+                "model_number": "102-G36221-0C",
+                "product_serial": "692526018886",
+                "fru_id": "113-AMDG362210C90-100-300000193",
+                "product_name": "AMD Instinct MI355 OAM",
+                "manufacturer_name": "AMD"
+            },
+            "ras": {
+                "eeprom_version": "0x30000",
+                "bad_page_threshold": "N/A",
+                "bad_page_threshold_exceeded": "N/A",
+                "parity_schema": "DISABLED",
+                "single_bit_schema": "DISABLED",
+                "double_bit_schema": "DISABLED",
+                "poison_schema": "ENABLED",
+                "ecc_block_state": {
+                    "UMC": "ENABLED",
+                    "SDMA": "ENABLED",
+                    "GFX": "ENABLED",
+                    "MMHUB": "ENABLED",
+                    "ATHUB": "ENABLED",
+                    "PCIE_BIF": "ENABLED",
+                    "HDP": "ENABLED",
+                    "XGMI_WAFL": "ENABLED",
+                    "DF": "ENABLED",
+                    "SMN": "ENABLED",
+                    "SEM": "DISABLED",
+                    "MP0": "ENABLED",
+                    "MP1": "ENABLED",
+                    "FUSE": "DISABLED",
+                    "MCA": "ENABLED",
+                    "VCN": "ENABLED",
+                    "JPEG": "ENABLED",
+                    "IH": "ENABLED",
+                    "MPIO": "ENABLED"
+                }
+            },
+            "soc_pstate": "N/A",
+            "xgmi_plpd": "N/A",
+            "process_isolation": "Disabled",
+            "numa": {
+                "node": 1,
+                "affinity": 1,
+                "cpu_affinity": {
+                    "cpu_list_0": {
+                        "bitmask": "0000000000000000",
+                        "cpu_cores_affinity": "N/A"
+                    },
+                    "cpu_list_1": {
+                        "bitmask": "FFFFFFFFFFFFFFFF",
+                        "cpu_cores_affinity": "64-127"
+                    }
+                },
+                "socket_affinity": {
+                    "cpu_list_0": {
+                        "bitmask": "0000000000000000",
+                        "cpu_cores_affinity": "N/A"
+                    },
+                    "cpu_list_1": {
+                        "bitmask": "FFFFFFFFFFFFFFFF",
+                        "cpu_cores_affinity": "64-127"
+                    }
+                }
+            },
+            "vram": {
+                "type": "HBM3E",
+                "vendor": "SAMSUNG",
+                "size": {
+                    "value": 294896,
+                    "unit": "MB"
+                },
+                "bit_width": 8192,
+                "max_bandwidth": {
+                    "value": 8192,
+                    "unit": "GB/s"
+                }
+            },
+            "cache_info": [
+                {
+                    "cache": 0,
+                    "cache_properties": [
+                        "DATA_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 32,
+                        "unit": "KB"
+                    },
+                    "cache_level": 1,
+                    "max_num_cu_shared": 1,
+                    "num_cache_instance": 256
+                },
+                {
+                    "cache": 1,
+                    "cache_properties": [
+                        "INST_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 64,
+                        "unit": "KB"
+                    },
+                    "cache_level": 1,
+                    "max_num_cu_shared": 2,
+                    "num_cache_instance": 112
+                },
+                {
+                    "cache": 2,
+                    "cache_properties": [
+                        "INST_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 64,
+                        "unit": "KB"
+                    },
+                    "cache_level": 1,
+                    "max_num_cu_shared": 1,
+                    "num_cache_instance": 32
+                },
+                {
+                    "cache": 3,
+                    "cache_properties": [
+                        "DATA_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 16,
+                        "unit": "KB"
+                    },
+                    "cache_level": 1,
+                    "max_num_cu_shared": 2,
+                    "num_cache_instance": 112
+                },
+                {
+                    "cache": 4,
+                    "cache_properties": [
+                        "DATA_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 16,
+                        "unit": "KB"
+                    },
+                    "cache_level": 1,
+                    "max_num_cu_shared": 1,
+                    "num_cache_instance": 32
+                },
+                {
+                    "cache": 5,
+                    "cache_properties": [
+                        "DATA_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 4096,
+                        "unit": "KB"
+                    },
+                    "cache_level": 2,
+                    "max_num_cu_shared": 256,
+                    "num_cache_instance": 1
+                },
+                {
+                    "cache": 6,
+                    "cache_properties": [
+                        "DATA_CACHE",
+                        "SIMD_CACHE"
+                    ],
+                    "cache_size": {
+                        "value": 262144,
+                        "unit": "KB"
+                    },
+                    "cache_level": 3,
+                    "max_num_cu_shared": 256,
+                    "num_cache_instance": 1
+                }
+            ],
+            "clock": {
+                "sys": {
+                    "current_level": 0,
+                    "current_frequency": "94MHz",
+                    "frequency_levels": {
+                        "Level 0": "94 MHz",
+                        "Level 1": "500 MHz",
+                        "Level 2": "2400 MHz"
+                    }
+                },
+                "mem": {
+                    "current_level": 0,
+                    "current_frequency": "2000MHz",
+                    "frequency_levels": {
+                        "Level 0": "2000 MHz"
+                    }
+                },
+                "df": {
+                    "current_level": 0,
+                    "current_frequency": "1250MHz",
+                    "frequency_levels": {
+                        "Level 0": "1250 MHz"
+                    }
+                },
+                "soc": {
+                    "current_level": 0,
+                    "current_frequency": "41MHz",
+                    "frequency_levels": {
+                        "Level 0": "41 MHz",
+                        "Level 1": "1200 MHz"
+                    }
+                },
+                "dcef": "N/A",
+                "vclk0": {
+                    "current_level": 0,
+                    "current_frequency": "59MHz",
+                    "frequency_levels": {
+                        "Level 0": "59 MHz"
+                    }
+                },
+                "vclk1": {
+                    "current_level": 0,
+                    "current_frequency": "59MHz",
+                    "frequency_levels": {
+                        "Level 0": "59 MHz"
+                    }
+                },
+                "dclk0": {
+                    "current_level": 0,
+                    "current_frequency": "48MHz",
+                    "frequency_levels": {
+                        "Level 0": "48 MHz"
+                    }
+                },
+                "dclk1": {
+                    "current_level": 0,
+                    "current_frequency": "48MHz",
+                    "frequency_levels": {
+                        "Level 0": "48 MHz"
+                    }
+                }
+            }
+        }
+    ]
+}
