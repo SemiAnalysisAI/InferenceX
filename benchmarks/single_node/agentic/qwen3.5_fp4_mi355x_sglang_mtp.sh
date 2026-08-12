@@ -11,8 +11,7 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 export EVAL_FRAMEWORK="lm-eval"
 
 check_env_vars \
-    MODEL TP CONC EP_SIZE KV_OFFLOADING \
-    TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
+    MODEL TP CONC EP_SIZE RESULT_DIR DURATION
 
 SCHEDULER_RECV_INTERVAL=${SCHEDULER_RECV_INTERVAL:-30}
 
@@ -54,51 +53,6 @@ trap cleanup_agentic_services EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-CACHE_ARGS=()
-WARMUP_ARGS=()
-PAGE_SIZE=16
-if require_agentic_kv_offload_backend hicache; then
-    # Qwen3.5 creates target KV and Mamba host pools per rank. NEXTN adds a
-    # one-layer draft KV pool, or 1/15 of target KV. Convert the node-level
-    # workflow budget to SGLang's per-rank --hicache-size and retain the
-    # established MI355X 180 GB per-pool ceiling.
-    HICACHE_ALIGNMENT_RESERVE_GB=$TP
-    HICACHE_USABLE_TOTAL_GB=$((TOTAL_CPU_DRAM_GB - HICACHE_ALIGNMENT_RESERVE_GB))
-    if [ "$HICACHE_USABLE_TOTAL_GB" -lt 1 ]; then
-        echo "Error: insufficient DRAM after HiCache alignment reserve." >&2
-        exit 1
-    fi
-    MAX_HICACHE_SIZE_GB=$((HICACHE_USABLE_TOTAL_GB * 15 / TP / 31))
-    HICACHE_MAX_SIZE_GB_PER_RANK_POOL=${HICACHE_MAX_SIZE_GB_PER_RANK_POOL:-180}
-    if [ "$MAX_HICACHE_SIZE_GB" -gt "$HICACHE_MAX_SIZE_GB_PER_RANK_POOL" ]; then
-        MAX_HICACHE_SIZE_GB="$HICACHE_MAX_SIZE_GB_PER_RANK_POOL"
-    fi
-    HICACHE_SIZE_GB="${HICACHE_SIZE_GB:-$MAX_HICACHE_SIZE_GB}"
-    if [ "$HICACHE_SIZE_GB" -lt 1 ] || [ "$HICACHE_SIZE_GB" -gt "$MAX_HICACHE_SIZE_GB" ]; then
-        echo "Error: HICACHE_SIZE_GB=$HICACHE_SIZE_GB outside 1..$MAX_HICACHE_SIZE_GB." >&2
-        exit 1
-    fi
-    PROJECTED_HICACHE_TOTAL_GB=$(((HICACHE_SIZE_GB * TP * 31 + 14) / 15 + HICACHE_ALIGNMENT_RESERVE_GB))
-    if [ "$PROJECTED_HICACHE_TOTAL_GB" -gt "$TOTAL_CPU_DRAM_GB" ]; then
-        echo "Error: projected HiCache use ${PROJECTED_HICACHE_TOTAL_GB} GB exceeds configured ${TOTAL_CPU_DRAM_GB} GB." >&2
-        exit 1
-    fi
-    echo "HiCache pools: ${HICACHE_SIZE_GB} GB per rank; projected node total ${PROJECTED_HICACHE_TOTAL_GB} GB."
-
-    # Qwen3.5's hybrid attention/Mamba pools require the page-first kernel
-    # transfer path on ROCm. Page size 64 also matches SGLang's MI355X EAGLE
-    # recipe and avoids page-size-1 verify-graph compiler failures.
-    PAGE_SIZE=64
-    CACHE_ARGS=(
-        --enable-hierarchical-cache
-        --hicache-size "$HICACHE_SIZE_GB"
-        --hicache-io-backend kernel
-        --hicache-mem-layout page_first
-        --hicache-write-policy write_through_selective
-    )
-    WARMUP_ARGS=(--skip-server-warmup)
-fi
-
 PARALLEL_ARGS=(
     --tp "$TP"
     --dp 1
@@ -113,9 +67,6 @@ fi
 MAX_RUNNING_REQUESTS=$((2 * CONC))
 CUDA_GRAPH_MAX_BS="$CONC"
 [ "$CUDA_GRAPH_MAX_BS" -gt 64 ] && CUDA_GRAPH_MAX_BS=64
-if agentic_kv_offload_enabled && [ "$CUDA_GRAPH_MAX_BS" -gt 16 ]; then
-    CUDA_GRAPH_MAX_BS=16
-fi
 
 export PYTHONNOUSERSITE=1
 export SGLANG_USE_AITER=1
@@ -142,7 +93,7 @@ SGLANG_CMD=(
     --mem-fraction-static 0.80
     --model-loader-extra-config '{"enable_multithread_load": true}'
     --watchdog-timeout 1200
-    --page-size "$PAGE_SIZE"
+    --page-size 16
     --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
     --max-prefill-tokens 32768
@@ -159,8 +110,6 @@ SGLANG_CMD=(
     --speculative-num-draft-tokens 4
     --enable-metrics
     --enable-cache-report
-    "${CACHE_ARGS[@]}"
-    "${WARMUP_ARGS[@]}"
 )
 
 printf '%q ' "${SGLANG_CMD[@]}" | tee "$RESULT_DIR/sglang_command.txt"

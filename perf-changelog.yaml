@@ -5823,6 +5823,6 @@
     - qwen3.5-fp4-mi355x-sglang-agentic-mtp
   description:
     - "Add Qwen3.5-397B-A17B MXFP4 MI355X SGLang AgentX with native EAGLE MTP and the committed golden synthetic acceptance length."
-    - "Match the B200/B300 TP4 and TP2 frontier coverage, with MI355X HiCache DRAM tiers only around the corresponding HBM capacity knees and required SGLang metrics exports."
+    - "Cover the measured resident TP2/EP2 and TP4 Pareto ranges through their HBM capacity knees, with required SGLang metrics exports."
     - "Use SGLang v0.5.17 and disable unstable AITER all-reduce fusion for TP2/EP2 EAGLE rank consistency."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2562
