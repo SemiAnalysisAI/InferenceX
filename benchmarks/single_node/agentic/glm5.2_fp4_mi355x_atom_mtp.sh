@@ -2,8 +2,7 @@
 set -eo pipefail
 set -x
 
-# Agentic trace replay benchmark for MiniMax-M3 FP4 on MI355X using vLLM
-# and EAGLE3 speculative decoding.
+# Agentic trace replay benchmark for GLM5.2 FP4 on MI355X using ATOM MTP
 #
 # Required env vars:
 #   MODEL, MODEL_PATH, TP, CONC, KV_OFFLOADING, KV_OFFLOAD_BACKEND,
