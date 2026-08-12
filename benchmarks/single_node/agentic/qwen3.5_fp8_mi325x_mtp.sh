@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -eo pipefail
 set -x
 
 # AgentX trace replay for Qwen3.5-397B-A17B FP8 on MI325X with SGLang
@@ -11,7 +11,7 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 export EVAL_FRAMEWORK="lm-eval"
 
 check_env_vars \
-    MODEL TP CONC EP_SIZE KV_OFFLOADING \
+    MODEL TP CONC EP_SIZE \
     TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
 
 SCHEDULER_RECV_INTERVAL=${SCHEDULER_RECV_INTERVAL:-30}
@@ -60,11 +60,6 @@ cleanup_agentic_services() {
 trap cleanup_agentic_services EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-
-if agentic_kv_offload_enabled; then
-    echo "Error: the initial MI325X discovery pass supports GPU-resident KV only." >&2
-    exit 1
-fi
 
 PARALLEL_ARGS=(
     --tp "$TP"
@@ -141,8 +136,7 @@ SGLANG_CMD=(
     --enable-cache-report
 )
 
-printf '%q ' "${SGLANG_CMD[@]}" | tee "$RESULT_DIR/sglang_command.txt"
-printf '\n' | tee -a "$RESULT_DIR/sglang_command.txt"
+write_command "$RESULT_DIR/sglang_command.txt" "${SGLANG_CMD[@]}"
 "${SGLANG_CMD[@]}" > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 

@@ -420,6 +420,14 @@ wait_for_server_ready() {
     kill $TAIL_PID
 }
 
+# Persist an argv array in shell-replayable form.
+write_command() {
+    local output_file="$1"
+    shift
+    printf '%q ' "$@" | tee "$output_file"
+    printf '\n' | tee -a "$output_file"
+}
+
 # Run benchmark serving with standardized parameters
 # All parameters are required except --endpoint, --use-chat-template, --dsv4, and --trust-remote-code
 # Parameters:
