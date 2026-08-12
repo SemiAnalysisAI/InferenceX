@@ -479,11 +479,14 @@ of an equivalent dense GQA-bf16 cache. Compression trades bytes for descriptor c
 entries it produces push transfers into the per-descriptor regime, so the paged rows sit far
 below each lane's `bulk` row — one single-descriptor transfer of the request's total bytes per
 ISL, the wire-speed ceiling the paged rows are read against (bulk rows are batch 1 by
-construction). Two budgets shed a point's largest batches rather than dropping the point, and the
-smallest batch always survives so a single request stays measurable everywhere: a per-rank pool
-budget (64 GiB, sized to the fleet's smallest HBM), and a per-burst descriptor budget (a 512k-ISL
-page-16 request alone is ~2.1M descriptors, and posting time is linear in batch x descriptors on
-the per-descriptor floor, so unbounded bursts would trip the per-case time guard).
+construction). Two budgets shed a point's largest batches rather than dropping the point, and the two
+smallest batches always survive, so a single request stays measurable everywhere and every point
+keeps a one-to-two scaling step on the batch axis: a per-rank pool budget (64 GiB, sized to the
+fleet's smallest HBM, and a hard memory limit the two-batch floor never overrides), and a
+per-burst descriptor budget (a 512k-ISL page-16 request alone is ~2.1M descriptors, and posting
+time is linear in batch x descriptors on the per-descriptor floor, so unbounded bursts would trip
+the per-case time guard; the floor deliberately runs that point's batch-2 burst ~2x over budget,
+bounded work that the gb-nv per-case guard is sized for).
 
 Timing is host wall clock around post→completion — completion of a one-sided transfer is
 host-visible and no local kernel participates, so CUDA events have nothing to bracket. Descriptor

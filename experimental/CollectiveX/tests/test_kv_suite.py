@@ -254,10 +254,11 @@ class KVGrid(unittest.TestCase):
         base.update(overrides)
         return argparse.Namespace(**base)
 
-    def test_descriptor_budget_sheds_batches_but_keeps_a_single_request(self):
+    def test_descriptor_budget_sheds_batches_but_keeps_a_scaling_step(self):
         # 512k page-16 is ~2.1M descriptors per request: over budget at any
-        # batch above 1, but the single request must survive. The 32k cells of
-        # the original grid must keep their full batch ladder.
+        # batch above 1, but the two smallest batches must survive so the
+        # batch axis keeps a one-to-two scaling step everywhere. The 32k cells
+        # of the original grid must keep their full batch ladder.
         import run_kv
 
         points, isls, batches = run_kv._grid(self._args())
@@ -266,11 +267,11 @@ class KVGrid(unittest.TestCase):
         self.assertEqual(allowed[8192, 16], [1, 2, 4, 8, 16, 32, 64])
         self.assertEqual(allowed[32768, 16], [1, 2, 4, 8, 16])
         self.assertEqual(allowed[32768, 64], [1, 2, 4, 8, 16, 32])
-        self.assertEqual(allowed[524288, 16], [1])
+        self.assertEqual(allowed[524288, 16], [1, 2])
         self.assertEqual(allowed[524288, 64], [1, 2])
         for cfg, batch_list in points:
             self.assertLessEqual(cfg["pool_bytes"], run_kv.POOL_BUDGET)
-            for batch in batch_list[1:]:
+            for batch in batch_list[2:]:
                 self.assertLessEqual(batch * cfg["descs"], run_kv.DESC_BUDGET)
 
     def test_pool_budget_sheds_largest_batches_not_the_point(self):
