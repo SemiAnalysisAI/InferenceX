@@ -5894,18 +5894,8 @@
     - "Cover the measured resident TP2/EP2 and TP4 Pareto ranges through their HBM capacity knees, with required SGLang metrics exports."
     - "Use SGLang v0.5.17 and disable unstable AITER all-reduce fusion for TP2/EP2 EAGLE rank consistency."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2562
-
 - config-keys:
-    - dsv4-fp4-b200-dynamo-sglang-mtp
+    - minimaxm3-fp8-mi325x-vllm-agentic-mtp
   description:
-    - "Add a DeepSeek-V4-Pro FP4 Dynamo-SGLang MTP configuration for B200 with five 8k/1k disaggregated topologies."
-    - "Use NIXL for KV transfer with EAGLE speculative decoding and chat-formatted benchmark inputs."
-    - "Image: lmsysorg/sglang:nightly-dev-cu13-20260710-cfc66e05"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2554
-
-- config-keys:
-    - glm5.2-fp4-mi355x-sglang-agentic-mtp
-  description:
-    - "Increase MTP speculative steps from 3 to 5 (num-draft-tokens 4→6) and raise SGLANG_SIMULATE_ACC_LEN from 2.99 to 3.61 to reflect higher measured acceptance rate, targeting ~15% throughput improvement"
-    - "Replace the TP8/EP8 low-concurrency arm (conc [1,2,4]) hicache offload with kv-offloading: none to reduce per-request latency at low load; conc [1,2,4] are now tested on both tp=4+hicache and tp=8+no-offload so SemiAnalysis can select the Pareto-optimal point per concurrency"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2570
+    - "Add MiniMax-M3 MXFP8 AgentX on MI325X with vLLM v0.27.1, EAGLE3-GQA, golden synthetic acceptance length 2.78, complete server metrics, and an isolated LMCache MP functional gate before broad resident discovery."
+  pr-link: XXX
