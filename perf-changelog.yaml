@@ -5815,3 +5815,9 @@
   description:
     - "Install LMCache v0.5.3's missing pure-Python MP runtime dependencies without changing the tested torch/ROCm stack."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2487
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-vllm-agentic-mtp
+  description:
+    - "Complete the LMCache MP runtime with ROCm CuPy, remove the unused native-offload path, and use shared readiness and command-recording helpers."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2487
