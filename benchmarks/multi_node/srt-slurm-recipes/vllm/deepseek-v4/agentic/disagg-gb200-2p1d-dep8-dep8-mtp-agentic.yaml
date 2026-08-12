@@ -81,6 +81,7 @@ backend:
       <<: *dep8_config
       attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_fp4_indexer_cache":true}'
       enforce-eager: false
+      gpu-memory-utilization: 0.90
       max-num-seqs: 1024
       max-num-batched-tokens: 1024
       compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
