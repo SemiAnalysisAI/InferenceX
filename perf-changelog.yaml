@@ -5845,3 +5845,14 @@
   description:
     - "Add MiniMax-M3 MXFP8 AgentX on H100 with vLLM v0.27.1, EAGLE3 golden AL 2.78, resident TP8 c1-c5, and Mooncake DRAM offload c6/c8."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2564
+
+- config-keys:
+    - qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp
+  description:
+    - "Add the measured GB200 Qwen3.5 NVFP4 AgentX Pareto frontier across aggregate TP4, TP2/EP2, and TP4 HiCache with K=3 MTP."
+    - "Use stable SGLang v0.5.17-cu130 and NVIDIA/srt-slurm v1.0.45."
+    - "Enable SGLang metrics/cache reporting and require nonempty sglang: server metrics before publishing results."
+    - "Use K=3 golden synthetic acceptance length 3.39 for throughput; eval retains real MTP verification."
+    - "Give the released SGLang router one hour to register the 28-minute-loading backend and route AgentX sessions by correlation ID."
+    - "Bound hybrid-state pools to the measured resident and HiCache operating ranges instead of reserving capacity that cannot fit beside target and MTP weights."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2568
