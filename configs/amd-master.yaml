@@ -636,6 +636,21 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=2"
 
+kimik3-fp4-mi355x-vllm-agentic-mtp:
+  image: vllm/vllm-openai-rocm:nightly-cb8104839c141609d99f1254459ef3a4f1bd4263
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.50
+      search-space:
+      - { tp: 8, kv-offloading: none, conc-list: [1, 4, 8] , spec-decoding: mtp}
+      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [10], spec-decoding: mtp }
+
 dsr1-fp4-mi355x-sglang-disagg:
   image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519
   model: amd/DeepSeek-R1-0528-MXFP4-v2
