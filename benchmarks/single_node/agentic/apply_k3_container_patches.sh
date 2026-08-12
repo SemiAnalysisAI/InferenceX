@@ -34,6 +34,10 @@
 #                (upstream issue #42085); see the long comment at the patch.
 #   audit        diagnostic only: name the block in the get_new_blocks assert
 #                and warn once if free_blocks() drives a ref_cnt negative.
+#   queue guard  drop free-queue inserts of an already-linked block (which
+#                inflate num_free_blocks without adding a node, so popleft_n
+#                eventually hands out the fake tail sentinel block_id=-1) and
+#                log the offending caller once.
 #   aiter #4521  fp8 cp round-robin asm MLA verify kernels: adds the qh16/qh32
 #                qseqlen4 gqaratio16/32 cprr .co + mla_asm.csv + asm_mla.cu +
 #                v1_2_device.cuh + aiter/mla.py + aiter/ops/attention.py, then
@@ -1343,6 +1347,116 @@ if [ "$(grep -c 'KVCACHE-AUDIT' "$ROOT/vllm/v1/core/block_pool.py")" != "2" ]; t
 fi
 
 
+# ---------------------------------------------------------------------------
+# Free-queue double-insert guard (repair + attribution).
+#
+# Run 31616361031 (CoW pin applied) still died, but the audit assert named the
+# block: `block_id=-1 ref_cnt=1`, i.e. the allocator was handed the queue's own
+# fake tail sentinel. No "drove a block below zero" warning fired, so reference
+# counting is clean -- `num_free_blocks` simply outran the number of nodes
+# actually linked in the list, and popleft_n walked past the end.
+#
+# The only way the counter can outrun the list is an insert of a block that is
+# already linked: append_n/prepend_n set `block.prev = last; block.next = tail`
+# unconditionally and add 1 to the counter, so re-inserting a queued node links
+# it to itself and adds a phantom to the count. A block outside the list always
+# has BOTH link pointers None (popleft_n and remove() clear them), so
+# "already linked" is an exact O(1) test.
+#
+# Drop such inserts -- the block is already in the list, so the list stays
+# correct and the counter stays honest -- and log the caller's stack once so
+# the next failure names whoever double-freed into the queue. Also trip
+# immediately in popleft_n if the walk ever reaches the sentinel again, instead
+# of silently handing it out and only failing on the second handout (which is
+# why the sentinel came back with ref_cnt=1 rather than 0).
+# ---------------------------------------------------------------------------
+cat > "$WS/FREE_QUEUE_GUARD.diff.in" <<'DIFF_FREE_QUEUE_GUARD'
+diff --git a/vllm/v1/core/kv_cache_utils.py b/vllm/v1/core/kv_cache_utils.py
+--- a/vllm/v1/core/kv_cache_utils.py
++++ b/vllm/v1/core/kv_cache_utils.py
+@@ -6,6 +6,7 @@
+ import hashlib
+ import math
+ import os
++import traceback
+ from collections import defaultdict
+ from collections.abc import Callable, Iterable, Iterator, Sequence
+ from dataclasses import dataclass, replace
+@@ -289,6 +290,10 @@
+         ret = []
+         for _ in range(n):
+             assert curr_block is not None
++            assert curr_block is not self.fake_free_list_tail, (
++                "KVCACHE-AUDIT: popleft_n walked into the fake tail -- "
++                f"num_free_blocks over-counted the free list (requested {n})"
++            )
+             ret.append(curr_block)
+             last_block = curr_block
+             curr_block = curr_block.next_free_block
+@@ -346,8 +351,43 @@
+__BLANK_CONTEXT__
+         self.num_free_blocks += 1
+__BLANK_CONTEXT__
++    def _drop_relinked(
++        self, blocks: list[KVCacheBlock], where: str
++    ) -> list[KVCacheBlock]:
++        """KVCACHE-AUDIT: drop blocks that are already linked into the list.
++
++        A block outside the free list always has both link pointers set to
++        None, so a non-None pointer here means the caller is inserting a block
++        that is already queued. Doing that links the node to itself and still
++        bumps ``num_free_blocks``, so the counter outruns the list; ``popleft_n``
++        then walks off the end and hands out the fake tail sentinel
++        (``block_id=-1``). Dropping the re-insert keeps the list correct (the
++        block is already in it) and keeps the counter honest.
++        """
++        if all(
++            b.prev_free_block is None and b.next_free_block is None for b in blocks
++        ):
++            return blocks
++        kept: list[KVCacheBlock] = []
++        for b in blocks:
++            if b.prev_free_block is None and b.next_free_block is None:
++                kept.append(b)
++                continue
++            logger.warning_once(
++                "KVCACHE-AUDIT: %s() was handed an already-linked block "
++                "(block_id=%d ref_cnt=%d hashed=%s); dropping the duplicate "
++                "insert. Caller:\n%s",
++                where,
++                b.block_id,
++                b.ref_cnt,
++                b.block_hash is not None,
++                "".join(traceback.format_stack()[-8:-1]),
++            )
++        return kept
++
+     def prepend_n(self, blocks: list[KVCacheBlock]) -> None:
+         """Put a list of blocks at the front of the free list."""
++        blocks = self._drop_relinked(blocks, "prepend_n")
+         if len(blocks) == 0:
+             return
+__BLANK_CONTEXT__
+@@ -373,6 +413,7 @@
+         Args:
+             blocks: The blocks to append.
+         """
++        blocks = self._drop_relinked(blocks, "append_n")
+         if len(blocks) == 0:
+             return
+__BLANK_CONTEXT__
+DIFF_FREE_QUEUE_GUARD
+sed 's/^__BLANK_CONTEXT__$/ /' "$WS/FREE_QUEUE_GUARD.diff.in" > "$WS/FREE_QUEUE_GUARD.diff"
+apply_one "vllm/v1/core/kv_cache_utils.py" "_drop_relinked" "$WS/FREE_QUEUE_GUARD.diff"
+if ! grep -qF "_drop_relinked" "$ROOT/vllm/v1/core/kv_cache_utils.py"; then
+  echo "ERROR: free-queue double-insert guard did not apply"
+  exit 1
+fi
+if [ "$(grep -c 'KVCACHE-AUDIT' "$ROOT/vllm/v1/core/kv_cache_utils.py")" != "3" ]; then
+  echo "ERROR: free-queue guard applied partially"
+  exit 1
+fi
+
 say "3/4 aiter #4521 (fp8 cp round-robin asm MLA verify kernels)  [needs network + hipcc + GPU]"
 # Unlike the offline Python diffs above, #4521 ships BINARY .co kernels (not in
 # the GitHub .diff) and a C++ asm_mla.cu change that must be recompiled, so this
@@ -1420,8 +1534,10 @@ echo "chk Mamba running CoW          = $(grep -c 'vLLM #51766: preserve running 
 echo "chk CoW pin (touch)            = $(grep -c 'COW_PIN_TOUCH' "$ROOT/vllm/v1/core/single_type_kv_cache_manager.py")  (expect 2)"
 echo "chk raw CoW ref_cnt bumps      = $(grep -cE '^[[:space:]]+(cow_block|source_block)\.ref_cnt \+= 1' "$ROOT/vllm/v1/core/single_type_kv_cache_manager.py")  (expect 0)"
 echo "chk allocator audit            = $(grep -c 'KVCACHE-AUDIT' "$ROOT/vllm/v1/core/block_pool.py")  (expect 2)"
+echo "chk free-queue guard           = $(grep -c 'KVCACHE-AUDIT' "$ROOT/vllm/v1/core/kv_cache_utils.py")  (expect 3)"
 echo "triton          = $(python -c 'import triton; print(triton.__version__)')  (expect 3.7.0*)"
 python -m py_compile "$ROOT/vllm/v1/core/single_type_kv_cache_manager.py" \
+  "$ROOT/vllm/v1/core/kv_cache_utils.py" \
   "$ROOT/vllm/v1/core/block_pool.py" \
   "$ROOT/aiter/ops/triton/gluon/mla_gluon.py" \
   "$ROOT/aiter/ops/gemm_op_a16w16.py" \

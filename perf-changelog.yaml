@@ -5720,3 +5720,12 @@
     - "Name the offending block in the get_new_blocks assertion and warn once when free_blocks drives a reference count negative, so a residual accounting bug reports which block and which direction instead of a bare AssertionError twenty minutes into the run."
     - "Keep the MI355X TP8 c12 vllm-simple DRAM offload cell with lazy_offload enabled as the reproduction point; the matched no-offload sibling of this cell already runs to completion, so the connector is what drives the copy-on-write path into the window."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Reject free-block-queue inserts of a block that is already linked into the queue. append_n and prepend_n overwrite the link pointers and add one to num_free_blocks unconditionally, so re-inserting a queued node links it to itself and adds a phantom to the count; popleft_n then walks past the end of the list and hands out the queue's own fake tail sentinel as if it were a real KV block. A block outside the queue always has both link pointers cleared, so the duplicate insert is detected in constant time, dropped, and its caller logged once."
+    - "Trip immediately in popleft_n if the walk reaches the fake tail, instead of handing the sentinel out silently and only failing on a later allocation once its reference count is already non-zero."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
