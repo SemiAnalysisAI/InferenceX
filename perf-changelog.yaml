@@ -5822,26 +5822,6 @@
 - config-keys:
     - minimaxm3-fp4-mi355x-vllm-agentic-mtp
   description:
-    - "Add Minimax-M3 FP4 vLLM Single Node Agentic Support"
-    - "Image: vllm/vllm-openai-rocm:nightly-cb8104839c141609d99f1254459ef3a4f1bd4263"
-    - "Throughput runs use synthetic EAGLE3 acceptance pinned to the minimax-m3 golden AL (thinking_on, num_speculative_tokens=5, AL=3.35); EVAL_ONLY accuracy runs keep real target verification"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2487
-
-- config-keys:
-    - minimaxm3-fp4-mi355x-vllm-agentic-mtp
-  description:
-    - "Refresh the MI355X MiniMax-M3 AgentX MTP submission with vLLM v0.27.1 and the committed thinking-on golden acceptance length."
-    - "Expand TP4/TP2 GPU-resident coverage with topology-compatible AITER/Triton sparse attention, and add TP-sharded LMCache MP DRAM-offload points near the capacity knee with validated vLLM Prometheus metrics."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2487
-
-- config-keys:
-    - minimaxm3-fp4-mi355x-vllm-agentic-mtp
-  description:
-    - "Install LMCache v0.5.3's missing pure-Python MP runtime dependencies without changing the tested torch/ROCm stack."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2487
-
-- config-keys:
-    - minimaxm3-fp4-mi355x-vllm-agentic-mtp
-  description:
-    - "Complete the LMCache MP runtime with ROCm CuPy, remove the unused native-offload path, and use shared readiness and command-recording helpers."
+    - "Add the MI355X MiniMax-M3 FP4 vLLM AgentX MTP submission on vLLM v0.27.1, using the committed EAGLE3 synthetic acceptance length of 3.35 for throughput and real target verification for eval."
+    - "Sweep TP2/TP4 GPU-resident configurations and TP4 LMCache MP DRAM-offload points around the capacity knee, with vLLM server metrics enabled."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2487
