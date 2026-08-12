@@ -488,6 +488,9 @@ else
     git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
 fi
+if [[ "${EVAL_FRAMEWORK:-lm-eval}" == "kimi-vendor" ]]; then
+    python3 "$GITHUB_WORKSPACE/runners/patch_srt_eval_dispatch.py" "$(pwd)" || exit 1
+fi
 
 echo "Installing srtctl..."
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -635,10 +638,10 @@ if command -v squeue >/dev/null 2>&1; then
 fi
 sed -i "s/^name:.*/name: \"${SRT_SLURM_JOB_NAME}\"/" "$CONFIG_PATH"
 
-# Optionally inject synthetic acceptance into the recipe's speculative-config
-# when SYNTHETIC_ACCEPTANCE=true (no-op otherwise). Must run after the name
-# override and before srtctl apply so the rendered job picks it up.
-python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" "$CONFIG_PATH" "$FRAMEWORK"
+# Restore real acceptance for eval-only jobs, or inject synthetic acceptance
+# when a throughput run explicitly enables it.
+python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
+    "$CONFIG_PATH" "$FRAMEWORK" || exit 1
 
 # Don't leak the login-node venv to the compute-node orchestrator. sbatch's
 # default --export=ALL propagates VIRTUAL_ENV (set by `source

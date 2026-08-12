@@ -98,7 +98,7 @@ backend:
       max-num-seqs: 8
       max-num-batched-tokens: 8192
       speculative-config: '{"method":"dspark","model":"/tmp/Kimi-K3-DSpark","num_speculative_tokens":2,"attention_backend":"FLASHINFER_MLA","draft_sample_method":"probabilistic","rejection_sample_method":"synthetic","synthetic_acceptance_length":2.51}'
-      compilation-config: '{"cudagraph_capture_sizes":[3,6,9,12,15,18,21,24]}'
+      compilation-config: '{"cudagraph_capture_sizes":[3,6,9,12,15,18,21,24],"pass_config":{"fuse_allreduce_rms":false}}'
       block-size: 64
       language-model-only: true
       disable-custom-all-reduce: true
@@ -108,7 +108,6 @@ backend:
       reasoning-parser: "kimi_k3"
       dyn-reasoning-parser: "kimi_k3"
       no-enable-flashinfer-autotune: true
-      compilation-config: '{"pass_config":{"fuse_allreduce_rms":false}}'
 
 sbatch_directives:
   cpus-per-task: "144"

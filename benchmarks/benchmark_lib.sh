@@ -929,13 +929,6 @@ _run_kimi_tool_call_schema_eval() {
         esac
     done
 
-    case "${IS_MULTINODE:-false}" in
-        true|1)
-            echo "ERROR: Kimi tool-call schema eval supports single-node only" >&2
-            export EVAL_RESULT_DIR=""
-            return 2
-            ;;
-    esac
 
     local model_name="${MODEL_NAME:-${MODEL:-}}"
     local adapter_path="${INFERENCEX_REPO_ROOT}/utils/evals/kimi_vendor_eval.py"
@@ -1816,6 +1809,9 @@ run_eval() {
     fi
 
     local framework="${EVAL_FRAMEWORK:-${cli_framework:-$scenario_default}}"
+    if [ "$framework" = "kimi-vendor" ] && [ -z "${EVAL_SUITE:-}" ]; then
+        EVAL_SUITE="kimi_tool_call_schema"
+    fi
 
     case "${EVAL_SUITE:-}" in
         "") ;;

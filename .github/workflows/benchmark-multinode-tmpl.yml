@@ -133,6 +133,16 @@ on:
         type: boolean
         required: false
         default: false
+      eval-framework:
+        description: "Eval runner (lm-eval, swebench, or kimi-vendor)"
+        type: string
+        required: false
+        default: "lm-eval"
+      eval-suite:
+        description: "Kimi Vendor Verifier suite; leave empty for other eval runners"
+        type: string
+        required: false
+        default: ""
       eval-conc:
         description: "Concurrency value or space-separated list for eval requests (overrides default max-of-conc-list)"
         type: string
@@ -232,6 +242,8 @@ env:
   DECODE_HARDWARE: ${{ inputs.decode-hardware }}
   RUN_EVAL: ${{ inputs.run-eval }}
   EVAL_ONLY: ${{ inputs.eval-only }}
+  EVAL_FRAMEWORK: ${{ inputs.eval-framework }}
+  EVAL_SUITE: ${{ inputs.eval-suite }}
   EVAL_CONC: ${{ inputs.eval-conc }}
   EVAL_LIMIT: ${{ inputs.eval-limit }}
   SWEBENCH_GEN_MODE: ${{ inputs.swebench-gen-mode }}
@@ -471,6 +483,7 @@ jobs:
           path: |
             meta_env.json
             results*.json
+            *_vendor_report.json
             sample*.jsonl
             agent_preds.json
             predictions.jsonl
@@ -492,6 +505,7 @@ jobs:
         run: |
           rm -f meta_env.json || true
           rm -f results*.json || true
+          rm -f *_vendor_report.json || true
           rm -f sample*.jsonl || true
           rm -f agent_preds.json predictions.jsonl swebench_report_*.json *.traj* || true
 

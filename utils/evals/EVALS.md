@@ -48,7 +48,8 @@ runner. Existing jobs continue to use lm-eval with GSM8K by default.
 
 The default eval framework is [lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness) (`lm-eval`). Agentic eval-only matrix jobs inherit this default and therefore run the same GSM8K task as 8k1k. Explicit agentic runs can still select SWE-bench.
 
-The Phase 1 Kimi smoke is opt-in and single-node only. Select
+The Phase 1 Kimi smoke is opt-in. It supports single-node jobs and Kimi K3
+aggregate H200, B200, and GB200 srt-slurm jobs. Select
 `eval-framework: kimi-vendor` and `eval-suite: kimi_tool_call_schema` on
 `e2e-tests.yml`, or invoke it from the repository root after a server is ready:
 
@@ -98,7 +99,10 @@ upstream pytest process to 900 seconds.
 
 This smoke validates one object-schema tool call. It does not cover tool choice,
 parallel calls, multi-turn execution, or general agent quality. Multi-value
-batched concurrency and multi-node execution are unsupported.
+batched concurrency is unsupported. Multi-node aggregate jobs run the same
+two-case smoke against their OpenAI-compatible frontend. Eval-only launchers
+restore real block verification before submitting recipes that otherwise use
+synthetic acceptance for throughput.
 
 ### Benchmark script flow
 
@@ -161,10 +165,10 @@ Multi-node evals support two hardware paths:
 **NVIDIA Slurm multi-node (GB200, GB300, B200, B300, H100, H200)** runs through [srt-slurm](https://github.com/NVIDIA/srt-slurm) on the `sa-submission-q2-2026` branch.
 - `do_sweep.py` skips the benchmark stage when `EVAL_ONLY=true`, runs `_run_post_eval()` directly
 - In eval-only mode, uses the full `wait_for_model()` health check (same as benchmark stage) since the benchmark health check was skipped
-- `lm-eval` runner (`benchmarks/lm_eval.py`) is invoked by `do_sweep.py` as a post/eval-only step and sources InferenceX's `benchmark_lib.sh` from the mounted workspace (`/infmax-workspace`)
+- The registered srt-slurm `lm-eval` post-runner sources InferenceX's `benchmark_lib.sh` from the mounted workspace (`/infmax-workspace`). Kimi-selected launches patch that hook to use generic `run_eval` dispatch while preserving lm-eval as the default.
 - Eval artifacts written to `/logs/eval_results/` inside the container, collected by launch scripts
 - NVIDIA Slurm launch scripts always collect server logs for debugging but skip benchmark result collection when `EVAL_ONLY=true`
-- Env vars threaded: `RUN_EVAL`, `EVAL_ONLY`, `IS_MULTINODE`, `FRAMEWORK`, `PRECISION`, `MODEL_PREFIX`, `RUNNER_TYPE`, `RESULT_FILENAME`, `SPEC_DECODING`, `ISL`, `OSL`, `PREFILL_TP/EP/NUM_WORKERS/DP_ATTN`, `DECODE_TP/EP/NUM_WORKERS/DP_ATTN`, `MODEL_NAME`, `EVAL_CONC`
+- Env vars threaded: `RUN_EVAL`, `EVAL_ONLY`, `EVAL_FRAMEWORK`, `EVAL_SUITE`, `IS_MULTINODE`, `FRAMEWORK`, `PRECISION`, `MODEL_PREFIX`, `RUNNER_TYPE`, `RESULT_FILENAME`, `SPEC_DECODING`, `ISL`, `OSL`, `PREFILL_TP/EP/NUM_WORKERS/DP_ATTN`, `DECODE_TP/EP/NUM_WORKERS/DP_ATTN`, `MODEL_NAME`, `EVAL_CONC`
 
 For multi-node `all-evals`, `EVAL_CONC` is a space-separated list. When it contains multiple values, `run_eval` runs those concurrency points sequentially against the same live engine, stages each result with a `_concN` filename suffix, and records expected/completed/failed points in `meta_env.json`.
 

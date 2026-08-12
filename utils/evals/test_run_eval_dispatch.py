@@ -11,6 +11,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BENCHMARK_LIB = REPO_ROOT / "benchmarks" / "benchmark_lib.sh"
+MULTINODE_WORKFLOW = REPO_ROOT / ".github/workflows/benchmark-multinode-tmpl.yml"
 E2E_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "e2e-tests.yml"
 
 _SCRIPT = r'''
@@ -221,6 +222,31 @@ printf 'FINAL_SUITE=%s\n' "${EVAL_SUITE-unset}"
     assert "FINAL_SUITE=unset" in result.stdout
 
 
+def test_kimi_default_suite_reaches_eval_only_metadata() -> None:
+    script = r'''
+source "$BENCHMARK_LIB"
+run_kimi_vendor_eval() { echo "DISPATCH=$EVAL_SUITE"; }
+append_lm_eval_summary() { echo "METADATA=$EVAL_SUITE"; }
+export EVAL_FRAMEWORK=kimi-vendor
+export EVAL_ONLY=true
+export IS_AGENTIC=1
+export EVAL_CONCURRENT_REQUESTS=""
+unset EVAL_SUITE
+run_eval --port 8888
+'''
+    result = subprocess.run(
+        ["bash", "-c", script],
+        env={**os.environ, "BENCHMARK_LIB": str(BENCHMARK_LIB)},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "DISPATCH=kimi_tool_call_schema" in result.stdout
+    assert "METADATA=kimi_tool_call_schema" in result.stdout
+
+
 def test_kimi_vendor_rejects_batched_concurrency() -> None:
     result = _run_invalid_call(
         "EVAL_MAX_MODEL_LEN=16384 "
@@ -238,15 +264,6 @@ def test_kimi_vendor_rejects_unsupported_suite() -> None:
     assert result.returncode == 2
     assert "unsupported Kimi Vendor Verifier suite 'gsm8k'" in result.stderr
 
-
-def test_kimi_vendor_rejects_multinode() -> None:
-    for value in ("true", "1"):
-        result = _run_invalid_call(
-            f"EVAL_SUITE=kimi_tool_call_schema IS_MULTINODE={value} "
-            "run_kimi_vendor_eval"
-        )
-        assert result.returncode == 2
-        assert "supports single-node only" in result.stderr
 
 
 def test_kimi_vendor_setup_failure_writes_compatibility_result(
@@ -352,7 +369,9 @@ printf 'EVAL_RC=%s\n' "$?"
 
 
 
-def test_kimi_vendor_runner_uses_fixed_upstream_contract(tmp_path: Path) -> None:
+def test_kimi_vendor_multinode_runner_uses_fixed_upstream_contract(
+    tmp_path: Path,
+) -> None:
     results_dir = tmp_path / "results"
     verifier_dir = tmp_path / "verifier"
     runtime_dir = tmp_path / "runtime"
@@ -383,7 +402,7 @@ printf 'EVAL_RESULT_DIR=%s\n' "$EVAL_RESULT_DIR"
         "RUNTIME_DIR": str(runtime_dir),
         "OPENAI_API_KEY": "must-not-be-forwarded",
         "KV_OFFLOADING": "none",
-        "IS_MULTINODE": "false",
+        "IS_MULTINODE": "true",
     }
     for key in (
         "EVAL_SUITE",
@@ -1134,6 +1153,18 @@ def test_agentic_eval_workflow_forwards_runner_contract() -> None:
     assert forwarded["eval-suite"] == "${{ inputs.eval-suite }}"
 
 
+def test_multinode_agentic_eval_workflow_forwards_runner_contract() -> None:
+    workflow = yaml.safe_load(E2E_WORKFLOW.read_text())
+    forwarded = workflow["jobs"]["test-sweep-multi-node-agentic-evals"]["with"]
+    reusable_workflow = yaml.safe_load(MULTINODE_WORKFLOW.read_text())
+
+    assert forwarded["eval-framework"] == "${{ inputs.eval-framework }}"
+    assert forwarded["eval-suite"] == "${{ inputs.eval-suite }}"
+    assert reusable_workflow["env"]["EVAL_FRAMEWORK"] == "${{ inputs.eval-framework }}"
+    assert reusable_workflow["env"]["EVAL_SUITE"] == "${{ inputs.eval-suite }}"
+    assert "*_vendor_report.json" in MULTINODE_WORKFLOW.read_text()
+
+
 
 def test_trusted_changelog_matrix_keeps_multinode_agentic_evals() -> None:
     workflow = yaml.safe_load(E2E_WORKFLOW.read_text())
@@ -1149,3 +1180,6 @@ def test_trusted_changelog_matrix_keeps_multinode_agentic_evals() -> None:
     )
 
     assert '"multinode_agentic_evals"' in flatten_command
+    get_jobs_command = get_jobs["run"]
+    assert "EVALS=$(" in get_jobs_command
+    assert "score_matrix eval" in get_jobs_command
