@@ -5843,4 +5843,4 @@
   description:
     - "Increase MTP speculative steps from 3 to 5 (num-draft-tokens 4→6) and raise SGLANG_SIMULATE_ACC_LEN from 2.99 to 3.61 to reflect higher measured acceptance rate, targeting ~15% throughput improvement"
     - "Replace the TP8/EP8 low-concurrency arm (conc [1,2,4]) hicache offload with kv-offloading: none to reduce per-request latency at low load; conc [1,2,4] are now tested on both tp=4+hicache and tp=8+no-offload so SemiAnalysis can select the Pareto-optimal point per concurrency"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PLACEHOLDER
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2570
