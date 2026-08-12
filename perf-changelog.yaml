@@ -5796,6 +5796,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2476
 
 - config-keys:
+    - dsv4-fp8-h200-dynamo-sglang-agentic-agg
+  description:
+    - "Add one H200 TP8 aggregated DeepSeek-V4-Pro AgentX recipe with MTP and HiCache."
+    - "Generate Pareto points by sweeping concurrency [1, 2, 4, 8, 16] while keeping the serving topology fixed."
+    - "Use Dynamo header-based session affinity and AIPerf agentx-v1.0.1 (b7b16cf851885567988a643282266bce74e34437)."
+    - "Enable SGLang engine metrics and require the sglang: server-metric prefix so the published trace artifacts carry backend data."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2364
+  
+
+- config-keys:
     - minimaxm3-fp4-mi355x-vllm-agentic-mtp
   description:
     - "Add Minimax-M3 FP4 vLLM Single Node Agentic Support"
