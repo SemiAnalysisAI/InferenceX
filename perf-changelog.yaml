@@ -5804,4 +5804,6 @@
     - "Use stable SGLang v0.5.17-cu130 and NVIDIA/srt-slurm v1.0.45."
     - "Enable SGLang metrics/cache reporting and require nonempty sglang: server metrics before publishing results."
     - "Use K=3 golden synthetic acceptance length 3.39 for throughput; eval retains real MTP verification."
+    - "Give the released SGLang router one hour to register the 28-minute-loading backend and route AgentX sessions by correlation ID."
+    - "Bound TP2 hybrid-state pools to the c32 resident and c56 HiCache discovery ceilings instead of reserving 160 requests that cannot fit beside target and MTP weights."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2568
