@@ -5820,6 +5820,25 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2475
 
 - config-keys:
+    - minimaxm3-fp4-mi355x-vllm-agentic-mtp
+  description:
+    - "Add the MI355X MiniMax-M3 FP4 vLLM AgentX MTP submission on vLLM v0.27.1, using the committed EAGLE3 synthetic acceptance length of 3.35 for throughput and real target verification for eval."
+    - "Sweep TP2/TP4 GPU-resident configurations and TP4 LMCache MP DRAM-offload points around the capacity knee, with vLLM server metrics enabled."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2487
+
+- config-keys:
+    - qwen3.5-fp8-mi300x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Qwen3.5-397B-A17B FP8 AgentX on MI300X with SGLang native EAGLE MTP and golden synthetic acceptance length 3.39"
+    - "Use TP8/EP1 and TP8/EP8 Pareto sweeps at c4/c16/c20/c24/c32; fast discovery found peak throughput at c24 and a post-knee regression at c32"
+    - "Exclude HiCache because SGLang v0.5.16 rejects Qwen3.5's layer-first hybrid cache layout"
+    - "Collect and require SGLang Prometheus metrics from the aggregate engine endpoint"
+    - "Image: lmsysorg/sglang-rocm:v0.5.16-rocm720-mi30x-20260730"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2563
+
+- config-keys:
     - qwen3.5-fp8-mi325x-sglang-agentic-mtp
   scenario-type:
     - agentic-coding
