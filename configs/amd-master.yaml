@@ -466,6 +466,23 @@ qwen3.5-fp8-mi300x-sglang:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
+# AgentX Pareto sweep for Qwen3.5 FP8 on MI300X. The fast discovery run peaks
+# at c24; c32 records the post-knee throughput and latency cliff.
+qwen3.5-fp8-mi300x-sglang-agentic-mtp:
+  image: lmsysorg/sglang-rocm:v0.5.16-rocm720-mi30x-20260730
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  runner: cluster:mi300x-amds
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [4, 16, 20, 24, 32] }
+      - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [4, 16, 20, 24, 32] }
+
 dsr1-fp8-mi355x-atom:
   image: rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511
   model: deepseek-ai/DeepSeek-R1-0528
@@ -1680,6 +1697,22 @@ dsv4-fp8-mi325x-vllm-mtp:
       # cap 8k1k MTP at 128 (normal holds 256, 1k1k holds 512).
       - { tp: 8, conc-start: 4, conc-end: 128, spec-decoding: mtp }
 
+minimaxm3-fp4-mi355x-vllm-agentic-mtp:
+  image: vllm/vllm-openai-rocm:v0.27.1
+  model: amd/MiniMax-M3-MXFP4
+  model-prefix: minimaxm3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.20
+      search-space:
+      - { tp: 4, kv-offloading: none, conc-list: [1, 2, 4, 5, 8, 10, 12, 15, 20, 24, 28, 32], spec-decoding: mtp }
+      - { tp: 2, kv-offloading: none, conc-list: [1, 2, 5], spec-decoding: mtp }
+      - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.3" }, conc-list: [32, 40], spec-decoding: mtp }
+
 # GLM-5.2 FP4 agentic-coding benchmark on MI355X via SGLang with MTP speculative
 # decoding. TP=4 EP=4 with KV offloading to DRAM (hicache backend) to support
 # long agentic context windows. Concurrency sweep [1, 2, 4, 8, 10].
@@ -1697,4 +1730,3 @@ glm5.2-fp4-mi355x-sglang-agentic-mtp:
       search-space:
       - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 2, 4, 8, 10, 12, 16], spec-decoding: mtp }
       - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 2, 4], spec-decoding: mtp }
-
