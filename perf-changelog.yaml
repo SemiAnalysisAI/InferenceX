@@ -5813,5 +5813,5 @@
 - config-keys:
     - minimaxm3-fp4-mi355x-vllm-agentic-mtp
   description:
-    - "Install LMCache v0.5.3's pinned sortedcontainers runtime dependency explicitly while preserving vLLM's tested torch/ROCm stack."
+    - "Install LMCache v0.5.3's missing pure-Python MP runtime dependencies without changing the tested torch/ROCm stack."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2487

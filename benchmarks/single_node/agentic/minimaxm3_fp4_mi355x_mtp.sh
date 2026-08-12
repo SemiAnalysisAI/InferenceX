@@ -116,14 +116,17 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         # LMCache v0.5.3 publishes an official Python 3.12 ROCm wheel for
         # gfx942/gfx950 and validates MiniMax-M3 with LMCacheMPConnector.
         # --no-deps preserves the vLLM image's tested torch/ROCm stack. Install
-        # the wheel's pure-Python SortedList dependency explicitly; LMCache's
-        # CPU memory manager imports it during MP connector initialization.
+        # the wheel's pure-Python runtime dependencies that are absent from the
+        # vLLM image explicitly. LMCache imports both while starting MP mode.
         LMCACHE_VERSION="0.5.3"
         LMCACHE_ROCM_INDEX="https://github.com/LMCache/LMCache/releases/expanded_assets/v${LMCACHE_VERSION}-rocm"
         agentic_pip_install --quiet --no-cache-dir --no-deps \
             "sortedcontainers==2.4.0" \
+            "opentelemetry-exporter-prometheus==0.61b0" \
             "lmcache==${LMCACHE_VERSION}" --find-links "$LMCACHE_ROCM_INDEX"
-        python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null
+        python3 -c \
+            "import lmcache.integration.vllm.lmcache_mp_connector; import opentelemetry.exporter.prometheus" \
+            >/dev/null
 
         # One MP server process per TP rank avoids putting every rank's Python
         # store/retrieve bookkeeping behind one GIL. The configured node-level
