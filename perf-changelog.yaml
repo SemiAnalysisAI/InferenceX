@@ -5784,7 +5784,6 @@
     - "Update the B300 DSV4 AgentX MTP image and SimpleCPU sweep through c576."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2536
   
-
 - config-keys:
     - kimik3-fp4-b300-vllm-agentic-dspark
   description:
@@ -5803,4 +5802,19 @@
     - "Use Dynamo header-based session affinity and AIPerf agentx-v1.0.1 (b7b16cf851885567988a643282266bce74e34437)."
     - "Enable SGLang engine metrics and require the sglang: server-metric prefix so the published trace artifacts carry backend data."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2364
-  
+
+- config-keys:
+    - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
+  description:
+    - "Add Kimi K3 B200 AgentX latency, balanced, and throughput tiers on a two-node TP8/DP2/EP16 DSpark topology with tensor parallelism local to each B200"
+    - "Add a TP8/DP2/EP16 SimpleCPUOffloadConnector capacity tier with 220 GiB of host KV per rank"
+    - "Keep throughput on DSpark level 7 probabilistic drafting with committed golden synthetic AL 3.84; EVAL_ONLY selects committed rejection_sample_method=block recipes for real target verification"
+    - "Use the digest-pinned 2026-08-10 upstream vLLM nightly and direct Inferact/Kimi-K3-DSpark model ID as shipped, with no local compatibility layer or installed serving-engine rewrite"
+    - "Use node-local TP8 FlashInfer collectives and cross-node DP2/EP16 so the digest-pinned upstream serving engine runs without a compatibility layer or source rewrite"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2475
+
+- config-keys:
+    - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
+  description:
+    - "Extend the SimpleCPUOffloadConnector grid to c8/c12/c16/c20/c24/c28/c32/c48/c64 to locate its crossover against the resident curve"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2475
