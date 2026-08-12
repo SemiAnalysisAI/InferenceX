@@ -119,6 +119,7 @@ backend:
       kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":549755813888,"cpu_bytes_to_use_per_rank":137438953472,"lazy_offload":false}}'
       scheduler-cls: "vllm.v1.core.sched.async_scheduler.AsyncScheduler"
       dyn-tool-call-parser: "kimi_k3"
+      dyn-enable-structural-tag: true
       reasoning-parser: "kimi_k3"
       dyn-reasoning-parser: "kimi_k3"
       no-enable-flashinfer-autotune: true

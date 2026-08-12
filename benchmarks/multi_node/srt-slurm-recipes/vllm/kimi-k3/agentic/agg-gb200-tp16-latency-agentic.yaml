@@ -105,6 +105,7 @@ backend:
       enable-prefix-caching: true
       scheduler-cls: "vllm.v1.core.sched.async_scheduler.AsyncScheduler"
       dyn-tool-call-parser: "kimi_k3"
+      dyn-enable-structural-tag: true
       reasoning-parser: "kimi_k3"
       dyn-reasoning-parser: "kimi_k3"
       no-enable-flashinfer-autotune: true

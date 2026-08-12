@@ -242,6 +242,24 @@ def test_gb200_kimi_compilation_config_preserves_all_settings() -> None:
         assert compilation_config["pass_config"]["fuse_allreduce_rms"] is False
 
 
+
+def test_gb200_dynamo_kimi_recipes_enable_structural_tool_constraints() -> None:
+    recipe_dir = (
+        REPO_ROOT / "benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic"
+    )
+    recipes = [
+        yaml.safe_load(path.read_text())
+        for path in recipe_dir.glob("agg-gb200-*-agentic.yaml")
+    ]
+
+    assert recipes
+    for recipe in recipes:
+        frontend = recipe["frontend"]
+        assert frontend["type"] == "dynamo"
+        config = recipe["backend"]["vllm_config"]["aggregated"]
+        assert config["dyn-tool-call-parser"] == "kimi_k3"
+        assert config["dyn-enable-structural-tag"] is True
+
 def test_b200_kimi_recipe_uses_available_roce_devices() -> None:
     recipe_path = (
         REPO_ROOT
