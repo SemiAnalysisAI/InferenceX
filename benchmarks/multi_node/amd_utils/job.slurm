@@ -710,7 +710,11 @@ fi  # end: if ENGINE == atom-disagg || vllm-disagg
 # exist), which is how a prefill fault on this arm was lost. The mount below points
 # it at the node's /tmp/coredumps, next to the per-role logs the run already collects.
 # Note: this block is inside the quoted srun body, so no double quotes here.
+# 1777 (not the default 775): the process ROCm uses to write the dump is not
+# necessarily the uid that owns this directory, and it reported the directory as not
+# writable even once it existed.
 mkdir -p /tmp/coredumps 2>/dev/null || true
+chmod 1777 /tmp/coredumps 2>/dev/null || true
 
 # Pre-clean (idempotent): stop then force-remove so GPU VRAM is released before
 # the sanity gate. stop-only left containers in Created/Exited state on some nodes.
