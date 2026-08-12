@@ -36,6 +36,10 @@ infra:
 frontend:
   type: dynamo
   enable_multiple_frontends: false
+  env:
+    # Long AgentX prefills can exceed Dynamo's request-plane default while
+    # the healthy DEP8 worker is still computing the first response.
+    DYN_TCP_REQUEST_TIMEOUT: "60"
   args:
     router-mode: random
     router-session-affinity-ttl-secs: 900

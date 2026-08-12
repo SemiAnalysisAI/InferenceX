@@ -5833,4 +5833,5 @@
     - "Select the supported FlashInfer DeepSeek V4 sparse-MLA backend, avoiding the released FlashMLA long-prefill TMA regression while preserving FP4 indexer caching."
     - "Use the public DeepSeek V4 MTP full-decode-only graph mode so aggregate and disaggregated DEP do not capture incompatible sliding-window cache views."
     - "Use the established 7,200-second Dynamo lease budget so the long FP4 model load and graph compile cannot expire healthy frontend and backend registrations."
+    - "Allow 60 seconds for Dynamo TCP request-plane acknowledgements so healthy long AgentX prefills are not cut off by the transport default."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2567
