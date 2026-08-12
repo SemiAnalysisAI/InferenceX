@@ -27,6 +27,13 @@
 #   vllm  #51766 preserve Mamba running CoW ownership after an external cache
 #                hit whose first continuation remains inside the same state
 #                block (the Kimi-K3 hybrid-cache failure mode).
+#   CoW pin      take the two CoW retention refs through BlockPool.touch()
+#                instead of a raw `ref_cnt += 1`, so a retained block that was
+#                sitting in the free queue is actually unlinked from it. This
+#                is the c12 SimpleCPUOffloadConnector free-list corruption
+#                (upstream issue #42085); see the long comment at the patch.
+#   audit        diagnostic only: name the block in the get_new_blocks assert
+#                and warn once if free_blocks() drives a ref_cnt negative.
 #   aiter #4521  fp8 cp round-robin asm MLA verify kernels: adds the qh16/qh32
 #                qseqlen4 gqaratio16/32 cprr .co + mla_asm.csv + asm_mla.cu +
 #                v1_2_device.cuh + aiter/mla.py + aiter/ops/attention.py, then
@@ -1222,6 +1229,119 @@ if ! grep -qF "vLLM #51766: preserve running CoW after an external Mamba hit." \
   exit 1
 fi
 
+# ---------------------------------------------------------------------------
+# CoW retention pin: route the two raw `ref_cnt += 1` sites through
+# BlockPool.touch().
+#
+# `touch()` is the only correct way to take a reference on a KVCacheBlock:
+#
+#     if block.ref_cnt == 0 and not block.is_null:
+#         self.free_block_queue.remove(block)
+#     block.ref_cnt += 1
+#
+# The two CoW retention sites bump `ref_cnt` directly instead, so a block that
+# is sitting in the free queue at ref_cnt==0 stays linked into that queue while
+# its ref_cnt becomes 1. The allocator then hands it out anyway and trips
+# `assert block.ref_cnt == 0` in `get_new_blocks` -- or, once the same block is
+# freed again and re-appended, `assert curr_block is not None` in
+# `FreeKVCacheBlockQueue.popleft_n`. Those are exactly the two engine deaths
+# seen on the c12 SimpleCPUOffloadConnector cell (upstream issue #42085): the
+# no-offload sibling of the same cell runs to completion because the connector
+# is what drives the partial-hit / CoW path hard enough to hit the window.
+#
+# For a block that already holds a reference (the common case) `touch()` is
+# identical to the raw increment, so this is a strict narrowing of behaviour.
+# ---------------------------------------------------------------------------
+cat > "$WS/COW_PIN_TOUCH.diff.in" <<'DIFF_COW_PIN_TOUCH'
+diff --git a/vllm/v1/core/single_type_kv_cache_manager.py b/vllm/v1/core/single_type_kv_cache_manager.py
+--- a/vllm/v1/core/single_type_kv_cache_manager.py
++++ b/vllm/v1/core/single_type_kv_cache_manager.py
+@@ -422,7 +422,11 @@
+         assert not source_block.is_null and source_block.ref_cnt > 0
+         req_blocks[block_idx] = cow_block
+         self._pending_cow_copies.append((source_block, cow_block))
+-        cow_block.ref_cnt += 1
++        # COW_PIN_TOUCH: take the retention ref through the block pool. A raw
++        # `ref_cnt += 1` leaves a ref_cnt==0 block linked in the free queue,
++        # which later trips `assert block.ref_cnt == 0` in get_new_blocks and
++        # corrupts the free-block list.
++        self.block_pool.touch((cow_block,))
+__BLANK_CONTEXT__
+     def cache_blocks(
+         self,
+@@ -1621,7 +1625,8 @@
+                         assert req_blocks[block_idx] is source_block
+                         self.block_pool.move_block_hashes(source_block, cow_block)
+                         self._pending_cow_copies.append((source_block, cow_block))
+-                        source_block.ref_cnt += 1
++                        # COW_PIN_TOUCH: see _apply_cow above.
++                        self.block_pool.touch((source_block,))
+                         boundary_tokens = self._producer_partial_tail_reqs.pop(
+                             request_id, None
+                         )
+DIFF_COW_PIN_TOUCH
+sed 's/^__BLANK_CONTEXT__$/ /' "$WS/COW_PIN_TOUCH.diff.in" > "$WS/COW_PIN_TOUCH.diff"
+apply_one "vllm/v1/core/single_type_kv_cache_manager.py" \
+  "COW_PIN_TOUCH" \
+  "$WS/COW_PIN_TOUCH.diff"
+if [ "$(grep -c 'COW_PIN_TOUCH' "$ROOT/vllm/v1/core/single_type_kv_cache_manager.py")" != "2" ]; then
+  echo "ERROR: CoW retention pin patch did not apply to both sites"
+  grep -n 'ref_cnt += 1' "$ROOT/vllm/v1/core/single_type_kv_cache_manager.py" || true
+  exit 1
+fi
+if grep -qE '^\s+(cow_block|source_block)\.ref_cnt \+= 1' \
+        "$ROOT/vllm/v1/core/single_type_kv_cache_manager.py"; then
+  echo "ERROR: a raw CoW ref_cnt increment survived the pin patch"
+  exit 1
+fi
+
+# ---------------------------------------------------------------------------
+# Allocator audit (diagnostic only, no behaviour change). If the free list is
+# still corrupted after the pin fix, these two hunks say which invariant broke
+# and on which block, instead of leaving a bare AssertionError 20 minutes into
+# the benchmark.
+# ---------------------------------------------------------------------------
+cat > "$WS/BLOCK_POOL_AUDIT.diff" <<'DIFF_BLOCK_POOL_AUDIT'
+diff --git a/vllm/v1/core/block_pool.py b/vllm/v1/core/block_pool.py
+--- a/vllm/v1/core/block_pool.py
++++ b/vllm/v1/core/block_pool.py
+@@ -664,7 +664,12 @@
+         if self.enable_caching:
+             for block in ret:
+                 self._maybe_evict_cached_block(block)
+-                assert block.ref_cnt == 0
++                assert block.ref_cnt == 0, (
++                    "KVCACHE-AUDIT: free queue handed out a referenced block "
++                    f"(block_id={block.block_id} ref_cnt={block.ref_cnt} "
++                    f"hashed={block.block_hash is not None} "
++                    f"null={block.is_null})"
++                )
+                 block.ref_cnt += 1
+                 if self.metrics_collector:
+                     self.metrics_collector.on_block_allocated(block)
+@@ -729,6 +734,15 @@
+         blocks_without_hash = []
+         for block in ordered_blocks:
+             block.ref_cnt -= 1
++            if block.ref_cnt < 0 and not block.is_null:
++                logger.warning_once(
++                    "KVCACHE-AUDIT: free_blocks() drove a block below zero "
++                    "(block_id=%d ref_cnt=%d hashed=%s) -- a double-free is "
++                    "corrupting the free-block list.",
++                    block.block_id,
++                    block.ref_cnt,
++                    block.block_hash is not None,
++                )
+             if block.ref_cnt == 0 and not block.is_null:
+                 # When caching is disabled we always append for better
+                 # GPU cache locality from reusing recently used blocks
+DIFF_BLOCK_POOL_AUDIT
+apply_one "vllm/v1/core/block_pool.py" "KVCACHE-AUDIT" "$WS/BLOCK_POOL_AUDIT.diff"
+if [ "$(grep -c 'KVCACHE-AUDIT' "$ROOT/vllm/v1/core/block_pool.py")" != "2" ]; then
+  echo "ERROR: block pool audit patch did not apply to both sites"
+  exit 1
+fi
+
 
 say "3/4 aiter #4521 (fp8 cp round-robin asm MLA verify kernels)  [needs network + hipcc + GPU]"
 # Unlike the offline Python diffs above, #4521 ships BINARY .co kernels (not in
@@ -1297,8 +1417,13 @@ echo "chk attn_utils.py              = $(grep -c 'cg_support_exclude_layers' "$R
 echo "chk model_runner.py            = $(grep -c 'cg_support_exclude_layers' "$ROOT/vllm/v1/worker/gpu/model_runner.py")"
 echo "chk fused_recurrent.py         = $(grep -c 'reshape(-1).contiguous()' "$ROOT/vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py")"
 echo "chk Mamba running CoW          = $(grep -c 'vLLM #51766: preserve running CoW' "$ROOT/vllm/v1/core/single_type_kv_cache_manager.py")"
+echo "chk CoW pin (touch)            = $(grep -c 'COW_PIN_TOUCH' "$ROOT/vllm/v1/core/single_type_kv_cache_manager.py")  (expect 2)"
+echo "chk raw CoW ref_cnt bumps      = $(grep -cE '^[[:space:]]+(cow_block|source_block)\.ref_cnt \+= 1' "$ROOT/vllm/v1/core/single_type_kv_cache_manager.py")  (expect 0)"
+echo "chk allocator audit            = $(grep -c 'KVCACHE-AUDIT' "$ROOT/vllm/v1/core/block_pool.py")  (expect 2)"
 echo "triton          = $(python -c 'import triton; print(triton.__version__)')  (expect 3.7.0*)"
-python -m py_compile "$ROOT/aiter/ops/triton/gluon/mla_gluon.py" \
+python -m py_compile "$ROOT/vllm/v1/core/single_type_kv_cache_manager.py" \
+  "$ROOT/vllm/v1/core/block_pool.py" \
+  "$ROOT/aiter/ops/triton/gluon/mla_gluon.py" \
   "$ROOT/aiter/ops/gemm_op_a16w16.py" \
   "$ROOT/vllm/v1/attention/backends/mla/rocm_aiter_mla.py" \
   "$ROOT/vllm/v1/attention/backends/mla/triton_mla.py" \

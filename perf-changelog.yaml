@@ -5710,3 +5710,13 @@
     - "Remove the allocator-wide BlockPool.free_blocks object-identity dedup experiment. Kimi-K3 hybrid/Mamba cache groups legitimately carry repeated references (often one per hybrid group), so suppressing every duplicate leaks valid decrements and does not prevent free-block queue corruption."
     - "Keep SimpleCPUOffloadConnector lazy_offload enabled and retain the MI355X TP8 c12 AgentX reproduction point; lowering GPU memory utilization or concurrency only changes the timing of the ownership race and is not the fix."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Take the two copy-on-write retention references in the KV cache managers through BlockPool.touch() instead of a raw ref_cnt increment. A raw increment leaves a block that was sitting in the free queue at ref_cnt 0 still linked into that queue, so the allocator hands it out anyway; that is the free-block list corruption behind the MI355X TP8 c12 SimpleCPUOffloadConnector engine deaths (upstream issue #42085), which appear as either the get_new_blocks ref_cnt assertion or the popleft_n queue-walk assertion depending on which side of the window the block is reused."
+    - "Name the offending block in the get_new_blocks assertion and warn once when free_blocks drives a reference count negative, so a residual accounting bug reports which block and which direction instead of a bare AssertionError twenty minutes into the run."
+    - "Keep the MI355X TP8 c12 vllm-simple DRAM offload cell with lazy_offload enabled as the reproduction point; the matched no-offload sibling of this cell already runs to completion, so the connector is what drives the copy-on-write path into the window."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
