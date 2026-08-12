@@ -56,12 +56,22 @@ Kimi-K3:
   # VLLM_SSM_CONV_STATE_LAYOUT=DS"). PYTHONHASHSEED pins block hashing so identical
   # prefixes key identically across ranks, which the vllm-simple offload tier needs.
   #
-  # HSA_NO_SCRATCH_RECLAIM stays at the single-node recipe's 1 (its MEC FW <177
-  # RCCL workaround). Flipping it to 0 is the DSv4 PD recipe's fix for
-  # out-of-resource, and it is the obvious next thing to try if this arm hits OOR,
-  # but it is not carried here without evidence on K3: it is one variable, and the
-  # MoRI queue sizing in env.sh is the one being tested first.
-  env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4=1 AITER_BF16_FP8_MOE_BOUND=0 VLLM_ROCM_AITER_MLA_ASM_PADDING=asm VLLM_USE_BREAKABLE_CUDAGRAPH=0 SAFETENSORS_FAST_GPU=1 VLLM_SSM_CONV_STATE_LAYOUT=DS PYTHONHASHSEED=42 HSA_NO_SCRATCH_RECLAIM=1 VLLM_ENGINE_READY_TIMEOUT_S=7200 VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=1200"
+  # HSA_NO_SCRATCH_RECLAIM=0, following the DSv4 PD recipe (env.sh pins the same for
+  # DeepSeek-V4-Pro, commented there as resolving out-of-resource). The single-node
+  # recipe pins 1 as a MEC FW <177 RCCL workaround, but with reclaim disabled the
+  # scratch a worker holds is never returned, and a P/D worker carries the KV
+  # transfer, the DSpark draft and (on prefill) the CPU offload tier at once.
+  #
+  # This is exported per-model AFTER env.sh, so it wins over the environment and is
+  # what the engines actually see -- a runner-side override of this var cannot take
+  # effect, which is why it is set here rather than passed in.
+  #
+  # The MoRI queue sizing was bisected first and did not remove the crash: send-WR
+  # 16384 lost the decoder to HSA 0x1016 at ~25 min, 32767 moved it to a prefill
+  # memory access fault at ~35 min, and 8192 with a 500 ms backoff removed SQ-full
+  # entirely yet still lost the decoder to HSA 0x1016 at ~65 min. So the queue depth
+  # modulates when it happens, not whether -- this is the next variable.
+  env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4=1 AITER_BF16_FP8_MOE_BOUND=0 VLLM_ROCM_AITER_MLA_ASM_PADDING=asm VLLM_USE_BREAKABLE_CUDAGRAPH=0 SAFETENSORS_FAST_GPU=1 VLLM_SSM_CONV_STATE_LAYOUT=DS PYTHONHASHSEED=42 HSA_NO_SCRATCH_RECLAIM=0 VLLM_ENGINE_READY_TIMEOUT_S=7200 VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=1200"
   hf_dir: "models--moonshotai--Kimi-K3"
 
 MiniMax-M2.5:
