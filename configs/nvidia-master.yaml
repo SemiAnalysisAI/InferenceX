@@ -7171,12 +7171,14 @@ minimaxm3-fp8-h200-vllm-agentic-mtp:
   multinode: false
   scenarios:
     agentic-coding:
-    # Broad fast run 31540120459 located the TP8 knee at c10-c14. Compare the
-    # built-in vLLM host tier at equal concurrency before selecting the final
-    # full-duration Pareto sweep.
+    # Fast runs 31540120459 and 31558981228 locate the resident knee at c10
+    # and show Mooncake retaining throughput at c12-c14. TEP is dominated,
+    # DEP cannot allocate the 1M-token KV cache, and vLLM-simple falls after
+    # c10, so the strict sweep keeps only the measured Pareto candidates.
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [10, 12, 14, 16] }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 6, 8, 10] }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [12, 14] }
 
 qwen3.5-fp4-b200-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.16-cu130

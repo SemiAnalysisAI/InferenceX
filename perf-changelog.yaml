@@ -5844,3 +5844,11 @@
   description:
     - "Route the vLLM-simple refinement through the MiniMax-M3 MTP runtime and preserve its checkpoint-cache DRAM reservation."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2565
+
+- config-keys:
+    - minimaxm3-fp8-h200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Finalize the strict TP8 MTP sweep at resident c1/c2/c4/c6/c8/c10 and Mooncake c12/c14 from completed fast-run measurements."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2565
