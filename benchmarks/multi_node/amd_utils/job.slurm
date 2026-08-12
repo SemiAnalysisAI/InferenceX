@@ -480,6 +480,7 @@ DOCKER_ENV_COMMON=(
     # var crosses into the container.
     -e MORI_IO_QP_MAX_CQE=\${MORI_IO_QP_MAX_CQE:-}
     -e MORI_IO_QP_MAX_SGE=\${MORI_IO_QP_MAX_SGE:-}
+    -e MORI_IO_TC_DISABLE=\${MORI_IO_TC_DISABLE:-}
     # aiperf client knobs. The SGLang path forwards these into its sibling client
     # container's env-file, but a co-located client (the vllm-disagg agentic path,
     # which runs trace_replay.sh inside this container) only sees what crosses this
