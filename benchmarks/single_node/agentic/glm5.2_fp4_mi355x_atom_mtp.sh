@@ -80,7 +80,7 @@ case "$KV_OFFLOAD_BACKEND" in
         # LMCache settings
         export PYTHONHASHSEED=0
         export LMCACHE_LOCAL_CPU=True
-        export LMCACHE_MAX_LOCAL_CPU_SIZE=200
+        export LMCACHE_MAX_LOCAL_CPU_SIZE="$TOTAL_CPU_DRAM_GB"
         export LMCACHE_CHUNK_SIZE=256
         export OFFLOAD_MIN_LOAD_TOKENS=8192
 
