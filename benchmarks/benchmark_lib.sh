@@ -1150,10 +1150,6 @@ _run_kimi_tool_call_schema_eval() {
     fi
 
     local eval_rc=0
-    local diagnostic_args=()
-    if [ "${KIMI_VENDOR_DIAGNOSTIC:-0}" = "1" ]; then
-        diagnostic_args=(--diagnostic)
-    fi
     PYTHONPATH="${runtime_dir}${PYTHONPATH:+:${PYTHONPATH}}" \
         python3 "$adapter_path" \
             --verifier-dir "$checkout_dir" \
@@ -1161,7 +1157,6 @@ _run_kimi_tool_call_schema_eval() {
             --api-key EMPTY \
             --model "$model_name" \
             --output-dir "$results_dir" \
-            "${diagnostic_args[@]}" \
             || eval_rc=$?
     _cleanup_kimi_vendor_eval "$runtime_dir" "$checkout_dir"
     return "$eval_rc"

@@ -148,11 +148,6 @@ on:
         type: string
         required: false
         default: ""
-      kimi-vendor-diagnostic:
-        description: "Capture ordered raw Kimi tool-call responses"
-        type: boolean
-        required: false
-        default: false
       eval-limit:
         description: "Eval instance count: empty/full = whole split (default); N = first-N smoke slice"
         required: false
@@ -251,7 +246,6 @@ env:
   EVAL_SUITE: ${{ inputs.eval-suite }}
   EVAL_CONC: ${{ inputs.eval-conc }}
   EVAL_LIMIT: ${{ inputs.eval-limit }}
-  KIMI_VENDOR_DIAGNOSTIC: ${{ inputs.kimi-vendor-diagnostic && '1' || '0' }}
   SWEBENCH_GEN_MODE: ${{ inputs.swebench-gen-mode }}
   # GPU/multi-node runners lack Docker for SWE-bench scoring.
   SWEBENCH_USE_MODAL: 'true'
@@ -490,7 +484,6 @@ jobs:
             meta_env.json
             results*.json
             *_vendor_report.json
-            eval_kimi_tool_call_diagnostic.json
             sample*.jsonl
             agent_preds.json
             predictions.jsonl
