@@ -109,12 +109,14 @@ SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
 
 SERVER_PID=""
+LMCACHE_PID=""
 
 cleanup_agentic_services() {
     local exit_code=$?
     trap - EXIT INT TERM
     set +e
     stop_background_process_tree "$SERVER_PID" "vLLM server" 60
+    stop_background_process_tree "$LMCACHE_PID" "LMCache server"
     exit "$exit_code"
 }
 trap cleanup_agentic_services EXIT
@@ -142,6 +144,79 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         "{\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use_per_rank\":$CPU_BYTES_PER_RANK,\"lazy_offload\":$SIMPLE_LAZY_OFFLOAD}}"
     )
     echo "SimpleCPUOffloadConnector: ${CPU_BYTES_PER_RANK} B/rank x ${TP} ranks, lazy_offload=$SIMPLE_LAZY_OFFLOAD"
+    ;;
+  lmcache)
+    require_agentic_kv_offload_backend "$KV_OFFLOAD_BACKEND"
+
+    # Keep the image's tested torch/ROCm stack and install only LMCache's
+    # missing runtime dependencies, same as the MiniMax-M3 lmcache arm.
+    LMCACHE_VERSION="0.5.4rc1"
+    LMCACHE_ROCM_INDEX="https://github.com/LMCache/LMCache/releases/expanded_assets/v${LMCACHE_VERSION}-rocm"
+    agentic_pip_install --quiet --no-cache-dir --no-deps \
+        "sortedcontainers==2.4.0" \
+        "opentelemetry-exporter-prometheus==0.61b0" \
+        "cupy-rocm-7-0==14.1.1" \
+        "lmcache==${LMCACHE_VERSION}" --find-links "$LMCACHE_ROCM_INDEX"
+    python3 -c \
+        "import cupy; import lmcache.integration.vllm.lmcache_mp_connector; import opentelemetry.exporter.prometheus" \
+        >/dev/null
+
+    # One MP server for the node, per the Kimi-K3 recipe
+    # (docs.lmcache.ai/recipes/kimi_k3.html). --chunk-size must equal the
+    # K3 unified block size N=768 at 8 GPUs, and the hybrid KDA/MLA layout
+    # (two KV-cache groups under MTP) requires one object group per
+    # sliding-window size: --separate-object-groups.
+    LMCACHE_PORT=6555
+    LMCACHE_HTTP_PORT=8090
+    LMCACHE_LOG="$RESULT_DIR/lmcache_server.log"
+
+    # The whole generated node-DRAM budget backs the single server's L1,
+    # which lives in /dev/shm; fail early if it cannot fit.
+    LMCACHE_L1_SIZE_GB="$TOTAL_CPU_DRAM_GB"
+    SHM_FREE_GB=$(df -BG --output=avail /dev/shm 2>/dev/null | tail -1 | tr -dc '0-9')
+    if [ -n "$SHM_FREE_GB" ] && [ "$SHM_FREE_GB" -gt 0 ]; then
+        SHM_CAP_GB=$((SHM_FREE_GB * 90 / 100))
+        if [ "$LMCACHE_L1_SIZE_GB" -gt "$SHM_CAP_GB" ]; then
+            echo "Error: LMCache L1 ${LMCACHE_L1_SIZE_GB} GB exceeds 90% of free /dev/shm (${SHM_CAP_GB} GB)." >&2
+            exit 1
+        fi
+    fi
+
+    LMCACHE_CMD=(
+        lmcache server
+        --host 127.0.0.1
+        --port "$LMCACHE_PORT"
+        --http-host 127.0.0.1
+        --http-port "$LMCACHE_HTTP_PORT"
+        --l1-size-gb "$LMCACHE_L1_SIZE_GB"
+        --l1-init-size-gb 10
+        --chunk-size 768
+        --separate-object-groups
+        --enable-extra-logging
+        --max-cpu-workers 8
+        --max-gpu-workers 1
+        --eviction-policy LRU
+    )
+    append_command "$RESULT_DIR/lmcache_command.txt" "${LMCACHE_CMD[@]}"
+    "${LMCACHE_CMD[@]}" > "$LMCACHE_LOG" 2>&1 &
+    LMCACHE_PID=$!
+    wait_for_ready \
+        --endpoint "http://127.0.0.1:${LMCACHE_HTTP_PORT}/healthcheck" \
+        --log "$LMCACHE_LOG" \
+        --pid "$LMCACHE_PID" \
+        --sleep-interval 1 \
+        --timeout 600
+
+    # 100k-330k-token agentic prefixes make single retrieves large; use the
+    # same MQ timeout headroom as the MiniMax-M3 arm.
+    OFFLOAD_ARGS=(
+        --kv-transfer-config
+        "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_connector_module_path\":\"lmcache.integration.vllm.lmcache_mp_connector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.port\":$LMCACHE_PORT,\"lmcache.mp.mq_timeout\":6000.0}}"
+    )
+    ;;
+  *)
+    echo "Error: unsupported KV_OFFLOAD_BACKEND='$KV_OFFLOAD_BACKEND' (expected vllm-simple or lmcache)" >&2
+    exit 1
     ;;
 esac
 fi

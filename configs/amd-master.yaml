@@ -650,6 +650,10 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [1, 4, 8] , spec-decoding: mtp}
       - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [10], spec-decoding: mtp }
+      # LMCache MP-server DRAM offload on top of the same DSpark MTP serving
+      # stack, at the same concurrency as the vllm-simple arm for a direct
+      # offload-backend comparison.
+      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.4rc1" }, conc-list: [10], spec-decoding: mtp }
 
 dsr1-fp4-mi355x-sglang-disagg:
   image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519
