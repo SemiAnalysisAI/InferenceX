@@ -163,9 +163,13 @@ case "${KV_OFFLOAD_BACKEND:-}" in
 
     # One MP server for the node, per the Kimi-K3 recipe
     # (docs.lmcache.ai/recipes/kimi_k3.html). --chunk-size must equal the
-    # K3 unified block size N=768 at 8 GPUs, and the hybrid KDA/MLA layout
-    # (two KV-cache groups under MTP) requires one object group per
-    # sliding-window size: --separate-object-groups.
+    # unified attention block size, which THIS stack (fp8 KV, TP8, no
+    # mamba-cache-mode align) sets to 1536 -- "Setting attention block size
+    # to 1536 tokens to ensure that attention page size is >= mamba page
+    # size" (run 31644990546); the recipe's 768 is the CUDA-path value and
+    # fails the connector's chunk %% block == 0 assert here. The hybrid
+    # KDA/MLA layout (two KV-cache groups under MTP) requires one object
+    # group per sliding-window size: --separate-object-groups.
     LMCACHE_PORT=6555
     LMCACHE_HTTP_PORT=8090
     LMCACHE_LOG="$RESULT_DIR/lmcache_server.log"
@@ -190,7 +194,7 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         --http-port "$LMCACHE_HTTP_PORT"
         --l1-size-gb "$LMCACHE_L1_SIZE_GB"
         --l1-init-size-gb 10
-        --chunk-size 768
+        --chunk-size 1536
         --separate-object-groups
         --enable-extra-logging
         --max-cpu-workers 8
