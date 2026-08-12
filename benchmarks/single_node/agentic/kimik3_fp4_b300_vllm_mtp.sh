@@ -139,7 +139,7 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         # bool("false") is True in Python.
         OFFLOAD_ARGS=(
             --kv-transfer-config
-            "{\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use_per_rank\":${CPU_BYTES_PER_RANK},\"lazy_offload\":true}}"
+            "{\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use_per_rank\":${CPU_BYTES_PER_RANK},\"lazy_offload\":false}}"
         )
         ;;
     *)

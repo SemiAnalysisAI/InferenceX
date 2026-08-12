@@ -7,7 +7,7 @@ set -x
 #
 # The server command is the AMD reference `vllm serve` for this model, i.e. the
 # upstream vLLM recipe's amd block (vllm-project/recipes,
-# models/moonshotai/Kimi-K3.yaml, date_updated 2026-07-25) as run in practice:
+# https://recipes.vllm.ai/moonshotai/Kimi-K3) as run in practice:
 #
 #   --trust-remote-code --moe-backend auto --tensor-parallel-size 8
 #   --load-format auto --gpu-memory-utilization 0.95 --mm-encoder-tp-mode data
@@ -33,26 +33,18 @@ set -x
 # Perf-search knobs. Each defaults to the reference command's value, so an
 # otherwise-unset run reproduces the reference exactly:
 #   GPU_MEM_UTIL             0.95   (reference)
-#   MAX_NUM_BATCHED_TOKENS   4096   (reference)
+#   MAX_NUM_BATCHED_TOKENS   8192   (default)
 #   AITER_A8W4               1      (reference; 0 = aiter a16w4 MoE path)
-#   LANGUAGE_MODEL_ONLY      false  (reference loads the vision tower)
+#   LANGUAGE_MODEL_ONLY      true   
 #   KV_CACHE_DTYPE           fp8    (default for every arm; =auto for a bf16 A/B)
 #   KV_BLOCK_SIZE            unset  (unset -> vLLM sizes the page; 128 under fp8)
-#   MAX_MODEL_LEN            unset  (unset -> vLLM derives K3's 1M context)
+#   MAX_MODEL_LEN            1M     
 #   SPEC_DECODE              true   (this is the _mtp DSpark recipe; =false for a no-spec A/B)
 #   SPEC_NUM_TOKENS          2      (DSpark draft length; validated by the _mtp config)
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
 wait_for_amd_gpu_clean
-
-# Force the eval framework to lm-eval, matching minimaxm3_fp4_mi355x.sh.
-# run_eval derives its default as swebench for agentic scenarios
-# (scenario_default=swebench when IS_AGENTIC/SCENARIO_TYPE=agentic-coding), but
-# EVAL_FRAMEWORK takes precedence over that default
-# (benchmark_lib.sh:1471 framework=${EVAL_FRAMEWORK:-...}). Left overridable so
-# the SWE-bench path below can still be selected with EVAL_FRAMEWORK=swebench.
-export EVAL_FRAMEWORK="${EVAL_FRAMEWORK:-lm-eval}"
 
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE
 
@@ -86,14 +78,11 @@ rocm-smi || true
 amd-smi || true
 
 # ---- Resolve traces and install deps ----------------------------------------
-# kimik3* is on resolve_trace_source's unfiltered allowlist (benchmark_lib.sh),
-# so this replays the full 062126 v7 corpus rather than the 256k-capped variant.
 resolve_trace_source
 install_agentic_deps
 
 # ---- Reference env block ----------------------------------------------------
 export VLLM_ROCM_AITER_MLA_ASM_PADDING=asm
-#export AITER_DISABLE_FMHA_OPUS=1   
 export VLLM_ROCM_USE_AITER=1
 export SAFETENSORS_FAST_GPU=1
 export VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4=1
@@ -135,27 +124,10 @@ trap 'exit 143' TERM
 # ---- KV offload -------------------------------------------------------------
 # TOTAL_CPU_DRAM_GB is the aggregate host-DRAM budget the matrix generator
 # derives from dram-utilization and the runner's available-cpu-dram-mib, capped
-# at the 2,861,022 MiB (3 TB decimal) agentic limit. Per
+# at the 3,095,781 MiB (3 TB decimal) agentic limit. Per
 # benchmarks/single_node/agentic/README.md it must be consumed as given and
 # never replaced with a model-specific constant.
 OFFLOAD_ARGS=()
-
-# fp8 KV is the DEFAULT for every arm on this model.
-#
-# It is the first thing that made the trace run well: run 30442578333 (c8,
-# kvnone, 3600s) scored 32.59 output tok/s / 696 total tok/s/GPU at TTFT 2.6s,
-# against 19.17 / 535 / 69.1s for the bf16 offload cell in the same window.
-# K3 costs ~217 KiB KV/token -- 3x K2.7 -- so halving the KV element size is
-# the single largest lever available, exactly as in
-# [[fp8-kv-cache-mandatory]] for kimik2.7.
-#
-# This is set here, before the KV_OFFLOAD_BACKEND case below, for two reasons:
-# the agentic matrix has no per-cell env channel (so a kvnone cell has no other
-# way to ask for fp8), and the mla_gluon patch further down gates on
-# KV_CACHE_DTYPE=fp8 and must see it already set.
-#
-# Set KV_CACHE_DTYPE=auto for a bf16 A/B.
-KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-auto}"
 
 if agentic_kv_offload_enabled; then
 case "${KV_OFFLOAD_BACKEND:-}" in
@@ -175,30 +147,16 @@ esac
 fi
 
 # ---- LLM server  ------------------------------------------------------------
-# Apply the in-container filesystem patches this MTP recipe depends on (vLLM
-# PR #50619 K3 fp8 MLA verify, aiter mla_gluon batch relax + PR #4474 int64 KV
-# stride, Triton 3.7.0). The script is idempotent, so re-runs are safe.
 bash "$(dirname "$0")/apply_k3_container_patches.sh"
 
 # ---- Parallelism ------------------------------------------------------------
-# TP8 or TEP8. No DP-attention arm: upstream strategy_min_gpus.multi_node_dep is
-# 16, so DEP is not a single-node strategy for this model.
 EP_ARGS=()
 if [ "$EP_SIZE" -gt 1 ]; then
     EP_ARGS=(--enable-expert-parallel)
 fi
 
-# ---- Multimodal vs text-only ------------------------------------------------
-LANGUAGE_MODEL_ONLY="true"
-MM_ARGS=(--mm-encoder-tp-mode data)
-if [ "$LANGUAGE_MODEL_ONLY" = "true" ]; then
-    MM_ARGS=(--language-model-only)
-fi
-
-# ---- Optional axes ----------------------------------------------------------
-KV_CACHE_DTYPE_ARGS=(--kv-cache-dtype "fp8")
+# ---- Speculative ------------------------------------------------------------
 SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-2}"
-
 SYNTHETIC_ACCEPT_LEN=2.51
 
 if [ "${EVAL_ONLY:-false}" = "true" ]; then
@@ -213,6 +171,7 @@ else
     )
 fi
 
+# ---- HIP graph ------------------------------------------------------------
 MAX_NUM_SEQS=20
 MAX_CUDAGRAPH_CAPTURE_SIZE=60
 CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 1 "$MAX_CUDAGRAPH_CAPTURE_SIZE")"
@@ -222,9 +181,7 @@ GPU_MEM_UTIL="0.9"
 
 echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
-
 export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS="${VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS:-1200}"
-
 
 { set +x; } 2>/dev/null
 VLLM_CMD=(
@@ -237,15 +194,15 @@ VLLM_CMD=(
     "${EP_ARGS[@]}"
     --load-format fastsafetensors
     --gpu-memory-utilization "$GPU_MEM_UTIL"
-    "${MM_ARGS[@]}"
+    --language-model-only
     --max-num-seqs "$MAX_NUM_SEQS"
     --enable-auto-tool-choice
     --tool-call-parser kimi_k3
     --reasoning-parser kimi_k3
     --max-model-len 1048576
     --enable-prefix-caching
+    --kv-cache-dtype "fp8"
     "${COMPILATION_CONFIG_ARGS[@]}"
-    "${KV_CACHE_DTYPE_ARGS[@]}"
     "${SPEC_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
 )
