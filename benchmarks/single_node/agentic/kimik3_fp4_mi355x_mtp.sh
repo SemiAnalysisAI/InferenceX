@@ -462,9 +462,22 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         echo "Error: LMCache chunk-size $LMCACHE_K3_CHUNK_SIZE is not a multiple of N=$LMCACHE_UNIFIED_BLOCK." >&2
         exit 1
     fi
-    if [ "$MAX_NUM_BATCHED_TOKENS" -lt "$LMCACHE_UNIFIED_BLOCK" ] \
-       || [ "$MAX_NUM_BATCHED_TOKENS" -ge $(( LMCACHE_UNIFIED_BLOCK * 2 )) ]; then
-        echo "Error: --max-num-batched-tokens $MAX_NUM_BATCHED_TOKENS outside [N, 2N) for N=$LMCACHE_UNIFIED_BLOCK." >&2
+    # The upper half of that rule is conditional as of LMCache #4437: with
+    # --separate-object-groups (which K3 now requires, see below) the only
+    # constraint is mnbt >= N -- a step must still advance at least one whole
+    # block for `align` to snapshot anything, but a step MAY now span several
+    # blocks, snapshotting only the last one. Values >= 2N trade finer-grained
+    # prefix reuse for larger prefill steps. Without the flag the old
+    # [N, 2N) window still applies. The default here is unchanged (2N-72), so
+    # this only stops the guard from rejecting a deliberate override.
+    if [ "$MAX_NUM_BATCHED_TOKENS" -lt "$LMCACHE_UNIFIED_BLOCK" ]; then
+        echo "Error: --max-num-batched-tokens $MAX_NUM_BATCHED_TOKENS is below N=$LMCACHE_UNIFIED_BLOCK." >&2
+        exit 1
+    fi
+    if [ "${LMCACHE_SEPARATE_OBJECT_GROUPS:-1}" != "1" ] \
+       && [ "$MAX_NUM_BATCHED_TOKENS" -ge $(( LMCACHE_UNIFIED_BLOCK * 2 )) ]; then
+        echo "Error: --max-num-batched-tokens $MAX_NUM_BATCHED_TOKENS outside [N, 2N) for N=$LMCACHE_UNIFIED_BLOCK" \
+             "without --separate-object-groups." >&2
         exit 1
     fi
     echo "LMCache: N=$LMCACHE_UNIFIED_BLOCK (kv-cache-dtype=${KV_CACHE_DTYPE:-auto})" \
@@ -572,7 +585,24 @@ except Exception:
     # Built from source rather than `pip install lmcache==0.5.3`: upstream tags
     # ROCm builds separately (v0.5.3rc4-rocm), so PyPI is not reliably a gfx950
     # wheel, and this path already sets PYTORCH_ROCM_ARCH and BUILD_WITH_HIP=1.
-    LMCACHE_GIT_REF="${LMCACHE_GIT_REF:-140819c9d57a975dbc5678a6459a218e544cb58b}"
+    #
+    # Bumped 2026-08-12 from 140819c9 (v0.5.3, 2026-08-05) to d131cecf, six
+    # commits later on dev, to pick up LMCache #4437 "[Core] Optimize
+    # store/retrieve for linear models" (2026-08-07). That PR is the upstream
+    # fix for the write amplification this arm has been paying:
+    #   - align-mode Mamba/KDA layers are now treated as a sliding window of
+    #     one engine block (kv_cache_groups._is_mamba_align_spec), so a retrieve
+    #     only H2Ds the last block of the linear state instead of the whole
+    #     prefix, and null blocks are skipped on store entirely.
+    #   - it makes --separate-object-groups REQUIRED for Mamba / linear hybrids
+    #     (see the server args below) and, with it, lifts the
+    #     max_num_batched_tokens < 2N ceiling that pinned every store to a
+    #     single chunk.
+    # 140819c9 is a direct ancestor of d131cecf; the five intervening commits
+    # are an MP dataclass refactor (#4425), an FS-native O_DIRECT fix (#3916),
+    # MUSA MP block transfer (#3979), a logging cleanup (#4331) and arm64
+    # wheels (#4195). No branch change.
+    LMCACHE_GIT_REF="${LMCACHE_GIT_REF:-d131cecfbda1c73019c56bf5173c6110b6c01f35}"
     LMCACHE_VERSION="${LMCACHE_VERSION:-${LMCACHE_CFG_VERSION:-git}}"
     if ! python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null 2>&1; then
         if [ "$LMCACHE_VERSION" = "git" ]; then
@@ -629,6 +659,22 @@ if missing:
         f"Registered edits: {sorted(names)}. Needs dev >= #4278 (2026-07-28)."
     )
 print(f"lmcache K3 edits present: {sorted(names)}")
+
+# #4437: align-mode Mamba/KDA layers must resolve to a one-block cross-chunk
+# window. Without it the recipe still RUNS -- it just silently pays the old
+# full-prefix store/retrieve cost, which is the whole point of this bump, and
+# --separate-object-groups below would be doing much less than intended.
+try:
+    from lmcache.integration.vllm import kv_cache_groups as g
+except Exception as exc:
+    sys.exit(f"FATAL: cannot import kv_cache_groups: {exc}")
+if not hasattr(g, "_is_mamba_align_spec"):
+    sys.exit(
+        "FATAL: installed lmcache lacks LMCache #4437 "
+        "(kv_cache_groups._is_mamba_align_spec missing). Needs dev >= d131cec "
+        "(2026-08-07)."
+    )
+print("lmcache #4437 linear-model store/retrieve optimization present")
 PYEOF
 
     LMCACHE_HOST="${LMCACHE_HOST:-127.0.0.1}"
@@ -650,10 +696,13 @@ PYEOF
     # fixed per-op cost, not bandwidth. And the ops are 1 chunk each because
     # GetStoreMetadata stages `num_staging_tokens // chunk_size` chunks while
     # num_staging_tokens grows by at most max_num_batched_tokens per scheduler
-    # step -- with mnbt 3000 and chunk 3072 that is one chunk, forever. mnbt
-    # cannot be raised: validate_mamba_step_alignment requires
-    # mnbt < 2 * block_size, and block_size 1536 is derived by vLLM from the
-    # fp8 page-size match, not settable from the command line.
+    # step -- with mnbt 3000 and chunk 3072 that is one chunk, forever. At the
+    # time of that run mnbt could not be raised: validate_mamba_step_alignment
+    # required mnbt < 2 * block_size, and block_size 1536 is derived by vLLM
+    # from the fp8 page-size match, not settable from the command line.
+    # (LMCache #4437 has since lifted that ceiling under
+    # --separate-object-groups; the default mnbt is still 3000, so the
+    # measurement above still describes the current configuration.)
     #
     # So the op count is fixed and each op costs what it costs. The remaining
     # lever is where those ops run. The server logs:
@@ -830,6 +879,23 @@ PYEOF
     # --max-gpu-workers/--max-cpu-workers, and --l1-read-ttl-seconds in
     # lmcache/v1/distributed/config.py.
     LMCACHE_PROFILE="${LMCACHE_PROFILE:-reference}"
+
+    # REQUIRED for K3 as of LMCache #4437, on every profile. K3 is a Mamba /
+    # linear-attention hybrid (KDA + MLA), and the flag is what gives the KDA
+    # layers their own object group so their recurrent state is stored and
+    # loaded independently of the full-attention layers. #4437 also flipped the
+    # default from True to False, so it has to be passed explicitly now --
+    # inheriting the default would silently put every layer back into one
+    # full-attention object group and undo the store/retrieve optimization the
+    # ref bump above is here for. It is also the precondition for
+    # max_num_batched_tokens >= 2N (see the mnbt derivation above).
+    # Set LMCACHE_SEPARATE_OBJECT_GROUPS=0 to A/B against the old grouping.
+    if [ "${LMCACHE_SEPARATE_OBJECT_GROUPS:-1}" = "1" ]; then
+        LMCACHE_SEPARATE_OBJECT_GROUPS_ARGS=(--separate-object-groups)
+    else
+        LMCACHE_SEPARATE_OBJECT_GROUPS_ARGS=(--no-separate-object-groups)
+    fi
+
     echo "Starting $LMCACHE_N_SERVERS LMCache MP server shard(s)" \
          "(profile=$LMCACHE_PROFILE, L1=${LMCACHE_L1_SHARD_GB}GB each," \
          "${LMCACHE_L1_SIZE_GB}GB total, ${LMCACHE_RANKS_PER_SERVER} rank(s)/shard)..."
@@ -908,6 +974,7 @@ PYEOF
             --http-host "$LMCACHE_HOST"
             --http-port "$_shard_http"
             --l1-size-gb "$LMCACHE_L1_SHARD_GB"
+            "${LMCACHE_SEPARATE_OBJECT_GROUPS_ARGS[@]}"
             "${LMCACHE_PROFILE_ARGS[@]}"
         )
         printf '%q ' "${LMCACHE_CMD[@]}" >> "$RESULT_DIR/lmcache_command.txt"

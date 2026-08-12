@@ -1022,10 +1022,23 @@ kimik3-fp4-mi355x-vllm-agentic-mtp-dspark-prepatched-syn-lmc-c10:
   # lmcache.mp.server_urls, taking each process to ~0.50x wall clock. The
   # aggregate L1 pool is unchanged (907GB total, 8 x ~113GB).
   #
+  # Third attempt (run 31488191596) did that and got 1140.62 tok/s/GPU -- no
+  # better than the single-process 1210.96, so the GIL was not the binding
+  # term. External hit rate was 14.2% and GPU KV usage 70.3%.
+  #
+  # Fourth attempt: the write volume itself. LMCache is bumped from v0.5.3
+  # (140819c9) to d131cecf, which adds #4437 "[Core] Optimize store/retrieve
+  # for linear models" -- align-mode KDA layers become a one-block sliding
+  # window, null blocks are skipped on store, and retrieves only H2D the last
+  # block of the linear state. It requires --separate-object-groups, which the
+  # recipe now passes on every profile. Nothing else moves: same image, same
+  # synthetic 2.51, same fp8 KV, same 907GB sharded L1, same mnbt 3000.
+  #
   # Read Waiting/Deferred and the engine idle fraction before the throughput
-  # number. If Deferred is still non-zero, the remaining term is the 8x write
-  # amplification from mla_only() being False on this hybrid model, which is an
-  # upstream fix, not a tuning one.
+  # number, and compare the STORE op count against attempt 2's 76,921 -- that
+  # is the number #4437 is supposed to cut. The 8x write amplification from
+  # mla_only() being False on this hybrid model is a separate upstream issue
+  # and is NOT addressed by this bump.
   image: aigmkt/kimi-k3-agentx@sha256:6eed69f39f036df3c7a61a2263159935a00a7c988a328677d502476a541c5c08
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
