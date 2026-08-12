@@ -236,3 +236,70 @@ def test_cli_setup_failure_writes_zero_score_artifact(tmp_path: Path) -> None:
     assert _score(output_dir) == 0.0
     assert projected["integration_error"]["message"] == "checkout failed"
     assert _n_eff(output_dir) == 0
+
+
+def test_diagnostic_sequence_captures_raw_responses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    verifier_dir = tmp_path / "verifier"
+    case_dir = verifier_dir / "testdata" / "walle_validator_cases" / "validator_cases"
+    case_dir.mkdir(parents=True)
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+
+    class FakeResponse:
+        accepted = True
+        message = "tool call returned"
+        arguments = '{"value": {}}'
+        http_status = None
+        error_type = None
+
+    class FakeClient:
+        def __init__(self) -> None:
+            self.chat = SimpleNamespace(
+                completions=SimpleNamespace(create=lambda **kwargs: None)
+            )
+
+        def close(self) -> None:
+            pass
+
+    fake_validator = SimpleNamespace(
+        load_cases=lambda path: ["case"],
+        select_cases=lambda cases, **kwargs: [
+            (
+                SimpleNamespace(suite="TestAdditionalProperties", line=1),
+                {"type": "object"},
+                "object_parameter_schema",
+            )
+        ],
+        make_client=lambda *args: FakeClient(),
+        send_tool_schema=lambda client,
+        model,
+        schema,
+        max_tokens,
+        thinking,
+        think_mode,
+        *,
+        stream: FakeResponse(),
+        validate_arguments=lambda schema, arguments: (True, "valid"),
+    )
+    monkeypatch.setattr(
+        kve.importlib,
+        "import_module",
+        lambda name: fake_validator,
+    )
+
+    kve.run_diagnostic_sequence(
+        verifier_dir=verifier_dir,
+        base_url="http://localhost/v1",
+        api_key="EMPTY",
+        model="model-a",
+        output_dir=output_dir,
+    )
+
+    report = json.loads((output_dir / kve.DIAGNOSTIC_REPORT_FILENAME).read_text())
+    assert report["sequence"] == list(kve.DIAGNOSTIC_MODES)
+    assert [record["mode"] for record in report["results"]] == list(
+        kve.DIAGNOSTIC_MODES
+    )
+    assert all(record["arguments_valid"] for record in report["results"])
