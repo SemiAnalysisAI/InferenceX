@@ -1577,12 +1577,7 @@ minimaxm3-fp8-mi325x-vllm-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.20
       search-space:
-      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12] }
-      - { tp: 4, ep: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12] }
-      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 32] }
-      - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [2, 4, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 32] }
-      - { tp: 8, ep: 8, dp-attn: true, spec-decoding: mtp, kv-offloading: none, conc-list: [16, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64], router: { name: vllm-router, version: "0.1.14" } }
-      - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.3" }, conc-list: [18, 20, 22, 24, 28, 32] }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8, 10, 12, 14, 16, 18] }
 
 minimaxm3-fp4-mi355x-vllm-agentic:
   image: vllm/vllm-openai-rocm:nightly-dcfebf93f4eccf30f71872283331eee757915daf
