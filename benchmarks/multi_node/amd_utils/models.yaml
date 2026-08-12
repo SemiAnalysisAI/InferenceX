@@ -282,7 +282,7 @@ GLM-5.2-MXFP4-AgentX:
       context_length: 1048576
     no_dp:
       max_running_requests: 128
-      chunked_prefill_size: 131072
+      chunked_prefill_size: 65536
       context_length: 1048576
   decode:
     mem_fraction_static: 0.85
