@@ -7143,9 +7143,9 @@ minimaxm3-fp8-h100-vllm-agentic:
 
 # EAGLE3 speculative-decoding (spec-decoding: mtp) variant of
 # minimaxm3-fp8-h100-vllm-agentic, pairing MiniMaxAI/MiniMax-M3-MXFP8 with the
-# Inferact/MiniMax-M3-EAGLE3 draft head (3 speculative tokens, FLASH_ATTN
-# drafter) and pinning synthetic acceptance to the golden AL 2.83
-# (golden_al_distribution/minimaxm3_eagle3.yaml, thinking_on, K=3). Same TP8-only
+# Inferact/MiniMax-M3-EAGLE3-GQA draft head (3 speculative tokens, FLASH_ATTN
+# drafter) and pinning synthetic acceptance to the golden AL 2.78
+# (golden_al_distribution/minimaxm3_eagle3_gqa.yaml, thinking_on, K=3). Same TP8-only
 # layout and KV arms as the non-MTP entry so the spec-decode delta is readable at
 # equal concurrency, trimmed at the extreme-conc end: the draft head plus its KV
 # eat into the same HBM budget that already puts the GPU-resident cliff near
