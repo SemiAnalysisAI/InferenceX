@@ -12,6 +12,7 @@ identity:
 
 dynamo: { version: "1.3.1", install: true }
 setup_script: vllm-container-deps.sh
+environment: { ETCD_LEASE_TTL: "7200" }
 slurm: { time_limit: "8:00:00" }
 health_check: { max_attempts: 2160, interval_seconds: 10 }
 
@@ -64,20 +65,21 @@ backend:
       enable-expert-parallel: true
       enable-ep-weight-filter: true
       moe-backend: deep_gemm_mega_moe
-      attention-config: '{"use_fp4_indexer_cache":true}'
+      attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"use_fp4_indexer_cache":true}'
       max-model-len: 1048576
       max-num-seqs: 16
       max-num-batched-tokens: 16384
       trust-remote-code: true
       enforce-eager: true
       block-size: 256
-      gpu-memory-utilization: 0.90
+      gpu-memory-utilization: 0.95
       no-disable-hybrid-kv-cache-manager: true
       enable-sleep-mode: true
       tokenizer-mode: deepseek_v4
       speculative-config: '{"method":"mtp","num_speculative_tokens":2}'
     decode:
       <<: *dep8_config
+      attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_fp4_indexer_cache":true}'
       enforce-eager: false
       max-num-seqs: 1024
       max-num-batched-tokens: 1024

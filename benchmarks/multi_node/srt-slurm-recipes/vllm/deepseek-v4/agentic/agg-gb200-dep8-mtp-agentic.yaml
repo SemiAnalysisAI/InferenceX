@@ -15,6 +15,7 @@ dynamo:
   install: true
 
 setup_script: vllm-container-deps.sh
+environment: { ETCD_LEASE_TTL: "7200" }
 slurm: { time_limit: "8:00:00" }
 health_check: { max_attempts: 2160, interval_seconds: 10 }
 
@@ -63,7 +64,7 @@ backend:
       enable-expert-parallel: true
       enable-ep-weight-filter: true
       moe-backend: deep_gemm_mega_moe
-      attention-config: '{"use_fp4_indexer_cache":true}'
+      attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"use_fp4_indexer_cache":true}'
       max-model-len: 1048576
       max-num-seqs: 256
       max-num-batched-tokens: 8192

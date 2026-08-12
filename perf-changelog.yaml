@@ -5829,4 +5829,7 @@
     - "Use released vLLM v0.27.1, Dynamo 1.3.1, and NVIDIA/srt-slurm v1.0.45."
     - "Collect every logical vLLM prefill/decode leader endpoint and require nonempty vllm: server metrics before publishing results."
     - "Use the official K=2 MTP configuration with golden synthetic acceptance length 2.49 for throughput; eval retains real MTP verification."
+    - "Use the established 0.95 GB200 disaggregated GPU memory budget so K=2 MTP and NIXL retain enough KV memory for the native 1,048,576-token context."
+    - "Select the supported FlashInfer DeepSeek V4 sparse-MLA backend, avoiding the released FlashMLA long-prefill TMA regression while preserving FP4 indexer caching."
+    - "Use the established 7,200-second Dynamo lease budget so the long FP4 model load and graph compile cannot expire healthy frontend and backend registrations."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2567
