@@ -5918,3 +5918,11 @@
     - "Add a TEP2 arm (tp 2, ep 2) to the qwen3.5-fp4-b200-sglang-mtp 8k/1k sweep at concurrency 16, 32, and 64"
     - "Rides on the NVFP4-V2 checkpoint switch from #2205"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2550
+
+- config-keys:
+    - minimaxm3-fp8-mi300x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add MI300X MiniMax-M3 MXFP8 AgentX with vLLM EAGLE3-GQA, golden synthetic acceptance length 2.78, a broad TP8/EP8 discovery grid, required server metrics, and an isolated LMCache MP DRAM-offload gate."
+  pr-link: null
