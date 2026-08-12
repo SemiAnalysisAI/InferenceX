@@ -5897,5 +5897,5 @@
 - config-keys:
     - minimaxm3-fp8-mi325x-vllm-agentic-mtp
   description:
-    - "Add MiniMax-M3 MXFP8 AgentX on MI325X with vLLM v0.27.1, EAGLE3-GQA, golden synthetic acceptance length 2.78, complete server metrics, and an isolated LMCache MP functional gate before broad resident discovery."
+    - "Add MiniMax-M3 MXFP8 AgentX on MI325X with vLLM v0.27.1, EAGLE3-GQA, golden synthetic acceptance length 2.78, complete server metrics, broad TP4/TP8/TEP/DEP discovery, and LMCache MP around the TP8/EP8 memory knee."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2579
