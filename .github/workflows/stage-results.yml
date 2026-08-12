@@ -20,9 +20,9 @@ jobs:
       startsWith(github.event.comment.body, '/stage-results')
     runs-on: ubuntu-latest
     permissions:
-      actions: read
-      contents: read
-      issues: read
+      actions: read # Validate the source workflow run and its artifacts
+      contents: read # Resolve pull-request commits
+      issues: read # Read labels and label-history timeline events
       pull-requests: write # Post staging status as github-actions rather than a PAT user
     steps:
       - name: Authorize request and resolve source run
@@ -256,11 +256,7 @@ jobs:
         with:
           github-token: ${{ github.token }}
           script: |
-            const body = [
-              `@${process.env.REQUESTED_BY} staging [run ${process.env.RUN_ID}](${process.env.RUN_URL}). Existing staged runs will be preserved; a completion link will be posted here.`,
-              '',
-              `@${process.env.REQUESTED_BY} 正在将[运行 ${process.env.RUN_ID}](${process.env.RUN_URL})发布到预发布环境。已有的预发布运行会继续保留；完成后将在此处提供链接。`,
-            ].join('\n');
+            const body = `@${process.env.REQUESTED_BY} staging [run ${process.env.RUN_ID}](${process.env.RUN_URL}). Existing staged runs will be preserved; a completion link will be posted here.`;
             const comment = await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,

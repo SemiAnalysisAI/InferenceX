@@ -1,0 +1,121 @@
+name: "agg-h200-tp8-mtp-kvoffload"
+
+# DeepSeek-V4-Pro AgentX aggregated TP8 serving on one 8xH200 node. The recipe is
+# topology-invariant; configs/nvidia-master.yaml varies only concurrency to
+# produce the latency/throughput Pareto curve.
+
+model:
+  path: "deepseek-v4-pro"
+  container: "dynamo-sglang"
+  precision: "fp8"
+
+dynamo:
+  install: true
+  wheel: "1.3.0.dev20260718"
+
+slurm:
+  time_limit: "8:00:00"
+
+health_check:
+  max_attempts: 1440
+  interval_seconds: 10
+
+resources:
+  gpu_type: "h200"
+  gpus_per_node: 8
+  agg_nodes: 1
+  agg_workers: 1
+  gpus_per_agg: 8
+
+infra:
+  etcd_nats_dedicated_node: true
+  # AgentX prompts can exceed NATS's 1 MiB default after JSON serialization.
+  nats_max_payload_mb: 32
+
+frontend:
+  type: dynamo
+  nginx_session_affinity: true
+  nginx_session_affinity_header: X-Dynamo-Session-ID
+  enable_multiple_frontends: true
+  num_additional_frontends: 4
+  env:
+    PIP_BREAK_SYSTEM_PACKAGES: "1"
+  args:
+    router-mode: "kv"
+    router-session-affinity-ttl-secs: "3600"
+    active-decode-blocks-threshold: "None"
+    active-prefill-tokens-threshold: "None"
+    active-prefill-tokens-threshold-frac: "None"
+
+backend:
+  type: sglang
+
+  aggregated_environment:
+    SGLANG_DEFAULT_THINKING: "1"
+    SGLANG_DSV4_REASONING_EFFORT: high
+    SGLANG_SIMULATE_ACC_LEN: "2.49"
+    SGLANG_SIMULATE_ACC_METHOD: match-expected
+    SGLANG_SIMULATE_ACC_TOKEN_MODE: real-draft-token
+    PIP_BREAK_SYSTEM_PACKAGES: "1"
+    HF_HUB_CACHE: /hf_hub_cache
+    SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
+    SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: "1"
+    SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2: "1"
+    SGLANG_OPT_USE_ONLINE_COMPRESS: "0"
+    SGLANG_OPT_USE_JIT_INDEXER_METADATA: "1"
+    SGLANG_OPT_USE_JIT_NORM: "1"
+    SGLANG_OPT_USE_TOPK_V2: "True"
+    SGLANG_ENABLE_UNIFIED_RADIX_TREE: "1"
+
+  sglang_config:
+    aggregated:
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      enable-metrics: true
+      trust-remote-code: true
+      stream-interval: 50
+      watchdog-timeout: 1000000
+      mem-fraction-static: 0.88
+      chunked-prefill-size: 4096
+      moe-runner-backend: marlin
+      disable-flashinfer-autotune: true
+      swa-full-tokens-ratio: 0.1
+      max-running-requests: 32
+      cuda-graph-max-bs: 32
+
+      scheduler-recv-interval: 30
+      tp-size: 8
+      dp-size: 1
+      ep-size: 1
+
+      enable-hierarchical-cache: true
+      hicache-ratio: 6
+      hicache-write-policy: write_through
+      hicache-io-backend: kernel
+
+      speculative-algorithm: EAGLE
+      speculative-num-steps: 3
+      speculative-eagle-topk: 1
+      speculative-num-draft-tokens: 4
+
+srun_options:
+  # The custom benchmark installs its isolated AIPerf environment at runtime.
+  container-remap-root: ""
+
+benchmark:
+  type: custom
+  command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+  env:
+    INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
+    RESULT_DIR: /logs/agentic
+    PORT: "8000"
+    # Aggregated serving uses one TP8 worker for both prefill and decode.
+    IS_MULTINODE: "false"
+    TP: "8"
+    AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
+    AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
+    # Fail the run loudly if the aggregate engine's sglang: metrics never reach
+    # the AIPerf export, instead of publishing a trace artifact with no backend
+    # series behind it.
+    AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
+    AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
+    HF_HUB_CACHE: /hf_hub_cache
