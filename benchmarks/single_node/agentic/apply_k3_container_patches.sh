@@ -1197,6 +1197,153 @@ DIFF_KDA_FUSED_RECURRENT
 apply_one "vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py" "stride_state_indices" "$WS/KDA_FUSED_RECURRENT.diff"
 
 
+# --- KV block accounting probes ------------------------------------------------
+# Disagg + the DRAM offload tier reports "GPU KV cache usage: -0.1%", which on an
+# 898-block pool is exactly one spurious free block (1/897). A double free cannot
+# produce it -- free_blocks only queues at ref_cnt == 0 and a second free just
+# goes to -1 silently -- so the extra block comes from re-inserting a block that
+# is still linked in the free queue, which corrupts the list AND inflates the
+# counter. Neither path reports itself today, and the symptom surfaces half an
+# hour downstream of the cause. These two probes fire at the moment of
+# corruption with a stack that names the offending caller, and self-heal instead
+# of aborting so a long agentic replay survives to finish.
+cat > "$WS/FREE_QUEUE_GUARD.diff" <<'DIFF_FREE_QUEUE_GUARD'
+diff --git a/vllm/v1/core/kv_cache_utils.py b/vllm/v1/core/kv_cache_utils.py
+--- a/vllm/v1/core/kv_cache_utils.py
++++ b/vllm/v1/core/kv_cache_utils.py
+@@ -320,23 +320,63 @@ class FreeKVCacheBlockQueue:
+         block.next_free_block.prev_free_block = block.prev_free_block
+ 
+         # Remove the block from the linked list.
+         block.prev_free_block = block.next_free_block = None
+         self.num_free_blocks -= 1
+ 
++    @staticmethod
++    def _is_linked(block: KVCacheBlock) -> bool:
++        """Whether the block is currently in the free list.
++
++        Every real block in the list has both links set (the fake head and tail
++        are never popped), and popleft/remove clear both.
++        """
++        return block.prev_free_block is not None or block.next_free_block is not None
++
++    def _drop_already_linked(
++        self, blocks: list[KVCacheBlock], caller: str
++    ) -> list[KVCacheBlock]:
++        """Refuse to insert blocks that are already in the free list.
++
++        Re-inserting a linked block overwrites its links, which both inflates
++        num_free_blocks and drops whatever followed it from traversal -- the
++        block ends up unreachable while still counted, and the only visible
++        symptom is a KV cache usage that drifts negative (one spurious free
++        block on an N-block pool reads as -1/(N-1)). The offender is logged with
++        a stack so the owning path is identifiable, and the insert is skipped so
++        the counter stays truthful instead of corrupting the list.
++        """
++        linked = [block for block in blocks if self._is_linked(block)]
++        if not linked:
++            return blocks
++        logger.error(
++            "Free block queue asked by %s to re-insert %d block(s) already in "
++            "the free list (ids=%s, ref_cnts=%s); skipping them. This is a "
++            "block-accounting bug in the caller.",
++            caller,
++            len(linked),
++            [block.block_id for block in linked],
++            [block.ref_cnt for block in linked],
++            stack_info=True,
++        )
++        linked_ids = {id(block) for block in linked}
++        return [block for block in blocks if id(block) not in linked_ids]
++
+     def append(self, block: KVCacheBlock) -> None:
+         """Put a block back into the free list and increase
+         num_free_blocks by 1.
+ 
+         Args:
+             block: The block to append.
+         """
+         if self.fake_free_list_tail.prev_free_block is None:
+             raise RuntimeError(
+                 "prev_free_block of fake_free_list_tail should always exist"
+             )
++        if not self._drop_already_linked([block], "append"):
++            return
+         last_block: KVCacheBlock = self.fake_free_list_tail.prev_free_block
+ 
+         # Connect the new block after the last block.
+         last_block.next_free_block = block
+         block.prev_free_block = last_block
+ 
+@@ -345,12 +385,13 @@ class FreeKVCacheBlockQueue:
+         self.fake_free_list_tail.prev_free_block = block
+ 
+         self.num_free_blocks += 1
+ 
+     def prepend_n(self, blocks: list[KVCacheBlock]) -> None:
+         """Put a list of blocks at the front of the free list."""
++        blocks = self._drop_already_linked(blocks, "prepend_n")
+         if len(blocks) == 0:
+             return
+ 
+         first_block = self.fake_free_list_head.next_free_block
+         assert first_block is not None, (
+             "next_free_block of fake_free_list_head should always exist"
+@@ -370,12 +411,13 @@ class FreeKVCacheBlockQueue:
+     def append_n(self, blocks: list[KVCacheBlock]) -> None:
+         """Put a list of blocks back into the free list
+ 
+         Args:
+             blocks: The blocks to append.
+         """
++        blocks = self._drop_already_linked(blocks, "append_n")
+         if len(blocks) == 0:
+             return
+ 
+         last_block = self.fake_free_list_tail.prev_free_block
+         assert last_block is not None, (
+             "prev_free_block of fake_free_list_tail should always exist"
+DIFF_FREE_QUEUE_GUARD
+apply_one "vllm/v1/core/kv_cache_utils.py" "_drop_already_linked" "$WS/FREE_QUEUE_GUARD.diff"
+
+cat > "$WS/BLOCK_POOL_REFCNT.diff" <<'DIFF_BLOCK_POOL_REFCNT'
+diff --git a/vllm/v1/core/block_pool.py b/vllm/v1/core/block_pool.py
+--- a/vllm/v1/core/block_pool.py
++++ b/vllm/v1/core/block_pool.py
+@@ -726,12 +726,29 @@ class BlockPool:
+         """
+         # Identify blocks with hash (LRU cache) and without it (never match APC)
+         blocks_with_hash = []
+         blocks_without_hash = []
+         for block in ordered_blocks:
+             block.ref_cnt -= 1
++            if block.ref_cnt < 0:
++                # A block freed once too often. Left unreported this is silent
++                # rather than harmless: the block is already in the free queue,
++                # and touch() only unlinks at ref_cnt == 0, so the next prefix
++                # hit raises it to 0 and leaves it queued while a request owns
++                # it -- get_new_blocks' ref_cnt == 0 assertion then passes and
++                # hands the same block to a second request.
++                logger.error(
++                    "Block %d freed with ref_cnt already 0 (now %d); the "
++                    "block is in the free queue while still referenced. "
++                    "Clamping to 0.",
++                    block.block_id,
++                    block.ref_cnt,
++                    stack_info=True,
++                )
++                block.ref_cnt = 0
++                continue
+             if block.ref_cnt == 0 and not block.is_null:
+                 # When caching is disabled we always append for better
+                 # GPU cache locality from reusing recently used blocks
+                 if block.block_hash is None and self.enable_caching:
+                     blocks_without_hash.append(block)
+                 else:
+DIFF_BLOCK_POOL_REFCNT
+apply_one "vllm/v1/core/block_pool.py" "freed with ref_cnt already 0" "$WS/BLOCK_POOL_REFCNT.diff"
+
+
 say "3/4 aiter #4521 (fp8 cp round-robin asm MLA verify kernels)  [needs network + hipcc + GPU]"
 # Unlike the offline Python diffs above, #4521 ships BINARY .co kernels (not in
 # the GitHub .diff) and a C++ asm_mla.cu change that must be recompiled, so this
@@ -1269,6 +1416,8 @@ echo "chk envs.py                    = $(grep -c 'VLLM_ROCM_AITER_MLA_ASM_PADDIN
 echo "chk mla.py                     = $(grep -c 'if not self.impl.supports_quant_query_input' "$ROOT/vllm/models/kimi_k3/nvidia/mla.py")"
 echo "chk attn_utils.py              = $(grep -c 'cg_support_exclude_layers' "$ROOT/vllm/v1/worker/gpu/attn_utils.py")"
 echo "chk model_runner.py            = $(grep -c 'cg_support_exclude_layers' "$ROOT/vllm/v1/worker/gpu/model_runner.py")"
+echo "chk kv_cache_utils.py          = $(grep -c '_drop_already_linked' "$ROOT/vllm/v1/core/kv_cache_utils.py")  (expect 4)"
+echo "chk block_pool.py              = $(grep -c 'freed with ref_cnt already 0' "$ROOT/vllm/v1/core/block_pool.py")"
 echo "chk fused_recurrent.py         = $(grep -c 'reshape(-1).contiguous()' "$ROOT/vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py")"
 echo "triton          = $(python -c 'import triton; print(triton.__version__)')  (expect 3.7.0*)"
 python -m py_compile "$ROOT/aiter/ops/triton/gluon/mla_gluon.py" \
@@ -1280,6 +1429,8 @@ python -m py_compile "$ROOT/aiter/ops/triton/gluon/mla_gluon.py" \
   "$ROOT/vllm/models/kimi_k3/nvidia/mla.py" \
   "$ROOT/vllm/v1/worker/gpu/attn_utils.py" \
   "$ROOT/vllm/v1/worker/gpu/model_runner.py" \
+  "$ROOT/vllm/v1/core/kv_cache_utils.py" \
+  "$ROOT/vllm/v1/core/block_pool.py" \
   "$ROOT/vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py" && echo "PY_COMPILE_OK" || { echo "PY_COMPILE_FAIL"; exit 1; }
 # Runtime import needs a GPU (aiter probes rocminfo); best-effort.
 python - <<'PYEOF'
