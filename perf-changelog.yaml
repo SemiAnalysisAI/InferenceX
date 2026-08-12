@@ -5832,3 +5832,44 @@
     - "Add the MI355X GLM-5.2 FP4 ATOM AgentX MTP submission, mirroring the upstream ATOM GLM-5.2 MXFP4 + MTP recipe with ptpc_fp8 online quantization and the lmcache_offload connector for DRAM offload."
     - "Sweep TP4 (conc 2/4/8/10) and TP8 (conc 1/2/4) LMCache DRAM-offload configurations, using MTP num-speculative-tokens 3 with the synthetic acceptance rate derived from the golden AL distribution (SIMULATE_ACC_LEN 2.99)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2576
+
+- config-keys:
+    - qwen3.5-fp8-mi300x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Qwen3.5-397B-A17B FP8 AgentX on MI300X with SGLang native EAGLE MTP and golden synthetic acceptance length 3.39"
+    - "Use TP8/EP1 and TP8/EP8 Pareto sweeps at c4/c16/c20/c24/c32; fast discovery found peak throughput at c24 and a post-knee regression at c32"
+    - "Exclude HiCache because SGLang v0.5.16 rejects Qwen3.5's layer-first hybrid cache layout"
+    - "Collect and require SGLang Prometheus metrics from the aggregate engine endpoint"
+    - "Image: lmsysorg/sglang-rocm:v0.5.16-rocm720-mi30x-20260730"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2563
+
+- config-keys:
+    - minimaxm3-fp8-h100-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add MiniMax-M3 MXFP8 AgentX on H100 with vLLM v0.27.1, EAGLE3 golden AL 2.78, resident TP8 c1-c5, and Mooncake DRAM offload c6/c8."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2564
+
+- config-keys:
+    - qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp
+  description:
+    - "Add the measured GB200 Qwen3.5 NVFP4 AgentX Pareto frontier across aggregate TP4, TP2/EP2, and TP4 HiCache with K=3 MTP."
+    - "Use stable SGLang v0.5.17-cu130 and NVIDIA/srt-slurm v1.0.45."
+    - "Enable SGLang metrics/cache reporting and require nonempty sglang: server metrics before publishing results."
+    - "Use K=3 golden synthetic acceptance length 3.39 for throughput; eval retains real MTP verification."
+    - "Give the released SGLang router one hour to register the 28-minute-loading backend and route AgentX sessions by correlation ID."
+    - "Bound hybrid-state pools to the measured resident and HiCache operating ranges instead of reserving capacity that cannot fit beside target and MTP weights."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2568
+
+- config-keys:
+    - qwen3.5-fp8-mi325x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add MI325X Qwen3.5 FP8 AgentX with SGLang native EAGLE MTP and golden synthetic acceptance length 3.39"
+    - "Use lmsysorg/sglang:v0.5.16-rocm720-mi30x, FP8 KV cache, AITER attention, and required SGLang Prometheus metrics"
+    - "Select a 32-point official TP2/EP2, TP4, TEP4, TP8, and TEP8 matrix from the complete 62-point fast discovery sweep"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2566
