@@ -5825,22 +5825,6 @@
     - agentic-coding
   description:
     - "Refresh H100 MiniMax-M3 MXFP8 AgentX with vLLM v0.27.1 and EAGLE3-GQA synthetic golden AL 2.78."
-    - "Screen TP8, TEP8, DEP8, and Mooncake DRAM-offload curves in AgentX fast mode before the final full sweep."
-    - "Require vLLM server metrics and session-aware DEP routing without relaxed request thresholds."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2564
-
-- config-keys:
-    - minimaxm3-fp8-h100-vllm-agentic-mtp
-  scenario-type:
-    - agentic-coding
-  description:
-    - "Recover six broad-search points lost to one node's NVML failure and compare TP8 vLLM-simple DRAM offload at c4/c6/c8/c10."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2564
-
-- config-keys:
-    - minimaxm3-fp8-h100-vllm-agentic-mtp
-  scenario-type:
-    - agentic-coding
-  description:
-    - "Route vLLM-simple through the MTP launcher and exclude the H100 node with a confirmed NVML device fault."
+    - "Use the complete fast sweep to retain TP8 c1-c5 and Mooncake TP8 c6/c8 for the strict Pareto sweep; TEP is dominated, DEP is infeasible at its required KV allocation, and vLLM-simple is not retained after its function screen."
+    - "Require vLLM server metrics and keep strict request and profile validation."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2564

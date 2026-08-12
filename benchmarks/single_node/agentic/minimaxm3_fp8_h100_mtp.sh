@@ -73,21 +73,6 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     "")
         require_agentic_kv_offload_none
         ;;
-    vllm-simple)
-        require_agentic_kv_offload_backend vllm-simple
-        TOTAL_CPU_DRAM_GIB=$((TOTAL_CPU_DRAM_GB * 1000000000 / 1073741824))
-        CPU_OFFLOAD_GIB_PER_RANK=$(((TOTAL_CPU_DRAM_GIB - MODEL_CHECKPOINT_PAGE_CACHE_GIB) / TP - MODEL_CPU_OFFLOAD_GB))
-        if (( CPU_OFFLOAD_GIB_PER_RANK <= 0 )); then
-            echo "Error: CPU DRAM budget is too small for checkpoint cache, model, and KV offload" >&2
-            exit 1
-        fi
-        CPU_BYTES_PER_RANK=$((CPU_OFFLOAD_GIB_PER_RANK * 1024 * 1024 * 1024))
-        export PYTHONHASHSEED=42
-        OFFLOAD_ARGS=(
-            --kv-transfer-config
-            "{\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use_per_rank\":${CPU_BYTES_PER_RANK},\"lazy_offload\":false}}"
-        )
-        ;;
     mooncake)
         require_agentic_kv_offload_backend mooncake
         TOTAL_CPU_DRAM_GIB=$((TOTAL_CPU_DRAM_GB * 1000000000 / 1073741824))
