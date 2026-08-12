@@ -5896,6 +5896,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2562
 
 - config-keys:
+    - dsv4-fp4-b200-dynamo-sglang-mtp
+  description:
+    - "Add a DeepSeek-V4-Pro FP4 Dynamo-SGLang MTP configuration for B200 with five 8k/1k disaggregated topologies."
+    - "Use NIXL for KV transfer with EAGLE speculative decoding and chat-formatted benchmark inputs."
+    - "Image: lmsysorg/sglang:nightly-dev-cu13-20260710-cfc66e05"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2554
+
+- config-keys:
     - qwen3.5-fp4-b200-sglang-mtp
   scenario-type:
     - fixed-seq-len
