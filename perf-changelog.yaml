@@ -5894,3 +5894,13 @@
     - "Cover the measured resident TP2/EP2 and TP4 Pareto ranges through their HBM capacity knees, with required SGLang metrics exports."
     - "Use SGLang v0.5.17 and disable unstable AITER all-reduce fusion for TP2/EP2 EAGLE rank consistency."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2562
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add HiCache DRAM KV-offload support to the recipe and isolate a single TP4 concurrency 16 point to prove the path boots on gfx950; the resident arms and the remaining HiCache points stay commented out for this iteration."
+    - "Run the HiCache arm at page size 64 with kernel io-backend and page_first layout, sized to 80 percent of the workflow DRAM budget at a 180 GB per-rank ceiling."
+    - "Patch sgl-project/sglang#34560 into the container for the HiCache arms only: Qwen3.5 leaves num_nextn_predict_layers unset on hf_text_config, which misroutes the MTP draft cache to the sidecar path and aborts startup."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2582
