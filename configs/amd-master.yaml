@@ -665,7 +665,11 @@ kimik3-fp4-mi355x-vllm-agentic-mtp-lmcache:
   multinode: false
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.50
+    # 0.40, not the base key's 0.50: the LMCache L1 is /dev/shm-backed and the
+    # script refuses budgets above 90% of free shm. mi355x-amds nodes mount
+    # ~1.5 TB of shm (cap ~1360 GB), so 0.50's 1499 GB budget fails the check
+    # (run 31644286169); 0.40 -> ~1199 GB fits with margin.
+    - dram-utilization: 0.40
       search-space:
       - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.4rc1" }, conc-list: [4, 8, 16], spec-decoding: mtp }
 
