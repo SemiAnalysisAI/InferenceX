@@ -201,6 +201,12 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         --max-cpu-workers 8
         --max-gpu-workers 1
         --eviction-policy LRU
+        # Pin the server-driven STORE/RETRIEVE path (same as the MiniMax-M3
+        # arm) so the benchmark measures one deterministic transfer path
+        # instead of the auto-mode pair. The L1 stays /dev/shm-backed either
+        # way (shm_name defaults on), which is why the capacity check above
+        # applies in this mode too.
+        --supported-transfer-mode lmcache_driven
     )
     append_command "$RESULT_DIR/lmcache_command.txt" "${LMCACHE_CMD[@]}"
     "${LMCACHE_CMD[@]}" > "$LMCACHE_LOG" 2>&1 &
