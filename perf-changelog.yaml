@@ -5830,4 +5830,4 @@
     - minimaxm3-fp4-mi355x-vllm-agentic-mtp
   description:
     - "Evaluate a TP8 GPU-resident MiniMax-M3 AgentX MTP curve from concurrency 1 through 64 against the published TP2/TP4 frontier."
-  pr-link: XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2574
