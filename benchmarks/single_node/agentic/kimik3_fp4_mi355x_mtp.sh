@@ -1005,15 +1005,32 @@ PYEOF
     # length of that list, and asserts world_size % n_servers == 0. It is a
     # comma-separated string here (the connector accepts a list or a string)
     # because this has to survive a JSON round trip through the serve command.
+    #
+    # kv_load_failure_policy: vLLM's default is "fail" -- a failed external load
+    # finishes the request with an error. That default is what turned a handful
+    # of recoverable LMCache retrieve failures into a dead engine on run
+    # 31557199586 (see the config comment on the c10 key). LMCache's retrieve
+    # loops over object groups and enqueues the H2D for each one as it goes, so
+    # when a later group misses its keys the earlier groups' copies are ALREADY
+    # in flight; "fail" then finishes the request and returns its blocks to the
+    # pool while those copies are still landing. The engine died ~1.5s after
+    # exactly such a failure with hipErrorIllegalAddress.
+    #
+    # "recompute" reschedules the request to recompute the failed blocks
+    # instead, so the blocks stay owned by the request and are overwritten by a
+    # real prefill rather than freed under an in-flight DMA. It is also simply
+    # the right policy for a benchmark: a cache miss should cost time, not a
+    # request.
+    LMCACHE_KV_LOAD_FAILURE_POLICY="${LMCACHE_KV_LOAD_FAILURE_POLICY:-recompute}"
     if [ "$LMCACHE_PROFILE" = "k2.7" ]; then
         OFFLOAD_ARGS=(
             --kv-transfer-config
-            "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_connector_module_path\":\"lmcache.integration.vllm.lmcache_mp_connector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.server_urls\":\"$LMCACHE_SERVER_URLS\"}}"
+            "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_connector_module_path\":\"lmcache.integration.vllm.lmcache_mp_connector\",\"kv_role\":\"kv_both\",\"kv_load_failure_policy\":\"$LMCACHE_KV_LOAD_FAILURE_POLICY\",\"kv_connector_extra_config\":{\"lmcache.mp.server_urls\":\"$LMCACHE_SERVER_URLS\"}}"
         )
     else
         OFFLOAD_ARGS=(
             --kv-transfer-config
-            "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.server_urls\":\"$LMCACHE_SERVER_URLS\",\"lmcache.mp.mq_timeout\":$LMCACHE_MQ_TIMEOUT}}"
+            "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_role\":\"kv_both\",\"kv_load_failure_policy\":\"$LMCACHE_KV_LOAD_FAILURE_POLICY\",\"kv_connector_extra_config\":{\"lmcache.mp.server_urls\":\"$LMCACHE_SERVER_URLS\",\"lmcache.mp.mq_timeout\":$LMCACHE_MQ_TIMEOUT}}"
         )
     fi
     ;;

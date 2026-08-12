@@ -1034,11 +1034,35 @@ kimik3-fp4-mi355x-vllm-agentic-mtp-dspark-prepatched-syn-lmc-c10:
   # recipe now passes on every profile. Nothing else moves: same image, same
   # synthetic 2.51, same fp8 KV, same 907GB sharded L1, same mnbt 3000.
   #
+  # Attempt 4 (run 31557199586) worked, and then died. #4437 did exactly what
+  # it promised -- stored tokens per input token 7.0 -> 2.5, external hit
+  # 14.2% -> 23.0%, TTFT p50 63.2s -> 2.55s, 2103.59 tok/s/GPU over the 1294s
+  # it survived, the first time this arm has beaten the GPU-only sibling. At
+  # 03:13:22 the engine took a hipErrorIllegalAddress in the DSpark drafter and
+  # aiperf aborted on the error rate.
+  #
+  # The crash is #4437's, not the drafter's. The LMCache shard logs carry
+  # 55,992 "L1Manager: finish read on non-read-locked key, potential
+  # inconsistent data might be read" warnings and 16 hard retrieve failures;
+  # attempt 3, same everything minus #4437, has ZERO of both. #4437's retrieve
+  # reads only the in-window suffix per object group and assumes the prefetch
+  # locked exactly that set -- the warnings say the two sets disagree. The
+  # request whose retrieve failed at 03:13:20 is the same request the crashing
+  # scheduler step was prefilling 1.5s later.
+  #
+  # Attempt 5 sets kv_load_failure_policy=recompute (vLLM's default is fail).
+  # LMCache enqueues each object group's H2D as it goes, so a later group's
+  # miss leaves earlier copies in flight; "fail" frees the request's blocks out
+  # from under them. That is a mitigation of the consequence, not of the cause:
+  # the lock-accounting mismatch is upstream and still needs a fix. If the
+  # warnings persist and the run still dies, the next step is
+  # LMCACHE_SEPARATE_OBJECT_GROUPS=0 to confirm the windowed-retrieve path is
+  # the trigger -- at the cost of reverting to attempt 3's throughput.
+  #
   # Read Waiting/Deferred and the engine idle fraction before the throughput
-  # number, and compare the STORE op count against attempt 2's 76,921 -- that
-  # is the number #4437 is supposed to cut. The 8x write amplification from
-  # mla_only() being False on this hybrid model is a separate upstream issue
-  # and is NOT addressed by this bump.
+  # number, and compare the STORE op count against attempt 2's 76,921. The 8x
+  # write amplification from mla_only() being False on this hybrid model is a
+  # separate upstream issue and is NOT addressed by any of this.
   image: aigmkt/kimi-k3-agentx@sha256:6eed69f39f036df3c7a61a2263159935a00a7c988a328677d502476a541c5c08
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
