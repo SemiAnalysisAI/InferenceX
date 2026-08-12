@@ -184,9 +184,11 @@ if [ "$DP_ATTENTION" = "true" ]; then
     export SGLANG_DP_USE_REDUCE_SCATTER=1
     export GPU_MAX_HW_QUEUES=5
 elif [ "$CONC" -le 16 ]; then
-    # A full 131072-token prefill chunk needs ~7 GiB/rank of activation
-    # headroom on top of the static pool; pair it with mem-fraction 0.80
-    # like the FP8 sibling's low-conc band (0.85 OOMs the device mid-replay:
+    # Chunked prefill 32k: smaller chunks let the scheduler interleave decode
+    # steps between prefill chunks, reducing TPOT for concurrent sessions
+    # (improved interactivity vs the original 131072-token chunk). The reduced
+    # chunk size drops per-chunk activation headroom from ~7 GiB/rank to
+    # ~1.7 GiB/rank, so mem-fraction 0.85 is safe (0.85 OOMed at 131k:
     # "Tried to allocate 6.86 GiB ... 5.15 GiB is free", run 29751563205).
     CHUNKED_PREFILL_SIZE=32768
     MEM_FRACTION_STATIC=0.85
@@ -197,6 +199,9 @@ fi
 MAX_RUNNING_REQUESTS=$((1 * CONC))
 [ "$MAX_RUNNING_REQUESTS" -gt 256 ] && MAX_RUNNING_REQUESTS=256
 CUDA_GRAPH_MAX_BS=$MAX_RUNNING_REQUESTS
+# NOTE: with MTP num-steps=5 the draft+verify batch can momentarily exceed
+# MAX_RUNNING_REQUESTS; if cuda-graph misses ("graph capture miss") appear in
+# server.log under load, consider raising this to e.g. MAX_RUNNING_REQUESTS * 2.
 
 if [ "${EVAL_ONLY:-false}" != "true" ]; then
     export SGLANG_SIMULATE_ACC_LEN=3.61

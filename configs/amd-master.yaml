@@ -1650,8 +1650,9 @@ minimaxm3-fp4-mi355x-vllm-agentic-mtp:
       - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.3" }, conc-list: [32, 40], spec-decoding: mtp }
 
 # GLM-5.2 FP4 agentic-coding benchmark on MI355X via SGLang with MTP speculative
-# decoding. TP=4 EP=4 with KV offloading to DRAM (hicache backend) to support
-# long agentic context windows. Concurrency sweep [1, 2, 4, 8, 10].
+# decoding. Two arms: (1) TP4/EP4 with HiCache KV offloading to DRAM, concurrency
+# sweep [1, 2, 4, 8, 10, 12, 16]; (2) TP8/EP8 without KV offloading for low-latency
+# comparison at conc [1, 2, 4]. SA selects the Pareto-optimal arm per concurrency.
 glm5.2-fp4-mi355x-sglang-agentic-mtp:
   image: lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260728
   model: amd/GLM-5.2-MXFP4
