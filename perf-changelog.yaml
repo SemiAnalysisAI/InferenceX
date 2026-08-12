@@ -5825,3 +5825,10 @@
     - "Add the MI355X MiniMax-M3 FP4 vLLM AgentX MTP submission on vLLM v0.27.1, using the committed EAGLE3 synthetic acceptance length of 3.35 for throughput and real target verification for eval."
     - "Sweep TP2/TP4 GPU-resident configurations and TP4 LMCache MP DRAM-offload points around the capacity knee, with vLLM server metrics enabled."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2487
+
+- config-keys:
+    - glm5.2-fp4-mi355x-atom-agentic-mtp
+  description:
+    - "Add the MI355X GLM-5.2 FP4 ATOM AgentX MTP submission, mirroring the upstream ATOM GLM-5.2 MXFP4 + MTP recipe with ptpc_fp8 online quantization and the lmcache_offload connector for DRAM offload."
+    - "Sweep TP4 (conc 2/4/8/10) and TP8 (conc 1/2/4) LMCache DRAM-offload configurations, using MTP num-speculative-tokens 3 with the synthetic acceptance rate derived from the golden AL distribution (SIMULATE_ACC_LEN 2.99)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2576
