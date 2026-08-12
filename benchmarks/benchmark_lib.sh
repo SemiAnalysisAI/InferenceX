@@ -871,6 +871,7 @@ import sys
 import tarfile
 import tempfile
 import time
+from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
@@ -916,28 +917,58 @@ try:
     )
     with tempfile.TemporaryFile() as archive_file:
         downloaded = 0
-        deadline = time.monotonic() + 60
-        with urlopen(request, timeout=60) as response:
-            while True:
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    raise TimeoutError("archive download exceeded the 60-second deadline")
-                sock = getattr(getattr(response, "fp", None), "raw", None)
-                sock = getattr(sock, "_sock", None)
-                if sock is not None:
-                    sock.settimeout(max(0.001, remaining))
-                try:
-                    chunk = response.read(1024 * 1024)
-                except socket.timeout as error:
-                    raise TimeoutError(
-                        "archive download exceeded the 60-second deadline"
-                    ) from error
-                if not chunk:
-                    break
-                downloaded += len(chunk)
-                if downloaded > 128 * 1024 * 1024:
-                    raise ValueError("archive download exceeds the 128 MiB safety limit")
-                archive_file.write(chunk)
+        for attempt in range(1, 4):
+            archive_file.seek(0)
+            archive_file.truncate()
+            downloaded = 0
+            deadline = time.monotonic() + 60
+            try:
+                with urlopen(request, timeout=60) as response:
+                    while True:
+                        remaining = deadline - time.monotonic()
+                        if remaining <= 0:
+                            raise TimeoutError(
+                                "archive download exceeded the 60-second deadline"
+                            )
+                        sock = getattr(getattr(response, "fp", None), "raw", None)
+                        sock = getattr(sock, "_sock", None)
+                        if sock is not None:
+                            sock.settimeout(max(0.001, remaining))
+                        try:
+                            chunk = response.read(1024 * 1024)
+                        except socket.timeout as error:
+                            raise TimeoutError(
+                                "archive download exceeded the 60-second deadline"
+                            ) from error
+                        if not chunk:
+                            break
+                        downloaded += len(chunk)
+                        if downloaded > 128 * 1024 * 1024:
+                            raise ValueError(
+                                "archive download exceeds the 128 MiB safety limit"
+                            )
+                        archive_file.write(chunk)
+                break
+            except HTTPError as error:
+                if error.code not in (408, 429) and not 500 <= error.code < 600:
+                    raise
+                if attempt == 3:
+                    raise
+                print(
+                    f"WARN: Kimi-Vendor-Verifier archive download attempt "
+                    f"{attempt}/3 failed: {error}; retrying",
+                    file=sys.stderr,
+                )
+                time.sleep(attempt)
+            except (TimeoutError, URLError, ConnectionError) as error:
+                if attempt == 3:
+                    raise
+                print(
+                    f"WARN: Kimi-Vendor-Verifier archive download attempt "
+                    f"{attempt}/3 failed: {error}; retrying",
+                    file=sys.stderr,
+                )
+                time.sleep(attempt)
         if downloaded == 0:
             raise ValueError("downloaded archive is empty")
         archive_file.seek(0)

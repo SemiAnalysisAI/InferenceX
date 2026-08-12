@@ -380,11 +380,19 @@ def _kimi_verifier_archive(
 
 
 @contextmanager
-def _serve_archive(payload: bytes):
+def _serve_archive(payload: bytes, *, transient_failures: int = 0):
     request_paths = []
+    request_count = 0
+
     class ArchiveHandler(BaseHTTPRequestHandler):
         def do_GET(self):
+            nonlocal request_count
             request_paths.append(self.path)
+            request_count += 1
+            if request_count <= transient_failures:
+                self.send_response(503)
+                self.end_headers()
+                return
             self.send_response(200)
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
@@ -411,6 +419,7 @@ def _prepare_local_kimi_verifier(
     tmp_path: Path,
     payload: bytes,
     verifier_ref: str = "1" * 40,
+    transient_failures: int = 0,
 ) -> tuple[subprocess.CompletedProcess[str], Path, list[str]]:
     checkout = tmp_path / "checkout"
     script = r'''
@@ -419,7 +428,10 @@ git() { echo "git must not be invoked" >&2; return 127; }
 mktemp() { mkdir "$CHECKOUT"; printf '%s\n' "$CHECKOUT"; }
 _prepare_kimi_vendor_verifier "$REPO_URL" "$VERIFIER_REF"
 '''
-    with _serve_archive(payload) as (repo_url, request_paths):
+    with _serve_archive(
+        payload,
+        transient_failures=transient_failures,
+    ) as (repo_url, request_paths):
         result = subprocess.run(
             ["bash", "-c", script],
             env={
@@ -453,6 +465,25 @@ def test_kimi_vendor_verifier_fetches_expected_subset_without_git(tmp_path: Path
         if path.is_file()
     } == _KIMI_VERIFIER_REQUIRED_FILES
     assert "git must not be invoked" not in result.stderr
+
+
+def test_kimi_vendor_verifier_retries_transient_archive_failure(
+    tmp_path: Path,
+) -> None:
+    result, checkout, request_paths = _prepare_local_kimi_verifier(
+        tmp_path,
+        _kimi_verifier_archive(),
+        transient_failures=1,
+    )
+    verifier_ref = "1" * 40
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == str(checkout)
+    assert request_paths == [
+        f"/owner/verifier/archive/{verifier_ref}.tar.gz",
+        f"/owner/verifier/archive/{verifier_ref}.tar.gz",
+    ]
+    assert "archive download attempt 1/3 failed" in result.stderr
 
 
 def test_kimi_vendor_verifier_removes_partial_checkout_when_member_missing(
