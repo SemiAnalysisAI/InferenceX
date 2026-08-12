@@ -5925,4 +5925,4 @@
     - agentic-coding
   description:
     - "Add MI300X MiniMax-M3 MXFP8 AgentX with vLLM EAGLE3-GQA, golden synthetic acceptance length 2.78, a broad TP8/EP8 discovery grid, required server metrics, and an isolated LMCache MP DRAM-offload gate."
-  pr-link: null
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2580
