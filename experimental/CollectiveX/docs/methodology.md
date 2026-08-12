@@ -494,8 +494,11 @@ build + handle creation are reported separately as `prep_ms` (engines amortize t
 prepped-handle reuse) and never inside the timed transfer. Every point reports pooled
 trials x reps percentiles, GB/s at p50, and a verification verdict: the destination pool is
 pattern-checked after `pull` on the initiator and after `push` on the target (an offset-derived
-byte pattern makes any page's expected contents computable from its offset alone), and both pools
-are repainted between points. A failed verify flips the document `invalid` and the leg red.
+byte pattern makes any page's expected contents computable from its offset alone), covering every
+request in the burst against its own block tables — concurrent same-session requests are exactly
+where corruption would hide, so a passing request 0 is never taken as evidence for the others.
+Both pools are repainted between points. A failed verify flips the document `invalid` and the
+leg red.
 
 A registry backend can carry restrictions: `ops` when a fabric serves one direction only
 (mooncake on mi355x runs `push` — AMD's atom-dev build moves WRITE at wire speed over the

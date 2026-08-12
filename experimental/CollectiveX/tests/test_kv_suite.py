@@ -249,7 +249,7 @@ class KVGrid(unittest.TestCase):
         import argparse
 
         base = dict(workload_name="kv-dsv4", precision="fp8",
-                    isl_ladder="8192 32768 524288", page_tokens="16 64",
+                    isl_ladder="8192 32768 131072 524288", page_tokens="16 64",
                     batch_sizes="1 2 4 8 16 32 64", pool_slack=2.0)
         base.update(overrides)
         return argparse.Namespace(**base)
@@ -262,11 +262,14 @@ class KVGrid(unittest.TestCase):
         import run_kv
 
         points, isls, batches = run_kv._grid(self._args())
-        self.assertEqual((isls, batches), ([8192, 32768, 524288], [1, 2, 4, 8, 16, 32, 64]))
+        self.assertEqual((isls, batches),
+                         ([8192, 32768, 131072, 524288], [1, 2, 4, 8, 16, 32, 64]))
         allowed = {(cfg["isl"], cfg["page_tokens"]): allowed for cfg, allowed in points}
         self.assertEqual(allowed[8192, 16], [1, 2, 4, 8, 16, 32, 64])
         self.assertEqual(allowed[32768, 16], [1, 2, 4, 8, 16])
         self.assertEqual(allowed[32768, 64], [1, 2, 4, 8, 16, 32])
+        self.assertEqual(allowed[131072, 16], [1, 2, 4])
+        self.assertEqual(allowed[131072, 64], [1, 2, 4, 8])
         self.assertEqual(allowed[524288, 16], [1, 2])
         self.assertEqual(allowed[524288, 64], [1, 2])
         for cfg, batch_list in points:
@@ -290,6 +293,26 @@ class KVGrid(unittest.TestCase):
         finally:
             run_kv.POOL_BUDGET = saved
         self.assertEqual(points[0][1], [1, 4])
+        self.assertLessEqual(points[0][0]["pool_bytes"], budget)
+
+    def test_pool_budget_overrides_the_two_batch_floor(self):
+        # The descriptor floor keeps the two smallest batches, but the pool
+        # budget is a hard memory limit and must still shed a floor-kept
+        # batch. Pin the budget between 512k page-16's batch-1 and batch-2
+        # pool sizes: batch 2 survives the descriptor floor, then the pool
+        # loop must drop it, leaving [1].
+        import kv_workload
+        import run_kv
+
+        args = self._args(isl_ladder="524288", page_tokens="16")
+        budget = kv_workload.plan_config("dsv4", "fp8", 524288, 16,
+                                         2.0, batch_max=1)["pool_bytes"]
+        saved, run_kv.POOL_BUDGET = run_kv.POOL_BUDGET, budget
+        try:
+            points, _isls, _batches = run_kv._grid(args)
+        finally:
+            run_kv.POOL_BUDGET = saved
+        self.assertEqual(points[0][1], [1])
         self.assertLessEqual(points[0][0]["pool_bytes"], budget)
 
 

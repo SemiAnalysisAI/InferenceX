@@ -246,7 +246,17 @@ def main() -> int:
 
     rows: list[dict] = []
 
-    def measure(make, cfg_row: dict, op: str, verify_side: str, tables=None):
+    def verify_burst(cfg, table_pairs):
+        """Every request in the burst must land: a passing request 0 says
+        nothing about the others, and concurrent same-session requests are
+        exactly where corruption would hide."""
+        for r, (dst, src) in enumerate(table_pairs):
+            passed, detail = kv_workload.verify_transfer(pool.read8, cfg, dst, src)
+            if not passed:
+                return False, f"request={r} {detail}"
+        return True, ""
+
+    def measure(make, cfg_row: dict, op: str, verify_side: str, table_pairs=None):
         """One grid point: initiator times bursts, then the verifying side checks."""
         if role == "initiator":
             made = make()  # one (post, wait, prep_seconds) per request in the burst
@@ -258,7 +268,7 @@ def main() -> int:
         dist.barrier()  # transfers complete before anyone inspects pools
         verdict = exchange_verdict(
             dist, role, verify_side,
-            lambda: kv_workload.verify_transfer(pool.read8, cfg_row["_cfg"], *tables))
+            lambda: verify_burst(cfg_row["_cfg"], table_pairs))
         repaint()
         dist.barrier()
         if role != "initiator":
@@ -293,11 +303,14 @@ def main() -> int:
                         backend.make_paged(cfg, op, initiator_tables[r], target_tables[r])
                         for r in range(batch)]
                 # pull lands on the initiator's pool; push on the target's.
-                # Request 0's tables stand in for the burst: same pool, same pattern.
+                # Every request in the burst is checked against its own tables.
                 verify_side = "initiator" if op == "pull" else "target"
-                tables = ((initiator_tables[0], target_tables[0]) if op == "pull"
-                          else (target_tables[0], initiator_tables[0]))
-                row = measure(make, {**base, "batch": batch}, op, verify_side, tables)
+                table_pairs = [
+                    (initiator_tables[r], target_tables[r]) if op == "pull"
+                    else (target_tables[r], initiator_tables[r])
+                    for r in range(batch)]
+                row = measure(make, {**base, "batch": batch}, op, verify_side,
+                              table_pairs)
                 if row is not None:
                     rows.append(row)
                     print(f"[run_kv] {json.dumps(row)}", flush=True)
@@ -311,7 +324,7 @@ def main() -> int:
                 "req_bytes": nbytes, "_cfg": cfg}
         for op in ops:
             make = (lambda op=op, n=nbytes: [backend.make_bulk(n, op)]) if role == "initiator" else None
-            row = measure(make, base, op, verify_side="none", tables=None)
+            row = measure(make, base, op, verify_side="none", table_pairs=None)
             if row is not None:
                 rows.append(row)
                 print(f"[run_kv] {json.dumps(row)}", flush=True)
