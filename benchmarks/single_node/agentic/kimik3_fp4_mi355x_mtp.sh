@@ -564,7 +564,19 @@ except Exception:
     # Built from source rather than `pip install lmcache==0.5.3`: upstream tags
     # ROCm builds separately (v0.5.3rc4-rocm), so PyPI is not reliably a gfx950
     # wheel, and this path already sets PYTORCH_ROCM_ARCH and BUILD_WITH_HIP=1.
-    LMCACHE_GIT_REF="${LMCACHE_GIT_REF:-140819c9d57a975dbc5678a6459a218e544cb58b}"
+    # Bumped from 140819c9 (v0.5.3) to d131cecf to pick up LMCache #4437
+    # "[Core] Optimize store/retrieve for linear models". Six commits apart,
+    # 140819c9 is a direct ancestor. #4437 makes --separate-object-groups
+    # mandatory for Mamba/linear hybrids AND flips its default from True to
+    # False, so the server command below now passes it explicitly.
+    #
+    # This branch is deliberately based on run 31471603763's tree (6831b3337),
+    # i.e. the SINGLE-process MP server, so the patch is the only variable
+    # against that run. The sharded sibling (kimik3-lmc-4437-c10) died twice
+    # with GPU memory faults seconds after an LMCache retrieve failure; every
+    # #4437 run so far has been on an 8-shard topology, and this run is what
+    # says whether that matters.
+    LMCACHE_GIT_REF="${LMCACHE_GIT_REF:-d131cecfbda1c73019c56bf5173c6110b6c01f35}"
     LMCACHE_VERSION="${LMCACHE_VERSION:-${LMCACHE_CFG_VERSION:-git}}"
     if ! python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null 2>&1; then
         if [ "$LMCACHE_VERSION" = "git" ]; then
@@ -621,6 +633,19 @@ if missing:
         f"Registered edits: {sorted(names)}. Needs dev >= #4278 (2026-07-28)."
     )
 print(f"lmcache K3 edits present: {sorted(names)}")
+
+# #4437 must actually be in the build -- without it the run silently measures
+# the old store/retrieve path and proves nothing.
+try:
+    from lmcache.integration.vllm import kv_cache_groups as g
+except Exception as exc:
+    sys.exit(f"FATAL: cannot import kv_cache_groups: {exc}")
+if not hasattr(g, "_is_mamba_align_spec"):
+    sys.exit(
+        "FATAL: installed lmcache lacks LMCache #4437 "
+        "(kv_cache_groups._is_mamba_align_spec missing). Needs dev >= d131cec."
+    )
+print("lmcache #4437 linear-model store/retrieve optimization present")
 PYEOF
 
     LMCACHE_HOST="${LMCACHE_HOST:-127.0.0.1}"
@@ -749,6 +774,18 @@ PYEOF
     # --max-gpu-workers/--max-cpu-workers, and --l1-read-ttl-seconds in
     # lmcache/v1/distributed/config.py.
     LMCACHE_PROFILE="${LMCACHE_PROFILE:-reference}"
+
+    # REQUIRED for K3 as of LMCache #4437: K3 is a Mamba / linear-attention
+    # hybrid (KDA + MLA), and this is what gives the KDA layers their own
+    # object group. #4437 flipped the default from True to False, so it has to
+    # be passed explicitly or the retrieve optimization is a no-op.
+    # Set LMCACHE_SEPARATE_OBJECT_GROUPS=0 to A/B against the old grouping.
+    if [ "${LMCACHE_SEPARATE_OBJECT_GROUPS:-1}" = "1" ]; then
+        LMCACHE_SEPARATE_OBJECT_GROUPS_ARGS=(--separate-object-groups)
+    else
+        LMCACHE_SEPARATE_OBJECT_GROUPS_ARGS=(--no-separate-object-groups)
+    fi
+
     echo "Starting LMCache MP server (profile=$LMCACHE_PROFILE, L1=${LMCACHE_L1_SIZE_GB}GB)..."
     case "$LMCACHE_PROFILE" in
       k2.7)
@@ -759,6 +796,7 @@ PYEOF
             --port "$LMCACHE_PORT"
             --http-host "$LMCACHE_HOST"
             --http-port "$LMCACHE_HTTP_PORT"
+            "${LMCACHE_SEPARATE_OBJECT_GROUPS_ARGS[@]}"
             --l1-size-gb "$LMCACHE_L1_SIZE_GB"
             --l1-init-size-gb "$LMCACHE_L1_INIT_SIZE_GB"
             --l1-read-ttl-seconds "${LMCACHE_L1_READ_TTL_SECONDS:-7200}"
@@ -786,6 +824,7 @@ PYEOF
             --port "$LMCACHE_PORT"
             --http-host "$LMCACHE_HOST"
             --http-port "$LMCACHE_HTTP_PORT"
+            "${LMCACHE_SEPARATE_OBJECT_GROUPS_ARGS[@]}"
             --chunk-size "$LMCACHE_CHUNK_SIZE"
             --max-workers "${LMCACHE_MAX_WORKERS:-$TP}"
             --l1-size-gb "$LMCACHE_L1_SIZE_GB"
@@ -801,6 +840,7 @@ PYEOF
             --port "$LMCACHE_PORT"
             --http-host "$LMCACHE_HOST"
             --http-port "$LMCACHE_HTTP_PORT"
+            "${LMCACHE_SEPARATE_OBJECT_GROUPS_ARGS[@]}"
             --l1-size-gb "$LMCACHE_L1_SIZE_GB"
             --l1-init-size-gb "$LMCACHE_L1_INIT_SIZE_GB"
             --max-gpu-workers "$LMCACHE_MAX_GPU_WORKERS"
