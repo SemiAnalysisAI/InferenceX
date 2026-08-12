@@ -5700,3 +5700,13 @@
     - "Use the official lmsysorg/sglang:v0.5.16-rocm720-mi30x image, enable SGLang prompt-cache reporting, and pass the backend Prometheus metrics endpoint explicitly to AIPerf"
     - "Allow up to 30 minutes for healthy AgentX responses admitted near the end of the measurement window to drain before AIPerf finalizes profile metric coverage"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2528
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Backport merged vLLM PR #51766 into the pinned ROCm container: after an external Mamba state hit whose first continuation remains within the same state block, mark the request as allocated so the following partial-tail copy-on-write uses running-request ownership consistently in the scheduler core and worker."
+    - "Remove the allocator-wide BlockPool.free_blocks object-identity dedup experiment. Kimi-K3 hybrid/Mamba cache groups legitimately carry repeated references (often one per hybrid group), so suppressing every duplicate leaks valid decrements and does not prevent free-block queue corruption."
+    - "Keep SimpleCPUOffloadConnector lazy_offload enabled and retain the MI355X TP8 c12 AgentX reproduction point; lowering GPU memory utilization or concurrency only changes the timing of the ownership race and is not the fix."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
