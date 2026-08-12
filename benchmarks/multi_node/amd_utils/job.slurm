@@ -704,6 +704,13 @@ else
 fi
 fi  # end: if ENGINE == atom-disagg || vllm-disagg
 
+# ROCm writes a GPU core dump to /coredumps on a memory access fault and gives up
+# when that directory is absent (it logs that /coredumps is not writable or does not
+# exist), which is how a prefill fault on this arm was lost. The mount below points
+# it at the node's /tmp/coredumps, next to the per-role logs the run already collects.
+# Note: this block is inside the quoted srun body, so no double quotes here.
+mkdir -p /tmp/coredumps 2>/dev/null || true
+
 # Pre-clean (idempotent): stop then force-remove so GPU VRAM is released before
 # the sanity gate. stop-only left containers in Created/Exited state on some nodes.
 \$DOCKER_CMD ps -aq --filter \"$CONT_FILTER\" | xargs -r \$DOCKER_CMD rm -f || true
@@ -782,6 +789,7 @@ fi
     --shm-size 128G \
     -v /tmp:/run_logs \
     -v ${BENCHMARK_LOGS_DIR}:/benchmark_logs \
+    -v /tmp/coredumps:/coredumps \
     -v ${DI_REPO_DIR}:${DOCKER_MOUNT_PATH} \
     -v ${HICACHE_MC_CONFIG}:/config/hicache_mc.env:ro \
     ${EXTRA_DOCKER_MOUNTS:-} \

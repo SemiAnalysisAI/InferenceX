@@ -216,12 +216,19 @@ $1 == "DSCP" && $2 == ":" && $NF == p {
     # send-WR 16384 before the decoder aborted, so the queue is raised to the
     # verified DSv4 PD depth (32767, the ionic per-QP maximum) and the scatter-
     # gather list to 4 so a hybrid page needs fewer WRs to begin with.
+    #
+    # These are defaults, not hard assignments: this sizing is still being bisected
+    # against a crash that moves between the roles (decode HSA 0x1016 at send-WR
+    # 16384; prefill GPU memory access fault at 32767, with SQ-full still logged on
+    # the decoder either way), and a hard assignment here would silently override the
+    # runner, making that bisect impossible without editing this file.
     if [[ "$MODEL_NAME" == "Kimi-K3" ]]; then
-        export MORI_IO_SQ_BACKOFF_TIMEOUT_US=50000
-        export MORI_IO_QP_MAX_SEND_WR=32767
-        export MORI_IO_QP_MAX_CQE=32768
-        export MORI_IO_QP_MAX_SGE=4
-        echo "[INFO] Kimi-K3 MoRIIO: SQ_BACKOFF_TIMEOUT_US=$MORI_IO_SQ_BACKOFF_TIMEOUT_US QP_MAX_SEND_WR=$MORI_IO_QP_MAX_SEND_WR QP_MAX_CQE=$MORI_IO_QP_MAX_CQE QP_MAX_SGE=$MORI_IO_QP_MAX_SGE"
+        export MORI_IO_SQ_BACKOFF_TIMEOUT_US="${MORI_IO_SQ_BACKOFF_TIMEOUT_US:-50000}"
+        export MORI_IO_QP_MAX_SEND_WR="${MORI_IO_QP_MAX_SEND_WR:-32767}"
+        export MORI_IO_QP_MAX_CQE="${MORI_IO_QP_MAX_CQE:-32768}"
+        export MORI_IO_QP_MAX_SGE="${MORI_IO_QP_MAX_SGE:-4}"
+        export MORI_IO_TC_DISABLE="${MORI_IO_TC_DISABLE:-0}"
+        echo "[INFO] Kimi-K3 MoRIIO: SQ_BACKOFF_TIMEOUT_US=$MORI_IO_SQ_BACKOFF_TIMEOUT_US QP_MAX_SEND_WR=$MORI_IO_QP_MAX_SEND_WR QP_MAX_CQE=$MORI_IO_QP_MAX_CQE QP_MAX_SGE=$MORI_IO_QP_MAX_SGE TC_DISABLE=$MORI_IO_TC_DISABLE"
     fi
 
 else
