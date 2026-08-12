@@ -55,6 +55,26 @@ on:
                 required: false
                 type: string
                 default: ""
+            kimi-tool-call-diagnostic:
+                description: "Run temporary ordered Kimi tool-call diagnostics"
+                required: false
+                type: boolean
+                default: false
+            kimi-tool-call-diagnostic-temperature:
+                description: "Temperature for temporary Kimi diagnostics"
+                required: false
+                type: string
+                default: "0"
+            kimi-tool-call-diagnostic-seed:
+                description: "Seed for temporary Kimi diagnostics"
+                required: false
+                type: string
+                default: "1"
+            kimi-tool-call-diagnostic-sequence:
+                description: "Comma-separated unary/stream diagnostic order"
+                required: false
+                type: string
+                default: "unary,unary,stream,stream,stream,unary"
             swebench-gen-mode:
                 description: "SWE-bench generation mode (single-shot | agentic). Empty = agentic (single-shot is an explicit debugging escape hatch)."
                 required: false
@@ -145,6 +165,26 @@ on:
                 required: false
                 type: string
                 default: ""
+            kimi-tool-call-diagnostic:
+                description: "Run temporary ordered Kimi tool-call diagnostics"
+                required: false
+                type: boolean
+                default: false
+            kimi-tool-call-diagnostic-temperature:
+                description: "Temperature for temporary Kimi diagnostics"
+                required: false
+                type: string
+                default: "0"
+            kimi-tool-call-diagnostic-seed:
+                description: "Seed for temporary Kimi diagnostics"
+                required: false
+                type: string
+                default: "1"
+            kimi-tool-call-diagnostic-sequence:
+                description: "Comma-separated unary/stream diagnostic order"
+                required: false
+                type: string
+                default: "unary,unary,stream,stream,stream,unary"
             swebench-gen-mode:
                 description: "SWE-bench generation mode (single-shot | agentic). Empty = agentic (single-shot is an explicit debugging escape hatch)."
                 required: false
@@ -398,6 +438,12 @@ jobs:
             run-eval: true
             eval-only: true
             eval-conc: ${{ matrix.config['eval-all-concs'] && join(matrix.config.conc, ' ') || matrix.config['eval-conc'] }}
+            eval-framework: ${{ inputs.eval-framework }}
+            eval-suite: ${{ inputs.eval-suite }}
+            kimi-tool-call-diagnostic: ${{ inputs.kimi-tool-call-diagnostic }}
+            kimi-tool-call-diagnostic-temperature: ${{ inputs.kimi-tool-call-diagnostic-temperature }}
+            kimi-tool-call-diagnostic-seed: ${{ inputs.kimi-tool-call-diagnostic-seed }}
+            kimi-tool-call-diagnostic-sequence: ${{ inputs.kimi-tool-call-diagnostic-sequence }}
             ref: ${{ inputs.ref }}
 
     test-sweep-agentic:
@@ -484,6 +530,10 @@ jobs:
             swebench-gen-mode: ${{ inputs.swebench-gen-mode }}
             eval-framework: ${{ inputs.eval-framework }}
             eval-suite: ${{ inputs.eval-suite }}
+            kimi-tool-call-diagnostic: ${{ inputs.kimi-tool-call-diagnostic }}
+            kimi-tool-call-diagnostic-temperature: ${{ inputs.kimi-tool-call-diagnostic-temperature }}
+            kimi-tool-call-diagnostic-seed: ${{ inputs.kimi-tool-call-diagnostic-seed }}
+            kimi-tool-call-diagnostic-sequence: ${{ inputs.kimi-tool-call-diagnostic-sequence }}
             scenario-type: agentic-coding
             ref: ${{ inputs.ref }}
 
@@ -601,6 +651,10 @@ jobs:
             swebench-gen-mode: ${{ inputs.swebench-gen-mode }}
             eval-framework: ${{ inputs.eval-framework }}
             eval-suite: ${{ inputs.eval-suite }}
+            kimi-tool-call-diagnostic: ${{ inputs.kimi-tool-call-diagnostic }}
+            kimi-tool-call-diagnostic-temperature: ${{ inputs.kimi-tool-call-diagnostic-temperature }}
+            kimi-tool-call-diagnostic-seed: ${{ inputs.kimi-tool-call-diagnostic-seed }}
+            kimi-tool-call-diagnostic-sequence: ${{ inputs.kimi-tool-call-diagnostic-sequence }}
             scenario-type: agentic-coding
             ref: ${{ inputs.ref }}
 
@@ -679,6 +733,12 @@ jobs:
             run-eval: true
             eval-only: true
             eval-limit: ${{ inputs.eval-limit }}
+            eval-framework: ${{ inputs.eval-framework }}
+            eval-suite: ${{ inputs.eval-suite }}
+            kimi-tool-call-diagnostic: ${{ inputs.kimi-tool-call-diagnostic }}
+            kimi-tool-call-diagnostic-temperature: ${{ inputs.kimi-tool-call-diagnostic-temperature }}
+            kimi-tool-call-diagnostic-seed: ${{ inputs.kimi-tool-call-diagnostic-seed }}
+            kimi-tool-call-diagnostic-sequence: ${{ inputs.kimi-tool-call-diagnostic-sequence }}
             ref: ${{ inputs.ref }}
 
     collect-results:

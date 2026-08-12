@@ -1113,6 +1113,15 @@ _run_kimi_tool_call_schema_eval() {
     local adapter_path="${INFERENCEX_REPO_ROOT}/utils/evals/kimi_vendor_eval.py"
     local runtime_dir=""
     local checkout_dir=""
+    local diagnostic_args=()
+    if [[ "${KIMI_TOOL_CALL_DIAGNOSTIC:-false}" == "true" ]]; then
+        diagnostic_args+=(--diagnostic)
+        diagnostic_args+=(
+            --diagnostic-temperature "${KIMI_TOOL_CALL_DIAGNOSTIC_TEMPERATURE:-0}"
+            --diagnostic-seed "${KIMI_TOOL_CALL_DIAGNOSTIC_SEED:-1}"
+            --diagnostic-sequence "${KIMI_TOOL_CALL_DIAGNOSTIC_SEQUENCE:-unary,unary,stream,stream,stream,unary}"
+        )
+    fi
 
     mkdir -p "$results_dir" || return $?
     export EVAL_RESULT_DIR="$results_dir"
@@ -1157,6 +1166,7 @@ _run_kimi_tool_call_schema_eval() {
             --api-key EMPTY \
             --model "$model_name" \
             --output-dir "$results_dir" \
+            "${diagnostic_args[@]}" \
             || eval_rc=$?
     _cleanup_kimi_vendor_eval "$runtime_dir" "$checkout_dir"
     return "$eval_rc"
