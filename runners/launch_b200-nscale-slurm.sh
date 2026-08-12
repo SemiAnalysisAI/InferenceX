@@ -8,8 +8,9 @@
 # them would force every dgxc path to become an override hook and would let a
 # dgxc-only change silently alter nscale runs.
 #
-# Scope: multi-node Dynamo-vLLM DeepSeek-V4-Pro and Kimi K2.6 FP4 runs on
-# the b200-nscale/b200-new runner labels. Anything else exits non-zero.
+# Scope: multi-node Dynamo-vLLM DeepSeek-V4-Pro and Kimi K2.6 FP4 runs, plus
+# DeepSeek-V4-Pro FP4 Dynamo-SGLang MTP, on the b200-nscale/b200-new runner
+# labels. Anything else exits non-zero.
 
 SLURM_PARTITION="batch_1"
 SLURM_ACCOUNT="benchmark"
@@ -49,8 +50,9 @@ else
     exit 1
 fi
 
-if [[ $FRAMEWORK != "dynamo-vllm" ]]; then
-    echo "Unsupported framework for b200-nscale: $FRAMEWORK (only dynamo-vllm)" >&2
+if [[ $FRAMEWORK != "dynamo-vllm" ]] &&
+   [[ $MODEL_PREFIX != "dsv4" || $PRECISION != "fp4" || $FRAMEWORK != "dynamo-sglang" || $SPEC_DECODING != "mtp" ]]; then
+    echo "Unsupported framework/configuration for b200-nscale: $MODEL_PREFIX/$PRECISION/$FRAMEWORK/$SPEC_DECODING" >&2
     exit 1
 fi
 
@@ -59,7 +61,14 @@ export SERVED_MODEL_NAME=$MODEL
 echo "Cloning srt-slurm repository..."
 SRT_REPO_DIR="srt-slurm"
 rm -rf "$SRT_REPO_DIR"
-if [[ $MODEL_PREFIX == "dsv4" ]]; then
+if [[ $MODEL_PREFIX == "dsv4" && $FRAMEWORK == "dynamo-sglang" ]]; then
+    git clone --branch main --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
+    cd "$SRT_REPO_DIR" || exit 1
+    # Pin the srt-slurm revision used by these checked-in recipes.
+    git checkout 04e87fcc505d6d851451781a5499ca19a02ec2b4 || exit 1
+    mkdir -p recipes/sglang/deepseek-v4
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4" recipes/sglang/deepseek-v4
+elif [[ $MODEL_PREFIX == "dsv4" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
     cd "$SRT_REPO_DIR" || exit 1
     git checkout aflowers/vllm-gb200-v0.20.0 || exit 1
@@ -165,6 +174,7 @@ model_paths:
 # Container aliases
 containers:
   dynamo-vllm: "${SQUASH_FILE}"
+  dynamo-sglang: "${SQUASH_FILE}"
   "${IMAGE}": "${SQUASH_FILE}"
   nginx-sqsh: "${NGINX_SQUASH_FILE}"
 use_exclusive_sbatch_directive: true
@@ -201,8 +211,9 @@ sed -i 's/^  max_attempts: [0-9]*/  max_attempts: 720/' "$CONFIG_PATH"
 inject_synthetic_acceptance "$CONFIG_PATH" "$FRAMEWORK" || exit 1
 
 SRTCTL_PREFLIGHT_ARGS=()
-# Kimi K2.6 weights are staged on the Slurm compute nodes, not the login node.
-if [[ $MODEL_PREFIX == "kimik2.6" ]]; then
+# These weights are staged on the Slurm compute nodes, not the login node.
+if [[ $MODEL_PREFIX == "kimik2.6" ]] ||
+   [[ $MODEL_PREFIX == "dsv4" && $FRAMEWORK == "dynamo-sglang" ]]; then
     SRTCTL_PREFLIGHT_ARGS+=(--no-preflight)
 fi
 
