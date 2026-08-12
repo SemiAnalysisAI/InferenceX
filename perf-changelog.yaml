@@ -5439,6 +5439,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2508
 
 - config-keys:
+    - dsv4-fp4-b200-sglang-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh the purged B200 DeepSeek-V4-Pro SGLang AgentX resident, DP-attention, and HiCache grid on SGLang v0.5.17."
+    - "Use native EAGLE MTP (3 steps, top-k 1, 4 draft tokens) and golden synthetic acceptance length 2.49 for throughput; eval retains real verification."
+    - "Follow the official SGLang DeepSeek-V4 Blackwell recipe and require nonempty SGLang server metrics."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2578
+
+- config-keys:
     - minimaxm3-fp4-b200-dynamo-vllm-mtp
   description:
     - "Add MiniMax M3 NVFP4 B200 disagg EAGLE3 MTP recipes, mirrored from B300"
