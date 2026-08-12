@@ -1250,6 +1250,59 @@ dsv4-fp4-mi355x-vllm-agentic-mtp:
       # while MTP creates two. Restore these points after the upstream hybrid
       # KV recovery fix lands: https://github.com/vllm-project/vllm/pull/45497
 
+kimik3-fp4-mi355x-vllm-agentic:
+  # Day-zero Kimi-K3 recipe for MI355X (gfx950), the ROCm counterpart of
+  # kimik3-fp4-b300-vllm-agentic. The pinned image is the STOCK ROCm vLLM
+  # nightly; the recipe idempotently patches it into the validated container at
+  # startup (aiter @ 55dbc4f47 rebuild + tuned GEMM CSV + triton 3.7.0 + the 5
+  # vLLM ASM-MLA patches K3's 12-head/rank fp8 attention needs) via
+  # benchmarks/single_node/agentic/apply_k3_container_patches.sh. K3 ships as the
+  # out-of-tree vllm.models.kimi_k3 plugin, present in this nightly.
+  image: vllm/vllm-openai-rocm:nightly-cb8104839c141609d99f1254459ef3a4f1bd4263
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    # Agentic-coding only, mirroring the B300 sister's ladder so GPU-resident
+    # and host-DRAM-offload are directly comparable at equal concurrency.
+    agentic-coding:
+    - dram-utilization: 0.60
+      search-space:
+      # TP8-only: a ~1.5 TB FP4 checkpoint does not fit below 8 GPUs.
+      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 24] }
+      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [8, 16, 24] }
+
+kimik3-fp4-mi355x-vllm-agentic-dspark:
+  # DSpark speculative decoding (Inferact/Kimi-K3-DSpark draft) at level 2 with
+  # probabilistic drafting and synthetic acceptance pinned to the committed golden
+  # AL 2.51 (golden_al_distribution/
+  # kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml,
+  # thinking_on 2 -> 2.51), per the AgentX policy: draft length is the
+  # submission's choice, the acceptance target is not. Synthetic-vs-synthetic is
+  # the only apples-to-apples comparison with kimik3-fp4-b300-vllm-agentic-dspark.
+  # EVAL_ONLY runs switch to real block verification. spec-decoding: mtp routes to
+  # kimik3_fp4_mi355x_vllm_mtp.sh, which forces the draft causal (the ROCm fp8-asm
+  # requirement) and serves the mandated DSpark config (gpu-mem 0.95 / seqs 64 /
+  # MNBT 16384 / FULL_AND_PIECEWISE / KV pin 32 GiB).
+  image: vllm/vllm-openai-rocm:nightly-cb8104839c141609d99f1254459ef3a4f1bd4263
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.60
+      search-space:
+      # GPU-resident through the ladder; host-DRAM offload for conc>=8 where the
+      # on-device KV pin saturates and the shared prefix would otherwise evict.
+      - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 24] }
+      - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [8, 16, 24] }
+
 dsr1-fp4-mi355x-sglang-disagg-mtp:
   image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519
   model: amd/DeepSeek-R1-0528-MXFP4-v2
