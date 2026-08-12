@@ -4,6 +4,7 @@ set -e
 # System-specific configuration for H100 DGXC Slurm cluster
 SLURM_PARTITION="hpc-gpu-1"
 SLURM_ACCOUNT="customer"
+H100_SLURM_EXCLUDED_NODELIST="${H100_SLURM_EXCLUDED_NODELIST-hpc-gpu-1-8}"
 
 # Route spec-decoding=mtp configs to the _mtp benchmark script (parity with
 # the h200 launchers, which have carried SPEC_SUFFIX since #392).
@@ -289,7 +290,13 @@ else
 
     export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
 
-    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$GPU_COUNT --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
+    SALLOC_EXCLUDE_ARGS=()
+    if [[ -n "$H100_SLURM_EXCLUDED_NODELIST" ]]; then
+        SALLOC_EXCLUDE_ARGS=(--exclude="$H100_SLURM_EXCLUDED_NODELIST")
+        echo "Excluding H100 nodes: $H100_SLURM_EXCLUDED_NODELIST"
+    fi
+
+    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$GPU_COUNT --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME" "${SALLOC_EXCLUDE_ARGS[@]}"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
     if [[ -z "$JOB_ID" ]]; then
         echo "ERROR: failed to resolve H100 Slurm allocation" >&2

@@ -5836,3 +5836,11 @@
   description:
     - "Recover six broad-search points lost to one node's NVML failure and compare TP8 vLLM-simple DRAM offload at c4/c6/c8/c10."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2564
+
+- config-keys:
+    - minimaxm3-fp8-h100-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Route vLLM-simple through the MTP launcher and exclude the H100 node with a confirmed NVML device fault."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2564
