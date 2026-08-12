@@ -195,6 +195,13 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         --http-port "$LMCACHE_HTTP_PORT"
         --l1-size-gb "$LMCACHE_L1_SIZE_GB"
         --l1-init-size-gb 10
+        # Read locks default to a 300s TTL, and with a single GPU worker
+        # serializing 100k-300k-token K3 transfers, queued reads routinely
+        # outlive it: run 31648224111 logged 57k "finish read on
+        # non-read-locked key" warnings starting exactly warmup+300s before
+        # a GPU illegal-access crash. Outlast the job like the MiniMax-M3
+        # arm does.
+        --l1-read-ttl-seconds 7200
         --chunk-size 3072
         --separate-object-groups
         --enable-extra-logging
