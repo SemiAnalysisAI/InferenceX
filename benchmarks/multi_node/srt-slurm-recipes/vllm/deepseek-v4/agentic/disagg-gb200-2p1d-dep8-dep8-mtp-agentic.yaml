@@ -83,7 +83,7 @@ backend:
       enforce-eager: false
       max-num-seqs: 1024
       max-num-batched-tokens: 1024
-      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY"}'
+      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
       max-cudagraph-capture-size: 1024
       stream-interval: 10
 

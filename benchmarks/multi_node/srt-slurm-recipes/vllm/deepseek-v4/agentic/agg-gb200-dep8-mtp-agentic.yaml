@@ -70,7 +70,7 @@ backend:
       max-num-batched-tokens: 8192
       trust-remote-code: true
       block-size: 256
-      compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}'
+      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
       max-cudagraph-capture-size: 256
       speculative-config: '{"method":"mtp","num_speculative_tokens":2}'
       gpu-memory-utilization: 0.90
