@@ -36,7 +36,27 @@ OFFLOAD_ARGS=()
 MODEL_CPU_OFFLOAD_GB=26
 MODEL_CHECKPOINT_PAGE_CACHE_GIB=414
 MOONCAKE_LOCAL_BUFFER_GIB=4
-if require_agentic_kv_offload_backend mooncake; then
+case "${KV_OFFLOAD_BACKEND:-}" in
+    "")
+        require_agentic_kv_offload_none
+        ;;
+    vllm-simple)
+        require_agentic_kv_offload_backend vllm-simple
+        TOTAL_CPU_DRAM_GIB=$((TOTAL_CPU_DRAM_GB * 1000000000 / 1073741824))
+        CPU_OFFLOAD_GIB_PER_RANK=$(((TOTAL_CPU_DRAM_GIB - MODEL_CHECKPOINT_PAGE_CACHE_GIB) / TP - MODEL_CPU_OFFLOAD_GB))
+        if (( CPU_OFFLOAD_GIB_PER_RANK <= 0 )); then
+            echo "Error: CPU DRAM budget is too small for checkpoint cache, model, and KV offload" >&2
+            exit 1
+        fi
+        CPU_BYTES_PER_RANK=$((CPU_OFFLOAD_GIB_PER_RANK * 1024 * 1024 * 1024))
+        export PYTHONHASHSEED=42
+        OFFLOAD_ARGS=(
+            --kv-transfer-config
+            "{\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use_per_rank\":${CPU_BYTES_PER_RANK},\"lazy_offload\":false}}"
+        )
+        ;;
+    mooncake)
+        require_agentic_kv_offload_backend mooncake
         TOTAL_CPU_DRAM_GIB=$((TOTAL_CPU_DRAM_GB * 1000000000 / 1073741824))
         PER_RANK_GIB=$(((TOTAL_CPU_DRAM_GIB - MODEL_CHECKPOINT_PAGE_CACHE_GIB) / TP - MODEL_CPU_OFFLOAD_GB - MOONCAKE_LOCAL_BUFFER_GIB))
         if (( PER_RANK_GIB <= 0 )); then
@@ -73,7 +93,12 @@ EOF
             --kv-transfer-config
             '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true}}'
         )
-fi
+        ;;
+    *)
+        echo "Error: unsupported KV_OFFLOAD_BACKEND='$KV_OFFLOAD_BACKEND'" >&2
+        exit 1
+        ;;
+esac
 
 PARALLEL_ARGS=(--tensor-parallel-size "$TP" --data-parallel-size 1)
 if [[ "$DP_ATTENTION" == "true" ]]; then

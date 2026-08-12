@@ -7125,17 +7125,16 @@ minimaxm3-fp8-h100-vllm-agentic-mtp:
   multinode: false
   scenarios:
     agentic-coding:
-    # Fast discovery covers latency-oriented TP8, expert-parallel TEP8, and
-    # session-routed DEP8. Mooncake starts before the tight H100 HBM knee and
-    # extends each viable topology far enough to expose its host-tier tail.
+    # Recover the six points lost to one node's NVML failure in broad fast run
+    # 31540120174, and compare vLLM's built-in host tier around the H100 knee.
+    # DEP is omitted here because four independent points already proved that
+    # its native 1M-token KV allocation cannot fit on 80 GB H100s.
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 8, 10] }
-      - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 8, 10] }
-      - { tp: 8, ep: 8, dp-attn: true, spec-decoding: mtp, kv-offloading: none, conc-list: [8, 12, 16, 24, 32] }
-      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [2, 4, 6, 8, 10, 12, 16] }
-      - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [2, 4, 6, 8, 10, 12, 16] }
-      - { tp: 8, ep: 8, dp-attn: true, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [16, 24, 32] }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [2] }
+      - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [2, 4, 5] }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [10, 16] }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [4, 6, 8, 10] }
 
 minimaxm3-fp8-h200-vllm-agentic:
   image: vllm/vllm-openai:nightly-04c2a8deac44fdb1ca3e2b5ec3e6bf16f3f6a914
