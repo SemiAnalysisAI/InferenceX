@@ -85,14 +85,15 @@ if require_agentic_kv_offload_backend hicache; then
     fi
     echo "HiCache pools: ${HICACHE_SIZE_GB} GB per rank; projected node total ${PROJECTED_HICACHE_TOTAL_GB} GB."
 
-    # Offloaded runs use page size 1 with the proven ROCm direct/layer_first
-    # host-transfer path.
-    PAGE_SIZE=1
+    # Qwen3.5's hybrid attention/Mamba pools require the page-first kernel
+    # transfer path on ROCm. Page size 64 also matches SGLang's MI355X EAGLE
+    # recipe and avoids page-size-1 verify-graph compiler failures.
+    PAGE_SIZE=64
     CACHE_ARGS=(
         --enable-hierarchical-cache
         --hicache-size "$HICACHE_SIZE_GB"
-        --hicache-io-backend direct
-        --hicache-mem-layout layer_first
+        --hicache-io-backend kernel
+        --hicache-mem-layout page_first
         --hicache-write-policy write_through_selective
     )
     WARMUP_ARGS=(--skip-server-warmup)
