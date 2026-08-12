@@ -34,6 +34,18 @@
 #                (upstream issue #42085); see the long comment at the patch.
 #   audit        diagnostic only: name the block in the get_new_blocks assert
 #                and warn once if free_blocks() drives a ref_cnt negative.
+#   ROOT CAUSE   allocate_external_computed_blocks() could ask get_new_blocks()
+#                for a NEGATIVE number of blocks (req_blocks is already longer
+#                than the token count implies, because MambaManager
+#                over-allocates by num_speculative_blocks and pads with null
+#                blocks). popleft_n() does `num_free_blocks -= n`, so a
+#                negative n ADDS |n| phantom blocks to the counter while
+#                linking no nodes; the counter drifts above the real list
+#                length until the walk runs off the end and hands out the fake
+#                tail sentinel (block_id=-1). Only reachable with external
+#                computed tokens, i.e. only with a KV connector -- which is
+#                why the no-offload sibling of this cell never dies.
+#                Clamp the count, and assert n > 0 in popleft_n.
 #   queue guard  drop free-queue inserts of an already-linked block (which
 #                inflate num_free_blocks without adding a node, so popleft_n
 #                eventually hands out the fake tail sentinel block_id=-1) and
@@ -1260,20 +1272,44 @@ cat > "$WS/COW_PIN_TOUCH.diff.in" <<'DIFF_COW_PIN_TOUCH'
 diff --git a/vllm/v1/core/single_type_kv_cache_manager.py b/vllm/v1/core/single_type_kv_cache_manager.py
 --- a/vllm/v1/core/single_type_kv_cache_manager.py
 +++ b/vllm/v1/core/single_type_kv_cache_manager.py
-@@ -422,7 +422,11 @@
+@@ -320,9 +320,22 @@
+             return
+__BLANK_CONTEXT__
+         req_blocks = self.req_to_blocks[request_id]
+-        allocated_blocks = self.block_pool.get_new_blocks(
+-            cdiv(num_total_computed_tokens, self.block_size) - len(req_blocks)
++        # EXT_BLOCKS_CLAMP: req_blocks can already be longer than the token
++        # count implies -- MambaManager over-allocates by num_speculative_blocks
++        # and pads skipped positions with the null block -- so this difference
++        # goes negative. get_new_blocks() does not reject a negative count and
++        # popleft_n() then does `num_free_blocks -= n`, ADDING |n| phantom
++        # blocks to the counter while linking no nodes. The counter drifts above
++        # the real list length until popleft_n walks off the end and hands out
++        # the fake tail sentinel (block_id=-1). Reachable only when there are
++        # external computed tokens, i.e. only with a KV connector attached,
++        # which is why the no-offload sibling of this cell never dies.
++        num_new_blocks = cdiv(num_total_computed_tokens, self.block_size) - len(
++            req_blocks
+         )
++        if num_new_blocks <= 0:
++            return
++        allocated_blocks = self.block_pool.get_new_blocks(num_new_blocks)
+         req_blocks.extend(allocated_blocks)
+         if self._record_new_block_ids:
+             self.new_block_ids.extend(b.block_id for b in allocated_blocks)
+@@ -422,7 +435,10 @@
          assert not source_block.is_null and source_block.ref_cnt > 0
          req_blocks[block_idx] = cow_block
          self._pending_cow_copies.append((source_block, cow_block))
 -        cow_block.ref_cnt += 1
 +        # COW_PIN_TOUCH: take the retention ref through the block pool. A raw
 +        # `ref_cnt += 1` leaves a ref_cnt==0 block linked in the free queue,
-+        # which later trips `assert block.ref_cnt == 0` in get_new_blocks and
-+        # corrupts the free-block list.
++        # which later trips `assert block.ref_cnt == 0` in get_new_blocks.
 +        self.block_pool.touch((cow_block,))
 __BLANK_CONTEXT__
      def cache_blocks(
          self,
-@@ -1621,7 +1625,8 @@
+@@ -1621,7 +1637,8 @@
                          assert req_blocks[block_idx] is source_block
                          self.block_pool.move_block_hashes(source_block, cow_block)
                          self._pending_cow_copies.append((source_block, cow_block))
@@ -1288,6 +1324,10 @@ sed 's/^__BLANK_CONTEXT__$/ /' "$WS/COW_PIN_TOUCH.diff.in" > "$WS/COW_PIN_TOUCH.
 apply_one "vllm/v1/core/single_type_kv_cache_manager.py" \
   "COW_PIN_TOUCH" \
   "$WS/COW_PIN_TOUCH.diff"
+if ! grep -qF "EXT_BLOCKS_CLAMP" "$ROOT/vllm/v1/core/single_type_kv_cache_manager.py"; then
+  echo "ERROR: external-computed-blocks clamp did not apply"
+  exit 1
+fi
 if [ "$(grep -c 'COW_PIN_TOUCH' "$ROOT/vllm/v1/core/single_type_kv_cache_manager.py")" != "2" ]; then
   echo "ERROR: CoW retention pin patch did not apply to both sites"
   grep -n 'ref_cnt += 1' "$ROOT/vllm/v1/core/single_type_kv_cache_manager.py" || true
@@ -1394,7 +1434,18 @@ __BLANK_CONTEXT__
 __BLANK_CONTEXT__
      def popleft_n(self, n: int) -> list[KVCacheBlock]:
          """Pop the first n free blocks and reduce num_free_blocks by n.
-@@ -289,6 +291,10 @@
+@@ -281,6 +283,10 @@
+         """
+         if n == 0:
+             return []
++        # A negative n silently ADDS |n| to num_free_blocks below while linking
++        # no nodes, so the counter drifts above the real list length and the
++        # walk later runs off the end into the fake tail sentinel.
++        assert n > 0, f"KVCACHE-AUDIT: popleft_n called with a negative n ({n})"
+         assert self.num_free_blocks >= n
+         self.num_free_blocks -= n
+__BLANK_CONTEXT__
+@@ -289,6 +295,10 @@
          ret = []
          for _ in range(n):
              assert curr_block is not None
@@ -1405,7 +1456,7 @@ __BLANK_CONTEXT__
              ret.append(curr_block)
              last_block = curr_block
              curr_block = curr_block.next_free_block
-@@ -301,6 +307,7 @@
+@@ -301,6 +311,7 @@
              # the new first block.
              self.fake_free_list_head.next_free_block = curr_block
              curr_block.prev_free_block = self.fake_free_list_head
@@ -1413,7 +1464,7 @@ __BLANK_CONTEXT__
          return ret
 __BLANK_CONTEXT__
      def remove(self, block: KVCacheBlock) -> None:
-@@ -322,6 +329,7 @@
+@@ -322,6 +333,7 @@
          # Remove the block from the linked list.
          block.prev_free_block = block.next_free_block = None
          self.num_free_blocks -= 1
@@ -1421,7 +1472,7 @@ __BLANK_CONTEXT__
 __BLANK_CONTEXT__
      def append(self, block: KVCacheBlock) -> None:
          """Put a block back into the free list and increase
-@@ -345,9 +353,102 @@
+@@ -345,9 +357,102 @@
          self.fake_free_list_tail.prev_free_block = block
 __BLANK_CONTEXT__
          self.num_free_blocks += 1
@@ -1524,7 +1575,7 @@ __BLANK_CONTEXT__
          if len(blocks) == 0:
              return
 __BLANK_CONTEXT__
-@@ -366,6 +467,7 @@
+@@ -366,6 +471,7 @@
          first_block.prev_free_block = prev_block
 __BLANK_CONTEXT__
          self.num_free_blocks += len(blocks)
@@ -1532,7 +1583,7 @@ __BLANK_CONTEXT__
 __BLANK_CONTEXT__
      def append_n(self, blocks: list[KVCacheBlock]) -> None:
          """Put a list of blocks back into the free list
-@@ -373,6 +475,7 @@
+@@ -373,6 +479,7 @@
          Args:
              blocks: The blocks to append.
          """
@@ -1540,7 +1591,7 @@ __BLANK_CONTEXT__
          if len(blocks) == 0:
              return
 __BLANK_CONTEXT__
-@@ -391,6 +494,7 @@
+@@ -391,6 +498,7 @@
          self.fake_free_list_tail.prev_free_block = last_block
 __BLANK_CONTEXT__
          self.num_free_blocks += len(blocks)
@@ -1634,6 +1685,7 @@ echo "chk attn_utils.py              = $(grep -c 'cg_support_exclude_layers' "$R
 echo "chk model_runner.py            = $(grep -c 'cg_support_exclude_layers' "$ROOT/vllm/v1/worker/gpu/model_runner.py")"
 echo "chk fused_recurrent.py         = $(grep -c 'reshape(-1).contiguous()' "$ROOT/vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py")"
 echo "chk Mamba running CoW          = $(grep -c 'vLLM #51766: preserve running CoW' "$ROOT/vllm/v1/core/single_type_kv_cache_manager.py")"
+echo "chk ext-blocks clamp           = $(grep -c 'EXT_BLOCKS_CLAMP' "$ROOT/vllm/v1/core/single_type_kv_cache_manager.py")  (expect 1)"
 echo "chk CoW pin (touch)            = $(grep -c 'COW_PIN_TOUCH' "$ROOT/vllm/v1/core/single_type_kv_cache_manager.py")  (expect 2)"
 echo "chk raw CoW ref_cnt bumps      = $(grep -cE '^[[:space:]]+(cow_block|source_block)\.ref_cnt \+= 1' "$ROOT/vllm/v1/core/single_type_kv_cache_manager.py")  (expect 0)"
 echo "chk allocator audit            = $(grep -c 'KVCACHE-AUDIT' "$ROOT/vllm/v1/core/block_pool.py")  (expect 2)"

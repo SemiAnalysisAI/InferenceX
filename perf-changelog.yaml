@@ -5739,3 +5739,12 @@
     - "Resynchronising is also a safety net rather than only a diagnostic: every engine death on this cell comes from the counter sitting above the true list length, which lets the allocator pop past the end of the list and hand out the queue's fake tail sentinel as if it were a real block."
     - "Also refuse an insert of the same block object appearing twice within one batch, which links the node to itself and counts it twice; the previous guard only rejected blocks that were already linked before the call."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Root cause of the MI355X TP8 c12 SimpleCPUOffloadConnector engine deaths: the external-computed-blocks allocation subtracts the request's current block count from the count implied by its computed tokens, and that difference can be negative because the Mamba manager over-allocates by the speculative block count and pads skipped positions with the null block. The allocator does not reject a negative request, and the free queue's pop path subtracts the requested count from its free-block counter, so a negative request adds that many phantom blocks to the counter while linking no nodes."
+    - "The counter then sits above the true list length until the pop walk runs off the end of the list and hands out the queue's own fake tail sentinel as a real block. This path runs only when there are external computed tokens, that is only with a KV connector attached, which is why the matched no-offload cell always ran to completion. Clamp the request to zero and reject a negative pop outright."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
