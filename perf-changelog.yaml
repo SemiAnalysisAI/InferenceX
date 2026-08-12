@@ -5843,7 +5843,5 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Refresh H100 MiniMax-M3 MXFP8 AgentX with vLLM v0.27.1 and EAGLE3-GQA synthetic golden AL 2.78."
-    - "Use the complete fast sweep to retain TP8 c1-c5 and Mooncake TP8 c6/c8 for the strict Pareto sweep; TEP is dominated, DEP is infeasible at its required KV allocation, and vLLM-simple is not retained after its function screen."
-    - "Require vLLM server metrics and keep strict request and profile validation."
+    - "Add MiniMax-M3 MXFP8 AgentX on H100 with vLLM v0.27.1, EAGLE3 golden AL 2.78, resident TP8 c1-c5, and Mooncake DRAM offload c6/c8."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2564

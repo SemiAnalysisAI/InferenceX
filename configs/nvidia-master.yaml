@@ -7141,15 +7141,6 @@ minimaxm3-fp8-h100-vllm-agentic:
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }
       - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }
 
-# EAGLE3 speculative-decoding (spec-decoding: mtp) variant of
-# minimaxm3-fp8-h100-vllm-agentic, pairing MiniMaxAI/MiniMax-M3-MXFP8 with the
-# Inferact/MiniMax-M3-EAGLE3-GQA draft head (3 speculative tokens, FLASH_ATTN
-# drafter) and pinning synthetic acceptance to the golden AL 2.78
-# (golden_al_distribution/minimaxm3_eagle3_gqa.yaml, thinking_on, K=3). Same TP8-only
-# layout and KV arms as the non-MTP entry so the spec-decode delta is readable at
-# equal concurrency, trimmed at the extreme-conc end: the draft head plus its KV
-# eat into the same HBM budget that already puts the GPU-resident cliff near
-# conc 6 on 80 GB H100s.
 minimaxm3-fp8-h100-vllm-agentic-mtp:
   image: vllm/vllm-openai:v0.27.1
   model: MiniMaxAI/MiniMax-M3-MXFP8
@@ -7160,11 +7151,7 @@ minimaxm3-fp8-h100-vllm-agentic-mtp:
   multinode: false
   scenarios:
     agentic-coding:
-    # The complete fast sweep places the GPU-resident cliff between c5 and c6.
-    # Retain the resident latency/knee curve through c5, then use Mooncake at
-    # c6/c8 to extend throughput without crossing that HBM cliff. TEP was
-    # dominated, DEP could not allocate its 1M-token KV cache on 80 GB H100s,
-    # and the vLLM-simple function screen did not justify a frontier row.
+    # The fast sweep places the resident HBM cliff between c5 and c6.
     - dram-utilization: 0.80
       search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 3, 4, 5] }
