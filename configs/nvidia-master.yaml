@@ -7136,16 +7136,12 @@ minimaxm3-fp8-h200-vllm-agentic-mtp:
   multinode: false
   scenarios:
     agentic-coding:
-    # Broad fast discovery spans TP8, TEP8, and session-routed DEP8. Mooncake
-    # overlaps the expected HBM knee and continues into the host-tier tail.
+    # Broad fast run 31540120459 located the TP8 knee at c10-c14. Compare the
+    # built-in vLLM host tier at equal concurrency before selecting the final
+    # full-duration Pareto sweep.
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 6, 8, 10, 12, 14, 16, 20] }
-      - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 6, 8, 10, 12, 14, 16, 20] }
-      - { tp: 8, ep: 8, dp-attn: true, spec-decoding: mtp, kv-offloading: none, conc-list: [8, 12, 16, 24, 32, 48] }
-      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [8, 10, 12, 14, 16, 20, 24, 32] }
-      - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [8, 10, 12, 14, 16, 20, 24, 32] }
-      - { tp: 8, ep: 8, dp-attn: true, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [24, 32, 48, 64] }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [10, 12, 14, 16] }
 
 qwen3.5-fp4-b200-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.16-cu130

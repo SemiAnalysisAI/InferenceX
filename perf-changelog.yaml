@@ -5804,3 +5804,11 @@
     - "Screen TP8, TEP8, DEP8, and Mooncake DRAM-offload curves in AgentX fast mode before the final full sweep."
     - "Require vLLM server metrics and session-aware DEP routing without relaxed request thresholds."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2565
+
+- config-keys:
+    - minimaxm3-fp8-h200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Broad fast run 31540120459 identifies the TP8 knee at c10-c14; compare vLLM-simple DRAM offload at c10/c12/c14/c16 before the final full sweep."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2565
