@@ -1348,27 +1348,31 @@ fi
 
 
 # ---------------------------------------------------------------------------
-# Free-queue double-insert guard (repair + attribution).
+# Free-list integrity audit + insert guard.
 #
-# Run 31616361031 (CoW pin applied) still died, but the audit assert named the
-# block: `block_id=-1 ref_cnt=1`, i.e. the allocator was handed the queue's own
-# fake tail sentinel. No "drove a block below zero" warning fired, so reference
-# counting is clean -- `num_free_blocks` simply outran the number of nodes
-# actually linked in the list, and popleft_n walked past the end.
+# Run 31616361031 (CoW pin): the allocator was handed block_id=-1 -- the free
+# queue's own fake tail sentinel -- so num_free_blocks had outrun the number of
+# nodes actually linked in the list. No ref_cnt ever went negative, so this is
+# a list/counter problem, not a reference-counting one.
 #
-# The only way the counter can outrun the list is an insert of a block that is
-# already linked: append_n/prepend_n set `block.prev = last; block.next = tail`
-# unconditionally and add 1 to the counter, so re-inserting a queued node links
-# it to itself and adds a phantom to the count. A block outside the list always
-# has BOTH link pointers None (popleft_n and remove() clear them), so
-# "already linked" is an exact O(1) test.
+# Run 31622187542 added a cross-call double-insert guard. It never fired, and
+# the run still died on the same over-count (now caught earlier by the
+# popleft_n tripwire). Nothing outside FreeKVCacheBlockQueue writes the link
+# pointers, so rather than keep guessing at the mechanism, measure it: this
+# pool holds only ~1.8k blocks, so walking the whole list after every mutation
+# costs microseconds.
 #
-# Drop such inserts -- the block is already in the list, so the list stays
-# correct and the counter stays honest -- and log the caller's stack once so
-# the next failure names whoever double-freed into the queue. Also trip
-# immediately in popleft_n if the walk ever reaches the sentinel again, instead
-# of silently handing it out and only failing on the second handout (which is
-# why the sentinel came back with ref_cnt=1 rather than 0).
+# _audit() compares num_free_blocks to the real list length (and detects
+# cycles) after popleft/popleft_n/remove/append/append_n/prepend_n. On the
+# first mismatch it logs the counter, the true length and the caller's stack,
+# then resyncs the counter -- which is also a safety net, since every engine
+# death so far comes from the counter sitting ABOVE the true length and
+# letting get_new_blocks pop past the end of the list.
+#
+# _drop_relinked() additionally refuses two inserts that would inflate the
+# counter without adding a node: a block that is already linked (a block
+# outside the list always has BOTH pointers None), and the same block object
+# twice in one batch (which links the node to itself and counts it twice).
 # ---------------------------------------------------------------------------
 cat > "$WS/FREE_QUEUE_GUARD.diff.in" <<'DIFF_FREE_QUEUE_GUARD'
 diff --git a/vllm/v1/core/kv_cache_utils.py b/vllm/v1/core/kv_cache_utils.py
@@ -1382,7 +1386,15 @@ diff --git a/vllm/v1/core/kv_cache_utils.py b/vllm/v1/core/kv_cache_utils.py
  from collections import defaultdict
  from collections.abc import Callable, Iterable, Iterator, Sequence
  from dataclasses import dataclass, replace
-@@ -289,6 +290,10 @@
+@@ -269,6 +270,7 @@
+__BLANK_CONTEXT__
+         self.num_free_blocks -= 1
+         return first_block
++        self._audit("popleft")
+__BLANK_CONTEXT__
+     def popleft_n(self, n: int) -> list[KVCacheBlock]:
+         """Pop the first n free blocks and reduce num_free_blocks by n.
+@@ -289,6 +291,10 @@
          ret = []
          for _ in range(n):
              assert curr_block is not None
@@ -1393,51 +1405,134 @@ diff --git a/vllm/v1/core/kv_cache_utils.py b/vllm/v1/core/kv_cache_utils.py
              ret.append(curr_block)
              last_block = curr_block
              curr_block = curr_block.next_free_block
-@@ -346,8 +351,43 @@
+@@ -301,6 +307,7 @@
+             # the new first block.
+             self.fake_free_list_head.next_free_block = curr_block
+             curr_block.prev_free_block = self.fake_free_list_head
++        self._audit("popleft_n")
+         return ret
+__BLANK_CONTEXT__
+     def remove(self, block: KVCacheBlock) -> None:
+@@ -322,6 +329,7 @@
+         # Remove the block from the linked list.
+         block.prev_free_block = block.next_free_block = None
+         self.num_free_blocks -= 1
++        self._audit("remove")
+__BLANK_CONTEXT__
+     def append(self, block: KVCacheBlock) -> None:
+         """Put a block back into the free list and increase
+@@ -345,9 +353,102 @@
+         self.fake_free_list_tail.prev_free_block = block
 __BLANK_CONTEXT__
          self.num_free_blocks += 1
-__BLANK_CONTEXT__
++        self._audit("append")
++
++    _audit_reports: int = 0
++
++    def _audit(self, where: str) -> None:
++        """KVCACHE-AUDIT: verify num_free_blocks against the actual list.
++
++        Walks the free list and compares its length to the counter. The pool
++        here holds ~1.8k blocks, so the walk costs microseconds and is worth
++        paying to catch the desync at the operation that causes it rather than
++        at the allocation that trips over it minutes later.
++
++        On a mismatch: report the counter, the true length and the caller's
++        stack (first few occurrences only), then resync the counter. The
++        resync is also a safety net -- the engine deaths all come from the
++        counter being ABOVE the true length, which lets get_new_blocks pop past
++        the end of the list and hand out the fake tail sentinel.
++        """
++        n = 0
++        cycle = False
++        seen: set[int] = set()
++        curr = self.fake_free_list_head.next_free_block
++        while curr is not None and curr is not self.fake_free_list_tail:
++            if id(curr) in seen:
++                cycle = True
++                break
++            seen.add(id(curr))
++            n += 1
++            curr = curr.next_free_block
++        if n == self.num_free_blocks and not cycle:
++            return
++        type(self)._audit_reports += 1
++        if type(self)._audit_reports <= 5:
++            logger.warning(
++                "KVCACHE-AUDIT: free list desynced after %s() -- "
++                "num_free_blocks=%d but the list holds %d node(s)%s. "
++                "Resyncing the counter. Caller:\n%s",
++                where,
++                self.num_free_blocks,
++                n,
++                " [CYCLE]" if cycle else "",
++                "".join(traceback.format_stack()[-10:-1]),
++            )
++        elif type(self)._audit_reports % 1000 == 0:
++            logger.warning(
++                "KVCACHE-AUDIT: %d desyncs so far (latest in %s(): "
++                "counter=%d list=%d)",
++                type(self)._audit_reports,
++                where,
++                self.num_free_blocks,
++                n,
++            )
++        self.num_free_blocks = n
++
 +    def _drop_relinked(
 +        self, blocks: list[KVCacheBlock], where: str
 +    ) -> list[KVCacheBlock]:
-+        """KVCACHE-AUDIT: drop blocks that are already linked into the list.
++        """KVCACHE-AUDIT: drop inserts that would corrupt the free list.
 +
-+        A block outside the free list always has both link pointers set to
-+        None, so a non-None pointer here means the caller is inserting a block
-+        that is already queued. Doing that links the node to itself and still
-+        bumps ``num_free_blocks``, so the counter outruns the list; ``popleft_n``
-+        then walks off the end and hands out the fake tail sentinel
-+        (``block_id=-1``). Dropping the re-insert keeps the list correct (the
-+        block is already in it) and keeps the counter honest.
++        Two cases, both of which add to ``num_free_blocks`` without adding a
++        node, so the counter outruns the list and popleft_n eventually hands
++        out the fake tail sentinel (``block_id=-1``):
++
++        * the block is already linked into the list -- a block outside the
++          list always has BOTH link pointers None, since popleft_n and
++          remove() clear them, so this is an exact O(1) test;
++        * the same block object appears twice in one batch, which links the
++          node to itself and counts it twice.
 +        """
-+        if all(
-+            b.prev_free_block is None and b.next_free_block is None for b in blocks
-+        ):
-+            return blocks
++        seen: set[int] = set()
 +        kept: list[KVCacheBlock] = []
++        bad = False
 +        for b in blocks:
-+            if b.prev_free_block is None and b.next_free_block is None:
++            linked = b.prev_free_block is not None or b.next_free_block is not None
++            dup = id(b) in seen
++            if not linked and not dup:
++                seen.add(id(b))
 +                kept.append(b)
 +                continue
++            bad = True
 +            logger.warning_once(
-+                "KVCACHE-AUDIT: %s() was handed an already-linked block "
-+                "(block_id=%d ref_cnt=%d hashed=%s); dropping the duplicate "
-+                "insert. Caller:\n%s",
++                "KVCACHE-AUDIT: %s() was handed a block it must not insert "
++                "(block_id=%d ref_cnt=%d already_linked=%s dup_in_batch=%s); "
++                "dropping it. Caller:\n%s",
 +                where,
 +                b.block_id,
 +                b.ref_cnt,
-+                b.block_hash is not None,
++                linked,
++                dup,
 +                "".join(traceback.format_stack()[-8:-1]),
 +            )
-+        return kept
-+
++        return kept if bad else blocks
+__BLANK_CONTEXT__
      def prepend_n(self, blocks: list[KVCacheBlock]) -> None:
          """Put a list of blocks at the front of the free list."""
 +        blocks = self._drop_relinked(blocks, "prepend_n")
          if len(blocks) == 0:
              return
 __BLANK_CONTEXT__
-@@ -373,6 +413,7 @@
+@@ -366,6 +467,7 @@
+         first_block.prev_free_block = prev_block
+__BLANK_CONTEXT__
+         self.num_free_blocks += len(blocks)
++        self._audit("prepend_n")
+__BLANK_CONTEXT__
+     def append_n(self, blocks: list[KVCacheBlock]) -> None:
+         """Put a list of blocks back into the free list
+@@ -373,6 +475,7 @@
          Args:
              blocks: The blocks to append.
          """
@@ -1445,6 +1540,14 @@ __BLANK_CONTEXT__
          if len(blocks) == 0:
              return
 __BLANK_CONTEXT__
+@@ -391,6 +494,7 @@
+         self.fake_free_list_tail.prev_free_block = last_block
+__BLANK_CONTEXT__
+         self.num_free_blocks += len(blocks)
++        self._audit("append_n")
+__BLANK_CONTEXT__
+     def get_all_free_blocks(self) -> list[KVCacheBlock]:
+         """Get all free blocks in the free list. Mainly used for testing.
 DIFF_FREE_QUEUE_GUARD
 sed 's/^__BLANK_CONTEXT__$/ /' "$WS/FREE_QUEUE_GUARD.diff.in" > "$WS/FREE_QUEUE_GUARD.diff"
 apply_one "vllm/v1/core/kv_cache_utils.py" "_drop_relinked" "$WS/FREE_QUEUE_GUARD.diff"
@@ -1452,7 +1555,7 @@ if ! grep -qF "_drop_relinked" "$ROOT/vllm/v1/core/kv_cache_utils.py"; then
   echo "ERROR: free-queue double-insert guard did not apply"
   exit 1
 fi
-if [ "$(grep -c 'KVCACHE-AUDIT' "$ROOT/vllm/v1/core/kv_cache_utils.py")" != "3" ]; then
+if [ "$(grep -c '_audit(' "$ROOT/vllm/v1/core/kv_cache_utils.py")" != "7" ]; then
   echo "ERROR: free-queue guard applied partially"
   exit 1
 fi
@@ -1534,7 +1637,7 @@ echo "chk Mamba running CoW          = $(grep -c 'vLLM #51766: preserve running 
 echo "chk CoW pin (touch)            = $(grep -c 'COW_PIN_TOUCH' "$ROOT/vllm/v1/core/single_type_kv_cache_manager.py")  (expect 2)"
 echo "chk raw CoW ref_cnt bumps      = $(grep -cE '^[[:space:]]+(cow_block|source_block)\.ref_cnt \+= 1' "$ROOT/vllm/v1/core/single_type_kv_cache_manager.py")  (expect 0)"
 echo "chk allocator audit            = $(grep -c 'KVCACHE-AUDIT' "$ROOT/vllm/v1/core/block_pool.py")  (expect 2)"
-echo "chk free-queue guard           = $(grep -c 'KVCACHE-AUDIT' "$ROOT/vllm/v1/core/kv_cache_utils.py")  (expect 3)"
+echo "chk free-queue guard           = $(grep -c '_audit(' "$ROOT/vllm/v1/core/kv_cache_utils.py")  (expect 7)"
 echo "triton          = $(python -c 'import triton; print(triton.__version__)')  (expect 3.7.0*)"
 python -m py_compile "$ROOT/vllm/v1/core/single_type_kv_cache_manager.py" \
   "$ROOT/vllm/v1/core/kv_cache_utils.py" \

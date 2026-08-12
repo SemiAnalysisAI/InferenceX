@@ -5729,3 +5729,13 @@
     - "Reject free-block-queue inserts of a block that is already linked into the queue. append_n and prepend_n overwrite the link pointers and add one to num_free_blocks unconditionally, so re-inserting a queued node links it to itself and adds a phantom to the count; popleft_n then walks past the end of the list and hands out the queue's own fake tail sentinel as if it were a real KV block. A block outside the queue always has both link pointers cleared, so the duplicate insert is detected in constant time, dropped, and its caller logged once."
     - "Trip immediately in popleft_n if the walk reaches the fake tail, instead of handing the sentinel out silently and only failing on a later allocation once its reference count is already non-zero."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Audit the free-block list against its counter after every queue mutation. This pool holds roughly eighteen hundred blocks, so walking the whole list costs microseconds and catches the desync at the operation that causes it rather than at the allocation that trips over it an hour later; the audit reports the counter, the true list length and the caller, then resynchronises the counter."
+    - "Resynchronising is also a safety net rather than only a diagnostic: every engine death on this cell comes from the counter sitting above the true list length, which lets the allocator pop past the end of the list and hand out the queue's fake tail sentinel as if it were a real block."
+    - "Also refuse an insert of the same block object appearing twice within one batch, which links the node to itself and counts it twice; the previous guard only rejected blocks that were already linked before the call."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
