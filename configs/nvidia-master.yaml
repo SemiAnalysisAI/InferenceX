@@ -7177,6 +7177,25 @@ minimaxm3-fp8-h200-vllm-agentic:
       - { tp: 8, ep: 8, kv-offloading: none, conc-list: [2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
       - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
 
+minimaxm3-fp8-h200-vllm-agentic-mtp:
+  image: vllm/vllm-openai:v0.27.1
+  model: MiniMaxAI/MiniMax-M3-MXFP8
+  model-prefix: minimaxm3
+  runner: cluster:h200-dgxc
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    # Fast runs 31540120459 and 31558981228 locate the resident knee at c10
+    # and show Mooncake retaining throughput at c12-c14. TEP is dominated,
+    # DEP cannot allocate the 1M-token KV cache, and vLLM-simple falls after
+    # c10, so the strict sweep keeps only the measured Pareto candidates.
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 6, 8, 10] }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [12, 14] }
+
 qwen3.5-fp4-b200-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.16-cu130
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
