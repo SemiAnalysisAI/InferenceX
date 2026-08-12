@@ -5837,3 +5837,11 @@
     - "Collect and require SGLang Prometheus metrics from the aggregate engine endpoint"
     - "Image: lmsysorg/sglang-rocm:v0.5.16-rocm720-mi30x-20260730"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2563
+
+- config-keys:
+    - minimaxm3-fp8-h100-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add MiniMax-M3 MXFP8 AgentX on H100 with vLLM v0.27.1, EAGLE3 golden AL 2.78, resident TP8 c1-c5, and Mooncake DRAM offload c6/c8."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2564
