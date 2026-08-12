@@ -5742,8 +5742,6 @@
   scenario-type:
     - fixed-seq-len
   description:
-    - "Add a TEP2 arm (tp 2, ep 2) to the Qwen3.5-397B-A17B NVFP4 B200 SGLang MTP 8k/1k sweep at concurrency 16, 32, and 64"
-    - "Expert parallelism 2 measured against a same-node ep 1 reference at concurrency 32: +1.11% tok/s/GPU and +2.28% tok/s/user, non-overlapping on both axes across two samples"
-    - "Combined against the current published tp 2 ep 1 rows: 7534.5 tok/s/GPU at 120.16 tok/s/user (+5.85% / +5.17%) at concurrency 16, 10319.8 at 80.41 (+8.94% / +7.26%) at 32, and 13290.8 at 51.97 (+9.46% / +9.06%) at 64"
-    - "Correctness held on the promoted configuration: GSM8K strict-match 0.967-0.975 and flexible-extract 0.960-0.968 against a 0.94 threshold, coherence passed, decode CUDA graph active and MTP acceptance baseline-like with no backend fallback"
+    - "Add a TEP2 arm (tp 2, ep 2) to the qwen3.5-fp4-b200-sglang-mtp 8k/1k sweep at concurrency 16, 32, and 64"
+    - "Rides on the NVFP4-V2 checkpoint switch from #2205"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2550
