@@ -199,7 +199,7 @@ MAX_RUNNING_REQUESTS=$((1 * CONC))
 CUDA_GRAPH_MAX_BS=$MAX_RUNNING_REQUESTS
 
 if [ "${EVAL_ONLY:-false}" != "true" ]; then
-    export SGLANG_SIMULATE_ACC_LEN=2.99
+    export SGLANG_SIMULATE_ACC_LEN=3.61
     export SGLANG_SIMULATE_ACC_METHOD=match-expected
     export SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token
 fi
@@ -225,9 +225,9 @@ SGLANG_CMD=(
     --max-running-requests "$MAX_RUNNING_REQUESTS"
     --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
     --speculative-algorithm EAGLE
-    --speculative-num-steps 3
+    --speculative-num-steps 5
     --speculative-eagle-topk 1
-    --speculative-num-draft-tokens 4
+    --speculative-num-draft-tokens 6
     "${CACHE_ARGS[@]}"
     --watchdog-timeout 1800
     --enable-metrics
