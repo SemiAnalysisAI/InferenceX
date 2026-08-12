@@ -164,7 +164,11 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     CPU_BYTES_PER_RANK=$(( TOTAL_CPU_DRAM_GB * 1000 * 1000 * 1000 / TP ))
     # Identical prefixes must hash to identical block keys across ranks.
     export PYTHONHASHSEED=42
-    SIMPLE_LAZY_OFFLOAD="${SIMPLE_LAZY_OFFLOAD:-false}"
+    # Eager SimpleCPU offload corrupts the hybrid-cache GPU block free list on
+    # this workload, including with the upstream eager-store dedup from vLLM
+    # #42903 (runs 31553977202 and 31556459192). Lazy mode walks the GPU free
+    # queue, whose nodes are unique by construction, and avoids that store path.
+    SIMPLE_LAZY_OFFLOAD="${SIMPLE_LAZY_OFFLOAD:-true}"
     OFFLOAD_ARGS=(
         --kv-transfer-config
         "{\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use_per_rank\":$CPU_BYTES_PER_RANK,\"lazy_offload\":$SIMPLE_LAZY_OFFLOAD}}"

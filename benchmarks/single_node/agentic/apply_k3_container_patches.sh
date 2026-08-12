@@ -24,9 +24,6 @@
 #                requires ndim==1). Replaces the earlier reshape/coerce
 #                workaround. NOTE: not strictly needed by this stack (it boots
 #                under FULL_AND_PIECEWISE without it) -- kept for robustness.
-#   vllm  #42903 deduplicate eager SimpleCPUOffloadConnector store events so
-#                hybrid-cache physical-block reuse cannot corrupt the GPU block
-#                free list or leave blocks with stale reference counts.
 #   aiter #4521  fp8 cp round-robin asm MLA verify kernels: adds the qh16/qh32
 #                qseqlen4 gqaratio16/32 cprr .co + mla_asm.csv + asm_mla.cu +
 #                v1_2_device.cuh + aiter/mla.py + aiter/ops/attention.py, then
@@ -1199,89 +1196,6 @@ index 2f512df62643..db519fb6f0db 100644
 DIFF_KDA_FUSED_RECURRENT
 apply_one "vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py" "stride_state_indices" "$WS/KDA_FUSED_RECURRENT.diff"
 
-cat > "$WS/SIMPLE_KV_OFFLOAD_DEDUP.diff.in" <<'DIFF_SIMPLE_KV_OFFLOAD_DEDUP'
-diff --git a/vllm/v1/simple_kv_offload/manager.py b/vllm/v1/simple_kv_offload/manager.py
---- a/vllm/v1/simple_kv_offload/manager.py
-+++ b/vllm/v1/simple_kv_offload/manager.py
-@@ -389,6 +389,8 @@ def update_state_after_alloc(
-                 cpu_block_ids.append(cpu_blk.block_id)
-                 cpu_blocks_to_touch.append(cpu_blk)
-__BLANK_CONTEXT__
-+        assert len(gpu_block_ids) == len(set(gpu_block_ids))
-+
-         # Touch CPU blocks to prevent eviction during async load.
-         self.cpu_block_pool.touch(cpu_blocks_to_touch)
-         # Release the temporary pin held since get_num_new_matched_tokens().
-@@ -616,17 +618,21 @@ def _prepare_eager_store_specs(
-                         advanced_per_group[g] += 1
-                         continue
-__BLANK_CONTEXT__
-+                    # Skip blocks already scheduled in this step.
-+                    if gpu_block_id in in_flight:
-+                        advanced_per_group[g] += 1
-+                        continue
-+
-                     bhash_with_group = gpu_block.block_hash
-                     if bhash_with_group is None:
-                         # Masked-out SWA position the coordinator chose not to
-                         # hash; it can never serve a prefix-cache hit, so skip.
-                         advanced_per_group[g] += 1
-                         continue
-__BLANK_CONTEXT__
--                    # Skip if already scheduled for store or already cached in CPU.
-+                    # Skip if already cached in CPU.
-                     if (
--                        gpu_block_id in in_flight
--                        or cpu_block_pool.cached_block_hash_to_block.get_one_block(
-+                        cpu_block_pool.cached_block_hash_to_block.get_one_block(
-                             bhash_with_group
-                         )
-                         is not None
-@@ -639,6 +645,7 @@ def _prepare_eager_store_specs(
-                         break
-                     num_free -= 1
-__BLANK_CONTEXT__
-+                    in_flight.add(gpu_block_id)
-                     gpu_block_ids.append(gpu_block_id)
-                     block_hashes_to_store.append(bhash_with_group)
-                     advanced_per_group[g] += 1
-@@ -660,7 +667,6 @@ def _prepare_eager_store_specs(
-                 req_ids.append(req_id)
-                 merged_gpu_block_ids.extend(gpu_block_ids)
-                 merged_cpu_block_ids.extend(cpu_block_ids)
--                in_flight.update(gpu_block_ids)
-__BLANK_CONTEXT__
-                 # Touch GPU blocks to prevent freeing during async copy
-                 gpu_block_pool.touch(
-@@ -848,12 +854,15 @@ def _cleanup_load_request(self, req_id: str) -> None:
-                     self._load_event_to_reqs.pop(state.load_event, None)
-__BLANK_CONTEXT__
-         if state.transfer_meta is not None:
--            # Free CPU touch refs
-+            # Free CPU touch refs. Dedup to avoid double-free: the
-+            # transfer pairs may repeat the same CPU block when
-+            # different GPU blocks share identical content.
-             self.cpu_block_pool.free_blocks(
-                 self.cpu_block_pool.blocks[bid]
--                for bid in state.transfer_meta.cpu_block_ids
-+                for bid in dict.fromkeys(state.transfer_meta.cpu_block_ids)
-             )
--            # Free GPU touch refs
-+            # Free GPU touch refs. CPU-hit allocation gives each loaded block a
-+            # distinct GPU block, asserted in update_state_after_alloc.
-             assert self._gpu_block_pool is not None
-             self._gpu_block_pool.free_blocks(
-                 self._gpu_block_pool.blocks[bid]
-DIFF_SIMPLE_KV_OFFLOAD_DEDUP
-sed 's/^__BLANK_CONTEXT__$/ /' "$WS/SIMPLE_KV_OFFLOAD_DEDUP.diff.in" \
-  > "$WS/SIMPLE_KV_OFFLOAD_DEDUP.diff"
-apply_one "vllm/v1/simple_kv_offload/manager.py" "Skip blocks already scheduled in this step." "$WS/SIMPLE_KV_OFFLOAD_DEDUP.diff"
-if ! grep -qF "Skip blocks already scheduled in this step." \
-        "$ROOT/vllm/v1/simple_kv_offload/manager.py"; then
-  echo "ERROR: vLLM #42903 SimpleCPUOffloadConnector dedup patch did not apply"
-  exit 1
-fi
-
 
 say "3/4 aiter #4521 (fp8 cp round-robin asm MLA verify kernels)  [needs network + hipcc + GPU]"
 # Unlike the offline Python diffs above, #4521 ships BINARY .co kernels (not in
@@ -1356,7 +1270,6 @@ echo "chk mla.py                     = $(grep -c 'if not self.impl.supports_quan
 echo "chk attn_utils.py              = $(grep -c 'cg_support_exclude_layers' "$ROOT/vllm/v1/worker/gpu/attn_utils.py")"
 echo "chk model_runner.py            = $(grep -c 'cg_support_exclude_layers' "$ROOT/vllm/v1/worker/gpu/model_runner.py")"
 echo "chk fused_recurrent.py         = $(grep -c 'reshape(-1).contiguous()' "$ROOT/vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py")"
-echo "chk simple offload dedup        = $(grep -c 'Skip blocks already scheduled in this step.' "$ROOT/vllm/v1/simple_kv_offload/manager.py")"
 echo "triton          = $(python -c 'import triton; print(triton.__version__)')  (expect 3.7.0*)"
 python -m py_compile "$ROOT/aiter/ops/triton/gluon/mla_gluon.py" \
   "$ROOT/aiter/ops/gemm_op_a16w16.py" \
@@ -1367,7 +1280,6 @@ python -m py_compile "$ROOT/aiter/ops/triton/gluon/mla_gluon.py" \
   "$ROOT/vllm/models/kimi_k3/nvidia/mla.py" \
   "$ROOT/vllm/v1/worker/gpu/attn_utils.py" \
   "$ROOT/vllm/v1/worker/gpu/model_runner.py" \
-  "$ROOT/vllm/v1/simple_kv_offload/manager.py" \
   "$ROOT/vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py" && echo "PY_COMPILE_OK" || { echo "PY_COMPILE_FAIL"; exit 1; }
 # Runtime import needs a GPU (aiter probes rocminfo); best-effort.
 python - <<'PYEOF'
