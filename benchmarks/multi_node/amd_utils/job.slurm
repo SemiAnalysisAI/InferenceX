@@ -494,6 +494,13 @@ DOCKER_ENV_COMMON=(
     -e AIPERF_FAILED_REQUEST_THRESHOLD=\${AIPERF_FAILED_REQUEST_THRESHOLD:-}
     -e AIPERF_HTTP_TCP_USER_TIMEOUT=\${AIPERF_HTTP_TCP_USER_TIMEOUT:-}
     -e AIPERF_EXPERIMENTAL_FAST=\${AIPERF_EXPERIMENTAL_FAST:-}
+    # GPU core dumps: ROCm takes the dump directory from the HOST kernel core_pattern
+    # (on the MI355X nodes: /coredumps/core-%e-%s-%u-%g-%p-%t), so inside a container
+    # it writes to a path the image does not have and reports it as not writable or
+    # missing -- which is how a fault on the K3 disagg arm produced no dump. The
+    # runtime names HSA_COREDUMP_FILE as the supported override (it also refuses pipe
+    # patterns in containers), so point it at the per-role log dir the run collects.
+    -e HSA_COREDUMP_FILE=\${HSA_COREDUMP_FILE:-/run_logs/slurm_job-\${SLURM_JOB_ID}/gpucore-%e-%p}
     -e DECODE_TP_SIZE=\$DECODE_TP_SIZE
     -e DECODE_TP=\$DECODE_TP
     -e DECODE_NUM_WORKERS=\$DECODE_NUM_WORKERS
