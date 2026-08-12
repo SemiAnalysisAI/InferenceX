@@ -5856,3 +5856,13 @@
     - "Give the released SGLang router one hour to register the 28-minute-loading backend and route AgentX sessions by correlation ID."
     - "Bound hybrid-state pools to the measured resident and HiCache operating ranges instead of reserving capacity that cannot fit beside target and MTP weights."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2568
+
+- config-keys:
+    - qwen3.5-fp8-mi325x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add MI325X Qwen3.5 FP8 AgentX with SGLang native EAGLE MTP and golden synthetic acceptance length 3.39"
+    - "Use lmsysorg/sglang:v0.5.16-rocm720-mi30x, FP8 KV cache, AITER attention, and required SGLang Prometheus metrics"
+    - "Select a 32-point official TP2/EP2, TP4, TEP4, TP8, and TEP8 matrix from the complete 62-point fast discovery sweep"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2566
