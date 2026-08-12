@@ -57,7 +57,7 @@ cleanup_agentic_services() {
     local exit_code=$?
     trap - EXIT INT TERM
     set +e
-    stop_background_process_tree "$SERVER_PID" "vLLM server" 60
+    stop_background_process_tree "$SERVER_PID" "ATOM server" 60
     local i
     for i in "${!LMCACHE_PIDS[@]}"; do
         stop_background_process_tree "${LMCACHE_PIDS[$i]}" "LMCache server $i"
@@ -152,7 +152,7 @@ else
 fi
 echo "SIMULATE_ACC_LEN=$SIMULATE_ACC_LEN NUM_SPEC_TOKENS=$NUM_SPEC_TOKENS SPEC_ACCEPTANCE_RATE=$SPEC_ACCEPTANCE_RATE"
 
-VLLM_CMD=(
+ATOM_CMD=(
     python -m atom.entrypoints.openai_server
     --model "$MODEL_PATH"
     --host 0.0.0.0
@@ -166,8 +166,8 @@ VLLM_CMD=(
     "${SPEC_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
 )
-write_command "$RESULT_DIR/server_command.txt" "${VLLM_CMD[@]}"
-"${VLLM_CMD[@]}" > "$SERVER_LOG" 2>&1 &
+write_command "$RESULT_DIR/server_command.txt" "${ATOM_CMD[@]}"
+"${ATOM_CMD[@]}" > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 echo "Server PID: $SERVER_PID"
 
