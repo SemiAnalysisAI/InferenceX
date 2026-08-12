@@ -5874,3 +5874,11 @@
   description:
     - "Add MiniMax-M3 MXFP8 AgentX on H200 with vLLM v0.27.1, EAGLE3 golden AL 2.78, resident TP8 c1/c2/c4/c6/c8/c10, and Mooncake DRAM offload c12/c14."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2565
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang-agentic-mtp
+  description:
+    - "Add Qwen3.5-397B-A17B MXFP4 MI355X SGLang AgentX with native EAGLE MTP and the committed golden synthetic acceptance length."
+    - "Cover the measured resident TP2/EP2 and TP4 Pareto ranges through their HBM capacity knees, with required SGLang metrics exports."
+    - "Use SGLang v0.5.17 and disable unstable AITER all-reduce fusion for TP2/EP2 EAGLE rank consistency."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2562
