@@ -45,9 +45,17 @@ DECODE_TP_SIZE="${DECODE_TP_SIZE:-$GPUS_PER_NODE}"
 ROUTER_PORT="${ROUTER_PORT:-30000}"
 SERVER_PORT="${SERVER_PORT:-2584}"
 ENGINE_ID="${ENGINE_ID:-${MODEL_NAME}-pd-run}"
+VLLM_SERVER_READY_TIMEOUT="${VLLM_SERVER_READY_TIMEOUT:-900}"
 
 # Prefer MODEL_PATH from job.slurm (handles HF cache snapshot resolution)
 MODEL_PATH="${MODEL_PATH:-${MODEL_DIR}/${MODEL_NAME}}"
+if [[ ! -f "${MODEL_PATH}/config.json" && -d "${MODEL_PATH}/snapshots" ]]; then
+    snapshot_path="$(find "${MODEL_PATH}/snapshots" -mindepth 1 -maxdepth 1 -type d | sort | head -1)"
+    if [[ -n "$snapshot_path" && -f "${snapshot_path}/config.json" ]]; then
+        echo "[model] Resolved HF cache root ${MODEL_PATH} -> ${snapshot_path}"
+        MODEL_PATH="$snapshot_path"
+    fi
+fi
 
 # =============================================================================
 # Dependencies and Environment Setup
@@ -62,6 +70,20 @@ host_name=$(hostname)
 
 echo "[INFO] Management IP (barriers/proxy): $host_ip"
 echo "[INFO] RDMA IP (Nixl KV transfer): $rdma_ip"
+
+stage_run_logs() {
+    if [[ "${DRY_RUN:-0}" == "1" || -z "${SLURM_JOB_ID:-}" ]]; then
+        return 0
+    fi
+    local src="/run_logs/slurm_job-${SLURM_JOB_ID}"
+    local dst="${BENCHMARK_LOGS_DIR:-/run_logs}/logs/slurm_job-${SLURM_JOB_ID}"
+    if [[ -d "$src" ]]; then
+        mkdir -p "$dst"
+        cp -a "$src"/. "$dst"/ 2>/dev/null || true
+    fi
+}
+
+trap stage_run_logs EXIT
 
 # =============================================================================
 # RDMA / Nixl Workarounds
@@ -239,12 +261,13 @@ PROXY_PING_PORT="${PROXY_PING_PORT:-36367}"
 # too would spend a budget that was never computed for it.
 #
 # Escaping note: these strings are interpolated into PREFILL_CMD/DECODE_CMD and
-# then `eval`-ed, so JSON is wrapped in single quotes with \"-escaped double
-# quotes inside -- the single quotes are what survives the second parse.
+# then `eval`-ed, so JSON is wrapped in single quotes. The JSON value itself must
+# contain plain double quotes; pre-escaped \" reaches vLLM literally and fails
+# pydantic JSON parsing.
 build_kv_transfer_configs() {
     local moriio_prefill moriio_decode
-    moriio_prefill="{\\\"kv_connector\\\": \\\"MoRIIOConnector\\\", \\\"kv_role\\\": \\\"kv_producer\\\", \\\"kv_connector_extra_config\\\": {\\\"proxy_ip\\\": \\\"${NODE0_ADDR}\\\", \\\"proxy_ping_port\\\": \\\"${PROXY_PING_PORT}\\\", \\\"http_port\\\": \\\"${SERVER_PORT}\\\", \\\"read_mode\\\": true}}"
-    moriio_decode="{\\\"kv_connector\\\": \\\"MoRIIOConnector\\\", \\\"kv_role\\\": \\\"kv_consumer\\\", \\\"kv_connector_extra_config\\\": {\\\"proxy_ip\\\": \\\"${NODE0_ADDR}\\\", \\\"proxy_ping_port\\\": \\\"${PROXY_PING_PORT}\\\", \\\"http_port\\\": \\\"${SERVER_PORT}\\\", \\\"read_mode\\\": true}}"
+    moriio_prefill="{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_producer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\", \"read_mode\": true}}"
+    moriio_decode="{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_consumer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\", \"read_mode\": true}}"
 
     KV_TRANSFER_PREFILL="'${moriio_prefill}'"
     KV_TRANSFER_DECODE="'${moriio_decode}'"
@@ -258,8 +281,8 @@ build_kv_transfer_configs() {
         local per_rank
         per_rank=$(( TOTAL_CPU_DRAM_GB * 1000 * 1000 * 1000 / PREFILL_TP_SIZE ))
         local simple
-        simple="{\\\"kv_connector\\\": \\\"SimpleCPUOffloadConnector\\\", \\\"kv_role\\\": \\\"kv_both\\\", \\\"kv_connector_extra_config\\\": {\\\"cpu_bytes_to_use_per_rank\\\": ${per_rank}, \\\"lazy_offload\\\": false}}"
-        KV_TRANSFER_PREFILL="'{\\\"kv_connector\\\": \\\"MultiConnector\\\", \\\"kv_role\\\": \\\"kv_both\\\", \\\"kv_connector_extra_config\\\": {\\\"connectors\\\": [${moriio_prefill}, ${simple}]}}'"
+        simple="{\"kv_connector\": \"SimpleCPUOffloadConnector\", \"kv_role\": \"kv_both\", \"kv_connector_extra_config\": {\"cpu_bytes_to_use_per_rank\": ${per_rank}, \"lazy_offload\": false}}"
+        KV_TRANSFER_PREFILL="'{\"kv_connector\": \"MultiConnector\", \"kv_role\": \"kv_both\", \"kv_connector_extra_config\": {\"connectors\": [${moriio_prefill}, ${simple}]}}'"
         echo "[kv] prefill = MultiConnector[MoRIIO(kv_producer) + SimpleCPUOffload(${per_rank} B/rank x ${PREFILL_TP_SIZE})]"
         echo "[kv] decode  = MoRIIO(kv_consumer)"
     else
@@ -365,7 +388,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
             --node-ips ${IPADDRS} \
             --node-ports $SERVER_PORT \
             --wait-for-all-ports \
-            --timeout 1800
+            --timeout ${VLLM_SERVER_READY_TIMEOUT} || exit 1
     fi
 
     echo "Congratulations!!! All prefill and decode servers are up . . ."
@@ -382,6 +405,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         echo "DRY RUN: $HEALTH_BARRIER_CMD"
     else
         eval "$HEALTH_BARRIER_CMD"
+        [[ $? -eq 0 ]] || exit 1
         echo "MoRI-IO proxy is ready for benchmarking"
     fi
 
@@ -579,7 +603,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$xP" ]; then
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BARRIER_CMD"
     else
-        eval "$BARRIER_CMD"
+        eval "$BARRIER_CMD" || exit 1
     fi
 
     echo "Waiting until proxy server closes..."
@@ -637,7 +661,7 @@ else
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BARRIER_CMD"
     else
-        eval "$BARRIER_CMD"
+        eval "$BARRIER_CMD" || exit 1
     fi
 
     echo "Waiting until proxy server closes..."

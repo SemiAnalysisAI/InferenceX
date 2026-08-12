@@ -70,7 +70,7 @@ Kimi-K3:
   # SQ-full entirely yet still lost the decoder to HSA 0x1016 at ~65 min. Depth
   # modulates when it happens, not whether.
   env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4=1 AITER_BF16_FP8_MOE_BOUND=0 VLLM_ROCM_AITER_MLA_ASM_PADDING=asm VLLM_USE_BREAKABLE_CUDAGRAPH=0 SAFETENSORS_FAST_GPU=1 VLLM_SSM_CONV_STATE_LAYOUT=DS PYTHONHASHSEED=42 HSA_NO_SCRATCH_RECLAIM=1 VLLM_ENGINE_READY_TIMEOUT_S=7200 VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=1200"
-  hf_dir: "models--moonshotai--Kimi-K3"
+  hf_dir: "Kimi-K3"
 
 MiniMax-M2.5:
   # AITER fused-MoE kernel fmoe_bf16_blockscaleFp8_g1u1_vs_silu_32x384 for gfx950 writes OOB when run with MiniMax's shapes at M=8K(=num batched tokens), crashing vllm during AITER warmup.
