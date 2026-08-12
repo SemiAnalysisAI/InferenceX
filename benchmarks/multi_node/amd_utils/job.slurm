@@ -469,8 +469,30 @@ DOCKER_ENV_COMMON=(
     -e ENABLE_METRICS=\${ENABLE_METRICS:-0}
     -e PREFILL_ROUTER_POLICY=\${PREFILL_ROUTER_POLICY:-random}
     -e DECODE_ROUTER_POLICY=\${DECODE_ROUTER_POLICY:-random}
+    # env.sh auto-detects the RDMA device list with ibv_devinfo and aborts the run
+    # when that comes back empty, naming IBDEVICES as the override. That override
+    # only worked for atom-disagg, which was the one engine block passing it.
+    -e IBDEVICES=\${IBDEVICES:-}
     -e MORI_IO_SQ_BACKOFF_TIMEOUT_US=\${MORI_IO_SQ_BACKOFF_TIMEOUT_US:-}
     -e MORI_IO_QP_MAX_SEND_WR=\${MORI_IO_QP_MAX_SEND_WR:-}
+    # Passed through for the same reason as the two above: env.sh applies them as
+    # "${VAR:-default}", so a runner-side override only reaches the engine if the
+    # var crosses into the container.
+    -e MORI_IO_QP_MAX_CQE=\${MORI_IO_QP_MAX_CQE:-}
+    -e MORI_IO_QP_MAX_SGE=\${MORI_IO_QP_MAX_SGE:-}
+    # aiperf client knobs. The SGLang path forwards these into its sibling client
+    # container's env-file, but a co-located client (the vllm-disagg agentic path,
+    # which runs trace_replay.sh inside this container) only sees what crosses this
+    # boundary -- so without them AIPERF_WARMUP_REQUESTS_PER_LANE and friends were
+    # silently unsettable, and the warmup phase ran its 10 requests/lane default.
+    # That default is the worst shape for P/D: warmup drives one request per lane
+    # with max_tokens=1, so decode contributes nothing and the phase is pure
+    # prefill. Empty values are skipped by the client's own "${VAR:-default}".
+    -e AIPERF_WARMUP_REQUESTS_PER_LANE=\${AIPERF_WARMUP_REQUESTS_PER_LANE:-}
+    -e AIPERF_TRACE_IDLE_GAP_CAP_SECONDS=\${AIPERF_TRACE_IDLE_GAP_CAP_SECONDS:-}
+    -e AIPERF_FAILED_REQUEST_THRESHOLD=\${AIPERF_FAILED_REQUEST_THRESHOLD:-}
+    -e AIPERF_HTTP_TCP_USER_TIMEOUT=\${AIPERF_HTTP_TCP_USER_TIMEOUT:-}
+    -e AIPERF_EXPERIMENTAL_FAST=\${AIPERF_EXPERIMENTAL_FAST:-}
     -e DECODE_TP_SIZE=\$DECODE_TP_SIZE
     -e DECODE_TP=\$DECODE_TP
     -e DECODE_NUM_WORKERS=\$DECODE_NUM_WORKERS
@@ -522,7 +544,6 @@ elif [[ "$ENGINE" == "atom-disagg" ]]; then
         -e MAX_MODEL_LEN=${MAX_MODEL_LEN:-}
         -e MAX_NUM_BATCHED_TOKENS=${MAX_NUM_BATCHED_TOKENS:-}
         -e EXTRA_SERVER_ARGS=\${EXTRA_SERVER_ARGS:-}
-        -e IBDEVICES=${IBDEVICES:-}
     )
 else
     DOCKER_ENV_ENGINE=(
@@ -598,9 +619,16 @@ echo \"Rank \$SLURM_PROCID on \$(hostname)\"
 eval \"\$DOCKER_CMD_DETECT\"
 echo \"[docker-detect] rank \$SLURM_PROCID: DOCKER_CMD=\$DOCKER_CMD\"
 
-# Enable out-of-tree RDMA library mounts for atom-disagg (mooncake requires host RDMA stack)
+# Out-of-tree RDMA library mounts (mooncake/MoRIIO need the host RDMA stack).
+# vllm-disagg is included alongside atom-disagg because it has the same
+# requirement: on ionic/bnxt hosts the container's bundled provider does not match
+# the host kernel driver, ibv_devinfo then finds no device, and env.sh aborts on
+# empty RDMA-device detection before any server starts. What gets mounted is chosen
+# by the host NIC type, so this is a no-op on mlx5. sglang-disagg is deliberately
+# left out: it passes today on every fleet, and widening the mounts under it would
+# change a working path for no reason.
 RDMA_MOUNTS=()
-if [[ "$ENGINE" == "atom-disagg" ]]; then
+if [[ "$ENGINE" == "atom-disagg" || "$ENGINE" == "vllm-disagg" ]]; then
 
 # When the container base OS differs from the host (e.g. Ubuntu 24.04 image
 # on a 22.04 host), the container's bundled libibverbs/libionic may be
@@ -674,7 +702,7 @@ if [[ \${#RDMA_MOUNTS[@]} -gt 0 ]]; then
 else
     echo \"[rdma] no out-of-tree RDMA mounts needed\"
 fi
-fi  # end: if ENGINE == atom-disagg
+fi  # end: if ENGINE == atom-disagg || vllm-disagg
 
 # Pre-clean (idempotent): stop then force-remove so GPU VRAM is released before
 # the sanity gate. stop-only left containers in Created/Exited state on some nodes.

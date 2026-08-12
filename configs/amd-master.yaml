@@ -583,6 +583,107 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=2"
 
+# Disaggregated Kimi-K3 MXFP4 with the DSpark draft, shaped after
+# dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp (#2309): same cluster runner,
+# same agentic-coding scenario, per-role additional-settings carrying the node
+# counts. The aggregate (single-node) mi355x K3 arm it is meant to be compared
+# against still lives on amd/agentx_k3_vllm_dev_0804, so the numbers from this arm
+# are only comparable to that branch's, not to anything on main yet.
+#
+# The serve body lives in benchmarks/multi_node/amd_utils/models_vllm.yaml
+# (Kimi-K3) and is kept identical to that single-node recipe, so the only variable
+# against the aggregate arm is the P/D split itself.
+#
+# KV moves over MoRIIO in READ mode: K3's KDA conv+ssm state can only be pulled by
+# the decoder, never per-layer pushed, so the consumer performs the read. The
+# connector support for K3's hybrid state, its per-layer KV block lengths (the KDA
+# group's page is 3072 tokens against the MLA groups' 1536 at fp8) and the DSpark
+# draft-layer skip are installed in-container by
+# benchmarks/multi_node/amd_utils/apply_k3_moriio_patches.sh.
+#
+# Why two ratios. The 062126 agentic corpus replays at ISL ~70k / OSL ~426 on this
+# model, i.e. ~165:1, so the work is prefill-dominated and a 1:1 split leaves the
+# decoder idle: a measured 1P1D conc-8 run held Running~1 / Waiting~5 on prefill
+# while decode sat at Running~2.4 / Waiting 0, and TTFT p99 went to ~122 s against
+# ~12 s for the aggregate arm at the same concurrency. 1P1D is kept as the
+# comparable baseline; 2P1D is the first ratio that gives prefill room to match the
+# trace. Concurrency stays at 8 on 1P1D for that comparison and opens to [8, 16] on
+# 2P1D, where the extra prefill worker is what makes the higher point meaningful.
+#
+# dram-utilization 0.50 matches the aggregate arm, and the matrix sizes the budget
+# from the PREFILL worker's per-node GPU footprint (generate_sweep_configs.py:
+# agentic_dram_offload_gb) because only prefill offloads to CPU DRAM today --
+# server_vllm.sh composes MoRIIO and SimpleCPUOffload with MultiConnector on the
+# prefill side only, for the same reason.
+kimik3-fp4-mi355x-vllm-disagg-agentic-mtp:
+  image: vllm/vllm-openai-rocm:nightly-cb8104839c141609d99f1254459ef3a4f1bd4263
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  # Same fleet as the aggregate arm (kimik3-fp4-mi355x-vllm-agentic-mtp). Agentic
+  # master configs must use a cluster: runner so every point lands on one exact
+  # hardware fleet, and using the *same* one is what makes P/D comparable to it.
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm-disagg
+  # vllm/vllm-router keeps only ~15 nightlies on Docker Hub and older dated tags
+  # are garbage-collected, so this pin will need refreshing; nightly-20260716-1fbcde7
+  # (used by kimik2.5-fp4-mi355x-vllm-disagg) is already gone.
+  router: { name: vllm-router, version: "nightly-20260804-d60711d" }
+  kv-p2p-transfer: mori
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.50
+      search-space:
+      # PREFILL_NODES/DECODE_NODES are what submit.sh sizes the allocation from
+      # (NUM_NODES = PREFILL_NODES + DECODE_NODES) and what the recipe's
+      # check_env_vars requires; they are not derived from num-worker/tp, so every
+      # row must carry them. DECODE_MTP_SIZE only labels the result JSON on this
+      # arm: the vLLM draft is configured by --speculative-config in
+      # models_vllm.yaml, and server_vllm.sh never reads that var.
+      #
+      # 1P1D -- the like-for-like baseline against the aggregate arm.
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        conc-list: [8]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=2"
+      # 2P1D -- prefill-heavy, which is the shape this trace actually wants.
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        conc-list: [8, 16]
+        prefill:
+          num-worker: 2
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=2"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=2"
+
 dsr1-fp4-mi355x-sglang-disagg:
   image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519
   model: amd/DeepSeek-R1-0528-MXFP4-v2

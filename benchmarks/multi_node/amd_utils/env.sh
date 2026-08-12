@@ -205,6 +205,25 @@ $1 == "DSCP" && $2 == ":" && $NF == p {
     set +x
     echo "[INFO] IBDEVICES=$IBDEVICES  UCX_NET_DEVICES=$UCX_NET_DEVICES  NCCL_SOCKET_IFNAME=$NCCL_SOCKET_IFNAME  UCX_IB_GID_INDEX=$UCX_IB_GID_INDEX  UCX_IB_TRAFFIC_CLASS=${UCX_IB_TRAFFIC_CLASS:-unset}"
 
+    # =========================================================================
+    # Kimi-K3 MoRIIO KV-transfer sizing
+    # =========================================================================
+    # Placed after the global MoRI block so it wins over those defaults. K3 moves
+    # KV in READ mode over a page geometry that issues far more work requests per
+    # transfer than the models the global defaults were sized for: 1536-token MLA
+    # pages plus 3072-token KDA (conv+ssm) pages, all pulled by the decoder. A
+    # measured 1P1D conc-8 replay logged 369 MoRIIO "SQ full" read failures at
+    # send-WR 16384 before the decoder aborted, so the queue is raised to the
+    # verified DSv4 PD depth (32767, the ionic per-QP maximum) and the scatter-
+    # gather list to 4 so a hybrid page needs fewer WRs to begin with.
+    if [[ "$MODEL_NAME" == "Kimi-K3" ]]; then
+        export MORI_IO_SQ_BACKOFF_TIMEOUT_US=50000
+        export MORI_IO_QP_MAX_SEND_WR=32767
+        export MORI_IO_QP_MAX_CQE=32768
+        export MORI_IO_QP_MAX_SGE=4
+        echo "[INFO] Kimi-K3 MoRIIO: SQ_BACKOFF_TIMEOUT_US=$MORI_IO_SQ_BACKOFF_TIMEOUT_US QP_MAX_SEND_WR=$MORI_IO_QP_MAX_SEND_WR QP_MAX_CQE=$MORI_IO_QP_MAX_CQE QP_MAX_SGE=$MORI_IO_QP_MAX_SGE"
+    fi
+
 else
     # =========================================================================
     # SGLang-specific environment

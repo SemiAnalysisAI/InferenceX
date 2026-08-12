@@ -222,6 +222,82 @@ echo "Decode  node IPs: ${DECODE_ARGS}"
 # MoRI-IO proxy ZMQ registration port (must match vllm-router --vllm-discovery-address)
 PROXY_PING_PORT="${PROXY_PING_PORT:-36367}"
 
+# =============================================================================
+# KV transfer config
+# =============================================================================
+# The P/D transfer itself is always MoRIIO. When the matrix also asks for a CPU
+# DRAM tier (kv-offloading: dram), the two are composed with MultiConnector
+# instead of picking one, mirroring the shape the NVIDIA agentic recipes use for
+# PD-plus-store (see benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/
+# agentic/disagg-*-agentic.yaml: outer kv_role kv_both, each child carrying its
+# own role).
+#
+# The tier is attached to the PREFILL side only. That is not a simplification:
+# utils/matrix_logic/generate_sweep_configs.py::agentic_dram_offload_gb sizes
+# TOTAL_CPU_DRAM_GB from the *prefill* worker's per-node GPU footprint precisely
+# because "only prefill offloads KV to CPU DRAM today". Giving the decoder a tier
+# too would spend a budget that was never computed for it.
+#
+# Escaping note: these strings are interpolated into PREFILL_CMD/DECODE_CMD and
+# then `eval`-ed, so JSON is wrapped in single quotes with \"-escaped double
+# quotes inside -- the single quotes are what survives the second parse.
+build_kv_transfer_configs() {
+    local moriio_prefill moriio_decode
+    moriio_prefill="{\\\"kv_connector\\\": \\\"MoRIIOConnector\\\", \\\"kv_role\\\": \\\"kv_producer\\\", \\\"kv_connector_extra_config\\\": {\\\"proxy_ip\\\": \\\"${NODE0_ADDR}\\\", \\\"proxy_ping_port\\\": \\\"${PROXY_PING_PORT}\\\", \\\"http_port\\\": \\\"${SERVER_PORT}\\\", \\\"read_mode\\\": true}}"
+    moriio_decode="{\\\"kv_connector\\\": \\\"MoRIIOConnector\\\", \\\"kv_role\\\": \\\"kv_consumer\\\", \\\"kv_connector_extra_config\\\": {\\\"proxy_ip\\\": \\\"${NODE0_ADDR}\\\", \\\"proxy_ping_port\\\": \\\"${PROXY_PING_PORT}\\\", \\\"http_port\\\": \\\"${SERVER_PORT}\\\", \\\"read_mode\\\": true}}"
+
+    KV_TRANSFER_PREFILL="'${moriio_prefill}'"
+    KV_TRANSFER_DECODE="'${moriio_decode}'"
+
+    if [[ "${KV_OFFLOADING:-none}" == "dram" && "${KV_OFFLOAD_BACKEND:-}" == "vllm-simple" ]]; then
+        if [[ -z "${TOTAL_CPU_DRAM_GB:-}" || "${TOTAL_CPU_DRAM_GB}" == "0" ]]; then
+            echo "ERROR: kv-offloading=dram with backend vllm-simple but TOTAL_CPU_DRAM_GB is unset." >&2
+            echo "       The agentic matrix derives it from dram-utilization; it must be consumed as given." >&2
+            exit 1
+        fi
+        local per_rank
+        per_rank=$(( TOTAL_CPU_DRAM_GB * 1000 * 1000 * 1000 / PREFILL_TP_SIZE ))
+        local simple
+        simple="{\\\"kv_connector\\\": \\\"SimpleCPUOffloadConnector\\\", \\\"kv_role\\\": \\\"kv_both\\\", \\\"kv_connector_extra_config\\\": {\\\"cpu_bytes_to_use_per_rank\\\": ${per_rank}, \\\"lazy_offload\\\": false}}"
+        KV_TRANSFER_PREFILL="'{\\\"kv_connector\\\": \\\"MultiConnector\\\", \\\"kv_role\\\": \\\"kv_both\\\", \\\"kv_connector_extra_config\\\": {\\\"connectors\\\": [${moriio_prefill}, ${simple}]}}'"
+        echo "[kv] prefill = MultiConnector[MoRIIO(kv_producer) + SimpleCPUOffload(${per_rank} B/rank x ${PREFILL_TP_SIZE})]"
+        echo "[kv] decode  = MoRIIO(kv_consumer)"
+    else
+        echo "[kv] MoRIIO only (kv-offloading=${KV_OFFLOADING:-none} backend=${KV_OFFLOAD_BACKEND:-none})"
+    fi
+}
+
+# =============================================================================
+# Model-specific in-container patches
+# =============================================================================
+# Kimi-K3 needs two patch stacks on this image, and a disagg run needs both for the
+# same reason the aggregate arm does:
+#
+#   1. apply_k3_container_patches.sh -- the model stack the single-node recipe
+#      installs at kimik3_fp4_mi355x_mtp.sh:181. Not optional and not P/D-specific:
+#      it carries the rocm_aiter_mla small-head multi-token MTP-verify paged-KV
+#      path, triton_mla UNIFORM_BATCH cudagraph support for the non-causal DSpark
+#      draft group, the KDA fused_recurrent state_indices coercion that PIECEWISE
+#      cudagraph boot needs, Triton 3.7.0 + tabulate for Gluon MLA, and the aiter
+#      #4521 asm verify kernels. Without it K3 does not survive warmup with a
+#      DSpark draft, disagg or not.
+#   2. apply_k3_moriio_patches.sh -- the MoRIIO side: hybrid MLA+KDA state
+#      transfer, per-layer KV block lengths, the DSpark draft-layer skip.
+#
+# The two are disjoint file by file, so order does not matter; container patches
+# run first to mirror the order the arm was validated in. Both are idempotent, so
+# every prefill/decode rank can call this.
+apply_model_patches() {
+    if [[ "${MODEL_NAME}" == "Kimi-K3" ]]; then
+        local here
+        here="$(dirname "${BASH_SOURCE[0]}")"
+        bash "${here}/../../single_node/agentic/apply_k3_container_patches.sh" \
+            || { echo "ERROR: apply_k3_container_patches.sh failed" >&2; exit 1; }
+        bash "${here}/apply_k3_moriio_patches.sh" \
+            || { echo "ERROR: apply_k3_moriio_patches.sh failed" >&2; exit 1; }
+    fi
+}
+
 # vLLM runtime environment (static vars moved to env.sh; these depend on per-node state)
 setup_vllm_env() {
     export VLLM_NIXL_SIDE_CHANNEL_HOST=${rdma_ip}
@@ -261,12 +337,14 @@ if [ "$NODE_RANK" -eq 0 ]; then
     # Router is started as an external container by job.slurm (VLLM_ROUTER_IMAGE)
     echo "Using external vllm-router container (started by job.slurm on this node)"
 
+    apply_model_patches
+    build_kv_transfer_configs
     SERVED_MODEL="${MODEL_NAME}"
     PREFILL_CMD="vllm serve ${MODEL_PATH} \
         --served-model-name ${SERVED_MODEL} \
         --port $SERVER_PORT \
         --trust-remote-code \
-        --kv-transfer-config '{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_producer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\", \"read_mode\": true}}' \
+        --kv-transfer-config ${KV_TRANSFER_PREFILL} \
         ${PREFILL_SERVER_CONFIG}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -312,10 +390,49 @@ if [ "$NODE_RANK" -eq 0 ]; then
     cd $WS_PATH
 
     export ROUTER_PORT=$ROUTER_PORT
-    BENCH_CMD="bash $WS_PATH/bench.sh ${xP} ${yD} $((PREFILL_TP_SIZE*xP)) $((DECODE_TP_SIZE*yD)) \
-        $MODEL_DIR $MODEL_NAME /run_logs/slurm_job-${SLURM_JOB_ID} ${BENCH_INPUT_LEN} \
-        ${BENCH_OUTPUT_LEN} \"${BENCH_MAX_CONCURRENCY}\" ${BENCH_REQUEST_RATE} \
-        ${BENCH_RANDOM_RANGE_RATIO} ${BENCH_NUM_PROMPTS_MULTIPLIER}"
+
+    # Select the benchmark runner, mirroring server_sglang.sh:
+    #   IS_AGENTIC=1/true  -> agentic trace replay (trace_replay.sh)
+    #   IS_AGENTIC unset/0 -> fixed-seq-len throughput benchmark (bench.sh)
+    # trace_replay.sh is already engine-aware (it resolves MODEL from MODEL_NAME
+    # when ENGINE=vllm-disagg), so the agentic client needs no vLLM-specific
+    # runner -- only the endpoint wiring below.
+    if [[ "${IS_AGENTIC:-0}" == "1" || "${IS_AGENTIC:-}" == "true" ]]; then
+        # Point aiperf's server-metrics scrape at the per-worker Prometheus
+        # endpoints. The router aiperf would otherwise infer from --url does not
+        # expose Prometheus, so without this every server-side cache/KV field in
+        # the result JSON comes out null. Unlike SGLang this is not gated on
+        # ENABLE_METRICS: vLLM serves /metrics unconditionally.
+        METRICS_URLS=()
+        for _ip in ${PREFILL_ARGS} ${DECODE_ARGS}; do
+            METRICS_URLS+=("http://${_ip}:${SERVER_PORT}/metrics")
+        done
+        if [[ "${#METRICS_URLS[@]}" -gt 0 ]]; then
+            AIPERF_SERVER_METRICS_URLS=$(IFS=,; echo "${METRICS_URLS[*]}")
+            export AIPERF_SERVER_METRICS_URLS
+            echo "AIPERF_SERVER_METRICS_URLS=${AIPERF_SERVER_METRICS_URLS}"
+        fi
+        # SERVER_FLUSH_URLS_CSV is deliberately left unset: trace_replay.sh's
+        # between-concurrency cache clear POSTs SGLang's /flush_cache, which vLLM
+        # does not serve (its equivalent, /reset_prefix_cache, only exists under
+        # VLLM_SERVER_DEV_MODE=1, which env.sh pins to 0). The clear is
+        # best-effort there and an empty list makes it a no-op instead of a wall
+        # of failed curls. It costs nothing today because the multinode agentic
+        # matrix explodes to one concurrency per allocation
+        # (MAX_MULTINODE_AGENTIC_CONCURRENCIES_PER_ALLOCATION=1), so no run
+        # measures a second conc point behind a warm cache.
+
+        # trace_replay.sh signature: model_path model_name concurrency_list log_path
+        BENCH_CMD="bash $WS_PATH/trace_replay.sh \
+            $MODEL_DIR $MODEL_NAME \"${BENCH_MAX_CONCURRENCY}\" /run_logs/slurm_job-${SLURM_JOB_ID}"
+        echo "Benchmark runner: trace_replay.sh (agentic, KV_OFFLOADING=${KV_OFFLOADING:-none}, backend=${KV_OFFLOAD_BACKEND:-none}, CONC=${BENCH_MAX_CONCURRENCY}, DURATION=${DURATION:-unset})"
+    else
+        BENCH_CMD="bash $WS_PATH/bench.sh ${xP} ${yD} $((PREFILL_TP_SIZE*xP)) $((DECODE_TP_SIZE*yD)) \
+            $MODEL_DIR $MODEL_NAME /run_logs/slurm_job-${SLURM_JOB_ID} ${BENCH_INPUT_LEN} \
+            ${BENCH_OUTPUT_LEN} \"${BENCH_MAX_CONCURRENCY}\" ${BENCH_REQUEST_RATE} \
+            ${BENCH_RANDOM_RANGE_RATIO} ${BENCH_NUM_PROMPTS_MULTIPLIER}"
+        echo "Benchmark runner: bench.sh (fixed-seq-len)"
+    fi
 
     if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
         echo "EVAL_ONLY mode: skipping throughput benchmark"
@@ -432,12 +549,14 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$xP" ]; then
         echo "[PREFILL_ENV] $env_pair"
     done
 
+    apply_model_patches
+    build_kv_transfer_configs
     SERVED_MODEL="${MODEL_NAME}"
     PREFILL_CMD="vllm serve ${MODEL_PATH} \
         --served-model-name ${SERVED_MODEL} \
         --port $SERVER_PORT \
         --trust-remote-code \
-        --kv-transfer-config '{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_producer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\", \"read_mode\": true}}' \
+        --kv-transfer-config ${KV_TRANSFER_PREFILL} \
         ${PREFILL_SERVER_CONFIG}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -488,12 +607,14 @@ else
         echo "[DECODE_ENV] $env_pair"
     done
 
+    apply_model_patches
+    build_kv_transfer_configs
     SERVED_MODEL="${MODEL_NAME}"
     DECODE_CMD="vllm serve ${MODEL_PATH} \
         --served-model-name ${SERVED_MODEL} \
         --port $SERVER_PORT \
         --trust-remote-code \
-        --kv-transfer-config '{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_consumer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\", \"read_mode\": true}}' \
+        --kv-transfer-config ${KV_TRANSFER_DECODE} \
         ${DECODE_SERVER_CONFIG}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
