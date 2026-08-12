@@ -37,12 +37,30 @@ elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "bf16" ]]; then
 elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH="/lustre/fsw/models/Qwen3.5-397B-A17B-FP8"
     export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp8"
+# qwen3.5 fp4 spans two checkpoints, so this must branch on the checkpoint and
+# not on MODEL_PREFIX+PRECISION alone: the sglang keys moved to NVFP4-V2 while
+# qwen3.5-fp4-b200-trt / -trt-mtp still declare plain NVFP4. Both share
+# model-prefix qwen3.5 + precision fp4 + runner b200, and further down this
+# script does `export MODEL="$MODEL_PATH"`, so a single shared branch would
+# serve V2 weights to the TRT configs while publishing them under the old
+# checkpoint name.
+elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp4" && $MODEL == *NVFP4-V2 ]]; then
+    export MODEL_PATH="/scratch/fsw/models/Qwen3.5-397B-A17B-NVFP4-V2"
+    export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp4"
 elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/lustre/fsw/models/Qwen3.5-397B-A17B-NVFP4"
     export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp4"
 elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH="/lustre/fsw/models/GLM-5-FP8"
     export SRT_SLURM_MODEL_PREFIX="glm5-fp8"
+elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp8" ]]; then
+    # GLM-5.1 retired in July and its weights were cleaned out of the
+    # SRE-owned (root-only) /lustre/fsw/models tree, so this checkpoint is
+    # staged on the sa-shared-writable home Lustre mount instead. That mount
+    # is compute-visible at the same path, and the launcher bind-mounts
+    # $MODEL_PATH by name into the container.
+    export MODEL_PATH="/home/sa-shared/models/GLM-5.1-FP8"
+    export SRT_SLURM_MODEL_PREFIX="glm5.1-fp8"
 elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/lustre/fsw/models/GLM-5-NVFP4"
     export SRT_SLURM_MODEL_PREFIX="glm5-fp4"
@@ -111,6 +129,21 @@ fi
 export AIPERF_MMAP_CACHE_HOST_PATH="/lustre/fsw/gharunners/aiperf-cache"
 
 if [[ "$IS_MULTINODE" == "true" ]]; then
+    if [[ "$FRAMEWORK" == "tilert" ]]; then
+        export SLURM_PARTITION SLURM_ACCOUNT
+        export TILERT_WEIGHTS_DIR="${TILERT_WEIGHTS_DIR:-/lustre/fsw/gharunners/models/${MODEL_PREFIX}-${PRECISION}-tilert-8shard}"
+        # These nodes expose eight RoCE HCAs, mlx5_0..mlx5_7 (all PORT_ACTIVE,
+        # link_layer Ethernet); there is no mlx5_10/mlx5_11 here. Verified
+        # with ibv_devinfo inside a pyxis container on an allocated gpu-2 node.
+        export UCX_NET_DEVICES="${UCX_NET_DEVICES:-mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1,mlx5_4:1,mlx5_5:1,mlx5_6:1,mlx5_7:1}"
+        export UCX_MEMTYPE_CACHE="${UCX_MEMTYPE_CACHE:-n}"
+        export UCX_MEMTYPE_REG_WHOLE="${UCX_MEMTYPE_REG_WHOLE:-n}"
+        TILERT_DISAGG="$GITHUB_WORKSPACE/benchmarks/multi_node/${EXP_NAME%%_*}_${PRECISION}_b200_${FRAMEWORK}-disagg.sh"
+        [[ -f "$TILERT_DISAGG" ]] || { echo "tilert disagg script not found: $TILERT_DISAGG"; exit 1; }
+        exec bash "$TILERT_DISAGG"
+        exit 1
+    fi
+
     # Validate framework
     if [[ $FRAMEWORK != "dynamo-sglang" && $FRAMEWORK != "dynamo-trt" && $FRAMEWORK != "dynamo-vllm" ]]; then
         echo "Unsupported framework: $FRAMEWORK. Supported frameworks are: dynamo-trt, dynamo-sglang, dynamo-vllm"

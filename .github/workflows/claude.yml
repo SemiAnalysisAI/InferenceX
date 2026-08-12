@@ -221,7 +221,7 @@ jobs:
 
             ## Updating perf-changelog.yaml
 
-            See `AGENTS.md` → "Updating Docker Images" for entry format and rules. Required whenever you change image tags, env vars, or perf-affecting params in `configs/*-master.yaml` or `benchmarks/*.sh`. Use `XXX` as the PR-link placeholder until the PR exists.
+            See `docs/configuration-procedures.md` → "Update an image" and "Append the changelog safely" for entry format and rules. Required whenever you change image tags, env vars, or perf-affecting params in `configs/*-master.yaml` or `benchmarks/*.sh`. Use `XXX` as the PR-link placeholder until the PR exists.
 
             ## Spawning Additional Workers:
             You CAN spawn additional Claude workers by commenting "@claude" with a specific task.
@@ -252,7 +252,7 @@ jobs:
 
             ### Additional Knowledge
             - MI355 is gfx950 not gfx1201
-            - STP/MTP terminology: see `AGENTS.md` → "Terminology"
+            - STP/MTP terminology: see `docs/configuration-procedures.md` → "Add a model + hardware recipe"
 
             ### Expert Parallelism in Benchmark Scripts
             vLLM and SGLang handle expert parallelism differently. When writing or reviewing benchmark scripts for MoE models:
