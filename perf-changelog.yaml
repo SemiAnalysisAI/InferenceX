@@ -5727,7 +5727,100 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2520
 
 - config-keys:
+    - glm5.2-fp4-mi355x-sglang-agentic-mtp
+  description:
+    - "Add GLM-5.2 FP4 SGLANG Single Node Agentic Support"
+    - "Image: lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260728"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2488
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-agg
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-disagg
+  description:
+    - "Upgrade Dynamo from 1.3.0.dev1 to 1.3.0.dev20260718 so router queueing is disabled by default at high concurrency"
+    - "Migrate AgentX session affinity from nvext.session_control to X-Dynamo-Session-ID headers with a 3600-second router TTL"
+    - "Remove the DYN_ROUTER_TEMPERATURE=10000000 override and restore Dynamo's deterministic 0.0 default"
+    - "Upgrade SGLang from nightly-dev-cu13-20260711-7de33ce8 to nightly-dev-cu13-20260719-99f5a6f4, the latest nightly before the scheduler WAR-barrier regression in SGLang #31687"
+    - "Restore the pre-watchdog AgentX concurrency grid and use AIPerf's default 300-second per-trajectory idle-gap cap"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2319
+
+- config-keys:
+    - qwen3.5-fp4-b200-sglang
+    - qwen3.5-fp4-b200-sglang-mtp
+    - qwen3.5-fp4-b300-sglang
+    - qwen3.5-fp4-b300-sglang-mtp
+  description:
+    - "Switch Qwen3.5 FP4 SGLang configs to the nvidia/Qwen3.5-397B-A17B-NVFP4-V2 checkpoint"
+    - "Model pre-staged on all clusters as Qwen3.5-397B-A17B-NVFP4-V2"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2205
+
+- config-keys:
+    - qwen3.5-fp4-gb300-dynamo-trt
+  description:
+    - "Add Qwen3.5-397B-A17B-NVFP4 GB300 disaggregated multinode TensorRT-LLM+Dynamo benchmarks (STP, no MTP) for 8k1k."
+    - "Image: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc18 with Dynamo installed at runtime (version 1.3.0.dev20260708, TCP request plane)."
+    - "8k1k: 9 STP configs spanning 1P13D DEP2+13D TP4 (conc 78), 1P4D DEP2+4D TEP16 (conc 24), 1P8D DEP2+8D TEP8 (conc 48), 2P15D DEP2+15D TP4 (conc 180/216), 3P1D DEP2+1D DEP4 (conc 1536), 7P12D DEP2+12D TEP4 (conc 1152), 8P9D DEP2+9D TEP4 (conc 1728), 10P3D DEP2+3D DEP8 (conc 4608)."
+    - "Runner: launch_gb300-nv.sh updated to clone NVIDIA/srt-slurm@v1.0.29 and overlay local recipes from benchmarks/multi_node/srt-slurm-recipes/trtllm/qwen3.5/gb300-fp4/disagg/ for the dynamo-trt+qwen3.5+fp4 path, and to skip srtctl preflight for this path."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2206
+
+- config-keys:
+    - qwen3.5-fp4-gb300-dynamo-sglang
+  description:
+    - "Bump SGLang image to v0.5.14-cu130 for the Qwen3.5 FP4 GB300 disaggregated dynamo-sglang config"
+    - "Switch to the nvidia/Qwen3.5-397B-A17B-NVFP4-V2 checkpoint (model pre-staged on cluster as Qwen3.5-397B-A17B-NVFP4-V2)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2238
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp
+  description:
+    - "Add EAGLE/MTP speculative-decoding arm for the DSv4 MI355X agentic disagg HiCache benchmark, mirroring the existing dsv4-fp4-mi355x-sglang-disagg-agentic-hicache TP8/EP1 and TP8/EP8/DPA topologies with spec-decoding=mtp and DECODE_MTP_SIZE=3."
+    - "models.yaml: add mtp_flags (--speculative-algorithm EAGLE --speculative-eagle-topk 1) to DeepSeek-V4-Pro-AgentX; num-steps/num-draft-tokens are derived from DECODE_MTP_SIZE in server_sglang.sh. DeepSeek-V4's MTP head is a native NextN/EAGLE draft shipped with the model, so no --speculative-draft-model-path is needed."
+    - "Two search-space arms: TP8/EP1 no-DP at conc-list [2,4,8,16,32], and TP8/EP8/DPA (ep=8, dp-attn=true) at conc-list [64,96,128], both on image lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260719."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2309
+
+- config-keys:
+    - dsv4-fp4-b300-vllm-agentic-mtp
+  description:
+    - "Update the B300 DSV4 AgentX MTP image and SimpleCPU sweep through c576."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2536
+  
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  description:
+    - "Refresh B300 Kimi K3 DSpark submission with corrected AgentX harness"
+    - "Use the pinned 2026-08-10 vLLM nightly with upstream Kimi K3 and DSpark support"
+    - "Match the current published upstream Kimi K3 FP8-KV profile by using flashinfer MLA prefill with prefill query quantization"
+    - "Keep DSpark K=2 probabilistic throughput on synthetic golden AL 2.51 while the generated EVAL_ONLY row uses real block verification"
+    - "Cap the GPU-resident search at concurrency 8 after concurrency 16 failed to complete deterministic warmup; retain concurrency 16 for the DRAM-offload capacity tier"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2476
+
+- config-keys:
+    - dsv4-fp8-h200-dynamo-sglang-agentic-agg
+  description:
+    - "Add one H200 TP8 aggregated DeepSeek-V4-Pro AgentX recipe with MTP and HiCache."
+    - "Generate Pareto points by sweeping concurrency [1, 2, 4, 8, 16] while keeping the serving topology fixed."
+    - "Use Dynamo header-based session affinity and AIPerf agentx-v1.0.1 (b7b16cf851885567988a643282266bce74e34437)."
+    - "Enable SGLang engine metrics and require the sglang: server-metric prefix so the published trace artifacts carry backend data."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2364
+
+- config-keys:
+    - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
+  description:
+    - "Add Kimi K3 B200 AgentX latency, balanced, and throughput tiers on a two-node TP8/DP2/EP16 DSpark topology with tensor parallelism local to each B200"
+    - "Add a TP8/DP2/EP16 SimpleCPUOffloadConnector capacity tier with 220 GiB of host KV per rank"
+    - "Keep throughput on DSpark level 7 probabilistic drafting with committed golden synthetic AL 3.84; EVAL_ONLY selects committed rejection_sample_method=block recipes for real target verification"
+    - "Use the digest-pinned 2026-08-10 upstream vLLM nightly and direct Inferact/Kimi-K3-DSpark model ID as shipped, with no local compatibility layer or installed serving-engine rewrite"
+    - "Use node-local TP8 FlashInfer collectives and cross-node DP2/EP16 so the digest-pinned upstream serving engine runs without a compatibility layer or source rewrite"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2475
+
+- config-keys:
+    - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
+  description:
+    - "Extend the SimpleCPUOffloadConnector grid to c8/c12/c16/c20/c24/c28/c32/c48/c64 to locate its crossover against the resident curve"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2475
+
+- config-keys:
     - dsv4-fp4-b200-vllm
   description:
-    - "B200 DSv4 FP4 vLLM: nightly image, new sweep (TP8, TEP8, DEP8), megamoe enabled when ep>1"
+    - "B200 DSv4 FP4 vLLM: nightly image, new sweep (TP8, TEP8, DEP8), megamoe when ep>1, gmu 0.95, cap max-model-len 12288"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2534

@@ -15,6 +15,9 @@ from an unknown producer contract must never be published.
 Role energy semantics: ``prefill_gpu_energy_j`` / ``decode_gpu_energy_j`` are
 the board-level energy of that role's GPUs integrated over the FULL formal
 serving window. They are not kernel-level prefill/decode phase energies.
+``prefill_avg_power_w`` / ``decode_avg_power_w`` divide that role energy by the
+same full window and by the role's GPU count, so they are the mean board draw
+of that role's GPUs across the whole serving window, not a phase power.
 
 Ordinary benchmark runs are best-effort: invalid telemetry records
 ``power_valid=0`` (and no energy metrics) in the aggregate plus a validation
@@ -108,6 +111,8 @@ WHOLE_METRIC_KEYS = (
 ROLE_METRIC_KEYS = (
     "prefill_gpu_energy_j",
     "decode_gpu_energy_j",
+    "prefill_avg_power_w",
+    "decode_avg_power_w",
     "prefill_joules_per_input_token",
     "decode_joules_per_output_token",
 )
@@ -1062,11 +1067,13 @@ def validate_and_integrate(
     }
     if prefill_gpus > 0:
         metrics["prefill_gpu_energy_j"] = role_energy["prefill"]
+        metrics["prefill_avg_power_w"] = role_energy["prefill"] / duration_s / prefill_gpus
         metrics["prefill_joules_per_input_token"] = (
             role_energy["prefill"] / benchmark.total_input_tokens
         )
     if decode_gpus > 0:
         metrics["decode_gpu_energy_j"] = role_energy["decode"]
+        metrics["decode_avg_power_w"] = role_energy["decode"] / duration_s / decode_gpus
         metrics["decode_joules_per_output_token"] = (
             role_energy["decode"] / benchmark.total_output_tokens
         )
