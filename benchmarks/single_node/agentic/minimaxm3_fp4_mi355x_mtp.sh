@@ -229,7 +229,10 @@ write_command "$RESULT_DIR/server_command.txt" "${VLLM_CMD[@]}"
 SERVER_PID=$!
 echo "Server PID: $SERVER_PID"
 
-wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
+wait_for_ready \
+    --endpoint "http://0.0.0.0:${PORT}/health" \
+    --log "$SERVER_LOG" \
+    --pid "$SERVER_PID"
 
 # ---- Run benchmark ----------------------------------------------------------
 if [ "${EVAL_ONLY}" = "true" ]; then
