@@ -5828,3 +5828,10 @@
   description:
     - "Extend the SimpleCPUOffloadConnector grid to c8/c12/c16/c20/c24/c28/c32/c48/c64 to locate its crossover against the resident curve"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2475
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-vllm-agentic-mtp
+  description:
+    - "Add the MI355X MiniMax-M3 FP4 vLLM AgentX MTP submission on vLLM v0.27.1, using the committed EAGLE3 synthetic acceptance length of 3.35 for throughput and real target verification for eval."
+    - "Sweep TP2/TP4 GPU-resident configurations and TP4 LMCache MP DRAM-offload points around the capacity knee, with vLLM server metrics enabled."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2487
