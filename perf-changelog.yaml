@@ -5710,3 +5710,13 @@
     - "Remove the allocator-wide BlockPool.free_blocks object-identity dedup experiment. Kimi-K3 hybrid/Mamba cache groups legitimately carry repeated references (often one per hybrid group), so suppressing every duplicate leaks valid decrements and does not prevent free-block queue corruption."
     - "Keep SimpleCPUOffloadConnector lazy_offload enabled and retain the MI355X TP8 c12 AgentX reproduction point; lowering GPU memory utilization or concurrency only changes the timing of the ownership race and is not the fix."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Backport merged vLLM PR #51843 for the exact Kimi-K3 + DSpark sliding-window layout: disable fine-grained Mamba align prefix-cache hits when any hybrid cache manager requires block-aligned lookup, and keep the scheduler from creating partial-tail entries after that fallback."
+    - "Run 31574482892 proved PR #51766 alone was insufficient: after profiling traffic began, MambaManager.allocate_new_blocks selected a supposedly free block whose ref_cnt was still nonzero. PR #51843 merged roughly two hours after that failure and identifies incompatible DSpark sliding-window lookup granularity as the source of this assertion class."
+    - "Retain lazy SimpleCPUOffloadConnector and the upstream PR #51766 running-CoW fix; rerun only the MI355X TP8 c12 AgentX reproduction point."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

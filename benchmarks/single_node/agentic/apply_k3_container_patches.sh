@@ -27,6 +27,9 @@
 #   vllm  #51766 preserve Mamba running CoW ownership after an external cache
 #                hit whose first continuation remains inside the same state
 #                block (the Kimi-K3 hybrid-cache failure mode).
+#   vllm  #51843 disable fine-grained prefix-cache hits when Kimi-K3's Mamba
+#                align groups are combined with the block-aligned sliding-
+#                window DSpark cache manager.
 #   aiter #4521  fp8 cp round-robin asm MLA verify kernels: adds the qh16/qh32
 #                qseqlen4 gqaratio16/32 cprr .co + mla_asm.csv + asm_mla.cu +
 #                v1_2_device.cuh + aiter/mla.py + aiter/ops/attention.py, then
@@ -1222,6 +1225,105 @@ if ! grep -qF "vLLM #51766: preserve running CoW after an external Mamba hit." \
   exit 1
 fi
 
+cat > "$WS/HYBRID_PREFIX_HIT_GUARD.diff.in" <<'DIFF_HYBRID_PREFIX_HIT_GUARD'
+diff --git a/vllm/v1/core/kv_cache_coordinator.py b/vllm/v1/core/kv_cache_coordinator.py
+--- a/vllm/v1/core/kv_cache_coordinator.py
++++ b/vllm/v1/core/kv_cache_coordinator.py
+@@ -5,6 +5,7 @@ from collections.abc import Sequence
+ from typing import NamedTuple
+__BLANK_CONTEXT__
+ from vllm import envs
++from vllm.logger import init_logger
+ from vllm.utils.math_utils import cdiv
+ from vllm.v1.core.block_pool import BlockPool
+ from vllm.v1.core.kv_cache_metrics import KVCacheMetricsCollector
+@@ -26,6 +27,8 @@ from vllm.v1.kv_cache_interface import (
+ )
+ from vllm.v1.request import Request
+__BLANK_CONTEXT__
++logger = init_logger(__name__)
++
+__BLANK_CONTEXT__
+ def _validate_prefix_cache_retention_interval(
+     retention_interval: int | None,
+@@ -62,6 +65,8 @@ class KVCacheCoordinator(ABC):
+     Coordinate the KV cache of different KV cache groups.
+     """
+__BLANK_CONTEXT__
++    enable_partial_hash_hits = False
++
+     def __init__(
+         self,
+         kv_cache_config: KVCacheConfig,
+@@ -578,14 +583,29 @@ class HybridKVCacheCoordinator(KVCacheCoordinator):
+                     "full-attention and Mamba groups, got: "
+                     f"{type(g.kv_cache_spec).__name__}."
+                 )
+-        # Partial hash hits are limited to full-attention + mamba ("align")
+-        # without context parallelism.
+-        self.enable_partial_hash_hits = dcp_world_size == 1 and any(
++        # Fine-grained hash hits require Mamba "align", no context
++        # parallelism, and compatible cache managers in every group.
++        has_partial_mamba_group = any(
+             isinstance(g.kv_cache_spec, MambaSpec)
+             and g.kv_cache_spec.mamba_cache_mode == "align"
+             and g.kv_cache_spec.block_size > hash_block_size
+             for g in kv_cache_config.kv_cache_groups
+         )
++        self.enable_partial_hash_hits = dcp_world_size == 1 and has_partial_mamba_group
++        if self.enable_partial_hash_hits:
++            unsupported_partial_hit_managers = {
++                type(manager).__name__
++                for manager in self.single_type_managers
++                if not manager.supports_fine_grained_hash_lookup
++                and manager.block_size != hash_block_size
++            }
++            if unsupported_partial_hit_managers:
++                self.enable_partial_hash_hits = False
++                logger.warning_once(
++                    "Disabling fine-grained prefix-cache hits because these KV "
++                    "cache managers require block-aligned lookups: %s.",
++                    ", ".join(sorted(unsupported_partial_hit_managers)),
++                )
+         self.verify_and_split_kv_cache_groups()
+__BLANK_CONTEXT__
+     @property
+DIFF_HYBRID_PREFIX_HIT_GUARD
+sed 's/^__BLANK_CONTEXT__$/ /' "$WS/HYBRID_PREFIX_HIT_GUARD.diff.in" \
+  > "$WS/HYBRID_PREFIX_HIT_GUARD.diff"
+apply_one "vllm/v1/core/kv_cache_coordinator.py" \
+  "Disabling fine-grained prefix-cache hits because these KV" \
+  "$WS/HYBRID_PREFIX_HIT_GUARD.diff"
+if ! grep -qF "Disabling fine-grained prefix-cache hits because these KV" \
+        "$ROOT/vllm/v1/core/kv_cache_coordinator.py"; then
+  echo "ERROR: vLLM #51843 hybrid prefix-hit coordinator patch did not apply"
+  exit 1
+fi
+
+cat > "$WS/HYBRID_PREFIX_SCHEDULER_GUARD.diff.in" <<'DIFF_HYBRID_PREFIX_SCHEDULER_GUARD'
+diff --git a/vllm/v1/core/sched/scheduler.py b/vllm/v1/core/sched/scheduler.py
+--- a/vllm/v1/core/sched/scheduler.py
++++ b/vllm/v1/core/sched/scheduler.py
+@@ -307,6 +307,7 @@ class Scheduler(SchedulerInterface):
+         self.mamba_partial_cache_hit = (
+             self.need_mamba_block_aligned_split
+             and self.hash_block_size < self.block_size
++            and self.kv_cache_manager.coordinator.enable_partial_hash_hits
+         )
+__BLANK_CONTEXT__
+         # Counts of non-empty steps scheduled / processed. update_from_output
+DIFF_HYBRID_PREFIX_SCHEDULER_GUARD
+sed 's/^__BLANK_CONTEXT__$/ /' "$WS/HYBRID_PREFIX_SCHEDULER_GUARD.diff.in" \
+  > "$WS/HYBRID_PREFIX_SCHEDULER_GUARD.diff"
+apply_one "vllm/v1/core/sched/scheduler.py" \
+  "and self.kv_cache_manager.coordinator.enable_partial_hash_hits" \
+  "$WS/HYBRID_PREFIX_SCHEDULER_GUARD.diff"
+if ! grep -qF "and self.kv_cache_manager.coordinator.enable_partial_hash_hits" \
+        "$ROOT/vllm/v1/core/sched/scheduler.py"; then
+  echo "ERROR: vLLM #51843 hybrid prefix-hit scheduler patch did not apply"
+  exit 1
+fi
+
 
 say "3/4 aiter #4521 (fp8 cp round-robin asm MLA verify kernels)  [needs network + hipcc + GPU]"
 # Unlike the offline Python diffs above, #4521 ships BINARY .co kernels (not in
@@ -1297,6 +1399,8 @@ echo "chk attn_utils.py              = $(grep -c 'cg_support_exclude_layers' "$R
 echo "chk model_runner.py            = $(grep -c 'cg_support_exclude_layers' "$ROOT/vllm/v1/worker/gpu/model_runner.py")"
 echo "chk fused_recurrent.py         = $(grep -c 'reshape(-1).contiguous()' "$ROOT/vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py")"
 echo "chk Mamba running CoW          = $(grep -c 'vLLM #51766: preserve running CoW' "$ROOT/vllm/v1/core/single_type_kv_cache_manager.py")"
+echo "chk hybrid prefix-hit guard    = $(grep -c 'Disabling fine-grained prefix-cache hits' "$ROOT/vllm/v1/core/kv_cache_coordinator.py")"
+echo "chk scheduler prefix-hit guard = $(grep -c 'coordinator.enable_partial_hash_hits' "$ROOT/vllm/v1/core/sched/scheduler.py")"
 echo "triton          = $(python -c 'import triton; print(triton.__version__)')  (expect 3.7.0*)"
 python -m py_compile "$ROOT/aiter/ops/triton/gluon/mla_gluon.py" \
   "$ROOT/aiter/ops/gemm_op_a16w16.py" \
@@ -1308,6 +1412,8 @@ python -m py_compile "$ROOT/aiter/ops/triton/gluon/mla_gluon.py" \
   "$ROOT/vllm/v1/worker/gpu/attn_utils.py" \
   "$ROOT/vllm/v1/worker/gpu/model_runner.py" \
   "$ROOT/vllm/v1/core/single_type_kv_cache_manager.py" \
+  "$ROOT/vllm/v1/core/kv_cache_coordinator.py" \
+  "$ROOT/vllm/v1/core/sched/scheduler.py" \
   "$ROOT/vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py" && echo "PY_COMPILE_OK" || { echo "PY_COMPILE_FAIL"; exit 1; }
 # Runtime import needs a GPU (aiter probes rocminfo); best-effort.
 python - <<'PYEOF'
