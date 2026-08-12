@@ -91,8 +91,7 @@ SGLANG_CMD=(
     --enable-cache-report
 )
 
-printf '%q ' "${SGLANG_CMD[@]}" | tee "$RESULT_DIR/sglang_command.txt"
-printf '\n' | tee -a "$RESULT_DIR/sglang_command.txt"
+write_command "$RESULT_DIR/sglang_command.txt" "${SGLANG_CMD[@]}"
 "${SGLANG_CMD[@]}" > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 

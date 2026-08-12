@@ -5820,6 +5820,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2475
 
 - config-keys:
+    - minimaxm3-fp4-mi355x-vllm-agentic-mtp
+  description:
+    - "Add the MI355X MiniMax-M3 FP4 vLLM AgentX MTP submission on vLLM v0.27.1, using the committed EAGLE3 synthetic acceptance length of 3.35 for throughput and real target verification for eval."
+    - "Sweep TP2/TP4 GPU-resident configurations and TP4 LMCache MP DRAM-offload points around the capacity knee, with vLLM server metrics enabled."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2487
+
+- config-keys:
     - qwen3.5-fp8-mi300x-sglang-agentic-mtp
   scenario-type:
     - agentic-coding
