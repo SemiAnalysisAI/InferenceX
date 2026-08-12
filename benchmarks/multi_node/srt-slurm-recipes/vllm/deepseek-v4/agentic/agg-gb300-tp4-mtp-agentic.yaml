@@ -118,7 +118,7 @@ backend:
       no-enable-flashinfer-autotune: true
       block-size: 256
       compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128],"mode":0}'
-      speculative-config: '{"method":"mtp","num_speculative_tokens":3,"rejection_sample_method":"synthetic","synthetic_acceptance_length":2.49}'
+      speculative-config: '{"method":"mtp","num_speculative_tokens":3}'
       gpu-memory-utilization: 0.94
       stream-interval: 10
       no-disable-hybrid-kv-cache-manager: true
