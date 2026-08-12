@@ -479,7 +479,7 @@ jobs:
         if: ${{ always() && (env.RUN_EVAL == 'true' || inputs.eval-only) }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: eval_${{ env.EXP_NAME }}_${{ env.RESULT_FILENAME }}
+          name: eval_${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_p${{ env.PREFILL_NUM_WORKERS }}x${{ env.PREFILL_TP }}p${{ env.PREFILL_PP_SIZE }}c${{ env.PREFILL_DCP_SIZE }}k${{ env.PREFILL_PCP_SIZE }}e${{ env.PREFILL_EP }}d${{ env.PREFILL_DP_ATTN }}_d${{ env.DECODE_NUM_WORKERS }}x${{ env.DECODE_TP }}p${{ env.DECODE_PP_SIZE }}c${{ env.DECODE_DCP_SIZE }}k${{ env.DECODE_PCP_SIZE }}e${{ env.DECODE_EP }}d${{ env.DECODE_DP_ATTN }}_kv${{ env.KV_OFFLOADING }}-${{ env.KV_OFFLOAD_BACKEND }}_spec${{ env.SPEC_DECODING }}_c${{ join(fromJson(inputs.conc-list), 'x') }}_${{ runner.name }}
           path: |
             meta_env.json
             results*.json

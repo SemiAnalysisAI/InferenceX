@@ -75,10 +75,11 @@ launch their existing `*_mtp.sh` server instead of silently falling back to STP.
 
 The smoke runs the unmodified
 [MoonshotAI/Kimi-Vendor-Verifier](https://github.com/MoonshotAI/Kimi-Vendor-Verifier)
-at commit `b9ed3a6665bdff2c943246f7d2903cd003d6ddd6`. Each run creates a fresh
-sparse checkout containing the upstream pytest configuration, tool-call schema
-tests, and bundled Walle cases. InferenceX does not install the verifier package
-or reimplement its request, streaming, retry, or validation logic.
+at commit `b9ed3a6665bdff2c943246f7d2903cd003d6ddd6`. Each run downloads the
+fresh pinned GitHub source archive and safely extracts only the upstream pytest
+configuration, tool-call schema tests, and bundled Walle cases. InferenceX does
+not install the verifier package or reimplement its request, streaming, retry,
+or validation logic.
 
 Python 3.12 or newer is required. The runner installs the minimal pinned runtime
 (`httpx[http2]`, `openai`, `jsonschema`, and `pytest`) into a temporary isolated
@@ -137,7 +138,7 @@ Key eval functions in `benchmarks/benchmark_lib.sh`:
 | `append_lm_eval_summary` | Writes `meta_env.json` and moves eval artifacts to workspace |
 | `_install_lm_eval_deps` | Installs lm-eval dependencies |
 | `_prepare_kimi_vendor_runtime` | Installs the pinned verifier dependencies in an isolated temp path |
-| `_prepare_kimi_vendor_verifier` | Fetches a fresh pinned sparse checkout |
+| `_prepare_kimi_vendor_verifier` | Downloads and safely extracts a fresh subset of the pinned source archive |
 | `_patch_lm_eval` | Patches lm-eval for reasoning tokens and TRT compatibility |
 | `compute_eval_context_length` | Computes eval context length (requested benchmark context, capped at model native max) |
 | `get_native_max_context_length` | Extracts model's native max context length from HF config |

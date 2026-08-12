@@ -1,14 +1,12 @@
 """Tests for eval result aggregation."""
 
 import json
-import sys
 from pathlib import Path
 
 from collect_eval_results import (
     EVAL_RESULT_FORMAT,
     build_row,
     collect_eval_rows,
-    main as collect_main,
 )
 from evals.kimi_vendor_eval import RESULT_FORMAT as KIMI_VENDOR_RESULT_FORMAT
 
@@ -153,39 +151,76 @@ def test_collect_eval_rows_accepts_neutral_result_format(tmp_path: Path) -> None
     assert rows[0]["eval_suite"] == "provider_smoke"
 
 
-def test_main_renders_zero_effective_samples(
+def test_collect_eval_rows_excludes_integration_and_sample_failures(
     tmp_path: Path,
-    monkeypatch,
-    capsys,
 ) -> None:
-    for name, is_multinode in (("single", False), ("multi", True)):
+    for name, invalid in (
+        ("integration", "integration"),
+        ("zero", 0),
+        ("nonnumeric", "unknown"),
+        ("nonfinite", float("nan")),
+        ("malformed", []),
+    ):
         artifact_dir = tmp_path / f"eval_{name}"
         artifact_dir.mkdir()
         (artifact_dir / "meta_env.json").write_text(json.dumps({
-            "is_multinode": is_multinode,
             "eval_suite": "gsm8k",
         }))
         result_path = artifact_dir / f"results_{name}.json"
         _write_lm_eval_result(result_path, 0.0)
         result = json.loads(result_path.read_text())
-        result["n-samples"]["gsm8k"]["effective"] = 0
+        if invalid == "integration":
+            result["integration_error"] = {
+                "type": "RuntimeError",
+                "message": "vendor verifier checkout failed",
+            }
+        else:
+            result["n-samples"]["gsm8k"]["effective"] = invalid
         result_path.write_text(json.dumps(result))
 
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        ["collect_eval_results.py", str(tmp_path), "zero-samples"],
-    )
+    assert collect_eval_rows(tmp_path) == []
 
-    collect_main()
 
-    task_rows = [
-        line
-        for line in capsys.readouterr().out.splitlines()
-        if "| gsm8k " in line
-    ]
-    assert len(task_rows) == 2
-    for row in task_rows:
-        cells = [cell.strip() for cell in row.split("|")[1:-1]]
-        assert cells[-2] == "0"
+def test_collect_eval_rows_accepts_legacy_missing_effective_count(
+    tmp_path: Path,
+) -> None:
+    artifact_dir = tmp_path / "eval_legacy"
+    artifact_dir.mkdir()
+    (artifact_dir / "meta_env.json").write_text(json.dumps({
+        "eval_suite": "gsm8k",
+    }))
+    result_path = artifact_dir / "results_legacy.json"
+    _write_lm_eval_result(result_path, 0.9)
+    result = json.loads(result_path.read_text())
+    result.pop("n-samples")
+    result_path.write_text(json.dumps(result))
+
+    rows = collect_eval_rows(tmp_path)
+
+    assert len(rows) == 1
+    assert rows[0]["score"] == 0.9
+    assert rows[0]["n_eff"] is None
+
+
+def test_collect_eval_rows_does_not_resurrect_stale_valid_result(
+    tmp_path: Path,
+) -> None:
+    artifact_dir = tmp_path / "eval_retry"
+    artifact_dir.mkdir()
+    (artifact_dir / "meta_env.json").write_text(json.dumps({
+        "eval_suite": "gsm8k",
+    }))
+    stale_path = artifact_dir / "results_older.json"
+    _write_lm_eval_result(stale_path, 1.0)
+    current_path = artifact_dir / "results_current.json"
+    _write_lm_eval_result(current_path, 0.0)
+    result = json.loads(current_path.read_text())
+    result["integration_error"] = {
+        "type": "RuntimeError",
+        "message": "vendor verifier checkout failed",
+    }
+    current_path.write_text(json.dumps(result))
+    stale_path.touch()
+    current_path.touch()
+
+    assert collect_eval_rows(tmp_path) == []

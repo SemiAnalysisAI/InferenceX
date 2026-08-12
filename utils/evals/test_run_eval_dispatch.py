@@ -1,10 +1,16 @@
 
 from __future__ import annotations
 
+import io
 import json
 import os
+import re
 import stat
 import subprocess
+import tarfile
+import threading
+from contextlib import contextmanager
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import yaml
@@ -315,6 +321,166 @@ printf 'SETUP_RC=%s\n' "$?"
     )
     assert score_result["integration_error"]["message"] == message
     assert not (results_dir / "kimi_vendor_report.json").exists()
+
+
+_KIMI_VERIFIER_REQUIRED_FILES = {
+    "pyproject.toml",
+    "tests/conftest.py",
+    "tests/__init__.py",
+    "tests/tool_call_json_schema/conftest.py",
+    "tests/tool_call_json_schema/__init__.py",
+    "tests/tool_call_json_schema/test_tool_call_json_schema.py",
+    "tests/tool_call_json_schema/validator.py",
+    *{
+        f"testdata/walle_validator_cases/validator_cases/{case}/valid.jsonl"
+        for case in (
+            "TestAdditionalProperties",
+            "TestAnyOf",
+            "TestBasicTypes",
+            "TestDefs",
+            "TestDescription",
+            "TestEnforcerCases",
+            "TestID",
+            "TestKeywordsValidation",
+            "TestNestedDefsDepth",
+            "TestNumberFormat",
+            "TestRangeConstraints",
+            "TestRefInProperties",
+            "TestReferences",
+            "TestRequired",
+            "TestSingleTypeInArray",
+            "TestTypeLocation",
+        )
+    },
+}
+
+
+def _kimi_verifier_archive(
+    *,
+    missing: str | None = None,
+    unsafe_member: tarfile.TarInfo | None = None,
+) -> bytes:
+    output = io.BytesIO()
+    with tarfile.open(fileobj=output, mode="w:gz") as archive:
+        for relative_path in sorted(_KIMI_VERIFIER_REQUIRED_FILES - {missing}):
+            payload = relative_path.encode()
+            member = tarfile.TarInfo(f"verifier-pinned/{relative_path}")
+            member.size = len(payload)
+            archive.addfile(member, io.BytesIO(payload))
+        extra = b"must not be extracted"
+        member = tarfile.TarInfo("verifier-pinned/README.md")
+        member.size = len(extra)
+        archive.addfile(member, io.BytesIO(extra))
+        if unsafe_member is not None:
+            archive.addfile(
+                unsafe_member,
+                io.BytesIO(b"unsafe") if unsafe_member.isfile() else None,
+            )
+    return output.getvalue()
+
+
+@contextmanager
+def _serve_archive(payload: bytes):
+    request_paths = []
+    class ArchiveHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            request_paths.append(self.path)
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, *args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), ArchiveHandler)
+    thread = threading.Thread(target=server.serve_forever)
+    thread.start()
+    try:
+        yield (
+            f"http://127.0.0.1:{server.server_port}/owner/verifier.git",
+            request_paths,
+        )
+    finally:
+        server.shutdown()
+        thread.join()
+        server.server_close()
+
+
+def _prepare_local_kimi_verifier(
+    tmp_path: Path,
+    payload: bytes,
+    verifier_ref: str = "1" * 40,
+) -> tuple[subprocess.CompletedProcess[str], Path, list[str]]:
+    checkout = tmp_path / "checkout"
+    script = r'''
+source "$BENCHMARK_LIB"
+git() { echo "git must not be invoked" >&2; return 127; }
+mktemp() { mkdir "$CHECKOUT"; printf '%s\n' "$CHECKOUT"; }
+_prepare_kimi_vendor_verifier "$REPO_URL" "$VERIFIER_REF"
+'''
+    with _serve_archive(payload) as (repo_url, request_paths):
+        result = subprocess.run(
+            ["bash", "-c", script],
+            env={
+                **os.environ,
+                "BENCHMARK_LIB": str(BENCHMARK_LIB),
+                "CHECKOUT": str(checkout),
+                "REPO_URL": repo_url,
+                "VERIFIER_REF": verifier_ref,
+            },
+            text=True,
+            capture_output=True,
+        )
+    return result, checkout, request_paths
+
+
+def test_kimi_vendor_verifier_fetches_expected_subset_without_git(tmp_path: Path) -> None:
+    result, checkout, request_paths = _prepare_local_kimi_verifier(
+        tmp_path,
+        _kimi_verifier_archive(),
+    )
+    verifier_ref = "1" * 40
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == str(checkout)
+    assert request_paths == [
+        f"/owner/verifier/archive/{verifier_ref}.tar.gz",
+    ]
+    assert {
+        path.relative_to(checkout).as_posix()
+        for path in checkout.rglob("*")
+        if path.is_file()
+    } == _KIMI_VERIFIER_REQUIRED_FILES
+    assert "git must not be invoked" not in result.stderr
+
+
+def test_kimi_vendor_verifier_removes_partial_checkout_when_member_missing(
+    tmp_path: Path,
+) -> None:
+    missing = "tests/tool_call_json_schema/validator.py"
+    result, checkout, _ = _prepare_local_kimi_verifier(
+        tmp_path,
+        _kimi_verifier_archive(missing=missing),
+    )
+
+    assert result.returncode == 1
+    assert missing in result.stderr
+    assert not checkout.exists()
+
+
+def test_kimi_vendor_verifier_rejects_unsafe_archive_members(tmp_path: Path) -> None:
+    unsafe = tarfile.TarInfo("verifier-pinned/../../escaped")
+    unsafe.size = len(b"unsafe")
+    result, checkout, _ = _prepare_local_kimi_verifier(
+        tmp_path,
+        _kimi_verifier_archive(unsafe_member=unsafe),
+    )
+
+    assert result.returncode == 1
+    assert "unsafe archive member path" in result.stderr
+    assert not checkout.exists()
+    assert not (tmp_path / "escaped").exists()
 
 
 def test_kimi_vendor_dependency_install_is_isolated(tmp_path: Path) -> None:
@@ -1015,6 +1181,185 @@ def test_agentic_eval_limit_full_runs_whole_split(tmp_path):
     argv = (shim / "argv.log").read_text()
     assert "--slice" not in argv, argv
     assert "GEN_RC=0" in res.stdout, res.stdout + res.stderr
+
+
+def test_multinode_eval_artifact_names_are_bounded_and_distinct() -> None:
+    workflow = yaml.safe_load(MULTINODE_WORKFLOW.read_text())
+    upload = next(
+        step
+        for step in workflow["jobs"]["benchmark"]["steps"]
+        if step.get("name") == "Upload eval results (if any)"
+    )
+    expression = upload["with"]["name"]
+    assert expression.startswith("eval_")
+    assert "RESULT_FILENAME" not in expression
+
+    targets = [
+        {
+            "EXP_NAME": "kimik3_p2x16ep32dpa_d0x16ep32dpa_conc12",
+            "PRECISION": "fp4",
+            "FRAMEWORK": "vllm",
+            "PREFILL_NUM_WORKERS": "2",
+            "PREFILL_TP": "16",
+            "PREFILL_PP_SIZE": "1",
+            "SPEC_DECODING": "mtp",
+            "PREFILL_DCP_SIZE": "1",
+            "PREFILL_PCP_SIZE": "1",
+            "PREFILL_EP": "32",
+            "PREFILL_DP_ATTN": "true",
+            "DECODE_NUM_WORKERS": "0",
+            "DECODE_TP": "16",
+            "DECODE_PP_SIZE": "1",
+            "DECODE_DCP_SIZE": "1",
+            "DECODE_PCP_SIZE": "1",
+            "DECODE_EP": "32",
+            "DECODE_DP_ATTN": "true",
+            "KV_OFFLOADING": "none",
+            "KV_OFFLOAD_BACKEND": "",
+            "conc-list": ["1", "12", "16"],
+            "runner.name": "h200-dgxc-slurm_00",
+        },
+        {
+            "EXP_NAME": "kimik3_p4x8ep32dpa_d0x8ep32dpa_conc12",
+            "PRECISION": "fp4",
+            "FRAMEWORK": "vllm",
+            "PREFILL_NUM_WORKERS": "4",
+            "PREFILL_TP": "8",
+            "PREFILL_PP_SIZE": "1",
+            "PREFILL_DCP_SIZE": "1",
+            "PREFILL_PCP_SIZE": "1",
+            "PREFILL_EP": "32",
+            "PREFILL_DP_ATTN": "true",
+            "DECODE_NUM_WORKERS": "0",
+            "SPEC_DECODING": "mtp",
+            "DECODE_TP": "8",
+            "DECODE_PP_SIZE": "1",
+            "DECODE_DCP_SIZE": "1",
+            "DECODE_PCP_SIZE": "1",
+            "DECODE_EP": "32",
+            "DECODE_DP_ATTN": "true",
+            "KV_OFFLOADING": "none",
+            "KV_OFFLOAD_BACKEND": "",
+            "conc-list": ["1", "12", "16"],
+            "runner.name": "h200-dgxc-slurm_01",
+        },
+        {
+            "EXP_NAME": "kimik3_p4x8ep32dpa_d0x8ep32dpa_conc12_kvdram-vllm-simple",
+            "PRECISION": "fp4",
+            "FRAMEWORK": "vllm",
+            "PREFILL_NUM_WORKERS": "4",
+            "PREFILL_TP": "8",
+            "PREFILL_PP_SIZE": "1",
+            "PREFILL_DCP_SIZE": "1",
+            "PREFILL_PCP_SIZE": "1",
+            "PREFILL_EP": "32",
+            "PREFILL_DP_ATTN": "true",
+            "DECODE_NUM_WORKERS": "0",
+            "DECODE_TP": "8",
+            "DECODE_PP_SIZE": "1",
+            "DECODE_DCP_SIZE": "1",
+            "DECODE_PCP_SIZE": "1",
+            "DECODE_EP": "32",
+            "SPEC_DECODING": "mtp",
+            "DECODE_DP_ATTN": "true",
+            "KV_OFFLOADING": "dram",
+            "KV_OFFLOAD_BACKEND": "vllm-simple",
+            "conc-list": ["1", "12", "16"],
+            "runner.name": "h200-dgxc-slurm_02",
+        },
+        {
+            "EXP_NAME": "kimik3_p1x8_d0x8_conc16",
+            "PRECISION": "fp4",
+            "FRAMEWORK": "dynamo-vllm",
+            "PREFILL_NUM_WORKERS": "1",
+            "PREFILL_TP": "8",
+            "PREFILL_PP_SIZE": "2",
+            "PREFILL_DCP_SIZE": "1",
+            "PREFILL_PCP_SIZE": "1",
+            "PREFILL_EP": "1",
+            "PREFILL_DP_ATTN": "false",
+            "DECODE_NUM_WORKERS": "0",
+            "DECODE_TP": "8",
+            "DECODE_PP_SIZE": "2",
+            "DECODE_DCP_SIZE": "1",
+            "DECODE_PCP_SIZE": "1",
+            "DECODE_EP": "1",
+            "DECODE_DP_ATTN": "false",
+            "SPEC_DECODING": "mtp",
+            "KV_OFFLOADING": "none",
+            "KV_OFFLOAD_BACKEND": "",
+            "conc-list": ["1", "16"],
+            "runner.name": "b200-dgxc_00",
+        },
+        {
+            "EXP_NAME": "kimik3_p1x16ep16_d0x16ep16_conc16",
+            "PRECISION": "fp4",
+            "FRAMEWORK": "dynamo-vllm",
+            "PREFILL_NUM_WORKERS": "1",
+            "PREFILL_TP": "16",
+            "PREFILL_PP_SIZE": "1",
+            "PREFILL_DCP_SIZE": "1",
+            "PREFILL_PCP_SIZE": "1",
+            "PREFILL_EP": "16",
+            "PREFILL_DP_ATTN": "false",
+            "DECODE_NUM_WORKERS": "0",
+            "DECODE_TP": "16",
+            "DECODE_PP_SIZE": "1",
+            "DECODE_DCP_SIZE": "1",
+            "DECODE_PCP_SIZE": "1",
+            "DECODE_EP": "16",
+            "DECODE_DP_ATTN": "false",
+            "KV_OFFLOADING": "none",
+            "SPEC_DECODING": "mtp",
+            "KV_OFFLOAD_BACKEND": "",
+            "conc-list": ["16"],
+            "runner.name": "gb200-nv_00",
+        },
+        {
+            "EXP_NAME": "kimik3_p1x16_d0x16_conc1",
+            "PRECISION": "fp4",
+            "FRAMEWORK": "dynamo-vllm",
+            "PREFILL_NUM_WORKERS": "1",
+            "PREFILL_TP": "16",
+            "PREFILL_PP_SIZE": "1",
+            "PREFILL_DCP_SIZE": "1",
+            "PREFILL_PCP_SIZE": "1",
+            "PREFILL_EP": "1",
+            "PREFILL_DP_ATTN": "false",
+            "DECODE_NUM_WORKERS": "0",
+            "DECODE_TP": "16",
+            "DECODE_PP_SIZE": "1",
+            "DECODE_DCP_SIZE": "1",
+            "DECODE_PCP_SIZE": "1",
+            "DECODE_EP": "1",
+            "DECODE_DP_ATTN": "false",
+            "KV_OFFLOADING": "none",
+            "KV_OFFLOAD_BACKEND": "",
+            "SPEC_DECODING": "mtp",
+            "conc-list": ["1"],
+            "runner.name": "gb200-nv_01",
+        },
+    ]
+    non_mtp_twin = {**targets[3], "SPEC_DECODING": "none"}
+
+    def render(values: dict[str, object]) -> str:
+        name = expression
+        name = re.sub(
+            r"\$\{\{ join\(fromJson\(inputs\.conc-list\), 'x'\) \}\}",
+            "x".join(values["conc-list"]),
+            name,
+        )
+        for key, value in values.items():
+            if key != "conc-list":
+                name = name.replace(f"${{{{ env.{key} }}}}", str(value))
+        name = name.replace("${{ runner.name }}", str(values["runner.name"]))
+        assert "${{" not in name
+        return name
+
+    names = [render(target) for target in targets]
+    assert len(names) == len(set(names)) == 6
+    assert render(targets[3]) != render(non_mtp_twin)
+    assert all(name.startswith("eval_") and len(name.encode()) <= 256 for name in names)
 
 
 

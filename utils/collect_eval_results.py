@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import sys
 import json
+import math
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -72,16 +73,27 @@ def result_concurrency(path: Path) -> Optional[int]:
 
 
 def detect_lm_eval_jsons(d: Path, batched: bool = False) -> List[Path]:
-    """Return collector-compatible eval result JSONs from one artifact directory.
+    """Return the latest collector-compatible eval result JSONs.
 
-    Legacy lm-eval artifacts contribute their latest result file. Batched
-    artifacts contribute the latest result file for each `_concN` suffix.
+    Result filenames contain sortable timestamps. Mtime remains a fallback for
+    legacy names, with the filename as a deterministic tie-breaker.
     """
     immediate_jsons = set(d.glob('results*.json'))
     immediate_jsons.update(
         p for p in d.glob('*.json') if p.name != 'meta_env.json'
     )
     lm_paths = []
+
+    def recency_key(path: Path) -> Tuple[str, int, str]:
+        match = re.search(
+            r"\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}(?:\.\d+)?",
+            path.name,
+        )
+        return (
+            match.group(0) if match else "",
+            path.stat().st_mtime_ns,
+            path.name,
+        )
 
     for p in immediate_jsons:
         data = load_json(p)
@@ -93,7 +105,7 @@ def detect_lm_eval_jsons(d: Path, batched: bool = False) -> List[Path]:
     if not lm_paths:
         return []
     if not batched:
-        return [max(lm_paths, key=lambda path: path.stat().st_mtime)]
+        return [max(lm_paths, key=recency_key)]
 
     latest_by_conc: Dict[int, Path] = {}
     for path in lm_paths:
@@ -101,15 +113,28 @@ def detect_lm_eval_jsons(d: Path, batched: bool = False) -> List[Path]:
         if conc is None:
             continue
         current = latest_by_conc.get(conc)
-        if current is None or path.stat().st_mtime > current.stat().st_mtime:
+        if current is None or recency_key(path) > recency_key(current):
             latest_by_conc[conc] = path
     return [latest_by_conc[conc] for conc in sorted(latest_by_conc)]
 
 
-def detect_eval_jsons(d: Path) -> Tuple[Optional[Path], Optional[Path]]:
-    """Return the latest legacy lm-eval JSON and deprecated second slot."""
-    lm_paths = detect_lm_eval_jsons(d)
-    return (lm_paths[0] if lm_paths else None), None
+def has_invalid_effective_count(data: Dict[str, Any], task: str) -> bool:
+    """Return whether a task has an explicitly invalid effective count."""
+    if 'n-samples' not in data:
+        return False
+    sample_counts = data['n-samples']
+    if not isinstance(sample_counts, dict) or task not in sample_counts:
+        return True
+    task_samples = sample_counts[task]
+    if not isinstance(task_samples, dict) or 'effective' not in task_samples:
+        return True
+    effective = task_samples['effective']
+    return (
+        isinstance(effective, bool)
+        or not isinstance(effective, (int, float))
+        or not math.isfinite(effective)
+        or effective <= 0
+    )
 
 
 def extract_lm_metrics(json_path: Path) -> List[Dict[str, Any]]:
@@ -124,6 +149,8 @@ def extract_lm_metrics(json_path: Path) -> List[Dict[str, Any]]:
     - Values from results[task][metric,filter]
     """
     data = load_json(json_path) or {}
+    if 'integration_error' in data:
+        return []
     results = data.get('results', {})
     configs = data.get('configs', {})
 
@@ -133,6 +160,8 @@ def extract_lm_metrics(json_path: Path) -> List[Dict[str, Any]]:
     extracted = []
 
     for task in results.keys():
+        if has_invalid_effective_count(data, task):
+            continue
         task_results = results[task]
         task_config = configs.get(task, {})
 
