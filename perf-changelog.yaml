@@ -5824,31 +5824,5 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Add H200 MiniMax-M3 MXFP8 AgentX on vLLM v0.27.1 with EAGLE3-GQA synthetic golden AL 2.78."
-    - "Screen TP8, TEP8, DEP8, and Mooncake DRAM-offload curves in AgentX fast mode before the final full sweep."
-    - "Require vLLM server metrics and session-aware DEP routing without relaxed request thresholds."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2565
-
-- config-keys:
-    - minimaxm3-fp8-h200-vllm-agentic-mtp
-  scenario-type:
-    - agentic-coding
-  description:
-    - "Broad fast run 31540120459 identifies the TP8 knee at c10-c14; compare vLLM-simple DRAM offload at c10/c12/c14/c16 before the final full sweep."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2565
-
-- config-keys:
-    - minimaxm3-fp8-h200-vllm-agentic-mtp
-  scenario-type:
-    - agentic-coding
-  description:
-    - "Route the vLLM-simple refinement through the MiniMax-M3 MTP runtime and preserve its checkpoint-cache DRAM reservation."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2565
-
-- config-keys:
-    - minimaxm3-fp8-h200-vllm-agentic-mtp
-  scenario-type:
-    - agentic-coding
-  description:
-    - "Finalize the strict TP8 MTP sweep at resident c1/c2/c4/c6/c8/c10 and Mooncake c12/c14 from completed fast-run measurements."
+    - "Add MiniMax-M3 MXFP8 AgentX on H200 with vLLM v0.27.1, EAGLE3 golden AL 2.78, resident TP8 c1/c2/c4/c6/c8/c10, and Mooncake DRAM offload c12/c14."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2565

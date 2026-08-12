@@ -1,32 +1,14 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -eo pipefail
 set -x
 
-# MiniMax-M3 MXFP8 H200 AgentX (agentic-coding) recipe with EAGLE3 speculative
-# decoding — the spec-decoding=mtp variant of agentic/minimaxm3_fp8_h200.sh.
-# Everything outside the speculative block mirrors the non-MTP agentic sibling
-# (Mooncake host-DRAM KV offload, --block-size 128, --language-model-only,
-# --kv-cache-dtype fp8, TRITON_ATTN, gmu 0.92, minimax_m3 parsers, vllm-router
-# for DP-attention), so the spec-decode delta is readable at equal concurrency.
-#
-# Speculative config: Inferact/MiniMax-M3-EAGLE3-GQA, 3 speculative tokens,
-# and the committed thinking-on golden AL. The
-# drafter is pinned to FLASH_ATTN as on the other CUDA M3 MTP recipes: the
-# EAGLE3 head is MHA and FlashInfer only serves page size 128 through its
-# trtllm-gen kernel, which requires GQA/MQA.
-#
-# Throughput runs pin synthetic acceptance to the committed golden AL; the
-# EVAL_ONLY accuracy run keeps real target verification. See SYNTHETIC_ACCEPT_LEN.
+# H200 MiniMax-M3 MXFP8 AgentX with EAGLE3 and optional Mooncake DRAM KV offload.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
+check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION PORT EVAL_ONLY
 
 DRAFT_MODEL="Inferact/MiniMax-M3-EAGLE3-GQA"
-
-if [[ -n "${SLURM_JOB_ID:-}" ]]; then
-    echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
-fi
 
 resolve_complete_model_snapshot() {
     python3 - "$1" <<'PY'
@@ -89,11 +71,7 @@ else
     export MODEL_PATH
 fi
 
-# The EAGLE3 draft is never pre-staged next to the target checkpoint; fetch it
-# into the shared HF cache. That cache is a network FS where concurrent
-# day-zero downloads hit huggingface_hub's WeakFileLock "[Errno 116] Stale file
-# handle" race, so retry (the download resumes) as the fixed-seq-len MTP
-# recipes do.
+# Concurrent downloads on the shared HF cache can hit transient stale handles.
 for attempt in 1 2 3 4 5; do
     hf download "$DRAFT_MODEL" && break
     if [ "$attempt" = 5 ]; then echo "hf download of $DRAFT_MODEL failed after $attempt attempts" >&2; exit 1; fi
@@ -110,47 +88,43 @@ export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export PYTHONNOUSERSITE=1
 
 SERVER_LOG="$RESULT_DIR/server.log"
-ROUTER_LOG="$RESULT_DIR/router.log"
 MOONCAKE_MASTER_LOG="$RESULT_DIR/mooncake_master.log"
 mkdir -p "$RESULT_DIR"
+
+SERVER_PID=""
+MOONCAKE_MASTER_PID=""
+cleanup_services() {
+    local exit_code=$?
+    trap - EXIT INT TERM
+    set +e
+    stop_background_process_tree "$SERVER_PID" "vLLM server" 60
+    stop_background_process_tree "$MOONCAKE_MASTER_PID" "Mooncake master" 30
+    exit "$exit_code"
+}
+trap cleanup_services EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 OFFLOAD_ARGS=()
 MODEL_CHECKPOINT_PAGE_CACHE_GIB=414
 MOONCAKE_LOCAL_BUFFER_GIB=4
-case "${KV_OFFLOAD_BACKEND:-}" in
-    "")
-        require_agentic_kv_offload_none
-        ;;
-    vllm-simple)
-        require_agentic_kv_offload_backend vllm-simple
-        TOTAL_CPU_DRAM_GIB=$((TOTAL_CPU_DRAM_GB * 1000000000 / 1073741824))
-        CPU_OFFLOAD_GIB_PER_RANK=$(((TOTAL_CPU_DRAM_GIB - MODEL_CHECKPOINT_PAGE_CACHE_GIB) / TP))
-        if (( CPU_OFFLOAD_GIB_PER_RANK <= 0 )); then
-            echo "Error: CPU DRAM budget is too small for checkpoint cache and KV offload" >&2
-            exit 1
-        fi
-        CPU_BYTES_PER_RANK=$((CPU_OFFLOAD_GIB_PER_RANK * 1024 * 1024 * 1024))
-        export PYTHONHASHSEED=42
-        OFFLOAD_ARGS=(
-            --kv-transfer-config
-            "{\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use_per_rank\":${CPU_BYTES_PER_RANK},\"lazy_offload\":false}}"
-        )
-        ;;
-    mooncake)
-        require_agentic_kv_offload_backend mooncake
-        TOTAL_CPU_DRAM_GIB=$((TOTAL_CPU_DRAM_GB * 1000000000 / 1073741824))
-        PER_RANK_GB=$(((TOTAL_CPU_DRAM_GIB - MODEL_CHECKPOINT_PAGE_CACHE_GIB) / TP - MOONCAKE_LOCAL_BUFFER_GIB))
-        if (( PER_RANK_GB <= 0 )); then
-            echo "Error: CPU DRAM budget is too small for checkpoint cache and KV offload" >&2
-            exit 1
-        fi
-        MOONCAKE_VERSION=0.3.11.post1
-        agentic_pip_install --quiet --no-cache-dir --no-deps \
-            --force-reinstall "mooncake-transfer-engine-cuda13==$MOONCAKE_VERSION"
-        python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null
-        MOONCAKE_MASTER_PORT=$((PORT + 12000))
-        MOONCAKE_CONFIG_PATH="$RESULT_DIR/mooncake_config.json"
-        cat > "$MOONCAKE_CONFIG_PATH" <<EOF
+if [ "$KV_OFFLOADING" = "none" ]; then
+    require_agentic_kv_offload_none
+elif [ "$KV_OFFLOADING" = "dram" ]; then
+    require_agentic_kv_offload_backend mooncake
+    TOTAL_CPU_DRAM_GIB=$((TOTAL_CPU_DRAM_GB * 1000000000 / 1073741824))
+    PER_RANK_GB=$(((TOTAL_CPU_DRAM_GIB - MODEL_CHECKPOINT_PAGE_CACHE_GIB) / TP - MOONCAKE_LOCAL_BUFFER_GIB))
+    if (( PER_RANK_GB <= 0 )); then
+        echo "Error: CPU DRAM budget is too small for checkpoint cache and KV offload" >&2
+        exit 1
+    fi
+    MOONCAKE_VERSION=0.3.11.post1
+    agentic_pip_install --quiet --no-cache-dir --no-deps \
+        --force-reinstall "mooncake-transfer-engine-cuda13==$MOONCAKE_VERSION"
+    python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null
+    MOONCAKE_MASTER_PORT=$((PORT + 12000))
+    MOONCAKE_CONFIG_PATH="$RESULT_DIR/mooncake_config.json"
+    cat > "$MOONCAKE_CONFIG_PATH" <<EOF
 {
   "mode": "embedded",
   "metadata_server": "P2PHANDSHAKE",
@@ -162,120 +136,72 @@ case "${KV_OFFLOAD_BACKEND:-}" in
   "enable_offload": false
 }
 EOF
-        export MOONCAKE_CONFIG_PATH PYTHONHASHSEED=0 MC_SLICE_SIZE=1048576 MC_WORKERS_PER_CTX=4
-        export MC_ENABLE_DEST_DEVICE_AFFINITY=1
-        mooncake_master --port "$MOONCAKE_MASTER_PORT" \
-            --eviction_high_watermark_ratio=0.80 \
-            --eviction_ratio=0.10 > "$MOONCAKE_MASTER_LOG" 2>&1 &
-        MOONCAKE_MASTER_PID=$!
-        sleep 2
-        kill -0 "$MOONCAKE_MASTER_PID"
-        OFFLOAD_ARGS=(
-            --kv-transfer-config
-            '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true}}'
-        )
-        ;;
-    *)
-        echo "Error: unsupported KV_OFFLOAD_BACKEND='$KV_OFFLOAD_BACKEND'" >&2
-        exit 1
-        ;;
-esac
-
-PARALLEL_ARGS=(--tensor-parallel-size "$TP" --data-parallel-size 1)
-if [[ "$DP_ATTENTION" == "true" ]]; then
-    PARALLEL_ARGS=(--tensor-parallel-size 1 --data-parallel-size "$TP")
+    export MOONCAKE_CONFIG_PATH PYTHONHASHSEED=0 MC_SLICE_SIZE=1048576 MC_WORKERS_PER_CTX=4
+    export MC_ENABLE_DEST_DEVICE_AFFINITY=1
+    mooncake_master --port "$MOONCAKE_MASTER_PORT" \
+        --eviction_high_watermark_ratio=0.80 \
+        --eviction_ratio=0.10 > "$MOONCAKE_MASTER_LOG" 2>&1 &
+    MOONCAKE_MASTER_PID=$!
+    sleep 2
+    kill -0 "$MOONCAKE_MASTER_PID"
+    OFFLOAD_ARGS=(
+        --kv-transfer-config
+        '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true}}'
+    )
+else
+    echo "Error: unsupported KV_OFFLOADING='$KV_OFFLOADING'" >&2
+    exit 1
 fi
 
-EP_ARGS=()
-if (( EP_SIZE > 1 )); then
-    EP_ARGS=(--enable-expert-parallel)
-fi
-
-VLLM_BACKEND_PORT="$PORT"
-if [[ "$DP_ATTENTION" == "true" ]]; then
-    VLLM_BACKEND_PORT=$((PORT + 1))
-    export AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID=1
-    agentic_pip_install --quiet 'vllm-router==0.1.14'
-fi
-
-export AIPERF_SERVER_METRICS_URLS="http://localhost:${VLLM_BACKEND_PORT}/metrics"
+export AIPERF_SERVER_METRICS_URLS="http://localhost:${PORT}/metrics"
 export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="vllm:"
 
-# use 3 speculative tokens for all configs, matching the MiniMax-M3 MTP recipes
 NUM_SPEC_TOKENS=3
 TOKENS_PER_SEQ=$((1 + NUM_SPEC_TOKENS))
 
-# AgentX pins acceptance to the committed golden AL so submissions are compared
-# on system performance at a fixed acceptance target rather than on draft-head
-# quality. 2.78 is minimaxm3_eagle3_gqa.yaml thinking_on[3].
-#
-# EVAL_ONLY switches back to real verification: synthetic acceptance commits
-# drafted tokens regardless of the target logits, so generated text is wrong and
-# the eval would score ~0 (same split as dsv4_fp4_b*_vllm_mtp.sh).
+# Golden AL is minimaxm3_eagle3_gqa.yaml thinking_on[3]; eval uses real verification.
 SYNTHETIC_ACCEPT_LEN=2.78
-if [ "${EVAL_ONLY:-false}" = "true" ]; then
+if [ "$EVAL_ONLY" = "true" ]; then
     SPEC_CONFIG="{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"FLASH_ATTN\"}"
 else
     SPEC_CONFIG="{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"FLASH_ATTN\", \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
 fi
 
-# DEP distributes the live AgentX session trees across its data-parallel ranks.
-if [[ "$DP_ATTENTION" == "true" ]]; then
-    if (( 2 * CONC % TP != 0 )); then
-        echo "DEP requires 2*CONC divisible by TP (CONC=$CONC TP=$TP)" >&2
-        exit 1
-    fi
-    MAX_NUM_SEQS=$((2 * CONC / TP))
-else
-    MAX_NUM_SEQS=$((2 * CONC))
-fi
-# Cudagraph capture sizes are in TOKENS: a decode batch of S sequences verifies
-# S*(1+NUM_SPEC_TOKENS) tokens, so cap capture at MAX_NUM_SEQS*(1+N) or the
-# FULL_DECODE_ONLY ladder tops out at MAX_NUM_SEQS/(1+N) sequences and the
-# largest decode batches fall back to eager.
+MAX_NUM_SEQS=$((2 * CONC))
+# MTP verifies four tokens per sequence, so CUDA graph capture is token-sized.
 MAX_CUDAGRAPH_CAPTURE_SIZE=$((MAX_NUM_SEQS * TOKENS_PER_SEQ))
 
-vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
-    --host 0.0.0.0 \
-    --port "$VLLM_BACKEND_PORT" \
-    "${PARALLEL_ARGS[@]}" \
-    "${EP_ARGS[@]}" \
-    --gpu-memory-utilization 0.90 \
-    --kv-cache-dtype fp8 \
-    --attention-backend TRITON_ATTN \
-    --block-size 128 \
-    --language-model-only \
-    --enable-prefix-caching \
-    --enable-prompt-tokens-details \
-    --default-chat-template-kwargs '{"thinking_mode":"enabled"}' \
-    --max-num-seqs "$MAX_NUM_SEQS" \
-    --max-cudagraph-capture-size "$MAX_CUDAGRAPH_CAPTURE_SIZE" \
-    --speculative-config "$SPEC_CONFIG" \
-    --tool-call-parser minimax_m3 \
-    --reasoning-parser minimax_m3 \
-    --enable-auto-tool-choice \
-    --trust-remote-code \
-    "${OFFLOAD_ARGS[@]}" > "$SERVER_LOG" 2>&1 &
+VLLM_CMD=(
+    vllm serve "$MODEL_PATH"
+    --served-model-name "$MODEL"
+    --host 0.0.0.0
+    --port "$PORT"
+    --tensor-parallel-size "$TP"
+    --data-parallel-size 1
+    --gpu-memory-utilization 0.90
+    --kv-cache-dtype fp8
+    --attention-backend TRITON_ATTN
+    --block-size 128
+    --language-model-only
+    --enable-prefix-caching
+    --enable-prompt-tokens-details
+    --default-chat-template-kwargs '{"thinking_mode":"enabled"}'
+    --max-num-seqs "$MAX_NUM_SEQS"
+    --max-cudagraph-capture-size "$MAX_CUDAGRAPH_CAPTURE_SIZE"
+    --speculative-config "$SPEC_CONFIG"
+    --tool-call-parser minimax_m3
+    --reasoning-parser minimax_m3
+    --enable-auto-tool-choice
+    --trust-remote-code
+    "${OFFLOAD_ARGS[@]}"
+)
+write_command "$RESULT_DIR/vllm_command.txt" "${VLLM_CMD[@]}"
+"${VLLM_CMD[@]}" > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 
-wait_for_server_ready --port "$VLLM_BACKEND_PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
+wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-if [[ "$DP_ATTENTION" == "true" ]]; then
-    vllm-router \
-        --worker-urls "http://localhost:$VLLM_BACKEND_PORT" \
-        --policy consistent_hash \
-        --intra-node-data-parallel-size "$TP" \
-        --host 0.0.0.0 \
-        --port "$PORT" \
-        --prometheus-host 127.0.0.1 \
-        --prometheus-port "$((PORT + 10000))" \
-        --request-timeout-secs 14400 \
-        --disable-retries > "$ROUTER_LOG" 2>&1 &
-    ROUTER_PID=$!
-    wait_for_server_ready --port "$PORT" --server-log "$ROUTER_LOG" --server-pid "$ROUTER_PID"
-fi
-
-if [ "${EVAL_ONLY}" = "true" ]; then
+if [ "$EVAL_ONLY" = "true" ]; then
     run_eval --port "$PORT"
 else
     build_replay_cmd "$RESULT_DIR"

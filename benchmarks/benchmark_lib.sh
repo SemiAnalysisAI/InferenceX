@@ -343,6 +343,14 @@ check_env_vars() {
     fi
 }
 
+# Record a shell-array command in a reproducible, shell-escaped form.
+write_command() {
+    local output_file="$1"
+    shift
+    printf '%q ' "$@" | tee "$output_file"
+    printf '\n' | tee -a "$output_file"
+}
+
 # Wait for server to be ready by polling the health endpoint
 # All parameters are required
 # Parameters:
