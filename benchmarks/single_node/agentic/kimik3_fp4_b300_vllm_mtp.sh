@@ -186,15 +186,19 @@ case "${KV_OFFLOAD_BACKEND:-}" in
             >/dev/null
 
         # One MP server for the node, per the Kimi-K3 recipe
-        # (docs.lmcache.ai/recipes/kimi_k3.html). --chunk-size 768 is that
-        # recipe's CUDA-path value; the connector requires the chunk to be a
-        # multiple of every engine KV group's tokens_per_block, so if the
-        # server log reports a mismatch, raise it to the least common multiple
-        # of the block sizes vLLM prints at startup ("Setting attention block
-        # size to N" plus the KDA state group's own size) -- the ROCm sister
-        # arm needs 3072 for exactly this reason. K3's hybrid KDA/MLA layout
-        # registers more than one KV-cache group under MTP, which additionally
-        # requires one object group per sliding-window size:
+        # (docs.lmcache.ai/recipes/kimi_k3.html), but NOT that recipe's
+        # --chunk-size 768: the connector requires the chunk to be a multiple
+        # of every engine KV group's tokens_per_block, and this stack's blocks
+        # are far larger than 768. On this exact image and script, vLLM pins
+        # the attention group to 1536 (run 31404943911, interface.py:911,
+        # "Setting attention block size to 1536 tokens to ensure that
+        # attention page size is >= mamba page size") and pads the KDA/mamba
+        # page to match (interface.py:935). That alignment is generic vLLM
+        # code, not platform-specific, which is why the MI355X sister arm
+        # lands on the same 1536 plus a 3072-token KDA state group and also
+        # needs 3072. 768 is smaller than the attention block, so it is not a
+        # multiple of it and fails at connector init. The multi-group layout
+        # additionally requires one object group per sliding-window size:
         # --separate-object-groups.
         LMCACHE_PORT=6555
         LMCACHE_HTTP_PORT=8090
@@ -214,7 +218,7 @@ case "${KV_OFFLOAD_BACKEND:-}" in
             --http-port "$LMCACHE_HTTP_PORT"
             --l1-size-gb "$LMCACHE_L1_SIZE_GB"
             --l1-init-size-gb 10
-            --chunk-size 768
+            --chunk-size 3072
             --separate-object-groups
             --enable-extra-logging
             --extra-logging-interval 30
