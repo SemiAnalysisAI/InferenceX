@@ -1723,7 +1723,7 @@ glm5.2-fp4-mi355x-sglang-agentic-mtp:
 # decoding. TP=4, TP=8 with KV offloading to DRAM (lmcache backend) to support
 # Recipe is from PR https://github.com/ROCm/ATOM/pull/1877 
 glm5.2-fp4-mi355x-atom-agentic-mtp:
-  image: rocm/atom-dev:ubuntu24.04_py3.12_pytorch_release_2.10.0_glm52_agentic
+  image: rocm/atom-dev:ubuntu24.04_py3.12_pytorch_release_2.10.0_glm52_agentic_0813
   model: amd/GLM-5.2-MXFP4
   model-prefix: glm5.2
   runner: cluster:mi355x-amds
