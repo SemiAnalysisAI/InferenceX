@@ -6171,3 +6171,24 @@
     - "Use AITER INT4 quick-reduce, ptpc_fp8 online quantization excluding embeddings, lm_head, gates, and experts, an FP8 KV cache, and three-token MTP with golden synthetic acceptance length 2.99 for benchmark runs."
     - "Set max-num-seqs to twice the concurrency, select CUDA graph capture sizes by concurrency, and cap max-num-batched-tokens at 16384."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2576
+
+- config-keys:
+    - glm5.1-fp8-b200-tilert-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add the agentic-coding scenario for GLM-5.1 FP8 B200 TileRT PD-disaggregation, reusing the fixed-seq-len topology (1 prefill node TP8 + 1 decode node TP8, NIXL KV transfer, MTP) with an AIPerf trace replay in place of benchmark_serving.py"
+    - "Separate config key rather than a second scenario on glm5.1-fp8-b200-tilert: agentic master configs must declare an exact cluster:<name> runner, so this entry uses the existing cluster:b200-dgxc runner label"
+    - "Pin TileRT to the published 0.1.5.post2 wheel; decode serves one sequence at a time, so conc-list is the single point [1]"
+    - "kv-offloading: none -- TileRT keeps all KV state on the GPU and exposes no DRAM offload tier"
+    - "GLM-5.1 has 202752 native positions, so AIPerf's --max-context-length drops the corpus traces whose peak context exceeds it: 175 of the 393 traces in cc-traces-weka-062126-256k remain eligible"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2650
+
+- config-keys:
+    - glm5.1-fp8-b200-tilert-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Replace the unavailable upstream TileRT post3 dependency with the reproducible 0.1.5.post2+inferencex.1 queueing backport: preserve the official post2 native libraries, patch only pd_router.py, and pin the internal release wheel by URL and SHA256"
+    - "Wait up to 1800 seconds for the single decode node instead of returning HTTP 429 immediately; this addresses AgentX intra-session fan-out while keeping the benchmark concurrency point at 1"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2650
