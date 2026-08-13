@@ -51,15 +51,13 @@ PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path $MODEL_PATH --se
 --kv-cache-dtype fp8_e4m3 \
 --mamba-ssm-dtype bfloat16 \
 --attention-backend trtllm_mha \
---mm-attention-backend triton_attn \
 --moe-runner-backend flashinfer_trtllm \
 --cuda-graph-max-bs $CONC \
---max-running-requests $CONC \
 --max-prefill-tokens 16384 \
 --chunked-prefill-size 16384 \
 --mem-fraction-static 0.8 \
 --stream-interval 50 \
---scheduler-recv-interval 10 \
+--scheduler-recv-interval $( [[ $CONC -gt 4 ]] && echo 30 || echo 10 ) \
 --tokenizer-worker-num 6 \
 --tokenizer-path $MODEL_PATH \
 --context-length $CONTEXT_LENGTH > $SERVER_LOG 2>&1 &
@@ -81,8 +79,7 @@ run_benchmark_serving \
     --num-prompts "$((CONC * 10))" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
-    --result-dir /workspace/ \
-    --use-chat-template
+    --result-dir /workspace/
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
