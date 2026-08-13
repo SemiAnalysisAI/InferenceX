@@ -5445,7 +5445,7 @@
   description:
     - "Refresh the purged B300 DeepSeek-V4-Pro SGLang AgentX TP4, TP8, DP-attention, and HiCache grid on SGLang v0.5.17."
     - "Use native EAGLE MTP (3 steps, top-k 1, 4 draft tokens) and golden synthetic acceptance length 2.49 for throughput; eval retains real verification."
-    - "Follow the official SGLang DeepSeek-V4 Blackwell recipe and require nonempty SGLang server metrics."
+    - "Follow the official SGLang DeepSeek-V4 Blackwell recipe, require nonempty SGLang server metrics, keep pooled AgentX connections alive, let AIPerf own HiCache warmup, and reserve transient MoE workspace at DEP8 c512."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2577
 
 - config-keys:

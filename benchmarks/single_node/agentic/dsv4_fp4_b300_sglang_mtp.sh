@@ -63,6 +63,7 @@ export SGLANG_ENABLE_UNIFIED_RADIX_TREE=1
 export SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS=1
 
 CACHE_ARGS=()
+WARMUP_ARGS=()
 if require_agentic_kv_offload_backend hicache; then
     # DeepSeek V4 HiCache currently rejects --hicache-size and supports
     # capacity control only through a host/device token-capacity ratio.
@@ -90,6 +91,9 @@ if require_agentic_kv_offload_backend hicache; then
         --hicache-io-backend "$HICACHE_IO_BACKEND"
         --hicache-mem-layout "$HICACHE_MEM_LAYOUT"
     )
+    # AIPerf owns the representative warmup for AgentX. Avoid SGLang's
+    # redundant per-DP warmup timing out after the API is already healthy.
+    WARMUP_ARGS=(--skip-server-warmup)
     echo "HiCache DSv4 CPU tier: ratio=$HICACHE_RATIO, capacity=${TOTAL_CPU_DRAM_GB} GB, write_policy=$HICACHE_WRITE_POLICY, io_backend=$HICACHE_IO_BACKEND, mem_layout=$HICACHE_MEM_LAYOUT"
 fi
 
@@ -122,6 +126,10 @@ if [ "$DP_ATTENTION" = "true" ]; then
         --disable-flashinfer-autotune
     )
     MEM_FRACTION_STATIC=0.95
+    if [ "$CONC" -ge 512 ]; then
+        # Leave room for FlashInfer's transient MoE workspace at the DEP8 tail.
+        MEM_FRACTION_STATIC=0.94
+    fi
     CHUNKED_PREFILL_SIZE=16384
 else
     PARALLEL_ARGS+=(
@@ -151,6 +159,9 @@ export TORCH_CUDA_ARCH_LIST=10.0
 # six-hour request timeout unchanged, but allow up to 15 minutes for TCP
 # progress before declaring the connection dead.
 export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
+# Outlast AIPerf's pooled connections so an inter-turn idle gap cannot race
+# Uvicorn's five-second keep-alive closure.
+export SGLANG_TIMEOUT_KEEP_ALIVE=900
 export SGLANG_JIT_DEEPGEMM_FAST_WARMUP=1
 export SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT=1
 export SGLANG_OPT_USE_JIT_NORM=1
@@ -196,6 +207,7 @@ SGLANG_CMD=(
     "${MODEL_ARGS[@]}"
     "${METRICS_ARGS[@]}"
     "${CACHE_ARGS[@]}"
+    "${WARMUP_ARGS[@]}"
 )
 
 write_command "$RESULT_DIR/sglang_command.txt" "${SGLANG_CMD[@]}"
