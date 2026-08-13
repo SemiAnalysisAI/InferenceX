@@ -6,8 +6,8 @@ set -x
 # with MTP speculative decoding (num_speculative_tokens=3): synthetic acceptance
 # length 2.49 for throughput, real target verification for the EVAL_ONLY eval.
 #
-# Identical to dsv4_fp4_b300_vllm.sh (same image, engine args, offload, GPU
-# topologies, and agentic aiperf rig) with exactly two MTP deltas:
+# This MTP-only recipe keeps the established image, engine args, offload, GPU
+# topologies, and agentic aiperf rig, with two speculative-decoding behaviors:
 #   --speculative-config: synthetic acceptance length 2.49 (throughput) vs real MTP (EVAL_ONLY); see the SPEC_CONFIG block
 #   cudagraph capture sizes expressed in TOKENS (see the capture block below).
 #
@@ -18,8 +18,8 @@ set -x
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
 #
-# TP4, TP8, and DEP8 (TP8 + DP-attention) are GPU-resident (KV_OFFLOADING=none).
-# DEP4 uses KV_OFFLOADING=dram with KV_OFFLOAD_BACKEND=vllm-simple or mooncake.
+# TP8 and TP4 c8 are GPU-resident. TP4 c16, DEP4, and DEP8 use DRAM offload
+# with KV_OFFLOAD_BACKEND=vllm-simple or mooncake.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -49,9 +49,9 @@ if [ "$DP_ATTENTION" = "true" ] && [ $((2 * CONC % TP)) -ne 0 ]; then
     exit 1
 fi
 
-# DEP8 (TP8 + DP-attention) is a GPU-resident, high-concurrency arm that is
-# tuned separately from the smaller DEP4 arm (larger prefill token budget,
-# long-prefill chunking, and a lower GPU-memory-utilization headroom).
+# DEP8 (TP8 + DP-attention) is a high-concurrency SimpleCPU arm tuned separately
+# from DEP4 with a larger prefill token budget and lower GPU-memory-utilization
+# headroom. Both DEP arms chunk long prefills.
 IS_DEP8=false
 if [ "$DP_ATTENTION" = "true" ] && [ "$TP" -eq 8 ]; then
     IS_DEP8=true
@@ -93,6 +93,13 @@ if [ "$DP_ATTENTION" = "true" ]; then
     agentic_pip_install --quiet "vllm-router==$VLLM_ROUTER_VERSION"
 fi
 
+# AIPerf automatically scrapes the public endpoint's /metrics URL. That is the
+# vLLM engine for pure TP, but the native router for DP-attention. Explicitly
+# add the engine endpoint so every topology captures vLLM metrics; AIPerf
+# deduplicates it against the automatic endpoint in pure-TP runs.
+export AIPERF_SERVER_METRICS_URLS="http://localhost:${VLLM_BACKEND_PORT}/metrics"
+export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="vllm:"
+
 # Match the environment used by v4pro-b300.yaml.
 export VLLM_USE_V2_MODEL_RUNNER=1
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
@@ -112,8 +119,8 @@ ROUTER_PID=""
 MOONCAKE_MASTER_PID=""
 
 # The generated TOTAL_CPU_DRAM_GB budget is proportional to allocated GPUs.
-# On cluster:b300-nv, dram-utilization=0.80 and DEP4 resolve to roughly the
-# source recipe's 280 GiB per DP rank. TP4 remains GPU-resident.
+# On cluster:b300-nv, dram-utilization=0.95 gives both DEP4 and DEP8 356 GB per
+# DP rank (1,424 GB and 2,849 GB total, respectively). TP arms remain GPU-resident.
 OFFLOAD_ARGS=()
 case "$KV_OFFLOAD_BACKEND" in
     "")
@@ -231,14 +238,14 @@ if [ "$EP_SIZE" -gt 1 ]; then
     )
 fi
 if [ "$DP_ATTENTION" = "true" ]; then
-    MODE_ARGS+=(--prefill-schedule-interval 8)
+    MODE_ARGS+=(
+        --prefill-schedule-interval 8
+        --long-prefill-token-threshold 512
+    )
     if [ "$IS_DEP8" = "true" ]; then
-        # GPU-resident DEP8 gets a larger prefill token budget and chunks long
-        # prefills so decode latency stays bounded at high concurrency.
-        MODE_ARGS+=(
-            --max-num-batched-tokens 16384
-            --long-prefill-token-threshold 4096
-        )
+        # DEP8 gets a larger prefill token budget; the shared long-prefill
+        # threshold keeps decode latency bounded under load.
+        MODE_ARGS+=(--max-num-batched-tokens 16384)
     else
         MODE_ARGS+=(--max-num-batched-tokens 8192)
     fi

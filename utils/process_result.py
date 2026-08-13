@@ -46,6 +46,8 @@ def get_optional_component_metadata(env_var):
 _MULTINODE_ROLE_METRIC_KEYS = (
     "prefill_gpu_energy_j",
     "decode_gpu_energy_j",
+    "prefill_avg_power_w",
+    "decode_avg_power_w",
     "prefill_joules_per_input_token",
     "decode_joules_per_output_token",
 )
