@@ -86,7 +86,7 @@ backend:
       gpu-memory-utilization: 0.90
       stream-interval: 10
       no-disable-hybrid-kv-cache-manager: true
-      enable-prompt-tokens-details: true
+      kv-cache-metrics: true
       tokenizer-mode: deepseek_v4
 
 sbatch_directives:

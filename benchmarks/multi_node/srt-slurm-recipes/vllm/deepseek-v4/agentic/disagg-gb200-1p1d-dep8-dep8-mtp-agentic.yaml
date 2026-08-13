@@ -88,7 +88,7 @@ backend:
       block-size: 256
       gpu-memory-utilization: 0.95
       no-disable-hybrid-kv-cache-manager: true
-      enable-prompt-tokens-details: true
+      kv-cache-metrics: true
       enable-sleep-mode: true
       tokenizer-mode: deepseek_v4
       speculative-config: '{"method":"mtp","num_speculative_tokens":2}'
