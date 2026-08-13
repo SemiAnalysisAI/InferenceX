@@ -231,7 +231,7 @@ MAX_CUDAGRAPH_CAPTURE_SIZE="${MAX_CUDAGRAPH_CAPTURE_SIZE:-44}"
 # qlen 3 a 12-token batch rounds to the size-16 PIECEWISE desc and never reaches
 # the size-18 FULL decode desc. That gap is exactly what #52000 fixes, so this is
 # the arm where the PR can be measured. It also captures far fewer graphs.
-CUDAGRAPH_LADDER="${CUDAGRAPH_LADDER:-dense}"
+CUDAGRAPH_LADDER="${CUDAGRAPH_LADDER:-sparse}"
 case "$CUDAGRAPH_LADDER" in
     dense)
         CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 1 "$MAX_CUDAGRAPH_CAPTURE_SIZE")"
