@@ -32,7 +32,7 @@ set -x
 #
 # Perf-search knobs. Each defaults to the reference command's value, so an
 # otherwise-unset run reproduces the reference exactly:
-#   GPU_MEM_UTIL             0.95   (reference)
+#   GPU_MEM_UTIL             0.84   (vllm-simple; 0.90 otherwise)
 #   MAX_NUM_BATCHED_TOKENS   4096   (reference)
 #   AITER_A8W4               1      (reference; 0 = aiter a16w4 MoE path)
 #   LANGUAGE_MODEL_ONLY      false  (reference loads the vision tower)
@@ -41,6 +41,8 @@ set -x
 #   MAX_MODEL_LEN            unset  (unset -> vLLM derives K3's 1M context)
 #   SPEC_DECODE              true   (this is the _mtp DSpark recipe; =false for a no-spec A/B)
 #   SPEC_NUM_TOKENS          2      (DSpark draft length; validated by the _mtp config)
+#   DISTRIBUTED_TIMEOUT_S    1800   (K3 rank compile skew can exceed NCCL's 600s default)
+#   VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS 3600 (cold K3 kernels can exceed 1200s)
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -88,6 +90,7 @@ amd-smi || true
 # ---- Resolve traces and install deps ----------------------------------------
 # kimik3* is on resolve_trace_source's unfiltered allowlist (benchmark_lib.sh),
 # so this replays the full 062126 v7 corpus rather than the 256k-capped variant.
+export MODEL_PREFIX="${MODEL_PREFIX:-kimik3}"
 resolve_trace_source
 install_agentic_deps
 
@@ -198,32 +201,41 @@ fi
 # ---- Optional axes ----------------------------------------------------------
 KV_CACHE_DTYPE_ARGS=(--kv-cache-dtype "fp8")
 SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-2}"
+DRAFT_MODEL_PATH="${DRAFT_MODEL_PATH:-Inferact/Kimi-K3-DSpark}"
 
 SYNTHETIC_ACCEPT_LEN=2.51
 
 if [ "${EVAL_ONLY:-false}" = "true" ]; then
     SPEC_ARGS=(
         --speculative-config
-        "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"block\"}"
+        "{\"model\":\"$DRAFT_MODEL_PATH\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"block\"}"
     )
 else
     SPEC_ARGS=(
         --speculative-config
-        "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
+        "{\"model\":\"$DRAFT_MODEL_PATH\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
     )
 fi
 
 MAX_NUM_SEQS=20
-MAX_CUDAGRAPH_CAPTURE_SIZE=60
+MAX_CUDAGRAPH_CAPTURE_SIZE="${MAX_CUDAGRAPH_CAPTURE_SIZE:-44}"
 CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 1 "$MAX_CUDAGRAPH_CAPTURE_SIZE")"
 COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}")
 
-GPU_MEM_UTIL="0.9"
+if [[ "${KV_OFFLOAD_BACKEND:-}" == "vllm-simple" ]]; then
+    # The full 1M K3 + DSpark graph is within 0.34 GiB of the post-load free
+    # memory at 0.90 on MI355X. 0.84 leaves enough headroom for graph capture.
+    DEFAULT_GPU_MEM_UTIL=0.84
+else
+    DEFAULT_GPU_MEM_UTIL=0.9
+fi
+GPU_MEM_UTIL="${GPU_MEM_UTIL:-$DEFAULT_GPU_MEM_UTIL}"
 
 echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
 
-export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS="${VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS:-1200}"
+export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS="${VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS:-3600}"
+export DISTRIBUTED_TIMEOUT_S="${DISTRIBUTED_TIMEOUT_S:-1800}"
 
 
 { set +x; } 2>/dev/null
@@ -234,6 +246,7 @@ VLLM_CMD=(
     --trust-remote-code
     --moe-backend auto
     --tensor-parallel-size "$TP"
+    --distributed-timeout-seconds "$DISTRIBUTED_TIMEOUT_S"
     "${EP_ARGS[@]}"
     --load-format fastsafetensors
     --gpu-memory-utilization "$GPU_MEM_UTIL"

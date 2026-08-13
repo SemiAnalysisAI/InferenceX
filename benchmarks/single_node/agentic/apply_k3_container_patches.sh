@@ -2,9 +2,9 @@
 # =============================================================================
 # apply_k3_cb8104839c_fp8_embedded.sh   (PINNED / offline)
 #
-# Reproduces, BYTE-FOR-BYTE, the patched Python source of the working Kimi-K3
-# fp8-KV FULL_AND_PIECEWISE cudagraph container `k3_srok_cb810_0810_replay` on a
-# FRESH container of:
+# Reproduces the patched Python source of the working Kimi-K3 fp8-KV
+# FULL_AND_PIECEWISE cudagraph container `k3_srok_cb810_0810_replay`, then adds
+# the pinned c12 simple-CPU-offload correctness fixes, on a FRESH container of:
 #   vllm/vllm-openai-rocm:nightly-cb8104839c141609d99f1254459ef3a4f1bd4263
 #
 # Code changes are EMBEDDED as pristine->container diffs (no GitHub / no PR
@@ -24,6 +24,27 @@
 #                requires ndim==1). Replaces the earlier reshape/coerce
 #                workaround. NOTE: not strictly needed by this stack (it boots
 #                under FULL_AND_PIECEWISE without it) -- kept for robustness.
+#   vllm  #51766 preserve Mamba running-request CoW ownership after an external
+#                prefix hit whose first continuation stays in the same block.
+#   vllm  #50344 keep connectors without explicit support (including simple
+#                CPU offload) on a common, locally consistent hybrid prefix.
+#   vllm  #51843 disable fine-grained Mamba prefix hits when another hybrid
+#                group (K3's DSpark sliding window) requires block alignment.
+#   vllm  #42903 deduplicate physical GPU blocks eagerly in the global
+#                simple-offload in-flight set. This covers both sliding-window
+#                reuse within a request and prefix sharing across requests in
+#                the same scheduler step; assert GPU load blocks are unique.
+#   vllm  #42612-style free-list insertion guard: preserve queue accounting if
+#                a refcount bug attempts to reinsert an already-linked block,
+#                and emit the originating stack instead of corrupting the list.
+#   vllm  #42612 deduplicate each free_blocks() batch by physical block ID so a
+#                repeated SWA/hybrid entry cannot decrement below zero after
+#                the first occurrence has already entered the free queue.
+#   free-list cross-call guard: an already-linked non-null block is already
+#                free; a later release must not decrement it below zero.
+#   authoritative free-queue membership: every queue mutation is guarded by
+#                physical block ID and derives num_free_blocks from that set,
+#                preventing a duplicate append from corrupting list accounting.
 #   aiter #4521  fp8 cp round-robin asm MLA verify kernels: adds the qh16/qh32
 #                qseqlen4 gqaratio16/32 cprr .co + mla_asm.csv + asm_mla.cu +
 #                v1_2_device.cuh + aiter/mla.py + aiter/ops/attention.py, then
@@ -93,7 +114,7 @@ diff --git a/aiter/ops/triton/gluon/mla_gluon.py b/aiter/ops/triton/gluon/mla_gl
 @@ -156,6 +156,11 @@
      num_iter = gl.cdiv(split_kv_end - split_kv_start, BLOCK_N)
      start_n = split_kv_start
- 
+__EMPTY_CONTEXT__
 +    # >2GB KV cache (global_load path): widen strides to int64 so kv offsets don't overflow int32.
 +    if not WITHIN_2GB:
 +        stride_kv_c_bs = stride_kv_c_bs.to(gl.int64)
@@ -105,7 +126,7 @@ diff --git a/aiter/ops/triton/gluon/mla_gluon.py b/aiter/ops/triton/gluon/mla_gl
 @@ -861,6 +866,11 @@
          kv_pe_offset = 0
          use_2d_view = False
- 
+__EMPTY_CONTEXT__
 +    if q_nope.dtype == torch.float8_e4m3fn:
 +        q_nope = q_nope.to(torch.bfloat16)
 +    if q_pe is not None and q_pe.dtype == torch.float8_e4m3fn:
@@ -130,6 +151,7 @@ diff --git a/aiter/ops/triton/gluon/mla_gluon.py b/aiter/ops/triton/gluon/mla_gl
              # Fill ~256 WGs (total WGs = B * NUM_KV_SPLITS <= 256, one MI350 wave),
              # but never split a sequence into more blocks than it has: bound by the
 DIFF_MLA_GLUON
+sed -i 's/^__EMPTY_CONTEXT__$/ /' "$WS/MLA_GLUON.diff"
 apply_one "aiter/ops/triton/gluon/mla_gluon.py" "1 <= batch_size <= 256" "$WS/MLA_GLUON.diff"
 
 cat > "$WS/GEMM_A16W16.diff" <<'DIFF_GEMM_A16W16'
@@ -1196,6 +1218,536 @@ index 2f512df62643..db519fb6f0db 100644
 DIFF_KDA_FUSED_RECURRENT
 apply_one "vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py" "stride_state_indices" "$WS/KDA_FUSED_RECURRENT.diff"
 
+cat > "$WS/MAMBA_EXTERNAL_HIT_COW.diff" <<'DIFF_MAMBA_EXTERNAL_HIT_COW'
+diff --git a/vllm/v1/core/single_type_kv_cache_manager.py b/vllm/v1/core/single_type_kv_cache_manager.py
+--- a/vllm/v1/core/single_type_kv_cache_manager.py
++++ b/vllm/v1/core/single_type_kv_cache_manager.py
+@@ -1559,6 +1559,8 @@ class MambaManager(SingleTypeKVCacheManager):
+             # `num_required_blocks` might be less than `len(req_blocks)` if blocks are
+             # over-allocated at last round.
+             if num_required_blocks <= len(req_blocks) and not has_partial_hit:
++                # Externally populated blocks still establish a running request.
++                self._allocated_block_reqs.add(request_id)
+                 return []
+             else:
+                 prev_block_len = len(req_blocks)
+DIFF_MAMBA_EXTERNAL_HIT_COW
+apply_one "vllm/v1/core/single_type_kv_cache_manager.py" \
+  "Externally populated blocks still establish a running request." \
+  "$WS/MAMBA_EXTERNAL_HIT_COW.diff"
+
+cat > "$WS/CONNECTOR_HYBRID_POLICY.diff" <<'DIFF_CONNECTOR_HYBRID_POLICY'
+diff --git a/vllm/distributed/kv_transfer/kv_connector/v1/base.py b/vllm/distributed/kv_transfer/kv_connector/v1/base.py
+--- a/vllm/distributed/kv_transfer/kv_connector/v1/base.py
++++ b/vllm/distributed/kv_transfer/kv_connector/v1/base.py
+@@ -174,6 +174,15 @@ class KVConnectorBase_V1(ABC):
+     """
+__EMPTY_CONTEXT__
+     @property
++    def supports_divergent_local_hybrid_hits(self) -> bool:
++        """Whether external hits can complete divergent local hybrid hits.
++
++        A capable connector restores lagging recurrent state when the local
++        full-attention group reaches a deeper boundary. Defaults to False.
++        """
++        return False
++
++    @property
+     def prefer_cross_layer_blocks(self) -> bool:
+         """
+         Indicates whether this connector prefers KV blocks that hold KV data for all
+DIFF_CONNECTOR_HYBRID_POLICY
+sed -i 's/^__EMPTY_CONTEXT__$/ /' "$WS/CONNECTOR_HYBRID_POLICY.diff"
+apply_one "vllm/distributed/kv_transfer/kv_connector/v1/base.py" \
+  "supports_divergent_local_hybrid_hits" \
+  "$WS/CONNECTOR_HYBRID_POLICY.diff"
+
+cat > "$WS/HYBRID_PREFIX_SCHEDULER.diff" <<'DIFF_HYBRID_PREFIX_SCHEDULER'
+diff --git a/vllm/v1/core/sched/scheduler.py b/vllm/v1/core/sched/scheduler.py
+--- a/vllm/v1/core/sched/scheduler.py
++++ b/vllm/v1/core/sched/scheduler.py
+@@ -320,6 +320,7 @@ class Scheduler(SchedulerInterface):
+         self.mamba_partial_cache_hit = (
+             self.need_mamba_block_aligned_split
+             and self.hash_block_size < self.block_size
++            and self.kv_cache_manager.coordinator.enable_partial_hash_hits
+         )
+__EMPTY_CONTEXT__
+         # Counts of non-empty steps scheduled / processed. update_from_output
+@@ -436,6 +437,18 @@ class Scheduler(SchedulerInterface):
+         end = min((s for s in stops if start < s < end), default=end)
+         return max(end - start, 0)
+__EMPTY_CONTEXT__
++    def _get_local_prefix_cache_hit(
++        self, request: Request
++    ) -> tuple[KVCacheBlocks, int, int, bool]:
++        connector = self.connector
++        if connector is not None and connector.supports_divergent_local_hybrid_hits:
++            return self.kv_cache_manager.get_computed_blocks_for_connector(request)
++
++        blocks, num_local, shared_prefix_boundary = (
++            self.kv_cache_manager.get_computed_blocks(request)
++        )
++        return blocks, num_local, shared_prefix_boundary, False
++
+     def schedule(self, throttle_prefills: bool = False) -> SchedulerOutput:
+         self.current_step += 1
+         # NOTE(woosuk) on the scheduling algorithm:
+@@ -744,26 +757,12 @@ class Scheduler(SchedulerInterface):
+                 # Get already-cached tokens.
+                 if request.num_computed_tokens == 0:
+                     did_prefix_cache_lookup = True
+-                    hit_diverged = False
+-                    # Get locally-cached tokens.
+-                    if self.connector is not None:
+-                        # A KV connector transfers the missing suffix, which needs a
+-                        # hybrid-aware lookup that can diverge across groups.
+-                        (
+-                            new_computed_blocks,
+-                            num_new_local_computed_tokens,
+-                            request.shared_prefix_boundary,
+-                            hit_diverged,
+-                        ) = self.kv_cache_manager.get_computed_blocks_for_connector(
+-                            request
+-                        )
+-                    else:
+-                        (
+-                            new_computed_blocks,
+-                            num_new_local_computed_tokens,
+-                            # Marconi shared-prefix junction to pin; 0 if none.
+-                            request.shared_prefix_boundary,
+-                        ) = self.kv_cache_manager.get_computed_blocks(request)
++                    (
++                        new_computed_blocks,
++                        num_new_local_computed_tokens,
++                        request.shared_prefix_boundary,
++                        hit_diverged,
++                    ) = self._get_local_prefix_cache_hit(request)
+__EMPTY_CONTEXT__
+                     # Get externally-cached tokens if using a KVConnector.
+                     if self.connector is not None:
+DIFF_HYBRID_PREFIX_SCHEDULER
+sed -i 's/^__EMPTY_CONTEXT__$/ /' "$WS/HYBRID_PREFIX_SCHEDULER.diff"
+apply_one "vllm/v1/core/sched/scheduler.py" \
+  "def _get_local_prefix_cache_hit" \
+  "$WS/HYBRID_PREFIX_SCHEDULER.diff"
+
+cat > "$WS/HYBRID_PREFIX_COORDINATOR.diff" <<'DIFF_HYBRID_PREFIX_COORDINATOR'
+diff --git a/vllm/v1/core/kv_cache_coordinator.py b/vllm/v1/core/kv_cache_coordinator.py
+--- a/vllm/v1/core/kv_cache_coordinator.py
++++ b/vllm/v1/core/kv_cache_coordinator.py
+@@ -5,6 +5,7 @@ from collections.abc import Sequence
+ from typing import NamedTuple
+__EMPTY_CONTEXT__
+ from vllm import envs
++from vllm.logger import init_logger
+ from vllm.utils.math_utils import cdiv
+ from vllm.v1.core.block_pool import BlockPool
+ from vllm.v1.core.kv_cache_metrics import KVCacheMetricsCollector
+@@ -25,6 +26,8 @@ from vllm.v1.kv_cache_interface import (
+     SlidingWindowSpec,
+ )
+ from vllm.v1.request import Request
++
++logger = init_logger(__name__)
+__EMPTY_CONTEXT__
+__EMPTY_CONTEXT__
+ def _validate_prefix_cache_retention_interval(
+@@ -62,6 +65,8 @@ class KVCacheCoordinator(ABC):
+     Coordinate the KV cache of different KV cache groups.
+     """
+__EMPTY_CONTEXT__
++    enable_partial_hash_hits = False
++
+     def __init__(
+         self,
+         kv_cache_config: KVCacheConfig,
+@@ -578,14 +583,29 @@ class HybridKVCacheCoordinator(KVCacheCoordinator):
+                     "full-attention and Mamba groups, got: "
+                     f"{type(g.kv_cache_spec).__name__}."
+                 )
+-        # Partial hash hits are limited to full-attention + mamba ("align")
+-        # without context parallelism.
+-        self.enable_partial_hash_hits = dcp_world_size == 1 and any(
++        # Fine-grained hash hits require Mamba "align", no context
++        # parallelism, and compatible cache managers in every group.
++        has_partial_mamba_group = any(
+             isinstance(g.kv_cache_spec, MambaSpec)
+             and g.kv_cache_spec.mamba_cache_mode == "align"
+             and g.kv_cache_spec.block_size > hash_block_size
+             for g in kv_cache_config.kv_cache_groups
+         )
++        self.enable_partial_hash_hits = dcp_world_size == 1 and has_partial_mamba_group
++        if self.enable_partial_hash_hits:
++            unsupported_partial_hit_managers = {
++                type(manager).__name__
++                for manager in self.single_type_managers
++                if not manager.supports_fine_grained_hash_lookup
++                and manager.block_size != hash_block_size
++            }
++            if unsupported_partial_hit_managers:
++                self.enable_partial_hash_hits = False
++                logger.warning_once(
++                    "Disabling fine-grained prefix-cache hits because these KV "
++                    "cache managers require block-aligned lookups: %s.",
++                    ", ".join(sorted(unsupported_partial_hit_managers)),
++                )
+         self.verify_and_split_kv_cache_groups()
+__EMPTY_CONTEXT__
+     @property
+DIFF_HYBRID_PREFIX_COORDINATOR
+sed -i 's/^__EMPTY_CONTEXT__$/ /' "$WS/HYBRID_PREFIX_COORDINATOR.diff"
+apply_one "vllm/v1/core/kv_cache_coordinator.py" \
+  "unsupported_partial_hit_managers" \
+  "$WS/HYBRID_PREFIX_COORDINATOR.diff"
+
+cat > "$WS/SIMPLE_OFFLOAD_EAGER_DEDUP.diff" <<'DIFF_SIMPLE_OFFLOAD_EAGER_DEDUP'
+diff --git a/vllm/v1/simple_kv_offload/manager.py b/vllm/v1/simple_kv_offload/manager.py
+--- a/vllm/v1/simple_kv_offload/manager.py
++++ b/vllm/v1/simple_kv_offload/manager.py
+@@ -587,6 +587,11 @@ class SimpleCPUOffloadScheduler:
+                         advanced_per_group[g] += 1
+                         continue
+
++                    # Populate the global set during the scan so duplicate
++                    # blocks are suppressed across requests in this step too.
++                    if gpu_block_id in in_flight:
++                        advanced_per_group[g] += 1
++                        continue
+                     bhash_with_group = gpu_block.block_hash
+                     if bhash_with_group is None:
+                         # Masked-out SWA position the coordinator chose not to
+@@ -595,10 +600,9 @@ class SimpleCPUOffloadScheduler:
+                         advanced_per_group[g] += 1
+                         continue
+
+-                    # Skip if already scheduled for store or already cached in CPU.
+-                    if (
+-                        gpu_block_id in in_flight
+-                        or cpu_block_pool.cached_block_hash_to_block.get_one_block(
++                    # Skip if already cached in CPU.
++                    if (
++                        cpu_block_pool.cached_block_hash_to_block.get_one_block(
+                             bhash_with_group
+                         )
+                         is not None
+@@ -612,6 +616,7 @@ class SimpleCPUOffloadScheduler:
+                         break
+                     num_free -= 1
+
++                    in_flight.add(gpu_block_id)
+                     gpu_block_ids.append(gpu_block_id)
+                     block_hashes_to_store.append(bhash_with_group)
+                     advanced_per_group[g] += 1
+@@ -638,7 +643,6 @@ class SimpleCPUOffloadScheduler:
+                 req_ids.append(req_id)
+                 merged_gpu_block_ids.extend(gpu_block_ids)
+                 merged_cpu_block_ids.extend(cpu_block_ids)
+-                in_flight.update(gpu_block_ids)
+
+                 # Touch GPU blocks to prevent freeing during async copy
+                 gpu_block_pool.touch(
+@@ -837,9 +841,10 @@ class SimpleCPUOffloadScheduler:
+
+         if state.transfer_meta is not None:
+-            # Free CPU touch refs
++            # Distinct GPU loads may share one cached CPU block. Release that
++            # physical CPU ref at most once for this transfer.
+             self.cpu_block_pool.free_blocks(
+                 self.cpu_block_pool.blocks[bid]
+-                for bid in state.transfer_meta.cpu_block_ids
++                for bid in dict.fromkeys(state.transfer_meta.cpu_block_ids)
+             )
+             # Free GPU touch refs
+             assert self._gpu_block_pool is not None
+DIFF_SIMPLE_OFFLOAD_EAGER_DEDUP
+apply_one "vllm/v1/simple_kv_offload/manager.py" \
+  "Populate the global set during the scan so duplicate" \
+  "$WS/SIMPLE_OFFLOAD_EAGER_DEDUP.diff"
+
+cat > "$WS/SIMPLE_OFFLOAD_LOAD_UNIQUENESS.diff" <<'DIFF_SIMPLE_OFFLOAD_LOAD_UNIQUENESS'
+diff --git a/vllm/v1/simple_kv_offload/manager.py b/vllm/v1/simple_kv_offload/manager.py
+--- a/vllm/v1/simple_kv_offload/manager.py
++++ b/vllm/v1/simple_kv_offload/manager.py
+@@ -389,6 +389,8 @@ class SimpleCPUOffloadScheduler:
+                 cpu_block_ids.append(cpu_blk.block_id)
+                 cpu_blocks_to_touch.append(cpu_blk)
+__EMPTY_CONTEXT__
++        assert len(gpu_block_ids) == len(set(gpu_block_ids))
++
+         # Touch CPU blocks to prevent eviction during async load.
+         self.cpu_block_pool.touch(cpu_blocks_to_touch)
+         # Release the temporary pin held since get_num_new_matched_tokens().
+DIFF_SIMPLE_OFFLOAD_LOAD_UNIQUENESS
+sed -i 's/^__EMPTY_CONTEXT__$/ /' "$WS/SIMPLE_OFFLOAD_LOAD_UNIQUENESS.diff"
+apply_one "vllm/v1/simple_kv_offload/manager.py" \
+  "assert len(gpu_block_ids) == len(set(gpu_block_ids))" \
+  "$WS/SIMPLE_OFFLOAD_LOAD_UNIQUENESS.diff"
+
+cat > "$WS/FREE_QUEUE_INSERT_GUARD.diff" <<'DIFF_FREE_QUEUE_INSERT_GUARD'
+diff --git a/vllm/v1/core/block_pool.py b/vllm/v1/core/block_pool.py
+--- a/vllm/v1/core/block_pool.py
++++ b/vllm/v1/core/block_pool.py
+@@ -727,10 +727,29 @@ class BlockPool:
+         """
+         # Identify blocks with hash (LRU cache) and without it (never match APC)
+         blocks_with_hash = []
+         blocks_without_hash = []
++        newly_free_block_ids: set[int] = set()
+         for block in ordered_blocks:
+             block.ref_cnt -= 1
+             if block.ref_cnt == 0 and not block.is_null:
++                # A block entering the free list must be detached. Re-linking
++                # an existing node makes num_free_blocks exceed the reachable
++                # list and later crashes popleft_n(). Keep the existing queue
++                # entry and preserve its accounting while surfacing the caller.
++                already_linked = (
++                    block.prev_free_block is not None
++                    or block.next_free_block is not None
++                )
++                if block.block_id in newly_free_block_ids or already_linked:
++                    logger.error(
++                        "Skipping duplicate free-list insertion for block %d "
++                        "(already_linked=%s).",
++                        block.block_id,
++                        already_linked,
++                        stack_info=True,
++                    )
++                    continue
++                newly_free_block_ids.add(block.block_id)
+                 # When caching is disabled we always append for better
+                 # GPU cache locality from reusing recently used blocks
+                 if block.block_hash is None and self.enable_caching:
+DIFF_FREE_QUEUE_INSERT_GUARD
+apply_one "vllm/v1/core/block_pool.py" \
+  "Skipping duplicate free-list insertion" \
+  "$WS/FREE_QUEUE_INSERT_GUARD.diff"
+
+cat > "$WS/FREE_BLOCK_BATCH_DEDUP.diff" <<'DIFF_FREE_BLOCK_BATCH_DEDUP'
+diff --git a/vllm/v1/core/block_pool.py b/vllm/v1/core/block_pool.py
+--- a/vllm/v1/core/block_pool.py
++++ b/vllm/v1/core/block_pool.py
+@@ -729,7 +729,22 @@ class BlockPool:
+         blocks_with_hash = []
+         blocks_without_hash = []
+         newly_free_block_ids: set[int] = set()
+-        for block in ordered_blocks:
++        # SWA and hybrid managers can expose the same physical block at more
++        # than one logical position. A free batch releases request ownership,
++        # so decrement each physical block at most once per call. Without this,
++        # a later duplicate can drive ref_cnt below zero after the first copy
++        # has already been linked into the free queue.
++        unique_blocks: list[KVCacheBlock] = []
++        seen_block_ids: set[int] = set()
++        for block in ordered_blocks:
++            if block.block_id in seen_block_ids:
++                logger.warning_once(
++                    "Deduplicated repeated physical block in free_blocks()."
++                )
++                continue
++            seen_block_ids.add(block.block_id)
++            unique_blocks.append(block)
++        for block in unique_blocks:
+             block.ref_cnt -= 1
+             if block.ref_cnt == 0 and not block.is_null:
+                 # A block entering the free list must be detached. Re-linking
+DIFF_FREE_BLOCK_BATCH_DEDUP
+apply_one "vllm/v1/core/block_pool.py" \
+  "Deduplicated repeated physical block in free_blocks()." \
+  "$WS/FREE_BLOCK_BATCH_DEDUP.diff"
+
+cat > "$WS/FREE_BLOCK_CROSS_CALL_GUARD.diff" <<'DIFF_FREE_BLOCK_CROSS_CALL_GUARD'
+diff --git a/vllm/v1/core/block_pool.py b/vllm/v1/core/block_pool.py
+--- a/vllm/v1/core/block_pool.py
++++ b/vllm/v1/core/block_pool.py
+@@ -747,6 +747,24 @@ class BlockPool:
+             seen_block_ids.add(block.block_id)
+             unique_blocks.append(block)
+         for block in unique_blocks:
++            # Queue linkage is the authoritative free-state invariant. A
++            # second release arriving in a later call must not decrement an
++            # already-free block below zero while leaving it reachable from
++            # the queue. That creates a delayed get_new_blocks assertion.
++            already_free = not block.is_null and (
++                block.prev_free_block is not None
++                or block.next_free_block is not None
++            )
++            if already_free:
++                logger.warning_once(
++                    "Ignoring repeated cross-call release of already-free "
++                    "block %d (ref_cnt=%d).",
++                    block.block_id,
++                    block.ref_cnt,
++                    stack_info=True,
++                )
++                block.ref_cnt = 0
++                continue
+             block.ref_cnt -= 1
+             if block.ref_cnt == 0 and not block.is_null:
+                 # A block entering the free list must be detached. Re-linking
+DIFF_FREE_BLOCK_CROSS_CALL_GUARD
+apply_one "vllm/v1/core/block_pool.py" \
+  "Ignoring repeated cross-call release of already-free" \
+  "$WS/FREE_BLOCK_CROSS_CALL_GUARD.diff"
+
+cat > "$WS/KV_QUEUE_MEMBERSHIP.diff" <<'DIFF_KV_QUEUE_MEMBERSHIP'
+diff --git a/vllm/v1/core/kv_cache_utils.py b/vllm/v1/core/kv_cache_utils.py
+--- a/vllm/v1/core/kv_cache_utils.py
++++ b/vllm/v1/core/kv_cache_utils.py
+@@ -205,6 +205,13 @@ class FreeKVCacheBlockQueue:
+__EMPTY_CONTEXT__
+     def __init__(self, blocks: list[KVCacheBlock]) -> None:
+         self.num_free_blocks = len(blocks)
++        # Keep queue membership independent of the intrusive links. The links
++        # are optimized for O(1) removal, but a duplicate append can overwrite
++        # them before the counter notices and make num_free_blocks larger than
++        # the reachable list. Membership is the authoritative guard for every
++        # queue mutation.
++        self._free_block_ids = {block.block_id for block in blocks}
++        assert len(self._free_block_ids) == self.num_free_blocks
+__EMPTY_CONTEXT__
+         # Initialize doubly links of consecutive blocks
+         for i in range(self.num_free_blocks):
+@@ -267,7 +274,9 @@ class FreeKVCacheBlockQueue:
+         # Remove the block from the linked list.
+         first_block.prev_free_block = first_block.next_free_block = None
+__EMPTY_CONTEXT__
+-        self.num_free_blocks -= 1
++        assert first_block.block_id in self._free_block_ids
++        self._free_block_ids.remove(first_block.block_id)
++        self.num_free_blocks = len(self._free_block_ids)
+         return first_block
+__EMPTY_CONTEXT__
+     def popleft_n(self, n: int) -> list[KVCacheBlock]:
+@@ -281,15 +290,17 @@ class FreeKVCacheBlockQueue:
+         """
+         if n == 0:
+             return []
+-        assert self.num_free_blocks >= n
+-        self.num_free_blocks -= n
++        assert len(self._free_block_ids) >= n
+__EMPTY_CONTEXT__
+         curr_block = self.fake_free_list_head.next_free_block
+         # Pop n blocks from the head of the list
+         ret = []
+         for _ in range(n):
+             assert curr_block is not None
++            assert curr_block is not self.fake_free_list_tail
++            assert curr_block.block_id in self._free_block_ids
+             ret.append(curr_block)
++            self._free_block_ids.remove(curr_block.block_id)
+             last_block = curr_block
+             curr_block = curr_block.next_free_block
+             # Reset prev_free_block and next_free_block of all popped blocks
+@@ -301,6 +312,7 @@ class FreeKVCacheBlockQueue:
+             # the new first block.
+             self.fake_free_list_head.next_free_block = curr_block
+             curr_block.prev_free_block = self.fake_free_list_head
++        self.num_free_blocks = len(self._free_block_ids)
+         return ret
+__EMPTY_CONTEXT__
+     def remove(self, block: KVCacheBlock) -> None:
+@@ -309,7 +321,11 @@ class FreeKVCacheBlockQueue:
+         Args:
+             block: The block to remove.
+         """
+-        if block.prev_free_block is None or block.next_free_block is None:
++        if (
++            block.block_id not in self._free_block_ids
++            or block.prev_free_block is None
++            or block.next_free_block is None
++        ):
+             # This should not happen if the block is from the free list.
+             # It indicates a bug in the caller's logic.
+             raise RuntimeError(f"remove() called on an invalid block: {block}")
+@@ -321,7 +337,8 @@ class FreeKVCacheBlockQueue:
+__EMPTY_CONTEXT__
+         # Remove the block from the linked list.
+         block.prev_free_block = block.next_free_block = None
+-        self.num_free_blocks -= 1
++        self._free_block_ids.remove(block.block_id)
++        self.num_free_blocks = len(self._free_block_ids)
+__EMPTY_CONTEXT__
+     def append(self, block: KVCacheBlock) -> None:
+         """Put a block back into the free list and increase
+@@ -330,6 +347,11 @@ class FreeKVCacheBlockQueue:
+         Args:
+             block: The block to append.
+         """
++        if block.block_id in self._free_block_ids:
++            logger.warning_once(
++                "Ignoring duplicate free-list append for block %d.", block.block_id
++            )
++            return
+         if self.fake_free_list_tail.prev_free_block is None:
+             raise RuntimeError(
+                 "prev_free_block of fake_free_list_tail should always exist"
+@@ -344,10 +366,22 @@ class FreeKVCacheBlockQueue:
+         block.next_free_block = self.fake_free_list_tail
+         self.fake_free_list_tail.prev_free_block = block
+__EMPTY_CONTEXT__
+-        self.num_free_blocks += 1
++        self._free_block_ids.add(block.block_id)
++        self.num_free_blocks = len(self._free_block_ids)
+__EMPTY_CONTEXT__
+     def prepend_n(self, blocks: list[KVCacheBlock]) -> None:
+         """Put a list of blocks at the front of the free list."""
++        unique_blocks = []
++        for block in blocks:
++            if block.block_id in self._free_block_ids:
++                logger.warning_once(
++                    "Ignoring duplicate free-list prepend for block %d.",
++                    block.block_id,
++                )
++                continue
++            self._free_block_ids.add(block.block_id)
++            unique_blocks.append(block)
++        blocks = unique_blocks
+         if len(blocks) == 0:
+             return
+__EMPTY_CONTEXT__
+@@ -365,7 +399,7 @@ class FreeKVCacheBlockQueue:
+         prev_block.next_free_block = first_block
+         first_block.prev_free_block = prev_block
+__EMPTY_CONTEXT__
+-        self.num_free_blocks += len(blocks)
++        self.num_free_blocks = len(self._free_block_ids)
+__EMPTY_CONTEXT__
+     def append_n(self, blocks: list[KVCacheBlock]) -> None:
+         """Put a list of blocks back into the free list
+@@ -373,6 +407,17 @@ class FreeKVCacheBlockQueue:
+         Args:
+             blocks: The blocks to append.
+         """
++        unique_blocks = []
++        for block in blocks:
++            if block.block_id in self._free_block_ids:
++                logger.warning_once(
++                    "Ignoring duplicate free-list append_n for block %d.",
++                    block.block_id,
++                )
++                continue
++            self._free_block_ids.add(block.block_id)
++            unique_blocks.append(block)
++        blocks = unique_blocks
+         if len(blocks) == 0:
+             return
+__EMPTY_CONTEXT__
+@@ -390,7 +435,7 @@ class FreeKVCacheBlockQueue:
+         last_block.next_free_block = self.fake_free_list_tail
+         self.fake_free_list_tail.prev_free_block = last_block
+__EMPTY_CONTEXT__
+-        self.num_free_blocks += len(blocks)
++        self.num_free_blocks = len(self._free_block_ids)
+__EMPTY_CONTEXT__
+     def get_all_free_blocks(self) -> list[KVCacheBlock]:
+         """Get all free blocks in the free list. Mainly used for testing.
+DIFF_KV_QUEUE_MEMBERSHIP
+sed -i 's/^__EMPTY_CONTEXT__$/ /' "$WS/KV_QUEUE_MEMBERSHIP.diff"
+apply_one "vllm/v1/core/kv_cache_utils.py" \
+  "Membership is the authoritative guard for every" \
+  "$WS/KV_QUEUE_MEMBERSHIP.diff"
+
 
 say "3/4 aiter #4521 (fp8 cp round-robin asm MLA verify kernels)  [needs network + hipcc + GPU]"
 # Unlike the offline Python diffs above, #4521 ships BINARY .co kernels (not in
@@ -1270,6 +1822,16 @@ echo "chk mla.py                     = $(grep -c 'if not self.impl.supports_quan
 echo "chk attn_utils.py              = $(grep -c 'cg_support_exclude_layers' "$ROOT/vllm/v1/worker/gpu/attn_utils.py")"
 echo "chk model_runner.py            = $(grep -c 'cg_support_exclude_layers' "$ROOT/vllm/v1/worker/gpu/model_runner.py")"
 echo "chk fused_recurrent.py         = $(grep -c 'reshape(-1).contiguous()' "$ROOT/vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py")"
+echo "chk mamba external-hit CoW     = $(grep -c 'Externally populated blocks still establish a running request' "$ROOT/vllm/v1/core/single_type_kv_cache_manager.py")"
+echo "chk connector hybrid policy    = $(grep -c 'supports_divergent_local_hybrid_hits' "$ROOT/vllm/distributed/kv_transfer/kv_connector/v1/base.py")"
+echo "chk scheduler hybrid policy    = $(grep -c 'def _get_local_prefix_cache_hit' "$ROOT/vllm/v1/core/sched/scheduler.py")"
+echo "chk partial-hit compatibility  = $(grep -c 'unsupported_partial_hit_managers' "$ROOT/vllm/v1/core/kv_cache_coordinator.py")"
+echo "chk simple-offload eager dedup = $(grep -c 'Populate the global set during the scan so duplicate' "$ROOT/vllm/v1/simple_kv_offload/manager.py")"
+echo "chk simple-offload load unique = $(grep -c 'assert len(gpu_block_ids) == len(set(gpu_block_ids))' "$ROOT/vllm/v1/simple_kv_offload/manager.py")"
+echo "chk free-list insert guard     = $(grep -c 'Skipping duplicate free-list insertion' "$ROOT/vllm/v1/core/block_pool.py")"
+echo "chk free-block batch dedup     = $(grep -c 'Deduplicated repeated physical block in free_blocks' "$ROOT/vllm/v1/core/block_pool.py")"
+echo "chk free-block cross-call      = $(grep -c 'Ignoring repeated cross-call release of already-free' "$ROOT/vllm/v1/core/block_pool.py")"
+echo "chk free-queue membership      = $(grep -c 'Membership is the authoritative guard for every' "$ROOT/vllm/v1/core/kv_cache_utils.py")"
 echo "triton          = $(python -c 'import triton; print(triton.__version__)')  (expect 3.7.0*)"
 python -m py_compile "$ROOT/aiter/ops/triton/gluon/mla_gluon.py" \
   "$ROOT/aiter/ops/gemm_op_a16w16.py" \
@@ -1280,7 +1842,14 @@ python -m py_compile "$ROOT/aiter/ops/triton/gluon/mla_gluon.py" \
   "$ROOT/vllm/models/kimi_k3/nvidia/mla.py" \
   "$ROOT/vllm/v1/worker/gpu/attn_utils.py" \
   "$ROOT/vllm/v1/worker/gpu/model_runner.py" \
-  "$ROOT/vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py" && echo "PY_COMPILE_OK" || { echo "PY_COMPILE_FAIL"; exit 1; }
+  "$ROOT/vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py" \
+  "$ROOT/vllm/v1/core/single_type_kv_cache_manager.py" \
+  "$ROOT/vllm/distributed/kv_transfer/kv_connector/v1/base.py" \
+  "$ROOT/vllm/v1/core/sched/scheduler.py" \
+  "$ROOT/vllm/v1/core/kv_cache_coordinator.py" \
+  "$ROOT/vllm/v1/simple_kv_offload/manager.py" \
+  "$ROOT/vllm/v1/core/block_pool.py" \
+  "$ROOT/vllm/v1/core/kv_cache_utils.py" && echo "PY_COMPILE_OK" || { echo "PY_COMPILE_FAIL"; exit 1; }
 # Runtime import needs a GPU (aiter probes rocminfo); best-effort.
 python - <<'PYEOF'
 import importlib, traceback
