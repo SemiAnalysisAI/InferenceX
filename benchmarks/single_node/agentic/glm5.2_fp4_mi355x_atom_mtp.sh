@@ -41,7 +41,7 @@ install_agentic_deps
 # Require the vLLM Prometheus stream in every official result. AIPerf
 # deduplicates this endpoint against its automatic localhost discovery.
 export AIPERF_SERVER_METRICS_URLS="http://localhost:${PORT}/metrics"
-export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="vllm:"
+export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="atom:"
 
 # VRAM space check
 wait_for_amd_gpu_clean
