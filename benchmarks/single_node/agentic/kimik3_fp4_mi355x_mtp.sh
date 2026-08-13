@@ -82,13 +82,18 @@ resolve_trace_source
 install_agentic_deps
 
 # ---- Reference env block ----------------------------------------------------
-# export VLLM_ROCM_AITER_MLA_ASM_PADDING=asm
+# Keep ALL of these. Commenting them out does not avoid the AITER FMHA crash:
+# that crash is gated on VLLM_ROCM_USE_AITER alone (AiterFlashAttnPrefillBackend
+# .is_available() consults only rocm_aiter_ops.is_enabled()), so disabling the
+# others just loses the MoE kernels while keeping the failure. The crash is
+# avoided by pinning the MLA prefill backend in VLLM_CMD below.
+export VLLM_ROCM_AITER_MLA_ASM_PADDING=asm
 export VLLM_ROCM_USE_AITER=1
-# export SAFETENSORS_FAST_GPU=1
-# export VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4=1
-# export AITER_BF16_FP8_MOE_BOUND=0
-# # REQUIRED on ROCm per the upstream recipe: the build auto-enables this to 1.
-# export VLLM_USE_BREAKABLE_CUDAGRAPH=0
+export SAFETENSORS_FAST_GPU=1
+export VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4=1
+export AITER_BF16_FP8_MOE_BOUND=0
+# REQUIRED on ROCm per the upstream recipe: the build auto-enables this to 1.
+export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 
 # Workaround for MEC FW <177 RCCL memory reclaim issue (shared with the other
 # gfx950 recipes in this tree).
@@ -171,6 +176,26 @@ else
     )
 fi
 
+# ---- MLA prefill backend -----------------------------------------------------
+# On ROCm the prefill priority is [ROCM_AITER_FA, FLASH_ATTN]. ROCM_AITER_FA
+# JIT-builds module_fmha_fwd_bf16_opus at runtime; that module registers its own
+# aiter_tensor_t, distinct from the one in the prebuilt module_aiter_core, so the
+# first call dies with:
+#   TypeError: fmha_fwd_bf16_opus_fwd(): incompatible function arguments
+# during compile_or_warm_up_model -> _dummy_run, before the server binds.
+# Pinning FLASH_ATTN keeps every AITER MoE kernel (and its throughput) while
+# skipping only the broken FMHA prefill path.
+# Set MLA_PREFILL_BACKEND=ROCM_AITER_FA to restore stock behaviour once the
+# AITER packaging issue is fixed upstream.
+MLA_PREFILL_BACKEND="${MLA_PREFILL_BACKEND:-FLASH_ATTN}"
+MLA_PREFILL_ARGS=()
+if [ -n "$MLA_PREFILL_BACKEND" ]; then
+    MLA_PREFILL_ARGS=(
+        --attention-config
+        "{\"mla_prefill_backend\":\"$MLA_PREFILL_BACKEND\"}"
+    )
+fi
+
 # ---- HIP graph ------------------------------------------------------------
 MAX_NUM_SEQS=20
 MAX_CUDAGRAPH_CAPTURE_SIZE=60
@@ -202,6 +227,7 @@ VLLM_CMD=(
     --max-model-len 1048576
     --enable-prefix-caching
     --kv-cache-dtype "fp8"
+    "${MLA_PREFILL_ARGS[@]}"
     "${COMPILATION_CONFIG_ARGS[@]}"
     "${SPEC_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
