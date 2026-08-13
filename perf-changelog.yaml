@@ -5439,16 +5439,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2508
 
 - config-keys:
-    - dsv4-fp4-b300-sglang-agentic-hicache-mtp
-  scenario-type:
-    - agentic-coding
-  description:
-    - "Refresh the purged B300 DeepSeek-V4-Pro SGLang AgentX TP4, TP8, DP-attention, and HiCache grid on SGLang v0.5.17."
-    - "Use native EAGLE MTP (3 steps, top-k 1, 4 draft tokens) and golden synthetic acceptance length 2.49 for throughput; eval retains real verification."
-    - "Follow the official SGLang DeepSeek-V4 Blackwell recipe, require nonempty SGLang server metrics, keep pooled AgentX connections alive, let AIPerf own HiCache warmup, and reserve transient MoE workspace at DEP8 c512."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2577
-
-- config-keys:
     - minimaxm3-fp4-b200-dynamo-vllm-mtp
   description:
     - "Add MiniMax M3 NVFP4 B200 disagg EAGLE3 MTP recipes, mirrored from B300"
@@ -5904,3 +5894,28 @@
     - "Cover the measured resident TP2/EP2 and TP4 Pareto ranges through their HBM capacity knees, with required SGLang metrics exports."
     - "Use SGLang v0.5.17 and disable unstable AITER all-reduce fusion for TP2/EP2 EAGLE rank consistency."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2562
+
+- config-keys:
+    - dsv4-fp4-b200-dynamo-sglang-mtp
+  description:
+    - "Add a DeepSeek-V4-Pro FP4 Dynamo-SGLang MTP configuration for B200 with five 8k/1k disaggregated topologies."
+    - "Use NIXL for KV transfer with EAGLE speculative decoding and chat-formatted benchmark inputs."
+    - "Image: lmsysorg/sglang:nightly-dev-cu13-20260710-cfc66e05"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2554
+
+- config-keys:
+    - glm5.2-fp4-mi355x-sglang-agentic-mtp
+  description:
+    - "Increase MTP speculative steps from 3 to 5 (num-draft-tokens 4→6) and raise SGLANG_SIMULATE_ACC_LEN from 2.99 to 3.61 to reflect higher measured acceptance rate, targeting ~15% throughput improvement"
+    - "Replace the TP8/EP8 low-concurrency arm (conc [1,2,4]) hicache offload with kv-offloading: none to reduce per-request latency at low load; conc [1,2,4] are now tested on both tp=4+hicache and tp=8+no-offload so SemiAnalysis can select the Pareto-optimal point per concurrency"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2570
+
+- config-keys:
+    - dsv4-fp4-b300-sglang-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh the purged B300 DeepSeek-V4-Pro SGLang AgentX TP4, TP8, DP-attention, and HiCache grid on SGLang v0.5.17."
+    - "Use native EAGLE MTP (3 steps, top-k 1, 4 draft tokens) and golden synthetic acceptance length 2.49 for throughput; eval retains real verification."
+    - "Follow the official SGLang DeepSeek-V4 Blackwell recipe, require nonempty SGLang server metrics, keep pooled AgentX connections alive, let AIPerf own HiCache warmup, and reserve transient MoE workspace at DEP8 c512."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2577
