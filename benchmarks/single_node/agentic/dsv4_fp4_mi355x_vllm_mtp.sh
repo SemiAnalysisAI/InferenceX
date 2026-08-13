@@ -387,11 +387,22 @@ else
     SPEC_CONFIG="{\"method\": \"mtp\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
 fi
 
+# Patch the pinned image before serving. Covered by docs/waiver/<PR>.md per
+# docs/PR_REVIEW_CHECKLIST.md. The script is strictly additive and idempotent;
+# see its header for what is carried and, just as importantly, what is not.
+bash "$(dirname "$0")/apply_dsv4_container_patches.sh"
+
 echo "Starting vllm server..."
 set -x
 export VLLM_ROCM_USE_AITER=1
 #export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 export VLLM_ROCM_USE_AITER_MOE=1
+# vllm #51714's opt-in gluon sparse-MLA decode kernel for gfx950. Read straight
+# from os.environ by the call site (rocm_aiter_mla_sparse.py), not through
+# envs.py, so vLLM logs it as an "Unknown vLLM environment variable" -- that
+# warning is expected and does not mean the knob was ignored. Grep the server
+# log for the kernel's own line to confirm the path was taken.
+export VLLM_ROCM_DSV4_SPARSE_GLUON=${VLLM_ROCM_DSV4_SPARSE_GLUON:-1}
 
 sleep 180
 

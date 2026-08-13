@@ -1301,7 +1301,19 @@ qwen3.5-fp8-mi355x-sglang-agentic-hicache:
 # is no longer available from Docker Hub. Throughput uses the three-token golden
 # synthetic acceptance length, while eval-only runs retain real verification.
 dsv4-fp4-mi355x-vllm-agentic-mtp:
-  image: vllm/vllm-openai-rocm:nightly-821717118fc26667dd474b9b0ab81d29259dfc5c
+  # Pinned to the 08-09 nightly. This is the base the local bring-up actually
+  # serves on: with benchmarks/single_node/agentic/apply_dsv4_container_patches.sh
+  # it completes weight load, the profile run and cudagraph capture, and answers
+  # an 8k-in/1k-out sweep at concurrency 32.
+  #
+  # Do NOT bump this to a newer nightly without re-running that bring-up. The
+  # 08-12 nightly (3ee2df30) memory-faults during the profile run on this
+  # config, and it does so on the PRISTINE image as well as the patched one --
+  # eight workers serialize on /tmp/aiter_configs/bf16_tuned_gemm.csv.lock and
+  # the one holding the baton dies in the post-MoE bf16 GEMM. That is a
+  # regression in the base, not something this recipe's patches introduce, and
+  # it is under separate investigation.
+  image: vllm/vllm-openai-rocm:nightly-f8d03e77416bf90c49acbe50e233275722f02c4b
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:mi355x-amds

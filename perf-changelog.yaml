@@ -5918,3 +5918,15 @@
     - "Add a TEP2 arm (tp 2, ep 2) to the qwen3.5-fp4-b200-sglang-mtp 8k/1k sweep at concurrency 16, 32, and 64"
     - "Rides on the NVFP4-V2 checkpoint switch from #2205"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2550
+
+- config-keys:
+    - dsv4-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Pin the image to the 08-09 nightly (f8d03e77) and patch it before serving via benchmarks/single_node/agentic/apply_dsv4_container_patches.sh, so the config can actually start: the previously pinned nightly memory-faults during the profile run on this recipe"
+    - "The fault is in the base, not in the patches -- it reproduces identically on a pristine 08-12 nightly (3ee2df30) with no patches applied at all: eight TP workers serialize on /tmp/aiter_configs/bf16_tuned_gemm.csv.lock and the worker holding the baton dies in the post-MoE bf16 GEMM"
+    - "Patch stack is strictly additive and idempotent: vllm #51473 (native MXFP4 TP8 shard allocation, merged 2026-08-11 i.e. after this base), vllm #51714 (opt-in AITER gluon sparse-MLA decode for gfx950), vllm #51918 config/kernel.py only (registers the flydsl_mega_moe backend name), aiter #4417 (large-token FlyDSL MoE launch/output limits, grafted by anchor), plus the one gluon kernel file the base lacks"
+    - "Nothing that ships in the base is overwritten: three of the four pa_decode_sparse variants already ship and are left untouched, aiter core is not modified, and the MegaMoE model-side hunks of #51918 are deliberately not applied because the base has no mori.ir.flydsl"
+    - "Enable VLLM_ROCM_DSV4_SPARSE_GLUON=1 by default (overridable); the knob is read via os.environ rather than envs.py, so vLLM logs it as an unknown environment variable"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PRNUM
