@@ -1546,6 +1546,32 @@ kimik3-fp4-b300-vllm-agentic-dspark:
       # TP8 SimpleCPUOffload (host DRAM)
       - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [1, 2, 4, 8, 16] }
 
+# LMCache MP-server DRAM offload on top of the same DSpark MTP serving stack as
+# kimik3-fp4-b300-vllm-agentic-dspark (same image, script, and topology). A
+# dedicated key so LMCache points can be selected and swept without re-running
+# the resident and vllm-simple arms of the base key.
+kimik3-fp4-b300-vllm-agentic-dspark-lmcache:
+  image: vllm/vllm-openai:nightly-b22afe45ac797ae58e67a7a3ad79ee5714024420@sha256:144356af876edbb3a4bfee23e1444b196cc3fdadd0a0c1a7f11f721756972a21
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:b300-nv
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    # Agentic-coding only, and 0.63 matches the base key so the LMCache L1 gets
+    # exactly the host-DRAM budget the SimpleCPUOffload arm gets (~1,889 GB
+    # aggregate at TP8). The LMCache server runs with --shm-name "" so that L1
+    # lives in ordinary process memory and is not capped by /dev/shm.
+    agentic-coding:
+    - dram-utilization: 0.63
+      search-space:
+      # conc 4/8/16 overlaps the base key's vllm-simple ladder at its top three
+      # offload points, so LMCache is directly comparable there. TP8-only for
+      # the same reason as the base key: a ~1.5 TB MXFP4 checkpoint does not
+      # fit below 8 GPUs.
+      - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.4rc2" }, conc-list: [4, 8, 16] }
+
 dsr1-fp8-b200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
   model: deepseek-ai/DeepSeek-R1-0528

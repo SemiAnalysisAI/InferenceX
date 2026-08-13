@@ -5918,3 +5918,12 @@
     - "Add a TEP2 arm (tp 2, ep 2) to the qwen3.5-fp4-b200-sglang-mtp 8k/1k sweep at concurrency 16, 32, and 64"
     - "Rides on the NVFP4-V2 checkpoint switch from #2205"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2550
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark-lmcache
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a dedicated LMCache 0.5.4rc2 DRAM KV-offload key at TP8 conc 4/8/16 on top of the unchanged kimik3-fp4-b300-vllm-agentic-dspark DSpark MTP stack, with the version pinned in the master config."
+    - "Run one LMCache MP server per node with --separate-object-groups for the hybrid KDA/MLA multi-group layout, keeping the L1 in process memory (--shm-name \"\") so the DRAM budget is not capped by /dev/shm."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PR_NUMBER

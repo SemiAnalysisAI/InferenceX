@@ -120,6 +120,20 @@ export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
 SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
 
+# The LMCache arm starts a second long-lived process that must not outlive this
+# job (its L1 holds the whole host-DRAM budget). The vLLM server's lifecycle is
+# left exactly as it was -- the job wrapper still owns it.
+LMCACHE_PID=""
+
+cleanup_lmcache_server() {
+    local exit_code=$?
+    trap - EXIT
+    set +e
+    stop_background_process_tree "$LMCACHE_PID" "LMCache server"
+    exit "$exit_code"
+}
+trap cleanup_lmcache_server EXIT
+
 # ---- KV offloading ----------------------------------------------------------
 # The generated TOTAL_CPU_DRAM_GB budget is the aggregate host-DRAM pool for the
 # node; SimpleCPUOffloadConnector is sized per rank. At dram-utilization 0.63 on
@@ -142,8 +156,84 @@ case "${KV_OFFLOAD_BACKEND:-}" in
             "{\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use_per_rank\":${CPU_BYTES_PER_RANK},\"lazy_offload\":false}}"
         )
         ;;
+    lmcache)
+        require_agentic_kv_offload_backend lmcache
+
+        # Install LMCache's runtime dependencies that this image does not
+        # already ship, then LMCache itself with --no-deps so pip never
+        # re-resolves the image's tested torch/CUDA stack. None of the three
+        # dependency packages depends on torch, so they resolve safely.
+        # cupy-cuda13x is the CUDA counterpart of the cupy-rocm-7-0 pin in the
+        # MI355X sister arm; LMCache lists it as a hard requirement.
+        LMCACHE_VERSION="0.5.4rc2"
+        agentic_pip_install --quiet --no-cache-dir \
+            "sortedcontainers==2.4.0" \
+            "opentelemetry-exporter-prometheus==0.61b0" \
+            "cupy-cuda13x==14.1.1"
+        agentic_pip_install --quiet --no-cache-dir --no-deps \
+            "lmcache==${LMCACHE_VERSION}"
+        python3 -c \
+            "import cupy; import lmcache.integration.vllm.lmcache_mp_connector; import opentelemetry.exporter.prometheus" \
+            >/dev/null
+
+        # One MP server for the node, per the Kimi-K3 recipe
+        # (docs.lmcache.ai/recipes/kimi_k3.html). --chunk-size 768 is that
+        # recipe's CUDA-path value; the connector requires the chunk to be a
+        # multiple of every engine KV group's tokens_per_block, so if the
+        # server log reports a mismatch, raise it to the least common multiple
+        # of the block sizes vLLM prints at startup ("Setting attention block
+        # size to N" plus the KDA state group's own size) -- the ROCm sister
+        # arm needs 3072 for exactly this reason. K3's hybrid KDA/MLA layout
+        # registers more than one KV-cache group under MTP, which additionally
+        # requires one object group per sliding-window size:
+        # --separate-object-groups.
+        LMCACHE_PORT=6555
+        LMCACHE_HTTP_PORT=8090
+        LMCACHE_LOG="$RESULT_DIR/lmcache_server.log"
+
+        # Consume the generated aggregate budget verbatim, per
+        # benchmarks/single_node/agentic/README.md. --shm-name "" keeps L1 in
+        # ordinary process memory so the budget is not silently capped by the
+        # size of the node's /dev/shm mount.
+        LMCACHE_L1_SIZE_GB="$TOTAL_CPU_DRAM_GB"
+
+        LMCACHE_CMD=(
+            lmcache server
+            --host 127.0.0.1
+            --port "$LMCACHE_PORT"
+            --http-host 127.0.0.1
+            --http-port "$LMCACHE_HTTP_PORT"
+            --l1-size-gb "$LMCACHE_L1_SIZE_GB"
+            --l1-init-size-gb 10
+            --chunk-size 768
+            --separate-object-groups
+            --enable-extra-logging
+            --extra-logging-interval 30
+            --max-cpu-workers 8
+            --max-gpu-workers 1
+            --eviction-policy LRU
+            --supported-transfer-mode lmcache_driven
+            --shm-name ""
+        )
+        append_command "$RESULT_DIR/lmcache_command.txt" "${LMCACHE_CMD[@]}"
+        "${LMCACHE_CMD[@]}" > "$LMCACHE_LOG" 2>&1 &
+        LMCACHE_PID=$!
+        wait_for_ready \
+            --endpoint "http://127.0.0.1:${LMCACHE_HTTP_PORT}/healthcheck" \
+            --log "$LMCACHE_LOG" \
+            --pid "$LMCACHE_PID" \
+            --sleep-interval 1 \
+            --timeout 600
+
+        # 100k-330k-token agentic prefixes make single retrieves large; use the
+        # same MQ timeout headroom as the MI355X arm.
+        OFFLOAD_ARGS=(
+            --kv-transfer-config
+            "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_connector_module_path\":\"lmcache.integration.vllm.lmcache_mp_connector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.port\":$LMCACHE_PORT,\"lmcache.mp.mq_timeout\":6000.0}}"
+        )
+        ;;
     *)
-        echo "Error: unsupported KV_OFFLOAD_BACKEND='$KV_OFFLOAD_BACKEND' (expected empty or vllm-simple)" >&2
+        echo "Error: unsupported KV_OFFLOAD_BACKEND='$KV_OFFLOAD_BACKEND' (expected empty, vllm-simple, or lmcache)" >&2
         exit 1
         ;;
 esac
