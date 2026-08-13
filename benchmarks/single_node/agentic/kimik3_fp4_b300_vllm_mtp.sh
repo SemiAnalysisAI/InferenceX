@@ -159,19 +159,28 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     lmcache)
         require_agentic_kv_offload_backend lmcache
 
-        # Install LMCache's runtime dependencies that this image does not
-        # already ship, then LMCache itself with --no-deps so pip never
-        # re-resolves the image's tested torch/CUDA stack. None of the three
-        # dependency packages depends on torch, so they resolve safely.
-        # cupy-cuda13x is the CUDA counterpart of the cupy-rocm-7-0 pin in the
-        # MI355X sister arm; LMCache lists it as a hard requirement.
+        # LMCache's own CUDA 12.9 build, not the generic PyPI wheel -- the
+        # release publishes a dedicated -cu129 asset set, the CUDA counterpart
+        # of the -rocm assets the MI355X sister arm installs. This is the
+        # upstream install line, which reads in uv form as:
+        #
+        #   uv pip install lmcache==v$VERSION \
+        #     --extra-index-url https://download.pytorch.org/whl/cu129 \
+        #     --find-links .../expanded_assets/v$VERSION-cu129 \
+        #     --index-strategy unsafe-best-match
+        #
+        # --index-strategy has no pip counterpart because it does not need one:
+        # pip already resolves best-match across every configured index, which
+        # is exactly what unsafe-best-match restores in uv. torch is an
+        # unpinned LMCache requirement that the image already satisfies, so
+        # its tested build is left alone and the cu129 torch index is only
+        # consulted for CUDA wheels pip would otherwise miss.
         LMCACHE_VERSION="0.5.4rc2"
+        LMCACHE_CUDA_INDEX="https://github.com/LMCache/LMCache/releases/expanded_assets/v${LMCACHE_VERSION}-cu129"
         agentic_pip_install --quiet --no-cache-dir \
-            "sortedcontainers==2.4.0" \
-            "opentelemetry-exporter-prometheus==0.61b0" \
-            "cupy-cuda13x==14.1.1"
-        agentic_pip_install --quiet --no-cache-dir --no-deps \
-            "lmcache==${LMCACHE_VERSION}"
+            "lmcache==${LMCACHE_VERSION}" \
+            --extra-index-url https://download.pytorch.org/whl/cu129 \
+            --find-links "$LMCACHE_CUDA_INDEX"
         python3 -c \
             "import cupy; import lmcache.integration.vllm.lmcache_mp_connector; import opentelemetry.exporter.prometheus" \
             >/dev/null
