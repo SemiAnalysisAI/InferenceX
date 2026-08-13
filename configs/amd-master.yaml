@@ -1539,8 +1539,8 @@ glm5.2-fp8-mi325x-sglang-agentic-mtp:
       search-space:
       - { tp: 8, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 3, 4, 5, 6, 8] }
 
-# Fast discovery found a sharp quality cliff after c3. Keep TP c1/c3 plus TEP
-# c3; TP c2 exhausted HBM in two identical official long-context warmups.
+# Fast discovery found a sharp quality cliff after c3. Keep the verified TP and
+# TEP c3 points; lower concurrency repeatedly failed quality or memory gates.
 glm5.2-fp8-mi300x-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.16-rocm720-mi30x
   model: zai-org/GLM-5.2-FP8
@@ -1553,7 +1553,7 @@ glm5.2-fp8-mi300x-sglang-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 3] }
+      - { tp: 8, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [3] }
       - { tp: 8, ep: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [3] }
 
 minimaxm3-fp8-mi325x-vllm-agentic:
