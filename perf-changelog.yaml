@@ -5918,3 +5918,11 @@
     - "Add a TEP2 arm (tp 2, ep 2) to the qwen3.5-fp4-b200-sglang-mtp 8k/1k sweep at concurrency 16, 32, and 64"
     - "Rides on the NVFP4-V2 checkpoint switch from #2205"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2550
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-agentic-mtp
+  description:
+    - "Add DeepSeek-V4-Pro FP4 single-node SGLang AgentX recipe on MI355X with EAGLE/MTP (num-steps 3, num-draft-tokens 4) and SGLANG_SIMULATE_ACC_LEN=2.49 from the committed thinking_on golden AL curve"
+    - "Restores the single-node SGLang agentic coverage deleted in PR #2531; TP8 arms with and without HiCache DRAM offload"
+    - "Image: lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260719"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
