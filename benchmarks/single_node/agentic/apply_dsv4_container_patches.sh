@@ -12,10 +12,9 @@
 #   docker exec -i <container> bash /path/to/apply_dsv4_container_patches.sh
 #
 # WHAT THIS ENABLES
-#   Three knobs that the base cannot run unpatched, all three verified to
-#   import cleanly afterwards (see the checks at the end):
+#   Two knobs that the base cannot run unpatched, both verified to import
+#   cleanly afterwards (see the checks at the end):
 #     * sparse gluon decode  (VLLM_ROCM_DSV4_SPARSE_GLUON=1)
-#     * FSE                  (aiter fhmoe)
 #     * MegaMoE / DEP8       (--moe-backend flydsl_mega_moe)
 #
 #   The gluon knob in particular was silently dead before this: the base's
@@ -28,14 +27,42 @@
 #   the process. Copying only the gfx950 gluon kernel is NOT enough; the facade
 #   that dispatches to it has to come along.
 #
-# WHAT IS NOT DONE
+# WHAT IS NOT DONE, AND WHY
+#   * FSE (aiter fhmoe) is NOT enabled. It was attempted and reverted, because
+#     it cannot be reached by file-level transplant on this base:
+#       - All four fhmoe files are ABSENT from the base's vendored aiter, and
+#         they need _flydsl_moe_stage1_impl / _flydsl_moe_stage2_impl, which
+#         only exist in the upstream ops/flydsl/moe_kernels.py.
+#       - Swapping in that moe_kernels.py looks safe by symbol diff (58 -> 66
+#         defined symbols, 0 lost, 8 gained) but the diff only measures what a
+#         file DEFINES, not what it CALLS. The upstream file calls
+#         compile_mixed_moe_gemm1(v2_output_layout=...) into
+#         kernels/mixed_moe_gemm_2stage.py, and the base's copy of that file
+#         has no such parameter. Every TP worker then died in the profile run:
+#             TypeError: compile_mixed_moe_gemm1() got an unexpected keyword
+#                        argument 'v2_output_layout'
+#         reached via fused_moe_2stages -> flydsl_moe_stage1, i.e. on the
+#         DEFAULT --moe-backend aiter path. It broke the main TP8 arm, not just
+#         FSE.
+#       - Chasing the signature is not bounded. The intra-aiter import closure
+#         of the FSE chain is 30 files that differ from upstream, including
+#         kernels/mixed_moe_gemm_2stage.py at 9024 lines in the base vs 146
+#         upstream. The base's vendored aiter is a structural fork, not an
+#         older revision of the same tree, so "sync a few more files" converges
+#         on replacing the vendored tree wholesale.
+#     For contrast, the gluon chain's closure is 9 files with 3 differing, none
+#     of them on the call path -- which is why that one is safe to transplant
+#     and this one is not. FSE needs an image whose vendored aiter already has
+#     it.
 #   * aiter core (jit/core.py) is not modified. The base already exposes
 #     _set_current_hip_stream, which the nightly vllm calls for
 #     module_rmsnorm_quant; an earlier wholesale post2-python overlay regressed
 #     it and crashed rmsnorm_quant warmup.
-#   * aiter #4417 is NOT grafted separately. It is already contained in the
-#     aiter@$AITER_SHA moe_kernels.py this script installs, so the old
-#     anchor-graft helper is gone.
+#   * aiter #4417 is NOT grafted. Its two guards cannot fire on this recipe:
+#     requires_flydsl_stage2_reduce first fires at 299594 tokens against a
+#     65536 ceiling (max_num_batched_tokens 16384 x the MTP fan-out of 4), and
+#     resolve_flydsl_grid_y_persist_m returns persist_m=1 with 8x of headroom
+#     under the grid.y cap. The sweep grid varies concurrency only.
 # =============================================================================
 set -uo pipefail
 AITER_SHA="97d0c6e4cb7a0919c12291c7c7d560ad412f15c1"
@@ -60,21 +87,13 @@ WS=/tmp/dsv4_patch; mkdir -p "$WS"
 # is what produced the extra_cache TypeError above. The facade and the kernel
 # it dispatches to are one unit and have to move together.
 #
-# moe_kernels.py is replaced rather than patched. Symbol-diffed base vs
-# upstream before doing so: 58 base symbols, 66 upstream, ZERO lost, +8 gained
-# (including _flydsl_moe_stage1_impl / _flydsl_moe_stage2_impl, which FSE's
-# aiter/ops/flydsl/fhmoe.py imports and the base simply does not define).
+# This list is deliberately just the gluon pair. ops/flydsl/moe_kernels.py and
+# the four fhmoe files were in it and were removed -- see "WHAT IS NOT DONE"
+# above for the TypeError they caused on the default MoE path.
 AITER_FILES=(
   # sparse gluon decode: the kernel AND the facade that dispatches to it
   aiter/ops/triton/attention/pa_decode_sparse.py
   aiter/ops/triton/_gluon_kernels/gfx950/attention/pa_decode_sparse.py
-  # FSE (fused heterogeneous MoE)
-  aiter/fhmoe.py
-  aiter/ops/flydsl/fhmoe.py
-  aiter/ops/flydsl/kernels/fhmoe.py
-  aiter/aot/flydsl/fhmoe.py
-  # carries FSE's stage1/stage2 impls, and aiter #4417's two guards
-  aiter/ops/flydsl/moe_kernels.py
 )
 ASRC="$WS/aiter_src"
 if [ ! -d "$ASRC/.git" ]; then git clone -q --filter=blob:none --no-checkout "$AITER_REPO" "$ASRC" 2>&1 | tail -1; fi
@@ -203,7 +222,11 @@ apply_file 51918 "vllm/models/deepseek_v4/amd/model.py"           "use_mega_moe"
 
 # --- 4/4 verify ---------------------------------------------------------------
 echo "chk gluon gfx950 kernel = $([ -f "$ROOT/aiter/ops/triton/_gluon_kernels/gfx950/attention/pa_decode_sparse.py" ] && echo present || echo MISSING)"
-echo "chk aiter #4417 guards  = $(grep -c 'requires_flydsl_stage2_reduce\|resolve_flydsl_grid_y_persist_m' "$ROOT/aiter/ops/flydsl/moe_kernels.py" 2>/dev/null) (expect 5)"
+# moe_kernels.py must be the BASE copy, not the upstream one -- see the FSE note
+# in the header. The upstream file calls compile_mixed_moe_gemm1 with a keyword
+# the base's mixed_moe_gemm_2stage.py does not accept, which kills the default
+# --moe-backend aiter path during the profile run.
+echo "chk moe_kernels is base = $(grep -c 'v2_output_layout' "$ROOT/aiter/ops/flydsl/moe_kernels.py" 2>/dev/null) (expect 0)"
 echo "chk vllm  #51473        = $(grep -c 'AITER_MXFP4_BF16 and activation == MoEActivation.SILU' "$ROOT/vllm/model_executor/layers/fused_moe/oracle/mxfp4.py" 2>/dev/null) (expect 1)"
 echo "chk vllm  #51714        = $(grep -c '_DSV4_SPARSE_GLUON' "$ROOT/vllm/v1/attention/ops/rocm_aiter_mla_sparse.py" 2>/dev/null)"
 echo "chk vllm  #51918 name   = $(grep -c 'flydsl_mega_moe' "$ROOT/vllm/config/kernel.py" 2>/dev/null)"
@@ -211,7 +234,6 @@ echo "chk vllm  #51918 model  = $(grep -c 'use_mega_moe' "$ROOT/vllm/models/deep
 
 python -m py_compile \
   "$ROOT/aiter/ops/triton/attention/pa_decode_sparse.py" \
-  "$ROOT/aiter/ops/flydsl/moe_kernels.py" \
   "$ROOT/vllm/model_executor/layers/fused_moe/oracle/mxfp4.py" \
   "$ROOT/vllm/v1/attention/ops/rocm_aiter_mla_sparse.py" \
   "$ROOT/vllm/models/deepseek_v4/amd/model.py" \
@@ -244,8 +266,6 @@ except Exception as e:
 
 for m in ["aiter.jit.core",
           "aiter.ops.triton.attention.pa_decode_sparse",
-          "aiter.fhmoe",                                    # FSE
-          "aiter.ops.flydsl.fhmoe",                         # FSE
           "mori.ir.flydsl",                                 # MegaMoE
           "aiter.ops.flydsl.kernels.flydsl_dispatch_combine_intranode_kernel",
           "vllm.model_executor.layers.fused_moe.oracle.mxfp4",
@@ -258,6 +278,39 @@ for m in ["aiter.jit.core",
     except Exception as e:
         fail = True
         print("IMPORT_ERR", m, type(e).__name__, (str(e).splitlines() or [""])[-1])
+
+# The default MoE path must still resolve. An upstream moe_kernels.py imports
+# cleanly and only explodes later, inside the profile run, when flydsl_moe_stage1
+# calls compile_mixed_moe_gemm1 with a keyword the base does not accept -- so an
+# import check alone would have passed. Check the signature agreement directly.
+#
+# Read the keywords off the CALL NODE via AST. Grepping the function body for
+# `name=` instead picks up every local assignment in it and reports them as
+# rejected kwargs -- a false positive this check produced on a clean tree.
+try:
+    import ast, textwrap
+    from aiter.ops.flydsl.kernels.mixed_moe_gemm_2stage import compile_mixed_moe_gemm1
+    import aiter.ops.flydsl.moe_kernels as mk
+    sig = inspect.signature(compile_mixed_moe_gemm1)
+    accepted = set(sig.parameters)
+    var_kw = any(p.kind is inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
+    tree = ast.parse(textwrap.dedent(inspect.getsource(mk.compile_flydsl_moe_stage1)))
+    passed = set()
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Call):
+            fn = n.func
+            name = fn.attr if isinstance(fn, ast.Attribute) else getattr(fn, "id", None)
+            if name == "compile_mixed_moe_gemm1":
+                passed |= {kw.arg for kw in n.keywords if kw.arg}
+    unknown = sorted(passed - accepted)
+    if unknown and not var_kw:
+        fail = True
+        print("MOE_SIG_MISMATCH compile_mixed_moe_gemm1 rejects:", unknown)
+    else:
+        print(f"MOE_SIG_OK compile_flydsl_moe_stage1 -> compile_mixed_moe_gemm1 "
+              f"({len(passed)} kwargs, all accepted)")
+except Exception as e:
+    print("MOE_SIG probe err", type(e).__name__, e)
 
 # _set_current_hip_stream is NOT a top-level attribute of aiter.jit.core -- it
 # is called there as `module._set_current_hip_stream(...)`, i.e. it lives on the
