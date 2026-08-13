@@ -1534,7 +1534,7 @@ minimaxm3-fp8-mi300x-vllm-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 6, 8, 10] }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [2, 4, 6, 8, 10] }
       - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.3" }, conc-list: [16] }
 
 # GLM-5.2 FP8 full-context AgentX refresh on MI325X. This preserves the TP8

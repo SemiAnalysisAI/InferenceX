@@ -5924,5 +5924,5 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Add MI300X MiniMax-M3 MXFP8 AgentX with vLLM EAGLE3-GQA, measured resident TP8 c1-c10, and an LMCache MP DRAM-offload c16 point."
+    - "Add MI300X MiniMax-M3 MXFP8 AgentX with vLLM EAGLE3-GQA, measured resident TP8 c2-c10, and an LMCache MP DRAM-offload c16 point."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2580
