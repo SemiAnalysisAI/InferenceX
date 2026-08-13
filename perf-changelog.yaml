@@ -1738,7 +1738,7 @@
     - "TP=2 and TP=4, concurrency 4-256 for 1k1k and 8k1k sequence lengths"
     - "Add --gpu-memory-utilization 0.9 to server launch"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1133
-  
+
 
 - config-keys:
     - dsv4-fp8-h200-vllm
@@ -1860,7 +1860,6 @@
     - "Image pinned to lmsysorg/sglang:deepseek-v4-b300@sha256:26e116bd211e300dbb76924d56c5cbe6cc3ee5ee2fe314859cb8774f5bc070f3"
     - "DP-attention path enables SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN=1 for better SWA eviction behavior"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1185
-  
 
 - config-keys:
     - dsv4-fp4-b200-sglang
@@ -5918,6 +5917,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2570
 
 - config-keys:
+    - minimaxm3-fp8-mi325x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add MiniMax-M3 MXFP8 AgentX on MI325X with vLLM v0.27.1, EAGLE3-GQA, golden synthetic acceptance length 2.78, and the measured resident TP8 frontier through its c16-c18 latency knee."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2579
+
+- config-keys:
     - qwen3.5-fp4-b200-sglang-mtp
   scenario-type:
     - fixed-seq-len
@@ -5925,3 +5932,31 @@
     - "Add a TEP2 arm (tp 2, ep 2) to the qwen3.5-fp4-b200-sglang-mtp 8k/1k sweep at concurrency 16, 32, and 64"
     - "Rides on the NVFP4-V2 checkpoint switch from #2205"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2550
+
+- config-keys:
+    - minimaxm3-fp8-mi300x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add MI300X MiniMax-M3 MXFP8 AgentX with vLLM EAGLE3-GQA, measured resident TP8 c2-c10, and an LMCache MP DRAM-offload c16 point."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2580
+
+- config-keys:
+    - dsv4-fp4-b200-sglang-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh the purged B200 DeepSeek-V4-Pro SGLang AgentX resident, DP-attention, and HiCache grid on SGLang v0.5.17."
+    - "Use native EAGLE MTP (3 steps, top-k 1, 4 draft tokens) and golden synthetic acceptance length 2.49 for throughput; eval retains real verification."
+    - "Follow the official SGLang DeepSeek-V4 Blackwell recipe, require nonempty SGLang server metrics, and keep pooled AgentX connections alive across inter-turn gaps."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2578
+
+- config-keys:
+    - dsv4-fp4-b300-sglang-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh the purged B300 DeepSeek-V4-Pro SGLang AgentX TP4, TP8, DP-attention, and HiCache grid on SGLang v0.5.17."
+    - "Use native EAGLE MTP (3 steps, top-k 1, 4 draft tokens) and golden synthetic acceptance length 2.49 for throughput; eval retains real verification."
+    - "Follow the official SGLang DeepSeek-V4 Blackwell recipe, require nonempty SGLang server metrics, keep pooled AgentX connections alive, let AIPerf own HiCache warmup, and reserve transient MoE workspace at DEP8 c512."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2577
