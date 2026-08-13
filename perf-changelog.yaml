@@ -5924,5 +5924,5 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Add MI300X GLM-5.2 FP8 AgentX with native SGLang EAGLE MTP and the verified resident Pareto matrix: TP8 c1-c3 plus TEP8 c3."
+    - "Add MI300X GLM-5.2 FP8 AgentX with native SGLang EAGLE MTP and the verified resident Pareto matrix: TP8 c1/c3 plus TEP8 c3."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2581
