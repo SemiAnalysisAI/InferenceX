@@ -647,7 +647,7 @@ kimik3-fp4-mi355x-vllm-disagg-agentic-mtp:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: vllm-simple }
-        conc-list: [8]
+        conc-list: [1, 8, 16]
         prefill:
           num-worker: 1
           tp: 8
