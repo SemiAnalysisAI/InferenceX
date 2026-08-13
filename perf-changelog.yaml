@@ -5962,4 +5962,4 @@
     - "Add a DeepSeek-V4-Pro FP4 Dynamo-TensorRT-LLM MTP AgentX configuration for GB300 with ten disaggregated topologies."
     - "Use NIXL KV transfer, deterministic MTP acceptance settings, and in-repo EPLB placement tables."
     - "Image: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc24"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2595
