@@ -5926,4 +5926,4 @@
   description:
     - "Add a dedicated LMCache 0.5.4rc2 DRAM KV-offload key at TP8 conc 4/8/16 on top of the unchanged kimik3-fp4-b300-vllm-agentic-dspark DSpark MTP stack, with the version pinned in the master config."
     - "Run one LMCache MP server per node with --separate-object-groups for the hybrid KDA/MLA multi-group layout, keeping the L1 in process memory (--shm-name \"\") so the DRAM budget is not capped by /dev/shm."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PR_NUMBER
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2593
