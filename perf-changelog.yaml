@@ -5911,5 +5911,5 @@
   description:
     - "Add GB200 DeepSeek-V4-Pro FP4 Dynamo-vLLM AgentX with K=2 MTP and golden synthetic acceptance length 2.49."
     - "Compare the B200 TP8 and DEP8 concurrency range and extend throughput with 1P1D and 2P1D DEP8 disaggregation."
-    - "Retain prefix-cache blocks for 32,768 scheduling steps and export every logical vLLM server-metrics endpoint."
+    - "Use KV-aware Dynamo routing with 4-hour correlation-ID affinity, authoritative vLLM KV events, prompt-token details, and every logical vLLM server-metrics endpoint."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2567

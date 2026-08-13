@@ -44,8 +44,10 @@ frontend:
   type: dynamo
   enable_multiple_frontends: false
   args:
-    router-mode: random
-    router-session-affinity-ttl-secs: 900
+    router-mode: kv
+    router-reset-states: true
+    router-session-affinity-ttl-secs: 14400
+    kv-cache-block-size: 256
 
 backend:
   type: vllm
@@ -67,6 +69,7 @@ backend:
     NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
   vllm_config:
     aggregated:
+      kv-events-config: '{"publisher":"zmq","topic":"kv-events","endpoint":"tcp://*:20080","enable_kv_cache_events":true}'
       served-model-name: deepseek-ai/DeepSeek-V4-Pro
       kv-cache-dtype: fp8
       tensor-parallel-size: 8
@@ -83,6 +86,7 @@ backend:
       gpu-memory-utilization: 0.90
       stream-interval: 10
       no-disable-hybrid-kv-cache-manager: true
+      enable-prompt-tokens-details: true
       tokenizer-mode: deepseek_v4
 
 sbatch_directives:

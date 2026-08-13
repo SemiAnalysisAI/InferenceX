@@ -36,8 +36,10 @@ frontend:
     # the healthy DEP8 workers are still computing their first responses.
     DYN_TCP_REQUEST_TIMEOUT: "60"
   args:
-    router-mode: random
-    router-session-affinity-ttl-secs: 900
+    router-mode: kv
+    router-reset-states: true
+    router-session-affinity-ttl-secs: 14400
+    kv-cache-block-size: 256
 
 backend:
   type: vllm
@@ -63,6 +65,7 @@ backend:
   vllm_config:
     prefill: &dep8_config
       kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
+      kv-events-config: '{"publisher":"zmq","topic":"kv-events","endpoint":"tcp://*:20080","enable_kv_cache_events":true}'
       served-model-name: deepseek-ai/DeepSeek-V4-Pro
       kv-cache-dtype: fp8
       tensor-parallel-size: 1
@@ -80,6 +83,7 @@ backend:
       block-size: 256
       gpu-memory-utilization: 0.95
       no-disable-hybrid-kv-cache-manager: true
+      enable-prompt-tokens-details: true
       enable-sleep-mode: true
       tokenizer-mode: deepseek_v4
       speculative-config: '{"method":"mtp","num_speculative_tokens":2}'
