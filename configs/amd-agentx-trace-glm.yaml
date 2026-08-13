@@ -38,6 +38,15 @@
 #   test-config --config-files configs/amd-agentx-trace-glm.yaml \
 #     --config-keys glm5.2-fp4-mi355x-sglang-disagg-agentic-p-tp8-d-tp8ep8dp8dpa-hicache-mtp-chash-trace \
 #     --conc 8
+#
+# Same chash topology + MTP5 (DECODE_MTP_SIZE=5, simulate AL 3.61), conc 16/20/24/28,
+# 60-minute profiling per conc — e.g. conc 16:
+#   test-config --config-files configs/amd-agentx-trace-glm.yaml \
+#     --config-keys glm5.2-fp4-mi355x-sglang-disagg-agentic-p-tp8-d-tp8ep8dp8dpa-hicache-mtp5-chash-c16-28-trace \
+#     --conc 16
+#
+# Recipe: benchmarks/multi_node/agentic/glm5.2_fp4_mi355x_sglang-disagg_chash_mtp5.sh
+#
 # conc-list is intentionally limited to [8]: this decode topology (EP8+DP8)
 # passes --max-running-requests=conc, which SGLang divides by dp_size(8) inside
 # the scheduler to get each DP rank's capacity. Confirmed via a live conc=2
@@ -47,7 +56,13 @@
 # decode topology; conc 2/4/6 need a non-DP decode topology instead (e.g.
 # ep:1, dp-attn:false) to be runnable.
 #
-# Recipe: benchmarks/multi_node/agentic/glm5.2_fp4_mi355x_sglang-disagg.sh
+# Symmetric 1P1D TP4/EP4 prefill + TP4/EP4 decode + HiCache, MTP5 tunables
+# (mem 0.80, chunk 32k, ratio 1.5, simulate AL 3.61) — e.g. conc 10:
+#   test-config --config-files configs/amd-agentx-trace-glm.yaml \
+#     --config-keys glm5.2-fp4-mi355x-sglang-disagg-agentic-p4-d4ep4-mtp-trace \
+#     --conc 10
+#
+# Recipe: benchmarks/multi_node/agentic/glm5.2_fp4_mi355x_sglang-disagg_tp4ep4_mtp.sh
 
 glm5.2-fp4-mi355x-sglang-disagg-agentic-tp8-nohicache-stp-trace:
   image: lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260729
@@ -291,3 +306,83 @@ glm5.2-fp4-mi355x-sglang-disagg-agentic-p-tp8-d-tp8ep8dp8dpa-hicache-mtp-chash-t
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=2"
           - "ROUTER_DECODE_POLICY=consistent_hashing"
+
+glm5.2-fp4-mi355x-sglang-disagg-agentic-p-tp8-d-tp8ep8dp8dpa-hicache-mtp5-chash-c16-28-trace:
+  image: lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260729
+  model: amd/GLM-5.2-MXFP4
+  model-prefix: glm5.2
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: sglang-disagg
+  kv-p2p-transfer: mori
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - spec-decoding: "mtp"
+        conc-list: [ 16, 20, 24, 28 ]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260729"
+          - "BENCHMARK_SCRIPT=benchmarks/multi_node/agentic/glm5.2_fp4_mi355x_sglang-disagg_chash_mtp5.sh"
+          - "HICACHE_RATIO=2"
+          - "HICACHE_WRITE_POLICY=write_through_selective"
+          - "HICACHE_PREFETCH_POLICY=best_effort"
+          - "HICACHE_MEM_LAYOUT=page_first_direct"
+          - "HICACHE_IO_BACKEND=direct"
+          - "HICACHE_PAGE_SIZE=1"
+          - "DURATION=3600"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=5"
+          - "ROUTER_DECODE_POLICY=consistent_hashing"
+
+glm5.2-fp4-mi355x-sglang-disagg-agentic-p4-d4ep4-mtp-trace:
+  image: lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260728
+  model: amd/GLM-5.2-MXFP4
+  model-prefix: glm5.2
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: sglang-disagg
+  kv-p2p-transfer: mori
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - spec-decoding: "mtp"
+        conc-list: [ 1, 2, 4, 8, 10, 12, 16 ]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260728"
+          - "BENCHMARK_SCRIPT=benchmarks/multi_node/agentic/glm5.2_fp4_mi355x_sglang-disagg_tp4ep4_mtp.sh"
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=5"

@@ -424,6 +424,10 @@ DOCKER_ENV_COMMON=(
     -e PREFILL_ENABLE_DP=\$PREFILL_ENABLE_DP
     -e PREFILL_CONTEXT_LENGTH=\${PREFILL_CONTEXT_LENGTH:-}
     -e PREFILL_CHUNKED_PREFILL_SIZE=\${PREFILL_CHUNKED_PREFILL_SIZE:-}
+    -e PREFILL_MEM_FRACTION_STATIC_OVERRIDE=\${PREFILL_MEM_FRACTION_STATIC_OVERRIDE:-}
+    -e DECODE_MEM_FRACTION_STATIC_OVERRIDE=\${DECODE_MEM_FRACTION_STATIC_OVERRIDE:-}
+    -e AGENTIC_DECODE_ALIGN_SINGLE_NODE_BS=\${AGENTIC_DECODE_ALIGN_SINGLE_NODE_BS:-}
+    -e DECODE_CUDA_GRAPH_BS_CAP=\${DECODE_CUDA_GRAPH_BS_CAP:-}
     -e SGLANG_AITER_MLA_PERSIST=\${SGLANG_AITER_MLA_PERSIST:-0}
     -e DISABLE_CUSTOM_ALL_REDUCE=\${DISABLE_CUSTOM_ALL_REDUCE:-0}
     -e MAX_MODEL_LEN=\${MAX_MODEL_LEN:-}
@@ -517,6 +521,7 @@ MORI_RDMA_TC=${MORI_RDMA_TC:-}
 SGLANG_SIMULATE_ACC_LEN=${SGLANG_SIMULATE_ACC_LEN:-}
 SGLANG_SIMULATE_ACC_METHOD=${SGLANG_SIMULATE_ACC_METHOD:-}
 SGLANG_SIMULATE_ACC_TOKEN_MODE=${SGLANG_SIMULATE_ACC_TOKEN_MODE:-}
+SGLANG_OPT_USE_TOPK_V2=${SGLANG_OPT_USE_TOPK_V2:-}
 ROUTER_PREFILL_POLICY=${ROUTER_PREFILL_POLICY:-${PREFILL_ROUTER_POLICY:-}}
 ROUTER_DECODE_POLICY=${ROUTER_DECODE_POLICY:-${DECODE_ROUTER_POLICY:-}}
 EOF
@@ -560,9 +565,12 @@ echo \"Rank \$SLURM_PROCID on \$(hostname)\"
 eval \"\$DOCKER_CMD_DETECT\"
 echo \"[docker-detect] rank \$SLURM_PROCID: DOCKER_CMD=\$DOCKER_CMD\"
 
-# Enable out-of-tree RDMA library mounts for atom-disagg (mooncake requires host RDMA stack)
+# Enable out-of-tree RDMA library mounts for disagg engines that use host RDMA
+# (atom mooncake KV + sglang Mori KV transfer). Without these bind-mounts on
+# amd-aim ionic nodes, the container's bundled libibverbs is ABI-incompatible
+# with the host kernel driver and Mori fails with 'no active RDMA device'.
 RDMA_MOUNTS=()
-if [[ "$ENGINE" == "atom-disagg" ]]; then
+if [[ "$ENGINE" == "atom-disagg" || "$ENGINE" == "sglang-disagg" ]]; then
 
 # When the container base OS differs from the host (e.g. Ubuntu 24.04 image
 # on a 22.04 host), the container's bundled libibverbs/libionic may be
@@ -576,10 +584,10 @@ _detect_nic_type() {
         for dev in /sys/class/infiniband/*; do
             local name; name=\$(basename \"\$dev\")
             case \"\$name\" in
-                bnxt_re*) ((bnxt++)) ;; mlx5*) ((mlx5++)) ;; ionic*) ((ionic++)) ;;
+                bnxt_re*) bnxt=\$((bnxt + 1)) ;; mlx5*) mlx5=\$((mlx5 + 1)) ;; ionic*) ionic=\$((ionic + 1)) ;;
                 *)
                     local drv; drv=\$(basename \"\$(readlink -f \"\$dev/device/driver\" 2>/dev/null)\" 2>/dev/null || true)
-                    case \"\$drv\" in bnxt*) ((bnxt++)) ;; mlx5*) ((mlx5++)) ;; ionic*) ((ionic++)) ;; esac ;;
+                    case \"\$drv\" in bnxt*) bnxt=\$((bnxt + 1)) ;; mlx5*) mlx5=\$((mlx5 + 1)) ;; ionic*) ionic=\$((ionic + 1)) ;; esac ;;
             esac
         done
     fi
@@ -636,7 +644,7 @@ if [[ \${#RDMA_MOUNTS[@]} -gt 0 ]]; then
 else
     echo \"[rdma] no out-of-tree RDMA mounts needed\"
 fi
-fi  # end: if ENGINE == atom-disagg
+fi  # end: if ENGINE needs host RDMA bind-mounts
 
 # Pre-clean (idempotent)
 \$DOCKER_CMD ps -aq --filter \"$CONT_FILTER\" | xargs -r \$DOCKER_CMD rm -f || true

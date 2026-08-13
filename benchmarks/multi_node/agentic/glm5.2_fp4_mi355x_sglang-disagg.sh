@@ -110,6 +110,13 @@ export ROUTER_PREFILL_POLICY="${ROUTER_PREFILL_POLICY:-${PREFILL_ROUTER_POLICY:-
 export ROUTER_DECODE_POLICY="${ROUTER_DECODE_POLICY:-${DECODE_ROUTER_POLICY:-}}"
 export ENABLE_METRICS="${ENABLE_METRICS:-1}"
 
+# Mirror glm5.2_fp4_mi355x_sglang_mtp.sh (#2570): keep --dsa-topk-backend
+# sgl-kernel (models.yaml) but disable the top-k v2 opt path. v2 is JIT-compiled
+# from CUDA-only source (cooperative_groups.h) and cannot build for gfx950; v1
+# dispatches to the precompiled HIP op in sgl-kernel (upstream MI355X CI runs
+# DSA models the same way).
+export SGLANG_OPT_USE_TOPK_V2=false
+
 if [[ "${SPEC_DECODING:-none}" == "mtp" || "${DECODE_MTP_SIZE:-0}" -gt 0 ]]; then
   # Do not use ${DECODE_MTP_SIZE:-2}: wrappers may pre-set 0 and block :- defaulting.
   if [[ "${DECODE_MTP_SIZE:-0}" -le 0 ]]; then
