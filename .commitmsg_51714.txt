@@ -1,0 +1,22 @@
+Drop the DP-attention guard now that aiter#4673 fixes the root cause
+
+The guard was added when DP-attention + gluon degenerated generation
+(gsm8k 1.00 -> 0.30 on EP8) and the cause was still unknown. It is now
+known: the gluon driver decided `use_buffer_load` from
+`nelement() * element_size()`, which undercounts a strided KV pool whose
+addressable span exceeds a 32-bit offset. Past 2 GiB the buffer_load
+offsets wrap and the gather returns zeros. DP-attention only mattered
+because it is what grows the pool far enough to cross the boundary.
+
+ROCm/aiter#4673 sizes the decision from the real strided span, so the
+condition the guard was standing in for no longer exists, and gating on
+data_parallel_size just disables the kernel on the configuration it was
+written for. Replace it with a comment naming aiter#4673 as the
+prerequisite; the existing try/except still falls back to Triton for the
+rest of the process if the kernel raises.
+
+Measured on MI355X (gfx950) with the fix in place: DEP8 (DP-attention,
+EP8) + MegaMoE + gluon at concurrency 96 reaches 12,244 tok/s/GPU, and
+all eight DP ranks log the gluon path engaging.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>

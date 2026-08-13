@@ -1,0 +1,73 @@
+diff --git a/aiter/ops/flydsl/moe_kernels.py b/aiter/ops/flydsl/moe_kernels.py
+index 4b3253b7c0..454a58b523 100644
+--- a/aiter/ops/flydsl/moe_kernels.py
++++ b/aiter/ops/flydsl/moe_kernels.py
+@@ -13,6 +13,9 @@
+ 
+ _KERNEL_PARAMS: dict[str, dict] = {}
+ 
++# HIP limits grid.y/grid.z to 65535.
++_HIP_MAX_GRID_DIM_Y = 65535
++
+ 
+ def _get_dtypes():
+     from aiter.utility import dtypes
+@@ -94,6 +97,25 @@ def pick_flydsl_stage1_tile_n(inter_dim: int) -> int:
+     return 256 if (inter_dim % 256 == 0) else 128
+ 
+ 
++def resolve_flydsl_grid_y_persist_m(
++    num_m_blocks: int, requested_persist_m: int = 0
++) -> int:
++    """Increase persist_m as needed to keep grid.y within HIP's limit."""
++    num_m_blocks = max(int(num_m_blocks), 0)
++    requested_persist_m = max(int(requested_persist_m), 1)
++    required_persist_m = max(
++        1, (num_m_blocks + _HIP_MAX_GRID_DIM_Y - 1) // _HIP_MAX_GRID_DIM_Y
++    )
++    return max(requested_persist_m, required_persist_m)
++
++
++def requires_flydsl_stage2_reduce(
++    token_num: int, model_dim: int, element_size: int
++) -> bool:
++    """Return whether stage2 atomic output exceeds 32-bit byte offsets."""
++    return int(token_num) * int(model_dim) * int(element_size) > 0xFFFFFFFF
++
++
+ def resolve_flydsl_stage2_tile_k(inter_dim: int, tile_k: int) -> int:
+     """Return a ``tile_k`` that divides ``inter_dim``, preferring the caller value.
+ 
+@@ -1403,7 +1425,7 @@ def flydsl_moe_stage1(
+     )
+     _grid_y = min(_dense_blks, _all_blks)
+ 
+-    _persist_m = persist_m if persist_m > 0 else 1
++    _persist_m = resolve_flydsl_grid_y_persist_m(_grid_y, persist_m)
+ 
+     # Allocate sorted-scale buffer with padding for tiled layout
+     scale_cols = inter_dim // 32
+@@ -1706,6 +1728,13 @@ def flydsl_moe_stage2(
+     # accumulate. Enabled by default; set AITER_FLYDSL_FORCE_REDUCE=0 to opt out.
+     if os.environ.get("AITER_FLYDSL_FORCE_REDUCE", "0") == "1":
+         mode = "reduce"
++    elif (
++        mode != "reduce"
++        and not return_per_slot
++        and requires_flydsl_stage2_reduce(token_num, model_dim, 2)
++    ):
++        # Buffer atomics use 32-bit offsets; reduce outputs larger than 4 GiB.
++        mode = "reduce"
+ 
+     accumulate = mode != "reduce" and not return_per_slot
+ 
+@@ -1764,7 +1793,8 @@ def flydsl_moe_stage2(
+         _persist_m = -1 if m_blocks > 256 else 1
+ 
+     if a_dtype == "fp8":
+-        _persist_m = 1
++        # FP8 uses non-persistent scheduling, so cap grid.y via persist_m.
++        _persist_m = resolve_flydsl_grid_y_persist_m(m_blocks)
+ 
+     if bias is not None and bias.dtype != torch.float32:
+         bias = bias.to(torch.float32)

@@ -5929,4 +5929,4 @@
     - "Patch stack is strictly additive and idempotent: vllm #51473 (native MXFP4 TP8 shard allocation, merged 2026-08-11 i.e. after this base), vllm #51714 (opt-in AITER gluon sparse-MLA decode for gfx950), vllm #51918 config/kernel.py only (registers the flydsl_mega_moe backend name), aiter #4417 (large-token FlyDSL MoE launch/output limits, grafted by anchor), plus the one gluon kernel file the base lacks"
     - "Nothing that ships in the base is overwritten: three of the four pa_decode_sparse variants already ship and are left untouched, aiter core is not modified, and the MegaMoE model-side hunks of #51918 are deliberately not applied because the base has no mori.ir.flydsl"
     - "Enable VLLM_ROCM_DSV4_SPARSE_GLUON=1 by default (overridable); the knob is read via os.environ rather than envs.py, so vLLM logs it as an unknown environment variable"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PRNUM
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2589
