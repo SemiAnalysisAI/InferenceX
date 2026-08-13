@@ -1539,6 +1539,23 @@ glm5.2-fp8-mi325x-sglang-agentic-mtp:
       search-space:
       - { tp: 8, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 3, 4, 5, 6, 8] }
 
+# Fast discovery found a sharp quality cliff after c3. Keep the verified TP and
+# TEP c3 points; lower concurrency repeatedly failed quality or memory gates.
+glm5.2-fp8-mi300x-sglang-agentic-mtp:
+  image: lmsysorg/sglang:v0.5.16-rocm720-mi30x
+  model: zai-org/GLM-5.2-FP8
+  model-prefix: glm5.2
+  runner: cluster:mi300x-amds
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [3] }
+      - { tp: 8, ep: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [3] }
+
 minimaxm3-fp8-mi325x-vllm-agentic:
   image: vllm/vllm-openai-rocm:nightly-04c2a8deac44fdb1ca3e2b5ec3e6bf16f3f6a914
   model: MiniMaxAI/MiniMax-M3-MXFP8
