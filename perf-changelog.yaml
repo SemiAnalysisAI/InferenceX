@@ -5960,5 +5960,5 @@
     - agentic-coding
   description:
     - "Add Qwen3.5 FP8 H200 SGLang AgentX MTP points with DRAM HiCache"
-    - "Use TP8/EP1 concurrency 2 through 24, published FlashInfer 0.6.15 CUDA 13 wheels, and golden MTP acceptance length 3.39"
+    - "Use TP8/EP1 concurrency 2 through 24, published FlashInfer 0.6.17 CUDA 13 wheels, and golden MTP acceptance length 3.39"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

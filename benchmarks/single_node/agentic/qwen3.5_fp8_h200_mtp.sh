@@ -44,12 +44,12 @@ export WEKA_LOADER_OVERRIDE=semianalysis_cc_traces_weka_with_subagents_256k
 resolve_trace_source
 install_agentic_deps
 
-agentic_pip_install --no-deps --force-reinstall flashinfer_python==0.6.15
+agentic_pip_install --no-deps --force-reinstall flashinfer_python==0.6.17
 agentic_pip_install \
-    --no-deps --force-reinstall flashinfer-cubin==0.6.15 \
+    --no-deps --force-reinstall flashinfer-cubin==0.6.17 \
     --index-url https://flashinfer.ai/whl
 agentic_pip_install \
-    --no-deps --force-reinstall flashinfer-jit-cache==0.6.15+cu130 \
+    --no-deps --force-reinstall flashinfer-jit-cache==0.6.17+cu130 \
     --index-url https://flashinfer.ai/whl/cu130
 
 SERVER_LOG="$RESULT_DIR/server.log"
