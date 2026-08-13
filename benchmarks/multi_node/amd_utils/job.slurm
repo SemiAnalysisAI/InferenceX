@@ -336,6 +336,7 @@ export MODAL_TOKEN_SECRET="${MODAL_TOKEN_SECRET:-}"
 export HF_TOKEN="${HF_TOKEN:-}"
 export SCENARIO_TYPE="${SCENARIO_TYPE:-}"
 export EVAL_LIMIT="${EVAL_LIMIT:-}"
+export ROUTER_METADATA="${ROUTER_METADATA:-}"
 
 SANITIZED_USER=$(echo "$USER_NAME" | tr -c 'a-zA-Z0-9_.-' '_')
 export DOCKER_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_${MODEL_NAME}_${SLURM_JOB_ID}"
@@ -343,7 +344,27 @@ export DOCKER_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_${MODEL_NAME}_${S
 # vLLM external router container.
 # NOTE: vllm/vllm-router only retains ~16 recent nightlies on Docker Hub; older
 # dated tags are garbage-collected (manifest unknown)
-VLLM_ROUTER_IMAGE="${VLLM_ROUTER_IMAGE:-vllm/vllm-router:nightly-20260716-1fbcde7}"
+if [[ -z "${VLLM_ROUTER_IMAGE:-}" && -n "${ROUTER_METADATA:-}" ]]; then
+    VLLM_ROUTER_IMAGE=$(python3 - <<'PY'
+import json
+import os
+import sys
+
+try:
+    metadata = json.loads(os.environ["ROUTER_METADATA"])
+except Exception:
+    sys.exit(0)
+
+name = metadata.get("name")
+version = metadata.get("version")
+if name == "vllm-router" and version:
+    print(f"vllm/vllm-router:{version}")
+PY
+)
+fi
+VLLM_ROUTER_IMAGE="${VLLM_ROUTER_IMAGE:-vllm/vllm-router:nightly-20260804-d60711d}"
+export VLLM_ROUTER_IMAGE
+echo "VLLM_ROUTER_IMAGE: $VLLM_ROUTER_IMAGE"
 ROUTER_CONT_NAME="router_vllm_${SANITIZED_USER}_${SLURM_JOB_ID}"
 # Separate agentic benchmark-client container (see CLIENT_IMAGE handling below).
 CLIENT_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_client_${SLURM_JOB_ID}"
@@ -491,7 +512,7 @@ DOCKER_ENV_COMMON=(
     -e AIPERF_WARMUP_REQUESTS_PER_LANE=\${AIPERF_WARMUP_REQUESTS_PER_LANE:-}
     -e AIPERF_TRACE_IDLE_GAP_CAP_SECONDS=\${AIPERF_TRACE_IDLE_GAP_CAP_SECONDS:-}
     -e AIPERF_FAILED_REQUEST_THRESHOLD=\${AIPERF_FAILED_REQUEST_THRESHOLD:-}
-    -e AIPERF_HTTP_TCP_USER_TIMEOUT=\${AIPERF_HTTP_TCP_USER_TIMEOUT:-}
+    -e AIPERF_HTTP_TCP_USER_TIMEOUT=\${AIPERF_HTTP_TCP_USER_TIMEOUT:-900000}
     -e AIPERF_EXPERIMENTAL_FAST=\${AIPERF_EXPERIMENTAL_FAST:-}
     -e DECODE_TP_SIZE=\$DECODE_TP_SIZE
     -e DECODE_TP=\$DECODE_TP

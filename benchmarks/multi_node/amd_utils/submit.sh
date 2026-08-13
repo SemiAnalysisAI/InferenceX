@@ -165,6 +165,7 @@ export MODAL_TOKEN_SECRET="${MODAL_TOKEN_SECRET:-}"
 export HF_TOKEN="${HF_TOKEN:-}"
 export SCENARIO_TYPE="${SCENARIO_TYPE:-}"
 export EVAL_LIMIT="${EVAL_LIMIT:-}"
+export ROUTER_METADATA="${ROUTER_METADATA:-}"
 
 # Log directory: must be on NFS (shared filesystem) so the submit host can read SLURM output.
 export BENCHMARK_LOGS_DIR="${BENCHMARK_LOGS_DIR:-$(pwd)/benchmark_logs}"
@@ -186,7 +187,7 @@ fi
 # Optional: exclude specific nodes (e.g. nodes with broken Docker sockets).
 # Set SLURM_EXCLUDE_NODES env var to a comma-separated list of hostnames.
 EXCLUDE_OPT=()
-SLURM_EXCLUDE_NODES="${SLURM_EXCLUDE_NODES:-mia1-p01-g09,mia1-p01-g10,mia1-p01-g11,mia1-p01-g12}"
+SLURM_EXCLUDE_NODES="${SLURM_EXCLUDE_NODES:-mia1-p01-g09,mia1-p01-g10,mia1-p01-g11,mia1-p01-g12,mia1-p01-g16}"
 if [[ -n "${SLURM_EXCLUDE_NODES:-}" ]]; then
     EXCLUDE_OPT=(--exclude "$SLURM_EXCLUDE_NODES")
 fi
