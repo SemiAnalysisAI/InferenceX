@@ -1441,6 +1441,429 @@ DIFF_BLOCK_POOL_REFCNT
 apply_one "vllm/v1/core/block_pool.py" "_report_negative_usage" "$WS/BLOCK_POOL_REFCNT.diff"
 
 
+
+# ---------------------------------------------------------------------------
+# KV block accounting fixes for the hybrid (MLA + KDA) cache
+#
+# Four defects found while chasing a reproducible 24-minute crash on the K3
+# disagg arm, where decode died with "Cannot get 1 free blocks from the pool" at
+# 99.7% pool usage while the reported KV usage on prefill went negative.
+#
+#   1. find_longest_cache_hit reconciles every group's prefix hit to the
+#      shallowest, but only truncates attention_groups[0], sized with
+#      group_ids[0]'s block size. K3 has two full-attention groups at 3072 and
+#      1536, which are separate attention groups, so the second one kept a block
+#      list deeper than the reported hit_length -- by an exact multiple of 3072
+#      tokens, measured fourteen times out of fourteen. That over-long list is
+#      what allocate_external_computed_blocks then subtracts from, producing a
+#      negative block request that inflates the free-block counter.
+#   2. allocate_external_computed_blocks passes an unguarded
+#      cdiv(total, bs) - len(req_blocks); the queue and the pool both let a
+#      negative through and then decrement the counter the wrong way. Clamped at
+#      the source and refused in both places, matching the max(..., 0) the base
+#      class already applies for the same hazard.
+#   3. MambaManager's align predictor reserves 1 + num_speculative_blocks but
+#      inherits the token-proportional external allocator, so every external-KV
+#      admission took one unreserved block per mamba group.
+#   4. The base-class running-request fast path returns before the partial-hit
+#      branch while allocate_new_blocks still takes a CoW block for a request
+#      carried in _partial_hit_reqs.
+#
+# Verified on this arm: with these in place a 30-minute conc=8 replay reports
+# zero pool exhaustions, zero reservation shortfalls, zero counter drift and zero
+# negative usage on both engines, GSM8K scores 0.995 cold and hot, and the replay
+# completes with 0/243 request errors where the unpatched arm died at 24 minutes.
+#
+# Diagnostics-only code (free-list audits, pool dumps, drift classifier, the
+# hit-list overrun probe) is deliberately not carried here.
+# ---------------------------------------------------------------------------
+say "kv-fix 1/7 reserve the block the CoW path takes"
+ROOT="$ROOT" python3 - <<'PY_ALLOC_FIX'
+import os, sys
+
+root = os.environ["ROOT"]
+path = os.path.join(root, "vllm/v1/core/single_type_kv_cache_manager.py")
+src = open(path, encoding="utf-8").read()
+
+if "carried partial hit" in src:
+    print("  single_type_kv_cache_manager.py: reservation fix already present (skip)")
+    sys.exit(0)
+
+OLD = """        if request_id in self.num_cached_block:
+            # Fast-path: a running request won't have any new prefix-cache hits.
+            assert len(new_computed_blocks) == 0
+            # NOTE: With speculative decoding, request's blocks may be allocated
+            # for draft tokens which are later rejected. In this case,
+            # num_required_blocks may be smaller than num_req_blocks.
+            return max(num_required_blocks - num_req_blocks, 0)
+"""
+NEW = """        if request_id in self.num_cached_block:
+            # Fast-path: a running request won't have any new prefix-cache hits.
+            assert len(new_computed_blocks) == 0
+            # NOTE: With speculative decoding, request's blocks may be allocated
+            # for draft tokens which are later rejected. In this case,
+            # num_required_blocks may be smaller than num_req_blocks.
+            num_new_blocks = max(num_required_blocks - num_req_blocks, 0)
+            if request_id in self._partial_hit_reqs:
+                # A carried partial hit: allocate_new_blocks unconditionally
+                # pulls the private CoW block for it, so it has to be reserved
+                # here too. The partial-hit branch below is unreachable on this
+                # path (it keys off new_computed_blocks, which is empty for a
+                # running request), and MambaManager's own predictor already
+                # ORs this condition in. Missing it reserves N and takes N+1,
+                # which only fails once the pool has no slack left.
+                num_new_blocks += 1
+            return num_new_blocks
+"""
+if src.count(OLD) != 1:
+    print(f"  ERROR: fast-path anchor found {src.count(OLD)} times (expected 1)")
+    sys.exit(1)
+src = src.replace(OLD, NEW, 1)
+
+open(path, "w", encoding="utf-8").write(src)
+print("  single_type_kv_cache_manager.py: APPLIED (carried partial-hit reservation)")
+PY_ALLOC_FIX
+
+say "kv-fix 2/7 clamp the negative external block request"
+ROOT="$ROOT" python3 - <<'PY_NEG_ALLOC'
+import os, sys
+
+root = os.environ["ROOT"]
+path = os.path.join(root, "vllm/v1/core/single_type_kv_cache_manager.py")
+src = open(path, encoding="utf-8").read()
+
+if "_NEG_EXTERNAL_REPORTS" in src:
+    print("  single_type_kv_cache_manager.py: negative-request clamp already present (skip)")
+    sys.exit(0)
+
+def sub(old, new, what):
+    global src
+    n = src.count(old)
+    if n != 1:
+        print(f"  ERROR: anchor for {what} found {n} times (expected 1)")
+        sys.exit(1)
+    src = src.replace(old, new, 1)
+
+# This module has no logger of its own yet.
+sub(
+    "from vllm.utils.math_utils import cdiv\n",
+    "from vllm.logger import init_logger\nfrom vllm.utils.math_utils import cdiv\n",
+    "logger import",
+)
+sub(
+    "class SingleTypeKVCacheManager(ABC):\n",
+    "logger = init_logger(__name__)\n"
+    "\n"
+    "_MAX_NEG_EXTERNAL_REPORTS = 20\n"
+    "_NEG_EXTERNAL_REPORTS = 0\n"
+    "\n"
+    "\n"
+    "class SingleTypeKVCacheManager(ABC):\n",
+    "module-level logger and report cap",
+)
+
+sub(
+    """        req_blocks = self.req_to_blocks[request_id]
+        allocated_blocks = self.block_pool.get_new_blocks(
+            cdiv(num_total_computed_tokens, self.block_size) - len(req_blocks)
+        )
+""",
+    """        req_blocks = self.req_to_blocks[request_id]
+        num_missing = cdiv(num_total_computed_tokens, self.block_size) - len(req_blocks)
+        if num_missing < 0:
+            # The blocks this group already holds cover the computed tokens, so
+            # there is nothing to allocate. Passing the negative through would
+            # not allocate anything either -- it would add |num_missing| to
+            # num_free_blocks, because popleft_n subtracts n unconditionally and
+            # then iterates range(n) zero times. The counter would over-report
+            # free blocks from then on, which reads as a negative KV cache usage
+            # and eventually hands out the fake list tail as a real block.
+            global _NEG_EXTERNAL_REPORTS
+            if _NEG_EXTERNAL_REPORTS < _MAX_NEG_EXTERNAL_REPORTS:
+                _NEG_EXTERNAL_REPORTS += 1
+                logger.error(
+                    "External KV allocation asked for %d blocks in group %s/%s "
+                    "(block_size=%d): total_computed=%d needs %d block(s) but "
+                    "the request already holds %d. Clamping to 0. (report "
+                    "%d/%d)",
+                    num_missing,
+                    self.kv_cache_group_id,
+                    type(self).__name__,
+                    self.block_size,
+                    num_total_computed_tokens,
+                    cdiv(num_total_computed_tokens, self.block_size),
+                    len(req_blocks),
+                    _NEG_EXTERNAL_REPORTS,
+                    _MAX_NEG_EXTERNAL_REPORTS,
+                    stack_info=True,
+                )
+            return
+        if num_missing == 0:
+            return
+        allocated_blocks = self.block_pool.get_new_blocks(num_missing)
+""",
+    "external allocation clamp",
+)
+
+open(path, "w", encoding="utf-8").write(src)
+print("  single_type_kv_cache_manager.py: APPLIED (negative external request clamp)")
+PY_NEG_ALLOC
+
+say "kv-fix 3/7 refuse a negative popleft_n"
+ROOT="$ROOT" python3 - <<'PY_NEG_QUEUE'
+import os, sys
+
+root = os.environ["ROOT"]
+path = os.path.join(root, "vllm/v1/core/kv_cache_utils.py")
+src = open(path, encoding="utf-8").read()
+
+if "asked for a negative number of blocks" in src:
+    print("  kv_cache_utils.py: negative popleft_n guard already present (skip)")
+    sys.exit(0)
+
+OLD = """        if n == 0:
+            return []
+        assert self.num_free_blocks >= n
+        self.num_free_blocks -= n
+"""
+NEW = """        if n < 0:
+            # `num_free_blocks -= n` would raise the counter by |n| while
+            # range(n) pops nothing, leaving the counter permanently above the
+            # list. Refuse instead: the caller wanted no blocks.
+            logger.error(
+                "Free block queue asked for a negative number of blocks (n=%d); "
+                "returning none. Subtracting it would inflate num_free_blocks "
+                "(currently %d) and the pool would start over-reporting free "
+                "space.",
+                n,
+                self.num_free_blocks,
+                stack_info=True,
+            )
+            return []
+        if n == 0:
+            return []
+        assert self.num_free_blocks >= n
+        self.num_free_blocks -= n
+"""
+if src.count(OLD) != 1:
+    print(f"  ERROR: popleft_n prologue anchor found {src.count(OLD)} times")
+    sys.exit(1)
+src = src.replace(OLD, NEW, 1)
+
+open(path, "w", encoding="utf-8").write(src)
+print("  kv_cache_utils.py: APPLIED (negative popleft_n guard)")
+PY_NEG_QUEUE
+
+say "kv-fix 4/7 refuse a negative get_new_blocks"
+ROOT="$ROOT" python3 - <<'PY_NEG_POOL'
+import os, sys
+
+root = os.environ["ROOT"]
+path = os.path.join(root, "vllm/v1/core/block_pool.py")
+src = open(path, encoding="utf-8").read()
+
+if "negative block count" in src:
+    print("  block_pool.py: negative get_new_blocks guard already present (skip)")
+    sys.exit(0)
+
+OLD = """        if num_blocks > self.get_num_free_blocks():
+"""
+NEW = """        if num_blocks < 0:
+            logger.error(
+                "get_new_blocks called with a negative block count (%d); "
+                "treating it as 0. The free-block gate below compares with > so "
+                "a negative passes it, and popleft_n would then add %d to "
+                "num_free_blocks.",
+                num_blocks,
+                -num_blocks,
+                stack_info=True,
+            )
+            num_blocks = 0
+        if num_blocks > self.get_num_free_blocks():
+"""
+if src.count(OLD) != 1:
+    print(f"  ERROR: get_new_blocks gate anchor found {src.count(OLD)} times")
+    sys.exit(1)
+src = src.replace(OLD, NEW, 1)
+
+open(path, "w", encoding="utf-8").write(src)
+print("  block_pool.py: APPLIED (negative get_new_blocks guard)")
+PY_NEG_POOL
+
+say "kv-fix 5/7 mamba align reservation is never negative"
+ROOT="$ROOT" python3 - <<'PY_MAMBA_RESERVE'
+import os, sys
+
+root = os.environ["ROOT"]
+path = os.path.join(root, "vllm/v1/core/single_type_kv_cache_manager.py")
+src = open(path, encoding="utf-8").read()
+
+if "never negative" in src:
+    print("  single_type_kv_cache_manager.py: mamba reservation clamp already present (skip)")
+    sys.exit(0)
+
+OLD = """            if num_new_blocks > 0:
+                if request_id in self._allocated_block_reqs:
+                    # Old request. Needs at most 1 more blocks as we can reuse the
+                    # speculative blocks in previous step.
+                    num_new_blocks = 1 + int(has_partial_hit)
+                else:
+                    # First prefill. Allocate 1 block for running state, the
+                    # speculative blocks, and one extra block if a partial cache
+                    # hit must be copy-on-written before the new tokens run.
+                    num_new_blocks = (
+                        1 + self.num_speculative_blocks + int(has_partial_hit)
+                    )
+"""
+NEW = """            if num_new_blocks > 0:
+                if request_id in self._allocated_block_reqs:
+                    # Old request. Needs at most 1 more blocks as we can reuse the
+                    # speculative blocks in previous step.
+                    num_new_blocks = 1 + int(has_partial_hit)
+                else:
+                    # First prefill. Allocate 1 block for running state, the
+                    # speculative blocks, and one extra block if a partial cache
+                    # hit must be copy-on-written before the new tokens run.
+                    num_new_blocks = (
+                        1 + self.num_speculative_blocks + int(has_partial_hit)
+                    )
+            else:
+                # The request already holds at least as many blocks as it needs,
+                # which happens once rejected draft tokens shrink the requirement
+                # below what a previous step allocated. allocate_new_blocks
+                # returns [] here, so the reservation is zero and never negative:
+                # allocate_slots sums these across managers before checking the
+                # free list, and a negative would quietly hand another manager
+                # blocks that do not exist.
+                num_new_blocks = 0
+"""
+if src.count(OLD) != 1:
+    print(f"  ERROR: mamba predictor anchor found {src.count(OLD)} times (expected 1)")
+    sys.exit(1)
+src = src.replace(OLD, NEW, 1)
+
+open(path, "w", encoding="utf-8").write(src)
+print("  single_type_kv_cache_manager.py: APPLIED (mamba reservation never negative)")
+PY_MAMBA_RESERVE
+
+say "kv-fix 6/7 mamba reserves its external block"
+ROOT="$ROOT" python3 - <<'PY_MAMBA_EXTERNAL'
+import os, sys
+
+root = os.environ["ROOT"]
+path = os.path.join(root, "vllm/v1/core/single_type_kv_cache_manager.py")
+src = open(path, encoding="utf-8").read()
+
+if "the external block that the inherited" in src:
+    print("  single_type_kv_cache_manager.py: mamba external reservation already present (skip)")
+    sys.exit(0)
+
+OLD = """            num_evictable_computed_blocks = self._get_num_evictable_blocks(
+                new_computed_blocks
+            )
+            return num_new_blocks + num_evictable_computed_blocks
+"""
+NEW = """            # Reserve the external block that the inherited
+            # allocate_external_computed_blocks will take. That method is
+            # token-proportional -- get_new_blocks(cdiv(total_computed,
+            # block_size) - len(req_blocks)) -- while the reservation above
+            # collapses to a state block plus the speculative ones, so the
+            # difference is consumed on every admission and reserved on none.
+            # On the decode side of a P/D split every request arrives with
+            # external computed tokens, which is why that engine is the one
+            # that runs out. The block is genuinely needed: allocate_new_blocks
+            # records it as last_state_block_idx, where the transferred mamba
+            # state lands. Predict the length that method will see rather than
+            # assuming a count: add_local_computed_blocks pads with
+            # num_skipped_blocks nulls and then appends whatever survives
+            # slicing the hit list by the same amount.
+            if total_computed_tokens > num_local_computed_tokens:
+                num_skipped_blocks = (
+                    self.get_num_skipped_tokens(total_computed_tokens)
+                    // self.block_size
+                )
+                num_blocks_after_local = (
+                    len(self.req_to_blocks[request_id])
+                    + num_skipped_blocks
+                    + max(len(new_computed_blocks) - num_skipped_blocks, 0)
+                )
+                num_new_blocks += max(
+                    cdiv(total_computed_tokens, self.block_size)
+                    - num_blocks_after_local,
+                    0,
+                )
+
+            num_evictable_computed_blocks = self._get_num_evictable_blocks(
+                new_computed_blocks
+            )
+            return num_new_blocks + num_evictable_computed_blocks
+"""
+if src.count(OLD) != 1:
+    print(f"  ERROR: mamba return anchor found {src.count(OLD)} times (expected 1)")
+    sys.exit(1)
+src = src.replace(OLD, NEW, 1)
+
+open(path, "w", encoding="utf-8").write(src)
+print("  single_type_kv_cache_manager.py: APPLIED (mamba reserves the external block)")
+PY_MAMBA_EXTERNAL
+
+say "kv-fix 7/7 reconcile every full-attention group"
+ROOT="$ROOT" python3 - <<'PY_HIT_FIX'
+import io
+import os
+import sys
+
+root = os.environ["ROOT"]
+path = os.path.join(root, "vllm", "v1", "core", "kv_cache_coordinator.py")
+src = io.open(path, encoding="utf-8").read()
+
+if "run17: reconcile every full-attention group" in src:
+    print("      already patched")
+    sys.exit(0)
+
+OLD = """        # Truncate full attention blocks to final hit_length (if present)
+        first_group = self.attention_groups[0]
+        if isinstance(first_group.spec, FullAttentionSpec):
+            group_block_size = self.single_type_managers[
+                first_group.group_ids[0]
+            ].block_size
+            num_blocks = cdiv(hit_length, group_block_size)
+            for group_id in first_group.group_ids:
+                if (blks := hit_blocks_by_group[group_id]) is not None:
+                    del blks[num_blocks:]
+                    hit_length_by_group[group_id] = hit_length
+"""
+if src.count(OLD) != 1:
+    print("      ERROR: truncation block not found verbatim (%d matches)" % src.count(OLD))
+    sys.exit(1)
+
+NEW = """        # run17: reconcile every full-attention group, each by its own block
+        # size. This used to truncate only attention_groups[0], sized with
+        # group_ids[0]'s block_size. A hybrid model with two full-attention
+        # groups at different block sizes (K3: 3072 and 1536) puts them in
+        # separate attention_groups, so the second one was never brought back to
+        # the agreed boundary -- it kept its own deeper hit while the reported
+        # hit_length was the shallower reconciled value. Every consumer that
+        # sizes work from hit_length then disagrees with that group's block list;
+        # allocate_external_computed_blocks is the one that turns the difference
+        # into a negative block request and an inflated free-block counter.
+        for _group in self.attention_groups:
+            if not isinstance(_group.spec, FullAttentionSpec):
+                continue
+            for group_id in _group.group_ids:
+                blks = hit_blocks_by_group[group_id]
+                if blks is None:
+                    continue
+                _bs = self.single_type_managers[group_id].block_size
+                del blks[cdiv(hit_length, _bs):]
+                hit_length_by_group[group_id] = hit_length
+"""
+src = src.replace(OLD, NEW, 1)
+io.open(path, "w", encoding="utf-8", newline="").write(src)
+print("      patched kv_cache_coordinator.py: all full-attention groups reconciled")
+PY_HIT_FIX
+
+
 say "3/4 aiter #4521 (fp8 cp round-robin asm MLA verify kernels)  [needs network + hipcc + GPU]"
 # Unlike the offline Python diffs above, #4521 ships BINARY .co kernels (not in
 # the GitHub .diff) and a C++ asm_mla.cu change that must be recompiled, so this
