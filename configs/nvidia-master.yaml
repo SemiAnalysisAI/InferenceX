@@ -1566,11 +1566,12 @@ kimik3-fp4-b300-vllm-agentic-dspark-lmcache:
     agentic-coding:
     - dram-utilization: 0.63
       search-space:
-      # conc 4/8/16 overlaps the base key's vllm-simple ladder at its top three
-      # offload points, so LMCache is directly comparable there. TP8-only for
-      # the same reason as the base key: a ~1.5 TB MXFP4 checkpoint does not
-      # fit below 8 GPUs.
-      - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.4rc2" }, conc-list: [4, 8, 16] }
+      # 4/8/16 land on the base key's vllm-simple ladder at its top three
+      # offload points, so LMCache is directly comparable there; 10 fills the
+      # 8->16 gap, where the MI355X sister arm's ladder is densest. TP8-only
+      # for the same reason as the base key: a ~1.5 TB MXFP4 checkpoint does
+      # not fit below 8 GPUs.
+      - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.4rc2" }, conc-list: [4, 8, 10, 16] }
 
 dsr1-fp8-b200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
