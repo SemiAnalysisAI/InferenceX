@@ -600,7 +600,10 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
       #- { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-k3, version: "git" }, conc-list: [12], spec-decoding: mtp}
       #- { tp: 8, kv-offloading: none, conc-list: [8] , spec-decoding: mtp}
       #- { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [10], spec-decoding: mtp }
-      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [12], spec-decoding: mtp }
+      #- { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [12], spec-decoding: mtp }
+      # c1 audit of the "fp8 ASM DSpark, synthetic AL 2.51" point: no offload, so
+      # the only variable against the published red line is the PR stack.
+      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1], spec-decoding: mtp }
       #- { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "git" }, conc-list: [12], spec-decoding: mtp}
 
 dsr1-fp4-mi355x-sglang-disagg:

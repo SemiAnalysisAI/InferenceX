@@ -219,8 +219,40 @@ fi
 
 MAX_NUM_SEQS=20
 MAX_CUDAGRAPH_CAPTURE_SIZE="${MAX_CUDAGRAPH_CAPTURE_SIZE:-44}"
-CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 1 "$MAX_CUDAGRAPH_CAPTURE_SIZE")"
-COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}")
+
+# dense (default, unchanged): capture every size 1..MAX. Every integer token
+# count then has a desc, and _init_candidates builds a FULL decode desc at
+# round_up(num_tokens, decode_qlen) and appends it AHEAD of the PIECEWISE one --
+# so every reachable uniform-decode count (qlen * nreqs) already resolves to a
+# FULL graph and nothing falls to eager. That also makes vllm#52000 a no-op.
+#
+# sparse: let vLLM derive its stock ladder (still capped by
+# max_cudagraph_capture_size), which leaves gaps that round_up can miss -- at
+# qlen 3 a 12-token batch rounds to the size-16 PIECEWISE desc and never reaches
+# the size-18 FULL decode desc. That gap is exactly what #52000 fixes, so this is
+# the arm where the PR can be measured. It also captures far fewer graphs.
+CUDAGRAPH_LADDER="${CUDAGRAPH_LADDER:-dense}"
+case "$CUDAGRAPH_LADDER" in
+    dense)
+        CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 1 "$MAX_CUDAGRAPH_CAPTURE_SIZE")"
+        CAPTURE_SIZES_JSON=",\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]"
+        ;;
+    sparse)
+        CAPTURE_SIZES_JSON=""
+        ;;
+    *)
+        echo "Error: CUDAGRAPH_LADDER must be 'dense' or 'sparse', got '$CUDAGRAPH_LADDER'." >&2
+        exit 1
+        ;;
+esac
+COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"]$CAPTURE_SIZES_JSON}")
+echo "CUDAGRAPH_LADDER=$CUDAGRAPH_LADDER -> ${COMPILATION_CONFIG_ARGS[1]}"
+
+# Which model runner is live decides which of the PRs under test can execute at
+# all: #52000 patches the V2 runner (vllm/v1/worker/gpu/cudagraph_utils.py) and
+# #51590 patches V1. method=dspark forces V2, so record the resolved value here
+# rather than inferring it from the config afterwards.
+echo "VLLM_USE_V2_MODEL_RUNNER=${VLLM_USE_V2_MODEL_RUNNER:-<unset; dspark forces V2>}"
 
 if [[ "${KV_OFFLOAD_BACKEND:-}" == "vllm-simple" ]]; then
     # The full 1M K3 + DSpark graph is within 0.34 GiB of the post-load free

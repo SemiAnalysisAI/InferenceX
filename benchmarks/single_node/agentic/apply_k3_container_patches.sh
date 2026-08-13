@@ -60,6 +60,24 @@
 #                kernels. SUPERSEDES the earlier HYBRID (gluon-flatten) verify.
 #                mla_gluon bh16bn128 batch<=256 relax + fp8-query dequant are
 #                kept (used by the bf16 verify path).
+#   vllm  #52000 offer a padded FULL decode graph to a uniform-decode batch
+#                instead of letting it fall to an eager PIECEWISE desc. INERT
+#                under cudagraph_capture_sizes=[1..44]; needs the launcher's
+#                CUDAGRAPH_LADDER=sparse to have a gap to fix. Patches the V2
+#                runner (vllm/v1/worker/gpu/), which dspark forces.
+#   vllm  #51590 capture every descriptor while profiling cudagraph memory
+#                rather than extrapolating from the first two, and account for
+#                the scratch profiling leaves behind. NO-OP HERE: it patches the
+#                V1 runner, and V2's profile_cudagraph_memory is a stub returning
+#                0. Applied under WITH_PR51590 (default 1) so the null result is
+#                recorded rather than assumed.
+#   aiter #4713  get_block_n_fp8 lookup no longer KeyErrors at the spec-decode
+#                verify widths 80/96/112.
+#   aiter #4715  FlyDSL split-K semaphore/signal workspace allocated fresh under
+#                cudagraph capture, so the zero-fill is a graph node. FlyDSL
+#                sibling of #4494 above.
+#   aiter #4647  NOT APPLIED -- targets a v2_output_layout FlyDSL MoE path that
+#                postdates this image's aiter pin. Probed at runtime, not assumed.
 #   triton 3.7.0 (AMD ROCm 7.2.0) + tabulate + lm_eval[api]==0.4.12
 #
 # Run INSIDE a fresh container of that image:
@@ -1749,6 +1767,549 @@ apply_one "vllm/v1/core/kv_cache_utils.py" \
   "$WS/KV_QUEUE_MEMBERSHIP.diff"
 
 
+# ---- PRs under test: the xiaohuguo cudagraph / MLA stack ---------------------
+# Five PRs, all OPEN. Ported as anchor-matched diffs generated against the exact
+# sources this image builds from (vllm cb8104839c14, aiter v0.1.19 per
+# docker/Dockerfile.rocm_base), because the installed tree drifts from what
+# GitHub serves for the same tag. Each was round-tripped offline: applied to a
+# pristine checkout with `git apply`, then diffed back against the expected
+# post-state.
+#
+#   vllm  #51040  already embedded above (fp8 asm MLA prefill, pad-to-16)
+#   vllm  #52000  padded FULL decode graph instead of eager PIECEWISE
+#   vllm  #51590  measure the real cudagraph capture footprint for KV budgeting
+#   aiter #4713   get_block_n_fp8 KeyError at spec-decode verify widths
+#   aiter #4715   FlyDSL split-K semaphore re-zeroed inside the capture
+#   aiter #4647   NOT APPLIED -- see the probe below
+
+# aiter#4713 -- get_block_n_fp8 is indexed by nhead * max_seqlen_q, which for K3
+# at TP8 (12 heads padded to 16) and a DSpark verify is 16*5=80, 16*6=96 or
+# 16*7=112. None of those keys exist, so the lookup raises KeyError mid-decode.
+# Adds the three entries and makes the lookup fall back instead of raising.
+cat > "$WS/AITER_BLOCKN.diff" <<'DIFF_AITER_BLOCKN'
+diff --git a/aiter/mla.py b/aiter/mla.py
+--- a/aiter/mla.py
++++ b/aiter/mla.py
+@@ -193,6 +193,9 @@
+         32: 128,
+         48: 64,
+         64: 64,
++        80: 64,
++        96: 64,
++        112: 64,
+         128: 32,
+         256: 32,
+         384: 32,
+@@ -200,7 +203,7 @@
+     }
+__EMPTY_CONTEXT__
+     if dtype == dtypes.fp8 and not ignore_total_kv:
+-        min_block_n = get_block_n_fp8[int(nhead * max_seqlen_q)]
++        min_block_n = get_block_n_fp8.get(int(nhead * max_seqlen_q), 64)
+         # ceil(avg_kv / min_block_n) computed in pure integers (avg_kv = total_kv/bs).
+         num_kv_splits = min(
+             num_kv_splits,
+DIFF_AITER_BLOCKN
+sed -i 's/^__EMPTY_CONTEXT__$/ /' "$WS/AITER_BLOCKN.diff"
+apply_one "aiter/mla.py" "get_block_n_fp8.get(" "$WS/AITER_BLOCKN.diff"
+
+# aiter#4715 -- the FlyDSL sibling of #4494, which this script already applies to
+# gemm_op_a16w16.py above. The stream-cached split-K semaphore/signal pair is
+# zeroed once, eagerly, before capture, so the zero-fill is not a graph node. The
+# reduction decrements those counters as workgroups retire and nothing re-arms
+# them on replay, so the last-workgroup handshake hangs. Allocate a fresh zeroed
+# workspace per capture and keep it alive for the process lifetime.
+cat > "$WS/FLYDSL_SPLITK.diff" <<'DIFF_FLYDSL_SPLITK'
+diff --git a/aiter/ops/flydsl/gemm_kernels.py b/aiter/ops/flydsl/gemm_kernels.py
+--- a/aiter/ops/flydsl/gemm_kernels.py
++++ b/aiter/ops/flydsl/gemm_kernels.py
+@@ -697,8 +697,13 @@
+ _register_all_configs()
+__EMPTY_CONTEXT__
+__EMPTY_CONTEXT__
++# Captured split-K semaphore/signal workspaces are kept alive for the process
++# lifetime so the graph-recorded zero-fill has valid backing storage on replay.
++_captured_split_k_keepalive: list[tuple[torch.Tensor, torch.Tensor]] = []
++
++
+ @functools.lru_cache(maxsize=128)
+-def _get_split_k_tensors(
++def _get_split_k_tensors_cached(
+     device: torch.device,
+     stream: torch.cuda.Stream,
+ ) -> tuple[torch.Tensor, torch.Tensor]:
+@@ -709,6 +714,31 @@
+     return semaphore, signal
+__EMPTY_CONTEXT__
+__EMPTY_CONTEXT__
++def _get_split_k_tensors(
++    device: torch.device,
++    stream: torch.cuda.Stream,
++) -> tuple[torch.Tensor, torch.Tensor]:
++    # During CUDA-graph capture the stream-cached buffers are unsafe: their
++    # zero-init ran once, eagerly, before capture, so it is not part of the graph.
++    # The split-K reduction decrements these counters as workgroups retire; on
++    # graph *replay* they are never re-zeroed, so the "last workgroup" reduction
++    # handshake never re-arms and the kernel hangs (the same failure mode fixed
++    # for the a16w16 ASM GEMM path in ROCm/aiter#4494). Allocate a fresh, zeroed
++    # workspace per capture so the zero-fill is recorded as a graph node and
++    # re-establishes the initial state on every replay; keep it alive for the
++    # process lifetime.
++    if torch.cuda.is_current_stream_capturing():
++        semaphore = torch.zeros(
++            (SPLIT_K_SEMAPHORE_MAX_LEN,), dtype=torch.int32, device=device
++        )
++        signal = torch.zeros(
++            (SPLIT_K_SEMAPHORE_MAX_LEN,), dtype=torch.int32, device=device
++        )
++        _captured_split_k_keepalive.append((semaphore, signal))
++        return semaphore, signal
++    return _get_split_k_tensors_cached(device, stream)
++
++
+ def _check_split_k_semaphore_capacity(
+     m: int, n: int, tile_m: int, tile_n: int, split_k: int
+ ) -> None:
+DIFF_FLYDSL_SPLITK
+sed -i 's/^__EMPTY_CONTEXT__$/ /' "$WS/FLYDSL_SPLITK.diff"
+apply_one "aiter/ops/flydsl/gemm_kernels.py" "_captured_split_k_keepalive" \
+  "$WS/FLYDSL_SPLITK.diff"
+
+# aiter#4647 -- reuse the FlyDSL v2 stage-1 scratch across layers and captures.
+# Its entire guard is `v2_output_layout and out_dtype == "fp8"`, and the v2
+# output layout postdates this image's aiter pin: v0.1.19 has no
+# v2_output_layout parameter on _flydsl_stage1_wrapper and no
+# flydsl_moe_stage1 in ops/flydsl/moe_kernels.py at all. Probe rather than
+# assume -- the nightly image can carry a different aiter than the Dockerfile
+# pin suggests -- and say so out loud either way, so a skipped PR is never read
+# as an applied one.
+echo "  aiter version = $(python -c 'import importlib.metadata as m; print(m.version("aiter"))' 2>/dev/null || echo unknown)"
+if grep -q "v2_output_layout" "$ROOT/aiter/fused_moe.py" 2>/dev/null; then
+  echo "  #4647: aiter HAS v2_output_layout -- this pin can take the PR; not ported here." >&2
+  echo "  #4647: rerun with the diff generated against THIS tree before trusting the arm." >&2
+else
+  echo "  #4647: SKIPPED (no v2_output_layout at this aiter pin; PR targets newer aiter)"
+fi
+
+# vllm#52000 -- a uniform-decode batch whose token count has no FULL decode graph
+# falls to an eager PIECEWISE desc; this offers the smallest FULL decode graph
+# that can pad up to it, ahead of the mixed fallback.
+#
+# Correct file for this recipe: speculative method "dspark" forces
+# use_v2_model_runner (config/vllm.py), so the live runner is vllm/v1/worker/gpu/
+# and gpu/cudagraph_utils.py is the code that dispatches.
+#
+# INERT ON THE DENSE LADDER. _init_candidates builds a FULL decode desc at
+# round_up(num_tokens, decode_qlen), keys it by the ROUNDED count, and appends it
+# BEFORE the PIECEWISE desc. With cudagraph_capture_sizes=[1..44] the rounded
+# count is itself in the ladder, so every reachable uniform-decode count
+# (qlen*nreqs) already resolves to a FULL desc at the head of its list.
+#
+# It bites on the stock ladder, and only because this is v2:
+# resolve_cudagraph_mode_and_sizes calls adjust_cudagraph_sizes_for_spec_decode
+# (which would round every capture size to a multiple of decode_qlen, removing
+# the gaps) ONLY when `not use_v2_model_runner`. So on dspark the ladder stays
+# unaligned: at qlen 3 the size-16 entry files its FULL desc under key 18, key 16
+# holds PIECEWISE alone, and a 12-token decode batch lands on key 16 and runs
+# eager. That is the case this PR fixes -- CUDAGRAPH_LADDER=sparse to exercise it.
+cat > "$WS/CG_UTILS.diff" <<'DIFF_CG_UTILS'
+diff --git a/vllm/v1/worker/gpu/cudagraph_utils.py b/vllm/v1/worker/gpu/cudagraph_utils.py
+--- a/vllm/v1/worker/gpu/cudagraph_utils.py
++++ b/vllm/v1/worker/gpu/cudagraph_utils.py
+@@ -273,16 +273,50 @@
+         if not descs_by_token_lora:
+             return
+__EMPTY_CONTEXT__
++        # FULL decode graphs, ascending by token count, can serve any smaller
++        # uniform-decode batch via request/token padding. They are inert for
++        # non-uniform batches (rejected by _is_compatible on uniform_token_count),
++        # so it is safe to offer them ahead of the mixed/PIECEWISE fallback for
++        # every token count. Without this, a uniform-decode batch whose exact
++        # token count has no FULL decode graph (a gap in round_up(size, qlen))
++        # silently drops to an eager PIECEWISE graph -- e.g. with a spec-decode
++        # query length of 3 and the default capture ladder, 12 tokens (4 reqs)
++        # finds only the size-16 PIECEWISE desc and never the size-18 FULL decode
++        # desc that could pad 4->6 reqs, so attention runs eager (metadata build
++        # + kernels on the host critical path) every decode step.
++        decode_full_descs = (
++            sorted(
++                (
++                    d
++                    for d in descs_by_mode.get(decode_mode, [])
++                    if d.uniform_token_count is not None
++                ),
++                key=lambda d: d.num_tokens,
++            )
++            if separate_decode_routine and decode_mode == CUDAGraphMode.FULL
++            else []
++        )
++
+         all_token_counts = sorted({k[0] for k in descs_by_token_lora})
+         current_range_start = 0
+         for token_cg_size in all_token_counts:
+             for i in range(current_range_start, token_cg_size + 1):
+                 for num_active_loras in self.lora_capture_cases:
+                     staging_key = (token_cg_size, num_active_loras)
+-                    if staging_key in descs_by_token_lora:
+-                        self._candidates[(i, num_active_loras)] = descs_by_token_lora[
+-                            staging_key
+-                        ]
++                    if staging_key not in descs_by_token_lora:
++                        continue
++                    fallback = descs_by_token_lora[staging_key]
++                    # Prefer the smallest FULL decode graph that can pad up to
++                    # this token count over the mixed/PIECEWISE fallback.
++                    pad_up = [
++                        d
++                        for d in decode_full_descs
++                        if d.num_tokens >= i
++                        and d.num_active_loras == num_active_loras
++                    ]
++                    self._candidates[(i, num_active_loras)] = pad_up + [
++                        d for d in fallback if d not in pad_up
++                    ]
+             current_range_start = token_cg_size + 1
+__EMPTY_CONTEXT__
+         for mode, descs in descs_by_mode.items():
+DIFF_CG_UTILS
+sed -i 's/^__EMPTY_CONTEXT__$/ /' "$WS/CG_UTILS.diff"
+apply_one "vllm/v1/worker/gpu/cudagraph_utils.py" "decode_full_descs" "$WS/CG_UTILS.diff"
+
+# vllm#51590 -- capture EVERY descriptor while profiling instead of extrapolating
+# from the first two, and count the scratch profiling leaves behind that the real
+# capture then reuses.
+#
+# A NO-OP ON THIS RECIPE, and applied anyway so the claim is on the record
+# rather than assumed. #51590 rewrites profile_cudagraph_memory in
+# vllm/v1/worker/gpu_model_runner.py -- the V1 runner. dspark forces
+# use_v2_model_runner, and the V2 runner's own profile_cudagraph_memory
+# (vllm/v1/worker/gpu/model_runner.py) is a stub that returns 0 unconditionally
+# ("NOTE(woosuk): It is TBD whether we keep this API or not"). So the V1 hunks
+# are never executed, and the gpu_worker.py hunks only reshape the logic around a
+# call that yields 0: cudagraph_memory_estimate stays 0, nothing is subtracted
+# from the KV pool, and the compile_or_warm_up_model comparison stays behind its
+# `> 0` guard. The one observable difference is a warning when
+# VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0.
+#
+# This is why --gpu-memory-utilization is hand-tuned here (0.84 / 0.90): on V2
+# nothing budgets cudagraph capture, before or after this PR.
+#
+# FLAGGED SEPARATELY because on a V1 recipe it would move the memory envelope,
+# not just perf -- a larger, more accurate estimate is subtracted from the KV
+# pool, and the full ladder gets captured twice. WITH_PR51590=0 isolates it.
+if [ "${WITH_PR51590:-1}" = "1" ]; then
+cat > "$WS/CG_MEM_RUNNER.diff" <<'DIFF_CG_MEM_RUNNER'
+diff --git a/vllm/v1/worker/gpu_model_runner.py b/vllm/v1/worker/gpu_model_runner.py
+--- a/vllm/v1/worker/gpu_model_runner.py
++++ b/vllm/v1/worker/gpu_model_runner.py
+@@ -862,6 +862,11 @@
+         # Cudagraph dispatcher for runtime cudagraph dispatching.
+         self.cudagraph_dispatcher = CudagraphDispatcher(self.vllm_config)
+__EMPTY_CONTEXT__
++        # Memory that memory profiling allocated and did not give back. The
++        # real capture reuses it, so it belongs to any comparison of the
++        # estimate against what the graphs actually cost.
++        self.cudagraph_profiling_retained_memory = 0
++
+         self.mm_budget = (
+             MultiModalBudget(self.vllm_config, self.mm_registry)
+             if self.supports_mm_inputs
+@@ -6615,6 +6620,13 @@
+__EMPTY_CONTEXT__
+     @torch.inference_mode()
+     def profile_cudagraph_memory(self) -> int:
++        # Baseline for the estimate. Everything this function allocates from
++        # here on is memory the steady state has to live with, whether it is
++        # the capture pool or the setup the pool needs.
++        torch.accelerator.synchronize()
++        torch.accelerator.empty_cache()
++        free_before_profiling = torch.accelerator.get_memory_info()[0]
++
+         with set_current_vllm_config(self.vllm_config):
+             self._init_minimal_kv_cache_for_profiling()
+__EMPTY_CONTEXT__
+@@ -6663,8 +6675,7 @@
+             original_pools[id(instance)] = instance.graph_pool
+             instance.graph_pool = profiling_pool
+__EMPTY_CONTEXT__
+-        shared_memory_estimate = {}
+-        per_graph_estimate = {}
++        decoder_memory_estimate = 0
+         encoder_memory_estimate = 0
+__EMPTY_CONTEXT__
+         # On ROCm, capture these throwaway profiling graphs on vLLM's dedicated
+@@ -6695,12 +6706,18 @@
+                 torch.accelerator.synchronize()
+                 torch.accelerator.empty_cache()
+__EMPTY_CONTEXT__
++                # Capture every descriptor instead of extrapolating from the
++                # first two. Pool growth across capture sizes is not linear, and
++                # a graph captured during profiling can reuse the memory of the
++                # one before it, so a two-sample extrapolation can report a
++                # small fraction of the pool the real capture goes on to build.
++                # Under-reporting here is not conservative: the shortfall is
++                # handed to the KV cache, which then pushes total usage past
++                # gpu_memory_utilization.
+                 for mode, descs in capture_descs:
+-                    profile_descs = descs[:2]
+-                    mem_samples: list[int] = []
++                    mode_mem_before = torch.accelerator.get_memory_info()[0]
+__EMPTY_CONTEXT__
+-                    for i, desc in enumerate(profile_descs):
+-                        mem_before = torch.accelerator.get_memory_info()[0]
++                    for i, desc in enumerate(descs):
+                         self._warmup_and_capture(
+                             desc,
+                             cudagraph_runtime_mode=mode,
+@@ -6713,28 +6730,39 @@
+                                 else None
+                             ),
+                         )
+-                        torch.accelerator.synchronize()
+-                        free_after = torch.accelerator.get_memory_info()[0]
+-                        mem_samples.append(mem_before - free_after)
+-
+-                    first_capture = mem_samples[0]
+-                    # Use at least 1 MiB per graph for driver overhead
+-                    per_graph = max(
+-                        mem_samples[1] if len(mem_samples) > 1 else 0, 1 << 20
+-                    )
+-
+-                    shared_memory_estimate[mode] = first_capture
+-                    per_graph_estimate[mode] = per_graph * (len(descs) - 1)
+__EMPTY_CONTEXT__
++                    torch.accelerator.synchronize()
++                    # Diagnostic only, and deliberately unclamped: a negative
++                    # value is a useful signal that this mode ran mostly out of
++                    # memory the allocator already held.
+                     logger.debug(
+-                        "Estimated %s CUDA graph memory: "
+-                        "%.2f MiB first-capture + (%d-1) × %.2f MiB per-graph",
++                        "Estimated %s CUDA graph memory: %.2f MiB for %d graphs",
+                         mode.name,
+-                        first_capture / (1 << 20),
++                        (mode_mem_before - torch.accelerator.get_memory_info()[0])
++                        / (1 << 20),
+                         len(descs),
+-                        per_graph / (1 << 20),
+                     )
+__EMPTY_CONTEXT__
++                # Measure the modes together rather than summing them. They
++                # capture back to back into one pool, so a mode can measure
++                # negative when the allocator releases more than that mode took,
++                # and clamping each mode before summing would then overcount.
++                # One span across all of them also subsumes whatever the modes
++                # overlay in the shared pool.
++                #
++                # The span starts at function entry, not at the capture loop.
++                # Standing up the profiling KV cache also initializes the
++                # attention backends and metadata builders, whose scratch is
++                # sized by the capture shapes and is rebuilt for the real KV
++                # cache. Nothing else budgets it: memory profiling ran before
++                # any of it existed. It does count the profiling KV cache,
++                # which is deliberately minimal and errs toward reserving
++                # slightly too much rather than too little.
++                decoder_free_after = torch.accelerator.get_memory_info()[0]
++                decoder_memory_estimate = max(
++                    free_before_profiling - decoder_free_after, 0
++                )
++
+                 if encoder_cudagraph_manager is not None:
+                     mem_before = torch.accelerator.get_memory_info()[0]
+                     encoder_cudagraph_manager.capture(graph_pool=encoder_profiling_pool)
+@@ -6766,15 +6794,16 @@
+             self._cleanup_profiling_kv_cache()
+             compilation_counter.num_cudagraph_captured = saved_num_cudagraph_captured
+__EMPTY_CONTEXT__
+-        # FULL and PIECEWISE graphs share the global pool at runtime and are
+-        # never replayed concurrently, so the pool overlays their memory.
+-        # Take the max to avoid double-counting the overlap.
+-        decoder_estimate = max(shared_memory_estimate.values(), default=0) + sum(
+-            per_graph_estimate.values()
++        # Cleanup above discards the graphs and empties the cache, but scratch
++        # the captured shapes allocated stays live and the real capture reuses
++        # it. Without this, that memory looks like it was never spent.
++        self.cudagraph_profiling_retained_memory = max(
++            free_before_profiling - torch.accelerator.get_memory_info()[0], 0
+         )
++
+         # Encoder graphs use a manager-local pool at runtime, separate from the
+         # decoder pool, so add their estimate instead of overlaying it.
+-        total_estimate = decoder_estimate + encoder_memory_estimate
++        total_estimate = decoder_memory_estimate + encoder_memory_estimate
+         logger.info(
+             "Estimated CUDA graph memory: %.2f GiB total",
+             total_estimate / (1 << 30),
+DIFF_CG_MEM_RUNNER
+sed -i 's/^__EMPTY_CONTEXT__$/ /' "$WS/CG_MEM_RUNNER.diff"
+apply_one "vllm/v1/worker/gpu_model_runner.py" "cudagraph_profiling_retained_memory" \
+  "$WS/CG_MEM_RUNNER.diff"
+
+# Anchored against gpu_worker.py AFTER the get_kv_cache_capacity hunk above; the
+# regions are disjoint but the line numbers are not.
+cat > "$WS/CG_MEM_WORKER.diff" <<'DIFF_CG_MEM_WORKER'
+diff --git a/vllm/v1/worker/gpu_worker.py b/vllm/v1/worker/gpu_worker.py
+--- a/vllm/v1/worker/gpu_worker.py
++++ b/vllm/v1/worker/gpu_worker.py
+@@ -510,23 +510,19 @@
+         # the AMD-CI mem tests), and graph_pool_handle resolves to the same
+         # torch.cuda handle the live capture path already uses on ROCm.
+         # XPU stays excluded (see #39977).
+-        cudagraph_memory_estimate = 0
+-        if (
++        will_capture_cudagraphs = (
+             current_platform.is_cuda_alike()
+             and self.vllm_config.compilation_config.cudagraph_mode != CUDAGraphMode.NONE
+-        ):
+-            cudagraph_memory_estimate = self.model_runner.profile_cudagraph_memory()
+-
+-        # Respect the opt-in flag as originally designed.
+-        cudagraph_memory_estimate_applied = (
+-            cudagraph_memory_estimate
+-            if envs.VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS
+-            else 0
+         )
++        # Profiling captures every graph, so it is not free. Skip it entirely
++        # when the estimate would only be discarded.
++        cudagraph_memory_estimate = 0
++        if will_capture_cudagraphs and envs.VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS:
++            cudagraph_memory_estimate = self.model_runner.profile_cudagraph_memory()
+__EMPTY_CONTEXT__
+         self.total_consumed = profile_result.total_consumed
+         self.peak_activation_memory = (
+-            profile_result.transient_peak_headroom + cudagraph_memory_estimate_applied
++            profile_result.transient_peak_headroom + cudagraph_memory_estimate
+         )
+         self.cudagraph_memory_estimate = cudagraph_memory_estimate
+__EMPTY_CONTEXT__
+@@ -545,7 +541,7 @@
+         self.available_kv_cache_memory_bytes = (
+             self.requested_memory
+             - profile_result.non_kv_cache_memory
+-            - cudagraph_memory_estimate_applied
++            - cudagraph_memory_estimate
+         )
+__EMPTY_CONTEXT__
+         unrequested_memory = self.init_snapshot.free_memory - self.requested_memory
+@@ -566,44 +562,41 @@
+             format_gib(self.available_kv_cache_memory_bytes),
+         )
+__EMPTY_CONTEXT__
+-        if cudagraph_memory_estimate > 0:
++        if (
++            will_capture_cudagraphs
++            and not envs.VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS
++        ):
++            # No estimate to quote a utilization against, because profiling was
++            # skipped rather than measured and thrown away.
++            logger.warning_once(
++                "CUDA graph memory profiling is disabled "
++                "(VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0). "
++                "Without it, CUDA graph memory is not accounted for "
++                "during KV cache allocation, which may require lowering "
++                "--gpu-memory-utilization to avoid OOM. Consider "
++                "re-enabling it (the default as of v0.21.0)."
++            )
++        elif cudagraph_memory_estimate > 0:
+             total_mem = self.init_snapshot.total_memory
+             current_util = self.cache_config.gpu_memory_utilization
+             cg_util_delta = cudagraph_memory_estimate / total_mem
+-            if envs.VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS:
+-                equiv_util = round(current_util - cg_util_delta, 4)
+-                suggested_util = min(
+-                    round(current_util + cg_util_delta, 4),
+-                    1.0,
+-                )
+-                logger.info(
+-                    "CUDA graph memory profiling is enabled (default since "
+-                    "v0.21.0). The current --gpu-memory-utilization=%.4f is "
+-                    "equivalent to --gpu-memory-utilization=%.4f without "
+-                    "CUDA graph memory profiling. To maintain the same "
+-                    "effective KV cache size as before, increase "
+-                    "--gpu-memory-utilization to %.4f. To disable, set "
+-                    "VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0.",
+-                    current_util,
+-                    equiv_util,
+-                    suggested_util,
+-                )
+-            else:
+-                suggested_util = min(
+-                    round(current_util + cg_util_delta, 4),
+-                    1.0,
+-                )
+-                logger.warning(
+-                    "CUDA graph memory profiling is disabled "
+-                    "(VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0). "
+-                    "Without it, CUDA graph memory is not accounted for "
+-                    "during KV cache allocation, which may require lowering "
+-                    "--gpu-memory-utilization to avoid OOM. Consider "
+-                    "re-enabling it (the default as of v0.21.0) and increasing "
+-                    "--gpu-memory-utilization from %.4f to %.4f.",
+-                    current_util,
+-                    suggested_util,
+-                )
++            equiv_util = round(current_util - cg_util_delta, 4)
++            suggested_util = min(
++                round(current_util + cg_util_delta, 4),
++                1.0,
++            )
++            logger.info(
++                "CUDA graph memory profiling is enabled (default since "
++                "v0.21.0). The current --gpu-memory-utilization=%.4f is "
++                "equivalent to --gpu-memory-utilization=%.4f without "
++                "CUDA graph memory profiling. To maintain the same "
++                "effective KV cache size as before, increase "
++                "--gpu-memory-utilization to %.4f. To disable, set "
++                "VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0.",
++                current_util,
++                equiv_util,
++                suggested_util,
++            )
+__EMPTY_CONTEXT__
+         return reserve_mm_ipc_gpu_memory(
+             int(self.available_kv_cache_memory_bytes),
+@@ -730,20 +723,29 @@
+         if not self.model_config.enforce_eager:
+             cuda_graph_memory_bytes = self.model_runner.capture_model()
+__EMPTY_CONTEXT__
+-        # Compare actual vs estimated CUDA graph memory (if we did profiling)
++        # Compare actual vs estimated CUDA graph memory (if we did profiling).
++        # Profiling captures the same graphs first and keeps the scratch they
++        # allocate, so the capture above only pays for what profiling did not
++        # already leave behind. Comparing the estimate against the capture
++        # alone would report a large miss for an estimate that was correct.
+         if (
+             hasattr(self, "cudagraph_memory_estimate")
+             and self.cudagraph_memory_estimate > 0
+         ):
+             GiB = lambda b: round(b / GiB_bytes, 2)
+-            diff = abs(cuda_graph_memory_bytes - self.cudagraph_memory_estimate)
++            retained = self.model_runner.cudagraph_profiling_retained_memory
++            actual = cuda_graph_memory_bytes + retained
++            diff = abs(actual - self.cudagraph_memory_estimate)
+             logger.info(
+-                "CUDA graph pool memory: %s GiB (actual), %s GiB (estimated), "
++                "CUDA graph pool memory: %s GiB (actual: %s GiB captured + "
++                "%s GiB retained by profiling), %s GiB (estimated), "
+                 "difference: %s GiB (%.1f%%).",
++                GiB(actual),
+                 GiB(cuda_graph_memory_bytes),
++                GiB(retained),
+                 GiB(self.cudagraph_memory_estimate),
+                 GiB(diff),
+-                100 * diff / max(cuda_graph_memory_bytes, 1),
++                100 * diff / max(actual, 1),
+             )
+__EMPTY_CONTEXT__
+         if self.cache_config.kv_cache_memory_bytes is None and hasattr(
+DIFF_CG_MEM_WORKER
+sed -i 's/^__EMPTY_CONTEXT__$/ /' "$WS/CG_MEM_WORKER.diff"
+apply_one "vllm/v1/worker/gpu_worker.py" "will_capture_cudagraphs" "$WS/CG_MEM_WORKER.diff"
+else
+  echo "  #51590: SKIPPED (WITH_PR51590!=1)"
+fi
+
+
 say "3/4 aiter #4521 (fp8 cp round-robin asm MLA verify kernels)  [needs network + hipcc + GPU]"
 # Unlike the offline Python diffs above, #4521 ships BINARY .co kernels (not in
 # the GitHub .diff) and a C++ asm_mla.cu change that must be recompiled, so this
@@ -1832,9 +2393,18 @@ echo "chk free-list insert guard     = $(grep -c 'Skipping duplicate free-list i
 echo "chk free-block batch dedup     = $(grep -c 'Deduplicated repeated physical block in free_blocks' "$ROOT/vllm/v1/core/block_pool.py")"
 echo "chk free-block cross-call      = $(grep -c 'Ignoring repeated cross-call release of already-free' "$ROOT/vllm/v1/core/block_pool.py")"
 echo "chk free-queue membership      = $(grep -c 'Membership is the authoritative guard for every' "$ROOT/vllm/v1/core/kv_cache_utils.py")"
+echo "chk #4713 mla.py block_n       = $(grep -c 'get_block_n_fp8.get(' "$ROOT/aiter/mla.py")"
+echo "chk #4715 flydsl split-K       = $(grep -c '_captured_split_k_keepalive' "$ROOT/aiter/ops/flydsl/gemm_kernels.py")  (expect 2)"
+echo "chk #52000 cudagraph_utils.py  = $(grep -c 'decode_full_descs' "$ROOT/vllm/v1/worker/gpu/cudagraph_utils.py")  (expect 2)"
+echo "chk #51590 gpu_model_runner.py = $(grep -c 'cudagraph_profiling_retained_memory' "$ROOT/vllm/v1/worker/gpu_model_runner.py")  (expect 2; 0 if WITH_PR51590=0)"
+echo "chk #51590 gpu_worker.py       = $(grep -c 'will_capture_cudagraphs' "$ROOT/vllm/v1/worker/gpu_worker.py")  (expect 3; 0 if WITH_PR51590=0)"
 echo "triton          = $(python -c 'import triton; print(triton.__version__)')  (expect 3.7.0*)"
 python -m py_compile "$ROOT/aiter/ops/triton/gluon/mla_gluon.py" \
   "$ROOT/aiter/ops/gemm_op_a16w16.py" \
+  "$ROOT/aiter/mla.py" \
+  "$ROOT/aiter/ops/flydsl/gemm_kernels.py" \
+  "$ROOT/vllm/v1/worker/gpu/cudagraph_utils.py" \
+  "$ROOT/vllm/v1/worker/gpu_model_runner.py" \
   "$ROOT/vllm/v1/attention/backends/mla/rocm_aiter_mla.py" \
   "$ROOT/vllm/v1/attention/backends/mla/triton_mla.py" \
   "$ROOT/vllm/v1/worker/gpu_worker.py" \
