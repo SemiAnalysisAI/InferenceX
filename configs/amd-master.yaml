@@ -1539,8 +1539,8 @@ glm5.2-fp8-mi325x-sglang-agentic-mtp:
       search-space:
       - { tp: 8, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 3, 4, 5, 6, 8] }
 
-# Dense discovery around the MI325X c3-c5 HBM knee. MI300X has 25% less HBM,
-# so sample every concurrency through c8 for both TP and expert-parallel MoE.
+# Fast discovery found a sharp quality cliff after c3. Keep TP c1-c3 plus TEP
+# c3, whose lower TTFT trades slightly lower input throughput than TP c3.
 glm5.2-fp8-mi300x-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.16-rocm720-mi30x
   model: zai-org/GLM-5.2-FP8
@@ -1553,7 +1553,8 @@ glm5.2-fp8-mi300x-sglang-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: mtp, conc-list: [3] }
+      - { tp: 8, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 3] }
+      - { tp: 8, ep: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [3] }
 
 minimaxm3-fp8-mi325x-vllm-agentic:
   image: vllm/vllm-openai-rocm:nightly-04c2a8deac44fdb1ca3e2b5ec3e6bf16f3f6a914

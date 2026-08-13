@@ -10,7 +10,9 @@ export EVAL_FRAMEWORK="lm-eval"
 
 check_env_vars \
     MODEL TP CONC EP_SIZE KV_OFFLOADING PORT EVAL_ONLY \
-    TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
+    RESULT_DIR DURATION
+
+require_agentic_kv_offload_none
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -37,30 +39,6 @@ install_agentic_deps
 SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
 SERVER_PID=""
-
-CACHE_ARGS=()
-if require_agentic_kv_offload_backend hicache; then
-    # SGLang allocates one target and one much smaller EAGLE draft host pool
-    # per rank. Use the generated node-total DRAM budget, reserving one GB per
-    # rank for alignment; 64 GB per pool is enough to exercise eviction while
-    # preserving host headroom for model loading on MI300X nodes.
-    HICACHE_ALIGNMENT_RESERVE_GB=$TP
-    HICACHE_MAX_SIZE_GB=$(((TOTAL_CPU_DRAM_GB - HICACHE_ALIGNMENT_RESERVE_GB) / TP / 2))
-    HICACHE_SIZE_GB=64
-    if [ "$HICACHE_SIZE_GB" -gt "$HICACHE_MAX_SIZE_GB" ]; then
-        echo "Error: HiCache requires ${HICACHE_SIZE_GB} GB per rank pool but the configured limit is ${HICACHE_MAX_SIZE_GB} GB" >&2
-        exit 1
-    fi
-    echo "HiCache CPU pools: ${HICACHE_SIZE_GB} GB per rank pool across TP=${TP}, within ${TOTAL_CPU_DRAM_GB} GB node budget"
-    CACHE_ARGS=(
-        --page-size 64
-        --enable-hierarchical-cache
-        --hicache-size "$HICACHE_SIZE_GB"
-        --hicache-io-backend kernel
-        --hicache-mem-layout page_first
-        --hicache-write-policy write_through_selective
-    )
-fi
 
 cleanup_agentic_services() {
     local exit_code=$?
@@ -119,7 +97,6 @@ SGLANG_CMD=(
     --watchdog-timeout 1800
     --enable-metrics
     --enable-cache-report
-    "${CACHE_ARGS[@]}"
 )
 
 write_command "$RESULT_DIR/sglang_command.txt" "${SGLANG_CMD[@]}"
