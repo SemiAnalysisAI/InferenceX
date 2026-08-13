@@ -218,6 +218,16 @@ elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX =
     mkdir -p recipes/sglang/deepseek-v4/agentic
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/agentic" \
         recipes/sglang/deepseek-v4/agentic
+elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "dsv4" ]]; then
+    # DeepSeek-V4-Pro TensorRT-LLM AgentX recipes are version-controlled here
+    # and use the srt-slurm v1.0.36 release.
+    SRT_SLURM_MODEL_PREFIX="deepseek-ai/DeepSeek-V4-Pro"
+    git clone --branch v1.0.36 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
+    cd "$SRT_REPO_DIR" || exit 1
+
+    mkdir -p benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4 || exit 1
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4" \
+        benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4 || exit 1
 elif [[ "$IS_AGENTIC" == "1" ]]; then
     # Agentic recipes use NVIDIA/srt-slurm v1.0.36. This is the upstream
     # version validated in InferenceX PR #2302 and includes per-node DP,
@@ -355,13 +365,17 @@ echo "Configs available at: $SRT_REPO_DIR/"
 # Create srtslurm.yaml for srtctl (used by both frameworks)
 SRTCTL_ROOT="${SRT_REPO_DIR}"
 echo "Creating srtslurm.yaml configuration..."
+SRT_DEFAULT_TIME_LIMIT="4:00:00"
+if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "dsv4" ]]; then
+    SRT_DEFAULT_TIME_LIMIT="8:00:00"
+fi
 cat > srtslurm.yaml <<EOF
 # SRT SLURM Configuration for GB300
 
 # Default SLURM settings
 default_account: "${SLURM_ACCOUNT}"
 default_partition: "${SLURM_PARTITION}"
-default_time_limit: "4:00:00"
+default_time_limit: "${SRT_DEFAULT_TIME_LIMIT}"
 
 # Resource defaults
 gpus_per_node: 4
