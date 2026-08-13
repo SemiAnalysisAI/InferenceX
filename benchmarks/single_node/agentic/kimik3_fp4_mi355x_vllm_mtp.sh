@@ -109,6 +109,27 @@ MERGED_GEMM_CSV="${MERGED_GEMM_CSV:-/opt/aiter-local/aiter/configs/merged_bf16_t
 if [ -z "${AITER_CONFIG_GEMM_BF16:-}" ] && [ -f "$MERGED_GEMM_CSV" ]; then
     export AITER_CONFIG_GEMM_BF16="$MERGED_GEMM_CSV"
 fi
+# Guard: the tuned BF16 GEMM table is a large perf lever. Without it the dense
+# GEMMs fall back to an untuned path and throughput drops materially -- and it does
+# so SILENTLY. Warn loudly if the CSV is missing (e.g. a pre-baked image that never
+# ran apply_k3_container_patches.sh) so an untuned run is never mistaken for a valid
+# number. Set REQUIRE_TUNED_GEMM=1 to make a missing CSV fatal instead of a warning.
+if [ -z "${AITER_CONFIG_GEMM_BF16:-}" ] || [ ! -f "${AITER_CONFIG_GEMM_BF16:-/nonexistent}" ]; then
+    echo "############################################################################" >&2
+    echo "WARNING: tuned BF16 GEMM CSV not found (looked for '$MERGED_GEMM_CSV')."       >&2
+    echo "         AITER_CONFIG_GEMM_BF16 is unset -> dense GEMMs run UNTUNED and"        >&2
+    echo "         throughput will be materially lower than the published recipe."        >&2
+    echo "         Fix: ensure apply_k3_container_patches.sh ran (it installs"            >&2
+    echo "         k3_patches/kimik3_bf16_tuned_gemm.csv), or point AITER_CONFIG_GEMM_BF16">&2
+    echo "         at the merged CSV. Set REQUIRE_TUNED_GEMM=1 to make this fatal."        >&2
+    echo "############################################################################" >&2
+    if [ "${REQUIRE_TUNED_GEMM:-0}" = "1" ]; then
+        echo "REQUIRE_TUNED_GEMM=1 -> aborting to avoid an untuned (invalid) run." >&2
+        exit 1
+    fi
+else
+    echo "tuned BF16 GEMM CSV active: $AITER_CONFIG_GEMM_BF16 ($(wc -l < "$AITER_CONFIG_GEMM_BF16" 2>/dev/null) rows)"
+fi
 
 # ---- Resolve traces + install AIPerf (isolated venv) ------------------------
 resolve_trace_source
@@ -206,7 +227,16 @@ CAPTURE_SIZES="${CAPTURE_SIZES:-1,2,4,8,12,16,24,32,36,40,48,56,64,72,80,88,96,1
 CUDAGRAPH_MODE="${CUDAGRAPH_MODE:-FULL_AND_PIECEWISE}"
 COMPILATION_CONFIG="{\"mode\":3,\"cudagraph_mode\":\"$CUDAGRAPH_MODE\",\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[$CAPTURE_SIZES]}"
 
-echo "Starting vllm server (MI355X/AITER DSpark fp8-asm, synthetic AL=$SYNTHETIC_ACCEPT_LEN)..."
+# Banner must reflect the ACTUAL spec arm: EVAL_ONLY uses block/real verify (an
+# accuracy run, NOT throughput-comparable), the default uses synthetic golden AL.
+# Printing "synthetic AL" unconditionally would let a block run be mistaken for a
+# throughput run when checking the log -- report the real mode.
+if [ "${EVAL_ONLY:-false}" = "true" ]; then
+    SPEC_MODE_DESC="block/REAL verify (EVAL_ONLY accuracy run -- NOT throughput-comparable)"
+else
+    SPEC_MODE_DESC="synthetic AL=$SYNTHETIC_ACCEPT_LEN (AgentX golden, throughput methodology)"
+fi
+echo "Starting vllm server (MI355X/AITER DSpark fp8-asm, spec=$SPEC_MODE_DESC)..."
 { set +x; } 2>/dev/null
 VLLM_CMD=(
     vllm serve "$MODEL_PATH" --served-model-name "$MODEL"
