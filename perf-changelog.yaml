@@ -5918,3 +5918,12 @@
     - "Add a TEP2 arm (tp 2, ep 2) to the qwen3.5-fp4-b200-sglang-mtp 8k/1k sweep at concurrency 16, 32, and 64"
     - "Rides on the NVFP4-V2 checkpoint switch from #2205"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2550
+
+- config-keys:
+    - qwen3.5-fp8-h200-sglang-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Qwen3.5 FP8 H200 SGLang AgentX MTP points with DRAM HiCache"
+    - "Use TP8/EP1 concurrency 2 through 24, published FlashInfer 0.6.15 CUDA 13 wheels, and golden MTP acceptance length 3.39"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
