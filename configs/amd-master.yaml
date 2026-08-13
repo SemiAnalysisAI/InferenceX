@@ -671,7 +671,7 @@ kimik3-fp4-mi355x-vllm-agentic-mtp-lmcache:
     # (run 31644286169); 0.40 -> ~1199 GB fits with margin.
     - dram-utilization: 0.40
       search-space:
-      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.4rc1" }, conc-list: [4, 8, 16], spec-decoding: mtp }
+      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.4rc2" }, conc-list: [4, 8, 16], spec-decoding: mtp }
 
 dsr1-fp4-mi355x-sglang-disagg:
   image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519
