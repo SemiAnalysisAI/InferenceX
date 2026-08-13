@@ -1729,6 +1729,8 @@ glm5.2-fp4-mi355x-sglang-agentic-mtp:
 # already-green disagg AgentX entry. Pure TP8 only: DSA + dp-attention hangs a
 # collective under long-context prefill, so no DEP arm ships until that path is
 # validated. conc 16 appears on both arms to isolate the host KV tier's gain.
+      # - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, conc-list: [1, 2, 4, 8, 16], spec-decoding: mtp }
+      # - { tp: 8, ep: 1, dp-attn: false, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 32, 48], spec-decoding: mtp }
 dsv4-fp4-mi355x-sglang-agentic-mtp:
   image: aigmkt/mori-dev:sglang-0.5.17-rocm720-mi35x-mori-0812
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -1741,7 +1743,5 @@ dsv4-fp4-mi355x-sglang-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, conc-list: [1, 2, 4, 8, 16], spec-decoding: mtp }
-      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 32, 48], spec-decoding: mtp }
       - { tp: 8, ep: 1, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [32], spec-decoding: mtp }
 
