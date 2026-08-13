@@ -28,6 +28,9 @@ on:
                 default: false
 
 jobs:
+    # dsv4 on b200 deliberately uses the vllm-mtp entry: the sglang/trt entries
+    # pin the `b200-dsv4` virtual runner pool, whose scheduler queue is not
+    # currently served (jobs sit queued for days while b200-dgxc idles).
     sweep:
         uses: ./.github/workflows/e2e-tests.yml
         secrets: inherit
@@ -36,7 +39,7 @@ jobs:
             generate-cli-command: >-
                 test-config
                 --config-keys ${{ inputs.config-keys ||
-                'dsv4-fp4-b200-sglang
+                'dsv4-fp4-b200-vllm-mtp
                 dsv4-fp4-b300-sglang-mtp
                 qwen3.5-fp4-b200-sglang-mtp
                 qwen3.5-fp4-b300-sglang-mtp' }}
