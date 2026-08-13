@@ -150,7 +150,7 @@ case "${KV_OFFLOAD_BACKEND:-}" in
 
     # Keep the image's tested torch/ROCm stack and install only LMCache's
     # missing runtime dependencies, same as the MiniMax-M3 lmcache arm.
-    LMCACHE_VERSION="0.5.4rc1"
+    LMCACHE_VERSION="0.5.4rc2"
     LMCACHE_ROCM_INDEX="https://github.com/LMCache/LMCache/releases/expanded_assets/v${LMCACHE_VERSION}-rocm"
     agentic_pip_install --quiet --no-cache-dir --no-deps \
         "sortedcontainers==2.4.0" \
@@ -175,17 +175,7 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     LMCACHE_HTTP_PORT=8090
     LMCACHE_LOG="$RESULT_DIR/lmcache_server.log"
 
-    # The whole generated node-DRAM budget backs the single server's L1,
-    # which lives in /dev/shm; fail early if it cannot fit.
     LMCACHE_L1_SIZE_GB="$TOTAL_CPU_DRAM_GB"
-    SHM_FREE_GB=$(df -BG --output=avail /dev/shm 2>/dev/null | tail -1 | tr -dc '0-9')
-    if [ -n "$SHM_FREE_GB" ] && [ "$SHM_FREE_GB" -gt 0 ]; then
-        SHM_CAP_GB=$((SHM_FREE_GB * 90 / 100))
-        if [ "$LMCACHE_L1_SIZE_GB" -gt "$SHM_CAP_GB" ]; then
-            echo "Error: LMCache L1 ${LMCACHE_L1_SIZE_GB} GB exceeds 90% of free /dev/shm (${SHM_CAP_GB} GB)." >&2
-            exit 1
-        fi
-    fi
 
     LMCACHE_CMD=(
         lmcache server
@@ -198,15 +188,12 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         --chunk-size 3072
         --separate-object-groups
         --enable-extra-logging
+        --extra-logging-interval 30
         --max-cpu-workers 8
         --max-gpu-workers 1
         --eviction-policy LRU
-        # Pin the server-driven STORE/RETRIEVE path (same as the MiniMax-M3
-        # arm) so the benchmark measures one deterministic transfer path
-        # instead of the auto-mode pair. The L1 stays /dev/shm-backed either
-        # way (shm_name defaults on), which is why the capacity check above
-        # applies in this mode too.
         --supported-transfer-mode lmcache_driven
+        --shm-name ""
     )
     append_command "$RESULT_DIR/lmcache_command.txt" "${LMCACHE_CMD[@]}"
     "${LMCACHE_CMD[@]}" > "$LMCACHE_LOG" 2>&1 &

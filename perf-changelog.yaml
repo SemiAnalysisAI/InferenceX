@@ -5924,6 +5924,6 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Add a dedicated LMCache 0.5.4rc1 DRAM KV-offload key at TP8 conc 4/8/16 on top of the unchanged kimik3-fp4-mi355x-vllm-agentic-mtp DSpark MTP stack."
-    - "Run one LMCache MP server per node with chunk size 768 (the K3 unified block size at 8 GPUs) and --separate-object-groups for the hybrid KDA/MLA two-group KV layout."
+    - "Add a dedicated LMCache 0.5.4rc2 DRAM KV-offload key at TP8 conc 4/8/16 on top of the unchanged kimik3-fp4-mi355x-vllm-agentic-mtp DSpark MTP stack, with the version pinned in the master config and consumed by the script via KV_OFFLOAD_BACKEND_METADATA."
+    - "Run one LMCache MP server per node with chunk size 3072 (the minimum multiple of the hybrid KDA/MLA group block sizes) and --separate-object-groups, keeping the L1 in process memory (--shm-name \"\") so the DRAM budget is not capped by /dev/shm."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2583
