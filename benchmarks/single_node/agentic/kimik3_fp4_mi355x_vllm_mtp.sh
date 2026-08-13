@@ -233,6 +233,17 @@ COMPILATION_CONFIG="{\"mode\":3,\"cudagraph_mode\":\"$CUDAGRAPH_MODE\",\"custom_
 # throughput run when checking the log -- report the real mode.
 if [ "${EVAL_ONLY:-false}" = "true" ]; then
     SPEC_MODE_DESC="block/REAL verify (EVAL_ONLY accuracy run -- NOT throughput-comparable)"
+    # Loud guard: an EVAL_ONLY run uses real block verification, so its acceptance
+    # length is the corpus-measured ~1.2-1.7 (not the synthetic golden 2.51) and its
+    # tok/s is correspondingly lower. Those numbers are for ACCURACY, not throughput.
+    # Warn unmistakably so an eval run's tok/s can't be reported as a recipe result.
+    echo "############################################################################" >&2
+    echo "WARNING: EVAL_ONLY=true -> ACCURACY run (rejection_sample_method=block)."      >&2
+    echo "         Acceptance is real-verify (~1.2-1.7), NOT the synthetic golden 2.51," >&2
+    echo "         so throughput / interactivity from this run are LOWER and are NOT"    >&2
+    echo "         comparable to the published recipe. Do NOT report tok/s from an"      >&2
+    echo "         EVAL_ONLY run. For throughput, run with EVAL_ONLY unset (default)."   >&2
+    echo "############################################################################" >&2
 else
     SPEC_MODE_DESC="synthetic AL=$SYNTHETIC_ACCEPT_LEN (AgentX golden, throughput methodology)"
 fi
