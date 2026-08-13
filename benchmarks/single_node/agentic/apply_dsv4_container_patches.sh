@@ -1,165 +1,279 @@
 #!/usr/bin/env bash
 # =============================================================================
-# ADDITIVE patch stack for the 08-09 nightly base
+# Container patch stack for the 08-09 nightly base
 #   vllm/vllm-openai-rocm:nightly-f8d03e77416bf90c49acbe50e233275722f02c4b
 #   (vllm 0.26.1rc1.dev528+gf8d03e774)
 #
-# STRICTLY ADDITIVE. Nothing that ships in the base is overwritten:
-#   * only the ONE gluon kernel file the base genuinely lacks is copied in
-#     (gfx950/attention/pa_decode_sparse.py). The other three pa_decode_sparse
-#     variants SHIP IN THE BASE and are deliberately NOT touched -- an earlier
-#     revision of this script copied all four out of aiter@97d0c6e4, silently
-#     replacing three base files with a cross-version transplant. Do not
-#     reintroduce that.
-#   * aiter core (jit/core.py, fused_moe.py) is not modified. The base already
-#     exposes _set_current_hip_stream, which the nightly vllm calls for
-#     module_rmsnorm_quant; the old wholesale post2-python overlay regressed it
-#     and crashed rmsnorm_quant warmup.
-#   * MegaMoE/DEP8 is out of scope on this route: its intranode kernel needs
-#     mori.ir.flydsl, which is absent from the base (verified: ModuleNotFoundError).
-#     FSE is likewise out (aiter #4269 needs aiter/fhmoe.py, also absent).
-#
-# Carried:
-#   vllm  #51473  native MXFP4 TP8 shard allocation (MERGED 2026-08-11 -- i.e.
-#                 AFTER this 08-09 base, so unlike the 08-12 base it must be
-#                 applied here). One hunk on
-#                 vllm/model_executor/layers/fused_moe/oracle/mxfp4.py.
-#   vllm  #51714  opt-in AITER gluon kernel for sparse-MLA decode on gfx950
-#                 (open). Dormant unless VLLM_ROCM_DSV4_SPARSE_GLUON=1.
-#   vllm  #51918  FlyDSL fused mega-MoE backend (open). Dormant unless
-#                 --moe-backend flydsl_mega_moe is selected.
-#   aiter #4417   large-token FlyDSL MoE launch/output limits (merged
-#                 2026-07-30; the base's VENDORED aiter predates it -- the
-#                 vendored revision is pinned and does not track aiter main).
+# Everything here comes from an UPSTREAM ref -- either a vllm PR diff or a
+# pinned aiter/mori commit. Nothing is sourced from a private measurement
+# image. Idempotent: every step is marker-gated, re-running is a no-op.
 #
 # Run INSIDE a fresh container of the pinned image:
-#   docker exec -i <container> bash /path/to/dsv4_patch_0809.sh
-# Idempotent: every step is marker-gated, re-running is a no-op.
+#   docker exec -i <container> bash /path/to/apply_dsv4_container_patches.sh
+#
+# WHAT THIS ENABLES
+#   Three knobs that the base cannot run unpatched, all three verified to
+#   import cleanly afterwards (see the checks at the end):
+#     * sparse gluon decode  (VLLM_ROCM_DSV4_SPARSE_GLUON=1)
+#     * FSE                  (aiter fhmoe)
+#     * MegaMoE / DEP8       (--moe-backend flydsl_mega_moe)
+#
+#   The gluon knob in particular was silently dead before this: the base's
+#   aiter facade pa_decode_sparse() predates the extra_cache/extra_indices/
+#   extra_indptr keywords that vllm #51714's call site passes, so every worker
+#   raised
+#       TypeError: pa_decode_sparse() got an unexpected keyword argument
+#                  'extra_cache'
+#   on its first decode and latched onto the Triton fallback for the rest of
+#   the process. Copying only the gfx950 gluon kernel is NOT enough; the facade
+#   that dispatches to it has to come along.
+#
+# WHAT IS NOT DONE
+#   * aiter core (jit/core.py) is not modified. The base already exposes
+#     _set_current_hip_stream, which the nightly vllm calls for
+#     module_rmsnorm_quant; an earlier wholesale post2-python overlay regressed
+#     it and crashed rmsnorm_quant warmup.
+#   * aiter #4417 is NOT grafted separately. It is already contained in the
+#     aiter@$AITER_SHA moe_kernels.py this script installs, so the old
+#     anchor-graft helper is gone.
 # =============================================================================
 set -uo pipefail
 AITER_SHA="97d0c6e4cb7a0919c12291c7c7d560ad412f15c1"
 AITER_REPO="https://github.com/ROCm/aiter"
+MORI_SHA="84a33cc0f15f019c78c995728973b70ea3d10bb7"
+MORI_REPO="https://github.com/ROCm/mori"
 VLLM_REPO="https://github.com/vllm-project/vllm"
 ROOT="$(python -c 'import importlib.util as u, os; print(os.path.dirname(os.path.dirname(u.find_spec("vllm").origin)))')"
 [ -d "$ROOT/vllm" ] && [ -d "$ROOT/aiter" ] || { echo "ERROR ROOT=$ROOT"; exit 1; }
-echo "[add] ROOT=$ROOT"
-echo "[add] vllm  = $(python -c 'import vllm;print(vllm.__version__)' 2>/dev/null)"
-WS=/tmp/dsv4_add; mkdir -p "$WS"
+echo "[patch] ROOT=$ROOT"
+echo "[patch] vllm = $(python -c 'import vllm;print(vllm.__version__)' 2>/dev/null)"
+WS=/tmp/dsv4_patch; mkdir -p "$WS"
 
-# --- 1/4 gluon kernel: ONLY the file the base lacks ---------------------------
-# Verified against this base: gfx1250/, _triton_kernels/ and the ops/triton/
-# facade all ship. Copying the aiter@97d0c6e4 versions over them is the
-# cross-version transplant that has to be avoided, so the loop SKIPS anything
-# already present rather than overwriting it.
-GLUON_PATHS=(
-  aiter/ops/triton/_gluon_kernels/gfx950/attention/pa_decode_sparse.py
-  aiter/ops/triton/_gluon_kernels/gfx1250/attention/pa_decode_sparse.py
-  aiter/ops/triton/_triton_kernels/attention/pa_decode_sparse.py
+# --- 1/4 aiter files from the pinned SHA --------------------------------------
+# Sourced from aiter@$AITER_SHA, not from any prebuilt image.
+#
+# A note on why the facade is in this list. An earlier revision of this script
+# copied only the ONE file the base lacked (the gfx950 gluon kernel) and
+# deliberately skipped the three pa_decode_sparse variants that ship in the
+# base, to avoid a cross-version transplant. That was the right instinct but
+# the wrong call for the facade specifically: keeping the base's older facade
+# is what produced the extra_cache TypeError above. The facade and the kernel
+# it dispatches to are one unit and have to move together.
+#
+# moe_kernels.py is replaced rather than patched. Symbol-diffed base vs
+# upstream before doing so: 58 base symbols, 66 upstream, ZERO lost, +8 gained
+# (including _flydsl_moe_stage1_impl / _flydsl_moe_stage2_impl, which FSE's
+# aiter/ops/flydsl/fhmoe.py imports and the base simply does not define).
+AITER_FILES=(
+  # sparse gluon decode: the kernel AND the facade that dispatches to it
   aiter/ops/triton/attention/pa_decode_sparse.py
+  aiter/ops/triton/_gluon_kernels/gfx950/attention/pa_decode_sparse.py
+  # FSE (fused heterogeneous MoE)
+  aiter/fhmoe.py
+  aiter/ops/flydsl/fhmoe.py
+  aiter/ops/flydsl/kernels/fhmoe.py
+  aiter/aot/flydsl/fhmoe.py
+  # carries FSE's stage1/stage2 impls, and aiter #4417's two guards
+  aiter/ops/flydsl/moe_kernels.py
 )
-NEED=()
-for p in "${GLUON_PATHS[@]}"; do
-  if [ -f "$ROOT/$p" ]; then echo "  keep base  $p"; else NEED+=("$p"); fi
+ASRC="$WS/aiter_src"
+if [ ! -d "$ASRC/.git" ]; then git clone -q --filter=blob:none --no-checkout "$AITER_REPO" "$ASRC" 2>&1 | tail -1; fi
+( cd "$ASRC" && git fetch -q --depth 1 origin "$AITER_SHA" 2>&1 | tail -1 && git checkout -q "$AITER_SHA" -- "${AITER_FILES[@]}" ) \
+  || { echo "  aiter: CHECKOUT FAILED"; exit 1; }
+for p in "${AITER_FILES[@]}"; do
+  [ -e "$ASRC/$p" ] || { echo "  MISSING in src: $p"; continue; }
+  if [ -f "$ROOT/$p" ] && cmp -s "$ASRC/$p" "$ROOT/$p"; then echo "  same       $p"; continue; fi
+  mkdir -p "$(dirname "$ROOT/$p")"; cp -a "$ASRC/$p" "$ROOT/$p"; echo "  installed  $p"
 done
-if [ ${#NEED[@]} -gt 0 ]; then
-  SRC="$WS/aiter_src"
-  if [ ! -d "$SRC/.git" ]; then git clone --filter=blob:none --no-checkout "$AITER_REPO" "$SRC" 2>&1 | tail -1; fi
-  ( cd "$SRC" && git fetch --depth 1 origin "$AITER_SHA" 2>&1 | tail -1 && git checkout -q "$AITER_SHA" -- "${NEED[@]}" )
-  for p in "${NEED[@]}"; do
-    [ -e "$SRC/$p" ] || { echo "  MISSING in src: $p"; continue; }
-    mkdir -p "$(dirname "$ROOT/$p")"; cp -a "$SRC/$p" "$ROOT/$p"; echo "  added      $p"
-  done
-else
-  echo "  (nothing to add)"
-fi
 
-# --- 2/4 aiter #4417: large-token FlyDSL MoE launch/output limits --------------
-# Two guards: stage2 buffer atomics address the output with 32-bit byte offsets
-# (>4 GiB walks off the end), and HIP caps grid.y at 65535. Neither fires at the
-# DSv4-Pro TP8 shape measured here -- requires_flydsl_stage2_reduce(65536, 7168,
-# 2) is False (~939 MB) -- so this is NOT a fix for the profile-run memfault; it
-# is carried because it is a real gap any larger-token sweep row would hit.
-# The upstream .diff will NOT apply: the base's aiter predates aiter's typing
-# modernization, so every context line still reads Dict[str, Dict] where the
-# diff expects dict[str, dict]. The hunks are grafted by anchor instead.
-python "$(dirname "$0")/graft_aiter_4417.py" "$ROOT/aiter/ops/flydsl/moe_kernels.py" || \
-  { echo "  #4417: GRAFT FAILED"; exit 1; }
+# --- 2/4 mori: mori.ir.flydsl + the cov cascade -------------------------------
+# MegaMoE's intranode dispatch/combine kernel does `import mori.ir.flydsl`, and
+# the base ships mori WITHOUT that subpackage. Three .py files -- no compiled
+# artifact, contrary to a first reading of the ModuleNotFoundError.
+#
+# They cannot be dropped in alone. mori/ir/flydsl/runtime.py calls
+# find_bitcode(cov=6) (FlyDSL needs ABI 600), and `cov` is a parameter that
+# cascades through three more files the base predates: ir/bitcode.py,
+# jit/cache.py, jit/core.py (37 call sites upstream, 0 in the base) plus
+# jit/config.py for is_debuginfo_enabled. Installing a subset yields, in order,
+#   TypeError: find_bitcode() got an unexpected keyword argument 'cov'
+#   ImportError: cannot import name 'is_debuginfo_enabled'
+# so the whole cascade goes or none of it does.
+#
+# libmori_shmem_device.bc is NOT shipped here. It is a 485 KB LLVM IR blob and
+# a build artifact; find_bitcode() falls back to mori.jit.core.ensure_bitcode(),
+# which compiles it in-container with hipcc on first import (~1 min). That
+# keeps this script free of binary payloads.
+MORI_FILES=(
+  mori/ir/flydsl/__init__.py
+  mori/ir/flydsl/ops.py
+  mori/ir/flydsl/runtime.py
+  mori/ir/bitcode.py
+  mori/jit/cache.py
+  mori/jit/config.py
+  mori/jit/core.py
+)
+if [ -d "$ROOT/mori" ]; then
+  MSRC="$WS/mori_src"
+  if [ ! -d "$MSRC/.git" ]; then git clone -q --filter=blob:none --no-checkout "$MORI_REPO" "$MSRC" 2>&1 | tail -1; fi
+  ( cd "$MSRC" && git fetch -q --depth 1 origin "$MORI_SHA" 2>&1 | tail -1 && git checkout -q "$MORI_SHA" -- python/mori ) \
+    || { echo "  mori: CHECKOUT FAILED"; }
+  for p in "${MORI_FILES[@]}"; do
+    src="$MSRC/python/$p"
+    [ -e "$src" ] || { echo "  MISSING in src: $p"; continue; }
+    if [ -f "$ROOT/$p" ] && cmp -s "$src" "$ROOT/$p"; then echo "  same       $p"; continue; fi
+    mkdir -p "$(dirname "$ROOT/$p")"; cp -a "$src" "$ROOT/$p"; echo "  installed  $p"
+  done
+  find "$ROOT/mori" -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null
+else
+  echo "  mori: not installed in this image, skipping MegaMoE deps"
+fi
+find "$ROOT/aiter" -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null
 
 # --- 3/4 vllm PRs -------------------------------------------------------------
-apply_pr(){ local pr="$1" mf="$ROOT/$2" mk="$3" d="$WS/vllm_$1.diff"
-  if grep -qF "$mk" "$mf" 2>/dev/null; then echo "  #$pr: already present"; return 0; fi
-  curl -ksSL -o "$d" "$VLLM_REPO/pull/$pr.diff" || { echo "  #$pr: FETCH FAIL"; return 1; }
-  if ( cd "$ROOT" && git apply -p1 --3way "$d" ) 2>/dev/null || ( cd "$ROOT" && git apply -p1 "$d" ) 2>/dev/null
-  then echo "  #$pr: APPLIED"; else echo "  #$pr: FAILED"; return 1; fi
+fetch_diff(){ local pr="$1"; local d="$WS/vllm_$pr.diff"
+  [ -s "$d" ] || curl -ksSL -o "$d" "$VLLM_REPO/pull/$pr.diff" || return 1
+  [ -s "$d" ] || return 1; echo "$d"
 }
-# #51473 carries a tests/ hunk that has no counterpart in an installed wheel, so
-# apply only the runtime file rather than the whole PR diff.
-apply_51473(){
-  local mf="$ROOT/vllm/model_executor/layers/fused_moe/oracle/mxfp4.py"
-  local mk="AITER_MXFP4_BF16 and activation == MoEActivation.SILU"
-  if grep -qF "$mk" "$mf" 2>/dev/null; then echo "  #51473: already present"; return 0; fi
-  curl -ksSL -o "$WS/vllm_51473.diff" "$VLLM_REPO/pull/51473.diff" || { echo "  #51473: FETCH FAIL"; return 1; }
-  ( cd "$ROOT" && git apply -p1 --include='vllm/*' --3way "$WS/vllm_51473.diff" ) 2>/dev/null \
-    || ( cd "$ROOT" && git apply -p1 --include='vllm/*' "$WS/vllm_51473.diff" ) 2>/dev/null \
-    && echo "  #51473: APPLIED" || { echo "  #51473: FAILED"; return 1; }
-}
-apply_51473 || true
-apply_pr 51714 "vllm/v1/attention/ops/rocm_aiter_mla_sparse.py" "_DSV4_SPARSE_GLUON" || true
 
-# #51918 is taken PARTIALLY, on purpose: only vllm/config/kernel.py, which
-# registers "flydsl_mega_moe" as an accepted --moe-backend value. The model-side
-# hunks are NOT applied.
-#
-# Two independent reasons, either of which is sufficient:
-#   1. The backend cannot run on this base at all. MegaMoE's intranode kernel
-#      imports mori.ir.flydsl, and this image has no mori.ir.flydsl (verified:
-#      ModuleNotFoundError). Applying the model hunks would buy a backend that
-#      raises on first use.
-#   2. The model.py hunks do not apply cleanly here. #51918 is written against a
-#      tree ~3 days newer than this 08-09 base; the two earlier hunks shift the
-#      line numbering enough that the third fails at model.py:300. `git apply
-#      --3way` cannot rescue it because site-packages is not a git repo, so
-#      there are no blobs to 3-way against. Force-grafting a DEP8 code path that
-#      cannot execute anyway is not worth the transplant risk -- that is exactly
-#      how the earlier pa_decode_sparse damage happened.
-#
-# Net effect: the TP8 arm is unaffected (it never selects this backend), and a
-# DEP8 row would be rejected at config time with a clear error instead of
-# failing deep inside a kernel. DEP8/MegaMoE stays out of scope on this route.
-apply_pr_files(){ local pr="$1" inc="$2" mf="$ROOT/$3" mk="$4" d="$WS/vllm_$1.diff"
-  if grep -qF "$mk" "$mf" 2>/dev/null; then echo "  #$pr ($inc): already present"; return 0; fi
-  curl -ksSL -o "$d" "$VLLM_REPO/pull/$pr.diff" || { echo "  #$pr: FETCH FAIL"; return 1; }
-  ( cd "$ROOT" && git apply -p1 --include="$inc" "$d" ) 2>/dev/null \
-    && echo "  #$pr ($inc): APPLIED" || { echo "  #$pr ($inc): FAILED"; return 1; }
+# Split a PR diff down to the hunks for ONE file. `patch -i <whole.diff> <file>`
+# does NOT do this -- it applies every hunk in the diff to the named file. Doing
+# that once wrote dspark.py's and mtp.py's hunks into model.py and left it with
+# a SyntaxError (an import landed mid-docstring). Always split first.
+split_diff(){ local d="$1" f="$2" out="$3"
+  python - "$d" "$f" "$out" <<'PYEOF'
+import re, sys
+src, target, out = sys.argv[1], sys.argv[2], sys.argv[3]
+parts = re.split(r"(?m)^(?=diff --git )", open(src).read())
+keep = [p for p in parts if p.startswith("diff --git a/%s " % target)]
+open(out, "w").write("".join(keep))
+sys.exit(0 if keep else 1)
+PYEOF
 }
-apply_pr_files 51918 "vllm/config/kernel.py" "vllm/config/kernel.py" "flydsl_mega_moe" || true
+
+# Apply one file's hunks. git apply first (exact); fall back to patch --fuzz,
+# which tolerates the context drift from #51918 being written against a tree a
+# few days newer than this base.
+apply_file(){ local pr="$1" f="$2" mk="$3" fuzz="${4:-0}"
+  if [ -n "$mk" ] && grep -qF "$mk" "$ROOT/$f" 2>/dev/null; then echo "  #$pr $f: already present"; return 0; fi
+  local d; d="$(fetch_diff "$pr")" || { echo "  #$pr: FETCH FAIL"; return 1; }
+  local one="$WS/${pr}_$(echo "$f" | tr / _).diff"
+  split_diff "$d" "$f" "$one" || { echo "  #$pr $f: no hunks in diff"; return 1; }
+  if ( cd "$ROOT" && git apply -p1 "$one" ) 2>/dev/null; then
+    echo "  #$pr $f: APPLIED"; return 0
+  fi
+  if [ "$fuzz" != "0" ]; then
+    if ( cd "$ROOT" && patch -p1 --forward --fuzz="$fuzz" --no-backup-if-mismatch -s -i "$one" ) 2>/dev/null; then
+      echo "  #$pr $f: APPLIED (fuzz=$fuzz)"
+      ( cd "$ROOT" && rm -f "$f.rej" "$f.orig" )
+      return 0
+    fi
+    ( cd "$ROOT" && rm -f "$f.rej" "$f.orig" )
+  fi
+  echo "  #$pr $f: FAILED"; return 1
+}
+
+# #51473 -- native MXFP4 TP8 shard allocation. MERGED 2026-08-11, i.e. AFTER
+# this 08-09 base, so unlike the 08-12 line it must be applied here. Its tests/
+# hunk has no counterpart in an installed wheel, hence per-file application.
+apply_file 51473 "vllm/model_executor/layers/fused_moe/oracle/mxfp4.py" \
+  "AITER_MXFP4_BF16 and activation == MoEActivation.SILU" || true
+
+# #51714 -- opt-in gluon sparse-MLA decode for gfx950. Dormant unless
+# VLLM_ROCM_DSV4_SPARSE_GLUON=1. Needs the aiter facade from step 1 to work.
+apply_file 51714 "vllm/v1/attention/ops/rocm_aiter_mla_sparse.py" "_DSV4_SPARSE_GLUON" || true
+
+# #51918 -- FlyDSL mega-MoE backend, now applied IN FULL.
+# A previous revision took only config/kernel.py (the backend name) and skipped
+# the model side, on the grounds that mori.ir.flydsl was missing so the backend
+# could never run. Step 2 removes that blocker, so the model hunks go in too.
+# model.py needs fuzz=3: #51918 targets a tree a few days newer and the earlier
+# hunks shift line numbering. All 6 of its hunks land; the result is
+# py_compile-clean and imports (checked below).
+#
+# Each entry carries its own presence marker. Without one the step re-runs on an
+# already-patched container, git apply correctly refuses, and the log says
+# FAILED -- functionally a no-op, but it reads like a real failure in CI output.
+apply_file 51918 "vllm/config/kernel.py"                          "flydsl_mega_moe"          || true
+apply_file 51918 "vllm/models/deepseek_v4/amd/dspark.py"          "finalize_mega_moe_layers" || true
+apply_file 51918 "vllm/models/deepseek_v4/amd/mega_moe_experts.py" "MegaMoE expert layer"    || true
+apply_file 51918 "vllm/models/deepseek_v4/amd/mega_moe_runtime.py" "MegaMoEV2 runtime"       || true
+apply_file 51918 "vllm/models/deepseek_v4/amd/mtp.py"             "finalize_mega_moe_layers" || true
+apply_file 51918 "vllm/models/deepseek_v4/amd/model.py"           "use_mega_moe" 3           || true
 
 # --- 4/4 verify ---------------------------------------------------------------
-echo "chk gluon gfx950      = $([ -f "$ROOT/aiter/ops/triton/_gluon_kernels/gfx950/attention/pa_decode_sparse.py" ] && echo present || echo MISSING)"
-echo "chk aiter #4417       = $(grep -c 'requires_flydsl_stage2_reduce\|resolve_flydsl_grid_y_persist_m' "$ROOT/aiter/ops/flydsl/moe_kernels.py" 2>/dev/null) (expect 5)"
-echo "chk vllm #51473       = $(grep -c 'AITER_MXFP4_BF16 and activation == MoEActivation.SILU' "$ROOT/vllm/model_executor/layers/fused_moe/oracle/mxfp4.py" 2>/dev/null) (expect 1)"
-echo "chk vllm #51714       = $(grep -c '_DSV4_SPARSE_GLUON' "$ROOT/vllm/v1/attention/ops/rocm_aiter_mla_sparse.py" 2>/dev/null)"
-echo "chk vllm #51918       = $(grep -c 'flydsl_mega_moe' "$ROOT/vllm/config/kernel.py" 2>/dev/null)"
-python -m py_compile "$ROOT/aiter/ops/triton/attention/pa_decode_sparse.py" \
+echo "chk gluon gfx950 kernel = $([ -f "$ROOT/aiter/ops/triton/_gluon_kernels/gfx950/attention/pa_decode_sparse.py" ] && echo present || echo MISSING)"
+echo "chk aiter #4417 guards  = $(grep -c 'requires_flydsl_stage2_reduce\|resolve_flydsl_grid_y_persist_m' "$ROOT/aiter/ops/flydsl/moe_kernels.py" 2>/dev/null) (expect 5)"
+echo "chk vllm  #51473        = $(grep -c 'AITER_MXFP4_BF16 and activation == MoEActivation.SILU' "$ROOT/vllm/model_executor/layers/fused_moe/oracle/mxfp4.py" 2>/dev/null) (expect 1)"
+echo "chk vllm  #51714        = $(grep -c '_DSV4_SPARSE_GLUON' "$ROOT/vllm/v1/attention/ops/rocm_aiter_mla_sparse.py" 2>/dev/null)"
+echo "chk vllm  #51918 name   = $(grep -c 'flydsl_mega_moe' "$ROOT/vllm/config/kernel.py" 2>/dev/null)"
+echo "chk vllm  #51918 model  = $(grep -c 'use_mega_moe' "$ROOT/vllm/models/deepseek_v4/amd/model.py" 2>/dev/null) (expect >0)"
+
+python -m py_compile \
+  "$ROOT/aiter/ops/triton/attention/pa_decode_sparse.py" \
+  "$ROOT/aiter/ops/flydsl/moe_kernels.py" \
   "$ROOT/vllm/model_executor/layers/fused_moe/oracle/mxfp4.py" \
-  "$ROOT/vllm/v1/attention/ops/rocm_aiter_mla_sparse.py" && echo PY_COMPILE_OK || { echo PY_COMPILE_FAIL; exit 1; }
+  "$ROOT/vllm/v1/attention/ops/rocm_aiter_mla_sparse.py" \
+  "$ROOT/vllm/models/deepseek_v4/amd/model.py" \
+  "$ROOT/vllm/models/deepseek_v4/amd/mtp.py" \
+  "$ROOT/vllm/models/deepseek_v4/amd/dspark.py" \
+  "$ROOT/vllm/models/deepseek_v4/amd/mega_moe_experts.py" \
+  "$ROOT/vllm/models/deepseek_v4/amd/mega_moe_runtime.py" \
+  "$ROOT/vllm/config/kernel.py" && echo PY_COMPILE_OK || { echo PY_COMPILE_FAIL; exit 1; }
+
 python - <<'PYEOF'
-import importlib
-for m in ["aiter.jit.core","aiter.ops.triton.attention.pa_decode_sparse",
+import importlib, inspect, re, sys
+
+fail = False
+
+# The facade signature is the check that actually matters for the gluon knob:
+# the kernel file being present says nothing about whether the call site's
+# keywords are accepted.
+try:
+    from aiter.ops.triton.attention.pa_decode_sparse import pa_decode_sparse as f
+    p = inspect.signature(f).parameters
+    missing = [k for k in ("extra_cache", "extra_indices", "extra_indptr") if k not in p]
+    if missing:
+        fail = True
+        print("FACADE_MISSING", missing, "-- gluon would fall back to Triton at runtime")
+    else:
+        print("FACADE_OK extra_cache/extra_indices/extra_indptr accepted")
+except Exception as e:
+    fail = True
+    print("FACADE_ERR", type(e).__name__, e)
+
+for m in ["aiter.jit.core",
+          "aiter.ops.triton.attention.pa_decode_sparse",
+          "aiter.fhmoe",                                    # FSE
+          "aiter.ops.flydsl.fhmoe",                         # FSE
+          "mori.ir.flydsl",                                 # MegaMoE
+          "aiter.ops.flydsl.kernels.flydsl_dispatch_combine_intranode_kernel",
           "vllm.model_executor.layers.fused_moe.oracle.mxfp4",
-          "vllm.v1.attention.ops.rocm_aiter_mla_sparse","vllm._aiter_ops"]:
-    try: importlib.import_module(m); print("IMPORT_OK",m)
-    except Exception as e: print("IMPORT_ERR",m,type(e).__name__,(str(e).splitlines() or [''])[-1])
-# _set_current_hip_stream is NOT a top-level attribute of aiter.jit.core -- it is
-# called there as `module._set_current_hip_stream(...)`, i.e. it lives on the
+          "vllm.v1.attention.ops.rocm_aiter_mla_sparse",
+          "vllm.models.deepseek_v4.amd.model",
+          "vllm._aiter_ops"]:
+    try:
+        importlib.import_module(m)
+        print("IMPORT_OK", m)
+    except Exception as e:
+        fail = True
+        print("IMPORT_ERR", m, type(e).__name__, (str(e).splitlines() or [""])[-1])
+
+# _set_current_hip_stream is NOT a top-level attribute of aiter.jit.core -- it
+# is called there as `module._set_current_hip_stream(...)`, i.e. it lives on the
 # compiled .so that core.py loads. hasattr(core, ...) therefore returns False on
 # a perfectly healthy tree; an earlier version of this probe read that False as
-# a missing symbol. Grep the call site instead: what the old wholesale
-# post2-python overlay actually did was regress core.py so the call vanished.
+# a missing symbol. Grep the call site instead.
 try:
-    import aiter.jit.core as c, inspect, re
+    import aiter.jit.core as c
     n = len(re.findall(r"_set_current_hip_stream", inspect.getsource(c)))
     print(f"core.py _set_current_hip_stream call sites: {n} (expect >=1)")
-except Exception as e: print("core probe err",e)
+except Exception as e:
+    print("core probe err", e)
+
+print("VERIFY:", "FAILURES_PRESENT" if fail else "ALL_OK")
+sys.exit(1 if fail else 0)
 PYEOF
-echo "[add] DONE"
+rc=$?
+echo "[patch] DONE (verify rc=$rc)"
+exit $rc
