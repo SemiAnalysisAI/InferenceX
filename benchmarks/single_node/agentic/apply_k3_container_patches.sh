@@ -238,8 +238,27 @@ print("[kv-blockpool] patched", p)
 EOF
 }
 
+# Per-patch switches, so a single patch can be isolated without disabling the
+# others. Note patch [1] is load-bearing: without it ROCM_AITER_FA prefill dies
+# at warmup with the fmha_fwd_bf16_opus TypeError, so skipping it does not give
+# a clean baseline -- it gives a different crash.
+#   SKIP_PATCH_AITER=1      skip [1] aiter pybind11
+#   SKIP_PATCH_CUDAGRAPH=1  skip [2] TritonMLA UNIFORM_BATCH   <- the HIP-999 suspect
+#   SKIP_PATCH_BLOCKPOOL=1  skip [3] KV block-pool clamp
 echo "[kimi-patches] applying in-container patches..."
-patch_aiter_pybind11      || true
-patch_triton_mla_cudagraph || true
-patch_kv_blockpool         || true
+if [ "${SKIP_PATCH_AITER:-0}" = "1" ]; then
+    echo "[aiter-pybind11] SKIPPED via SKIP_PATCH_AITER=1"
+else
+    patch_aiter_pybind11 || true
+fi
+if [ "${SKIP_PATCH_CUDAGRAPH:-0}" = "1" ]; then
+    echo "[triton-mla-cudagraph] SKIPPED via SKIP_PATCH_CUDAGRAPH=1"
+else
+    patch_triton_mla_cudagraph || true
+fi
+if [ "${SKIP_PATCH_BLOCKPOOL:-0}" = "1" ]; then
+    echo "[kv-blockpool] SKIPPED via SKIP_PATCH_BLOCKPOOL=1"
+else
+    patch_kv_blockpool || true
+fi
 echo "[kimi-patches] done."
