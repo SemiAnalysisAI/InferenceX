@@ -356,6 +356,37 @@ def test_default_http_post_retries_only_retryable_http_statuses(
         )
 
 
+def test_default_http_post_maps_incomplete_body_to_transport_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class IncompleteResponse:
+        def __enter__(self) -> Self:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def read(self, size: int) -> bytes:
+            return self.read1(size)
+
+        def read1(self, size: int) -> bytes:
+            raise mpe.http.client.IncompleteRead(b'{"choices":', 100)
+
+    monkeypatch.setattr(
+        mpe._NO_REDIRECT_OPENER,
+        "open",
+        lambda *args, **kwargs: IncompleteResponse(),
+    )
+
+    with pytest.raises(mpe.TransportError):
+        mpe._default_http_post(
+            url="https://provider.example/v1/chat/completions",
+            headers={"Authorization": "Bearer secret"},
+            payload={"model": "MiniMax-M3", "messages": []},
+            timeout_seconds=1,
+        )
+
+
 def test_default_http_post_rejects_redirect_without_leaking_authorization() -> None:
     received_authorization: list[str | None] = []
 

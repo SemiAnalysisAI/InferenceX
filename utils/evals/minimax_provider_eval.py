@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import copy
 import hashlib
+import http.client
 import json
 import math
 import re
@@ -250,7 +251,12 @@ def _default_http_post(
         raise ValueError(
             f"chat completion request failed with HTTP {exc.code}: {exc.reason}"
         ) from exc
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+    except (
+        urllib.error.URLError,
+        http.client.HTTPException,
+        TimeoutError,
+        OSError,
+    ) as exc:
         raise TransportError(str(exc)) from exc
     try:
         return json.loads(content)
