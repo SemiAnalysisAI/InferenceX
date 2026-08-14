@@ -1767,7 +1767,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp:
     - dram-utilization: 0.80
       search-space:
       - spec-decoding: "mtp"
-        conc-list: [ 1,2,4,8,16,32 ]
+        conc-list: [ 1,2,4,8,16,32,48 ]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         prefill:
