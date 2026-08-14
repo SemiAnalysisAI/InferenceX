@@ -5979,5 +5979,5 @@
   description:
     - "Append TP4 concurrency 6 to the existing B200 Qwen3.5 FP8 SGLang AgentX MTP resident curve."
     - "Canary validation uses the trusted E2E workflow's 300-second duration override; the production recipe remains unchanged."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2614
   append-only: true
