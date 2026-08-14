@@ -32,7 +32,7 @@ set -x
 #
 # Perf-search knobs. Each defaults to the reference command's value, so an
 # otherwise-unset run reproduces the reference exactly:
-#   GPU_MEM_UTIL             0.84   (vllm-simple; 0.90 otherwise)
+#   GPU_MEM_UTIL             0.90
 #   MAX_NUM_BATCHED_TOKENS   16384  (vLLM default is 8192)
 #   AITER_A8W4               1      (reference; 0 = aiter a16w4 MoE path)
 #   LANGUAGE_MODEL_ONLY      false  (reference loads the vision tower)
@@ -225,14 +225,7 @@ MAX_CUDAGRAPH_CAPTURE_SIZE="${MAX_CUDAGRAPH_CAPTURE_SIZE:-44}"
 CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 1 "$MAX_CUDAGRAPH_CAPTURE_SIZE")"
 COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}")
 
-if [[ "${KV_OFFLOAD_BACKEND:-}" == "vllm-simple" ]]; then
-    # The full 1M K3 + DSpark graph is within 0.34 GiB of the post-load free
-    # memory at 0.90 on MI355X. 0.84 leaves enough headroom for graph capture.
-    DEFAULT_GPU_MEM_UTIL=0.84
-else
-    DEFAULT_GPU_MEM_UTIL=0.9
-fi
-GPU_MEM_UTIL="${GPU_MEM_UTIL:-$DEFAULT_GPU_MEM_UTIL}"
+GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.9}"
 
 echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
