@@ -7461,8 +7461,6 @@ minimaxm3-fp4-b200-vllm-agentic-mtp:
   multinode: false
   scenarios:
     agentic-coding:
-    # 0.683 maps the B200 TP4 SimpleCPU point to a 1,024 GB engine-level CPU
-    # KV budget. GPU-resident points receive a zero budget.
     - dram-utilization: 0.683
       search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1] }
