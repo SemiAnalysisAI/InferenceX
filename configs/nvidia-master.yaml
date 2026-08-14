@@ -7736,6 +7736,103 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-2p1d-dep8-dep8:
           ep: 8
           dp-attn: true
 
+dsv4-fp4-gb200-dynamo-vllm-agentic-mtp-agg:
+  image: vllm/vllm-openai:nightly-3ee2df30337a301164c46ae444b76ee67e71c106
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: cluster:gb200-nv
+  precision: fp4
+  framework: dynamo-vllm
+  router: { name: dynamo-router, version: "1.3.1" }
+  multinode: true
+  disagg: false
+  scenarios:
+    agentic-coding:
+    - search-space:
+      # Match the B200 TP8 latency points for direct normalized-interactivity
+      # comparison, then use the public vLLM GB200 DEP8 topology for throughput.
+      - spec-decoding: mtp
+        conc-list: [1, 2, 4, 6, 8]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/agentic/agg-gb200-tp8-mtp-agentic.yaml"
+        decode:
+          num-worker: 0
+          tp: 8
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        conc-list: [8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/agentic/agg-gb200-dep8-mtp-agentic.yaml"
+        decode:
+          num-worker: 0
+          tp: 8
+          ep: 8
+          dp-attn: true
+
+dsv4-fp4-gb200-dynamo-vllm-agentic-mtp-disagg:
+  image: vllm/vllm-openai:nightly-3ee2df30337a301164c46ae444b76ee67e71c106
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: cluster:gb200-nv
+  precision: fp4
+  framework: dynamo-vllm
+  router: { name: dynamo-router, version: "1.3.1" }
+  kv-p2p-transfer: nixl
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - search-space:
+      # One two-tray DEP8 prefill and decode worker covers the balanced region.
+      - spec-decoding: mtp
+        conc-list: [32, 64, 96, 128, 192, 256]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/agentic/disagg-gb200-1p1d-dep8-dep8-mtp-agentic.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+      # A second DEP8 prefill worker extends the high-concurrency region.
+      - spec-decoding: mtp
+        conc-list: [192, 256, 384, 512]
+        prefill:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/agentic/disagg-gb200-2p1d-dep8-dep8-mtp-agentic.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+
 dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-agg:
   image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-426e59f
   model: deepseek-ai/DeepSeek-V4-Pro
