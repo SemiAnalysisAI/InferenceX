@@ -61,7 +61,7 @@ case "$SCENARIO" in
         export AGENTIC_OUTPUT_DIR="${AGENTIC_OUTPUT_DIR:-$INFMAX_CONTAINER_WORKSPACE}"
         export AIPERF_SERVER_METRICS_URLS="http://localhost:${PORT}/metrics"
         export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="vllm:"
-        exec "$INFMAX_CONTAINER_WORKSPACE/benchmarks/multi_node/agentic_srt.sh"
+        exec bash "$INFMAX_CONTAINER_WORKSPACE/benchmarks/multi_node/agentic_srt.sh"
         ;;
     *)
         echo "ERROR: unsupported scenario: $SCENARIO" >&2
