@@ -51,8 +51,22 @@ say "1/7 sanity: shipped recipe backend present (_mtp_decode_qlen)"
 grep -q _mtp_decode_qlen "$R" || { echo "!! recipe rocm_aiter_mla.py not installed — apply the base recipe first"; exit 1; }
 
 say "2/7 force DSpark draft causal (dflash_config.causal=true)"
-DCACHE=/dev/shm/hf-cache/models--Inferact--Kimi-K3-DSpark/snapshots
-CFG="$(ls -d "$DCACHE"/*/ 2>/dev/null | head -1)config.json"
+# The draft can be staged under any HF cache root (mia1 nodes use
+# /mnt/hf_hub_cache, not /dev/shm/hf-cache), so search the configured roots
+# instead of one hardcoded path. A miss here is not fatal — the recipe resolves
+# the snapshot via huggingface_hub and forces causal before serving — but a
+# hardcoded path meant this step always no-op'd on those nodes.
+CFG=""
+for _root in "${HF_HUB_CACHE:-}" "${HF_HOME:+$HF_HOME/hub}" /mnt/hf_hub_cache \
+             /dev/shm/hf-cache "$HOME/.cache/huggingface/hub"; do
+  [ -n "$_root" ] || continue
+  # Plain glob, not $(ls ...): under `set -e` with pipefail an `ls` miss makes
+  # the assignment itself fail and aborts the bootstrap. An unmatched glob just
+  # stays literal and fails the -f test.
+  for _c in "$_root"/models--Inferact--Kimi-K3-DSpark/snapshots/*/; do
+    if [ -f "${_c}config.json" ]; then CFG="${_c}config.json"; break 2; fi
+  done
+done
 if [ -f "$CFG" ]; then
   cp -n "$CFG" "$CFG.orig.bak"
   python3 - "$CFG" <<'PY'

@@ -73,8 +73,31 @@ if [ -n "$ROCR_VISIBLE_DEVICES" ]; then export HIP_VISIBLE_DEVICES="$ROCR_VISIBL
 # source on ROCm; with causal=true the draft runs the fp8 asm path like the
 # target). Idempotent write — the draft may live anywhere the harness staged it,
 # so set it here rather than relying on the bootstrap's /dev/shm-scoped step.
-if [ -f "$DRAFT_MODEL_PATH/config.json" ]; then
-    python3 - "$DRAFT_MODEL_PATH/config.json" <<'PY'
+#
+# When DRAFT_MODEL_PATH is a bare repo id, "$DRAFT_MODEL_PATH/config.json" is not
+# a real path, so resolve the downloaded snapshot out of the HF cache. Skipping
+# this quietly costs ~15 min: the draft stays non-causal and the engine only dies
+# at backend selection with "ROCM_AITER_MLA ... non-causal attention not
+# supported", so a miss is fatal here rather than a warning.
+DRAFT_CFG_DIR="$DRAFT_MODEL_PATH"
+if [ ! -f "$DRAFT_CFG_DIR/config.json" ]; then
+    DRAFT_CFG_DIR="$(python3 - "$DRAFT_MODEL_PATH" <<'PY'
+import sys
+try:
+    from huggingface_hub import snapshot_download
+    print(snapshot_download(sys.argv[1], local_files_only=True), end="")
+except Exception as e:
+    print("", end="")
+PY
+)"
+fi
+if [ ! -f "$DRAFT_CFG_DIR/config.json" ]; then
+    echo "!! cannot locate draft config.json for '$DRAFT_MODEL_PATH'" >&2
+    echo "   (resolved: '${DRAFT_CFG_DIR:-<empty>}'). Without dflash_config.causal=true" >&2
+    echo "   the draft is non-causal and ROCM_AITER_MLA refuses to initialize." >&2
+    exit 1
+fi
+python3 - "$DRAFT_CFG_DIR/config.json" <<'PY'
 import json, sys
 f = sys.argv[1]
 c = json.load(open(f))
@@ -86,7 +109,6 @@ else:
     json.dump(c, open(f, "w"), indent=2)
     print("forced draft dflash_config.causal=true:", f)
 PY
-fi
 
 # ---- MI355X day-0 serving environment (AITER + fp8 ASM MLA) ------------------
 export VLLM_ROCM_USE_AITER=1
@@ -97,6 +119,22 @@ export VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4=1
 export AITER_BF16_FP8_MOE_BOUND=0
 export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 export SAFETENSORS_FAST_GPU=1
+
+# Weight load: `auto` took 745 s for the ~1.5 TB checkpoint (run 31774454379),
+# most of the pre-ready window. Use the fastsafetensors loader like the B300
+# siblings do. It is not NVIDIA-only — GDS is, and vLLM falls back to its nogds
+# path — but the package is not guaranteed in the ROCm nightly, so probe for it
+# and stay on `auto` if it is missing rather than failing the cell at serve time.
+LOAD_FORMAT="${LOAD_FORMAT:-}"
+if [ -z "$LOAD_FORMAT" ]; then
+    if python3 -c "import fastsafetensors" 2>/dev/null; then
+        LOAD_FORMAT=fastsafetensors
+    else
+        echo "  fastsafetensors not importable — falling back to --load-format auto" >&2
+        LOAD_FORMAT=auto
+    fi
+fi
+echo "  load-format: $LOAD_FORMAT"
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_HTTP_TIMEOUT_KEEP_ALIVE=900
 export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
@@ -260,7 +298,7 @@ VLLM_CMD=(
     --max-model-len 1048576
     --max-num-batched-tokens "$MNBT"
     --trust-remote-code
-    --load-format auto
+    --load-format "$LOAD_FORMAT"
     --moe-backend aiter
     --mm-encoder-tp-mode data
     "${KVDTYPE_ARGS[@]}"
