@@ -5960,3 +5960,14 @@
     - "Use native EAGLE MTP (3 steps, top-k 1, 4 draft tokens) and golden synthetic acceptance length 2.49 for throughput; eval retains real verification."
     - "Follow the official SGLang DeepSeek-V4 Blackwell recipe, require nonempty SGLang server metrics, keep pooled AgentX connections alive, let AIPerf own HiCache warmup, and reserve transient MoE workspace at DEP8 c512."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2577
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang-agentic
+    - qwen3.5-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add new qwen3.5-fp4-mi355x-sglang-agentic config for Qwen3.5-397B-A17B MXFP4 on MI355X with native EAGLE MTP (num-steps=5, draft-tokens=6, topk=1), TP4/EP4, HiCache DRAM KV offloading, and golden simulated acceptance length 3.61."
+    - "Consolidate qwen3.5-fp4-mi355x-sglang-agentic-mtp from two arms (TP2/EP2 + TP4/EP1, no KV offloading) to a single TP4/EP4 arm with HiCache DRAM KV offloading, aligned concurrency sweep [1, 2, 4, 8, 10, 12, 16]."
+    - "New benchmark script benchmarks/single_node/agentic/qwen3.5_fp4_mi355x_sglang.sh with EAGLE MTP, HiCache, qwen3 reasoning parser, and qwen3_coder tool-call parser."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2605
