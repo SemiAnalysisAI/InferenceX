@@ -196,19 +196,75 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         # surface the real dlopen error ourselves -- without it the failure is
         # indistinguishable from a missing file.
         python3 - <<'PYEOF' || true
-# ensure_native() swallows the real error and latches _native_bound=True on
-# the first attempt, so the open question is whether the failure is import
-# ORDER (torch not yet loaded) or a symbol/ABI mismatch. Import torch first:
-# if the warning disappears, it is ordering; if it persists, it is the build.
+# Definitive c_ops instrumentation.
+#
+# ensure_native() swallows the real exception in `except ImportError` and
+# latches _native_bound=True on the first attempt, so neither the error nor the
+# caller is ever visible. Wrap __import__ to capture the exception, and hook the
+# logger to capture the stack at the moment the warning is emitted -- together
+# these name both WHAT fails and WHO triggered it.
+import builtins
+import logging
+import sys
 import traceback
-import torch  # noqa: F401  -- deliberately first
-print("torch:", torch.__version__)
+
+_real_import = builtins.__import__
+_failures = []
+
+
+def _tracing_import(name, globals=None, locals=None, fromlist=(), level=0):
+    try:
+        return _real_import(name, globals, locals, fromlist, level)
+    except BaseException as exc:  # noqa: BLE001 - diagnostic
+        if "c_ops" in name:
+            _failures.append((name, exc))
+            print(f"[probe] IMPORT FAILED: {name}: {type(exc).__name__}: {exc}", flush=True)
+            traceback.print_exc()
+        raise
+
+
+class _WarnHook(logging.Handler):
+    def emit(self, record):
+        try:
+            msg = record.getMessage()
+        except Exception:  # noqa: BLE001
+            return
+        if "c_ops compiled extension not found" in msg:
+            print("[probe] ensure_native() gave up -- caller stack:", flush=True)
+            traceback.print_stack()
+
+
+builtins.__import__ = _tracing_import
+logging.getLogger().addHandler(_WarnHook())
+logging.getLogger().setLevel(logging.DEBUG)
+
+print("[probe] torch loaded before lmcache?", "torch" in sys.modules, flush=True)
+
+# Import exactly what the server imports, in the server's order.
+import lmcache.integration.vllm.lmcache_mp_connector  # noqa: E402,F401
+
+print("[probe] torch in sys.modules now:", "torch" in sys.modules, flush=True)
+print("[probe] c_ops in sys.modules:", "lmcache.c_ops" in sys.modules, flush=True)
+print(f"[probe] captured c_ops import failures: {len(_failures)}", flush=True)
+for name, exc in _failures:
+    print(f"[probe]   {name}: {type(exc).__name__}: {exc}", flush=True)
+
+# Now show whether the singleton is latched off despite the extension being loadable.
 try:
-    import lmcache.c_ops
-    print("c_ops import (torch preloaded): OK")
-except BaseException as exc:
-    print("c_ops import (torch preloaded) FAILED:", type(exc).__name__, exc)
-    traceback.print_exc()
+    from lmcache.v1.platform.cuda.device_ops import CudaDeviceOps
+
+    ops = CudaDeviceOps()
+    print("[probe] CudaDeviceOps._native_bound =", getattr(ops, "_native_bound", "?"), flush=True)
+except BaseException as exc:  # noqa: BLE001
+    print("[probe] could not inspect CudaDeviceOps:", type(exc).__name__, exc, flush=True)
+
+# And whether a direct import works at this point.
+try:
+    import lmcache.c_ops  # noqa: F401
+
+    print("[probe] direct import lmcache.c_ops AFTER: OK", flush=True)
+except BaseException as exc:  # noqa: BLE001
+    print("[probe] direct import lmcache.c_ops AFTER FAILED:", type(exc).__name__, exc, flush=True)
 PYEOF
         # c_ops.so links libtorch/libc10 but they are not on the default
         # loader path -- `ldd` reports libc10.so, libtorch.so, libtorch_cpu.so,
