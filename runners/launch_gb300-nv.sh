@@ -228,6 +228,10 @@ elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "
     mkdir -p benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4 || exit 1
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4" \
         benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4 || exit 1
+    if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
+        find benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4 -name "*.yaml" \
+            -exec sed -i '/TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS/d' {} +
+    fi
 elif [[ "$IS_AGENTIC" == "1" ]]; then
     # Agentic recipes use NVIDIA/srt-slurm v1.0.36. This is the upstream
     # version validated in InferenceX PR #2302 and includes per-node DP,

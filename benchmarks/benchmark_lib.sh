@@ -1995,7 +1995,7 @@ build_replay_cmd() {
     # rolling TTFT/ITL/throughput block and emit it every 30 seconds.
     export AIPERF_UI_REALTIME_METRICS_ENABLED=true
     REPLAY_CMD="$AIPERF_CLI profile --scenario inferencex-agentx-mvp"
-    REPLAY_CMD+=" --url http://localhost:$PORT"
+    REPLAY_CMD+=" --url ${AIPERF_SERVER_URL:-http://localhost:$PORT}"
     REPLAY_CMD+=" --endpoint /v1/chat/completions"
     REPLAY_CMD+=" --endpoint-type chat"
     REPLAY_CMD+=" --streaming"
@@ -2174,13 +2174,57 @@ run_agentic_replay_and_write_outputs() {
     local result_dir="$1"
     local replay_rc
     local validation_rc
+    local warmup_shutdown_timeout="${AIPERF_WARMUP_FAILURE_SHUTDOWN_TIMEOUT_SECONDS:-120}"
+    local replay_fifo="$result_dir/.aiperf-output-${BASHPID:-$$}"
+    local replay_pid
+    local tee_pid
+    local watchdog_pid
+
+    if ! [[ "$warmup_shutdown_timeout" =~ ^[1-9][0-9]*$ ]]; then
+        echo "ERROR: AIPERF_WARMUP_FAILURE_SHUTDOWN_TIMEOUT_SECONDS must be a positive integer" >&2
+        return 1
+    fi
 
     echo "$REPLAY_CMD" > "$result_dir/benchmark_command.txt"
+    rm -f "$replay_fifo"
+    mkfifo "$replay_fifo"
 
     set +e
     set -x
-    $REPLAY_CMD 2>&1 | tee "$result_dir/benchmark.log"
-    replay_rc=${PIPESTATUS[0]}
+    tee "$result_dir/benchmark.log" < "$replay_fifo" &
+    tee_pid=$!
+    $REPLAY_CMD > "$replay_fifo" 2>&1 &
+    replay_pid=$!
+    (
+        set +x
+        while _background_process_is_running "$replay_pid"; do
+            if [[ -f "$result_dir/benchmark.log" ]] \
+                    && grep -Eq 'Terminal warmup failure|Run aborted \(warmup_failure\)' \
+                    "$result_dir/benchmark.log"; then
+                deadline=$((SECONDS + warmup_shutdown_timeout))
+                while _background_process_is_running "$replay_pid" \
+                        && [[ $SECONDS -lt $deadline ]]; do
+                    sleep 1
+                done
+                if _background_process_is_running "$replay_pid"; then
+                    echo "ERROR: AIPerf did not exit within ${warmup_shutdown_timeout}s after warmup failure" >&2
+                    stop_background_process_tree "$replay_pid" "AIPerf" 10
+                fi
+                break
+            elif [[ -f "$result_dir/benchmark.log" ]] \
+                    && grep -Eq 'Phase profiling \(profiling\) started' \
+                    "$result_dir/benchmark.log"; then
+                break
+            fi
+            sleep 1
+        done
+    ) &
+    watchdog_pid=$!
+    wait "$replay_pid"
+    replay_rc=$?
+    wait "$watchdog_pid" || true
+    wait "$tee_pid" || true
+    rm -f "$replay_fifo"
     set +x
     set -e
 
