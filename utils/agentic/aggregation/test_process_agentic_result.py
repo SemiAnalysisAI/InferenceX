@@ -343,6 +343,7 @@ def _run_processor(
             "KV_OFFLOADING": "none",
             "RUNNER_TYPE": "b200-x4",
             "IMAGE": "test/image:0.1",
+            "RECIPE_FINGERPRINT": "b" * 64,
             "SPEC_DECODING": "none",
             "DISAGG": "false",
             "IS_MULTINODE": "false",
@@ -373,6 +374,7 @@ def test_processor_emits_nested_request_and_server_metrics(tmp_path: Path):
     result_dir = _write_fixture(tmp_path)
     output_dir = tmp_path / "out"
     agg = _run_processor(result_dir, output_dir)
+    assert agg["recipe_fingerprint"] == "b" * 64
     missing = AGG_TOP_LEVEL_KEYS - set(agg.keys())
     assert not missing, f"agg JSON missing top-level keys: {sorted(missing)}"
     assert not (_flat_request_keys(result_dir) & set(agg.keys()))

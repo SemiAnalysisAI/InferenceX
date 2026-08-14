@@ -215,19 +215,6 @@ qwen3.5-fp8-mi355x-sglang-mtp:
       search-space:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
 
-qwen3.5-fp8-mi355x-sglang-agentic:
-  image: lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260414
-  model: Qwen/Qwen3.5-397B-A17B-FP8
-  model-prefix: qwen3.5
-  runner: cluster:mi355x-amds
-  precision: fp8
-  framework: sglang
-  multinode: false
-  scenarios:
-    agentic-coding:
-    - search-space:
-      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
-
 # MI325X official matrix selected from the complete 62-point fast sweep. TP2
 # peaks at c4, TP4/TEP4 at c40, and TP8/TEP8 at c64; the next point beyond each
 # knee is retained to document the throughput cliff.
@@ -1301,26 +1288,6 @@ qwen3.5-fp8-mi325x-sglang-mtp:
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
 
-qwen3.5-fp8-mi355x-sglang-agentic-hicache:
-  image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260521
-  model: Qwen/Qwen3.5-397B-A17B-FP8
-  model-prefix: qwen3.5
-  runner: cluster:mi355x-amds
-  precision: fp8
-  framework: sglang
-  multinode: false
-  scenarios:
-    agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
-      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
-      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 32, 48, 64] }
-
-# MTP twin of dsv4-fp4-mi355x-vllm-agentic. The topologies, KV-offload backends,
-# and concurrency points are identical; speculative decoding is enabled on the
-# current immutable ROCm nightly because the base config's retired nightly tag
-# is no longer available from Docker Hub. Throughput uses the three-token golden
-# synthetic acceptance length, while eval-only runs retain real verification.
 dsv4-fp4-mi355x-vllm-agentic-mtp:
   image: vllm/vllm-openai-rocm:nightly-821717118fc26667dd474b9b0ab81d29259dfc5c
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -1522,27 +1489,6 @@ dsv4-fp4-mi355x-atom-disagg:
           additional-settings:
           - "DECODE_NODES=1"
       # 1P1D TP8
-minimaxm3-fp8-mi300x-vllm-agentic:
-  image: vllm/vllm-openai-rocm:nightly-04c2a8deac44fdb1ca3e2b5ec3e6bf16f3f6a914
-  model: MiniMaxAI/MiniMax-M3-MXFP8
-  model-prefix: minimaxm3
-  runner: cluster:mi300x-amds
-  precision: fp8
-  framework: vllm
-  multinode: false
-  scenarios:
-    agentic-coding:
-    # FP8 KV cache is 29,952 bytes/token/GPU for TP/TEP. Projecting the
-    # measured BF16 cache budget gives about 2.76M active tokens on MI300X;
-    # the June-21 service-time-weighted request is 269k tokens, so sample every
-    # integer around the expected conc-10 cliff rather than geometric jumps.
-    - dram-utilization: 0.80
-      search-space:
-      - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
-      - { tp: 8, ep: 8, kv-offloading: none, conc-list: [2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
-      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
-
 minimaxm3-fp8-mi300x-vllm-agentic-mtp:
   image: vllm/vllm-openai-rocm:v0.27.1
   model: MiniMaxAI/MiniMax-M3-MXFP8
@@ -1575,32 +1521,6 @@ glm5.2-fp8-mi325x-sglang-agentic-mtp:
       search-space:
       - { tp: 8, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 3, 4, 5, 6, 8] }
 
-minimaxm3-fp8-mi325x-vllm-agentic:
-  image: vllm/vllm-openai-rocm:nightly-04c2a8deac44fdb1ca3e2b5ec3e6bf16f3f6a914
-  model: MiniMaxAI/MiniMax-M3-MXFP8
-  model-prefix: minimaxm3
-  runner: cluster:mi325x-amds
-  precision: fp8
-  framework: vllm
-  multinode: false
-  scenarios:
-    agentic-coding:
-    # Measured FP8 capacities: TP4 1.66M tokens, TP8 4.93M tokens, and DEP8
-    # 12.69M aggregate tokens. With the June-21 service-time-weighted 269k
-    # active request, their expected cliffs are conc 6, 18, and 47. Use dense
-    # bands around each cliff; Mooncake rows overlap those bands because host
-    # storage improves prefix retention but does not hold active decode KV.
-    - dram-utilization: 0.80
-      search-space:
-      - { tp: 4, kv-offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }
-      - { tp: 4, ep: 4, kv-offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }
-      - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 32] }
-      - { tp: 8, ep: 8, kv-offloading: none, conc-list: [2, 4, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 32] }
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, conc-list: [16, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 72, 80], router: { name: vllm-router, version: "0.1.14" } }
-      - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }
-      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 32] }
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [24, 32, 36, 40, 44, 48, 52, 56, 60, 64, 72, 80, 96], router: { name: vllm-router, version: "0.1.14" } }
-
 minimaxm3-fp8-mi325x-vllm-agentic-mtp:
   image: vllm/vllm-openai-rocm:v0.27.1
   model: MiniMaxAI/MiniMax-M3-MXFP8
@@ -1614,20 +1534,6 @@ minimaxm3-fp8-mi325x-vllm-agentic-mtp:
     - dram-utilization: 0.20
       search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8, 10, 12, 14, 16, 18] }
-
-minimaxm3-fp4-mi355x-vllm-agentic:
-  image: vllm/vllm-openai-rocm:nightly-dcfebf93f4eccf30f71872283331eee757915daf
-  model: amd/MiniMax-M3-MXFP4
-  model-prefix: minimaxm3
-  runner: cluster:mi355x-amds
-  precision: fp4
-  framework: vllm
-  multinode: false
-  scenarios:
-    agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
-      - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [1, 4, 8, 16] }
 
 dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp:
   image: lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260719

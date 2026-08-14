@@ -1220,6 +1220,7 @@ _write_lm_eval_meta_json() {
   "framework": "${fw:-unknown}",
   "precision": "${prec:-unknown}",
   "spec_decoding": "${SPEC_DECODING:-}",
+  "recipe_fingerprint": "${RECIPE_FINGERPRINT:-}",
   "tp": ${TP:-1},
   "pp": ${PP_SIZE:-1},
   "dcp_size": ${DCP_SIZE:-1},
