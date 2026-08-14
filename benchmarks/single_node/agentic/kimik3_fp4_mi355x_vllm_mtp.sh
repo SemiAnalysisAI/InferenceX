@@ -130,6 +130,9 @@ export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
 # VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT. Baked DSpark layer reads this to route the
 # 12-head fp8 spec verify to the asm q-row-fold.
 export VLLM_ROCM_AITER_MLA_ASM_PADDING=asm
+# The drafter's context_proj faults inside ops.wvSplitK (run 31781752925 c1);
+# patch_wvsplitk.py only forces the activation contiguous. Skip the skinny path.
+export VLLM_ROCM_USE_SKINNY_GEMM=0
 # Merged tuned BF16 GEMM table installed by apply_k3_container_patches.sh.
 MERGED_GEMM_CSV="${MERGED_GEMM_CSV:-/opt/aiter-local/aiter/configs/merged_bf16_tuned_gemm.csv}"
 if [ -z "${AITER_CONFIG_GEMM_BF16:-}" ] && [ -f "$MERGED_GEMM_CSV" ]; then
