@@ -316,18 +316,34 @@ PYEOF
         # size of the node's /dev/shm mount.
         LMCACHE_L1_SIZE_GB="$TOTAL_CPU_DRAM_GB"
 
-        # Launch via python with torch imported FIRST, instead of the bare
-        # `lmcache` console script. CudaDeviceOps.ensure_native() sets
-        # `self._native_bound = True` BEFORE attempting `import lmcache.c_ops`,
-        # so if that first attempt happens while torch is not yet loaded the
-        # extension is written off permanently and the server silently runs the
-        # broken torch fallback for its whole life. The same import succeeds
-        # once torch is up -- this run proved it ("c_ops import (torch
-        # preloaded): OK") in the very process whose server logged "compiled
-        # extension not found". Preloading torch removes the ordering hazard.
+        # c_ops.so resolves c10/torch symbols only once libtorch is loaded
+        # RTLD_GLOBAL. Captured directly:
+        #
+        #   ImportError: .../lmcache/c_ops.cpython-312-x86_64-linux-gnu.so:
+        #   undefined symbol: _ZN3c104impl3cow23materialize_cow_storageERNS_11StorageImplE
+        #     ( c10::impl::cow::materialize_cow_storage(c10::StorageImpl&) )
+        #
+        # It is NOT an ABI mismatch -- the same import succeeds moments later,
+        # once torch is in the process, so the symbol does exist in this
+        # image's torch. But CudaDeviceOps.ensure_native() latches
+        # _native_bound = True on its FIRST attempt and swallows the error, so
+        # one early miss pins the process to the torch fallback for good, and
+        # that fallback is broken for this stack's multi-KV-group KDA/MLA
+        # layout (77-98% of stores fail).
+        #
+        # Preloading torch in the parent is not enough: the server forks CPU
+        # and GPU workers that import lmcache fresh. LD_PRELOAD applies to the
+        # whole process tree, so the symbols are resolvable everywhere. Scoped
+        # to this command via `env` rather than exported, to leave the vLLM
+        # server's environment untouched.
+        LMCACHE_LD_PRELOAD="${TORCH_LIB_DIR}/libc10.so:${TORCH_LIB_DIR}/libtorch_cpu.so:${TORCH_LIB_DIR}/libtorch.so"
+        if [ -f "${TORCH_LIB_DIR}/libc10_cuda.so" ]; then
+            LMCACHE_LD_PRELOAD="${LMCACHE_LD_PRELOAD}:${TORCH_LIB_DIR}/libc10_cuda.so:${TORCH_LIB_DIR}/libtorch_cuda.so"
+        fi
+        echo "LMCACHE_LD_PRELOAD=$LMCACHE_LD_PRELOAD"
         LMCACHE_CMD=(
-            python3 -c "import sys, torch; from lmcache.cli.main import main; sys.argv[0]='lmcache'; main()"
-            server
+            env "LD_PRELOAD=$LMCACHE_LD_PRELOAD"
+            lmcache server
             --host 127.0.0.1
             --port "$LMCACHE_PORT"
             --http-host 127.0.0.1
