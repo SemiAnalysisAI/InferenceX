@@ -91,6 +91,8 @@ backend:
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       enable-metrics: true
       trust-remote-code: true
+      reasoning-parser: deepseek-v4
+      tool-call-parser: deepseekv4
       stream-interval: 50
       watchdog-timeout: 1000000
       mem-fraction-static: 0.90
