@@ -50,11 +50,6 @@ if [ "${SKIP_K3_BOOTSTRAP:-0}" != "1" ]; then
     bash "$RECIPE_DIR/apply_k3_container_patches.sh"
 fi
 
-# Without this the drafter silently loses FULL cudagraphs under spec-decode.
-case "${DRAFT_BACKEND:-TRITON_MLA}" in
-    *TRITON*) bash "$RECIPE_DIR/apply_triton_mla_cudagraph_fix.sh" || true ;;
-esac
-
 DRAFT_MODEL="${DRAFT_MODEL:-Inferact/Kimi-K3-DSpark}"
 
 # Resolve target + draft weights (pre-staged else HF cache).
@@ -74,13 +69,10 @@ else
 fi
 if [ -n "$ROCR_VISIBLE_DEVICES" ]; then export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"; fi
 
-# Only AITER backends need the draft forced causal; TRITON_MLA takes it non-causal.
-DRAFT_BACKEND="${DRAFT_BACKEND:-TRITON_MLA}"
-case "$DRAFT_BACKEND" in
-    *AITER*) DRAFT_CAUSAL=true  ;;
-    *)       DRAFT_CAUSAL=false ;;
-esac
-
+# Force the DSpark draft causal (non-causal parallel drafting is a cudagraph OOB
+# source on ROCm; with causal=true the draft runs the fp8 asm path like the
+# target). Idempotent write — the draft may live anywhere the harness staged it,
+# so set it here rather than relying on the bootstrap's /dev/shm-scoped step.
 # DRAFT_MODEL_PATH may be a bare repo id, so fall back to the HF cache snapshot.
 DRAFT_CFG_DIR="$DRAFT_MODEL_PATH"
 if [ ! -f "$DRAFT_CFG_DIR/config.json" ]; then
@@ -95,24 +87,21 @@ PY
 )"
 fi
 if [ ! -f "$DRAFT_CFG_DIR/config.json" ]; then
-    echo "!! cannot locate draft config.json for '$DRAFT_MODEL_PATH'" >&2
-    echo "   (resolved: '${DRAFT_CFG_DIR:-<empty>}'). dflash_config.causal must be" >&2
-    echo "   pinned to $DRAFT_CAUSAL for DRAFT_BACKEND=$DRAFT_BACKEND before serving." >&2
+    echo "!! no draft config.json for '$DRAFT_MODEL_PATH' (resolved '${DRAFT_CFG_DIR:-}')." >&2
+    echo "   Without causal=true ROCM_AITER_MLA rejects the draft." >&2
     exit 1
 fi
-# Write explicitly, not just on true: the HF cache is shared across runs.
-python3 - "$DRAFT_CFG_DIR/config.json" "$DRAFT_CAUSAL" <<'PY'
+python3 - "$DRAFT_CFG_DIR/config.json" <<'PY'
 import json, sys
-f, want = sys.argv[1], sys.argv[2] == "true"
+f = sys.argv[1]
 c = json.load(open(f))
 d = c.setdefault("dflash_config", {})
-if d.get("causal") == want:
-    print(f"draft dflash_config.causal already {want}")
+if d.get("causal") is True:
+    print("draft already forced causal")
 else:
-    prev = d.get("causal")
-    d["causal"] = want
+    d["causal"] = True
     json.dump(c, open(f, "w"), indent=2)
-    print(f"set draft dflash_config.causal={want} (was {prev}):", f)
+    print("forced draft dflash_config.causal=true:", f)
 PY
 
 # ---- MI355X day-0 serving environment (AITER + fp8 ASM MLA) ------------------
@@ -124,18 +113,16 @@ export VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4=1
 export AITER_BF16_FP8_MOE_BOUND=0
 export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 export SAFETENSORS_FAST_GPU=1
-
 # fastsafetensors cuts weight load 745s -> 140s; not guaranteed in the ROCm image.
 LOAD_FORMAT="${LOAD_FORMAT:-}"
 if [ -z "$LOAD_FORMAT" ]; then
     if python3 -c "import fastsafetensors" 2>/dev/null; then
         LOAD_FORMAT=fastsafetensors
     else
-        echo "  fastsafetensors not importable — falling back to --load-format auto" >&2
+        echo "fastsafetensors not importable -> --load-format auto" >&2
         LOAD_FORMAT=auto
     fi
 fi
-echo "  load-format: $LOAD_FORMAT"
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_HTTP_TIMEOUT_KEEP_ALIVE=900
 export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
@@ -225,21 +212,23 @@ TOKENS_PER_SEQ=$((1 + NUM_SPEC_TOKENS))
 # thinking_on 2 -> 2.51). Do not mix with the greedy curve's 2.45.
 SYNTHETIC_ACCEPT_LEN="${SYNTHETIC_ACCEPT_LEN:-2.51}"
 
-# Draft on TRITON_MLA + bf16 KV (run 31765562914). The recipe's fp8-asm draft
-# faults in _rejection_kernel on the first live verify (run 31776367386).
-# Target keeps ROCM_AITER_MLA + fp8.
-DRAFT_KV_CACHE_DTYPE="${DRAFT_KV_CACHE_DTYPE:-auto}"
+# Draft attention backend: ROCM_AITER_MLA (draft forced causal -> fp8 asm path,
+# same as target). Throughput runs pin synthetic acceptance; EVAL_ONLY accuracy
+# runs use real block verification (synthetic commits drafted tokens regardless
+# of the target's logits, so generated text would be wrong -> eval scores 0).
+DRAFT_BACKEND="${DRAFT_BACKEND:-ROCM_AITER_MLA}"
 if [ "${EVAL_ONLY:-false}" = "true" ]; then
-    SPEC_CONFIG="{\"method\": \"dspark\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"$DRAFT_BACKEND\", \"kv_cache_dtype\": \"$DRAFT_KV_CACHE_DTYPE\", \"draft_sample_method\": \"probabilistic\", \"rejection_sample_method\": \"block\"}"
+    SPEC_CONFIG="{\"method\": \"dspark\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"$DRAFT_BACKEND\", \"draft_sample_method\": \"probabilistic\", \"rejection_sample_method\": \"block\"}"
 else
-    SPEC_CONFIG="{\"method\": \"dspark\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"$DRAFT_BACKEND\", \"kv_cache_dtype\": \"$DRAFT_KV_CACHE_DTYPE\", \"draft_sample_method\": \"probabilistic\", \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
+    SPEC_CONFIG="{\"method\": \"dspark\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"$DRAFT_BACKEND\", \"draft_sample_method\": \"probabilistic\", \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
 fi
 
 # ---- Mandated DSpark serving knobs (do not change) --------------------------
 # gpu-mem 0.95 / max-num-seqs 64 / MNBT 16384 / FULL_AND_PIECEWISE are mandated.
 MAX_NUM_SEQS="${MAX_NUM_SEQS:-64}"
 MNBT="${MNBT:-16384}"
-GPU_MEM="${GPU_MEM:-0.95}"
+# 0.85, not the recipe's 0.95: leave raw VRAM for aiter asm workspaces / RCCL.
+GPU_MEM="${GPU_MEM:-0.85}"
 KVDTYPE_ARGS=(
     --kv-cache-dtype "${KV_CACHE_DTYPE:-fp8}"
     --attention-backend "${ATTENTION_BACKEND:-ROCM_AITER_MLA}"
