@@ -364,13 +364,12 @@ DeepSeek-R1-0528-MXFP4-v2:
       cuda_graph_bs_range: "1-128"
 
 DeepSeek-V4-Pro-AgentX:
-  base_flags: "--watchdog-timeout 3600 --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend dsv4 --page-size 256 --disable-shared-experts-fusion --tool-call-parser deepseekv4 --reasoning-parser deepseek-v4 --disaggregation-transfer-backend mori --log-level info --log-level-http error"
-  dp_flags: "--enable-dp-attention --enable-prefill-delayer --enable-two-batch-overlap"
+  base_flags: "--watchdog-timeout 3600 --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend dsv4 --page-size 256 --swa-full-tokens-ratio 0.1 --disable-shared-experts-fusion --tool-call-parser deepseekv4 --reasoning-parser deepseek-v4 --disaggregation-transfer-backend mori --log-level info --log-level-http error"
+  dp_flags: "--enable-dp-attention --enable-prefill-delayer"
   ep_flags: "--ep-dispatch-algorithm fake --moe-a2a-backend mori --deepep-mode normal"
   mtp_flags: "--speculative-algorithm EAGLE --speculative-eagle-topk 1"
   prefill:
     mem_fraction_static: 0.85
-    swa_full_tokens_ratio: 0.1
     disable_radix_cache: false
     disable_cuda_graph: true
     dp:
@@ -390,7 +389,6 @@ DeepSeek-V4-Pro-AgentX:
       context_length: 1048576
   decode:
     mem_fraction_static: 0.85
-    swa_full_tokens_ratio: 0.1
     disable_cuda_graph: false
     prefill_round_robin_balance: true
     disagg_decode_enable_radix_cache: false

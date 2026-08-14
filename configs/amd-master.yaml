@@ -1753,7 +1753,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache:
           - "DECODE_MTP_SIZE=0"
 
 dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp:
-  image: aigmkt/pytorch-private:sglang-0.5.16-rocm720-mi35x-20260803-pr32746-moria0afee14-20260804
+  image: rocm/sgl-dev:v0.5.17-rocm720-mi35x-20260813
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:mi355x-amds
@@ -1766,28 +1766,28 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      # - spec-decoding: "mtp"
-      #   conc-list: [ 1,2,4,8,16,32 ]
-      #   kv-offloading: dram
-      #   kv-offload-backend: { name: hicache }
-      #   prefill:
-      #     num-worker: 1
-      #     tp: 8
-      #     ep: 1
-      #     dp-attn: false
-      #     additional-settings:
-      #     - "PREFILL_NODES=1"
-      #     - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260719"
-      #   decode:
-      #     num-worker: 1
-      #     tp: 8
-      #     ep: 1
-      #     dp-attn: false
-      #     additional-settings:
-      #     - "DECODE_NODES=1"
-      #     - "DECODE_MTP_SIZE=3"
       - spec-decoding: "mtp"
-        conc-list: [ 64, 96, 128 ]
+        conc-list: [ 1,2,4,8,16,32 ]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260719"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=3"
+      - spec-decoding: "mtp"
+        conc-list: [ 64, 96, 128, 192 ]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         prefill:
