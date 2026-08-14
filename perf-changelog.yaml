@@ -5971,3 +5971,13 @@
     - "Compare the B200 TP8 and DEP8 concurrency range and extend throughput with 1P1D and 2P1D DEP8 disaggregation."
     - "Use KV-aware Dynamo routing with 4-hour correlation-ID affinity, authoritative vLLM KV events, KV-cache token metrics, and every logical vLLM server-metrics endpoint."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2567
+
+- config-keys:
+    - qwen3.5-fp8-b200-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Append TP4 concurrency 6 to the existing B200 Qwen3.5 FP8 SGLang AgentX MTP resident curve."
+    - "Canary validation uses the trusted E2E workflow's 300-second duration override; the production recipe remains unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  append-only: true
