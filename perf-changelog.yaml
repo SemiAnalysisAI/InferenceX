@@ -5981,7 +5981,6 @@
     - "Inject the committed synthetic MTP acceptance length only for GB300 AgentX throughput; keep eval-only jobs on real target verification."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2571
   
-<<<<<<< HEAD
 
 - config-keys:
     - kimik3-fp4-mi355x-vllm-agentic-mtp-lmcache
@@ -5991,5 +5990,3 @@
     - "Add a dedicated LMCache 0.5.4rc2 DRAM KV-offload key at TP8 conc 4/8/10/12 on top of the unchanged kimik3-fp4-mi355x-vllm-agentic-mtp DSpark MTP stack, with the version pinned in the master config and consumed by the script via KV_OFFLOAD_BACKEND_METADATA."
     - "Run one LMCache MP server per node with chunk size 3072 (the minimum multiple of the hybrid KDA/MLA group block sizes) and --separate-object-groups, keeping the L1 in process memory (--shm-name \"\") so the DRAM budget is not capped by /dev/shm."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2598
-=======
->>>>>>> upstream/main
