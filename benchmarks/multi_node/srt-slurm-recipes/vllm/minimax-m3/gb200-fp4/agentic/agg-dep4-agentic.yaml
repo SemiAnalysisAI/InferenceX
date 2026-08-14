@@ -1,9 +1,9 @@
 name: "minimax-m3-vllm-agg-gb200-dep4-agentic"
 
-model: { path: "minimax-m3-nvfp4", container: "vllm/vllm-openai:nightly-5e35a6f4f9bbc217c599692157ca985c894373f7", precision: "fp4" }
+model: { path: "minimax-m3-nvfp4", container: "vllm/vllm-openai:v0.27.1", precision: "fp4" }
 identity:
   model: { repo: "nvidia/MiniMax-M3-NVFP4" }
-  container: { image: "vllm/vllm-openai:nightly-5e35a6f4f9bbc217c599692157ca985c894373f7" }
+  container: { image: "vllm/vllm-openai:v0.27.1" }
   frameworks: { dynamo: "1.3.0" }
 dynamo: { hash: "ba83080ecd31c1ce918559e576d3c5bc9e092ff1", install: true }
 slurm: { time_limit: "12:00:00" }
