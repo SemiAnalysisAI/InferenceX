@@ -19,6 +19,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 BENCHMARK_LIB = REPO_ROOT / "benchmarks" / "benchmark_lib.sh"
 MULTINODE_WORKFLOW = REPO_ROOT / ".github/workflows/benchmark-multinode-tmpl.yml"
 E2E_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "e2e-tests.yml"
+QWEN_SGLANG_MTP_LAUNCHERS = (
+    REPO_ROOT / "benchmarks" / "single_node" / "agentic" / "qwen3.5_fp8_h100_mtp.sh",
+    REPO_ROOT / "benchmarks" / "single_node" / "agentic" / "qwen3.5_fp8_h200_mtp.sh",
+)
 
 _SCRIPT = r'''
 source "$BENCHMARK_LIB"
@@ -1543,6 +1547,13 @@ def test_eval_limit_full_and_zero_accepted(tmp_path):
         assert "GEN_RC=0" in res.stdout, f"EVAL_LIMIT={sentinel!r}: {res.stdout}{res.stderr}"
     argv = (shim / "argv.log").read_text()
     assert "--slice" not in argv
+
+
+def test_qwen_sglang_launchers_expose_structured_tool_calls() -> None:
+    for launcher in QWEN_SGLANG_MTP_LAUNCHERS:
+        command = launcher.read_text()
+        assert "--reasoning-parser qwen3" in command
+        assert "--tool-call-parser qwen3_coder" in command
 
 
 def test_agentic_eval_workflow_forwards_runner_contract() -> None:
