@@ -217,7 +217,18 @@ esac
 # the only apples-to-apples comparison with the B300-MTP baseline, which pins the
 # same golden AL. K=2 rather than 7: verify width is a real cost synthetic
 # acceptance does not remove; K=2 clears break-even at both ends of the conc range.
-NUM_SPEC_TOKENS="${NUM_SPEC_TOKENS:-2}"
+#
+# TEST-BRANCH DEVIATION (not PR 2585): K=3, not the recipe's K=2. At K=2 the
+# first live verify faults -- _rejection_kernel launches into
+# HSA_STATUS_ERROR_EXCEPTION 0x1016 / HIP 719 illegal access (run 31776367386,
+# c1 and c4; warmup passes 11/11 because it runs max_tokens=1 and never
+# exercises a multi-token verify). Synthetic's rates[0]=1.0 forces
+# num_accepted_tokens>=1, driving an index path `block` never reaches; K=3 with
+# the same golden AL cleared this on this SKU before (run 31106651433).
+# Synthetic acceptance is fixed by AgentX policy, draft length is not, and K is
+# absent from the recipe's "mandated ... do not change" list -- so this stays a
+# valid operating point, just not a literal 2585 replication. Report it as K=3.
+NUM_SPEC_TOKENS="${NUM_SPEC_TOKENS:-3}"
 TOKENS_PER_SEQ=$((1 + NUM_SPEC_TOKENS))
 # Committed golden AL at K=2 on the probabilistic curve
 # (kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml:
@@ -261,6 +272,10 @@ KVMEM_ARG=(); [ -n "$KV_CACHE_MEMORY" ] && KVMEM_ARG=(--kv-cache-memory "$KV_CAC
 # (conc-4 -> 12 tok, conc-12 -> 36 tok fall to a PIECEWISE graph -> attention runs
 # eager every step -> get_mla_metadata_v1 host bubble, ~75 ms ITL). Adding 12 and
 # 36 gives exact FULL decode graphs. Rule: for a new conc C, add 3*C.
+# At the K=3 above, uniform_decode_query_len = 4, so the rule becomes 4*C and
+# c1/c4/c8 need 4/16/32 -- all three are already on this ladder, so it is
+# unchanged. Revisit if a conc whose 4*C is absent (e.g. c12 -> 48 is present,
+# c20 -> 80 is present, c22 -> 88 is present) gets added.
 CAPTURE_SIZES="${CAPTURE_SIZES:-1,2,4,8,12,16,24,32,36,40,48,56,64,72,80,88,96,104,112,120,128,136,144,152,160,168,176,184,192,200,208,216,224,232,240,248,256,272,288,304,320,336,352,368,384}"
 CUDAGRAPH_MODE="${CUDAGRAPH_MODE:-FULL_AND_PIECEWISE}"
 COMPILATION_CONFIG="{\"mode\":3,\"cudagraph_mode\":\"$CUDAGRAPH_MODE\",\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[$CAPTURE_SIZES]}"
