@@ -90,7 +90,8 @@ The selected interpreter installs the minimal pinned verifier runtime
 upstream `tests/tool_call_json_schema/test_tool_call_json_schema.py` with:
 
 - the local OpenAI-compatible endpoint, `EMPTY` API key, and served model name;
-- `--think-mode none --selection object --max-cases 1 --max-tokens 2048`;
+- `--think-mode none` for other models, or `--think-mode opensource --thinking`
+  for `dsv4`, plus `--selection object --max-cases 1 --max-tokens 2048`;
 - the upstream-recommended `--reruns 3 --reruns-delay 2`;
 - the bundled Walle case directory and `--tool-json-report`.
 

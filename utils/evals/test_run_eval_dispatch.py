@@ -746,6 +746,7 @@ printf 'EVAL_RESULT_DIR=%s\n' "$EVAL_RESULT_DIR"
         "RESULTS_DIR": str(results_dir),
         "VERIFIER_DIR": str(verifier_dir),
         "MODEL": "test-model",
+        "MODEL_PREFIX": "dsv4",
         "RUNTIME_DIR": str(runtime_dir),
         "PYTHON_DIR": str(python_dir),
         "OPENAI_API_KEY": "must-not-be-forwarded",
@@ -787,6 +788,8 @@ printf 'EVAL_RESULT_DIR=%s\n' "$EVAL_RESULT_DIR"
         results_dir,
     ):
         assert f"PYTHON_ARG=<{value}>" in output
+    assert "PYTHON_ARG=<--model-prefix>" in output
+    assert "PYTHON_ARG=<dsv4>" in output
     assert "must-not-be-forwarded" not in output
     assert "SYSTEM_PYTHON_UNEXPECTED" not in output
     assert "EVAL_SUITE=kimi_tool_call_schema" in output

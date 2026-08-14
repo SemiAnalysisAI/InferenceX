@@ -1297,6 +1297,7 @@ _run_kimi_tool_call_schema_eval() {
             --base-url "http://127.0.0.1:${port}/v1" \
             --api-key EMPTY \
             --model "$model_name" \
+            --model-prefix "${MODEL_PREFIX:-}" \
             --output-dir "$results_dir" \
             || eval_rc=$?
     _cleanup_kimi_vendor_eval \

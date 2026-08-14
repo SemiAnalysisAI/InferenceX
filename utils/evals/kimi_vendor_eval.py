@@ -30,9 +30,19 @@ def prepare_compatibility_path(output_dir: Path) -> Path:
 
 
 def build_pytest_command(
-    *, base_url: str, api_key: str, model: str, report_path: Path
+    *,
+    base_url: str,
+    api_key: str,
+    model: str,
+    model_prefix: str = "",
+    report_path: Path,
 ) -> list[str]:
     """Build the fixed Phase 1 invocation of the upstream verifier."""
+    thinking_args = (
+        ["--think-mode", "opensource", "--thinking"]
+        if model_prefix == "dsv4"
+        else ["--think-mode", "none"]
+    )
     return [
         sys.executable,
         "-m",
@@ -48,8 +58,7 @@ def build_pytest_command(
         api_key,
         "--smoke-model",
         model,
-        "--think-mode",
-        "none",
+        *thinking_args,
         "--selection",
         "object",
         "--max-cases",
@@ -169,6 +178,7 @@ def run_evaluation(
     base_url: str,
     api_key: str,
     model: str,
+    model_prefix: str = "",
     output_dir: Path,
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
 ) -> bool:
@@ -187,6 +197,7 @@ def run_evaluation(
                 base_url=base_url,
                 api_key=api_key,
                 model=model,
+                model_prefix=model_prefix,
                 report_path=native_report.resolve(),
             ),
             cwd=verifier_dir,
@@ -236,6 +247,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--base-url")
     parser.add_argument("--api-key", default="EMPTY")
     parser.add_argument("--model", required=True)
+    parser.add_argument("--model-prefix", default="")
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument(
         "--timeout-seconds", type=_positive_int, default=DEFAULT_TIMEOUT_SECONDS
@@ -278,6 +290,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         base_url=args.base_url,
         api_key=args.api_key,
         model=args.model,
+        model_prefix=args.model_prefix,
         output_dir=args.output_dir,
         timeout_seconds=args.timeout_seconds,
     )

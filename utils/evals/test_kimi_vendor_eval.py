@@ -87,6 +87,24 @@ def test_builds_fixed_upstream_pytest_command(tmp_path: Path) -> None:
     ]
 
 
+def test_builds_dsv4_thinking_command(tmp_path: Path) -> None:
+    command = kve.build_pytest_command(
+        base_url="http://127.0.0.1:8000/v1",
+        api_key="EMPTY",
+        model="deepseek-ai/DeepSeek-V4-Pro",
+        model_prefix="dsv4",
+        report_path=tmp_path / kve.NATIVE_REPORT_FILENAME,
+    )
+
+    think_mode_index = command.index("--think-mode")
+    selection_index = command.index("--selection")
+    assert command[think_mode_index:selection_index] == [
+        "--think-mode",
+        "opensource",
+        "--thinking",
+    ]
+
+
 @pytest.mark.parametrize(
     ("stream_status", "return_code", "expected_pass", "expected_score"),
     (
