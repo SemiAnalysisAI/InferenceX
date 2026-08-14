@@ -88,7 +88,7 @@ install_agentic_deps
 #   [2] TritonMLA cudagraph support        -> FULL cudagraphs for DSpark (5.52x TPOT)
 #   [3] KV block-pool negative-count clamp -> stops the mid-run engine crash
 # Set SKIP_KIMI_PATCHES=1 to run stock.
-bash "$(dirname "$0")/apply_kimi_k3_patches.sh" || true
+bash "$(dirname "$0")/apply_k3_container_patches.sh" || true
 
 # ---- Reference env block ----------------------------------------------------
 # Keep ALL of these. Commenting them out does not avoid the AITER FMHA crash:
