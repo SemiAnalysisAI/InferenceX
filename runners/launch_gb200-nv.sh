@@ -394,8 +394,8 @@ if [ -d "$SRT_REPO_DIR" ]; then
     rm -rf "$SRT_REPO_DIR"
 fi
 
-# Qwen3.5 FP4 AgentX uses the latest released srt-slurm. v1.0.45 injects
-# the aggregate logical-worker Prometheus endpoint into custom benchmarks.
+# MiniMax-M3 FP4 AgentX uses v1.0.50 for complete logical-worker metrics
+# discovery across aggregate, DP-attention, and disaggregated topologies.
 if [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "minimaxm3" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-vllm" ]]; then
     git clone --branch v1.0.50 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
@@ -406,16 +406,24 @@ if [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "minimaxm3" && "$PRECISION" == 
     mkdir -p recipes/vllm/minimax-m3/gb200-fp4/agentic
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3/gb200-fp4/agentic" \
         recipes/vllm/minimax-m3/gb200-fp4/agentic
-elif [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
+# These AgentX submissions use released srt-slurm custom-benchmark metrics
+# discovery so AIPerf receives every logical worker endpoint.
+elif [[ "$IS_AGENTIC" == "1" && (( "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-sglang" ) || ( "$MODEL_PREFIX" == "dsv4" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-vllm" )) ]]; then
     git clone --branch v1.0.45 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
     test "$(git rev-parse HEAD)" = "9d8d92b20c350a5d42f0709f5a0b64e30eb37d33" || {
         echo "Error: NVIDIA/srt-slurm v1.0.45 resolved to an unexpected commit" >&2
         exit 1
     }
-    mkdir -p recipes/sglang/qwen3.5/gb200-fp4/agentic
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb200-fp4/agentic" \
-        recipes/sglang/qwen3.5/gb200-fp4/agentic
+    if [[ "$MODEL_PREFIX" == "qwen3.5" ]]; then
+        mkdir -p recipes/sglang/qwen3.5/gb200-fp4/agentic
+        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb200-fp4/agentic" \
+            recipes/sglang/qwen3.5/gb200-fp4/agentic
+    else
+        mkdir -p recipes/vllm/deepseek-v4/agentic
+        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
+            recipes/vllm/deepseek-v4/agentic
+    fi
 # TODO(CJQ): migrate the remaining Agentic model paths to released srt-slurm.
 elif [[ "$IS_AGENTIC" == "1" ]]; then
     # Agentic multi-node pins cquil11/srt-slurm-nv revisions that provide:
