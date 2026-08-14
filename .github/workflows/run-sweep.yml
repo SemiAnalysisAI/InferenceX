@@ -619,7 +619,9 @@ jobs:
             kv-offload-backend: ${{ matrix.config['kv-offload-backend'].name }}
             kv-offload-backend-metadata: ${{ matrix.config['kv-offload-backend'] && toJson(matrix.config['kv-offload-backend']) || '' }}
             total-cpu-dram-gb: ${{ matrix.config.total-cpu-dram-gb }}
-            duration: ${{ matrix.config.duration }}
+            # Disposable PR #2614 canary: this generated experiment name exists
+            # only for the newly appended TP4 concurrency-6 point.
+            duration: ${{ matrix.config.exp-name == 'qwen3.5_tp4_conc6_kvnone_spec-mtp' && '300' || matrix.config.duration }}
             isl: '0'
             osl: '0'
             max-model-len: '0'
