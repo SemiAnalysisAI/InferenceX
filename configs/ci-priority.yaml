@@ -11,6 +11,9 @@ adjustments:
   additional-node: -0.001
   event:
     push: 2.0
+    # Scheduled snapshots must never outrank interactive work: -10 drives any
+    # job-level bonus total below zero, and the scoring floor clamps it to 0.
+    schedule: -10.0
   multi-node: 1.25
   agentic: 1.0
   eval-only: 0.0

@@ -82,6 +82,26 @@ def test_node_count_must_be_a_positive_integer(node_count):
         )
 
 
+def test_scheduled_snapshot_jobs_floor_at_zero_below_every_pr_job():
+    high_value = {
+        "runner": "b300",
+        "framework": "sglang",
+        "model-prefix": "qwen3.5",
+        "precision": "fp4",
+        "spec-decoding": "mtp",
+    }
+    baseline_pr_job = {"runner": "h100", "framework": "trt"}
+
+    scheduled = calculate_priority(
+        high_value,
+        POLICY,
+        PriorityContext(event_name="schedule"),
+    )
+
+    assert scheduled == Decimal("0.000")
+    assert scheduled < calculate_priority(baseline_pr_job, POLICY)
+
+
 def test_patchwork_score_uses_half_up_rounding():
     policy = deepcopy(POLICY)
     policy["labels"]["patchwork"]["score"] = 0.7225
