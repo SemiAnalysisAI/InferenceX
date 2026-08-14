@@ -159,23 +159,24 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     lmcache)
         require_agentic_kv_offload_backend lmcache
 
-        # The LMCache wheel MUST match the image's CUDA major version. Its
-        # compiled `lmcache.c_ops` extension is linked against a specific
-        # libcudart, and LMCache does NOT fail when that .so cannot be
-        # dlopen'd -- it logs "lmcache.c_ops compiled extension not found;
-        # CudaDeviceOps stays on the torch baseline for all ops" and silently
-        # falls back to the pure-torch path in lmcache/v1/platform/torch_ops.py.
-        # That fallback is broken for this stack's hybrid multi-KV-group
-        # KDA/MLA layout: 77-98% of stores die with cudaErrorInvalidValue in
-        # index_select/cudaMemcpy, so the offload tier stays empty and the arm
-        # silently measures a cache that never stored anything.
+        # Plain PyPI. The GitHub release `expanded_assets` URLs were never
+        # doing anything here -- pip resolved the identical PyPI wheel
+        # (lmcache-0.5.4rc2-cp312-cp312-manylinux_2_27_x86_64...whl, 15.6 MB)
+        # in every run, whether --find-links pointed at the -cu129 assets or
+        # the default ones.
         #
-        # This node reports CUDA 13.0, so use the DEFAULT release assets, whose
-        # c_ops links libcudart.so.13 (cuda_13.0). Do NOT use the `-cu129`
-        # asset set: its c_ops links libcudart.so.12 (cuda_12.9) and cannot
-        # load here. The `-rocm` assets are the MI355X sister arm's equivalent.
-        # If the image's CUDA major version ever changes, this URL must change
-        # with it -- verify with `nvidia-smi | grep "CUDA Version"`.
+        # --force-reinstall IS required: this image ships lmcache 0.5.3, so a
+        # plain install of 0.5.4rc2 upgrades it, but without the flag an
+        # already-matching version would be left in place silently.
+        #
+        # Why any of this matters: LMCache does not fail when its compiled
+        # `lmcache.c_ops` extension cannot be loaded. It logs "compiled
+        # extension not found; CudaDeviceOps stays on the torch baseline" and
+        # silently falls back to lmcache/v1/platform/torch_ops.py, which is
+        # broken for this stack's hybrid multi-KV-group KDA/MLA layout: 77-98%
+        # of stores die with cudaErrorInvalidValue, so the offload tier stays
+        # empty and the arm measures a cache that never stored anything.
+        # The guard after server start is what makes that loud.
         # --force-reinstall is REQUIRED, not cosmetic: this image already ships
         # lmcache 0.5.4rc2, so a plain `pip install lmcache==0.5.4rc2` finds the
         # requirement already satisfied and installs nothing -- the --find-links
@@ -184,10 +185,8 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         # identical build, `LMCache v0.5.4rc2 (gf82f6fd3)`, in ~3 seconds. We
         # were always running the image's copy, whose c_ops does not load here.
         LMCACHE_VERSION="0.5.4rc2"
-        LMCACHE_CUDA_INDEX="https://github.com/LMCache/LMCache/releases/expanded_assets/v${LMCACHE_VERSION}"
         agentic_pip_install --no-cache-dir --force-reinstall --no-deps \
-            "lmcache==${LMCACHE_VERSION}" \
-            --find-links "$LMCACHE_CUDA_INDEX"
+            "lmcache==${LMCACHE_VERSION}"
         # Record what actually landed. Silent installs are how the no-op above
         # went unnoticed for two full sweeps; do not add --quiet back.
         python3 -m pip show lmcache 2>/dev/null | grep -E "^(Version|Location):"
@@ -197,12 +196,18 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         # surface the real dlopen error ourselves -- without it the failure is
         # indistinguishable from a missing file.
         python3 - <<'PYEOF' || true
+# ensure_native() swallows the real error and latches _native_bound=True on
+# the first attempt, so the open question is whether the failure is import
+# ORDER (torch not yet loaded) or a symbol/ABI mismatch. Import torch first:
+# if the warning disappears, it is ordering; if it persists, it is the build.
 import traceback
+import torch  # noqa: F401  -- deliberately first
+print("torch:", torch.__version__)
 try:
     import lmcache.c_ops
-    print("c_ops import: OK")
+    print("c_ops import (torch preloaded): OK")
 except BaseException as exc:
-    print("c_ops import FAILED:", type(exc).__name__, exc)
+    print("c_ops import (torch preloaded) FAILED:", type(exc).__name__, exc)
     traceback.print_exc()
 PYEOF
         # c_ops.so links libtorch/libc10 but they are not on the default
