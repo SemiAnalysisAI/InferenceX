@@ -1738,7 +1738,7 @@
     - "TP=2 and TP=4, concurrency 4-256 for 1k1k and 8k1k sequence lengths"
     - "Add --gpu-memory-utilization 0.9 to server launch"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1133
-  
+
 
 - config-keys:
     - dsv4-fp8-h200-vllm
@@ -1860,7 +1860,6 @@
     - "Image pinned to lmsysorg/sglang:deepseek-v4-b300@sha256:26e116bd211e300dbb76924d56c5cbe6cc3ee5ee2fe314859cb8774f5bc070f3"
     - "DP-attention path enables SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN=1 for better SWA eviction behavior"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1185
-  
 
 - config-keys:
     - dsv4-fp4-b200-sglang
@@ -5427,6 +5426,18 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2446
 
 - config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  description:
+    - "Add single-node agentic-coding recipe for Kimi-K3 (MXFP4, 2.8T MoE, 896 experts, KDA/MLA hybrid, 1M native context) on MI355X (gfx950) with vLLM + DSpark MTP speculative decoding. Agentic-coding scenario only -- no fixed-seq-len (1k1k / 8k1k) arms."
+    - "TP8 only: the ~1.56 TB MXFP4 checkpoint is ~195 GB/GPU across 8 gfx950 288 GB parts; TP4 would need ~390 GB/GPU and cannot load, matching upstream strategy_min_gpus."
+    - "In-container filesystem patches applied via an idempotent git-apply wrapper (apply_k3_container_patches.sh): KDA fused_recurrent state_indices coercion (PIECEWISE cudagraph boot), triton_mla UNIFORM_BATCH cudagraph support for the non-causal DSpark draft group, rocm_aiter_mla small-head (<16 heads at TP8) multi-token MTP-verify paged-KV buffers (vLLM PR #50619 path), and aiter mla_gluon int64 KV stride on the >2GB path (aiter PR #4474); plus Triton 3.7.0 (ROCm 7.2.0) + tabulate for Gluon MLA PaddedSharedLayout."
+    - "Piecewise cudagraph capture: compilation-config mode 3 with an explicit even-step cudagraph_capture_sizes list up to 2*CONC*(1+SPEC_NUM_TOKENS) (6*CONC at spec=2), no cudagraph_mode. Capture range is decoupled from --max-num-seqs (1*CONC) so it covers the DSpark verify batch (each decode slot expands to 1+num_speculative_tokens rows) even though the served slot cap is lower."
+    - "Speculative config: method dspark on the Inferact/Kimi-K3-DSpark draft head, num_speculative_tokens 2, attention_backend TRITON_MLA, draft_sample_method probabilistic, rejection_sample_method synthetic with synthetic_acceptance_length 2.45."
+    - "Serve flags: --moe-backend auto, --load-format fastsafetensors, --language-model-only, --kv-cache-dtype auto (bf16 KV), --enable-prefix-caching, gpu-memory-utilization 0.9, kimi_k3 reasoning/tool-call parsers, max-model-len 1048576. Env: VLLM_ROCM_USE_AITER=1, VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4=1, AITER_BF16_FP8_MOE_BOUND=0, VLLM_USE_BREAKABLE_CUDAGRAPH=0, SAFETENSORS_FAST_GPU=1."
+    - "Search space is one TP8 GPU-resident arm (kv-offloading none) at conc-list [4, 8, 10, 12, 14, 16]; the LMCache/vllm-native/SimpleCPUOffload DRAM-offload backends are wired in the recipe but off this sweep's ladder."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2508
+
+- config-keys:
     - minimaxm3-fp4-b200-dynamo-vllm-mtp
   description:
     - "Add MiniMax M3 NVFP4 B200 disagg EAGLE3 MTP recipes, mirrored from B300"
@@ -5866,3 +5877,79 @@
     - "Use lmsysorg/sglang:v0.5.16-rocm720-mi30x, FP8 KV cache, AITER attention, and required SGLang Prometheus metrics"
     - "Select a 32-point official TP2/EP2, TP4, TEP4, TP8, and TEP8 matrix from the complete 62-point fast discovery sweep"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2566
+
+- config-keys:
+    - minimaxm3-fp8-h200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add MiniMax-M3 MXFP8 AgentX on H200 with vLLM v0.27.1, EAGLE3 golden AL 2.78, resident TP8 c1/c2/c4/c6/c8/c10, and Mooncake DRAM offload c12/c14."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2565
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang-agentic-mtp
+  description:
+    - "Add Qwen3.5-397B-A17B MXFP4 MI355X SGLang AgentX with native EAGLE MTP and the committed golden synthetic acceptance length."
+    - "Cover the measured resident TP2/EP2 and TP4 Pareto ranges through their HBM capacity knees, with required SGLang metrics exports."
+    - "Use SGLang v0.5.17 and disable unstable AITER all-reduce fusion for TP2/EP2 EAGLE rank consistency."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2562
+
+- config-keys:
+    - dsv4-fp4-b200-dynamo-sglang-mtp
+  description:
+    - "Add a DeepSeek-V4-Pro FP4 Dynamo-SGLang MTP configuration for B200 with five 8k/1k disaggregated topologies."
+    - "Use NIXL for KV transfer with EAGLE speculative decoding and chat-formatted benchmark inputs."
+    - "Image: lmsysorg/sglang:nightly-dev-cu13-20260710-cfc66e05"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2554
+
+- config-keys:
+    - glm5.2-fp4-mi355x-sglang-agentic-mtp
+  description:
+    - "Increase MTP speculative steps from 3 to 5 (num-draft-tokens 4→6) and raise SGLANG_SIMULATE_ACC_LEN from 2.99 to 3.61 to reflect higher measured acceptance rate, targeting ~15% throughput improvement"
+    - "Replace the TP8/EP8 low-concurrency arm (conc [1,2,4]) hicache offload with kv-offloading: none to reduce per-request latency at low load; conc [1,2,4] are now tested on both tp=4+hicache and tp=8+no-offload so SemiAnalysis can select the Pareto-optimal point per concurrency"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2570
+
+- config-keys:
+    - minimaxm3-fp8-mi325x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add MiniMax-M3 MXFP8 AgentX on MI325X with vLLM v0.27.1, EAGLE3-GQA, golden synthetic acceptance length 2.78, and the measured resident TP8 frontier through its c16-c18 latency knee."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2579
+
+- config-keys:
+    - qwen3.5-fp4-b200-sglang-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Add a TEP2 arm (tp 2, ep 2) to the qwen3.5-fp4-b200-sglang-mtp 8k/1k sweep at concurrency 16, 32, and 64"
+    - "Rides on the NVFP4-V2 checkpoint switch from #2205"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2550
+
+- config-keys:
+    - minimaxm3-fp8-mi300x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add MI300X MiniMax-M3 MXFP8 AgentX with vLLM EAGLE3-GQA, measured resident TP8 c2-c10, and an LMCache MP DRAM-offload c16 point."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2580
+
+- config-keys:
+    - dsv4-fp4-b200-sglang-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh the purged B200 DeepSeek-V4-Pro SGLang AgentX resident, DP-attention, and HiCache grid on SGLang v0.5.17."
+    - "Use native EAGLE MTP (3 steps, top-k 1, 4 draft tokens) and golden synthetic acceptance length 2.49 for throughput; eval retains real verification."
+    - "Follow the official SGLang DeepSeek-V4 Blackwell recipe, require nonempty SGLang server metrics, and keep pooled AgentX connections alive across inter-turn gaps."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2578
+
+- config-keys:
+    - dsv4-fp4-b300-sglang-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh the purged B300 DeepSeek-V4-Pro SGLang AgentX TP4, TP8, DP-attention, and HiCache grid on SGLang v0.5.17."
+    - "Use native EAGLE MTP (3 steps, top-k 1, 4 draft tokens) and golden synthetic acceptance length 2.49 for throughput; eval retains real verification."
+    - "Follow the official SGLang DeepSeek-V4 Blackwell recipe, require nonempty SGLang server metrics, keep pooled AgentX connections alive, let AIPerf own HiCache warmup, and reserve transient MoE workspace at DEP8 c512."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2577
