@@ -77,7 +77,7 @@ export SGLANG_MAMBA_SSM_DTYPE=bfloat16
 export SGLANG_TIMEOUT_KEEP_ALIVE=1800
 
 if [ "${EVAL_ONLY:-false}" != "true" ]; then
-    export SGLANG_SIMULATE_ACC_LEN=3.39
+    export SGLANG_SIMULATE_ACC_LEN=3.61
     export SGLANG_SIMULATE_ACC_METHOD=match-expected
     export SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token
 fi
@@ -106,9 +106,9 @@ SGLANG_CMD=(
     --reasoning-parser qwen3
     --tool-call-parser qwen3_coder
     --speculative-algorithm EAGLE
-    --speculative-num-steps 3
+    --speculative-num-steps 5
     --speculative-eagle-topk 1
-    --speculative-num-draft-tokens 4
+    --speculative-num-draft-tokens 6
     --enable-metrics
     --enable-cache-report
 )
