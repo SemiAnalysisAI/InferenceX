@@ -184,6 +184,21 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         # the -cu129 assets and one to the default assets both produced the
         # identical build, `LMCache v0.5.4rc2 (gf82f6fd3)`, in ~3 seconds. We
         # were always running the image's copy, whose c_ops does not load here.
+        # Before overwriting it: does the image's OWN lmcache work? The
+        # 0.5.4rc2 wheel's c_ops needs c10::impl::cow::materialize_cow_storage,
+        # which nm shows NO torch library in this image defines -- a real ABI
+        # mismatch, not an ordering problem. The image ships 0.5.3, presumably
+        # built against this torch, so establish whether it loads before we
+        # replace it.
+        echo "=== image's pre-existing lmcache ==="
+        python3 -m pip show lmcache 2>/dev/null | grep -E "^Version:" || echo "  (not installed)"
+        _IMG_SO=$(python3 -c "import lmcache, glob, os; print((glob.glob(os.path.join(os.path.dirname(lmcache.__file__), 'c_ops*.so')) or [''])[0])" 2>/dev/null || true)
+        if [ -n "$_IMG_SO" ]; then
+            echo "  c_ops: $_IMG_SO"
+            echo "  needs materialize_cow_storage: $(nm -D --undefined-only "$_IMG_SO" 2>/dev/null | grep -c materialize_cow_storage || true)"
+            python3 -c "import lmcache.c_ops; print('  IMAGE c_ops import: OK')" 2>&1 | tail -2 || echo "  IMAGE c_ops import: FAILED"
+        fi
+
         LMCACHE_VERSION="0.5.4rc2"
         agentic_pip_install --no-cache-dir --force-reinstall --no-deps \
             "lmcache==${LMCACHE_VERSION}"
