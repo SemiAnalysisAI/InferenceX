@@ -5960,3 +5960,14 @@
     - "Use native EAGLE MTP (3 steps, top-k 1, 4 draft tokens) and golden synthetic acceptance length 2.49 for throughput; eval retains real verification."
     - "Follow the official SGLang DeepSeek-V4 Blackwell recipe, require nonempty SGLang server metrics, keep pooled AgentX connections alive, let AIPerf own HiCache warmup, and reserve transient MoE workspace at DEP8 c512."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2577
+
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-vllm-agentic-mtp-agg
+    - dsv4-fp4-gb200-dynamo-vllm-agentic-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GB200 DeepSeek-V4-Pro FP4 Dynamo-vLLM AgentX with K=2 MTP and golden synthetic acceptance length 2.49."
+    - "Compare the B200 TP8 and DEP8 concurrency range and extend throughput with 1P1D and 2P1D DEP8 disaggregation."
+    - "Use KV-aware Dynamo routing with 4-hour correlation-ID affinity, authoritative vLLM KV events, KV-cache token metrics, and every logical vLLM server-metrics endpoint."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2567
