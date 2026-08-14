@@ -5953,3 +5953,14 @@
     - "Use native EAGLE MTP (3 steps, top-k 1, 4 draft tokens) and golden synthetic acceptance length 2.49 for throughput; eval retains real verification."
     - "Follow the official SGLang DeepSeek-V4 Blackwell recipe, require nonempty SGLang server metrics, keep pooled AgentX connections alive, let AIPerf own HiCache warmup, and reserve transient MoE workspace at DEP8 c512."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2577
+
+- config-keys:
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GLM-5.2-NVFP4 GB300 AgentX (agentic-coding) Dynamo-SGLang benchmarks over a 7-point sweep: aggregated single-worker TP8 (conc 2/4), disaggregated low-latency TP4-prefill/TP4-decode 1P2D (conc 48), 1P4D (conc 48), 1P6D (conc 45), and high-throughput 2P1D DEP8-prefill/DEP16-decode (conc 128/192)"
+    - "EAGLE speculative decoding, hierarchical KV cache (hicache-size 135), MTP, decode mem-fraction-static 0.9, nixl KV transfer with UCX_TLS=ib, and X-Correlation-ID session affinity; driven from the NVIDIA/srt-slurm base+zip_override recipes via CONFIG_FILE selectors"
+    - "Image: lmsysorg/sglang:nightly-dev-cu13-20260805-211ee642; runner: gb300-nv"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
