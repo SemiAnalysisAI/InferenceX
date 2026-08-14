@@ -17,6 +17,7 @@
 | 在本地生成并检查矩阵 | [本地矩阵生成](#本地矩阵生成) |
 | 验证 YAML 与 `perf-changelog.yaml` | [YAML 与 Changelog 验证](#yaml-与-changelog-验证) |
 | 启动定向 GPU 任务 | [手动端到端派发](#手动端到端派发) |
+| 运维每周 overview snapshot | [每周 overview snapshot](#每周-overview-snapshot) |
 | 选择 PR 扫描标签 | [PR 主标签与修饰标签](#pr-主标签与修饰标签) |
 | 理解提前取消行为 | [Canary 与 Fail-fast 语义](#canary-与-fail-fast-语义) |
 | 诊断或重跑 Workflow | [监控与重跑](#监控与重跑) |
@@ -211,6 +212,19 @@ RUN_ID=$(gh run list \
 ```
 
 如果 `RUN_ID` 为空，不得继续。Run Metadata 描述派发 Workflow 的 Ref，可能不等于输入 `ref`。解释 GPU 结果前，必须在 `get-jobs` 中确认唯一标题、生成器命令与 Checkout Ref。
+
+## 每周 overview snapshot
+
+[`weekly-overview-snapshot.yml`](../.github/workflows/weekly-overview-snapshot.yml) 每周六 06:00 UTC 运行一次精选 best-config sweep，使 `/overview` 每个 model×hardware 格子至少每周获得一个同批次数据点（#2304、#2586）。它以固定的 `test-config` key 列表调用 `e2e-tests.yml`，随后携带自身 run ID 向 InferenceX-app 派发 `ingest-results`，因此结果无需 merge 到 `main` 即可发布到生产数据库。
+
+运维要点：
+
+- 范围由 workflow 内默认 `config-keys` 列表决定；修改该列表，或通过 `workflow_dispatch` 输入 `config-keys` 按次覆盖。
+- `workflow_dispatch` 输入 `skip-ingest: true` 只跑 sweep、不写生产数据库（冒烟测试）。
+- 优先级：`schedule` 事件在 [`configs/ci-priority.yaml`](../configs/ci-priority.yaml) 中计 `-10.0`，打分器以 0 为下限，因此 snapshot job 以 `0.000` 排队——低于所有 PR 与 main-push job。
+- 部分失败仍会入库：app 侧摄取会跳过失败的 benchmark 行，宁可发布半新快照也不丢掉整周。
+- 恢复：sweep 已完成但 ingest 失败时走 [`recover-reused-ingest.yml`](../.github/workflows/recover-reused-ingest.yml) 的常规恢复路径；sweep 本身失败则用相同 config keys 手动重新 dispatch 即可。
+- overview 页面每个 serving series 只显示最新一次 run，因此 snapshot run 会替换其覆盖 config 的展示数字（已接受的取舍；见 #2586）。
 
 ## PR 主标签与修饰标签
 

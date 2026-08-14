@@ -17,6 +17,7 @@ Use this page for matrix generation, CI dispatch, PR sweeps, result staging, art
 | Generate and inspect a matrix locally | [Local matrix generation](#local-matrix-generation) |
 | Validate YAML and `perf-changelog.yaml` | [YAML and changelog validation](#yaml-and-changelog-validation) |
 | Launch a targeted GPU run | [Manual end-to-end dispatch](#manual-end-to-end-dispatch) |
+| Operate the weekly overview snapshot | [Weekly overview snapshot](#weekly-overview-snapshot) |
 | Select PR sweep labels | [PR primary and modifier labels](#pr-primary-and-modifier-labels) |
 | Understand early cancellation | [Canary and fail-fast semantics](#canary-and-fail-fast-semantics) |
 | Diagnose or rerun a workflow | [Monitoring and reruns](#monitoring-and-reruns) |
@@ -219,6 +220,19 @@ RUN_ID=$(gh run list \
 ```
 
 Do not continue if `RUN_ID` is empty. Run metadata describes the dispatch workflow ref, which may not equal input `ref`. Verify the unique title, generator command, and checkout ref in `get-jobs` before interpreting GPU results.
+
+## Weekly overview snapshot
+
+[`weekly-overview-snapshot.yml`](../.github/workflows/weekly-overview-snapshot.yml) runs a curated best-config sweep every Saturday 06:00 UTC so each `/overview` model×hardware cell gets a same-batch data point at least weekly (#2304, #2586). It calls `e2e-tests.yml` with a fixed `test-config` key list, then dispatches `ingest-results` to InferenceX-app with its own run ID, so results publish to the production database without a merge to `main`.
+
+Operational facts:
+
+- Scope lives in the workflow's default `config-keys` list; change it there, or override per run via `workflow_dispatch` input `config-keys`.
+- `workflow_dispatch` input `skip-ingest: true` runs the sweep without touching the production database (smoke test).
+- Priority: `schedule` events score `-10.0` in [`configs/ci-priority.yaml`](../configs/ci-priority.yaml) and the scorer floors at 0, so snapshot jobs queue at `0.000` — below every PR and main-push job.
+- Partial failures still ingest: the app-side ingestion skips failed benchmark rows, so a half-fresh snapshot publishes rather than dropping the week.
+- Recovery: a failed ingest for a completed sweep goes through the normal recovery path in [`recover-reused-ingest.yml`](../.github/workflows/recover-reused-ingest.yml); a failed sweep can simply be re-dispatched manually with the same config keys.
+- The overview page shows only the latest run per serving series, so a snapshot run replaces the displayed number for its configs (accepted trade-off; see #2586).
 
 ## PR primary and modifier labels
 
