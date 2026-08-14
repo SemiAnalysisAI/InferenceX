@@ -31,7 +31,6 @@ frontend:
   enable_multiple_frontends: false
   args:
     router-mode: "kv"
-    router-reset-states: true
     router-kv-events: true
     router-temperature: "0"
     kv-cache-block-size: 128
