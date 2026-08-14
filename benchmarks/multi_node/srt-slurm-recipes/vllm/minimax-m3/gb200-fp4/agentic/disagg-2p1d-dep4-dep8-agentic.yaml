@@ -51,7 +51,7 @@ backend:
       kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
       attention-config: '{"backend":"FLASHINFER","use_trtllm_attention":true,"indexer_kv_dtype":"fp8"}'
       block-size: 128
-      gpu-memory-utilization: 0.9
+      gpu-memory-utilization: 0.95
       max-model-len: 1048576
       language-model-only: true
       kv-cache-dtype: "fp8"
@@ -76,7 +76,7 @@ backend:
       kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
       attention-config: '{"backend":"FLASHINFER","use_trtllm_attention":true,"indexer_kv_dtype":"fp8"}'
       block-size: 128
-      gpu-memory-utilization: 0.9
+      gpu-memory-utilization: 0.95
       max-model-len: 1048576
       language-model-only: true
       kv-cache-dtype: "fp8"
