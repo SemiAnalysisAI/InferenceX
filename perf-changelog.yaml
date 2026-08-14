@@ -5960,3 +5960,13 @@
     - "Use native EAGLE MTP (3 steps, top-k 1, 4 draft tokens) and golden synthetic acceptance length 2.49 for throughput; eval retains real verification."
     - "Follow the official SGLang DeepSeek-V4 Blackwell recipe, require nonempty SGLang server metrics, keep pooled AgentX connections alive, let AIPerf own HiCache warmup, and reserve transient MoE workspace at DEP8 c512."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2577
+
+- config-keys:
+    - minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp
+    - minimaxm3-fp4-gb200-dynamo-vllm-agentic-disagg-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GB200 MiniMax-M3 NVFP4 AgentX with EAGLE3-GQA, the complete B200 TP4 baseline, vLLM SimpleCPU offload, DEP4/DEP8, and KV-routed P/D topologies."
+    - "Use NVIDIA/srt-slurm v1.0.50 and require every logical vLLM metrics endpoint."
+  pr-link: XXX
