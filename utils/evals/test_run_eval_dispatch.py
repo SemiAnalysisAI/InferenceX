@@ -293,9 +293,15 @@ def test_kimi_vendor_setup_failure_writes_compatibility_result(
     tmp_path: Path,
 ) -> None:
     results_dir = tmp_path / "results"
+    python_dir = tmp_path / "python"
     script = r'''
 source "$BENCHMARK_LIB"
-_require_kimi_vendor_python() { :; }
+_prepare_kimi_vendor_python() {
+    mkdir "$PYTHON_DIR"
+    KIMI_VENDOR_PYTHON=/unusable/bootstrap/python
+    KIMI_VENDOR_PYTHON_CLEANUP_DIR="$PYTHON_DIR"
+    export KIMI_VENDOR_PYTHON KIMI_VENDOR_PYTHON_CLEANUP_DIR
+}
 _prepare_kimi_vendor_runtime() { return 12; }
 run_kimi_vendor_eval --results-dir "$RESULTS_DIR"
 printf 'SETUP_RC=%s\n' "$?"
@@ -304,6 +310,7 @@ printf 'SETUP_RC=%s\n' "$?"
         **os.environ,
         "BENCHMARK_LIB": str(BENCHMARK_LIB),
         "RESULTS_DIR": str(results_dir),
+        "PYTHON_DIR": str(python_dir),
         "MODEL": "test-model",
         "IS_MULTINODE": "false",
         "KV_OFFLOADING": "none",
@@ -338,6 +345,7 @@ printf 'SETUP_RC=%s\n' "$?"
     )
     assert score_result["integration_error"]["message"] == message
     assert not (results_dir / "kimi_vendor_report.json").exists()
+    assert not python_dir.exists()
 
 
 _KIMI_VERIFIER_REQUIRED_FILES = {
@@ -531,11 +539,121 @@ def test_kimi_vendor_verifier_rejects_unsafe_archive_members(tmp_path: Path) -> 
     assert not (tmp_path / "escaped").exists()
 
 
+def test_kimi_vendor_uses_system_python_fast_path() -> None:
+    script = r'''
+source "$BENCHMARK_LIB"
+python3() {
+    printf 'SYSTEM_PYTHON_ARG=<%s>\n' "$@"
+    [ "$1" = "-c" ]
+}
+mktemp() { echo "UNEXPECTED_MKTEMP"; return 99; }
+KIMI_VENDOR_PYTHON=/previous/python
+KIMI_VENDOR_PYTHON_CLEANUP_DIR=/previous/runtime
+_prepare_kimi_vendor_python
+printf 'SELECTED_PYTHON=<%s>\n' "$KIMI_VENDOR_PYTHON"
+printf 'PYTHON_CLEANUP=<%s>\n' "$KIMI_VENDOR_PYTHON_CLEANUP_DIR"
+'''
+    result = subprocess.run(
+        ["bash", "-c", script],
+        env={**os.environ, "BENCHMARK_LIB": str(BENCHMARK_LIB)},
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+    assert "SYSTEM_PYTHON_ARG=<-c>" in result.stdout
+    assert "SELECTED_PYTHON=<python3>" in result.stdout
+    assert "PYTHON_CLEANUP=<>" in result.stdout
+    assert "UNEXPECTED_MKTEMP" not in result.stdout
+
+
+def test_kimi_vendor_bootstraps_pinned_python_and_cleans_it(
+    tmp_path: Path,
+) -> None:
+    log_path = tmp_path / "bootstrap.log"
+    fake_uv = tmp_path / "fake-uv"
+    fake_uv.write_text(
+        r'''#!/usr/bin/env bash
+printf 'UV_CACHE_DIR=<%s>\n' "$UV_CACHE_DIR" >> "$KIMI_LOG"
+printf 'UV_PYTHON_INSTALL_DIR=<%s>\n' "$UV_PYTHON_INSTALL_DIR" >> "$KIMI_LOG"
+printf 'UV_ARG=<%s>\n' "$@" >> "$KIMI_LOG"
+venv_dir="${!#}"
+mkdir -p "$venv_dir/bin"
+cat > "$venv_dir/bin/python" <<'PYTHON'
+#!/usr/bin/env bash
+printf 'SELECTED_PYTHON_ARG=<%s>\n' "$@" >> "$KIMI_LOG"
+PYTHON
+chmod +x "$venv_dir/bin/python"
+'''
+    )
+    fake_uv.chmod(0o755)
+    script = r'''
+source "$BENCHMARK_LIB"
+python3() {
+    if [ "$1" = "-c" ]; then
+        printf 'VERSION_CHECK\n' >> "$KIMI_LOG"
+        return 1
+    fi
+    printf 'SYSTEM_PYTHON_ARG=<%s>\n' "$@" >> "$KIMI_LOG"
+    local prefix=""
+    while [[ $# -gt 0 ]]; do
+        if [ "$1" = "--prefix" ]; then
+            prefix="$2"
+            break
+        fi
+        shift
+    done
+    mkdir -p "$prefix/bin"
+    cp "$FAKE_UV" "$prefix/bin/uv"
+    chmod +x "$prefix/bin/uv"
+}
+_prepare_kimi_vendor_python
+cleanup_dir="$KIMI_VENDOR_PYTHON_CLEANUP_DIR"
+printf 'SELECTED_PYTHON=<%s>\n' "$KIMI_VENDOR_PYTHON"
+printf 'PYTHON_CLEANUP=<%s>\n' "$cleanup_dir"
+runtime_dir="$TEST_ROOT/runtime"
+mkdir "$runtime_dir"
+_install_kimi_vendor_eval_deps "$runtime_dir"
+_cleanup_kimi_vendor_eval "$runtime_dir" "$cleanup_dir"
+[ ! -e "$runtime_dir" ] && [ ! -e "$cleanup_dir" ] && printf 'CLEANED\n'
+'''
+    result = subprocess.run(
+        ["bash", "-c", script],
+        env={
+            **os.environ,
+            "BENCHMARK_LIB": str(BENCHMARK_LIB),
+            "FAKE_UV": str(fake_uv),
+            "KIMI_LOG": str(log_path),
+            "TEST_ROOT": str(tmp_path),
+        },
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    log = log_path.read_text()
+
+    assert "VERSION_CHECK" in log
+    assert "SYSTEM_PYTHON_ARG=<--prefix>" in log
+    assert "SYSTEM_PYTHON_ARG=<uv==0.11.33>" in log
+    assert "UV_ARG=<venv>" in log
+    assert "UV_ARG=<--python>" in log
+    assert "UV_ARG=<3.12>" in log
+    assert "UV_ARG=<--seed>" in log
+    assert "UV_CACHE_DIR=</tmp/kimi-vendor-python-" in log
+    assert "UV_PYTHON_INSTALL_DIR=</tmp/kimi-vendor-python-" in log
+    assert "SELECTED_PYTHON_ARG=<--target>" in log
+    assert "SELECTED_PYTHON_ARG=<pytest-rerunfailures==16.4>" in log
+    assert "SELECTED_PYTHON=</tmp/kimi-vendor-python-" in result.stdout
+    assert "PYTHON_CLEANUP=</tmp/kimi-vendor-python-" in result.stdout
+    assert "CLEANED" in result.stdout
+
+
 def test_kimi_vendor_dependency_install_is_isolated(tmp_path: Path) -> None:
     runtime_dir = tmp_path / "runtime"
     script = r'''
 source "$BENCHMARK_LIB"
-python3() { printf 'PYTHON_ARG=<%s>\n' "$@"; }
+selected_python() { printf 'PYTHON_ARG=<%s>\n' "$@"; }
+KIMI_VENDOR_PYTHON=selected_python
 _install_kimi_vendor_eval_deps "$RUNTIME_DIR"
 '''
     result = subprocess.run(
@@ -559,7 +677,7 @@ _install_kimi_vendor_eval_deps "$RUNTIME_DIR"
 def test_kimi_vendor_surfaces_failure_artifact_error(tmp_path: Path) -> None:
     script = r'''
 source "$BENCHMARK_LIB"
-_require_kimi_vendor_python() { return 12; }
+_prepare_kimi_vendor_python() { return 12; }
 _write_kimi_vendor_integration_error() { return 23; }
 run_kimi_vendor_eval --results-dir "$RESULTS_DIR"
 printf 'EVAL_RC=%s\n' "$?"
@@ -590,20 +708,33 @@ def test_kimi_vendor_multinode_runner_uses_fixed_upstream_contract(
     results_dir = tmp_path / "results"
     verifier_dir = tmp_path / "verifier"
     runtime_dir = tmp_path / "runtime"
-    runtime_dir.mkdir()
+    python_dir = tmp_path / "python"
     verifier_dir.mkdir()
     script = r'''
 source "$BENCHMARK_LIB"
-_require_kimi_vendor_python() { :; }
-_prepare_kimi_vendor_runtime() { printf '%s\n' "$RUNTIME_DIR"; }
+_prepare_kimi_vendor_python() {
+    mkdir "$PYTHON_DIR"
+    KIMI_VENDOR_PYTHON=selected_python
+    KIMI_VENDOR_PYTHON_CLEANUP_DIR="$PYTHON_DIR"
+    export KIMI_VENDOR_PYTHON KIMI_VENDOR_PYTHON_CLEANUP_DIR
+}
+_prepare_kimi_vendor_runtime() {
+    mkdir "$RUNTIME_DIR"
+    _install_kimi_vendor_eval_deps "$RUNTIME_DIR" >&2
+    printf '%s\n' "$RUNTIME_DIR"
+}
 _prepare_kimi_vendor_verifier() {
     printf 'CHECKOUT=%s@%s\n' "$1" "$2" >&2
+    "$KIMI_VENDOR_PYTHON" - "$1" "$2" "$VERIFIER_DIR" <<'PY' >&2
+archive extraction
+PY
     printf '%s\n' "$VERIFIER_DIR"
 }
-python3() {
-    printf 'PYTHONPATH=<%s>\n' "$PYTHONPATH"
-    printf 'PYTHON_ARG=<%s>\n' "$@"
+selected_python() {
+    printf 'PYTHONPATH=<%s>\n' "$PYTHONPATH" >&2
+    printf 'PYTHON_ARG=<%s>\n' "$@" >&2
 }
+python3() { echo "SYSTEM_PYTHON_UNEXPECTED" >&2; return 99; }
 run_kimi_vendor_eval --port 9999 --results-dir "$RESULTS_DIR"
 printf 'EVAL_SUITE=%s\n' "$EVAL_SUITE"
 printf 'EVAL_RESULT_DIR=%s\n' "$EVAL_RESULT_DIR"
@@ -615,6 +746,7 @@ printf 'EVAL_RESULT_DIR=%s\n' "$EVAL_RESULT_DIR"
         "VERIFIER_DIR": str(verifier_dir),
         "MODEL": "test-model",
         "RUNTIME_DIR": str(runtime_dir),
+        "PYTHON_DIR": str(python_dir),
         "OPENAI_API_KEY": "must-not-be-forwarded",
         "KV_OFFLOADING": "none",
         "IS_MULTINODE": "true",
@@ -641,6 +773,10 @@ printf 'EVAL_RESULT_DIR=%s\n' "$EVAL_RESULT_DIR"
         "CHECKOUT=https://github.com/MoonshotAI/Kimi-Vendor-Verifier.git"
         "@b9ed3a6665bdff2c943246f7d2903cd003d6ddd6"
     ) in output
+    assert "PYTHON_ARG=<->" in output
+    assert (
+        "PYTHON_ARG=<b9ed3a6665bdff2c943246f7d2903cd003d6ddd6>" in output
+    )
     for value in (
         adapter,
         verifier_dir,
@@ -651,10 +787,12 @@ printf 'EVAL_RESULT_DIR=%s\n' "$EVAL_RESULT_DIR"
     ):
         assert f"PYTHON_ARG=<{value}>" in output
     assert "must-not-be-forwarded" not in output
+    assert "SYSTEM_PYTHON_UNEXPECTED" not in output
     assert "EVAL_SUITE=kimi_tool_call_schema" in output
     assert f"EVAL_RESULT_DIR={results_dir}" in output
     assert not (tmp_path / "runtime").exists()
     assert not verifier_dir.exists()
+    assert not python_dir.exists()
 
 
 def test_run_lm_eval_rejects_missing_option_value():

@@ -81,16 +81,21 @@ configuration, tool-call schema tests, and bundled Walle cases. InferenceX does
 not install the verifier package or reimplement its request, streaming, or
 validation logic.
 
-Python 3.12 or newer is required. The runner installs the minimal pinned runtime
+System Python 3.12 or newer is preferred and used directly. On older images,
+the runner uses the existing system `pip` to install pinned `uv==0.11.33` under
+a temporary prefix, then provisions an isolated Python 3.12 virtual environment.
+The selected interpreter installs the minimal pinned verifier runtime
 (`httpx[http2]`, `openai`, `jsonschema`, `pytest`, and
-`pytest-rerunfailures`) into a temporary isolated package directory, then runs
-upstream
-`tests/tool_call_json_schema/test_tool_call_json_schema.py` with:
+`pytest-rerunfailures`) into a separate temporary package directory, then runs
+upstream `tests/tool_call_json_schema/test_tool_call_json_schema.py` with:
 
 - the local OpenAI-compatible endpoint, `EMPTY` API key, and served model name;
 - `--think-mode none --selection object --max-cases 1 --max-tokens 2048`;
 - the upstream-recommended `--reruns 3 --reruns-delay 2`;
 - the bundled Walle case directory and `--tool-json-report`.
+
+The temporary Python runtime, package directory, and verifier checkout are
+removed after both successful and failed runs.
 
 The selection is `TestAdditionalProperties:1`, parametrized upstream in
 non-streaming and streaming modes. Pytest makes one initial attempt and up to
@@ -144,6 +149,7 @@ Key eval functions in `benchmarks/benchmark_lib.sh`:
 | `run_kimi_vendor_eval` | Selects and runs a pinned Kimi Vendor Verifier suite |
 | `append_lm_eval_summary` | Writes `meta_env.json` and moves eval artifacts to workspace |
 | `_install_lm_eval_deps` | Installs lm-eval dependencies |
+| `_prepare_kimi_vendor_python` | Uses system Python 3.12+ or provisions an isolated pinned Python 3.12 runtime on older images |
 | `_prepare_kimi_vendor_runtime` | Installs the pinned verifier dependencies in an isolated temp path |
 | `_prepare_kimi_vendor_verifier` | Downloads and safely extracts a fresh subset of the pinned source archive |
 | `_patch_lm_eval` | Patches lm-eval for reasoning tokens and TRT compatibility |
