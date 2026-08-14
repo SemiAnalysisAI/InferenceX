@@ -1552,6 +1552,13 @@ def test_agentic_eval_workflow_forwards_runner_contract() -> None:
     assert forwarded["spec-decoding"] == "${{ matrix.config.spec-decoding }}"
     assert forwarded["eval-framework"] == "${{ inputs.eval-framework }}"
     assert forwarded["eval-suite"] == "${{ inputs.eval-suite }}"
+    assert forwarded["kv-offload-backend"] == (
+        "${{ matrix.config['kv-offload-backend'].name }}"
+    )
+    assert forwarded["kv-offload-backend-metadata"] == (
+        "${{ matrix.config['kv-offload-backend'] && "
+        "toJson(matrix.config['kv-offload-backend']) || '' }}"
+    )
 
 
 def test_multinode_agentic_eval_workflow_forwards_runner_contract() -> None:
