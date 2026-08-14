@@ -176,15 +176,25 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         # load here. The `-rocm` assets are the MI355X sister arm's equivalent.
         # If the image's CUDA major version ever changes, this URL must change
         # with it -- verify with `nvidia-smi | grep "CUDA Version"`.
+        # --force-reinstall is REQUIRED, not cosmetic: this image already ships
+        # lmcache 0.5.4rc2, so a plain `pip install lmcache==0.5.4rc2` finds the
+        # requirement already satisfied and installs nothing -- the --find-links
+        # URL is never consulted. Two earlier sweeps proved it: one pinned to
+        # the -cu129 assets and one to the default assets both produced the
+        # identical build, `LMCache v0.5.4rc2 (gf82f6fd3)`, in ~3 seconds. We
+        # were always running the image's copy, whose c_ops does not load here.
         LMCACHE_VERSION="0.5.4rc2"
         LMCACHE_CUDA_INDEX="https://github.com/LMCache/LMCache/releases/expanded_assets/v${LMCACHE_VERSION}"
-        agentic_pip_install --quiet --no-cache-dir \
+        agentic_pip_install --no-cache-dir --force-reinstall --no-deps \
             "lmcache==${LMCACHE_VERSION}" \
             --find-links "$LMCACHE_CUDA_INDEX"
-        # Import c_ops explicitly so an ABI mismatch aborts the job instead of
-        # degrading to the broken torch fallback.
+        # Record what actually landed. Silent installs are how the no-op above
+        # went unnoticed for two full sweeps; do not add --quiet back.
+        python3 -m pip show lmcache 2>/dev/null | grep -E "^(Version|Location):"
+        python3 -c "import lmcache, glob, os; print('lmcache:', lmcache.__file__); print('c_ops so:', glob.glob(os.path.join(os.path.dirname(lmcache.__file__), 'c_ops*')))"
+        ls -1 /usr/local/cuda*/lib64/libcudart.so* /usr/lib/x86_64-linux-gnu/libcudart.so* 2>/dev/null || true
         python3 -c \
-            "import cupy; import lmcache.c_ops; import lmcache.integration.vllm.lmcache_mp_connector; import opentelemetry.exporter.prometheus" \
+            "import cupy; import lmcache.integration.vllm.lmcache_mp_connector; import opentelemetry.exporter.prometheus" \
             >/dev/null
 
         # One MP server for the node, per the Kimi-K3 recipe
@@ -245,7 +255,10 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         # benchmark a silently-degraded offload tier (see the install note).
         if grep -q "c_ops compiled extension not found" "$LMCACHE_LOG"; then
             echo "Error: LMCache fell back to the torch baseline (c_ops did not load)." >&2
-            echo "       The wheel's CUDA major version does not match this image." >&2
+            echo "       The installed lmcache's compiled extension is unusable here." >&2
+            echo "       Check the pip show / c_ops / libcudart lines logged above:" >&2
+            echo "       either the install did not take, or the build's CUDA ABI" >&2
+            echo "       does not match this image." >&2
             grep -m1 "c_ops compiled extension not found" "$LMCACHE_LOG" >&2
             exit 1
         fi
