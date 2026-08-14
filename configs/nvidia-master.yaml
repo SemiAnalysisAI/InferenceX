@@ -1220,19 +1220,6 @@ qwen3.5-fp8-b200-sglang:
       - { tp: 8, conc-start: 4, conc-end: 4 }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
 
-qwen3.5-fp8-b200-sglang-agentic:
-  image: lmsysorg/sglang:nightly-dev-20260422-de962f32
-  model: Qwen/Qwen3.5-397B-A17B-FP8
-  model-prefix: qwen3.5
-  runner: cluster:b200-dgxc
-  precision: fp8
-  framework: sglang
-  multinode: false
-  scenarios:
-    agentic-coding:
-    - search-space:
-      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
-
 qwen3.5-fp8-b200-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.16-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
@@ -1508,37 +1495,6 @@ dsr1-fp8-b300-sglang-mtp:
       search-space:
       - { tp: 8, ep: 1, conc-start: 1, conc-end: 512, spec-decoding: mtp }
 
-kimik3-fp4-b300-vllm-agentic:
-  # Day-zero Kimi-K3 recipe. `vllm/vllm-openai:kimi-k3` is the pre-release
-  # Kimi-K3 build (vLLM 0.1.dev19262+gb6bbf29dd, pushed 2026-07-27); K3 ships as
-  # the out-of-tree `vllm.models.kimi_k3` plugin package (DSpark MLA + KDA
-  # kernels), so a generic vllm-openai release cannot serve this checkpoint.
-  image: vllm/vllm-openai:kimi-k3
-  model: moonshotai/Kimi-K3
-  model-prefix: kimik3
-  runner: cluster:b300-nv
-  precision: fp4
-  framework: vllm
-  multinode: false
-  scenarios:
-    # Agentic-coding only: no fixed-seq-len (1k1k / 8k1k) arms for this recipe.
-    agentic-coding:
-      # 0.63 resolves to ~220 GiB of host DRAM per rank across the 8 TP ranks on
-      # cluster:b300-nv (total-cpu-dram-gb 1889), which is what the
-      # SimpleCPUOffloadConnector pool is sized to in the script.
-    - dram-utilization: 0.63
-      search-space:
-      # TP8 is the only single-node layout that fits: the MXFP4 checkpoint is
-      # ~1.5 TB (~188 GB/GPU across 8 B300s), and TP4 would need ~375 GB/GPU
-      # against 288 GB of HBM. The conc ceiling is set by the ~70 GB/GPU left
-      # for MLA KV after weights at gpu-memory-utilization 0.90.
-      # Both arms share one ladder so GPU-resident and DRAM-offload are directly
-      # comparable at equal concurrency (same shape as the kimik2.5 B300 sister).
-      # TP8 GPU-resident
-      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 24] }
-      # TP8 SimpleCPUOffload (host DRAM)
-      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [1, 2, 4, 8, 16, 24] }
-
 kimik3-fp4-b300-vllm-agentic-dspark:
   # DSpark speculative decoding on the Inferact/Kimi-K3-DSpark draft head, at
   # level 2 with probabilistic drafting and synthetic acceptance pinned to the
@@ -1684,19 +1640,6 @@ dsv4-fp8-h200-vllm-mtp:
 # DeepSeek-V4-Pro H200 single-node with SGLang (Marlin FP8, TP-only).
 # Pinned to the h200-dgxc-slurm runner pool because the deepseek-v4-hopper
 # image needs the /ix mount layout that only launch_h200-dgxc-slurm.sh sets up.
-
-dsv4-fp8-h200-vllm-agentic:
-  image: vllm/vllm-openai:v0.22.0
-  model: deepseek-ai/DeepSeek-V4-Pro
-  model-prefix: dsv4
-  runner: cluster:h200-dgxc
-  precision: fp8
-  framework: vllm
-  multinode: false
-  scenarios:
-    agentic-coding:
-    - search-space:
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, conc-list: [1, 2, 4, 8, 16] }
 
 # DeepSeek-V4-Pro AgentX on one aggregated TP8 H200 worker. Keep the serving
 # topology fixed and sweep only concurrency to produce the Pareto curve.
@@ -7019,21 +6962,6 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-disagg:
           dp-attn: false
 
     # ---------- 1k1k high-throughput (wide-EP decode, EAGLE MTP) ----------
-qwen3.5-fp8-b300-sglang-agentic-hicache:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260520-425dffbd
-  model: Qwen/Qwen3.5-397B-A17B-FP8
-  model-prefix: qwen3.5
-  runner: cluster:b300-nv
-  precision: fp8
-  framework: sglang
-  multinode: false
-  scenarios:
-    agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
-      - { tp: 4, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
-      - { tp: 4, ep: 1, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 32, 48, 64] }
-
 qwen3.5-fp8-b300-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.16-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
@@ -7066,111 +6994,6 @@ qwen3.5-fp4-b300-sglang-agentic-mtp:
       - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16, 20, 24, 28, 32] }
       - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [32, 34, 36, 38, 40, 44, 48, 52, 56] }
 
-# CONC range conservative for H100's 80 GB HBM3 under the long-ISL with-
-# subagents corpus. hicache arm capped at conc 16 since high-conc + hicache
-# tends to flake on first runs and conc 16 covers the cliff. The bench script
-# sets WEKA_LOADER_OVERRIDE to the 256k-capped corpus variant.
-dsv4-fp4-gb300-dynamo-vllm-agentic:
-  image: vllm/vllm-openai:v0.21.0-ubuntu2404
-  model: deepseek-ai/DeepSeek-V4-Pro
-  model-prefix: dsv4
-  runner: cluster:gb300-nv
-  precision: fp4
-  framework: dynamo-vllm
-  router: { name: dynamo-router, version: "1.2.0.dev20260426" }
-  kv-p2p-transfer: nixl
-  multinode: true
-  disagg: true
-  scenarios:
-    agentic-coding:
-    - search-space:
-      # Low-latency: same 1p6d shape as the mid tier but at much lower conc
-      # (32 vs 192). 32/6 ≈ 5 seqs per decode worker — well below saturation,
-      # so each request gets ~6× the per-request decode compute it would get
-      # at conc=192. Reuses the 1p6d recipe; no separate recipe file needed.
-      - spec-decoding: none
-        conc-list: [32]
-        prefill:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/deepseek-v4/agentic/disagg-gb300-1p6d-dep4-tp4-agentic.yaml"
-        decode:
-          num-worker: 6
-          tp: 4
-          ep: 1
-          dp-attn: false
-      # Mid: 1 prefill (DEP=4) + 6 decode (TP=4). 7 nodes / 28 GPUs.
-      # Mirrors fixed-seq-len conc=192 entry.
-      - spec-decoding: none
-        conc-list: [192]
-        prefill:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/deepseek-v4/agentic/disagg-gb300-1p6d-dep4-tp4-agentic.yaml"
-        decode:
-          num-worker: 6
-          tp: 4
-          ep: 1
-          dp-attn: false
-      # High-throughput: 4 prefill (DEP=4 each) + 1 decode (DEP=8). 6 nodes /
-      # 24 GPUs. Smallest 4096-class shape in fixed-seq-len; deep_gemm_mega_moe
-      # on both sides. Mirrors fixed-seq-len conc=4096 entry (4p1d variant).
-      - spec-decoding: none
-        conc-list: [4096]
-        prefill:
-          num-worker: 4
-          tp: 4
-          ep: 4
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/deepseek-v4/agentic/disagg-gb300-4p1d-dep4-dep8-24-c4096-agentic.yaml"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-
-qwen3.5-fp8-h100-sglang-agentic:
-  image: lmsysorg/sglang:v0.5.12-cu130
-  model: Qwen/Qwen3.5-397B-A17B-FP8
-  model-prefix: qwen3.5
-  runner: cluster:h100-dgxc
-  precision: fp8
-  framework: sglang
-  multinode: false
-  scenarios:
-    agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
-      - { tp: 8, ep: 8, kv-offloading: none,    conc-list: [1, 2, 4, 8, 12, 14, 16] }
-      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [12, 14, 16, 20, 24, 28, 32, 42] }
-
-# MTP speculative-decoding (spec-decoding: mtp) variant of
-# qwen3.5-fp8-h100-sglang-agentic: same TP8/EP8 GPU-resident and HiCache arms,
-# plus SGLang EAGLE MTP (num-steps 3, eagle-topk 1, 4 draft tokens = 3
-# speculative tokens) with simulated acceptance pinned to the golden AL 3.39
-# (golden_al_distribution/qwen3.5_mtp.yaml, thinking_on, K=3) -- the same value
-# the GB300 Qwen3.5 AgentX srt-slurm recipes use. Image moves to
-# lmsysorg/sglang:v0.5.16-cu130 because SGLANG_SIMULATE_ACC_TOKEN_MODE only
-# exists from v0.5.16; v0.5.14 is the version the fixed-seq-len H100 MTP entry
-# already runs. Conc lists are trimmed at the top end for the draft head's KV.
-
-# First Qwen3.5 AgentX recipe on H200, shipped spec-decode-only per the AgentX
-# policy that new agentic arms enable speculative decoding rather than running a
-# separate STP baseline (MODELS.md). SGLang EAGLE MTP (num-steps 3, eagle-topk 1,
-# 4 draft tokens = 3 speculative tokens) with simulated acceptance pinned to the
-# golden AL 3.39 (golden_al_distribution/qwen3.5_mtp.yaml, thinking_on, K=3).
-# Image is lmsysorg/sglang:v0.5.16-cu130: SGLANG_SIMULATE_ACC_TOKEN_MODE only
-# exists from v0.5.16, and v0.5.14 is what the fixed-seq-len H200 MTP entry runs.
-# Search space is the H100 AgentX shape widened for H200's 141 GB: the
-# fixed-seq-len H200 MTP entry already runs conc 4-128 at TP8/EP8 versus H100's
-# 4-32, so the GPU-resident arm extends to 24 and HiCache to 48.
 qwen3.5-fp8-h200-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.16-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
@@ -7242,28 +7065,6 @@ qwen3.5-fp4-b200-trt-mtp:
       - { tp: 8, ep: 8, spec-decoding: "mtp", conc-list: [4] }
       - { tp: 8, ep: 8, dp-attn: true, spec-decoding: "mtp", conc-list: [128, 256, 1024] }
 
-minimaxm3-fp8-h100-vllm-agentic:
-  image: vllm/vllm-openai:nightly-04c2a8deac44fdb1ca3e2b5ec3e6bf16f3f6a914
-  model: MiniMaxAI/MiniMax-M3-MXFP8
-  model-prefix: minimaxm3
-  runner: cluster:h100-dgxc
-  precision: fp8
-  framework: vllm
-  multinode: false
-  scenarios:
-    agentic-coding:
-    # FP8 KV cache is 29,952 bytes/token/GPU for TP/TEP: 60 layers of
-    # sharded FP8 K/V plus 57 layers of BF16 indexer cache. The June-21 trace
-    # has a 269k-token service-time-weighted active request, placing the H100
-    # 1.64M-token HBM cliff near conc 6. Sample every integer through the
-    # cliff; Mooncake extends prefix retention, not active-request HBM.
-    - dram-utilization: 0.80
-      search-space:
-      - { tp: 8, kv-offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }
-      - { tp: 8, ep: 8, kv-offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }
-      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }
-
 minimaxm3-fp8-h100-vllm-agentic-mtp:
   image: vllm/vllm-openai:v0.27.1
   model: MiniMaxAI/MiniMax-M3-MXFP8
@@ -7279,26 +7080,6 @@ minimaxm3-fp8-h100-vllm-agentic-mtp:
       search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 3, 4, 5] }
       - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [6, 8] }
-
-minimaxm3-fp8-h200-vllm-agentic:
-  image: vllm/vllm-openai:nightly-04c2a8deac44fdb1ca3e2b5ec3e6bf16f3f6a914
-  model: MiniMaxAI/MiniMax-M3-MXFP8
-  model-prefix: minimaxm3
-  runner: cluster:h200-dgxc
-  precision: fp8
-  framework: vllm
-  multinode: false
-  scenarios:
-    agentic-coding:
-    # The same 29,952-byte FP8 TP/TEP cache layout gives H200 about 2.56M
-    # active tokens. Against the June-21 service-time-weighted 269k-token
-    # request, the expected HBM cliff is near conc 10; sample densely from
-    # 5-14 and retain post-cliff points through 20.
-    - dram-utilization: 0.80
-      search-space:
-      - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
-      - { tp: 8, ep: 8, kv-offloading: none, conc-list: [2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
-      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
 
 minimaxm3-fp8-h200-vllm-agentic-mtp:
   image: vllm/vllm-openai:v0.27.1
@@ -7465,7 +7246,6 @@ minimaxm3-fp4-b200-vllm-agentic-mtp:
       search-space:
       - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 5, 8, 10, 12, 15, 20] }
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [20, 30, 40] }
-
 # GB200 MiniMax-M3 NVFP4 AgentX discovery grid. The aggregate TP4 arms retain
 # the complete B200 search space; DEP and P/D add higher-concurrency probes.
 minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp:
@@ -7659,121 +7439,6 @@ minimaxm3-fp4-gb200-dynamo-vllm-agentic-disagg-mtp:
           - "SYNTHETIC_ACCEPTANCE=true"
           - "SYNTHETIC_ACCEPTANCE_LENGTH=2.78"
         decode: { num-worker: 1, tp: 8, ep: 8, dp-attn: true }
-dsv4-fp4-gb200-dynamo-vllm-agentic-3p2d-tep8-tp8:
-  image: vllm/vllm-openai:v0.23.0
-  model: deepseek-ai/DeepSeek-V4-Pro
-  model-prefix: dsv4
-  runner: cluster:gb200-nv
-  precision: fp4
-  framework: dynamo-vllm
-  router: { name: dynamo-router, version: "1.3.0.dev20260618" }
-  kv-p2p-transfer: nixl
-  multinode: true
-  disagg: true
-  scenarios:
-    agentic-coding:
-    - search-space:
-      # Ultra-high-interactivity probes below the historical c16 endpoint.
-      - spec-decoding: none
-        conc-list: [4, 8]
-        prefill:
-          num-worker: 3
-          tp: 8
-          ep: 8
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/deepseek-v4/agentic/disagg-gb200-3p2d-tep8-tp8-agentic.yaml"
-        decode:
-          num-worker: 2
-          tp: 8
-          ep: 1
-          dp-attn: false
-      - spec-decoding: none
-        conc-list: [16, 24, 32, 40]
-        prefill:
-          num-worker: 3
-          tp: 8
-          ep: 8
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/deepseek-v4/agentic/disagg-gb200-3p2d-tep8-tp8-agentic.yaml"
-        decode:
-          num-worker: 2
-          tp: 8
-          ep: 1
-          dp-attn: false
-      - spec-decoding: none
-        conc-list: [48, 56, 64, 80]
-        prefill:
-          num-worker: 3
-          tp: 8
-          ep: 8
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/deepseek-v4/agentic/disagg-gb200-3p2d-tep8-tp8-agentic.yaml"
-        decode:
-          num-worker: 2
-          tp: 8
-          ep: 1
-          dp-attn: false
-
-dsv4-fp4-gb200-dynamo-vllm-agentic-2p1d-dep8-dep8:
-  image: vllm/vllm-openai:v0.23.0
-  model: deepseek-ai/DeepSeek-V4-Pro
-  model-prefix: dsv4
-  runner: cluster:gb200-nv
-  precision: fp4
-  framework: dynamo-vllm
-  router: { name: dynamo-router, version: "1.3.0.dev20260618" }
-  kv-p2p-transfer: nixl
-  multinode: true
-  disagg: true
-  scenarios:
-    agentic-coding:
-    - search-space:
-      - spec-decoding: none
-        conc-list: [32, 48, 64, 80]
-        prefill:
-          num-worker: 2
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/deepseek-v4/agentic/disagg-gb200-2p1d-dep8-dep8-agentic.yaml"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-      - spec-decoding: none
-        conc-list: [96, 128, 160]
-        prefill:
-          num-worker: 2
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/deepseek-v4/agentic/disagg-gb200-2p1d-dep8-dep8-agentic.yaml"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-      # Exploratory tail beyond the measured c160 normalized-throughput peak.
-      - spec-decoding: none
-        conc-list: [192, 224, 256]
-        prefill:
-          num-worker: 2
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/deepseek-v4/agentic/disagg-gb200-2p1d-dep8-dep8-agentic.yaml"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
 
 dsv4-fp4-gb200-dynamo-vllm-agentic-mtp-agg:
   image: vllm/vllm-openai:nightly-3ee2df30337a301164c46ae444b76ee67e71c106
