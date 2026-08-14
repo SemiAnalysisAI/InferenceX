@@ -11,6 +11,7 @@ DO_SWEEP_ENV_BLOCK = """            "EVAL_ONLY",
             "IS_MULTINODE","""
 DO_SWEEP_ENV_REPLACEMENT = """            "EVAL_ONLY",
             "EVAL_FRAMEWORK",
+            "EVAL_CONC",
             "EVAL_LIMIT",
             "EVAL_SUITE",
             "SWEBENCH_GEN_MODE",

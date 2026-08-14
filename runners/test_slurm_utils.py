@@ -99,6 +99,7 @@ def test_patch_srt_eval_dispatch_forwards_selection_and_is_idempotent(
     assert second.returncode == 0, second.stderr
     assert do_sweep.read_text().count('"EVAL_FRAMEWORK"') == 1
     assert do_sweep.read_text().count('"EVAL_SUITE"') == 1
+    assert do_sweep.read_text().count('"EVAL_CONC"') == 1
     assert do_sweep.read_text().count('"EVAL_LIMIT"') == 1
     assert do_sweep.read_text().count('"SWEBENCH_GEN_MODE"') == 1
     assert 'run_eval --port "$PORT"' in eval_script.read_text()
