@@ -43,7 +43,7 @@ install_agentic_deps
 
 OFFLOAD_ARGS=()
 if require_agentic_kv_offload_backend vllm-simple; then
-    CPU_OFFLOAD_BYTES=$((TOTAL_CPU_DRAM_GB * 1024 * 1024 * 1024))
+    CPU_OFFLOAD_BYTES=$((TOTAL_CPU_DRAM_GB * 1000 * 1000 * 1000))
     export VLLM_USE_SIMPLE_KV_OFFLOAD=1
     OFFLOAD_CONFIG=$(printf \
         '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":%d,"lazy_offload":true}}' \

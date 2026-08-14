@@ -5971,3 +5971,10 @@
     - "Compare the B200 TP8 and DEP8 concurrency range and extend throughput with 1P1D and 2P1D DEP8 disaggregation."
     - "Use KV-aware Dynamo routing with 4-hour correlation-ID affinity, authoritative vLLM KV events, KV-cache token metrics, and every logical vLLM server-metrics endpoint."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2567
+
+- config-keys:
+    - minimaxm3-fp4-b300-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh the MiniMax-M3 B300 AgentX submission as eight EAGLE3-GQA points: no-offload TP8 C1 and TP4 C1/C5/C10/C15/C20, TP4 C30 with 1,024 GB SimpleCPU KV offload, and TP2 C24 with the proportional-policy 750 GB SimpleCPU KV-offload cap."
