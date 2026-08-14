@@ -7395,7 +7395,7 @@ qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp:
         decode: { num-worker: 0, tp: 2, ep: 2, dp-attn: false }
 
 minimaxm3-fp4-b300-vllm-agentic-mtp:
-  image: vllm/vllm-openai:v0.27.1
+  image: vllm/vllm-openai:nightly-5e35a6f4f9bbc217c599692157ca985c894373f7
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: cluster:b300-nv
@@ -7452,7 +7452,7 @@ minimaxm3-fp4-b300-vllm-agentic-mtp:
 # the same 3 TB AgentX ceiling before the proportional-GPU rule is applied.
 # GPU-resident points receive a zero budget.
 minimaxm3-fp4-b200-vllm-agentic-mtp:
-  image: vllm/vllm-openai:v0.27.1
+  image: vllm/vllm-openai:nightly-5e35a6f4f9bbc217c599692157ca985c894373f7
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: cluster:b200-dgxc
@@ -7469,7 +7469,7 @@ minimaxm3-fp4-b200-vllm-agentic-mtp:
 # GB200 MiniMax-M3 NVFP4 AgentX discovery grid. The aggregate TP4 arms retain
 # the complete B200 search space; DEP and P/D add higher-concurrency probes.
 minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp:
-  image: vllm/vllm-openai:nightly-5e35a6f4f9bbc217c599692157ca985c894373f7
+  image: vllm/vllm-openai:v0.27.1
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: cluster:gb200-nv
@@ -7537,7 +7537,7 @@ minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp:
         decode: { num-worker: 0, tp: 8, ep: 8, dp-attn: true }
 
 minimaxm3-fp4-gb200-dynamo-vllm-agentic-disagg-mtp:
-  image: vllm/vllm-openai:nightly-5e35a6f4f9bbc217c599692157ca985c894373f7
+  image: vllm/vllm-openai:v0.27.1
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: cluster:gb200-nv
