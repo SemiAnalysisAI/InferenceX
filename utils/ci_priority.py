@@ -166,9 +166,7 @@ def calculate_priority(
     ):
         score += _decimal(checklist.get("adjustment", 0))
 
-    # Floor at 0 so large negative event adjustments (scheduled snapshots) pin
-    # to the patchwork-proven bottom score instead of minting negative labels.
-    return max(score, Decimal(0)).quantize(SCORE_QUANTUM, ROUND_HALF_UP)
+    return score.quantize(SCORE_QUANTUM, ROUND_HALF_UP)
 
 
 def format_priority(score: Decimal) -> str:
