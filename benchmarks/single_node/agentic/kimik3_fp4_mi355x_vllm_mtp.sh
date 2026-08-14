@@ -50,6 +50,11 @@ if [ "${SKIP_K3_BOOTSTRAP:-0}" != "1" ]; then
     bash "$RECIPE_DIR/apply_k3_container_patches.sh"
 fi
 
+# Without this the drafter silently loses FULL cudagraphs under spec-decode.
+case "${DRAFT_BACKEND:-TRITON_MLA}" in
+    *TRITON*) bash "$RECIPE_DIR/apply_triton_mla_cudagraph_fix.sh" || true ;;
+esac
+
 DRAFT_MODEL="${DRAFT_MODEL:-Inferact/Kimi-K3-DSpark}"
 
 # Resolve target + draft weights (pre-staged else HF cache).
@@ -69,16 +74,14 @@ else
 fi
 if [ -n "$ROCR_VISIBLE_DEVICES" ]; then export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"; fi
 
-# Force the DSpark draft causal (non-causal parallel drafting is a cudagraph OOB
-# source on ROCm; with causal=true the draft runs the fp8 asm path like the
-# target). Idempotent write — the draft may live anywhere the harness staged it,
-# so set it here rather than relying on the bootstrap's /dev/shm-scoped step.
-#
-# When DRAFT_MODEL_PATH is a bare repo id, "$DRAFT_MODEL_PATH/config.json" is not
-# a real path, so resolve the downloaded snapshot out of the HF cache. Skipping
-# this quietly costs ~15 min: the draft stays non-causal and the engine only dies
-# at backend selection with "ROCM_AITER_MLA ... non-causal attention not
-# supported", so a miss is fatal here rather than a warning.
+# Only AITER backends need the draft forced causal; TRITON_MLA takes it non-causal.
+DRAFT_BACKEND="${DRAFT_BACKEND:-TRITON_MLA}"
+case "$DRAFT_BACKEND" in
+    *AITER*) DRAFT_CAUSAL=true  ;;
+    *)       DRAFT_CAUSAL=false ;;
+esac
+
+# DRAFT_MODEL_PATH may be a bare repo id, so fall back to the HF cache snapshot.
 DRAFT_CFG_DIR="$DRAFT_MODEL_PATH"
 if [ ! -f "$DRAFT_CFG_DIR/config.json" ]; then
     DRAFT_CFG_DIR="$(python3 - "$DRAFT_MODEL_PATH" <<'PY'
@@ -86,28 +89,30 @@ import sys
 try:
     from huggingface_hub import snapshot_download
     print(snapshot_download(sys.argv[1], local_files_only=True), end="")
-except Exception as e:
+except Exception:
     print("", end="")
 PY
 )"
 fi
 if [ ! -f "$DRAFT_CFG_DIR/config.json" ]; then
     echo "!! cannot locate draft config.json for '$DRAFT_MODEL_PATH'" >&2
-    echo "   (resolved: '${DRAFT_CFG_DIR:-<empty>}'). Without dflash_config.causal=true" >&2
-    echo "   the draft is non-causal and ROCM_AITER_MLA refuses to initialize." >&2
+    echo "   (resolved: '${DRAFT_CFG_DIR:-<empty>}'). dflash_config.causal must be" >&2
+    echo "   pinned to $DRAFT_CAUSAL for DRAFT_BACKEND=$DRAFT_BACKEND before serving." >&2
     exit 1
 fi
-python3 - "$DRAFT_CFG_DIR/config.json" <<'PY'
+# Write explicitly, not just on true: the HF cache is shared across runs.
+python3 - "$DRAFT_CFG_DIR/config.json" "$DRAFT_CAUSAL" <<'PY'
 import json, sys
-f = sys.argv[1]
+f, want = sys.argv[1], sys.argv[2] == "true"
 c = json.load(open(f))
 d = c.setdefault("dflash_config", {})
-if d.get("causal") is True:
-    print("draft already forced causal")
+if d.get("causal") == want:
+    print(f"draft dflash_config.causal already {want}")
 else:
-    d["causal"] = True
+    prev = d.get("causal")
+    d["causal"] = want
     json.dump(c, open(f, "w"), indent=2)
-    print("forced draft dflash_config.causal=true:", f)
+    print(f"set draft dflash_config.causal={want} (was {prev}):", f)
 PY
 
 # ---- MI355X day-0 serving environment (AITER + fp8 ASM MLA) ------------------
@@ -120,11 +125,7 @@ export AITER_BF16_FP8_MOE_BOUND=0
 export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 export SAFETENSORS_FAST_GPU=1
 
-# Weight load: `auto` took 745 s for the ~1.5 TB checkpoint (run 31774454379),
-# most of the pre-ready window. Use the fastsafetensors loader like the B300
-# siblings do. It is not NVIDIA-only — GDS is, and vLLM falls back to its nogds
-# path — but the package is not guaranteed in the ROCm nightly, so probe for it
-# and stay on `auto` if it is missing rather than failing the cell at serve time.
+# fastsafetensors cuts weight load 745s -> 140s; not guaranteed in the ROCm image.
 LOAD_FORMAT="${LOAD_FORMAT:-}"
 if [ -z "$LOAD_FORMAT" ]; then
     if python3 -c "import fastsafetensors" 2>/dev/null; then
@@ -217,33 +218,21 @@ esac
 # the only apples-to-apples comparison with the B300-MTP baseline, which pins the
 # same golden AL. K=2 rather than 7: verify width is a real cost synthetic
 # acceptance does not remove; K=2 clears break-even at both ends of the conc range.
-#
-# TEST-BRANCH DEVIATION (not PR 2585): K=3, not the recipe's K=2. At K=2 the
-# first live verify faults -- _rejection_kernel launches into
-# HSA_STATUS_ERROR_EXCEPTION 0x1016 / HIP 719 illegal access (run 31776367386,
-# c1 and c4; warmup passes 11/11 because it runs max_tokens=1 and never
-# exercises a multi-token verify). Synthetic's rates[0]=1.0 forces
-# num_accepted_tokens>=1, driving an index path `block` never reaches; K=3 with
-# the same golden AL cleared this on this SKU before (run 31106651433).
-# Synthetic acceptance is fixed by AgentX policy, draft length is not, and K is
-# absent from the recipe's "mandated ... do not change" list -- so this stays a
-# valid operating point, just not a literal 2585 replication. Report it as K=3.
-NUM_SPEC_TOKENS="${NUM_SPEC_TOKENS:-3}"
+NUM_SPEC_TOKENS="${NUM_SPEC_TOKENS:-2}"
 TOKENS_PER_SEQ=$((1 + NUM_SPEC_TOKENS))
 # Committed golden AL at K=2 on the probabilistic curve
 # (kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml:
 # thinking_on 2 -> 2.51). Do not mix with the greedy curve's 2.45.
 SYNTHETIC_ACCEPT_LEN="${SYNTHETIC_ACCEPT_LEN:-2.51}"
 
-# Draft attention backend: ROCM_AITER_MLA (draft forced causal -> fp8 asm path,
-# same as target). Throughput runs pin synthetic acceptance; EVAL_ONLY accuracy
-# runs use real block verification (synthetic commits drafted tokens regardless
-# of the target's logits, so generated text would be wrong -> eval scores 0).
-DRAFT_BACKEND="${DRAFT_BACKEND:-ROCM_AITER_MLA}"
+# Draft on TRITON_MLA + bf16 KV (run 31765562914). The recipe's fp8-asm draft
+# faults in _rejection_kernel on the first live verify (run 31776367386).
+# Target keeps ROCM_AITER_MLA + fp8.
+DRAFT_KV_CACHE_DTYPE="${DRAFT_KV_CACHE_DTYPE:-auto}"
 if [ "${EVAL_ONLY:-false}" = "true" ]; then
-    SPEC_CONFIG="{\"method\": \"dspark\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"$DRAFT_BACKEND\", \"draft_sample_method\": \"probabilistic\", \"rejection_sample_method\": \"block\"}"
+    SPEC_CONFIG="{\"method\": \"dspark\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"$DRAFT_BACKEND\", \"kv_cache_dtype\": \"$DRAFT_KV_CACHE_DTYPE\", \"draft_sample_method\": \"probabilistic\", \"rejection_sample_method\": \"block\"}"
 else
-    SPEC_CONFIG="{\"method\": \"dspark\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"$DRAFT_BACKEND\", \"draft_sample_method\": \"probabilistic\", \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
+    SPEC_CONFIG="{\"method\": \"dspark\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"$DRAFT_BACKEND\", \"kv_cache_dtype\": \"$DRAFT_KV_CACHE_DTYPE\", \"draft_sample_method\": \"probabilistic\", \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
 fi
 
 # ---- Mandated DSpark serving knobs (do not change) --------------------------
@@ -272,10 +261,6 @@ KVMEM_ARG=(); [ -n "$KV_CACHE_MEMORY" ] && KVMEM_ARG=(--kv-cache-memory "$KV_CAC
 # (conc-4 -> 12 tok, conc-12 -> 36 tok fall to a PIECEWISE graph -> attention runs
 # eager every step -> get_mla_metadata_v1 host bubble, ~75 ms ITL). Adding 12 and
 # 36 gives exact FULL decode graphs. Rule: for a new conc C, add 3*C.
-# At the K=3 above, uniform_decode_query_len = 4, so the rule becomes 4*C and
-# c1/c4/c8 need 4/16/32 -- all three are already on this ladder, so it is
-# unchanged. Revisit if a conc whose 4*C is absent (e.g. c12 -> 48 is present,
-# c20 -> 80 is present, c22 -> 88 is present) gets added.
 CAPTURE_SIZES="${CAPTURE_SIZES:-1,2,4,8,12,16,24,32,36,40,48,56,64,72,80,88,96,104,112,120,128,136,144,152,160,168,176,184,192,200,208,216,224,232,240,248,256,272,288,304,320,336,352,368,384}"
 CUDAGRAPH_MODE="${CUDAGRAPH_MODE:-FULL_AND_PIECEWISE}"
 COMPILATION_CONFIG="{\"mode\":3,\"cudagraph_mode\":\"$CUDAGRAPH_MODE\",\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[$CAPTURE_SIZES]}"
