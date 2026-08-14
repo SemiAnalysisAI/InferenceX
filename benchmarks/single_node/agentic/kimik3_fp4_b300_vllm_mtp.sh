@@ -159,30 +159,32 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     lmcache)
         require_agentic_kv_offload_backend lmcache
 
-        # LMCache's own CUDA 12.9 build, not the generic PyPI wheel -- the
-        # release publishes a dedicated -cu129 asset set, the CUDA counterpart
-        # of the -rocm assets the MI355X sister arm installs. This is the
-        # upstream install line, which reads in uv form as:
+        # The LMCache wheel MUST match the image's CUDA major version. Its
+        # compiled `lmcache.c_ops` extension is linked against a specific
+        # libcudart, and LMCache does NOT fail when that .so cannot be
+        # dlopen'd -- it logs "lmcache.c_ops compiled extension not found;
+        # CudaDeviceOps stays on the torch baseline for all ops" and silently
+        # falls back to the pure-torch path in lmcache/v1/platform/torch_ops.py.
+        # That fallback is broken for this stack's hybrid multi-KV-group
+        # KDA/MLA layout: 77-98% of stores die with cudaErrorInvalidValue in
+        # index_select/cudaMemcpy, so the offload tier stays empty and the arm
+        # silently measures a cache that never stored anything.
         #
-        #   uv pip install lmcache==v$VERSION \
-        #     --extra-index-url https://download.pytorch.org/whl/cu129 \
-        #     --find-links .../expanded_assets/v$VERSION-cu129 \
-        #     --index-strategy unsafe-best-match
-        #
-        # --index-strategy has no pip counterpart because it does not need one:
-        # pip already resolves best-match across every configured index, which
-        # is exactly what unsafe-best-match restores in uv. torch is an
-        # unpinned LMCache requirement that the image already satisfies, so
-        # its tested build is left alone and the cu129 torch index is only
-        # consulted for CUDA wheels pip would otherwise miss.
+        # This node reports CUDA 13.0, so use the DEFAULT release assets, whose
+        # c_ops links libcudart.so.13 (cuda_13.0). Do NOT use the `-cu129`
+        # asset set: its c_ops links libcudart.so.12 (cuda_12.9) and cannot
+        # load here. The `-rocm` assets are the MI355X sister arm's equivalent.
+        # If the image's CUDA major version ever changes, this URL must change
+        # with it -- verify with `nvidia-smi | grep "CUDA Version"`.
         LMCACHE_VERSION="0.5.4rc2"
-        LMCACHE_CUDA_INDEX="https://github.com/LMCache/LMCache/releases/expanded_assets/v${LMCACHE_VERSION}-cu129"
+        LMCACHE_CUDA_INDEX="https://github.com/LMCache/LMCache/releases/expanded_assets/v${LMCACHE_VERSION}"
         agentic_pip_install --quiet --no-cache-dir \
             "lmcache==${LMCACHE_VERSION}" \
-            --extra-index-url https://download.pytorch.org/whl/cu129 \
             --find-links "$LMCACHE_CUDA_INDEX"
+        # Import c_ops explicitly so an ABI mismatch aborts the job instead of
+        # degrading to the broken torch fallback.
         python3 -c \
-            "import cupy; import lmcache.integration.vllm.lmcache_mp_connector; import opentelemetry.exporter.prometheus" \
+            "import cupy; import lmcache.c_ops; import lmcache.integration.vllm.lmcache_mp_connector; import opentelemetry.exporter.prometheus" \
             >/dev/null
 
         # One MP server for the node, per the Kimi-K3 recipe
@@ -237,6 +239,16 @@ case "${KV_OFFLOAD_BACKEND:-}" in
             --pid "$LMCACHE_PID" \
             --sleep-interval 1 \
             --timeout 600
+
+        # Second guard, on the server process itself: the import check above
+        # only proves c_ops loads in this shell's python3. Abort rather than
+        # benchmark a silently-degraded offload tier (see the install note).
+        if grep -q "c_ops compiled extension not found" "$LMCACHE_LOG"; then
+            echo "Error: LMCache fell back to the torch baseline (c_ops did not load)." >&2
+            echo "       The wheel's CUDA major version does not match this image." >&2
+            grep -m1 "c_ops compiled extension not found" "$LMCACHE_LOG" >&2
+            exit 1
+        fi
 
         # 100k-330k-token agentic prefixes make single retrieves large; use the
         # same MQ timeout headroom as the MI355X arm.
