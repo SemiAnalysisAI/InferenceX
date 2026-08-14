@@ -2,6 +2,7 @@
 default:
   gsm8k: 0.90
   kimi_tool_call_schema: 1.0
+  minimax_m3_smoke: 1.0
   gpqa_diamond_cot_n_shot: 0.30
   swebench_lite: 0.50
 models:

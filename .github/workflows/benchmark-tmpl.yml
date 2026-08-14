@@ -86,12 +86,12 @@ on:
         required: false
         default: false
       eval-framework:
-        description: "Eval runner (lm-eval, swebench, or kimi-vendor)"
+        description: "Eval runner (lm-eval, swebench, kimi-vendor, or minimax-vendor)"
         type: string
         required: false
         default: "lm-eval"
       eval-suite:
-        description: "Kimi Vendor Verifier suite; leave empty for other eval runners"
+        description: "Provider verifier suite; leave empty for lm-eval and swebench"
         type: string
         required: false
         default: ""

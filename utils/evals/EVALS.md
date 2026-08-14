@@ -65,9 +65,9 @@ python3 utils/evals/validate_scores.py
 
 The framework selects a provider-specific subprocess adapter, while the suite
 selects a case set understood by that adapter. Each adapter owns its endpoint
-format, dependencies, native report, metrics, and pass policy. Future MiniMax
-or BFCL support should add explicit `run_eval` cases rather than a shared
-request or report abstraction.
+format, dependencies, native report, metrics, and pass policy. Kimi and MiniMax
+use separate explicit `run_eval` cases; future provider or BFCL support should
+do the same rather than introduce a shared request or report abstraction.
 Agentic eval jobs forward the matrix `spec-decoding` value, so MTP entries
 launch their existing `*_mtp.sh` server instead of silently falling back to STP.
 
@@ -118,6 +118,87 @@ two-case smoke against their OpenAI-compatible frontend. Eval-only launchers
 restore real block verification before submitting recipes that otherwise use
 synthetic acceptance for throughput.
 
+### MiniMax M3 provider compatibility smoke
+
+The Phase 1 MiniMax smoke is opt-in and applies only to a MiniMax M3 provider
+exposing an OpenAI-compatible chat-completions API. The runner rejects other
+models unless `MODEL_PREFIX=minimaxm3` or `MODEL`/`MODEL_NAME` contains
+`MiniMax-M3`. Select
+`eval-framework: minimax-vendor` and `eval-suite: minimax_m3_smoke` in
+`e2e-tests.yml`, or run it from the repository root against an already-ready
+server:
+
+```bash
+source benchmarks/benchmark_lib.sh
+export EVAL_FRAMEWORK=minimax-vendor
+export MODEL_NAME="<served MiniMax-M3 model identifier>"
+export EVAL_SUITE=minimax_m3_smoke
+export EVAL_RESULT_DIR="$(mktemp -d /tmp/eval_out-XXXXXX)"
+run_eval --port "$PORT"
+append_lm_eval_summary
+python3 utils/evals/validate_scores.py
+```
+
+`utils/evals/minimax_m3_smoke.json` is derived from
+[MiniMax-AI/MiniMax-Provider-Verifier](https://github.com/MiniMax-AI/MiniMax-Provider-Verifier)
+`sample.jsonl` at commit
+`85bf180e54e2ab0b31595cfdc697116c4760876d`. The vendored fixture retains
+the full upstream MIT copyright, permission, and warranty notice. It contains
+exactly these three upstream zero-based rows, in this order:
+
+1. index 0, the non-Cyrillic language-following check;
+2. index 71, an `expected_tool_call: true` request exercising tool-call trigger
+   and argument-schema validation;
+3. index 101, an `expected_tool_call: false` request exercising the scenario
+   parameter key-order check.
+
+The adapter applies the pinned validator semantics directly to this fixture; it
+does not download the upstream repository or run the remaining 99 cases.
+
+The adapter sends the three requests sequentially to
+`${base_url}/chat/completions`. The endpoint must accept an OpenAI-compatible
+Bearer token and chat-completions request body and return OpenAI-compatible
+message, finish-reason, and tool-call fields. Redirect responses are rejected
+before forwarding bearer credentials; the local runner supplies
+`Authorization: Bearer EMPTY`. The smoke overrides fixture
+sampling with `temperature: 0`, `top_p: 1`, and `max_tokens: 2048`. Each request
+has a 180-second timeout by default and at most one retry for transport
+failures, HTTP 429, or HTTP 5xx responses (two total attempts); a hard
+900-second global bound covers the whole suite.
+
+`minimax_vendor_report.json` is the native report. It preserves every raw
+response and reports the six requested upstream-derived metric families:
+
+- `Query-Success-Rate`, which records whether the endpoint returned a response,
+  not whether the answer was generally correct;
+- `ToolCalls-Trigger-Similarity`, the F1 score computed from the fixture's
+  `expected_tool_call` labels;
+- `ToolCalls-Schema-Accuracy`, which validates returned function names and
+  arguments against the requested tool schema;
+- `Error-Only-Reasoning-Rate`, for responses with reasoning but neither visible
+  content nor tool calls;
+- `Language-Following-Success-Rate`, the non-Cyrillic language check;
+- `Scenario-Check-Pass-Rate`, the scenario parameter key-order check.
+
+The adapter additionally writes exactly one timestamped
+`results_minimax_vendor_*.json` compatibility artifact. Its `result_format` is
+`inferencex-eval-v1`, `eval_adapter` is `minimax-provider-verifier`, task is
+`minimax_m3_smoke`, and primary metric is `exact_match,strict-match`. A
+completed run records original and effective sample counts of three. Its
+compatibility score is passed cases divided by
+three; the `minimax_m3_smoke` threshold is `1.0`, so every case must pass.
+Both artifacts match the workflows' existing `results*.json` and
+`*_vendor_report.json` upload patterns.
+Setup, integration, timeout, and collection failures still emit a zero-score
+compatibility artifact with error metadata.
+
+This is a fixed three-case provider compatibility smoke, not the full
+102-case MiniMax Provider Verifier, BFCL, or a cross-model quality comparison.
+It does not estimate the upstream dataset's aggregate rates, stochastic
+pass-at-k behavior, streaming behavior, parallel-call behavior, multi-turn tool
+execution, or general agent quality. Its metric denominators are only the
+applicable cases in this pinned three-row fixture.
+
 ### Benchmark script flow
 
 All benchmark scripts in `benchmarks/` follow one of two flows:
@@ -148,10 +229,12 @@ Key eval functions in `benchmarks/benchmark_lib.sh`:
 | `run_eval` | Unified entrypoint - dispatches to framework-specific runner |
 | `run_lm_eval` | Runs lm-eval harness against the OpenAI-compatible endpoint |
 | `run_kimi_vendor_eval` | Selects and runs a pinned Kimi Vendor Verifier suite |
+| `run_minimax_vendor_eval` | Validates MiniMax M3 applicability and runs the pinned three-case provider smoke |
 | `append_lm_eval_summary` | Writes `meta_env.json` and moves eval artifacts to workspace |
 | `_install_lm_eval_deps` | Installs lm-eval dependencies |
-| `_prepare_kimi_vendor_python` | Uses system Python 3.12+ or provisions an isolated pinned Python 3.12 runtime on older images |
+| `_prepare_vendor_verifier_python` | Uses system Python 3.12+ or provisions an isolated pinned Python 3.12 runtime for provider verifiers |
 | `_prepare_kimi_vendor_runtime` | Installs the pinned verifier dependencies in an isolated temp path |
+| `_prepare_minimax_vendor_runtime` | Installs the pinned MiniMax adapter dependency in an isolated temp path |
 | `_prepare_kimi_vendor_verifier` | Downloads and safely extracts a fresh subset of the pinned source archive |
 | `_patch_lm_eval` | Patches lm-eval for reasoning tokens and TRT compatibility |
 | `compute_eval_context_length` | Computes eval context length (requested benchmark context, capped at model native max) |
@@ -241,8 +324,8 @@ cat ./evals/agg_eval_all.json | jq '[.[] | select(.hw == "B200")]'
 |----------|---------|-------------|
 | `RUN_EVAL` | `false` | Enable eval after throughput benchmark |
 | `EVAL_ONLY` | `false` | Skip throughput, only run evals (set by workflow) |
-| `EVAL_FRAMEWORK` | `lm-eval` | Eval runner (`lm-eval`, `swebench`, or `kimi-vendor`) |
-| `EVAL_SUITE` | basename of `EVAL_TASKS_DIR`, else `gsm8k` | Provider suite selector and artifact identity. External override is currently supported only by `kimi-vendor`; other runners derive it from their task |
+| `EVAL_FRAMEWORK` | `lm-eval` | Eval runner (`lm-eval`, `swebench`, `kimi-vendor`, or `minimax-vendor`) |
+| `EVAL_SUITE` | basename of `EVAL_TASKS_DIR`, else `gsm8k` | Provider suite selector and artifact identity. External overrides are supported by `kimi-vendor` and `minimax-vendor`; other runners derive it from their task |
 | `EVAL_TASKS_DIR` | `utils/evals/gsm8k.yaml` | Path to lm-eval task YAML |
 | `EVAL_RESULT_DIR` | `/tmp/eval_out-*` | Output directory for eval results |
 | `EVAL_MAX_MODEL_LEN` | `16384` | Max context for eval (set by `compute_eval_context_length`) |

@@ -17,6 +17,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BENCHMARK_LIB = REPO_ROOT / "benchmarks" / "benchmark_lib.sh"
+SINGLE_NODE_WORKFLOW = REPO_ROOT / ".github/workflows/benchmark-tmpl.yml"
 MULTINODE_WORKFLOW = REPO_ROOT / ".github/workflows/benchmark-multinode-tmpl.yml"
 E2E_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "e2e-tests.yml"
 QWEN_SGLANG_MTP_LAUNCHERS = (
@@ -29,6 +30,7 @@ source "$BENCHMARK_LIB"
 run_lm_eval()       { echo "DISPATCH=lm-eval"; }
 run_swebench_eval() { echo "DISPATCH=swebench"; }
 run_kimi_vendor_eval() { echo "DISPATCH=kimi-vendor"; }
+run_minimax_vendor_eval() { echo "DISPATCH=minimax-vendor"; }
 append_lm_eval_summary() { echo "STAGED=summary"; }
 export EVAL_MAX_MODEL_LEN=16384
 export EVAL_CONCURRENT_REQUESTS=""
@@ -196,7 +198,7 @@ def test_run_eval_rejects_suite_override_for_lm_eval() -> None:
     )
 
     assert result.returncode == 2
-    assert "only supported with EVAL_FRAMEWORK=kimi-vendor" in result.stderr
+    assert "only supported with a provider verifier framework" in result.stderr
 
 
 def test_run_eval_scopes_runner_selected_suite_to_one_call() -> None:
@@ -288,6 +290,283 @@ def test_kimi_vendor_rejects_unsupported_suite() -> None:
     assert "unsupported Kimi Vendor Verifier suite 'gsm8k'" in result.stderr
 
 
+def _run_minimax_dispatch(*, suite: str | None = None, concurrency: str = "") -> str:
+    script = r'''
+source "$BENCHMARK_LIB"
+unset EVAL_MAX_MODEL_LEN
+compute_eval_context_length() { echo "UNEXPECTED_CONTEXT_LOAD"; return 99; }
+MINIMAX_DISPATCH_COUNT=0
+run_minimax_vendor_eval() {
+    MINIMAX_DISPATCH_COUNT=$((MINIMAX_DISPATCH_COUNT + 1))
+    printf 'DISPATCH=minimax-vendor SUITE=%s ARGS=<%s>\n' "$EVAL_SUITE" "$*"
+}
+export EVAL_CONCURRENT_REQUESTS="$TEST_EVAL_CONCURRENCY"
+export EVAL_ONLY=false
+export IS_AGENTIC=0
+run_eval --framework minimax-vendor --port 9999
+printf 'DISPATCH_COUNT=%s\n' "$MINIMAX_DISPATCH_COUNT"
+printf 'COMPLETED_SUITE=%s\n' "$EVAL_COMPLETED_SUITE"
+'''
+    env = {
+        **os.environ,
+        "BENCHMARK_LIB": str(BENCHMARK_LIB),
+        "MODEL": "served-model",
+        "MODEL_PREFIX": "minimaxm3",
+        "TEST_EVAL_CONCURRENCY": concurrency,
+    }
+    for key in ("EVAL_FRAMEWORK", "EVAL_SUITE", "EVAL_COMPLETED_SUITE"):
+        env.pop(key, None)
+    if suite is not None:
+        env["EVAL_SUITE"] = suite
+    result = subprocess.run(
+        ["bash", "-c", script],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    assert "UNEXPECTED_CONTEXT_LOAD" not in result.stdout
+    return result.stdout
+
+
+def test_minimax_vendor_defaults_suite_dispatches_once_and_records_completion() -> None:
+    output = _run_minimax_dispatch()
+
+    assert "DISPATCH=minimax-vendor SUITE=minimax_m3_smoke" in output
+    assert "ARGS=<--port 9999>" in output
+    assert "DISPATCH_COUNT=1" in output
+    assert "COMPLETED_SUITE=minimax_m3_smoke" in output
+
+
+def test_minimax_vendor_accepts_explicit_supported_suite() -> None:
+    output = _run_minimax_dispatch(suite="minimax_m3_smoke")
+
+    assert "DISPATCH=minimax-vendor SUITE=minimax_m3_smoke" in output
+    assert "DISPATCH_COUNT=1" in output
+    assert "COMPLETED_SUITE=minimax_m3_smoke" in output
+
+
+def test_minimax_vendor_rejects_unsupported_suite() -> None:
+    result = _run_invalid_call(
+        "MODEL_PREFIX=minimaxm3 "
+        "EVAL_SUITE=gsm8k "
+        "run_eval --framework minimax-vendor"
+    )
+
+    assert result.returncode == 2
+    assert "unsupported MiniMax Provider Verifier suite 'gsm8k'" in result.stderr
+
+
+def test_run_eval_rejects_unknown_framework() -> None:
+    result = _run_invalid_call(
+        "EVAL_MAX_MODEL_LEN=16384 run_eval --framework not-a-framework"
+    )
+
+    assert result.returncode == 1
+    assert "Unknown framework 'not-a-framework'" in result.stdout
+
+
+def test_minimax_vendor_rejects_concurrency_sweep_for_sequential_smoke() -> None:
+    result = _run_invalid_call(
+        "MODEL_PREFIX=minimaxm3 "
+        "EVAL_CONCURRENT_REQUESTS='1 4' "
+        "run_eval --framework minimax-vendor"
+    )
+
+    assert result.returncode == 1
+    assert "batched eval concurrency is only supported for lm-eval" in result.stderr
+
+
+def test_minimax_vendor_ignores_single_launcher_concurrency_value() -> None:
+    output = _run_minimax_dispatch(concurrency="128")
+
+    assert "DISPATCH=minimax-vendor SUITE=minimax_m3_smoke" in output
+    assert "DISPATCH_COUNT=1" in output
+
+
+def test_minimax_vendor_rejects_non_m3_model() -> None:
+    result = _run_invalid_call(
+        "MODEL=moonshotai/Kimi-K2 "
+        "MODEL_PREFIX=kimik3 "
+        "run_minimax_vendor_eval"
+    )
+
+    assert result.returncode == 2
+    assert "requires MODEL_PREFIX=minimaxm3" in result.stderr
+
+
+def test_minimax_vendor_accepts_case_insensitive_m3_model_name() -> None:
+    script = r'''
+source "$BENCHMARK_LIB"
+_run_minimax_m3_smoke_eval() { echo "DISPATCH=$EVAL_SUITE"; }
+unset MODEL_PREFIX EVAL_SUITE EVAL_RESULT_DIR
+MODEL_NAME=vendor/MINIMAX-M3-custom run_minimax_vendor_eval
+'''
+    result = subprocess.run(
+        ["bash", "-c", script],
+        env={**os.environ, "BENCHMARK_LIB": str(BENCHMARK_LIB)},
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+    assert "DISPATCH=minimax_m3_smoke" in result.stdout
+
+
+def test_minimax_vendor_setup_failure_uses_integration_error_and_stages(
+    tmp_path: Path,
+) -> None:
+    script = r'''
+source "$BENCHMARK_LIB"
+unset EVAL_SUITE EVAL_RESULT_DIR EVAL_COMPLETED_SUITE
+unset VENDOR_VERIFIER_PYTHON VENDOR_VERIFIER_PYTHON_CLEANUP_DIR
+_prepare_vendor_verifier_python() { return 12; }
+_prepare_minimax_vendor_runtime() { echo "UNEXPECTED_DEPENDENCY_INSTALL"; return 99; }
+python3() { printf 'ADAPTER_ARG=<%s>\n' "$@"; }
+append_lm_eval_summary() { printf 'STAGED=<%s>\n' "$EVAL_RESULT_DIR"; }
+export MODEL_PREFIX=minimaxm3
+export MODEL=test-model
+export EVAL_CONCURRENT_REQUESTS=""
+export EVAL_ONLY=false
+export IS_AGENTIC=0
+run_eval --framework minimax-vendor --results-dir "$RESULTS_DIR"
+eval_rc=$?
+printf 'EVAL_RC=%s\n' "$eval_rc"
+'''
+    results_dir = tmp_path / "results"
+    result = subprocess.run(
+        ["bash", "-c", script],
+        env={
+            **os.environ,
+            "BENCHMARK_LIB": str(BENCHMARK_LIB),
+            "RESULTS_DIR": str(results_dir),
+        },
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    output = result.stdout + result.stderr
+
+    assert "EVAL_RC=12" in output
+    assert "UNEXPECTED_DEPENDENCY_INSTALL" not in output
+    assert f"ADAPTER_ARG=<{REPO_ROOT / 'utils/evals/minimax_provider_eval.py'}>" in output
+    assert "ADAPTER_ARG=<test-model>" in output
+    assert f"ADAPTER_ARG=<{results_dir}>" in output
+    assert "ADAPTER_ARG=<--integration-error>" in output
+    assert (
+        "ADAPTER_ARG=<MiniMax Provider Verifier Python runtime preparation "
+        "failed with exit code 12>"
+    ) in output
+    assert f"STAGED=<{results_dir}>" in output
+    assert output.count("STAGED=<") == 1
+
+
+def test_minimax_vendor_dependency_install_is_pinned_and_minimal(
+    tmp_path: Path,
+) -> None:
+    script = r'''
+source "$BENCHMARK_LIB"
+selected_python() { printf 'PYTHON_ARG=<%s>\n' "$@"; }
+VENDOR_VERIFIER_PYTHON=selected_python
+_install_minimax_vendor_eval_deps "$RUNTIME_DIR"
+'''
+    result = subprocess.run(
+        ["bash", "-c", script],
+        env={
+            **os.environ,
+            "BENCHMARK_LIB": str(BENCHMARK_LIB),
+            "RUNTIME_DIR": str(tmp_path / "runtime"),
+        },
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+    assert "PYTHON_ARG=<jsonschema==4.25.1>" in result.stdout
+    assert "PYTHON_ARG=<openai" not in result.stdout
+    assert "PYTHON_ARG=<httpx" not in result.stdout
+    assert "PYTHON_ARG=<pytest" not in result.stdout
+    assert "--break-system-packages" not in result.stdout
+
+
+def test_minimax_vendor_runner_uses_fixed_adapter_contract(tmp_path: Path) -> None:
+    results_dir = tmp_path / "results"
+    runtime_dir = tmp_path / "runtime"
+    python_dir = tmp_path / "python"
+    script = r'''
+source "$BENCHMARK_LIB"
+selected_python() {
+    printf 'PYTHONPATH=<%s>\n' "$PYTHONPATH" >&2
+    printf 'PYTHON_ARG=<%s>\n' "$@" >&2
+}
+_prepare_vendor_verifier_python() {
+    mkdir "$PYTHON_DIR"
+    VENDOR_VERIFIER_PYTHON=selected_python
+    VENDOR_VERIFIER_PYTHON_CLEANUP_DIR="$PYTHON_DIR"
+    export VENDOR_VERIFIER_PYTHON VENDOR_VERIFIER_PYTHON_CLEANUP_DIR
+}
+_prepare_minimax_vendor_runtime() {
+    mkdir "$RUNTIME_DIR"
+    printf '%s\n' "$RUNTIME_DIR"
+}
+mktemp() { echo "UNEXPECTED_DEFAULT_RESULTS_DIR" >&2; return 99; }
+run_minimax_vendor_eval --port 9999 --results-dir "$RESULTS_DIR"
+printf 'EVAL_SUITE=%s\n' "$EVAL_SUITE"
+printf 'EVAL_RESULT_DIR=%s\n' "$EVAL_RESULT_DIR"
+'''
+    env = {
+        **os.environ,
+        "BENCHMARK_LIB": str(BENCHMARK_LIB),
+        "RESULTS_DIR": str(results_dir),
+        "RUNTIME_DIR": str(runtime_dir),
+        "PYTHON_DIR": str(python_dir),
+        "MODEL": "test-model",
+        "MODEL_PREFIX": "minimaxm3",
+        "OPENAI_API_KEY": "must-not-be-forwarded",
+    }
+    for key in ("EVAL_SUITE", "EVAL_RESULT_DIR", "MODEL_NAME"):
+        env.pop(key, None)
+    result = subprocess.run(
+        ["bash", "-c", script],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    output = result.stdout + result.stderr
+    adapter = REPO_ROOT / "utils/evals/minimax_provider_eval.py"
+    fixture = REPO_ROOT / "utils/evals/minimax_m3_smoke.json"
+
+    assert f"PYTHONPATH=<{runtime_dir}" in output
+    for value in (
+        adapter,
+        "http://127.0.0.1:9999/v1",
+        "EMPTY",
+        "test-model",
+        results_dir,
+        fixture,
+        "180",
+        "900",
+    ):
+        assert f"PYTHON_ARG=<{value}>" in output
+    for option in (
+        "--base-url",
+        "--api-key",
+        "--model",
+        "--output-dir",
+        "--fixture",
+        "--request-timeout-seconds",
+        "--timeout-seconds",
+    ):
+        assert f"PYTHON_ARG=<{option}>" in output
+    assert "must-not-be-forwarded" not in output
+    assert "UNEXPECTED_DEFAULT_RESULTS_DIR" not in output
+    assert "EVAL_SUITE=minimax_m3_smoke" in output
+    assert f"EVAL_RESULT_DIR={results_dir}" in output
+    assert not runtime_dir.exists()
+    assert not python_dir.exists()
+
+
 
 def test_kimi_vendor_setup_failure_writes_compatibility_result(
     tmp_path: Path,
@@ -296,11 +575,11 @@ def test_kimi_vendor_setup_failure_writes_compatibility_result(
     python_dir = tmp_path / "python"
     script = r'''
 source "$BENCHMARK_LIB"
-_prepare_kimi_vendor_python() {
+_prepare_vendor_verifier_python() {
     mkdir "$PYTHON_DIR"
-    KIMI_VENDOR_PYTHON=/unusable/bootstrap/python
-    KIMI_VENDOR_PYTHON_CLEANUP_DIR="$PYTHON_DIR"
-    export KIMI_VENDOR_PYTHON KIMI_VENDOR_PYTHON_CLEANUP_DIR
+    VENDOR_VERIFIER_PYTHON=/unusable/bootstrap/python
+    VENDOR_VERIFIER_PYTHON_CLEANUP_DIR="$PYTHON_DIR"
+    export VENDOR_VERIFIER_PYTHON VENDOR_VERIFIER_PYTHON_CLEANUP_DIR
 }
 _prepare_kimi_vendor_runtime() { return 12; }
 run_kimi_vendor_eval --results-dir "$RESULTS_DIR"
@@ -547,11 +826,11 @@ python3() {
     [ "$1" = "-c" ]
 }
 mktemp() { echo "UNEXPECTED_MKTEMP"; return 99; }
-KIMI_VENDOR_PYTHON=/previous/python
-KIMI_VENDOR_PYTHON_CLEANUP_DIR=/previous/runtime
-_prepare_kimi_vendor_python
-printf 'SELECTED_PYTHON=<%s>\n' "$KIMI_VENDOR_PYTHON"
-printf 'PYTHON_CLEANUP=<%s>\n' "$KIMI_VENDOR_PYTHON_CLEANUP_DIR"
+VENDOR_VERIFIER_PYTHON=/previous/python
+VENDOR_VERIFIER_PYTHON_CLEANUP_DIR=/previous/runtime
+_prepare_vendor_verifier_python "Kimi Vendor Verifier" "kimi-vendor-python"
+printf 'SELECTED_PYTHON=<%s>\n' "$VENDOR_VERIFIER_PYTHON"
+printf 'PYTHON_CLEANUP=<%s>\n' "$VENDOR_VERIFIER_PYTHON_CLEANUP_DIR"
 '''
     result = subprocess.run(
         ["bash", "-c", script],
@@ -607,14 +886,14 @@ python3() {
     cp "$FAKE_UV" "$prefix/bin/uv"
     chmod +x "$prefix/bin/uv"
 }
-_prepare_kimi_vendor_python
-cleanup_dir="$KIMI_VENDOR_PYTHON_CLEANUP_DIR"
-printf 'SELECTED_PYTHON=<%s>\n' "$KIMI_VENDOR_PYTHON"
+_prepare_vendor_verifier_python "Kimi Vendor Verifier" "kimi-vendor-python"
+cleanup_dir="$VENDOR_VERIFIER_PYTHON_CLEANUP_DIR"
+printf 'SELECTED_PYTHON=<%s>\n' "$VENDOR_VERIFIER_PYTHON"
 printf 'PYTHON_CLEANUP=<%s>\n' "$cleanup_dir"
 runtime_dir="$TEST_ROOT/runtime"
 mkdir "$runtime_dir"
 _install_kimi_vendor_eval_deps "$runtime_dir"
-_cleanup_kimi_vendor_eval "$runtime_dir" "$cleanup_dir"
+_cleanup_vendor_eval "$runtime_dir" "$cleanup_dir"
 [ ! -e "$runtime_dir" ] && [ ! -e "$cleanup_dir" ] && printf 'CLEANED\n'
 '''
     result = subprocess.run(
@@ -654,7 +933,7 @@ def test_kimi_vendor_dependency_install_is_isolated(tmp_path: Path) -> None:
     script = r'''
 source "$BENCHMARK_LIB"
 selected_python() { printf 'PYTHON_ARG=<%s>\n' "$@"; }
-KIMI_VENDOR_PYTHON=selected_python
+VENDOR_VERIFIER_PYTHON=selected_python
 _install_kimi_vendor_eval_deps "$RUNTIME_DIR"
 '''
     result = subprocess.run(
@@ -678,7 +957,7 @@ _install_kimi_vendor_eval_deps "$RUNTIME_DIR"
 def test_kimi_vendor_surfaces_failure_artifact_error(tmp_path: Path) -> None:
     script = r'''
 source "$BENCHMARK_LIB"
-_prepare_kimi_vendor_python() { return 12; }
+_prepare_vendor_verifier_python() { return 12; }
 _write_kimi_vendor_integration_error() { return 23; }
 run_kimi_vendor_eval --results-dir "$RESULTS_DIR"
 printf 'EVAL_RC=%s\n' "$?"
@@ -713,11 +992,11 @@ def test_kimi_vendor_multinode_runner_uses_fixed_upstream_contract(
     verifier_dir.mkdir()
     script = r'''
 source "$BENCHMARK_LIB"
-_prepare_kimi_vendor_python() {
+_prepare_vendor_verifier_python() {
     mkdir "$PYTHON_DIR"
-    KIMI_VENDOR_PYTHON=selected_python
-    KIMI_VENDOR_PYTHON_CLEANUP_DIR="$PYTHON_DIR"
-    export KIMI_VENDOR_PYTHON KIMI_VENDOR_PYTHON_CLEANUP_DIR
+    VENDOR_VERIFIER_PYTHON=selected_python
+    VENDOR_VERIFIER_PYTHON_CLEANUP_DIR="$PYTHON_DIR"
+    export VENDOR_VERIFIER_PYTHON VENDOR_VERIFIER_PYTHON_CLEANUP_DIR
 }
 _prepare_kimi_vendor_runtime() {
     mkdir "$RUNTIME_DIR"
@@ -726,7 +1005,7 @@ _prepare_kimi_vendor_runtime() {
 }
 _prepare_kimi_vendor_verifier() {
     printf 'CHECKOUT=%s@%s\n' "$1" "$2" >&2
-    "$KIMI_VENDOR_PYTHON" - "$1" "$2" "$VERIFIER_DIR" <<'PY' >&2
+    "$VENDOR_VERIFIER_PYTHON" - "$1" "$2" "$VERIFIER_DIR" <<'PY' >&2
 archive extraction
 PY
     printf '%s\n' "$VERIFIER_DIR"
@@ -1721,6 +2000,19 @@ def test_agentic_eval_workflow_forwards_runner_contract() -> None:
         "${{ matrix.config['kv-offload-backend'] && "
         "toJson(matrix.config['kv-offload-backend']) || '' }}"
     )
+
+def test_fixed_eval_workflows_forward_provider_contract() -> None:
+    workflow = yaml.safe_load(E2E_WORKFLOW.read_text())
+    for job_name in ("test-sweep-evals", "test-sweep-multi-node-evals"):
+        forwarded = workflow["jobs"][job_name]["with"]
+        assert forwarded["eval-framework"] == "${{ inputs.eval-framework }}"
+        assert forwarded["eval-suite"] == "${{ inputs.eval-suite }}"
+
+    reusable_workflow = yaml.safe_load(SINGLE_NODE_WORKFLOW.read_text())
+    assert reusable_workflow["env"]["EVAL_FRAMEWORK"] == "${{ inputs.eval-framework }}"
+    assert reusable_workflow["env"]["EVAL_SUITE"] == "${{ inputs.eval-suite }}"
+    assert "*_vendor_report.json" in SINGLE_NODE_WORKFLOW.read_text()
+
 
 
 def test_multinode_agentic_eval_workflow_forwards_runner_contract() -> None:

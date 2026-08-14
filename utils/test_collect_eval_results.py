@@ -10,10 +10,15 @@ from collect_eval_results import (
     collect_eval_rows,
 )
 from evals.kimi_vendor_eval import RESULT_FORMAT as KIMI_VENDOR_RESULT_FORMAT
+from evals.minimax_provider_eval import RESULT_FORMAT as MINIMAX_RESULT_FORMAT
 
 
 def test_kimi_vendor_result_format_matches_collector_contract() -> None:
     assert KIMI_VENDOR_RESULT_FORMAT == EVAL_RESULT_FORMAT
+
+
+def test_minimax_result_format_matches_collector_contract() -> None:
+    assert MINIMAX_RESULT_FORMAT == EVAL_RESULT_FORMAT
 
 
 def test_build_row_preserves_sequence_lengths() -> None:
@@ -136,24 +141,28 @@ def test_collect_eval_rows_ignores_failed_batch_points(
 
 
 
-def test_collect_eval_rows_accepts_neutral_result_format(tmp_path: Path) -> None:
-    artifact_dir = tmp_path / "eval_provider"
+def test_collect_eval_rows_accepts_minimax_compatibility_result(
+    tmp_path: Path,
+) -> None:
+    artifact_dir = tmp_path / "eval_minimax"
     artifact_dir.mkdir()
     (artifact_dir / "meta_env.json").write_text(
-        json.dumps({"eval_suite": "provider_smoke"})
+        json.dumps({"eval_suite": "minimax_m3_smoke"})
     )
-    result_path = artifact_dir / "results_provider.json"
-    _write_lm_eval_result(result_path, 1.0)
+    result_path = artifact_dir / "results_minimax_vendor.json"
+    _write_lm_eval_result(result_path, 1.0, task="minimax_m3_smoke")
     result = json.loads(result_path.read_text())
     result.pop("lm_eval_version")
     result["result_format"] = EVAL_RESULT_FORMAT
+    result["eval_adapter"] = "minimax-provider-verifier"
     result_path.write_text(json.dumps(result))
 
     rows = collect_eval_rows(tmp_path)
 
     assert len(rows) == 1
+    assert rows[0]["task"] == "minimax_m3_smoke"
     assert rows[0]["score"] == 1.0
-    assert rows[0]["eval_suite"] == "provider_smoke"
+    assert rows[0]["eval_suite"] == "minimax_m3_smoke"
 
 
 def test_collect_eval_rows_excludes_integration_and_sample_failures(

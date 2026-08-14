@@ -46,12 +46,12 @@ on:
                 type: string
                 default: ""
             eval-framework:
-                description: "Agentic eval runner (lm-eval, swebench, or kimi-vendor)"
+                description: "Eval runner (lm-eval, swebench, kimi-vendor, or minimax-vendor)"
                 required: false
                 type: string
                 default: "lm-eval"
             eval-suite:
-                description: "Kimi Vendor Verifier suite; empty for other runners"
+                description: "Provider verifier suite; empty for lm-eval and swebench"
                 required: false
                 type: string
                 default: ""
@@ -136,12 +136,12 @@ on:
                 type: string
                 default: ""
             eval-framework:
-                description: "Agentic eval runner (lm-eval, swebench, or kimi-vendor)"
+                description: "Eval runner (lm-eval, swebench, kimi-vendor, or minimax-vendor)"
                 required: false
                 type: string
                 default: "lm-eval"
             eval-suite:
-                description: "Kimi Vendor Verifier suite; empty for other runners"
+                description: "Provider verifier suite; empty for lm-eval and swebench"
                 required: false
                 type: string
                 default: ""

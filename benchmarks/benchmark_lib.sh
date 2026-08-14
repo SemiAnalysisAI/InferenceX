@@ -892,22 +892,25 @@ _install_lm_eval_deps() {
     fi
 }
 
-_prepare_kimi_vendor_python() {
-    KIMI_VENDOR_PYTHON=python3
-    KIMI_VENDOR_PYTHON_CLEANUP_DIR=""
-    export KIMI_VENDOR_PYTHON KIMI_VENDOR_PYTHON_CLEANUP_DIR
+_prepare_vendor_verifier_python() {
+    local verifier_name="$1"
+    local runtime_prefix="$2"
+
+    VENDOR_VERIFIER_PYTHON=python3
+    VENDOR_VERIFIER_PYTHON_CLEANUP_DIR=""
+    export VENDOR_VERIFIER_PYTHON VENDOR_VERIFIER_PYTHON_CLEANUP_DIR
 
     if python3 -c 'import sys; raise SystemExit(sys.version_info < (3, 12))'; then
         return 0
     fi
 
     local python_dir uv_prefix uv_bin venv_dir prepare_rc=0
-    python_dir="$(mktemp -d /tmp/kimi-vendor-python-XXXXXX)" || {
-        echo "ERROR: could not create a temporary Python directory for Kimi-Vendor-Verifier" >&2
+    python_dir="$(mktemp -d "/tmp/${runtime_prefix}-XXXXXX")" || {
+        echo "ERROR: could not create a temporary Python directory for ${verifier_name}" >&2
         return 1
     }
-    KIMI_VENDOR_PYTHON_CLEANUP_DIR="$python_dir"
-    export KIMI_VENDOR_PYTHON_CLEANUP_DIR
+    VENDOR_VERIFIER_PYTHON_CLEANUP_DIR="$python_dir"
+    export VENDOR_VERIFIER_PYTHON_CLEANUP_DIR
 
     uv_prefix="${python_dir}/uv"
     uv_bin="${uv_prefix}/bin/uv"
@@ -925,24 +928,24 @@ _prepare_kimi_vendor_python() {
             || prepare_rc=$?
     fi
     if [ "$prepare_rc" -eq 0 ] && [ ! -x "${venv_dir}/bin/python" ]; then
-        echo "ERROR: pinned uv did not create the Kimi verifier Python interpreter" >&2
+        echo "ERROR: pinned uv did not create the ${verifier_name} Python interpreter" >&2
         prepare_rc=1
     fi
     if [ "$prepare_rc" -ne 0 ]; then
         rm -rf "$python_dir" || true
-        KIMI_VENDOR_PYTHON=python3
-        KIMI_VENDOR_PYTHON_CLEANUP_DIR=""
-        export KIMI_VENDOR_PYTHON KIMI_VENDOR_PYTHON_CLEANUP_DIR
+        VENDOR_VERIFIER_PYTHON=python3
+        VENDOR_VERIFIER_PYTHON_CLEANUP_DIR=""
+        export VENDOR_VERIFIER_PYTHON VENDOR_VERIFIER_PYTHON_CLEANUP_DIR
         return "$prepare_rc"
     fi
 
-    KIMI_VENDOR_PYTHON="${venv_dir}/bin/python"
-    export KIMI_VENDOR_PYTHON
+    VENDOR_VERIFIER_PYTHON="${venv_dir}/bin/python"
+    export VENDOR_VERIFIER_PYTHON
 }
 
 _install_kimi_vendor_eval_deps() {
     local target_dir="$1"
-    "${KIMI_VENDOR_PYTHON:-python3}" -m pip install -q --no-cache-dir --target "$target_dir" \
+    "${VENDOR_VERIFIER_PYTHON:-python3}" -m pip install -q --no-cache-dir --target "$target_dir" \
         "httpx[http2]==0.28.1" \
         "openai==2.14.0" \
         "jsonschema==4.25.1" \
@@ -971,7 +974,7 @@ _prepare_kimi_vendor_verifier() {
         return 1
     }
 
-    "${KIMI_VENDOR_PYTHON:-python3}" - "$repo_url" "$verifier_ref" "$checkout_dir" <<'PY' || prepare_rc=$?
+    "${VENDOR_VERIFIER_PYTHON:-python3}" - "$repo_url" "$verifier_ref" "$checkout_dir" <<'PY' || prepare_rc=$?
 from pathlib import Path
 import re
 import socket
@@ -1202,7 +1205,7 @@ PY
     printf '%s\n' "$checkout_dir"
 }
 
-_cleanup_kimi_vendor_eval() {
+_cleanup_vendor_eval() {
     local path
     for path in "$@"; do
         [ -z "$path" ] || rm -rf "$path" || true
@@ -1258,7 +1261,7 @@ _run_kimi_tool_call_schema_eval() {
     export EVAL_RESULT_DIR="$results_dir"
 
     local setup_rc=0 integration_error=""
-    _prepare_kimi_vendor_python || {
+    _prepare_vendor_verifier_python "Kimi-Vendor-Verifier" "kimi-vendor-python" || {
         setup_rc=$?
         integration_error="Kimi Vendor Verifier Python runtime preparation failed with exit code ${setup_rc}"
     }
@@ -1277,8 +1280,8 @@ _run_kimi_tool_call_schema_eval() {
         }
     fi
     if [ "$setup_rc" -ne 0 ]; then
-        _cleanup_kimi_vendor_eval \
-            "$runtime_dir" "$checkout_dir" "${KIMI_VENDOR_PYTHON_CLEANUP_DIR:-}"
+        _cleanup_vendor_eval \
+            "$runtime_dir" "$checkout_dir" "${VENDOR_VERIFIER_PYTHON_CLEANUP_DIR:-}"
         echo "ERROR: ${integration_error}" >&2
         local artifact_rc=0
         _write_kimi_vendor_integration_error \
@@ -1292,7 +1295,7 @@ _run_kimi_tool_call_schema_eval() {
 
     local eval_rc=0
     PYTHONPATH="${runtime_dir}${PYTHONPATH:+:${PYTHONPATH}}" \
-        "${KIMI_VENDOR_PYTHON:-python3}" "$adapter_path" \
+        "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" \
             --verifier-dir "$checkout_dir" \
             --base-url "http://127.0.0.1:${port}/v1" \
             --api-key EMPTY \
@@ -1300,8 +1303,8 @@ _run_kimi_tool_call_schema_eval() {
             --model-prefix "${MODEL_PREFIX:-}" \
             --output-dir "$results_dir" \
             || eval_rc=$?
-    _cleanup_kimi_vendor_eval \
-        "$runtime_dir" "$checkout_dir" "${KIMI_VENDOR_PYTHON_CLEANUP_DIR:-}"
+    _cleanup_vendor_eval \
+        "$runtime_dir" "$checkout_dir" "${VENDOR_VERIFIER_PYTHON_CLEANUP_DIR:-}"
     return "$eval_rc"
 }
 
@@ -1315,6 +1318,139 @@ run_kimi_vendor_eval() {
             ;;
         *)
             echo "ERROR: unsupported Kimi Vendor Verifier suite '${eval_suite}'" >&2
+            export EVAL_RESULT_DIR=""
+            return 2
+            ;;
+    esac
+}
+
+_install_minimax_vendor_eval_deps() {
+    local target_dir="$1"
+    "${VENDOR_VERIFIER_PYTHON:-python3}" -m pip install -q --no-cache-dir --target "$target_dir" \
+        "jsonschema==4.25.1"
+}
+
+_prepare_minimax_vendor_runtime() {
+    local runtime_dir install_rc=0
+    runtime_dir="$(mktemp -d /tmp/minimax-vendor-runtime-XXXXXX)" || return $?
+    _install_minimax_vendor_eval_deps "$runtime_dir" >&2 || install_rc=$?
+    if [ "$install_rc" -ne 0 ]; then
+        rm -rf "$runtime_dir"
+        return "$install_rc"
+    fi
+    printf '%s\n' "$runtime_dir"
+}
+
+_write_minimax_vendor_integration_error() {
+    local adapter_path="$1"
+    local model_name="$2"
+    local results_dir="$3"
+    local message="$4"
+
+    # The adapter's integration-error path is stdlib-only, so it remains usable
+    # when Python provisioning or dependency installation is what failed.
+    python3 "$adapter_path" \
+        --model "$model_name" \
+        --output-dir "$results_dir" \
+        --integration-error "$message"
+}
+
+_run_minimax_m3_smoke_eval() {
+    local port="${PORT:-8888}"
+    local results_dir="${EVAL_RESULT_DIR:-}"
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --port|--results-dir)
+                if [[ $# -lt 2 || -z "${2:-}" || "${2:-}" == --* ]]; then
+                    echo "ERROR: $1 requires a value" >&2
+                    return 2
+                fi
+                case "$1" in
+                    --port)        port="$2" ;;
+                    --results-dir) results_dir="$2" ;;
+                esac
+                shift 2
+                ;;
+            *)
+                echo "Unknown parameter: $1" >&2
+                return 2
+                ;;
+        esac
+    done
+
+    if [ -z "$results_dir" ]; then
+        results_dir="$(mktemp -d /tmp/eval_out-XXXXXX)" || return $?
+    fi
+
+    local model_name="${MODEL_NAME:-${MODEL:-}}"
+    local adapter_path="${INFERENCEX_REPO_ROOT}/utils/evals/minimax_provider_eval.py"
+    local fixture_path="${INFERENCEX_REPO_ROOT}/utils/evals/minimax_m3_smoke.json"
+    local runtime_dir=""
+
+    mkdir -p "$results_dir" || return $?
+    results_dir="$(cd "$results_dir" && pwd)" || return $?
+    export EVAL_RESULT_DIR="$results_dir"
+
+    local setup_rc=0 integration_error=""
+    _prepare_vendor_verifier_python "MiniMax Provider Verifier" "minimax-vendor-python" || {
+        setup_rc=$?
+        integration_error="MiniMax Provider Verifier Python runtime preparation failed with exit code ${setup_rc}"
+    }
+    if [ "$setup_rc" -eq 0 ]; then
+        runtime_dir=$(_prepare_minimax_vendor_runtime) || {
+            setup_rc=$?
+            integration_error="MiniMax Provider Verifier dependency installation failed with exit code ${setup_rc}"
+        }
+    fi
+    if [ "$setup_rc" -ne 0 ]; then
+        _cleanup_vendor_eval \
+            "$runtime_dir" "${VENDOR_VERIFIER_PYTHON_CLEANUP_DIR:-}"
+        echo "ERROR: ${integration_error}" >&2
+        local artifact_rc=0
+        _write_minimax_vendor_integration_error \
+            "$adapter_path" "$model_name" "$results_dir" "$integration_error" \
+            || artifact_rc=$?
+        if [ "$artifact_rc" -ne 0 ]; then
+            echo "ERROR: failed to write MiniMax verifier failure artifact (exit code ${artifact_rc})" >&2
+        fi
+        return "$setup_rc"
+    fi
+
+    local eval_rc=0
+    PYTHONPATH="${runtime_dir}${PYTHONPATH:+:${PYTHONPATH}}" \
+        "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" \
+            --base-url "http://127.0.0.1:${port}/v1" \
+            --api-key EMPTY \
+            --model "$model_name" \
+            --output-dir "$results_dir" \
+            --fixture "$fixture_path" \
+            --request-timeout-seconds 180 \
+            --timeout-seconds 900 \
+            || eval_rc=$?
+    _cleanup_vendor_eval \
+        "$runtime_dir" "${VENDOR_VERIFIER_PYTHON_CLEANUP_DIR:-}"
+    return "$eval_rc"
+}
+
+run_minimax_vendor_eval() {
+    local eval_suite="${EVAL_SUITE:-minimax_m3_smoke}"
+    export EVAL_SUITE="$eval_suite"
+
+    case "$eval_suite" in
+        minimax_m3_smoke)
+            local model_name="${MODEL_NAME:-${MODEL:-}}"
+            local model_prefix="${MODEL_PREFIX:-}"
+            if [[ "$model_prefix" != [Mm][Ii][Nn][Ii][Mm][Aa][Xx][Mm]3 ]] \
+                && [[ "$model_name" != *[Mm][Ii][Nn][Ii][Mm][Aa][Xx]-[Mm]3* ]]; then
+                echo "ERROR: MiniMax M3 smoke requires MODEL_PREFIX=minimaxm3 or a MODEL/MODEL_NAME containing MiniMax-M3" >&2
+                export EVAL_RESULT_DIR=""
+                return 2
+            fi
+            _run_minimax_m3_smoke_eval "$@"
+            ;;
+        *)
+            echo "ERROR: unsupported MiniMax Provider Verifier suite '${eval_suite}'" >&2
             export EVAL_RESULT_DIR=""
             return 2
             ;;
@@ -2136,9 +2272,14 @@ run_eval() {
     fi
 
     local framework="${EVAL_FRAMEWORK:-${cli_framework:-$scenario_default}}"
-    if [ "$framework" = "kimi-vendor" ] && [ -z "${EVAL_SUITE:-}" ]; then
-        EVAL_SUITE="kimi_tool_call_schema"
-    fi
+    case "$framework" in
+        kimi-vendor)
+            [ -n "${EVAL_SUITE:-}" ] || EVAL_SUITE="kimi_tool_call_schema"
+            ;;
+        minimax-vendor)
+            [ -n "${EVAL_SUITE:-}" ] || EVAL_SUITE="minimax_m3_smoke"
+            ;;
+    esac
 
     case "${EVAL_SUITE:-}" in
         "") ;;
@@ -2148,14 +2289,18 @@ run_eval() {
             ;;
     esac
 
-    if [ -n "${EVAL_SUITE:-}" ] && [ "$framework" != "kimi-vendor" ]; then
-        echo "ERROR: EVAL_SUITE is only supported with EVAL_FRAMEWORK=kimi-vendor" >&2
+    if [ -n "${EVAL_SUITE:-}" ] \
+        && [ "$framework" != "kimi-vendor" ] \
+        && [ "$framework" != "minimax-vendor" ]; then
+        echo "ERROR: EVAL_SUITE is only supported with a provider verifier framework (kimi-vendor or minimax-vendor)" >&2
         return 2
     fi
 
-    # Kimi Vendor Verifier uses a fixed request budget and does not consume
-    # EVAL_MAX_MODEL_LEN, so avoid loading model configuration for that path.
-    if [ "$framework" != "kimi-vendor" ] && [ -z "${EVAL_MAX_MODEL_LEN:-}" ]; then
+    # Provider verifier suites use fixed request budgets and do not consume
+    # EVAL_MAX_MODEL_LEN, so avoid loading model configuration for those paths.
+    if [ "$framework" != "kimi-vendor" ] \
+        && [ "$framework" != "minimax-vendor" ] \
+        && [ -z "${EVAL_MAX_MODEL_LEN:-}" ]; then
         compute_eval_context_length "$MODEL" "${MAX_MODEL_LEN:-0}" > /dev/null
     fi
 
@@ -2227,6 +2372,7 @@ run_eval() {
         lm-eval|lm_eval) run_lm_eval "${forwarded[@]}" || eval_rc=$? ;;
         swebench)        run_swebench_eval "${forwarded[@]}" || eval_rc=$? ;;
         kimi-vendor)     run_kimi_vendor_eval "${forwarded[@]}" || eval_rc=$? ;;
+        minimax-vendor)  run_minimax_vendor_eval "${forwarded[@]}" || eval_rc=$? ;;
         *)               echo "Unknown framework '${framework}'"; eval_rc=1 ;;
     esac
 
@@ -2234,10 +2380,12 @@ run_eval() {
         export EVAL_COMPLETED_SUITE="$EVAL_SUITE"
     fi
 
-    # Agentic eval-only recipes have no separate staging step. Kimi failures
-    # also carry diagnostic score artifacts that callers must preserve.
+    # Agentic eval-only recipes have no separate staging step. Provider
+    # verifier failures also carry diagnostic score artifacts to preserve.
     if { [ "${EVAL_ONLY:-false}" = "true" ] && [ "$scenario_is_agentic" = "1" ]; } \
-        || { [ "$framework" = "kimi-vendor" ] && [ "$eval_rc" -ne 0 ]; }; then
+        || { { [ "$framework" = "kimi-vendor" ] \
+            || [ "$framework" = "minimax-vendor" ]; } \
+            && [ "$eval_rc" -ne 0 ]; }; then
         append_lm_eval_summary || true
     fi
 
