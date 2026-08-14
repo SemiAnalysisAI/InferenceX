@@ -5973,6 +5973,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2567
 
 - config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-agg
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Inject the committed synthetic MTP acceptance length only for GB300 AgentX throughput; keep eval-only jobs on real target verification."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2571
+  
+
+- config-keys:
     - qwen3.5-fp8-b200-sglang-agentic-mtp
   scenario-type:
     - agentic-coding
