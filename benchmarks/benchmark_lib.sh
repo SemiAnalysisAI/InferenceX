@@ -892,20 +892,57 @@ _install_lm_eval_deps() {
     fi
 }
 
-_require_kimi_vendor_python() {
+_prepare_kimi_vendor_python() {
+    KIMI_VENDOR_PYTHON=python3
+    KIMI_VENDOR_PYTHON_CLEANUP_DIR=""
+    export KIMI_VENDOR_PYTHON KIMI_VENDOR_PYTHON_CLEANUP_DIR
+
     if python3 -c 'import sys; raise SystemExit(sys.version_info < (3, 12))'; then
         return 0
     fi
 
-    local python_version
-    python_version="$(python3 -c 'import platform; print(platform.python_version())' 2>/dev/null || printf 'unavailable')"
-    echo "ERROR: Kimi Vendor Verifier requires Python >=3.12 (python3 is ${python_version})" >&2
-    return 2
+    local python_dir uv_prefix uv_bin venv_dir prepare_rc=0
+    python_dir="$(mktemp -d /tmp/kimi-vendor-python-XXXXXX)" || {
+        echo "ERROR: could not create a temporary Python directory for Kimi-Vendor-Verifier" >&2
+        return 1
+    }
+    KIMI_VENDOR_PYTHON_CLEANUP_DIR="$python_dir"
+    export KIMI_VENDOR_PYTHON_CLEANUP_DIR
+
+    uv_prefix="${python_dir}/uv"
+    uv_bin="${uv_prefix}/bin/uv"
+    venv_dir="${python_dir}/venv"
+    python3 -m pip install -q --no-cache-dir --prefix "$uv_prefix" "uv==0.11.33" \
+        || prepare_rc=$?
+    if [ "$prepare_rc" -eq 0 ] && [ ! -x "$uv_bin" ]; then
+        echo "ERROR: pinned uv installation did not create ${uv_bin}" >&2
+        prepare_rc=1
+    fi
+    if [ "$prepare_rc" -eq 0 ]; then
+        UV_CACHE_DIR="${python_dir}/uv-cache" \
+        UV_PYTHON_INSTALL_DIR="${python_dir}/python" \
+            "$uv_bin" venv --python 3.12 --seed "$venv_dir" \
+            || prepare_rc=$?
+    fi
+    if [ "$prepare_rc" -eq 0 ] && [ ! -x "${venv_dir}/bin/python" ]; then
+        echo "ERROR: pinned uv did not create the Kimi verifier Python interpreter" >&2
+        prepare_rc=1
+    fi
+    if [ "$prepare_rc" -ne 0 ]; then
+        rm -rf "$python_dir" || true
+        KIMI_VENDOR_PYTHON=python3
+        KIMI_VENDOR_PYTHON_CLEANUP_DIR=""
+        export KIMI_VENDOR_PYTHON KIMI_VENDOR_PYTHON_CLEANUP_DIR
+        return "$prepare_rc"
+    fi
+
+    KIMI_VENDOR_PYTHON="${venv_dir}/bin/python"
+    export KIMI_VENDOR_PYTHON
 }
 
 _install_kimi_vendor_eval_deps() {
     local target_dir="$1"
-    python3 -m pip install -q --no-cache-dir --target "$target_dir" \
+    "${KIMI_VENDOR_PYTHON:-python3}" -m pip install -q --no-cache-dir --target "$target_dir" \
         "httpx[http2]==0.28.1" \
         "openai==2.14.0" \
         "jsonschema==4.25.1" \
@@ -934,7 +971,7 @@ _prepare_kimi_vendor_verifier() {
         return 1
     }
 
-    python3 - "$repo_url" "$verifier_ref" "$checkout_dir" <<'PY' || prepare_rc=$?
+    "${KIMI_VENDOR_PYTHON:-python3}" - "$repo_url" "$verifier_ref" "$checkout_dir" <<'PY' || prepare_rc=$?
 from pathlib import Path
 import re
 import socket
@@ -1220,9 +1257,9 @@ _run_kimi_tool_call_schema_eval() {
     export EVAL_RESULT_DIR="$results_dir"
 
     local setup_rc=0 integration_error=""
-    _require_kimi_vendor_python || {
+    _prepare_kimi_vendor_python || {
         setup_rc=$?
-        integration_error="Kimi Vendor Verifier Python version check failed with exit code ${setup_rc}"
+        integration_error="Kimi Vendor Verifier Python runtime preparation failed with exit code ${setup_rc}"
     }
     if [ "$setup_rc" -eq 0 ]; then
         runtime_dir=$(_prepare_kimi_vendor_runtime) || {
@@ -1239,7 +1276,8 @@ _run_kimi_tool_call_schema_eval() {
         }
     fi
     if [ "$setup_rc" -ne 0 ]; then
-        _cleanup_kimi_vendor_eval "$runtime_dir" "$checkout_dir"
+        _cleanup_kimi_vendor_eval \
+            "$runtime_dir" "$checkout_dir" "${KIMI_VENDOR_PYTHON_CLEANUP_DIR:-}"
         echo "ERROR: ${integration_error}" >&2
         local artifact_rc=0
         _write_kimi_vendor_integration_error \
@@ -1253,14 +1291,15 @@ _run_kimi_tool_call_schema_eval() {
 
     local eval_rc=0
     PYTHONPATH="${runtime_dir}${PYTHONPATH:+:${PYTHONPATH}}" \
-        python3 "$adapter_path" \
+        "${KIMI_VENDOR_PYTHON:-python3}" "$adapter_path" \
             --verifier-dir "$checkout_dir" \
             --base-url "http://127.0.0.1:${port}/v1" \
             --api-key EMPTY \
             --model "$model_name" \
             --output-dir "$results_dir" \
             || eval_rc=$?
-    _cleanup_kimi_vendor_eval "$runtime_dir" "$checkout_dir"
+    _cleanup_kimi_vendor_eval \
+        "$runtime_dir" "$checkout_dir" "${KIMI_VENDOR_PYTHON_CLEANUP_DIR:-}"
     return "$eval_rc"
 }
 
@@ -1545,11 +1584,11 @@ _normalize_bool_json() {
 bridge_disagg_eval_metadata() {
     export TP="${PREFILL_TP:-${PREFILL_TP_SIZE:-${TP:-1}}}"
     export PREFILL_TP="${PREFILL_TP:-${PREFILL_TP_SIZE:-${TP:-1}}}"
-    export PREFILL_EP="$(_resolve_disagg_ep "${PREFILL_EP:-1}" "${PREFILL_ENABLE_EP:-false}" "${PREFILL_TP_SIZE:-${PREFILL_TP:-1}}")"
+    export PREFILL_EP="$(_resolve_disagg_ep "${PREFILL_EP:-${EP_SIZE:-${EP:-1}}}" "${PREFILL_ENABLE_EP:-false}" "${PREFILL_TP_SIZE:-${PREFILL_TP:-1}}")"
     export EP_SIZE="${PREFILL_EP}"
     export PREFILL_NUM_WORKERS="${PREFILL_NUM_WORKERS:-${xP:-1}}"
     export DECODE_TP="${DECODE_TP:-${DECODE_TP_SIZE:-${TP:-1}}}"
-    export DECODE_EP="$(_resolve_disagg_ep "${DECODE_EP:-1}" "${DECODE_ENABLE_EP:-false}" "${DECODE_TP_SIZE:-${DECODE_TP:-1}}")"
+    export DECODE_EP="$(_resolve_disagg_ep "${DECODE_EP:-${EP_SIZE:-${EP:-1}}}" "${DECODE_ENABLE_EP:-false}" "${DECODE_TP_SIZE:-${DECODE_TP:-1}}")"
     export DECODE_NUM_WORKERS="${DECODE_NUM_WORKERS:-${yD:-1}}"
 
     local prefill_dp="${PREFILL_DP_ATTN:-${PREFILL_DP_ATTENTION:-${PREFILL_ENABLE_DP:-false}}}"

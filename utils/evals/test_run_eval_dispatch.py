@@ -772,6 +772,15 @@ def test_summary_metadata_preserves_lm_eval_gsm8k_defaults(tmp_path: Path) -> No
     assert meta["conc"] == 7
 
 
+def test_summary_metadata_preserves_single_node_expert_parallelism(
+    tmp_path: Path,
+) -> None:
+    meta = _summary_metadata(tmp_path, TP="8", EP_SIZE="8")
+
+    assert meta["ep"] == 8
+    assert meta["prefill_ep"] == 8
+    assert meta["decode_ep"] == 8
+
 def test_run_lm_eval_exports_cli_task_path(tmp_path: Path) -> None:
     script = r'''
 source "$BENCHMARK_LIB"
