@@ -5953,3 +5953,11 @@
     - "Use native EAGLE MTP (3 steps, top-k 1, 4 draft tokens) and golden synthetic acceptance length 2.49 for throughput; eval retains real verification."
     - "Follow the official SGLang DeepSeek-V4 Blackwell recipe, require nonempty SGLang server metrics, keep pooled AgentX connections alive, let AIPerf own HiCache warmup, and reserve transient MoE workspace at DEP8 c512."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2577
+
+- config-keys:
+    - qwen3.8-fp8-mi355x-vllm-multi-nodes
+    - qwen3.8-fp8-mi355x-vllm-multi-nodes-agentic
+  description:
+    - "Add Qwen3.8-2.4T-A95B FP8 on two MI355X nodes with vLLM Ray TP8/PP2 serving for 8k/1k and AgentX concurrency-1 bring-up."
+    - "Use Slurm-assigned hosts and eno0 addresses, require matching pre-staged model snapshots, and run the vllm/vllm-openai-rocm:qwen38 image with max-model-len auto."
+  pr-link: TBD
