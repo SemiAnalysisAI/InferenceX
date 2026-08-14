@@ -220,7 +220,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         cd "$SRT_REPO_DIR" || exit 1
         git checkout sa-submission-q2-2026
     fi
-    if [[ "${EVAL_FRAMEWORK:-lm-eval}" == "kimi-vendor" ]]; then
+    if [[ "${EVAL_FRAMEWORK:-lm-eval}" != "lm-eval" ]]; then
         python3 "$GITHUB_WORKSPACE/runners/patch_srt_eval_dispatch.py" "$(pwd)" || exit 1
     fi
 

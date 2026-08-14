@@ -11,7 +11,9 @@ DO_SWEEP_ENV_BLOCK = """            "EVAL_ONLY",
             "IS_MULTINODE","""
 DO_SWEEP_ENV_REPLACEMENT = """            "EVAL_ONLY",
             "EVAL_FRAMEWORK",
+            "EVAL_LIMIT",
             "EVAL_SUITE",
+            "SWEBENCH_GEN_MODE",
             "IS_MULTINODE","""
 LM_EVAL_COMMAND = 'run_eval --framework lm-eval --port "$PORT" || eval_rc=$?'
 GENERIC_EVAL_COMMAND = 'run_eval --port "$PORT" || eval_rc=$?'
@@ -34,6 +36,13 @@ def prepare_replacements(
         old_count = content.count(old)
         new_count = content.count(new)
         if old_count == 1 and new_count == 0:
+            anchor = old.splitlines()[0]
+            anchor_count = content.count(anchor)
+            if anchor_count != 1:
+                raise RuntimeError(
+                    f"invalid patch state in {path}: "
+                    f"anchor {anchor!r} count={anchor_count}"
+                )
             content = content.replace(old, new, 1)
             changed = True
         elif old_count != 0 or new_count != 1:

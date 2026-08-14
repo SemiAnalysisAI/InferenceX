@@ -1,6 +1,7 @@
 """Tests for eval result aggregation."""
 
 import json
+import os
 from pathlib import Path
 
 from collect_eval_results import (
@@ -232,3 +233,102 @@ def test_collect_eval_rows_does_not_resurrect_stale_valid_result(
     stale_path.touch()
 
     assert collect_eval_rows(tmp_path) == []
+
+
+def test_collect_eval_rows_uses_mtime_for_newer_legacy_name(
+    tmp_path: Path,
+) -> None:
+    artifact_dir = tmp_path / "eval_retry"
+    artifact_dir.mkdir()
+    (artifact_dir / "meta_env.json").write_text(
+        json.dumps({"eval_suite": "kimi_tool_call_schema"})
+    )
+    stale_path = (
+        artifact_dir / "results_kimi_vendor_2026-08-12T01-00-00.000000.json"
+    )
+    _write_lm_eval_result(stale_path, 1.0, task="kimi_tool_call_schema")
+    current_path = artifact_dir / "results.json"
+    _write_lm_eval_result(current_path, 0.0, task="kimi_tool_call_schema")
+    current = json.loads(current_path.read_text())
+    current["integration_error"] = {
+        "type": "RuntimeError",
+        "message": "latest attempt failed",
+    }
+    current_path.write_text(json.dumps(current))
+    os.utime(current_path, (2_000_000_000, 2_000_000_000))
+
+    assert collect_eval_rows(tmp_path) == []
+
+
+def test_collect_eval_rows_rejects_missing_or_out_of_range_scores(
+    tmp_path: Path,
+) -> None:
+    for index, score in enumerate(
+        (None, True, float("nan"), float("inf"), -0.1, 1.1)
+    ):
+        artifact_dir = tmp_path / f"eval_invalid_{index}"
+        artifact_dir.mkdir()
+        (artifact_dir / "meta_env.json").write_text(
+            json.dumps({"eval_suite": "kimi_tool_call_schema"})
+        )
+        _write_lm_eval_result(
+            artifact_dir / f"results_{index}.json",
+            score,
+            task="kimi_tool_call_schema",
+        )
+
+    assert collect_eval_rows(tmp_path) == []
+
+
+def test_collect_eval_rows_falls_back_for_invalid_filename_timestamp(
+    tmp_path: Path,
+) -> None:
+    artifact_dir = tmp_path / "eval_invalid_timestamp"
+    artifact_dir.mkdir()
+    (artifact_dir / "meta_env.json").write_text(
+        json.dumps({"eval_suite": "kimi_tool_call_schema"})
+    )
+    _write_lm_eval_result(
+        artifact_dir / "results_2026-99-99T99-99-99.json",
+        1.0,
+        task="kimi_tool_call_schema",
+    )
+
+    rows = collect_eval_rows(tmp_path)
+
+    assert len(rows) == 1
+    assert rows[0]["score"] == 1.0
+
+
+def test_collect_eval_rows_uses_extract_filter_as_primary_score(
+    tmp_path: Path,
+) -> None:
+    artifact_dir = tmp_path / "eval_gpqa"
+    artifact_dir.mkdir()
+    (artifact_dir / "meta_env.json").write_text(
+        json.dumps({"eval_suite": "gpqa_diamond_cot_n_shot"})
+    )
+    (artifact_dir / "results_gpqa.json").write_text(json.dumps({
+        "lm_eval_version": "0.4.0",
+        "results": {
+            "gpqa_diamond_cot_n_shot": {
+                "exact_match,extract_abcd": 0.75,
+                "exact_match_stderr,extract_abcd": 0.02,
+            },
+        },
+        "configs": {
+            "gpqa_diamond_cot_n_shot": {
+                "metric_list": [{"metric": "exact_match"}],
+                "filter_list": [{"name": "extract_abcd"}],
+            },
+        },
+        "n-samples": {
+            "gpqa_diamond_cot_n_shot": {"effective": 8},
+        },
+    }))
+
+    rows = collect_eval_rows(tmp_path)
+
+    assert len(rows) == 1
+    assert rows[0]["score"] == 0.75
+    assert rows[0]["score_name"] == "em_flexible"

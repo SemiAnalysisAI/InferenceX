@@ -99,6 +99,8 @@ def test_patch_srt_eval_dispatch_forwards_selection_and_is_idempotent(
     assert second.returncode == 0, second.stderr
     assert do_sweep.read_text().count('"EVAL_FRAMEWORK"') == 1
     assert do_sweep.read_text().count('"EVAL_SUITE"') == 1
+    assert do_sweep.read_text().count('"EVAL_LIMIT"') == 1
+    assert do_sweep.read_text().count('"SWEBENCH_GEN_MODE"') == 1
     assert 'run_eval --port "$PORT"' in eval_script.read_text()
     assert "--framework lm-eval" not in eval_script.read_text()
     assert "*_vendor_report.json" in eval_script.read_text()
@@ -189,6 +191,64 @@ def test_eval_only_restores_real_vllm_acceptance(tmp_path: Path) -> None:
     assert "synthetic_acceptance_length" not in rewritten
 
 
+
+def test_eval_only_removes_sglang_simulated_acceptance(tmp_path: Path) -> None:
+    recipe = tmp_path / "recipe.yaml"
+    recipe.write_text(
+        "backend:\n"
+        "  sglang_config:\n"
+        "    decode_environment:\n"
+        '      SGLANG_SIMULATE_ACC_LEN: "2.99"\n'
+        '      SGLANG_SIMULATE_ACC_METHOD: "match-expected"\n'
+        '      SGLANG_SIMULATE_ACC_TOKEN_MODE: "real-draft-token"\n'
+        "      KEEP_ME: unchanged\n"
+    )
+
+    result = subprocess.run(
+        ["python3", str(INJECT_ACCEPTANCE), str(recipe), "dynamo-sglang"],
+        env={**os.environ, "EVAL_ONLY": "true"},
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    rewritten = recipe.read_text()
+    assert "SGLANG_SIMULATE_ACC_" not in rewritten
+    assert "KEEP_ME: unchanged" in rewritten
+
+
+def test_sglang_throughput_replaces_existing_simulated_acceptance(
+    tmp_path: Path,
+) -> None:
+    recipe = tmp_path / "recipe.yaml"
+    recipe.write_text(
+        "backend:\n"
+        "  aggregated_environment:\n"
+        '    SGLANG_SIMULATE_ACC_LEN: "2.99"\n'
+        '    SGLANG_SIMULATE_ACC_METHOD: "match-expected"\n'
+        '    SGLANG_SIMULATE_ACC_TOKEN_MODE: "real-draft-token"\n'
+        "    KEEP_ME: unchanged\n"
+    )
+
+    result = subprocess.run(
+        ["python3", str(INJECT_ACCEPTANCE), str(recipe), "dynamo-sglang"],
+        env={
+            **os.environ,
+            "SYNTHETIC_ACCEPTANCE": "true",
+            "SYNTHETIC_ACCEPTANCE_LENGTH": "3.39",
+        },
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    rewritten = recipe.read_text()
+    assert rewritten.count("SGLANG_SIMULATE_ACC_LEN") == 1
+    assert 'SGLANG_SIMULATE_ACC_LEN: "3.39"' in rewritten
+    assert "KEEP_ME: unchanged" in rewritten
+
 def test_eval_only_acceptance_rewrite_allows_non_speculative_recipe(
     tmp_path: Path,
 ) -> None:
@@ -210,16 +270,20 @@ def test_eval_only_acceptance_rewrite_allows_non_speculative_recipe(
 
 def test_nvidia_srt_launchers_prepare_kimi_eval_dispatch() -> None:
     launchers = (
+        REPO_ROOT / "runners/launch_h100-dgxc-slurm.sh",
         REPO_ROOT / "runners/launch_h200-dgxc-slurm.sh",
         REPO_ROOT / "runners/launch_b200-dgxc.sh",
+        REPO_ROOT / "runners/launch_b200-nscale-slurm.sh",
+        REPO_ROOT / "runners/launch_b300-nv.sh",
         REPO_ROOT / "runners/launch_gb200-nv.sh",
+        REPO_ROOT / "runners/launch_gb300-nv.sh",
     )
 
     for launcher in launchers:
         content = launcher.read_text()
         assert "patch_srt_eval_dispatch.py" in content
-        assert 'EVAL_FRAMEWORK:-lm-eval}" == "kimi-vendor"' in content
-        assert "inject_synthetic_acceptance.py" in content
+        assert 'EVAL_FRAMEWORK:-lm-eval}" != "lm-eval"' in content
+        assert "inject_synthetic_acceptance" in content
 
 
 def test_gb200_kimi_compilation_config_preserves_all_settings() -> None:

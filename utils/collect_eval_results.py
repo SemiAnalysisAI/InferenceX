@@ -3,6 +3,7 @@ import sys
 import json
 import math
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from tabulate import tabulate
@@ -84,16 +85,33 @@ def detect_lm_eval_jsons(d: Path, batched: bool = False) -> List[Path]:
     )
     lm_paths = []
 
-    def recency_key(path: Path) -> Tuple[str, int, str]:
+    def recency_key(path: Path) -> Tuple[int, str]:
         match = re.search(
             r"\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}(?:\.\d+)?",
             path.name,
         )
-        return (
-            match.group(0) if match else "",
-            path.stat().st_mtime_ns,
-            path.name,
-        )
+        if match:
+            try:
+                timestamp = match.group(0)
+                base, separator, fraction = timestamp.partition(".")
+                parsed = datetime.strptime(
+                    base,
+                    "%Y-%m-%dT%H-%M-%S",
+                ).replace(tzinfo=timezone.utc)
+                fractional_ns = (
+                    int((fraction + "000000000")[:9])
+                    if separator
+                    else 0
+                )
+                order_ns = (
+                    int(parsed.timestamp()) * 1_000_000_000
+                    + fractional_ns
+                )
+            except ValueError:
+                order_ns = path.stat().st_mtime_ns
+        else:
+            order_ns = path.stat().st_mtime_ns
+        return order_ns, path.name
 
     for p in immediate_jsons:
         data = load_json(p)
@@ -326,6 +344,10 @@ def build_row(meta: Dict[str, Any], m: Dict[str, Any]) -> Dict[str, Any]:
         row['score'] = m.get('accuracy')
         row['score_name'] = 'accuracy'
         row['score_se'] = m.get('accuracy_se')
+    elif m.get('flex') is not None:
+        row['score'] = m.get('flex')
+        row['score_name'] = 'em_flexible'
+        row['score_se'] = m.get('flex_se')
     else:
         row['score'] = None
         row['score_name'] = None
@@ -359,6 +381,21 @@ def collect_eval_rows(root: Path) -> List[Dict[str, Any]]:
 
             metrics_list = extract_lm_metrics(lm_path)
             for metrics in metrics_list:
+                primary_score = next(
+                    (
+                        metrics.get(name)
+                        for name in ('strict', 'accuracy', 'flex')
+                        if metrics.get(name) is not None
+                    ),
+                    None,
+                )
+                if (
+                    isinstance(primary_score, bool)
+                    or not isinstance(primary_score, (int, float))
+                    or not math.isfinite(primary_score)
+                    or not 0.0 <= primary_score <= 1.0
+                ):
+                    continue
                 rows.append(build_row(row_meta, metrics))
     return rows
 

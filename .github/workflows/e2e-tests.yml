@@ -397,9 +397,11 @@ jobs:
             decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
             run-eval: true
             eval-only: true
-            eval-conc: ${{ matrix.config['eval-all-concs'] && join(matrix.config.conc, ' ') || matrix.config['eval-conc'] }}
+            eval-conc: ${{ inputs.eval-framework == 'lm-eval' && matrix.config['eval-all-concs'] && join(matrix.config.conc, ' ') || matrix.config['eval-conc'] }}
+            eval-limit: ${{ inputs.eval-limit }}
             eval-framework: ${{ inputs.eval-framework }}
             eval-suite: ${{ inputs.eval-suite }}
+            swebench-gen-mode: ${{ inputs.swebench-gen-mode }}
             ref: ${{ inputs.ref }}
 
     test-sweep-agentic:
@@ -571,7 +573,7 @@ jobs:
             precision: ${{ matrix.config.precision }}
             router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
             kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
-            conc-list: ${{ toJson(matrix.config.conc) }}
+            conc-list: ${{ format('[{0}]', matrix.config['eval-conc']) }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
             prefill-hardware: ${{ matrix.config.prefill.hardware }}
@@ -684,6 +686,7 @@ jobs:
             eval-limit: ${{ inputs.eval-limit }}
             eval-framework: ${{ inputs.eval-framework }}
             eval-suite: ${{ inputs.eval-suite }}
+            swebench-gen-mode: ${{ inputs.swebench-gen-mode }}
             ref: ${{ inputs.ref }}
 
     collect-results:

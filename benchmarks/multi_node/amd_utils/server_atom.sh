@@ -411,9 +411,9 @@ if [ "$NODE_RANK" -eq 0 ]; then
             fi
 
             if [[ "$DRY_RUN" -eq 1 ]]; then
-                echo "DRY RUN: run_eval --framework lm-eval --port ${ROUTER_PORT} (conc=${EVAL_CONCURRENT_REQUESTS})"
+                echo "DRY RUN: run_eval --port ${ROUTER_PORT} (framework=${EVAL_FRAMEWORK:-lm-eval}, conc=${EVAL_CONCURRENT_REQUESTS})"
             else
-                MODEL_NAME="${MODEL_DIR}/${MODEL_NAME}" run_eval --framework lm-eval --port ${ROUTER_PORT}
+                MODEL_NAME="${MODEL_DIR}/${MODEL_NAME}" run_eval --port "${ROUTER_PORT}"
                 eval_rc=$?
 
                 if [[ $eval_rc -ne 0 ]]; then

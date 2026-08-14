@@ -912,8 +912,8 @@ _prepare_kimi_vendor_python() {
     uv_prefix="${python_dir}/uv"
     uv_bin="${uv_prefix}/bin/uv"
     venv_dir="${python_dir}/venv"
-    python3 -m pip install -q --no-cache-dir --prefix "$uv_prefix" "uv==0.11.33" \
-        || prepare_rc=$?
+    python3 -m pip install -q --no-cache-dir --break-system-packages \
+        --prefix "$uv_prefix" "uv==0.11.33" || prepare_rc=$?
     if [ "$prepare_rc" -eq 0 ] && [ ! -x "$uv_bin" ]; then
         echo "ERROR: pinned uv installation did not create ${uv_bin}" >&2
         prepare_rc=1
@@ -1254,6 +1254,7 @@ _run_kimi_tool_call_schema_eval() {
     local checkout_dir=""
 
     mkdir -p "$results_dir" || return $?
+    results_dir="$(cd "$results_dir" && pwd)" || return $?
     export EVAL_RESULT_DIR="$results_dir"
 
     local setup_rc=0 integration_error=""
@@ -1693,7 +1694,11 @@ META
 }
 
 rewrite_lm_eval_meta_env() {
-    _write_lm_eval_meta_json "./meta_env.json" "" "${CONC:-1}"
+    if [ -n "${EVAL_BATCHED_CONCS:-}" ]; then
+        append_lm_eval_summary
+    else
+        _write_lm_eval_meta_json "./meta_env.json" "" "${CONC:-1}"
+    fi
 }
 
 append_lm_eval_summary() {
@@ -2224,12 +2229,14 @@ run_eval() {
         *)               echo "Unknown framework '${framework}'"; eval_rc=1 ;;
     esac
 
-    if [ "$framework" = "kimi-vendor" ]; then
+    if [ -n "${EVAL_SUITE:-}" ]; then
         export EVAL_COMPLETED_SUITE="$EVAL_SUITE"
     fi
 
-    # Agentic eval-only recipes have no separate staging step.
-    if [ "${EVAL_ONLY:-false}" = "true" ] && [ "$scenario_is_agentic" = "1" ]; then
+    # Agentic eval-only recipes have no separate staging step. Kimi failures
+    # also carry diagnostic score artifacts that callers must preserve.
+    if { [ "${EVAL_ONLY:-false}" = "true" ] && [ "$scenario_is_agentic" = "1" ]; } \
+        || { [ "$framework" = "kimi-vendor" ] && [ "$eval_rc" -ne 0 ]; }; then
         append_lm_eval_summary || true
     fi
 

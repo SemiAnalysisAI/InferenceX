@@ -330,6 +330,11 @@ else
     git checkout sa-submission-q2-2026
 fi
 
+if [[ "${EVAL_FRAMEWORK:-lm-eval}" != "lm-eval" ]]; then
+    python3 "$GITHUB_WORKSPACE/runners/patch_srt_eval_dispatch.py" "$(pwd)" \
+        || exit 1
+fi
+
 echo "Installing srtctl..."
 export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -424,6 +429,8 @@ fi
 # below still receives the full CONFIG_FILE (with selector).
 CONFIG_PATH="${CONFIG_FILE%%:*}"
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
+python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
+    "$CONFIG_PATH" "$FRAMEWORK" || exit 1
 
 # --no-preflight skips srtctl's pre-submit model-path stat, which runs on
 # the GHA runner host (im-gb300-login-02, an x86 login node). It's required

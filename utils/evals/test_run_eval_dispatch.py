@@ -634,6 +634,7 @@ _cleanup_kimi_vendor_eval "$runtime_dir" "$cleanup_dir"
 
     assert "VERSION_CHECK" in log
     assert "SYSTEM_PYTHON_ARG=<--prefix>" in log
+    assert "SYSTEM_PYTHON_ARG=<--break-system-packages>" in log
     assert "SYSTEM_PYTHON_ARG=<uv==0.11.33>" in log
     assert "UV_ARG=<venv>" in log
     assert "UV_ARG=<--python>" in log
