@@ -1,0 +1,75 @@
+name: Weekly Overview Snapshot
+run-name: Weekly Overview Snapshot
+
+# Scheduled curated-config pass (not a full sweep) so every
+# /overview model×hardware cell gets a same-batch data point at least weekly
+# (#2304). The config-keys list is the scope knob: pilot is dsv4+qwen3.5 on
+# b200/b300; extend to mi355x then gb200/gb300 once the pilot proves the
+# ingest path. `schedule` events score -10 in ci-priority.yaml and the
+# scheduler floors scores at 0, so snapshot jobs queue at 0.000 — strictly
+# below every PR and main-push sweep job (which start from base 1.0).
+
+permissions:
+    contents: read
+
+concurrency:
+    group: weekly-overview-snapshot
+    cancel-in-progress: false
+
+on:
+    schedule:
+        - cron: "0 6 * * 6" # Saturday 06:00 UTC — weekend off-peak, avoids weekday PR-sweep contention
+    workflow_dispatch:
+        inputs:
+            config-keys:
+                description: "Space-separated master-config keys to run (default: pilot list)"
+                required: false
+                type: string
+            skip-ingest:
+                description: "Skip the production DB ingest (smoke-test the sweep only)"
+                required: false
+                type: boolean
+                default: false
+
+jobs:
+    # dsv4 on b200 deliberately uses the vllm-mtp entry: the sglang/trt entries
+    # pin the `b200-dsv4` virtual runner pool, whose scheduler queue is not
+    # currently served (jobs sit queued for days while b200-dgxc idles).
+    sweep:
+        uses: ./.github/workflows/e2e-tests.yml
+        secrets: inherit
+        with:
+            generate-cli-command: >-
+                test-config
+                --config-keys ${{ inputs.config-keys ||
+                'dsv4-fp4-b200-vllm-mtp
+                dsv4-fp4-b300-sglang-mtp
+                qwen3.5-fp4-b200-sglang-mtp
+                qwen3.5-fp4-b300-sglang-mtp' }}
+                --no-evals
+                --config-files configs/nvidia-master.yaml configs/amd-master.yaml
+
+    # Fires even when some sweep jobs fail — ingest skips failed
+    # rows and a partially fresh snapshot beats an empty week.
+    trigger-ingest:
+        needs: sweep
+        if: >-
+            always() &&
+            needs.sweep.result != 'cancelled' &&
+            needs.sweep.result != 'skipped' &&
+            inputs.skip-ingest != true
+        runs-on: ubuntu-latest
+        steps:
+            - name: Trigger database ingest
+              run: |
+                  curl -sSf -X POST \
+                    -H "Authorization: Bearer ${{ secrets.INFX_FRONTEND_PAT }}" \
+                    -H "Accept: application/vnd.github+v3+json" \
+                    https://api.github.com/repos/SemiAnalysisAI/InferenceX-app/dispatches \
+                    -d '{
+                      "event_type": "ingest-results",
+                      "client_payload": {
+                        "source-run-id": "${{ github.run_id }}",
+                        "merge-run-id": "${{ github.run_id }}"
+                      }
+                    }'
