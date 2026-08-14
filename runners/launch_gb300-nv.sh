@@ -238,14 +238,25 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
 elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
     # Fixed-length DeepSeek-V4 recipes are version-controlled in this repository;
-    # overlay them onto the srt-slurm release that bootstraps cargo/maturin for
-    # the hash-pinned Dynamo source build before launch.
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    git checkout v1.0.25
-    mkdir -p recipes/sglang/deepseek-v4/8k1k
+    # overlay them onto the selected srt-slurm checkout. Power lanes use the
+    # exact producer pin and stamp it for strict result provenance; non-power
+    # lanes retain the v1.0.25 release that bootstraps cargo/maturin for the
+    # hash-pinned Dynamo source build before launch.
+    if [[ "$USES_DCGM_POWER" == "1" ]]; then
+        git clone "$POWER_SRT_SLURM_URL" "$SRT_REPO_DIR" || exit 1
+        cd "$SRT_REPO_DIR" || exit 1
+        git checkout "$POWER_SRT_SLURM_PIN" || exit 1
+        # The power lane must run the exact pinned producer SHA, never a moving branch.
+        test "$(git rev-parse HEAD)" = "$POWER_SRT_SLURM_PIN" || { echo "Error: srt-slurm HEAD does not match POWER_SRT_SLURM_PIN=$POWER_SRT_SLURM_PIN" >&2; exit 1; }
+        git rev-parse HEAD > "$GITHUB_WORKSPACE/power-producer-sha.txt"
+    else
+        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
+        cd "$SRT_REPO_DIR" || exit 1
+        git checkout v1.0.25 || exit 1
+    fi
+    mkdir -p recipes/sglang/deepseek-v4/8k1k || exit 1
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/8k1k" \
-        recipes/sglang/deepseek-v4/8k1k
+        recipes/sglang/deepseek-v4/8k1k || exit 1
 elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
@@ -311,19 +322,6 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "kimik2.5" && $PRECISION
     git checkout main
     mkdir -p recipes/vllm/kimi-k2.5-fp4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k2.5-fp4" recipes/vllm/kimi-k2.5-fp4
-elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" && "$USES_DCGM_POWER" == "1" ]]; then
-    # Note (wenyao): only the power lane routes here — non-power dsv4 sglang
-    # keeps the generic fallthrough untouched. The overlay is required: the
-    # telemetry-tagged DSV4 recipes are version-controlled in-repo only,
-    # neither upstream ref ships them.
-    git clone "$POWER_SRT_SLURM_URL" "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    git checkout "$POWER_SRT_SLURM_PIN" || exit 1
-    # The power lane must run the exact pinned producer SHA, never a moving branch.
-    test "$(git rev-parse HEAD)" = "$POWER_SRT_SLURM_PIN" || { echo "Error: srt-slurm HEAD does not match POWER_SRT_SLURM_PIN=$POWER_SRT_SLURM_PIN" >&2; exit 1; }
-    git rev-parse HEAD > "$GITHUB_WORKSPACE/power-producer-sha.txt"
-    mkdir -p recipes/sglang/deepseek-v4
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4" recipes/sglang/deepseek-v4
 elif [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "dsv4" ]]; then
     # DSv4 dynamo-trt recipes use the HuggingFace model ID as model.path,
     # so override SRT_SLURM_MODEL_PREFIX to match the recipe's model path key.
