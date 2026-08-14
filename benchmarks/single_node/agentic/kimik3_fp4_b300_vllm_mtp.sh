@@ -287,6 +287,20 @@ PYEOF
             echo "ldd $LMCACHE_SO"
             ldd "$LMCACHE_SO" 2>&1 | grep -E "not found|libcudart|libtorch|libc10" || true
         fi
+        # Which torch library actually EXPORTS the symbol c_ops needs?
+        # LD_PRELOAD of libc10/libtorch_cpu/libtorch did not resolve it, so
+        # locate the definition rather than guessing which .so to preload.
+        echo "=== searching torch libs for materialize_cow_storage ==="
+        for _so in "$TORCH_LIB_DIR"/libc10.so "$TORCH_LIB_DIR"/libc10_cuda.so \
+                   "$TORCH_LIB_DIR"/libtorch.so "$TORCH_LIB_DIR"/libtorch_cpu.so \
+                   "$TORCH_LIB_DIR"/libtorch_cuda.so "$TORCH_LIB_DIR"/libtorch_python.so; do
+            [ -f "$_so" ] || continue
+            _n=$(nm -D --defined-only "$_so" 2>/dev/null | grep -c "materialize_cow_storage" || true)
+            _u=$(nm -D --undefined-only "$_so" 2>/dev/null | grep -c "materialize_cow_storage" || true)
+            echo "  $(basename "$_so"): defined=$_n undefined=$_u"
+        done
+        echo "  (c_ops needs it) $(nm -D --undefined-only "$LMCACHE_SO" 2>/dev/null | grep -c materialize_cow_storage || true)"
+
         python3 -c \
             "import cupy; import lmcache.integration.vllm.lmcache_mp_connector; import opentelemetry.exporter.prometheus" \
             >/dev/null
