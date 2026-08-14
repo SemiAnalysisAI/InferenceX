@@ -52,12 +52,17 @@ compares the generated matrices at the base and head revisions, runs only the ne
 added points, and emits metadata that lets InferenceX-app extend the most recent
 matching curve instead of presenting the partial run as a separate curve.
 
-This mode is intentionally narrow. An append-only PR may change only
-`perf-changelog.yaml` and the master config files; every selected config must already
-exist, its prior concurrency points must remain present, and all generated fields
-other than concurrency must be identical. Image, recipe, launcher, topology, duration,
-or benchmark-logic changes are rejected. Append-only entries cannot be mixed with
-regular entries or eval-selection modifiers in the same sweep.
+This mode is intentionally narrow. An append-only PR may change
+`perf-changelog.yaml`, the master config files, and directly used benchmark/launch
+shell scripts. Every selected config must already exist, its prior concurrency points
+must remain present, and all generated fields other than concurrency must be
+identical. A script change is allowed only when its changed control-flow path is
+exclusively gated to the newly appended points named by the changelog; no changed line
+may execute for an existing point. Image, shared launcher logic, topology, duration,
+or unrelated benchmark-logic changes are rejected. Append-only entries cannot be
+mixed with regular entries or eval-selection modifiers in the same sweep. The matrix
+validator enforces the generated config and file scope; the AI reviewer must trace and
+verify the script control-flow condition.
 
 ```yaml
 - config-keys:

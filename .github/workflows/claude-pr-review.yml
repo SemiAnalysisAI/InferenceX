@@ -136,12 +136,13 @@ jobs:
 
             ### Append-only Perf Changelog Safety:
             When a new `perf-changelog.yaml` entry contains `append-only: true`, verify the complete PR diff before approving it:
-            - The only changed files may be `perf-changelog.yaml` and `configs/amd-master.yaml` and/or `configs/nvidia-master.yaml`.
+            - Changed files may be `perf-changelog.yaml`, `configs/amd-master.yaml` and/or `configs/nvidia-master.yaml`, directly used `benchmarks/**/*.sh` scripts, and `runners/launch_*.sh` launchers. Other files are forbidden.
             - Every newly added changelog entry must contain `append-only: true`; append-only and regular entries may not be mixed.
             - Selected existing curves may only gain concurrency values. The container image and every other generated recipe property (model, framework, topology, arguments, sequence lengths, duration, scenario, and so on) must remain unchanged.
+            - A benchmark/launch script may change only when every changed line is on a control-flow path uniquely gated to the corresponding newly appended points. Trace the selected config and generated runtime values into the script condition. Confirm the condition cannot be true for any existing point. Unguarded/shared setup changes, or a branch also used by an existing concurrency/config/scenario, are blocking.
             - Existing concurrency values, curves, configs, and scenarios may not be removed, replaced, or newly introduced.
             - Eval modifiers (`evals-only`, `all-evals`, `eval-min-prefill-ep`) are not allowed.
-            If any condition fails, report a 🔴 **BLOCKING** issue. This restriction prevents combining cherry-picked data points produced by different images or benchmark logic into one apparent curve.
+            If any condition fails, report a 🔴 **BLOCKING** issue. Do not reject a script change merely because the file changed; reject it when the changed path is not exclusive to the appended points or the exclusivity cannot be proven from the diff.
 
             ## Terminology:
             - **STP (Single Token Prediction)**: Standard autoregressive decoding — one token per forward pass. No speculative decoding or MTP. Benchmarks labeled "STP only" use vanilla decoding.

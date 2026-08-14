@@ -364,18 +364,26 @@ APPLICABILITY: this check applies when any new `perf-changelog.yaml` entry conta
 `append-only: true`. If none does, report N/A.
 - Confirm every new changelog entry in the sweep is append-only; mixed regular and
   append-only entries are not allowed.
-- Inspect the complete PR diff. Only `perf-changelog.yaml` and
-  `configs/nvidia-master.yaml` / `configs/amd-master.yaml` may change. FAIL on any
-  benchmark script, launcher, workflow, recipe, or unrelated file change.
+- Inspect the complete PR diff. Allowed files are `perf-changelog.yaml`,
+  `configs/nvidia-master.yaml` / `configs/amd-master.yaml`, directly used
+  `benchmarks/**/*.sh` scripts, and `runners/launch_*.sh` launchers. FAIL on a
+  workflow, non-shell helper, unrelated recipe, or unrelated file change.
 - For every selected config, compare the generated matrix at the PR base and head.
   Every base curve and concurrency must remain present, and every non-concurrency
   field must be identical. In particular, require the exact same image, model,
   framework, runner, topology, server arguments, scenario, duration, and offload
-  settings. The only permitted semantic difference is one or more newly added
+  settings. The generated matrix may differ only by one or more newly added
   concurrency values on existing curves.
+- For every changed benchmark/launch script, trace the selected config and generated
+  runtime values into the changed control flow. Every changed line must be reachable
+  only for the corresponding newly appended points. PASS a script change when its
+  branch condition is uniquely satisfied by those points. FAIL an unguarded/shared
+  setup change, a condition also satisfied by an existing point, or any case where
+  exclusivity cannot be proven from the diff. Do not fail solely because an eligible
+  script file changed.
 - FAIL if an existing concurrency is rerun or removed, a new recipe/curve is created,
-  or any non-concurrency setting changes. This prevents cherry-picking points from
-  different images or recipes into one published curve.
+  or a non-concurrency config setting changes. A script-logic change is the narrow
+  exception above and must be exclusive to the appended points.
 - Treat the repository's append-only matrix validation as supporting evidence, but
   verify the diff independently and name the offending field/path when failing.
 

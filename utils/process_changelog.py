@@ -18,8 +18,20 @@ from matrix_logic.validation import (
 )
 
 SCENARIO_TYPES = ("fixed-seq-len", "agentic-coding")
-APPEND_ONLY_ALLOWED_FILES = {"perf-changelog.yaml", *MASTER_CONFIGS}
+APPEND_ONLY_ALWAYS_ALLOWED_FILES = {"perf-changelog.yaml", *MASTER_CONFIGS}
 CONCURRENCY_CONFIG_FIELDS = {"conc-list", "conc-start", "conc-end"}
+
+
+def is_append_only_allowed_file(filepath: str) -> bool:
+    """Allow config inputs plus launch scripts whose control flow is AI-reviewed."""
+    if filepath in APPEND_ONLY_ALWAYS_ALLOWED_FILES:
+        return True
+    path = Path(filepath)
+    if path.suffix != ".sh":
+        return False
+    if path.parts and path.parts[0] == "benchmarks":
+        return True
+    return path.parent == Path("runners") and path.name.startswith("launch_")
 
 
 def _freeze_config_value(value):
@@ -265,11 +277,16 @@ def validate_append_only_scope(
     selected_config_scenarios: dict[str, set[str]],
 ) -> None:
     """Reject code changes and unrelated config edits in an append-only PR."""
-    unexpected_files = get_changed_files(base_ref, head_ref) - APPEND_ONLY_ALLOWED_FILES
+    unexpected_files = {
+        filepath
+        for filepath in get_changed_files(base_ref, head_ref)
+        if not is_append_only_allowed_file(filepath)
+    }
     if unexpected_files:
         raise ValueError(
-            "append-only PRs may change only perf-changelog.yaml and master config "
-            f"files; unexpected changes: {sorted(unexpected_files)}"
+            "append-only PRs may change only perf-changelog.yaml, master configs, "
+            "and benchmark/launch shell scripts; unexpected changes: "
+            f"{sorted(unexpected_files)}"
         )
 
     selected_configs = selected_config_scenarios.keys()
