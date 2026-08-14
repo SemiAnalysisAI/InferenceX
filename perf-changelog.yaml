@@ -5977,5 +5977,5 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Refresh the MiniMax-M3 B200 AgentX submission as seven EAGLE3-GQA points: no-offload TP8 C1 and TP4 C1/C5/C10/C15/C20, and TP4 C30 with 1,024 GB SimpleCPU KV offload."
+    - "Refresh the MiniMax-M3 B200 AgentX submission: no-offload TP8 C1 and TP4 C1/C5/C10/C15/C20, plus a TP4 SimpleCPU KV-offload sweep at C15–C40 using the full-capacity DRAM budget."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2611
