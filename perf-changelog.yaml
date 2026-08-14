@@ -5979,5 +5979,5 @@
     - agentic-coding
   description:
     - "Add GB200 MiniMax-M3 NVFP4 AgentX with EAGLE3-GQA, the complete B200 TP4 baseline, vLLM SimpleCPU offload, DEP4/DEP8, and KV-routed P/D topologies."
-    - "Use vLLM v0.27.1 and NVIDIA/srt-slurm v1.0.50, and require every logical vLLM metrics endpoint."
+    - "Use vLLM v0.27.1, NVIDIA/srt-slurm v1.0.50, Dynamo-native MiniMax tool/reasoning parsing, thinking-enabled requests, and every logical vLLM metrics endpoint."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2609
