@@ -234,8 +234,8 @@ if [ -n "$MLA_PREFILL_BACKEND" ]; then
 fi
 
 # ---- HIP graph ------------------------------------------------------------
-MAX_NUM_SEQS=20
-MAX_CUDAGRAPH_CAPTURE_SIZE=60
+MAX_NUM_SEQS="${MAX_NUM_SEQS:-$(( CONC * 2 ))}"
+MAX_CUDAGRAPH_CAPTURE_SIZE="${MAX_CUDAGRAPH_CAPTURE_SIZE:-$(( MAX_NUM_SEQS * 3 ))}"
 CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 1 "$MAX_CUDAGRAPH_CAPTURE_SIZE")"
 COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}")
 
