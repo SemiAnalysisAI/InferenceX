@@ -160,10 +160,12 @@ The adapter sends the three requests sequentially to
 Bearer token and chat-completions request body and return OpenAI-compatible
 message, finish-reason, and tool-call fields. Redirect responses are rejected
 before forwarding bearer credentials; the local runner supplies
-`Authorization: Bearer EMPTY`. The smoke overrides fixture
-sampling with `temperature: 0`, `top_p: 1`, and `max_tokens: 2048`. Each request
-has a 180-second timeout by default and at most one retry for transport
-failures, HTTP 429, or HTTP 5xx responses (two total attempts); a hard
+`Authorization: Bearer EMPTY`. The smoke overrides fixture sampling with
+`temperature: 0`, `top_p: 1`, and the upstream M3 default
+`max_tokens: 40960`, which prevents valid tool-call responses from ending at
+the model's common 2048-token generation default. Each request has a
+180-second timeout by default and at most one retry for transport failures,
+HTTP 429, or HTTP 5xx responses (two total attempts); a hard
 900-second global bound covers the whole suite.
 
 `minimax_vendor_report.json` is the native report. It preserves every raw

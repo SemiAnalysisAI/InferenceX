@@ -24,6 +24,7 @@ COMPATIBILITY_GLOB = "results_minimax_vendor_*.json"
 DEFAULT_FIXTURE_PATH = Path(__file__).with_name("minimax_m3_smoke.json")
 DEFAULT_REQUEST_TIMEOUT_SECONDS = 180.0
 DEFAULT_TIMEOUT_SECONDS = 900.0
+M3_DEFAULT_MAX_TOKENS = 40960
 RESULT_FORMAT = "inferencex-eval-v1"
 ADAPTER_NAME = "minimax-provider-verifier"
 EXPECTED_INDICES = (0, 71, 101)
@@ -195,7 +196,7 @@ def prepare_request(row: Mapping[str, Any], model: str) -> dict[str, Any]:
         model=model,
         temperature=0,
         top_p=1,
-        max_tokens=2048,
+        max_tokens=M3_DEFAULT_MAX_TOKENS,
     )
     return request
 
@@ -785,7 +786,11 @@ def _native_report(
         "endpoint": endpoint,
         "completed": completed,
         "threshold": 1.0,
-        "sampling": {"temperature": 0, "top_p": 1, "max_tokens": 2048},
+        "sampling": {
+            "temperature": 0,
+            "top_p": 1,
+            "max_tokens": M3_DEFAULT_MAX_TOKENS,
+        },
         "source": {
             "url": (fixture_metadata or {}).get("source", UPSTREAM_SOURCE),
             "ref": (fixture_metadata or {}).get("ref", UPSTREAM_REF),

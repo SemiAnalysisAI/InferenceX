@@ -165,7 +165,7 @@ def test_success_writes_complete_native_and_compatibility_reports(
         assert call["payload"]["model"] == "MiniMax-M3"
         assert call["payload"]["temperature"] == 0
         assert call["payload"]["top_p"] == 1
-        assert call["payload"]["max_tokens"] == 2048
+        assert call["payload"]["max_tokens"] == mpe.M3_DEFAULT_MAX_TOKENS
         assert "data_index" not in call["payload"]
         assert "check_type" not in call["payload"]
         assert "expected_tool_call" not in call["payload"]
