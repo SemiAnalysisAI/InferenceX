@@ -5971,3 +5971,13 @@
     - "Compare the B200 TP8 and DEP8 concurrency range and extend throughput with 1P1D and 2P1D DEP8 disaggregation."
     - "Use KV-aware Dynamo routing with 4-hour correlation-ID affinity, authoritative vLLM KV events, KV-cache token metrics, and every logical vLLM server-metrics endpoint."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2567
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-agg
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Inject the committed synthetic MTP acceptance length only for GB300 AgentX throughput; keep eval-only jobs on real target verification."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2571
+  
