@@ -81,12 +81,31 @@ amd-smi || true
 resolve_trace_source
 install_agentic_deps
 
+# ---- AITER pybind11 fix ------------------------------------------------------
+# The image's prebuilt aiter .so files are compiled against torch's bundled
+# pybind11 (PYBIND11_INTERNALS_VERSION 11), but aiter's JIT builder injects the
+# standalone pybind11 3.1.0 (version 12) as a -I flag, which outranks the
+# -isystem path holding torch's copy. pybind11 keeps a SEPARATE type registry
+# per internals id, so a JIT-built module cannot see aiter_tensor_t registered
+# by the prebuilt core, and the first call dies during model warmup with:
+#   TypeError: fmha_fwd_bf16_opus_fwd(): incompatible function arguments
+# The script below is idempotent, verifies the mismatch actually exists before
+# touching anything, and self-disables once the image ships a fixed aiter.
+bash "$(dirname "$0")/apply_aiter_pybind11_fix.sh" || true
+
+# ---- DSpark FULL-cudagraph fix ----------------------------------------------
+# TritonMLA declares _cudagraph_support=UNIFORM_SINGLE_TOKEN_DECODE, which forces
+# FULL_AND_PIECEWISE -> PIECEWISE under spec-decode and then silently gives the
+# DSpark drafter CUDAGraphMode.NONE (fully eager). Measured on 8x MI355X, single
+# stream 600-token generations: 14.05 -> 77.65 tok/s, ITL 71.16 -> 12.88 ms (5.52x),
+# output verified correct. Idempotent; no-op if already patched.
+bash "$(dirname "$0")/apply_triton_mla_cudagraph_fix.sh" || true
+
 # ---- Reference env block ----------------------------------------------------
 # Keep ALL of these. Commenting them out does not avoid the AITER FMHA crash:
 # that crash is gated on VLLM_ROCM_USE_AITER alone (AiterFlashAttnPrefillBackend
 # .is_available() consults only rocm_aiter_ops.is_enabled()), so disabling the
-# others just loses the MoE kernels while keeping the failure. The crash is
-# avoided by pinning the MLA prefill backend in VLLM_CMD below.
+# others just loses the MoE kernels while keeping the failure.
 export VLLM_ROCM_AITER_MLA_ASM_PADDING=asm
 export VLLM_ROCM_USE_AITER=1
 export SAFETENSORS_FAST_GPU=1
@@ -185,9 +204,14 @@ fi
 # during compile_or_warm_up_model -> _dummy_run, before the server binds.
 # Pinning FLASH_ATTN keeps every AITER MoE kernel (and its throughput) while
 # skipping only the broken FMHA prefill path.
-# Set MLA_PREFILL_BACKEND=ROCM_AITER_FA to restore stock behaviour once the
-# AITER packaging issue is fixed upstream.
-MLA_PREFILL_BACKEND="${MLA_PREFILL_BACKEND:-FLASH_ATTN}"
+# UPDATE: the AITER packaging issue is now fixed at source by
+# apply_aiter_pybind11_fix.sh (run above), so ROCM_AITER_FA is usable again and
+# is the default. Measured on 8x MI355X / Kimi-K3 MXFP4 TP8, cold prefill:
+#   ~24k ctx  FLASH_ATTN 12,953 -> AITER 13,524 tok/s  (+4.4%)
+#   ~93k ctx  FLASH_ATTN 11,174 -> AITER 13,423 tok/s  (+20.1%)
+# This workload averages ~99k input tokens, so the ~93k figure is the relevant
+# one. Set MLA_PREFILL_BACKEND=FLASH_ATTN to fall back if AITER regresses.
+MLA_PREFILL_BACKEND="${MLA_PREFILL_BACKEND:-ROCM_AITER_FA}"
 MLA_PREFILL_ARGS=()
 if [ -n "$MLA_PREFILL_BACKEND" ]; then
     MLA_PREFILL_ARGS=(
