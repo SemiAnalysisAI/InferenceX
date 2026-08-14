@@ -3,7 +3,9 @@ set -euo pipefail
 set -x
 
 # AgentX trace replay for Qwen3.5-397B-A17B MXFP4 on MI355X with SGLang
-# without speculative decoding (baseline non-MTP configuration).
+# native EAGLE MTP speculative decoding. Throughput uses the committed
+# golden synthetic acceptance length; evaluation retains real target-model
+# verification.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -74,6 +76,12 @@ export AITER_FLYDSL_FORCE=1
 export SGLANG_MAMBA_SSM_DTYPE=bfloat16
 export SGLANG_TIMEOUT_KEEP_ALIVE=1800
 
+if [ "${EVAL_ONLY:-false}" != "true" ]; then
+    export SGLANG_SIMULATE_ACC_LEN=3.39
+    export SGLANG_SIMULATE_ACC_METHOD=match-expected
+    export SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token
+fi
+
 SGLANG_CMD=(
     python3 -m sglang.launch_server
     --model-path "$MODEL_PATH"
@@ -97,6 +105,10 @@ SGLANG_CMD=(
     --tokenizer-path "$MODEL"
     --reasoning-parser qwen3
     --tool-call-parser qwen3_coder
+    --speculative-algorithm EAGLE
+    --speculative-num-steps 3
+    --speculative-eagle-topk 1
+    --speculative-num-draft-tokens 4
     --enable-metrics
     --enable-cache-report
 )
