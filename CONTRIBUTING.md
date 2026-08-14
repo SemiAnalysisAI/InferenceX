@@ -46,28 +46,38 @@ A full benchmark sweep is expensive GPU time, and the runners are shared by ever
 
 ## Adding points to the latest curve with `append-only`
 
-When a recipe and image are unchanged and a PR only adds concurrency values to an
-existing curve, mark every new changelog entry with `append-only: true`. Sweep setup
-compares the generated matrices at the base and head revisions, runs only the newly
-added points, and emits metadata that lets InferenceX-app extend the most recent
-matching curve instead of presenting the partial run as a separate curve.
+When a PR only adds generated points to an existing curve, mark every new changelog
+entry with `append-only: true`. Additions may introduce new concurrency values or new
+recipe variants, such as another tensor-parallelism value. Sweep setup compares the
+generated matrices at the base and head revisions, runs only the newly added points,
+and emits metadata that lets InferenceX-app extend the most recent matching curve
+instead of presenting the partial run as a separate curve.
 
 This mode is intentionally narrow, but it is not based on a file allowlist. Supporting
 code, benchmark scripts, launchers, and other files may change when their behavioral
 effect is exclusive to the newly appended points named by the changelog. No changed
-benchmark path may execute for or alter an existing point. Every selected config must
-already exist, its prior concurrency points must remain present, and all generated
-fields other than concurrency must be identical. Image changes or shared logic changes
-that can affect existing points are rejected. Append-only entries cannot be mixed with
-regular entries or eval-selection modifiers in the same sweep. The matrix validator
-enforces deterministic generated-config invariants; the human and AI reviewers must
-inspect the complete diff and verify behavioral isolation.
+benchmark path may execute for or alter an existing point. Every selected config and
+scenario must already exist, and every point generated at the base revision must
+remain present with the same recipe. The head may contain any additional generated
+recipes or points inside that scope, including new topology or other recipe dimensions;
+the sweep schedules the generated set difference. Additions must use the same non-null
+image and belong to an existing dashboard visual series. Each generated recipe carries
+a deterministic fingerprint so two distinct recipes at the same concurrency remain
+distinct database points without splitting the visual curve. Removing or modifying an
+existing point, or changing shared logic that can affect one, is rejected. Append-only
+entries cannot be mixed with regular entries or eval-selection modifiers in the same
+sweep. The matrix validator enforces the additive generated-matrix invariant; the human
+and AI reviewers must inspect the complete diff and verify behavioral isolation. The
+mechanical comparison renders each config revision with its own generator, validation
+code, and runner metadata. Launcher and benchmark-script changes still rely on
+complete-diff review because matrix equality alone cannot prove their runtime
+control-flow isolation.
 
 ```yaml
 - config-keys:
     - dsv4-fp4-b300-vllm-mtp
   description:
-    - "Add concurrency 192 to the existing curve"
+    - "Add TP8 at concurrency 12 and 16 to the existing curve"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
   append-only: true
 ```

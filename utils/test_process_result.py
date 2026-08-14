@@ -52,6 +52,7 @@ def base_env_vars():
         "DISAGG": "false",
         "MODEL_PREFIX": "dsr1",
         "IMAGE": "test-image",
+        "RECIPE_FINGERPRINT": "a" * 64,
     }
 
 
@@ -215,6 +216,7 @@ class TestProcessResultScript:
         assert output_data["isl"] == 1024
         assert output_data["osl"] == 1024
         assert output_data["disagg"] is False
+        assert output_data["recipe_fingerprint"] == "a" * 64
 
         # Verify single-node specific fields
         assert output_data["is_multinode"] is False

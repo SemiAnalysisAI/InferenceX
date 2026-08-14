@@ -369,21 +369,25 @@ APPLICABILITY: this check applies when any new `perf-changelog.yaml` entry conta
   is never a reason to fail; determine whether each benchmark-affecting change is
   behaviorally isolated to the appended points.
 - For every selected config, compare the generated matrix at the PR base and head.
-  Every base curve and concurrency must remain present, and every non-concurrency
-  field must be identical. In particular, require the exact same image, model,
-  framework, runner, topology, server arguments, scenario, duration, and offload
-  settings. The generated matrix may differ only by one or more newly added
-  concurrency values on existing curves.
+  Treat the complete base matrix as an immutable subset of the head matrix: every
+  existing point must remain present with the same image and complete recipe. The
+  head may add concurrency points or entirely new recipe variants, such as a new
+  tensor-parallelism value, inside the selected existing config/scenario. Every
+  addition must retain the target visual curve's one non-null image.
 - Trace the selected config and generated runtime values through every affected file
   into the changed behavior. The behavior must be reachable only for the corresponding
   newly appended points. PASS when the controlling condition is uniquely satisfied by
   those points. FAIL an unguarded/shared setup change, a condition also satisfied by an
   existing point, or any case where exclusivity cannot be proven from the diff.
-- FAIL if an existing concurrency is rerun or removed, a new recipe/curve is created,
-  or a non-concurrency config setting changes. Other benchmark-affecting changes are
-  permitted only under the behavioral-isolation rule above.
+- FAIL if any existing point or recipe is rerun, removed, or modified. New configs and
+  scenarios are out of scope, but new generated recipe variants inside the selected
+  existing config/scenario are allowed. Other benchmark-affecting changes are permitted
+  only under the behavioral-isolation rule above.
 - Treat the repository's append-only matrix validation as supporting evidence, but
-  verify the diff independently and name the offending field/path when failing.
+  verify the diff independently and name the offending field/path when failing. Each
+  config revision is rendered with its own generator, validation code, and runner
+  metadata, but this does not mechanically prove that launcher or benchmark-script
+  changes are isolated at runtime.
 
 ## Verdict and output
 Decide PASS only if Checks 0-12 ALL pass. A check reported as `N/A` counts as a pass.
