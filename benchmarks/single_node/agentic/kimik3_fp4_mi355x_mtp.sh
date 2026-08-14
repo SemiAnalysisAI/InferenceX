@@ -33,7 +33,7 @@ set -x
 # Perf-search knobs. Each defaults to the reference command's value, so an
 # otherwise-unset run reproduces the reference exactly:
 #   GPU_MEM_UTIL             0.84   (vllm-simple; 0.90 otherwise)
-#   MAX_NUM_BATCHED_TOKENS   4096   (reference)
+#   MAX_NUM_BATCHED_TOKENS   16384  (vLLM default is 8192)
 #   AITER_A8W4               1      (reference; 0 = aiter a16w4 MoE path)
 #   LANGUAGE_MODEL_ONLY      false  (reference loads the vision tower)
 #   KV_CACHE_DTYPE           fp8    (default for every arm; =auto for a bf16 A/B)
@@ -218,6 +218,9 @@ else
 fi
 
 MAX_NUM_SEQS=20
+# A/B against the vLLM default of 8192: doubling the chunked-prefill chunk on a
+# ~116K-token-per-request agentic trace halves the number of prefill steps.
+MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-16384}"
 MAX_CUDAGRAPH_CAPTURE_SIZE="${MAX_CUDAGRAPH_CAPTURE_SIZE:-44}"
 CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 1 "$MAX_CUDAGRAPH_CAPTURE_SIZE")"
 COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}")
@@ -252,6 +255,7 @@ VLLM_CMD=(
     --gpu-memory-utilization "$GPU_MEM_UTIL"
     "${MM_ARGS[@]}"
     --max-num-seqs "$MAX_NUM_SEQS"
+    --max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS"
     --enable-auto-tool-choice
     --tool-call-parser kimi_k3
     --reasoning-parser kimi_k3
