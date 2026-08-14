@@ -49,7 +49,7 @@ def build_pytest_command(
         "--smoke-model",
         model,
         "--think-mode",
-        "none",
+        "opensource",
         "--selection",
         "object",
         "--max-cases",
