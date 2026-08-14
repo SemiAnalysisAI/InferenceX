@@ -205,6 +205,21 @@ except BaseException as exc:
     print("c_ops import FAILED:", type(exc).__name__, exc)
     traceback.print_exc()
 PYEOF
+        # c_ops.so links libtorch/libc10 but they are not on the default
+        # loader path -- `ldd` reports libc10.so, libtorch.so, libtorch_cpu.so,
+        # libtorch_python.so, libc10_cuda.so and libtorch_cuda.so as "not
+        # found" (libcudart resolves fine). Normally that is harmless because
+        # `import torch` loads them RTLD_GLOBAL first, but
+        # CudaDeviceOps.ensure_native() sets `self._native_bound = True` BEFORE
+        # its `import lmcache.c_ops`, so one early failure -- before torch is
+        # in the process -- permanently disables native ops and silently pins
+        # the whole server to the broken torch fallback. Putting torch's lib
+        # dir on LD_LIBRARY_PATH makes the extension loadable regardless of
+        # import order.
+        TORCH_LIB_DIR=$(python3 -c "import os, torch; print(os.path.join(os.path.dirname(torch.__file__), 'lib'))")
+        export LD_LIBRARY_PATH="${TORCH_LIB_DIR}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+        echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
+
         # ldd names the missing/unresolved shared object directly.
         LMCACHE_SO=$(python3 -c "import lmcache, glob, os; print((glob.glob(os.path.join(os.path.dirname(lmcache.__file__), 'c_ops*.so')) or [''])[0])")
         if [ -n "$LMCACHE_SO" ]; then
