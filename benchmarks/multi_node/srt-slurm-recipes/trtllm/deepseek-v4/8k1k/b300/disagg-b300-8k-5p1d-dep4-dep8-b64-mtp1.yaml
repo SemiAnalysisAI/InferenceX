@@ -1,0 +1,132 @@
+name: disagg-b300-8k-5p1d-dep4-dep8-b64-mtp1
+model:
+  path: deepseek-v4-pro
+  container: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc23
+  precision: fp4
+dynamo:
+  install: true
+  wheel: "1.4.0.dev20260730"
+  request_plane: tcp
+resources:
+  gpu_type: b300
+  prefill_nodes: 5
+  prefill_workers: 5
+  gpus_per_prefill: 4
+  decode_nodes: 1
+  decode_workers: 1
+  gpus_per_decode: 8
+  gpus_per_node: 8
+backend:
+  type: trtllm
+  prefill_environment:
+    TLLM_LOG_LEVEL: INFO
+    TRTLLM_SERVER_DISABLE_GC: '1'
+    TRTLLM_WORKER_DISABLE_GC: '1'
+    TRTLLM_ENABLE_PDL: '1'
+    ENROOT_ALLOW_DEV: 'yes'
+    NCCL_GRAPH_MIXING_SUPPORT: '0'
+    MIMALLOC_PURGE_DELAY: '0'
+    PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+    TLLM_PROFILE_LOG_RANKS: all
+    TLLM_METRICS_ALL_RANKS: '1'
+    UCX_TLS: rc,cuda_copy,sm,self
+    UCX_MAX_RNDV_RAILS: '1'
+    UCX_MAX_EAGER_RAILS: '1'
+    NIXL_PLUGIN_DIR: /opt/nvidia/nvda_nixl/lib/x86_64-linux-gnu/plugins
+  decode_environment:
+    TLLM_LOG_LEVEL: INFO
+    TRTLLM_SERVER_DISABLE_GC: '1'
+    TRTLLM_WORKER_DISABLE_GC: '1'
+    TRTLLM_ENABLE_PDL: '1'
+    ENROOT_ALLOW_DEV: 'yes'
+    NCCL_GRAPH_MIXING_SUPPORT: '0'
+    MIMALLOC_PURGE_DELAY: '0'
+    TLLM_PROFILE_LOG_RANKS: all
+    UCX_TLS: rc,cuda_copy,sm,self
+    UCX_MAX_RNDV_RAILS: '1'
+    UCX_MAX_EAGER_RAILS: '1'
+    NIXL_PLUGIN_DIR: /opt/nvidia/nvda_nixl/lib/x86_64-linux-gnu/plugins
+  trtllm_config:
+    prefill:
+      cache_transceiver_config:
+        backend: NIXL
+        kv_transfer_timeout_ms: 600000
+        transceiver_runtime: PYTHON
+      cuda_graph_config:
+      disable_overlap_scheduler: true
+      enable_attention_dp: true
+      kv_cache_config:
+        dtype: fp8
+        enable_block_reuse: false
+        free_gpu_memory_fraction: 0.5
+        tokens_per_block: 128
+      max_batch_size: 2
+      max_num_tokens: 8192
+      max_seq_len: 8232
+      moe_config:
+        backend: TRTLLM
+      moe_expert_parallel_size: 4
+      pipeline_parallel_size: 1
+      print_iter_log: true
+      speculative_config:
+        decoding_type: MTP
+        max_draft_len: 1
+      tensor_parallel_size: 4
+    decode:
+      cache_transceiver_config:
+        backend: NIXL
+        kv_transfer_timeout_ms: 600000
+        transceiver_runtime: PYTHON
+      cuda_graph_config:
+        batch_sizes:
+        - 1
+        - 2
+        - 4
+        - 8
+        - 16
+        - 24
+        - 32
+        - 40
+        - 48
+        - 56
+        - 64
+        enable_padding: true
+      enable_attention_dp: true
+      enable_lm_head_tp_in_adp: true
+      kv_cache_config:
+        dtype: fp8
+        enable_block_reuse: false
+        free_gpu_memory_fraction: 0.8
+        tokens_per_block: 128
+      max_batch_size: 64
+      max_num_tokens: 128
+      max_seq_len: 9256
+      moe_config:
+        backend: TRTLLM
+        use_low_precision_moe_combine: true
+      moe_expert_parallel_size: 8
+      num_postprocess_workers: 4
+      pipeline_parallel_size: 1
+      print_iter_log: true
+      speculative_config:
+        decoding_type: MTP
+        max_draft_len: 1
+      stream_interval: 100
+      tensor_parallel_size: 8
+benchmark:
+  type: sa-bench
+  isl: 8192
+  osl: 1024
+  concurrencies: "666"
+  req_rate: inf
+  random_range_ratio: 0.8
+  use_chat_template: true
+  custom_tokenizer: "sa_bench_tokenizers.sglang_deepseek_v4.SGLangDeepseekV4Tokenizer"
+frontend:
+  type: dynamo
+  enable_multiple_frontends: true
+health_check:
+  max_attempts: 360
+  interval_seconds: 10
+environment:
+  TRTLLM_SERVER_DISABLE_GC: '1'

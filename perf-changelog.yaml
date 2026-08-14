@@ -5960,3 +5960,12 @@
     - "Use native EAGLE MTP (3 steps, top-k 1, 4 draft tokens) and golden synthetic acceptance length 2.49 for throughput; eval retains real verification."
     - "Follow the official SGLang DeepSeek-V4 Blackwell recipe, require nonempty SGLang server metrics, keep pooled AgentX connections alive, let AIPerf own HiCache warmup, and reserve transient MoE workspace at DEP8 c512."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2577
+
+- config-keys:
+    - dsv4-fp4-b300-dynamo-trt
+  description:
+    - "Add the DeepSeek-V4-Pro FP4 B300 Dynamo TensorRT-LLM disaggregated configuration with STP and MTP recipe variants."
+    - "Run on b300 with the checkpoint at /scratch/models/DeepSeek-V4-Pro and batch_1/benchmark Slurm settings."
+    - "Stage the TensorRT-LLM recipes through launch_b300-nv.sh."
+    - "Image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc23"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2596
