@@ -374,6 +374,21 @@ qwen3.5-fp4-mi355x-sglang-mtp:
       - { tp: 2, conc-start: 4, conc-end: 128, spec-decoding: mtp }
       - { tp: 4, conc-start: 4, conc-end: 16, spec-decoding: mtp }
 
+qwen3.5-fp4-mi355x-sglang-agentic:
+  image: lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260811
+  model: amd/Qwen3.5-397B-A17B-MXFP4
+  model-prefix: qwen3.5
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 2, ep: 2, kv-offloading: none, conc-list: [1, 4, 8, 12, 16, 20] }
+      - { tp: 4, ep: 1, kv-offloading: none, conc-list: [1, 4, 8, 12, 16, 20, 24, 28, 32, 40] }
+
 qwen3.5-fp4-mi355x-sglang-agentic-mtp:
   image: lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260811
   model: amd/Qwen3.5-397B-A17B-MXFP4
