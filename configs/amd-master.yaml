@@ -1287,7 +1287,7 @@ kimik3-fp4-mi355x-vllm-agentic-dspark:
   # kimik3_fp4_mi355x_vllm_mtp.sh, which forces the draft causal (the ROCm fp8-asm
   # requirement) and serves the mandated DSpark config (gpu-mem 0.95 / seqs 64 /
   # MNBT 16384 / FULL_AND_PIECEWISE / KV pin 32 GiB).
-  image: vllm/vllm-openai-rocm:nightly-cb8104839c141609d99f1254459ef3a4f1bd4263
+  image: vllm/vllm-openai-rocm:nightly-3ee2df30337a301164c46ae444b76ee67e71c106
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:mi355x-amds

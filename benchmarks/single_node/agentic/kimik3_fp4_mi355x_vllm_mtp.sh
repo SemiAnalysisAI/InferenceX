@@ -46,9 +46,14 @@ fi
 # present, so re-runs / pre-patched images cost only the grep verify. Set
 # SKIP_K3_BOOTSTRAP=1 to skip (e.g. when serving a pre-baked patched image).
 RECIPE_DIR="$(cd "$(dirname "$0")" && pwd)"
-if [ "${SKIP_K3_BOOTSTRAP:-0}" != "1" ]; then
+# Image is now nightly-3ee2df3033, which carries the ASM/DSpark fixes upstream.
+# The k3 patch stack targets cb810483's code layout and its anchors no longer
+# apply, so it is off by default; these two are what that image still needs.
+if [ "${SKIP_K3_BOOTSTRAP:-1}" != "1" ]; then
     bash "$RECIPE_DIR/apply_k3_container_patches.sh"
 fi
+bash "$RECIPE_DIR/apply_aiter_pybind11_fix.sh" || true
+bash "$RECIPE_DIR/apply_triton_mla_cudagraph_fix.sh" || true
 
 DRAFT_MODEL="${DRAFT_MODEL:-Inferact/Kimi-K3-DSpark}"
 
@@ -73,6 +78,12 @@ if [ -n "$ROCR_VISIBLE_DEVICES" ]; then export HIP_VISIBLE_DEVICES="$ROCR_VISIBL
 # source on ROCm; with causal=true the draft runs the fp8 asm path like the
 # target). Idempotent write — the draft may live anywhere the harness staged it,
 # so set it here rather than relying on the bootstrap's /dev/shm-scoped step.
+# Only AITER backends need the draft forced causal; TRITON_MLA takes it non-causal.
+case "${DRAFT_BACKEND:-TRITON_MLA}" in
+    *AITER*) DRAFT_CAUSAL=true  ;;
+    *)       DRAFT_CAUSAL=false ;;
+esac
+
 # DRAFT_MODEL_PATH may be a bare repo id, so fall back to the HF cache snapshot.
 DRAFT_CFG_DIR="$DRAFT_MODEL_PATH"
 if [ ! -f "$DRAFT_CFG_DIR/config.json" ]; then
@@ -88,20 +99,22 @@ PY
 fi
 if [ ! -f "$DRAFT_CFG_DIR/config.json" ]; then
     echo "!! no draft config.json for '$DRAFT_MODEL_PATH' (resolved '${DRAFT_CFG_DIR:-}')." >&2
-    echo "   Without causal=true ROCM_AITER_MLA rejects the draft." >&2
+    echo "   dflash_config.causal must be pinned to $DRAFT_CAUSAL before serving." >&2
     exit 1
 fi
-python3 - "$DRAFT_CFG_DIR/config.json" <<'PY'
+# Write explicitly, not just on true: the HF cache is shared across runs.
+python3 - "$DRAFT_CFG_DIR/config.json" "$DRAFT_CAUSAL" <<'PY'
 import json, sys
-f = sys.argv[1]
+f, want = sys.argv[1], sys.argv[2] == "true"
 c = json.load(open(f))
 d = c.setdefault("dflash_config", {})
-if d.get("causal") is True:
-    print("draft already forced causal")
+if d.get("causal") == want:
+    print(f"draft dflash_config.causal already {want}")
 else:
-    d["causal"] = True
+    prev = d.get("causal")
+    d["causal"] = want
     json.dump(c, open(f, "w"), indent=2)
-    print("forced draft dflash_config.causal=true:", f)
+    print(f"set draft dflash_config.causal={want} (was {prev}):", f)
 PY
 
 # ---- MI355X day-0 serving environment (AITER + fp8 ASM MLA) ------------------
@@ -130,9 +143,6 @@ export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
 # VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT. Baked DSpark layer reads this to route the
 # 12-head fp8 spec verify to the asm q-row-fold.
 export VLLM_ROCM_AITER_MLA_ASM_PADDING=asm
-# The drafter's context_proj faults inside ops.wvSplitK (run 31781752925 c1);
-# patch_wvsplitk.py only forces the activation contiguous. Skip the skinny path.
-export VLLM_ROCM_USE_SKINNY_GEMM=0
 # Merged tuned BF16 GEMM table installed by apply_k3_container_patches.sh.
 MERGED_GEMM_CSV="${MERGED_GEMM_CSV:-/opt/aiter-local/aiter/configs/merged_bf16_tuned_gemm.csv}"
 if [ -z "${AITER_CONFIG_GEMM_BF16:-}" ] && [ -f "$MERGED_GEMM_CSV" ]; then
@@ -219,11 +229,14 @@ SYNTHETIC_ACCEPT_LEN="${SYNTHETIC_ACCEPT_LEN:-2.51}"
 # same as target). Throughput runs pin synthetic acceptance; EVAL_ONLY accuracy
 # runs use real block verification (synthetic commits drafted tokens regardless
 # of the target's logits, so generated text would be wrong -> eval scores 0).
-DRAFT_BACKEND="${DRAFT_BACKEND:-ROCM_AITER_MLA}"
+# Draft as run 31765562914 has it on this image: TRITON_MLA (the only ROCm MLA
+# backend supporting non-causal multi-token decode) with its own bf16 KV.
+DRAFT_BACKEND="${DRAFT_BACKEND:-TRITON_MLA}"
+DRAFT_KV_CACHE_DTYPE="${DRAFT_KV_CACHE_DTYPE:-auto}"
 if [ "${EVAL_ONLY:-false}" = "true" ]; then
-    SPEC_CONFIG="{\"method\": \"dspark\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"$DRAFT_BACKEND\", \"draft_sample_method\": \"probabilistic\", \"rejection_sample_method\": \"block\"}"
+    SPEC_CONFIG="{\"method\": \"dspark\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"$DRAFT_BACKEND\", \"kv_cache_dtype\": \"$DRAFT_KV_CACHE_DTYPE\", \"draft_sample_method\": \"probabilistic\", \"rejection_sample_method\": \"block\"}"
 else
-    SPEC_CONFIG="{\"method\": \"dspark\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"$DRAFT_BACKEND\", \"draft_sample_method\": \"probabilistic\", \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
+    SPEC_CONFIG="{\"method\": \"dspark\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"$DRAFT_BACKEND\", \"kv_cache_dtype\": \"$DRAFT_KV_CACHE_DTYPE\", \"draft_sample_method\": \"probabilistic\", \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
 fi
 
 # ---- Mandated DSpark serving knobs (do not change) --------------------------
