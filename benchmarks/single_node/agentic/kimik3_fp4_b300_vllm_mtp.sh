@@ -240,9 +240,9 @@ VLLM_CMD=(
     --reasoning-parser kimi_k3
     --tool-call-parser kimi_k3
     --enable-auto-tool-choice
-    # FP8 KV cache requires the prefill query quantization flag. MLA prefill
-    # runs on TRTLLM_RAGGED per the upstream Blackwell override.
-    --attention-config '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true}'
+    # FP8 KV cache requires prefill query quantization. Use FlashInfer MLA
+    # prefill, matching the current published upstream Kimi-K3 recipe.
+    --attention-config '{"mla_prefill_backend":"flashinfer","use_prefill_query_quantization":true}'
     --speculative-config "$SPEC_CONFIG"
     --compilation-config "$COMPILATION_CONFIG"
     --disable-uvicorn-access-log
