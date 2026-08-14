@@ -364,26 +364,24 @@ APPLICABILITY: this check applies when any new `perf-changelog.yaml` entry conta
 `append-only: true`. If none does, report N/A.
 - Confirm every new changelog entry in the sweep is append-only; mixed regular and
   append-only entries are not allowed.
-- Inspect the complete PR diff. Allowed files are `perf-changelog.yaml`,
-  `configs/nvidia-master.yaml` / `configs/amd-master.yaml`, directly used
-  `benchmarks/**/*.sh` scripts, and `runners/launch_*.sh` launchers. FAIL on a
-  workflow, non-shell helper, unrelated recipe, or unrelated file change.
+- Inspect the complete PR diff without using a file allowlist. Supporting code,
+  benchmark scripts, launchers, helpers, and other files may change. Their path alone
+  is never a reason to fail; determine whether each benchmark-affecting change is
+  behaviorally isolated to the appended points.
 - For every selected config, compare the generated matrix at the PR base and head.
   Every base curve and concurrency must remain present, and every non-concurrency
   field must be identical. In particular, require the exact same image, model,
   framework, runner, topology, server arguments, scenario, duration, and offload
   settings. The generated matrix may differ only by one or more newly added
   concurrency values on existing curves.
-- For every changed benchmark/launch script, trace the selected config and generated
-  runtime values into the changed control flow. Every changed line must be reachable
-  only for the corresponding newly appended points. PASS a script change when its
-  branch condition is uniquely satisfied by those points. FAIL an unguarded/shared
-  setup change, a condition also satisfied by an existing point, or any case where
-  exclusivity cannot be proven from the diff. Do not fail solely because an eligible
-  script file changed.
+- Trace the selected config and generated runtime values through every affected file
+  into the changed behavior. The behavior must be reachable only for the corresponding
+  newly appended points. PASS when the controlling condition is uniquely satisfied by
+  those points. FAIL an unguarded/shared setup change, a condition also satisfied by an
+  existing point, or any case where exclusivity cannot be proven from the diff.
 - FAIL if an existing concurrency is rerun or removed, a new recipe/curve is created,
-  or a non-concurrency config setting changes. A script-logic change is the narrow
-  exception above and must be exclusive to the appended points.
+  or a non-concurrency config setting changes. Other benchmark-affecting changes are
+  permitted only under the behavioral-isolation rule above.
 - Treat the repository's append-only matrix validation as supporting evidence, but
   verify the diff independently and name the offending field/path when failing.
 

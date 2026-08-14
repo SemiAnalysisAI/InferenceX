@@ -18,20 +18,7 @@ from matrix_logic.validation import (
 )
 
 SCENARIO_TYPES = ("fixed-seq-len", "agentic-coding")
-APPEND_ONLY_ALWAYS_ALLOWED_FILES = {"perf-changelog.yaml", *MASTER_CONFIGS}
 CONCURRENCY_CONFIG_FIELDS = {"conc-list", "conc-start", "conc-end"}
-
-
-def is_append_only_allowed_file(filepath: str) -> bool:
-    """Allow config inputs plus launch scripts whose control flow is AI-reviewed."""
-    if filepath in APPEND_ONLY_ALWAYS_ALLOWED_FILES:
-        return True
-    path = Path(filepath)
-    if path.suffix != ".sh":
-        return False
-    if path.parts and path.parts[0] == "benchmarks":
-        return True
-    return path.parent == Path("runners") and path.name.startswith("launch_")
 
 
 def _freeze_config_value(value):
@@ -161,17 +148,6 @@ def get_config_keys_from_master(
     return list(resolved_keys)
 
 
-def get_changed_files(base_ref: str, head_ref: str) -> set[str]:
-    """Return repository-relative paths changed by the requested sweep diff."""
-    result = subprocess.run(
-        ["git", "diff", "--name-only", base_ref, head_ref],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    return {line for line in result.stdout.splitlines() if line}
-
-
 @contextmanager
 def config_files_at_ref(ref: str):
     """Materialize the master configs from ``ref`` for matrix generation."""
@@ -270,25 +246,11 @@ def append_only_delta(base_entries: list[dict], head_entries: list[dict]) -> lis
 
 
 def validate_append_only_scope(
-    base_ref: str,
-    head_ref: str,
     base_master: dict,
     head_master: dict,
     selected_config_scenarios: dict[str, set[str]],
 ) -> None:
-    """Reject code changes and unrelated config edits in an append-only PR."""
-    unexpected_files = {
-        filepath
-        for filepath in get_changed_files(base_ref, head_ref)
-        if not is_append_only_allowed_file(filepath)
-    }
-    if unexpected_files:
-        raise ValueError(
-            "append-only PRs may change only perf-changelog.yaml, master configs, "
-            "and benchmark/launch shell scripts; unexpected changes: "
-            f"{sorted(unexpected_files)}"
-        )
-
+    """Reject config edits that would mutate an existing generated curve."""
     selected_configs = selected_config_scenarios.keys()
     all_keys = base_master.keys() | head_master.keys()
     unrelated_changes = [
@@ -446,8 +408,6 @@ def main():
                 f"revision; missing: {sorted(missing_from_base)}"
             )
         validate_append_only_scope(
-            args.base_ref,
-            args.head_ref,
             base_master,
             master_config,
             selected_config_scenarios,

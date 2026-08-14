@@ -155,7 +155,7 @@ def test_append_only_delta_rejects_image_changes():
         raise AssertionError("image mutation should reject append-only mode")
 
 
-def test_append_only_scope_rejects_non_concurrency_recipe_changes(monkeypatch):
+def test_append_only_scope_rejects_non_concurrency_recipe_changes():
     base = {
         "test-config": {
             "image": "vllm/vllm-openai:v0.16.0",
@@ -178,11 +178,9 @@ def test_append_only_scope_rejects_non_concurrency_recipe_changes(monkeypatch):
             },
         }
     }
-    monkeypatch.setattr(process_changelog, "get_changed_files", lambda *_: set())
-
     try:
         process_changelog.validate_append_only_scope(
-            "base", "head", base, head, {"test-config": {"agentic-coding"}}
+            base, head, {"test-config": {"agentic-coding"}}
         )
     except ValueError as error:
         assert "duration" in str(error)
@@ -190,7 +188,7 @@ def test_append_only_scope_rejects_non_concurrency_recipe_changes(monkeypatch):
         raise AssertionError("recipe mutation should reject append-only mode")
 
 
-def test_append_only_scope_allows_range_to_list_expansion(monkeypatch):
+def test_append_only_scope_allows_range_to_list_expansion():
     base = {
         "test-config": {
             "image": "vllm/vllm-openai:v0.16.0",
@@ -211,64 +209,9 @@ def test_append_only_scope_allows_range_to_list_expansion(monkeypatch):
             },
         }
     }
-    monkeypatch.setattr(process_changelog, "get_changed_files", lambda *_: set())
-
     process_changelog.validate_append_only_scope(
-        "base", "head", base, head, {"test-config": {"fixed-seq-len"}}
+        base, head, {"test-config": {"fixed-seq-len"}}
     )
-
-
-def test_append_only_scope_allows_benchmark_and_launch_shell_scripts(monkeypatch):
-    master = {
-        "test-config": {
-            "image": "vllm/vllm-openai:v0.16.0",
-            "scenarios": {
-                "fixed-seq-len": {
-                    "search-space": [{"tp": 8, "conc-list": [4, 8]}],
-                }
-            },
-        }
-    }
-    monkeypatch.setattr(
-        process_changelog,
-        "get_changed_files",
-        lambda *_: {
-            "perf-changelog.yaml",
-            "configs/nvidia-master.yaml",
-            "benchmarks/single_node/test.sh",
-            "benchmarks/multi_node/helpers/server.sh",
-            "runners/launch_b300-nv.sh",
-        },
-    )
-
-    process_changelog.validate_append_only_scope(
-        "base", "head", master, master, {"test-config": {"fixed-seq-len"}}
-    )
-
-
-def test_append_only_scope_rejects_shared_or_non_shell_logic(monkeypatch):
-    master = {
-        "test-config": {
-            "image": "vllm/vllm-openai:v0.16.0",
-            "scenarios": {"fixed-seq-len": {}},
-        }
-    }
-    monkeypatch.setattr(
-        process_changelog,
-        "get_changed_files",
-        lambda *_: {"runners/slurm_utils.sh", "benchmarks/single_node/helper.py"},
-    )
-
-    try:
-        process_changelog.validate_append_only_scope(
-            "base", "head", master, master, {"test-config": {"fixed-seq-len"}}
-        )
-    except ValueError as error:
-        assert "unexpected changes" in str(error)
-        assert "runners/slurm_utils.sh" in str(error)
-        assert "benchmarks/single_node/helper.py" in str(error)
-    else:
-        raise AssertionError("shared and non-shell logic should remain out of scope")
 
 
 def test_append_only_main_runs_only_added_points_and_skips_evals(
@@ -288,7 +231,6 @@ def test_append_only_main_runs_only_added_points_and_skips_evals(
     commands = []
 
     monkeypatch.setattr(process_changelog, "get_added_lines", lambda *_: added_yaml)
-    monkeypatch.setattr(process_changelog, "get_changed_files", lambda *_: set())
     monkeypatch.setattr(
         process_changelog,
         "config_files_at_ref",
