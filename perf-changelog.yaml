@@ -5961,14 +5961,6 @@
     - "Follow the official SGLang DeepSeek-V4 Blackwell recipe, require nonempty SGLang server metrics, keep pooled AgentX connections alive, let AIPerf own HiCache warmup, and reserve transient MoE workspace at DEP8 c512."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2577
 
-- config-keys:
-    - kimik3-fp4-mi355x-vllm-agentic-mtp
-  scenario-type:
-    - agentic-coding
-  description:
-    - "Kimi-K3 Agentx Pef Tuning with AITER Backend"
-    - "Image : vllm/vllm-openai-rocm:nightly-3ee2df30337a301164c46ae444b76ee67e71c106"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2602
 
 - config-keys:
     - dsv4-fp4-gb200-dynamo-vllm-agentic-mtp-agg
