@@ -223,6 +223,8 @@ jobs:
 
             See `docs/configuration-procedures.md` → "Update an image" and "Append the changelog safely" for entry format and rules. Required whenever you change image tags, env vars, or perf-affecting params in `configs/*-master.yaml` or `benchmarks/*.sh`. Use `XXX` as the PR-link placeholder until the PR exists.
 
+            If an entry uses `append-only: true`, do not create or approve changes beyond added concurrency values on existing curves. The PR may change only `perf-changelog.yaml` and the selected master config files; the image and all non-concurrency recipe logic must be identical to the base revision, no existing point/curve/config/scenario may be removed, all added changelog entries must be append-only, and eval modifiers are forbidden. Treat a violation as blocking because it would combine incomparable or cherry-picked results into one curve.
+
             ## Spawning Additional Workers:
             You CAN spawn additional Claude workers by commenting "@claude" with a specific task.
   

@@ -3,9 +3,36 @@
 import json
 import subprocess
 import sys
+from contextlib import nullcontext
 from types import SimpleNamespace
 
 import process_changelog
+
+
+def _fixed_matrix_row(conc, *, image="vllm/vllm-openai:v0.16.0"):
+    return {
+        "image": image,
+        "model": "deepseek-ai/DeepSeek-V4-Pro",
+        "model-prefix": "dsv4",
+        "precision": "fp4",
+        "framework": "vllm",
+        "spec-decoding": "mtp",
+        "runner": "cluster:b300-nv",
+        "isl": 8192,
+        "osl": 1024,
+        "tp": 8,
+        "pp": 1,
+        "dcp-size": 1,
+        "pcp-size": 1,
+        "ep": 8,
+        "dp-attn": True,
+        "conc": conc,
+        "max-model-len": 10240,
+        "exp-name": f"dsv4_conc{conc}",
+        "disagg": False,
+        "run-eval": False,
+        "eval-only": False,
+    }
 
 
 def _scenario_values(command):
@@ -57,6 +84,189 @@ def test_config_key_expansion_is_deterministic_and_deduplicated():
     )
 
     assert result == ["config-b", "config-a"]
+
+
+def test_append_only_delta_keeps_only_new_single_node_points():
+    base = [_fixed_matrix_row(4), _fixed_matrix_row(8)]
+    head = [*base, _fixed_matrix_row(12)]
+
+    delta = process_changelog.append_only_delta(base, head)
+
+    assert [entry["conc"] for entry in delta] == [12]
+
+
+def test_append_only_delta_slices_multinode_concurrency_lists():
+    common = {
+        "image": "lmsysorg/sglang:v0.5.7",
+        "model": "deepseek-ai/DeepSeek-V4-Pro",
+        "model-prefix": "dsv4",
+        "precision": "fp4",
+        "framework": "dynamo-sglang",
+        "conc": [8, 16],
+        "exp-name": "dsv4-disagg",
+    }
+
+    delta = process_changelog.append_only_delta(
+        [common],
+        [{**common, "conc": [8, 16, 24]}],
+    )
+
+    assert delta == [{**common, "conc": [24]}]
+
+
+def test_append_only_delta_deduplicates_new_single_node_points():
+    base = [_fixed_matrix_row(4)]
+    head = [base[0], _fixed_matrix_row(8), _fixed_matrix_row(8)]
+
+    delta = process_changelog.append_only_delta(base, head)
+
+    assert [entry["conc"] for entry in delta] == [8]
+
+
+def test_append_only_delta_deduplicates_multinode_concurrency_lists():
+    common = {
+        "image": "lmsysorg/sglang:v0.5.7",
+        "model": "deepseek-ai/DeepSeek-V4-Pro",
+        "framework": "dynamo-sglang",
+        "conc": [8, 16],
+        "exp-name": "dsv4-disagg",
+    }
+
+    delta = process_changelog.append_only_delta(
+        [common],
+        [{**common, "conc": [8, 16, 24, 24]}],
+    )
+
+    assert delta == [{**common, "conc": [24]}]
+
+
+def test_append_only_delta_rejects_image_changes():
+    base = [_fixed_matrix_row(4)]
+    head = [
+        _fixed_matrix_row(4, image="vllm/vllm-openai:v0.16.1"),
+        _fixed_matrix_row(8, image="vllm/vllm-openai:v0.16.1"),
+    ]
+
+    try:
+        process_changelog.append_only_delta(base, head)
+    except ValueError as error:
+        assert "curve logic" in str(error)
+    else:
+        raise AssertionError("image mutation should reject append-only mode")
+
+
+def test_append_only_scope_rejects_non_concurrency_recipe_changes(monkeypatch):
+    base = {
+        "test-config": {
+            "image": "vllm/vllm-openai:v0.16.0",
+            "scenarios": {
+                "agentic-coding": {
+                    "duration": 3600,
+                    "search-space": [{"tp": 8, "conc-list": [1, 4]}],
+                }
+            },
+        }
+    }
+    head = {
+        "test-config": {
+            "image": "vllm/vllm-openai:v0.16.0",
+            "scenarios": {
+                "agentic-coding": {
+                    "duration": 1800,
+                    "search-space": [{"tp": 8, "conc-list": [1, 4, 8]}],
+                }
+            },
+        }
+    }
+    monkeypatch.setattr(process_changelog, "get_changed_files", lambda *_: set())
+
+    try:
+        process_changelog.validate_append_only_scope(
+            "base", "head", base, head, {"test-config": {"agentic-coding"}}
+        )
+    except ValueError as error:
+        assert "duration" in str(error)
+    else:
+        raise AssertionError("recipe mutation should reject append-only mode")
+
+
+def test_append_only_scope_allows_range_to_list_expansion(monkeypatch):
+    base = {
+        "test-config": {
+            "image": "vllm/vllm-openai:v0.16.0",
+            "scenarios": {
+                "fixed-seq-len": {
+                    "search-space": [{"tp": 8, "conc-start": 4, "conc-end": 64}],
+                }
+            },
+        }
+    }
+    head = {
+        "test-config": {
+            "image": "vllm/vllm-openai:v0.16.0",
+            "scenarios": {
+                "fixed-seq-len": {
+                    "search-space": [{"tp": 8, "conc-list": [4, 16, 32, 64]}],
+                }
+            },
+        }
+    }
+    monkeypatch.setattr(process_changelog, "get_changed_files", lambda *_: set())
+
+    process_changelog.validate_append_only_scope(
+        "base", "head", base, head, {"test-config": {"fixed-seq-len"}}
+    )
+
+
+def test_append_only_main_runs_only_added_points_and_skips_evals(
+    monkeypatch,
+    capsys,
+):
+    added_yaml = """
+- config-keys:
+    - test-config
+  description:
+    - Add one concurrency point without rerunning the curve
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1
+  append-only: true
+"""
+    base_rows = [_fixed_matrix_row(4)]
+    head_rows = [*base_rows, _fixed_matrix_row(8)]
+    commands = []
+
+    monkeypatch.setattr(process_changelog, "get_added_lines", lambda *_: added_yaml)
+    monkeypatch.setattr(process_changelog, "get_changed_files", lambda *_: set())
+    monkeypatch.setattr(
+        process_changelog,
+        "config_files_at_ref",
+        lambda *_: nullcontext(["base-nvidia.yaml", "base-amd.yaml"]),
+    )
+    monkeypatch.setattr(
+        process_changelog,
+        "load_config_files",
+        lambda _: {"test-config": {"image": "vllm/vllm-openai:v0.16.0"}},
+    )
+
+    def fake_run(command, **kwargs):
+        commands.append(command)
+        rows = base_rows if "base-nvidia.yaml" in command else head_rows
+        return SimpleNamespace(stdout=json.dumps(rows))
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(sys, "argv", [
+        "process_changelog.py",
+        "--base-ref", "base",
+        "--head-ref", "head",
+        "--changelog-file", "perf-changelog.yaml",
+    ])
+
+    process_changelog.main()
+
+    output = json.loads(capsys.readouterr().out)
+    assert [row["conc"] for row in output["single_node"]["8k1k"]] == [8]
+    assert output["evals"] == []
+    assert output["changelog_metadata"]["entries"][0]["append-only"] is True
+    assert len(commands) == 2
 
 
 def test_all_evals_skips_benchmarks_and_uses_all_evals_generator_flag(

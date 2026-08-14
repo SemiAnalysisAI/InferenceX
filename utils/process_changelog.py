@@ -1,8 +1,12 @@
 import argparse
+import copy
 import json
 import re
 import subprocess
+import tempfile
 from collections import defaultdict
+from contextlib import contextmanager
+from pathlib import Path
 
 import yaml
 from constants import GENERATE_SWEEPS_PY_SCRIPT, MASTER_CONFIGS
@@ -14,6 +18,8 @@ from matrix_logic.validation import (
 )
 
 SCENARIO_TYPES = ("fixed-seq-len", "agentic-coding")
+APPEND_ONLY_ALLOWED_FILES = {"perf-changelog.yaml", *MASTER_CONFIGS}
+CONCURRENCY_CONFIG_FIELDS = {"conc-list", "conc-start", "conc-end"}
 
 
 def _freeze_config_value(value):
@@ -143,6 +149,198 @@ def get_config_keys_from_master(
     return list(resolved_keys)
 
 
+def get_changed_files(base_ref: str, head_ref: str) -> set[str]:
+    """Return repository-relative paths changed by the requested sweep diff."""
+    result = subprocess.run(
+        ["git", "diff", "--name-only", base_ref, head_ref],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return {line for line in result.stdout.splitlines() if line}
+
+
+@contextmanager
+def config_files_at_ref(ref: str):
+    """Materialize the master configs from ``ref`` for matrix generation."""
+    with tempfile.TemporaryDirectory(prefix="inferencex-append-only-") as temp_dir:
+        paths = []
+        for config_file in MASTER_CONFIGS:
+            result = subprocess.run(
+                ["git", "show", f"{ref}:{config_file}"],
+                capture_output=True,
+                check=True,
+            )
+            destination = Path(temp_dir) / config_file
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(result.stdout)
+            paths.append(str(destination))
+        yield paths
+
+
+def _matrix_curve_key(entry: dict) -> tuple:
+    """Identify one curve while deliberately excluding point-level fields."""
+    return tuple(
+        sorted(
+            (key, _freeze_config_value(value))
+            for key, value in entry.items()
+            if key not in {"conc", "exp-name"}
+        )
+    )
+
+
+def _matrix_concurrencies(entry: dict) -> tuple[int, ...]:
+    conc = entry.get("conc")
+    if isinstance(conc, int):
+        return (conc,)
+    if isinstance(conc, list) and conc and all(isinstance(value, int) for value in conc):
+        return tuple(conc)
+    raise ValueError(f"append-only matrix entry has invalid concurrency value: {conc!r}")
+
+
+def append_only_delta(base_entries: list[dict], head_entries: list[dict]) -> list[dict]:
+    """Return only newly added points, rejecting any existing-curve mutation.
+
+    Generated matrix rows are the runtime contract. Grouping them without ``conc``
+    and ``exp-name`` catches image, launcher, topology, arguments, duration, and
+    scenario changes while allowing only concurrency-set expansion.
+    """
+    base_groups: dict[tuple, set[int]] = defaultdict(set)
+    head_groups: dict[tuple, set[int]] = defaultdict(set)
+    for entry in base_entries:
+        base_groups[_matrix_curve_key(entry)].update(_matrix_concurrencies(entry))
+    for entry in head_entries:
+        head_groups[_matrix_curve_key(entry)].update(_matrix_concurrencies(entry))
+
+    if not base_groups:
+        raise ValueError("append-only requires an existing curve in the base revision")
+
+    removed_curves = base_groups.keys() - head_groups.keys()
+    new_curves = head_groups.keys() - base_groups.keys()
+    if removed_curves or new_curves:
+        raise ValueError(
+            "append-only may not add, remove, or modify curve logic; only concurrency "
+            "points may be added"
+        )
+
+    for key, base_concurrencies in base_groups.items():
+        removed_points = base_concurrencies - head_groups[key]
+        if removed_points:
+            raise ValueError(
+                "append-only may not remove existing concurrency points: "
+                f"{sorted(removed_points)}"
+            )
+
+    delta: list[dict] = []
+    emitted_concurrencies: dict[tuple, set[int]] = defaultdict(set)
+    for entry in head_entries:
+        key = _matrix_curve_key(entry)
+        added = head_groups[key] - base_groups[key]
+        conc = entry.get("conc")
+        if isinstance(conc, int):
+            if conc in added and conc not in emitted_concurrencies[key]:
+                delta.append(entry)
+                emitted_concurrencies[key].add(conc)
+            continue
+        added_in_source_order = []
+        for value in conc:
+            if value in added and value not in emitted_concurrencies[key]:
+                added_in_source_order.append(value)
+                emitted_concurrencies[key].add(value)
+        if added_in_source_order:
+            delta_entry = copy.deepcopy(entry)
+            delta_entry["conc"] = added_in_source_order
+            delta.append(delta_entry)
+
+    if not delta:
+        raise ValueError("append-only did not add any concurrency points")
+    return delta
+
+
+def validate_append_only_scope(
+    base_ref: str,
+    head_ref: str,
+    base_master: dict,
+    head_master: dict,
+    selected_config_scenarios: dict[str, set[str]],
+) -> None:
+    """Reject code changes and unrelated config edits in an append-only PR."""
+    unexpected_files = get_changed_files(base_ref, head_ref) - APPEND_ONLY_ALLOWED_FILES
+    if unexpected_files:
+        raise ValueError(
+            "append-only PRs may change only perf-changelog.yaml and master config "
+            f"files; unexpected changes: {sorted(unexpected_files)}"
+        )
+
+    selected_configs = selected_config_scenarios.keys()
+    all_keys = base_master.keys() | head_master.keys()
+    unrelated_changes = [
+        key
+        for key in all_keys
+        if key not in selected_configs and base_master.get(key) != head_master.get(key)
+    ]
+    if unrelated_changes:
+        raise ValueError(
+            "append-only PR changed configs not selected by its changelog entry: "
+            f"{sorted(unrelated_changes)}"
+        )
+
+    for config, allowed_scenarios in selected_config_scenarios.items():
+        base_config = base_master[config]
+        head_config = head_master[config]
+        if base_config.keys() != head_config.keys():
+            raise ValueError(
+                f"append-only changed top-level fields for config {config!r}"
+            )
+        for field in base_config.keys() - {"scenarios"}:
+            if base_config[field] != head_config[field]:
+                raise ValueError(
+                    f"append-only changed non-scenario field {field!r} in {config!r}"
+                )
+
+        base_scenarios = base_config.get("scenarios", {})
+        head_scenarios = head_config.get("scenarios", {})
+        if base_scenarios.keys() != head_scenarios.keys():
+            raise ValueError(
+                f"append-only added or removed a scenario in config {config!r}"
+            )
+        for scenario in base_scenarios:
+            if scenario not in allowed_scenarios:
+                if base_scenarios[scenario] != head_scenarios[scenario]:
+                    raise ValueError(
+                        "append-only changed a scenario outside its changelog scope: "
+                        f"{config!r} / {scenario!r}"
+                    )
+                continue
+            _validate_concurrency_only_structure(
+                base_scenarios[scenario],
+                head_scenarios[scenario],
+                f"{config}.{scenario}",
+            )
+
+
+def _validate_concurrency_only_structure(base, head, path: str) -> None:
+    """Require identical config structure except at explicit concurrency fields."""
+    if isinstance(base, dict) and isinstance(head, dict):
+        base_keys = base.keys() - CONCURRENCY_CONFIG_FIELDS
+        head_keys = head.keys() - CONCURRENCY_CONFIG_FIELDS
+        if base_keys != head_keys:
+            raise ValueError(f"append-only changed config structure at {path}")
+        for key in base_keys:
+            _validate_concurrency_only_structure(base[key], head[key], f"{path}.{key}")
+        return
+    if isinstance(base, list) and isinstance(head, list):
+        if len(base) != len(head):
+            raise ValueError(f"append-only changed config structure at {path}")
+        for index, (base_item, head_item) in enumerate(zip(base, head)):
+            _validate_concurrency_only_structure(
+                base_item, head_item, f"{path}[{index}]"
+            )
+        return
+    if base != head:
+        raise ValueError(f"append-only changed non-concurrency value at {path}")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-ref", type=str, required=True)
@@ -171,6 +369,17 @@ def main():
     if not changelog_data:
         raise ValueError("No valid YAML entries found in the changelog additions.")
 
+    parsed_entries = [ChangelogEntry.model_validate(entry) for entry in changelog_data]
+    has_append_only = any(entry.append_only for entry in parsed_entries)
+    if has_append_only and not all(entry.append_only for entry in parsed_entries):
+        raise ValueError(
+            "append-only entries cannot share a sweep with regular changelog entries"
+        )
+    if has_append_only and (args.all_evals or args.evals_only):
+        raise ValueError(
+            "append-only sweeps cannot use all-evals or evals-only modifiers"
+        )
+
     final_results = {
         "single_node": defaultdict(list),
         "multi_node": defaultdict(list),
@@ -194,12 +403,38 @@ def main():
 
     master_config = load_config_files(MASTER_CONFIGS)
     resolved_entries = []
-    for entry_data in changelog_data:
-        entry = ChangelogEntry.model_validate(entry_data)
+    for entry in parsed_entries:
         all_configs = get_config_keys_from_master(
             entry.config_keys, master_config
         )
         resolved_entries.append((entry, all_configs))
+
+    base_config_context = None
+    base_config_files = None
+    if has_append_only:
+        base_config_context = config_files_at_ref(args.base_ref)
+        base_config_files = base_config_context.__enter__()
+        base_master = load_config_files(base_config_files)
+        selected_config_scenarios: dict[str, set[str]] = defaultdict(set)
+        for entry, configs in resolved_entries:
+            for config in configs:
+                selected_config_scenarios[config].update(
+                    entry.scenario_type or SCENARIO_TYPES
+                )
+        selected_configs = selected_config_scenarios.keys()
+        missing_from_base = selected_configs - base_master.keys()
+        if missing_from_base:
+            raise ValueError(
+                "append-only requires every selected config to exist in the base "
+                f"revision; missing: {sorted(missing_from_base)}"
+            )
+        validate_append_only_scope(
+            args.base_ref,
+            args.head_ref,
+            base_master,
+            master_config,
+            selected_config_scenarios,
+        )
 
     # Process all-evals entries first so their broader eval matrix wins when
     # the same config appears in multiple changelog entries.
@@ -230,7 +465,7 @@ def main():
                     benchmark_groups[unseen_scenarios].append(config)
 
             for scenarios, benchmark_configs in benchmark_groups.items():
-                base_cmd = [
+                head_cmd = [
                     "python3",
                     GENERATE_SWEEPS_PY_SCRIPT,
                     "test-config",
@@ -241,18 +476,37 @@ def main():
                     "--no-evals",
                 ]
                 if scenarios != SCENARIO_TYPES:
-                    base_cmd.extend(["--scenario-type", *scenarios])
+                    head_cmd.extend(["--scenario-type", *scenarios])
                 try:
                     result = subprocess.run(
-                        base_cmd,
+                        head_cmd,
                         capture_output=True,
                         text=True,
                         check=True,
                     )
+                    head_results = json.loads(result.stdout)
+                    if entry.append_only:
+                        base_cmd = head_cmd.copy()
+                        config_files_index = base_cmd.index("--config-files") + 1
+                        base_cmd[
+                            config_files_index:config_files_index + len(MASTER_CONFIGS)
+                        ] = base_config_files
+                        base_result = subprocess.run(
+                            base_cmd,
+                            capture_output=True,
+                            text=True,
+                            check=True,
+                        )
+                        head_results = append_only_delta(
+                            json.loads(base_result.stdout), head_results
+                        )
                 except subprocess.CalledProcessError as e:
                     print(e.stderr)
                     raise
-                all_benchmark_results.extend(json.loads(result.stdout))
+                all_benchmark_results.extend(head_results)
+
+        if entry.append_only:
+            continue
 
         eval_groups = defaultdict(list)
         for config in all_configs:
@@ -298,6 +552,9 @@ def main():
                 entry_eval_results, entry.eval_min_prefill_ep
             )
             all_eval_results.extend(entry_eval_results)
+
+    if base_config_context is not None:
+        base_config_context.__exit__(None, None, None)
 
     if args.trim_conc:
         all_benchmark_results = trim_conc(all_benchmark_results)

@@ -44,6 +44,30 @@ A full benchmark sweep is expensive GPU time, and the runners are shared by ever
 - **This reduces CI queue time for everyone.** Each reused merge frees hours of GPU runner time for other PRs, so please prefer the reuse path over merging without it. A green sweep alone is not enough. The `/reuse-sweep-run` comment must be on record (the sign-off verification checks for it), otherwise `main` silently re-runs the full sweep.
 - `utils/merge_with_reuse.sh <pr-number>` is the supported merge path. It posts the command, syncs the branch with `main`, waits for checks, and squash-merges. See the [workflows README](.github/workflows/README.md#reusing-an-approved-pr-full-sweep) for eligibility details.
 
+## Adding points to the latest curve with `append-only`
+
+When a recipe and image are unchanged and a PR only adds concurrency values to an
+existing curve, mark every new changelog entry with `append-only: true`. Sweep setup
+compares the generated matrices at the base and head revisions, runs only the newly
+added points, and emits metadata that lets InferenceX-app extend the most recent
+matching curve instead of presenting the partial run as a separate curve.
+
+This mode is intentionally narrow. An append-only PR may change only
+`perf-changelog.yaml` and the master config files; every selected config must already
+exist, its prior concurrency points must remain present, and all generated fields
+other than concurrency must be identical. Image, recipe, launcher, topology, duration,
+or benchmark-logic changes are rejected. Append-only entries cannot be mixed with
+regular entries or eval-selection modifiers in the same sweep.
+
+```yaml
+- config-keys:
+    - dsv4-fp4-b300-vllm-mtp
+  description:
+    - "Add concurrency 192 to the existing curve"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  append-only: true
+```
+
 ## AMD cluster: never leave root-owned files in runner workspaces
 
 Multi-node benchmarks on the AMD MI355X TW cluster submit Slurm jobs whose containers often run as **root**. If those containers write files (typically `benchmark_logs/logs/slurm_job-*`) into the GitHub Actions runner workspace and the job is **cancelled** before teardown runs, the root-owned directories are stranded. The runner user cannot delete them, so `actions/checkout` fails with:

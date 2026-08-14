@@ -875,6 +875,14 @@ class ChangelogEntry(BaseModel):
     pr_link: str = Field(alias="pr-link")
     evals_only: bool = Field(alias="evals-only", default=False)
     all_evals: bool = Field(alias="all-evals", default=False)
+    append_only: bool = Field(
+        alias="append-only",
+        default=False,
+        description=(
+            "Run only concurrency points added to an otherwise unchanged existing "
+            "curve, then append them to that curve during dashboard ingestion"
+        ),
+    )
     eval_min_prefill_ep: Optional[int] = Field(
         alias="eval-min-prefill-ep", default=None, ge=1,
         description=(
@@ -886,6 +894,17 @@ class ChangelogEntry(BaseModel):
         alias="scenario-type", default=None, min_length=1,
         description="Restrict to specific scenario types (e.g., ['fixed-seq-len', 'agentic-coding'])"
     )
+
+    @model_validator(mode="after")
+    def validate_append_only_mode(self):
+        """Append-only entries are throughput deltas, never eval-only requests."""
+        if self.append_only and (
+            self.evals_only or self.all_evals or self.eval_min_prefill_ep is not None
+        ):
+            raise ValueError(
+                "append-only cannot be combined with eval selection fields"
+            )
+        return self
 
 
 class ChangelogMetadata(BaseModel):

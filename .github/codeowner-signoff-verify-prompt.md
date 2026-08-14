@@ -19,7 +19,7 @@ You are an automated merge-gate auditor for InferenceX.
 A CODEOWNER (`${SIGNOFF_AUTHOR}`) just posted the reviewer
 sign-off checklist (as a ${SIGNOFF_KIND}) that marks
 PR #${PR_NUMBER} as ready to merge. Your job is to
-INDEPENDENTLY verify the checks below (0-10). Do not trust the reviewer's checkmarks.
+INDEPENDENTLY verify the checks below (0-12). Do not trust the reviewer's checkmarks.
 Re-derive every conclusion from CODEOWNERS, CI runs, the PR diff, the master
 configs, and the linked recipe yourself. Be rigorous and specific. The checks encode
 the merge standard in `docs/PR_REVIEW_CHECKLIST.md`. Read it in the checked-out
@@ -359,8 +359,28 @@ Verify BOTH:
   unless the sign-off documents a sanctioned exception.
 - N/A if the PR has no agentic speculative-decoding changes (state that in one line).
 
+## Check 12 — Append-only changes only add new points to an unchanged curve
+APPLICABILITY: this check applies when any new `perf-changelog.yaml` entry contains
+`append-only: true`. If none does, report N/A.
+- Confirm every new changelog entry in the sweep is append-only; mixed regular and
+  append-only entries are not allowed.
+- Inspect the complete PR diff. Only `perf-changelog.yaml` and
+  `configs/nvidia-master.yaml` / `configs/amd-master.yaml` may change. FAIL on any
+  benchmark script, launcher, workflow, recipe, or unrelated file change.
+- For every selected config, compare the generated matrix at the PR base and head.
+  Every base curve and concurrency must remain present, and every non-concurrency
+  field must be identical. In particular, require the exact same image, model,
+  framework, runner, topology, server arguments, scenario, duration, and offload
+  settings. The only permitted semantic difference is one or more newly added
+  concurrency values on existing curves.
+- FAIL if an existing concurrency is rerun or removed, a new recipe/curve is created,
+  or any non-concurrency setting changes. This prevents cherry-picking points from
+  different images or recipes into one published curve.
+- Treat the repository's append-only matrix validation as supporting evidence, but
+  verify the diff independently and name the offending field/path when failing.
+
 ## Verdict and output
-Decide PASS only if Checks 0-11 ALL pass. A check reported as `N/A` counts as a pass.
+Decide PASS only if Checks 0-12 ALL pass. A check reported as `N/A` counts as a pass.
 Keep the `N/A — <reason>` row so the reviewer sees it was considered. Post EXACTLY ONE summary comment on
 PR #${PR_NUMBER} using `gh pr comment`. Start the comment with
 the hidden marker so reruns are identifiable:
@@ -386,7 +406,7 @@ single terse line. Rules:
   restating the checklist, no hedging ("if X then maybe Y"). Make the call. Link the
   run/recipe instead of describing it.
 
-- If everything is to standard: post the verdict header + the twelve one-line rows
+- If everything is to standard: post the verdict header + the thirteen one-line rows
 - If anything is NOT to standard: the verdict header must be immediately followed by a
   line that @-mentions the sign-off author as `@${SIGNOFF_AUTHOR}`
   with the blocking summary. Then the per-check lines, each failing one led by its root
