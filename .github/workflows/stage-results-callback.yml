@@ -4,7 +4,7 @@ run-name: Report staged run ${{ github.event.client_payload.run-id }} to PR #${{
 
 on:
   repository_dispatch:
-    types: [stage-results-completed]
+    types: [stage-results-started, stage-results-completed]
 
 permissions: {}
 
@@ -32,6 +32,7 @@ jobs:
             const appRunId = String(payload['app-run-id'] ?? '');
             const commentId = String(payload['comment-id'] ?? '');
             const succeeded = String(payload['stage-succeeded'] ?? '');
+            const callbackType = context.payload.action;
 
             if (payload['source-repository'] !== 'SemiAnalysisAI/InferenceX-app') {
               core.setFailed('Unsupported staging callback source');
@@ -53,30 +54,29 @@ jobs:
               core.setFailed('Callback requester is not a valid GitHub login');
               return;
             }
-            if (!['true', 'false'].includes(succeeded)) {
+            if (!['stage-results-started', 'stage-results-completed'].includes(callbackType)) {
+              core.setFailed('Unsupported staging callback type');
+              return;
+            }
+            if (callbackType === 'stage-results-completed' && !['true', 'false'].includes(succeeded)) {
               core.setFailed('Callback stage-succeeded value must be true or false');
               return;
             }
 
             const appRunUrl = `${context.serverUrl}/SemiAnalysisAI/InferenceX-app/actions/runs/${appRunId}`;
+            const sourceRunUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${runId}`;
             const stagingSite = 'https://inferencemax-app-git-staging-semianalysisai.vercel.app';
             const entry = encodeURIComponent(`${runDate}~r${runId}`);
             const chartUrl = `${stagingSite}/inference?i_dates=${entry}`;
-            const body = succeeded === 'true'
+            const body = callbackType === 'stage-results-started'
+              ? `@${requestedBy} staging [run ${runId}](${sourceRunUrl}). [InferenceX-app staging workflow](${appRunUrl}) is now running. Existing staged runs will be preserved; this comment will be updated when staging completes.`
+              : succeeded === 'true'
               ? [
                   `@${requestedBy} staged run ${runId}: ${chartUrl}`,
                   '',
                   `This run remains available across future \`/stage-results\` requests. Staging the same run ID again updates its staged data. [Staging workflow](${appRunUrl})`,
-                  '',
-                  `@${requestedBy} 已将运行 ${runId} 发布到预发布环境：${chartUrl}`,
-                  '',
-                  `后续的 \`/stage-results\` 请求不会移除此运行；再次发布相同的运行 ID 会更新其预发布数据。[预发布工作流](${appRunUrl})`,
                 ].join('\n')
-              : [
-                  `@${requestedBy} staging run ${runId} failed. [Inspect the staging workflow](${appRunUrl}).`,
-                  '',
-                  `@${requestedBy} 预发布运行 ${runId} 失败。[查看预发布工作流](${appRunUrl})。`,
-                ].join('\n');
+              : `@${requestedBy} staging run ${runId} failed. [Inspect the staging workflow](${appRunUrl}).`;
 
             if (commentId) {
               await github.rest.issues.updateComment({

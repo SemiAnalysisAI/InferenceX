@@ -8,9 +8,10 @@
 # them would force every dgxc path to become an override hook and would let a
 # dgxc-only change silently alter nscale runs.
 #
-# Scope: multi-node DeepSeek-V4-Pro FP4 runs with Dynamo-vLLM or Dynamo
-# TensorRT-LLM, plus Kimi K2.6 FP4 runs with Dynamo-vLLM, on the
-# b200-nscale/b200-new runner labels. Anything else exits non-zero.
+# Scope: multi-node DeepSeek-V4-Pro FP4 runs with Dynamo-vLLM,
+# Dynamo-SGLang MTP, or Dynamo TensorRT-LLM, plus Kimi K2.6 FP4 runs with
+# Dynamo-vLLM, on the b200-nscale/b200-new runner labels. Anything else exits
+# non-zero.
 
 SLURM_PARTITION="batch_1"
 SLURM_ACCOUNT="benchmark"
@@ -50,13 +51,14 @@ else
     exit 1
 fi
 
-if [[ $FRAMEWORK != "dynamo-vllm" && $FRAMEWORK != "dynamo-trt" ]]; then
-    echo "Unsupported framework for b200-nscale: $FRAMEWORK (supported: dynamo-vllm, dynamo-trt)" >&2
-    exit 1
-fi
-
-if [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX != "dsv4" ]]; then
-    echo "Unsupported model for b200-nscale Dynamo TensorRT-LLM: $MODEL_PREFIX" >&2
+if [[ $FRAMEWORK == "dynamo-vllm" ]]; then
+    :
+elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-sglang" && $SPEC_DECODING == "mtp" ]]; then
+    :
+elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-trt" ]]; then
+    :
+else
+    echo "Unsupported framework/configuration for b200-nscale: $MODEL_PREFIX/$PRECISION/$FRAMEWORK/$SPEC_DECODING" >&2
     exit 1
 fi
 
@@ -66,11 +68,12 @@ echo "Cloning srt-slurm repository..."
 SRT_REPO_DIR="srt-slurm"
 rm -rf "$SRT_REPO_DIR"
 if [[ $MODEL_PREFIX == "dsv4" && $FRAMEWORK == "dynamo-trt" ]]; then
+    SRT_TRT_REV="22132f7449769315a441b1061dbe1d67435887bb"
     mkdir -p "$SRT_REPO_DIR"
     git -C "$SRT_REPO_DIR" init --quiet || exit 1
     git -C "$SRT_REPO_DIR" fetch --quiet --depth 1 \
-        https://github.com/NVIDIA/srt-slurm.git refs/pull/274/head || exit 1
-    git -C "$SRT_REPO_DIR" checkout --quiet 22132f7449769315a441b1061dbe1d67435887bb || exit 1
+        https://github.com/NVIDIA/srt-slurm.git "$SRT_TRT_REV" || exit 1
+    git -C "$SRT_REPO_DIR" checkout --quiet "$SRT_TRT_REV" || exit 1
     cd "$SRT_REPO_DIR" || exit 1
     mkdir -p recipes/trtllm/deepseek-v4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4" \
@@ -78,8 +81,21 @@ if [[ $MODEL_PREFIX == "dsv4" && $FRAMEWORK == "dynamo-trt" ]]; then
     cp "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/moe_load_balancer_ctx_ep4_384.yaml" \
         "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/moe_load_balancer_gen_ep8_slots384.yaml" \
         configs/ || exit 1
+    if ! grep -Fqx 'CONTAINER_REMAP_ROOT_EXPORT = {"ENROOT_REMAP_ROOT": "yes"}' src/srtctl/core/slurm.py; then
+        echo "Unexpected ENROOT_REMAP_ROOT default in pinned srt-slurm revision $SRT_TRT_REV" >&2
+        exit 1
+    fi
     sed -i 's/CONTAINER_REMAP_ROOT_EXPORT = {"ENROOT_REMAP_ROOT": "yes"}/CONTAINER_REMAP_ROOT_EXPORT = {"ENROOT_REMAP_ROOT": "no"}/' \
-        src/srtctl/core/slurm.py
+        src/srtctl/core/slurm.py || exit 1
+    grep -Fqx 'CONTAINER_REMAP_ROOT_EXPORT = {"ENROOT_REMAP_ROOT": "no"}' \
+        src/srtctl/core/slurm.py || exit 1
+elif [[ $MODEL_PREFIX == "dsv4" && $FRAMEWORK == "dynamo-sglang" ]]; then
+    git clone --branch main --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
+    cd "$SRT_REPO_DIR" || exit 1
+    # Pin the srt-slurm revision used by these checked-in recipes.
+    git checkout 04e87fcc505d6d851451781a5499ca19a02ec2b4 || exit 1
+    mkdir -p recipes/sglang/deepseek-v4
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4" recipes/sglang/deepseek-v4
 elif [[ $MODEL_PREFIX == "dsv4" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
     cd "$SRT_REPO_DIR" || exit 1
@@ -186,6 +202,7 @@ model_paths:
 # Container aliases
 containers:
   dynamo-vllm: "${SQUASH_FILE}"
+  dynamo-sglang: "${SQUASH_FILE}"
   "${IMAGE}": "${SQUASH_FILE}"
   nginx-sqsh: "${NGINX_SQUASH_FILE}"
 use_exclusive_sbatch_directive: true
@@ -222,8 +239,9 @@ sed -i 's/^  max_attempts: [0-9]*/  max_attempts: 720/' "$CONFIG_PATH"
 inject_synthetic_acceptance "$CONFIG_PATH" "$FRAMEWORK" || exit 1
 
 SRTCTL_PREFLIGHT_ARGS=()
-# These checkpoints are staged on Slurm compute nodes, not the login node.
-if [[ $MODEL_PREFIX == "kimik2.6" || ( $MODEL_PREFIX == "dsv4" && $FRAMEWORK == "dynamo-trt" ) ]]; then
+# These weights are staged on the Slurm compute nodes, not the login node.
+if [[ $MODEL_PREFIX == "kimik2.6" ]] ||
+   [[ $MODEL_PREFIX == "dsv4" && ( $FRAMEWORK == "dynamo-sglang" || $FRAMEWORK == "dynamo-trt" ) ]]; then
     SRTCTL_PREFLIGHT_ARGS+=(--no-preflight)
 fi
 

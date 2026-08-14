@@ -343,37 +343,36 @@ check_env_vars() {
     fi
 }
 
-# Wait for server to be ready by polling the health endpoint
-# All parameters are required
-# Parameters:
-#   --port: Server port
-#   --server-log: Path to server log file
-#   --server-pid: Server process ID (required)
-#   --sleep-interval: Sleep interval between health checks (optional, default: 5)
-wait_for_server_ready() {
+# Poll an HTTP endpoint while streaming the owning process log.
+# Required: --endpoint, --log, --pid. A zero timeout waits indefinitely.
+wait_for_ready() {
     set +x
-    local port=""
-    local server_log=""
-    local server_pid=""
+    local endpoint=""
+    local process_log=""
+    local process_pid=""
     local sleep_interval=5
+    local timeout=0
 
-    # Parse arguments
     while [[ $# -gt 0 ]]; do
         case $1 in
-            --port)
-                port="$2"
+            --endpoint)
+                endpoint="$2"
                 shift 2
                 ;;
-            --server-log)
-                server_log="$2"
+            --log)
+                process_log="$2"
                 shift 2
                 ;;
-            --server-pid)
-                server_pid="$2"
+            --pid)
+                process_pid="$2"
                 shift 2
                 ;;
             --sleep-interval)
                 sleep_interval="$2"
+                shift 2
+                ;;
+            --timeout)
+                timeout="$2"
                 shift 2
                 ;;
             *)
@@ -383,41 +382,112 @@ wait_for_server_ready() {
         esac
     done
 
-    # Validate required parameters
-    if [[ -z "$port" ]]; then
-        echo "Error: --port is required"
+    if [[ -z "$endpoint" ]]; then
+        echo "Error: --endpoint is required"
         return 1
     fi
-    if [[ -z "$server_log" ]]; then
-        echo "Error: --server-log is required"
+    if [[ -z "$process_log" ]]; then
+        echo "Error: --log is required"
         return 1
     fi
-    if [[ -z "$server_pid" ]]; then
-        echo "Error: --server-pid is required"
+    if [[ -z "$process_pid" ]]; then
+        echo "Error: --pid is required"
+        return 1
+    fi
+    if [[ ! "$sleep_interval" =~ ^[1-9][0-9]*$ ]]; then
+        echo "Error: --sleep-interval must be a positive integer"
+        return 1
+    fi
+    if [[ ! "$timeout" =~ ^[0-9]+$ ]]; then
+        echo "Error: --timeout must be a non-negative integer"
         return 1
     fi
 
-    # Wait for server log file to be created (container startup may delay this)
-    while [ ! -f "$server_log" ]; do
-        if ! kill -0 "$server_pid" 2>/dev/null; then
-            echo "Server died before creating log file. Exiting."
+    local deadline=0
+    if [[ "$timeout" -gt 0 ]]; then
+        deadline=$((SECONDS + timeout))
+    fi
+
+    while [[ ! -f "$process_log" ]]; do
+        if ! kill -0 "$process_pid" 2>/dev/null; then
+            echo "Process died before creating $process_log." >&2
+            exit 1
+        fi
+        if [[ "$deadline" -gt 0 && "$SECONDS" -ge "$deadline" ]]; then
+            echo "Timed out waiting for $endpoint." >&2
             exit 1
         fi
         sleep 1
     done
 
-    # Show logs until server is ready
-    tail -f -n +1 "$server_log" &
-    local TAIL_PID=$!
-    until curl --output /dev/null --silent --fail http://0.0.0.0:$port/health; do
-        if ! kill -0 "$server_pid" 2>/dev/null; then
-            echo "Server died before becoming healthy. Exiting."
-            kill $TAIL_PID
+    tail -f -n +1 "$process_log" &
+    local tail_pid=$!
+    until curl --output /dev/null --silent --fail "$endpoint"; do
+        if ! kill -0 "$process_pid" 2>/dev/null; then
+            echo "Process died before $endpoint became ready." >&2
+            kill "$tail_pid" 2>/dev/null || true
+            exit 1
+        fi
+        if [[ "$deadline" -gt 0 && "$SECONDS" -ge "$deadline" ]]; then
+            echo "Timed out waiting for $endpoint." >&2
+            kill "$tail_pid" 2>/dev/null || true
             exit 1
         fi
         sleep "$sleep_interval"
     done
-    kill $TAIL_PID
+    kill "$tail_pid" 2>/dev/null || true
+    wait "$tail_pid" 2>/dev/null || true
+}
+
+wait_for_server_ready() {
+    local port=""
+    local server_log=""
+    local server_pid=""
+    local sleep_interval=5
+
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --port) port="$2"; shift 2 ;;
+            --server-log) server_log="$2"; shift 2 ;;
+            --server-pid) server_pid="$2"; shift 2 ;;
+            --sleep-interval) sleep_interval="$2"; shift 2 ;;
+            *) echo "Unknown parameter: $1"; return 1 ;;
+        esac
+    done
+
+    if [[ -z "$port" || -z "$server_log" || -z "$server_pid" ]]; then
+        echo "Error: --port, --server-log, and --server-pid are required"
+        return 1
+    fi
+
+    wait_for_ready \
+        --endpoint "http://0.0.0.0:${port}/health" \
+        --log "$server_log" \
+        --pid "$server_pid" \
+        --sleep-interval "$sleep_interval"
+}
+
+# Persist an argv array in shell-replayable form.
+write_command() {
+    local output_file="$1"
+    shift
+    printf '%q ' "$@" | tee "$output_file"
+    printf '\n' | tee -a "$output_file"
+}
+
+append_command() {
+    local output_file="$1"
+    shift
+    printf '%q ' "$@" >> "$output_file"
+    printf '\n' >> "$output_file"
+}
+
+# Persist an argv array in shell-replayable form.
+write_command() {
+    local output_file="$1"
+    shift
+    printf '%q ' "$@" | tee "$output_file"
+    printf '\n' | tee -a "$output_file"
 }
 
 # Run benchmark serving with standardized parameters
@@ -1048,6 +1118,142 @@ _eval_concs_to_json() {
     printf '[%s]' "$joined"
 }
 
+_env_is_true() {
+    case "${1,,}" in
+        1|true|yes|on) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+_resolve_disagg_ep() {
+    local ep="${1:-1}"
+    local enable_flag="${2:-false}"
+    local tp_size="${3:-1}"
+    if [[ "$ep" == "1" ]] && _env_is_true "$enable_flag"; then
+        echo "$tp_size"
+    else
+        echo "$ep"
+    fi
+}
+
+_normalize_bool_json() {
+    if _env_is_true "${1:-false}"; then
+        echo "true"
+    else
+        echo "false"
+    fi
+}
+
+# Export TP/EP/DP metadata for append_lm_eval_summary / meta_env.json.
+# Prefer workflow PREFILL_EP/DECODE_EP and *_DP_ATTN (from job.slurm) over
+# ENABLE_* launch booleans so DEP8/DPA arms record the correct topology.
+bridge_disagg_eval_metadata() {
+    export TP="${PREFILL_TP:-${PREFILL_TP_SIZE:-${TP:-1}}}"
+    export PREFILL_TP="${PREFILL_TP:-${PREFILL_TP_SIZE:-${TP:-1}}}"
+    export PREFILL_EP="$(_resolve_disagg_ep "${PREFILL_EP:-1}" "${PREFILL_ENABLE_EP:-false}" "${PREFILL_TP_SIZE:-${PREFILL_TP:-1}}")"
+    export EP_SIZE="${PREFILL_EP}"
+    export PREFILL_NUM_WORKERS="${PREFILL_NUM_WORKERS:-${xP:-1}}"
+    export DECODE_TP="${DECODE_TP:-${DECODE_TP_SIZE:-${TP:-1}}}"
+    export DECODE_EP="$(_resolve_disagg_ep "${DECODE_EP:-1}" "${DECODE_ENABLE_EP:-false}" "${DECODE_TP_SIZE:-${DECODE_TP:-1}}")"
+    export DECODE_NUM_WORKERS="${DECODE_NUM_WORKERS:-${yD:-1}}"
+
+    local prefill_dp="${PREFILL_DP_ATTN:-${PREFILL_DP_ATTENTION:-${PREFILL_ENABLE_DP:-false}}}"
+    local decode_dp="${DECODE_DP_ATTN:-${DECODE_DP_ATTENTION:-${DECODE_ENABLE_DP:-false}}}"
+    export DP_ATTENTION="$(_normalize_bool_json "$prefill_dp")"
+    export PREFILL_DP_ATTENTION="$(_normalize_bool_json "$prefill_dp")"
+    export DECODE_DP_ATTENTION="$(_normalize_bool_json "$decode_dp")"
+}
+
+_write_lm_eval_meta_json() {
+    local meta_json="$1"
+    local batch_metadata="${2:-}"
+    local metadata_conc="${3:-${CONC:-1}}"
+
+    bridge_disagg_eval_metadata
+
+    local model_name="${MODEL_NAME:-$MODEL}"
+    local is_multinode_json="false"
+    if [ "${IS_MULTINODE:-false}" = "true" ]; then
+        is_multinode_json="true"
+    fi
+
+    local prefill_tp="${PREFILL_TP:-${TP:-1}}"
+    local prefill_pp="${PREFILL_PP_SIZE:-${PP_SIZE:-1}}"
+    local prefill_dcp_size="${PREFILL_DCP_SIZE:-${DCP_SIZE:-1}}"
+    local prefill_pcp_size="${PREFILL_PCP_SIZE:-${PCP_SIZE:-1}}"
+    local prefill_ep="${PREFILL_EP:-${EP_SIZE:-1}}"
+    local prefill_num_workers="${PREFILL_NUM_WORKERS:-1}"
+    local decode_tp="${DECODE_TP:-${TP:-1}}"
+    local decode_pp="${DECODE_PP_SIZE:-${PP_SIZE:-1}}"
+    local decode_dcp_size="${DECODE_DCP_SIZE:-${DCP_SIZE:-1}}"
+    local decode_pcp_size="${DECODE_PCP_SIZE:-${PCP_SIZE:-1}}"
+    local decode_ep="${DECODE_EP:-${EP_SIZE:-1}}"
+    local decode_num_workers="${DECODE_NUM_WORKERS:-1}"
+
+    local dp_json
+    dp_json="$(_normalize_bool_json "${DP_ATTENTION:-false}")"
+    local prefill_dp_json
+    prefill_dp_json="$(_normalize_bool_json "${PREFILL_DP_ATTENTION:-${DP_ATTENTION:-false}}")"
+    local decode_dp_json
+    decode_dp_json="$(_normalize_bool_json "${DECODE_DP_ATTENTION:-${DP_ATTENTION:-false}}")"
+
+    local fw="${FRAMEWORK:-}"
+    local prec="${PRECISION:-}"
+    if [[ -z "$fw" || -z "$prec" ]]; then
+        if [[ -n "${RESULT_FILENAME:-}" ]]; then
+            local parsed
+            parsed=$(echo "${RESULT_FILENAME}" | sed -n 's/.*_\([^_][^_]*\)_\([^_][^_]*\)_tp.*/\1 \2/p')
+            local p1="${parsed%% *}"
+            local p2="${parsed#* }"
+            if [[ -z "$prec" && -n "$p1" && "$p1" != "$parsed" ]]; then
+                prec="$p1"
+            fi
+            if [[ -z "$fw" && -n "$p2" && "$p2" != "$parsed" ]]; then
+                fw="$p2"
+            fi
+        fi
+    fi
+
+    cat > "${meta_json}" <<META
+{
+  "is_multinode": ${is_multinode_json},
+  "framework": "${fw:-unknown}",
+  "precision": "${prec:-unknown}",
+  "spec_decoding": "${SPEC_DECODING:-}",
+  "tp": ${TP:-1},
+  "pp": ${PP_SIZE:-1},
+  "dcp_size": ${DCP_SIZE:-1},
+  "pcp_size": ${PCP_SIZE:-1},
+  "conc": ${metadata_conc},
+${batch_metadata}  "ep": ${EP_SIZE:-1},
+  "dp_attention": ${dp_json},
+  "prefill_tp": ${prefill_tp},
+  "prefill_pp": ${prefill_pp},
+  "prefill_dcp_size": ${prefill_dcp_size},
+  "prefill_pcp_size": ${prefill_pcp_size},
+  "prefill_ep": ${prefill_ep},
+  "prefill_dp_attention": ${prefill_dp_json},
+  "prefill_num_workers": ${prefill_num_workers},
+  "decode_tp": ${decode_tp},
+  "decode_pp": ${decode_pp},
+  "decode_dcp_size": ${decode_dcp_size},
+  "decode_pcp_size": ${decode_pcp_size},
+  "decode_ep": ${decode_ep},
+  "decode_dp_attention": ${decode_dp_json},
+  "decode_num_workers": ${decode_num_workers},
+  "model": "${model_name:-}",
+  "infmax_model_prefix": "${MODEL_PREFIX:-unknown}",
+  "hw": "${RUNNER_TYPE:-unknown}",
+  "isl": "${ISL:-0}",
+  "osl": "${OSL:-0}"
+}
+META
+}
+
+rewrite_lm_eval_meta_env() {
+    _write_lm_eval_meta_json "./meta_env.json" "" "${CONC:-1}"
+}
+
 append_lm_eval_summary() {
     local batch_concs="${EVAL_BATCHED_CONCS:-}"
     local results_dir="${EVAL_RESULT_DIR:-}"
@@ -1085,96 +1291,7 @@ append_lm_eval_summary() {
         meta_json="${out_dir}/meta_env.json"
     fi
 
-    # Write minimal meta for collectors that expect it
-    local model_name="${MODEL_NAME:-$MODEL}"
-    local is_multinode_json="false"
-    if [ "${IS_MULTINODE:-false}" = "true" ]; then
-        is_multinode_json="true"
-    fi
-
-    local prefill_tp="${PREFILL_TP:-${TP:-1}}"
-    local prefill_pp="${PREFILL_PP_SIZE:-${PP_SIZE:-1}}"
-    local prefill_dcp_size="${PREFILL_DCP_SIZE:-${DCP_SIZE:-1}}"
-    local prefill_pcp_size="${PREFILL_PCP_SIZE:-${PCP_SIZE:-1}}"
-    local prefill_ep="${PREFILL_EP:-${EP_SIZE:-1}}"
-    local prefill_num_workers="${PREFILL_NUM_WORKERS:-1}"
-    local decode_tp="${DECODE_TP:-${TP:-1}}"
-    local decode_pp="${DECODE_PP_SIZE:-${PP_SIZE:-1}}"
-    local decode_dcp_size="${DECODE_DCP_SIZE:-${DCP_SIZE:-1}}"
-    local decode_pcp_size="${DECODE_PCP_SIZE:-${PCP_SIZE:-1}}"
-    local decode_ep="${DECODE_EP:-${EP_SIZE:-1}}"
-    local decode_num_workers="${DECODE_NUM_WORKERS:-1}"
-
-    local dp_json="false"
-    if [ "${DP_ATTENTION:-false}" = "true" ]; then dp_json="true"; fi
-    local prefill_dp_json="$dp_json"
-    if [ "${PREFILL_DP_ATTENTION:-${DP_ATTENTION:-false}}" = "true" ]; then
-        prefill_dp_json="true"
-    else
-        prefill_dp_json="false"
-    fi
-    local decode_dp_json="$dp_json"
-    if [ "${DECODE_DP_ATTENTION:-${DP_ATTENTION:-false}}" = "true" ]; then
-        decode_dp_json="true"
-    else
-        decode_dp_json="false"
-    fi
-
-    # Derive framework/precision from env, fallback to parsing RESULT_FILENAME
-    # RESULT_FILENAME format (from workflow):
-    #   <exp_name>_<precision>_<framework>_tp<...>_ep<...>_dpa_<...>_conc<...>_<runner>
-    local fw="${FRAMEWORK:-}"
-    local prec="${PRECISION:-}"
-    if [[ -z "$fw" || -z "$prec" ]]; then
-        if [[ -n "${RESULT_FILENAME:-}" ]]; then
-            # Extract the two fields immediately before "_tp"
-            # Handles arbitrary underscores in exp_name by matching from the end
-            local parsed
-            parsed=$(echo "${RESULT_FILENAME}" | sed -n 's/.*_\([^_][^_]*\)_\([^_][^_]*\)_tp.*/\1 \2/p')
-            local p1="${parsed%% *}"
-            local p2="${parsed#* }"
-            if [[ -z "$prec" && -n "$p1" && "$p1" != "$parsed" ]]; then
-                prec="$p1"
-            fi
-            if [[ -z "$fw" && -n "$p2" && "$p2" != "$parsed" ]]; then
-                fw="$p2"
-            fi
-        fi
-    fi
-    cat > "${meta_json}" <<META
-{
-  "is_multinode": ${is_multinode_json},
-  "framework": "${fw:-unknown}",
-  "precision": "${prec:-unknown}",
-  "spec_decoding": "${SPEC_DECODING:-}",
-  "tp": ${TP:-1},
-  "pp": ${PP_SIZE:-1},
-  "dcp_size": ${DCP_SIZE:-1},
-  "pcp_size": ${PCP_SIZE:-1},
-  "conc": ${metadata_conc},
-${batch_metadata}  "ep": ${EP_SIZE:-1},
-  "dp_attention": ${dp_json},
-  "prefill_tp": ${prefill_tp},
-  "prefill_pp": ${prefill_pp},
-  "prefill_dcp_size": ${prefill_dcp_size},
-  "prefill_pcp_size": ${prefill_pcp_size},
-  "prefill_ep": ${prefill_ep},
-  "prefill_dp_attention": ${prefill_dp_json},
-  "prefill_num_workers": ${prefill_num_workers},
-  "decode_tp": ${decode_tp},
-  "decode_pp": ${decode_pp},
-  "decode_dcp_size": ${decode_dcp_size},
-  "decode_pcp_size": ${decode_pcp_size},
-  "decode_ep": ${decode_ep},
-  "decode_dp_attention": ${decode_dp_json},
-  "decode_num_workers": ${decode_num_workers},
-  "model": "${model_name:-}",
-  "infmax_model_prefix": "${MODEL_PREFIX:-unknown}",
-  "hw": "${RUNNER_TYPE:-unknown}",
-  "isl": "${ISL:-0}",
-  "osl": "${OSL:-0}"
-}
-META
+    _write_lm_eval_meta_json "$meta_json" "$batch_metadata" "$metadata_conc"
 
     if [ -n "$batch_concs" ]; then
         echo "Prepared batched eval artifacts in: $(pwd)"
@@ -1230,7 +1347,12 @@ _patch_swebench_scoring() {
 
 # SWE-bench requires ~/.modal.toml despite env credentials.
 _ensure_modal_credentials() {
-    if [ "${SWEBENCH_USE_MODAL:-false}" != "true" ]; then return 0; fi
+    # Agentic generation uses swerex_modal sandboxes even when scoring is local.
+    if [ "${SWEBENCH_USE_MODAL:-false}" != "true" ] \
+        && [ "${IS_AGENTIC:-0}" != "1" ] \
+        && [ "${SCENARIO_TYPE:-}" != "agentic-coding" ]; then
+        return 0
+    fi
     # CI secrets may include whitespace or quotes.
     if [ -n "${MODAL_TOKEN_ID:-}" ]; then
         MODAL_TOKEN_ID=$(printf %s "$MODAL_TOKEN_ID" | tr -d "[:space:]\"'")
@@ -1253,7 +1375,7 @@ _ensure_modal_credentials() {
         chmod 600 "$HOME/.modal.toml"
         echo "[swebench] wrote ~/.modal.toml from MODAL_TOKEN_ID/MODAL_TOKEN_SECRET env"
     else
-        echo "WARN: SWEBENCH_USE_MODAL=true but no ~/.modal.toml and no MODAL_TOKEN_ID/MODAL_TOKEN_SECRET env; Modal scoring will fail credential validation" >&2
+        echo "WARN: Modal credentials required but no ~/.modal.toml and no MODAL_TOKEN_ID/MODAL_TOKEN_SECRET env; Modal sandboxes will fail authentication" >&2
     fi
 }
 
@@ -1718,6 +1840,17 @@ install_agentic_deps() {
     rm -rf "$AIPERF_VENV"
     mkdir -p "$AIPERF_UV_CACHE_DIR"
 
+    # Request an explicit interpreter version rather than binding to whatever
+    # `python3` resolves to in the server container. aiperf's pyproject.toml
+    # dropped Python 3.10 support (SemiAnalysisAI/aiperf#1107); the sglang-rocm
+    # /vllm-rocm images still ship 3.10.12 as their default python3, so
+    # `--python "$(command -v python3)"` pinned the venv to an interpreter that
+    # can no longer satisfy `requires-python = ">=3.11,<3.14"`, leaving the venv
+    # without aiperf/hf installed (silent until the aiperf/hf calls below hit
+    # "No such file or directory"). uv auto-downloads a standalone build of the
+    # requested version when the system doesn't have one (same network path
+    # already used to fetch uv itself above), so this doesn't depend on the
+    # container image bundling a new-enough Python.
     UV_CACHE_DIR="$AIPERF_UV_CACHE_DIR" \
         "$AIPERF_UV_BIN" venv --python "${AIPERF_PYTHON_VERSION:-3.11}" "$AIPERF_VENV"
     UV_CACHE_DIR="$AIPERF_UV_CACHE_DIR" \
