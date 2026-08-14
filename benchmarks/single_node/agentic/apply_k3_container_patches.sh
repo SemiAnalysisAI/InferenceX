@@ -75,8 +75,15 @@ else
   rm -rf "$LOCAL_AITER"; git clone "$AITER_REPO" "$LOCAL_AITER"
 fi
 git config --global --add safe.directory "$LOCAL_AITER"
-git -C "$LOCAL_AITER" fetch --tags --depth=1 origin "$AITER_PIN" 2>/dev/null \
+# Fetch with FULL history: the #4579/#4575 assertions below are ancestry checks,
+# and a --depth=1 fetch grafts the tree shallow at $AITER_PIN so HEAD has no
+# parents and merge-base --is-ancestor reports false for commits that really are
+# ancestors. Unshallow a reused/staged checkout for the same reason.
+git -C "$LOCAL_AITER" fetch --tags origin "$AITER_PIN" 2>/dev/null \
   || git -C "$LOCAL_AITER" fetch --tags origin 2>/dev/null || true
+if [ "$(git -C "$LOCAL_AITER" rev-parse --is-shallow-repository)" = "true" ]; then
+  git -C "$LOCAL_AITER" fetch --unshallow --tags origin 2>/dev/null || true
+fi
 git -C "$LOCAL_AITER" reset --hard "$AITER_PIN"
 git -C "$LOCAL_AITER" submodule update --init 3rdparty/composable_kernel
 [ -d "$LOCAL_AITER/3rdparty/composable_kernel/include" ] \
