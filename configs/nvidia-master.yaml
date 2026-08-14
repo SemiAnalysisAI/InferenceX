@@ -8029,8 +8029,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-2p2d:
 # eagle-topk 1, 4 draft tokens = 3 speculative tokens), with acceptance pinned
 # to the golden AL 2.99 (golden_al_distribution/glm5.2_mtp.yaml, thinking_on,
 # K=3) through SGLANG_SIMULATE_ACC_*. Image is bumped to v0.5.16-cu130: it is
-# the first release that reads SGLANG_SIMULATE_ACC_TOKEN_MODE, and it is the
-# tag the GLM-5.2 GB300 dynamo-sglang agentic recipes already run.
+# the first release that reads SGLANG_SIMULATE_ACC_TOKEN_MODE.
 #
 # Cookbook low-latency arm (TP8, fp8 KV, cutedsl bf16 GEMM) only, on the AgentX
 # MTP concurrency grid [1, 4, 8, 12, 16]: steps of at least 2 because
@@ -8063,7 +8062,7 @@ glm5.2-fp4-b300-sglang-agentic-mtp:
 # acceptance pinned to the golden AL 2.99 (golden_al_distribution/glm5.2_mtp.yaml,
 # thinking_on, K=3) through SGLANG_SIMULATE_ACC_*. Image lmsysorg/sglang:v0.5.16-cu130
 # is the first release that reads SGLANG_SIMULATE_ACC_TOKEN_MODE and is what the
-# B300 sibling and the GLM-5.2 GB300 dynamo-sglang agentic recipes run.
+# B300 sibling runs.
 #
 # Same single arm and concurrency grid as glm5.2-fp4-b300-sglang-agentic-mtp so
 # the two SKUs are directly comparable: cookbook low-latency TP8 with HiCache
@@ -8101,7 +8100,8 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-agg:
       # aggregated 1-worker TP8 (prefill+decode on the same GPUs)
       - spec-decoding: mtp
         conc-list: [2, 4]
-        kv-offloading: none
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
         prefill:
           num-worker: 1
           tp: 8
@@ -8135,7 +8135,8 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg:
       # low-latency 1P2D TP4-prefill / TP4-decode (2 decode workers)
       - spec-decoding: mtp
         conc-list: [48]
-        kv-offloading: none
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
         prefill:
           num-worker: 1
           tp: 4
@@ -8151,7 +8152,8 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg:
       # low-latency 1P4D TP4-prefill / TP4-decode (4 decode workers)
       - spec-decoding: mtp
         conc-list: [48]
-        kv-offloading: none
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
         prefill:
           num-worker: 1
           tp: 4
@@ -8167,7 +8169,8 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg:
       # low-latency 1P6D TP4-prefill / TP4-decode (6 decode workers)
       - spec-decoding: mtp
         conc-list: [45]
-        kv-offloading: none
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
         prefill:
           num-worker: 1
           tp: 4
@@ -8183,7 +8186,8 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg:
       # high-throughput 2P1D DEP8-prefill / DEP16-decode
       - spec-decoding: mtp
         conc-list: [128]
-        kv-offloading: none
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
         prefill:
           num-worker: 2
           tp: 8
@@ -8198,7 +8202,8 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg:
           dp-attn: true
       - spec-decoding: mtp
         conc-list: [192]
-        kv-offloading: none
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
         prefill:
           num-worker: 2
           tp: 8

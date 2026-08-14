@@ -10,16 +10,16 @@ base:
   frontend:
     type: dynamo
     nginx_session_affinity: true
-    nginx_session_affinity_header: X-Correlation-ID
+    nginx_session_affinity_header: X-Dynamo-Session-ID
+    enable_multiple_frontends: true
     env:
-      DYN_ROUTER_TEMPERATURE: '10000000'
       PIP_BREAK_SYSTEM_PACKAGES: '1'
     args:
       router-mode: kv
       active-decode-blocks-threshold: None
       active-prefill-tokens-threshold: None
       active-prefill-tokens-threshold-frac: None
-      router-session-affinity-ttl-secs: 1200
+      router-session-affinity-ttl-secs: 3600
   dynamo:
     hash: 71eb001e17fa73c742f0afe1a6ed96836cb135fd
     install: true
@@ -185,7 +185,6 @@ zip_override_mtp_agentx_hightpt:
         deepep-mode: low_latency
         enable-dp-attention: true
         enable-dp-lm-head: true
-        enable-flashinfer-allreduce-fusion: false
         ep-dispatch-algorithm: static
         ep-num-redundant-experts: 0
         expert-parallel-size: 16
@@ -202,9 +201,6 @@ zip_override_mtp_agentx_hightpt:
         expert-parallel-size: 8
         max-prefill-tokens: 8192
         tensor-parallel-size: 8
-  frontend:
-    enable_multiple_frontends: true
-    num_additional_frontends: 4
   resources:
     decode_nodes: 4
     decode_workers: 1
@@ -214,9 +210,6 @@ zip_override_mtp_agentx_hightpt:
     prefill_workers: 2
 zip_override_mtp_agentx_lowlat:
   name: [agentx-1p2d_tp4-c48, agentx-1p4d_tp4-c48, agentx-1p6d_tp4-c45]
-  frontend:
-    enable_multiple_frontends: true
-    num_additional_frontends: 4
   resources:
     decode_nodes: [2, 4, 6]
     decode_workers: [2, 4, 6]
