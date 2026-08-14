@@ -47,7 +47,6 @@ backend:
       enable-expert-parallel: true
       trust-remote-code: true
       enable-prefix-caching: true
-      enable-prompt-tokens-details: true
       kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
       attention-config: '{"backend":"FLASHINFER","use_trtllm_attention":true,"indexer_kv_dtype":"fp8"}'
       block-size: 128

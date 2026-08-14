@@ -38,7 +38,6 @@ backend:
       enable-expert-parallel: true
       trust-remote-code: true
       enable-prefix-caching: true
-      enable-prompt-tokens-details: true
       attention-config: '{"backend":"FLASHINFER","use_trtllm_attention":true,"indexer_kv_dtype":"fp8"}'
       block-size: 128
       gpu-memory-utilization: 0.95
