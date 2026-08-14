@@ -193,6 +193,24 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         python3 -m pip show lmcache 2>/dev/null | grep -E "^(Version|Location):"
         python3 -c "import lmcache, glob, os; print('lmcache:', lmcache.__file__); print('c_ops so:', glob.glob(os.path.join(os.path.dirname(lmcache.__file__), 'c_ops*')))"
         ls -1 /usr/local/cuda*/lib64/libcudart.so* /usr/lib/x86_64-linux-gnu/libcudart.so* 2>/dev/null || true
+        # device_ops.ensure_native() swallows this in `except ImportError`, so
+        # surface the real dlopen error ourselves -- without it the failure is
+        # indistinguishable from a missing file.
+        python3 - <<'PYEOF' || true
+import traceback
+try:
+    import lmcache.c_ops
+    print("c_ops import: OK")
+except BaseException as exc:
+    print("c_ops import FAILED:", type(exc).__name__, exc)
+    traceback.print_exc()
+PYEOF
+        # ldd names the missing/unresolved shared object directly.
+        LMCACHE_SO=$(python3 -c "import lmcache, glob, os; print((glob.glob(os.path.join(os.path.dirname(lmcache.__file__), 'c_ops*.so')) or [''])[0])")
+        if [ -n "$LMCACHE_SO" ]; then
+            echo "ldd $LMCACHE_SO"
+            ldd "$LMCACHE_SO" 2>&1 | grep -E "not found|libcudart|libtorch|libc10" || true
+        fi
         python3 -c \
             "import cupy; import lmcache.integration.vllm.lmcache_mp_connector; import opentelemetry.exporter.prometheus" \
             >/dev/null
