@@ -27,6 +27,9 @@ elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH="/data/models/dsr1-fp8"
     export SERVED_MODEL_NAME="deepseek-r1-fp8"
     export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
+elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-trt" ]]; then
+    export MODEL_PATH="${MODEL_PATH:-/scratch/models/DeepSeek-V4-Pro}"
+    export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
 elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-vllm" ]]; then
     SELECTED_MODEL_PATH=""
     if [[ -n "${MODEL_PATH:-}" && -d "${MODEL_PATH}" ]]; then
@@ -57,7 +60,7 @@ elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" && $FRAMEWORK == "dy
     export MODEL_PATH="/data/models/MiniMax-M3-MXFP8"
     export SRT_SLURM_MODEL_PREFIX="MiniMaxAI/MiniMax-M3-MXFP8"
 else
-    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4 with dynamo-vllm or dynamo-sglang, minimaxm2.5-fp4 with dynamo-vllm, minimaxm2.5-fp8 with dynamo-vllm, minimaxm3-fp4 with dynamo-vllm, minimaxm3-fp8 with dynamo-vllm"
+    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4 with dynamo-trt, dynamo-vllm, or dynamo-sglang, minimaxm2.5-fp4 with dynamo-vllm, minimaxm2.5-fp8 with dynamo-vllm, minimaxm3-fp4 with dynamo-vllm, minimaxm3-fp8 with dynamo-vllm"
     exit 1
 fi
 
@@ -73,6 +76,19 @@ fi
 if [[ "$IS_AGENTIC" == "1" ]]; then
     git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR" || exit 1
+elif [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
+    git clone --branch v1.0.50 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
+    cd "$SRT_REPO_DIR" || exit 1
+    git checkout e4019633c9e2bc25f38c44b81edf52bb0504d937 || exit 1
+    mkdir -p recipes/trtllm/deepseek-v4
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4" \
+        recipes/trtllm/deepseek-v4 || exit 1
+    # Dynamo installation enables enroot root remapping by default. Disable it for
+    # TensorRT-LLM MPI workers so the container can use the host PMIx socket.
+    sed -i 's/CONTAINER_REMAP_ROOT_EXPORT = {"ENROOT_REMAP_ROOT": "yes"}/CONTAINER_REMAP_ROOT_EXPORT = {"ENROOT_REMAP_ROOT": "no"}/' \
+        src/srtctl/core/slurm.py
+    grep -Fq 'CONTAINER_REMAP_ROOT_EXPORT = {"ENROOT_REMAP_ROOT": "no"}' \
+        src/srtctl/core/slurm.py || exit 1
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR" || exit 1
@@ -135,9 +151,28 @@ NGINX_IMAGE="nginx:1.27.4"
 SQUASH_FILE="/data/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 NGINX_SQUASH_FILE="/data/squash/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
-# Import containers via enroot
-srun -N 1 -A $SLURM_ACCOUNT -p $SLURM_PARTITION bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
-srun -N 1 -A $SLURM_ACCOUNT -p $SLURM_PARTITION bash -c "enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE"
+# Import containers via enroot. The DSV4 TensorRT-LLM matrix shares squash
+# destinations across its jobs, so serialize imports and reuse valid images.
+if [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "dsv4" ]]; then
+    import_squash_b300() {
+        local squash="$1" image="$2"
+        srun -N 1 -A "$SLURM_ACCOUNT" -p "$SLURM_PARTITION" bash -c "
+            exec 9>\"${squash}.lock\"
+            flock -w 600 9 || { echo 'Failed to acquire lock for ${squash}'; exit 1; }
+            if unsquashfs -l \"${squash}\" >/dev/null 2>&1; then
+                echo 'Squash already exists and is valid, skipping import: ${squash}'
+            else
+                rm -f \"${squash}\"
+                enroot import -o \"${squash}\" \"docker://${image}\"
+            fi
+        "
+    }
+    import_squash_b300 "$SQUASH_FILE" "$IMAGE"
+    import_squash_b300 "$NGINX_SQUASH_FILE" "$NGINX_IMAGE"
+else
+    srun -N 1 -A "$SLURM_ACCOUNT" -p "$SLURM_PARTITION" bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
+    srun -N 1 -A "$SLURM_ACCOUNT" -p "$SLURM_PARTITION" bash -c "enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE"
+fi
 
 export ISL="$ISL"
 export OSL="$OSL"
@@ -145,6 +180,11 @@ export EVAL_ONLY="${EVAL_ONLY:-false}"
 
 # Create srtslurm.yaml for srtctl
 SRTCTL_ROOT="${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"
+DEFAULT_MOUNTS_BLOCK='default_mounts:
+  "/opt/ucx-no-ud": "/usr/local/ucx"'
+if [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "dsv4" ]]; then
+    DEFAULT_MOUNTS_BLOCK=""
+fi
 echo "Creating srtslurm.yaml configuration..."
 cat > srtslurm.yaml <<EOF
 # SRT SLURM Configuration for B300
@@ -169,8 +209,7 @@ containers:
   "${IMAGE}": "${SQUASH_FILE}"
   nginx-sqsh: "${NGINX_SQUASH_FILE}"
 use_exclusive_sbatch_directive: true
-default_mounts:
-  "/opt/ucx-no-ud": "/usr/local/ucx"
+${DEFAULT_MOUNTS_BLOCK}
 EOF
 
 echo "Generated srtslurm.yaml:"
@@ -213,6 +252,9 @@ SRTCTL_APPLY_ARGS=(
 # the login host cannot stat it even though workers can. Keep this bypass
 # scoped to those recipe sets; runtime model loading still validates the path.
 if [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" && ( "$CONFIG_FILE" == recipes/vllm/minimax-m3/b300-fp4/8k1k/mtp/*.yaml || "$CONFIG_FILE" == recipes/vllm/minimax-m3/b300-fp4/8k1k/*-tp1-*.yaml ) ]]; then
+    SRTCTL_APPLY_ARGS+=(--no-preflight)
+fi
+if [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "dsv4" && "$MODEL_PATH" == /scratch/models/* ]]; then
     SRTCTL_APPLY_ARGS+=(--no-preflight)
 fi
 if [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" && "$MODEL_PATH" == /scratch/models/* ]]; then
