@@ -260,8 +260,18 @@ PYEOF
         # size of the node's /dev/shm mount.
         LMCACHE_L1_SIZE_GB="$TOTAL_CPU_DRAM_GB"
 
+        # Launch via python with torch imported FIRST, instead of the bare
+        # `lmcache` console script. CudaDeviceOps.ensure_native() sets
+        # `self._native_bound = True` BEFORE attempting `import lmcache.c_ops`,
+        # so if that first attempt happens while torch is not yet loaded the
+        # extension is written off permanently and the server silently runs the
+        # broken torch fallback for its whole life. The same import succeeds
+        # once torch is up -- this run proved it ("c_ops import (torch
+        # preloaded): OK") in the very process whose server logged "compiled
+        # extension not found". Preloading torch removes the ordering hazard.
         LMCACHE_CMD=(
-            lmcache server
+            python3 -c "import sys, torch; from lmcache.cli.main import main; sys.argv[0]='lmcache'; main()"
+            server
             --host 127.0.0.1
             --port "$LMCACHE_PORT"
             --http-host 127.0.0.1
