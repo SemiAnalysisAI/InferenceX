@@ -305,6 +305,18 @@ PYEOF
         # Which torch library actually EXPORTS the symbol c_ops needs?
         # LD_PRELOAD of libc10/libtorch_cpu/libtorch did not resolve it, so
         # locate the definition rather than guessing which .so to preload.
+        # Which torch is this, and what does its c10 actually export under
+        # c10::impl::cow? The wheel embeds no torch version, so the mismatch
+        # has to be characterised from the symbols. c_ops needs BOTH
+        # c10::impl::cow::is_cow_data_ptr and ::materialize_cow_storage.
+        python3 -c "import torch; print('  torch:', torch.__version__, '| built with CUDA', torch.version.cuda)"
+        echo "  --- all c10::impl::cow symbols exported by libc10.so ---"
+        nm -D --defined-only "$TORCH_LIB_DIR/libc10.so" 2>/dev/null | grep -oE "_ZN3c104impl3cow[A-Za-z0-9_]*" | sort -u | head -20 || true
+        echo "  --- (count) ---"
+        nm -D --defined-only "$TORCH_LIB_DIR/libc10.so" 2>/dev/null | grep -c "3cow" || true
+        echo "  --- what c_ops requires ---"
+        nm -D --undefined-only "$LMCACHE_SO" 2>/dev/null | grep -oE "_ZN3c104impl3cow[A-Za-z0-9_]*" | sort -u || true
+
         echo "=== searching torch libs for materialize_cow_storage ==="
         for _so in "$TORCH_LIB_DIR"/libc10.so "$TORCH_LIB_DIR"/libc10_cuda.so \
                    "$TORCH_LIB_DIR"/libtorch.so "$TORCH_LIB_DIR"/libtorch_cpu.so \
