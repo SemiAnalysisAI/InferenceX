@@ -13,12 +13,12 @@ set -x
 # variant whose numbers are apples-to-apples with the B300-MTP baseline
 # (synthetic acceptance vs synthetic acceptance -- see the SPEC_CONFIG block).
 #
-# Attention: ROCM_AITER_MLA (asm persistent) for BOTH target and draft. On ROCm,
-# the DSpark draft's semi-autoregressive parallel drafting is forced CAUSAL
-# (dflash_config.causal=true, applied by apply_k3_container_patches.sh) so the
-# draft no longer needs TRITON_MLA's non-causal path and runs on the same fp8 asm
-# path as the target. This requires the vLLM ASM patches + DSpark fp8-asm layer
-# baked into the validated base image below.
+# Attention: target on ROCM_AITER_MLA (fp8 asm persistent). The DSpark DRAFT runs
+# TRITON_MLA with its own bf16 KV and non-causal parallel drafting, matching the
+# reference c8 cell (3562.77 tok/s/GPU). The fp8-asm draft alternative
+# (DRAFT_BACKEND=ROCM_AITER_MLA, which forces dflash_config.causal=true) is fully
+# supported by the patch stack and measured 3375.14 -- it wins on cache hit rate
+# but loses on ITL. dflash_config.causal is derived from DRAFT_BACKEND below.
 #
 # Validated base image (carries the vLLM patches + AITER build + DSpark layer):
 #   vllm/vllm-openai-rocm:nightly-cb8104839c141609d99f1254459ef3a4f1bd4263
@@ -88,11 +88,17 @@ else
 fi
 if [ -n "$ROCR_VISIBLE_DEVICES" ]; then export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"; fi
 
-# Force the DSpark draft causal (non-causal parallel drafting is a cudagraph OOB
-# source on ROCm; with causal=true the draft runs the fp8 asm path like the
-# target). Idempotent write — the draft may live anywhere the harness staged it,
-# so set it here rather than relying on the bootstrap's /dev/shm-scoped step.
+# dflash_config.causal must match the draft's attention backend, so derive it
+# rather than pinning it: ROCM_AITER_MLA needs causal=true (its fp8 asm path has
+# no non-causal kernel), while TRITON_MLA is the only ROCm MLA backend that
+# supports DSpark's non-causal multi-token parallel drafting and wants
+# causal=false. Written explicitly on every run because the HF cache is shared
+# and a previous run may have left the opposite value.
 # DRAFT_MODEL_PATH may be a bare repo id, so fall back to the HF cache snapshot.
+case "${DRAFT_BACKEND:-TRITON_MLA}" in
+    *AITER*) DRAFT_CAUSAL=true  ;;
+    *)       DRAFT_CAUSAL=false ;;
+esac
 DRAFT_CFG_DIR="$DRAFT_MODEL_PATH"
 if [ ! -f "$DRAFT_CFG_DIR/config.json" ]; then
     DRAFT_CFG_DIR="$(python3 - "$DRAFT_MODEL_PATH" <<'PZ'
@@ -109,20 +115,19 @@ if [ ! -f "$DRAFT_CFG_DIR/config.json" ]; then
     echo "!! no draft config.json for '$DRAFT_MODEL_PATH' (resolved '${DRAFT_CFG_DIR:-}')" >&2
     exit 1
 fi
-if true; then
-    python3 - "$DRAFT_CFG_DIR/config.json" <<'PY'
+python3 - "$DRAFT_CFG_DIR/config.json" "$DRAFT_CAUSAL" <<'PY'
 import json, sys
-f = sys.argv[1]
+f, want = sys.argv[1], sys.argv[2] == "true"
 c = json.load(open(f))
 d = c.setdefault("dflash_config", {})
-if d.get("causal") is True:
-    print("draft already forced causal")
+if d.get("causal") == want:
+    print(f"draft dflash_config.causal already {want}")
 else:
-    d["causal"] = True
+    prev = d.get("causal")
+    d["causal"] = want
     json.dump(c, open(f, "w"), indent=2)
-    print("forced draft dflash_config.causal=true:", f)
+    print(f"set draft dflash_config.causal={want} (was {prev}):", f)
 PY
-fi
 
 # ---- MI355X day-0 serving environment (AITER + fp8 ASM MLA) ------------------
 export VLLM_ROCM_USE_AITER=1
@@ -240,11 +245,18 @@ SYNTHETIC_ACCEPT_LEN="${SYNTHETIC_ACCEPT_LEN:-2.51}"
 # same as target). Throughput runs pin synthetic acceptance; EVAL_ONLY accuracy
 # runs use real block verification (synthetic commits drafted tokens regardless
 # of the target's logits, so generated text would be wrong -> eval scores 0).
-DRAFT_BACKEND="${DRAFT_BACKEND:-ROCM_AITER_MLA}"
+# TRITON_MLA + its own bf16 draft KV, matching amd/kimi-k3-agentic-perf-tuning's
+# 3562.77 tok/s/GPU c8 cell. Our fp8-asm draft (ROCM_AITER_MLA) reached 3375.14
+# with a BETTER cache hit rate (93.6% vs 89.3%) and a bigger pool, but ITL p90
+# 38.59 ms vs 28.11 ms -- the whole residual gap is decode speed, and the draft
+# backend is the last structural difference from the reference. Set
+# DRAFT_BACKEND=ROCM_AITER_MLA to go back to the fp8 asm draft.
+DRAFT_BACKEND="${DRAFT_BACKEND:-TRITON_MLA}"
+DRAFT_KV_CACHE_DTYPE="${DRAFT_KV_CACHE_DTYPE:-auto}"
 if [ "${EVAL_ONLY:-false}" = "true" ]; then
-    SPEC_CONFIG="{\"method\": \"dspark\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"$DRAFT_BACKEND\", \"draft_sample_method\": \"probabilistic\", \"rejection_sample_method\": \"block\"}"
+    SPEC_CONFIG="{\"method\": \"dspark\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"$DRAFT_BACKEND\", \"kv_cache_dtype\": \"$DRAFT_KV_CACHE_DTYPE\", \"draft_sample_method\": \"probabilistic\", \"rejection_sample_method\": \"block\"}"
 else
-    SPEC_CONFIG="{\"method\": \"dspark\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"$DRAFT_BACKEND\", \"draft_sample_method\": \"probabilistic\", \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
+    SPEC_CONFIG="{\"method\": \"dspark\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"$DRAFT_BACKEND\", \"kv_cache_dtype\": \"$DRAFT_KV_CACHE_DTYPE\", \"draft_sample_method\": \"probabilistic\", \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
 fi
 
 # ---- Mandated DSpark serving knobs (do not change) --------------------------
