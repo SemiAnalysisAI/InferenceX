@@ -5980,6 +5980,7 @@
   description:
     - "Inject the committed synthetic MTP acceptance length only for GB300 AgentX throughput; keep eval-only jobs on real target verification."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2571
+  
 
 - config-keys:
     - minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp
