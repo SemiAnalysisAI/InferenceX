@@ -49,7 +49,12 @@ frontend:
   type: dynamo
   enable_multiple_frontends: false
   args:
-    dyn-chat-processor: "dynamo"
+    # Use vLLM's Kimi K3 parser so OpenAI responses expose structured
+    # tool_calls instead of raw XTML in message.content.
+    dyn-chat-processor: "vllm"
+    tool-call-parser: "kimi_k3"
+    reasoning-parser: "kimi_k3"
+    enable-auto-tool-choice: true
     router-mode: "kv"
     router-kv-events: true
     router-temperature: "0"
@@ -108,8 +113,6 @@ backend:
       enable-prefix-caching: true
       scheduler-cls: "vllm.v1.core.sched.async_scheduler.AsyncScheduler"
       dyn-tool-call-parser: "kimi_k3"
-      dyn-enable-structural-tag: true
-      dyn-structural-tag-scope: "always"
       reasoning-parser: "kimi_k3"
       dyn-reasoning-parser: "kimi_k3"
       no-enable-flashinfer-autotune: true
