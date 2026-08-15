@@ -18,23 +18,26 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y libpci-dev libgrpc++-dev protobuf-compiler-grpc
 
-# Some engine images ship a slimmed /usr/include while dpkg still records the
-# -dev packages as installed, so apt reports "already the newest version" and
-# installs nothing. Reinstall to put the headers back before giving up.
-if [[ ! -s /usr/include/pci/pci.h || ! -s /usr/include/grpcpp/grpcpp.h ]]; then
-    echo "[mori-build] headers absent though packages are recorded installed; reinstalling"
-    apt-get install -y --reinstall libpci-dev libgrpc++-dev protobuf-compiler-grpc
-fi
-
-# Named gates: a bare `test -s` fails silently, which previously left the CI
-# log ending mid-apt with no indication of which dependency was missing.
-for header in /usr/include/pci/pci.h /usr/include/grpcpp/grpcpp.h; do
-    if [[ ! -s "$header" ]]; then
-        echo "[mori-build] FATAL: missing build header $header after apt-get install" >&2
-        exit 1
+# Probe with the compiler rather than testing a hard-coded path. libpci-dev
+# installs pci/pci.h under the multiarch prefix (/usr/include/x86_64-linux-gnu),
+# which is on the default include path but absent from /usr/include/pci, so a
+# path test reports the dependency missing on an image where it is fine.
+check_header() {
+    local header=$1 compiler=$2 src
+    src=$(mktemp "/tmp/mori_dep_XXXXXX.${3}")
+    printf '#include <%s>\nint main(void){return 0;}\n' "$header" >"$src"
+    if "$compiler" -fsyntax-only "$src" 2>/dev/null; then
+        echo "[mori-build] $header is on the include path"
+        rm -f "$src"
+        return 0
     fi
-    echo "[mori-build] found $header"
-done
+    rm -f "$src"
+    echo "[mori-build] FATAL: $compiler cannot find <$header> after apt-get install" >&2
+    return 1
+}
+
+check_header pci/pci.h cc c
+check_header grpcpp/grpcpp.h c++ cc
 
 echo "[mori-build] installing build requirements"
 python3 -m pip install --break-system-packages -r requirements-build.txt
