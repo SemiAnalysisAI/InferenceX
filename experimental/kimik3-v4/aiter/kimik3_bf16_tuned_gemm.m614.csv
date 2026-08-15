@@ -1,0 +1,5 @@
+gfx,cu_num,M,N,K,bias,dtype,outdtype,scaleAB,bpreshuffle,libtype,solidx,splitK,us,kernelName,err_ratio,tflops,bw
+gfx950,256,614,6288,7168,False,torch.bfloat16,torch.bfloat16,False,False,torch,0,0,75.6884,,0,731272.63,1.41
+gfx950,256,614,1536,128,False,torch.bfloat16,torch.bfloat16,False,False,flydsl,708,1,3.1819,flydsl_gemm2_abf16_wbf16_bf16_t64x64x64_split_k1_block_m_warp4_block_n_warp1_block_k_warp1_async_copyTrue_b_to_ldsTrue_b_preshuffleFalse_c_to_ldsFalse_gfx950,0,75878.52,0.77
+gfx950,256,614,896,7168,False,torch.bfloat16,torch.bfloat16,False,False,flydsl,570,1,31.6793,flydsl_gemm4_abf16_wbf16_bf16_t32x64x64_split_k1_block_m_warp1_block_n_warp2_block_k_warp1_async_copyTrue_b_to_ldsTrue_b_preshuffleFalse_c_to_ldsFalse_gfx950,0,248959.67,0.72
+gfx950,256,614,3584,7168,False,torch.bfloat16,torch.bfloat16,False,False,flydsl,540,1,67.0567,flydsl_gemm2_abf16_wbf16_bf16_t32x64x64_split_k1_block_m_warp1_block_n_warp1_block_k_warp1_async_copyTrue_b_to_ldsTrue_b_preshuffleFalse_c_to_ldsFalse_gfx950,0,470459.34,0.96
