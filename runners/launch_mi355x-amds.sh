@@ -313,6 +313,8 @@ else
         BENCHMARK_SCRIPT="$SCRIPT_FALLBACK"
     fi
 
+    srun --jobid=$JOB_ID bash -c "du -h /dev/shm" || true
+
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
         --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache \
