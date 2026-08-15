@@ -6,14 +6,14 @@ name: "svf-vllm-disagg-gb200-2p1d-dep8-dep16-c1024-mtp2-agentic"
 
 model:
   path: "deepseek-v4-pro"
-  container: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-426e59f"
+  container: "vllm/vllm-openai:nightly"
   precision: "fp4"
 
 identity:
   model:
     repo: "deepseek-ai/DeepSeek-V4-Pro"
   container:
-    image: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-426e59f"
+    image: "vllm/vllm-openai:nightly"
   frameworks:
     dynamo: "1.3.0.dev20260720"
 
@@ -98,7 +98,7 @@ backend:
       tokenizer-mode: "deepseek_v4"
       attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"use_fp4_indexer_cache":true}'
       speculative-config: '{"method":"mtp","num_speculative_tokens":3}'
-      moe-backend: "deep_gemm_amxf4_mega_moe"
+      moe-backend: "deep_gemm_mega_moe"
       numa-bind: true
       numa-bind-nodes: [0, 0, 1, 1]
     decode:
@@ -125,7 +125,7 @@ backend:
       tokenizer-mode: "deepseek_v4"
       attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"use_fp4_indexer_cache":true}'
       speculative-config: '{"method":"mtp","num_speculative_tokens":3}'
-      moe-backend: "deep_gemm_amxf4_mega_moe"
+      moe-backend: "deep_gemm_mega_moe"
       numa-bind: true
       numa-bind-nodes: [0, 0, 1, 1]
   prefill_environment:

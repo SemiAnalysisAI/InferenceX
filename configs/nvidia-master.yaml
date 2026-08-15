@@ -7599,11 +7599,15 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
 
 # GB200 mirror of the dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-{agg,disagg}
 # tuning above (PR #2571). Any worker that used 4 GPUs on GB300 uses 8 on
-# GB200 here; every other setting is copied unchanged. Kept as separate
+# GB200 here. Two deltas from the GB300 recipes: the stock vllm/vllm-openai
+# nightly image (the GB300 pinned nightly-dev arm64 cu13.0.1 build is
+# ephemeral and already pruned) and the regular deep_gemm_mega_moe backend
+# instead of deep_gemm_amxf4_mega_moe (W4A4 AMXF4 MegaMoE isn't in stock
+# nightly yet). Every other setting is copied unchanged. Kept as separate
 # mtp2 keys/recipe files so the existing GB200 AgentX MTP recipes above are
 # untouched.
 dsv4-fp4-gb200-dynamo-vllm-agentic-mtp2-agg:
-  image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-426e59f
+  image: vllm/vllm-openai:nightly
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:gb200-nv
@@ -7673,7 +7677,7 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-mtp2-agg:
           dp-attn: false
 
 dsv4-fp4-gb200-dynamo-vllm-agentic-mtp2-disagg:
-  image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-426e59f
+  image: vllm/vllm-openai:nightly
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:gb200-nv
