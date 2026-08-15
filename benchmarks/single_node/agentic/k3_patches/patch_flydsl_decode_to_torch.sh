@@ -27,6 +27,16 @@ CSV="${CSV:-/opt/aiter-local/aiter/configs/merged_bf16_tuned_gemm.csv}"
 [ -f "$CSV" ] || { echo "!! tuned GEMM CSV not found at $CSV" >&2; exit 1; }
 
 cp -n "$CSV" "$CSV.pre_flydsl_fix.bak" || true
+# Count BEFORE rewriting. "0 remaining" alone cannot distinguish "converted N"
+# from "the table never had these shapes" — the latter means K3's dense decode
+# GEMMs have no tuned entry at all and fall back to the untuned heuristic.
+sel='$3<=192 && ( (($4==1024||$4==384)&&$5==7168) || ($4==7168&&$5==512) )'
+before_flydsl=$(awk -F, "\$11==\"flydsl\" && $sel" "$CSV" | wc -l)
+before_any=$(awk -F, "NR>1 && $sel" "$CSV" | wc -l)
+echo "K3 dense decode shapes (M<=192) present in table: $before_any (of which flydsl: $before_flydsl)"
+if [ "$before_any" -eq 0 ]; then
+  echo "!! WARNING: no tuned rows for the K3 dense decode shapes — dense decode GEMMs will run UNTUNED" >&2
+fi
 awk -F, -v OFS="," '
 NR==1 {print; next}
 # NOTE: encode exactly like a native torch row -> splitK(col13)=0, kernelName(col15)=native.
@@ -38,5 +48,6 @@ NR==1 {print; next}
 }
 {print}
 ' "$CSV" > "$CSV.new" && mv "$CSV.new" "$CSV"
-echo "flydsl rows remaining for K3 dense shapes at M<=192 (expect 0): $(awk -F, '$11=="flydsl" && $3<=192 && ( (($4==1024||$4==384)&&$5==7168) || ($4==7168&&$5==512) )' "$CSV" | wc -l)"
+after_flydsl=$(awk -F, "\$11==\"flydsl\" && $sel" "$CSV" | wc -l)
+echo "flydsl->torch converted: $(( before_flydsl - after_flydsl )) rows; flydsl remaining (expect 0): $after_flydsl"
 echo "flydsl->torch reroute applied to $CSV"

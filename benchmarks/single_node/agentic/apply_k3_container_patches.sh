@@ -108,12 +108,29 @@ say "2/9 aiter a16w16 split-K graph-safety guard (AITER_ALLOW_SPLITK=1 to re-ena
 python3 "$PATCHES/patch_aiter_splitk_cudagraph.py"
 
 # ---------------------------------------------------------------------------
-say "3/9 install + merge tuned K3 BF16 GEMM CSV"
+say "3/9 install tuned K3 BF16 GEMM CSV"
 CONFIGS="$LOCAL_AITER/aiter/configs"
 mkdir -p "$CONFIGS/model_configs"
 cp "$TUNED_CSV" "$CONFIGS/model_configs/kimik3_bf16_tuned_gemm.csv"
 cmp -s "$TUNED_CSV" "$CONFIGS/model_configs/kimik3_bf16_tuned_gemm.csv" \
   || { echo "!! tuned GEMM CSV copy verification failed" >&2; exit 1; }
+# The measured unified-v2 image ships the PRE-MERGED table, not a live merge:
+# its Docker build runs with K3_DOCKER_BUILD_NO_GPU=1, which takes the copy
+# branch, and verify_unified_image.sh asserts 3032 lines + this exact sha256.
+# A live merge on a fresh aiter checkout reproduces 3027 rows, so re-merging
+# silently serves a different tuned table than the one that was measured.
+# K3_LIVE_GEMM_MERGE=1 restores the merge (e.g. after retuning on a node).
+MERGED_DEST="$CONFIGS/merged_bf16_tuned_gemm.csv"
+PREMERGED_CSV="$PATCHES/merged_bf16_tuned_gemm.v1.csv"
+PREMERGED_SHA=72d56b89d3aa57c29ae01f594929543ab9dae98be2df358fc20ce977a0a82a3e
+if [ "${K3_LIVE_GEMM_MERGE:-0}" != "1" ] && [ -f "$PREMERGED_CSV" ]; then
+  got=$(sha256sum "$PREMERGED_CSV" | awk '{print $1}')
+  [ "$got" = "$PREMERGED_SHA" ] \
+    || { echo "!! measured GEMM CSV sha mismatch: $got != $PREMERGED_SHA" >&2; exit 1; }
+  cp "$PREMERGED_CSV" "$MERGED_DEST"
+  echo "  installed measured unified-v2 merged BF16 GEMM CSV ($(wc -l < "$MERGED_DEST") lines, sha ${PREMERGED_SHA:0:12})"
+else
+  echo "  live-merging BF16 GEMM CSVs (K3_LIVE_GEMM_MERGE=${K3_LIVE_GEMM_MERGE:-0})"
 python3 - "$CONFIGS" <<'PY'
 import os, shutil, sys
 from pathlib import Path
@@ -138,6 +155,7 @@ dest = configs / "merged_bf16_tuned_gemm.csv"
 shutil.copyfile(merged, dest)
 print(f"  merged BF16 GEMM CSV -> {dest}")
 PY
+fi
 
 # ---------------------------------------------------------------------------
 if [ "${SKIP_TRITON:-0}" = "1" ]; then
@@ -217,6 +235,51 @@ chk "$KDA_CHUNK" "_RECOMPUTE_W_U_NUM_STAGES"  2 "KDA stage gate (#50649)"
 chk "$OFFLOAD_SCHED" "OFFLOAD_EAGLE_PREFIX_VETO" 1 "full-attn eagle prefix veto"
 chk "$KV_UTILS" "_annotate_eagle_groups_from_draft_spec" 2 "hybrid EAGLE group annotation (#52047)"
 python3 -c "import vllm.v1.attention.backends.mla.rocm_aiter_mla; print('  IMPORT_OK')"
+
+# Package pins + real import checks. verify_unified_image.sh asserts versions
+# only, which cannot catch a wheel that installs at the right version but does
+# not provide the module vLLM imports (triton_kernels.matmul_ogs is exactly
+# that case). Report both. Warn by default — the MoE path here is
+# --moe-backend aiter, so a missing triton_kernels is a fallback, not a
+# failure. REQUIRE_UNIFIED_PINS=1 makes any mismatch fatal.
+python3 - <<'PY'
+import os
+from importlib.metadata import version, PackageNotFoundError
+
+expected = {
+    "amd-aiter": "0.1.19.post3.dev40+g55dbc4f47",
+    "flydsl": "0.3.0",
+    "hf-transfer": "0.1.9",
+    "py-spy": "0.4.2",
+    "triton": "3.7.0+amd.rocm7.2.0.git89002410",
+    "triton_kernels": "1.0.0+amd.rocm7.2.0.git89002410",
+}
+bad = []
+for pkg, want in expected.items():
+    try:
+        got = version(pkg)
+    except PackageNotFoundError:
+        got = "MISSING"
+    mark = "OK  " if got == want else "DIFF"
+    if got != want:
+        bad.append(f"{pkg}: expected {want}, got {got}")
+    print(f"  {mark} {pkg} {got}")
+
+for mod in ("triton_kernels.matmul_ogs", "fastsafetensors"):
+    try:
+        __import__(mod)
+        print(f"  OK   import {mod}")
+    except Exception as exc:
+        bad.append(f"import {mod} failed: {exc}")
+        print(f"  DIFF import {mod} FAILED: {exc}")
+
+if bad and os.environ.get("REQUIRE_UNIFIED_PINS") == "1":
+    raise SystemExit("!! REQUIRE_UNIFIED_PINS=1 and pins/imports differ:\n  " + "\n  ".join(bad))
+if bad:
+    print("!! package pins/imports differ from unified-v2 (non-fatal):")
+    for b in bad:
+        print(f"     {b}")
+PY
 [ "$ok" = 1 ] || { echo; echo "!! one or more anchors missing — see FAIL lines above" >&2; exit 1; }
 
 echo

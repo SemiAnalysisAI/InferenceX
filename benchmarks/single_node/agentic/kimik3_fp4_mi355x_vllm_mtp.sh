@@ -129,14 +129,12 @@ export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
 export VLLM_ROCM_AITER_MLA_ASM_PADDING=asm
 # vLLM #50649: recompute_w_u_fwd_kernel autotunes num_stages=4, which is racy
 # with num_warps=4 and silently emits ~1e38 garbage that propagates into the
-# target logits (and, via NaN, into the rejection sampler's tl.argmax). The
-# bootstrap makes the stage list selectable; take the safe list [2, 3] on the
-# wide batches where the race is observed and keep stage 4 at low concurrency,
-# where it materially helps tail latency. Override with VLLM_K3_KDA_SAFE_STAGES.
-if [ -z "${VLLM_K3_KDA_SAFE_STAGES:-}" ]; then
-    if [ "$CONC" -ge 8 ]; then VLLM_K3_KDA_SAFE_STAGES=1; else VLLM_K3_KDA_SAFE_STAGES=0; fi
-fi
-export VLLM_K3_KDA_SAFE_STAGES
+# target logits (and, via NaN, into the rejection sampler's tl.argmax). Take the
+# merged-upstream behaviour (safe list [2, 3]) at EVERY concurrency: a
+# per-concurrency default makes cells on the same ladder differ in two variables
+# at once, so no c1-vs-c8 delta can be attributed to concurrency. Stage 4 is an
+# explicit A/B (VLLM_K3_KDA_SAFE_STAGES=0), not a silent function of CONC.
+export VLLM_K3_KDA_SAFE_STAGES="${VLLM_K3_KDA_SAFE_STAGES:-1}"
 # Merged tuned BF16 GEMM table installed by apply_k3_container_patches.sh.
 MERGED_GEMM_CSV="${MERGED_GEMM_CSV:-/opt/aiter-local/aiter/configs/merged_bf16_tuned_gemm.csv}"
 if [ -z "${AITER_CONFIG_GEMM_BF16:-}" ] && [ -f "$MERGED_GEMM_CSV" ]; then
@@ -246,7 +244,13 @@ KVDTYPE_ARGS=(
 # verify buffers) and OOMs to "0 MB free". Prefix caching stores the ~64k prefix
 # ONCE (~350k KV tokens, ~6 GiB needed); pin KV to 32 GiB (~2M tokens, >5x) so a
 # large physical headroom remains for the activation peak. Do NOT touch gpu-mem.
-KV_CACHE_MEMORY="${KV_CACHE_MEMORY:-34359738368}"
+# 64 GiB, raised from 32: at c8 the 32 GiB pool (2,020,206 tokens) pinned at
+# 100%, prefix-cache hit fell 94.6% -> 75.8% against a 97.2% theoretical, output
+# came in at 51.5% of expected and 8.6% of trajectories were invalidated. The
+# ranks report ~281 GiB free at profiling time, so 32 GiB of extra pool still
+# leaves a large activation headroom. Note this bypasses --gpu-memory-utilization
+# entirely (gpu_worker skips memory profiling when kv_cache_memory_bytes is set).
+KV_CACHE_MEMORY="${KV_CACHE_MEMORY:-68719476736}"
 KVMEM_ARG=(); [ -n "$KV_CACHE_MEMORY" ] && KVMEM_ARG=(--kv-cache-memory "$KV_CACHE_MEMORY")
 
 # cudagraph capture sizes — pin explicitly so DSpark decode (M = TOKENS_PER_SEQ *
