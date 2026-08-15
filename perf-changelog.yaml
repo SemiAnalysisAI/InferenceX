@@ -5987,6 +5987,5 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Add GB200 MiniMax-M3 NVFP4 AgentX with EAGLE3-GQA, the B200 TP4 baseline, DEP4/DEP8, KV-routed P/D, and high-concurrency SimpleCPU offload."
-    - "Use vLLM v0.27.1, NVIDIA/srt-slurm v1.0.50, and Dynamo v1.3.1 with full 1M context, MiniMax parsing, KV-cache token metrics, and every logical vLLM metrics endpoint."
+    - "Add the tuned GB200 MiniMax-M3 FP4 AgentX frontier with EAGLE3, the B200 TP4 baseline, DEP4/DEP8, SimpleCPU offload, and KV-routed P/D."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2609
