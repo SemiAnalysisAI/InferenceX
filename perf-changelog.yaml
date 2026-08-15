@@ -6002,3 +6002,12 @@
     - "Mixed attention-DP (dep) and non-DP (tep) decode shapes; recipes from benchmarks/multi_node/srt-slurm-recipes/trtllm/qwen3.5/gb300-fp4/disagg/agentx/."
     - "EVAL_ONLY runs switch to real block verification by removing synthetic acceptance (TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS stripped from all agentx recipes before srtctl)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2612
+
+- config-keys:
+    - qwen3.5-fp4-gb300-dynamo-trt-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Fix AgentX warmup 404s: the dynamo-trt frontend registers Qwen3.5-397B-A17B-NVFP4-V2 without the nvidia/ org prefix regardless of DYN_TRTLLM_SERVED_MODEL_NAME, so aiperf's --model (from $MODEL) never matched and killed warmup before profiling started."
+    - "Add SERVED_MODEL_NAME: Qwen3.5-397B-A17B-NVFP4-V2 to all 6 agentx recipe env blocks and make build_replay_cmd prefer SERVED_MODEL_NAME over $MODEL for the aiperf --model flag."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2612

@@ -2000,7 +2000,11 @@ build_replay_cmd() {
     REPLAY_CMD+=" --endpoint /v1/chat/completions"
     REPLAY_CMD+=" --endpoint-type chat"
     REPLAY_CMD+=" --streaming"
-    REPLAY_CMD+=" --model $MODEL"
+    # SERVED_MODEL_NAME overrides $MODEL when the frontend registers the
+    # model under a different name than the recipe's model.path alias (e.g.
+    # dynamo-trt srt-slurm recipes serve "DeepSeek-V4-Pro" while $MODEL is
+    # the HF id "deepseek-ai/DeepSeek-V4-Pro"). Mismatches 404 at warmup.
+    REPLAY_CMD+=" --model ${SERVED_MODEL_NAME:-$MODEL}"
     REPLAY_CMD+=" --concurrency $CONC"
     REPLAY_CMD+=" --benchmark-duration $duration"
     REPLAY_CMD+=" --stats-interval 30"

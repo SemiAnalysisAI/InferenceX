@@ -215,3 +215,4 @@ benchmark:
     AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
     HF_HUB_CACHE: /hf_hub_cache
     WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
+    SERVED_MODEL_NAME: Qwen3.5-397B-A17B-NVFP4-V2
