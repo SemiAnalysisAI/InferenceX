@@ -36,6 +36,11 @@ on:
       exp-name:
         required: true
         type: string
+      recipe-fingerprint:
+        description: "Deterministic generated-recipe identity"
+        required: false
+        type: string
+        default: ''
       isl:
         required: true
         type: string
@@ -164,6 +169,7 @@ env:
   HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
   HF_HUB_CACHE: '/mnt/hf_hub_cache/'
   EXP_NAME: ${{ inputs.exp-name }}
+  RECIPE_FINGERPRINT: ${{ inputs.recipe-fingerprint }}
   MODEL: ${{ inputs.model }}
   MODEL_PREFIX: ${{ inputs.model-prefix }}
   ISL: ${{ inputs.isl }}
@@ -281,17 +287,20 @@ jobs:
         env:
           RUNNER_NAME: ${{ runner.name }}
           RUNNER_TYPE: ${{ inputs.runner }}
-          # Hash uniquely on {EXP_NAME}_{PRECISION}_{FRAMEWORK}_tp{}-pp{}-dcp{}-pcp{}-ep{}-dpa{}_disagg-{}_spec-{}_conc{}_{runner}
-          RESULT_FILENAME: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_tp${{ env.TP }}-pp${{ env.PP_SIZE }}-dcp${{ env.DCP_SIZE }}-pcp${{ env.PCP_SIZE }}-ep${{ env.EP_SIZE }}-dpa${{ env.DP_ATTENTION }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ env.CONC }}_${{ runner.name }}
+          RESULT_FILENAME_BASE: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_tp${{ env.TP }}-pp${{ env.PP_SIZE }}-dcp${{ env.DCP_SIZE }}-pcp${{ env.PCP_SIZE }}-ep${{ env.EP_SIZE }}-dpa${{ env.DP_ATTENTION }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ env.CONC }}_${{ runner.name }}
           # Suppress per-job eval markdown from being appended to the step summary.
           # We'll publish a single combined eval table in the collection job instead.
           GITHUB_STEP_SUMMARY: ''
         run: |
+          export RESULT_FILENAME="$RESULT_FILENAME_BASE"
+          if [ -n "$RECIPE_FINGERPRINT" ]; then
+            export RESULT_FILENAME="${RESULT_FILENAME}_recipe-${RECIPE_FINGERPRINT:0:16}"
+          fi
           export GPU_COUNT=$((TP * PP_SIZE * PCP_SIZE))
           echo "GPU_COUNT=${GPU_COUNT}" >> "$GITHUB_ENV"
 
           # Export RESULT_FILENAME early so it's available for artifact uploads even if cancelled
-          echo "RESULT_FILENAME=${RESULT_FILENAME}" >> $GITHUB_ENV
+          echo "RESULT_FILENAME=${RESULT_FILENAME}" >> "$GITHUB_ENV"
 
           bash ./runners/launch_${RUNNER_NAME%%_*}.sh
 
