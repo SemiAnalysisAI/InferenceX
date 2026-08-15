@@ -48,8 +48,10 @@ mkdir -p "$BENCHMARK_LOGS_DIR"
 export TP PP NUM_NODES GPUS_PER_NODE
 export CONTAINER_IMAGE="$IMAGE"
 export DOCKER_IMAGE_NAME="$IMAGE"
-# Host path for Kimi-K3 weights (NFS). Overridable for local smoke.
-export HOST_MODEL_PATH="${HOST_MODEL_PATH:-/it-share/hf_cache/Kimi-K3}"
+# Host paths for the HF cache / Kimi-K3 weights (NFS). Overridable for local smoke.
+export HOST_HF_CACHE="${HOST_HF_CACHE:-/it-share/hf_cache}"
+export HOST_MODEL_PATH="${HOST_MODEL_PATH:-${HOST_HF_CACHE}/Kimi-K3}"
+export AITER_GEMM_MERGE="${AITER_GEMM_MERGE:-auto}"
 export MODEL_PATH="/model"
 export PORT="${PORT:-8000}"
 export MASTER_PORT="${MASTER_PORT:-29500}"

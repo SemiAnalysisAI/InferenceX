@@ -32,9 +32,13 @@ NUM_NODES="${NUM_NODES:-${SLURM_JOB_NUM_NODES:-${SLURM_NNODES:?}}}"
 GPUS_PER_NODE="${GPUS_PER_NODE:-8}"
 PORT="${PORT:-8000}"
 MASTER_PORT="${MASTER_PORT:-29500}"
-HOST_MODEL_PATH="${HOST_MODEL_PATH:-/it-share/hf_cache/Kimi-K3}"
+HOST_HF_CACHE="${HOST_HF_CACHE:-/it-share/hf_cache}"
+HOST_MODEL_PATH="${HOST_MODEL_PATH:-${HOST_HF_CACHE}/Kimi-K3}"
 IBDEVICES="${IBDEVICES:-rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7}"
 SERVE_SCRIPT="benchmarks/multi_node/agentic/kimik3_fp4_mi355x_vllm_tp8pp2.sh"
+# Parity with the verified g06+g17 smoke: the nightly image needs this triton pin.
+TRITON_INDEX_URL="${TRITON_INDEX_URL:-https://pypi.amd.com/triton/release/rocm-7.2.0/simple/}"
+TRITON_PIN="${TRITON_PIN:-triton==3.7.0}"
 CONT_PREFIX="kimik3_agg_pp_${SLURM_JOB_ID}"
 
 JOB_LOGS_DIR="${BENCHMARK_LOGS_DIR}/logs/slurm_job-${SLURM_JOB_ID}"
@@ -88,16 +92,35 @@ launch_rank() {
     srun --overlap -w "$node" -N1 -n1 --kill-on-bad-exit=1 bash -lc "
 set -euo pipefail
 ${DOCKER_CMD_DETECT}
+# Avoid pipefail+SIGPIPE from awk exiting while ip still writes.
+set +o pipefail
+HOST_IP=\$(ip route get 1.1.1.1 2>/dev/null | awk '/src/ {print \$7; exit}')
+HOST_IP=\"\${HOST_IP:-\$(hostname -I | awk '{print \$1}')}\"
+NET_IF=\$(ip route 2>/dev/null | awk '/^default/ {print \$5; exit}')
+set -o pipefail
 \$DOCKER_CMD rm -f '${cont}' 2>/dev/null || true
 \$DOCKER_CMD run ${run_mode} --name '${cont}' \\
   --device /dev/dri --device /dev/kfd --device /dev/infiniband \\
   --ulimit memlock=-1 --ulimit stack=67108864 \\
   --network host --ipc host --group-add video \\
   --cap-add SYS_PTRACE --security-opt seccomp=unconfined --privileged \\
+  --add-host \"\$(hostname):\${HOST_IP}\" \\
+  -v /sys:/sys --shm-size 128G \\
+  -v /tmp:/tmp \\
   -v '${GITHUB_WORKSPACE}:/workspace' \\
+  -v '${HOST_HF_CACHE}:/hf_cache' \\
   -v '${HOST_MODEL_PATH}:/model:ro' \\
   -v '${result_host}:/results' \\
   -v '${JOB_LOGS_DIR}/agentic:/logs/agentic' \\
+  -e GLOO_SOCKET_IFNAME=\"\${NET_IF}\" \\
+  -e NCCL_SOCKET_IFNAME=\"\${NET_IF}\" \\
+  -e NCCL_IB_HCA='${IBDEVICES}' \\
+  -e HF_HOME=/hf_cache \\
+  -e HUGGINGFACE_HUB_CACHE=/hf_cache \\
+  -e PYTHONNOUSERSITE=1 \\
+  -e PYTHONPATH=/workspace/experimental/kimik3-v4/aiter/aiter_site \\
+  -e AITER_GEMM_MERGE='${AITER_GEMM_MERGE:-auto}' \\
+  -e AITER_CONFIG_GEMM_BF16=/tmp/aiter_configs/bf16_tuned_gemm.csv \\
   -e GITHUB_WORKSPACE=/workspace \\
   -e INFMAX_CONTAINER_WORKSPACE=/workspace \\
   -e MODEL='${MODEL}' \\
@@ -141,9 +164,16 @@ ${DOCKER_CMD_DETECT}
   -e AITER_GEMM_EXTRA_CSV='${AITER_GEMM_EXTRA_CSV:-/workspace/experimental/kimik3-v4/aiter/kimik3_bf16_tuned_gemm.combined.csv}' \\
   -e IBDEVICES='${IBDEVICES}' \\
   -e AIPERF_EXPERIMENTAL_FAST='${AIPERF_EXPERIMENTAL_FAST:-0}' \\
+  -e AIPERF_UNSAFE_OVERRIDE=true \\
+  -e SCENARIO_SUBDIR=agentic/ \\
+  -e ENFORCE_EAGER='${ENFORCE_EAGER:-false}' \\
   -w /workspace \\
+  --entrypoint bash \\
   '${DOCKER_IMAGE_NAME}' \\
-  bash '${SERVE_SCRIPT}'
+  -lc 'set -euo pipefail
+python -m pip install -q --extra-index-url ${TRITON_INDEX_URL} ${TRITON_PIN} tabulate || true
+cd /workspace
+exec bash ${SERVE_SCRIPT}'
 "
 }
 
@@ -155,8 +185,8 @@ for ((rank = NUM_NODES - 1; rank >= 1; rank--)); do
 done
 
 echo "Launching rank-0 serve + agentic on ${NODES[0]}..."
-launch_rank 0 "${NODES[0]}"
-RC=$?
+RC=0
+launch_rank 0 "${NODES[0]}" || RC=$?
 
 # Stage agentic aiperf trees for launch_mi355x-amds.sh (expects conc_* under agentic/).
 if [[ -d "${JOB_LOGS_DIR}/rank0" ]]; then
