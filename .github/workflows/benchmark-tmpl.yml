@@ -257,6 +257,24 @@ jobs:
             done
           fi
 
+          # Cleanup root-owned files stranded in THIS runner's workspace.
+          # Benchmark containers run with --container-remap-root and write logs
+          # as root; a cancelled or failed job skips teardown and leaves dirs the
+          # runner user cannot delete. actions/checkout then fails its workspace
+          # cleanup with "EACCES: permission denied, rmdir" for every subsequent
+          # job on that runner, so one cancellation takes the runner out of
+          # service until someone clears it by hand over the sudo hop. Runs
+          # pre-checkout (and again post-run) so the runner self-heals.
+          if [ -n "${GITHUB_WORKSPACE:-}" ] && command -v sudo >/dev/null 2>&1; then
+            for _d in "$GITHUB_WORKSPACE/benchmark_logs" "$GITHUB_WORKSPACE/benchmark_artifacts"; do
+              [ -d "$_d" ] || continue
+              if [ -n "$(find "$_d" -user root -print -quit 2>/dev/null)" ]; then
+                echo "[workspace] removing root-owned leftovers: $_d"
+                sudo -n rm -rf "$_d" 2>/dev/null || rm -rf "$_d" 2>/dev/null || true
+              fi
+            done
+          fi
+
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           token: ${{ secrets.REPO_PAT }}
