@@ -1514,9 +1514,9 @@ kimik3-fp4-b300-vllm-agentic-dspark:
   scenarios:
     # Agentic-coding only: no fixed-seq-len (1k1k / 8k1k) arms for this recipe.
     agentic-coding:
-      # 0.4267 of cluster:b300-nv's host DRAM gives 1280 GB, which the recipe
-      # divides across the 8 TP ranks into a 160 GB Mooncake segment each.
-    - dram-utilization: 0.4267
+      # Sizes the Mooncake segment: this resolves to total-cpu-dram-gb, which
+      # the recipe divides across the 8 TP ranks.
+    - dram-utilization: 0.5
       search-space:
       # TP8-only: a ~1.5 TB MXFP4 checkpoint does not fit below 8 GPUs.
       # One entry for both arms; the recipe drafts at conc <= 8. Keep the
