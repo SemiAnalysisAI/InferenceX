@@ -4,8 +4,9 @@ set -x
 
 # Agentic trace replay for Kimi-K3 (MXFP4) on B300: TP8 x DCP8, TokenspeedMLA,
 # Mooncake as the external KV tier. Concurrency selects the arm:
-#   conc <= 8   DSpark level 7 at the committed golden AL
-#   conc >  8   no drafting
+#   conc <= 8   DSpark level 7, golden AL 3.84
+#   conc 16     DSpark level 3, golden AL 3.00
+#   conc >  16  no drafting
 # Keep the arms disjoint in concurrency: exp-name carries conc and spec but not
 # the arm, so a shared concurrency would collide.
 #
@@ -175,22 +176,24 @@ EOF
 esac
 
 # ---- Speculative decoding ---------------------------------------------------
-DSPARK_MAX_CONC=8
 if [ "${SPEC_DECODING:-none}" != "mtp" ]; then
-    echo "Error: this recipe expects spec-decoding=mtp for both arms, got '${SPEC_DECODING:-}'" >&2
+    echo "Error: this recipe expects spec-decoding=mtp for every arm, got '${SPEC_DECODING:-}'" >&2
     exit 1
 fi
-if [ "$CONC" -le "$DSPARK_MAX_CONC" ]; then
+# Draft length by concurrency. The golden AL must track it, from the
+# probabilistic curve in golden_al_distribution/.
+if [ "$CONC" -le 8 ]; then
     NUM_SPEC_TOKENS=7
+    SYNTHETIC_ACCEPT_LEN=3.84
+elif [ "$CONC" -le 16 ]; then
+    NUM_SPEC_TOKENS=3
+    SYNTHETIC_ACCEPT_LEN=3.00
 else
     NUM_SPEC_TOKENS=0
 fi
 
 SPEC_ARGS=()
 if [ "$NUM_SPEC_TOKENS" -gt 0 ]; then
-    # Golden AL at K=7 on the probabilistic curve
-    # (golden_al_distribution/kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml).
-    SYNTHETIC_ACCEPT_LEN=3.84
     # EVAL_ONLY needs real verification: synthetic acceptance commits drafts
     # regardless of target logits and would zero the eval score.
     if [ "${EVAL_ONLY:-false}" = "true" ]; then
