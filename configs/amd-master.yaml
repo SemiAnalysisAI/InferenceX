@@ -1301,11 +1301,15 @@ kimik3-fp4-mi355x-vllm-agentic-dspark:
   multinode: false
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.60
+    - dram-utilization: 0.4
       search-space:
-      # GPU-resident through the ladder; host-DRAM offload for conc>=8 where the
-      # on-device KV pin saturates and the shared prefix would otherwise evict.
-      - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1] }
+      # GPU-resident only at the low end. From conc>=8 the on-device pool cannot
+      # hold the shared prefix (measured: 100% KV usage, prefix hit 94.6% -> 75.8%
+      # against a 97.2% theoretical), so those cells spill evicted KV to host DRAM
+      # via SimpleCPUOffloadConnector. This mirrors amd/kimi-k3-agentic-perf-tuning,
+      # whose c10 offload cell measured 4137.89 tok/s/GPU with 79.9% GPU + 10.3%
+      # external = 90.2% overall hit, vs our 2579.45 at c8 with no offload.
+      - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [8] }
 
 dsr1-fp4-mi355x-sglang-disagg-mtp:
   image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519

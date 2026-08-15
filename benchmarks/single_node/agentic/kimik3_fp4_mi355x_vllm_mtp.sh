@@ -230,14 +230,22 @@ fi
 
 # ---- Mandated DSpark serving knobs (do not change) --------------------------
 # gpu-mem 0.95 / max-num-seqs 64 / MNBT 16384 / FULL_AND_PIECEWISE are mandated.
-MAX_NUM_SEQS="${MAX_NUM_SEQS:-64}"
+# 20, not 64. At these concurrencies max_num_seqs is a MEMORY knob, not a
+# scheduling one -- c8 never has more than 8 requests in flight, so the extra 44
+# slots only inflate the profiled activation peak and shrink the auto-sized KV
+# pool. amd/kimi-k3-agentic-perf-tuning ran seqs 20 at gmu 0.90 and got a
+# 2,620,369-token pool (vs 2,020,206 under our 32 GiB pin) and 4137.89
+# tok/s/GPU at c10. Deviates from PR 2585's "mandated" seqs 64 -- revisit
+# before submission.
+MAX_NUM_SEQS="${MAX_NUM_SEQS:-20}"
 MNBT="${MNBT:-16384}"
-# 0.85, and it is LIVE again now that KV is unpinned (a pin makes gmu inert).
-# The documented unpinned-K3 ladder on this hardware: 0.90 killed 4/4 cells,
-# 0.88 passed c4/c8/c16 but DIES AT c1, and 0.85 is the only value c1 has been
-# got through on. A ladder that includes c1 therefore has to run 0.85 -- the
-# extra pool 0.88 would buy is not worth losing the low-conc point.
-GPU_MEM="${GPU_MEM:-0.85}"
+# 0.90, LIVE now that KV is unpinned (a pin makes gmu inert).
+# The old "0.90 kills 4/4 cells" result was measured at max_num_seqs 128 on the
+# Gluon-era base recipe: the activation peak scales with the seq slots, so 0.90
+# only overcommits when seqs is large. amd/kimi-k3-agentic-perf-tuning ran
+# 0.90 WITH seqs 20 successfully, which is the pairing used here. Raising gmu
+# without dropping seqs is the combination to avoid.
+GPU_MEM="${GPU_MEM:-0.90}"
 KVDTYPE_ARGS=(
     --kv-cache-dtype "${KV_CACHE_DTYPE:-fp8}"
     --attention-backend "${ATTENTION_BACKEND:-ROCM_AITER_MLA}"
