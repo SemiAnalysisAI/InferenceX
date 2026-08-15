@@ -11,10 +11,10 @@
 #     so none of the HICACHE_*/MC_* tunables apply. server_vllm.sh composes it
 #     with MoRIIO under MultiConnector on the prefill side (see
 #     build_kv_transfer_configs there).
-#   * the MoRI queue sizing is NOT set here. env.sh pins it for Kimi-K3 with
-#     hard assignments (MORI_IO_QP_MAX_SEND_WR/CQE/SGE and the SQ backoff),
-#     which is where the reasoning for those numbers lives; setting them here as
-#     well would create a second source of truth that silently drifts.
+#   * the MoRI queue sizing is NOT set here. env.sh pins Kimi-K3 defaults
+#     (MORI_IO_SQ_BACKOFF_TIMEOUT_US=500000, QP_MAX_SEND_WR=8192, CQE=16384,
+#     SGE=2, TC_DISABLE=0) and job.slurm -e's them into the engine container;
+#     setting them here as well would create a second source of truth.
 #
 # The serve body (TP, cudagraph capture, fp8 KV, DSpark speculative-config, 1M
 # context) lives in amd_utils/models_vllm.yaml under Kimi-K3.

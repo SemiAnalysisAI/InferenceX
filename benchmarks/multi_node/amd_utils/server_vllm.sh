@@ -226,10 +226,14 @@ PROXY_PING_PORT="${PROXY_PING_PORT:-36367}"
 # budget is sized from the prefill worker, while decode always pulls over MoRIIO.
 build_kv_transfer_configs() {
     local moriio_prefill moriio_decode
-    moriio_prefill="{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_producer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\", \"read_mode\": true}}"
-    moriio_decode="{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_consumer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\", \"read_mode\": true}}"
+    # MORIIO_READ_MODE=true|false (default true). Write path needs a mori build
+    # that exposes IOEngine.wait_all for the #51052 batch barrier.
+    local read_mode="${MORIIO_READ_MODE:-true}"
+    moriio_prefill="{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_producer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\", \"read_mode\": ${read_mode}}}"
+    moriio_decode="{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_consumer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\", \"read_mode\": ${read_mode}}}"
     KV_TRANSFER_PREFILL="'${moriio_prefill}'"
     KV_TRANSFER_DECODE="'${moriio_decode}'"
+    echo "[INFO] MoRIIO read_mode=${read_mode}"
 
     if [[ "${KV_OFFLOADING:-none}" == "dram" && "${KV_OFFLOAD_BACKEND:-}" == "vllm-simple" ]]; then
         if [[ -z "${TOTAL_CPU_DRAM_GB:-}" || "${TOTAL_CPU_DRAM_GB}" == "0" ]]; then
@@ -251,6 +255,8 @@ apply_model_patches() {
             || { echo "ERROR: apply_k3_container_patches.sh failed" >&2; exit 1; }
         bash "${here}/apply_k3_moriio_patches.sh" \
             || { echo "ERROR: apply_k3_moriio_patches.sh failed" >&2; exit 1; }
+        bash "${here}/ensure_mori_wait_all.sh" \
+            || { echo "ERROR: ensure_mori_wait_all.sh failed" >&2; exit 1; }
     fi
 }
 
