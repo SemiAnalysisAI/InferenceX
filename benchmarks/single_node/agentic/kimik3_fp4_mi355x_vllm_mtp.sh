@@ -232,12 +232,12 @@ fi
 # gpu-mem 0.95 / max-num-seqs 64 / MNBT 16384 / FULL_AND_PIECEWISE are mandated.
 MAX_NUM_SEQS="${MAX_NUM_SEQS:-64}"
 MNBT="${MNBT:-16384}"
-# 0.88, and it is LIVE again now that KV is unpinned (a pin makes gmu inert).
-# Not 0.95/0.90: on the unpinned base K3 recipe 4/4 cells died at 0.90 while
-# 3/3 passed at 0.88 -- it comes up clean and dies mid-prefill, the same
-# out-of-pool ASM workspace exhaustion described above. 0.88 is the documented
-# ceiling for an auto-sized K3 pool on this hardware.
-GPU_MEM="${GPU_MEM:-0.88}"
+# 0.85, and it is LIVE again now that KV is unpinned (a pin makes gmu inert).
+# The documented unpinned-K3 ladder on this hardware: 0.90 killed 4/4 cells,
+# 0.88 passed c4/c8/c16 but DIES AT c1, and 0.85 is the only value c1 has been
+# got through on. A ladder that includes c1 therefore has to run 0.85 -- the
+# extra pool 0.88 would buy is not worth losing the low-conc point.
+GPU_MEM="${GPU_MEM:-0.85}"
 KVDTYPE_ARGS=(
     --kv-cache-dtype "${KV_CACHE_DTYPE:-fp8}"
     --attention-backend "${ATTENTION_BACKEND:-ROCM_AITER_MLA}"
