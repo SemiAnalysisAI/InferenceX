@@ -226,8 +226,8 @@ PROXY_PING_PORT="${PROXY_PING_PORT:-36367}"
 # budget is sized from the prefill worker, while decode always pulls over MoRIIO.
 build_kv_transfer_configs() {
     local moriio_prefill moriio_decode
-    moriio_prefill="{\\\"kv_connector\\\": \\\"MoRIIOConnector\\\", \\\"kv_role\\\": \\\"kv_producer\\\", \\\"kv_connector_extra_config\\\": {\\\"proxy_ip\\\": \\\"${NODE0_ADDR}\\\", \\\"proxy_ping_port\\\": \\\"${PROXY_PING_PORT}\\\", \\\"http_port\\\": \\\"${SERVER_PORT}\\\", \\\"read_mode\\\": true}}"
-    moriio_decode="{\\\"kv_connector\\\": \\\"MoRIIOConnector\\\", \\\"kv_role\\\": \\\"kv_consumer\\\", \\\"kv_connector_extra_config\\\": {\\\"proxy_ip\\\": \\\"${NODE0_ADDR}\\\", \\\"proxy_ping_port\\\": \\\"${PROXY_PING_PORT}\\\", \\\"http_port\\\": \\\"${SERVER_PORT}\\\", \\\"read_mode\\\": true}}"
+    moriio_prefill="{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_producer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\", \"read_mode\": true}}"
+    moriio_decode="{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_consumer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\", \"read_mode\": true}}"
     KV_TRANSFER_PREFILL="'${moriio_prefill}'"
     KV_TRANSFER_DECODE="'${moriio_decode}'"
 
@@ -238,8 +238,8 @@ build_kv_transfer_configs() {
         fi
         local per_rank simple
         per_rank=$(( TOTAL_CPU_DRAM_GB * 1000 * 1000 * 1000 / PREFILL_TP_SIZE ))
-        simple="{\\\"kv_connector\\\": \\\"SimpleCPUOffloadConnector\\\", \\\"kv_role\\\": \\\"kv_both\\\", \\\"kv_connector_extra_config\\\": {\\\"cpu_bytes_to_use_per_rank\\\": ${per_rank}, \\\"lazy_offload\\\": false}}"
-        KV_TRANSFER_PREFILL="'{\\\"kv_connector\\\": \\\"MultiConnector\\\", \\\"kv_role\\\": \\\"kv_both\\\", \\\"kv_connector_extra_config\\\": {\\\"connectors\\\": [${moriio_prefill}, ${simple}]}}'"
+        simple="{\"kv_connector\": \"SimpleCPUOffloadConnector\", \"kv_role\": \"kv_both\", \"kv_connector_extra_config\": {\"cpu_bytes_to_use_per_rank\": ${per_rank}, \"lazy_offload\": false}}"
+        KV_TRANSFER_PREFILL="'{\"kv_connector\": \"MultiConnector\", \"kv_role\": \"kv_both\", \"kv_connector_extra_config\": {\"connectors\": [${moriio_prefill}, ${simple}]}}'"
     fi
 }
 
