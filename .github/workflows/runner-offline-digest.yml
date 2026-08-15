@@ -14,12 +14,51 @@ on:
   schedule:
     - cron: '13 14 * * *'  # daily 14:13 UTC ≈ 8:13 AM CST (9:13 AM CDT during DST)
   workflow_dispatch:
+    inputs:
+      clean-amd-cache:
+        description: Remove the known root-owned Python cache blocking checkout
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 jobs:
+  clean-amd-cache:
+    if: ${{ inputs.clean-amd-cache }}
+    strategy:
+      fail-fast: false
+      max-parallel: 10
+      matrix:
+        runner:
+          - mi355x-amds_00
+          - mi355x-amds_01
+          - mi355x-amds_02
+          - mi355x-amds_03
+          - mi355x-amds_04
+          - mi355x-amds_05
+          - mi355x-amds_06
+          - mi355x-amds_07
+          - mi355x-amds_08
+          - mi355x-amds_09
+    runs-on: ${{ fromJSON(format('["self-hosted","{0}"]', matrix.runner)) }}
+    steps:
+      - name: Remove generated root-owned Python cache
+        run: |
+          set -euo pipefail
+          target="${GITHUB_WORKSPACE}/experimental/kimik3-v4/aiter/aiter_site/__pycache__/sitecustomize.cpython-312.pyc"
+          if [[ ! -e "$target" ]]; then
+            echo "Cache is absent on ${{ matrix.runner }}"
+            exit 0
+          fi
+          [[ "$target" == */__pycache__/*.pyc ]]
+          stat -c 'Deleting generated cache: %F, %s bytes, owner=%U:%G, mode=%a, path=%n' "$target"
+          sudo rm -f -- "$target"
+          test ! -e "$target"
+
   digest:
+    if: ${{ github.event_name == 'schedule' || !inputs.clean-amd-cache }}
     runs-on: ubuntu-latest
     steps:
       - name: List offline runners
