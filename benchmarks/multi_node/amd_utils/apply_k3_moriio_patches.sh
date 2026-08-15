@@ -17,6 +17,14 @@ if [[ ! -f "$PATCH_FILE" ]]; then
     exit 1
 fi
 
+# Windows checkouts may leave CRLF in the patch; strip before apply.
+if grep -q $'\r' "$PATCH_FILE"; then
+    tmp=$(mktemp)
+    tr -d '\r' < "$PATCH_FILE" > "$tmp"
+    PATCH_FILE="$tmp"
+    trap 'rm -f "$tmp"' EXIT
+fi
+
 MORIIO_DIR="$ROOT/vllm/distributed/kv_transfer/kv_connector/v1/moriio"
 if grep -RqsE '_draft_only_layers|as_attn_mamba' "$MORIIO_DIR"; then
     echo "[k3-moriio] #51052 already applied"
