@@ -460,11 +460,15 @@ jobs:
           if-no-files-found: ignore
 
       - name: Upload agentic aggregated result
-        if: ${{ !inputs.eval-only && inputs.scenario-type == 'agentic-coding' }}
+        # always(): a sweep whose last concurrency fails still wrote aggregates
+        # for the ones that passed, and the raw-results step beside this one
+        # already keeps them on failure.
+        if: ${{ always() && !inputs.eval-only && inputs.scenario-type == 'agentic-coding' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bmk_agentic_${{ env.RESULT_FILENAME }}
           path: ${{ env.RESULT_FILENAME }}_conc*.json
+          if-no-files-found: ignore
 
       - name: Upload agentic raw results
         if: ${{ always() && inputs.scenario-type == 'agentic-coding' }}
