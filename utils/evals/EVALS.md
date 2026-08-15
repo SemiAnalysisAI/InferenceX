@@ -63,11 +63,11 @@ append_lm_eval_summary
 python3 utils/evals/validate_scores.py
 ```
 
-The framework selects a provider-specific subprocess adapter, while the suite
+The framework selects a suite-specific subprocess adapter, while the suite
 selects a case set understood by that adapter. Each adapter owns its endpoint
-format, dependencies, native report, metrics, and pass policy. Kimi and MiniMax
-use separate explicit `run_eval` cases; future provider or BFCL support should
-do the same rather than introduce a shared request or report abstraction.
+format, dependencies, native report, metrics, and integration-failure policy.
+Kimi, MiniMax, and BFCL use separate explicit `run_eval` cases rather than a
+shared request or report abstraction.
 Agentic eval jobs forward the matrix `spec-decoding` value, so MTP entries
 launch their existing `*_mtp.sh` server instead of silently falling back to STP.
 
@@ -186,6 +186,99 @@ pass-at-k behavior, streaming behavior, parallel-call behavior, multi-turn tool
 execution, language following, scenario key-order recall, or general agent
 quality.
 
+### BFCL V4 deterministic tool-use smoke
+
+The BFCL smoke is opt-in for models served through an OpenAI-compatible
+chat-completions endpoint. Select `eval-framework: bfcl` and
+`eval-suite: bfcl_smoke` in `e2e-tests.yml`, or run it from the repository root
+against an already-ready server:
+
+```bash
+source benchmarks/benchmark_lib.sh
+export EVAL_FRAMEWORK=bfcl
+export MODEL_NAME="<served model identifier>"
+export EVAL_SUITE=bfcl_smoke
+export EVAL_RESULT_DIR="$(mktemp -d /tmp/eval_out-XXXXXX)"
+run_eval --port "$PORT"
+append_lm_eval_summary
+python3 utils/evals/validate_scores.py --metric-prefix 'acc,'
+```
+
+The runtime pins
+[`bfcl-eval==2026.3.23`](https://pypi.org/project/bfcl-eval/2026.3.23/), built
+from Gorilla commit
+[`6ea57973c7a6097fd7c5915698c54c17c5b1b6c8`](https://github.com/ShishirPatil/gorilla/commit/6ea57973c7a6097fd7c5915698c54c17c5b1b6c8).
+It downloads the exact
+[`bfcl_eval-2026.3.23-py3-none-any.whl`](https://files.pythonhosted.org/packages/ba/41/ed458527c770c50225b60bae3b0c3444b26804ee455fa2d8f187018d2cb2/bfcl_eval-2026.3.23-py3-none-any.whl)
+and verifies SHA256
+`3bb6dfa5f0c68ad403c9ec50b00db2bb3b4cc9b38ab1ff33f48fe30d853d3a0a`
+before installation. The integration follows the pinned
+[vLLM perf-eval BFCL runner](https://github.com/vllm-project/perf-eval/blob/7ecb11405df86b202f4c5cca322bd133052fee82/lib/run_bfcl.py),
+but uses a fixed four-case V4 partial evaluation:
+
+| BFCL category | Exact upstream case ID | Projected task |
+|---------------|------------------------|----------------|
+| `simple_python` | `simple_python_0` | `bfcl_simple_python` |
+| `multiple` | `multiple_9` | `bfcl_multiple` |
+| `parallel` | `parallel_1` | `bfcl_parallel` |
+| `irrelevance` | `irrelevance_0` | `bfcl_irrelevance` |
+
+The verified wheel is installed into a temporary Python 3.10-or-newer virtual
+environment with system site packages enabled so the image's existing
+Torch/Transformers stack can be reused; it never mutates the global Python
+environment. The temporary environment and BFCL project root are removed after
+the run. Once package installation finishes, evaluation is local-only: BFCL
+skips its server setup and uses only the already-running local API root,
+typically `http://127.0.0.1:$PORT/v1`. The OpenAI SDK appends
+`/chat/completions`; the adapter base URL is not the full endpoint. BFCL does
+not download a model or call a remote inference API.
+
+The smoke fixes temperature to `0`, uses four BFCL worker threads, allows 180
+seconds per OpenAI request with retries disabled, and has a 900-second
+whole-suite timeout. Dependency installation is separately bounded at 600
+seconds. Dependency, setup, transport, timeout, and collection failures write
+zero-score artifacts with integration-error metadata and fail the runner
+nonzero. A completed evaluation exits independently of model quality; the
+workflow score-validation step applies the threshold afterward.
+
+The endpoint must implement OpenAI chat completions at `/v1/chat/completions`,
+accept `tools` and the tool-selection fields emitted by BFCL, and return the
+served model's OpenAI tool-call shape. In particular, assistant tool calls need
+function names and JSON-encoded `function.arguments`; the response must also
+support a normal no-tool answer for the irrelevance case. Starting a nominally
+OpenAI-compatible server is not sufficient if it cannot parse that model's
+native tool-call syntax.
+
+Configure the server's model-specific function-calling parser and, when the
+model's default template does not render tools correctly, its tool-aware chat
+template. For vLLM, automatic calls require `--enable-auto-tool-choice` plus
+`--tool-call-parser`, with `--chat-template` when needed. SGLang uses its
+corresponding `--tool-call-parser`; TensorRT-LLM uses `--tool_parser`, plus the
+matching reasoning-parser option when the model requires one. Parser names are
+engine-specific. Current common mappings are Kimi K3 (`kimi_k3`), MiniMax M3
+(`minimax_m3` in vLLM/TRT-LLM and `minimax-m3` in SGLang), and DeepSeek V4
+(`deepseek_v4` in vLLM/TRT-LLM and `deepseekv4` in SGLang). GLM-4.5 uses
+`glm45` in vLLM/SGLang, while GLM-4.7 uses `glm47`; Qwen3-Coder uses
+`qwen3_coder` in vLLM/SGLang, with `qwen3_xml` for vLLM's XML variant and
+`qwen3` for the corresponding TensorRT-LLM parser. The model recipe and
+installed engine version are authoritative; BFCL does not replace a missing or
+mismatched parser/chat template.
+
+`bfcl_report.json` is the native report. `results_bfcl.json` is the
+`inferencex-eval-v1` compatibility result consumed by the existing artifact
+upload, `append_lm_eval_summary`, collector, and score validator. It projects
+the four-case aggregate as task `bfcl_smoke` and the four one-case diagnostic
+tasks shown above. Every row uses lm-eval-compatible `acc,none` (plus
+`acc_stderr,none`); BFCL workflows therefore validate with metric prefix
+`acc,` rather than the default exact-match prefix.
+
+Only `bfcl_smoke` gates the run: its `0.75` threshold requires at least three
+of the four fixed upstream cases to be correct. The four `bfcl_<category>`
+thresholds are `0.0`, so their one-case scores remain diagnostic and a single
+failed category does not become a second gate. BFCL reuses the existing eval
+job, upload paths, aggregation, and validation instead of adding a parallel
+workflow or artifact route.
+
 ### Benchmark script flow
 
 All benchmark scripts in `benchmarks/` follow one of two flows:
@@ -217,11 +310,14 @@ Key eval functions in `benchmarks/benchmark_lib.sh`:
 | `run_lm_eval` | Runs lm-eval harness against the OpenAI-compatible endpoint |
 | `run_kimi_vendor_eval` | Selects and runs a pinned Kimi Vendor Verifier suite |
 | `run_minimax_vendor_eval` | Runs the pinned single-case MiniMax provider smoke |
+| `run_bfcl_eval` | Runs the pinned four-case BFCL V4 smoke |
 | `append_lm_eval_summary` | Writes `meta_env.json` and moves eval artifacts to workspace |
 | `_install_lm_eval_deps` | Installs lm-eval dependencies |
 | `_prepare_vendor_verifier_python` | Uses system Python 3.12+ or provisions an isolated pinned Python 3.12 runtime for provider verifiers |
 | `_prepare_kimi_vendor_runtime` | Installs the pinned verifier dependencies in an isolated temp path |
 | `_prepare_minimax_vendor_runtime` | Installs the pinned MiniMax adapter dependency in an isolated temp path |
+| `_prepare_bfcl_runtime` | Installs the verified BFCL wheel in a temporary virtual environment |
+| `_install_bfcl_eval_deps` | Downloads, verifies, and installs the pinned BFCL wheel |
 | `_prepare_kimi_vendor_verifier` | Downloads and safely extracts a fresh subset of the pinned source archive |
 | `_patch_lm_eval` | Patches lm-eval for reasoning tokens and TRT compatibility |
 | `compute_eval_context_length` | Computes eval context length (requested benchmark context, capped at model native max) |
@@ -334,8 +430,8 @@ cat ./evals/agg_eval_all.json | jq '[.[] | select(.hw == "B200")]'
 2. Add an explicit framework case in `run_eval`; keep suite-specific policy in
    that adapter's shell runner.
 3. Install dependencies in a provider-specific isolated runtime.
-4. Emit `result_format: inferencex-eval-v1`, preserve the native report as
-   `*_vendor_report.json`, set `EVAL_SUITE`, and add a threshold.
+4. Emit `result_format: inferencex-eval-v1`, preserve the native report in an
+   explicitly uploaded suite-specific path, set `EVAL_SUITE`, and add a threshold.
 
 ### Runtime patches (`utils/evals/patches/`)
 

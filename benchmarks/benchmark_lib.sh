@@ -895,13 +895,21 @@ _install_lm_eval_deps() {
 _prepare_vendor_verifier_python() {
     local verifier_name="$1"
     local runtime_prefix="$2"
+    local use_system_site_packages="${3:-false}"
+    local minimum_python_minor="${4:-12}"
 
     VENDOR_VERIFIER_PYTHON=python3
     VENDOR_VERIFIER_PYTHON_CLEANUP_DIR=""
     export VENDOR_VERIFIER_PYTHON VENDOR_VERIFIER_PYTHON_CLEANUP_DIR
 
-    if python3 -c 'import sys; raise SystemExit(sys.version_info < (3, 12))'; then
-        return 0
+    local system_python_is_compatible=false
+    if python3 -c \
+        'import sys; raise SystemExit(sys.version_info < (3, int(sys.argv[1])))' \
+        "$minimum_python_minor"; then
+        system_python_is_compatible=true
+        if [ "$use_system_site_packages" != "true" ]; then
+            return 0
+        fi
     fi
 
     local python_dir uv_prefix uv_bin venv_dir prepare_rc=0
@@ -912,23 +920,32 @@ _prepare_vendor_verifier_python() {
     VENDOR_VERIFIER_PYTHON_CLEANUP_DIR="$python_dir"
     export VENDOR_VERIFIER_PYTHON_CLEANUP_DIR
 
-    uv_prefix="${python_dir}/uv"
-    uv_bin="${uv_prefix}/bin/uv"
     venv_dir="${python_dir}/venv"
-    python3 -m pip install -q --no-cache-dir --break-system-packages \
-        --prefix "$uv_prefix" "uv==0.11.33" || prepare_rc=$?
-    if [ "$prepare_rc" -eq 0 ] && [ ! -x "$uv_bin" ]; then
-        echo "ERROR: pinned uv installation did not create ${uv_bin}" >&2
-        prepare_rc=1
-    fi
-    if [ "$prepare_rc" -eq 0 ]; then
-        UV_CACHE_DIR="${python_dir}/uv-cache" \
-        UV_PYTHON_INSTALL_DIR="${python_dir}/python" \
-            "$uv_bin" venv --python 3.12 --seed "$venv_dir" \
-            || prepare_rc=$?
+    if [ "$system_python_is_compatible" = "true" ]; then
+        python3 -m venv --system-site-packages "$venv_dir" || prepare_rc=$?
+    else
+        uv_prefix="${python_dir}/uv"
+        uv_bin="${uv_prefix}/bin/uv"
+        python3 -m pip install -q --no-cache-dir --break-system-packages \
+            --prefix "$uv_prefix" "uv==0.11.33" || prepare_rc=$?
+        if [ "$prepare_rc" -eq 0 ] && [ ! -x "$uv_bin" ]; then
+            echo "ERROR: pinned uv installation did not create ${uv_bin}" >&2
+            prepare_rc=1
+        fi
+        if [ "$prepare_rc" -eq 0 ]; then
+            local system_site_packages_args=()
+            if [ "$use_system_site_packages" = "true" ]; then
+                system_site_packages_args+=(--system-site-packages)
+            fi
+            UV_CACHE_DIR="${python_dir}/uv-cache" \
+            UV_PYTHON_INSTALL_DIR="${python_dir}/python" \
+                "$uv_bin" venv --python "3.${minimum_python_minor}" --seed \
+                    "${system_site_packages_args[@]}" "$venv_dir" \
+                || prepare_rc=$?
+        fi
     fi
     if [ "$prepare_rc" -eq 0 ] && [ ! -x "${venv_dir}/bin/python" ]; then
-        echo "ERROR: pinned uv did not create the ${verifier_name} Python interpreter" >&2
+        echo "ERROR: pinned Python setup did not create the ${verifier_name} interpreter" >&2
         prepare_rc=1
     fi
     if [ "$prepare_rc" -ne 0 ]; then
@@ -1318,6 +1335,201 @@ run_kimi_vendor_eval() {
             ;;
         *)
             echo "ERROR: unsupported Kimi Vendor Verifier suite '${eval_suite}'" >&2
+            export EVAL_RESULT_DIR=""
+            return 2
+            ;;
+    esac
+}
+
+_install_bfcl_eval_deps() {
+    local download_dir="$1"
+    local wheel_url="https://files.pythonhosted.org/packages/ba/41/ed458527c770c50225b60bae3b0c3444b26804ee455fa2d8f187018d2cb2/bfcl_eval-2026.3.23-py3-none-any.whl"
+    local wheel_sha256="3bb6dfa5f0c68ad403c9ec50b00db2bb3b4cc9b38ab1ff33f48fe30d853d3a0a"
+    local wheel_path="${download_dir}/bfcl_eval-2026.3.23-py3-none-any.whl"
+
+    "${VENDOR_VERIFIER_PYTHON:-python3}" - \
+        "$wheel_url" "$wheel_sha256" "$wheel_path" <<'PY' || return $?
+from hashlib import sha256
+from pathlib import Path
+import sys
+from urllib.request import Request, urlopen
+
+wheel_url, expected_sha256, wheel_path_arg = sys.argv[1:]
+wheel_path = Path(wheel_path_arg)
+digest = sha256()
+downloaded = 0
+request = Request(
+    wheel_url,
+    headers={"User-Agent": "InferenceX-BFCL-Smoke"},
+)
+
+try:
+    with urlopen(request, timeout=180) as response, wheel_path.open("xb") as output:
+        while chunk := response.read(1024 * 1024):
+            downloaded += len(chunk)
+            if downloaded > 512 * 1024 * 1024:
+                raise ValueError("BFCL wheel exceeds the 512 MiB safety limit")
+            digest.update(chunk)
+            output.write(chunk)
+    if downloaded == 0:
+        raise ValueError("downloaded BFCL wheel is empty")
+    actual_sha256 = digest.hexdigest()
+    if actual_sha256 != expected_sha256:
+        raise ValueError(
+            f"BFCL wheel SHA256 mismatch: expected {expected_sha256}, "
+            f"got {actual_sha256}"
+        )
+except Exception as error:
+    wheel_path.unlink(missing_ok=True)
+    print(f"ERROR: failed to download and verify the pinned BFCL wheel: {error}", file=sys.stderr)
+    raise SystemExit(1)
+PY
+
+    timeout 600 "${VENDOR_VERIFIER_PYTHON:-python3}" -m pip install \
+        -q --no-cache-dir "$wheel_path"
+}
+
+_prepare_bfcl_runtime() {
+    local runtime_dir install_rc=0
+    runtime_dir="$(mktemp -d /tmp/bfcl-runtime-XXXXXX)" || return $?
+    _install_bfcl_eval_deps "$runtime_dir" >&2 || install_rc=$?
+    if [ "$install_rc" -ne 0 ]; then
+        rm -rf "$runtime_dir"
+        return "$install_rc"
+    fi
+    printf '%s\n' "$runtime_dir"
+}
+
+_write_bfcl_integration_error() {
+    local adapter_path="$1"
+    local model_name="$2"
+    local results_dir="$3"
+    local message="$4"
+    local adapter_rc=0
+
+    # Integration errors deliberately make the adapter exit nonzero after
+    # publishing both score artifacts. Treat those artifacts, not that expected
+    # status, as proof that failure reporting succeeded.
+    "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" \
+        --model "$model_name" \
+        --output-dir "$results_dir" \
+        --integration-error "$message" \
+        || adapter_rc=$?
+    if [ -f "${results_dir}/bfcl_report.json" ] \
+        && [ -f "${results_dir}/results_bfcl.json" ]; then
+        return 0
+    fi
+    if [ "$adapter_rc" -eq 0 ]; then
+        return 1
+    fi
+    return "$adapter_rc"
+}
+
+_run_bfcl_smoke_eval() {
+    local port="${PORT:-8888}"
+    local results_dir="${EVAL_RESULT_DIR:-}"
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --port|--results-dir)
+                if [[ $# -lt 2 || -z "${2:-}" || "${2:-}" == --* ]]; then
+                    echo "ERROR: $1 requires a value" >&2
+                    return 2
+                fi
+                case "$1" in
+                    --port)        port="$2" ;;
+                    --results-dir) results_dir="$2" ;;
+                esac
+                shift 2
+                ;;
+            *)
+                echo "Unknown parameter: $1" >&2
+                return 2
+                ;;
+        esac
+    done
+
+    if [ -z "$results_dir" ]; then
+        results_dir="$(mktemp -d /tmp/eval_out-XXXXXX)" || return $?
+    fi
+
+    local model_name="${MODEL_NAME:-${MODEL:-}}"
+    local adapter_path="${INFERENCEX_REPO_ROOT}/utils/evals/bfcl_eval.py"
+    local runtime_dir=""
+    local project_root=""
+
+    mkdir -p "$results_dir" || return $?
+    results_dir="$(cd "$results_dir" && pwd)" || return $?
+    export EVAL_RESULT_DIR="$results_dir"
+
+    local setup_rc=0 integration_error=""
+    _prepare_vendor_verifier_python "BFCL" "bfcl-python" true 10 || {
+        setup_rc=$?
+        integration_error="BFCL Python runtime preparation failed with exit code ${setup_rc}"
+    }
+    if [ "$setup_rc" -eq 0 ]; then
+        runtime_dir=$(_prepare_bfcl_runtime) || {
+            setup_rc=$?
+            integration_error="BFCL dependency installation failed with exit code ${setup_rc}"
+        }
+    fi
+    if [ "$setup_rc" -eq 0 ]; then
+        project_root="$(mktemp -d /tmp/bfcl-project-root-XXXXXX)" || {
+            setup_rc=$?
+            integration_error="BFCL project root preparation failed with exit code ${setup_rc}"
+        }
+    fi
+    if [ "$setup_rc" -ne 0 ]; then
+        echo "ERROR: ${integration_error}" >&2
+        local artifact_rc=0
+        _write_bfcl_integration_error \
+            "$adapter_path" "$model_name" "$results_dir" "$integration_error" \
+            || artifact_rc=$?
+        if [ "$artifact_rc" -ne 0 ]; then
+            echo "ERROR: failed to write BFCL failure artifact (exit code ${artifact_rc})" >&2
+        fi
+        _cleanup_vendor_eval \
+            "$runtime_dir" "$project_root" "${VENDOR_VERIFIER_PYTHON_CLEANUP_DIR:-}"
+        return "$setup_rc"
+    fi
+
+    local eval_rc=0
+    timeout 900 "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" \
+        --base-url "http://127.0.0.1:${port}/v1" \
+        --api-key EMPTY \
+        --model "$model_name" \
+        --output-dir "$results_dir" \
+        --bfcl-project-root "$project_root" \
+        --num-threads 4 \
+        --request-timeout-seconds 180 \
+        || eval_rc=$?
+    if [ "$eval_rc" -ne 0 ] \
+        && { [ ! -f "${results_dir}/bfcl_report.json" ] \
+            || [ ! -f "${results_dir}/results_bfcl.json" ]; }; then
+        local integration_error="BFCL evaluation failed with exit code ${eval_rc}"
+        local artifact_rc=0
+        _write_bfcl_integration_error \
+            "$adapter_path" "$model_name" "$results_dir" "$integration_error" \
+            || artifact_rc=$?
+        if [ "$artifact_rc" -ne 0 ]; then
+            echo "ERROR: failed to write BFCL failure artifact (exit code ${artifact_rc})" >&2
+        fi
+    fi
+    _cleanup_vendor_eval \
+        "$runtime_dir" "$project_root" "${VENDOR_VERIFIER_PYTHON_CLEANUP_DIR:-}"
+    return "$eval_rc"
+}
+
+run_bfcl_eval() {
+    local eval_suite="${EVAL_SUITE:-bfcl_smoke}"
+    export EVAL_SUITE="$eval_suite"
+
+    case "$eval_suite" in
+        bfcl_smoke)
+            _run_bfcl_smoke_eval "$@"
+            ;;
+        *)
+            echo "ERROR: unsupported BFCL suite '${eval_suite}'" >&2
             export EVAL_RESULT_DIR=""
             return 2
             ;;
@@ -2272,6 +2484,9 @@ run_eval() {
         minimax-vendor)
             [ -n "${EVAL_SUITE:-}" ] || EVAL_SUITE="minimax_m3_smoke"
             ;;
+        bfcl)
+            [ -n "${EVAL_SUITE:-}" ] || EVAL_SUITE="bfcl_smoke"
+            ;;
     esac
 
     case "${EVAL_SUITE:-}" in
@@ -2284,15 +2499,17 @@ run_eval() {
 
     if [ -n "${EVAL_SUITE:-}" ] \
         && [ "$framework" != "kimi-vendor" ] \
-        && [ "$framework" != "minimax-vendor" ]; then
-        echo "ERROR: EVAL_SUITE is only supported with a provider verifier framework (kimi-vendor or minimax-vendor)" >&2
+        && [ "$framework" != "minimax-vendor" ] \
+        && [ "$framework" != "bfcl" ]; then
+        echo "ERROR: EVAL_SUITE is only supported with kimi-vendor, minimax-vendor, or bfcl" >&2
         return 2
     fi
 
-    # Provider verifier suites use fixed request budgets and do not consume
+    # Explicit verifier suites use fixed request budgets and do not consume
     # EVAL_MAX_MODEL_LEN, so avoid loading model configuration for those paths.
     if [ "$framework" != "kimi-vendor" ] \
         && [ "$framework" != "minimax-vendor" ] \
+        && [ "$framework" != "bfcl" ] \
         && [ -z "${EVAL_MAX_MODEL_LEN:-}" ]; then
         compute_eval_context_length "$MODEL" "${MAX_MODEL_LEN:-0}" > /dev/null
     fi
@@ -2366,6 +2583,7 @@ run_eval() {
         swebench)        run_swebench_eval "${forwarded[@]}" || eval_rc=$? ;;
         kimi-vendor)     run_kimi_vendor_eval "${forwarded[@]}" || eval_rc=$? ;;
         minimax-vendor)  run_minimax_vendor_eval "${forwarded[@]}" || eval_rc=$? ;;
+        bfcl)           run_bfcl_eval "${forwarded[@]}" || eval_rc=$? ;;
         *)               echo "Unknown framework '${framework}'"; eval_rc=1 ;;
     esac
 
@@ -2373,11 +2591,12 @@ run_eval() {
         export EVAL_COMPLETED_SUITE="$EVAL_SUITE"
     fi
 
-    # Agentic eval-only recipes have no separate staging step. Provider
-    # verifier failures also carry diagnostic score artifacts to preserve.
+    # Agentic eval-only recipes have no separate staging step. Verifier failures
+    # also carry diagnostic score artifacts to preserve.
     if { [ "${EVAL_ONLY:-false}" = "true" ] && [ "$scenario_is_agentic" = "1" ]; } \
         || { { [ "$framework" = "kimi-vendor" ] \
-            || [ "$framework" = "minimax-vendor" ]; } \
+            || [ "$framework" = "minimax-vendor" ] \
+            || [ "$framework" = "bfcl" ]; } \
             && [ "$eval_rc" -ne 0 ]; }; then
         append_lm_eval_summary || true
     fi

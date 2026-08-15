@@ -31,6 +31,7 @@ run_lm_eval()       { echo "DISPATCH=lm-eval"; }
 run_swebench_eval() { echo "DISPATCH=swebench"; }
 run_kimi_vendor_eval() { echo "DISPATCH=kimi-vendor"; }
 run_minimax_vendor_eval() { echo "DISPATCH=minimax-vendor"; }
+run_bfcl_eval() { echo "DISPATCH=bfcl"; }
 append_lm_eval_summary() { echo "STAGED=summary"; }
 export EVAL_MAX_MODEL_LEN=16384
 export EVAL_CONCURRENT_REQUESTS=""
@@ -55,6 +56,7 @@ def _dispatch(
     env.pop("EVAL_FRAMEWORK", None)
     env.pop("CLI_FW", None)
     env.pop("KV_OFFLOAD_BACKEND", None)
+    env.pop("EVAL_SUITE", None)
     if cli_fw is not None:
         env["CLI_FW"] = cli_fw
     if env_fw is not None:
@@ -198,7 +200,7 @@ def test_run_eval_rejects_suite_override_for_lm_eval() -> None:
     )
 
     assert result.returncode == 2
-    assert "only supported with a provider verifier framework" in result.stderr
+    assert "only supported with kimi-vendor, minimax-vendor, or bfcl" in result.stderr
 
 
 def test_run_eval_scopes_runner_selected_suite_to_one_call() -> None:
@@ -2019,6 +2021,7 @@ def test_fixed_eval_workflows_forward_provider_contract() -> None:
     assert reusable_workflow["env"]["EVAL_FRAMEWORK"] == "${{ inputs.eval-framework }}"
     assert reusable_workflow["env"]["EVAL_SUITE"] == "${{ inputs.eval-suite }}"
     assert "*_vendor_report.json" in SINGLE_NODE_WORKFLOW.read_text()
+    assert "bfcl_report.json" in SINGLE_NODE_WORKFLOW.read_text()
 
 
 
@@ -2032,6 +2035,7 @@ def test_multinode_agentic_eval_workflow_forwards_runner_contract() -> None:
     assert reusable_workflow["env"]["EVAL_FRAMEWORK"] == "${{ inputs.eval-framework }}"
     assert reusable_workflow["env"]["EVAL_SUITE"] == "${{ inputs.eval-suite }}"
     assert "*_vendor_report.json" in MULTINODE_WORKFLOW.read_text()
+    assert "bfcl_report.json" in MULTINODE_WORKFLOW.read_text()
 
 
 
@@ -2052,3 +2056,374 @@ def test_trusted_changelog_matrix_keeps_multinode_agentic_evals() -> None:
     get_jobs_command = get_jobs["run"]
     assert "EVALS=$(" in get_jobs_command
     assert "score_matrix eval" in get_jobs_command
+
+
+def test_env_can_force_bfcl_on_agentic_eval() -> None:
+    output = _dispatch(is_agentic="1", eval_only="true", env_fw="bfcl")
+
+    assert "DISPATCH=bfcl" in output
+    assert "STAGED=summary" in output
+
+def test_cli_can_force_bfcl_on_fixed_seqlen_eval() -> None:
+    output = _dispatch(is_agentic="0", cli_fw="bfcl")
+
+    assert "DISPATCH=bfcl" in output
+    assert "STAGED=summary" not in output
+
+def test_bfcl_defaults_suite_dispatches_once_without_context_loading() -> None:
+    script = r"""
+source "$BENCHMARK_LIB"
+unset EVAL_MAX_MODEL_LEN
+compute_eval_context_length() { echo "UNEXPECTED_CONTEXT_LOAD"; return 99; }
+BFCL_DISPATCH_COUNT=0
+run_bfcl_eval() {
+    BFCL_DISPATCH_COUNT=$((BFCL_DISPATCH_COUNT + 1))
+    printf 'DISPATCH=bfcl SUITE=%s ARGS=<%s>\n' "$EVAL_SUITE" "$*"
+}
+append_lm_eval_summary() { printf 'STAGED=%s\n' "$EVAL_COMPLETED_SUITE"; }
+export EVAL_CONCURRENT_REQUESTS=""
+export EVAL_ONLY=false
+export IS_AGENTIC=0
+run_eval --framework bfcl --port 9999
+printf 'DISPATCH_COUNT=%s\n' "$BFCL_DISPATCH_COUNT"
+printf 'COMPLETED_SUITE=%s\n' "$EVAL_COMPLETED_SUITE"
+"""
+    env = {**os.environ, "BENCHMARK_LIB": str(BENCHMARK_LIB), "MODEL": "served-model"}
+    for key in ("EVAL_FRAMEWORK", "EVAL_SUITE", "EVAL_COMPLETED_SUITE"):
+        env.pop(key, None)
+    result = subprocess.run(
+        ["bash", "-c", script],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+    assert "DISPATCH=bfcl SUITE=bfcl_smoke ARGS=<--port 9999>" in result.stdout
+    assert "DISPATCH_COUNT=1" in result.stdout
+    assert "COMPLETED_SUITE=bfcl_smoke" in result.stdout
+    assert "STAGED=bfcl_smoke" not in result.stdout
+    assert "UNEXPECTED_CONTEXT_LOAD" not in result.stdout
+
+def test_bfcl_rejects_suite_from_another_provider() -> None:
+    result = _run_invalid_call(
+        "EVAL_CONCURRENT_REQUESTS='' "
+        "EVAL_SUITE=minimax_m3_smoke "
+        "run_eval --framework bfcl"
+    )
+
+    assert result.returncode == 2
+    assert "unsupported BFCL suite 'minimax_m3_smoke'" in result.stderr
+
+def test_bfcl_suite_is_rejected_by_mismatched_framework() -> None:
+    result = _run_invalid_call(
+        "EVAL_CONCURRENT_REQUESTS='' "
+        "EVAL_SUITE=bfcl_smoke "
+        "run_eval --framework minimax-vendor"
+    )
+
+    assert result.returncode == 2
+    assert "unsupported MiniMax Provider Verifier suite 'bfcl_smoke'" in result.stderr
+
+def test_bfcl_rejects_unknown_suite() -> None:
+    result = _run_invalid_call("EVAL_SUITE=not_a_bfcl_suite run_bfcl_eval")
+
+    assert result.returncode == 2
+    assert "unsupported BFCL suite 'not_a_bfcl_suite'" in result.stderr
+
+def test_bfcl_dependency_timeout_uses_integration_error_and_stages(
+    tmp_path: Path,
+) -> None:
+    results_dir = tmp_path / "results"
+    python_dir = tmp_path / "python"
+    script = r"""
+source "$BENCHMARK_LIB"
+unset EVAL_SUITE EVAL_RESULT_DIR EVAL_COMPLETED_SUITE
+unset VENDOR_VERIFIER_PYTHON VENDOR_VERIFIER_PYTHON_CLEANUP_DIR
+selected_python() {
+    printf 'ADAPTER_ARG=<%s>\n' "$@"
+    touch "$RESULTS_DIR/bfcl_report.json" "$RESULTS_DIR/results_bfcl.json"
+    return 1
+}
+_prepare_vendor_verifier_python() {
+    mkdir "$PYTHON_DIR"
+    VENDOR_VERIFIER_PYTHON=selected_python
+    VENDOR_VERIFIER_PYTHON_CLEANUP_DIR="$PYTHON_DIR"
+    export VENDOR_VERIFIER_PYTHON VENDOR_VERIFIER_PYTHON_CLEANUP_DIR
+}
+_prepare_bfcl_runtime() { return 124; }
+python3() { echo "UNEXPECTED_SYSTEM_PYTHON"; return 99; }
+append_lm_eval_summary() { printf 'STAGED=<%s>\n' "$EVAL_RESULT_DIR"; }
+export EVAL_CONCURRENT_REQUESTS=""
+export EVAL_ONLY=false
+export IS_AGENTIC=0
+eval_rc=0
+run_eval --framework bfcl --results-dir "$RESULTS_DIR" || eval_rc=$?
+printf 'EVAL_RC=%s\n' "$eval_rc"
+exit "$eval_rc"
+"""
+    env = {
+        **os.environ,
+        "BENCHMARK_LIB": str(BENCHMARK_LIB),
+        "RESULTS_DIR": str(results_dir),
+        "PYTHON_DIR": str(python_dir),
+        "MODEL": "test-model",
+    }
+    env.pop("EVAL_FRAMEWORK", None)
+    result = subprocess.run(
+        ["bash", "-c", script],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    output = result.stdout + result.stderr
+
+    assert result.returncode == 124
+    assert "EVAL_RC=124" in output
+    assert f"ADAPTER_ARG=<{REPO_ROOT / 'utils/evals/bfcl_eval.py'}>" in output
+    assert "ADAPTER_ARG=<test-model>" in output
+    assert f"ADAPTER_ARG=<{results_dir}>" in output
+    assert "ADAPTER_ARG=<--integration-error>" in output
+    assert (
+        "ADAPTER_ARG=<BFCL dependency installation failed with exit code 124>" in output
+    )
+    assert output.count(f"STAGED=<{results_dir}>") == 1
+    assert (results_dir / "bfcl_report.json").exists()
+    assert (results_dir / "results_bfcl.json").exists()
+    assert "failed to write BFCL failure artifact" not in output
+    assert "UNEXPECTED_SYSTEM_PYTHON" not in output
+    assert not python_dir.exists()
+
+def _run_bfcl_adapter_command(
+    tmp_path: Path, *, adapter_rc: int = 0
+) -> tuple[subprocess.CompletedProcess[str], tuple[Path, Path, Path, Path]]:
+    results_dir = tmp_path / "results"
+    runtime_dir = tmp_path / "runtime"
+    python_dir = tmp_path / "python"
+    project_root = tmp_path / "bfcl-project"
+    script = r"""
+source "$BENCHMARK_LIB"
+selected_python() {
+    printf 'ADAPTER_ARG=<%s>\n' "$@"
+    local arg
+    for arg in "$@"; do
+        if [ "$arg" = "--integration-error" ]; then
+            touch "$RESULTS_DIR/bfcl_report.json" "$RESULTS_DIR/results_bfcl.json"
+            return 1
+        fi
+    done
+    return "$TEST_ADAPTER_RC"
+}
+_prepare_vendor_verifier_python() {
+    printf 'PREPARE_ARG=<%s>\n' "$@"
+    mkdir "$PYTHON_DIR"
+    VENDOR_VERIFIER_PYTHON=selected_python
+    VENDOR_VERIFIER_PYTHON_CLEANUP_DIR="$PYTHON_DIR"
+    export VENDOR_VERIFIER_PYTHON VENDOR_VERIFIER_PYTHON_CLEANUP_DIR
+}
+_prepare_bfcl_runtime() {
+    mkdir "$RUNTIME_DIR"
+    printf '%s\n' "$RUNTIME_DIR"
+}
+mktemp() {
+    printf 'MKTEMP_ARG=<%s>\n' "$@" >&2
+    mkdir "$PROJECT_ROOT"
+    printf '%s\n' "$PROJECT_ROOT"
+}
+timeout() {
+    printf 'TIMEOUT_ARG=<%s>\n' "$1"
+    shift
+    "$@"
+}
+append_lm_eval_summary() { printf 'STAGED=<%s>\n' "$EVAL_RESULT_DIR"; }
+unset EVAL_SUITE EVAL_RESULT_DIR EVAL_COMPLETED_SUITE EVAL_MAX_MODEL_LEN
+compute_eval_context_length() { echo "UNEXPECTED_CONTEXT_LOAD"; return 99; }
+export EVAL_CONCURRENT_REQUESTS=""
+export EVAL_ONLY=false
+export IS_AGENTIC=0
+eval_rc=0
+run_eval --framework bfcl --port 9999 --results-dir "$RESULTS_DIR" || eval_rc=$?
+printf 'EVAL_RC=%s\n' "$eval_rc"
+printf 'EVAL_COMPLETED_SUITE=%s\n' "$EVAL_COMPLETED_SUITE"
+printf 'EVAL_RESULT_DIR=%s\n' "$EVAL_RESULT_DIR"
+exit "$eval_rc"
+"""
+    env = {
+        **os.environ,
+        "BENCHMARK_LIB": str(BENCHMARK_LIB),
+        "RESULTS_DIR": str(results_dir),
+        "RUNTIME_DIR": str(runtime_dir),
+        "PYTHON_DIR": str(python_dir),
+        "PROJECT_ROOT": str(project_root),
+        "MODEL": "repository/model",
+        "MODEL_NAME": "served-model",
+        "OPENAI_API_KEY": "must-not-be-forwarded",
+        "TEST_ADAPTER_RC": str(adapter_rc),
+    }
+    for key in (
+        "EVAL_FRAMEWORK",
+        "EVAL_SUITE",
+        "EVAL_RESULT_DIR",
+        "EVAL_COMPLETED_SUITE",
+        "VENDOR_VERIFIER_PYTHON",
+        "VENDOR_VERIFIER_PYTHON_CLEANUP_DIR",
+    ):
+        env.pop(key, None)
+    result = subprocess.run(
+        ["bash", "-c", script],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    return result, (results_dir, runtime_dir, python_dir, project_root)
+
+def test_bfcl_runner_uses_fixed_adapter_contract_and_cleans_runtime(
+    tmp_path: Path,
+) -> None:
+    result, paths = _run_bfcl_adapter_command(tmp_path)
+    results_dir, runtime_dir, python_dir, project_root = paths
+    output = result.stdout + result.stderr
+
+    assert result.returncode == 0, result.stderr
+    for value in (
+        str(REPO_ROOT / "utils/evals/bfcl_eval.py"),
+        "--base-url",
+        "http://127.0.0.1:9999/v1",
+        "--api-key",
+        "EMPTY",
+        "--model",
+        "served-model",
+        "--output-dir",
+        str(results_dir),
+        "--bfcl-project-root",
+        str(project_root),
+        "--num-threads",
+        "4",
+        "--request-timeout-seconds",
+        "180",
+    ):
+        assert f"ADAPTER_ARG=<{value}>" in output
+    assert "PREPARE_ARG=<BFCL>" in output
+    assert "PREPARE_ARG=<bfcl-python>" in output
+    assert "PREPARE_ARG=<true>" in output
+    assert "PREPARE_ARG=<10>" in output
+    assert "TIMEOUT_ARG=<900>" in output
+    assert "ADAPTER_ARG=<must-not-be-forwarded>" not in output
+    assert "UNEXPECTED_CONTEXT_LOAD" not in output
+    assert f"STAGED=<{results_dir}>" not in output
+    assert "EVAL_RC=0" in output
+    assert "EVAL_COMPLETED_SUITE=bfcl_smoke" in output
+    assert f"EVAL_RESULT_DIR={results_dir}" in output
+    assert results_dir.exists()
+    assert not runtime_dir.exists()
+    assert not python_dir.exists()
+    assert not project_root.exists()
+
+def test_bfcl_adapter_timeout_writes_reports_stages_and_propagates(
+    tmp_path: Path,
+) -> None:
+    result, paths = _run_bfcl_adapter_command(tmp_path, adapter_rc=124)
+    results_dir, runtime_dir, python_dir, project_root = paths
+    output = result.stdout + result.stderr
+
+    assert result.returncode == 124
+    assert "EVAL_RC=124" in output
+    assert output.count(f"STAGED=<{results_dir}>") == 1
+    assert "ADAPTER_ARG=<--integration-error>" in output
+    assert "ADAPTER_ARG=<BFCL evaluation failed with exit code 124>" in output
+    assert (results_dir / "bfcl_report.json").exists()
+    assert (results_dir / "results_bfcl.json").exists()
+    assert "failed to write BFCL failure artifact" not in output
+    assert "run_eval failed with exit code 124" in result.stderr
+    assert not runtime_dir.exists()
+    assert not python_dir.exists()
+    assert not project_root.exists()
+
+def test_bfcl_installer_uses_verified_wheel_in_selected_venv(tmp_path: Path) -> None:
+    script = r"""
+source "$BENCHMARK_LIB"
+selected_python() { printf 'PYTHON_ARG=<%s>\n' "$@"; }
+timeout() {
+    printf 'TIMEOUT_ARG=<%s>\n' "$1"
+    shift
+    "$@"
+}
+VENDOR_VERIFIER_PYTHON=selected_python
+_install_bfcl_eval_deps "$DOWNLOAD_DIR"
+"""
+    result = subprocess.run(
+        ["bash", "-c", script],
+        env={
+            **os.environ,
+            "BENCHMARK_LIB": str(BENCHMARK_LIB),
+            "DOWNLOAD_DIR": str(tmp_path),
+        },
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    wheel_path = tmp_path / "bfcl_eval-2026.3.23-py3-none-any.whl"
+
+    for value in (
+        "https://files.pythonhosted.org/packages/ba/41/"
+        "ed458527c770c50225b60bae3b0c3444b26804ee455fa2d8f187018d2cb2/"
+        "bfcl_eval-2026.3.23-py3-none-any.whl",
+        "3bb6dfa5f0c68ad403c9ec50b00db2bb3b4cc9b38ab1ff33f48fe30d853d3a0a",
+        str(wheel_path),
+        "-m",
+        "pip",
+        "install",
+        "--no-cache-dir",
+    ):
+        assert f"PYTHON_ARG=<{value}>" in result.stdout
+    assert "TIMEOUT_ARG=<600>" in result.stdout
+    assert "--break-system-packages" not in result.stdout
+    assert "--target" not in result.stdout
+
+def test_bfcl_python_preparation_exposes_system_site_packages(
+    tmp_path: Path,
+) -> None:
+    python_root = tmp_path / "bfcl-python"
+    script = r"""
+source "$BENCHMARK_LIB"
+python3() {
+    if [ "$1" = "-c" ]; then
+        printf 'VERSION_CHECK_ARG=<%s>\n' "$@"
+        return 0
+    fi
+    printf 'SYSTEM_PYTHON_ARG=<%s>\n' "$@"
+    venv_dir="${!#}"
+    mkdir -p "$venv_dir/bin"
+    printf '#!/usr/bin/env bash\n' > "$venv_dir/bin/python"
+    chmod +x "$venv_dir/bin/python"
+}
+mktemp() {
+    mkdir "$PYTHON_ROOT"
+    printf '%s\n' "$PYTHON_ROOT"
+}
+_prepare_vendor_verifier_python "BFCL" "bfcl-python" true 10
+cleanup_dir="$VENDOR_VERIFIER_PYTHON_CLEANUP_DIR"
+printf 'SELECTED_PYTHON=<%s>\n' "$VENDOR_VERIFIER_PYTHON"
+_cleanup_vendor_eval "$cleanup_dir"
+"""
+    result = subprocess.run(
+        ["bash", "-c", script],
+        env={
+            **os.environ,
+            "BENCHMARK_LIB": str(BENCHMARK_LIB),
+            "PYTHON_ROOT": str(python_root),
+        },
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+    assert "SYSTEM_PYTHON_ARG=<-m>" in result.stdout
+    assert "SYSTEM_PYTHON_ARG=<venv>" in result.stdout
+    assert "SYSTEM_PYTHON_ARG=<--system-site-packages>" in result.stdout
+    assert "VERSION_CHECK_ARG=<10>" in result.stdout
+    assert f"SELECTED_PYTHON=<{python_root / 'venv/bin/python'}>" in result.stdout
+    assert "--prefix" not in result.stdout
+    assert not python_root.exists()

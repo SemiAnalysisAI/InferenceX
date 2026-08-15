@@ -91,12 +91,12 @@ on:
         required: false
         default: false
       eval-framework:
-        description: "Eval runner (lm-eval, swebench, kimi-vendor, or minimax-vendor)"
+        description: "Eval runner (lm-eval, swebench, kimi-vendor, minimax-vendor, or bfcl)"
         type: string
         required: false
         default: "lm-eval"
       eval-suite:
-        description: "Provider verifier suite; leave empty for lm-eval and swebench"
+        description: "Eval suite (kimi_tool_call_schema, minimax_m3_smoke, or bfcl_smoke); empty for lm-eval and swebench"
         type: string
         required: false
         default: ""
@@ -414,6 +414,7 @@ jobs:
             meta_env.json
             results*.json
             *_vendor_report.json
+            bfcl_report.json
             sample*.jsonl
             agent_preds.json
             predictions.jsonl
@@ -423,7 +424,12 @@ jobs:
 
       - name: Verify eval scores
         if: ${{ (success() || failure()) && inputs.eval-only }}
-        run: python3 utils/evals/validate_scores.py
+        run: |
+          if [[ "${EVAL_FRAMEWORK}" == "bfcl" ]]; then
+            python3 utils/evals/validate_scores.py --metric-prefix 'acc,'
+          else
+            python3 utils/evals/validate_scores.py
+          fi
 
       - name: Cleanup eval outputs (post-upload)
         if: ${{ always() && (env.RUN_EVAL == 'true' || inputs.eval-only) }}
@@ -433,6 +439,7 @@ jobs:
           rm -f results*.json || true
           rm -f -- ./*_vendor_report.json || true
           rm -f sample*.jsonl || true
+          rm -f bfcl_report.json || true
           rm -f agent_preds.json predictions.jsonl swebench_report_*.json *.traj* || true
           
       - name: Resource cleanup (post-run)

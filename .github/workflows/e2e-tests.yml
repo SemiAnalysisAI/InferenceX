@@ -46,12 +46,12 @@ on:
                 type: string
                 default: ""
             eval-framework:
-                description: "Eval runner (lm-eval, swebench, kimi-vendor, or minimax-vendor)"
+                description: "Eval runner (lm-eval, swebench, kimi-vendor, minimax-vendor, or bfcl)"
                 required: false
                 type: string
                 default: "lm-eval"
             eval-suite:
-                description: "Provider verifier suite; empty for lm-eval and swebench"
+                description: "Eval suite (kimi_tool_call_schema, minimax_m3_smoke, or bfcl_smoke); empty for lm-eval and swebench"
                 required: false
                 type: string
                 default: ""
@@ -136,12 +136,12 @@ on:
                 type: string
                 default: ""
             eval-framework:
-                description: "Eval runner (lm-eval, swebench, kimi-vendor, or minimax-vendor)"
+                description: "Eval runner (lm-eval, swebench, kimi-vendor, minimax-vendor, or bfcl)"
                 required: false
                 type: string
                 default: "lm-eval"
             eval-suite:
-                description: "Provider verifier suite; empty for lm-eval and swebench"
+                description: "Eval suite (kimi_tool_call_schema, minimax_m3_smoke, or bfcl_smoke); empty for lm-eval and swebench"
                 required: false
                 type: string
                 default: ""

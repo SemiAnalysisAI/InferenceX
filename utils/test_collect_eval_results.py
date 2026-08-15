@@ -341,3 +341,57 @@ def test_collect_eval_rows_uses_extract_filter_as_primary_score(
     assert len(rows) == 1
     assert rows[0]["score"] == 0.75
     assert rows[0]["score_name"] == "em_flexible"
+
+
+def test_collect_eval_rows_accepts_bfcl_compatibility_and_ignores_native_report(
+    tmp_path: Path,
+) -> None:
+    artifact_dir = tmp_path / "eval_bfcl"
+    artifact_dir.mkdir()
+    (artifact_dir / "meta_env.json").write_text(
+        json.dumps({"eval_suite": "bfcl_smoke"})
+    )
+    (artifact_dir / "bfcl_report.json").write_text(
+        json.dumps(
+            {
+                "results": {"native_only": {"acc,none": 1.0}},
+            }
+        )
+    )
+    compatibility_path = artifact_dir / "results_bfcl.json"
+    tasks = {
+        "bfcl_smoke": 0.75,
+        "bfcl_simple_python": 1.0,
+    }
+    compatibility_path.write_text(
+        json.dumps(
+            {
+                "result_format": EVAL_RESULT_FORMAT,
+                "model_name": "test-model",
+                "results": {
+                    task: {
+                        "acc,none": score,
+                        "acc_stderr,none": 0.0,
+                    }
+                    for task, score in tasks.items()
+                },
+                "configs": {
+                    task: {
+                        "metric_list": [{"metric": "acc"}],
+                        "filter_list": [{"name": "none"}],
+                    }
+                    for task in tasks
+                },
+                "n-samples": {
+                    "bfcl_smoke": {"effective": 4},
+                    "bfcl_simple_python": {"effective": 1},
+                },
+            }
+        )
+    )
+
+    rows = collect_eval_rows(tmp_path)
+
+    assert {row["task"]: row["score"] for row in rows} == tasks
+    assert {row["score_name"] for row in rows} == {"accuracy"}
+    assert {row["source"] for row in rows} == {str(compatibility_path)}

@@ -348,3 +348,8 @@ def test_amd_multinode_container_forwards_eval_concurrency_list() -> None:
     ).read_text()
     assert 'expected_concs="${EVAL_CONC}"' in workflow
     assert 'validate_scores.py --expected-concs "${expected_concs}"' in workflow
+    assert 'if [[ "${EVAL_FRAMEWORK}" == "bfcl" ]]; then' in workflow
+    assert (
+        "validate_scores.py --metric-prefix 'acc,' "
+        '--expected-concs "${expected_concs}"'
+    ) in workflow
