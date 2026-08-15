@@ -46,6 +46,8 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 
 wait_for_amd_gpu_clean
 
+du -h /dev/shm
+
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
