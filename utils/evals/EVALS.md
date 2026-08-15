@@ -118,12 +118,10 @@ two-case smoke against their OpenAI-compatible frontend. Eval-only launchers
 restore real block verification before submitting recipes that otherwise use
 synthetic acceptance for throughput.
 
-### MiniMax M3 provider compatibility smoke
+### MiniMax provider compatibility smoke
 
-The Phase 1 MiniMax smoke is opt-in and applies only to a MiniMax M3 provider
-exposing an OpenAI-compatible chat-completions API. The runner rejects other
-models unless `MODEL_PREFIX=minimaxm3` or `MODEL`/`MODEL_NAME` contains
-`MiniMax-M3`. Select
+The Phase 1 MiniMax smoke is opt-in and applies to supported models exposing
+an OpenAI-compatible chat-completions API. Select
 `eval-framework: minimax-vendor` and `eval-suite: minimax_m3_smoke` in
 `e2e-tests.yml`, or run it from the repository root against an already-ready
 server:
@@ -144,62 +142,49 @@ python3 utils/evals/validate_scores.py
 `sample.jsonl` at commit
 `85bf180e54e2ab0b31595cfdc697116c4760876d`. The vendored fixture retains
 the full upstream MIT copyright, permission, and warranty notice. It contains
-exactly these three upstream zero-based rows, in this order:
+only upstream zero-based row 71, an `expected_tool_call: true` request
+exercising tool-call trigger and argument-schema validation. The adapter
+applies the pinned validator semantics directly to this fixture; it does not
+download the upstream repository or run the remaining 101 cases.
 
-1. index 0, the non-Cyrillic language-following check;
-2. index 71, an `expected_tool_call: true` request exercising tool-call trigger
-   and argument-schema validation;
-3. index 101, an `expected_tool_call: false` request exercising the scenario
-   parameter key-order check.
+The adapter sends the request to `${base_url}/chat/completions`. The endpoint
+must accept an OpenAI-compatible Bearer token and chat-completions request body
+and return OpenAI-compatible message, finish-reason, and tool-call fields.
+Redirect responses are rejected before forwarding bearer credentials; the
+local runner supplies `Authorization: Bearer EMPTY`. The smoke uses
+`temperature: 0`, `top_p: 1`, and `max_tokens: 40960`. The token budget matches
+the pinned verifier's MiniMax M3 default and prevents a valid tool-call response
+from ending at the model's common 2048-token generation default. The request
+has a 180-second timeout by default and at most one retry for transport
+failures, HTTP 429, or HTTP 5xx responses (two total attempts); a hard
+900-second global bound covers the smoke.
 
-The adapter applies the pinned validator semantics directly to this fixture; it
-does not download the upstream repository or run the remaining 99 cases.
-
-The adapter sends the three requests sequentially to
-`${base_url}/chat/completions`. The endpoint must accept an OpenAI-compatible
-Bearer token and chat-completions request body and return OpenAI-compatible
-message, finish-reason, and tool-call fields. Redirect responses are rejected
-before forwarding bearer credentials; the local runner supplies
-`Authorization: Bearer EMPTY`. The smoke overrides fixture sampling with
-`temperature: 0`, `top_p: 1`, and the upstream M3 default
-`max_tokens: 40960`, which prevents valid tool-call responses from ending at
-the model's common 2048-token generation default. Each request has a
-180-second timeout by default and at most one retry for transport failures,
-HTTP 429, or HTTP 5xx responses (two total attempts); a hard
-900-second global bound covers the whole suite.
-
-`minimax_vendor_report.json` is the native report. It preserves every raw
-response and reports the six requested upstream-derived metric families:
-
-- `Query-Success-Rate`, which records whether the endpoint returned a response,
-  not whether the answer was generally correct;
-- `ToolCalls-Trigger-Similarity`, the F1 score computed from the fixture's
-  `expected_tool_call` labels;
-- `ToolCalls-Schema-Accuracy`, which validates returned function names and
-  arguments against the requested tool schema;
-- `Error-Only-Reasoning-Rate`, for responses with reasoning but neither visible
-  content nor tool calls;
-- `Language-Following-Success-Rate`, the non-Cyrillic language check;
-- `Scenario-Check-Pass-Rate`, the scenario parameter key-order check.
+`minimax_vendor_report.json` is the native report. It preserves the raw
+response and reports the six upstream-derived metric fields. This Phase 1 case
+exercises `Query-Success-Rate`, `ToolCalls-Trigger-Similarity`,
+`ToolCalls-Schema-Accuracy`, and `Error-Only-Reasoning-Rate`.
+`Language-Following-Success-Rate` and `Scenario-Check-Pass-Rate` have no
+applicable case in this fixture and report `0.0` with zero checked counts.
 
 The adapter additionally writes exactly one timestamped
 `results_minimax_vendor_*.json` compatibility artifact. Its `result_format` is
 `inferencex-eval-v1`, `eval_adapter` is `minimax-provider-verifier`, task is
 `minimax_m3_smoke`, and primary metric is `exact_match,strict-match`. A
-completed run records original and effective sample counts of three. Its
-compatibility score is passed cases divided by
-three; the `minimax_m3_smoke` threshold is `1.0`, so every case must pass.
+completed run records original and effective sample counts of one. Its score
+is `1.0` only when row 71 returns a `tool_calls` finish reason and every
+function call validates against the requested schema. The
+`minimax_m3_smoke` threshold remains `1.0`.
 Both artifacts match the workflows' existing `results*.json` and
 `*_vendor_report.json` upload patterns.
 Setup, integration, timeout, and collection failures still emit a zero-score
 compatibility artifact with error metadata.
 
-This is a fixed three-case provider compatibility smoke, not the full
+This is a fixed single-case provider compatibility smoke, not the full
 102-case MiniMax Provider Verifier, BFCL, or a cross-model quality comparison.
 It does not estimate the upstream dataset's aggregate rates, stochastic
 pass-at-k behavior, streaming behavior, parallel-call behavior, multi-turn tool
-execution, or general agent quality. Its metric denominators are only the
-applicable cases in this pinned three-row fixture.
+execution, language following, scenario key-order recall, or general agent
+quality.
 
 ### Benchmark script flow
 
@@ -231,7 +216,7 @@ Key eval functions in `benchmarks/benchmark_lib.sh`:
 | `run_eval` | Unified entrypoint - dispatches to framework-specific runner |
 | `run_lm_eval` | Runs lm-eval harness against the OpenAI-compatible endpoint |
 | `run_kimi_vendor_eval` | Selects and runs a pinned Kimi Vendor Verifier suite |
-| `run_minimax_vendor_eval` | Validates MiniMax M3 applicability and runs the pinned three-case provider smoke |
+| `run_minimax_vendor_eval` | Runs the pinned single-case MiniMax provider smoke |
 | `append_lm_eval_summary` | Writes `meta_env.json` and moves eval artifacts to workspace |
 | `_install_lm_eval_deps` | Installs lm-eval dependencies |
 | `_prepare_vendor_verifier_python` | Uses system Python 3.12+ or provisions an isolated pinned Python 3.12 runtime for provider verifiers |

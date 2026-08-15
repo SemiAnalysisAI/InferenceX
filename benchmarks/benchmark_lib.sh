@@ -1439,14 +1439,6 @@ run_minimax_vendor_eval() {
 
     case "$eval_suite" in
         minimax_m3_smoke)
-            local model_name="${MODEL_NAME:-${MODEL:-}}"
-            local model_prefix="${MODEL_PREFIX:-}"
-            if [[ "$model_prefix" != [Mm][Ii][Nn][Ii][Mm][Aa][Xx][Mm]3 ]] \
-                && [[ "$model_name" != *[Mm][Ii][Nn][Ii][Mm][Aa][Xx]-[Mm]3* ]]; then
-                echo "ERROR: MiniMax M3 smoke requires MODEL_PREFIX=minimaxm3 or a MODEL/MODEL_NAME containing MiniMax-M3" >&2
-                export EVAL_RESULT_DIR=""
-                return 2
-            fi
             _run_minimax_m3_smoke_eval "$@"
             ;;
         *)

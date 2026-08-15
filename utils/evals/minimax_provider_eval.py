@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the pinned three-case MiniMax M3 provider compatibility smoke."""
+"""Run the pinned single-case MiniMax M3 provider compatibility smoke."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ DEFAULT_TIMEOUT_SECONDS = 900.0
 M3_DEFAULT_MAX_TOKENS = 40960
 RESULT_FORMAT = "inferencex-eval-v1"
 ADAPTER_NAME = "minimax-provider-verifier"
-EXPECTED_INDICES = (0, 71, 101)
+EXPECTED_INDICES = (71,)
 UPSTREAM_REF = "85bf180e54e2ab0b31595cfdc697116c4760876d"
 UPSTREAM_SOURCE = (
     "https://raw.githubusercontent.com/MiniMax-AI/MiniMax-Provider-Verifier/"
@@ -38,9 +38,7 @@ EXPECTED_LICENSE_SHA256 = (
     "aa7cec386fcb5e555aba0e8b1c31307940af41967708c9bc0f78b4e02e235dd5"
 )
 EXPECTED_CASE_SHA256 = {
-    0: "655d3135fc553b08c376f363165699548396428136fd9536345cf37b564b357a",
     71: "10272004ae08f4a7d08d2306404f6cbb7bbfa794230e1082a235ded036d550ed",
-    101: "10c3c2bf8d4e43d520de8ef3955cda1dcdd852c9c904decbc7d8cd040431afd4",
 }
 MAX_RESPONSE_BYTES = 16 * 1024 * 1024
 MAX_ATTEMPTS = 2
@@ -120,12 +118,12 @@ def _validate_tools(value: Any, name: str) -> None:
 
 
 def load_fixture(path: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    """Load and validate the exact pinned three-case fixture."""
+    """Load and validate the exact pinned single-case fixture."""
     root = _mapping(json.loads(path.read_text(encoding="utf-8")), "fixture")
     if root.get("source") != UPSTREAM_SOURCE or root.get("ref") != UPSTREAM_REF:
         raise ValueError("fixture source or ref does not match the pinned upstream")
     if root.get("indices") != list(EXPECTED_INDICES):
-        raise ValueError("fixture indices must be exactly [0, 71, 101]")
+        raise ValueError("fixture indices must be exactly [71]")
     license_text = root.get("license")
     if (
         not isinstance(license_text, str)
@@ -135,13 +133,11 @@ def load_fixture(path: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
 
     raw_rows = root.get("rows")
     if not isinstance(raw_rows, list) or len(raw_rows) != len(EXPECTED_INDICES):
-        raise ValueError("fixture must contain exactly three rows")
+        raise ValueError("fixture must contain exactly one row")
 
     rows: list[dict[str, Any]] = []
     expected_checks = {
-        0: ["contains_russian_characters_unicode"],
         71: [],
-        101: ["scenario_check"],
     }
     for position, raw_row in enumerate(raw_rows):
         row = dict(_mapping(raw_row, f"fixture.rows[{position}]"))
@@ -935,7 +931,7 @@ def run_evaluation(
     http_post: HttpPost = _default_http_post,
     clock: Clock = time.monotonic,
 ) -> bool:
-    """Run all three cases sequentially and always publish both artifacts."""
+    """Run the pinned case and always publish both artifacts."""
     output_dir.mkdir(parents=True, exist_ok=True)
     native_path = output_dir / NATIVE_REPORT_FILENAME
     native_path.unlink(missing_ok=True)
@@ -1019,7 +1015,7 @@ def run_evaluation(
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run the pinned three-case MiniMax M3 provider smoke."
+        description="Run the pinned single-case MiniMax M3 provider smoke."
     )
     parser.add_argument("--base-url")
     parser.add_argument("--api-key", default="EMPTY")

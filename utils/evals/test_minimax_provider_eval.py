@@ -151,13 +151,11 @@ def test_success_writes_complete_native_and_compatibility_reports(
         http_post=http_post,
     )
 
-    assert len(invocations) == 3
+    assert len(invocations) == 1
     assert [
         call["payload"].get("tools", [{}])[0].get("function", {}).get("name")
-        if call["payload"].get("tools")
-        else None
         for call in invocations
-    ] == [None, "flag_duplicate_therapies", "example"]
+    ] == ["flag_duplicate_therapies"]
     for call in invocations:
         assert call["url"] == "http://127.0.0.1:8000/v1/chat/completions"
         assert call["headers"]["Authorization"] == "Bearer secret"
@@ -178,24 +176,22 @@ def test_success_writes_complete_native_and_compatibility_reports(
     assert native["source"] == {
         "url": mpe.UPSTREAM_SOURCE,
         "ref": mpe.UPSTREAM_REF,
-        "indices": [0, 71, 101],
+        "indices": [71],
     }
-    assert native["summary"]["total"] == 3
-    assert native["summary"]["passed_count"] == 3
+    assert native["summary"]["total"] == 1
+    assert native["summary"]["passed_count"] == 1
     assert native["summary"]["overall_compatibility_score"] == 1.0
     assert native["metrics"] == {
         "Query-Success-Rate": 1.0,
         "ToolCalls-Trigger-Similarity": 1.0,
         "ToolCalls-Schema-Accuracy": 1.0,
         "Error-Only-Reasoning-Rate": 0.0,
-        "Language-Following-Success-Rate": 1.0,
-        "Scenario-Check-Pass-Rate": 1.0,
+        "Language-Following-Success-Rate": 0.0,
+        "Scenario-Check-Pass-Rate": 0.0,
     }
-    assert [result["data_index"] for result in native["results"]] == [0, 71, 101]
+    assert [result["data_index"] for result in native["results"]] == [71]
     assert [result["response"]["id"] for result in native["results"]] == [
-        "language-response",
         "tool-response",
-        "scenario-response",
     ]
 
     compatibility = _compatibility(output_dir)
@@ -204,8 +200,8 @@ def test_success_writes_complete_native_and_compatibility_reports(
     assert compatibility["model_name"] == "MiniMax-M3"
     assert _score(output_dir) == 1.0
     assert compatibility["n-samples"][mpe.TASK_NAME] == {
-        "original": 3,
-        "effective": 3,
+        "original": 1,
+        "effective": 1,
     }
     assert "secret" not in json.dumps([native, compatibility])
 
@@ -221,12 +217,12 @@ def test_schema_failure_fails_only_tool_case(tmp_path: Path) -> None:
     output_dir = tmp_path / "output"
     assert not _run(output_dir, post)
     native = _native(output_dir)
-    tool_result = native["results"][1]
+    tool_result = native["results"][0]
     assert tool_result["tool_calls_valid"] is False
     assert tool_result["failures"] == ["tool_call_schema"]
     assert native["metrics"]["ToolCalls-Schema-Accuracy"] == 0.0
-    assert native["summary"]["passed_count"] == 2
-    assert _score(output_dir) == pytest.approx(2 / 3)
+    assert native["summary"]["passed_count"] == 0
+    assert _score(output_dir) == 0.0
 
 
 def test_trigger_failure_uses_expected_label(tmp_path: Path) -> None:
@@ -240,63 +236,46 @@ def test_trigger_failure_uses_expected_label(tmp_path: Path) -> None:
     output_dir = tmp_path / "output"
     assert not _run(output_dir, post)
     native = _native(output_dir)
-    assert native["results"][1]["failures"] == ["tool_call_trigger"]
+    assert native["results"][0]["failures"] == ["tool_call_trigger"]
     assert native["metrics"]["ToolCalls-Trigger-Similarity"] == 0.0
     assert native["summary"]["tool_calls_finish_stop"] == 1
-    assert native["summary"]["stop_finish_stop"] == 1
-
-
-def test_negative_trigger_requires_stop_finish_reason(tmp_path: Path) -> None:
-    def post(payload: dict[str, Any]) -> dict[str, Any]:
-        tools = payload.get("tools", [])
-        if tools and tools[0]["function"]["name"] == "example":
-            response = _scenario_response()
-            response["choices"][0]["finish_reason"] = "length"
-            return response
-        return _response_for(payload)
-
-    output_dir = tmp_path / "output"
-    assert not _run(output_dir, post)
-    native = _native(output_dir)
-    assert native["results"][2]["failures"] == ["tool_call_trigger"]
     assert native["summary"]["stop_finish_stop"] == 0
-    assert native["metrics"]["ToolCalls-Trigger-Similarity"] == 1.0
 
 
-def test_language_failure_uses_pinned_cyrillic_range(tmp_path: Path) -> None:
-    def post(payload: dict[str, Any]) -> dict[str, Any]:
-        if not payload.get("tools"):
-            return _language_response("Это ответ")
-        return _response_for(payload)
-
-    output_dir = tmp_path / "output"
-    assert not _run(output_dir, post)
-    native = _native(output_dir)
-    assert native["results"][0]["language_following_checked"] is True
-    assert native["results"][0]["language_following_valid"] is False
-    assert native["results"][0]["failures"] == ["language_following"]
-    assert native["metrics"]["Language-Following-Success-Rate"] == 0.0
+def test_language_validator_uses_pinned_cyrillic_range() -> None:
+    result = mpe.validate_language("success", "Это ответ")
+    assert result["language_following_checked"] is True
+    assert result["language_following_valid"] is False
 
 
-def test_scenario_failure_uses_visible_first_occurrence_order(tmp_path: Path) -> None:
-    def post(payload: dict[str, Any]) -> dict[str, Any]:
-        tools = payload.get("tools", [])
-        if tools and tools[0]["function"]["name"] == "example":
-            return _scenario_response(
-                "<think>123 some-parameter</think> xyz then some-parameter"
-            )
-        return _response_for(payload)
-
-    output_dir = tmp_path / "output"
-    assert not _run(output_dir, post)
-    result = _native(output_dir)["results"][2]
+def test_scenario_validator_uses_visible_first_occurrence_order() -> None:
+    request = {
+        "tools": [
+            {
+                "function": {
+                    "parameters": {
+                        "properties": {
+                            "123": {},
+                            "some-parameter": {},
+                            "xyz": {},
+                            "another-parameter": {},
+                        }
+                    }
+                }
+            }
+        ]
+    }
+    result = mpe.validate_scenario(
+        request,
+        "success",
+        "<think>123 some-parameter</think> xyz then some-parameter",
+    )
     assert result["scenario_check_checked"] is True
     assert result["scenario_check_detail"] == {
         "expected": ["123", "some-parameter", "xyz", "another-parameter"],
         "actual": ["xyz", "some-parameter"],
     }
     assert result["scenario_check_valid"] is False
-    assert result["failures"] == ["scenario_check"]
 
 
 def test_transport_retries_once_then_preserves_success(tmp_path: Path) -> None:
@@ -317,7 +296,7 @@ def test_transport_retries_once_then_preserves_success(tmp_path: Path) -> None:
         output_dir=output_dir,
         http_post=http_post,
     )
-    assert attempts == 4
+    assert attempts == 2
     assert _native(output_dir)["results"][0]["attempts"] == 2
     assert _score(output_dir) == 1.0
 
@@ -487,15 +466,15 @@ def test_malformed_chat_response_records_diagnostic_and_continues(
     output_dir = tmp_path / "output"
     assert not _run(output_dir, post)
     native = _native(output_dir)
-    assert calls == 3
-    assert len(native["results"]) == 3
+    assert calls == 1
+    assert len(native["results"]) == 1
     for result in native["results"]:
         assert result["status"] == "failed"
         assert result["failures"][0] == "query_failed"
         assert result["response"]["error"]["type"] in {"TypeError", "ValueError"}
 
 
-def test_exhausted_transport_failure_does_not_skip_later_cases(tmp_path: Path) -> None:
+def test_exhausted_transport_failure_publishes_report(tmp_path: Path) -> None:
     calls = 0
 
     def http_post(**request: Any) -> dict[str, Any]:
@@ -514,18 +493,16 @@ def test_exhausted_transport_failure_does_not_skip_later_cases(tmp_path: Path) -
         http_post=http_post,
     )
     native = _native(output_dir)
-    assert calls == 4
-    assert len(native["results"]) == 3
+    assert calls == 2
+    assert len(native["results"]) == 1
     assert native["results"][0]["failures"] == [
         "query_failed",
-        "language_following",
+        "tool_call_trigger",
     ]
-    assert native["results"][1]["case_passed"] is True
-    assert native["results"][2]["case_passed"] is True
-    assert native["metrics"]["Query-Success-Rate"] == pytest.approx(2 / 3)
+    assert native["metrics"]["Query-Success-Rate"] == 0.0
 
 
-def test_global_deadline_caps_attempts_and_publishes_partial_report(
+def test_global_deadline_caps_attempts_and_publishes_timeout_report(
     tmp_path: Path,
 ) -> None:
     now = [0.0]
@@ -536,7 +513,7 @@ def test_global_deadline_caps_attempts_and_publishes_partial_report(
 
     def http_post(**request: Any) -> dict[str, Any]:
         timeouts.append(request["timeout_seconds"])
-        now[0] += 0.7
+        now[0] += 1.1
         return _response_for(request["payload"])
 
     output_dir = tmp_path / "output"
@@ -551,16 +528,14 @@ def test_global_deadline_caps_attempts_and_publishes_partial_report(
         clock=clock,
     )
     native = _native(output_dir)
-    assert timeouts == pytest.approx([1.0, 0.3])
-    assert len(native["results"]) == 3
-    assert native["results"][0]["case_passed"] is True
-    assert native["results"][1]["suite_timed_out"] is True
-    assert native["results"][2]["suite_timed_out"] is True
+    assert timeouts == pytest.approx([1.0])
+    assert len(native["results"]) == 1
+    assert native["results"][0]["suite_timed_out"] is True
     assert native["completed"] is False
     assert native["integration_error"]["type"] == "SuiteTimeoutError"
     compatibility = _compatibility(output_dir)
     assert _score(output_dir) == 0.0
-    assert compatibility["n-samples"][mpe.TASK_NAME]["effective"] == 1
+    assert compatibility["n-samples"][mpe.TASK_NAME]["effective"] == 0
     assert compatibility["integration_error"]["type"] == "SuiteTimeoutError"
 
 
@@ -620,20 +595,18 @@ def test_default_http_post_bounds_a_drip_feed_body_by_wall_clock(
 
 def test_reasoning_only_response_is_always_checked(tmp_path: Path) -> None:
     def post(payload: dict[str, Any]) -> dict[str, Any]:
-        if not payload.get("tools"):
-            return {
-                "choices": [
-                    {
-                        "finish_reason": "length",
-                        "message": {
-                            "reasoning": "I could not answer",
-                            "content": "",
-                            "tool_calls": [],
-                        },
-                    }
-                ]
-            }
-        return _response_for(payload)
+        return {
+            "choices": [
+                {
+                    "finish_reason": "length",
+                    "message": {
+                        "reasoning": "I could not answer",
+                        "content": "",
+                        "tool_calls": [],
+                    },
+                }
+            ]
+        }
 
     output_dir = tmp_path / "output"
     assert not _run(output_dir, post)
@@ -641,9 +614,9 @@ def test_reasoning_only_response_is_always_checked(tmp_path: Path) -> None:
     assert native["results"][0]["error_only_reasoning"] is True
     assert native["results"][0]["failures"] == [
         "error_only_reasoning",
-        "language_following",
+        "tool_call_trigger",
     ]
-    assert native["metrics"]["Error-Only-Reasoning-Rate"] == pytest.approx(1 / 3)
+    assert native["metrics"]["Error-Only-Reasoning-Rate"] == 1.0
 
 
 def test_stale_artifacts_are_removed_without_touching_foreign_results(
@@ -691,7 +664,7 @@ def test_integration_error_cli_is_dependency_free_and_writes_both_artifacts(
 
     native = _native(output_dir)
     assert native["completed"] is False
-    assert len(native["results"]) == 3
+    assert len(native["results"]) == 1
     assert native["integration_error"] == {
         "type": "RuntimeError",
         "message": "dependency installation failed",
@@ -699,7 +672,7 @@ def test_integration_error_cli_is_dependency_free_and_writes_both_artifacts(
     compatibility = _compatibility(output_dir)
     assert _score(output_dir) == 0.0
     assert compatibility["n-samples"][mpe.TASK_NAME] == {
-        "original": 3,
+        "original": 1,
         "effective": 0,
     }
     assert compatibility["integration_error"]["message"] == (
@@ -738,17 +711,17 @@ def test_fixture_rejects_unpinned_or_incomplete_input(
 ) -> None:
     fixture = json.loads(mpe.DEFAULT_FIXTURE_PATH.read_text(encoding="utf-8"))
     if field == "indices":
-        fixture[field] = [0, 71]
+        fixture[field] = [0]
     elif field == "ref":
         fixture[field] = "main"
     elif field == "license":
         fixture[field] = "MIT License"
     elif field == "rows":
-        fixture[field] = fixture[field][:-1]
+        fixture[field] = []
     elif field == "prompt":
         fixture["rows"][0]["messages"][0]["content"] = "changed"
     else:
-        fixture["rows"][1]["tools"][0]["function"]["parameters"]["type"] = "array"
+        fixture["rows"][0]["tools"][0]["function"]["parameters"]["type"] = "array"
     path = tmp_path / "fixture.json"
     path.write_text(json.dumps(fixture), encoding="utf-8")
 

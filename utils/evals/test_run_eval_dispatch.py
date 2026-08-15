@@ -384,15 +384,22 @@ def test_minimax_vendor_ignores_single_launcher_concurrency_value() -> None:
     assert "DISPATCH_COUNT=1" in output
 
 
-def test_minimax_vendor_rejects_non_m3_model() -> None:
-    result = _run_invalid_call(
-        "MODEL=moonshotai/Kimi-K2 "
-        "MODEL_PREFIX=kimik3 "
-        "run_minimax_vendor_eval"
+def test_minimax_vendor_accepts_non_m3_model() -> None:
+    script = r'''
+source "$BENCHMARK_LIB"
+_run_minimax_m3_smoke_eval() { echo "DISPATCH=$EVAL_SUITE"; }
+unset EVAL_SUITE EVAL_RESULT_DIR
+MODEL=moonshotai/Kimi-K3 MODEL_PREFIX=kimik3 run_minimax_vendor_eval
+'''
+    result = subprocess.run(
+        ["bash", "-c", script],
+        env={**os.environ, "BENCHMARK_LIB": str(BENCHMARK_LIB)},
+        text=True,
+        capture_output=True,
+        check=True,
     )
 
-    assert result.returncode == 2
-    assert "requires MODEL_PREFIX=minimaxm3" in result.stderr
+    assert "DISPATCH=minimax_m3_smoke" in result.stdout
 
 
 def test_minimax_vendor_accepts_case_insensitive_m3_model_name() -> None:
