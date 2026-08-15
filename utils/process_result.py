@@ -123,6 +123,7 @@ result_filename = base_env['RESULT_FILENAME']
 isl = base_env['ISL']
 osl = base_env['OSL']
 image = base_env['IMAGE']
+recipe_fingerprint = os.environ.get('RECIPE_FINGERPRINT', '')
 
 with open(f'{result_filename}.json') as f:
     bmk_result = json.load(f)
@@ -137,6 +138,7 @@ data = {
     'precision': precision,
     'spec_decoding': spec_decoding,
     'disagg': disagg,
+    'recipe_fingerprint': recipe_fingerprint,
     'isl': int(isl),
     'osl': int(osl),
 }
