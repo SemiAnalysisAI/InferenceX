@@ -2,6 +2,11 @@
 # Kimi-K3 MXFP4 MI355X aggregated multinode PP2 agentic benchmark (2 nodes).
 # Supports TP8×PP2 (16 GPUs) or TP4×PP2 (8 GPUs, 4 per node).
 #
+# CI e2e entry: configs/amd-master.yaml kimik3-fp4-mi355x-vllm-agentic-tp8pp2
+#   → launch_mi355x-amds.sh → kimik3_fp4_mi355x_vllm.sh → kimik3_agg_pp_job.slurm
+#   → this script (per-rank container). Local smoke still uses
+#   experimental/kimik3-v4/run_kimik3_tp8pp2_smoke_g06_g17.sh.
+#
 # MI355X adaptation of the B200 srt-slurm recipe
 # benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic/
 # agg-b200-tp8pp2-retention0-agentic.yaml
@@ -26,6 +31,9 @@
 #   TP (default 8), PP (default 2), PORT, KV_OFFLOAD_BACKEND (vllm-simple when dram),
 #   GPU_MEM_UTIL, ENFORCE_EAGER (default false), MAX_NUM_SEQS (default 20),
 #   MAX_NUM_BATCHED_TOKENS (default 8192; caps chunked-prefill M to avoid OOM)
+#   ASYNC_SCHEDULING: true|1 → --async-scheduling;
+#                     false|0 → --no-async-scheduling;
+#                     unset/auto → omit (engine default; matches prior smoke)
 #
 set -euo pipefail
 set -x
@@ -236,6 +244,24 @@ fi
 if [[ "${DISABLE_CUSTOM_ALL_REDUCE:-0}" == "1" ]]; then
     COMMON_VLLM_ARGS+=(--disable-custom-all-reduce)
 fi
+# Async scheduling toggle for PP (vLLM --async-scheduling / --no-async-scheduling).
+case "${ASYNC_SCHEDULING:-auto}" in
+true|TRUE|1|yes|YES|on|ON)
+    COMMON_VLLM_ARGS+=(--async-scheduling)
+    echo "ASYNC_SCHEDULING=on -> --async-scheduling"
+    ;;
+false|FALSE|0|no|NO|off|OFF)
+    COMMON_VLLM_ARGS+=(--no-async-scheduling)
+    echo "ASYNC_SCHEDULING=off -> --no-async-scheduling"
+    ;;
+auto|AUTO|"")
+    echo "ASYNC_SCHEDULING=auto -> omit (vLLM default)"
+    ;;
+*)
+    echo "Error: ASYNC_SCHEDULING='${ASYNC_SCHEDULING}' (expected true|false|auto)" >&2
+    exit 1
+    ;;
+esac
 
 if [[ "$NODE_RANK" -eq 1 ]]; then
     echo "Starting rank-1 headless PP worker on $(hostname)"
@@ -246,9 +272,17 @@ if [[ "$NODE_RANK" -eq 1 ]]; then
     exec "${VLLM_CMD[@]}" > "$SERVER_LOG" 2>&1
 fi
 
-# Rank 0: OpenAI API + agentic trace replay.
+# Rank 0: OpenAI API + agentic trace replay (CONC_LIST sequential, like agentic_srt.sh).
 resolve_trace_source
 install_agentic_deps
+
+BASE_RESULT_DIR="${RESULT_DIR}"
+BASE_RESULT_FILENAME="${RESULT_FILENAME}"
+read -r -a CONCURRENCIES <<< "${CONC_LIST:-$CONC}"
+if [[ "${#CONCURRENCIES[@]}" -eq 0 ]]; then
+    echo "ERROR: CONC_LIST/CONC must contain at least one concurrency" >&2
+    exit 1
+fi
 
 SERVER_PID=""
 cleanup_agentic_services() {
@@ -268,8 +302,9 @@ VLLM_CMD=(
     --port "$PORT"
     "${COMMON_VLLM_ARGS[@]}"
 )
-printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
-printf '\n' | tee -a "$RESULT_DIR/vllm_command.txt"
+printf '%q ' "${VLLM_CMD[@]}" | tee "$BASE_RESULT_DIR/vllm_command.txt"
+printf '\n' | tee -a "$BASE_RESULT_DIR/vllm_command.txt"
+SERVER_LOG="$BASE_RESULT_DIR/server.log"
 "${VLLM_CMD[@]}" > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 
@@ -278,6 +313,26 @@ wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$S
 if [[ "${EVAL_ONLY}" == "true" ]]; then
     run_eval --port "$PORT"
 else
-    build_replay_cmd "$RESULT_DIR"
-    run_agentic_replay_and_write_outputs "$RESULT_DIR"
+    for concurrency in "${CONCURRENCIES[@]}"; do
+        if ! [[ "$concurrency" =~ ^[1-9][0-9]*$ ]]; then
+            echo "ERROR: invalid agentic concurrency: $concurrency" >&2
+            exit 1
+        fi
+        export CONC="$concurrency"
+        # Workflow expects ${RESULT_FILENAME}_concN.json (see agentic_srt.sh).
+        export RESULT_FILENAME="${BASE_RESULT_FILENAME}_conc${concurrency}"
+        RESULT_DIR="${BASE_RESULT_DIR}/conc_${concurrency}"
+        mkdir -p "$RESULT_DIR"
+        # Also mirror under /logs/agentic for launch_mi355x-amds.sh staging.
+        if [[ -d /logs/agentic ]]; then
+            mkdir -p "/logs/agentic/conc_${concurrency}"
+            # Keep aiperf under RESULT_DIR; staging copies from rank0 or /logs.
+        fi
+        echo "Running agentic concurrency $concurrency of: ${CONCURRENCIES[*]}"
+        build_replay_cmd "$RESULT_DIR"
+        run_agentic_replay_and_write_outputs "$RESULT_DIR"
+        if [[ -d /logs/agentic/conc_${concurrency} && -d "$RESULT_DIR" ]]; then
+            cp -a "$RESULT_DIR"/. "/logs/agentic/conc_${concurrency}/" 2>/dev/null || true
+        fi
+    done
 fi

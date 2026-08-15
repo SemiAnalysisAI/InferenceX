@@ -61,7 +61,7 @@ mkdir -p "$RESULT_HOST" "$LOG_ROOT"
 echo "=== MI355X ${TOPO_TAG} smoke (mtp-aligned, no spec-decode) ===" | tee "$MAIN_LOG"
 echo "hold=${SLURM_REUSE_JOBID} nodes=${NODE0}+${NODE1} tp=${TP} pp=${PP} gpus=${GPU_DEVICES}" | tee -a "$MAIN_LOG"
 echo "conc=${CONC} dur=${DURATION}s kv=${KV_OFFLOADING}/${KV_OFFLOAD_BACKEND} dram_gb=${TOTAL_CPU_DRAM_GB} enforce_eager=${ENFORCE_EAGER} aiter_extra=${AITER_GEMM_EXTRA_CSV} debug_rocm=${DEBUG_ROCM} max_cudagraph=${MAX_CUDAGRAPH_CAPTURE_SIZE:-auto}" | tee -a "$MAIN_LOG"
-echo "patches: n6288=${AITER_N6288_CHUNK_PATCH:-1} ca_flush_sync=${AITER_CA_FLUSH_SYNC_PATCH:-1} disable_custom_ar=${DISABLE_CUSTOM_ALL_REDUCE:-0}" | tee -a "$MAIN_LOG"
+echo "patches: n6288=${AITER_N6288_CHUNK_PATCH:-1} ca_flush_sync=${AITER_CA_FLUSH_SYNC_PATCH:-1} disable_custom_ar=${DISABLE_CUSTOM_ALL_REDUCE:-0} async_sched=${ASYNC_SCHEDULING:-auto}" | tee -a "$MAIN_LOG"
 mkdir -p "$RANK1_RESULT_HOST"
 
 if [[ "$DEBUG_ROCM" != "0" ]]; then
@@ -116,6 +116,7 @@ set -o pipefail
     export AITER_N6288_CHUNK_PATCH=${AITER_N6288_CHUNK_PATCH:-1}
     export AITER_CA_FLUSH_SYNC_PATCH=${AITER_CA_FLUSH_SYNC_PATCH:-1}
     export DISABLE_CUSTOM_ALL_REDUCE=${DISABLE_CUSTOM_ALL_REDUCE:-0}
+    export ASYNC_SCHEDULING=${ASYNC_SCHEDULING:-auto}
     export MODEL=moonshotai/Kimi-K3 MODEL_PATH=/model MODEL_PREFIX=kimik3
     export TP=${TP} PP=${PP} CONC=${CONC}
     export KV_OFFLOADING=${KV_OFFLOADING} KV_OFFLOAD_BACKEND=${KV_OFFLOAD_BACKEND}

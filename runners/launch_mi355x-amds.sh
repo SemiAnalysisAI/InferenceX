@@ -77,7 +77,11 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     fi
 
     SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_mi355x_${FRAMEWORK}.sh"
-    if [[ "$FRAMEWORK" == "sglang-disagg" ]] || [[ "$FRAMEWORK" == "vllm-disagg" ]] || [[ "$FRAMEWORK" == "atom-disagg" ]]; then
+    # Aggregated (non-disagg) vLLM PP agentic: 2-node TP×PP via multi_node/agentic/
+    # submit wrapper (e.g. kimik3_fp4_mi355x_vllm.sh → kimik3_agg_pp_job.slurm).
+    if [[ "$FRAMEWORK" == "vllm" && "${DISAGG:-false}" == "false" && ( "${IS_AGENTIC:-0}" == "1" || "${IS_AGENTIC:-}" == "true" ) ]]; then
+        BENCHMARK_SUBDIR="multi_node/agentic"
+    elif [[ "$FRAMEWORK" == "sglang-disagg" ]] || [[ "$FRAMEWORK" == "vllm-disagg" ]] || [[ "$FRAMEWORK" == "atom-disagg" ]]; then
         # Agentic recipes live under multi_node/agentic/ and export the
         # HiCache tunables (page-size, io-backend, ...); fixed-seq-len recipes
         # live at the multi_node/ root. Honor SCENARIO_SUBDIR so agentic-coding

@@ -603,6 +603,46 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
       - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [1, 4, 8, 10], spec-decoding: mtp }
       #- { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "git" }, conc-list: [12], spec-decoding: mtp}
 
+# Aggregated TP8×PP2 (2 nodes / 16 GPUs). Weights do not fit one MI355X node at
+# TP8 alone for this bring-up path without PP; mirrors B200 agg-tp8pp2 agentic
+# (decode num-worker 0 so GPUs are counted once). Serving profile matches the
+# g06+g17 smoke: no MTP, dram + vllm-simple, FULL_AND_PIECEWISE, max-num-seqs 20.
+# Launcher: runners/launch_mi355x-amds.sh → multi_node/agentic/kimik3_fp4_mi355x_vllm.sh
+# → kimik3_fp4_mi355x_vllm_tp8pp2.sh (container serve).
+kimik3-fp4-mi355x-vllm-agentic-tp8pp2:
+  image: vllm/vllm-openai-rocm:nightly-cb8104839c141609d99f1254459ef3a4f1bd4263
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: true
+  disagg: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.50
+      search-space:
+      - spec-decoding: none
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        # Smoke-validated around c10; ladder for e2e bring-up.
+        conc-list: [4, 8, 10, 12, 16, 20]
+        prefill:
+          num-worker: 1
+          tp: 8
+          pp: 2
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          # true|1 → --async-scheduling; false|0 → --no-async-scheduling; auto → omit.
+          - "ASYNC_SCHEDULING=false"
+        decode:
+          num-worker: 0
+          tp: 8
+          pp: 2
+          ep: 1
+          dp-attn: false
+
 dsr1-fp4-mi355x-sglang-disagg:
   image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519
   model: amd/DeepSeek-R1-0528-MXFP4-v2

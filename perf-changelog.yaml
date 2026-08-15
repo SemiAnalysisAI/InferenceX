@@ -5700,3 +5700,17 @@
     - "Use the official lmsysorg/sglang:v0.5.16-rocm720-mi30x image, enable SGLang prompt-cache reporting, and pass the backend Prometheus metrics endpoint explicitly to AIPerf"
     - "Allow up to 30 minutes for healthy AgentX responses admitted near the end of the measurement window to drain before AIPerf finalizes profile metric coverage"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2528
+
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-tp8pp2
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add MI355X aggregated TP8xPP2 agentic recipe for Kimi-K3 MXFP4 (2 nodes / 16 GPUs, disagg=false, decode num-worker 0), mirroring the verified g06+g17 smoke and the B200 agg-tp8pp2 agentic shape."
+    - "Serving: vllm/vllm-openai-rocm nightly-cb8104839c..., no MTP, dram + vllm-simple (~1500 GB/node at dram-utilization 0.50), FULL_AND_PIECEWISE cudagraph capture 1..44, max-num-seqs 20, max-num-batched-tokens 8192, gpu-memory-utilization 0.84, disable-custom-all-reduce for PP stability."
+    - "CI path: launch_mi355x-amds.sh routes framework=vllm + disagg=false + agentic to multi_node/agentic/kimik3_fp4_mi355x_vllm.sh -> kimik3_agg_pp_job.slurm -> kimik3_fp4_mi355x_vllm_tp8pp2.sh; aiter GEMM CSV + n6288/ca_flush patches from experimental/kimik3-v4/aiter."
+    - "ASYNC_SCHEDULING toggle (additional-settings / env): true -> --async-scheduling, false -> --no-async-scheduling, auto -> omit; e2e default false."
+    - "Search space conc-list [4, 8, 10, 12, 16, 20] (c10 smoke-validated)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
+
