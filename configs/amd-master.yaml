@@ -1678,3 +1678,12 @@ dsv4-fp4-mi355x-sglang-agentic-mtp:
       search-space:
       - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, conc-list: [1, 2, 4, 8, 16], spec-decoding: mtp }
       - { tp: 8, ep: 1, dp-attn: false, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 32, 48], spec-decoding: mtp }
+      # UMBP (MoRI) as the HiCache L3 tier, in distributed mode with a
+      # node-local umbp_master. Same host-DRAM L2 as the hicache arm plus a
+      # 64 GB/rank L3 pool, on the same conc points so the L3 delta is
+      # directly readable. Needs the UMBP write path from upstream sglang
+      # PR #30762, present in this image; the recipe runs hicache-ratio 1 (not
+      # the hicache arm's 1.5) because ibv_reg_mr pins the whole host pool on
+      # one node, and UMBP_DISABLE_ZERO_COPY_REGISTER=true to avoid the
+      # duplicate MR registration that aborts the server on first write.
+      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: dram, kv-offload-backend: { name: umbp }, conc-list: [16, 32, 48], spec-decoding: mtp }
