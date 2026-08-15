@@ -23,14 +23,18 @@
 #   docker cp benchmarks/single_node/agentic k3-dspark-benchmark:/opt/k3-recipe
 #   docker exec k3-dspark-benchmark bash /opt/k3-recipe/apply_k3_container_patches.sh
 #
-# Result matches `setup_benchmark.sh setup-dspark` from the source tree exactly:
+# Result matches the measured unified-v2 runtime (k3-unified-v2-from-cb810):
 #   - aiter rebuilt at pin 55dbc4f47 (#4579 d3ddaabf9 + #4575 22beb1caa)
+#   - aiter a16w16 split-K disabled under graph replay (patch_aiter_splitk_cudagraph.py)
 #   - bundled tuned K3 GEMM CSV installed + merged -> merged_bf16_tuned_gemm.csv
-#   - triton 3.7.0 + tabulate (nightly ships 3.6.0)
+#   - triton 3.7.0 + triton_kernels + flydsl 0.3.0 (nightly ships triton 3.6.0)
 #   - 5 vLLM ASM base patches (decode #50578, fp8 prefill PR-A, PS metadata16,
 #     skip-k3-fp8-ps, wvSplitK #50618)
 #   - DSpark fp8-asm enablement layer (apply_dspark_fp8asm.sh)
+#   - full MLA small-head helper w/ gfx950 Gluon gate (patch_mla_small_head_helper.py)
 #   - FlyDSL->torch decode-GEMM reroute (patch_flydsl_decode_to_torch.sh)
+#   - vLLM #50183 rejection-sampler NaN argmax guard, #50649 KDA stage gate,
+#     #52047 hybrid EAGLE KV-offload group annotation
 #
 # Overridable knobs (env):
 #   AITER_PIN     aiter commit to build (default 55dbc4f47...)
@@ -61,10 +65,10 @@ say() { echo; echo "############### $* ###############"; }
 [ -f "$MLA" ] || { echo "!! $MLA not found — is this the pinned base image?" >&2; exit 1; }
 
 # ---------------------------------------------------------------------------
-say "1/6 build node-local aiter @ $AITER_PIN (#4579 + #4575 K/V int-32 offsets)"
+say "1/9 build node-local aiter @ $AITER_PIN (#4579 + #4575 K/V int-32 offsets)"
 # Stage from AITER_SRC if provided, else clone. JIT-compiles on demand against
-# the container torch + system triton (PREBUILD_KERNELS=0, AITER_USE_SYSTEM_TRITON=1).
-export PREBUILD_KERNELS=0 AITER_USE_SYSTEM_TRITON=1
+# the container torch + system triton (AITER_USE_SYSTEM_TRITON=1).
+export PREBUILD_KERNELS="${PREBUILD_KERNELS:-0}" AITER_USE_SYSTEM_TRITON=1
 if [ -d "$LOCAL_AITER/.git" ]; then
   echo "  reusing existing $LOCAL_AITER checkout"
 elif [ -n "${AITER_SRC:-}" ] && [ -d "$AITER_SRC/.git" ]; then
@@ -75,7 +79,6 @@ else
   rm -rf "$LOCAL_AITER"; git clone "$AITER_REPO" "$LOCAL_AITER"
 fi
 git config --global --add safe.directory "$LOCAL_AITER"
-# Full history: a shallow fetch would break the ancestry asserts below.
 git -C "$LOCAL_AITER" fetch --tags origin "$AITER_PIN" 2>/dev/null \
   || git -C "$LOCAL_AITER" fetch --tags origin 2>/dev/null || true
 if [ "$(git -C "$LOCAL_AITER" rev-parse --is-shallow-repository)" = "true" ]; then
@@ -99,7 +102,13 @@ rm -rf /root/aiter; ln -s "$LOCAL_AITER" /root/aiter
 python3 -c "import aiter; assert '/opt/aiter-local' in aiter.__file__ or '/root/aiter' in aiter.__file__, aiter.__file__; print('  aiter:', aiter.__file__)"
 
 # ---------------------------------------------------------------------------
-say "2/6 install + merge tuned K3 BF16 GEMM CSV"
+# Must run after the checkout above (reset --hard would revert it) and before
+# anything JIT-compiles the a16w16 module.
+say "2/9 aiter a16w16 split-K graph-safety guard (AITER_ALLOW_SPLITK=1 to re-enable)"
+python3 "$PATCHES/patch_aiter_splitk_cudagraph.py"
+
+# ---------------------------------------------------------------------------
+say "3/9 install + merge tuned K3 BF16 GEMM CSV"
 CONFIGS="$LOCAL_AITER/aiter/configs"
 mkdir -p "$CONFIGS/model_configs"
 cp "$TUNED_CSV" "$CONFIGS/model_configs/kimik3_bf16_tuned_gemm.csv"
@@ -132,16 +141,19 @@ PY
 
 # ---------------------------------------------------------------------------
 if [ "${SKIP_TRITON:-0}" = "1" ]; then
-  say "3/6 triton upgrade SKIPPED (SKIP_TRITON=1)"
+  say "4/9 triton upgrade SKIPPED (SKIP_TRITON=1)"
 else
-  say "3/6 triton 3.7.0 + tabulate (nightly ships 3.6.0)"
+  say "4/9 triton 3.7.0 + triton_kernels + unified-v2 runtime wheels"
   pip install -q --extra-index-url https://pypi.amd.com/triton/release/rocm-7.2.0/simple/ \
-    triton==3.7.0 tabulate
+    triton==3.7.0 tabulate triton_kernels==1.0.0+amd.rocm7.2.0.git89002410
+  # flydsl/hf_transfer/py-spy: the unified-v2 pins. fastsafetensors cuts weight
+  # load 745s -> 140s and is what --load-format fastsafetensors needs.
+  pip install -q flydsl==0.3.0 hf_transfer==0.1.9 py-spy==0.4.2 fastsafetensors
 fi
 python3 -c "import triton; print('  triton', triton.__version__)"
 
 # ---------------------------------------------------------------------------
-say "4/6 vLLM ASM base patches (decode #50578, fp8 prefill PR-A, PS16, skip-k3-fp8-ps, wvSplitK #50618)"
+say "5/9 vLLM ASM base patches (decode #50578, fp8 prefill PR-A, PS16, skip-k3-fp8-ps, wvSplitK #50618)"
 if grep -q "PATCH(fp8-asm)" "$MLA" && grep -q "PATCH(fp8-prefill-pad)" "$MLA" \
    && grep -q "num_head_k = max(16, self.num_heads)" "$MLA" \
    && grep -q "PATCH(skip-k3-fp8-ps)" "$MLA" \
@@ -155,17 +167,34 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-say "5/6 DSpark fp8-asm enablement layer"
+say "6/9 DSpark fp8-asm enablement layer"
 bash "$PATCHES/apply_dspark_fp8asm.sh"
 
 # ---------------------------------------------------------------------------
-say "6/6 FlyDSL -> torch decode-GEMM reroute (cudagraph-capturable dense GEMMs)"
+# Upgrades the stub helper the layer above installs into the full unified-v2
+# helper, so "gluon" only wins where a gfx950 Gluon decode build exists.
+say "7/9 full MLA small-head helper (gfx950 Gluon gate)"
+python3 "$PATCHES/patch_mla_small_head_helper.py"
+
+# ---------------------------------------------------------------------------
+say "8/9 FlyDSL -> torch decode-GEMM reroute (cudagraph-capturable dense GEMMs)"
 CSV="$CONFIGS/merged_bf16_tuned_gemm.csv" bash "$PATCHES/patch_flydsl_decode_to_torch.sh"
+
+# ---------------------------------------------------------------------------
+say "9/9 vLLM #50183 NaN argmax guard, #50649 KDA stage gate, #52047 hybrid EAGLE offload"
+python3 "$PATCHES/patch_rejection_nan_argmax.py"
+python3 "$PATCHES/patch_kda_autotune_stages.py"
+python3 "$PATCHES/patch_offload_eagle_hybrid.py"
 
 # ---------------------------------------------------------------------------
 say "VERIFY (matches setup_benchmark.sh verify-dspark-patches)"
 AITER_MLA="$LOCAL_AITER/aiter/mla.py"
+AITER_SPLITK="$LOCAL_AITER/csrc/py_itfs_cu/asm_gemm_a16w16.cu"
 KDA="$DIST/vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py"
+KDA_CHUNK="$DIST/vllm/models/kimi_k3/amd/ops/third_party/kda/chunk.py"
+REJECT="$DIST/vllm/v1/worker/gpu/spec_decode/rejection_sampler_utils.py"
+OFFLOAD_SCHED="$DIST/vllm/distributed/kv_transfer/kv_connector/v1/offloading/scheduler.py"
+KV_UTILS="$DIST/vllm/v1/core/kv_cache_utils.py"
 ok=1
 chk() { local n; n=$(grep -c "$2" "$1" 2>/dev/null || echo 0); \
         if [ "$n" -ge "$3" ]; then echo "  OK   $4 ($n)"; else echo "  FAIL $4 ($n < $3)"; ok=0; fi; }
@@ -180,6 +209,13 @@ chk "$MLA"   "uses_asm_decode"                2 "persistent-metadata gate"
 chk "$AITER_MLA" "80: 64"                     1 "aiter get_block_n_fp8 key 80"
 chk "$AITER_MLA" "get_block_n_fp8.get("       1 "aiter get_block_n_fp8.get()"
 chk "$KDA"   "stride_indices_seq"             5 "KDA PR#27 stride fix"
+chk "$MLA"   "def _gluon_mla_decode_supported" 1 "full small-head helper (gfx950 gluon gate)"
+chk "$AITER_SPLITK" "PATCH(splitk-cudagraph)" 1 "aiter split-K graph guard"
+chk "$AITER_SPLITK" "PATCH(splitk-grid-guard)" 1 "aiter split-K grid guard"
+chk "$REJECT" "NaN breaks tl.argmax index bounds" 1 "rejection NaN guard (#50183)"
+chk "$KDA_CHUNK" "_RECOMPUTE_W_U_NUM_STAGES"  2 "KDA stage gate (#50649)"
+chk "$OFFLOAD_SCHED" "OFFLOAD_EAGLE_PREFIX_VETO" 1 "full-attn eagle prefix veto"
+chk "$KV_UTILS" "_annotate_eagle_groups_from_draft_spec" 2 "hybrid EAGLE group annotation (#52047)"
 python3 -c "import vllm.v1.attention.backends.mla.rocm_aiter_mla; print('  IMPORT_OK')"
 [ "$ok" = 1 ] || { echo; echo "!! one or more anchors missing — see FAIL lines above" >&2; exit 1; }
 

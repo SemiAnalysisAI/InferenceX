@@ -46,14 +46,9 @@ fi
 # present, so re-runs / pre-patched images cost only the grep verify. Set
 # SKIP_K3_BOOTSTRAP=1 to skip (e.g. when serving a pre-baked patched image).
 RECIPE_DIR="$(cd "$(dirname "$0")" && pwd)"
-# Image is now nightly-3ee2df3033, which carries the ASM/DSpark fixes upstream.
-# The k3 patch stack targets cb810483's code layout and its anchors no longer
-# apply, so it is off by default; these two are what that image still needs.
-if [ "${SKIP_K3_BOOTSTRAP:-1}" != "1" ]; then
+if [ "${SKIP_K3_BOOTSTRAP:-0}" != "1" ]; then
     bash "$RECIPE_DIR/apply_k3_container_patches.sh"
 fi
-bash "$RECIPE_DIR/apply_aiter_pybind11_fix.sh" || true
-bash "$RECIPE_DIR/apply_triton_mla_cudagraph_fix.sh" || true
 
 DRAFT_MODEL="${DRAFT_MODEL:-Inferact/Kimi-K3-DSpark}"
 
@@ -78,44 +73,37 @@ if [ -n "$ROCR_VISIBLE_DEVICES" ]; then export HIP_VISIBLE_DEVICES="$ROCR_VISIBL
 # source on ROCm; with causal=true the draft runs the fp8 asm path like the
 # target). Idempotent write — the draft may live anywhere the harness staged it,
 # so set it here rather than relying on the bootstrap's /dev/shm-scoped step.
-# Only AITER backends need the draft forced causal; TRITON_MLA takes it non-causal.
-case "${DRAFT_BACKEND:-TRITON_MLA}" in
-    *AITER*) DRAFT_CAUSAL=true  ;;
-    *)       DRAFT_CAUSAL=false ;;
-esac
-
 # DRAFT_MODEL_PATH may be a bare repo id, so fall back to the HF cache snapshot.
 DRAFT_CFG_DIR="$DRAFT_MODEL_PATH"
 if [ ! -f "$DRAFT_CFG_DIR/config.json" ]; then
-    DRAFT_CFG_DIR="$(python3 - "$DRAFT_MODEL_PATH" <<'PY'
+    DRAFT_CFG_DIR="$(python3 - "$DRAFT_MODEL_PATH" <<'PZ'
 import sys
 try:
     from huggingface_hub import snapshot_download
     print(snapshot_download(sys.argv[1], local_files_only=True), end="")
 except Exception:
     print("", end="")
-PY
+PZ
 )"
 fi
 if [ ! -f "$DRAFT_CFG_DIR/config.json" ]; then
-    echo "!! no draft config.json for '$DRAFT_MODEL_PATH' (resolved '${DRAFT_CFG_DIR:-}')." >&2
-    echo "   dflash_config.causal must be pinned to $DRAFT_CAUSAL before serving." >&2
+    echo "!! no draft config.json for '$DRAFT_MODEL_PATH' (resolved '${DRAFT_CFG_DIR:-}')" >&2
     exit 1
 fi
-# Write explicitly, not just on true: the HF cache is shared across runs.
-python3 - "$DRAFT_CFG_DIR/config.json" "$DRAFT_CAUSAL" <<'PY'
+if true; then
+    python3 - "$DRAFT_CFG_DIR/config.json" <<'PY'
 import json, sys
-f, want = sys.argv[1], sys.argv[2] == "true"
+f = sys.argv[1]
 c = json.load(open(f))
 d = c.setdefault("dflash_config", {})
-if d.get("causal") == want:
-    print(f"draft dflash_config.causal already {want}")
+if d.get("causal") is True:
+    print("draft already forced causal")
 else:
-    prev = d.get("causal")
-    d["causal"] = want
+    d["causal"] = True
     json.dump(c, open(f, "w"), indent=2)
-    print(f"set draft dflash_config.causal={want} (was {prev}):", f)
+    print("forced draft dflash_config.causal=true:", f)
 PY
+fi
 
 # ---- MI355X day-0 serving environment (AITER + fp8 ASM MLA) ------------------
 export VLLM_ROCM_USE_AITER=1
@@ -126,15 +114,11 @@ export VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4=1
 export AITER_BF16_FP8_MOE_BOUND=0
 export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 export SAFETENSORS_FAST_GPU=1
-# fastsafetensors cuts weight load 745s -> 140s; not guaranteed in the ROCm image.
+# fastsafetensors cuts weight load 745s -> 140s; not guaranteed in the image.
 LOAD_FORMAT="${LOAD_FORMAT:-}"
 if [ -z "$LOAD_FORMAT" ]; then
-    if python3 -c "import fastsafetensors" 2>/dev/null; then
-        LOAD_FORMAT=fastsafetensors
-    else
-        echo "fastsafetensors not importable -> --load-format auto" >&2
-        LOAD_FORMAT=auto
-    fi
+    if python3 -c "import fastsafetensors" 2>/dev/null; then LOAD_FORMAT=fastsafetensors;
+    else echo "fastsafetensors missing -> auto" >&2; LOAD_FORMAT=auto; fi
 fi
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_HTTP_TIMEOUT_KEEP_ALIVE=900
@@ -143,6 +127,16 @@ export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
 # VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT. Baked DSpark layer reads this to route the
 # 12-head fp8 spec verify to the asm q-row-fold.
 export VLLM_ROCM_AITER_MLA_ASM_PADDING=asm
+# vLLM #50649: recompute_w_u_fwd_kernel autotunes num_stages=4, which is racy
+# with num_warps=4 and silently emits ~1e38 garbage that propagates into the
+# target logits (and, via NaN, into the rejection sampler's tl.argmax). The
+# bootstrap makes the stage list selectable; take the safe list [2, 3] on the
+# wide batches where the race is observed and keep stage 4 at low concurrency,
+# where it materially helps tail latency. Override with VLLM_K3_KDA_SAFE_STAGES.
+if [ -z "${VLLM_K3_KDA_SAFE_STAGES:-}" ]; then
+    if [ "$CONC" -ge 8 ]; then VLLM_K3_KDA_SAFE_STAGES=1; else VLLM_K3_KDA_SAFE_STAGES=0; fi
+fi
+export VLLM_K3_KDA_SAFE_STAGES
 # Merged tuned BF16 GEMM table installed by apply_k3_container_patches.sh.
 MERGED_GEMM_CSV="${MERGED_GEMM_CSV:-/opt/aiter-local/aiter/configs/merged_bf16_tuned_gemm.csv}"
 if [ -z "${AITER_CONFIG_GEMM_BF16:-}" ] && [ -f "$MERGED_GEMM_CSV" ]; then
@@ -229,21 +223,17 @@ SYNTHETIC_ACCEPT_LEN="${SYNTHETIC_ACCEPT_LEN:-2.51}"
 # same as target). Throughput runs pin synthetic acceptance; EVAL_ONLY accuracy
 # runs use real block verification (synthetic commits drafted tokens regardless
 # of the target's logits, so generated text would be wrong -> eval scores 0).
-# Draft as run 31765562914 has it on this image: TRITON_MLA (the only ROCm MLA
-# backend supporting non-causal multi-token decode) with its own bf16 KV.
-DRAFT_BACKEND="${DRAFT_BACKEND:-TRITON_MLA}"
-DRAFT_KV_CACHE_DTYPE="${DRAFT_KV_CACHE_DTYPE:-auto}"
+DRAFT_BACKEND="${DRAFT_BACKEND:-ROCM_AITER_MLA}"
 if [ "${EVAL_ONLY:-false}" = "true" ]; then
-    SPEC_CONFIG="{\"method\": \"dspark\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"$DRAFT_BACKEND\", \"kv_cache_dtype\": \"$DRAFT_KV_CACHE_DTYPE\", \"draft_sample_method\": \"probabilistic\", \"rejection_sample_method\": \"block\"}"
+    SPEC_CONFIG="{\"method\": \"dspark\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"$DRAFT_BACKEND\", \"draft_sample_method\": \"probabilistic\", \"rejection_sample_method\": \"block\"}"
 else
-    SPEC_CONFIG="{\"method\": \"dspark\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"$DRAFT_BACKEND\", \"kv_cache_dtype\": \"$DRAFT_KV_CACHE_DTYPE\", \"draft_sample_method\": \"probabilistic\", \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
+    SPEC_CONFIG="{\"method\": \"dspark\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"$DRAFT_BACKEND\", \"draft_sample_method\": \"probabilistic\", \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
 fi
 
 # ---- Mandated DSpark serving knobs (do not change) --------------------------
 # gpu-mem 0.95 / max-num-seqs 64 / MNBT 16384 / FULL_AND_PIECEWISE are mandated.
 MAX_NUM_SEQS="${MAX_NUM_SEQS:-64}"
 MNBT="${MNBT:-16384}"
-# 0.85, not the recipe's 0.95: leave raw VRAM for aiter asm workspaces / RCCL.
 GPU_MEM="${GPU_MEM:-0.85}"
 KVDTYPE_ARGS=(
     --kv-cache-dtype "${KV_CACHE_DTYPE:-fp8}"
