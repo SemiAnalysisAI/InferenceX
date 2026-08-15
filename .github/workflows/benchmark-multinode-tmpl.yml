@@ -493,6 +493,7 @@ jobs:
             meta_env.json
             results*.json
             *_vendor_report.json
+            *_vendor_results.jsonl
             sample*.jsonl
             agent_preds.json
             predictions.jsonl
@@ -520,6 +521,7 @@ jobs:
           rm -f meta_env.json || true
           rm -f results*.json || true
           rm -f -- ./*_vendor_report.json || true
+          rm -f -- ./*_vendor_results.jsonl || true
           rm -f bfcl_report.json || true
           rm -f sample*.jsonl || true
           rm -f agent_preds.json predictions.jsonl swebench_report_*.json *.traj* || true

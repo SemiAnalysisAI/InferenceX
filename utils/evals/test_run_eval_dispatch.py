@@ -273,6 +273,45 @@ run_eval --port 8888
     assert "DISPATCH=kimi_tool_call_schema" in result.stdout
     assert "METADATA=kimi_tool_call_schema" in result.stdout
 
+def test_kimi_full_suite_dispatches_to_schema_runner() -> None:
+    script = r'''
+source "$BENCHMARK_LIB"
+_run_kimi_tool_call_schema_eval() {
+    printf 'DISPATCH=%s ARGS=<%s>\n' "$EVAL_SUITE" "$*"
+}
+EVAL_SUITE=kimi_tool_call_schema_full run_kimi_vendor_eval --port 9999
+'''
+    result = subprocess.run(
+        ["bash", "-c", script],
+        env={**os.environ, "BENCHMARK_LIB": str(BENCHMARK_LIB)},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "DISPATCH=kimi_tool_call_schema_full ARGS=<--port 9999>" in result.stdout
+
+
+def test_minimax_full_suite_dispatches_to_full_runner() -> None:
+    script = r'''
+source "$BENCHMARK_LIB"
+_run_minimax_m3_full_eval() {
+    printf 'DISPATCH=%s ARGS=<%s>\n' "$EVAL_SUITE" "$*"
+}
+EVAL_SUITE=minimax_m3_full run_minimax_vendor_eval --port 9999
+'''
+    result = subprocess.run(
+        ["bash", "-c", script],
+        env={**os.environ, "BENCHMARK_LIB": str(BENCHMARK_LIB)},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "DISPATCH=minimax_m3_full ARGS=<--port 9999>" in result.stdout
+
 
 def test_kimi_vendor_rejects_batched_concurrency() -> None:
     result = _run_invalid_call(
@@ -499,6 +538,39 @@ _install_minimax_vendor_eval_deps "$RUNTIME_DIR"
     assert "PYTHON_ARG=<openai" not in result.stdout
     assert "PYTHON_ARG=<httpx" not in result.stdout
     assert "PYTHON_ARG=<pytest" not in result.stdout
+    assert "--break-system-packages" not in result.stdout
+
+
+def test_minimax_full_dependency_install_matches_pinned_upstream_requirements(
+    tmp_path: Path,
+) -> None:
+    script = r'''
+source "$BENCHMARK_LIB"
+selected_python() { printf 'PYTHON_ARG=<%s>\n' "$@"; }
+VENDOR_VERIFIER_PYTHON=selected_python
+_install_minimax_m3_full_deps "$RUNTIME_DIR"
+'''
+    result = subprocess.run(
+        ["bash", "-c", script],
+        env={
+            **os.environ,
+            "BENCHMARK_LIB": str(BENCHMARK_LIB),
+            "RUNTIME_DIR": str(tmp_path / "runtime"),
+        },
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+    for requirement in (
+        "jsonschema==4.25.1",
+        "loguru==0.7.3",
+        "megfile==4.2.5",
+        "numpy==2.3.4",
+        "openai==2.7.1",
+        "tqdm==4.67.1",
+    ):
+        assert f"PYTHON_ARG=<{requirement}>" in result.stdout
     assert "--break-system-packages" not in result.stdout
 
 
@@ -964,6 +1036,7 @@ _install_kimi_vendor_eval_deps "$RUNTIME_DIR"
     assert "PYTHON_ARG=<--target>" in result.stdout
     assert f"PYTHON_ARG=<{runtime_dir}>" in result.stdout
     assert "PYTHON_ARG=<pytest-rerunfailures==16.4>" in result.stdout
+    assert "pytest-xdist" not in result.stdout
     assert "--break-system-packages" not in result.stdout
 
 
@@ -1082,11 +1155,82 @@ printf 'EVAL_RESULT_DIR=%s\n' "$EVAL_RESULT_DIR"
         assert f"PYTHON_ARG=<{value}>" in output
     assert "PYTHON_ARG=<--model-prefix>" in output
     assert "PYTHON_ARG=<dsv4>" in output
+    assert "PYTHON_ARG=<--task-name>" in output
+    assert "PYTHON_ARG=<kimi_tool_call_schema>" in output
+    assert "PYTHON_ARG=<--timeout-seconds>" in output
+    assert "PYTHON_ARG=<900>" in output
     assert "must-not-be-forwarded" not in output
     assert "SYSTEM_PYTHON_UNEXPECTED" not in output
     assert "EVAL_SUITE=kimi_tool_call_schema" in output
     assert f"EVAL_RESULT_DIR={results_dir}" in output
     assert not (tmp_path / "runtime").exists()
+    assert not verifier_dir.exists()
+    assert not python_dir.exists()
+
+def test_kimi_full_runner_installs_xdist_sets_timeout_and_cleans_runtimes(
+    tmp_path: Path,
+) -> None:
+    results_dir = tmp_path / "results"
+    verifier_dir = tmp_path / "verifier"
+    runtime_dir = tmp_path / "runtime"
+    python_dir = tmp_path / "python"
+    script = r'''
+source "$BENCHMARK_LIB"
+_prepare_vendor_verifier_python() {
+    mkdir "$PYTHON_DIR"
+    VENDOR_VERIFIER_PYTHON=selected_python
+    VENDOR_VERIFIER_PYTHON_CLEANUP_DIR="$PYTHON_DIR"
+    export VENDOR_VERIFIER_PYTHON VENDOR_VERIFIER_PYTHON_CLEANUP_DIR
+}
+_prepare_kimi_vendor_runtime() {
+    printf 'RUNTIME_SUITE=<%s>\n' "$1" >&2
+    mkdir "$RUNTIME_DIR"
+    _install_kimi_vendor_eval_deps "$RUNTIME_DIR" "$1" >&2
+    printf '%s\n' "$RUNTIME_DIR"
+}
+_prepare_kimi_vendor_verifier() {
+    mkdir "$VERIFIER_DIR"
+    printf '%s\n' "$VERIFIER_DIR"
+}
+selected_python() {
+    printf 'PYTHONPATH=<%s>\n' "$PYTHONPATH" >&2
+    printf 'PYTHON_ARG=<%s>\n' "$@" >&2
+}
+run_kimi_vendor_eval --port 9999 --results-dir "$RESULTS_DIR"
+printf 'EVAL_SUITE=%s\n' "$EVAL_SUITE"
+printf 'EVAL_RESULT_DIR=%s\n' "$EVAL_RESULT_DIR"
+'''
+    env = {
+        **os.environ,
+        "BENCHMARK_LIB": str(BENCHMARK_LIB),
+        "EVAL_SUITE": "kimi_tool_call_schema_full",
+        "RESULTS_DIR": str(results_dir),
+        "VERIFIER_DIR": str(verifier_dir),
+        "MODEL": "test-model",
+        "RUNTIME_DIR": str(runtime_dir),
+        "PYTHON_DIR": str(python_dir),
+    }
+    for key in ("EVAL_RESULT_DIR", "MODEL_NAME"):
+        env.pop(key, None)
+
+    result = subprocess.run(
+        ["bash", "-c", script],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    output = result.stdout + result.stderr
+
+    assert "RUNTIME_SUITE=<kimi_tool_call_schema_full>" in output
+    assert "PYTHON_ARG=<pytest-xdist==3.8.0>" in output
+    assert "PYTHON_ARG=<--task-name>" in output
+    assert "PYTHON_ARG=<kimi_tool_call_schema_full>" in output
+    assert "PYTHON_ARG=<--timeout-seconds>" in output
+    assert "PYTHON_ARG=<7200>" in output
+    assert "EVAL_SUITE=kimi_tool_call_schema_full" in output
+    assert f"EVAL_RESULT_DIR={results_dir}" in output
+    assert not runtime_dir.exists()
     assert not verifier_dir.exists()
     assert not python_dir.exists()
 

@@ -24,6 +24,41 @@ def _report(stream_status: str = "passed") -> dict[str, Any]:
         ],
     }
 
+def _full_report(*, failed_records: int = 0) -> dict[str, Any]:
+    selected_cases: list[dict[str, Any]] = []
+    results: list[dict[str, Any]] = []
+    for line in range(1, kve.FULL_SELECTED_CASES + 1):
+        selected_cases.append(
+            {
+                "suite": "TestSchema",
+                "line": line,
+                "selection_reason": "all",
+                "schema": {},
+            }
+        )
+        for mode in ("non-stream", "stream"):
+            results.append(
+                {
+                    "suite": "TestSchema",
+                    "line": line,
+                    "mode": mode,
+                    "status": (
+                        "failed" if len(results) < failed_records else "passed"
+                    ),
+                }
+            )
+    return {
+        "summary": {
+            "total": len(results),
+            "by_status": {
+                "passed": len(results) - failed_records,
+                "failed": failed_records,
+            },
+        },
+        "selected_cases": selected_cases,
+        "results": results,
+    }
+
 
 def _report_with_inconsistent_counts() -> dict[str, Any]:
     report = _report("failed")
@@ -41,12 +76,12 @@ def _result(output_dir: Path) -> dict[str, Any]:
     return json.loads(paths[0].read_text())
 
 
-def _score(output_dir: Path) -> float:
-    return _result(output_dir)["results"][kve.TASK_NAME]["exact_match,strict-match"]
+def _score(output_dir: Path, task_name: str = kve.TASK_NAME) -> float:
+    return _result(output_dir)["results"][task_name]["exact_match,strict-match"]
 
 
-def _n_eff(output_dir: Path) -> int:
-    return _result(output_dir)["n-samples"][kve.TASK_NAME]["effective"]
+def _n_eff(output_dir: Path, task_name: str = kve.TASK_NAME) -> int:
+    return _result(output_dir)["n-samples"][task_name]["effective"]
 
 
 def test_builds_fixed_upstream_pytest_command(tmp_path: Path) -> None:
@@ -83,6 +118,49 @@ def test_builds_fixed_upstream_pytest_command(tmp_path: Path) -> None:
         "object",
         "--max-cases",
         "1",
+        "--case-dir",
+        "testdata/walle_validator_cases/validator_cases",
+        "--max-tokens",
+        "2048",
+        "--tool-json-report",
+        str(report),
+    ]
+
+def test_builds_full_upstream_pytest_command(tmp_path: Path) -> None:
+    report = tmp_path / kve.NATIVE_REPORT_FILENAME
+
+    assert kve.build_pytest_command(
+        base_url="http://127.0.0.1:8000/v1",
+        api_key="EMPTY",
+        model="test-model",
+        report_path=report,
+        task_name=kve.FULL_TASK_NAME,
+    ) == [
+        sys.executable,
+        "-m",
+        "pytest",
+        "tests/tool_call_json_schema/test_tool_call_json_schema.py",
+        "-n",
+        "8",
+        "--reruns",
+        "6",
+        "--reruns-delay",
+        "3",
+        "--only-rerun",
+        (
+            r"(?i)(Error code: (404|429|5[0-9]{2})|APIConnectionError|"
+            r"APITimeoutError|Connection error|timed out)"
+        ),
+        "--base-url",
+        "http://127.0.0.1:8000/v1",
+        "--api-key",
+        "EMPTY",
+        "--smoke-model",
+        "test-model",
+        "--think-mode",
+        "none",
+        "--selection",
+        "all",
         "--case-dir",
         "testdata/walle_validator_cases/validator_cases",
         "--max-tokens",
@@ -159,6 +237,76 @@ def test_projects_upstream_outcomes(
     assert projected["eval_adapter"] == kve.ADAPTER_NAME
     assert "lm_eval_version" not in projected
     assert (output_dir / kve.NATIVE_REPORT_FILENAME).read_bytes() == native_bytes
+
+def test_full_report_projects_all_mode_records_and_defers_quality_gating(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output_dir = tmp_path / "output"
+    native_bytes = json.dumps(_full_report(failed_records=1)).encode()
+    invocation: dict[str, Any] = {}
+
+    def fake_run(
+        command: list[str], *, cwd: Path, check: bool, timeout: int
+    ) -> SimpleNamespace:
+        invocation.update(command=command, cwd=cwd, check=check, timeout=timeout)
+        Path(command[command.index("--tool-json-report") + 1]).write_bytes(native_bytes)
+        return SimpleNamespace(returncode=1)
+
+    monkeypatch.setattr(kve.subprocess, "run", fake_run)
+
+    assert kve.run_evaluation(
+        verifier_dir=tmp_path,
+        base_url="http://localhost/v1",
+        api_key="EMPTY",
+        model="model-a",
+        output_dir=output_dir,
+        task_name=kve.FULL_TASK_NAME,
+        timeout_seconds=kve.FULL_TIMEOUT_SECONDS,
+    )
+    projected = _result(output_dir)
+    assert invocation["timeout"] == 7200
+    assert set(projected["results"]) == {kve.FULL_TASK_NAME}
+    assert _score(output_dir, kve.FULL_TASK_NAME) == 407 / 408
+    assert projected["n-samples"][kve.FULL_TASK_NAME] == {
+        "original": 408,
+        "effective": 408,
+    }
+    assert "integration_error" not in projected
+    assert (output_dir / kve.NATIVE_REPORT_FILENAME).read_bytes() == native_bytes
+
+
+def test_full_report_rejects_incomplete_modes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    report = _full_report()
+    report["results"][-1]["mode"] = "non-stream"
+
+    def fake_run(
+        command: list[str], *, cwd: Path, check: bool, timeout: int
+    ) -> SimpleNamespace:
+        Path(command[command.index("--tool-json-report") + 1]).write_text(
+            json.dumps(report)
+        )
+        return SimpleNamespace(returncode=1)
+
+    monkeypatch.setattr(kve.subprocess, "run", fake_run)
+    output_dir = tmp_path / "output"
+
+    assert not kve.run_evaluation(
+        verifier_dir=tmp_path,
+        base_url="http://localhost/v1",
+        api_key="EMPTY",
+        model="model-a",
+        output_dir=output_dir,
+        task_name=kve.FULL_TASK_NAME,
+        timeout_seconds=kve.FULL_TIMEOUT_SECONDS,
+    )
+    projected = _result(output_dir)
+    assert _score(output_dir, kve.FULL_TASK_NAME) == 0.0
+    assert _n_eff(output_dir, kve.FULL_TASK_NAME) == 0
+    assert projected["integration_error"]["type"] == "ValueError"
 
 
 @pytest.mark.parametrize(

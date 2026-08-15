@@ -962,18 +962,26 @@ _prepare_vendor_verifier_python() {
 
 _install_kimi_vendor_eval_deps() {
     local target_dir="$1"
-    "${VENDOR_VERIFIER_PYTHON:-python3}" -m pip install -q --no-cache-dir --target "$target_dir" \
-        "httpx[http2]==0.28.1" \
-        "openai==2.14.0" \
-        "jsonschema==4.25.1" \
-        "pytest==8.4.2" \
+    local eval_suite="${2:-kimi_tool_call_schema}"
+    local -a packages=(
+        "httpx[http2]==0.28.1"
+        "openai==2.14.0"
+        "jsonschema==4.25.1"
+        "pytest==8.4.2"
         "pytest-rerunfailures==16.4"
+    )
+    if [ "$eval_suite" = "kimi_tool_call_schema_full" ]; then
+        packages+=("pytest-xdist==3.8.0")
+    fi
+    "${VENDOR_VERIFIER_PYTHON:-python3}" -m pip install -q --no-cache-dir \
+        --target "$target_dir" "${packages[@]}"
 }
 
 _prepare_kimi_vendor_runtime() {
+    local eval_suite="${1:-kimi_tool_call_schema}"
     local runtime_dir install_rc=0
     runtime_dir="$(mktemp -d /tmp/kimi-vendor-runtime-XXXXXX)" || return $?
-    _install_kimi_vendor_eval_deps "$runtime_dir" >&2 || install_rc=$?
+    _install_kimi_vendor_eval_deps "$runtime_dir" "$eval_suite" >&2 || install_rc=$?
     if [ "$install_rc" -ne 0 ]; then
         rm -rf "$runtime_dir"
         return "$install_rc"
@@ -1233,11 +1241,13 @@ _write_kimi_vendor_integration_error() {
     local adapter_path="$1"
     local model_name="$2"
     local results_dir="$3"
-    local message="$4"
+    local task_name="$4"
+    local message="$5"
 
     python3 "$adapter_path" \
         --model "$model_name" \
         --output-dir "$results_dir" \
+        --task-name "$task_name" \
         --integration-error "$message"
 }
 
@@ -1246,6 +1256,11 @@ _run_kimi_tool_call_schema_eval() {
     local results_dir="${EVAL_RESULT_DIR:-$(mktemp -d /tmp/eval_out-XXXXXX)}"
     local verifier_repo="https://github.com/MoonshotAI/Kimi-Vendor-Verifier.git"
     local verifier_ref="b9ed3a6665bdff2c943246f7d2903cd003d6ddd6"
+    local eval_suite="${EVAL_SUITE:-kimi_tool_call_schema}"
+    local timeout_seconds=900
+    if [ "$eval_suite" = "kimi_tool_call_schema_full" ]; then
+        timeout_seconds=7200
+    fi
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -1283,7 +1298,7 @@ _run_kimi_tool_call_schema_eval() {
         integration_error="Kimi Vendor Verifier Python runtime preparation failed with exit code ${setup_rc}"
     }
     if [ "$setup_rc" -eq 0 ]; then
-        runtime_dir=$(_prepare_kimi_vendor_runtime) || {
+        runtime_dir=$(_prepare_kimi_vendor_runtime "$eval_suite") || {
             setup_rc=$?
             integration_error="Kimi Vendor Verifier dependency installation failed with exit code ${setup_rc}"
         }
@@ -1302,8 +1317,8 @@ _run_kimi_tool_call_schema_eval() {
         echo "ERROR: ${integration_error}" >&2
         local artifact_rc=0
         _write_kimi_vendor_integration_error \
-            "$adapter_path" "$model_name" "$results_dir" "$integration_error" \
-            || artifact_rc=$?
+            "$adapter_path" "$model_name" "$results_dir" "$eval_suite" \
+            "$integration_error" || artifact_rc=$?
         if [ "$artifact_rc" -ne 0 ]; then
             echo "ERROR: failed to write Kimi verifier failure artifact (exit code ${artifact_rc})" >&2
         fi
@@ -1319,6 +1334,8 @@ _run_kimi_tool_call_schema_eval() {
             --model "$model_name" \
             --model-prefix "${MODEL_PREFIX:-}" \
             --output-dir "$results_dir" \
+            --task-name "$eval_suite" \
+            --timeout-seconds "$timeout_seconds" \
             || eval_rc=$?
     _cleanup_vendor_eval \
         "$runtime_dir" "$checkout_dir" "${VENDOR_VERIFIER_PYTHON_CLEANUP_DIR:-}"
@@ -1330,7 +1347,7 @@ run_kimi_vendor_eval() {
     export EVAL_SUITE="$eval_suite"
 
     case "$eval_suite" in
-        kimi_tool_call_schema)
+        kimi_tool_call_schema|kimi_tool_call_schema_full)
             _run_kimi_tool_call_schema_eval "$@"
             ;;
         *)
@@ -1645,6 +1662,106 @@ _run_minimax_m3_smoke_eval() {
     return "$eval_rc"
 }
 
+_install_minimax_m3_full_deps() {
+    local target_dir="$1"
+    "${VENDOR_VERIFIER_PYTHON:-python3}" -m pip install -q --no-cache-dir --target "$target_dir" \
+        "jsonschema==4.25.1" \
+        "loguru==0.7.3" \
+        "megfile==4.2.5" \
+        "numpy==2.3.4" \
+        "openai==2.7.1" \
+        "tqdm==4.67.1"
+}
+
+_prepare_minimax_m3_full_runtime() {
+    local adapter_path="$1"
+    local runtime_dir prepare_rc=0
+    runtime_dir="$(mktemp -d /tmp/minimax-m3-full-runtime-XXXXXX)" || return $?
+    "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" prepare-source \
+        --source-dir "${runtime_dir}/source" >&2 || prepare_rc=$?
+    if [ "$prepare_rc" -eq 0 ]; then
+        _install_minimax_m3_full_deps "${runtime_dir}/deps" >&2 || prepare_rc=$?
+    fi
+    if [ "$prepare_rc" -ne 0 ]; then
+        rm -rf "$runtime_dir"
+        return "$prepare_rc"
+    fi
+    printf '%s\n' "$runtime_dir"
+}
+
+_run_minimax_m3_full_eval() {
+    local port="${PORT:-8888}"
+    local results_dir="${EVAL_RESULT_DIR:-}"
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --port|--results-dir)
+                if [[ $# -lt 2 || -z "${2:-}" || "${2:-}" == --* ]]; then
+                    echo "ERROR: $1 requires a value" >&2
+                    return 2
+                fi
+                case "$1" in
+                    --port)        port="$2" ;;
+                    --results-dir) results_dir="$2" ;;
+                esac
+                shift 2
+                ;;
+            *)
+                echo "Unknown parameter: $1" >&2
+                return 2
+                ;;
+        esac
+    done
+
+    if [ -z "$results_dir" ]; then
+        results_dir="$(mktemp -d /tmp/eval_out-XXXXXX)" || return $?
+    fi
+
+    local model_name="${MODEL_NAME:-${MODEL:-}}"
+    local adapter_path="${INFERENCEX_REPO_ROOT}/utils/evals/minimax_m3_full_eval.py"
+    local runtime_dir=""
+
+    mkdir -p "$results_dir" || return $?
+    results_dir="$(cd "$results_dir" && pwd)" || return $?
+    export EVAL_RESULT_DIR="$results_dir"
+
+    local setup_rc=0 integration_error=""
+    _prepare_vendor_verifier_python "MiniMax M3 full verifier" "minimax-m3-full-python" || {
+        setup_rc=$?
+        integration_error="MiniMax M3 full Python runtime preparation failed with exit code ${setup_rc}"
+    }
+    if [ "$setup_rc" -eq 0 ]; then
+        runtime_dir=$(_prepare_minimax_m3_full_runtime "$adapter_path") || {
+            setup_rc=$?
+            integration_error="MiniMax M3 full pinned runtime preparation failed with exit code ${setup_rc}"
+        }
+    fi
+    if [ "$setup_rc" -ne 0 ]; then
+        echo "ERROR: ${integration_error}" >&2
+        "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" failure \
+            --model "$model_name" \
+            --output-dir "$results_dir" \
+            --message "$integration_error" || true
+        _cleanup_vendor_eval \
+            "$runtime_dir" "${VENDOR_VERIFIER_PYTHON_CLEANUP_DIR:-}"
+        return "$setup_rc"
+    fi
+
+    local eval_rc=0
+    "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" run \
+        --python "${VENDOR_VERIFIER_PYTHON:-python3}" \
+        --source-dir "${runtime_dir}/source" \
+        --dependency-dir "${runtime_dir}/deps" \
+        --base-url "http://127.0.0.1:${port}/v1" \
+        --model "$model_name" \
+        --output-dir "$results_dir" \
+        || eval_rc=$?
+    _cleanup_vendor_eval \
+        "$runtime_dir" "${VENDOR_VERIFIER_PYTHON_CLEANUP_DIR:-}"
+    return "$eval_rc"
+}
+
+
 run_minimax_vendor_eval() {
     local eval_suite="${EVAL_SUITE:-minimax_m3_smoke}"
     export EVAL_SUITE="$eval_suite"
@@ -1652,6 +1769,9 @@ run_minimax_vendor_eval() {
     case "$eval_suite" in
         minimax_m3_smoke)
             _run_minimax_m3_smoke_eval "$@"
+            ;;
+        minimax_m3_full)
+            _run_minimax_m3_full_eval "$@"
             ;;
         *)
             echo "ERROR: unsupported MiniMax Provider Verifier suite '${eval_suite}'" >&2
