@@ -232,25 +232,38 @@ fi
 # gpu-mem 0.95 / max-num-seqs 64 / MNBT 16384 / FULL_AND_PIECEWISE are mandated.
 MAX_NUM_SEQS="${MAX_NUM_SEQS:-64}"
 MNBT="${MNBT:-16384}"
-GPU_MEM="${GPU_MEM:-0.85}"
+# 0.88, and it is LIVE again now that KV is unpinned (a pin makes gmu inert).
+# Not 0.95/0.90: on the unpinned base K3 recipe 4/4 cells died at 0.90 while
+# 3/3 passed at 0.88 -- it comes up clean and dies mid-prefill, the same
+# out-of-pool ASM workspace exhaustion described above. 0.88 is the documented
+# ceiling for an auto-sized K3 pool on this hardware.
+GPU_MEM="${GPU_MEM:-0.88}"
 KVDTYPE_ARGS=(
     --kv-cache-dtype "${KV_CACHE_DTYPE:-fp8}"
     --attention-backend "${ATTENTION_BACKEND:-ROCM_AITER_MLA}"
 )
 
-# KV-cache memory pin. At gpu-mem 0.95 with TP8 K3-fp4, weights are ~201 GiB of
-# the 273.6 GiB budget; vLLM's auto-sizer under-estimates the real prefill/verify
-# activation peak (MNBT chunks x up-to-64 concurrent 68k-token reqs + DSpark
-# verify buffers) and OOMs to "0 MB free". Prefix caching stores the ~64k prefix
-# ONCE (~350k KV tokens, ~6 GiB needed); pin KV to 32 GiB (~2M tokens, >5x) so a
-# large physical headroom remains for the activation peak. Do NOT touch gpu-mem.
-# 64 GiB, raised from 32: at c8 the 32 GiB pool (2,020,206 tokens) pinned at
-# 100%, prefix-cache hit fell 94.6% -> 75.8% against a 97.2% theoretical, output
-# came in at 51.5% of expected and 8.6% of trajectories were invalidated. The
-# ranks report ~281 GiB free at profiling time, so 32 GiB of extra pool still
-# leaves a large activation headroom. Note this bypasses --gpu-memory-utilization
-# entirely (gpu_worker skips memory profiling when kv_cache_memory_bytes is set).
-KV_CACHE_MEMORY="${KV_CACHE_MEMORY:-68719476736}"
+# KV-cache memory. UNPINNED by default so vLLM runs memory profiling and reports
+# what it believes is available -- the number this recipe has never measured.
+#
+# Measured per rank on the c1/c8 cb810 runs (8x MI355X, 288 GiB):
+#   free before weights 281.2 GiB  -  weights 194.9 GiB  =  86.3 GiB actually free
+# so a 32 GiB pin left ~54 GiB for activations/ASM workspaces/RCCL, and a 64 GiB
+# pin leaves only ~22 GiB. (An earlier revision of this comment read the 281.2
+# figure as free memory AT profiling time; it is the pre-weights init_device
+# snapshot, printed later.) Setting kv_cache_memory_bytes makes gpu_worker SKIP
+# profiling entirely -- which is why the peak is unmeasured, and why the
+# 0.95-vs-0.85 gmu sweep found the fault "invariant to gmu": with a pin,
+# --gpu-memory-utilization controls nothing.
+#
+# Caveat on the number this produces: vLLM profiles the TORCH allocator peak.
+# aiter's ASM prefill workspaces are raw hipMalloc outside that pool, so the
+# reported headroom is an over-estimate of what is really spare -- that gap is
+# the suspected mechanism behind the probabilistic mid-prefill
+# HSA_OUT_OF_RESOURCES deaths. Treat the profiled value as an upper bound.
+#
+# Re-pin with KV_CACHE_MEMORY=<bytes> (32 GiB = 34359738368, 64 = 68719476736).
+KV_CACHE_MEMORY="${KV_CACHE_MEMORY-}"
 KVMEM_ARG=(); [ -n "$KV_CACHE_MEMORY" ] && KVMEM_ARG=(--kv-cache-memory "$KV_CACHE_MEMORY")
 
 # cudagraph capture sizes — pin explicitly so DSpark decode (M = TOKENS_PER_SEQ *
