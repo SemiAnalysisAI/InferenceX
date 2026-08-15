@@ -41,6 +41,12 @@ frontend:
   env:
     PIP_BREAK_SYSTEM_PACKAGES: "1"
   args:
+    # Dynamo's default Rust chat processor does not consume SGLang's
+    # deepseekv4 parser setting. Parse DSML tool calls at the frontend so
+    # non-stream OpenAI responses expose message.tool_calls.
+    dyn-chat-processor: sglang
+    tool-call-parser: deepseekv4
+    reasoning-parser: deepseek-v4
     router-mode: "kv"
     router-session-affinity-ttl-secs: "3600"
     active-decode-blocks-threshold: "None"
