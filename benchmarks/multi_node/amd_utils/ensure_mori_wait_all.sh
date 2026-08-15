@@ -33,12 +33,21 @@ echo "[k3-mori-waitall] wait_all missing; attempting in-container upgrade"
 if [[ -n "$MORI_WAITALL_SPEC" ]]; then
     $PY -m pip install -q --no-cache-dir --break-system-packages "$MORI_WAITALL_SPEC" \
         || { echo "[k3-mori-waitall] ERROR: pip install $MORI_WAITALL_SPEC failed" >&2; exit 1; }
-elif has_wait_all; then
-    :
 else
-    # Best-effort: latest published mori on the index the image already uses.
-    $PY -m pip install -q --no-cache-dir --break-system-packages -U "mori" \
-        || echo "[k3-mori-waitall] WARN: pip -U mori failed; will fall back to poll path" >&2
+    # PyPI package names are amd-mori / amd-mori-nightly (both provide import `mori`).
+    # Prefer nightly (where wait_all landed); fall back to stable amd-mori.
+    upgraded=0
+    for spec in "amd-mori-nightly" "amd-mori"; do
+        echo "[k3-mori-waitall] trying pip install -U --pre $spec"
+        if $PY -m pip install -q --no-cache-dir --break-system-packages -U --pre "$spec"; then
+            upgraded=1
+            break
+        fi
+        echo "[k3-mori-waitall] WARN: pip install $spec failed" >&2
+    done
+    if [[ "$upgraded" -eq 0 ]]; then
+        echo "[k3-mori-waitall] WARN: no amd-mori wheel installed; will fall back to poll path" >&2
+    fi
 fi
 
 if has_wait_all; then
