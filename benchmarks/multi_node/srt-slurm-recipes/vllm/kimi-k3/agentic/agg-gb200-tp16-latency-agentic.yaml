@@ -48,7 +48,12 @@ frontend:
   type: dynamo
   enable_multiple_frontends: false
   args:
-    dyn-chat-processor: "dynamo"
+    # Use vLLM's Kimi K3 parsers so unary OpenAI responses expose structured
+    # reasoning and tool_calls instead of raw XTML control tags.
+    dyn-chat-processor: "vllm"
+    tool-call-parser: "kimi_k3"
+    reasoning-parser: "kimi_k3"
+    enable-auto-tool-choice: true
     router-mode: "kv"
     router-kv-events: true
     router-temperature: "0"
