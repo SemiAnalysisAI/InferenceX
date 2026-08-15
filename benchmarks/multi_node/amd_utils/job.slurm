@@ -469,8 +469,16 @@ DOCKER_ENV_COMMON=(
     -e ENABLE_METRICS=\${ENABLE_METRICS:-0}
     -e PREFILL_ROUTER_POLICY=\${PREFILL_ROUTER_POLICY:-random}
     -e DECODE_ROUTER_POLICY=\${DECODE_ROUTER_POLICY:-random}
+    -e IBDEVICES=\${IBDEVICES:-}
     -e MORI_IO_SQ_BACKOFF_TIMEOUT_US=\${MORI_IO_SQ_BACKOFF_TIMEOUT_US:-}
     -e MORI_IO_QP_MAX_SEND_WR=\${MORI_IO_QP_MAX_SEND_WR:-}
+    -e MORI_IO_QP_MAX_CQE=\${MORI_IO_QP_MAX_CQE:-}
+    -e MORI_IO_QP_MAX_SGE=\${MORI_IO_QP_MAX_SGE:-}
+    -e AIPERF_WARMUP_REQUESTS_PER_LANE=\${AIPERF_WARMUP_REQUESTS_PER_LANE:-}
+    -e AIPERF_TRACE_IDLE_GAP_CAP_SECONDS=\${AIPERF_TRACE_IDLE_GAP_CAP_SECONDS:-}
+    -e AIPERF_FAILED_REQUEST_THRESHOLD=\${AIPERF_FAILED_REQUEST_THRESHOLD:-}
+    -e AIPERF_HTTP_TCP_USER_TIMEOUT=\${AIPERF_HTTP_TCP_USER_TIMEOUT:-}
+    -e AIPERF_EXPERIMENTAL_FAST=\${AIPERF_EXPERIMENTAL_FAST:-}
     -e DECODE_TP_SIZE=\$DECODE_TP_SIZE
     -e DECODE_TP=\$DECODE_TP
     -e DECODE_NUM_WORKERS=\$DECODE_NUM_WORKERS
@@ -522,7 +530,6 @@ elif [[ "$ENGINE" == "atom-disagg" ]]; then
         -e MAX_MODEL_LEN=${MAX_MODEL_LEN:-}
         -e MAX_NUM_BATCHED_TOKENS=${MAX_NUM_BATCHED_TOKENS:-}
         -e EXTRA_SERVER_ARGS=\${EXTRA_SERVER_ARGS:-}
-        -e IBDEVICES=${IBDEVICES:-}
     )
 else
     DOCKER_ENV_ENGINE=(
@@ -598,9 +605,9 @@ echo \"Rank \$SLURM_PROCID on \$(hostname)\"
 eval \"\$DOCKER_CMD_DETECT\"
 echo \"[docker-detect] rank \$SLURM_PROCID: DOCKER_CMD=\$DOCKER_CMD\"
 
-# Enable out-of-tree RDMA library mounts for atom-disagg (mooncake requires host RDMA stack)
+# Enable out-of-tree RDMA library mounts for MoRIIO/Mooncake host RDMA stacks.
 RDMA_MOUNTS=()
-if [[ "$ENGINE" == "atom-disagg" ]]; then
+if [[ "$ENGINE" == "atom-disagg" || "$ENGINE" == "vllm-disagg" ]]; then
 
 # When the container base OS differs from the host (e.g. Ubuntu 24.04 image
 # on a 22.04 host), the container's bundled libibverbs/libionic may be
@@ -674,7 +681,7 @@ if [[ \${#RDMA_MOUNTS[@]} -gt 0 ]]; then
 else
     echo \"[rdma] no out-of-tree RDMA mounts needed\"
 fi
-fi  # end: if ENGINE == atom-disagg
+fi  # end: if ENGINE == atom-disagg || vllm-disagg
 
 # Pre-clean (idempotent): stop then force-remove so GPU VRAM is released before
 # the sanity gate. stop-only left containers in Created/Exited state on some nodes.
