@@ -376,6 +376,11 @@ def eval_key(row: dict[str, Any]) -> tuple[Any, ...]:
     )
 
 
+def eval_result_key(row: dict[str, Any]) -> tuple[Any, ...]:
+    """Build a task-level eval result identity."""
+    return (*eval_key(row), row.get("task"))
+
+
 def raw_eval_artifact_dirs(artifacts_dir: Path) -> list[Path]:
     """Return raw eval result artifacts, excluding aggregate and debug artifacts."""
     return sorted(
@@ -499,7 +504,6 @@ def raw_eval_key_rows(
         errors.extend(meta_errors)
         if meta_errors:
             continue
-        rows.extend(key for key, _ in contributions)
 
         result_paths = _recognized_eval_result_paths(
             artifact_dir.glob("results*.json")
@@ -539,6 +543,16 @@ def raw_eval_key_rows(
                     f"raw eval artifact {artifact_dir.name!r} latest result "
                     f"{latest.name!r}{conc_label} {result_error}"
                 )
+                continue
+            result_data = load_json(latest)
+            result_tasks = result_data["results"]
+            contribution_meta = (
+                {**meta, "conc": conc} if conc is not None else meta
+            )
+            rows.extend(
+                eval_result_key({**contribution_meta, "task": task})
+                for task in result_tasks
+            )
     return rows, errors
 
 
@@ -584,7 +598,7 @@ def validate_eval_artifacts(
                             "has invalid eval_suite"
                         )
                         continue
-                    aggregate_rows.append(eval_key(row))
+                    aggregate_rows.append(eval_result_key(row))
             if row_count == 0:
                 errors.append("eval_results_all contains no rows")
             errors.extend(
@@ -755,16 +769,21 @@ def _raw_result_error(path: Path) -> Optional[str]:
                 for item in filter_list
             ):
                 return f"has malformed filter config for task {task!r}"
+            configured_names = [
+                f"{base_metric},{item['name']}"
+                for item in filter_list
+            ]
             strict_names = [
-                f"{base_metric},{item['name']}"
-                for item in filter_list
-                if "strict" in item["name"] or "resolved" in item["name"]
+                name
+                for name in configured_names
+                if "strict" in name or "resolved" in name
             ]
-            primary_names = strict_names or [
-                f"{base_metric},{item['name']}"
-                for item in filter_list
-                if "flex" in item["name"] or "extract" in item["name"]
+            fallback_names = [
+                name
+                for name in configured_names
+                if "flex" in name or "extract" in name
             ]
+            primary_names = strict_names or fallback_names or configured_names
         else:
             primary_names = ["acc" if "acc" in metrics else base_metric]
         if not primary_names or any(name not in metrics for name in primary_names):
@@ -902,7 +921,7 @@ def _dedupe_eval_aggregate(
         loaded[agg_path] = data
         for index, row in enumerate(data):
             if isinstance(row, dict) and not invalid_eval_suite(row):
-                groups.setdefault(eval_key(row), []).append(
+                groups.setdefault(eval_result_key(row), []).append(
                     (agg_path, index, row)
                 )
 
@@ -930,7 +949,8 @@ def _dedupe_eval_aggregate(
             winner_result_names[key] = max(candidates, key=_result_order).name
 
     for key, entries in groups.items():
-        winner = winners.get(key)
+        artifact_key = key[:-1]
+        winner = winners.get(artifact_key)
         if winner is None or len(entries) == 1:
             continue
         matching = [
@@ -938,7 +958,7 @@ def _dedupe_eval_aggregate(
             for entry in entries
             if _source_names_raw_dir(entry[2].get("source"), winner)
         ]
-        winner_result_name = winner_result_names.get(key)
+        winner_result_name = winner_result_names.get(artifact_key)
         exact_matching = [
             entry
             for entry in matching

@@ -49,9 +49,14 @@ def build_pytest_command(
         "pytest",
         "tests/tool_call_json_schema/test_tool_call_json_schema.py",
         "--reruns",
-        "3",
+        "6",
         "--reruns-delay",
-        "2",
+        "3",
+        "--only-rerun",
+        (
+            r"(?i)(Error code: (404|429|5[0-9]{2})|APIConnectionError|"
+            r"APITimeoutError|Connection error|timed out)"
+        ),
         "--base-url",
         base_url,
         "--api-key",

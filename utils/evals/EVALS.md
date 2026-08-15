@@ -92,7 +92,7 @@ upstream `tests/tool_call_json_schema/test_tool_call_json_schema.py` with:
 - the local OpenAI-compatible endpoint, `EMPTY` API key, and served model name;
 - `--think-mode none` for other models, or `--think-mode opensource --thinking`
   for `dsv4`, plus `--selection object --max-cases 1 --max-tokens 2048`;
-- the upstream-recommended `--reruns 3 --reruns-delay 2`;
+- up to six three-second reruns, limited to transient HTTP and transport errors;
 - the bundled Walle case directory and `--tool-json-report`.
 
 The temporary Python runtime, package directory, and verifier checkout are
@@ -100,9 +100,10 @@ removed after both successful and failed runs.
 
 The selection is `TestAdditionalProperties:1`, parametrized upstream in
 non-streaming and streaming modes. Pytest makes one initial attempt and up to
-three reruns of each failing mode, with a two-second delay before each rerun.
-These retries reduce transient transport and model-sampling flakes; they do not
-make the smoke deterministic. The unchanged native report remains one final
+six reruns of each mode at three-second intervals, but only for HTTP 404, 429,
+5xx, connection, and timeout failures. This covers frontends whose health route
+becomes ready shortly before chat completions without retrying schema or
+model-output failures. The unchanged native report remains one final
 outcome per mode because the upstream report deduplicates rerun records by case
 and mode. It is uploaded as `kimi_vendor_report.json`, and
 `utils/evals/kimi_vendor_eval.py` projects those two outcomes into the existing

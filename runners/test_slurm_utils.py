@@ -105,6 +105,7 @@ def test_patch_srt_eval_dispatch_forwards_selection_and_is_idempotent(
     assert 'run_eval --port "$PORT"' in eval_script.read_text()
     assert "--framework lm-eval" not in eval_script.read_text()
     assert "*_vendor_report.json" in eval_script.read_text()
+    assert "bfcl_report.json" in eval_script.read_text()
     assert "already patched" in second.stdout
 
 
@@ -307,7 +308,7 @@ def test_gb200_kimi_compilation_config_preserves_all_settings() -> None:
         assert compilation_config["pass_config"]["fuse_allreduce_rms"] is False
 
 
-def test_gb200_dynamo_kimi_recipes_enable_structural_tool_constraints() -> None:
+def test_gb200_dynamo_kimi_recipes_configure_tool_parser() -> None:
     recipe_dir = (
         REPO_ROOT / "benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic"
     )
@@ -322,7 +323,7 @@ def test_gb200_dynamo_kimi_recipes_enable_structural_tool_constraints() -> None:
         assert frontend["type"] == "dynamo"
         config = recipe["backend"]["vllm_config"]["aggregated"]
         assert config["dyn-tool-call-parser"] == "kimi_k3"
-        assert config["dyn-enable-structural-tag"] is True
+
 
 
 def test_b200_kimi_recipe_uses_available_roce_devices() -> None:

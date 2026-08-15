@@ -29,6 +29,7 @@ M3_DEFAULT_MAX_TOKENS = 40960
 RESULT_FORMAT = "inferencex-eval-v1"
 ADAPTER_NAME = "minimax-provider-verifier"
 EXPECTED_INDICES = (71,)
+M3_MODEL_REGEX = re.compile(r"(?<![A-Za-z0-9])m3(?![A-Za-z0-9])", re.IGNORECASE)
 UPSTREAM_REF = "85bf180e54e2ab0b31595cfdc697116c4760876d"
 UPSTREAM_SOURCE = (
     "https://raw.githubusercontent.com/MiniMax-AI/MiniMax-Provider-Verifier/"
@@ -195,8 +196,9 @@ def prepare_request(row: Mapping[str, Any], model: str) -> dict[str, Any]:
         model=model,
         temperature=0,
         top_p=1,
-        max_tokens=M3_DEFAULT_MAX_TOKENS,
     )
+    if M3_MODEL_REGEX.search(model):
+        request["max_tokens"] = M3_DEFAULT_MAX_TOKENS
     return request
 
 

@@ -1138,6 +1138,8 @@ print(json.dumps(json.loads(sys.stdin.read())))' <<<"$_val")" || {
                         [ -e "/workspace/$f" ] && cp -f "/workspace/$f" "$EVAL_COPY_DIR/"
                     done
                     find /workspace -maxdepth 1 -name 'results*.json' -exec cp -f {} "$EVAL_COPY_DIR/" \;
+                    find /workspace -maxdepth 1 -name '*_vendor_report.json' -exec cp -f {} "$EVAL_COPY_DIR/" \;
+                    find /workspace -maxdepth 1 -name 'bfcl_report.json' -exec cp -f {} "$EVAL_COPY_DIR/" \;
                     find /workspace -maxdepth 1 -name 'sample*.jsonl' -exec cp -f {} "$EVAL_COPY_DIR/" \;
 
                     echo "Eval completed. Artifacts staged in $EVAL_COPY_DIR"

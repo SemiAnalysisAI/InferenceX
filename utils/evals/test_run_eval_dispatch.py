@@ -432,10 +432,13 @@ unset VENDOR_VERIFIER_PYTHON VENDOR_VERIFIER_PYTHON_CLEANUP_DIR
 _prepare_vendor_verifier_python() { return 12; }
 _prepare_minimax_vendor_runtime() { echo "UNEXPECTED_DEPENDENCY_INSTALL"; return 99; }
 python3() { printf 'ADAPTER_ARG=<%s>\n' "$@"; }
-append_lm_eval_summary() { printf 'STAGED=<%s>\n' "$EVAL_RESULT_DIR"; }
+append_lm_eval_summary() {
+    printf 'STAGED=<%s>\n' "$EVAL_RESULT_DIR"
+    printf 'STAGED_CONC=<%s>\n' "$CONC"
+}
 export MODEL_PREFIX=minimaxm3
 export MODEL=test-model
-export EVAL_CONCURRENT_REQUESTS=""
+export EVAL_CONCURRENT_REQUESTS=7
 export EVAL_ONLY=false
 export IS_AGENTIC=0
 run_eval --framework minimax-vendor --results-dir "$RESULTS_DIR"
@@ -468,6 +471,7 @@ printf 'EVAL_RC=%s\n' "$eval_rc"
     ) in output
     assert f"STAGED=<{results_dir}>" in output
     assert output.count("STAGED=<") == 1
+    assert "STAGED_CONC=<7>" in output
 
 
 def test_minimax_vendor_dependency_install_is_pinned_and_minimal(

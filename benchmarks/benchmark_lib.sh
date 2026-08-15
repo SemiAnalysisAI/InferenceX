@@ -1561,7 +1561,7 @@ _write_minimax_vendor_integration_error() {
 
     # The adapter's integration-error path is stdlib-only, so it remains usable
     # when Python provisioning or dependency installation is what failed.
-    python3 "$adapter_path" \
+    "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" \
         --model "$model_name" \
         --output-dir "$results_dir" \
         --integration-error "$message"
@@ -2575,6 +2575,10 @@ run_eval() {
             echo "Deferring failure until post-upload score validation preserves all artifacts" >&2
         fi
         return 0
+    fi
+
+    if [ -n "${EVAL_CONCURRENT_REQUESTS:-}" ]; then
+        export CONC="$EVAL_CONCURRENT_REQUESTS"
     fi
 
     local eval_rc=0

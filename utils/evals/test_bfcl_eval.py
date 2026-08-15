@@ -1,3 +1,4 @@
+import builtins
 import json
 import subprocess
 import sys
@@ -9,6 +10,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import bfcl_eval as be
+import validate_scores as vs
 
 
 def _compatibility_path(output_dir: Path) -> Path:
@@ -29,6 +31,21 @@ def _native(output_dir: Path) -> dict[str, Any]:
 
 def _score(output_dir: Path) -> float:
     return _compatibility(output_dir)["results"][be.TASK_NAME]["acc,none"]
+
+
+def test_thresholds_are_stdlib_readable_without_pyyaml(monkeypatch) -> None:
+    real_import = builtins.__import__
+
+    def import_without_yaml(name, *args, **kwargs):
+        if name == "yaml":
+            raise ModuleNotFoundError("No module named 'yaml'")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", import_without_yaml)
+    thresholds = vs.load_config(str(Path(vs.__file__).with_name("thresholds.yaml")))
+
+    assert thresholds["default"]["bfcl_smoke"] == 0.75
+    assert thresholds["default"]["bfcl_parallel"] == 0.0
 
 
 def _write_result(

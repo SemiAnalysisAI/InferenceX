@@ -206,6 +206,14 @@ def test_success_writes_complete_native_and_compatibility_reports(
     assert "secret" not in json.dumps([native, compatibility])
 
 
+def test_non_m3_request_does_not_force_m3_token_budget() -> None:
+    _, rows = mpe.load_fixture(mpe.DEFAULT_FIXTURE_PATH)
+
+    request = mpe.prepare_request(rows[0], "moonshotai/Kimi-K3")
+
+    assert "max_tokens" not in request
+
+
 def test_schema_failure_fails_only_tool_case(tmp_path: Path) -> None:
     def post(payload: dict[str, Any]) -> dict[str, Any]:
         if payload.get("tools", [{}])[0].get("function", {}).get("name") == (

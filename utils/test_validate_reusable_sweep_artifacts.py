@@ -9,6 +9,7 @@ from validate_reusable_sweep_artifacts import (
     agentic_key,
     benchmark_key,
     eval_key,
+    eval_result_key,
     dedupe_reran_evals,
     main,
     validate_agentic_artifacts,
@@ -417,6 +418,13 @@ def test_eval_validation_separates_explicit_suite_identities(
     assert validate_eval_artifacts(tmp_path) == []
 
 
+def test_eval_result_key_includes_task_identity() -> None:
+    gsm8k = single_eval_result(32, eval_suite="tool_use")
+    bfcl = {**gsm8k, "task": "bfcl_smoke"}
+
+    assert eval_result_key(gsm8k) != eval_result_key(bfcl)
+
+
 def test_eval_validation_distinguishes_sequence_lengths(tmp_path: Path) -> None:
     write_eval_aggregate(
         tmp_path,
@@ -644,6 +652,51 @@ def test_eval_validation_accepts_neutral_result_format_marker(
     data["result_format"] = "inferencex-eval-v1"
     result_path.write_text(json.dumps(data))
     write_eval_aggregate(tmp_path, [single_eval_result(32)])
+
+    assert validate_eval_artifacts(tmp_path) == []
+
+
+def test_eval_validation_accepts_neutral_filter_primary_score(
+    tmp_path: Path,
+) -> None:
+    write_raw_eval_artifact(tmp_path, 32, eval_suite="bfcl_smoke")
+    result_path = next(tmp_path.glob("eval_*/results*.json"))
+    data = json.loads(result_path.read_text())
+    data["results"]["gsm8k"] = {
+        "acc,none": 1.0,
+        "acc_stderr,none": 0.0,
+    }
+    data["configs"]["gsm8k"] = {
+        "metric_list": [{"metric": "acc"}],
+        "filter_list": [{"name": "none"}],
+    }
+    result_path.write_text(json.dumps(data))
+    write_eval_aggregate(
+        tmp_path,
+        [single_eval_result(32, eval_suite="bfcl_smoke")],
+    )
+
+    assert validate_eval_artifacts(tmp_path) == []
+
+
+def test_eval_validation_accepts_multiple_tasks_from_one_artifact(
+    tmp_path: Path,
+) -> None:
+    write_raw_eval_artifact(tmp_path, 32, eval_suite="tool_use")
+    result_path = next(tmp_path.glob("eval_*/results*.json"))
+    data = json.loads(result_path.read_text())
+    data["results"]["bfcl_smoke"] = {
+        "exact_match,strict-match": 1.0,
+        "exact_match_stderr,strict-match": 0.0,
+    }
+    data["configs"]["bfcl_smoke"] = data["configs"]["gsm8k"]
+    data["n-samples"]["bfcl_smoke"] = {"effective": 1}
+    result_path.write_text(json.dumps(data))
+    base_row = single_eval_result(32, eval_suite="tool_use")
+    write_eval_aggregate(
+        tmp_path,
+        [base_row, {**base_row, "task": "bfcl_smoke"}],
+    )
 
     assert validate_eval_artifacts(tmp_path) == []
 
@@ -911,9 +964,9 @@ def test_dedupe_keeps_latest_legacy_rerun(tmp_path: Path) -> None:
     assert any("kept 1 of 3" in message for message in messages)
 
 
-def test_dedupe_leaves_ambiguous_duplicates_for_validation(tmp_path: Path) -> None:
-    # Duplicate raw identities with no result timestamps cannot be ordered, so
-    # dedupe must leave them and validation must still reject them.
+def test_dedupe_leaves_ambiguous_artifacts_for_validation(tmp_path: Path) -> None:
+    # Result-less raw artifacts cannot be ordered or reused. Dedupe leaves them
+    # for validation to reject as missing recognized results.
     for name in ("eval_minimaxm3_conc4096_b300-nv_01", "eval_minimaxm3_conc4096_b300-nv_02"):
         _dd_write_legacy_raw(tmp_path, name, 4096, None)
     _dd_write_aggregate(
@@ -922,7 +975,10 @@ def test_dedupe_leaves_ambiguous_duplicates_for_validation(tmp_path: Path) -> No
     )
 
     assert dedupe_reran_evals(tmp_path) == []
-    assert any("duplicate" in e for e in validate_eval_artifacts(tmp_path))
+    assert any(
+        "no recognized eval result" in error
+        for error in validate_eval_artifacts(tmp_path)
+    )
 
 
 def test_dedupe_is_noop_for_clean_artifacts(tmp_path: Path) -> None:
@@ -1276,7 +1332,12 @@ def test_eval_validation_accepts_extract_filter_primary_score(
     raw_path.write_text(json.dumps(data))
     write_eval_aggregate(
         tmp_path,
-        [single_eval_result(32, eval_suite="gpqa")],
+        [
+            {
+                **single_eval_result(32, eval_suite="gpqa"),
+                "task": "gpqa",
+            }
+        ],
     )
 
     assert validate_eval_artifacts(tmp_path) == []

@@ -63,9 +63,14 @@ def test_builds_fixed_upstream_pytest_command(tmp_path: Path) -> None:
         "pytest",
         "tests/tool_call_json_schema/test_tool_call_json_schema.py",
         "--reruns",
-        "3",
+        "6",
         "--reruns-delay",
-        "2",
+        "3",
+        "--only-rerun",
+        (
+            r"(?i)(Error code: (404|429|5[0-9]{2})|APIConnectionError|"
+            r"APITimeoutError|Connection error|timed out)"
+        ),
         "--base-url",
         "http://127.0.0.1:8000/v1",
         "--api-key",

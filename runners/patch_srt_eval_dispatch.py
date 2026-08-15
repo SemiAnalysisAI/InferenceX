@@ -20,8 +20,8 @@ LM_EVAL_COMMAND = 'run_eval --framework lm-eval --port "$PORT" || eval_rc=$?'
 GENERIC_EVAL_COMMAND = 'run_eval --port "$PORT" || eval_rc=$?'
 EVAL_ARTIFACT_COPY = """cp -v results*.json /logs/eval_results/ 2>/dev/null || true
 cp -v sample*.jsonl /logs/eval_results/ 2>/dev/null || true"""
-KIMI_ARTIFACT_COPY = """cp -v results*.json /logs/eval_results/ 2>/dev/null || true
-cp -v *_vendor_report.json /logs/eval_results/ 2>/dev/null || true
+VERIFIER_ARTIFACT_COPY = """cp -v results*.json /logs/eval_results/ 2>/dev/null || true
+cp -v *_vendor_report.json bfcl_report.json /logs/eval_results/ 2>/dev/null || true
 cp -v sample*.jsonl /logs/eval_results/ 2>/dev/null || true"""
 
 
@@ -65,7 +65,7 @@ def patch_checkout(root: Path) -> list[Path]:
             root / "src/srtctl/benchmarks/scripts/lm-eval/bench.sh",
             (
                 (LM_EVAL_COMMAND, GENERIC_EVAL_COMMAND),
-                (EVAL_ARTIFACT_COPY, KIMI_ARTIFACT_COPY),
+                (EVAL_ARTIFACT_COPY, VERIFIER_ARTIFACT_COPY),
             ),
         ),
     )
