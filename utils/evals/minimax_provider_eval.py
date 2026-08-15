@@ -41,14 +41,16 @@ EXPECTED_CASE_SHA256 = {
     71: "10272004ae08f4a7d08d2306404f6cbb7bbfa794230e1082a235ded036d550ed",
 }
 MAX_RESPONSE_BYTES = 16 * 1024 * 1024
-MAX_ATTEMPTS = 2
+RETRY_BACKOFF_SECONDS = (5.0, 10.0, 20.0)
+MAX_ATTEMPTS = len(RETRY_BACKOFF_SECONDS) + 1
 
 HttpPost = Callable[..., Any]
 Clock = Callable[[], float]
+Sleeper = Callable[[float], None]
 
 
 class TransportError(OSError):
-    """An HTTP transport failure that may be retried once."""
+    """An HTTP transport failure that may be retried with bounded backoff."""
 
 
 class SuiteTimeoutError(TimeoutError):
@@ -242,7 +244,7 @@ def _default_http_post(
         with _NO_REDIRECT_OPENER.open(request, timeout=timeout_seconds) as response:
             content = _read_response_body(response, deadline).decode("utf-8")
     except urllib.error.HTTPError as exc:
-        if exc.code == 429 or 500 <= exc.code < 600:
+        if exc.code in {404, 429} or 500 <= exc.code < 600:
             raise TransportError(f"HTTP {exc.code}: {exc.reason}") from exc
         raise ValueError(
             f"chat completion request failed with HTTP {exc.code}: {exc.reason}"
@@ -553,6 +555,7 @@ def _evaluate_case(
     deadline: float,
     http_post: HttpPost,
     clock: Clock,
+    sleeper: Sleeper,
 ) -> dict[str, Any]:
     prepared = prepare_request(row, model)
     started = clock()
@@ -597,6 +600,9 @@ def _evaluate_case(
                 break
             request_error = exc
             if attempt + 1 < MAX_ATTEMPTS:
+                delay = min(RETRY_BACKOFF_SECONDS[attempt], deadline - clock())
+                if delay > 0:
+                    sleeper(delay)
                 continue
             break
         except Exception as exc:  # noqa: BLE001 - preserve per-request diagnostics
@@ -930,6 +936,7 @@ def run_evaluation(
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
     http_post: HttpPost = _default_http_post,
     clock: Clock = time.monotonic,
+    sleeper: Sleeper = time.sleep,
 ) -> bool:
     """Run the pinned case and always publish both artifacts."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -942,8 +949,8 @@ def run_evaluation(
             request_timeout_seconds, "request_timeout_seconds"
         )
         suite_timeout = _positive_number(timeout_seconds, "timeout_seconds")
-        if not callable(http_post) or not callable(clock):
-            raise TypeError("http_post and clock must be callable")
+        if not callable(http_post) or not callable(clock) or not callable(sleeper):
+            raise TypeError("http_post, clock, and sleeper must be callable")
         deadline = clock() + suite_timeout
         if not isinstance(model, str) or not model.strip():
             raise ValueError("model must be a non-empty string")
@@ -981,6 +988,7 @@ def run_evaluation(
                 deadline=deadline,
                 http_post=http_post,
                 clock=clock,
+                sleeper=sleeper,
             )
         except Exception as exc:  # noqa: BLE001 - continue and report every case
             result = _failed_case_result(row, exc)

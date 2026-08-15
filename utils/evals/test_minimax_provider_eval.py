@@ -278,8 +278,11 @@ def test_scenario_validator_uses_visible_first_occurrence_order() -> None:
     assert result["scenario_check_valid"] is False
 
 
-def test_transport_retries_once_then_preserves_success(tmp_path: Path) -> None:
+def test_transport_retries_with_backoff_then_preserves_success(
+    tmp_path: Path,
+) -> None:
     attempts = 0
+    sleeps: list[float] = []
 
     def http_post(**request: Any) -> dict[str, Any]:
         nonlocal attempts
@@ -295,8 +298,10 @@ def test_transport_retries_once_then_preserves_success(tmp_path: Path) -> None:
         model="MiniMax-M3",
         output_dir=output_dir,
         http_post=http_post,
+        sleeper=sleeps.append,
     )
     assert attempts == 2
+    assert sleeps == [5.0]
     assert _native(output_dir)["results"][0]["attempts"] == 2
     assert _score(output_dir) == 1.0
 
@@ -305,6 +310,7 @@ def test_transport_retries_once_then_preserves_success(tmp_path: Path) -> None:
     ("status_code", "error_type"),
     (
         (400, ValueError),
+        (404, mpe.TransportError),
         (408, ValueError),
         (429, mpe.TransportError),
         (503, mpe.TransportError),
@@ -476,13 +482,12 @@ def test_malformed_chat_response_records_diagnostic_and_continues(
 
 def test_exhausted_transport_failure_publishes_report(tmp_path: Path) -> None:
     calls = 0
+    sleeps: list[float] = []
 
     def http_post(**request: Any) -> dict[str, Any]:
         nonlocal calls
         calls += 1
-        if calls <= 2:
-            raise mpe.TransportError("offline")
-        return _response_for(request["payload"])
+        raise mpe.TransportError("offline")
 
     output_dir = tmp_path / "output"
     assert not mpe.run_evaluation(
@@ -491,9 +496,11 @@ def test_exhausted_transport_failure_publishes_report(tmp_path: Path) -> None:
         model="MiniMax-M3",
         output_dir=output_dir,
         http_post=http_post,
+        sleeper=sleeps.append,
     )
     native = _native(output_dir)
-    assert calls == 2
+    assert calls == 4
+    assert sleeps == [5.0, 10.0, 20.0]
     assert len(native["results"]) == 1
     assert native["results"][0]["failures"] == [
         "query_failed",
