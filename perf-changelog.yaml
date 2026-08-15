@@ -5973,6 +5973,26 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2567
 
 - config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-agg
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Inject the committed synthetic MTP acceptance length only for GB300 AgentX throughput; keep eval-only jobs on real target verification."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2571
+
+
+- config-keys:
+    - minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp
+    - minimaxm3-fp4-gb200-dynamo-vllm-agentic-disagg-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add the tuned GB200 MiniMax-M3 FP4 AgentX frontier with EAGLE3, the B200 TP4 baseline, DEP4/DEP8, SimpleCPU offload, and KV-routed P/D."
+    - "Use full-decode-only CUDA graphs for TP4 stability."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2609
+
+- config-keys:
     - qwen3.5-fp4-gb300-dynamo-trt-agentic-disagg
   scenario-type:
     - agentic-coding
