@@ -5990,4 +5990,4 @@
     - "Move the B300 Kimi K3 recipe to TP8 x DCP8 with Mooncake as the external KV tier, on an image carrying the Kimi K3 DCP, DSpark-under-DCP and Mooncake hybrid-attention changes."
     - "Sweep concurrency 1, 2, 4, 8, 24, 32, 40, 48, 56 and 70, drafting with DSpark level 7 at concurrency 8 and below and without speculation above it."
     - "Serve on TokenspeedMLA with TRTLLM_RAGGED prefill, a 16384 prefill token budget, gpu-memory-utilization 0.90 and a 160 GB Mooncake segment per rank."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2616
