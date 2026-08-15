@@ -87,7 +87,10 @@ export VLLM_USE_DIRECT_DCP_KV_GATHER=1
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_RPC_TIMEOUT=600000
 export VLLM_PREFIX_CACHE_RETENTION_INTERVAL=0
-export VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0
+# Reserve for the cudagraph pool when sizing KV. With this off, KV is sized as
+# budget - weights - activation, so the pool (14.84 GiB at c70) overshoots the
+# budget and the FlashInfer MoE workspace has nothing left to allocate into.
+export VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=1
 export PYTHONNOUSERSITE=1
 export TORCH_CUDA_ARCH_LIST=10.0
 # Identical prefixes must hash to identical block keys run-to-run.
