@@ -1516,7 +1516,7 @@ kimik3-fp4-b300-vllm-agentic-dspark:
     agentic-coding:
       # Sizes the Mooncake segment: this resolves to total-cpu-dram-gb, which
       # the recipe divides across the 8 TP ranks.
-    - dram-utilization: 0.5
+    - dram-utilization: 1.0
       search-space:
       # TP8-only: a ~1.5 TB MXFP4 checkpoint does not fit below 8 GPUs.
       # One entry for every arm: the recipe drafts at DSpark 7 up to conc 8,

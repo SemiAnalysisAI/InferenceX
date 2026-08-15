@@ -6007,3 +6007,13 @@
   description:
     - "Lower gpu-memory-utilization to 0.90 so concurrency 56 and 70 leave room for the FlashInfer MoE workspace, which had 1.60 GiB free against a 2.78 GiB allocation at 0.92."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2616
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Pick the Mooncake RDMA rail at runtime instead of hardcoding mlx5_0, which is down on some b300-nv nodes and left the transfer engine with no HCA to initialise."
+    - "Apply gpu-memory-utilization 0.90 only at concurrency 56 and above, where the FlashInfer MoE workspace ran out of buffer; lower concurrencies keep 0.92 and their full KV cache."
+    - "Raise dram-utilization to 1.0, giving a 374 GB Mooncake segment per rank."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2616

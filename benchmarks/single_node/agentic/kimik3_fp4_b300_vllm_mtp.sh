@@ -87,10 +87,7 @@ export VLLM_USE_DIRECT_DCP_KV_GATHER=1
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_RPC_TIMEOUT=600000
 export VLLM_PREFIX_CACHE_RETENTION_INTERVAL=0
-# Reserve for the cudagraph pool when sizing KV. With this off, KV is sized as
-# budget - weights - activation, so the pool (14.84 GiB at c70) overshoots the
-# budget and the FlashInfer MoE workspace has nothing left to allocate into.
-export VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=1
+export VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0
 export PYTHONNOUSERSITE=1
 export TORCH_CUDA_ARCH_LIST=10.0
 # Identical prefixes must hash to identical block keys run-to-run.
@@ -131,6 +128,25 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         # One rail for every rank. These nodes are rail-isolated, so two
         # different RNICs cannot reach each other even within a node, and the
         # embedded store's ranks are eight processes on one host.
+        #
+        # Chosen at runtime: mlx5_0 is down on some nodes (b300-016, b300-017),
+        # and a hardcoded rail has no fallback -- topology discovery finds 0
+        # HCAs and every rank dies in a 20-retry loop that reads like a store
+        # problem. Order starts at mlx5_0 so a healthy node is unchanged.
+        MOONCAKE_RAIL=""
+        for _d in mlx5_0 mlx5_1 mlx5_2 mlx5_3 mlx5_4 mlx5_5 mlx5_8 mlx5_9 \
+                  mlx5_10 mlx5_11 mlx5_16 mlx5_17 mlx5_20 mlx5_21 mlx5_22 mlx5_23; do
+            if grep -q ACTIVE "/sys/class/infiniband/$_d/ports/1/state" 2>/dev/null; then
+                MOONCAKE_RAIL="$_d"
+                break
+            fi
+        done
+        if [ -z "$MOONCAKE_RAIL" ]; then
+            echo "Error: no active RDMA rail on $(hostname); Mooncake cannot initialise" >&2
+            exit 1
+        fi
+        echo "Mooncake rail: $MOONCAKE_RAIL"
+
         cat > "$MOONCAKE_CONFIG_PATH" <<EOF
 {
   "mode": "embedded",
@@ -139,7 +155,7 @@ case "${KV_OFFLOAD_BACKEND:-}" in
   "global_segment_size": "${PER_RANK_GB}GB",
   "local_buffer_size": "4GB",
   "protocol": "rdma",
-  "device_name": "mlx5_0",
+  "device_name": "$MOONCAKE_RAIL",
   "enable_offload": false
 }
 EOF
@@ -209,6 +225,16 @@ fi
 
 MAX_NUM_SEQS=$((2 * CONC))
 
+# 1 - this is the buffer for what is not sized against the budget: the cudagraph
+# pool, the FlashInfer MoE workspace and fragmentation. Only c56 and c70 ran out
+# of it (2.78 GiB wanted, 1.60 GiB free); the pool grows with concurrency, so
+# lower points keep the default and their full KV cache.
+if [ "$CONC" -ge 56 ]; then
+    GPU_MEM_UTIL=0.90
+else
+    GPU_MEM_UTIL=0.92
+fi
+
 # Capture sizes: step * 1..min(max-num-seqs, 128), then the fixed powers of two
 # above that. Sizes are tokens when drafting, sequences when not; the 128 caps
 # the number of dense entries, not their value.
@@ -239,9 +265,7 @@ VLLM_CMD=(
     --tensor-parallel-size "$TP"
     "${CP_ARGS[@]}"
     --max-num-seqs "$MAX_NUM_SEQS"
-    # 1 - this is the buffer for what is not sized against the budget: the
-    # cudagraph pool, the FlashInfer MoE workspace and fragmentation.
-    --gpu-memory-utilization 0.90
+    --gpu-memory-utilization "$GPU_MEM_UTIL"
     --max-num-batched-tokens 16384
     --trust-remote-code
     --language-model-only
