@@ -241,7 +241,7 @@ VLLM_CMD=(
     --max-num-seqs "$MAX_NUM_SEQS"
     # 1 - this is the buffer for what is not sized against the budget: the
     # cudagraph pool, the FlashInfer MoE workspace and fragmentation.
-    --gpu-memory-utilization 0.92
+    --gpu-memory-utilization 0.90
     --max-num-batched-tokens 16384
     --trust-remote-code
     --language-model-only

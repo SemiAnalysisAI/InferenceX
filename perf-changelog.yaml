@@ -5999,3 +5999,11 @@
   description:
     - "Let the memory profiler reserve for the cudagraph pool when sizing the KV cache, so concurrency 56 and above stop running out of GPU memory on the first FlashInfer MoE workspace allocation."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2616
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Lower gpu-memory-utilization to 0.90 so concurrency 56 and 70 leave room for the FlashInfer MoE workspace, which had 1.60 GiB free against a 2.78 GiB allocation at 0.92."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2616
