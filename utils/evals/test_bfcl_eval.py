@@ -215,8 +215,8 @@ def test_perfect_score_projects_pinned_ids_and_upstream_headers(
     assert json.loads(
         (project_root / "test_case_ids_to_generate.json").read_text(encoding="utf-8")
     ) == {
-        "simple_python": ["simple_python_0"],
-        "multiple": ["multiple_9"],
+        "simple_python": ["simple_python_141"],
+        "multiple": ["multiple_38"],
         "parallel": ["parallel_1"],
         "irrelevance": ["irrelevance_0"],
     }
@@ -488,8 +488,8 @@ def test_upstream_exception_publishes_zero_score_reports(tmp_path: Path) -> None
         "message": "BFCL generation failed",
     }
     assert compatibility["bfcl"]["source"]["case_ids"] == {
-        "simple_python": ["simple_python_0"],
-        "multiple": ["multiple_9"],
+        "simple_python": ["simple_python_141"],
+        "multiple": ["multiple_38"],
         "parallel": ["parallel_1"],
         "irrelevance": ["irrelevance_0"],
     }

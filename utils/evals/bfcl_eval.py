@@ -38,8 +38,8 @@ VLLM_INTEGRATION_REF = "7ecb11405df86b202f4c5cca322bd133052fee82"
 
 # Dict insertion order is intentional: reports and the upstream run-ID file are stable.
 SMOKE_CASE_IDS: dict[str, tuple[str, ...]] = {
-    "simple_python": ("simple_python_0",),
-    "multiple": ("multiple_9",),
+    "simple_python": ("simple_python_141",),
+    "multiple": ("multiple_38",),
     "parallel": ("parallel_1",),
     "irrelevance": ("irrelevance_0",),
 }

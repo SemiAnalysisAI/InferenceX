@@ -218,15 +218,16 @@ but uses a fixed four-case V4 partial evaluation:
 
 | BFCL category | Exact upstream case ID | Projected task |
 |---------------|------------------------|----------------|
-| `simple_python` | `simple_python_0` | `bfcl_simple_python` |
-| `multiple` | `multiple_9` | `bfcl_multiple` |
+| `simple_python` | `simple_python_141` | `bfcl_simple_python` |
+| `multiple` | `multiple_38` | `bfcl_multiple` |
 | `parallel` | `parallel_1` | `bfcl_parallel` |
 | `irrelevance` | `irrelevance_0` | `bfcl_irrelevance` |
 
-The verified wheel is installed into a temporary Python 3.10-or-newer virtual
-environment with system site packages enabled so the image's existing
-Torch/Transformers stack can be reused; it never mutates the global Python
-environment. The temporary environment and BFCL project root are removed after
+The verified wheel and its undeclared `soundfile==0.13.1` import dependency are
+installed into a temporary Python 3.10-or-newer virtual environment with system
+site packages enabled so the image's existing Torch/Transformers stack can be
+reused; it never mutates the global Python environment. The temporary
+environment and BFCL project root are removed after
 the run. Once package installation finishes, evaluation is local-only: BFCL
 skips its server setup and uses only the already-running local API root,
 typically `http://127.0.0.1:$PORT/v1`. The OpenAI SDK appends
