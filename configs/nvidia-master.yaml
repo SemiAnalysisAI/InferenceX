@@ -1496,24 +1496,15 @@ dsr1-fp8-b300-sglang-mtp:
       - { tp: 8, ep: 1, conc-start: 1, conc-end: 512, spec-decoding: mtp }
 
 kimik3-fp4-b300-vllm-agentic-dspark:
-  # DSpark speculative decoding on the Inferact/Kimi-K3-DSpark draft head, at
-  # level 2 with probabilistic drafting and synthetic acceptance pinned to the
-  # committed golden AL 2.51 (golden_al_distribution/
-  # kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml,
-  # thinking_on 2 -> 2.51), per the AgentX policy in that directory's README:
-  # draft length is the submission's choice, the acceptance target is not.
-  # EVAL_ONLY runs switch to real block verification, since synthetic acceptance
-  # commits drafts regardless of target logits and would zero the SWE-bench score.
+  # TP8 x DCP8 with Mooncake as the external KV tier. The recipe drafts with
+  # DSpark level 7 at conc <= 8 and stops above it; synthetic acceptance is
+  # pinned to the committed golden AL 3.84 (golden_al_distribution/
+  # kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml),
+  # and EVAL_ONLY switches to real block verification.
   #
-  # Level 2 not 7: verify width is a real system cost synthetic acceptance does
-  # not remove, and at K=7 the 8-position verify loses to no-speculation once the
-  # GPU saturates even at the forced golden AL of 3.84.
-  #
-  # The draft's REAL acceptance on this corpus is 1.16-2.01 (13-41% position-1) --
-  # its native window is 32k YaRN-stretched to 1M, and the same image/draft/config
-  # reaches AL 4.18 on short-context work. These throughput numbers measure the
-  # system at a prescribed acceptance, not the draft's fitness at 100k+ context.
-  image: vllm/vllm-openai:nightly-b22afe45ac797ae58e67a7a3ad79ee5714024420@sha256:144356af876edbb3a4bfee23e1444b196cc3fdadd0a0c1a7f11f721756972a21
+  # The image carries the Kimi-K3 DCP, DSpark-under-DCP and Mooncake-hybrid
+  # changes (vllm-project/vllm agentx-k3 @ 5894fdf).
+  image: vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-5894fdf
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:b300-nv
@@ -1523,19 +1514,14 @@ kimik3-fp4-b300-vllm-agentic-dspark:
   scenarios:
     # Agentic-coding only: no fixed-seq-len (1k1k / 8k1k) arms for this recipe.
     agentic-coding:
-    - dram-utilization: 0.63
+      # 0.4267 of cluster:b300-nv's host DRAM gives 1280 GB, which the recipe
+      # divides across the 8 TP ranks into a 160 GB Mooncake segment each.
+    - dram-utilization: 0.4267
       search-space:
-      # Keep equal resident/offload points through conc 8. The digest-pinned
-      # bring-up sweep (run 31404943911) confirmed that resident conc 16
-      # remained in warmup after 1,770 seconds (96/177 requests), while conc 8
-      # entered profiling. The offload conc 16 arm completed warmup in 804
-      # seconds and exercised the external KV tier, so retain it as the
-      # capacity endpoint.
       # TP8-only: a ~1.5 TB MXFP4 checkpoint does not fit below 8 GPUs.
-      # TP8 GPU-resident
-      - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8] }
-      # TP8 SimpleCPUOffload (host DRAM)
-      - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [1, 2, 4, 8, 16] }
+      # One entry for both arms; the recipe drafts at conc <= 8. Keep the
+      # concurrencies disjoint across arms so exp-names stay unique.
+      - { tp: 8, ep: 1, dcp-size: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [1, 2, 4, 8, 24, 32, 40, 48, 56, 70] }
 
 dsr1-fp8-b200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
