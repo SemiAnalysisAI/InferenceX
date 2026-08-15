@@ -33,7 +33,6 @@ GPUS_PER_NODE="${GPUS_PER_NODE:-8}"
 PORT="${PORT:-8000}"
 MASTER_PORT="${MASTER_PORT:-29500}"
 HOST_HF_CACHE="${HOST_HF_CACHE:-/it-share/hf_cache}"
-HOST_MODEL_PATH="${HOST_MODEL_PATH:-${HOST_HF_CACHE}/Kimi-K3}"
 IBDEVICES="${IBDEVICES:-rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7}"
 SERVE_SCRIPT="benchmarks/multi_node/agentic/kimik3_fp4_mi355x_vllm_tp8pp2.sh"
 # Parity with the verified g06+g17 smoke: the nightly image needs this triton pin.
@@ -55,6 +54,72 @@ MASTER_ADDR="$(srun -w "${NODES[0]}" -N1 -n1 hostname -I | awk '{print $1}')"
 echo "MASTER_ADDR=${MASTER_ADDR} nodes=${NODES[*]}"
 
 DOCKER_CMD_DETECT='if docker ps &>/dev/null; then DOCKER_CMD=docker; else DOCKER_CMD="sudo docker"; fi'
+
+# ---------------------------------------------------------------------------
+# Model path resolution (host side, before any container starts).
+#
+# /model is mounted read-only, so the in-container `hf download` fallback cannot
+# work here: weights must already be staged on every allocated node. Resolve
+# across the known roots and fail fast with the per-node verdict, mirroring
+# amd_utils/job.slurm rather than burning the job on a doomed download.
+# ---------------------------------------------------------------------------
+MODEL_DIR_NAME="${MODEL##*/}"
+HF_CACHE_DIR_NAME="models--${MODEL//\//--}"
+
+model_dir_ready_on_all_nodes() {
+    local path="$1"
+    srun --overlap -N"${NUM_NODES}" -n"${NUM_NODES}" bash -lc "
+        if [[ -n \"\$(ls -A '${path}' 2>/dev/null)\" ]]; then
+            echo \"\$(hostname): found ${path}\"
+        else
+            echo \"\$(hostname): missing ${path}\"
+            exit 1
+        fi
+    "
+}
+
+# An HF-cache-layout dir holds the real weights under snapshots/<rev>.
+resolve_snapshot_dir() {
+    local base="$1"
+    local snap
+    snap="$(ls -1d "${base}"/snapshots/*/ 2>/dev/null | head -1)"
+    if [[ -n "$snap" ]]; then
+        echo "${snap%/}"
+    else
+        echo "$base"
+    fi
+}
+
+MODEL_SEARCH_PATHS=()
+[[ -n "${HOST_MODEL_PATH:-}" ]] && MODEL_SEARCH_PATHS+=("$HOST_MODEL_PATH")
+MODEL_SEARCH_PATHS+=(
+    "${HOST_HF_CACHE}/${MODEL_DIR_NAME}"
+    "${HOST_HF_CACHE}/${HF_CACHE_DIR_NAME}"
+    "/it-share/data/${MODEL_DIR_NAME}"
+    "/it-share/data/${HF_CACHE_DIR_NAME}"
+    "/nfsdata/${MODEL_DIR_NAME}"
+    "/nfsdata/hf_hub_cache-0/${MODEL_DIR_NAME}"
+    "/nfsdata/hf_hub_cache-0/${HF_CACHE_DIR_NAME}"
+)
+
+RESOLVED_MODEL_PATH=""
+for candidate in "${MODEL_SEARCH_PATHS[@]}"; do
+    echo "Checking model path on all ${NUM_NODES} nodes: ${candidate}"
+    if model_dir_ready_on_all_nodes "$candidate"; then
+        RESOLVED_MODEL_PATH="$(resolve_snapshot_dir "$candidate")"
+        break
+    fi
+done
+
+if [[ -z "$RESOLVED_MODEL_PATH" ]]; then
+    echo "FATAL: '${MODEL}' weights not staged on all of: ${NODES[*]}" >&2
+    echo "Searched:" >&2
+    for candidate in "${MODEL_SEARCH_PATHS[@]}"; do echo "  - ${candidate}" >&2; done
+    echo "Stage the weights on every allocated node, or set HOST_MODEL_PATH." >&2
+    exit 1
+fi
+HOST_MODEL_PATH="$RESOLVED_MODEL_PATH"
+echo "Resolved HOST_MODEL_PATH=${HOST_MODEL_PATH}"
 
 cleanup_containers() {
     set +e

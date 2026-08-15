@@ -48,9 +48,13 @@ mkdir -p "$BENCHMARK_LOGS_DIR"
 export TP PP NUM_NODES GPUS_PER_NODE
 export CONTAINER_IMAGE="$IMAGE"
 export DOCKER_IMAGE_NAME="$IMAGE"
-# Host paths for the HF cache / Kimi-K3 weights (NFS). Overridable for local smoke.
+# Host HF cache root. HOST_MODEL_PATH is left unset on purpose: the job script
+# resolves the weights across the known roots and validates every allocated
+# node, so set it only to pin a specific staging dir.
 export HOST_HF_CACHE="${HOST_HF_CACHE:-/it-share/hf_cache}"
-export HOST_MODEL_PATH="${HOST_MODEL_PATH:-${HOST_HF_CACHE}/Kimi-K3}"
+if [[ -n "${HOST_MODEL_PATH:-}" ]]; then
+    export HOST_MODEL_PATH
+fi
 export AITER_GEMM_MERGE="${AITER_GEMM_MERGE:-auto}"
 export MODEL_PATH="/model"
 export PORT="${PORT:-8000}"
