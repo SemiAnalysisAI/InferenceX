@@ -646,7 +646,7 @@ kimik3-fp4-mi355x-vllm-disagg-agentic-mtp:
       # 1P1D no-offload formal sweep.
       - spec-decoding: mtp
         kv-offloading: none
-        conc-list: [1, 8, 16]
+        conc-list: [1, 8, 10]
         prefill:
           num-worker: 1
           tp: 8
