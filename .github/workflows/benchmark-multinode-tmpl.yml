@@ -514,7 +514,7 @@ jobs:
         run: |
           rm -f meta_env.json || true
           rm -f results*.json || true
-          rm -f *_vendor_report.json || true
+          rm -f -- ./*_vendor_report.json || true
           rm -f sample*.jsonl || true
           rm -f agent_preds.json predictions.jsonl swebench_report_*.json *.traj* || true
 
