@@ -5962,10 +5962,30 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2577
 
 - config-keys:
+    - dsv4-fp4-gb200-dynamo-vllm-agentic-mtp-agg
+    - dsv4-fp4-gb200-dynamo-vllm-agentic-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GB200 DeepSeek-V4-Pro FP4 Dynamo-vLLM AgentX with K=2 MTP and golden synthetic acceptance length 2.49."
+    - "Compare the B200 TP8 and DEP8 concurrency range and extend throughput with 1P1D and 2P1D DEP8 disaggregation."
+    - "Use KV-aware Dynamo routing with 4-hour correlation-ID affinity, authoritative vLLM KV events, KV-cache token metrics, and every logical vLLM server-metrics endpoint."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2567
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-agg
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Inject the committed synthetic MTP acceptance length only for GB300 AgentX throughput; keep eval-only jobs on real target verification."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2571
+  
+- config-keys:
     - kimik3-fp4-mi355x-vllm-agentic-mtp
   scenario-type:
     - agentic-coding
   description:
     - "Kimi-K3 Agentx Pef Tuning with AITER Backend"
-    - "Image : vllm/vllm-openai-rocm:nightly-3ee2df30337a301164c46ae444b76ee67e71c106"
+    - "Image : vllm/vllm-openai-rocm:nightly-ac7509e2b1db40fec2f03dde1ed4e9dfdc2338c9"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2602
