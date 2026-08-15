@@ -52,6 +52,7 @@ frontend:
     # Use vLLM's Kimi K3 parser so OpenAI responses expose structured
     # tool_calls instead of raw XTML in message.content.
     dyn-chat-processor: "vllm"
+    trust-remote-code: true
     tool-call-parser: "kimi_k3"
     reasoning-parser: "kimi_k3"
     enable-auto-tool-choice: true
