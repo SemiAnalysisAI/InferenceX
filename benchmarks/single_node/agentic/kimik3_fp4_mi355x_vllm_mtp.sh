@@ -33,6 +33,25 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
 
+# Free the GPU on EVERY exit path, not just the success path. This script runs
+# under `set -e`, so any earlier failure (server never becomes ready, a benchmark
+# error, a cancelled job) used to skip the cleanup at the bottom and leave 8 TP
+# workers holding ~195 GiB each. The next job allocated to that node then dies in
+# init_device with "Free memory on device ... is less than desired GPU memory
+# utilization" -- one failure poisons the node for every run that follows.
+# Observed on mia1-p01-g11 and mia1-p01-g16 during this series.
+_k3_free_gpu() {
+    [[ -n "${SERVER_PID:-}" ]] && kill "$SERVER_PID" 2>/dev/null || true
+    pkill -9 -f "/usr/local/bin/vll[m]" 2>/dev/null || true
+    pkill -9 -f "EngineCore" 2>/dev/null || true
+    pkill -9 -f "multiprocessing.spawn" 2>/dev/null || true
+    for _ in $(seq 1 30); do
+        pgrep -f "EngineCore|multiprocessing.spawn" >/dev/null 2>&1 || break
+        sleep 2
+    done
+}
+trap _k3_free_gpu EXIT
+
 if [ "$TP" -ne 8 ]; then
     echo "Error: Kimi-K3 on MI355X requires TP=8 (~1.5 TB checkpoint), got TP='$TP'" >&2
     exit 1
@@ -349,10 +368,6 @@ else
     run_agentic_replay_and_write_outputs "$RESULT_DIR"
 fi
 
-# cleanup: free the GPU (orphaned TP workers otherwise hold VRAM)
-[[ -n "${SERVER_PID:-}" ]] && kill "$SERVER_PID" 2>/dev/null || true
-pkill -9 -f "/usr/local/bin/vll[m]" 2>/dev/null || true
-pkill -9 -f "EngineCore" 2>/dev/null || true
-pkill -9 -f "multiprocessing.spawn" 2>/dev/null || true
-for _ in $(seq 1 30); do pgrep -f "EngineCore|multiprocessing.spawn" >/dev/null 2>&1 || break; sleep 2; done
+# GPU cleanup is handled by the _k3_free_gpu EXIT trap installed at the top, so
+# it runs on failure and cancellation too, not only here.
 set +x
