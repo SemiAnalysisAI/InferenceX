@@ -638,8 +638,12 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 4], spec-decoding: mtp }
       - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [8, 10, 12, 14, 16, 20], spec-decoding: mtp }
 
+# Unified-v2 single-node image + in-container MoRIIO #51052 (hybrid KDA transfer).
+# Runtime also applies the idempotent kimik3 container patches (TritonMLA
+# UNIFORM_BATCH + defensive KV block-pool clamp). Matrix: 1P1D none@1 and
+# vllm-simple DRAM@8/12 with synthetic AL=2.51 (see models_vllm.yaml).
 kimik3-fp4-mi355x-vllm-disagg-agentic-mtp:
-  image: vllm/vllm-openai-rocm:nightly-ac7509e2b1db40fec2f03dde1ed4e9dfdc2338c9
+  image: aigmkt/k3-dspark-benchmark:unified-k3-agentx-20260814-v2
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:mi355x-amds

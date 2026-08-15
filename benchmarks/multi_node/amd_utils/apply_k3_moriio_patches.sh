@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Apply the #51052 Kimi-K3 MoRIIO connector patch inside the engine container.
+# Intended for the unified-v2 image (and any cb810-lineage base that still lacks
+# hybrid mamba/KDA transfer). Idempotent: no-ops when markers already present.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
