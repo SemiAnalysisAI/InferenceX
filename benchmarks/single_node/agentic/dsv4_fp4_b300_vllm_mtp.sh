@@ -142,7 +142,7 @@ case "$KV_OFFLOAD_BACKEND" in
   "kv_connector": "SimpleCPUOffloadConnector",
   "kv_role": "kv_both",
   "kv_connector_extra_config": {
-    "cpu_bytes_to_use": ${CPU_BYTES_PER_RANK},
+    "cpu_bytes_to_use_per_rank": ${CPU_BYTES_PER_RANK},
     "enable_cross_layers_blocks": "true",
     "lazy_offload": ${SIMPLE_LAZY_OFFLOAD}
   }
