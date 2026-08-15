@@ -48,12 +48,7 @@ frontend:
   type: dynamo
   enable_multiple_frontends: false
   args:
-    # Use vLLM's Kimi K3 parsers so unary OpenAI responses expose structured
-    # reasoning and tool_calls instead of raw XTML control tags.
-    dyn-chat-processor: "vllm"
-    tool-call-parser: "kimi_k3"
-    reasoning-parser: "kimi_k3"
-    enable-auto-tool-choice: true
+    dyn-chat-processor: "dynamo"
     router-mode: "kv"
     router-kv-events: true
     router-temperature: "0"
@@ -111,6 +106,9 @@ backend:
       scheduler-cls: "vllm.v1.core.sched.async_scheduler.AsyncScheduler"
       dyn-tool-call-parser: "kimi_k3"
       dyn-enable-structural-tag: true
+      # This verifier uses OpenAI's default tool_choice=auto. Force guided
+      # structural tags so the Kimi K3 parser always receives valid XTML.
+      dyn-structural-tag-scope: "always"
       reasoning-parser: "kimi_k3"
       dyn-reasoning-parser: "kimi_k3"
       no-enable-flashinfer-autotune: true
