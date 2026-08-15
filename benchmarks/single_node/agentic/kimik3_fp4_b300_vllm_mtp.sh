@@ -192,20 +192,20 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         # replace it.
         echo "=== image's pre-existing lmcache ==="
         python3 -m pip show lmcache 2>/dev/null | grep -E "^Version:" || echo "  (not installed)"
-        _IMG_SO=$(python3 -c "import lmcache, glob, os; print((glob.glob(os.path.join(os.path.dirname(lmcache.__file__), 'c_ops*.so')) or [''])[0])" 2>/dev/null || true)
+        _IMG_SO=$(python3 -c "import lmcache, glob, os; print((glob.glob(os.path.join(os.path.dirname(lmcache.__file__), 'cuda_ops*.so')) or [''])[0])" 2>/dev/null || true)
         if [ -n "$_IMG_SO" ]; then
             echo "  c_ops: $_IMG_SO"
             echo "  needs materialize_cow_storage: $(nm -D --undefined-only "$_IMG_SO" 2>/dev/null | grep -c materialize_cow_storage || true)"
             python3 -c "import lmcache.c_ops; print('  IMAGE c_ops import: OK')" 2>&1 | tail -2 || echo "  IMAGE c_ops import: FAILED"
         fi
 
-        LMCACHE_VERSION="0.5.4rc2"
+        LMCACHE_VERSION="0.5.4rc4"
         agentic_pip_install --no-cache-dir --force-reinstall --no-deps \
             "lmcache==${LMCACHE_VERSION}"
         # Record what actually landed. Silent installs are how the no-op above
         # went unnoticed for two full sweeps; do not add --quiet back.
         python3 -m pip show lmcache 2>/dev/null | grep -E "^(Version|Location):"
-        python3 -c "import lmcache, glob, os; print('lmcache:', lmcache.__file__); print('c_ops so:', glob.glob(os.path.join(os.path.dirname(lmcache.__file__), 'c_ops*')))"
+        python3 -c "import lmcache, glob, os; print('lmcache:', lmcache.__file__); print('c_ops so:', sum((glob.glob(os.path.join(os.path.dirname(lmcache.__file__), pat)) for pat in ('c_ops*','cuda_ops*')), []))"
         ls -1 /usr/local/cuda*/lib64/libcudart.so* /usr/lib/x86_64-linux-gnu/libcudart.so* 2>/dev/null || true
         # device_ops.ensure_native() swallows this in `except ImportError`, so
         # surface the real dlopen error ourselves -- without it the failure is
@@ -231,7 +231,7 @@ def _tracing_import(name, globals=None, locals=None, fromlist=(), level=0):
     try:
         return _real_import(name, globals, locals, fromlist, level)
     except BaseException as exc:  # noqa: BLE001 - diagnostic
-        if "c_ops" in name:
+        if "c_ops" in name or "cuda_ops" in name:
             _failures.append((name, exc))
             print(f"[probe] IMPORT FAILED: {name}: {type(exc).__name__}: {exc}", flush=True)
             traceback.print_exc()
@@ -244,7 +244,7 @@ class _WarnHook(logging.Handler):
             msg = record.getMessage()
         except Exception:  # noqa: BLE001
             return
-        if "c_ops compiled extension not found" in msg:
+        if "ops compiled extension not found" in msg:
             print("[probe] ensure_native() gave up -- caller stack:", flush=True)
             traceback.print_stack()
 
@@ -259,7 +259,7 @@ print("[probe] torch loaded before lmcache?", "torch" in sys.modules, flush=True
 import lmcache.integration.vllm.lmcache_mp_connector  # noqa: E402,F401
 
 print("[probe] torch in sys.modules now:", "torch" in sys.modules, flush=True)
-print("[probe] c_ops in sys.modules:", "lmcache.c_ops" in sys.modules, flush=True)
+print("[probe] cuda_ops in sys.modules:", "lmcache.cuda_ops" in sys.modules, flush=True)
 print(f"[probe] captured c_ops import failures: {len(_failures)}", flush=True)
 for name, exc in _failures:
     print(f"[probe]   {name}: {type(exc).__name__}: {exc}", flush=True)
@@ -275,9 +275,9 @@ except BaseException as exc:  # noqa: BLE001
 
 # And whether a direct import works at this point.
 try:
-    import lmcache.c_ops  # noqa: F401
+    import lmcache.cuda_ops  # noqa: F401
 
-    print("[probe] direct import lmcache.c_ops AFTER: OK", flush=True)
+    print("[probe] direct import lmcache.cuda_ops AFTER: OK", flush=True)
 except BaseException as exc:  # noqa: BLE001
     print("[probe] direct import lmcache.c_ops AFTER FAILED:", type(exc).__name__, exc, flush=True)
 PYEOF
@@ -297,7 +297,7 @@ PYEOF
         echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
 
         # ldd names the missing/unresolved shared object directly.
-        LMCACHE_SO=$(python3 -c "import lmcache, glob, os; print((glob.glob(os.path.join(os.path.dirname(lmcache.__file__), 'c_ops*.so')) or [''])[0])")
+        LMCACHE_SO=$(python3 -c "import lmcache, glob, os; print((glob.glob(os.path.join(os.path.dirname(lmcache.__file__), 'cuda_ops*.so')) or [''])[0])")
         if [ -n "$LMCACHE_SO" ]; then
             echo "ldd $LMCACHE_SO"
             ldd "$LMCACHE_SO" 2>&1 | grep -E "not found|libcudart|libtorch|libc10" || true
@@ -414,13 +414,13 @@ PYEOF
         # Second guard, on the server process itself: the import check above
         # only proves c_ops loads in this shell's python3. Abort rather than
         # benchmark a silently-degraded offload tier (see the install note).
-        if grep -q "c_ops compiled extension not found" "$LMCACHE_LOG"; then
+        if grep -qE "(cuda_)?c?_?ops compiled extension not found" "$LMCACHE_LOG"; then
             echo "Error: LMCache fell back to the torch baseline (c_ops did not load)." >&2
             echo "       The installed lmcache's compiled extension is unusable here." >&2
             echo "       Check the pip show / c_ops / libcudart lines logged above:" >&2
             echo "       either the install did not take, or the build's CUDA ABI" >&2
             echo "       does not match this image." >&2
-            grep -m1 "c_ops compiled extension not found" "$LMCACHE_LOG" >&2
+            grep -m1 -E "(cuda_)?c?_?ops compiled extension not found" "$LMCACHE_LOG" >&2
             exit 1
         fi
 
