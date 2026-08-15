@@ -13,12 +13,12 @@ set -x
 # variant whose numbers are apples-to-apples with the B300-MTP baseline
 # (synthetic acceptance vs synthetic acceptance -- see the SPEC_CONFIG block).
 #
-# Attention: target on ROCM_AITER_MLA (fp8 asm persistent). The DSpark DRAFT runs
-# TRITON_MLA with its own bf16 KV and non-causal parallel drafting, matching the
-# reference c8 cell (3562.77 tok/s/GPU). The fp8-asm draft alternative
-# (DRAFT_BACKEND=ROCM_AITER_MLA, which forces dflash_config.causal=true) is fully
-# supported by the patch stack and measured 3375.14 -- it wins on cache hit rate
-# but loses on ITL. dflash_config.causal is derived from DRAFT_BACKEND below.
+# Attention: ROCM_AITER_MLA (fp8 asm persistent) for BOTH target and draft, with
+# the draft forced causal (dflash_config.causal=true, derived from DRAFT_BACKEND
+# below). Measured on this patch stack at c8 with DRAM offload: asm draft
+# 3375.14 tok/s/GPU vs TRITON_MLA+bf16 draft 1540.37, a 2.2x gap driven by ITL
+# (p50 11.94 vs 55.42 ms). This needs the vLLM ASM patches + DSpark fp8-asm layer
+# that apply_k3_container_patches.sh installs.
 #
 # Validated base image (carries the vLLM patches + AITER build + DSpark layer):
 #   vllm/vllm-openai-rocm:nightly-cb8104839c141609d99f1254459ef3a4f1bd4263
@@ -95,7 +95,15 @@ if [ -n "$ROCR_VISIBLE_DEVICES" ]; then export HIP_VISIBLE_DEVICES="$ROCR_VISIBL
 # causal=false. Written explicitly on every run because the HF cache is shared
 # and a previous run may have left the opposite value.
 # DRAFT_MODEL_PATH may be a bare repo id, so fall back to the HF cache snapshot.
-case "${DRAFT_BACKEND:-TRITON_MLA}" in
+# Defined here, not next to SPEC_CONFIG: the causal derivation below consumes it.
+# fp8 asm draft. MEASURED, same cell, same offload config:
+#   ROCM_AITER_MLA + fp8   3375.14 tok/s/GPU, ITL p50 11.94 / p90 38.59 ms, 841 reqs
+#   TRITON_MLA     + bf16  1540.37 tok/s/GPU, ITL p50 55.42 / p90 75.50 ms, 348 reqs
+# The reference branch runs TRITON_MLA and still reaches 3562.77, but on a
+# different base image; on THIS patch stack the fp8 asm draft is 2.2x faster.
+DRAFT_BACKEND="${DRAFT_BACKEND:-ROCM_AITER_MLA}"
+DRAFT_KV_CACHE_DTYPE="${DRAFT_KV_CACHE_DTYPE:-fp8}"
+case "$DRAFT_BACKEND" in
     *AITER*) DRAFT_CAUSAL=true  ;;
     *)       DRAFT_CAUSAL=false ;;
 esac
@@ -245,14 +253,6 @@ SYNTHETIC_ACCEPT_LEN="${SYNTHETIC_ACCEPT_LEN:-2.51}"
 # same as target). Throughput runs pin synthetic acceptance; EVAL_ONLY accuracy
 # runs use real block verification (synthetic commits drafted tokens regardless
 # of the target's logits, so generated text would be wrong -> eval scores 0).
-# TRITON_MLA + its own bf16 draft KV, matching amd/kimi-k3-agentic-perf-tuning's
-# 3562.77 tok/s/GPU c8 cell. Our fp8-asm draft (ROCM_AITER_MLA) reached 3375.14
-# with a BETTER cache hit rate (93.6% vs 89.3%) and a bigger pool, but ITL p90
-# 38.59 ms vs 28.11 ms -- the whole residual gap is decode speed, and the draft
-# backend is the last structural difference from the reference. Set
-# DRAFT_BACKEND=ROCM_AITER_MLA to go back to the fp8 asm draft.
-DRAFT_BACKEND="${DRAFT_BACKEND:-TRITON_MLA}"
-DRAFT_KV_CACHE_DTYPE="${DRAFT_KV_CACHE_DTYPE:-auto}"
 if [ "${EVAL_ONLY:-false}" = "true" ]; then
     SPEC_CONFIG="{\"method\": \"dspark\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"$DRAFT_BACKEND\", \"kv_cache_dtype\": \"$DRAFT_KV_CACHE_DTYPE\", \"draft_sample_method\": \"probabilistic\", \"rejection_sample_method\": \"block\"}"
 else
