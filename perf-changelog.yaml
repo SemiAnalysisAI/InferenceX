@@ -6015,5 +6015,5 @@
   description:
     - "Pick the Mooncake RDMA rail at runtime instead of hardcoding mlx5_0, which is down on some b300-nv nodes and left the transfer engine with no HCA to initialise."
     - "Apply gpu-memory-utilization 0.90 only at concurrency 56 and above, where the FlashInfer MoE workspace ran out of buffer; lower concurrencies keep 0.92 and their full KV cache."
-    - "Raise dram-utilization to 1.0, giving a 374 GB Mooncake segment per rank."
+    - "Raise dram-utilization to 0.95, giving a 355 GB Mooncake segment per rank."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2616
