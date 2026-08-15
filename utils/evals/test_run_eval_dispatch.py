@@ -2376,6 +2376,7 @@ _install_bfcl_eval_deps "$DOWNLOAD_DIR"
         "pip",
         "install",
         "--no-cache-dir",
+        "soundfile==0.13.1",
     ):
         assert f"PYTHON_ARG=<{value}>" in result.stdout
     assert "TIMEOUT_ARG=<600>" in result.stdout

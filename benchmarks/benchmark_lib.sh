@@ -1386,7 +1386,7 @@ except Exception as error:
 PY
 
     timeout 600 "${VENDOR_VERIFIER_PYTHON:-python3}" -m pip install \
-        -q --no-cache-dir "$wheel_path"
+        -q --no-cache-dir "$wheel_path" "soundfile==0.13.1"
 }
 
 _prepare_bfcl_runtime() {
