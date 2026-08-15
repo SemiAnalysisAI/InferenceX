@@ -58,8 +58,17 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     cleanup_and_save_logs() {
         if [[ -n "${GITHUB_ACTIONS:-}" && -n "${JOB_ID:-}" ]]; then
             local art_dir="$GITHUB_WORKSPACE/benchmark_artifacts"
+            local job_logs_dir="$BENCHMARK_LOGS_DIR/logs/slurm_job-${JOB_ID}"
+            local server_logs_dir="$BENCHMARK_LOGS_DIR/server_logs/slurm_job-${JOB_ID}"
             mkdir -p "$art_dir"
             cp -r "$BENCHMARK_LOGS_DIR"/slurm_job-${JOB_ID}.{out,err} "$art_dir/" 2>/dev/null || true
+            if [[ -d "$server_logs_dir" && ! -f "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" ]]; then
+                tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" \
+                    -C "$server_logs_dir" . 2>/dev/null || true
+            elif [[ -d "$job_logs_dir" && ! -f "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" ]]; then
+                tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" \
+                    -C "$job_logs_dir" . 2>/dev/null || true
+            fi
         fi
         # Print .err inline so failures are visible in CI output
         local err_file="$BENCHMARK_LOGS_DIR/slurm_job-${JOB_ID:-unknown}.err"
@@ -229,7 +238,9 @@ PY
                 echo "WARNING: no agentic conc_*/ artifacts found under $JOB_LOGS_DIR/agentic"
             fi
             # Server/router/prefill/decode logs for the multinode_server_logs_* artifact.
-            if tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$JOB_LOGS_DIR" . 2>/dev/null; then
+            SERVER_LOGS_DIR="$BENCHMARK_LOGS_DIR/server_logs/slurm_job-${JOB_ID}"
+            [[ -d "$SERVER_LOGS_DIR" ]] || SERVER_LOGS_DIR="$JOB_LOGS_DIR"
+            if tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$SERVER_LOGS_DIR" . 2>/dev/null; then
                 echo "Created multinode_server_logs.tar.gz"
             else
                 echo "WARNING: failed to create multinode_server_logs.tar.gz"
