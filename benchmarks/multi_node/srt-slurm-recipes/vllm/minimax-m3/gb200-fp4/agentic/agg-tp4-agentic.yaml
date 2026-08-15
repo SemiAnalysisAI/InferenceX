@@ -63,6 +63,7 @@ backend:
       enable-prefix-caching: true
       kv-cache-metrics: true
       attention-config: '{"backend":"FLASHINFER","use_trtllm_attention":true,"indexer_kv_dtype":"fp8","minimax_m3_msa_decode_backend":"cutlass"}'
+      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY"}'
       block-size: 128
       gpu-memory-utilization: 0.9
       max-model-len: 1048576
