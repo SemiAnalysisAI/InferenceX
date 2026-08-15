@@ -30,29 +30,55 @@ PY
 fi
 
 echo "[k3-mori-waitall] wait_all missing; attempting in-container upgrade"
+
+install_spec() {
+    local spec=$1
+    # Nightly wheels are often manylinux_2_39; older engine images (glibc 2.35)
+    # reject that tag. Retag to linux_x86_64 so pip accepts it — runtime may
+    # still fail on LIBPCI_3.8 / other symbols, which has_wait_all will catch.
+    if [[ -f "$spec" && "$spec" == *.whl ]]; then
+        local dir base retagged
+        dir=$(dirname "$spec")
+        base=$(basename "$spec")
+        retagged="$dir/${base/manylinux_2_39_x86_64/linux_x86_64}"
+        if [[ "$retagged" != "$spec" ]]; then
+            cp -a "$spec" "$retagged"
+            spec=$retagged
+            echo "[k3-mori-waitall] retagged wheel -> $spec"
+        fi
+        $PY -m pip install -q --no-cache-dir --break-system-packages --force-reinstall --no-deps "$spec"
+    else
+        $PY -m pip install -q --no-cache-dir --break-system-packages -U --pre "$spec"
+    fi
+}
+
+upgraded=0
 if [[ -n "$MORI_WAITALL_SPEC" ]]; then
-    $PY -m pip install -q --no-cache-dir --break-system-packages "$MORI_WAITALL_SPEC" \
-        || { echo "[k3-mori-waitall] ERROR: pip install $MORI_WAITALL_SPEC failed" >&2; exit 1; }
+    if install_spec "$MORI_WAITALL_SPEC"; then
+        upgraded=1
+    else
+        echo "[k3-mori-waitall] WARN: pip install $MORI_WAITALL_SPEC failed" >&2
+    fi
 else
-    # PyPI package names are amd-mori / amd-mori-nightly (both provide import `mori`).
-    # Prefer nightly (where wait_all landed); fall back to stable amd-mori.
-    upgraded=0
+    # PyPI: amd-mori-nightly / amd-mori both provide import name `mori`.
     for spec in "amd-mori-nightly" "amd-mori"; do
         echo "[k3-mori-waitall] trying pip install -U --pre $spec"
-        if $PY -m pip install -q --no-cache-dir --break-system-packages -U --pre "$spec"; then
+        if install_spec "$spec"; then
             upgraded=1
             break
         fi
         echo "[k3-mori-waitall] WARN: pip install $spec failed" >&2
     done
-    if [[ "$upgraded" -eq 0 ]]; then
-        echo "[k3-mori-waitall] WARN: no amd-mori wheel installed; will fall back to poll path" >&2
-    fi
 fi
 
-if has_wait_all; then
+if [[ "$upgraded" -eq 1 ]] && has_wait_all; then
     echo "[k3-mori-waitall] wait_all OK after upgrade"
     exit 0
+fi
+
+# Import may fail after a glibc/libpci-incompatible wheel; leave a clear signal.
+if ! $PY -c 'import mori' 2>/dev/null; then
+    echo "[k3-mori-waitall] WARN: mori import broken after upgrade attempt; image may need a compatible wait_all wheel" >&2
 fi
 
 echo "[k3-mori-waitall] WARN: wait_all still missing — MoRIIO will use Python poll fallback" >&2
