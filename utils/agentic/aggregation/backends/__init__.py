@@ -7,10 +7,11 @@ from typing import Any
 from .base import ServerMetricsBackend
 from .dynamo_vllm import DynamoVllmBackend
 from .sglang import SglangBackend
+from .trtllm import TrtllmBackend
 from .vllm import VllmBackend
 
-
 BACKENDS: tuple[ServerMetricsBackend, ...] = (
+    TrtllmBackend(),
     DynamoVllmBackend(),
     SglangBackend(),
     VllmBackend(),
