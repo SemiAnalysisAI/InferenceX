@@ -330,6 +330,32 @@ jobs:
             done
           fi
 
+      # Engine containers run as root against a bind-mounted workspace, so a run
+      # that is cancelled before its cleanup trap leaves root-owned benchmark
+      # logs behind. actions/checkout then fails the next job on that runner
+      # with "EACCES: permission denied, rmdir .../benchmark_logs/logs/...",
+      # which takes the runner out of service until someone clears it by hand.
+      # Clear it here, before checkout, scoped to the two directories the
+      # launcher owns.
+      - name: Clear root-owned benchmark leftovers (pre-checkout)
+        run: |
+          set -uo pipefail
+          case "${GITHUB_WORKSPACE:-}" in
+            */actions-runner/_work/*) ;;
+            *) echo "Refusing to clean unexpected workspace '${GITHUB_WORKSPACE:-}'"; exit 0 ;;
+          esac
+          for d in benchmark_logs benchmark_artifacts; do
+            target="$GITHUB_WORKSPACE/$d"
+            [ -e "$target" ] || continue
+            if rm -rf "$target" 2>/dev/null; then
+              echo "removed $target"
+            elif sudo rm -rf "$target"; then
+              echo "removed $target (sudo)"
+            else
+              echo "WARNING: could not remove $target" >&2
+            fi
+          done
+
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           token: ${{ secrets.REPO_PAT }}

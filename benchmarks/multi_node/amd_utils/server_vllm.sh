@@ -468,6 +468,11 @@ if [ "$NODE_RANK" -eq 0 ]; then
 
     if [[ "$DRY_RUN" -eq 0 ]]; then
         cp -r /run_logs/slurm_job-${SLURM_JOB_ID} "$LOGS_OUTPUT/"
+        # This container is root and the destination is the bind-mounted CI
+        # workspace, so leave the copy world-writable. Otherwise a cancelled run
+        # strands root-owned files that actions/checkout cannot clean, and the
+        # runner fails every later job with EACCES.
+        chmod -R a+rwX "$LOGS_OUTPUT/slurm_job-${SLURM_JOB_ID}" 2>/dev/null || true
         echo "Copied results to $LOGS_OUTPUT/slurm_job-${SLURM_JOB_ID}"
     fi
 
