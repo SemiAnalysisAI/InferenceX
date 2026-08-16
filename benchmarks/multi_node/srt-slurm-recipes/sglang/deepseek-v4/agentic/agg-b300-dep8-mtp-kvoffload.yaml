@@ -92,10 +92,9 @@ backend:
       load-balance-method: total_tokens
       moe-a2a-backend: megamoe
       enable-hierarchical-cache: true
-      # Ratio 1.75 completes c576, but its busiest DP rank reaches 99.4% host
-      # cache usage. Retry 2.0 with the smaller DSpark SWA pool (0.02) to add
-      # enough prefix-cache headroom without approaching the 2.5 startup OOM.
-      hicache-ratio: 2.0
+      # Keep the explicit host KV pool within the x86 B300 node's 3 TB DRAM
+      # budget; ratio 2.0 OOMs during startup before the benchmark can run.
+      hicache-ratio: 1.5
       hicache-write-policy: write_back
       hicache-io-backend: direct
       hicache-mem-layout: page_first_direct
