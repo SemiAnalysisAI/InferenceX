@@ -7650,6 +7650,23 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
       # Keep the checked-in recipes on real MTP verification. Throughput jobs
       # inject the committed golden AL at launch; EVAL_ONLY leaves them real.
       - spec-decoding: mtp
+        conc-list: [736]
+        router: { name: dynamo-router, version: "1.3.0.dev20260720" }
+        prefill:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.97"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/agentic/disagg-gb300-2p1d-dep8-dep32-c736-mtp-agentic.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+      - spec-decoding: mtp
         conc-list: [1152]
         router: { name: dynamo-router, version: "1.3.0.dev20260720" }
         prefill:
