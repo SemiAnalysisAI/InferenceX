@@ -281,6 +281,47 @@ failed category does not become a second gate. BFCL reuses the existing eval
 job, upload paths, aggregation, and validation instead of adding a parallel
 workflow or artifact route.
 
+#### BFCL V4 model-quality suites
+
+Two explicit BFCL suites extend the four-case endpoint smoke into broader
+model-quality diagnostics:
+
+| Suite | Selected BFCL V4 categories | Requests |
+|-------|-----------------------------|----------|
+| `bfcl_vllm_minimax_m3` | `simple_python` (400), `multiple` (200), `parallel` (200), `parallel_multiple` (200) | 1000 |
+| `bfcl_vllm_kimi` | The same 1000 single-turn cases plus 60 each from `multi_turn_base`, `multi_turn_miss_func`, `multi_turn_miss_param`, and `multi_turn_long_context` | 1240 |
+
+Select these suites explicitly with `eval-framework: bfcl`; `bfcl_smoke`
+remains the framework default. Both suites use BFCL's OpenAI completions
+handler against the local endpoint rather than a hosted-provider handler. They
+fix temperature to `0.001`, disable request retries, and keep the 180-second
+per-request timeout. MiniMax uses eight worker threads. Kimi uses 16 threads
+and permits up to ten multi-turn steps. The whole-suite timeout is 7200
+seconds.
+
+The adapter builds a deterministic run-ID map from the pinned BFCL dataset.
+Single-turn suites select every case in their named categories. The Kimi
+multi-turn selection sorts each leaf category and takes its first 60 cases.
+Although upstream BFCL evaluates these subsets with `partial_eval`, the
+adapter rejects missing, unexpected, or duplicate result IDs and score headers
+whose counts or accuracy do not reconcile with the selected corpus.
+
+The compatibility result publishes `bfcl_vllm_minimax_m3` or
+`bfcl_vllm_kimi` as the aggregate task and preserves per-category
+`bfcl_<category>` tasks. Kimi also publishes a combined `bfcl_multi_turn`
+task. Full-suite thresholds are `0.0`; they are diagnostic until repeated
+hardware runs establish model, precision, and backend baselines. A completed
+zero-score run therefore passes threshold validation, while dependency,
+transport, timeout, malformed-output, and integration failures still fail.
+
+`bfcl_upstream_artifacts.tar.gz` preserves the pinned upstream result and
+failure-only score JSONL files, exact selected-ID map, and file locks for
+debugging. The native `bfcl_report.json` includes the package version, wheel
+hash, source revision, integration revision, per-category score headers,
+case IDs, failure records, and sampling settings. The compatibility
+`results_bfcl.json` remains the only input to the normal InferenceX eval
+collector and dashboard path.
+
 ### Benchmark script flow
 
 All benchmark scripts in `benchmarks/` follow one of two flows:
