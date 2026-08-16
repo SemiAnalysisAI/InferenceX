@@ -1,5 +1,6 @@
 import builtins
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -32,6 +33,28 @@ def _native(output_dir: Path) -> dict[str, Any]:
 def _score(output_dir: Path) -> float:
     return _compatibility(output_dir)["results"][be.TASK_NAME]["acc,none"]
 
+
+
+def _category_score(
+    category: str,
+    total_count: int,
+    correct_count: int,
+) -> be.CategoryScore:
+    case_ids = tuple(f"{category}_{index}" for index in range(total_count))
+    return be.CategoryScore(
+        category=category,
+        case_ids=case_ids,
+        score_file=f"score/model-a/BFCL_v4_{category}_score.json",
+        header={
+            "accuracy": correct_count / total_count,
+            "correct_count": correct_count,
+            "total_count": total_count,
+        },
+        records=tuple({"id": case_id} for case_id in case_ids[correct_count:]),
+        accuracy=correct_count / total_count,
+        correct_count=correct_count,
+        total_count=total_count,
+    )
 
 def test_thresholds_are_stdlib_readable_without_pyyaml(monkeypatch) -> None:
     real_import = builtins.__import__
@@ -165,9 +188,77 @@ def test_command_defaults_and_required_runtime_inputs(tmp_path: Path) -> None:
     assert args.num_threads == 4
     assert args.request_timeout_seconds == 180.0
     assert args.integration_error is None
-
+    assert args.suite == be.TASK_NAME
     with pytest.raises(SystemExit):
         be.parse_args(["--model", "model-a", "--output-dir", str(tmp_path / "missing")])
+
+
+def test_cli_selects_suite_defaults_and_rejects_unknown_suite(tmp_path: Path) -> None:
+    args = be.parse_args(
+        [
+            "--base-url",
+            "http://localhost:8000/v1",
+            "--model",
+            "model-a",
+            "--output-dir",
+            str(tmp_path / "output"),
+            "--bfcl-project-root",
+            str(tmp_path / "bfcl"),
+            "--suite",
+            "bfcl_vllm_kimi",
+        ]
+    )
+
+    assert args.suite == "bfcl_vllm_kimi"
+    assert args.num_threads == 16
+
+    with pytest.raises(SystemExit):
+        be.parse_args(
+            [
+                "--base-url",
+                "http://localhost:8000/v1",
+                "--model",
+                "model-a",
+                "--output-dir",
+                str(tmp_path / "output"),
+                "--bfcl-project-root",
+                str(tmp_path / "bfcl"),
+                "--suite",
+                "bfcl_unknown",
+            ]
+        )
+
+
+def test_cli_forwards_selected_suite_on_normal_path(
+    tmp_path: Path, monkeypatch
+) -> None:
+    invocation: dict[str, Any] = {}
+
+    def run_evaluation(**kwargs: Any) -> bool:
+        invocation.update(kwargs)
+        return True
+
+    monkeypatch.setattr(be, "run_evaluation", run_evaluation)
+
+    return_code = be.main(
+        [
+            "--base-url",
+            "http://localhost:8000/v1",
+            "--model",
+            "model-a",
+            "--output-dir",
+            str(tmp_path / "output"),
+            "--bfcl-project-root",
+            str(tmp_path / "bfcl"),
+            "--suite",
+            "bfcl_vllm_kimi",
+        ]
+    )
+
+    assert return_code == 0
+    assert invocation["suite"] is be.KIMI_SUITE
+    assert invocation["num_threads"] == 16
+
 
 
 @pytest.mark.parametrize(
@@ -551,3 +642,230 @@ def test_integration_error_cli_is_stdlib_only_and_returns_nonzero(
     native = _native(output_dir)
     assert native["completed"] is False
     assert native["integration_error"] == compatibility["integration_error"]
+
+
+def test_full_suite_sets_project_root_before_dataset_import(
+    monkeypatch, tmp_path: Path
+) -> None:
+    output_dir = tmp_path / "output"
+    project_root = tmp_path / "project"
+    observed_roots: list[str | None] = []
+    monkeypatch.setenv("BFCL_PROJECT_ROOT", "stale-root")
+
+    def stop_after_observing_root(suite: be.SuiteSpec):
+        observed_roots.append(os.environ.get("BFCL_PROJECT_ROOT"))
+        raise RuntimeError("stop after project-root check")
+
+    monkeypatch.setattr(be, "_build_suite_case_ids", stop_after_observing_root)
+
+    passed = be.run_evaluation(
+        base_url="http://localhost:8000/v1",
+        api_key="EMPTY",
+        model="model-a",
+        output_dir=output_dir,
+        bfcl_project_root=project_root,
+        suite=be.MINIMAX_SUITE,
+    )
+
+    assert passed is False
+    assert observed_roots == [str(project_root)]
+
+
+@pytest.mark.parametrize(
+    ("suite", "expected_step_limit"),
+    (
+        (be.MINIMAX_SUITE, None),
+        (be.KIMI_SUITE, 10),
+    ),
+)
+def test_full_suite_ids_use_exact_sorted_leaf_allocations(
+    monkeypatch,
+    suite: be.SuiteSpec,
+    expected_step_limit: int | None,
+) -> None:
+    multi_turn_leaves = (
+        "multi_turn_base",
+        "multi_turn_miss_func",
+        "multi_turn_miss_param",
+        "multi_turn_long_context",
+    )
+    upstream_multi_turn_leaves = (
+        "multi_turn_base",
+        "multi_turn_long_context",
+        "multi_turn_miss_func",
+        "multi_turn_miss_param",
+    )
+    available_counts = {
+        "simple_python": 400,
+        "multiple": 200,
+        "parallel": 200,
+        "parallel_multiple": 200,
+        **{leaf: 75 for leaf in multi_turn_leaves},
+    }
+    observed_step_limits: list[int | None] = []
+
+    def load_dataset_entry(category: str) -> list[dict[str, str]]:
+        return [
+            {"id": f"{category}_{index:03d}"}
+            for index in reversed(range(available_counts[category]))
+        ]
+
+    def parse_test_category_argument(categories: list[str]) -> list[str]:
+        assert len(categories) == 1
+        return (
+            list(upstream_multi_turn_leaves)
+            if categories[0] == "multi_turn"
+            else categories
+        )
+
+    def load_helpers(maximum_step_limit):
+        observed_step_limits.append(maximum_step_limit)
+        return (
+            load_dataset_entry,
+            parse_test_category_argument,
+            lambda entry: entry["id"],
+        )
+
+    monkeypatch.setattr(be, "_load_dataset_helpers", load_helpers)
+
+    selected = be._build_suite_case_ids(suite)
+
+    assert observed_step_limits == [expected_step_limit]
+    assert tuple(
+        (category, len(case_ids)) for category, case_ids in selected.items()
+    ) == suite.expected_leaf_counts
+    assert sum(map(len, selected.values())) == suite.expected_sample_count
+    assert all(
+        list(case_ids) == sorted(case_ids) for case_ids in selected.values()
+    )
+    if suite is be.KIMI_SUITE:
+        assert {
+            leaf: len(selected[leaf]) for leaf in multi_turn_leaves
+        } == {leaf: 60 for leaf in multi_turn_leaves}
+        assert all(selected[leaf][-1].endswith("_059") for leaf in multi_turn_leaves)
+
+
+def test_mixed_category_diagnostics_project_each_failure_id() -> None:
+    score = be.CategoryScore(
+        category="parallel",
+        case_ids=("parallel_0", "parallel_1", "parallel_2"),
+        score_file="score/model-a/BFCL_v4_parallel_score.json",
+        header={"accuracy": 2 / 3, "correct_count": 2, "total_count": 3},
+        records=({"id": "parallel_1", "error": "wrong call"},),
+        accuracy=2 / 3,
+        correct_count=2,
+        total_count=3,
+    )
+
+    assert score.as_dict()["case_scores"] == [
+        {"id": "parallel_0", "score": 1.0, "correct": True},
+        {"id": "parallel_1", "score": 0.0, "correct": False},
+        {"id": "parallel_2", "score": 1.0, "correct": True},
+    ]
+
+
+def test_kimi_projects_namespaced_leaf_and_weighted_aggregate_scores() -> None:
+    assert be.KIMI_SUITE.expected_sample_count == 1240
+    selected = {
+        category: tuple(f"{category}_{index}" for index in range(total_count))
+        for category, total_count in be.KIMI_SUITE.expected_leaf_counts
+    }
+    correct_counts = {
+        "simple_python": 200,
+        "multiple": 100,
+        "parallel": 50,
+        "parallel_multiple": 200,
+        "multi_turn_base": 60,
+        "multi_turn_miss_func": 30,
+        "multi_turn_miss_param": 0,
+        "multi_turn_long_context": 15,
+    }
+    scores = [
+        _category_score(category, total_count, correct_counts[category])
+        for category, total_count in be.KIMI_SUITE.expected_leaf_counts
+    ]
+
+    compatibility = be._compatibility_result(
+        suite=be.KIMI_SUITE,
+        case_ids_by_category=selected,
+        model="model-a",
+        scores=scores,
+    )
+
+    assert compatibility["results"]["bfcl_vllm_kimi"]["acc,none"] == 655 / 1240
+    assert (
+        compatibility["results"]["bfcl_vllm_kimi_multi_turn"]["acc,none"]
+        == 105 / 240
+    )
+    assert compatibility["n-samples"]["bfcl_vllm_kimi_multi_turn"] == {
+        "original": 240,
+        "effective": 240,
+    }
+    assert all(
+        f"bfcl_vllm_kimi_{category}" in compatibility["results"]
+        for category in selected
+    )
+    assert "bfcl_simple_python" not in compatibility["results"]
+    assert "bfcl_multi_turn" not in compatibility["results"]
+
+
+def test_selected_suite_integration_error_preserves_suite_identity(
+    tmp_path: Path,
+) -> None:
+    output_dir = tmp_path / "output"
+
+    return_code = be.main(
+        [
+            "--model",
+            "model-a",
+            "--output-dir",
+            str(output_dir),
+            "--suite",
+            "bfcl_vllm_minimax_m3",
+            "--integration-error",
+            "pinned wheel installation failed",
+        ]
+    )
+
+    assert return_code == 1
+    compatibility = _compatibility(output_dir)
+    native = _native(output_dir)
+    assert native["task"] == "bfcl_vllm_minimax_m3"
+    assert native["summary"]["expected_count"] == 1000
+    assert native["sampling"] == {"temperature": 0.001, "num_threads": 8}
+    assert list(compatibility["results"]) == [
+        "bfcl_vllm_minimax_m3",
+        "bfcl_vllm_minimax_m3_simple_python",
+        "bfcl_vllm_minimax_m3_multiple",
+        "bfcl_vllm_minimax_m3_parallel",
+        "bfcl_vllm_minimax_m3_parallel_multiple",
+    ]
+    assert compatibility["n-samples"]["bfcl_vllm_minimax_m3"] == {
+        "original": 1000,
+        "effective": 0,
+    }
+    assert native["integration_error"] == compatibility["integration_error"]
+
+
+def test_score_total_must_match_every_selected_id(tmp_path: Path) -> None:
+    project_root = tmp_path / "bfcl"
+    score_path = (
+        project_root
+        / "score"
+        / "model-a"
+        / "BFCL_v4_simple_python_score.json"
+    )
+    score_path.parent.mkdir(parents=True)
+    score_path.write_text(
+        json.dumps({"accuracy": 1.0, "correct_count": 1, "total_count": 1}) + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="simple_python evaluated 1 cases; expected 2",
+    ):
+        be._collect_scores(
+            project_root,
+            {"simple_python": ("simple_python_0", "simple_python_1")},
+        )

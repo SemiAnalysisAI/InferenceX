@@ -1417,11 +1417,61 @@ _prepare_bfcl_runtime() {
     printf '%s\n' "$runtime_dir"
 }
 
+_archive_bfcl_upstream_artifacts() {
+    local project_root="$1"
+    local archive_path="$2"
+
+    "${VENDOR_VERIFIER_PYTHON:-python3}" - "$project_root" "$archive_path" <<'PY'
+import gzip
+import os
+from pathlib import Path
+import tarfile
+import sys
+
+project_root = Path(sys.argv[1])
+archive_path = Path(sys.argv[2])
+temporary_path = archive_path.with_name(f".{archive_path.name}.tmp")
+temporary_path.unlink(missing_ok=True)
+
+try:
+    with (
+        temporary_path.open("xb") as raw_archive,
+        gzip.GzipFile(filename="", mode="wb", fileobj=raw_archive, mtime=0) as compressed,
+        tarfile.open(fileobj=compressed, mode="w", format=tarfile.PAX_FORMAT) as archive,
+    ):
+        for path in sorted(
+            project_root.rglob("*"),
+            key=lambda candidate: candidate.relative_to(project_root).as_posix(),
+        ):
+            relative_path = path.relative_to(project_root).as_posix()
+            if path.is_symlink():
+                raise ValueError(f"refusing to archive symbolic link: {relative_path}")
+            info = archive.gettarinfo(str(path), arcname=relative_path)
+            info.uid = 0
+            info.gid = 0
+            info.uname = ""
+            info.gname = ""
+            info.mtime = 0
+            if info.isdir():
+                archive.addfile(info)
+            elif info.isfile():
+                with path.open("rb") as source:
+                    archive.addfile(info, source)
+            else:
+                raise ValueError(f"refusing to archive special file: {relative_path}")
+    os.replace(temporary_path, archive_path)
+except BaseException:
+    temporary_path.unlink(missing_ok=True)
+    raise
+PY
+}
+
 _write_bfcl_integration_error() {
     local adapter_path="$1"
     local model_name="$2"
     local results_dir="$3"
     local message="$4"
+    local suite="$5"
     local adapter_rc=0
 
     # Integration errors deliberately make the adapter exit nonzero after
@@ -1430,6 +1480,7 @@ _write_bfcl_integration_error() {
     "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" \
         --model "$model_name" \
         --output-dir "$results_dir" \
+        --suite "$suite" \
         --integration-error "$message" \
         || adapter_rc=$?
     if [ -f "${results_dir}/bfcl_report.json" ] \
@@ -1442,7 +1493,13 @@ _write_bfcl_integration_error() {
     return "$adapter_rc"
 }
 
-_run_bfcl_smoke_eval() {
+_run_bfcl_suite_eval() {
+    local eval_suite="$1"
+    local num_threads="$2"
+    local process_timeout_seconds="$3"
+    local archive_upstream="$4"
+    shift 4
+
     local port="${PORT:-8888}"
     local results_dir="${EVAL_RESULT_DIR:-}"
 
@@ -1478,6 +1535,9 @@ _run_bfcl_smoke_eval() {
     mkdir -p "$results_dir" || return $?
     results_dir="$(cd "$results_dir" && pwd)" || return $?
     export EVAL_RESULT_DIR="$results_dir"
+    if [ "$archive_upstream" = true ]; then
+        rm -f "${results_dir}/bfcl_upstream_artifacts.tar.gz"
+    fi
 
     local setup_rc=0 integration_error=""
     _prepare_vendor_verifier_python "BFCL" "bfcl-python" true 10 || {
@@ -1501,7 +1561,7 @@ _run_bfcl_smoke_eval() {
         local artifact_rc=0
         _write_bfcl_integration_error \
             "$adapter_path" "$model_name" "$results_dir" "$integration_error" \
-            || artifact_rc=$?
+            "$eval_suite" || artifact_rc=$?
         if [ "$artifact_rc" -ne 0 ]; then
             echo "ERROR: failed to write BFCL failure artifact (exit code ${artifact_rc})" >&2
         fi
@@ -1511,15 +1571,30 @@ _run_bfcl_smoke_eval() {
     fi
 
     local eval_rc=0
-    timeout 900 "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" \
+    local -a suite_args=()
+    if [ "$eval_suite" != "bfcl_smoke" ]; then
+        suite_args=(--suite "$eval_suite")
+    fi
+    timeout "$process_timeout_seconds" \
+        "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" \
         --base-url "http://127.0.0.1:${port}/v1" \
         --api-key EMPTY \
         --model "$model_name" \
         --output-dir "$results_dir" \
         --bfcl-project-root "$project_root" \
-        --num-threads 4 \
+        "${suite_args[@]}" \
+        --num-threads "$num_threads" \
         --request-timeout-seconds 180 \
         || eval_rc=$?
+    local archive_rc=0
+    if [ "$archive_upstream" = true ]; then
+        _archive_bfcl_upstream_artifacts \
+            "$project_root" "${results_dir}/bfcl_upstream_artifacts.tar.gz" \
+            || archive_rc=$?
+        if [ "$archive_rc" -ne 0 ]; then
+            echo "ERROR: failed to archive BFCL upstream artifacts (exit code ${archive_rc})" >&2
+        fi
+    fi
     if [ "$eval_rc" -ne 0 ] \
         && { [ ! -f "${results_dir}/bfcl_report.json" ] \
             || [ ! -f "${results_dir}/results_bfcl.json" ]; }; then
@@ -1527,14 +1602,22 @@ _run_bfcl_smoke_eval() {
         local artifact_rc=0
         _write_bfcl_integration_error \
             "$adapter_path" "$model_name" "$results_dir" "$integration_error" \
-            || artifact_rc=$?
+            "$eval_suite" || artifact_rc=$?
         if [ "$artifact_rc" -ne 0 ]; then
             echo "ERROR: failed to write BFCL failure artifact (exit code ${artifact_rc})" >&2
         fi
     fi
     _cleanup_vendor_eval \
         "$runtime_dir" "$project_root" "${VENDOR_VERIFIER_PYTHON_CLEANUP_DIR:-}"
-    return "$eval_rc"
+    if [ "$eval_rc" -ne 0 ]; then
+        return "$eval_rc"
+    fi
+    return "$archive_rc"
+}
+
+
+_run_bfcl_smoke_eval() {
+    _run_bfcl_suite_eval bfcl_smoke 4 900 false "$@"
 }
 
 run_bfcl_eval() {
@@ -1544,6 +1627,12 @@ run_bfcl_eval() {
     case "$eval_suite" in
         bfcl_smoke)
             _run_bfcl_smoke_eval "$@"
+            ;;
+        bfcl_vllm_minimax_m3)
+            _run_bfcl_suite_eval "$eval_suite" 8 7200 true "$@"
+            ;;
+        bfcl_vllm_kimi)
+            _run_bfcl_suite_eval "$eval_suite" 16 7200 true "$@"
             ;;
         *)
             echo "ERROR: unsupported BFCL suite '${eval_suite}'" >&2
@@ -2219,6 +2308,11 @@ append_lm_eval_summary() {
             fi
         done < <(find "${out_dir}" -type f -name "*.json*" -print0 2>/dev/null)
     fi
+    if [ -f "${out_dir}/bfcl_upstream_artifacts.tar.gz" ] \
+        && ! mv -f "${out_dir}/bfcl_upstream_artifacts.tar.gz" ./; then
+        echo "ERROR: failed to move ${out_dir}/bfcl_upstream_artifacts.tar.gz" >&2
+        return 1
+    fi
 
     # Best-effort cleanup of the temp directory
     if [ -n "${out_dir}" ] && [ -d "${out_dir}" ]; then
@@ -2226,6 +2320,31 @@ append_lm_eval_summary() {
     fi
 
     echo "Moved eval artifacts to: $(pwd)"
+}
+
+stage_eval_artifacts() {
+    local destination="$1"
+    shift
+
+    mkdir -p "$destination" || return $?
+    local source_dir artifact
+    local artifacts=()
+    for source_dir in "$@"; do
+        [ -d "$source_dir" ] || continue
+        artifacts=(
+            "$source_dir"/meta_env.json
+            "$source_dir"/results*.json
+            "$source_dir"/*_vendor_report.json
+            "$source_dir"/*_vendor_results.jsonl
+            "$source_dir"/bfcl_report.json
+            "$source_dir"/bfcl_upstream_artifacts.tar.gz
+            "$source_dir"/sample*.jsonl
+        )
+        for artifact in "${artifacts[@]}"; do
+            [ -f "$artifact" ] || continue
+            cp -f "$artifact" "$destination/" || return $?
+        done
+    done
 }
 
 
@@ -2715,6 +2834,7 @@ run_eval() {
         export EVAL_COMPLETED_SUITE="$EVAL_SUITE"
     fi
 
+    local stage_rc=0
     # Agentic eval-only recipes have no separate staging step. Verifier failures
     # also carry diagnostic score artifacts to preserve.
     if { [ "${EVAL_ONLY:-false}" = "true" ] && [ "$scenario_is_agentic" = "1" ]; } \
@@ -2722,17 +2842,21 @@ run_eval() {
             || [ "$framework" = "minimax-vendor" ] \
             || [ "$framework" = "bfcl" ]; } \
             && [ "$eval_rc" -ne 0 ]; }; then
-        append_lm_eval_summary || true
+        append_lm_eval_summary || stage_rc=$?
     fi
 
     if [ "$eval_rc" -ne 0 ]; then
         echo "ERROR: run_eval failed with exit code $eval_rc" >&2
         if [ "${EVAL_ONLY:-false}" = "true" ]; then
             echo "Eval-only mode: failing after artifact collection" >&2
-            return "$eval_rc"
         fi
+        return "$eval_rc"
     fi
-    return $eval_rc
+    if [ "$stage_rc" -ne 0 ]; then
+        echo "ERROR: eval artifact staging failed with exit code $stage_rc" >&2
+        return "$stage_rc"
+    fi
+    return 0
 }
 
 

@@ -51,7 +51,7 @@ on:
                 type: string
                 default: "lm-eval"
             eval-suite:
-                description: "Eval suite (kimi_tool_call_schema, minimax_m3_smoke, or bfcl_smoke); empty for lm-eval and swebench"
+                description: "Eval suite (kimi_tool_call_schema, kimi_tool_call_schema_full, minimax_m3_smoke, minimax_m3_full, bfcl_smoke, bfcl_vllm_minimax_m3, or bfcl_vllm_kimi); empty for lm-eval and swebench"
                 required: false
                 type: string
                 default: ""
@@ -141,7 +141,7 @@ on:
                 type: string
                 default: "lm-eval"
             eval-suite:
-                description: "Eval suite (kimi_tool_call_schema, minimax_m3_smoke, or bfcl_smoke); empty for lm-eval and swebench"
+                description: "Eval suite (kimi_tool_call_schema, kimi_tool_call_schema_full, minimax_m3_smoke, minimax_m3_full, bfcl_smoke, bfcl_vllm_minimax_m3, or bfcl_vllm_kimi); empty for lm-eval and swebench"
                 required: false
                 type: string
                 default: ""

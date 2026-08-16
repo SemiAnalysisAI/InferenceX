@@ -7,6 +7,7 @@ import os
 import re
 import stat
 import subprocess
+import sys
 import tarfile
 import threading
 from contextlib import contextmanager
@@ -272,6 +273,30 @@ run_eval --port 8888
     assert result.returncode == 0, result.stderr
     assert "DISPATCH=kimi_tool_call_schema" in result.stdout
     assert "METADATA=kimi_tool_call_schema" in result.stdout
+
+
+def test_agentic_eval_propagates_artifact_staging_failure() -> None:
+    script = r'''
+source "$BENCHMARK_LIB"
+run_kimi_vendor_eval() { :; }
+append_lm_eval_summary() { return 73; }
+export EVAL_FRAMEWORK=kimi-vendor
+export EVAL_ONLY=true
+export IS_AGENTIC=1
+export EVAL_CONCURRENT_REQUESTS=""
+unset EVAL_SUITE
+run_eval --port 8888
+'''
+    result = subprocess.run(
+        ["bash", "-c", script],
+        env={**os.environ, "BENCHMARK_LIB": str(BENCHMARK_LIB)},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 73
+    assert "eval artifact staging failed with exit code 73" in result.stderr
 
 def test_kimi_full_suite_dispatches_to_schema_runner() -> None:
     script = r'''
@@ -1343,6 +1368,98 @@ append_lm_eval_summary >/dev/null
     return json.loads((work_dir / "meta_env.json").read_text())
 
 
+def test_summary_stages_bfcl_upstream_archive_before_cleanup(tmp_path: Path) -> None:
+    work_dir = tmp_path / "work"
+    results_dir = tmp_path / "results"
+    work_dir.mkdir()
+    results_dir.mkdir()
+    archive = results_dir / "bfcl_upstream_artifacts.tar.gz"
+    archive.write_bytes(b"bfcl-archive")
+    script = r'''
+source "$BENCHMARK_LIB"
+cd "$WORK_DIR"
+append_lm_eval_summary >/dev/null
+'''
+    env = {
+        **os.environ,
+        "BENCHMARK_LIB": str(BENCHMARK_LIB),
+        "WORK_DIR": str(work_dir),
+        "EVAL_RESULT_DIR": str(results_dir),
+        "MODEL": "test-model",
+        "CONC": "7",
+        "KV_OFFLOADING": "none",
+    }
+
+    subprocess.run(["bash", "-c", script], env=env, check=True)
+
+    assert (work_dir / archive.name).read_bytes() == b"bfcl-archive"
+    assert not results_dir.exists()
+
+
+def test_stage_eval_artifacts_copies_verifier_outputs_only(tmp_path: Path) -> None:
+    source_one = tmp_path / "source-one"
+    source_two = tmp_path / "source-two"
+    destination = tmp_path / "destination"
+    source_one.mkdir()
+    source_two.mkdir()
+    expected = {
+        "meta_env.json",
+        "results_bfcl.json",
+        "kimi_vendor_report.json",
+        "kimi_vendor_results.jsonl",
+        "bfcl_report.json",
+        "bfcl_upstream_artifacts.tar.gz",
+        "sample_eval.jsonl",
+    }
+    for filename in expected:
+        source = source_one if filename.endswith(".json") else source_two
+        (source / filename).write_text(filename)
+    (source_one / "unrelated.log").write_text("skip")
+    script = r'''
+source "$BENCHMARK_LIB"
+stage_eval_artifacts "$DESTINATION" "$SOURCE_ONE" "$SOURCE_TWO"
+'''
+    subprocess.run(
+        ["bash", "-c", script],
+        env={
+            **os.environ,
+            "BENCHMARK_LIB": str(BENCHMARK_LIB),
+            "DESTINATION": str(destination),
+            "SOURCE_ONE": str(source_one),
+            "SOURCE_TWO": str(source_two),
+            "KV_OFFLOADING": "none",
+        },
+        check=True,
+    )
+
+    assert {path.name for path in destination.iterdir()} == expected
+
+
+def test_stage_eval_artifacts_propagates_copy_failure(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "bfcl_report.json").write_text("{}")
+    script = r'''
+source "$BENCHMARK_LIB"
+cp() { return 73; }
+stage_eval_artifacts "$DESTINATION" "$SOURCE"
+'''
+
+    result = subprocess.run(
+        ["bash", "-c", script],
+        env={
+            **os.environ,
+            "BENCHMARK_LIB": str(BENCHMARK_LIB),
+            "DESTINATION": str(tmp_path / "destination"),
+            "SOURCE": str(source),
+            "KV_OFFLOADING": "none",
+        },
+        check=False,
+    )
+
+    assert result.returncode == 73
+
+
 def test_summary_metadata_preserves_lm_eval_gsm8k_defaults(tmp_path: Path) -> None:
     meta = _summary_metadata(tmp_path)
 
@@ -2170,6 +2287,9 @@ def test_fixed_eval_workflows_forward_provider_contract() -> None:
     assert reusable_workflow["env"]["EVAL_SUITE"] == "${{ inputs.eval-suite }}"
     assert "*_vendor_report.json" in SINGLE_NODE_WORKFLOW.read_text()
     assert "bfcl_report.json" in SINGLE_NODE_WORKFLOW.read_text()
+    assert "bfcl_upstream_artifacts.tar.gz" in SINGLE_NODE_WORKFLOW.read_text()
+    assert "bfcl_vllm_minimax_m3" in SINGLE_NODE_WORKFLOW.read_text()
+    assert "bfcl_vllm_kimi" in SINGLE_NODE_WORKFLOW.read_text()
 
 
 
@@ -2184,7 +2304,10 @@ def test_multinode_agentic_eval_workflow_forwards_runner_contract() -> None:
     assert reusable_workflow["env"]["EVAL_SUITE"] == "${{ inputs.eval-suite }}"
     assert "*_vendor_report.json" in MULTINODE_WORKFLOW.read_text()
     assert "bfcl_report.json" in MULTINODE_WORKFLOW.read_text()
+    assert "bfcl_upstream_artifacts.tar.gz" in MULTINODE_WORKFLOW.read_text()
 
+    assert "bfcl_vllm_minimax_m3" in MULTINODE_WORKFLOW.read_text()
+    assert "bfcl_vllm_kimi" in MULTINODE_WORKFLOW.read_text()
 
 
 def test_trusted_changelog_matrix_keeps_multinode_agentic_evals() -> None:
@@ -2279,6 +2402,32 @@ def test_bfcl_rejects_unknown_suite() -> None:
     assert result.returncode == 2
     assert "unsupported BFCL suite 'not_a_bfcl_suite'" in result.stderr
 
+def test_bfcl_full_suite_thresholds_are_diagnostic_and_namespaced() -> None:
+    thresholds = yaml.safe_load(
+        (REPO_ROOT / "utils/evals/thresholds.yaml").read_text()
+    )["default"]
+    full_suite_tasks = (
+        "bfcl_vllm_minimax_m3",
+        "bfcl_vllm_minimax_m3_simple_python",
+        "bfcl_vllm_minimax_m3_multiple",
+        "bfcl_vllm_minimax_m3_parallel",
+        "bfcl_vllm_minimax_m3_parallel_multiple",
+        "bfcl_vllm_kimi",
+        "bfcl_vllm_kimi_simple_python",
+        "bfcl_vllm_kimi_multiple",
+        "bfcl_vllm_kimi_parallel",
+        "bfcl_vllm_kimi_parallel_multiple",
+        "bfcl_vllm_kimi_multi_turn",
+        "bfcl_vllm_kimi_multi_turn_base",
+        "bfcl_vllm_kimi_multi_turn_miss_func",
+        "bfcl_vllm_kimi_multi_turn_miss_param",
+        "bfcl_vllm_kimi_multi_turn_long_context",
+    )
+
+    assert thresholds["bfcl_smoke"] == 0.75
+    assert all(thresholds[task] == 0.0 for task in full_suite_tasks)
+
+
 def test_bfcl_dependency_timeout_uses_integration_error_and_stages(
     tmp_path: Path,
 ) -> None:
@@ -2286,7 +2435,7 @@ def test_bfcl_dependency_timeout_uses_integration_error_and_stages(
     python_dir = tmp_path / "python"
     script = r"""
 source "$BENCHMARK_LIB"
-unset EVAL_SUITE EVAL_RESULT_DIR EVAL_COMPLETED_SUITE
+export EVAL_SUITE=bfcl_vllm_kimi
 unset VENDOR_VERIFIER_PYTHON VENDOR_VERIFIER_PYTHON_CLEANUP_DIR
 selected_python() {
     printf 'ADAPTER_ARG=<%s>\n' "$@"
@@ -2333,6 +2482,8 @@ exit "$eval_rc"
     assert "ADAPTER_ARG=<test-model>" in output
     assert f"ADAPTER_ARG=<{results_dir}>" in output
     assert "ADAPTER_ARG=<--integration-error>" in output
+    assert "ADAPTER_ARG=<--suite>" in output
+    assert "ADAPTER_ARG=<bfcl_vllm_kimi>" in output
     assert (
         "ADAPTER_ARG=<BFCL dependency installation failed with exit code 124>" in output
     )
@@ -2341,10 +2492,15 @@ exit "$eval_rc"
     assert (results_dir / "results_bfcl.json").exists()
     assert "failed to write BFCL failure artifact" not in output
     assert "UNEXPECTED_SYSTEM_PYTHON" not in output
+    assert not (results_dir / "bfcl_upstream_artifacts.tar.gz").exists()
     assert not python_dir.exists()
 
 def _run_bfcl_adapter_command(
-    tmp_path: Path, *, adapter_rc: int = 0
+    tmp_path: Path,
+    *,
+    adapter_rc: int = 0,
+    suite: str = "",
+    archive_rc: int = 0,
 ) -> tuple[subprocess.CompletedProcess[str], tuple[Path, Path, Path, Path]]:
     results_dir = tmp_path / "results"
     runtime_dir = tmp_path / "runtime"
@@ -2361,6 +2517,9 @@ selected_python() {
             return 1
         fi
     done
+    if [ "$TEST_ADAPTER_RC" -eq 0 ]; then
+        touch "$RESULTS_DIR/bfcl_report.json" "$RESULTS_DIR/results_bfcl.json"
+    fi
     return "$TEST_ADAPTER_RC"
 }
 _prepare_vendor_verifier_python() {
@@ -2379,13 +2538,26 @@ mktemp() {
     mkdir "$PROJECT_ROOT"
     printf '%s\n' "$PROJECT_ROOT"
 }
+_archive_bfcl_upstream_artifacts() {
+    printf 'ARCHIVE_PROJECT_ROOT=<%s>\n' "$1"
+    printf 'ARCHIVE_PATH=<%s>\n' "$2"
+    if [ "$TEST_ARCHIVE_RC" -eq 0 ]; then
+        touch "$2"
+    fi
+    return "$TEST_ARCHIVE_RC"
+}
 timeout() {
     printf 'TIMEOUT_ARG=<%s>\n' "$1"
     shift
     "$@"
 }
 append_lm_eval_summary() { printf 'STAGED=<%s>\n' "$EVAL_RESULT_DIR"; }
-unset EVAL_SUITE EVAL_RESULT_DIR EVAL_COMPLETED_SUITE EVAL_MAX_MODEL_LEN
+if [ -n "$TEST_SUITE" ]; then
+    export EVAL_SUITE="$TEST_SUITE"
+else
+    unset EVAL_SUITE
+fi
+unset EVAL_RESULT_DIR EVAL_COMPLETED_SUITE EVAL_MAX_MODEL_LEN
 compute_eval_context_length() { echo "UNEXPECTED_CONTEXT_LOAD"; return 99; }
 export EVAL_CONCURRENT_REQUESTS=""
 export EVAL_ONLY=false
@@ -2408,6 +2580,8 @@ exit "$eval_rc"
         "MODEL_NAME": "served-model",
         "OPENAI_API_KEY": "must-not-be-forwarded",
         "TEST_ADAPTER_RC": str(adapter_rc),
+        "TEST_SUITE": suite,
+        "TEST_ARCHIVE_RC": str(archive_rc),
     }
     for key in (
         "EVAL_FRAMEWORK",
@@ -2458,6 +2632,9 @@ def test_bfcl_runner_uses_fixed_adapter_contract_and_cleans_runtime(
     assert "PREPARE_ARG=<true>" in output
     assert "PREPARE_ARG=<10>" in output
     assert "TIMEOUT_ARG=<900>" in output
+    assert "ADAPTER_ARG=<--suite>" not in output
+    assert "ARCHIVE_PROJECT_ROOT=" not in output
+    assert not (results_dir / "bfcl_upstream_artifacts.tar.gz").exists()
     assert "ADAPTER_ARG=<must-not-be-forwarded>" not in output
     assert "UNEXPECTED_CONTEXT_LOAD" not in output
     assert f"STAGED=<{results_dir}>" not in output
@@ -2468,6 +2645,63 @@ def test_bfcl_runner_uses_fixed_adapter_contract_and_cleans_runtime(
     assert not runtime_dir.exists()
     assert not python_dir.exists()
     assert not project_root.exists()
+
+def test_bfcl_full_suites_use_suite_specific_runtime_and_archive_before_cleanup(
+    tmp_path: Path,
+) -> None:
+    suite_contracts = (
+        ("bfcl_vllm_minimax_m3", "8"),
+        ("bfcl_vllm_kimi", "16"),
+    )
+
+    for suite, expected_threads in suite_contracts:
+        suite_tmp_path = tmp_path / suite
+        suite_tmp_path.mkdir()
+        result, paths = _run_bfcl_adapter_command(
+            suite_tmp_path,
+            suite=suite,
+        )
+        results_dir, runtime_dir, python_dir, project_root = paths
+        output = result.stdout + result.stderr
+
+        assert result.returncode == 0, result.stderr
+        assert "TIMEOUT_ARG=<7200>" in output
+        assert "ADAPTER_ARG=<--suite>" in output
+        assert f"ADAPTER_ARG=<{suite}>" in output
+        assert f"EVAL_COMPLETED_SUITE={suite}" in output
+        assert "ADAPTER_ARG=<--num-threads>" in output
+        assert f"ADAPTER_ARG=<{expected_threads}>" in output
+        assert f"ARCHIVE_PROJECT_ROOT=<{project_root}>" in output
+        assert (
+            f"ARCHIVE_PATH=<{results_dir / 'bfcl_upstream_artifacts.tar.gz'}>"
+            in output
+        )
+        assert (results_dir / "bfcl_upstream_artifacts.tar.gz").exists()
+        assert not runtime_dir.exists()
+        assert not python_dir.exists()
+        assert not project_root.exists()
+
+
+def test_bfcl_full_suite_archive_failure_preserves_scores_and_cleans_runtime(
+    tmp_path: Path,
+) -> None:
+    result, paths = _run_bfcl_adapter_command(
+        tmp_path,
+        suite="bfcl_vllm_kimi",
+        archive_rc=73,
+    )
+    results_dir, runtime_dir, python_dir, project_root = paths
+    output = result.stdout + result.stderr
+
+    assert result.returncode == 73
+    assert "failed to archive BFCL upstream artifacts (exit code 73)" in output
+    assert (results_dir / "bfcl_report.json").exists()
+    assert (results_dir / "results_bfcl.json").exists()
+    assert not (results_dir / "bfcl_upstream_artifacts.tar.gz").exists()
+    assert not runtime_dir.exists()
+    assert not python_dir.exists()
+    assert not project_root.exists()
+
 
 def test_bfcl_adapter_timeout_writes_reports_stages_and_propagates(
     tmp_path: Path,
@@ -2480,6 +2714,8 @@ def test_bfcl_adapter_timeout_writes_reports_stages_and_propagates(
     assert "EVAL_RC=124" in output
     assert output.count(f"STAGED=<{results_dir}>") == 1
     assert "ADAPTER_ARG=<--integration-error>" in output
+    assert "ADAPTER_ARG=<--suite>" in output
+    assert "ADAPTER_ARG=<bfcl_smoke>" in output
     assert "ADAPTER_ARG=<BFCL evaluation failed with exit code 124>" in output
     assert (results_dir / "bfcl_report.json").exists()
     assert (results_dir / "results_bfcl.json").exists()
@@ -2488,6 +2724,91 @@ def test_bfcl_adapter_timeout_writes_reports_stages_and_propagates(
     assert not runtime_dir.exists()
     assert not python_dir.exists()
     assert not project_root.exists()
+
+def test_bfcl_upstream_archive_is_deterministic_and_survives_cleanup(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / "project"
+    result_path = project_root / "result/run/BFCL_v4_simple_python_result.json"
+    score_path = project_root / "score/run/BFCL_v4_simple_python_score.json"
+    id_path = project_root / "test_case_ids_to_generate.json"
+    for path, content in (
+        (result_path, '{"id":"simple_python_0"}\n'),
+        (score_path, '{"accuracy":1.0}\n'),
+        (id_path, '{"simple_python":["simple_python_0"]}\n'),
+    ):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+    first_archive = tmp_path / "first.tar.gz"
+    second_archive = tmp_path / "second.tar.gz"
+    script = r"""
+source "$BENCHMARK_LIB"
+VENDOR_VERIFIER_PYTHON="$PYTHON"
+_archive_bfcl_upstream_artifacts "$PROJECT_ROOT" "$FIRST_ARCHIVE"
+_archive_bfcl_upstream_artifacts "$PROJECT_ROOT" "$SECOND_ARCHIVE"
+_cleanup_vendor_eval "$PROJECT_ROOT"
+"""
+    subprocess.run(
+        ["bash", "-c", script],
+        env={
+            **os.environ,
+            "BENCHMARK_LIB": str(BENCHMARK_LIB),
+            "PYTHON": sys.executable,
+            "PROJECT_ROOT": str(project_root),
+            "FIRST_ARCHIVE": str(first_archive),
+            "SECOND_ARCHIVE": str(second_archive),
+        },
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+    assert first_archive.read_bytes() == second_archive.read_bytes()
+    with tarfile.open(first_archive, "r:gz") as archive:
+        assert archive.getnames() == [
+            "result",
+            "result/run",
+            "result/run/BFCL_v4_simple_python_result.json",
+            "score",
+            "score/run",
+            "score/run/BFCL_v4_simple_python_score.json",
+            "test_case_ids_to_generate.json",
+        ]
+    assert not project_root.exists()
+
+
+def test_bfcl_upstream_archive_rejects_symbolic_links(tmp_path: Path) -> None:
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    outside = tmp_path / "outside.json"
+    outside.write_text('{"secret":true}\n')
+    (project_root / "escape.json").symlink_to(outside)
+    archive = tmp_path / "unsafe.tar.gz"
+    script = r"""
+source "$BENCHMARK_LIB"
+VENDOR_VERIFIER_PYTHON="$PYTHON"
+_archive_bfcl_upstream_artifacts "$PROJECT_ROOT" "$ARCHIVE"
+"""
+
+    result = subprocess.run(
+        ["bash", "-c", script],
+        env={
+            **os.environ,
+            "BENCHMARK_LIB": str(BENCHMARK_LIB),
+            "PYTHON": sys.executable,
+            "PROJECT_ROOT": str(project_root),
+            "ARCHIVE": str(archive),
+        },
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "refusing to archive symbolic link: escape.json" in result.stderr
+    assert not archive.exists()
+    assert not (tmp_path / ".unsafe.tar.gz.tmp").exists()
+
 
 def test_bfcl_installer_uses_verified_wheel_in_selected_venv(tmp_path: Path) -> None:
     script = r"""

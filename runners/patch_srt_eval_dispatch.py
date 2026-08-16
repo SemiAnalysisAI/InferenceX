@@ -21,7 +21,7 @@ GENERIC_EVAL_COMMAND = 'run_eval --port "$PORT" || eval_rc=$?'
 EVAL_ARTIFACT_COPY = """cp -v results*.json /logs/eval_results/ 2>/dev/null || true
 cp -v sample*.jsonl /logs/eval_results/ 2>/dev/null || true"""
 VERIFIER_ARTIFACT_COPY = """cp -v results*.json /logs/eval_results/ 2>/dev/null || true
-cp -v *_vendor_report.json bfcl_report.json /logs/eval_results/ 2>/dev/null || true
+cp -v *_vendor_report.json *_vendor_results.jsonl bfcl_report.json bfcl_upstream_artifacts.tar.gz /logs/eval_results/ 2>/dev/null || true
 cp -v sample*.jsonl /logs/eval_results/ 2>/dev/null || true"""
 
 

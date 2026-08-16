@@ -106,6 +106,8 @@ def test_patch_srt_eval_dispatch_forwards_selection_and_is_idempotent(
     assert "--framework lm-eval" not in eval_script.read_text()
     assert "*_vendor_report.json" in eval_script.read_text()
     assert "bfcl_report.json" in eval_script.read_text()
+    assert "*_vendor_results.jsonl" in eval_script.read_text()
+    assert "bfcl_upstream_artifacts.tar.gz" in eval_script.read_text()
     assert "already patched" in second.stdout
 
 
@@ -284,6 +286,8 @@ def test_nvidia_srt_launchers_prepare_kimi_eval_dispatch() -> None:
     for launcher in launchers:
         content = launcher.read_text()
         assert "patch_srt_eval_dispatch.py" in content
+        patch_command = content.index("patch_srt_eval_dispatch.py")
+        assert "|| exit 1" in content[patch_command : patch_command + 200]
         assert 'EVAL_FRAMEWORK:-lm-eval}" != "lm-eval"' in content
         assert "inject_synthetic_acceptance" in content
 
