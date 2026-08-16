@@ -18,9 +18,55 @@
 # No YAML anchors here: validate_master_config treats every top-level key as a
 # config entry, so an anchor-holding key fails schema validation.
 
-# Match the single-node step budget. Neither path sets the flag, so the
-# multi-node engine runs on V1's 16384 default while the single-node recipe,
-# whose tail is much better, does not set VLLM_USE_V1 at all.
+# Grow the GPU KV pool. The prefill engine reports 281.49 of 287.98 GiB free
+# while gpu-memory-utilization 0.9 caps the budget at 259.19 GiB, leaving the
+# KV pool at 50.98 GiB against the 71.77 GiB vLLM says is reachable. A larger
+# pool means fewer prefixes evicted, so fewer full recomputes. Verified safe:
+# an earlier arm at 0.96 started and served with no OOM and no
+# HSA_STATUS_ERROR_OUT_OF_RESOURCES.
+kimik3-ttft-exp-gpumem096:
+  image: vllm/vllm-openai-rocm:nightly-ac7509e2b1db40fec2f03dde1ed4e9dfdc2338c9
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm-disagg
+  router: { name: vllm-router, version: "nightly-20260809-d2ba586" }
+  kv-p2p-transfer: mori
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.50
+      search-space:
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        conc-list: [8]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "MORIIO_READ_MODE=true"
+          - "MORI_WAITALL_BUILD=0"
+          - "PREFILL_GPU_MEM_UTIL=0.96"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=2"
+
+# Smaller step budget, kept only as the counterpart to the long-prefill cap
+# finding: capping long prefills at 4096 dropped prefill throughput from 7,903
+# to 4,631 tok/s, so 8192 is expected to cost throughput too. Run it to bound
+# how much of that loss comes from chunk size rather than from the cap's
+# scheduling behaviour.
 kimik3-ttft-exp-batched8192:
   image: vllm/vllm-openai-rocm:nightly-ac7509e2b1db40fec2f03dde1ed4e9dfdc2338c9
   model: moonshotai/Kimi-K3
