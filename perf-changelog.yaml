@@ -6018,3 +6018,13 @@
   description:
     - "Refresh the MiniMax-M3 B200 AgentX submission: no-offload TP8 C1 and TP4 C1/C5/C10/C15/C20, plus a TP4 SimpleCPU KV-offload sweep at C15–C40 using the full-capacity DRAM budget."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2611
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move the B300 Kimi K3 recipe to TP8 x DCP8 with Mooncake as the external KV tier"
+    - "Sweep concurrency 1, 2, 4, 8, 16, 24, 32, 40, 48, 56 and 70, drafting with DSpark level 7 at concurrency 8 and below, DSpark level 3 at concurrency 16"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2616
+  
