@@ -1,7 +1,7 @@
-name: "svf-vllm-disagg-gb200-2p1d-dep8-dep16-c1024-mtp2-agentic"
+name: "svf-vllm-disagg-gb200-2p1d-dep8-dep12-c576-mtp2-agentic"
 
 # GB200 AgentX MTP3 topology: two DEP8 prefill workers feed one
-# DEP16 decode worker at concurrency 1024. Decode consumes P/D KV through NIXL
+# DEP12 decode worker at concurrency 576. Decode consumes P/D KV through NIXL
 # and MooncakeStore but skips Mooncake prefix lookup to avoid CPU overhead.
 
 model:
@@ -40,11 +40,11 @@ resources:
   het_jobs: false
   spread_workers: false
   prefill_nodes: 4
-  decode_nodes: 4
+  decode_nodes: 3
   prefill_workers: 2
   decode_workers: 1
   gpus_per_prefill: 8
-  gpus_per_decode: 16
+  gpus_per_decode: 12
 
 infra:
   etcd_nats_dedicated_node: false
@@ -68,7 +68,7 @@ backend:
   mooncake_kv_store:
     store_config:
       metadata_server: "P2PHANDSHAKE"
-      global_segment_size: "180GB"
+      global_segment_size: "160GB"
       local_buffer_size: "4GB"
       protocol: "rdma"
       device_name: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
@@ -107,7 +107,7 @@ backend:
       kv-cache-dtype: "fp8"
       tensor-parallel-size: 1
       pipeline-parallel-size: 1
-      data-parallel-size: 16
+      data-parallel-size: 12
       data-parallel-rpc-port: 13345
       enable-cumem-allocator: true
       enable-expert-parallel: true
@@ -180,7 +180,7 @@ backend:
     NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
     VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
     VLLM_DSV4_MEGA_FP8_COMBINE: "1"
-    DG_JIT_CACHE_DIR: "/tmp/dg-cache-dsv4-gb200-2p1d-dep16-decode-{job_id}"
+    DG_JIT_CACHE_DIR: "/tmp/dg-cache-dsv4-gb200-2p1d-dep12-decode-{job_id}"
     MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
     MC_STORE_CLIENT_METRIC: "1"
     MC_STORE_CLIENT_METRIC_INTERVAL: "5"

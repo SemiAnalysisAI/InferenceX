@@ -1,7 +1,8 @@
-name: "svf-vllm-disagg-gb200-1p1d-dep8-dep8-c256-mtp2-agentic"
+name: "svf-vllm-disagg-gb200-2p1d-dep8-dep16-c512-mtp2-agentic"
 
-# GB200 AgentX MTP3 topology: one DEP8 prefill worker feeds one
-# DEP8 decode worker at concurrency 256.
+# GB200 AgentX MTP3 topology: two DEP8 prefill workers feed one
+# DEP16 decode worker at concurrency 512. Decode consumes P/D KV through NIXL
+# and MooncakeStore but skips Mooncake prefix lookup to avoid CPU overhead.
 
 model:
   path: "deepseek-v4-pro"
@@ -20,6 +21,10 @@ dynamo:
   wheel: "1.3.0.dev20260720"
   install: true
 
+environment:
+  # Mooncake prefix-block hashes must match across processes and nodes.
+  PYTHONHASHSEED: "0"
+
 setup_script: vllm-container-deps.sh
 
 slurm:
@@ -34,20 +39,16 @@ resources:
   gpus_per_node: 4
   het_jobs: false
   spread_workers: false
-  prefill_nodes: 2
-  decode_nodes: 2
-  prefill_workers: 1
+  prefill_nodes: 4
+  decode_nodes: 4
+  prefill_workers: 2
   decode_workers: 1
   gpus_per_prefill: 8
-  gpus_per_decode: 8
+  gpus_per_decode: 16
 
 infra:
   etcd_nats_dedicated_node: false
   nats_max_payload_mb: 32
-
-environment:
-  # Mooncake prefix-block hashes must match across processes and nodes.
-  PYTHONHASHSEED: "0"
 
 frontend:
   type: dynamo
@@ -67,7 +68,7 @@ backend:
   mooncake_kv_store:
     store_config:
       metadata_server: "P2PHANDSHAKE"
-      global_segment_size: "180GB"
+      global_segment_size: "160GB"
       local_buffer_size: "4GB"
       protocol: "rdma"
       device_name: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
@@ -92,8 +93,7 @@ backend:
       trust-remote-code: true
       no-enable-flashinfer-autotune: true
       block-size: 256
-      max-cudagraph-capture-size: 256
-      gpu-memory-utilization: 0.92
+      gpu-memory-utilization: 0.90
       no-disable-hybrid-kv-cache-manager: true
       tokenizer-mode: "deepseek_v4"
       attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"use_fp4_indexer_cache":true}'
@@ -107,20 +107,20 @@ backend:
       kv-cache-dtype: "fp8"
       tensor-parallel-size: 1
       pipeline-parallel-size: 1
-      data-parallel-size: 8
+      data-parallel-size: 16
       data-parallel-rpc-port: 13345
       enable-cumem-allocator: true
       enable-expert-parallel: true
       enable-ep-weight-filter: true
       max-model-len: 1048576
-      max-num-seqs: 256
-      max-num-batched-tokens: 1024
+      max-num-seqs: 64
+      max-num-batched-tokens: 256
       trust-remote-code: true
       no-enable-flashinfer-autotune: true
       block-size: 256
       compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
-      max-cudagraph-capture-size: 1024
-      gpu-memory-utilization: 0.92
+      max-cudagraph-capture-size: 256
+      gpu-memory-utilization: 0.90
       no-disable-hybrid-kv-cache-manager: true
       tokenizer-mode: "deepseek_v4"
       attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"use_fp4_indexer_cache":true}'
@@ -139,6 +139,7 @@ backend:
     VLLM_SERVER_DEV_MODE: "1"
     VLLM_USE_V2_MODEL_RUNNER: "1"
     VLLM_MOONCAKE_LOAD_RECV_THREADS: "20"
+    VLLM_MOONCAKE_STORE_SEND_THREADS: "8"
     VLLM_ALLREDUCE_USE_SYMM_MEM: "0"
     UCX_MEMTYPE_CACHE: "n"
     UCX_NET_DEVICES: "mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1"
@@ -146,13 +147,13 @@ backend:
     NCCL_CUMEM_ENABLE: "1"
     NCCL_MNNVL_ENABLE: "1"
     NCCL_NVLS_ENABLE: "1"
-    NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
     VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
+    NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
     VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
     VLLM_USE_BREAKABLE_CUDAGRAPH: "0"
     VLLM_CONNECTOR_PREFETCH_DEPTH: "8"
     VLLM_DSV4_MEGA_FP8_COMBINE: "1"
-    DG_JIT_CACHE_DIR: "/tmp/dg-cache-dsv4-gb200-1p1d-dep8-dep8-c256-{job_id}"
+    DG_JIT_CACHE_DIR: "/tmp/dg-cache-dsv4-gb200-2p1d-prefill-{job_id}"
     MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
     MC_STORE_CLIENT_METRIC: "1"
     MC_STORE_CLIENT_METRIC_INTERVAL: "5"
@@ -175,11 +176,11 @@ backend:
     NCCL_CUMEM_ENABLE: "1"
     NCCL_MNNVL_ENABLE: "1"
     NCCL_NVLS_ENABLE: "1"
-    NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
     VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
+    NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
     VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
     VLLM_DSV4_MEGA_FP8_COMBINE: "1"
-    DG_JIT_CACHE_DIR: "/tmp/dg-cache-dsv4-gb200-1p1d-dep8-dep8-c256-{job_id}"
+    DG_JIT_CACHE_DIR: "/tmp/dg-cache-dsv4-gb200-2p1d-dep16-decode-{job_id}"
     MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
     MC_STORE_CLIENT_METRIC: "1"
     MC_STORE_CLIENT_METRIC_INTERVAL: "5"
@@ -187,6 +188,7 @@ backend:
 
 sbatch_directives:
   cpus-per-task: "72"
+  mem: "0"
 
 srun_options:
   container-remap-root: ""
