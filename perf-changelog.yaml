@@ -5982,3 +5982,39 @@
     - "EAGLE speculative decoding, hierarchical KV cache (hicache-size 135), MTP, decode mem-fraction-static 0.9, nixl KV transfer with UCX_TLS=ib, and X-Dynamo-Session-ID session affinity; driven from the NVIDIA/srt-slurm base+zip_override recipes via CONFIG_FILE selectors"
     - "Image: lmsysorg/sglang:nightly-dev-cu13-20260805-211ee642; runner: gb300-nv"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2608
+
+- config-keys:
+    - minimaxm3-fp4-b300-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh the MiniMax-M3 B300 AgentX submission as eight EAGLE3-GQA points: no-offload TP8 C1 and TP4 C1/C5/C10/C15/C20, TP4 C30 with 1,024 GB SimpleCPU KV offload, and TP2 C24 with the proportional-policy 750 GB SimpleCPU KV-offload cap."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2610
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-agg
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Inject the committed synthetic MTP acceptance length only for GB300 AgentX throughput; keep eval-only jobs on real target verification."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2571
+  
+
+- config-keys:
+    - minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp
+    - minimaxm3-fp4-gb200-dynamo-vllm-agentic-disagg-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add the tuned GB200 MiniMax-M3 FP4 AgentX frontier with EAGLE3, the B200 TP4 baseline, DEP4/DEP8, SimpleCPU offload, and KV-routed P/D."
+    - "Use full-decode-only CUDA graphs for TP4 stability."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2609
+
+- config-keys:
+    - minimaxm3-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh the MiniMax-M3 B200 AgentX submission: no-offload TP8 C1 and TP4 C1/C5/C10/C15/C20, plus a TP4 SimpleCPU KV-offload sweep at C15–C40 using the full-capacity DRAM budget."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2611

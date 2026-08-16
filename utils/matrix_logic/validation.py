@@ -78,6 +78,7 @@ class Fields(Enum):
     CONC = 'conc'
     MAX_MODEL_LEN = 'max-model-len'
     EXP_NAME = 'exp-name'
+    RECIPE_FINGERPRINT = 'recipe-fingerprint'
     DISAGG = 'disagg'
     SCENARIO_TYPE = 'scenario-type'
 
@@ -175,6 +176,11 @@ class SingleNodeMatrixEntry(BaseModel):
     run_eval: bool = Field(alias=Fields.RUN_EVAL.value)
     eval_only: bool = Field(alias=Fields.EVAL_ONLY.value, default=False)
     router: Optional[ComponentMetadata] = None
+    recipe_fingerprint: Optional[str] = Field(
+        default=None,
+        alias=Fields.RECIPE_FINGERPRINT.value,
+        pattern=r"^[0-9a-f]{64}$",
+    )
 
     @model_validator(mode='after')
     def validate_single_node_topology(self):
@@ -245,6 +251,11 @@ class MultiNodeMatrixEntry(BaseModel):
     kv_p2p_transfer: Optional[str] = Field(
         default=None, alias=Fields.KV_P2P_TRANSFER.value, min_length=1
     )
+    recipe_fingerprint: Optional[str] = Field(
+        default=None,
+        alias=Fields.RECIPE_FINGERPRINT.value,
+        pattern=r"^[0-9a-f]{64}$",
+    )
 
     @model_validator(mode='after')
     def validate_worker_hardware_pair(self):
@@ -295,6 +306,11 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
     # omit them, and exclude_none keeps them out of dumped benchmark output.
     run_eval: Optional[bool] = Field(default=None, alias=Fields.RUN_EVAL.value)
     eval_only: Optional[bool] = Field(default=None, alias=Fields.EVAL_ONLY.value)
+    recipe_fingerprint: Optional[str] = Field(
+        default=None,
+        alias=Fields.RECIPE_FINGERPRINT.value,
+        pattern=r"^[0-9a-f]{64}$",
+    )
 
     @model_validator(mode='after')
     def validate_kv_offload_fields(self):
@@ -341,6 +357,11 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
     run_eval: Optional[bool] = Field(default=None, alias=Fields.RUN_EVAL.value)
     eval_only: Optional[bool] = Field(default=None, alias=Fields.EVAL_ONLY.value)
     eval_conc: Optional[int] = Field(default=None, alias=Fields.EVAL_CONC.value)
+    recipe_fingerprint: Optional[str] = Field(
+        default=None,
+        alias=Fields.RECIPE_FINGERPRINT.value,
+        pattern=r"^[0-9a-f]{64}$",
+    )
 
     @model_validator(mode='after')
     def validate_worker_hardware_pair(self):
@@ -875,6 +896,14 @@ class ChangelogEntry(BaseModel):
     pr_link: str = Field(alias="pr-link")
     evals_only: bool = Field(alias="evals-only", default=False)
     all_evals: bool = Field(alias="all-evals", default=False)
+    append_only: bool = Field(
+        alias="append-only",
+        default=False,
+        description=(
+            "Run only generated points or recipe variants added while preserving "
+            "every existing generated point, then append them to the latest curve"
+        ),
+    )
     eval_min_prefill_ep: Optional[int] = Field(
         alias="eval-min-prefill-ep", default=None, ge=1,
         description=(
@@ -886,6 +915,17 @@ class ChangelogEntry(BaseModel):
         alias="scenario-type", default=None, min_length=1,
         description="Restrict to specific scenario types (e.g., ['fixed-seq-len', 'agentic-coding'])"
     )
+
+    @model_validator(mode="after")
+    def validate_append_only_mode(self):
+        """Append-only entries are throughput deltas, never eval-only requests."""
+        if self.append_only and (
+            self.evals_only or self.all_evals or self.eval_min_prefill_ep is not None
+        ):
+            raise ValueError(
+                "append-only cannot be combined with eval selection fields"
+            )
+        return self
 
 
 class ChangelogMetadata(BaseModel):

@@ -4,6 +4,9 @@
 
 set -exo pipefail
 
+# shellcheck source=runners/slurm_utils.sh
+source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
+
 export SLURM_PARTITION="batch_1"
 export SLURM_ACCOUNT="benchmark"
 export ENROOT_ROOTFS_WRITABLE=1
@@ -437,6 +440,11 @@ fi
 # below still receives the full CONFIG_FILE (with selector).
 CONFIG_PATH="${CONFIG_FILE%%:*}"
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
+
+# Throughput recipes opt into synthetic acceptance through the master config.
+# Eval-only jobs leave the checked-in real-MTP recipe unchanged so generated
+# tokens still pass target-model verification.
+inject_synthetic_acceptance "$CONFIG_PATH" "$FRAMEWORK" || exit 1
 
 # --no-preflight skips srtctl's pre-submit model-path stat, which runs on
 # the GHA runner host (im-gb300-login-02, an x86 login node). It's required
