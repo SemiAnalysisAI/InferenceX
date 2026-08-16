@@ -1274,6 +1274,15 @@ def main():
         )
     )
     parent_parser.add_argument(
+        '--with-agentic-evals',
+        action='store_true',
+        help=(
+            'Emit the agentic eval row alongside the throughput rows instead of '
+            'replacing them. --evals-only and --all-evals drop every non-eval '
+            'config, so they cannot produce one run that carries both.'
+        )
+    )
+    parent_parser.add_argument(
         '--runner-node-filter',
         required=False,
         help='Filter runner nodes by substring match (e.g., "amd" to only include nodes containing that string). Expands each config to individual matching nodes.'
@@ -1443,7 +1452,10 @@ def main():
         
     # Apply the existing eval policy first, then expand it when requested.
     if not args.no_evals:
-        matrix_values = mark_eval_entries(matrix_values, include_agentic=args.evals_only or args.all_evals)
+        matrix_values = mark_eval_entries(
+            matrix_values,
+            include_agentic=args.evals_only or args.all_evals or args.with_agentic_evals,
+        )
         if args.all_evals:
             matrix_values = mark_all_eval_entries(matrix_values)
 
