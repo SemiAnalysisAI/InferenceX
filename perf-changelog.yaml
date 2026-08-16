@@ -1,4 +1,14 @@
 - config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic
+    - kimik3-fp4-mi355x-vllm-agentic-dspark
+  description:
+    - "Add the Kimi-K3 (2.8T, KDA/MLA hybrid, 1M native context) MI355X agentic recipe -- MoE runs the aiter SITUV2 A8W4 path (fp8 activations x 4-bit weights: AITER_SITUV2_A8W4=1 + VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4=1),  plus fp8-asm MLA attention. Agentic-coding with TP8"
+    - "The recipe boots from the STOCK pinned ROCm vLLM nightly image and idempotently self-bootstraps into the K3 serving stack in-container via benchmarks/single_node/agentic/apply_k3_container_patches.sh: aiter rebuilt at pin 55dbc4f47 (#4579 + #4575 int-32 K/V offset fixes), the bundled tuned K3 BF16 GEMM CSV installed + merged, triton 3.7.0, 5 vLLM ASM MLA patches (decode #50578, fp8 prefill, PS metadata16, skip-k3-fp8-ps, wvSplitK #50618), the DSpark fp8-asm enablement layer, and the FlyDSL->torch decode-GEMM reroute (cudagraph-capturable dense GEMMs). Set SKIP_K3_BOOTSTRAP=1 to serve a pre-baked patched image."
+    - "DSpark speculative variant: method dspark on the Inferact/Kimi-K3-DSpark draft head, num_speculative_tokens 2. The draft is forced dflash_config.causal=true -- non-causal parallel drafting is a cudagraph OOB source on ROCm; with causal=true the draft runs the same fp8-asm path as the target. Throughput runs pin synthetic acceptance (golden AL 2.51 @ K=2, per the AgentX golden_al_distribution policy, matching the b300 sibling); EVAL_ONLY accuracy runs switch to rejection_sample_method=block real verification, so their acceptance/throughput are not comparable to the synthetic throughput arm."
+    - "Bring-up validated on a local MI355X (gfx950, TP8) dry-run: the DSpark arm boots clean (causal draft applied, clean FULL+PIECEWISE cudagraph capture on all 8 ranks, no 0x1016/HSA/OOM/OOB), and the GSM8K accuracy gate passes under EVAL_ONLY real block verification at exact_match strict-match 0.969 (n=1319), above the default 0.90 threshold (no kimik3 entry in thresholds.yaml). The agentic single-node eval selector groups by (model, runner, framework, precision), so either the base or the -dspark arm may be eval-selected; both handle EVAL_ONLY."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2585
+
+- config-keys:
     - 70b-fp8-*-vllm
   description:
     - 'Add compilation-config ''{"custom_ops": ["-rms_norm", "-quant_fp8", "-silu_and_mul"]}'' as extra config to all benchmarks/70b_fp8_mi*.sh scripts'
