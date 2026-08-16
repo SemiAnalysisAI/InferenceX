@@ -319,9 +319,10 @@ zero-score run therefore passes threshold validation, while dependency,
 transport, timeout, malformed-output, and integration failures still fail.
 
 `bfcl_upstream_artifacts.tar.gz` preserves the pinned upstream result and
-failure-only score JSONL files, exact selected-ID map, and file locks for
-debugging. The native `bfcl_report.json` includes the package version, wheel
-hash, source revision, integration revision, per-category score headers,
+failure-only score JSONL files, exact selected-ID map, file locks, provenance
+manifest, and Apache 2.0 license copy for debugging and attribution.
+The native `bfcl_report.json` includes the package version, wheel hash, source
+revision, integration revision, per-category score headers,
 case IDs, failure records, and sampling settings. The compatibility
 `results_bfcl.json` remains the only input to the normal InferenceX eval
 collector and dashboard path.

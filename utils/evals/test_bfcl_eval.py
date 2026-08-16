@@ -328,6 +328,35 @@ def test_perfect_score_projects_pinned_ids_and_upstream_headers(
         "parallel": ["parallel_1"],
         "irrelevance": ["irrelevance_0"],
     }
+    assert (project_root / be.UPSTREAM_LICENSE_FILENAME).read_text(
+        encoding="utf-8"
+    ).startswith("                                 Apache License")
+    attribution = json.loads(
+        (project_root / be.UPSTREAM_ATTRIBUTION_FILENAME).read_text(
+            encoding="utf-8"
+        )
+    )
+    assert attribution == {
+        "artifact": "BFCL-generated evaluation results",
+        "upstream": {
+            "package": "bfcl-eval",
+            "package_version": "2026.3.23",
+            "wheel_sha256": be.BFCL_WHEEL_SHA256,
+            "repository": "https://github.com/ShishirPatil/gorilla",
+            "source_revision": be.SOURCE_REVISION,
+            "vllm_integration_revision": be.VLLM_INTEGRATION_REF,
+            "license": "Apache-2.0",
+            "license_url": (
+                "https://github.com/ShishirPatil/gorilla/blob/"
+                f"{be.SOURCE_REVISION}/LICENSE"
+            ),
+            "license_file": be.UPSTREAM_LICENSE_FILENAME,
+        },
+        "modifications": (
+            "InferenceX selected deterministic case subsets and projected upstream "
+            "scores; this archive does not modify upstream BFCL source."
+        ),
+    }
 
     compatibility = _compatibility(output_dir)
     native = _native(output_dir)

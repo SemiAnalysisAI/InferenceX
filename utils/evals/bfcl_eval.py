@@ -36,6 +36,12 @@ UPSTREAM_SOURCE = "https://pypi.org/project/bfcl-eval/2026.3.23/"
 UPSTREAM_REF = f"{BFCL_PACKAGE}=={BFCL_PACKAGE_VERSION}"
 SOURCE_REVISION = "6ea57973c7a6097fd7c5915698c54c17c5b1b6c8"
 VLLM_INTEGRATION_REF = "7ecb11405df86b202f4c5cca322bd133052fee82"
+UPSTREAM_LICENSE = "Apache-2.0"
+UPSTREAM_LICENSE_URL = (
+    f"{UPSTREAM_REPOSITORY}/blob/{SOURCE_REVISION}/LICENSE"
+)
+UPSTREAM_LICENSE_FILENAME = "BFCL_LICENSE.apache-2.0.txt"
+UPSTREAM_ATTRIBUTION_FILENAME = "BFCL_ATTRIBUTION.json"
 
 # Dict insertion order is intentional: smoke reports and the upstream run-ID
 # file remain byte-for-byte stable.
@@ -399,6 +405,38 @@ def _compatibility_result(
 def _write_json(path: Path, value: Mapping[str, Any]) -> None:
     path.write_text(
         json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+
+
+def _write_upstream_attribution(project_root: Path) -> None:
+    """Keep BFCL provenance and its Apache license with archived outputs."""
+    project_root.mkdir(parents=True, exist_ok=True)
+    repository_license = Path(__file__).resolve().parents[2] / "LICENSE"
+    if not repository_license.is_file():
+        raise FileNotFoundError(f"Apache license file not found: {repository_license}")
+    (project_root / UPSTREAM_LICENSE_FILENAME).write_bytes(
+        repository_license.read_bytes()
+    )
+    _write_json(
+        project_root / UPSTREAM_ATTRIBUTION_FILENAME,
+        {
+            "artifact": "BFCL-generated evaluation results",
+            "upstream": {
+                "package": BFCL_PACKAGE,
+                "package_version": BFCL_PACKAGE_VERSION,
+                "wheel_sha256": BFCL_WHEEL_SHA256,
+                "repository": UPSTREAM_REPOSITORY,
+                "source_revision": SOURCE_REVISION,
+                "vllm_integration_revision": VLLM_INTEGRATION_REF,
+                "license": UPSTREAM_LICENSE,
+                "license_url": UPSTREAM_LICENSE_URL,
+                "license_file": UPSTREAM_LICENSE_FILENAME,
+            },
+            "modifications": (
+                "InferenceX selected deterministic case subsets and projected "
+                "upstream scores; this archive does not modify upstream BFCL source."
+            ),
+        },
     )
 
 
@@ -901,6 +939,7 @@ def run_evaluation(
             raise TypeError("upstream_runner must be callable")
 
         os.environ["BFCL_PROJECT_ROOT"] = str(bfcl_project_root)
+        _write_upstream_attribution(bfcl_project_root)
         selected_case_ids = _build_suite_case_ids(suite)
         _write_id_map(bfcl_project_root, selected_case_ids)
         upstream_runner(
