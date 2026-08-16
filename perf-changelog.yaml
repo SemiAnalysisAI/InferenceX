@@ -6040,3 +6040,10 @@
     - "Add SERVED_MODEL_NAME: Qwen3.5-397B-A17B-NVFP4-V2 to all 6 agentx recipe env blocks and make build_replay_cmd prefer SERVED_MODEL_NAME over $MODEL for the aiperf --model flag."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2612
   
+- config-keys:
+    - qwen3.5-fp4-gb300-dynamo-trt-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "collect metrics refresh"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2625
