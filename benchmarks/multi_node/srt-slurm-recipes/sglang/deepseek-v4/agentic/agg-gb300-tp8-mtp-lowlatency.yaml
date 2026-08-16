@@ -55,9 +55,6 @@ backend:
   type: sglang
   aggregated_environment:
     SGLANG_RAGGED_VERIFY_MODE: "static"
-    SGLANG_SIMULATE_ACC_LEN: "3.82"
-    SGLANG_SIMULATE_ACC_METHOD: match-expected
-    SGLANG_SIMULATE_ACC_TOKEN_MODE: "real-draft-token"
     SGLANG_DEFAULT_THINKING: "1"
     SGLANG_DSV4_REASONING_EFFORT: high
     PIP_BREAK_SYSTEM_PACKAGES: "1"

@@ -44,6 +44,12 @@ elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
     export SERVED_MODEL_NAME="deepseek-r1-fp8"
     export MODEL_PATH=/scratch/models/DeepSeek-R1-0528
     export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
+elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" && $MODEL == "deepseek-ai/DeepSeek-V4-Pro-DSpark" ]]; then
+    # The DSpark checkpoint is staged in the shared runner cache visible from
+    # the GB300 compute nodes. Keep a distinct alias from the legacy MTP
+    # checkpoint so other DSv4 lanes retain their node-local model mapping.
+    export MODEL_PATH="$HF_HUB_CACHE_HOST_PATH/inferencex-models/DeepSeek-V4-Pro-DSpark"
+    export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro-dspark"
 elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
     # Use the node-local /scratch SSD for the 806 GB DSv4-Pro
     # checkpoint. Faster than the Vast NFS path, but this dir only
