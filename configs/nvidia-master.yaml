@@ -7281,7 +7281,7 @@ qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp:
         decode: { num-worker: 0, tp: 2, ep: 2, dp-attn: false }
 
 minimaxm3-fp4-b300-vllm-agentic-mtp:
-  image: vllm/vllm-openai:nightly-5e35a6f4f9bbc217c599692157ca985c894373f7
+  image: vllm/vllm-openai:nightly-ac7509e2b1db40fec2f03dde1ed4e9dfdc2338c9
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: cluster:b300-nv
@@ -7290,13 +7290,14 @@ minimaxm3-fp4-b300-vllm-agentic-mtp:
   multinode: false
   scenarios:
     agentic-coding:
-    # 0.683 maps the B300 TP4 SimpleCPU point to a 1,024 GB
-    # engine-level CPU KV budget. GPU-resident points receive a zero budget.
     - dram-utilization: 0.683
       search-space:
-      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 5, 10, 15, 20] }
-      - { tp: 2, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 5] }
-      - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [30, 40, 50, 60, 65, 70, 75] }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1] }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 5, 10, 15, 20] }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [30] }
+    - dram-utilization: 1.0
+      search-space:
+      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [24] }
 
 # GB200 DeepSeek-V4 disaggregated AgentX frontier. The 3P/2D TEP8/TP8 curve
 # covers the middle/high-interactivity range omitted by the one-decode DEP
@@ -7338,7 +7339,7 @@ minimaxm3-fp4-b300-vllm-agentic-mtp:
 # the same 3 TB AgentX ceiling before the proportional-GPU rule is applied.
 # GPU-resident points receive a zero budget.
 minimaxm3-fp4-b200-vllm-agentic-mtp:
-  image: vllm/vllm-openai:nightly-5e35a6f4f9bbc217c599692157ca985c894373f7
+  image: vllm/vllm-openai:nightly-ac7509e2b1db40fec2f03dde1ed4e9dfdc2338c9
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: cluster:b200-dgxc
@@ -7349,8 +7350,11 @@ minimaxm3-fp4-b200-vllm-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.683
       search-space:
-      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 5, 8, 10, 12, 15, 20] }
-      - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [20, 30, 40] }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1] }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 5, 10, 15, 20] }
+    - dram-utilization: 1.0
+      search-space:
+      - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [15, 20, 25, 30, 32, 34, 36, 38, 40] }
 # Preserve the B200 TP4 search space and add the GB200 Pareto candidates found
 # by direct DEP and P/D tuning.
 minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp:
@@ -8056,8 +8060,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-2p2d:
 # eagle-topk 1, 4 draft tokens = 3 speculative tokens), with acceptance pinned
 # to the golden AL 2.99 (golden_al_distribution/glm5.2_mtp.yaml, thinking_on,
 # K=3) through SGLANG_SIMULATE_ACC_*. Image is bumped to v0.5.16-cu130: it is
-# the first release that reads SGLANG_SIMULATE_ACC_TOKEN_MODE, and it is the
-# tag the GLM-5.2 GB300 dynamo-sglang agentic recipes already run.
+# the first release that reads SGLANG_SIMULATE_ACC_TOKEN_MODE.
 #
 # Cookbook low-latency arm (TP8, fp8 KV, cutedsl bf16 GEMM) only, on the AgentX
 # MTP concurrency grid [1, 4, 8, 12, 16]: steps of at least 2 because
@@ -8090,7 +8093,7 @@ glm5.2-fp4-b300-sglang-agentic-mtp:
 # acceptance pinned to the golden AL 2.99 (golden_al_distribution/glm5.2_mtp.yaml,
 # thinking_on, K=3) through SGLANG_SIMULATE_ACC_*. Image lmsysorg/sglang:v0.5.16-cu130
 # is the first release that reads SGLANG_SIMULATE_ACC_TOKEN_MODE and is what the
-# B300 sibling and the GLM-5.2 GB300 dynamo-sglang agentic recipes run.
+# B300 sibling runs.
 #
 # Same single arm and concurrency grid as glm5.2-fp4-b300-sglang-agentic-mtp so
 # the two SKUs are directly comparable: cookbook low-latency TP8 with HiCache
@@ -8110,6 +8113,140 @@ glm5.2-fp4-b200-sglang-agentic-mtp:
     - dram-utilization: 0.80
       search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 4, 8, 12, 16] }
+
+glm5.2-fp4-gb300-dynamo-sglang-agentic-agg:
+  image: lmsysorg/sglang:nightly-dev-cu13-20260805-211ee642
+  model: nvidia/GLM-5.2-NVFP4
+  model-prefix: glm5.2
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-sglang
+  router: { name: dynamo-router, version: "71eb001e17fa73c742f0afe1a6ed96836cb135fd" }
+  multinode: true
+  disagg: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      # aggregated 1-worker TP8 (prefill+decode on the same GPUs)
+      - spec-decoding: mtp
+        conc-list: [2, 4]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5.2/gb300-fp4/agentic/glm5.2-agentx-agg.yaml"
+        # Aggregated worker serves prefill and decode on the same GPUs.
+        # Keep decode at zero to avoid double-counting the TP8 allocation.
+        decode:
+          num-worker: 0
+          tp: 8
+          ep: 1
+          dp-attn: false
+
+glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg:
+  image: lmsysorg/sglang:nightly-dev-cu13-20260805-211ee642
+  model: nvidia/GLM-5.2-NVFP4
+  model-prefix: glm5.2
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-sglang
+  router: { name: dynamo-router, version: "71eb001e17fa73c742f0afe1a6ed96836cb135fd" }
+  kv-p2p-transfer: nixl
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      # low-latency 1P2D TP4-prefill / TP4-decode (2 decode workers)
+      - spec-decoding: mtp
+        conc-list: [48]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5.2/gb300-fp4/agentic/glm5.2-agentx.yaml:zip_override_mtp_agentx_lowlat[0]"
+        decode:
+          num-worker: 2
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # low-latency 1P4D TP4-prefill / TP4-decode (4 decode workers)
+      - spec-decoding: mtp
+        conc-list: [48]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5.2/gb300-fp4/agentic/glm5.2-agentx.yaml:zip_override_mtp_agentx_lowlat[1]"
+        decode:
+          num-worker: 4
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # low-latency 1P6D TP4-prefill / TP4-decode (6 decode workers)
+      - spec-decoding: mtp
+        conc-list: [45]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5.2/gb300-fp4/agentic/glm5.2-agentx.yaml:zip_override_mtp_agentx_lowlat[2]"
+        decode:
+          num-worker: 6
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # high-throughput 2P1D DEP8-prefill / DEP16-decode
+      - spec-decoding: mtp
+        conc-list: [128]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5.2/gb300-fp4/agentic/glm5.2-agentx.yaml:zip_override_mtp_agentx_hightpt[0]"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      - spec-decoding: mtp
+        conc-list: [192]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5.2/gb300-fp4/agentic/glm5.2-agentx.yaml:zip_override_mtp_agentx_hightpt[1]"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
 
 qwen3.5-fp8-gb200-dynamo-sglang-mtp:
   image: lmsysorg/sglang:v0.5.14-cu130@sha256:5027e95bf6ec536856b1b52a91d1f35ff5c564ab83e8a94758a169ff09bb8df3

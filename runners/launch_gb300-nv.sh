@@ -65,6 +65,9 @@ elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp4" ]]; then
     # in our GLM-5.1 sglang recipes.
     export MODEL_PATH=/scratch/models/GLM-5.1-NVFP4
     export SRT_SLURM_MODEL_PREFIX="glm-5-fp4"
+elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp4" ]]; then
+    export MODEL_PATH=/scratch/models/GLM-5.2-NVFP4
+    export SRT_SLURM_MODEL_PREFIX="glm-5.2-fp4"
 elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH=/scratch/models/GLM-5-NVFP4
     export SRT_SLURM_MODEL_PREFIX="glm-5-fp4"
@@ -94,7 +97,7 @@ elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH=/scratch/models/Qwen3.5-397B-A17B-FP8
     export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp8"
 else
-    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4, glm5-fp4, glm5-fp8, minimaxm2.5-fp4, minimaxm2.5-fp8, kimik2.5-fp4, qwen3.5-fp4, qwen3.5-fp8"
+    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4, glm5-fp4, glm5-fp8, glm5.2-fp4, minimaxm2.5-fp4, minimaxm2.5-fp8, kimik2.5-fp4, qwen3.5-fp4, qwen3.5-fp8"
     exit 1
 fi
 
@@ -233,6 +236,16 @@ elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX =
     mkdir -p recipes/sglang/deepseek-v4/agentic
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/agentic" \
         recipes/sglang/deepseek-v4/agentic
+elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.2" ]]; then
+    # GLM-5.2 GB300 sglang AgentX: srt-slurm main has the agentx-mvp scenario,
+    # the zip_override sweep selectors, and the multi-frontend session-affinity
+    # schema these recipes need.
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    git checkout main
+    mkdir -p recipes/sglang/glm5.2/gb300-fp4
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5.2/gb300-fp4" \
+        recipes/sglang/glm5.2/gb300-fp4
 elif [[ "$IS_AGENTIC" == "1" ]]; then
     # Agentic recipes use NVIDIA/srt-slurm v1.0.36. This is the upstream
     # version validated in InferenceX PR #2302 and includes per-node DP,
