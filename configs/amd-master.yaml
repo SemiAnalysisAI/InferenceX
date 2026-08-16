@@ -623,7 +623,7 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
           - "DECODE_MTP_SIZE=2"
 
 kimik3-fp4-mi355x-vllm-agentic-mtp:
-  image: vllm/vllm-openai-rocm:nightly-cb8104839c141609d99f1254459ef3a4f1bd4263
+  image: vllm/vllm-openai-rocm:nightly-8efa13b700f1836657699cae2503dc2feab27fa0
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:mi355x-amds
@@ -1321,7 +1321,7 @@ kimik3-fp4-mi355x-vllm-agentic-dspark:
   # kimik3_fp4_mi355x_vllm_mtp.sh, which forces the draft causal (the ROCm fp8-asm
   # requirement) and serves the mandated DSpark config (gpu-mem 0.95 / seqs 64 /
   # MNBT 16384 / FULL_AND_PIECEWISE / KV pin 44.4 GiB (~2.8M tokens).
-  image: vllm/vllm-openai-rocm:nightly-cb8104839c141609d99f1254459ef3a4f1bd4263
+  image: vllm/vllm-openai-rocm:nightly-8efa13b700f1836657699cae2503dc2feab27fa0
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:mi355x-amds

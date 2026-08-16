@@ -6,7 +6,7 @@
 # Kimi-K3 FP4 MI355X DSpark agentic benchmark runs in. Run this INSIDE a
 # container started from:
 #
-#   vllm/vllm-openai-rocm:nightly-cb8104839c141609d99f1254459ef3a4f1bd4263
+#   vllm/vllm-openai-rocm:nightly-8efa13b700f1836657699cae2503dc2feab27fa0
 #
 # (method borrowed from InferenceX #2508: fetch/build the deltas the base image
 # lacks, apply them into the installed dist-packages + a node-local aiter, then
@@ -19,7 +19,7 @@
 #       --security-opt seccomp=unconfined --security-opt label=disable \
 #       --cap-add=SYS_PTRACE -e GPU_ARCHS=gfx950 \
 #       --entrypoint sleep \
-#       vllm/vllm-openai-rocm:nightly-cb8104839c141609d99f1254459ef3a4f1bd4263 infinity
+#       vllm/vllm-openai-rocm:nightly-8efa13b700f1836657699cae2503dc2feab27fa0 infinity
 #   docker cp benchmarks/single_node/agentic k3-dspark-benchmark:/opt/k3-recipe
 #   docker exec k3-dspark-benchmark bash /opt/k3-recipe/apply_k3_fp4_fp8asm_dspark_patches.sh
 #
