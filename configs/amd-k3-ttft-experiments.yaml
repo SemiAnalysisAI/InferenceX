@@ -6,25 +6,40 @@
 # drives the TTFT tail, and holding it fixed leaves the cluster free for the
 # comparisons that matter.
 #
-# The tail comes from occasional full recomputes of 300-500k-token prompts,
-# which hold the prefill engine for 50-70s. Two independent levers:
-#   how often a blocker appears -> cache capacity  (dram-utilization)
-#   how much damage one does    -> scheduling      (max-num-batched-tokens,
-#                                  plus the long-prefill cap already in
-#                                  models_vllm.yaml)
+# The tail is prefill queueing behind occasional full recomputes of 300-500k
+# token prompts, which hold the engine 50-70s. Recompute volume predicts queue
+# wait (r=+0.98) while elapsed time does not (r=-0.07), so the only lever is
+# how often a blocker appears, i.e. cache capacity.
+#
+# Two of the three capacity levers are now closed:
+#
+#   GPU KV pool. Raising gpu-memory-utilization to 0.96 grows the pool from
+#   ~51 to 68.26 GiB but leaves "Available Free mem : 0 MB", and the prefill
+#   engine dies on the first real prompts with HSA_STATUS_ERROR_OUT_OF_RESOURCES
+#   (run 31935621301). The headroom vLLM offers as "fully utilize gpu memory"
+#   is the scratch the engine needs; it is not free KV. Arm deleted, do not
+#   re-add without a smaller step and a scratch measurement.
+#
+#   Chunk size. Capping long prefills at 4096 cost 41% of prefill throughput
+#   (7,903 -> 4,631 tok/s) and was reverted in e33e9ad.
+#
+# That leaves the CPU prefix tier, which until 3a2bfa4 could not be tested at
+# all: e2e-tests.yml never forwarded total-cpu-dram-gb, so every arm ran on the
+# workflow default of 600 GB no matter what dram-utilization said. The two arms
+# below are the first real points on that curve, against the historical
+# 600 GB baseline.
 #
 # Scratch sweep. Delete before opening a PR.
 #
 # No YAML anchors here: validate_master_config treats every top-level key as a
 # config entry, so an anchor-holding key fails schema validation.
 
-# Grow the GPU KV pool. The prefill engine reports 281.49 of 287.98 GiB free
-# while gpu-memory-utilization 0.9 caps the budget at 259.19 GiB, leaving the
-# KV pool at 50.98 GiB against the 71.77 GiB vLLM says is reachable. A larger
-# pool means fewer prefixes evicted, so fewer full recomputes. Verified safe:
-# an earlier arm at 0.96 started and served with no OOM and no
-# HSA_STATUS_ERROR_OUT_OF_RESOURCES.
-kimik3-ttft-exp-gpumem096:
+# The stock recipe as written: dram-utilization 0.50 -> 1499 GB. Every published
+# K3 conc8 number so far was really 600 GB, so this arm is not a repeat of the
+# baseline, it is the baseline the recipe intended. At the engine's measured
+# ~41 KiB/token this moves the tier from ~14M to ~36M tokens, against a working
+# set that passes 31M tokens inside 900s.
+kimik3-ttft-exp-dram050:
   image: vllm/vllm-openai-rocm:nightly-ac7509e2b1db40fec2f03dde1ed4e9dfdc2338c9
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
@@ -52,7 +67,6 @@ kimik3-ttft-exp-gpumem096:
           - "PREFILL_NODES=1"
           - "MORIIO_READ_MODE=true"
           - "MORI_WAITALL_BUILD=0"
-          - "PREFILL_GPU_MEM_UTIL=0.96"
         decode:
           num-worker: 1
           tp: 8
@@ -62,52 +76,10 @@ kimik3-ttft-exp-gpumem096:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=2"
 
-# Smaller step budget, kept only as the counterpart to the long-prefill cap
-# finding: capping long prefills at 4096 dropped prefill throughput from 7,903
-# to 4,631 tok/s, so 8192 is expected to cost throughput too. Run it to bound
-# how much of that loss comes from chunk size rather than from the cap's
-# scheduling behaviour.
-kimik3-ttft-exp-batched8192:
-  image: vllm/vllm-openai-rocm:nightly-ac7509e2b1db40fec2f03dde1ed4e9dfdc2338c9
-  model: moonshotai/Kimi-K3
-  model-prefix: kimik3
-  runner: cluster:mi355x-amds
-  precision: fp4
-  framework: vllm-disagg
-  router: { name: vllm-router, version: "nightly-20260809-d2ba586" }
-  kv-p2p-transfer: mori
-  multinode: true
-  disagg: true
-  scenarios:
-    agentic-coding:
-    - dram-utilization: 0.50
-      search-space:
-      - spec-decoding: mtp
-        kv-offloading: dram
-        kv-offload-backend: { name: vllm-simple }
-        conc-list: [8]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-          - "MORIIO_READ_MODE=true"
-          - "MORI_WAITALL_BUILD=0"
-          - "PREFILL_MAX_BATCHED_TOKENS=8192"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=2"
-
-# Grow the CPU prefix-cache tier. The node has 2938 GB available; 0.50 uses
-# 1397 GB, which holds roughly 4.15M tokens, while the working set passes 31M
-# tokens inside 900s.
+# The far end of the same lever: 0.80 -> 2399 GB, roughly 57M tokens, enough to
+# hold the whole observed working set. If the tail does not improve between
+# 1499 and 2399 GB, capacity is not the binding constraint and the recompute
+# clusters come from something the tier cannot cache.
 kimik3-ttft-exp-dram080:
   image: vllm/vllm-openai-rocm:nightly-ac7509e2b1db40fec2f03dde1ed4e9dfdc2338c9
   model: moonshotai/Kimi-K3
