@@ -7176,7 +7176,7 @@ qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp:
         decode: { num-worker: 0, tp: 2, ep: 2, dp-attn: false }
 
 minimaxm3-fp4-b300-vllm-agentic-mtp:
-  image: vllm/vllm-openai:nightly-5e35a6f4f9bbc217c599692157ca985c894373f7
+  image: vllm/vllm-openai:nightly-ac7509e2b1db40fec2f03dde1ed4e9dfdc2338c9
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: cluster:b300-nv
@@ -7185,13 +7185,14 @@ minimaxm3-fp4-b300-vllm-agentic-mtp:
   multinode: false
   scenarios:
     agentic-coding:
-    # 0.683 maps the B300 TP4 SimpleCPU point to a 1,024 GB
-    # engine-level CPU KV budget. GPU-resident points receive a zero budget.
     - dram-utilization: 0.683
       search-space:
-      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 5, 10, 15, 20] }
-      - { tp: 2, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 5] }
-      - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [30, 40, 50, 60, 65, 70, 75] }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1] }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 5, 10, 15, 20] }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [30] }
+    - dram-utilization: 1.0
+      search-space:
+      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [24] }
 
 # GB200 DeepSeek-V4 disaggregated AgentX frontier. The 3P/2D TEP8/TP8 curve
 # covers the middle/high-interactivity range omitted by the one-decode DEP
