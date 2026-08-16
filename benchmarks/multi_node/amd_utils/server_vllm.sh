@@ -216,9 +216,31 @@ for _cfg in PREFILL DECODE; do
     fi
 done
 
+# Single-value tuning knobs. These exist alongside *_EXTRA_SERVE_ARGS because
+# a sweep can only reach them through a config's additional-settings, and the
+# workflow joins those with spaces before handing them to `export`
+# (benchmark-multinode-tmpl.yml), so any value containing a space is unusable
+# there. Numeric knobs pass through fine.
+set_serve_flag() {
+    local var=$1 flag=$2 value=$3
+    [[ -z "$value" ]] && return 0
+    if echo "${!var}" | grep -q -- "$flag"; then
+        printf -v "$var" '%s' \
+            "$(echo "${!var}" | sed -E "s#${flag}[[:space:]]+[^[:space:]]+#${flag} ${value}#g")"
+    else
+        printf -v "$var" '%s %s %s' "${!var}" "$flag" "$value"
+    fi
+}
+
+set_serve_flag PREFILL_SERVER_CONFIG --gpu-memory-utilization      "${PREFILL_GPU_MEM_UTIL:-}"
+set_serve_flag DECODE_SERVER_CONFIG  --gpu-memory-utilization      "${DECODE_GPU_MEM_UTIL:-}"
+set_serve_flag PREFILL_SERVER_CONFIG --long-prefill-token-threshold "${PREFILL_LONG_PREFILL_TOKENS:-}"
+set_serve_flag PREFILL_SERVER_CONFIG --max-num-batched-tokens      "${PREFILL_MAX_BATCHED_TOKENS:-}"
+set_serve_flag DECODE_SERVER_CONFIG  --max-num-batched-tokens      "${DECODE_MAX_BATCHED_TOKENS:-}"
+
 # Appended last so they win: vLLM's argparse keeps the final occurrence of a
-# repeated option. Lets a sweep vary a serve flag (gpu-memory-utilization,
-# max-num-batched-tokens, ...) without forking models_vllm.yaml per arm.
+# repeated option. Free-form escape hatch for local runs, where the value can
+# contain spaces.
 if [[ -n "${PREFILL_EXTRA_SERVE_ARGS:-}" ]]; then
     PREFILL_SERVER_CONFIG+=" ${PREFILL_EXTRA_SERVE_ARGS}"
 fi
