@@ -32,6 +32,7 @@ resources:
   gpus_per_decode: 2
 backend:
   type: trtllm
+  publish_events_and_metrics: true
   prefill_environment:
     CUDA_SCALE_LAUNCH_QUEUES: 4x
     MIMALLOC_ARENA_RESERVE: '0'
@@ -111,7 +112,7 @@ backend:
         - cuda_core
       pipeline_parallel_size: 1
       print_iter_log: true
-      return_perf_metrics: false
+      return_perf_metrics: true
       scheduler_config:
         capacity_scheduler_policy: MAX_UTILIZATION
       tensor_parallel_size: 1
@@ -177,7 +178,7 @@ backend:
         - cuda_core
       pipeline_parallel_size: 1
       print_iter_log: true
-      return_perf_metrics: false
+      return_perf_metrics: true
       scheduler_config:
         capacity_scheduler_policy: GUARANTEED_NO_EVICT
       speculative_config:
@@ -211,6 +212,7 @@ benchmark:
     IS_MULTINODE: 'true'
     AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
     AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
+    AIPERF_REQUIRED_SERVER_METRIC_PREFIX: trtllm_
     AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
     HF_HUB_CACHE: /hf_hub_cache
     WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126_256k
