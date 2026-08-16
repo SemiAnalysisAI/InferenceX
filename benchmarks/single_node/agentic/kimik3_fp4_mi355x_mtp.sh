@@ -97,13 +97,13 @@ bash "$(dirname "$0")/apply_k3_container_patches.sh" || true
 # that crash is gated on VLLM_ROCM_USE_AITER alone (AiterFlashAttnPrefillBackend
 # .is_available() consults only rocm_aiter_ops.is_enabled()), so disabling the
 # others just loses the MoE kernels while keeping the failure.
-export VLLM_ROCM_AITER_MLA_ASM_PADDING=asm
-export VLLM_ROCM_USE_AITER=1
-export SAFETENSORS_FAST_GPU=1
-export VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4=1
-export AITER_BF16_FP8_MOE_BOUND=0
-# REQUIRED on ROCm per the upstream recipe: the build auto-enables this to 1.
-export VLLM_USE_BREAKABLE_CUDAGRAPH=0
+# export VLLM_ROCM_AITER_MLA_ASM_PADDING=asm
+# export VLLM_ROCM_USE_AITER=1
+# export SAFETENSORS_FAST_GPU=1
+# export VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4=1
+# export AITER_BF16_FP8_MOE_BOUND=0
+# # REQUIRED on ROCm per the upstream recipe: the build auto-enables this to 1.
+# export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 
 # Workaround for MEC FW <177 RCCL memory reclaim issue (shared with the other
 # gfx950 recipes in this tree).
