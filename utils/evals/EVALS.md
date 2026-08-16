@@ -291,6 +291,10 @@ model-quality diagnostics:
 | `bfcl_vllm_minimax_m3` | `simple_python` (400), `multiple` (200), `parallel` (200), `parallel_multiple` (200) | 1000 |
 | `bfcl_vllm_kimi` | The same 1000 single-turn cases plus 60 each from `multi_turn_base`, `multi_turn_miss_func`, `multi_turn_miss_param`, and `multi_turn_long_context` | 1240 |
 
+These are the model-specific non-live and multi-turn slices used by the pinned
+BFCL vLLM integration, not every BFCL V4 leaderboard category. They exclude
+the V4 agentic web-search and memory evaluations.
+
 Select these suites explicitly with `eval-framework: bfcl`; `bfcl_smoke`
 remains the framework default. Both suites use BFCL's OpenAI completions
 handler against the local endpoint rather than a hosted-provider handler. They
