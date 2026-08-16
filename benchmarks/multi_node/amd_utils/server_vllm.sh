@@ -204,6 +204,18 @@ if [[ "${DECODE_ENABLE_DP:-false}" == "true" ]] && ! echo "$DECODE_SERVER_CONFIG
     DECODE_SERVER_CONFIG+=" --enable-dp-attention"
 fi
 
+# Health and metrics are polled every few seconds for the whole run, and each
+# poll wrote an access-log line: that spam was the bulk of the engine logs
+# shipped in CI artifacts. Suppressing the access log for those endpoints does
+# not affect metrics collection, and keeps real request lines.
+QUIET_ENDPOINTS="/health,/metrics,/ping,/load"
+for _cfg in PREFILL DECODE; do
+    _v="${_cfg}_SERVER_CONFIG"
+    if ! echo "${!_v}" | grep -q -- '--disable-access-log-for-endpoints'; then
+        printf -v "$_v" '%s --disable-access-log-for-endpoints %s' "${!_v}" "$QUIET_ENDPOINTS"
+    fi
+done
+
 # Appended last so they win: vLLM's argparse keeps the final occurrence of a
 # repeated option. Lets a sweep vary a serve flag (gpu-memory-utilization,
 # max-num-batched-tokens, ...) without forking models_vllm.yaml per arm.

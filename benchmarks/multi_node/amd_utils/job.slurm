@@ -96,6 +96,10 @@ DECODE_MTP_SIZE=${DECODE_MTP_SIZE:-0}
 ROUTER_TYPE="${ROUTER_TYPE:-vllm-router}"
 ROUTER_PORT="${ROUTER_PORT:-30000}"
 PROXY_PING_PORT="${PROXY_PING_PORT:-36367}"
+# At info the router logs several CONSISTENT_HASH_DEBUG lines per request, which
+# dominated the artifact. Raise to info when routing decisions are the thing
+# under investigation.
+ROUTER_LOG_LEVEL="${ROUTER_LOG_LEVEL:-warn}"
 
 # =============================================================================
 # Model Path Resolution
@@ -797,7 +801,7 @@ if [[ \"$ENGINE\" == \"vllm-disagg\" && \"$ROUTER_TYPE\" == \"vllm-router\" && \
             --policy consistent_hash \
             --prefill-policy consistent_hash \
             --decode-policy consistent_hash \
-            --log-level info 2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/vllm_router_\$(hostname).log \"
+            --log-level ${ROUTER_LOG_LEVEL} 2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/vllm_router_\$(hostname).log \"
 fi
 
 # Skip exec on vllm-disagg rank 0 so we can stop the router after the main
