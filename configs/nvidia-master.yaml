@@ -8576,7 +8576,7 @@ dsv4-fp4-b300-dynamo-sglang-agentic-mtp-agg:
           dp-attn: true
           additional-settings:
           - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.82"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.77"
           - "CONFIG_FILE=recipes/sglang/deepseek-v4/agentic/agg-b300-dep4-mtp-kvoffload.yaml"
         decode:
           num-worker: 0
@@ -8594,7 +8594,7 @@ dsv4-fp4-b300-dynamo-sglang-agentic-mtp-agg:
           dp-attn: true
           additional-settings:
           - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.82"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.77"
           - "CONFIG_FILE=recipes/sglang/deepseek-v4/agentic/agg-b300-dep8-mtp-kvoffload.yaml"
         decode:
           num-worker: 0
