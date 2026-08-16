@@ -2093,29 +2093,64 @@ diff --git a/vllm/v1/core/kv_cache_utils.py b/vllm/v1/core/kv_cache_utils.py
 index ad51e4b2b..40fea23dc 100644
 --- a/vllm/v1/core/kv_cache_utils.py
 +++ b/vllm/v1/core/kv_cache_utils.py
-@@ -1208,9 +1208,23 @@ def _get_kv_cache_groups_uniform_page_size(
+@@ -1208,9 +1208,27 @@ def _get_kv_cache_groups_uniform_page_size(
      # is the minimum number of layers among all attention types. Need a better
      # strategy if we want to support more complex patterns (e.g., 20 full + 30
      # sw, where the group size should be 10).
 -    min_num_layers = min([len(layers) for layers in layer_buckets])
-+    bucket_sizes = [len(layers) for layers in layer_buckets]
-+    max_num_layers = max(bucket_sizes)
-+    # A drafter can add its own attention type with far fewer layers than the
-+    # target (e.g. an MLA-only draft on a hybrid mamba/attention target). Letting
-+    # that bucket set group_size over-splits the target's layers, and makes an
-+    # engine that holds the drafter group its mamba layers differently from one
-+    # that does not, breaking PD-disaggregated KV transfer. Draft layers are few,
-+    # so padding them up to the target's group size is cheap.
-+    primary_sizes = [
-+        len(layers)
-+        for layers, specs in zip(layer_buckets, spec_buckets)
-+        if not all(
++    primary_layer_buckets: list[list[str]] = []
++    draft_layer_buckets: list[list[str]] = []
++    for layers, specs in zip(layer_buckets, spec_buckets):
++        if all(
 +            getattr(spec, "non_causal_multi_token_decode", False) for spec in specs
-+        )
-+    ]
-+    min_num_layers = min(primary_sizes or bucket_sizes)
++        ):
++            draft_layer_buckets.append(layers)
++        else:
++            primary_layer_buckets.append(layers)
++
++    # A drafter can add its own attention type with far fewer layers than the
++    # target (e.g. an MLA-only draft on a hybrid mamba/attention target).
++    # Keeping those draft-only buckets in the target grouping either lets the
++    # 5-layer draft bucket over-split target layers, or pads it to a 24-layer
++    # target group and wastes hundreds of percent of draft KV. Group primary
++    # target buckets together, then append each draft-only bucket as its own
++    # exact-sized group.
++    primary_sizes = [len(layers) for layers in primary_layer_buckets]
++    min_num_layers = min(primary_sizes or [len(layers) for layers in layer_buckets])
      group_size = min_num_layers
 -    max_num_layers = max([len(layers) for layers in layer_buckets])
++    max_num_layers = max(primary_sizes or [len(layers) for layers in layer_buckets])
      if max_num_layers < min_num_layers * 1.5:
          # If the number of layers is not much larger than the minimum number of
          # layers, use the maximum number of layers as the group size to avoid
+@@ -1230,27 +1248,29 @@ def _get_kv_cache_groups_uniform_page_size(
+         # layers while accommodating speculative decoding drafters that add
+         # extra layers to one attention type.
+         group_size = max_num_layers
+     grouped_layers = []
+-    for layers in layer_buckets:
++    for layers in primary_layer_buckets:
+         num_padding_layers = group_size - len(layers) % group_size
+         if num_padding_layers != group_size:
+             logger.warning(
+                 "Add %d padding layers, may waste at most %.2f%% KV cache memory",  # noqa
+                 num_padding_layers,
+                 num_padding_layers / len(layers) * 100,
+             )
+         num_groups = cdiv(len(layers), group_size)
+         # In PP case, say if we have
+         # - stage 0: full.0, sw.0, sw.1
+         # - stage 1: full.1, sw.2, sw.3
+         # We should have 3 groups: (full.0, full.1), (sw.0, sw.2), (sw.1, sw.3)
+         # It can't be (full.0, full.1), (sw.0, sw.1), (sw.2, sw.3) because
+         # the 3 groups in stage 0 will be (full.0), (sw.0, sw.1), (empty group)
+         # and it will be padded to (full.0, padding), (sw.0, sw.1),
+         # (padding, padding) to ensure the number of layers in each group is
+         # the same and will cause memory waste.
+         # To avoid this, we assign layers[i::num_groups] to the i-th group
+         # instead of layers[i * group_size: (i + 1) * group_size]
+         for i in range(num_groups):
+             grouped_layers.append(layers[i::num_groups])
++    for layers in draft_layer_buckets:
++        grouped_layers.append(layers)
+     return create_kv_cache_group_specs(kv_cache_spec, grouped_layers)
