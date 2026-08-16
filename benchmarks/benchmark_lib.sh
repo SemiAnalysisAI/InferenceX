@@ -1220,6 +1220,7 @@ _write_lm_eval_meta_json() {
   "framework": "${fw:-unknown}",
   "precision": "${prec:-unknown}",
   "spec_decoding": "${SPEC_DECODING:-}",
+  "recipe_fingerprint": "${RECIPE_FINGERPRINT:-}",
   "tp": ${TP:-1},
   "pp": ${PP_SIZE:-1},
   "dcp_size": ${DCP_SIZE:-1},
@@ -2038,6 +2039,9 @@ build_replay_cmd() {
     # CPU on minimax-m2.5 at high concurrency. Lossless for vLLM (server
     # usage is authoritative).
     REPLAY_CMD+=" --use-server-token-count"
+    if [ -n "${AIPERF_EXTRA_INPUTS:-}" ]; then
+        REPLAY_CMD+=" --extra-inputs $AIPERF_EXTRA_INPUTS"
+    fi
     # Dynamo's KV router needs an explicit conversation session binding to
     # keep later turns on the prefill worker that owns their prefix blocks.
     # X-Correlation-ID is useful tracing metadata but does not establish that
