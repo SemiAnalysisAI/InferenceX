@@ -156,19 +156,28 @@ print(f'PREFILL_MODEL_ENVS=\"{pev}\"')
 echo "Loaded model configuration for: $MODEL_NAME"
 
 # Apply tensor-parallel size and EP/DP flags from submit pipeline.
-if [[ -n "${PREFILL_TP_SIZE:-}" ]]; then
-    if echo "$PREFILL_SERVER_CONFIG" | grep -q -- '--tensor-parallel-size'; then
-        PREFILL_SERVER_CONFIG=$(echo "$PREFILL_SERVER_CONFIG" | sed -E "s/--tensor-parallel-size[[:space:]]+[0-9]+/--tensor-parallel-size ${PREFILL_TP_SIZE}/g")
+set_parallel_flag() {
+    local var=$1 flag=$2 value=$3
+    [[ -z "$value" ]] && return 0
+    if echo "${!var}" | grep -q -- "$flag"; then
+        printf -v "$var" '%s' \
+            "$(echo "${!var}" | sed -E "s/${flag}[[:space:]]+[0-9]+/${flag} ${value}/g")"
     else
-        PREFILL_SERVER_CONFIG+=" --tensor-parallel-size ${PREFILL_TP_SIZE}"
+        printf -v "$var" '%s %s %s' "${!var}" "$flag" "$value"
     fi
+}
+
+if [[ -n "${PREFILL_TP_SIZE:-}" ]]; then
+    set_parallel_flag PREFILL_SERVER_CONFIG --tensor-parallel-size "${PREFILL_TP_SIZE}"
 fi
 if [[ -n "${DECODE_TP_SIZE:-}" ]]; then
-    if echo "$DECODE_SERVER_CONFIG" | grep -q -- '--tensor-parallel-size'; then
-        DECODE_SERVER_CONFIG=$(echo "$DECODE_SERVER_CONFIG" | sed -E "s/--tensor-parallel-size[[:space:]]+[0-9]+/--tensor-parallel-size ${DECODE_TP_SIZE}/g")
-    else
-        DECODE_SERVER_CONFIG+=" --tensor-parallel-size ${DECODE_TP_SIZE}"
-    fi
+    set_parallel_flag DECODE_SERVER_CONFIG --tensor-parallel-size "${DECODE_TP_SIZE}"
+fi
+if [[ -n "${PREFILL_PP_SIZE:-}" && "${PREFILL_PP_SIZE}" != "1" ]]; then
+    set_parallel_flag PREFILL_SERVER_CONFIG --pipeline-parallel-size "${PREFILL_PP_SIZE}"
+fi
+if [[ -n "${DECODE_PP_SIZE:-}" && "${DECODE_PP_SIZE}" != "1" ]]; then
+    set_parallel_flag DECODE_SERVER_CONFIG --pipeline-parallel-size "${DECODE_PP_SIZE}"
 fi
 # Throughput arms pin a synthetic acceptance length, which commits drafted
 # tokens without consulting the target's logits: fast, but the generated text is
