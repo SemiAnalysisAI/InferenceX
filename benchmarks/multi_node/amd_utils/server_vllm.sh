@@ -170,6 +170,27 @@ if [[ -n "${DECODE_TP_SIZE:-}" ]]; then
         DECODE_SERVER_CONFIG+=" --tensor-parallel-size ${DECODE_TP_SIZE}"
     fi
 fi
+# Throughput arms pin a synthetic acceptance length, which commits drafted
+# tokens without consulting the target's logits: fast, but the generated text is
+# wrong. An accuracy run has to verify for real. Without this, GSM8K scored
+# 0.3518 against the 0.9 gate while the same server measured throughput fine.
+# The single-node siblings (kimik3_fp4_mi355x_mtp.sh, dsv4_fp4_b300_vllm_mtp.sh)
+# make the same split; the multi-node path only documented it.
+# vLLM rejects synthetic_acceptance_length unless the method is 'synthetic',
+# so drop that key in the same rewrite.
+if [[ "${EVAL_ONLY:-false}" == "true" || "${RUN_EVAL:-false}" == "true" ]]; then
+    _real_verify() {
+        printf '%s' "$1" |
+            sed -E 's/\\?"rejection_sample_method\\?"[[:space:]]*:[[:space:]]*\\?"synthetic\\?"/\\"rejection_sample_method\\": \\"block\\"/g' |
+            sed -E 's/,[[:space:]]*\\?"synthetic_acceptance_length\\?"[[:space:]]*:[[:space:]]*[0-9.]+//g'
+    }
+    if echo "$PREFILL_SERVER_CONFIG" | grep -q 'rejection_sample_method'; then
+        PREFILL_SERVER_CONFIG=$(_real_verify "$PREFILL_SERVER_CONFIG")
+        DECODE_SERVER_CONFIG=$(_real_verify "$DECODE_SERVER_CONFIG")
+        echo "[eval] speculative decoding switched to real block verification"
+    fi
+fi
+
 if [[ "${PREFILL_ENABLE_EP:-false}" == "true" ]] && ! echo "$PREFILL_SERVER_CONFIG" | grep -q -- '--enable-expert-parallel'; then
     PREFILL_SERVER_CONFIG+=" --enable-expert-parallel"
 fi
