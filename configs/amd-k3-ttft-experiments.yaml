@@ -1,0 +1,100 @@
+# Controlled conc8 TTFT experiments for Kimi-K3 multi-node disagg.
+#
+# Each key is kimik3-fp4-mi355x-vllm-disagg-agentic-mtp-read reduced to a
+# single concurrency, changing exactly one variable, so an arm can be compared
+# against that key's own conc8 point. READ only: read vs write is not what
+# drives the TTFT tail, and holding it fixed leaves the cluster free for the
+# comparisons that matter.
+#
+# The tail comes from occasional full recomputes of 300-500k-token prompts,
+# which hold the prefill engine for 50-70s. Two independent levers:
+#   how often a blocker appears -> cache capacity  (dram-utilization)
+#   how much damage one does    -> scheduling      (max-num-batched-tokens,
+#                                  plus the long-prefill cap already in
+#                                  models_vllm.yaml)
+#
+# Scratch sweep. Delete before opening a PR.
+#
+# No YAML anchors here: validate_master_config treats every top-level key as a
+# config entry, so an anchor-holding key fails schema validation.
+
+# Match the single-node step budget. Neither path sets the flag, so the
+# multi-node engine runs on V1's 16384 default while the single-node recipe,
+# whose tail is much better, does not set VLLM_USE_V1 at all.
+kimik3-ttft-exp-batched8192:
+  image: vllm/vllm-openai-rocm:nightly-ac7509e2b1db40fec2f03dde1ed4e9dfdc2338c9
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm-disagg
+  router: { name: vllm-router, version: "nightly-20260809-d2ba586" }
+  kv-p2p-transfer: mori
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.50
+      search-space:
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        conc-list: [8]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "MORIIO_READ_MODE=true"
+          - "MORI_WAITALL_BUILD=0"
+          - "PREFILL_MAX_BATCHED_TOKENS=8192"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=2"
+
+# Grow the CPU prefix-cache tier. The node has 2938 GB available; 0.50 uses
+# 1397 GB, which holds roughly 4.15M tokens, while the working set passes 31M
+# tokens inside 900s.
+kimik3-ttft-exp-dram080:
+  image: vllm/vllm-openai-rocm:nightly-ac7509e2b1db40fec2f03dde1ed4e9dfdc2338c9
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm-disagg
+  router: { name: vllm-router, version: "nightly-20260809-d2ba586" }
+  kv-p2p-transfer: mori
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        conc-list: [8]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "MORIIO_READ_MODE=true"
+          - "MORI_WAITALL_BUILD=0"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=2"
