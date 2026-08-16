@@ -76,6 +76,107 @@ kimik3-ttft-exp-dram050:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=2"
 
+# Supply side: give the prefill engine back the throughput async scheduling was
+# meant to provide.
+#
+# The prefill engine runs at a ~120% duty cycle (4,310s of prefill work inside a
+# 3,600s run), so throughput is not a second-order concern here - it is the
+# denominator of the whole problem. Both K3 paths currently pass
+# --no-async-scheduling, added to dodge a KV block-pool crash
+# (`assert block.ref_cnt == 0` via defer_block_free). But
+# apply_k3_container_patches.sh records that the same crash was reproduced on
+# the external block path *with* the flag: "--no-async-scheduling was tested and
+# does NOT help (c12 died at 490 s)", and ships patch_kv_blockpool for it.
+#
+# So we are paying async scheduling's throughput tax for a mitigation that its
+# own notes say does not mitigate. Prefill only, to keep the variable single.
+# If the block-pool assert reappears, that is the answer and the flag goes back.
+kimik3-ttft-exp-async:
+  image: vllm/vllm-openai-rocm:nightly-ac7509e2b1db40fec2f03dde1ed4e9dfdc2338c9
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm-disagg
+  router: { name: vllm-router, version: "nightly-20260809-d2ba586" }
+  kv-p2p-transfer: mori
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.50
+      search-space:
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        conc-list: [8]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "MORIIO_READ_MODE=true"
+          - "MORI_WAITALL_BUILD=0"
+          - "PREFILL_EXTRA_SERVE_ARGS=--async-scheduling"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=2"
+
+# Supply side, the blunt version: two prefill nodes instead of one.
+#
+# Nothing else on the list changes the service rate itself. At 8,692 tok/s
+# against an offered 10,407 tok/s, a second prefill worker takes the duty cycle
+# from ~120% to ~60% and the queue should collapse even if recompute volume
+# never moves. It also doubles the GPU KV pool available for prefixes, which the
+# 0.96 experiment showed cannot be bought any other way.
+#
+# Costs a third node. If the tail improves here and nowhere else, the honest
+# conclusion is that 1P1D is simply under-provisioned for this corpus rather
+# than misconfigured.
+kimik3-ttft-exp-2p1d:
+  image: vllm/vllm-openai-rocm:nightly-ac7509e2b1db40fec2f03dde1ed4e9dfdc2338c9
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm-disagg
+  router: { name: vllm-router, version: "nightly-20260809-d2ba586" }
+  kv-p2p-transfer: mori
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.50
+      search-space:
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        conc-list: [8]
+        prefill:
+          num-worker: 2
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=2"
+          - "MORIIO_READ_MODE=true"
+          - "MORI_WAITALL_BUILD=0"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=2"
+
 # Head-of-line blocking, attacked without paying the throughput tax that killed
 # the 4096 cap.
 #
@@ -175,3 +276,37 @@ kimik3-ttft-exp-dram080:
           additional-settings:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=2"
+
+# Is the PD split itself costing prefix reuse? Single node, same conc, same
+# corpus, and dram-utilization deliberately set to 0.50 rather than the
+# published single-node 0.40 so the CPU tier is 1499 GB on both sides and the
+# only difference left is the topology.
+#
+# The hypothesis this tests: in 1P1D the model's output tokens are generated on
+# the decode engine, so their KV exists only there. The next turn's prompt is
+# old prompt + model output + new tool result, and prefix caching is strictly
+# sequential, so the prefill engine's match dies at the output segment and
+# everything after it - including the fresh tool result - is recomputed. One
+# engine holding both should match straight through.
+#
+# Read it on vllm:prefix_cache_hits / prefix_cache_queries, not on TTFT: a
+# single node also has no KV transfer and a different decode story, so TTFT is
+# not comparable but the prefill hit rate is.
+kimik3-ttft-exp-singlenode-c8:
+  image: vllm/vllm-openai-rocm:nightly-ac7509e2b1db40fec2f03dde1ed4e9dfdc2338c9
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.50
+      search-space:
+      - tp: 8
+        ep: 1
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        conc-list: [8]
+        spec-decoding: mtp
