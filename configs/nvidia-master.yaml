@@ -8551,6 +8551,27 @@ glm5.1-fp8-b200-tilert:
           additional-settings:
           - "DECODE_NODES=1"
 
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - spec-decoding: "mtp"
+        conc-list: [1]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_IMAGE=vllm/vllm-openai:v0.26.0"
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+
 dsv4-fp4-b300-dynamo-sglang-agentic-mtp-agg:
   image: lmsysorg/sglang:nightly-dev-cu13-20260816-4a6dc267
   model: deepseek-ai/DeepSeek-V4-Pro-DSpark
@@ -8601,23 +8622,3 @@ dsv4-fp4-b300-dynamo-sglang-agentic-mtp-agg:
           tp: 8
           ep: 8
           dp-attn: true
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - spec-decoding: "mtp"
-        conc-list: [1]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_IMAGE=vllm/vllm-openai:v0.26.0"
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=1"
