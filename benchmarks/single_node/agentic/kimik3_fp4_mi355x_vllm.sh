@@ -78,6 +78,13 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     "")
         require_agentic_kv_offload_none
         ;;
+    native)
+        require_agentic_kv_offload_backend native
+        OFFLOAD_ARGS=(
+            --kv-offloading-size "${KV_OFFLOADING_SIZE:-$TOTAL_CPU_DRAM_GB}"
+            --kv-offloading-backend native
+        )
+        ;;
     vllm-simple)
         require_agentic_kv_offload_backend vllm-simple
         CPU_BYTES_PER_RANK=$(( TOTAL_CPU_DRAM_GB * 1000 * 1000 * 1000 / TP ))
