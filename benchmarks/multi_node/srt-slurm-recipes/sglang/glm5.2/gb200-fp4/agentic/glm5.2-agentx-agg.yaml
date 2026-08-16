@@ -50,26 +50,30 @@ backend:
       max-prefill-tokens: 8192
       context-length: 1048576
       speculative-algorithm: EAGLE
-      speculative-num-steps: 4
+      speculative-num-steps: 3
       speculative-eagle-topk: 1
-      speculative-num-draft-tokens: 5
+      speculative-num-draft-tokens: 4
       nsa-prefill-backend: trtllm
       nsa-decode-backend: trtllm
+      bf16-gemm-backend: cutedsl
       moe-runner-backend: flashinfer_trtllm
       fp4-gemm-backend: flashinfer_trtllm
       disable-shared-experts-fusion: true
       enable-flashinfer-allreduce-fusion: true
       weight-loader-prefetch-checkpoints: true
       model-loader-extra-config: '{"enable_multithread_load": true}'
-      mem-fraction-static: 0.8
+      mem-fraction-static: 0.83
       enable-hierarchical-cache: true
       hicache-write-policy: write_back
       hicache-size: 135
       hicache-io-backend: direct
+      hicache-mem-layout: page_first_direct
+      watchdog-timeout: 1800
       enable-metrics: true
       enable-cache-report: true
   aggregated_environment:
     TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+    SGLANG_TIMEOUT_KEEP_ALIVE: '900'
     PYTHONUNBUFFERED: '1'
     DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
     MC_TE_METRIC: 'true'
@@ -84,7 +88,7 @@ backend:
     SGLANG_MOE_NVFP4_DISPATCH: '1'
     SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '1'
     SGLANG_CLIP_MAX_NEW_TOKENS_ESTIMATION: '8'
-    SGLANG_SIMULATE_ACC_LEN: '3.33'
+    SGLANG_SIMULATE_ACC_LEN: '2.99'
     SGLANG_SIMULATE_ACC_METHOD: match-expected
     SGLANG_SIMULATE_ACC_TOKEN_MODE: real-draft-token
     PIP_BREAK_SYSTEM_PACKAGES: '1'
@@ -107,6 +111,9 @@ benchmark:
     PORT: '8000'
     IS_MULTINODE: 'true'
     AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
+    AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+    AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
+    AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
     AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
     HF_HUB_CACHE: /hf_hub_cache
 infra:

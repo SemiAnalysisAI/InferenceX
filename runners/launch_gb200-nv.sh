@@ -587,6 +587,13 @@ if [[ "$IS_AGENTIC" == "1" ]]; then
     DEFAULT_MOUNTS_BLOCK="default_mounts:
   ${AIPERF_MMAP_CACHE_HOST_PATH}: /aiperf_mmap_cache
   ${HF_HUB_CACHE_HOST_PATH}: /hf_hub_cache"
+    if uses_watchtower_shared_fs && [[ "$MODEL_PREFIX" == "glm5.2" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
+        DYNAMO_WHEELS_CACHE_HOST_PATH="${SHARED_BASE}/dynamo-wheels"
+        mkdir -p "$DYNAMO_WHEELS_CACHE_HOST_PATH"
+        chmod 777 "$DYNAMO_WHEELS_CACHE_HOST_PATH" 2>/dev/null || true
+        DEFAULT_MOUNTS_BLOCK+="
+  ${DYNAMO_WHEELS_CACHE_HOST_PATH}: /configs/dynamo-wheels"
+    fi
 fi
 
 echo "Creating srtslurm.yaml configuration..."

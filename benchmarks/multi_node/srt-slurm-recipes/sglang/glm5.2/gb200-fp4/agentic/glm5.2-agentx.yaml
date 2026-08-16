@@ -25,6 +25,9 @@ base:
       PIP_BREAK_SYSTEM_PACKAGES: '1'
     args:
       router-mode: kv
+      router-kv-events: true
+      router-temperature: 0
+      kv-cache-block-size: 64
       active-decode-blocks-threshold: None
       active-prefill-tokens-threshold: None
       active-prefill-tokens-threshold-frac: None
@@ -34,8 +37,10 @@ base:
     install: true
   backend:
     type: sglang
+    kv_events_config: true
     prefill_environment:
       TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+      SGLANG_TIMEOUT_KEEP_ALIVE: '900'
       PYTHONUNBUFFERED: '1'
       DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
       SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: '100000'
@@ -58,9 +63,13 @@ base:
       NVSHMEM_REMOTE_TRANSPORT: none
       SGLANG_DG_CACHE_DIR: /deepgemm_cache
       FLASHINFER_WORKSPACE_BASE: /flashinfer_cache
-      SGLANG_SIMULATE_ACC_LEN: '2.5'
+      SGLANG_FLASHINFER_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '2048'
+      SGLANG_SIMULATE_ACC_LEN: '2.99'
+      SGLANG_SIMULATE_ACC_METHOD: match-expected
+      SGLANG_SIMULATE_ACC_TOKEN_MODE: real-draft-token
     decode_environment:
       TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+      SGLANG_TIMEOUT_KEEP_ALIVE: '900'
       PYTHONUNBUFFERED: '1'
       DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
       SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: '100000'
@@ -84,7 +93,8 @@ base:
       NVSHMEM_REMOTE_TRANSPORT: none
       SGLANG_DG_CACHE_DIR: /deepgemm_cache
       FLASHINFER_WORKSPACE_BASE: /flashinfer_cache
-      SGLANG_SIMULATE_ACC_LEN: '2.5'
+      SGLANG_FLASHINFER_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '2048'
+      SGLANG_SIMULATE_ACC_LEN: '2.99'
       SGLANG_SIMULATE_ACC_METHOD: match-expected
       SGLANG_SIMULATE_ACC_TOKEN_MODE: real-draft-token
     sglang_config:
@@ -96,33 +106,41 @@ base:
         disaggregation-mode: prefill
         disaggregation-transfer-backend: nixl
         tensor-parallel-size: 4
-        data-parallel-size: 4
-        expert-parallel-size: 4
-        enable-dp-attention: true
-        enable-dp-lm-head: true
+        attn-cp-size: 1
+        enable-prefill-cp: false
+        enable-dsa-cache-layer-split: false
+        data-parallel-size: 1
+        expert-parallel-size: 1
+        enable-dp-attention: false
+        enable-dp-lm-head: false
         load-balance-method: total_tokens
-        chunked-prefill-size: 65536
-        max-prefill-tokens: 16384
-        max-running-requests: 16
-        cuda-graph-max-bs: 16
+        chunked-prefill-size: 32768
+        max-prefill-tokens: 8192
+        max-total-tokens: 1048576
+        max-running-requests: 64
+        cuda-graph-max-bs: 64
         disable-cuda-graph: true
         nsa-prefill-backend: trtllm
         nsa-decode-backend: trtllm
-        moe-runner-backend: flashinfer_cutlass
-        fp4-gemm-backend: flashinfer_cutlass
+        bf16-gemm-backend: cutedsl
+        moe-runner-backend: flashinfer_trtllm
+        fp4-gemm-backend: flashinfer_trtllm
+        disable-shared-experts-fusion: true
         enable-flashinfer-allreduce-fusion: true
         weight-loader-prefetch-checkpoints: true
         model-loader-extra-config: '{"enable_multithread_load": true}'
-        mem-fraction-static: 0.8
+        mem-fraction-static: 0.83
         context-length: 1048576
         enable-hierarchical-cache: true
         hicache-write-policy: write_back
         hicache-size: 135
         hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
         speculative-algorithm: EAGLE
-        speculative-num-steps: 1
+        speculative-num-steps: 3
         speculative-eagle-topk: 1
-        speculative-num-draft-tokens: 2
+        speculative-num-draft-tokens: 4
+        watchdog-timeout: 1800
         enable-metrics: true
         enable-cache-report: true
       decode:
@@ -134,22 +152,23 @@ base:
         disaggregation-transfer-backend: nixl
         disable-radix-cache: true
         speculative-algorithm: EAGLE
-        speculative-num-steps: 2
+        speculative-num-steps: 3
         speculative-eagle-topk: 1
-        speculative-num-draft-tokens: 3
+        speculative-num-draft-tokens: 4
         tensor-parallel-size: 4
         data-parallel-size: 1
         expert-parallel-size: 1
         enable-dp-attention: false
         enable-dp-lm-head: false
-        max-running-requests: 16
-        cuda-graph-max-bs: 16
+        max-running-requests: 64
+        cuda-graph-max-bs: 64
         chunked-prefill-size: 64
         context-length: 1048576
         nsa-prefill-backend: trtllm
         nsa-decode-backend: trtllm
+        bf16-gemm-backend: cutedsl
         moe-runner-backend: flashinfer_trtllm
-        fp4-gemm-backend: flashinfer_cutlass
+        fp4-gemm-backend: flashinfer_trtllm
         skip-tokenizer-init: true
         stream-interval: 30
         enable-flashinfer-allreduce-fusion: true
@@ -157,6 +176,7 @@ base:
         model-loader-extra-config: '{"enable_multithread_load": true}'
         mem-fraction-static: 0.9
         disaggregation-decode-extra-slots: 0
+        watchdog-timeout: 1800
         enable-metrics: true
         enable-cache-report: true
   health_check:
@@ -171,6 +191,9 @@ base:
       PORT: '8000'
       IS_MULTINODE: 'true'
       AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
       AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
       HF_HUB_CACHE: /hf_hub_cache
   infra:
@@ -183,46 +206,11 @@ base:
     mem: '0'
     container-remap-root: ''
 
-zip_override_mtp_agentx_hightpt:
-  name: [agentx-2p1d-dep16]
-  backend:
-    sglang_config:
-      decode:
-        cuda-graph-max-bs: 144
-        data-parallel-size: 16
-        deepep-config: /configs/deepep_config.json
-        deepep-mode: low_latency
-        enable-dp-attention: true
-        enable-dp-lm-head: true
-        ep-dispatch-algorithm: static
-        ep-num-redundant-experts: 0
-        expert-parallel-size: 16
-        max-running-requests: 144
-        mem-fraction-static: 0.85
-        moe-a2a-backend: deepep
-        moe-dense-tp-size: 1
-        moe-runner-backend: flashinfer_cutedsl
-        speculative-moe-a2a-backend: deepep
-        speculative-moe-runner-backend: deep_gemm
-        tensor-parallel-size: 16
-      prefill:
-        data-parallel-size: 8
-        expert-parallel-size: 8
-        max-prefill-tokens: 8192
-        tensor-parallel-size: 8
+zip_override_mtp_agentx_frontier:
+  name: [agentx-1p1d-tp4-hicache]
   resources:
-    decode_nodes: 4
+    decode_nodes: 1
     decode_workers: 1
-    gpus_per_decode: 16
-    gpus_per_prefill: 8
-    prefill_nodes: 4
-    prefill_workers: 2
-
-zip_override_mtp_agentx_lowlat:
-  name: [agentx-1p2d-tp4, agentx-1p4d-tp4, agentx-1p6d-tp4]
-  resources:
-    decode_nodes: [2, 4, 6]
-    decode_workers: [2, 4, 6]
     gpus_per_decode: 4
     gpus_per_prefill: 4
     prefill_nodes: 1
