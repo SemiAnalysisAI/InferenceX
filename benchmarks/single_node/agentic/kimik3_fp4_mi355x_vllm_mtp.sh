@@ -64,8 +64,16 @@ if [[ -n "${MODEL_PATH:-}" ]]; then
 else
     if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
     export MODEL_PATH="$MODEL"
-    DRAFT_MODEL_PATH="${DRAFT_MODEL_PATH:-$DRAFT_MODEL}"
-    if [[ "$DRAFT_MODEL_PATH" != /* ]]; then hf download "$DRAFT_MODEL"; fi
+    # The draft MUST resolve to a concrete writable dir (not a bare repo id): the
+    # causal-forcing step below edits $DRAFT_MODEL_PATH/config.json in place, and a
+    # bare id has no such file -> the patch silently no-ops -> non-causal parallel
+    # drafting -> cudagraph OOB on ROCm. This is the branch the single-node CI
+    # runner takes (MODEL_PATH unset), so download the draft the same way the
+    # MODEL_PATH branch above does.
+    DRAFT_MODEL_PATH="${DRAFT_MODEL_PATH:-${WRITABLE_MODELS_DIR:-/tmp/models}/${DRAFT_MODEL##*/}}"
+    if [[ ! -d "$DRAFT_MODEL_PATH" || -z "$(ls -A "$DRAFT_MODEL_PATH" 2>/dev/null)" ]]; then
+        hf download "$DRAFT_MODEL" --local-dir "$DRAFT_MODEL_PATH"
+    fi
 fi
 if [ -n "$ROCR_VISIBLE_DEVICES" ]; then export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"; fi
 

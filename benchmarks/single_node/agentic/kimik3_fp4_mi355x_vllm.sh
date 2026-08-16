@@ -148,8 +148,17 @@ echo "Server PID: $SERVER_PID"
 
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-build_replay_cmd "$RESULT_DIR"
-run_agentic_replay_and_write_outputs "$RESULT_DIR"
+# The agentic single-node eval selector groups by (model, runner, framework,
+# precision) and eval-marks exactly one entry in that group -- which can be THIS
+# base arm, not the -dspark arm. So the accuracy gate may drive this script with
+# EVAL_ONLY=true; run the GSM8K eval then, or the gate replays throughput and gets
+# no score. Mirrors kimik3_fp4_b300_vllm.sh.
+if [ "${EVAL_ONLY:-false}" = "true" ]; then
+    run_eval --port "$PORT"
+else
+    build_replay_cmd "$RESULT_DIR"
+    run_agentic_replay_and_write_outputs "$RESULT_DIR"
+fi
 
 # cleanup: free the GPU (orphaned TP workers otherwise hold VRAM)
 [[ -n "${SERVER_PID:-}" ]] && kill "$SERVER_PID" 2>/dev/null || true
