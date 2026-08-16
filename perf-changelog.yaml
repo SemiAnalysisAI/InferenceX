@@ -6039,4 +6039,13 @@
     - "EVAL_ONLY runs switch to real block verification by removing synthetic acceptance (TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS stripped from all agentx recipes before srtctl)."
     - "Add SERVED_MODEL_NAME: Qwen3.5-397B-A17B-NVFP4-V2 to all 6 agentx recipe env blocks and make build_replay_cmd prefer SERVED_MODEL_NAME over $MODEL for the aiperf --model flag."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2612
-  
+
+- config-keys:
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GB200 GLM-5.2 FP4 Dynamo-SGLang AgentX with EAGLE MTP, HiCache DRAM offload, and KV-aware correlation-ID affinity."
+    - "Measure the TP8 aggregate curve and tuned 1P1D TP4 HiCache c10/c12 disaggregated frontier with every logical SGLang metrics endpoint."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2620
