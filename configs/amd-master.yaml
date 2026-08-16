@@ -691,6 +691,68 @@ kimik3-fp4-mi355x-vllm-disagg-agentic-mtp:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=2"
 
+# Same topology as kimik3-fp4-mi355x-vllm-disagg-agentic-mtp, but pulling KV
+# with MoRIIO READ instead of pushing with WRITE. READ needs neither
+# IOEngine.wait_all nor the derived mori image, so the wait_all build is off
+# here; the Kimi-K3 MoRI queue sizing in env.sh still applies to both. Kept as
+# a separate key so a read run and a write run never share a sweep.
+kimik3-fp4-mi355x-vllm-disagg-agentic-mtp-read:
+  image: vllm/vllm-openai-rocm:nightly-ac7509e2b1db40fec2f03dde1ed4e9dfdc2338c9
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm-disagg
+  router: { name: vllm-router, version: "nightly-20260809-d2ba586" }
+  kv-p2p-transfer: mori
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.50
+      search-space:
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [1]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "MORIIO_READ_MODE=true"
+          - "MORI_WAITALL_BUILD=0"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=2"
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        conc-list: [8, 12, 16]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "MORIIO_READ_MODE=true"
+          - "MORI_WAITALL_BUILD=0"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=2"
+
 dsr1-fp4-mi355x-sglang-disagg:
   image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519
   model: amd/DeepSeek-R1-0528-MXFP4-v2
