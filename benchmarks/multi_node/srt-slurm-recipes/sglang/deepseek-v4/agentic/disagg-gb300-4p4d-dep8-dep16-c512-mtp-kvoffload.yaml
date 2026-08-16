@@ -1,7 +1,7 @@
-name: "disagg-gb300-4p4d-dep8-dep16-c400-mtp-kvoffload"
+name: "disagg-gb300-4p4d-dep8-dep16-c512-mtp-kvoffload"
 
 # Agentic-coding SGLang disaggregated recipe for DeepSeek-V4-Pro on GB300
-# (4P x DEP8 / 4D x DEP16, DSpark K=6 + hierarchical-cache KV offload), tuned for concurrency 400.
+# (4P x DEP8 / 4D x DEP16, MTP + hierarchical-cache KV offload), tuned for concurrency 512.
 #
 # DEP8-prefill variant aligned with the measured Pareto point: prefill uses
 # tp/dp/ep 8, four nodes, and SGLANG_DSV4_MHC_PREWARM=1.
@@ -9,19 +9,13 @@ name: "disagg-gb300-4p4d-dep8-dep16-c400-mtp-kvoffload"
 # from the master-config conc-list.
 
 model:
-  path: "deepseek-v4-pro-dspark"
+  path: "deepseek-v4-pro"
   container: "dynamo-sglang"
   precision: "fp4"
 
-identity:
-  model:
-    repo: "deepseek-ai/DeepSeek-V4-Pro-DSpark"
-  container:
-    image: "lmsysorg/sglang:nightly-dev-cu13-20260816-4a6dc267"
-
 dynamo:
   install: true
-  hash: "7a4e47ead90ec6b479e397996f6479ce7d251510"
+  wheel: "1.3.0.dev20260718"
 
 slurm:
   time_limit: "8:00:00"
@@ -62,7 +56,6 @@ backend:
   type: sglang
 
   prefill_environment:
-    SGLANG_RAGGED_VERIFY_MODE: "static"
     SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "900"
     PIP_BREAK_SYSTEM_PACKAGES: '1'
     PYTHONUNBUFFERED: '1'
@@ -96,8 +89,10 @@ backend:
     SGLANG_DSV4_MHC_PREWARM: '1'
 
   decode_environment:
-    SGLANG_RAGGED_VERIFY_MODE: "static"
     SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "900"
+    SGLANG_SIMULATE_ACC_LEN: '2.49'
+    SGLANG_SIMULATE_ACC_METHOD: match-expected
+    SGLANG_SIMULATE_ACC_TOKEN_MODE: "real-draft-token"
     PIP_BREAK_SYSTEM_PACKAGES: '1'
     PYTHONUNBUFFERED: '1'
     SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
@@ -132,7 +127,7 @@ backend:
   sglang_config:
     prefill:
       host: 0.0.0.0
-      served-model-name: deepseek-ai/DeepSeek-V4-Pro-DSpark
+      served-model-name: deepseek-ai/DeepSeek-V4-Pro
       enable-metrics: true
       model-path: /model/
       trust-remote-code: true
@@ -148,19 +143,18 @@ backend:
       disaggregation-transfer-backend: mooncake
       disaggregation-mode: prefill
       load-balance-method: total_tokens
-      mem-fraction-static: 0.85
+      mem-fraction-static: 0.9
       swa-full-tokens-ratio: 0.02
       max-running-requests: 256
       cuda-graph-max-bs: 256
-      chunked-prefill-size: 65536
+      chunked-prefill-size: 32768
       disable-flashinfer-autotune: true
       model-loader-extra-config: '{"enable_multithread_load":true,"num_threads":8}'
       kv-events-config: '{"publisher":"zmq","topic":"kv-events","endpoint":"tcp://*:5557"}'
-      speculative-algorithm: DSPARK
-      speculative-dspark-block-size: 6
-      speculative-num-steps: 1
+      speculative-algorithm: EAGLE
+      speculative-num-steps: 3
       speculative-eagle-topk: 1
-      speculative-num-draft-tokens: 7
+      speculative-num-draft-tokens: 4
       enable-hierarchical-cache: true
       hicache-write-policy: write_back
       hicache-ratio: 1
@@ -168,7 +162,7 @@ backend:
 
     decode:
       host: 0.0.0.0
-      served-model-name: deepseek-ai/DeepSeek-V4-Pro-DSpark
+      served-model-name: deepseek-ai/DeepSeek-V4-Pro
       enable-metrics: true
       model-path: /model/
       trust-remote-code: true
@@ -191,11 +185,10 @@ backend:
       disable-flashinfer-autotune: true
       model-loader-extra-config: '{"enable_multithread_load":true,"num_threads":8}'
       kv-events-config: '{"publisher":"zmq","topic":"kv-events","endpoint":"tcp://*:5567"}'
-      speculative-algorithm: DSPARK
-      speculative-dspark-block-size: 6
-      speculative-num-steps: 1
+      speculative-algorithm: EAGLE
+      speculative-num-steps: 3
       speculative-eagle-topk: 1
-      speculative-num-draft-tokens: 7
+      speculative-num-draft-tokens: 4
 
 
 sbatch_directives:
@@ -219,4 +212,3 @@ benchmark:
     AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
     AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
     HF_HUB_CACHE: "/hf_hub_cache"
-    INFMAX_AIPERF_TOKENIZER: "/model"

@@ -6020,18 +6020,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2611
 
 - config-keys:
-    - dsv4-fp4-gb300-dynamo-sglang-agentic-agg
-    - dsv4-fp4-gb300-dynamo-sglang-agentic-disagg
-  scenario-type:
-    - agentic-coding
-  description:
-    - "Replace the GB300 DeepSeek-V4-Pro AgentX EAGLE/MTP serving path with DSpark block size 6 across two aggregate and four disaggregated recipes"
-    - "Use DeepSeek-V4-Pro-DSpark with SGLANG_RAGGED_VERIFY_MODE=static, MegaMoE for DEP workers, and throughput-only thinking-on acceptance length 3.82 from the committed probabilistic DSpark curve (golden_al_distribution/dsv4_dspark_probabilistic.yaml, run 31279568355); eval keeps real DSpark verification"
-    - "Refresh SGLang to nightly-dev-cu13-20260816-4a6dc267, which already contains the required DSpark performance and MegaMoE support"
-    - "Retune the Pareto ladder to concurrency 1/4/8, 192, 400, 640, and 1536; the 8P4D concurrency-1536 point is the throughput endpoint"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2623
-
-- config-keys:
     - dsv4-fp4-b300-dynamo-sglang-agentic-mtp-agg
   scenario-type:
     - agentic-coding
