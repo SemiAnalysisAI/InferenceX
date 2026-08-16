@@ -76,6 +76,65 @@ kimik3-ttft-exp-dram050:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=2"
 
+# Head-of-line blocking, attacked without paying the throughput tax that killed
+# the 4096 cap.
+#
+# V1 fills one 16,384-token step budget from the running queue first, so a
+# request with more than 16,384 tokens left takes the whole budget every step.
+# A 500k-token recompute therefore owns ~31 consecutive steps, ~56s, and the
+# other seven lanes get nothing. The only step we have a dump for confirms the
+# shape: 13,824 + 2,500 tokens, i.e. a second request got in only on the long
+# one's final chunk.
+#
+# `--long-prefill-token-threshold 4096` alone reserved budget for the others but
+# shrank the step to 4096 whenever nobody else had tokens ready, costing 41% of
+# prefill throughput. Raising the total budget instead keeps the long request at
+# today's 16,384 per step - same GEMM/MoE efficiency, no throughput loss - and
+# gives the waiting lanes a second 16,384 to make progress in. Kimi-K2.5 and
+# MiniMax already run --max-num-batched-tokens 32768 on this SKU.
+#
+# Risk to watch: peak activation was 6.04 GiB at 16,384 and the 0.96 arm proved
+# the spare ~20 GiB is scratch the engine needs. If this arm dies with
+# HSA_STATUS_ERROR_OUT_OF_RESOURCES, the budget is the cause.
+kimik3-ttft-exp-budget32k:
+  image: vllm/vllm-openai-rocm:nightly-ac7509e2b1db40fec2f03dde1ed4e9dfdc2338c9
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm-disagg
+  router: { name: vllm-router, version: "nightly-20260809-d2ba586" }
+  kv-p2p-transfer: mori
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.50
+      search-space:
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        conc-list: [8]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "MORIIO_READ_MODE=true"
+          - "MORI_WAITALL_BUILD=0"
+          - "PREFILL_MAX_BATCHED_TOKENS=32768"
+          - "PREFILL_LONG_PREFILL_TOKENS=16384"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=2"
+
 # The far end of the same lever: 0.80 -> 2399 GB, roughly 57M tokens, enough to
 # hold the whole observed working set. If the tail does not improve between
 # 1499 and 2399 GB, capacity is not the binding constraint and the recompute
