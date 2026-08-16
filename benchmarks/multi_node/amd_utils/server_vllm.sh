@@ -204,6 +204,16 @@ if [[ "${DECODE_ENABLE_DP:-false}" == "true" ]] && ! echo "$DECODE_SERVER_CONFIG
     DECODE_SERVER_CONFIG+=" --enable-dp-attention"
 fi
 
+# Appended last so they win: vLLM's argparse keeps the final occurrence of a
+# repeated option. Lets a sweep vary a serve flag (gpu-memory-utilization,
+# max-num-batched-tokens, ...) without forking models_vllm.yaml per arm.
+if [[ -n "${PREFILL_EXTRA_SERVE_ARGS:-}" ]]; then
+    PREFILL_SERVER_CONFIG+=" ${PREFILL_EXTRA_SERVE_ARGS}"
+fi
+if [[ -n "${DECODE_EXTRA_SERVE_ARGS:-}" ]]; then
+    DECODE_SERVER_CONFIG+=" ${DECODE_EXTRA_SERVE_ARGS}"
+fi
+
 echo "PREFILL_SERVER_CONFIG (after TP/EP/DP): $PREFILL_SERVER_CONFIG"
 echo "DECODE_SERVER_CONFIG (after TP/EP/DP): $DECODE_SERVER_CONFIG"
 
