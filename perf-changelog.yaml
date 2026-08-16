@@ -5999,3 +5999,11 @@
     - "Add the tuned GB200 MiniMax-M3 FP4 AgentX frontier with EAGLE3, the B200 TP4 baseline, DEP4/DEP8, SimpleCPU offload, and KV-routed P/D."
     - "Use full-decode-only CUDA graphs for TP4 stability."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2609
+
+- config-keys:
+    - minimaxm3-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh the MiniMax-M3 B200 AgentX submission: no-offload TP8 C1 and TP4 C1/C5/C10/C15/C20, plus a TP4 SimpleCPU KV-offload sweep at C15–C40 using the full-capacity DRAM budget."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2611
