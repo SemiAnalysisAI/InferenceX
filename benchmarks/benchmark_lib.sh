@@ -2071,6 +2071,11 @@ build_replay_cmd() {
     # from vLLM) is unaffected by this flag and still gives us KV usage,
     # prefix cache hit rate, etc.
     REPLAY_CMD+=" --no-gpu-telemetry"
+    # A staged checkpoint can provide the tokenizer without touching the
+    # shared Hugging Face cache. This is required for local-dir model mounts.
+    if [[ -n "${INFMAX_AIPERF_TOKENIZER:-}" ]]; then
+        REPLAY_CMD+=" --tokenizer $INFMAX_AIPERF_TOKENIZER"
+    fi
     # aiperf's dataset manager (separate from the inference parser) loads
     # the model's tokenizer for trace-prompt tokenization regardless of
     # --use-server-token-count. Models like kimi (amd/Kimi-K2.5-MXFP4,

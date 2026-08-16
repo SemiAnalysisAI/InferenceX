@@ -1,5 +1,7 @@
 #!/usr/bin/bash
 
+source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
+
 # System-specific configuration for B300 NV Slurm cluster (sa-shared)
 SLURM_PARTITION="batch_1"
 SLURM_ACCOUNT="benchmark"
@@ -41,6 +43,9 @@ elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-
     fi
     export MODEL_PATH="${SELECTED_MODEL_PATH:-/data/models/dsv4-pro}"
     export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
+elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-sglang" && $MODEL == "deepseek-ai/DeepSeek-V4-Pro-DSpark" ]]; then
+    export MODEL_PATH="${MODEL_PATH:-/data/models/DeepSeek-V4-Pro-DSpark}"
+    export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro-dspark"
 elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-sglang" ]]; then
     export MODEL_PATH="${MODEL_PATH:-/scratch/models/DeepSeek-V4-Pro}"
     export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
@@ -70,7 +75,17 @@ if [ -d "$SRT_REPO_DIR" ]; then
 fi
 
 # TODO(CJQ): make first class upon srt-slurm upstream refactor
-if [[ "$IS_AGENTIC" == "1" ]]; then
+if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
+    # Match the GB300 DSV4 AgentX path: v1.0.38 provides --no-preflight,
+    # session-affinity frontend support, backend metric injection for custom
+    # benchmarks, and the current aggregated Dynamo-SGLang recipe schema.
+    git clone --branch v1.0.38 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
+    cd "$SRT_REPO_DIR" || exit 1
+    mkdir -p recipes/sglang/deepseek-v4/agentic
+    cp -R \
+        "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/agentic/." \
+        recipes/sglang/deepseek-v4/agentic
+elif [[ "$IS_AGENTIC" == "1" ]]; then
     git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR" || exit 1
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
@@ -135,9 +150,45 @@ NGINX_IMAGE="nginx:1.27.4"
 SQUASH_FILE="/data/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 NGINX_SQUASH_FILE="/data/squash/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
-# Import containers via enroot
-srun -N 1 -A $SLURM_ACCOUNT -p $SLURM_PARTITION bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
-srun -N 1 -A $SLURM_ACCOUNT -p $SLURM_PARTITION bash -c "enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE"
+# Import containers via enroot. Perform the validity check on the allocated
+# compute node, not before submitting srun: a job can wait in the queue while
+# another runner creates the same shared squash file. Serialize imports so a
+# concurrent cache miss cannot race on the output either.
+import_squash() {
+    local squash_file="$1"
+    local image_ref="$2"
+
+    srun -N 1 -A "$SLURM_ACCOUNT" -p "$SLURM_PARTITION" \
+        bash -s -- "$squash_file" "$image_ref" <<'IMPORT_SQUASH'
+set -euo pipefail
+squash_file="$1"
+image_ref="$2"
+lock_dir="$(dirname "$squash_file")/.locks"
+mkdir -p "$lock_dir"
+lock_file="$lock_dir/$(basename "$squash_file").lock"
+
+(
+    flock -w 3600 9 || {
+        echo "Failed to acquire lock for $squash_file" >&2
+        exit 1
+    }
+    if unsquashfs -l "$squash_file" > /dev/null 2>&1; then
+        echo "Squash file already exists and is valid, skipping import: $squash_file"
+    else
+        rm -f "$squash_file"
+        enroot import -o "$squash_file" "docker://$image_ref"
+        unsquashfs -l "$squash_file" > /dev/null 2>&1 || {
+            echo "enroot import did not produce a valid squash file: $squash_file" >&2
+            exit 1
+        }
+        chmod a+r "$squash_file" || true
+    fi
+) 9>"$lock_file"
+IMPORT_SQUASH
+}
+
+import_squash "$SQUASH_FILE" "$IMAGE"
+import_squash "$NGINX_SQUASH_FILE" "$NGINX_IMAGE"
 
 export ISL="$ISL"
 export OSL="$OSL"
@@ -171,6 +222,7 @@ containers:
 use_exclusive_sbatch_directive: true
 default_mounts:
   "/opt/ucx-no-ud": "/usr/local/ucx"
+  "${GITHUB_WORKSPACE}": "/infmax-workspace"
 EOF
 
 echo "Generated srtslurm.yaml:"
@@ -200,6 +252,11 @@ fi
 
 # Override the job name in the recipe with the runner name.
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
+
+# Throughput recipes opt into synthetic acceptance through the master config.
+# Eval-only jobs leave the checked-in real-MTP recipe unchanged so generated
+# tokens still pass target-model verification.
+inject_synthetic_acceptance "$CONFIG_PATH" "$FRAMEWORK" || exit 1
 if [[ "$MODEL_PREFIX" == "minimaxm3" && -n "$MINIMAX_M3_SLURM_EXCLUDED_NODELIST" ]]; then
     sed -i "/^name:.*/a sbatch_directives:\n  exclude: \"${MINIMAX_M3_SLURM_EXCLUDED_NODELIST}\"" "$CONFIG_PATH"
 fi
@@ -483,8 +540,16 @@ else
     export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
 
     SALLOC_TIME_LIMIT="${SALLOC_TIME_LIMIT:-480}"
-    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT -N 1 --gres=gpu:$GPU_COUNT --exclusive --mem=0 --time="$SALLOC_TIME_LIMIT" --no-shell --job-name="$RUNNER_NAME"
+    if ! salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT -N 1 --gres=gpu:$GPU_COUNT --exclusive --mem=0 --time="$SALLOC_TIME_LIMIT" --no-shell --job-name="$RUNNER_NAME"; then
+        echo "Failed to allocate B300 Slurm resources for account=$SLURM_ACCOUNT partition=$SLURM_PARTITION" >&2
+        exit 1
+    fi
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
+
+    if [[ -z "$JOB_ID" ]]; then
+        echo "Slurm allocation succeeded but no job ID was found for $RUNNER_NAME" >&2
+        exit 1
+    fi
 
     srun --jobid=$JOB_ID \
         --mpi=none \

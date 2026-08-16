@@ -1,0 +1,129 @@
+name: "agg-b300-dep8-mtp-kvoffload"
+
+model:
+  path: "deepseek-v4-pro-dspark"
+  container: "dynamo-sglang"
+  precision: "fp4"
+
+identity:
+  model:
+    repo: "deepseek-ai/DeepSeek-V4-Pro-DSpark"
+  container:
+    image: "lmsysorg/sglang:nightly-dev-cu13-20260816-4a6dc267"
+
+dynamo:
+  install: true
+  hash: "7a4e47ead90ec6b479e397996f6479ce7d251510"
+
+slurm:
+  time_limit: "8:00:00"
+
+health_check:
+  max_attempts: 1440
+  interval_seconds: 10
+
+resources:
+  gpu_type: "b300"
+  gpus_per_node: 8
+  agg_nodes: 1
+  agg_workers: 1
+  gpus_per_agg: 8
+
+infra:
+  etcd_nats_dedicated_node: true
+  nats_max_payload_mb: 32
+
+frontend:
+  type: dynamo
+  nginx_session_affinity: true
+  nginx_session_affinity_header: X-Dynamo-Session-ID
+  enable_multiple_frontends: true
+  num_additional_frontends: 4
+  env:
+    PIP_BREAK_SYSTEM_PACKAGES: "1"
+  args:
+    router-mode: "kv"
+    router-session-affinity-ttl-secs: "3600"
+    active-decode-blocks-threshold: "None"
+    active-prefill-tokens-threshold: "None"
+    active-prefill-tokens-threshold-frac: "None"
+
+backend:
+  type: sglang
+  # Let srt-slurm allocate and register the worker-local publisher endpoint;
+  # Dynamo needs discovery metadata in addition to the SGLang CLI flag.
+  kv_events_config:
+    aggregated: true
+  aggregated_environment:
+    PIP_BREAK_SYSTEM_PACKAGES: "1"
+    SGLANG_RAGGED_VERIFY_MODE: "static"
+    SGLANG_DEFAULT_THINKING: "1"
+    SGLANG_ENABLE_UNIFIED_RADIX_TREE: "1"
+    SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: "1"
+    SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE: "1"
+    SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_FP4_ACTS: "1"
+    SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_MXF4_KIND: "1"
+    SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "9216"
+    SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2: "0"
+    SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
+    SGLANG_OPT_USE_JIT_INDEXER_METADATA: "1"
+    SGLANG_OPT_USE_JIT_NORM: "1"
+    SGLANG_OPT_USE_TOPK_V2: "1"
+  sglang_config:
+    aggregated:
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro-DSpark"
+      trust-remote-code: true
+      enable-metrics: true
+      mem-fraction-static: 0.90
+      swa-full-tokens-ratio: 0.02
+      chunked-prefill-size: 8192
+      max-prefill-tokens: 8192
+      max-running-requests: 1152
+      cuda-graph-max-bs: 144
+      stream-interval: 20
+      incremental-streaming-output: true
+      watchdog-timeout: 1800
+      dp-size: 8
+      tp-size: 8
+      ep-size: 8
+      enable-dp-attention: true
+      enable-dp-lm-head: true
+      moe-dense-tp-size: 1
+      load-balance-method: total_tokens
+      moe-a2a-backend: megamoe
+      enable-hierarchical-cache: true
+      # Ratio 1.75 completes c576, but its busiest DP rank reaches 99.4% host
+      # cache usage. Retry 2.0 with the smaller DSpark SWA pool (0.02) to add
+      # enough prefix-cache headroom without approaching the 2.5 startup OOM.
+      hicache-ratio: 2.0
+      hicache-write-policy: write_back
+      hicache-io-backend: direct
+      hicache-mem-layout: page_first_direct
+      weight-loader-drop-cache-after-load: true
+      speculative-algorithm: DSPARK
+      speculative-dspark-block-size: 6
+      speculative-num-steps: 1
+      speculative-eagle-topk: 1
+      speculative-num-draft-tokens: 7
+
+sbatch_directives:
+  mem: "0"
+  cpus-per-task: "144"
+
+srun_options:
+  mem: "0"
+  container-remap-root: ""
+
+benchmark:
+  type: custom
+  command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+  env:
+    INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
+    RESULT_DIR: /logs/agentic
+    PORT: "8000"
+    IS_MULTINODE: "false"
+    TP: "8"
+    AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
+    AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
+    AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
+    INFMAX_AIPERF_TOKENIZER: "/model"

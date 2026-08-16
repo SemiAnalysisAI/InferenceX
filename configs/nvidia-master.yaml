@@ -8555,6 +8555,57 @@ glm5.1-fp8-b200-tilert:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=1"
+
+dsv4-fp4-b300-dynamo-sglang-agentic-mtp-agg:
+  image: lmsysorg/sglang:nightly-dev-cu13-20260816-4a6dc267
+  model: deepseek-ai/DeepSeek-V4-Pro-DSpark
+  model-prefix: dsv4
+  runner: cluster:b300-nv
+  precision: fp4
+  framework: dynamo-sglang
+  router: { name: dynamo-router, version: "7a4e47ead90ec6b479e397996f6479ce7d251510" }
+  multinode: true
+  disagg: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.95
+      search-space:
+      - spec-decoding: draft_model
+        conc-list: [48, 64]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.82"
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/agentic/agg-b300-dep4-mtp-kvoffload.yaml"
+        decode:
+          num-worker: 0
+          tp: 4
+          ep: 4
+          dp-attn: true
+      - spec-decoding: draft_model
+        conc-list: [128, 256, 384, 512, 576]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.82"
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/agentic/agg-b300-dep8-mtp-kvoffload.yaml"
+        decode:
+          num-worker: 0
+          tp: 8
+          ep: 8
+          dp-attn: true
     - isl: 8192
       osl: 1024
       search-space:
