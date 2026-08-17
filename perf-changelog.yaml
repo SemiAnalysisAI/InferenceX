@@ -6049,3 +6049,17 @@
     - "Add GB200 GLM-5.2 FP4 Dynamo-SGLang AgentX with EAGLE MTP, HiCache DRAM offload, and KV-aware correlation-ID affinity."
     - "Measure the TP8 aggregate curve and tuned 1P1D TP4 HiCache c10/c12 disaggregated frontier with every logical SGLang metrics endpoint."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2620
+
+- config-keys:
+    - dsr1-fp4-mi355x-sglang-disagg
+    - dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp
+    - dsr1-fp4-mi355x-sglang-disagg-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Replace the DeepSeek-R1 MXFP4 model-specific amd_utils launcher with native srt-slurm orchestration using SGLang Router and AMD MoRI on MI355X."
+    - "Preserve the complete production STP and MTP 8k1k search space as 12 explicit runtime selectors: TP8 and DEP8/DPA 1P1D, 1P2D, and 2P1D topologies spanning c1 through c4096 with one-, two-, and three-step NEXTN variants."
+    - "Use lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260809, the existing shared 78-shard MXFP4 checkpoint, FP8 KV cache, AITer attention, role-specific MoRI tuning, and the SGLang/DeepSeek-R1-NextN draft model."
+    - "Run the repository's unchanged benchmark_serving.py through srt-slurm's custom benchmark contract, with one allocation per topology and tuning family to amortize model initialization across each concurrency sweep."
+    - "Validate local production checkpoints before submission and prefetch optional external draft repositories once into the canonical shared Hugging Face cache instead of downloading them independently on every prefill and decode worker."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2633

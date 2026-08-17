@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ -n "${CONFIG_FILE:-}" ]]; then
+    exec bash "$(dirname "${BASH_SOURCE[0]}")/launch_mi300x-amds-srt.sh"
+fi
+
 export HF_HUB_CACHE_MOUNT="/raid/hf-hub-cache/"
 
 PARTITION="compute"

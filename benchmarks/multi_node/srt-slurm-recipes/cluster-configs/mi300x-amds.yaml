@@ -1,0 +1,43 @@
+# srt-slurm cluster profile for the MI300X AMD Slurm cluster.
+# Runtime-specific source/output paths are supplied by the launcher.
+
+cluster: mi300x-amds
+default_partition: compute
+default_time_limit: "01:00:00"
+
+gpus_per_node: 8
+accelerator_vendor: amd
+# Private NIC names vary by node generation (ens51f1np1 vs ens61f1np1), so
+# use srt-slurm's RFC1918-preferring automatic resolver.
+network_interface: null
+
+# This cluster allocates accelerators through GRES and does not implement the
+# NVIDIA cluster's topology-segment directive.
+gpu_sbatch_directive: gres
+use_segment_sbatch_directive: false
+use_exclusive_sbatch_directive: false
+
+# The login node and compute nodes do not share this output path. Carry the
+# exact resolved recipe in the batch script and materialize it on the allocated
+# head node instead of depending on a submitter-side copy.
+runtime_config_transport: embedded
+
+default_sbatch_directives:
+  cpus-per-task: "32"
+  mem: "128G"
+  exclude: "chi-mi300x-049,chi-mi300x-121"
+
+default_mounts:
+  /dev/kfd: /dev/kfd
+  /dev/dri: /dev/dri
+  /raid/hf-hub-cache: /hf_hub_cache
+  # The launcher appends per-run /infmax-workspace and /results mounts here.
+
+# Pyxis otherwise re-imports the large ROCm image for every srun step. The
+# validation launcher materializes this immutable squashfs on each healthy
+# node before submitting a sweep.
+containers:
+  vllm-rocm-v0.26.0: /raid/hf-hub-cache/inferencex/srt-slurm/containers/vllm-openai-rocm-v0.26.0.sqsh
+  vllm-router-20260809: /raid/hf-hub-cache/inferencex/srt-slurm/containers/vllm-router-nightly-20260809-d2ba586.sqsh
+
+nginx_raise_ulimit: false

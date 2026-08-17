@@ -1,0 +1,93 @@
+# Minimal MI300X aggregate validation. This recipe deliberately uses one GPU,
+# a small public model, and a short fixed-sequence workload. It validates
+# srt-slurm orchestration rather than performance.
+
+name: "mi300x-vllm-qwen3-0.6b-agg-fixed-seq"
+
+model:
+  path: "hf:Qwen/Qwen3-0.6B"
+  container: "vllm-rocm-v0.26.0"
+  precision: "fp16"
+
+identity:
+  model:
+    repo: "Qwen/Qwen3-0.6B"
+  container:
+    image: "vllm/vllm-openai-rocm:v0.26.0"
+  frameworks:
+    vllm: "0.26.0+rocm723"
+
+slurm:
+  time_limit: "00:30:00"
+
+resources:
+  gpu_type: "mi300x"
+  gpus_per_node: 1
+  agg_nodes: 1
+  agg_workers: 1
+  gpus_per_agg: 1
+
+frontend:
+  type: vllm
+  enable_multiple_frontends: false
+
+backend:
+  type: vllm
+  connector: null
+  set_visible_devices: true
+  aggregated_environment:
+    HF_HOME: "/hf_hub_cache"
+    HF_HUB_CACHE: "/hf_hub_cache"
+    HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
+    TRANSFORMERS_CACHE: "/hf_hub_cache"
+    PYTHONUNBUFFERED: "1"
+  vllm_config:
+    aggregated:
+      served-model-name: "Qwen/Qwen3-0.6B"
+      tensor-parallel-size: 1
+      gpu-memory-utilization: 0.50
+      max-model-len: 2048
+      max-num-seqs: 8
+
+srun_options:
+  container-writable: ""
+  container-remap-root: ""
+  mem: "0"
+
+health_check:
+  max_attempts: 180
+  interval_seconds: 5
+
+benchmark:
+  type: custom
+  command: |
+    set -euo pipefail
+    result_root="/results/${SLURM_JOB_ID}"
+    mkdir -p "${result_root}/fixed-seq"
+    trap 'tar -C /logs -czf "'"${result_root}"'/runtime-logs.tar.gz" . 2>/dev/null || true' EXIT
+    for concurrency in 1 4; do
+      python3 /infmax-workspace/utils/bench_serving/benchmark_serving.py \
+      --backend openai-chat \
+      --base-url "http://${SRT_FRONTEND_HOST}:${SRT_FRONTEND_PORT}" \
+      --endpoint /v1/chat/completions \
+      --model Qwen/Qwen3-0.6B \
+      --tokenizer Qwen/Qwen3-0.6B \
+      --dataset-name random \
+      --random-input-len 128 \
+      --random-output-len 32 \
+      --random-range-ratio 1.0 \
+      --random-num-workers 1 \
+      --num-warmups "${concurrency}" \
+      --num-prompts "$((concurrency * 4))" \
+      --max-concurrency "${concurrency}" \
+      --request-rate inf \
+      --ignore-eos \
+      --disable-tqdm \
+      --save-result \
+      --result-dir "${result_root}/fixed-seq" \
+      --result-filename "qwen3-0.6b-isl128-osl32-c${concurrency}.json";
+    done
+  env:
+    HF_HOME: /hf_hub_cache
+    HF_HUB_CACHE: /hf_hub_cache
+    HUGGINGFACE_HUB_CACHE: /hf_hub_cache

@@ -1,0 +1,35 @@
+# srt-slurm cluster profile for the MI355X AMD Slurm cluster. The login and
+# compute nodes share /it-share, so source, output, image, and result paths do
+# not need node-local transport.
+
+cluster: mi355x-amds
+default_partition: compute
+default_time_limit: "01:00:00"
+output_dir: /it-share/gharunners2/srt-slurm/outputs
+
+gpus_per_node: 8
+accelerator_vendor: amd
+network_interface: eno0
+
+gpu_sbatch_directive: gres
+use_segment_sbatch_directive: false
+use_exclusive_sbatch_directive: false
+runtime_config_transport: shared-filesystem
+
+default_sbatch_directives:
+  cpus-per-task: "32"
+  mem: "128G"
+
+default_mounts:
+  /dev/kfd: /dev/kfd
+  /dev/dri: /dev/dri
+  /it-share/hf-hub-cache: /hf_hub_cache
+  # Legacy production checkpoints live here. The launcher may expose one as a
+  # zero-copy seed under the canonical /hf_hub_cache/hub layout.
+  /it-share/hf_home: /it-share/hf_home
+  # The launcher appends the exact shared workspace and result roots.
+
+containers:
+  sglang-rocm-v0.5.17-mi35x: /it-share/gharunners2/srt-slurm/containers/sglang-rocm-v0.5.17-mi35x-20260809.sqsh
+
+nginx_raise_ulimit: false

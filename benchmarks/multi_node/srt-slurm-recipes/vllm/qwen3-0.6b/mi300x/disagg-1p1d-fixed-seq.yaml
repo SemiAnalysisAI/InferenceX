@@ -1,0 +1,121 @@
+# Minimal two-node MI300X prefill/decode validation. This recipe exercises
+# vLLM Router discovery and AMD MoRI-IO KV transfer without performance tuning.
+
+name: "mi300x-vllm-qwen3-0.6b-disagg-1p1d-fixed-seq"
+
+model:
+  path: "hf:Qwen/Qwen3-0.6B"
+  container: "vllm-rocm-v0.26.0"
+  precision: "fp16"
+
+identity:
+  model:
+    repo: "Qwen/Qwen3-0.6B"
+  container:
+    image: "vllm/vllm-openai-rocm:v0.26.0"
+  frameworks:
+    vllm: "0.26.0+rocm723"
+    vllm-router: "nightly-20260809-d2ba586"
+
+slurm:
+  time_limit: "00:45:00"
+
+resources:
+  gpu_type: "mi300x"
+  gpus_per_node: 1
+  prefill_nodes: 1
+  decode_nodes: 1
+  prefill_workers: 1
+  decode_workers: 1
+  gpus_per_prefill: 1
+  gpus_per_decode: 1
+
+frontend:
+  type: vllm-router
+  enable_multiple_frontends: false
+  container_image: "vllm-router-20260809"
+  args:
+    policy: consistent_hash
+    prefill-policy: consistent_hash
+    decode-policy: consistent_hash
+
+backend:
+  type: vllm
+  connector: moriio
+  set_visible_devices: true
+  prefill_environment:
+    HF_HOME: "/hf_hub_cache"
+    HF_HUB_CACHE: "/hf_hub_cache"
+    HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
+    TRANSFORMERS_CACHE: "/hf_hub_cache"
+    PYTHONUNBUFFERED: "1"
+    VLLM_ROCM_USE_AITER: "1"
+    MORI_IO_SQ_BACKOFF_TIMEOUT_US: "50000"
+  decode_environment:
+    HF_HOME: "/hf_hub_cache"
+    HF_HUB_CACHE: "/hf_hub_cache"
+    HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
+    TRANSFORMERS_CACHE: "/hf_hub_cache"
+    PYTHONUNBUFFERED: "1"
+    VLLM_ROCM_USE_AITER: "1"
+    MORI_IO_SQ_BACKOFF_TIMEOUT_US: "50000"
+  vllm_config:
+    prefill:
+      served-model-name: "Qwen/Qwen3-0.6B"
+      tensor-parallel-size: 1
+      gpu-memory-utilization: 0.50
+      max-model-len: 2048
+      max-num-seqs: 8
+      enforce-eager: true
+      attention-backend: "ROCM_AITER_FA"
+    decode:
+      served-model-name: "Qwen/Qwen3-0.6B"
+      tensor-parallel-size: 1
+      gpu-memory-utilization: 0.50
+      max-model-len: 2048
+      max-num-seqs: 8
+      enforce-eager: true
+      attention-backend: "ROCM_AITER_FA"
+
+srun_options:
+  container-writable: ""
+  container-remap-root: ""
+  mem: "0"
+
+health_check:
+  max_attempts: 240
+  interval_seconds: 5
+
+benchmark:
+  type: custom
+  command: |
+    set -euo pipefail
+    result_root="/results/${SLURM_JOB_ID}"
+    mkdir -p "${result_root}/fixed-seq"
+    trap 'tar -C /logs -czf "'"${result_root}"'/runtime-logs.tar.gz" . 2>/dev/null || true' EXIT
+    for concurrency in 1 4; do
+      python3 /infmax-workspace/utils/bench_serving/benchmark_serving.py \
+      --backend openai-chat \
+      --base-url "http://${SRT_FRONTEND_HOST}:${SRT_FRONTEND_PORT}" \
+      --endpoint /v1/chat/completions \
+      --model Qwen/Qwen3-0.6B \
+      --tokenizer Qwen/Qwen3-0.6B \
+      --dataset-name random \
+      --random-input-len 128 \
+      --random-output-len 32 \
+      --random-range-ratio 1.0 \
+      --random-num-workers 1 \
+      --num-warmups "${concurrency}" \
+      --num-prompts "$((concurrency * 4))" \
+      --max-concurrency "${concurrency}" \
+      --request-rate inf \
+      --ignore-eos \
+      --disable-tqdm \
+      --save-result \
+      --result-dir "${result_root}/fixed-seq" \
+      --result-filename "qwen3-0.6b-disagg-isl128-osl32-c${concurrency}.json";
+    done
+  env:
+    HF_HOME: /hf_hub_cache
+    HF_HUB_CACHE: /hf_hub_cache
+    HUGGINGFACE_HUB_CACHE: /hf_hub_cache
