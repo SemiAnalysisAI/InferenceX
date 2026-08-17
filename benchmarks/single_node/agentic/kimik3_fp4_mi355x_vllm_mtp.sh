@@ -159,8 +159,24 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         ;;
     native)
         require_agentic_kv_offload_backend native
+        # The native tier backs the whole node-wide region with ONE /dev/shm
+        # file, so the request must fit tmpfs, not just RAM. At dram-utilization
+        # 0.60 TOTAL_CPU_DRAM_GB resolves above the default /dev/shm cap (50% of
+        # RAM); madvise(MADV_POPULATE_WRITE) then takes a SIGBUS on the full
+        # tmpfs and engine init dies with EFAULT ("Bad address") ~20 min in.
+        KV_OFFLOADING_SIZE="${KV_OFFLOADING_SIZE:-$TOTAL_CPU_DRAM_GB}"
+        SHM_FREE_GB=$(df -B1G --output=avail /dev/shm 2>/dev/null | tail -1 | tr -dc '0-9')
+        SHM_BUDGET_GB=$(( ${SHM_FREE_GB:-0} * 9 / 10 ))
+        if [ "${SHM_FREE_GB:-0}" -gt 0 ] && [ "$KV_OFFLOADING_SIZE" -gt "$SHM_BUDGET_GB" ]; then
+            echo "KV offload: /dev/shm has ${SHM_FREE_GB} GiB free; clamping --kv-offloading-size ${KV_OFFLOADING_SIZE} -> ${SHM_BUDGET_GB} GiB"
+            KV_OFFLOADING_SIZE="$SHM_BUDGET_GB"
+        fi
+        if [ "$KV_OFFLOADING_SIZE" -lt "${KV_OFFLOAD_MIN_GB:-64}" ]; then
+            echo "Error: /dev/shm (${SHM_FREE_GB:-0} GiB free) cannot back a useful native KV tier; raise the container shm-size or switch this arm to kv-offload-backend vllm-simple" >&2
+            exit 1
+        fi
         OFFLOAD_ARGS=(
-            --kv-offloading-size "${KV_OFFLOADING_SIZE:-$TOTAL_CPU_DRAM_GB}"
+            --kv-offloading-size "$KV_OFFLOADING_SIZE"
             --kv-offloading-backend native
         )
         ;;

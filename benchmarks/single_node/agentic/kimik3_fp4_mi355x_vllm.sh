@@ -80,8 +80,24 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         ;;
     native)
         require_agentic_kv_offload_backend native
+        # The native tier backs the whole node-wide region with ONE /dev/shm
+        # file, so the request must fit tmpfs, not just RAM. At dram-utilization
+        # 0.60 TOTAL_CPU_DRAM_GB resolves above the default /dev/shm cap (50% of
+        # RAM); madvise(MADV_POPULATE_WRITE) then takes a SIGBUS on the full
+        # tmpfs and engine init dies with EFAULT ("Bad address") ~20 min in.
+        KV_OFFLOADING_SIZE="${KV_OFFLOADING_SIZE:-$TOTAL_CPU_DRAM_GB}"
+        SHM_FREE_GB=$(df -B1G --output=avail /dev/shm 2>/dev/null | tail -1 | tr -dc '0-9')
+        SHM_BUDGET_GB=$(( ${SHM_FREE_GB:-0} * 9 / 10 ))
+        if [ "${SHM_FREE_GB:-0}" -gt 0 ] && [ "$KV_OFFLOADING_SIZE" -gt "$SHM_BUDGET_GB" ]; then
+            echo "KV offload: /dev/shm has ${SHM_FREE_GB} GiB free; clamping --kv-offloading-size ${KV_OFFLOADING_SIZE} -> ${SHM_BUDGET_GB} GiB"
+            KV_OFFLOADING_SIZE="$SHM_BUDGET_GB"
+        fi
+        if [ "$KV_OFFLOADING_SIZE" -lt "${KV_OFFLOAD_MIN_GB:-64}" ]; then
+            echo "Error: /dev/shm (${SHM_FREE_GB:-0} GiB free) cannot back a useful native KV tier; raise the container shm-size or switch this arm to kv-offload-backend vllm-simple" >&2
+            exit 1
+        fi
         OFFLOAD_ARGS=(
-            --kv-offloading-size "${KV_OFFLOADING_SIZE:-$TOTAL_CPU_DRAM_GB}"
+            --kv-offloading-size "$KV_OFFLOADING_SIZE"
             --kv-offloading-backend native
         )
         ;;
@@ -104,6 +120,9 @@ esac
 # fp8 prefill at uncapped (~1M) context — higher values re-introduce the
 # activation-arena OOM that capped long context. Override via MAX_NUM_SEQS.
 MAX_NUM_SEQS="${MAX_NUM_SEQS:-64}"
+# MNBT 16384 is mandated and shared with the -mtp sibling, so the base and
+# DSpark curves are measured on the same prefill chunk size.
+MNBT="${MNBT:-16384}"
 
 # --- fp8 KV on K3 (dense MLA) via the ASM persistent MLA path ------------------
 # K3's attention is DENSE MLA with 12 heads/rank at TP8 (a non-divisor of 16).
@@ -121,6 +140,16 @@ KVDTYPE_ARGS=(
 
 export VLLM_ROCM_USE_AITER_MOE=1
 
+# KV-cache memory pin, same rationale as the -mtp sibling. At gpu-mem 0.95 with
+# TP8 K3-fp4 the auto-sizer leaves KV at ~73 GiB against ~198 GiB of weights and
+# ~10.5 GiB of cudagraphs, i.e. under 4 GiB spare of the 288 GiB device. The
+# first long-context prefill plus a runtime Triton JIT then exhausts the device
+# and HSA aborts with "Available Free mem : 0 MB". Prefix caching only needs the
+# ~64k prefix stored once (~6 GiB), so pin KV to 32 GiB (~2M tokens) and leave
+# the rest as activation headroom. Do NOT touch gpu-mem.
+KV_CACHE_MEMORY="${KV_CACHE_MEMORY:-34359738368}"
+KVMEM_ARG=(); [ -n "$KV_CACHE_MEMORY" ] && KVMEM_ARG=(--kv-cache-memory "$KV_CACHE_MEMORY")
+
 echo "Starting vllm server (MI355X/AITER, DSV4-agentic-derived config)..."
 VLLM_CMD=(
     vllm serve "$MODEL_PATH" --served-model-name "$MODEL"
@@ -130,12 +159,13 @@ VLLM_CMD=(
     --distributed-executor-backend mp
     --gpu-memory-utilization 0.95
     --max-num-seqs "$MAX_NUM_SEQS"
-    --max-num-batched-tokens 4096
+    --max-num-batched-tokens "$MNBT"
     --trust-remote-code
     --load-format auto
     --moe-backend auto
     --mm-encoder-tp-mode data
     "${KVDTYPE_ARGS[@]}"
+    "${KVMEM_ARG[@]}"
     --compilation-config '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE"}'
     --enable-prefix-caching
     # native hybrid KV (MLA + KDA) — no padding; the fix for the capture fault.

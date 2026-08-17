@@ -1307,7 +1307,7 @@ kimik3-fp4-mi355x-vllm-agentic:
       search-space:
       # TP8-only: a ~1.5 TB FP4 checkpoint does not fit below 8 GPUs.
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 24] }
-      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [8, 16, 24] }
+      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [8, 16, 24] }
 
 kimik3-fp4-mi355x-vllm-agentic-dspark:
   # DSpark speculative decoding (Inferact/Kimi-K3-DSpark draft) at level 2 with
@@ -1335,7 +1335,7 @@ kimik3-fp4-mi355x-vllm-agentic-dspark:
       # GPU-resident through the ladder; host-DRAM offload for conc>=8 where the
       # on-device KV pin saturates and the shared prefix would otherwise evict.
       - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 24] }
-      - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [8, 16, 24] }
+      - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [8, 16, 24] }
 
 dsr1-fp4-mi355x-sglang-disagg-mtp:
   image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519
