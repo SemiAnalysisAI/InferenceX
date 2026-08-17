@@ -35,7 +35,7 @@ export MODEL_PATH=$MODEL_PATH
 export MODEL_NAME=$MODEL_NAME
 export CONTAINER_IMAGE=$IMAGE
 
-# Same EP/DP booleans as dsr1_fp8_mi355x_sglang-disagg.sh → amd_utils/submit.sh
+# Map the matrix EP/DP values to the booleans consumed by amd_utils/submit.sh.
 if [[ "${PREFILL_EP:-1}" -eq 1 ]]; then
     export PREFILL_ENABLE_EP=false
 else

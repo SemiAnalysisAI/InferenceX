@@ -11,6 +11,7 @@ SGLANG_IMAGE="lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260809"
 SHARED_BASE="/it-share/gharunners2/srt-slurm"
 SHARED_IMAGE="${SHARED_BASE}/containers/sglang-rocm-v0.5.17-mi35x-20260809.sqsh"
 SHARED_HF_CACHE="/it-share/hf-hub-cache"
+LEGACY_HF_CACHE="/it-share/hf_home"
 SHARED_RESULTS="${SHARED_BASE}/results"
 
 : "${GITHUB_WORKSPACE:?GITHUB_WORKSPACE must be set by Actions}"
@@ -32,9 +33,10 @@ SRT_REPO_DIR="${WORK_DIR}/srt-slurm"
 mkdir -p "$WORK_DIR" "$SHARED_RESULTS"
 
 # Materialize one immutable, shared squashfs and the requested model. Older
-# MI355X jobs populated Hugging Face's cache directly under SHARED_HF_CACHE;
-# expose a complete legacy cache through the current $HF_HOME/hub layout before
-# snapshot_download so large production checkpoints are reused without copies.
+# MI355X jobs populated Hugging Face caches either directly under
+# SHARED_HF_CACHE or under LEGACY_HF_CACHE; expose either layout through the
+# current $HF_HOME/hub path before snapshot_download so production checkpoints
+# are reused without copies.
 # This job exits normally and never cancels or preempts another job.
 STAGE_SCRIPT="${WORK_DIR}/stage-mi355x-runtime.sbatch"
 cat > "$STAGE_SCRIPT" <<EOF
@@ -68,13 +70,17 @@ exec 8>"$SHARED_HF_CACHE/.${MODEL_CACHE_KEY}.stage.lock"
 flock -w 2400 8
 legacy_model_dir="$SHARED_HF_CACHE/${MODEL_CACHE_KEY}"
 canonical_model_dir="$SHARED_HF_CACHE/hub/${MODEL_CACHE_KEY}"
-if [[ ! -e "\$canonical_model_dir" && -f "\$legacy_model_dir/refs/main" && -d "\$legacy_model_dir/snapshots" ]]; then
-    ln -s "../${MODEL_CACHE_KEY}" "\$canonical_model_dir"
+if [[ ! -e "\$canonical_model_dir" ]]; then
+    if [[ -f "\$legacy_model_dir/refs/main" && -d "\$legacy_model_dir/snapshots" ]]; then
+        ln -s "../${MODEL_CACHE_KEY}" "\$canonical_model_dir"
+    elif [[ -f "$LEGACY_HF_CACHE/${MODEL_CACHE_KEY}/refs/main" && -d "$LEGACY_HF_CACHE/${MODEL_CACHE_KEY}/snapshots" ]]; then
+        ln -s "$LEGACY_HF_CACHE/${MODEL_CACHE_KEY}" "\$canonical_model_dir"
+    fi
 fi
 flock -u 8
 srun --nodes=1 --ntasks=1 \
     --container-image="$SHARED_IMAGE" \
-    --container-mounts="$SHARED_HF_CACHE:/hf_hub_cache" \
+    --container-mounts="$SHARED_HF_CACHE:/hf_hub_cache,$LEGACY_HF_CACHE:$LEGACY_HF_CACHE" \
     --container-writable --container-remap-root --no-container-entrypoint \
     --export=ALL,HF_HOME=/hf_hub_cache,HF_HUB_CACHE=/hf_hub_cache/hub,HUGGINGFACE_HUB_CACHE=/hf_hub_cache/hub,MODEL_REPO=${MODEL} \
     python3 -c 'import os; from huggingface_hub import snapshot_download; snapshot_download(os.environ["MODEL_REPO"])'
