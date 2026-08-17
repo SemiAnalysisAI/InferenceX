@@ -6076,3 +6076,11 @@
   description:
     - "Align the TensorRT-LLM synthetic accepted-draft-token setting with the committed DeepSeek-V4-Pro AgentX acceptance target."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2595
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-trt-agentx
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Match the TensorRT-LLM synthetic accepted-draft-token setting to the recipe's disabled thinking mode."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2595
