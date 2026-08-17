@@ -3,11 +3,11 @@ name: "disagg-b200-1p1d-tp8-tp8-c1"
 
 model:
   path: "deepseek-v4-pro"
-  container: "lmsysorg/sglang:nightly-dev-cu13-20260708-b3632494"
+  container: "lmsysorg/sglang:nightly-dev-cu13-20260814-c4271c3f"
   precision: "fp4"
 
 dynamo:
-  hash: "92f5b3b8d7dd5ab9179d4b1034bd2c1c0803693e"
+  hash: "86f84b9486905c2bfaa4b756c9fa39f04ecf5ebd"
   install: true
 
 sbatch_directives:
@@ -39,14 +39,9 @@ backend:
     PYTHONUNBUFFERED: "1"
     SGLANG_RADIX_FORCE_MISS: "1"
     SGLANG_JIT_DEEPGEMM_FAST_WARMUP: "1"
-    SGLANG_ENABLE_THINKING: "1"
-    SGLANG_REASONING_EFFORT: "max"
+    SGLANG_DEFAULT_THINKING: "1"
+    SGLANG_DSV4_REASONING_EFFORT: "max"
     SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
-    SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN: "1"
-    NCCL_MNNVL_ENABLE: "1"
-    NCCL_CUMEM_ENABLE: "1"
-    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
-    MC_FORCE_MNNVL: "1"
     SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
     SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
     SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: "1"
@@ -55,14 +50,9 @@ backend:
     PYTHONUNBUFFERED: "1"
     SGLANG_RADIX_FORCE_MISS: "1"
     SGLANG_JIT_DEEPGEMM_FAST_WARMUP: "1"
-    SGLANG_ENABLE_THINKING: "1"
-    SGLANG_REASONING_EFFORT: "max"
+    SGLANG_DEFAULT_THINKING: "1"
+    SGLANG_DSV4_REASONING_EFFORT: "max"
     SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
-    SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN: "1"
-    NCCL_MNNVL_ENABLE: "1"
-    NCCL_CUMEM_ENABLE: "1"
-    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
-    MC_FORCE_MNNVL: "1"
     SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
     SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
     SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: "1"
@@ -75,7 +65,7 @@ backend:
       disable-radix-cache: true
 
       disaggregation-mode: "prefill"
-      disaggregation-transfer-backend: mooncake
+      disaggregation-transfer-backend: nixl
 
       tensor-parallel-size: 8
       data-parallel-size:   1
@@ -96,7 +86,7 @@ backend:
       disable-radix-cache: true
 
       disaggregation-mode: "decode"
-      disaggregation-transfer-backend: mooncake
+      disaggregation-transfer-backend: nixl
 
       tensor-parallel-size: 8
       data-parallel-size:   1
@@ -117,4 +107,4 @@ benchmark:
   osl: 1024
   concurrencies: "1"
   req_rate: "inf"
-  use_chat_template: false
+  use_chat_template: true
