@@ -9,13 +9,13 @@ name: "disagg-gb300-4p4d-dep8-dep16-c400-mtp-kvoffload"
 # from the master-config conc-list.
 
 model:
-  path: "deepseek-v4-pro-dspark"
+  path: "deepseek-v4-pro-0813"
   container: "dynamo-sglang"
   precision: "fp4"
 
 identity:
   model:
-    repo: "deepseek-ai/DeepSeek-V4-Pro-DSpark"
+    repo: "deepseek-ai/DeepSeek-V4-Pro-0813"
   container:
     image: "lmsysorg/sglang:nightly-dev-cu13-20260816-4a6dc267"
 
@@ -63,9 +63,6 @@ backend:
 
   prefill_environment:
     SGLANG_RAGGED_VERIFY_MODE: "static"
-    SGLANG_SIMULATE_ACC_LEN: "3.82"
-    SGLANG_SIMULATE_ACC_METHOD: match-expected
-    SGLANG_SIMULATE_ACC_TOKEN_MODE: "real-draft-token"
     SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "900"
     PIP_BREAK_SYSTEM_PACKAGES: '1'
     PYTHONUNBUFFERED: '1'
@@ -100,9 +97,6 @@ backend:
 
   decode_environment:
     SGLANG_RAGGED_VERIFY_MODE: "static"
-    SGLANG_SIMULATE_ACC_LEN: "3.82"
-    SGLANG_SIMULATE_ACC_METHOD: match-expected
-    SGLANG_SIMULATE_ACC_TOKEN_MODE: "real-draft-token"
     SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "900"
     PIP_BREAK_SYSTEM_PACKAGES: '1'
     PYTHONUNBUFFERED: '1'
@@ -138,8 +132,9 @@ backend:
   sglang_config:
     prefill:
       host: 0.0.0.0
-      served-model-name: deepseek-ai/DeepSeek-V4-Pro-DSpark
+      served-model-name: deepseek-ai/DeepSeek-V4-Pro-0813
       enable-metrics: true
+      enable-cache-report: true
       model-path: /model/
       trust-remote-code: true
       watchdog-timeout: 86400
@@ -174,8 +169,9 @@ backend:
 
     decode:
       host: 0.0.0.0
-      served-model-name: deepseek-ai/DeepSeek-V4-Pro-DSpark
+      served-model-name: deepseek-ai/DeepSeek-V4-Pro-0813
       enable-metrics: true
+      enable-cache-report: true
       model-path: /model/
       trust-remote-code: true
       watchdog-timeout: 86400
@@ -225,4 +221,3 @@ benchmark:
     AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
     AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
     HF_HUB_CACHE: "/hf_hub_cache"
-    INFMAX_AIPERF_TOKENIZER: "/model"

@@ -6055,8 +6055,28 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Replace the GB300 DeepSeek-V4-Pro AgentX EAGLE/MTP serving path with DSpark block size 6 across two aggregate and five disaggregated recipes"
-    - "Use DeepSeek-V4-Pro-DSpark with SGLANG_RAGGED_VERIFY_MODE=static, MegaMoE for DEP workers, and forced thinking-on acceptance length 3.82"
+    - "Replace the GB300 DeepSeek-V4-Pro AgentX EAGLE/MTP serving path with DSpark block size 6 across two aggregate and four disaggregated recipes"
+    - "Use the official DeepSeek-V4-Pro-0813 checkpoint with SGLANG_RAGGED_VERIFY_MODE=static, MegaMoE for DEP workers, and throughput-only thinking-on acceptance length 3.77 from the committed DeepSeek-V4-Pro-0813 probabilistic DSpark curve (golden_al_distribution/dsv4_0813_dspark_probabilistic.yaml); eval keeps real DSpark verification"
     - "Refresh SGLang to nightly-dev-cu13-20260816-4a6dc267, which already contains the required DSpark performance and MegaMoE support"
-    - "Retune the Pareto ladder to concurrency 1/4/8, 32, 192, 400, 640, and 1536; the 8P4D concurrency-1536 point is the throughput endpoint"
+    - "Retune the Pareto ladder to concurrency 1/4/8, 192, 400, 640, and 1536; the 8P4D concurrency-1536 point is the throughput endpoint"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2623
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Restore concurrency 1152 as the validated 8P4D DSpark throughput endpoint after the concurrency-1536 formal AgentX warmup exceeded prefill activation-memory headroom"
+    - "Keep the 8P4D topology, DSpark block size 6, prefill mem-fraction-static 0.85, decode CUDA Graph batch size 192, and all other serving parameters unchanged"
+    - "Use the coarse WAR barrier only for the TP4 aggregate point to avoid the shared-read-done startup stall observed with the 20260816 nightly"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2623
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-agg
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable SGLang cache reporting on every GB300 DeepSeek-V4-Pro DSpark worker and prefetch checkpoint shards on the two pure-TP aggregate recipes"
+    - "Move the DSv4 AgentX runner from srt-slurm v1.0.38 to v1.0.40; set the concurrency-1152 recipe's nginx client/upstream keepalive to 900 seconds and AIPerf TCP user timeout to 900 seconds so a pooled multi-turn connection is not closed between turns"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2623
