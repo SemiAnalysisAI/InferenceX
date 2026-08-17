@@ -54,6 +54,12 @@ def main() -> int:
     ap.add_argument("--libtype", default="flydsl,asm")
     ap.add_argument("--max-candidates", type=int, default=400)
     ap.add_argument("--device", default="cuda:0")
+    ap.add_argument(
+        "--allow-torch-winner",
+        action="store_true",
+        help="Let torch win when it is the fastest backend. Use for shapes tuned only "
+        "for throughput; omit for shapes tuned to escape a faulting torch path.",
+    )
     args = ap.parse_args()
 
     libtypes = [x.strip() for x in args.libtype.split(",") if x.strip()]
@@ -73,7 +79,15 @@ def main() -> int:
         w.writeheader()
         for m, n, k in shapes:
             t0 = time.time()
-            best = tune_shape(m, n, k, libtypes, device, args.max_candidates)
+            best = tune_shape(
+                m,
+                n,
+                k,
+                libtypes,
+                device,
+                args.max_candidates,
+                allow_torch_winner=args.allow_torch_winner,
+            )
             tf, bw = tflops_bw(m, n, k, best["us"])
             w.writerow(
                 {

@@ -1,0 +1,193 @@
+From 886e88a3d17026e696a21af0aa0a1d20470876b5 Mon Sep 17 00:00:00 2001
+From: Yongqin Wang <yongqinwang@roblox.com>
+Date: Tue, 11 Aug 2026 17:30:26 +0000
+Subject: [PATCH 4/4] [Spec Decode][PP] Fix aux-tap packing under compile and
+ outside a worker
+
+Two CI failures on this branch, both from the aux-tap plumbing running in
+contexts the feature could not reach before.
+
+The compile wrapper rejects any forward whose bytecode names `update`, its
+heuristic for buffer mutation under cudagraphs. Packing the taps through
+dict.update tripped it, so the engine failed to start for Llama, Qwen2/3,
+Kimi-K3 and DeepSeek-V4. Stock CUDA hid this because AOT compile bypasses
+the hook; it fired on ROCm and wherever the compile cache is off. Merge the
+taps by unpacking instead, and pin the rule with a unit test.
+
+The mixin also resolved the PP group while packing, receiving and caching
+the slot layout. Every caller already gates on is_last_rank, so the first
+two lookups were redundant, and they made model construction fail wherever
+no PP group exists, which is what the Kimi-K3 eagle3 unit tests do. Drop
+them, and skip the layout cache when the parallel state is not initialized.
+
+Signed-off-by: Yongqin Wang <yongqinwang@roblox.com>
+---
+ .../test_eagle3_aux_hidden_states_pp.py       | 13 ++++++++++
+ vllm/model_executor/models/interfaces.py      | 26 ++++++++++---------
+ vllm/model_executor/models/llama.py           |  9 +++++--
+ vllm/model_executor/models/qwen2.py           |  9 +++++--
+ vllm/models/deepseek_v4/nvidia/model.py       |  8 ++++--
+ vllm/models/kimi_k3/nvidia/model.py           |  9 +++++--
+ 6 files changed, 54 insertions(+), 20 deletions(-)
+
+diff --git a/tests/v1/worker/test_eagle3_aux_hidden_states_pp.py b/tests/v1/worker/test_eagle3_aux_hidden_states_pp.py
+index 3fa140f8bd56..826c0b68b1b6 100644
+--- a/tests/v1/worker/test_eagle3_aux_hidden_states_pp.py
++++ b/tests/v1/worker/test_eagle3_aux_hidden_states_pp.py
+@@ -10,6 +10,8 @@
+ 
+ from vllm.distributed.utils import get_pp_indices
+ from vllm.model_executor.models.interfaces import EagleModelMixin
++from vllm.model_executor.models.llama import LlamaModel
++from vllm.model_executor.models.qwen2 import Qwen2Model
+ 
+ # Kimi-K3 / DSpark: 93 layers, target_layer_ids [2, 23, 47, 71, 89].
+ # get_eagle3_aux_layers_from_config maps target_layer_ids -> +1.
+@@ -65,3 +67,14 @@ def test_middle_stage_sends_only_local_taps():
+     upstream = [a for a in AUX_IDS if a <= start]
+     assert not set(local) & set(upstream)
+     assert local == [a for a in AUX_IDS if start < a <= end]
++
++
++@pytest.mark.parametrize("model_cls", [LlamaModel, Qwen2Model])
++def test_forward_does_not_name_update(model_cls):
++    """Packing taps must not go through dict.update.
++
++    TorchDynamoWrapper.bytecode_hook refuses any compiled forward whose
++    bytecode names `update`, so a model that packs its taps that way cannot
++    start under cudagraphs. The same holds for the other opted-in models.
++    """
++    assert "update" not in model_cls.forward.__code__.co_names
+diff --git a/vllm/model_executor/models/interfaces.py b/vllm/model_executor/models/interfaces.py
+index 86a54938bd66..dcbd2556e5f0 100644
+--- a/vllm/model_executor/models/interfaces.py
++++ b/vllm/model_executor/models/interfaces.py
+@@ -1510,8 +1510,15 @@ def _set_aux_hidden_state_layers(self, layers: tuple[int, ...]) -> None:
+ 
+     def _cache_aux_pp_layout(self) -> None:
+         """Resolve this rank's slot layout, off the forward path."""
+-        from vllm.distributed.parallel_state import get_pp_group
++        from vllm.distributed.parallel_state import (
++            get_pp_group,
++            model_parallel_is_initialized,
++        )
+ 
++        # Models are also built outside a worker, where there is no PP group
++        # and so nothing to forward.
++        if not model_parallel_is_initialized():
++            return
+         pp = get_pp_group()
+         if pp.world_size < 2:
+             return
+@@ -1583,12 +1590,10 @@ def pack_local_aux_for_last(
+         """Expose this stage's own aux taps to the runner, keyed by global slot.
+ 
+         Pure packing, so the forward stays capturable by full CUDA graphs; the
+-        taps then ride the ``IntermediateTensors`` handoff.
++        taps then ride the ``IntermediateTensors`` handoff. Callers reach this
++        only off the last rank, which implies a PP world size above one.
+         """
+-        from vllm.distributed.parallel_state import get_pp_group
+-
+-        pp = get_pp_group()
+-        if pp.world_size == 1 or pp.is_last_rank or not aux_hidden_states:
++        if not aux_hidden_states:
+             return {}
+         base = self._aux_slot_base_cached
+         return {
+@@ -1602,13 +1607,10 @@ def recv_remote_aux_from_producers(
+         """Collect earlier stages' aux taps on the last rank, in tap order.
+ 
+         The handoff has already landed them in the persistent buffer, so reading
+-        fixed slots keeps the forward capturable by full CUDA graphs.
++        fixed slots keeps the forward capturable by full CUDA graphs. Callers
++        gate on the last rank; the count is zero unless a split left taps
++        upstream, which cannot happen at a PP world size of one.
+         """
+-        from vllm.distributed.parallel_state import get_pp_group
+-
+-        pp = get_pp_group()
+-        if not pp.is_last_rank or pp.world_size == 1:
+-            return []
+         total = self._aux_upstream_total_cached
+         if total == 0:
+             return []
+diff --git a/vllm/model_executor/models/llama.py b/vllm/model_executor/models/llama.py
+index ce9b1bcd325c..ab542de7df68 100644
+--- a/vllm/model_executor/models/llama.py
++++ b/vllm/model_executor/models/llama.py
+@@ -442,8 +442,13 @@ def forward(
+             )
+ 
+         if not get_pp_group().is_last_rank:
+-            tensors = {"hidden_states": hidden_states, "residual": residual}
+-            tensors.update(self.pack_local_aux_for_last(aux_hidden_states))
++            # Merged by unpacking rather than dict.update: the compile wrapper
++            # rejects a forward whose bytecode names `update`.
++            tensors = {
++                "hidden_states": hidden_states,
++                "residual": residual,
++                **self.pack_local_aux_for_last(aux_hidden_states),
++            }
+             return IntermediateTensors(tensors)
+ 
+         hidden_states, _ = self.norm(hidden_states, residual)
+diff --git a/vllm/model_executor/models/qwen2.py b/vllm/model_executor/models/qwen2.py
+index 72f18a377182..0e03eb1c2fa3 100644
+--- a/vllm/model_executor/models/qwen2.py
++++ b/vllm/model_executor/models/qwen2.py
+@@ -435,8 +435,13 @@ def forward(
+             )
+ 
+         if not get_pp_group().is_last_rank:
+-            tensors = {"hidden_states": hidden_states, "residual": residual}
+-            tensors.update(self.pack_local_aux_for_last(aux_hidden_states))
++            # Merged by unpacking rather than dict.update: the compile wrapper
++            # rejects a forward whose bytecode names `update`.
++            tensors = {
++                "hidden_states": hidden_states,
++                "residual": residual,
++                **self.pack_local_aux_for_last(aux_hidden_states),
++            }
+             return IntermediateTensors(tensors)
+ 
+         hidden_states, _ = self.norm(hidden_states, residual)
+diff --git a/vllm/models/deepseek_v4/nvidia/model.py b/vllm/models/deepseek_v4/nvidia/model.py
+index 0da6d0f05b54..63241439da4c 100644
+--- a/vllm/models/deepseek_v4/nvidia/model.py
++++ b/vllm/models/deepseek_v4/nvidia/model.py
+@@ -1197,8 +1197,12 @@ def forward(
+                 )
+ 
+         if not get_pp_group().is_last_rank:
+-            tensors = {"hidden_states": hidden_states}
+-            tensors.update(self.pack_local_aux_for_last(aux_hidden_states))
++            # Merged by unpacking rather than dict.update: the compile wrapper
++            # rejects a forward whose bytecode names `update`.
++            tensors = {
++                "hidden_states": hidden_states,
++                **self.pack_local_aux_for_last(aux_hidden_states),
++            }
+             return IntermediateTensors(tensors)
+ 
+         if self.use_sequence_parallel:
+diff --git a/vllm/models/kimi_k3/nvidia/model.py b/vllm/models/kimi_k3/nvidia/model.py
+index 8a89faaba462..16b6a2e8c9be 100644
+--- a/vllm/models/kimi_k3/nvidia/model.py
++++ b/vllm/models/kimi_k3/nvidia/model.py
+@@ -1374,8 +1374,13 @@ def forward(
+             )
+             if prefix_sum is not None:
+                 hidden_states = hidden_states + prefix_sum
+-            tensors = {"hidden_states": hidden_states, "residual": residual}
+-            tensors.update(self.pack_local_aux_for_last(aux_hidden_states))
++            # Merged by unpacking rather than dict.update: the compile wrapper
++            # rejects a forward whose bytecode names `update`.
++            tensors = {
++                "hidden_states": hidden_states,
++                "residual": residual,
++                **self.pack_local_aux_for_last(aux_hidden_states),
++            }
+             return IntermediateTensors(tensors)
+ 
+         if self.use_attn_res:

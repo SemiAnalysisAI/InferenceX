@@ -8,12 +8,13 @@ M614="${M614:-${AITER_DIR}/kimik3_bf16_tuned_gemm.m614.csv}"
 M6144="${M6144:-${AITER_DIR}/kimik3_bf16_tuned_gemm.m6144.csv}"
 N6288="${N6288:-${AITER_DIR}/kimik3_bf16_tuned_gemm.n6288.csv}"
 SMALL_M="${SMALL_M:-${AITER_DIR}/kimik3_bf16_tuned_gemm.cudagraph_small_m.csv}"
+BUCKETS="${BUCKETS:-${AITER_DIR}/kimik3_bf16_tuned_gemm.padded_buckets.csv}"
 BULK="${BULK:-${AITER_DIR}/kimik3_bf16_tuned_gemm.extra.csv}"
 OUT="${OUT:-${AITER_DIR}/kimik3_bf16_tuned_gemm.combined.csv}"
 HEADER="gfx,cu_num,M,N,K,bias,dtype,outdtype,scaleAB,bpreshuffle,libtype,solidx,splitK,us,kernelName,err_ratio,tflops,bw"
 
 inputs=()
-for f in "$M614" "$M6144" "$N6288" "$SMALL_M" "$BULK"; do
+for f in "$M614" "$M6144" "$N6288" "$SMALL_M" "$BUCKETS" "$BULK"; do
   [[ -f "$f" ]] && inputs+=("$f")
 done
 [[ ${#inputs[@]} -gt 0 ]] || { echo "No tune CSV inputs found under ${AITER_DIR}" >&2; exit 1; }

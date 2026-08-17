@@ -194,6 +194,7 @@ def tune_shape(
     libtypes: list[str],
     device: torch.device,
     max_candidates: int,
+    allow_torch_winner: bool = False,
 ) -> dict[str, Any]:
     print(f"\n=== tune M={m} N={n} K={k} ===")
     a = torch.randn(m, k, device=device, dtype=torch.bfloat16)
@@ -203,7 +204,20 @@ def tune_shape(
     us0, err0 = bench_fn(lambda: torch_gemm(a, b, 0, None, torch.bfloat16), ref)
     print(f"  torch baseline us={us0:.3f} err={err0:.4f}")
 
+    torch_config = {
+        "libtype": "torch",
+        "solidx": 0,
+        "splitK": 0,
+        "us": us0,
+        "kernelName": "",
+        "err_ratio": round(err0, 4),
+    }
+
     winners: list[dict[str, Any]] = []
+    # Callers that only tune to *escape* torch (cudagraph small-M, where the torch
+    # path faults during capture) must never pin torch back, however fast it is.
+    if allow_torch_winner and us0 > 0:
+        winners.append(torch_config)
     if "flydsl" in libtypes:
         cand = tune_flydsl(a, b, ref, m, n, k, max_candidates)
         if cand:
@@ -221,14 +235,7 @@ def tune_shape(
 
     if not winners:
         print("  no valid flydsl/asm winner; falling back to torch")
-        return {
-            "libtype": "torch",
-            "solidx": 0,
-            "splitK": 0,
-            "us": us0,
-            "kernelName": "",
-            "err_ratio": round(err0, 4),
-        }
+        return torch_config
 
     best = min(winners, key=lambda x: x["us"])
     print(f"  => pick {best['libtype']} us={best['us']:.3f}")

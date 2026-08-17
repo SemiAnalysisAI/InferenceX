@@ -12,12 +12,12 @@
 # agg-b200-tp8pp2-retention0-agentic.yaml
 #
 # Serving profile aligned with single-node kimik3_fp4_mi355x_mtp.sh /
-# configs/amd-master.yaml kimik3-fp4-mi355x-vllm-agentic-mtp (spec-decoding:
-# none here instead of DSpark MTP):
+# configs/amd-master.yaml kimik3-fp4-mi355x-vllm-agentic-mtp:
 #   - ROCm image + apply_k3_container_patches.sh
 #   - fp8 KV, dram + vllm-simple CPU offload (default), FULL_AND_PIECEWISE cudagraph
 #   - max-num-seqs 20, max-model-len 1M, gpu-mem 0.84 with offload
 #   - AITER MoE SITUV2 A8W4 + asm MLA (no offline aiter GEMM tune in CI)
+#   - optional DSpark via SPEC_DECODE=true (CI tp8pp2 default remains none)
 #
 # Topology:
 #   - TP8 x PP2, plain TP (EP off), aggregated (no P/D disagg)
@@ -31,6 +31,10 @@
 #   TP (default 8), PP (default 2), PORT, KV_OFFLOAD_BACKEND (vllm-simple when dram),
 #   GPU_MEM_UTIL, ENFORCE_EAGER (default false), MAX_NUM_SEQS (default 20),
 #   MAX_NUM_BATCHED_TOKENS (default 8192; caps chunked-prefill M to avoid OOM)
+#   RUN_EVAL=true → after agentic profiling, run lm-eval (gsm8k) against the warm engine
+#   SPEC_DECODE=true → DSpark (Inferact/Kimi-K3-DSpark, TRITON_MLA), same as
+#                      kimik3_fp4_mi355x_mtp.sh; SPEC_NUM_TOKENS default 2
+#   DRAFT_MODEL_PATH → draft weights (default Inferact/Kimi-K3-DSpark or /hf_cache/…)
 #   ASYNC_SCHEDULING: true|1 → --async-scheduling;
 #                     false|0 → --no-async-scheduling;
 #                     unset/auto → omit (engine default; matches prior smoke)
@@ -51,6 +55,13 @@ MAX_NUM_SEQS="${MAX_NUM_SEQS:-20}"
 # B200 agg-tp8pp2 recipe + prior MI355X OOM (M≈336k): keep prefill chunks bounded.
 MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-8192}"
 MAX_CUDAGRAPH_CAPTURE_SIZE="${MAX_CUDAGRAPH_CAPTURE_SIZE:-44}"
+# Lower bound of the capture list. The aiter MXFP4 fused_moe picks M-specific
+# kernel variants below M≈8 (M=2 selects _w4_gui_kw2_fp8 +
+# t32x256x256_reduce_persist) and those fault with an illegal device access
+# during capture on gfx950; the tuned GEMM CSVs carry no M<=8 rows either.
+# Raise this to skip those sizes — batches below the smallest captured size are
+# padded up to it, so only the capture list shrinks.
+MIN_CUDAGRAPH_CAPTURE_SIZE="${MIN_CUDAGRAPH_CAPTURE_SIZE:-1}"
 
 check_env_vars MODEL MODEL_PREFIX CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION RESULT_FILENAME
 
@@ -204,7 +215,79 @@ fi
 # K3 container patches (triton 3.7.0 + vLLM/aiter hotfixes) — idempotent.
 bash "$(dirname "$0")/../../single_node/agentic/apply_k3_container_patches.sh"
 
-CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 1 "$MAX_CUDAGRAPH_CAPTURE_SIZE")"
+# vLLM #50514 (open): DSpark/EAGLE3 under PP — draft on last PP stage only.
+# Required when SPEC_DECODE is on with PP>1; no-op if already applied.
+case "${SPEC_DECODE:-false}" in
+true|TRUE|1|yes|YES|on|ON|mtp|dspark)
+    bash "${GITHUB_WORKSPACE:-/workspace}/experimental/kimik3-v4/apply_vllm_50514_pp_spec.sh" \
+      || { echo "ERROR: apply_vllm_50514_pp_spec.sh failed (needed for DSpark+PP)" >&2; exit 1; }
+    ;;
+esac
+
+# ---- Optional DSpark (matches kimik3_fp4_mi355x_mtp.sh) ---------------------
+SPEC_ARGS=()
+case "${SPEC_DECODE:-false}" in
+true|TRUE|1|yes|YES|on|ON|mtp|dspark)
+    SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-2}"
+    DRAFT_MODEL_PATH="${DRAFT_MODEL_PATH:-Inferact/Kimi-K3-DSpark}"
+    # Prefer a local HF-cache checkout when the hub id is not a directory.
+    if [[ ! -d "$DRAFT_MODEL_PATH" ]]; then
+        for cand in \
+            "/hf_cache/Kimi-K3-DSpark" \
+            "/hf_cache/models--Inferact--Kimi-K3-DSpark" \
+            "${HF_HOME:-}/Kimi-K3-DSpark" \
+            "${HUGGINGFACE_HUB_CACHE:-}/Kimi-K3-DSpark"; do
+            if [[ -n "$cand" && -d "$cand" && -n "$(ls -A "$cand" 2>/dev/null)" ]]; then
+                DRAFT_MODEL_PATH="$cand"
+                break
+            fi
+        done
+    fi
+    SYNTHETIC_ACCEPT_LEN="${SYNTHETIC_ACCEPT_LEN:-2.51}"
+    # Use real block rejection when accuracy-checking (EVAL_ONLY / RUN_EVAL), or when
+    # explicitly requested. Synthetic AL is only for throughput bring-up.
+    REJECTION_SAMPLE_METHOD="${REJECTION_SAMPLE_METHOD:-}"
+    if [[ -z "$REJECTION_SAMPLE_METHOD" ]]; then
+        if [[ "${EVAL_ONLY:-false}" == "true" || "${RUN_EVAL:-false}" == "true" ]]; then
+            REJECTION_SAMPLE_METHOD=block
+        else
+            REJECTION_SAMPLE_METHOD=synthetic
+        fi
+    fi
+    case "$REJECTION_SAMPLE_METHOD" in
+    block|BLOCK)
+        SPEC_ARGS=(
+            --speculative-config
+            "{\"model\":\"$DRAFT_MODEL_PATH\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"block\"}"
+        )
+        ;;
+    synthetic|SYNTHETIC)
+        SPEC_ARGS=(
+            --speculative-config
+            "{\"model\":\"$DRAFT_MODEL_PATH\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
+        )
+        ;;
+    *)
+        echo "Error: REJECTION_SAMPLE_METHOD='$REJECTION_SAMPLE_METHOD' (expected block|synthetic)" >&2
+        exit 1
+        ;;
+    esac
+    echo "DSpark enabled: draft=${DRAFT_MODEL_PATH} tokens=${SPEC_NUM_TOKENS} rejection=${REJECTION_SAMPLE_METHOD} eval_only=${EVAL_ONLY:-false} run_eval=${RUN_EVAL:-false}"
+    ;;
+false|FALSE|0|no|NO|off|OFF|none|"")
+    echo "SPEC_DECODE=off (STP / no speculative decoding)"
+    ;;
+*)
+    echo "Error: SPEC_DECODE='${SPEC_DECODE}' (expected true|false|mtp|dspark)" >&2
+    exit 1
+    ;;
+esac
+
+if (( MIN_CUDAGRAPH_CAPTURE_SIZE > MAX_CUDAGRAPH_CAPTURE_SIZE )); then
+    echo "Error: MIN_CUDAGRAPH_CAPTURE_SIZE=$MIN_CUDAGRAPH_CAPTURE_SIZE exceeds MAX_CUDAGRAPH_CAPTURE_SIZE=$MAX_CUDAGRAPH_CAPTURE_SIZE" >&2
+    exit 1
+fi
+CUDAGRAPH_CAPTURE_SIZES="$(seq -s, "$MIN_CUDAGRAPH_CAPTURE_SIZE" "$MAX_CUDAGRAPH_CAPTURE_SIZE")"
 COMPILATION_CONFIG_ARGS=(
     --compilation-config
     "{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}"
@@ -232,6 +315,7 @@ COMMON_VLLM_ARGS=(
     --enable-prefix-caching
     "${COMPILATION_CONFIG_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
+    "${SPEC_ARGS[@]}"
     --master-addr "$MASTER_ADDR"
     --master-port "$MASTER_PORT"
     --nnodes "$NNODES"
@@ -335,4 +419,10 @@ else
             cp -a "$RESULT_DIR"/. "/logs/agentic/conc_${concurrency}/" 2>/dev/null || true
         fi
     done
+    # Optional accuracy check against the still-warm engine (gsm8k via lm-eval).
+    if [[ "${RUN_EVAL:-false}" == "true" ]]; then
+        echo "RUN_EVAL=true: running lm-eval after agentic profiling"
+        run_eval --framework lm-eval --port "$PORT"
+        append_lm_eval_summary || true
+    fi
 fi

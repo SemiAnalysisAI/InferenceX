@@ -1,0 +1,38 @@
+From e7859f54b49ee181b52393e0d5c1e09855f91716 Mon Sep 17 00:00:00 2001
+From: Yongqin Wang <yongqinwang@roblox.com>
+Date: Mon, 10 Aug 2026 23:25:53 +0000
+Subject: [PATCH 3/4] Fetch the draft checkpoint through vLLM's tagged HF
+ helpers
+
+check_forbidden_imports rejects calling huggingface_hub directly; use
+hf_api().snapshot_download from vllm.transformers_utils.repo_utils.
+
+Signed-off-by: Yongqin Wang <yongqinwang@roblox.com>
+---
+ tests/v1/e2e/spec_decode/eagle/test_eagle3_pp.py | 9 +++++++--
+ 1 file changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/tests/v1/e2e/spec_decode/eagle/test_eagle3_pp.py b/tests/v1/e2e/spec_decode/eagle/test_eagle3_pp.py
+index 422fda95dda2..a18e48ad1622 100644
+--- a/tests/v1/e2e/spec_decode/eagle/test_eagle3_pp.py
++++ b/tests/v1/e2e/spec_decode/eagle/test_eagle3_pp.py
+@@ -78,11 +78,16 @@ def draft_without_embed_tokens(tmp_path_factory) -> str:
+     one. ``DRAFT`` carries its own, so on its own it never exercises that path.
+     Removing the key reproduces the shared-embedding class at 1B.
+     """
+-    from huggingface_hub import snapshot_download
+     from safetensors.torch import load_file, save_file
+ 
++    from vllm.transformers_utils.repo_utils import hf_api
++
+     src = Path(
+-        snapshot_download(DRAFT, allow_patterns=["*.json", "*.py", "*.safetensors"])
++        hf_api().snapshot_download(
++            repo_id=DRAFT,
++            repo_type="model",
++            allow_patterns=["*.json", "*.py", "*.safetensors"],
++        )
+     )
+     dst = tmp_path_factory.mktemp("eagle3_shared_embed")
+     for path in src.iterdir():
+
