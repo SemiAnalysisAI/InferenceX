@@ -6039,7 +6039,16 @@
     - "EVAL_ONLY runs switch to real block verification by removing synthetic acceptance (TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS stripped from all agentx recipes before srtctl)."
     - "Add SERVED_MODEL_NAME: Qwen3.5-397B-A17B-NVFP4-V2 to all 6 agentx recipe env blocks and make build_replay_cmd prefer SERVED_MODEL_NAME over $MODEL for the aiperf --model flag."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2612
-  
+- config-keys:
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GB200 GLM-5.2 FP4 Dynamo-SGLang AgentX with EAGLE MTP, HiCache DRAM offload, and KV-aware correlation-ID affinity."
+    - "Measure the TP8 aggregate curve and tuned 1P1D TP4 HiCache c10/c12 disaggregated frontier with every logical SGLang metrics endpoint."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2620
+
 - config-keys:
     - dsv4-fp4-b300-dynamo-sglang-agentic-mtp-agg
   scenario-type:
@@ -6048,5 +6057,5 @@
     - "Add B300 Dynamo-SGLang DSpark6 AgentX aggregate DEP4 and DEP8 configurations with session-affinity routing, HiCache host offload, an 8K prefill window, and thinking-on block-size-6 golden synthetic acceptance length 3.77 for throughput; eval retains real verification."
     - "Use the August 16 SGLang CUDA 13 nightly and srt-slurm v1.0.38, with DEP4 concurrency 48-64 and DEP8 concurrency 128-576."
     - "Cap the DEP8 HiCache ratio at 1.5 so the explicit host KV pool fits within the B300 x86 node's 3 TB DRAM budget during model loading and JIT startup."
-    - "Use the staged /model tokenizer as the single AIPerf tokenizer argument, avoiding a duplicate Click option while keeping AgentX setup independent of the shared Hugging Face cache."
+    - "Use the official DeepSeek-V4-Pro-0813 model identity so AIPerf follows the standard --tokenizer $MODEL path and reuses the shared Hugging Face cache."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2624
