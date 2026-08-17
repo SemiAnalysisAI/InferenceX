@@ -5982,20 +5982,9 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2571
   
 - config-keys:
-    - minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp
-    - minimaxm3-fp4-gb200-dynamo-vllm-agentic-disagg-mtp
+    - kimik3-fp4-mi355x-vllm-agentic-mtp-nokv
   scenario-type:
     - agentic-coding
   description:
-    - "Add the tuned GB200 MiniMax-M3 FP4 AgentX frontier with EAGLE3, the B200 TP4 baseline, DEP4/DEP8, SimpleCPU offload, and KV-routed P/D."
-    - "Use full-decode-only CUDA graphs for TP4 stability."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2609
-
-- config-keys:
-    - kimik3-fp4-mi355x-vllm-agentic-mtp-lmcache
-  scenario-type:
-    - agentic-coding
-  description:
-    - "Add a dedicated LMCache 0.5.4rc4 DRAM KV-offload key at TP8 conc 4/8/10/12 on top of the unchanged kimik3-fp4-mi355x-vllm-agentic-mtp DSpark MTP stack, with the version pinned in the master config and consumed by the script via KV_OFFLOAD_BACKEND_METADATA."
-    - "Run one LMCache MP server per node with chunk size 3072 (the minimum multiple of the hybrid KDA/MLA group block sizes) and --separate-object-groups, keeping the L1 in process memory (--shm-name \"\") so the DRAM budget is not capped by /dev/shm."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2598
+    - "DIAGNOSTIC ONLY, not for merge: sweep the kimik3-fp4-mi355x-vllm-agentic-mtp-lmcache points with the KV transfer config removed (no LMCache server, no --kv-transfer-config, GPU-resident KV only) to isolate whether the hipErrorIllegalAddress crashes come from the offload connector or from the node."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PLACEHOLDER
