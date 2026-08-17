@@ -1295,13 +1295,13 @@ qwen3.5-fp8-mi355x-sglang-agentic-hicache:
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
       - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 32, 48, 64] }
 
-# MTP twin of dsv4-fp4-mi355x-vllm-agentic. The topologies, KV-offload backends,
-# and concurrency points are identical; speculative decoding is enabled on the
-# current immutable ROCm nightly because the base config's retired nightly tag
-# is no longer available from Docker Hub. Throughput uses the three-token golden
-# synthetic acceptance length, while eval-only runs retain real verification.
+# MTP twin of dsv4-fp4-mi355x-vllm-agentic. This pins the 2026-08-17 ROCm
+# nightly that contains the DSv4 TP8 384-shard fix, Triton sparse-decode path,
+# and ROCm MRV1/wide-eager regression fix needed by the local TP8 AgentX
+# reproduction run. Throughput uses the three-token golden synthetic acceptance
+# length, while eval-only runs retain real verification.
 dsv4-fp4-mi355x-vllm-agentic-mtp:
-  image: vllm/vllm-openai-rocm:nightly-f8d03e77416bf90c49acbe50e233275722f02c4b
+  image: vllm/vllm-openai-rocm:nightly-311b3513af33bc29b4acb2fde2e9313e5e9966a0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:mi355x-amds
@@ -1312,8 +1312,7 @@ dsv4-fp4-mi355x-vllm-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.60
       search-space:
-      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 8, 16, 32, 40, 48] }
-      - { tp: 8, ep: 1, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [32, 48, 64, 96], router: { name: vllm-router, version: "0.1.14" } }
+      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [4, 8, 16, 32, 48, 64] }
       # LMCache invalid-block recovery currently assumes one KV-cache group,
       # while MTP creates two. Restore these points after the upstream hybrid
       # KV recovery fix lands: https://github.com/vllm-project/vllm/pull/45497
