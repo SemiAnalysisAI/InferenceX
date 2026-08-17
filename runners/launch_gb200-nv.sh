@@ -705,13 +705,12 @@ python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" "$CONFIG_PATH
 # srtctl itself still resolves through PATH (.venv/bin is on it).
 unset VIRTUAL_ENV
 
-# --no-preflight is only used on the agentic path, where the recipe resolves
-# model.path to /mnt/numa1 (compute-node-only NVMe) that the login-node
-# runner can't see. Fixed-seq-len recipes keep enforcement on.
-PREFLIGHT_ARGS=()
-if [[ "$IS_AGENTIC" == "1" ]]; then
-    PREFLIGHT_ARGS=(--no-preflight)
-fi
+# GB200 recipes resolve model.path through mounts the login-node runner
+# can't reliably stat (compute-node-local NVMe, and lustre paths that
+# aren't cross-mounted on the runner pod), so srtctl's login-node model-FS
+# preflight fails before sbatch. Skip it on both the agentic and
+# fixed-seq-len paths.
+PREFLIGHT_ARGS=(--no-preflight)
 
 SRTCTL_APPLY_ARGS=(
     "${PREFLIGHT_ARGS[@]}"
