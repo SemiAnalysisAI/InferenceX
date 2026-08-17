@@ -266,6 +266,7 @@ VLLM_CMD=(
     --max-model-len 1048576
     --enable-prefix-caching
     --kv-cache-dtype "fp8"
+    --max-num-batched-tokens 8192
     "${ASYNC_SCHED_ARGS[@]}"
     "${MLA_PREFILL_ARGS[@]}"
     "${COMPILATION_CONFIG_ARGS[@]}"
