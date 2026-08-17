@@ -5973,6 +5973,25 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2567
 
 - config-keys:
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GLM-5.2-NVFP4 GB300 AgentX (agentic-coding) Dynamo-SGLang benchmarks over a 7-point sweep: aggregated single-worker TP8 (conc 2/4), disaggregated low-latency TP4-prefill/TP4-decode 1P2D (conc 48), 1P4D (conc 48), 1P6D (conc 45), and high-throughput 2P1D DEP8-prefill/DEP16-decode (conc 128/192)"
+    - "EAGLE speculative decoding, hierarchical KV cache (hicache-size 135), MTP, decode mem-fraction-static 0.9, nixl KV transfer with UCX_TLS=ib, and X-Dynamo-Session-ID session affinity; driven from the NVIDIA/srt-slurm base+zip_override recipes via CONFIG_FILE selectors"
+    - "Image: lmsysorg/sglang:nightly-dev-cu13-20260805-211ee642; runner: gb300-nv"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2608
+
+- config-keys:
+    - minimaxm3-fp4-b300-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh the MiniMax-M3 B300 AgentX submission as eight EAGLE3-GQA points: no-offload TP8 C1 and TP4 C1/C5/C10/C15/C20, TP4 C30 with 1,024 GB SimpleCPU KV offload, and TP2 C24 with the proportional-policy 750 GB SimpleCPU KV-offload cap."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2610
+
+- config-keys:
     - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-agg
     - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
   scenario-type:
@@ -5980,7 +5999,7 @@
   description:
     - "Inject the committed synthetic MTP acceptance length only for GB300 AgentX throughput; keep eval-only jobs on real target verification."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2571
-
+  
 
 - config-keys:
     - minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp
@@ -5993,18 +6012,50 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2609
 
 - config-keys:
-    - qwen3.5-fp8-h200-sglang-agentic-hicache-mtp
+    - minimaxm3-fp4-b200-vllm-agentic-mtp
   scenario-type:
     - agentic-coding
   description:
-    - "Add Qwen3.5 FP8 H200 SGLang AgentX MTP points with DRAM HiCache"
-    - "Use TP8/EP1 concurrency 2 through 24, published FlashInfer 0.6.17 CUDA 13 wheels, and golden MTP acceptance length 3.39"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+    - "Refresh the MiniMax-M3 B200 AgentX submission: no-offload TP8 C1 and TP4 C1/C5/C10/C15/C20, plus a TP4 SimpleCPU KV-offload sweep at C15–C40 using the full-capacity DRAM budget."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2611
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move the B300 Kimi K3 recipe to TP8 x DCP8 with Mooncake as the external KV tier"
+    - "Sweep concurrency 1, 2, 4, 8, 16, 24, 32, 40, 48, 56 and 70, drafting with DSpark level 7 at concurrency 8 and below, DSpark level 3 at concurrency 16"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2616
+  
+- config-keys:
+    - qwen3.5-fp4-gb300-dynamo-trt-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Qwen3.5-397B-A17B-NVFP4-V2 GB300 TRT-LLM disaggregated AgentX with Dynamo router 1.4.0.dev20260807 and NIXL KV transfer."
+    - "Cover 6 disaggregated topologies (1P1D through 3P2D) with MTP speculative decoding across conc 7-704 using TRT-LLM release:1.3.0rc24."
+    - "Mixed attention-DP (dep) and non-DP (tep) decode shapes; recipes from benchmarks/multi_node/srt-slurm-recipes/trtllm/qwen3.5/gb300-fp4/disagg/agentx/."
+    - "EVAL_ONLY runs switch to real block verification by removing synthetic acceptance (TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS stripped from all agentx recipes before srtctl)."
+    - "Add SERVED_MODEL_NAME: Qwen3.5-397B-A17B-NVFP4-V2 to all 6 agentx recipe env blocks and make build_replay_cmd prefer SERVED_MODEL_NAME over $MODEL for the aiperf --model flag."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2612
+
+- config-keys:
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GB200 GLM-5.2 FP4 Dynamo-SGLang AgentX with EAGLE MTP, HiCache DRAM offload, and KV-aware correlation-ID affinity."
+    - "Measure the TP8 aggregate curve and tuned 1P1D TP4 HiCache c10/c12 disaggregated frontier with every logical SGLang metrics endpoint."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2620
 
 - config-keys:
     - qwen3.5-fp8-h200-sglang-agentic-hicache-mtp
   scenario-type:
     - agentic-coding
   description:
-    - "Update the Qwen3.5 FP8 H200 SGLang AgentX MTP HiCache image to nightly-dev-cu13-20260815-a5ba081f"
+    - "Add Qwen3.5 FP8 H200 SGLang AgentX MTP points with DRAM HiCache."
+    - "Use TP8/EP1 concurrency 2 through 24, published FlashInfer 0.6.17 CUDA 13 wheels, and golden MTP acceptance length 3.39."
+    - "Use the lmsysorg/sglang:nightly-dev-cu13-20260815-a5ba081f image."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2592
