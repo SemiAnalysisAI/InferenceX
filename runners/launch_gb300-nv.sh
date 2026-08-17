@@ -245,8 +245,14 @@ elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4" \
         benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4 || exit 1
     if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
+        # srt-slurm v1.0.50 launches lm-eval on the allocation head and uses
+        # localhost:8000. Keep AgentX frontends on first_decode for throughput,
+        # but co-locate the eval-only frontend with lm-eval so loopback resolves.
         find benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4 -name "*.yaml" \
-            -exec sed -i '/TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS/d' {} +
+            -exec sed -i \
+                -e '/TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS/d' \
+                -e 's/^  orchestrator_placement: first_decode$/  orchestrator_placement: head/' \
+                {} +
     fi
 elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.2" ]]; then
     # GLM-5.2 GB300 sglang AgentX: srt-slurm main has the agentx-mvp scenario,
