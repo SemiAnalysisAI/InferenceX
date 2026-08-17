@@ -1,0 +1,99 @@
+# Small two-worker aggregate correctness lane for the srt-slurm ATOM backend
+# and Infera's dynamic KV-aware router. This validates orchestration, not tuning.
+
+name: "mi300x-atom-qwen3-0.6b-agg-2w-fixed-seq"
+
+model:
+  path: "hf:Qwen/Qwen3-0.6B"
+  container: "infera-atom-v0.1.1"
+  precision: "fp16"
+
+identity:
+  model:
+    repo: "Qwen/Qwen3-0.6B"
+  container:
+    image: "rocm/infera:atom-v0.1.1"
+  frameworks:
+    atom: "0.1.4.dev113+g5837907f3"
+    infera: "0.0.0"
+
+slurm:
+  time_limit: "00:45:00"
+
+resources:
+  gpu_type: "mi300x"
+  gpus_per_node: 8
+  agg_nodes: 1
+  agg_workers: 2
+  gpus_per_agg: 1
+
+frontend:
+  type: infera
+  enable_multiple_frontends: false
+  env:
+    PYTHONPATH: "/atom-source:/infera-source"
+  args:
+    router-policy: kv-aware
+
+backend:
+  type: atom
+  enable_kv_events: true
+  aggregated_environment:
+    HF_HOME: "/hf_hub_cache"
+    HF_HUB_CACHE: "/hf_hub_cache"
+    HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
+    PYTHONPATH: "/atom-source:/infera-source"
+    PYTHONUNBUFFERED: "1"
+    OMP_NUM_THREADS: "1"
+  atom_config:
+    aggregated:
+      kv_cache_dtype: fp8
+      gpu-memory-utilization: 0.50
+      max-model-len: 2048
+      max-num-seqs: 8
+      block-size: 16
+      enforce-eager: true
+
+srun_options:
+  container-writable: ""
+  container-remap-root: ""
+  mem: "0"
+
+health_check:
+  max_attempts: 240
+  interval_seconds: 5
+
+benchmark:
+  type: custom
+  command: |
+    set -euo pipefail
+    result_root="/results/${SLURM_JOB_ID}"
+    mkdir -p "${result_root}/fixed-seq"
+    trap 'tar -C /logs -czf "'"${result_root}"'/runtime-logs.tar.gz" . 2>/dev/null || true' EXIT
+    for concurrency in 1 4; do
+      python3 /infmax-workspace/utils/bench_serving/benchmark_serving.py \
+      --backend openai \
+      --base-url "http://${SRT_FRONTEND_HOST}:${SRT_FRONTEND_PORT}" \
+      --endpoint /v1/completions \
+      --model Qwen/Qwen3-0.6B \
+      --tokenizer Qwen/Qwen3-0.6B \
+      --dataset-name random \
+      --random-input-len 128 \
+      --random-output-len 32 \
+      --random-prefix-len 96 \
+      --random-range-ratio 1.0 \
+      --random-num-workers 1 \
+      --num-warmups "${concurrency}" \
+      --num-prompts "$((concurrency * 4))" \
+      --max-concurrency "${concurrency}" \
+      --request-rate inf \
+      --ignore-eos \
+      --disable-tqdm \
+      --save-result \
+      --result-dir "${result_root}/fixed-seq" \
+      --result-filename "qwen3-0.6b-atom-agg-isl128-osl32-c${concurrency}.json";
+    done
+  env:
+    HF_HOME: /hf_hub_cache
+    HF_HUB_CACHE: /hf_hub_cache
+    HUGGINGFACE_HUB_CACHE: /hf_hub_cache

@@ -5,18 +5,41 @@ set -euo pipefail
 # in explicitly with CONFIG_FILE; all existing MI355X launch behavior remains
 # unchanged for every other row.
 SRT_SLURM_REPOSITORY="https://github.com/SemiAnalysisAI/srt-slurm.git"
-SRT_SLURM_COMMIT="31e72da43ed21fe941c039be51b2cad1a3cf428a"
+SRT_SLURM_COMMIT="5ecfb13d1ba0960045482f1ef006312d8729d37a"
+INFERA_REPOSITORY="https://github.com/cquil11/Infera.git"
+INFERA_COMMIT="8ed8f1728c745d4e91ba9eaa09ed81159aa57e41"
+ATOM_REPOSITORY="https://github.com/cquil11/ATOM.git"
+ATOM_COMMIT="2ab42bc2c64d1ad04f698c396da48473e71a6dbb"
 SLURM_PARTITION="compute"
 SGLANG_IMAGE="lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260809"
+ATOM_IMAGE="rocm/infera:atom-v0.1.1"
 SHARED_BASE="/it-share/gharunners2/srt-slurm"
-SHARED_IMAGE="${SHARED_BASE}/containers/sglang-rocm-v0.5.17-mi35x-20260809.sqsh"
 SHARED_HF_CACHE="/it-share/hf-hub-cache"
 SHARED_RESULTS="${SHARED_BASE}/results"
+SHARED_INFERA_RUNTIME="${SHARED_BASE}/runtime/infera-${INFERA_COMMIT}"
+SHARED_ATOM_RUNTIME="${SHARED_BASE}/runtime/atom-${ATOM_COMMIT}"
 
 : "${GITHUB_WORKSPACE:?GITHUB_WORKSPACE must be set by Actions}"
 : "${RESULT_FILENAME:?RESULT_FILENAME must be set by the benchmark workflow}"
 : "${CONFIG_FILE:?CONFIG_FILE must name an srt-slurm recipe}"
 : "${MODEL:?MODEL must identify the Hugging Face model}"
+
+case "${IMAGE:?IMAGE must identify the recipe container}" in
+    "$SGLANG_IMAGE")
+        RUNTIME_IMAGE="$SGLANG_IMAGE"
+        SHARED_IMAGE="${SHARED_BASE}/containers/sglang-rocm-v0.5.17-mi35x-20260809.sqsh"
+        LOCAL_FALLBACK_IMAGE="/var/lib/squash/lmsysorg_sglang-rocm_v0.5.17-rocm720-mi35x-20260809.sqsh"
+        ;;
+    "$ATOM_IMAGE")
+        RUNTIME_IMAGE="$ATOM_IMAGE"
+        SHARED_IMAGE="${SHARED_BASE}/containers/infera-atom-v0.1.1.sqsh"
+        LOCAL_FALLBACK_IMAGE=""
+        ;;
+    *)
+        echo "Unsupported MI355X srt-slurm image: $IMAGE" >&2
+        exit 1
+        ;;
+esac
 
 CONFIG_PATH="${CONFIG_FILE%%:*}"
 LOCAL_RECIPE="${GITHUB_WORKSPACE}/benchmarks/multi_node/srt-slurm-recipes/${CONFIG_PATH#recipes/}"
@@ -43,17 +66,59 @@ cat > "$STAGE_SCRIPT" <<EOF
 #SBATCH --time=00:45:00
 #SBATCH --job-name=${RUNNER_NAME:-mi355x-srt}-stage
 set -euo pipefail
-mkdir -p "$(dirname "$SHARED_IMAGE")" "$SHARED_HF_CACHE"
+export ENROOT_RUNTIME_PATH="\${TMPDIR:-/tmp}/enroot-runtime-\${UID}"
+mkdir -p "\$ENROOT_RUNTIME_PATH" "$(dirname "$SHARED_IMAGE")" "$SHARED_HF_CACHE"
+chmod 700 "\$ENROOT_RUNTIME_PATH"
+ensure_git_checkout() {
+    local target="\$1"
+    local repository="\$2"
+    local commit="\$3"
+    local lock_fd
+    local temporary="\${target}.tmp.\${SLURM_JOB_ID}.\${BASHPID}"
+    local quarantine="\${target}.incomplete.\${SLURM_JOB_ID}.\${BASHPID}"
+
+    mkdir -p "\$(dirname "\$target")"
+    exec {lock_fd}>"\${target}.lock"
+    flock -w 2400 "\$lock_fd"
+    if [[ ! -d "\$target/.git" ]]; then
+        if [[ -e "\$target" ]]; then
+            mv -T "\$target" "\$quarantine"
+        fi
+        git clone --quiet "\$repository" "\$temporary"
+        git -C "\$temporary" fetch --quiet origin "\$commit"
+        git -C "\$temporary" checkout --quiet --detach "\$commit"
+        test "\$(git -C "\$temporary" rev-parse HEAD)" = "\$commit"
+        mv -T "\$temporary" "\$target"
+    else
+        git -C "\$target" fetch --quiet origin "\$commit"
+        git -C "\$target" checkout --quiet --detach "\$commit"
+        test "\$(git -C "\$target" rev-parse HEAD)" = "\$commit"
+    fi
+    flock -u "\$lock_fd"
+    exec {lock_fd}>&-
+}
+ensure_git_checkout "${SHARED_INFERA_RUNTIME}" "${INFERA_REPOSITORY}" "${INFERA_COMMIT}"
+ensure_git_checkout "${SHARED_ATOM_RUNTIME}" "${ATOM_REPOSITORY}" "${ATOM_COMMIT}"
 exec 9>"${SHARED_IMAGE}.lock"
 flock -w 2400 9
 if ! unsquashfs -s "$SHARED_IMAGE" >/dev/null 2>&1; then
     tmp="${SHARED_IMAGE}.tmp.\${SLURM_JOB_ID}"
     rm -f "\$tmp"
-    local_image="/var/lib/squash/lmsysorg_sglang-rocm_v0.5.17-rocm720-mi35x-20260809.sqsh"
-    if unsquashfs -s "\$local_image" >/dev/null 2>&1; then
-        cp --sparse=always "\$local_image" "\$tmp"
+    if [[ -n "${LOCAL_FALLBACK_IMAGE}" ]] && unsquashfs -s "${LOCAL_FALLBACK_IMAGE}" >/dev/null 2>&1; then
+        cp --sparse=always "${LOCAL_FALLBACK_IMAGE}" "\$tmp"
     else
-        enroot import -o "\$tmp" "docker://${SGLANG_IMAGE}"
+        for attempt in 1 2 3; do
+            rm -f "\$tmp"
+            if enroot import -o "\$tmp" "docker://${RUNTIME_IMAGE}"; then
+                break
+            fi
+            if [[ "\$attempt" -eq 3 ]]; then
+                echo "Failed to import ${RUNTIME_IMAGE} after \${attempt} attempts" >&2
+                exit 1
+            fi
+            echo "Retrying ${RUNTIME_IMAGE} import after attempt \${attempt}" >&2
+            sleep "\$((attempt * 10))"
+        done
     fi
     unsquashfs -s "\$tmp" >/dev/null
     mv "\$tmp" "$SHARED_IMAGE"
@@ -81,12 +146,12 @@ ACTUAL_SRT_COMMIT=$(git -C "$SRT_REPO_DIR" rev-parse HEAD)
 mkdir -p "${SRT_REPO_DIR}/$(dirname "$CONFIG_PATH")"
 cp "$LOCAL_RECIPE" "${SRT_REPO_DIR}/${CONFIG_PATH}"
 cp "$CLUSTER_PROFILE" "${WORK_DIR}/srtslurm.yaml"
-python3 - "${WORK_DIR}/srtslurm.yaml" "$GITHUB_WORKSPACE" "$SHARED_RESULTS" <<'PY'
+python3 - "${WORK_DIR}/srtslurm.yaml" "$GITHUB_WORKSPACE" "$SHARED_RESULTS" "$SHARED_INFERA_RUNTIME" "$SHARED_ATOM_RUNTIME" <<'PY'
 import sys
 from pathlib import Path
 
 path = Path(sys.argv[1])
-workspace, results = sys.argv[2:]
+workspace, results, infera_runtime, atom_runtime = sys.argv[2:]
 needle = "  /it-share/hf-hub-cache: /hf_hub_cache\n"
 text = path.read_text()
 if text.count(needle) != 1:
@@ -94,7 +159,11 @@ if text.count(needle) != 1:
 path.write_text(
     text.replace(
         needle,
-        needle + f"  {workspace}: /infmax-workspace\n  {results}: /results\n",
+        needle
+        + f"  {workspace}: /infmax-workspace\n"
+        + f"  {results}: /results\n"
+        + f"  {infera_runtime}: /infera-source\n"
+        + f"  {atom_runtime}: /atom-source\n",
     )
 )
 PY
@@ -103,7 +172,7 @@ export PATH="$HOME/.local/bin:$PATH"
 cd "$SRT_REPO_DIR"
 uv venv --python 3.12
 uv pip install -e .
-make setup-compute ARCH=x86_64
+make setup ARCH=x86_64
 source .venv/bin/activate
 export SRTSLURM_CONFIG="${WORK_DIR}/srtslurm.yaml"
 export SRTCTL_RUNTIME_SOURCE_DIR="$SRT_REPO_DIR"

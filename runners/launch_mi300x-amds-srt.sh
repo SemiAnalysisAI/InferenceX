@@ -4,19 +4,44 @@ set -euo pipefail
 # MI300X srt-slurm validation path. The existing launcher remains the default;
 # matrix rows opt in by exporting CONFIG_FILE through additional-settings.
 SRT_SLURM_REPOSITORY="https://github.com/SemiAnalysisAI/srt-slurm.git"
-SRT_SLURM_COMMIT="dd0109d4043141072ad37c043f1100332008b77f"
+SRT_SLURM_COMMIT="5ecfb13d1ba0960045482f1ef006312d8729d37a"
+INFERA_REPOSITORY="https://github.com/cquil11/Infera.git"
+INFERA_COMMIT="8ed8f1728c745d4e91ba9eaa09ed81159aa57e41"
+ATOM_REPOSITORY="https://github.com/cquil11/ATOM.git"
+ATOM_COMMIT="2ab42bc2c64d1ad04f698c396da48473e71a6dbb"
 SLURM_PARTITION="compute"
 EXCLUDED_NODES="chi-mi300x-049,chi-mi300x-121"
 REMOTE_BASE="/raid/hf-hub-cache/inferencex/srt-slurm"
 VLLM_IMAGE="vllm/vllm-openai-rocm:v0.26.0"
 VLLM_ROUTER_IMAGE="vllm/vllm-router:nightly-20260809-d2ba586"
+ATOM_IMAGE="rocm/infera:atom-v0.1.1"
 VLLM_SQSH="${REMOTE_BASE}/containers/vllm-openai-rocm-v0.26.0.sqsh"
 VLLM_ROUTER_SQSH="${REMOTE_BASE}/containers/vllm-router-nightly-20260809-d2ba586.sqsh"
+ATOM_SQSH="${REMOTE_BASE}/containers/infera-atom-v0.1.1.sqsh"
 
 : "${GITHUB_WORKSPACE:?GITHUB_WORKSPACE must be set by Actions}"
 : "${RESULT_FILENAME:?RESULT_FILENAME must be set by the benchmark workflow}"
 
 : "${CONFIG_FILE:?CONFIG_FILE must name an srt-slurm recipe}"
+
+case "${IMAGE:?IMAGE must identify the recipe container}" in
+    "$VLLM_IMAGE")
+        ENGINE_IMAGE="$VLLM_IMAGE"
+        ENGINE_SQSH="$VLLM_SQSH"
+        AUX_IMAGE="$VLLM_ROUTER_IMAGE"
+        AUX_SQSH="$VLLM_ROUTER_SQSH"
+        ;;
+    "$ATOM_IMAGE")
+        ENGINE_IMAGE="$ATOM_IMAGE"
+        ENGINE_SQSH="$ATOM_SQSH"
+        AUX_IMAGE=""
+        AUX_SQSH=""
+        ;;
+    *)
+        echo "Unsupported MI300X srt-slurm image: $IMAGE" >&2
+        exit 1
+        ;;
+esac
 
 CONFIG_PATH="${CONFIG_FILE%%:*}"
 LOCAL_RECIPE="${GITHUB_WORKSPACE}/benchmarks/multi_node/srt-slurm-recipes/${CONFIG_PATH#recipes/}"
@@ -27,6 +52,8 @@ CLUSTER_PROFILE="${GITHUB_WORKSPACE}/benchmarks/multi_node/srt-slurm-recipes/clu
 RUN_KEY="${GITHUB_RUN_ID:-manual}-${GITHUB_RUN_ATTEMPT:-0}-${RUNNER_NAME:-runner}"
 REMOTE_RUNTIME="${REMOTE_BASE}/runtime/inferencex-${RUN_KEY}"
 REMOTE_SRT_RUNTIME="${REMOTE_BASE}/runtime/srt-slurm-${SRT_SLURM_COMMIT}"
+REMOTE_INFERA_RUNTIME="${REMOTE_BASE}/runtime/infera-${INFERA_COMMIT}"
+REMOTE_ATOM_RUNTIME="${REMOTE_BASE}/runtime/atom-${ATOM_COMMIT}"
 REMOTE_RESULTS="${REMOTE_BASE}/results"
 WORK_DIR="${GITHUB_WORKSPACE}/.srt-slurm-${RUN_KEY}"
 SRT_REPO_DIR="${WORK_DIR}/srt-slurm"
@@ -34,8 +61,9 @@ mkdir -p "$WORK_DIR"
 
 # The login and compute nodes do not share a filesystem. Stage only the
 # unchanged InferenceX benchmark client and immutable public container images
-# onto every eligible node. The batch job exits normally; it does not cancel or
-# preempt any allocation.
+# onto every eligible node. The cluster has nine nodes and this validation
+# excludes two, so the staging allocation must cover all seven remaining nodes.
+# The batch job exits normally; it does not cancel or preempt any allocation.
 RUNTIME_ARCHIVE="${WORK_DIR}/inferencex-benchmark.tar.gz"
 tar -C "$GITHUB_WORKSPACE" -czf "$RUNTIME_ARCHIVE" utils/bench_serving
 RUNTIME_PAYLOAD=$(base64 -w0 "$RUNTIME_ARCHIVE")
@@ -43,7 +71,7 @@ STAGE_SCRIPT="${WORK_DIR}/stage-runtime.sbatch"
 cat > "$STAGE_SCRIPT" <<EOF
 #!/usr/bin/env bash
 #SBATCH --partition=${SLURM_PARTITION}
-#SBATCH --nodes=5
+#SBATCH --nodes=7
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=1
 #SBATCH --time=00:45:00
@@ -58,7 +86,11 @@ srun --ntasks-per-node=1 bash -c '
   set -euo pipefail
   runtime="${REMOTE_RUNTIME}"
   srt_runtime="${REMOTE_SRT_RUNTIME}"
-  mkdir -p "\$runtime" "${REMOTE_RESULTS}" "${REMOTE_BASE}/containers"
+  infera_runtime="${REMOTE_INFERA_RUNTIME}"
+  atom_runtime="${REMOTE_ATOM_RUNTIME}"
+  export ENROOT_RUNTIME_PATH="\${TMPDIR:-/tmp}/enroot-runtime-\${UID}"
+  mkdir -p "\$ENROOT_RUNTIME_PATH" "\$runtime" "${REMOTE_RESULTS}" "${REMOTE_BASE}/containers"
+  chmod 700 "\$ENROOT_RUNTIME_PATH"
   ensure_container_image() {
     local target="\$1"
     local image="\$2"
@@ -71,23 +103,60 @@ srun --ntasks-per-node=1 bash -c '
     flock -w 2400 "\$lock_fd"
     if ! unsquashfs -s "\$target" >/dev/null 2>&1; then
       tmp="\${target}.tmp.\${SLURM_JOB_ID}"
-      rm -f "\$tmp"
-      enroot import -o "\$tmp" "docker://\${image}"
+      for attempt in 1 2 3; do
+        rm -f "\$tmp"
+        if enroot import -o "\$tmp" "docker://\${image}"; then
+          break
+        fi
+        if [[ "\$attempt" -eq 3 ]]; then
+          echo "Failed to import \${image} after \${attempt} attempts" >&2
+          return 1
+        fi
+        echo "Retrying \${image} import after attempt \${attempt}" >&2
+        sleep "\$((attempt * 10))"
+      done
       unsquashfs -s "\$tmp" >/dev/null
       mv "\$tmp" "\$target"
     fi
     flock -u "\$lock_fd"
     exec {lock_fd}>&-
   }
-  ensure_container_image "${VLLM_SQSH}" "${VLLM_IMAGE}"
-  ensure_container_image "${VLLM_ROUTER_SQSH}" "${VLLM_ROUTER_IMAGE}"
-  if [[ ! -d "\$srt_runtime/.git" ]]; then
-    git clone --quiet "${SRT_SLURM_REPOSITORY}" "\$srt_runtime"
+  ensure_git_checkout() {
+    local target="\$1"
+    local repository="\$2"
+    local commit="\$3"
+    local lock_fd
+    local temporary="\${target}.tmp.\${SLURM_JOB_ID}.\${BASHPID}"
+    local quarantine="\${target}.incomplete.\${SLURM_JOB_ID}.\${BASHPID}"
+
+    mkdir -p "\$(dirname "\$target")"
+    exec {lock_fd}>"\${target}.lock"
+    flock -w 2400 "\$lock_fd"
+    if [[ ! -d "\$target/.git" ]]; then
+      if [[ -e "\$target" ]]; then
+        mv -T "\$target" "\$quarantine"
+      fi
+      git clone --quiet "\$repository" "\$temporary"
+      git -C "\$temporary" fetch --quiet origin "\$commit"
+      git -C "\$temporary" checkout --quiet --detach "\$commit"
+      test "\$(git -C "\$temporary" rev-parse HEAD)" = "\$commit"
+      mv -T "\$temporary" "\$target"
+    else
+      git -C "\$target" fetch --quiet origin "\$commit"
+      git -C "\$target" checkout --quiet --detach "\$commit"
+      test "\$(git -C "\$target" rev-parse HEAD)" = "\$commit"
+    fi
+    flock -u "\$lock_fd"
+    exec {lock_fd}>&-
+  }
+  ensure_container_image "${ENGINE_SQSH}" "${ENGINE_IMAGE}"
+  if [[ -n "${AUX_IMAGE}" ]]; then
+    ensure_container_image "${AUX_SQSH}" "${AUX_IMAGE}"
   fi
-  git -C "\$srt_runtime" fetch --quiet origin "${SRT_SLURM_COMMIT}"
-  git -C "\$srt_runtime" checkout --quiet --detach "${SRT_SLURM_COMMIT}"
-  test "\$(git -C "\$srt_runtime" rev-parse HEAD)" = "${SRT_SLURM_COMMIT}"
-  make -C "\$srt_runtime" --no-print-directory setup-compute ARCH=x86_64
+  ensure_git_checkout "\$srt_runtime" "${SRT_SLURM_REPOSITORY}" "${SRT_SLURM_COMMIT}"
+  make -C "\$srt_runtime" --no-print-directory setup ARCH=x86_64
+  ensure_git_checkout "\$infera_runtime" "${INFERA_REPOSITORY}" "${INFERA_COMMIT}"
+  ensure_git_checkout "\$atom_runtime" "${ATOM_REPOSITORY}" "${ATOM_COMMIT}"
   tar -xzf "/tmp/inferencex-benchmark-\${SLURM_JOB_ID}.tar.gz" -C "\$runtime"
   printf "%s\\n" "${GITHUB_SHA:-unknown}" > "\$runtime/.inferencex-source-head"
 '
@@ -106,12 +175,12 @@ ACTUAL_SRT_COMMIT=$(git -C "$SRT_REPO_DIR" rev-parse HEAD)
 mkdir -p "${SRT_REPO_DIR}/$(dirname "$CONFIG_PATH")"
 cp "$LOCAL_RECIPE" "${SRT_REPO_DIR}/${CONFIG_PATH}"
 cp "$CLUSTER_PROFILE" "${WORK_DIR}/srtslurm.yaml"
-python3 - "${WORK_DIR}/srtslurm.yaml" "$REMOTE_RUNTIME" "$REMOTE_RESULTS" <<'PY'
+python3 - "${WORK_DIR}/srtslurm.yaml" "$REMOTE_RUNTIME" "$REMOTE_RESULTS" "$REMOTE_INFERA_RUNTIME" "$REMOTE_ATOM_RUNTIME" <<'PY'
 import sys
 from pathlib import Path
 
 path = Path(sys.argv[1])
-runtime, results = sys.argv[2:]
+runtime, results, infera_runtime, atom_runtime = sys.argv[2:]
 needle = "  /raid/hf-hub-cache: /hf_hub_cache\n"
 text = path.read_text()
 if text.count(needle) != 1:
@@ -119,7 +188,11 @@ if text.count(needle) != 1:
 path.write_text(
     text.replace(
         needle,
-        needle + f"  {runtime}: /infmax-workspace\n  {results}: /results\n",
+        needle
+        + f"  {runtime}: /infmax-workspace\n"
+        + f"  {results}: /results\n"
+        + f"  {infera_runtime}: /infera-source\n"
+        + f"  {atom_runtime}: /atom-source\n",
     )
 )
 PY
@@ -128,7 +201,7 @@ export PATH="$HOME/.local/bin:$PATH"
 cd "$SRT_REPO_DIR"
 uv venv --python 3.12
 uv pip install -e .
-make setup-compute ARCH=x86_64
+make setup ARCH=x86_64
 source .venv/bin/activate
 export SRTSLURM_CONFIG="${WORK_DIR}/srtslurm.yaml"
 export SRTCTL_RUNTIME_SOURCE_DIR="$REMOTE_SRT_RUNTIME"

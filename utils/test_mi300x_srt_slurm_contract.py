@@ -13,6 +13,11 @@ RECIPE_PATH = (
     / "benchmarks/multi_node/srt-slurm-recipes/vllm/qwen3-0.6b/mi300x/agg-fixed-seq.yaml"
 )
 DISAGG_RECIPE_PATH = RECIPE_PATH.with_name("disagg-1p1d-fixed-seq.yaml")
+ATOM_RECIPE_PATH = (
+    REPO_ROOT
+    / "benchmarks/multi_node/srt-slurm-recipes/atom/qwen3-0.6b/mi300x/agg-2w-fixed-seq.yaml"
+)
+ATOM_DISAGG_RECIPE_PATH = ATOM_RECIPE_PATH.with_name("disagg-1p1d-fixed-seq.yaml")
 CLUSTER_PATH = (
     REPO_ROOT
     / "benchmarks/multi_node/srt-slurm-recipes/cluster-configs/mi300x-amds.yaml"
@@ -92,9 +97,11 @@ def test_official_matrix_routes_disagg_through_the_pinned_srt_launcher():
         "CONFIG_FILE=recipes/vllm/qwen3-0.6b/mi300x/"
         "disagg-1p1d-fixed-seq.yaml"
     ]
-    assert "315e4b06a7e0806194a646ea21832e750e896a46" in launcher
-    assert "make setup-compute ARCH=x86_64" in launcher
+    assert "5ecfb13d1ba0960045482f1ef006312d8729d37a" in launcher
+    assert launcher.count("setup ARCH=x86_64") == 2
     assert "--no-preflight" in launcher
+    assert 'ENROOT_RUNTIME_PATH="\\${TMPDIR:-/tmp}/enroot-runtime-\\${UID}"' in launcher
+    assert "for attempt in 1 2 3" in launcher
     assert 'VLLM_IMAGE="vllm/vllm-openai-rocm:v0.26.0"' in launcher
     assert (
         'VLLM_ROUTER_IMAGE="vllm/vllm-router:nightly-20260809-d2ba586"'
@@ -106,9 +113,17 @@ def test_official_matrix_routes_disagg_through_the_pinned_srt_launcher():
     assert 'unsquashfs -s "\\$tmp"' in launcher
     assert 'mv "\\$tmp" "\\$target"' in launcher
     assert 'REMOTE_SRT_RUNTIME="${REMOTE_BASE}/runtime/srt-slurm-${SRT_SLURM_COMMIT}"' in launcher
-    assert 'git -C "\\$srt_runtime" checkout --quiet --detach "${SRT_SLURM_COMMIT}"' in launcher
-    assert 'make -C "\\$srt_runtime" --no-print-directory setup-compute ARCH=x86_64' in launcher
+    assert (
+        'ensure_git_checkout "\\$srt_runtime" "${SRT_SLURM_REPOSITORY}" '
+        '"${SRT_SLURM_COMMIT}"'
+        in launcher
+    )
+    assert 'make -C "\\$srt_runtime" --no-print-directory setup ARCH=x86_64' in launcher
     assert 'export SRTCTL_RUNTIME_SOURCE_DIR="$REMOTE_SRT_RUNTIME"' in launcher
+    assert '#SBATCH --nodes=7' in launcher
+    assert 'ensure_git_checkout()' in launcher
+    assert 'mv -T "\\$target" "\\$quarantine"' in launcher
+    assert 'mv -T "\\$temporary" "\\$target"' in launcher
     assert "scancel" not in launcher
 
 
@@ -187,6 +202,50 @@ def test_fixed_sequence_recipe_uses_inferencex_custom_benchmark():
     assert "sa-bench" not in command
 
 
+def test_atom_recipes_use_infera_and_keep_worker_metrics_honest():
+    cluster = yaml.safe_load(CLUSTER_PATH.read_text())
+    aggregate = yaml.safe_load(ATOM_RECIPE_PATH.read_text())
+    disaggregate = yaml.safe_load(ATOM_DISAGG_RECIPE_PATH.read_text())
+    launcher = SRT_LAUNCHER_PATH.read_text()
+
+    assert cluster["containers"]["infera-atom-v0.1.1"].endswith(
+        "/infera-atom-v0.1.1.sqsh"
+    )
+    assert aggregate["resources"]["agg_workers"] == 2
+    for recipe in (aggregate, disaggregate):
+        assert recipe["model"]["container"] == "infera-atom-v0.1.1"
+        assert recipe["identity"]["container"]["image"] == (
+            "rocm/infera:atom-v0.1.1"
+        )
+        assert recipe["frontend"]["type"] == "infera"
+        assert recipe["frontend"]["args"]["router-policy"] == "kv-aware"
+        assert recipe["backend"]["type"] == "atom"
+        assert recipe["backend"]["enable_kv_events"] is True
+        command = recipe["benchmark"]["command"]
+        assert "--backend openai" in command
+        assert "--endpoint /v1/completions" in command
+    assert disaggregate["backend"]["connector"] == "mooncake"
+    assert disaggregate["backend"]["mooncake_protocol"] == "tcp"
+    assert 'ATOM_IMAGE="rocm/infera:atom-v0.1.1"' in launcher
+    assert 'INFERA_COMMIT="8ed8f1728c745d4e91ba9eaa09ed81159aa57e41"' in launcher
+    assert 'ATOM_COMMIT="2ab42bc2c64d1ad04f698c396da48473e71a6dbb"' in launcher
+    assert 'REMOTE_INFERA_RUNTIME="${REMOTE_BASE}/runtime/infera-${INFERA_COMMIT}"' in launcher
+    for recipe in (aggregate, disaggregate):
+        assert recipe["frontend"]["env"]["PYTHONPATH"] == (
+            "/atom-source:/infera-source"
+        )
+        role_environments = [
+            value
+            for key, value in recipe["backend"].items()
+            if key.endswith("_environment")
+        ]
+        assert role_environments
+        assert all(
+            env["PYTHONPATH"] == "/atom-source:/infera-source"
+            for env in role_environments
+        )
+
+
 def test_fixed_sequence_commands_keep_all_arguments_attached(tmp_path):
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
@@ -198,14 +257,20 @@ def test_fixed_sequence_commands_keep_all_arguments_attached(tmp_path):
     )
     fake_python.chmod(0o755)
 
-    for recipe_path in (RECIPE_PATH, DISAGG_RECIPE_PATH):
+    recipe_paths = (
+        RECIPE_PATH,
+        DISAGG_RECIPE_PATH,
+        ATOM_RECIPE_PATH,
+        ATOM_DISAGG_RECIPE_PATH,
+    )
+    for index, recipe_path in enumerate(recipe_paths):
         command = yaml.safe_load(recipe_path.read_text())["benchmark"]["command"]
-        result_dir = tmp_path / recipe_path.stem
+        result_dir = tmp_path / f"recipe-{index}"
         command = command.replace(
             'result_root="/results/${SLURM_JOB_ID}"',
             f'result_root="{result_dir}"',
         )
-        args_log = tmp_path / f"{recipe_path.stem}.args"
+        args_log = tmp_path / f"recipe-{index}.args"
         env = {
             **os.environ,
             "PATH": f"{fake_bin}:{os.environ['PATH']}",
