@@ -195,3 +195,75 @@ kimik3-read-rescan-c16-dram080-eval1:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=2"
           - "EVAL_CONCURRENT_REQUESTS=1"
+
+kimik3-dpattn-bringup-prefill-dpa-c1:
+  image: vllm/vllm-openai-rocm:nightly-ac7509e2b1db40fec2f03dde1ed4e9dfdc2338c9
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm-disagg
+  router: { name: vllm-router, version: "nightly-20260809-d2ba586" }
+  kv-p2p-transfer: mori
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.50
+      search-space:
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [1]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "MORIIO_READ_MODE=true"
+          - "MORI_WAITALL_BUILD=0"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=2"
+
+kimik3-dpattn-bringup-prefill-dpa-ep-c1:
+  image: vllm/vllm-openai-rocm:nightly-ac7509e2b1db40fec2f03dde1ed4e9dfdc2338c9
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm-disagg
+  router: { name: vllm-router, version: "nightly-20260809-d2ba586" }
+  kv-p2p-transfer: mori
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.50
+      search-space:
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [1]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "MORIIO_READ_MODE=true"
+          - "MORI_WAITALL_BUILD=0"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=2"
