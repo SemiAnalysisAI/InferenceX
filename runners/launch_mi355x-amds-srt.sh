@@ -19,7 +19,8 @@ SHARED_RESULTS="${SHARED_BASE}/results"
 : "${CONFIG_FILE:?CONFIG_FILE must name an srt-slurm recipe}"
 : "${MODEL:?MODEL must identify the Hugging Face model}"
 
-MODEL_CACHE_KEY="models--${MODEL//\//--}"
+SRT_MODEL_LOCAL_PATH="${SRT_MODEL_LOCAL_PATH:-}"
+SRT_DRAFT_MODEL="${SRT_DRAFT_MODEL:-}"
 
 CONFIG_PATH="${CONFIG_FILE%%:*}"
 LOCAL_RECIPE="${GITHUB_WORKSPACE}/benchmarks/multi_node/srt-slurm-recipes/${CONFIG_PATH#recipes/}"
@@ -32,11 +33,14 @@ WORK_DIR="${GITHUB_WORKSPACE}/.srt-slurm-${RUN_KEY}"
 SRT_REPO_DIR="${WORK_DIR}/srt-slurm"
 mkdir -p "$WORK_DIR" "$SHARED_RESULTS"
 
-# Materialize one immutable, shared squashfs and the requested model. Older
-# MI355X jobs populated Hugging Face caches either directly under
-# SHARED_HF_CACHE or under LEGACY_HF_CACHE; expose either layout through the
-# current $HF_HOME/hub path before snapshot_download so production checkpoints
-# are reused without copies.
+# Materialize one immutable, shared squashfs and the requested model inputs.
+# Production checkpoints may be either Hugging Face repositories or an
+# existing shared local directory. Optional external speculative models are
+# prefetched once into the same shared Hugging Face cache instead of being
+# downloaded independently by every P/D worker at startup. Older MI355X jobs
+# populated caches either directly under SHARED_HF_CACHE or under
+# LEGACY_HF_CACHE; expose either layout through the current $HF_HOME/hub path
+# before snapshot_download so those checkpoints are reused without copies.
 # This job exits normally and never cancels or preempts another job.
 STAGE_SCRIPT="${WORK_DIR}/stage-mi355x-runtime.sbatch"
 cat > "$STAGE_SCRIPT" <<EOF
@@ -66,24 +70,65 @@ if ! unsquashfs -s "$SHARED_IMAGE" >/dev/null 2>&1; then
 fi
 flock -u 9
 mkdir -p "$SHARED_HF_CACHE/hub"
-exec 8>"$SHARED_HF_CACHE/.${MODEL_CACHE_KEY}.stage.lock"
-flock -w 2400 8
-legacy_model_dir="$SHARED_HF_CACHE/${MODEL_CACHE_KEY}"
-canonical_model_dir="$SHARED_HF_CACHE/hub/${MODEL_CACHE_KEY}"
-if [[ ! -e "\$canonical_model_dir" ]]; then
-    if [[ -f "\$legacy_model_dir/refs/main" && -d "\$legacy_model_dir/snapshots" ]]; then
-        ln -s "../${MODEL_CACHE_KEY}" "\$canonical_model_dir"
-    elif [[ -f "$LEGACY_HF_CACHE/${MODEL_CACHE_KEY}/refs/main" && -d "$LEGACY_HF_CACHE/${MODEL_CACHE_KEY}/snapshots" ]]; then
-        ln -s "$LEGACY_HF_CACHE/${MODEL_CACHE_KEY}" "\$canonical_model_dir"
+seed_legacy_cache() {
+    local repo="\$1"
+    local cache_key="models--\${repo//\//--}"
+    local legacy_model_dir="$SHARED_HF_CACHE/\${cache_key}"
+    local canonical_model_dir="$SHARED_HF_CACHE/hub/\${cache_key}"
+    exec 8>"$SHARED_HF_CACHE/.\${cache_key}.stage.lock"
+    flock -w 2400 8
+    if [[ ! -e "\$canonical_model_dir" ]]; then
+        if [[ -f "\$legacy_model_dir/refs/main" && -d "\$legacy_model_dir/snapshots" ]]; then
+            ln -s "../\${cache_key}" "\$canonical_model_dir"
+        elif [[ -f "$LEGACY_HF_CACHE/\${cache_key}/refs/main" && -d "$LEGACY_HF_CACHE/\${cache_key}/snapshots" ]]; then
+            ln -s "$LEGACY_HF_CACHE/\${cache_key}" "\$canonical_model_dir"
+        fi
     fi
+    flock -u 8
+}
+
+model_repos=()
+if [[ -n "$SRT_MODEL_LOCAL_PATH" ]]; then
+    python3 - "$SRT_MODEL_LOCAL_PATH" <<'PYMODEL'
+import json
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+if not root.is_dir():
+    raise SystemExit(f"local model directory does not exist: {root}")
+for required in ("config.json", "tokenizer_config.json", "model.safetensors.index.json"):
+    if not (root / required).is_file():
+        raise SystemExit(f"local model is missing {required}: {root}")
+index = json.loads((root / "model.safetensors.index.json").read_text())
+shards = sorted(set(index.get("weight_map", {}).values()))
+if not shards:
+    raise SystemExit(f"local model index has no shards: {root}")
+missing = [shard for shard in shards if not (root / shard).is_file()]
+if missing:
+    raise SystemExit(f"local model is missing {len(missing)} indexed shards: {missing[:5]}")
+print(f"validated local model {root}: {len(shards)} indexed shards")
+PYMODEL
+else
+    model_repos+=("$MODEL")
 fi
-flock -u 8
+if [[ -n "$SRT_DRAFT_MODEL" ]]; then
+    model_repos+=("$SRT_DRAFT_MODEL")
+fi
+for repo in "\${model_repos[@]}"; do
+    seed_legacy_cache "\$repo"
+done
+
+if (( \${#model_repos[@]} == 0 )); then
+    exit 0
+fi
+model_repo_list="\$(IFS=,; echo "\${model_repos[*]}")"
 srun --nodes=1 --ntasks=1 \
     --container-image="$SHARED_IMAGE" \
     --container-mounts="$SHARED_HF_CACHE:/hf_hub_cache,$LEGACY_HF_CACHE:$LEGACY_HF_CACHE" \
     --container-writable --container-remap-root --no-container-entrypoint \
-    --export=ALL,HF_HOME=/hf_hub_cache,HF_HUB_CACHE=/hf_hub_cache/hub,HUGGINGFACE_HUB_CACHE=/hf_hub_cache/hub,MODEL_REPO=${MODEL} \
-    python3 -c 'import os; from huggingface_hub import snapshot_download; snapshot_download(os.environ["MODEL_REPO"])'
+    --export=ALL,HF_HOME=/hf_hub_cache,HF_HUB_CACHE=/hf_hub_cache/hub,HUGGINGFACE_HUB_CACHE=/hf_hub_cache/hub,MODEL_REPOS="\$model_repo_list" \
+    python3 -c 'import os; from huggingface_hub import snapshot_download; [snapshot_download(repo) for repo in os.environ["MODEL_REPOS"].split(",") if repo]'
 EOF
 STAGE_JOB_ID=$(sbatch --wait --parsable "$STAGE_SCRIPT")
 STAGE_JOB_ID="${STAGE_JOB_ID%%;*}"
