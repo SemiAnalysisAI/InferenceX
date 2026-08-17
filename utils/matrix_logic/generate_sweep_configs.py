@@ -1456,6 +1456,12 @@ def main():
             matrix_values,
             include_agentic=args.evals_only or args.all_evals or args.with_agentic_evals,
         )
+        if args.with_agentic_evals and not args.evals_only and not args.all_evals:
+            eval_entries = [dict(e) for e in matrix_values if e.get(Fields.RUN_EVAL.value, False)]
+            for entry in matrix_values:
+                entry[Fields.RUN_EVAL.value] = False
+                entry.pop(Fields.EVAL_CONC.value, None)
+            matrix_values.extend(eval_entries)
         if args.all_evals:
             matrix_values = mark_all_eval_entries(matrix_values)
 
