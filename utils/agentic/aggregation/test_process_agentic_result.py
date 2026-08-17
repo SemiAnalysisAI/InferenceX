@@ -1337,7 +1337,7 @@ def test_processor_normalizes_trtllm_server_metrics(tmp_path: Path):
                 "type": "counter",
                 "series": [{"stats": {"total": 200.0}}],
             },
-            "trtllm_prompt_tokens_total": {
+            "trtllm_prompt_tokens": {
                 "type": "counter",
                 "series": [
                     {
@@ -1352,7 +1352,7 @@ def test_processor_normalizes_trtllm_server_metrics(tmp_path: Path):
                     },
                 ],
             },
-            "trtllm_generation_tokens_total": {
+            "trtllm_generation_tokens": {
                 "type": "counter",
                 "series": [
                     {
@@ -1362,7 +1362,7 @@ def test_processor_normalizes_trtllm_server_metrics(tmp_path: Path):
                     }
                 ],
             },
-            "trtllm_prompt_cached_tokens_total": {
+            "trtllm_prompt_cached_tokens": {
                 "type": "counter",
                 "series": [
                     {"endpoint_url": prefill_url, "stats": {"total": 200.0}},
@@ -1387,7 +1387,7 @@ def test_processor_normalizes_trtllm_server_metrics(tmp_path: Path):
                 "type": "gauge",
                 "series": [{"endpoint_url": prefill_url, "stats": {"max": 0.25}}],
             },
-            "trtllm_kv_cache_offload_bytes_total": {
+            "trtllm_kv_cache_offload_bytes": {
                 "type": "counter",
                 "series": [
                     {
@@ -1397,7 +1397,7 @@ def test_processor_normalizes_trtllm_server_metrics(tmp_path: Path):
                     }
                 ],
             },
-            "trtllm_kv_cache_onboard_bytes_total": {
+            "trtllm_kv_cache_onboard_bytes": {
                 "type": "counter",
                 "series": [
                     {

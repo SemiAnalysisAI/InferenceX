@@ -33,16 +33,23 @@ class TrtllmBackend(ServerMetricsBackend):
     ) -> None:
         prompt_total = _first_counter_total(
             metrics,
-            ["dynamo_frontend_input_sequence_tokens", "trtllm_prompt_tokens_total"],
+            [
+                "dynamo_frontend_input_sequence_tokens",
+                "trtllm_prompt_tokens",
+                "trtllm_prompt_tokens_total",
+            ],
         )
         generation_total = _first_counter_total(
             metrics,
-            ["dynamo_frontend_output_tokens", "trtllm_generation_tokens_total"],
+            [
+                "dynamo_frontend_output_tokens",
+                "trtllm_generation_tokens",
+                "trtllm_generation_tokens_total",
+            ],
         )
-        cached_tokens = sum_stat(
+        cached_tokens = _first_counter_total(
             metrics,
-            "trtllm_prompt_cached_tokens_total",
-            preferred_keys=("total", "sum", "max", "avg"),
+            ["trtllm_prompt_cached_tokens", "trtllm_prompt_cached_tokens_total"],
         )
 
         flat["total_prompt_tokens"] = counter_int(prompt_total)
@@ -75,15 +82,19 @@ class TrtllmBackend(ServerMetricsBackend):
                 combine="max",
             )
         )
-        flat["kv_offload_bytes_gpu_to_cpu"] = sum_stat(
+        flat["kv_offload_bytes_gpu_to_cpu"] = _first_counter_total(
             metrics,
-            "trtllm_kv_cache_offload_bytes_total",
-            preferred_keys=("total", "sum", "max", "avg"),
+            [
+                "trtllm_kv_cache_offload_bytes",
+                "trtllm_kv_cache_offload_bytes_total",
+            ],
         )
-        flat["kv_offload_bytes_cpu_to_gpu"] = sum_stat(
+        flat["kv_offload_bytes_cpu_to_gpu"] = _first_counter_total(
             metrics,
-            "trtllm_kv_cache_onboard_bytes_total",
-            preferred_keys=("total", "sum", "max", "avg"),
+            [
+                "trtllm_kv_cache_onboard_bytes",
+                "trtllm_kv_cache_onboard_bytes_total",
+            ],
         )
 
         computed_tokens = None
@@ -152,12 +163,14 @@ class TrtllmBackend(ServerMetricsBackend):
 def _first_counter_total(
     metrics: dict[str, dict[str, Any]],
     metric_names: list[str],
+    series_filter: Any = None,
 ) -> float | None:
     for metric_name in metric_names:
         value = sum_stat(
             metrics,
             metric_name,
             preferred_keys=("total", "sum", "max", "avg"),
+            series_filter=series_filter,
         )
         if value is not None:
             return value
@@ -189,19 +202,19 @@ def _trtllm_sources(metrics: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
         series_filter = lambda series, endpoint=endpoint: str(
             series.get("endpoint_url", "")
         ) == endpoint
-        prompt_tokens = sum_stat(
+        prompt_tokens = _first_counter_total(
             metrics,
-            "trtllm_prompt_tokens_total",
+            ["trtllm_prompt_tokens", "trtllm_prompt_tokens_total"],
             series_filter=series_filter,
         )
-        generation_tokens = sum_stat(
+        generation_tokens = _first_counter_total(
             metrics,
-            "trtllm_generation_tokens_total",
+            ["trtllm_generation_tokens", "trtllm_generation_tokens_total"],
             series_filter=series_filter,
         )
-        cached_tokens = sum_stat(
+        cached_tokens = _first_counter_total(
             metrics,
-            "trtllm_prompt_cached_tokens_total",
+            ["trtllm_prompt_cached_tokens", "trtllm_prompt_cached_tokens_total"],
             series_filter=series_filter,
         )
         hit_rate = normalize_fraction(
