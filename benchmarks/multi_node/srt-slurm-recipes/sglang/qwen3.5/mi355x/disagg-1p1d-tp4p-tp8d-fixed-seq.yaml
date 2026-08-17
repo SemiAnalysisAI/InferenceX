@@ -1,0 +1,149 @@
+# Production-scale MI355X port of the existing Qwen3.5 FP8 1P1D recipe.
+# Each role owns one full 8-GPU node; the native SGLang Router provides the
+# request plane and AMD MoRI moves KV directly between the P/D workers.
+
+name: "mi355x-sglang-qwen3.5-fp8-disagg-1p1d-tp4p-tp8d-fixed-seq"
+
+model:
+  path: "hf:Qwen/Qwen3.5-397B-A17B-FP8"
+  container: "sglang-v0.5.16-mi35x"
+  precision: "fp8"
+
+identity:
+  model:
+    repo: "Qwen/Qwen3.5-397B-A17B-FP8"
+  container:
+    image: "lmsysorg/sglang:v0.5.16-rocm720-mi35x"
+  frameworks:
+    sglang: "0.5.16"
+    sglang-router: "0.3.2"
+
+slurm:
+  time_limit: "08:00:00"
+
+# This topology owns every GPU on each MI355X node. Give SGLang the complete
+# 128-core cpuset as well: its ROCm image enables per-GPU CPU affinity, which
+# maps the eight TP ranks across the full dual-socket CPU topology.
+sbatch_directives:
+  cpus-per-task: "128"
+  mem: "0"
+
+resources:
+  gpu_type: "mi355x"
+  gpus_per_node: 8
+  prefill_nodes: 1
+  decode_nodes: 1
+  prefill_workers: 1
+  decode_workers: 1
+  gpus_per_prefill: 4
+  gpus_per_decode: 8
+
+frontend:
+  type: sglang
+  enable_multiple_frontends: false
+  args:
+    policy: round_robin
+    prefill-policy: round_robin
+    decode-policy: round_robin
+
+backend:
+  type: sglang
+  prefill_environment: &common_environment
+    HF_HOME: "/hf_hub_cache"
+    # Hugging Face stores hub snapshots under $HF_HOME/hub. Keep the explicit
+    # cache variables on that same path so srt-slurm's prefetch and every
+    # backend process resolve the identical, current snapshot.
+    HF_HUB_CACHE: "/hf_hub_cache/hub"
+    HUGGINGFACE_HUB_CACHE: "/hf_hub_cache/hub"
+    PYTHONUNBUFFERED: "1"
+    IBDEVICES: "rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7"
+    GLOO_SOCKET_IFNAME: "eno0"
+    NCCL_SOCKET_IFNAME: "eno0"
+    MORI_RDMA_TC: "104"
+    MORI_IO_TC: "104"
+    MORI_IO_SQ_BACKOFF_TIMEOUT_US: "50000"
+    MORI_IO_QP_MAX_SEND_WR: "16384"
+    MORI_IO_QP_MAX_CQE: "32768"
+    MORI_IO_QP_MAX_SGE: "2"
+    MORI_SHMEM_MODE: "ISOLATION"
+    SGLANG_USE_AITER: "1"
+    AITER_LOG_LEVEL: "ERROR"
+    SGLANG_MORI_DISPATCH_DTYPE: "auto"
+    SGLANG_MORI_QP_PER_TRANSFER: "4"
+    SGLANG_MORI_NUM_WORKERS: "4"
+    SGLANG_DISAGGREGATION_NUM_PRE_ALLOCATE_REQS: "32"
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "3600"
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "3600"
+    SGLANG_HEALTH_CHECK_TIMEOUT: "600"
+  decode_environment: *common_environment
+  sglang_config:
+    prefill: &common_config
+      served-model-name: "Qwen/Qwen3.5-397B-A17B-FP8"
+      tensor-parallel-size: 4
+      disaggregation-transfer-backend: mori
+      disaggregation-ib-device: "rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7"
+      kv-cache-dtype: "fp8_e4m3"
+      attention-backend: aiter
+      moe-dense-tp-size: 1
+      load-balance-method: round_robin
+      watchdog-timeout: 3600
+      decode-log-interval: 1000
+      log-level: warning
+      mem-fraction-static: 0.80
+      max-running-requests: 128
+      chunked-prefill-size: 262144
+      context-length: 16384
+      disable-radix-cache: true
+      cuda-graph-bs: [1, 2, 3, 4, 5, 6, 7, 8]
+      enable-metrics: true
+    decode:
+      <<: *common_config
+      mem-fraction-static: 0.85
+      prefill-round-robin-balance: true
+
+srun_options:
+  container-writable: ""
+  container-remap-root: ""
+  mem: "0"
+
+health_check:
+  max_attempts: 720
+  interval_seconds: 5
+
+benchmark:
+  type: custom
+  command: |
+    set -euo pipefail
+    result_root="/results/${SLURM_JOB_ID}"
+    mkdir -p "${result_root}/fixed-seq"
+    trap 'tar -C /logs -czf "'"${result_root}"'/runtime-logs.tar.gz" . 2>/dev/null || true' EXIT
+    for concurrency in 8 16 32 64 128; do
+      num_prompts=$((concurrency * 10))
+      if ((num_prompts < 16)); then
+        num_prompts=16
+      fi
+      python3 /infmax-workspace/utils/bench_serving/benchmark_serving.py \
+        --backend openai-chat \
+        --base-url "http://${SRT_FRONTEND_HOST}:${SRT_FRONTEND_PORT}" \
+        --endpoint /v1/chat/completions \
+        --model Qwen/Qwen3.5-397B-A17B-FP8 \
+        --tokenizer Qwen/Qwen3.5-397B-A17B-FP8 \
+        --dataset-name random \
+        --random-input-len 8192 \
+        --random-output-len 1024 \
+        --random-range-ratio 1.0 \
+        --random-num-workers 1 \
+        --num-warmups "$((concurrency * 2))" \
+        --num-prompts "${num_prompts}" \
+        --max-concurrency "${concurrency}" \
+        --request-rate inf \
+        --ignore-eos \
+        --disable-tqdm \
+        --save-result \
+        --result-dir "${result_root}/fixed-seq" \
+        --result-filename "qwen3.5-fp8-disagg-isl8192-osl1024-c${concurrency}.json"
+    done
+  env:
+    HF_HOME: /hf_hub_cache
+    HF_HUB_CACHE: /hf_hub_cache/hub
+    HUGGINGFACE_HUB_CACHE: /hf_hub_cache/hub
