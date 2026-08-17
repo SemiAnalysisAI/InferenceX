@@ -5796,4 +5796,5 @@
     - "Run the complete 8k1k c8/c16/c32/c64/c128 search space in one eight-hour Slurm allocation through the repository's unchanged benchmark_serving.py custom benchmark."
     - "Use lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260809, retain FP8 KV cache and AITer attention, and remove the temporary duplicate qwen3.5-fp8-mi355x-sglang-srt-disagg config key."
     - "Pin the launcher to SemiAnalysisAI/srt-slurm c609754b so native-router endpoint registration and AMD orchestration match the current integration branch."
+    - "Reuse validated legacy MI355X Hugging Face cache trees through the standard $HF_HOME/hub layout under a per-model lock, avoiding duplicate production-checkpoint downloads or copies."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2628
