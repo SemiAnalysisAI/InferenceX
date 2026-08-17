@@ -77,7 +77,7 @@ backend:
       # 0.9258 on B300; use the same 0.94 fraction as the GB300 TP4 recipe.
       mem-fraction-static: 0.94
       swa-full-tokens-ratio: 0.02
-      chunked-prefill-size: 8192
+      chunked-prefill-size: 32768
       max-prefill-tokens: 8192
       max-running-requests: 128
       cuda-graph-max-bs: 32

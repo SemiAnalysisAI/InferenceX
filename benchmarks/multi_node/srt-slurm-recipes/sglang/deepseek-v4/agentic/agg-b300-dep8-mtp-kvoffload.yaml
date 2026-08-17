@@ -75,7 +75,7 @@ backend:
       enable-metrics: true
       mem-fraction-static: 0.90
       swa-full-tokens-ratio: 0.02
-      chunked-prefill-size: 8192
+      chunked-prefill-size: 65536
       max-prefill-tokens: 8192
       max-running-requests: 1152
       cuda-graph-max-bs: 144
