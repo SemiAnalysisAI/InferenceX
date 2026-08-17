@@ -21,7 +21,7 @@ set -x
 # baked into the validated base image below.
 #
 # Validated base image (carries the vLLM patches + AITER build + DSpark layer):
-#   vllm/vllm-openai-rocm:nightly-8efa13b700f1836657699cae2503dc2feab27fa0
+#   vllm/vllm-openai-rocm:nightly-311b3513af33bc29b4acb2fde2e9313e5e9966a0
 #   reproduced from the pinned nightly by apply_k3_fp4_fp8asm_dspark_patches.sh.
 # Pinned in configs/amd-master.yaml (kimik3-fp4-mi355x-vllm-agentic-mtp).
 #

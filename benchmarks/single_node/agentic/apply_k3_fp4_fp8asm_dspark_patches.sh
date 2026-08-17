@@ -6,7 +6,7 @@
 # Kimi-K3 FP4 MI355X DSpark agentic benchmark runs in. Run this INSIDE a
 # container started from:
 #
-#   vllm/vllm-openai-rocm:nightly-8efa13b700f1836657699cae2503dc2feab27fa0
+#   vllm/vllm-openai-rocm:nightly-311b3513af33bc29b4acb2fde2e9313e5e9966a0
 #
 # (method borrowed from InferenceX #2508: fetch/build the deltas the base image
 # lacks, apply them into the installed dist-packages + a node-local aiter, then
@@ -19,7 +19,7 @@
 #       --security-opt seccomp=unconfined --security-opt label=disable \
 #       --cap-add=SYS_PTRACE -e GPU_ARCHS=gfx950 \
 #       --entrypoint sleep \
-#       vllm/vllm-openai-rocm:nightly-8efa13b700f1836657699cae2503dc2feab27fa0 infinity
+#       vllm/vllm-openai-rocm:nightly-311b3513af33bc29b4acb2fde2e9313e5e9966a0 infinity
 #   docker cp benchmarks/single_node/agentic k3-dspark-benchmark:/opt/k3-recipe
 #   docker exec k3-dspark-benchmark bash /opt/k3-recipe/apply_k3_fp4_fp8asm_dspark_patches.sh
 #
@@ -28,9 +28,10 @@
 #   - aiter ASM a16w16 split-K cudagraph-safety guard (patch_aiter_splitk_cudagraph.py)
 #   - bundled tuned K3 GEMM CSV installed + merged -> merged_bf16_tuned_gemm.csv
 #   - triton 3.7.0 + tabulate (nightly ships 3.6.0)
-#   - 5 vLLM ASM base patches (decode #50578, fp8 prefill PR-A, PS metadata16,
-#     skip-k3-fp8-ps, wvSplitK #50618)
-#   - vLLM rejection-sampler NaN-argmax guard (#50183, patch_rejection_nan_argmax.py)
+#   - (the 5 vLLM ASM base patches -- decode #50578, fp8 prefill PR-A, PS
+#     metadata16, skip-k3-fp8-ps, wvSplitK #50618 -- and the rejection-sampler
+#     NaN-argmax guard #50183 are UPSTREAMED in 0.27; re-checked by anchor in
+#     VERIFY, no longer applied)
 #   - DSpark fp8-asm enablement layer (apply_dspark_fp8asm.sh)
 #   - FlyDSL->torch decode-GEMM reroute (patch_flydsl_decode_to_torch.sh)
 #   - KV-offload full-attn eagle prefix-veto fix (patch_offload_eagle_prefix_veto.py)
@@ -77,7 +78,7 @@ say() { echo; echo "############### $* ###############"; }
 [ -f "$MLA" ] || { echo "!! $MLA not found — is this the pinned base image?" >&2; exit 1; }
 
 # ---------------------------------------------------------------------------
-say "1/9 build node-local aiter @ $AITER_PIN (#4579 + #4575 K/V int-32 offsets)"
+say "1/7 build node-local aiter @ $AITER_PIN (#4579 + #4575 K/V int-32 offsets)"
 # Stage from AITER_SRC if provided, else clone. JIT-compiles on demand against
 # the container torch + system triton (PREBUILD_KERNELS=0, AITER_USE_SYSTEM_TRITON=1).
 export PREBUILD_KERNELS=0 AITER_USE_SYSTEM_TRITON=1
@@ -120,7 +121,7 @@ rm -rf /root/aiter; ln -s "$LOCAL_AITER" /root/aiter
 python3 -c "import aiter; assert '/opt/aiter-local' in aiter.__file__ or '/root/aiter' in aiter.__file__, aiter.__file__; print('  aiter:', aiter.__file__)"
 
 # ---------------------------------------------------------------------------
-say "2/9 aiter ASM a16w16 split-K cudagraph-safety guard"
+say "2/7 aiter ASM a16w16 split-K cudagraph-safety guard"
 # MUST run AFTER the git reset --hard above (a reset wipes the .cu edit). The
 # split-K a16w16 ASM kernels reduce partial-K through a per-(device,stream) atomic
 # semaphore whose zero-at-launch invariant is violated under vLLM FULL cudagraph
@@ -131,7 +132,7 @@ say "2/9 aiter ASM a16w16 split-K cudagraph-safety guard"
 LOCAL_AITER="$LOCAL_AITER" python3 "$PATCHES/patch_aiter_splitk_cudagraph.py"
 
 # ---------------------------------------------------------------------------
-say "3/9 install + merge tuned K3 BF16 GEMM CSV"
+say "3/7 install + merge tuned K3 BF16 GEMM CSV"
 CONFIGS="$LOCAL_AITER/aiter/configs"
 mkdir -p "$CONFIGS/model_configs"
 cp "$TUNED_CSV" "$CONFIGS/model_configs/kimik3_bf16_tuned_gemm.csv"
@@ -164,50 +165,41 @@ PY
 
 # ---------------------------------------------------------------------------
 if [ "${SKIP_TRITON:-0}" = "1" ]; then
-  say "4/9 triton upgrade SKIPPED (SKIP_TRITON=1)"
+  say "4/7 triton upgrade SKIPPED (SKIP_TRITON=1)"
 else
-  say "4/9 triton 3.7.0 + tabulate (nightly ships 3.6.0)"
+  say "4/7 triton 3.7.0 + tabulate (nightly ships 3.6.0)"
   pip install -q --extra-index-url https://pypi.amd.com/triton/release/rocm-7.2.0/simple/ \
     triton==3.7.0 tabulate
 fi
 python3 -c "import triton; print('  triton', triton.__version__)"
 
 # ---------------------------------------------------------------------------
-say "5/9 vLLM ASM base patches (decode #50578, fp8 prefill PR-A, PS16, skip-k3-fp8-ps, wvSplitK #50618)"
-if grep -q "PATCH(fp8-asm)" "$MLA" && grep -q "PATCH(fp8-prefill-pad)" "$MLA" \
-   && grep -q "num_head_k = max(16, self.num_heads)" "$MLA" \
-   && grep -q "PATCH(skip-k3-fp8-ps)" "$MLA" \
-   && grep -q "PATCH(vLLM #50618)" "$UTILS"; then
-  echo "  all 5 ASM patches already present"
-else
-  for p in patch_fp8asm.py patch_fp8_prefill.py patch_ps_metadata16.py patch_skip_k3_fp8_ps.py patch_wvsplitk.py; do
-    echo "  applying $p ..."
-    python3 "$PATCHES/$p"
-  done
-fi
+# vLLM 0.27 ships the former "5 ASM base patches" (old step 5) and the rejection
+# NaN-argmax guard (old step 6) NATIVELY, so both steps are dropped:
+#   - skip-K3-fp8-PS / fp8-prefill-pad: native strict gate
+#       self._fp8_prefill_enabled = ... and self.num_heads % 16 == 0
+#     (rocm_aiter_mla.py L375 builder + L990 impl) leaves fp8-asm PREFILL OFF for
+#     K3's 12 heads/rank -- the intended end state, no patch.
+#   - decode pad-to-16 (#50578): native AiterMLAHelper.get_mla_padded_q tile-pad
+#     + use_gluon_decode()==asm routing.
+#   - PS metadata16: native self._num_attention_heads = max(16, self.num_heads).
+#   - wvSplitK #50618: native .contiguous() on the skinny-GEMM x_view
+#     (model_executor/layers/utils.py, gated by skinny_operands_compatible).
+#   - NaN-argmax #50183: native tl.where(x != x, -inf, x) at both argmax sites in
+#     rejection_sampler_utils.py ("NaN breaks tl.argmax index bounds").
+# All are re-checked by anchor in the VERIFY block below. The old patch_*.py
+# files remain in k3_patches/ (unreferenced) pending the boot+GSM8K validation.
 
 # ---------------------------------------------------------------------------
-say "6/9 vLLM rejection-sampler NaN-argmax guard (#50183)"
-# NaN target logits -> tl.argmax returns an out-of-range block index -> OOB read
-# in the rejection/resample kernels -> HSA_STATUS_ERROR_EXCEPTION (~0x1016) a
-# second into the c1 profiling request. Map NaN->-inf before both argmax calls.
-REJ="$DIST/vllm/v1/worker/gpu/spec_decode/rejection_sampler_utils.py"
-if grep -q "NaN breaks tl.argmax index bounds" "$REJ"; then
-  echo "  NaN-argmax guard already present"
-else
-  DIST="$DIST" python3 "$PATCHES/patch_rejection_nan_argmax.py"
-fi
-
-# ---------------------------------------------------------------------------
-say "7/9 DSpark fp8-asm enablement layer"
+say "5/7 DSpark fp8-asm enablement layer"
 bash "$PATCHES/apply_dspark_fp8asm.sh"
 
 # ---------------------------------------------------------------------------
-say "8/9 FlyDSL -> torch decode-GEMM reroute (cudagraph-capturable dense GEMMs)"
+say "6/7 FlyDSL -> torch decode-GEMM reroute (cudagraph-capturable dense GEMMs)"
 CSV="$CONFIGS/merged_bf16_tuned_gemm.csv" bash "$PATCHES/patch_flydsl_decode_to_torch.sh"
 
 # ---------------------------------------------------------------------------
-say "9/9 KV-offload full-attn eagle PREFIX-VETO fix (offload READ path)"
+say "7/7 KV-offload full-attn eagle PREFIX-VETO fix (offload READ path)"
 # Needed only when serving with --kv-offloading-backend native, but always safe:
 # it only changes the offload scheduler's _lookup(), which is inert when offload
 # is off. The scheduler runs num_hit_chunks -= 1 for the full-attention eagle
@@ -232,19 +224,23 @@ KDA="$DIST/vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py"
 ok=1
 chk() { local n; n=$(grep -c "$2" "$1" 2>/dev/null || echo 0); \
         if [ "$n" -ge "$3" ]; then echo "  OK   $4 ($n)"; else echo "  FAIL $4 ($n < $3)"; ok=0; fi; }
-chk "$MLA"   "PATCH(fp8-asm)"                 1 "decode pad-to-16 (#50578)"
-chk "$MLA"   "PATCH(fp8-prefill-pad)"         1 "fp8 prefill pad (PR-A)"
-chk "$MLA"   "num_head_k = max(16, self.num_heads)" 1 "PS metadata16 (PR-A)"
-chk "$MLA"   "PATCH(skip-k3-fp8-ps)"          1 "skip K3 fp8 PS"
-chk "$UTILS" "PATCH(vLLM #50618)"             1 "wvSplitK (#50618)"
+# --- former base patches (old steps 5/6): upstreamed natively in vLLM 0.27 ---
+chk "$MLA"   "get_mla_padded_q"               1 "decode pad-to-16 (native get_mla_padded_q)"
+chk "$MLA"   "self.num_heads % 16 == 0"       2 "fp8-asm PREFILL OFF for K3 12h (native strict gate)"
+chk "$MLA"   "self._num_attention_heads = max(16, self.num_heads)" 1 "PS metadata16 (native)"
+chk "$UTILS" "skinny_operands_compatible"     1 "wvSplitK contiguous (native #50618)"
+chk "$REJ"   "NaN breaks tl.argmax index bounds" 1 "rejection NaN-argmax guard (native #50183)"
+# --- aiter-side patch still applied (step 2) ---
 chk "$AITER_SPLITK" "PATCH(splitk-cudagraph)" 1 "aiter ASM split-K graph guard"
-chk "$REJ"   "NaN breaks tl.argmax index bounds" 1 "rejection NaN-argmax guard (#50183)"
-chk "$MLA"   "_mtp_decode_qlen"               1 "DSpark _mtp_decode_qlen"
-chk "$MLA"   'method == "dspark"'             1 "dspark verify qlen branch"
-chk "$MLA"   "uses_asm_decode"                2 "persistent-metadata gate"
+# --- DSpark verify width + persistent-metadata gate: native on 0.27 ---
+chk "$MLA"   "_mtp_decode_qlen"               1 "DSpark _mtp_decode_qlen (native)"
+chk "$MLA"   "self._mtp_decode_qlen = self.reorder_batch_threshold or 1" 1 "DSpark verify width via reorder_batch_threshold (native)"
+chk "$MLA"   "use_gluon_verify"               2 "gluon-verify gate present (native)"
+chk "$MLA"   "_ASM_PADDED_MAX_PS_QLEN"        1 "persistent-metadata asm PS-qlen cap (native)"
 chk "$AITER_MLA" "80: 64"                     1 "aiter get_block_n_fp8 key 80"
 chk "$AITER_MLA" "get_block_n_fp8.get("       1 "aiter get_block_n_fp8.get()"
-chk "$KDA"   "stride_indices_seq"             5 "KDA PR#27 stride fix"
+chk "$KDA"   "stride_indices_seq"             4 "KDA fwd spec-decode seq-stride (native PR#27)"
+chk "$KDA"   "stride_state_indices"           3 "KDA packed-decode state-index stride (native PR#27)"
 python3 -c "import vllm.v1.attention.backends.mla.rocm_aiter_mla; print('  IMPORT_OK')"
 [ "$ok" = 1 ] || { echo; echo "!! one or more anchors missing — see FAIL lines above" >&2; exit 1; }
 
