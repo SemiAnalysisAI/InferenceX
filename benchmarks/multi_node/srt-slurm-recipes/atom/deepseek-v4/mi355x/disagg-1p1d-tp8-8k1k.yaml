@@ -88,7 +88,10 @@ benchmark:
     set -euo pipefail
     result_root="/results/${SLURM_JOB_ID}"
     mkdir -p "${result_root}/fixed-seq"
-    trap 'tar -C /logs -czf "'"${result_root}"'/runtime-logs.tar.gz" . 2>/dev/null || true' EXIT
+    archive_runtime_logs() {
+      tar -C /logs -czf "${result_root}/runtime-logs.tar.gz" . 2>/dev/null || true
+    }
+    trap archive_runtime_logs EXIT
     for concurrency in 4 8 16 32 64 128; do
       num_prompts=$((concurrency * 10))
       if (( num_prompts < 16 )); then num_prompts=16; fi
@@ -112,6 +115,7 @@ benchmark:
         --save-result \
         --result-dir "${result_root}/fixed-seq" \
         --result-filename "dsv4-atom-mi355x-disagg-1p1d-tp8-isl8192-osl1024-c${concurrency}.json"
+    done
   env:
     HF_HOME: /hf_hub_cache
     HF_HUB_CACHE: /hf_hub_cache/hub

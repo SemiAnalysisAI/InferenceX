@@ -7,7 +7,7 @@ set -euo pipefail
 SRT_SLURM_REPOSITORY="https://github.com/SemiAnalysisAI/srt-slurm.git"
 SRT_SLURM_COMMIT="5ecfb13d1ba0960045482f1ef006312d8729d37a"
 INFERA_REPOSITORY="https://github.com/cquil11/Infera.git"
-INFERA_COMMIT="8ed8f1728c745d4e91ba9eaa09ed81159aa57e41"
+INFERA_COMMIT="503dcbd1b60229a5a508fd3da45994c56a2b40ec"
 ATOM_REPOSITORY="https://github.com/cquil11/ATOM.git"
 ATOM_COMMIT="2ab42bc2c64d1ad04f698c396da48473e71a6dbb"
 SLURM_PARTITION="compute"
