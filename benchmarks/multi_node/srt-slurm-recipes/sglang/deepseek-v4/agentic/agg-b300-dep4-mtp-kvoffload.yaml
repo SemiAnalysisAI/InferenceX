@@ -74,6 +74,11 @@ backend:
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro-0813"
       trust-remote-code: true
       enable-metrics: true
+      enable-cache-report: true
+      # The AgentX corpus contains a small number of traces longer than the
+      # runtime KV capacity. Match the existing native B300 launcher: truncate
+      # those requests instead of leaving Dynamo streams unresolved.
+      allow-auto-truncate: true
       # DSpark draft weights raise the measured minimum viable fraction to
       # 0.9258 on B300; use the same 0.94 fraction as the GB300 TP4 recipe.
       mem-fraction-static: 0.94
