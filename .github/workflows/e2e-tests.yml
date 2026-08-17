@@ -26,7 +26,7 @@ on:
                 type: string
                 default: ""
             require-power:
-                description: "Fail fixed-sequence jobs when GPU power is invalid"
+                description: "Fail benchmark jobs when GPU power is invalid"
                 required: false
                 type: boolean
                 default: false
@@ -106,7 +106,7 @@ on:
                 type: string
                 default: ""
             require-power:
-                description: "Fail fixed-sequence jobs when GPU power is invalid"
+                description: "Fail benchmark jobs when GPU power is invalid"
                 required: false
                 type: boolean
                 default: false
@@ -423,6 +423,7 @@ jobs:
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ 'false' }}
             run-eval: false
+            require-power: ${{ inputs.require-power }}
             scenario-type: agentic-coding
             ref: ${{ inputs.ref }}
 
