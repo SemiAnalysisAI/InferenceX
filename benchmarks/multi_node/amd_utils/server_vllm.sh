@@ -180,9 +180,41 @@ fi
 # so drop that key in the same rewrite.
 if [[ "${EVAL_ONLY:-false}" == "true" || "${RUN_EVAL:-false}" == "true" ]]; then
     _real_verify() {
-        printf '%s' "$1" |
-            sed -E 's/\\?"rejection_sample_method\\?"[[:space:]]*:[[:space:]]*\\?"synthetic\\?"/\\"rejection_sample_method\\": \\"block\\"/g' |
-            sed -E 's/,[[:space:]]*\\?"synthetic_acceptance_length\\?"[[:space:]]*:[[:space:]]*[0-9.]+//g'
+        SPEC_SERVER_CONFIG="$1" python3 - <<'PY'
+import json
+import os
+import shlex
+import sys
+
+cfg = os.environ["SPEC_SERVER_CONFIG"]
+try:
+    tokens = shlex.split(cfg)
+except ValueError as exc:
+    print(f"ERROR: failed to parse server config while editing --speculative-config: {exc}", file=sys.stderr)
+    sys.exit(1)
+
+try:
+    index = tokens.index("--speculative-config")
+except ValueError:
+    print(cfg)
+    sys.exit(0)
+
+if index + 1 >= len(tokens):
+    print("ERROR: --speculative-config is missing its JSON value", file=sys.stderr)
+    sys.exit(1)
+
+try:
+    spec = json.loads(tokens[index + 1])
+except json.JSONDecodeError as exc:
+    print(f"ERROR: invalid --speculative-config JSON before eval rewrite: {exc}", file=sys.stderr)
+    print(tokens[index + 1], file=sys.stderr)
+    sys.exit(1)
+
+spec["rejection_sample_method"] = "block"
+spec.pop("synthetic_acceptance_length", None)
+tokens[index + 1] = json.dumps(spec, separators=(",", ":"))
+print(shlex.join(tokens))
+PY
     }
     if echo "$PREFILL_SERVER_CONFIG" | grep -q 'rejection_sample_method'; then
         PREFILL_SERVER_CONFIG=$(_real_verify "$PREFILL_SERVER_CONFIG")

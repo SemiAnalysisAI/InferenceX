@@ -663,6 +663,7 @@ kimik3-fp4-mi355x-vllm-disagg-agentic-mtp:
           dp-attn: false
           additional-settings:
           - "PREFILL_NODES=1"
+          - "PREFILL_EXTRA_SERVE_ARGS=--enforce-eager"
         decode:
           num-worker: 1
           tp: 8
@@ -709,7 +710,7 @@ kimik3-fp4-mi355x-vllm-disagg-agentic-mtp-read:
   disagg: true
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.50
+    - dram-utilization: 0.80
       search-space:
       - spec-decoding: mtp
         kv-offloading: none
@@ -734,7 +735,7 @@ kimik3-fp4-mi355x-vllm-disagg-agentic-mtp-read:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: vllm-simple }
-        conc-list: [8, 12, 16]
+        conc-list: [8, 12]
         prefill:
           num-worker: 1
           tp: 8
@@ -744,6 +745,29 @@ kimik3-fp4-mi355x-vllm-disagg-agentic-mtp-read:
           - "PREFILL_NODES=1"
           - "MORIIO_READ_MODE=true"
           - "MORI_WAITALL_BUILD=0"
+          - "PREFILL_EXTRA_SERVE_ARGS=--enforce-eager"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=2"
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        conc-list: [16]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "MORIIO_READ_MODE=true"
+          - "MORI_WAITALL_BUILD=0"
+          - "PREFILL_EXTRA_SERVE_ARGS=--enforce-eager"
         decode:
           num-worker: 1
           tp: 8
