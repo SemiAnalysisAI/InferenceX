@@ -119,6 +119,22 @@ two-case smoke against their OpenAI-compatible frontend. Eval-only launchers
 restore real block verification before submitting recipes that otherwise use
 synthetic acceptance for throughput.
 
+### Kimi full tool-call schema diagnostic
+
+`kimi_tool_call_schema_full` runs the same pinned upstream test module with
+`--selection all`. It evaluates all 204 selected Walle schema cases in
+non-streaming and streaming modes, for 408 reported outcomes. Eight pytest
+workers share a two-hour whole-suite timeout. The native report must declare
+the exact selected suite and line identities, contain both modes for every
+case, and reconcile all outcome counts before projection.
+
+Select it explicitly with `eval-framework: kimi-vendor` and
+`eval-suite: kimi_tool_call_schema_full`. Its threshold is `0.0`, so model
+quality is diagnostic while setup, timeout, malformed-report, and integration
+failures still fail through the standard zero-effective-sample error path. The
+full suite reuses the smoke's pinned checkout, retry policy, result envelope,
+artifact staging, collector, and dashboard path.
+
 ### MiniMax provider compatibility smoke
 
 The Phase 1 MiniMax smoke is opt-in and applies to supported models exposing
@@ -156,8 +172,8 @@ local runner supplies `Authorization: Bearer EMPTY`. The smoke uses
 `temperature: 0`, `top_p: 1`, and `max_tokens: 40960`. The token budget matches
 the pinned verifier's MiniMax M3 default and prevents a valid tool-call response
 from ending at the model's common 2048-token generation default. The request
-has a 180-second timeout by default and at most one retry for transport
-failures, HTTP 429, or HTTP 5xx responses (two total attempts); a hard
+has a 180-second timeout by default and at most three retries for transport
+failures, HTTP 429, or HTTP 5xx responses (four total attempts); a hard
 900-second global bound covers the smoke.
 
 `minimax_vendor_report.json` is the native report. It preserves the raw
@@ -187,6 +203,36 @@ pass-at-k behavior, streaming behavior, parallel-call behavior, multi-turn tool
 execution, language following, scenario key-order recall, or general agent
 quality.
 
+### MiniMax M3 full provider diagnostic
+
+`minimax_m3_full` is an explicit, non-gating expansion of the smoke to all 102
+rows in the pinned MiniMax Provider Verifier dataset:
+
+```bash
+source benchmarks/benchmark_lib.sh
+export EVAL_FRAMEWORK=minimax-vendor
+export EVAL_SUITE=minimax_m3_full
+export MODEL_NAME='<served model identifier>'
+run_eval --port "$PORT"
+append_lm_eval_summary
+python3 utils/evals/validate_scores.py
+```
+
+The runner downloads only the eight source and validator files allowlisted in
+`utils/evals/minimax_m3_full_eval.py` at commit
+`85bf180e54e2ab0b31595cfdc697116c4760876d`, verifies each SHA256, and executes
+the pinned `verify.py` once. It uses five workers, a 600-second request timeout,
+three upstream retries, and a seven-hour whole-suite timeout. The workflow
+retains at least one hour for artifact staging, score validation, and cleanup.
+
+The native files are `minimax_vendor_report.json` and
+`minimax_vendor_results.jsonl`. The compatibility result publishes task
+`minimax_m3_full` with the native `tool_calls_match_rate`, requires exactly 102
+successful result rows, and rejects transport failures or inconsistent
+summaries. Its threshold is `0.0`, so this suite is diagnostic during the first
+rollout. Setup, transport, timeout, malformed-output, and integration failures
+still fail through the standard zero-effective-sample error path.
+
 ### BFCL V4 deterministic tool-use smoke
 
 The BFCL smoke is opt-in for models served through an OpenAI-compatible
@@ -202,8 +248,11 @@ export EVAL_SUITE=bfcl_smoke
 export EVAL_RESULT_DIR="$(mktemp -d /tmp/eval_out-XXXXXX)"
 run_eval --port "$PORT"
 append_lm_eval_summary
-python3 utils/evals/validate_scores.py --metric-prefix 'acc,'
+python3 utils/evals/validate_scores.py
 ```
+
+The validator reads BFCL's declared `acc` metric from the compatibility result,
+so workflows do not need a framework-specific metric override.
 
 The runtime pins
 [`bfcl-eval==2026.3.23`](https://pypi.org/project/bfcl-eval/2026.3.23/), built
@@ -339,7 +388,7 @@ All benchmark scripts in `benchmarks/` follow one of two flows:
 # 4. Run evals:
 if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT"
-    append_lm_eval_summary  # Writes meta_env.json and moves artifacts
+    append_lm_eval_summary  # Writes meta_env.json and stages artifacts
 fi
 
 # Eval-only mode (EVAL_ONLY=true):
@@ -357,9 +406,9 @@ Key eval functions in `benchmarks/benchmark_lib.sh`:
 | `run_eval` | Unified entrypoint - dispatches to framework-specific runner |
 | `run_lm_eval` | Runs lm-eval harness against the OpenAI-compatible endpoint |
 | `run_kimi_vendor_eval` | Selects and runs a pinned Kimi Vendor Verifier suite |
-| `run_minimax_vendor_eval` | Runs the pinned single-case MiniMax provider smoke |
-| `run_bfcl_eval` | Runs the pinned four-case BFCL V4 smoke |
-| `append_lm_eval_summary` | Writes `meta_env.json` and moves eval artifacts to workspace |
+| `run_minimax_vendor_eval` | Selects the pinned MiniMax smoke or full diagnostic |
+| `run_bfcl_eval` | Selects a pinned BFCL V4 smoke or model-quality suite |
+| `append_lm_eval_summary` | Writes `meta_env.json` and stages eval artifacts in the workspace |
 | `_install_lm_eval_deps` | Installs lm-eval dependencies |
 | `_prepare_vendor_verifier_python` | Uses system Python 3.12+ or provisions an isolated pinned Python 3.12 runtime for provider verifiers |
 | `_prepare_kimi_vendor_runtime` | Installs the pinned verifier dependencies in an isolated temp path |
@@ -370,6 +419,11 @@ Key eval functions in `benchmarks/benchmark_lib.sh`:
 | `_patch_lm_eval` | Patches lm-eval for reasoning tokens and TRT compatibility |
 | `compute_eval_context_length` | Computes eval context length (requested benchmark context, capped at model native max) |
 | `get_native_max_context_length` | Extracts model's native max context length from HF config |
+
+`EVAL_FRAMEWORK` is the orchestration-level selection and takes precedence over
+legacy `--framework lm-eval` arguments embedded in fixed-sequence recipes.
+Without that environment variable, an explicit `--framework` argument takes
+precedence over the scenario default.
 
 ### Single-node
 For default lm-eval jobs in eval-only mode (`EVAL_ONLY=true`), the benchmark script computes `EVAL_MAX_MODEL_LEN` via `compute_eval_context_length`, starts the server with that context length, skips throughput, and runs lm-eval. Each framework wires that context differently (`--context-length` for SGLang, `--max_seq_len` for TRT-LLM).

@@ -46,6 +46,9 @@ frontend:
   env:
     PIP_BREAK_SYSTEM_PACKAGES: "1"
   args:
+    dyn-chat-processor: sglang
+    tool-call-parser: deepseekv4
+    reasoning-parser: deepseek-v4
     router-mode: "kv"
     router-session-affinity-ttl-secs: "3600"
     active-decode-blocks-threshold: "None"

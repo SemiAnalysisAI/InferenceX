@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import copy
 import hashlib
 import http.client
 import json
@@ -139,9 +138,6 @@ def load_fixture(path: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         raise ValueError("fixture must contain exactly one row")
 
     rows: list[dict[str, Any]] = []
-    expected_checks = {
-        71: [],
-    }
     for position, raw_row in enumerate(raw_rows):
         row = dict(_mapping(raw_row, f"fixture.rows[{position}]"))
         data_index = row.get("data_index")
@@ -157,20 +153,12 @@ def load_fixture(path: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         if case_digest != EXPECTED_CASE_SHA256[data_index]:
             raise ValueError(f"fixture row {data_index} differs from pinned upstream")
         _validate_messages(row.get("messages"), f"fixture.rows[{position}].messages")
-        check_types = row.get("check_type", [])
-        if check_types != expected_checks[data_index]:
+        if row.get("check_type", []) != []:
             raise ValueError(f"fixture row {data_index} has unexpected check_type")
-        if data_index == 0:
-            if "expected_tool_call" in row or "tools" in row:
-                raise ValueError("fixture row 0 must remain the language-only case")
-        else:
-            _validate_tools(row.get("tools"), f"fixture.rows[{position}].tools")
-            expected_label = data_index == 71
-            if row.get("expected_tool_call") is not expected_label:
-                raise ValueError(
-                    f"fixture row {data_index} has an invalid expected label"
-                )
-        rows.append(copy.deepcopy(row))
+        _validate_tools(row.get("tools"), f"fixture.rows[{position}].tools")
+        if row.get("expected_tool_call") is not True:
+            raise ValueError(f"fixture row {data_index} has an invalid expected label")
+        rows.append(row)
 
     return dict(root), rows
 
@@ -180,8 +168,15 @@ def build_endpoint(base_url: str) -> str:
         raise ValueError("base_url must be a non-empty string")
     normalized = base_url.strip().rstrip("/")
     parsed = urllib.parse.urlsplit(normalized)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise ValueError("base_url must be an absolute HTTP(S) URL")
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.netloc
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ValueError(
+            "base_url must be an absolute HTTP(S) URL without query or fragment"
+        )
     return f"{normalized}/chat/completions"
 
 
@@ -189,7 +184,7 @@ def prepare_request(row: Mapping[str, Any], model: str) -> dict[str, Any]:
     """Strip evaluator fields and apply the fixed smoke sampling overrides."""
     if not isinstance(model, str) or not model.strip():
         raise ValueError("model must be a non-empty string")
-    request = copy.deepcopy(dict(row))
+    request = dict(row)
     for field in ("data_index", "check_type", "expected_tool_call", "scenario_check"):
         request.pop(field, None)
     request.update(
@@ -294,75 +289,17 @@ def _validate_chat_completion_response(value: Any) -> Mapping[str, Any]:
     return response
 
 
-# Adapted verbatim from pinned validator/tool_calls.py.
-_COMMON_COMMANDS = [
-    "ls ",
-    "cat ",
-    "git ",
-    "npm ",
-    "npx ",
-    "cd ",
-    "cp ",
-    "mv ",
-    "rm ",
-    "mkdir ",
-    "chmod ",
-    "chown ",
-    "find ",
-    "grep ",
-    "curl ",
-    "wget ",
-    "pip ",
-]
-
-
-def _is_shell_c_invocation(cmd: list[Any]) -> bool:
-    if not cmd or len(cmd) < 3:
-        return False
-    shell = cmd[0]
-    if shell not in (
-        "bash",
-        "sh",
-        "zsh",
-        "/bin/bash",
-        "/bin/sh",
-        "/bin/zsh",
-        "/usr/bin/bash",
-        "/usr/bin/sh",
-        "/usr/bin/zsh",
-    ):
-        return False
-    for arg in cmd[1:]:
-        if arg in ("-c", "-lc"):
-            return True
-        if arg in ("-l", "--login"):
-            continue
-        break
-    return False
-
-
-def is_valid_array_command(cmd: Any) -> bool:
-    if not isinstance(cmd, list) or len(cmd) == 0:
-        return False
-    if _is_shell_c_invocation(cmd):
-        return True
-    for elem in cmd:
-        if not isinstance(elem, str):
-            return False
-        if " " in elem:
-            for prefix in _COMMON_COMMANDS:
-                if elem.startswith(prefix):
-                    return False
-    return not (len(cmd) == 1 and " " in cmd[0])
+def _require_tool_validation() -> None:
+    """Fail setup before requests if the pinned schema dependency is unavailable."""
+    try:
+        import jsonschema  # noqa: F401
+    except ImportError as exc:
+        raise RuntimeError("jsonschema is required for tool-call validation") from exc
 
 
 def validate_tool_call(tool_call: Any, tools: list[dict[str, Any]]) -> bool:
-    """Apply pinned JSON Schema and array-command validation lazily."""
-    try:
-        # Lazy by design: --integration-error must work if dependency setup failed.
-        from jsonschema import ValidationError, validate
-    except ImportError:
-        return False
+    """Apply pinned JSON Schema validation."""
+    from jsonschema import ValidationError, validate
 
     try:
         call = _mapping(tool_call, "tool_call")
@@ -382,15 +319,6 @@ def validate_tool_call(tool_call: Any, tools: list[dict[str, Any]]) -> bool:
         if isinstance(args, str):
             args = json.loads(args)
         validate(instance=args, schema=schema)
-        for param_name, param_schema in schema.get("properties", {}).items():
-            if (
-                param_name == "command"
-                and param_schema.get("type") == "array"
-                and param_schema.get("items", {}).get("type") == "string"
-            ):
-                cmd_value = args.get(param_name)
-                if cmd_value is not None and not is_valid_array_command(cmd_value):
-                    return False
         return True
     except (json.JSONDecodeError, ValidationError):
         return False
@@ -423,92 +351,6 @@ def validate_tool_calls(
             result["tool_calls_valid"] = False
     return result
 
-
-# Adapted verbatim from pinned validator/russian_characters.py.
-def not_contains_russian_characters_unicode(text: str) -> bool:
-    for char in text:
-        char_code = ord(char)
-        if 0x0400 <= char_code <= 0x04FF:
-            return False
-    return True
-
-
-def validate_language(status: str, resp_content: Any) -> dict[str, Any]:
-    result: dict[str, Any] = {
-        "language_following_checked": False,
-        "language_following_valid": None,
-    }
-    if status != "success" or not resp_content:
-        return result
-    result["language_following_checked"] = True
-    result["language_following_valid"] = not_contains_russian_characters_unicode(
-        resp_content
-    )
-    return result
-
-
-# Adapted verbatim from pinned validator/scenario_check.py.
-def _extract_expected_order(request: dict[str, Any]) -> list[str] | None:
-    tools = request.get("tools")
-    if not tools or not isinstance(tools, list):
-        return None
-    params = tools[0].get("function", {}).get("parameters", {})
-    if not params:
-        return None
-    if "properties" in params:
-        return list(params["properties"].keys())
-    schema_keywords = {
-        "type",
-        "description",
-        "required",
-        "additionalProperties",
-        "$schema",
-        "items",
-        "enum",
-        "default",
-    }
-    keys = [key for key in params if key not in schema_keywords]
-    return keys if keys else None
-
-
-def _get_visible_content(text: str) -> str:
-    return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
-
-
-def _extract_actual_order(text: str, expected: list[str]) -> list[str]:
-    positions = []
-    for param in expected:
-        index = text.find(param)
-        if index != -1:
-            positions.append((index, param))
-    positions.sort(key=lambda item: item[0])
-    return [param for _, param in positions]
-
-
-def validate_scenario(
-    request: dict[str, Any], status: str, resp_content: Any
-) -> dict[str, Any]:
-    result: dict[str, Any] = {
-        "scenario_check_checked": False,
-        "scenario_check_valid": None,
-        "scenario_check_detail": None,
-    }
-    if status != "success" or not resp_content:
-        return result
-    expected_order = _extract_expected_order(request)
-    if not expected_order:
-        return result
-    visible = _get_visible_content(resp_content)
-    actual_order = _extract_actual_order(visible, expected_order)
-    result["scenario_check_checked"] = True
-    result["scenario_check_valid"] = (
-        len(actual_order) >= 2 and actual_order == expected_order[: len(actual_order)]
-    )
-    result["scenario_check_detail"] = {
-        "expected": expected_order,
-        "actual": actual_order,
-    }
-    return result
 
 
 # Adapted verbatim from pinned verify.py::_is_error_only_reasoning_response.
@@ -589,9 +431,7 @@ def _evaluate_case(
                 response = None
                 suite_timed_out = True
                 break
-            response = copy.deepcopy(
-                dict(_validate_chat_completion_response(raw_response))
-            )
+            response = dict(_validate_chat_completion_response(raw_response))
             status = "success"
             request_error = None
             break
@@ -614,7 +454,7 @@ def _evaluate_case(
                 suite_timed_out = True
             break
 
-    finish_reason, resp_content = _choice_fields(response)
+    finish_reason, _ = _choice_fields(response)
     result: dict[str, Any] = {
         "data_index": row["data_index"],
         "status": status,
@@ -627,17 +467,13 @@ def _evaluate_case(
         else {"error": _error_dict(request_error or RuntimeError("request failed"))},
         "error_only_reasoning_checked": 1,
         "error_only_reasoning": _is_error_only_reasoning_response(response),
+        "integration_failure": isinstance(
+            request_error, (TransportError, TimeoutError, OSError)
+        ),
     }
 
-    check_types = row.get("check_type", [])
     try:
-        if check_types:
-            if "contains_russian_characters_unicode" in check_types:
-                result.update(validate_language(status, resp_content))
-            if "scenario_check" in check_types:
-                result.update(validate_scenario(prepared, status, resp_content))
-        else:
-            result.update(validate_tool_calls(prepared, response, status))
+        result.update(validate_tool_calls(prepared, response, status))
     except Exception as exc:  # noqa: BLE001 - validators must not abort the report
         result["validator_error"] = _error_dict(exc)
 
@@ -658,16 +494,6 @@ def _evaluate_case(
             and result.get("tool_calls_valid") is not True
         ):
             failures.append("tool_call_schema")
-    if (
-        "contains_russian_characters_unicode" in check_types
-        and result.get("language_following_valid") is not True
-    ):
-        failures.append("language_following")
-    if (
-        "scenario_check" in check_types
-        and result.get("scenario_check_valid") is not True
-    ):
-        failures.append("scenario_check")
     if "validator_error" in result:
         failures.append("validator_error")
 
@@ -899,6 +725,7 @@ def _failed_case_result(row: Mapping[str, Any], exc: BaseException) -> dict[str,
         "case_passed": False,
         "failures": ["adapter_error"],
         "suite_timed_out": isinstance(exc, SuiteTimeoutError),
+        "integration_failure": True,
     }
 
 
@@ -960,7 +787,14 @@ def run_evaluation(
             raise ValueError("api_key must be a non-empty string")
         endpoint = build_endpoint(base_url)
         fixture_metadata, rows = load_fixture(fixture_path)
-    except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+        _require_tool_validation()
+    except (
+        OSError,
+        RuntimeError,
+        ValueError,
+        TypeError,
+        json.JSONDecodeError,
+    ) as exc:
         _write_json(
             native_path,
             _native_report(
@@ -997,10 +831,25 @@ def run_evaluation(
         results.append(result)
 
     timed_out = any(result["suite_timed_out"] for result in results)
+    failed_integration = next(
+        (result for result in results if result["integration_failure"]),
+        None,
+    )
     integration_error: BaseException | None = None
-    completed = not timed_out
     if timed_out:
         integration_error = SuiteTimeoutError("global suite timeout exceeded")
+    elif failed_integration is not None:
+        error = failed_integration["response"]["error"]
+        message = str(error.get("message", "request failed"))
+        if error.get("type") == "TransportError":
+            integration_error = TransportError(message)
+        elif error.get("type") in {"TimeoutError", "SuiteTimeoutError"}:
+            integration_error = TimeoutError(message)
+        else:
+            integration_error = RuntimeError(
+                f"{error.get('type', 'adapter error')}: {message}"
+            )
+    completed = integration_error is None
     native = _native_report(
         model=model,
         endpoint=endpoint,
@@ -1010,7 +859,7 @@ def run_evaluation(
         integration_error=integration_error,
     )
     passed_count = native["summary"]["passed_count"]
-    effective = sum(not result["suite_timed_out"] for result in results)
+    effective = len(results) if completed else 0
     score = passed_count / len(EXPECTED_INDICES) if completed else 0.0
     compatibility = _compatibility_result(
         model,

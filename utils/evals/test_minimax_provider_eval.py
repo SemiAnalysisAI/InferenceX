@@ -250,40 +250,6 @@ def test_trigger_failure_uses_expected_label(tmp_path: Path) -> None:
     assert native["summary"]["stop_finish_stop"] == 0
 
 
-def test_language_validator_uses_pinned_cyrillic_range() -> None:
-    result = mpe.validate_language("success", "Это ответ")
-    assert result["language_following_checked"] is True
-    assert result["language_following_valid"] is False
-
-
-def test_scenario_validator_uses_visible_first_occurrence_order() -> None:
-    request = {
-        "tools": [
-            {
-                "function": {
-                    "parameters": {
-                        "properties": {
-                            "123": {},
-                            "some-parameter": {},
-                            "xyz": {},
-                            "another-parameter": {},
-                        }
-                    }
-                }
-            }
-        ]
-    }
-    result = mpe.validate_scenario(
-        request,
-        "success",
-        "<think>123 some-parameter</think> xyz then some-parameter",
-    )
-    assert result["scenario_check_checked"] is True
-    assert result["scenario_check_detail"] == {
-        "expected": ["123", "some-parameter", "xyz", "another-parameter"],
-        "actual": ["xyz", "some-parameter"],
-    }
-    assert result["scenario_check_valid"] is False
 
 
 def test_transport_retries_with_backoff_then_preserves_success(
@@ -515,6 +481,14 @@ def test_exhausted_transport_failure_publishes_report(tmp_path: Path) -> None:
         "tool_call_trigger",
     ]
     assert native["metrics"]["Query-Success-Rate"] == 0.0
+    assert native["completed"] is False
+    assert native["integration_error"] == {
+        "type": "TransportError",
+        "message": "offline",
+    }
+    compatibility = _compatibility(output_dir)
+    assert compatibility["n-samples"][mpe.TASK_NAME]["effective"] == 0
+    assert compatibility["integration_error"] == native["integration_error"]
 
 
 def test_global_deadline_caps_attempts_and_publishes_timeout_report(
@@ -715,6 +689,34 @@ def test_invalid_runtime_input_writes_zero_score_artifacts(tmp_path: Path) -> No
     assert _native(output_dir)["integration_error"]["type"] == "ValueError"
     assert _score(output_dir) == 0.0
     assert _compatibility(output_dir)["n-samples"][mpe.TASK_NAME]["effective"] == 0
+
+def test_missing_schema_dependency_is_an_integration_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    called = False
+
+    def http_post(**request: Any) -> Any:
+        nonlocal called
+        called = True
+        return _response_for(request["payload"])
+
+    def missing_dependency() -> None:
+        raise RuntimeError("jsonschema is required for tool-call validation")
+
+    monkeypatch.setattr(mpe, "_require_tool_validation", missing_dependency)
+
+    assert not mpe.run_evaluation(
+        base_url="https://provider.example/v1",
+        api_key="secret",
+        model="MiniMax-M3",
+        output_dir=tmp_path,
+        http_post=http_post,
+    )
+    assert called is False
+    native = _native(tmp_path)
+    assert native["completed"] is False
+    assert native["integration_error"]["type"] == "RuntimeError"
+    assert _compatibility(tmp_path)["n-samples"][mpe.TASK_NAME]["effective"] == 0
 
 
 @pytest.mark.parametrize(

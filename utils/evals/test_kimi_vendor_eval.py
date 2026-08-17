@@ -189,11 +189,20 @@ def test_builds_dsv4_thinking_command(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
-    ("stream_status", "return_code", "expected_pass", "expected_score"),
     (
-        ("passed", 0, True, 1.0),
-        ("passed", 1, False, 0.0),
-        ("failed", 1, False, 0.5),
+        "stream_status",
+        "return_code",
+        "expected_pass",
+        "expected_score",
+        "expected_n_eff",
+        "expected_error",
+    ),
+    (
+        ("passed", 0, True, 1.0, 2, None),
+        ("passed", 1, False, 0.0, 0, "RuntimeError"),
+        ("failed", 0, False, 0.0, 0, "RuntimeError"),
+        ("failed", 1, False, 0.5, 2, None),
+        ("failed", 2, False, 0.0, 0, "RuntimeError"),
     ),
 )
 def test_projects_upstream_outcomes(
@@ -203,6 +212,8 @@ def test_projects_upstream_outcomes(
     return_code: int,
     expected_pass: bool,
     expected_score: float,
+    expected_n_eff: int,
+    expected_error: str | None,
 ) -> None:
     output_dir = tmp_path / "output"
     native_bytes = json.dumps(_report(stream_status)).encode()
@@ -231,10 +242,14 @@ def test_projects_upstream_outcomes(
     assert invocation["check"] is False
     assert invocation["timeout"] == kve.DEFAULT_TIMEOUT_SECONDS
     assert _score(output_dir) == expected_score
-    assert _n_eff(output_dir) == 2
+    assert _n_eff(output_dir) == expected_n_eff
     projected = _result(output_dir)
     assert projected["result_format"] == kve.RESULT_FORMAT
     assert projected["eval_adapter"] == kve.ADAPTER_NAME
+    if expected_error is None:
+        assert "integration_error" not in projected
+    else:
+        assert projected["integration_error"]["type"] == expected_error
     assert "lm_eval_version" not in projected
     assert (output_dir / kve.NATIVE_REPORT_FILENAME).read_bytes() == native_bytes
 

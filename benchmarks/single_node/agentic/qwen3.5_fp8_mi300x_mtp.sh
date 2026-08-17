@@ -6,7 +6,6 @@ set -x
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-export EVAL_FRAMEWORK="${EVAL_FRAMEWORK:-lm-eval}"
 
 check_env_vars \
     MODEL TP CONC EP_SIZE KV_OFFLOADING \

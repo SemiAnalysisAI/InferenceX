@@ -200,8 +200,15 @@ def _nonempty_string(value: str) -> str:
 def _absolute_http_url(value: str) -> str:
     normalized = _nonempty_string(value).rstrip("/")
     parsed = urllib.parse.urlsplit(normalized)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise argparse.ArgumentTypeError("must be an absolute HTTP(S) URL")
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.netloc
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise argparse.ArgumentTypeError(
+            "must be an absolute HTTP(S) URL without query or fragment"
+        )
     if parsed.path.rstrip("/").endswith("/chat/completions"):
         raise argparse.ArgumentTypeError(
             "must be an API root URL; the OpenAI client appends /chat/completions"
@@ -450,6 +457,12 @@ def _prepare_output_paths(output_dir: Path) -> tuple[Path, Path]:
     compatibility_path = output_dir / COMPATIBILITY_FILENAME
     return native_path, compatibility_path
 
+def _clear_upstream_modules() -> None:
+    """Reload BFCL's import-time paths and limits for each adapter invocation."""
+    for module_name in tuple(sys.modules):
+        if module_name == "bfcl_eval" or module_name.startswith("bfcl_eval."):
+            sys.modules.pop(module_name, None)
+
 
 def _write_id_map(
     project_root: Path, case_ids_by_category: Mapping[str, tuple[str, ...]]
@@ -483,26 +496,17 @@ def _load_dataset_helpers(
     maximum_step_limit: int | None,
 ) -> tuple[Callable[[str], Any], Callable[[list[str]], Any], Callable[[Any], Any]]:
     """Import BFCL's pinned dataset helpers only when a full suite is selected."""
-    adapter_directory = Path(__file__).resolve().parent
-    original_sys_path = sys.path[:]
-    sys.path[:] = [
-        entry
-        for entry in sys.path
-        if Path(entry or os.curdir).resolve() != adapter_directory
-    ]
-    try:
-        if maximum_step_limit is not None:
-            import bfcl_eval.constants.default_prompts as bfcl_prompts
+    if maximum_step_limit is not None:
+        import bfcl_eval.constants.default_prompts as bfcl_prompts
 
-            # This must happen before importing utils/base_handler for multi-turn.
-            bfcl_prompts.MAXIMUM_STEP_LIMIT = maximum_step_limit
-        from bfcl_eval.utils import (
-            load_dataset_entry,
-            parse_test_category_argument,
-            sort_key,
-        )
-    finally:
-        sys.path[:] = original_sys_path
+        # This must happen before importing utils/base_handler for multi-turn.
+        bfcl_prompts.MAXIMUM_STEP_LIMIT = maximum_step_limit
+    from bfcl_eval.utils import (
+        load_dataset_entry,
+        parse_test_category_argument,
+        sort_key,
+    )
+
     return load_dataset_entry, parse_test_category_argument, sort_key
 
 
@@ -609,28 +613,16 @@ def _run_upstream(
     os.environ["OPENAI_BASE_URL"] = base_url
     os.environ["OPENAI_API_KEY"] = api_key
 
-    # The adapter filename intentionally matches the installed package. When the
-    # file is executed directly, hide its directory during package resolution.
-    adapter_directory = Path(__file__).resolve().parent
-    original_sys_path = sys.path[:]
-    sys.path[:] = [
-        entry
-        for entry in sys.path
-        if Path(entry or os.curdir).resolve() != adapter_directory
-    ]
-    try:
-        if suite.maximum_step_limit is not None:
-            import bfcl_eval.constants.default_prompts as bfcl_prompts
+    if suite.maximum_step_limit is not None:
+        import bfcl_eval.constants.default_prompts as bfcl_prompts
 
-            bfcl_prompts.MAXIMUM_STEP_LIMIT = suite.maximum_step_limit
-        import bfcl_eval.constants.model_config as bfcl_model_config
-        from bfcl_eval.__main__ import evaluate, generate
-        from bfcl_eval.constants.model_config import ModelConfig
-        from bfcl_eval.model_handler.api_inference.openai_completion import (
-            OpenAICompletionsHandler,
-        )
-    finally:
-        sys.path[:] = original_sys_path
+        bfcl_prompts.MAXIMUM_STEP_LIMIT = suite.maximum_step_limit
+    import bfcl_eval.constants.model_config as bfcl_model_config
+    from bfcl_eval.__main__ import evaluate, generate
+    from bfcl_eval.constants.model_config import ModelConfig
+    from bfcl_eval.model_handler.api_inference.openai_completion import (
+        OpenAICompletionsHandler,
+    )
     request_failures: SimpleQueue[Exception] = SimpleQueue()
 
     class BoundedOpenAICompletionsHandler(OpenAICompletionsHandler):
@@ -939,6 +931,7 @@ def run_evaluation(
             raise TypeError("upstream_runner must be callable")
 
         os.environ["BFCL_PROJECT_ROOT"] = str(bfcl_project_root)
+        _clear_upstream_modules()
         _write_upstream_attribution(bfcl_project_root)
         selected_case_ids = _build_suite_case_ids(suite)
         _write_id_map(bfcl_project_root, selected_case_ids)

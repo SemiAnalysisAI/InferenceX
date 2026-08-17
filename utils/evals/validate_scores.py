@@ -88,6 +88,21 @@ def invalid_effective_count(data: dict, task: str) -> tuple[bool, object]:
     )
     return invalid, effective
 
+def metric_prefixes(data: dict, task: str, override: str | None) -> tuple[str, ...]:
+    """Resolve score metric prefixes from an explicit override or task config."""
+    if override is not None:
+        return (override,)
+    task_config = data.get("configs", {}).get(task, {})
+    metric_list = task_config.get("metric_list", [])
+    declared = tuple(
+        f"{item['metric']},"
+        for item in metric_list
+        if isinstance(item, dict)
+        and isinstance(item.get("metric"), str)
+        and item["metric"]
+    )
+    return declared or ("exact_match,",)
+
 
 def integration_error_message(error: object) -> str:
     """Render the structured integration error fields for a direct failure."""
@@ -226,8 +241,9 @@ def main() -> int:
         help="Override the detected model prefix (default: read from meta_env.json / $MODEL_PREFIX)",
     )
     parser.add_argument(
-        "--metric-prefix", default="exact_match,",
-        help="Only check metrics whose name starts with this prefix (default: 'exact_match,')",
+        "--metric-prefix",
+        default=None,
+        help="Override task-config metric selection with one metric prefix",
     )
     parser.add_argument(
         "--results-glob", default="results*.json",
@@ -325,8 +341,9 @@ def main() -> int:
                 failed = True
                 continue
             min_score, source = resolve_threshold(config, prefix, task, args.min_score)
+            prefixes = metric_prefixes(data, task, args.metric_prefix)
             for name, val in metrics.items():
-                if not name.startswith(args.metric_prefix) or "stderr" in name:
+                if not name.startswith(prefixes) or "stderr" in name:
                     continue
                 if not isinstance(val, (int, float)):
                     continue
@@ -343,7 +360,8 @@ def main() -> int:
                     )
 
     if checked == 0:
-        print("WARN: no metrics matched prefix '{}'".format(args.metric_prefix), file=sys.stderr)
+        selector = args.metric_prefix or "declared task metrics"
+        print(f"WARN: no metrics matched {selector!r}", file=sys.stderr)
 
     return 1 if (failed or checked == 0) else 0
 

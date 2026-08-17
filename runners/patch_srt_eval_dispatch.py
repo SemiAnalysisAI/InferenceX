@@ -15,14 +15,17 @@ DO_SWEEP_ENV_REPLACEMENT = """            "EVAL_ONLY",
             "EVAL_LIMIT",
             "EVAL_SUITE",
             "SWEBENCH_GEN_MODE",
+            "SWEBENCH_USE_MODAL",
+            "MODAL_TOKEN_ID",
+            "MODAL_TOKEN_SECRET",
+            "IS_AGENTIC",
+            "SCENARIO_TYPE",
             "IS_MULTINODE","""
 LM_EVAL_COMMAND = 'run_eval --framework lm-eval --port "$PORT" || eval_rc=$?'
 GENERIC_EVAL_COMMAND = 'run_eval --port "$PORT" || eval_rc=$?'
 EVAL_ARTIFACT_COPY = """cp -v results*.json /logs/eval_results/ 2>/dev/null || true
 cp -v sample*.jsonl /logs/eval_results/ 2>/dev/null || true"""
-VERIFIER_ARTIFACT_COPY = """cp -v results*.json /logs/eval_results/ 2>/dev/null || true
-cp -v *_vendor_report.json *_vendor_results.jsonl bfcl_report.json bfcl_upstream_artifacts.tar.gz /logs/eval_results/ 2>/dev/null || true
-cp -v sample*.jsonl /logs/eval_results/ 2>/dev/null || true"""
+VERIFIER_ARTIFACT_COPY = 'stage_eval_artifacts /logs/eval_results "$PWD" || true'
 
 
 def prepare_replacements(

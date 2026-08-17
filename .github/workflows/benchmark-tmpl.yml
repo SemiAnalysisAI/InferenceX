@@ -409,14 +409,13 @@ jobs:
         if: ${{ always() && (env.RUN_EVAL == 'true' || inputs.eval-only) }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: eval_${{ env.EXP_NAME }}_${{ env.RESULT_FILENAME }}
+          name: eval_${{ env.RESULT_FILENAME }}_${{ env.EVAL_FRAMEWORK }}_${{ env.EVAL_SUITE }}_${{ github.run_attempt }}
           path: |
             meta_env.json
             results*.json
-            *_vendor_report.json
-            *_vendor_results.jsonl
-            bfcl_report.json
-            bfcl_upstream_artifacts.tar.gz
+            *_report.json
+            *_results.jsonl
+            *_artifacts.tar.gz
             sample*.jsonl
             agent_preds.json
             predictions.jsonl
@@ -426,12 +425,7 @@ jobs:
 
       - name: Verify eval scores
         if: ${{ (success() || failure()) && inputs.eval-only }}
-        run: |
-          if [[ "${EVAL_FRAMEWORK}" == "bfcl" ]]; then
-            python3 utils/evals/validate_scores.py --metric-prefix 'acc,'
-          else
-            python3 utils/evals/validate_scores.py
-          fi
+        run: python3 utils/evals/validate_scores.py
 
       - name: Cleanup eval outputs (post-upload)
         if: ${{ always() && (env.RUN_EVAL == 'true' || inputs.eval-only) }}
@@ -439,11 +433,10 @@ jobs:
           rm -f meta_env.json || true
           # Remove any eval results JSONs that were moved into workspace
           rm -f results*.json || true
-          rm -f -- ./*_vendor_report.json || true
-          rm -f -- ./*_vendor_results.jsonl || true
+          rm -f -- ./*_report.json || true
+          rm -f -- ./*_results.jsonl || true
           rm -f sample*.jsonl || true
-          rm -f bfcl_report.json || true
-          rm -f bfcl_upstream_artifacts.tar.gz || true
+          rm -f -- ./*_artifacts.tar.gz || true
           rm -f agent_preds.json predictions.jsonl swebench_report_*.json *.traj* || true
           
       - name: Resource cleanup (post-run)

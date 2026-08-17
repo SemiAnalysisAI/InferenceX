@@ -1237,6 +1237,59 @@ _cleanup_vendor_eval() {
     done
 }
 
+_has_eval_result() {
+    local results_dir="$1"
+    local filename_prefix="$2"
+    local matches=("${results_dir}/${filename_prefix}"*.json)
+    [ -f "${matches[0]}" ]
+}
+
+_prepare_eval_artifact_family() {
+    local results_dir="$1"
+    local family="$2"
+    local artifact rm_rc=0
+    local artifacts=()
+
+    export EVAL_RESULT_DIR=""
+    case "$family" in
+        kimi)
+            artifacts=(
+                "${results_dir}"/results_kimi_vendor_*.json
+                "${results_dir}/kimi_vendor_report.json"
+            )
+            ;;
+        minimax)
+            artifacts=(
+                "${results_dir}"/results_minimax_vendor_*.json
+                "${results_dir}/minimax_vendor_report.json"
+                "${results_dir}/minimax_vendor_results.jsonl"
+            )
+            ;;
+        bfcl)
+            artifacts=(
+                "${results_dir}"/results_bfcl*.json
+                "${results_dir}/bfcl_report.json"
+                "${results_dir}/bfcl_upstream_artifacts.tar.gz"
+            )
+            ;;
+        *)
+            echo "ERROR: unsupported eval artifact family '${family}'" >&2
+            return 2
+            ;;
+    esac
+
+    for artifact in "${artifacts[@]}"; do
+        if [ -e "$artifact" ] || [ -L "$artifact" ]; then
+            rm -f -- "$artifact" || rm_rc=$?
+            if [ "$rm_rc" -ne 0 ]; then
+                echo "ERROR: failed to remove stale eval artifact ${artifact}" >&2
+                return "$rm_rc"
+            fi
+        fi
+    done
+    export EVAL_RESULT_DIR="$results_dir"
+}
+
 _write_kimi_vendor_integration_error() {
     local adapter_path="$1"
     local model_name="$2"
@@ -1244,7 +1297,7 @@ _write_kimi_vendor_integration_error() {
     local task_name="$4"
     local message="$5"
 
-    python3 "$adapter_path" \
+    "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" \
         --model "$model_name" \
         --output-dir "$results_dir" \
         --task-name "$task_name" \
@@ -1290,7 +1343,7 @@ _run_kimi_tool_call_schema_eval() {
 
     mkdir -p "$results_dir" || return $?
     results_dir="$(cd "$results_dir" && pwd)" || return $?
-    export EVAL_RESULT_DIR="$results_dir"
+    _prepare_eval_artifact_family "$results_dir" kimi || return $?
 
     local setup_rc=0 integration_error=""
     _prepare_vendor_verifier_python "Kimi-Vendor-Verifier" "kimi-vendor-python" || {
@@ -1312,8 +1365,6 @@ _run_kimi_tool_call_schema_eval() {
         }
     fi
     if [ "$setup_rc" -ne 0 ]; then
-        _cleanup_vendor_eval \
-            "$runtime_dir" "$checkout_dir" "${VENDOR_VERIFIER_PYTHON_CLEANUP_DIR:-}"
         echo "ERROR: ${integration_error}" >&2
         local artifact_rc=0
         _write_kimi_vendor_integration_error \
@@ -1322,6 +1373,8 @@ _run_kimi_tool_call_schema_eval() {
         if [ "$artifact_rc" -ne 0 ]; then
             echo "ERROR: failed to write Kimi verifier failure artifact (exit code ${artifact_rc})" >&2
         fi
+        _cleanup_vendor_eval \
+            "$runtime_dir" "$checkout_dir" "${VENDOR_VERIFIER_PYTHON_CLEANUP_DIR:-}"
         return "$setup_rc"
     fi
 
@@ -1337,6 +1390,17 @@ _run_kimi_tool_call_schema_eval() {
             --task-name "$eval_suite" \
             --timeout-seconds "$timeout_seconds" \
             || eval_rc=$?
+    if [ "$eval_rc" -ne 0 ] \
+        && ! _has_eval_result "$results_dir" "results_kimi_vendor_"; then
+        integration_error="Kimi Vendor Verifier failed with exit code ${eval_rc}"
+        local artifact_rc=0
+        _write_kimi_vendor_integration_error \
+            "$adapter_path" "$model_name" "$results_dir" "$eval_suite" \
+            "$integration_error" || artifact_rc=$?
+        if [ "$artifact_rc" -ne 0 ]; then
+            echo "ERROR: failed to write Kimi verifier failure artifact (exit code ${artifact_rc})" >&2
+        fi
+    fi
     _cleanup_vendor_eval \
         "$runtime_dir" "$checkout_dir" "${VENDOR_VERIFIER_PYTHON_CLEANUP_DIR:-}"
     return "$eval_rc"
@@ -1528,16 +1592,13 @@ _run_bfcl_suite_eval() {
     fi
 
     local model_name="${MODEL_NAME:-${MODEL:-}}"
-    local adapter_path="${INFERENCEX_REPO_ROOT}/utils/evals/bfcl_eval.py"
+    local adapter_path="${INFERENCEX_REPO_ROOT}/utils/evals/bfcl_adapter.py"
     local runtime_dir=""
     local project_root=""
 
     mkdir -p "$results_dir" || return $?
     results_dir="$(cd "$results_dir" && pwd)" || return $?
-    export EVAL_RESULT_DIR="$results_dir"
-    if [ "$archive_upstream" = true ]; then
-        rm -f "${results_dir}/bfcl_upstream_artifacts.tar.gz"
-    fi
+    _prepare_eval_artifact_family "$results_dir" bfcl || return $?
 
     local setup_rc=0 integration_error=""
     _prepare_vendor_verifier_python "BFCL" "bfcl-python" true 10 || {
@@ -1708,7 +1769,7 @@ _run_minimax_m3_smoke_eval() {
 
     mkdir -p "$results_dir" || return $?
     results_dir="$(cd "$results_dir" && pwd)" || return $?
-    export EVAL_RESULT_DIR="$results_dir"
+    _prepare_eval_artifact_family "$results_dir" minimax || return $?
 
     local setup_rc=0 integration_error=""
     _prepare_vendor_verifier_python "MiniMax Provider Verifier" "minimax-vendor-python" || {
@@ -1722,8 +1783,6 @@ _run_minimax_m3_smoke_eval() {
         }
     fi
     if [ "$setup_rc" -ne 0 ]; then
-        _cleanup_vendor_eval \
-            "$runtime_dir" "${VENDOR_VERIFIER_PYTHON_CLEANUP_DIR:-}"
         echo "ERROR: ${integration_error}" >&2
         local artifact_rc=0
         _write_minimax_vendor_integration_error \
@@ -1732,6 +1791,8 @@ _run_minimax_m3_smoke_eval() {
         if [ "$artifact_rc" -ne 0 ]; then
             echo "ERROR: failed to write MiniMax verifier failure artifact (exit code ${artifact_rc})" >&2
         fi
+        _cleanup_vendor_eval \
+            "$runtime_dir" "${VENDOR_VERIFIER_PYTHON_CLEANUP_DIR:-}"
         return "$setup_rc"
     fi
 
@@ -1746,6 +1807,17 @@ _run_minimax_m3_smoke_eval() {
             --request-timeout-seconds 180 \
             --timeout-seconds 900 \
             || eval_rc=$?
+    if [ "$eval_rc" -ne 0 ] \
+        && ! _has_eval_result "$results_dir" "results_minimax_vendor_"; then
+        integration_error="MiniMax Provider Verifier failed with exit code ${eval_rc}"
+        local artifact_rc=0
+        _write_minimax_vendor_integration_error \
+            "$adapter_path" "$model_name" "$results_dir" "$integration_error" \
+            || artifact_rc=$?
+        if [ "$artifact_rc" -ne 0 ]; then
+            echo "ERROR: failed to write MiniMax verifier failure artifact (exit code ${artifact_rc})" >&2
+        fi
+    fi
     _cleanup_vendor_eval \
         "$runtime_dir" "${VENDOR_VERIFIER_PYTHON_CLEANUP_DIR:-}"
     return "$eval_rc"
@@ -1776,6 +1848,18 @@ _prepare_minimax_m3_full_runtime() {
         return "$prepare_rc"
     fi
     printf '%s\n' "$runtime_dir"
+}
+
+_write_minimax_m3_full_integration_error() {
+    local adapter_path="$1"
+    local model_name="$2"
+    local results_dir="$3"
+    local message="$4"
+
+    "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" failure \
+        --model "$model_name" \
+        --output-dir "$results_dir" \
+        --message "$message"
 }
 
 _run_minimax_m3_full_eval() {
@@ -1812,7 +1896,7 @@ _run_minimax_m3_full_eval() {
 
     mkdir -p "$results_dir" || return $?
     results_dir="$(cd "$results_dir" && pwd)" || return $?
-    export EVAL_RESULT_DIR="$results_dir"
+    _prepare_eval_artifact_family "$results_dir" minimax || return $?
 
     local setup_rc=0 integration_error=""
     _prepare_vendor_verifier_python "MiniMax M3 full verifier" "minimax-m3-full-python" || {
@@ -1827,10 +1911,13 @@ _run_minimax_m3_full_eval() {
     fi
     if [ "$setup_rc" -ne 0 ]; then
         echo "ERROR: ${integration_error}" >&2
-        "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" failure \
-            --model "$model_name" \
-            --output-dir "$results_dir" \
-            --message "$integration_error" || true
+        local artifact_rc=0
+        _write_minimax_m3_full_integration_error \
+            "$adapter_path" "$model_name" "$results_dir" "$integration_error" \
+            || artifact_rc=$?
+        if [ "$artifact_rc" -ne 0 ]; then
+            echo "ERROR: failed to write MiniMax full verifier failure artifact (exit code ${artifact_rc})" >&2
+        fi
         _cleanup_vendor_eval \
             "$runtime_dir" "${VENDOR_VERIFIER_PYTHON_CLEANUP_DIR:-}"
         return "$setup_rc"
@@ -1845,6 +1932,17 @@ _run_minimax_m3_full_eval() {
         --model "$model_name" \
         --output-dir "$results_dir" \
         || eval_rc=$?
+    if [ "$eval_rc" -ne 0 ] \
+        && ! _has_eval_result "$results_dir" "results_minimax_vendor_full_"; then
+        integration_error="MiniMax M3 full verifier failed with exit code ${eval_rc}"
+        local artifact_rc=0
+        _write_minimax_m3_full_integration_error \
+            "$adapter_path" "$model_name" "$results_dir" "$integration_error" \
+            || artifact_rc=$?
+        if [ "$artifact_rc" -ne 0 ]; then
+            echo "ERROR: failed to write MiniMax full verifier failure artifact (exit code ${artifact_rc})" >&2
+        fi
+    fi
     _cleanup_vendor_eval \
         "$runtime_dir" "${VENDOR_VERIFIER_PYTHON_CLEANUP_DIR:-}"
     return "$eval_rc"
@@ -2296,30 +2394,15 @@ append_lm_eval_summary() {
         return 0
     fi
 
-    # Move eval artifacts into PWD (no new directories in workspace)
-    if [ -f "${meta_json}" ]; then
-        mv -f "${meta_json}" ./ || echo "WARN: failed to move ${meta_json}" >&2
-    fi
-    if [ -d "${out_dir}" ]; then
-        while IFS= read -r -d '' jf; do
-            base=$(basename "$jf")
-            if [ "$base" != "meta_env.json" ]; then
-                mv -f "$jf" ./ || echo "WARN: failed to move ${jf}" >&2
-            fi
-        done < <(find "${out_dir}" -type f -name "*.json*" -print0 2>/dev/null)
-    fi
-    if [ -f "${out_dir}/bfcl_upstream_artifacts.tar.gz" ] \
-        && ! mv -f "${out_dir}/bfcl_upstream_artifacts.tar.gz" ./; then
-        echo "ERROR: failed to move ${out_dir}/bfcl_upstream_artifacts.tar.gz" >&2
-        return 1
-    fi
+    # Copy the complete allowlisted eval artifact set before removing its temp dir.
+    stage_eval_artifacts "$(pwd)" "$out_dir" || return $?
 
     # Best-effort cleanup of the temp directory
     if [ -n "${out_dir}" ] && [ -d "${out_dir}" ]; then
         rm -rf --one-file-system "${out_dir}" || rm -rf "${out_dir}" || true
     fi
 
-    echo "Moved eval artifacts to: $(pwd)"
+    echo "Staged eval artifacts in: $(pwd)"
 }
 
 stage_eval_artifacts() {
@@ -2328,23 +2411,32 @@ stage_eval_artifacts() {
 
     mkdir -p "$destination" || return $?
     local source_dir artifact
+    local copied=0
     local artifacts=()
     for source_dir in "$@"; do
         [ -d "$source_dir" ] || continue
         artifacts=(
             "$source_dir"/meta_env.json
             "$source_dir"/results*.json
-            "$source_dir"/*_vendor_report.json
-            "$source_dir"/*_vendor_results.jsonl
-            "$source_dir"/bfcl_report.json
-            "$source_dir"/bfcl_upstream_artifacts.tar.gz
+            "$source_dir"/*_report.json
+            "$source_dir"/*_results.jsonl
+            "$source_dir"/*_artifacts.tar.gz
             "$source_dir"/sample*.jsonl
+            "$source_dir"/agent_preds.json
+            "$source_dir"/swebench_report_*.json
+            "$source_dir"/predictions.jsonl
+            "$source_dir"/*.traj*
         )
         for artifact in "${artifacts[@]}"; do
             [ -f "$artifact" ] || continue
             cp -f "$artifact" "$destination/" || return $?
+            copied=$((copied + 1))
         done
     done
+    if [ "$copied" -eq 0 ]; then
+        echo "ERROR: no eval artifacts found to stage" >&2
+        return 1
+    fi
 }
 
 
@@ -2835,8 +2927,8 @@ run_eval() {
     fi
 
     local stage_rc=0
-    # Agentic eval-only recipes have no separate staging step. Verifier failures
-    # also carry diagnostic score artifacts to preserve.
+    # Agentic eval-only recipes have no separate staging step. Provider
+    # failures are staged before returning so diagnostic artifacts survive.
     if { [ "${EVAL_ONLY:-false}" = "true" ] && [ "$scenario_is_agentic" = "1" ]; } \
         || { { [ "$framework" = "kimi-vendor" ] \
             || [ "$framework" = "minimax-vendor" ] \
@@ -2844,7 +2936,6 @@ run_eval() {
             && [ "$eval_rc" -ne 0 ]; }; then
         append_lm_eval_summary || stage_rc=$?
     fi
-
     if [ "$eval_rc" -ne 0 ]; then
         echo "ERROR: run_eval failed with exit code $eval_rc" >&2
         if [ "${EVAL_ONLY:-false}" = "true" ]; then

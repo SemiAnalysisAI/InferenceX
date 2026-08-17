@@ -26,6 +26,8 @@ for concurrency in "${CONCURRENCIES[@]}"; do
     fi
 done
 
+resolve_trace_source
+install_agentic_deps
 
 wait_for_agentic_servers_idle() {
     local timeout_seconds="${AIPERF_DRAIN_TIMEOUT_SECONDS:-1800}"
@@ -95,9 +97,6 @@ while time.monotonic() < deadline:
 raise SystemExit(f"Agentic servers did not drain within {timeout_seconds} seconds")
 PY
 }
-
-resolve_trace_source
-install_agentic_deps
 
 # The AgentX scenario's first-turn cache-bust marker includes AIPerf's unique
 # per-invocation benchmark ID. Each point therefore gets a disjoint KV keyspace

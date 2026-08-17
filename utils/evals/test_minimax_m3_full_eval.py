@@ -146,6 +146,54 @@ def test_projects_exactly_102_results_from_native_match_rate_without_rewriting_r
         .splitlines()
     ) == 102
 
+def test_full_projection_removes_stale_smoke_result(tmp_path: Path) -> None:
+    stale_smoke = tmp_path / "results_minimax_vendor_2026-01-01.json"
+    stale_smoke.write_text("{}")
+
+    compatibility_path = full._compatibility_path(tmp_path)
+
+    assert not stale_smoke.exists()
+    assert compatibility_path.name.startswith("results_minimax_vendor_full_")
+
+
+def test_failure_command_replaces_stale_native_artifacts(tmp_path: Path) -> None:
+    native_report = tmp_path / full.NATIVE_REPORT_FILENAME
+    native_results = tmp_path / full.NATIVE_RESULTS_FILENAME
+    native_report.write_text('{"stale": true}\n')
+    native_results.write_text('{"stale": true}\n')
+
+    assert (
+        full.main(
+            [
+                "failure",
+                "--model",
+                "MiniMax-M3",
+                "--output-dir",
+                str(tmp_path),
+                "--message",
+                "runtime setup failed",
+            ]
+        )
+        == 0
+    )
+
+    report = json.loads(native_report.read_text(encoding="utf-8"))
+    assert report["completed"] is False
+    assert report["integration_error"]["message"] == "runtime setup failed"
+    result_rows = native_results.read_text(encoding="utf-8").splitlines()
+    assert len(result_rows) == 1
+    assert json.loads(result_rows[0])["status"] == "integration_error"
+
+
+def test_full_suite_timeout_leaves_workflow_cleanup_margin() -> None:
+    shortest_workflow_timeout_seconds = 480 * 60
+    cleanup_margin_seconds = 60 * 60
+
+    assert (
+        full.UPSTREAM_TIMEOUT_SECONDS
+        <= shortest_workflow_timeout_seconds - cleanup_margin_seconds
+    )
+
 
 @pytest.mark.parametrize(
     ("result_count", "failed_index", "message"),

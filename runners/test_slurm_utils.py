@@ -102,12 +102,15 @@ def test_patch_srt_eval_dispatch_forwards_selection_and_is_idempotent(
     assert do_sweep.read_text().count('"EVAL_CONC"') == 1
     assert do_sweep.read_text().count('"EVAL_LIMIT"') == 1
     assert do_sweep.read_text().count('"SWEBENCH_GEN_MODE"') == 1
+    assert do_sweep.read_text().count('"SWEBENCH_USE_MODAL"') == 1
+    assert do_sweep.read_text().count('"MODAL_TOKEN_ID"') == 1
+    assert do_sweep.read_text().count('"MODAL_TOKEN_SECRET"') == 1
+    assert do_sweep.read_text().count('"IS_AGENTIC"') == 1
+    assert do_sweep.read_text().count('"SCENARIO_TYPE"') == 1
     assert 'run_eval --port "$PORT"' in eval_script.read_text()
     assert "--framework lm-eval" not in eval_script.read_text()
-    assert "*_vendor_report.json" in eval_script.read_text()
-    assert "bfcl_report.json" in eval_script.read_text()
-    assert "*_vendor_results.jsonl" in eval_script.read_text()
-    assert "bfcl_upstream_artifacts.tar.gz" in eval_script.read_text()
+    assert 'stage_eval_artifacts /logs/eval_results "$PWD" || true' in eval_script.read_text()
+    assert "cp -v" not in eval_script.read_text()
     assert "already patched" in second.stdout
 
 
@@ -328,6 +331,58 @@ def test_gb200_dynamo_kimi_recipes_configure_tool_parser() -> None:
         config = recipe["backend"]["vllm_config"]["aggregated"]
         assert config["dyn-tool-call-parser"] == "kimi_k3"
 
+
+
+def test_dynamo_sglang_agentic_recipes_parse_tools_at_frontend() -> None:
+    recipe_roots = (
+        (
+            REPO_ROOT
+            / "benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/agentic",
+            ("deepseekv4", "deepseek-v4"),
+        ),
+        (
+            REPO_ROOT
+            / "benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb300-fp4/agentic",
+            ("qwen3_coder", "qwen3"),
+        ),
+    )
+    checked = 0
+
+    for recipe_root, (tool_parser, reasoning_parser) in recipe_roots:
+        for recipe_path in recipe_root.glob("*.yaml"):
+            recipe = yaml.safe_load(recipe_path.read_text())
+            frontend = recipe["frontend"]
+            if frontend["type"] != "dynamo":
+                continue
+            args = frontend["args"]
+            assert args["dyn-chat-processor"] == "sglang", recipe_path
+            assert args["tool-call-parser"] == tool_parser, recipe_path
+            assert args["reasoning-parser"] == reasoning_parser, recipe_path
+            checked += 1
+
+    assert checked == 14
+
+
+def test_swebench_container_paths_forward_modal_credentials() -> None:
+    paths = (
+        REPO_ROOT / "benchmarks/multi_node/llm-d/submit.sh",
+        REPO_ROOT / "benchmarks/multi_node/llm-d/job.slurm",
+        REPO_ROOT / "runners/launch_h100-cr.sh",
+        REPO_ROOT / "runners/launch_mi325x-tw.sh",
+    )
+
+    for path in paths:
+        content = path.read_text()
+        assert "SWEBENCH_USE_MODAL" in content, path
+        assert "MODAL_TOKEN_ID" in content, path
+        assert "MODAL_TOKEN_SECRET" in content, path
+        assert "IS_AGENTIC" in content, path
+        assert "SCENARIO_TYPE" in content, path
+        if path.name == "job.slurm" and "llm-d" in path.parts:
+            assert "-e MODAL_TOKEN_ID \\" in content
+            assert "-e MODAL_TOKEN_SECRET \\" in content
+            assert "-e MODAL_TOKEN_ID=" not in content
+            assert "-e MODAL_TOKEN_SECRET=" not in content
 
 
 def test_b200_kimi_recipe_uses_available_roce_devices() -> None:

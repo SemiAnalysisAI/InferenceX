@@ -1,6 +1,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import os
@@ -85,6 +86,15 @@ def test_agentic_eval_only_stages_summary():
 def test_fixed_seqlen_eval_only_leaves_staging_to_recipe():
     assert "STAGED=summary" not in _dispatch(is_agentic="0", eval_only="true")
 
+def test_fixed_seqlen_provider_leaves_staging_to_recipe() -> None:
+    output = _dispatch(
+        is_agentic="0",
+        eval_only="true",
+        env_fw="minimax-vendor",
+    )
+    assert "DISPATCH=minimax-vendor" in output
+    assert "STAGED=summary" not in output
+
 
 
 def test_explicit_framework_arg_overrides_scenario():
@@ -93,6 +103,13 @@ def test_explicit_framework_arg_overrides_scenario():
 
 def test_env_framework_overrides_scenario():
     assert "DISPATCH=lm-eval" in _dispatch(is_agentic="1", env_fw="lm-eval")
+
+def test_environment_framework_overrides_legacy_recipe_argument() -> None:
+    assert "DISPATCH=kimi-vendor" in _dispatch(
+        is_agentic="1",
+        cli_fw="bfcl",
+        env_fw="kimi-vendor",
+    )
 
 
 def test_env_can_force_swebench_on_fixed_seqlen():
@@ -493,9 +510,22 @@ def test_minimax_vendor_setup_failure_uses_integration_error_and_stages(
 source "$BENCHMARK_LIB"
 unset EVAL_SUITE EVAL_RESULT_DIR EVAL_COMPLETED_SUITE
 unset VENDOR_VERIFIER_PYTHON VENDOR_VERIFIER_PYTHON_CLEANUP_DIR
-_prepare_vendor_verifier_python() { return 12; }
-_prepare_minimax_vendor_runtime() { echo "UNEXPECTED_DEPENDENCY_INSTALL"; return 99; }
-python3() { printf 'ADAPTER_ARG=<%s>\n' "$@"; }
+_prepare_vendor_verifier_python() {
+    if compgen -G "$RESULTS_DIR/results_minimax_vendor_*.json" >/dev/null \
+        || [ -e "$RESULTS_DIR/minimax_vendor_report.json" ]; then
+        echo "STALE_MINIMAX_ARTIFACT"
+        return 99
+    fi
+    mkdir -p "$PYTHON_DIR"
+    cat >"$PYTHON_DIR/python3" <<'PY'
+#!/bin/bash
+printf 'ADAPTER_ARG=<%s>\n' "$@"
+PY
+    chmod +x "$PYTHON_DIR/python3"
+    export VENDOR_VERIFIER_PYTHON="$PYTHON_DIR/python3"
+    export VENDOR_VERIFIER_PYTHON_CLEANUP_DIR="$PYTHON_DIR"
+}
+_prepare_minimax_vendor_runtime() { return 12; }
 append_lm_eval_summary() {
     printf 'STAGED=<%s>\n' "$EVAL_RESULT_DIR"
     printf 'STAGED_CONC=<%s>\n' "$CONC"
@@ -510,12 +540,16 @@ eval_rc=$?
 printf 'EVAL_RC=%s\n' "$eval_rc"
 '''
     results_dir = tmp_path / "results"
+    results_dir.mkdir()
+    (results_dir / "results_minimax_vendor_stale.json").write_text("{}")
+    (results_dir / "minimax_vendor_report.json").write_text("{}")
     result = subprocess.run(
         ["bash", "-c", script],
         env={
             **os.environ,
             "BENCHMARK_LIB": str(BENCHMARK_LIB),
             "RESULTS_DIR": str(results_dir),
+            "PYTHON_DIR": str(tmp_path / "python"),
         },
         text=True,
         capture_output=True,
@@ -524,13 +558,14 @@ printf 'EVAL_RC=%s\n' "$eval_rc"
     output = result.stdout + result.stderr
 
     assert "EVAL_RC=12" in output
-    assert "UNEXPECTED_DEPENDENCY_INSTALL" not in output
+    assert "STALE_MINIMAX_ARTIFACT" not in output
+    assert not (tmp_path / "python").exists()
     assert f"ADAPTER_ARG=<{REPO_ROOT / 'utils/evals/minimax_provider_eval.py'}>" in output
     assert "ADAPTER_ARG=<test-model>" in output
     assert f"ADAPTER_ARG=<{results_dir}>" in output
     assert "ADAPTER_ARG=<--integration-error>" in output
     assert (
-        "ADAPTER_ARG=<MiniMax Provider Verifier Python runtime preparation "
+        "ADAPTER_ARG=<MiniMax Provider Verifier dependency installation "
         "failed with exit code 12>"
     ) in output
     assert f"STAGED=<{results_dir}>" in output
@@ -682,12 +717,25 @@ def test_kimi_vendor_setup_failure_writes_compatibility_result(
     tmp_path: Path,
 ) -> None:
     results_dir = tmp_path / "results"
+    results_dir.mkdir()
+    (results_dir / "results_kimi_vendor_stale.json").write_text("{}")
+    (results_dir / "kimi_vendor_report.json").write_text("{}")
     python_dir = tmp_path / "python"
     script = r'''
 source "$BENCHMARK_LIB"
 _prepare_vendor_verifier_python() {
+    if compgen -G "$RESULTS_DIR/results_kimi_vendor_*.json" >/dev/null \
+        || [ -e "$RESULTS_DIR/kimi_vendor_report.json" ]; then
+        echo "STALE_KIMI_ARTIFACT"
+        return 99
+    fi
     mkdir "$PYTHON_DIR"
-    VENDOR_VERIFIER_PYTHON=/unusable/bootstrap/python
+    cat >"$PYTHON_DIR/python3" <<'PY'
+#!/bin/bash
+exec /usr/bin/env python3 "$@"
+PY
+    chmod +x "$PYTHON_DIR/python3"
+    VENDOR_VERIFIER_PYTHON="$PYTHON_DIR/python3"
     VENDOR_VERIFIER_PYTHON_CLEANUP_DIR="$PYTHON_DIR"
     export VENDOR_VERIFIER_PYTHON VENDOR_VERIFIER_PYTHON_CLEANUP_DIR
 }
@@ -722,6 +770,7 @@ printf 'SETUP_RC=%s\n' "$?"
     score_files = list(results_dir.glob("results*.json"))
 
     assert "SETUP_RC=12" in result.stdout
+    assert "STALE_KIMI_ARTIFACT" not in result.stdout + result.stderr
     assert message in result.stderr
     assert "failed to write Kimi verifier failure artifact" not in result.stderr
     assert len(score_files) == 1
@@ -735,6 +784,49 @@ printf 'SETUP_RC=%s\n' "$?"
     assert score_result["integration_error"]["message"] == message
     assert not (results_dir / "kimi_vendor_report.json").exists()
     assert not python_dir.exists()
+
+def test_preclear_failure_cannot_stage_stale_provider_result(tmp_path: Path) -> None:
+    results_dir = tmp_path / "results"
+    results_dir.mkdir()
+    stale_result = results_dir / "results_kimi_vendor_stale.json"
+    stale_result.write_text('{"stale": true}\n')
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    script = r'''
+source "$BENCHMARK_LIB"
+rm() { return 73; }
+append_lm_eval_summary() {
+    if [ -n "${EVAL_RESULT_DIR:-}" ]; then
+        echo "UNEXPECTED_STAGING"
+    fi
+    return 1
+}
+unset EVAL_FRAMEWORK EVAL_SUITE EVAL_RESULT_DIR EVAL_COMPLETED_SUITE
+export MODEL=test-model
+cd "$WORK_DIR"
+run_eval --framework kimi-vendor --results-dir "$RESULTS_DIR"
+printf 'EVAL_RC=%s\n' "$?"
+printf 'EVAL_RESULT_DIR=<%s>\n' "${EVAL_RESULT_DIR:-}"
+'''
+    result = subprocess.run(
+        ["bash", "-c", script],
+        env={
+            **os.environ,
+            "BENCHMARK_LIB": str(BENCHMARK_LIB),
+            "RESULTS_DIR": str(results_dir),
+            "WORK_DIR": str(work_dir),
+        },
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+    assert "EVAL_RC=73" in result.stdout
+    assert "EVAL_RESULT_DIR=<>" in result.stdout
+    assert "UNEXPECTED_STAGING" not in result.stdout
+    assert "failed to remove stale eval artifact" in result.stderr
+    assert stale_result.is_file()
+    assert list(work_dir.iterdir()) == []
 
 
 _KIMI_VERIFIER_REQUIRED_FILES = {
@@ -1396,7 +1488,7 @@ append_lm_eval_summary >/dev/null
     assert not results_dir.exists()
 
 
-def test_stage_eval_artifacts_copies_verifier_outputs_only(tmp_path: Path) -> None:
+def test_stage_eval_artifacts_copies_eval_outputs_only(tmp_path: Path) -> None:
     source_one = tmp_path / "source-one"
     source_two = tmp_path / "source-two"
     destination = tmp_path / "destination"
@@ -1410,6 +1502,10 @@ def test_stage_eval_artifacts_copies_verifier_outputs_only(tmp_path: Path) -> No
         "bfcl_report.json",
         "bfcl_upstream_artifacts.tar.gz",
         "sample_eval.jsonl",
+        "agent_preds.json",
+        "predictions.jsonl",
+        "swebench_report_eval.json",
+        "trace.traj.json",
     }
     for filename in expected:
         source = source_one if filename.endswith(".json") else source_two
@@ -1454,6 +1550,62 @@ stage_eval_artifacts "$DESTINATION" "$SOURCE"
             "SOURCE": str(source),
             "KV_OFFLOADING": "none",
         },
+        check=False,
+    )
+
+    assert result.returncode == 73
+
+def test_stage_eval_artifacts_fails_when_no_artifacts_exist(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    script = r'''
+source "$BENCHMARK_LIB"
+stage_eval_artifacts "$DESTINATION" "$SOURCE"
+'''
+
+    result = subprocess.run(
+        ["bash", "-c", script],
+        env={
+            **os.environ,
+            "BENCHMARK_LIB": str(BENCHMARK_LIB),
+            "DESTINATION": str(tmp_path / "destination"),
+            "SOURCE": str(source),
+            "KV_OFFLOADING": "none",
+        },
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "no eval artifacts found to stage" in result.stderr
+
+
+def test_summary_propagates_artifact_staging_failure(tmp_path: Path) -> None:
+    work_dir = tmp_path / "work"
+    results_dir = tmp_path / "results"
+    work_dir.mkdir()
+    results_dir.mkdir()
+    (results_dir / "results_eval.json").write_text("{}")
+    script = r'''
+source "$BENCHMARK_LIB"
+cp() { return 73; }
+cd "$WORK_DIR"
+append_lm_eval_summary
+'''
+    result = subprocess.run(
+        ["bash", "-c", script],
+        env={
+            **os.environ,
+            "BENCHMARK_LIB": str(BENCHMARK_LIB),
+            "WORK_DIR": str(work_dir),
+            "EVAL_RESULT_DIR": str(results_dir),
+            "MODEL": "test-model",
+            "CONC": "7",
+            "KV_OFFLOADING": "none",
+        },
+        text=True,
+        capture_output=True,
         check=False,
     )
 
@@ -2105,25 +2257,57 @@ def test_multinode_eval_artifact_names_are_bounded_and_distinct() -> None:
         },
     ]
     non_mtp_twin = {**targets[3], "SPEC_DECODING": "none"}
+    disagg_twin = {**targets[3], "DISAGG": "true"}
+    recipe_twin = {
+        **targets[3],
+        "EVAL_ARTIFACT_RECIPE": "0123456789abcdef",
+    }
+    suite_twin = {**targets[3], "EVAL_SUITE": "bfcl_vllm_kimi"}
+    conc_twin = {**targets[3], "conc-list": ["2", "16"]}
 
     def render(values: dict[str, object]) -> str:
         name = expression
-        name = re.sub(
-            r"\$\{\{ join\(fromJson\(inputs\.conc-list\), 'x'\) \}\}",
-            "x".join(values["conc-list"]),
-            name,
-        )
-        for key, value in values.items():
+        defaults: dict[str, object] = {
+            "DISAGG": "false",
+            "EVAL_ARTIFACT_RECIPE": "",
+            "EVAL_FRAMEWORK": "bfcl",
+            "EVAL_SUITE": "bfcl_smoke",
+        }
+        defaults["EVAL_ARTIFACT_CONC"] = hashlib.sha256(
+            " ".join(values["conc-list"]).encode()
+        ).hexdigest()[:12]
+        for key, value in {**defaults, **values}.items():
             if key != "conc-list":
                 name = name.replace(f"${{{{ env.{key} }}}}", str(value))
         name = name.replace("${{ runner.name }}", str(values["runner.name"]))
+        name = name.replace("${{ github.run_attempt }}", "1")
         assert "${{" not in name
         return name
 
-    names = [render(target) for target in targets]
-    assert len(names) == len(set(names)) == 6
-    assert render(targets[3]) != render(non_mtp_twin)
+    variants = [
+        *targets,
+        non_mtp_twin,
+        disagg_twin,
+        recipe_twin,
+        suite_twin,
+        conc_twin,
+    ]
+    names = [render(target) for target in variants]
+    assert len(names) == len(set(names)) == len(variants)
     assert all(name.startswith("eval_") and len(name.encode()) <= 256 for name in names)
+
+
+def test_single_node_eval_artifact_name_includes_suite_identity() -> None:
+    workflow = yaml.safe_load(SINGLE_NODE_WORKFLOW.read_text())
+    upload = next(
+        step
+        for step in workflow["jobs"]["benchmark"]["steps"]
+        if step.get("name") == "Upload eval results (if any)"
+    )
+    expression = upload["with"]["name"]
+    assert "EVAL_FRAMEWORK" in expression
+    assert "EVAL_SUITE" in expression
+    assert "github.run_attempt" in expression
 
 
 
@@ -2285,9 +2469,9 @@ def test_fixed_eval_workflows_forward_provider_contract() -> None:
     reusable_workflow = yaml.safe_load(SINGLE_NODE_WORKFLOW.read_text())
     assert reusable_workflow["env"]["EVAL_FRAMEWORK"] == "${{ inputs.eval-framework }}"
     assert reusable_workflow["env"]["EVAL_SUITE"] == "${{ inputs.eval-suite }}"
-    assert "*_vendor_report.json" in SINGLE_NODE_WORKFLOW.read_text()
-    assert "bfcl_report.json" in SINGLE_NODE_WORKFLOW.read_text()
-    assert "bfcl_upstream_artifacts.tar.gz" in SINGLE_NODE_WORKFLOW.read_text()
+    assert "*_report.json" in SINGLE_NODE_WORKFLOW.read_text()
+    assert "*_results.jsonl" in SINGLE_NODE_WORKFLOW.read_text()
+    assert "*_artifacts.tar.gz" in SINGLE_NODE_WORKFLOW.read_text()
     assert "bfcl_vllm_minimax_m3" in SINGLE_NODE_WORKFLOW.read_text()
     assert "bfcl_vllm_kimi" in SINGLE_NODE_WORKFLOW.read_text()
 
@@ -2302,9 +2486,9 @@ def test_multinode_agentic_eval_workflow_forwards_runner_contract() -> None:
     assert forwarded["eval-suite"] == "${{ inputs.eval-suite }}"
     assert reusable_workflow["env"]["EVAL_FRAMEWORK"] == "${{ inputs.eval-framework }}"
     assert reusable_workflow["env"]["EVAL_SUITE"] == "${{ inputs.eval-suite }}"
-    assert "*_vendor_report.json" in MULTINODE_WORKFLOW.read_text()
-    assert "bfcl_report.json" in MULTINODE_WORKFLOW.read_text()
-    assert "bfcl_upstream_artifacts.tar.gz" in MULTINODE_WORKFLOW.read_text()
+    assert "*_report.json" in MULTINODE_WORKFLOW.read_text()
+    assert "*_results.jsonl" in MULTINODE_WORKFLOW.read_text()
+    assert "*_artifacts.tar.gz" in MULTINODE_WORKFLOW.read_text()
 
     assert "bfcl_vllm_minimax_m3" in MULTINODE_WORKFLOW.read_text()
     assert "bfcl_vllm_kimi" in MULTINODE_WORKFLOW.read_text()
@@ -2433,6 +2617,9 @@ def test_bfcl_dependency_timeout_uses_integration_error_and_stages(
 ) -> None:
     results_dir = tmp_path / "results"
     python_dir = tmp_path / "python"
+    results_dir.mkdir()
+    stale_result = results_dir / "results_bfcl_previous.json"
+    stale_result.write_text('{"stale": true}\n')
     script = r"""
 source "$BENCHMARK_LIB"
 export EVAL_SUITE=bfcl_vllm_kimi
@@ -2478,7 +2665,7 @@ exit "$eval_rc"
 
     assert result.returncode == 124
     assert "EVAL_RC=124" in output
-    assert f"ADAPTER_ARG=<{REPO_ROOT / 'utils/evals/bfcl_eval.py'}>" in output
+    assert f"ADAPTER_ARG=<{REPO_ROOT / 'utils/evals/bfcl_adapter.py'}>" in output
     assert "ADAPTER_ARG=<test-model>" in output
     assert f"ADAPTER_ARG=<{results_dir}>" in output
     assert "ADAPTER_ARG=<--integration-error>" in output
@@ -2490,6 +2677,7 @@ exit "$eval_rc"
     assert output.count(f"STAGED=<{results_dir}>") == 1
     assert (results_dir / "bfcl_report.json").exists()
     assert (results_dir / "results_bfcl.json").exists()
+    assert not stale_result.exists()
     assert "failed to write BFCL failure artifact" not in output
     assert "UNEXPECTED_SYSTEM_PYTHON" not in output
     assert not (results_dir / "bfcl_upstream_artifacts.tar.gz").exists()
@@ -2610,7 +2798,7 @@ def test_bfcl_runner_uses_fixed_adapter_contract_and_cleans_runtime(
 
     assert result.returncode == 0, result.stderr
     for value in (
-        str(REPO_ROOT / "utils/evals/bfcl_eval.py"),
+        str(REPO_ROOT / "utils/evals/bfcl_adapter.py"),
         "--base-url",
         "http://127.0.0.1:9999/v1",
         "--api-key",

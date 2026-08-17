@@ -10,6 +10,7 @@ import math
 import os
 import subprocess
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime, timezone
@@ -21,7 +22,7 @@ RESULT_FORMAT = "inferencex-eval-v1"
 ADAPTER_NAME = "minimax-provider-verifier"
 NATIVE_REPORT_FILENAME = "minimax_vendor_report.json"
 NATIVE_RESULTS_FILENAME = "minimax_vendor_results.jsonl"
-COMPATIBILITY_GLOB = "results_minimax_vendor_full_*.json"
+COMPATIBILITY_GLOB = "results_minimax_vendor_*.json"
 EXPECTED_RESULT_COUNT = 102
 UPSTREAM_REF = "85bf180e54e2ab0b31595cfdc697116c4760876d"
 UPSTREAM_BASE_URL = (
@@ -43,7 +44,7 @@ REQUIRED_SOURCE_SHA256 = {
 }
 MAX_SOURCE_BYTES = 16 * 1024 * 1024
 DOWNLOAD_TIMEOUT_SECONDS = 60
-UPSTREAM_TIMEOUT_SECONDS = 12 * 60 * 60
+UPSTREAM_TIMEOUT_SECONDS = 7 * 60 * 60
 
 Runner = Callable[..., subprocess.CompletedProcess[Any]]
 Fetcher = Callable[[str], bytes]
@@ -180,10 +181,19 @@ def build_verifier_command(
     output_dir: Path,
 ) -> list[str]:
     """Build the single pinned-upstream invocation for all 102 rows."""
-    if not model.strip():
+    if not isinstance(model, str) or not model.strip():
         raise ValueError("model must be a non-empty string")
-    if not base_url.startswith(("http://", "https://")):
-        raise ValueError("base_url must be an absolute HTTP(S) URL")
+    normalized_base_url = base_url.strip().rstrip("/")
+    parsed_base_url = urllib.parse.urlsplit(normalized_base_url)
+    if (
+        parsed_base_url.scheme not in {"http", "https"}
+        or not parsed_base_url.netloc
+        or parsed_base_url.query
+        or parsed_base_url.fragment
+    ):
+        raise ValueError(
+            "base_url must be an absolute HTTP(S) URL without query or fragment"
+        )
     extra_body = json.dumps(
         {"temperature": 0, "top_p": 1, "max_tokens": 40960},
         separators=(",", ":"),
@@ -195,7 +205,7 @@ def build_verifier_command(
         "--model",
         model,
         "--base-url",
-        base_url.rstrip("/"),
+        normalized_base_url,
         "--api-key",
         "EMPTY",
         "--concurrency",
@@ -363,29 +373,28 @@ def project_native_artifacts(*, output_dir: Path, model: str) -> Path:
 
 
 def publish_failure(*, output_dir: Path, model: str, error: BaseException) -> Path:
-    """Publish compatibility and native diagnostics without hiding partial output."""
+    """Publish canonical failure metadata while retaining partial result rows."""
     output_dir.mkdir(parents=True, exist_ok=True)
     native_report_path = output_dir / NATIVE_REPORT_FILENAME
     native_results_path = output_dir / NATIVE_RESULTS_FILENAME
-    if not native_report_path.exists():
-        _write_json(
-            native_report_path,
-            {
-                "verifier": ADAPTER_NAME,
-                "task": TASK_NAME,
-                "model": model,
-                "completed": False,
-                "threshold": 0.0,
-                "source": {
-                    "ref": UPSTREAM_REF,
-                    "sample_sha256": EXPECTED_SAMPLE_SHA256,
-                },
-                "success_count": 0,
-                "failure_count": EXPECTED_RESULT_COUNT,
-                "tool_calls_match_rate": 0.0,
-                "integration_error": _error_dict(error),
+    _write_json(
+        native_report_path,
+        {
+            "verifier": ADAPTER_NAME,
+            "task": TASK_NAME,
+            "model": model,
+            "completed": False,
+            "threshold": 0.0,
+            "source": {
+                "ref": UPSTREAM_REF,
+                "sample_sha256": EXPECTED_SAMPLE_SHA256,
             },
-        )
+            "success_count": 0,
+            "failure_count": EXPECTED_RESULT_COUNT,
+            "tool_calls_match_rate": 0.0,
+            "integration_error": _error_dict(error),
+        },
+    )
     if not native_results_path.exists():
         native_results_path.write_text(
             json.dumps(
@@ -497,6 +506,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 1
         return 0
     if args.command == "failure":
+        (args.output_dir / NATIVE_RESULTS_FILENAME).unlink(missing_ok=True)
         publish_failure(
             output_dir=args.output_dir,
             model=args.model,

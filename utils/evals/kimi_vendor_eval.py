@@ -327,15 +327,13 @@ def run_evaluation(
             report,
             task_name=task_name,
         )
-        if task_name == FULL_TASK_NAME:
-            completed_successfully = subprocess_rc == 0 or (
-                subprocess_rc == 1 and not all_passed
-            )
-            invalid_exit = not completed_successfully
-        else:
-            completed_successfully = subprocess_rc == 0 and all_passed
-            invalid_exit = subprocess_rc != 0 and all_passed
-        if invalid_exit:
+        valid_outcome = (subprocess_rc == 0 and all_passed) or (
+            subprocess_rc == 1 and not all_passed
+        )
+        completed_successfully = subprocess_rc == 0 and all_passed
+        if task_name == FULL_TASK_NAME and valid_outcome:
+            completed_successfully = True
+        if not valid_outcome:
             integration_error = RuntimeError(
                 f"upstream verifier exited with code {subprocess_rc}"
             )
@@ -343,7 +341,7 @@ def run_evaluation(
                 model,
                 0.0,
                 task_name=task_name,
-                n_samples=expected_total,
+                n_samples=0,
                 integration_error=integration_error,
             )
             completed_successfully = False

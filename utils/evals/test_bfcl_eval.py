@@ -10,7 +10,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import bfcl_eval as be
+import bfcl_adapter as be
 import validate_scores as vs
 
 
@@ -69,6 +69,39 @@ def test_thresholds_are_stdlib_readable_without_pyyaml(monkeypatch) -> None:
 
     assert thresholds["default"]["bfcl_smoke"] == 0.75
     assert thresholds["default"]["bfcl_parallel"] == 0.0
+
+def test_score_validator_uses_declared_bfcl_metric(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    result = {
+        "results": {"bfcl_smoke": {"acc,none": 0.8, "acc_stderr,none": 0.1}},
+        "configs": {
+            "bfcl_smoke": {
+                "metric_list": [{"metric": "acc", "aggregation": "mean"}]
+            }
+        },
+        "n-samples": {"bfcl_smoke": {"original": 4, "effective": 4}},
+    }
+    (tmp_path / "results_bfcl.json").write_text(json.dumps(result))
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["validate_scores.py"])
+
+    assert vs.main() == 0
+
+
+def test_adapter_module_does_not_collide_with_upstream_package(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    upstream = object()
+    child = object()
+    monkeypatch.setitem(sys.modules, "bfcl_eval", upstream)
+    monkeypatch.setitem(sys.modules, "bfcl_eval.constants", child)
+
+    be._clear_upstream_modules()
+
+    assert be.__name__ == "bfcl_adapter"
+    assert "bfcl_eval" not in sys.modules
+    assert "bfcl_eval.constants" not in sys.modules
 
 
 def _write_result(
@@ -285,14 +318,20 @@ def test_cli_rejects_invalid_positive_values(
         )
 
 
-def test_cli_rejects_chat_completions_endpoint_instead_of_api_root(
-    tmp_path: Path,
-) -> None:
+@pytest.mark.parametrize(
+    "base_url",
+    (
+        "http://localhost/v1/chat/completions",
+        "http://localhost/v1?mode=test",
+        "http://localhost/v1#fragment",
+    ),
+)
+def test_cli_rejects_invalid_api_root(tmp_path: Path, base_url: str) -> None:
     with pytest.raises(SystemExit):
         be.parse_args(
             [
                 "--base-url",
-                "http://localhost/v1/chat/completions",
+                base_url,
                 "--model",
                 "model-a",
                 "--output-dir",
