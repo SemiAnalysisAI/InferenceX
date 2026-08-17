@@ -5807,3 +5807,12 @@
     - "Overlay the exact upstream Infera KV-event decoder fix from AMD-AGI/Infera#114 so ATOM's tagged-map events populate the router cache view during pre-release hardware validation."
     - "Serialize shared Infera and ATOM source staging per checkout and publish completed clones atomically so concurrent aggregate and disaggregated validation jobs cannot corrupt one another."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2558
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom-disagg
+  description:
+    - "Port the DeepSeek-V4-Pro FP4 MI355X ATOM disaggregated 8k/1k submission from the configuration-specific AMD launcher to srt-slurm ATOM orchestration and Infera KV-aware routing."
+    - "Preserve all original search points: 1P1D TP8 at concurrency 4, 8, 16, 32, 64, and 128; 2P1D DPA+TP8 at concurrency 256, 512, 768, 1024, and 2048."
+    - "Use the unchanged InferenceX benchmark_serving.py through the custom benchmark contract and remove the exact legacy wrapper plus its obsolete deprecated 1k/1k entry."
+    - "Use the hardware-proven Mooncake TCP transport for the initial correctness sweep; validate the updated ROCm RDMA path separately before changing production transport."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2627
