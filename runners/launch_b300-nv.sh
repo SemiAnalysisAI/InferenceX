@@ -44,7 +44,7 @@ elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-
     export MODEL_PATH="${SELECTED_MODEL_PATH:-/data/models/dsv4-pro}"
     export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
 elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-sglang" && $MODEL == "deepseek-ai/DeepSeek-V4-Pro-DSpark" ]]; then
-    export MODEL_PATH="${MODEL_PATH:-/data/models/DeepSeek-V4-Pro-DSpark}"
+    export MODEL_PATH="${MODEL_PATH:-/scratch/models/DeepSeek-V4-Pro-0813}"
     export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro-dspark"
 elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-sglang" ]]; then
     export MODEL_PATH="${MODEL_PATH:-/scratch/models/DeepSeek-V4-Pro}"
