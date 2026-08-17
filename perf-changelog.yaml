@@ -6009,3 +6009,11 @@
     - "Align the GB300 Dynamo-TensorRT-LLM AgentX recipes with the explicit srt-slurm runtime contract."
     - "Pin and isolate the AgentX client, remove unused backend environment settings, provide explicit frontend and benchmark identity values, and use the standard GB300 job time limit."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2595
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-trt-agentx
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Align the TensorRT-LLM synthetic accepted-draft-token setting with the committed DeepSeek-V4-Pro AgentX acceptance target."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2595
