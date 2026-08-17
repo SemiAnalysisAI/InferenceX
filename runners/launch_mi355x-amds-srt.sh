@@ -69,18 +69,36 @@ set -euo pipefail
 export ENROOT_RUNTIME_PATH="\${TMPDIR:-/tmp}/enroot-runtime-\${UID}"
 mkdir -p "\$ENROOT_RUNTIME_PATH" "$(dirname "$SHARED_IMAGE")" "$SHARED_HF_CACHE"
 chmod 700 "\$ENROOT_RUNTIME_PATH"
-if [[ ! -d "${SHARED_INFERA_RUNTIME}/.git" ]]; then
-    git clone --quiet "${INFERA_REPOSITORY}" "${SHARED_INFERA_RUNTIME}"
-fi
-git -C "${SHARED_INFERA_RUNTIME}" fetch --quiet origin "${INFERA_COMMIT}"
-git -C "${SHARED_INFERA_RUNTIME}" checkout --quiet --detach "${INFERA_COMMIT}"
-test "\$(git -C "${SHARED_INFERA_RUNTIME}" rev-parse HEAD)" = "${INFERA_COMMIT}"
-if [[ ! -d "${SHARED_ATOM_RUNTIME}/.git" ]]; then
-    git clone --quiet "${ATOM_REPOSITORY}" "${SHARED_ATOM_RUNTIME}"
-fi
-git -C "${SHARED_ATOM_RUNTIME}" fetch --quiet origin "${ATOM_COMMIT}"
-git -C "${SHARED_ATOM_RUNTIME}" checkout --quiet --detach "${ATOM_COMMIT}"
-test "\$(git -C "${SHARED_ATOM_RUNTIME}" rev-parse HEAD)" = "${ATOM_COMMIT}"
+ensure_git_checkout() {
+    local target="\$1"
+    local repository="\$2"
+    local commit="\$3"
+    local lock_fd
+    local temporary="\${target}.tmp.\${SLURM_JOB_ID}.\${BASHPID}"
+    local quarantine="\${target}.incomplete.\${SLURM_JOB_ID}.\${BASHPID}"
+
+    mkdir -p "\$(dirname "\$target")"
+    exec {lock_fd}>"\${target}.lock"
+    flock -w 2400 "\$lock_fd"
+    if [[ ! -d "\$target/.git" ]]; then
+        if [[ -e "\$target" ]]; then
+            mv -T "\$target" "\$quarantine"
+        fi
+        git clone --quiet "\$repository" "\$temporary"
+        git -C "\$temporary" fetch --quiet origin "\$commit"
+        git -C "\$temporary" checkout --quiet --detach "\$commit"
+        test "\$(git -C "\$temporary" rev-parse HEAD)" = "\$commit"
+        mv -T "\$temporary" "\$target"
+    else
+        git -C "\$target" fetch --quiet origin "\$commit"
+        git -C "\$target" checkout --quiet --detach "\$commit"
+        test "\$(git -C "\$target" rev-parse HEAD)" = "\$commit"
+    fi
+    flock -u "\$lock_fd"
+    exec {lock_fd}>&-
+}
+ensure_git_checkout "${SHARED_INFERA_RUNTIME}" "${INFERA_REPOSITORY}" "${INFERA_COMMIT}"
+ensure_git_checkout "${SHARED_ATOM_RUNTIME}" "${ATOM_REPOSITORY}" "${ATOM_COMMIT}"
 exec 9>"${SHARED_IMAGE}.lock"
 flock -w 2400 9
 if ! unsquashfs -s "$SHARED_IMAGE" >/dev/null 2>&1; then

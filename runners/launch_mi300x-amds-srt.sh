@@ -125,22 +125,29 @@ srun --ntasks-per-node=1 bash -c '
     local target="\$1"
     local repository="\$2"
     local commit="\$3"
+    local lock_fd
     local temporary="\${target}.tmp.\${SLURM_JOB_ID}.\${BASHPID}"
     local quarantine="\${target}.incomplete.\${SLURM_JOB_ID}.\${BASHPID}"
+
+    mkdir -p "\$(dirname "\$target")"
+    exec {lock_fd}>"\${target}.lock"
+    flock -w 2400 "\$lock_fd"
     if [[ ! -d "\$target/.git" ]]; then
       if [[ -e "\$target" ]]; then
-        mv "\$target" "\$quarantine"
+        mv -T "\$target" "\$quarantine"
       fi
       git clone --quiet "\$repository" "\$temporary"
       git -C "\$temporary" fetch --quiet origin "\$commit"
       git -C "\$temporary" checkout --quiet --detach "\$commit"
       test "\$(git -C "\$temporary" rev-parse HEAD)" = "\$commit"
-      mv "\$temporary" "\$target"
+      mv -T "\$temporary" "\$target"
     else
       git -C "\$target" fetch --quiet origin "\$commit"
       git -C "\$target" checkout --quiet --detach "\$commit"
       test "\$(git -C "\$target" rev-parse HEAD)" = "\$commit"
     fi
+    flock -u "\$lock_fd"
+    exec {lock_fd}>&-
   }
   ensure_container_image "${ENGINE_SQSH}" "${ENGINE_IMAGE}"
   if [[ -n "${AUX_IMAGE}" ]]; then

@@ -77,4 +77,8 @@ def test_matrix_rows_route_only_through_the_atom_srt_launcher():
     assert "5ecfb13d1ba0960045482f1ef006312d8729d37a" in launcher
     assert "8ed8f1728c745d4e91ba9eaa09ed81159aa57e41" in launcher
     assert "2ab42bc2c64d1ad04f698c396da48473e71a6dbb" in launcher
+    assert "ensure_git_checkout()" in launcher
+    assert 'exec {lock_fd}>"\\${target}.lock"' in launcher
+    assert 'flock -w 2400 "\\$lock_fd"' in launcher
+    assert 'mv -T "\\$temporary" "\\$target"' in launcher
     assert "scancel" not in launcher
