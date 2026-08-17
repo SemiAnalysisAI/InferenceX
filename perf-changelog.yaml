@@ -6084,3 +6084,11 @@
   description:
     - "Match the TensorRT-LLM synthetic accepted-draft-token setting to the recipe's disabled thinking mode."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2595
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-trt-agentx
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use the thinking-enabled DeepSeek-V4-Pro AgentX target for TensorRT-LLM synthetic draft acceptance."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2595
