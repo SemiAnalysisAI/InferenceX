@@ -1279,7 +1279,7 @@ dsv4-fp4-mi355x-vllm-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.60
       search-space:
-      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 8, 16, 32, 40, 48] }
+      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 8, 16, 32, 40, 48, 56, 64] }
       - { tp: 8, ep: 1, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [32, 48, 64, 96], router: { name: vllm-router, version: "0.1.14" } }
       # LMCache invalid-block recovery currently assumes one KV-cache group,
       # while MTP creates two. Restore these points after the upstream hybrid

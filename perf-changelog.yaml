@@ -6056,7 +6056,7 @@
     - agentic-coding
   description:
     - "Repin the image to the 2026-08-17 ROCm nightly (nightly-311b3513af33bc29b4acb2fde2e9313e5e9966a0, digest sha256:4b403315f9a0d9b0ed4221dfc7ea04538701b4de0ce283c0e2cee622b217ff89). Docker Hub last pushed it at 2026-08-17T05:32:09Z and the tag commit is vllm-project/vllm@311b3513."
-    - "Preserve the PR's existing AgentX search-space while updating the image and flags: pure TP8 remains at concurrency 1, 4, 8, 16, 32, 40, and 48; the DP-attention arm remains at 32, 48, 64, and 96."
+    - "Update the pure TP8 AgentX search-space to concurrency 1, 4, 8, 16, 32, 40, 48, 56, and 64; the DP-attention arm remains at 32, 48, 64, and 96."
     - "The pinned nightly includes vLLM #51473 (native 384-shard MXFP4 TP8 allocation), #52212 (gfx950 Triton sparse-MLA decode), and #52401, the merged equivalent of Fangzhou's #52488 regression fix for ROCm DeepSeek V4 MRV1 plus the wide eager attention region."
     - "Make the local run flags explicit in the checked-in recipe: VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4, VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1, cudagraph_mode FULL_AND_PIECEWISE, gpu-memory-utilization 0.86, max-num-seqs 2*CONC for the pure TP8 scheduler, and max-num-seqs CONC for the DP-attention scheduler."
     - "Unset VLLM_ROCM_DSV4_SPARSE_GLUON and DSV4_SPARSE_WORKLOAD_PROBE* so runner environment residue cannot switch the recipe away from the intended no-Gluon, no-diagnostic-probe Triton sparse-decode path."
