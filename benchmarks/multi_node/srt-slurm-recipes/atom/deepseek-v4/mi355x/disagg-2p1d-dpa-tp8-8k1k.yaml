@@ -42,7 +42,10 @@ frontend:
 backend:
   type: atom
   connector: mooncake
-  mooncake_protocol: tcp
+  # Match the production-green legacy sweep: this high-throughput search uses
+  # Mooncake RDMA across rdma0-rdma7. TCP saturates during c256 and causes the
+  # decode endpoint to miss transfer deadlines even with connection pooling.
+  mooncake_protocol: rdma
   enable_kv_events: true
   prefill_environment: &worker_environment
     HF_HOME: "/hf_hub_cache"

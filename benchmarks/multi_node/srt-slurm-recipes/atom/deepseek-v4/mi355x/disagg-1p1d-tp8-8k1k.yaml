@@ -42,10 +42,10 @@ frontend:
 backend:
   type: atom
   connector: mooncake
-  # The stable image predates Mooncake's ROCm DMA-BUF registration fix. TCP
-  # is the hardware-proven correctness transport; RDMA is validated separately
-  # when the fixed ATOM/Mooncake image is available.
-  mooncake_protocol: tcp
+  # The production-green legacy sweep used Mooncake RDMA on rdma0-rdma7.
+  # The pinned ATOM source contains the ROCm local-device filtering fix and
+  # selects the per-GPU RDMA device; srt-slurm supplies the cluster GID index.
+  mooncake_protocol: rdma
   enable_kv_events: true
   prefill_environment: &worker_environment
     HF_HOME: "/hf_hub_cache"
@@ -60,14 +60,16 @@ backend:
   atom_config:
     prefill:
       kv_cache_dtype: fp8
-      gpu-memory-utilization: 0.85
+      # Leave registration/runtime headroom after the initial 0.85 run reached
+      # server registration with less than 6 MiB free and failed a 6 MiB calloc.
+      gpu-memory-utilization: 0.84
       max-num-seqs: 256
       block-size: 16
       no-enable_prefix_caching: true
       trust-remote-code: true
     decode:
       kv_cache_dtype: fp8
-      gpu-memory-utilization: 0.85
+      gpu-memory-utilization: 0.84
       max-num-seqs: 128
       block-size: 16
       no-enable_prefix_caching: true
