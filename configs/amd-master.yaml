@@ -1381,17 +1381,14 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=1"
 
-# MiniMax-M3 MXFP8 MI355X recipe:
-# https://github.com/vllm-project/recipes/commit/2a3728ed9892debfd767a72a58ebc90b33f186e5
-# MXFP8 runs from TP=4 on gfx950; block size 128 is mandatory for MSA.
 dsv4-fp4-mi355x-atom-disagg:
-  image: rocm/atom-dev:nightly_202606101403
+  image: rocm/infera:atom-v0.1.1
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
-  runner: mi355x
+  runner: cluster:mi355x-amds
   precision: fp4
   framework: atom-disagg
-  router: { name: atomesh, version: "087b82d9c1f630e79149ba37e6213257ec9a76f8" }
+  router: { name: infera, version: "0.1.1" }
   kv-p2p-transfer: mooncake
   multinode: true
   disagg: true
@@ -1400,8 +1397,11 @@ dsv4-fp4-mi355x-atom-disagg:
     - isl: 8192
       osl: 1024
       search-space:
-      # 2P1D DPA+TP8 
-      - conc-list: [ 256, 512, 768, 1024, 2048 ]
+      # The custom srt-slurm recipes own the exact concurrency loops. Keeping
+      # one matrix row per topology avoids launching the complete loop once per
+      # concurrency while preserving every original measurement point.
+      # 2P1D DPA+TP8
+      - conc-list: [ 1 ]
         prefill:
           num-worker: 2
           tp: 8
@@ -1409,6 +1409,7 @@ dsv4-fp4-mi355x-atom-disagg:
           dp-attn: true
           additional-settings:
           - "PREFILL_NODES=2"
+          - "CONFIG_FILE=recipes/atom/deepseek-v4/mi355x/disagg-2p1d-dpa-tp8-8k1k.yaml"
         decode:
           num-worker: 1
           tp: 8
@@ -1416,8 +1417,8 @@ dsv4-fp4-mi355x-atom-disagg:
           dp-attn: true
           additional-settings:
           - "DECODE_NODES=1"
-      # 1P1D TP8 
-      - conc-list: [ 4, 8, 16, 32, 64, 128 ]
+      # 1P1D TP8
+      - conc-list: [ 1 ]
         prefill:
           num-worker: 1
           tp: 8
@@ -1425,6 +1426,7 @@ dsv4-fp4-mi355x-atom-disagg:
           dp-attn: false
           additional-settings:
           - "PREFILL_NODES=1"
+          - "CONFIG_FILE=recipes/atom/deepseek-v4/mi355x/disagg-1p1d-tp8-8k1k.yaml"
         decode:
           num-worker: 1
           tp: 8
@@ -1432,7 +1434,9 @@ dsv4-fp4-mi355x-atom-disagg:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=1"
-      # 1P1D TP8
+# MiniMax-M3 MXFP8 MI300X recipe:
+# https://github.com/vllm-project/recipes/commit/2a3728ed9892debfd767a72a58ebc90b33f186e5
+# MXFP8 runs from TP=4 on gfx942; block size 128 is mandatory for MSA.
 minimaxm3-fp8-mi300x-vllm-agentic:
   image: vllm/vllm-openai-rocm:nightly-04c2a8deac44fdb1ca3e2b5ec3e6bf16f3f6a914
   model: MiniMaxAI/MiniMax-M3-MXFP8
