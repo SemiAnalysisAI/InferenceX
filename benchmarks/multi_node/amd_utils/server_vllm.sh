@@ -475,7 +475,9 @@ if [ "$NODE_RANK" -eq 0 ]; then
 
             source /workspace/benchmarks/benchmark_lib.sh
 
-            if [[ -n "${EVAL_CONC:-}" ]]; then
+            if [[ -n "${EVAL_CONCURRENT_REQUESTS:-}" ]]; then
+                echo "Using explicit EVAL_CONCURRENT_REQUESTS=${EVAL_CONCURRENT_REQUESTS}"
+            elif [[ -n "${EVAL_CONC:-}" ]]; then
                 export EVAL_CONCURRENT_REQUESTS="${EVAL_CONC}"
             else
                 export EVAL_CONCURRENT_REQUESTS=$(echo "$BENCH_MAX_CONCURRENCY" | tr 'x' '\n' | sort -n | tail -1)
