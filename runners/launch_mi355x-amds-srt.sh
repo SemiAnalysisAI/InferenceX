@@ -5,18 +5,24 @@ set -euo pipefail
 # in explicitly with CONFIG_FILE; all existing MI355X launch behavior remains
 # unchanged for every other row.
 SRT_SLURM_REPOSITORY="https://github.com/SemiAnalysisAI/srt-slurm.git"
-SRT_SLURM_COMMIT="31e72da43ed21fe941c039be51b2cad1a3cf428a"
+SRT_SLURM_COMMIT="c609754b5622f96d5c12a93149e245308d4f1e9b"
 SLURM_PARTITION="compute"
-SGLANG_IMAGE="lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260809"
 SHARED_BASE="/it-share/gharunners2/srt-slurm"
-SHARED_IMAGE="${SHARED_BASE}/containers/sglang-rocm-v0.5.17-mi35x-20260809.sqsh"
 SHARED_HF_CACHE="/it-share/hf-hub-cache"
+SHARED_AIPERF_CACHE="/it-share/aiperf-cache"
 SHARED_RESULTS="${SHARED_BASE}/results"
 
 : "${GITHUB_WORKSPACE:?GITHUB_WORKSPACE must be set by Actions}"
 : "${RESULT_FILENAME:?RESULT_FILENAME must be set by the benchmark workflow}"
 : "${CONFIG_FILE:?CONFIG_FILE must name an srt-slurm recipe}"
+: "${IMAGE:?IMAGE must identify the SGLang container image}"
 : "${MODEL:?MODEL must identify the Hugging Face model}"
+
+SGLANG_IMAGE="$IMAGE"
+IMAGE_KEY="${SGLANG_IMAGE//\//_}"
+IMAGE_KEY="${IMAGE_KEY//:/_}"
+SHARED_IMAGE="${SHARED_BASE}/containers/${IMAGE_KEY}.sqsh"
+LOCAL_IMAGE="/var/lib/squash/${IMAGE_KEY}.sqsh"
 
 CONFIG_PATH="${CONFIG_FILE%%:*}"
 LOCAL_RECIPE="${GITHUB_WORKSPACE}/benchmarks/multi_node/srt-slurm-recipes/${CONFIG_PATH#recipes/}"
@@ -27,7 +33,7 @@ CLUSTER_PROFILE="${GITHUB_WORKSPACE}/benchmarks/multi_node/srt-slurm-recipes/clu
 RUN_KEY="${GITHUB_RUN_ID:-manual}-${GITHUB_RUN_ATTEMPT:-0}-${RUNNER_NAME:-runner}"
 WORK_DIR="${GITHUB_WORKSPACE}/.srt-slurm-${RUN_KEY}"
 SRT_REPO_DIR="${WORK_DIR}/srt-slurm"
-mkdir -p "$WORK_DIR" "$SHARED_RESULTS"
+mkdir -p "$WORK_DIR" "$SHARED_RESULTS" "$SHARED_AIPERF_CACHE"
 
 # Materialize one immutable, shared squashfs and the small public validation
 # model. This job exits normally and never cancels or preempts another job.
@@ -49,7 +55,7 @@ flock -w 2400 9
 if ! unsquashfs -s "$SHARED_IMAGE" >/dev/null 2>&1; then
     tmp="${SHARED_IMAGE}.tmp.\${SLURM_JOB_ID}"
     rm -f "\$tmp"
-    local_image="/var/lib/squash/lmsysorg_sglang-rocm_v0.5.17-rocm720-mi35x-20260809.sqsh"
+    local_image="${LOCAL_IMAGE}"
     if unsquashfs -s "\$local_image" >/dev/null 2>&1; then
         cp --sparse=always "\$local_image" "\$tmp"
     else
@@ -81,22 +87,76 @@ ACTUAL_SRT_COMMIT=$(git -C "$SRT_REPO_DIR" rev-parse HEAD)
 mkdir -p "${SRT_REPO_DIR}/$(dirname "$CONFIG_PATH")"
 cp "$LOCAL_RECIPE" "${SRT_REPO_DIR}/${CONFIG_PATH}"
 cp "$CLUSTER_PROFILE" "${WORK_DIR}/srtslurm.yaml"
-python3 - "${WORK_DIR}/srtslurm.yaml" "$GITHUB_WORKSPACE" "$SHARED_RESULTS" <<'PY'
+python3 - "${WORK_DIR}/srtslurm.yaml" "${SRT_REPO_DIR}/${CONFIG_PATH}" \
+    "$GITHUB_WORKSPACE" "$SHARED_RESULTS" "$SHARED_AIPERF_CACHE" "$SHARED_IMAGE" <<'PY'
+import os
 import sys
 from pathlib import Path
 
-path = Path(sys.argv[1])
-workspace, results = sys.argv[2:]
+import yaml
+
+profile_path = Path(sys.argv[1])
+recipe_path = Path(sys.argv[2])
+workspace, results, aiperf_cache, image_path = sys.argv[3:]
 needle = "  /it-share/hf-hub-cache: /hf_hub_cache\n"
-text = path.read_text()
+text = profile_path.read_text()
 if text.count(needle) != 1:
     raise SystemExit("expected exactly one Hugging Face cache mount")
-path.write_text(
+profile_path.write_text(
     text.replace(
         needle,
-        needle + f"  {workspace}: /infmax-workspace\n  {results}: /results\n",
+        needle
+        + f"  {aiperf_cache}: /aiperf_mmap_cache\n"
+        + f"  {workspace}: /infmax-workspace\n"
+        + f"  {results}: /results\n",
     )
 )
+
+recipe = yaml.safe_load(recipe_path.read_text())
+container_alias = recipe["model"]["container"]
+profile = yaml.safe_load(profile_path.read_text())
+profile.setdefault("containers", {})[container_alias] = image_path
+profile_path.write_text(yaml.safe_dump(profile, sort_keys=False))
+
+benchmark_env = recipe.setdefault("benchmark", {}).setdefault("env", {})
+forwarded = (
+    "AIPERF_EXPERIMENTAL_FAST",
+    "CONC",
+    "CONC_LIST",
+    "DURATION",
+    "EVAL_CONC",
+    "EVAL_LIMIT",
+    "EVAL_ONLY",
+    "FRAMEWORK",
+    "IS_AGENTIC",
+    "KV_OFFLOADING",
+    "MAX_MODEL_LEN",
+    "MODEL",
+    "MODEL_PREFIX",
+    "PRECISION",
+    "RESULT_FILENAME",
+    "RUN_EVAL",
+    "RUNNER_TYPE",
+    "SPEC_DECODING",
+    "TOTAL_CPU_DRAM_GB",
+)
+for key in forwarded:
+    value = os.environ.get(key)
+    if value:
+        benchmark_env[key] = value
+
+if os.environ.get("EVAL_ONLY", "false").lower() == "true" or os.environ.get("RUN_EVAL", "false").lower() == "true":
+    decode_env = recipe.get("backend", {}).get("decode_environment", {})
+    for key in (
+        "SGLANG_SIMULATE_ACC_LEN",
+        "SGLANG_SIMULATE_ACC_METHOD",
+        "SGLANG_SIMULATE_ACC_TOKEN_MODE",
+    ):
+        decode_env.pop(key, None)
+    server_config = recipe.get("backend", {}).get("sglang_config", {})
+    for mode in ("prefill", "decode"):
+        server_config.get(mode, {}).pop("ep-dispatch-algorithm", None)
+recipe_path.write_text(yaml.safe_dump(recipe, sort_keys=False))
 PY
 
 export PATH="$HOME/.local/bin:$PATH"
@@ -135,11 +195,14 @@ read -r JOB_STATE JOB_EXIT JOB_NODELIST < <(
 echo "srt-slurm job ${JOB_ID}: state=${JOB_STATE} exit=${JOB_EXIT} nodes=${JOB_NODELIST}"
 
 RESULT_DIR="${SHARED_RESULTS}/${JOB_ID}"
+OUTPUT_LOG_DIR="${SHARED_BASE}/outputs/${JOB_ID}/logs"
 mkdir -p "$GITHUB_WORKSPACE/LOGS"
-if [[ -f "$RESULT_DIR/runtime-logs.tar.gz" ]]; then
-    cp "$RESULT_DIR/runtime-logs.tar.gz" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"
+if [[ -d "$OUTPUT_LOG_DIR" ]]; then
+    tar -C "$OUTPUT_LOG_DIR" -czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" .
 fi
-cp -R "$RESULT_DIR/." "$GITHUB_WORKSPACE/LOGS/"
+if [[ -d "$RESULT_DIR" ]]; then
+    cp -R "$RESULT_DIR/." "$GITHUB_WORKSPACE/LOGS/"
+fi
 
 if [[ "${DISAGG:-false}" == "true" ]]; then
     PREFILL_GPUS=$((PREFILL_NUM_WORKERS * PREFILL_TP))
@@ -149,21 +212,32 @@ else
     TOTAL_GPUS=$((PREFILL_NUM_WORKERS * PREFILL_TP * ${PREFILL_PP_SIZE:-1} * ${PREFILL_PCP_SIZE:-1}))
 fi
 
-shopt -s nullglob
-RESULTS=("$RESULT_DIR"/fixed-seq/*.json)
-shopt -u nullglob
-[[ ${#RESULTS[@]} -gt 0 ]] || { echo "No fixed-sequence results found in $RESULT_DIR" >&2; exit 1; }
-for result in "${RESULTS[@]}"; do
-    concurrency=$(basename "$result" | sed -n 's/.*-c\([0-9][0-9]*\)\.json/\1/p')
-    [[ -n "$concurrency" ]] || { echo "Cannot parse concurrency from $result" >&2; exit 1; }
-    if [[ "${DISAGG:-false}" == "true" ]]; then
-        output="${GITHUB_WORKSPACE}/${RESULT_FILENAME}_srt-${JOB_ID}_conc${concurrency}_gpus_${TOTAL_GPUS}_ctx_${PREFILL_GPUS}_gen_${DECODE_GPUS}.json"
-    else
-        output="${GITHUB_WORKSPACE}/${RESULT_FILENAME}_srt-${JOB_ID}_conc${concurrency}_gpus_${TOTAL_GPUS}.json"
-    fi
-    cp "$result" "$output"
-    echo "Collected $output"
-done
+if [[ "${IS_AGENTIC:-0}" == "1" ]]; then
+    shopt -s nullglob
+    RESULTS=("$GITHUB_WORKSPACE/${RESULT_FILENAME}"_conc*.json)
+    shopt -u nullglob
+    [[ ${#RESULTS[@]} -gt 0 ]] || {
+        echo "No AgentX aggregate results found for ${RESULT_FILENAME}" >&2
+        exit 1
+    }
+    printf 'Collected %s\n' "${RESULTS[@]}"
+else
+    shopt -s nullglob
+    RESULTS=("$RESULT_DIR"/fixed-seq/*.json)
+    shopt -u nullglob
+    [[ ${#RESULTS[@]} -gt 0 ]] || { echo "No fixed-sequence results found in $RESULT_DIR" >&2; exit 1; }
+    for result in "${RESULTS[@]}"; do
+        concurrency=$(basename "$result" | sed -n 's/.*-c\([0-9][0-9]*\)\.json/\1/p')
+        [[ -n "$concurrency" ]] || { echo "Cannot parse concurrency from $result" >&2; exit 1; }
+        if [[ "${DISAGG:-false}" == "true" ]]; then
+            output="${GITHUB_WORKSPACE}/${RESULT_FILENAME}_srt-${JOB_ID}_conc${concurrency}_gpus_${TOTAL_GPUS}_ctx_${PREFILL_GPUS}_gen_${DECODE_GPUS}.json"
+        else
+            output="${GITHUB_WORKSPACE}/${RESULT_FILENAME}_srt-${JOB_ID}_conc${concurrency}_gpus_${TOTAL_GPUS}.json"
+        fi
+        cp "$result" "$output"
+        echo "Collected $output"
+    done
+fi
 
 if [[ "$JOB_STATE" != COMPLETED || "$JOB_EXIT" != 0:0 ]]; then
     echo "srt-slurm validation failed: ${JOB_STATE} (${JOB_EXIT})" >&2

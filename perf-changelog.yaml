@@ -5745,6 +5745,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2542
 
 - config-keys:
+    - glm5.2-fp4-mi355x-sglang-agentic-mtp
+  description:
+    - "Add GLM-5.2 FP4 SGLANG Single Node Agentic Support"
+    - "Image: lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260728"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2488
+
+- config-keys:
     - dsv4-fp4-gb300-dynamo-sglang-agentic-agg
     - dsv4-fp4-gb300-dynamo-sglang-agentic-disagg
   description:
@@ -5788,3 +5795,24 @@
     - "models.yaml: add mtp_flags (--speculative-algorithm EAGLE --speculative-eagle-topk 1) to DeepSeek-V4-Pro-AgentX; num-steps/num-draft-tokens are derived from DECODE_MTP_SIZE in server_sglang.sh. DeepSeek-V4's MTP head is a native NextN/EAGLE draft shipped with the model, so no --speculative-draft-model-path is needed."
     - "Two search-space arms: TP8/EP1 no-DP at conc-list [2,4,8,16,32], and TP8/EP8/DPA (ep=8, dp-attn=true) at conc-list [64,96,128], both on image lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260719."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2309
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp
+  description:
+    - "Port the merged MI355X DeepSeek V4 AgentX MTP 1P1D search space from the legacy AMD multinode launcher to srt-slurm."
+    - "Use srt-slurm's native SGLang Router frontend and AMD MoRI transport without Dynamo, NATS, etcd, or NIXL."
+    - "Preserve TP8/EP1 c1,c2,c4,c8,c16,c32 and TP8/EP8/DPA c96,c128, EAGLE MTP, the golden simulated average length, HiCache settings, and logical prefill/decode server-metrics collection through the custom AgentX benchmark."
+    - "Remove the superseded DSV4-specific amd_utils benchmark wrapper, model stanza, HiCache override plumbing, and hard-coded synthetic-acceptance injection; the srt-slurm recipes now own those settings directly."
+    - "Allocate all 128 logical CPUs per MI355X backend node so SGLang TP8 affinity follows the complete host topology, and pin srt-slurm diagnostics that preserve failure-log tails containing non-UTF-8 ROCm compiler output."
+    - "Move the known-green DeepSeek V4 ROCm kernel-routing contract into each self-contained srt-slurm recipe; this avoids the unsupported AITer fused-MoE heuristic dispatch path while keeping legacy harness-only environment indirection removed."
+    - "Declare the exact SGLang and AMD MoRI runtime fingerprint reported by the pinned ROCm image so srt-slurm identity verification is reproducible."
+    - "Rebase the AMD runtime on the active native-router branch and wait for every advertised SGLang HTTP worker to become healthy before launching Model Gateway, preventing slow ROCm startup from permanently dropping a static prefill worker after the router's one-shot registration timeout."
+    - "Pin the MI355X launcher to SemiAnalysisAI/srt-slurm commit c609754b5622f96d5c12a93149e245308d4f1e9b, including the native-router base, SGLang worker-readiness gate, and benchmark-stage frontend registry fix."
+    - "Document the MI355X Ionic DSCP/PFC and RDMA health contract required by MoRI, including the drain-before-repair and verify-before-resume procedure."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2555
+
+- config-keys:
+    - dsv4-fp4-b300-vllm-agentic-mtp
+  description:
+    - "Update the B300 DSV4 AgentX MTP image and SimpleCPU sweep through c576."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2536
