@@ -710,7 +710,7 @@ kimik3-fp4-mi355x-vllm-disagg-agentic-mtp-read:
   disagg: true
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
+    - dram-utilization: 0.70
       search-space:
       - spec-decoding: mtp
         kv-offloading: none
