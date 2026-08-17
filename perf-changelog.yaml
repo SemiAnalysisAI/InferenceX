@@ -5987,4 +5987,4 @@
     - agentic-coding
   description:
     - "DIAGNOSTIC ONLY, not for merge: sweep the kimik3-fp4-mi355x-vllm-agentic-mtp-lmcache points with the KV transfer config removed (no LMCache server, no --kv-transfer-config, GPU-resident KV only) to isolate whether the hipErrorIllegalAddress crashes come from the offload connector or from the node."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PLACEHOLDER
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2635
