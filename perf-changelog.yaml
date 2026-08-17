@@ -6048,4 +6048,5 @@
     - "Add B300 Dynamo-SGLang DSpark6 AgentX aggregate DEP4 and DEP8 configurations with session-affinity routing, HiCache host offload, an 8K prefill window, and thinking-on block-size-6 golden synthetic acceptance length 3.77 for throughput; eval retains real verification."
     - "Use the August 16 SGLang CUDA 13 nightly and srt-slurm v1.0.38, with DEP4 concurrency 48-64 and DEP8 concurrency 128-576."
     - "Cap the DEP8 HiCache ratio at 1.5 so the explicit host KV pool fits within the B300 x86 node's 3 TB DRAM budget during model loading and JIT startup."
+    - "Use the staged /model tokenizer as the single AIPerf tokenizer argument, avoiding a duplicate Click option while keeping AgentX setup independent of the shared Hugging Face cache."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2624

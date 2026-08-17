@@ -2007,10 +2007,10 @@ build_replay_cmd() {
     REPLAY_CMD+=" --model ${SERVED_MODEL_NAME:-$MODEL}"
     # aiperf's dataset manager resolves the tokenizer from --model by
     # default, but a SERVED_MODEL_NAME override (above) is a wire name, not
-    # necessarily a valid HF repo id (e.g. "Qwen3.5-397B-A17B-NVFP4-V2" vs
-    # the real "nvidia/Qwen3.5-397B-A17B-NVFP4-V2"), which 404s tokenizer
-    # loading. Always pass the real HF id explicitly.
-    REPLAY_CMD+=" --tokenizer $MODEL"
+    # necessarily a valid HF repo id. Prefer a staged checkpoint when the
+    # recipe provides one; otherwise pass the real HF model ID. Emit exactly
+    # one --tokenizer option because Click rejects duplicate occurrences.
+    REPLAY_CMD+=" --tokenizer ${INFMAX_AIPERF_TOKENIZER:-$MODEL}"
     REPLAY_CMD+=" --concurrency $CONC"
     REPLAY_CMD+=" --benchmark-duration $duration"
     REPLAY_CMD+=" --stats-interval 30"
@@ -2081,11 +2081,6 @@ build_replay_cmd() {
     # from vLLM) is unaffected by this flag and still gives us KV usage,
     # prefix cache hit rate, etc.
     REPLAY_CMD+=" --no-gpu-telemetry"
-    # A staged checkpoint can provide the tokenizer without touching the
-    # shared Hugging Face cache. This is required for local-dir model mounts.
-    if [[ -n "${INFMAX_AIPERF_TOKENIZER:-}" ]]; then
-        REPLAY_CMD+=" --tokenizer $INFMAX_AIPERF_TOKENIZER"
-    fi
     # aiperf's dataset manager (separate from the inference parser) loads
     # the model's tokenizer for trace-prompt tokenization regardless of
     # --use-server-token-count. Models like kimi (amd/Kimi-K2.5-MXFP4,
