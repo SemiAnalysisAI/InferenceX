@@ -90,6 +90,8 @@ backend:
       ep-size: 4
       enable-dp-attention: true
       enable-dp-lm-head: true
+      enable-prefill-delayer: true
+      prefill-delayer-max-delay-passes: 30
       moe-dense-tp-size: 1
       load-balance-method: total_tokens
       moe-a2a-backend: megamoe
