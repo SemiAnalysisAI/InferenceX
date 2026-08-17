@@ -18,6 +18,8 @@ SHARED_RESULTS="${SHARED_BASE}/results"
 : "${CONFIG_FILE:?CONFIG_FILE must name an srt-slurm recipe}"
 : "${MODEL:?MODEL must identify the Hugging Face model}"
 
+MODEL_CACHE_KEY="models--${MODEL//\//--}"
+
 CONFIG_PATH="${CONFIG_FILE%%:*}"
 LOCAL_RECIPE="${GITHUB_WORKSPACE}/benchmarks/multi_node/srt-slurm-recipes/${CONFIG_PATH#recipes/}"
 CLUSTER_PROFILE="${GITHUB_WORKSPACE}/benchmarks/multi_node/srt-slurm-recipes/cluster-configs/mi355x-amds.yaml"
@@ -29,9 +31,11 @@ WORK_DIR="${GITHUB_WORKSPACE}/.srt-slurm-${RUN_KEY}"
 SRT_REPO_DIR="${WORK_DIR}/srt-slurm"
 mkdir -p "$WORK_DIR" "$SHARED_RESULTS"
 
-# Materialize one immutable, shared squashfs and the small public validation
-# model. This job exits normally and never cancels or preempts another job.
-# The shared lock makes concurrent aggregate/disaggregated validations safe.
+# Materialize one immutable, shared squashfs and the requested model. Older
+# MI355X jobs populated Hugging Face's cache directly under SHARED_HF_CACHE;
+# expose a complete legacy cache through the current $HF_HOME/hub layout before
+# snapshot_download so large production checkpoints are reused without copies.
+# This job exits normally and never cancels or preempts another job.
 STAGE_SCRIPT="${WORK_DIR}/stage-mi355x-runtime.sbatch"
 cat > "$STAGE_SCRIPT" <<EOF
 #!/usr/bin/env bash
@@ -59,6 +63,15 @@ if ! unsquashfs -s "$SHARED_IMAGE" >/dev/null 2>&1; then
     mv "\$tmp" "$SHARED_IMAGE"
 fi
 flock -u 9
+mkdir -p "$SHARED_HF_CACHE/hub"
+exec 8>"$SHARED_HF_CACHE/.${MODEL_CACHE_KEY}.stage.lock"
+flock -w 2400 8
+legacy_model_dir="$SHARED_HF_CACHE/${MODEL_CACHE_KEY}"
+canonical_model_dir="$SHARED_HF_CACHE/hub/${MODEL_CACHE_KEY}"
+if [[ ! -e "\$canonical_model_dir" && -f "\$legacy_model_dir/refs/main" && -d "\$legacy_model_dir/snapshots" ]]; then
+    ln -s "../${MODEL_CACHE_KEY}" "\$canonical_model_dir"
+fi
+flock -u 8
 srun --nodes=1 --ntasks=1 \
     --container-image="$SHARED_IMAGE" \
     --container-mounts="$SHARED_HF_CACHE:/hf_hub_cache" \

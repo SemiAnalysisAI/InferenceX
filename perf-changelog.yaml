@@ -6547,4 +6547,5 @@
     - "Run all five points in one eight-hour Slurm allocation through the unchanged benchmark_serving.py custom benchmark."
     - "Use the existing lmsysorg/sglang:v0.5.16-rocm720-mi35x image, FP8 KV cache, and AITer attention settings."
     - "Pin the launcher to the exact SemiAnalysisAI/srt-slurm PR #7 revision used for validation."
+    - "Reuse validated MI355X Hugging Face cache trees through the standard $HF_HOME/hub layout under a per-model lock."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2628
