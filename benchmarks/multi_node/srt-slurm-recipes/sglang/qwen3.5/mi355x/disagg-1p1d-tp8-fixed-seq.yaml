@@ -20,7 +20,7 @@ identity:
     amd-mori: "0.5.17.dev20260809+g7120f3ee13"
 
 slurm:
-  time_limit: "02:00:00"
+  time_limit: "08:00:00"
 
 # This topology owns every GPU on each MI355X node. Give SGLang the complete
 # 128-core cpuset as well: its ROCm image enables per-GPU CPU affinity, which
@@ -118,27 +118,32 @@ benchmark:
     result_root="/results/${SLURM_JOB_ID}"
     mkdir -p "${result_root}/fixed-seq"
     trap 'tar -C /logs -czf "'"${result_root}"'/runtime-logs.tar.gz" . 2>/dev/null || true' EXIT
-    concurrency=8
-    python3 /infmax-workspace/utils/bench_serving/benchmark_serving.py \
-      --backend openai-chat \
-      --base-url "http://${SRT_FRONTEND_HOST}:${SRT_FRONTEND_PORT}" \
-      --endpoint /v1/chat/completions \
-      --model Qwen/Qwen3.5-397B-A17B-FP8 \
-      --tokenizer Qwen/Qwen3.5-397B-A17B-FP8 \
-      --dataset-name random \
-      --random-input-len 8192 \
-      --random-output-len 1024 \
-      --random-range-ratio 1.0 \
-      --random-num-workers 1 \
-      --num-warmups "${concurrency}" \
-      --num-prompts "$((concurrency * 2))" \
-      --max-concurrency "${concurrency}" \
-      --request-rate inf \
-      --ignore-eos \
-      --disable-tqdm \
-      --save-result \
-      --result-dir "${result_root}/fixed-seq" \
-      --result-filename "qwen3.5-fp8-disagg-isl8192-osl1024-c${concurrency}.json"
+    for concurrency in 8 16 32 64 128; do
+      num_prompts=$((concurrency * 10))
+      if ((num_prompts < 16)); then
+        num_prompts=16
+      fi
+      python3 /infmax-workspace/utils/bench_serving/benchmark_serving.py \
+        --backend openai-chat \
+        --base-url "http://${SRT_FRONTEND_HOST}:${SRT_FRONTEND_PORT}" \
+        --endpoint /v1/chat/completions \
+        --model Qwen/Qwen3.5-397B-A17B-FP8 \
+        --tokenizer Qwen/Qwen3.5-397B-A17B-FP8 \
+        --dataset-name random \
+        --random-input-len 8192 \
+        --random-output-len 1024 \
+        --random-range-ratio 1.0 \
+        --random-num-workers 1 \
+        --num-warmups "$((concurrency * 2))" \
+        --num-prompts "${num_prompts}" \
+        --max-concurrency "${concurrency}" \
+        --request-rate inf \
+        --ignore-eos \
+        --disable-tqdm \
+        --save-result \
+        --result-dir "${result_root}/fixed-seq" \
+        --result-filename "qwen3.5-fp8-disagg-isl8192-osl1024-c${concurrency}.json"
+    done
   env:
     HF_HOME: /hf_hub_cache
     HF_HUB_CACHE: /hf_hub_cache/hub
