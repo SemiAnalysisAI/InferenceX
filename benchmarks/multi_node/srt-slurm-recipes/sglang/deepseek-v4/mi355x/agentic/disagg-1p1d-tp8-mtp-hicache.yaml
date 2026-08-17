@@ -104,7 +104,9 @@ backend:
       trust-remote-code: true
       tp-size: 8
       watchdog-timeout: 3600
-      load-balance-method: round_robin
+      # Let SGLang choose the role-correct PD policy: follow_bootstrap_room on
+      # prefill workers and round_robin on decode workers.
+      load-balance-method: auto
       kv-cache-dtype: fp8_e4m3
       attention-backend: dsv4
       page-size: 256
