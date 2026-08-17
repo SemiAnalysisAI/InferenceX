@@ -73,7 +73,9 @@ backend:
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro-DSpark"
       trust-remote-code: true
       enable-metrics: true
-      mem-fraction-static: 0.90
+      # Leave activation headroom for 8K/rank chunked prefill; 0.90 OOMs
+      # under the c128 AgentX warmup while 0.85 completes the full run.
+      mem-fraction-static: 0.85
       swa-full-tokens-ratio: 0.02
       chunked-prefill-size: 65536
       max-prefill-tokens: 8192
