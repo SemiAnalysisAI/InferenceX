@@ -407,10 +407,6 @@ export VLLM_ROCM_USE_AITER_MOE=1
 export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
 export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS="${VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS:-1200}"
 
-# The local TP8 reproduction runs intentionally used the Triton sparse-decode
-# path from the image, not the diagnostic sparse probe or the experimental Gluon
-# sparse-decode override. Clear these here so runner environment residue cannot
-# silently switch the recipe away from the published flags.
 unset VLLM_ROCM_DSV4_SPARSE_GLUON
 unset DSV4_SPARSE_WORKLOAD_PROBE
 unset DSV4_SPARSE_WORKLOAD_PROBE_INTERVAL

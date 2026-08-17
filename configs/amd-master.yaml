@@ -1267,11 +1267,6 @@ qwen3.5-fp8-mi325x-sglang-mtp:
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
 
-# MTP twin of dsv4-fp4-mi355x-vllm-agentic. This pins the 2026-08-17 ROCm
-# nightly that contains the DSv4 384-shard fix, Triton sparse-decode path, and
-# ROCm MRV1/wide-eager regression fix needed by the local AgentX reproduction
-# flags. Throughput uses the three-token golden synthetic acceptance length,
-# while eval-only runs retain real verification.
 dsv4-fp4-mi355x-vllm-agentic-mtp:
   image: vllm/vllm-openai-rocm:nightly-311b3513af33bc29b4acb2fde2e9313e5e9966a0
   model: deepseek-ai/DeepSeek-V4-Pro
