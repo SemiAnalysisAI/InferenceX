@@ -6044,5 +6044,4 @@
     - qwen3.5-fp8-mi355x-sglang-disagg
   description:
     - "Bump qwen3.5-fp8-mi355x-sglang-disagg image from v0.5.14 to v0.5.16 (3-5% throughput improvement) and switch from TP8P+TP8D (16 GPU) to TP4P+TP8D (12 GPU) — TP4 prefill delivers identical decode interactivity with 24-31% better throughput/GPU."
-    - "Infra: add docker_sg.sh wrapper and update job.slurm DOCKER_CMD_DETECT to use sg-docker fallback for nodes where Slurm doesn't activate the docker supplementary group."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2606

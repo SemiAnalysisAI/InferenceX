@@ -246,11 +246,7 @@ SELECTED_NODELIST_STR=$(echo "$SELECTED_NODES" | tr '\n' ',' | sed 's/,$//')
 
 # Docker privilege detection — evaluated per-node since group membership varies.
 # Exported as a snippet so every srun participant resolves it locally.
-# Order: (1) plain docker if the socket is reachable; (2) sg-docker wrapper if the
-# user is a docker-group member but Slurm didn't activate the group in the step's
-# credentials (common here); (3) sudo docker as a last resort.
-SG_DOCKER_WRAPPER="${DI_REPO_DIR}/benchmarks/multi_node/amd_utils/docker_sg.sh"
-export DOCKER_CMD_DETECT="if docker ps &>/dev/null 2>&1; then DOCKER_CMD=docker; elif sg docker -c 'docker ps' &>/dev/null 2>&1; then DOCKER_CMD='${SG_DOCKER_WRAPPER}'; else DOCKER_CMD='sudo docker'; fi"
+export DOCKER_CMD_DETECT='if docker ps &>/dev/null 2>&1; then DOCKER_CMD=docker; else DOCKER_CMD="sudo docker"; fi'
 
 # Update SLURM environment variables
 export SLURM_NNODES=$NUM_NODES
@@ -386,7 +382,7 @@ cleanup() {
   # on every allocated node. Scoped to $DOCKER_CONT_NAME so it never touches
   # other users' containers. (Ported from InferenceY 51ebfa88.)
   srun --nodelist="$SELECTED_NODELIST_SRUN" \
-    bash -c 'eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD rm -f '"$DOCKER_CONT_NAME"' 2>/dev/null || true; _pid=$($DOCKER_CMD inspect --format "{{.State.Pid}}" '"$DOCKER_CONT_NAME"' 2>/dev/null || true); if [ -n "$_pid" ] && [ "$_pid" != "0" ]; then sudo kill -9 "$_pid" 2>/dev/null || true; sleep 2; $DOCKER_CMD rm -f '"$DOCKER_CONT_NAME"' 2>/dev/null || true; fi' 2>/dev/null || true
+    bash -c 'eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD rm -f '"$DOCKER_CONT_NAME"' 2>/dev/null || true' 2>/dev/null || true
   rm -rf ${SLURM_SUBMIT_DIR}/logs 2>/dev/null || true
   echo "[${SLURM_JOB_ID}] cleanup done."
 }
@@ -588,14 +584,6 @@ if [[ -n "${CLIENT_IMAGE:-}" ]]; then
     srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c 'eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD pull '"$CLIENT_IMAGE"' >/dev/null 2>&1 || true' 2>/dev/null || true
 fi
 
-# Pre-pull the main Docker image on every node so the container creation
-# barrier (300s) doesn't race against a multi-GB image download on nodes
-# where the image isn't cached. Best-effort: failure here is non-fatal
-# since docker run will pull as a fallback.
-echo "[pre-pull] Pulling $DOCKER_IMAGE_NAME on all nodes..."
-srun --nodelist="$SELECTED_NODELIST_SRUN" \
-  bash -c 'eval "$DOCKER_CMD_DETECT"; echo "[pre-pull] $(hostname): pulling..."; $DOCKER_CMD pull '"$DOCKER_IMAGE_NAME"' && echo "[pre-pull] $(hostname): done" || echo "[pre-pull] $(hostname): pull failed (will retry on docker run)"' || true
-
 srun \
   --nodelist="$SELECTED_NODELIST_SRUN" \
   --kill-on-bad-exit=1 \
@@ -693,23 +681,6 @@ fi  # end: if ENGINE == atom-disagg
 \$DOCKER_CMD ps -aq --filter \"$CONT_FILTER\" | xargs -r \$DOCKER_CMD rm -f || true
 \$DOCKER_CMD ps -aq | xargs -r \$DOCKER_CMD stop -t 15 || true
 \$DOCKER_CMD ps -aq | xargs -r \$DOCKER_CMD rm -f || true
-
-# Fallback for stuck containers: if docker rm -f fails (\"did not receive an
-# exit event\"), the container's shim/init PID is stuck in uninterruptible
-# sleep (common after a GPU hang). Kill the container PIDs directly so the
-# daemon can clean up the cgroup and release GPU VRAM.
-_stuck=\$(\$DOCKER_CMD ps -aq 2>/dev/null || true)
-if [[ -n \"\$_stuck\" ]]; then
-    echo \"[pre-clean] containers still present after docker rm -f; attempting direct PID kill\"
-    for _cid in \$_stuck; do
-        _pid=\$(\$DOCKER_CMD inspect --format '{{.State.Pid}}' \"\$_cid\" 2>/dev/null || true)
-        if [[ -n \"\$_pid\" && \"\$_pid\" != \"0\" ]]; then
-            sudo kill -9 \"\$_pid\" 2>/dev/null || true
-        fi
-    done
-    sleep 3
-    \$DOCKER_CMD ps -aq | xargs -r \$DOCKER_CMD rm -f 2>/dev/null || true
-fi
 sleep 2
 
 # GPU sanity gate: containers are stopped, so any remaining VRAM use is a bare
@@ -807,20 +778,7 @@ exit \$DOCKER_EXIT_CODE
 "
 
 if [[ "${KEEP_CONTAINERS}" != "1" ]]; then
-    srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c '
-        eval "$DOCKER_CMD_DETECT"
-        for _cont in '"$DOCKER_CONT_NAME"' '"$CLIENT_CONT_NAME"'; do
-            $DOCKER_CMD rm -f "$_cont" 2>/dev/null || true
-            if $DOCKER_CMD inspect "$_cont" &>/dev/null; then
-                _pid=$($DOCKER_CMD inspect --format "{{.State.Pid}}" "$_cont" 2>/dev/null || true)
-                if [ -n "$_pid" ] && [ "$_pid" != "0" ]; then
-                    sudo kill -9 "$_pid" 2>/dev/null || true
-                    sleep 2
-                    $DOCKER_CMD rm -f "$_cont" 2>/dev/null || true
-                fi
-            fi
-        done
-    ' || true
+    srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c 'eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD rm -f '"$DOCKER_CONT_NAME"' '"$CLIENT_CONT_NAME"' 2>/dev/null || true'
 
     # Clean up vLLM external router container on node 0
     if [[ "$ENGINE" == "vllm-disagg" && "$ROUTER_TYPE" == "vllm-router" ]]; then
