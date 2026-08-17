@@ -52,6 +52,7 @@ def base_env_vars():
         "DISAGG": "false",
         "MODEL_PREFIX": "dsr1",
         "IMAGE": "test-image",
+        "RECIPE_FINGERPRINT": "a" * 64,
     }
 
 
@@ -215,6 +216,7 @@ class TestProcessResultScript:
         assert output_data["isl"] == 1024
         assert output_data["osl"] == 1024
         assert output_data["disagg"] is False
+        assert output_data["recipe_fingerprint"] == "a" * 64
 
         # Verify single-node specific fields
         assert output_data["is_multinode"] is False
@@ -1224,6 +1226,8 @@ class TestMultinodePower:
         assert agg["power_valid"] == 1
         assert agg["prefill_gpu_energy_j"] == 48000.0
         assert agg["decode_gpu_energy_j"] == 36000.0
+        assert agg["prefill_avg_power_w"] == 400.0
+        assert agg["decode_avg_power_w"] == 300.0
         assert (tmp_path / "power_validation_benchmark_result.json").is_file()
 
     def test_missing_package_is_best_effort(self, tmp_path, power_env):

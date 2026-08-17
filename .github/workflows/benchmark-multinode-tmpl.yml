@@ -37,6 +37,11 @@ on:
       exp-name:
         required: true
         type: string
+      recipe-fingerprint:
+        description: "Deterministic generated-recipe identity"
+        required: false
+        type: string
+        default: ''
       isl:
         required: true
         type: string
@@ -217,6 +222,7 @@ env:
   # once; sbatch/srun inherit this env so the token reaches the workers.
   HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
   EXP_NAME: ${{ inputs.exp-name }}
+  RECIPE_FINGERPRINT: ${{ inputs.recipe-fingerprint }}
   IMAGE: ${{ inputs.image }}
   MODEL_PREFIX: ${{ inputs.model-prefix }}
   MODEL: ${{ inputs.model }}
@@ -336,10 +342,13 @@ jobs:
         env:
           RUNNER_NAME: ${{ runner.name }}
           RUNNER_TYPE: ${{ inputs.runner }}
-          # Hash uniquely on all prefill/decode parallelism fields, worker counts, serving mode, concurrency, and runner.
-          RESULT_FILENAME: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_prefill-tp${{ env.PREFILL_TP }}-pp${{ env.PREFILL_PP_SIZE }}-dcp${{ env.PREFILL_DCP_SIZE }}-pcp${{ env.PREFILL_PCP_SIZE }}-ep${{ env.PREFILL_EP }}-dp${{ env.PREFILL_DP_ATTN }}-nw${{ env.PREFILL_NUM_WORKERS }}_decode-tp${{ env.DECODE_TP }}-pp${{ env.DECODE_PP_SIZE }}-dcp${{ env.DECODE_DCP_SIZE }}-pcp${{ env.DECODE_PCP_SIZE }}-ep${{ env.DECODE_EP }}-dp${{ env.DECODE_DP_ATTN }}-nw${{ env.DECODE_NUM_WORKERS }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ join(fromJson(inputs.conc-list), 'x') }}_${{ runner.name }}
+          RESULT_FILENAME_BASE: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_prefill-tp${{ env.PREFILL_TP }}-pp${{ env.PREFILL_PP_SIZE }}-dcp${{ env.PREFILL_DCP_SIZE }}-pcp${{ env.PREFILL_PCP_SIZE }}-ep${{ env.PREFILL_EP }}-dp${{ env.PREFILL_DP_ATTN }}-nw${{ env.PREFILL_NUM_WORKERS }}_decode-tp${{ env.DECODE_TP }}-pp${{ env.DECODE_PP_SIZE }}-dcp${{ env.DECODE_DCP_SIZE }}-pcp${{ env.DECODE_PCP_SIZE }}-ep${{ env.DECODE_EP }}-dp${{ env.DECODE_DP_ATTN }}-nw${{ env.DECODE_NUM_WORKERS }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ join(fromJson(inputs.conc-list), 'x') }}_${{ runner.name }}
         run: |
           set -x
+          export RESULT_FILENAME="$RESULT_FILENAME_BASE"
+          if [ -n "$RECIPE_FINGERPRINT" ]; then
+            export RESULT_FILENAME="${RESULT_FILENAME}_recipe-${RECIPE_FINGERPRINT:0:16}"
+          fi
           # Export RESULT_FILENAME early so it's available for artifact uploads even if cancelled
           echo "RESULT_FILENAME=${RESULT_FILENAME}" >> "$GITHUB_ENV"
 
@@ -467,7 +476,7 @@ jobs:
         if: ${{ always() && (env.RUN_EVAL == 'true' || inputs.eval-only) }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: eval_${{ env.EXP_NAME }}_${{ env.RESULT_FILENAME }}
+          name: eval_${{ env.RESULT_FILENAME }}
           path: |
             meta_env.json
             results*.json

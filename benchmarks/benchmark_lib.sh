@@ -343,37 +343,36 @@ check_env_vars() {
     fi
 }
 
-# Wait for server to be ready by polling the health endpoint
-# All parameters are required
-# Parameters:
-#   --port: Server port
-#   --server-log: Path to server log file
-#   --server-pid: Server process ID (required)
-#   --sleep-interval: Sleep interval between health checks (optional, default: 5)
-wait_for_server_ready() {
+# Poll an HTTP endpoint while streaming the owning process log.
+# Required: --endpoint, --log, --pid. A zero timeout waits indefinitely.
+wait_for_ready() {
     set +x
-    local port=""
-    local server_log=""
-    local server_pid=""
+    local endpoint=""
+    local process_log=""
+    local process_pid=""
     local sleep_interval=5
+    local timeout=0
 
-    # Parse arguments
     while [[ $# -gt 0 ]]; do
         case $1 in
-            --port)
-                port="$2"
+            --endpoint)
+                endpoint="$2"
                 shift 2
                 ;;
-            --server-log)
-                server_log="$2"
+            --log)
+                process_log="$2"
                 shift 2
                 ;;
-            --server-pid)
-                server_pid="$2"
+            --pid)
+                process_pid="$2"
                 shift 2
                 ;;
             --sleep-interval)
                 sleep_interval="$2"
+                shift 2
+                ;;
+            --timeout)
+                timeout="$2"
                 shift 2
                 ;;
             *)
@@ -383,41 +382,112 @@ wait_for_server_ready() {
         esac
     done
 
-    # Validate required parameters
-    if [[ -z "$port" ]]; then
-        echo "Error: --port is required"
+    if [[ -z "$endpoint" ]]; then
+        echo "Error: --endpoint is required"
         return 1
     fi
-    if [[ -z "$server_log" ]]; then
-        echo "Error: --server-log is required"
+    if [[ -z "$process_log" ]]; then
+        echo "Error: --log is required"
         return 1
     fi
-    if [[ -z "$server_pid" ]]; then
-        echo "Error: --server-pid is required"
+    if [[ -z "$process_pid" ]]; then
+        echo "Error: --pid is required"
+        return 1
+    fi
+    if [[ ! "$sleep_interval" =~ ^[1-9][0-9]*$ ]]; then
+        echo "Error: --sleep-interval must be a positive integer"
+        return 1
+    fi
+    if [[ ! "$timeout" =~ ^[0-9]+$ ]]; then
+        echo "Error: --timeout must be a non-negative integer"
         return 1
     fi
 
-    # Wait for server log file to be created (container startup may delay this)
-    while [ ! -f "$server_log" ]; do
-        if ! kill -0 "$server_pid" 2>/dev/null; then
-            echo "Server died before creating log file. Exiting."
+    local deadline=0
+    if [[ "$timeout" -gt 0 ]]; then
+        deadline=$((SECONDS + timeout))
+    fi
+
+    while [[ ! -f "$process_log" ]]; do
+        if ! kill -0 "$process_pid" 2>/dev/null; then
+            echo "Process died before creating $process_log." >&2
+            exit 1
+        fi
+        if [[ "$deadline" -gt 0 && "$SECONDS" -ge "$deadline" ]]; then
+            echo "Timed out waiting for $endpoint." >&2
             exit 1
         fi
         sleep 1
     done
 
-    # Show logs until server is ready
-    tail -f -n +1 "$server_log" &
-    local TAIL_PID=$!
-    until curl --output /dev/null --silent --fail http://0.0.0.0:$port/health; do
-        if ! kill -0 "$server_pid" 2>/dev/null; then
-            echo "Server died before becoming healthy. Exiting."
-            kill $TAIL_PID
+    tail -f -n +1 "$process_log" &
+    local tail_pid=$!
+    until curl --output /dev/null --silent --fail "$endpoint"; do
+        if ! kill -0 "$process_pid" 2>/dev/null; then
+            echo "Process died before $endpoint became ready." >&2
+            kill "$tail_pid" 2>/dev/null || true
+            exit 1
+        fi
+        if [[ "$deadline" -gt 0 && "$SECONDS" -ge "$deadline" ]]; then
+            echo "Timed out waiting for $endpoint." >&2
+            kill "$tail_pid" 2>/dev/null || true
             exit 1
         fi
         sleep "$sleep_interval"
     done
-    kill $TAIL_PID
+    kill "$tail_pid" 2>/dev/null || true
+    wait "$tail_pid" 2>/dev/null || true
+}
+
+wait_for_server_ready() {
+    local port=""
+    local server_log=""
+    local server_pid=""
+    local sleep_interval=5
+
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --port) port="$2"; shift 2 ;;
+            --server-log) server_log="$2"; shift 2 ;;
+            --server-pid) server_pid="$2"; shift 2 ;;
+            --sleep-interval) sleep_interval="$2"; shift 2 ;;
+            *) echo "Unknown parameter: $1"; return 1 ;;
+        esac
+    done
+
+    if [[ -z "$port" || -z "$server_log" || -z "$server_pid" ]]; then
+        echo "Error: --port, --server-log, and --server-pid are required"
+        return 1
+    fi
+
+    wait_for_ready \
+        --endpoint "http://0.0.0.0:${port}/health" \
+        --log "$server_log" \
+        --pid "$server_pid" \
+        --sleep-interval "$sleep_interval"
+}
+
+# Persist an argv array in shell-replayable form.
+write_command() {
+    local output_file="$1"
+    shift
+    printf '%q ' "$@" | tee "$output_file"
+    printf '\n' | tee -a "$output_file"
+}
+
+append_command() {
+    local output_file="$1"
+    shift
+    printf '%q ' "$@" >> "$output_file"
+    printf '\n' >> "$output_file"
+}
+
+# Persist an argv array in shell-replayable form.
+write_command() {
+    local output_file="$1"
+    shift
+    printf '%q ' "$@" | tee "$output_file"
+    printf '\n' | tee -a "$output_file"
 }
 
 # Run benchmark serving with standardized parameters
@@ -1150,6 +1220,7 @@ _write_lm_eval_meta_json() {
   "framework": "${fw:-unknown}",
   "precision": "${prec:-unknown}",
   "spec_decoding": "${SPEC_DECODING:-}",
+  "recipe_fingerprint": "${RECIPE_FINGERPRINT:-}",
   "tp": ${TP:-1},
   "pp": ${PP_SIZE:-1},
   "dcp_size": ${DCP_SIZE:-1},
@@ -1929,7 +2000,17 @@ build_replay_cmd() {
     REPLAY_CMD+=" --endpoint /v1/chat/completions"
     REPLAY_CMD+=" --endpoint-type chat"
     REPLAY_CMD+=" --streaming"
-    REPLAY_CMD+=" --model $MODEL"
+    # SERVED_MODEL_NAME overrides $MODEL when the frontend registers the
+    # model under a different name than the recipe's model.path alias (e.g.
+    # dynamo-trt srt-slurm recipes serve "DeepSeek-V4-Pro" while $MODEL is
+    # the HF id "deepseek-ai/DeepSeek-V4-Pro"). Mismatches 404 at warmup.
+    REPLAY_CMD+=" --model ${SERVED_MODEL_NAME:-$MODEL}"
+    # aiperf's dataset manager resolves the tokenizer from --model by
+    # default, but a SERVED_MODEL_NAME override (above) is a wire name, not
+    # necessarily a valid HF repo id (e.g. "Qwen3.5-397B-A17B-NVFP4-V2" vs
+    # the real "nvidia/Qwen3.5-397B-A17B-NVFP4-V2"), which 404s tokenizer
+    # loading. Always pass the real HF id explicitly.
+    REPLAY_CMD+=" --tokenizer $MODEL"
     REPLAY_CMD+=" --concurrency $CONC"
     REPLAY_CMD+=" --benchmark-duration $duration"
     REPLAY_CMD+=" --stats-interval 30"
@@ -1968,6 +2049,9 @@ build_replay_cmd() {
     # CPU on minimax-m2.5 at high concurrency. Lossless for vLLM (server
     # usage is authoritative).
     REPLAY_CMD+=" --use-server-token-count"
+    if [ -n "${AIPERF_EXTRA_INPUTS:-}" ]; then
+        REPLAY_CMD+=" --extra-inputs $AIPERF_EXTRA_INPUTS"
+    fi
     # Dynamo's KV router needs an explicit conversation session binding to
     # keep later turns on the prefill worker that owns their prefix blocks.
     # X-Correlation-ID is useful tracing metadata but does not establish that
