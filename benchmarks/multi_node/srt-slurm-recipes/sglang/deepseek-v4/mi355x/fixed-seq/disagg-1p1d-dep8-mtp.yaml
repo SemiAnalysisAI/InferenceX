@@ -118,7 +118,10 @@ backend:
       speculative-num-draft-tokens: 2
       log-level: info
       log-level-http: error
-      context-length: 9217
+      # The DSV4 chat encoder adds three framing tokens to the nominal 8192
+      # prompt. Match the workflow's 9472-token admission budget so the full
+      # 1024-token completion fits (8195 + 1024) instead of being rejected.
+      context-length: 9472
       enable-metrics: true
       enable-cache-report: true
       mem-fraction-static: 0.80

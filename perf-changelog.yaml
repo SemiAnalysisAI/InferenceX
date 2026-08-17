@@ -5826,4 +5826,5 @@
     - "Preserve two-step EAGLE MTP on TP8 and one-step EAGLE MTP on DEP8, with the native SGLang Router frontend and AMD MoRI KV/MoE transport."
     - "Use the runtime-verified lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260719 image and the exact srt-slurm commit c609754b5622f96d5c12a93149e245308d4f1e9b inherited from the validated DeepSeek V4 AgentX port."
     - "Run fixed 8192-input/1024-output random workloads through the unchanged utils/bench_serving/benchmark_serving.py custom benchmark and remove the superseded dsv4_fp4_mi355x_sglang-disagg.sh wrapper."
+    - "Set both MTP server roles to the workflow's 9472-token admission budget: DeepSeek V4 chat encoding adds three framing tokens, so the prior 9217 limit rejected every 8195-input/1024-output request before inference."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2630
