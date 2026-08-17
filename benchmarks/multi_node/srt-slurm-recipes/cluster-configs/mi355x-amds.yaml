@@ -24,6 +24,9 @@ default_mounts:
   /dev/kfd: /dev/kfd
   /dev/dri: /dev/dri
   /it-share/hf-hub-cache: /hf_hub_cache
+  # Legacy production checkpoints live here. The launcher may expose one as a
+  # zero-copy seed under the canonical /hf_hub_cache/hub layout.
+  /it-share/hf_home: /it-share/hf_home
   # The launcher appends the exact shared workspace and result roots.
 
 containers:

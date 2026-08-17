@@ -5798,3 +5798,16 @@
     - "Pin the launcher to SemiAnalysisAI/srt-slurm c609754b so native-router endpoint registration and AMD orchestration match the current integration branch."
     - "Reuse validated legacy MI355X Hugging Face cache trees through the standard $HF_HOME/hub layout under a per-model lock, avoiding duplicate production-checkpoint downloads or copies."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2628
+
+- config-keys:
+    - dsr1-fp8-mi355x-sglang-disagg
+    - dsr1-fp8-mi355x-sglang-disagg-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Replace the DeepSeek-R1 FP8 model-specific amd_utils launcher with native srt-slurm orchestration using SGLang Router and AMD MoRI on MI355X."
+    - "Preserve all six production STP/MTP topology families and every original 8k1k point: 2P1D DEP8/DPA at c1024/c2048, 1P2D TP8 at c4-c256 for STP and c2-c256 for MTP2, and 1P1D TP4-to-TP8 at c1-c64."
+    - "Use the current lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260809 runtime, explicit role-specific MoRI dispatch limits, FP8 KV cache, AITer attention, and NEXTN draft depths matching the former MTP configurations."
+    - "Run the repository's unchanged benchmark_serving.py through srt-slurm's custom benchmark contract, with one allocation per topology to amortize model initialization across its concurrency sweep."
+    - "Expose the complete 163-shard legacy checkpoint as a zero-copy canonical Hugging Face cache seed rather than copying or downloading another 688.6 GB model tree."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2631
