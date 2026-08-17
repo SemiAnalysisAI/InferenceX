@@ -85,6 +85,10 @@ backend:
     SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "16384"
     SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "1800"
     SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "1800"
+    # The native router may select a different DPA rank from the rank encoded
+    # in bootstrap_room. Use SGLang's supported rank-query fallback so decode
+    # retrieves the actual prefill rank instead of rejecting the KV transfer.
+    SGLANG_DISAGGREGATION_FORCE_QUERY_PREFILL_DP_RANK: "1"
   decode_environment:
     <<: *common_environment
     SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "1024"
