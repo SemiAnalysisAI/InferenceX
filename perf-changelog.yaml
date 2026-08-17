@@ -5788,3 +5788,11 @@
     - "models.yaml: add mtp_flags (--speculative-algorithm EAGLE --speculative-eagle-topk 1) to DeepSeek-V4-Pro-AgentX; num-steps/num-draft-tokens are derived from DECODE_MTP_SIZE in server_sglang.sh. DeepSeek-V4's MTP head is a native NextN/EAGLE draft shipped with the model, so no --speculative-draft-model-path is needed."
     - "Two search-space arms: TP8/EP1 no-DP at conc-list [2,4,8,16,32], and TP8/EP8/DPA (ep=8, dp-attn=true) at conc-list [64,96,128], both on image lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260719."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2309
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-sglang-disagg
+  description:
+    - "Replace the model-specific amd_utils launcher with native srt-slurm orchestration using SGLang Router and AMD MoRI for the existing 1P1D TP8 MI355X topology."
+    - "Run the complete 8k1k c8/c16/c32/c64/c128 search space in one eight-hour Slurm allocation through the repository's unchanged benchmark_serving.py custom benchmark."
+    - "Use lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260809, retain FP8 KV cache and AITer attention, and remove the temporary duplicate qwen3.5-fp8-mi355x-sglang-srt-disagg config key."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2628
