@@ -1,13 +1,13 @@
 name: "agg-b300-dep8-mtp-kvoffload"
 
 model:
-  path: "deepseek-v4-pro-dspark"
+  path: "deepseek-v4-pro-0813"
   container: "dynamo-sglang"
   precision: "fp4"
 
 identity:
   model:
-    repo: "deepseek-ai/DeepSeek-V4-Pro-DSpark"
+    repo: "deepseek-ai/DeepSeek-V4-Pro-0813"
   container:
     image: "lmsysorg/sglang:nightly-dev-cu13-20260816-4a6dc267"
 
@@ -71,7 +71,7 @@ backend:
     SGLANG_OPT_USE_TOPK_V2: "1"
   sglang_config:
     aggregated:
-      served-model-name: "deepseek-ai/DeepSeek-V4-Pro-DSpark"
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro-0813"
       trust-remote-code: true
       enable-metrics: true
       # Leave activation headroom for 8K/rank chunked prefill; 0.90 OOMs
@@ -127,4 +127,3 @@ benchmark:
     AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
     AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
     AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
-    INFMAX_AIPERF_TOKENIZER: "/model"

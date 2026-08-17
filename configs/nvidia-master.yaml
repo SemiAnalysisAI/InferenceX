@@ -8666,7 +8666,7 @@ glm5.1-fp8-b200-tilert:
 
 dsv4-fp4-b300-dynamo-sglang-agentic-mtp-agg:
   image: lmsysorg/sglang:nightly-dev-cu13-20260816-4a6dc267
-  model: deepseek-ai/DeepSeek-V4-Pro-DSpark
+  model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:b300-nv
   precision: fp4
