@@ -375,7 +375,6 @@ DP_SCHED_ARGS=()
 if [ "$DP_ATTENTION" = "true" ]; then
     DP_SCHED_ARGS=(
         --prefill-schedule-interval 8
-        --max-num-batched-tokens 8192
         --long-prefill-token-threshold 16384
     )
 fi
@@ -407,13 +406,6 @@ export VLLM_ROCM_USE_AITER_MOE=1
 export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
 export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS="${VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS:-1200}"
 
-unset VLLM_ROCM_DSV4_SPARSE_GLUON
-unset DSV4_SPARSE_WORKLOAD_PROBE
-unset DSV4_SPARSE_WORKLOAD_PROBE_INTERVAL
-unset DSV4_SPARSE_WORKLOAD_PROBE_LAYER
-unset DSV4_SPARSE_WORKLOAD_PROBE_RANK
-unset DSV4_SPARSE_WORKLOAD_PROBE_PATH
-
 sleep 180
 
 { set +x; } 2>/dev/null
@@ -425,6 +417,7 @@ VLLM_CMD=(
     --async-scheduling
     --distributed-executor-backend mp
     --kv-cache-dtype fp8
+    --max-num-batched-tokens 8192
     "${PARALLEL_ARGS[@]}"
     "${EP_ARGS[@]}"
     "${DP_SCHED_ARGS[@]}"
