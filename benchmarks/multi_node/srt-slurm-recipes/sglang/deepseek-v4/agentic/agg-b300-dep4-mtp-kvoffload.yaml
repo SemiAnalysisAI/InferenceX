@@ -71,6 +71,7 @@ backend:
   sglang_config:
     aggregated:
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro-DSpark"
+      trust-remote-code: true
       enable-metrics: true
       # DSpark draft weights raise the measured minimum viable fraction to
       # 0.9258 on B300; use the same 0.94 fraction as the GB300 TP4 recipe.
