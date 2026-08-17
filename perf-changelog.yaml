@@ -5816,3 +5816,14 @@
   description:
     - "Update the B300 DSV4 AgentX MTP image and SimpleCPU sweep through c576."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2536
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-disagg
+    - dsv4-fp4-mi355x-sglang-disagg-mtp
+  description:
+    - "Port the production MI355X DeepSeek V4 fixed-sequence STP and MTP disaggregated search spaces from the model-specific AMD submit/helper stack to srt-slurm."
+    - "Preserve TP8 c1,c2,c4,c8,c16,c32,c64,c128 and DEP8/DPA c256,c512 for both STP and MTP; each of the four topology allocations now iterates its original concurrency points without reloading the model between points."
+    - "Preserve two-step EAGLE MTP on TP8 and one-step EAGLE MTP on DEP8, with the native SGLang Router frontend and AMD MoRI KV/MoE transport."
+    - "Use the runtime-verified lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260719 image and the exact srt-slurm commit c609754b5622f96d5c12a93149e245308d4f1e9b inherited from the validated DeepSeek V4 AgentX port."
+    - "Run fixed 8192-input/1024-output random workloads through the unchanged utils/bench_serving/benchmark_serving.py custom benchmark and remove the superseded dsv4_fp4_mi355x_sglang-disagg.sh wrapper."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2630
