@@ -6049,3 +6049,12 @@
     - "Add GB200 GLM-5.2 FP4 Dynamo-SGLang AgentX with EAGLE MTP, HiCache DRAM offload, and KV-aware correlation-ID affinity."
     - "Measure the TP8 aggregate curve and tuned 1P1D TP4 HiCache c10/c12 disaggregated frontier with every logical SGLang metrics endpoint."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2620
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Tune the GB300 SGLang AgentX aggregate low-concurrency frontier with TP8 concurrency 1/4 and TP4 concurrency 8 profiles."
+    - "Use phase-specific decode CUDA graph limits and throughput-only synthetic MTP acceptance; eval-only runs retain real target verification."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2644
