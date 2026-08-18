@@ -235,9 +235,15 @@ KVDTYPE_ARGS=(
 # the 273.6 GiB budget; vLLM's auto-sizer under-estimates the real prefill/verify
 # activation peak (MNBT chunks x up-to-64 concurrent 68k-token reqs + DSpark
 # verify buffers) and OOMs to "0 MB free". Prefix caching stores the ~64k prefix
-# ONCE (~350k KV tokens, ~6 GiB needed); pin KV to 32 GiB (~2M tokens, >5x) so a
-# large physical headroom remains for the activation peak. Do NOT touch gpu-mem.
-KV_CACHE_MEMORY="${KV_CACHE_MEMORY:-34359738368}"
+# ONCE (~350k KV tokens, ~6 GiB needed). The published MI355X dashboard arm
+# auto-sized ~2.80M GPU KV tokens; a 32 GiB pin (~2.02M after KDA padding waste)
+# saturated at conc 8 and prefix cache fell to ~77% aggregate (-2.6% tok/s/chip vs
+# published). Pin KV to 44.4 GiB (~2.80M tokens at 17,008 B/token) — validated on
+# MI355X DSpark c8 dev150: 3357 tok/s/chip (+11% vs published 3026), 91.6% prefix
+# hit, p90 ITL 42 ms, clean serve with no OOM. Spending activation headroom is
+# exactly what the old 32 GiB pin avoided; set KV_CACHE_MEMORY=34359738368 to revert
+# if the first long-context prefill OOMs. Do NOT touch gpu-mem.
+KV_CACHE_MEMORY="${KV_CACHE_MEMORY:-47691420128}"
 KVMEM_ARG=(); [ -n "$KV_CACHE_MEMORY" ] && KVMEM_ARG=(--kv-cache-memory "$KV_CACHE_MEMORY")
 
 # cudagraph capture sizes — pin explicitly so DSpark decode (M = TOKENS_PER_SEQ *

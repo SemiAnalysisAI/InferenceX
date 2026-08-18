@@ -6207,3 +6207,11 @@
     - "Use AITER INT4 quick-reduce, ptpc_fp8 online quantization excluding embeddings, lm_head, gates, and experts, an FP8 KV cache, and three-token MTP with golden synthetic acceptance length 2.99 for benchmark runs."
     - "Set max-num-seqs to twice the concurrency, select CUDA graph capture sizes by concurrency, and cap max-num-batched-tokens at 16384."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2576
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-dspark
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  description:
+    - "DSpark MTP default --kv-cache-memory pin moves 32 GiB (34359738368, ~2.02M GPU KV tokens after KDA padding) to 44.4 GiB (47691420128, ~2.80M tokens at 17,008 bytes/token), matching the published MI355X dashboard auto-size pool. The 32 GiB pin saturated prefix cache at agentic conc 8 (76.9% aggregate server prefix hit, 2948 tok/s/chip, -2.6% vs published 3026) because unique trajectories evicted shared-prefix blocks once GPU KV usage passed ~55%."
+    - "Exclusive-node A/B on dev150 nightly (311b3513), no offload, synth AL 2.51, 3600s: kv44 c8 n020 -> 3357 tok/s/chip (+11% vs published 3026), 91.6% prefix hit, p90 streamed ITL 42 ms, p90 interactivity 23.6; same image with recipe-default 32 GiB on n062 -> 2657 tok/s/chip, 69.6% prefix hit. Serve boot and full benchmark completed without OOM on kv44. Override KV_CACHE_MEMORY=34359738368 to revert; activation-peak OOM on the first long prefill remains the documented failure mode when headroom is insufficient."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2585
