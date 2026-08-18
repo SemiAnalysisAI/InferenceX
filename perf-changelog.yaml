@@ -6082,5 +6082,5 @@
     - agentic-coding
   description:
     - "DIAGNOSTIC ONLY, not for merge: unserialized control for the -serialize key on #2641. Byte-identical recipe and search space with AMD_SERIALIZE_KERNEL unset, run the same day on the same cluster, to test whether kernel serialization is what suppresses the MI355X hipErrorIllegalAddress. Uses the vllm-simple backend, which reproduces the crash with no LMCache involved."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PLACEHOLDER
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2655
 
