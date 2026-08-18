@@ -6076,3 +6076,19 @@
     - "Add GB200 DeepSeek-V4-Pro FP4 Dynamo-vLLM AgentX mirroring the GB300 PR #2571 MTP tuning, with every GB300 4-GPU worker sized to 8 GPUs on GB200."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2636
 
+- config-keys:
+    - dsv4-fp4-b200-dynamo-sglang
+  description:
+    - "Add a DeepSeek-V4-Pro FP4 Dynamo-SGLang STP configuration for B200 with ten 8k/1k disaggregated topologies."
+    - "Use Mooncake for KV transfer with raw synthetic benchmark inputs."
+    - "Image: lmsysorg/sglang:nightly-dev-cu13-20260708-b3632494"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2560
+
+- config-keys:
+    - dsv4-fp4-b200-dynamo-sglang
+  description:
+    - "Switch the DeepSeek-V4-Pro FP4 B200 Dynamo-SGLang STP recipes to NIXL KV transfer."
+    - "Refresh the SGLang image and Dynamo source revision, and align runtime environment flags with the updated image."
+    - "Use raw synthetic benchmark inputs across the ten disaggregated 8k/1k STP recipes."
+    - "Image: lmsysorg/sglang:nightly-dev-cu13-20260814-c4271c3f"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2560
