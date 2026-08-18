@@ -190,6 +190,13 @@ base:
 # topology-specific deltas explicit while the master config owns concurrency.
 zip_override_mtp_agentx_tp8:
   name: [agentx-1p1d-dep8-tp8-c4, agentx-1p1d-dep8-tp8-c8]
+  frontend:
+    num_additional_frontends: 4
+    nginx_session_affinity_header: X-Correlation-ID
+    env:
+      DYN_ROUTER_TEMPERATURE: '10000000'
+    args:
+      router-session-affinity-ttl-secs: 1200
   resources:
     decode_nodes: 2
     decode_workers: 1
