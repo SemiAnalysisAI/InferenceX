@@ -209,7 +209,9 @@ EOF
 esac
 
 PARALLEL_ARGS=(--tensor-parallel-size "$TP" --data-parallel-size 1)
-MODE_ARGS=()
+# Keep scheduler behavior stable across vLLM image defaults for every TP/DEP
+# submission point.
+MODE_ARGS=(--max-num-batched-tokens 8192)
 if [ "$DP_ATTENTION" = "true" ]; then
     PARALLEL_ARGS=(--tensor-parallel-size 1 --data-parallel-size "$TP")
     export PYTORCH_ALLOC_CONF=expandable_segments:True
@@ -223,12 +225,11 @@ if [ "$EP_SIZE" -gt 1 ]; then
     )
 fi
 if [ "$DP_ATTENTION" = "true" ]; then
-    # Keep B200's profiled activation footprint within the 0.90 GPU-memory
-    # budget; 16K prefill batches leave too little DeepGEMM runtime headroom.
+    # Chunk long prefills on DEP; the shared 8K token budget above also keeps
+    # its profiled activation footprint within the 0.90 GPU-memory budget.
     MODE_ARGS+=(
         --prefill-schedule-interval 8
         --long-prefill-token-threshold 512
-        --max-num-batched-tokens 8192
     )
 fi
 
