@@ -22,9 +22,7 @@ slurm:
   time_limit: "04:00:00"
 
 health_check:
-  # 360 x 10s = 1 hour. Loading and cudagraph capture complete in ~30 min when
-  # healthy, so a worker still absent at 1 hour is wedged, not slow.
-  max_attempts: 360
+  max_attempts: 720
   interval_seconds: 10
 
 resources:
@@ -57,12 +55,7 @@ backend:
       - "--eviction_ratio=0.10"
     store_config:
       metadata_server: "P2PHANDSHAKE"
-      # Per-rank segment: srt-slurm starts one embedded store client per vLLM
-      # worker, so the node total is 4 x this on a 4-GPU GB200 node. 128 GiB
-      # per rank = 512 GiB per node, matching the Kimi-K3 GB200 offload arm
-      # (agg-gb200-dep16-throughput-vllm-simple-offload-agentic.yaml) and the
-      # dram-utilization 0.61 budget declared in configs/nvidia-master.yaml.
-      global_segment_size: "128GB"
+      global_segment_size: "96GB"
       local_buffer_size: "4GB"
       protocol: "rdma"
       device_name: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
@@ -80,9 +73,6 @@ backend:
     VLLM_RPC_TIMEOUT: "600000"
     VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "0"
     VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: "0"
-    # Every other GB200 Kimi-K3 recipe sets this; it keeps large allocations
-    # from fragmenting HBM against the cudagraph pool.
-    PYTORCH_ALLOC_CONF: "expandable_segments:True"
     PYTHONNOUSERSITE: "1"
     TORCH_CUDA_ARCH_LIST: "10.0"
     PYTHONHASHSEED: "42"
@@ -104,9 +94,6 @@ backend:
       max-num-batched-tokens: 8192
       trust-remote-code: true
       language-model-only: true
-      # fastsafetensors stages shards on the GPU and OOMed loading the K3
-      # checkpoint on GB200 (run 32144394011); the lazy safetensors loader is
-      # slower but stays within HBM.
       load-format: "safetensors"
       safetensors-load-strategy: "lazy"
       moe-backend: "auto"
@@ -121,17 +108,8 @@ backend:
       # Throughput jobs inject the committed K=4 golden AL (3.36); EVAL_ONLY
       # preserves this real target-verification configuration.
       speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
-      # Capture sizes are tokens when drafting, and short prefills run on the
-      # captured graphs too, so the ladder has to reach well past the
-      # 2 x (1 + K=4) = 10 tokens a decode step needs. 512 keeps those
-      # prefills on graphs while dropping the tail above 512 that OOMed
-      # cudagraph capture on the no-spec arm (run 32144394011).
-      max-cudagraph-capture-size: 512
-      # Size the KV cache from the free-HBM profile instead of an explicit
-      # budget. Derated to 0.85 so the cudagraph pool, the FlashInfer MoE
-      # workspace and fragmentation keep room; at 0.92 the KV cache took
-      # 30.34 GiB and cudagraph capture OOMed (run 32144394011).
-      gpu-memory-utilization: 0.85
+      max-cudagraph-capture-size: 1024
+      kv-cache-memory: 10737418240
       kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false}}'
 
 sbatch_directives:

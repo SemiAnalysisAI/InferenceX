@@ -8125,10 +8125,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic:
           ep: 16
           dp-attn: true
 
-# Kimi-K3 GB200 TP16/DCP16 aggregate profiles using Mooncake DRAM offload.
-# dram-utilization 0.61 is the Kimi-K3 GB200 budget already validated by
-# kimik3-fp4-gb200-dynamo-vllm-agentic: 550 GB (512 GiB) per four-GPU node,
-# which the recipes spend as a 128 GiB Mooncake segment per TP rank.
+# Kimi-K3 GB200 TP16/DCP16 profiles using Mooncake DRAM offload.
 kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg:
   image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-75c2eef
   model: moonshotai/Kimi-K3
@@ -8140,7 +8137,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg:
   disagg: false
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.61
+    - dram-utilization: 0.1065
       search-space:
       - spec-decoding: mtp
         kv-offloading: dram
@@ -8169,7 +8166,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-mooncake-dcp16-agg:
   disagg: false
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.61
+    - dram-utilization: 0.1065
       search-space:
       - kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.12.post1" }
