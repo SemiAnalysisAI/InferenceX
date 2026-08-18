@@ -7651,7 +7651,7 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
       # inject the committed golden AL at launch; EVAL_ONLY leaves them real.
       - spec-decoding: mtp
         conc-list: [4]
-        router: { name: dynamo-router, version: "1.3.0.dev20260720" }
+        router: { name: dynamo-router, version: "1.4.0" }
         prefill:
           num-worker: 1
           tp: 4
@@ -7668,7 +7668,7 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
           dp-attn: false
       - spec-decoding: mtp
         conc-list: [12]
-        router: { name: dynamo-router, version: "1.3.0.dev20260720" }
+        router: { name: dynamo-router, version: "1.4.0" }
         prefill:
           num-worker: 1
           tp: 4
@@ -7685,7 +7685,7 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
           dp-attn: false
       - spec-decoding: mtp
         conc-list: [24]
-        router: { name: dynamo-router, version: "1.3.0.dev20260720" }
+        router: { name: dynamo-router, version: "1.4.0" }
         prefill:
           num-worker: 1
           tp: 4

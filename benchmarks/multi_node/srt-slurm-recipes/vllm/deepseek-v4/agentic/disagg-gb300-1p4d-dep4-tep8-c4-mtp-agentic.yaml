@@ -15,10 +15,10 @@ identity:
   container:
     image: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-426e59f"
   frameworks:
-    dynamo: "1.3.0.dev20260720"
+    dynamo: "1.4.0"
 
 dynamo:
-  wheel: "1.3.0.dev20260720"
+  wheel: "1.4.0"
   install: true
 
 environment:
@@ -111,8 +111,8 @@ backend:
       enable-expert-parallel: true
       enable-ep-weight-filter: true
       max-model-len: 1048576
-      max-num-seqs: 1
-      max-num-batched-tokens: 4
+      max-num-seqs: 16
+      max-num-batched-tokens: 8192
       trust-remote-code: true
       no-enable-flashinfer-autotune: true
       block-size: 256
