@@ -27,7 +27,9 @@ FULL_WORKERS = 8
 RESULT_FORMAT = "inferencex-eval-v1"
 ADAPTER_NAME = "kimi-vendor-verifier"
 
-ENDPOINT_REJECTION_RE = re.compile(r"(?im)tool schema rejected:")
+ENDPOINT_REJECTION_RE = re.compile(
+    r"(?im)^(?:E\s+)?AssertionError:.*tool schema rejected:"
+)
 
 
 def prepare_compatibility_path(output_dir: Path) -> Path:
@@ -398,7 +400,7 @@ def run_evaluation(
                 integration_error=integration_error,
             )
             completed_successfully = False
-        elif task_name == FULL_TASK_NAME and valid_outcome:
+        elif valid_outcome:
             completed_successfully = True
         elif not valid_outcome:
             integration_error = RuntimeError(

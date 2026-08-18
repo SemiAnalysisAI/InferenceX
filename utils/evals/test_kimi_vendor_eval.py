@@ -201,7 +201,7 @@ def test_builds_dsv4_thinking_command(tmp_path: Path) -> None:
         ("passed", 0, True, 1.0, 2, None),
         ("passed", 1, False, 0.0, 0, "RuntimeError"),
         ("failed", 0, False, 0.0, 0, "RuntimeError"),
-        ("failed", 1, False, 0.5, 2, None),
+        ("failed", 1, True, 0.5, 2, None),
         ("failed", 2, False, 0.0, 0, "RuntimeError"),
     ),
 )
@@ -260,7 +260,8 @@ def test_full_report_projects_all_mode_records_and_defers_quality_gating(
     output_dir = tmp_path / "output"
     report = _full_report(failed_records=1)
     report["results"][0]["message"] = (
-        "AssertionError: TestSchema:1 [non-stream] (all) "
+        '        f"tool schema rejected: {response.message}"\n'
+        "E       AssertionError: TestSchema:1 [non-stream] (all) "
         "arguments validation failed: 'bad' is not valid"
     )
     native_bytes = json.dumps(report).encode()
