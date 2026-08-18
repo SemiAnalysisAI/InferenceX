@@ -675,17 +675,22 @@ kimik3-fp4-mi355x-vllm-agentic-mtp-nokv:
       search-space:
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [4, 8, 10, 12, 16], spec-decoding: mtp }
 
-# DIAGNOSTIC ONLY -- not for merge. Reproduces the hipErrorIllegalAddress with
-# AMD_SERIALIZE_KERNEL=3 and device-side assertions enabled (see the DIAGNOSTIC
-# block in kimik3_fp4_mi355x_mtp.sh) so the fault is reported at the kernel that
-# actually causes it instead of at whatever CUDA call checks the error flag next.
+# DIAGNOSTIC ONLY -- not for merge. UNSERIALIZED CONTROL for the -serialize key
+# on #2641. Byte-identical recipe and search space; the only difference is that
+# DIAG_SERIALIZE_KERNEL defaults to 0 here, so AMD_SERIALIZE_KERNEL is not set
+# and kernel launches stay asynchronous as in a normal run.
 #
-# Uses the vllm-simple backend rather than LMCache on purpose: SimpleCPUOffloadConnector
-# is vLLM's own CPU offload, so it reproduces the identical crash with no LMCache
-# in the picture, which keeps the repro minimal. c8 and c10 both failed on this
-# backend in run 31837518310. Timings from this key are meaningless -- serialized
-# kernel launches make the run far slower than normal.
-kimik3-fp4-mi355x-vllm-agentic-mtp-serialize:
+# Purpose: establish a same-day differential. The serialized arm did not
+# reproduce the hipErrorIllegalAddress; if this arm does reproduce it on the
+# same points, on the same cluster, on the same day, that isolates kernel
+# serialization as the thing that suppresses the crash -- which would make it a
+# race rather than a deterministic out-of-bounds access.
+#
+# Uses vllm-simple rather than LMCache on purpose: SimpleCPUOffloadConnector is
+# vLLM's own CPU offload, so it reproduces the identical crash with no LMCache
+# in the picture. c8, c10, c12 and c16 all failed on this backend in run
+# 31837518310, so each point has a known unserialized failure to compare against.
+kimik3-fp4-mi355x-vllm-agentic-mtp-noserialize:
   image: vllm/vllm-openai-rocm:nightly-ac7509e2b1db40fec2f03dde1ed4e9dfdc2338c9
   model: moonshotai/Kimi-K3
   model-prefix: kimik3

@@ -121,7 +121,7 @@ export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 # This is very slow by design. The crash reproduces during warmup
 # (compile_or_warm_up_model -> _dummy_run), so the run only needs to reach
 # startup; any throughput numbers it produces are meaningless.
-DIAG_SERIALIZE_KERNEL="${DIAG_SERIALIZE_KERNEL:-1}"
+DIAG_SERIALIZE_KERNEL="${DIAG_SERIALIZE_KERNEL:-0}"
 if [[ "$DIAG_SERIALIZE_KERNEL" == "1" ]]; then
     export AMD_SERIALIZE_KERNEL=3
     export TORCH_USE_HIP_DSA=1
