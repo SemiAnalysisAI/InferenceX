@@ -6094,4 +6094,4 @@
   description:
     - "Add MiniMax-M3 NVFP4 B300 single-node TensorRT-LLM AgentX with EAGLE3-GQA speculative decoding (3 draft tokens)."
     - "Use the nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc23.post1 image."
-  pr-link: XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2658
