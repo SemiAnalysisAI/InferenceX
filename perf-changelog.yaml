@@ -6279,3 +6279,12 @@
   description:
     - "Pin max-num-batched-tokens to 8192 for every B200 TP8 and DEP8 AgentX submission point after the vLLM image refresh."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2646
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Pin B200 GPU KV cache memory to the exact post-profile byte budgets for TP8 and DEP8."
+    - "Use max-num-seqs=4*CONC and max-num-batched-tokens=16*CONC on TP; retain the DEP8 8192-token budget."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2646

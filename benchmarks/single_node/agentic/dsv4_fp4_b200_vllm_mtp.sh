@@ -209,9 +209,7 @@ EOF
 esac
 
 PARALLEL_ARGS=(--tensor-parallel-size "$TP" --data-parallel-size 1)
-# Keep scheduler behavior stable across vLLM image defaults for every TP/DEP
-# submission point.
-MODE_ARGS=(--max-num-batched-tokens 8192)
+MODE_ARGS=()
 if [ "$DP_ATTENTION" = "true" ]; then
     PARALLEL_ARGS=(--tensor-parallel-size 1 --data-parallel-size "$TP")
     export PYTORCH_ALLOC_CONF=expandable_segments:True
@@ -225,22 +223,27 @@ if [ "$EP_SIZE" -gt 1 ]; then
     )
 fi
 if [ "$DP_ATTENTION" = "true" ]; then
-    # Chunk long prefills on DEP; the shared 8K token budget above also keeps
-    # its profiled activation footprint within the 0.90 GPU-memory budget.
+    # Chunk long prefills on DEP while retaining the profiled 8K token budget.
     MODE_ARGS+=(
         --prefill-schedule-interval 8
         --long-prefill-token-threshold 512
     )
 fi
 
-# AgentX concurrency counts live session trees. Subagent fan-out can push the
-# global instantaneous request count above CONC, so retain 2x global headroom
-# while avoiding the old 8x over-allocation of that budget on every DEP rank.
+# AgentX concurrency counts live session trees. Retain per-rank 2x headroom on
+# DEP and 4x global headroom on pure TP, where subagent fan-out can exceed CONC.
+# Pin the lowest completed post-CUDA-graph recommendation per topology from run
+# 32133180389: TP8 c8 and DEP8 c196, respectively.
 if [ "$DP_ATTENTION" = "true" ]; then
     MAX_NUM_SEQS=$((2 * CONC / TP))
+    MAX_NUM_BATCHED_TOKENS=8192
+    KV_CACHE_MEMORY=23022689895
 else
-    MAX_NUM_SEQS=$((2 * CONC))
+    MAX_NUM_SEQS=$((4 * CONC))
+    MAX_NUM_BATCHED_TOKENS=$((16 * CONC))
+    KV_CACHE_MEMORY=47562520167
 fi
+MODE_ARGS+=(--max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS")
 
 # MTP: cudagraph capture sizes are in TOKENS. With num_speculative_tokens=N,
 # every uniform decode batch of S seqs verifies S*(1+N) tokens, so capture the
@@ -271,7 +274,6 @@ echo "Starting vllm server..."
 export TORCH_CUDA_ARCH_LIST="10.0"
 export PYTHONNOUSERSITE=1
 export VLLM_FLOAT32_MATMUL_PRECISION=high
-GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.90}"
 
 { set +x; } 2>/dev/null
 VLLM_CMD=(
@@ -282,7 +284,7 @@ VLLM_CMD=(
     --kv-cache-dtype fp8
     --block-size 256
     --max-model-len 1048576
-    --gpu-memory-utilization "$GPU_MEMORY_UTILIZATION"
+    --kv-cache-memory "$KV_CACHE_MEMORY"
     --numa-bind
     --enable-cumem-allocator
     --no-enable-flashinfer-autotune
