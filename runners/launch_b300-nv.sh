@@ -227,7 +227,7 @@ SRTCTL_APPLY_ARGS=(
 if [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" && ( "$CONFIG_FILE" == recipes/vllm/minimax-m3/b300-fp4/8k1k/mtp/*.yaml || "$CONFIG_FILE" == recipes/vllm/minimax-m3/b300-fp4/8k1k/*-tp1-*.yaml ) ]]; then
     SRTCTL_APPLY_ARGS+=(--no-preflight)
 fi
-if [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" && "$MODEL_PATH" == /scratch/models/* ]]; then
+if [[ $FRAMEWORK == "dynamo-sglang" && ( $MODEL_PREFIX == "dsv4" || $MODEL_PREFIX == "glm5.2" ) && "$MODEL_PATH" == /scratch/models/* ]]; then
     SRTCTL_APPLY_ARGS+=(--no-preflight)
 fi
 if [[ -n "$SRTCTL_SETUP_SCRIPT" ]]; then
