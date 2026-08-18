@@ -332,6 +332,34 @@ def test_gb200_dynamo_kimi_recipes_configure_tool_parser() -> None:
         assert config["dyn-tool-call-parser"] == "kimi_k3"
 
 
+def test_gb200_dynamo_minimax_recipes_configure_frontend_tool_parser() -> None:
+    recipe_dir = (
+        REPO_ROOT
+        / "benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3"
+        / "gb200-fp4/agentic"
+    )
+    recipe_paths = sorted(recipe_dir.glob("*.yaml"))
+
+    assert len(recipe_paths) == 6
+    for recipe_path in recipe_paths:
+        recipe = yaml.safe_load(recipe_path.read_text())
+        args = recipe["frontend"]["args"]
+        assert args["dyn-chat-processor"] == "vllm", recipe_path
+        assert args["tool-call-parser"] == "minimax_m3", recipe_path
+        assert args["reasoning-parser"] == "minimax_m3", recipe_path
+        assert args["enable-auto-tool-choice"] is True, recipe_path
+
+
+def test_mi355_minimax_launcher_configures_reasoning_parser() -> None:
+    launcher = (
+        REPO_ROOT
+        / "benchmarks/single_node/agentic/minimaxm3_fp4_mi355x_mtp.sh"
+    ).read_text()
+
+    assert "--tool-call-parser minimax_m3" in launcher
+    assert "--reasoning-parser minimax_m3" in launcher
+    assert "--enable-auto-tool-choice" in launcher
+
 
 def test_dynamo_sglang_agentic_recipes_parse_tools_at_frontend() -> None:
     recipe_roots = (

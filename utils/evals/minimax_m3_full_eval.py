@@ -9,6 +9,7 @@ import json
 import math
 import os
 import subprocess
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -44,6 +45,8 @@ REQUIRED_SOURCE_SHA256 = {
 }
 MAX_SOURCE_BYTES = 16 * 1024 * 1024
 DOWNLOAD_TIMEOUT_SECONDS = 60
+DOWNLOAD_ATTEMPTS = 3
+DOWNLOAD_RETRY_DELAY_SECONDS = 3
 UPSTREAM_TIMEOUT_SECONDS = 7 * 60 * 60
 
 Runner = Callable[..., subprocess.CompletedProcess[Any]]
@@ -96,28 +99,44 @@ def _fetch_source(relative_path: str) -> bytes:
         headers={"Accept": "application/octet-stream"},
         method="GET",
     )
-    try:
-        with _NO_REDIRECT_OPENER.open(
-            request, timeout=DOWNLOAD_TIMEOUT_SECONDS
-        ) as response:
-            status = getattr(response, "status", None)
-            if status != 200 or response.geturl() != url:
-                raise FullSuiteError(
-                    f"unexpected response for pinned source {relative_path}: "
-                    f"status={status!r}, url={response.geturl()!r}"
-                )
-            declared_size = response.headers.get("Content-Length")
-            if declared_size is not None and int(declared_size) > MAX_SOURCE_BYTES:
-                raise FullSuiteError(
-                    f"pinned source {relative_path} exceeds the size limit"
-                )
-            content = response.read(MAX_SOURCE_BYTES + 1)
-    except (OSError, ValueError, urllib.error.URLError) as exc:
-        raise FullSuiteError(
-            f"failed to download pinned source {relative_path}: {exc}"
-        ) from exc
-    verify_source_content(relative_path, content)
-    return content
+    last_error: BaseException | None = None
+    for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
+        try:
+            with _NO_REDIRECT_OPENER.open(
+                request, timeout=DOWNLOAD_TIMEOUT_SECONDS
+            ) as response:
+                status = getattr(response, "status", None)
+                if status != 200 or response.geturl() != url:
+                    raise FullSuiteError(
+                        f"unexpected response for pinned source {relative_path}: "
+                        f"status={status!r}, url={response.geturl()!r}"
+                    )
+                declared_size = response.headers.get("Content-Length")
+                if (
+                    declared_size is not None
+                    and int(declared_size) > MAX_SOURCE_BYTES
+                ):
+                    raise FullSuiteError(
+                        f"pinned source {relative_path} exceeds the size limit"
+                    )
+                content = response.read(MAX_SOURCE_BYTES + 1)
+        except (
+            FullSuiteError,
+            OSError,
+            ValueError,
+            urllib.error.URLError,
+        ) as exc:
+            last_error = exc
+            if attempt < DOWNLOAD_ATTEMPTS:
+                time.sleep(DOWNLOAD_RETRY_DELAY_SECONDS)
+                continue
+            break
+        verify_source_content(relative_path, content)
+        return content
+    raise FullSuiteError(
+        f"failed to download pinned source {relative_path} after "
+        f"{DOWNLOAD_ATTEMPTS} attempts: {last_error}"
+    ) from last_error
 
 
 def _validate_sample(content: bytes) -> None:

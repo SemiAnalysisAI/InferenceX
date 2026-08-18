@@ -782,7 +782,11 @@ printf 'SETUP_RC=%s\n' "$?"
         == 0.0
     )
     assert score_result["integration_error"]["message"] == message
-    assert not (results_dir / "kimi_vendor_report.json").exists()
+    native_result = json.loads(
+        (results_dir / "kimi_vendor_report.json").read_text()
+    )
+    assert native_result["completed"] is False
+    assert native_result["integration_error"]["message"] == message
     assert not python_dir.exists()
 
 def test_preclear_failure_cannot_stage_stale_provider_result(tmp_path: Path) -> None:

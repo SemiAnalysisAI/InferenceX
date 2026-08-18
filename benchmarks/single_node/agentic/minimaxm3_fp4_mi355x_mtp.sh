@@ -215,6 +215,7 @@ VLLM_CMD=(
     --moe-backend aiter
     --kv-cache-dtype fp8
     --tool-call-parser minimax_m3
+    --reasoning-parser minimax_m3
     --enable-auto-tool-choice
     --default-chat-template-kwargs '{"thinking_mode":"enabled"}'
     --max-num-seqs "$((2 * CONC))"

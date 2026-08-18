@@ -167,21 +167,69 @@ def extract_lm_metrics(json_path: Path) -> List[Dict[str, Any]]:
     - Values from results[task][metric,filter]
     """
     data = load_json(json_path) or {}
-    if 'integration_error' in data:
-        return []
     results = data.get('results', {})
-    configs = data.get('configs', {})
+    raw_configs = data.get('configs', {})
+    configs = raw_configs if isinstance(raw_configs, dict) else {}
 
-    if not results:
+    if not isinstance(results, dict) or not results:
         return []
 
     extracted = []
 
     for task in results.keys():
-        if has_invalid_effective_count(data, task):
-            continue
         task_results = results[task]
-        task_config = configs.get(task, {})
+        raw_task_config = configs.get(task, {})
+        task_config = (
+            raw_task_config if isinstance(raw_task_config, dict) else {}
+        )
+        raw_metadata = task_config.get('metadata', {})
+        metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
+        model = data.get('model_name') or metadata.get('model')
+
+        sample_counts = data.get('n-samples')
+        raw_task_samples = (
+            sample_counts.get(task)
+            if isinstance(sample_counts, dict)
+            else None
+        )
+        n_eff = (
+            raw_task_samples.get('effective')
+            if isinstance(raw_task_samples, dict)
+            else None
+        )
+        invalid_effective_count = has_invalid_effective_count(data, task)
+        integration_error = data.get('integration_error')
+        if integration_error is None and invalid_effective_count:
+            integration_error = {
+                'type': 'InvalidEffectiveSampleCount',
+                'message': f'invalid effective sample count: {n_eff!r}',
+            }
+        if integration_error is None and not isinstance(task_results, dict):
+            integration_error = {
+                'type': 'InvalidTaskResults',
+                'message': f'invalid task results for {task!r}',
+            }
+        if integration_error is not None:
+            if not isinstance(integration_error, dict):
+                integration_error = {
+                    'type': 'IntegrationError',
+                    'message': str(integration_error),
+                }
+            extracted.append({
+                'task': task,
+                'strict': None,
+                'strict_se': None,
+                'flex': None,
+                'flex_se': None,
+                'accuracy': None,
+                'accuracy_se': None,
+                'n_eff': 0 if invalid_effective_count else n_eff,
+                'model': model,
+                'source': str(json_path),
+                'infrastructure_success': False,
+                'integration_error': integration_error,
+            })
+            continue
 
         # Base metric: from config's metric_list
         metric_list = task_config.get('metric_list', [])
@@ -224,12 +272,6 @@ def extract_lm_metrics(json_path: Path) -> List[Dict[str, Any]]:
         # N-samples (effective count)
         n_eff = data.get('n-samples', {}).get(task, {}).get('effective')
 
-        # Model name
-        model = (
-            data.get('model_name')
-            or task_config.get('metadata', {}).get('model')
-        )
-
         extracted.append({
             'task': task,
             'strict': strict_val,
@@ -240,7 +282,9 @@ def extract_lm_metrics(json_path: Path) -> List[Dict[str, Any]]:
             'accuracy_se': accuracy_se,
             'n_eff': n_eff,
             'model': model,
-            'source': str(json_path)
+            'source': str(json_path),
+            'infrastructure_success': True,
+            'integration_error': None,
         })
 
     return extracted
@@ -332,6 +376,8 @@ def build_row(meta: Dict[str, Any], m: Dict[str, Any]) -> Dict[str, Any]:
         'em_flexible_se': m.get('flex_se'),
         'n_eff': m.get('n_eff'),
         'source': m.get('source'),
+        'infrastructure_success': m.get('infrastructure_success', True),
+        'integration_error': m.get('integration_error'),
     }
 
     if 'eval_suite' in meta:
@@ -383,6 +429,9 @@ def collect_eval_rows(root: Path) -> List[Dict[str, Any]]:
 
             metrics_list = extract_lm_metrics(lm_path)
             for metrics in metrics_list:
+                if metrics.get('infrastructure_success') is False:
+                    rows.append(build_row(row_meta, metrics))
+                    continue
                 primary_score = next(
                     (
                         metrics.get(name)
@@ -391,12 +440,30 @@ def collect_eval_rows(root: Path) -> List[Dict[str, Any]]:
                     ),
                     None,
                 )
-                if (
+                invalid_primary_score = (
                     isinstance(primary_score, bool)
                     or not isinstance(primary_score, (int, float))
                     or not math.isfinite(primary_score)
                     or not 0.0 <= primary_score <= 1.0
-                ):
+                )
+                if invalid_primary_score:
+                    failed_metrics = {
+                        **metrics,
+                        'strict': None,
+                        'strict_se': None,
+                        'accuracy': None,
+                        'accuracy_se': None,
+                        'flex': None,
+                        'flex_se': None,
+                        'infrastructure_success': False,
+                        'integration_error': {
+                            'type': 'InvalidPrimaryScore',
+                            'message': (
+                                f'invalid primary score: {primary_score!r}'
+                            ),
+                        },
+                    }
+                    rows.append(build_row(row_meta, failed_metrics))
                     continue
                 rows.append(build_row(row_meta, metrics))
     return rows

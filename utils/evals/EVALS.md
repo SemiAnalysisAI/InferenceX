@@ -21,10 +21,12 @@ Generator eval modes:
 - Default: throughput plus the selected eval subset.
 - `--no-evals`: throughput only.
 - `--evals-only`: selected evals only.
-- `--all-evals`: every fixed-sequence eval only. This is equivalent to
-  `--evals-only --all-evals`. Multi-node topologies run all `conc-list` values
-  sequentially on one engine. Agentic-coding configs are included and run
-  GSM8K (they are excluded only from the default, non-eval sweep).
+- `--all-evals`: every eligible fixed-sequence and agentic eval. This is
+  equivalent to `--evals-only --all-evals`. Multi-node fixed-sequence
+  topologies run all `conc-list` values sequentially on one engine.
+- `--trim-conc`: after eval selection, retain the minimum concurrency for each
+  single-node or multi-node deployment shape and move that shape's selected eval
+  to the retained row. This is the deployment smoke mode, not a throughput sweep.
 
 Changelog entries use `evals-only: true` and `all-evals: true`. The `all-evals`
 setting implies eval-only there. On PRs, the same names are modifier labels:
@@ -33,6 +35,52 @@ suppresses it. Modifier runs cannot be reused.
 
 Deduplication is scenario-aware: fixed-sequence coverage does not suppress
 agentic coverage, and `all-evals` wins over default eval coverage.
+
+### Tool-use support contract
+
+The tool-use adapters are backend-independent clients of the local
+OpenAI-compatible endpoint. The deployment-smoke target set contains every
+generated Kimi K3 and MiniMax M3 agentic configuration in the NVIDIA and AMD
+master configs, including their single-node and multi-node vLLM and
+Dynamo-vLLM recipes. A configuration is verified only when the current PR head
+launches its tool-aware endpoint, the matching vendor smoke and `bfcl_smoke`
+complete their expected sample counts, and the native and
+`inferencex-eval-v1` artifacts are collected without `integration_error`.
+
+Infrastructure support does not mean every model must pass every quality
+threshold. A completed result with a positive effective sample count can score
+below its threshold and fail the quality gate without being a deployment
+failure. Missing parser support, transport errors, timeouts, malformed output,
+missing samples, and missing artifacts are infrastructure failures.
+
+Generator coverage and static parser checks do not prove a live backend. Before
+claiming complete deployment support, run both smoke suites on every row from
+the matrices below at the current PR head. Run each full vendor or BFCL
+model-quality suite on at least one matching deployment; these longer suites do
+not need to repeat on every equivalent parser topology.
+
+Generate the complete deployment-smoke matrices with:
+
+```bash
+uv run --no-project --with pydantic --with pyyaml --python 3.12 \
+  python utils/matrix_logic/generate_sweep_configs.py full-sweep \
+  --config-files configs/nvidia-master.yaml configs/amd-master.yaml \
+  --model-prefix kimik3 \
+  --scenario-type agentic-coding \
+  --evals-only --all-evals --trim-conc
+
+uv run --no-project --with pydantic --with pyyaml --python 3.12 \
+  python utils/matrix_logic/generate_sweep_configs.py full-sweep \
+  --config-files configs/nvidia-master.yaml configs/amd-master.yaml \
+  --model-prefix minimaxm3 \
+  --scenario-type agentic-coding \
+  --evals-only --all-evals --trim-conc
+```
+
+Run each generated matrix with the matching vendor smoke and `bfcl_smoke`.
+The full Kimi, MiniMax, and BFCL suites use the same endpoint and artifact
+paths, but are diagnostic model-quality campaigns rather than a replacement
+for the per-topology deployment smoke.
 
 ### Artifact reuse
 
@@ -48,8 +96,8 @@ runner. Existing jobs continue to use lm-eval with GSM8K by default.
 
 The default eval framework is [lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness) (`lm-eval`). Agentic eval-only matrix jobs inherit this default and therefore run the same GSM8K task as 8k1k. Explicit agentic runs can still select SWE-bench.
 
-The Phase 1 Kimi smoke is opt-in. It supports single-node jobs and Kimi K3
-aggregate H200, B200, and GB200 srt-slurm jobs. Select
+The Kimi smoke is opt-in and applies to supported models exposing a
+tool-aware OpenAI-compatible chat-completions API. Select
 `eval-framework: kimi-vendor` and `eval-suite: kimi_tool_call_schema` on
 `e2e-tests.yml`, or invoke it from the repository root after a server is ready:
 
@@ -485,7 +533,9 @@ gh run download <RUN_ID> --repo SemiAnalysisAI/InferenceX -n eval_results_all -D
 
 # View eval summary
 cat ./evals/agg_eval_all.json | jq -r '
-  .[] | [.hw, .framework, .precision, .tp, .conc, .task, (.score * 100 | round | . / 100)]
+  .[] | [.hw, .framework, .precision, .tp, .conc, .task,
+    (if .infrastructure_success then ((.score * 100 | round) / 100)
+     else .integration_error.type end)]
   | @tsv' | column -t
 
 # Filter to specific hardware
@@ -502,6 +552,15 @@ cat ./evals/agg_eval_all.json | jq '[.[] | select(.hw == "B200")]'
 | `n_eff` | Number of samples evaluated |
 | `task` | Eval task name (e.g., `gsm8k`) |
 | `eval_suite` | Explicit suite identity used for collection and artifact reuse |
+| `infrastructure_success` | `false` when setup, transport, timeout, sample-count, or score validation failed |
+| `integration_error` | Structured infrastructure failure type and message, otherwise `null` |
+
+Collection retains the latest attempt for each artifact or batched concurrency.
+Raw compatibility artifacts encode infrastructure failures with `score: 0`,
+`n_eff: 0`, and `integration_error`. Aggregation preserves the failure row but
+sets `score: null` and `infrastructure_success: false`, so dashboards cannot
+mistake an endpoint failure for measured model quality. An older successful
+attempt cannot replace a newer failed retry.
 
 ### Environment variables
 

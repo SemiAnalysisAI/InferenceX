@@ -165,7 +165,7 @@ def test_collect_eval_rows_accepts_minimax_compatibility_result(
     assert rows[0]["eval_suite"] == "minimax_m3_smoke"
 
 
-def test_collect_eval_rows_excludes_integration_and_sample_failures(
+def test_collect_eval_rows_retains_integration_and_sample_failures(
     tmp_path: Path,
 ) -> None:
     for name, invalid in (
@@ -192,7 +192,51 @@ def test_collect_eval_rows_excludes_integration_and_sample_failures(
             result["n-samples"]["gsm8k"]["effective"] = invalid
         result_path.write_text(json.dumps(result))
 
-    assert collect_eval_rows(tmp_path) == []
+    rows = collect_eval_rows(tmp_path)
+    assert len(rows) == 5
+    assert all(row["infrastructure_success"] is False for row in rows)
+    assert all(row["score"] is None for row in rows)
+    assert all(
+        row["n_eff"] == 0
+        for row in rows
+        if row["integration_error"]["type"] == "InvalidEffectiveSampleCount"
+    )
+    assert {
+        row["integration_error"]["type"]
+        for row in rows
+    } == {"RuntimeError", "InvalidEffectiveSampleCount"}
+
+
+def test_collect_eval_rows_handles_malformed_failure_metadata(
+    tmp_path: Path,
+) -> None:
+    for index, (configs, sample_counts) in enumerate(
+        (
+            (None, None),
+            ({"gsm8k": None}, {"gsm8k": None}),
+        )
+    ):
+        artifact_dir = tmp_path / f"eval_malformed_metadata_{index}"
+        artifact_dir.mkdir()
+        (artifact_dir / "meta_env.json").write_text(
+            json.dumps({"eval_suite": "gsm8k"})
+        )
+        result_path = artifact_dir / f"results_{index}.json"
+        _write_lm_eval_result(result_path, 0.0)
+        result = json.loads(result_path.read_text())
+        result["configs"] = configs
+        result["n-samples"] = sample_counts
+        result["integration_error"] = {
+            "type": "RuntimeError",
+            "message": "setup failed",
+        }
+        result_path.write_text(json.dumps(result))
+
+    rows = collect_eval_rows(tmp_path)
+    assert len(rows) == 2
+    assert all(row["score"] is None for row in rows)
+    assert all(row["n_eff"] == 0 for row in rows)
+    assert all(row["infrastructure_success"] is False for row in rows)
 
 
 def test_collect_eval_rows_accepts_legacy_missing_effective_count(
@@ -241,7 +285,12 @@ def test_collect_eval_rows_does_not_resurrect_stale_valid_result(
     current_path.touch()
     stale_path.touch()
 
-    assert collect_eval_rows(tmp_path) == []
+    rows = collect_eval_rows(tmp_path)
+    assert len(rows) == 1
+    assert rows[0]["infrastructure_success"] is False
+    assert rows[0]["integration_error"]["message"] == (
+        "vendor verifier checkout failed"
+    )
 
 
 def test_collect_eval_rows_uses_mtime_for_newer_legacy_name(
@@ -266,10 +315,13 @@ def test_collect_eval_rows_uses_mtime_for_newer_legacy_name(
     current_path.write_text(json.dumps(current))
     os.utime(current_path, (2_000_000_000, 2_000_000_000))
 
-    assert collect_eval_rows(tmp_path) == []
+    rows = collect_eval_rows(tmp_path)
+    assert len(rows) == 1
+    assert rows[0]["infrastructure_success"] is False
+    assert rows[0]["integration_error"]["message"] == "latest attempt failed"
 
 
-def test_collect_eval_rows_rejects_missing_or_out_of_range_scores(
+def test_collect_eval_rows_retains_missing_or_out_of_range_scores(
     tmp_path: Path,
 ) -> None:
     for index, score in enumerate(
@@ -286,7 +338,13 @@ def test_collect_eval_rows_rejects_missing_or_out_of_range_scores(
             task="kimi_tool_call_schema",
         )
 
-    assert collect_eval_rows(tmp_path) == []
+    rows = collect_eval_rows(tmp_path)
+    assert len(rows) == 6
+    assert all(row["score"] is None for row in rows)
+    assert all(row["infrastructure_success"] is False for row in rows)
+    assert {
+        row["integration_error"]["type"] for row in rows
+    } == {"InvalidPrimaryScore"}
 
 
 def test_collect_eval_rows_falls_back_for_invalid_filename_timestamp(

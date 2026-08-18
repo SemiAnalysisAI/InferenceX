@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 from collections.abc import Mapping, Sequence
@@ -25,6 +26,8 @@ FULL_TIMEOUT_SECONDS = 7200
 FULL_WORKERS = 8
 RESULT_FORMAT = "inferencex-eval-v1"
 ADAPTER_NAME = "kimi-vendor-verifier"
+
+ENDPOINT_REJECTION_RE = re.compile(r"(?im)tool schema rejected:")
 
 
 def prepare_compatibility_path(output_dir: Path) -> Path:
@@ -99,6 +102,24 @@ def _expected_total(task_name: str) -> int:
         return EXPECTED_TOTALS[task_name]
     except KeyError as exc:
         raise ValueError(f"unsupported Kimi task: {task_name}") from exc
+
+def _endpoint_rejection_messages(report: Any) -> list[str]:
+    """Return upstream failures rejected before argument-schema validation."""
+    root = _mapping(report, "report")
+    results = root.get("results")
+    if not isinstance(results, list):
+        raise ValueError("report.results must be an array")
+    messages: list[str] = []
+    for index, result in enumerate(results):
+        record = _mapping(result, f"report.results[{index}]")
+        message = record.get("message")
+        if (
+            record.get("status") == "failed"
+            and isinstance(message, str)
+            and ENDPOINT_REJECTION_RE.search(message)
+        ):
+            messages.append(message)
+    return messages
 
 
 def _project_report(
@@ -274,6 +295,38 @@ def _compatibility_result(
         }
     return result
 
+def _write_native_failure(
+    path: Path,
+    *,
+    model: str,
+    task_name: str,
+    error: BaseException,
+) -> None:
+    """Write a native diagnostic envelope when upstream cannot produce one."""
+    path.write_text(
+        json.dumps(
+            {
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "model": model,
+                "task": task_name,
+                "completed": False,
+                "summary": {
+                    "total": 0,
+                    "expected_total": _expected_total(task_name),
+                    "by_status": {},
+                },
+                "results": [],
+                "integration_error": {
+                    "type": type(error).__name__,
+                    "message": str(error),
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
 
 def _write_compatibility(path: Path, result: Mapping[str, Any]) -> None:
     path.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
@@ -327,13 +380,27 @@ def run_evaluation(
             report,
             task_name=task_name,
         )
+        endpoint_rejections = _endpoint_rejection_messages(report)
         valid_outcome = (subprocess_rc == 0 and all_passed) or (
             subprocess_rc == 1 and not all_passed
         )
         completed_successfully = subprocess_rc == 0 and all_passed
-        if task_name == FULL_TASK_NAME and valid_outcome:
+        if endpoint_rejections:
+            integration_error = RuntimeError(
+                "upstream verifier reported "
+                f"{len(endpoint_rejections)} endpoint request or response failure(s)"
+            )
+            compatibility = _compatibility_result(
+                model,
+                0.0,
+                task_name=task_name,
+                n_samples=0,
+                integration_error=integration_error,
+            )
+            completed_successfully = False
+        elif task_name == FULL_TASK_NAME and valid_outcome:
             completed_successfully = True
-        if not valid_outcome:
+        elif not valid_outcome:
             integration_error = RuntimeError(
                 f"upstream verifier exited with code {subprocess_rc}"
             )
@@ -354,6 +421,13 @@ def run_evaluation(
             n_samples=0,
             integration_error=exc,
         )
+        if not native_report.exists():
+            _write_native_failure(
+                native_report,
+                model=model,
+                task_name=task_name,
+                error=exc,
+            )
     finally:
         try:
             _write_compatibility(compatibility_path, compatibility)
@@ -411,7 +485,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     if args.integration_error is not None:
         args.output_dir.mkdir(parents=True, exist_ok=True)
-        (args.output_dir / NATIVE_REPORT_FILENAME).unlink(missing_ok=True)
+        error = RuntimeError(args.integration_error)
+        _write_native_failure(
+            args.output_dir / NATIVE_REPORT_FILENAME,
+            model=args.model,
+            task_name=args.task_name,
+            error=error,
+        )
         _write_compatibility(
             prepare_compatibility_path(args.output_dir),
             _compatibility_result(
@@ -419,7 +499,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 0.0,
                 task_name=args.task_name,
                 n_samples=0,
-                integration_error=RuntimeError(args.integration_error),
+                integration_error=error,
             ),
         )
         return 0

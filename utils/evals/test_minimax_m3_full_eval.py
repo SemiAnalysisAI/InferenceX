@@ -72,6 +72,69 @@ def test_prepared_source_tree_requires_every_pinned_byte(
         "3ead102af0f888acc95867b3a9916942524b02f4f64931f020a1bfb4fee9aae2"
     )
 
+def test_fetch_source_retries_transient_network_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    content = b"pinned source"
+    monkeypatch.setattr(
+        full,
+        "REQUIRED_SOURCE_SHA256",
+        {"verify.py": hashlib.sha256(content).hexdigest()},
+    )
+    sleeps: list[int] = []
+
+    class Response:
+        status = 200
+        headers: dict[str, str] = {}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def geturl(self) -> str:
+            return full.source_url("verify.py")
+
+        def read(self, _: int) -> bytes:
+            return content
+
+    class Opener:
+        calls = 0
+
+        def open(self, request, *, timeout):
+            self.calls += 1
+            if self.calls < full.DOWNLOAD_ATTEMPTS:
+                raise full.urllib.error.URLError("transient")
+            return Response()
+
+    opener = Opener()
+    monkeypatch.setattr(full, "_NO_REDIRECT_OPENER", opener)
+    monkeypatch.setattr(full.time, "sleep", sleeps.append)
+
+    assert full._fetch_source("verify.py") == content
+    assert opener.calls == full.DOWNLOAD_ATTEMPTS
+    assert sleeps == [full.DOWNLOAD_RETRY_DELAY_SECONDS] * 2
+
+
+def test_fetch_source_reports_exhausted_retries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Opener:
+        calls = 0
+
+        def open(self, request, *, timeout):
+            self.calls += 1
+            raise full.urllib.error.URLError("offline")
+
+    opener = Opener()
+    monkeypatch.setattr(full, "_NO_REDIRECT_OPENER", opener)
+    monkeypatch.setattr(full.time, "sleep", lambda _: None)
+
+    with pytest.raises(full.FullSuiteError, match="after 3 attempts"):
+        full._fetch_source("verify.py")
+    assert opener.calls == full.DOWNLOAD_ATTEMPTS
+
 
 def test_verifier_command_is_one_102_row_run_with_fixed_m3_settings(
     tmp_path: Path,

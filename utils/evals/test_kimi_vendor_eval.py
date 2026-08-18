@@ -258,7 +258,12 @@ def test_full_report_projects_all_mode_records_and_defers_quality_gating(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     output_dir = tmp_path / "output"
-    native_bytes = json.dumps(_full_report(failed_records=1)).encode()
+    report = _full_report(failed_records=1)
+    report["results"][0]["message"] = (
+        "AssertionError: TestSchema:1 [non-stream] (all) "
+        "arguments validation failed: 'bad' is not valid"
+    )
+    native_bytes = json.dumps(report).encode()
     invocation: dict[str, Any] = {}
 
     def fake_run(
@@ -288,6 +293,46 @@ def test_full_report_projects_all_mode_records_and_defers_quality_gating(
         "effective": 408,
     }
     assert "integration_error" not in projected
+    assert (output_dir / kve.NATIVE_REPORT_FILENAME).read_bytes() == native_bytes
+
+def test_full_report_classifies_endpoint_failures_as_integration_errors(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    report = _full_report(failed_records=1)
+    report["results"][0]["message"] = (
+        "AssertionError: TestSchema:1 [non-stream] (all) tool schema rejected: "
+        "Data returned by API invalid for expected schema."
+    )
+    native_bytes = json.dumps(report).encode()
+
+    def fake_run(
+        command: list[str], *, cwd: Path, check: bool, timeout: int
+    ) -> SimpleNamespace:
+        Path(command[command.index("--tool-json-report") + 1]).write_bytes(
+            native_bytes
+        )
+        return SimpleNamespace(returncode=1)
+
+    monkeypatch.setattr(kve.subprocess, "run", fake_run)
+    output_dir = tmp_path / "output"
+
+    assert not kve.run_evaluation(
+        verifier_dir=tmp_path,
+        base_url="http://localhost/v1",
+        api_key="EMPTY",
+        model="model-a",
+        output_dir=output_dir,
+        task_name=kve.FULL_TASK_NAME,
+        timeout_seconds=kve.FULL_TIMEOUT_SECONDS,
+    )
+    projected = _result(output_dir)
+    assert _score(output_dir, kve.FULL_TASK_NAME) == 0.0
+    assert _n_eff(output_dir, kve.FULL_TASK_NAME) == 0
+    assert projected["integration_error"]["type"] == "RuntimeError"
+    assert "endpoint request or response failure" in projected[
+        "integration_error"
+    ]["message"]
     assert (output_dir / kve.NATIVE_REPORT_FILENAME).read_bytes() == native_bytes
 
 
@@ -396,7 +441,7 @@ def test_failure_cannot_reuse_stale_outputs(
         output_dir=output_dir,
     )
     assert _score(output_dir) == 0.0
-    assert not native_report.exists()
+    assert json.loads(native_report.read_text())["completed"] is False
     assert foreign_result.exists()
 
 
@@ -422,7 +467,10 @@ def test_cli_setup_failure_writes_zero_score_artifact(tmp_path: Path) -> None:
         == 0
     )
     projected = _result(output_dir)
-    assert not (output_dir / kve.NATIVE_REPORT_FILENAME).exists()
+    native = json.loads((output_dir / kve.NATIVE_REPORT_FILENAME).read_text())
+    assert native["completed"] is False
+    assert native["summary"]["expected_total"] == 2
+    assert native["integration_error"]["message"] == "checkout failed"
     assert _score(output_dir) == 0.0
     assert projected["integration_error"]["message"] == "checkout failed"
     assert _n_eff(output_dir) == 0
