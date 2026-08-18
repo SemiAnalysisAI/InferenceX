@@ -7691,7 +7691,7 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
 # mtp2 keys/recipe files so the existing GB200 AgentX MTP recipes above are
 # untouched.
 dsv4-fp4-gb200-dynamo-vllm-agentic-mtp2-agg:
-  image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-426e59f
+  image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-d62ad46
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:gb200-nv
@@ -7761,7 +7761,7 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-mtp2-agg:
           dp-attn: false
 
 dsv4-fp4-gb200-dynamo-vllm-agentic-mtp2-disagg:
-  image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-426e59f
+  image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-d62ad46
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:gb200-nv
@@ -7775,6 +7775,25 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-mtp2-disagg:
     - search-space:
       # Keep the checked-in recipes on real MTP verification. Throughput jobs
       # inject the committed golden AL at launch; EVAL_ONLY leaves them real.
+      # High interactivity: one DEP8 prefill worker feeds four TP8 decode
+      # workers through NIXL, with no CPU or Mooncake offload.
+      - spec-decoding: mtp
+        conc-list: [4]
+        router: { name: dynamo-router, version: "1.3.0.dev20260720" }
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/agentic/disagg-gb200-1p4d-dep8-tp8-c4-mtp2-agentic.yaml"
+        decode:
+          num-worker: 4
+          tp: 8
+          ep: 1
+          dp-attn: false
       - spec-decoding: mtp
         conc-list: [576]
         router: { name: dynamo-router, version: "1.3.0.dev20260720" }

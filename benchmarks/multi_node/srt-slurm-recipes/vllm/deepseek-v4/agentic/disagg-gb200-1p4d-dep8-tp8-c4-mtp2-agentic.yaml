@@ -1,7 +1,8 @@
-name: "svf-vllm-disagg-gb200-1p1d-dep8-dep8-c128-mtp2-agentic"
+name: "svf-vllm-disagg-gb200-1p4d-dep8-tp8-c4-mtp2-agentic"
 
-# GB200 AgentX MTP3 topology: one DEP8 prefill worker feeds one
-# DEP8 decode worker at concurrency 128.
+# GB200 high-interactivity AgentX MTP3 topology: one DEP8 prefill worker
+# feeds four TP8 decode workers at concurrency 4. P/D KV moves through NIXL;
+# no CPU or Mooncake offload is configured.
 
 model:
   path: "deepseek-v4-pro"
@@ -35,19 +36,15 @@ resources:
   het_jobs: false
   spread_workers: false
   prefill_nodes: 2
-  decode_nodes: 2
+  decode_nodes: 8
   prefill_workers: 1
-  decode_workers: 1
+  decode_workers: 4
   gpus_per_prefill: 8
   gpus_per_decode: 8
 
 infra:
   etcd_nats_dedicated_node: false
   nats_max_payload_mb: 32
-
-environment:
-  # Mooncake prefix-block hashes must match across processes and nodes.
-  PYTHONHASHSEED: "0"
 
 frontend:
   type: dynamo
@@ -64,18 +61,9 @@ backend:
   type: vllm
   connector: null
   dp_launch_mode: per_node
-  mooncake_kv_store:
-    store_config:
-      metadata_server: "P2PHANDSHAKE"
-      global_segment_size: "140GB"
-      local_buffer_size: "4GB"
-      protocol: "rdma"
-      device_name: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
-      mode: "embedded"
-      enable_offload: false
   vllm_config:
     prefill:
-      kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_cross_layers_blocks":false,"enable_offload":false}}]}}'
+      kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}}'
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       kv-cache-dtype: "fp8"
       tensor-parallel-size: 1
@@ -87,12 +75,11 @@ backend:
       enable-ep-weight-filter: true
       max-model-len: 1048576
       max-num-seqs: 64
-      max-num-batched-tokens: 8192
+      max-num-batched-tokens: 4096
       long-prefill-token-threshold: 1024
       trust-remote-code: true
       no-enable-flashinfer-autotune: true
       block-size: 256
-      max-cudagraph-capture-size: 256
       gpu-memory-utilization: 0.85
       no-disable-hybrid-kv-cache-manager: true
       tokenizer-mode: "deepseek_v4"
@@ -102,30 +89,26 @@ backend:
       numa-bind: true
       numa-bind-nodes: [0, 0, 1, 1]
     decode:
-      kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_consumer","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_consumer","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_consumer","kv_connector_extra_config":{"load_async":true,"lookup_async":false,"enable_lookup":false,"enable_cross_layers_blocks":false,"enable_offload":false}}]}}'
+      kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_consumer","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}}'
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       kv-cache-dtype: "fp8"
-      tensor-parallel-size: 1
+      tensor-parallel-size: 8
       pipeline-parallel-size: 1
-      data-parallel-size: 8
-      data-parallel-rpc-port: 13345
+      disable-custom-all-reduce: true
       enable-cumem-allocator: true
-      enable-expert-parallel: true
-      enable-ep-weight-filter: true
       max-model-len: 1048576
-      max-num-seqs: 128
-      max-num-batched-tokens: 1024
+      max-num-seqs: 1
+      max-num-batched-tokens: 4
       trust-remote-code: true
       no-enable-flashinfer-autotune: true
       block-size: 256
       compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
-      max-cudagraph-capture-size: 512
-      gpu-memory-utilization: 0.92
+      max-cudagraph-capture-size: 4
+      gpu-memory-utilization: 0.90
       no-disable-hybrid-kv-cache-manager: true
       tokenizer-mode: "deepseek_v4"
       attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"use_fp4_indexer_cache":true}'
       speculative-config: '{"method":"mtp","num_speculative_tokens":3}'
-      moe-backend: "deep_gemm_amxf4_mega_moe"
       numa-bind: true
       numa-bind-nodes: [0, 0, 1, 1]
   prefill_environment:
@@ -138,7 +121,6 @@ backend:
     VLLM_V2_WARMUP_MAX_NUM_SEQS: "20"
     VLLM_SERVER_DEV_MODE: "1"
     VLLM_USE_V2_MODEL_RUNNER: "1"
-    VLLM_MOONCAKE_LOAD_RECV_THREADS: "20"
     VLLM_ALLREDUCE_USE_SYMM_MEM: "0"
     UCX_MEMTYPE_CACHE: "n"
     UCX_NET_DEVICES: "mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1"
@@ -150,13 +132,8 @@ backend:
     VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
     VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
     VLLM_USE_BREAKABLE_CUDAGRAPH: "0"
-    VLLM_CONNECTOR_PREFETCH_DEPTH: "8"
     VLLM_DSV4_MEGA_FP8_COMBINE: "1"
-    DG_JIT_CACHE_DIR: "/tmp/dg-cache-dsv4-gb200-1p1d-dep8-dep8-c128-{job_id}"
-    MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
-    MC_STORE_CLIENT_METRIC: "1"
-    MC_STORE_CLIENT_METRIC_INTERVAL: "5"
-    MC_TE_METRIC: "0"
+    DG_JIT_CACHE_DIR: "/tmp/dg-cache-dsv4-gb200-1p4d-dep8-prefill-c4-{job_id}"
   decode_environment:
     HF_HUB_CACHE: "/hf_hub_cache"
     HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
@@ -165,28 +142,30 @@ backend:
     VLLM_RPC_TIMEOUT: "600000"
     VLLM_LOG_STATS_INTERVAL: "1"
     VLLM_V2_WARMUP_MAX_NUM_SEQS: "20"
-    VLLM_SERVER_DEV_MODE: "1"
-    VLLM_USE_V2_MODEL_RUNNER: "1"
-    VLLM_MOONCAKE_LOAD_RECV_THREADS: "20"
-    VLLM_ALLREDUCE_USE_SYMM_MEM: "0"
-    UCX_MEMTYPE_CACHE: "n"
-    UCX_NET_DEVICES: "mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1"
-    UCX_TLS: "rc,cuda_copy"
+    TILELANG_CLEANUP_TEMP_FILES: "1"
+    VLLM_USE_NCCL_SYMM_MEM: "0"
+    TORCH_SYMMMEM: "NVSHMEM"
     NCCL_CUMEM_ENABLE: "1"
     NCCL_MNNVL_ENABLE: "1"
     NCCL_NVLS_ENABLE: "1"
-    NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
-    VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
+    VLLM_SERVER_DEV_MODE: "1"
+    VLLM_USE_V2_MODEL_RUNNER: "1"
+    VLLM_USE_RUST_FRONTEND: "1"
+    VLLM_ALLREDUCE_USE_FLASHINFER: "1"
+    VLLM_FLASHINFER_ALLREDUCE_BACKEND: "auto"
     VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
-    VLLM_DSV4_MEGA_FP8_COMBINE: "1"
-    DG_JIT_CACHE_DIR: "/tmp/dg-cache-dsv4-gb200-1p1d-dep8-dep8-c128-{job_id}"
-    MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
-    MC_STORE_CLIENT_METRIC: "1"
-    MC_STORE_CLIENT_METRIC_INTERVAL: "5"
-    MC_TE_METRIC: "0"
+    VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "1024"
+    VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_NET_DEVICES: "mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1"
+    UCX_TLS: "rc,cuda_copy"
+    NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
+    NCCL_P2P_LEVEL: "NVL"
+    DG_JIT_CACHE_DIR: "/tmp/dg-cache-dsv4-gb200-1p4d-tp8-decode-c4-{job_id}"
 
 sbatch_directives:
   cpus-per-task: "72"
+  mem: "0"
 
 srun_options:
   container-remap-root: ""

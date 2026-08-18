@@ -6,14 +6,14 @@ name: "svf-vllm-agg-gb200-tp8-c8-mtp2-agentic"
 
 model:
   path: "deepseek-v4-pro"
-  container: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-426e59f"
+  container: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-d62ad46"
   precision: "fp4"
 
 identity:
   model:
     repo: "deepseek-ai/DeepSeek-V4-Pro"
   container:
-    image: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-426e59f"
+    image: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-d62ad46"
   frameworks:
     dynamo: "1.2.1"
 
