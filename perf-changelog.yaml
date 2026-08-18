@@ -6086,3 +6086,11 @@
     - "Use TP8/EP1 concurrency 2 through 24, published FlashInfer 0.6.17 CUDA 13 wheels, and golden MTP acceptance length 3.39."
     - "Use the lmsysorg/sglang:nightly-dev-cu13-20260815-a5ba081f image."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2592
+
+- config-keys:
+    - glm5.2-fp4-b300-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use a 270 GB/rank absolute HiCache target pool for glm5.2-fp4-b300-sglang-agentic-mtp, replacing the previous ratio-based sizing."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2651
