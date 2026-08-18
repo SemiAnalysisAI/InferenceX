@@ -5997,3 +5997,11 @@
   description:
     - "Add the Kimi-K3 MI355X vLLM disaggregated AgentX arm with MoRIIO KV transfer and optional DRAM offload."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2602
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-disagg-agentic-mtp-read
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Validate Kimi-K3 c12 READ disagg with the draft MLA KV grouping patch at DRAM 0.70."
+  pr-link: XXX
