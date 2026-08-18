@@ -1,5 +1,4 @@
 - config-keys:
-    - kimik3-fp4-mi355x-vllm-agentic
     - kimik3-fp4-mi355x-vllm-agentic-dspark
   description:
     - "Add the Kimi-K3 (2.8T, KDA/MLA hybrid, 1M native context) MI355X agentic recipe -- MoE runs the aiter SITUV2 A8W4 path (fp8 activations x 4-bit weights: AITER_SITUV2_A8W4=1 + VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4=1),  plus fp8-asm MLA attention. Agentic-coding with TP8"
