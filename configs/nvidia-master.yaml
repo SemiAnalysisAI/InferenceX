@@ -8673,7 +8673,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-mooncake-dcp8-agg:
       search-space:
       - kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.12.post1" }
-        conc-list: [48, 64]
+        conc-list: [48, 64, 70]
         prefill:
           num-worker: 1
           tp: 8
