@@ -104,6 +104,7 @@ backend:
       attention-backend: "FLASHINFER_MLA"
       attention-config: '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true}'
       max-cudagraph-capture-size: 1024
+      max-num-seqs: 1000
       kv-cache-memory: 10737418240
       kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false}}'
 
