@@ -6103,3 +6103,12 @@
     - "Use a 270 GB/rank target HiCache pool for the GLM-5.2 B200 TP8 c12 and c16 AgentX points to avoid the host-cache capacity cliff."
     - "Keep the existing ratio-0.75 pool for c1, c4, and c8 while retaining the SGLang EAGLE MTP and golden synthetic acceptance setup."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2652
+
+- config-keys:
+    - minimaxm3-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add the MiniMax-M3 NVFP4 GB300 disaggregated AgentX config with EAGLE3-GQA MTP and Mooncake DRAM KV offload."
+    - "Use vllm/vllm-openai:nightly-5e35a6f4f9bbc217c599692157ca985c894373f7 with golden synthetic AL 2.78 for throughput and a real-verification eval twin."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
