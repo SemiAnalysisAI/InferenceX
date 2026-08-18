@@ -196,11 +196,7 @@ def test_collect_eval_rows_retains_integration_and_sample_failures(
     assert len(rows) == 5
     assert all(row["infrastructure_success"] is False for row in rows)
     assert all(row["score"] is None for row in rows)
-    assert all(
-        row["n_eff"] == 0
-        for row in rows
-        if row["integration_error"]["type"] == "InvalidEffectiveSampleCount"
-    )
+    assert all(row["n_eff"] == 0 for row in rows)
     assert {
         row["integration_error"]["type"]
         for row in rows

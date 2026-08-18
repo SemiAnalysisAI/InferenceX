@@ -223,7 +223,7 @@ def extract_lm_metrics(json_path: Path) -> List[Dict[str, Any]]:
                 'flex_se': None,
                 'accuracy': None,
                 'accuracy_se': None,
-                'n_eff': 0 if invalid_effective_count else n_eff,
+                'n_eff': 0,
                 'model': model,
                 'source': str(json_path),
                 'infrastructure_success': False,
