@@ -26,6 +26,7 @@ RESULT_FORMAT = "inferencex-eval-v1"
 ADAPTER_NAME = "bfcl-v4-openai-completions"
 DEFAULT_NUM_THREADS = 4
 DEFAULT_REQUEST_TIMEOUT_SECONDS = 180.0
+DEFAULT_REQUEST_MAX_RETRIES = 2
 REQUIRED_SCORE = 0.75
 
 BFCL_PACKAGE = "bfcl-eval"
@@ -158,6 +159,7 @@ class UpstreamRunner(Protocol):
         api_key: str,
         num_threads: int,
         request_timeout_seconds: float,
+        request_max_retries: int,
     ) -> None: ...
 
 
@@ -223,6 +225,16 @@ def _positive_int(value: str) -> int:
         raise argparse.ArgumentTypeError("must be a positive integer") from exc
     if parsed <= 0:
         raise argparse.ArgumentTypeError("must be a positive integer")
+    return parsed
+
+
+def _nonnegative_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a non-negative integer") from exc
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("must be a non-negative integer")
     return parsed
 
 
@@ -299,6 +311,8 @@ def _native_report(
     model: str,
     base_url: str | None,
     num_threads: int,
+    request_timeout_seconds: float,
+    request_max_retries: int,
     scores: Sequence[CategoryScore] | None,
     integration_error: BaseException | None = None,
 ) -> dict[str, Any]:
@@ -316,6 +330,8 @@ def _native_report(
         "sampling": {
             "temperature": suite.temperature,
             "num_threads": num_threads,
+            "request_timeout_seconds": request_timeout_seconds,
+            "request_max_retries": request_max_retries,
         },
         "summary": {
             "accuracy": accuracy,
@@ -606,6 +622,7 @@ def _run_upstream(
     api_key: str,
     num_threads: int,
     request_timeout_seconds: float,
+    request_max_retries: int,
 ) -> None:
     """Lazily load and invoke the pinned BFCL API against an existing server."""
     suite, case_ids_by_category = _read_selected_suite(project_root)
@@ -628,12 +645,15 @@ def _run_upstream(
     class BoundedOpenAICompletionsHandler(OpenAICompletionsHandler):
         def _build_client_kwargs(self) -> dict[str, Any]:
             kwargs = super()._build_client_kwargs()
-            kwargs.update(timeout=request_timeout_seconds, max_retries=0)
+            kwargs.update(
+                timeout=request_timeout_seconds,
+                max_retries=request_max_retries,
+            )
             return kwargs
 
         def generate_with_backoff(self, **kwargs: Any) -> tuple[Any, float]:
-            # The upstream method has an unbounded RateLimitError retry decorator.
-            # The surrounding eval process owns the suite deadline, so issue once.
+            # Replace upstream's unbounded RateLimitError decorator with the
+            # OpenAI client's bounded transport and server-error retries.
             started = time.monotonic()
             try:
                 response = self.client.chat.completions.create(**kwargs)
@@ -870,6 +890,8 @@ def publish_integration_error(
             model=model,
             base_url=None,
             num_threads=suite.default_num_threads,
+            request_timeout_seconds=DEFAULT_REQUEST_TIMEOUT_SECONDS,
+            request_max_retries=DEFAULT_REQUEST_MAX_RETRIES,
             scores=None,
             integration_error=error,
         ),
@@ -896,6 +918,7 @@ def run_evaluation(
     suite: SuiteSpec = SMOKE_SUITE,
     num_threads: int | None = None,
     request_timeout_seconds: float = DEFAULT_REQUEST_TIMEOUT_SECONDS,
+    request_max_retries: int = DEFAULT_REQUEST_MAX_RETRIES,
     upstream_runner: UpstreamRunner = _run_upstream,
 ) -> bool:
     """Run one immutable BFCL suite and always publish both report formats."""
@@ -927,6 +950,12 @@ def run_evaluation(
             or request_timeout_seconds <= 0
         ):
             raise ValueError("request_timeout_seconds must be positive and finite")
+        if (
+            isinstance(request_max_retries, bool)
+            or not isinstance(request_max_retries, int)
+            or request_max_retries < 0
+        ):
+            raise ValueError("request_max_retries must be a non-negative integer")
         if not callable(upstream_runner):
             raise TypeError("upstream_runner must be callable")
 
@@ -942,6 +971,7 @@ def run_evaluation(
             api_key=normalized_key,
             num_threads=resolved_num_threads,
             request_timeout_seconds=float(request_timeout_seconds),
+            request_max_retries=request_max_retries,
         )
         _validate_generated_results(bfcl_project_root, selected_case_ids)
         scores = _collect_scores(bfcl_project_root, selected_case_ids)
@@ -958,6 +988,8 @@ def run_evaluation(
                 model=model,
                 base_url=base_url,
                 num_threads=resolved_num_threads,
+                request_timeout_seconds=float(request_timeout_seconds),
+                request_max_retries=request_max_retries,
                 scores=None,
                 integration_error=exc,
             ),
@@ -980,6 +1012,8 @@ def run_evaluation(
         model=normalized_model,
         base_url=normalized_url,
         num_threads=resolved_num_threads,
+        request_timeout_seconds=float(request_timeout_seconds),
+        request_max_retries=request_max_retries,
         scores=scores,
     )
     compatibility = _compatibility_result(
@@ -1012,6 +1046,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--request-timeout-seconds",
         type=_positive_float,
         default=DEFAULT_REQUEST_TIMEOUT_SECONDS,
+    )
+    parser.add_argument(
+        "--request-max-retries",
+        type=_nonnegative_int,
+        default=DEFAULT_REQUEST_MAX_RETRIES,
     )
     parser.add_argument("--integration-error")
     args = parser.parse_args(argv)
@@ -1051,6 +1090,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         suite=suite,
         num_threads=args.num_threads,
         request_timeout_seconds=args.request_timeout_seconds,
+        request_max_retries=args.request_max_retries,
     )
     return 0 if passed else 1
 

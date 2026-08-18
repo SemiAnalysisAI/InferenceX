@@ -220,6 +220,7 @@ def test_command_defaults_and_required_runtime_inputs(tmp_path: Path) -> None:
     assert args.api_key == "EMPTY"
     assert args.num_threads == 4
     assert args.request_timeout_seconds == 180.0
+    assert args.request_max_retries == 2
     assert args.integration_error is None
     assert args.suite == be.TASK_NAME
     with pytest.raises(SystemExit):
@@ -291,12 +292,17 @@ def test_cli_forwards_selected_suite_on_normal_path(
     assert return_code == 0
     assert invocation["suite"] is be.KIMI_SUITE
     assert invocation["num_threads"] == 16
+    assert invocation["request_max_retries"] == 2
 
 
 
 @pytest.mark.parametrize(
     ("flag", "value"),
-    (("--num-threads", "0"), ("--request-timeout-seconds", "nan")),
+    (
+        ("--num-threads", "0"),
+        ("--request-timeout-seconds", "nan"),
+        ("--request-max-retries", "-1"),
+    ),
 )
 def test_cli_rejects_invalid_positive_values(
     tmp_path: Path, flag: str, value: str
@@ -358,6 +364,7 @@ def test_perfect_score_projects_pinned_ids_and_upstream_headers(
         "api_key": "EMPTY",
         "num_threads": 4,
         "request_timeout_seconds": 180.0,
+        "request_max_retries": 2,
     }
     assert json.loads(
         (project_root / "test_case_ids_to_generate.json").read_text(encoding="utf-8")
@@ -900,7 +907,12 @@ def test_selected_suite_integration_error_preserves_suite_identity(
     native = _native(output_dir)
     assert native["task"] == "bfcl_vllm_minimax_m3"
     assert native["summary"]["expected_count"] == 1000
-    assert native["sampling"] == {"temperature": 0.001, "num_threads": 8}
+    assert native["sampling"] == {
+        "temperature": 0.001,
+        "num_threads": 8,
+        "request_timeout_seconds": 180.0,
+        "request_max_retries": 2,
+    }
     assert list(compatibility["results"]) == [
         "bfcl_vllm_minimax_m3",
         "bfcl_vllm_minimax_m3_simple_python",

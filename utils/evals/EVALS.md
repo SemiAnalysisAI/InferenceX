@@ -333,8 +333,9 @@ typically `http://127.0.0.1:$PORT/v1`. The OpenAI SDK appends
 not download a model or call a remote inference API.
 
 The smoke fixes temperature to `0`, uses four BFCL worker threads, allows 180
-seconds per OpenAI request with retries disabled, and has a 900-second
-whole-suite timeout. Dependency installation is separately bounded at 600
+seconds per OpenAI request, and permits two bounded OpenAI client retries for
+retryable transport and server failures (three total attempts). The whole-suite
+timeout is 900 seconds. Dependency installation is separately bounded at 600
 seconds. Dependency, setup, transport, timeout, and collection failures write
 zero-score artifacts with integration-error metadata and fail the runner
 nonzero. A completed evaluation exits independently of model quality; the
@@ -395,10 +396,10 @@ the V4 agentic web-search and memory evaluations.
 Select these suites explicitly with `eval-framework: bfcl`; `bfcl_smoke`
 remains the framework default. Both suites use BFCL's OpenAI completions
 handler against the local endpoint rather than a hosted-provider handler. They
-fix temperature to `0.001`, disable request retries, and keep the 180-second
-per-request timeout. MiniMax uses eight worker threads. Kimi uses 16 threads
-and permits up to ten multi-turn steps. The whole-suite timeout is 7200
-seconds.
+fix temperature to `0.001`, permit the same two bounded request retries, and
+keep the 180-second per-attempt timeout. MiniMax uses eight worker threads.
+Kimi uses 16 threads and permits up to ten multi-turn steps. The whole-suite
+timeout is 7200 seconds.
 
 The adapter builds a deterministic run-ID map from the pinned BFCL dataset.
 Single-turn suites select every case in their named categories. The Kimi
