@@ -8125,38 +8125,10 @@ kimik3-fp4-gb200-dynamo-vllm-agentic:
           ep: 16
           dp-attn: true
 
-# Kimi-K3 GB200 TP16/DCP16 profiles using Mooncake DRAM offload.
-kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-disagg:
-  image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-75c2eef
-  model: moonshotai/Kimi-K3
-  model-prefix: kimik3
-  runner: cluster:gb200-nv
-  precision: fp4
-  framework: dynamo-vllm
-  router: { name: dynamo-router, version: "ba83080ecd31c1ce918559e576d3c5bc9e092ff1" }
-  kv-p2p-transfer: nixl
-  multinode: true
-  disagg: true
-  scenarios:
-    agentic-coding:
-    - dram-utilization: 0.1065
-      search-space:
-      - spec-decoding: mtp
-        kv-offloading: dram
-        kv-offload-backend: { name: mooncake, version: "0.3.12.post1" }
-        conc-list: [1, 4, 8, 16, 32, 48]
-        prefill:
-          num-worker: 1
-          tp: 16
-          dcp-size: 16
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.36"
-          - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/disagg-gb200-1p1d-dcp16-dcp16-dspark4-mooncake-agentic.yaml"
-        decode: { num-worker: 1, tp: 16, dcp-size: 16, ep: 1, dp-attn: false }
-
+# Kimi-K3 GB200 TP16/DCP16 aggregate profiles using Mooncake DRAM offload.
+# dram-utilization 0.61 is the Kimi-K3 GB200 budget already validated by
+# kimik3-fp4-gb200-dynamo-vllm-agentic: 550 GB (512 GiB) per four-GPU node,
+# which the recipes spend as a 128 GiB Mooncake segment per TP rank.
 kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg:
   image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-75c2eef
   model: moonshotai/Kimi-K3
@@ -8168,12 +8140,12 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg:
   disagg: false
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.1065
+    - dram-utilization: 0.61
       search-space:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.12.post1" }
-        conc-list: [1, 4]
+        conc-list: [1, 2, 4, 8, 16]
         prefill:
           num-worker: 1
           tp: 16
@@ -8197,11 +8169,11 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-mooncake-dcp16-agg:
   disagg: false
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.1065
+    - dram-utilization: 0.61
       search-space:
       - kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.12.post1" }
-        conc-list: [16, 32, 48, 64]
+        conc-list: [8, 16, 24, 32, 36, 40, 44, 48]
         prefill:
           num-worker: 1
           tp: 16

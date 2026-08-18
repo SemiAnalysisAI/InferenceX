@@ -6226,12 +6226,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2660
 
 - config-keys:
-    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-disagg
     - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg
     - kimik3-fp4-gb200-dynamo-vllm-agentic-mooncake-dcp16-agg
   scenario-type:
     - agentic-coding
   description:
-    - "Add Kimi-K3 GB200 DCP16 AgentX configurations with Mooncake DRAM offload."
-    - "Cover 1P1D, DSpark max-num-seqs 2, and no-spec aggregate profiles using the rebuilt vLLM image."
+    - "Add Kimi-K3 GB200 TP16/DCP16 aggregate AgentX configurations with Mooncake DRAM offload."
+    - "DSpark K=4 arm runs max-num-seqs 2 over concurrency 1-16; the no-spec arm runs max-num-seqs 512 over concurrency 8-48."
+    - "Both load weights with fastsafetensors and size the KV cache from gpu-memory-utilization 0.92 rather than an explicit kv-cache-memory budget."
+    - "Mooncake segments are 128 GiB per TP rank (512 GiB per four-GPU node), matching the dram-utilization 0.61 budget already used by the Kimi-K3 GB200 offload arm."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2639

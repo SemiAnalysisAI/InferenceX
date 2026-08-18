@@ -55,7 +55,12 @@ backend:
       - "--eviction_ratio=0.10"
     store_config:
       metadata_server: "P2PHANDSHAKE"
-      global_segment_size: "96GB"
+      # Per-rank segment: srt-slurm starts one embedded store client per vLLM
+      # worker, so the node total is 4 x this on a 4-GPU GB200 node. 128 GiB
+      # per rank = 512 GiB per node, matching the Kimi-K3 GB200 offload arm
+      # (agg-gb200-dep16-throughput-vllm-simple-offload-agentic.yaml) and the
+      # dram-utilization 0.61 budget declared in configs/nvidia-master.yaml.
+      global_segment_size: "128GB"
       local_buffer_size: "4GB"
       protocol: "rdma"
       device_name: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
@@ -93,8 +98,7 @@ backend:
       max-num-batched-tokens: 16384
       trust-remote-code: true
       language-model-only: true
-      load-format: "safetensors"
-      safetensors-load-strategy: "lazy"
+      load-format: "fastsafetensors"
       moe-backend: "auto"
       no-enable-flashinfer-autotune: true
       enable-prefix-caching: true
@@ -104,8 +108,10 @@ backend:
       attention-backend: "FLASHINFER_MLA"
       attention-config: '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true}'
       max-cudagraph-capture-size: 1024
-      max-num-seqs: 1000
-      kv-cache-memory: 10737418240
+      max-num-seqs: 512
+      # Size the KV cache from the free-HBM profile instead of an explicit
+      # budget; 0.92 matches agg-gb200-tp16-latency-agentic.yaml.
+      gpu-memory-utilization: 0.92
       kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false}}'
 
 sbatch_directives:
