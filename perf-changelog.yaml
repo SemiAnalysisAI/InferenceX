@@ -6076,3 +6076,14 @@
     - "Add GB200 DeepSeek-V4-Pro FP4 Dynamo-vLLM AgentX mirroring the GB300 PR #2571 MTP tuning, with every GB300 4-GPU worker sized to 8 GPUs on GB200."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2636
 
+- config-keys:
+    - glm5.1-fp8-b200-tilert-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add the agentic-coding scenario for GLM-5.1 FP8 B200 TileRT PD-disaggregation, reusing the fixed-seq-len topology (1 prefill node TP8 + 1 decode node TP8, NIXL KV transfer, MTP) with an AIPerf trace replay in place of benchmark_serving.py"
+    - "Separate config key rather than a second scenario on glm5.1-fp8-b200-tilert: agentic master configs must declare an exact cluster:<name> runner, so this entry adds cluster:b200-dgxc-slurm to configs/runners.yaml over the same three b200-dgxc-slurm nodes the b200-multinode label already uses"
+    - "TileRT decode serves one sequence at a time, so conc-list is the single point [1]; the router waits for a free decode node (--queue-timeout) instead of answering 429 when a session fans out into concurrent sub-conversations"
+    - "kv-offloading: none -- TileRT keeps all KV state on the GPU and exposes no DRAM offload tier"
+    - "GLM-5.1 has 202752 native positions, so AIPerf's --max-context-length drops the corpus traces whose peak context exceeds it: 175 of the 393 traces in cc-traces-weka-062126-256k remain eligible"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2645
