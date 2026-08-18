@@ -4885,7 +4885,6 @@
 - config-keys:
     - dsv4-fp4-gb300-dynamo-sglang-agentic-agg
     - dsv4-fp4-gb300-dynamo-sglang-agentic-disagg
-    - dsv4-fp4-gb300-dynamo-sglang-agentic-disagg
   description:
     - "Add GB300 DeepSeek-V4 dynamo-sglang agentic recipes (agg-tp4 + dep8 disagg pareto)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2157
@@ -6053,6 +6052,7 @@
 
 - config-keys:
     - dsv4-fp4-gb300-dynamo-sglang-agentic-agg
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-disagg
   scenario-type:
     - agentic-coding
   description:
