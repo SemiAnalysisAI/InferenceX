@@ -6111,4 +6111,4 @@
   description:
     - "Add MiniMax-M3 NVFP4 GB300 aggregate AgentX submission via the Dynamo frontend and a vLLM aggregated worker."
     - "Cover TP2 C24 and TP4 C1/C5/C10/C15/C20/C30, with SimpleCPU-lazy KV offload at TP2 C24 (400 GiB) and TP4 C30 (700 GiB); other TP4 points stay GPU-resident."
-  pr-link: XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2664
