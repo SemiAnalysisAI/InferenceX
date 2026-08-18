@@ -103,6 +103,37 @@ export AITER_BF16_FP8_MOE_BOUND=0
 # REQUIRED on ROCm per the upstream recipe: the build auto-enables this to 1.
 export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 
+# ---- DIAGNOSTIC: synchronous kernel fault reporting -------------------------
+# NOT FOR MERGE. Remove this block once the hipErrorIllegalAddress is located.
+#
+# Every traceback we have collected for that crash is useless for locating it.
+# HIP reports kernel faults asynchronously, so the Python stack unwinds at
+# whatever CUDA call happens to check the error flag next -- in our logs that
+# is triton's _init_handles() -> get_current_device() while *loading*
+# _fwd_kernel_stage2, a kernel that had not been launched yet. vLLM prints the
+# caveat itself: "the stacktrace below might be incorrect."
+#
+# AMD_SERIALIZE_KERNEL=3 makes every kernel launch wait for completion, so the
+# fault surfaces at the kernel that actually caused it. TORCH_USE_HIP_DSA turns
+# on the device-side assertion tracking the abort message explicitly asks for
+# ("Device-side assertion tracking was not enabled by user").
+#
+# This is very slow by design. The crash reproduces during warmup
+# (compile_or_warm_up_model -> _dummy_run), so the run only needs to reach
+# startup; any throughput numbers it produces are meaningless.
+DIAG_SERIALIZE_KERNEL="${DIAG_SERIALIZE_KERNEL:-1}"
+if [[ "$DIAG_SERIALIZE_KERNEL" == "1" ]]; then
+    export AMD_SERIALIZE_KERNEL=3
+    export TORCH_USE_HIP_DSA=1
+    export TORCH_USE_CUDA_DSA=1
+    # Serialized launches make warmup far slower than the normal budget allows;
+    # the point is to reach the fault, not to finish quickly.
+    export VLLM_ENGINE_READY_TIMEOUT_S="${VLLM_ENGINE_READY_TIMEOUT_S:-14400}"
+    export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS="${VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS:-3600}"
+    echo "DIAGNOSTIC: AMD_SERIALIZE_KERNEL=3 and device-side assertions are ON."
+    echo "DIAGNOSTIC: kernel launches are serialized; timings are not valid."
+fi
+
 # Workaround for MEC FW <177 RCCL memory reclaim issue (shared with the other
 # gfx950 recipes in this tree).
 mec_version=$(rocm-smi --showfw 2>/dev/null | grep MEC | head -n 1 | awk '{print $NF}')

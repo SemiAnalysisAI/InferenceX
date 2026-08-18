@@ -675,6 +675,30 @@ kimik3-fp4-mi355x-vllm-agentic-mtp-nokv:
       search-space:
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [4, 8, 10, 12, 16], spec-decoding: mtp }
 
+# DIAGNOSTIC ONLY -- not for merge. Reproduces the hipErrorIllegalAddress with
+# AMD_SERIALIZE_KERNEL=3 and device-side assertions enabled (see the DIAGNOSTIC
+# block in kimik3_fp4_mi355x_mtp.sh) so the fault is reported at the kernel that
+# actually causes it instead of at whatever CUDA call checks the error flag next.
+#
+# Uses the vllm-simple backend rather than LMCache on purpose: SimpleCPUOffloadConnector
+# is vLLM's own CPU offload, so it reproduces the identical crash with no LMCache
+# in the picture, which keeps the repro minimal. c8 and c10 both failed on this
+# backend in run 31837518310. Timings from this key are meaningless -- serialized
+# kernel launches make the run far slower than normal.
+kimik3-fp4-mi355x-vllm-agentic-mtp-serialize:
+  image: vllm/vllm-openai-rocm:nightly-ac7509e2b1db40fec2f03dde1ed4e9dfdc2338c9
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.60
+      search-space:
+      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [8, 10], spec-decoding: mtp }
+
 
 dsr1-fp4-mi355x-sglang-disagg:
   image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519
