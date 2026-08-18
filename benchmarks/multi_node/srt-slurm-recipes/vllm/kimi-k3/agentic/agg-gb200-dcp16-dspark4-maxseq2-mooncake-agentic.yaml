@@ -116,10 +116,12 @@ backend:
       # Throughput jobs inject the committed K=4 golden AL (3.36); EVAL_ONLY
       # preserves this real target-verification configuration.
       speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
-      # Drafting makes capture sizes tokens: max-num-seqs 2 x (1 + K=4) = 10.
-      # 64 leaves margin while dropping the unusable tail that OOMed the
-      # no-spec arm's 1024-wide ladder.
-      max-cudagraph-capture-size: 64
+      # Capture sizes are tokens when drafting, and short prefills run on the
+      # captured graphs too, so the ladder has to reach well past the
+      # 2 x (1 + K=4) = 10 tokens a decode step needs. 512 keeps those
+      # prefills on graphs while dropping the tail above 512 that OOMed
+      # cudagraph capture on the no-spec arm (run 32144394011).
+      max-cudagraph-capture-size: 512
       # Size the KV cache from the free-HBM profile instead of an explicit
       # budget; 0.92 matches agg-gb200-tp16-latency-agentic.yaml.
       gpu-memory-utilization: 0.90
