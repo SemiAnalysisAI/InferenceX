@@ -6093,4 +6093,4 @@
     - agentic-coding
   description:
     - "Add GLM-5.2 NVFP4 GB300 AgentX recipes for Dynamo and TensorRT-LLM disaggregated serving with NIXL KV transfer and MTP speculative decoding."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2657
