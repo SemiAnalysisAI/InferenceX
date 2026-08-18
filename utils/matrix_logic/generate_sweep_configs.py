@@ -43,6 +43,76 @@ def seq_len_to_str(isl: int, osl: int) -> str:
     """
     return seq_len_itos.get((isl, osl), f"{isl}_{osl}")
 
+def freeze_config_value(value):
+    """Convert JSON-shaped config values into deterministic hashable values."""
+    if isinstance(value, dict):
+        return tuple(
+            sorted((key, freeze_config_value(item)) for key, item in value.items())
+        )
+    if isinstance(value, list):
+        return tuple(freeze_config_value(item) for item in value)
+    return value
+
+
+def trim_conc(entries: list[dict]) -> list[dict]:
+    """Retain the lowest concurrency for each generated deployment shape.
+
+    Entries are grouped by every non-eval field except ``conc`` and the
+    generated ``exp-name``. Multi-node rows may encode concurrency either as a
+    list within one row or as one-row list chunks; both representations collapse
+    to one row whose ``conc`` and dispatch-facing ``eval-conc`` use the minimum.
+    """
+    ignored_fields = {
+        "conc",
+        "exp-name",
+        "run-eval",
+        "eval-only",
+        "eval-conc",
+        "eval-all-concs",
+    }
+    groups: dict[tuple, list[int]] = {}
+    out: list[dict] = []
+
+    def minimum_concurrency(entry: dict):
+        conc = entry["conc"]
+        return min(conc) if isinstance(conc, list) else conc
+
+    for source_entry in entries:
+        entry = source_entry
+        conc = entry.get("conc")
+        if entry.get("prefill") is not None and isinstance(conc, list) and conc:
+            minimum_conc = min(conc)
+            if len(conc) > 1 or entry.get("eval-conc") != minimum_conc:
+                entry = {**entry, "conc": [minimum_conc]}
+                if "eval-conc" in entry:
+                    entry["eval-conc"] = minimum_conc
+
+        key = tuple(
+            sorted(
+                (key, freeze_config_value(value))
+                for key, value in entry.items()
+                if key not in ignored_fields
+            )
+        )
+        groups.setdefault(key, []).append(len(out))
+        out.append(entry)
+
+    drop: set[int] = set()
+    for indices in groups.values():
+        keep = min(indices, key=lambda index: minimum_concurrency(out[index]))
+        kept_entry = out[keep]
+        if any(out[index].get("run-eval") is True for index in indices):
+            kept_entry = {**kept_entry, "run-eval": True}
+            if kept_entry.get("prefill") is not None:
+                kept_entry["eval-conc"] = minimum_concurrency(kept_entry)
+            if any(
+                out[index].get("eval-all-concs") is True for index in indices
+            ):
+                kept_entry["eval-all-concs"] = True
+            out[keep] = kept_entry
+        drop.update(index for index in indices if index != keep)
+    return [entry for index, entry in enumerate(out) if index not in drop]
+
 
 def runner_labels(runner_data: dict) -> dict:
     """Return runner scheduling labels."""
@@ -289,10 +359,9 @@ def mark_eval_entries(matrix_values: list[dict], include_agentic: bool = False) 
       - Single-node: run GSM8K through the same lm-eval path as fixed-sequence
         8k1k evals, marking the highest-conc entry per (model, runner,
         framework, precision) group.
-      - Multi-node: same policy as the fixed-seq-len multi-node case above
-        (highest eligible conc per distinct parallelism config, via
-        eval-conc), using SWE-bench since it doesn't support batched
-        concurrencies.
+      - Multi-node: run GSM8K through the same lm-eval path, selecting the
+        highest eligible concurrency per distinct parallelism config via
+        eval-conc.
     """
     from collections import defaultdict
 
@@ -360,8 +429,7 @@ def mark_eval_entries(matrix_values: list[dict], include_agentic: bool = False) 
         ag_sn_groups = defaultdict(list)
         # Multi-node agentic: same "highest eligible conc per distinct
         # parallelism config" policy as the fixed-seq-len mn_groups above.
-        # SWE-bench doesn't support batched concurrencies (unlike lm-eval),
-        # so exactly one conc is picked per group, never the full list.
+        # The selected eval subset uses exactly one conc per group.
         ag_mn_groups = defaultdict(list)
         for i, entry in enumerate(matrix_values):
             if entry.get(Fields.SCENARIO_TYPE.value) != 'agentic-coding':
@@ -402,12 +470,10 @@ def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
     Evals only run at 8k1k (matching mark_eval_entries), so entries at other
     sequence lengths (e.g. 1k1k) are passed through untouched rather than
     expanded into eval rows.
-    Single-node agentic entries use GSM8K through the same lm-eval path as
-    fixed-sequence 8k1k evals. Multi-node agentic entries use SWE-bench,
-    which doesn't support batched concurrencies (unlike lm-eval): multi-node
-    agentic rows with the same topology are merged (to recombine any chunking
-    split), but only the highest resulting conc is marked for eval via
-    eval-conc, not the full list.
+    Single- and multi-node agentic entries use GSM8K through lm-eval.
+    Multi-node agentic rows with the same topology are merged (to recombine
+    any chunking split), but only the highest resulting conc is marked for
+    eval via eval-conc, matching the default agentic selection policy.
     Multi-node fixed-seq-len rows with the same engine topology are merged
     into one eval row whose full concurrency list is run sequentially
     against the same engine.
@@ -1274,6 +1340,14 @@ def main():
         )
     )
     parent_parser.add_argument(
+        '--trim-conc',
+        action='store_true',
+        help=(
+            'Trim each generated deployment shape to its minimum concurrency '
+            'after applying eval selection.'
+        )
+    )
+    parent_parser.add_argument(
         '--runner-node-filter',
         required=False,
         help='Filter runner nodes by substring match (e.g., "amd" to only include nodes containing that string). Expands each config to individual matching nodes.'
@@ -1441,11 +1515,15 @@ def main():
     else:
         parser.error(f"Unknown command: {args.command}")
         
+
     # Apply the existing eval policy first, then expand it when requested.
     if not args.no_evals:
         matrix_values = mark_eval_entries(matrix_values, include_agentic=args.evals_only or args.all_evals)
         if args.all_evals:
             matrix_values = mark_all_eval_entries(matrix_values)
+
+    if args.trim_conc:
+        matrix_values = trim_conc(matrix_values)
 
     if args.evals_only or args.all_evals:
         matrix_values = [e for e in matrix_values if e.get(Fields.RUN_EVAL.value, False)]

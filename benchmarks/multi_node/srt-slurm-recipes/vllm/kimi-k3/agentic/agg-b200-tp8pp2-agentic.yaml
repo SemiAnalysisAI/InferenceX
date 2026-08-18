@@ -80,7 +80,7 @@ backend:
     TILELANG_CLEANUP_TEMP_FILES: "1"
     UCX_MEMTYPE_CACHE: "n"
     UCX_MEMTYPE_REG_WHOLE: "n"
-    UCX_NET_DEVICES: "mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1,mlx5_4:1,mlx5_5:1,mlx5_10:1,mlx5_11:1"
+    UCX_NET_DEVICES: "mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1,mlx5_4:1,mlx5_5:1,mlx5_6:1,mlx5_7:1"
     HF_HUB_CACHE: "/hf_hub_cache"
     HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
   vllm_config:

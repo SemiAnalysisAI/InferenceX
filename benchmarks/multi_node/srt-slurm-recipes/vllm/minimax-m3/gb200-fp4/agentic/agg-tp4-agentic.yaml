@@ -30,6 +30,11 @@ frontend:
   enable_multiple_frontends: false
   env: { DYN_TCP_REQUEST_TIMEOUT: "60" }
   args:
+    dyn-chat-processor: "vllm"
+    trust-remote-code: true
+    tool-call-parser: "minimax_m3"
+    reasoning-parser: "minimax_m3"
+    enable-auto-tool-choice: true
     router-mode: "kv"
     router-kv-events: true
     router-reset-states: true

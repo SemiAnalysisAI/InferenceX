@@ -11,7 +11,6 @@ set -x
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-export EVAL_FRAMEWORK="lm-eval"
 
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
 
@@ -216,6 +215,7 @@ VLLM_CMD=(
     --moe-backend aiter
     --kv-cache-dtype fp8
     --tool-call-parser minimax_m3
+    --reasoning-parser minimax_m3
     --enable-auto-tool-choice
     --default-chat-template-kwargs '{"thinking_mode":"enabled"}'
     --max-num-seqs "$((2 * CONC))"

@@ -227,6 +227,106 @@ def test_validate_scores_checks_threshold_for_every_concurrency(
     assert "FAIL: [conc=4] gsm8k exact_match,strict-match" in captured.err
 
 
+def test_validate_scores_reports_integration_failure_without_thresholding(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    result_path = tmp_path / "results_test.json"
+    result_path.write_text(json.dumps({
+        "integration_error": {
+            "type": "RuntimeError",
+            "message": "vendor verifier checkout failed",
+        },
+        "results": {
+            "gsm8k": {
+                "exact_match,strict-match": 0.0,
+            },
+        },
+        "n-samples": {"gsm8k": {"effective": 0}},
+    }))
+    monkeypatch.setattr(sys, "argv", [
+        "validate_scores.py",
+        "--meta-env",
+        str(tmp_path / "meta_env.json"),
+        "--results-glob",
+        str(result_path),
+    ])
+
+    assert validate_scores_main() == 1
+    captured = capsys.readouterr()
+    assert "integration failure: RuntimeError: vendor verifier checkout failed" in captured.err
+    assert "gsm8k exact_match,strict-match" not in captured.err
+
+
+def test_validate_scores_rejects_invalid_effective_count_without_thresholding(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    result_path = tmp_path / "results_test.json"
+    result_path.write_text(json.dumps({
+        "results": {
+            "gsm8k": {
+                "exact_match,strict-match": 0.0,
+            },
+            "other": {
+                "exact_match,strict-match": 0.0,
+            },
+            "nonfinite": {
+                "exact_match,strict-match": 1.0,
+            },
+        },
+        "n-samples": {
+            "gsm8k": {"effective": "unknown"},
+            "other": {"effective": 0},
+            "nonfinite": {"effective": float("inf")},
+        },
+    }))
+    monkeypatch.setattr(sys, "argv", [
+        "validate_scores.py",
+        "--meta-env",
+        str(tmp_path / "meta_env.json"),
+        "--results-glob",
+        str(result_path),
+    ])
+
+    assert validate_scores_main() == 1
+    captured = capsys.readouterr()
+    assert "gsm8k invalid effective sample count: 'unknown'" in captured.err
+    assert "gsm8k exact_match,strict-match" not in captured.err
+    assert "other invalid effective sample count: 0" in captured.err
+    assert "other exact_match,strict-match" not in captured.err
+
+    assert "nonfinite invalid effective sample count: inf" in captured.err
+    assert "nonfinite exact_match,strict-match" not in captured.err
+
+def test_validate_scores_accepts_legacy_result_without_effective_count(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    result_path = tmp_path / "results_test.json"
+    result_path.write_text(json.dumps({
+        "results": {
+            "gsm8k": {
+                "exact_match,strict-match": 1.0,
+            },
+        },
+    }))
+    monkeypatch.setattr(sys, "argv", [
+        "validate_scores.py",
+        "--meta-env",
+        str(tmp_path / "meta_env.json"),
+        "--results-glob",
+        str(result_path),
+    ])
+
+    assert validate_scores_main() == 0
+    captured = capsys.readouterr()
+    assert "PASS: gsm8k exact_match,strict-match" in captured.out
+
+
 def test_amd_multinode_container_forwards_eval_concurrency_list() -> None:
     job_slurm = (
         Path(__file__).resolve().parents[2]
@@ -248,3 +348,4 @@ def test_amd_multinode_container_forwards_eval_concurrency_list() -> None:
     ).read_text()
     assert 'expected_concs="${EVAL_CONC}"' in workflow
     assert 'validate_scores.py --expected-concs "${expected_concs}"' in workflow
+    assert "--metric-prefix" not in workflow

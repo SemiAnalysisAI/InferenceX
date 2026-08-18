@@ -1,7 +1,11 @@
 """Comprehensive tests for generate_sweep_configs.py"""
-import pytest
 import argparse
 import copy
+import hashlib
+import json
+from pathlib import Path
+
+import pytest
 from generate_sweep_configs import (
     MIN_EVAL_CONC,
     seq_len_stoi,
@@ -13,6 +17,7 @@ from generate_sweep_configs import (
     mark_all_eval_entries,
     apply_node_type_defaults,
     expand_config_keys,
+    trim_conc,
 )
 
 
@@ -1904,6 +1909,132 @@ class TestArgumentDefaults:
         }
         assert all(entry['run-eval'] is True for entry in result)
         assert all(entry['eval-only'] is True for entry in result)
+
+    def test_trim_conc_reduces_generated_eval_matrix(
+        self,
+        monkeypatch,
+        sample_single_node_config,
+        sample_runner_config,
+    ):
+        import sys
+        import generate_sweep_configs
+
+        monkeypatch.setattr(
+            generate_sweep_configs,
+            'load_config_files',
+            lambda _: sample_single_node_config,
+        )
+        monkeypatch.setattr(
+            generate_sweep_configs,
+            'load_runner_file',
+            lambda _: sample_runner_config,
+        )
+        monkeypatch.setattr(sys, 'argv', [
+            'generate_sweep_configs.py',
+            'test-config',
+            '--config-files', 'dummy.yaml',
+            '--config-keys', 'dsr1-fp8-mi300x-sglang',
+            '--evals-only',
+            '--all-evals',
+            '--trim-conc',
+        ])
+
+        result = generate_sweep_configs.main()
+
+        assert len(result) == 1
+        assert result[0]['conc'] == 4
+        assert result[0]['run-eval'] is True
+        assert result[0]['eval-only'] is True
+
+    def test_trim_conc_updates_multinode_dispatch_concurrency(self):
+        low_entry = {
+            'prefill': {'num-worker': 1, 'tp': 8},
+            'decode': {'num-worker': 0, 'tp': 8},
+            'conc': [4],
+        }
+        high_entry = {
+            **low_entry,
+            'conc': [64],
+            'run-eval': True,
+            'eval-conc': 64,
+        }
+
+        result = trim_conc([high_entry, low_entry])
+
+        assert len(result) == 1
+        assert result[0]['conc'] == [4]
+        assert result[0]['eval-conc'] == 4
+        assert result[0]['run-eval'] is True
+
+    def test_kimi_minimax_trimmed_eval_matrix_covers_current_configs(
+        self,
+        monkeypatch,
+    ):
+        import sys
+        import generate_sweep_configs
+
+        repo_root = Path(__file__).resolve().parents[2]
+        monkeypatch.setattr(sys, 'argv', [
+            'generate_sweep_configs.py',
+            'full-sweep',
+            '--config-files',
+            str(repo_root / 'configs/nvidia-master.yaml'),
+            str(repo_root / 'configs/amd-master.yaml'),
+            '--runner-config',
+            str(repo_root / 'configs/runners.yaml'),
+            '--model-prefix',
+            'kimik3',
+            'minimaxm3',
+            '--scenario-type',
+            'agentic-coding',
+            '--evals-only',
+            '--all-evals',
+            '--trim-conc',
+        ])
+
+        rows = generate_sweep_configs.main()
+        manifest_fields = (
+            'model-prefix',
+            'runner',
+            'framework',
+            'precision',
+            'tp',
+            'pp',
+            'dcp-size',
+            'pcp-size',
+            'ep',
+            'dp-attn',
+            'prefill',
+            'decode',
+            'disagg',
+            'kv-offloading',
+            'kv-offload-backend',
+            'spec-decoding',
+            'exp-name',
+        )
+        manifest = sorted(
+            tuple(
+                (
+                    field,
+                    generate_sweep_configs.freeze_config_value(row.get(field)),
+                )
+                for field in manifest_fields
+            )
+            for row in rows
+        )
+        manifest_digest = hashlib.sha256(
+            json.dumps(manifest, separators=(',', ':')).encode()
+        ).hexdigest()
+
+        assert len(manifest) == 36
+        assert manifest_digest == (
+            'c37c4259ca15d7b4856166a4703a7cc6ed43d4b86262cd6c58433c19fdcfa813'
+        ), json.dumps(manifest, indent=2)
+        for row in rows:
+            if isinstance(row['conc'], list):
+                assert row['conc'] == [row['eval-conc']]
+        assert all(row['run-eval'] is True for row in rows)
+        assert all(row['eval-only'] is True for row in rows)
 
     def test_all_evals_batches_each_multinode_concurrency(
         self,

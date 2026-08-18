@@ -54,6 +54,9 @@ frontend:
     # the system env. Applies to both dynamo.hash (source) and dynamo.wheel.
     PIP_BREAK_SYSTEM_PACKAGES: "1"
   args:
+    dyn-chat-processor: sglang
+    tool-call-parser: deepseekv4
+    reasoning-parser: deepseek-v4
     router-mode: "kv"
     router-session-affinity-ttl-secs: "3600"
     active-decode-blocks-threshold: "None"
@@ -91,6 +94,8 @@ backend:
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       enable-metrics: true
       trust-remote-code: true
+      reasoning-parser: deepseek-v4
+      tool-call-parser: deepseekv4
       stream-interval: 50
       watchdog-timeout: 1000000
       mem-fraction-static: 0.90

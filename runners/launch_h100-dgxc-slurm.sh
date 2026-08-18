@@ -54,6 +54,11 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         cd "$SRT_REPO_DIR"
         git checkout sa-submission-q2-2026
     fi
+    if [[ "${EVAL_FRAMEWORK:-lm-eval}" != "lm-eval" ]]; then
+        python3 "$GITHUB_WORKSPACE/runners/patch_srt_eval_dispatch.py" "$(pwd)" \
+            || exit 1
+    fi
+
 
     echo "Installing srtctl..."
     export UV_INSTALL_DIR="/mnt/nfs/sa-shared/.uv/bin"
@@ -145,6 +150,8 @@ EOF
     sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
     # Raise sglang's torch-distributed TCPStore timeout from the 600s gloo default
     sed -i '/^      watchdog-timeout:/a\      dist-timeout: 1800' "${CONFIG_FILE%%:*}"
+    python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
+        "${CONFIG_FILE%%:*}" "$FRAMEWORK" || exit 1
     SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "h100,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
     echo "$SRTCTL_OUTPUT"
 
