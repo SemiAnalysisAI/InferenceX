@@ -85,9 +85,11 @@ if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "qw
         find "$TRTLLM_RECIPES_DIR" -name "*.yaml" \
             -exec sed -i '/TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS/d' {} +
     fi
-    SRTCTL_SETUP_SCRIPT="bind-b300-prefill-cpus.sh"
-    cp "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/$SRTCTL_SETUP_SCRIPT" \
-        "configs/$SRTCTL_SETUP_SCRIPT"
+    if [[ "${CONFIG_FILE:-}" == *"disagg-b300-9p1d-dep1-dep8-c536-b64-mtp-kvoffload.yaml" ]]; then
+        SRTCTL_SETUP_SCRIPT="bind-b300-prefill-cpus.sh"
+        cp "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/$SRTCTL_SETUP_SCRIPT" \
+            "configs/$SRTCTL_SETUP_SCRIPT"
+    fi
 elif [[ "$IS_AGENTIC" == "1" ]]; then
     git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR" || exit 1
