@@ -6234,4 +6234,4 @@
   description:
     - "Add Kimi-K3 GB200 DCP16 AgentX configurations with Mooncake DRAM offload."
     - "Cover 1P1D, DSpark max-num-seqs 2, and no-spec aggregate profiles using the rebuilt vLLM image."
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2639
