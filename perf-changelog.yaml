@@ -6076,7 +6076,6 @@
     - "Add GB200 DeepSeek-V4-Pro FP4 Dynamo-vLLM AgentX mirroring the GB300 PR #2571 MTP tuning, with every GB300 4-GPU worker sized to 8 GPUs on GB200."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2636
 
-
 - config-keys:
     - qwen3.5-fp8-h200-sglang-agentic-hicache-mtp
   scenario-type:
@@ -6119,5 +6118,14 @@
     - agentic-coding
   description:
     - "Append GB300 vLLM AgentX c388 with TRT-matched 1P1D DEP8/DEP32 topology and batching, decode graph capture 16, and synthetic AL 2.97."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2302
+  append-only: true
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Append GB300 vLLM AgentX low-latency c4/c12/c24 with TRT-matched 1P4D DEP4/TEP8 and 1P6D DEP4/TEP4 topologies and batching, decode graph capture 4/16, and synthetic AL 2.49."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2302
   append-only: true
