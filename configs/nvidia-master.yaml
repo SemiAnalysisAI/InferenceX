@@ -8212,8 +8212,10 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-2p2d:
 # 48, well above that cap, and at conc <= 16 attention-DP leaves 2 sessions per
 # rank and is strictly dominated by TP8, so it would spend a GPU job per point
 # to re-measure a worse curve. This recipe offloads to host DRAM: without
-# HiCache the working set outgrows HBM past conc
-# 8 and the radix hit rate collapses to <0.1.
+# HiCache the working set outgrows HBM past conc 8 and the radix hit rate
+# collapses to <0.1. The benchmark script uses an absolute 270 GB/rank target
+# HiCache pool for every point, keeping host token capacity stable across the
+# curve and providing more headroom than the validated ratio-1.50 c16 run.
 glm5.2-fp4-b300-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.16-cu130
   model: nvidia/GLM-5.2-NVFP4

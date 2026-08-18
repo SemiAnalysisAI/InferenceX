@@ -6076,3 +6076,11 @@
     - "Add GB200 DeepSeek-V4-Pro FP4 Dynamo-vLLM AgentX mirroring the GB300 PR #2571 MTP tuning, with every GB300 4-GPU worker sized to 8 GPUs on GB200."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2636
 
+- config-keys:
+    - glm5.2-fp4-b300-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use a 270 GB/rank absolute HiCache target pool for glm5.2-fp4-b300-sglang-agentic-mtp, replacing the previous ratio-based sizing."
+  pr-link: XXX
+
