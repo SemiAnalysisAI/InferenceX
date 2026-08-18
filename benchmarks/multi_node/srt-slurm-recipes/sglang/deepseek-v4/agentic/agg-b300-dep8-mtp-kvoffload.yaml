@@ -75,10 +75,6 @@ backend:
       trust-remote-code: true
       enable-metrics: true
       enable-cache-report: true
-      # The AgentX corpus contains a small number of traces longer than the
-      # runtime KV capacity. Match the existing native B300 launcher: truncate
-      # those requests instead of leaving Dynamo streams unresolved.
-      allow-auto-truncate: true
       # Leave activation headroom for 8K/rank chunked prefill; 0.90 OOMs
       # under the c128 AgentX warmup while 0.85 completes the full run.
       mem-fraction-static: 0.85
