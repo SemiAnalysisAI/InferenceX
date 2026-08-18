@@ -22,7 +22,9 @@ slurm:
   time_limit: "04:00:00"
 
 health_check:
-  max_attempts: 720
+  # 360 x 10s = 1 hour. Loading and cudagraph capture complete in ~30 min when
+  # healthy, so a worker still absent at 1 hour is wedged, not slow.
+  max_attempts: 360
   interval_seconds: 10
 
 resources:
@@ -78,9 +80,8 @@ backend:
     VLLM_RPC_TIMEOUT: "600000"
     VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "0"
     VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: "0"
-    # fastsafetensors stages shards on the GPU; without expandable segments the
-    # loader fragments HBM and a 2 GiB staging buffer fails with tens of GiB
-    # free (run 32144394011). Every other GB200 Kimi-K3 recipe sets this.
+    # Every other GB200 Kimi-K3 recipe sets this; it keeps large allocations
+    # from fragmenting HBM against the cudagraph pool.
     PYTORCH_ALLOC_CONF: "expandable_segments:True"
     PYTHONNOUSERSITE: "1"
     TORCH_CUDA_ARCH_LIST: "10.0"
@@ -102,7 +103,11 @@ backend:
       max-num-batched-tokens: 16384
       trust-remote-code: true
       language-model-only: true
-      load-format: "fastsafetensors"
+      # fastsafetensors stages shards on the GPU and OOMed loading the K3
+      # checkpoint on GB200 (run 32144394011); the lazy safetensors loader is
+      # slower but stays within HBM.
+      load-format: "safetensors"
+      safetensors-load-strategy: "lazy"
       moe-backend: "auto"
       no-enable-flashinfer-autotune: true
       enable-prefix-caching: true
@@ -117,8 +122,10 @@ backend:
       max-cudagraph-capture-size: 512
       max-num-seqs: 512
       # Size the KV cache from the free-HBM profile instead of an explicit
-      # budget; 0.92 matches agg-gb200-tp16-latency-agentic.yaml.
-      gpu-memory-utilization: 0.90
+      # budget. Derated to 0.85 so the cudagraph pool, the FlashInfer MoE
+      # workspace and fragmentation keep room; at 0.92 the KV cache took
+      # 30.34 GiB and cudagraph capture OOMed (run 32144394011).
+      gpu-memory-utilization: 0.85
       kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false}}'
 
 sbatch_directives:
