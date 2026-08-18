@@ -1,6 +1,8 @@
-# Measured p90-ITL Pareto family: OCI jobs 471335-471337 and 471341-471342,
-# using one aggregate TP8 x DCP8 worker, DSpark K=4, and max-num-seqs 2.
-name: "kimi-k3-vllm-agg-gb300-dcp8-dspark4-maxseq2-mooncake-agentic"
+# p90-ITL Pareto family from OCI jobs 471335-471337 and 471341-471342: one
+# aggregate TP8 x DCP8 worker with max-num-seqs 2. Drafts at DSpark K=7 to
+# match the B300 low-latency arm (kimik3_fp4_b300_vllm_mtp.sh drafts at K=7
+# for conc <= 8) rather than the K=4 the measured jobs used.
+name: "kimi-k3-vllm-agg-gb300-dcp8-dspark7-maxseq2-mooncake-agentic"
 
 model:
   path: "moonshotai/Kimi-K3"
@@ -68,10 +70,11 @@ backend:
     VLLM_ALLREDUCE_USE_FLASHINFER: "1"
     VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION: "1"
     VLLM_USE_V2_MODEL_RUNNER: "1"
-    # Preserve the measured collective fallback when moving to the built image.
-    VLLM_USE_DIRECT_DCP_A2A: "0"
-    VLLM_USE_DIRECT_DCP_Q_GATHER: "0"
-    VLLM_USE_DIRECT_DCP_KV_GATHER: "0"
+    # Use the direct DCP a2a/gather kernels rather than the collective
+    # fallback, matching the B300 arm (kimik3_fp4_b300_vllm_mtp.sh).
+    VLLM_USE_DIRECT_DCP_A2A: "1"
+    VLLM_USE_DIRECT_DCP_Q_GATHER: "1"
+    VLLM_USE_DIRECT_DCP_KV_GATHER: "1"
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     VLLM_RPC_TIMEOUT: "600000"
     VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "0"
@@ -94,7 +97,7 @@ backend:
       decode-context-parallel-size: 8
       dcp-comm-backend: "a2a"
       max-num-seqs: 2
-      gpu-memory-utilization: 0.90
+      gpu-memory-utilization: 0.92
       max-num-batched-tokens: 8192
       trust-remote-code: true
       language-model-only: true
@@ -108,9 +111,9 @@ backend:
       stream-interval: 10
       attention-backend: "TOKENSPEED_MLA"
       attention-config: '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true}'
-      # Throughput jobs inject the committed K=4 golden AL (3.36); EVAL_ONLY
+      # Throughput jobs inject the committed K=7 golden AL (3.84); EVAL_ONLY
       # preserves this real target-verification configuration.
-      speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+      speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":7,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
       max-cudagraph-capture-size: 1024
       kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false}}'
 

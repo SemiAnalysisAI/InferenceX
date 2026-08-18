@@ -66,10 +66,11 @@ backend:
     VLLM_ALLREDUCE_USE_FLASHINFER: "1"
     VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION: "1"
     VLLM_USE_V2_MODEL_RUNNER: "1"
-    # Preserve the measured collective fallback when moving to the built image.
-    VLLM_USE_DIRECT_DCP_A2A: "0"
-    VLLM_USE_DIRECT_DCP_Q_GATHER: "0"
-    VLLM_USE_DIRECT_DCP_KV_GATHER: "0"
+    # Use the direct DCP a2a/gather kernels rather than the collective
+    # fallback, matching the B300 arm (kimik3_fp4_b300_vllm_mtp.sh).
+    VLLM_USE_DIRECT_DCP_A2A: "1"
+    VLLM_USE_DIRECT_DCP_Q_GATHER: "1"
+    VLLM_USE_DIRECT_DCP_KV_GATHER: "1"
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     VLLM_RPC_TIMEOUT: "600000"
     VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "0"
@@ -91,7 +92,7 @@ backend:
       tensor-parallel-size: 8
       decode-context-parallel-size: 8
       dcp-comm-backend: "a2a"
-      gpu-memory-utilization: 0.90
+      gpu-memory-utilization: 0.92
       max-num-batched-tokens: 16384
       trust-remote-code: true
       language-model-only: true
@@ -102,7 +103,7 @@ backend:
       prefix-match-unit: 128
       kv-cache-dtype: "fp8"
       stream-interval: 10
-      attention-backend: "FLASHINFER_MLA"
+      attention-backend: "TOKENSPEED_MLA"
       attention-config: '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true}'
       max-cudagraph-capture-size: 1024
       kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false}}'

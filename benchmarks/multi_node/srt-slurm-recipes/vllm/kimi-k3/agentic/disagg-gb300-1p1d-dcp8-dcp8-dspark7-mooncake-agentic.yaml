@@ -67,10 +67,11 @@ backend:
       mode: "embedded"
       enable_offload: false
   prefill_environment: &kimi_env
-    # Preserve the measured collective fallback when moving to the built image.
-    VLLM_USE_DIRECT_DCP_A2A: "0"
-    VLLM_USE_DIRECT_DCP_Q_GATHER: "0"
-    VLLM_USE_DIRECT_DCP_KV_GATHER: "0"
+    # Use the direct DCP a2a/gather kernels rather than the collective
+    # fallback, matching the B300 arm (kimik3_fp4_b300_vllm_mtp.sh).
+    VLLM_USE_DIRECT_DCP_A2A: "1"
+    VLLM_USE_DIRECT_DCP_Q_GATHER: "1"
+    VLLM_USE_DIRECT_DCP_KV_GATHER: "1"
     VLLM_ALLREDUCE_USE_FLASHINFER: "1"
     # No-op in this recipe: shared-expert sequence-parallel sharding requires
     # expert parallelism, which is disabled on both roles.

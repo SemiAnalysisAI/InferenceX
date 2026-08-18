@@ -8652,8 +8652,10 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg:
           dp-attn: false
           additional-settings:
           - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.36"
-          - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-gb300-dcp8-dspark4-maxseq2-mooncake-agentic.yaml"
+          # Golden AL at DSpark K=7 on the probabilistic/block curve, matching
+          # the B300 low-latency arm.
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.84"
+          - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-gb300-dcp8-dspark7-maxseq2-mooncake-agentic.yaml"
         decode: { num-worker: 0, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
 
 # High-throughput aggregate p90-ITL Pareto points without speculative decoding
@@ -8673,7 +8675,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-mooncake-dcp8-agg:
       search-space:
       - kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.12.post1" }
-        conc-list: [48, 64, 70]
+        conc-list: [48, 70, 74]
         prefill:
           num-worker: 1
           tp: 8
