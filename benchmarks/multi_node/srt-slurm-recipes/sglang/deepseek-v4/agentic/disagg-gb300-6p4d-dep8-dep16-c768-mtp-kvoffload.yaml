@@ -10,15 +10,20 @@ name: "disagg-gb300-6p4d-dep8-dep16-c768-mtp-kvoffload"
 
 model:
   path: "deepseek-v4-pro"
-  container: "dynamo-sglang"
+  container: "lmsysorg/sglang:nightly-dev-cu13-20260811-d59c1ddf"
   precision: "fp4"
+
+identity:
+  model:
+    repo: "deepseek-ai/DeepSeek-V4-Pro"
+  container:
+    image: "lmsysorg/sglang:nightly-dev-cu13-20260811-d59c1ddf"
+  frameworks:
+    dynamo: "1.4.0"
 
 dynamo:
   install: true
   wheel: "1.4.0"
-
-slurm:
-  time_limit: "8:00:00"
 
 health_check:
   max_attempts: 1440
@@ -91,9 +96,6 @@ backend:
 
   decode_environment:
     SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "900"
-    SGLANG_SIMULATE_ACC_LEN: '2.49'
-    SGLANG_SIMULATE_ACC_METHOD: match-expected
-    SGLANG_SIMULATE_ACC_TOKEN_MODE: "real-draft-token"
     PIP_BREAK_SYSTEM_PACKAGES: '1'
     PYTHONUNBUFFERED: '1'
     SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'

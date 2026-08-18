@@ -5,7 +5,7 @@ name: "agg-gb300-tp4-mtp-lowlatency"
 
 model:
   path: "deepseek-v4-pro"
-  container: "dynamo-sglang"
+  container: "lmsysorg/sglang:nightly-dev-cu13-20260811-d59c1ddf"
   precision: "fp4"
 
 identity:
@@ -19,9 +19,6 @@ identity:
 dynamo:
   install: true
   wheel: "1.4.0"
-
-slurm:
-  time_limit: "4:00:00"
 
 health_check:
   max_attempts: 1440

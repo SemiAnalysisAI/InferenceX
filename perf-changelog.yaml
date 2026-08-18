@@ -6085,4 +6085,5 @@
     - "Tune the GB300 SGLang AgentX aggregate low-concurrency frontier with TP8 concurrency 1/4 and TP4 concurrency 8 profiles."
     - "Update the aggregate and disaggregated configurations to SGLang nightly-dev-cu13-20260811-d59c1ddf and the Dynamo 1.4.0 release."
     - "Use phase-specific decode CUDA graph limits and throughput-only synthetic MTP acceptance; eval-only runs retain real target verification."
+    - "Use an eight-hour DSV4 AgentX allocation and pass the configured GB300 Slurm account to image-validation steps."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2644
