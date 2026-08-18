@@ -77,6 +77,7 @@ if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "qw
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR" || exit 1
     git checkout v1.0.53
+    sed -i 's/CONTAINER_REMAP_ROOT_EXPORT = {"ENROOT_REMAP_ROOT": "yes"}/CONTAINER_REMAP_ROOT_EXPORT = {"ENROOT_REMAP_ROOT": "no"}/' src/srtctl/core/slurm.py
     TRTLLM_RECIPES_DIR="recipes/trtllm/qwen3.5/b300-fp4/disagg/agentx"
     mkdir -p "$TRTLLM_RECIPES_DIR"
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/qwen3.5/b300-fp4/disagg/agentx" \
