@@ -78,6 +78,10 @@ backend:
     VLLM_RPC_TIMEOUT: "600000"
     VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "0"
     VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: "0"
+    # fastsafetensors stages shards on the GPU; without expandable segments the
+    # loader fragments HBM and a 2 GiB staging buffer fails with tens of GiB
+    # free (run 32144394011). Every other GB200 Kimi-K3 recipe sets this.
+    PYTORCH_ALLOC_CONF: "expandable_segments:True"
     PYTHONNOUSERSITE: "1"
     TORCH_CUDA_ARCH_LIST: "10.0"
     PYTHONHASHSEED: "42"
@@ -107,11 +111,14 @@ backend:
       stream-interval: 10
       attention-backend: "FLASHINFER_MLA"
       attention-config: '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true}'
-      max-cudagraph-capture-size: 1024
+      # No drafting here, so capture sizes are sequences and nothing above
+      # max-num-seqs is reachable. At 1024 the ladder held 32 unusable graphs
+      # and capture OOMed on size 608 (run 32144394011).
+      max-cudagraph-capture-size: 512
       max-num-seqs: 512
       # Size the KV cache from the free-HBM profile instead of an explicit
       # budget; 0.92 matches agg-gb200-tp16-latency-agentic.yaml.
-      gpu-memory-utilization: 0.92
+      gpu-memory-utilization: 0.90
       kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false}}'
 
 sbatch_directives:

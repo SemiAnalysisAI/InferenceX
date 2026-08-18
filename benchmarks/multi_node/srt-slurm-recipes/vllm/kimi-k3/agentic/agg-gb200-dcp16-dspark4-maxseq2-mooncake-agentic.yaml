@@ -78,6 +78,10 @@ backend:
     VLLM_RPC_TIMEOUT: "600000"
     VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "0"
     VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: "0"
+    # fastsafetensors stages shards on the GPU; without expandable segments the
+    # loader fragments HBM and a 2 GiB staging buffer fails with tens of GiB
+    # free (run 32144394011). Every other GB200 Kimi-K3 recipe sets this.
+    PYTORCH_ALLOC_CONF: "expandable_segments:True"
     PYTHONNOUSERSITE: "1"
     TORCH_CUDA_ARCH_LIST: "10.0"
     PYTHONHASHSEED: "42"
@@ -112,10 +116,13 @@ backend:
       # Throughput jobs inject the committed K=4 golden AL (3.36); EVAL_ONLY
       # preserves this real target-verification configuration.
       speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
-      max-cudagraph-capture-size: 1024
+      # Drafting makes capture sizes tokens: max-num-seqs 2 x (1 + K=4) = 10.
+      # 64 leaves margin while dropping the unusable tail that OOMed the
+      # no-spec arm's 1024-wide ladder.
+      max-cudagraph-capture-size: 64
       # Size the KV cache from the free-HBM profile instead of an explicit
       # budget; 0.92 matches agg-gb200-tp16-latency-agentic.yaml.
-      gpu-memory-utilization: 0.92
+      gpu-memory-utilization: 0.90
       kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false}}'
 
 sbatch_directives:
