@@ -6263,3 +6263,11 @@
   description:
     - "Refresh with lower stream interval to collect correct client metrics"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2686
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the B200 DeepSeek-V4-Pro vLLM AgentX MTP image from 426e59f to d62ad46."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2646
