@@ -197,6 +197,15 @@ EOF
 echo "Generated srtslurm.yaml:"
 cat srtslurm.yaml
 
+# The /opt/ucx-no-ud mount shadows the image UCX 1.20 with an older UCX missing
+# ucp_device_local_mem_list_create, so NIXL's libplugin_UCX.so fails to dlopen
+# ("backend UCX not found"). dsv4 dynamo-trt sets UCX_TLS without ud anyway, so drop
+# the no-UD mount and use the image UCX (other frameworks keep it for the ud_verbs bug).
+if [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "qwen3.5" ]]; then
+    sed -i '/"\/opt\/ucx-no-ud": "\/usr\/local\/ucx"/d; /^default_mounts:$/d' srtslurm.yaml
+    echo "Dropped /opt/ucx-no-ud mount for qwen3.5 dynamo-trt (NIXL needs image UCX 1.20)"
+fi
+
 echo "Running make setup..."
 make setup ARCH=x86_64
 
