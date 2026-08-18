@@ -402,6 +402,9 @@ echo "Configs available at: $SRT_REPO_DIR/"
 SRTCTL_ROOT="${SRT_REPO_DIR}"
 echo "Creating srtslurm.yaml configuration..."
 SRT_DEFAULT_TIME_LIMIT="4:00:00"
+if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "dsv4" ]]; then
+    SRT_DEFAULT_TIME_LIMIT="8:00:00"
+fi
 cat > srtslurm.yaml <<EOF
 # SRT SLURM Configuration for GB300
 

@@ -6068,6 +6068,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2619
   
 - config-keys:
+    - dsv4-fp4-gb200-dynamo-vllm-agentic-mtp2-agg
+    - dsv4-fp4-gb200-dynamo-vllm-agentic-mtp2-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GB200 DeepSeek-V4-Pro FP4 Dynamo-vLLM AgentX mirroring the GB300 PR #2571 MTP tuning, with every GB300 4-GPU worker sized to 8 GPUs on GB200."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2636
+
+- config-keys:
     - dsv4-fp4-gb300-dynamo-trt-agentx
   scenario-type:
     - agentic-coding
@@ -6108,4 +6117,12 @@
     - agentic-coding
   description:
     - "Use the thinking-enabled DeepSeek-V4-Pro AgentX target for TensorRT-LLM synthetic draft acceptance."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2595
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-trt-agentx
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Restore CI-provided AgentX result filenames and the extended GB300 job limit."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2595

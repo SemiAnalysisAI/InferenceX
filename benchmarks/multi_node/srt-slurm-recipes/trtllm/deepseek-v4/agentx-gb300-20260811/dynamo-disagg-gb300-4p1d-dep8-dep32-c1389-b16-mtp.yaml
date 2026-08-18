@@ -152,7 +152,6 @@ frontend:
     PRECISION: fp4
     CONC: '1389'
     DURATION: '3600'
-    RESULT_FILENAME: dsv4_dynamo_conc1389
     KV_OFFLOADING: none
     ETCD_LEASE_TTL: '120'
     DYN_ROUTER_QUEUE_THRESHOLD: None
@@ -179,7 +178,6 @@ benchmark:
     PRECISION: fp4
     CONC: '1389'
     DURATION: '3600'
-    RESULT_FILENAME: dsv4_dynamo_conc1389
     KV_OFFLOADING: none
     INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
     RESULT_DIR: /logs/agentic
