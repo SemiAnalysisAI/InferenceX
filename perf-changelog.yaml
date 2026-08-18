@@ -6076,3 +6076,10 @@
     - "Add GB200 DeepSeek-V4-Pro FP4 Dynamo-vLLM AgentX mirroring the GB300 PR #2571 MTP tuning, with every GB300 4-GPU worker sized to 8 GPUs on GB200."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2636
 
+- config-keys:
+    - glm5.2-fp4-gb300-dynamo-trt-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GLM-5.2 NVFP4 GB300 AgentX recipes for Dynamo and TensorRT-LLM disaggregated serving with NIXL KV transfer and MTP speculative decoding."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
