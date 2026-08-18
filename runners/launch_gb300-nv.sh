@@ -401,14 +401,6 @@ default_time_limit: "4:00:00"
 gpus_per_node: 4
 network_interface: ""
 
-# The Kimi-K3 DCP path must not inherit host UCX transport/device pins: NIXL
-# brings its own UCX while NCCL uses its built-in transport.
-default_bash_preamble: >-
-  if [ "\${MODEL_PREFIX:-}" = "kimik3" ]; then
-    unset UCX_TLS UCX_NET_DEVICES;
-    export UCX_TCP_AF_PRIO=inet;
-  fi
-
 # Path to srtctl repo root (where the configs live)
 srtctl_root: "${SRTCTL_ROOT}"
 
