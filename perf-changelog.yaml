@@ -6082,4 +6082,4 @@
     - agentic-coding
   description:
     - "DIAGNOSTIC ONLY, not for merge: reproduce the MI355X hipErrorIllegalAddress with AMD_SERIALIZE_KERNEL=3 and device-side assertions enabled so the fault is reported at the kernel that causes it. Uses the vllm-simple backend, which reproduces the identical crash with no LMCache involved. Serialized kernel launches make all timings from this key meaningless."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PLACEHOLDER
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2641
