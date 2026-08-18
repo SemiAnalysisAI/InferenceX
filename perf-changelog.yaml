@@ -5999,7 +5999,6 @@
   description:
     - "Inject the committed synthetic MTP acceptance length only for GB300 AgentX throughput; keep eval-only jobs on real target verification."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2571
-  
 
 - config-keys:
     - minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp
@@ -6049,7 +6048,25 @@
     - "Add GB200 GLM-5.2 FP4 Dynamo-SGLang AgentX with EAGLE MTP, HiCache DRAM offload, and KV-aware correlation-ID affinity."
     - "Measure the TP8 aggregate curve and tuned 1P1D TP4 HiCache c10/c12 disaggregated frontier with every logical SGLang metrics endpoint."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2620
-
+  
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Retune B200 DeepSeek-V4-Pro vLLM AgentX MTP with SimpleCPU TP8 [1, 4, 8, 16, 24] and DEP8 [32, 64, 96, 128, 160, 196]."
+    - "Use vLLM 426e59f with DEP scheduling, MTP CUDA graphs, and host-DRAM sizing while keeping the B200 0.90 GPU-memory default."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2621
+  
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-vllm-agentic-mtp2-agg
+    - dsv4-fp4-gb200-dynamo-vllm-agentic-mtp2-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GB200 DeepSeek-V4-Pro FP4 Dynamo-vLLM AgentX mirroring the GB300 PR #2571 MTP tuning, with every GB300 4-GPU worker sized to 8 GPUs on GB200."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2619
+  
 - config-keys:
     - qwen3.5-fp8-mi355x-sglang-disagg
   scenario-type:
