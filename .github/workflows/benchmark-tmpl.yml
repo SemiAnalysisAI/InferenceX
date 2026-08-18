@@ -254,6 +254,13 @@ jobs:
     steps:
       - name: Resource cleanup (pre-run)
         run: &resource-cleanup |
+          # Containerized AMD Slurm jobs can leave root-owned artifacts when
+          # interrupted before their launcher EXIT trap runs. Repair ownership
+          # before checkout cleanup and again after the job via this shared step.
+          if [[ "${{ inputs.runner }}" == "cluster:mi355x-amds" && -d "$GITHUB_WORKSPACE" ]]; then
+            sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE"
+          fi
+
           # Cleanup Docker resources
           if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
             echo "[Docker] Cleaning up resources ..."
