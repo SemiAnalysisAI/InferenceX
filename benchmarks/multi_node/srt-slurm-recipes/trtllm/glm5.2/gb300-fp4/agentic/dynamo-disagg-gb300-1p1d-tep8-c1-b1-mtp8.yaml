@@ -1,4 +1,4 @@
-name: dynamo-disagg-gb300-1p3d-tep8-c1-b1-mtp7
+name: dynamo-disagg-gb300-1p1d-tep8-c1-b1-mtp8
 
 model:
   path: nvidia/GLM-5.2-NVFP4
@@ -10,15 +10,6 @@ dynamo:
   wheel: 1.4.0.dev20260807
   request_plane: tcp
 
-identity:
-  model:
-    repo: nvidia/GLM-5.2-NVFP4
-  container:
-    image: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc22.post1
-  frameworks:
-    dynamo: 1.4.0.dev20260807
-    tensorrt_llm: 1.3.0rc22.post1
-
 health_check:
   max_attempts: 270
   interval_seconds: 10
@@ -29,8 +20,8 @@ resources:
   prefill_nodes: 1
   prefill_workers: 1
   gpus_per_prefill: 4
-  decode_nodes: 6
-  decode_workers: 3
+  decode_nodes: 2
+  decode_workers: 1
   gpus_per_decode: 8
 
 backend:
@@ -54,7 +45,7 @@ backend:
     UCX_RNDV_SCHEME: put_zcopy
     TRTLLM_KVCACHE_SEND_BUFFER_COUNT: "1"
     TRTLLM_KVCACHE_RECV_BUFFER_COUNT: "1"
-    TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS: "2.91"
+    TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS: "3.06"
     DYN_TRTLLM_ENABLE_ATTENTION_DP: "1"
     DYN_ENGINE_CONV_AFFINITY: "1"
     DYN_TOKENIZER: fastokens
@@ -101,7 +92,7 @@ backend:
         enable_heuristic_topk: true
       speculative_config:
         decoding_type: MTP
-        max_draft_len: 7
+        max_draft_len: 8
       tensor_parallel_size: 4
     decode:
       cache_transceiver_config:
@@ -112,7 +103,7 @@ backend:
         kv_transfer_timeout_ms: 600000
       cuda_graph_config:
         batch_sizes: [1]
-        enable_padding: true
+        enable_padding: false
       enable_attention_dp: false
       trust_remote_code: true
       kv_cache_config:
@@ -127,8 +118,8 @@ backend:
       moe_config:
         backend: TRTLLM
         use_low_precision_moe_combine: true
-      moe_expert_parallel_size: 8
-      num_postprocess_workers: 4
+      moe_expert_parallel_size: 1
+      num_postprocess_workers: 8
       pipeline_parallel_size: 1
       print_iter_log: true
       return_perf_metrics: true
@@ -139,8 +130,8 @@ backend:
         use_cute_dsl_topk: true
       speculative_config:
         decoding_type: MTP
-        max_draft_len: 7
-      stream_interval: 20
+        max_draft_len: 8
+      stream_interval: 60
       tensor_parallel_size: 8
   publish_events_and_metrics: false
 
