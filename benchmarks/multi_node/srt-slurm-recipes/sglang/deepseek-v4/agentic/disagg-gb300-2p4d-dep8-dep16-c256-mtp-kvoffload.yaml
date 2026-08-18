@@ -15,7 +15,7 @@ model:
 
 dynamo:
   install: true
-  wheel: "1.3.0.dev20260718"
+  wheel: "1.4.0"
 
 slurm:
   time_limit: "8:00:00"

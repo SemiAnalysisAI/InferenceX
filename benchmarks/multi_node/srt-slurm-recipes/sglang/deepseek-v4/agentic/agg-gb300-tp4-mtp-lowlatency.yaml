@@ -13,10 +13,12 @@ identity:
     repo: "deepseek-ai/DeepSeek-V4-Pro"
   container:
     image: "lmsysorg/sglang:nightly-dev-cu13-20260811-d59c1ddf"
+  frameworks:
+    dynamo: "1.4.0"
 
 dynamo:
   install: true
-  hash: "7a4e47ead90ec6b479e397996f6479ce7d251510"
+  wheel: "1.4.0"
 
 slurm:
   time_limit: "4:00:00"
