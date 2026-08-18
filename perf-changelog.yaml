@@ -6103,3 +6103,12 @@
     - "Use a 270 GB/rank target HiCache pool for the GLM-5.2 B200 TP8 c12 and c16 AgentX points to avoid the host-cache capacity cliff."
     - "Keep the existing ratio-0.75 pool for c1, c4, and c8 while retaining the SGLang EAGLE MTP and golden synthetic acceptance setup."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2652
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp-lmcache
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a dedicated LMCache 0.5.4rc4 DRAM KV-offload key at TP8 conc 4/8/10/12 on top of the unchanged kimik3-fp4-mi355x-vllm-agentic-mtp DSpark MTP stack, with the version pinned in the master config and consumed by the script via KV_OFFLOAD_BACKEND_METADATA."
+    - "Run one LMCache MP server per node with chunk size 3072 (the minimum multiple of the hybrid KDA/MLA group block sizes) and --separate-object-groups, keeping the L1 in process memory (--shm-name \"\") so the DRAM budget is not capped by /dev/shm."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2598
