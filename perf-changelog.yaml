@@ -6103,3 +6103,12 @@
     - "Use a 270 GB/rank target HiCache pool for the GLM-5.2 B200 TP8 c12 and c16 AgentX points to avoid the host-cache capacity cliff."
     - "Keep the existing ratio-0.75 pool for c1, c4, and c8 while retaining the SGLang EAGLE MTP and golden synthetic acceptance setup."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2652
+
+- config-keys:
+    - minimaxm3-fp4-gb300-dynamo-vllm-agentic-agg-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add MiniMax-M3 NVFP4 GB300 aggregate AgentX submission via the Dynamo frontend and a vLLM aggregated worker."
+    - "Cover TP2 C24 and TP4 C1/C5/C10/C15/C20/C30, with SimpleCPU-lazy KV offload at TP2 C24 (400 GiB) and TP4 C30 (700 GiB); other TP4 points stay GPU-resident."
+  pr-link: XXX

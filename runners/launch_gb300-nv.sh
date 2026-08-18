@@ -80,6 +80,9 @@ elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" ]]; then
 elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH=/data/models/MiniMax-M2.5
     export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-fp8"
+elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" ]]; then
+    export MODEL_PATH=/scratch/models/MiniMax-M3-NVFP4
+    export SRT_SLURM_MODEL_PREFIX="nvidia/MiniMax-M3-NVFP4"
 elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH=/data/models/MiniMax-M3-MXFP8
     export SRT_SLURM_MODEL_PREFIX="minimax-m3-mxfp8"
@@ -97,7 +100,7 @@ elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH=/scratch/models/Qwen3.5-397B-A17B-FP8
     export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp8"
 else
-    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4, glm5-fp4, glm5-fp8, glm5.2-fp4, minimaxm2.5-fp4, minimaxm2.5-fp8, kimik2.5-fp4, qwen3.5-fp4, qwen3.5-fp8"
+    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4, glm5-fp4, glm5-fp8, glm5.2-fp4, minimaxm2.5-fp4, minimaxm2.5-fp8, minimaxm3-fp4, minimaxm3-fp8, kimik2.5-fp4, qwen3.5-fp4, qwen3.5-fp8"
     exit 1
 fi
 
@@ -181,6 +184,14 @@ fi
 
 export EVAL_ONLY="${EVAL_ONLY:-false}"
 
+# Agentic eval jobs use a real-verification recipe instead of the throughput
+# recipe's synthetic EAGLE acceptance model. Keep throughput and eval topology
+# identical; only speculative-token verification differs.
+if [[ "$EVAL_ONLY" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
+    CONFIG_FILE="$EVAL_CONFIG_FILE"
+    echo "EVAL_ONLY=true: selecting real-verification recipe $CONFIG_FILE"
+fi
+
 export ISL="$ISL"
 export OSL="$OSL"
 
@@ -257,6 +268,9 @@ elif [[ "$IS_AGENTIC" == "1" ]]; then
     mkdir -p recipes/vllm/deepseek-v4/agentic || exit 1
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
         recipes/vllm/deepseek-v4/agentic || exit 1
+    mkdir -p recipes/vllm/minimax-m3/agentic || exit 1
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3/agentic" \
+        recipes/vllm/minimax-m3/agentic || exit 1
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
