@@ -72,7 +72,6 @@ backend:
     VLLM_V2_WARMUP_MAX_NUM_SEQS: "96"
     TILELANG_CLEANUP_TEMP_FILES: "1"
     VLLM_ALLREDUCE_USE_SYMM_MEM: "0"
-    TORCH_SYMMMEM: "NVSHMEM"
     NCCL_CUMEM_ENABLE: "1"
     NCCL_MNNVL_ENABLE: "1"
     NCCL_NVLS_ENABLE: "1"
@@ -84,9 +83,6 @@ backend:
     VLLM_DSV4_MEGA_FP8_COMBINE: "1"
     VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "1024"
     VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
-    UCX_MEMTYPE_CACHE: "n"
-    UCX_NET_DEVICES: "mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1"
-    UCX_TLS: "rc,cuda_copy"
     NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
     NCCL_P2P_LEVEL: "NVL"
     DG_JIT_CACHE_DIR: "/tmp/dg-cache-dsv4-gb300-agg-tp8-simple-offload-mtp-{job_id}"
@@ -103,14 +99,11 @@ backend:
       max-num-seqs: 96
       max-num-batched-tokens: 8192
       trust-remote-code: true
-      no-enable-flashinfer-autotune: true
       block-size: 256
-      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
       max-cudagraph-capture-size: 384
-      speculative-config: '{"method":"mtp","num_speculative_tokens":3}'
+      speculative-config: '{"method":"mtp","num_speculative_tokens":3,"rejection_sample_method":"synthetic","synthetic_acceptance_length":2.49}'
       kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":137438953472,"lazy_offload":false}}'
       gpu-memory-utilization: 0.94
-      stream-interval: 10
       no-disable-hybrid-kv-cache-manager: true
       tokenizer-mode: "deepseek_v4"
 
