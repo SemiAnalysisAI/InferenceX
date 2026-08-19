@@ -6,7 +6,7 @@ name: "disagg-gb300-12p1d-dep4-dep24-18-c3000"
 
 model:
   path: "deepseek-v4-pro"
-  container: "lmsysorg/sglang:nightly-dev-cu13-20260707-b4155233"
+  container: "lmsysorg/sglang:v0.5.14-cu130@sha256:5027e95bf6ec536856b1b52a91d1f35ff5c564ab83e8a94758a169ff09bb8df3"
   precision: "fp4"
 
 dynamo:

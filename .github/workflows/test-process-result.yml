@@ -14,6 +14,12 @@ on:
       - 'runners/launch_gb300-nv.sh'
       - 'utils/aggregate_power.py'
       - 'utils/aggregate_power_multinode.py'
+      - 'utils/agentic/aggregation/power_adapter.py'
+      - 'utils/agentic/aggregation/test_power_adapter.py'
+      - 'utils/agentic/aggregation/test_power_lifecycle.py'
+      - 'utils/agentic/aggregation/process_agentic_result.py'
+      - 'utils/agentic/aggregation/test_process_agentic_result.py'
+      - 'utils/pytest.ini'
       - 'utils/bench_serving/benchmark_serving.py'
       - 'utils/process_result.py'
       - 'utils/test_aggregate_power.py'
@@ -48,4 +54,4 @@ jobs:
       - name: Run pytest
         run: |
           cd utils
-          python -m pytest test_aggregate_power.py test_aggregate_power_multinode.py test_gb200_power_official_contract.py test_gb300_power_official_contract.py test_process_result.py -v
+          python -m pytest test_aggregate_power.py test_aggregate_power_multinode.py agentic/aggregation/test_power_adapter.py agentic/aggregation/test_power_lifecycle.py agentic/aggregation/test_process_agentic_result.py test_gb200_power_official_contract.py test_gb300_power_official_contract.py test_process_result.py -v
