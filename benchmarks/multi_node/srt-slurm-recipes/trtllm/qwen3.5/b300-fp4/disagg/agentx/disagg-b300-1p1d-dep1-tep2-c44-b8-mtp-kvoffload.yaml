@@ -14,7 +14,7 @@ dynamo:
   install: true
   wheel: 1.4.0.dev20260807
 sbatch_directives:
-  exclude: b300-002,b300-011
+  exclude: b300-002,b300-010,b300-011
 slurm:
   time_limit: 04:00:00
 health_check:
