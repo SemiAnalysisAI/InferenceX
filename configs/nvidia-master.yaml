@@ -7735,6 +7735,101 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-mtp-disagg:
           ep: 8
           dp-attn: true
 
+dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-agg:
+  image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-d62ad46
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-vllm
+  router: { name: dynamo-router, version: "1.4.0" }
+  multinode: true
+  disagg: false
+  scenarios:
+    agentic-coding:
+    # 0.6095238 resolves to 512 GiB of host DRAM per four-GPU GB300 node,
+    # matching the SimpleCPUOffloadConnector pool in the offload recipes.
+    - dram-utilization: 0.6095238
+      search-space:
+      # Keep the checked-in recipes on real MTP verification. Throughput jobs
+      # inject the committed golden AL at launch; EVAL_ONLY leaves them real.
+      # TP4 remains GPU-resident through c4, then uses vLLM Simple CPU offload.
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [1, 2, 4]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/agentic/agg-gb300-tp4-mtp-agentic.yaml"
+        # The aggregate worker also performs decode; keep the decode worker
+        # count at zero so result aggregation counts four GPUs only once.
+        decode:
+          num-worker: 0
+          tp: 4
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        conc-list: [6, 8, 12, 16]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/agentic/agg-gb300-tp4-vllm-simple-offload-mtp-agentic.yaml"
+        decode:
+          num-worker: 0
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # TP8 remains GPU-resident through c8, then uses vLLM Simple CPU offload.
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [1, 2, 4, 8]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/agentic/agg-gb300-tp8-mtp-agentic.yaml"
+        # The aggregate worker also performs decode; keep the decode worker
+        # count at zero so result aggregation counts eight GPUs only once.
+        decode:
+          num-worker: 0
+          tp: 8
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        conc-list: [12, 16, 20, 24]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/agentic/agg-gb300-tp8-vllm-simple-offload-mtp-agentic.yaml"
+        decode:
+          num-worker: 0
+          tp: 8
+          ep: 1
+          dp-attn: false
+
 dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
   image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-d62ad46
   model: deepseek-ai/DeepSeek-V4-Pro

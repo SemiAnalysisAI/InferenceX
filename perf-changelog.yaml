@@ -6268,3 +6268,12 @@
   description:
     - "Port the GB300 1P DEP8 + 1D DEP16 concurrency-512 MTP P/D point and align its runtime tuning with the retained DEP8/DEP16 recipes."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2665
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Restore the GB300 DeepSeek-V4-Pro aggregate TP4 and TP8 AgentX MTP recipes on image d62ad46 with Dynamo 1.4.0 and safetensors prefetch loading."
+    - "Sweep TP4 at concurrency 1, 2, 4, 6, 8, 12, and 16 with vLLM Simple CPU KV offload from concurrency 6; sweep TP8 at concurrency 1, 2, 4, 8, 12, 16, 20, and 24 with offload from concurrency 12."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2665
