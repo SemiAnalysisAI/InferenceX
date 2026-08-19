@@ -6203,3 +6203,11 @@
   description:
     - "Add new B200 multi-node configs with PP2, DCP8"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2672
+
+- config-keys:
+    - dsv4-fp4-b300-sglang-agentic-hicache-mtp-nightly
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Test-only: measure sglang nightly on B300 AgentX DEP8 c512 with HiCache DRAM offload, MegaMoE FP4-activation A2A, 131072-token chunked prefill, and mem-fraction 0.85."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2680
