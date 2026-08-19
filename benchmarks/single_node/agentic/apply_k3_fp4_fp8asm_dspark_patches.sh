@@ -6,7 +6,7 @@
 # Kimi-K3 FP4 MI355X DSpark agentic benchmark runs in. Run this INSIDE a
 # container started from:
 #
-#   vllm/vllm-openai-rocm:nightly-aa9903490c616dc6871e5acc62cec7bb1e5e9434
+#   vllm/vllm-openai-rocm:nightly-5a4c8d99242e9e069b604d0e9b969e77f7dd501d
 #
 # (method borrowed from InferenceX #2508: fetch/build the deltas the base image
 # lacks, apply them into the installed dist-packages + a node-local aiter, then
@@ -19,7 +19,7 @@
 #       --security-opt seccomp=unconfined --security-opt label=disable \
 #       --cap-add=SYS_PTRACE -e GPU_ARCHS=gfx950 \
 #       --entrypoint sleep \
-#       vllm/vllm-openai-rocm:nightly-aa9903490c616dc6871e5acc62cec7bb1e5e9434 infinity
+#       vllm/vllm-openai-rocm:nightly-5a4c8d99242e9e069b604d0e9b969e77f7dd501d infinity
 #   docker cp benchmarks/single_node/agentic k3-dspark-benchmark:/opt/k3-recipe
 #   docker exec k3-dspark-benchmark bash /opt/k3-recipe/apply_k3_fp4_fp8asm_dspark_patches.sh
 #
@@ -188,7 +188,9 @@ python3 -c "import triton; print('  triton', triton.__version__)"
 #   - NaN-argmax #50183: native tl.where(x != x, -inf, x) at both argmax sites in
 #     rejection_sampler_utils.py ("NaN breaks tl.argmax index bounds").
 # All are re-checked by anchor in the VERIFY block below. The old patch_*.py
-# files remain in k3_patches/ (unreferenced) pending the boot+GSM8K validation.
+# files (patch_fp8_prefill / patch_fp8asm / patch_ps_metadata16 /
+# patch_rejection_nan_argmax / patch_skip_k3_fp8_ps / patch_wvsplitk) have been
+# REMOVED from k3_patches/ — the natives are verified by anchor instead.
 
 # ---------------------------------------------------------------------------
 say "5/7 DSpark fp8-asm enablement layer"
@@ -222,12 +224,19 @@ AITER_SPLITK="$LOCAL_AITER/csrc/py_itfs_cu/asm_gemm_a16w16.cu"
 REJ="$DIST/vllm/v1/worker/gpu/spec_decode/rejection_sampler_utils.py"
 KDA="$DIST/vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py"
 ok=1
-chk() { local n; n=$(grep -c "$2" "$1" 2>/dev/null || echo 0); \
+# NB: `grep -c` prints "0" AND exits 1 on zero matches, so `|| echo 0` would
+# append a SECOND "0" -> n="0\n0" -> `[: integer expression expected`. Take the
+# count as-is (subst ignores grep's exit code) and default only when the file is
+# missing (grep prints nothing).
+chk() { local n; n=$(grep -c "$2" "$1" 2>/dev/null); n=${n:-0}; \
         if [ "$n" -ge "$3" ]; then echo "  OK   $4 ($n)"; else echo "  FAIL $4 ($n < $3)"; ok=0; fi; }
 # --- former base patches (old steps 5/6): upstreamed natively in vLLM 0.27 ---
 chk "$MLA"   "get_mla_padded_q"               1 "decode pad-to-16 (native get_mla_padded_q)"
 chk "$MLA"   "self.num_heads % 16 == 0"       2 "fp8-asm PREFILL OFF for K3 12h (native strict gate)"
-chk "$MLA"   "self._num_attention_heads = max(16, self.num_heads)" 1 "PS metadata16 (native)"
+# PS metadata16: native, but on nightly-5a4c8d99 the inline `max(16, self.num_heads)`
+# was refactored into AiterMLAHelper.get_actual_mla_num_heads(): for K3's 12 heads/rank
+# it returns ceil(12/16)*16 = 16 (== old max(16,12)), plus a native H24 fast path.
+chk "$MLA"   "get_actual_mla_num_heads"       2 "PS metadata16 pad-to-16 (native get_actual_mla_num_heads)"
 chk "$UTILS" "skinny_operands_compatible"     1 "wvSplitK contiguous (native #50618)"
 chk "$REJ"   "NaN breaks tl.argmax index bounds" 1 "rejection NaN-argmax guard (native #50183)"
 # --- aiter-side patch still applied (step 2) ---

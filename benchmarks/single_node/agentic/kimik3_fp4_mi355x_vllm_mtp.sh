@@ -21,7 +21,7 @@ set -x
 # baked into the validated base image below.
 #
 # Validated base image (carries the vLLM patches + AITER build + DSpark layer):
-#   vllm/vllm-openai-rocm:nightly-aa9903490c616dc6871e5acc62cec7bb1e5e9434
+#   vllm/vllm-openai-rocm:nightly-5a4c8d99242e9e069b604d0e9b969e77f7dd501d
 #   reproduced from the pinned nightly by apply_k3_fp4_fp8asm_dspark_patches.sh.
 # Pinned in configs/amd-master.yaml (kimik3-fp4-mi355x-vllm-agentic-mtp).
 #
@@ -40,7 +40,7 @@ fi
 
 # ---- Bootstrap the container from the pinned base image ----------------------
 # The image pinned in configs/amd-master.yaml is the STOCK ROCm vLLM nightly
-# (cb8104839c...); this idempotently turns it into the exact k3-dspark-benchmark
+# (nightly-5a4c8d99...); this idempotently turns it into the exact k3-dspark-benchmark
 # container (aiter @ 55dbc4f47 rebuild, tuned GEMM CSV, triton 3.7.0, 5 vLLM ASM
 # patches, DSpark fp8-asm layer, FlyDSL->torch reroute). No-op once markers are
 # present, so re-runs / pre-patched images cost only the grep verify. Set
@@ -120,14 +120,14 @@ fi
 # Guard: the tuned BF16 GEMM table is a large perf lever. Without it the dense
 # GEMMs fall back to an untuned path and throughput drops materially -- and it does
 # so SILENTLY. Warn loudly if the CSV is missing (e.g. a pre-baked image that never
-# ran apply_k3_container_patches.sh) so an untuned run is never mistaken for a valid
+# ran apply_k3_fp4_fp8asm_dspark_patches.sh) so an untuned run is never mistaken for a valid
 # number. Set REQUIRE_TUNED_GEMM=1 to make a missing CSV fatal instead of a warning.
 if [ -z "${AITER_CONFIG_GEMM_BF16:-}" ] || [ ! -f "${AITER_CONFIG_GEMM_BF16:-/nonexistent}" ]; then
     echo "############################################################################" >&2
     echo "WARNING: tuned BF16 GEMM CSV not found (looked for '$MERGED_GEMM_CSV')."       >&2
     echo "         AITER_CONFIG_GEMM_BF16 is unset -> dense GEMMs run UNTUNED and"        >&2
     echo "         throughput will be materially lower than the published recipe."        >&2
-    echo "         Fix: ensure apply_k3_container_patches.sh ran (it installs"            >&2
+    echo "         Fix: ensure apply_k3_fp4_fp8asm_dspark_patches.sh ran (it installs"     >&2
     echo "         k3_patches/kimik3_bf16_tuned_gemm.csv), or point AITER_CONFIG_GEMM_BF16">&2
     echo "         at the merged CSV. Set REQUIRE_TUNED_GEMM=1 to make this fatal."        >&2
     echo "############################################################################" >&2
@@ -243,7 +243,21 @@ KVDTYPE_ARGS=(
 # hit, p90 ITL 42 ms, clean serve with no OOM. Spending activation headroom is
 # exactly what the old 32 GiB pin avoided; set KV_CACHE_MEMORY=34359738368 to revert
 # if the first long-context prefill OOMs. Do NOT touch gpu-mem.
-KV_CACHE_MEMORY="${KV_CACHE_MEMORY:-47691420128}"
+#
+# CONC-gated policy (matches the amd-master.yaml agentic search-space split):
+#   conc<8   -> 32 GiB pin (34359738368), GPU-resident, NO KV offload. Low-conc KV fits
+#              on-card with activation headroom to spare; a bigger pin only steals headroom.
+#   conc>=8  -> 44.4 GiB pin (47691420128), paired with host-DRAM KV offload (dram/vllm-simple
+#              in the YAML). At conc>=8 the on-device KV saturates and the shared prefix would
+#              otherwise evict; the larger pin + offload overflow is where the win was measured.
+# An explicitly-set KV_CACHE_MEMORY env always wins (manual override / revert).
+if [ -z "${KV_CACHE_MEMORY:-}" ]; then
+  if [ "${CONC:-1}" -ge 8 ]; then
+    KV_CACHE_MEMORY=47691420128   # 44.4 GiB, conc>=8 (paired with KV offload)
+  else
+    KV_CACHE_MEMORY=34359738368   # 32 GiB, conc<8 (GPU-resident, no offload)
+  fi
+fi
 KVMEM_ARG=(); [ -n "$KV_CACHE_MEMORY" ] && KVMEM_ARG=(--kv-cache-memory "$KV_CACHE_MEMORY")
 
 # cudagraph capture sizes — pin explicitly so DSpark decode (M = TOKENS_PER_SEQ *

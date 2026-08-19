@@ -16,7 +16,7 @@ set -x
 # prefill also needs ROCm/aiter #4452 (64-bit paged-KV offsets) for >4GB KV.
 #
 # Validated base image (carries the vLLM patches + AITER build above):
-#   vllm/vllm-openai-rocm:nightly-aa9903490c616dc6871e5acc62cec7bb1e5e9434
+#   vllm/vllm-openai-rocm:nightly-5a4c8d99242e9e069b604d0e9b969e77f7dd501d
 # Pinned in configs/amd-master.yaml (kimik3-fp4-mi355x-vllm-agentic).
 #
 # Required env vars: MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR, DURATION
@@ -33,7 +33,7 @@ fi
 
 # ---- Bootstrap the container from the pinned base image ----------------------
 # The image pinned in configs/amd-master.yaml is the STOCK ROCm vLLM nightly
-# (cb8104839c...); this idempotently applies the aiter rebuild + tuned GEMM CSV
+# (nightly-5a4c8d99...); this idempotently applies the aiter rebuild + tuned GEMM CSV
 # + triton 3.7.0 + vLLM ASM patches it needs (see apply_k3_fp4_fp8asm_dspark_patches.sh).
 # No-op once markers are present. Set SKIP_K3_BOOTSTRAP=1 for a pre-baked image.
 RECIPE_DIR="$(cd "$(dirname "$0")" && pwd)"
