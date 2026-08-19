@@ -6130,3 +6130,17 @@
     - "Add MiniMax-M3 NVFP4 B200 single-node TensorRT-LLM AgentX with EAGLE3-GQA speculative decoding."
     - "Use the nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc23.post1 image."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2659
+
+- config-keys:
+    - dsv4-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Repin the image to the 2026-08-17 ROCm nightly (nightly-311b3513af33bc29b4acb2fde2e9313e5e9966a0, digest sha256:4b403315f9a0d9b0ed4221dfc7ea04538701b4de0ce283c0e2cee622b217ff89). Docker Hub last pushed it at 2026-08-17T05:32:09Z and the tag commit is vllm-project/vllm@311b3513."
+    - "Update the pure TP8 AgentX search-space to concurrency 1, 4, 8, 16, 32, 40, 48, 56, and 64; keep only concurrency 64 for the DP-attention arm."
+    - "The pinned nightly includes vLLM #51473 (native 384-shard MXFP4 TP8 allocation), #52212 (gfx950 Triton sparse-MLA decode), and #52401, the merged equivalent of Fangzhou's #52488 regression fix for ROCm DeepSeek V4 MRV1 plus the wide eager attention region."
+    - "Pin max-num-batched-tokens to 8192 for both arms instead of the nightly default of 16384; the TP8 initialization check increased GPU KV cache capacity from 4,730,981 to 8,524,228 tokens and reduced peak activation memory from 11.44 GiB to 8.9 GiB."
+    - "Remove the MoE padding from 384 to 512 and replace it with the native 384-expert kernels, save 30% redundant dummy computation."
+    - "Optimze the MLA kernel under long context scenario, where the num_kv_split is further tuned for best hardware utilization."
+    - "Cache fp32 upcast of static e8m0 weight scale in AITER scaled_mm."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2590
