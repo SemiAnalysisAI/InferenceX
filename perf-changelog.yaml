@@ -6225,3 +6225,15 @@
     - "Add a TP2/EP2 HiCache branch and update the resident recipes with extra_buffer_lazy, ReplaySSM speculative verification, and checkpoint page-cache release."
     - "Select TP4 C1/C2/C4/C8/C12/C20/C24, TP2/EP2 resident C4/C8/C12/C20, and TP2/EP2 HiCache C22/C24/C28/C32/C40 with golden synthetic acceptance length 3.39."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2660
+
+- config-keys:
+    - glm5.2-fp4-b200-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-b200-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GLM-5.2 NVFP4 B200 Dynamo-SGLang AgentX aggregate and disaggregated coverage."
+    - "Cover aggregate TP8 at concurrency 2, 4, 8, and 12, plus disaggregated 1P2D and 1P3D DEP8 at concurrency 113."
+    - "Use EAGLE MTP, golden synthetic acceptance for throughput only, HiCache DRAM offload, NIXL KV transfer for disaggregated serving, and KV-aware session affinity."
+    - "Image: lmsysorg/sglang:nightly-dev-cu13-20260805-211ee642; recipe ported from NVIDIA/srt-slurm v1.0.53 (217f94387abeddfed7149a71955dc523e07cd765)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2673

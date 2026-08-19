@@ -253,6 +253,16 @@ labels:
     - b200-dgxc_07
     - b200-dgxc_08
     - b200-dgxc_09
+  cluster:b200-nscale:
+    - b200-nscale-slurm_0
+    - b200-nscale-slurm_1
+    - b200-nscale-slurm_2
+    - b200-nscale-slurm_3
+    - b200-nscale-slurm_4
+    - b200-nscale-slurm_5
+    - b200-nscale-slurm_6
+    - b200-nscale-slurm_7
+    - b200-nscale-slurm_8
   cluster:b300-cw:
     - b300-cw_0
     - b300-cw_01

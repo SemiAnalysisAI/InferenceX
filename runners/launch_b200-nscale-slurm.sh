@@ -9,8 +9,9 @@
 # dgxc-only change silently alter nscale runs.
 #
 # Scope: multi-node Dynamo-vLLM DeepSeek-V4-Pro and Kimi K2.6 FP4 runs, plus
-# DeepSeek-V4-Pro FP4 Dynamo-SGLang MTP, on the b200-nscale/b200-new runner
-# labels. Anything else exits non-zero.
+# DeepSeek-V4-Pro FP4 Dynamo-SGLang MTP and GLM-5.2-NVFP4 Dynamo-SGLang
+# AgentX MTP, on the b200-nscale/b200-new runner labels. Anything else exits
+# non-zero.
 
 SLURM_PARTITION="batch_1"
 SLURM_ACCOUNT="benchmark"
@@ -46,6 +47,9 @@ elif [[ $MODEL_PREFIX == "kimik2.6" && $PRECISION == "fp4" ]]; then
 elif [[ $MODEL_PREFIX == "kimik3" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="${MODEL_PATH:-$NSCALE_MODEL_ROOT/Kimi-K3}"
     export SRT_SLURM_MODEL_PREFIX="kimik3"
+elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp4" ]]; then
+    export MODEL_PATH="${MODEL_PATH:-$NSCALE_MODEL_ROOT/GLM-5.2-NVFP4}"
+    export SRT_SLURM_MODEL_PREFIX="glm-5.2-fp4"
 else
     echo "Unsupported model prefix/precision for b200-nscale: $MODEL_PREFIX/$PRECISION" >&2
     echo "Models staged under $NSCALE_MODEL_ROOT:" >&2
@@ -54,7 +58,8 @@ else
 fi
 
 if [[ $FRAMEWORK != "dynamo-vllm" ]] &&
-   [[ $MODEL_PREFIX != "dsv4" || $PRECISION != "fp4" || $FRAMEWORK != "dynamo-sglang" || $SPEC_DECODING != "mtp" ]]; then
+   [[ $MODEL_PREFIX != "dsv4" || $PRECISION != "fp4" || $FRAMEWORK != "dynamo-sglang" || $SPEC_DECODING != "mtp" ]] &&
+   [[ $MODEL_PREFIX != "glm5.2" || $PRECISION != "fp4" || $FRAMEWORK != "dynamo-sglang" || $SPEC_DECODING != "mtp" ]]; then
     echo "Unsupported framework/configuration for b200-nscale: $MODEL_PREFIX/$PRECISION/$FRAMEWORK/$SPEC_DECODING" >&2
     exit 1
 fi
@@ -80,6 +85,16 @@ elif [[ $MODEL_PREFIX == "dsv4" && $FRAMEWORK == "dynamo-sglang" ]]; then
     git checkout 04e87fcc505d6d851451781a5499ca19a02ec2b4 || exit 1
     mkdir -p recipes/sglang/deepseek-v4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4" recipes/sglang/deepseek-v4
+elif [[ $MODEL_PREFIX == "glm5.2" && $FRAMEWORK == "dynamo-sglang" ]]; then
+    # NVIDIA/srt-slurm v1.0.53 is the released schema validated against the
+    # GLM-5.2 B200 AgentX aggregate and disaggregated recipes.
+    git clone --branch v1.0.53 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
+    cd "$SRT_REPO_DIR" || exit 1
+    test "$(git rev-parse HEAD)" = "217f94387abeddfed7149a71955dc523e07cd765" || exit 1
+    mkdir -p recipes/sglang/glm5.2/b200-fp4/agentic
+    cp -rT \
+        "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5.2/b200-fp4/agentic" \
+        recipes/sglang/glm5.2/b200-fp4/agentic
 elif [[ $MODEL_PREFIX == "dsv4" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
     cd "$SRT_REPO_DIR" || exit 1
@@ -235,7 +250,8 @@ SRTCTL_PREFLIGHT_ARGS=()
 # These weights are staged on the Slurm compute nodes, not the login node.
 if [[ $MODEL_PREFIX == "kimik2.6" ]] ||
    [[ $MODEL_PREFIX == "kimik3" ]] ||
-   [[ $MODEL_PREFIX == "dsv4" && $FRAMEWORK == "dynamo-sglang" ]]; then
+   [[ $MODEL_PREFIX == "dsv4" && $FRAMEWORK == "dynamo-sglang" ]] ||
+   [[ $MODEL_PREFIX == "glm5.2" ]]; then
     SRTCTL_PREFLIGHT_ARGS+=(--no-preflight)
 fi
 
