@@ -6195,3 +6195,11 @@
     - "Use AITER INT4 quick-reduce, ptpc_fp8 online quantization excluding embeddings, lm_head, gates, and experts, an FP8 KV cache, and three-token MTP with golden synthetic acceptance length 2.99 for benchmark runs."
     - "Set max-num-seqs to twice the concurrency, select CUDA graph capture sizes by concurrency, and cap max-num-batched-tokens at 16384."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2576
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump image from lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260811 to lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260818"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2576
