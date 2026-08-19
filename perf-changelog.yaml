@@ -6316,3 +6316,14 @@
     - "Supersede the provisional all-SimpleCPU mapping by keeping TP8 c1, c4, and c8 GPU-resident."
     - "Retain SimpleCPU only for the existing DEP8 ladder; add neither Mooncake nor additional TP8 points."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2646
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Switch the existing B200 DEP8 c32, c64, c96, c128, c160, and c196 points from SimpleCPU to Mooncake Store 0.3.11.post1."
+    - "Keep TP8 c1, c4, and c8 GPU-resident and preserve the nine-point matrix."
+    - "Restore the proven 0.80 host-DRAM utilization to leave runtime and safetensors-prefetch headroom on cluster:b200-dgxc."
+    - "Reuse the Mooncake embedded RDMA configuration previously exercised successfully on cluster:b200-dgxc."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2646
