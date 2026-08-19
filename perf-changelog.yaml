@@ -5964,4 +5964,5 @@
     - "Own the middle of the curve with a 3-prefill/1-decode DEP4 to DEP16 shape swept at concurrency 565, 384, 256 and 192, where the 16-way decode replica spreads attention widely enough that lowering concurrency buys interactivity cheaply."
     - "Reach the latency tail with a 1-prefill/1-decode DEP4 to plain TP8 shape at concurrency 32 and 16; prefill and decode disagree on attention TP size there, so those recipes set SGLANG_DISAGG_STAGING_BUFFER=1 for heterogeneous-TP KV transfer."
     - "Retain the existing aggregate and disaggregated GB300 entries unchanged so their published high-interactivity points stay on the curve."
+    - "Point the GB300 runner at Slurm account restricted, which is the account paired with the batch_1 partition it already requests; the previous benchmark account made every srun fail with an invalid account/partition combination."
   pr-link: https://github.com/NVIDIA/InferenceMAX/pull/232
