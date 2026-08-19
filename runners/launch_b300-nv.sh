@@ -45,7 +45,7 @@ elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-
     export MODEL_PATH="${MODEL_PATH:-/scratch/models/DeepSeek-V4-Pro}"
     export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
 elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-trt" ]]; then
-    export SERVED_MODEL_NAME="GLM-5.2-NVFP4"
+    export SERVED_MODEL_NAME="nvidia/GLM-5.2-NVFP4"
     export MODEL_PATH="/scratch/models/GLM-5.2-NVFP4"
     export SRT_SLURM_MODEL_PREFIX="nvidia/GLM-5.2-NVFP4"
 elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-vllm" ]]; then

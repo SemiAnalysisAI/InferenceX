@@ -8492,22 +8492,7 @@ glm5.2-fp4-b300-dynamo-trt-agentic-mtp:
           ep: 4
           dp-attn: false
       - spec-decoding: mtp
-        conc-list: [152]
-        kv-offloading: none
-        prefill:
-          num-worker: 5
-          tp: 4
-          ep: 4
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2/b300-fp4/agentic/dynamo-disagg-b300-5p2d-dep8-c152-b16-mtp3.yaml"
-        decode:
-          num-worker: 2
-          tp: 8
-          ep: 8
-          dp-attn: true
-      - spec-decoding: mtp
-        conc-list: [259]
+        conc-list: [233]
         kv-offloading: none
         prefill:
           num-worker: 8
@@ -8515,7 +8500,7 @@ glm5.2-fp4-b300-dynamo-trt-agentic-mtp:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2/b300-fp4/agentic/dynamo-disagg-b300-8p2d-dep8-c259-b16-mtp3.yaml"
+          - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2/b300-fp4/agentic/dynamo-disagg-b300-8p2d-dep8-c233-b16-mtp3.yaml"
         decode:
           num-worker: 2
           tp: 8

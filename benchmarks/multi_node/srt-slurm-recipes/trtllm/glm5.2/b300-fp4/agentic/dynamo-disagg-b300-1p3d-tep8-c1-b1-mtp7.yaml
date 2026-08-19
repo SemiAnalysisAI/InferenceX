@@ -20,6 +20,9 @@ dynamo:
   wheel: 1.4.0.dev20260807
   request_plane: tcp
 
+slurm:
+  time_limit: "4:00:00"
+
 health_check:
   max_attempts: 270
   interval_seconds: 10
@@ -52,7 +55,10 @@ backend:
     TRTLLM_SERVE_ENABLE_MSGSPEC: "1"
     TLLM_ADP_ROUTER_MATCH_RATE_THRESHOLD: "0.10"
     TRTLLM_KV_CACHE_TRANSFER_TIMEOUT_SEC: "600"
-    UCX_TLS: rc,cuda_ipc,cuda_copy,sm,self,tcp
+    UCX_MAX_RNDV_RAILS: "2"
+    UCX_MAX_HCA_PER_GPU: inf
+    UCX_LOG_LEVEL: info
+    TRTLLM_CTX_LOCAL_HCA_PIN: "1"
     UCX_RNDV_SCHEME: put_zcopy
     TRTLLM_KVCACHE_SEND_BUFFER_COUNT: "1"
     TRTLLM_KVCACHE_RECV_BUFFER_COUNT: "1"
@@ -75,7 +81,7 @@ backend:
         max_tokens_in_buffer: 1048576
         kv_transfer_timeout_ms: 600000
       cuda_graph_config: null
-      disable_overlap_scheduler: false
+      disable_overlap_scheduler: true
       enable_attention_dp: true
       enable_chunked_prefill: true
       trust_remote_code: true
@@ -84,7 +90,7 @@ backend:
         enable_block_reuse: true
         event_buffer_max_size: 0
         free_gpu_memory_fraction: 0.75
-        host_cache_size: 137438953472
+        host_cache_size: 412316860416
         tokens_per_block: 64
       max_batch_size: 256
       max_num_tokens: 8192
@@ -95,10 +101,10 @@ backend:
       num_postprocess_workers: 8
       pipeline_parallel_size: 1
       print_iter_log: true
-      perf_metrics_max_requests: 100000
-      return_perf_metrics: true
+      return_perf_metrics: false
       scheduler_config:
         capacity_scheduler_policy: MAX_UTILIZATION
+        context_chunking_policy: EQUAL_PROGRESS
       sparse_attention_config:
         algorithm: dsa
         enable_heuristic_topk: true
@@ -135,8 +141,7 @@ backend:
       num_postprocess_workers: 4
       pipeline_parallel_size: 1
       print_iter_log: true
-      perf_metrics_max_requests: 100000
-      return_perf_metrics: true
+      return_perf_metrics: false
       sparse_attention_config:
         algorithm: dsa
         enable_heuristic_topk: true
@@ -171,7 +176,6 @@ frontend:
 
 benchmark:
   type: custom
-  use_chat_template: true
   client_placement: last_decode
   command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
   env:
