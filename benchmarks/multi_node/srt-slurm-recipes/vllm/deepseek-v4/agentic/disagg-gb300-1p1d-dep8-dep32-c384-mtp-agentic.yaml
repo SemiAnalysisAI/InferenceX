@@ -1,10 +1,10 @@
 # Source: https://github.com/SemiAnalysisAI/InferenceX/blob/c0fce8a2682364c68858e5ed8995bf94bbb70e30/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic/disagg-gb300-1p1d-dep8-dep32-c388-mtp-agentic.yaml
 # Preserve the source point's topology-specific batching while aligning its
 # shared runtime settings with the current GB300 P/D recipes in this branch.
-name: "svf-vllm-disagg-gb300-1p1d-dep8-dep32-c388-mtp-agentic"
+name: "svf-vllm-disagg-gb300-1p1d-dep8-dep32-c384-mtp-agentic"
 
 # GB300 AgentX MTP3 topology: one DEP8 prefill worker feeds one
-# DEP32 decode worker at concurrency 388. Decode consumes P/D KV through NIXL
+# DEP32 decode worker at concurrency 384. Decode consumes P/D KV through NIXL
 # and MooncakeStore but skips Mooncake prefix lookup to avoid CPU overhead.
 
 model:
@@ -158,7 +158,7 @@ backend:
     VLLM_USE_BREAKABLE_CUDAGRAPH: "0"
     VLLM_CONNECTOR_PREFETCH_DEPTH: "8"
     VLLM_DSV4_MEGA_FP8_COMBINE: "1"
-    DG_JIT_CACHE_DIR: "/tmp/dg-cache-dsv4-gb300-1p1d-dep8-prefill-c388-{job_id}"
+    DG_JIT_CACHE_DIR: "/tmp/dg-cache-dsv4-gb300-1p1d-dep8-prefill-c384-{job_id}"
     MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
     MC_STORE_CLIENT_METRIC: "1"
     MC_STORE_CLIENT_METRIC_INTERVAL: "5"
@@ -185,7 +185,7 @@ backend:
     NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
     VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "0"
     VLLM_DSV4_MEGA_FP8_COMBINE: "1"
-    DG_JIT_CACHE_DIR: "/tmp/dg-cache-dsv4-gb300-1p1d-dep32-decode-c388-{job_id}"
+    DG_JIT_CACHE_DIR: "/tmp/dg-cache-dsv4-gb300-1p1d-dep32-decode-c384-{job_id}"
     MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
     MC_STORE_CLIENT_METRIC: "1"
     MC_STORE_CLIENT_METRIC_INTERVAL: "5"
