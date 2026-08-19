@@ -5962,6 +5962,6 @@
     - "Measure a fresh GB300 Qwen3.5 NVFP4-V2 disaggregated AgentX Pareto on the stock lmsysorg/sglang:nightly-dev-cu13-20260818-c0b6474b container with no engine patches."
     - "Saturate the throughput end with a 3-prefill/2-decode DEP4 shape at concurrency 704, which reaches 121,845 total tok/s/chip on 20 chips."
     - "Own the middle of the curve with a 3-prefill/1-decode DEP4 to DEP16 shape swept at concurrency 565, 384, 256 and 192, where the 16-way decode replica spreads attention widely enough that lowering concurrency buys interactivity cheaply."
-    - "Reach the latency tail with a 1-prefill/1-decode DEP4 to plain TP8 shape at concurrency 32, 16 and 1; prefill and decode disagree on attention TP size there, so those recipes set SGLANG_DISAGG_STAGING_BUFFER=1 for heterogeneous-TP KV transfer."
+    - "Reach the latency tail with a 1-prefill/1-decode DEP4 to plain TP8 shape at concurrency 32 and 16; prefill and decode disagree on attention TP size there, so those recipes set SGLANG_DISAGG_STAGING_BUFFER=1 for heterogeneous-TP KV transfer."
     - "Retain the existing aggregate and disaggregated GB300 entries unchanged so their published high-interactivity points stay on the curve."
   pr-link: https://github.com/NVIDIA/InferenceMAX/pull/232
