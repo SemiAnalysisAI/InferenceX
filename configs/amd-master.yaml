@@ -1569,9 +1569,9 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp:
           - "DECODE_MTP_SIZE=3"
 
 # GLM-5.2 MXFP4 MI355X SGLang disaggregated agentic (1P1D TP8, HiCache DRAM KV
-# offload). Mirrors dsv4-fp4-mi355x-sglang-disagg-agentic-hicache; L2 HiCache
-# tuning (ratio 1.5, page_first_direct, write_through_selective) validated on
-# amd-aim 1P1D — see glm5.2_fp4_mi355x_sglang-disagg.sh. Weights:
+# offload, built-in MTP). Mirrors dsv4-fp4-mi355x-sglang-disagg-agentic-hicache;
+# L2 HiCache tuning (ratio 1.5, page_first_direct, write_through_selective)
+# validated on amd-aim 1P1D — see glm5.2_fp4_mi355x_sglang-disagg.sh. Weights:
 # amd/GLM-5.2-MXFP4 under /it-share/data (default MODEL_DIR on mia1*).
 glm5.2-fp4-mi355x-sglang-disagg-agentic-hicache:
   image: lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260729
@@ -1587,7 +1587,7 @@ glm5.2-fp4-mi355x-sglang-disagg-agentic-hicache:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - spec-decoding: "none"
+      - spec-decoding: "mtp"
         conc-list: [ 2, 4, 8, 16, 32 ]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
@@ -1611,7 +1611,7 @@ glm5.2-fp4-mi355x-sglang-disagg-agentic-hicache:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=0"
+          - "DECODE_MTP_SIZE=2"
 
 # DeepSeek-V4-Pro FP8 single-node on MI325X (gfx942) via vLLM.
 # EXTRAPOLATED bring-up. Same rationale as dsv4-fp8-mi300x-vllm: sglang has no

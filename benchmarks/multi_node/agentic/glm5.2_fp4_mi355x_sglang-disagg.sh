@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Agentic trace-replay recipe for a disaggregated SGLang server on MI355X
-# (GLM-5.2 MXFP4, 1P1D TP8, HiCache DRAM KV offload).
+# (GLM-5.2 MXFP4, 1P1D TP8, HiCache DRAM KV offload, built-in MTP/EAGLE).
 #
 # CI-style sibling of dsv4_fp4_mi355x_sglang-disagg.sh: driven entirely by
 # environment variables and submits a SLURM job via submit.sh. HiCache defaults:
@@ -109,7 +109,21 @@ fi
 export PREFILL_ROUTER_POLICY="${PREFILL_ROUTER_POLICY:-cache_aware}"
 export ENABLE_METRICS="${ENABLE_METRICS:-1}"
 
-export DECODE_MTP_SIZE="${DECODE_MTP_SIZE:-0}"
+if [[ "${SPEC_DECODING:-none}" == "mtp" || "${DECODE_MTP_SIZE:-0}" -gt 0 ]]; then
+  # Do not use ${DECODE_MTP_SIZE:-2}: wrappers may pre-set 0 and block :- defaulting.
+  if [[ "${DECODE_MTP_SIZE:-0}" -le 0 ]]; then
+    export DECODE_MTP_SIZE=2
+  fi
+  # Throughput: synthetic acceptance from golden_al_distribution/glm5.2_mtp.yaml
+  # (thinking_on, num_speculative_tokens=2 -> AL 2.50). EVAL_ONLY runs use real MTP.
+  if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
+    export SGLANG_SIMULATE_ACC_LEN="${SGLANG_SIMULATE_ACC_LEN:-2.50}"
+    export SGLANG_SIMULATE_ACC_METHOD="${SGLANG_SIMULATE_ACC_METHOD:-match-expected}"
+    export SGLANG_SIMULATE_ACC_TOKEN_MODE="${SGLANG_SIMULATE_ACC_TOKEN_MODE:-real-draft-token}"
+  fi
+else
+  export DECODE_MTP_SIZE="${DECODE_MTP_SIZE:-0}"
+fi
 
 # AIPerf reuses keep-alive sockets across agentic turns; outlast the default
 # 5s SGLang keep-alive (same mitigation as glm5.2_fp4_b300_sglang.sh).
