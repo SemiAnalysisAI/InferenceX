@@ -1,7 +1,7 @@
 name: "svf-vllm-agg-gb300-tp4-vllm-simple-offload-mtp-agentic"
 
 # GB300 AgentX aggregate topology: one TP4 worker occupies one four-GPU node
-# and serves both prefill and decode for the c6-c16 sweep. Each rank reserves
+# and serves both prefill and decode for the c12-c16 sweep. Each rank reserves
 # 128 GiB of host DRAM for SimpleCPUOffloadConnector (512 GiB per node). Keep
 # 32 scheduler slots and capture the corresponding 128-token MTP graph envelope.
 

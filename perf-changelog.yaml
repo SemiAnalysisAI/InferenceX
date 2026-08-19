@@ -6320,3 +6320,11 @@
   description:
     - "Raise the aggregate SimpleCPUOffload DRAM budget from 0.6095238 to 0.80, exposing 672 GiB per four-GPU GB300 node."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2665
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Run aggregate TP4 concurrency 6 and 8 and TP8 concurrency 12 on the GPU-resident Mooncake Store recipes; retain SimpleCPUOffload for TP4 concurrency 12 and 16 and TP8 concurrency 16, 20, and 24."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2665

@@ -1,9 +1,8 @@
 name: "svf-vllm-agg-gb300-tp4-mtp-agentic"
 
 # GB300 AgentX aggregate topology: one TP4 worker occupies one four-GPU node
-# and serves both prefill and decode for the GPU-resident c1-c4 sweep. Size
-# max-num-seqs at 4x the maximum concurrency and the MTP graph at four tokens
-# per sequence (one target plus three draft tokens).
+# and serves both prefill and decode for the GPU-resident c1-c8 sweep. Keep
+# 16 scheduler slots and capture the corresponding 64-token MTP graph envelope.
 
 model:
   path: "deepseek-v4-pro"
