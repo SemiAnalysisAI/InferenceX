@@ -1173,6 +1173,25 @@ dsv4-fp4-b300-sglang-agentic-hicache-mtp:
       - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: mtp, conc-list: [32, 40, 48, 56, 64, 72, 80, 88, 96, 128], router: { name: sglang-router, version: "0.3.2" } }
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [52, 72, 100, 128, 144, 196, 512], router: { name: sglang-router, version: "0.3.2" } }
 
+# Test-only DEP8 c512 arm on the current sglang nightly: HiCache host offload
+# behind the DP-attention arm (the running set saturates the GPU KV pool at
+# c512, so follow-up prefix reuse needs the host tier), MegaMoE FP4-activation
+# A2A, and 16384-token/rank prefill chunks. Not intended to replace the
+# v0.5.17 entry above.
+dsv4-fp4-b300-sglang-agentic-hicache-mtp-nightly:
+  image: lmsysorg/sglang:nightly-dev-cu13-20260818-c0b6474b
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: cluster:b300-nv
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: mtp, conc-list: [512], router: { name: sglang-router, version: "0.3.2" } }
+
   # DeepSeek-V4-Pro on B300 with EAGLE/MTP speculative decoding. Recipe is
   # selected inside benchmarks/single_node/dsv4_fp4_b300_sglang_mtp.sh by
   # DP_ATTENTION:
