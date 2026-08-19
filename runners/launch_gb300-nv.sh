@@ -5,7 +5,7 @@
 set -exo pipefail
 
 export SLURM_PARTITION="batch_1"
-export SLURM_ACCOUNT="restricted"
+export SLURM_ACCOUNT="benchmark"
 export ENROOT_ROOTFS_WRITABLE=1
 
 # Host-side directory holding aiperf's content-addressed dataset mmap cache.
