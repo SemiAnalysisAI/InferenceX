@@ -6215,3 +6215,13 @@
     - "Use NIXL KV transfer for disaggregated variants, prefill HiCache DRAM offload, native MTP with committed thinking-on golden acceptance lengths, and lmsysorg/sglang:nightly-dev-cu13-20260805-211ee642."
     - "Leave DYN_ROUTER_TEMPERATURE unset across the recipe set."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2642
+
+- config-keys:
+    - qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh GB200 Qwen3.5 NVFP4-V2 AgentX on lmsysorg/sglang:nightly-dev-20260818-c0b6474b without engine patches."
+    - "Add a TP2/EP2 HiCache branch and update the resident recipes with extra_buffer_lazy, ReplaySSM speculative verification, and checkpoint page-cache release."
+    - "Select TP4 C1/C2/C4/C8/C12/C20/C24, TP2/EP2 resident C4/C8/C12/C20, and TP2/EP2 HiCache C22/C24/C28/C32/C40 with golden synthetic acceptance length 3.39."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2660
