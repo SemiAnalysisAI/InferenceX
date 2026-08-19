@@ -82,6 +82,12 @@ trap 'exit 143' TERM
 # request bursts produced by subagent fan-out.
 MAX_NUM_SEQS=$((2 * CONC))
 
+# Saturation arms carry a larger in-flight working set than the 30-minute
+# default warmup drain allows.
+if [ "$CONC" -ge 32 ]; then
+    export AGENTIC_WARMUP_GRACE_PERIOD=3600
+fi
+
 # golden_al_distribution/dsv4_mtp.yaml: thinking_on, 3 draft tokens -> AL 2.49
 # acceptance rate = (2.49 - 1) / 3 = 0.4966666667.
 NUM_SPEC_TOKENS=3
