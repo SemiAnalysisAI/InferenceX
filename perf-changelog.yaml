@@ -5927,6 +5927,18 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2550
 
 - config-keys:
+    - dsv4-fp4-gb200-dynamo-sglang
+    - dsv4-fp4-gb300-dynamo-sglang
+    - qwen3.5-fp4-gb300-dynamo-sglang
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Extend official DCGM power collection to the recipe-gated FP4 GB200 and GB300 Dynamo-SGLang lanes."
+    - "Synchronize all DSV4 GB300 recipes on lmsysorg/sglang:v0.5.14-cu130@sha256:5027e95bf6ec536856b1b52a91d1f35ff5c564ab83e8a94758a169ff09bb8df3."
+    - "Pin the srt-slurm power producer and record its exact checkout SHA for strict provenance validation."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2507
+
+- config-keys:
     - qwen3.5-fp8-b300-sglang-agentic-power-ab
     - qwen3.5-fp4-b300-sglang-agentic-power-ab
   scenario-type:
