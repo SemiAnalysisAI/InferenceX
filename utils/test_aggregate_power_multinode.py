@@ -213,6 +213,7 @@ def assert_invalid(pkg, expected_reason, **run_kwargs):
     """Both modes must reject: metrics withheld always, exit code differs."""
     assert pkg.run(require_power=False, **run_kwargs) == 0
     agg = pkg.agg()
+    assert agg["power_metric_schema_version"] == 2
     assert agg["power_valid"] == 0
     for key in apm.WHOLE_METRIC_KEYS + apm.ROLE_METRIC_KEYS:
         assert key not in agg
@@ -229,6 +230,7 @@ class TestValidPackage:
         assert pkg.run() == 0
 
         agg = pkg.agg()
+        assert agg["power_metric_schema_version"] == 2
         assert agg["power_valid"] == 1
         assert agg["avg_power_w"] == 350.0
         assert agg["avg_total_gpu_power_w"] == 1400.0

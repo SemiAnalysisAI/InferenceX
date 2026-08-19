@@ -181,6 +181,9 @@ if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
     elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp4" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/Qwen3.5-397B-A17B-NVFP4-V2"
         export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp4"
+    elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp4" ]]; then
+        export MODEL_PATH="/mnt/lustre01/users-public/sa-shared/models/GLM-5.2-NVFP4"
+        export SRT_SLURM_MODEL_PREFIX="glm-5.2-fp4"
     elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp4" ]]; then
         # SRT_SLURM_MODEL_PREFIX matches the model.path alias ("glm-5-fp4")
         # in our GLM-5.1 sglang recipes.
@@ -251,8 +254,11 @@ elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
     elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/MiniMax-M3-MXFP8"
         export SRT_SLURM_MODEL_PREFIX="minimax-m3-mxfp8"
+    elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" ]]; then
+        export MODEL_PATH="/mnt/lustre01/models/MiniMax-M3-NVFP4"
+        export SRT_SLURM_MODEL_PREFIX="minimax-m3-nvfp4"
     else
-        echo "Unsupported model prefix/precision combination: $MODEL_PREFIX/$PRECISION. Supported combinations for dynamo-vllm: kimik2.5/fp4, kimik3/fp4, dsv4/fp4, minimaxm2.5/fp4, minimaxm2.5/fp8, minimaxm3/fp8"
+        echo "Unsupported model prefix/precision combination: $MODEL_PREFIX/$PRECISION. Supported combinations for dynamo-vllm: kimik2.5/fp4, kimik3/fp4, dsv4/fp4, minimaxm2.5/fp4, minimaxm2.5/fp8, minimaxm3/fp4, minimaxm3/fp8"
         exit 1
     fi
 else
@@ -263,7 +269,7 @@ NGINX_IMAGE="nginx:1.27.4"
 
 uses_watchtower_shared_fs() {
     case "$MODEL_PREFIX" in
-        minimaxm2.5|minimaxm3|kimik2.5|kimik3|qwen3.5) return 0 ;;
+        minimaxm2.5|minimaxm3|kimik2.5|kimik3|qwen3.5|glm5.2) return 0 ;;
     esac
     # dsv4 multinode runs only under dynamo-vllm on watchtower, which likewise
     # needs the srt-slurm workspace/outputs on a compute-visible shared FS
@@ -392,18 +398,46 @@ if [ -d "$SRT_REPO_DIR" ]; then
     rm -rf "$SRT_REPO_DIR"
 fi
 
-# Qwen3.5 FP4 AgentX uses the latest released srt-slurm. v1.0.45 injects
-# the aggregate logical-worker Prometheus endpoint into custom benchmarks.
-if [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
+# GLM-5.2 and MiniMax-M3 AgentX use v1.0.50 for complete logical-worker
+# metrics discovery across aggregate, DP-attention, and disaggregated topologies.
+if [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "glm5.2" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
+    git clone --branch v1.0.50 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    test "$(git rev-parse HEAD)" = "e4019633c9e2bc25f38c44b81edf52bb0504d937" || {
+        echo "Error: NVIDIA/srt-slurm v1.0.50 resolved to an unexpected commit" >&2
+        exit 1
+    }
+    mkdir -p recipes/sglang/glm5.2/gb200-fp4/agentic
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5.2/gb200-fp4/agentic" \
+        recipes/sglang/glm5.2/gb200-fp4/agentic
+elif [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "minimaxm3" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-vllm" ]]; then
+    git clone --branch v1.0.50 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    test "$(git rev-parse HEAD)" = "e4019633c9e2bc25f38c44b81edf52bb0504d937" || {
+        echo "Error: NVIDIA/srt-slurm v1.0.50 resolved to an unexpected commit" >&2
+        exit 1
+    }
+    mkdir -p recipes/vllm/minimax-m3/gb200-fp4/agentic
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3/gb200-fp4/agentic" \
+        recipes/vllm/minimax-m3/gb200-fp4/agentic
+# These AgentX submissions use released srt-slurm custom-benchmark metrics
+# discovery so AIPerf receives every logical worker endpoint.
+elif [[ "$IS_AGENTIC" == "1" && (( "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-sglang" ) || ( "$MODEL_PREFIX" == "dsv4" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-vllm" )) ]]; then
     git clone --branch v1.0.45 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
     test "$(git rev-parse HEAD)" = "9d8d92b20c350a5d42f0709f5a0b64e30eb37d33" || {
         echo "Error: NVIDIA/srt-slurm v1.0.45 resolved to an unexpected commit" >&2
         exit 1
     }
-    mkdir -p recipes/sglang/qwen3.5/gb200-fp4/agentic
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb200-fp4/agentic" \
-        recipes/sglang/qwen3.5/gb200-fp4/agentic
+    if [[ "$MODEL_PREFIX" == "qwen3.5" ]]; then
+        mkdir -p recipes/sglang/qwen3.5/gb200-fp4/agentic
+        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb200-fp4/agentic" \
+            recipes/sglang/qwen3.5/gb200-fp4/agentic
+    else
+        mkdir -p recipes/vllm/deepseek-v4/agentic
+        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
+            recipes/vllm/deepseek-v4/agentic
+    fi
 # TODO(CJQ): migrate the remaining Agentic model paths to released srt-slurm.
 elif [[ "$IS_AGENTIC" == "1" ]]; then
     # Agentic multi-node pins cquil11/srt-slurm-nv revisions that provide:
@@ -569,6 +603,13 @@ if [[ "$IS_AGENTIC" == "1" ]]; then
     DEFAULT_MOUNTS_BLOCK="default_mounts:
   ${AIPERF_MMAP_CACHE_HOST_PATH}: /aiperf_mmap_cache
   ${HF_HUB_CACHE_HOST_PATH}: /hf_hub_cache"
+    if uses_watchtower_shared_fs && [[ "$MODEL_PREFIX" == "glm5.2" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
+        DYNAMO_WHEELS_CACHE_HOST_PATH="${SHARED_BASE}/dynamo-wheels"
+        mkdir -p "$DYNAMO_WHEELS_CACHE_HOST_PATH"
+        chmod 777 "$DYNAMO_WHEELS_CACHE_HOST_PATH" 2>/dev/null || true
+        DEFAULT_MOUNTS_BLOCK+="
+  ${DYNAMO_WHEELS_CACHE_HOST_PATH}: /configs/dynamo-wheels"
+    fi
 fi
 
 echo "Creating srtslurm.yaml configuration..."
@@ -680,14 +721,12 @@ python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" "$CONFIG_PATH
 # srtctl itself still resolves through PATH (.venv/bin is on it).
 unset VIRTUAL_ENV
 
-# --no-preflight is used where the recipe resolves model.path to /mnt/numa1
-# (compute-node-only NVMe) that the login-node runner can't see: the agentic
-# path, and the dsv4 power lane (same /mnt/numa1 checkpoint). Other
-# fixed-seq-len recipes keep enforcement on.
-PREFLIGHT_ARGS=()
-if [[ "$IS_AGENTIC" == "1" ]] || [[ "$USES_DCGM_POWER" == "1" && "$MODEL_PREFIX" == "dsv4" ]]; then
-    PREFLIGHT_ARGS=(--no-preflight)
-fi
+# GB200 recipes resolve model.path through mounts the login-node runner
+# can't reliably stat (compute-node-local NVMe, and lustre paths that
+# aren't cross-mounted on the runner pod), so srtctl's login-node model-FS
+# preflight fails before sbatch. Skip it on both the agentic and
+# fixed-seq-len paths.
+PREFLIGHT_ARGS=(--no-preflight)
 
 SRTCTL_APPLY_ARGS=(
     "${PREFLIGHT_ARGS[@]}"
