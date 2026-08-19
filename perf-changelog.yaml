@@ -6144,3 +6144,12 @@
     - "Optimze the MLA kernel under long context scenario, where the num_kv_split is further tuned for best hardware utilization."
     - "Cache fp32 upcast of static e8m0 weight scale in AITER scaled_mm."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2590
+
+- config-keys:
+    - minimaxm3-fp4-b300-trtllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add MiniMax-M3 NVFP4 B300 single-node TensorRT-LLM AgentX with EAGLE3-GQA speculative decoding (3 draft tokens)."
+    - "Use the nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc23.post1 image."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2658
