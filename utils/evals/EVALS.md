@@ -11,11 +11,10 @@ from throughput. Selection lives in `mark_eval_entries()` in
   runner, framework, precision, TP, and decoding configuration.
 - **Multi-node:** 8k1k only, with one job per parallelism topology at its highest
   eligible concurrency. Rows differing only by concurrency share a topology.
-- **Agentic (SWE-bench), single-node:** highest-conc entry per (model,
-  runner, framework, precision) group.
-- **Agentic (SWE-bench), multi-node:** same policy as multi-node fixed-seq-len
-  above (highest eligible conc per parallelism topology), since SWE-bench
-  doesn't support batched concurrencies the way lm-eval does.
+- **Agentic (GSM8K), single-node:** highest-conc entry per (model, runner,
+  framework, precision) group.
+- **Agentic (GSM8K), multi-node:** highest eligible concurrency per
+  parallelism topology.
 
 Generator eval modes:
 
@@ -44,9 +43,243 @@ malformed metadata, duplicates, and raw/aggregate mismatches are not. See
 [workflow reuse](../../.github/workflows/README.md#reusing-an-approved-pr-full-sweep).
 
 ## How?
-`run_eval` in `benchmarks/benchmark_lib.sh` runs EleutherAI/lm-evaluation-harness against the server's OpenAI-compatible endpoint. Concurrency is set via `EVAL_CONCURRENT_REQUESTS` env var (not a CLI flag). Results are collected by `utils/collect_eval_results.py` and published as a summary table.
+`run_eval` in `benchmarks/benchmark_lib.sh` dispatches to the selected eval
+runner. Existing jobs continue to use lm-eval with GSM8K by default.
 
 The default eval framework is [lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness) (`lm-eval`). Agentic eval-only matrix jobs inherit this default and therefore run the same GSM8K task as 8k1k. Explicit agentic runs can still select SWE-bench.
+
+The Phase 1 Kimi smoke is opt-in. It supports single-node jobs and Kimi K3
+aggregate H200, B200, and GB200 srt-slurm jobs. Select
+`eval-framework: kimi-vendor` and `eval-suite: kimi_tool_call_schema` on
+`e2e-tests.yml`, or invoke it from the repository root after a server is ready:
+
+```bash
+source benchmarks/benchmark_lib.sh
+export EVAL_FRAMEWORK=kimi-vendor
+export EVAL_SUITE=kimi_tool_call_schema
+export EVAL_RESULT_DIR="$(mktemp -d /tmp/eval_out-XXXXXX)"
+run_eval --port "$PORT"
+append_lm_eval_summary
+python3 utils/evals/validate_scores.py
+```
+
+The framework selects a suite-specific subprocess adapter, while the suite
+selects a case set understood by that adapter. Each adapter owns its endpoint
+format, dependencies, native report, metrics, and integration-failure policy.
+Kimi, MiniMax, and BFCL use separate explicit `run_eval` cases rather than a
+shared request or report abstraction.
+Agentic eval jobs forward the matrix `spec-decoding` value, so MTP entries
+launch their existing `*_mtp.sh` server instead of silently falling back to STP.
+
+### Stock Kimi tool-call schema smoke
+
+The smoke runs the unmodified
+[MoonshotAI/Kimi-Vendor-Verifier](https://github.com/MoonshotAI/Kimi-Vendor-Verifier)
+at commit `b9ed3a6665bdff2c943246f7d2903cd003d6ddd6`. Each run downloads the
+fresh pinned GitHub source archive and safely extracts only the upstream pytest
+configuration, tool-call schema tests, and bundled Walle cases. InferenceX does
+not install the verifier package or reimplement its request, streaming, or
+validation logic.
+
+System Python 3.12 or newer is preferred and used directly. On older images,
+the runner uses the existing system `pip` to install pinned `uv==0.11.33` under
+a temporary prefix, then provisions an isolated Python 3.12 virtual environment.
+The selected interpreter installs the minimal pinned verifier runtime
+(`httpx[http2]`, `openai`, `jsonschema`, `pytest`, and
+`pytest-rerunfailures`) into a separate temporary package directory, then runs
+upstream `tests/tool_call_json_schema/test_tool_call_json_schema.py` with:
+
+- the local OpenAI-compatible endpoint, `EMPTY` API key, and served model name;
+- `--think-mode none` for other models, or `--think-mode opensource --thinking`
+  for `dsv4`, plus `--selection object --max-cases 1 --max-tokens 2048`;
+- up to six three-second reruns, limited to transient HTTP and transport errors;
+- the bundled Walle case directory and `--tool-json-report`.
+
+The temporary Python runtime, package directory, and verifier checkout are
+removed after both successful and failed runs.
+
+The selection is `TestAdditionalProperties:1`, parametrized upstream in
+non-streaming and streaming modes. Pytest makes one initial attempt and up to
+six reruns of each mode at three-second intervals, but only for HTTP 404, 429,
+5xx, connection, and timeout failures. This covers frontends whose health route
+becomes ready shortly before chat completions without retrying schema or
+model-output failures. The unchanged native report remains one final
+outcome per mode because the upstream report deduplicates rerun records by case
+and mode. It is uploaded as `kimi_vendor_report.json`, and
+`utils/evals/kimi_vendor_eval.py` projects those two outcomes into the existing
+eval result shape. Both must pass, so the `kimi_tool_call_schema` threshold is
+`1.0`. Setup, timeout, and collection failures emit a zero-score result with
+error metadata. The adapter's 900-second global timeout bounds the entire
+upstream pytest process, including all attempts and rerun delays.
+
+This smoke validates one object-schema tool call. It does not cover tool choice,
+parallel calls, multi-turn execution, or general agent quality. Multi-value
+batched concurrency is unsupported. Multi-node aggregate jobs run the same
+two-case smoke against their OpenAI-compatible frontend. Eval-only launchers
+restore real block verification before submitting recipes that otherwise use
+synthetic acceptance for throughput.
+
+### MiniMax provider compatibility smoke
+
+The Phase 1 MiniMax smoke is opt-in and applies to supported models exposing
+an OpenAI-compatible chat-completions API. Select
+`eval-framework: minimax-vendor` and `eval-suite: minimax_m3_smoke` in
+`e2e-tests.yml`, or run it from the repository root against an already-ready
+server:
+
+```bash
+source benchmarks/benchmark_lib.sh
+export EVAL_FRAMEWORK=minimax-vendor
+export MODEL_NAME="<served MiniMax-M3 model identifier>"
+export EVAL_SUITE=minimax_m3_smoke
+export EVAL_RESULT_DIR="$(mktemp -d /tmp/eval_out-XXXXXX)"
+run_eval --port "$PORT"
+append_lm_eval_summary
+python3 utils/evals/validate_scores.py
+```
+
+`utils/evals/minimax_m3_smoke.json` is derived from
+[MiniMax-AI/MiniMax-Provider-Verifier](https://github.com/MiniMax-AI/MiniMax-Provider-Verifier)
+`sample.jsonl` at commit
+`85bf180e54e2ab0b31595cfdc697116c4760876d`. The vendored fixture retains
+the full upstream MIT copyright, permission, and warranty notice. It contains
+only upstream zero-based row 71, an `expected_tool_call: true` request
+exercising tool-call trigger and argument-schema validation. The adapter
+applies the pinned validator semantics directly to this fixture; it does not
+download the upstream repository or run the remaining 101 cases.
+
+The adapter sends the request to `${base_url}/chat/completions`. The endpoint
+must accept an OpenAI-compatible Bearer token and chat-completions request body
+and return OpenAI-compatible message, finish-reason, and tool-call fields.
+Redirect responses are rejected before forwarding bearer credentials; the
+local runner supplies `Authorization: Bearer EMPTY`. The smoke uses
+`temperature: 0`, `top_p: 1`, and `max_tokens: 40960`. The token budget matches
+the pinned verifier's MiniMax M3 default and prevents a valid tool-call response
+from ending at the model's common 2048-token generation default. The request
+has a 180-second timeout by default and at most one retry for transport
+failures, HTTP 429, or HTTP 5xx responses (two total attempts); a hard
+900-second global bound covers the smoke.
+
+`minimax_vendor_report.json` is the native report. It preserves the raw
+response and reports the six upstream-derived metric fields. This Phase 1 case
+exercises `Query-Success-Rate`, `ToolCalls-Trigger-Similarity`,
+`ToolCalls-Schema-Accuracy`, and `Error-Only-Reasoning-Rate`.
+`Language-Following-Success-Rate` and `Scenario-Check-Pass-Rate` have no
+applicable case in this fixture and report `0.0` with zero checked counts.
+
+The adapter additionally writes exactly one timestamped
+`results_minimax_vendor_*.json` compatibility artifact. Its `result_format` is
+`inferencex-eval-v1`, `eval_adapter` is `minimax-provider-verifier`, task is
+`minimax_m3_smoke`, and primary metric is `exact_match,strict-match`. A
+completed run records original and effective sample counts of one. Its score
+is `1.0` only when row 71 returns a `tool_calls` finish reason and every
+function call validates against the requested schema. The
+`minimax_m3_smoke` threshold remains `1.0`.
+Both artifacts match the workflows' existing `results*.json` and
+`*_vendor_report.json` upload patterns.
+Setup, integration, timeout, and collection failures still emit a zero-score
+compatibility artifact with error metadata.
+
+This is a fixed single-case provider compatibility smoke, not the full
+102-case MiniMax Provider Verifier, BFCL, or a cross-model quality comparison.
+It does not estimate the upstream dataset's aggregate rates, stochastic
+pass-at-k behavior, streaming behavior, parallel-call behavior, multi-turn tool
+execution, language following, scenario key-order recall, or general agent
+quality.
+
+### BFCL V4 deterministic tool-use smoke
+
+The BFCL smoke is opt-in for models served through an OpenAI-compatible
+chat-completions endpoint. Select `eval-framework: bfcl` and
+`eval-suite: bfcl_smoke` in `e2e-tests.yml`, or run it from the repository root
+against an already-ready server:
+
+```bash
+source benchmarks/benchmark_lib.sh
+export EVAL_FRAMEWORK=bfcl
+export MODEL_NAME="<served model identifier>"
+export EVAL_SUITE=bfcl_smoke
+export EVAL_RESULT_DIR="$(mktemp -d /tmp/eval_out-XXXXXX)"
+run_eval --port "$PORT"
+append_lm_eval_summary
+python3 utils/evals/validate_scores.py --metric-prefix 'acc,'
+```
+
+The runtime pins
+[`bfcl-eval==2026.3.23`](https://pypi.org/project/bfcl-eval/2026.3.23/), built
+from Gorilla commit
+[`6ea57973c7a6097fd7c5915698c54c17c5b1b6c8`](https://github.com/ShishirPatil/gorilla/commit/6ea57973c7a6097fd7c5915698c54c17c5b1b6c8).
+It downloads the exact
+[`bfcl_eval-2026.3.23-py3-none-any.whl`](https://files.pythonhosted.org/packages/ba/41/ed458527c770c50225b60bae3b0c3444b26804ee455fa2d8f187018d2cb2/bfcl_eval-2026.3.23-py3-none-any.whl)
+and verifies SHA256
+`3bb6dfa5f0c68ad403c9ec50b00db2bb3b4cc9b38ab1ff33f48fe30d853d3a0a`
+before installation. The integration follows the pinned
+[vLLM perf-eval BFCL runner](https://github.com/vllm-project/perf-eval/blob/7ecb11405df86b202f4c5cca322bd133052fee82/lib/run_bfcl.py),
+but uses a fixed four-case V4 partial evaluation:
+
+| BFCL category | Exact upstream case ID | Projected task |
+|---------------|------------------------|----------------|
+| `simple_python` | `simple_python_141` | `bfcl_simple_python` |
+| `multiple` | `multiple_38` | `bfcl_multiple` |
+| `parallel` | `parallel_1` | `bfcl_parallel` |
+| `irrelevance` | `irrelevance_0` | `bfcl_irrelevance` |
+
+The verified wheel and its undeclared `soundfile==0.13.1` import dependency are
+installed into a temporary Python 3.10-or-newer virtual environment with system
+site packages enabled so the image's existing Torch/Transformers stack can be
+reused; it never mutates the global Python environment. The temporary
+environment and BFCL project root are removed after
+the run. Once package installation finishes, evaluation is local-only: BFCL
+skips its server setup and uses only the already-running local API root,
+typically `http://127.0.0.1:$PORT/v1`. The OpenAI SDK appends
+`/chat/completions`; the adapter base URL is not the full endpoint. BFCL does
+not download a model or call a remote inference API.
+
+The smoke fixes temperature to `0`, uses four BFCL worker threads, allows 180
+seconds per OpenAI request with retries disabled, and has a 900-second
+whole-suite timeout. Dependency installation is separately bounded at 600
+seconds. Dependency, setup, transport, timeout, and collection failures write
+zero-score artifacts with integration-error metadata and fail the runner
+nonzero. A completed evaluation exits independently of model quality; the
+workflow score-validation step applies the threshold afterward.
+
+The endpoint must implement OpenAI chat completions at `/v1/chat/completions`,
+accept `tools` and the tool-selection fields emitted by BFCL, and return the
+served model's OpenAI tool-call shape. In particular, assistant tool calls need
+function names and JSON-encoded `function.arguments`; the response must also
+support a normal no-tool answer for the irrelevance case. Starting a nominally
+OpenAI-compatible server is not sufficient if it cannot parse that model's
+native tool-call syntax.
+
+Configure the server's model-specific function-calling parser and, when the
+model's default template does not render tools correctly, its tool-aware chat
+template. For vLLM, automatic calls require `--enable-auto-tool-choice` plus
+`--tool-call-parser`, with `--chat-template` when needed. SGLang uses its
+corresponding `--tool-call-parser`; TensorRT-LLM uses `--tool_parser`, plus the
+matching reasoning-parser option when the model requires one. Parser names are
+engine-specific. Current common mappings are Kimi K3 (`kimi_k3`), MiniMax M3
+(`minimax_m3` in vLLM/TRT-LLM and `minimax-m3` in SGLang), and DeepSeek V4
+(`deepseek_v4` in vLLM/TRT-LLM and `deepseekv4` in SGLang). GLM-4.5 uses
+`glm45` in vLLM/SGLang, while GLM-4.7 uses `glm47`; Qwen3-Coder uses
+`qwen3_coder` in vLLM/SGLang, with `qwen3_xml` for vLLM's XML variant and
+`qwen3` for the corresponding TensorRT-LLM parser. The model recipe and
+installed engine version are authoritative; BFCL does not replace a missing or
+mismatched parser/chat template.
+
+`bfcl_report.json` is the native report. `results_bfcl.json` is the
+`inferencex-eval-v1` compatibility result consumed by the existing artifact
+upload, `append_lm_eval_summary`, collector, and score validator. It projects
+the four-case aggregate as task `bfcl_smoke` and the four one-case diagnostic
+tasks shown above. Every row uses lm-eval-compatible `acc,none` (plus
+`acc_stderr,none`); BFCL workflows therefore validate with metric prefix
+`acc,` rather than the default exact-match prefix.
+
+Only `bfcl_smoke` gates the run: its `0.75` threshold requires at least three
+of the four fixed upstream cases to be correct. The four `bfcl_<category>`
+thresholds are `0.0`, so their one-case scores remain diagnostic and a single
+failed category does not become a second gate. BFCL reuses the existing eval
+job, upload paths, aggregation, and validation instead of adding a parallel
+workflow or artifact route.
 
 ### Benchmark script flow
 
@@ -77,14 +310,23 @@ Key eval functions in `benchmarks/benchmark_lib.sh`:
 |----------|-------------|
 | `run_eval` | Unified entrypoint - dispatches to framework-specific runner |
 | `run_lm_eval` | Runs lm-eval harness against the OpenAI-compatible endpoint |
+| `run_kimi_vendor_eval` | Selects and runs a pinned Kimi Vendor Verifier suite |
+| `run_minimax_vendor_eval` | Runs the pinned single-case MiniMax provider smoke |
+| `run_bfcl_eval` | Runs the pinned four-case BFCL V4 smoke |
 | `append_lm_eval_summary` | Writes `meta_env.json` and moves eval artifacts to workspace |
 | `_install_lm_eval_deps` | Installs lm-eval dependencies |
+| `_prepare_vendor_verifier_python` | Uses system Python 3.12+ or provisions an isolated pinned Python 3.12 runtime for provider verifiers |
+| `_prepare_kimi_vendor_runtime` | Installs the pinned verifier dependencies in an isolated temp path |
+| `_prepare_minimax_vendor_runtime` | Installs the pinned MiniMax adapter dependency in an isolated temp path |
+| `_prepare_bfcl_runtime` | Installs the verified BFCL wheel in a temporary virtual environment |
+| `_install_bfcl_eval_deps` | Downloads, verifies, and installs the pinned BFCL wheel |
+| `_prepare_kimi_vendor_verifier` | Downloads and safely extracts a fresh subset of the pinned source archive |
 | `_patch_lm_eval` | Patches lm-eval for reasoning tokens and TRT compatibility |
 | `compute_eval_context_length` | Computes eval context length (requested benchmark context, capped at model native max) |
 | `get_native_max_context_length` | Extracts model's native max context length from HF config |
 
 ### Single-node
-In eval-only mode (`EVAL_ONLY=true`), the benchmark script computes `EVAL_MAX_MODEL_LEN` via `compute_eval_context_length`, starts the server with that context length, skips throughput, and runs lm-eval directly. Each framework wires that context differently (`--context-length` for SGLang, `--max_seq_len` for TRT-LLM).
+For default lm-eval jobs in eval-only mode (`EVAL_ONLY=true`), the benchmark script computes `EVAL_MAX_MODEL_LEN` via `compute_eval_context_length`, starts the server with that context length, skips throughput, and runs lm-eval. Each framework wires that context differently (`--context-length` for SGLang, `--max_seq_len` for TRT-LLM).
 
 ### Multi-node
 Multi-node evals support two hardware paths:
@@ -92,13 +334,13 @@ Multi-node evals support two hardware paths:
 **MI355X (AMD)** — `benchmarks/multi_node/amd_utils/server_sglang.sh`
 - Skips throughput when `EVAL_ONLY=true`
 - Fixed-seq-len: runs lm-eval via `run_eval --framework lm-eval` against the router on port 30000
-- Agentic-coding (disaggregated, `IS_AGENTIC=1`): runs SWE-bench via `run_eval --port 30000` (no
-  `--framework` override, same auto-selection as single-node agentic eval-only). Since there's no
-  single "TP" for a disaggregated topology, and the workflow spells a couple of metadata fields
-  differently (`PREFILL_DP_ATTN`/`DECODE_DP_ATTN`) than `append_lm_eval_summary` expects
-  (`PREFILL_DP_ATTENTION`/`DECODE_DP_ATTENTION`), the agentic branch bridges those before calling
-  `run_eval`; `append_lm_eval_summary` itself runs automatically inside `run_eval()` (same
-  `EVAL_ONLY=true && IS_AGENTIC` auto-staging as single-node), not as a separate call.
+- Agentic-coding (disaggregated, `IS_AGENTIC=1`): follows the same GSM8K/lm-eval path via
+  `run_eval --framework lm-eval`. Since there's no single "TP" for a disaggregated topology,
+  and the workflow spells a couple of metadata fields differently
+  (`PREFILL_DP_ATTN`/`DECODE_DP_ATTN`) than `append_lm_eval_summary` expects
+  (`PREFILL_DP_ATTENTION`/`DECODE_DP_ATTENTION`), the agentic branch bridges those before
+  calling `run_eval`; `append_lm_eval_summary` itself runs automatically inside `run_eval()`
+  (same `EVAL_ONLY=true && IS_AGENTIC` auto-staging as single-node), not as a separate call.
 - Concurrency uses workflow-provided `EVAL_CONC` when set, otherwise falls back to max of `BENCH_MAX_CONCURRENCY` (x-separated values)
 - Eval artifacts copied to `/run_logs/slurm_job-*/eval_results/`
 - `runners/launch_mi355x-amds.sh` skips benchmark result collection when `EVAL_ONLY=true` and uses `find` to locate eval results
@@ -106,10 +348,10 @@ Multi-node evals support two hardware paths:
 **NVIDIA Slurm multi-node (GB200, GB300, B200, B300, H100, H200)** runs through [srt-slurm](https://github.com/NVIDIA/srt-slurm) on the `sa-submission-q2-2026` branch.
 - `do_sweep.py` skips the benchmark stage when `EVAL_ONLY=true`, runs `_run_post_eval()` directly
 - In eval-only mode, uses the full `wait_for_model()` health check (same as benchmark stage) since the benchmark health check was skipped
-- `lm-eval` runner (`benchmarks/lm_eval.py`) is invoked by `do_sweep.py` as a post/eval-only step and sources InferenceX's `benchmark_lib.sh` from the mounted workspace (`/infmax-workspace`)
+- The registered srt-slurm `lm-eval` post-runner sources InferenceX's `benchmark_lib.sh` from the mounted workspace (`/infmax-workspace`). Kimi-selected launches patch that hook to use generic `run_eval` dispatch while preserving lm-eval as the default.
 - Eval artifacts written to `/logs/eval_results/` inside the container, collected by launch scripts
 - NVIDIA Slurm launch scripts always collect server logs for debugging but skip benchmark result collection when `EVAL_ONLY=true`
-- Env vars threaded: `RUN_EVAL`, `EVAL_ONLY`, `IS_MULTINODE`, `FRAMEWORK`, `PRECISION`, `MODEL_PREFIX`, `RUNNER_TYPE`, `RESULT_FILENAME`, `SPEC_DECODING`, `ISL`, `OSL`, `PREFILL_TP/EP/NUM_WORKERS/DP_ATTN`, `DECODE_TP/EP/NUM_WORKERS/DP_ATTN`, `MODEL_NAME`, `EVAL_CONC`
+- Env vars threaded: `RUN_EVAL`, `EVAL_ONLY`, `EVAL_FRAMEWORK`, `EVAL_SUITE`, `IS_MULTINODE`, `FRAMEWORK`, `PRECISION`, `MODEL_PREFIX`, `RUNNER_TYPE`, `RESULT_FILENAME`, `SPEC_DECODING`, `ISL`, `OSL`, `PREFILL_TP/EP/NUM_WORKERS/DP_ATTN`, `DECODE_TP/EP/NUM_WORKERS/DP_ATTN`, `MODEL_NAME`, `EVAL_CONC`
 
 For multi-node `all-evals`, `EVAL_CONC` is a space-separated list. When it contains multiple values, `run_eval` runs those concurrency points sequentially against the same live engine, stages each result with a `_concN` filename suffix, and records expected/completed/failed points in `meta_env.json`.
 
@@ -159,6 +401,7 @@ cat ./evals/agg_eval_all.json | jq '[.[] | select(.hw == "B200")]'
 | `em_flexible` | Flexible extraction (looser number matching) |
 | `n_eff` | Number of samples evaluated |
 | `task` | Eval task name (e.g., `gsm8k`) |
+| `eval_suite` | Explicit suite identity used for collection and artifact reuse |
 
 ### Environment variables
 
@@ -166,7 +409,8 @@ cat ./evals/agg_eval_all.json | jq '[.[] | select(.hw == "B200")]'
 |----------|---------|-------------|
 | `RUN_EVAL` | `false` | Enable eval after throughput benchmark |
 | `EVAL_ONLY` | `false` | Skip throughput, only run evals (set by workflow) |
-| `EVAL_FRAMEWORK` | `lm-eval` | Eval framework to use |
+| `EVAL_FRAMEWORK` | `lm-eval` | Eval runner (`lm-eval`, `swebench`, `kimi-vendor`, or `minimax-vendor`) |
+| `EVAL_SUITE` | basename of `EVAL_TASKS_DIR`, else `gsm8k` | Provider suite selector and artifact identity. External overrides are supported by `kimi-vendor` and `minimax-vendor`; other runners derive it from their task |
 | `EVAL_TASKS_DIR` | `utils/evals/gsm8k.yaml` | Path to lm-eval task YAML |
 | `EVAL_RESULT_DIR` | `/tmp/eval_out-*` | Output directory for eval results |
 | `EVAL_MAX_MODEL_LEN` | `16384` | Max context for eval (set by `compute_eval_context_length`) |
@@ -181,6 +425,15 @@ cat ./evals/agg_eval_all.json | jq '[.[] | select(.hw == "B200")]'
 1. Create a task YAML in `utils/evals/` following the lm-eval task format.
 2. Set `EVAL_TASKS_DIR=utils/evals/<your_task>.yaml` when running benchmarks.
 3. Update `utils/collect_eval_results.py` if new metrics need extraction.
+
+### Adding a provider verifier
+
+1. Add a provider-specific adapter under `utils/evals/`.
+2. Add an explicit framework case in `run_eval`; keep suite-specific policy in
+   that adapter's shell runner.
+3. Install dependencies in a provider-specific isolated runtime.
+4. Emit `result_format: inferencex-eval-v1`, preserve the native report in an
+   explicitly uploaded suite-specific path, set `EVAL_SUITE`, and add a threshold.
 
 ### Runtime patches (`utils/evals/patches/`)
 

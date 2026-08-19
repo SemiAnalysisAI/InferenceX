@@ -131,6 +131,8 @@ backend:
       enable-metrics: true
       model-path: /model/
       trust-remote-code: true
+      reasoning-parser: deepseek-v4
+      tool-call-parser: deepseekv4
       watchdog-timeout: 86400
       stream-interval: 60
       tp-size: 8
@@ -166,6 +168,8 @@ backend:
       enable-metrics: true
       model-path: /model/
       trust-remote-code: true
+      reasoning-parser: deepseek-v4
+      tool-call-parser: deepseekv4
       watchdog-timeout: 86400
       stream-interval: 60
       tp-size: 16

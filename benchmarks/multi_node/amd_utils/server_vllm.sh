@@ -355,9 +355,9 @@ if [ "$NODE_RANK" -eq 0 ]; then
             fi
 
             if [[ "$DRY_RUN" -eq 1 ]]; then
-                echo "DRY RUN: run_eval --framework lm-eval --port $ROUTER_PORT (conc=${EVAL_CONCURRENT_REQUESTS}, ctx=${EVAL_MAX_MODEL_LEN:-auto})"
+                echo "DRY RUN: run_eval --port $ROUTER_PORT (framework=${EVAL_FRAMEWORK:-lm-eval}, conc=${EVAL_CONCURRENT_REQUESTS}, ctx=${EVAL_MAX_MODEL_LEN:-auto})"
             else
-                run_eval --framework lm-eval --port "$ROUTER_PORT"
+                run_eval --port "$ROUTER_PORT"
                 eval_rc=$?
 
                 if [[ $eval_rc -ne 0 ]]; then
@@ -390,6 +390,8 @@ if [ "$NODE_RANK" -eq 0 ]; then
                         [ -e "/workspace/$f" ] && cp -f "/workspace/$f" "$EVAL_COPY_DIR/"
                     done
                     find /workspace -maxdepth 1 -name 'results*.json' -exec cp -f {} "$EVAL_COPY_DIR/" \;
+                    find /workspace -maxdepth 1 -name '*_vendor_report.json' -exec cp -f {} "$EVAL_COPY_DIR/" \;
+                    find /workspace -maxdepth 1 -name 'bfcl_report.json' -exec cp -f {} "$EVAL_COPY_DIR/" \;
                     find /workspace -maxdepth 1 -name 'sample*.jsonl' -exec cp -f {} "$EVAL_COPY_DIR/" \;
 
                     echo "Eval completed. Artifacts staged in $EVAL_COPY_DIR"

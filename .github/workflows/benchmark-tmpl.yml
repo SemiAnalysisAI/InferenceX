@@ -90,6 +90,16 @@ on:
         type: boolean
         required: false
         default: false
+      eval-framework:
+        description: "Eval runner (lm-eval, swebench, kimi-vendor, minimax-vendor, or bfcl)"
+        type: string
+        required: false
+        default: "lm-eval"
+      eval-suite:
+        description: "Eval suite (kimi_tool_call_schema, minimax_m3_smoke, or bfcl_smoke); empty for lm-eval and swebench"
+        type: string
+        required: false
+        default: ""
       random-range-ratio:
         required: false
         type: string
@@ -179,6 +189,8 @@ env:
   DISAGG: ${{ inputs.disagg }}
   RUN_EVAL: ${{ inputs.run-eval }}
   EVAL_ONLY: ${{ inputs.eval-only }}
+  EVAL_FRAMEWORK: ${{ inputs.eval-framework }}
+  EVAL_SUITE: ${{ inputs.eval-suite }}
   # Agentic-coding env. Fixed-seq-len jobs leave these empty.
   SCENARIO_TYPE: ${{ inputs.scenario-type }}
   SCENARIO_SUBDIR: ${{ inputs.scenario-type == 'agentic-coding' && 'agentic/' || 'fixed_seq_len/' }}
@@ -203,7 +215,7 @@ env:
   MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
   MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
   # These b300 nodes are currently broken.
-  SALLOC_EXCLUDE: 'b300-005,b300-006'
+  SALLOC_EXCLUDE: 'b300-005,b300-006,b300-017'
 
 permissions:
   contents: read
@@ -401,6 +413,8 @@ jobs:
           path: |
             meta_env.json
             results*.json
+            *_vendor_report.json
+            bfcl_report.json
             sample*.jsonl
             agent_preds.json
             predictions.jsonl
@@ -410,7 +424,12 @@ jobs:
 
       - name: Verify eval scores
         if: ${{ (success() || failure()) && inputs.eval-only }}
-        run: python3 utils/evals/validate_scores.py
+        run: |
+          if [[ "${EVAL_FRAMEWORK}" == "bfcl" ]]; then
+            python3 utils/evals/validate_scores.py --metric-prefix 'acc,'
+          else
+            python3 utils/evals/validate_scores.py
+          fi
 
       - name: Cleanup eval outputs (post-upload)
         if: ${{ always() && (env.RUN_EVAL == 'true' || inputs.eval-only) }}
@@ -418,7 +437,9 @@ jobs:
           rm -f meta_env.json || true
           # Remove any eval results JSONs that were moved into workspace
           rm -f results*.json || true
+          rm -f -- ./*_vendor_report.json || true
           rm -f sample*.jsonl || true
+          rm -f bfcl_report.json || true
           rm -f agent_preds.json predictions.jsonl swebench_report_*.json *.traj* || true
           
       - name: Resource cleanup (post-run)

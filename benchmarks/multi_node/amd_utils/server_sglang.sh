@@ -1113,9 +1113,9 @@ print(json.dumps(json.loads(sys.stdin.read())))' <<<"$_val")" || {
             # RESULT_FILENAME are already set via Docker -e flags from job.slurm
 
             if [[ "$DRY_RUN" -eq 1 ]]; then
-                echo "DRY RUN: run_eval --framework lm-eval --port 30000 (conc=${EVAL_CONCURRENT_REQUESTS}, ctx=${EVAL_MAX_MODEL_LEN:-auto})"
+                echo "DRY RUN: run_eval --port 30000 (framework=${EVAL_FRAMEWORK:-lm-eval}, conc=${EVAL_CONCURRENT_REQUESTS}, ctx=${EVAL_MAX_MODEL_LEN:-auto})"
             else
-                run_eval --framework lm-eval --port 30000
+                run_eval --port 30000
                 eval_rc=$?
 
                 if [[ $eval_rc -ne 0 ]]; then
@@ -1138,6 +1138,8 @@ print(json.dumps(json.loads(sys.stdin.read())))' <<<"$_val")" || {
                         [ -e "/workspace/$f" ] && cp -f "/workspace/$f" "$EVAL_COPY_DIR/"
                     done
                     find /workspace -maxdepth 1 -name 'results*.json' -exec cp -f {} "$EVAL_COPY_DIR/" \;
+                    find /workspace -maxdepth 1 -name '*_vendor_report.json' -exec cp -f {} "$EVAL_COPY_DIR/" \;
+                    find /workspace -maxdepth 1 -name 'bfcl_report.json' -exec cp -f {} "$EVAL_COPY_DIR/" \;
                     find /workspace -maxdepth 1 -name 'sample*.jsonl' -exec cp -f {} "$EVAL_COPY_DIR/" \;
 
                     echo "Eval completed. Artifacts staged in $EVAL_COPY_DIR"
