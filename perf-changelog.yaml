@@ -6204,13 +6204,6 @@
     - "Add DeepSeek-V4-Pro FP4 ATOM MTP AgentX on one 8x MI355X node at concurrency 1, 2, 4, 8, 16, 32, and 48, with no KV offload and max-num-seqs set to twice concurrency."
     - "Use rocm/atom-dev:nightly_202608181633 (digest sha256:fdc5650f2b6d13c22f1f1b3873ee6dc61278e6b0b90dc24d0f6c55810895032f), FP8 KV/index caches, prefix caching, 32K state checkpoints, 16K batching/prefill chunks, and FULL cudagraph mode."
     - "Use three-token MTP with the committed DeepSeek-V4 thinking-mode golden AL 2.49 (synthetic acceptance rate 0.4966666667) for throughput, while eval-only runs measure real MTP acceptance."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2668
-
-- config-keys:
-    - dsv4-fp4-mi355x-atom-agentic-mtp
-  scenario-type:
-    - agentic-coding
-  description:
     - "Increase the AgentX warmup grace period from the 1800-second default to 3600 seconds at concurrency 32 and 48, matching the DeepSeek-V4-Pro SGLang saturation recipe so in-flight warmup requests can drain and reused long prefixes are fully primed before profiling."
     - "Keep concurrency 1 through 16 at the default 1800 seconds; the profiling duration remains 3600 seconds for every concurrency arm."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2668
