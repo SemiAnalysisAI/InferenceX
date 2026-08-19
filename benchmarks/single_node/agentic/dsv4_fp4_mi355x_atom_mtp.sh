@@ -112,9 +112,9 @@ ATOM_CMD=(
     --index-cache-dtype fp8
     --enable-prefix-caching
     --gpu-memory-utilization 0.9
-    --max-num-batched-tokens 8192
-    --attn-prefill-chunk-size 8192
-    --state-checkpoint-interval-tokens 8192
+    --max-num-batched-tokens 16384
+    --attn-prefill-chunk-size 16384
+    --state-checkpoint-interval-tokens 32768
     --level 3
     --cudagraph-mode FULL
     "${SPEC_ARGS[@]}"
