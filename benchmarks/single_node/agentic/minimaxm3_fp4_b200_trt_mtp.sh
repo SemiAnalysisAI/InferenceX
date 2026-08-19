@@ -134,7 +134,7 @@ enable_chunked_prefill: true
 enable_autotuner: true
 trust_remote_code: true
 reasoning_parser: minimax_m3
-stream_interval: 100
+stream_interval: 20
 print_iter_log: true
 num_postprocess_workers: 8
 enable_attention_dp: false
