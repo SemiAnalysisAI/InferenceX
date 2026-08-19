@@ -108,13 +108,11 @@ backend:
       kv-cache-dtype: "fp8"
       tensor-parallel-size: 8
       pipeline-parallel-size: 1
-      disable-custom-all-reduce: true
       attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"use_fp4_indexer_cache":true}'
       max-model-len: 1048576
       max-num-seqs: 32
       max-num-batched-tokens: 8192
       trust-remote-code: true
-      no-enable-flashinfer-autotune: true
       block-size: 256
       max-cudagraph-capture-size: 128
       speculative-config: '{"method":"mtp","num_speculative_tokens":3,"rejection_sample_method":"synthetic","synthetic_acceptance_length":2.49}'
