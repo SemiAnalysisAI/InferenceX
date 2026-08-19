@@ -6303,3 +6303,12 @@
   description:
     - "Keep the checked-in aggregate TP4 and TP8 recipes on real MTP verification; throughput runs inject synthetic acceptance length 2.49 from nvidia-master.yaml, while EVAL_ONLY leaves the recipes unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2665
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Activate MooncakeStoreConnector for the GPU-resident aggregate TP4 and TP8 recipes without proactive KV offload."
+    - "Set the SimpleCPUOffload TP4 and TP8 max-num-seqs capacities to 32 and 64 with matching 128- and 256-token MTP graph envelopes."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2665
