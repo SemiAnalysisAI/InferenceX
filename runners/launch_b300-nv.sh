@@ -160,13 +160,8 @@ export ISL="$ISL"
 export OSL="$OSL"
 export EVAL_ONLY="${EVAL_ONLY:-false}"
 
-DEFAULT_MOUNTS_BLOCK='default_mounts:'
-if [[ $FRAMEWORK != "dynamo-trt" || $MODEL_PREFIX != "glm5.2" ]]; then
-    DEFAULT_MOUNTS_BLOCK+='
+DEFAULT_MOUNTS_BLOCK='default_mounts:
   "/opt/ucx-no-ud": "/usr/local/ucx"'
-else
-    echo "Using the container UCX for glm5.2 dynamo-trt NIXL transfers"
-fi
 if [[ "$IS_AGENTIC" == "1" ]]; then
     AIPERF_MMAP_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/ai-perf-cache"
     HF_HUB_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/hf-hub-cache"
@@ -229,6 +224,26 @@ CONFIG_PATH="${CONFIG_FILE%%:*}"
 if [[ ! -f "$CONFIG_PATH" ]]; then
     echo "Error: CONFIG_FILE does not exist after srt-slurm setup: $CONFIG_PATH" >&2
     exit 1
+fi
+
+# AgentX writes its aggregate directly into the workflow workspace. Replace the
+# recipe's standalone basename with the workflow-generated basename so result
+# validation and artifact upload look for the file that the benchmark creates.
+if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "glm5.2" ]]; then
+    if [[ -z "${RESULT_FILENAME:-}" || ! "$RESULT_FILENAME" =~ ^[A-Za-z0-9._-]+$ ]]; then
+        echo "Error: invalid AgentX RESULT_FILENAME: ${RESULT_FILENAME:-<unset>}" >&2
+        exit 1
+    fi
+    RESULT_FILENAME_FIELD_COUNT=$(grep -c '^    RESULT_FILENAME:' "$CONFIG_PATH" || true)
+    if [[ "$RESULT_FILENAME_FIELD_COUNT" -ne 1 ]]; then
+        echo "Error: expected one benchmark RESULT_FILENAME field in $CONFIG_PATH, found $RESULT_FILENAME_FIELD_COUNT" >&2
+        exit 1
+    fi
+    sed -i "s|^    RESULT_FILENAME:.*|    RESULT_FILENAME: ${RESULT_FILENAME}|" "$CONFIG_PATH"
+    if ! grep -Fqx "    RESULT_FILENAME: ${RESULT_FILENAME}" "$CONFIG_PATH"; then
+        echo "Error: failed to render AgentX RESULT_FILENAME in $CONFIG_PATH" >&2
+        exit 1
+    fi
 fi
 
 # Eval runs execute lm-eval on the allocation head and connect over loopback.
