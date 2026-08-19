@@ -6312,3 +6312,11 @@
     - "Activate MooncakeStoreConnector for the GPU-resident aggregate TP4 and TP8 recipes without proactive KV offload."
     - "Set the SimpleCPUOffload TP4 and TP8 max-num-seqs capacities to 32 and 64 with matching 128- and 256-token MTP graph envelopes."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2665
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Raise the aggregate SimpleCPUOffload DRAM budget from 0.6095238 to 0.80, exposing 672 GiB per four-GPU GB300 node."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2665

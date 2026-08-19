@@ -7747,9 +7747,9 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-agg:
   disagg: false
   scenarios:
     agentic-coding:
-    # 0.6095238 resolves to 512 GiB of host DRAM per four-GPU GB300 node,
-    # matching the SimpleCPUOffloadConnector pool in the offload recipes.
-    - dram-utilization: 0.6095238
+    # Reserve 80% (672 GiB) of host DRAM per four-GPU GB300 node, leaving
+    # headroom above the 512 GiB SimpleCPUOffloadConnector pool.
+    - dram-utilization: 0.80
       search-space:
       # Keep the checked-in recipes on real MTP verification. Throughput jobs
       # inject the committed golden AL at launch; EVAL_ONLY leaves them real.
