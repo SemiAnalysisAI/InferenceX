@@ -264,6 +264,37 @@ GLM-5-FP8:
       chunked_prefill_size: 262144
       cuda_graph_bs_range: "1-128"
 
+GLM-5.2-MXFP4-AgentX:
+  base_flags: "--watchdog-timeout 1200 --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend dsa --dsa-prefill-backend tilelang --dsa-decode-backend tilelang --dsa-topk-backend sgl-kernel --disaggregation-transfer-backend mori --tool-call-parser glm47 --reasoning-parser glm45 --trust-remote-code --served-model-name amd/GLM-5.2-MXFP4 --log-level info --log-level-http error --model-loader-extra-config '{\\\"enable_multithread_load\\\": true, \\\"num_threads\\\": 8}'"
+  # GLM-5.2 built-in MTP via the EAGLE spec path (eagle-topk 1), matching
+  # srt-slurm-recipes/sglang/glm5/gb200-fp4/glm5-mtp.yaml and DeepSeek-V4 DI.
+  # build_server_config appends --speculative-num-steps/--speculative-num-draft-tokens
+  # from DECODE_MTP_SIZE when spec-decoding: mtp.
+  mtp_flags: "--speculative-algorithm EAGLE --speculative-eagle-topk 1"
+  dp_flags: "--enable-dp-attention --moe-dense-tp-size 1 --enable-dp-lm-head"
+  ep_flags: "--moe-a2a-backend mori"
+  prefill:
+    mem_fraction_static: 0.8
+    disable_radix_cache: false
+    dp:
+      max_running_requests: 1024
+      chunked_prefill_size: "MORI_MAX_DISPATCH_TOKENS_PREFILL * PREFILL_TP_SIZE"
+      context_length: 1048576
+    no_dp:
+      max_running_requests: 128
+      chunked_prefill_size: 131072
+      context_length: 1048576
+  decode:
+    mem_fraction_static: 0.85
+    prefill_round_robin_balance: true
+    disagg_decode_enable_radix_cache: false
+    dp:
+      max_running_requests: 1024
+      cuda_graph_bs_range: "1-128"
+    no_dp:
+      max_running_requests: 128
+      cuda_graph_bs_range: "1-128"
+
 DeepSeek-R1-0528-MXFP4-Preview:
   base_flags: "--decode-log-interval 1000 --log-level warning --watchdog-timeout 3600 --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend aiter --disaggregation-transfer-backend mori"
   mtp_flags: "--speculative-algorithm NEXTN --speculative-eagle-topk 1"

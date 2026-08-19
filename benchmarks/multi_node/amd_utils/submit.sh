@@ -151,6 +151,7 @@ export DRY_RUN="${DRY_RUN:-0}"
 # Eval-related env vars (threaded from workflow → runner → here → job.slurm → Docker)
 export RUN_EVAL="${RUN_EVAL:-false}"
 export EVAL_ONLY="${EVAL_ONLY:-false}"
+export ROUTER_READINESS_CANARY="${ROUTER_READINESS_CANARY:-1}"
 export EVAL_CONC="${EVAL_CONC:-}"
 export FRAMEWORK="${FRAMEWORK:-}"
 export PRECISION="${PRECISION:-}"
@@ -205,10 +206,29 @@ if [[ -n "${SLURM_REUSE_JOBID:-}" ]]; then
     # Resolve allocation's nodelist if not already provided.
     ALLOC_NODELIST="${SLURM_JOB_NODELIST:-$(squeue -h -j "$REUSE_JID" -o '%N' 2>/dev/null)}"
     if [[ -z "$ALLOC_NODELIST" ]]; then
+        ALLOC_NODELIST="$(scontrol show job "$REUSE_JID" 2>/dev/null | awk -F= '/NodeList=/{print $2}' | awk '{print $1}')"
+    fi
+    # Expand Slurm bracket form: host-[01,57] -> host-01,host-57
+    if [[ "$ALLOC_NODELIST" == *"["* ]]; then
+        EXPANDED="$(scontrol show hostnames "$ALLOC_NODELIST" 2>/dev/null | paste -sd, -)"
+        if [[ -n "$EXPANDED" ]]; then
+            ALLOC_NODELIST="$EXPANDED"
+        elif [[ -n "${NODE_LIST:-}" ]]; then
+            ALLOC_NODELIST="$NODE_LIST"
+        fi
+    fi
+    if [[ -z "$ALLOC_NODELIST" ]]; then
         echo "Error: could not resolve nodelist for job ${REUSE_JID}" >&2
         exit 1
     fi
-    ALLOC_NNODES=$(scontrol show hostnames "$ALLOC_NODELIST" | wc -l)
+    if [[ "$ALLOC_NODELIST" == *","* ]]; then
+        ALLOC_NNODES=$(tr ',' '\n' <<< "$ALLOC_NODELIST" | grep -c .)
+    else
+        ALLOC_NNODES=$(scontrol show hostnames "$ALLOC_NODELIST" 2>/dev/null | wc -l)
+        if [[ "$ALLOC_NNODES" -lt 1 ]]; then
+            ALLOC_NNODES=1
+        fi
+    fi
     if [[ "$ALLOC_NNODES" -lt "$NUM_NODES" ]]; then
         echo "Error: allocation ${REUSE_JID} has ${ALLOC_NNODES} nodes, need ${NUM_NODES}" >&2
         exit 1
