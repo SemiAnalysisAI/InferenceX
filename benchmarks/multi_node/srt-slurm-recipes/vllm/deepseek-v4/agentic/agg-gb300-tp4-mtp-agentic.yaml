@@ -112,7 +112,6 @@ backend:
       max-num-seqs: 16
       max-num-batched-tokens: 8192
       trust-remote-code: true
-      no-enable-flashinfer-autotune: true
       block-size: 256
       max-cudagraph-capture-size: 64
       speculative-config: '{"method":"mtp","num_speculative_tokens":3,"rejection_sample_method":"synthetic","synthetic_acceptance_length":2.49}'
