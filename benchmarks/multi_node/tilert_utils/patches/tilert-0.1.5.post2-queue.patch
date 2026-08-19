@@ -1,0 +1,133 @@
+--- a/tilert/pd_vllm/pd_router.py
++++ b/tilert/pd_vllm/pd_router.py
+@@ -4,7 +4,8 @@
+ non-streaming.
+
+ Flow per request (phase-1 hybrid, see design doc):
+-  1. pick a free decode node (in-memory busy tracking; all busy -> 429)
++  1. wait up to --queue-timeout for a free decode node (in-memory busy
++     tracking; timeout -> 429)
+   2. forward to vLLM with max_tokens=1 + logprobs and inject
+      kv_transfer_params {tilert_host, tilert_ctrl_port} — the connector
+      claims the request and RDMA-sends state to the decode node
+@@ -56,19 +57,27 @@
+ class Pool:
+     def __init__(self, nodes: list[DecodeNode]):
+         self.nodes = nodes
+-        self._lock = threading.Lock()
++        self._available = threading.Condition()
+
+-    def acquire(self) -> DecodeNode | None:
+-        with self._lock:
+-            for n in self.nodes:
+-                if not n.busy:
+-                    n.busy = True
+-                    return n
+-        return None
++    def acquire(self, timeout: float = 0.0) -> DecodeNode | None:
++        deadline = time.monotonic() + timeout
++        with self._available:
++            while True:
++                for n in self.nodes:
++                    if not n.busy:
++                        n.busy = True
++                        return n
++                if timeout <= 0:
++                    return None
++                remaining = deadline - time.monotonic()
++                if remaining <= 0:
++                    return None
++                self._available.wait(timeout=remaining)
+
+     def release(self, node: DecodeNode) -> None:
+-        with self._lock:
++        with self._available:
+             node.busy = False
++            self._available.notify()
+
+
+ def first_token_from_logprobs(resp: dict, is_chat: bool) -> int:
+@@ -123,11 +134,19 @@
+ class RouterCtx:
+     """Immutable per-process context (tokenizer, parser factory, config)."""
+
+-    def __init__(self, vllm_url: str, pool: Pool, tokenizer, parser_name: str):
++    def __init__(
++        self,
++        vllm_url: str,
++        pool: Pool,
++        tokenizer,
++        parser_name: str,
++        queue_timeout: float = 0.0,
++    ):
+         self.vllm_url = vllm_url
+         self.pool = pool
+         self.tokenizer = tokenizer
+         self.parser_name = parser_name
++        self.queue_timeout = queue_timeout
+         self._parsers = {}
+         if parser_name != "none":
+             if tokenizer is None:
+@@ -178,9 +197,12 @@
+     # ── non-streaming ────────────────────────────────────────────────────
+     def _handle(path: str, body: dict):
+         is_chat = path.endswith("chat/completions")
+-        node = pool.acquire()
++        node = pool.acquire(ctx.queue_timeout)
+         if node is None:
+-            return JSONResponse({"error": "all decode nodes busy"}, status_code=429)
++            return JSONResponse(
++                {"error": f"all decode nodes busy after {ctx.queue_timeout:g}s"},
++                status_code=429,
++            )
+         t0 = time.time()
+         try:
+             prefill = _prefill(path, body, node)
+@@ -257,9 +280,12 @@
+     async def _handle_stream(path: str, body: dict, request: Request):
+         from starlette.concurrency import run_in_threadpool
+
+-        node = pool.acquire()
++        node = await run_in_threadpool(pool.acquire, ctx.queue_timeout)
+         if node is None:
+-            return JSONResponse({"error": "all decode nodes busy"}, status_code=429)
++            return JSONResponse(
++                {"error": f"all decode nodes busy after {ctx.queue_timeout:g}s"},
++                status_code=429,
++            )
+
+         try:
+             prefill = await run_in_threadpool(_prefill, path, body, node)
+@@ -445,7 +472,15 @@
+         default="glm47",
+         help="output parser (reasoning + tool calls)",
+     )
++    ap.add_argument(
++        "--queue-timeout",
++        type=float,
++        default=0.0,
++        help="seconds to wait for a free decode node before returning HTTP 429",
++    )
+     args = ap.parse_args()
++    if args.queue_timeout < 0:
++        ap.error("--queue-timeout must be non-negative")
+
+     nodes = []
+     for spec in args.decode:
+@@ -460,14 +495,15 @@
+             args.model_path, trust_remote_code=True
+         )  # nosec B615
+
+-    ctx = RouterCtx(args.vllm_url, Pool(nodes), tokenizer, args.parser)
++    ctx = RouterCtx(args.vllm_url, Pool(nodes), tokenizer, args.parser, args.queue_timeout)
+     app = build_app(ctx)
+     logger.info(
+-        "router on :%d -> vllm=%s, %d decode node(s), parser=%s",
++        "router on :%d -> vllm=%s, %d decode node(s), parser=%s, queue_timeout=%gs",
+         args.port,
+         args.vllm_url,
+         len(nodes),
+         args.parser,
++        args.queue_timeout,
+     )
+     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")

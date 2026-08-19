@@ -1,7 +1,15 @@
 #!/bin/bash
 
-TILERT_VERSION="${TILERT_VERSION:-0.1.5.post2}"
 TILERT_PIP_INDEX_URL="${TILERT_PIP_INDEX_URL:-}"
+if [[ "${IS_AGENTIC:-0}" == "1" || "${SCENARIO_TYPE:-}" == "agentic-coding" ]]; then
+    TILERT_VERSION="${TILERT_VERSION:-0.1.5.post2+inferencex.1}"
+    TILERT_WHEEL_URL="${TILERT_WHEEL_URL:-https://github.com/SemiAnalysisAI/InferenceX/releases/download/tilert-v0.1.5.post2-inferencex.1/tilert-0.1.5.post2+inferencex.1-cp312-cp312-manylinux_2_28_x86_64.whl}"
+    TILERT_WHEEL_SHA256="${TILERT_WHEEL_SHA256:-4c0a4330b96d3cb96536d761197e978bde18030bb1e3d14f2a39472053ab4b7b}"
+else
+    TILERT_VERSION="${TILERT_VERSION:-0.1.5.post2}"
+    TILERT_WHEEL_URL="${TILERT_WHEEL_URL:-}"
+    TILERT_WHEEL_SHA256="${TILERT_WHEEL_SHA256:-}"
+fi
 
 TILERT_HTTP_DEPS="${TILERT_HTTP_DEPS:-fastapi uvicorn httpx}"
 TILERT_NIXL_VERSION="${TILERT_NIXL_VERSION:-1.3.1}"
@@ -42,6 +50,18 @@ _pip_args() {
     printf '%s\n' "${a[@]}"
 }
 
+_tilert_install_spec() {
+    if [[ -n "$TILERT_WHEEL_URL" ]]; then
+        [[ -n "$TILERT_WHEEL_SHA256" ]] || {
+            echo "[SETUP] ERROR: TILERT_WHEEL_SHA256 is required with TILERT_WHEEL_URL" >&2
+            return 1
+        }
+        printf '%s#sha256=%s\n' "$TILERT_WHEEL_URL" "$TILERT_WHEEL_SHA256"
+    else
+        printf 'tilert==%s\n' "$TILERT_VERSION"
+    fi
+}
+
 install_tilert_decode() {
     mapfile -t _pa < <(_pip_args)
     local have; have="$(_installed_version tilert)"
@@ -49,9 +69,13 @@ install_tilert_decode() {
         echo "[SETUP] tilert $have already installed, skipping"
     else
         [[ -n "$have" ]] && echo "[SETUP] tilert $have installed, switching to pinned $TILERT_VERSION"
-        echo "[SETUP] installing tilert==$TILERT_VERSION (official PyPI release wheel)"
-        "$PY" -m pip install "${_pa[@]}" "tilert==$TILERT_VERSION" || {
-            echo "[SETUP] ERROR: failed to install tilert==$TILERT_VERSION"; exit 1; }
+        if [[ -n "$TILERT_WHEEL_URL" ]]; then
+            echo "[SETUP] installing tilert==$TILERT_VERSION (InferenceX queueing backport; SHA256 pinned)"
+        else
+            echo "[SETUP] installing tilert==$TILERT_VERSION (official package-index wheel)"
+        fi
+        "$PY" -m pip install "${_pa[@]}" "$(_tilert_install_spec)" || {
+            echo "[SETUP] ERROR: failed to install tilert==$TILERT_VERSION from $TILERT_WHEEL_URL"; exit 1; }
         have="$(_installed_version tilert)"
         [[ "$have" == "$TILERT_VERSION" ]] || {
             echo "[SETUP] ERROR: still not $TILERT_VERSION after install (actual: ${have:-not installed})"; exit 1; }
@@ -104,8 +128,8 @@ install_tilert_prefill() {
     else
         echo "[SETUP] installing tilert==$TILERT_VERSION --no-deps (connector plugin only; leaves transformers untouched)"
         mapfile -t _pa < <(_pip_args)
-        "$PY" -m pip install "${_pa[@]}" --no-deps "tilert==$TILERT_VERSION" || {
-            echo "[SETUP] ERROR: failed to install tilert==$TILERT_VERSION (--no-deps)"; exit 1; }
+        "$PY" -m pip install "${_pa[@]}" --no-deps "$(_tilert_install_spec)" || {
+            echo "[SETUP] ERROR: failed to install tilert==$TILERT_VERSION from $TILERT_WHEEL_URL (--no-deps)"; exit 1; }
         have="$(_installed_version tilert)"
         [[ "$have" == "$TILERT_VERSION" ]] || {
             echo "[SETUP] ERROR: still not $TILERT_VERSION after install (actual: ${have:-not installed})"; exit 1; }
