@@ -88,7 +88,7 @@ elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp4" ]]; then
     fi
     export MODEL_PATH="${SELECTED_MODEL_PATH:-/lustre/fsw/gharunners/models/GLM-5.2-NVFP4}"
     mkdir -p "$MODEL_PATH"
-    export SRT_SLURM_MODEL_PREFIX="glm-5.2-fp4"
+    export SRT_SLURM_MODEL_PREFIX="glm5.2-fp4"
 elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "int4" ]]; then
     export MODEL_PATH="/lustre/fsw/models/Kimi-K2.5"
     export SRT_SLURM_MODEL_PREFIX="kimik2.5"
@@ -215,17 +215,6 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         git checkout v1.0.29
         mkdir -p recipes/trtllm/kimi-k25-nvfp4/b200-fp4
         cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/kimi-k2.5/disagg/trtllm_dynamo/b200-fp4" recipes/trtllm/kimi-k25-nvfp4/b200-fp4
-    elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp4" ]]; then
-        # NVIDIA/srt-slurm v1.0.53 is the released schema validated against the
-        # GLM-5.2 B200 AgentX aggregate and disaggregated recipes (ported from
-        # NVIDIA/srt-slurm#314).
-        git clone --branch v1.0.53 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-        cd "$SRT_REPO_DIR" || exit 1
-        test "$(git rev-parse HEAD)" = "217f94387abeddfed7149a71955dc523e07cd765" || exit 1
-        mkdir -p recipes/sglang/glm5.2/b200-fp4/agentic
-        cp -rT \
-            "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5.2/b200-fp4/agentic" \
-            recipes/sglang/glm5.2/b200-fp4/agentic
     else
         git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR" || exit 1
@@ -374,18 +363,11 @@ EOF
     fi
 
     # Override the job name in the config file with the runner name
-    CONFIG_PATH="${CONFIG_FILE%%:*}"
-    sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
+    sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "${CONFIG_FILE%%:*}"
     # Bump recipe health-check timeout from 360×10s=3600s to 720×10s=7200s
     # so large-model loads (e.g. DSR1-FP8 ~680GB off shared FS) finish in time.
     # Uses ${CONFIG_FILE%%:*} because CONFIG_FILE may carry an :override[N] suffix.
-    sed -i 's/^  max_attempts: [0-9]*/  max_attempts: 720/' "$CONFIG_PATH"
-
-    # Agentic throughput rows opt into golden synthetic acceptance through
-    # the master config. EVAL_ONLY makes the injector a no-op so evals retain
-    # real target-model verification while exercising the same MTP path.
-    python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
-        "$CONFIG_PATH" "$FRAMEWORK" || exit 1
+    sed -i 's/^  max_attempts: [0-9]*/  max_attempts: 720/' "${CONFIG_FILE%%:*}"
 
     SRTCTL_PREFLIGHT_ARGS=()
     # Kimi K2.6 weights are staged on the Slurm compute nodes, not the login node.
