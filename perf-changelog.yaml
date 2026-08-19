@@ -6258,5 +6258,5 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Refresh GB300 AgentX MTP aggregate/P-D recipes: cap TP4/TP8 at c16 and add c384 DEP8/DEP32 with 4 decode Mooncake receive threads."
+    - "Refresh GB300 AgentX MTP aggregate/P-D recipes: cap TP4/TP8 at c16 and add c448 DEP8/DEP32 with decode max-num-seqs 8, max-num-batched-tokens 32, and 4 Mooncake receive threads."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2665
