@@ -267,6 +267,21 @@ fi
 #   ~93k ctx  FLASH_ATTN 11,174 -> AITER 13,423 tok/s  (+20.1%)
 # This workload averages ~99k input tokens, so the ~93k figure is the relevant
 # one. Set MLA_PREFILL_BACKEND=FLASH_ATTN to fall back if AITER regresses.
+#
+# Under DCP the default flips back to FLASH_ATTN. Runs 32215249474 and
+# 32216365989 both died with an HSA_STATUS_ERROR_EXCEPTION 0x1016 on all 8 ranks
+# on the first real ~99k-token prefill -- never in warmup, never at dcp=1. The
+# reported kernel moved between runs (aiter moe_sorting, then the attn_res
+# triton kernel) with a generic `unspecified launch failure`, which is what an
+# ASYNC fault in an earlier kernel looks like: the next launch is simply the one
+# that finds the queue dead. Both reported sites sit downstream of the MLA
+# prefill, and mla_attention.py:809-811,839-840 already route dcp_world_size>1
+# away from the fast paths onto the chunked-context merge, so AITER's FMHA
+# prefill is the standing suspect. Set MLA_PREFILL_BACKEND explicitly to
+# override either default.
+if [ "$DCP_SIZE" -gt 1 ]; then
+    MLA_PREFILL_BACKEND="${MLA_PREFILL_BACKEND:-FLASH_ATTN}"
+fi
 MLA_PREFILL_BACKEND="${MLA_PREFILL_BACKEND:-ROCM_AITER_FA}"
 MLA_PREFILL_ARGS=()
 if [ -n "$MLA_PREFILL_BACKEND" ]; then
