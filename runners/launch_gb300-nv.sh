@@ -4,8 +4,19 @@
 
 set -exo pipefail
 
-export SLURM_PARTITION="batch_1"
-export SLURM_ACCOUNT="benchmark"
+if [[ "${MODEL_PREFIX:-}" == "qwen3.5" && "${PRECISION:-}" == "fp4" ]]; then
+    # The GB300 runner moved Qwen3.5 dispatch to the restricted batch_2
+    # partition and the slurm-shared tree; batch_1/benchmark now fails every
+    # srun with an invalid account/partition combination. Leave every
+    # unrelated matrix on the upstream defaults.
+    export SLURM_PARTITION="batch_2"
+    export SLURM_ACCOUNT="restricted"
+    export GB300_SHARED_ROOT="/data/home/slurm-shared/gharunners"
+else
+    export SLURM_PARTITION="batch_1"
+    export SLURM_ACCOUNT="benchmark"
+    export GB300_SHARED_ROOT="/data/home/sa-shared/gharunners"
+fi
 export ENROOT_ROOTFS_WRITABLE=1
 
 # Host-side directory holding aiperf's content-addressed dataset mmap cache.
@@ -15,9 +26,9 @@ export ENROOT_ROOTFS_WRITABLE=1
 # Without it, every run re-tokenizes and re-writes ~65 GB of mmap files
 # per dataset on first use. 777 mode so all gharunner_X SLURM users can
 # write to it.
-export AIPERF_MMAP_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/ai-perf-cache"
+export AIPERF_MMAP_CACHE_HOST_PATH="${GB300_SHARED_ROOT}/ai-perf-cache"
 
-export HF_HUB_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/hf-hub-cache"
+export HF_HUB_CACHE_HOST_PATH="${GB300_SHARED_ROOT}/hf-hub-cache"
 mkdir -p "$HF_HUB_CACHE_HOST_PATH"
 
 # Persistent dynamo source-build cache. srtctl's hash-pinned dynamo install
@@ -28,7 +39,7 @@ mkdir -p "$HF_HUB_CACHE_HOST_PATH"
 # root, which the non-root server containers can't do), so persist and share
 # the cache across jobs by bind-mounting this host dir at /configs/dynamo-wheels.
 # Seed it once with a --container-remap-root build. 777 for multi-user runners.
-export DYNAMO_WHEELS_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/dynamo-wheels"
+export DYNAMO_WHEELS_CACHE_HOST_PATH="${GB300_SHARED_ROOT}/dynamo-wheels"
 mkdir -p "$DYNAMO_WHEELS_CACHE_HOST_PATH"
 
 export MODEL_PATH=$MODEL
@@ -103,8 +114,8 @@ NGINX_IMAGE="nginx:1.27.4"
 # symbolic links" bug from workflow worker NFS sessions on lockfiles
 # AND data files. /data/ has a separate NFS client cache that isn't
 # poisoned. See feedback_gb300_nfs_eloop_workaround for diagnosis.
-SQUASH_FILE="/data/home/sa-shared/gharunners/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-NGINX_SQUASH_FILE="/data/home/sa-shared/gharunners/squash/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+SQUASH_FILE="${GB300_SHARED_ROOT}/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+NGINX_SQUASH_FILE="${GB300_SHARED_ROOT}/squash/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
 # Run the import on a compute node via srun, not on the login node:
 # the login node is x86_64 while the compute nodes are aarch64, so the
@@ -162,7 +173,7 @@ POWER_SRT_SLURM_PIN="6fc1bed01a0b82dae0088a105c03ce0cfb353443"
 
 if [[ "$USES_DCGM_POWER" == "1" ]]; then
     DCGM_EXPORTER_IMAGE="nvcr.io/nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless"
-    DCGM_EXPORTER_SQSH="/data/home/sa-shared/gharunners/squash/$(echo "$DCGM_EXPORTER_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    DCGM_EXPORTER_SQSH="${GB300_SHARED_ROOT}/squash/$(echo "$DCGM_EXPORTER_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     # Note (wenyao): import_squash treats an existing unsquashfs-valid file
     # as a cache hit but does not re-validate a fresh import, so check
     # explicitly — on a compute node, like the import itself (login node is

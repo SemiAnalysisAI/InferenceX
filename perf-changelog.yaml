@@ -5964,5 +5964,5 @@
     - "Own the middle of the curve with a 3-prefill/1-decode DEP4 to DEP16 shape swept at concurrency 565, 384, 256 and 192, where the 16-way decode replica spreads attention widely enough that lowering concurrency buys interactivity cheaply."
     - "Reach the latency tail with a 1-prefill/1-decode DEP4 to plain TP8 shape at concurrency 32 and 16; prefill and decode disagree on attention TP size there, so those recipes set SGLANG_DISAGG_STAGING_BUFFER=1 for heterogeneous-TP KV transfer."
     - "Retain the existing aggregate and disaggregated GB300 entries unchanged so their published high-interactivity points stay on the curve."
-    - "Pass --account explicitly on the GB300 runner squash-import and DCGM-check sruns, which previously sent only --partition and let Slurm resolve the account from the submitter default, as launch_h200-dgxc-slurm.sh already does."
+    - "Dispatch the Qwen3.5 GB300 matrix through the restricted batch_2 partition and the slurm-shared tree, matching where the runner now accepts jobs; batch_1 with the benchmark account rejects every srun with an invalid account/partition combination. Unrelated matrices keep the upstream defaults."
   pr-link: https://github.com/NVIDIA/InferenceMAX/pull/232
