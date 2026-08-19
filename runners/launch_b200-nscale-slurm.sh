@@ -44,6 +44,9 @@ if [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
 elif [[ $MODEL_PREFIX == "kimik2.6" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="${MODEL_PATH:-$NSCALE_MODEL_ROOT/Kimi-K2.6-NVFP4}"
     export SRT_SLURM_MODEL_PREFIX="kimi-k2.6-nvfp4"
+elif [[ $MODEL_PREFIX == "kimik3" && $PRECISION == "fp4" ]]; then
+    export MODEL_PATH="${MODEL_PATH:-$NSCALE_MODEL_ROOT/Kimi-K3}"
+    export SRT_SLURM_MODEL_PREFIX="kimik3"
 elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="${MODEL_PATH:-$NSCALE_MODEL_ROOT/GLM-5.2-NVFP4}"
     export SRT_SLURM_MODEL_PREFIX="glm-5.2-fp4"
@@ -66,7 +69,16 @@ export SERVED_MODEL_NAME=$MODEL
 echo "Cloning srt-slurm repository..."
 SRT_REPO_DIR="srt-slurm"
 rm -rf "$SRT_REPO_DIR"
-if [[ $MODEL_PREFIX == "dsv4" && $FRAMEWORK == "dynamo-sglang" ]]; then
+if [[ "$IS_AGENTIC" == "1" && $MODEL_PREFIX == "kimik3" ]]; then
+    # Pin the tested renderer so branch movement cannot change generated rank
+    # commands between sweep points.
+    git clone --branch main --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
+    cd "$SRT_REPO_DIR" || exit 1
+    git checkout 217f9438 || exit 1
+    mkdir -p recipes/vllm/kimi-k3/agentic || exit 1
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
+        recipes/vllm/kimi-k3/agentic || exit 1
+elif [[ $MODEL_PREFIX == "dsv4" && $FRAMEWORK == "dynamo-sglang" ]]; then
     git clone --branch main --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
     cd "$SRT_REPO_DIR" || exit 1
     # Pin the srt-slurm revision used by these checked-in recipes.
@@ -208,6 +220,15 @@ export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
 echo "Submitting job with srtctl..."
 echo "MODEL_PATH=$MODEL_PATH"
 
+# An eval row may point at a committed real-verification recipe while its
+# throughput row keeps synthetic golden acceptance. Only configs that set
+# EVAL_CONFIG_FILE opt into this selection; all other configs keep using
+# CONFIG_FILE unchanged.
+if [[ "${EVAL_ONLY:-false}" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
+    CONFIG_FILE="$EVAL_CONFIG_FILE"
+    echo "EVAL_ONLY=true: selecting real-verification recipe $CONFIG_FILE"
+fi
+
 if [[ -z "$CONFIG_FILE" ]]; then
     echo "Error: CONFIG_FILE is not set. The srt-slurm path requires a CONFIG_FILE in additional-settings." >&2
     echo "Config: MODEL_PREFIX=${MODEL_PREFIX} PRECISION=${PRECISION} FRAMEWORK=${FRAMEWORK}" >&2
@@ -228,6 +249,7 @@ inject_synthetic_acceptance "$CONFIG_PATH" "$FRAMEWORK" || exit 1
 SRTCTL_PREFLIGHT_ARGS=()
 # These weights are staged on the Slurm compute nodes, not the login node.
 if [[ $MODEL_PREFIX == "kimik2.6" ]] ||
+   [[ $MODEL_PREFIX == "kimik3" ]] ||
    [[ $MODEL_PREFIX == "dsv4" && $FRAMEWORK == "dynamo-sglang" ]] ||
    [[ $MODEL_PREFIX == "glm5.2" ]]; then
     SRTCTL_PREFLIGHT_ARGS+=(--no-preflight)
