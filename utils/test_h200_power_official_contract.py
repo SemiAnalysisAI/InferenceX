@@ -84,10 +84,24 @@ def test_launcher_injects_exact_matrix_concurrencies_and_finalizes_each_result()
     assert 'cp "$GITHUB_WORKSPACE/power-producer-sha.txt" "$LOGS_DIR/power/power-producer-sha.txt"' in launcher
 
 
-def test_pr_a_keeps_glm_recipe_power_disabled_until_followup_pr_b():
+def test_pr_b_enables_only_the_glm_recipe_in_optional_mode():
     recipe = yaml.safe_load(RECIPE.read_text(encoding="utf-8"))
 
-    assert "telemetry" not in recipe
+    assert recipe["telemetry"] == {
+        "enabled": True,
+        "provider": "dcgm-power",
+        "default_frequency": 1.0,
+        "storage_subdir": "power",
+        "required": False,
+        "startup_timeout_seconds": 120,
+        "request_timeout_seconds": 2,
+        "collector_join_timeout_seconds": 10,
+        "dcgm_exporter": {
+            "container_image": "dcgm-exporter",
+            "port": 9401,
+        },
+    }
+    # The launcher injects the exact matrix point before srtctl validation.
     assert "concurrencies" not in recipe["benchmark"]
     assert recipe["benchmark"]["type"] == "custom"
     assert recipe["infra"]["etcd_nats_dedicated_node"] is True
