@@ -281,6 +281,7 @@ VLLM_CMD=(
     --host 0.0.0.0
     --port "$VLLM_BACKEND_PORT"
     --trust-remote-code
+    --safetensors-load-strategy=prefetch
     --kv-cache-dtype fp8
     --block-size 256
     --max-model-len 1048576
