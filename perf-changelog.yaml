@@ -6225,3 +6225,12 @@
     - "Add a TP2/EP2 HiCache branch and update the resident recipes with extra_buffer_lazy, ReplaySSM speculative verification, and checkpoint page-cache release."
     - "Select TP4 C1/C2/C4/C8/C12/C20/C24, TP2/EP2 resident C4/C8/C12/C20, and TP2/EP2 HiCache C22/C24/C28/C32/C40 with golden synthetic acceptance length 3.39."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2660
+
+- config-keys:
+    - dsv4-fp4-b300-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Append GPU-resident TP4 concurrency 1, 2, 4, and 6 points to the existing B300 DeepSeek-V4-Pro vLLM AgentX MTP curve."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2647
+  append-only: true
