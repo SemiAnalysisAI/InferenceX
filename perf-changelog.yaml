@@ -6260,3 +6260,11 @@
     - "Update the GB300 DeepSeek-V4-Pro Dynamo-vLLM AgentX P/D image from 426e59f to d62ad46, move Dynamo to 1.4.0, and enable safetensors prefetch loading."
     - "Replace the aggregate TP data points with the upstream 1P DEP4 + 3D TP8 concurrency-3 NIXL point."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2665
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Port the GB300 1P DEP8 + 1D DEP16 concurrency-512 MTP P/D point and align its runtime tuning with the retained DEP8/DEP16 recipes."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2665
