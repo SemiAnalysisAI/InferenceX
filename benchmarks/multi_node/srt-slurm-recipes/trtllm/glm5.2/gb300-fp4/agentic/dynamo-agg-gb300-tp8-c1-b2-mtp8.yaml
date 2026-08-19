@@ -1,4 +1,4 @@
-name: dynamo-disagg-gb300-1p1d-tep8-c1-b1-mtp8
+name: dynamo-agg-gb300-tp8-c1-b2-mtp8
 
 model:
   path: nvidia/GLM-5.2-NVFP4
@@ -17,16 +17,13 @@ health_check:
 resources:
   gpu_type: gb300
   gpus_per_node: 4
-  prefill_nodes: 1
-  prefill_workers: 1
-  gpus_per_prefill: 4
-  decode_nodes: 2
-  decode_workers: 1
-  gpus_per_decode: 8
+  agg_nodes: 2
+  agg_workers: 1
+  gpus_per_agg: 8
 
 backend:
   type: trtllm
-  prefill_environment: &server_environment
+  aggregated_environment:
     HF_HUB_OFFLINE: "1"
     TRANSFORMERS_OFFLINE: "1"
     TQDM_DISABLE: "1"
@@ -40,98 +37,51 @@ backend:
     PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
     TRTLLM_SERVE_ENABLE_MSGSPEC: "1"
     TLLM_ADP_ROUTER_MATCH_RATE_THRESHOLD: "0.10"
-    TRTLLM_KV_CACHE_TRANSFER_TIMEOUT_SEC: "600"
     UCX_CUDA_IPC_ENABLE_MNNVL: "y"
     UCX_RNDV_SCHEME: put_zcopy
-    TRTLLM_KVCACHE_SEND_BUFFER_COUNT: "1"
-    TRTLLM_KVCACHE_RECV_BUFFER_COUNT: "1"
     TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS: "3.06"
+    TRTLLM_DISAGG_IDLE_CHECK: pr17324
     DYN_TRTLLM_ENABLE_ATTENTION_DP: "1"
     DYN_ENGINE_CONV_AFFINITY: "1"
     DYN_TOKENIZER: fastokens
     DYN_PUBLISH_KV_EVENTS: "0"
-  decode_environment: *server_environment
   trtllm_config:
-    prefill:
-      attention_dp_config:
-        enable_kv_cache_aware_routing: false
-        kv_cache_routing_conversation_affinity: true
-        kv_cache_routing_max_sessions: 65536
-      cache_transceiver_config:
-        backend: NIXL
-        transceiver_runtime: PYTHON
-        kv_cache_bounce_size_mb: 5120
-        max_tokens_in_buffer: 1048576
-        kv_transfer_timeout_ms: 600000
-      cuda_graph_config: null
+    aggregated:
+      cuda_graph_config:
+        batch_sizes: [1, 2]
+        enable_padding: false
       disable_overlap_scheduler: false
-      enable_attention_dp: true
+      enable_attention_dp: false
       enable_chunked_prefill: true
+      enable_lm_head_tp_in_adp: false
       trust_remote_code: true
       kv_cache_config:
         dtype: fp8
         enable_block_reuse: true
         event_buffer_max_size: 0
-        free_gpu_memory_fraction: 0.75
-        host_cache_size: 137438953472
+        free_gpu_memory_fraction: 0.85
         tokens_per_block: 64
-      max_batch_size: 256
+      max_batch_size: 2
       max_num_tokens: 8192
-      max_seq_len: 1048576
-      moe_config:
-        backend: CUTEDSL
-      moe_expert_parallel_size: 4
-      num_postprocess_workers: 8
-      pipeline_parallel_size: 1
-      print_iter_log: true
-      return_perf_metrics: true
-      scheduler_config:
-        capacity_scheduler_policy: MAX_UTILIZATION
-      sparse_attention_config:
-        algorithm: dsa
-        enable_heuristic_topk: true
-      speculative_config:
-        decoding_type: MTP
-        max_draft_len: 8
-      tensor_parallel_size: 4
-    decode:
-      cache_transceiver_config:
-        backend: NIXL
-        transceiver_runtime: PYTHON
-        kv_cache_bounce_size_mb: 5120
-        max_tokens_in_buffer: 1048576
-        kv_transfer_timeout_ms: 600000
-      cuda_graph_config:
-        batch_sizes: [1]
-        enable_padding: false
-      enable_attention_dp: false
-      trust_remote_code: true
-      kv_cache_config:
-        dtype: fp8
-        enable_block_reuse: false
-        event_buffer_max_size: 0
-        free_gpu_memory_fraction: 0.8
-        tokens_per_block: 64
-      max_batch_size: 1
-      max_num_tokens: 128
       max_seq_len: 1048576
       moe_config:
         backend: TRTLLM
         use_low_precision_moe_combine: true
       moe_expert_parallel_size: 1
       num_postprocess_workers: 8
+      perf_metrics_max_requests: 100000
       pipeline_parallel_size: 1
       print_iter_log: true
-      return_perf_metrics: true
+      return_perf_metrics: false
       sparse_attention_config:
         algorithm: dsa
         enable_heuristic_topk: true
         use_cute_dsl_paged_mqa_logits: true
-        use_cute_dsl_topk: true
       speculative_config:
         decoding_type: MTP
         max_draft_len: 8
-      stream_interval: 60
+        num_nextn_predict_layers: 8
+      stream_interval: 20
       tensor_parallel_size: 8
   publish_events_and_metrics: false
 
@@ -154,11 +104,9 @@ frontend:
     active-decode-blocks-threshold: None
     active-prefill-tokens-threshold: None
     active-prefill-tokens-threshold-frac: None
-  orchestrator_placement: first_decode
 
 benchmark:
   type: custom
-  client_placement: last_decode
   command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
   env:
     INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
