@@ -6113,3 +6113,11 @@
   description:
     - "Add Kimi-K3 GB300 AgentX configurations."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2637
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-sglang-disagg
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Bump qwen3.5-fp8-mi355x-sglang-disagg image from v0.5.14 to v0.5.16 (3-5% throughput improvement) and switch from TP8P+TP8D (16 GPU) to TP4P+TP8D (12 GPU) — TP4 prefill delivers identical decode interactivity with 24-31% better throughput/GPU."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2606
