@@ -7814,7 +7814,7 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-agg:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
-        conc-list: [16, 20, 24]
+        conc-list: [16]
         prefill:
           num-worker: 1
           tp: 8
@@ -7914,6 +7914,24 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
           num-worker: 1
           tp: 16
           ep: 16
+          dp-attn: true
+      # Source: SemiAnalysisAI/InferenceX@c0fce8a2682364c68858e5ed8995bf94bbb70e30.
+      - spec-decoding: mtp
+        conc-list: [388]
+        router: { name: dynamo-router, version: "1.4.0" }
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/agentic/disagg-gb300-1p1d-dep8-dep32-c388-mtp-agentic.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
           dp-attn: true
       - spec-decoding: mtp
         conc-list: [256]

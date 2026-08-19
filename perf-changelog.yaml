@@ -6345,3 +6345,13 @@
   description:
     - "Pin PYTHONHASHSEED=0 in both aggregate Mooncake Store recipes so prefix-block keys remain deterministic across vLLM processes and nodes."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2665
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-agg
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Cap both aggregate TP4 and TP8 sweeps at concurrency 16 by removing TP8 concurrency 20 and 24; TP4 already ends at concurrency 16."
+    - "Port the GB300 1P DEP8 + 1D DEP32 concurrency-388 P/D point from c0fce8a, preserving its topology-specific batching while aligning Dynamo 1.4.0, safetensors prefetch, prefix retention, JIT cache paths, and synthetic acceptance length with this branch."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2665
