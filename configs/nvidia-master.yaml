@@ -7040,6 +7040,7 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-disagg-dep:
     agentic-coding:
     - dram-utilization: 0.90
       search-space:
+      # Throughput end: DEP4->DEP4 saturates the 20-chip pod.
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
@@ -7056,22 +7057,7 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-disagg-dep:
           tp: 4
           ep: 4
           dp-attn: true
-      - spec-decoding: mtp
-        kv-offloading: dram
-        kv-offload-backend: { name: hicache }
-        conc-list: [480]
-        prefill:
-          num-worker: 3
-          tp: 4
-          ep: 4
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/disagg-gb300-3p2d-dep4-dep4-c480-mtp-hicache-session-jid3134351.yaml"
-        decode:
-          num-worker: 2
-          tp: 4
-          ep: 4
-          dp-attn: true
+      # DEP4->DEP16 owns the middle: a 16-way decode replica spreads attention
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
@@ -7088,38 +7074,75 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-disagg-dep:
           tp: 16
           ep: 16
           dp-attn: true
+      # wide enough that dropping concurrency buys interactivity cheaply.
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
-        conc-list: [240]
+        conc-list: [384]
         prefill:
           num-worker: 3
           tp: 4
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/disagg-gb300-3p2d-dep4-dep4-c240-mtp-hicache-session-jid3136106.yaml"
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/disagg-gb300-3p1d-dep4-dep16-c384-mtp-hicache-session-jid3137788.yaml"
         decode:
-          num-worker: 2
-          tp: 4
-          ep: 4
+          num-worker: 1
+          tp: 16
+          ep: 16
           dp-attn: true
+      # 
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
-        conc-list: [160]
+        conc-list: [256]
         prefill:
           num-worker: 3
           tp: 4
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/disagg-gb300-3p2d-dep4-dep4-c160-mtp-hicache-session-jid3136107.yaml"
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/disagg-gb300-3p1d-dep4-dep16-c256-mtp-hicache-session-jid3137789.yaml"
         decode:
-          num-worker: 2
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # 
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        conc-list: [192]
+        prefill:
+          num-worker: 3
           tp: 4
           ep: 4
           dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/disagg-gb300-3p1d-dep4-dep16-c192-mtp-hicache-session-jid3137833.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # Latency tail: DEP4 prefill -> plain TP8 decode. Attention TP differs
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        conc-list: [32]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/disagg-gb300-1p1d-dep4-tp8-c32-mtp-hicache-staging-jid3138839.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+      # across the pair, so these three set SGLANG_DISAGG_STAGING_BUFFER=1.
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
@@ -7130,23 +7153,24 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-disagg-dep:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/disagg-gb300-1p1d-dep4-tp8-c16-mtp-hicache-session-jid3137141.yaml"
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/disagg-gb300-1p1d-dep4-tp8-c16-mtp-hicache-staging-jid3138837.yaml"
         decode:
           num-worker: 1
           tp: 8
           ep: 1
           dp-attn: false
+      # 
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
-        conc-list: [8]
+        conc-list: [1]
         prefill:
           num-worker: 1
           tp: 4
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/disagg-gb300-1p1d-dep4-tp8-c8-mtp-hicache-session-jid3137143.yaml"
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/disagg-gb300-1p1d-dep4-tp8-c1-mtp-hicache-staging-jid3140658.yaml"
         decode:
           num-worker: 1
           tp: 8

@@ -1,4 +1,4 @@
-name: disagg-gb300-1p1d-dep4-tp8-c8-mtp-hicache-session-jid3137143
+name: disagg-gb300-1p1d-dep4-tp8-c16-mtp-hicache-staging-jid3138837
 model:
   path: qwen3.5-fp4
   container: dynamo-sglang
@@ -43,7 +43,7 @@ backend:
   type: sglang
   prefill_environment:
     PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
-    SGLANG_DISAGG_STAGING_BUFFER: '0'
+    SGLANG_DISAGG_STAGING_BUFFER: '1'
     NO_COLOR: '1'
     PYTHONUNBUFFERED: '1'
     PIP_BREAK_SYSTEM_PACKAGES: '1'
@@ -71,7 +71,7 @@ backend:
     SGLANG_SIMULATE_ACC_LEN: '4.80'
     SGLANG_SIMULATE_ACC_METHOD: match-expected
     SGLANG_SIMULATE_ACC_TOKEN_MODE: real-draft-token
-    SGLANG_DISAGG_STAGING_BUFFER: '0'
+    SGLANG_DISAGG_STAGING_BUFFER: '1'
     NO_COLOR: '1'
     PYTHONUNBUFFERED: '1'
     PIP_BREAK_SYSTEM_PACKAGES: '1'
@@ -186,8 +186,6 @@ backend:
       disable-shared-experts-fusion: true
       moe-a2a-backend: none
       deepep-mode: low_latency
-      ep-dispatch-algorithm: static
-      eplb-algorithm: deepseek
       speculative-algorithm: NEXTN
       speculative-num-steps: 5
       speculative-eagle-topk: 1

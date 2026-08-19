@@ -1,4 +1,4 @@
-name: disagg-gb300-3p2d-dep4-dep4-c240-mtp-hicache-session-jid3136106
+name: disagg-gb300-1p1d-dep4-tp8-c32-mtp-hicache-staging-jid3138839
 model:
   path: qwen3.5-fp4
   container: dynamo-sglang
@@ -14,12 +14,12 @@ health_check:
 resources:
   gpu_type: gb300
   gpus_per_node: 4
-  prefill_nodes: 3
+  prefill_nodes: 1
   decode_nodes: 2
-  prefill_workers: 3
-  decode_workers: 2
+  prefill_workers: 1
+  decode_workers: 1
   gpus_per_prefill: 4
-  gpus_per_decode: 4
+  gpus_per_decode: 8
 infra:
   etcd_nats_dedicated_node: true
   nats_max_payload_mb: 8
@@ -43,7 +43,7 @@ backend:
   type: sglang
   prefill_environment:
     PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
-    SGLANG_DISAGG_STAGING_BUFFER: '0'
+    SGLANG_DISAGG_STAGING_BUFFER: '1'
     NO_COLOR: '1'
     PYTHONUNBUFFERED: '1'
     PIP_BREAK_SYSTEM_PACKAGES: '1'
@@ -71,7 +71,7 @@ backend:
     SGLANG_SIMULATE_ACC_LEN: '4.80'
     SGLANG_SIMULATE_ACC_METHOD: match-expected
     SGLANG_SIMULATE_ACC_TOKEN_MODE: real-draft-token
-    SGLANG_DISAGG_STAGING_BUFFER: '0'
+    SGLANG_DISAGG_STAGING_BUFFER: '1'
     NO_COLOR: '1'
     PYTHONUNBUFFERED: '1'
     PIP_BREAK_SYSTEM_PACKAGES: '1'
@@ -165,12 +165,12 @@ backend:
       trust-remote-code: true
       quantization: modelopt_fp4
       kv-cache-dtype: fp8_e4m3
-      tensor-parallel-size: 4
+      tensor-parallel-size: 8
       pipeline-parallel-size: 1
-      data-parallel-size: 4
-      expert-parallel-size: 4
+      data-parallel-size: 1
+      expert-parallel-size: 1
       moe-dense-tp-size: 1
-      enable-dp-attention: true
+      enable-dp-attention: false
       enable-dp-lm-head: true
       load-balance-method: round_robin
       mamba-scheduler-strategy: no_buffer
@@ -181,19 +181,17 @@ backend:
       disaggregation-bootstrap-port: 31000
       page-size: 64
       attention-backend: trtllm_mha
-      moe-runner-backend: flashinfer_cutedsl
+      moe-runner-backend: auto
       linear-attn-decode-backend: triton
       disable-shared-experts-fusion: true
-      moe-a2a-backend: flashinfer
+      moe-a2a-backend: none
       deepep-mode: low_latency
-      ep-dispatch-algorithm: static
-      eplb-algorithm: deepseek
       speculative-algorithm: NEXTN
       speculative-num-steps: 5
       speculative-eagle-topk: 1
       speculative-num-draft-tokens: 6
-      speculative-moe-runner-backend: deep_gemm
-      speculative-moe-a2a-backend: deepep
+      speculative-moe-runner-backend: auto
+      speculative-moe-a2a-backend: none
       chunked-prefill-size: 4096
       mem-fraction-static: 0.7
       max-mamba-cache-size: 468
