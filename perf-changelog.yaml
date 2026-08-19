@@ -6328,3 +6328,12 @@
   description:
     - "Run aggregate TP4 concurrency 6 and 8 and TP8 concurrency 12 on the GPU-resident Mooncake Store recipes; retain SimpleCPUOffload for TP4 concurrency 12 and 16 and TP8 concurrency 16, 20, and 24."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2665
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Correct the aggregate offload backend to Mooncake Store 0.3.11.post1 for TP4 concurrency 12 and 16 and TP8 concurrency 16, 20, and 24; keep the lower-concurrency recipes GPU-resident without a KV connector."
+    - "Rename the two offload recipes from vllm-simple to mooncake and mirror the disaggregated prefill-side MooncakeStoreConnector settings."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2665

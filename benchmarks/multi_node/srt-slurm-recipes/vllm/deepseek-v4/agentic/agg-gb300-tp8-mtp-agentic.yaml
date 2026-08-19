@@ -115,7 +115,6 @@ backend:
       block-size: 256
       max-cudagraph-capture-size: 128
       speculative-config: '{"method":"mtp","num_speculative_tokens":3}'
-      kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_cross_layers_blocks":false,"enable_offload":false}}'
       gpu-memory-utilization: 0.94
       no-disable-hybrid-kv-cache-manager: true
       tokenizer-mode: "deepseek_v4"
