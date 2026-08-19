@@ -182,12 +182,7 @@ if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/Qwen3.5-397B-A17B-NVFP4-V2"
         export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp4"
     elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp4" ]]; then
-        if [[ "${CONFIG_FILE%%:*}" == "recipes/sglang/glm5.2/gb200-fp4/agentic/glm5.2-agentx-mtp.yaml" ]]; then
-            # This recipe uses the checkpoint staged on compute-node local NVMe.
-            export MODEL_PATH="/mnt/numa1/models/GLM-5.2-NVFP4"
-        else
-            export MODEL_PATH="/mnt/lustre01/users-public/sa-shared/models/GLM-5.2-NVFP4"
-        fi
+        export MODEL_PATH="/mnt/lustre01/users-public/sa-shared/models/GLM-5.2-NVFP4"
         export SRT_SLURM_MODEL_PREFIX="glm-5.2-fp4"
     elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp4" ]]; then
         # SRT_SLURM_MODEL_PREFIX matches the model.path alias ("glm-5-fp4")
