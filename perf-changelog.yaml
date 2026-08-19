@@ -5838,13 +5838,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2487
 
 - config-keys:
-    - glm5.2-fp4-mi355x-atom-agentic-mtp
-  description:
-    - "Add the MI355X GLM-5.2 FP4 ATOM AgentX MTP submission, mirroring the upstream ATOM GLM-5.2 MXFP4 + MTP recipe with ptpc_fp8 online quantization and the lmcache_offload connector for DRAM offload."
-    - "Sweep TP4 (conc 2/4/8/10) and TP8 (conc 1/2/4) LMCache DRAM-offload configurations, using MTP num-speculative-tokens 3 with the synthetic acceptance rate derived from the golden AL distribution (SIMULATE_ACC_LEN 2.99)."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2576
-
-- config-keys:
     - qwen3.5-fp8-mi300x-sglang-agentic-mtp
   scenario-type:
     - agentic-coding
@@ -6168,3 +6161,13 @@
   description:
     - "Update the B200 SGLang AgentX HiCache MTP DEP8 configuration."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2656
+
+- config-keys:
+    - glm5.2-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add the MI355X GLM-5.2 FP4 ATOM AgentX MTP submission: TP4 at concurrency 2, 4, 8, and 10 uses LMCache DRAM offload, while GPU-resident TP8 at concurrency 1, 2, and 4 uses no KV offload."
+    - "Use AITER INT4 quick-reduce, ptpc_fp8 online quantization excluding embeddings, lm_head, gates, and experts, an FP8 KV cache, and three-token MTP with golden synthetic acceptance length 2.99 for benchmark runs."
+    - "Set max-num-seqs to twice the concurrency, select CUDA graph capture sizes by concurrency, and cap max-num-batched-tokens at 16384."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2576
