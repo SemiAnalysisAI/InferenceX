@@ -6204,4 +6204,4 @@
     - "Add GLM-5.2 MXFP4 MI355X 1P1D TP8 disaggregated SGLang AgentX with DRAM HiCache KV offload and built-in MTP (spec-decoding: mtp, DECODE_MTP_SIZE=2, EAGLE topk 1)."
     - "HiCache L2: ratio 1.5, write_through_selective, page_first_direct, direct IO. Throughput uses synthetic AL 2.50 from golden_al_distribution/glm5.2_mtp.yaml; EVAL_ONLY uses real draft-model MTP."
     - "Image: lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260729; model amd/GLM-5.2-MXFP4; conc-list [2, 4, 8, 16, 32]."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2679
