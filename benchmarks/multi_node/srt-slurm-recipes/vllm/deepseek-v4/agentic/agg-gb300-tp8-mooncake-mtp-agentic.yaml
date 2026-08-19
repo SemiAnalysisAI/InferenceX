@@ -26,6 +26,8 @@ environment:
   DYNAMO_WHEEL_DIRS: "/srtctl-wheels"
   # The frontend shares Grace CPU capacity with the long TP8 cold start.
   ETCD_LEASE_TTL: "7200"
+  # Keep Mooncake prefix-block keys deterministic across vLLM processes.
+  PYTHONHASHSEED: "0"
 
 setup_script: vllm-container-deps.sh
 
