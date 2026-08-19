@@ -109,7 +109,7 @@ backend:
       max-cudagraph-capture-size: 384
       speculative-config: '{"method":"mtp","num_speculative_tokens":3}'
       kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":137438953472,"lazy_offload":false}}'
-      gpu-memory-utilization: 0.92
+      gpu-memory-utilization: 0.94
       stream-interval: 10
       no-disable-hybrid-kv-cache-manager: true
       tokenizer-mode: "deepseek_v4"

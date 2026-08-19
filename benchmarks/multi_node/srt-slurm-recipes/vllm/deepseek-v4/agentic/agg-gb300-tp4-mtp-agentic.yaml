@@ -122,7 +122,7 @@ backend:
       compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
       max-cudagraph-capture-size: 64
       speculative-config: '{"method":"mtp","num_speculative_tokens":3}'
-      gpu-memory-utilization: 0.92
+      gpu-memory-utilization: 0.94
       stream-interval: 10
       no-disable-hybrid-kv-cache-manager: true
       tokenizer-mode: "deepseek_v4"

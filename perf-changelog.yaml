@@ -6287,3 +6287,11 @@
     - "Revert all GB300 DeepSeek-V4-Pro AgentX recipes from image d62ad46 to the previous 426e59f image."
     - "Disable prefix-cache retention intervals across aggregate and P/D workers; align aggregate TP all-reduce and GPU-memory tuning with the low-latency 1P3D TP8 decode recipe."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2665
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Restore aggregate TP4 and TP8 GPU memory utilization from 0.92 to 0.94; the lower value was specific to the separate low-latency 1P3D decode topology."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2665
