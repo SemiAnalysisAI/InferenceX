@@ -173,5 +173,6 @@ if [ "${EVAL_ONLY}" = "true" ]; then
     run_eval --port "$PORT"
 else
     build_replay_cmd "$RESULT_DIR"
+    REPLAY_CMD+=" --allow-empty-content"
     run_agentic_replay_and_write_outputs "$RESULT_DIR"
 fi

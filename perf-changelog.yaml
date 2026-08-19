@@ -6215,3 +6215,12 @@
     - "Use NIXL KV transfer for disaggregated variants, prefill HiCache DRAM offload, native MTP with committed thinking-on golden acceptance lengths, and lmsysorg/sglang:nightly-dev-cu13-20260805-211ee642."
     - "Leave DYN_ROUTER_TEMPERATURE unset across the recipe set."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2642
+
+- config-keys:
+    - minimaxm3-fp4-b300-trtllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Test AIPerf PR #42 empty-content TTFT handling on the MiniMax-M3 NVFP4 B300 TensorRT-LLM AgentX configuration."
+    - "Pin utils/aiperf to e8ece5d29bd0285af1ced36fbc4c670328b2d58c and enable --allow-empty-content for this recipe."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2682
