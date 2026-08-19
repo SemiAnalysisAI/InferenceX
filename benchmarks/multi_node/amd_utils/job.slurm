@@ -425,6 +425,58 @@ srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c '
     echo "NFS cache refreshed on $(hostname)"
 '
 
+# Kimi-K3 MoRIIO write mode requires IOEngine.wait_all from ROCm/mori #341.
+# Build it once per node into a derived image before serving, so package
+# installation stays out of the live engine container.
+#
+# Prefill and decode must agree on the transfer direction, so the read/write
+# decision is made here once for the whole job and propagated to every
+# container via MORIIO_READ_MODE. If the derived image cannot be produced on
+# every node, the job falls back to READ mode on the base image rather than
+# serving a mismatched pair or failing outright.
+if [[ "$ENGINE" == "vllm-disagg" && "$MODEL_NAME" == "Kimi-K3" &&
+      "${MORI_WAITALL_BUILD:-0}" == "1" && "${DRY_RUN:-0}" != "1" ]]; then
+    MORI_PIN="${MORI_WAITALL_COMMIT:-f7e6ac6863c53821bc7afb91a578cc6ce38fcad0}"
+    MORI_SOURCE_DIR="${MORI_WAITALL_SOURCE_DIR:-${BENCHMARK_LOGS_DIR}/mori-${MORI_PIN:0:8}}"
+    # No registry prefix: Docker resolves "localhost/..." as a registry host and
+    # tries to pull the derived image over HTTP instead of using the local one.
+    MORI_DERIVED_IMAGE="${MORI_WAITALL_IMAGE:-k3-moriio-${SLURM_JOB_ID}:mori341}"
+    MORI_WAITALL_OK=1
+
+    if [[ ! -d "$MORI_SOURCE_DIR/.git" ||
+          "$(git -C "$MORI_SOURCE_DIR" rev-parse HEAD 2>/dev/null || true)" != "$MORI_PIN" ]]; then
+        rm -rf "$MORI_SOURCE_DIR"
+        git clone --filter=blob:none https://github.com/ROCm/mori.git "$MORI_SOURCE_DIR" \
+            || MORI_WAITALL_OK=0
+        if [[ "$MORI_WAITALL_OK" == "1" ]]; then
+            git -C "$MORI_SOURCE_DIR" checkout -q "$MORI_PIN" || MORI_WAITALL_OK=0
+            git -C "$MORI_SOURCE_DIR" submodule update --init --recursive --depth 1 \
+                || MORI_WAITALL_OK=0
+        fi
+    fi
+
+    if [[ "$MORI_WAITALL_OK" == "1" ]]; then
+        echo "[mori-image] source HEAD=$(git -C "$MORI_SOURCE_DIR" rev-parse HEAD)"
+        srun --nodelist="$SELECTED_NODELIST_SRUN" --nodes="$NUM_NODES" \
+            --ntasks="$NUM_NODES" --ntasks-per-node=1 \
+            bash "$DI_REPO_DIR/benchmarks/multi_node/amd_utils/prepare_mori_waitall_image.sh" \
+            "$DOCKER_IMAGE_NAME" "$MORI_DERIVED_IMAGE" "$MORI_SOURCE_DIR" \
+            || MORI_WAITALL_OK=0
+    fi
+
+    if [[ "$MORI_WAITALL_OK" == "1" ]]; then
+        DOCKER_IMAGE_NAME="$MORI_DERIVED_IMAGE"
+        echo "[mori-image] serving from $DOCKER_IMAGE_NAME (wait_all available)"
+    elif [[ "${MORI_WAITALL_REQUIRED:-0}" == "1" ]]; then
+        echo "FATAL: could not prepare the wait_all mori image and MORI_WAITALL_REQUIRED=1" >&2
+        exit 1
+    else
+        export MORIIO_READ_MODE=true
+        echo "[mori-image] WARNING: wait_all image unavailable on at least one node;" \
+             "falling back to MoRIIO READ mode on $DOCKER_IMAGE_NAME"
+    fi
+fi
+
 # =============================================================================
 # Build engine-specific Docker environment variables
 # =============================================================================

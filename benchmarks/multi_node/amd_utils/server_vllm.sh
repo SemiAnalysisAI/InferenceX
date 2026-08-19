@@ -255,6 +255,50 @@ echo "Decode  node IPs: ${DECODE_ARGS}"
 # MoRI-IO proxy ZMQ registration port (must match vllm-router --vllm-discovery-address)
 PROXY_PING_PORT="${PROXY_PING_PORT:-36367}"
 
+# Compose MoRIIO with the optional CPU KV tier on prefill only. The matrix's DRAM
+# budget is sized from the prefill worker, while decode always pulls over MoRIIO.
+build_kv_transfer_configs() {
+    local moriio_prefill moriio_decode
+    # MORIIO_READ_MODE=true|false (default true). Write path needs a mori build
+    # that exposes IOEngine.wait_all for the #51052 batch barrier.
+    local read_mode="${MORIIO_READ_MODE:-true}"
+    moriio_prefill="{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_producer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\", \"read_mode\": ${read_mode}}}"
+    moriio_decode="{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_consumer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\", \"read_mode\": ${read_mode}}}"
+    KV_TRANSFER_PREFILL="'${moriio_prefill}'"
+    KV_TRANSFER_DECODE="'${moriio_decode}'"
+    echo "[INFO] MoRIIO read_mode=${read_mode}"
+
+    if [[ "${KV_OFFLOADING:-none}" == "dram" && "${KV_OFFLOAD_BACKEND:-}" == "vllm-simple" ]]; then
+        if [[ -z "${TOTAL_CPU_DRAM_GB:-}" || "${TOTAL_CPU_DRAM_GB}" == "0" ]]; then
+            echo "ERROR: kv-offloading=dram with vllm-simple requires TOTAL_CPU_DRAM_GB." >&2
+            exit 1
+        fi
+        local per_rank simple
+        per_rank=$(( TOTAL_CPU_DRAM_GB * 1000 * 1000 * 1000 / PREFILL_TP_SIZE ))
+        simple="{\"kv_connector\": \"SimpleCPUOffloadConnector\", \"kv_role\": \"kv_both\", \"kv_connector_extra_config\": {\"cpu_bytes_to_use_per_rank\": ${per_rank}, \"lazy_offload\": false}}"
+        KV_TRANSFER_PREFILL="'{\"kv_connector\": \"MultiConnector\", \"kv_role\": \"kv_both\", \"kv_connector_extra_config\": {\"connectors\": [${moriio_prefill}, ${simple}]}}'"
+    fi
+}
+
+apply_model_patches() {
+    if [[ "${MODEL_NAME}" == "Kimi-K3" ]]; then
+        local here
+        here="$(dirname "${BASH_SOURCE[0]}")"
+        bash "${here}/../../single_node/agentic/apply_k3_container_patches.sh" \
+            || { echo "ERROR: apply_k3_container_patches.sh failed" >&2; exit 1; }
+        bash "${here}/apply_k3_moriio_patches.sh" \
+            || { echo "ERROR: apply_k3_moriio_patches.sh failed" >&2; exit 1; }
+        # Only the write path needs the #341 batch barrier. job.slurm already
+        # decided read vs write for the whole job, so a missing wait_all here
+        # means the derived image did not reach this container and the two
+        # roles would disagree on the transfer direction.
+        if [[ "${MORIIO_READ_MODE:-true}" != "true" ]]; then
+            bash "${here}/ensure_mori_wait_all.sh" \
+                || { echo "ERROR: write mode requested but IOEngine.wait_all is missing" >&2; exit 1; }
+        fi
+    fi
+}
+
 # vLLM runtime environment (static vars moved to env.sh; these depend on per-node state)
 setup_vllm_env() {
     export VLLM_NIXL_SIDE_CHANNEL_HOST=${rdma_ip}
@@ -294,12 +338,14 @@ if [ "$NODE_RANK" -eq 0 ]; then
     # Router is started as an external container by job.slurm (VLLM_ROUTER_IMAGE)
     echo "Using external vllm-router container (started by job.slurm on this node)"
 
+    apply_model_patches
+    build_kv_transfer_configs
     SERVED_MODEL="${MODEL_NAME}"
     PREFILL_CMD="vllm serve ${MODEL_PATH} \
         --served-model-name ${SERVED_MODEL} \
         --port $SERVER_PORT \
         --trust-remote-code \
-        --kv-transfer-config '{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_producer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\", \"read_mode\": true}}' \
+        --kv-transfer-config ${KV_TRANSFER_PREFILL} \
         ${PREFILL_SERVER_CONFIG}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -486,12 +532,14 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$xP" ]; then
         echo "[PREFILL_ENV] $env_pair"
     done
 
+    apply_model_patches
+    build_kv_transfer_configs
     SERVED_MODEL="${MODEL_NAME}"
     PREFILL_CMD="vllm serve ${MODEL_PATH} \
         --served-model-name ${SERVED_MODEL} \
         --port $SERVER_PORT \
         --trust-remote-code \
-        --kv-transfer-config '{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_producer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\", \"read_mode\": true}}' \
+        --kv-transfer-config ${KV_TRANSFER_PREFILL} \
         ${PREFILL_SERVER_CONFIG}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -542,12 +590,14 @@ else
         echo "[DECODE_ENV] $env_pair"
     done
 
+    apply_model_patches
+    build_kv_transfer_configs
     SERVED_MODEL="${MODEL_NAME}"
     DECODE_CMD="vllm serve ${MODEL_PATH} \
         --served-model-name ${SERVED_MODEL} \
         --port $SERVER_PORT \
         --trust-remote-code \
-        --kv-transfer-config '{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_consumer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\", \"read_mode\": true}}' \
+        --kv-transfer-config ${KV_TRANSFER_DECODE} \
         ${DECODE_SERVER_CONFIG}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
