@@ -101,14 +101,19 @@ fi
 
 PARALLEL_ARGS=(--tp "$TP")
 METRICS_ARGS=(--enable-metrics --enable-cache-report)
+MODEL_ARGS=()
 CHUNKED_PREFILL_SIZE=8192
+SWA_FULL_TOKENS_RATIO=0.1
 if [ "$DP_ATTENTION" = "true" ]; then
     DEEPEP_CONFIG='{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
+    MODEL_ARGS+=(--enable-deepseek-v4-fp4-indexer)
     export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=1
+    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_FP4_ACTS=1
+    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_MXF4_KIND=1
     export SGLANG_OPT_FIX_HASH_MEGA_MOE=1
     export SGLANG_OPT_USE_FAST_MASK_EP=1
     export SGLANG_OPT_FIX_MEGA_MOE_MEMORY=1
-    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=4096
+    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=8192
     export SGLANG_OPT_FIX_NEXTN_MEGA_MOE=1
     export SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=0
     PARALLEL_ARGS+=(
@@ -123,7 +128,9 @@ if [ "$DP_ATTENTION" = "true" ]; then
         --moe-a2a-backend deepep
         --deepep-config "$DEEPEP_CONFIG"
     )
-    CHUNKED_PREFILL_SIZE=32768
+    # This is the global budget across all eight DP-attention ranks.
+    CHUNKED_PREFILL_SIZE=65536
+    SWA_FULL_TOKENS_RATIO=0.02
 else
     PARALLEL_ARGS+=(
         --moe-runner-backend flashinfer_mxfp4
@@ -131,7 +138,6 @@ else
     )
 fi
 
-MODEL_ARGS=()
 # The B200-specialized image deadlocks immediately after weight loading when
 # forced through the B300 compressed-attention/page-size overrides.
 # DeepGEMM's DSv4 indexer needs a multi-GiB temporary allocation at long
@@ -186,7 +192,7 @@ SGLANG_CMD=(
     --trust-remote-code
     "${PARALLEL_ARGS[@]}"
     --mem-fraction-static "$MEM_FRACTION_STATIC"
-    --swa-full-tokens-ratio 0.1
+    --swa-full-tokens-ratio "$SWA_FULL_TOKENS_RATIO"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
     --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
