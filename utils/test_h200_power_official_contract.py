@@ -16,6 +16,10 @@ RECIPE = REPO_ROOT / (
     "benchmarks/multi_node/srt-slurm-recipes/sglang/glm5.2/agentic/"
     "disagg-h200-2p2d-pcp8-tp8-dp8-mtp.yaml"
 )
+DSV4_RECIPE = REPO_ROOT / (
+    "benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/agentic/"
+    "agg-h200-tp8-mtp-kvoffload.yaml"
+)
 WORKFLOW = REPO_ROOT / ".github/workflows/test-process-result.yml"
 
 PRODUCER_SHA = "a1b8c7af10c00e5ea40074aebdc0086189bbc064"
@@ -38,10 +42,11 @@ def test_h200_launcher_detects_recipe_opt_in_and_rejects_unvalidated_lanes():
     assert '"$IS_AGENTIC" != "1"' in launcher
     assert '"$FRAMEWORK" != "dynamo-sglang"' in launcher
     assert '"$MODEL_PREFIX" != "glm5.2"' in launcher
+    assert '"$MODEL_PREFIX" != "dsv4"' in launcher
     assert '"$PRECISION" != "fp8"' in launcher
 
 
-def test_glm_agentx_uses_exact_fork_sha_and_other_clone_lanes_are_unchanged():
+def test_power_agentx_lanes_use_exact_fork_sha_and_kimi_clone_is_unchanged():
     launcher = LAUNCHER.read_text(encoding="utf-8")
 
     assert f'POWER_SRT_SLURM_URL="{PRODUCER_URL}"' in launcher
@@ -51,10 +56,11 @@ def test_glm_agentx_uses_exact_fork_sha_and_other_clone_lanes_are_unchanged():
     assert 'test "$(git rev-parse HEAD)" = "$POWER_SRT_SLURM_PIN"' in launcher
     assert 'git rev-parse HEAD > "$GITHUB_WORKSPACE/power-producer-sha.txt"' in launcher
 
-    # These pre-existing branches are deliberately outside PR-A.
+    assert '"$MODEL_PREFIX" == "dsv4"' in launcher
+
+    # Kimi remains deliberately outside this PR.
     assert "https://github.com/functionstackx/srt-slurm-nv.git" in launcher
     assert "df5baa93f4caf5169dea2a4236ad2cc742fe40e7" in launcher
-    assert "git clone --branch v1.0.38 --single-branch https://github.com/NVIDIA/srt-slurm.git" in launcher
 
 
 def test_power_lane_provisions_exporter_and_injects_container_mapping():
@@ -84,15 +90,16 @@ def test_launcher_injects_exact_matrix_concurrencies_and_finalizes_each_result()
     assert 'cp "$GITHUB_WORKSPACE/power-producer-sha.txt" "$LOGS_DIR/power/power-producer-sha.txt"' in launcher
 
 
-def test_pr_b_enables_only_the_glm_recipe_in_optional_mode():
+def test_pr_b_requires_glm_and_enables_optional_dsv4_aggregate():
     recipe = yaml.safe_load(RECIPE.read_text(encoding="utf-8"))
+    dsv4_recipe = yaml.safe_load(DSV4_RECIPE.read_text(encoding="utf-8"))
 
     assert recipe["telemetry"] == {
         "enabled": True,
         "provider": "dcgm-power",
         "default_frequency": 1.0,
         "storage_subdir": "power",
-        "required": False,
+        "required": True,
         "startup_timeout_seconds": 120,
         "request_timeout_seconds": 2,
         "collector_join_timeout_seconds": 10,
@@ -106,12 +113,38 @@ def test_pr_b_enables_only_the_glm_recipe_in_optional_mode():
     assert recipe["benchmark"]["type"] == "custom"
     assert recipe["infra"]["etcd_nats_dedicated_node"] is True
 
+    assert dsv4_recipe["telemetry"] == {
+        "enabled": True,
+        "provider": "dcgm-power",
+        "default_frequency": 1.0,
+        "storage_subdir": "power",
+        "required": False,
+        "startup_timeout_seconds": 120,
+        "request_timeout_seconds": 2,
+        "collector_join_timeout_seconds": 10,
+        "dcgm_exporter": {
+            "container_image": "dcgm-exporter",
+            "port": 9401,
+        },
+    }
+    assert "concurrencies" not in dsv4_recipe["benchmark"]
+    assert dsv4_recipe["benchmark"]["type"] == "custom"
+    assert dsv4_recipe["benchmark"]["env"]["IS_MULTINODE"] == "true"
+    assert dsv4_recipe["resources"] == {
+        "gpu_type": "h200",
+        "gpus_per_node": 8,
+        "agg_nodes": 1,
+        "agg_workers": 1,
+        "gpus_per_agg": 8,
+    }
+
 
 def test_process_result_ci_covers_h200_power_files():
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
     for path in (
         "benchmarks/multi_node/srt-slurm-recipes/sglang/glm5.2/agentic/disagg-h200-2p2d-pcp8-tp8-dp8-mtp.yaml",
+        "benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/agentic/agg-h200-tp8-mtp-kvoffload.yaml",
         "runners/launch_h200-dgxc-slurm.sh",
         "runners/inject_srt_power_concurrencies.py",
         "utils/test_h200_power_official_contract.py",

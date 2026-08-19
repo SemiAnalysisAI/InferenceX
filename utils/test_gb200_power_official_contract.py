@@ -157,12 +157,13 @@ REQUIRED_POWER_RECIPES = {
     "benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/8k1k/disagg-gb200-1p2d-dep8-dep16-10-c256.yaml": 9401,
     "benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/8k1k/disagg-gb300-1p1d-dep4-dep16-5-c1024.yaml": 19401,
     "benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/8k1k/disagg-gb300-1p1d-tp4-tp4-2-c1.yaml": 19401,
+    "benchmarks/multi_node/srt-slurm-recipes/sglang/glm5.2/agentic/disagg-h200-2p2d-pcp8-tp8-dp8-mtp.yaml": 9401,
     "benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb200-fp8/8k1k/1p1d-tp4-tp4.yaml": 9401,
     "benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb300-fp4/8k1k/disagg/stp/8k1k_stp_lowlat_0.yaml": 19401,
     "benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb300-fp8/8k1k/1p1d-tp4-tp4.yaml": 19401,
 }
 OPTIONAL_POWER_RECIPES = {
-    "benchmarks/multi_node/srt-slurm-recipes/sglang/glm5.2/agentic/disagg-h200-2p2d-pcp8-tp8-dp8-mtp.yaml": 9401,
+    "benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/agentic/agg-h200-tp8-mtp-kvoffload.yaml": 9401,
 }
 POWER_RECIPES = REQUIRED_POWER_RECIPES | OPTIONAL_POWER_RECIPES
 

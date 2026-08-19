@@ -54,13 +54,22 @@ class Package:
         self.agg_result = root / "agg_renamed_by_launcher.json"
         self.validation_result = root / "power_validation.json"
 
-    def run(self, *, prefill_gpus=2, decode_gpus=2, sha=PRODUCER_SHA, require_power=False):
+    def run(
+        self,
+        *,
+        prefill_gpus=2,
+        decode_gpus=2,
+        aggregate_gpus=0,
+        sha=PRODUCER_SHA,
+        require_power=False,
+    ):
         return apm.run(
             self.power_dir,
             self.bench_result,
             self.agg_result,
             prefill_gpus=prefill_gpus,
             decode_gpus=decode_gpus,
+            aggregate_gpus=aggregate_gpus,
             expected_producer_sha=sha,
             logs_root=self.logs_root,
             validation_result=self.validation_result,
@@ -284,6 +293,30 @@ class TestValidPackage:
         assert pkg.run(require_power=True) == 0
         assert pkg.agg()["power_valid"] == 1
 
+    def test_aggregate_topology_emits_only_whole_deployment_metrics(self, tmp_path):
+        pkg = build_package(tmp_path)
+        manifest_path = pkg.power_dir / "manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        for device in manifest["expected_devices"]:
+            for assignment in device["assignments"]:
+                assignment["worker_role"] = "agg"
+                assignment["het_group"] = None
+        manifest_path.write_text(json.dumps(manifest, indent=2))
+
+        assert pkg.run(
+            prefill_gpus=0,
+            decode_gpus=0,
+            aggregate_gpus=4,
+            require_power=True,
+        ) == 0
+
+        agg = pkg.agg()
+        assert agg["power_valid"] == 1
+        assert agg["avg_power_w"] == 350.0
+        assert agg["total_gpu_energy_j"] == 84000.0
+        assert set(apm.ROLE_METRIC_KEYS).isdisjoint(agg)
+        assert set(pkg.sidecar()["per_gpu_role"].values()) == {"agg"}
+
     def test_agentx_adapter_consumes_a_real_custom_benchmark_package(self, tmp_path):
         from utils.agentic.aggregation.power_adapter import run_multinode_agentic_power
 
@@ -322,6 +355,7 @@ class TestValidPackage:
                 {
                     "hw": "h200",
                     "conc": 4,
+                    "disagg": True,
                     "num_prefill_gpu": 2,
                     "num_decode_gpu": 2,
                 }
@@ -499,6 +533,24 @@ class TestTopologyGates:
     def test_role_counts_must_match_workflow_env(self, tmp_path):
         pkg = build_package(tmp_path)
         assert_invalid(pkg, "topology_env_mismatch", prefill_gpus=4, decode_gpus=2)
+
+    def test_aggregate_role_count_must_match_aggregate_topology(self, tmp_path):
+        pkg = build_package(tmp_path)
+        manifest_path = pkg.power_dir / "manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        for device in manifest["expected_devices"]:
+            for assignment in device["assignments"]:
+                assignment["worker_role"] = "agg"
+                assignment["het_group"] = None
+        manifest_path.write_text(json.dumps(manifest, indent=2))
+
+        assert_invalid(
+            pkg,
+            "topology_env_mismatch",
+            prefill_gpus=0,
+            decode_gpus=0,
+            aggregate_gpus=8,
+        )
 
     def test_roles_sharing_het_group_rejected(self, tmp_path):
         pkg = build_package(tmp_path)

@@ -41,15 +41,16 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         USES_DCGM_POWER=1
     fi
 
-    # PR-A supports exactly the GLM-5.2 FP8 AgentX topology. Future recipes
-    # must earn a separate cluster smoke instead of inheriting this lane.
+    # Only explicitly reviewed H200 FP8 AgentX recipes may use dcgm-power.
+    # Future recipes must earn a separate cluster smoke instead of inheriting
+    # this lane.
     if [[ "$USES_DCGM_POWER" == "1" && (
         "$IS_AGENTIC" != "1" ||
         "$FRAMEWORK" != "dynamo-sglang" ||
-        "$MODEL_PREFIX" != "glm5.2" ||
+        ( "$MODEL_PREFIX" != "glm5.2" && "$MODEL_PREFIX" != "dsv4" ) ||
         "$PRECISION" != "fp8"
     ) ]]; then
-        echo "Error: H200 dcgm-power is validated only for AgentX dynamo-sglang glm5.2/fp8" >&2
+        echo "Error: H200 dcgm-power is validated only for AgentX dynamo-sglang glm5.2/fp8 or dsv4/fp8" >&2
         exit 1
     fi
 
@@ -107,9 +108,11 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         rm -rf "$SRT_REPO_DIR"
     fi
 
-    if [[ $IS_AGENTIC == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.2" ]]; then
+    if [[ $IS_AGENTIC == "1" && $FRAMEWORK == "dynamo-sglang" && (
+        "$MODEL_PREFIX" == "glm5.2" || "$MODEL_PREFIX" == "dsv4"
+    ) ]]; then
         # The pinned fork carries the v1.0.44 AgentX lifecycle plus the formal
-        # custom-benchmark dcgm-power contract needed by PR-A.
+        # custom-benchmark dcgm-power contract used by the allowlisted recipes.
         git clone "$POWER_SRT_SLURM_URL" "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR"
         git checkout "$POWER_SRT_SLURM_PIN" || exit 1
@@ -124,18 +127,6 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         mkdir -p recipes/vllm/kimi-k3/agentic
         cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
             recipes/vllm/kimi-k3/agentic
-    elif [[ $IS_AGENTIC == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
-        # Overlay the single H200 aggregated recipe on the upstream release
-        # that provides custom benchmarks, Dynamo wheels, and affinity config.
-        # v1.0.38 also injects every logical SGLang worker leader's /metrics URL
-        # into AIPERF_SERVER_METRICS_URLS for custom benchmarks; v1.0.10 wired
-        # that only for built-in AIPerf runners, so the AgentX trace artifacts
-        # came back with no backend engine series behind them.
-        git clone --branch v1.0.38 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-        cd "$SRT_REPO_DIR"
-        mkdir -p recipes/sglang/deepseek-v4/agentic
-        cp "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/agentic/agg-h200-tp8-mtp-kvoffload.yaml" \
-            recipes/sglang/deepseek-v4/agentic/
     elif [[ "$IS_AGENTIC" == "1" ]]; then
         git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR"
