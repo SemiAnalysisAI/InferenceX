@@ -109,6 +109,12 @@ case "$KV_OFFLOAD_BACKEND" in
         # grid coincide and the joint load aims both legs at one boundary.
         export LMCACHE_CHUNK_SIZE=256
 
+        # OFFLOAD_PROFILE is deliberately left unset (default 0). The source
+        # recipe sets it to 1, but that only turns on per-step offload
+        # statistics in the connector, and the numbers behind this submission
+        # were measured with it off. Noted here so the difference from the
+        # recipe reads as a choice rather than an omission.
+
         # CPU state-offload tier for the KDA recurrent state.
         export OFFLOAD_STATE=1
         export OFFLOAD_STATE_STAGING_GROUPS=8
@@ -134,6 +140,9 @@ esac
 echo "Starting atom server..."
 export PYTHONNOUSERSITE=1
 
+# Required by ATOM: without it the aiter kernel logs flood the server log for
+# the whole 3600 s replay.
+export AITER_LOG_LEVEL="${AITER_LOG_LEVEL:-WARNING}"
 export AITER_SITUV2_A4W4=1
 export AITER_QUICK_REDUCE_QUANTIZATION=INT4
 export AITER_FLYDSL_STAGE2_FP8=1

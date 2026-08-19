@@ -648,8 +648,9 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
 # Concurrency 1 and 4 are GPU-resident. 8 and 10 add the LMCache DRAM tier and
 # ATOM's CPU state-offload tier together: K3 is a hybrid, so a resumed agentic
 # turn needs the KDA recurrent state back, and the paged KV tier alone cannot
-# restore one. dram-utilization 0.085 puts the aggregate budget at 254 GB,
-# i.e. ~32 GB per rank once the script divides by TP.
+# restore one. dram-utilization 0.086 puts the aggregate budget at 257 GB, so
+# the script's divide-by-TP lands on exactly the 32 GB per rank the recipe was
+# measured with (0.085 gives 254, which floors to 31).
 kimik3-fp4-mi355x-atom-agentic-mtp:
   image: rocm/atom-dev:ubuntu24.04_py3.12_pytorch_release_2.10.0_kimi_k3_agentic_0818
   model: moonshotai/Kimi-K3
@@ -660,7 +661,7 @@ kimik3-fp4-mi355x-atom-agentic-mtp:
   multinode: false
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.085
+    - dram-utilization: 0.086
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [1, 4], spec-decoding: mtp }
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [8, 10], spec-decoding: mtp }
