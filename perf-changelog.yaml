@@ -6296,3 +6296,14 @@
   description:
     - "Enable safetensors prefetch loading for every B200 DeepSeek-V4-Pro vLLM AgentX MTP point."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2646
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Revert the B200 DeepSeek-V4-Pro vLLM image from d62ad46 to the proven 426e59f build."
+    - "Keep the existing nine-point TP8 and DEP8 matrix entirely on SimpleCPU without adding Mooncake or additional TP8 concurrencies."
+    - "Remove image-profiled exact KV-cache byte caps; restore 0.90 GPU utilization, fixed 8192-token batches, and a 16-sequence TP8 envelope."
+    - "Set prefix retention to 0, disable the AIPerf mmap cache, bound sparse-indexer memory and execution timeout, and use FlashInfer all-reduce without symmetric memory on pure TP."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2646

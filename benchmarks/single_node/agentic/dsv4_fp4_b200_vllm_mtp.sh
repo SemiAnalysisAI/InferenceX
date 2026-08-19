@@ -11,15 +11,15 @@ set -x
 #   --speculative-config: synthetic acceptance length 2.49 (throughput) vs real MTP (EVAL_ONLY); see the SPEC_CONFIG block
 #   cudagraph capture sizes expressed in TOKENS (see the capture block below).
 #
-# The throughput sweep uses DEP8 with SimpleCPUOffloadConnector only. The recipe
-# uses FP8 KV cache, sparse DeepSeek-V4 FlashInfer attention with an FP4 indexer
-# cache, mega-MoE, long-prefill chunking, and FULL_DECODE_ONLY CUDA graphs with
-# every decode batch captured explicitly.
+# The throughput sweep uses TP8 and DEP8 with SimpleCPUOffloadConnector only.
+# The recipe uses FP8 KV cache, sparse DeepSeek-V4 FlashInfer attention with an
+# FP4 indexer cache, mega-MoE, long-prefill chunking, and FULL_DECODE_ONLY CUDA
+# graphs with every decode batch captured explicitly.
 #
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
 #
-# DEP8 offloads KV to host DRAM with KV_OFFLOAD_BACKEND=vllm-simple.
+# TP8 and DEP8 offload KV to host DRAM with KV_OFFLOAD_BACKEND=vllm-simple.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -96,14 +96,16 @@ export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="vllm:"
 # DeepSeek-V4-Pro weights are large; engine startup can exceed default 600s.
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 
-# vllm-project/vllm#43447 keeps local SWA prefix-cache tails sparsely, while
-# vllm-project/vllm#44774 applies the same reachability policy to Mooncake's
-# store mask. 32k matches the trace-replay tuning validated for this workload.
-export VLLM_PREFIX_CACHE_RETENTION_INTERVAL=32768
+export VLLM_PREFIX_CACHE_RETENTION_INTERVAL=0
 export VLLM_USE_V2_MODEL_RUNNER=1
 export VLLM_USE_RUST_FRONTEND=1
 export VLLM_DSV4_MEGA_FP8_COMBINE=1
+export VLLM_SPARSE_INDEXER_MAX_LOGITS_MB=1024
+export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=1800
 export VLLM_RPC_TIMEOUT=600000
+export NCCL_NVLS_ENABLE=1
+# Avoid concurrent readers observing a mismatched mmap data/index pair.
+export AIPERF_DATASET_MMAP_CACHE_ENABLED=false
 
 # ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
@@ -213,6 +215,9 @@ MODE_ARGS=()
 if [ "$DP_ATTENTION" = "true" ]; then
     PARALLEL_ARGS=(--tensor-parallel-size 1 --data-parallel-size "$TP")
     export PYTORCH_ALLOC_CONF=expandable_segments:True
+else
+    export VLLM_ALLREDUCE_USE_SYMM_MEM=0
+    export VLLM_ALLREDUCE_USE_FLASHINFER=1
 fi
 
 if [ "$EP_SIZE" -gt 1 ]; then
@@ -230,20 +235,17 @@ if [ "$DP_ATTENTION" = "true" ]; then
     )
 fi
 
-# AgentX concurrency counts live session trees. Retain per-rank 2x headroom on
-# DEP and 4x global headroom on pure TP, where subagent fan-out can exceed CONC.
-# Pin the lowest completed post-CUDA-graph recommendation per topology from run
-# 32133180389: TP8 c8 and DEP8 c196, respectively.
+# The exact KV-cache byte caps were profiled against the superseded image.
+# Restore the reverted image's utilization-based policy and use two times the
+# largest submitted TP8 concurrency as the aggregate sequence envelope.
+MAX_NUM_BATCHED_TOKENS=8192
 if [ "$DP_ATTENTION" = "true" ]; then
     MAX_NUM_SEQS=$((2 * CONC / TP))
-    MAX_NUM_BATCHED_TOKENS=8192
-    KV_CACHE_MEMORY=23022689895
 else
-    MAX_NUM_SEQS=$((4 * CONC))
-    MAX_NUM_BATCHED_TOKENS=$((16 * CONC))
-    KV_CACHE_MEMORY=47562520167
+    MAX_NUM_SEQS=16
 fi
 MODE_ARGS+=(--max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS")
+export VLLM_V2_WARMUP_MAX_NUM_SEQS="$MAX_NUM_SEQS"
 
 # MTP: cudagraph capture sizes are in TOKENS. With num_speculative_tokens=N,
 # every uniform decode batch of S seqs verifies S*(1+N) tokens, so capture the
@@ -274,6 +276,7 @@ echo "Starting vllm server..."
 export TORCH_CUDA_ARCH_LIST="10.0"
 export PYTHONNOUSERSITE=1
 export VLLM_FLOAT32_MATMUL_PRECISION=high
+GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.90}"
 
 { set +x; } 2>/dev/null
 VLLM_CMD=(
@@ -285,10 +288,9 @@ VLLM_CMD=(
     --kv-cache-dtype fp8
     --block-size 256
     --max-model-len 1048576
-    --kv-cache-memory "$KV_CACHE_MEMORY"
+    --gpu-memory-utilization "$GPU_MEMORY_UTILIZATION"
     --numa-bind
     --enable-cumem-allocator
-    --no-enable-flashinfer-autotune
     --tokenizer-mode deepseek_v4
     --tool-call-parser deepseek_v4
     --enable-auto-tool-choice
