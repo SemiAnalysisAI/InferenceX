@@ -127,10 +127,21 @@ if [ "$DP_ATTENTION" = "true" ]; then
     )
     MEM_FRACTION_STATIC=0.95
     if [ "$CONC" -ge 512 ]; then
-        # Leave room for FlashInfer's transient MoE workspace at the DEP8 tail.
-        MEM_FRACTION_STATIC=0.94
+        # DEP8 c512: MegaMoE FP4-activation A2A (same DeepGEMM path as the
+        # vLLM amxf4 recipe) plus a larger per-step prefill budget so the
+        # 5,677-request warmup finishes inside the job budget. The DSV4
+        # indexer's fp32 MQA logits transient scales with the per-rank chunk
+        # and has no budget cap in this image, so static memory must stay at
+        # 0.85 (the only value that has completed c512 end to end).
+        PARALLEL_ARGS+=(--moe-a2a-backend megamoe)
+        export SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_FP4_ACTS=1
+        export SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_MXF4_KIND=1
+        export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=16384
+        MEM_FRACTION_STATIC=0.85
+        CHUNKED_PREFILL_SIZE=131072
+    else
+        CHUNKED_PREFILL_SIZE=16384
     fi
-    CHUNKED_PREFILL_SIZE=16384
 else
     PARALLEL_ARGS+=(
         --moe-runner-backend flashinfer_mxfp4
@@ -143,6 +154,9 @@ MODEL_ARGS=(
     --page-size 256
     --disable-shared-experts-fusion
 )
+if [ "$DP_ATTENTION" = "true" ] && [ "$CONC" -ge 512 ]; then
+    MODEL_ARGS+=(--enable-deepseek-v4-fp4-indexer)
+fi
 
 # AgentX concurrency counts live session trees, not individual requests.
 # Allow subagent fan-out to exceed CONC without clipping request bursts.
@@ -240,6 +254,23 @@ wait_for_ready \
 
 if [ "$USE_SGLANG_ROUTER" = "true" ]; then
     echo "Starting SGLang router on port $PORT for $TP DP ranks..."
+    # Wave hardening, gated on the pinned router's flag surface: bounded
+    # retries with backoff absorb transient upstream failures during the
+    # cache-hit flood so a single 5xx cannot abort a root warmup request,
+    # no circuit breaker (its fast-fail window can strike root requests),
+    # and idle-pool pruning drops connections before the server's 900 s
+    # keep-alive closes them under us.
+    ROUTER_HARDENING_ARGS=(--disable-retries)
+    ROUTER_HELP="$("${SGLANG_ROUTER_CMD[@]}" --help 2>&1 || true)"
+    if grep -q -- "--retry-max-retries" <<<"$ROUTER_HELP"; then
+        ROUTER_HARDENING_ARGS=(--retry-max-retries 8 --retry-initial-backoff-ms 250 --retry-max-backoff-ms 4000)
+    fi
+    if grep -q -- "--disable-circuit-breaker" <<<"$ROUTER_HELP"; then
+        ROUTER_HARDENING_ARGS+=(--disable-circuit-breaker)
+    fi
+    if grep -q -- "--pool-idle-timeout-secs" <<<"$ROUTER_HELP"; then
+        ROUTER_HARDENING_ARGS+=(--pool-idle-timeout-secs 300)
+    fi
     "${SGLANG_ROUTER_CMD[@]}" \
         --worker-urls "http://localhost:$SGLANG_BACKEND_PORT" \
         --policy consistent_hashing \
@@ -252,7 +283,7 @@ if [ "$USE_SGLANG_ROUTER" = "true" ]; then
         --connect-timeout-secs 900 \
         --request-timeout-secs 14400 \
         --disable-health-check \
-        --disable-retries > "$ROUTER_LOG" 2>&1 &
+        "${ROUTER_HARDENING_ARGS[@]}" > "$ROUTER_LOG" 2>&1 &
     ROUTER_PID=$!
     echo "Router PID: $ROUTER_PID"
     wait_for_ready \
