@@ -14,6 +14,8 @@ import sys
 _PATCHES = (
     ("AITER_N6288_CHUNK_PATCH", "patch_gemm_n6288_chunk"),
     ("AITER_CA_FLUSH_SYNC_PATCH", "patch_ca_graph_flush_sync"),
+    ("KV_OFFLOAD_BATCH_CHUNK_PATCH", "patch_kv_offload_batch_chunk"),
+    ("KV_OFFLOAD_BLOCK_CAP_PATCH", "patch_kv_offload_block_cap"),
 )
 
 
@@ -94,4 +96,44 @@ try:
                 pass
 except Exception:
     # Never break host python tools if patch fails.
+    pass
+
+
+# libtvm_ffi.so installs its own SIGSEGV handler from a library constructor, which
+# clobbers Python's faulthandler and leaves only unsymbolized C frames. Re-enabling
+# on a timer wins that race no matter when tvm_ffi gets imported. The dump target is
+# a real file because vLLM replaces sys.stderr with a wrapper that has no fileno().
+def _keep_python_faulthandler() -> None:
+    import faulthandler
+    import time
+
+    try:
+        fh = open("/tmp/fh_%d.log" % os.getpid(), "w", buffering=1)
+    except Exception:
+        return
+    globals()["_FH_FILE"] = fh  # handler needs this fd to stay open
+    fh.write("armed pid=%d argv=%r\n" % (os.getpid(), sys.argv[:2]))
+    armed = False
+    while True:
+        try:
+            faulthandler.disable()
+            faulthandler.enable(file=fh, all_threads=True)
+            if not armed:
+                fh.write("faulthandler.enable ok\n")
+                armed = True
+        except Exception as exc:
+            fh.write("enable failed: %r\n" % (exc,))
+        time.sleep(0.25)
+
+
+try:
+    if os.environ.get("FORCE_PY_FAULTHANDLER", "0") == "1" and not _should_skip():
+        import threading
+
+        threading.Thread(
+            target=_keep_python_faulthandler,
+            name="keep-faulthandler",
+            daemon=True,
+        ).start()
+except Exception:
     pass

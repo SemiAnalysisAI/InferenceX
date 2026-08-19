@@ -48,6 +48,7 @@ KV_OFFLOAD_BACKEND="${KV_OFFLOAD_BACKEND:-vllm-simple}"
 # `name` matching KV_OFFLOAD_BACKEND) whenever offloading is enabled; without it
 # the post-profiling aggregation SystemExits and (under set -e) skips lm-eval.
 if [[ "${KV_OFFLOADING}" == "none" ]]; then
+  KV_OFFLOAD_BACKEND=""
   KV_OFFLOAD_BACKEND_METADATA="${KV_OFFLOAD_BACKEND_METADATA:-}"
 else
   KV_OFFLOAD_BACKEND_METADATA="${KV_OFFLOAD_BACKEND_METADATA:-{\"name\":\"${KV_OFFLOAD_BACKEND}\"}}"
@@ -135,18 +136,21 @@ set -o pipefail
     export AITER_N6288_CHUNK_PATCH=${AITER_N6288_CHUNK_PATCH:-1}
     export AITER_CA_FLUSH_SYNC_PATCH=${AITER_CA_FLUSH_SYNC_PATCH:-1}
     export DISABLE_CUSTOM_ALL_REDUCE=${DISABLE_CUSTOM_ALL_REDUCE:-0}
+    export VLLM_ROCM_USE_AITER_MLA=${VLLM_ROCM_USE_AITER_MLA:-1}
     export ASYNC_SCHEDULING=${ASYNC_SCHEDULING:-auto}
     export MODEL=moonshotai/Kimi-K3 MODEL_PATH=/model MODEL_PREFIX=kimik3
     export TP=${TP} PP=${PP} PP_SIZE=${PP} CONC=${CONC}
     # process_agentic_result.py reads PP_SIZE (not PP) for per-GPU denominator.
     # Keep IS_MULTINODE unset/false: aggregated TP×PP co-located path uses tp*pp.
     export MAX_NUM_SEQS=${MAX_NUM_SEQS:-20}
+    export MAX_NUM_BATCHED_TOKENS=${MAX_NUM_BATCHED_TOKENS:-8192}
     export REJECTION_SAMPLE_METHOD=${REJECTION_SAMPLE_METHOD:-}
     export KV_OFFLOADING=${KV_OFFLOADING} KV_OFFLOAD_BACKEND=${KV_OFFLOAD_BACKEND}
     export TOTAL_CPU_DRAM_GB=${TOTAL_CPU_DRAM_GB}
     export DURATION=${DURATION}
     export AIPERF_UNSAFE_OVERRIDE=true IS_AGENTIC=1 EVAL_ONLY=false
     export AIPERF_EXPERIMENTAL_FAST=${AIPERF_EXPERIMENTAL_FAST:-0}
+    export AIPERF_WARMUP_REQUESTS_PER_LANE=${AIPERF_WARMUP_REQUESTS_PER_LANE:-10}
     export RUN_EVAL=${RUN_EVAL:-false} EVAL_FRAMEWORK=${EVAL_FRAMEWORK:-lm-eval}
     export SPEC_DECODE=${SPEC_DECODE:-false}
     export SPEC_NUM_TOKENS=${SPEC_NUM_TOKENS:-2}
@@ -165,10 +169,18 @@ set -o pipefail
     export NODE_RANK=${rank} NNODES=2 MASTER_ADDR=${MASTER_IP} MASTER_PORT=${MASTER_PORT} PORT=${PORT}
     export ENFORCE_EAGER=${ENFORCE_EAGER}
     export MIN_CUDAGRAPH_CAPTURE_SIZE=${MIN_CUDAGRAPH_CAPTURE_SIZE:-1}
+    export MAX_CUDAGRAPH_CAPTURE_SIZE=${MAX_CUDAGRAPH_CAPTURE_SIZE:-44}
     export AITER_GEMM_MERGE=${AITER_GEMM_MERGE}
     export AITER_GEMM_EXTRA_CSV=/workspace/experimental/kimik3-v4/aiter/${AITER_GEMM_EXTRA_BASENAME}
     export AITER_CONFIG_GEMM_BF16=/tmp/aiter_configs/bf16_tuned_gemm.csv
     export PYTHONNOUSERSITE=1
+    export PYTHONFAULTHANDLER=${PYTHONFAULTHANDLER:-1}
+    export FORCE_PY_FAULTHANDLER=${FORCE_PY_FAULTHANDLER:-0}
+    export KV_OFFLOAD_BATCH_CHUNK_PATCH=${KV_OFFLOAD_BATCH_CHUNK_PATCH:-1}
+    export KV_OFFLOAD_MAX_BLOCKS_PER_BATCH=${KV_OFFLOAD_MAX_BLOCKS_PER_BATCH:-64}
+    export KV_OFFLOAD_BATCH_CHUNK_LOG=${KV_OFFLOAD_BATCH_CHUNK_LOG:-0}
+    export KV_OFFLOAD_MAX_CPU_BLOCKS=${KV_OFFLOAD_MAX_CPU_BLOCKS:-0}
+    export SKIP_GPU_CLEAN_WAIT=${SKIP_GPU_CLEAN_WAIT:-0}
     # Host already points core_pattern at ${COREDUMP_DIR}; force unlimited
     # core size inside the container so PP worker SIGSEGV leaves a usable dump.
     ulimit -c unlimited 2>/dev/null || true

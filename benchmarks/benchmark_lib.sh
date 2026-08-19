@@ -238,6 +238,13 @@ _write_amd_smi_sidecar() {
 # GPU is at <=10% VRAM, otherwise returns 1 so the caller aborts rather than
 # starting a benchmark on GPUs still draining the previous run's memory.
 wait_for_amd_gpu_clean() {
+    # Opt-in escape hatch: rocm-smi VRAM% accounting can stay stale for a
+    # prior job long after HIP reports the memory free and large allocations
+    # succeed, which otherwise strands a run in this gate until it aborts.
+    if [ "${SKIP_GPU_CLEAN_WAIT:-0}" = "1" ]; then
+        echo "SKIP_GPU_CLEAN_WAIT=1: skipping prior-job GPU memory reclaim gate"
+        return 0
+    fi
     local gpu_clean=false vram_max i
     for i in $(seq 1 90); do
         vram_max=$(rocm-smi --showmemuse 2>/dev/null \
