@@ -6161,3 +6161,11 @@
   description:
     - "Update the B200 SGLang AgentX HiCache MTP DEP8 configuration."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2656
+
+- config-keys:
+    - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add new B200 multi-node configs with DP2, EP16"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2618
