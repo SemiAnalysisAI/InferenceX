@@ -974,8 +974,8 @@ dsv4-fp4-b200-vllm-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.95
       search-space:
-      # Keep the existing B200 SimpleCPU matrix; do not add TP8 points.
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [1, 4, 8] }
+      # Keep low-concurrency TP8 GPU-resident; do not add more TP8 points.
+      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 8] }
       # DEP8 SimpleCPU + MTP
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [32, 64, 96, 128, 160, 196], router: { name: vllm-router, version: "0.1.14" } }
 

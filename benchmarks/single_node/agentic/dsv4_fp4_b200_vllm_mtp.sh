@@ -11,15 +11,15 @@ set -x
 #   --speculative-config: synthetic acceptance length 2.49 (throughput) vs real MTP (EVAL_ONLY); see the SPEC_CONFIG block
 #   cudagraph capture sizes expressed in TOKENS (see the capture block below).
 #
-# The throughput sweep uses TP8 and DEP8 with SimpleCPUOffloadConnector only.
-# The recipe uses FP8 KV cache, sparse DeepSeek-V4 FlashInfer attention with an
-# FP4 indexer cache, mega-MoE, long-prefill chunking, and FULL_DECODE_ONLY CUDA
-# graphs with every decode batch captured explicitly.
+# The throughput sweep uses GPU-resident TP8 and SimpleCPU DEP8. The recipe uses
+# FP8 KV cache, sparse DeepSeek-V4 FlashInfer attention with an FP4 indexer cache,
+# mega-MoE, long-prefill chunking, and FULL_DECODE_ONLY CUDA graphs with every
+# decode batch captured explicitly.
 #
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
 #
-# TP8 and DEP8 offload KV to host DRAM with KV_OFFLOAD_BACKEND=vllm-simple.
+# DEP8 offloads KV to host DRAM with KV_OFFLOAD_BACKEND=vllm-simple.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
