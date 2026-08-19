@@ -220,6 +220,12 @@ else
 fi
 echo "SIMULATE_ACC_LEN=$SIMULATE_ACC_LEN NUM_SPEC_TOKENS=$NUM_SPEC_TOKENS SPEC_ACCEPTANCE_RATE=$SPEC_ACCEPTANCE_RATE"
 
+#TODO: test, overide
+if [ "$CONC" -gt 10 ]; then
+    SPEC_ARGS=()
+fi
+echo "SPEC_ARGS" $SPEC_ARGS
+
 # ---- LLM server -------------------------------------------------------------
 ATOM_CMD=(
     python -m atom.entrypoints.openai_server
