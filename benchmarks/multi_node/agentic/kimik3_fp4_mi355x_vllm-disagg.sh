@@ -8,9 +8,13 @@
 # things differ from that recipe because the engine differs:
 #
 #   * the KV offload tier is vLLM's own SimpleCPUOffloadConnector, not HiCache,
-#     so none of the HICACHE_*/MC_* tunables apply. A follow-up commit wires
-#     MultiConnector composition in server_vllm.sh.
-#   * MoRI queue sizing uses the shared env.sh defaults on this commit.
+#     so none of the HICACHE_*/MC_* tunables apply. server_vllm.sh composes it
+#     with MoRIIO under MultiConnector on the prefill side (see
+#     build_kv_transfer_configs there).
+#   * the MoRI queue sizing is NOT set here. env.sh pins Kimi-K3 defaults
+#     (MORI_IO_SQ_BACKOFF_TIMEOUT_US=500000, QP_MAX_SEND_WR=8192, CQE=16384,
+#     SGE=2, TC_DISABLE=0) and job.slurm -e's them into the engine container;
+#     setting them here as well would create a second source of truth.
 #
 # The serve body (TP, cudagraph capture, fp8 KV, DSpark speculative-config, 1M
 # context) lives in amd_utils/models_vllm.yaml under Kimi-K3.
@@ -64,6 +68,14 @@ export TIME_LIMIT="${TIME_LIMIT:-12:00:00}"
 export MODEL_PATH=$MODEL_PATH
 export MODEL_NAME=$MODEL_NAME
 export CONTAINER_IMAGE=$IMAGE
+
+# ── MoRIIO write + wait_all ──
+# job.slurm derives a node-local image from CONTAINER_IMAGE with the exact
+# ROCm/mori commit SGLang MI35x pins (#341 / IOEngine.wait_all). The live server
+# only verifies the baked capability; it never installs a wheel at startup.
+export MORI_WAITALL_BUILD="${MORI_WAITALL_BUILD:-1}"
+export MORI_WAITALL_COMMIT="${MORI_WAITALL_COMMIT:-f7e6ac6863c53821bc7afb91a578cc6ce38fcad0}"
+export MORIIO_READ_MODE="${MORIIO_READ_MODE:-false}"
 
 # job.slurm's fallback pin is routinely garbage-collected from Docker Hub
 # (only ~16 nightlies are retained), so pin the tag this arm was validated

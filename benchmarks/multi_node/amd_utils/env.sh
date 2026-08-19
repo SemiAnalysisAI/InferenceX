@@ -50,11 +50,17 @@ export NCCL_IB_HCA=${NCCL_IB_HCA:-$IBDEVICES}
 # =============================================================================
 # Shared by the vLLM MoRIIOConnector and the SGLang/MoRI KV-transfer path.
 
-export MORI_IO_SQ_BACKOFF_TIMEOUT_US=50000
-export MORI_IO_QP_MAX_SEND_WR=16384
-export MORI_IO_QP_MAX_CQE=32768
-export MORI_IO_QP_MAX_SGE=2
-export MORI_IO_TC_DISABLE=0
+if [[ "${MODEL_NAME:-}" == "Kimi-K3" ]]; then
+    export MORI_IO_SQ_BACKOFF_TIMEOUT_US="${MORI_IO_SQ_BACKOFF_TIMEOUT_US:-500000}"
+    export MORI_IO_QP_MAX_SEND_WR="${MORI_IO_QP_MAX_SEND_WR:-8192}"
+    export MORI_IO_QP_MAX_CQE="${MORI_IO_QP_MAX_CQE:-16384}"
+else
+    export MORI_IO_SQ_BACKOFF_TIMEOUT_US="${MORI_IO_SQ_BACKOFF_TIMEOUT_US:-50000}"
+    export MORI_IO_QP_MAX_SEND_WR="${MORI_IO_QP_MAX_SEND_WR:-16384}"
+    export MORI_IO_QP_MAX_CQE="${MORI_IO_QP_MAX_CQE:-32768}"
+fi
+export MORI_IO_QP_MAX_SGE="${MORI_IO_QP_MAX_SGE:-2}"
+export MORI_IO_TC_DISABLE="${MORI_IO_TC_DISABLE:-0}"
 
 # QoS/DSCP configuration
 # Priority order: 1) Set by runner, 2) Detect via nicctl, 3) Detect from hostname
@@ -179,6 +185,15 @@ $1 == "DSCP" && $2 == ":" && $NF == p {
 
     set +x
     echo "[INFO] IBDEVICES=$IBDEVICES  UCX_NET_DEVICES=$UCX_NET_DEVICES  NCCL_SOCKET_IFNAME=$NCCL_SOCKET_IFNAME  UCX_IB_GID_INDEX=$UCX_IB_GID_INDEX  UCX_IB_TRAFFIC_CLASS=${UCX_IB_TRAFFIC_CLASS:-unset}"
+
+    if [[ "$MODEL_NAME" == "Kimi-K3" ]]; then
+        export MORI_IO_SQ_BACKOFF_TIMEOUT_US="${MORI_IO_SQ_BACKOFF_TIMEOUT_US:-500000}"
+        export MORI_IO_QP_MAX_SEND_WR="${MORI_IO_QP_MAX_SEND_WR:-8192}"
+        export MORI_IO_QP_MAX_CQE="${MORI_IO_QP_MAX_CQE:-16384}"
+        export MORI_IO_QP_MAX_SGE="${MORI_IO_QP_MAX_SGE:-2}"
+        export MORI_IO_TC_DISABLE="${MORI_IO_TC_DISABLE:-0}"
+        echo "[INFO] Kimi-K3 MoRI IO: SQ_BACKOFF=${MORI_IO_SQ_BACKOFF_TIMEOUT_US}us SEND_WR=${MORI_IO_QP_MAX_SEND_WR} CQE=${MORI_IO_QP_MAX_CQE} SGE=${MORI_IO_QP_MAX_SGE} TC_DISABLE=${MORI_IO_TC_DISABLE}"
+    fi
 
 else
     # =========================================================================
