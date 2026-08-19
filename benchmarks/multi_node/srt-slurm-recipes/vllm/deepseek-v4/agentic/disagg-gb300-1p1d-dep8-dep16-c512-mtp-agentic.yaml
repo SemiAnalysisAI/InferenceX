@@ -9,14 +9,14 @@ name: "svf-vllm-disagg-gb300-1p1d-dep8-dep16-c512-mtp-agentic"
 
 model:
   path: "deepseek-v4-pro"
-  container: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-d62ad46"
+  container: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-426e59f"
   precision: "fp4"
 
 identity:
   model:
     repo: "deepseek-ai/DeepSeek-V4-Pro"
   container:
-    image: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-d62ad46"
+    image: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-426e59f"
   frameworks:
     dynamo: "1.4.0"
 
@@ -154,7 +154,7 @@ backend:
     NCCL_NVLS_ENABLE: "1"
     VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
     NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
-    VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
+    VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "0"
     VLLM_USE_BREAKABLE_CUDAGRAPH: "0"
     VLLM_CONNECTOR_PREFETCH_DEPTH: "8"
     VLLM_DSV4_MEGA_FP8_COMBINE: "1"
@@ -183,7 +183,7 @@ backend:
     NCCL_NVLS_ENABLE: "1"
     VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
     NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
-    VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
+    VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "0"
     VLLM_DSV4_MEGA_FP8_COMBINE: "1"
     DG_JIT_CACHE_DIR: "/tmp/dg-cache-dsv4-gb300-1p1d-dep16-decode-c512-{job_id}"
     MC_ENABLE_DEST_DEVICE_AFFINITY: "1"

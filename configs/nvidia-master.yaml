@@ -7736,7 +7736,7 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-mtp-disagg:
           dp-attn: true
 
 dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-agg:
-  image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-d62ad46
+  image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-426e59f
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:gb300-nv
@@ -7831,7 +7831,7 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-agg:
           dp-attn: false
 
 dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
-  image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-d62ad46
+  image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-426e59f
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:gb300-nv

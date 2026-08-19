@@ -6,14 +6,14 @@ name: "svf-vllm-agg-gb300-tp8-vllm-simple-offload-mtp-agentic"
 
 model:
   path: "deepseek-v4-pro"
-  container: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-d62ad46"
+  container: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-426e59f"
   precision: "fp4"
 
 identity:
   model:
     repo: "deepseek-ai/DeepSeek-V4-Pro"
   container:
-    image: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-d62ad46"
+    image: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-426e59f"
   frameworks:
     dynamo: "1.4.0"
 
@@ -71,7 +71,7 @@ backend:
     VLLM_LOG_STATS_INTERVAL: "1"
     VLLM_V2_WARMUP_MAX_NUM_SEQS: "96"
     TILELANG_CLEANUP_TEMP_FILES: "1"
-    VLLM_USE_NCCL_SYMM_MEM: "0"
+    VLLM_ALLREDUCE_USE_SYMM_MEM: "0"
     TORCH_SYMMMEM: "NVSHMEM"
     NCCL_CUMEM_ENABLE: "1"
     NCCL_MNNVL_ENABLE: "1"
@@ -80,8 +80,8 @@ backend:
     VLLM_USE_V2_MODEL_RUNNER: "1"
     VLLM_USE_RUST_FRONTEND: "1"
     VLLM_ALLREDUCE_USE_FLASHINFER: "1"
-    VLLM_FLASHINFER_ALLREDUCE_BACKEND: "auto"
-    VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
+    VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "0"
+    VLLM_DSV4_MEGA_FP8_COMBINE: "1"
     VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "1024"
     VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
     UCX_MEMTYPE_CACHE: "n"
@@ -109,7 +109,7 @@ backend:
       max-cudagraph-capture-size: 384
       speculative-config: '{"method":"mtp","num_speculative_tokens":3}'
       kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":137438953472,"lazy_offload":false}}'
-      gpu-memory-utilization: 0.94
+      gpu-memory-utilization: 0.92
       stream-interval: 10
       no-disable-hybrid-kv-cache-manager: true
       tokenizer-mode: "deepseek_v4"

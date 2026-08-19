@@ -7,14 +7,14 @@ name: "svf-vllm-disagg-gb300-1p3d-dep4-tp8-c3-mtp-agentic"
 # feeds three TP8 decode workers at concurrency 3 through NIXL.
 model:
   path: "deepseek-v4-pro"
-  container: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-d62ad46"
+  container: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-426e59f"
   precision: "fp4"
 
 identity:
   model:
     repo: "deepseek-ai/DeepSeek-V4-Pro"
   container:
-    image: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-d62ad46"
+    image: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-426e59f"
   frameworks:
     dynamo: "1.4.0"
 
@@ -35,6 +35,7 @@ environment:
   VLLM_ALLREDUCE_USE_FLASHINFER: "1"
   VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
   VLLM_DSV4_MEGA_FP8_COMBINE: "1"
+  VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "0"
   DG_JIT_CACHE_DIR: "/tmp/dg-cache-dsv4-gb300-1p3d-{job_id}"
 
 slurm:
@@ -178,7 +179,7 @@ benchmark:
     DURATION: "3600"
     RESULT_FILENAME: "dsv4_agentx101_p1dep4_d3tp8_c3_kv_nixl_mtp_fi_ar_lpt512_psi1"
     RUNNER_TYPE: "gb300"
-    IMAGE: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-d62ad46"
+    IMAGE: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-426e59f"
     SPEC_DECODING: "mtp"
     DISAGG: "true"
     OFFLOADING: "none"
