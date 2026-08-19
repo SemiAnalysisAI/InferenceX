@@ -661,6 +661,25 @@ kimik3-fp4-mi355x-vllm-agentic-mtp-dcp:
       - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: none, conc-list: [4], spec-decoding: mtp }
       - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [8], spec-decoding: mtp }
 
+# One cell, for isolating the aiter moe_sorting fault run 32215249474 hit on both
+# DCP cells. Same as the c4 arm above; the comm backend is not expressible in the
+# search space, so the variable moves in the recipe (DCP_COMM_BACKEND, a2a there
+# and ag_rs here). c8 is not repeated -- it failed identically, so it would buy
+# nothing.
+kimik3-fp4-mi355x-vllm-agentic-mtp-dcp-isolate:
+  image: vllm/vllm-openai-rocm:nightly-ac7509e2b1db40fec2f03dde1ed4e9dfdc2338c9
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.65
+      search-space:
+      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: none, conc-list: [4], spec-decoding: mtp }
+
 dsr1-fp4-mi355x-sglang-disagg:
   image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519
   model: amd/DeepSeek-R1-0528-MXFP4-v2

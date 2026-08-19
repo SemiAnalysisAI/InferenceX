@@ -179,16 +179,25 @@ if [ "$EP_SIZE" -gt 1 ]; then
     EP_ARGS=(--enable-expert-parallel)
 fi
 
-# DCP shards the target's KV cache across the TP ranks, so it buys capacity
-# without a second node: vllm#51705 measures +40.6% GPU KV tokens at TP8/DCP8
-# under the same fp8 cache dtype. The DSpark draft group stays replicated (the
-# draft attends over the whole sequence and throws its decode LSE away), which
-# is the whole substance of that PR -- unpatched, vLLM rejects the combination
-# at config time.
+# DCP shards the target's KV cache across the TP ranks; the DSpark draft group
+# stays replicated (the draft attends over the whole sequence and throws its
+# decode LSE away), which is the substance of vllm#51705 -- unpatched, vLLM
+# rejects the combination at config time. Interleave 1 is the round-robin
+# sharding that PR's per-row verify window assumes. GPU count is unchanged: DCP
+# reuses the TP ranks.
 #
-# a2a is the comm backend the PR validated; interleave 1 is the round-robin
-# sharding its per-row verify window assumes. GPU count is unchanged: DCP reuses
-# the TP ranks.
+# NB on this recipe DCP is a KV capacity REGRESSION, not the +40.6% #51705
+# reports: replicating the draft group adds 19 padding layers ("may waste at
+# most 380.00%") and 2,795,917 tokens at dcp=1 becomes 1,932,335 at dcp=8. The
+# PR's gain is measured against a dcp=1 baseline 2.2x worse than ours.
+#
+# Comm backend: a2a is what #51705 validated, but run 32215249474 took an
+# HSA_STATUS_ERROR_EXCEPTION 0x1016 on all 8 ranks inside aiter moe_sorting
+# (apply_routed_input_transform) on the first real ~99k-token prefill, on both
+# c4 and c8, where the dcp=1 baseline on the same image aborts zero times. ag_rs
+# is vLLM's default and the less exotic path, so it is the default here while
+# that is isolated; set DCP_COMM_BACKEND=a2a to go back.
+DCP_COMM_BACKEND="${DCP_COMM_BACKEND:-ag_rs}"
 DCP_ARGS=()
 if [ "$DCP_SIZE" -gt 1 ]; then
     if [ $(( TP % DCP_SIZE )) -ne 0 ]; then
@@ -197,7 +206,7 @@ if [ "$DCP_SIZE" -gt 1 ]; then
     fi
     DCP_ARGS=(
         --decode-context-parallel-size "$DCP_SIZE"
-        --dcp-comm-backend a2a
+        --dcp-comm-backend "$DCP_COMM_BACKEND"
         --cp-kv-cache-interleave-size 1
     )
 fi
