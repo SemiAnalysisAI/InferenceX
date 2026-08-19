@@ -58,8 +58,17 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     cleanup_and_save_logs() {
         if [[ -n "${GITHUB_ACTIONS:-}" && -n "${JOB_ID:-}" ]]; then
             local art_dir="$GITHUB_WORKSPACE/benchmark_artifacts"
+            local job_logs_dir="$BENCHMARK_LOGS_DIR/logs/slurm_job-${JOB_ID}"
+            local server_logs_dir="$BENCHMARK_LOGS_DIR/server_logs/slurm_job-${JOB_ID}"
             mkdir -p "$art_dir"
             cp -r "$BENCHMARK_LOGS_DIR"/slurm_job-${JOB_ID}.{out,err} "$art_dir/" 2>/dev/null || true
+            if [[ -d "$server_logs_dir" && ! -f "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" ]]; then
+                tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" \
+                    -C "$server_logs_dir" . 2>/dev/null || true
+            elif [[ -d "$job_logs_dir" && ! -f "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" ]]; then
+                tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" \
+                    -C "$job_logs_dir" . 2>/dev/null || true
+            fi
         fi
         # Print .err inline so failures are visible in CI output
         local err_file="$BENCHMARK_LOGS_DIR/slurm_job-${JOB_ID:-unknown}.err"
@@ -78,7 +87,15 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_mi355x_${FRAMEWORK}.sh"
     if [[ "$FRAMEWORK" == "sglang-disagg" ]] || [[ "$FRAMEWORK" == "vllm-disagg" ]] || [[ "$FRAMEWORK" == "atom-disagg" ]]; then
-        BENCHMARK_SUBDIR="multi_node"
+        # Agentic recipes live under multi_node/agentic/ and export the
+        # HiCache tunables (page-size, io-backend, ...); fixed-seq-len recipes
+        # live at the multi_node/ root. Honor SCENARIO_SUBDIR so agentic-coding
+        # configs pick the agentic recipe instead of the root one.
+        if [[ "${SCENARIO_SUBDIR}" == "agentic/" ]]; then
+            BENCHMARK_SUBDIR="multi_node/agentic"
+        else
+            BENCHMARK_SUBDIR="multi_node"
+        fi
     else
         BENCHMARK_SUBDIR="single_node/fixed_seq_len"
     fi
@@ -126,7 +143,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     # search for "FRAMEWORK_DIFF_IF_STATEMENT #3" for this if-statement
     # Find the latest log directory that contains the data
 
-    if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
+    if [[ "${EVAL_ONLY:-false}" != "true" && "${IS_AGENTIC:-0}" != "1" ]]; then
         cat > collect_latest_results.py <<'PY'
 import os, sys
 job_dir, isl, osl, nexp, framework = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4]), sys.argv[5]
@@ -172,12 +189,64 @@ PY
             shopt -s nullglob
             for eval_file in "$EVAL_DIR"/*; do
                 [ -f "$eval_file" ] || continue
-                cp "$eval_file" "$GITHUB_WORKSPACE/"
-                echo "Copied eval artifact: $(basename "$eval_file")"
+                eval_dest="$GITHUB_WORKSPACE/$(basename "$eval_file")"
+                rm -f "$eval_dest"
+                # Eval artifacts are created as root inside the container; sudo
+                # is required to overwrite any stale root-owned files in the
+                # workspace from prior runs on this runner.
+                if sudo cp "$eval_file" "$eval_dest"; then
+                    sudo chown "$(id -u):$(id -g)" "$eval_dest" 2>/dev/null || true
+                    echo "Copied eval artifact: $(basename "$eval_file")"
+                else
+                    echo "ERROR: failed to copy eval artifact: $(basename "$eval_file")" >&2
+                    exit 1
+                fi
             done
             shopt -u nullglob
         else
             echo "WARNING: RUN_EVAL=true but no eval results found under $BENCHMARK_LOGS_DIR/logs"
+        fi
+    fi
+
+    # Stage agentic raw artifacts + server logs for the CI upload steps.
+    # server_sglang.sh copies /run_logs/slurm_job-<id> to
+    # $BENCHMARK_LOGS_DIR/logs/slurm_job-<id> on shared storage, and
+    # trace_replay.sh writes each concurrency's aiperf artifacts under
+    # agentic/conc_<N>/ (mirroring agentic_srt.sh). benchmark-multinode-tmpl.yml
+    # uploads them from $GITHUB_WORKSPACE/LOGS/agentic/conc_*/... plus a
+    # multinode_server_logs.tar.gz, so preserve the conc_<N>/ nesting here
+    # before the logs dir is removed below. The agg result JSON is already
+    # written straight to the mounted workspace by the existing agentic
+    # aggregation module.
+    if [[ "${IS_AGENTIC:-0}" == "1" ]]; then
+        JOB_LOGS_DIR="$BENCHMARK_LOGS_DIR/logs/slurm_job-${JOB_ID}"
+        if [ -d "$JOB_LOGS_DIR" ]; then
+            # trace_replay.sh always nests artifacts under agentic/conc_<N>/.
+            # Copy the whole agentic/ tree so the conc_<N>/ subdirs are
+            # preserved for the LOGS/agentic/conc_*/... upload globs.
+            AGENTIC_SRC="$JOB_LOGS_DIR/agentic"
+            if [ -d "$AGENTIC_SRC" ] && find "$AGENTIC_SRC" -mindepth 1 -maxdepth 1 -type d -name 'conc_*' -print -quit 2>/dev/null | grep -q .; then
+                echo "Staging agentic raw artifacts from $AGENTIC_SRC"
+                mkdir -p "$GITHUB_WORKSPACE/LOGS/agentic"
+                cp -r "$AGENTIC_SRC"/. "$GITHUB_WORKSPACE/LOGS/agentic/"
+                # Container artifacts arrive root-owned; chown/chmod so git clean
+                # and later jobs (possibly a different runner user) can remove LOGS/.
+                sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE/LOGS" 2>/dev/null || true
+                chmod -R a+rwX "$GITHUB_WORKSPACE/LOGS" 2>/dev/null || true
+                ls -laR "$GITHUB_WORKSPACE/LOGS/agentic"
+            else
+                echo "WARNING: no agentic conc_*/ artifacts found under $JOB_LOGS_DIR/agentic"
+            fi
+            # Server/router/prefill/decode logs for the multinode_server_logs_* artifact.
+            SERVER_LOGS_DIR="$BENCHMARK_LOGS_DIR/server_logs/slurm_job-${JOB_ID}"
+            [[ -d "$SERVER_LOGS_DIR" ]] || SERVER_LOGS_DIR="$JOB_LOGS_DIR"
+            if tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$SERVER_LOGS_DIR" . 2>/dev/null; then
+                echo "Created multinode_server_logs.tar.gz"
+            else
+                echo "WARNING: failed to create multinode_server_logs.tar.gz"
+            fi
+        else
+            echo "WARNING: agentic staging skipped; $JOB_LOGS_DIR not found"
         fi
     fi
 
@@ -268,6 +337,7 @@ else
         --container-remap-root \
         --no-container-entrypoint --export=ALL,AIPERF_DATASET_MMAP_CACHE_DIR=/aiperf_mmap_cache \
         bash "$BENCHMARK_SCRIPT"
+    benchmark_rc=$?
 
     scancel $JOB_ID
 
@@ -275,4 +345,6 @@ else
         echo "gpucore files exist. not good"
         rm -f gpucore.*
     fi
+
+    exit "$benchmark_rc"
 fi

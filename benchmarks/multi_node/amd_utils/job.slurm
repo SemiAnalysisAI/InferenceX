@@ -42,13 +42,26 @@ if [[ -z "${DOCKER_IMAGE_NAME:-}" ]]; then
 fi
 
 MODEL_NAME="${MODEL_NAME:-None}"
-if ! grep -q "^${MODEL_NAME}:" "$MODELS_YAML"; then
-    echo "Error: Model '$MODEL_NAME' not found in $MODELS_YAML"
-    echo "Available models:"
-    grep -E '^[A-Za-z]' "$MODELS_YAML" | sed 's/:.*$//' | sed 's/^/  - /'
-    exit 1
+# Resolve the models.yaml entry the same way server_sglang.sh does: agentic runs
+# (IS_AGENTIC) use the '<model>-AgentX' recipe, non-agentic disaggregated runs use
+# '<model>-DI'. Fall back to the bare model name if the variant key is absent.
+# MODEL_NAME itself is left unchanged so env.sh/server_sglang.sh still see the base name.
+if [[ "${IS_AGENTIC:-0}" == "1" || "${IS_AGENTIC:-}" == "true" ]]; then
+    MODEL_YAML_KEY="${MODEL_NAME}-AgentX"
+else
+    MODEL_YAML_KEY="${MODEL_NAME}-DI"
 fi
-echo "Model found: $MODEL_NAME"
+if ! grep -q "^${MODEL_YAML_KEY}:" "$MODELS_YAML"; then
+    if grep -q "^${MODEL_NAME}:" "$MODELS_YAML"; then
+        MODEL_YAML_KEY="$MODEL_NAME"
+    else
+        echo "Error: Model '$MODEL_YAML_KEY' (nor bare '$MODEL_NAME') not found in $MODELS_YAML"
+        echo "Available models:"
+        grep -E '^[A-Za-z]' "$MODELS_YAML" | sed 's/:.*$//' | sed 's/^/  - /'
+        exit 1
+    fi
+fi
+echo "Model found: $MODEL_YAML_KEY (MODEL_NAME=$MODEL_NAME, IS_AGENTIC=${IS_AGENTIC:-0})"
 
 RUN_FILE="server.sh"
 echo "Runfile set: $RUN_FILE"
@@ -57,29 +70,6 @@ echo "Runfile set: $RUN_FILE"
 # $(pwd) is amd_utils/ (the sbatch submit dir); go up 3 levels to reach the repo root.
 export DI_REPO_DIR=$(cd "$(pwd)/../../.." && pwd)
 
-# ── In-tree sglang patches: auto-apply for known-affected images ──────
-# sglang v0.5.12.post1 ships a known-broken MoRI PD-disaggregation
-# backend that crashes hybrid-attention models (GLM-5, Qwen3.5-MoE,
-# anything with state_types: List[StateType]) at startup. We carry an
-# in-tree overlay of mori/conn.py that fixes the wire format + the
-# legacy state_type fallback (see patches/README.md for the bug
-# analysis and patch detail).
-#
-# Auto-applied when the image tag contains "v0.5.12.post1", unless the
-# caller sets MORI_CONN_PATCH=skip. The overlay is appended to
-# ${EXTRA_DOCKER_MOUNTS:-} so callers can still inject other mounts.
-# Dedup guard avoids double-mounting if EXTRA_DOCKER_MOUNTS already
-# contains the target path (docker rejects duplicate destinations).
-_MORI_PATCH_FILE="$DI_REPO_DIR/benchmarks/multi_node/amd_utils/patches/mori_conn.py"
-_MORI_PATCH_TARGET="/sgl-workspace/sglang/python/sglang/srt/disaggregation/mori/conn.py"
-if [[ "${MORI_CONN_PATCH:-auto}" != "skip" ]] \
-   && [[ -f "$_MORI_PATCH_FILE" ]] \
-   && [[ "${DOCKER_IMAGE_NAME:-}" == *"v0.5.12.post1"* ]] \
-   && [[ "${EXTRA_DOCKER_MOUNTS:-}" != *"$_MORI_PATCH_TARGET"* ]]; then
-    EXTRA_DOCKER_MOUNTS="${EXTRA_DOCKER_MOUNTS:-} -v ${_MORI_PATCH_FILE}:${_MORI_PATCH_TARGET}:ro"
-    export EXTRA_DOCKER_MOUNTS
-    echo "[job.slurm] auto-applied MoRI conn.py overlay: ${_MORI_PATCH_FILE}"
-fi
 xP="${xP:-1}"
 yD="${yD:-1}"
 
@@ -106,6 +96,10 @@ DECODE_MTP_SIZE=${DECODE_MTP_SIZE:-0}
 ROUTER_TYPE="${ROUTER_TYPE:-vllm-router}"
 ROUTER_PORT="${ROUTER_PORT:-30000}"
 PROXY_PING_PORT="${PROXY_PING_PORT:-36367}"
+# At info the router logs several CONSISTENT_HASH_DEBUG lines per request, which
+# dominated the artifact. Raise to info when routing decisions are the thing
+# under investigation.
+ROUTER_LOG_LEVEL="${ROUTER_LOG_LEVEL:-warn}"
 
 # =============================================================================
 # Model Path Resolution
@@ -202,11 +196,41 @@ else
         fi
     }
 
-    if check_model_path "$MODEL_DIR/$MODEL_NAME" "$MODEL_DIR"; then
+    # Extract hf_dir from models.yaml (same as vllm-disagg path above)
+    SGL_DISK_DIR_NAME=$(awk '/^'"$MODEL_NAME"':/{found=1; next}
+        found && /^[^ ]/{exit}
+        found && /hf_dir:/{gsub(/[" ]/, "", $2); print $2; exit}' "$MODELS_YAML")
+    SGL_DISK_DIR_NAME="${SGL_DISK_DIR_NAME:-$MODEL_NAME}"
+
+    # Prefer the caller-supplied MODEL_PATH (recipe scripts set this explicitly);
+    # fall back to MODEL_DIR/hf_dir then MODEL_DIR/MODEL_NAME.
+    if [[ -n "${MODEL_PATH:-}" && "$MODEL_PATH" != "$MODEL_DIR" ]]; then
+        # Caller already resolved the path (e.g. MODEL_PATH=/it-share/hf_cache/models--...)
+        # Use it directly if it exists on all nodes, otherwise try subdirectory combos.
+        if check_model_path "$MODEL_PATH" "MODEL_PATH (caller-supplied)"; then
+            echo "Selected MODEL_PATH: $MODEL_PATH (caller-supplied, available on all nodes)"
+        elif check_model_path "$MODEL_PATH/$SGL_DISK_DIR_NAME" "$MODEL_PATH/$SGL_DISK_DIR_NAME"; then
+            MODEL_PATH="$MODEL_PATH/$SGL_DISK_DIR_NAME"
+            echo "Selected MODEL_PATH: $MODEL_PATH (available on all nodes)"
+        elif check_model_path "$MODEL_PATH/$MODEL_NAME" "$MODEL_PATH/$MODEL_NAME"; then
+            MODEL_PATH="$MODEL_PATH/$MODEL_NAME"
+            echo "Selected MODEL_PATH: $MODEL_PATH (available on all nodes)"
+        else
+            echo "FATAL ERROR: Model '$MODEL_NAME' not found on ALL allocated nodes in:"
+            echo "  - $MODEL_PATH"
+            echo "  - $MODEL_PATH/$SGL_DISK_DIR_NAME"
+            echo "  - $MODEL_PATH/$MODEL_NAME"
+            exit 1
+        fi
+    elif check_model_path "$MODEL_DIR/$SGL_DISK_DIR_NAME" "$MODEL_DIR/$SGL_DISK_DIR_NAME"; then
+        MODEL_PATH="$MODEL_DIR/$SGL_DISK_DIR_NAME"
+        echo "Selected MODEL_PATH: $MODEL_PATH (available on all nodes)"
+    elif check_model_path "$MODEL_DIR/$MODEL_NAME" "$MODEL_DIR"; then
         MODEL_PATH="$MODEL_DIR/$MODEL_NAME"
         echo "Selected MODEL_PATH: $MODEL_PATH (available on all nodes)"
     else
         echo "FATAL ERROR: Model '$MODEL_NAME' not found on ALL allocated nodes in:"
+        echo "  - $MODEL_DIR/$SGL_DISK_DIR_NAME"
         echo "  - $MODEL_DIR/$MODEL_NAME"
         exit 1
     fi
@@ -310,6 +334,12 @@ export RUNNER_TYPE="${RUNNER_TYPE:-}"
 export RESULT_FILENAME="${RESULT_FILENAME:-}"
 export SPEC_DECODING="${SPEC_DECODING:-}"
 export IS_MULTINODE="${IS_MULTINODE:-false}"
+export SWEBENCH_USE_MODAL="${SWEBENCH_USE_MODAL:-false}"
+export MODAL_TOKEN_ID="${MODAL_TOKEN_ID:-}"
+export MODAL_TOKEN_SECRET="${MODAL_TOKEN_SECRET:-}"
+export HF_TOKEN="${HF_TOKEN:-}"
+export SCENARIO_TYPE="${SCENARIO_TYPE:-}"
+export EVAL_LIMIT="${EVAL_LIMIT:-}"
 
 SANITIZED_USER=$(echo "$USER_NAME" | tr -c 'a-zA-Z0-9_.-' '_')
 export DOCKER_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_${MODEL_NAME}_${SLURM_JOB_ID}"
@@ -317,14 +347,67 @@ export DOCKER_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_${MODEL_NAME}_${S
 # vLLM external router container.
 # NOTE: vllm/vllm-router only retains ~16 recent nightlies on Docker Hub; older
 # dated tags are garbage-collected (manifest unknown)
-VLLM_ROUTER_IMAGE="${VLLM_ROUTER_IMAGE:-vllm/vllm-router:nightly-20260617-e667ebb}"
+VLLM_ROUTER_IMAGE="${VLLM_ROUTER_IMAGE:-vllm/vllm-router:nightly-20260716-1fbcde7}"
 ROUTER_CONT_NAME="router_vllm_${SANITIZED_USER}_${SLURM_JOB_ID}"
+# Separate agentic benchmark-client container (see CLIENT_IMAGE handling below).
+CLIENT_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_client_${SLURM_JOB_ID}"
 export RUN_FILE_FULL="$WS_PATH/${RUN_FILE}"
 
 SELECTED_NODELIST_SRUN=$(echo "$SELECTED_NODES" | paste -sd,)
 
+# =============================================================================
+# RDMA QoS / DCQCN Pre-flight Check
+# =============================================================================
+# Gate the run on NIC QoS (PFC/DSCP) and DCQCN config on every node before
+# any container/GPU time is spent. Runs on the bare host (nicctl is a host
+# tool). See rdma_check.sh for details.
+RDMA_CHECK_SCRIPT="$(pwd)/helpers/rdma_check.sh"
+if [[ "${SKIP_RDMA_CHECK:-0}" == "1" ]]; then
+    echo "[INFO] SKIP_RDMA_CHECK=1 set; skipping RDMA QoS/DCQCN pre-flight check"
+elif [[ -f "$RDMA_CHECK_SCRIPT" ]]; then
+    echo "Checking RDMA QoS/DCQCN configuration on all $NUM_NODES allocated node(s)..."
+    srun --nodelist="$SELECTED_NODELIST_SRUN" --ntasks=$NUM_NODES bash "$RDMA_CHECK_SCRIPT"
+    RDMA_CHECK_RC=$?
+    if [[ $RDMA_CHECK_RC -ne 0 ]]; then
+        echo "FATAL: RDMA QoS/DCQCN pre-flight check failed on one or more nodes (see [FAIL] lines above)."
+        echo "       Set SKIP_RDMA_CHECK=1 to bypass (not recommended -- MoRI cross-node transfers would run unprotected by PFC/DCQCN)."
+        exit 1
+    fi
+    echo "RDMA QoS/DCQCN pre-flight check passed on all $NUM_NODES node(s)"
+else
+    echo "[WARN] $RDMA_CHECK_SCRIPT not found; skipping RDMA QoS/DCQCN pre-flight check"
+fi
+
+collect_server_logs() {
+  local shared_dir="${BENCHMARK_LOGS_DIR}/server_logs/slurm_job-${SLURM_JOB_ID}"
+  mkdir -p "$shared_dir/nodes"
+  echo "[logs] collecting per-node server logs into $shared_dir/nodes"
+  srun --nodelist="$SELECTED_NODELIST_SRUN" --nodes="$NUM_NODES" \
+    --ntasks="$NUM_NODES" --ntasks-per-node=1 bash -c '
+      host=$(hostname -s)
+      src="/tmp/slurm_job-'"$SLURM_JOB_ID"'"
+      dst="'"$shared_dir"'/nodes/$host"
+      mkdir -p "$dst"
+      if [[ -d "$src" ]]; then
+        cp -r "$src"/. "$dst"/ 2>/dev/null || true
+      fi
+      eval "$DOCKER_CMD_DETECT"
+      $DOCKER_CMD logs "'"$DOCKER_CONT_NAME"'" >"$dst/container.log" 2>&1 || true
+      $DOCKER_CMD logs "'"$ROUTER_CONT_NAME"'" >"$dst/router_container.log" 2>&1 || true
+      printf "host=%s\njob=%s\n" "$host" "'"$SLURM_JOB_ID"'" >"$dst/metadata.txt"
+    ' 2>/dev/null || echo "[logs] WARN: per-node log collection was incomplete"
+}
+
 cleanup() {
-  echo "[${SLURM_JOB_ID}] termination received on $(hostname); cleaning up..."
+  echo "[${SLURM_JOB_ID}] termination received on $(hostname); cleaning up container + stale logs..."
+  collect_server_logs || true
+  # Backstop: on scancel/timeout/step-hang the foreground `exec docker run`
+  # client is killed before --rm can fire, so the container (and its GPU/ports/
+  # :30000) leaks and the step never returns. Force-remove THIS job's container
+  # on every allocated node. Scoped to $DOCKER_CONT_NAME so it never touches
+  # other users' containers. (Ported from InferenceY 51ebfa88.)
+  srun --nodelist="$SELECTED_NODELIST_SRUN" \
+    bash -c 'eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD rm -f '"$DOCKER_CONT_NAME"' 2>/dev/null || true' 2>/dev/null || true
   rm -rf ${SLURM_SUBMIT_DIR}/logs 2>/dev/null || true
   echo "[${SLURM_JOB_ID}] cleanup done."
 }
@@ -366,7 +449,6 @@ DOCKER_ENV_COMMON=(
     -e BENCH_MAX_CONCURRENCY=\$BENCH_MAX_CONCURRENCY
     -e BENCH_REQUEST_RATE=\$BENCH_REQUEST_RATE
     -e TQDM_MININTERVAL=\$TQDM_MININTERVAL
-    -e DRY_RUN=\$DRY_RUN
     -e BENCHMARK_LOGS_DIR=/benchmark_logs
     -e ENGINE=\$ENGINE
     -e WS_PATH=${WS_PATH}
@@ -379,14 +461,67 @@ DOCKER_ENV_COMMON=(
     -e RUNNER_TYPE=\$RUNNER_TYPE
     -e RESULT_FILENAME=\$RESULT_FILENAME
     -e SPEC_DECODING=\$SPEC_DECODING
+    # DISAGG was never forwarded into the container at all (not even under a
+    # different name), so process_agentic_result.py's env_bool("DISAGG") always
+    # defaulted to false in the result JSON regardless of the actual topology.
+    -e DISAGG=\${DISAGG:-false}
     -e PREFILL_TP_SIZE=\$PREFILL_TP_SIZE
+    # PREFILL_TP/DECODE_TP/*_NUM_WORKERS (below, undecorated -- distinct from the
+    # *_SIZE vars server_sglang.sh uses for launch args) are what
+    # process_agentic_result.py's _gpu_shape() reads for multinode runs. Without
+    # these the container never sees them (only *_SIZE was passed), so agentic
+    # result JSONs silently recorded tp=0 / prefill_tp=0 / prefill_num_workers=0
+    # for every multinode run.
+    -e PREFILL_TP=\$PREFILL_TP
+    -e PREFILL_NUM_WORKERS=\$PREFILL_NUM_WORKERS
     -e PREFILL_ENABLE_EP=\$PREFILL_ENABLE_EP
     -e PREFILL_ENABLE_DP=\$PREFILL_ENABLE_DP
+    # process_agentic_result.py reads these (distinct from the ENABLE_* launch
+    # booleans above) for agg_bmk.json's parallelism metadata; without them it
+    # defaulted to ep=1/dp_attention=false even for DEP8 arms.
+    -e PREFILL_EP=\${PREFILL_EP:-1}
+    -e PREFILL_DP_ATTN=\${PREFILL_DP_ATTN:-false}
+    -e PREFILL_CONTEXT_LENGTH=\${PREFILL_CONTEXT_LENGTH:-}
+    -e PREFILL_CHUNKED_PREFILL_SIZE=\${PREFILL_CHUNKED_PREFILL_SIZE:-}
+    -e DISABLE_CUSTOM_ALL_REDUCE=\${DISABLE_CUSTOM_ALL_REDUCE:-}
+    -e MAX_MODEL_LEN=\${MAX_MODEL_LEN:-}
+    -e DURATION=\${DURATION:-1800}
+    -e IS_AGENTIC=\${IS_AGENTIC:-0}
+    -e KV_OFFLOADING=\${KV_OFFLOADING:-none}
+    -e KV_OFFLOAD_BACKEND=\${KV_OFFLOAD_BACKEND:-}
+    -e KV_OFFLOAD_BACKEND_METADATA=\"\${KV_OFFLOAD_BACKEND_METADATA:-}\"
+    -e TOTAL_CPU_DRAM_GB=\${TOTAL_CPU_DRAM_GB:-}
+    -e ENABLE_METRICS=\${ENABLE_METRICS:-0}
+    -e PREFILL_ROUTER_POLICY=\${PREFILL_ROUTER_POLICY:-random}
+    -e DECODE_ROUTER_POLICY=\${DECODE_ROUTER_POLICY:-random}
+    -e IBDEVICES=\${IBDEVICES:-}
+    -e MORI_IO_SQ_BACKOFF_TIMEOUT_US=\${MORI_IO_SQ_BACKOFF_TIMEOUT_US:-}
+    -e MORI_IO_QP_MAX_SEND_WR=\${MORI_IO_QP_MAX_SEND_WR:-}
+    -e MORI_IO_QP_MAX_CQE=\${MORI_IO_QP_MAX_CQE:-}
+    -e MORI_IO_QP_MAX_SGE=\${MORI_IO_QP_MAX_SGE:-}
+    -e MORI_IO_TC_DISABLE=\${MORI_IO_TC_DISABLE:-}
+    -e MORI_RDMA_TC=\${MORI_RDMA_TC:-}
+    -e MORI_IO_TC=\${MORI_IO_TC:-}
+    -e MORIIO_READ_MODE=\${MORIIO_READ_MODE:-}
     -e DECODE_TP_SIZE=\$DECODE_TP_SIZE
+    -e DECODE_TP=\$DECODE_TP
+    -e DECODE_NUM_WORKERS=\$DECODE_NUM_WORKERS
     -e DECODE_ENABLE_EP=\$DECODE_ENABLE_EP
     -e DECODE_ENABLE_DP=\$DECODE_ENABLE_DP
+    # See PREFILL_EP/PREFILL_DP_ATTN comment above -- decode counterpart.
+    -e DECODE_EP=\${DECODE_EP:-1}
+    -e DECODE_DP_ATTN=\${DECODE_DP_ATTN:-false}
     -e DECODE_MTP_SIZE=\$DECODE_MTP_SIZE
     -e IS_MULTINODE=\$IS_MULTINODE
+    -e DRY_RUN=\${DRY_RUN:-0}
+    # SWE-bench agentic eval runs inside this container and needs Modal/HF
+    # credentials to launch sandboxes and download datasets.
+    -e SWEBENCH_USE_MODAL=\${SWEBENCH_USE_MODAL:-false}
+    -e MODAL_TOKEN_ID=\${MODAL_TOKEN_ID:-}
+    -e MODAL_TOKEN_SECRET=\${MODAL_TOKEN_SECRET:-}
+    -e HF_TOKEN=\${HF_TOKEN:-}
+    -e SCENARIO_TYPE=\${SCENARIO_TYPE:-}
+    -e \"EVAL_LIMIT=\${EVAL_LIMIT:-}\"
 )
 
 # Engine-specific env vars
@@ -419,7 +554,6 @@ elif [[ "$ENGINE" == "atom-disagg" ]]; then
         -e MAX_MODEL_LEN=${MAX_MODEL_LEN:-}
         -e MAX_NUM_BATCHED_TOKENS=${MAX_NUM_BATCHED_TOKENS:-}
         -e EXTRA_SERVER_ARGS=\${EXTRA_SERVER_ARGS:-}
-        -e IBDEVICES=${IBDEVICES:-}
     )
 else
     DOCKER_ENV_ENGINE=(
@@ -427,8 +561,59 @@ else
     )
 fi
 
+# HiCache / Mooncake settings are delivered via a bind-mounted config file rather
+# than a long list of docker -e flags. Write it once to the shared benchmark-logs
+# dir (already a host path, visible on every node) and mount it read-only at
+# /config/hicache_mc.env, where env.sh sources it before applying its defaults.
+# Empty values are preserved so env.sh's "${VAR:-default}" fallbacks still apply.
+HICACHE_MC_CONFIG="${BENCHMARK_LOGS_DIR}/hicache_mc_${SLURM_JOB_ID}.env"
+cat > "$HICACHE_MC_CONFIG" <<EOF
+HICACHE_RATIO=${HICACHE_RATIO:-}
+FORCE_HICACHE_RATIO=${FORCE_HICACHE_RATIO:-}
+HICACHE_HOST_POOL_COUNT=${HICACHE_HOST_POOL_COUNT:-}
+HICACHE_PAGE_SIZE=${HICACHE_PAGE_SIZE:-}
+HICACHE_IO_BACKEND=${HICACHE_IO_BACKEND:-}
+HICACHE_MEM_LAYOUT=${HICACHE_MEM_LAYOUT:-}
+HICACHE_WRITE_POLICY=${HICACHE_WRITE_POLICY:-}
+HICACHE_STORAGE_BACKEND=${HICACHE_STORAGE_BACKEND:-}
+HICACHE_PREFETCH_POLICY=${HICACHE_PREFETCH_POLICY:-}
+MC_PATCH_HOSTPOOL=${MC_PATCH_HOSTPOOL:-}
+MC_MASTER_PORT=${MC_MASTER_PORT:-}
+MC_METADATA_PORT=${MC_METADATA_PORT:-}
+MC_METRICS_PORT=${MC_METRICS_PORT:-}
+MC_MASTER_THREADS=${MC_MASTER_THREADS:-}
+MC_EVICTION_HIGH_WATERMARK=${MC_EVICTION_HIGH_WATERMARK:-}
+MC_PROTOCOL=${MC_PROTOCOL:-}
+MC_GLOBAL_SEG=${MC_GLOBAL_SEG:-}
+MC_DEVICE=${MC_DEVICE:-}
+MC_MASTER_ADDR=${MC_MASTER_ADDR:-}
+MC_METADATA_SERVER=${MC_METADATA_SERVER:-}
+EOF
+echo "[config] wrote HiCache/Mooncake settings -> $HICACHE_MC_CONFIG"
+
 # Engine-specific container filter for pre-clean
 CONT_FILTER="name=^container_${ENGINE}_"
+
+# =============================================================================
+# Optional: separate benchmark-client image (agentic runs) — node-0 sibling
+# =============================================================================
+# When CLIENT_IMAGE is set, node 0 runs the aiperf trace replay in its own
+# sibling container built from CLIENT_IMAGE (which ships a pre-baked aiperf +
+# deps), instead of rebuilding the aiperf venv inside the server container every
+# run. Give the server container access to the host docker socket + CLI and the
+# host paths the sibling needs for its bind mounts. These fragments are expanded
+# at submit time and injected into the server `docker run` below; empty (no-op)
+# when CLIENT_IMAGE is unset, so the in-container aiperf path is unchanged.
+CLIENT_DOCKER_MOUNTS=""
+CLIENT_DOCKER_ENV=""
+if [[ -n "${CLIENT_IMAGE:-}" ]]; then
+    HOST_DOCKER_BIN="$(command -v docker || echo /usr/bin/docker)"
+    CLIENT_DOCKER_MOUNTS="-v /var/run/docker.sock:/var/run/docker.sock -v ${HOST_DOCKER_BIN}:/usr/bin/docker"
+    CLIENT_DOCKER_ENV="-e CLIENT_IMAGE=${CLIENT_IMAGE} -e HOST_REPO_DIR=${DI_REPO_DIR} -e HOST_MODEL_DIR=${MODEL_DIR} -e HOST_BENCH_LOGS=${BENCHMARK_LOGS_DIR} -e CLIENT_CONT_NAME=${CLIENT_CONT_NAME}"
+    echo "[client] node-0 sibling benchmark-client image enabled: ${CLIENT_IMAGE}"
+    # Best-effort pre-pull on all nodes so node 0's sibling launch doesn't stall.
+    srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c 'eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD pull '"$CLIENT_IMAGE"' >/dev/null 2>&1 || true' 2>/dev/null || true
+fi
 
 srun \
   --nodelist="$SELECTED_NODELIST_SRUN" \
@@ -444,9 +629,9 @@ echo \"Rank \$SLURM_PROCID on \$(hostname)\"
 eval \"\$DOCKER_CMD_DETECT\"
 echo \"[docker-detect] rank \$SLURM_PROCID: DOCKER_CMD=\$DOCKER_CMD\"
 
-# Enable out-of-tree RDMA library mounts for atom-disagg (mooncake requires host RDMA stack)
+# Enable out-of-tree RDMA library mounts for MoRIIO/Mooncake host RDMA stacks.
 RDMA_MOUNTS=()
-if [[ "$ENGINE" == "atom-disagg" ]]; then
+if [[ "$ENGINE" == "atom-disagg" || "$ENGINE" == "vllm-disagg" ]]; then
 
 # When the container base OS differs from the host (e.g. Ubuntu 24.04 image
 # on a 22.04 host), the container's bundled libibverbs/libionic may be
@@ -520,11 +705,24 @@ if [[ \${#RDMA_MOUNTS[@]} -gt 0 ]]; then
 else
     echo \"[rdma] no out-of-tree RDMA mounts needed\"
 fi
-fi  # end: if ENGINE == atom-disagg
+fi  # end: if ENGINE == atom-disagg || vllm-disagg
 
-# Pre-clean (idempotent)
+# Pre-clean (idempotent): stop then force-remove so GPU VRAM is released before
+# the sanity gate. stop-only left containers in Created/Exited state on some nodes.
 \$DOCKER_CMD ps -aq --filter \"$CONT_FILTER\" | xargs -r \$DOCKER_CMD rm -f || true
-\$DOCKER_CMD ps -aq | xargs -r \$DOCKER_CMD stop || true
+\$DOCKER_CMD ps -aq | xargs -r \$DOCKER_CMD stop -t 15 || true
+\$DOCKER_CMD ps -aq | xargs -r \$DOCKER_CMD rm -f || true
+sleep 2
+
+# GPU sanity gate: containers are stopped, so any remaining VRAM use is a bare
+# (non-containerized) process hogging the GPU -- fail fast (and name it)
+# instead of OOMing in model load ~30 min later. set -e + --kill-on-bad-exit
+# tears down the whole job on non-zero exit.
+if [[ \"${SKIP_GPU_SANITY:-0}\" == \"1\" ]]; then
+    echo \"[INFO] SKIP_GPU_SANITY=1 set; skipping GPU sanity pre-flight check\"
+else
+    bash \"$DI_REPO_DIR/benchmarks/multi_node/amd_utils/helpers/gpu_sanity.sh\"
+fi
 
 # Start vLLM external router container on node 0
 if [[ \"$ENGINE\" == \"vllm-disagg\" && \"$ROUTER_TYPE\" == \"vllm-router\" && \"\$SLURM_PROCID\" == \"0\" ]]; then
@@ -532,6 +730,7 @@ if [[ \"$ENGINE\" == \"vllm-disagg\" && \"$ROUTER_TYPE\" == \"vllm-router\" && \
     \$DOCKER_CMD run -d \
         --name \"$ROUTER_CONT_NAME\" \
         --network host \
+        --ulimit nofile=1048576:1048576 \
         -v /tmp:/run_logs \
         \"$VLLM_ROUTER_IMAGE\" \
         bash -lc \"mkdir -p /run_logs/slurm_job-${SLURM_JOB_ID} && exec vllm-router \
@@ -543,7 +742,7 @@ if [[ \"$ENGINE\" == \"vllm-disagg\" && \"$ROUTER_TYPE\" == \"vllm-router\" && \
             --policy consistent_hash \
             --prefill-policy consistent_hash \
             --decode-policy consistent_hash \
-            --log-level info 2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/vllm_router_\$(hostname).log \"
+            --log-level ${ROUTER_LOG_LEVEL} 2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/vllm_router_\$(hostname).log \"
 fi
 
 # Skip exec on vllm-disagg rank 0 so we can stop the router after the main
@@ -572,6 +771,7 @@ fi
     --device=/dev/infiniband/uverbs7 \
     --ulimit memlock=-1 \
     --ulimit stack=67108864 \
+    --ulimit nofile=1048576:1048576 \
     --network host \
     --ipc host \
     --group-add video \
@@ -586,10 +786,13 @@ fi
     -v /tmp:/run_logs \
     -v ${BENCHMARK_LOGS_DIR}:/benchmark_logs \
     -v ${DI_REPO_DIR}:${DOCKER_MOUNT_PATH} \
+    -v ${HICACHE_MC_CONFIG}:/config/hicache_mc.env:ro \
     ${EXTRA_DOCKER_MOUNTS:-} \
+    ${CLIENT_DOCKER_MOUNTS} \
     \${RDMA_MOUNTS[@]+"\${RDMA_MOUNTS[@]}"} \
     ${DOCKER_ENV_COMMON[*]} \
     ${DOCKER_ENV_ENGINE[*]} \
+    ${CLIENT_DOCKER_ENV} \
     --name \"$DOCKER_CONT_NAME\" \
     --entrypoint \"\" \
     \"$DOCKER_IMAGE_NAME\" bash -lc '
@@ -604,9 +807,11 @@ echo \"[rank 0] Main container exited (rc=\$DOCKER_EXIT_CODE). Stopping vllm-rou
 \$DOCKER_CMD rm -f \"$ROUTER_CONT_NAME\" 2>/dev/null || true
 exit \$DOCKER_EXIT_CODE
 "
+SRUN_RC=$?
+collect_server_logs || true
 
 if [[ "${KEEP_CONTAINERS}" != "1" ]]; then
-    srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c 'eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD rm -f '"$DOCKER_CONT_NAME"' 2>/dev/null || true'
+    srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c 'eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD rm -f '"$DOCKER_CONT_NAME"' '"$CLIENT_CONT_NAME"' 2>/dev/null || true'
 
     # Clean up vLLM external router container on node 0
     if [[ "$ENGINE" == "vllm-disagg" && "$ROUTER_TYPE" == "vllm-router" ]]; then
@@ -615,3 +820,5 @@ if [[ "${KEEP_CONTAINERS}" != "1" ]]; then
         '
     fi
 fi
+
+exit "$SRUN_RC"

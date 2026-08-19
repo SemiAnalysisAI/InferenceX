@@ -242,6 +242,7 @@ jobs:
             conc: ${{ matrix.config.conc[0] }}
             kv-offloading: ${{ matrix.config.kv-offloading }}
             kv-offload-backend: ${{ matrix.config.kv-offload-backend }}
+            total-cpu-dram-gb: ${{ matrix.config['total-cpu-dram-gb'] }}
             duration: ${{ inputs.duration-override != '' && inputs.duration-override || matrix.config.duration }}
             run-eval: false
             scenario-type: agentic-coding
