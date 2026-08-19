@@ -81,7 +81,6 @@ backend:
     VLLM_V2_WARMUP_MAX_NUM_SEQS: "16"
     TILELANG_CLEANUP_TEMP_FILES: "1"
     VLLM_ALLREDUCE_USE_SYMM_MEM: "0"
-    TORCH_SYMMMEM: "NVSHMEM"
     NCCL_CUMEM_ENABLE: "1"
     NCCL_MNNVL_ENABLE: "1"
     NCCL_NVLS_ENABLE: "1"
@@ -94,9 +93,6 @@ backend:
     VLLM_DSV4_MEGA_FP8_COMBINE: "1"
     VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "1024"
     VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
-    UCX_MEMTYPE_CACHE: "n"
-    UCX_NET_DEVICES: "mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1"
-    UCX_TLS: "rc,cuda_copy"
     NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
     NCCL_P2P_LEVEL: "NVL"
     MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
@@ -111,7 +107,6 @@ backend:
       kv-cache-dtype: "fp8"
       tensor-parallel-size: 4
       pipeline-parallel-size: 1
-      disable-custom-all-reduce: true
       attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"use_fp4_indexer_cache":true}'
       max-model-len: 1048576
       max-num-seqs: 16
@@ -119,11 +114,9 @@ backend:
       trust-remote-code: true
       no-enable-flashinfer-autotune: true
       block-size: 256
-      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
       max-cudagraph-capture-size: 64
-      speculative-config: '{"method":"mtp","num_speculative_tokens":3}'
+      speculative-config: '{"method":"mtp","num_speculative_tokens":3,"rejection_sample_method":"synthetic","synthetic_acceptance_length":2.49}'
       gpu-memory-utilization: 0.94
-      stream-interval: 10
       no-disable-hybrid-kv-cache-manager: true
       tokenizer-mode: "deepseek_v4"
 
