@@ -7082,6 +7082,144 @@ qwen3.5-fp4-b300-sglang-agentic-mtp:
       - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16, 20, 24, 28, 32] }
       - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [36, 44, 52] }
 
+# Controlled AgentX power A/B: identical software, topology, MTP settings,
+# concurrency, and memory tier across FP8 and FP4. The HBM-only rows measure
+# the natural AgentX prefix-cache workload; HiCache isolates host-tier effects.
+qwen3.5-fp8-b300-sglang-agentic-power-ab:
+  image: lmsysorg/sglang:v0.5.16-cu130
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  runner: cluster:b300-nv
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: none, conc-list: [16, 32] }
+      - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 32] }
+
+qwen3.5-fp4-b300-sglang-agentic-power-ab:
+  image: lmsysorg/sglang:v0.5.16-cu130
+  model: nvidia/Qwen3.5-397B-A17B-NVFP4
+  model-prefix: qwen3.5
+  runner: cluster:b300-nv
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: none, conc-list: [16, 32] }
+      - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 32] }
+
+# CONC range conservative for H100's 80 GB HBM3 under the long-ISL with-
+# subagents corpus. hicache arm capped at conc 16 since high-conc + hicache
+# tends to flake on first runs and conc 16 covers the cliff. The bench script
+# sets WEKA_LOADER_OVERRIDE to the 256k-capped corpus variant.
+dsv4-fp4-gb300-dynamo-vllm-agentic:
+  image: vllm/vllm-openai:v0.21.0-ubuntu2404
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-vllm
+  router: { name: dynamo-router, version: "1.2.0.dev20260426" }
+  kv-p2p-transfer: nixl
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - search-space:
+      # Low-latency: same 1p6d shape as the mid tier but at much lower conc
+      # (32 vs 192). 32/6 ≈ 5 seqs per decode worker — well below saturation,
+      # so each request gets ~6× the per-request decode compute it would get
+      # at conc=192. Reuses the 1p6d recipe; no separate recipe file needed.
+      - spec-decoding: none
+        conc-list: [32]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/agentic/disagg-gb300-1p6d-dep4-tp4-agentic.yaml"
+        decode:
+          num-worker: 6
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # Mid: 1 prefill (DEP=4) + 6 decode (TP=4). 7 nodes / 28 GPUs.
+      # Mirrors fixed-seq-len conc=192 entry.
+      - spec-decoding: none
+        conc-list: [192]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/agentic/disagg-gb300-1p6d-dep4-tp4-agentic.yaml"
+        decode:
+          num-worker: 6
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # High-throughput: 4 prefill (DEP=4 each) + 1 decode (DEP=8). 6 nodes /
+      # 24 GPUs. Smallest 4096-class shape in fixed-seq-len; deep_gemm_mega_moe
+      # on both sides. Mirrors fixed-seq-len conc=4096 entry (4p1d variant).
+      - spec-decoding: none
+        conc-list: [4096]
+        prefill:
+          num-worker: 4
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/agentic/disagg-gb300-4p1d-dep4-dep8-24-c4096-agentic.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+
+qwen3.5-fp8-h100-sglang-agentic:
+  image: lmsysorg/sglang:v0.5.12-cu130
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  runner: cluster:h100-dgxc
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, ep: 8, kv-offloading: none,    conc-list: [1, 2, 4, 8, 12, 14, 16] }
+      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [12, 14, 16, 20, 24, 28, 32, 42] }
+
+# MTP speculative-decoding (spec-decoding: mtp) variant of
+# qwen3.5-fp8-h100-sglang-agentic: same TP8/EP8 GPU-resident and HiCache arms,
+# plus SGLang EAGLE MTP (num-steps 3, eagle-topk 1, 4 draft tokens = 3
+# speculative tokens) with simulated acceptance pinned to the golden AL 3.39
+# (golden_al_distribution/qwen3.5_mtp.yaml, thinking_on, K=3) -- the same value
+# the GB300 Qwen3.5 AgentX srt-slurm recipes use. Image moves to
+# lmsysorg/sglang:v0.5.16-cu130 because SGLANG_SIMULATE_ACC_TOKEN_MODE only
+# exists from v0.5.16; v0.5.14 is the version the fixed-seq-len H100 MTP entry
+# already runs. Conc lists are trimmed at the top end for the draft head's KV.
+
+# First Qwen3.5 AgentX recipe on H200, shipped spec-decode-only per the AgentX
+# policy that new agentic arms enable speculative decoding rather than running a
+# separate STP baseline (MODELS.md). SGLang EAGLE MTP (num-steps 3, eagle-topk 1,
+# 4 draft tokens = 3 speculative tokens) with simulated acceptance pinned to the
+# golden AL 3.39 (golden_al_distribution/qwen3.5_mtp.yaml, thinking_on, K=3).
+# Image is lmsysorg/sglang:v0.5.16-cu130: SGLANG_SIMULATE_ACC_TOKEN_MODE only
+# exists from v0.5.16, and v0.5.14 is what the fixed-seq-len H200 MTP entry runs.
+# Search space is the H100 AgentX shape widened for H200's 141 GB: the
+# fixed-seq-len H200 MTP entry already runs conc 4-128 at TP8/EP8 versus H100's
+# 4-32, so the GPU-resident arm extends to 24 and HiCache to 48.
 qwen3.5-fp8-h200-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.16-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8

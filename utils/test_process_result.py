@@ -1362,3 +1362,7 @@ printf '%s' "$GPU_METRICS_CSV"
             "test-sweep-evals:", 1
         )[0]
         assert "require-power: ${{ inputs.require-power }}" in single_node_job
+        agentic_job = workflow.split("test-sweep-agentic:", 1)[1].split(
+            "test-sweep-agentic-evals:", 1
+        )[0]
+        assert "require-power: ${{ inputs.require-power }}" in agentic_job

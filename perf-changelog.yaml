@@ -5927,6 +5927,18 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2550
 
 - config-keys:
+    - qwen3.5-fp8-b300-sglang-agentic-power-ab
+    - qwen3.5-fp4-b300-sglang-agentic-power-ab
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a controlled Qwen3.5 B300 AgentX power matrix across FP8/FP4, HBM-only/HiCache, and concurrency 16/32 using identical SGLang v0.5.16 TP2/EP2 MTP settings."
+    - "新增受控的 Qwen3.5 B300 AgentX 功耗矩阵：在相同的 SGLang v0.5.16、TP2/EP2 和 MTP 配置下，对比 FP8/FP4、仅 HBM/HiCache，以及并发 16/32。"
+    - "Allow workflow_dispatch AgentX jobs to fail closed when strict power validation is requested."
+    - "允许通过 workflow_dispatch 启动的 AgentX 任务在启用严格功耗校验时遇到无效遥测后直接失败。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2601
+
+- config-keys:
     - dsv4-fp4-mi355x-sglang-agentic-mtp
   description:
     - "Add DeepSeek-V4-Pro FP4 single-node SGLang AgentX recipe on MI355X with EAGLE/MTP (num-steps 3, num-draft-tokens 4) and SGLANG_SIMULATE_ACC_LEN=2.49 from the committed thinking_on golden AL curve"
