@@ -5714,3 +5714,14 @@
     - "Search space conc-list [4, 8, 10, 12, 16, 20] (c10 smoke-validated)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
 
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-tp8pp2
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable DSpark speculative decoding (spec-decoding: mtp, num-spec-tokens 2, synthetic acceptance length 2.51) for the MI355X aggregated TP8xPP2 Kimi-K3 agentic recipe; previously served STP-only (spec-decoding: none)."
+    - "Fix a CONC=20 SIGSEGV in hipMemcpyBatchAsync: SimpleCPUOffloadScheduler derived CPU-offload block count from the global GPU KV-cache config, but each PP stage's SimpleCPUOffloadConnector worker independently sizes its own pinned buffer from its own unique-KV-tensor count (PP0: 3, PP1: 5), so the scheduler issued block IDs past PP1's smaller buffer. Added a block-cap patch (experimental/kimik3-v4/aiter/patch_kv_offload_block_cap.py) that clamps the derived CPU config to the smallest per-stage capacity; an upstream vLLM fix is in progress."
+    - "Widen max-num-batched-tokens from 2048 to 8192 for this heavily prefill-dominated agentic workload (mean ISL ~135K, p95 ~455K tokens); this alone drives ~4.8x throughput and ~98% TTFT improvement over the prior baseline."
+    - "Validated end-to-end with zero GPU faults over full 30-minute profiling windows: c16 2,049 tok/s/GPU, c20 2,078 tok/s/GPU (TTFT p50 1,682ms, E2E p50 8,963ms, GPU KV-cache occupancy 90.4%)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
+

@@ -606,7 +606,8 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
 # Aggregated TP8×PP2 (2 nodes / 16 GPUs). Weights do not fit one MI355X node at
 # TP8 alone for this bring-up path without PP; mirrors B200 agg-tp8pp2 agentic
 # (decode num-worker 0 so GPUs are counted once). Serving profile matches the
-# g06+g17 smoke: no MTP, dram + vllm-simple, FULL_AND_PIECEWISE, max-num-seqs 20.
+# g06+g17 smoke: DSpark MTP (num-spec-tokens 2), dram + vllm-simple,
+# FULL_AND_PIECEWISE, max-num-seqs 20, chunked-prefill token budget 8192.
 # Launcher: runners/launch_mi355x-amds.sh → multi_node/agentic/kimik3_fp4_mi355x_vllm.sh
 # → kimik3_fp4_mi355x_vllm_tp8pp2.sh (container serve).
 kimik3-fp4-mi355x-vllm-agentic-tp8pp2:
@@ -622,10 +623,11 @@ kimik3-fp4-mi355x-vllm-agentic-tp8pp2:
     agentic-coding:
     - dram-utilization: 0.50
       search-space:
-      - spec-decoding: none
+      - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: vllm-simple }
-        # Smoke-validated around c10; ladder for e2e bring-up.
+        # DSpark smoke-validated at c4/c8/c16/c20 (g06+g17); c10/c12 carried
+        # over from the pre-DSpark PP bring-up ladder for full-sweep coverage.
         conc-list: [4, 8, 10, 12, 16, 20]
         prefill:
           num-worker: 1
