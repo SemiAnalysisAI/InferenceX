@@ -6202,4 +6202,4 @@
     - agentic-coding
   description:
     - "Bump image from lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260811 to lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260818"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2576
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2677
