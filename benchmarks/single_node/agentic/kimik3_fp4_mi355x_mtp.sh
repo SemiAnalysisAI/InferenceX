@@ -41,6 +41,8 @@ set -x
 #   MAX_MODEL_LEN            1M     
 #   SPEC_DECODE              true   (this is the _mtp DSpark recipe; =false for a no-spec A/B)
 #   SPEC_NUM_TOKENS          2      (DSpark draft length; validated by the _mtp config)
+#   DCP_SIZE                 1      (>1 sends the target's KV across the TP ranks;
+#                                    needs vllm#51705, applied in-container)
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -83,12 +85,19 @@ amd-smi || true
 resolve_trace_source
 install_agentic_deps
 
+# ---- Decode context parallelism ----------------------------------------------
+# Normalised here rather than in the parallelism block below because the patch
+# script reads it: #51705 is applied only when DCP is actually on.
+DCP_SIZE="${DCP_SIZE:-1}"
+export DCP_SIZE
+
 # ---- In-container patches ----------------------------------------------------
-# Three fixes, all confined to this container's site-packages, all idempotent
+# Four fixes, all confined to this container's site-packages, all idempotent
 # and all self-disabling once the image ships them:
 #   [1] aiter pybind11 internals mismatch  -> unblocks ROCM_AITER_FA prefill
 #   [2] TritonMLA cudagraph support        -> FULL cudagraphs for DSpark (5.52x TPOT)
 #   [3] KV block-pool negative-count clamp -> stops the mid-run engine crash
+#   [4] vllm#51705                         -> DSpark under DCP (DCP_SIZE>1 only)
 # Set SKIP_KIMI_PATCHES=1 to run stock.
 bash "$(dirname "$0")/apply_k3_container_patches.sh" || true
 
@@ -168,6 +177,29 @@ fi
 EP_ARGS=()
 if [ "$EP_SIZE" -gt 1 ]; then
     EP_ARGS=(--enable-expert-parallel)
+fi
+
+# DCP shards the target's KV cache across the TP ranks, so it buys capacity
+# without a second node: vllm#51705 measures +40.6% GPU KV tokens at TP8/DCP8
+# under the same fp8 cache dtype. The DSpark draft group stays replicated (the
+# draft attends over the whole sequence and throws its decode LSE away), which
+# is the whole substance of that PR -- unpatched, vLLM rejects the combination
+# at config time.
+#
+# a2a is the comm backend the PR validated; interleave 1 is the round-robin
+# sharding its per-row verify window assumes. GPU count is unchanged: DCP reuses
+# the TP ranks.
+DCP_ARGS=()
+if [ "$DCP_SIZE" -gt 1 ]; then
+    if [ $(( TP % DCP_SIZE )) -ne 0 ]; then
+        echo "Error: TP=$TP must be divisible by DCP_SIZE=$DCP_SIZE." >&2
+        exit 1
+    fi
+    DCP_ARGS=(
+        --decode-context-parallel-size "$DCP_SIZE"
+        --dcp-comm-backend a2a
+        --cp-kv-cache-interleave-size 1
+    )
 fi
 
 # ---- Speculative ------------------------------------------------------------
@@ -256,6 +288,7 @@ VLLM_CMD=(
     --moe-backend auto
     --tensor-parallel-size "$TP"
     "${EP_ARGS[@]}"
+    "${DCP_ARGS[@]}"
     --load-format fastsafetensors
     --gpu-memory-utilization "$GPU_MEM_UTIL"
     --language-model-only

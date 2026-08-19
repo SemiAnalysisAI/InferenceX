@@ -12,6 +12,7 @@
 #   [1] aiter pybind11 internals mismatch  -> unblocks ROCM_AITER_FA prefill
 #   [2] TritonMLA cudagraph support        -> FULL cudagraphs for DSpark (5.52x TPOT)
 #   [3] KV block-pool negative-count clamp -> stops the mid-run engine crash
+#   [4] vllm-project/vllm#51705            -> DSpark under DCP (only when DCP_SIZE>1)
 #
 # Env:
 #   SKIP_KIMI_PATCHES=1   skip everything
@@ -19,6 +20,7 @@
 # =============================================================================
 set -euo pipefail
 PY=${PYTHON:-python3}
+PATCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/k3_patches"
 
 if [ "${SKIP_KIMI_PATCHES:-0}" = "1" ]; then
     echo "[kimi-patches] SKIP_KIMI_PATCHES=1, doing nothing."
@@ -238,6 +240,61 @@ print("[kv-blockpool] patched", p)
 EOF
 }
 
+# -----------------------------------------------------------------------------
+# [4] vllm-project/vllm#51705: decode context parallelism for Kimi-K3 DSpark
+# -----------------------------------------------------------------------------
+# Before this PR `decode_context_parallel_size > 1` with the DSpark drafter is
+# rejected at config time. The PR keeps hybrid KV-cache grouping
+# drafter-invariant, replicates the draft group (it attends over the whole
+# sequence and discards its decode LSE, so it cannot be DCP-sharded), returns a
+# per-rank decode LSE from the AITER MLA backend for the merge, and counts the
+# multi-token verify's causal window in global rather than per-rank positions.
+#
+# k3_patches/vllm_51705_dcp.patch is the PR's four commits squashed onto
+# ac7509e2b1db40fec2f03dde1ed4e9dfdc2338c9, i.e. exactly the vLLM commit this
+# recipe's nightly image is built from, so it applies with zero fuzz. All 11
+# touched files are pure Python -- nothing here needs a rebuild.
+#
+# Applied ONLY when DCP_SIZE > 1, so the dcp=1 cells stay byte-identical to the
+# unpatched baseline and remain a valid A/B.
+patch_dcp_51705() {
+    local label="dcp-51705"
+    local patch_file="$PATCH_DIR/vllm_51705_dcp.patch"
+
+    if [ "${DCP_SIZE:-1}" -le 1 ]; then
+        echo "[$label] DCP_SIZE=${DCP_SIZE:-1}; not needed, skipping."
+        return 0
+    fi
+    if [ ! -f "$patch_file" ]; then
+        echo "[$label] $patch_file missing; skipping." >&2
+        return 0
+    fi
+
+    local vllm_init; vllm_init=$(_modfile vllm)
+    if [ -z "$vllm_init" ]; then
+        echo "[$label] vllm not importable; skipping." >&2
+        return 0
+    fi
+    # <site-packages>/vllm/__init__.py -> <site-packages>, the -p1 root.
+    local root; root=$(dirname "$(dirname "$vllm_init")")
+
+    # Marker is a symbol the PR introduces, so a future image that ships #51705
+    # no-ops here instead of failing to apply.
+    if grep -q "dcp_local_verify_row_lens" \
+        "$root/vllm/v1/attention/backends/mla/rocm_aiter_mla.py" 2>/dev/null; then
+        echo "[$label] already present."
+        return 0
+    fi
+
+    if ! patch -p1 -d "$root" --dry-run --forward --batch < "$patch_file" >/dev/null 2>&1; then
+        echo "[$label] patch does not apply to this image; leaving unpatched." >&2
+        echo "[$label] DCP_SIZE=$DCP_SIZE will be rejected at config time." >&2
+        return 0
+    fi
+    patch -p1 -d "$root" --forward --batch --backup --suffix=.orig < "$patch_file"
+    echo "[$label] applied vllm#51705 (DCP for K3 DSpark)."
+}
+
 # Per-patch switches, so a single patch can be isolated without disabling the
 # others. Note patch [1] is load-bearing: without it ROCM_AITER_FA prefill dies
 # at warmup with the fmha_fwd_bf16_opus TypeError, so skipping it does not give
@@ -245,6 +302,7 @@ EOF
 #   SKIP_PATCH_AITER=1      skip [1] aiter pybind11
 #   SKIP_PATCH_CUDAGRAPH=1  skip [2] TritonMLA UNIFORM_BATCH   <- the HIP-999 suspect
 #   SKIP_PATCH_BLOCKPOOL=1  skip [3] KV block-pool clamp
+#   SKIP_PATCH_DCP=1        skip [4] vllm#51705 DCP support
 echo "[kimi-patches] applying in-container patches..."
 if [ "${SKIP_PATCH_AITER:-0}" = "1" ]; then
     echo "[aiter-pybind11] SKIPPED via SKIP_PATCH_AITER=1"
@@ -260,5 +318,10 @@ if [ "${SKIP_PATCH_BLOCKPOOL:-0}" = "1" ]; then
     echo "[kv-blockpool] SKIPPED via SKIP_PATCH_BLOCKPOOL=1"
 else
     patch_kv_blockpool || true
+fi
+if [ "${SKIP_PATCH_DCP:-0}" = "1" ]; then
+    echo "[dcp-51705] SKIPPED via SKIP_PATCH_DCP=1"
+else
+    patch_dcp_51705 || true
 fi
 echo "[kimi-patches] done."
