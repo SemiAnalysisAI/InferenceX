@@ -114,7 +114,7 @@ backend:
       trust-remote-code: true
       block-size: 256
       max-cudagraph-capture-size: 64
-      speculative-config: '{"method":"mtp","num_speculative_tokens":3,"rejection_sample_method":"synthetic","synthetic_acceptance_length":2.49}'
+      speculative-config: '{"method":"mtp","num_speculative_tokens":3}'
       gpu-memory-utilization: 0.94
       no-disable-hybrid-kv-cache-manager: true
       tokenizer-mode: "deepseek_v4"

@@ -100,7 +100,7 @@ backend:
       trust-remote-code: true
       block-size: 256
       max-cudagraph-capture-size: 384
-      speculative-config: '{"method":"mtp","num_speculative_tokens":3,"rejection_sample_method":"synthetic","synthetic_acceptance_length":2.49}'
+      speculative-config: '{"method":"mtp","num_speculative_tokens":3}'
       kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":137438953472,"lazy_offload":false}}'
       gpu-memory-utilization: 0.94
       no-disable-hybrid-kv-cache-manager: true
