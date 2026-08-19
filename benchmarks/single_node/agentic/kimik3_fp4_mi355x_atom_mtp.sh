@@ -175,6 +175,15 @@ case "$CONC" in
         ATOM_ENABLE_REPLAYSSM=0
         STATE_CHECKPOINT_SLOTS=16
         ;;
+#TODO: test, overide
+    16|24|32|40)
+        MAX_NUM_SEQS=$CONC
+        MAX_NUM_BATCHED_TOKENS=4096
+        GPU_MEM_UTIL=0.90
+        ATOM_ENABLE_REPLAYSSM=0
+        STATE_CHECKPOINT_SLOTS=16
+        ;;
+        
     *)
         echo "Unsupported CONC=$CONC" >&2
         exit 2
