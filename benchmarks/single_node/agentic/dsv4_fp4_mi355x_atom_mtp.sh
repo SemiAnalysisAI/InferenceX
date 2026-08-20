@@ -103,7 +103,7 @@ ATOM_CMD=(
     --server-port "$PORT"
     --tensor-parallel-size "$TP"
     --kv-cache-dtype fp8
-    --index-cache-dtype fp8
+    --index-cache-dtype fp4
     --enable-prefix-caching
     --gpu-memory-utilization 0.9
     --max-num-batched-tokens 16384
