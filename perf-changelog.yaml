@@ -6260,4 +6260,4 @@
     - agentic-coding
   description:
     - "Update the GB200 Pareto by replacing the non-DSpark DCP16 candidates at concurrency 16, 24, 32, 36, and 44 with TP8 x PP2/DCP8 Mooncake candidates at concurrency 16, 32, 48, 72, and 96."
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2700
