@@ -44,6 +44,10 @@ elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-
 elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-sglang" ]]; then
     export MODEL_PATH="${MODEL_PATH:-/scratch/models/DeepSeek-V4-Pro}"
     export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
+elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-trt" ]]; then
+    export SERVED_MODEL_NAME="nvidia/GLM-5.2-NVFP4"
+    export MODEL_PATH="/scratch/models/GLM-5.2-NVFP4"
+    export SRT_SLURM_MODEL_PREFIX="nvidia/GLM-5.2-NVFP4"
 elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-vllm" ]]; then
     export MODEL_PATH="/data/models/MiniMax-M2.5-NVFP4"
     export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-nvfp4"
@@ -57,7 +61,7 @@ elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" && $FRAMEWORK == "dy
     export MODEL_PATH="/data/models/MiniMax-M3-MXFP8"
     export SRT_SLURM_MODEL_PREFIX="MiniMaxAI/MiniMax-M3-MXFP8"
 else
-    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4 with dynamo-vllm or dynamo-sglang, minimaxm2.5-fp4 with dynamo-vllm, minimaxm2.5-fp8 with dynamo-vllm, minimaxm3-fp4 with dynamo-vllm, minimaxm3-fp8 with dynamo-vllm"
+    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4 with dynamo-vllm or dynamo-sglang, glm5.2-fp4 with dynamo-trt, minimaxm2.5-fp4 with dynamo-vllm, minimaxm2.5-fp8 with dynamo-vllm, minimaxm3-fp4 with dynamo-vllm, minimaxm3-fp8 with dynamo-vllm"
     exit 1
 fi
 
@@ -70,7 +74,20 @@ if [ -d "$SRT_REPO_DIR" ]; then
 fi
 
 # TODO(CJQ): make first class upon srt-slurm upstream refactor
-if [[ "$IS_AGENTIC" == "1" ]]; then
+if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "glm5.2" ]]; then
+    git clone --branch v1.0.36 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR" || exit 1
+    # This cluster requires root remapping to remain disabled for PMIx.
+    sed -i 's/CONTAINER_REMAP_ROOT_EXPORT = {"ENROOT_REMAP_ROOT": "yes"}/CONTAINER_REMAP_ROOT_EXPORT = {"ENROOT_REMAP_ROOT": "no"}/' src/srtctl/core/slurm.py
+    TRTLLM_RECIPES_DIR="benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2"
+    mkdir -p "$TRTLLM_RECIPES_DIR"
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2" \
+        "$TRTLLM_RECIPES_DIR"
+    if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
+        find "$TRTLLM_RECIPES_DIR" -name "*.yaml" \
+            -exec sed -i '/TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS/d' {} +
+    fi
+elif [[ "$IS_AGENTIC" == "1" ]]; then
     git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR" || exit 1
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
@@ -143,6 +160,23 @@ export ISL="$ISL"
 export OSL="$OSL"
 export EVAL_ONLY="${EVAL_ONLY:-false}"
 
+DEFAULT_MOUNTS_BLOCK='default_mounts:'
+if [[ $FRAMEWORK != "dynamo-trt" || $MODEL_PREFIX != "glm5.2" ]]; then
+    DEFAULT_MOUNTS_BLOCK+='
+  "/opt/ucx-no-ud": "/usr/local/ucx"'
+else
+    echo "Using the container UCX for glm5.2 dynamo-trt NIXL transfers"
+fi
+if [[ "$IS_AGENTIC" == "1" ]]; then
+    AIPERF_MMAP_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/ai-perf-cache"
+    HF_HUB_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/hf-hub-cache"
+    mkdir -p "$AIPERF_MMAP_CACHE_HOST_PATH" "$HF_HUB_CACHE_HOST_PATH"
+    chmod 777 "$AIPERF_MMAP_CACHE_HOST_PATH" "$HF_HUB_CACHE_HOST_PATH" 2>/dev/null || true
+    DEFAULT_MOUNTS_BLOCK+="
+  \"${AIPERF_MMAP_CACHE_HOST_PATH}\": \"/aiperf_mmap_cache\"
+  \"${HF_HUB_CACHE_HOST_PATH}\": \"/hf_hub_cache\""
+fi
+
 # Create srtslurm.yaml for srtctl
 SRTCTL_ROOT="${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"
 echo "Creating srtslurm.yaml configuration..."
@@ -169,8 +203,7 @@ containers:
   "${IMAGE}": "${SQUASH_FILE}"
   nginx-sqsh: "${NGINX_SQUASH_FILE}"
 use_exclusive_sbatch_directive: true
-default_mounts:
-  "/opt/ucx-no-ud": "/usr/local/ucx"
+${DEFAULT_MOUNTS_BLOCK}
 EOF
 
 echo "Generated srtslurm.yaml:"
@@ -198,6 +231,16 @@ if [[ ! -f "$CONFIG_PATH" ]]; then
     exit 1
 fi
 
+if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "glm5.2" ]]; then
+    sed -i "s|^    RESULT_FILENAME:.*|    RESULT_FILENAME: ${RESULT_FILENAME}|" "$CONFIG_PATH"
+fi
+
+# Eval runs execute lm-eval on the allocation head and connect over loopback.
+# Throughput keeps the frontend on first_decode and the client on last_decode.
+if [[ "${EVAL_ONLY:-false}" == "true" && "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "glm5.2" ]]; then
+    sed -i 's/^  orchestrator_placement: first_decode$/  orchestrator_placement: head/' "$CONFIG_PATH"
+fi
+
 # Override the job name in the recipe with the runner name.
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
 if [[ "$MODEL_PREFIX" == "minimaxm3" && -n "$MINIMAX_M3_SLURM_EXCLUDED_NODELIST" ]]; then
@@ -216,6 +259,9 @@ if [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISION 
     SRTCTL_APPLY_ARGS+=(--no-preflight)
 fi
 if [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" && "$MODEL_PATH" == /scratch/models/* ]]; then
+    SRTCTL_APPLY_ARGS+=(--no-preflight)
+fi
+if [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "glm5.2" && "$MODEL_PATH" == /scratch/models/* ]]; then
     SRTCTL_APPLY_ARGS+=(--no-preflight)
 fi
 if [[ -n "$SRTCTL_SETUP_SCRIPT" ]]; then
@@ -353,6 +399,19 @@ if [[ "${RUN_EVAL:-false}" == "true" || "${EVAL_ONLY:-false}" == "true" ]]; then
     else
         echo "WARNING: RUN_EVAL=true but no eval results found at $EVAL_DIR"
     fi
+
+    # srt-slurm stages eval artifacts but does not write the metadata file
+    # consumed by score validation. Reuse the canonical metadata writer so
+    # topology and recipe identity stay aligned with the workflow inputs.
+    eval_conc_value="${EVAL_CONC:-${CONC:-1}}"
+    (
+        export IS_MULTINODE=true
+        # shellcheck source=benchmarks/benchmark_lib.sh
+        source "$GITHUB_WORKSPACE/benchmarks/benchmark_lib.sh"
+        _write_lm_eval_meta_json \
+            "$GITHUB_WORKSPACE/meta_env.json" "" "$eval_conc_value"
+    )
+    echo "Wrote meta_env.json (conc=${eval_conc_value}, prefix=${MODEL_PREFIX:-unknown})"
 fi
 
 # Clean up srt-slurm outputs to prevent NFS silly-rename lock files

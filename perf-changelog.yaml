@@ -6234,3 +6234,11 @@
   description:
     - "Add GB200 Kimi K3 AgentX config."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2639
+
+- config-keys:
+    - glm5.2-fp4-b300-dynamo-trt-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GLM-5.2 NVFP4 B300 AgentX recipes for Dynamo and TensorRT-LLM disaggregated serving with NIXL KV transfer and MTP speculative decoding."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2666
