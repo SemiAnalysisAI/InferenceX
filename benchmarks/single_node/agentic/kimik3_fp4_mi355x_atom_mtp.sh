@@ -208,6 +208,7 @@ NUM_SPEC_TOKENS=7
     8|10)
 SIMULATE_ACC_LEN=2.54
 NUM_SPEC_TOKENS=2
+        ;;
     *)
         echo "Unsupported CONC=$CONC" >&2
         exit 2
