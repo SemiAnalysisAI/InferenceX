@@ -195,8 +195,14 @@ fi
 # ---- Speculative ------------------------------------------------------------
 # golden 2.51 at num_speculative_tokens 2 in
 # https://github.com/SemiAnalysisAI/InferenceX/blob/main/golden_al_distribution/kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml
-SIMULATE_ACC_LEN=2.51
-NUM_SPEC_TOKENS=2
+
+if [ "$CONC" = 1 ]; then
+    SIMULATE_ACC_LEN=3.75
+    NUM_SPEC_TOKENS=6
+else
+    SIMULATE_ACC_LEN=2.51
+    NUM_SPEC_TOKENS=2
+fi
     
 # spec-decode-acceptance-rate = (SIMULATE_ACC_LEN - 1) / NUM_SPEC_TOKENS
 SPEC_ACCEPTANCE_RATE=$(awk "BEGIN{print ($SIMULATE_ACC_LEN-1)/$NUM_SPEC_TOKENS}")
