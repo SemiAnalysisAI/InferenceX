@@ -25,10 +25,19 @@ amd-Llama-3.3-70B-Instruct-FP8-KV:
   env: "VLLM_USE_V1=1 VLLM_V1_USE_PREFILL_DECODE_ATTENTION=1 AMDGCN_USE_BUFFER_OPS=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_RMSNORM=1 VLLM_USE_AITER_TRITON_ROPE=1 TRITON_HIP_ASYNC_COPY_BYPASS_PERMUTE=1 TRITON_HIP_USE_ASYNC_COPY=1 TRITON_HIP_USE_BLOCK_PINGPONG=1 TRITON_HIP_ASYNC_FAST_SWIZZLE=1"
 
 Kimi-K2.5-MXFP4:
-  prefill_flags: "--tensor-parallel-size 8 --no-enable-prefix-caching --block-size 1 --gpu-memory-utilization 0.90 --max-model-len 32768 --mm-encoder-tp-mode data --kv-cache-dtype fp8 --max-num-seqs 256 --max-num-batched-tokens 32768"
-  decode_flags: "--tensor-parallel-size 8 --all2all-backend mori_low_latency --no-enable-prefix-caching --block-size 1 --gpu-memory-utilization 0.90 --max-model-len 32768 --mm-encoder-tp-mode data --kv-cache-dtype fp8 --max-num-seqs 256 --max-num-batched-tokens 32768"
-  env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_RMSNORM=1 VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 HSA_NO_SCRATCH_RECLAIM=1 VLLM_ENGINE_READY_TIMEOUT_S=3600"
+  prefill_flags: "--tensor-parallel-size 8 --compilation-config '{\"cudagraph_mode\":\"PIECEWISE\"}' --no-enable-prefix-caching --block-size 1 --gpu-memory-utilization 0.90 --mm-encoder-tp-mode data"
+  decode_flags: "--tensor-parallel-size 8 --enable-expert-parallel --all2all-backend mori_low_latency --compilation-config '{\"cudagraph_mode\":\"PIECEWISE\"}' --no-enable-prefix-caching --block-size 1 --gpu-memory-utilization 0.90 --mm-encoder-tp-mode data"
+  env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_PAGED_ATTN=0 VLLM_ROCM_USE_AITER_RMSNORM=1 VLLM_USE_AITER_TRITON_SILU_MUL=0 VLLM_ENGINE_READY_TIMEOUT_S=3600"
   hf_dir: "models--amd--Kimi-K2.5-MXFP4"
+
+# Kimi-K3 MXFP4 with DSpark speculative decoding. Synthetic AL matches the
+# single-node AMD throughput arm; eval runs switch rejection_sample_method to
+# "block" in server_vllm.sh.
+Kimi-K3:
+  prefill_flags: "--tensor-parallel-size 8 --moe-backend auto --load-format fastsafetensors --gpu-memory-utilization 0.9 --language-model-only --max-num-seqs 32 --enable-auto-tool-choice --tool-call-parser kimi_k3 --reasoning-parser kimi_k3 --max-model-len 1048576 --enable-prefix-caching --kv-cache-dtype fp8 --no-async-scheduling --attention-config '{\"mla_prefill_backend\":\"ROCM_AITER_FA\"}' --compilation-config '{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":96,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96]}' --speculative-config '{\"model\":\"/models/Inferact-Kimi-K3-DSpark\",\"num_speculative_tokens\":2,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"synthetic\",\"synthetic_acceptance_length\":2.51}' --enable-prompt-tokens-details"
+  decode_flags: "--tensor-parallel-size 8 --moe-backend auto --load-format fastsafetensors --gpu-memory-utilization 0.9 --language-model-only --max-num-seqs 32 --enable-auto-tool-choice --tool-call-parser kimi_k3 --reasoning-parser kimi_k3 --max-model-len 1048576 --enable-prefix-caching --kv-cache-dtype fp8 --no-async-scheduling --attention-config '{\"mla_prefill_backend\":\"ROCM_AITER_FA\"}' --compilation-config '{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":96,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96]}' --speculative-config '{\"model\":\"/models/Inferact-Kimi-K3-DSpark\",\"num_speculative_tokens\":2,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"synthetic\",\"synthetic_acceptance_length\":2.51}' --enable-prompt-tokens-details"
+  env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4=1 AITER_BF16_FP8_MOE_BOUND=0 VLLM_ROCM_AITER_MLA_ASM_PADDING=asm VLLM_USE_BREAKABLE_CUDAGRAPH=0 SAFETENSORS_FAST_GPU=1 VLLM_SSM_CONV_STATE_LAYOUT=DS PYTHONHASHSEED=42 HSA_NO_SCRATCH_RECLAIM=0 VLLM_ENGINE_READY_TIMEOUT_S=7200 VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=1200"
+  hf_dir: "Kimi-K3"
 
 MiniMax-M2.5:
   # AITER fused-MoE kernel fmoe_bf16_blockscaleFp8_g1u1_vs_silu_32x384 for gfx950 writes OOB when run with MiniMax's shapes at M=8K(=num batched tokens), crashing vllm during AITER warmup.
@@ -41,8 +50,7 @@ MiniMax-M2.5:
 MiniMax-M3-MXFP4:
   prefill_flags: "--tensor-parallel-size 8 --max-num-batched-tokens 32768 --max-num-seqs 512 --block-size 128 --language-model-only --attention-backend TRITON_ATTN --moe-backend aiter --no-enable-prefix-caching --gpu-memory-utilization 0.90 --tool-call-parser minimax_m3 --reasoning-parser minimax_m3 --enable-auto-tool-choice"
   decode_flags: "--tensor-parallel-size 8 --max-num-batched-tokens 32768 --max-num-seqs 512 --block-size 128 --language-model-only --attention-backend TRITON_ATTN --moe-backend aiter --no-enable-prefix-caching --gpu-memory-utilization 0.90 --tool-call-parser minimax_m3 --reasoning-parser minimax_m3 --enable-auto-tool-choice"
-  env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_MOE=1 VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 VLLM_USE_BREAKABLE_CUDAGRAPH=0 VLLM_ENGINE_READY_TIMEOUT_S=3600"
-  prefill_env: "VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 VLLM_ROCM_QUICK_REDUCE_MAX_SIZE_BYTES_MB=2048"
+  env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_MOE=1 VLLM_USE_BREAKABLE_CUDAGRAPH=0 VLLM_ENGINE_READY_TIMEOUT_S=3600"
   hf_dir: "models--amd--MiniMax-M3-MXFP4"
 
 gpt-oss-120b:
@@ -53,17 +61,10 @@ gpt-oss-120b:
 MiniMax-M3-MXFP8:
   # MiniMax-M3 MXFP8 disagg, no EP. The --tensor-parallel-size 8 below is just a
   # placeholder: server_vllm.sh sed-rewrites it to PREFILL_TP_SIZE/DECODE_TP_SIZE
-  # from the master-config prefill/decode tp (the sweep uses TP4 workers only,
-  # varying the prefill:decode worker ratio rather than TP).
+  # from the master-config prefill/decode tp (the sweep mixes TP8 and TP4 layouts).
   # --block-size 128 is mandatory (MSA sparse/index cache); text-only benchmark
   # so --language-model-only frees the vision encoder. gfx950 uses FP8 KV cache.
-  # Serve flags + env kept in sync with the single-node recipe
-  # benchmarks/single_node/fixed_seq_len/deprecated/minimaxm3_fp8_mi355x.sh:
-  #   --moe-backend aiter (AITER fused MoE), --linear-backend emulation, and the
-  #   larger --max-num-batched-tokens 32768 prefill budget; plus the AITER
-  #   router-append shared-experts fusion (self-disables under EP; the sweep is
-  #   EP1 so it stays active) and INT6 quick all-reduce quantization.
-  prefill_flags: "--tensor-parallel-size 8 --block-size 128 --language-model-only --kv-cache-dtype fp8 --attention-backend TRITON_ATTN --moe-backend aiter --linear-backend emulation --max-num-batched-tokens 32768 --no-enable-prefix-caching --gpu-memory-utilization 0.90 --tool-call-parser minimax_m3 --reasoning-parser minimax_m3 --enable-auto-tool-choice"
-  decode_flags: "--tensor-parallel-size 8 --block-size 128 --language-model-only --kv-cache-dtype fp8 --attention-backend TRITON_ATTN --moe-backend aiter --linear-backend emulation --max-num-batched-tokens 32768 --no-enable-prefix-caching --gpu-memory-utilization 0.90 --tool-call-parser minimax_m3 --reasoning-parser minimax_m3 --enable-auto-tool-choice"
-  env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT6 VLLM_USE_BREAKABLE_CUDAGRAPH=0 VLLM_ENGINE_READY_TIMEOUT_S=3600"
+  prefill_flags: "--tensor-parallel-size 8 --block-size 128 --language-model-only --kv-cache-dtype fp8 --attention-backend TRITON_ATTN --no-enable-prefix-caching --gpu-memory-utilization 0.90 --tool-call-parser minimax_m3 --reasoning-parser minimax_m3 --enable-auto-tool-choice"
+  decode_flags: "--tensor-parallel-size 8 --block-size 128 --language-model-only --kv-cache-dtype fp8 --attention-backend TRITON_ATTN --no-enable-prefix-caching --gpu-memory-utilization 0.90 --tool-call-parser minimax_m3 --reasoning-parser minimax_m3 --enable-auto-tool-choice"
+  env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_USE_BREAKABLE_CUDAGRAPH=0 VLLM_ENGINE_READY_TIMEOUT_S=3600"
   hf_dir: "models--MiniMaxAI--MiniMax-M3-MXFP8"

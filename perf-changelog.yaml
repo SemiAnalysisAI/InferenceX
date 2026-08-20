@@ -6251,3 +6251,11 @@
   description:
     - "Refresh with lower stream interval to collect correct client metrics"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2686
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-disagg-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Kimi-K3 MI355X vLLM 1P1D disaggregated AgentX with DSpark, MoRIIO KV transfer, and optional DRAM offload."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2602

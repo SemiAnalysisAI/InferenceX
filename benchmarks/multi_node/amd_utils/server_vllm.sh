@@ -170,6 +170,27 @@ if [[ -n "${DECODE_TP_SIZE:-}" ]]; then
         DECODE_SERVER_CONFIG+=" --tensor-parallel-size ${DECODE_TP_SIZE}"
     fi
 fi
+# Throughput arms pin a synthetic acceptance length, which commits drafted
+# tokens without consulting the target's logits: fast, but the generated text is
+# wrong. An accuracy run has to verify for real. Without this, GSM8K scored
+# 0.3518 against the 0.9 gate while the same server measured throughput fine.
+# The single-node siblings (kimik3_fp4_mi355x_mtp.sh, dsv4_fp4_b300_vllm_mtp.sh)
+# make the same split; the multi-node path only documented it.
+# vLLM rejects synthetic_acceptance_length unless the method is 'synthetic',
+# so drop that key in the same rewrite.
+if [[ "${EVAL_ONLY:-false}" == "true" || "${RUN_EVAL:-false}" == "true" ]]; then
+    _real_verify() {
+        printf '%s' "$1" |
+            sed -E 's/\\?"rejection_sample_method\\?"[[:space:]]*:[[:space:]]*\\?"synthetic\\?"/\\"rejection_sample_method\\": \\"block\\"/g' |
+            sed -E 's/,[[:space:]]*\\?"synthetic_acceptance_length\\?"[[:space:]]*:[[:space:]]*[0-9.]+//g'
+    }
+    if echo "$PREFILL_SERVER_CONFIG" | grep -q 'rejection_sample_method'; then
+        PREFILL_SERVER_CONFIG=$(_real_verify "$PREFILL_SERVER_CONFIG")
+        DECODE_SERVER_CONFIG=$(_real_verify "$DECODE_SERVER_CONFIG")
+        echo "[eval] speculative decoding switched to real block verification"
+    fi
+fi
+
 if [[ "${PREFILL_ENABLE_EP:-false}" == "true" ]] && ! echo "$PREFILL_SERVER_CONFIG" | grep -q -- '--enable-expert-parallel'; then
     PREFILL_SERVER_CONFIG+=" --enable-expert-parallel"
 fi
@@ -182,6 +203,18 @@ fi
 if [[ "${DECODE_ENABLE_DP:-false}" == "true" ]] && ! echo "$DECODE_SERVER_CONFIG" | grep -q -- '--enable-dp-attention'; then
     DECODE_SERVER_CONFIG+=" --enable-dp-attention"
 fi
+
+# Health and metrics are polled every few seconds for the whole run, and each
+# poll wrote an access-log line: that spam was the bulk of the engine logs
+# shipped in CI artifacts. Suppressing the access log for those endpoints does
+# not affect metrics collection, and keeps real request lines.
+QUIET_ENDPOINTS="/health,/metrics,/ping,/load"
+for _cfg in PREFILL DECODE; do
+    _v="${_cfg}_SERVER_CONFIG"
+    if ! echo "${!_v}" | grep -q -- '--disable-access-log-for-endpoints'; then
+        printf -v "$_v" '%s --disable-access-log-for-endpoints %s' "${!_v}" "$QUIET_ENDPOINTS"
+    fi
+done
 
 echo "PREFILL_SERVER_CONFIG (after TP/EP/DP): $PREFILL_SERVER_CONFIG"
 echo "DECODE_SERVER_CONFIG (after TP/EP/DP): $DECODE_SERVER_CONFIG"
@@ -312,10 +345,26 @@ if [ "$NODE_RANK" -eq 0 ]; then
     cd $WS_PATH
 
     export ROUTER_PORT=$ROUTER_PORT
-    BENCH_CMD="bash $WS_PATH/bench.sh ${xP} ${yD} $((PREFILL_TP_SIZE*xP)) $((DECODE_TP_SIZE*yD)) \
-        $MODEL_DIR $MODEL_NAME /run_logs/slurm_job-${SLURM_JOB_ID} ${BENCH_INPUT_LEN} \
-        ${BENCH_OUTPUT_LEN} \"${BENCH_MAX_CONCURRENCY}\" ${BENCH_REQUEST_RATE} \
-        ${BENCH_RANDOM_RANGE_RATIO} ${BENCH_NUM_PROMPTS_MULTIPLIER}"
+    if [[ "${IS_AGENTIC:-0}" == "1" || "${IS_AGENTIC:-}" == "true" ]]; then
+        METRICS_URLS=()
+        for _ip in ${PREFILL_ARGS} ${DECODE_ARGS}; do
+            METRICS_URLS+=("http://${_ip}:${SERVER_PORT}/metrics")
+        done
+        if [[ "${#METRICS_URLS[@]}" -gt 0 ]]; then
+            AIPERF_SERVER_METRICS_URLS=$(IFS=,; echo "${METRICS_URLS[*]}")
+            export AIPERF_SERVER_METRICS_URLS
+            echo "AIPERF_SERVER_METRICS_URLS=${AIPERF_SERVER_METRICS_URLS}"
+        fi
+        BENCH_CMD="bash $WS_PATH/trace_replay.sh \
+            $MODEL_DIR $MODEL_NAME \"${BENCH_MAX_CONCURRENCY}\" /run_logs/slurm_job-${SLURM_JOB_ID}"
+        echo "Benchmark runner: trace_replay.sh (agentic)"
+    else
+        BENCH_CMD="bash $WS_PATH/bench.sh ${xP} ${yD} $((PREFILL_TP_SIZE*xP)) $((DECODE_TP_SIZE*yD)) \
+            $MODEL_DIR $MODEL_NAME /run_logs/slurm_job-${SLURM_JOB_ID} ${BENCH_INPUT_LEN} \
+            ${BENCH_OUTPUT_LEN} \"${BENCH_MAX_CONCURRENCY}\" ${BENCH_REQUEST_RATE} \
+            ${BENCH_RANDOM_RANGE_RATIO} ${BENCH_NUM_PROMPTS_MULTIPLIER}"
+        echo "Benchmark runner: bench.sh (fixed-seq-len)"
+    fi
 
     if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
         echo "EVAL_ONLY mode: skipping throughput benchmark"
@@ -406,6 +455,11 @@ if [ "$NODE_RANK" -eq 0 ]; then
 
     if [[ "$DRY_RUN" -eq 0 ]]; then
         cp -r /run_logs/slurm_job-${SLURM_JOB_ID} "$LOGS_OUTPUT/"
+        # This container is root and the destination is the bind-mounted CI
+        # workspace, so leave the copy world-writable. Otherwise a cancelled run
+        # strands root-owned files that actions/checkout cannot clean, and the
+        # runner fails every later job with EACCES.
+        chmod -R a+rwX "$LOGS_OUTPUT/slurm_job-${SLURM_JOB_ID}" 2>/dev/null || true
         echo "Copied results to $LOGS_OUTPUT/slurm_job-${SLURM_JOB_ID}"
     fi
 

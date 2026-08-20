@@ -96,6 +96,10 @@ DECODE_MTP_SIZE=${DECODE_MTP_SIZE:-0}
 ROUTER_TYPE="${ROUTER_TYPE:-vllm-router}"
 ROUTER_PORT="${ROUTER_PORT:-30000}"
 PROXY_PING_PORT="${PROXY_PING_PORT:-36367}"
+# At info the router logs several CONSISTENT_HASH_DEBUG lines per request, which
+# dominated the artifact. Raise to info when routing decisions are the thing
+# under investigation.
+ROUTER_LOG_LEVEL="${ROUTER_LOG_LEVEL:-warn}"
 
 # =============================================================================
 # Model Path Resolution
@@ -374,8 +378,29 @@ else
     echo "[WARN] $RDMA_CHECK_SCRIPT not found; skipping RDMA QoS/DCQCN pre-flight check"
 fi
 
+collect_server_logs() {
+  local shared_dir="${BENCHMARK_LOGS_DIR}/server_logs/slurm_job-${SLURM_JOB_ID}"
+  mkdir -p "$shared_dir/nodes"
+  echo "[logs] collecting per-node server logs into $shared_dir/nodes"
+  srun --nodelist="$SELECTED_NODELIST_SRUN" --nodes="$NUM_NODES" \
+    --ntasks="$NUM_NODES" --ntasks-per-node=1 bash -c '
+      host=$(hostname -s)
+      src="/tmp/slurm_job-'"$SLURM_JOB_ID"'"
+      dst="'"$shared_dir"'/nodes/$host"
+      mkdir -p "$dst"
+      if [[ -d "$src" ]]; then
+        cp -r "$src"/. "$dst"/ 2>/dev/null || true
+      fi
+      eval "$DOCKER_CMD_DETECT"
+      $DOCKER_CMD logs "'"$DOCKER_CONT_NAME"'" >"$dst/container.log" 2>&1 || true
+      $DOCKER_CMD logs "'"$ROUTER_CONT_NAME"'" >"$dst/router_container.log" 2>&1 || true
+      printf "host=%s\njob=%s\n" "$host" "'"$SLURM_JOB_ID"'" >"$dst/metadata.txt"
+    ' 2>/dev/null || echo "[logs] WARN: per-node log collection was incomplete"
+}
+
 cleanup() {
   echo "[${SLURM_JOB_ID}] termination received on $(hostname); cleaning up container + stale logs..."
+  collect_server_logs || true
   # Backstop: on scancel/timeout/step-hang the foreground `exec docker run`
   # client is killed before --rm can fire, so the container (and its GPU/ports/
   # :30000) leaks and the step never returns. Force-remove THIS job's container
@@ -469,8 +494,15 @@ DOCKER_ENV_COMMON=(
     -e ENABLE_METRICS=\${ENABLE_METRICS:-0}
     -e PREFILL_ROUTER_POLICY=\${PREFILL_ROUTER_POLICY:-random}
     -e DECODE_ROUTER_POLICY=\${DECODE_ROUTER_POLICY:-random}
+    -e IBDEVICES=\${IBDEVICES:-}
     -e MORI_IO_SQ_BACKOFF_TIMEOUT_US=\${MORI_IO_SQ_BACKOFF_TIMEOUT_US:-}
     -e MORI_IO_QP_MAX_SEND_WR=\${MORI_IO_QP_MAX_SEND_WR:-}
+    -e MORI_IO_QP_MAX_CQE=\${MORI_IO_QP_MAX_CQE:-}
+    -e MORI_IO_QP_MAX_SGE=\${MORI_IO_QP_MAX_SGE:-}
+    -e MORI_IO_TC_DISABLE=\${MORI_IO_TC_DISABLE:-}
+    -e MORI_RDMA_TC=\${MORI_RDMA_TC:-}
+    -e MORI_IO_TC=\${MORI_IO_TC:-}
+    -e MORIIO_READ_MODE=\${MORIIO_READ_MODE:-}
     -e DECODE_TP_SIZE=\$DECODE_TP_SIZE
     -e DECODE_TP=\$DECODE_TP
     -e DECODE_NUM_WORKERS=\$DECODE_NUM_WORKERS
@@ -522,7 +554,6 @@ elif [[ "$ENGINE" == "atom-disagg" ]]; then
         -e MAX_MODEL_LEN=${MAX_MODEL_LEN:-}
         -e MAX_NUM_BATCHED_TOKENS=${MAX_NUM_BATCHED_TOKENS:-}
         -e EXTRA_SERVER_ARGS=\${EXTRA_SERVER_ARGS:-}
-        -e IBDEVICES=${IBDEVICES:-}
     )
 else
     DOCKER_ENV_ENGINE=(
@@ -598,9 +629,9 @@ echo \"Rank \$SLURM_PROCID on \$(hostname)\"
 eval \"\$DOCKER_CMD_DETECT\"
 echo \"[docker-detect] rank \$SLURM_PROCID: DOCKER_CMD=\$DOCKER_CMD\"
 
-# Enable out-of-tree RDMA library mounts for atom-disagg (mooncake requires host RDMA stack)
+# Enable out-of-tree RDMA library mounts for MoRIIO/Mooncake host RDMA stacks.
 RDMA_MOUNTS=()
-if [[ "$ENGINE" == "atom-disagg" ]]; then
+if [[ "$ENGINE" == "atom-disagg" || "$ENGINE" == "vllm-disagg" ]]; then
 
 # When the container base OS differs from the host (e.g. Ubuntu 24.04 image
 # on a 22.04 host), the container's bundled libibverbs/libionic may be
@@ -674,7 +705,7 @@ if [[ \${#RDMA_MOUNTS[@]} -gt 0 ]]; then
 else
     echo \"[rdma] no out-of-tree RDMA mounts needed\"
 fi
-fi  # end: if ENGINE == atom-disagg
+fi  # end: if ENGINE == atom-disagg || vllm-disagg
 
 # Pre-clean (idempotent): stop then force-remove so GPU VRAM is released before
 # the sanity gate. stop-only left containers in Created/Exited state on some nodes.
@@ -711,7 +742,7 @@ if [[ \"$ENGINE\" == \"vllm-disagg\" && \"$ROUTER_TYPE\" == \"vllm-router\" && \
             --policy consistent_hash \
             --prefill-policy consistent_hash \
             --decode-policy consistent_hash \
-            --log-level info 2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/vllm_router_\$(hostname).log \"
+            --log-level ${ROUTER_LOG_LEVEL} 2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/vllm_router_\$(hostname).log \"
 fi
 
 # Skip exec on vllm-disagg rank 0 so we can stop the router after the main
@@ -776,6 +807,8 @@ echo \"[rank 0] Main container exited (rc=\$DOCKER_EXIT_CODE). Stopping vllm-rou
 \$DOCKER_CMD rm -f \"$ROUTER_CONT_NAME\" 2>/dev/null || true
 exit \$DOCKER_EXIT_CODE
 "
+SRUN_RC=$?
+collect_server_logs || true
 
 if [[ "${KEEP_CONTAINERS}" != "1" ]]; then
     srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c 'eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD rm -f '"$DOCKER_CONT_NAME"' '"$CLIENT_CONT_NAME"' 2>/dev/null || true'
@@ -787,3 +820,5 @@ if [[ "${KEEP_CONTAINERS}" != "1" ]]; then
         '
     fi
 fi
+
+exit "$SRUN_RC"

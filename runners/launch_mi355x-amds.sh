@@ -58,8 +58,17 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     cleanup_and_save_logs() {
         if [[ -n "${GITHUB_ACTIONS:-}" && -n "${JOB_ID:-}" ]]; then
             local art_dir="$GITHUB_WORKSPACE/benchmark_artifacts"
+            local job_logs_dir="$BENCHMARK_LOGS_DIR/logs/slurm_job-${JOB_ID}"
+            local server_logs_dir="$BENCHMARK_LOGS_DIR/server_logs/slurm_job-${JOB_ID}"
             mkdir -p "$art_dir"
             cp -r "$BENCHMARK_LOGS_DIR"/slurm_job-${JOB_ID}.{out,err} "$art_dir/" 2>/dev/null || true
+            if [[ -d "$server_logs_dir" && ! -f "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" ]]; then
+                tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" \
+                    -C "$server_logs_dir" . 2>/dev/null || true
+            elif [[ -d "$job_logs_dir" && ! -f "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" ]]; then
+                tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" \
+                    -C "$job_logs_dir" . 2>/dev/null || true
+            fi
         fi
         # Print .err inline so failures are visible in CI output
         local err_file="$BENCHMARK_LOGS_DIR/slurm_job-${JOB_ID:-unknown}.err"
@@ -229,7 +238,9 @@ PY
                 echo "WARNING: no agentic conc_*/ artifacts found under $JOB_LOGS_DIR/agentic"
             fi
             # Server/router/prefill/decode logs for the multinode_server_logs_* artifact.
-            if tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$JOB_LOGS_DIR" . 2>/dev/null; then
+            SERVER_LOGS_DIR="$BENCHMARK_LOGS_DIR/server_logs/slurm_job-${JOB_ID}"
+            [[ -d "$SERVER_LOGS_DIR" ]] || SERVER_LOGS_DIR="$JOB_LOGS_DIR"
+            if tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$SERVER_LOGS_DIR" . 2>/dev/null; then
                 echo "Created multinode_server_logs.tar.gz"
             else
                 echo "WARNING: failed to create multinode_server_logs.tar.gz"
@@ -266,7 +277,11 @@ else
     export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
 
     set -x
-    salloc --partition=$PARTITION --gres=gpu:$GPU_COUNT --exclusive --cpus-per-task=128 --time=500 --no-shell --job-name="$RUNNER_NAME"
+    # Exclude known-bad mi355x compute nodes (KLAUD_DEBUG §5.1 / §5.2):
+    #   mia1-p01-g09: pyxis broken (persistently fails to create container filesystem)
+    #   mia1-p01-g11: docker.sock permissions denied (cluster-cleanup step fails)
+    # Both have been root-caused via #1431/#1432/#1440/#1441/#1443 sweep failures.
+    salloc --partition=$PARTITION --exclude=mia1-p01-g09,mia1-p01-g11 --gres=gpu:$GPU_COUNT --exclusive --cpus-per-task=128 --time=500 --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -h -o %A | head -n1)
 
     srun --jobid=$JOB_ID bash -c "docker stop \$(docker ps -a -q)"
