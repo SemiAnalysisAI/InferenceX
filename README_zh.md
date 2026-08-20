@@ -16,6 +16,7 @@
 
 ## 新闻
 
+- **[2026/07]** 🔥 Kimi K3 2.8T：自 Day 0 起持续进行基准测试
 - **[2026/06]** 🔥 MiniMax M3：自 Day 0 起持续进行基准测试 [仪表盘](https://inferencex.semianalysis.com/inference?preset=minimax-m3-launch)
 - **[2026/04]** 🔥 DeepSeek V4 Pro 1.6T：自 Day 0 起持续进行基准测试 [文章](https://newsletter.semianalysis.com/p/deepseekv4-16t-day-0-to-day-43-performance)，[仪表盘](https://inferencex.semianalysis.com/inference?preset=dsv4-launch)
 - **[2026/03]** 🔥 Qwen3.5 397B：自 Day 0 起持续进行基准测试 [仪表盘](https://inferencex.semianalysis.com/)
