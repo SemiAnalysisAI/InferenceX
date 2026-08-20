@@ -1,10 +1,10 @@
 # Source: https://github.com/Inferact/srt-slurm-sa/blob/4a870cd5bc333bf8a312fc65ca1ea82cdab9b2df/recipes/vllm/deepseek-v4-pro/GB300/agentic/agentx-v1.0.1/1p3d-pdep4-dtp8-c3-kv-nixl-mtp-flashinfer-ar-lpt512-psi1.yaml
-# Adapted to the InferenceX AgentX harness and throughput-only synthetic MTP
-# acceptance injection so eval-only runs continue to verify real MTP output.
-name: "svf-vllm-disagg-gb300-1p3d-dep4-tp8-c3-mtp-agentic"
+# Adapted from the source topology to a 1P4D concurrency-4 point for the
+# InferenceX AgentX harness; eval-only runs continue to verify real MTP output.
+name: "svf-vllm-disagg-gb300-1p4d-dep4-tp8-c4-mtp-agentic"
 
 # GB300 high-interactivity AgentX MTP3 topology: one DEP4 prefill worker
-# feeds three TP8 decode workers at concurrency 3 through NIXL.
+# feeds four TP8 decode workers at concurrency 4 through NIXL.
 model:
   path: "deepseek-v4-pro"
   container: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-426e59f"
@@ -36,7 +36,7 @@ environment:
   VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
   VLLM_DSV4_MEGA_FP8_COMBINE: "1"
   VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "0"
-  DG_JIT_CACHE_DIR: "/tmp/dg-cache-dsv4-gb300-1p3d-{job_id}"
+  DG_JIT_CACHE_DIR: "/tmp/dg-cache-dsv4-gb300-1p4d-{job_id}"
 
 slurm:
   time_limit: "08:00:00"
@@ -51,9 +51,9 @@ resources:
   het_jobs: false
   spread_workers: false
   prefill_nodes: 1
-  decode_nodes: 6
+  decode_nodes: 8
   prefill_workers: 1
-  decode_workers: 3
+  decode_workers: 4
   gpus_per_prefill: 4
   gpus_per_decode: 8
 
@@ -69,7 +69,7 @@ frontend:
     MODEL_PREFIX: "dsv4"
     FRAMEWORK: "dynamo-vllm"
     PRECISION: "fp4"
-    CONC: "3"
+    CONC: "4"
     DURATION: "3600"
     KV_OFFLOADING: "none"
     ETCD_LEASE_TTL: "120"
@@ -175,9 +175,9 @@ benchmark:
     SERVED_MODEL_NAME: "DeepSeek-V4-Pro"
     FRAMEWORK: "dynamo-vllm"
     PRECISION: "fp4"
-    CONC: "3"
+    CONC: "4"
     DURATION: "3600"
-    RESULT_FILENAME: "dsv4_agentx101_p1dep4_d3tp8_c3_kv_nixl_mtp_fi_ar_lpt512_psi1"
+    RESULT_FILENAME: "dsv4_agentx101_p1dep4_d4tp8_c4_kv_nixl_mtp_fi_ar_lpt512_psi1"
     RUNNER_TYPE: "gb300"
     IMAGE: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-426e59f"
     SPEC_DECODING: "mtp"
@@ -189,7 +189,7 @@ benchmark:
     PREFILL_NUM_WORKERS: "1"
     PREFILL_EP: "4"
     DECODE_TP: "8"
-    DECODE_NUM_WORKERS: "3"
+    DECODE_NUM_WORKERS: "4"
     DECODE_EP: "1"
     EP_SIZE: "1"
     AIPERF_MAX_OSL: "none"

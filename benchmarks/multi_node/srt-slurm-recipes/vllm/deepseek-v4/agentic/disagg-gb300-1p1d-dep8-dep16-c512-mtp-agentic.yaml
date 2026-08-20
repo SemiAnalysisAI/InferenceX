@@ -92,7 +92,7 @@ backend:
       enable-ep-weight-filter: true
       max-model-len: 1048576
       max-num-seqs: 64
-      max-num-batched-tokens: 8192
+      max-num-batched-tokens: 16384
       long-prefill-token-threshold: 1024
       trust-remote-code: true
       no-enable-flashinfer-autotune: true

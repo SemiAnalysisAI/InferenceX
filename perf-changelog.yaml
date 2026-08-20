@@ -6258,5 +6258,7 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Refresh GB300 AgentX MTP aggregate/P-D recipes: cap TP4/TP8 at c16 and add c448 and c256 1P DEP8 / 1D DEP32 operating points with the same runtime tuning, decode max-num-seqs 8, max-num-batched-tokens 32, 4 Mooncake receive threads, and isolated JIT cache paths."
+    - "Keep the aggregate runtime recipe and existing TP4 c8 point unchanged, and add GPU-resident TP4 points at c1, c2, c4, and c6."
+    - "Add 1P DEP4 + 4D TP8 at c4, 1P DEP8 + 1D DEP16 at c512, and 1P DEP8 + 1D DEP32 at c448 and c256 using isolated recipes."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2665
+  append-only: true

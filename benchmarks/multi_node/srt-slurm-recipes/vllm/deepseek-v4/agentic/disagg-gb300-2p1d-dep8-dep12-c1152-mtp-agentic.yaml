@@ -15,10 +15,10 @@ identity:
   container:
     image: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-426e59f"
   frameworks:
-    dynamo: "1.4.0"
+    dynamo: "1.3.0.dev20260720"
 
 dynamo:
-  wheel: "1.4.0"
+  wheel: "1.3.0.dev20260720"
   install: true
 
 environment:
@@ -78,7 +78,6 @@ backend:
     prefill:
       kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_cross_layers_blocks":false,"enable_offload":false}}]}}'
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
-      safetensors-load-strategy: "prefetch"
       kv-cache-dtype: "fp8"
       tensor-parallel-size: 1
       pipeline-parallel-size: 1
@@ -105,7 +104,6 @@ backend:
     decode:
       kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_consumer","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_consumer","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_consumer","kv_connector_extra_config":{"load_async":true,"lookup_async":false,"enable_lookup":false,"enable_cross_layers_blocks":false,"enable_offload":false}}]}}'
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
-      safetensors-load-strategy: "prefetch"
       kv-cache-dtype: "fp8"
       tensor-parallel-size: 1
       pipeline-parallel-size: 1
@@ -151,7 +149,7 @@ backend:
     NCCL_NVLS_ENABLE: "1"
     VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
     NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
-    VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "0"
+    VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
     VLLM_USE_BREAKABLE_CUDAGRAPH: "0"
     VLLM_CONNECTOR_PREFETCH_DEPTH: "8"
     VLLM_DSV4_MEGA_FP8_COMBINE: "1"
@@ -180,7 +178,7 @@ backend:
     NCCL_NVLS_ENABLE: "1"
     VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
     NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
-    VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "0"
+    VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
     VLLM_DSV4_MEGA_FP8_COMBINE: "1"
     DG_JIT_CACHE_DIR: "/tmp/dg-cache-dsv4-gb300-2p1d-dep12-decode-{job_id}"
     MC_ENABLE_DEST_DEVICE_AFFINITY: "1"

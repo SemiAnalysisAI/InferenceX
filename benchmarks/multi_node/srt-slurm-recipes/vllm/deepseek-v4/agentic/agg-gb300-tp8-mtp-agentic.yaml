@@ -1,8 +1,8 @@
 name: "svf-vllm-agg-gb300-tp8-mtp-agentic"
 
-# GB300 AgentX aggregate topology: one TP8 worker spans two four-GPU nodes
-# and serves both prefill and decode for the GPU-resident c1-c12 sweep. Keep
-# 32 scheduler slots and capture the corresponding 128-token MTP graph envelope.
+# GB300 AgentX aggregate topology: one TP8 worker spans two four-GPU
+# nodes and serves both prefill and decode at concurrency 4. Keep at least
+# 16 sequence slots and otherwise size the scheduler at 4x concurrency.
 
 model:
   path: "deepseek-v4-pro"
@@ -15,10 +15,10 @@ identity:
   container:
     image: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-426e59f"
   frameworks:
-    dynamo: "1.4.0"
+    dynamo: "1.2.1"
 
 dynamo:
-  wheel: "1.4.0"
+  wheel: "1.2.1"
   install: true
 
 environment:
@@ -78,9 +78,10 @@ backend:
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     VLLM_RPC_TIMEOUT: "600000"
     VLLM_LOG_STATS_INTERVAL: "1"
-    VLLM_V2_WARMUP_MAX_NUM_SEQS: "32"
+    VLLM_V2_WARMUP_MAX_NUM_SEQS: "16"
     TILELANG_CLEANUP_TEMP_FILES: "1"
-    VLLM_ALLREDUCE_USE_SYMM_MEM: "0"
+    VLLM_USE_NCCL_SYMM_MEM: "0"
+    TORCH_SYMMMEM: "NVSHMEM"
     NCCL_CUMEM_ENABLE: "1"
     NCCL_MNNVL_ENABLE: "1"
     NCCL_NVLS_ENABLE: "1"
@@ -88,34 +89,39 @@ backend:
     VLLM_USE_V2_MODEL_RUNNER: "1"
     VLLM_USE_RUST_FRONTEND: "1"
     VLLM_ALLREDUCE_USE_FLASHINFER: "1"
+    VLLM_FLASHINFER_ALLREDUCE_BACKEND: "auto"
     VLLM_MOONCAKE_LOAD_RECV_THREADS: "20"
-    VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "0"
-    VLLM_DSV4_MEGA_FP8_COMBINE: "1"
+    VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
     VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "1024"
     VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_NET_DEVICES: "mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1"
+    UCX_TLS: "rc,cuda_copy"
     NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
     NCCL_P2P_LEVEL: "NVL"
     MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
     MC_STORE_CLIENT_METRIC: "1"
     MC_STORE_CLIENT_METRIC_INTERVAL: "5"
     MC_TE_METRIC: "0"
-    DG_JIT_CACHE_DIR: "/tmp/dg-cache-dsv4-gb300-agg-tp8-mtp-{job_id}"
+    DG_JIT_CACHE_DIR: "/tmp/dg-cache-dsv4-gb300-agg-mtp-{job_id}"
   vllm_config:
     aggregated:
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
-      safetensors-load-strategy: "prefetch"
       kv-cache-dtype: "fp8"
       tensor-parallel-size: 8
       pipeline-parallel-size: 1
+      disable-custom-all-reduce: true
       attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"use_fp4_indexer_cache":true}'
       max-model-len: 1048576
-      max-num-seqs: 32
+      max-num-seqs: 16
       max-num-batched-tokens: 8192
       trust-remote-code: true
+      no-enable-flashinfer-autotune: true
       block-size: 256
-      max-cudagraph-capture-size: 128
+      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64],"mode":0}'
       speculative-config: '{"method":"mtp","num_speculative_tokens":3}'
       gpu-memory-utilization: 0.94
+      stream-interval: 10
       no-disable-hybrid-kv-cache-manager: true
       tokenizer-mode: "deepseek_v4"
 
