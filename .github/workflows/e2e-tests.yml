@@ -64,23 +64,27 @@ jobs:
               with:
                 ref: ${{ github.sha }}
 
+            - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
             - id: get-jobs
               run: |
-                  pip install pydantic
-                  CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py \
-                    ${{ inputs.generate-cli-command || github.event.inputs.generate-cli-command }})
+                  GENERATE_COMMAND="${{ inputs.generate-cli-command || github.event.inputs.generate-cli-command }}"
+                  CONFIG_JSON=$(uv run --no-project --with pydantic --with pyyaml --python 3.12 \
+                    ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py \
+                    $GENERATE_COMMAND)
                   AGENTIC=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if x.get('scenario-type') == 'agentic-coding' and 'prefill' not in x]))")
                   MULTI_AGENTIC=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if x.get('scenario-type') == 'agentic-coding' and 'prefill' in x]))")
                   SINGLE=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' not in x and x.get('scenario-type') != 'agentic-coding' and not x.get('eval-only', False)]))")
                   MULTI=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' in x and x.get('scenario-type') != 'agentic-coding' and not x.get('eval-only', False)]))")
                   EVALS=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' not in x and x.get('scenario-type') != 'agentic-coding' and x.get('run-eval', False)]))")
                   MULTI_EVAL=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' in x and x.get('run-eval', False)]))")
-                  echo "agentic-config=$AGENTIC" >> $GITHUB_OUTPUT
-                  echo "multi-node-agentic-config=$MULTI_AGENTIC" >> $GITHUB_OUTPUT
-                  echo "single-node-config=$SINGLE" >> $GITHUB_OUTPUT
-                  echo "multi-node-config=$MULTI" >> $GITHUB_OUTPUT
-                  echo "eval-config=$EVALS" >> $GITHUB_OUTPUT
-                  echo "multi-node-eval-config=$MULTI_EVAL" >> $GITHUB_OUTPUT
+                  {
+                    echo "agentic-config=$AGENTIC"
+                    echo "multi-node-agentic-config=$MULTI_AGENTIC"
+                    echo "single-node-config=$SINGLE"
+                    echo "multi-node-config=$MULTI"
+                    echo "eval-config=$EVALS"
+                    echo "multi-node-eval-config=$MULTI_EVAL"
+                  } >> "$GITHUB_OUTPUT"
 
     test-sweep-multi-node:
         needs: get-jobs
@@ -241,12 +245,12 @@ jobs:
             decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
             conc: ${{ matrix.config.conc[0] }}
             kv-offloading: ${{ matrix.config.kv-offloading }}
-            kv-offload-backend: ${{ matrix.config.kv-offload-backend }}
+            kv-offload-backend: ${{ matrix.config['kv-offload-backend'].name }}
             total-cpu-dram-gb: ${{ matrix.config['total-cpu-dram-gb'] }}
             duration: ${{ inputs.duration-override != '' && inputs.duration-override || matrix.config.duration }}
             run-eval: false
             scenario-type: agentic-coding
-            ref: ${{ inputs.ref }}
+            ref: ${{ inputs.ref || github.sha }}
 
     test-sweep-single-node:
         needs: get-jobs
