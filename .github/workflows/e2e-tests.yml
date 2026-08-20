@@ -453,7 +453,7 @@ jobs:
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.conc }}
             kv-offloading: ${{ matrix.config.kv-offloading }}
-            kv-offload-backend: ${{ matrix.config['kv-offload-backend'].name }} 
+            kv-offload-backend: ${{ matrix.config['kv-offload-backend'].name }}
             total-cpu-dram-gb: ${{ matrix.config.total-cpu-dram-gb }}
             duration: ${{ inputs.agentx-fast && '1200' || (inputs.duration-override != '' && inputs.duration-override || matrix.config.duration) }}
             agentx-fast: ${{ inputs.agentx-fast }}
