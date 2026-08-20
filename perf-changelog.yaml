@@ -6100,7 +6100,6 @@
     - "Add GB200 DeepSeek-V4-Pro FP4 Dynamo-vLLM AgentX mirroring the GB300 PR #2571 MTP tuning, with every GB300 4-GPU worker sized to 8 GPUs on GB200."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2636
 
-
 - config-keys:
     - qwen3.5-fp8-h200-sglang-agentic-hicache-mtp
   scenario-type:
@@ -6251,3 +6250,11 @@
   description:
     - "Refresh with lower stream interval to collect correct client metrics"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2686
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-sglang-disagg-mtp
+  description:
+    - "Add new qwen3.5-fp8-mi355x-sglang-disagg-mtp config with native EAGLE MTP (depth 3, top-k 1) on image v0.5.16."
+    - "Two search-space arms: conc 8-64 with TP4P+TP8D, and conc 128 with TP4P+TP4D (avoids TP8D draft-verification bottleneck at high concurrency: +83% tput/GPU, 7.5x TTFT improvement)."
+    - "models.yaml: add mtp_flags (--speculative-algorithm EAGLE --speculative-eagle-topk 1) to Qwen3.5-397B-A17B-FP8."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2607
