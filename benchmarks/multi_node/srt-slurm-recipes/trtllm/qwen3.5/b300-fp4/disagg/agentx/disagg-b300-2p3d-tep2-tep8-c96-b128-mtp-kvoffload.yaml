@@ -43,10 +43,6 @@ backend:
     TRTLLM_WORKER_DISABLE_GC: '1'
     UCX_TLS: rc,cuda_ipc,cuda_copy,sm,self,tcp
     UCX_LOG_LEVEL: info
-    UCX_CUDA_IPC_ENABLE_MNNVL: "n"
-    UCX_MAX_RMA_RAILS: "1"
-    UCX_MAX_RNDV_RAILS: "1"
-    UCX_RNDV_SCHEME: "put_zcopy"
     TRTLLM_KV_TRANSFER_NUM_THREADS: '8'
     DYN_ENGINE_CONV_AFFINITY: "1"
   decode_environment:
@@ -62,10 +58,6 @@ backend:
     TRTLLM_WORKER_DISABLE_GC: '1'
     UCX_TLS: rc,cuda_ipc,cuda_copy,sm,self,tcp
     UCX_LOG_LEVEL: info
-    UCX_CUDA_IPC_ENABLE_MNNVL: "n"
-    UCX_MAX_RMA_RAILS: "1"
-    UCX_MAX_RNDV_RAILS: "1"
-    UCX_RNDV_SCHEME: "put_zcopy"
     TRTLLM_KV_TRANSFER_NUM_THREADS: '8'
     DYN_ENGINE_CONV_AFFINITY: "1"
   trtllm_config:
