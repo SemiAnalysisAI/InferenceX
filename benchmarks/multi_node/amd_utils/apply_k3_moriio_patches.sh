@@ -31,6 +31,22 @@ if [[ ! -f "$PATCH_FILE" ]]; then
     exit 1
 fi
 
+# Patches must be UTF-8 unified diffs over vllm/ only. Full-repo diffs that
+# include examples/ or tests/ cannot apply inside the installed wheel layout.
+if [[ "$(head -c 2 "$PATCH_FILE" | od -An -tx1 | tr -d ' ')" == "fffe" ]]; then
+    echo "[k3-moriio] ERROR: patch is UTF-16; regenerate as UTF-8 LF" >&2
+    exit 1
+fi
+if ! head -1 "$PATCH_FILE" | grep -q '^diff --git '; then
+    echo "[k3-moriio] ERROR: patch does not look like a unified diff" >&2
+    exit 1
+fi
+if grep -qE '^diff --git a/(examples|tests)/' "$PATCH_FILE"; then
+    echo "[k3-moriio] ERROR: patch contains examples/ or tests/ paths" >&2
+    echo "[k3-moriio] Regenerate with paths under vllm/ only (see patches/README.md)" >&2
+    exit 1
+fi
+
 if grep -q $'\r' "$PATCH_FILE"; then
     tmp=$(mktemp)
     tr -d '\r' < "$PATCH_FILE" > "$tmp"
