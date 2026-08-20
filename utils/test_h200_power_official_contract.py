@@ -21,6 +21,7 @@ DSV4_RECIPE = REPO_ROOT / (
     "agg-h200-tp8-mtp-kvoffload.yaml"
 )
 WORKFLOW = REPO_ROOT / ".github/workflows/test-process-result.yml"
+E2E_WORKFLOW = REPO_ROOT / ".github/workflows/e2e-tests.yml"
 
 PRODUCER_SHA = "a1b8c7af10c00e5ea40074aebdc0086189bbc064"
 PRODUCER_URL = "https://github.com/edwingao28/srt-slurm.git"
@@ -154,6 +155,18 @@ def test_process_result_ci_covers_h200_power_files():
     pytest_command = workflow.split("- name: Run pytest", 1)[1]
     assert "test_h200_power_official_contract.py" in pytest_command
     assert "test_inject_srt_power_concurrencies.py" in pytest_command
+
+
+def test_multinode_agentic_workflow_forwards_strict_power_inputs():
+    workflow = E2E_WORKFLOW.read_text(encoding="utf-8")
+    job = workflow.split("    test-sweep-multi-node-agentic:\n", 1)[1].split(
+        "    test-sweep-multi-node-agentic-evals:\n", 1
+    )[0]
+
+    assert "            require-power: ${{ inputs.require-power }}\n" in job
+    assert (
+        "            power-producer-sha: ${{ inputs.power-producer-sha }}\n" in job
+    )
 
 
 def test_producer_pin_is_immutable_and_only_declared_once():
