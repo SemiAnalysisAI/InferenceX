@@ -175,15 +175,6 @@ case "$CONC" in
         ATOM_ENABLE_REPLAYSSM=0
         STATE_CHECKPOINT_SLOTS=16
         ;;
-#TODO: test, overide
-    16|24|32|40)
-        MAX_NUM_SEQS=$CONC
-        MAX_NUM_BATCHED_TOKENS=4096
-        GPU_MEM_UTIL=0.90
-        ATOM_ENABLE_REPLAYSSM=0
-        STATE_CHECKPOINT_SLOTS=16
-        ;;
-        
     *)
         echo "Unsupported CONC=$CONC" >&2
         exit 2
@@ -228,12 +219,6 @@ else
     )
 fi
 echo "SIMULATE_ACC_LEN=$SIMULATE_ACC_LEN NUM_SPEC_TOKENS=$NUM_SPEC_TOKENS SPEC_ACCEPTANCE_RATE=$SPEC_ACCEPTANCE_RATE"
-
-#TODO: test, overide
-if [ "$CONC" -gt 10 ]; then
-    SPEC_ARGS=()
-fi
-echo "SPEC_ARGS" $SPEC_ARGS
 
 # ---- LLM server -------------------------------------------------------------
 ATOM_CMD=(
