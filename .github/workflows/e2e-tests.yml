@@ -460,7 +460,7 @@ jobs:
             isl: '0'
             osl: '0'
             max-model-len: '0'
-            spec-decoding: 'none'
+            spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ 'false' }}
             run-eval: true
             eval-only: true
