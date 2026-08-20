@@ -6271,23 +6271,10 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2657
 
 - config-keys:
-    - qwen3.5-fp4-gb300-dynamo-trt-agentic-disagg
-    - qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg
-    - qwen3.5-fp4-gb300-dynamo-sglang-agentic-disagg
-    - dsv4-fp4-gb300-dynamo-vllm-agentic
-    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-agg
-    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
-    - dsv4-fp4-gb300-dynamo-sglang-agentic-agg
-    - dsv4-fp4-gb300-dynamo-sglang-agentic-disagg
-    - glm5.2-fp4-gb300-dynamo-sglang-agentic-agg
-    - glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg
     - glm5.2-fp4-gb300-dynamo-trt-agentic-agg-mtp
     - glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp
-    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
-    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
-    - kimik3-fp4-gb300-dynamo-vllm-agentic-mooncake-dcp8-agg
   scenario-type:
     - agentic-coding
   description:
-    - "Use the batch_3 Slurm partition for the GB300 launcher."
+    - "Use the batch_3 Slurm partition for the GLM-5.2 GB300 Dynamo-TRT AgentX configuration."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2657
