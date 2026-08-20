@@ -170,12 +170,20 @@ if [ "$EP_SIZE" -gt 1 ]; then
     PARALLEL_ARGS+=(--enable-expert-parallel)
 fi
 
+if [ "$TP" -eq 4 ]; then
+    ATTN_BACKEND=ROCM_AITER_FA
+    export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1
+else
+    ATTN_BACKEND=TRITON_ATTN
+    export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=0
+fi
+
 # Synthetic acceptance standardizes throughput against the committed golden
 # EAGLE3-GQA curve. Accuracy evals must use real target verification.
 if [ "${EVAL_ONLY}" = "true" ]; then
-    SPEC_CONFIG="{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"TRITON_ATTN\"}"
+    SPEC_CONFIG="{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"$ATTN_BACKEND\"}"
 else
-    SPEC_CONFIG="{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"TRITON_ATTN\", \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
+    SPEC_CONFIG="{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"$ATTN_BACKEND\", \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
 fi
 
 echo "Starting vllm server..."
@@ -187,14 +195,6 @@ export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_USE_AITER_MOE=1
 export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
-# The AITER page-16 sparse-attention path requires exactly one KV head per
-# tensor-parallel rank. MiniMax-M3 has four KV heads, so TP4 uses that fast
-# path while TP2 uses vLLM's supported Triton sparse-attention fallback.
-if [ "$TP" -eq 4 ]; then
-    export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1
-else
-    export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=0
-fi
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 export VLLM_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16=0
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION_MIN_SIZE_KB=256
@@ -212,7 +212,7 @@ VLLM_CMD=(
     --max-num-batched-tokens 32768
     --language-model-only
     --enable-prefix-caching
-    --attention-backend TRITON_ATTN
+    --attention-backend "$ATTN_BACKEND"
     --moe-backend aiter
     --kv-cache-dtype fp8
     --tool-call-parser minimax_m3
