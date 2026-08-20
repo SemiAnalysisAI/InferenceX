@@ -83,18 +83,19 @@ trap 'exit 143' TERM
 MAX_NUM_SEQS=$((2 * CONC))
 
 # golden_al_distribution/dsv4_mtp.yaml: thinking_on, 3 draft tokens -> AL 2.49
-# acceptance rate = (2.49 - 1) / 3 = 0.4966666667.
+# --spec-decode-acceptance-length 2.49.
+# https://github.com/ROCm/ATOM/pull/1948
 NUM_SPEC_TOKENS=3
-SPEC_ACCEPTANCE_RATE=0.4966666667
+SPEC_DECODE_AL=2.49
 SPEC_ARGS=(
     --method mtp
     --num-speculative-tokens "$NUM_SPEC_TOKENS"
 )
 if [ "${EVAL_ONLY:-false}" != "true" ]; then
-    SPEC_ARGS+=(--spec-decode-acceptance-rate "$SPEC_ACCEPTANCE_RATE")
+    SPEC_ARGS+=(--spec-decode-acceptance-length "$SPEC_DECODE_AL")
 fi
 
-echo "Starting ATOM server with MAX_NUM_SEQS=$MAX_NUM_SEQS NUM_SPEC_TOKENS=$NUM_SPEC_TOKENS SPEC_ACCEPTANCE_RATE=$SPEC_ACCEPTANCE_RATE EVAL_ONLY=${EVAL_ONLY:-false}"
+echo "Starting ATOM server with MAX_NUM_SEQS=$MAX_NUM_SEQS NUM_SPEC_TOKENS=$NUM_SPEC_TOKENS SPEC_DECODE_AL=$SPEC_DECODE_AL EVAL_ONLY=${EVAL_ONLY:-false}"
 ATOM_CMD=(
     python3 -u -m atom.entrypoints.openai_server
     --model "$MODEL_PATH"
