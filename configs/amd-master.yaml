@@ -637,6 +637,35 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
       - { tp: 8, kv-offloading: none, conc-list: [1, 4, 8] , spec-decoding: mtp}
       - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [10], spec-decoding: mtp }
 
+# Kimi-K3 MXFP4 agentic-coding benchmark on MI355X via ATOM with DSpark
+# speculative decoding (2 draft tokens -> golden AL 2.51,
+# golden_al_distribution/kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml,
+# the same golden the vLLM arm feeds to synthetic_acceptance_length).
+# Companion to kimik3-fp4-mi355x-vllm-agentic-mtp: same checkpoint, same
+# runner, same concurrency points, so the two engines are directly comparable.
+# TP8 only -- the 1.56 TB MXFP4 checkpoint is ~195 GB/GPU and TP4 cannot load,
+# which is also why there is no DP-attention arm.
+# Concurrency 1 and 4 are GPU-resident. 8 and 10 add the LMCache DRAM tier and
+# ATOM's CPU state-offload tier together: K3 is a hybrid, so a resumed agentic
+# turn needs the KDA recurrent state back, and the paged KV tier alone cannot
+# restore one. dram-utilization 0.086 puts the aggregate budget at 257 GB, so
+# the script's divide-by-TP lands on exactly the 32 GB per rank the recipe was
+# measured with (0.085 gives 254, which floors to 31).
+kimik3-fp4-mi355x-atom-agentic-mtp:
+  image: rocm/atom-dev:ubuntu24.04_py3.12_pytorch_release_2.10.0_kimi_k3_agentic_0818
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: atom
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.086
+      search-space:
+      - { tp: 8, kv-offloading: none, conc-list: [1, 4], spec-decoding: mtp }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [8, 10], spec-decoding: mtp }
+
 dsr1-fp4-mi355x-sglang-disagg:
   image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519
   model: amd/DeepSeek-R1-0528-MXFP4-v2
