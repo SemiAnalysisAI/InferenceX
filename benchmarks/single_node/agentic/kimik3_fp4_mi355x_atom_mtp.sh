@@ -200,8 +200,19 @@ fi
 # acceptance than the vLLM arm. Flagging it explicitly rather than silently:
 # if the sweep is meant to be strictly comparable, set this to 2.51 and the
 # derived rate becomes 0.755.
+case "$CONC" in
+    1|4)
+SIMULATE_ACC_LEN=3.84
+NUM_SPEC_TOKENS=7
+        ;;
+    8|10)
 SIMULATE_ACC_LEN=2.54
 NUM_SPEC_TOKENS=2
+    *)
+        echo "Unsupported CONC=$CONC" >&2
+        exit 2
+        ;;
+esac
 # spec-decode-acceptance-rate = (SIMULATE_ACC_LEN - 1) / NUM_SPEC_TOKENS
 SPEC_ACCEPTANCE_RATE=$(awk "BEGIN{print ($SIMULATE_ACC_LEN-1)/$NUM_SPEC_TOKENS}")
 if [ "${EVAL_ONLY}" = "true" ]; then
