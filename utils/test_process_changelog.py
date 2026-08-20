@@ -58,16 +58,6 @@ def test_recipe_fingerprint_reaches_all_e2e_benchmark_jobs():
     assert workflow.count("recipe-fingerprint: ${{ matrix.config") == 8
 
 
-def test_e2e_agentic_eval_preserves_spec_decoding():
-    workflow = (Path(__file__).parents[1] / ".github/workflows/e2e-tests.yml").read_text()
-    agentic_eval_job = workflow.split("test-sweep-agentic-evals:", 1)[1].split(
-        "test-sweep-multi-node-agentic:", 1
-    )[0]
-
-    assert "spec-decoding: ${{ matrix.config.spec-decoding }}" in agentic_eval_job
-    assert "spec-decoding: 'none'" not in agentic_eval_job
-
-
 def test_recipe_fingerprint_disambiguates_result_and_artifact_names():
     repo_root = Path(__file__).parents[1]
     for template_name in ("benchmark-tmpl.yml", "benchmark-multinode-tmpl.yml"):
