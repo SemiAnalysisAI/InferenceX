@@ -16,6 +16,7 @@ Trusted by Operators of Trillion Dollar Token Factories such as OpenAI, Meta, Mi
 
 ## News
 
+- **[2026/08]** 🔥 **AgentX: World's First Fully Open Source Apache 2.0 Realistic 1Mil+ Long Context, Multi Turn Benchmark Live** [dashboard](https://inferencex.semianalysis.com/agentx)
 - **[2026/08]** 🔥 GLM5.3: continuous agentic benchmarks live too [dashboard](https://inferencex.semianalysis.com/)
 - **[2026/07]** 🔥 Kimi K3 2.8T: continuous benchmarks live since Day 0
 - **[2026/06]** 🔥 MiniMax M3: continuous benchmarks live since Day 0 [dashboard](https://inferencex.semianalysis.com/inference?preset=minimax-m3-launch)
