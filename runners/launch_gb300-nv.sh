@@ -7,7 +7,8 @@ set -exo pipefail
 # shellcheck source=runners/slurm_utils.sh
 source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
 
-export SLURM_PARTITION="batch_1"
+export SLURM_PARTITION="${SLURM_PARTITION:-batch_1}"
+export SBATCH_PARTITION="$SLURM_PARTITION"
 export SLURM_ACCOUNT="benchmark"
 export ENROOT_ROOTFS_WRITABLE=1
 

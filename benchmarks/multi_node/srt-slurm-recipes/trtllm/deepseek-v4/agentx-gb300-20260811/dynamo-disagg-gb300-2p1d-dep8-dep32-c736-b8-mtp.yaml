@@ -85,7 +85,6 @@ backend:
       max_seq_len: 990016
       moe_config:
         backend: TRTLLM
-        load_balancer: /infmax-workspace/benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4/agentx-gb300-20260811/eplb_confs/moe_load_balancer_ctx_ep8_slots384.yaml
       moe_expert_parallel_size: 8
       pipeline_parallel_size: 1
       print_iter_log: true
@@ -125,7 +124,6 @@ backend:
       moe_config:
         backend: MEGAMOE_DEEPGEMM
         use_low_precision_moe_combine: true
-        load_balancer: /infmax-workspace/benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4/agentx-gb300-20260811/eplb_confs/moe_load_balancer_gen_ep32_slots384.yaml
       moe_expert_parallel_size: 32
       num_postprocess_workers: 4
       pipeline_parallel_size: 1
