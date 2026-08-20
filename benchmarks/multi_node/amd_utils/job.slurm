@@ -425,6 +425,58 @@ srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c '
     echo "NFS cache refreshed on $(hostname)"
 '
 
+# Kimi-K3 MoRIIO write mode requires IOEngine.wait_all from ROCm/mori #341.
+# Build it once per node into a derived image before serving, so package
+# installation stays out of the live engine container.
+#
+# Prefill and decode must agree on the transfer direction, so the read/write
+# decision is made here once for the whole job and propagated to every
+# container via MORIIO_READ_MODE. If the derived image cannot be produced on
+# every node, the job falls back to READ mode on the base image rather than
+# serving a mismatched pair or failing outright.
+if [[ "$ENGINE" == "vllm-disagg" && "$MODEL_NAME" == "Kimi-K3" &&
+      "${MORI_WAITALL_BUILD:-0}" == "1" && "${DRY_RUN:-0}" != "1" ]]; then
+    MORI_PIN="${MORI_WAITALL_COMMIT:-f7e6ac6863c53821bc7afb91a578cc6ce38fcad0}"
+    MORI_SOURCE_DIR="${MORI_WAITALL_SOURCE_DIR:-${BENCHMARK_LOGS_DIR}/mori-${MORI_PIN:0:8}}"
+    # No registry prefix: Docker resolves "localhost/..." as a registry host and
+    # tries to pull the derived image over HTTP instead of using the local one.
+    MORI_DERIVED_IMAGE="${MORI_WAITALL_IMAGE:-k3-moriio-${SLURM_JOB_ID}:mori341}"
+    MORI_WAITALL_OK=1
+
+    if [[ ! -d "$MORI_SOURCE_DIR/.git" ||
+          "$(git -C "$MORI_SOURCE_DIR" rev-parse HEAD 2>/dev/null || true)" != "$MORI_PIN" ]]; then
+        rm -rf "$MORI_SOURCE_DIR"
+        git clone --filter=blob:none https://github.com/ROCm/mori.git "$MORI_SOURCE_DIR" \
+            || MORI_WAITALL_OK=0
+        if [[ "$MORI_WAITALL_OK" == "1" ]]; then
+            git -C "$MORI_SOURCE_DIR" checkout -q "$MORI_PIN" || MORI_WAITALL_OK=0
+            git -C "$MORI_SOURCE_DIR" submodule update --init --recursive --depth 1 \
+                || MORI_WAITALL_OK=0
+        fi
+    fi
+
+    if [[ "$MORI_WAITALL_OK" == "1" ]]; then
+        echo "[mori-image] source HEAD=$(git -C "$MORI_SOURCE_DIR" rev-parse HEAD)"
+        srun --nodelist="$SELECTED_NODELIST_SRUN" --nodes="$NUM_NODES" \
+            --ntasks="$NUM_NODES" --ntasks-per-node=1 \
+            bash "$DI_REPO_DIR/benchmarks/multi_node/amd_utils/prepare_mori_waitall_image.sh" \
+            "$DOCKER_IMAGE_NAME" "$MORI_DERIVED_IMAGE" "$MORI_SOURCE_DIR" \
+            || MORI_WAITALL_OK=0
+    fi
+
+    if [[ "$MORI_WAITALL_OK" == "1" ]]; then
+        DOCKER_IMAGE_NAME="$MORI_DERIVED_IMAGE"
+        echo "[mori-image] serving from $DOCKER_IMAGE_NAME (wait_all available)"
+    elif [[ "${MORI_WAITALL_REQUIRED:-0}" == "1" ]]; then
+        echo "FATAL: could not prepare the wait_all mori image and MORI_WAITALL_REQUIRED=1" >&2
+        exit 1
+    else
+        export MORIIO_READ_MODE=true
+        echo "[mori-image] WARNING: wait_all image unavailable on at least one node;" \
+             "falling back to MoRIIO READ mode on $DOCKER_IMAGE_NAME"
+    fi
+fi
+
 # =============================================================================
 # Build engine-specific Docker environment variables
 # =============================================================================
@@ -503,6 +555,18 @@ DOCKER_ENV_COMMON=(
     -e MORI_RDMA_TC=\${MORI_RDMA_TC:-}
     -e MORI_IO_TC=\${MORI_IO_TC:-}
     -e MORIIO_READ_MODE=\${MORIIO_READ_MODE:-}
+    -e \"PREFILL_EXTRA_SERVE_ARGS=\${PREFILL_EXTRA_SERVE_ARGS:-}\"
+    -e \"DECODE_EXTRA_SERVE_ARGS=\${DECODE_EXTRA_SERVE_ARGS:-}\"
+    -e PREFILL_GPU_MEM_UTIL=\${PREFILL_GPU_MEM_UTIL:-}
+    -e DECODE_GPU_MEM_UTIL=\${DECODE_GPU_MEM_UTIL:-}
+    -e PREFILL_LONG_PREFILL_TOKENS=\${PREFILL_LONG_PREFILL_TOKENS:-}
+    -e PREFILL_MAX_BATCHED_TOKENS=\${PREFILL_MAX_BATCHED_TOKENS:-}
+    -e DECODE_MAX_BATCHED_TOKENS=\${DECODE_MAX_BATCHED_TOKENS:-}
+    -e AIPERF_WARMUP_REQUESTS_PER_LANE=\${AIPERF_WARMUP_REQUESTS_PER_LANE:-}
+    -e AIPERF_TRACE_IDLE_GAP_CAP_SECONDS=\${AIPERF_TRACE_IDLE_GAP_CAP_SECONDS:-}
+    -e AIPERF_FAILED_REQUEST_THRESHOLD=\${AIPERF_FAILED_REQUEST_THRESHOLD:-}
+    -e AIPERF_HTTP_TCP_USER_TIMEOUT=\${AIPERF_HTTP_TCP_USER_TIMEOUT:-900000}
+    -e AIPERF_EXPERIMENTAL_FAST=\${AIPERF_EXPERIMENTAL_FAST:-}
     -e DECODE_TP_SIZE=\$DECODE_TP_SIZE
     -e DECODE_TP=\$DECODE_TP
     -e DECODE_NUM_WORKERS=\$DECODE_NUM_WORKERS
