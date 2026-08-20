@@ -49,6 +49,8 @@ else
     export MODEL_PATH="$MODEL"
 fi
 
+wait_for_amd_gpu_clean
+
 rocm-smi || true
 amd-smi || true
 
