@@ -6263,3 +6263,14 @@
   description:
     - "Refresh with lower stream interval to collect correct client metrics"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2686
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-agg
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Keep the aggregate runtime recipe and existing TP4 c8 point unchanged, and add GPU-resident TP4 points at c1, c2, c4, and c6."
+    - "Add 1P DEP4 + 4D TP8 at c4, 1P DEP8 + 1D DEP16 at c512, and 1P DEP8 + 1D DEP32 at c448 and c256 using isolated recipes."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2665
+  append-only: true
