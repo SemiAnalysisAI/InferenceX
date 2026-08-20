@@ -35,7 +35,7 @@ base:
       NCCL_CUMEM_ENABLE: '1'
       NCCL_MNNVL_ENABLE: '1'
       MC_FORCE_MNNVL: '1'
-      UCX_TLS: rc,cuda_copy,cuda_ipc,sm,self
+      UCX_LOG_LEVEL: debug
       SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
       SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
       SGLANG_ENABLE_THINKING: '1'
@@ -56,7 +56,7 @@ base:
       NCCL_CUMEM_ENABLE: '1'
       NCCL_MNNVL_ENABLE: '1'
       MC_FORCE_MNNVL: '1'
-      UCX_TLS: rc,cuda_copy,cuda_ipc,sm,self
+      UCX_LOG_LEVEL: debug
       SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
       SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
       SGLANG_MOE_NVFP4_DISPATCH: '1'
