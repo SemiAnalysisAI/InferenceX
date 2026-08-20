@@ -6248,4 +6248,4 @@
   description:
     - "Enable optional dcgm-power telemetry on 51 eligible GB200 and GB300 recipes."
     - "Keep 8 hardware-proven recipes required, and leave the 2 dedicated-infra recipes disabled."
-  pr-link: XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2687
