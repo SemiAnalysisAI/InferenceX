@@ -6217,6 +6217,25 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2642
 
 - config-keys:
+    - qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh GB200 Qwen3.5 NVFP4-V2 AgentX on lmsysorg/sglang:nightly-dev-20260818-c0b6474b without engine patches."
+    - "Add a TP2/EP2 HiCache branch and update the resident recipes with extra_buffer_lazy, ReplaySSM speculative verification, and checkpoint page-cache release."
+    - "Select TP4 C1/C2/C4/C8/C12/C20/C24, TP2/EP2 resident C4/C8/C12/C20, and TP2/EP2 HiCache C22/C24/C28/C32/C40 with golden synthetic acceptance length 3.39."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2660
+
+- config-keys:
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-mooncake-dcp16-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GB200 Kimi K3 AgentX config."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2639
+
+- config-keys:
     - kimik2.6-fp4-b200-dynamo-vllm
     - dsv4-fp4-b200-dynamo-vllm
     - dsv4-fp4-b300-dynamo-vllm
