@@ -361,7 +361,7 @@ qwen3.5-fp4-mi355x-sglang-mtp:
       - { tp: 4, conc-start: 4, conc-end: 16, spec-decoding: mtp }
 
 qwen3.5-fp4-mi355x-sglang-agentic-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260811
+  image: lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260818
   model: amd/Qwen3.5-397B-A17B-MXFP4
   model-prefix: qwen3.5
   runner: cluster:mi355x-amds
@@ -1283,6 +1283,22 @@ dsv4-fp4-mi355x-vllm-agentic-mtp:
       # LMCache invalid-block recovery currently assumes one KV-cache group,
       # while MTP creates two. Restore these points after the upstream hybrid
       # KV recovery fix lands: https://github.com/vllm-project/vllm/pull/45497
+
+# DeepSeek-V4-Pro FP4 AgentX on one MI355X node using ATOM MTP. Throughput
+# uses the thinking_on golden AL 2.49 for three draft tokens; eval uses real
+# MTP acceptance. max-num-seqs is set to 2x concurrency by the recipe.
+dsv4-fp4-mi355x-atom-agentic-mtp:
+  image: rocm/atom-dev:nightly_202608201032
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: atom
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 48] }
 
 dsr1-fp4-mi355x-sglang-disagg-mtp:
   image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519
