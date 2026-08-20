@@ -342,6 +342,7 @@ async def benchmark(
     goodput_config_dict: Dict[str, float],
     max_concurrency: Optional[int],
     lora_modules: Optional[List[str]],
+    dp_rank_roundrobin: Optional[int] = None,
 ):
     if backend in ASYNC_REQUEST_FUNCS:
         request_func = ASYNC_REQUEST_FUNCS[backend]
@@ -439,12 +440,22 @@ async def benchmark(
 
     benchmark_start_time = time.perf_counter()
     tasks: List[asyncio.Task] = []
+    req_idx = 0
     async for request in get_request(input_requests, request_rate, burstiness):
         prompt, prompt_len, output_len, mm_content = request
         req_model_id, req_model_name = model_id, model_name
         if lora_modules:
             req_lora_module = next(lora_modules)
             req_model_id, req_model_name = req_lora_module, req_lora_module
+
+        # Explicit round-robin over DP ranks: pin request i to rank i % N via
+        # vLLM's X-data-parallel-rank header, bypassing the server-side balancer.
+        extra_headers = None
+        if dp_rank_roundrobin:
+            extra_headers = {
+                "X-data-parallel-rank": str(req_idx % dp_rank_roundrobin)
+            }
+        req_idx += 1
 
         request_func_input = RequestFuncInput(model=req_model_id,
                                               model_name=req_model_name,
@@ -455,7 +466,8 @@ async def benchmark(
                                               logprobs=logprobs,
                                               best_of=best_of,
                                               multi_modal_content=mm_content,
-                                              ignore_eos=ignore_eos)
+                                              ignore_eos=ignore_eos,
+                                              extra_headers=extra_headers)
         tasks.append(
             asyncio.create_task(
                 limited_request_func(request_func_input=request_func_input,
@@ -698,6 +710,7 @@ def main(args: argparse.Namespace):
             goodput_config_dict=goodput_config_dict,
             max_concurrency=args.max_concurrency,
             lora_modules=args.lora_modules,
+            dp_rank_roundrobin=args.dp_rank_roundrobin,
         ))
 
     # Save config and results to json
@@ -869,6 +882,14 @@ if __name__ == "__main__":
         "results in a more uniform arrival of requests.",
     )
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument(
+        "--dp-rank-roundrobin",
+        type=int,
+        default=None,
+        help="If set to N, pin request i to data-parallel rank i %% N via the "
+        "X-data-parallel-rank header, bypassing the server-side DP balancer "
+        "(explicit round-robin routing). Use N = data_parallel_size.",
+    )
     parser.add_argument(
         "--trust-remote-code",
         action="store_true",

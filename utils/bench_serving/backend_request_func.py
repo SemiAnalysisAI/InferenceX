@@ -30,6 +30,7 @@ class RequestFuncInput:
     extra_body: Optional[dict] = None
     multi_modal_content: Optional[dict] = None
     ignore_eos: bool = False
+    extra_headers: Optional[dict] = None
 
 
 @dataclass
@@ -262,6 +263,8 @@ async def async_request_openai_completions(
         headers = {
             "Authorization": f"Bearer {os.environ.get('OPENAI_API_KEY')}"
         }
+        if request_func_input.extra_headers:
+            headers.update(request_func_input.extra_headers)
 
         output = RequestFuncOutput()
         output.prompt_len = request_func_input.prompt_len
@@ -368,6 +371,8 @@ async def async_request_openai_chat_completions(
             "Content-Type": "application/json",
             "Authorization": f"Bearer {os.environ.get('OPENAI_API_KEY')}",
         }
+        if request_func_input.extra_headers:
+            headers.update(request_func_input.extra_headers)
 
         output = RequestFuncOutput()
         output.prompt_len = request_func_input.prompt_len
