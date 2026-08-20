@@ -6234,3 +6234,11 @@
   description:
     - "Add GB200 Kimi K3 AgentX config."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2639
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add the MI355X Minimax-M3 FP4 Agentic MTP"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2671
