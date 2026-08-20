@@ -66,13 +66,19 @@ CACHE_ARGS=()
 WARMUP_ARGS=()
 if require_agentic_kv_offload_backend hicache; then
     # DeepSeek V4 HiCache currently rejects --hicache-size and supports
-    # capacity control only through a host/device token-capacity ratio.
-    # DSv4 exposes capacity as a host/device token ratio rather than bytes.
-    # Measurements put TP8 ratio=2 near 950 GB and TP4 ratio=8 near 1 TB,
-    # both below their configured capacities. The old TP4 ratio=16
-    # used roughly 2 TB and violated the half-node allocation rule.
+    # capacity control only through a host/device token-capacity ratio, so
+    # TOTAL_CPU_DRAM_GB cannot be applied directly and the ratio has to
+    # approximate it. Measured at TP8 with ratio=2 and mem-fraction 0.835:
+    # 124.88 GB per rank (swa 44.59 + c4 71.93 + indexer 8.36), i.e. 999 GB
+    # across 8 ranks. Capacity is linear in the ratio and scales with device
+    # KV, which mem-fraction 0.9 grows by ~1.28x, so ratio=4 lands near
+    # 2,560 GB against cluster:b300-nv's 2,964 GB -- roughly 86%, leaving
+    # ~400 GB for the OS, page cache, AIPerf and the router. The vLLM agentic
+    # lane consumes 2,849 GB at dram-utilization 0.95, so this stays under it.
+    # NOTE this supersedes the earlier half-node allocation rule that pinned
+    # TP8 to ratio=2, which gave a third of the vLLM lane's capacity.
     if [ "$TP" -ge 8 ]; then
-        DEFAULT_HICACHE_RATIO=2
+        DEFAULT_HICACHE_RATIO=4
     else
         DEFAULT_HICACHE_RATIO=8
     fi
@@ -116,21 +122,29 @@ if [ "$DP_ATTENTION" = "true" ]; then
     PARALLEL_ARGS+=(
         --dp "$TP"
         --tokenizer-worker-num "$TP"
+        --enable-prefill-delayer
+        --prefill-decode-interval 20
         --enable-dp-attention
         --enable-dp-attention-local-control-broadcast
         --incremental-streaming-output
         --stream-interval 20
         --dist-init-addr "127.0.0.1:$((PORT + 2000))"
         --ep-size "$EP_SIZE"
-        --moe-runner-backend flashinfer_mxfp4
+        --moe-a2a-backend megamoe
+        --enable-deepseek-v4-fp4-indexer
         --disable-flashinfer-autotune
     )
-    MEM_FRACTION_STATIC=0.95
+    MEM_FRACTION_STATIC=0.9
     if [ "$CONC" -ge 512 ]; then
-        # Leave room for FlashInfer's transient MoE workspace at the DEP8 tail.
-        MEM_FRACTION_STATIC=0.94
+        # Leave room for the mega-MoE transient workspace at the DEP8 tail.
+        MEM_FRACTION_STATIC=0.89
     fi
-    CHUNKED_PREFILL_SIZE=16384
+    # --chunked-prefill-size is a GLOBAL budget: server_args.py divides it by
+    # dp_size, and dp_size is TP here. Scale it so every DEP shape gets the
+    # per-rank 8192 that was tuned, rather than 16384/rank at DEP4 -- which
+    # exceeds MegaMoE's per-rank token cap (a startup ValueError) and measured
+    # slower at DEP8 when tried directly.
+    CHUNKED_PREFILL_SIZE=$((8192 * TP))
 else
     PARALLEL_ARGS+=(
         --moe-runner-backend flashinfer_mxfp4
@@ -150,6 +164,17 @@ MAX_RUNNING_REQUESTS=$((2 * CONC))
 CUDA_GRAPH_MAX_BS=$CONC
 [ "$CUDA_GRAPH_MAX_BS" -gt 64 ] && CUDA_GRAPH_MAX_BS=64
 
+# --cuda-graph-max-bs is an alias whose dest is cuda_graph_max_bs_decode, so the
+# two forms below are the same knob and must not both be passed.
+CUDA_GRAPH_ARGS=(--cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS")
+SWA_FULL_TOKENS_RATIO=0.1
+if [ "$DP_ATTENTION" = "true" ]; then
+    # Decode graphs must cover the padded MTP batch across all DP ranks, which
+    # exceeds CONC; capping at 64 would fall back to eager decode.
+    CUDA_GRAPH_ARGS=(--cuda-graph-max-bs-decode 544)
+    SWA_FULL_TOKENS_RATIO=0.075
+fi
+
 export PYTHONNOUSERSITE=1
 export TORCH_CUDA_ARCH_LIST=10.0
 # Agentic warmup dispatches hundreds of large prompts at once. SGLang's
@@ -168,6 +193,17 @@ export SGLANG_OPT_USE_JIT_NORM=1
 export SGLANG_OPT_USE_JIT_INDEXER_METADATA=1
 export SGLANG_OPT_USE_TOPK_V2=1
 export SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2=1
+if [ "$DP_ATTENTION" = "true" ]; then
+    # MegaMoE's FP4/MXF4 activation path is opt-in -- both flags default False,
+    # so --moe-a2a-backend megamoe alone runs a different kernel than the one
+    # measured. DG_USE_FP4_ACTS / DG_USE_MXF4_KIND are forwarded to DeepGEMM
+    # automatically from these two.
+    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_FP4_ACTS=1
+    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_MXF4_KIND=1
+    # Must cover the per-rank prefill budget (8192) or startup raises; the
+    # extra 128 is headroom over the exact-fit boundary.
+    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=8320
+fi
 if [ "${EVAL_ONLY}" != "true" ]; then
     export SGLANG_SIMULATE_ACC_LEN=2.49
     export SGLANG_SIMULATE_ACC_METHOD=match-expected
@@ -191,9 +227,9 @@ SGLANG_CMD=(
     --trust-remote-code
     "${PARALLEL_ARGS[@]}"
     --mem-fraction-static "$MEM_FRACTION_STATIC"
-    --swa-full-tokens-ratio 0.1
+    --swa-full-tokens-ratio "$SWA_FULL_TOKENS_RATIO"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
-    --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
+    "${CUDA_GRAPH_ARGS[@]}"
     --allow-auto-truncate
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
     --tool-call-parser deepseekv4
