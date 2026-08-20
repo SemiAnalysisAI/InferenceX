@@ -6251,3 +6251,16 @@
   description:
     - "Refresh with lower stream interval to collect correct client metrics"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2686
+
+- config-keys:
+    - kimik2.6-fp4-b200-dynamo-vllm
+    - dsv4-fp4-b200-dynamo-vllm
+    - dsv4-fp4-b300-dynamo-vllm
+    - dsv4-fp4-b300-dynamo-sglang
+    - dsv4-fp4-b200-dynamo-sglang-mtp
+    - dsv4-fp4-b200-dynamo-vllm-mtp
+    - dsv4-fp4-b300-dynamo-sglang-mtp
+  description:
+    - "Enable optional dcgm-power telemetry on 37 eligible B200 and B300 recipes."
+    - "Route only enabled recipes through the immutable producer fork and preserve non-power launcher revisions."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2688

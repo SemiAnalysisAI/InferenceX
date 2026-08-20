@@ -38,14 +38,24 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
-from aggregate_power import (
-    POWER_METRIC_SCHEMA_VERSION,
-    BenchmarkData,
-    _append_reason,
-    _integrate_device,
-    _load_benchmark_data,
-    _write_json_atomic,
-)
+try:
+    from .aggregate_power import (
+        POWER_METRIC_SCHEMA_VERSION,
+        BenchmarkData,
+        _append_reason,
+        _integrate_device,
+        _load_benchmark_data,
+        _write_json_atomic,
+    )
+except ImportError:  # Direct execution: python utils/aggregate_power_multinode.py
+    from aggregate_power import (
+        POWER_METRIC_SCHEMA_VERSION,
+        BenchmarkData,
+        _append_reason,
+        _integrate_device,
+        _load_benchmark_data,
+        _write_json_atomic,
+    )
 
 # --- srt-slurm dcgm-power v1 wire contract (mirrored constants) -------------
 

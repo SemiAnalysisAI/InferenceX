@@ -164,10 +164,14 @@ POWER_RECIPES = {
 
 
 def test_exactly_the_declared_recipes_opt_into_dcgm_power():
+    from test_b200_b300_power_official_contract import (
+        POWER_RECIPES as B200_B300_POWER_RECIPES,
+    )
+
     hits = git_grep_lines(
         "-lF", "provider: dcgm-power", "--", "benchmarks/multi_node/srt-slurm-recipes"
     )
-    assert sorted(hits) == sorted(POWER_RECIPES)
+    assert sorted(hits) == sorted(set(POWER_RECIPES) | set(B200_B300_POWER_RECIPES))
 
 
 def test_every_power_recipe_declares_the_same_telemetry_contract():
