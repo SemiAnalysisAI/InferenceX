@@ -33,7 +33,7 @@ name: "disagg-gb300-1p1d-dep4-dep16-5-c1024"
 
 model:
   path: "deepseek-v4-pro"
-  container: "lmsysorg/sglang:nightly-dev-cu13-20260707-b4155233"
+  container: "lmsysorg/sglang:v0.5.14-cu130@sha256:5027e95bf6ec536856b1b52a91d1f35ff5c564ab83e8a94758a169ff09bb8df3"
   precision: "fp4"
 
 dynamo:
@@ -177,3 +177,18 @@ benchmark:
   req_rate: "inf"
   use_chat_template: false
   custom_tokenizer: "sa_bench_tokenizers.sglang_deepseek_v4.SGLangDeepseekV4Tokenizer"
+
+telemetry:
+  enabled: true
+  provider: dcgm-power
+  default_frequency: 1.0
+  storage_subdir: power
+  required: true
+  startup_timeout_seconds: 120
+  request_timeout_seconds: 2
+  collector_join_timeout_seconds: 10
+  dcgm_exporter:
+    container_image: dcgm-exporter
+    # 9401 is already bound by the cluster-level exporter on im-gb300 nodes;
+    # use a port outside that range.
+    port: 19401
