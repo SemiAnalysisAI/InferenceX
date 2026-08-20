@@ -356,6 +356,24 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "kimik2.5" && $PRECISION
     git checkout main
     mkdir -p recipes/vllm/kimi-k2.5-fp4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k2.5-fp4" recipes/vllm/kimi-k2.5-fp4
+elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "dsv4" ]]; then
+    SRT_SLURM_MODEL_PREFIX="deepseek-ai/DeepSeek-V4-Pro"
+    git clone --branch v1.0.50 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
+    cd "$SRT_REPO_DIR" || exit 1
+
+    mkdir -p benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4 || exit 1
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4" \
+        benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4 || exit 1
+    if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
+        # srt-slurm v1.0.50 launches lm-eval on the allocation head and uses
+        # localhost:8000. Keep AgentX frontends on first_decode for throughput,
+        # but co-locate the eval-only frontend with lm-eval so loopback resolves.
+        find benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4 -name "*.yaml" \
+            -exec sed -i \
+                -e '/TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS/d' \
+                -e 's/^  orchestrator_placement: first_decode$/  orchestrator_placement: head/' \
+                {} +
+    fi
 elif [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "dsv4" ]]; then
     # DSv4 dynamo-trt recipes use the HuggingFace model ID as model.path,
     # so override SRT_SLURM_MODEL_PREFIX to match the recipe's model path key.
@@ -401,13 +419,17 @@ echo "Configs available at: $SRT_REPO_DIR/"
 # Create srtslurm.yaml for srtctl (used by both frameworks)
 SRTCTL_ROOT="${SRT_REPO_DIR}"
 echo "Creating srtslurm.yaml configuration..."
+SRT_DEFAULT_TIME_LIMIT="4:00:00"
+if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "dsv4" ]]; then
+    SRT_DEFAULT_TIME_LIMIT="8:00:00"
+fi
 cat > srtslurm.yaml <<EOF
 # SRT SLURM Configuration for GB300
 
 # Default SLURM settings
 default_account: "${SLURM_ACCOUNT}"
 default_partition: "${SLURM_PARTITION}"
-default_time_limit: "4:00:00"
+default_time_limit: "${SRT_DEFAULT_TIME_LIMIT}"
 
 # Resource defaults
 gpus_per_node: 4

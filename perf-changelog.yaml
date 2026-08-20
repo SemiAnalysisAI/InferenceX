@@ -6251,3 +6251,12 @@
   description:
     - "Refresh with lower stream interval to collect correct client metrics"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2686
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-trt-agentx
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add DeepSeek-V4-Pro GB300 Dynamo-TensorRT-LLM AgentX recipes for concurrencies 4, 24, 736, and 2626."
+    - "Disable TensorRT-LLM return_perf_metrics in the prefill and decode workers."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
