@@ -372,7 +372,7 @@ qwen3.5-fp4-mi355x-sglang-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16, 20] }
+      - { tp: 2, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16, 20, 24, 28, 32] }
       - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16, 20, 24, 28, 32, 40] }
 
 qwen3.5-fp4-mi355x-sglang-disagg:

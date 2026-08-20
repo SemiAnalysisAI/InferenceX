@@ -6251,3 +6251,12 @@
   description:
     - "Refresh with lower stream interval to collect correct client metrics"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2686
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Replace the TP2/EP2 arm with TP2/EP1 so the 2-GPU point matches qwen3.5-fp4-b200-sglang-agentic-mtp."
+    - "Extend the TP2 concurrency list to 1, 4, 8, 12, 16, 20, 24, 28, and 32."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2693
