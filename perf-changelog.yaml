@@ -6227,4 +6227,4 @@
   description:
     - "Enable optional dcgm-power telemetry on 37 eligible B200 and B300 recipes."
     - "Route only enabled recipes through the immutable producer fork and preserve non-power launcher revisions."
-  pr-link: XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2688
