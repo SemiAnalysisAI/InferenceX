@@ -1288,7 +1288,7 @@ dsv4-fp4-mi355x-vllm-agentic-mtp:
 # uses the thinking_on golden AL 2.49 for three draft tokens; eval uses real
 # MTP acceptance. max-num-seqs is set to 2x concurrency by the recipe.
 dsv4-fp4-mi355x-atom-agentic-mtp:
-  image: rocm/atom-dev:nightly_202608181633
+  image: rocm/atom-dev:nightly_202608201032
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:mi355x-amds
