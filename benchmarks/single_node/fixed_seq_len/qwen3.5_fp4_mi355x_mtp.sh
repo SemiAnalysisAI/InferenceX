@@ -47,6 +47,7 @@ python3 -m sglang.launch_server --model-path=$MODEL --trust-remote-code \
 --speculative-num-steps 3 \
 --speculative-eagle-topk 1 \
 --speculative-num-draft-tokens 4 \
+--kv-cache-dtype fp8_e4m3 \
 > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
