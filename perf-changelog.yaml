@@ -6251,3 +6251,12 @@
   description:
     - "Refresh with lower stream interval to collect correct client metrics"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2686
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang
+    - qwen3.5-fp4-mi355x-sglang-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Switch the served checkpoint from amd/Qwen3.5-397B-A17B-MXFP4 to amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2 on both arms."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2695
