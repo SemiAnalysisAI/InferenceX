@@ -240,6 +240,24 @@ elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX =
     mkdir -p recipes/sglang/deepseek-v4/agentic
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/agentic" \
         recipes/sglang/deepseek-v4/agentic
+elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "dsv4" ]]; then
+    SRT_SLURM_MODEL_PREFIX="deepseek-ai/DeepSeek-V4-Pro"
+    git clone --branch v1.0.50 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
+    cd "$SRT_REPO_DIR" || exit 1
+
+    mkdir -p benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4 || exit 1
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4" \
+        benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4 || exit 1
+    if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
+        # srt-slurm v1.0.50 launches lm-eval on the allocation head and uses
+        # localhost:8000. Keep AgentX frontends on first_decode for throughput,
+        # but co-locate the eval-only frontend with lm-eval so loopback resolves.
+        find benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4 -name "*.yaml" \
+            -exec sed -i \
+                -e '/TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS/d' \
+                -e 's/^  orchestrator_placement: first_decode$/  orchestrator_placement: head/' \
+                {} +
+    fi
 elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.2" ]]; then
     # GLM-5.2 GB300 sglang AgentX: srt-slurm main has the agentx-mvp scenario,
     # the zip_override sweep selectors, and the multi-frontend session-affinity
@@ -356,24 +374,6 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "kimik2.5" && $PRECISION
     git checkout main
     mkdir -p recipes/vllm/kimi-k2.5-fp4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k2.5-fp4" recipes/vllm/kimi-k2.5-fp4
-elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "dsv4" ]]; then
-    SRT_SLURM_MODEL_PREFIX="deepseek-ai/DeepSeek-V4-Pro"
-    git clone --branch v1.0.50 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
-    cd "$SRT_REPO_DIR" || exit 1
-
-    mkdir -p benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4 || exit 1
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4" \
-        benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4 || exit 1
-    if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
-        # srt-slurm v1.0.50 launches lm-eval on the allocation head and uses
-        # localhost:8000. Keep AgentX frontends on first_decode for throughput,
-        # but co-locate the eval-only frontend with lm-eval so loopback resolves.
-        find benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4 -name "*.yaml" \
-            -exec sed -i \
-                -e '/TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS/d' \
-                -e 's/^  orchestrator_placement: first_decode$/  orchestrator_placement: head/' \
-                {} +
-    fi
 elif [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "dsv4" ]]; then
     # DSv4 dynamo-trt recipes use the HuggingFace model ID as model.path,
     # so override SRT_SLURM_MODEL_PREFIX to match the recipe's model path key.
