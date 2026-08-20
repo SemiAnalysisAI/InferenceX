@@ -11,7 +11,7 @@ AIPERF_MMAP_CACHE_HOST_PATH="${AIPERF_MMAP_CACHE_HOST_PATH:-/home/sa-shared/ghar
 # intentionally long-lived; update the SHA only after reviewing a new fork
 # commit and re-running the H200 hardware gate.
 POWER_SRT_SLURM_URL="https://github.com/edwingao28/srt-slurm.git"
-POWER_SRT_SLURM_PIN="a1b8c7af10c00e5ea40074aebdc0086189bbc064"
+POWER_SRT_SLURM_PIN="e5c837f06a362dc888dfea2ee588e9f19c298270"
 
 set -x
 

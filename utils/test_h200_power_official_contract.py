@@ -23,7 +23,7 @@ DSV4_RECIPE = REPO_ROOT / (
 WORKFLOW = REPO_ROOT / ".github/workflows/test-process-result.yml"
 E2E_WORKFLOW = REPO_ROOT / ".github/workflows/e2e-tests.yml"
 
-PRODUCER_SHA = "a1b8c7af10c00e5ea40074aebdc0086189bbc064"
+PRODUCER_SHA = "e5c837f06a362dc888dfea2ee588e9f19c298270"
 PRODUCER_URL = "https://github.com/edwingao28/srt-slurm.git"
 
 
