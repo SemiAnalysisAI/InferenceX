@@ -314,7 +314,7 @@ qwen3.5-fp8-mi355x-sglang-disagg:
 
 qwen3.5-fp4-mi355x-sglang:
   image: lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260730
-  model: amd/Qwen3.5-397B-A17B-MXFP4
+  model: amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2
   model-prefix: qwen3.5
   runner: mi355x
   precision: fp4
@@ -346,7 +346,7 @@ qwen3.5-fp4-mi355x-atom:
 
 qwen3.5-fp4-mi355x-sglang-mtp:
   image: lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260730
-  model: amd/Qwen3.5-397B-A17B-MXFP4
+  model: amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2
   model-prefix: qwen3.5
   runner: mi355x
   precision: fp4
