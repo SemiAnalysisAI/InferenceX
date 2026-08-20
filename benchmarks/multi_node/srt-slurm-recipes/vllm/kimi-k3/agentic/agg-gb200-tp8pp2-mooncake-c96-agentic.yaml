@@ -1,7 +1,7 @@
 name: "kimik3-vllm-agg-gb200-tp8pp2-mooncake-c96-agentic"
 
 model:
-  path: "kimik3"
+  path: "kimi-k3"
   container: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-728d3ad"
   precision: "fp4"
 
