@@ -6234,3 +6234,18 @@
   description:
     - "Add GB200 Kimi K3 AgentX config."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2639
+
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-sglang
+    - dsv4-fp4-gb200-dynamo-sglang-mtp
+    - dsv4-fp4-gb300-dynamo-sglang
+    - dsv4-fp4-gb300-dynamo-sglang-mtp
+    - qwen3.5-fp4-gb300-dynamo-sglang
+    - qwen3.5-fp8-gb200-dynamo-sglang
+    - qwen3.5-fp8-gb200-dynamo-sglang-mtp
+    - qwen3.5-fp8-gb300-dynamo-sglang
+    - qwen3.5-fp8-gb300-dynamo-sglang-mtp
+  description:
+    - "Enable optional dcgm-power telemetry on 51 eligible GB200 and GB300 recipes."
+    - "Keep 8 hardware-proven recipes required, and leave the 2 dedicated-infra recipes disabled."
+  pr-link: XXX
