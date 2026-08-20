@@ -155,7 +155,7 @@ frontend:
     active-decode-blocks-threshold: None
     active-prefill-tokens-threshold: None
     active-prefill-tokens-threshold-frac: None
-  orchestrator_placement: first_decode
+  orchestrator_placement: head
 
 benchmark:
   type: custom
