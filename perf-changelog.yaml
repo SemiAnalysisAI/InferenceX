@@ -6271,4 +6271,5 @@
   description:
     - "Add the MiniMax-M3 NVFP4 GB300 disaggregated AgentX config with EAGLE3-GQA MTP and Mooncake DRAM KV offload."
     - "Use vllm/vllm-openai:nightly-5e35a6f4f9bbc217c599692157ca985c894373f7 with golden synthetic AL 2.78 for throughput and a real-verification eval twin."
+    - "Drive the AgentX replay thinking-on via AIPERF_EXTRA_INPUTS thinking:true, and set dyn-reasoning-parser / dyn-tool-call-parser, matching the GB200 MiniMax-M3 AgentX recipes so the run matches the golden minimaxm3_eagle3_gqa thinking_on[3] = 2.78 acceptance target."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2663
