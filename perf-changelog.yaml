@@ -6349,3 +6349,4 @@
     - "Add one aggregated TP8 and six disaggregated GLM-5.2 NVFP4 GB300 AgentX recipes for Dynamo and TensorRT-LLM with MTP speculative decoding."
     - "Use the concurrency-1 aggregated Pareto point and disable TensorRT-LLM performance-metrics responses for all seven points."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2657
+  
