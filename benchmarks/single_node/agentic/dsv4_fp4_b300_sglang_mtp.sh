@@ -144,7 +144,7 @@ if [ "$DP_ATTENTION" = "true" ]; then
         # DP rank, which then hangs the whole engine in the MLP-sync collective.
         MEM_FRACTION_STATIC=0.93
         if [ "$CONC" -ge 512 ]; then
-            MEM_FRACTION_STATIC=0.875
+            MEM_FRACTION_STATIC=0.86
         elif [ "$CONC" -ge 384 ]; then
             MEM_FRACTION_STATIC=0.89
         elif [ "$CONC" -ge 256 ]; then
