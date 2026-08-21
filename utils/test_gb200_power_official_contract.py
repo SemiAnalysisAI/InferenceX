@@ -61,7 +61,7 @@ def assert_recipe_driven_detection(launcher):
     assert "t && /^  enabled: true$/        { e = 1 }" in launcher
     assert "USES_DCGM_POWER=1" in launcher
     assert (
-        'if [[ "$USES_DCGM_POWER" == "1" && "$PRECISION" != "fp8" ]]; then'
+        'if [[ "$USES_DCGM_POWER" == "1" && "$FRAMEWORK" != "dynamo-sglang" ]]; then'
         in launcher
     )
     # Exporter provisioning, pinned clone, srtslurm.yaml injection, and audit
@@ -149,14 +149,36 @@ def test_pin_literal_lives_only_in_the_two_launchers():
     ]
 
 
-def test_exactly_two_recipes_opt_into_dcgm_power():
+# Every recipe that opts into dcgm-power, with the exporter port its cluster
+# requires (im-gb300 nodes already bind 9401; gb200 keeps the default).
+POWER_RECIPES = {
+    "benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/8k1k/disagg-gb200-1p1d-dep8-dep16-6-c512.yaml": 9401,
+    "benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/8k1k/disagg-gb200-1p1d-tp8-tp8-4-c1.yaml": 9401,
+    "benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/8k1k/disagg-gb200-1p2d-dep8-dep16-10-c256.yaml": 9401,
+    "benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/8k1k/disagg-gb300-1p1d-dep4-dep16-5-c1024.yaml": 19401,
+    "benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/8k1k/disagg-gb300-1p1d-tp4-tp4-2-c1.yaml": 19401,
+    "benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb200-fp8/8k1k/1p1d-tp4-tp4.yaml": 9401,
+    "benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb300-fp4/8k1k/disagg/stp/8k1k_stp_lowlat_0.yaml": 19401,
+    "benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb300-fp8/8k1k/1p1d-tp4-tp4.yaml": 19401,
+}
+
+
+def test_exactly_the_declared_recipes_opt_into_dcgm_power():
     hits = git_grep_lines(
         "-lF", "provider: dcgm-power", "--", "benchmarks/multi_node/srt-slurm-recipes"
     )
-    assert sorted(hits) == [
-        "benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb200-fp8/8k1k/1p1d-tp4-tp4.yaml",
-        "benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb300-fp8/8k1k/1p1d-tp4-tp4.yaml",
-    ]
+    assert sorted(hits) == sorted(POWER_RECIPES)
+
+
+def test_every_power_recipe_declares_the_same_telemetry_contract():
+    for path, port in POWER_RECIPES.items():
+        telemetry = yaml.safe_load((REPO_ROOT / path).read_text())["telemetry"]
+        assert telemetry["enabled"] is True, path
+        assert telemetry["provider"] == "dcgm-power", path
+        assert telemetry["default_frequency"] == 1.0, path
+        assert telemetry["required"] is True, path
+        assert telemetry["dcgm_exporter"]["container_image"] == "dcgm-exporter", path
+        assert telemetry["dcgm_exporter"]["port"] == port, path
 
 
 def test_lane_and_pin_have_no_env_override_backdoor():
