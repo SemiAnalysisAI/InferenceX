@@ -6276,4 +6276,4 @@
     - "Use --cuda-graph-max-bs-decode 196 on the DP path, matching the largest configured concurrency; keep the existing concurrency-capped --cuda-graph-max-bs behavior for TP-only runs."
     - "Enable the DeepSeek-V4 FP4 indexer on the TP-only path as well, while retaining flashinfer_mxfp4, chunked-prefill 8192, mem-fraction-static 0.88, and swa-full-tokens-ratio 0.1."
     - "Keep the published TP-only rows, drop the DP-attention no-offload point, and replace the DP-attention HiCache concurrency list [16, 40, 48] with [32, 64, 96, 128, 160, 196]. The DP path retains HiCache ratio 8, mem-fraction-static 0.88, swa-full-tokens-ratio 0.02, and the existing 2x max-running-requests budget."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2703
