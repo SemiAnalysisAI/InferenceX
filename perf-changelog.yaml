@@ -6277,3 +6277,14 @@
   description:
     - "Refresh with lower stream interval to collect correct client metrics"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2686
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump the SGLang image from lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260719 to lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260817."
+    - "Add concurrency 48 and 64 to the TP8/EP1 sweep, and 64 and 192 to the TP8/EP8 DP-attention sweep."
+    - "Increase prefill mem_fraction_static from 0.72 to 0.85 and reduce HICACHE_RATIO from 4 to 3."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2643
+  

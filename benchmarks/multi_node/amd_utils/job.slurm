@@ -676,21 +676,21 @@ else
 fi
 fi  # end: if ENGINE == atom-disagg
 
-# Pre-clean (idempotent): stop then force-remove so GPU VRAM is released before
-# the sanity gate. stop-only left containers in Created/Exited state on some nodes.
+# Pre-clean (idempotent): stop then force-remove so GPU VRAM is released
+# before the drain gate. stop-only left containers in Created/Exited state
+# on some nodes.
 \$DOCKER_CMD ps -aq --filter \"$CONT_FILTER\" | xargs -r \$DOCKER_CMD rm -f || true
 \$DOCKER_CMD ps -aq | xargs -r \$DOCKER_CMD stop -t 15 || true
 \$DOCKER_CMD ps -aq | xargs -r \$DOCKER_CMD rm -f || true
 sleep 2
 
-# GPU sanity gate: containers are stopped, so any remaining VRAM use is a bare
-# (non-containerized) process hogging the GPU -- fail fast (and name it)
-# instead of OOMing in model load ~30 min later. set -e + --kill-on-bad-exit
-# tears down the whole job on non-zero exit.
+# GPU drain gate: fail fast on leftover VRAM use instead of OOMing in model
+# load ~15 min later. Reuses wait_for_amd_gpu_clean from benchmark_lib.sh.
 if [[ \"${SKIP_GPU_SANITY:-0}\" == \"1\" ]]; then
-    echo \"[INFO] SKIP_GPU_SANITY=1 set; skipping GPU sanity pre-flight check\"
+    echo \"[INFO] SKIP_GPU_SANITY=1 set; skipping GPU pre-flight drain check\"
 else
-    bash \"$DI_REPO_DIR/benchmarks/multi_node/amd_utils/helpers/gpu_sanity.sh\"
+    # Unset so benchmark_lib.sh's unrelated agentic KV_OFFLOADING check doesn't exit 1 here.
+    bash -c \"unset IS_AGENTIC SCENARIO_TYPE; source $DI_REPO_DIR/benchmarks/benchmark_lib.sh && wait_for_amd_gpu_clean\"
 fi
 
 # Start vLLM external router container on node 0
