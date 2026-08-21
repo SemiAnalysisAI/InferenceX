@@ -6279,6 +6279,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2686
 
 - config-keys:
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-mooncake-dcp16-agg
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the GB200 Pareto by replacing the non-DSpark DCP16 candidates at concurrency 16, 24, 32, 36, and 44 with TP8 x PP2/DCP8 Mooncake candidates at concurrency 16, 32, 48, 72, and 96."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2700
+
+- config-keys:
     - dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp
   scenario-type:
     - agentic-coding
@@ -6297,3 +6307,12 @@
     - "Enable SGLANG_OPT_USE_AITER_BATCHED_GEMM for mi355x sglang dsv4 agentic workload."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2705
 
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-trt-agentx
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add DeepSeek-V4-Pro GB300 Dynamo-TensorRT-LLM AgentX recipes for concurrencies 4, 24, 388, 736, 1152, and 2626."
+    - "Disable TensorRT-LLM return_perf_metrics in the prefill and decode workers."
+    - "Route the selected GB300 workloads to batch_3."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2690
