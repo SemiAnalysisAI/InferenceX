@@ -2,6 +2,7 @@
 import pytest
 import argparse
 import copy
+from pathlib import Path
 from generate_sweep_configs import (
     MIN_EVAL_CONC,
     seq_len_stoi,
@@ -14,6 +15,7 @@ from generate_sweep_configs import (
     apply_node_type_defaults,
     expand_config_keys,
 )
+from validation import load_config_files, load_runner_file
 
 
 # =============================================================================
@@ -2604,6 +2606,55 @@ class TestGenerateFullSweepMixed:
             multi_result[0]["decode"]["dcp-size"],
             multi_result[0]["decode"]["pcp-size"],
         ) == (2, 2, 1)
+
+
+class TestAgentXPowerExperimentConfigs:
+    """Contracts for the controlled Qwen3.5 B300 power experiment."""
+
+    def test_qwen_b300_fp4_fp8_memory_tier_matrix_is_balanced(self):
+        repo_root = Path(__file__).resolve().parents[2]
+        config = load_config_files([str(repo_root / "configs/nvidia-master.yaml")])
+        runners = load_runner_file(str(repo_root / "configs/runners.yaml"))
+        args = argparse.Namespace(
+            config_keys=[
+                "qwen3.5-fp8-b300-sglang-agentic-power-ab",
+                "qwen3.5-fp4-b300-sglang-agentic-power-ab",
+            ],
+            seq_lens=None,
+            conc=[16, 32],
+            scenario_type=["agentic-coding"],
+            runner_node_filter=None,
+        )
+
+        result = generate_test_config_sweep(args, config, runners)
+
+        assert len(result) == 8
+        assert {
+            (row["precision"], row["kv-offloading"], row["conc"])
+            for row in result
+        } == {
+            (precision, offload, conc)
+            for precision in ("fp4", "fp8")
+            for offload in ("none", "dram")
+            for conc in (16, 32)
+        }
+        assert {row["image"] for row in result} == {
+            "lmsysorg/sglang:v0.5.16-cu130"
+        }
+        assert all(row["runner"] == "cluster:b300-nv" for row in result)
+        assert all(row["tp"] == 2 and row["ep"] == 2 for row in result)
+        assert all(row["spec-decoding"] == "mtp" for row in result)
+        assert all(row["duration"] == 3600 for row in result)
+        assert all(
+            row.get("kv-offload-backend") == {"name": "hicache"}
+            for row in result
+            if row["kv-offloading"] == "dram"
+        )
+        assert all(
+            "kv-offload-backend" not in row
+            for row in result
+            if row["kv-offloading"] == "none"
+        )
 
 
 # =============================================================================
