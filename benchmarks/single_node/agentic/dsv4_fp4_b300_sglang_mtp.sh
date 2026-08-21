@@ -146,7 +146,7 @@ if [ "$DP_ATTENTION" = "true" ]; then
         if [ "$CONC" -ge 512 ]; then
             MEM_FRACTION_STATIC=0.86
         elif [ "$CONC" -ge 384 ]; then
-            MEM_FRACTION_STATIC=0.89
+            MEM_FRACTION_STATIC=0.88
         elif [ "$CONC" -ge 256 ]; then
             MEM_FRACTION_STATIC=0.9
         fi
