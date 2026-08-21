@@ -10,7 +10,7 @@ name: "disagg-gb300-2p4d-dep8-dep16-c256-mtp-kvoffload"
 
 model:
   path: "deepseek-v4-pro"
-  container: "lmsysorg/sglang:nightly-dev-cu13-20260821-f825d729"
+  container: "dynamo-sglang"
   precision: "fp4"
 
 identity:
