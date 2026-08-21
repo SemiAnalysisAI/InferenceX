@@ -67,13 +67,15 @@ WARMUP_ARGS=()
 if require_agentic_kv_offload_backend hicache; then
     # DeepSeek V4 HiCache rejects --hicache-size and controls capacity only
     # through a host/device token ratio, so TOTAL_CPU_DRAM_GB cannot apply
-    # directly. Measured: TP8 ratio=2 at mem-fraction 0.835 gives 999 GB.
-    # Capacity is linear in the ratio and scales with device KV, so ratio=4
-    # at mem-fraction 0.9 lands near 2,560 GB of the node's 2,964 GB, under
-    # the 2,849 GB the vLLM agentic lane uses at dram-utilization 0.95.
-    # Supersedes the old half-node rule that pinned TP8 to ratio=2.
+    # directly. Host capacity scales with BOTH the ratio and device KV, so it
+    # also grows with mem-fraction-static -- the two knobs multiply. Measured:
+    # TP8 ratio=2 at mem-fraction 0.835 gives 999 GB. ratio=4 at mem-fraction
+    # 0.93 overshoots: it left only 5.84 GB free on a 2,964 GB node and the
+    # V4 paged pool failed to allocate. ratio=3 keeps the tier near 2 TB with
+    # room for the paged pool, page cache, AIPerf and the router, while still
+    # well above the old half-node rule that pinned TP8 to ratio=2.
     if [ "$TP" -ge 8 ]; then
-        DEFAULT_HICACHE_RATIO=4
+        DEFAULT_HICACHE_RATIO=3
     else
         DEFAULT_HICACHE_RATIO=8
     fi
