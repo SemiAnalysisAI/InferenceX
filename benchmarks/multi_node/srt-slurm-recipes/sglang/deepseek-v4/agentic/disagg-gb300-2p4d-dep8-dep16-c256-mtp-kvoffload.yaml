@@ -10,14 +10,14 @@ name: "disagg-gb300-2p4d-dep8-dep16-c256-mtp-kvoffload"
 
 model:
   path: "deepseek-v4-pro"
-  container: "lmsysorg/sglang:nightly-dev-cu13-20260811-d59c1ddf"
+  container: "lmsysorg/sglang:nightly-dev-cu13-20260821-f825d729"
   precision: "fp4"
 
 identity:
   model:
     repo: "deepseek-ai/DeepSeek-V4-Pro"
   container:
-    image: "lmsysorg/sglang:nightly-dev-cu13-20260811-d59c1ddf"
+    image: "lmsysorg/sglang:nightly-dev-cu13-20260821-f825d729"
   frameworks:
     dynamo: "1.4.0"
 
