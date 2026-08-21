@@ -175,7 +175,11 @@ MODEL_ARGS=(
 # AgentX concurrency counts live session trees, not individual requests.
 # Allow subagent fan-out to exceed CONC without clipping request bursts.
 MAX_RUNNING_REQUESTS=$((2 * CONC))
-CUDA_GRAPH_MAX_BS=$CONC
+# Subagent fan-out means live requests exceed CONC (see MAX_RUNNING_REQUESTS
+# above), so sizing decode graphs at CONC would drop every larger batch to
+# eager decode. Capture past the fan-out; the runtime clamps this down to the
+# request pool size anyway.
+CUDA_GRAPH_MAX_BS=$((CONC * 4))
 [ "$CUDA_GRAPH_MAX_BS" -gt 64 ] && CUDA_GRAPH_MAX_BS=64
 
 # --cuda-graph-max-bs is an alias whose dest is cuda_graph_max_bs_decode, so the
