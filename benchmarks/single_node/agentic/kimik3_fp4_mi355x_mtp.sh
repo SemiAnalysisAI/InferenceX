@@ -39,7 +39,7 @@ set -x
 #   KV_CACHE_DTYPE           fp8    (default for every arm; =auto for a bf16 A/B)
 #   KV_BLOCK_SIZE            unset  (unset -> vLLM sizes the page; 128 under fp8)
 #   MAX_MODEL_LEN            1M     
-#   SPEC_DECODE              true   (this is the _mtp DSpark recipe; =false for a no-spec A/B)
+#   SPEC_DECODING            mtp    (set to none for the no-DSpark arm)
 #   SPEC_NUM_TOKENS          2      (DSpark draft length; validated by the _mtp config)
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
@@ -104,13 +104,18 @@ export VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4=1
 export AITER_BF16_FP8_MOE_BOUND=0
 # REQUIRED on ROCm per the upstream recipe: the build auto-enables this to 1.
 export VLLM_USE_BREAKABLE_CUDAGRAPH=0
+# Packed DCP A2A collectives must use process-lifetime buffers: graph replay
+# bakes in the send/recv addresses, while function-local torch.empty tensors
+# are freed immediately after capture. 128 covers eager warmup and MAX_CG=96.
+export VLLM_DCP_A2A_PERSISTENT_BUFFERS=1
+export VLLM_DCP_A2A_BUFFER_MAX_BATCH=128
 
-# Workaround for MEC FW <177 RCCL memory reclaim issue (shared with the other
-# gfx950 recipes in this tree).
-mec_version=$(rocm-smi --showfw 2>/dev/null | grep MEC | head -n 1 | awk '{print $NF}')
-if [[ "$mec_version" == "" || ${mec_version:-0} -lt 177 ]]; then
-    export HSA_NO_SCRATCH_RECLAIM=1
-fi
+# The other gfx950 recipes pin this to 1 as an MEC FW <177 RCCL reclaim
+# workaround, and the CI parent environment exports 1, so a :- default would
+# never take effect here. Assign it: at TP8xDCP8 pinned scratch is what starves
+# the run -- capture and warmup leave ~3.6 GB free and the engine then dies
+# under load with HSA_STATUS_ERROR_OUT_OF_RESOURCES (0x1008).
+export HSA_NO_SCRATCH_RECLAIM=0
 
 # 2.8T of weights off a shared/NFS mount takes far longer than the default.
 export VLLM_ENGINE_READY_TIMEOUT_S="${VLLM_ENGINE_READY_TIMEOUT_S:-7200}"
@@ -174,7 +179,9 @@ fi
 SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-2}"
 SYNTHETIC_ACCEPT_LEN=2.51
 
-if [ "${EVAL_ONLY:-false}" = "true" ]; then
+if [ "${SPEC_DECODING:-mtp}" = "none" ]; then
+    SPEC_ARGS=()
+elif [ "${EVAL_ONLY:-false}" = "true" ]; then
     SPEC_ARGS=(
         --speculative-config
         "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"block\"}"
@@ -235,13 +242,37 @@ if [ -n "$MLA_PREFILL_BACKEND" ]; then
     )
 fi
 
+# ---- Decode context parallelism ---------------------------------------------
+# Compare TP8 and TP8+DCP8 while keeping every non-topology setting identical.
+DCP_SIZE="${DCP_SIZE:-8}"
+DCP_ARGS=()
+if [ "$DCP_SIZE" -eq 8 ]; then
+    export VLLM_ALLOW_DCP_FULL_CUDAGRAPH=1
+    DCP_ARGS=(
+        --decode-context-parallel-size "$DCP_SIZE"
+        --dcp-comm-backend a2a
+        --cp-kv-cache-interleave-size 1
+    )
+elif [ "$DCP_SIZE" -ne 1 ]; then
+    echo "Error: this recipe supports DCP_SIZE=1 or 8, got $DCP_SIZE." >&2
+    exit 1
+fi
+
 # ---- HIP graph ------------------------------------------------------------
 MAX_NUM_SEQS="${MAX_NUM_SEQS:-$(( CONC * 2 ))}"
 MAX_CUDAGRAPH_CAPTURE_SIZE="${MAX_CUDAGRAPH_CAPTURE_SIZE:-$(( MAX_NUM_SEQS * 3 ))}"
 CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 1 "$MAX_CUDAGRAPH_CAPTURE_SIZE")"
-COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}")
+# FULL, not FULL_AND_PIECEWISE: the latter leaves the DSpark drafter on
+# piecewise graphs, and drafting on full graphs is the entire point of this arm
+# (14.05 -> 77.65 tok/s single stream). Set CUDAGRAPH_MODE to override when
+# isolating a capture failure.
+CUDAGRAPH_MODE="${CUDAGRAPH_MODE:-FULL}"
+COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"$CUDAGRAPH_MODE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}")
 
-GPU_MEM_UTIL="0.9"
+# At 0.88 vLLM preallocates ~48.6 GiB/rank of KV, while the AgentX warmup's
+# M=8190 prefill leaves HSA only ~1.3 GiB for runtime scratch. 0.84 returns
+# ~11.5 GiB/rank to transient graph/GEMM/MoE allocations.
+GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.84}"
 
 echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
@@ -260,6 +291,7 @@ VLLM_CMD=(
     --gpu-memory-utilization "$GPU_MEM_UTIL"
     --language-model-only
     --max-num-seqs "$MAX_NUM_SEQS"
+    "${DCP_ARGS[@]}"
     --enable-auto-tool-choice
     --tool-call-parser kimi_k3
     --reasoning-parser kimi_k3
