@@ -6325,3 +6325,13 @@
     - "Expand the GB300 AgentX aggregate TP4 sweep to concurrency 1, 2, 4, 6, and 8."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2676
   
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  append-only: true
+  description:
+    - "Add TP8 SimpleCPU + MTP AgentX points at concurrency 14 and 18."
+    - "At these two concurrencies only, the benchmark script switches cudagraphs from FULL_DECODE_ONLY to FULL_AND_PIECEWISE with extra piecewise capture sizes (100-500) so mixed prefill/decode batches also run under CUDA graphs, and caps --max-num-batched-tokens at 8192 to leave KV-cache room for the larger graph memory footprint."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2702
+  

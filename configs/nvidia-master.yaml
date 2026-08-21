@@ -975,7 +975,7 @@ dsv4-fp4-b200-vllm-agentic-mtp:
     - dram-utilization: 0.95
       search-space:
       # TP8 SimpleCPU + MTP
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [1, 4, 8, 16, 24] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [1, 4, 8, 14, 16, 18, 24] }
       # DEP8 SimpleCPU + MTP
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [32, 64, 96, 128, 160, 196], router: { name: vllm-router, version: "0.1.14" } }
 

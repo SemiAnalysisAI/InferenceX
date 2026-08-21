@@ -232,6 +232,21 @@ if [ "$DP_ATTENTION" = "true" ]; then
     )
 fi
 
+# Concurrencies served by the large-batch arm. These keep the default 2x
+# running-sequence headroom -- pinning it to CONC throttled the cold-start burst --
+# and admit much larger prefill batches, so a cold turn prefills in few steps.
+case "$CONC" in
+    14|18) TIGHT_BATCH_ARM=true ;;
+    *)     TIGHT_BATCH_ARM=false ;;
+esac
+if [ "$TIGHT_BATCH_ARM" = "true" ] && [ "$DP_ATTENTION" != "true" ]; then
+    # Piecewise capture costs ~1.5 GiB more than decode-only graphs, so keep the
+    # prefill batch at the default to leave room for the KV cache. gpu-memory-
+    # utilization stays at 0.90: at 0.92 the trtllm_fp4_block_scale_routed_moe
+    # workspace could not allocate 1.64 GiB on the first request and the engine died.
+    MODE_ARGS+=(--max-num-batched-tokens 8192)
+fi
+
 # AgentX concurrency counts live session trees. Subagent fan-out can push the
 # global instantaneous request count above CONC, so retain 2x global headroom
 # while avoiding the old 8x over-allocation of that budget on every DEP rank.
@@ -257,14 +272,24 @@ if [ "${EVAL_ONLY:-false}" = "true" ]; then
 else
     SPEC_CONFIG="{\"method\": \"mtp\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": 2.49}"
 fi
-CUDA_GRAPH_CAPTURE_SIZES=""
+CAPTURE_SIZE_LIST=()
 for ((num_seqs = 1; num_seqs <= MAX_NUM_SEQS; num_seqs++)); do
-    if [ -n "$CUDA_GRAPH_CAPTURE_SIZES" ]; then
-        CUDA_GRAPH_CAPTURE_SIZES+=","
-    fi
-    CUDA_GRAPH_CAPTURE_SIZES+="$((num_seqs * TOKENS_PER_SEQ))"
+    CAPTURE_SIZE_LIST+=("$((num_seqs * TOKENS_PER_SEQ))")
 done
-COMPILATION_CONFIG="{\"cudagraph_mode\":\"FULL_DECODE_ONLY\",\"cudagraph_capture_sizes\":[${CUDA_GRAPH_CAPTURE_SIZES}],\"mode\":0}"
+if [ "$TIGHT_BATCH_ARM" = "true" ]; then
+    # FULL_AND_PIECEWISE: the full graphs cover the uniform decode batches
+    # enumerated above, the piecewise graphs cover mixed prefill/decode batches.
+    # Piecewise capture requires the compiled graph, so no "mode":0 here.
+    CAPTURE_SIZE_LIST+=(100 200 300 400 500)
+fi
+# The decode multiples and the piecewise sizes overlap once MAX_NUM_SEQS*(1+N)
+# passes 100, so sort and de-duplicate before serving the list.
+CUDA_GRAPH_CAPTURE_SIZES=$(printf '%s\n' "${CAPTURE_SIZE_LIST[@]}" | sort -n -u | paste -sd, -)
+if [ "$TIGHT_BATCH_ARM" = "true" ]; then
+    COMPILATION_CONFIG="{\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"cudagraph_capture_sizes\":[${CUDA_GRAPH_CAPTURE_SIZES}]}"
+else
+    COMPILATION_CONFIG="{\"cudagraph_mode\":\"FULL_DECODE_ONLY\",\"cudagraph_capture_sizes\":[${CUDA_GRAPH_CAPTURE_SIZES}],\"mode\":0}"
+fi
 
 echo "Starting vllm server..."
 export TORCH_CUDA_ARCH_LIST="10.0"
