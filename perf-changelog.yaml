@@ -6197,6 +6197,32 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2576
 
 - config-keys:
+    - kimik3-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add the MI355X Kimi-K3 FP4 ATOM AgentX submission with DSpark speculative decoding (2 draft tokens): TP8 at concurrency 1 and 4 is GPU-resident with no KV offload, while concurrency 8 and 10 add the LMCache DRAM tier together with ATOM's CPU state-offload tier."
+    - "Both offload tiers are switched together because Kimi-K3 is a hybrid: Kimi Delta Attention carries a per-request recurrent state alongside the paged KV, so a resumed agentic turn needs the state back and the paged KV tier alone cannot restore one."
+    - "Use AITER INT4 quick-reduce, AITER SITUV2 A4W4, FlyDSL stage-2 FP8, ptpc_fp8 online quantization excluding embeddings, lm_head, conv1d projections, experts, and the multimodal tower, an FP8 KV cache, and a 128-token page."
+    - "Set the simulated acceptance length to 2.54, giving spec-decode-acceptance-rate (2.54 - 1) / 2 = 0.77, which is the value the submitted ATOM numbers were measured under. This is 1.2% above the committed golden 2.51 that the vLLM arm feeds to synthetic_acceptance_length, and the script carries a review note saying so; set it to 2.51 for a strictly like-for-like sweep. Evaluations use real acceptance."
+    - "Divide the aggregate TOTAL_CPU_DRAM_GB budget by TP for LMCACHE_MAX_LOCAL_CPU_SIZE, which is a per-rank setting; dram-utilization 0.085 lands that at roughly 32 GB per rank."
+    - "Set OFFLOAD_GPU_STAGING_CHUNKS to 16 because the staging buffer defaults to 2 chunks (8 MiB) and one Kimi-K3 state entry is 54.78 MiB; a buffer too small to hold one entry makes the state tier decline to build after a single log line."
+    - "Select max-num-seqs, max-num-batched-tokens, gpu-memory-utilization, and in-GPU state-checkpoint slots by concurrency, and place state checkpoints at the prompt-end anchor only."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2670
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add DeepSeek-V4-Pro FP4 ATOM MTP AgentX on one 8x MI355X node at concurrency 1, 2, 4, 8, 16, 32, and 48, with no KV offload and max-num-seqs set to twice concurrency."
+    - "Use rocm/atom-dev:nightly_202608201032, FP8 KV/index caches, prefix caching, 32K state checkpoints, 16K batching/prefill chunks, and FULL cudagraph mode."
+    - "Use three-token MTP with the committed DeepSeek-V4 thinking-mode golden AL 2.49 (synthetic acceptance length 3) for throughput, while eval-only runs measure real MTP acceptance."
+    - "Increase the AgentX warmup grace period from the 1800-second default to 3600 seconds at concurrency 32 and 48, matching the DeepSeek-V4-Pro SGLang saturation recipe so in-flight warmup requests can drain and reused long prefixes are fully primed before profiling."
+    - "Keep concurrency 1 through 16 at the default 1800 seconds; the profiling duration remains 3600 seconds for every concurrency arm."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2698
+
+- config-keys:
     - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
   scenario-type:
     - agentic-coding
@@ -6227,6 +6253,62 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2660
 
 - config-keys:
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-mooncake-dcp16-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GB200 Kimi K3 AgentX config."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2639
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump image from lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260811 to lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260818"
+    - "Serve the AgentX arm with an fp8_e4m3 KV cache."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2677
+
+- config-keys:
+    - minimaxm3-fp4-b200-trtllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh with lower stream interval to collect correct client metrics"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2686
+
+- config-keys:
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-mooncake-dcp16-agg
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the GB200 Pareto by replacing the non-DSpark DCP16 candidates at concurrency 16, 24, 32, 36, and 44 with TP8 x PP2/DCP8 Mooncake candidates at concurrency 16, 32, 48, 72, and 96."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2700
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump the SGLang image from lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260719 to lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260817."
+    - "Add concurrency 48 and 64 to the TP8/EP1 sweep, and 64 and 192 to the TP8/EP8 DP-attention sweep."
+    - "Increase prefill mem_fraction_static from 0.72 to 0.85 and reduce HICACHE_RATIO from 4 to 3."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2643
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-trt-agentx
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add DeepSeek-V4-Pro GB300 Dynamo-TensorRT-LLM AgentX recipes for concurrencies 4, 24, 388, 736, 1152, and 2626."
+    - "Disable TensorRT-LLM return_perf_metrics in the prefill and decode workers."
+    - "Route the selected GB300 workloads to batch_3."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2690
+
+- config-keys:
     - dsv4-fp4-b300-vllm-agentic-mtp
   scenario-type:
     - agentic-coding
@@ -6234,3 +6316,4 @@
     - "Append GPU-resident TP4 concurrency 1, 2, 4, and 6 points to the existing B300 DeepSeek-V4-Pro vLLM AgentX MTP curve."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2647
   append-only: true
+  

@@ -438,6 +438,13 @@ elif [[ "$IS_AGENTIC" == "1" && (( "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" 
         cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
             recipes/vllm/deepseek-v4/agentic
     fi
+# Kimi-K3 requires direct multi-node vLLM frontend support from srt-slurm.
+elif [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "kimik3" ]]; then
+    git clone --branch v1.0.53 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
+    cd "$SRT_REPO_DIR" || exit 1
+    mkdir -p recipes/vllm/kimi-k3/agentic || exit 1
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
+        recipes/vllm/kimi-k3/agentic || exit 1
 # TODO(CJQ): migrate the remaining Agentic model paths to released srt-slurm.
 elif [[ "$IS_AGENTIC" == "1" ]]; then
     # Agentic multi-node pins cquil11/srt-slurm-nv revisions that provide:
@@ -450,21 +457,10 @@ elif [[ "$IS_AGENTIC" == "1" ]]; then
     #     must reach the agentic_srt.sh srun)
     git clone https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
-    if [[ "$MODEL_PREFIX" == "kimik3" ]]; then
-        # Kimi K3 additionally needs vLLM TP groups within data parallel and
-        # every DP engine metrics endpoint exposed to AIPerf.
-        git checkout b1fb626fbdbfe3306dcb51cb181ab35861ec3b1c
-        mkdir -p recipes/vllm/kimi-k3/agentic
-        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
-            recipes/vllm/kimi-k3/agentic
-        cp "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/kimik3-dspark-config-compat.sh" \
-            configs/kimik3-dspark-config-compat.sh
-    else
-        git checkout de59739b172e507e15ebf145bfe305f606e82fbf
-        mkdir -p recipes/vllm/deepseek-v4/agentic
-        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
-            recipes/vllm/deepseek-v4/agentic
-    fi
+    git checkout de59739b172e507e15ebf145bfe305f606e82fbf
+    mkdir -p recipes/vllm/deepseek-v4/agentic
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
+        recipes/vllm/deepseek-v4/agentic
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
