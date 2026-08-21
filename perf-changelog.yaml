@@ -6307,3 +6307,13 @@
     - "Disable TensorRT-LLM return_perf_metrics in the prefill and decode workers."
     - "Route the selected GB300 workloads to batch_3."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2690
+
+- config-keys:
+    - dsv4-fp4-b300-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Append GPU-resident TP4 concurrency 1, 2, 4, and 6 points to the existing B300 DeepSeek-V4-Pro vLLM AgentX MTP curve."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2647
+  append-only: true
+  
