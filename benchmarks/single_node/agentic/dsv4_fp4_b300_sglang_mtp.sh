@@ -129,10 +129,19 @@ if [ "$DP_ATTENTION" = "true" ]; then
         --enable-deepseek-v4-fp4-indexer
         --disable-flashinfer-autotune
     )
-    MEM_FRACTION_STATIC=0.9
-    if [ "$CONC" -ge 512 ]; then
-        # Leave room for the mega-MoE transient workspace at the DEP8 tail.
-        MEM_FRACTION_STATIC=0.89
+    # DEP4 shards the model over half the node, so per-rank weights roughly
+    # double and the weights-only floor rises above 0.9 (the engine reports a
+    # minimum viable 0.9013 and refuses to start). Keep upstream's 0.95 there.
+    # DEP8 has room for the lower value, which leaves mega-MoE workspace
+    # headroom.
+    if [ "$TP" -ge 8 ]; then
+        MEM_FRACTION_STATIC=0.93
+        if [ "$CONC" -ge 512 ]; then
+            # Leave room for the mega-MoE transient workspace at the DEP8 tail.
+            MEM_FRACTION_STATIC=0.92
+        fi
+    else
+        MEM_FRACTION_STATIC=0.95
     fi
     # --chunked-prefill-size is a GLOBAL budget: server_args.py divides it by
     # dp_size, and dp_size is TP here. Scale it so every DEP shape gets the
