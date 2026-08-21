@@ -66,6 +66,10 @@ elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp4" ]]; then
     # in our GLM-5.1 sglang recipes.
     export MODEL_PATH=/scratch/models/GLM-5.1-NVFP4
     export SRT_SLURM_MODEL_PREFIX="glm-5-fp4"
+elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-trt" ]]; then
+    export SERVED_MODEL_NAME="GLM-5.2-NVFP4"
+    export MODEL_PATH=/scratch/models/GLM-5.2-NVFP4
+    export SRT_SLURM_MODEL_PREFIX="nvidia/GLM-5.2-NVFP4"
 elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH=/scratch/models/GLM-5.2-NVFP4
     export SRT_SLURM_MODEL_PREFIX="glm-5.2-fp4"
@@ -202,6 +206,18 @@ if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "qw
     TRTLLM_RECIPES_DIR="recipes/trtllm/qwen3.5/gb300-fp4/disagg/agentx"
     mkdir -p "$TRTLLM_RECIPES_DIR"
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/qwen3.5/gb300-fp4/disagg/agentx" \
+        "$TRTLLM_RECIPES_DIR"
+    if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
+        find "$TRTLLM_RECIPES_DIR" -name "*.yaml" \
+            -exec sed -i '/TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS/d' {} +
+    fi
+elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "glm5.2" ]]; then
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    git checkout v1.0.38
+    TRTLLM_RECIPES_DIR="benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2"
+    mkdir -p "$TRTLLM_RECIPES_DIR"
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2" \
         "$TRTLLM_RECIPES_DIR"
     if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
         find "$TRTLLM_RECIPES_DIR" -name "*.yaml" \
@@ -685,6 +701,19 @@ if [[ "${RUN_EVAL:-false}" == "true" || "${EVAL_ONLY:-false}" == "true" ]]; then
     else
         echo "WARNING: RUN_EVAL=true but no eval results found at $EVAL_DIR"
     fi
+
+    # srt-slurm stages eval artifacts but does not write the metadata file
+    # consumed by score validation. Reuse the canonical metadata writer so
+    # topology and recipe identity stay aligned with the workflow inputs.
+    eval_conc_value="${EVAL_CONC:-${CONC:-1}}"
+    (
+        export IS_MULTINODE=true
+        # shellcheck source=benchmarks/benchmark_lib.sh
+        source "$GITHUB_WORKSPACE/benchmarks/benchmark_lib.sh"
+        _write_lm_eval_meta_json \
+            "$GITHUB_WORKSPACE/meta_env.json" "" "$eval_conc_value"
+    )
+    echo "Wrote meta_env.json (conc=${eval_conc_value}, prefix=${MODEL_PREFIX:-unknown})"
 fi
 
 # Snapshot logs to GITHUB_WORKSPACE BEFORE cleanup, so the EXIT trap's

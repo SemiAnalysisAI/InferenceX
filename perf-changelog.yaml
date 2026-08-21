@@ -6339,3 +6339,14 @@
     - "Enable the DeepSeek-V4 FP4 indexer on the TP-only path as well, while retaining flashinfer_mxfp4, chunked-prefill 8192, mem-fraction-static 0.88, and swa-full-tokens-ratio 0.1."
     - "Keep the published TP-only rows, drop the DP-attention no-offload point, and replace the DP-attention HiCache concurrency list [16, 40, 48] with [32, 64, 96]. The DP path retains HiCache ratio 8, mem-fraction-static 0.88, swa-full-tokens-ratio 0.02, and the existing 2x max-running-requests budget."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2703
+  
+- config-keys:
+    - glm5.2-fp4-gb300-dynamo-trt-agentic-agg-mtp
+    - glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add one aggregated TP8 and six disaggregated GLM-5.2 NVFP4 GB300 AgentX recipes for Dynamo and TensorRT-LLM with MTP speculative decoding."
+    - "Use the concurrency-1 aggregated Pareto point and disable TensorRT-LLM performance-metrics responses for all seven points."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2657
+  
