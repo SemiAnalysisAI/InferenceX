@@ -6331,6 +6331,7 @@
     - agentic-coding
   append-only: true
   description:
-    - "Add a few more points"
+    - "Add TP8 SimpleCPU + MTP AgentX points at concurrency 14 and 18."
+    - "At these two concurrencies only, the benchmark script switches cudagraphs from FULL_DECODE_ONLY to FULL_AND_PIECEWISE with extra piecewise capture sizes (100-500) so mixed prefill/decode batches also run under CUDA graphs, and caps --max-num-batched-tokens at 8192 to leave KV-cache room for the larger graph memory footprint."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2702
   
