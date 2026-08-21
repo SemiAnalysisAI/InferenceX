@@ -111,7 +111,7 @@ if [ "$DP_ATTENTION" = "true" ]; then
         --dp "$TP"
         --tokenizer-worker-num "$TP"
         --enable-prefill-delayer
-        --prefill-decode-interval 20
+        --prefill-decode-interval 10
         --enable-dp-attention
         --enable-dp-attention-local-control-broadcast
         --incremental-streaming-output
@@ -145,13 +145,8 @@ MEM_FRACTION_STATIC=0.88
 # AgentX concurrency counts live session trees, not individual requests.
 # Allow subagent fan-out to exceed CONC without clipping request bursts.
 MAX_RUNNING_REQUESTS=$((2 * CONC))
-CUDA_GRAPH_MAX_BS=$CONC
-[ "$CUDA_GRAPH_MAX_BS" -gt 64 ] && CUDA_GRAPH_MAX_BS=64
+CUDA_GRAPH_MAX_BS=$((2 * CONC))
 CUDA_GRAPH_ARGS=(--cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS")
-if [ "$DP_ATTENTION" = "true" ]; then
-    # Cover the largest configured DEP AgentX concurrency.
-    CUDA_GRAPH_ARGS=(--cuda-graph-max-bs-decode 196)
-fi
 
 export PYTHONNOUSERSITE=1
 export TORCH_CUDA_ARCH_LIST=10.0
