@@ -65,18 +65,13 @@ export SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS=1
 CACHE_ARGS=()
 WARMUP_ARGS=()
 if require_agentic_kv_offload_backend hicache; then
-    # DeepSeek V4 HiCache currently rejects --hicache-size and supports
-    # capacity control only through a host/device token-capacity ratio, so
-    # TOTAL_CPU_DRAM_GB cannot be applied directly and the ratio has to
-    # approximate it. Measured at TP8 with ratio=2 and mem-fraction 0.835:
-    # 124.88 GB per rank (swa 44.59 + c4 71.93 + indexer 8.36), i.e. 999 GB
-    # across 8 ranks. Capacity is linear in the ratio and scales with device
-    # KV, which mem-fraction 0.9 grows by ~1.28x, so ratio=4 lands near
-    # 2,560 GB against cluster:b300-nv's 2,964 GB -- roughly 86%, leaving
-    # ~400 GB for the OS, page cache, AIPerf and the router. The vLLM agentic
-    # lane consumes 2,849 GB at dram-utilization 0.95, so this stays under it.
-    # NOTE this supersedes the earlier half-node allocation rule that pinned
-    # TP8 to ratio=2, which gave a third of the vLLM lane's capacity.
+    # DeepSeek V4 HiCache rejects --hicache-size and controls capacity only
+    # through a host/device token ratio, so TOTAL_CPU_DRAM_GB cannot apply
+    # directly. Measured: TP8 ratio=2 at mem-fraction 0.835 gives 999 GB.
+    # Capacity is linear in the ratio and scales with device KV, so ratio=4
+    # at mem-fraction 0.9 lands near 2,560 GB of the node's 2,964 GB, under
+    # the 2,849 GB the vLLM agentic lane uses at dram-utilization 0.95.
+    # Supersedes the old half-node rule that pinned TP8 to ratio=2.
     if [ "$TP" -ge 8 ]; then
         DEFAULT_HICACHE_RATIO=4
     else
