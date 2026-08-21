@@ -10,15 +10,16 @@
 # degrades to "unpatched", never to "broken".
 #
 #   [1] aiter pybind11 internals mismatch  -> unblocks ROCM_AITER_FA prefill
-#   [2] TritonMLA cudagraph support        -> FULL cudagraphs for DSpark (5.52x TPOT)
-#   [3] KV block-pool negative-count clamp -> stops the mid-run engine crash
-#   [4] corrected K3 DCP vLLM stack         -> segmented verify + persistent CG
-#   [5] persistent DCP A2A buffers          -> graph replay pointer stability
-#   [6] validated AITER Gluon overlay       -> fp8 DCP verify support
+#   [2] KV block-pool negative-count clamp -> stops the mid-run engine crash
+#   [3] live vLLM DCP branch               -> Kimi-K3 DSpark DCP correctness
+#   [4] validated AITER Gluon overlay      -> fp8 DCP verify support
 #
 # Env:
-#   SKIP_KIMI_PATCHES=1   skip everything
-#   PYTHON=...            interpreter to use (default python3)
+#   SKIP_KIMI_PATCHES=1  skip everything
+#   PYTHON=...           interpreter to use (default python3)
+#   VLLM_DCP_REPO_URL=...  vLLM fork URL
+#   VLLM_DCP_BRANCH=...    branch fetched on every container start
+#   VLLM_DCP_BASE=...      image commit used as the patch base
 # =============================================================================
 set -euo pipefail
 PY=${PYTHON:-python3}
@@ -144,50 +145,7 @@ EOF
 }
 
 # -----------------------------------------------------------------------------
-# [2] vLLM: let DSpark spec-decode keep FULL cudagraphs
-# -----------------------------------------------------------------------------
-# TritonMLAMetadataBuilder._cudagraph_support = UNIFORM_SINGLE_TOKEN_DECODE caps
-# min_cg_support below UNIFORM_BATCH, so config/compilation.py downgrades
-# FULL_AND_PIECEWISE -> PIECEWISE under spec-decode. dflash/speculator.py then
-# gives the DSpark drafter CUDAGraphMode.NONE -- fully eager -- and logs nothing.
-# TRITON_MLA cannot be swapped out: it is the only ROCm MLA backend with
-# supports_non_causal_multi_token_decode=True, which DSpark requires
-# (ROCM_AITER_MLA fails with "non-causal attention not supported").
-# The builder already calls _init_reorder_batch_threshold(1,
-# supports_spec_as_decode=True) "so full-cudagraph capture admits it", so
-# UNIFORM_BATCH is the self-consistent value.
-# MEASURED 8x MI355X single stream, 600-token gens:
-#   before 14.05 tok/s ITL 71.16 ms  ->  after 77.65 tok/s ITL 12.88 ms  (5.52x)
-patch_triton_mla_cudagraph() {
-    local label="triton-mla-cudagraph"
-    local target; target=$(_modfile vllm.v1.attention.backends.mla.triton_mla)
-    if [ -z "$target" ] || [ ! -f "$target" ]; then
-        echo "[$label] target not found; skipping."; return 0
-    fi
-    if grep -q "AttentionCGSupport.UNIFORM_BATCH" "$target"; then
-        echo "[$label] already patched."; return 0
-    fi
-    cp -n "$target" "$target.orig" 2>/dev/null || true
-    $PY - "$target" <<'EOF' || echo "[triton-mla-cudagraph] patch failed; unchanged." >&2
-import sys, io
-p = sys.argv[1]
-src = io.open(p, encoding="utf-8").read()
-old = """    _cudagraph_support: ClassVar[AttentionCGSupport] = (
-        AttentionCGSupport.UNIFORM_SINGLE_TOKEN_DECODE
-    )"""
-new = """    # PATCHED: UNIFORM_SINGLE_TOKEN_DECODE forced a PIECEWISE downgrade under
-    # spec-decode, which silently made the DSpark drafter fully eager.
-    _cudagraph_support: ClassVar[AttentionCGSupport] = AttentionCGSupport.UNIFORM_BATCH"""
-if src.count(old) != 1:
-    sys.stderr.write("[triton-mla-cudagraph] anchor missing or not unique; aborting.\n")
-    sys.exit(1)
-io.open(p, "w", encoding="utf-8").write(src.replace(old, new))
-print("[triton-mla-cudagraph] patched", p)
-EOF
-}
-
-# -----------------------------------------------------------------------------
-# [3] vLLM: clamp the negative block count that corrupts the KV free list
+# [2] vLLM: clamp the negative block count that corrupts the KV free list
 # -----------------------------------------------------------------------------
 # single_type_kv_cache_manager.py, in allocate_external_computed_blocks(), is the
 # ONLY unguarded get_new_blocks() call site in that file (siblings clamp or
@@ -242,148 +200,110 @@ EOF
 }
 
 # -----------------------------------------------------------------------------
-# [4] Corrected Kimi-K3 DSpark DCP production stack
+# [3] Fetch and apply the current Kimi-K3 DSpark DCP branch
 # -----------------------------------------------------------------------------
-# Generated from vLLM ac7509e2b..5dd8ff381, production files only. This is the
-# stack validated at TP8/DCP8, MAX_CG=96: segmented MLA verify, DCP FULL-graph
-# enablement, global block-table sizing, and persistent DFlash/AITER metadata.
-K3_DCP_PATCH_SHA="185ac7d5229fa7011a870070412385a80bb350c624dfbc73a92268bdb6c1dc37"
-patch_k3_dcp_vllm() {
-    local label="k3-dcp-vllm"
+# Pull the branch on every fresh container start, then generate a production-only
+# patch against the exact vLLM commit in the pinned image. This keeps SA synced
+# when the DCP branch is fixed without copying a new multi-thousand-line diff
+# into InferenceX. A failed fetch, dry-run, apply, or verification is fatal.
+patch_vllm_dcp_branch() (
+    local label="vllm-dcp-branch"
+    local repo_url="${VLLM_DCP_REPO_URL:-https://github.com/YukioZzz/vllm.git}"
+    local branch="${VLLM_DCP_BRANCH:-yichaozhu/k3-dspark-dcp-v3}"
+    local base="${VLLM_DCP_BASE:-ac7509e2b1db40fec2f03dde1ed4e9dfdc2338c9}"
+    if ! command -v git >/dev/null 2>&1 || ! command -v patch >/dev/null 2>&1; then
+        echo "[$label] git and patch are required in the serving image." >&2
+        return 1
+    fi
     local root; root=$($PY -c 'import vllm,os;print(os.path.dirname(os.path.dirname(vllm.__file__)))' 2>/dev/null)
     if [ -z "$root" ] || [ ! -d "$root/vllm" ]; then
         echo "[$label] vllm root not found." >&2
         return 1
     fi
-    if grep -q "self.seq_lens_cg" \
-        "$root/vllm/v1/attention/backends/mla/rocm_aiter_mla.py" 2>/dev/null &&
-       grep -q "prepare_dcp_local_seq_lens" \
-        "$root/vllm/v1/worker/gpu/spec_decode/dflash/cudagraph.py" 2>/dev/null; then
-        echo "[$label] already patched."
-        return 0
+
+    local workdir repo patch_file
+    workdir=$(mktemp -d)
+    repo="$workdir/vllm"
+    patch_file="$workdir/vllm-dcp.patch"
+    trap 'rc=$?; if [ "$rc" -ne 0 ]; then echo "[$label] FAILED (exit $rc)." >&2; fi; rm -rf "$workdir"' EXIT
+
+    echo "[$label] fetching $repo_url branch $branch (base $base)..."
+    git -C "$workdir" init --quiet vllm
+    git -C "$repo" remote add origin "$repo_url"
+    if ! git -C "$repo" fetch --quiet --no-tags --depth=1 origin \
+        "$base:refs/dcp-patch/base" \
+        "refs/heads/$branch:refs/dcp-patch/head"; then
+        echo "[$label] FETCH FAILED for $repo_url $branch." >&2
+        return 1
     fi
 
-    local diff_file
-    diff_file="$(dirname "$0")/vllm_k3_dcp_5dd8ff381_ac7509.patch"
-    if [ ! -f "$diff_file" ]; then
-        echo "[$label] vendored production patch not found: $diff_file" >&2
+    local base_sha head_sha state_file
+    base_sha=$(git -C "$repo" rev-parse refs/dcp-patch/base)
+    head_sha=$(git -C "$repo" rev-parse refs/dcp-patch/head)
+    state_file="$root/.inferencex-vllm-dcp-head"
+    echo "[$label] fetched base=$base_sha head=$head_sha"
+
+    verify_dcp_tree() {
+        local path expected actual
+        while IFS= read -r -d '' path; do
+            if git -C "$repo" cat-file -e "refs/dcp-patch/head:$path" 2>/dev/null; then
+                if [ ! -f "$root/$path" ]; then
+                    echo "[$label] VERIFY FAILED: missing $path" >&2
+                    return 1
+                fi
+                expected=$(git -C "$repo" rev-parse "refs/dcp-patch/head:$path")
+                actual=$(git hash-object "$root/$path")
+                if [ "$actual" != "$expected" ]; then
+                    echo "[$label] VERIFY FAILED: content mismatch in $path" >&2
+                    return 1
+                fi
+            elif [ -e "$root/$path" ]; then
+                echo "[$label] VERIFY FAILED: deleted path still exists: $path" >&2
+                return 1
+            fi
+        done < <(
+            git -C "$repo" diff --name-only -z \
+                refs/dcp-patch/base refs/dcp-patch/head -- vllm
+        )
+    }
+
+    if [ -f "$state_file" ] && [ "$(cat "$state_file")" = "$head_sha" ]; then
+        verify_dcp_tree
+        echo "[$label] already applied and verified head=$head_sha"
+        return 0
+    fi
+    if [ -f "$state_file" ]; then
+        echo "[$label] a different DCP head is already applied; use a fresh container." >&2
+        echo "[$label] applied=$(cat "$state_file") requested=$head_sha" >&2
         return 1
     fi
-    local got; got=$(sha256sum "$diff_file" | cut -d" " -f1)
-    if [ "$got" != "$K3_DCP_PATCH_SHA" ]; then
-        echo "[$label] sha256 mismatch; refusing an unreviewed revision." >&2
-        echo "[$label] expected $K3_DCP_PATCH_SHA" >&2
-        echo "[$label] got      $got" >&2
+
+    git -C "$repo" diff --binary refs/dcp-patch/base refs/dcp-patch/head \
+        -- vllm > "$patch_file"
+    if [ ! -s "$patch_file" ]; then
+        echo "[$label] generated patch is empty; refusing to continue." >&2
         return 1
     fi
-    if ! patch -p1 -d "$root" --dry-run --forward < "$diff_file"; then
+    echo "[$label] production diff:"
+    git -C "$repo" diff --stat refs/dcp-patch/base refs/dcp-patch/head -- vllm
+
+    if ! patch -p1 -d "$root" --dry-run --forward < "$patch_file"; then
         echo "[$label] dry-run failed; refusing a partial patch." >&2
         return 1
     fi
+    echo "[$label] dry-run succeeded."
     if ! patch -p1 -d "$root" --forward --backup \
-        --suffix=.k3-dcp.orig < "$diff_file"; then
+        --suffix=.dcp-branch.orig < "$patch_file"; then
         echo "[$label] apply failed after a clean dry-run." >&2
         return 1
     fi
-    grep -q "self.seq_lens_cg" \
-        "$root/vllm/v1/attention/backends/mla/rocm_aiter_mla.py"
-    grep -q "prepare_dcp_local_seq_lens" \
-        "$root/vllm/v1/worker/gpu/spec_decode/dflash/cudagraph.py"
-    echo "[$label] applied vLLM ac7509e2b..5dd8ff381."
-}
+    verify_dcp_tree
+    printf '%s\n' "$head_sha" > "$state_file"
+    echo "[$label] SUCCESS: applied $base_sha..$head_sha to $root"
+)
 
 # -----------------------------------------------------------------------------
-# [5] vLLM: keep DCP A2A send/recv buffers alive across graph replay
-# -----------------------------------------------------------------------------
-# dcp_alltoall.py allocates fresh send/recv tensors inside each attention call.
-# Capturing 96 graphs succeeds, but those local tensors die when the call
-# returns; replay then immediately faults on the unmapped RCCL buffer address.
-#
-# 8-rank op-level proof on MI355X, same packed payload and B=96..1:
-#   dynamic torch.empty: capture 0.69 s; first replay -> aperture on all 8 GPUs
-#   persistent flat pair: 3 x (96 captures + 96 replays) -> PASS
-#
-# Keep old generations too: if a later eager shape grows the capacity, graphs
-# captured against the prior generation must retain their original address.
-patch_dcp_a2a_persistent_buffers() {
-    local label="dcp-a2a-persistent"
-    local target; target=$(_modfile vllm.v1.attention.ops.dcp_alltoall)
-    if [ -z "$target" ] || [ ! -f "$target" ]; then
-        echo "[$label] target not found." >&2
-        return 1
-    fi
-    if grep -q "KIMI-PATCH-DCP-A2A-PERSISTENT" "$target"; then
-        echo "[$label] already patched."
-        return 0
-    fi
-    cp -n "$target" "$target.orig" 2>/dev/null || true
-    $PY - "$target" <<'EOF'
-import io
-import sys
-
-p = sys.argv[1]
-src = io.open(p, encoding="utf-8").read()
-if "\nimport os\n" not in src:
-    src = src.replace("\nimport torch\n", "\nimport os\n\nimport torch\n", 1)
-
-start = src.index("def _dcp_a2a_send_recv_buffers(")
-end = src.index("\n\n@triton.jit", start)
-old = src[start:end]
-new = '''# KIMI-PATCH-DCP-A2A-PERSISTENT: graph replay bakes in the RCCL payload
-# addresses. Function-local torch.empty tensors are freed after capture, so
-# retain flat max-size generations for the process lifetime.
-_dcp_a2a_buffer_generations: dict[
-    tuple[torch.device, torch.dtype, int, int, int],
-    list[tuple[int, torch.Tensor, torch.Tensor]],
-] = {}
-
-
-def _dcp_a2a_send_recv_buffers(
-    shape: tuple[int, ...],
-    device: torch.device,
-    dtype: torch.dtype,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    if os.environ.get("VLLM_DCP_A2A_PERSISTENT_BUFFERS", "1") == "0":
-        return (
-            torch.empty(shape, device=device, dtype=dtype),
-            torch.empty(shape, device=device, dtype=dtype),
-        )
-
-    world_size, batch_size, heads_per_rank, packed_dim = shape
-    key = (device, dtype, world_size, heads_per_rank, packed_dim)
-    generations = _dcp_a2a_buffer_generations.setdefault(key, [])
-
-    for capacity, send_flat, recv_flat in reversed(generations):
-        if capacity >= batch_size:
-            break
-    else:
-        # 128 covers this recipe's eager warmup and MAX_CG=96. If a future
-        # workload needs more, append a generation rather than replacing one:
-        # older captured graphs still own their original addresses.
-        capacity = max(
-            batch_size,
-            int(os.environ.get("VLLM_DCP_A2A_BUFFER_MAX_BATCH", "128")),
-        )
-        numel = world_size * capacity * heads_per_rank * packed_dim
-        send_flat = torch.empty(numel, device=device, dtype=dtype)
-        recv_flat = torch.empty_like(send_flat)
-        generations.append((capacity, send_flat, recv_flat))
-
-    numel = world_size * batch_size * heads_per_rank * packed_dim
-    return (
-        send_flat[:numel].view(shape),
-        recv_flat[:numel].view(shape),
-    )'''
-
-io.open(p, "w", encoding="utf-8").write(src[:start] + new + src[end:])
-print("[dcp-a2a-persistent] patched", p)
-EOF
-    $PY -m py_compile "$target"
-    grep -q "KIMI-PATCH-DCP-A2A-PERSISTENT" "$target"
-}
-
-# -----------------------------------------------------------------------------
-# [6] AITER: validated Gluon MLA support for DCP multi-token verify
+# [4] AITER: validated Gluon MLA support for DCP multi-token verify
 # -----------------------------------------------------------------------------
 AITER_GLUON_SHA="9459fce5dccd81a65e3e49e278f35d38e4b79d4552c6ac6ebdf406a937e063d7"
 patch_aiter_gluon_fp8_dcp() {
@@ -413,37 +333,23 @@ patch_aiter_gluon_fp8_dcp() {
     echo "[$label] patched $target"
 }
 
-# Per-patch switches, so a single patch can be isolated without disabling the
+# Per-patch switches, so a local patch can be isolated without disabling the
 # others. Note patch [1] is load-bearing: without it ROCM_AITER_FA prefill dies
 # at warmup with the fmha_fwd_bf16_opus TypeError, so skipping it does not give
 # a clean baseline -- it gives a different crash.
 #   SKIP_PATCH_AITER=1      skip [1] aiter pybind11
-#   SKIP_PATCH_CUDAGRAPH=1  skip [2] TritonMLA UNIFORM_BATCH   <- the HIP-999 suspect
-#   SKIP_PATCH_BLOCKPOOL=1  skip [3] KV block-pool clamp
-#   SKIP_PATCH_DCP_A2A=1    skip [5] persistent packed A2A buffers
+#   SKIP_PATCH_BLOCKPOOL=1  skip [2] KV block-pool clamp
 echo "[kimi-patches] applying in-container patches..."
-# Apply the coherent vLLM stack first. The older inline Triton patch below then
-# detects that its two changes already exist and becomes an idempotent no-op.
-patch_k3_dcp_vllm
 if [ "${SKIP_PATCH_AITER:-0}" = "1" ]; then
     echo "[aiter-pybind11] SKIPPED via SKIP_PATCH_AITER=1"
 else
     patch_aiter_pybind11 || true
-fi
-if [ "${SKIP_PATCH_CUDAGRAPH:-0}" = "1" ]; then
-    echo "[triton-mla-cudagraph] SKIPPED via SKIP_PATCH_CUDAGRAPH=1"
-else
-    patch_triton_mla_cudagraph || true
 fi
 if [ "${SKIP_PATCH_BLOCKPOOL:-0}" = "1" ]; then
     echo "[kv-blockpool] SKIPPED via SKIP_PATCH_BLOCKPOOL=1"
 else
     patch_kv_blockpool || true
 fi
-if [ "${SKIP_PATCH_DCP_A2A:-0}" = "1" ]; then
-    echo "[dcp-a2a-persistent] SKIPPED via SKIP_PATCH_DCP_A2A=1"
-else
-    patch_dcp_a2a_persistent_buffers
-fi
+patch_vllm_dcp_branch
 patch_aiter_gluon_fp8_dcp
 echo "[kimi-patches] done."

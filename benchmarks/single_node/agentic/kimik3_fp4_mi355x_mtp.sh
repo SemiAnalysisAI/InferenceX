@@ -84,13 +84,11 @@ resolve_trace_source
 install_agentic_deps
 
 # ---- In-container patches ----------------------------------------------------
-# Three fixes, all confined to this container's site-packages, all idempotent
-# and all self-disabling once the image ships them:
-#   [1] aiter pybind11 internals mismatch  -> unblocks ROCM_AITER_FA prefill
-#   [2] TritonMLA cudagraph support        -> FULL cudagraphs for DSpark (5.52x TPOT)
-#   [3] KV block-pool negative-count clamp -> stops the mid-run engine crash
+# Fetches the current YukioZzz/vllm DCP branch and applies its production diff
+# to the pinned image, then installs the retained AITER fp8 Gluon overlay.
+# Fetch/apply failures are fatal and logged so CI never runs an unpatched image.
 # Set SKIP_KIMI_PATCHES=1 to run stock.
-bash "$(dirname "$0")/apply_k3_container_patches.sh" || true
+bash "$(dirname "$0")/apply_k3_container_patches.sh"
 
 # ---- Reference env block ----------------------------------------------------
 # Keep ALL of these. Commenting them out does not avoid the AITER FMHA crash:
@@ -104,11 +102,6 @@ export VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4=1
 export AITER_BF16_FP8_MOE_BOUND=0
 # REQUIRED on ROCm per the upstream recipe: the build auto-enables this to 1.
 export VLLM_USE_BREAKABLE_CUDAGRAPH=0
-# Packed DCP A2A collectives must use process-lifetime buffers: graph replay
-# bakes in the send/recv addresses, while function-local torch.empty tensors
-# are freed immediately after capture. 128 covers eager warmup and MAX_CG=96.
-export VLLM_DCP_A2A_PERSISTENT_BUFFERS=1
-export VLLM_DCP_A2A_BUFFER_MAX_BATCH=128
 
 # The other gfx950 recipes pin this to 1 as an MEC FW <177 RCCL reclaim
 # workaround, and the CI parent environment exports 1, so a :- default would
