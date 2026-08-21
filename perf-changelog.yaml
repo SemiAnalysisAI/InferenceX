@@ -6283,10 +6283,8 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Bump the DSv4 FP4 MI355X SGLang disagg AgentX HiCache MTP image from lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260719 to lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260817."
-    - "Extend the MTP concurrency sweep: the TP8/EP1 no-DP arm to 1, 2, 4, 8, 16, 32, 48, and 64, and the TP8/EP8 DP-attention arm to 64, 96, 128, and 192, so concurrency 64 is measured on both topologies at the crossover."
-    - "models.yaml (DeepSeek-V4-Pro-AgentX): raise prefill mem_fraction_static from 0.72 to 0.85."
-    - "dsv4_fp4_mi355x_sglang-disagg.sh: lower the default HICACHE_RATIO from 4 to 3 (host pool = ratio * GPU KV pool), still pinned to the --hicache-ratio path through FORCE_HICACHE_RATIO."
-    - "AMD multi-node infrastructure, expected to be performance-neutral: job.slurm's pre-flight GPU drain gate now reuses wait_for_amd_gpu_clean from benchmark_lib.sh instead of the removed helpers/gpu_sanity.sh, and submit.sh resolves SLURM node exclusions per (framework, model) from node_excludes.yaml (Kimi-K2.5-MXFP4 on vllm-disagg only) with SLURM_EXCLUDE_NODES still overriding."
+    - "Bump the SGLang image from lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260719 to lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260817."
+    - "Add concurrency 48 and 64 to the TP8/EP1 sweep, and 64 and 192 to the TP8/EP8 DP-attention sweep."
+    - "Increase prefill mem_fraction_static from 0.72 to 0.85 and reduce HICACHE_RATIO from 4 to 3."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2643
   
