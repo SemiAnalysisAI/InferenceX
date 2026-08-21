@@ -2,49 +2,11 @@
 set -euo pipefail
 set -x
 
-# Agentic trace replay benchmark for Kimi-K3 MXFP4 on MI355X / MI350X (gfx950)
-# using vLLM.
-#
-# The server command is the AMD reference `vllm serve` for this model, i.e. the
-# upstream vLLM recipe's amd block (vllm-project/recipes,
-# https://recipes.vllm.ai/moonshotai/Kimi-K3) as run in practice:
-#
-#   --trust-remote-code --moe-backend auto --tensor-parallel-size 8
-#   --load-format auto --gpu-memory-utilization 0.95 --mm-encoder-tp-mode data
-#   --max-num-seqs 128 --max-num-batched-tokens 4096 --enable-auto-tool-choice
-#   --tool-call-parser kimi_k3 --reasoning-parser kimi_k3
-#
-# with env VLLM_ROCM_USE_AITER=1 SAFETENSORS_FAST_GPU=1 AITER_SITUV2_A8W4=1
-# AITER_BF16_FP8_MOE_BOUND=0 VLLM_USE_BREAKABLE_CUDAGRAPH=0.
-#
-# K3 is a 2.8T-parameter natively-multimodal MoE (896 routed experts, 16/token
-# plus shared) on Kimi Delta Attention, gated MLA and Attention Residuals, with
-# a 1M-token native context.
-#
-# TP=8 ONLY. The MXFP4 checkpoint is 1.561 TB decimal (1.420 TiB, 96
-# safetensors), ~195 GB/GPU across 8 GPUs of the 288 GB part; TP=4 would need
-# ~390 GB/GPU and cannot load. Upstream strategy_min_gpus agrees (single_node_tp
-# and multi_node_tep both 8, DEP 16+), which is why there is no DP-attention arm.
-#
-# Required env vars:
-#   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR, DURATION,
-#   EP_SIZE
-#
-# Perf-search knobs. Each defaults to the reference command's value, so an
-# otherwise-unset run reproduces the reference exactly:
-#   GPU_MEM_UTIL             0.95   (reference)
-#   MAX_NUM_BATCHED_TOKENS   8192   (default)
-#   AITER_A8W4               1      (reference; 0 = aiter a16w4 MoE path)
-#   LANGUAGE_MODEL_ONLY      true   
-#   KV_CACHE_DTYPE           fp8    (default for every arm; =auto for a bf16 A/B)
-#   KV_BLOCK_SIZE            unset  (unset -> vLLM sizes the page; 128 under fp8)
-#   MAX_MODEL_LEN            1M     
-#   SPEC_DECODE              true   (this is the _mtp DSpark recipe; =false for a no-spec A/B)
-#   SPEC_NUM_TOKENS          2      (DSpark draft length; validated by the _mtp config)
-
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
 wait_for_amd_gpu_clean
+
+du -h /dev/shm
 
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE
 
@@ -81,7 +43,12 @@ amd-smi || true
 resolve_trace_source
 install_agentic_deps
 
+
 # ---- Reference env block ----------------------------------------------------
+# Keep ALL of these. Commenting them out does not avoid the AITER FMHA crash:
+# that crash is gated on VLLM_ROCM_USE_AITER alone (AiterFlashAttnPrefillBackend
+# .is_available() consults only rocm_aiter_ops.is_enabled()), so disabling the
+# others just loses the MoE kernels while keeping the failure.
 export VLLM_ROCM_AITER_MLA_ASM_PADDING=asm
 export VLLM_ROCM_USE_AITER=1
 export SAFETENSORS_FAST_GPU=1
@@ -146,9 +113,6 @@ case "${KV_OFFLOAD_BACKEND:-}" in
 esac
 fi
 
-# ---- LLM server  ------------------------------------------------------------
-bash "$(dirname "$0")/apply_k3_container_patches.sh"
-
 # ---- Parallelism ------------------------------------------------------------
 EP_ARGS=()
 if [ "$EP_SIZE" -gt 1 ]; then
@@ -171,9 +135,23 @@ else
     )
 fi
 
+ASYNC_SCHED_ARGS=()
+if [ "${ASYNC_SCHEDULING:-0}" != "1" ]; then
+    ASYNC_SCHED_ARGS=(--no-async-scheduling)
+fi
+
+MLA_PREFILL_BACKEND="${MLA_PREFILL_BACKEND:-ROCM_AITER_FA}"
+MLA_PREFILL_ARGS=()
+if [ -n "$MLA_PREFILL_BACKEND" ]; then
+    MLA_PREFILL_ARGS=(
+        --attention-config
+        "{\"mla_prefill_backend\":\"$MLA_PREFILL_BACKEND\"}"
+    )
+fi
+
 # ---- HIP graph ------------------------------------------------------------
-MAX_NUM_SEQS=20
-MAX_CUDAGRAPH_CAPTURE_SIZE=60
+MAX_NUM_SEQS="${MAX_NUM_SEQS:-$(( CONC * 2 ))}"
+MAX_CUDAGRAPH_CAPTURE_SIZE="${MAX_CUDAGRAPH_CAPTURE_SIZE:-$(( MAX_NUM_SEQS * 3 ))}"
 CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 1 "$MAX_CUDAGRAPH_CAPTURE_SIZE")"
 COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}")
 
@@ -202,6 +180,13 @@ VLLM_CMD=(
     --max-model-len 1048576
     --enable-prefix-caching
     --kv-cache-dtype "fp8"
+    --max-num-batched-tokens 8192
+    --decode-context-parallel-size 8
+    --dcp-comm-backend a2a
+    --attention-backend ROCM_AITER_MLA
+    --cp-kv-cache-interleave-size 1
+    "${ASYNC_SCHED_ARGS[@]}"
+    "${MLA_PREFILL_ARGS[@]}"
     "${COMPILATION_CONFIG_ARGS[@]}"
     "${SPEC_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
