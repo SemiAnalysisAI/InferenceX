@@ -6309,6 +6309,23 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2690
 
 - config-keys:
+    - dsv4-fp4-b300-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Append GPU-resident TP4 concurrency 1, 2, 4, and 6 points to the existing B300 DeepSeek-V4-Pro vLLM AgentX MTP curve."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2647
+  append-only: true
+  
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Expand the GB300 AgentX aggregate TP4 sweep to concurrency 1, 2, 4, 6, and 8."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2676
+  
+- config-keys:
     - dsv4-fp4-b200-vllm-agentic-mtp
   scenario-type:
     - agentic-coding
@@ -6316,3 +6333,4 @@
   description:
     - "Add a few more points"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2702
+  
