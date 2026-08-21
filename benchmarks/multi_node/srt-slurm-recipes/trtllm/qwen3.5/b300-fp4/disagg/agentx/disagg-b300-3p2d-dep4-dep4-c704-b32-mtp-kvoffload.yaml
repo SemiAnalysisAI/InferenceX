@@ -41,7 +41,7 @@ backend:
     TRTLLM_PINNED_WEIGHT_STAGING: '1'
     TRTLLM_SERVER_DISABLE_GC: '1'
     TRTLLM_WORKER_DISABLE_GC: '1'
-    UCX_TLS: rc,cuda_ipc,cuda_copy
+    UCX_TLS: rc,cuda_ipc,cuda_copy,self,tcp
     UCX_LOG_LEVEL: info
     TRTLLM_KV_TRANSFER_NUM_THREADS: '8'
     DYN_ENGINE_CONV_AFFINITY: "1"
@@ -56,7 +56,7 @@ backend:
     TRTLLM_PINNED_WEIGHT_STAGING: '1'
     TRTLLM_SERVER_DISABLE_GC: '1'
     TRTLLM_WORKER_DISABLE_GC: '1'
-    UCX_TLS: rc,cuda_ipc,cuda_copy
+    UCX_TLS: rc,cuda_ipc,cuda_copy,self,tcp
     UCX_LOG_LEVEL: info
     TRTLLM_KV_TRANSFER_NUM_THREADS: '8'
     DYN_ENGINE_CONV_AFFINITY: "1"
