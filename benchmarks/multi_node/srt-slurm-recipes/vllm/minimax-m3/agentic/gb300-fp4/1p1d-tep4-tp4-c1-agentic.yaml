@@ -105,6 +105,7 @@ backend:
       reasoning-parser: "minimax_m3"
       dyn-tool-call-parser: "minimax_m3"
       dyn-reasoning-parser: "minimax_m3"
+      dyn-default-thinking-mode: "enabled"
       max-cudagraph-capture-size: 512
       max-num-batched-tokens: 16384
       max-num-seqs: 1024
