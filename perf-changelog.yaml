@@ -6350,3 +6350,14 @@
     - "Use the concurrency-1 aggregated Pareto point and disable TensorRT-LLM performance-metrics responses for all seven points."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2657
   
+
+- config-keys:
+    - minimaxm3-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add the MiniMax-M3 NVFP4 GB300 disaggregated AgentX config with EAGLE3-GQA MTP and Mooncake DRAM KV offload."
+    - "Use vllm/vllm-openai:nightly-5e35a6f4f9bbc217c599692157ca985c894373f7 with golden synthetic AL 2.78 for throughput and a real-verification eval twin."
+    - "Pin thinking-on so the run matches the golden minimaxm3_eagle3_gqa thinking_on[3] = 2.78 acceptance target: dyn-default-thinking-mode enabled on the decode worker covers both the AgentX replay and the eval twin, with AIPERF_EXTRA_INPUTS thinking:true on the replay as the GB200-sibling belt-and-braces."
+    - "Set dyn-reasoning-parser and dyn-tool-call-parser alongside reasoning-parser, matching the GB200 MiniMax-M3 AgentX recipes."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2663
