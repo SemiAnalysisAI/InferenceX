@@ -6297,3 +6297,13 @@
     - "Add concurrency 48 and 64 to the TP8/EP1 sweep, and 64 and 192 to the TP8/EP8 DP-attention sweep."
     - "Increase prefill mem_fraction_static from 0.72 to 0.85 and reduce HICACHE_RATIO from 4 to 3."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2643
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-trt-agentx
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add DeepSeek-V4-Pro GB300 Dynamo-TensorRT-LLM AgentX recipes for concurrencies 4, 24, 388, 736, 1152, and 2626."
+    - "Disable TensorRT-LLM return_perf_metrics in the prefill and decode workers."
+    - "Route the selected GB300 workloads to batch_3."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2690
