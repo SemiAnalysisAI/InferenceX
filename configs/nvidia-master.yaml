@@ -8193,8 +8193,11 @@ dsv4-fp4-gb300-dynamo-trt-agentx:
   disagg: true
   scenarios:
     agentic-coding:
-    - search-space:
+    - dram-utilization: 0.21429
+      search-space:
       - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.3.0rc24" }
         conc-list: [4]
         prefill:
           num-worker: 1
@@ -8210,6 +8213,8 @@ dsv4-fp4-gb300-dynamo-trt-agentx:
           ep: 8
           dp-attn: false
       - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.3.0rc24" }
         conc-list: [24]
         prefill:
           num-worker: 1
@@ -8225,6 +8230,8 @@ dsv4-fp4-gb300-dynamo-trt-agentx:
           ep: 4
           dp-attn: false
       - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.3.0rc24" }
         conc-list: [388]
         prefill:
           num-worker: 1
@@ -8240,6 +8247,8 @@ dsv4-fp4-gb300-dynamo-trt-agentx:
           ep: 32
           dp-attn: true
       - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.3.0rc24" }
         conc-list: [736]
         prefill:
           num-worker: 2
@@ -8255,6 +8264,8 @@ dsv4-fp4-gb300-dynamo-trt-agentx:
           ep: 32
           dp-attn: true
       - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.3.0rc24" }
         conc-list: [1152]
         prefill:
           num-worker: 3
@@ -8270,6 +8281,8 @@ dsv4-fp4-gb300-dynamo-trt-agentx:
           ep: 16
           dp-attn: true
       - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.3.0rc24" }
         conc-list: [2626]
         prefill:
           num-worker: 5
