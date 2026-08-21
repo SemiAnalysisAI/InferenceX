@@ -134,8 +134,50 @@ def case_count(path: str) -> None:
     print(len(load(path)["cases"]), end="")
 
 
+def _emit_kv_argv(case: dict, version: object, runner: str, ts: str, index: int) -> None:
+    """Null-delimited run_kv.py argv for a kv-transfer case. The leading
+    --entrypoint pair is consumed by the rank wrapper (runtime/common.sh),
+    which otherwise execs run_ep.py."""
+    timing = str(case["timing"]).split(":")
+    if len(timing) != 3:
+        print(f"unrecognised kv timing profile {case['timing']!r}", file=sys.stderr)
+        raise SystemExit(1)
+    out = (
+        f"results/{runner}_kv-{case['backend']}_{case['precision']}_{case['mode']}"
+        f"_{case['workload']}_{ts}-c{index:03d}.json"
+    )
+    argv = [
+        "--entrypoint", "run_kv",
+        "--backend", str(case["backend"]),
+        "--workload-name", str(case["workload"]),
+        "--precision", str(case["precision"]),
+        "--fabric", str(case["mode"]),
+        "--isl-ladder", str(case["isl_ladder"]),
+        "--page-tokens", str(case["page_tokens"]),
+        "--batch-sizes", str(case["batch_sizes"]),
+        "--kv-device", str(case.get("kv_device", "")),
+        "--ops", str(case["ops"]),
+        "--warmup", timing[0], "--reps", timing[1], "--trials", timing[2],
+        "--pool-slack", str(case["pool_slack"]),
+        "--seed", str(case["seed"]),
+        "--runner", runner,
+        "--case-id", str(case["case_id"]),
+        "--suite", str(case["suite"]),
+        "--gpus-per-node", str(case["gpus_per_node"]),
+        "--scale-up-domain", str(case["scale_up_domain"]),
+        "--scale-up-transport", str(case["scale_up_transport"]),
+        "--topology-class", str(case["topology_class"]),
+        "--version", str(version),
+        "--out", out,
+    ]
+    sys.stdout.buffer.write(b"\0".join(part.encode() for part in argv) + b"\0")
+
+
 def _emit_argv(case: dict, version: object, runner: str, ts: str, index: int) -> None:
-    """Emit one null-delimited run_ep.py argv — the only case-to-invocation codec."""
+    """Emit one null-delimited benchmark argv — the only case-to-invocation codec."""
+    if case.get("suite") == "kv-transfer":
+        _emit_kv_argv(case, version, runner, ts, index)
+        return
     get = lambda key, default="": str(case.get(key) or default)
     argv = [
         "--backend", str(case["backend"]),

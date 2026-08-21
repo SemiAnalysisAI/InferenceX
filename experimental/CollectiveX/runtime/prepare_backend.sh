@@ -594,6 +594,29 @@ FICHECK
   [ "$rc" -eq 0 ] || { collx_log "ERROR: FlashInfer EP one-sided A2A unavailable in this image"; return 1; }
 }
 
+# NIXL installs from the pinned wheel (nixl-cuXX directly: the `nixl` meta
+# package depends on BOTH cu12 and cu13 variants, and an unpinned install under
+# the image's stale pip resolved 1.0.1). The named container persists for the
+# job, so one install here serves every case srun. On ROCm images nothing to
+# do: sglang-rocm bundles nixl-cu12 with a ROCm-built UCX.
+nixl_prepare() {
+  python3 - <<'NIXLCHECK' && return 0
+import sys
+try:
+    import nixl  # noqa: F401
+except Exception:
+    raise SystemExit(1)
+NIXLCHECK
+  # Noble-based images mark python externally managed (PEP 668); the retry flag
+  # is the uccl-prep pattern (older pips never refuse, so they never reach it).
+  { python3 -m pip install -q --disable-pip-version-check --no-input 'nixl-cu13==1.3.2' \
+      || python3 -m pip install -q --disable-pip-version-check --no-input \
+           --break-system-packages 'nixl-cu13==1.3.2'; } \
+    || { collx_log "ERROR: nixl wheel install failed"; return 1; }
+  python3 -c "import nixl" \
+    || { collx_log "ERROR: nixl import failed after install"; return 1; }
+}
+
 main() {
   collx_apply_network_profile "${COLLX_NODES:-1}" "${COLLX_TRANSPORT:-}" || return 1
   validate_container_network || return 1
@@ -606,6 +629,28 @@ main() {
     uccl-ep) uccl_prepare || return 1 ;;
     nccl-ep) nccl_ep_prepare || return 1 ;;
     flashinfer-ep) flashinfer_ep_prepare || return 1 ;;
+    nixl) nixl_prepare || return 1 ;;
+    mooncake)
+      # ROCm builds ship inside the image (upstream wheels link libcuda.so.1;
+      # AMD's atom-dev image carries a working build), so an importable
+      # mooncake.engine wins. Otherwise install the pinned CUDA wheel; it
+      # links libcudart.so.12, which the adapter dlopens from the runtime
+      # package at import, so no LD_LIBRARY_PATH seam is needed.
+      if python3 -c "import mooncake.engine" 2>/dev/null; then
+        collx_log "mooncake provided by the image"
+      else
+        { python3 -m pip install -q --disable-pip-version-check --no-input \
+            'mooncake-transfer-engine==0.3.12.post1' nvidia-cuda-runtime-cu12 \
+            || python3 -m pip install -q --disable-pip-version-check --no-input \
+                 --break-system-packages \
+                 'mooncake-transfer-engine==0.3.12.post1' nvidia-cuda-runtime-cu12; } \
+          || { collx_log "ERROR: mooncake wheel install failed"; return 1; }
+      fi
+      ;;
+    mori-io)
+      python3 -c "import mori.io" \
+        || { collx_log "ERROR: MoRI-IO import failed"; return 1; }
+      ;;
     *)
       collx_log "ERROR: unknown backend preparation request"
       return 1

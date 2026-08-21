@@ -25,6 +25,7 @@ def _load_config(name: str) -> dict[str, Any]:
 
 
 SWEEP = _load_config("sweep.json")
+KV_SWEEP = _load_config("kv_sweep.json")
 PLATFORMS = _load_config("platform_config.json")["platforms"]
 # Per-backend production/candidate map for the matrix and docs; see EPBackend.maturity.
 BACKEND_MATURITY = _load_config("platform_config.json")["backend_maturity"]
@@ -97,6 +98,75 @@ def _topology(platform: dict[str, Any], ep: int) -> dict[str, Any]:
     }
 
 
+def _kv_backend_spec(value: Any) -> dict[str, Any]:
+    """kv_backends values are a fabric list (library runs the full sweep) or an
+    object carrying restrictions: `ops` (a backend that cannot serve one
+    direction on a fabric, e.g. mooncake on Pollara where ionic RDMA READ is
+    broken upstream), `image_ref` (a backend only shipped inside a specific
+    image, e.g. AMD's atom-dev mooncake build), and `device` (an engine NIC
+    filter template; `{gpu}` expands to the physical GPU index at runtime)."""
+    if isinstance(value, list):
+        return {"fabrics": value, "ops": None, "image_ref": None, "device": None}
+    return {
+        "fabrics": value["fabrics"],
+        "ops": value.get("ops"),
+        "image_ref": value.get("image_ref"),
+        "device": value.get("device"),
+    }
+
+
+def _kv_cases(sku: str, platform: dict[str, Any], fabric: str, backend: str,
+              selected_precisions: set[str], spec: dict[str, Any]) -> list[dict[str, Any]]:
+    """The kv-transfer cases one (sku, backend, fabric) shard runs.
+
+    A KV leg is 2 nodes x 1 GPU: the per-worker transfer pair an engine
+    actually forms, not an allocation-wide collective. Capability comes from
+    the registry's ``kv_backends`` map (backend -> fabrics), so a SKU with no
+    entry emits nothing — absence is not-yet-enabled, mirroring ll_backends.
+    """
+    timing = KV_SWEEP["timing"]
+    timing_profile = ":".join(str(timing[key]) for key in (
+        "warmup_per_trial", "reps_per_trial", "trials_per_point"))
+    cases = []
+    # A workload's dtype mix can be architectural (dsv4's fp8 slots), so the
+    # sweep config maps each workload to its precisions; a test pins the map to
+    # the workload model's own PRESETS (this file stays stdlib-importable for
+    # the runner-side matrix/extract steps, so it cannot import kv_workload).
+    for workload, preset_precisions in KV_SWEEP["workloads"].items():
+        for precision in preset_precisions:
+            if selected_precisions and precision not in selected_precisions:
+                continue
+            case = {
+                "suite": KV_SWEEP["suite"],
+                "workload": workload,
+                "backend": backend,
+                "routing": "paged",
+                "precision": precision,
+                "phase": "xfer",
+                "ep": 2,
+                "mode": fabric,
+                "isl_ladder": " ".join(map(str, KV_SWEEP["isl_ladder"])),
+                "page_tokens": " ".join(map(str, KV_SWEEP["page_tokens"])),
+                "batch_sizes": " ".join(map(str, KV_SWEEP["batch_sizes"])),
+                "ops": spec["ops"] or " ".join(KV_SWEEP["ops"]),
+                "kv_device": spec["device"] or "",
+                "pool_slack": KV_SWEEP["pool_slack"],
+                "seed": KV_SWEEP["seed"],
+                "timing": timing_profile,
+                "nodes": 2,
+                "gpus_per_node": 1,
+                "scale_up_domain": platform["scale_up_domain"],
+                "scope": "scale-out",
+                "scale_up_transport": platform["scale_up_transport"],
+                "scale_out_transport": fabric,
+                "transport": fabric,
+                "topology_class": f"{platform['product']}-kv-{fabric}",
+            }
+            case["case_id"] = ep_harness.case_id(sku, case)
+            cases.append(case)
+    return cases
+
+
 def _selected_backends(backend: str) -> list[str]:
     if backend == "all":
         return list(SWEEP_BACKENDS)
@@ -112,8 +182,14 @@ def resolve_matrix(
     ep_sizes: str = "",
     precisions: str = "",
     modes: str = "",
+    suites: str = "ep-core,kv-transfer",
 ) -> dict[str, Any]:
     """Resolve the fixed sweep into allocation-sized workflow shards."""
+    known_suites = {SWEEP["suite"], KV_SWEEP["suite"]}
+    selected_suites = {value.strip() for value in suites.split(",") if value.strip()}
+    unknown_suites = sorted(selected_suites - known_suites)
+    if unknown_suites:
+        raise SystemExit(f"unknown --suites {unknown_suites}; have {sorted(known_suites)}")
     selected_eps: set[int] = set()
     for value in filter(None, (part.strip() for part in ep_sizes.split(","))):
         if not value.isdigit() or int(value) <= 0:
@@ -162,7 +238,7 @@ def resolve_matrix(
     requested_cases: list[dict[str, Any]] = []
     shards: dict[tuple[str, str, str, int, str], list[dict[str, Any]]] = {}
 
-    for sku in sorted(PLATFORMS):
+    for sku in sorted(PLATFORMS) if SWEEP["suite"] in selected_suites else []:
         if (only_sku and sku != only_sku) or sku in excluded:
             continue
         platform = PLATFORMS[sku]
@@ -243,7 +319,45 @@ def resolve_matrix(
                                     (sku, target, mode, topology["nodes"], precision), []
                                 ).append(case)
 
+    # KV-transfer shards: additive, small (4 cases), gated per SKU by the
+    # registry's kv_backends map and by the same sku/precision selectors. The
+    # EP --backend filter does not apply — its vocabulary is EP backends.
+    # A backend-scoped dispatch (--backend deepep-v2 etc.) is an EP-focused run;
+    # kv shards ride only the full-matrix resolution or an explicit
+    # --suites kv-transfer with the default backend selector.
+    kv_shards: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
+    if KV_SWEEP["suite"] in selected_suites and backend == "all":
+        for sku in sorted(PLATFORMS):
+            if (only_sku and sku != only_sku) or sku in excluded:
+                continue
+            platform = PLATFORMS[sku]
+            for kv_backend, raw_spec in sorted(platform.get("kv_backends", {}).items()):
+                spec = _kv_backend_spec(raw_spec)
+                for fabric in spec["fabrics"]:
+                    cases = _kv_cases(sku, platform, fabric, kv_backend,
+                                      selected_precisions, spec)
+                    for case in cases:
+                        requested_cases.append({
+                            "sku": sku, "case": case, "disposition": "runnable",
+                            "reason": None, "detail": None,
+                        })
+                    if cases:
+                        kv_shards[(sku, kv_backend, fabric)] = (cases, spec)
+
     shards_by_sku: dict[str, list[dict[str, Any]]] = {}
+    for (sku, kv_backend, fabric), (cases, spec) in sorted(kv_shards.items()):
+        shards_by_sku.setdefault(sku, []).append({
+            "id": f"{sku}-kv-{kv_backend}-{fabric}",
+            "sku": sku,
+            "backend": kv_backend,
+            "mode": fabric,
+            "image_ref": spec["image_ref"] or "",
+            "launcher": PLATFORMS[sku]["launcher"],
+            "nodes": 2,
+            "gpus_per_node": 1,
+            "scale_up_domain": cases[0]["scale_up_domain"],
+            "cases": cases,
+        })
     for (sku, target, mode, nodes, precision), cases in sorted(shards.items()):
         first = cases[0]
         # Normal-mode shard IDs are unchanged (no mode segment) so existing references
@@ -299,6 +413,8 @@ def main() -> int:
     parser.add_argument("--modes", default="",
                         help="comma-separated subset of configs/sweep.json modes "
                              "(normal, low-latency); blank = all")
+    parser.add_argument("--suites", default="ep-core,kv-transfer",
+                        help="comma-separated suites to resolve (ep-core, kv-transfer)")
     parser.add_argument("--extract-from", default="", metavar="MATRIX")
     parser.add_argument("--shard-id", default="")
     parser.add_argument("--out", default="")
@@ -319,6 +435,7 @@ def main() -> int:
         ep_sizes=args.ep_sizes,
         precisions=args.precisions,
         modes=args.modes,
+        suites=args.suites,
     )
     if args.out:
         Path(args.out).write_text(

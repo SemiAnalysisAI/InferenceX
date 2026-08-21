@@ -1,5 +1,11 @@
 {
-  "backend_maturity": {"deepep-v2": "production", "mori": "production", "uccl-ep": "candidate", "nccl-ep": "candidate", "flashinfer-ep": "production"},
+  "backend_maturity": {
+    "deepep-v2": "production",
+    "mori": "production",
+    "uccl-ep": "candidate",
+    "nccl-ep": "candidate",
+    "flashinfer-ep": "production"
+  },
   "platforms": {
     "h100-dgxc": {
       "arch": "sm90",
@@ -10,9 +16,33 @@
       "scale_up_domain": 8,
       "scale_up_transport": "nvlink",
       "launcher": "single-slurm",
-      "backends": {"deepep-v2": [8, 16], "uccl-ep": [8], "nccl-ep": [8]},
-      "ll_backends": {"deepep-v2": [8], "uccl-ep": [8], "nccl-ep": [8]},
-      "fabric": {"nic": "ConnectX-7 2x200GbE", "switch": "Arista 7060DX5-64S (Tomahawk4, 25.6T)"},
+      "backends": {
+        "deepep-v2": [
+          8,
+          16
+        ],
+        "uccl-ep": [
+          8
+        ],
+        "nccl-ep": [
+          8
+        ]
+      },
+      "ll_backends": {
+        "deepep-v2": [
+          8
+        ],
+        "uccl-ep": [
+          8
+        ],
+        "nccl-ep": [
+          8
+        ]
+      },
+      "fabric": {
+        "nic": "ConnectX-7 2x200GbE",
+        "switch": "Arista 7060DX5-64S (Tomahawk4, 25.6T)"
+      },
       "operator": {
         "partition": "hpc-gpu-1",
         "account": "customer",
@@ -34,9 +64,41 @@
       "scale_up_domain": 8,
       "scale_up_transport": "nvlink",
       "launcher": "single-slurm",
-      "backends": {"deepep-v2": [8, 16], "uccl-ep": [8], "nccl-ep": [8]},
-      "ll_backends": {"deepep-v2": [8], "uccl-ep": [8], "nccl-ep": [8]},
-      "fabric": {"nic": "ConnectX-7 400G", "switch": "NVIDIA Quantum-2 QM9790 (25.6T, InfiniBand)"},
+      "backends": {
+        "deepep-v2": [
+          8,
+          16
+        ],
+        "uccl-ep": [
+          8
+        ],
+        "nccl-ep": [
+          8
+        ]
+      },
+      "ll_backends": {
+        "deepep-v2": [
+          8
+        ],
+        "uccl-ep": [
+          8
+        ],
+        "nccl-ep": [
+          8
+        ]
+      },
+      "kv_backends": {
+        "nixl": [
+          "rdma"
+        ],
+        "mooncake": [
+          "rdma"
+        ]
+      },
+      "fabric": {
+        "nic": "ConnectX-7 400G",
+        "switch": "NVIDIA Quantum-2 QM9790 (25.6T, InfiniBand)"
+      },
       "operator": {
         "partition": "main",
         "squash_dir": "/home/sa-shared/containers"
@@ -54,9 +116,42 @@
       "scale_up_domain": 8,
       "scale_up_transport": "nvlink",
       "launcher": "single-slurm",
-      "backends": {"deepep-v2": [8, 16], "uccl-ep": [8], "nccl-ep": [8]},
-      "ll_backends": {"deepep-v2": [8, 16], "uccl-ep": [8], "nccl-ep": [8]},
-      "fabric": {"nic": "8x ConnectX-7-class 400G InfiniBand rails (bare metal, gdrdrv)", "switch": "InfiniBand (model not surveyed)"},
+      "backends": {
+        "deepep-v2": [
+          8,
+          16
+        ],
+        "uccl-ep": [
+          8
+        ],
+        "nccl-ep": [
+          8
+        ]
+      },
+      "ll_backends": {
+        "deepep-v2": [
+          8,
+          16
+        ],
+        "uccl-ep": [
+          8
+        ],
+        "nccl-ep": [
+          8
+        ]
+      },
+      "kv_backends": {
+        "nixl": [
+          "rdma"
+        ],
+        "mooncake": [
+          "rdma"
+        ]
+      },
+      "fabric": {
+        "nic": "8x ConnectX-7-class 400G InfiniBand rails (bare metal, gdrdrv)",
+        "switch": "InfiniBand (model not surveyed)"
+      },
       "operator": {
         "partition": "batch_1",
         "account": "benchmark",
@@ -76,9 +171,24 @@
       "scale_up_domain": 8,
       "scale_up_transport": "nvlink",
       "launcher": "single-slurm",
-      "backends": {"deepep-v2": [8, 16], "nccl-ep": [8]},
-      "ll_backends": {"nccl-ep": [8]},
-      "fabric": {"nic": "ConnectX-8 2x400GbE", "switch": "NVIDIA Spectrum-X SN5600 (51.2T)"},
+      "backends": {
+        "deepep-v2": [
+          8,
+          16
+        ],
+        "nccl-ep": [
+          8
+        ]
+      },
+      "ll_backends": {
+        "nccl-ep": [
+          8
+        ]
+      },
+      "fabric": {
+        "nic": "ConnectX-8 2x400GbE",
+        "switch": "NVIDIA Spectrum-X SN5600 (51.2T)"
+      },
       "operator": {
         "partition": "batch_1",
         "account": "benchmark",
@@ -102,15 +212,52 @@
       "scale_up_domain": 72,
       "scale_up_transport": "mnnvl",
       "launcher": "gb-nv",
-      "backends": {"deepep-v2": [8, 16], "nccl-ep": [8, 16], "flashinfer-ep": [8, 16]},
-      "ll_backends": {"deepep-v2": [8, 16], "nccl-ep": [8]},
-      "fabric": {"nic": "MNNVL (scale-out not used)", "switch": "NVLink NVL72"},
+      "backends": {
+        "deepep-v2": [
+          8,
+          16
+        ],
+        "nccl-ep": [
+          8,
+          16
+        ],
+        "flashinfer-ep": [
+          8,
+          16
+        ]
+      },
+      "ll_backends": {
+        "deepep-v2": [
+          8,
+          16
+        ],
+        "nccl-ep": [
+          8
+        ]
+      },
+      "kv_backends": {
+        "nixl": [
+          "rdma",
+          "mnnvl"
+        ],
+        "mooncake": [
+          "rdma"
+        ]
+      },
+      "fabric": {
+        "nic": "4x ConnectX-7 NDR400 InfiniBand (KV scale-out; EP stays MNNVL)",
+        "switch": "NVLink NVL72 + Quantum-2"
+      },
       "operator": {
         "partition": "batch",
         "account": "benchmark",
         "storage_roots": [
           "/mnt/lustre01/users-public/sa-shared"
         ]
+      },
+      "network": {
+        "socket_ifname": "enP6p9s0np0",
+        "rdma_devices": "mlx5_0,mlx5_1,mlx5_3,mlx5_4"
       }
     },
     "gb300": {
@@ -122,9 +269,33 @@
       "scale_up_domain": 72,
       "scale_up_transport": "mnnvl",
       "launcher": "gb-nv",
-      "backends": {"deepep-v2": [8, 16], "nccl-ep": [8, 16], "flashinfer-ep": [8, 16]},
-      "ll_backends": {"deepep-v2": [8, 16], "nccl-ep": [8]},
-      "fabric": {"nic": "MNNVL (scale-out not used)", "switch": "NVLink NVL72"},
+      "backends": {
+        "deepep-v2": [
+          8,
+          16
+        ],
+        "nccl-ep": [
+          8,
+          16
+        ],
+        "flashinfer-ep": [
+          8,
+          16
+        ]
+      },
+      "ll_backends": {
+        "deepep-v2": [
+          8,
+          16
+        ],
+        "nccl-ep": [
+          8
+        ]
+      },
+      "fabric": {
+        "nic": "MNNVL (scale-out not used)",
+        "switch": "NVLink NVL72"
+      },
       "operator": {
         "partition": "batch_1",
         "account": "benchmark",
@@ -143,9 +314,23 @@
       "scale_up_domain": 8,
       "scale_up_transport": "xgmi",
       "launcher": "mi-tw",
-      "backends": {"mori": [8], "uccl-ep": [8]},
-      "ll_backends": {"mori": [8]},
-      "fabric": {"nic": "n/a (single-node scale-up)", "switch": "n/a (single-node scale-up)"}
+      "backends": {
+        "mori": [
+          8
+        ],
+        "uccl-ep": [
+          8
+        ]
+      },
+      "ll_backends": {
+        "mori": [
+          8
+        ]
+      },
+      "fabric": {
+        "nic": "n/a (single-node scale-up)",
+        "switch": "n/a (single-node scale-up)"
+      }
     },
     "mi300x-tw": {
       "arch": "gfx942",
@@ -156,9 +341,23 @@
       "scale_up_domain": 8,
       "scale_up_transport": "xgmi",
       "launcher": "mi-tw",
-      "backends": {"mori": [8], "uccl-ep": [8]},
-      "ll_backends": {"mori": [8]},
-      "fabric": {"nic": "n/a (single-node scale-up)", "switch": "n/a (single-node scale-up)"}
+      "backends": {
+        "mori": [
+          8
+        ],
+        "uccl-ep": [
+          8
+        ]
+      },
+      "ll_backends": {
+        "mori": [
+          8
+        ]
+      },
+      "fabric": {
+        "nic": "n/a (single-node scale-up)",
+        "switch": "n/a (single-node scale-up)"
+      }
     },
     "mi355x": {
       "arch": "gfx950",
@@ -169,9 +368,36 @@
       "scale_up_domain": 8,
       "scale_up_transport": "xgmi",
       "launcher": "mi-amds",
-      "backends": {"mori": [8], "uccl-ep": [8]},
-      "ll_backends": {"mori": [8]},
-      "fabric": {"nic": "Pollara 400GbE", "switch": "Arista 7060X6-64PE (Tomahawk5, 51.2T)"},
+      "backends": {
+        "mori": [
+          8
+        ],
+        "uccl-ep": [
+          8
+        ]
+      },
+      "ll_backends": {
+        "mori": [
+          8
+        ]
+      },
+      "kv_backends": {
+        "mori-io": [
+          "rdma"
+        ],
+        "mooncake": {
+          "fabrics": [
+            "rdma"
+          ],
+          "ops": "push",
+          "image_ref": "rocm/atom-dev:nightly_202606101403",
+          "device": "rdma{gpu}"
+        }
+      },
+      "fabric": {
+        "nic": "Pollara 400GbE",
+        "switch": "Arista 7060X6-64PE (Tomahawk5, 51.2T)"
+      },
       "network": {
         "socket_ifname": "eno0",
         "rdma_devices": "rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7",

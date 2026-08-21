@@ -46,11 +46,19 @@ NODES="${COLLX_NODES:-1}"; GPN="${COLLX_GPUS_PER_NODE:-8}"
 SCALE_UP_DOMAIN="${COLLX_SCALE_UP_DOMAIN:-8}"
 NGPUS="${COLLX_NGPUS:-$((NODES * GPN))}"
 TIME_MIN="${COLLX_TIME:-$DEFAULT_TIME}"
+case "$COLLX_BENCH" in
+  nixl | mooncake | mori-io)
+    # kv cases finish in ~45 minutes; a short exclusive ask backfills into
+    # scheduling gaps that a multi-hour one waits out (h200 pool contention).
+    TIME_MIN=150
+    ;;
+esac
 IMAGE="$COLLX_IMAGE"
 TS="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
 case "$COLLX_BENCH" in
   deepep-v2 | uccl-ep | nccl-ep) ;;
-  *) collx_die "unsupported $RUNNER EP backend: $COLLX_BENCH" ;;
+  nixl | mooncake) ;;  # kv-transfer suite
+  *) collx_die "unsupported $RUNNER backend: $COLLX_BENCH" ;;
 esac
 
 export COLLX_NGPUS="$NGPUS" COLLX_NODES="$NODES"

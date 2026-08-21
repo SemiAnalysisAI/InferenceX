@@ -109,15 +109,75 @@ def _headline(document: dict) -> tuple:
     )
 
 
+def _kv_cell(rows: list[dict], kind: str, page_tokens, op: str, batch: str = "min"):
+    """The largest-ISL row of a (kind, page, op) family — the bandwidth-bound
+    point — at its smallest or largest measured batch."""
+    matching = [r for r in rows
+                if r.get("kind") == kind and r.get("page_tokens") == page_tokens
+                and r.get("op") == op]
+    if not matching:
+        return "-", "-"
+    isl = max(r["isl"] for r in matching)
+    pick = min if batch == "min" else max
+    row = pick((r for r in matching if r["isl"] == isl),
+               key=lambda r: r.get("batch", 1))
+    return row["gbps_p50"], row["latency_ms"]["p50"]
+
+
+def render_kv(documents: list[dict]) -> list[str]:
+    """kv-transfer table: pull bandwidth at the bandwidth-bound ISL for the two
+    page sizes plus the bulk ceiling, and the paged-64 pull latency. Verify
+    failures flip the outcome column (and the leg already failed in CI)."""
+    lines = ["", "## CollectiveX KV-transfer results", "",
+             "| ver | sku | backend | fabric | workload | precision | outcome | op "
+             "| p64 GB/s b1 | p64 GB/s bmax | p16 GB/s b1 "
+             "| bulk GB/s | p64 ms b1 |",
+             "|--:|---|---|---|---|---|---|---|--:|--:|--:|--:|--:|"]
+    for document in documents:
+        factors = document["identity"]["case_factors"]
+        case = factors["case"]
+        rows = document["measurement"]["rows"]
+        # Cells read the pull lane when measured, else the push lane (a
+        # backend may serve one direction only, e.g. mooncake on Pollara
+        # where upstream ionic RDMA READ is broken); the op column names
+        # which lane the row's numbers come from.
+        op = next((candidate for candidate in ("pull", "push")
+                   if _kv_cell(rows, "paged", 64, candidate)[0] != "-"), "pull")
+        p64_gbps, p64_ms = _kv_cell(rows, "paged", 64, op)
+        p64_bmax, _ = _kv_cell(rows, "paged", 64, op, batch="max")
+        p16_gbps, _ = _kv_cell(rows, "paged", 16, op)
+        bulk_gbps, _ = _kv_cell(rows, "bulk", None, op)
+        lines.append(
+            f"| {document['version']} | {factors['sku']} | `{case['backend']}` | "
+            f"{case['mode']} | {case['workload']} | {case['precision']} | "
+            f"{document['outcome']['status']} | {op} | {p64_gbps} | {p64_bmax} | "
+            f"{p16_gbps} | {bulk_gbps} | {p64_ms} |"
+        )
+    lines.append("")
+    lines.append("> Paged rows move requests' KV as layer-major descriptor lists over "
+                 "randomized block tables (p16/p64 = tokens per page); b1/bmax = requests "
+                 "posted per burst (GB/s is burst-aggregate); bulk is the single-descriptor "
+                 "wire ceiling; op names the measured direction. GB/s at the largest ISL "
+                 "(bandwidth-bound).")
+    return lines
+
+
 def render(documents: list[dict]) -> str:
-    documents = sorted(documents, key=_identity)
-    invalid = [d for d in documents if d["outcome"]["status"] != "success"]
+    kv_documents = sorted(
+        (d for d in documents
+         if d["identity"]["case_factors"]["case"].get("suite") == "kv-transfer"),
+        key=_identity)
+    documents = sorted(
+        (d for d in documents
+         if d["identity"]["case_factors"]["case"].get("suite") != "kv-transfer"),
+        key=_identity)
+    invalid = [d for d in documents + kv_documents if d["outcome"]["status"] != "success"]
     lines = ["## CollectiveX EP results", ""]
     if invalid:
-        # The leg is already red (ep_harness.run_sweep returns nonzero on a non-success
-        # outcome); call the count out loudly so it is not lost in the per-row table.
+        # The leg is already red (the benchmark entrypoints return nonzero on a
+        # non-success outcome); call the count out loudly so it is not lost in the tables.
         lines.append(
-            f"> **{len(invalid)} of {len(documents)} outcome(s) INVALID** — "
+            f"> **{len(invalid)} of {len(documents) + len(kv_documents)} outcome(s) INVALID** — "
             "the leg fails; see the outcome column below."
         )
         lines.append("")
@@ -138,8 +198,10 @@ def render(documents: list[dict]) -> str:
             f"{phase} | {routing} | {ep} | {topo} | {wire} | "
             f"{document['outcome']['status']} | {token} | {p50} | {p99} | {min50} | {skew} |"
         )
-    if not documents:
+    if not documents and not kv_documents:
         lines.append("\n> No valid native outcome documents found.")
+    if kv_documents:
+        lines += render_kv(kv_documents)
     # The starred columns can hold two different quantities, so the table always says which — and
     # says so loudly when it holds both, since a mixed column silently compares a steady-state
     # period against an idle-pipeline latency.
