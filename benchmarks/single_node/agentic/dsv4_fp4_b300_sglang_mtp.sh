@@ -137,10 +137,18 @@ if [ "$DP_ATTENTION" = "true" ]; then
     # DEP8 has room for the lower value, which leaves mega-MoE workspace
     # headroom.
     if [ "$TP" -ge 8 ]; then
+        # Mega-MoE's transient workspace lives OUTSIDE the static allocation and
+        # needs a single ~7 GB contiguous block, so headroom must grow with
+        # concurrency. Measured at conc 256: 0.835 (~42 GB free) runs; 0.93
+        # (~16 GB free) and 0.95 (~11 GB free) both die with a CUDA OOM on one
+        # DP rank, which then hangs the whole engine in the MLP-sync collective.
         MEM_FRACTION_STATIC=0.93
         if [ "$CONC" -ge 512 ]; then
-            # Leave room for the mega-MoE transient workspace at the DEP8 tail.
-            MEM_FRACTION_STATIC=0.92
+            MEM_FRACTION_STATIC=0.875
+        elif [ "$CONC" -ge 384 ]; then
+            MEM_FRACTION_STATIC=0.89
+        elif [ "$CONC" -ge 256 ]; then
+            MEM_FRACTION_STATIC=0.9
         fi
     else
         MEM_FRACTION_STATIC=0.95
