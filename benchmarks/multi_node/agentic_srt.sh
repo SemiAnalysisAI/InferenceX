@@ -9,12 +9,7 @@ set -x
 INFMAX_CONTAINER_WORKSPACE="${INFMAX_CONTAINER_WORKSPACE:-/infmax-workspace}"
 source "$INFMAX_CONTAINER_WORKSPACE/benchmarks/benchmark_lib.sh"
 
-check_env_vars \
-    MODEL MODEL_PREFIX FRAMEWORK PRECISION CONC RESULT_FILENAME DURATION \
-    SRT_FRONTEND_HOST SRT_FRONTEND_PORT
-
-export AIPERF_SERVER_URL="http://${SRT_FRONTEND_HOST}:${SRT_FRONTEND_PORT}"
-echo "Using srt-slurm frontend endpoint: $AIPERF_SERVER_URL"
+check_env_vars MODEL MODEL_PREFIX FRAMEWORK PRECISION CONC RESULT_FILENAME DURATION
 
 BASE_RESULT_DIR="${RESULT_DIR:-/logs/agentic}"
 BASE_RESULT_FILENAME="$RESULT_FILENAME"
@@ -37,7 +32,7 @@ install_agentic_deps
 wait_for_agentic_servers_idle() {
     local timeout_seconds="${AIPERF_DRAIN_TIMEOUT_SECONDS:-1800}"
     local poll_seconds="${AIPERF_DRAIN_POLL_SECONDS:-10}"
-    local frontend_metrics_url="${AIPERF_SERVER_URL%/}/metrics"
+    local frontend_metrics_url="http://localhost:${PORT}/metrics"
 
     "$AIPERF_PYTHON" - \
         "$timeout_seconds" \
