@@ -6263,3 +6263,17 @@
   description:
     - "Refresh with lower stream interval to collect correct client metrics"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2686
+
+- config-keys:
+    - dsv4-fp4-b200-sglang-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump image from lmsysorg/sglang:v0.5.17-cu130 to lmsysorg/sglang:dev-nightly-0820 to pick up the prefill-delayer scheduling support used by the updated B200 recipe."
+    - "On the DP-attention path, add --enable-prefill-delayer with --prefill-decode-interval 20. Under speculative decoding plus DP attention, decode is synchronized globally; bounding consecutive decode steps prevents one rank's queued prefill from being delayed indefinitely."
+    - "On the DP path, replace DeepEP with --moe-a2a-backend megamoe plus --enable-deepseek-v4-fp4-indexer, --disable-shared-experts-fusion, and --disable-flashinfer-autotune. Export the MegaMoE FP4/MXF4 activation settings and increase the per-rank token workspace from 8192 to 8320 for headroom."
+    - "Scale chunked-prefill-size with dp_size (8192 * TP). SGLang divides this global budget by dp_size, preserving the tuned 8192-token per-rank budget for every DP-attention topology."
+    - "Use --cuda-graph-max-bs-decode 196 on the DP path, matching the largest configured concurrency; keep the existing concurrency-capped --cuda-graph-max-bs behavior for TP-only runs."
+    - "Enable the DeepSeek-V4 FP4 indexer on the TP-only path as well, while retaining flashinfer_mxfp4, chunked-prefill 8192, mem-fraction-static 0.88, and swa-full-tokens-ratio 0.1."
+    - "Keep the published TP-only rows, drop the DP-attention no-offload point, and replace the DP-attention HiCache concurrency list [16, 40, 48] with [32, 64, 96, 128, 160, 196]. The DP path retains HiCache ratio 8, mem-fraction-static 0.88, swa-full-tokens-ratio 0.02, and the existing 2x max-running-requests budget."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
