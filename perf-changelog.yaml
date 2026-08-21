@@ -6197,6 +6197,20 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2576
 
 - config-keys:
+    - kimik3-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add the MI355X Kimi-K3 FP4 ATOM AgentX submission with DSpark speculative decoding (2 draft tokens): TP8 at concurrency 1 and 4 is GPU-resident with no KV offload, while concurrency 8 and 10 add the LMCache DRAM tier together with ATOM's CPU state-offload tier."
+    - "Both offload tiers are switched together because Kimi-K3 is a hybrid: Kimi Delta Attention carries a per-request recurrent state alongside the paged KV, so a resumed agentic turn needs the state back and the paged KV tier alone cannot restore one."
+    - "Use AITER INT4 quick-reduce, AITER SITUV2 A4W4, FlyDSL stage-2 FP8, ptpc_fp8 online quantization excluding embeddings, lm_head, conv1d projections, experts, and the multimodal tower, an FP8 KV cache, and a 128-token page."
+    - "Set the simulated acceptance length to 2.54, giving spec-decode-acceptance-rate (2.54 - 1) / 2 = 0.77, which is the value the submitted ATOM numbers were measured under. This is 1.2% above the committed golden 2.51 that the vLLM arm feeds to synthetic_acceptance_length, and the script carries a review note saying so; set it to 2.51 for a strictly like-for-like sweep. Evaluations use real acceptance."
+    - "Divide the aggregate TOTAL_CPU_DRAM_GB budget by TP for LMCACHE_MAX_LOCAL_CPU_SIZE, which is a per-rank setting; dram-utilization 0.085 lands that at roughly 32 GB per rank."
+    - "Set OFFLOAD_GPU_STAGING_CHUNKS to 16 because the staging buffer defaults to 2 chunks (8 MiB) and one Kimi-K3 state entry is 54.78 MiB; a buffer too small to hold one entry makes the state tier decline to build after a single log line."
+    - "Select max-num-seqs, max-num-batched-tokens, gpu-memory-utilization, and in-GPU state-checkpoint slots by concurrency, and place state checkpoints at the prompt-end anchor only."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2670
+
+- config-keys:
     - dsv4-fp4-mi355x-atom-agentic-mtp
   scenario-type:
     - agentic-coding
