@@ -652,7 +652,7 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
 # the script's divide-by-TP lands on exactly the 32 GB per rank the recipe was
 # measured with (0.085 gives 254, which floors to 31).
 kimik3-fp4-mi355x-atom-agentic-mtp:
-  image: rocm/atom-dev:ubuntu24.04_py3.12_pytorch_release_2.10.0_kimi_k3_agentic_0818
+  image: rocm/atom-dev:ubuntu24.04_py3.12_pytorch_release_2.10.0_kimi_k3_agentic_0820
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:mi355x-amds

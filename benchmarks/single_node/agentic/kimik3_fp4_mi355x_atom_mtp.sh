@@ -193,19 +193,18 @@ if [ -n "$STATE_CHECKPOINT_SLOTS" ]; then
 fi
 
 # ---- Speculative ------------------------------------------------------------
-# golden 2.51 at num_speculative_tokens 2 in
 # https://github.com/SemiAnalysisAI/InferenceX/blob/main/golden_al_distribution/kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml
-
+#  6 draft tokens -> AL 3.75
+#  2 draft tokens -> AL 2.51
+# https://github.com/ROCm/ATOM/pull/1948
 if [ "$CONC" = 1 ]; then
-    SIMULATE_ACC_LEN=3.75
+    SPEC_DECODE_AL=3.75
     NUM_SPEC_TOKENS=6
 else
-    SIMULATE_ACC_LEN=2.51
+    SPEC_DECODE_AL=2.51
     NUM_SPEC_TOKENS=2
 fi
     
-# spec-decode-acceptance-rate = (SIMULATE_ACC_LEN - 1) / NUM_SPEC_TOKENS
-SPEC_ACCEPTANCE_RATE=$(awk "BEGIN{print ($SIMULATE_ACC_LEN-1)/$NUM_SPEC_TOKENS}")
 if [ "${EVAL_ONLY}" = "true" ]; then
     SPEC_ARGS=(
         --method dspark
@@ -217,10 +216,10 @@ else
         --method dspark
         --draft-model Inferact/Kimi-K3-DSpark
         --num-speculative-tokens "$NUM_SPEC_TOKENS"
-        --spec-decode-acceptance-rate "$SPEC_ACCEPTANCE_RATE"
+        --spec-decode-acceptance-length "$SPEC_DECODE_AL"
     )
 fi
-echo "SIMULATE_ACC_LEN=$SIMULATE_ACC_LEN NUM_SPEC_TOKENS=$NUM_SPEC_TOKENS SPEC_ACCEPTANCE_RATE=$SPEC_ACCEPTANCE_RATE"
+echo "SPEC_DECODE_AL=$SPEC_DECODE_AL NUM_SPEC_TOKENS=$NUM_SPEC_TOKENS"
 
 # ---- LLM server -------------------------------------------------------------
 ATOM_CMD=(
