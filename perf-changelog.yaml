@@ -6287,4 +6287,13 @@
     - "Add concurrency 48 and 64 to the TP8/EP1 sweep, and 64 and 192 to the TP8/EP8 DP-attention sweep."
     - "Increase prefill mem_fraction_static from 0.72 to 0.85 and reduce HICACHE_RATIO from 4 to 3."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2643
-  
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260821"
+    - "Enable SGLANG_OPT_USE_AITER_BATCHED_GEMM for mi355x sglang dsv4 agentic workload."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2705
+

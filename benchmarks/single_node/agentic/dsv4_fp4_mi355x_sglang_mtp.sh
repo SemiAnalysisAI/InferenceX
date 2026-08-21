@@ -73,6 +73,7 @@ export SGLANG_DSV4_REASONING_EFFORT=high
 export SGLANG_USE_ROCM700A=0
 export SGLANG_HACK_FLASHMLA_BACKEND=unified_kv_triton
 export AITER_BF16_FP8_MOE_BOUND=0
+export SGLANG_OPT_USE_AITER_BATCHED_GEMM=true
 
 # Unified radix tree: per-component (full-attn / SWA) cache management for
 # hybrid-attention models, plus proactive release of out-of-window SWA KV
