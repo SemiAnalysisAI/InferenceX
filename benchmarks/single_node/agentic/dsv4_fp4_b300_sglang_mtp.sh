@@ -151,7 +151,14 @@ if [ "$DP_ATTENTION" = "true" ]; then
             MEM_FRACTION_STATIC=0.9
         fi
     else
-        MEM_FRACTION_STATIC=0.95
+        # DEP4 is squeezed from both sides: weights occupy ~90% of each GPU when
+        # the model is sharded over half the node, so the engine refuses to start
+        # below ~0.902 (no KV left), while megamoe still needs its ~7 GB
+        # workspace above the static budget. 0.95 leaves only ~11 GB free -- the
+        # same margin that OOM'd a rank at DEP8 conc 256 -- so use 0.93, which
+        # gives the ~16 GB that DEP8 conc 128 runs with at the same per-rank load
+        # (max-running-requests/dp = 32 in both cases).
+        MEM_FRACTION_STATIC=0.93
     fi
     # --chunked-prefill-size is a GLOBAL budget: server_args.py divides it by
     # dp_size, and dp_size is TP here. Scale it so every DEP shape gets the
