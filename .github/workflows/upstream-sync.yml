@@ -37,11 +37,25 @@ jobs:
           echo "Starting branch synchronization..."
           for branch in $(git branch -r | grep 'upstream/' | grep -v 'HEAD' | grep -v '\->' | sed 's|upstream/||'); do
             echo "Syncing branch: $branch"
-            # Checkout or create local branch tracking origin
-            git checkout $branch 2>/dev/null || git checkout -b $branch origin/$branch
+            # Checkout or create local branch tracking origin. Always pass an explicit
+            # start point: a bare name lets git read "...-gb300" as a commit id and
+            # silently detach HEAD instead of switching to the branch.
+            git checkout -B $branch origin/$branch 2>/dev/null || git checkout -B $branch upstream/$branch
             git fetch upstream $branch
-            # Perform safe, non-destructive merge
-            git merge upstream/$branch --no-edit || true
+            # Merge upstream in. On conflict, take upstream's copy wholesale rather than
+            # leaving a half-merged index behind, which breaks the next branch's checkout.
+            # main is exempt: it carries files that do not exist upstream, this workflow
+            # among them, so it is only ever fast-forwarded.
+            if ! git merge upstream/$branch --no-edit; then
+              git merge --abort || true
+              if [ "$branch" = "main" ]; then
+                echo "::warning::merge conflict on main - left untouched, resolve by hand"
+              else
+                echo "::warning::merge conflict on $branch - resetting to upstream/$branch"
+                git reset --hard upstream/$branch
+                git push --force-with-lease origin $branch
+              fi
+            fi
             git push origin $branch
           done
 
