@@ -313,25 +313,23 @@ else
         BENCHMARK_SCRIPT="$SCRIPT_FALLBACK"
     fi
 
-    # An RDMA-backed KV tier needs the host's own verbs stack inside the
-    # container. This mirrors amd_utils/job.slurm rather than any local docker
-    # recipe, because single-node and multi-node CI run on the same fleet: the
-    # image's bundled libibverbs/libionic can be older than the host driver, and
-    # the provider has to match the NIC or ibv_open_device enumerates nothing.
-    # Every entry is conditional, so arms that never touch RDMA and hosts
-    # without these paths are unaffected.
+    # An RDMA-backed KV tier needs the host's verbs devices and ionic/mlx
+    # provider plugins inside the enroot/pyxis container. job.slurm does the
+    # same overlay with docker -v; pyxis cannot: bind-mounting host
+    # libibverbs.so.1.14.50.0 onto /lib/.../libibverbs.so.1 follows the
+    # image's symlink to libibverbs.so.1.14.39.0 and enroot fails with ENOENT
+    # (CI run 32593076264 on mia1-p01-g18). Stick to directories and devices
+    # whose dest already exists as a real path. Every entry is conditional so
+    # arms that never touch RDMA and hosts without these paths are unaffected.
     RDMA_MOUNTS=""
     _rdma_add() { [[ -e "$1" ]] && RDMA_MOUNTS="${RDMA_MOUNTS},${1}:${2}"; }
     _rdma_add /dev/infiniband /dev/infiniband
     _rdma_add /etc/libibverbs.d /etc/libibverbs.d
     _rdma_add /usr/lib/x86_64-linux-gnu/libibverbs /usr/lib/x86_64-linux-gnu/libibverbs
-    # Overmount the host loader library itself, same reason job.slurm does.
-    for _ibv in /usr/lib/x86_64-linux-gnu/libibverbs.so.1 /lib/x86_64-linux-gnu/libibverbs.so.1; do
-        if [[ -e "$_ibv" ]]; then
-            _rdma_add "$(readlink -f "$_ibv")" /lib/x86_64-linux-gnu/libibverbs.so.1
-            break
-        fi
-    done
+    # Directory-only: pyxis bind-mounts a file onto the image's realpath of
+    # dest, so overlaying host libibverbs.so.1.14.50.0 onto the so.1 symlink
+    # tries to create libibverbs.so.1.14.39.0 and fails. The ionic provider
+    # lives in the libibverbs plugin directory mounted above.
     if [[ -n "$RDMA_MOUNTS" ]]; then
         echo "RDMA mounts for the container:${RDMA_MOUNTS}"
         ls /sys/class/infiniband 2>/dev/null | tr '\n' ' ' | sed 's/^/RDMA devices on host: /;s/$/\n/'
