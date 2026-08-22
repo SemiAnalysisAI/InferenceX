@@ -165,6 +165,12 @@ case "$KV_OFFLOAD_BACKEND" in
 esac
 
 # ---- LLM server config ----------------------------------------------------------
+# Teaches ROCM_AITER_FA to dispatch multi-token decodes to the AITER gluon
+# paged-attention kernel the image already ships. Without it the shuffled KV
+# layout the TP4 arm needs is incompatible with MTP's multi-token decode and the
+# server asserts on the first one. See docs/waiver/PENDING-minimaxm3-pa-gluon.md.
+bash "$(dirname "$0")/apply_minimaxm3_container_patches.sh"
+
 PARALLEL_ARGS=(--tensor-parallel-size "$TP")
 if [ "$EP_SIZE" -gt 1 ]; then
     PARALLEL_ARGS+=(--enable-expert-parallel)
