@@ -360,7 +360,7 @@ else
         --container-writable \
         --container-workdir=/workspace/ \
         --container-remap-root \
-        --no-container-entrypoint --export=ALL,AIPERF_DATASET_MMAP_CACHE_DIR=/aiperf_mmap_cache \
+        --no-container-entrypoint --propagate=RLIMIT_MEMLOCK --export=ALL,AIPERF_DATASET_MMAP_CACHE_DIR=/aiperf_mmap_cache \
         bash "$BENCHMARK_SCRIPT"
     benchmark_rc=$?
 

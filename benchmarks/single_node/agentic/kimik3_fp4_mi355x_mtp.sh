@@ -222,8 +222,8 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         export MC_STORE_USE_HUGEPAGE=1
         export MC_STORE_HUGEPAGE_SIZE=2MB
         HUGEPAGE_GB=$(( HUGEPAGE_FREE * 2 / 1024 / TP ))
-        if [ "$HUGEPAGE_GB" -gt 4 ]; then
-            HUGEPAGE_GB=4
+        if [ "$HUGEPAGE_GB" -gt 2 ]; then
+            HUGEPAGE_GB=2
         fi
         if [ "$HUGEPAGE_GB" -lt "$PER_RANK_GB" ]; then
             PER_RANK_GB=$HUGEPAGE_GB
@@ -257,12 +257,17 @@ case "${KV_OFFLOAD_BACKEND:-}" in
 }
 EOF
     export MOONCAKE_CONFIG_PATH
+    # ibv_reg_mr ENOMEM on ionic is often RLIMIT_MEMLOCK, not hugepage shortage.
+    # CI 32596419301: 4GB x 8 ranks on rdma0, mmap ok, register failed [12].
+    ulimit -l unlimited 2>/dev/null || true
+    echo "memlock ulimit=$(ulimit -l)" >&2
+
     cat > "$RESULT_DIR/sitecustomize.py" <<'PY'
 import json
 import os
 from pathlib import Path
 
-rank = os.environ.get("LOCAL_RANK")
+rank = os.environ.get("LOCAL_RANK", os.environ.get("RANK"))
 path = os.environ.get("MOONCAKE_CONFIG_PATH")
 if rank is not None and path:
     src = Path(path)
@@ -278,6 +283,11 @@ if rank is not None and path:
             os.environ["MOONCAKE_CONFIG_PATH"] = str(dst)
 PY
     export PYTHONPATH="$RESULT_DIR${PYTHONPATH:+:$PYTHONPATH}"
+    PY_STDLIB=$(python3 -c "import sysconfig; print(sysconfig.get_path('stdlib'))")
+    if [ -n "$PY_STDLIB" ] && [ -d "$PY_STDLIB" ]; then
+        cp "$RESULT_DIR/sitecustomize.py" "$PY_STDLIB/sitecustomize.py"
+        echo "installed sitecustomize into $PY_STDLIB" >&2
+    fi
     export MC_STORE_MEMCPY=1
     export MC_ENABLE_PARALLEL_REG_MR=0
     export MC_GID_INDEX="${MC_GID_INDEX:-1}"
