@@ -221,10 +221,10 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     if [ "${HUGEPAGE_FREE:-0}" -ge 512 ]; then
         export MC_STORE_USE_HUGEPAGE=1
         export MC_STORE_HUGEPAGE_SIZE=2MB
-        HUGEPAGE_GB=$(( HUGEPAGE_FREE * 2 / 1024 / TP ))
-        if [ "$HUGEPAGE_GB" -gt 2 ]; then
-            HUGEPAGE_GB=2
-        fi
+        # Size the tier from the pool with headroom. Shrinking it was chased for
+        # four CI cycles and never mattered: the reproducer in run 32598493726
+        # fails identically at 2 GB and 8 GB.
+        HUGEPAGE_GB=$(( HUGEPAGE_FREE * 2 / 1024 * 9 / 10 / TP ))
         if [ "$HUGEPAGE_GB" -lt "$PER_RANK_GB" ]; then
             PER_RANK_GB=$HUGEPAGE_GB
             echo "clamping RDMA segment to ${PER_RANK_GB} GB/rank" >&2
@@ -288,6 +288,14 @@ PY
         cp "$RESULT_DIR/sitecustomize.py" "$PY_STDLIB/sitecustomize.py"
         echo "installed sitecustomize into $PY_STDLIB" >&2
     fi
+    # vLLM derives its workers by forking the engine core, and by then the
+    # process holds ~195 GB of device memory. CI run 32598493726 showed
+    # ibv_reg_mr only fails when both are true; neither alone reproduces it, and
+    # segment size is irrelevant (2 GB failed exactly like 8 GB). That is the
+    # documented case for libibverbs' fork-safe path, and the hugepages switch
+    # is its required companion because the segment is backed by 2 MB pages.
+    export RDMAV_FORK_SAFE=1
+    export RDMAV_HUGEPAGES_SAFE=1
     export MC_STORE_MEMCPY=1
     export MC_ENABLE_PARALLEL_REG_MR=0
     export MC_GID_INDEX="${MC_GID_INDEX:-1}"
@@ -315,9 +323,11 @@ PY
     # of weights, so one CI cycle answers the whole matrix instead of one knob.
     if [ "${MOONCAKE_PROBE:-1}" = "1" ]; then
         python3 "$(dirname "$0")/mooncake_rdma_probe.py" \
-            --master "127.0.0.1:$MOONCAKE_MASTER_PORT"
-        echo "probe complete; skipping the benchmark"
-        exit 0
+            --master "127.0.0.1:$MOONCAKE_MASTER_PORT" --verify || {
+            echo "Error: Mooncake cannot register memory in a forked GPU worker" >&2
+            exit 1
+        }
+        echo "probe passed; continuing to the benchmark"
     fi
 
     OFFLOAD_ARGS=(

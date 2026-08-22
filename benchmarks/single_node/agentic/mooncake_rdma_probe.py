@@ -252,6 +252,11 @@ def run_cell(
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--worker", action="store_true")
+    parser.add_argument(
+        "--verify",
+        action="store_true",
+        help="run only the reproducer cell and fail the job if it cannot register",
+    )
     parser.add_argument("--segment-mb", type=int, default=2048)
     parser.add_argument("--device", default="rdma0")
     parser.add_argument("--master", default="127.0.0.1:20888")
@@ -276,6 +281,24 @@ def main():
     print("=" * 72, flush=True)
 
     big_mr = 34359738368
+
+    if args.verify:
+        # CI run 32598493726 isolated the reproducer: registration fails only
+        # when the caller forks *and* holds weight-sized device memory, which is
+        # exactly a vLLM worker. Gate the benchmark on that same shape.
+        ok = run_cell(
+            "verify fork + 180GiB gpu",
+            8,
+            2048,
+            True,
+            False,
+            args.master,
+            big_mr,
+            gpu_gib=180,
+            fork=True,
+        )
+        return 0 if ok else 1
+
     # The bare sweep (segment size, page size, NIC binding, process count,
     # max_mr_size) passed every cell in CI run 32597763849, so the failure needs
     # the worker's process state: ROCm initialised with the weights resident.
