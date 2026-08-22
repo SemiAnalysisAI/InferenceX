@@ -120,6 +120,7 @@ if [ "$DP_ATTENTION" = "true" ]; then
         --dp "$TP"
         --tokenizer-worker-num "$TP"
         --enable-prefill-delayer
+        # TEMP(validation): 10 instead of 20 for the A/B against #2701.
         --prefill-decode-interval 10
         --enable-dp-attention
         --enable-dp-attention-local-control-broadcast
