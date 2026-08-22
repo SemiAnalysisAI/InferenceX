@@ -257,14 +257,24 @@ if [ "${EVAL_ONLY:-false}" = "true" ]; then
 else
     SPEC_CONFIG="{\"method\": \"mtp\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": 2.49}"
 fi
-CUDA_GRAPH_CAPTURE_SIZES=""
+CAPTURE_SIZE_LIST=()
 for ((num_seqs = 1; num_seqs <= MAX_NUM_SEQS; num_seqs++)); do
-    if [ -n "$CUDA_GRAPH_CAPTURE_SIZES" ]; then
-        CUDA_GRAPH_CAPTURE_SIZES+=","
-    fi
-    CUDA_GRAPH_CAPTURE_SIZES+="$((num_seqs * TOKENS_PER_SEQ))"
+    CAPTURE_SIZE_LIST+=("$((num_seqs * TOKENS_PER_SEQ))")
 done
-COMPILATION_CONFIG="{\"cudagraph_mode\":\"FULL_DECODE_ONLY\",\"cudagraph_capture_sizes\":[${CUDA_GRAPH_CAPTURE_SIZES}],\"mode\":0}"
+# TP additionally captures piecewise graphs for the mixed prefill/decode batches,
+# on top of the full graphs for the uniform decode batches above. Piecewise
+# capture requires the compiled graph, so no "mode":0 on that path. The DEP arm
+# keeps decode-only capture. The decode multiples and the piecewise sizes overlap
+# once MAX_NUM_SEQS*(1+N) passes 100, so sort and de-duplicate.
+if [ "$DP_ATTENTION" != "true" ]; then
+    CAPTURE_SIZE_LIST+=(100 200 300 400 500)
+fi
+CUDA_GRAPH_CAPTURE_SIZES=$(printf '%s\n' "${CAPTURE_SIZE_LIST[@]}" | sort -n -u | paste -sd, -)
+if [ "$DP_ATTENTION" != "true" ]; then
+    COMPILATION_CONFIG="{\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"cudagraph_capture_sizes\":[${CUDA_GRAPH_CAPTURE_SIZES}]}"
+else
+    COMPILATION_CONFIG="{\"cudagraph_mode\":\"FULL_DECODE_ONLY\",\"cudagraph_capture_sizes\":[${CUDA_GRAPH_CAPTURE_SIZES}],\"mode\":0}"
+fi
 
 echo "Starting vllm server..."
 export TORCH_CUDA_ARCH_LIST="10.0"
