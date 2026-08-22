@@ -310,6 +310,16 @@ PY
         exit 1
     fi
 
+    # MOONCAKE_PROBE=1 sweeps segment size, page size, NIC binding and process
+    # count against this node's RNICs and exits before the engine loads 1.5 TB
+    # of weights, so one CI cycle answers the whole matrix instead of one knob.
+    if [ "${MOONCAKE_PROBE:-1}" = "1" ]; then
+        python3 "$(dirname "$0")/mooncake_rdma_probe.py" \
+            --master "127.0.0.1:$MOONCAKE_MASTER_PORT"
+        echo "probe complete; skipping the benchmark"
+        exit 0
+    fi
+
     OFFLOAD_ARGS=(
         --kv-transfer-config
         '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_group_semantics":true}}'
