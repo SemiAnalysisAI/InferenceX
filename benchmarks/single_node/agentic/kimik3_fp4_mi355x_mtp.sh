@@ -126,11 +126,13 @@ mkdir -p "$RESULT_DIR"
 
 SERVER_PID=""
 MOONCAKE_MASTER_PID=""
+MEMWATCH_PID=""
 
 cleanup_agentic_services() {
     local exit_code=$?
     trap - EXIT INT TERM
     set +e
+    [ -n "$MEMWATCH_PID" ] && kill "$MEMWATCH_PID" 2>/dev/null
     stop_background_process_tree "$SERVER_PID" "vLLM server" 60
     stop_background_process_tree "$MOONCAKE_MASTER_PID" "Mooncake master" 10
     exit "$exit_code"
@@ -288,14 +290,13 @@ PY
         cp "$RESULT_DIR/sitecustomize.py" "$PY_STDLIB/sitecustomize.py"
         echo "installed sitecustomize into $PY_STDLIB" >&2
     fi
-    # vLLM derives its workers by forking the engine core, and by then the
-    # process holds ~195 GB of device memory. CI run 32598493726 showed
-    # ibv_reg_mr only fails when both are true; neither alone reproduces it, and
-    # segment size is irrelevant (2 GB failed exactly like 8 GB). That is the
-    # documented case for libibverbs' fork-safe path, and the hugepages switch
-    # is its required companion because the segment is backed by 2 MB pages.
-    export RDMAV_FORK_SAFE=1
-    export RDMAV_HUGEPAGES_SAFE=1
+    # A forked caller is the only condition under which registration could be
+    # made to fail on this node (CI run 32598493726); the bare sweep passed even
+    # at 8 ranks x 8 GB, so segment size, page size, NIC binding, max_mr_size and
+    # memlock are all cleared. libibverbs' fork-safe path did not help
+    # (32598888005), so take fork out of the picture instead. vLLM otherwise
+    # forks its workers off the engine core.
+    export VLLM_WORKER_MULTIPROC_METHOD=spawn
     export MC_STORE_MEMCPY=1
     export MC_ENABLE_PARALLEL_REG_MR=0
     export MC_GID_INDEX="${MC_GID_INDEX:-1}"
@@ -321,7 +322,19 @@ PY
     # MOONCAKE_PROBE=1 sweeps segment size, page size, NIC binding and process
     # count against this node's RNICs and exits before the engine loads 1.5 TB
     # of weights, so one CI cycle answers the whole matrix instead of one knob.
-    if [ "${MOONCAKE_PROBE:-1}" = "1" ]; then
+    # Sample the hugepage pool so a registration failure can be read against the
+    # pool state at the moment it happens instead of the state at startup.
+    (
+        while true; do
+            awk '/HugePages_Free|HugePages_Rsvd|MemAvailable/ {printf "%s=%s ", $1, $2}' \
+                /proc/meminfo
+            echo "MEMWATCH $(date -u +%H:%M:%S)"
+            sleep 10
+        done
+    ) &
+    MEMWATCH_PID=$!
+
+    if [ "${MOONCAKE_PROBE:-0}" = "1" ]; then
         python3 "$(dirname "$0")/mooncake_rdma_probe.py" \
             --master "127.0.0.1:$MOONCAKE_MASTER_PORT" --verify || {
             echo "Error: Mooncake cannot register memory in a forked GPU worker" >&2
