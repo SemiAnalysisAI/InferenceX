@@ -119,15 +119,18 @@ export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
 
 # ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
+MOONCAKE_MASTER_LOG="$RESULT_DIR/mooncake_master.log"
 mkdir -p "$RESULT_DIR"
 
 SERVER_PID=""
+MOONCAKE_MASTER_PID=""
 
 cleanup_agentic_services() {
     local exit_code=$?
     trap - EXIT INT TERM
     set +e
     stop_background_process_tree "$SERVER_PID" "vLLM server" 60
+    stop_background_process_tree "$MOONCAKE_MASTER_PID" "Mooncake master" 10
     exit "$exit_code"
 }
 trap cleanup_agentic_services EXIT
@@ -155,6 +158,84 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         "{\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use_per_rank\":$CPU_BYTES_PER_RANK,\"lazy_offload\":$SIMPLE_LAZY_OFFLOAD}}"
     )
     echo "SimpleCPUOffloadConnector: ${CPU_BYTES_PER_RANK} B/rank x ${TP} ranks, lazy_offload=$SIMPLE_LAZY_OFFLOAD"
+    ;;
+  mooncake)
+    require_agentic_kv_offload_backend "$KV_OFFLOAD_BACKEND"
+
+    # Reuse the pinned ROCm/HIP runtime validated on this cluster. Keeping the
+    # runtime and vLLM pins independent lets this arm stay on the stable
+    # nightly-ac7509 image while the connector code comes from the audited
+    # yichaozhu/k3-dspark-dcp-v3 branch.
+    MOONCAKE_RUNTIME_ROOT="${MOONCAKE_RUNTIME_ROOT:-/it-share/yiczhu/k3-cache-hit-20260822/mooncake-runtime}"
+    MOONCAKE_DMABUF_ROOT="${MOONCAKE_DMABUF_ROOT:-/it-share/yiczhu/k3-cache-hit-20260822/mooncake-dmabuf}"
+    MOONCAKE_EXPECTED_SHA=4c6d23c8f77230dd5974cf9bc87344dcc946ee77
+    if [ ! -x "$MOONCAKE_RUNTIME_ROOT/bin/mooncake_master" ] ||
+       [ ! -d "$MOONCAKE_RUNTIME_ROOT/python/mooncake" ]; then
+        echo "Error: validated Mooncake runtime is missing at $MOONCAKE_RUNTIME_ROOT" >&2
+        exit 1
+    fi
+    if ! grep -q "source=$MOONCAKE_EXPECTED_SHA" "$MOONCAKE_DMABUF_ROOT/manifest.txt" ||
+       [ ! -f "$MOONCAKE_DMABUF_ROOT/engine.cpython-312-x86_64-linux-gnu.so" ] ||
+       [ ! -f "$MOONCAKE_DMABUF_ROOT/store.cpython-312-x86_64-linux-gnu.so" ]; then
+        echo "Error: validated Mooncake DMABUF overlay is missing or unpinned" >&2
+        exit 1
+    fi
+
+    MOONCAKE_PYTHON_ROOT="$RESULT_DIR/mooncake-python"
+    mkdir -p "$MOONCAKE_PYTHON_ROOT"
+    cp -a "$MOONCAKE_RUNTIME_ROOT/python/mooncake" "$MOONCAKE_PYTHON_ROOT/"
+    cp "$MOONCAKE_DMABUF_ROOT/engine.cpython-312-x86_64-linux-gnu.so" \
+       "$MOONCAKE_DMABUF_ROOT/store.cpython-312-x86_64-linux-gnu.so" \
+       "$MOONCAKE_PYTHON_ROOT/mooncake/"
+    # The pinned stable image lacks the one system DSO not bundled with the
+    # exported Mooncake runtime. This exact install was probed in ac7509.
+    apt-get update -qq
+    apt-get install -y -qq --no-install-recommends libyaml-cpp0.7
+    export PYTHONPATH="$MOONCAKE_PYTHON_ROOT:$MOONCAKE_RUNTIME_ROOT/python${PYTHONPATH:+:$PYTHONPATH}"
+    export LD_LIBRARY_PATH="$MOONCAKE_RUNTIME_ROOT/lib:/opt/rocm/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    export PATH="$MOONCAKE_RUNTIME_ROOT/bin:$PATH"
+    python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null
+
+    PER_RANK_GB=$(( TOTAL_CPU_DRAM_GB / TP ))
+    MOONCAKE_MASTER_PORT=$((PORT + 12000))
+    MOONCAKE_CONFIG_PATH="$RESULT_DIR/mooncake_config.json"
+    cat > "$MOONCAKE_CONFIG_PATH" <<EOF
+{
+  "mode": "embedded",
+  "metadata_server": "P2PHANDSHAKE",
+  "master_server_address": "127.0.0.1:$MOONCAKE_MASTER_PORT",
+  "global_segment_size": "${PER_RANK_GB}GB",
+  "local_buffer_size": "64MB",
+  "protocol": "tcp",
+  "device_name": "",
+  "enable_offload": false
+}
+EOF
+    export MOONCAKE_CONFIG_PATH
+    export MC_STORE_MEMCPY=1
+    export PYTHONHASHSEED=42
+
+    mooncake_master --port "$MOONCAKE_MASTER_PORT" \
+        --eviction_high_watermark_ratio=0.90 \
+        --eviction_ratio=0.10 \
+        > "$MOONCAKE_MASTER_LOG" 2>&1 &
+    MOONCAKE_MASTER_PID=$!
+    sleep 2
+    if ! kill -0 "$MOONCAKE_MASTER_PID" 2>/dev/null; then
+        echo "Error: Mooncake master died during startup" >&2
+        cat "$MOONCAKE_MASTER_LOG" >&2
+        exit 1
+    fi
+
+    OFFLOAD_ARGS=(
+        --kv-transfer-config
+        '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_group_semantics":true}}'
+    )
+    echo "MooncakeStoreConnector: ${PER_RANK_GB} GB/rank x ${TP} ranks, TCP DRAM only"
+    ;;
+  *)
+    echo "Error: unsupported KV_OFFLOAD_BACKEND='$KV_OFFLOAD_BACKEND'" >&2
+    exit 1
     ;;
 esac
 fi
@@ -253,7 +334,7 @@ fi
 
 # ---- HIP graph ------------------------------------------------------------
 MAX_NUM_SEQS="${MAX_NUM_SEQS:-$(( CONC * 2 ))}"
-MAX_CUDAGRAPH_CAPTURE_SIZE="${MAX_CUDAGRAPH_CAPTURE_SIZE:-$(( MAX_NUM_SEQS * 3 ))}"
+MAX_CUDAGRAPH_CAPTURE_SIZE="${MAX_CUDAGRAPH_CAPTURE_SIZE:-$MAX_NUM_SEQS}"
 CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 1 "$MAX_CUDAGRAPH_CAPTURE_SIZE")"
 # FULL, not FULL_AND_PIECEWISE: the latter leaves the DSpark drafter on
 # piecewise graphs, and drafting on full graphs is the entire point of this arm
