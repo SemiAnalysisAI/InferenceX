@@ -6350,3 +6350,11 @@
   description:
     - "TEMP(validation): reduce the agentic sweep to the single conc-512 point, and have the recipe script apply sglang-loadback-multipin.patch (sgl-project/sglang#35880, a cherry-pick of sgl-project/sglang#34975 onto the dev-nightly-0820 base, keeping the #34519 write-back gating) onto the image's editable sglang source before server start. This validates the fix for the unified_cache commit_load_back single-pin assertion (load_back_pending_id) that killed the conc-512 scheduler at PR #2701. Not intended for merge; revert once the image carries the fix."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2704
+  
+- config-keys:
+    - dsv4-fp4-b300-sglang-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "TEMP(validation): switch --prefill-decode-interval from 20 to 10 for an A/B against #2701 at the single conc-512 point, on top of the load-back multipin patch. Not intended for merge."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2704
