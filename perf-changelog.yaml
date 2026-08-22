@@ -6369,3 +6369,12 @@
   description:
     - "Refresh with lower stream interval to collect correct client metrics"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2685
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Serve the TP8 arm with FULL_AND_PIECEWISE cudagraphs, capturing the mixed prefill/decode batches as well as the uniform decode batches. The DEP8 arm is unchanged."
+    - "Replace the TP8 concurrency list [1, 4, 8, 16, 24] with [1, 4, 8, 14], dropping the published concurrency 16 and 24 points and adding concurrency 14."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2707
