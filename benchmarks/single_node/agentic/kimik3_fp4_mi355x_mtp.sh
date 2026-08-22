@@ -204,11 +204,9 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         ls /usr/lib/x86_64-linux-gnu/libibverbs | head
     fi
 
-    # Use every RNIC; a single rdma0 for all 8 ranks is what mooncake logged
-    # as "specified devices: rdma0" right before the transport install failed.
-    if [ -z "${MOONCAKE_RDMA_DEVICE:-}" ]; then
-        MOONCAKE_RDMA_DEVICE=$(ls /sys/class/infiniband 2>/dev/null | tr '\n' ',' | sed 's/,$//')
-    fi
+    # One RNIC, not the whole list. CI run 32595345336 opened rdma0-7 on every
+    # rank and ibv_reg_mr returned ENOMEM while mounting 14GB segments.
+    MOONCAKE_RDMA_DEVICE="${MOONCAKE_RDMA_DEVICE:-rdma0}"
     if [ -z "$MOONCAKE_RDMA_DEVICE" ] || [ ! -e "/sys/class/infiniband/${MOONCAKE_RDMA_DEVICE%%,*}" ]; then
         echo "Error: RDMA device $MOONCAKE_RDMA_DEVICE not present" >&2
         ls /sys/class/infiniband 2>/dev/null >&2 || true
@@ -222,9 +220,12 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         export MC_STORE_USE_HUGEPAGE=1
         export MC_STORE_HUGEPAGE_SIZE=2MB
         HUGEPAGE_GB=$(( HUGEPAGE_FREE * 2 / 1024 / TP ))
+        if [ "$HUGEPAGE_GB" -gt 8 ]; then
+            HUGEPAGE_GB=8
+        fi
         if [ "$HUGEPAGE_GB" -lt "$PER_RANK_GB" ]; then
             PER_RANK_GB=$HUGEPAGE_GB
-            echo "hugepages short; clamping segment to ${PER_RANK_GB} GB/rank" >&2
+            echo "clamping RDMA segment to ${PER_RANK_GB} GB/rank" >&2
         fi
     else
         # CI cannot grow nr_hugepages (EACCES even from srun). Keep RDMA but
