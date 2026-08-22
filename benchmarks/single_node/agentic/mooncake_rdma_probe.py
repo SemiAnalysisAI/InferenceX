@@ -85,8 +85,37 @@ def dump_environment():
         traceback.print_exc()
 
 
+def preload_gpu(index, gib):
+    """Reproduce the worker's ROCm state before Mooncake registers anything."""
+    import torch
+
+    torch.cuda.set_device(index % torch.cuda.device_count())
+    blocks = []
+    for _ in range(gib):
+        blocks.append(torch.empty(1024**3, dtype=torch.uint8, device="cuda"))
+    torch.cuda.synchronize()
+    print(f"WORKER gpu_reserved={torch.cuda.memory_allocated() // 1024**3}GiB", flush=True)
+    return blocks
+
+
+def preload_host(gib):
+    buffers = []
+    for _ in range(gib):
+        buf = bytearray(1024**3)
+        buf[::4096] = b"\x01" * (len(buf) // 4096)
+        buffers.append(buf)
+    print(f"WORKER host_touched={gib}GiB", flush=True)
+    return buffers
+
+
 def worker(args):
     """Register one segment and report the return code."""
+    held = []
+    if args.gpu_gib:
+        held.append(preload_gpu(args.port % 8, args.gpu_gib))
+    if args.host_gib:
+        held.append(preload_host(args.host_gib))
+
     os.environ["MC_STORE_USE_HUGEPAGE"] = "1" if args.hugepage else "0"
     if args.hugepage:
         os.environ["MC_STORE_HUGEPAGE_SIZE"] = "2MB"
@@ -126,7 +155,17 @@ def worker(args):
     return 0 if rc == 0 else 1
 
 
-def run_cell(name, procs, segment_mb, hugepage, per_rank_nic, master, max_mr_size):
+def run_cell(
+    name,
+    procs,
+    segment_mb,
+    hugepage,
+    per_rank_nic,
+    master,
+    max_mr_size,
+    gpu_gib=0,
+    host_gib=0,
+):
     available = nics() or ["rdma0"]
     children = []
     for idx in range(procs):
@@ -148,6 +187,10 @@ def run_cell(name, procs, segment_mb, hugepage, per_rank_nic, master, max_mr_siz
             cmd.append("--hugepage")
         if max_mr_size:
             cmd += ["--max-mr-size", str(max_mr_size)]
+        if gpu_gib:
+            cmd += ["--gpu-gib", str(gpu_gib)]
+        if host_gib:
+            cmd += ["--host-gib", str(host_gib)]
         children.append(
             subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         )
@@ -181,6 +224,8 @@ def main():
     parser.add_argument("--port", type=int, default=20000)
     parser.add_argument("--hugepage", action="store_true")
     parser.add_argument("--max-mr-size", type=int, default=0)
+    parser.add_argument("--gpu-gib", type=int, default=0)
+    parser.add_argument("--host-gib", type=int, default=0)
     args = parser.parse_args()
 
     if args.worker:
@@ -196,18 +241,31 @@ def main():
     print("=" * 72, flush=True)
 
     big_mr = 34359738368
+    # The bare sweep (segment size, page size, NIC binding, process count,
+    # max_mr_size) passed every cell in CI run 32597763849, so the failure needs
+    # the worker's process state: ROCm initialised with the weights resident.
     cells = [
-        ("1proc 2GB huge rdma0", 1, 2048, True, False, big_mr),
-        ("8proc 2GB huge rdma0 (current)", 8, 2048, True, False, big_mr),
-        ("8proc 2GB huge per-rank-nic", 8, 2048, True, True, big_mr),
-        ("8proc 2GB 4K rdma0", 8, 2048, False, False, big_mr),
-        ("8proc 256MB huge rdma0", 8, 256, True, False, big_mr),
-        ("8proc 2GB huge rdma0 no-maxmr", 8, 2048, True, False, 0),
-        ("8proc 8GB huge per-rank-nic", 8, 8192, True, True, big_mr),
+        ("8proc 2GB baseline", 8, 2048, True, False, big_mr, 0, 0),
+        ("8proc 2GB + 8GiB gpu", 8, 2048, True, False, big_mr, 8, 0),
+        ("8proc 2GB + 180GiB gpu", 8, 2048, True, False, big_mr, 180, 0),
+        ("8proc 2GB + 180GiB gpu per-nic", 8, 2048, True, True, big_mr, 180, 0),
+        ("8proc 2GB + 20GiB host", 8, 2048, True, False, big_mr, 0, 20),
+        ("8proc 2GB 4K + 180GiB gpu", 8, 2048, False, False, big_mr, 180, 0),
     ]
-    for name, procs, segment_mb, hugepage, per_rank, max_mr in cells:
+    for name, procs, segment_mb, hugepage, per_rank, max_mr, gpu, host in cells:
+        print(sh("grep HugePages_Free /proc/meminfo").strip(), flush=True)
         try:
-            run_cell(name, procs, segment_mb, hugepage, per_rank, args.master, max_mr)
+            run_cell(
+                name,
+                procs,
+                segment_mb,
+                hugepage,
+                per_rank,
+                args.master,
+                max_mr,
+                gpu_gib=gpu,
+                host_gib=host,
+            )
         except Exception:  # noqa: BLE001
             print(f"PROBE_RESULT {name:<38} EXCEPTION", flush=True)
             traceback.print_exc()
