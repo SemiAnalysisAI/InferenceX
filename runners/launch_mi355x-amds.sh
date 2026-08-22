@@ -313,9 +313,33 @@ else
         BENCHMARK_SCRIPT="$SCRIPT_FALLBACK"
     fi
 
+    # An RDMA-backed KV tier needs the host's own verbs stack inside the
+    # container. This mirrors amd_utils/job.slurm rather than any local docker
+    # recipe, because single-node and multi-node CI run on the same fleet: the
+    # image's bundled libibverbs/libionic can be older than the host driver, and
+    # the provider has to match the NIC or ibv_open_device enumerates nothing.
+    # Every entry is conditional, so arms that never touch RDMA and hosts
+    # without these paths are unaffected.
+    RDMA_MOUNTS=""
+    _rdma_add() { [[ -e "$1" ]] && RDMA_MOUNTS="${RDMA_MOUNTS},${1}:${2}"; }
+    _rdma_add /dev/infiniband /dev/infiniband
+    _rdma_add /etc/libibverbs.d /etc/libibverbs.d
+    _rdma_add /usr/lib/x86_64-linux-gnu/libibverbs /usr/lib/x86_64-linux-gnu/libibverbs
+    # Overmount the host loader library itself, same reason job.slurm does.
+    for _ibv in /usr/lib/x86_64-linux-gnu/libibverbs.so.1 /lib/x86_64-linux-gnu/libibverbs.so.1; do
+        if [[ -e "$_ibv" ]]; then
+            _rdma_add "$(readlink -f "$_ibv")" /lib/x86_64-linux-gnu/libibverbs.so.1
+            break
+        fi
+    done
+    if [[ -n "$RDMA_MOUNTS" ]]; then
+        echo "RDMA mounts for the container:${RDMA_MOUNTS}"
+        ls /sys/class/infiniband 2>/dev/null | tr '\n' ' ' | sed 's/^/RDMA devices on host: /;s/$/\n/'
+    fi
+
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
-        --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache \
+        --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache$RDMA_MOUNTS \
         $SLRUM_HOME_MOUNT \
         --container-writable \
         --container-workdir=/workspace/ \

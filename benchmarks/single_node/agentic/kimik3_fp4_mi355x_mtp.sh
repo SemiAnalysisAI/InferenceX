@@ -84,10 +84,12 @@ resolve_trace_source
 install_agentic_deps
 
 # ---- In-container patches ----------------------------------------------------
-# Fetches the current YukioZzz/vllm DCP branch and applies its production diff
-# to the pinned image, then installs the retained AITER fp8 Gluon overlay.
-# Fetch/apply failures are fatal and logged so CI never runs an unpatched image.
-# Set SKIP_KIMI_PATCHES=1 to run stock.
+# The pinned image now ships the whole runtime pre-applied (vLLM tree at the DCP
+# branch, aiter pybind11 include order, KV block-pool clamp, AITER fp8 Gluon
+# overlay) and sets SKIP_KIMI_PATCHES=1 itself, so this is a no-op there. The
+# script and its patch files stay in the tree so the image can be rebuilt and
+# the diffs reviewed; see /opt/k3-patches/BAKED.md inside the image for which
+# patches are baked and which are deliberately skipped.
 bash "$(dirname "$0")/apply_k3_container_patches.sh"
 
 # ---- Reference env block ----------------------------------------------------
@@ -119,15 +121,18 @@ export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
 
 # ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
+MOONCAKE_MASTER_LOG="$RESULT_DIR/mooncake_master.log"
 mkdir -p "$RESULT_DIR"
 
 SERVER_PID=""
+MOONCAKE_MASTER_PID=""
 
 cleanup_agentic_services() {
     local exit_code=$?
     trap - EXIT INT TERM
     set +e
     stop_background_process_tree "$SERVER_PID" "vLLM server" 60
+    stop_background_process_tree "$MOONCAKE_MASTER_PID" "Mooncake master" 10
     exit "$exit_code"
 }
 trap cleanup_agentic_services EXIT
@@ -155,6 +160,118 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         "{\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use_per_rank\":$CPU_BYTES_PER_RANK,\"lazy_offload\":$SIMPLE_LAZY_OFFLOAD}}"
     )
     echo "SimpleCPUOffloadConnector: ${CPU_BYTES_PER_RANK} B/rank x ${TP} ranks, lazy_offload=$SIMPLE_LAZY_OFFLOAD"
+    ;;
+  mooncake)
+    require_agentic_kv_offload_backend "$KV_OFFLOAD_BACKEND"
+
+    # Mooncake and its ROCm DMABUF overlay are baked into the pinned image.
+    # Keep vLLM independently patched from yichaozhu/k3-dspark-dcp-v3.
+    MOONCAKE_RUNTIME_ROOT=/opt/mooncake
+    MOONCAKE_DMABUF_ROOT=/opt/mooncake-dmabuf
+    MOONCAKE_EXPECTED_SHA=4c6d23c8f77230dd5974cf9bc87344dcc946ee77
+    if [ ! -x "$MOONCAKE_RUNTIME_ROOT/bin/mooncake_master" ] ||
+       [ ! -d "$MOONCAKE_RUNTIME_ROOT/python/mooncake" ]; then
+        echo "Error: baked Mooncake runtime is missing from the image" >&2
+        exit 1
+    fi
+    if ! grep -q "source=$MOONCAKE_EXPECTED_SHA" "$MOONCAKE_DMABUF_ROOT/manifest.txt" ||
+       [ ! -f "$MOONCAKE_RUNTIME_ROOT/python/mooncake/engine.cpython-312-x86_64-linux-gnu.so" ] ||
+       [ ! -f "$MOONCAKE_RUNTIME_ROOT/python/mooncake/store.cpython-312-x86_64-linux-gnu.so" ]; then
+        echo "Error: baked Mooncake DMABUF overlay is missing or unpinned" >&2
+        exit 1
+    fi
+
+    export PYTHONPATH="$MOONCAKE_RUNTIME_ROOT/python${PYTHONPATH:+:$PYTHONPATH}"
+    export LD_LIBRARY_PATH="$MOONCAKE_RUNTIME_ROOT/lib:/opt/rocm/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    export PATH="$MOONCAKE_RUNTIME_ROOT/bin:$PATH"
+    python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null
+
+    PER_RANK_GB=$(( TOTAL_CPU_DRAM_GB / TP ))
+    MOONCAKE_MASTER_PORT=$((PORT + 12000))
+    MOONCAKE_CONFIG_PATH="$RESULT_DIR/mooncake_config.json"
+
+    # RDMA, not TCP: the point of this arm is the real transport, and the box has
+    # the devices. Two things RDMA needs that TCP hides:
+    #
+    # 1. 2MB hugepages. The RNIC's page-table-entry budget, not max_mr_size, is
+    #    what caps a large host registration -- at 4KiB pages a multi-hundred-GB
+    #    segment produces more entries than the NIC can hold. Reserve first, then
+    #    let the engine mmap its host DRAM out of the reserved pool.
+    # 2. A GID index, so the QP picks the routable RoCE address.
+    MOONCAKE_RDMA_DEVICE="${MOONCAKE_RDMA_DEVICE:-rdma0}"
+    if [ ! -e "/sys/class/infiniband/$MOONCAKE_RDMA_DEVICE" ]; then
+        echo "Error: RDMA device $MOONCAKE_RDMA_DEVICE not present" >&2
+        ls /sys/class/infiniband 2>/dev/null >&2 || true
+        exit 1
+    fi
+
+    # 8 ranks x PER_RANK_GB, plus the per-rank local buffer, plus headroom for
+    # whatever else on the host already holds hugepages (Weka does).
+    HUGEPAGE_NEED=$(( (TOTAL_CPU_DRAM_GB + TP + 8) * 1024 / 2 ))
+    HUGEPAGE_HAVE=$(cat /proc/sys/vm/nr_hugepages 2>/dev/null || echo 0)
+    HUGEPAGE_USED=$(( HUGEPAGE_HAVE - $(awk '/HugePages_Free:/ {print $2}' /proc/meminfo) ))
+    HUGEPAGE_TARGET=$(( HUGEPAGE_NEED + HUGEPAGE_USED ))
+    if [ "$HUGEPAGE_TARGET" -gt "$HUGEPAGE_HAVE" ]; then
+        echo "$HUGEPAGE_TARGET" > /proc/sys/vm/nr_hugepages || true
+    fi
+    HUGEPAGE_FREE=$(awk '/HugePages_Free:/ {print $2}' /proc/meminfo)
+    echo "hugepages: need=$HUGEPAGE_NEED free=$HUGEPAGE_FREE total=$(cat /proc/sys/vm/nr_hugepages)"
+    if [ "$HUGEPAGE_FREE" -lt "$HUGEPAGE_NEED" ]; then
+        # Better a smaller tier than a run whose every PUT fails.
+        PER_RANK_GB=$(( HUGEPAGE_FREE * 2 / 1024 / TP ))
+        echo "hugepages short; clamping segment to ${PER_RANK_GB} GB/rank" >&2
+        if [ "$PER_RANK_GB" -lt 1 ]; then
+            echo "Error: cannot reserve enough 2MB hugepages for the DRAM tier" >&2
+            exit 1
+        fi
+    fi
+
+    cat > "$MOONCAKE_CONFIG_PATH" <<EOF
+{
+  "mode": "embedded",
+  "metadata_server": "P2PHANDSHAKE",
+  "master_server_address": "127.0.0.1:$MOONCAKE_MASTER_PORT",
+  "global_segment_size": "${PER_RANK_GB}GB",
+  "local_buffer_size": "128MB",
+  "protocol": "rdma",
+  "device_name": "$MOONCAKE_RDMA_DEVICE",
+  "enable_offload": false
+}
+EOF
+    export MOONCAKE_CONFIG_PATH
+    export MC_STORE_MEMCPY=1
+    export MC_STORE_USE_HUGEPAGE=1
+    export MC_STORE_HUGEPAGE_SIZE=2MB
+    export MC_ENABLE_PARALLEL_REG_MR=1
+    export MC_GID_INDEX="${MC_GID_INDEX:-1}"
+    # Mooncake enforces max_mr_size client-side, so a value below the largest KV
+    # region rejects its registration; every GPU-sourced PUT then fails
+    # TRANSFER_FAIL and the external tier silently never hits. Keep it well above
+    # this model's ~2.2GB KV regions.
+    export MC_MAX_MR_SIZE="${MC_MAX_MR_SIZE:-34359738368}"
+    export PYTHONHASHSEED=42
+
+    mooncake_master --port "$MOONCAKE_MASTER_PORT" \
+        --eviction_high_watermark_ratio=0.90 \
+        --eviction_ratio=0.10 \
+        > "$MOONCAKE_MASTER_LOG" 2>&1 &
+    MOONCAKE_MASTER_PID=$!
+    sleep 2
+    if ! kill -0 "$MOONCAKE_MASTER_PID" 2>/dev/null; then
+        echo "Error: Mooncake master died during startup" >&2
+        cat "$MOONCAKE_MASTER_LOG" >&2
+        exit 1
+    fi
+
+    OFFLOAD_ARGS=(
+        --kv-transfer-config
+        '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_group_semantics":true}}'
+    )
+    echo "MooncakeStoreConnector: ${PER_RANK_GB} GB/rank x ${TP} ranks, TCP DRAM only"
+    ;;
+  *)
+    echo "Error: unsupported KV_OFFLOAD_BACKEND='$KV_OFFLOAD_BACKEND'" >&2
+    exit 1
     ;;
 esac
 fi
@@ -240,7 +357,11 @@ fi
 DCP_SIZE="${DCP_SIZE:-8}"
 DCP_ARGS=()
 if [ "$DCP_SIZE" -eq 8 ]; then
-    export VLLM_ALLOW_DCP_FULL_CUDAGRAPH=1
+    # Only meaningful when full graphs are actually requested; under PIECEWISE
+    # the ROCm platform has nothing to demote.
+    if [ "${CUDAGRAPH_MODE:-PIECEWISE}" != "PIECEWISE" ]; then
+        export VLLM_ALLOW_DCP_FULL_CUDAGRAPH=1
+    fi
     DCP_ARGS=(
         --decode-context-parallel-size "$DCP_SIZE"
         --dcp-comm-backend a2a
@@ -253,13 +374,14 @@ fi
 
 # ---- HIP graph ------------------------------------------------------------
 MAX_NUM_SEQS="${MAX_NUM_SEQS:-$(( CONC * 2 ))}"
-MAX_CUDAGRAPH_CAPTURE_SIZE="${MAX_CUDAGRAPH_CAPTURE_SIZE:-$(( MAX_NUM_SEQS * 3 ))}"
+MAX_CUDAGRAPH_CAPTURE_SIZE="${MAX_CUDAGRAPH_CAPTURE_SIZE:-$MAX_NUM_SEQS}"
 CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 1 "$MAX_CUDAGRAPH_CAPTURE_SIZE")"
-# FULL, not FULL_AND_PIECEWISE: the latter leaves the DSpark drafter on
-# piecewise graphs, and drafting on full graphs is the entire point of this arm
-# (14.05 -> 77.65 tok/s single stream). Set CUDAGRAPH_MODE to override when
-# isolating a capture failure.
-CUDAGRAPH_MODE="${CUDAGRAPH_MODE:-FULL}"
+# PIECEWISE while FULL capture is unstable on this stack: FULL is what this arm
+# ultimately wants (drafting on full graphs is worth 14.05 -> 77.65 tok/s single
+# stream), but it has been the failing half of every recent run, and the cache
+# behaviour this arm measures does not depend on it. PIECEWISE captured 32/32 in
+# 31s with no errors on g17. Set CUDAGRAPH_MODE=FULL to go back.
+CUDAGRAPH_MODE="${CUDAGRAPH_MODE:-PIECEWISE}"
 COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"$CUDAGRAPH_MODE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}")
 
 # At 0.88 vLLM preallocates ~48.6 GiB/rank of KV, while the AgentX warmup's
