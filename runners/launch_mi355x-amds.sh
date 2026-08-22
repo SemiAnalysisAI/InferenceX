@@ -313,26 +313,34 @@ else
         BENCHMARK_SCRIPT="$SCRIPT_FALLBACK"
     fi
 
-    # An RDMA-backed KV tier needs the host's verbs devices and ionic/mlx
-    # provider plugins inside the enroot/pyxis container. job.slurm does the
-    # same overlay with docker -v; pyxis cannot: bind-mounting host
-    # libibverbs.so.1.14.50.0 onto /lib/.../libibverbs.so.1 follows the
-    # image's symlink to libibverbs.so.1.14.39.0 and enroot fails with ENOENT
-    # (CI run 32593076264 on mia1-p01-g18). Stick to directories and devices
-    # whose dest already exists as a real path. Every entry is conditional so
-    # arms that never touch RDMA and hosts without these paths are unaffected.
-    RDMA_MOUNTS=""
-    _rdma_add() { [[ -e "$1" ]] && RDMA_MOUNTS="${RDMA_MOUNTS},${1}:${2}"; }
-    _rdma_add /dev/infiniband /dev/infiniband
-    _rdma_add /etc/libibverbs.d /etc/libibverbs.d
-    _rdma_add /usr/lib/x86_64-linux-gnu/libibverbs /usr/lib/x86_64-linux-gnu/libibverbs
-    # Directory-only: pyxis bind-mounts a file onto the image's realpath of
-    # dest, so overlaying host libibverbs.so.1.14.50.0 onto the so.1 symlink
-    # tries to create libibverbs.so.1.14.39.0 and fails. The ionic provider
-    # lives in the libibverbs plugin directory mounted above.
-    if [[ -n "$RDMA_MOUNTS" ]]; then
-        echo "RDMA mounts for the container:${RDMA_MOUNTS}"
-        ls /sys/class/infiniband 2>/dev/null | tr '\n' ' ' | sed 's/^/RDMA devices on host: /;s/$/\n/'
+    # Probe RDMA paths on the *allocated compute node*, not this GH runner.
+    # Run 32593076264 bound host libibverbs.so.1.14.50.0 onto the image so.1
+    # symlink (enroot ENOENT); 32594389955 skipped /dev/infiniband because
+    # the existence check ran on the runner. Directory/device mounts only.
+    RDMA_MOUNTS=$(srun --jobid=$JOB_ID bash -c '
+        m=""
+        add() { [ -e "$1" ] && m="${m},${1}:${2}"; }
+        add /dev/infiniband /dev/infiniband
+        add /etc/libibverbs.d /etc/libibverbs.d
+        add /usr/lib/x86_64-linux-gnu/libibverbs /usr/lib/x86_64-linux-gnu/libibverbs
+        echo "$m"
+    ')
+    echo "RDMA mounts for the container:${RDMA_MOUNTS}"
+    srun --jobid=$JOB_ID bash -c 'ls /sys/class/infiniband 2>/dev/null | tr "\n" " "; echo'
+
+    # Hugepage pool has to be grown on the host: pyxis cannot write
+    # /proc/sys/vm/nr_hugepages (run 32594389955). Cap at 512GB so the OS/Weka
+    # keep 4K pages; 64GB/rank is enough for the DRAM prefix tier under RDMA.
+    if [[ "${KV_OFFLOAD_BACKEND:-}" == "mooncake" ]]; then
+        srun --jobid=$JOB_ID bash -c '
+            have=$(cat /proc/sys/vm/nr_hugepages)
+            want=$((512 * 1024 / 2))
+            if [ "$want" -gt "$have" ]; then
+                echo "$want" > /proc/sys/vm/nr_hugepages
+            fi
+            echo "host hugepages: have=$have want=$want now=$(cat /proc/sys/vm/nr_hugepages)"
+            awk "/HugePages_/ {print}" /proc/meminfo
+        '
     fi
 
     srun --jobid=$JOB_ID \

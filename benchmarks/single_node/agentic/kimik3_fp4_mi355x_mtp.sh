@@ -205,25 +205,24 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         exit 1
     fi
 
-    # 8 ranks x PER_RANK_GB, plus the per-rank local buffer, plus headroom for
-    # whatever else on the host already holds hugepages (Weka does).
-    HUGEPAGE_NEED=$(( (TOTAL_CPU_DRAM_GB + TP + 8) * 1024 / 2 ))
-    HUGEPAGE_HAVE=$(cat /proc/sys/vm/nr_hugepages 2>/dev/null || echo 0)
-    HUGEPAGE_USED=$(( HUGEPAGE_HAVE - $(awk '/HugePages_Free:/ {print $2}' /proc/meminfo) ))
-    HUGEPAGE_TARGET=$(( HUGEPAGE_NEED + HUGEPAGE_USED ))
-    if [ "$HUGEPAGE_TARGET" -gt "$HUGEPAGE_HAVE" ]; then
-        echo "$HUGEPAGE_TARGET" > /proc/sys/vm/nr_hugepages || true
-    fi
+    # Size the DRAM segment from the hugepage pool the runner reserved on the
+    # host. Writing nr_hugepages from inside pyxis is a no-op (EACCES), so do
+    # not treat that as fatal and do not demand the whole node DRAM as 2MB
+    # pages — CI run 32594389955 asked for 1236480 pages against 5656, all used.
     HUGEPAGE_FREE=$(awk '/HugePages_Free:/ {print $2}' /proc/meminfo)
-    echo "hugepages: need=$HUGEPAGE_NEED free=$HUGEPAGE_FREE total=$(cat /proc/sys/vm/nr_hugepages)"
-    if [ "$HUGEPAGE_FREE" -lt "$HUGEPAGE_NEED" ]; then
-        # Better a smaller tier than a run whose every PUT fails.
-        PER_RANK_GB=$(( HUGEPAGE_FREE * 2 / 1024 / TP ))
-        echo "hugepages short; clamping segment to ${PER_RANK_GB} GB/rank" >&2
-        if [ "$PER_RANK_GB" -lt 1 ]; then
-            echo "Error: cannot reserve enough 2MB hugepages for the DRAM tier" >&2
-            exit 1
+    HUGEPAGE_TOTAL=$(awk '/HugePages_Total:/ {print $2}' /proc/meminfo)
+    echo "hugepages: free=$HUGEPAGE_FREE total=$HUGEPAGE_TOTAL"
+    if [ "${HUGEPAGE_FREE:-0}" -ge 512 ]; then
+        HUGEPAGE_GB=$(( HUGEPAGE_FREE * 2 / 1024 / TP ))
+        if [ "$HUGEPAGE_GB" -lt "$PER_RANK_GB" ]; then
+            PER_RANK_GB=$HUGEPAGE_GB
+            echo "hugepages short; clamping segment to ${PER_RANK_GB} GB/rank" >&2
         fi
+    fi
+    if [ "$PER_RANK_GB" -lt 1 ]; then
+        echo "Error: no free 2MB hugepages for the RDMA DRAM tier" >&2
+        awk '/HugePages_/ {print}' /proc/meminfo >&2
+        exit 1
     fi
 
     cat > "$MOONCAKE_CONFIG_PATH" <<EOF
@@ -267,7 +266,7 @@ EOF
         --kv-transfer-config
         '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_group_semantics":true}}'
     )
-    echo "MooncakeStoreConnector: ${PER_RANK_GB} GB/rank x ${TP} ranks, TCP DRAM only"
+    echo "MooncakeStoreConnector: ${PER_RANK_GB} GB/rank x ${TP} ranks, RDMA DRAM"
     ;;
   *)
     echo "Error: unsupported KV_OFFLOAD_BACKEND='$KV_OFFLOAD_BACKEND'" >&2
