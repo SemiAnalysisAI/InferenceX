@@ -6263,3 +6263,15 @@
   description:
     - "Refresh with lower stream interval to collect correct client metrics"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2686
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Serve the TP4 AgentX arm on ROCM_AITER_FA for both target and EAGLE3 draft attention (was TRITON_ATTN), with VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1; TP2 stays on TRITON_ATTN with the shuffled layout off."
+    - "In-container vLLM patch applied by an idempotent git-apply wrapper (apply_minimaxm3_container_patches.sh) porting vLLM PR #52849 onto v0.27.1: dispatches multi-token MTP decodes to the AITER gluon paged-attention kernel the image already ships, and derives the KV-cache stride order from the shuffled layout. Without it ROCM_AITER_FA asserts on the first multi-token decode ('Shuffle KV cache layout is not supported'), and with 3 speculative tokens every decode carries 4. Waived in docs/waiver/PENDING-minimaxm3-pa-gluon.md."
+    - "The gluon kernel bounds decode query length at 4 and query-length x query-group at 64, so MiniMax-M3's 64/4 head ratio makes 3 speculative tokens exactly the deepest MTP this path supports; a page size of 128 is also required."
+    - "Measured at TP4 conc 32 against the TRITON_ATTN baseline over the same 1229s window with the same synthetic acceptance length of 2.78 in both arms: output 269.7 -> 760.5 tok/s (+182%), ITL mean 63.2 -> 19.2 ms (-70%), TTFT p90 7.24 -> 4.95 s (-32%), e2el p90 157.0 -> 45.6 s (-71%), 553 -> 1157 requests profiled and 1 -> 0 errored. Prompt sizes and median output length are unchanged, so the gain is throughput rather than shorter responses."
+    - "Sweep the TP4 GPU-resident arm at conc 1/2/4/5/8/10/12/16/20/24/28/32/36; the TP2 GPU-resident and TP4 LMCache DRAM-offload arms are commented out."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
