@@ -6299,6 +6299,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2643
 
 - config-keys:
+    - dsv4-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260821"
+    - "Enable SGLANG_OPT_USE_AITER_BATCHED_GEMM for mi355x sglang dsv4 agentic workload."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2705
+
+- config-keys:
     - dsv4-fp4-gb300-dynamo-trt-agentx
   scenario-type:
     - agentic-coding
