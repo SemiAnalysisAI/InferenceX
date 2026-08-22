@@ -1179,7 +1179,7 @@ dsv4-fp4-b300-sglang-agentic-hicache-mtp:
   #   dp-attn: true  -> DP-attn  + megamoe + fp4 indexer
   #                     + chunked-prefill 65536 + mem-fraction 0.90
   #                     + swa-full-tokens-ratio 0.075
-  #                     + prefill-decode-interval 10
+  #                     + prefill-decode-interval 5
   # Both paths share EAGLE (3,1,4) and max-running-requests 2*CONC.
 dsv4-fp4-b300-sglang-mtp:
   image: lmsysorg/sglang:nightly-dev-cu13-20260610-f332e526

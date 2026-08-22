@@ -6358,3 +6358,11 @@
   description:
     - "TEMP(validation): switch --prefill-decode-interval from 20 to 10 for an A/B against #2701 at the single conc-512 point, on top of the load-back multipin patch. Not intended for merge."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2704
+  
+- config-keys:
+    - dsv4-fp4-b300-sglang-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "TEMP(validation): switch --prefill-decode-interval from 10 to 5 and lower DEP8 conc-512 mem-fraction-static from 0.875 to 0.86 (matching #2701's latest tier) for the next A/B point at conc 512, on top of the load-back multipin patch. Not intended for merge."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2704

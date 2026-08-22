@@ -120,8 +120,8 @@ if [ "$DP_ATTENTION" = "true" ]; then
         --dp "$TP"
         --tokenizer-worker-num "$TP"
         --enable-prefill-delayer
-        # TEMP(validation): 10 instead of 20 for the A/B against #2701.
-        --prefill-decode-interval 10
+        # TEMP(validation): 5 instead of 20 for the A/B against #2701.
+        --prefill-decode-interval 5
         --enable-dp-attention
         --enable-dp-attention-local-control-broadcast
         --incremental-streaming-output
@@ -145,7 +145,8 @@ if [ "$DP_ATTENTION" = "true" ]; then
         # DP rank, which then hangs the whole engine in the MLP-sync collective.
         MEM_FRACTION_STATIC=0.93
         if [ "$CONC" -ge 512 ]; then
-            MEM_FRACTION_STATIC=0.875
+            # TEMP(validation): 0.86, matching #2701's DEP8 conc512/576 tier.
+            MEM_FRACTION_STATIC=0.86
         elif [ "$CONC" -ge 384 ]; then
             MEM_FRACTION_STATIC=0.89
         elif [ "$CONC" -ge 256 ]; then
