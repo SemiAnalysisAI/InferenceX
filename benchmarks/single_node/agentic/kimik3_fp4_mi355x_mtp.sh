@@ -162,36 +162,24 @@ case "${KV_OFFLOAD_BACKEND:-}" in
   mooncake)
     require_agentic_kv_offload_backend "$KV_OFFLOAD_BACKEND"
 
-    # Reuse the pinned ROCm/HIP runtime validated on this cluster. Keeping the
-    # runtime and vLLM pins independent lets this arm stay on the stable
-    # nightly-ac7509 image while the connector code comes from the audited
-    # yichaozhu/k3-dspark-dcp-v3 branch.
-    MOONCAKE_RUNTIME_ROOT="${MOONCAKE_RUNTIME_ROOT:-/it-share/yiczhu/k3-cache-hit-20260822/mooncake-runtime}"
-    MOONCAKE_DMABUF_ROOT="${MOONCAKE_DMABUF_ROOT:-/it-share/yiczhu/k3-cache-hit-20260822/mooncake-dmabuf}"
+    # Mooncake and its ROCm DMABUF overlay are baked into the pinned image.
+    # Keep vLLM independently patched from yichaozhu/k3-dspark-dcp-v3.
+    MOONCAKE_RUNTIME_ROOT=/opt/mooncake
+    MOONCAKE_DMABUF_ROOT=/opt/mooncake-dmabuf
     MOONCAKE_EXPECTED_SHA=4c6d23c8f77230dd5974cf9bc87344dcc946ee77
     if [ ! -x "$MOONCAKE_RUNTIME_ROOT/bin/mooncake_master" ] ||
        [ ! -d "$MOONCAKE_RUNTIME_ROOT/python/mooncake" ]; then
-        echo "Error: validated Mooncake runtime is missing at $MOONCAKE_RUNTIME_ROOT" >&2
+        echo "Error: baked Mooncake runtime is missing from the image" >&2
         exit 1
     fi
     if ! grep -q "source=$MOONCAKE_EXPECTED_SHA" "$MOONCAKE_DMABUF_ROOT/manifest.txt" ||
-       [ ! -f "$MOONCAKE_DMABUF_ROOT/engine.cpython-312-x86_64-linux-gnu.so" ] ||
-       [ ! -f "$MOONCAKE_DMABUF_ROOT/store.cpython-312-x86_64-linux-gnu.so" ]; then
-        echo "Error: validated Mooncake DMABUF overlay is missing or unpinned" >&2
+       [ ! -f "$MOONCAKE_RUNTIME_ROOT/python/mooncake/engine.cpython-312-x86_64-linux-gnu.so" ] ||
+       [ ! -f "$MOONCAKE_RUNTIME_ROOT/python/mooncake/store.cpython-312-x86_64-linux-gnu.so" ]; then
+        echo "Error: baked Mooncake DMABUF overlay is missing or unpinned" >&2
         exit 1
     fi
 
-    MOONCAKE_PYTHON_ROOT="$RESULT_DIR/mooncake-python"
-    mkdir -p "$MOONCAKE_PYTHON_ROOT"
-    cp -a "$MOONCAKE_RUNTIME_ROOT/python/mooncake" "$MOONCAKE_PYTHON_ROOT/"
-    cp "$MOONCAKE_DMABUF_ROOT/engine.cpython-312-x86_64-linux-gnu.so" \
-       "$MOONCAKE_DMABUF_ROOT/store.cpython-312-x86_64-linux-gnu.so" \
-       "$MOONCAKE_PYTHON_ROOT/mooncake/"
-    # The pinned stable image lacks the one system DSO not bundled with the
-    # exported Mooncake runtime. This exact install was probed in ac7509.
-    apt-get update -qq
-    apt-get install -y -qq --no-install-recommends libyaml-cpp0.7
-    export PYTHONPATH="$MOONCAKE_PYTHON_ROOT:$MOONCAKE_RUNTIME_ROOT/python${PYTHONPATH:+:$PYTHONPATH}"
+    export PYTHONPATH="$MOONCAKE_RUNTIME_ROOT/python${PYTHONPATH:+:$PYTHONPATH}"
     export LD_LIBRARY_PATH="$MOONCAKE_RUNTIME_ROOT/lib:/opt/rocm/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
     export PATH="$MOONCAKE_RUNTIME_ROOT/bin:$PATH"
     python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null

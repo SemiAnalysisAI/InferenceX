@@ -304,17 +304,6 @@ else
         export HF_HUB_CACHE_MOUNT="/it-share/hf-hub-cache/"
     fi
 
-    EXTRA_CONTAINER_MOUNTS=""
-    if [[ "${KV_OFFLOAD_BACKEND:-}" == "mooncake" ]]; then
-        MOONCAKE_SHARED_ROOT="${MOONCAKE_SHARED_ROOT:-/it-share/yiczhu/k3-cache-hit-20260822}"
-        if [[ ! -d "$MOONCAKE_SHARED_ROOT/mooncake-runtime" ||
-              ! -d "$MOONCAKE_SHARED_ROOT/mooncake-dmabuf" ]]; then
-            echo "Mooncake runtime is missing at $MOONCAKE_SHARED_ROOT" >&2
-            exit 1
-        fi
-        EXTRA_CONTAINER_MOUNTS=",$MOONCAKE_SHARED_ROOT:$MOONCAKE_SHARED_ROOT"
-    fi
-
     SCRIPT_BASE="${EXP_NAME%%_*}_${PRECISION}_mi355x"
     SCRIPT_FW="benchmarks/single_node/${SCENARIO_SUBDIR:-fixed_seq_len/}${SCRIPT_BASE}_${FRAMEWORK}${SPEC_SUFFIX}.sh"
     SCRIPT_FALLBACK="benchmarks/single_node/${SCENARIO_SUBDIR:-fixed_seq_len/}${SCRIPT_BASE}${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh"
@@ -326,7 +315,7 @@ else
 
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
-        --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache$EXTRA_CONTAINER_MOUNTS \
+        --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache \
         $SLRUM_HOME_MOUNT \
         --container-writable \
         --container-workdir=/workspace/ \
