@@ -139,18 +139,36 @@ def worker(args):
         json.dump(cfg, fh)
     os.environ["MOONCAKE_CONFIG_PATH"] = path
 
-    from mooncake.store import MooncakeDistributedStore
+    def do_setup():
+        from mooncake.store import MooncakeDistributedStore
 
-    store = MooncakeDistributedStore()
-    rc = store.setup(
-        f"127.0.0.1:{args.port}",
-        "P2PHANDSHAKE",
-        args.segment_mb * 1024 * 1024,
-        128 * 1024 * 1024,
-        "rdma",
-        args.device,
-        args.master,
-    )
+        store = MooncakeDistributedStore()
+        return store.setup(
+            f"127.0.0.1:{args.port}",
+            "P2PHANDSHAKE",
+            args.segment_mb * 1024 * 1024,
+            128 * 1024 * 1024,
+            "rdma",
+            args.device,
+            args.master,
+        )
+
+    # vLLM spawns its workers from the engine core, and registering memory in a
+    # child after the parent has initialised the GPU is the one structural
+    # difference left between this probe and the failing run.
+    if args.fork:
+        pid = os.fork()
+        if pid == 0:
+            try:
+                rc = do_setup()
+                print(f"WORKER forked rc={rc}", flush=True)
+                os._exit(0 if rc == 0 else 1)
+            except Exception:  # noqa: BLE001
+                traceback.print_exc()
+                os._exit(1)
+        return 1 if os.waitpid(pid, 0)[1] else 0
+
+    rc = do_setup()
     print(f"WORKER rc={rc}", flush=True)
     return 0 if rc == 0 else 1
 
@@ -165,6 +183,7 @@ def run_cell(
     max_mr_size,
     gpu_gib=0,
     host_gib=0,
+    fork=False,
 ):
     available = nics() or ["rdma0"]
     children = []
@@ -191,14 +210,29 @@ def run_cell(
             cmd += ["--gpu-gib", str(gpu_gib)]
         if host_gib:
             cmd += ["--host-gib", str(host_gib)]
+        if fork:
+            cmd.append("--fork")
         children.append(
             subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         )
 
     failures = 0
     first_error = ""
-    for child in children:
-        out = child.communicate(timeout=300)[0].decode(errors="replace")
+    interesting = (
+        "NUMA-segmented",
+        "Mounting segment",
+        "Failed to register",
+        "rc=",
+        "Allocated NUMA",
+        "Using specified RDMA devices",
+        "gpu_reserved",
+    )
+    for pos, child in enumerate(children):
+        out = child.communicate(timeout=600)[0].decode(errors="replace")
+        if pos == 0:
+            for line in out.splitlines():
+                if any(k in line for k in interesting):
+                    print(f"    rank0| {line.strip()[:180]}", flush=True)
         if child.returncode != 0:
             failures += 1
             if not first_error:
@@ -206,7 +240,7 @@ def run_cell(
                     if "Failed to register" in line or "Error" in line:
                         first_error = line.strip()
                         break
-                first_error = first_error or out.strip().splitlines()[-1:][0]
+                first_error = first_error or (out.strip().splitlines() or [""])[-1]
 
     verdict = "OK" if failures == 0 else f"FAIL {failures}/{procs}"
     print(f"PROBE_RESULT {name:<38} {verdict}", flush=True)
@@ -226,6 +260,7 @@ def main():
     parser.add_argument("--max-mr-size", type=int, default=0)
     parser.add_argument("--gpu-gib", type=int, default=0)
     parser.add_argument("--host-gib", type=int, default=0)
+    parser.add_argument("--fork", action="store_true")
     args = parser.parse_args()
 
     if args.worker:
@@ -245,14 +280,13 @@ def main():
     # max_mr_size) passed every cell in CI run 32597763849, so the failure needs
     # the worker's process state: ROCm initialised with the weights resident.
     cells = [
-        ("8proc 2GB baseline", 8, 2048, True, False, big_mr, 0, 0),
-        ("8proc 2GB + 8GiB gpu", 8, 2048, True, False, big_mr, 8, 0),
-        ("8proc 2GB + 180GiB gpu", 8, 2048, True, False, big_mr, 180, 0),
-        ("8proc 2GB + 180GiB gpu per-nic", 8, 2048, True, True, big_mr, 180, 0),
-        ("8proc 2GB + 20GiB host", 8, 2048, True, False, big_mr, 0, 20),
-        ("8proc 2GB 4K + 180GiB gpu", 8, 2048, False, False, big_mr, 180, 0),
+        ("8proc 2GB baseline", 8, 2048, True, False, big_mr, 0, 0, False),
+        ("8proc 2GB forked child", 8, 2048, True, False, big_mr, 0, 0, True),
+        ("8proc 2GB + 180GiB gpu forked", 8, 2048, True, False, big_mr, 180, 0, True),
+        ("8proc 8GB forked child", 8, 8192, True, False, big_mr, 0, 0, True),
+        ("8proc 8GB + 180GiB gpu forked", 8, 8192, True, False, big_mr, 180, 0, True),
     ]
-    for name, procs, segment_mb, hugepage, per_rank, max_mr, gpu, host in cells:
+    for name, procs, segment_mb, hugepage, per_rank, max_mr, gpu, host, fork in cells:
         print(sh("grep HugePages_Free /proc/meminfo").strip(), flush=True)
         try:
             run_cell(
@@ -265,6 +299,7 @@ def main():
                 max_mr,
                 gpu_gib=gpu,
                 host_gib=host,
+                fork=fork,
             )
         except Exception:  # noqa: BLE001
             print(f"PROBE_RESULT {name:<38} EXCEPTION", flush=True)
