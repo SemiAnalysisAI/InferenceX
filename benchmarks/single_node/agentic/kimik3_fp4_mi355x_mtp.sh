@@ -204,8 +204,10 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         ls /usr/lib/x86_64-linux-gnu/libibverbs | head
     fi
 
-    # One RNIC, not the whole list. CI run 32595345336 opened rdma0-7 on every
-    # rank and ibv_reg_mr returned ENOMEM while mounting 14GB segments.
+    # JSON default is rdma0. Each vLLM worker then rewrites MOONCAKE_CONFIG_PATH
+    # to rdma${LOCAL_RANK} (see sitecustomize below). Pinning every rank to
+    # rdma0 still ENOMEM'd ibv_reg_mr at 8GB x 8 (CI run 32595896920); listing
+    # all NICs in one JSON opened 8 devices per rank (32595345336).
     MOONCAKE_RDMA_DEVICE="${MOONCAKE_RDMA_DEVICE:-rdma0}"
     if [ -z "$MOONCAKE_RDMA_DEVICE" ] || [ ! -e "/sys/class/infiniband/${MOONCAKE_RDMA_DEVICE%%,*}" ]; then
         echo "Error: RDMA device $MOONCAKE_RDMA_DEVICE not present" >&2
@@ -220,8 +222,8 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         export MC_STORE_USE_HUGEPAGE=1
         export MC_STORE_HUGEPAGE_SIZE=2MB
         HUGEPAGE_GB=$(( HUGEPAGE_FREE * 2 / 1024 / TP ))
-        if [ "$HUGEPAGE_GB" -gt 8 ]; then
-            HUGEPAGE_GB=8
+        if [ "$HUGEPAGE_GB" -gt 4 ]; then
+            HUGEPAGE_GB=4
         fi
         if [ "$HUGEPAGE_GB" -lt "$PER_RANK_GB" ]; then
             PER_RANK_GB=$HUGEPAGE_GB
@@ -255,8 +257,29 @@ case "${KV_OFFLOAD_BACKEND:-}" in
 }
 EOF
     export MOONCAKE_CONFIG_PATH
+    cat > "$RESULT_DIR/sitecustomize.py" <<'PY'
+import json
+import os
+from pathlib import Path
+
+rank = os.environ.get("LOCAL_RANK")
+path = os.environ.get("MOONCAKE_CONFIG_PATH")
+if rank is not None and path:
+    src = Path(path)
+    if src.is_file() and ".rank" not in src.name:
+        cfg = json.loads(src.read_text())
+        nics = sorted(
+            p.name for p in Path("/sys/class/infiniband").iterdir() if p.is_dir()
+        )
+        if nics:
+            cfg["device_name"] = nics[int(rank) % len(nics)]
+            dst = src.with_name(f"{src.stem}.rank{rank}{src.suffix}")
+            dst.write_text(json.dumps(cfg))
+            os.environ["MOONCAKE_CONFIG_PATH"] = str(dst)
+PY
+    export PYTHONPATH="$RESULT_DIR${PYTHONPATH:+:$PYTHONPATH}"
     export MC_STORE_MEMCPY=1
-    export MC_ENABLE_PARALLEL_REG_MR=1
+    export MC_ENABLE_PARALLEL_REG_MR=0
     export MC_GID_INDEX="${MC_GID_INDEX:-1}"
     # Mooncake enforces max_mr_size client-side, so a value below the largest KV
     # region rejects its registration; every GPU-sourced PUT then fails
