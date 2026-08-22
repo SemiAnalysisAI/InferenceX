@@ -339,17 +339,24 @@ patch_aiter_gluon_fp8_dcp() {
 # a clean baseline -- it gives a different crash.
 #   SKIP_PATCH_AITER=1      skip [1] aiter pybind11
 #   SKIP_PATCH_BLOCKPOOL=1  skip [2] KV block-pool clamp
+#
+# Order is load-bearing. [3] generates a production diff against the image
+# commit and then hash-verifies every touched file against the DCP branch
+# HEAD. [2] edits vllm/v1/core/single_type_kv_cache_manager.py, which is also
+# in that diff; applying [2] first made CI fail with
+#   VERIFY FAILED: content mismatch in .../single_type_kv_cache_manager.py
+# (run 32571248409). Apply the branch onto the stock image, then layer [2].
 echo "[kimi-patches] applying in-container patches..."
 if [ "${SKIP_PATCH_AITER:-0}" = "1" ]; then
     echo "[aiter-pybind11] SKIPPED via SKIP_PATCH_AITER=1"
 else
     patch_aiter_pybind11 || true
 fi
+patch_vllm_dcp_branch
 if [ "${SKIP_PATCH_BLOCKPOOL:-0}" = "1" ]; then
     echo "[kv-blockpool] SKIPPED via SKIP_PATCH_BLOCKPOOL=1"
 else
     patch_kv_blockpool || true
 fi
-patch_vllm_dcp_branch
 patch_aiter_gluon_fp8_dcp
 echo "[kimi-patches] done."
