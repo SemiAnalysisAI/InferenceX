@@ -313,30 +313,40 @@ else
         BENCHMARK_SCRIPT="$SCRIPT_FALLBACK"
     fi
 
-    # Probe RDMA paths on the *allocated compute node*, not this GH runner.
-    # Run 32593076264 bound host libibverbs.so.1.14.50.0 onto the image so.1
-    # symlink (enroot ENOENT); 32594389955 skipped /dev/infiniband because
-    # the existence check ran on the runner. Directory/device mounts only.
+    # Probe RDMA paths on the allocated compute node. Do not bind-mount the
+    # host libibverbs plugin directory: those .so files are relative symlinks
+    # to ../libionic.so.* (CI run 32594695582: libionic-rdmav34.so missing).
+    # Copy the resolved plugins into the already-mounted workspace instead.
     RDMA_MOUNTS=$(srun --jobid=$JOB_ID bash -c '
         m=""
         add() { [ -e "$1" ] && m="${m},${1}:${2}"; }
         add /dev/infiniband /dev/infiniband
         add /etc/libibverbs.d /etc/libibverbs.d
-        add /usr/lib/x86_64-linux-gnu/libibverbs /usr/lib/x86_64-linux-gnu/libibverbs
         echo "$m"
     ')
     echo "RDMA mounts for the container:${RDMA_MOUNTS}"
     srun --jobid=$JOB_ID bash -c 'ls /sys/class/infiniband 2>/dev/null | tr "\n" " "; echo'
 
-    # Hugepage pool has to be grown on the host: pyxis cannot write
-    # /proc/sys/vm/nr_hugepages (run 32594389955). Cap at 512GB so the OS/Weka
-    # keep 4K pages; 64GB/rank is enough for the DRAM prefix tier under RDMA.
     if [[ "${KV_OFFLOAD_BACKEND:-}" == "mooncake" ]]; then
         srun --jobid=$JOB_ID bash -c '
+            dst="'"$GITHUB_WORKSPACE"'/rdma-host-libs"
+            rm -rf "$dst"
+            mkdir -p "$dst/plugins"
+            if [ -d /usr/lib/x86_64-linux-gnu/libibverbs ]; then
+                cp -aL /usr/lib/x86_64-linux-gnu/libibverbs/. "$dst/plugins/"
+            fi
+            cp -a /usr/lib/x86_64-linux-gnu/libionic.so* "$dst/" 2>/dev/null || true
+            ls -l "$dst" "$dst/plugins" | head -40
+        '
+        srun --jobid=$JOB_ID bash -c '
             have=$(cat /proc/sys/vm/nr_hugepages)
-            want=$((512 * 1024 / 2))
+            want=$((128 * 1024 / 2))
             if [ "$want" -gt "$have" ]; then
-                echo "$want" > /proc/sys/vm/nr_hugepages
+                if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+                    echo "$want" | sudo -n tee /proc/sys/vm/nr_hugepages >/dev/null || true
+                else
+                    echo "$want" > /proc/sys/vm/nr_hugepages 2>/dev/null || true
+                fi
             fi
             echo "host hugepages: have=$have want=$want now=$(cat /proc/sys/vm/nr_hugepages)"
             awk "/HugePages_/ {print}" /proc/meminfo

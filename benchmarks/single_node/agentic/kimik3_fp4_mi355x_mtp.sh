@@ -190,37 +190,53 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     MOONCAKE_MASTER_PORT=$((PORT + 12000))
     MOONCAKE_CONFIG_PATH="$RESULT_DIR/mooncake_config.json"
 
-    # RDMA, not TCP: the point of this arm is the real transport, and the box has
-    # the devices. Two things RDMA needs that TCP hides:
-    #
-    # 1. 2MB hugepages. The RNIC's page-table-entry budget, not max_mr_size, is
-    #    what caps a large host registration -- at 4KiB pages a multi-hundred-GB
-    #    segment produces more entries than the NIC can hold. Reserve first, then
-    #    let the engine mmap its host DRAM out of the reserved pool.
-    # 2. A GID index, so the QP picks the routable RoCE address.
-    MOONCAKE_RDMA_DEVICE="${MOONCAKE_RDMA_DEVICE:-rdma0}"
-    if [ ! -e "/sys/class/infiniband/$MOONCAKE_RDMA_DEVICE" ]; then
+    # Ionic plugins on this fleet are relative symlinks
+    # (libionic-rdmav34.so -> ../libionic.so.1.1.54.0-187). Bind-mounting the
+    # plugin directory leaves that target outside the mount, so ibverbs fails
+    # with "cannot open libionic-rdmav34.so" (CI run 32594695582). The runner
+    # copies the resolved .so files into /workspace/rdma-host-libs.
+    if [ -d /workspace/rdma-host-libs/plugins ]; then
+        mkdir -p /usr/lib/x86_64-linux-gnu/libibverbs
+        cp -a /workspace/rdma-host-libs/plugins/. /usr/lib/x86_64-linux-gnu/libibverbs/
+        cp -a /workspace/rdma-host-libs/libionic.so* /usr/lib/x86_64-linux-gnu/ 2>/dev/null || true
+        export LD_LIBRARY_PATH="/usr/lib/x86_64-linux-gnu/libibverbs:/usr/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"
+        echo "installed host ionic plugins from /workspace/rdma-host-libs"
+        ls /usr/lib/x86_64-linux-gnu/libibverbs | head
+    fi
+
+    # Use every RNIC; a single rdma0 for all 8 ranks is what mooncake logged
+    # as "specified devices: rdma0" right before the transport install failed.
+    if [ -z "${MOONCAKE_RDMA_DEVICE:-}" ]; then
+        MOONCAKE_RDMA_DEVICE=$(ls /sys/class/infiniband 2>/dev/null | tr '\n' ',' | sed 's/,$//')
+    fi
+    if [ -z "$MOONCAKE_RDMA_DEVICE" ] || [ ! -e "/sys/class/infiniband/${MOONCAKE_RDMA_DEVICE%%,*}" ]; then
         echo "Error: RDMA device $MOONCAKE_RDMA_DEVICE not present" >&2
         ls /sys/class/infiniband 2>/dev/null >&2 || true
         exit 1
     fi
 
-    # Size the DRAM segment from the hugepage pool the runner reserved on the
-    # host. Writing nr_hugepages from inside pyxis is a no-op (EACCES), so do
-    # not treat that as fatal and do not demand the whole node DRAM as 2MB
-    # pages — CI run 32594389955 asked for 1236480 pages against 5656, all used.
     HUGEPAGE_FREE=$(awk '/HugePages_Free:/ {print $2}' /proc/meminfo)
     HUGEPAGE_TOTAL=$(awk '/HugePages_Total:/ {print $2}' /proc/meminfo)
     echo "hugepages: free=$HUGEPAGE_FREE total=$HUGEPAGE_TOTAL"
     if [ "${HUGEPAGE_FREE:-0}" -ge 512 ]; then
+        export MC_STORE_USE_HUGEPAGE=1
+        export MC_STORE_HUGEPAGE_SIZE=2MB
         HUGEPAGE_GB=$(( HUGEPAGE_FREE * 2 / 1024 / TP ))
         if [ "$HUGEPAGE_GB" -lt "$PER_RANK_GB" ]; then
             PER_RANK_GB=$HUGEPAGE_GB
             echo "hugepages short; clamping segment to ${PER_RANK_GB} GB/rank" >&2
         fi
+    else
+        # CI cannot grow nr_hugepages (EACCES even from srun). Keep RDMA but
+        # shrink the segment so 4K PTEs stay in the RNIC budget.
+        export MC_STORE_USE_HUGEPAGE=0
+        if [ "$PER_RANK_GB" -gt 4 ]; then
+            PER_RANK_GB=4
+        fi
+        echo "no free hugepages; RDMA with 4K pages at ${PER_RANK_GB} GB/rank" >&2
     fi
     if [ "$PER_RANK_GB" -lt 1 ]; then
-        echo "Error: no free 2MB hugepages for the RDMA DRAM tier" >&2
+        echo "Error: DRAM segment collapsed to ${PER_RANK_GB} GB/rank" >&2
         awk '/HugePages_/ {print}' /proc/meminfo >&2
         exit 1
     fi
@@ -239,8 +255,6 @@ case "${KV_OFFLOAD_BACKEND:-}" in
 EOF
     export MOONCAKE_CONFIG_PATH
     export MC_STORE_MEMCPY=1
-    export MC_STORE_USE_HUGEPAGE=1
-    export MC_STORE_HUGEPAGE_SIZE=2MB
     export MC_ENABLE_PARALLEL_REG_MR=1
     export MC_GID_INDEX="${MC_GID_INDEX:-1}"
     # Mooncake enforces max_mr_size client-side, so a value below the largest KV
