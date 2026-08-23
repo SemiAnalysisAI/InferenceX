@@ -467,7 +467,11 @@ COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"
 # At 0.88 vLLM preallocates ~48.6 GiB/rank of KV, while the AgentX warmup's
 # M=8190 prefill leaves HSA only ~1.3 GiB for runtime scratch. 0.84 returns
 # ~11.5 GiB/rank to transient graph/GEMM/MoE allocations.
-GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.84}"
+# 0.84 leaves nothing for warmup: run 32607408391 reached 232.77 GiB allocated
+# with 0 bytes free and died asking for 112 MiB. The earlier segfaults in
+# trivial elementwise kernels were the same exhaustion hitting an unchecked
+# allocation, so give warmup real headroom.
+GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.78}"
 
 echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
