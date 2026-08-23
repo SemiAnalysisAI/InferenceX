@@ -6399,3 +6399,11 @@
     - "Replace the unavailable upstream TileRT post3 dependency with the reproducible 0.1.5.post2+inferencex.1 queueing backport: preserve the official post2 native libraries, patch only pd_router.py, and pin the internal release wheel by URL and SHA256"
     - "Wait up to 1800 seconds for the single decode node instead of returning HTTP 429 immediately; this addresses AgentX intra-session fan-out while keeping the benchmark concurrency point at 1"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2650
+
+- config-keys:
+    - glm5.1-fp8-b200-tilert
+    - glm5.1-fp8-b200-tilert-agentic
+  description:
+    - "Replace the internal TileRT 0.1.5.post2+inferencex.1 queueing backport with the official 0.1.5.post3 PyPI wheel now that upstream has published it; remove the internal wheel builder and router patch"
+    - "Bump the shared TileRT dependency and router metadata to 0.1.5.post3 for both fixed-seq-length and AgentX configurations while retaining the AgentX 1800-second queue timeout"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2650

@@ -9895,7 +9895,7 @@ glm5.1-fp8-b200-tilert:
   runner: b200-multinode
   precision: fp8
   framework: tilert
-  router: { name: tilert-pd-router, version: "0.1.5.post2" }
+  router: { name: tilert-pd-router, version: "0.1.5.post3" }
   multinode: true
   disagg: true
   kv-p2p-transfer: nixl
@@ -9949,7 +9949,7 @@ glm5.1-fp8-b200-tilert-agentic:
   runner: cluster:b200-dgxc
   precision: fp8
   framework: tilert
-  router: { name: tilert-pd-router, version: "0.1.5.post2+inferencex.1" }
+  router: { name: tilert-pd-router, version: "0.1.5.post3" }
   multinode: true
   disagg: true
   kv-p2p-transfer: nixl
