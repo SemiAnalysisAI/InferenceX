@@ -323,6 +323,12 @@ apply_pr51171() {
 
 apply_pr51171
 
+# Fix LMCache "Unsupported kv_layout: none" on vLLM 0.26.x: re-add vLLM's
+# get_kv_cache_layout() and make LMCache read/normalize the resolved layout
+# (LBNHC->NHD) off the connector's config. Runs after the lmcache install
+# above; a no-op for the kvnone arm.
+bash "$(dirname "$0")/apply_kv_layout_fix.sh" || true
+
 
 # ---- Parallelism ------------------------------------------------------------
 EP_ARGS=()
