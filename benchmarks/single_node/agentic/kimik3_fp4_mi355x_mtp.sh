@@ -136,6 +136,7 @@ export FLAGS_v="${FLAGS_v:-0}"
 export AIPERF_TRAJECTORY_START_MIN_RATIO=0.0
 export AIPERF_TRAJECTORY_START_MAX_RATIO=0.0
 export AIPERF_EXPERIMENTAL_FAST_DURATION=300
+export VLLM_SERVER_DEV_MODE=1
 # REQUIRED on ROCm per the upstream recipe: the build auto-enables this to 1.
 export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 
