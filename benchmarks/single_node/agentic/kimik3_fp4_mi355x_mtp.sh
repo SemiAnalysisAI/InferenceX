@@ -327,7 +327,7 @@ apply_pr51171
 # get_kv_cache_layout() and make LMCache read/normalize the resolved layout
 # (LBNHC->NHD) off the connector's config. Runs after the lmcache install
 # above; a no-op for the kvnone arm.
-bash "$(dirname "$0")/apply_kv_layout_fix.sh" || true
+#bash "$(dirname "$0")/apply_kv_layout_fix.sh" || true
 
 
 # ---- Parallelism ------------------------------------------------------------
