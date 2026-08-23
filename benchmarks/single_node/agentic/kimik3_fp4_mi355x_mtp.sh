@@ -456,13 +456,16 @@ fi
 MAX_NUM_SEQS="${MAX_NUM_SEQS:-$(( CONC * 2 ))}"
 MAX_CUDAGRAPH_CAPTURE_SIZE="${MAX_CUDAGRAPH_CAPTURE_SIZE:-$MAX_NUM_SEQS}"
 CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 1 "$MAX_CUDAGRAPH_CAPTURE_SIZE")"
-# PIECEWISE while FULL capture is unstable on this stack: FULL is what this arm
-# ultimately wants (drafting on full graphs is worth 14.05 -> 77.65 tok/s single
-# stream), but it has been the failing half of every recent run, and the cache
-# behaviour this arm measures does not depend on it. PIECEWISE captured 32/32 in
-# 31s with no errors on g17. Set CUDAGRAPH_MODE=FULL to go back.
+# Run 32608081933 mounted all eight Mooncake segments, then segfaulted inside
+# aiter loadBinary during PIECEWISE warmup. --enforce-eager skips that capture
+# path so the KV-offload arm can serve; drop ENFORCE_EAGER to restore graphs.
+ENFORCE_EAGER="${ENFORCE_EAGER:-1}"
 CUDAGRAPH_MODE="${CUDAGRAPH_MODE:-PIECEWISE}"
-COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"$CUDAGRAPH_MODE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}")
+if [ "$ENFORCE_EAGER" = "1" ]; then
+    COMPILATION_CONFIG_ARGS=(--enforce-eager)
+else
+    COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"$CUDAGRAPH_MODE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}")
+fi
 
 # At 0.88 vLLM preallocates ~48.6 GiB/rank of KV, while the AgentX warmup's
 # M=8190 prefill leaves HSA only ~1.3 GiB for runtime scratch. 0.84 returns
