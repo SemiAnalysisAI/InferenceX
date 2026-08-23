@@ -182,6 +182,17 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         echo "Error: baked Mooncake DMABUF overlay is missing or unpinned" >&2
         exit 1
     fi
+    # The Python client and mooncake_master must come from the same source
+    # generation. CI 32614883629 baked a 4c6d23c8 client against an older
+    # master; BatchPutStart then failed with invalid rpc arg / -900 RPC_FAIL
+    # and the external tier never stored a key.
+    if [ ! -f "$MOONCAKE_RUNTIME_ROOT/master.manifest.txt" ] ||
+       ! grep -q "source=$MOONCAKE_EXPECTED_SHA" "$MOONCAKE_RUNTIME_ROOT/master.manifest.txt"; then
+        echo "Error: mooncake_master is missing or not pinned to $MOONCAKE_EXPECTED_SHA" >&2
+        ls -l "$MOONCAKE_RUNTIME_ROOT/bin/mooncake_master" >&2 || true
+        cat "$MOONCAKE_RUNTIME_ROOT/master.manifest.txt" 2>/dev/null >&2 || true
+        exit 1
+    fi
 
     export PYTHONPATH="$MOONCAKE_RUNTIME_ROOT/python${PYTHONPATH:+:$PYTHONPATH}"
     export LD_LIBRARY_PATH="$MOONCAKE_RUNTIME_ROOT/lib:/opt/rocm/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
