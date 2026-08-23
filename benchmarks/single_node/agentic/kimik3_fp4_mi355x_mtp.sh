@@ -124,6 +124,10 @@ export VLLM_ROCM_USE_AITER=1
 export SAFETENSORS_FAST_GPU=1
 export VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4=1
 export AITER_BF16_FP8_MOE_BOUND=0
+# Mooncake emits one C++ INFO line per MasterClient operation; DSpark's
+# fine-grained 20-group lookup expands that into hundreds of thousands of log
+# lines. Keep warnings/errors while removing this validation-only hot-path noise.
+export GLOG_minloglevel="${GLOG_minloglevel:-1}"
 # REQUIRED on ROCm per the upstream recipe: the build auto-enables this to 1.
 export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 
