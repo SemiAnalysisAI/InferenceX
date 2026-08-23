@@ -73,6 +73,12 @@ export SGLANG_DSV4_REASONING_EFFORT=high
 export SGLANG_USE_ROCM700A=0
 export SGLANG_HACK_FLASHMLA_BACKEND=unified_kv_triton
 export AITER_BF16_FP8_MOE_BOUND=0
+# DSv4 kernel fusions carried by the sgl-dev image: aiter batched GEMM for the
+# absorbed MLA projections, native b-preshuffle scale handling, and a fused
+# compress+norm+rope epilogue. All three default off in environ.py.
+export SGLANG_OPT_USE_AITER_BATCHED_GEMM=1
+export SGLANG_OPT_NATIVE_BPRESHUFFLE_SCALE=1
+export SGLANG_OPT_FUSE_COMPRESS_NORM_ROPE=1
 
 # Unified radix tree: per-component (full-attn / SWA) cache management for
 # hybrid-attention models, plus proactive release of out-of-window SWA KV
@@ -130,8 +136,10 @@ SGLANG_BACKEND_PORT="$PORT"
 # cap; same value the multi-node DeepSeek-V4-Pro-AgentX no_dp profile uses.
 CHUNKED_PREFILL_SIZE=8192
 # MTP adds a draft KV pool and extra graph captures on top of the spec-none
-# footprint, which ran at 0.90.
-MEM_FRACTION_STATIC=0.85
+# footprint, which ran at 0.90. 0.89 recovers most of that: the DSv4 compressor
+# state pools are sized from the full-attention pool and allocated after it,
+# outside this budget, so the remainder has to stay large enough to cover them.
+MEM_FRACTION_STATIC=0.89
 PARALLEL_ARGS=(--tensor-parallel-size "$TP")
 if [ "$DP_ATTENTION" = "true" ]; then
     USE_SGLANG_ROUTER=true
@@ -213,7 +221,7 @@ SGLANG_CMD=(
     --page-size 256
     --swa-full-tokens-ratio 0.10
     --kv-cache-dtype fp8_e4m3
-    --disable-shared-experts-fusion
+    --enforce-shared-experts-fusion
     --tool-call-parser deepseekv4
     --reasoning-parser deepseek-v4
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"

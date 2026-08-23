@@ -6378,3 +6378,14 @@
     - "Serve the TP8 arm with FULL_AND_PIECEWISE cudagraphs, capturing the mixed prefill/decode batches as well as the uniform decode batches. The DEP8 arm is unchanged."
     - "Replace the TP8 concurrency list [1, 4, 8, 16, 24] with [1, 4, 8, 14], dropping the published concurrency 16 and 24 points and adding concurrency 14."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2707
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update image from lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260813 to rocm/sgl-dev:v0.5.18-rocm720-mi35x-20260822."
+    - "Enable the DSv4 kernel fusions the new image carries, all of which default off: SGLANG_OPT_USE_AITER_BATCHED_GEMM=1 (aiter batched GEMM for the absorbed MLA projections), SGLANG_OPT_NATIVE_BPRESHUFFLE_SCALE=1, SGLANG_OPT_FUSE_COMPRESS_NORM_ROPE=1."
+    - "Raise mem-fraction-static from 0.85 to 0.89, enlarging the full-attention KV pool. The DSv4 compressor state pools are sized from that pool and allocated after it, outside this budget, so the remainder still has to cover them."
+    - "Switch --disable-shared-experts-fusion to --enforce-shared-experts-fusion, which fuses the single shared expert into the routed list. The tuned MoE tables in this image cover the resulting (inter_dim 384, expert 385, topk 7) shape at the token sizes this workload hits."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
