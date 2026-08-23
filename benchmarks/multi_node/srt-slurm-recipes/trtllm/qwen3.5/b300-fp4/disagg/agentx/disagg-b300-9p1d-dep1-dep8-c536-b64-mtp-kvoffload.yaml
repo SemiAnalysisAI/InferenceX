@@ -18,6 +18,8 @@ setup_script: "bind-b300-prefill-cpus.sh"
 
 slurm:
   time_limit: 04:00:00
+sbatch_directives:
+  exclude: b300-001,b300-007
 health_check:
   max_attempts: 540
   interval_seconds: 10
