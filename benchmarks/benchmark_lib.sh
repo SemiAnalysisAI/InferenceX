@@ -1975,9 +1975,9 @@ build_replay_cmd() {
     local warmup_requests_per_lane="${AIPERF_WARMUP_REQUESTS_PER_LANE:-10}"
 
     # Fast mode minimizes setup by advancing each trajectory lane only once
-    # and shortens profiling to 20 minutes.
+    # and defaults profiling to 20 minutes; smoke arms may shorten it further.
     if [[ "${AIPERF_EXPERIMENTAL_FAST:-0}" == "1" ]]; then
-        duration=1200
+        duration="${AIPERF_EXPERIMENTAL_FAST_DURATION:-1200}"
         warmup_requests_per_lane=1
     fi
 
