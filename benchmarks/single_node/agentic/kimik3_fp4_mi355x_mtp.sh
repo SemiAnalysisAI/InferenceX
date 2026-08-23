@@ -602,9 +602,13 @@ payload = {
 before = external_hits()
 request("/v1/chat/completions", payload)
 time.sleep(15)
-reset = json.loads(request("/reset_prefix_cache", {}))
-if not reset.get("success"):
-    raise RuntimeError(f"GPU prefix-cache reset failed: {reset}")
+for attempt in range(120):
+    reset = json.loads(request("/reset_prefix_cache", {}))
+    if reset.get("success"):
+        break
+    time.sleep(5)
+else:
+    raise RuntimeError("GPU prefix-cache reset did not drain within 10 minutes")
 request("/v1/chat/completions", payload)
 after = external_hits()
 delta = after - before
