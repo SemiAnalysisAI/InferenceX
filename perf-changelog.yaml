@@ -6386,4 +6386,5 @@
     - fixed-seq-len
   description:
     - "Switch the served checkpoint from amd/Qwen3.5-397B-A17B-MXFP4 to amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2 on both arms."
+    - "Export SGLANG_USE_AITER_FP8_PER_TOKEN=1 on both arms, as the checkpoint's published SGLang recipe requires."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2695
