@@ -255,7 +255,7 @@ case "${KV_OFFLOAD_BACKEND:-}" in
   "local_buffer_size": "128MB",
   "protocol": "rdma",
   "device_name": "$MOONCAKE_RDMA_DEVICE",
-  "enable_offload": false
+  "enable_offload": true
 }
 EOF
     export MOONCAKE_CONFIG_PATH
