@@ -378,11 +378,11 @@ VLLM_CMD=(
     --enable-prefix-caching
     --kv-cache-dtype "fp8"
     --max-num-batched-tokens 16384
-    --attention-config '{"mla_prefill_backend":"ROCM_AITER_FA"}'
     "${COMPILATION_CONFIG_ARGS[@]}"
     "${SPEC_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
 )
+    #--attention-config '{"mla_prefill_backend":"ROCM_AITER_FA"}'
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
 printf '\n' | tee -a "$RESULT_DIR/vllm_command.txt"
 "${VLLM_CMD[@]}" > "$SERVER_LOG" 2>&1 &
