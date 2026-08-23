@@ -92,6 +92,28 @@ install_agentic_deps
 # patches are baked and which are deliberately skipped.
 bash "$(dirname "$0")/apply_k3_container_patches.sh"
 
+# The pinned image predates spec-driven K3 draft-group annotation and the
+# Mooncake mirror of the five-field SpecGroup. Apply the source-matched patch
+# even though the image sets SKIP_KIMI_PATCHES=1 for its already-baked runtime
+# fixes. A marker makes retries idempotent; a failed dry-run is fatal.
+K3_CACHE_PATCH="$(dirname "$0")/patches/k3_dspark_cache_convergence.patch"
+VLLM_ROOT=$(python3 -c \
+    'import os,vllm; print(os.path.dirname(os.path.dirname(vllm.__file__)))')
+K3_CACHE_MARKER="$VLLM_ROOT/.k3-dspark-cache-convergence-v1"
+if [[ ! -f "$K3_CACHE_MARKER" ]]; then
+    test -s "$K3_CACHE_PATCH"
+    patch -p1 -d "$VLLM_ROOT" --dry-run --forward < "$K3_CACHE_PATCH"
+    patch -p1 -d "$VLLM_ROOT" --forward < "$K3_CACHE_PATCH"
+    python3 -m compileall -q \
+        "$VLLM_ROOT/vllm/config/speculative.py" \
+        "$VLLM_ROOT/vllm/v1/core/kv_cache_coordinator.py" \
+        "$VLLM_ROOT/vllm/v1/core/kv_cache_utils.py" \
+        "$VLLM_ROOT/vllm/v1/kv_cache_interface.py" \
+        "$VLLM_ROOT/vllm/distributed/kv_transfer/kv_connector/v1/mooncake/store/coordinator.py"
+    touch "$K3_CACHE_MARKER"
+fi
+echo "[k3-cache-patch] applied and verified"
+
 # ---- Reference env block ----------------------------------------------------
 # Keep ALL of these. Commenting them out does not avoid the AITER FMHA crash:
 # that crash is gated on VLLM_ROCM_USE_AITER alone (AiterFlashAttnPrefillBackend

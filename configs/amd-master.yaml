@@ -639,9 +639,9 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
       # partial_tail_offloads for the DRAM tier, so it truncates a hit to the
       # scheduler block and recomputes the remainder (measured 15.4% of a 60K
       # prompt). The whole point of this arm is the fine-grained external hit.
-      # No draft is the single-variable A/B against run 32624186852. It removes
-      # the 5-layer draft KV bucket, reducing vLLM KV groups from 20 to 4.
-      - { tp: 8, dcp-size: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "4c6d23c8" }, conc-list: [16], spec-decoding: none }
+      # DSpark uses one ephemeral draft group. Its cache result is deliberately
+      # veto-exempt so target MLA/Mamba groups converge independently.
+      - { tp: 8, dcp-size: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "4c6d23c8" }, conc-list: [16], spec-decoding: mtp }
 
 dsr1-fp4-mi355x-sglang-disagg:
   image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519
