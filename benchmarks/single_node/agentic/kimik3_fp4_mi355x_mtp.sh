@@ -344,12 +344,12 @@ fi
 if [ "${EVAL_ONLY:-false}" = "true" ]; then
     SPEC_ARGS=(
         --speculative-config
-        "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"block\"}"
+        "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"block\"}"
     )
 else
     SPEC_ARGS=(
         --speculative-config
-        "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
+        "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
     )
 fi
 
@@ -373,6 +373,9 @@ fi
 CP_ARGS=()
 if [ "$DCP_SIZE" -gt 1 ]; then
     CP_ARGS+=(--decode-context-parallel-size "$DCP_SIZE" --dcp-comm-backend a2a)
+    KV_CACHE_DTYPE="auto"
+else
+    KV_CACHE_DTYPE="fp8"
 fi
 export VLLM_USE_DIRECT_DCP_A2A=1
 export VLLM_USE_DIRECT_DCP_Q_GATHER=1
@@ -396,7 +399,7 @@ VLLM_CMD=(
     --reasoning-parser kimi_k3
     --max-model-len 1048576
     --enable-prefix-caching
-    --kv-cache-dtype "fp8"
+    --kv-cache-dtype "$KV_CACHE_DTYPE"
     --max-num-batched-tokens 8192
     --attention-config '{"mla_prefill_backend":"ROCM_AITER_FA"}'
     "${COMPILATION_CONFIG_ARGS[@]}"
