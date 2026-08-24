@@ -378,7 +378,7 @@ VLLM_CMD=(
     --tensor-parallel-size "$TP"
     "${EP_ARGS[@]}"
     --load-format fastsafetensors
-    --gpu-memory-utilization 0.95
+    --gpu-memory-utilization 0.9
     --language-model-only
     --max-num-seqs "$MAX_NUM_SEQS"
     --enable-auto-tool-choice
