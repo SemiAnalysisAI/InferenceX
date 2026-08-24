@@ -104,6 +104,131 @@ index 3e86b51696..6ce9179699 100644
                  if drop_eagle_block:
                      eagle_verified.add(idx)
                  elif _new_hit_length < curr_hit_length:
+diff --git a/vllm/distributed/kv_transfer/kv_connector/v1/mooncake/store/worker.py b/vllm/distributed/kv_transfer/kv_connector/v1/mooncake/store/worker.py
+index cfcae7d322..2b042fefff 100644
+--- a/vllm/distributed/kv_transfer/kv_connector/v1/mooncake/store/worker.py
++++ b/vllm/distributed/kv_transfer/kv_connector/v1/mooncake/store/worker.py
+@@ -23,6 +23,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
+ from dataclasses import dataclass
+ from typing import Any, Literal, TypeVar
+ 
++import psutil
+ import regex as re
+ import torch
+ import zmq
+@@ -185,6 +186,64 @@ class MooncakeStoreConfig:
+         return MooncakeStoreConfig.from_file(config_path)
+ 
+ 
++def _select_rank_local_rdma_device(
++    configured_device: str,
++    tp_rank: int,
++    available_devices: Sequence[str],
++) -> str:
++    """Select one RDMA device per TP rank, falling back to the configured one."""
++
++    def natural_key(device: str) -> tuple[str, int]:
++        match = re.fullmatch(r"(.*?)(\d+)", device)
++        return (match.group(1), int(match.group(2))) if match else (device, -1)
++
++    devices = sorted(available_devices, key=natural_key)
++    return devices[tp_rank % len(devices)] if devices else configured_device
++
++
++def _configure_rank_local_rdma_bind_address(device: str) -> str | None:
++    """Bind Mooncake's RDMA path to the IPv4 address of ``device``.
++
++    ``local_hostname`` remains the canonical host/control-plane address. Mooncake
++    uses ``MC_RDMA_BIND_ADDRESS`` separately when constructing RDMA NIC paths.
++    """
++    configured = os.environ.get("MC_RDMA_BIND_ADDRESS", "").strip()
++    if configured:
++        return configured
++
++    net_dir = f"/sys/class/infiniband/{device}/device/net"
++    try:
++        interfaces = sorted(os.listdir(net_dir))
++    except OSError as error:
++        logger.warning("Failed to find netdev for RDMA device %s: %s", device, error)
++        return None
++
++    addresses = psutil.net_if_addrs()
++    for interface in interfaces:
++        for address in addresses.get(interface, ()):
++            if address.family == socket.AF_INET:
++                os.environ["MC_RDMA_BIND_ADDRESS"] = address.address
++                return address.address
++    logger.warning("No IPv4 address found for RDMA device %s (%s)", device, interfaces)
++    return None
++
++
++def _resolve_preferred_segment(
++    store: Any,
++    configured_segment: str | None,
++    rank_local_rdma: bool,
++) -> str | None:
++    if configured_segment is not None or not rank_local_rdma:
++        return configured_segment
++    local_segment = store.get_hostname()
++    if not isinstance(local_segment, str) or not local_segment.strip():
++        raise RuntimeError(
++            "Rank-local RDMA requires MooncakeDistributedStore.get_hostname() "
++            "to return the local segment name"
++        )
++    return local_segment.strip()
++
++
+ def _normalize_tenant_id(value: Any) -> str:
+     if value is None:
+         return DEFAULT_TENANT_ID
+@@ -1556,6 +1615,34 @@ class MooncakeStoreWorker:
+ 
+         # Initialize MooncakeDistributedStore with its own TransferEngine
+         store_config = MooncakeStoreConfig.load_from_config()
++        rank_local_rdma = (
++            str(extra_config.get("rdma_device_per_rank", False)).strip().lower()
++            == "true"
++        )
++        if rank_local_rdma and store_config.protocol == "rdma":
++            try:
++                available_devices = os.listdir("/sys/class/infiniband")
++            except OSError as error:
++                logger.warning("Failed to list rank-local RDMA devices: %s", error)
++                available_devices = []
++            configured_device = store_config.device_name
++            store_config.device_name = _select_rank_local_rdma_device(
++                configured_device,
++                self.tp_rank,
++                available_devices,
++            )
++            bind_address = _configure_rank_local_rdma_bind_address(
++                store_config.device_name
++            )
++            logger.info(
++                "Mooncake rank-local RDMA binding: tp_rank=%d device=%s "
++                "bind_address=%s (configured=%s, available=%s)",
++                self.tp_rank,
++                store_config.device_name,
++                bind_address,
++                configured_device,
++                sorted(available_devices),
++            )
+         self.store = MooncakeDistributedStore()
+         local_ip = get_ip()
+         local_hostname = rdma_utils.get_requester_local_hostname(local_ip)
+@@ -1577,7 +1664,11 @@ class MooncakeStoreWorker:
+             logger.error(msg)
+             raise RuntimeError(msg)
+ 
+-        preferred_segment = rdma_utils.get_configured_preferred_segment(extra_config)
++        preferred_segment = _resolve_preferred_segment(
++            self.store,
++            rdma_utils.get_configured_preferred_segment(extra_config),
++            rank_local_rdma,
++        )
+         self.preferred_segment = preferred_segment
+         self.store_replicate_config = ReplicateConfig()
+         self.enable_group_semantics = (
 diff --git a/vllm/v1/core/kv_cache_coordinator.py b/vllm/v1/core/kv_cache_coordinator.py
 index 6db610d4b5..8e9e199f70 100644
 --- a/vllm/v1/core/kv_cache_coordinator.py

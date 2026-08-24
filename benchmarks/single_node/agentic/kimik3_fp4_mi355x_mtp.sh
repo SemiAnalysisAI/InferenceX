@@ -99,7 +99,7 @@ bash "$(dirname "$0")/apply_k3_container_patches.sh"
 K3_CACHE_PATCH="$(dirname "$0")/patches/k3_dspark_cache_convergence.patch"
 VLLM_ROOT=$(python3 -c \
     'import os,vllm; print(os.path.dirname(os.path.dirname(vllm.__file__)))')
-K3_CACHE_MARKER="$VLLM_ROOT/.k3-dspark-cache-convergence-v1"
+K3_CACHE_MARKER="$VLLM_ROOT/.k3-dspark-cache-convergence-v2"
 if [[ ! -f "$K3_CACHE_MARKER" ]]; then
     test -s "$K3_CACHE_PATCH"
     patch -p1 -d "$VLLM_ROOT" --dry-run --forward < "$K3_CACHE_PATCH"
@@ -109,7 +109,8 @@ if [[ ! -f "$K3_CACHE_MARKER" ]]; then
         "$VLLM_ROOT/vllm/v1/core/kv_cache_coordinator.py" \
         "$VLLM_ROOT/vllm/v1/core/kv_cache_utils.py" \
         "$VLLM_ROOT/vllm/v1/kv_cache_interface.py" \
-        "$VLLM_ROOT/vllm/distributed/kv_transfer/kv_connector/v1/mooncake/store/coordinator.py"
+        "$VLLM_ROOT/vllm/distributed/kv_transfer/kv_connector/v1/mooncake/store/coordinator.py" \
+        "$VLLM_ROOT/vllm/distributed/kv_transfer/kv_connector/v1/mooncake/store/worker.py"
     touch "$K3_CACHE_MARKER"
 fi
 echo "[k3-cache-patch] applied and verified"
@@ -252,10 +253,12 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         ls /usr/lib/x86_64-linux-gnu/libibverbs | head
     fi
 
-    # JSON default is rdma0. Each vLLM worker then rewrites MOONCAKE_CONFIG_PATH
-    # to rdma${LOCAL_RANK} (see sitecustomize below). Pinning every rank to
-    # rdma0 still ENOMEM'd ibv_reg_mr at 8GB x 8 (CI run 32595896920); listing
-    # all NICs in one JSON opened 8 devices per rank (32595345336).
+    # JSON default is rdma0. MooncakeStoreWorker then selects rdma${TP_RANK}
+    # during connector initialization and pins PUTs to that rank's segment.
+    # Pinning every rank to rdma0 still ENOMEM'd ibv_reg_mr at 8GB x 8
+    # (CI run 32595896920); listing all NICs in one JSON opened 8 devices
+    # per rank (32595345336). sitecustomize NIC rewrite without
+    # preferred_segment caused cross-NIC TRANSFER_FAIL on g05.
     MOONCAKE_RDMA_DEVICE="${MOONCAKE_RDMA_DEVICE:-rdma0}"
     if [ -z "$MOONCAKE_RDMA_DEVICE" ] || [ ! -e "/sys/class/infiniband/${MOONCAKE_RDMA_DEVICE%%,*}" ]; then
         echo "Error: RDMA device $MOONCAKE_RDMA_DEVICE not present" >&2
@@ -263,34 +266,26 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         exit 1
     fi
 
+    # This tier must stay on 2 MiB hugepages: a TB-scale 4 KiB registration
+    # exhausts the ionic RNIC's page-table budget. The runner gets the first
+    # chance to grow the host pool; retry here if the container can write
+    # the host sysctl.
+    NEED_HUGEPAGES=$(( TOTAL_CPU_DRAM_GB * 1024 / 2 * 10 / 9 + 2048 ))
+    CURRENT_HUGEPAGES=$(cat /proc/sys/vm/nr_hugepages)
+    if [ "$CURRENT_HUGEPAGES" -lt "$NEED_HUGEPAGES" ]; then
+        echo "$NEED_HUGEPAGES" > /proc/sys/vm/nr_hugepages 2>/dev/null || true
+    fi
     HUGEPAGE_FREE=$(awk '/HugePages_Free:/ {print $2}' /proc/meminfo)
     HUGEPAGE_TOTAL=$(awk '/HugePages_Total:/ {print $2}' /proc/meminfo)
     echo "hugepages: free=$HUGEPAGE_FREE total=$HUGEPAGE_TOTAL"
-    if [ "${HUGEPAGE_FREE:-0}" -ge 512 ]; then
-        export MC_STORE_USE_HUGEPAGE=1
-        export MC_STORE_HUGEPAGE_SIZE=2MB
-        # Size the tier from the pool with headroom. Shrinking it was chased for
-        # four CI cycles and never mattered: the reproducer in run 32598493726
-        # fails identically at 2 GB and 8 GB.
-        HUGEPAGE_GB=$(( HUGEPAGE_FREE * 2 / 1024 * 9 / 10 / TP ))
-        if [ "$HUGEPAGE_GB" -lt "$PER_RANK_GB" ]; then
-            PER_RANK_GB=$HUGEPAGE_GB
-            echo "clamping RDMA segment to ${PER_RANK_GB} GB/rank" >&2
-        fi
-    else
-        # CI cannot grow nr_hugepages (EACCES even from srun). Keep RDMA but
-        # shrink the segment so 4K PTEs stay in the RNIC budget.
-        export MC_STORE_USE_HUGEPAGE=0
-        if [ "$PER_RANK_GB" -gt 4 ]; then
-            PER_RANK_GB=4
-        fi
-        echo "no free hugepages; RDMA with 4K pages at ${PER_RANK_GB} GB/rank" >&2
-    fi
-    if [ "$PER_RANK_GB" -lt 1 ]; then
-        echo "Error: DRAM segment collapsed to ${PER_RANK_GB} GB/rank" >&2
+    HUGEPAGE_GB=$(( HUGEPAGE_FREE * 2 / 1024 * 9 / 10 / TP ))
+    if [ "$HUGEPAGE_GB" -lt "$PER_RANK_GB" ]; then
+        echo "Error: requested ${PER_RANK_GB} GB/rank but hugepage pool supports only ${HUGEPAGE_GB} GB/rank" >&2
         awk '/HugePages_/ {print}' /proc/meminfo >&2
         exit 1
     fi
+    export MC_STORE_USE_HUGEPAGE=1
+    export MC_STORE_HUGEPAGE_SIZE=2MB
 
     cat > "$MOONCAKE_CONFIG_PATH" <<EOF
 {
@@ -301,7 +296,7 @@ case "${KV_OFFLOAD_BACKEND:-}" in
   "local_buffer_size": "128MB",
   "protocol": "rdma",
   "device_name": "$MOONCAKE_RDMA_DEVICE",
-  "enable_offload": true
+  "enable_offload": false
 }
 EOF
     export MOONCAKE_CONFIG_PATH
@@ -310,31 +305,10 @@ EOF
     ulimit -l unlimited 2>/dev/null || true
     echo "memlock ulimit=$(ulimit -l)" >&2
 
-    cat > "$RESULT_DIR/sitecustomize.py" <<'PY'
-import json
-import os
-from pathlib import Path
-
-rank = os.environ.get("LOCAL_RANK", os.environ.get("RANK"))
-path = os.environ.get("MOONCAKE_CONFIG_PATH")
-if rank is not None and path:
-    src = Path(path)
-    if src.is_file() and ".rank" not in src.name:
-        cfg = json.loads(src.read_text())
-        nics = sorted(
-            p.name for p in Path("/sys/class/infiniband").iterdir() if p.is_dir()
-        )
-        if nics:
-            cfg["device_name"] = nics[int(rank) % len(nics)]
-            dst = src.with_name(f"{src.stem}.rank{rank}{src.suffix}")
-            dst.write_text(json.dumps(cfg))
-            os.environ["MOONCAKE_CONFIG_PATH"] = str(dst)
-PY
-    export PYTHONPATH="$RESULT_DIR${PYTHONPATH:+:$PYTHONPATH}"
-    PY_STDLIB=$(python3 -c "import sysconfig; print(sysconfig.get_path('stdlib'))")
-    if [ -n "$PY_STDLIB" ] && [ -d "$PY_STDLIB" ]; then
-        cp "$RESULT_DIR/sitecustomize.py" "$PY_STDLIB/sitecustomize.py"
-        echo "installed sitecustomize into $PY_STDLIB" >&2
+    WORKER_PATH=$(python3 -c 'import inspect; from vllm.distributed.kv_transfer.kv_connector.v1.mooncake.store import worker; print(inspect.getsourcefile(worker))')
+    if ! grep -q "rdma_device_per_rank" "$WORKER_PATH"; then
+        echo "Error: vLLM image lacks connector-owned rank-local RDMA binding" >&2
+        exit 1
     fi
     # A forked caller is the only condition under which registration could be
     # made to fail on this node (CI run 32598493726); the bare sweep passed even
@@ -391,7 +365,7 @@ PY
 
     OFFLOAD_ARGS=(
         --kv-transfer-config
-        '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_group_semantics":true}}'
+        '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_group_semantics":true,"rdma_device_per_rank":true}}'
     )
     echo "MooncakeStoreConnector: ${PER_RANK_GB} GB/rank x ${TP} ranks, RDMA DRAM"
     ;;

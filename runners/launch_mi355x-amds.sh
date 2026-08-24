@@ -340,7 +340,8 @@ else
         '
         srun --jobid=$JOB_ID bash -c '
             have=$(cat /proc/sys/vm/nr_hugepages)
-            want=$((128 * 1024 / 2))
+            want_gb=${TOTAL_CPU_DRAM_GB:-128}
+            want=$((want_gb * 1024 / 2 * 10 / 9 + 2048))
             if [ "$want" -gt "$have" ]; then
                 if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
                     echo "$want" | sudo -n tee /proc/sys/vm/nr_hugepages >/dev/null || true
@@ -348,8 +349,19 @@ else
                     echo "$want" > /proc/sys/vm/nr_hugepages 2>/dev/null || true
                 fi
             fi
-            echo "host hugepages: have=$have want=$want now=$(cat /proc/sys/vm/nr_hugepages)"
+            now=$(cat /proc/sys/vm/nr_hugepages)
+            if [ "$now" -lt "$want" ] && command -v docker >/dev/null 2>&1; then
+                echo "direct hugepage grow failed; trying privileged Docker"
+                docker run --rm --privileged -v /proc:/hostproc alpine:latest \
+                    sh -c "echo $want > /hostproc/sys/vm/nr_hugepages" || true
+                now=$(cat /proc/sys/vm/nr_hugepages)
+            fi
+            echo "host hugepages: have=$have want=$want now=$now"
             awk "/HugePages_/ {print}" /proc/meminfo
+            if [ "$now" -lt "$want" ]; then
+                echo "Error: cannot reserve the required hugepage pool" >&2
+                exit 1
+            fi
         '
     fi
 
