@@ -6378,3 +6378,12 @@
     - "Serve the TP8 arm with FULL_AND_PIECEWISE cudagraphs, capturing the mixed prefill/decode batches as well as the uniform decode batches. The DEP8 arm is unchanged."
     - "Replace the TP8 concurrency list [1, 4, 8, 16, 24] with [1, 4, 8, 14], dropping the published concurrency 16 and 24 points and adding concurrency 14."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2707
+
+- config-keys:
+    - glm5.1-fp8-b200-tilert
+    - glm5.1-fp8-b200-tilert-agentic
+  description:
+    - "Update 8k1kTileRT results, add AgentX results"
+    - "Replace the internal TileRT 0.1.5.post2+inferencex.1 queueing backport with the official 0.1.5.post3 PyPI wheel now that upstream has published it; remove the internal wheel builder and router patch"
+    - "Bump the shared TileRT dependency and router metadata to 0.1.5.post3 for both fixed-seq-length and AgentX configurations while retaining the AgentX 1800-second queue timeout"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2650
