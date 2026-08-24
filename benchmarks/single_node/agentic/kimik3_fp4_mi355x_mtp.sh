@@ -142,13 +142,11 @@ mkdir -p "$RESULT_DIR"
 
 SERVER_PID=""
 MOONCAKE_MASTER_PID=""
-MEMWATCH_PID=""
 
 cleanup_agentic_services() {
     local exit_code=$?
     trap - EXIT INT TERM
     set +e
-    [ -n "$MEMWATCH_PID" ] && kill "$MEMWATCH_PID" 2>/dev/null
     stop_background_process_tree "$SERVER_PID" "vLLM server" 60
     stop_background_process_tree "$MOONCAKE_MASTER_PID" "Mooncake master" 10
     exit "$exit_code"
@@ -326,18 +324,6 @@ EOF
         cat "$MOONCAKE_MASTER_LOG" >&2
         exit 1
     fi
-
-    # Sample the hugepage pool so a registration failure can be read against the
-    # pool state at the moment it happens instead of the state at startup.
-    (
-        while true; do
-            awk '/HugePages_Free|HugePages_Rsvd|MemAvailable/ {printf "%s=%s ", $1, $2}' \
-                /proc/meminfo
-            echo "MEMWATCH $(date -u +%H:%M:%S)"
-            sleep 10
-        done
-    ) &
-    MEMWATCH_PID=$!
 
     OFFLOAD_ARGS=(
         --kv-transfer-config
