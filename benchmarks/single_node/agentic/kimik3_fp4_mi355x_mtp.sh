@@ -384,15 +384,15 @@ VLLM_CMD=(
     --enable-auto-tool-choice
     --tool-call-parser kimi_k3
     --reasoning-parser kimi_k3
-    --max-model-len 8192
+    --max-model-len 1048576
     --enable-prefix-caching
     --kv-cache-dtype "fp8"
-    --max-num-batched-tokens 16384
+    --max-num-batched-tokens 8192
+    --attention-config '{"mla_prefill_backend":"ROCM_AITER_FA"}'
     "${COMPILATION_CONFIG_ARGS[@]}"
     "${SPEC_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
 )
-    #--attention-config '{"mla_prefill_backend":"ROCM_AITER_FA"}'
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
 printf '\n' | tee -a "$RESULT_DIR/vllm_command.txt"
 "${VLLM_CMD[@]}" > "$SERVER_LOG" 2>&1 &
