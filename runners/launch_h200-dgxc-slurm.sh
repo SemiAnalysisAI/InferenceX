@@ -108,14 +108,19 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     fi
 
     if [[ $IS_AGENTIC == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.2" ]]; then
-        # The pinned fork carries the v1.0.44 AgentX lifecycle plus the formal
-        # custom-benchmark dcgm-power contract needed by PR-A.
-        git clone "$POWER_SRT_SLURM_URL" "$SRT_REPO_DIR"
-        cd "$SRT_REPO_DIR"
-        git checkout "$POWER_SRT_SLURM_PIN" || exit 1
-        test "$(git rev-parse HEAD)" = "$POWER_SRT_SLURM_PIN" || { echo "Error: srt-slurm HEAD does not match POWER_SRT_SLURM_PIN=$POWER_SRT_SLURM_PIN" >&2; exit 1; }
         if [[ "$USES_DCGM_POWER" == "1" ]]; then
+            # The pinned fork carries the v1.0.44 AgentX lifecycle plus the formal
+            # custom-benchmark dcgm-power contract needed by PR-A.
+            git clone "$POWER_SRT_SLURM_URL" "$SRT_REPO_DIR"
+            cd "$SRT_REPO_DIR"
+            git checkout "$POWER_SRT_SLURM_PIN" || exit 1
+            test "$(git rev-parse HEAD)" = "$POWER_SRT_SLURM_PIN" || { echo "Error: srt-slurm HEAD does not match POWER_SRT_SLURM_PIN=$POWER_SRT_SLURM_PIN" >&2; exit 1; }
             git rev-parse HEAD > "$GITHUB_WORKSPACE/power-producer-sha.txt"
+        else
+            # v1.0.44 includes the AgentX custom benchmark integration and passes
+            # every logical SGLang worker's Prometheus URL to AIPerf.
+            git clone --branch v1.0.44 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+            cd "$SRT_REPO_DIR"
         fi
     elif [[ $IS_AGENTIC == "1" && $FRAMEWORK == "vllm" && $MODEL_PREFIX == "kimik3" ]]; then
         git clone https://github.com/functionstackx/srt-slurm-nv.git "$SRT_REPO_DIR"

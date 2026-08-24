@@ -51,6 +51,13 @@ def test_glm_agentx_uses_exact_fork_sha_and_other_clone_lanes_are_unchanged():
     assert 'test "$(git rev-parse HEAD)" = "$POWER_SRT_SLURM_PIN"' in launcher
     assert 'git rev-parse HEAD > "$GITHUB_WORKSPACE/power-producer-sha.txt"' in launcher
 
+    # Only the power lane may swap the runtime; non-power GLM AgentX runs keep
+    # the NVIDIA release their perf-changelog provenance records.
+    assert (
+        "git clone --branch v1.0.44 --single-branch https://github.com/NVIDIA/srt-slurm.git"
+        in launcher
+    )
+
     # These pre-existing branches are deliberately outside PR-A.
     assert "https://github.com/functionstackx/srt-slurm-nv.git" in launcher
     assert "df5baa93f4caf5169dea2a4236ad2cc742fe40e7" in launcher
