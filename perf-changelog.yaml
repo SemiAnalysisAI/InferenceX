@@ -6399,3 +6399,10 @@
     - "Switch --disable-shared-experts-fusion to --enforce-shared-experts-fusion, which fuses the single shared expert into the routed list. The tuned MoE tables in this image cover the resulting (inter_dim 384, expert 385, topk 7) shape at the token sizes this workload hits."
     - "Split the parallelism by concurrency: add a TP4 arm at [1, 2, 4, 8, 10] with no host KV tier, where halving the GPUs per replica raises throughput per GPU, and remove the TP8 no-offload arm [1, 2, 4, 8, 16]. This drops the published TP8 concurrency 1, 2, 4, 8 and 16 points and adds TP4 concurrency 1, 2, 4, 8 and 10."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2713
+- config-keys:
+    - dsv4-fp4-b200-dynamo-trt
+  description:
+    - "Add B200 DeepSeek-V4-Pro disaggregated dynamo-trtllm 8k1k throughput frontier recipes"
+    - "Image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc23; 16 prefill/decode worker-split points across DEP/TEP with and without MTP3"
+    - "Ported from NVIDIA/InferenceMAX PR #177 (dsv4-fp4-b200-dynamo-trt), adapted to the b200-dgxc runner and existing dsv4 model-path resolution"
+  pr-link: https://github.com/NVIDIA/InferenceMAX/pull/177

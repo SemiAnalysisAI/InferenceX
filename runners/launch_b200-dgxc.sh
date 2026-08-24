@@ -152,9 +152,9 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         exit 1
     fi
 
-    # Multinode dsv4 currently only ships with the dynamo-vllm recipe
-    if [[ $MODEL_PREFIX == "dsv4" && $FRAMEWORK != "dynamo-vllm" ]]; then
-        echo "Unsupported framework for multinode dsv4: $FRAMEWORK (only dynamo-vllm)"
+    # Multinode dsv4 ships dynamo-vllm and dynamo-trt recipes
+    if [[ $MODEL_PREFIX == "dsv4" && $FRAMEWORK != "dynamo-vllm" && $FRAMEWORK != "dynamo-trt" ]]; then
+        echo "Unsupported framework for multinode dsv4: $FRAMEWORK (only dynamo-vllm, dynamo-trt)"
         exit 1
     fi
 
@@ -183,6 +183,12 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         git checkout aflowers/vllm-gb200-v0.20.0
         mkdir -p recipes/vllm/deepseek-v4
         cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
+    elif [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "dsv4" ]]; then
+        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+        cd "$SRT_REPO_DIR" || exit 1
+        mkdir -p recipes/trtllm/deepseek-v4
+        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4" recipes/trtllm/deepseek-v4
+        cp "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/moe_load_balancer_"*.yaml configs/ 2>/dev/null || true
     elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "kimik2.6" && $PRECISION == "fp4" ]]; then
         git clone --branch main --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR" || exit 1
