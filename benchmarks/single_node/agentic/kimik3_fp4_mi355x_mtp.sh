@@ -488,6 +488,9 @@ ATTN_BE_ARGS=()
 if [ "$DCP_SIZE" -gt 1 ]; then
     CP_ARGS+=(--decode-context-parallel-size "$DCP_SIZE" --dcp-comm-backend a2a)
     ATTN_BE_ARGS+=(--attention-backend TRITON_MLA)
+    GPU_MEM_UTIL=0.85
+else
+    GPU_MEM_UTIL=0.9
 fi
 export VLLM_USE_DIRECT_DCP_A2A=0
 export VLLM_USE_DIRECT_DCP_Q_GATHER=0
@@ -503,7 +506,7 @@ VLLM_CMD=(
     --tensor-parallel-size "$TP"
     "${EP_ARGS[@]}"
     --load-format fastsafetensors
-    --gpu-memory-utilization 0.9
+    --gpu-memory-utilization "$GPU_MEM_UTIL"
     --language-model-only
     --max-num-seqs "$MAX_NUM_SEQS"
     --enable-auto-tool-choice
