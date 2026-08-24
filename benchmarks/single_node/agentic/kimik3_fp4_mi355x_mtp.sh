@@ -252,7 +252,7 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     # the host sysctl.
     NEED_HUGEPAGES=$(( TOTAL_CPU_DRAM_GB * 1024 / 2 * 10 / 9 + 2048 ))
     CURRENT_HUGEPAGES=$(cat /proc/sys/vm/nr_hugepages)
-    if [ "$CURRENT_HUGEPAGES" -lt "$NEED_HUGEPAGES" ]; then
+    if [ "$CURRENT_HUGEPAGES" -ne "$NEED_HUGEPAGES" ]; then
         echo "$NEED_HUGEPAGES" > /proc/sys/vm/nr_hugepages 2>/dev/null || true
     fi
     HUGEPAGE_FREE=$(awk '/HugePages_Free:/ {print $2}' /proc/meminfo)
