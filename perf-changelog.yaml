@@ -6387,3 +6387,14 @@
     - "Replace the internal TileRT 0.1.5.post2+inferencex.1 queueing backport with the official 0.1.5.post3 PyPI wheel now that upstream has published it; remove the internal wheel builder and router patch"
     - "Bump the shared TileRT dependency and router metadata to 0.1.5.post3 for both fixed-seq-length and AgentX configurations while retaining the AgentX 1800-second queue timeout"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2650
+
+- config-keys:
+    - glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move the GLM-5.2 concurrency-1 AgentX point from an aggregated TP8 topology to a disaggregated 1-prefill/1-decode topology with TP4 attention-DP prefill and TP8 decode."
+    - "Use MTP depth 5 with the committed golden acceptance target, tensor-parallel MoE on decode, and the CUTEDSL top-k path."
+    - "Align recipe KV offloading with the master config and keep the benchmark client colocated with the frontend orchestrator."
+    - "Retire the superseded aggregated configuration key while retaining the existing disaggregated topology points."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
