@@ -91,7 +91,7 @@ install_agentic_deps
 export SKIP_KIMI_PATCHES=0
 export VLLM_DCP_BRANCH_ONLY=1
 export VLLM_DCP_BASE=aa52364caaf821af5b7a5cafa962ae0353f368b8
-export VLLM_DCP_BRANCH=yichaozhu/k3-draft-cache-fix
+export VLLM_DCP_BRANCH=yichaozhu/k3-dspark-dcp-runtime
 bash "$(dirname "$0")/apply_k3_container_patches.sh"
 
 # ---- Reference env block ----------------------------------------------------
