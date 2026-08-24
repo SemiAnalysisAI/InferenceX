@@ -364,6 +364,21 @@ echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
 export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS="${VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS:-1200}"
 
+
+# DCP shards decode KV across the TP ranks, so it must divide TP.
+DCP_SIZE="${DCP_SIZE:-8}"
+if [ $((TP % DCP_SIZE)) -ne 0 ]; then
+    echo "Error: TP='$TP' must be divisible by DCP_SIZE='$DCP_SIZE'" >&2
+    exit 1
+fi
+CP_ARGS=()
+if [ "$DCP_SIZE" -gt 1 ]; then
+    CP_ARGS+=(--decode-context-parallel-size "$DCP_SIZE" --dcp-comm-backend a2a)
+fi
+export VLLM_USE_DIRECT_DCP_A2A=1
+export VLLM_USE_DIRECT_DCP_Q_GATHER=1
+export VLLM_USE_DIRECT_DCP_KV_GATHER=1
+
 { set +x; } 2>/dev/null
 VLLM_CMD=(
     vllm serve "$MODEL_PATH" --served-model-name "$MODEL"
@@ -388,6 +403,7 @@ VLLM_CMD=(
     "${COMPILATION_CONFIG_ARGS[@]}"
     "${SPEC_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
+    "${CP_ARGS[@]}"
 )
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
 printf '\n' | tee -a "$RESULT_DIR/vllm_command.txt"
