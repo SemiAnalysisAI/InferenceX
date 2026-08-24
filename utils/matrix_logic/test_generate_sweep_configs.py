@@ -2609,7 +2609,38 @@ class TestGenerateFullSweepMixed:
 
 
 class TestAgentXPowerExperimentConfigs:
-    """Contracts for the controlled Qwen3.5 B300 power experiment."""
+    """Contracts for controlled Qwen3.5 power experiments."""
+
+    def test_qwen_h200_fp4_fp8_fixed_8k1k_matrix_is_balanced(self):
+        repo_root = Path(__file__).resolve().parents[2]
+        config = load_config_files([str(repo_root / "configs/nvidia-master.yaml")])
+        runners = load_runner_file(str(repo_root / "configs/runners.yaml"))
+        args = argparse.Namespace(
+            config_keys=[
+                "qwen3.5-fp8-h200-sglang",
+                "qwen3.5-fp4-h200-sglang",
+            ],
+            seq_lens=["8k1k"],
+            conc=[1, 2, 4, 8, 16, 32, 64],
+            scenario_type=["fixed-seq-len"],
+            runner_node_filter=None,
+        )
+
+        result = generate_test_config_sweep(args, config, runners)
+
+        assert len(result) == 14
+        assert {(row["precision"], row["conc"]) for row in result} == {
+            (precision, conc)
+            for precision in ("fp4", "fp8")
+            for conc in (1, 2, 4, 8, 16, 32, 64)
+        }
+        assert {row["image"] for row in result} == {
+            "lmsysorg/sglang:v0.5.14-cu130"
+        }
+        assert all(row["runner"] == "h200" for row in result)
+        assert all(row["tp"] == 8 and row["ep"] == 8 for row in result)
+        assert all(row["isl"] == 8192 and row["osl"] == 1024 for row in result)
+        assert all(row["spec-decoding"] == "none" for row in result)
 
     def test_qwen_b300_fp4_fp8_memory_tier_matrix_is_balanced(self):
         repo_root = Path(__file__).resolve().parents[2]
