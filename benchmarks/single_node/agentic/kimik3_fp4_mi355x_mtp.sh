@@ -319,6 +319,114 @@ apply_pr51171() {
 
 apply_pr51171
 
+#!/usr/bin/env bash
+# apply_pr53587.sh
+# -----------------------------------------------------------------------------
+# Apply vLLM PR #53587 "[ROCm] Allow full CUDA graphs with DCP for the a2a
+# backend" to the vLLM installed inside the container image
+#   vllm/vllm-openai-rocm:nightly-ba07e4a48fc951300d97eb506217dd530583dea3
+#   (vllm 0.26.1rc1.dev1046+gba07e4a48)
+#
+# The PR gates the ROCm DCP -> PIECEWISE cudagraph downgrade on
+#   parallel_config.dcp_comm_backend != "a2a"
+# so the non-direct all-to-all ("a2a") DCP reduce path (Triton pack/unpack over
+# private-pool torch.empty buffers) reaches FULL cudagraphs on gfx950, matching
+# CUDA. ag_rs (default) and prefill-context-parallel still downgrade.
+#
+# Safe to `source` OR `bash`. Idempotent. Backs up rocm.py to
+# rocm.py.orig_pr53587. Touches only the container's site-packages vLLM.
+#
+# Runtime note (NOT part of this patch): to actually exercise the FULL-cudagraph
+# a2a path, launch the server with
+#     --decode-context-parallel-size <N>   (N > 1)
+#     --dcp-comm-backend a2a
+#     --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE", ...}'
+# and DO NOT set VLLM_USE_DIRECT_DCP_A2A=1 -- the "direct" NVLS op
+# (direct_dcp_a2a_lse_reduce) is CUDA-only and absent from ROCm images.
+#
+# Usage (inside the container):
+#     source apply_pr53587.sh      # or:  bash apply_pr53587.sh
+# -----------------------------------------------------------------------------
+
+apply_pr53587() {
+    local sp f rc
+
+    sp="$(python -c 'import vllm, os; print(os.path.dirname(os.path.dirname(vllm.__file__)))' 2>/dev/null)"
+    if [ -z "$sp" ] || [ ! -d "$sp/vllm" ]; then
+        echo "[pr53587] ERROR: cannot locate installed vllm" >&2
+        return 1
+    fi
+    f="$sp/vllm/platforms/rocm.py"
+    if [ ! -f "$f" ]; then
+        echo "[pr53587] ERROR: $f not found" >&2
+        return 1
+    fi
+    echo "[pr53587] target: $f  (vllm $(python -c 'import vllm; print(vllm.__version__)' 2>/dev/null))"
+
+    PR53587_TARGET="$f" python - <<'PY'
+import os, sys, shutil, py_compile
+
+f = os.environ["PR53587_TARGET"]
+src = open(f).read()
+
+marker = 'parallel_config.dcp_comm_backend != "a2a"'
+if marker in src:
+    print("[pr53587] already applied (marker present); nothing to do.")
+    sys.exit(0)
+
+new_if = (
+    "            if (\n"
+    "                parallel_config.decode_context_parallel_size > 1\n"
+    '                and parallel_config.dcp_comm_backend != "a2a"\n'
+    "            ):"
+)
+new_comment = (
+    '            # Decode context parallel does not support full cudagraphs, except\n'
+    '            # for the all-to-all ("a2a") backend: its Triton pack/unpack kernels\n'
+    '            # and private-pool send/recv buffers are capture-safe, matching CUDA\n'
+    '            # (which does not downgrade this path).\n'
+)
+
+# Preferred anchor: the unique comment + if block under has_full_cudagraphs().
+old_block = (
+    "            # decode context parallel does not support full cudagraphs\n"
+    "            if parallel_config.decode_context_parallel_size > 1:"
+)
+old_if = "            if parallel_config.decode_context_parallel_size > 1:"
+
+if old_block in src:
+    out = src.replace(old_block, new_comment + new_if, 1)
+elif src.count(old_if) == 1:
+    # Comment text differs across image versions; the if-line is still unique.
+    out = src.replace(old_if, new_if, 1)
+else:
+    print("[pr53587] ERROR: could not find a unique DCP cudagraph anchor in "
+          "rocm.py; image layout differs -- not modifying.", file=sys.stderr)
+    sys.exit(1)
+
+shutil.copy(f, f + ".orig_pr53587")
+open(f, "w").write(out)
+try:
+    py_compile.compile(f, doraise=True)
+except py_compile.PyCompileError as e:
+    shutil.copy(f + ".orig_pr53587", f)   # roll back on syntax error
+    print("[pr53587] ERROR: py_compile failed, reverted:\n%s" % e, file=sys.stderr)
+    sys.exit(1)
+print("[pr53587] PATCHED (backup: %s.orig_pr53587); marker count=%d"
+      % (f, out.count(marker)))
+PY
+    rc=$?
+    if [ "$rc" -eq 0 ]; then
+        echo "[pr53587] done -- restart the vLLM server for it to take effect."
+    else
+        echo "[pr53587] FAILED (rc=$rc)." >&2
+    fi
+    return "$rc"
+}
+
+apply_pr53587
+
+
 # Fix LMCache "Unsupported kv_layout: none" on vLLM 0.26.x: re-add vLLM's
 # get_kv_cache_layout() and make LMCache read/normalize the resolved layout
 # (LBNHC->NHD) off the connector's config. Runs after the lmcache install
@@ -381,9 +489,9 @@ if [ "$DCP_SIZE" -gt 1 ]; then
     CP_ARGS+=(--decode-context-parallel-size "$DCP_SIZE" --dcp-comm-backend a2a)
     ATTN_BE_ARGS+=(--attention-backend TRITON_MLA)
 fi
-export VLLM_USE_DIRECT_DCP_A2A=1
-export VLLM_USE_DIRECT_DCP_Q_GATHER=1
-export VLLM_USE_DIRECT_DCP_KV_GATHER=1
+export VLLM_USE_DIRECT_DCP_A2A=0
+export VLLM_USE_DIRECT_DCP_Q_GATHER=0
+export VLLM_USE_DIRECT_DCP_KV_GATHER=0
 
 { set +x; } 2>/dev/null
 VLLM_CMD=(
