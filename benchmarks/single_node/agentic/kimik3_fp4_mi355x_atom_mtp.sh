@@ -5,8 +5,8 @@ set -x
 # Agentic trace replay benchmark for Kimi-K3 MXFP4 on MI355X / MI350X (gfx950)
 # using ATOM with DSpark speculative decoding.
 #
-# Companion to kimik3_fp4_mi355x_mtp.sh, which runs the same checkpoint and the
-# same concurrency points under vLLM, so the two arms are directly comparable.
+# Companion to kimik3_fp4_mi355x_mtp.sh, which runs the same checkpoint under
+# vLLM, so the two arms are directly comparable.
 #
 # TP=8 ONLY, for the same reason as the vLLM arm: the MXFP4 checkpoint is
 # 1.561 TB decimal (~195 GB/GPU across 8 GPUs of the 288 GB part), and TP=4
@@ -17,14 +17,14 @@ set -x
 # byte-for-byte and does not apply to this stack.
 #
 # Required env vars:
-#   MODEL, MODEL_PATH, TP, CONC, KV_OFFLOADING, KV_OFFLOAD_BACKEND,
+#   MODEL, MODEL_PATH, TP, DCP_SIZE, CONC, KV_OFFLOADING, KV_OFFLOAD_BACKEND,
 #   TOTAL_CPU_DRAM_GB, RESULT_DIR, DURATION, EP_SIZE, DP_ATTENTION
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
 
-echo "MODEL=$MODEL TP=$TP CONC=$CONC KV_OFFLOADING=$KV_OFFLOADING TOTAL_CPU_DRAM_GB=$TOTAL_CPU_DRAM_GB RESULT_DIR=$RESULT_DIR DURATION=$DURATION EP_SIZE=$EP_SIZE DP_ATTENTION=$DP_ATTENTION"
+echo "MODEL=$MODEL TP=$TP DCP_SIZE=${DCP_SIZE:-1} CONC=$CONC KV_OFFLOADING=$KV_OFFLOADING TOTAL_CPU_DRAM_GB=$TOTAL_CPU_DRAM_GB RESULT_DIR=$RESULT_DIR DURATION=$DURATION EP_SIZE=$EP_SIZE DP_ATTENTION=$DP_ATTENTION"
 
 if [[ -v SLURM_JOB_ID ]]; then
     echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
@@ -85,11 +85,117 @@ trap cleanup_agentic_services EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
+# ---- Per-concurrency knobs --------------------------------------------------
+# Concurrency 1-4 is the latency floor: everything GPU-resident, no decode
+# context parallelism, the deepest draft the golden curve publishes, and an
+# 8192-token prefill step.
+# From concurrency 8 up, decode is KV-bandwidth-bound over 100k+ token agentic
+# contexts, so DCP8 shards the KV read across all 8 GPUs and the LMCache DRAM
+# tier backs the paged KV.
+#
+# The LMCache paged-KV tier itself is not switched here: it follows
+# kv-offloading in configs/amd-master.yaml, which is `none` for concurrency 1-4
+# and `dram` from concurrency 8 up. What this block chooses is
+# STATE_OFFLOAD_CPU_GIB, the per-rank slice of that CPU budget reserved for the
+# Kimi Delta Attention recurrent state; 0 leaves the whole budget to the paged
+# KV and keeps the state in GPU checkpoints instead.
+case "$CONC" in
+    # No KV offload; the working set fits in HBM.
+    1|2|4)
+        MAX_NUM_SEQS=32
+        MAX_NUM_BATCHED_TOKENS=8192
+        GPU_MEM_UTIL=0.88
+        ATOM_ENABLE_REPLAYSSM=0
+        STATE_CHECKPOINT_SLOTS=""
+        NUM_SPEC_TOKENS=7
+        SPEC_DECODE_AL=3.84
+        STATE_OFFLOAD_CPU_GIB=0
+        ;;
+    # LMCache paged-KV tier on, whole per-rank budget; state stays in GPU
+    # checkpoints, which is what ReplaySSM replays from.
+    8)
+        MAX_NUM_SEQS=32
+        MAX_NUM_BATCHED_TOKENS=4096
+        GPU_MEM_UTIL=0.88
+        ATOM_ENABLE_REPLAYSSM=1
+        STATE_CHECKPOINT_SLOTS=96
+        NUM_SPEC_TOKENS=3
+        SPEC_DECODE_AL=3.00
+        STATE_OFFLOAD_CPU_GIB=0
+        ;;
+    12)
+        MAX_NUM_SEQS=24
+        MAX_NUM_BATCHED_TOKENS=4096
+        GPU_MEM_UTIL=0.88
+        ATOM_ENABLE_REPLAYSSM=1
+        STATE_CHECKPOINT_SLOTS=96
+        NUM_SPEC_TOKENS=3
+        SPEC_DECODE_AL=3.00
+        STATE_OFFLOAD_CPU_GIB=0
+        ;;
+    # LMCache paged-KV tier plus ATOM's CPU state tier, 32 GB/rank carved out
+    # for the KDA recurrent state.
+    16)
+        MAX_NUM_SEQS=32
+        MAX_NUM_BATCHED_TOKENS=8192
+        GPU_MEM_UTIL=0.86
+        ATOM_ENABLE_REPLAYSSM=0
+        STATE_CHECKPOINT_SLOTS=""
+        NUM_SPEC_TOKENS=3
+        SPEC_DECODE_AL=3.00
+        STATE_OFFLOAD_CPU_GIB=32
+        ;;
+    32)
+        MAX_NUM_SEQS=64
+        MAX_NUM_BATCHED_TOKENS=8192
+        GPU_MEM_UTIL=0.86
+        ATOM_ENABLE_REPLAYSSM=0
+        STATE_CHECKPOINT_SLOTS=""
+        NUM_SPEC_TOKENS=0
+        SPEC_DECODE_AL=0
+        STATE_OFFLOAD_CPU_GIB=32
+        ;;
+    40)
+        MAX_NUM_SEQS=80
+        MAX_NUM_BATCHED_TOKENS=8192
+        GPU_MEM_UTIL=0.86
+        ATOM_ENABLE_REPLAYSSM=0
+        STATE_CHECKPOINT_SLOTS=""
+        NUM_SPEC_TOKENS=0
+        SPEC_DECODE_AL=0
+        STATE_OFFLOAD_CPU_GIB=32
+        ;;
+    56)
+        MAX_NUM_SEQS=72
+        MAX_NUM_BATCHED_TOKENS=4096
+        GPU_MEM_UTIL=0.88
+        ATOM_ENABLE_REPLAYSSM=0
+        STATE_CHECKPOINT_SLOTS=""
+        NUM_SPEC_TOKENS=0
+        SPEC_DECODE_AL=0
+        STATE_OFFLOAD_CPU_GIB=32
+        ;;
+    *)
+        echo "Unsupported CONC=$CONC" >&2
+        exit 2
+        ;;
+esac
+export ATOM_ENABLE_REPLAYSSM
+
+# Extra in-GPU state checkpoint slots beyond the in-flight floor. Checkpoints
+# and live requests share one pool, so without this the room to retain a
+# checkpoint is whatever max-num-seqs happens to leave.
+STATE_CKPT_ARGS=()
+if [ -n "$STATE_CHECKPOINT_SLOTS" ]; then
+    STATE_CKPT_ARGS=(--state-checkpoint-slots "$STATE_CHECKPOINT_SLOTS")
+fi
+
 # ---- KV offload -------------------------------------------------------------
 # K3 is a hybrid: Kimi Delta Attention carries a per-request recurrent state
-# alongside the paged KV. Both tiers are switched together here, because the
-# state tier is what makes a resumed agentic turn cheap and the paged KV tier
-# alone cannot restore one.
+# alongside the paged KV. The paged KV rides this LMCache tier from
+# concurrency 8 up; from concurrency 16 up the CPU state tier is switched on
+# alongside it, because the state tier is what makes a resumed agentic turn
+# cheap and the paged KV tier alone cannot restore one.
 OFFLOAD_ARGS=()
 
 case "$KV_OFFLOAD_BACKEND" in
@@ -100,32 +206,39 @@ case "$KV_OFFLOAD_BACKEND" in
         require_agentic_kv_offload_backend lmcache
 
         # TOTAL_CPU_DRAM_GB is the AGGREGATE budget from the matrix generator.
-        # LMCACHE_MAX_LOCAL_CPU_SIZE is per rank and every rank allocates its
-        # own, so the aggregate is divided by TP as the agentic README
-        # requires. Handing a rank the whole aggregate does not just overcommit
-        # -- it never finishes pinning and hangs the launch partway through.
+        # LMCACHE_MAX_LOCAL_CPU_SIZE and OFFLOAD_STATE_CPU_SIZE are per rank and
+        # every rank allocates its own, so the aggregate is divided by TP as the
+        # agentic README requires. Handing a rank the whole aggregate does not
+        # just overcommit -- it never finishes pinning and hangs the launch
+        # partway through.
+        PER_RANK_CPU_GB="$((TOTAL_CPU_DRAM_GB / TP))"
+        LMCACHE_CPU_GB="$((PER_RANK_CPU_GB - STATE_OFFLOAD_CPU_GIB))"
+
         export PYTHONHASHSEED=0
         export LMCACHE_LOCAL_CPU=True
-        export LMCACHE_MAX_LOCAL_CPU_SIZE="$((TOTAL_CPU_DRAM_GB / TP))"
-        # One chunk per hash block, so the KV grid and the state-checkpoint
-        # grid coincide and the joint load aims both legs at one boundary.
-        export LMCACHE_CHUNK_SIZE=256
+        export LMCACHE_MAX_LOCAL_CPU_SIZE="$LMCACHE_CPU_GB"
+        # DCP-locked: the offload hash block is block-size(128) x dcp(8) = 1024,
+        # so the KV grid and the state-checkpoint grid coincide and the joint
+        # load aims both legs at one boundary. 512 or 2048 misaligns it.
+        export LMCACHE_CHUNK_SIZE=1024
+        export OFFLOAD_KV_FOR_HYBRID=1
+        # Statistics only -- per-step offload counters in the connector. Kept on
+        # because the submitted numbers were measured with it on.
+        export OFFLOAD_PROFILE=1
 
-        # OFFLOAD_PROFILE is deliberately left unset (default 0). The source
-        # recipe sets it to 1, but that only turns on per-step offload
-        # statistics in the connector, and the numbers behind this submission
-        # were measured with it off. Noted here so the difference from the
-        # recipe reads as a choice rather than an omission.
-
-        # CPU state-offload tier for the KDA recurrent state.
-        export OFFLOAD_STATE=1
-        export OFFLOAD_STATE_STAGING_GROUPS=8
-        export OFFLOAD_STATE_MIN_LOAD_TOKENS=0
-        # Must be set: the staging buffer defaults to 2 chunks (8 MiB), one K3
-        # state entry is 54.78 MiB, and a buffer too small to hold one entry
-        # makes the tier decline to build -- one log line, then nothing
-        # offloads, which reads exactly like a tier that is on and idle.
-        export OFFLOAD_GPU_STAGING_CHUNKS=16
+        if [ "$STATE_OFFLOAD_CPU_GIB" -gt 0 ]; then
+            # CPU state-offload tier for the KDA recurrent state.
+            export OFFLOAD_STATE=1
+            export OFFLOAD_STATE_CPU_SIZE="$STATE_OFFLOAD_CPU_GIB"
+            export OFFLOAD_STATE_STAGING_GROUPS=8
+            export OFFLOAD_STATE_MIN_LOAD_TOKENS=0
+            # Must be set: the staging buffer defaults to 2 chunks (8 MiB), one
+            # K3 state entry is 54.78 MiB, and a buffer too small to hold one
+            # entry makes the tier decline to build -- one log line, then
+            # nothing offloads, which reads exactly like a tier that is on and
+            # idle.
+            export OFFLOAD_GPU_STAGING_CHUNKS=32
+        fi
 
         OFFLOAD_ARGS=(
             --kv-transfer-config
@@ -148,76 +261,27 @@ export AITER_LOG_LEVEL="${AITER_LOG_LEVEL:-WARNING}"
 export AITER_SITUV2_A4W4=1
 export AITER_QUICK_REDUCE_QUANTIZATION=INT4
 export AITER_FLYDSL_STAGE2_FP8=1
-export ATOM_MLA_MAX_SPLIT_PER_BATCH=256
 # Anchor-only state checkpointing: the demand rung is 47% of checkpoint writes
 # but reads back 2.8% of the time, against 85.2% for a prompt-end anchor, so it
 # costs more in evictions than its reuse is worth on these traces.
 export ATOM_STATE_CHECKPOINT_DEMAND=0
 
-# ---- Per-concurrency knobs --------------------------------------------------
-case "$CONC" in
-    1|4)
-        MAX_NUM_SEQS=32
-        MAX_NUM_BATCHED_TOKENS=8192
-        GPU_MEM_UTIL=0.88
-        ATOM_ENABLE_REPLAYSSM=0
-        STATE_CHECKPOINT_SLOTS=""
-        ;;
-    8)
-        MAX_NUM_SEQS=16
-        MAX_NUM_BATCHED_TOKENS=8192
-        GPU_MEM_UTIL=0.88
-        ATOM_ENABLE_REPLAYSSM=1
-        STATE_CHECKPOINT_SLOTS=16
-        ;;
-    10)
-        MAX_NUM_SEQS=16
-        MAX_NUM_BATCHED_TOKENS=4096
-        GPU_MEM_UTIL=0.90
-        ATOM_ENABLE_REPLAYSSM=0
-        STATE_CHECKPOINT_SLOTS=16
-        ;;
-    *)
-        echo "Unsupported CONC=$CONC" >&2
-        exit 2
-        ;;
-esac
-export ATOM_ENABLE_REPLAYSSM
-
-# Extra in-GPU state checkpoint slots beyond the in-flight floor. Checkpoints
-# and live requests share one pool, so without this the room to retain a
-# checkpoint is whatever max-num-seqs happens to leave.
-STATE_CKPT_ARGS=()
-if [ -n "$STATE_CHECKPOINT_SLOTS" ]; then
-    STATE_CKPT_ARGS=(--state-checkpoint-slots "$STATE_CHECKPOINT_SLOTS")
-fi
-
 # ---- Speculative ------------------------------------------------------------
 # https://github.com/SemiAnalysisAI/InferenceX/blob/main/golden_al_distribution/kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml
-#  6 draft tokens -> AL 3.75
-#  2 draft tokens -> AL 2.51
-# https://github.com/ROCm/ATOM/pull/1948
-if [ "$CONC" = 1 ]; then
-    SPEC_DECODE_AL=3.75
-    NUM_SPEC_TOKENS=6
-else
-    SPEC_DECODE_AL=2.51
-    NUM_SPEC_TOKENS=2
-fi
-    
-if [ "${EVAL_ONLY}" = "true" ]; then
+#  7 draft tokens -> AL 3.84
+#  3 draft tokens -> AL 3.00
+# Concurrency 32 and up serve without a draft model: past the throughput knee
+# the draft forward no longer pays for itself against the resident batch.
+SPEC_ARGS=()
+if [ "$NUM_SPEC_TOKENS" -gt 0 ]; then
     SPEC_ARGS=(
         --method dspark
         --draft-model Inferact/Kimi-K3-DSpark
         --num-speculative-tokens "$NUM_SPEC_TOKENS"
     )
-else
-    SPEC_ARGS=(
-        --method dspark
-        --draft-model Inferact/Kimi-K3-DSpark
-        --num-speculative-tokens "$NUM_SPEC_TOKENS"
-        --spec-decode-acceptance-length "$SPEC_DECODE_AL"
-    )
+    if [ "${EVAL_ONLY}" != "true" ]; then
+        SPEC_ARGS+=(--spec-decode-acceptance-length "$SPEC_DECODE_AL")
+    fi
 fi
 echo "SPEC_DECODE_AL=$SPEC_DECODE_AL NUM_SPEC_TOKENS=$NUM_SPEC_TOKENS"
 
@@ -229,6 +293,7 @@ ATOM_CMD=(
     --server-port "$PORT"
     --trust-remote-code
     --tensor-parallel-size "$TP"
+    --decode-context-parallel-size "${DCP_SIZE:-1}"
     --kv_cache_dtype fp8
     --block-size 128
     --max-num-seqs "$MAX_NUM_SEQS"
