@@ -90,10 +90,6 @@ export AITER_SITUV2_A8W4=1
 export AITER_BF16_FP8_MOE_BOUND=0
 # REQUIRED on ROCm per the upstream recipe: the build auto-enables this to 1.
 export VLLM_USE_BREAKABLE_CUDAGRAPH=0
-# Pin the KV cache layout to NHD (== LBNHC). vLLM 0.26.x resolves this hybrid
-# model to LBNHC by default; exporting it explicitly also exposes the layout to
-# the LMCache connector, which otherwise reads "none" and rejects it.
-export VLLM_KV_CACHE_LAYOUT=NHD
 
 # Workaround for MEC FW <177 RCCL memory reclaim issue (shared with the other
 # gfx950 recipes in this tree).
