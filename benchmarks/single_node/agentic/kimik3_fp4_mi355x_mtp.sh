@@ -333,18 +333,18 @@ if [ "$EP_SIZE" -gt 1 ]; then
 fi
 
 # ---- Speculative ------------------------------------------------------------
-# Default to mtp to preserve this recipe's behavior; spec-decoding=none drops
-# --speculative-config entirely (required for DCP, which dspark does not support).
-SPEC_ARGS=()
-if [ "${SPEC_DECODING:-mtp}" = "mtp" ]; then
-    if [ "$CONC" = 1 ]; then
-        SYNTHETIC_ACCEPT_LEN=3.75
-        SPEC_NUM_TOKENS=6
-    else
-        SYNTHETIC_ACCEPT_LEN=2.51
-        SPEC_NUM_TOKENS=2
-    fi
+if [ "$CONC" = 1 ]; then
+    SYNTHETIC_ACCEPT_LEN=3.75
+    SPEC_NUM_TOKENS=6
+elif [ "$CONC" -le 10 ]; then
+    SYNTHETIC_ACCEPT_LEN=2.51
+    SPEC_NUM_TOKENS=2
+else
+    NUM_SPEC_TOKENS=0
+fi
 
+SPEC_ARGS=()
+if [ "$NUM_SPEC_TOKENS" -gt 0 ]; then
     if [ "${EVAL_ONLY:-false}" = "true" ]; then
         SPEC_ARGS=(
             --speculative-config
@@ -356,8 +356,6 @@ if [ "${SPEC_DECODING:-mtp}" = "mtp" ]; then
             "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
         )
     fi
-else
-    SPEC_NUM_TOKENS=0
 fi
 
 # ---- HIP graph ------------------------------------------------------------
@@ -380,9 +378,6 @@ fi
 CP_ARGS=()
 if [ "$DCP_SIZE" -gt 1 ]; then
     CP_ARGS+=(--decode-context-parallel-size "$DCP_SIZE" --dcp-comm-backend a2a)
-    KV_CACHE_DTYPE="auto"
-else
-    KV_CACHE_DTYPE="fp8"
 fi
 export VLLM_USE_DIRECT_DCP_A2A=1
 export VLLM_USE_DIRECT_DCP_Q_GATHER=1
@@ -406,7 +401,7 @@ VLLM_CMD=(
     --reasoning-parser kimi_k3
     --max-model-len 1048576
     --enable-prefix-caching
-    --kv-cache-dtype "$KV_CACHE_DTYPE"
+    --kv-cache-dtype "fp8"
     --max-num-batched-tokens 8192
     --attention-config '{"mla_prefill_backend":"ROCM_AITER_FA"}'
     "${COMPILATION_CONFIG_ARGS[@]}"
