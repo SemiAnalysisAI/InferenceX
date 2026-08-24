@@ -188,7 +188,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         cd "$SRT_REPO_DIR" || exit 1
         mkdir -p recipes/trtllm/deepseek-v4
         cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4" recipes/trtllm/deepseek-v4
-        cp "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/moe_load_balancer_"*.yaml configs/ 2>/dev/null || true
+        cp "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4/8k1k/b200/configs/moe_load_balancer_"*.yaml configs/ 2>/dev/null || true
     elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "kimik2.6" && $PRECISION == "fp4" ]]; then
         git clone --branch main --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR" || exit 1
