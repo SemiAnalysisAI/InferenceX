@@ -6397,6 +6397,7 @@
     - dsv4-fp4-b200-dynamo-vllm-mtp
     - dsv4-fp4-b300-dynamo-sglang-mtp
   description:
-    - "Enable optional dcgm-power telemetry on 37 eligible B200 and B300 recipes."
+    - "Enable required dcgm-power telemetry on 37 eligible recipes: 21 B200 and 16 B300."
+    - "Required lanes promote exporter startup timeouts, launch failures, and endpoint resolution failures to blocking validation failures, so a recipe cannot publish a result whose power collection never started."
     - "Route only enabled recipes through the immutable producer fork and preserve non-power launcher revisions."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2688

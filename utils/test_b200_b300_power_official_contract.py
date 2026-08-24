@@ -1,4 +1,4 @@
-"""Contract for optional B200/B300 multinode dcgm-power lanes."""
+"""Contract for required B200/B300 multinode dcgm-power lanes."""
 
 from __future__ import annotations
 
@@ -93,7 +93,7 @@ def test_exactly_37_supported_recipes_are_selected_from_the_master_config():
     assert dedicated == 15
 
 
-def test_every_selected_recipe_starts_with_the_optional_contract():
+def test_every_selected_recipe_uses_the_required_contract():
     for path, item in POWER_RECIPES.items():
         recipe = yaml.safe_load((REPO_ROOT / path).read_text(encoding="utf-8"))
         assert recipe["benchmark"]["type"] == "sa-bench", path
@@ -102,7 +102,7 @@ def test_every_selected_recipe_starts_with_the_optional_contract():
             "provider": "dcgm-power",
             "default_frequency": 1.0,
             "storage_subdir": "power",
-            "required": False,
+            "required": True,
             "startup_timeout_seconds": 120,
             "request_timeout_seconds": 2,
             "collector_join_timeout_seconds": 10,

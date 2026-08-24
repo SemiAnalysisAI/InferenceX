@@ -122,7 +122,7 @@ telemetry:
   provider: dcgm-power
   default_frequency: 1.0
   storage_subdir: power
-  required: false
+  required: true
   startup_timeout_seconds: 120
   request_timeout_seconds: 2
   collector_join_timeout_seconds: 10
