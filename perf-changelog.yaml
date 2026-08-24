@@ -6406,3 +6406,8 @@
     - "Image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc23; 16 prefill/decode worker-split points across DEP/TEP with and without MTP3"
     - "Ported from NVIDIA/InferenceMAX PR #177 (dsv4-fp4-b200-dynamo-trt), adapted to the b200-dgxc runner and existing dsv4 model-path resolution"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2721
+- config-keys:
+    - dsv4-fp4-b200-dynamo-trt
+  description:
+    - "Split the 8k1k/b200 dynamo-trt recipe directory into mtp/ (spec-decoding mtp3) and stp/ (no spec-decoding, mtp0) subfolders; no scenario or search-space changes"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2721
