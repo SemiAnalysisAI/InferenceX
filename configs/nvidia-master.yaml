@@ -974,7 +974,7 @@ dsv4-fp4-b200-vllm-agentic-mtp:
     - dram-utilization: 0.95
       search-space:
       # TP8 SimpleCPU + MTP
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [1, 4, 8, 16, 24] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [1, 4, 8, 14] }
       # DEP8 SimpleCPU + MTP
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [32, 64, 96, 128, 160, 196], router: { name: vllm-router, version: "0.1.14" } }
 
@@ -9895,7 +9895,7 @@ glm5.1-fp8-b200-tilert:
   runner: b200-multinode
   precision: fp8
   framework: tilert
-  router: { name: tilert-pd-router, version: "0.1.5.post2" }
+  router: { name: tilert-pd-router, version: "0.1.5.post3" }
   multinode: true
   disagg: true
   kv-p2p-transfer: nixl
@@ -9924,6 +9924,38 @@ glm5.1-fp8-b200-tilert:
     - isl: 8192
       osl: 1024
       search-space:
+      - spec-decoding: "mtp"
+        conc-list: [1]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_IMAGE=vllm/vllm-openai:v0.26.0"
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+
+glm5.1-fp8-b200-tilert-agentic:
+  image: ghcr.io/tile-ai/tilert:0.1.5
+  model: zai-org/GLM-5.1-FP8
+  model-prefix: glm5.1
+  runner: cluster:b200-dgxc
+  precision: fp8
+  framework: tilert
+  router: { name: tilert-pd-router, version: "0.1.5.post3" }
+  multinode: true
+  disagg: true
+  kv-p2p-transfer: nixl
+  scenarios:
+    agentic-coding:
+    - search-space:
       - spec-decoding: "mtp"
         conc-list: [1]
         prefill:
