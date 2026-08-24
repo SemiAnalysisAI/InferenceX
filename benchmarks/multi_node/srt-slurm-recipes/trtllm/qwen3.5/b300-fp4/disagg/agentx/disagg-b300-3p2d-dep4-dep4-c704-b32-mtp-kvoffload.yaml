@@ -16,7 +16,7 @@ dynamo:
 slurm:
   time_limit: 04:00:00
 sbatch_directives:
-  exclude: b300-001,b300-007
+  exclude: b300-001,b300-003,b300-005,b300-007
 health_check:
   max_attempts: 540
   interval_seconds: 10
@@ -43,7 +43,7 @@ backend:
     TRTLLM_PINNED_WEIGHT_STAGING: '1'
     TRTLLM_SERVER_DISABLE_GC: '1'
     TRTLLM_WORKER_DISABLE_GC: '1'
-    UCX_TLS: rc,cuda_ipc,cuda_copy,self,tcp
+    UCX_TLS: rc,cuda_ipc,cuda_copy,tcp
     UCX_LOG_LEVEL: info
     TRTLLM_KV_TRANSFER_NUM_THREADS: '8'
     DYN_ENGINE_CONV_AFFINITY: "1"
@@ -58,7 +58,7 @@ backend:
     TRTLLM_PINNED_WEIGHT_STAGING: '1'
     TRTLLM_SERVER_DISABLE_GC: '1'
     TRTLLM_WORKER_DISABLE_GC: '1'
-    UCX_TLS: rc,cuda_ipc,cuda_copy,self,tcp
+    UCX_TLS: rc,cuda_ipc,cuda_copy,tcp
     UCX_LOG_LEVEL: info
     TRTLLM_KV_TRANSFER_NUM_THREADS: '8'
     DYN_ENGINE_CONV_AFFINITY: "1"
