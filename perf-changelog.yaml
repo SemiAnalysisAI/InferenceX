@@ -6547,3 +6547,11 @@
     - "Filter AgentX traces at the same 202,752-token context limit used by both TileRT roles so oversized Weka trajectories are excluded before replay."
     - "Pin SemiAnalysisAI/srt-slurm PR #10 commit d1e6c97b3baf3e87103b6d83189544c3c7d61c38, stacked on the AMD/native-router PR #7 and base runtime PR #1, including explicit native HTTP dependencies, GLM-5.1-compatible Transformers v5 router tokenization, incomplete-snapshot recovery, backend-declared conversion GPU resources, pre-container NVIDIA driver-hook activation, and lossless Slurm container-environment exports."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2750
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-trt-agentx
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Set OMP_NUM_THREADS=1 for the prefill and decode workers across the GB300 Dynamo-TensorRT-LLM AgentX recipe matrix."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
