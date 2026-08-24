@@ -313,14 +313,42 @@ else
         BENCHMARK_SCRIPT="$SCRIPT_FALLBACK"
     fi
 
+    RDMA_MOUNTS=""
+    if [[ "${KV_OFFLOAD_BACKEND:-}" == "mooncake" ]]; then
+        # The host plugin entries are relative symlinks to libionic outside the
+        # plugin directory. Dereference them into the mounted workspace.
+        RDMA_MOUNTS=$(srun --jobid=$JOB_ID bash -c '
+            m=""
+            add() { [ -e "$1" ] && m="${m},${1}:${2}"; }
+            add /dev/infiniband /dev/infiniband
+            add /etc/libibverbs.d /etc/libibverbs.d
+            echo "$m"
+        ')
+        echo "RDMA mounts for the container:${RDMA_MOUNTS}"
+        srun --jobid=$JOB_ID bash -c 'ls /sys/class/infiniband 2>/dev/null | tr "\n" " "; echo'
+        srun --jobid=$JOB_ID bash -c '
+            dst="'"$GITHUB_WORKSPACE"'/rdma-host-libs"
+            rm -rf "$dst"
+            mkdir -p "$dst/plugins"
+            if [ -d /usr/lib/x86_64-linux-gnu/libibverbs ]; then
+                cp -aL /usr/lib/x86_64-linux-gnu/libibverbs/. "$dst/plugins/"
+            fi
+            cp -a /usr/lib/x86_64-linux-gnu/libionic.so* "$dst/" 2>/dev/null || true
+            ls -l "$dst" "$dst/plugins" | head -40
+        '
+        srun --jobid=$JOB_ID \
+            bash "$GITHUB_WORKSPACE/benchmarks/single_node/agentic/setup_k3_mooncake_host.sh" \
+            "$TOTAL_CPU_DRAM_GB"
+    fi
+
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
-        --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache \
+        --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache$RDMA_MOUNTS \
         $SLRUM_HOME_MOUNT \
         --container-writable \
         --container-workdir=/workspace/ \
         --container-remap-root \
-        --no-container-entrypoint --export=ALL,AIPERF_DATASET_MMAP_CACHE_DIR=/aiperf_mmap_cache \
+        --no-container-entrypoint --propagate=RLIMIT_MEMLOCK --export=ALL,AIPERF_DATASET_MMAP_CACHE_DIR=/aiperf_mmap_cache \
         bash "$BENCHMARK_SCRIPT"
     benchmark_rc=$?
 

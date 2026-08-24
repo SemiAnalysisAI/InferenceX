@@ -623,7 +623,7 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
           - "DECODE_MTP_SIZE=2"
 
 kimik3-fp4-mi355x-vllm-agentic-mtp:
-  image: vllm/vllm-openai-rocm:nightly-cb8104839c141609d99f1254459ef3a4f1bd4263
+  image: yukiozzz/vllm-openai-rocm:k3-dspark-dcp-cache-eb61e4c76-mooncake4c6d23c8
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:mi355x-amds
@@ -632,10 +632,12 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
   multinode: false
   scenarios:
     agentic-coding:
+    # 0.50 yields ~1.5 TB of Mooncake capacity on a 3 TB node. The previous
+    # 0.80 arm reserved ~2.7 TB of hugepages after slack and left ROCm only
+    # ~300 GB of normal host memory, ending warmup with HSA 0x1008.
     - dram-utilization: 0.50
       search-space:
-      - { tp: 8, kv-offloading: none, conc-list: [1, 4, 8] , spec-decoding: mtp}
-      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [10], spec-decoding: mtp }
+      - { tp: 8, dcp-size: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "4c6d23c8" }, conc-list: [16], spec-decoding: mtp }
 
 # Kimi-K3 MXFP4 agentic-coding benchmark on MI355X via ATOM with DSpark
 # speculative decoding (2 draft tokens -> golden AL 2.51,
