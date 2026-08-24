@@ -6380,30 +6380,10 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2707
 
 - config-keys:
-    - glm5.1-fp8-b200-tilert-agentic
-  scenario-type:
-    - agentic-coding
-  description:
-    - "Add the agentic-coding scenario for GLM-5.1 FP8 B200 TileRT PD-disaggregation, reusing the fixed-seq-len topology (1 prefill node TP8 + 1 decode node TP8, NIXL KV transfer, MTP) with an AIPerf trace replay in place of benchmark_serving.py"
-    - "Separate config key rather than a second scenario on glm5.1-fp8-b200-tilert: agentic master configs must declare an exact cluster:<name> runner, so this entry uses the existing cluster:b200-dgxc runner label"
-    - "Pin TileRT to the published 0.1.5.post2 wheel; decode serves one sequence at a time, so conc-list is the single point [1]"
-    - "kv-offloading: none -- TileRT keeps all KV state on the GPU and exposes no DRAM offload tier"
-    - "GLM-5.1 has 202752 native positions, so AIPerf's --max-context-length drops the corpus traces whose peak context exceeds it: 175 of the 393 traces in cc-traces-weka-062126-256k remain eligible"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2650
-
-- config-keys:
-    - glm5.1-fp8-b200-tilert-agentic
-  scenario-type:
-    - agentic-coding
-  description:
-    - "Replace the unavailable upstream TileRT post3 dependency with the reproducible 0.1.5.post2+inferencex.1 queueing backport: preserve the official post2 native libraries, patch only pd_router.py, and pin the internal release wheel by URL and SHA256"
-    - "Wait up to 1800 seconds for the single decode node instead of returning HTTP 429 immediately; this addresses AgentX intra-session fan-out while keeping the benchmark concurrency point at 1"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2650
-
-- config-keys:
     - glm5.1-fp8-b200-tilert
     - glm5.1-fp8-b200-tilert-agentic
   description:
+    - "Update 8k1kTileRT results, add AgentX results"
     - "Replace the internal TileRT 0.1.5.post2+inferencex.1 queueing backport with the official 0.1.5.post3 PyPI wheel now that upstream has published it; remove the internal wheel builder and router patch"
     - "Bump the shared TileRT dependency and router metadata to 0.1.5.post3 for both fixed-seq-length and AgentX configurations while retaining the AgentX 1800-second queue timeout"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2650
