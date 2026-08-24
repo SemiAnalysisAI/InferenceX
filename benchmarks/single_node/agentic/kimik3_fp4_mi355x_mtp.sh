@@ -340,7 +340,7 @@ elif [ "$CONC" -le 10 ]; then
     SYNTHETIC_ACCEPT_LEN=2.51
     SPEC_NUM_TOKENS=2
 else
-    NUM_SPEC_TOKENS=0
+    SPEC_NUM_TOKENS=0
 fi
 
 SPEC_ARGS=()
