@@ -6554,4 +6554,5 @@
     - agentic-coding
   description:
     - "Set OMP_NUM_THREADS=1 for the prefill and decode workers across the GB300 Dynamo-TensorRT-LLM AgentX recipe matrix."
+    - "Allow the frontend and benchmark environments to inherit the runtime KV offloading setting."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2711
