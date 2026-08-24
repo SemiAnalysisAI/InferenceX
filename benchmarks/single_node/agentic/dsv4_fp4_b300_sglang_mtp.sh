@@ -313,7 +313,16 @@ if [ "$USE_SGLANG_ROUTER" = "true" ]; then
         --connect-timeout-secs 900 \
         --request-timeout-secs 14400 \
         --disable-health-check \
-        --disable-retries > "$ROUTER_LOG" 2>&1 &
+        `# A single transient router->engine send failure would otherwise` \
+        `# surface as a 500, and AgentX aborts the whole run when a root` \
+        `# warmup request fails ("ProfileAborted"). Measured at conc 512:` \
+        `# 22 such transients in one 3600s run, spread over all 8 DP` \
+        `# workers, every one of them recovered by the retry; with retries` \
+        `# disabled a single one killed a 2h15m arm.` \
+        --retry-max-retries 8 \
+        --retry-initial-backoff-ms 500 \
+        --retry-max-backoff-ms 10000 \
+        --retry-backoff-multiplier 2 > "$ROUTER_LOG" 2>&1 &
     ROUTER_PID=$!
     echo "Router PID: $ROUTER_PID"
     wait_for_ready \
