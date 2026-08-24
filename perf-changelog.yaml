@@ -6576,3 +6576,12 @@
     - "Recipes sourced from srt-slurm (recipes/trtllm/qwen3.5-fp4/inferencex/gb300/{mtp,stp})."
     - "Runner: launch_gb300-nv.sh bumped from NVIDIA/srt-slurm@v1.0.29 to v1.0.72 for the dynamo-trt+qwen3.5+fp4 path."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2730
+
+- config-keys:
+    - dsv4-fp4-b200-sglang-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "On the DP-attention path, remove --enable-prefill-delayer and increase --prefill-decode-interval from 10 to 20 to improve the P90 TTFT and TPOT balance."
+    - "Retain the existing TP8/DP8/EP8 topology, HiCache, MegaMoE, 65536-token global chunked-prefill budget, and 2x-concurrency request and CUDA-graph limits."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

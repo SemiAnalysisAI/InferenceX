@@ -110,8 +110,7 @@ if [ "$DP_ATTENTION" = "true" ]; then
     PARALLEL_ARGS+=(
         --dp "$TP"
         --tokenizer-worker-num "$TP"
-        --enable-prefill-delayer
-        --prefill-decode-interval 10
+        --prefill-decode-interval 20
         --enable-dp-attention
         --enable-dp-attention-local-control-broadcast
         --incremental-streaming-output
