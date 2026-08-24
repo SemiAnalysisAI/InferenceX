@@ -330,6 +330,27 @@ jobs:
             done
           fi
 
+      - name: Repair stale git state (pre-run)
+        run: |
+          # Interrupted runs leave index.lock files and corrupt submodule git
+          # dirs behind in the persistent self-hosted workspace, and both make
+          # actions/checkout fail before any benchmark starts. The runner
+          # executes one job at a time, so any lock found here is stale by
+          # definition; a submodule git dir whose HEAD no longer resolves is
+          # dropped together with its worktree so checkout re-clones it.
+          repo_dir="${{ github.workspace }}"
+          if [ -d "${repo_dir}/.git" ]; then
+            find "${repo_dir}/.git" -name index.lock -type f -delete || true
+            for gitdir in "${repo_dir}"/.git/modules/* "${repo_dir}"/.git/modules/*/*; do
+              [ -f "${gitdir}/HEAD" ] || continue
+              if ! git --git-dir="${gitdir}" rev-parse --verify 'HEAD^{commit}' >/dev/null 2>&1; then
+                rel="${gitdir##*/.git/modules/}"
+                echo "[git-repair] Removing corrupt submodule state: ${rel}"
+                rm -rf "${gitdir}" "${repo_dir:?}/${rel}"
+              fi
+            done
+          fi
+
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           token: ${{ secrets.REPO_PAT }}
