@@ -623,7 +623,9 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
           - "DECODE_MTP_SIZE=2"
 
 kimik3-fp4-mi355x-vllm-agentic-mtp:
-  image: vllm/vllm-openai-rocm:nightly-a3561ef8e49d3545c4078df43444beb4c98ae124 
+  #image: vllm/vllm-openai-rocm:nightly-a3561ef8e49d3545c4078df43444beb4c98ae124 
+  # before https://github.com/vllm-project/vllm/pull/51718 
+  image: vllm/vllm-openai-rocm:nightly-ba07e4a48fc951300d97eb506217dd530583dea3
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:mi355x-amds
@@ -632,7 +634,7 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
   multinode: false
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.40
+    - dram-utilization: 0.50
       search-space:
       #- { tp: 8, kv-offloading: none, conc-list: [1] , spec-decoding: mtp}
       #- { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.5.dev11+rocm7.2" }, conc-list: [4, 8, 10, 12, 16, 20], spec-decoding: mtp }
