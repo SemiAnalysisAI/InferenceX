@@ -59,6 +59,17 @@ def test_power_agentx_lanes_use_exact_fork_sha_and_kimi_clone_is_unchanged():
 
     assert '"$MODEL_PREFIX" == "dsv4"' in launcher
 
+    # Only the power lane may swap the runtime; non-power AgentX runs keep the
+    # NVIDIA release their perf-changelog provenance records.
+    assert (
+        "git clone --branch v1.0.44 --single-branch https://github.com/NVIDIA/srt-slurm.git"
+        in launcher
+    )
+    assert (
+        "git clone --branch v1.0.38 --single-branch https://github.com/NVIDIA/srt-slurm.git"
+        in launcher
+    )
+
     # Kimi remains deliberately outside this PR.
     assert "https://github.com/functionstackx/srt-slurm-nv.git" in launcher
     assert "df5baa93f4caf5169dea2a4236ad2cc742fe40e7" in launcher
