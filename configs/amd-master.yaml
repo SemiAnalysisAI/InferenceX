@@ -640,7 +640,8 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
       #- { tp: 8, kv-offloading: none, conc-list: [1] , spec-decoding: mtp}
       #- { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.5.dev11+rocm7.2" }, conc-list: [4, 8, 10, 12], spec-decoding: mtp }
       #- { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.5.dev11+rocm7.2" }, conc-list: [12], spec-decoding: mtp }
-      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.5.dev11+rocm7.2" }, conc-list: [12], spec-decoding: mtp }
+      #- { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.5.dev11+rocm7.2" }, conc-list: [12], spec-decoding: mtp }
+      - { tp: 8, ep: 1, dcp-size: 1, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.5.dev11+rocm7.2" }, conc-list: [20, 30], spec-decoding: mtp }
 
       #- { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [4, 8, 10, 12, 16, 20], spec-decoding: mtp }
       #- { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [12], spec-decoding: mtp }
