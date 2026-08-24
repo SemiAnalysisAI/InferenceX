@@ -6409,3 +6409,12 @@
     - "Require dcgm-power telemetry on the GLM-5.2 H200 disaggregated AgentX recipe."
     - "Enable dcgm-power telemetry on the DSV4 H200 aggregated AgentX recipe."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2684
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Append only the proven GB300 AgentX P/D points: DEP8/DEP16 at concurrency 512 and DEP4 with four TP8 decode workers at concurrency 4."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2665
+  append-only: true
