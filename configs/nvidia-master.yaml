@@ -9974,9 +9974,6 @@ glm5.1-fp8-b200-tilert-agentic:
           additional-settings:
           - "DECODE_NODES=1"
 
-          ep: 16
-          dp-attn: true
-
 dsv4-fp4-b200-dynamo-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc23
   model: deepseek-ai/DeepSeek-V4-Pro
