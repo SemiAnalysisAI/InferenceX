@@ -19,6 +19,7 @@ GB200_LAUNCHER = REPO_ROOT / "runners/launch_gb200-nv.sh"
 GB300_LAUNCHER = REPO_ROOT / "runners/launch_gb300-nv.sh"
 TMPL_PATH = REPO_ROOT / ".github/workflows/benchmark-multinode-tmpl.yml"
 PROCESS_RESULT_WORKFLOW = REPO_ROOT / ".github/workflows/test-process-result.yml"
+MASTER_CONFIG_REL = "configs/nvidia-master.yaml"
 PROCESS_RESULT_RECIPE_GLOBS = (
     "benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/**/*.yaml",
     "benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb200-*/**/*.yaml",
@@ -167,7 +168,7 @@ def _config_file_values(value):
 
 
 def _master_gb_recipe_runners():
-    master = yaml.safe_load((REPO_ROOT / "configs/nvidia-master.yaml").read_text())
+    master = yaml.safe_load((REPO_ROOT / MASTER_CONFIG_REL).read_text())
     runners = {}
     for config in master.values():
         if not isinstance(config, dict):
@@ -318,3 +319,7 @@ def test_process_result_workflow_watches_all_gb_power_recipe_families():
         covered.update(result.stdout.splitlines())
 
     assert set(GB_POWER_CANDIDATES) <= covered
+    # Candidate eligibility and exporter ports are derived from the master
+    # config, so a runner/framework/disagg edit there moves this set without
+    # touching any recipe.
+    assert f"- '{MASTER_CONFIG_REL}'" in workflow

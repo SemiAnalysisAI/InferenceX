@@ -11,6 +11,7 @@ on:
       - 'benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/**/*.yaml'
       - 'benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb200-*/**/*.yaml'
       - 'benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb300-*/**/*.yaml'
+      - 'configs/nvidia-master.yaml'
       - 'runners/launch_gb200-nv.sh'
       - 'runners/launch_gb300-nv.sh'
       - 'utils/aggregate_power.py'
