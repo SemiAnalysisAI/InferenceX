@@ -104,19 +104,6 @@ index 3e86b51696..6ce9179699 100644
                  if drop_eagle_block:
                      eagle_verified.add(idx)
                  elif _new_hit_length < curr_hit_length:
-diff --git a/vllm/distributed/kv_transfer/kv_connector/v1/mooncake/store/worker.py b/vllm/distributed/kv_transfer/kv_connector/v1/mooncake/store/worker.py
-index cfcae7d322..91b3003f08 100644
---- a/vllm/distributed/kv_transfer/kv_connector/v1/mooncake/store/worker.py
-+++ b/vllm/distributed/kv_transfer/kv_connector/v1/mooncake/store/worker.py
-@@ -114,7 +114,7 @@ def _make_mooncake_group_id(metadata: KeyMetadata, chunk_hash: str) -> str:
- DEFAULT_MOONCAKE_DISK_STAGING_BUFFER_BYTES = 1280 * 1024 * 1024
- # Bound each rank's PUT wave so concurrent TP ranks fit in a standalone
- # owner's registered memory while completed waves are offloaded to disk.
--_MOONCAKE_SAVE_BATCH_BYTES = 64 * 1024 * 1024
-+_MOONCAKE_SAVE_BATCH_BYTES = 16 * 1024 * 1024
- _MOONCAKE_SAVE_PRESSURE_RETRIES = 5
- 
- # Mirrors DirectIO alignment in Mooncake's AllocateBatch.
 diff --git a/vllm/v1/core/kv_cache_coordinator.py b/vllm/v1/core/kv_cache_coordinator.py
 index 6db610d4b5..8e9e199f70 100644
 --- a/vllm/v1/core/kv_cache_coordinator.py
