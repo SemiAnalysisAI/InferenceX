@@ -6387,3 +6387,11 @@
     - "Replace the internal TileRT 0.1.5.post2+inferencex.1 queueing backport with the official 0.1.5.post3 PyPI wheel now that upstream has published it; remove the internal wheel builder and router patch"
     - "Bump the shared TileRT dependency and router metadata to 0.1.5.post3 for both fixed-seq-length and AgentX configurations while retaining the AgentX 1800-second queue timeout"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2650
+
+- config-keys:
+    - dsv4-fp4-b200-llmd-vllm-agentx
+  description:
+    - "Add DeepSeek-V4-Pro FP4 B200 llmd-vllm P/D disagg benchmark (1P DEP8 + 1D DEP8, 2 nodes / 16 GPUs), porting the agentX (llm-manifesto/agentx-mvp) EPP scheduling config and per-role vLLM tuning"
+    - "Wire a FRAMEWORK==llmd-vllm dispatch into runners/launch_b200-dgxc-slurm.sh (self-contained, bypasses the srtctl/srt-slurm path used by the other B200 multinode frameworks)"
+    - "Pin a B200-only EPP/pd-sidecar v0.10.0 binary override (LLMD_BIN_DIR) for the disagg-profile-handler deciders: EPP shape; GB200's shared v0.9.0 binaries/path are untouched"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PLACEHOLDER

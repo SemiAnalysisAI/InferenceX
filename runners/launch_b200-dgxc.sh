@@ -129,6 +129,141 @@ fi
 export AIPERF_MMAP_CACHE_HOST_PATH="/lustre/fsw/gharunners/aiperf-cache"
 
 if [[ "$IS_MULTINODE" == "true" ]]; then
+    if [[ "$FRAMEWORK" == "llmd-vllm" ]]; then
+        # Self-contained: bypasses the srtctl/srt-slurm path entirely (the
+        # "Validate framework" guard and the dsv4-only-dynamo-vllm guard
+        # further below are srtctl-specific and are never reached from here).
+        # MODEL_PATH is already resolved above (the dsv4/fp4 branch); llm-d
+        # additionally needs MODEL_NAME (served-model-name), which this file
+        # doesn't otherwise set outside the srtctl block - reuse $MODEL (the
+        # master-config `model:` field), matching this file's own
+        # `export SERVED_MODEL_NAME=$MODEL` convention below.
+        if [[ ! ( "$MODEL_PREFIX" == "dsv4" && "$PRECISION" == "fp4" ) ]]; then
+            echo "Unsupported MODEL_PREFIX/PRECISION for llmd-vllm on B200: $MODEL_PREFIX/$PRECISION" >&2
+            exit 1
+        fi
+        export MODEL_NAME="$MODEL"
+
+        source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
+
+        # Enroot 3.x does not parse Docker's tag@digest syntax (the llm-d
+        # image is digest-pinned); build the explicit registry#repo:digest
+        # URI enroot expects.
+        llmd_enroot_uri_for_image() {
+            local image="$1"
+            local image_without_digest="$image"
+            local digest=""
+            local first_component registry repository
+
+            if [[ "$image" == *@sha256:* ]]; then
+                image_without_digest="${image%@*}"
+                digest="${image##*@}"
+            fi
+
+            first_component="${image_without_digest%%/*}"
+            if [[ "$image_without_digest" == */* && ( "$first_component" == *.* || "$first_component" == *:* || "$first_component" == "localhost" ) ]]; then
+                registry="$first_component"
+                repository="${image_without_digest#*/}"
+            else
+                registry="registry-1.docker.io"
+                repository="$image_without_digest"
+            fi
+
+            if [[ -z "$digest" ]]; then
+                if [[ "$registry" == "registry-1.docker.io" ]]; then
+                    printf 'docker://%s\n' "$image"
+                else
+                    printf 'docker://%s#%s\n' "$registry" "$repository"
+                fi
+                return
+            fi
+            if [[ "$registry" == "registry-1.docker.io" && "$repository" != */* ]]; then
+                repository="library/$repository"
+            fi
+            printf 'docker://%s#%s:%s\n' "$registry" "$repository" "$digest"
+        }
+
+        # Separate name from this file's existing (later) `import_squash` used
+        # by the srtctl path, to avoid redefining that function.
+        llmd_import_squash() {
+            local squash="$1" image="$2"
+            local lock="${squash}.lock"
+            local enroot_uri
+            enroot_uri=$(llmd_enroot_uri_for_image "$image") || exit 1
+            (
+                exec 9>"$lock"
+                flock -w 1800 9 || { echo "Failed to acquire lock for $squash" >&2; exit 1; }
+                if unsquashfs -l "$squash" > /dev/null 2>&1; then
+                    echo "Squash file already exists and is valid, skipping import: $squash"
+                else
+                    rm -f "$squash"
+                    if ! enroot import -o "$squash" "$enroot_uri"; then
+                        echo "Error: enroot import failed for $enroot_uri" >&2
+                        exit 1
+                    fi
+                fi
+            ) || exit 1
+        }
+
+        LLMD_SQUASH_DIR="${LLMD_SQUASH_DIR:-/home/sa-shared/containers}"
+        mkdir -p "$LLMD_SQUASH_DIR" 2>/dev/null || true
+        LLMD_SQUASH_FILE="${LLMD_SQUASH_DIR}/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+        llmd_import_squash "$LLMD_SQUASH_FILE" "$IMAGE"
+
+        export LLMD_CONTAINER_ENGINE=pyxis
+        export LLMD_SQUASH_FILE
+
+        # B200-only EPP/pd-sidecar binary pin (v0.10.0, needed for the
+        # agentX-ported disagg-profile-handler `deciders:` EPP shape). Points
+        # at a dedicated path so it never collides with GB200's shared
+        # binaries.env / v0.9.0 path - see benchmarks/llm-d/binaries.env for
+        # the mechanism. NOTE: this path must be populated once (out of band,
+        # on a host with docker + registry access) via:
+        #   LLMD_BIN_DIR=/home/sa-shared/llm-d-bins-v0.10.0 \
+        #   EPP_FROM_IMAGE=ghcr.io/llm-d/llm-d-router-endpoint-picker:v0.10.0 \
+        #   ROUTING_SIDECAR_IMAGE=ghcr.io/llm-d/llm-d-router-disagg-sidecar:v0.10.0 \
+        #   benchmarks/llm-d/extract-binaries.sh
+        # before this recipe can actually run; job.slurm's pyxis mount loop is
+        # a no-op (falls back to the image's baked-in v0.9.0) until then.
+        export LLMD_BIN_DIR="${LLMD_BIN_DIR:-/home/sa-shared/llm-d-bins-v0.10.0}"
+
+        export DOCKER_IMAGE_NAME=$IMAGE
+        export BENCHMARK_LOGS_DIR="$GITHUB_WORKSPACE/benchmark_logs"
+        mkdir -p "$BENCHMARK_LOGS_DIR"
+
+        SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_b200_llmd-vllm-disagg.sh"
+        BENCH_SCRIPT="benchmarks/multi_node/${SCRIPT_NAME}"
+        if [[ ! -f "$BENCH_SCRIPT" ]]; then
+            echo "Error: llm-d wrapper not found: $BENCH_SCRIPT" >&2
+            exit 1
+        fi
+
+        JOB_ID=$(bash "$BENCH_SCRIPT")
+        if [[ -z "$JOB_ID" ]]; then
+            echo "Error: failed to submit llm-d job" >&2
+            exit 1
+        fi
+        echo "Submitted llm-d job: $JOB_ID"
+
+        trap 'bundle_server_logs "$BENCHMARK_LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"; scancel "$JOB_ID" 2>/dev/null || true' EXIT INT TERM HUP
+
+        LOG_FILE="${BENCHMARK_LOGS_DIR}/slurm_job-${JOB_ID}.out"
+        stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || exit 1
+
+        while IFS= read -r -d '' result_file; do
+            copy_to_workspace "$result_file" "$GITHUB_WORKSPACE/$(basename "$result_file")" || exit 1
+        done < <(find "$BENCHMARK_LOGS_DIR" -name "${RESULT_FILENAME}*.json" -print0 2>/dev/null)
+
+        if [[ "${RUN_EVAL:-false}" == "true" ]]; then
+            EVAL_DIR=$(find "$BENCHMARK_LOGS_DIR" -type d -name eval_results -print -quit 2>/dev/null)
+            [[ -z "$EVAL_DIR" ]] && EVAL_DIR="$BENCHMARK_LOGS_DIR/eval_results"
+            copy_eval_artifacts "$EVAL_DIR" "$GITHUB_WORKSPACE" || exit 1
+        fi
+
+        scancel "$JOB_ID" 2>/dev/null || true
+        exit 0
+    fi
+
     if [[ "$FRAMEWORK" == "tilert" ]]; then
         export SLURM_PARTITION SLURM_ACCOUNT
         export TILERT_WEIGHTS_DIR="${TILERT_WEIGHTS_DIR:-/lustre/fsw/gharunners/models/${MODEL_PREFIX}-${PRECISION}-tilert-8shard}"
