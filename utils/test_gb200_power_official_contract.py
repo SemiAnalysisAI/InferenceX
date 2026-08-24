@@ -155,21 +155,6 @@ def test_pin_literal_lives_only_in_the_two_launchers():
     ]
 
 
-# Recipes with hardware proof may fail closed immediately. Newly eligible
-# recipes start optional until their own cluster smoke establishes the same
-# artifact contract.
-REQUIRED_POWER_RECIPES = {
-    "benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/8k1k/disagg-gb200-1p1d-dep8-dep16-6-c512.yaml": 9401,
-    "benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/8k1k/disagg-gb200-1p1d-tp8-tp8-4-c1.yaml": 9401,
-    "benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/8k1k/disagg-gb200-1p2d-dep8-dep16-10-c256.yaml": 9401,
-    "benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/8k1k/disagg-gb300-1p1d-dep4-dep16-5-c1024.yaml": 19401,
-    "benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/8k1k/disagg-gb300-1p1d-tp4-tp4-2-c1.yaml": 19401,
-    "benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb200-fp8/8k1k/1p1d-tp4-tp4.yaml": 9401,
-    "benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb300-fp4/8k1k/disagg/stp/8k1k_stp_lowlat_0.yaml": 19401,
-    "benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb300-fp8/8k1k/1p1d-tp4-tp4.yaml": 19401,
-}
-
-
 def _config_file_values(value):
     if isinstance(value, dict):
         for child in value.values():
@@ -247,8 +232,6 @@ def test_exactly_the_declared_recipes_opt_into_dcgm_power():
 
     assert len(GB_POWER_CANDIDATES) == 61
     assert len(ELIGIBLE_POWER_RECIPES) == 59
-    assert len(REQUIRED_POWER_RECIPES) == 8
-    assert len(ELIGIBLE_POWER_RECIPES) - len(REQUIRED_POWER_RECIPES) == 51
     assert relevant_hits == set(ELIGIBLE_POWER_RECIPES)
     assert INELIGIBLE_POWER_RECIPES == {
         "benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb200-fp8/8k1k/8p1d-dep4-dep16.yaml",
@@ -264,7 +247,7 @@ def test_every_power_recipe_declares_the_same_telemetry_contract():
             "provider": "dcgm-power",
             "default_frequency": 1.0,
             "storage_subdir": "power",
-            "required": path in REQUIRED_POWER_RECIPES,
+            "required": True,
             "startup_timeout_seconds": 120,
             "request_timeout_seconds": 2,
             "collector_join_timeout_seconds": 10,
