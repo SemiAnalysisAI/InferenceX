@@ -344,7 +344,7 @@ else
 fi
 
 SPEC_ARGS=()
-if [ "$NUM_SPEC_TOKENS" -gt 0 ]; then
+if [ "$SPEC_NUM_TOKENS" -gt 0 ]; then
     if [ "${EVAL_ONLY:-false}" = "true" ]; then
         SPEC_ARGS=(
             --speculative-config
