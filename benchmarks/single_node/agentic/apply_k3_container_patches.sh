@@ -20,6 +20,7 @@
 #   VLLM_DCP_REPO_URL=...  vLLM fork URL
 #   VLLM_DCP_BRANCH=...    branch fetched on every container start
 #   VLLM_DCP_BASE=...      image commit used as the patch base
+#   VLLM_DCP_BRANCH_ONLY=1 apply only [3] to an otherwise baked image
 # =============================================================================
 set -euo pipefail
 PY=${PYTHON:-python3}
@@ -339,6 +340,13 @@ patch_aiter_gluon_fp8_dcp() {
 # a clean baseline -- it gives a different crash.
 #   SKIP_PATCH_AITER=1      skip [1] aiter pybind11
 #   SKIP_PATCH_BLOCKPOOL=1  skip [2] KV block-pool clamp
+if [ "${VLLM_DCP_BRANCH_ONLY:-0}" = "1" ]; then
+    echo "[kimi-patches] applying vLLM branch overlay only..."
+    patch_vllm_dcp_branch
+    echo "[kimi-patches] done."
+    exit 0
+fi
+
 echo "[kimi-patches] applying in-container patches..."
 if [ "${SKIP_PATCH_AITER:-0}" = "1" ]; then
     echo "[aiter-pybind11] SKIPPED via SKIP_PATCH_AITER=1"

@@ -84,36 +84,15 @@ resolve_trace_source
 install_agentic_deps
 
 # ---- In-container patches ----------------------------------------------------
-# The pinned image now ships the whole runtime pre-applied (vLLM tree at the DCP
-# branch, aiter pybind11 include order, KV block-pool clamp, AITER fp8 Gluon
-# overlay) and sets SKIP_KIMI_PATCHES=1 itself, so this is a no-op there. The
-# script and its patch files stay in the tree so the image can be rebuilt and
-# the diffs reviewed; see /opt/k3-patches/BAKED.md inside the image for which
-# patches are baked and which are deliberately skipped.
+# The image already contains the aa52364caa runtime and the AITER overlays.
+# Fetch only the small production diff from that exact base to the reviewed
+# vLLM branch. This keeps source and tests in vLLM instead of vendoring a
+# duplicate 500-line patch in SA.
+export SKIP_KIMI_PATCHES=0
+export VLLM_DCP_BRANCH_ONLY=1
+export VLLM_DCP_BASE=aa52364caaf821af5b7a5cafa962ae0353f368b8
+export VLLM_DCP_BRANCH=yichaozhu/k3-draft-cache-fix
 bash "$(dirname "$0")/apply_k3_container_patches.sh"
-
-# The pinned image predates spec-driven K3 draft-group annotation and the
-# Mooncake mirror of the five-field SpecGroup. Apply the source-matched patch
-# even though the image sets SKIP_KIMI_PATCHES=1 for its already-baked runtime
-# fixes. A marker makes retries idempotent; a failed dry-run is fatal.
-K3_CACHE_PATCH="$(dirname "$0")/patches/k3_dspark_cache_convergence.patch"
-VLLM_ROOT=$(python3 -c \
-    'import os,vllm; print(os.path.dirname(os.path.dirname(vllm.__file__)))')
-K3_CACHE_MARKER="$VLLM_ROOT/.k3-dspark-cache-convergence-v2"
-if [[ ! -f "$K3_CACHE_MARKER" ]]; then
-    test -s "$K3_CACHE_PATCH"
-    patch -p1 -d "$VLLM_ROOT" --dry-run --forward < "$K3_CACHE_PATCH"
-    patch -p1 -d "$VLLM_ROOT" --forward < "$K3_CACHE_PATCH"
-    python3 -m compileall -q \
-        "$VLLM_ROOT/vllm/config/speculative.py" \
-        "$VLLM_ROOT/vllm/v1/core/kv_cache_coordinator.py" \
-        "$VLLM_ROOT/vllm/v1/core/kv_cache_utils.py" \
-        "$VLLM_ROOT/vllm/v1/kv_cache_interface.py" \
-        "$VLLM_ROOT/vllm/distributed/kv_transfer/kv_connector/v1/mooncake/store/coordinator.py" \
-        "$VLLM_ROOT/vllm/distributed/kv_transfer/kv_connector/v1/mooncake/store/worker.py"
-    touch "$K3_CACHE_MARKER"
-fi
-echo "[k3-cache-patch] applied and verified"
 
 # ---- Reference env block ----------------------------------------------------
 # Keep ALL of these. Commenting them out does not avoid the AITER FMHA crash:
