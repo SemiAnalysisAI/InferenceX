@@ -349,13 +349,22 @@ fi
 
 # ---- Speculative ------------------------------------------------------------
 SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-2}"
+SYNTHETIC_ACCEPT_LEN="${SYNTHETIC_ACCEPT_LEN:-2.51}"
 
 if [ "${SPEC_DECODING:-mtp}" = "none" ]; then
     SPEC_ARGS=()
-else
+elif [ "${EVAL_ONLY:-false}" = "true" ]; then
+    # Eval needs real verification. Synthetic acceptance commits draft tokens
+    # without checking target logits, so generated text is not scoreable.
     SPEC_ARGS=(
         --speculative-config
         "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
+    )
+else
+    # AgentX throughput follows the committed K=2 probabilistic golden curve.
+    SPEC_ARGS=(
+        --speculative-config
+        "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"synthetic\",\"synthetic_acceptance_length\":$SYNTHETIC_ACCEPT_LEN}"
     )
 fi
 
