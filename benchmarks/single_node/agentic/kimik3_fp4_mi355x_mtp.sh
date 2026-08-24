@@ -376,8 +376,10 @@ if [ $((TP % DCP_SIZE)) -ne 0 ]; then
     exit 1
 fi
 CP_ARGS=()
+ATTN_BE_ARGS=()
 if [ "$DCP_SIZE" -gt 1 ]; then
     CP_ARGS+=(--decode-context-parallel-size "$DCP_SIZE" --dcp-comm-backend a2a)
+    ATTN_BE_ARGS+=(--attention-backend TRITON_MLA)
 fi
 export VLLM_USE_DIRECT_DCP_A2A=1
 export VLLM_USE_DIRECT_DCP_Q_GATHER=1
@@ -404,6 +406,7 @@ VLLM_CMD=(
     --kv-cache-dtype "fp8"
     --max-num-batched-tokens 8192
     --attention-config '{"mla_prefill_backend":"ROCM_AITER_FA"}'
+    "${ATTN_BE_ARGS[@]}"
     "${COMPILATION_CONFIG_ARGS[@]}"
     "${SPEC_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
