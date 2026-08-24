@@ -6387,3 +6387,13 @@
     - "Replace the internal TileRT 0.1.5.post2+inferencex.1 queueing backport with the official 0.1.5.post3 PyPI wheel now that upstream has published it; remove the internal wheel builder and router patch"
     - "Bump the shared TileRT dependency and router metadata to 0.1.5.post3 for both fixed-seq-length and AgentX configurations while retaining the AgentX 1800-second queue timeout"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2650
+
+- config-keys:
+    - glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-2p2d
+    - dsv4-fp8-h200-dynamo-sglang-agentic-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Require dcgm-power telemetry on the GLM-5.2 H200 disaggregated AgentX recipe."
+    - "Enable dcgm-power telemetry on the DSV4 H200 aggregated AgentX recipe."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2684
