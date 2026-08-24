@@ -384,7 +384,7 @@ VLLM_CMD=(
     --enable-auto-tool-choice
     --tool-call-parser kimi_k3
     --reasoning-parser kimi_k3
-    --max-model-len 1048576
+    --max-model-len 8192
     --enable-prefix-caching
     --kv-cache-dtype "fp8"
     --max-num-batched-tokens 16384
