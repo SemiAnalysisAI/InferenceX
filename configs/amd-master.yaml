@@ -1716,18 +1716,9 @@ glm5.2-fp4-mi355x-atom-agentic-mtp:
        - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4], spec-decoding: mtp }
 
 
-# DeepSeek-V4-Pro FP4 agentic-coding benchmark on MI355X via SGLang with the
-# in-checkpoint MTP head (EAGLE path, depth 3 -> golden AL 2.49 for
-# thinking_on, golden_al_distribution/dsv4_mtp.yaml). Restores the single-node
-# SGLang AgentX coverage removed in de493d859 (PR #2531, which deleted the
-# spec-none dsv4-fp4-mi355x-sglang-agentic-hicache key and its script) so the
-# aggregated SGLang path is comparable with dsv4-fp4-mi355x-vllm-agentic-mtp
-# and dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp. The image matches the
-# already-green disagg AgentX entry. Pure TP8 only: DSA + dp-attention hangs a
-# collective under long-context prefill, so no DEP arm ships until that path is
-# validated. conc 16 appears on both arms to isolate the host KV tier's gain.
+
 dsv4-fp4-mi355x-sglang-agentic-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260813
+  image: lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260822
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:mi355x-amds
@@ -1738,5 +1729,5 @@ dsv4-fp4-mi355x-sglang-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, conc-list: [1, 2, 4, 8, 16], spec-decoding: mtp }
+      - { tp: 4, ep: 1, dp-attn: false, kv-offloading: none, conc-list: [1, 2, 4, 8, 10], spec-decoding: mtp }
       - { tp: 8, ep: 1, dp-attn: false, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 32, 48], spec-decoding: mtp }
