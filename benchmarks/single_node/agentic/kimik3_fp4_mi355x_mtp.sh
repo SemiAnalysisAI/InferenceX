@@ -333,24 +333,31 @@ if [ "$EP_SIZE" -gt 1 ]; then
 fi
 
 # ---- Speculative ------------------------------------------------------------
-if [ "$CONC" = 1 ]; then
-    SYNTHETIC_ACCEPT_LEN=3.75
-    SPEC_NUM_TOKENS=6
-else
-    SYNTHETIC_ACCEPT_LEN=2.51
-    SPEC_NUM_TOKENS=2
-fi
+# Default to mtp to preserve this recipe's behavior; spec-decoding=none drops
+# --speculative-config entirely (required for DCP, which dspark does not support).
+SPEC_ARGS=()
+if [ "${SPEC_DECODING:-mtp}" = "mtp" ]; then
+    if [ "$CONC" = 1 ]; then
+        SYNTHETIC_ACCEPT_LEN=3.75
+        SPEC_NUM_TOKENS=6
+    else
+        SYNTHETIC_ACCEPT_LEN=2.51
+        SPEC_NUM_TOKENS=2
+    fi
 
-if [ "${EVAL_ONLY:-false}" = "true" ]; then
-    SPEC_ARGS=(
-        --speculative-config
-        "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"block\"}"
-    )
+    if [ "${EVAL_ONLY:-false}" = "true" ]; then
+        SPEC_ARGS=(
+            --speculative-config
+            "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"block\"}"
+        )
+    else
+        SPEC_ARGS=(
+            --speculative-config
+            "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
+        )
+    fi
 else
-    SPEC_ARGS=(
-        --speculative-config
-        "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
-    )
+    SPEC_NUM_TOKENS=0
 fi
 
 # ---- HIP graph ------------------------------------------------------------
