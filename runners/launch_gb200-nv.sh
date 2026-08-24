@@ -438,10 +438,9 @@ elif [[ "$IS_AGENTIC" == "1" && (( "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" 
         cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
             recipes/vllm/deepseek-v4/agentic
     fi
-# Kimi-K3 uses the same released srt-slurm version as its GB300 AgentX
-# profiles, including the Mooncake store schema and direct multi-node vLLM.
+# Kimi-K3 requires direct multi-node vLLM frontend support from srt-slurm.
 elif [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "kimik3" ]]; then
-    git clone --branch v1.0.36 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
+    git clone --branch v1.0.53 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
     cd "$SRT_REPO_DIR" || exit 1
     mkdir -p recipes/vllm/kimi-k3/agentic || exit 1
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \

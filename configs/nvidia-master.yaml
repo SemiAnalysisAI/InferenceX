@@ -929,7 +929,7 @@ dsv4-fp4-b200-sglang:
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 1024 }
 
 dsv4-fp4-b200-sglang-agentic-hicache-mtp:
-  image: lmsysorg/sglang:v0.5.17-cu130
+  image: lmsysorg/sglang:dev-nightly-0820
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:b200-dgxc
@@ -942,8 +942,7 @@ dsv4-fp4-b200-sglang-agentic-hicache-mtp:
       search-space:
       - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 3, 4, 5] }
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: mtp, conc-list: [8, 10, 16, 32] }
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [16], router: { name: sglang-router, version: "0.3.2" } }
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: mtp, conc-list: [16, 40, 48], router: { name: sglang-router, version: "0.3.2" } }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: mtp, conc-list: [32, 64, 96], router: { name: sglang-router, version: "0.3.2" } }
 
 dsv4-fp4-b200-vllm:
   image: vllm/vllm-openai:v0.25.0
@@ -975,7 +974,7 @@ dsv4-fp4-b200-vllm-agentic-mtp:
     - dram-utilization: 0.95
       search-space:
       # TP8 SimpleCPU + MTP
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [1, 4, 8, 16, 24] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [1, 4, 8, 14] }
       # DEP8 SimpleCPU + MTP
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [32, 64, 96, 128, 160, 196], router: { name: vllm-router, version: "0.1.14" } }
 
@@ -1734,7 +1733,7 @@ dsv4-fp4-b300-vllm-agentic-mtp:
       # TP8 GPU-resident + MTP (num_speculative_tokens=3)
       - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4] }
       # TP4 GPU-resident + MTP (num_speculative_tokens=3)
-      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [8] }
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 6, 8] }
       # TP4 SimpleCPU + MTP (num_speculative_tokens=3)
       - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [16] }
       # DEP4 SimpleCPU + MTP (num_speculative_tokens=3)
@@ -7436,6 +7435,86 @@ minimaxm3-fp4-b300-vllm-agentic-mtp:
       search-space:
       - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [24] }
 
+minimaxm3-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
+  image: vllm/vllm-openai:nightly-5e35a6f4f9bbc217c599692157ca985c894373f7
+  model: nvidia/MiniMax-M3-NVFP4
+  model-prefix: minimaxm3
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-vllm
+  router: { name: dynamo-router, version: "1.4.0.dev20260730" }
+  kv-p2p-transfer: nixl
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.887
+      search-space:
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.12.post1" }
+        conc-list: [1]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/minimax-m3/agentic/gb300-fp4/1p1d-tep4-tp4-c1-agentic.yaml"
+          - "EVAL_CONFIG_FILE=recipes/vllm/minimax-m3/agentic/gb300-fp4/1p1d-tep4-tp4-c1-eval-agentic.yaml"
+        decode: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.12.post1" }
+        conc-list: [24]
+        prefill:
+          num-worker: 1
+          tp: 1
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/minimax-m3/agentic/gb300-fp4/1p3d-dep4-tp4-c24-agentic.yaml"
+          - "EVAL_CONFIG_FILE=recipes/vllm/minimax-m3/agentic/gb300-fp4/1p3d-dep4-tp4-c24-eval-agentic.yaml"
+        decode: { num-worker: 3, tp: 4, ep: 1, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.12.post1" }
+        conc-list: [20, 24]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/minimax-m3/agentic/gb300-fp4/1p1d-tp2-tp4-c20-c24-agentic.yaml"
+          - "EVAL_CONFIG_FILE=recipes/vllm/minimax-m3/agentic/gb300-fp4/1p1d-tp2-tp4-c20-c24-eval-agentic.yaml"
+        decode: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.12.post1" }
+        conc-list: [48]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/minimax-m3/agentic/gb300-fp4/1p3d-tp2-tp2-c48-agentic.yaml"
+          - "EVAL_CONFIG_FILE=recipes/vllm/minimax-m3/agentic/gb300-fp4/1p3d-tp2-tp2-c48-eval-agentic.yaml"
+        decode: { num-worker: 3, tp: 2, ep: 1, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.12.post1" }
+        conc-list: [120]
+        prefill:
+          num-worker: 2
+          tp: 2
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/minimax-m3/agentic/gb300-fp4/2p5d-tp2-tp2-c120-agentic.yaml"
+          - "EVAL_CONFIG_FILE=recipes/vllm/minimax-m3/agentic/gb300-fp4/2p5d-tp2-tp2-c120-eval-agentic.yaml"
+        decode: { num-worker: 5, tp: 2, ep: 1, dp-attn: false }
 minimaxm3-fp4-b300-trtllm-agentic-mtp:
   image: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc23.post1
   model: nvidia/MiniMax-M3-NVFP4
@@ -7787,7 +7866,7 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-agg:
           ep: 1
           dp-attn: false
       - spec-decoding: mtp
-        conc-list: [8]
+        conc-list: [1, 2, 4, 6, 8]
         prefill:
           num-worker: 1
           tp: 4
@@ -8170,7 +8249,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-mooncake-dcp16-agg:
       search-space:
       - kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.12.post1" }
-        conc-list: [8, 16, 24, 32, 36, 40, 44, 48]
+        conc-list: [8, 40, 48]
         prefill:
           num-worker: 1
           tp: 16
@@ -8180,6 +8259,240 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-mooncake-dcp16-agg:
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-gb200-dcp16-nospec-mooncake-agentic.yaml"
         decode: { num-worker: 0, tp: 16, dcp-size: 16, ep: 1, dp-attn: false }
+
+dsv4-fp4-gb300-dynamo-trt-agentx:
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc24
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-trt
+  router: { name: dynamo-router, version: "1.4.0.dev20260807" }
+  kv-p2p-transfer: nixl
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.21429
+      search-space:
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.3.0rc24" }
+        conc-list: [4]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4/agentx-gb300-20260811/dynamo-disagg-gb300-1p4d-dep4-tep8-c4-b1-mtp.yaml"
+          - "SLURM_PARTITION=batch_3"
+        decode:
+          num-worker: 4
+          tp: 8
+          ep: 8
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.3.0rc24" }
+        conc-list: [24]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4/agentx-gb300-20260811/dynamo-disagg-gb300-1p6d-dep4-tep4-c24-b4-mtp.yaml"
+          - "SLURM_PARTITION=batch_3"
+        decode:
+          num-worker: 6
+          tp: 4
+          ep: 4
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.3.0rc24" }
+        conc-list: [388]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4/agentx-gb300-20260811/dynamo-disagg-gb300-1p1d-dep8-dep32-c388-b4-mtp.yaml"
+          - "SLURM_PARTITION=batch_3"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.3.0rc24" }
+        conc-list: [736]
+        prefill:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4/agentx-gb300-20260811/dynamo-disagg-gb300-2p1d-dep8-dep32-c736-b8-mtp.yaml"
+          - "SLURM_PARTITION=batch_3"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.3.0rc24" }
+        conc-list: [1152]
+        prefill:
+          num-worker: 3
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4/agentx-gb300-20260811/dynamo-disagg-gb300-3p1d-dep8-dep16-c1152-b32-mtp.yaml"
+          - "SLURM_PARTITION=batch_3"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.3.0rc24" }
+        conc-list: [2626]
+        prefill:
+          num-worker: 5
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4/agentx-gb300-20260811/dynamo-disagg-gb300-5p1d-dep8-dep16-c2626-b96-mtp.yaml"
+          - "SLURM_PARTITION=batch_3"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+# Add GB200 TP8 x PP2/DCP8 AgentX operating points. The runtime topology uses
+# 16 GPUs total, allocated across four 4-GPU GB200 nodes.
+kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2:
+  image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-728d3ad
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:gb200-nv
+  precision: fp4
+  framework: dynamo-vllm
+  multinode: true
+  disagg: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.8
+      search-space:
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
+        conc-list: [16]
+        prefill:
+          num-worker: 1
+          tp: 8
+          pp: 2
+          dcp-size: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-gb200-tp8pp2-mooncake-c16-agentic.yaml"
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.84"
+        decode:
+          num-worker: 0
+          tp: 8
+          pp: 2
+          dcp-size: 8
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
+        conc-list: [32]
+        prefill:
+          num-worker: 1
+          tp: 8
+          pp: 2
+          dcp-size: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-gb200-tp8pp2-mooncake-c32-agentic.yaml"
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.84"
+        decode:
+          num-worker: 0
+          tp: 8
+          pp: 2
+          dcp-size: 8
+          ep: 1
+          dp-attn: false
+      - kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
+        conc-list: [48]
+        prefill:
+          num-worker: 1
+          tp: 8
+          pp: 2
+          dcp-size: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-gb200-tp8pp2-mooncake-c48-agentic.yaml"
+        decode:
+          num-worker: 0
+          tp: 8
+          pp: 2
+          dcp-size: 8
+          ep: 1
+          dp-attn: false
+      - kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
+        conc-list: [72]
+        prefill:
+          num-worker: 1
+          tp: 8
+          pp: 2
+          dcp-size: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-gb200-tp8pp2-mooncake-c72-agentic.yaml"
+        decode:
+          num-worker: 0
+          tp: 8
+          pp: 2
+          dcp-size: 8
+          ep: 1
+          dp-attn: false
+      - kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
+        conc-list: [96]
+        prefill:
+          num-worker: 1
+          tp: 8
+          pp: 2
+          dcp-size: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-gb200-tp8pp2-mooncake-c96-agentic.yaml"
+        decode:
+          num-worker: 0
+          tp: 8
+          pp: 2
+          dcp-size: 8
+          ep: 1
+          dp-attn: false
 
 dsv4-fp4-gb300-dynamo-sglang-agentic-agg:
   image: lmsysorg/sglang:nightly-dev-cu13-20260719-99f5a6f4
@@ -8843,6 +9156,158 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg:
           ep: 16
           dp-attn: true
 
+# GLM-5.2 NVFP4 TensorRT-LLM AgentX on GB300 with Dynamo aggregated serving.
+# One TP8 worker serves prefill and decode on the same eight GPUs at concurrency 1.
+glm5.2-fp4-gb300-dynamo-trt-agentic-agg-mtp:
+  image: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc22.post1
+  model: nvidia/GLM-5.2-NVFP4
+  model-prefix: glm5.2
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-trt
+  router: { name: dynamo-router, version: "1.4.0.dev20260807" }
+  multinode: true
+  disagg: false
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - spec-decoding: mtp
+        conc-list: [1]
+        kv-offloading: none
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2/gb300-fp4/agentic/dynamo-agg-gb300-tp8-c1-b2-mtp8.yaml"
+          - "SLURM_PARTITION=batch_3"
+        decode:
+          num-worker: 0
+          tp: 8
+          ep: 1
+          dp-attn: false
+
+# GLM-5.2 NVFP4 TensorRT-LLM AgentX on GB300 with Dynamo disaggregated serving.
+# Six topology variants use NIXL KV transfer and MTP3/MTP5 decoding.
+glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
+  image: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc22.post1
+  model: nvidia/GLM-5.2-NVFP4
+  model-prefix: glm5.2
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-trt
+  router: { name: dynamo-router, version: "1.4.0.dev20260807" }
+  kv-p2p-transfer: nixl
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.15239
+      search-space:
+      - spec-decoding: mtp
+        conc-list: [30]
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.3.0rc22.post1" }
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2/gb300-fp4/agentic/dynamo-disagg-gb300-1p4d-tep4-c30-b2-mtp5.yaml"
+          - "SLURM_PARTITION=batch_3"
+        decode:
+          num-worker: 4
+          tp: 4
+          ep: 4
+          dp-attn: false
+      - spec-decoding: mtp
+        conc-list: [20]
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.3.0rc22.post1" }
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2/gb300-fp4/agentic/dynamo-disagg-gb300-1p1d-tep8-c20-b5-mtp5.yaml"
+          - "SLURM_PARTITION=batch_3"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: false
+      - spec-decoding: mtp
+        conc-list: [60]
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.3.0rc22.post1" }
+        prefill:
+          num-worker: 3
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2/gb300-fp4/agentic/dynamo-disagg-gb300-3p4d-tep4-c60-b5-mtp5.yaml"
+          - "SLURM_PARTITION=batch_3"
+        decode:
+          num-worker: 4
+          tp: 4
+          ep: 4
+          dp-attn: false
+      - spec-decoding: mtp
+        conc-list: [152]
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.3.0rc22.post1" }
+        prefill:
+          num-worker: 5
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2/gb300-fp4/agentic/dynamo-disagg-gb300-5p1d-dep16-c152-b16-mtp3.yaml"
+          - "SLURM_PARTITION=batch_3"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      - spec-decoding: mtp
+        conc-list: [259]
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.3.0rc22.post1" }
+        prefill:
+          num-worker: 8
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2/gb300-fp4/agentic/dynamo-disagg-gb300-8p1d-dep16-c259-b16-mtp3.yaml"
+          - "SLURM_PARTITION=batch_3"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      - spec-decoding: mtp
+        conc-list: [227]
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.3.0rc22.post1" }
+        prefill:
+          num-worker: 6
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2/gb300-fp4/agentic/dynamo-disagg-gb300-6p1d-dep8-c227-b16-mtp3.yaml"
+          - "SLURM_PARTITION=batch_3"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+
 qwen3.5-fp8-gb200-dynamo-sglang-mtp:
   image: lmsysorg/sglang:v0.5.14-cu130@sha256:5027e95bf6ec536856b1b52a91d1f35ff5c564ab83e8a94758a169ff09bb8df3
   model: Qwen/Qwen3.5-397B-A17B-FP8
@@ -9430,7 +9895,7 @@ glm5.1-fp8-b200-tilert:
   runner: b200-multinode
   precision: fp8
   framework: tilert
-  router: { name: tilert-pd-router, version: "0.1.5.post2" }
+  router: { name: tilert-pd-router, version: "0.1.5.post3" }
   multinode: true
   disagg: true
   kv-p2p-transfer: nixl
@@ -9459,6 +9924,38 @@ glm5.1-fp8-b200-tilert:
     - isl: 8192
       osl: 1024
       search-space:
+      - spec-decoding: "mtp"
+        conc-list: [1]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_IMAGE=vllm/vllm-openai:v0.26.0"
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+
+glm5.1-fp8-b200-tilert-agentic:
+  image: ghcr.io/tile-ai/tilert:0.1.5
+  model: zai-org/GLM-5.1-FP8
+  model-prefix: glm5.1
+  runner: cluster:b200-dgxc
+  precision: fp8
+  framework: tilert
+  router: { name: tilert-pd-router, version: "0.1.5.post3" }
+  multinode: true
+  disagg: true
+  kv-p2p-transfer: nixl
+  scenarios:
+    agentic-coding:
+    - search-space:
       - spec-decoding: "mtp"
         conc-list: [1]
         prefill:
