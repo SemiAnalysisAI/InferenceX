@@ -6387,3 +6387,11 @@
     - "Replace the internal TileRT 0.1.5.post2+inferencex.1 queueing backport with the official 0.1.5.post3 PyPI wheel now that upstream has published it; remove the internal wheel builder and router patch"
     - "Bump the shared TileRT dependency and router metadata to 0.1.5.post3 for both fixed-seq-length and AgentX configurations while retaining the AgentX 1800-second queue timeout"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2650
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Serve the TP4 AgentX arm on ROCM_AITER_UNIFIED_ATTN for both target and EAGLE3 draft attention (was TRITON_ATTN)"
+    - "Sweep the TP4 GPU-resident arm at conc 1/2/4/5/8/10/12/16/20/24/28/32/36; the TP2 GPU-resident and TP4 LMCache DRAM-offload arms are commented out."
