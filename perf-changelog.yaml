@@ -6380,6 +6380,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2707
 
 - config-keys:
+    - glm5.1-fp8-b200-tilert
+    - glm5.1-fp8-b200-tilert-agentic
+  description:
+    - "Update 8k1kTileRT results, add AgentX results"
+    - "Replace the internal TileRT 0.1.5.post2+inferencex.1 queueing backport with the official 0.1.5.post3 PyPI wheel now that upstream has published it; remove the internal wheel builder and router patch"
+    - "Bump the shared TileRT dependency and router metadata to 0.1.5.post3 for both fixed-seq-length and AgentX configurations while retaining the AgentX 1800-second queue timeout"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2650
+
+- config-keys:
     - dsv4-fp4-mi355x-sglang-agentic-mtp
   scenario-type:
     - agentic-coding

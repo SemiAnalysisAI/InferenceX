@@ -175,6 +175,8 @@ Retain `meta_env.json`, `results*.json`, and `sample*.jsonl`. Agentic SWE-bench 
 
 AgentX is AIPerf `inferencex-agentx-mvp` trace replay, not a fixed-token synthetic benchmark. The checked-in default uses ten additional warmup requests per trajectory lane and the recipe's configured profile duration. `agentx-fast` forces one warmup request per lane and a 1,200-second profile. It affects single- and multi-node AgentX throughput only. Fixed-sequence throughput and evals remain canonical. Fast runs are not eligible for artifact reuse ([workflow policy](../.github/workflows/README.md#agentx-fast-mode), [fast replay settings](../benchmarks/benchmark_lib.sh#L1824-L1848)).
 
+Keep non-index engine or router wheels reproducible and immutable: check in the source patch and builder beside the launcher, verify the upstream wheel's digest before patching, assign an explicit local version, and install the published artifact through an exact URL with a SHA256 fragment. A local backport must not use an unreleased upstream version number.
+
 Targeted canonical run (configured duration and warmup, with fast and duration overrides omitted):
 
 ```bash
