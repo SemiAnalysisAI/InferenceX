@@ -101,19 +101,15 @@ labels:
     - b200-nscale-slurm_7
     - b200-nscale-slurm_8
   mi300x:
-    - mi300x-amds_00
-    - mi300x-amds_01
-    - mi300x-amds_02
-    - mi300x-amds_03
-    - mi300x-amds_04
-    - mi300x-amds_05
-    - mi300x-amds_06
-    - mi300x-amds_07
-    - mi300x-amds_08
-  mi300x-disagg:
-    - mi300x-amds_06
-    - mi300x-amds_07
-    - mi300x-amds_08
+    - mi300x-amd_00
+    - mi300x-amd_01
+    - mi300x-amd_02
+    - mi300x-amd_03
+    - mi300x-amd_04
+    - mi300x-amd_05
+    - mi300x-amd_06
+    - mi300x-amd_07
+    - mi300x-amd_08
   mi325x:
     - mi325x-amds_00
     - mi325x-amds_01
@@ -288,16 +284,16 @@ labels:
     - gb300-nv_2
   cluster:rtx6000pro-lat:
     - rtx6000pro-lat_00
-  cluster:mi300x-amds:
-    - mi300x-amds_00
-    - mi300x-amds_01
-    - mi300x-amds_02
-    - mi300x-amds_03
-    - mi300x-amds_04
-    - mi300x-amds_05
-    - mi300x-amds_06
-    - mi300x-amds_07
-    - mi300x-amds_08
+  cluster:mi300x-amd:
+    - mi300x-amd_00
+    - mi300x-amd_01
+    - mi300x-amd_02
+    - mi300x-amd_03
+    - mi300x-amd_04
+    - mi300x-amd_05
+    - mi300x-amd_06
+    - mi300x-amd_07
+    - mi300x-amd_08
   cluster:mi300x-tw:
     - mi300x-tw_00
     - mi300x-tw_01
@@ -359,8 +355,8 @@ hardware:
   cluster:rtx6000pro-lat:
     available-cpu-dram-mib: 1_500_000
     gpus-per-node: 8
-  cluster:mi300x-amds:
-    available-cpu-dram-mib: 2_321_924
+  cluster:mi300x-amd:
+    available-cpu-dram-mib: 1_547_820
     gpus-per-node: 8
   cluster:mi300x-tw:
     available-cpu-dram-mib: 2_322_328
