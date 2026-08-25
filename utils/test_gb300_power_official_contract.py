@@ -189,7 +189,8 @@ def test_launcher_provisions_exporter_through_shared_squash_path():
     assert_exporter_provisioning(launcher)
     # No SQUASH_DIR var here; the /data/ mount avoids the /home NFS ELOOP bug.
     assert 'DCGM_EXPORTER_SQSH="/data/home/sa-shared/gharunners/squash/' in launcher
-    assert 'srun --partition=$SLURM_PARTITION --exclusive --time=30 bash -c "unsquashfs -l' in launcher
+    assert 'srun --account="$SLURM_ACCOUNT" --partition="$SLURM_PARTITION" --exclusive --time=180' in launcher
+    assert 'srun --account="$SLURM_ACCOUNT" --partition="$SLURM_PARTITION" --exclusive --time=30 bash -c "unsquashfs -l' in launcher
 
 
 def test_launcher_pins_power_producer():
