@@ -6467,3 +6467,13 @@
     - "Reduce the concurrency-1536 disaggregated topology from six to five DEP8 prefill workers while retaining one DEP16 decode worker."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2644
   
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-agentic-umbp-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a UMBP (MoRI) HiCache L3 arm at conc 16, 32, and 48, mirroring the existing hicache arm's concurrency points so the L3 delta is directly comparable"
+    - "Serve it with a node-local umbp_master in UMBP distributed mode, hicache-ratio 1, page_first host layout, best_effort storage prefetch, and a 64 GB per-rank L3 DRAM pool"
+    - "Set UMBP_DISABLE_ZERO_COPY_REGISTER=true to avoid the duplicate RDMA memory-region registration that aborts the server on the first write_through"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2617

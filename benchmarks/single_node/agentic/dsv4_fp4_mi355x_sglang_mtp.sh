@@ -51,7 +51,27 @@ install_agentic_deps
 
 SERVER_LOG="$RESULT_DIR/server.log"
 ROUTER_LOG="$RESULT_DIR/router.log"
+UMBP_MASTER_LOG="$RESULT_DIR/umbp_master.log"
 mkdir -p "$RESULT_DIR"
+
+SERVER_PID=""
+ROUTER_PID=""
+UMBP_MASTER_PID=""
+
+# The UMBP master owns fixed ports on the node; a leaked one breaks the next
+# job's bind. Tear down every background service we started, in reverse order.
+cleanup_services() {
+    local exit_code=$?
+    trap - EXIT INT TERM
+    set +e
+    stop_background_process_tree "$ROUTER_PID" "SGLang router"
+    stop_background_process_tree "$SERVER_PID" "SGLang server" 60
+    stop_background_process_tree "$UMBP_MASTER_PID" "UMBP master"
+    exit "$exit_code"
+}
+trap cleanup_services EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 # ---- Client config ----------------------------------------------------------
 export PYTHONNOUSERSITE=1
@@ -111,12 +131,150 @@ if agentic_kv_offload_enabled; then
                 --hicache-mem-layout "$HICACHE_MEM_LAYOUT"
             )
             ;;
+        umbp|mori)
+            # HiCache L2 (host DRAM) + UMBP/MoRI as the L3 storage tier, in
+            # UMBP "distributed" mode with a node-local master. Ported from the
+            # validated single-node recipe in /apps/billhe/umbp_recipe
+            # (rocm/sgl-dev v0.5.17-rocm720-mi35x-20260813, upstream sglang
+            # PR #30762 / a34f81251f, which supplies umbp_store.py's
+            # batch_*_v2 multi-pool path).
+            #
+            # Two single-node-specific requirements from that bring-up:
+            #
+            # 1. UMBP_DISABLE_ZERO_COPY_REGISTER=true is mandatory. UMBPStore
+            #    pre-registers each side pool's whole host KV buffer for RDMA
+            #    at startup, but PoolClient does not reuse that MR and calls
+            #    RegisterRdmaMemoryRegionAuto again on the identical
+            #    (ptr, size) during the first batch_put_from_ptr. The second
+            #    ibv_reg_mr returns ENOMEM and mori aborts the whole server
+            #    from C++ (not catchable in Python). Skipping the
+            #    pre-registration hands registration to PoolClient exactly
+            #    once; the cost is the staging-buffer path.
+            # 2. hicache-ratio must be much smaller than the 1P1D disagg
+            #    recipe's 3. All 8 ranks share one host here, and ibv_reg_mr
+            #    pins + populates every page, so ratio 3 means a 243 GB/rank
+            #    deepseek_v4_c4 side pool (1.94 TB across the node) on top of
+            #    the 806 GB checkpoint. Ratio 1 measures ~88 GB/rank
+            #    (c4 75.5 + c128 9.7 + swa 2.4), i.e. ~704 GB node-wide.
+            #    DSv4 rejects --hicache-size outright
+            #    ("DeepSeek V4 HiCache currently does not support
+            #    --hicache-size"), so ratio is the only knob.
+            HICACHE_RATIO="${HICACHE_RATIO:-1}"
+            HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through}"
+            HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
+            # page_first, not the hicache-only arm's page_first_direct: the
+            # mori storage backend consumes the page-first host layout.
+            HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first}"
+            HICACHE_PREFETCH_POLICY="${HICACHE_PREFETCH_POLICY:-best_effort}"
+
+            # MoRI IO engine (UMBP's RDMA transport) and process-level knobs.
+            export MORI_IO_QP_MAX_SEND_WR="${MORI_IO_QP_MAX_SEND_WR:-32767}"
+            export MORI_IO_SQ_BACKOFF_TIMEOUT_US="${MORI_IO_SQ_BACKOFF_TIMEOUT_US:-500000}"
+            export MORI_SHMEM_MODE="${MORI_SHMEM_MODE:-ISOLATION}"
+            export MORI_SHMEM_HEAP_SIZE="${MORI_SHMEM_HEAP_SIZE:-1G}"
+            export UMBP_DISABLE_ZERO_COPY_REGISTER="${UMBP_DISABLE_ZERO_COPY_REGISTER:-true}"
+            # These nodes run with HugePages_Total=0, and
+            # UMBPHostTensorAllocator silently demotes to 4 KiB pages. Keep it
+            # off explicitly; to enable, reserve pages before the server starts
+            # (echo N > /proc/sys/vm/nr_hugepages) and set this to 1.
+            export UMBP_DRAM_USE_HUGEPAGES="${UMBP_DRAM_USE_HUGEPAGES:-0}"
+
+            # Port plan. Every family gets a 16-port stride keyed off this
+            # runner's PORT so the per-rank io_engine / peer_service ports
+            # (base + rank, rank < TP) of one runner cannot land on another's.
+            UMBP_PORT_STRIDE=$(( (PORT % 100) * 16 ))
+            UMBP_GRPC_PORT="${UMBP_GRPC_PORT:-$((21000 + UMBP_PORT_STRIDE))}"
+            UMBP_HTTP_PORT="${UMBP_HTTP_PORT:-$((23000 + UMBP_PORT_STRIDE))}"
+            UMBP_IO_ENGINE_PORT="${UMBP_IO_ENGINE_PORT:-$((25000 + UMBP_PORT_STRIDE))}"
+            UMBP_PEER_SERVICE_PORT="${UMBP_PEER_SERVICE_PORT:-$((27000 + UMBP_PORT_STRIDE))}"
+            UMBP_NODE_ADDR="${UMBP_NODE_ADDR:-127.0.0.1}"
+
+            # L3 DRAM pool, sized per UMBP client (one client per TP rank).
+            # Node accounting: L2 pinned (~88 GiB/rank at ratio 1) + L3
+            # (UMBP_L3_PER_RANK_GB/rank) must stay inside the configured
+            # TOTAL_CPU_DRAM_GB budget, alongside the 806 GB checkpoint's page
+            # cache. 64 GiB/rank = 512 GiB node-wide leaves ample headroom.
+            # The pool is sized in GiB; TOTAL_CPU_DRAM_GB from the matrix is
+            # decimal GB, so convert before comparing them.
+            UMBP_L3_PER_RANK_GB="${UMBP_L3_PER_RANK_GB:-96}"
+            UMBP_L3_TOTAL_GB=$((UMBP_L3_PER_RANK_GB * TP * 1073741824 / 1000000000))
+            if [ "$UMBP_L3_TOTAL_GB" -gt "$((TOTAL_CPU_DRAM_GB / 2))" ]; then
+                echo "Error: UMBP L3 pool ${UMBP_L3_TOTAL_GB} GB (${UMBP_L3_PER_RANK_GB} GB x TP${TP}) exceeds half of TOTAL_CPU_DRAM_GB=${TOTAL_CPU_DRAM_GB}; the HiCache L2 host pool needs the rest" >&2
+                exit 1
+            fi
+            UMBP_DRAM_BYTES=$((UMBP_L3_PER_RANK_GB * 1024 * 1024 * 1024))
+
+            # umbp_master is not on the default rpath; point the loader at
+            # mori's .so directory the same way the recipe does.
+            MORI_HOME="${MORI_HOME:-/sgl-workspace/mori}"
+            UMBP_MASTER_BIN="${UMBP_MASTER_BIN:-$MORI_HOME/build/src/umbp/umbp_master}"
+            if [ ! -x "$UMBP_MASTER_BIN" ]; then
+                echo "Error: umbp_master not found at '$UMBP_MASTER_BIN'. This image does not ship a built MoRI/UMBP; set MORI_HOME or UMBP_MASTER_BIN, or use KV_OFFLOAD_BACKEND=hicache." >&2
+                exit 1
+            fi
+            export LD_LIBRARY_PATH="$MORI_HOME/python/mori:${LD_LIBRARY_PATH:-}"
+
+            echo "Starting UMBP master (grpc=$UMBP_GRPC_PORT, http=$UMBP_HTTP_PORT)..."
+            "$UMBP_MASTER_BIN" "0.0.0.0:${UMBP_GRPC_PORT}" "$UMBP_HTTP_PORT" > "$UMBP_MASTER_LOG" 2>&1 &
+            UMBP_MASTER_PID=$!
+            UMBP_MASTER_READY=false
+            for _ in $(seq 1 60); do
+                if ! kill -0 "$UMBP_MASTER_PID" 2>/dev/null; then
+                    echo "UMBP master died during startup. Log follows:" >&2
+                    cat "$UMBP_MASTER_LOG" >&2 || true
+                    exit 1
+                fi
+                if curl -s --max-time 2 -o /dev/null "http://127.0.0.1:${UMBP_HTTP_PORT}/metrics"; then
+                    UMBP_MASTER_READY=true
+                    break
+                fi
+                sleep 1
+            done
+            [ "$UMBP_MASTER_READY" = "true" ] || { echo "Error: UMBP master metrics endpoint never came up on :$UMBP_HTTP_PORT" >&2; cat "$UMBP_MASTER_LOG" >&2 || true; exit 1; }
+            echo "UMBP master PID: $UMBP_MASTER_PID"
+
+            # cache_remote_fetches=false: a fetch served from a peer client is
+            # not re-cached locally. ssd_enabled=false keeps L3 DRAM-only.
+            UMBP_EXTRA_CONFIG=$(cat <<JSON
+{"dram_capacity_bytes": ${UMBP_DRAM_BYTES},
+ "ssd_enabled": false,
+ "master_address": "127.0.0.1:${UMBP_GRPC_PORT}",
+ "node_address": "${UMBP_NODE_ADDR}",
+ "io_engine_port": "${UMBP_IO_ENGINE_PORT}",
+ "peer_service_port": "${UMBP_PEER_SERVICE_PORT}",
+ "cache_remote_fetches": ${UMBP_CACHE_REMOTE_FETCHES:-false}}
+JSON
+)
+            echo "HiCache+UMBP DSv4: ratio=$HICACHE_RATIO, write_policy=$HICACHE_WRITE_POLICY, io_backend=$HICACHE_IO_BACKEND, mem_layout=$HICACHE_MEM_LAYOUT, prefetch=$HICACHE_PREFETCH_POLICY, l3_per_rank=${UMBP_L3_PER_RANK_GB} GiB (${UMBP_L3_TOTAL_GB} GB decimal node-wide), dram_budget=${TOTAL_CPU_DRAM_GB} GB, tp=$TP"
+            CACHE_ARGS=(
+                --enable-hierarchical-cache
+                --hicache-ratio "$HICACHE_RATIO"
+                --hicache-write-policy "$HICACHE_WRITE_POLICY"
+                --hicache-io-backend "$HICACHE_IO_BACKEND"
+                --hicache-mem-layout "$HICACHE_MEM_LAYOUT"
+                --hicache-storage-prefetch-policy "$HICACHE_PREFETCH_POLICY"
+                --hicache-storage-backend mori
+                --hicache-storage-backend-extra-config "$UMBP_EXTRA_CONFIG"
+                # Surfaces usage.prompt_tokens_details.cached_tokens, the only
+                # per-request signal that a prefix came back from L2/L3.
+                --enable-cache-report
+            )
+            ;;
         *)
-            echo "Error: unsupported KV_OFFLOAD_BACKEND '$KV_OFFLOAD_BACKEND' (expected: hicache)" >&2
+            echo "Error: unsupported KV_OFFLOAD_BACKEND '$KV_OFFLOAD_BACKEND' (expected: hicache or umbp)" >&2
             exit 1
             ;;
     esac
 fi
+
+# Snapshot the UMBP master's Prometheus output so an L3 delta (objects,
+# capacity, RPC counts) can be reconstructed from the artifacts after the run.
+# No-op unless the UMBP arm is active.
+snapshot_umbp_metrics() {
+    [ -n "$UMBP_MASTER_PID" ] || return 0
+    curl -s --max-time 10 "http://127.0.0.1:${UMBP_HTTP_PORT}/metrics" \
+        > "$RESULT_DIR/umbp_master_metrics_$1.txt" 2>/dev/null || true
+}
 
 # ---- Parallelism ------------------------------------------------------------
 # NOTE: the DP-attention path below is currently DORMANT (no dp-attn arms in
@@ -272,7 +430,9 @@ fi
 if [ "${EVAL_ONLY}" = "true" ]; then
     run_eval --port "$PORT"
 else
+    snapshot_umbp_metrics before
     build_replay_cmd "$RESULT_DIR"
     REPLAY_CMD+=" --server-metrics http://localhost:$SGLANG_BACKEND_PORT/metrics"
     run_agentic_replay_and_write_outputs "$RESULT_DIR"
+    snapshot_umbp_metrics after
 fi
