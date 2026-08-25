@@ -143,6 +143,13 @@ else
     exit 1
 fi
 
+# Profiled runs execute eager so every device kernel keeps its operator link;
+# setup_profiling_env must run before the server launch reads the profiler dir.
+setup_profiling_env
+if profiling_cuda_graph_disabled; then
+    PARALLEL_ARGS+=(--disable-cuda-graph)
+fi
+
 # Print all SGLANG_* env vars to both the CI step log and server.log so the
 # launch config is auditable from the result artifact alone.
 {

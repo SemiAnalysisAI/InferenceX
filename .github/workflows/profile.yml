@@ -1,5 +1,12 @@
 name: Profile
 
+# Capture a torch-profiler trace of one benchmark config (fixed-seq-len or
+# agentic) for kernel-level correlation. Reuses the standard benchmark
+# template with profile=true: the server runs eager by default (CUDA graphs
+# disabled) so every device kernel keeps its launching-operator attribution,
+# and the job uploads a profile_<result> artifact containing every trace the
+# engine produced plus a profile_meta.json metadata sidecar.
+
 on:
   workflow_dispatch:
     inputs:
@@ -17,33 +24,40 @@ on:
         required: false
         type: string
         default: '64'
-      moe-debug:
-        description: "Enable MoE debug patch and log (MOE_DEBUG_LOG)"
-        required: false
-        type: boolean
-        default: false
       ref:
         description: "Ref (branch/sha) to checkout"
         required: false
         type: string
+      keep-cuda-graphs:
+        description: "Profile with CUDA graphs enabled (graph-replayed kernels lose operator attribution)"
+        required: false
+        type: boolean
+        default: false
+      profile-num-steps:
+        description: "sglang: forward steps per stage to capture"
+        required: false
+        type: string
+        default: '2'
+      profile-start-delay-seconds:
+        description: "Agentic: steady-state delay before triggering the capture"
+        required: false
+        type: string
+        default: '600'
+      duration-override:
+        description: "Agentic: replay duration in seconds (empty = config value)"
+        required: false
+        type: string
+        default: '1800'
 
 permissions:
   contents: read
-
-env:
-  HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
-  HF_HUB_CACHE: '/mnt/hf_hub_cache/'
-  RANDOM_RANGE_RATIO: '0.8'
-  PERFETTO_RELAY_URL: https://semianalysisai.github.io/InferenceX-trace-storage
-  PYTHONDONTWRITEBYTECODE: '1'
-  PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
 
 jobs:
   get-jobs:
     runs-on: ubuntu-latest
     outputs:
-      filtered-matrix: ${{ steps.filter.outputs.filtered }}
-      count: ${{ steps.filter.outputs.count }}
+      fixed-config: ${{ steps.filter.outputs.fixed }}
+      agentic-config: ${{ steps.filter.outputs.agentic }}
     steps:
       - name: Checkout code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -72,11 +86,11 @@ jobs:
             --policy "${PRIORITY_ROOT}/configs/ci-priority.yaml" \
             --event-name "${{ github.event_name }}" \
             --queue-namespace "${{ github.run_id }}:${{ github.run_attempt }}" \
-            --labels-json '${{ inputs.moe-debug && '["ci-patchwork"]' || '[]' }}')
+            --labels-json '[]')
           echo "raw=$CONFIG_JSON" >> $GITHUB_OUTPUT
 
       - id: filter
-        name: Take first generated job
+        name: Take first generated job and route by scenario
         shell: python
         run: |
           import json, os, sys
@@ -86,244 +100,122 @@ jobs:
           except Exception as e:
             print('Invalid generator output:', e, file=sys.stderr)
             with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-              f.write("filtered=[]\ncount=0\n")
+              f.write("fixed=[]\nagentic=[]\n")
             raise
 
-          if not isinstance(data, list):
-            print('Generator output is not a list.', file=sys.stderr)
+          if not isinstance(data, list) or not data:
+            print('Generator produced no entries for '
+                  'config-key=${{ inputs.config-key }} conc=${{ inputs.conc }}.',
+                  file=sys.stderr)
             with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-              f.write("filtered=[]\ncount=0\n")
+              f.write("fixed=[]\nagentic=[]\n")
             raise SystemExit(1)
 
-          filt = data[:1]
+          # Multinode entries need the multinode template, which the profile
+          # plumbing does not cover yet.
+          single = [x for x in data if 'prefill' not in x]
+          if not single:
+            print('Only multinode entries generated; profiling supports '
+                  'single-node configs only.', file=sys.stderr)
+            with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write("fixed=[]\nagentic=[]\n")
+            raise SystemExit(1)
 
-          out = json.dumps(filt)
-          print(out)
+          entry = single[0]
+          agentic = entry.get('scenario-type') == 'agentic-coding'
+          fixed_out = json.dumps([] if agentic else [entry])
+          agentic_out = json.dumps([entry] if agentic else [])
+          print('selected entry:', json.dumps(entry))
           with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-            f.write(f"filtered={out}\n")
-            f.write(f"count={len(filt)}\n")
+            f.write(f"fixed={fixed_out}\n")
+            f.write(f"agentic={agentic_out}\n")
 
-      - name: Fail if no matching entries
-        if: ${{ steps.filter.outputs.count == '0' }}
-        run: |
-          echo "No entries produced for config-key=${{ inputs.config-key }}, conc=${{ inputs.conc }}." >&2
-          exit 1
-
-  profile:
+  profile-fixed:
     needs: get-jobs
+    if: ${{ needs.get-jobs.outputs.fixed-config != '[]' }}
+    uses: ./.github/workflows/benchmark-tmpl.yml
+    name: profile /
     strategy:
       fail-fast: false
       matrix:
-        config: ${{ fromJson(needs.get-jobs.outputs.filtered-matrix) }}
-    name: >-
-      p${{ matrix.config.priority }} | ${{ matrix.config.model-prefix }} ${{ matrix.config.precision }} ${{ matrix.config.runner }} ${{ matrix.config.framework }}
-      TP${{ matrix.config.tp }}${{ matrix.config.pp != '' && matrix.config.pp != '1' && format('/PP{0}', matrix.config.pp) || '' }}${{ matrix.config.dcp-size != '' && matrix.config.dcp-size != '1' && format('/DCP{0}', matrix.config.dcp-size) || '' }}${{ matrix.config.pcp-size != '' && matrix.config.pcp-size != '1' && format('/PCP{0}', matrix.config.pcp-size) || '' }} c${{ matrix.config.conc }}
-    runs-on: >-
-      ${{ fromJSON(
-        vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
-        format(
-          '["self-hosted",{0},{1},{2}]',
-          toJSON(matrix.config.runner),
-          toJSON(format(
-            'ci-job-{0}-{1}',
-            matrix.config.priority,
-            matrix.config['queue-token']
-          )),
-          toJSON(format('ci-attempt-{0}', github.run_attempt))
-        ) ||
-        format('[{0}]', toJSON(matrix.config.runner))
-      ) }}
-    env:
-      EXP_NAME: ${{ matrix.config.exp-name }}
-      MODEL: ${{ matrix.config.model }}
-      MODEL_PREFIX: ${{ matrix.config.model-prefix }}
-      ISL: ${{ matrix.config.isl }}
-      OSL: ${{ matrix.config.osl }}
-      MAX_MODEL_LEN: ${{ matrix.config.max-model-len }}
-      IMAGE: ${{ matrix.config.image }}
-      FRAMEWORK: ${{ matrix.config.framework }}
-      PRECISION: ${{ matrix.config.precision }}
-      TP: ${{ matrix.config.tp }}
-      PP_SIZE: ${{ matrix.config.pp }}
-      DCP_SIZE: ${{ matrix.config.dcp-size }}
-      PCP_SIZE: ${{ matrix.config.pcp-size }}
-      EP_SIZE: ${{ matrix.config.ep }}
-      DP_ATTENTION: ${{ matrix.config['dp-attn'] }}
-      CONC: ${{ matrix.config.conc }}
-      SPEC_DECODING: ${{ matrix.config.spec-decoding }}
-      DISAGG: ${{ matrix.config.disagg }}
-      MOE_DEBUG: '0'
-      MOE_DEBUG_LOG: ${{ (inputs.moe-debug) && '/workspace/moe_debug.tp0.log' || '' }}
-    steps:
-      - name: Resource cleanup
-        run: |
-          # Cleanup Docker resources
-          if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-            echo "[Docker] Cleaning up resources ..."
-            docker ps -aq | xargs -r docker rm -f
-            docker network prune -f
-            while [ -n "$(docker ps -aq)" ]; do
-              docker ps -a
-              sleep 5
-            done
-          fi
+        config: ${{ fromJson(needs.get-jobs.outputs.fixed-config) }}
+    secrets: inherit
+    with:
+      exp-name: ${{ matrix.config.exp-name }}
+      recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
+      isl: ${{ matrix.config.isl }}
+      osl: ${{ matrix.config.osl }}
+      max-model-len: ${{ matrix.config.max-model-len }}
+      runner: ${{ matrix.config.runner }}
+      priority: ${{ matrix.config.priority }}
+      queue-token: ${{ matrix.config['queue-token'] }}
+      image: ${{ matrix.config.image }}
+      model: ${{ matrix.config.model }}
+      model-prefix: ${{ matrix.config.model-prefix }}
+      framework: ${{ matrix.config.framework }}
+      precision: ${{ matrix.config.precision }}
+      router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
+      kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
+      tp: ${{ matrix.config.tp }}
+      pp: ${{ matrix.config.pp }}
+      dcp-size: ${{ matrix.config.dcp-size }}
+      pcp-size: ${{ matrix.config.pcp-size }}
+      ep: ${{ matrix.config.ep }}
+      dp-attn: ${{ matrix.config.dp-attn }}
+      conc: ${{ matrix.config.conc }}
+      spec-decoding: ${{ matrix.config.spec-decoding }}
+      disagg: ${{ matrix.config.disagg }}
+      run-eval: false
+      ref: ${{ inputs.ref }}
+      profile: true
+      profile-keep-cuda-graphs: ${{ inputs.keep-cuda-graphs }}
+      profile-num-steps: ${{ inputs.profile-num-steps }}
+      profile-start-delay-seconds: ${{ inputs.profile-start-delay-seconds }}
 
-          # Cleanup SLURM resources
-          if command -v squeue >/dev/null 2>&1; then
-            echo "[Slurm] Cleaning up jobs with name: ${{ runner.name }} ..."
-            scancel --name="${{ runner.name }}" || true
-            while [ -n "$(squeue --name='${{ runner.name }}' --noheader --format='%i')" ]; do
-              squeue --name="${{ runner.name }}"
-              sleep 5
-            done
-          fi
-
-      - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          fetch-depth: 0
-          ref: ${{ inputs.ref || github.sha }}
-          clean: false
-
-      - name: Launch + Profile (single-node sglang/vllm)
-        id: run
-        env:
-          RUNNER_NAME: ${{ runner.name }}
-          PROFILE: '1'
-          SGLANG_TORCH_PROFILER_DIR: /workspace/
-          VLLM_TORCH_PROFILER_DIR: /workspace/
-          VLLM_RPC_TIMEOUT: '1800000'
-        shell: bash
-        run: |
-          set -euo pipefail
-          export GPU_COUNT=$((TP * PP_SIZE * PCP_SIZE))
-          echo "GPU_COUNT=${GPU_COUNT}" >> "$GITHUB_ENV"
-          ep_val="${EP_SIZE:-1}"
-          res_name="${EXP_NAME}_${PRECISION}_${FRAMEWORK}_tp${TP}-pp${PP_SIZE}-dcp${DCP_SIZE}-pcp${PCP_SIZE}_ep${ep_val}_dpa_${DP_ATTENTION}_conc${CONC}_${RUNNER_NAME}"
-          export RESULT_FILENAME="${res_name}"
-          echo "RESULT_FILENAME=${res_name}" >> "$GITHUB_ENV"
-
-          bash ./runners/launch_${RUNNER_NAME%%_*}.sh
-
-          if [ ! -f "${res_name}.json" ]; then
-            echo "Run failed: Benchmark result ${res_name}.json not found." >&2
-            exit 1
-          fi
-
-          trace_path="profile_${res_name}.trace.json.gz"
-          if [ -f "$trace_path" ]; then
-            echo "trace=$trace_path" >> "$GITHUB_OUTPUT"
-            if [ "${FRAMEWORK}" = "sglang" ]; then
-              # Try to locate corresponding TP-0 traces produced by SGLang profiler
-              merged_latest=$(ls -t profiles/merged-*.trace.json.gz 2>/dev/null | head -n1 || true)
-              if [ -n "${merged_latest}" ] && [ -f "${merged_latest}" ]; then
-                ts_name="${merged_latest##*/}"
-                ts_name="${ts_name#merged-}"
-                ts_name="${ts_name%.trace.json.gz}"
-                tp0_decode="profiles/${ts_name}-TP-0-DECODE.trace.json.gz"
-                tp0_extend="profiles/${ts_name}-TP-0-EXTEND.trace.json.gz"
-                if [ -f "${tp0_decode}" ]; then
-                  echo "tp0_decode=${tp0_decode}" >> "$GITHUB_OUTPUT"
-                fi
-                if [ -f "${tp0_extend}" ]; then
-                  echo "tp0_extend=${tp0_extend}" >> "$GITHUB_OUTPUT"
-                fi
-              fi
-            fi
-          else
-            echo "Profile trace not found: $trace_path" >&2
-          fi
-
-      - name: Process result (json -> agg)
-        env:
-          RUNNER_TYPE: ${{ matrix.config.runner }}
-        run: |
-          python3 utils/process_result.py
-
-      - name: Upload profile as artifact
-        if: ${{ steps.run.outputs.trace != '' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: profile_${{ env.RESULT_FILENAME }}
-          path: profile_${{ env.RESULT_FILENAME }}.trace.json.gz
-          if-no-files-found: ignore
-
-      - name: Upload TP-0-DECODE trace as artifact
-        if: ${{ steps.run.outputs.tp0_decode != '' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: profile_${{ env.RESULT_FILENAME }}_TP0_DECODE
-          path: ${{ steps.run.outputs.tp0_decode }}
-          if-no-files-found: ignore
-
-      - name: Upload TP-0-EXTEND trace as artifact
-        if: ${{ steps.run.outputs.tp0_extend != '' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: profile_${{ env.RESULT_FILENAME }}_TP0_EXTEND
-          path: ${{ steps.run.outputs.tp0_extend }}
-          if-no-files-found: ignore
-
-      - name: Upload MoE debug log as artifact
-        if: ${{ env.MOE_DEBUG == '1' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: moe_debug_${{ env.RESULT_FILENAME }}
-          path: "moe_debug.tp0.log"
-          if-no-files-found: ignore
-
-      - name: Checkout storage repo
-        if: ${{ steps.run.outputs.trace != '' }}
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          repository: SemiAnalysisAI/InferenceX-trace-storage
-          path: storage
-          ref: master
-          ssh-key: ${{ secrets.PROFILER_STORAGE_DEPLOY_KEY }}
-          fetch-depth: 0
-
-      - name: Push profile to storage repo
-        if: ${{ steps.run.outputs.trace != '' }}
-        id: push
-        env:
-          TRACE_LOCAL: ${{ steps.run.outputs.trace }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          dest_dir="storage/profiles/${GITHUB_SHA}/${{ matrix.config.runner }}/${{ matrix.config.framework }}/${{ matrix.config['exp-name'] }}_${{ matrix.config.precision }}_tp${{ matrix.config.tp }}_pp${{ matrix.config.pp }}_dcp${{ matrix.config.dcp-size }}_pcp${{ matrix.config.pcp-size }}_ep${{ matrix.config.ep || 1 }}_conc${{ matrix.config.conc }}"
-          mkdir -p "$dest_dir"
-          cp "$TRACE_LOCAL" "$dest_dir/trace.json.gz"
-
-          pushd storage >/dev/null
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git add -A
-          git commit -m "Add profile: ${GITHUB_SHA} ${{ matrix.config['exp-name'] }} tp${{ matrix.config.tp }} pp${{ matrix.config.pp }} dcp${{ matrix.config.dcp-size }} pcp${{ matrix.config.pcp-size }} ep${{ matrix.config.ep || 1 }} conc${{ matrix.config.conc }}" || echo "Nothing to commit"
-          git push
-          STORAGE_SHA="$(git rev-parse HEAD)"
-          popd >/dev/null
-
-          export RAW_URL="https://raw.githubusercontent.com/SemiAnalysisAI/InferenceX-trace-storage/${STORAGE_SHA}/profiles/${GITHUB_SHA}/${{ matrix.config.runner }}/${{ matrix.config.framework }}/${{ matrix.config['exp-name'] }}_${{ matrix.config.precision }}_tp${{ matrix.config.tp }}_pp${{ matrix.config.pp }}_dcp${{ matrix.config.dcp-size }}_pcp${{ matrix.config.pcp-size }}_ep${{ matrix.config.ep || 1 }}_conc${{ matrix.config.conc }}/trace.json.gz"
-          export TITLE="${{ matrix.config['exp-name'] }}_${{ matrix.config.precision }}_tp${{ matrix.config.tp }}_pp${{ matrix.config.pp }}_dcp${{ matrix.config.dcp-size }}_pcp${{ matrix.config.pcp-size }}_ep${{ matrix.config.ep || 1 }}_conc${{ matrix.config.conc }}"
-
-          enc_src="$(python3 -c 'import os,urllib.parse; print(urllib.parse.quote(os.environ["RAW_URL"], safe=""))')"
-          enc_title="$(python3 -c 'import os,urllib.parse; print(urllib.parse.quote(os.environ["TITLE"], safe=""))')"
-
-          relay="${PERFETTO_RELAY_URL%/}"
-          RELAY_URL="${relay}/?src=${enc_src}&title=${enc_title}"
-
-          echo "raw_url=$RAW_URL" >> "$GITHUB_OUTPUT"
-          echo "relay_url=$RELAY_URL" >> "$GITHUB_OUTPUT"
-
-      - name: Print Perfetto link (relay)
-        if: ${{ steps.push.outputs.relay_url != '' }}
-        env:
-          RELAY_URL: ${{ steps.push.outputs.relay_url }}
-          RAW_URL: ${{ steps.push.outputs.raw_url }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "RAW trace URL: $RAW_URL"
-          echo "Perfetto Relay URL: $RELAY_URL"
-          printf "\n**Perfetto (Relay):** %s\n" "$RELAY_URL" >> "$GITHUB_STEP_SUMMARY"
+  profile-agentic:
+    needs: get-jobs
+    if: ${{ needs.get-jobs.outputs.agentic-config != '[]' }}
+    uses: ./.github/workflows/benchmark-tmpl.yml
+    name: profile agentic /
+    strategy:
+      fail-fast: false
+      matrix:
+        config: ${{ fromJson(needs.get-jobs.outputs.agentic-config) }}
+    secrets: inherit
+    with:
+      exp-name: ${{ matrix.config.exp-name }}
+      recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
+      runner: ${{ matrix.config.runner }}
+      priority: ${{ matrix.config.priority }}
+      queue-token: ${{ matrix.config['queue-token'] }}
+      image: ${{ matrix.config.image }}
+      model: ${{ matrix.config.model }}
+      model-prefix: ${{ matrix.config.model-prefix }}
+      framework: ${{ matrix.config.framework }}
+      precision: ${{ matrix.config.precision }}
+      router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
+      kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
+      tp: ${{ matrix.config.tp }}
+      pp: ${{ matrix.config.pp }}
+      dcp-size: ${{ matrix.config.dcp-size }}
+      pcp-size: ${{ matrix.config.pcp-size }}
+      ep: ${{ matrix.config.ep }}
+      dp-attn: ${{ matrix.config.dp-attn }}
+      conc: ${{ matrix.config.conc }}
+      kv-offloading: ${{ matrix.config.kv-offloading }}
+      kv-offload-backend: ${{ matrix.config['kv-offload-backend'].name }}
+      kv-offload-backend-metadata: ${{ matrix.config['kv-offload-backend'] && toJson(matrix.config['kv-offload-backend']) || '' }}
+      total-cpu-dram-gb: ${{ matrix.config.total-cpu-dram-gb }}
+      duration: ${{ inputs.duration-override != '' && inputs.duration-override || matrix.config.duration }}
+      isl: '0'
+      osl: '0'
+      max-model-len: '0'
+      spec-decoding: ${{ matrix.config.spec-decoding }}
+      disagg: ${{ 'false' }}
+      run-eval: false
+      scenario-type: agentic-coding
+      ref: ${{ inputs.ref }}
+      profile: true
+      profile-keep-cuda-graphs: ${{ inputs.keep-cuda-graphs }}
+      profile-num-steps: ${{ inputs.profile-num-steps }}
+      profile-start-delay-seconds: ${{ inputs.profile-start-delay-seconds }}

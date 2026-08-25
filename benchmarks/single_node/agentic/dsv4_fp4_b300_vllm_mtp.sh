@@ -297,6 +297,15 @@ if [ "$IS_DEP8" = "true" ]; then
     GPU_MEM_UTIL=0.92
 fi
 
+# Profiled runs execute eager so every device kernel keeps its operator link;
+# setup_profiling_env must run before the server launch reads
+# VLLM_TORCH_PROFILER_DIR.
+setup_profiling_env
+PROFILE_EAGER_ARGS=()
+if profiling_cuda_graph_disabled; then
+    PROFILE_EAGER_ARGS=(--enforce-eager)
+fi
+
 { set +x; } 2>/dev/null
 VLLM_CMD=(
     vllm serve "$MODEL_PATH" --served-model-name "$MODEL"
@@ -323,6 +332,7 @@ VLLM_CMD=(
     "${TP_ARGS[@]}"
     "${MODE_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
+    "${PROFILE_EAGER_ARGS[@]}"
 )
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
 printf '\n' | tee -a "$RESULT_DIR/vllm_command.txt"
@@ -353,5 +363,7 @@ if [ "${EVAL_ONLY}" = "true" ]; then
     run_eval --port "$PORT"
 else
     build_replay_cmd "$RESULT_DIR"
+    # Profiling endpoints live on the backend server, not the router.
+    export PROFILE_SERVER_URL="http://localhost:$VLLM_BACKEND_PORT"
     run_agentic_replay_and_write_outputs "$RESULT_DIR"
 fi

@@ -756,9 +756,11 @@ run_benchmark_serving() {
     fi
     set +x
 
-    # If profiling, move trace to relay-upload location
+    # If profiling, move trace to relay-upload location and stage the full
+    # trace set + metadata sidecar for artifact upload.
     if [[ "${PROFILE:-}" == "1" ]]; then
         move_profile_trace_for_relay
+        stage_profile_outputs
     fi
 
     return $benchmark_exit_code
@@ -768,6 +770,21 @@ run_benchmark_serving() {
 # --------------------------------
 # Profiling trace helpers
 # --------------------------------
+
+# Resolve the container-side path of the GitHub-workspace mount. Most runners
+# mount the repo at /workspace, but images that install their engine editable
+# under /workspace are mounted elsewhere (e.g. /ix); agentic scripts record
+# that in INFMAX_CONTAINER_WORKSPACE, and fixed-seq-len scripts run with the
+# mount as their cwd. Files must land here for GitHub Actions to collect them.
+_profile_workspace_dir() {
+    if [[ -n "${INFMAX_CONTAINER_WORKSPACE:-}" ]]; then
+        printf '%s' "$INFMAX_CONTAINER_WORKSPACE"
+    elif [[ -d "$PWD/utils/bench_serving" ]]; then
+        printf '%s' "$PWD"
+    else
+        printf '%s' /workspace
+    fi
+}
 
 _find_latest_profile_trace() {
     local latest=""
@@ -852,7 +869,7 @@ move_profile_trace_for_relay() {
         return 0
     fi
 
-    local dest_trace="/workspace/profile_${RESULT_FILENAME}.trace.json.gz"
+    local dest_trace="$(_profile_workspace_dir)/profile_${RESULT_FILENAME}.trace.json.gz"
     if [[ "$trace_file" == *.gz ]]; then
         cp -f "$trace_file" "$dest_trace"
     else
@@ -860,6 +877,254 @@ move_profile_trace_for_relay() {
     fi
 
     echo "[PROFILE] Relay trace prepared: $dest_trace (source: $trace_file)"
+}
+
+# --------------------------------
+# e2e profiling capture (PROFILE=1)
+# --------------------------------
+# Torch-profiler capture of a serving run for kernel-level correlation.
+# Knobs (all read from the environment; the Profile workflow sets them):
+#   PROFILE=1                    master switch.
+#   PROFILE_DISABLE_CUDA_GRAPH   default 1. Profiled servers run eager so every
+#                                device kernel keeps a link to its launching
+#                                operator; kernels replayed inside a captured
+#                                CUDA graph lose that attribution.
+#   PROFILE_SERVER_URL           base URL for /start_profile & /stop_profile.
+#                                Defaults to http://localhost:$PORT; scripts
+#                                that front the server with a router must point
+#                                this at the backend port.
+#   PROFILE_START_DELAY_SECONDS  agentic: steady-state delay before the capture
+#                                is triggered (default 600).
+#   PROFILE_NUM_STEPS            sglang: forward steps per stage to capture
+#                                (default 2; auto-stops when reached).
+#   PROFILE_CAPTURE_SECONDS      vllm: timed capture window (default 15).
+#   PROFILE_WITH_STACK           record python stacks (default true).
+#   PROFILE_OUTPUT_DIR           where the engine writes traces (defaulted by
+#                                setup_profiling_env to <workspace>/profiles).
+
+profiling_enabled() {
+    [[ "${PROFILE:-}" == "1" ]]
+}
+
+profiling_cuda_graph_disabled() {
+    profiling_enabled && [[ "${PROFILE_DISABLE_CUDA_GRAPH:-1}" == "1" ]]
+}
+
+# Call BEFORE launching the inference server: the engine reads its profiler
+# output dir from the environment at startup.
+setup_profiling_env() {
+    profiling_enabled || return 0
+    local ws
+    ws="$(_profile_workspace_dir)"
+    export PROFILE_OUTPUT_DIR="${PROFILE_OUTPUT_DIR:-$ws/profiles}"
+    mkdir -p "$PROFILE_OUTPUT_DIR"
+    export SGLANG_TORCH_PROFILER_DIR="$PROFILE_OUTPUT_DIR"
+    export VLLM_TORCH_PROFILER_DIR="$PROFILE_OUTPUT_DIR"
+    # Operand shapes/dtypes on cpu_op events are what link kernels back to
+    # operators downstream; vllm reads these knobs from the environment.
+    export VLLM_TORCH_PROFILER_RECORD_SHAPES=1
+    export VLLM_TORCH_PROFILER_WITH_STACK=1
+    echo "[PROFILE] Profiler output dir: $PROFILE_OUTPUT_DIR (cuda graphs $(profiling_cuda_graph_disabled && echo disabled || echo enabled))"
+}
+
+# Agentic runs replay traces through aiperf, which has no --profile flag; the
+# engines still expose /start_profile & /stop_profile over HTTP. Arm a
+# background trigger that waits for steady state and then captures a bounded
+# window. sglang auto-stops after num_steps per stage; vllm needs a timed stop.
+launch_agentic_profile_trigger() {
+    profiling_enabled || return 0
+    local log_dir="${1:-$(_profile_workspace_dir)}"
+    local url="${PROFILE_SERVER_URL:-http://localhost:${PORT:-8888}}"
+    local delay="${PROFILE_START_DELAY_SECONDS:-600}"
+    local trigger_log="$log_dir/profile_trigger.log"
+    (
+        sleep "$delay"
+        echo "[PROFILE] $(date --iso-8601=seconds) starting capture via $url/start_profile"
+        if [[ "${FRAMEWORK:-}" == *vllm* ]]; then
+            curl -sS -m 120 -X POST "$url/start_profile" \
+                -H 'Content-Type: application/json' -d '{}' \
+                || echo "[PROFILE] start_profile failed"
+            sleep "${PROFILE_CAPTURE_SECONDS:-15}"
+            echo "[PROFILE] $(date --iso-8601=seconds) stopping capture"
+            curl -sS -m 600 -X POST "$url/stop_profile" \
+                -H 'Content-Type: application/json' -d '{}' \
+                || echo "[PROFILE] stop_profile failed"
+        else
+            curl -sS -m 120 -X POST "$url/start_profile" \
+                -H 'Content-Type: application/json' \
+                -d "{\"num_steps\": ${PROFILE_NUM_STEPS:-2}, \"merge_profiles\": true, \"profile_by_stage\": true, \"record_shapes\": true, \"with_stack\": ${PROFILE_WITH_STACK:-true}}" \
+                || echo "[PROFILE] start_profile failed"
+        fi
+    ) > "$trigger_log" 2>&1 &
+    PROFILE_TRIGGER_PID=$!
+    echo "[PROFILE] Capture trigger armed: pid=$PROFILE_TRIGGER_PID delay=${delay}s url=$url log=$trigger_log"
+}
+
+# Reap the trigger and make sure no capture is left open (a stop on an
+# already-stopped profiler is a harmless error).
+finalize_profile_capture() {
+    profiling_enabled || return 0
+    if [[ -n "${PROFILE_TRIGGER_PID:-}" ]]; then
+        wait "$PROFILE_TRIGGER_PID" 2>/dev/null || true
+        PROFILE_TRIGGER_PID=""
+    fi
+    local url="${PROFILE_SERVER_URL:-http://localhost:${PORT:-8888}}"
+    curl -sS -m 600 -X POST "$url/stop_profile" \
+        -H 'Content-Type: application/json' -d '{}' >/dev/null 2>&1 || true
+}
+
+# Collect every trace the profiler produced plus a self-describing metadata
+# sidecar into <workspace>/profile_traces_${RESULT_FILENAME}/ for artifact
+# upload and downstream DB ingest.
+stage_profile_outputs() {
+    profiling_enabled || return 0
+    if [[ -z "${RESULT_FILENAME:-}" ]]; then
+        echo "[PROFILE] RESULT_FILENAME is not set; skipping profile staging." >&2
+        return 0
+    fi
+
+    local ws
+    ws="$(_profile_workspace_dir)"
+    local out_dir="$ws/profile_traces_${RESULT_FILENAME}"
+    mkdir -p "$out_dir"
+
+    # Search roots, deduped: explicit output dir, engine dirs, workspace root.
+    local -a roots=()
+    local dir="" existing="" seen=0
+    for dir in "${PROFILE_OUTPUT_DIR:-}" "${SGLANG_TORCH_PROFILER_DIR:-}" \
+               "${VLLM_TORCH_PROFILER_DIR:-}" "$ws" "$ws/profiles"; do
+        [[ -n "$dir" && -d "$dir" ]] || continue
+        seen=0
+        for existing in "${roots[@]}"; do
+            [[ "$existing" == "$dir" ]] && { seen=1; break; }
+        done
+        [[ "$seen" -eq 0 ]] && roots+=("$dir")
+    done
+
+    # The profiler writes traces asynchronously after the capture stops; wait
+    # for at least one to appear.
+    local -a traces=()
+    local waited=0 flush_wait="${PROFILE_FLUSH_WAIT_SECONDS:-180}"
+    while :; do
+        traces=()
+        while IFS= read -r -d '' f; do
+            [[ "$(basename "$f")" == profile_*.trace.json.gz ]] && continue
+            traces+=("$f")
+        done < <(find "${roots[@]}" -maxdepth 2 -type f \
+                     \( -name "*.trace.json" -o -name "*.trace.json.gz" \) \
+                     -print0 2>/dev/null | sort -z)
+        [[ ${#traces[@]} -gt 0 || $waited -ge $flush_wait ]] && break
+        sleep 10
+        waited=$((waited + 10))
+    done
+
+    if [[ ${#traces[@]} -eq 0 ]]; then
+        echo "[PROFILE] No traces found under: ${roots[*]}" >&2
+    fi
+
+    local dest="" base=""
+    for f in "${traces[@]}"; do
+        base="$(basename "$f")"
+        dest="$out_dir/$base"
+        if [[ -e "$dest" && ! "$f" -ef "$dest" ]]; then
+            dest="$out_dir/$(basename "$(dirname "$f")")_$base"
+        fi
+        cp -f "$f" "$dest"
+        # Store compressed only.
+        if [[ "$dest" != *.gz ]]; then
+            gzip -f "$dest"
+        fi
+    done
+    echo "[PROFILE] Staged ${#traces[@]} trace file(s) into $out_dir"
+
+    # Best-effort server introspection for the metadata sidecar.
+    local url="${PROFILE_SERVER_URL:-http://localhost:${PORT:-8888}}"
+    if [[ "${FRAMEWORK:-}" == *vllm* ]]; then
+        curl -sS -m 30 "$url/version" > "$out_dir/server_info.json" 2>/dev/null || true
+    else
+        curl -sS -m 30 "$url/get_server_info" > "$out_dir/server_info.json" 2>/dev/null || true
+    fi
+    local gpu_info=""
+    gpu_info="$(nvidia-smi --query-gpu=name,driver_version --format=csv,noheader 2>/dev/null | head -n1 || true)"
+
+    GPU_INFO="$gpu_info" PROFILE_STAGE_DIR="$out_dir" python3 - <<'PYEOF' || echo "[PROFILE] metadata sidecar failed" >&2
+import json, os, socket, datetime
+
+env = os.environ.get
+def as_bool(v):
+    return None if v is None else v.lower() in ("1", "true")
+def as_int(v):
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return None
+
+out_dir = os.environ["PROFILE_STAGE_DIR"]
+meta = {
+    "schema_version": "1",
+    "result_filename": env("RESULT_FILENAME"),
+    "captured_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    "hostname": socket.gethostname(),
+    "gpu_info": env("GPU_INFO") or None,
+    "github": {
+        "sha": env("GITHUB_SHA"),
+        "run_id": env("GITHUB_RUN_ID"),
+        "run_attempt": env("GITHUB_RUN_ATTEMPT"),
+    },
+    "workload": {
+        "scenario_type": env("SCENARIO_TYPE") or ("agentic-coding" if env("IS_AGENTIC") == "1" else "fixed-seq-len"),
+        "isl": as_int(env("ISL")),
+        "osl": as_int(env("OSL")),
+        "conc": as_int(env("CONC")),
+        "duration_s": as_int(env("DURATION")),
+        "random_range_ratio": env("RANDOM_RANGE_RATIO"),
+    },
+    "deployment": {
+        "exp_name": env("EXP_NAME"),
+        "model": env("MODEL"),
+        "model_prefix": env("MODEL_PREFIX"),
+        "precision": env("PRECISION"),
+        "framework": env("FRAMEWORK"),
+        "image": env("IMAGE"),
+        "runner_name": env("RUNNER_NAME"),
+        "runner_type": env("RUNNER_TYPE"),
+        "tp": as_int(env("TP")),
+        "pp": as_int(env("PP_SIZE")),
+        "dcp": as_int(env("DCP_SIZE")),
+        "pcp": as_int(env("PCP_SIZE")),
+        "ep": as_int(env("EP_SIZE")),
+        "dp_attention": as_bool(env("DP_ATTENTION")),
+        "spec_decoding": env("SPEC_DECODING"),
+        "disagg": as_bool(env("DISAGG")),
+        "kv_offloading": env("KV_OFFLOADING"),
+        "kv_offload_backend": env("KV_OFFLOAD_BACKEND"),
+    },
+    "profiler": {
+        "cuda_graph_disabled": env("PROFILE_DISABLE_CUDA_GRAPH", "1") == "1",
+        "num_steps": as_int(env("PROFILE_NUM_STEPS", "2")),
+        "start_delay_seconds": as_int(env("PROFILE_START_DELAY_SECONDS", "600")),
+        "capture_seconds": as_int(env("PROFILE_CAPTURE_SECONDS", "15")),
+        "with_stack": env("PROFILE_WITH_STACK", "true") == "true",
+        "record_shapes": True,
+    },
+    "traces": sorted(
+        f for f in os.listdir(out_dir)
+        if f.endswith((".trace.json", ".trace.json.gz"))
+    ),
+}
+with open(os.path.join(out_dir, "profile_meta.json"), "w") as fh:
+    json.dump(meta, fh, indent=2, sort_keys=True)
+print(f"[PROFILE] Wrote {os.path.join(out_dir, 'profile_meta.json')}")
+PYEOF
+
+    # Copy auxiliary launch context when present (server args are the ground
+    # truth for how the profiled server differed from the swept one).
+    local aux=""
+    for aux in "${RESULT_DIR:-}/sglang_command.txt" "${RESULT_DIR:-}/vllm_command.txt" \
+               "${RESULT_DIR:-}/benchmark_command.txt" "$ws/server.log"; do
+        [[ -n "$aux" && -f "$aux" ]] && cp -f "$aux" "$out_dir/" || true
+    done
+    return 0
 }
 
 
@@ -2260,6 +2525,8 @@ run_agentic_replay_and_write_outputs() (
 
     echo "$REPLAY_CMD" > "$result_dir/benchmark_command.txt"
 
+    launch_agentic_profile_trigger "$result_dir"
+
     set +e
     set -x
     $REPLAY_CMD 2>&1 | tee "$result_dir/benchmark.log"
@@ -2271,6 +2538,9 @@ run_agentic_replay_and_write_outputs() (
         _stop_agentx_power_monitor
         trap - EXIT INT TERM
     fi
+
+    finalize_profile_capture
+    stage_profile_outputs
 
     write_agentic_result_json "$result_dir"
 

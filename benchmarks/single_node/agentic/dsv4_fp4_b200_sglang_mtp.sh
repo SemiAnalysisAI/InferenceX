@@ -148,6 +148,13 @@ MAX_RUNNING_REQUESTS=$((2 * CONC))
 CUDA_GRAPH_MAX_BS=$((2 * CONC))
 CUDA_GRAPH_ARGS=(--cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS")
 
+# Profiled runs execute eager so every device kernel keeps its operator link;
+# setup_profiling_env must run before the server launch reads the profiler dir.
+setup_profiling_env
+if profiling_cuda_graph_disabled; then
+    CUDA_GRAPH_ARGS=(--disable-cuda-graph)
+fi
+
 export PYTHONNOUSERSITE=1
 export TORCH_CUDA_ARCH_LIST=10.0
 # Agentic warmup dispatches hundreds of large prompts at once. SGLang's
@@ -270,5 +277,7 @@ if [ "${EVAL_ONLY}" = "true" ]; then
 else
     build_replay_cmd "$RESULT_DIR"
     REPLAY_CMD+=" --server-metrics http://localhost:$SGLANG_BACKEND_PORT/metrics"
+    # Profiling endpoints live on the backend server, not the DP router.
+    export PROFILE_SERVER_URL="http://localhost:$SGLANG_BACKEND_PORT"
     run_agentic_replay_and_write_outputs "$RESULT_DIR"
 fi
