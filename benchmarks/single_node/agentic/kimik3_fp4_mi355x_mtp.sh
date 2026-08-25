@@ -1,32 +1,25 @@
 #!/usr/bin/env bash
 set -euo pipefail
 set -x
-
 source "$(dirname "$0")/../../benchmark_lib.sh"
-
 wait_for_amd_gpu_clean
 
-du -h /dev/shm
-
+export EVAL_FRAMEWORK="lm-eval"
+EVAL_ONLY="${EVAL_ONLY:-false}"
+EVAL_LIMIT="${EVAL_LIMIT:-200}"
+export EVAL_ONLY EVAL_LIMIT
+export AIPERF_EXPERIMENTAL_FAST=0
+export AIPERF_WARMUP_REQUESTS_PER_LANE=1
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE
 
-if [[ -n "${SLURM_JOB_ID:-}" ]]; then
-    echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
-fi
+DP_SIZE=1
+export DP_SIZE
+TOTAL_RANKS=$(( TP * DP_SIZE ))
 
-if [ "$TP" -ne 8 ]; then
-    echo "Error: Kimi-K3 MXFP4 is a 1.56 TB checkpoint and only fits at TP=8 on" >&2
-    echo "       288 GB gfx950 parts (~195 GB/GPU). Got TP=$TP." >&2
-    exit 1
-fi
-
-# ROCR/HIP visibility for vLLM 0.14+
 if [ -n "${ROCR_VISIBLE_DEVICES:-}" ]; then
     export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
 fi
 
-# `hf download` creates the target dir if missing and is itself idempotent. The
-# 1.56 TB checkpoint is normally pre-staged, so these calls are a no-op there.
 if [[ -n "${MODEL_PATH:-}" ]]; then
     if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
         hf download "$MODEL" --local-dir "$MODEL_PATH"
@@ -38,43 +31,35 @@ fi
 
 rocm-smi || true
 amd-smi || true
-
-# ---- Resolve traces and install deps ----------------------------------------
 resolve_trace_source
 install_agentic_deps
 
+DCP_SIZE=8
+export DCP_SIZE
 
-# ---- Reference env block ----------------------------------------------------
-# Keep ALL of these. Commenting them out does not avoid the AITER FMHA crash:
-# that crash is gated on VLLM_ROCM_USE_AITER alone (AiterFlashAttnPrefillBackend
-# .is_available() consults only rocm_aiter_ops.is_enabled()), so disabling the
-# others just loses the MoE kernels while keeping the failure.
+export SKIP_PATCH_OPUS_ROWS=1
+bash "$(dirname "$0")/apply_kimi_k3_patches.sh" || true
+
 export VLLM_ROCM_AITER_MLA_ASM_PADDING=asm
 export VLLM_ROCM_USE_AITER=1
 export SAFETENSORS_FAST_GPU=1
 export VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4=1
 export AITER_BF16_FP8_MOE_BOUND=0
-# REQUIRED on ROCm per the upstream recipe: the build auto-enables this to 1.
 export VLLM_USE_BREAKABLE_CUDAGRAPH=0
+export GPU_ARCHS=gfx950
+export VLLM_ROCM_USE_AITER_MOE=1
+export AITER_SITUV2_A8W4=1
+export HSA_NO_SCRATCH_RECLAIM=1
+export VLLM_K3_KDA_SAFE_STAGES=1
+export VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=1
 
-# Workaround for MEC FW <177 RCCL memory reclaim issue (shared with the other
-# gfx950 recipes in this tree).
-mec_version=$(rocm-smi --showfw 2>/dev/null | grep MEC | head -n 1 | awk '{print $NF}')
-if [[ "$mec_version" == "" || ${mec_version:-0} -lt 177 ]]; then
-    export HSA_NO_SCRATCH_RECLAIM=1
-fi
-
-# 2.8T of weights off a shared/NFS mount takes far longer than the default.
-export VLLM_ENGINE_READY_TIMEOUT_S="${VLLM_ENGINE_READY_TIMEOUT_S:-7200}"
-
-# Long agentic turns against a 1M context: keep the client from timing out
-# mid-request while the server is prefill-bound.
+export VLLM_ENGINE_READY_TIMEOUT_S=7200
 export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
+export PYTHONNOUSERSITE=1
+export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=1200
 
-# ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
-
 SERVER_PID=""
 
 cleanup_agentic_services() {
@@ -88,80 +73,65 @@ trap cleanup_agentic_services EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-# ---- KV offload -------------------------------------------------------------
-# TOTAL_CPU_DRAM_GB is the aggregate host-DRAM budget the matrix generator
-# derives from dram-utilization and the runner's available-cpu-dram-mib, capped
-# at the 3,095,781 MiB (3 TB decimal) agentic limit. Per
-# benchmarks/single_node/agentic/README.md it must be consumed as given and
-# never replaced with a model-specific constant.
+export PYTHONHASHSEED=42
+
+# KV offload. TOTAL_CPU_DRAM_GB is the aggregate host-DRAM budget the matrix
+# generator derives from dram-utilization and the runner's available CPU DRAM;
+# per the agentic README it must be consumed as given, never replaced with a
+# model-specific constant. Worth 3.3x on the non-DCP path (T92 vs T64), so the
+# absence of this block is not a neutral simplification.
 OFFLOAD_ARGS=()
-
 if agentic_kv_offload_enabled; then
-case "${KV_OFFLOAD_BACKEND:-}" in
-  vllm-simple)
-    require_agentic_kv_offload_backend "$KV_OFFLOAD_BACKEND"
-    CPU_BYTES_PER_RANK=$(( TOTAL_CPU_DRAM_GB * 1000 * 1000 * 1000 / TP ))
-    # Identical prefixes must hash to identical block keys across ranks.
-    export PYTHONHASHSEED=42
-    SIMPLE_LAZY_OFFLOAD="${SIMPLE_LAZY_OFFLOAD:-false}"
-    OFFLOAD_ARGS=(
-        --kv-transfer-config
-        "{\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use_per_rank\":$CPU_BYTES_PER_RANK,\"lazy_offload\":$SIMPLE_LAZY_OFFLOAD}}"
-    )
-    echo "SimpleCPUOffloadConnector: ${CPU_BYTES_PER_RANK} B/rank x ${TP} ranks, lazy_offload=$SIMPLE_LAZY_OFFLOAD"
-    ;;
-esac
+    case "${KV_OFFLOAD_BACKEND:-}" in
+      vllm-simple)
+        require_agentic_kv_offload_backend "$KV_OFFLOAD_BACKEND"
+        CPU_BYTES_PER_RANK=$(( TOTAL_CPU_DRAM_GB * 1000 * 1000 * 1000 / TOTAL_RANKS ))
+        # Identical prefixes must hash to identical block keys across ranks.
+        export PYTHONHASHSEED=42
+        SIMPLE_LAZY_OFFLOAD="${SIMPLE_LAZY_OFFLOAD:-false}"
+        OFFLOAD_ARGS=(
+            --kv-transfer-config
+            "{\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use_per_rank\":$CPU_BYTES_PER_RANK,\"lazy_offload\":$SIMPLE_LAZY_OFFLOAD}}"
+        )
+        echo "SimpleCPUOffloadConnector: ${CPU_BYTES_PER_RANK} B/rank x ${TOTAL_RANKS} ranks, lazy_offload=$SIMPLE_LAZY_OFFLOAD"
+        ;;
+      *)
+        echo "KV offload requested (KV_OFFLOADING=$KV_OFFLOADING) but backend '${KV_OFFLOAD_BACKEND:-unset}' is not handled here" >&2
+        ;;
+    esac
 fi
 
-# ---- Parallelism ------------------------------------------------------------
-EP_ARGS=()
-if [ "$EP_SIZE" -gt 1 ]; then
-    EP_ARGS=(--enable-expert-parallel)
-fi
+KV_CACHE_DTYPE=fp8
+CP_ARGS=(
+    --decode-context-parallel-size "$DCP_SIZE"
+    --dcp-comm-backend a2a
+    --attention-backend ROCM_AITER_MLA
+    --cp-kv-cache-interleave-size 1
+)
+export VLLM_USE_DIRECT_DCP_A2A=0
+export VLLM_USE_DIRECT_DCP_Q_GATHER=0
+export VLLM_USE_DIRECT_DCP_KV_GATHER=0
+export VLLM_ALLOW_DCP_FULL_CUDAGRAPH=1
+export VLLM_DCP_Q_REPLICATE=1
+export VLLM_ROCM_USE_AITER_MLA=1
+export AITER_DISABLE_FMHA_OPUS=1
+export VLLM_ROCM_USE_AITER_MLA=1
+export AITER_DISABLE_FMHA_OPUS=1
 
-# ---- Speculative ------------------------------------------------------------
-SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-2}"
-SYNTHETIC_ACCEPT_LEN=2.51
+SPEC_ARGS=()
 
-if [ "${EVAL_ONLY:-false}" = "true" ]; then
-    SPEC_ARGS=(
-        --speculative-config
-        "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"block\"}"
-    )
-else
-    SPEC_ARGS=(
-        --speculative-config
-        "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
-    )
-fi
+CHUNKED_PREFILL_ARGS=(--max-num-batched-tokens 8192)
+ASYNC_SCHED_ARGS=(--no-async-scheduling)
+MLA_PREFILL_ARGS=(--attention-config "{\"mla_prefill_backend\":\"ROCM_AITER_FA\"}")
 
-ASYNC_SCHED_ARGS=()
-if [ "${ASYNC_SCHEDULING:-0}" != "1" ]; then
-    ASYNC_SCHED_ARGS=(--no-async-scheduling)
-fi
+MAX_NUM_SEQS=80
+CUDAGRAPH_CAPTURE_SIZES="1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80"
+MAX_CUDAGRAPH_CAPTURE_SIZE=80
+CUDAGRAPH_MODE=FULL_AND_PIECEWISE
+COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"$CUDAGRAPH_MODE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}")
 
-MLA_PREFILL_BACKEND="${MLA_PREFILL_BACKEND:-ROCM_AITER_FA}"
-MLA_PREFILL_ARGS=()
-if [ -n "$MLA_PREFILL_BACKEND" ]; then
-    MLA_PREFILL_ARGS=(
-        --attention-config
-        "{\"mla_prefill_backend\":\"$MLA_PREFILL_BACKEND\"}"
-    )
-fi
+GPU_MEM_UTIL=0.9
 
-# ---- HIP graph ------------------------------------------------------------
-MAX_NUM_SEQS="${MAX_NUM_SEQS:-$(( CONC * 2 ))}"
-MAX_CUDAGRAPH_CAPTURE_SIZE="${MAX_CUDAGRAPH_CAPTURE_SIZE:-$(( MAX_NUM_SEQS * 3 ))}"
-CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 1 "$MAX_CUDAGRAPH_CAPTURE_SIZE")"
-COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}")
-
-GPU_MEM_UTIL="0.9"
-
-echo "Starting vllm server..."
-export PYTHONNOUSERSITE=1
-export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS="${VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS:-1200}"
-
-{ set +x; } 2>/dev/null
 VLLM_CMD=(
     vllm serve "$MODEL_PATH" --served-model-name "$MODEL"
     --host 0.0.0.0
@@ -169,7 +139,6 @@ VLLM_CMD=(
     --trust-remote-code
     --moe-backend auto
     --tensor-parallel-size "$TP"
-    "${EP_ARGS[@]}"
     --load-format fastsafetensors
     --gpu-memory-utilization "$GPU_MEM_UTIL"
     --language-model-only
@@ -179,23 +148,17 @@ VLLM_CMD=(
     --reasoning-parser kimi_k3
     --max-model-len 1048576
     --enable-prefix-caching
-    --kv-cache-dtype "fp8"
-    --max-num-batched-tokens 8192
-    --decode-context-parallel-size 8
-    --dcp-comm-backend a2a
-    --attention-backend ROCM_AITER_MLA
-    --cp-kv-cache-interleave-size 1
+    --enable-prompt-tokens-details
+    --kv-cache-dtype "$KV_CACHE_DTYPE"
+    "${CHUNKED_PREFILL_ARGS[@]}"
+    "${OFFLOAD_ARGS[@]}"
+    "${CP_ARGS[@]}"
+    "${SPEC_ARGS[@]}"
     "${ASYNC_SCHED_ARGS[@]}"
     "${MLA_PREFILL_ARGS[@]}"
     "${COMPILATION_CONFIG_ARGS[@]}"
-    "${SPEC_ARGS[@]}"
-    "${OFFLOAD_ARGS[@]}"
 )
-printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
-printf '\n' | tee -a "$RESULT_DIR/vllm_command.txt"
-"${VLLM_CMD[@]}" > "$SERVER_LOG" 2>&1 &
-SERVER_PID=$!
-echo "Server PID: $SERVER_PID"
+
 
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
