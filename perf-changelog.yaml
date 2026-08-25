@@ -6427,3 +6427,12 @@
     - "Append the proven GB300 AgentX DEP4 prefill and DEP16 decode point at concurrency 128."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2665
   append-only: true
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Append the proven GB300 AgentX DEP4 prefill and DEP16 decode point at concurrency 256 with decode limits 8/32/32."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2665
+  append-only: true
