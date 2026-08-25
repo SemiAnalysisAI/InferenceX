@@ -6467,3 +6467,15 @@
     - "Reduce the concurrency-1536 disaggregated topology from six to five DEP8 prefill workers while retaining one DEP16 decode worker."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2644
   
+
+- config-keys:
+    - dsr1-fp8-mi300x-sglang
+    - dsv4-fp8-mi300x-vllm
+    - dsv4-fp8-mi300x-vllm-mtp
+    - qwen3.5-fp8-mi300x-sglang
+    - qwen3.5-fp8-mi300x-sglang-agentic-mtp
+    - minimaxm3-fp8-mi300x-vllm-agentic-mtp
+  description:
+    - "Migrate MI300X execution from the retired mi300x-amds pool to the nine-node mi300x-amd Barite pool."
+    - "Keep only the GitHub Actions workspace on NFS and move squash images, model caches, AgentX dataset caches, and runtime state to node-local NVMe."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2732
