@@ -261,6 +261,16 @@ export AITER_LOG_LEVEL="${AITER_LOG_LEVEL:-WARNING}"
 export AITER_SITUV2_A4W4=1
 export AITER_QUICK_REDUCE_QUANTIZATION=INT4
 export AITER_FLYDSL_STAGE2_FP8=1
+# Read the 1.56 TB checkpoint into anonymous buffers instead of mapping it.
+# The mapped path materializes each tensor out of the page cache, so a rank
+# that loses its pages to reclaim pays for them again later, and the eight
+# ranks then finish loading minutes apart. That skew is fatal here: the
+# barrier ending allocate_kv_cache() is a NCCL collective, and PyTorch's
+# process-group timeout is a compile-time 600 s that ATOM does not override,
+# so the ranks that arrive first die waiting for the last one. Reading
+# explicitly costs more transient host memory per shard but makes the load
+# time depend on the filesystem alone rather than on page-cache residency.
+export ATOM_DISABLE_MMAP=true
 # Anchor-only state checkpointing: the demand rung is 47% of checkpoint writes
 # but reads back 2.8% of the time, against 85.2% for a prompt-end anchor, so it
 # costs more in evictions than its reuse is worth on these traces.
