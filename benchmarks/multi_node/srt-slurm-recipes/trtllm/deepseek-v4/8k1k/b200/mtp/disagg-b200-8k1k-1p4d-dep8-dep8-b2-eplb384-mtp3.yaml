@@ -5,7 +5,7 @@ model:
   precision: fp4
 dynamo:
   install: true
-  wheel: "1.4.0.dev20260730"
+  wheel: "1.4.0.dev20260807"
   request_plane: tcp
 resources:
   gpu_type: b200
