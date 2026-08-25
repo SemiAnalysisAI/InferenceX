@@ -29,6 +29,7 @@ frontend:
   enable_multiple_frontends: false
   type: dynamo
 backend:
+  set_cuda_visible_devices: true  # pinned dsv4 images predate vLLM #45026's --device-ids
   connector: null
   decode_environment:
     NCCL_CUMEM_ENABLE: '1'

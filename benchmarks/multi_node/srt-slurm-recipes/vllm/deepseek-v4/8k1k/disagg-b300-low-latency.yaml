@@ -38,6 +38,7 @@ frontend:
   enable_multiple_frontends: false
 
 backend:
+  set_cuda_visible_devices: true  # pinned dsv4 images predate vLLM #45026's --device-ids
   type: vllm
   connector: null
   prefill_environment:
