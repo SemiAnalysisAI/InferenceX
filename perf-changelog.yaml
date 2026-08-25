@@ -6401,6 +6401,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2713
 
 - config-keys:
+    - glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-2p2d
+    - dsv4-fp8-h200-dynamo-sglang-agentic-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Require dcgm-power telemetry on the GLM-5.2 H200 disaggregated AgentX recipe."
+    - "Enable dcgm-power telemetry on the DSV4 H200 aggregated AgentX recipe."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2684
+
+- config-keys:
     - kimik2.6-fp4-b200-dynamo-vllm
     - dsv4-fp4-b200-dynamo-vllm
     - dsv4-fp4-b300-dynamo-vllm

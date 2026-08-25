@@ -483,7 +483,9 @@ def test_multinode_aggregation_uses_central_package_and_aggregate_topology(
     bench_result.write_text(json.dumps({"max_concurrency": 8}))
     agg_result = tmp_path / "agg_agentx_conc8.json"
     agg_result.write_text(
-        json.dumps({"num_prefill_gpu": 16, "num_decode_gpu": 16}),
+        json.dumps(
+            {"disagg": True, "num_prefill_gpu": 16, "num_decode_gpu": 16}
+        ),
         encoding="utf-8",
     )
     power_dir = logs_root / "power"
@@ -513,7 +515,60 @@ def test_multinode_aggregation_uses_central_package_and_aggregate_topology(
             "agg_result": agg_result,
             "prefill_gpus": 16,
             "decode_gpus": 16,
+            "aggregate_gpus": 0,
             "expected_producer_sha": "a1b8c7af10c00e5ea40074aebdc0086189bbc064",
+            "logs_root": logs_root,
+            "validation_result": result_dir / "power_validation.json",
+            "require_power": True,
+        }
+    ]
+
+
+def test_multinode_aggregation_maps_aggregate_deployment_to_agg_role(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from utils.agentic.aggregation import power_adapter
+
+    logs_root = tmp_path / "logs"
+    result_dir = logs_root / "agentic" / "conc_8"
+    result_dir.mkdir(parents=True)
+    bench_result = result_dir / "agentic_power_concurrency_8.json"
+    bench_result.write_text(json.dumps({"max_concurrency": 8}))
+    agg_result = tmp_path / "agg_agentx_conc8.json"
+    agg_result.write_text(
+        json.dumps(
+            {"disagg": False, "num_prefill_gpu": 8, "num_decode_gpu": 0}
+        ),
+        encoding="utf-8",
+    )
+    power_dir = logs_root / "power"
+    power_dir.mkdir(parents=True)
+    calls: list[dict] = []
+
+    def fake_run(**kwargs) -> int:
+        calls.append(kwargs)
+        return 0
+
+    monkeypatch.setattr(power_adapter, "run_multinode_power", fake_run)
+
+    assert power_adapter.run_multinode_agentic_power(
+        result_dir=result_dir,
+        agg_result=agg_result,
+        power_dir=power_dir,
+        logs_root=logs_root,
+        expected_producer_sha="a" * 40,
+        require_power=True,
+    ) == 0
+    assert calls == [
+        {
+            "power_dir": power_dir,
+            "bench_result": bench_result,
+            "agg_result": agg_result,
+            "prefill_gpus": 0,
+            "decode_gpus": 0,
+            "aggregate_gpus": 8,
+            "expected_producer_sha": "a" * 40,
             "logs_root": logs_root,
             "validation_result": result_dir / "power_validation.json",
             "require_power": True,
@@ -525,10 +580,11 @@ def test_multinode_aggregation_uses_central_package_and_aggregate_topology(
     "payload",
     [
         {},
-        {"num_prefill_gpu": True, "num_decode_gpu": 16},
-        {"num_prefill_gpu": 16.5, "num_decode_gpu": 16},
-        {"num_prefill_gpu": 0, "num_decode_gpu": 0},
-        {"num_prefill_gpu": -1, "num_decode_gpu": 16},
+        {"disagg": "false", "num_prefill_gpu": 16, "num_decode_gpu": 0},
+        {"disagg": True, "num_prefill_gpu": True, "num_decode_gpu": 16},
+        {"disagg": True, "num_prefill_gpu": 16.5, "num_decode_gpu": 16},
+        {"disagg": True, "num_prefill_gpu": 0, "num_decode_gpu": 0},
+        {"disagg": True, "num_prefill_gpu": -1, "num_decode_gpu": 16},
     ],
 )
 def test_multinode_aggregation_rejects_invalid_aggregate_topology(
