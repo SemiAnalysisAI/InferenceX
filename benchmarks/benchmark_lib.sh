@@ -1005,10 +1005,18 @@ stage_profile_outputs() {
     # for at least one to appear.
     local -a traces=()
     local waited=0 flush_wait="${PROFILE_FLUSH_WAIT_SECONDS:-180}"
+    local canon=""
+    declare -A seen_canon
     while :; do
         traces=()
+        seen_canon=()
         while IFS= read -r -d '' f; do
             [[ "$(basename "$f")" == profile_*.trace.json.gz ]] && continue
+            # The search roots overlap (e.g. <ws> at depth 2 also covers
+            # <ws>/profiles); dedup by canonical path.
+            canon="$(readlink -f "$f" 2>/dev/null || printf '%s' "$f")"
+            [[ -n "${seen_canon[$canon]:-}" ]] && continue
+            seen_canon[$canon]=1
             traces+=("$f")
         done < <(find "${roots[@]}" -maxdepth 2 -type f \
                      \( -name "*.trace.json" -o -name "*.trace.json.gz" \) \
