@@ -282,13 +282,17 @@ export PYTHONNOUSERSITE=1
 export VLLM_FLOAT32_MATMUL_PRECISION=high
 GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.90}"
 
-# Profiled runs execute eager so every device kernel keeps its operator link;
-# setup_profiling_env must run before the server launch reads
-# VLLM_TORCH_PROFILER_DIR.
+# Profiled runs execute eager so every device kernel keeps its operator link.
+# Current vllm configures the torch profiler via --profiler-config (the old
+# VLLM_TORCH_PROFILER_DIR env is no longer recognized); record_shapes is off
+# by default and required for operator/operand correlation.
 setup_profiling_env
-PROFILE_EAGER_ARGS=()
-if profiling_cuda_graph_disabled; then
-    PROFILE_EAGER_ARGS=(--enforce-eager)
+PROFILE_VLLM_ARGS=()
+if profiling_enabled; then
+    if profiling_cuda_graph_disabled; then
+        PROFILE_VLLM_ARGS+=(--enforce-eager)
+    fi
+    PROFILE_VLLM_ARGS+=(--profiler-config "{\"profiler\":\"torch\",\"torch_profiler_dir\":\"$PROFILE_OUTPUT_DIR\",\"torch_profiler_record_shapes\":true}")
 fi
 
 { set +x; } 2>/dev/null
@@ -318,7 +322,7 @@ VLLM_CMD=(
     "${VLLM_CP_ARGS[@]}"
     "${MODE_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
-    "${PROFILE_EAGER_ARGS[@]}"
+    "${PROFILE_VLLM_ARGS[@]}"
 )
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
 printf '\n' | tee -a "$RESULT_DIR/vllm_command.txt"

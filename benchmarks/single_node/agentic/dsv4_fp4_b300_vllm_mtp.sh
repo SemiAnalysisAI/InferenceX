@@ -297,13 +297,17 @@ if [ "$IS_DEP8" = "true" ]; then
     GPU_MEM_UTIL=0.92
 fi
 
-# Profiled runs execute eager so every device kernel keeps its operator link;
-# setup_profiling_env must run before the server launch reads
-# VLLM_TORCH_PROFILER_DIR.
+# Profiled runs execute eager so every device kernel keeps its operator link.
+# Current vllm configures the torch profiler via --profiler-config (the old
+# VLLM_TORCH_PROFILER_DIR env is no longer recognized); record_shapes is off
+# by default and required for operator/operand correlation.
 setup_profiling_env
-PROFILE_EAGER_ARGS=()
-if profiling_cuda_graph_disabled; then
-    PROFILE_EAGER_ARGS=(--enforce-eager)
+PROFILE_VLLM_ARGS=()
+if profiling_enabled; then
+    if profiling_cuda_graph_disabled; then
+        PROFILE_VLLM_ARGS+=(--enforce-eager)
+    fi
+    PROFILE_VLLM_ARGS+=(--profiler-config "{\"profiler\":\"torch\",\"torch_profiler_dir\":\"$PROFILE_OUTPUT_DIR\",\"torch_profiler_record_shapes\":true}")
 fi
 
 { set +x; } 2>/dev/null
@@ -332,7 +336,7 @@ VLLM_CMD=(
     "${TP_ARGS[@]}"
     "${MODE_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
-    "${PROFILE_EAGER_ARGS[@]}"
+    "${PROFILE_VLLM_ARGS[@]}"
 )
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
 printf '\n' | tee -a "$RESULT_DIR/vllm_command.txt"
