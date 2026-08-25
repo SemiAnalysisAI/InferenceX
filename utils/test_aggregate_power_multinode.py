@@ -284,6 +284,66 @@ class TestValidPackage:
         assert pkg.run(require_power=True) == 0
         assert pkg.agg()["power_valid"] == 1
 
+    def test_agentx_adapter_consumes_a_real_custom_benchmark_package(self, tmp_path):
+        from utils.agentic.aggregation.power_adapter import run_multinode_agentic_power
+
+        pkg = build_package(tmp_path)
+        result_dir = pkg.logs_root / "agentic" / "conc_4"
+        result_dir.mkdir(parents=True)
+        stem = "agentic_power_concurrency_4"
+        formal_result = result_dir / f"{stem}.json"
+        pkg.original_result.replace(formal_result)
+
+        old_window = pkg.windows_dir / f"{RESULT_STEM}.json"
+        window = json.loads(old_window.read_text())
+        window.update(
+            {
+                "benchmark_type": "custom",
+                "result_path": f"agentic/conc_4/{stem}.json",
+            }
+        )
+        old_window.unlink()
+        (pkg.windows_dir / f"{stem}.json").write_text(json.dumps(window, indent=2))
+
+        manifest_path = pkg.power_dir / "manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        manifest["expected_windows"] = [
+            {"benchmark_type": "custom", "concurrency": 4}
+        ]
+        manifest["window_validations"][0].update(
+            {
+                "benchmark_type": "custom",
+                "window_file": f"windows/{stem}.json",
+            }
+        )
+        manifest_path.write_text(json.dumps(manifest, indent=2))
+        pkg.agg_result.write_text(
+            json.dumps(
+                {
+                    "hw": "h200",
+                    "conc": 4,
+                    "num_prefill_gpu": 2,
+                    "num_decode_gpu": 2,
+                }
+            )
+        )
+
+        assert run_multinode_agentic_power(
+            result_dir=result_dir,
+            agg_result=pkg.agg_result,
+            power_dir=pkg.power_dir,
+            logs_root=pkg.logs_root,
+            expected_producer_sha=PRODUCER_SHA,
+            require_power=True,
+        ) == 0
+
+        agg = pkg.agg()
+        assert agg["power_valid"] == 1
+        assert agg["prefill_avg_power_w"] == 400.0
+        assert agg["decode_avg_power_w"] == 300.0
+        validation = json.loads((result_dir / "power_validation.json").read_text())
+        assert validation["selected_window"]["window_file"] == f"windows/{stem}.json"
+
     def test_trapezoid_matches_hand_computed_ramp(self, tmp_path):
         # node-d/0 ramps linearly 300 -> 364 W across the samples; the
         # trapezoid over [1000, 1060] must equal the analytic integral
