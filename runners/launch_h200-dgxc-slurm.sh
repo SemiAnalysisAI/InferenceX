@@ -7,10 +7,11 @@ SLURM_ACCOUNT="sa-shared"
 HF_HUB_CACHE_MOUNT="${HF_HUB_CACHE_MOUNT:-/models/gharunners/hf-hub-cache}"
 AIPERF_MMAP_CACHE_HOST_PATH="${AIPERF_MMAP_CACHE_HOST_PATH:-/home/sa-shared/gharunners/ai-perf-cache}"
 
-# Temporarily track SemiAnalysisAI/srt-slurm PR #4 so its realized launch-plan
-# artifacts can be validated by the H200 AgentX hardware gate before merge.
-POWER_SRT_SLURM_URL="https://github.com/SemiAnalysisAI/srt-slurm.git"
-POWER_SRT_SLURM_PIN="ff57ec45f9fba76f58f0255c8f2a83c335c1bdc0"
+# Immutable producer prerequisite for the GLM-5.2 AgentX lane. This fork is
+# intentionally long-lived; update the SHA only after reviewing a new fork
+# commit and re-running the H200 hardware gate.
+POWER_SRT_SLURM_URL="https://github.com/edwingao28/srt-slurm.git"
+POWER_SRT_SLURM_PIN="e5c837f06a362dc888dfea2ee588e9f19c298270"
 
 set -x
 
@@ -36,8 +37,17 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         t && /^  provider: dcgm-power$/ { p = 1 }
         t && /^  enabled: true$/        { e = 1 }
         END { exit !(p && e) }
-    ' "$_RECIPE_SRC"; then
+' "$_RECIPE_SRC"; then
         USES_DCGM_POWER=1
+    fi
+
+    # PR #4 is based on the main srt-slurm lineage, which does not contain the
+    # separate dcgm-power fork's schema. This draft smoke intentionally omits
+    # power collection so it can exercise only the launch-plan upload contract.
+    LAUNCH_PLAN_SMOKE=0
+    if [[ "$IS_AGENTIC" == "1" && "$FRAMEWORK" == "dynamo-sglang" && "$MODEL_PREFIX" == "glm5.2" && "$PRECISION" == "fp8" ]]; then
+        LAUNCH_PLAN_SMOKE=1
+        USES_DCGM_POWER=0
     fi
 
     # Only explicitly reviewed H200 FP8 AgentX recipes may use dcgm-power.
@@ -110,7 +120,15 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     if [[ $IS_AGENTIC == "1" && $FRAMEWORK == "dynamo-sglang" && (
         "$MODEL_PREFIX" == "glm5.2" || "$MODEL_PREFIX" == "dsv4"
     ) ]]; then
-        if [[ "$USES_DCGM_POWER" == "1" ]]; then
+        if [[ "$LAUNCH_PLAN_SMOKE" == "1" ]]; then
+            git clone https://github.com/SemiAnalysisAI/srt-slurm.git "$SRT_REPO_DIR"
+            cd "$SRT_REPO_DIR"
+            git checkout ff57ec45f9fba76f58f0255c8f2a83c335c1bdc0 || exit 1
+            test "$(git rev-parse HEAD)" = "ff57ec45f9fba76f58f0255c8f2a83c335c1bdc0" || {
+                echo "Error: SemiAnalysisAI/srt-slurm PR #4 resolved to an unexpected commit" >&2
+                exit 1
+            }
+        elif [[ "$USES_DCGM_POWER" == "1" ]]; then
             # The pinned fork carries the v1.0.44 AgentX lifecycle plus the formal
             # custom-benchmark dcgm-power contract used by the allowlisted recipes.
             git clone "$POWER_SRT_SLURM_URL" "$SRT_REPO_DIR"
@@ -298,6 +316,10 @@ EOF
     if [[ -f "$LOCAL_CONFIG_FILE" ]]; then
         mkdir -p "$(dirname "$CONFIG_PATH")"
         cp "$LOCAL_CONFIG_FILE" "$CONFIG_PATH"
+    fi
+
+    if [[ "$LAUNCH_PLAN_SMOKE" == "1" ]]; then
+        sed -i '/^telemetry:/,/^[^ ]/{ /^telemetry:/d; /^  /d; }' "$CONFIG_PATH"
     fi
 
     if [[ "$USES_DCGM_POWER" == "1" ]]; then
