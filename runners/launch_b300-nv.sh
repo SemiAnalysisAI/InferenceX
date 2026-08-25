@@ -56,8 +56,11 @@ elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" && $FRAMEWORK == "dy
 elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" && $FRAMEWORK == "dynamo-vllm" ]]; then
     export MODEL_PATH="/data/models/MiniMax-M3-MXFP8"
     export SRT_SLURM_MODEL_PREFIX="MiniMaxAI/MiniMax-M3-MXFP8"
+elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp4" ]]; then
+    export MODEL_PATH="${MODEL_PATH:-/scratch/models/GLM-5.2-NVFP4}"
+    export SRT_SLURM_MODEL_PREFIX="glm-5.2-fp4"
 else
-    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4 with dynamo-vllm or dynamo-sglang, minimaxm2.5-fp4 with dynamo-vllm, minimaxm2.5-fp8 with dynamo-vllm, minimaxm3-fp4 with dynamo-vllm, minimaxm3-fp8 with dynamo-vllm"
+    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4 with dynamo-vllm or dynamo-sglang, minimaxm2.5-fp4 with dynamo-vllm, minimaxm2.5-fp8 with dynamo-vllm, minimaxm3-fp4 with dynamo-vllm, minimaxm3-fp8 with dynamo-vllm, glm5.2-fp4 with dynamo-sglang"
     exit 1
 fi
 
@@ -70,7 +73,18 @@ if [ -d "$SRT_REPO_DIR" ]; then
 fi
 
 # TODO(CJQ): make first class upon srt-slurm upstream refactor
-if [[ "$IS_AGENTIC" == "1" ]]; then
+if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp4" ]]; then
+    # GLM-5.2 B300 sglang AgentX: srt-slurm main carries the agentx-mvp scenario,
+    # session-affinity frontend, and custom benchmark schema these recipes need.
+    # Must precede the generic IS_AGENTIC catch-all below (it clones a different fork).
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR" || exit 1
+    # NVIDIA/srt-slurm#313 is still open, so pin its reviewed recipe contract.
+    git fetch origin pull/313/head || exit 1
+    git checkout --detach 93fae852166a30f3cc054c8616228bf62c69c48c || exit 1
+    mkdir -p recipes/sglang/glm5.2/b300-fp4
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5.2/b300-fp4" recipes/sglang/glm5.2/b300-fp4
+elif [[ "$IS_AGENTIC" == "1" ]]; then
     git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR" || exit 1
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
@@ -215,13 +229,17 @@ SRTCTL_APPLY_ARGS=(
 if [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" && ( "$CONFIG_FILE" == recipes/vllm/minimax-m3/b300-fp4/8k1k/mtp/*.yaml || "$CONFIG_FILE" == recipes/vllm/minimax-m3/b300-fp4/8k1k/*-tp1-*.yaml ) ]]; then
     SRTCTL_APPLY_ARGS+=(--no-preflight)
 fi
-if [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" && "$MODEL_PATH" == /scratch/models/* ]]; then
+if [[ $FRAMEWORK == "dynamo-sglang" && ( $MODEL_PREFIX == "dsv4" || $MODEL_PREFIX == "glm5.2" ) && "$MODEL_PATH" == /scratch/models/* ]]; then
     SRTCTL_APPLY_ARGS+=(--no-preflight)
 fi
 if [[ -n "$SRTCTL_SETUP_SCRIPT" ]]; then
     SRTCTL_APPLY_ARGS+=(--setup-script "$SRTCTL_SETUP_SCRIPT")
 fi
-SRTCTL_OUTPUT=$(srtctl apply "${SRTCTL_APPLY_ARGS[@]}" 2>&1)
+if [[ "$MODEL_PREFIX" == "glm5.2" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
+    SRTCTL_OUTPUT=$(env -u UCX_TLS srtctl apply "${SRTCTL_APPLY_ARGS[@]}" 2>&1)
+else
+    SRTCTL_OUTPUT=$(srtctl apply "${SRTCTL_APPLY_ARGS[@]}" 2>&1)
+fi
 echo "$SRTCTL_OUTPUT"
 
 # Extract JOB_ID from srtctl output

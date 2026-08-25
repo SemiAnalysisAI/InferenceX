@@ -6467,3 +6467,13 @@
     - "Reduce the concurrency-1536 disaggregated topology from six to five DEP8 prefill workers while retaining one DEP16 decode worker."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2644
   
+- config-keys:
+    - glm5.2-fp4-b300-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-b300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GLM-5.2-NVFP4 B300 AgentX (agentic-coding) Dynamo-SGLang benchmarks over a 7-point sweep: aggregated single-node TP8 (conc 2/4), disaggregated low-latency TP4-prefill/TP4-decode 1P2D (conc 63), 1P3D (conc 61), 1P4D (conc 59), 1P6D (conc 58), and throughput 2P1D DEP8-decode (conc 139)"
+    - "EAGLE speculative decoding, hierarchical KV cache (hicache-size 270), MTP, decode mem-fraction-static 0.92, nixl KV transfer, and X-Dynamo-Session-ID session affinity; driven from the NVIDIA/srt-slurm base+zip_override recipes via CONFIG_FILE selectors"
+    - "Image: lmsysorg/sglang:nightly-dev-cu13-20260824-95f5ecd3; runner: b300-nv"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2654
