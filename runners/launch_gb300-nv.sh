@@ -7,7 +7,8 @@ set -exo pipefail
 # shellcheck source=runners/slurm_utils.sh
 source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
 
-export SLURM_PARTITION="batch_1"
+export SLURM_PARTITION="${SLURM_PARTITION:-batch_1}"
+export SBATCH_PARTITION="$SLURM_PARTITION"
 export SLURM_ACCOUNT="benchmark"
 export ENROOT_ROOTFS_WRITABLE=1
 
@@ -65,6 +66,10 @@ elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp4" ]]; then
     # in our GLM-5.1 sglang recipes.
     export MODEL_PATH=/scratch/models/GLM-5.1-NVFP4
     export SRT_SLURM_MODEL_PREFIX="glm-5-fp4"
+elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-trt" ]]; then
+    export SERVED_MODEL_NAME="GLM-5.2-NVFP4"
+    export MODEL_PATH=/scratch/models/GLM-5.2-NVFP4
+    export SRT_SLURM_MODEL_PREFIX="nvidia/GLM-5.2-NVFP4"
 elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH=/scratch/models/GLM-5.2-NVFP4
     export SRT_SLURM_MODEL_PREFIX="glm-5.2-fp4"
@@ -80,6 +85,9 @@ elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" ]]; then
 elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH=/data/models/MiniMax-M2.5
     export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-fp8"
+elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" ]]; then
+    export MODEL_PATH=/scratch/models/MiniMax-M3-NVFP4
+    export SRT_SLURM_MODEL_PREFIX="nvidia/MiniMax-M3-NVFP4"
 elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH=/data/models/MiniMax-M3-MXFP8
     export SRT_SLURM_MODEL_PREFIX="minimax-m3-mxfp8"
@@ -100,7 +108,7 @@ elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH=/scratch/models/Qwen3.5-397B-A17B-FP8
     export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp8"
 else
-    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4, glm5-fp4, glm5-fp8, glm5.2-fp4, minimaxm2.5-fp4, minimaxm2.5-fp8, kimik2.5-fp4, kimik3-fp4, qwen3.5-fp4, qwen3.5-fp8"
+    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4, glm5-fp4, glm5-fp8, glm5.2-fp4, minimaxm2.5-fp4, minimaxm2.5-fp8, minimaxm3-fp4, minimaxm3-fp8, kimik2.5-fp4, kimik3-fp4, qwen3.5-fp4, qwen3.5-fp8"
     exit 1
 fi
 
@@ -184,6 +192,10 @@ if [[ "$USES_DCGM_POWER" == "1" ]]; then
 fi
 
 export EVAL_ONLY="${EVAL_ONLY:-false}"
+if [[ "$EVAL_ONLY" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
+    CONFIG_FILE="$EVAL_CONFIG_FILE"
+    echo "EVAL_ONLY=true: selecting real-verification recipe $CONFIG_FILE"
+fi
 
 export ISL="$ISL"
 export OSL="$OSL"
@@ -201,6 +213,18 @@ if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "qw
     TRTLLM_RECIPES_DIR="recipes/trtllm/qwen3.5/gb300-fp4/disagg/agentx"
     mkdir -p "$TRTLLM_RECIPES_DIR"
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/qwen3.5/gb300-fp4/disagg/agentx" \
+        "$TRTLLM_RECIPES_DIR"
+    if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
+        find "$TRTLLM_RECIPES_DIR" -name "*.yaml" \
+            -exec sed -i '/TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS/d' {} +
+    fi
+elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "glm5.2" ]]; then
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    git checkout v1.0.38
+    TRTLLM_RECIPES_DIR="benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2"
+    mkdir -p "$TRTLLM_RECIPES_DIR"
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2" \
         "$TRTLLM_RECIPES_DIR"
     if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
         find "$TRTLLM_RECIPES_DIR" -name "*.yaml" \
@@ -240,6 +264,24 @@ elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX =
     mkdir -p recipes/sglang/deepseek-v4/agentic
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/agentic" \
         recipes/sglang/deepseek-v4/agentic
+elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "dsv4" ]]; then
+    SRT_SLURM_MODEL_PREFIX="deepseek-ai/DeepSeek-V4-Pro"
+    git clone --branch v1.0.50 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
+    cd "$SRT_REPO_DIR" || exit 1
+
+    mkdir -p benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4 || exit 1
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4" \
+        benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4 || exit 1
+    if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
+        # srt-slurm v1.0.50 launches lm-eval on the allocation head and uses
+        # localhost:8000. Keep AgentX frontends on first_decode for throughput,
+        # but co-locate the eval-only frontend with lm-eval so loopback resolves.
+        find benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4 -name "*.yaml" \
+            -exec sed -i \
+                -e '/TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS/d' \
+                -e 's/^  orchestrator_placement: first_decode$/  orchestrator_placement: head/' \
+                {} +
+    fi
 elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.2" ]]; then
     # GLM-5.2 GB300 sglang AgentX: srt-slurm main has the agentx-mvp scenario,
     # the zip_override sweep selectors, and the multi-frontend session-affinity
@@ -261,6 +303,9 @@ elif [[ "$IS_AGENTIC" == "1" ]]; then
     mkdir -p recipes/vllm/deepseek-v4/agentic || exit 1
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
         recipes/vllm/deepseek-v4/agentic || exit 1
+    mkdir -p recipes/vllm/minimax-m3/agentic || exit 1
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3/agentic" \
+        recipes/vllm/minimax-m3/agentic || exit 1
     mkdir -p recipes/vllm/kimi-k3/agentic || exit 1
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
         recipes/vllm/kimi-k3/agentic || exit 1
@@ -401,13 +446,17 @@ echo "Configs available at: $SRT_REPO_DIR/"
 # Create srtslurm.yaml for srtctl (used by both frameworks)
 SRTCTL_ROOT="${SRT_REPO_DIR}"
 echo "Creating srtslurm.yaml configuration..."
+SRT_DEFAULT_TIME_LIMIT="4:00:00"
+if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "dsv4" ]]; then
+    SRT_DEFAULT_TIME_LIMIT="8:00:00"
+fi
 cat > srtslurm.yaml <<EOF
 # SRT SLURM Configuration for GB300
 
 # Default SLURM settings
 default_account: "${SLURM_ACCOUNT}"
 default_partition: "${SLURM_PARTITION}"
-default_time_limit: "4:00:00"
+default_time_limit: "${SRT_DEFAULT_TIME_LIMIT}"
 
 # Resource defaults
 gpus_per_node: 4
@@ -662,6 +711,19 @@ if [[ "${RUN_EVAL:-false}" == "true" || "${EVAL_ONLY:-false}" == "true" ]]; then
     else
         echo "WARNING: RUN_EVAL=true but no eval results found at $EVAL_DIR"
     fi
+
+    # srt-slurm stages eval artifacts but does not write the metadata file
+    # consumed by score validation. Reuse the canonical metadata writer so
+    # topology and recipe identity stay aligned with the workflow inputs.
+    eval_conc_value="${EVAL_CONC:-${CONC:-1}}"
+    (
+        export IS_MULTINODE=true
+        # shellcheck source=benchmarks/benchmark_lib.sh
+        source "$GITHUB_WORKSPACE/benchmarks/benchmark_lib.sh"
+        _write_lm_eval_meta_json \
+            "$GITHUB_WORKSPACE/meta_env.json" "" "$eval_conc_value"
+    )
+    echo "Wrote meta_env.json (conc=${eval_conc_value}, prefix=${MODEL_PREFIX:-unknown})"
 fi
 
 # Snapshot logs to GITHUB_WORKSPACE BEFORE cleanup, so the EXIT trap's
