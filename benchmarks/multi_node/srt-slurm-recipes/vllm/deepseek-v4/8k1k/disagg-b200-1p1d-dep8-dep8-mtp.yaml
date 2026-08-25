@@ -31,7 +31,7 @@ frontend:
   type: dynamo
   enable_multiple_frontends: false
 backend:
-  set_cuda_visible_devices: true  # pinned dsv4 images predate vLLM #45026's --device-ids
+  set_cuda_visible_devices: true  # keep the aflowers/vllm-gb200-v0.20.0 provenance: bind GPUs via CVD, not --device-ids
   type: vllm
   connector: null
   prefill_environment:
