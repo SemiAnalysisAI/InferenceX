@@ -296,7 +296,7 @@ SRTCTL_PREFLIGHT_ARGS=()
 # These weights are staged on the Slurm compute nodes, not the login node.
 if [[ $MODEL_PREFIX == "kimik2.6" ]] ||
    [[ $MODEL_PREFIX == "kimik3" ]] ||
-   [[ $MODEL_PREFIX == "dsv4" && $FRAMEWORK == "dynamo-sglang" ]]; then
+   [[ $MODEL_PREFIX == "dsv4" ]]; then
     SRTCTL_PREFLIGHT_ARGS+=(--no-preflight)
 fi
 
