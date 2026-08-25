@@ -18,6 +18,13 @@ RECIPE_PATH = REPO_ROOT / "benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.
 GB200_LAUNCHER = REPO_ROOT / "runners/launch_gb200-nv.sh"
 GB300_LAUNCHER = REPO_ROOT / "runners/launch_gb300-nv.sh"
 TMPL_PATH = REPO_ROOT / ".github/workflows/benchmark-multinode-tmpl.yml"
+PROCESS_RESULT_WORKFLOW = REPO_ROOT / ".github/workflows/test-process-result.yml"
+MASTER_CONFIG_REL = "configs/nvidia-master.yaml"
+PROCESS_RESULT_RECIPE_GLOBS = (
+    "benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/**/*.yaml",
+    "benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb200-*/**/*.yaml",
+    "benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb300-*/**/*.yaml",
+)
 
 STAMP_NAME = "power-producer-sha.txt"
 EXPORTER_IMAGE = "nvcr.io/nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless"
@@ -149,41 +156,107 @@ def test_pin_literal_lives_only_in_the_two_launchers():
     ]
 
 
-# Every recipe that opts into dcgm-power, with the exporter port its cluster
-# requires (im-gb300 nodes already bind 9401; gb200 keeps the default).
-REQUIRED_POWER_RECIPES = {
-    "benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/8k1k/disagg-gb200-1p1d-dep8-dep16-6-c512.yaml": 9401,
-    "benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/8k1k/disagg-gb200-1p1d-tp8-tp8-4-c1.yaml": 9401,
-    "benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/8k1k/disagg-gb200-1p2d-dep8-dep16-10-c256.yaml": 9401,
-    "benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/8k1k/disagg-gb300-1p1d-dep4-dep16-5-c1024.yaml": 19401,
-    "benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/8k1k/disagg-gb300-1p1d-tp4-tp4-2-c1.yaml": 19401,
-    "benchmarks/multi_node/srt-slurm-recipes/sglang/glm5.2/agentic/disagg-h200-2p2d-pcp8-tp8-dp8-mtp.yaml": 9401,
-    "benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb200-fp8/8k1k/1p1d-tp4-tp4.yaml": 9401,
-    "benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb300-fp4/8k1k/disagg/stp/8k1k_stp_lowlat_0.yaml": 19401,
-    "benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb300-fp8/8k1k/1p1d-tp4-tp4.yaml": 19401,
+def _config_file_values(value):
+    if isinstance(value, dict):
+        for child in value.values():
+            yield from _config_file_values(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _config_file_values(child)
+    elif isinstance(value, str) and value.startswith("CONFIG_FILE="):
+        yield value.removeprefix("CONFIG_FILE=").split(":", 1)[0]
+
+
+def _master_gb_recipe_runners():
+    master = yaml.safe_load((REPO_ROOT / MASTER_CONFIG_REL).read_text())
+    runners = {}
+    for config in master.values():
+        if not isinstance(config, dict):
+            continue
+        if config.get("runner") not in ("gb200", "gb300"):
+            continue
+        if config.get("framework") != "dynamo-sglang" or not config.get("disagg"):
+            continue
+        for config_file in _config_file_values(config.get("scenarios", {})):
+            runners[config_file.removeprefix("recipes/")] = config["runner"]
+    return runners
+
+
+def _gb_power_candidates():
+    recipe_root = REPO_ROOT / "benchmarks/multi_node/srt-slurm-recipes/sglang"
+    master_runners = _master_gb_recipe_runners()
+    candidates = {}
+    for family in ("deepseek-v4", "qwen3.5"):
+        for path in sorted((recipe_root / family).rglob("*.yaml")):
+            relative = path.relative_to(REPO_ROOT)
+            relative_recipe = relative.relative_to(
+                "benchmarks/multi_node/srt-slurm-recipes"
+            ).as_posix()
+            path_text = relative.as_posix()
+            recipe = yaml.safe_load(path.read_text())
+            benchmark = recipe.get("benchmark", {})
+            resources = recipe.get("resources", {})
+
+            runner = master_runners.get(relative_recipe)
+            if runner is None and "gb200" in path_text:
+                runner = "gb200"
+            elif runner is None and "gb300" in path_text:
+                runner = "gb300"
+
+            if (
+                runner not in ("gb200", "gb300")
+                or "/agentic/" in path_text
+                or benchmark.get("type") != "sa-bench"
+                or resources.get("prefill_nodes", 0) <= 0
+                or resources.get("decode_nodes", 0) <= 0
+            ):
+                continue
+            candidates[relative.as_posix()] = (runner, recipe)
+    return candidates
+
+
+GB_POWER_CANDIDATES = _gb_power_candidates()
+ELIGIBLE_POWER_RECIPES = {
+    path: 19401 if runner == "gb300" else 9401
+    for path, (runner, recipe) in GB_POWER_CANDIDATES.items()
+    if recipe.get("benchmark", {}).get("client_placement", "head") == "head"
+    and not recipe.get("infra", {}).get("etcd_nats_dedicated_node", False)
 }
-OPTIONAL_POWER_RECIPES = {
-    "benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/agentic/agg-h200-tp8-mtp-kvoffload.yaml": 9401,
-}
-POWER_RECIPES = REQUIRED_POWER_RECIPES | OPTIONAL_POWER_RECIPES
+INELIGIBLE_POWER_RECIPES = set(GB_POWER_CANDIDATES) - set(ELIGIBLE_POWER_RECIPES)
 
 
 def test_exactly_the_declared_recipes_opt_into_dcgm_power():
     hits = git_grep_lines(
         "-lF", "provider: dcgm-power", "--", "benchmarks/multi_node/srt-slurm-recipes"
     )
-    assert sorted(hits) == sorted(POWER_RECIPES)
+    relevant_hits = set(hits) & set(GB_POWER_CANDIDATES)
+
+    assert len(GB_POWER_CANDIDATES) == 61
+    assert len(ELIGIBLE_POWER_RECIPES) == 59
+    assert relevant_hits == set(ELIGIBLE_POWER_RECIPES)
+    assert INELIGIBLE_POWER_RECIPES == {
+        "benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb200-fp8/8k1k/8p1d-dep4-dep16.yaml",
+        "benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb300-fp8/8k1k/8p1d-dep4-dep16.yaml",
+    }
 
 
 def test_every_power_recipe_declares_the_same_telemetry_contract():
-    for path, port in POWER_RECIPES.items():
+    for path, port in ELIGIBLE_POWER_RECIPES.items():
         telemetry = yaml.safe_load((REPO_ROOT / path).read_text())["telemetry"]
-        assert telemetry["enabled"] is True, path
-        assert telemetry["provider"] == "dcgm-power", path
-        assert telemetry["default_frequency"] == 1.0, path
-        assert telemetry["required"] is (path in REQUIRED_POWER_RECIPES), path
-        assert telemetry["dcgm_exporter"]["container_image"] == "dcgm-exporter", path
-        assert telemetry["dcgm_exporter"]["port"] == port, path
+        assert telemetry == {
+            "enabled": True,
+            "provider": "dcgm-power",
+            "default_frequency": 1.0,
+            "storage_subdir": "power",
+            "required": True,
+            "startup_timeout_seconds": 120,
+            "request_timeout_seconds": 2,
+            "collector_join_timeout_seconds": 10,
+            "dcgm_exporter": {
+                "container_image": "dcgm-exporter",
+                "port": port,
+            },
+        }, path
 
 
 def test_lane_and_pin_have_no_env_override_backdoor():
@@ -228,3 +301,25 @@ def test_stamp_filename_agrees_between_launchers_and_template():
     # The manual input stays the override: the stamp only fills an empty env.
     assert f'if [ -z "$POWER_PRODUCER_SHA" ] && [ -f {STAMP_NAME} ]; then' in tmpl
     assert "POWER_PRODUCER_SHA: ${{ inputs.power-producer-sha }}" in tmpl
+
+
+def test_process_result_workflow_watches_all_gb_power_recipe_families():
+    workflow = PROCESS_RESULT_WORKFLOW.read_text()
+    covered = set()
+
+    for recipe_glob in PROCESS_RESULT_RECIPE_GLOBS:
+        assert f"- '{recipe_glob}'" in workflow
+        result = subprocess.run(
+            ["git", "ls-files", f":(glob){recipe_glob}"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        covered.update(result.stdout.splitlines())
+
+    assert set(GB_POWER_CANDIDATES) <= covered
+    # Candidate eligibility and exporter ports are derived from the master
+    # config, so a runner/framework/disagg edit there moves this set without
+    # touching any recipe.
+    assert f"- '{MASTER_CONFIG_REL}'" in workflow

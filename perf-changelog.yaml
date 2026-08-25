@@ -6411,6 +6411,40 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2684
 
 - config-keys:
+    - dsv4-fp4-b300-sglang-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump image from lmsysorg/sglang:v0.5.17-cu130 to lmsysorg/sglang-staging:dev-cu13-pr-35880, which picks up sgl-project/sglang#35017 (--prefill-decode-interval). That tag is lmsysorg/sglang:dev-nightly-0820 (build commit 92eeed41d7) with sgl-project/sglang#35880 applied on top -- a cherry-pick of #34975 that fixes a HiCache load-back crash. Without it, DEP8 at conc 384/512 dies mid-run with 'AssertionError: node N pinned by load-back M, new anchor N' in unified_tree_core.py commit_load_back: a node can be pinned by two concurrent H->D load-backs, but load_back_pending_id held only one anchor. Eight schedulers exit at once and the surviving DP ranks then block forever in the MLP-sync collective, so the client sees in-flight requests never return with zero errors. The assertion is reachable only under --hicache-write-policy write_back, which this recipe uses. Swap to a released tag once #34975 merges and ships in a nightly."
+    - "Add --prefill-decode-interval 20: +28% output throughput at conc 128 (2,433-2,470 -> 3,127-3,161 tok/s), closing the gap to the vLLM recipe from 1.32x to 1.03x. Under spec-decoding + DP attention SGLang synchronises decode globally, so a rank with no prefill work runs an idle batch and the busiest rank sets the clock for all eight; the interval bounds that."
+    - "Engine changes are scoped to the DP-attention path except the decode CUDA-graph cap. The TP-only path keeps flashinfer_mxfp4, chunked-prefill 8192, mem-fraction 0.88 and swa-full-tokens-ratio 0.1, because every measurement here ran with DP attention enabled."
+    - "Size the TP-only decode CUDA graphs at 4*CONC (still capped at 64) instead of CONC. AgentX concurrency counts live session trees, not requests, and the recipe already allows max-running-requests of 2*CONC for subagent fan-out -- so capturing only up to CONC dropped every larger decode batch to eager execution on exactly the low-concurrency rows that exist to measure latency. The runtime clamps the captured list to the request-pool size, so this cannot over-capture."
+    - "On the DP path, switch --moe-runner-backend flashinfer_mxfp4 to --moe-a2a-backend megamoe plus --enable-deepseek-v4-fp4-indexer, and export SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_FP4_ACTS=1 and _USE_MXF4_KIND=1. Both env flags default to False, so the backend flag alone would select a different MegaMoE kernel than the one measured; DeepGEMM's DG_USE_FP4_ACTS / DG_USE_MXF4_KIND are forwarded from them automatically."
+    - "Scale chunked-prefill-size with dp_size (8192 * TP) instead of pinning 65536. server_args.py divides this global budget by dp_size, so a fixed 65536 gives the tuned 8192/rank at DEP8 but 16384/rank at DEP4 -- which exceeds MegaMoE's per-rank token cap and raises at startup, and which measured slower when tried directly at DEP8. Also export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=8320, since the 8192 default is an exact fit with no headroom."
+    - "On the DP path, replace --cuda-graph-max-bs with --cuda-graph-max-bs-decode 544 and add --enable-prefill-delayer. The generic flag aliases the same knob, and its CONC-capped value of 64 does not cover the padded MTP decode batch across DP ranks."
+    - "Scale DP-path mem-fraction-static down as concurrency rises: DEP8 uses 0.93 at conc 32/64/128, 0.9 at 256, 0.88 at 384 and 0.86 at 512/576. MegaMoE's transient workspace is allocated outside the static budget and needs a single ~7 GB contiguous block, so the headroom left by mem-fraction-static has to grow with batch size. Measured at conc 256: 0.835 (~42 GB free) completes, while 0.93 (~16 GB free) and 0.95 (~11 GB free) both hit a CUDA OOM on a single DP rank -- which then hangs the whole engine, because the surviving ranks block forever in the MLP-sync collective and the client sees in-flight requests never return with zero errors. Also lower swa-full-tokens-ratio from 0.1 to 0.075."
+    - "Restructure the search space from 42 points to 12: a TP-8 no-offload row at conc 1/4/8/16/32 and a DEP8+hicache row at conc 32/64/128/256/384/512/576. Both TP-4 rows and both DEP4 rows are dropped. DEP4 cannot serve this trace: sharding the model over half the node leaves ~627k KV tokens per rank at mem-fraction 0.93 (measured) against prompts reaching 950,812 tokens, so the longest requests cannot be held at all, while raising mem-fraction far enough to hold them leaves too little room for the mega-MoE workspace. The two constraints barely overlap, and every DEP4 point failed. This tracks the vLLM agentic lane on the same runner, which sweeps DEP4 with a DRAM tier at 48/64 and DEP8 with a DRAM tier at 128/256/384/512/576. Measured at conc 256 with a CPU tier, SGLang 4,168 vs vLLM 4,199 tok/s."
+    - "Raise dram-utilization from 0.80 to 0.95, matching the vLLM agentic lane on the same runner, and the TP>=8 hicache ratio from 2 to 3 so the CPU tier reflects the allocated budget. DSv4 HiCache takes a host/device token ratio, not bytes, so the recipe cannot apply TOTAL_CPU_DRAM_GB directly, and host capacity scales with both the ratio and device KV -- meaning it also grows with mem-fraction-static. Measured at ratio 2 / mem-fraction 0.835 the tier allocates 999 GB (124.88 GB per rank across 8 ranks), a third of the 2,849 GB the vLLM agentic lane consumes. ratio 4 at mem-fraction 0.93 overshot the other way, leaving 5.84 GB free on a 2,964 GB node and failing to allocate the V4 paged pool; ratio 3 keeps the tier near 2 TB with room for the paged pool, page cache, AIPerf and the router. The TP<8 ratio is left at its existing value of 8."
+    - "Costs TTFT (p50 2.2x, p90 3.3x); AgentX is closed-loop so this is already priced into the throughput figures"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2701
+  
+
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-sglang
+    - dsv4-fp4-gb200-dynamo-sglang-mtp
+    - dsv4-fp4-gb300-dynamo-sglang
+    - dsv4-fp4-gb300-dynamo-sglang-mtp
+    - qwen3.5-fp4-gb300-dynamo-sglang
+    - qwen3.5-fp8-gb200-dynamo-sglang
+    - qwen3.5-fp8-gb200-dynamo-sglang-mtp
+    - qwen3.5-fp8-gb300-dynamo-sglang
+    - qwen3.5-fp8-gb300-dynamo-sglang-mtp
+  description:
+    - "Enable dcgm-power telemetry on the 51 remaining eligible GB200 and GB300 recipes, covering all 59 eligible recipes."
+    - "Mark telemetry required on every eligible recipe now that both the GB200 and GB300 pools are available, and leave the 2 dedicated-infra recipes disabled."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2687
+
+- config-keys:
     - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
   scenario-type:
     - agentic-coding
@@ -6418,3 +6452,4 @@
     - "Add four proven GB300 AgentX P/D points: c4, c128, c256, and c512."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2665
   append-only: true
+  
