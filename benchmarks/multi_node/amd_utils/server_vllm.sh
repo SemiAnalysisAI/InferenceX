@@ -202,6 +202,27 @@ apply_vllm_dp_config() {
 PREFILL_SERVER_CONFIG="$(apply_vllm_dp_config "$PREFILL_SERVER_CONFIG" "${PREFILL_TP_SIZE:-8}" "${PREFILL_ENABLE_DP:-false}")"
 DECODE_SERVER_CONFIG="$(apply_vllm_dp_config "$DECODE_SERVER_CONFIG" "${DECODE_TP_SIZE:-8}" "${DECODE_ENABLE_DP:-false}")"
 
+apply_vllm_dcp_config() {
+    local cfg="$1"
+    local dcp_size="${2:-1}"
+    local dcp_comm="${3:-a2a}"
+    local interleave="${4:-1}"
+
+    cfg=$(echo "$cfg" | sed -E 's/[[:space:]]*--decode-context-parallel-size[[:space:]]+[0-9]+//g')
+    cfg=$(echo "$cfg" | sed -E 's/[[:space:]]*--dcp-comm-backend[[:space:]]+[^[:space:]]+//g')
+    cfg=$(echo "$cfg" | sed -E 's/[[:space:]]*--cp-kv-cache-interleave-size[[:space:]]+[0-9]+//g')
+
+    if [[ "$dcp_size" != "1" ]]; then
+        cfg+=" --decode-context-parallel-size ${dcp_size}"
+        cfg+=" --dcp-comm-backend ${dcp_comm}"
+        cfg+=" --cp-kv-cache-interleave-size ${interleave}"
+    fi
+    echo "$cfg"
+}
+
+PREFILL_SERVER_CONFIG="$(apply_vllm_dcp_config "$PREFILL_SERVER_CONFIG" "${PREFILL_DCP_SIZE:-1}" "${PREFILL_DCP_COMM:-a2a}" "${PREFILL_CP_KV_CACHE_INTERLEAVE_SIZE:-1}")"
+DECODE_SERVER_CONFIG="$(apply_vllm_dcp_config "$DECODE_SERVER_CONFIG" "${DECODE_DCP_SIZE:-1}" "${DECODE_DCP_COMM:-a2a}" "${DECODE_CP_KV_CACHE_INTERLEAVE_SIZE:-1}")"
+
 apply_gpu_memory_utilization() {
     local cfg="$1"
     local gmu="${GPU_MEMORY_UTILIZATION:-}"

@@ -771,8 +771,8 @@ kimik2.5-fp4-mi355x-vllm-disagg:
 # model spec decoding on BOTH P and D, MoRIIO KDA P/D transfer + Mooncake DRAM
 # KV offload). vLLM K3/DSpark + MoRIIO-KDA fixes are online-installed from the
 # YukioZzz/vllm fork branch on top of the prebuilt kimi-k3 image (Mooncake
-# v0.3.11.post1 also built at job runtime by server_vllm.sh). conc-list [8] is a
-# smoke pass; widen once green.
+# v0.3.11.post1 also built at job runtime by server_vllm.sh). conc-list [16] is
+# the current post-fix DSpark+DCP validation target.
 # image/model/draft match the single-node reference PR #2403
 # (kimik3-fp4-mi355x-vllm-agentic-dspark) and the validated local 1P1D run
 # (k3-agentx/gen_k3_mc.sh).
@@ -801,7 +801,7 @@ kimik3-fp4-mi355x-vllm-disagg-agentic:
     - dram-utilization: 0.80
       search-space:
       - spec-decoding: draft_model
-        conc-list: [ 8 ]
+        conc-list: [ 16 ]
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
         prefill:
@@ -812,22 +812,25 @@ kimik3-fp4-mi355x-vllm-disagg-agentic:
           additional-settings:
           - "PREFILL_NODES=1"
           - "VLLM_PATCH_46240=1"
-          - "VLLM_K3_FORK_REF=yichaozhu/moriio-k3-dspark"
+          - "VLLM_K3_FORK_REF=yichaozhu/k3-tpdcp-hetero"
           - "HF_HUB_CACHE=/models/.cache/huggingface/hub"
           - "INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS=32"
           - "MC_WORKERS_PER_CTX=4"
         decode:
           num-worker: 1
           tp: 8
+          dcp-size: 8
           ep: 1
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=1"
           - "VLLM_PATCH_46240=1"
-          - "VLLM_K3_FORK_REF=yichaozhu/moriio-k3-dspark"
+          - "VLLM_K3_FORK_REF=yichaozhu/k3-tpdcp-hetero"
           - "HF_HUB_CACHE=/models/.cache/huggingface/hub"
           - "INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS=32"
           - "MC_WORKERS_PER_CTX=4"
+          - "DECODE_DCP_COMM=a2a"
+          - "DECODE_CP_KV_CACHE_INTERLEAVE_SIZE=1"
 
 # DEBUG arm: model-less plumbing smoke. Same topology/connectors/mooncake/fork/DSpark
 # as the real recipe, but --load-format dummy (LOAD_FORMAT=dummy) skips the 1.5TB
@@ -2008,4 +2011,3 @@ dsv4-fp8-mi325x-vllm-mtp:
       # is 55.8%. conc128 passed cleanly on the memory-tightest SKU (MI300X);
       # cap 8k1k MTP at 128 (normal holds 256, 1k1k holds 512).
       - { tp: 8, conc-start: 4, conc-end: 128, spec-decoding: mtp }
-
