@@ -6389,12 +6389,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2650
 
 - config-keys:
-    - minimaxm3-fp4-mi355x-vllm-agentic-mtp
-  scenario-type:
-    - agentic-coding
-  description:
-    - "Serve the TP4 AgentX arm on ROCM_AITER_UNIFIED_ATTN for both target and EAGLE3 draft attention (was TRITON_ATTN)"
-    - "Sweep the TP4 GPU-resident arm at conc 1/2/4/5/8/10/12/16/20/24/28/32/36; the TP2 GPU-resident and TP4 LMCache DRAM-offload arms are commented out."
     - dsv4-fp4-mi355x-sglang-agentic-mtp
   scenario-type:
     - agentic-coding
@@ -6472,4 +6466,11 @@
     - "Warm the aggregate low-latency profiles with the standard ten requests per trajectory lane instead of one, so they enter the profiling window from the same live state as every other AgentX recipe."
     - "Reduce the concurrency-1536 disaggregated topology from six to five DEP8 prefill workers while retaining one DEP16 decode worker."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2644
-  
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Serve the TP4 AgentX arm on ROCM_AITER_UNIFIED_ATTN for both target and EAGLE3 draft attention (was TRITON_ATTN)"
+    - "Sweep the TP4 GPU-resident arm at conc 1/2/4/5/8/10/12/16/20/24/28/32/36; the TP2 GPU-resident and TP4 LMCache DRAM-offload arms are commented out."
