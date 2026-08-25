@@ -124,6 +124,9 @@ benchmark:
 frontend:
   type: dynamo
   enable_multiple_frontends: true
+  env:
+    ETCD_LEASE_TTL: '120'
+    DYN_TOKENIZER: "fastokens"
 slurm:
   time_limit: '3:00:00'
 health_check:
