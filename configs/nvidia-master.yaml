@@ -7950,6 +7950,74 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
           tp: 8
           ep: 8
           dp-attn: true
+      - spec-decoding: mtp
+        conc-list: [512]
+        router: { name: dynamo-router, version: "1.4.0" }
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/agentic/disagg-gb300-1p1d-dep8-dep16-c512-mtp-agentic.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      - spec-decoding: mtp
+        conc-list: [4]
+        router: { name: dynamo-router, version: "1.4.0" }
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/agentic/disagg-gb300-1p4d-dep4-tp8-c4-mtp-agentic.yaml"
+        decode:
+          num-worker: 4
+          tp: 8
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        conc-list: [128]
+        router: { name: dynamo-router, version: "1.4.0" }
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/agentic/disagg-gb300-1p1d-dep4-dep16-c128-mtp-agentic.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      - spec-decoding: mtp
+        conc-list: [256]
+        router: { name: dynamo-router, version: "1.4.0" }
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/agentic/disagg-gb300-1p1d-dep4-dep16-c256-mtp-agentic.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
 
 # GB200 mirror of the dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-{agg,disagg}
 # tuning above (PR #2571). Any worker that used 4 GPUs on GB300 uses 8 on

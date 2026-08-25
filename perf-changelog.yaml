@@ -6443,3 +6443,13 @@
     - "Enable dcgm-power telemetry on the 51 remaining eligible GB200 and GB300 recipes, covering all 59 eligible recipes."
     - "Mark telemetry required on every eligible recipe now that both the GB200 and GB300 pools are available, and leave the 2 dedicated-infra recipes disabled."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2687
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add four proven GB300 AgentX P/D points: c4, c128, c256, and c512."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2665
+  append-only: true
+  
