@@ -166,8 +166,12 @@ def test_launchers_provision_and_preserve_power_provenance():
         text = launcher.read_text(encoding="utf-8")
         assert f'DCGM_EXPORTER_IMAGE="{EXPORTER_IMAGE}"' in text
         assert (
-            'import_squash "$DCGM_EXPORTER_SQSH" "$DCGM_EXPORTER_IMAGE"' in text
-            or 'enroot import -o \\"$DCGM_EXPORTER_SQSH\\" docker://$DCGM_EXPORTER_IMAGE'
+            'DCGM_EXPORTER_ENROOT_REF="${DCGM_EXPORTER_IMAGE/nvcr.io\\//nvcr.io#}"'
+            in text
+        ), launcher
+        assert (
+            'import_squash "$DCGM_EXPORTER_SQSH" "$DCGM_EXPORTER_ENROOT_REF"' in text
+            or 'enroot import -o \\"$DCGM_EXPORTER_SQSH\\" \\"docker://$DCGM_EXPORTER_ENROOT_REF\\"'
             in text
         ), launcher
         assert 'test -r "$DCGM_EXPORTER_SQSH"' in text

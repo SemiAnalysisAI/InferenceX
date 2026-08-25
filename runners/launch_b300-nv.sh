@@ -178,6 +178,8 @@ srun -N 1 -A $SLURM_ACCOUNT -p $SLURM_PARTITION bash -c "enroot import -o $NGINX
 
 if [[ "$USES_DCGM_POWER" == "1" ]]; then
     DCGM_EXPORTER_IMAGE="nvcr.io/nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless"
+    # enroot resolves bare paths against Docker Hub; nvcr.io pulls need the registry# form
+    DCGM_EXPORTER_ENROOT_REF="${DCGM_EXPORTER_IMAGE/nvcr.io\//nvcr.io#}"
     DCGM_EXPORTER_SQSH="/data/squash/$(echo "$DCGM_EXPORTER_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     DCGM_EXPORTER_LOCK="${DCGM_EXPORTER_SQSH}.lock"
     srun -N 1 -A "$SLURM_ACCOUNT" -p "$SLURM_PARTITION" bash -c "
@@ -188,7 +190,7 @@ if [[ "$USES_DCGM_POWER" == "1" ]]; then
             exit 0
         fi
         rm -f \"$DCGM_EXPORTER_SQSH\"
-        enroot import -o \"$DCGM_EXPORTER_SQSH\" docker://$DCGM_EXPORTER_IMAGE
+        enroot import -o \"$DCGM_EXPORTER_SQSH\" \"docker://$DCGM_EXPORTER_ENROOT_REF\"
         unsquashfs -l \"$DCGM_EXPORTER_SQSH\" > /dev/null
     " || exit 1
     test -r "$DCGM_EXPORTER_SQSH" || { echo "Error: DCGM exporter squash not readable: $DCGM_EXPORTER_SQSH" >&2; exit 1; }
