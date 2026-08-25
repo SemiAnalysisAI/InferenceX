@@ -6,8 +6,8 @@
 # benchmark container is ephemeral. See docs/waiver/2726.md.
 set -euo pipefail
 
-readonly IMAGE_EXPECTED="vllm/vllm-openai-rocm:v0.27.1"
-readonly IMAGE_DIGEST_EXPECTED="sha256:bb44b39aea26798cce43030a98bf48efd0322ca7147367db86e38b96bd80f0e7"
+readonly IMAGE_TAG_EXPECTED="vllm/vllm-openai-rocm:v0.27.1"
+readonly IMAGE_DIGEST_VALIDATED="sha256:bb44b39aea26798cce43030a98bf48efd0322ca7147367db86e38b96bd80f0e7"
 readonly VLLM_BASE="6e448d0ea9bf3d88d898b65449ca6dc2aec170ac"
 readonly AITER_BASE="545d97cc0aaeef7915e2c6df80b7f63f9d8ad657"
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -51,8 +51,8 @@ record_patch_state() {
     local status="$1"
     [[ -n "${RESULT_DIR:-}" && -d "$RESULT_DIR" ]] || return 0
     printf '%s\n' \
-        "image=$IMAGE_EXPECTED" \
-        "image_digest=$IMAGE_DIGEST_EXPECTED" \
+        "image_tag_expected=$IMAGE_TAG_EXPECTED" \
+        "image_digest_validated=$IMAGE_DIGEST_VALIDATED" \
         "vllm_base=$VLLM_BASE" \
         "aiter_base=$AITER_BASE" \
         "vllm_patch_sha256=$VLLM_PATCH_SHA256" \
