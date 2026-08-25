@@ -169,6 +169,24 @@ def test_lm_eval_sitecustomize_hooks(monkeypatch):
         ]
     )
     assert parsed == ["reason"]
+
+    parsed = LocalChatCompletion.parse_generations(
+        [
+            {
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "content": "",
+                            "reasoning": "current-vllm-reason",
+                            "reasoning_content": "legacy-reason",
+                        },
+                    }
+                ]
+            }
+        ]
+    )
+    assert parsed == ["current-vllm-reason"]
     rendered = TemplateAPI().apply_chat_template([{"role": "user", "content": "hi"}])
     assert isinstance(rendered, JsonChatStr)
     assert json.loads(rendered) == [{"role": "user", "content": "hi"}]

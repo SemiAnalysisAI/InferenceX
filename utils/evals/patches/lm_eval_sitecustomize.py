@@ -18,7 +18,15 @@ def _parse_generations(outputs, **kwargs):
                 message = choice.get("message") or {}
                 content = message.get("content")
                 if content in (None, "", []):
-                    content = message.get("reasoning_content") or ""
+                    # vLLM renamed its non-standard chat response field from
+                    # ``reasoning_content`` to ``reasoning``. Accept both so
+                    # an open reasoning block does not become an empty lm-eval
+                    # response when a model reaches the generation limit.
+                    content = (
+                        message.get("reasoning")
+                        or message.get("reasoning_content")
+                        or ""
+                    )
                 parsed[index] = content
         except Exception:
             parsed = [""]

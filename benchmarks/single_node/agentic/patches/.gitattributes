@@ -1,0 +1,2 @@
+# Patch payloads preserve the validated upstream source bytes verbatim.
+*.patch -whitespace

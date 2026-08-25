@@ -1,0 +1,2728 @@
+diff --git a/vllm/config/speculative.py b/vllm/config/speculative.py
+index 07bdcac68b84b45bc563dc91f6e4464752228783..42c9fc065fab61f2739da7e8277fcc80c21fa60f 100644
+--- a/vllm/config/speculative.py
++++ b/vllm/config/speculative.py
+@@ -127,6 +127,10 @@ class SpeculativeConfig:
+     max_model_len: int | None = Field(default=None, ge=1)
+     """The maximum model length of the draft model. Used when testing the
+     ability to skip speculation for some sequences."""
++    draft_attention_window: int | None = Field(default=None, ge=1)
++    """Limit the draft model's attention to the most recent tokens. This is
++    currently consumed by Llama-based EAGLE3 draft models, and leaves the
++    target model's attention unchanged."""
+     revision: str | None = None
+     """The specific model version to use for the draft model. It can be a
+     branch name, a tag name, or a commit id. If unspecified, will use the
+@@ -325,6 +329,8 @@ class SpeculativeConfig:
+                 # Convert to tuple to make it hashable
+                 factors.append(tuple(layer_ids))
+ 
++        factors.append(self.draft_attention_window)
++
+         hash_str = safe_hash(str(factors).encode(), usedforsecurity=False).hexdigest()
+         return hash_str
+ 
+diff --git a/vllm/model_executor/layers/attention/attention.py b/vllm/model_executor/layers/attention/attention.py
+index c8e5a9c6ac3d56eddc0bdd35db30ebb3065a1ed3..70cf502c1c065be5dab12e036d709c8d159fa082 100644
+--- a/vllm/model_executor/layers/attention/attention.py
++++ b/vllm/model_executor/layers/attention/attention.py
+@@ -250,6 +250,7 @@ class Attention(nn.Module, AttentionLayerBase):
+         mm_prefix_clamp_sliding_window: bool = False,
+         attn_backend: type[AttentionBackend] | None = None,
+         head_size_v: int | None = None,
++        retain_full_kv_cache: bool = False,
+         **extra_impl_args,
+     ) -> None:
+         """
+@@ -338,6 +339,11 @@ class Attention(nn.Module, AttentionLayerBase):
+         self.head_size_v = self.head_size if head_size_v is None else head_size_v
+         self.num_kv_heads = num_kv_heads
+         self.sliding_window = sliding_window
++        # Some speculative draft models benefit from limiting attention to a
++        # recent window while retaining their full KV history. Keeping the
++        # full cache preserves prefix-cache reuse across resumed agentic turns;
++        # the backend still receives ``sliding_window`` and applies the mask.
++        self.retain_full_kv_cache = retain_full_kv_cache
+         self.has_sink = extra_impl_args.get("sinks") is not None
+ 
+         # NOTE: model_config may be None during certain tests
+@@ -631,7 +637,7 @@ class Attention(nn.Module, AttentionLayerBase):
+         # Should not be called for enc-dec attention.
+         assert self.attn_type == AttentionType.DECODER
+         quant_mode = get_kv_quant_mode(self.kv_cache_dtype)
+-        if self.sliding_window is not None:
++        if self.sliding_window is not None and not self.retain_full_kv_cache:
+             assert not self.attn_backend.is_mla(), (
+                 "MLA is not supported for sliding window"
+             )
+diff --git a/vllm/model_executor/models/llama.py b/vllm/model_executor/models/llama.py
+index bb223a311460e8933f0c7aa7062e81672f7933cb..218396f72f917c6e8d3bbc0746878bb0933bb70f 100644
+--- a/vllm/model_executor/models/llama.py
++++ b/vllm/model_executor/models/llama.py
+@@ -214,6 +214,7 @@ class LlamaAttention(nn.Module):
+             cache_config=cache_config,
+             quant_config=quant_config,
+             per_layer_sliding_window=sliding_window,
++            retain_full_kv_cache=getattr(config, "_vllm_retain_full_kv_cache", False),
+             attn_type=attn_type,
+             prefix=f"{prefix}.attn",
+         )
+diff --git a/vllm/model_executor/models/llama_eagle3.py b/vllm/model_executor/models/llama_eagle3.py
+index 549e8b7bf63a349baa94d3dfb2d90b8fee264f32..a53ec805b2fd424954a5ecb21429fa3f2eb266fe 100644
+--- a/vllm/model_executor/models/llama_eagle3.py
++++ b/vllm/model_executor/models/llama_eagle3.py
+@@ -32,6 +32,26 @@ from .utils import (
+ logger = init_logger(__name__)
+ 
+ 
++def _configure_draft_attention_window(
++    config: LlamaConfig, draft_attention_window: int | None
++) -> None:
++    if draft_attention_window is None:
++        return
++    config.sliding_window = draft_attention_window
++    config.layer_types = ["sliding_attention"] * config.num_hidden_layers
++    # EAGLE3 is resumed repeatedly by agentic traces. Evicting old draft KV
++    # blocks makes every resumed request rebuild the attention window, which
++    # dominates decode latency. Retain the full cache for prefix reuse while
++    # the attention backend applies the local mask.
++    config._vllm_retain_full_kv_cache = True
++    logger.info(
++        "Using a %d-token sliding attention window with full KV retention "
++        "for all %d Llama EAGLE3 draft layers.",
++        draft_attention_window,
++        config.num_hidden_layers,
++    )
++
++
+ class LlamaDecoderLayer(LlamaDecoderLayer):
+     def __init__(
+         self,
+@@ -137,6 +157,8 @@ class LlamaModel(nn.Module):
+     ) -> None:
+         super().__init__()
+         self.config = vllm_config.speculative_config.draft_model_config.hf_config
++        draft_attention_window = vllm_config.speculative_config.draft_attention_window
++        _configure_draft_attention_window(self.config, draft_attention_window)
+         self.vocab_size = self.config.vocab_size
+ 
+         # Get drafter's quantization config
+diff --git a/vllm/model_executor/warmup/minimax_m3_msa_warmup.py b/vllm/model_executor/warmup/minimax_m3_msa_warmup.py
+index 18bf14249111714bc879c605c85b4bf9df48b8f1..6f985aec8a5b09af6e6c10a6aa36fc73abea03db 100644
+--- a/vllm/model_executor/warmup/minimax_m3_msa_warmup.py
++++ b/vllm/model_executor/warmup/minimax_m3_msa_warmup.py
+@@ -1,8 +1,14 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+ 
++import importlib
++import itertools
++import math
++import os
+ from typing import TYPE_CHECKING
+ 
++import torch
++
+ from vllm.logger import init_logger
+ from vllm.models.minimax_m3.nvidia.model import MiniMaxM3SparseAttention
+ from vllm.platforms import current_platform
+@@ -14,8 +20,599 @@ if TYPE_CHECKING:
+ logger = init_logger(__name__)
+ 
+ 
++def _warmup_aiter_unified_attention(worker: "Worker") -> None:
++    """Compile the FP8-query attention variants reachable in AgentX.
++
++    vLLM's ordinary graph warmup and a small request warmup do not cover every
++    split count selected by AITER for resumed AgentX trajectories.  In
++    particular, the same q=1 kernel can specialize for 8, 16, 32, 64, or 128
++    KV segments as the cached context grows.  Exercise representative inputs
++    directly so those specializations cannot first appear in the measured
++    phase.
++    """
++    unified_attention_module = importlib.import_module(
++        "aiter.ops.triton.attention.unified_attention"
++    )
++    from aiter.ops.triton.utils.types import e4m3_dtype
++
++    text_config = getattr(worker.model_config.hf_config, "text_config", None)
++    if text_config is None:
++        text_config = worker.model_config.hf_config
++    tp_size = worker.parallel_config.tensor_parallel_size
++    num_query_heads = int(text_config.num_attention_heads) // tp_size
++    total_num_kv_heads = int(text_config.num_key_value_heads)
++    num_kv_heads = max(1, total_num_kv_heads // tp_size)
++    head_size = int(text_config.head_dim)
++    block_size = int(worker.cache_config.block_size)
++    max_model_len = int(worker.model_config.max_model_len)
++    device = worker.device
++
++    # Match ROCM_AITER_UNIFIED_ATTN's packed allocation and transposed K/V
++    # views.  A single physical block is enough: the synthetic block table
++    # aliases every logical block to it, preserving the production strides and
++    # compile signature without allocating a long-context cache.
++    packed_cache = torch.zeros(
++        (1, num_kv_heads, block_size, 2 * head_size),
++        dtype=e4m3_dtype,
++        device=device,
++    )
++    key_cache, value_cache = packed_cache.transpose(1, 2).split(
++        head_size, dim=-1
++    )
++    q_descale = torch.ones(1, dtype=torch.float32, device=device)
++    k_descale = torch.ones_like(q_descale)
++    v_descale = torch.ones_like(q_descale)
++    # The production metadata builder allocates this table at max-model width.
++    # Triton includes pointer-range/divisibility properties in its cache key, so
++    # a context-sized synthetic table can compile a different specialization.
++    block_table = torch.zeros(
++        (1, math.ceil(max_model_len / block_size)),
++        dtype=torch.int32,
++        device=device,
++    )
++
++    # (label, per-sequence query lengths, per-sequence context lengths, sliding
++    # window).  The no-window
++    # resumed-prefill sizes map to split counts 128, 64, 32, 16, and 8 on
++    # gfx950.  Decode cases cover the context-limited split counts, while the
++    # two prefill cases on each path cover the small and large 2-D configs.
++    #
++    # AgentX concurrency 1 can still put two requests in one engine batch when
++    # a resumed parent overlaps a spawned branch.  Those mixed decode/prefill
++    # batches have a different Triton specialization from the one-sequence
++    # direct calls.  They first appeared eleven minutes into a real replay, so
++    # cover both the small and large query buckets explicitly.
++    cases = (
++        ("full-2d-decode", (1,), (512,), 0),
++        ("full-3d-decode-16", (1,), (1024,), 0),
++        ("full-3d-decode-32", (1,), (2048,), 0),
++        ("full-3d-decode-64", (1,), (4096,), 0),
++        ("full-3d-decode-128", (1,), (8192,), 0),
++        ("full-3d-prefill-128", (64,), (8192,), 0),
++        ("full-3d-prefill-64", (128,), (8192,), 0),
++        ("full-3d-prefill-32", (256,), (8192,), 0),
++        ("full-3d-prefill-16", (512,), (8192,), 0),
++        ("full-3d-prefill-8", (1024,), (8192,), 0),
++        ("full-2d-prefill-small", (16,), (512,), 0),
++        ("full-2d-prefill-large", (1280,), (1280,), 0),
++        ("full-mixed-prefill-small", (1, 2), (8192, 8192), 0),
++        ("full-mixed-prefill-large", (1, 256), (512, 512), 0),
++        ("window-3d-decode-8", (1,), (512,), 32768),
++        ("window-3d-decode-16", (1,), (1024,), 32768),
++        ("window-3d-decode-32", (1,), (2048,), 32768),
++        ("window-3d-decode-64", (1,), (4096,), 32768),
++        ("window-3d-decode-128", (1,), (8192,), 32768),
++        ("window-mixed-decode-128", (1, 1), (8192, 8192), 32768),
++        ("window-2d-prefill-small", (16,), (512,), 32768),
++        ("window-2d-prefill-large", (256,), (512,), 32768),
++        ("window-mixed-prefill-small", (1, 2), (8192, 8192), 32768),
++        (
++            "window-mixed-prefill-large",
++            (1, 256),
++            (32768, 32768),
++            32768,
++        ),
++    )
++
++    # At high external concurrency, the scheduler can place many resumed
++    # trajectories in the same engine batch. Although ``num_seqs`` itself is
++    # dynamic, the batch allocation size is part of Triton's pointer-range
++    # specialization and the batch width also changes the selected 3-D split
++    # count. Job 1014 proved that covering batch=32 only at context=32768 and
++    # context=2048 only at batch=1 is insufficient: its first profiled request
++    # compiled the batch=32/context~=2048 sliding-window specialization with
++    # NUM_SEGMENTS_PER_SEQ=32. Cover the reachable power-of-two batch/context
++    # cross-product directly, for both full and sliding-window attention.
++    decode_batch_sizes = (2, 4, 8, 16, 32)
++    decode_context_lens = (512, 1024, 2048, 4096, 8192, 32768)
++    high_concurrency_cases = tuple(
++        case
++        for batch_size in decode_batch_sizes
++        for context_len in decode_context_lens
++        for case in (
++            (
++                f"full-batch{batch_size}-decode-{context_len}",
++                (1,) * batch_size,
++                (context_len,) * batch_size,
++                0,
++            ),
++            (
++                f"window-batch{batch_size}-decode-{context_len}",
++                (1,) * batch_size,
++                (context_len,) * batch_size,
++                32768,
++            ),
++        )
++    )
++    batch_size = 32
++    high_concurrency_cases += (
++        (
++            "full-batch32-mixed-prefill-small",
++            (1,) * (batch_size - 1) + (2,),
++            (32768,) * batch_size,
++            0,
++        ),
++        (
++            "window-batch32-mixed-prefill-small",
++            (1,) * (batch_size - 1) + (2,),
++            (32768,) * batch_size,
++            32768,
++        ),
++        (
++            "full-batch32-mixed-prefill-3d",
++            (1,) * (batch_size - 1) + (256,),
++            (32768,) * batch_size,
++            0,
++        ),
++        (
++            "window-batch32-mixed-prefill-256",
++            (1,) * (batch_size - 1) + (256,),
++            (32768,) * batch_size,
++            32768,
++        ),
++        (
++            "full-batch32-mixed-prefill-2d",
++            (1,) * (batch_size - 1) + (1280,),
++            (32768,) * batch_size,
++            0,
++        ),
++        (
++            "window-batch32-mixed-prefill-1280",
++            (1,) * (batch_size - 1) + (1280,),
++            (32768,) * batch_size,
++            32768,
++        ),
++    )
++    cases += high_concurrency_cases
++
++    # The target path quantizes Q to FP8, while the EAGLE drafter keeps BF16 Q
++    # against the same FP8 packed cache. The latter reaches a distinct Triton
++    # specialization. Jobs 940/942/944 showed that the ordinary request warmup
++    # compiled one long-context drafter variant, then the deterministic replay
++    # compiled another after profiling began when a resumed trajectory crossed
++    # 32K. Exercise the observed 35,119- and 315,436-token shapes, plus the
++    # surrounding policy/corpus boundaries, in the serving process itself.
++    draft_bf16_cases = (
++        ("draft-window-decode-512", (1,), (512,), 32768),
++        ("draft-window-decode-8192", (1,), (8192,), 32768),
++        ("draft-window-decode-32768", (1,), (32768,), 32768),
++        ("draft-window-decode-35119", (1,), (35119,), 32768),
++        ("draft-window-decode-81920", (1,), (81920,), 32768),
++        ("draft-window-decode-262144", (1,), (262144,), 32768),
++        ("draft-window-decode-315436", (1,), (315436,), 32768),
++        ("draft-window-decode-393216", (1,), (393216,), 32768),
++    )
++    # C32 can schedule many drafter decode rows together. The target FP8 path
++    # above already covers those engine batch widths, but the BF16 drafter has
++    # a distinct Triton specialization. Job 997 first reached the missing
++    # multi-sequence variant 29 seconds into profiling, after the ordinary 354-
++    # request warmup had completed. Mirror the reachable high-concurrency
++    # decode widths here so every TP worker compiles them before measurement.
++    draft_bf16_cases += tuple(
++        (
++            f"draft-window-batch{batch_size}-decode-{context_len}",
++            (1,) * batch_size,
++            (context_len,) * batch_size,
++            32768,
++        )
++        for batch_size in decode_batch_sizes
++        for context_len in decode_context_lens
++    )
++    variants = (
++        ("target-fp8", cases, e4m3_dtype, q_descale),
++        ("draft-bf16", draft_bf16_cases, torch.bfloat16, None),
++    )
++    logger.info(
++        "Warming %d MiniMax M3 AITER unified-attention configurations twice.",
++        sum(len(variant_cases) for _, variant_cases, _, _ in variants),
++    )
++    for variant, variant_cases, query_dtype, query_scale in variants:
++        for label, query_lens, context_lens, sliding_window in (
++            variant_cases + variant_cases
++        ):
++            num_query_tokens = sum(query_lens)
++            query = torch.zeros(
++                (num_query_tokens, num_query_heads, head_size),
++                dtype=query_dtype,
++                device=device,
++            )
++            output = torch.empty(query.shape, dtype=torch.bfloat16, device=device)
++            cu_seqlens_q = torch.tensor(
++                (0, *tuple(itertools.accumulate(query_lens))),
++                dtype=torch.int32,
++                device=device,
++            )
++            case_block_table = block_table.expand(len(query_lens), -1).contiguous()
++            window_size = (sliding_window - 1, 0) if sliding_window else (-1, -1)
++            # Production selects decode rows from shared metadata buffers. The
++            # resulting ``seqused_k`` view can start one, two, or three int32
++            # elements past an aligned base. Triton specializes on that pointer
++            # alignment. Jobs 997/1009 exposed this on the BF16 drafter, and
++            # job 1014 exposed a distinct FP8 target specialization at the
++            # first C32 profiling batch. Cover every decode alignment while
++            # retaining a single aligned call for prefill cases.
++            context_offsets = (0, 1, 2, 3) if "decode" in label else (0,)
++            for context_offset in context_offsets:
++                seq_lens_storage = torch.tensor(
++                    (0,) * context_offset + tuple(context_lens),
++                    dtype=torch.int32,
++                    device=device,
++                )
++                seq_lens = seq_lens_storage[
++                    context_offset : context_offset + len(context_lens)
++                ]
++                unified_attention_module.unified_attention(
++                    q=query,
++                    k=key_cache,
++                    v=value_cache,
++                    out=output,
++                    cu_seqlens_q=cu_seqlens_q,
++                    max_seqlen_q=max(query_lens),
++                    seqused_k=seq_lens,
++                    max_seqlen_k=max(context_lens),
++                    softmax_scale=head_size**-0.5,
++                    causal=True,
++                    window_size=window_size,
++                    block_table=case_block_table,
++                    softcap=0,
++                    q_descale=query_scale,
++                    k_descale=k_descale,
++                    v_descale=v_descale,
++                )
++                logger.debug(
++                    "Warmed MiniMax M3 AITER attention case %s/%s "
++                    "with context offset %d.",
++                    variant,
++                    label,
++                    context_offset,
++                )
++    torch.cuda.synchronize(device)
++
++
++def _warmup_aiter_sparse_paged_attention(worker: "Worker") -> None:
++    """Compile the late AgentX sparse-prefill Gluon specialization.
++
++    The MiniMax-M3 sparse attend bypasses unified attention and calls AITER's
++    ``pa_decode_gluon`` directly. AgentX C1 jobs 944 and 956 both reached a new
++    one-shot specialization about eleven minutes into profiling on resumed
++    branch prefills of 820 and 818 tokens, respectively. Use one loaded sparse
++    layer's production KV-cache view and scalar scales, while synthesizing only
++    the query and emitted sparse page-table rows.
++    """
++    from vllm.models.minimax_m3.amd.model import (
++        MiniMaxM3SparseAttention as MiniMaxM3SparseAttentionAmd,
++    )
++
++    sparse_module = next(
++        (
++            module
++            for module in worker.get_model().modules()
++            if isinstance(module, MiniMaxM3SparseAttentionAmd)
++            and getattr(module, "use_aiter_sparse_pa", False)
++            and not getattr(module, "use_aiter_asm_sparse_pa", False)
++        ),
++        None,
++    )
++    if sparse_module is None:
++        return
++
++    from vllm.models.minimax_m3.amd.ops.sparse_pa import (
++        PAGES_PER_SPARSE_BLOCK,
++        _run_gluon_decode,
++    )
++
++    key_cache, value_cache = sparse_module.get_aiter_sparse_pa_kv_cache()
++    num_query_heads = int(sparse_module.num_heads)
++    num_kv_heads = int(sparse_module.num_kv_heads)
++    head_size = int(sparse_module.head_dim)
++    topk_blocks = int(sparse_module.impl.topk_blocks)
++    sparse_table_width = topk_blocks * PAGES_PER_SPARSE_BLOCK
++    sparse_context = topk_blocks * int(sparse_module.impl.block_size)
++    k_scale = getattr(sparse_module, "_k_scale", None)
++    v_scale = getattr(sparse_module, "_v_scale", None)
++    device = worker.device
++    # ``32`` covers the multi-request sparse-decode configuration used at the
++    # start of C32 profiling (max_context_partition_num=8). The larger cases
++    # retain coverage for the resumed sparse-prefill shapes seen in C1.
++    cases = (32, 818, 820)
++    # Production reuses one persistent context-length buffer for decode and
++    # prefill.  In a mixed batch the prefill view starts at ``num_decode_tokens``
++    # int32 elements, so its pointer can be 4-, 8-, 12-, or 16-byte aligned.
++    # Triton specializes the Gluon kernel on that pointer alignment.  Warming
++    # only a fresh, naturally aligned tensor therefore misses the exact C1
++    # ``sparse_ctx_buffer[1:]`` specialization and causes a late compile.
++    context_offsets = (0, 1, 2, 3)
++
++    logger.info(
++        "Warming MiniMax M3 AITER sparse paged-attention prefills %s with "
++        "int32 context offsets %s twice.",
++        cases,
++        context_offsets,
++    )
++    for _ in range(2):
++        for num_tokens in cases:
++            query = torch.zeros(
++                (num_tokens, num_query_heads, head_size),
++                dtype=torch.bfloat16,
++                device=device,
++            )
++            output = torch.empty_like(query)
++            sparse_bt = torch.zeros(
++                (num_tokens, sparse_table_width),
++                dtype=torch.int32,
++                device=device,
++            )
++            for context_offset in context_offsets:
++                sparse_ctx_storage = torch.full(
++                    (num_tokens + context_offset,),
++                    sparse_context,
++                    dtype=torch.int32,
++                    device=device,
++                )
++                sparse_ctx = sparse_ctx_storage[
++                    context_offset : context_offset + num_tokens
++                ]
++                _run_gluon_decode(
++                    query,
++                    key_cache,
++                    value_cache,
++                    sparse_bt,
++                    sparse_ctx,
++                    num_kv_heads,
++                    head_size**-0.5,
++                    output,
++                    k_scale,
++                    v_scale,
++                )
++    torch.cuda.synchronize(device)
++
++
++def _draft_bf16_projection_weights(worker: "Worker") -> tuple[torch.Tensor, ...]:
++    """Return one real local-shard weight for each drafter GEMM shape."""
++    draft_model = worker.model_runner.get_draft_model()
++    if draft_model is None:
++        return ()
++
++    projection_suffixes = (
++        "fc.weight",
++        "qkv_proj.weight",
++        "o_proj.weight",
++        "gate_up_proj.weight",
++        "down_proj.weight",
++    )
++    weights_by_shape: dict[tuple[int, int], torch.Tensor] = {}
++    names_by_shape: dict[tuple[int, int], str] = {}
++    for name, parameter in draft_model.named_parameters():
++        if not name.endswith(projection_suffixes):
++            continue
++        if (
++            parameter.ndim != 2
++            or parameter.dtype != torch.bfloat16
++            or not parameter.is_cuda
++            or not parameter.is_contiguous()
++        ):
++            continue
++        shape = (int(parameter.shape[0]), int(parameter.shape[1]))
++        weights_by_shape.setdefault(shape, parameter)
++        names_by_shape.setdefault(shape, name)
++
++    logger.info(
++        "MiniMax M3 AgentX drafter BF16 GEMM warmup shapes: %s",
++        tuple((names_by_shape[shape], shape) for shape in sorted(weights_by_shape)),
++    )
++    return tuple(weights_by_shape[shape] for shape in sorted(weights_by_shape))
++
++
++def _warmup_rocm_agentx_dynamic_kernels(worker: "Worker") -> None:
++    """Warm runtime-only MiniMax-M3 AgentX specializations in each worker.
++
++    A standalone cache-population process avoids native compiler builds, but
++    Triton still initializes each specialization in the serving process. The
++    AgentX trajectory handoff and long resumed prefills expose four families
++    after the normal vLLM and AIPerf warmups: EAGLE metadata, AITER unified
++    attention, draft BF16 GEMM, and native top-k/top-p sampling. Keep this
++    opt-in while the reachable-shape set is validated against the production
++    trace.
++    """
++    if os.getenv("VLLM_MINIMAX_M3_AGENTX_JIT_WARMUP", "0") != "1":
++        return
++    if not current_platform.is_rocm():
++        return
++    if not {
++        "MiniMaxM3SparseForCausalLM",
++        "MiniMaxM3SparseForConditionalGeneration",
++    }.intersection(worker.model_config.architectures):
++        return
++
++    from aiter.ops.triton.gemm.basic.gemm_a16w16 import gemm_a16w16
++    from vllm.v1.sample.ops.topk_topp_triton import apply_top_k_top_p_triton
++    from vllm.v1.spec_decode.utils import (
++        eagle_prepare_inputs_padded_kernel,
++        eagle_prepare_next_token_padded_kernel,
++        eagle_step_slot_mapping_metadata_kernel,
++    )
++
++    logger.info("Warming MiniMax M3 ROCm AgentX dynamic kernels in-process.")
++    device = worker.device
++    max_model_len = worker.model_config.max_model_len
++    block_size = worker.cache_config.block_size
++    n_blocks_per_req = math.ceil(max_model_len / block_size)
++    speculative_config = worker.vllm_config.speculative_config
++    batch_sizes = (1, 2, 4, 8, 16, 32, 64, 128, 256)
++
++    _warmup_aiter_unified_attention(worker)
++    _warmup_aiter_sparse_paged_attention(worker)
++
++    # Target-only correctness controls deliberately omit speculative decoding.
++    # They still benefit from the target-attention warmup above, but there are
++    # no EAGLE metadata or drafter GEMMs to specialize in that configuration.
++    if speculative_config is None:
++        torch.cuda.synchronize(device)
++        logger.info(
++            "Skipping MiniMax M3 EAGLE and drafter warmup because "
++            "speculative decoding is disabled."
++        )
++        return
++
++    num_spec_sampled_tokens = int(speculative_config.num_speculative_tokens) + 1
++
++    for num_reqs in batch_sizes:
++        cu_draft = torch.arange(
++            num_spec_sampled_tokens,
++            (num_reqs + 1) * num_spec_sampled_tokens,
++            num_spec_sampled_tokens,
++            dtype=torch.int32,
++            device=device,
++        )
++        valid = torch.ones(num_reqs, dtype=torch.int32, device=device)
++        query_start = torch.arange(
++            0,
++            (num_reqs + 1) * num_spec_sampled_tokens,
++            num_spec_sampled_tokens,
++            dtype=torch.int32,
++            device=device,
++        )
++        out_indices = torch.empty(num_reqs, dtype=torch.int32, device=device)
++        out_rejected = torch.empty_like(out_indices)
++        eagle_prepare_inputs_padded_kernel[(num_reqs,)](
++            cu_draft,
++            valid,
++            query_start,
++            out_indices,
++            out_rejected,
++            num_reqs,
++        )
++
++        # The proposer passes target-plus-draft tokens when speculation is
++        # active, but falls back to a one-token row for requests that bypass the
++        # drafter (for example beyond its long-context cutoff). Triton
++        # specializes both the row stride and BLOCK_SIZE_TOKENS, so derive the
++        # active row width from the serving configuration and cover both
++        # production layouts at every reachable engine batch width.
++        for num_sampled_tokens in (1, num_spec_sampled_tokens):
++            sampled = torch.zeros(
++                (num_reqs, num_sampled_tokens),
++                dtype=torch.int32,
++                device=device,
++            )
++            discard = torch.zeros(num_reqs, dtype=torch.bool, device=device)
++            backup = torch.zeros(num_reqs, dtype=torch.int32, device=device)
++            next_tokens = torch.empty_like(backup)
++            eagle_prepare_next_token_padded_kernel[(num_reqs,)](
++                sampled,
++                discard,
++                backup,
++                next_tokens,
++                valid,
++                200_064,
++                num_sampled_tokens,
++                num_reqs,
++                sampled.stride(0),
++                BLOCK_SIZE_TOKENS=1 << (num_sampled_tokens - 1).bit_length(),
++            )
++
++        positions = torch.zeros(num_reqs, dtype=torch.int64, device=device)
++        block_table = torch.zeros(
++            (num_reqs, n_blocks_per_req), dtype=torch.int32, device=device
++        )
++        seq_lens = torch.zeros(num_reqs, dtype=torch.int32, device=device)
++        out_positions = torch.empty_like(positions)
++        out_slots = torch.empty(num_reqs, dtype=torch.int64, device=device)
++        eagle_step_slot_mapping_metadata_kernel[(num_reqs,)](
++            positions,
++            block_table,
++            block_table.stride(0),
++            seq_lens,
++            out_positions,
++            out_slots,
++            block_size=block_size,
++            max_model_len=max_model_len,
++            n_blocks_per_req=n_blocks_per_req,
++            PAD_ID=-1,
++            batch_size=num_reqs,
++        )
++
++    # Use the loaded EAGLE3 model's real TP-local weights. The old hard-coded
++    # shapes belonged to a different drafter and therefore did not populate
++    # MiniMax-M3's A16W16 specializations.
++    projection_weights = _draft_bf16_projection_weights(worker)
++    token_sizes = (
++        1,
++        2,
++        4,
++        5,
++        8,
++        9,
++        16,
++        17,
++        32,
++        33,
++        64,
++        65,
++        128,
++        129,
++        256,
++        257,
++        512,
++        513,
++        1024,
++        1025,
++        2048,
++        2049,
++        4096,
++        4097,
++        8192,
++        8193,
++    )
++    for tokens in token_sizes:
++        for weight in projection_weights:
++            x = torch.empty(
++                (tokens, int(weight.shape[1])),
++                dtype=torch.bfloat16,
++                device=device,
++            )
++            gemm_a16w16(x, weight)
++            del x
++
++    vocab_size = int(worker.model_config.get_vocab_size())
++    for batch_size in batch_sizes:
++        logits = torch.empty(
++            (batch_size, vocab_size), dtype=torch.float32, device=device
++        )
++        top_k = torch.full((batch_size,), 50, dtype=torch.int32, device=device)
++        top_p = torch.full((batch_size,), 0.95, dtype=torch.float32, device=device)
++        apply_top_k_top_p_triton(logits, None, top_p)
++        apply_top_k_top_p_triton(logits, top_k, None)
++        apply_top_k_top_p_triton(logits, top_k, top_p)
++
++    torch.cuda.synchronize()
++    logger.info("MiniMax M3 ROCm AgentX dynamic-kernel warmup complete.")
++
++
+ @instrument(span_name="MiniMax M3 MSA warmup")
+ def minimax_m3_msa_warmup(worker: "Worker") -> None:
++    _warmup_rocm_agentx_dynamic_kernels(worker)
++
+     sparse_module = next(
+         (
+             module
+diff --git a/vllm/models/minimax_m3/amd/indexer_aiter.py b/vllm/models/minimax_m3/amd/indexer_aiter.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..2262914230cc3e6b910a541f22e5c3f99676de4c
+--- /dev/null
++++ b/vllm/models/minimax_m3/amd/indexer_aiter.py
+@@ -0,0 +1,492 @@
++# SPDX-License-Identifier: Apache-2.0
++# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
++"""AITER (ROCm) indexer impl for MiniMax M3.
++
++Scores index blocks and selects the top-k with AITER's fp8 MFMA kernels on both
++sides of the batch: ``pa_sparse_block_score_decode`` for the uniform-query-length
++decode rows and ``pa_sparse_block_score_prefill`` for the ragged prefill rows,
++then ``pa_sparse_block_topk`` for each. The two scoring passes share one tile
++body in AITER, so they agree block for block, and both encode the forced
++init/local blocks as the same sentinel scores the Triton indexer uses.
++
++The top-k also emits the attend's page table. The winners are already in its
++workgroup's LDS, so resolving them through the block table there costs one wave
++and replaces the separate Triton pass in ``ops.sparse_pa``; the rows it writes
++are one per (token, kv head) with the page ids folded head-minor, which is the
++layout ``pa_decode_gluon`` reads after it flattens the cache.
++
++The score kernels are built on ``v_mfma_f32_16x16x32_fp8_fp8``, so this impl
++requires an fp8 (e4m3) index cache and an fp8 index query -- the fused
++QK-norm/RoPE kernel emits both directly when the index cache is e4m3. See
++``aiter_indexer_unsupported_reason`` for the full set of limits;
++``select_indexer_impl_cls`` refuses to pick this impl unless they all hold.
++
++AITER imports are function-local so this module stays import-safe off ROCm.
++"""
++
++import math
++from dataclasses import dataclass
++from typing import ClassVar
++
++import torch
++
++from vllm.config import VllmConfig
++from vllm.config.attention import IndexerKVDType
++from vllm.forward_context import get_forward_context
++from vllm.models.minimax_m3.amd.ops.sparse_pa import ASM_PAGE_SIZE
++from vllm.models.minimax_m3.common.indexer import (
++    MiniMaxM3IndexerBackend,
++    MiniMaxM3IndexerDecodeMetadata,
++    MiniMaxM3IndexerImpl,
++    MiniMaxM3IndexerMetadata,
++    MiniMaxM3IndexerMetadataBuilder,
++    MiniMaxM3IndexerPrefillMetadata,
++    uniform_decode_query_len,
++)
++from vllm.models.minimax_m3.common.sparse_attention import MiniMaxM3SparseMetadata
++from vllm.platforms import current_platform
++from vllm.v1.attention.backend import AttentionBackend, CommonAttentionMetadata
++from vllm.v1.attention.backends.utils import split_decodes_and_prefills
++from vllm.v1.kv_cache_interface import AttentionSpec
++
++# Page size == sparse block size == index-K block.
++PAGE_SIZE = 128
++# Wave width the top-k is written against: it gives one lane per output slot and
++# reads the score row in wave-wide strips.
++WAVE_SIZE = 64
++# Per-lane register slots the top-k can hold, which is what caps the context: a
++# row may span at most SLOTS_MAX * WAVE_SIZE blocks.
++SLOTS_MAX = 128
++MAX_SUPPORTED_BLOCKS = SLOTS_MAX * WAVE_SIZE
++# MFMA columns the score pass has, one per (query token, index head) pair.
++MFMA_COLS = 16
++# The fp8 MFMA the score kernels are built on exists on these targets only.
++SUPPORTED_ARCHS = ("gfx942", "gfx950")
++
++
++def _pow2_ceil(n: int) -> int:
++    return 1 << (n - 1).bit_length() if n >= 1 else 1
++
++
++def score_block_width(max_seq_len: int, block_size: int) -> int:
++    """Block-axis width the top-k requires of the score buffer.
++
++    Lanes read whole wave-wide strips with no tail guard and each holds a
++    power-of-two count of them, so the axis is padded past the block count.
++    """
++    max_blk = math.ceil(max(max_seq_len, 1) / block_size)
++    return _pow2_ceil(math.ceil(max_blk / WAVE_SIZE)) * WAVE_SIZE
++
++
++def aiter_indexer_max_decode_query_len(vllm_config: VllmConfig) -> int:
++    """Longest query a decode row can carry, which spec decode is what sets.
++
++    Mirrors ``_init_reorder_batch_threshold(1, supports_spec_as_decode=True)``,
++    since that is what the builder splits the batch on and therefore what the
++    decode kernel will actually be handed.
++    """
++    spec = vllm_config.speculative_config
++    if spec is None or spec.num_speculative_tokens is None:
++        return 1
++    return 1 + (2 if spec.parallel_drafting else 1) * spec.num_speculative_tokens
++
++
++def aiter_indexer_unsupported_reason(
++    *,
++    topk_blocks: int,
++    sparse_block_size: int,
++    num_index_heads: int,
++    index_head_dim: int,
++    indexer_kv_dtype: IndexerKVDType,
++    max_model_len: int,
++    max_decode_query_len: int = 1,
++) -> str | None:
++    """Why the AITER indexer cannot serve this configuration, or None if it can.
++
++    Returning the reason rather than a bool keeps the fallback log actionable,
++    since most of these limits are shape constants a deployment can change.
++    """
++    if not current_platform.is_rocm():
++        return "not running on ROCm"
++    if indexer_kv_dtype not in ("fp8", "fp8_e4m3"):
++        # The score kernels are fp8 MFMA; there is no bf16 instantiation.
++        return (
++            f"needs an fp8 e4m3 index cache, got indexer_kv_dtype={indexer_kv_dtype!r}"
++        )
++    from vllm.platforms.rocm import on_gfx942, on_gfx950
++
++    if not (on_gfx942() or on_gfx950()):
++        return f"needs {' or '.join(SUPPORTED_ARCHS)} for the fp8 MFMA"
++    if topk_blocks > WAVE_SIZE:
++        return f"topk_blocks={topk_blocks} exceeds one wave ({WAVE_SIZE})"
++    if num_index_heads > MFMA_COLS:
++        return f"num_index_heads={num_index_heads} exceeds the {MFMA_COLS} MFMA columns"
++    # A decode row's whole query shares one MFMA tile, one column per (token,
++    # head) pair, so spec decode trades columns against the head count.
++    if num_index_heads * max_decode_query_len > MFMA_COLS:
++        return (
++            f"num_index_heads={num_index_heads} x max_decode_query_len="
++            f"{max_decode_query_len} exceeds the {MFMA_COLS} MFMA columns"
++        )
++    if index_head_dim % 64 != 0:
++        return f"index_head_dim={index_head_dim} must be a multiple of 64"
++    if sparse_block_size % MFMA_COLS != 0:
++        return (
++            f"sparse_block_size={sparse_block_size} must tile into "
++            f"{MFMA_COLS}-token MFMA rows"
++        )
++    max_blocks = math.ceil(max_model_len / sparse_block_size)
++    if max_blocks > MAX_SUPPORTED_BLOCKS:
++        return (
++            f"max_model_len={max_model_len} needs {max_blocks} blocks per row, "
++            f"more than the top-k's {MAX_SUPPORTED_BLOCKS}"
++        )
++    return None
++
++
++class MiniMaxM3IndexerAiterBackend(MiniMaxM3IndexerBackend):
++    """Indexer side-cache backend selecting the AITER builder."""
++
++    @staticmethod
++    def get_builder_cls() -> type["MiniMaxM3IndexerAiterMetadataBuilder"]:
++        return MiniMaxM3IndexerAiterMetadataBuilder
++
++
++@dataclass
++class MiniMaxM3IndexerAiterMetadata(MiniMaxM3IndexerMetadata):
++    """Adds the per-row shape the ragged top-k needs.
++
++    The uniform decode rows are recovered inside the kernel from ``seq_lens`` and
++    the shared query length, which also clamps cudagraph padding rows to nothing.
++    Prefill rows have no such shape, so it is materialized here once per forward
++    and shared by every layer -- which is also where the emitted page table's
++    tail block comes from, since a block count alone does not say how many tokens
++    the last block holds.
++    """
++
++    # [num_prefill_tokens] int32, cdiv(position + 1, PAGE_SIZE) per prefill row.
++    prefill_num_valid_pages: torch.Tensor | None = None
++    # [num_prefill_tokens] int32, the request each prefill row belongs to.
++    prefill_row_req_id: torch.Tensor | None = None
++    # [num_prefill_tokens] int32, causal token count (position + 1) per row.
++    prefill_kv_lens: torch.Tensor | None = None
++
++
++class MiniMaxM3IndexerAiterMetadataBuilder(MiniMaxM3IndexerMetadataBuilder):
++    """The Triton indexer's metadata plus the prefill rows' causal shape."""
++
++    def __init__(
++        self,
++        kv_cache_spec: AttentionSpec,
++        layer_names: list[str],
++        vllm_config: VllmConfig,
++        device: torch.device,
++    ) -> None:
++        super().__init__(kv_cache_spec, layer_names, vllm_config, device)
++        max_tokens = vllm_config.scheduler_config.max_num_batched_tokens
++        # Companions to the base's num_valid_pages_buffer, for the two vectors
++        # only the emitted table needs.
++        self.row_req_id_buffer = torch.empty(
++            max_tokens, dtype=torch.int32, device=device
++        )
++        self.kv_lens_buffer = torch.empty(max_tokens, dtype=torch.int32, device=device)
++
++    def build(
++        self,
++        common_prefix_len: int,
++        common_attn_metadata: CommonAttentionMetadata,
++        fast_build: bool = False,
++    ) -> MiniMaxM3IndexerAiterMetadata:
++        num_reqs = common_attn_metadata.num_reqs
++        num_tokens = common_attn_metadata.num_actual_tokens
++        query_start_loc = common_attn_metadata.query_start_loc
++        seq_lens = common_attn_metadata.seq_lens
++        block_table = common_attn_metadata.block_table_tensor
++
++        num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = (
++            split_decodes_and_prefills(
++                common_attn_metadata,
++                decode_threshold=self.reorder_batch_threshold,
++                require_uniform=True,
++            )
++        )
++        assert num_decodes + num_prefills == num_reqs
++        assert num_decode_tokens + num_prefill_tokens == num_tokens
++
++        # Decode-first batch: context lengths into the stable cudagraph buffer.
++        context_lens = self.context_len_buffer[:num_reqs]
++        context_lens.copy_(
++            common_attn_metadata.compute_num_computed_tokens(), non_blocking=True
++        )
++
++        prefill_metadata: MiniMaxM3IndexerPrefillMetadata | None = None
++        prefill_num_valid_pages: torch.Tensor | None = None
++        prefill_row_req_id: torch.Tensor | None = None
++        prefill_kv_lens: torch.Tensor | None = None
++        if num_prefills > 0:
++            cu_seqlens_q = (query_start_loc[num_decodes:] - num_decode_tokens).to(
++                torch.int32
++            )
++            prefill_metadata = MiniMaxM3IndexerPrefillMetadata(
++                cu_seqlens_q=cu_seqlens_q,
++                seq_lens=seq_lens[num_decodes:],
++                context_lens=context_lens[num_decodes:],
++                block_table=block_table[num_decodes:],
++                max_query_len=common_attn_metadata.max_query_len,
++                max_seq_len=common_attn_metadata.max_seq_len,
++            )
++            # A prefill row sees its own position, so its causal length and block
++            # count both follow from that alone; the request it belongs to comes
++            # from the query offsets. Prefill batches are never captured, so the
++            # stable buffers are only being reused here, not required.
++            positions = common_attn_metadata.positions
++            assert positions is not None
++            row_positions = positions[num_decode_tokens:num_tokens]
++            prefill_num_valid_pages = self.num_valid_pages_buffer[
++                num_decode_tokens:num_tokens
++            ]
++            prefill_num_valid_pages.copy_(
++                row_positions // PAGE_SIZE + 1, non_blocking=True
++            )
++            prefill_kv_lens = self.kv_lens_buffer[num_decode_tokens:num_tokens]
++            prefill_kv_lens.copy_(row_positions + 1, non_blocking=True)
++            prefill_row_req_id = self.row_req_id_buffer[num_decode_tokens:num_tokens]
++            prefill_row_req_id.copy_(
++                torch.searchsorted(
++                    cu_seqlens_q[1:].contiguous(),
++                    torch.arange(
++                        num_prefill_tokens,
++                        dtype=torch.int32,
++                        device=cu_seqlens_q.device,
++                    ),
++                    right=True,
++                ),
++                non_blocking=True,
++            )
++
++        decode_metadata: MiniMaxM3IndexerDecodeMetadata | None = None
++        if num_decode_tokens > 0:
++            qsl_cpu = common_attn_metadata.query_start_loc_cpu
++            query_lens_cpu = qsl_cpu[1 : num_decodes + 1] - qsl_cpu[:num_decodes]
++            decode_query_len = uniform_decode_query_len(
++                query_lens_cpu, num_decode_tokens
++            )
++            if decode_query_len is None:
++                # CUDA-graph memory profiling can report a positive padded
++                # token count while every request row has zero query length.
++                assert num_prefills == 0
++                num_tokens = 0
++                num_decodes = 0
++                num_decode_tokens = 0
++            else:
++                decode_metadata = MiniMaxM3IndexerDecodeMetadata(
++                    seq_lens=seq_lens[:num_decodes],
++                    block_table=block_table[:num_decodes],
++                    max_seq_len=common_attn_metadata.max_seq_len,
++                    decode_query_len=decode_query_len,
++                    max_decode_query_len=self.max_decode_query_len,
++                )
++
++        return MiniMaxM3IndexerAiterMetadata(
++            seq_lens=seq_lens,
++            max_seq_len=common_attn_metadata.max_seq_len,
++            slot_mapping=common_attn_metadata.slot_mapping,
++            num_actual_tokens=num_tokens,
++            num_decodes=num_decodes,
++            num_decode_tokens=num_decode_tokens,
++            num_prefills=num_prefills,
++            num_prefill_tokens=num_prefill_tokens,
++            prefill=prefill_metadata,
++            decode=decode_metadata,
++            prefill_num_valid_pages=prefill_num_valid_pages,
++            prefill_row_req_id=prefill_row_req_id,
++            prefill_kv_lens=prefill_kv_lens,
++        )
++
++
++class MiniMaxM3IndexerAiterImpl(MiniMaxM3IndexerImpl):
++    """AITER fp8 score + top-k for both prefill and decode."""
++
++    indexer_backend_cls: ClassVar[type[AttentionBackend]] = MiniMaxM3IndexerAiterBackend
++    emits_sparse_block_table: ClassVar[bool] = True
++
++    def __init__(self, **kwargs) -> None:
++        super().__init__(**kwargs)
++        # Both passes are v_mfma_f32_16x16x32_fp8_fp8 with no bf16 instantiation,
++        # so an index cache of any other dtype would be read as e4m3 bytes.
++        # select_indexer_impl_cls will not get here, but nothing else may either.
++        if self.indexer_kv_dtype not in ("fp8", "fp8_e4m3"):
++            raise ValueError(
++                "The AITER indexer requires an fp8 e4m3 index cache, got "
++                f"indexer_kv_dtype={self.indexer_kv_dtype!r}"
++            )
++
++    @property
++    def pages_per_block(self) -> int:
++        """Physical pages one selected block expands into for the attend."""
++        return self.block_size // ASM_PAGE_SIZE
++
++    def _table_rows(self, lo: int, hi: int) -> tuple[torch.Tensor, torch.Tensor]:
++        """The page table and context rows covering score rows ``[lo, hi)``.
++
++        One table row per (token, kv head), head minor, which is the order
++        ``pa_decode_gluon`` reads once it flattens the cache. Slices of the
++        shared buffers rather than copies, so the attend sees the writes; a
++        model that reserved no buffers gets throwaway ones, and the attend
++        rebuilds the table itself in that case.
++        """
++        kv_heads = self.num_kv_heads
++        if self.sparse_bt_buffer is None or self.sparse_ctx_buffer is None:
++            rows = (hi - lo) * kv_heads
++            device = self.index_cache.kv_cache.device
++            return (
++                torch.empty(
++                    (rows, self.topk_blocks * self.pages_per_block),
++                    dtype=torch.int32,
++                    device=device,
++                ),
++                torch.empty(rows, dtype=torch.int32, device=device),
++            )
++        return (
++            self.sparse_bt_buffer[lo * kv_heads : hi * kv_heads],
++            self.sparse_ctx_buffer[lo * kv_heads : hi * kv_heads],
++        )
++
++    def _new_score(self, rows: int, max_seq_len: int) -> torch.Tensor:
++        """Score buffer for ``rows`` query rows.
++
++        Left uninitialized on purpose: the score pass writes every block up to
++        the longest row it covers, and the top-k reads only the blocks its own
++        row can see, so nothing downstream observes the padded tail. Filling it
++        would cost a write over the whole [H, rows, width] extent, which at long
++        context is the largest tensor in the indexer.
++        """
++        return torch.empty(
++            (
++                self.num_index_heads,
++                rows,
++                score_block_width(max_seq_len, self.block_size),
++            ),
++            dtype=torch.float32,
++            device=self.index_cache.kv_cache.device,
++        )
++
++    def forward(
++        self,
++        index_query: torch.Tensor,
++    ) -> tuple[torch.Tensor | None, torch.Tensor | None]:
++        from aiter.ops.sparse_attention import (
++            pa_sparse_block_score_decode,
++            pa_sparse_block_score_prefill,
++            pa_sparse_block_topk,
++        )
++
++        attn_metadata = get_forward_context().attn_metadata
++        if not isinstance(attn_metadata, dict):
++            return None, None  # profiling run; caches unbound
++        md = attn_metadata[self.index_cache.prefix]
++        assert isinstance(md, MiniMaxM3IndexerAiterMetadata)
++        # The emitted page table addresses the main cache, whose blocks are a
++        # different group's than the index cache's, so the top-k resolves the
++        # selection through the attend's block table -- only the score pass reads
++        # the index cache and takes the indexer's.
++        attend_md = attn_metadata[self.attend_layer_name]
++        assert isinstance(attend_md, MiniMaxM3SparseMetadata)
++
++        num_tokens = md.num_actual_tokens
++        nd = md.num_decode_tokens
++        iq = index_query[:num_tokens].view(
++            -1, self.num_index_heads, self.index_head_dim
++        )
++        kv = self.index_cache.kv_cache
++
++        # Both sides write into the single shared persistent buffer (decode at
++        # [:, :nd], prefill at [:, nd:]) and return views into it. The top-k
++        # takes the head/row strides, so these slices need no copy back.
++        buf = self.topk_indices_buffer
++        if buf is None:
++            buf = torch.empty(
++                (self.num_index_heads, num_tokens, self.topk_blocks),
++                dtype=torch.int32,
++                device=iq.device,
++            )
++
++        decode_topk: torch.Tensor | None = None
++        prefill_topk: torch.Tensor | None = None
++
++        if nd > 0:
++            d = md.decode
++            assert d is not None
++            score = self._new_score(nd, d.max_seq_len)
++            pa_sparse_block_score_decode(
++                iq[:nd],
++                kv,
++                score,
++                d.block_table,
++                d.seq_lens,
++                init_blocks=self.init_blocks,
++                local_blocks=self.local_blocks,
++                query_len=d.decode_query_len,
++                max_seq_len=d.max_seq_len,
++            )
++            decode_topk = buf[:, :nd, :]
++            sparse_bt, sparse_ctx = self._table_rows(0, nd)
++            # A decode row's causal length is seq_len - query_len + token + 1,
++            # which the kernel derives itself, so the emitted table covers
++            # speculative rows without any extra per-row shape.
++            assert attend_md.decode is not None
++            pa_sparse_block_topk(
++                score,
++                decode_topk,
++                attend_md.decode.block_table,
++                d.seq_lens,
++                sparse_bt,
++                sparse_ctx,
++                max_seq_len=d.max_seq_len,
++                block_size=self.block_size,
++                query_len=d.decode_query_len,
++                num_kv_heads=self.num_kv_heads,
++                pages_per_block=self.pages_per_block,
++            )
++
++        if md.num_prefills > 0:
++            p = md.prefill
++            assert p is not None
++            assert md.prefill_num_valid_pages is not None
++            assert md.prefill_row_req_id is not None
++            assert md.prefill_kv_lens is not None
++            score = self._new_score(num_tokens - nd, p.max_seq_len)
++            pa_sparse_block_score_prefill(
++                iq[nd:],
++                kv,
++                score,
++                p.block_table,
++                p.cu_seqlens_q,
++                p.seq_lens,
++                init_blocks=self.init_blocks,
++                local_blocks=self.local_blocks,
++                max_query_len=p.max_query_len,
++                max_seq_len=p.max_seq_len,
++            )
++            prefill_topk = buf[:, nd:num_tokens, :]
++            sparse_bt, sparse_ctx = self._table_rows(nd, num_tokens)
++            # Ragged rows carry their request and causal length explicitly: the
++            # block count alone cannot place the tail block the table ends on.
++            assert attend_md.prefill is not None
++            pa_sparse_block_topk(
++                score,
++                prefill_topk,
++                attend_md.prefill.block_table,
++                p.seq_lens,
++                sparse_bt,
++                sparse_ctx,
++                max_seq_len=p.max_seq_len,
++                block_size=self.block_size,
++                num_valid_pages=md.prefill_num_valid_pages,
++                row_req_id=md.prefill_row_req_id,
++                kv_lens=md.prefill_kv_lens,
++                num_kv_heads=self.num_kv_heads,
++                pages_per_block=self.pages_per_block,
++            )
++
++        return decode_topk, prefill_topk
+diff --git a/vllm/models/minimax_m3/amd/model.py b/vllm/models/minimax_m3/amd/model.py
+index 696067666628634398e010d2b01752246cc5709e..5e2ff89993ef2c80bc9b9cf922e5afcbdeaa92e7 100644
+--- a/vllm/models/minimax_m3/amd/model.py
++++ b/vllm/models/minimax_m3/amd/model.py
+@@ -17,6 +17,7 @@ The MiniMax-M3-preview config selects a single set of branches:
+       "index" attention branch.
+ """
+ 
++import os
+ from collections.abc import Iterable
+ 
+ import torch
+@@ -38,7 +39,7 @@ from vllm.model_executor.layers.attention import Attention
+ from vllm.model_executor.layers.attention.attention import set_default_quant_scales
+ from vllm.model_executor.layers.attention_layer_base import AttentionLayerBase
+ from vllm.model_executor.layers.fused_allreduce_gemma_rms_norm import (
+-    fused_allreduce_gemma_rms_norm,
++    fused_allreduce_gemma_rms_norm as _fallback_fused_allreduce_gemma_rms_norm,
+ )
+ from vllm.model_executor.layers.fused_moe import (
+     FusedMoEFactory,
+@@ -81,10 +82,12 @@ from vllm.model_executor.models.utils import (
+ )
+ from vllm.model_executor.models.vision import run_dp_sharded_mrope_vision_model
+ from vllm.models.minimax_m3.amd.ops import (
++    fp32_router_gemm,
+     gemma_fused_add_rmsnorm,
+     gemma_rmsnorm,
+     swiglu_oai_split,
+ )
++from vllm.models.minimax_m3.amd.ops.sparse_pa import ASM_PAGE_SIZE
+ from vllm.models.minimax_m3.common.indexer import MiniMaxM3Indexer
+ from vllm.models.minimax_m3.common.mm_preprocess import (
+     MiniMaxM3VLDummyInputsBuilder,
+@@ -250,6 +253,69 @@ class MiniMAXGemmaRMSNorm(nn.Module):
+         return gemma_fused_add_rmsnorm(x, residual, self.weight, self.variance_epsilon)
+ 
+ 
++def _aiter_fused_allreduce_gemma_rms_norm(
++    hidden_states: torch.Tensor,
++    residual: torch.Tensor,
++    norm: MiniMAXGemmaRMSNorm,
++) -> tuple[torch.Tensor, torch.Tensor]:
++    """Fuse TP all-reduce, residual add, and Gemma RMSNorm on ROCm.
++
++    The generic eager helper uses FlashInfer on NVIDIA and otherwise falls back
++    to separate all-reduce and norm launches. AITER's custom all-reduce exposes
++    the same Gemma ``weight + 1`` mode, so use it for the MiniMax-M3 ROCm path
++    when explicitly enabled. The fallback preserves the existing behavior for
++    unsupported shapes, transports, and deployments with an older AITER build.
++    """
++    tp_size = get_tensor_model_parallel_world_size()
++    if tp_size == 1:
++        return norm(hidden_states, residual)
++
++    if os.getenv("VLLM_MINIMAX_M3_AITER_FUSED_AR_GEMMA", "0") == "1":
++        aiter_ar = rocm_aiter_ops.get_aiter_allreduce()
++        if aiter_ar is not None:
++            hidden_dim = hidden_states.shape[-1]
++            supported_hidden_dim = bool(
++                aiter_ar.supports_dynamic_hidden_dim
++                or hidden_dim in (512, 1024, 2048, 4096)
++            )
++            supported_layout = bool(
++                hidden_states.dim() == 2
++                and hidden_states.is_contiguous()
++                and residual.shape == hidden_states.shape
++                and residual.is_contiguous()
++                and hidden_states.dtype in (torch.bfloat16, torch.float16)
++                and norm.weight.dtype == hidden_states.dtype
++            )
++            if supported_hidden_dim and supported_layout:
++                ca = aiter_ar.aiter_ca
++                total_bytes = hidden_states.numel() * hidden_states.element_size()
++                token_num = hidden_states.numel() // hidden_dim
++                pack_size = 16 // hidden_states.element_size()
++                hidden_ok = (
++                    hidden_dim % pack_size == 0 and hidden_dim // pack_size <= 1024
++                )
++                if ca.world_size == 2:
++                    size_ok = True
++                elif ca.fully_connected and ca.world_size <= 4:
++                    size_ok = total_bytes < 256 * 1024
++                elif ca.fully_connected and ca.world_size <= 8:
++                    size_ok = total_bytes < 128 * 1024
++                else:
++                    size_ok = False
++                result = ca.custom_fused_ar_rms(
++                    hidden_states,
++                    residual,
++                    weight=norm.weight,
++                    eps=norm.variance_epsilon,
++                    use_1stage=hidden_ok and token_num <= 80 and size_ok,
++                    gemma_norm=True,
++                )
++                if result is not None:
++                    return result[0], result[1]
++
++    return _fallback_fused_allreduce_gemma_rms_norm(hidden_states, residual, norm)
++
++
+ class MiniMaxM3MLP(nn.Module):
+     """Dense SwiGLU-OAI MLP (used by the leading dense layers)."""
+ 
+@@ -330,6 +396,7 @@ class MiniMaxM3MoE(nn.Module):
+         config: PretrainedConfig,
+         layer_id: int,
+         quant_config: QuantizationConfig | None = None,
++        reduce_results: bool = True,
+         prefix: str = "",
+     ) -> None:
+         super().__init__()
+@@ -365,6 +432,9 @@ class MiniMaxM3MoE(nn.Module):
+             out_dtype=torch.float32,
+             prefix=f"{prefix}.gate",
+         )
++        self.use_rocm_fp32_router_gemm = (
++            os.getenv("VLLM_MINIMAX_M3_ROCM_FP32_ROUTER_GEMM", "0") == "1"
++        )
+ 
+         # Shared-expert fusion (opt-in via VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS,
+         # off under expert parallelism) folds the shared expert into the routed
+@@ -415,6 +485,7 @@ class MiniMaxM3MoE(nn.Module):
+                 self.n_shared_experts if self.fuse_shared_experts else None
+             ),
+             quant_config=quant_config,
++            reduce_results=reduce_results,
+             prefix=f"{prefix}.experts",
+         )
+ 
+@@ -427,8 +498,20 @@ class MiniMaxM3MoE(nn.Module):
+         num_tokens, hidden_dim = hidden_states.shape
+         hidden_states = hidden_states.view(-1, hidden_dim)
+ 
+-        # router_logits: (num_tokens, n_experts); GateLinear casts to fp32.
+-        router_logits, _ = self.gate(hidden_states)
++        # router_logits: (num_tokens, n_experts). The generic ROCm GateLinear
++        # fallback materializes hidden_states.float() before its FP32 GEMM.
++        # Keep the register-converting small-token kernel opt-in until its
++        # numerical and end-to-end AgentX results are validated.
++        use_rocm_router_kernel = (
++            self.use_rocm_fp32_router_gemm
++            and hidden_states.dtype == torch.bfloat16
++            and self.gate.weight.dtype == torch.float32
++            and 0 < hidden_states.shape[0] <= 32
++        )
++        if use_rocm_router_kernel:
++            router_logits = fp32_router_gemm(hidden_states, self.gate.weight)
++        else:
++            router_logits, _ = self.gate(hidden_states)
+         final_hidden_states = self.experts(
+             hidden_states=hidden_states, router_logits=router_logits
+         )
+@@ -556,6 +639,7 @@ class MiniMaxM3SparseAttention(nn.Module, AttentionLayerBase):
+         prefix: str = "",
+         cache_config: CacheConfig | None = None,
+         topk_indices_buffer: torch.Tensor | None = None,
++        sparse_table_buffers: tuple[torch.Tensor, torch.Tensor] | None = None,
+     ) -> None:
+         super().__init__()
+         self.hidden_size = config.hidden_size
+@@ -645,12 +729,17 @@ class MiniMaxM3SparseAttention(nn.Module, AttentionLayerBase):
+         self.calculate_kv_scales = False
+         set_default_quant_scales(self, register_buffer=True)
+ 
++        # Indexer side-cache dtype, mirroring --kv-cache-dtype for the main cache
++        # (--attention-config '{"indexer_kv_dtype": ...}'). FP8 E4M3 enables
++        # the AITER indexer; BF16 retains the Triton fallback.
++        self.indexer_kv_dtype = vllm_config.attention_config.indexer_kv_dtype
++
+         # Shared top-k buffer: the indexer writes the selected blocks into it and
+         # the attend impl reads them back (no Python value crosses the break).
+         self.topk_indices_buffer = topk_indices_buffer
+         self.attn_backend = MiniMaxM3SparseBackend
+-        # Indexer and main attention are separate impls. On ROCm the SM100 gate
+-        # is always False, so both pick Triton and the index cache stays bf16.
++        # Indexer and main attention are separate impls; the indexer picks AITER
++        # or Triton from its own cache dtype.
+         # impl is AttentionImplBase (broader than AttentionLayerBase's annotation).
+         self.impl: MiniMaxM3SparseImpl = select_main_impl_cls(  # type: ignore[assignment]
+             topk_blocks=sparse_cfg["sparse_topk_blocks"],
+@@ -666,11 +755,22 @@ class MiniMaxM3SparseAttention(nn.Module, AttentionLayerBase):
+             sparse_block_size=sparse_cfg["sparse_block_size"],
+         )
+         self.use_aiter_sparse_pa = minimax_m3_use_aiter_sparse_pa(self.num_kv_heads)
++        self.use_aiter_fused_cache_insert = bool(
++            self.use_aiter_sparse_pa
++            and os.getenv("VLLM_MINIMAX_M3_FUSED_CACHE_INSERT", "0") == "1"
++        )
++        self.use_aiter_asm_sparse_pa = bool(
++            self.use_aiter_sparse_pa
++            and is_quantized_kv_cache(self.kv_cache_dtype)
++            and os.getenv("VLLM_MINIMAX_M3_ASM_SPARSE_ATTN", "0") == "1"
++        )
+         self.kv_cache_k = torch.tensor([])
+         self.kv_cache_v = torch.tensor([])
++        self.kv_cache_k_scale_asm = torch.tensor([])
++        self.kv_cache_v_scale_asm = torch.tensor([])
+         self._aiter_sparse_pa_cache_data_ptr = 0
+-        # Self-contained nn.Module: owns its side cache, selects its impl in init
+-        # (Triton on ROCm, where the SM100 gate is always False).
++        # Self-contained nn.Module: owns its side cache and selects its impl in
++        # initialization.
+         self.indexer = MiniMaxM3Indexer(
+             num_kv_heads=self.num_kv_heads,
+             scale=self.scaling,
+@@ -683,7 +783,18 @@ class MiniMaxM3SparseAttention(nn.Module, AttentionLayerBase):
+             local_blocks=sparse_cfg.get("sparse_local_block", 0),
+             score_type=sparse_cfg.get("sparse_score_type", "max"),
+             cache_config=cache_config,
++            indexer_kv_dtype=self.indexer_kv_dtype,
+             topk_indices_buffer=topk_indices_buffer,
++            sparse_bt_buffer=sparse_table_buffers[0] if sparse_table_buffers else None,
++            sparse_ctx_buffer=sparse_table_buffers[1] if sparse_table_buffers else None,
++        )
++        use_emitted_table = (
++            sparse_table_buffers is not None
++            and self.indexer.impl.emits_sparse_block_table
++            and self.use_aiter_sparse_pa
++        )
++        self.sparse_bt_buffer, self.sparse_ctx_buffer = (
++            sparse_table_buffers if use_emitted_table else (None, None)
+         )
+ 
+         # Register the main K/V cache so the KV-cache manager allocates it.
+@@ -746,12 +857,99 @@ class MiniMaxM3SparseAttention(nn.Module, AttentionLayerBase):
+             self.head_dim,
+             x,
+         )
++        if self.use_aiter_asm_sparse_pa:
++            scale_shape = (num_phys16, self.num_kv_heads, 16)
++            k_scale = getattr(self, "_k_scale", None)
++            v_scale = getattr(self, "_v_scale", None)
++            if k_scale is None or v_scale is None:
++                raise RuntimeError(
++                    "MiniMax-M3 ASM sparse PA requires explicit KV scales"
++                )
++            self.kv_cache_k_scale_asm = torch.full(
++                scale_shape,
++                float(k_scale.item()),
++                dtype=torch.float32,
++                device=self.kv_cache.device,
++            )
++            self.kv_cache_v_scale_asm = torch.full(
++                scale_shape,
++                float(v_scale.item()),
++                dtype=torch.float32,
++                device=self.kv_cache.device,
++            )
+         self._aiter_sparse_pa_cache_data_ptr = self.kv_cache.data_ptr()
+ 
+     def get_aiter_sparse_pa_kv_cache(self) -> tuple[torch.Tensor, torch.Tensor]:
+         self._ensure_aiter_sparse_pa_kv_cache()
+         return self.kv_cache_k, self.kv_cache_v
+ 
++    def get_aiter_sparse_pa_asm_scales(self) -> tuple[torch.Tensor, torch.Tensor]:
++        self._ensure_aiter_sparse_pa_kv_cache()
++        if (
++            self.kv_cache_k_scale_asm.numel() == 0
++            or self.kv_cache_v_scale_asm.numel() == 0
++        ):
++            raise RuntimeError("MiniMax-M3 ASM sparse PA scales are not initialized")
++        return self.kv_cache_k_scale_asm, self.kv_cache_v_scale_asm
++
++    def _run_aiter_fused_cache_insert(
++        self,
++        qkv: torch.Tensor,
++        positions: torch.Tensor,
++        q: torch.Tensor,
++        index_q: torch.Tensor | None,
++        slot_mapping: torch.Tensor,
++        index_slot_mapping: torch.Tensor | None,
++        *,
++        skip_index_branch: bool,
++    ) -> None:
++        """Fuse QK norm, RoPE, and AITER page-16 cache insertion."""
++        from aiter.ops.minimax_m3_fused_qknorm_rope import (
++            minimax_m3_qknorm_rope_cache_shuffle_insert,
++        )
++
++        key_cache, value_cache = self.get_aiter_sparse_pa_kv_cache()
++        index_cache = None
++        if not skip_index_branch:
++            index_cache = self.indexer.index_cache.kv_cache
++            if index_cache.numel() == 0:
++                raise RuntimeError("MiniMax-M3 index cache is not bound")
++
++        kv_cache_dtype = (
++            self.kv_cache_dtype
++            if is_quantized_kv_cache(self.kv_cache_dtype)
++            else "auto"
++        )
++        minimax_m3_qknorm_rope_cache_shuffle_insert(
++            qkv,
++            self.q_norm.weight,
++            self.k_norm.weight,
++            self.rotary_emb.cos_sin_cache,
++            positions,
++            self.num_heads,
++            self.num_kv_heads,
++            self.num_idx_heads,
++            self.rotary_emb.rotary_dim,
++            self.q_norm.variance_epsilon,
++            slot_mapping,
++            key_cache,
++            value_cache,
++            q,
++            index_q_norm_weight=(
++                None if skip_index_branch else self.index_q_norm.weight
++            ),
++            index_k_norm_weight=(
++                None if skip_index_branch else self.index_k_norm.weight
++            ),
++            index_slot_mapping=index_slot_mapping,
++            index_cache=index_cache,
++            index_q_out=index_q,
++            kv_cache_dtype=kv_cache_dtype,
++            k_scale=getattr(self, "_k_scale", None),
++            v_scale=getattr(self, "_v_scale", None),
++            skip_index_branch=skip_index_branch,
++        )
++
+     def _insert_aiter_sparse_pa_kv(
+         self,
+         k: torch.Tensor,
+@@ -826,35 +1024,46 @@ class MiniMaxM3SparseAttention(nn.Module, AttentionLayerBase):
+         if self.skip_index_topk:
+             index_q = None
+             if self.use_aiter_sparse_pa:
+-                ops.fused_minimax_m3_qknorm_rope_kv_insert(
+-                    qkv,
+-                    self.q_norm.weight,
+-                    self.k_norm.weight,
+-                    cos_sin_cache,
+-                    positions,
+-                    self.num_heads,
+-                    self.num_kv_heads,
+-                    rotary_dim,
+-                    eps,
+-                    num_index_heads=self.num_idx_heads,
+-                    q_out=q,
+-                    skip_index_branch=True,
+-                )
+-                k_start = self.q_size
+-                v_start = k_start + self.kv_size
+-                k = qkv[:, k_start:v_start].view(
+-                    num_tokens, self.num_kv_heads, self.head_dim
+-                )
+-                v = qkv[:, v_start : v_start + self.kv_size].view(
+-                    num_tokens, self.num_kv_heads, self.head_dim
+-                )
+-                self._insert_aiter_sparse_pa_kv(
+-                    k,
+-                    v,
+-                    None,
+-                    main_slot_mapping,
+-                    None,
+-                )
++                if self.use_aiter_fused_cache_insert:
++                    self._run_aiter_fused_cache_insert(
++                        qkv,
++                        positions,
++                        q,
++                        None,
++                        main_slot_mapping,
++                        None,
++                        skip_index_branch=True,
++                    )
++                else:
++                    ops.fused_minimax_m3_qknorm_rope_kv_insert(
++                        qkv,
++                        self.q_norm.weight,
++                        self.k_norm.weight,
++                        cos_sin_cache,
++                        positions,
++                        self.num_heads,
++                        self.num_kv_heads,
++                        rotary_dim,
++                        eps,
++                        num_index_heads=self.num_idx_heads,
++                        q_out=q,
++                        skip_index_branch=True,
++                    )
++                    k_start = self.q_size
++                    v_start = k_start + self.kv_size
++                    k = qkv[:, k_start:v_start].view(
++                        num_tokens, self.num_kv_heads, self.head_dim
++                    )
++                    v = qkv[:, v_start : v_start + self.kv_size].view(
++                        num_tokens, self.num_kv_heads, self.head_dim
++                    )
++                    self._insert_aiter_sparse_pa_kv(
++                        k,
++                        v,
++                        None,
++                        main_slot_mapping,
++                        None,
++                    )
+             else:
+                 ops.fused_minimax_m3_qknorm_rope_kv_insert(
+                     qkv,
+@@ -876,44 +1085,60 @@ class MiniMaxM3SparseAttention(nn.Module, AttentionLayerBase):
+                 )
+         else:
+             index_slot_mapping = fwd_slot_mapping[self.indexer.index_cache.prefix]
+-            index_q = qkv.new_empty((num_tokens, self.index_q_size))
++            # Match the query dtype to the index-K cache. The fused insertion
++            # kernel writes E4M3 directly for the AITER FP8 score path.
++            index_q = qkv.new_empty(
++                (num_tokens, self.index_q_size),
++                dtype=self.indexer.index_cache.dtype,
++            )
+             if self.use_aiter_sparse_pa:
+-                ops.fused_minimax_m3_qknorm_rope_kv_insert(
+-                    qkv,
+-                    self.q_norm.weight,
+-                    self.k_norm.weight,
+-                    cos_sin_cache,
+-                    positions,
+-                    self.num_heads,
+-                    self.num_kv_heads,
+-                    rotary_dim,
+-                    eps,
+-                    self.index_q_norm.weight,
+-                    self.index_k_norm.weight,
+-                    self.num_idx_heads,
+-                    q_out=q,
+-                    index_q_out=index_q,
+-                    kv_cache_dtype=self.kv_cache_dtype,
+-                )
+-                k_start = self.q_size
+-                v_start = k_start + self.kv_size
+-                index_k_start = v_start + self.kv_size + self.index_q_size
+-                k = qkv[:, k_start:v_start].view(
+-                    num_tokens, self.num_kv_heads, self.head_dim
+-                )
+-                v = qkv[:, v_start : v_start + self.kv_size].view(
+-                    num_tokens, self.num_kv_heads, self.head_dim
+-                )
+-                index_k = qkv[
+-                    :, index_k_start : index_k_start + self.idx_head_dim
+-                ].view(num_tokens, self.idx_head_dim)
+-                self._insert_aiter_sparse_pa_kv(
+-                    k,
+-                    v,
+-                    index_k,
+-                    main_slot_mapping,
+-                    index_slot_mapping,
+-                )
++                if self.use_aiter_fused_cache_insert:
++                    self._run_aiter_fused_cache_insert(
++                        qkv,
++                        positions,
++                        q,
++                        index_q,
++                        main_slot_mapping,
++                        index_slot_mapping,
++                        skip_index_branch=False,
++                    )
++                else:
++                    ops.fused_minimax_m3_qknorm_rope_kv_insert(
++                        qkv,
++                        self.q_norm.weight,
++                        self.k_norm.weight,
++                        cos_sin_cache,
++                        positions,
++                        self.num_heads,
++                        self.num_kv_heads,
++                        rotary_dim,
++                        eps,
++                        self.index_q_norm.weight,
++                        self.index_k_norm.weight,
++                        self.num_idx_heads,
++                        q_out=q,
++                        index_q_out=index_q,
++                        kv_cache_dtype=self.kv_cache_dtype,
++                    )
++                    k_start = self.q_size
++                    v_start = k_start + self.kv_size
++                    index_k_start = v_start + self.kv_size + self.index_q_size
++                    k = qkv[:, k_start:v_start].view(
++                        num_tokens, self.num_kv_heads, self.head_dim
++                    )
++                    v = qkv[:, v_start : v_start + self.kv_size].view(
++                        num_tokens, self.num_kv_heads, self.head_dim
++                    )
++                    index_k = qkv[
++                        :, index_k_start : index_k_start + self.idx_head_dim
++                    ].view(num_tokens, self.idx_head_dim)
++                    self._insert_aiter_sparse_pa_kv(
++                        k,
++                        v,
++                        index_k,
++                        main_slot_mapping,
++                        index_slot_mapping,
++                    )
+             else:
+                 ops.fused_minimax_m3_qknorm_rope_kv_insert(
+                     qkv,
+@@ -971,6 +1196,7 @@ class MiniMaxM3DecoderLayer(nn.Module):
+         force_sparse_attn: bool = False,
+         force_moe: bool = False,
+         topk_indices_buffer: torch.Tensor | None = None,
++        sparse_table_buffers: tuple[torch.Tensor, torch.Tensor] | None = None,
+     ) -> None:
+         super().__init__()
+         self.hidden_size = config.hidden_size
+@@ -978,6 +1204,7 @@ class MiniMaxM3DecoderLayer(nn.Module):
+         # with the layer's index.
+         layer_id = int(prefix.split(sep=".")[-1])
+         self.layer_id = layer_id
++        self.fuse_input_allreduce = False
+ 
+         is_sparse_attention_layer = (
+             force_sparse_attn or layer_id in _sparse_attention_layer_ids(config)
+@@ -991,6 +1218,7 @@ class MiniMaxM3DecoderLayer(nn.Module):
+                 prefix=f"{prefix}.self_attn",
+                 cache_config=cache_config,
+                 topk_indices_buffer=topk_indices_buffer,
++                sparse_table_buffers=sparse_table_buffers,
+             )
+         else:
+             self.self_attn = MiniMaxM3Attention(
+@@ -1003,12 +1231,19 @@ class MiniMaxM3DecoderLayer(nn.Module):
+ 
+         # Dense layers store the FFN under `mlp`; MoE layers under
+         # `block_sparse_moe` -- matching the checkpoint's naming.
++        vllm_config = get_current_vllm_config()
++        defer_ffn_allreduce = bool(
++            os.getenv("VLLM_MINIMAX_M3_AITER_FUSED_AR_GEMMA", "0") == "1"
++            and vllm_config.parallel_config.pipeline_parallel_size == 1
++        )
++        reduce_results = not defer_ffn_allreduce
+         self.is_moe_layer = force_moe or _is_moe_layer(config, layer_id)
+         if self.is_moe_layer:
+             self.block_sparse_moe = MiniMaxM3MoE(
+                 config=config,
+                 layer_id=layer_id,
+                 quant_config=quant_config,
++                reduce_results=reduce_results,
+                 prefix=f"{prefix}.block_sparse_moe",
+             )
+         else:
+@@ -1016,6 +1251,7 @@ class MiniMaxM3DecoderLayer(nn.Module):
+                 config=config,
+                 intermediate_size=config.dense_intermediate_size,
+                 quant_config=quant_config,
++                reduce_results=reduce_results,
+                 prefix=f"{prefix}.mlp",
+             )
+ 
+@@ -1033,24 +1269,37 @@ class MiniMaxM3DecoderLayer(nn.Module):
+         hidden_states: torch.Tensor,
+         residual: torch.Tensor | None,
+     ) -> tuple[torch.Tensor, torch.Tensor]:
+-        # Self Attention
+-        if residual is None:
+-            residual = hidden_states
+-            hidden_states = self.input_layernorm(hidden_states)
++        # Self Attention. Complete a preceding deferred FFN all-reduce inside
++        # this layer's input Gemma RMSNorm when the AITER path is enabled.
++        if self.fuse_input_allreduce and residual is not None:
++            hidden_states, residual = _aiter_fused_allreduce_gemma_rms_norm(
++                hidden_states, residual, self.input_layernorm
++            )
+         else:
+-            hidden_states, residual = self.input_layernorm(hidden_states, residual)
++            if residual is None:
++                residual = hidden_states
++                hidden_states = self.input_layernorm(hidden_states)
++            else:
++                hidden_states, residual = self.input_layernorm(hidden_states, residual)
+         hidden_states = self.self_attn(
+             positions=positions,
+             hidden_states=hidden_states,
+         )
+ 
+-        hidden_states, residual = fused_allreduce_gemma_rms_norm(
++        hidden_states, residual = _aiter_fused_allreduce_gemma_rms_norm(
+             hidden_states, residual, self.post_attention_layernorm
+         )
+         ffn = self.block_sparse_moe if self.is_moe_layer else self.mlp
+         hidden_states = ffn(hidden_states)
+         return hidden_states, residual
+ 
++    @property
++    def ffn_all_reduce_deferred(self) -> bool:
++        """Whether this layer leaves its FFN output TP-partial."""
++        if self.is_moe_layer:
++            return self.block_sparse_moe.experts.moe_config.skip_final_all_reduce
++        return not self.mlp.down_proj.reduce_results
++
+ 
+ class MiniMaxM3Model(nn.Module, EagleModelMixin):
+     fall_back_to_pt_during_load = False
+@@ -1079,15 +1328,32 @@ class MiniMaxM3Model(nn.Module, EagleModelMixin):
+         # layers (mirrors DeepseekV4); the indexer writes its per-head decode/
+         # prefill block selection into it, the attend reads it back.
+         sparse_cfg = getattr(config, "sparse_attention_config", None)
++        self.sparse_table_buffers: tuple[torch.Tensor, torch.Tensor] | None = None
+         if sparse_cfg is not None:
+             tp_size = get_tensor_model_parallel_world_size()
+             num_index_heads = max(1, sparse_cfg["sparse_num_index_heads"] // tp_size)
++            max_tokens = vllm_config.scheduler_config.max_num_batched_tokens
+             self.topk_indices_buffer = torch.empty(
+                 num_index_heads,
+-                vllm_config.scheduler_config.max_num_batched_tokens,
++                max_tokens,
+                 sparse_cfg["sparse_topk_blocks"],
+                 dtype=torch.int32,
+             )
++            num_kv_heads = max(1, config.num_key_value_heads // tp_size)
++            if vllm_config.attention_config.indexer_kv_dtype in (
++                "fp8",
++                "fp8_e4m3",
++            ) and minimax_m3_use_aiter_sparse_pa(num_kv_heads):
++                rows = max_tokens * num_index_heads
++                self.sparse_table_buffers = (
++                    torch.empty(
++                        rows,
++                        sparse_cfg["sparse_topk_blocks"]
++                        * (sparse_cfg["sparse_block_size"] // ASM_PAGE_SIZE),
++                        dtype=torch.int32,
++                    ),
++                    torch.empty(rows, dtype=torch.int32),
++                )
+         else:
+             self.topk_indices_buffer = None
+ 
+@@ -1099,6 +1365,7 @@ class MiniMaxM3Model(nn.Module, EagleModelMixin):
+                 cache_config=cache_config,
+                 quant_config=quant_config,
+                 topk_indices_buffer=self.topk_indices_buffer,
++                sparse_table_buffers=self.sparse_table_buffers,
+             ),
+             prefix=f"{prefix}.layers",
+         )
+@@ -1111,6 +1378,15 @@ class MiniMaxM3Model(nn.Module, EagleModelMixin):
+             ["hidden_states", "residual"], config.hidden_size
+         )
+ 
++        # Match the upstream MiniMax-M3 cross-layer deferral: each TP-partial
++        # FFN output is reduced inside the following input RMSNorm, and the last
++        # one is reduced inside the final RMSNorm.
++        prev_defers = False
++        for idx, layer in enumerate(self.layers[self.start_layer : self.end_layer]):
++            layer.fuse_input_allreduce = idx > 0 and prev_defers
++            prev_defers = layer.ffn_all_reduce_deferred
++        self.fuse_final_norm_allreduce = prev_defers
++
+     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
+         return self.embed_tokens(input_ids)
+ 
+@@ -1145,7 +1421,12 @@ class MiniMaxM3Model(nn.Module, EagleModelMixin):
+                 {"hidden_states": hidden_states, "residual": residual}
+             )
+ 
+-        hidden_states, _ = self.norm(hidden_states, residual)
++        if self.fuse_final_norm_allreduce:
++            hidden_states, _ = _aiter_fused_allreduce_gemma_rms_norm(
++                hidden_states, residual, self.norm
++            )
++        else:
++            hidden_states, _ = self.norm(hidden_states, residual)
+ 
+         if len(aux_hidden_states) > 0:
+             return hidden_states, aux_hidden_states
+diff --git a/vllm/models/minimax_m3/amd/ops/__init__.py b/vllm/models/minimax_m3/amd/ops/__init__.py
+index 22d96f9de9796beab2930f849a03a8e9a600d3e7..f27a4624100401618aafc0996ae5a8dfd42acecb 100644
+--- a/vllm/models/minimax_m3/amd/ops/__init__.py
++++ b/vllm/models/minimax_m3/amd/ops/__init__.py
+@@ -7,6 +7,7 @@ unavailable on ROCm) with single-pass Triton kernels to cut launch overhead and
+ intermediate-tensor traffic during decode.
+ """
+ 
++from vllm.models.minimax_m3.amd.ops.fp32_router_gemm import fp32_router_gemm
+ from vllm.models.minimax_m3.amd.ops.gemma_rmsnorm import (
+     gemma_fused_add_rmsnorm,
+     gemma_rmsnorm,
+@@ -19,6 +20,7 @@ from vllm.models.minimax_m3.amd.ops.swiglu_oai import (
+ __all__ = [
+     "gemma_rmsnorm",
+     "gemma_fused_add_rmsnorm",
++    "fp32_router_gemm",
+     "swiglu_oai_split",
+     "swiglu_oai_quantize_mxfp8",
+ ]
+diff --git a/vllm/models/minimax_m3/amd/ops/fp32_router_gemm.py b/vllm/models/minimax_m3/amd/ops/fp32_router_gemm.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..bd07ed2203e58201d274035e33a7c61eb2ec36e4
+--- /dev/null
++++ b/vllm/models/minimax_m3/amd/ops/fp32_router_gemm.py
+@@ -0,0 +1,100 @@
++# SPDX-License-Identifier: Apache-2.0
++# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
++"""Small-token BF16 activation x FP32 router-weight GEMM for ROCm.
++
++MiniMax-M3 keeps its router weights and logits in FP32. The generic ROCm
++fallback first materializes an FP32 copy of every hidden state and then calls a
++general GEMM. AgentX decode uses only a few tokens at a time, so a persistent
++expert-column program can convert BF16 activations in registers and avoid that
++extra launch and global-memory round trip.
++"""
++
++import torch
++import triton
++import triton.language as tl
++
++
++@triton.jit
++def _fp32_router_gemm_kernel(
++    x_ptr,
++    weight_ptr,
++    out_ptr,
++    stride_xm: tl.constexpr,
++    stride_xk: tl.constexpr,
++    stride_wn: tl.constexpr,
++    stride_wk: tl.constexpr,
++    stride_om: tl.constexpr,
++    stride_on: tl.constexpr,
++    M: tl.constexpr,
++    K: tl.constexpr,
++    BLOCK_M: tl.constexpr,
++    BLOCK_K: tl.constexpr,
++):
++    expert = tl.program_id(0)
++    offsets_m = tl.arange(0, BLOCK_M)
++    offsets_k = tl.arange(0, BLOCK_K)
++    accumulator = tl.zeros((BLOCK_M,), dtype=tl.float32)
++
++    for k_start in tl.static_range(0, K, BLOCK_K):
++        k = k_start + offsets_k
++        weight = tl.load(
++            weight_ptr + expert * stride_wn + k * stride_wk,
++            mask=k < K,
++            other=0.0,
++        )
++        x = tl.load(
++            x_ptr
++            + offsets_m[:, None] * stride_xm
++            + k[None, :] * stride_xk,
++            mask=(offsets_m[:, None] < M) & (k[None, :] < K),
++            other=0.0,
++        )
++        accumulator += tl.sum(x.to(tl.float32) * weight[None, :], axis=1)
++
++    tl.store(
++        out_ptr + offsets_m * stride_om + expert * stride_on,
++        accumulator,
++        mask=offsets_m < M,
++    )
++
++
++def fp32_router_gemm(hidden_states: torch.Tensor, weight: torch.Tensor) -> torch.Tensor:
++    """Compute ``hidden_states @ weight.T`` with FP32 output for M <= 32."""
++    if hidden_states.ndim != 2 or weight.ndim != 2:
++        raise ValueError("router GEMM expects two rank-2 tensors")
++    if hidden_states.dtype != torch.bfloat16 or weight.dtype != torch.float32:
++        raise ValueError("router GEMM expects BF16 activations and FP32 weights")
++    if not hidden_states.is_cuda or not weight.is_cuda:
++        raise ValueError("router GEMM expects accelerator tensors")
++    if not hidden_states.is_contiguous() or not weight.is_contiguous():
++        raise ValueError("router GEMM expects contiguous tensors")
++
++    num_tokens, hidden_size = hidden_states.shape
++    num_experts, weight_hidden_size = weight.shape
++    if hidden_size != weight_hidden_size:
++        raise ValueError("activation and weight hidden dimensions must match")
++    if not 0 < num_tokens <= 32:
++        raise ValueError("router GEMM supports between 1 and 32 tokens")
++
++    output = torch.empty(
++        (num_tokens, num_experts), dtype=torch.float32, device=hidden_states.device
++    )
++    block_m = triton.next_power_of_2(num_tokens)
++    block_k = 256
++    _fp32_router_gemm_kernel[(num_experts,)](
++        hidden_states,
++        weight,
++        output,
++        hidden_states.stride(0),
++        hidden_states.stride(1),
++        weight.stride(0),
++        weight.stride(1),
++        output.stride(0),
++        output.stride(1),
++        M=num_tokens,
++        K=hidden_size,
++        BLOCK_M=block_m,
++        BLOCK_K=block_k,
++        num_warps=8,
++    )
++    return output
+diff --git a/vllm/models/minimax_m3/amd/ops/sparse_pa.py b/vllm/models/minimax_m3/amd/ops/sparse_pa.py
+index dbfde3cd868f9011f7781c2b28f4877c3ca5f487..6e9cba0931dc76b94eedd42c6c5e0774c904504e 100644
+--- a/vllm/models/minimax_m3/amd/ops/sparse_pa.py
++++ b/vllm/models/minimax_m3/amd/ops/sparse_pa.py
+@@ -274,7 +274,9 @@ def _insert_index_cache_kernel(
+     )
+     mask = (slot >= 0) & (offs_d < HEAD_DIM)
+     value = tl.load(src, mask=offs_d < HEAD_DIM, other=0.0)
+-    tl.store(dst, value, mask=mask)
++    # The side cache carries its own dtype (bf16, or e4m3 for the fp8 indexer),
++    # so convert rather than leaning on the store's implicit cast.
++    tl.store(dst, value.to(dst.dtype.element_ty), mask=mask)
+ 
+ 
+ @torch.no_grad()
+@@ -359,22 +361,45 @@ def minimax_m3_sparse_attn_decode_aiter(
+     k_scale: torch.Tensor | None = None,
+     v_scale: torch.Tensor | None = None,
+     decode_query_len: int = 1,
++    sparse_bt: torch.Tensor | None = None,
++    sparse_ctx: torch.Tensor | None = None,
++    use_asm: bool = False,
++    asm_k_scale: torch.Tensor | None = None,
++    asm_v_scale: torch.Tensor | None = None,
+ ) -> None:
+-    sparse_bt, sparse_ctx = minimax_m3_build_sparse_block_table_decode(
+-        topk_idx, block_table, seq_lens, decode_query_len
+-    )
+-    _run_gluon_decode(
+-        q,
+-        k_cache,
+-        v_cache,
+-        sparse_bt,
+-        sparse_ctx,
+-        num_kv_heads,
+-        sm_scale,
+-        output,
+-        k_scale,
+-        v_scale,
+-    )
++    # An indexer whose top-k already emitted the table hands it in; the winners
++    # were in that kernel's LDS, so resolving them there costs a wave and this
++    # pass is skipped entirely.
++    if sparse_bt is None or sparse_ctx is None:
++        sparse_bt, sparse_ctx = minimax_m3_build_sparse_block_table_decode(
++            topk_idx, block_table, seq_lens, decode_query_len
++        )
++    if use_asm:
++        _run_asm_decode(
++            q,
++            k_cache,
++            v_cache,
++            sparse_bt,
++            sparse_ctx,
++            num_kv_heads,
++            output,
++            decode_query_len,
++            asm_k_scale,
++            asm_v_scale,
++        )
++    else:
++        _run_gluon_decode(
++            q,
++            k_cache,
++            v_cache,
++            sparse_bt,
++            sparse_ctx,
++            num_kv_heads,
++            sm_scale,
++            output,
++            k_scale,
++            v_scale,
++        )
+ 
+ 
+ @torch.no_grad()
+@@ -391,17 +416,21 @@ def minimax_m3_sparse_attn_prefill_aiter(
+     output: torch.Tensor,
+     k_scale: torch.Tensor | None = None,
+     v_scale: torch.Tensor | None = None,
++    sparse_bt: torch.Tensor | None = None,
++    sparse_ctx: torch.Tensor | None = None,
+ ) -> None:
+-    total_q = q.shape[0]
+-    pos = torch.arange(total_q, dtype=torch.int32, device=q.device)
+-    query_req_id = torch.searchsorted(cu_seqlens_q[1:].contiguous(), pos, right=True)
+-    query_req_id = query_req_id.to(torch.int32)
+-    query_abs_pos = (prefix_lens[query_req_id] + (pos - cu_seqlens_q[query_req_id])).to(
+-        torch.int32
+-    )
+-    sparse_bt, sparse_ctx = minimax_m3_build_sparse_block_table_prefill(
+-        topk_idx, block_table, query_req_id, query_abs_pos
+-    )
++    if sparse_bt is None or sparse_ctx is None:
++        total_q = q.shape[0]
++        pos = torch.arange(total_q, dtype=torch.int32, device=q.device)
++        query_req_id = torch.searchsorted(
++            cu_seqlens_q[1:].contiguous(), pos, right=True
++        ).to(torch.int32)
++        query_abs_pos = (
++            prefix_lens[query_req_id] + (pos - cu_seqlens_q[query_req_id])
++        ).to(torch.int32)
++        sparse_bt, sparse_ctx = minimax_m3_build_sparse_block_table_prefill(
++            topk_idx, block_table, query_req_id, query_abs_pos
++        )
+     _run_gluon_decode(
+         q,
+         k_cache,
+@@ -495,3 +524,56 @@ def _run_gluon_decode(
+         sliding_window=-1,
+         ps=True,
+     )
++
++
++def _run_asm_decode(
++    q: torch.Tensor,
++    k_cache: torch.Tensor,
++    v_cache: torch.Tensor,
++    sparse_bt: torch.Tensor,
++    sparse_ctx: torch.Tensor,
++    num_kv_heads: int,
++    output: torch.Tensor,
++    decode_query_len: int,
++    k_scale: torch.Tensor | None,
++    v_scale: torch.Tensor | None,
++) -> None:
++    """Run the packaged gfx950 page-16 FP8 decode kernel.
++
++    ``pa_fwd_asm`` interprets FP8 scale arguments as dense per-cache-token
++    tables. A scalar or null pointer is therefore not a valid substitute, even
++    when a checkpoint uses one scale per layer. The owning attention layer
++    materializes and retains these tables before graph capture.
++    """
++    from aiter import pa_fwd_asm
++
++    if decode_query_len != 1:
++        raise ValueError("MiniMax-M3 ASM sparse PA currently requires q_len == 1")
++    if num_kv_heads != 1:
++        raise ValueError("MiniMax-M3 ASM sparse PA currently requires one KV head")
++    if not _is_fp8_kv_cache_tensor(k_cache):
++        raise ValueError("MiniMax-M3 ASM sparse PA requires an FP8 KV cache")
++    if k_scale is None or v_scale is None:
++        raise ValueError("MiniMax-M3 ASM sparse PA requires per-token KV scales")
++    if k_scale.shape != (k_cache.shape[0], num_kv_heads, ASM_PAGE_SIZE):
++        raise ValueError("MiniMax-M3 ASM sparse PA K scale has the wrong shape")
++    if v_scale.shape != (v_cache.shape[0], num_kv_heads, ASM_PAGE_SIZE):
++        raise ValueError("MiniMax-M3 ASM sparse PA V scale has the wrong shape")
++    if not q.is_contiguous():
++        q = q.contiguous()
++    if not output.is_contiguous():
++        raise ValueError("MiniMax-M3 AITER sparse PA output must be contiguous")
++
++    pa_fwd_asm(
++        q,
++        k_cache,
++        v_cache,
++        sparse_bt,
++        sparse_ctx,
++        sparse_bt.stride(0),
++        max_qlen=1,
++        K_QScale=k_scale,
++        V_QScale=v_scale,
++        out_=output,
++        high_precision=1,
++    )
+diff --git a/vllm/models/minimax_m3/amd/sparse_attention_msa.py b/vllm/models/minimax_m3/amd/sparse_attention_msa.py
+index 5845d659bbd55cecd4e28fe39199df453d3f582e..35a77cc2fc6373343f85554bce3981f576b0cca4 100644
+--- a/vllm/models/minimax_m3/amd/sparse_attention_msa.py
++++ b/vllm/models/minimax_m3/amd/sparse_attention_msa.py
+@@ -47,14 +47,24 @@ class MiniMaxM3SparseAiterPAImpl(MiniMaxM3SparseImpl):
+                 f"num_kv_heads == 1, got {self.num_kv_heads}"
+             )
+ 
++        # Set only when the layer's indexer emitted the page table alongside its
++        # selection; otherwise these stay None and the table is built below.
++        sparse_bt_buf = getattr(layer, "sparse_bt_buffer", None)
++        sparse_ctx_buf = getattr(layer, "sparse_ctx_buffer", None)
++        kvh = self.num_kv_heads
++
+         hd = self.head_size
+         q = query[:num_tokens].view(-1, self.num_heads, hd)
+         out = output[:num_tokens].view(-1, self.num_heads, hd)
+         k_cache, v_cache = layer.get_aiter_sparse_pa_kv_cache()  # type: ignore[attr-defined]
+         k_scale = getattr(layer, "_k_scale", None) if self.use_fp8_kv else None
+         v_scale = getattr(layer, "_v_scale", None) if self.use_fp8_kv else None
++        use_asm = bool(getattr(layer, "use_aiter_asm_sparse_pa", False))
++        asm_k_scale = asm_v_scale = None
++        if use_asm:
++            asm_k_scale, asm_v_scale = layer.get_aiter_sparse_pa_asm_scales()  # type: ignore[attr-defined]
+ 
+-        if main_md.num_decodes > 0:
++        if nd > 0:
+             d = main_md.decode
+             assert d is not None
+             minimax_m3_sparse_attn_decode_aiter(
+@@ -70,6 +80,13 @@ class MiniMaxM3SparseAiterPAImpl(MiniMaxM3SparseImpl):
+                 k_scale=k_scale,
+                 v_scale=v_scale,
+                 decode_query_len=d.decode_query_len,
++                sparse_bt=None if sparse_bt_buf is None else sparse_bt_buf[: nd * kvh],
++                sparse_ctx=(
++                    None if sparse_ctx_buf is None else sparse_ctx_buf[: nd * kvh]
++                ),
++                use_asm=use_asm,
++                asm_k_scale=asm_k_scale,
++                asm_v_scale=asm_v_scale,
+             )
+ 
+         if main_md.num_prefills > 0:
+@@ -88,5 +105,15 @@ class MiniMaxM3SparseAiterPAImpl(MiniMaxM3SparseImpl):
+                 out[nd:],
+                 k_scale=k_scale,
+                 v_scale=v_scale,
++                sparse_bt=(
++                    None
++                    if sparse_bt_buf is None
++                    else sparse_bt_buf[nd * kvh : num_tokens * kvh]
++                ),
++                sparse_ctx=(
++                    None
++                    if sparse_ctx_buf is None
++                    else sparse_ctx_buf[nd * kvh : num_tokens * kvh]
++                ),
+             )
+         return output
+diff --git a/vllm/models/minimax_m3/common/indexer.py b/vllm/models/minimax_m3/common/indexer.py
+index 767aa2d19bcc823a9ae5c9293bcee777eda726e5..176923912ecc9be2e7636504783d1a03acfdc966 100644
+--- a/vllm/models/minimax_m3/common/indexer.py
++++ b/vllm/models/minimax_m3/common/indexer.py
+@@ -60,6 +60,40 @@ from vllm.v1.kv_cache_interface import (
+ logger = init_logger(__name__)
+ 
+ 
++def uniform_decode_query_len(
++    query_lens_cpu: torch.Tensor, num_decode_tokens: int
++) -> int | None:
++    """Return the uniform active decode query length, ignoring padded rows.
++
++    Memory profiling can construct decode request rows whose query lengths are
++    all zero. Those rows must not produce decode metadata or launch a kernel.
++    CUDA-graph capture may place zero-length padding rows before or after the
++    active rows, so derive the uniform length from the positive entries rather
++    than assuming row zero is active. Full CUDA graphs also pad the token tensor
++    to the captured request bucket: in that layout ``num_decode_tokens`` counts
++    a query slot for every request row, including rows whose request offset has
++    length zero. Accept either the unpadded active-token count or that captured
++    bucket, while still rejecting inconsistent layouts.
++    """
++    active_query_lens = query_lens_cpu[query_lens_cpu > 0]
++    if active_query_lens.numel() == 0:
++        assert torch.all(query_lens_cpu == 0)
++        return None
++
++    decode_query_len = int(active_query_lens[0].item())
++    assert torch.all((query_lens_cpu == decode_query_len) | (query_lens_cpu == 0))
++    num_active_reqs = int(active_query_lens.numel())
++    unpadded_tokens = num_active_reqs * decode_query_len
++    captured_tokens = int(query_lens_cpu.numel()) * decode_query_len
++    assert num_decode_tokens in (unpadded_tokens, captured_tokens), (
++        f"decode token count {num_decode_tokens} does not match either the "
++        f"active layout ({num_active_reqs} x {decode_query_len} = "
++        f"{unpadded_tokens}) or the captured layout "
++        f"({query_lens_cpu.numel()} x {decode_query_len} = {captured_tokens})"
++    )
++    return decode_query_len
++
++
+ class MiniMaxM3IndexerBackend(AttentionBackend):
+     """Indexer side-cache backend (key-only)."""
+ 
+@@ -310,22 +344,28 @@ class MiniMaxM3IndexerTritonMetadataBuilder(MiniMaxM3IndexerMetadataBuilder):
+             )
+ 
+         decode_metadata: MiniMaxM3IndexerDecodeMetadata | None = None
+-        if num_decodes > 0:
++        if num_decode_tokens > 0:
+             qsl_cpu = common_attn_metadata.query_start_loc_cpu
+             query_lens_cpu = qsl_cpu[1 : num_decodes + 1] - qsl_cpu[:num_decodes]
+-            decode_query_len = int(query_lens_cpu[0].item())
+-            assert decode_query_len > 0
+-            assert torch.all(
+-                (query_lens_cpu == decode_query_len) | (query_lens_cpu == 0)
+-            )
+-            assert num_decode_tokens == num_decodes * decode_query_len
+-            decode_metadata = MiniMaxM3IndexerDecodeMetadata(
+-                seq_lens=seq_lens[:num_decodes],
+-                block_table=block_table[:num_decodes],
+-                max_seq_len=common_attn_metadata.max_seq_len,
+-                decode_query_len=decode_query_len,
+-                max_decode_query_len=self.max_decode_query_len,
++            decode_query_len = uniform_decode_query_len(
++                query_lens_cpu, num_decode_tokens
+             )
++            if decode_query_len is None:
++                # CUDA-graph memory profiling can report a positive padded
++                # token count while every request row has zero query length.
++                # This custom cache group has no work in that dummy pass.
++                assert num_prefills == 0
++                num_tokens = 0
++                num_decodes = 0
++                num_decode_tokens = 0
++            else:
++                decode_metadata = MiniMaxM3IndexerDecodeMetadata(
++                    seq_lens=seq_lens[:num_decodes],
++                    block_table=block_table[:num_decodes],
++                    max_seq_len=common_attn_metadata.max_seq_len,
++                    decode_query_len=decode_query_len,
++                    max_decode_query_len=self.max_decode_query_len,
++                )
+ 
+         return MiniMaxM3IndexerMetadata(
+             seq_lens=seq_lens,
+@@ -353,6 +393,8 @@ class MiniMaxM3IndexerImpl(nn.Module):
+     # Set by each impl so the side cache reports the matching backend + builder.
+     indexer_backend_cls: ClassVar[type[AttentionBackend]] = MiniMaxM3IndexerBackend
+ 
++    emits_sparse_block_table: ClassVar[bool] = False
++
+     def __init__(
+         self,
+         *,
+@@ -369,6 +411,8 @@ class MiniMaxM3IndexerImpl(nn.Module):
+         cache_config: CacheConfig | None = None,
+         indexer_kv_dtype: IndexerKVDType = "bf16",
+         topk_indices_buffer: torch.Tensor | None = None,
++        sparse_bt_buffer: torch.Tensor | None = None,
++        sparse_ctx_buffer: torch.Tensor | None = None,
+     ) -> None:
+         super().__init__()
+         self.num_kv_heads = num_kv_heads
+@@ -381,9 +425,18 @@ class MiniMaxM3IndexerImpl(nn.Module):
+         self.num_index_heads = num_index_heads
+         self.index_head_dim = index_head_dim
+         self.indexer_kv_dtype = indexer_kv_dtype
++        # The attention layer that owns this indexer, which is also the key its
++        # metadata sits under: the side cache and the main cache are separate
++        # KV-cache groups, so anything about the attend's pages has to come from
++        # there rather than from the indexer's own metadata.
++        self.attend_layer_name = prefix
+         # Shared, stable-address top-k output buffer (set by the model for the
+         # cudagraph-safe MSA impl); None -> impl allocates fresh (eager).
+         self.topk_indices_buffer = topk_indices_buffer
++        # Shared, stable-address page table + per-row context bound, filled only
++        # by impls whose top-k emits them (see emits_sparse_block_table).
++        self.sparse_bt_buffer = sparse_bt_buffer
++        self.sparse_ctx_buffer = sparse_ctx_buffer
+         # Owns the side cache (registers itself in the static forward context).
+         self.index_cache = MiniMaxM3IndexerCache(
+             head_dim=index_head_dim,
+@@ -429,7 +482,7 @@ class MiniMaxM3IndexerTritonImpl(MiniMaxM3IndexerImpl):
+         )
+         decode_topk: torch.Tensor | None = None
+         prefill_topk: torch.Tensor | None = None
+-        if index_md.num_decodes > 0:
++        if nd > 0:
+             d = index_md.decode
+             assert d is not None
+             decode_topk = minimax_m3_index_decode(
+@@ -476,13 +529,18 @@ class MiniMaxM3IndexerTritonImpl(MiniMaxM3IndexerImpl):
+ def select_indexer_impl_cls(
+     *,
+     topk_blocks: int,
++    sparse_block_size: int,
++    num_index_heads: int,
++    index_head_dim: int,
+     indexer_kv_dtype: IndexerKVDType = "bf16",
+ ) -> type[MiniMaxM3IndexerImpl]:
+     """Pick the indexer impl off the platform, top-k count, and cache dtype.
+ 
+     On Blackwell (SM100) with ``topk_blocks == 16`` (the only width fmha_sm100's
+     ``sparse_topk_select`` kernel supports), the fmha_sm100 score + top-k path is
+-    used for both bf16 and fp8 index caches. Everything else falls back to the
++    used for both bf16 and fp8 index caches. On ROCm an fp8 index cache picks the
++    AITER fp8 MFMA score + top-k, provided the shape limits in
++    ``aiter_indexer_unsupported_reason`` hold. Everything else falls back to the
+     Triton indexer (bf16 only).
+     """
+     if indexer_kv_dtype in ("mxfp4", "nvfp4"):
+@@ -490,6 +548,36 @@ def select_indexer_impl_cls(
+             f"indexer_kv_dtype={indexer_kv_dtype!r} needs the (not-yet-added) "
+             "CuteDSL indexer impl."
+         )
++    if current_platform.is_rocm():
++        # Lazy import so non-ROCm never reaches for AITER.
++        from vllm.models.minimax_m3.amd.indexer_aiter import (
++            MiniMaxM3IndexerAiterImpl,
++            aiter_indexer_max_decode_query_len,
++            aiter_indexer_unsupported_reason,
++        )
++
++        vllm_config = get_current_vllm_config()
++        reason = aiter_indexer_unsupported_reason(
++            topk_blocks=topk_blocks,
++            sparse_block_size=sparse_block_size,
++            num_index_heads=num_index_heads,
++            index_head_dim=index_head_dim,
++            indexer_kv_dtype=indexer_kv_dtype,
++            max_model_len=vllm_config.model_config.max_model_len,
++            max_decode_query_len=aiter_indexer_max_decode_query_len(vllm_config),
++        )
++        if reason is None:
++            logger.info_once(
++                "MiniMax M3 indexer: selected AITER (fp8 MFMA score + top-k) "
++                "[topk_blocks=%d, indexer_kv_dtype=%s]",
++                topk_blocks,
++                indexer_kv_dtype,
++            )
++            return MiniMaxM3IndexerAiterImpl
++        # An fp8 cache with no AITER path has nowhere else to go: the Triton
++        # indexer below is bf16-only.
++        logger.info_once("MiniMax M3 indexer: AITER unavailable (%s)", reason)
++
+     is_sm100 = (
+         current_platform.is_cuda() and current_platform.is_device_capability_family(100)
+     )
+@@ -549,10 +637,15 @@ class MiniMaxM3Indexer(nn.Module):
+         cache_config: CacheConfig | None = None,
+         indexer_kv_dtype: IndexerKVDType = "bf16",
+         topk_indices_buffer: torch.Tensor | None = None,
++        sparse_bt_buffer: torch.Tensor | None = None,
++        sparse_ctx_buffer: torch.Tensor | None = None,
+     ) -> None:
+         super().__init__()
+         impl_cls = select_indexer_impl_cls(
+             topk_blocks=topk_blocks,
++            sparse_block_size=sparse_block_size,
++            num_index_heads=num_index_heads,
++            index_head_dim=index_head_dim,
+             indexer_kv_dtype=indexer_kv_dtype,
+         )
+         self.impl = impl_cls(
+@@ -569,6 +662,8 @@ class MiniMaxM3Indexer(nn.Module):
+             cache_config=cache_config,
+             indexer_kv_dtype=indexer_kv_dtype,
+             topk_indices_buffer=topk_indices_buffer,
++            sparse_bt_buffer=sparse_bt_buffer,
++            sparse_ctx_buffer=sparse_ctx_buffer,
+         )
+ 
+     @property
+diff --git a/vllm/models/minimax_m3/common/sparse_attention.py b/vllm/models/minimax_m3/common/sparse_attention.py
+index e8154459ddbf5729528a6143b164d94ea64ce9c8..59cf03d8ee066cb1955d2ff90b1b2f65efd9620b 100644
+--- a/vllm/models/minimax_m3/common/sparse_attention.py
++++ b/vllm/models/minimax_m3/common/sparse_attention.py
+@@ -25,6 +25,7 @@ from vllm.config import VllmConfig
+ from vllm.config.cache import CacheDType
+ from vllm.forward_context import get_forward_context
+ from vllm.logger import init_logger
++from vllm.models.minimax_m3.common.indexer import uniform_decode_query_len
+ from vllm.models.minimax_m3.common.ops.sparse_attn import SPARSE_BLOCK_SIZE
+ from vllm.platforms import current_platform
+ 
+@@ -281,20 +282,25 @@ class MiniMaxM3SparseMetadataBuilder(AttentionMetadataBuilder[MiniMaxM3SparseMet
+             )
+ 
+         decode_metadata: MiniMaxM3SparseDecodeMetadata | None = None
+-        if num_decodes > 0:
++        if num_decode_tokens > 0:
+             qsl_cpu = common_attn_metadata.query_start_loc_cpu
+             query_lens_cpu = qsl_cpu[1 : num_decodes + 1] - qsl_cpu[:num_decodes]
+-            decode_query_len = int(query_lens_cpu[0].item())
+-            assert decode_query_len > 0
+-            assert torch.all(
+-                (query_lens_cpu == decode_query_len) | (query_lens_cpu == 0)
+-            )
+-            assert num_decode_tokens == num_decodes * decode_query_len
+-            decode_metadata = MiniMaxM3SparseDecodeMetadata(
+-                seq_lens=seq_lens[:num_decodes],
+-                block_table=block_table[:num_decodes],
+-                decode_query_len=decode_query_len,
++            decode_query_len = uniform_decode_query_len(
++                query_lens_cpu, num_decode_tokens
+             )
++            if decode_query_len is None:
++                # CUDA-graph memory profiling can report a positive padded
++                # token count while every request row has zero query length.
++                assert num_prefills == 0
++                num_tokens = 0
++                num_decodes = 0
++                num_decode_tokens = 0
++            else:
++                decode_metadata = MiniMaxM3SparseDecodeMetadata(
++                    seq_lens=seq_lens[:num_decodes],
++                    block_table=block_table[:num_decodes],
++                    decode_query_len=decode_query_len,
++                )
+ 
+         return MiniMaxM3SparseMetadata(
+             seq_lens=seq_lens,
+@@ -411,7 +417,7 @@ class MiniMaxM3SparseTritonImpl(MiniMaxM3SparseImpl):
+         v_scale = getattr(layer, "_v_scale", None) if self.use_fp8_kv else None
+ 
+         # Decode [:nd]: split-K over the selected blocks (request-major chunks).
+-        if main_md.num_decodes > 0:
++        if nd > 0:
+             d = main_md.decode
+             assert d is not None
+             minimax_m3_sparse_attn_decode(
+diff --git a/vllm/v1/attention/backends/rocm_aiter_unified_attn.py b/vllm/v1/attention/backends/rocm_aiter_unified_attn.py
+index 08cd86968679a393060f6f0e144a138a4e2e49c0..ae1db00501e28d237a3a7121ea1c26e48e878643 100644
+--- a/vllm/v1/attention/backends/rocm_aiter_unified_attn.py
++++ b/vllm/v1/attention/backends/rocm_aiter_unified_attn.py
+@@ -2,6 +2,7 @@
+ # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+ """Attention layer with PagedAttention and Triton prefix prefill."""
+ 
++import os
+ from typing import ClassVar
+ 
+ import torch
+@@ -15,7 +16,12 @@ from vllm.model_executor.layers.quantization.utils.quant_utils import (
+     kFp8StaticTensorSym,
+ )
+ from vllm.utils.torch_utils import is_quantized_kv_cache
+-from vllm.v1.attention.backend import AttentionLayer, AttentionType, MultipleOf
++from vllm.v1.attention.backend import (
++    AttentionLayer,
++    AttentionType,
++    CommonAttentionMetadata,
++    MultipleOf,
++)
+ from vllm.v1.attention.backends.rocm_attn import (
+     RocmAttentionBackend,
+     RocmAttentionImpl,
+@@ -26,6 +32,21 @@ from vllm.v1.attention.backends.rocm_attn import (
+ logger = init_logger(__name__)
+ 
+ 
++class RocmAiterUnifiedAttentionMetadataBuilder(RocmAttentionMetadataBuilder):
++    def build_for_cudagraph_capture(
++        self, common_attn_metadata: CommonAttentionMetadata
++    ) -> RocmAttentionMetadata:
++        attn_metadata = self.build(0, common_attn_metadata)
++        # Keep graph capture cheap, as the parent ROCm builder does, but do not
++        # zero query_start_loc. That workaround is specific to ROCM_ATTN's
++        # legacy prefix-prefill kernel. Unified attention consumes
++        # query_start_loc during decode graph replay; capturing it as all-zero
++        # makes every replay look like zero query tokens and collapses greedy
++        # generation to token id 0.
++        attn_metadata.seq_lens.fill_(1)
++        return attn_metadata
++
++
+ class RocmAiterUnifiedAttentionBackend(RocmAttentionBackend):
+     supported_dtypes: ClassVar[list[torch.dtype]] = [torch.float16, torch.bfloat16]
+     supported_kv_cache_dtypes: ClassVar[list[CacheDType]] = [
+@@ -67,6 +88,14 @@ class RocmAiterUnifiedAttentionBackend(RocmAttentionBackend):
+     def supports_non_causal(cls) -> bool:
+         return False
+ 
++    @classmethod
++    def supports_kv_connector(cls) -> bool:
++        # Unlike ROCM_ATTN's legacy (2, num_blocks, ...) allocation, unified
++        # attention keeps the block dimension first. KV connectors transfer
++        # the raw cache tensor by block, so the packed K/V content dimension
++        # remains connector-compatible.
++        return True
++
+     forward_includes_kv_cache_update: bool = False
+ 
+     @staticmethod
+@@ -95,8 +124,8 @@ class RocmAiterUnifiedAttentionBackend(RocmAttentionBackend):
+         return False
+ 
+     @staticmethod
+-    def get_builder_cls() -> type["RocmAttentionMetadataBuilder"]:
+-        return RocmAttentionMetadataBuilder
++    def get_builder_cls() -> type["RocmAiterUnifiedAttentionMetadataBuilder"]:
++        return RocmAiterUnifiedAttentionMetadataBuilder
+ 
+     @classmethod
+     def supports_attn_type(cls, attn_type: str) -> bool:
+@@ -111,7 +140,10 @@ class RocmAiterUnifiedAttentionBackend(RocmAttentionBackend):
+ 
+ class RocmAiterUnifiedAttentionImpl(RocmAttentionImpl):
+     def fused_output_quant_supported(self, quant_key: QuantKey):
+-        return quant_key == kFp8StaticTensorSym
++        return (
++            getattr(self, "supports_quant_output", True)
++            and quant_key == kFp8StaticTensorSym
++        )
+ 
+     def __init__(
+         self,
+@@ -143,10 +175,53 @@ class RocmAiterUnifiedAttentionImpl(RocmAttentionImpl):
+         logger.info_once(
+             "Using aiter unified attention for RocmAiterUnifiedAttentionImpl"
+         )
+-        from aiter.ops.triton.unified_attention import unified_attention
+-
++        unified_attention_kernel = os.getenv(
++            "VLLM_ROCM_AITER_UNIFIED_ATTN_KERNEL", "aiter"
++        )
++        if unified_attention_kernel == "aiter":
++            from aiter.ops.triton.unified_attention import unified_attention
++        elif unified_attention_kernel == "triton":
++            from vllm.v1.attention.ops.triton_unified_attention import (
++                unified_attention,
++            )
++        else:
++            raise ValueError(
++                "VLLM_ROCM_AITER_UNIFIED_ATTN_KERNEL must be aiter or triton"
++            )
+         self.unified_attention = unified_attention
+-        self.supports_quant_query_input = True
++        self.unified_attention_kernel = unified_attention_kernel
++        quant_query_input = os.getenv(
++            "VLLM_ROCM_AITER_UNIFIED_ATTN_QUANT_QUERY", "1"
++        )
++        if quant_query_input not in ("0", "1"):
++            raise ValueError(
++                "VLLM_ROCM_AITER_UNIFIED_ATTN_QUANT_QUERY must be 0 or 1"
++            )
++        self.supports_quant_query_input = quant_query_input == "1"
++        quant_output = os.getenv(
++            "VLLM_ROCM_AITER_UNIFIED_ATTN_QUANT_OUTPUT", "1"
++        )
++        if quant_output not in ("0", "1"):
++            raise ValueError(
++                "VLLM_ROCM_AITER_UNIFIED_ATTN_QUANT_OUTPUT must be 0 or 1"
++            )
++        self.supports_quant_output = quant_output == "1"
++        cache_writer = os.getenv(
++            "VLLM_ROCM_AITER_UNIFIED_ATTN_CACHE_WRITER", "aiter"
++        )
++        if cache_writer not in ("aiter", "triton"):
++            raise ValueError(
++                "VLLM_ROCM_AITER_UNIFIED_ATTN_CACHE_WRITER must be aiter or triton"
++            )
++        self.cache_writer = cache_writer
++        logger.info_once(
++            "AITER unified-attention kernel is %s; quantized query input is %s; "
++            "quantized output is %s; cache writer is %s.",
++            self.unified_attention_kernel,
++            "enabled" if self.supports_quant_query_input else "disabled",
++            "enabled" if self.supports_quant_output else "disabled",
++            self.cache_writer,
++        )
+ 
+     def _split_kv_cache(
+         self, kv_cache: torch.Tensor
+@@ -227,7 +302,7 @@ class RocmAiterUnifiedAttentionImpl(RocmAttentionImpl):
+         max_seqlen_k = attn_metadata.max_seq_len
+         block_table = attn_metadata.block_table
+ 
+-        if attn_metadata.causal:
++        if attn_metadata.causal and self.unified_attention_kernel == "aiter":
+             self.unified_attention(
+                 q=query[:num_actual_tokens],
+                 k=key_cache,
+@@ -251,8 +326,9 @@ class RocmAiterUnifiedAttentionImpl(RocmAttentionImpl):
+             )
+         else:
+             # The aiter kernel is causal-only. Non-causal cross-attention
+-            # (ENCODER_DECODER, e.g. Whisper) falls back to the vLLM Triton
+-            # unified kernel, which shares this layout and honors the flag.
++            # (ENCODER_DECODER, e.g. Whisper) and the diagnostic kernel A/B
++            # use the vLLM Triton unified kernel with this backend's unchanged
++            # cache layout, cache writer, and metadata.
+             from vllm.v1.attention.ops.triton_unified_attention import (
+                 unified_attention as triton_unified_attention,
+             )
+@@ -297,16 +373,36 @@ class RocmAiterUnifiedAttentionImpl(RocmAttentionImpl):
+         key_cache, value_cache = self._split_kv_cache(kv_cache)
+ 
+         # Reshape the input keys and values and store them in the cache.
+-        ops.reshape_and_cache_flash(
+-            key,
+-            value,
+-            key_cache,
+-            value_cache,
+-            slot_mapping,
+-            self.kv_cache_dtype,
+-            layer._k_scale,
+-            layer._v_scale,
+-        )
++        if self.cache_writer == "aiter":
++            ops.reshape_and_cache_flash(
++                key,
++                value,
++                key_cache,
++                value_cache,
++                slot_mapping,
++                self.kv_cache_dtype,
++                layer._k_scale,
++                layer._v_scale,
++            )
++        else:
++            # This backend packs K/V into the final content dimension. The
++            # resulting NHD split views have a non-contiguous block stride;
++            # use the same stride-aware writer as TritonAttentionBackend for
++            # the controlled writer-only A/B.
++            from vllm.v1.attention.ops.triton_reshape_and_cache_flash import (
++                triton_reshape_and_cache_flash,
++            )
++
++            triton_reshape_and_cache_flash(
++                key,
++                value,
++                key_cache,
++                value_cache,
++                slot_mapping,
++                self.kv_cache_dtype,
++                layer._k_scale,
++                layer._v_scale,
++            )
+ 
+     def fused_rope_kvcache_supported(self):
+         return rocm_aiter_ops.is_enabled()

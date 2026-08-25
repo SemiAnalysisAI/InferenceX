@@ -1,16 +1,21 @@
 #!/usr/bin/env bash
-set -eo pipefail
+set -euo pipefail
 set -x
 
 # Agentic trace replay benchmark for MiniMax-M3 FP4 on MI355X using vLLM
-# and EAGLE3 speculative decoding.
+# EAGLE3 speculative decoding.
 #
 # Required env vars:
-#   MODEL, MODEL_PATH, TP, CONC, KV_OFFLOADING, KV_OFFLOAD_BACKEND,
+#   MODEL, MODEL_PATH, TP, CONC, KV_OFFLOADING,
 #   TOTAL_CPU_DRAM_GB, RESULT_DIR, DURATION, EP_SIZE, DP_ATTENTION
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
+# Force the eval framework to lm-eval for this recipe. run_eval derives its
+# default as swebench for agentic scenarios (scenario_default=swebench when
+# IS_AGENTIC/SCENARIO_TYPE=agentic-coding), but EVAL_FRAMEWORK takes precedence
+# over that default (benchmark_lib.sh: framework=${EVAL_FRAMEWORK:-...}), so
+# setting it here makes the effective framework always lm-eval, never swebench.
 export EVAL_FRAMEWORK="lm-eval"
 
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
@@ -18,30 +23,80 @@ check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
 echo "MODEL=$MODEL TP=$TP CONC=$CONC KV_OFFLOADING=$KV_OFFLOADING TOTAL_CPU_DRAM_GB=$TOTAL_CPU_DRAM_GB RESULT_DIR=$RESULT_DIR DURATION=$DURATION EP_SIZE=$EP_SIZE DP_ATTENTION=$DP_ATTENTION"
 
 DRAFT_MODEL="Inferact/MiniMax-M3-EAGLE3-GQA"
-NUM_SPEC_TOKENS=3
+MODEL_REVISION="b83d14e3d64bf373a207f3c2a7e9f0b0f1e7fc3a"
+DRAFT_MODEL_REVISION="96692486b5fd38ebf8fd2a5f6bb53427d30819a8"
+NUM_SPEC_TOKENS=4
 # golden_al_distribution/minimaxm3_eagle3_gqa.yaml:
-# minimax-m3.thinking_on[3]
-SYNTHETIC_ACCEPT_LEN=2.78
+# minimax-m3.thinking_on[4]
+SYNTHETIC_ACCEPT_LEN=3.02
 
-if [[ -v SLURM_JOB_ID ]]; then
+if [[ "$TP" != "4" ]]; then
+    echo "This validated recipe supports TP4 only; got TP=$TP." >&2
+    exit 1
+fi
+
+if [[ -n "${SLURM_JOB_ID+x}" ]]; then
     echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
 # ROCR/HIP visibility for vLLM 0.14+
-if [[ -v ROCR_VISIBLE_DEVICES ]]; then
+if [[ -n "${ROCR_VISIBLE_DEVICES+x}" ]]; then
     export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
 fi
 
-if [[ -n "$MODEL_PATH" ]]; then
-    if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
-        hf download "$MODEL" --local-dir "$MODEL_PATH"
+checkpoint_is_complete() {
+    local dir="$1"
+    [[ -d "$dir" && -f "$dir/config.json" ]] || return 1
+    CKPT_DIR="$dir" python3 - <<'PYEOF'
+import glob
+import json
+import os
+import sys
+
+directory = os.environ["CKPT_DIR"]
+index = os.path.join(directory, "model.safetensors.index.json")
+if os.path.isfile(index):
+    with open(index) as handle:
+        shards = sorted(set(json.load(handle)["weight_map"].values()))
+    missing = [name for name in shards if not os.path.isfile(os.path.join(directory, name))]
+    if missing:
+        print(f"{len(missing)}/{len(shards)} shards missing, e.g. {missing[:3]}", file=sys.stderr)
+        sys.exit(1)
+elif not glob.glob(os.path.join(directory, "*.safetensors")):
+    print("no shard index and no .safetensors present", file=sys.stderr)
+    sys.exit(1)
+PYEOF
+}
+
+MODEL_REVISION_ARGS=()
+if [[ -n "${MODEL_REVISION:-}" ]]; then
+    MODEL_REVISION_ARGS=(--revision "$MODEL_REVISION")
+fi
+
+if [[ -n "${MODEL_PATH:-}" ]]; then
+    if ! checkpoint_is_complete "$MODEL_PATH"; then
+        hf download "$MODEL" "${MODEL_REVISION_ARGS[@]}" --local-dir "$MODEL_PATH"
     fi
+    checkpoint_is_complete "$MODEL_PATH" || {
+        echo "Error: $MODEL_PATH is incomplete after hf download $MODEL." >&2
+        exit 1
+    }
 else
-    hf download "$MODEL"
+    hf download "$MODEL" "${MODEL_REVISION_ARGS[@]}"
     export MODEL_PATH="$MODEL"
 fi
 
-hf download "$DRAFT_MODEL"
+DRAFT_MODEL_REVISION_ARGS=(--revision "$DRAFT_MODEL_REVISION")
+DRAFT_MODEL_PATH="${DRAFT_MODEL_PATH:-$DRAFT_MODEL}"
+if [[ "$DRAFT_MODEL_PATH" == "$DRAFT_MODEL" ]]; then
+    hf download "$DRAFT_MODEL" "${DRAFT_MODEL_REVISION_ARGS[@]}"
+elif ! checkpoint_is_complete "$DRAFT_MODEL_PATH"; then
+    hf download "$DRAFT_MODEL" "${DRAFT_MODEL_REVISION_ARGS[@]}" --local-dir "$DRAFT_MODEL_PATH"
+    checkpoint_is_complete "$DRAFT_MODEL_PATH" || {
+        echo "Error: $DRAFT_MODEL_PATH is incomplete after hf download $DRAFT_MODEL." >&2
+        exit 1
+    }
+fi
 
 rocm-smi || true
 amd-smi || true
@@ -54,112 +109,48 @@ install_agentic_deps
 export AIPERF_SERVER_METRICS_URLS="http://localhost:${PORT}/metrics"
 export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="vllm:"
 
+# Agentic sessions reuse one pooled HTTP connection across turns. Keep the
+# server-side socket alive longer than the longest expected inter-turn gap and
+# match AIPerf's TCP user timeout so a stale connection cannot turn an otherwise
+# healthy long run into a ClientOSError.
+export VLLM_HTTP_TIMEOUT_KEEP_ALIVE="${VLLM_HTTP_TIMEOUT_KEEP_ALIVE:-900}"
+export AIPERF_HTTP_TCP_USER_TIMEOUT="${AIPERF_HTTP_TCP_USER_TIMEOUT:-900000}"
+
 # ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
-LMCACHE_LOG="$RESULT_DIR/lmcache_server.log"
 mkdir -p "$RESULT_DIR"
 
 SERVER_PID=""
-LMCACHE_PIDS=()
 cleanup_agentic_services() {
     local exit_code=$?
     trap - EXIT INT TERM
     set +e
     stop_background_process_tree "$SERVER_PID" "vLLM server" 60
-    local i
-    for i in "${!LMCACHE_PIDS[@]}"; do
-        stop_background_process_tree "${LMCACHE_PIDS[$i]}" "LMCache server $i"
-    done
     exit "$exit_code"
 }
 trap cleanup_agentic_services EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
+# AgentX replays growing multi-turn prefixes, so keep prefix caching enabled
+# for both GPU-resident and native-offload configurations.
 OFFLOAD_ARGS=()
 
-case "$KV_OFFLOAD_BACKEND" in
+case "${KV_OFFLOAD_BACKEND:-}" in
     "")
         require_agentic_kv_offload_none
         ;;
-    lmcache)
-        require_agentic_kv_offload_backend lmcache
-
-        # Keep the image's tested torch/ROCm stack and install only LMCache's
-        # missing pure-Python runtime dependencies.
-        LMCACHE_VERSION="0.5.3"
-        LMCACHE_ROCM_INDEX="https://github.com/LMCache/LMCache/releases/expanded_assets/v${LMCACHE_VERSION}-rocm"
-        agentic_pip_install --quiet --no-cache-dir --no-deps \
-            "sortedcontainers==2.4.0" \
-            "opentelemetry-exporter-prometheus==0.61b0" \
-            "cupy-rocm-7-0==14.1.1" \
-            "lmcache==${LMCACHE_VERSION}" --find-links "$LMCACHE_ROCM_INDEX"
-        python3 -c \
-            "import cupy; import lmcache.integration.vllm.lmcache_mp_connector; import opentelemetry.exporter.prometheus" \
-            >/dev/null
-
-        # Split the node-level DRAM limit evenly across one MP server per TP rank.
-        LMCACHE_N_SERVERS="$TP"
-        LMCACHE_L1_SIZE_GB="$TOTAL_CPU_DRAM_GB"
-        SHM_FREE_GB=$(df -BG --output=avail /dev/shm 2>/dev/null | tail -1 | tr -dc '0-9')
-        if [ -n "$SHM_FREE_GB" ] && [ "$SHM_FREE_GB" -gt 0 ]; then
-            SHM_CAP_GB=$((SHM_FREE_GB * 90 / 100))
-            if [ "$LMCACHE_L1_SIZE_GB" -gt "$SHM_CAP_GB" ]; then
-                echo "Error: LMCache L1 ${LMCACHE_L1_SIZE_GB} GB exceeds 90% of free /dev/shm (${SHM_CAP_GB} GB)." >&2
-                exit 1
-            fi
-        fi
-        LMCACHE_L1_SHARD_GB=$((LMCACHE_L1_SIZE_GB / LMCACHE_N_SERVERS))
-        if [ "$LMCACHE_L1_SHARD_GB" -lt 1 ]; then
-            echo "Error: LMCache DRAM budget is less than 1 GB per TP rank." >&2
-            exit 1
-        fi
-
-        LMCACHE_SERVER_URLS=()
-        LMCACHE_HTTP_PORTS=()
-        LMCACHE_LOGS=()
-        : > "$RESULT_DIR/lmcache_command.txt"
-        for shard in $(seq 0 $((LMCACHE_N_SERVERS - 1))); do
-            shard_port=$((5555 + shard))
-            shard_http_port=$((8080 + shard))
-            shard_log="${LMCACHE_LOG%.log}_${shard}.log"
-            LMCACHE_CMD=(
-                lmcache server
-                --host 127.0.0.1
-                --port "$shard_port"
-                --http-host 127.0.0.1
-                --http-port "$shard_http_port"
-                --l1-size-gb "$LMCACHE_L1_SHARD_GB"
-                --l1-init-size-gb 10
-                --l1-read-ttl-seconds 7200
-                --chunk-size 256
-                --max-workers 2
-                --eviction-policy LRU
-                --supported-transfer-mode lmcache_driven
-            )
-            append_command "$RESULT_DIR/lmcache_command.txt" "${LMCACHE_CMD[@]}"
-            "${LMCACHE_CMD[@]}" > "$shard_log" 2>&1 &
-            LMCACHE_PIDS+=($!)
-            LMCACHE_HTTP_PORTS+=("$shard_http_port")
-            LMCACHE_LOGS+=("$shard_log")
-            LMCACHE_SERVER_URLS+=("tcp://127.0.0.1:${shard_port}")
-        done
-        for shard in "${!LMCACHE_PIDS[@]}"; do
-            wait_for_ready \
-                --endpoint "http://127.0.0.1:${LMCACHE_HTTP_PORTS[$shard]}/healthcheck" \
-                --log "${LMCACHE_LOGS[$shard]}" \
-                --pid "${LMCACHE_PIDS[$shard]}" \
-                --sleep-interval 1 \
-                --timeout 600
-        done
-        LMCACHE_SERVER_URLS_CSV=$(IFS=,; echo "${LMCACHE_SERVER_URLS[*]}")
-        OFFLOAD_ARGS=(
-            --kv-transfer-config
-            "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_connector_module_path\":\"lmcache.integration.vllm.lmcache_mp_connector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.server_urls\":\"$LMCACHE_SERVER_URLS_CSV\",\"lmcache.mp.mq_timeout\":6000.0}}"
-        )
+    vllm-simple)
+        require_agentic_kv_offload_backend vllm-simple
+        CPU_OFFLOAD_BYTES=$((TOTAL_CPU_DRAM_GB * 1024 * 1024 * 1024))
+        export VLLM_USE_SIMPLE_KV_OFFLOAD=1
+        OFFLOAD_CONFIG=$(printf \
+            '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":%d,"lazy_offload":true}}' \
+            "$CPU_OFFLOAD_BYTES")
+        OFFLOAD_ARGS=(--kv-transfer-config "$OFFLOAD_CONFIG")
         ;;
     *)
-        echo "Unsupported KV_OFFLOAD_BACKEND: $KV_OFFLOAD_BACKEND (expected empty or lmcache)" >&2
+        echo "Unsupported KV_OFFLOAD_BACKEND: ${KV_OFFLOAD_BACKEND:-}" >&2
         exit 1
         ;;
 esac
@@ -171,12 +162,13 @@ if [ "$EP_SIZE" -gt 1 ]; then
 fi
 
 # Synthetic acceptance standardizes throughput against the committed golden
-# EAGLE3-GQA curve. Accuracy evals must use real target verification.
+# EAGLE3-GQA curve. Accuracy evals use real target verification.
 if [ "${EVAL_ONLY}" = "true" ]; then
-    SPEC_CONFIG="{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"TRITON_ATTN\"}"
+    SPEC_CONFIG="{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"ROCM_AITER_UNIFIED_ATTN\", \"draft_attention_window\": 32768}"
 else
-    SPEC_CONFIG="{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"TRITON_ATTN\", \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
+    SPEC_CONFIG="{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"ROCM_AITER_UNIFIED_ATTN\", \"draft_attention_window\": 32768, \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
 fi
+SPECULATIVE_ARGS=(--speculative-config "$SPEC_CONFIG")
 
 echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
@@ -187,17 +179,35 @@ export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_USE_AITER_MOE=1
 export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
-# The AITER page-16 sparse-attention path requires exactly one KV head per
-# tensor-parallel rank. MiniMax-M3 has four KV heads, so TP4 uses that fast
-# path while TP2 uses vLLM's supported Triton sparse-attention fallback.
-if [ "$TP" -eq 4 ]; then
-    export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1
-else
-    export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=0
-fi
+export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 export VLLM_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16=0
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION_MIN_SIZE_KB=256
+export VLLM_ROCM_QUICK_REDUCE_MAX_SIZE_BYTES_MB=2048
+export VLLM_ROCM_AITER_UNIFIED_ATTN_QUANT_QUERY=1
+export VLLM_ROCM_AITER_UNIFIED_ATTN_QUANT_OUTPUT=1
+export VLLM_ROCM_AITER_UNIFIED_ATTN_KERNEL=aiter
+export VLLM_ROCM_AITER_UNIFIED_ATTN_CACHE_WRITER=aiter
+export AITER_UNIFIED_ATTN_SLIDING_DECODE_3D=1
+export VLLM_MINIMAX_M3_FUSED_CACHE_INSERT=1
+export VLLM_MINIMAX_M3_AITER_FUSED_AR_GEMMA=1
+export VLLM_MINIMAX_M3_ROCM_FP32_ROUTER_GEMM=0
+export VLLM_MINIMAX_M3_AGENTX_JIT_WARMUP=1
+export VLLM_MINIMAX_M3_ASM_SPARSE_ATTN=0
+export AIPERF_WARMUP_REQUESTS_PER_LANE=10
+
+GPU_MEMORY_UTILIZATION=0.85
+MAX_NUM_BATCHED_TOKENS=32768
+MAX_NUM_SEQS=256
+KV_CACHE_DTYPE=fp8
+MAX_CUDAGRAPH_CAPTURE_SIZE=512
+ATTENTION_CONFIG_ARGS=(--attention-config '{"indexer_kv_dtype":"fp8"}')
+
+bash "$(dirname "$0")/apply_minimaxm3_agentx_patches.sh"
+AITER_ROOT="$(python3 -c 'import importlib.util as u, os; print(os.path.dirname(os.path.dirname(u.find_spec("aiter").origin)))')"
+export AITER_FUSED_CACHE_INSERT_OVERLAY="$AITER_ROOT/aiter_meta"
+export PYTHONPATH="$AITER_FUSED_CACHE_INSERT_OVERLAY${PYTHONPATH:+:$PYTHONPATH}"
+python3 "$(dirname "$0")/precompile_minimaxm3_aiter.py" --max-model-len 1048576
 
 VLLM_CMD=(
     vllm serve "$MODEL_PATH"
@@ -207,24 +217,30 @@ VLLM_CMD=(
     "${PARALLEL_ARGS[@]}"
     --trust-remote-code
     --block-size 128
-    --gpu-memory-utilization 0.85
+    --gpu-memory-utilization "$GPU_MEMORY_UTILIZATION"
     --enable-chunked-prefill
-    --max-num-batched-tokens 32768
+    --max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS"
     --language-model-only
     --enable-prefix-caching
-    --attention-backend TRITON_ATTN
+    --enable-prompt-tokens-details
+    --attention-backend ROCM_AITER_UNIFIED_ATTN
+    "${ATTENTION_CONFIG_ARGS[@]}"
     --moe-backend aiter
-    --kv-cache-dtype fp8
+    --kv-cache-dtype "$KV_CACHE_DTYPE"
     --tool-call-parser minimax_m3
+    --reasoning-parser minimax_m3
     --enable-auto-tool-choice
     --default-chat-template-kwargs '{"thinking_mode":"enabled"}'
-    --max-num-seqs "$((2 * CONC))"
+    --max-num-seqs "$MAX_NUM_SEQS"
+    --max-cudagraph-capture-size "$MAX_CUDAGRAPH_CAPTURE_SIZE"
+    --jit-monitor-verbose
     --stream-interval 20
     --hf-overrides '{"text_config": {"use_index_cache": true, "index_topk_freq": 4}}'
-    --speculative-config "$SPEC_CONFIG"
+    "${SPECULATIVE_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
 )
-write_command "$RESULT_DIR/server_command.txt" "${VLLM_CMD[@]}"
+printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
+printf '\n' | tee -a "$RESULT_DIR/vllm_command.txt"
 "${VLLM_CMD[@]}" > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 echo "Server PID: $SERVER_PID"
