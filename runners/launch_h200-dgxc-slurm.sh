@@ -7,11 +7,10 @@ SLURM_ACCOUNT="sa-shared"
 HF_HUB_CACHE_MOUNT="${HF_HUB_CACHE_MOUNT:-/models/gharunners/hf-hub-cache}"
 AIPERF_MMAP_CACHE_HOST_PATH="${AIPERF_MMAP_CACHE_HOST_PATH:-/home/sa-shared/gharunners/ai-perf-cache}"
 
-# Immutable producer prerequisite for the GLM-5.2 AgentX lane. This fork is
-# intentionally long-lived; update the SHA only after reviewing a new fork
-# commit and re-running the H200 hardware gate.
-POWER_SRT_SLURM_URL="https://github.com/edwingao28/srt-slurm.git"
-POWER_SRT_SLURM_PIN="e5c837f06a362dc888dfea2ee588e9f19c298270"
+# Temporarily track SemiAnalysisAI/srt-slurm PR #4 so its realized launch-plan
+# artifacts can be validated by the H200 AgentX hardware gate before merge.
+POWER_SRT_SLURM_URL="https://github.com/SemiAnalysisAI/srt-slurm.git"
+POWER_SRT_SLURM_PIN="ff57ec45f9fba76f58f0255c8f2a83c335c1bdc0"
 
 set -x
 
@@ -254,6 +253,9 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 default_account: "${SLURM_ACCOUNT}"
 default_partition: "${SLURM_PARTITION}"
 default_time_limit: "4:00:00"
+# Persist exact realized srun commands under logs/launch-plan so the normal
+# multinode server-log artifact upload captures them.
+record_launch_plan: true
 # Resource defaults
 gpus_per_node: 8
 network_interface: ""

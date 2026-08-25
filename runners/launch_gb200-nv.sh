@@ -398,15 +398,13 @@ if [ -d "$SRT_REPO_DIR" ]; then
     rm -rf "$SRT_REPO_DIR"
 fi
 
-# GLM-5.2 AgentX temporarily tracks SemiAnalysisAI/srt-slurm PR #4 so its
-# realized launch-plan artifacts can be validated end to end before merge.
-# MiniMax-M3 remains on v1.0.50 below.
+# GLM-5.2 and MiniMax-M3 AgentX use v1.0.50 for complete logical-worker
+# metrics discovery across aggregate, DP-attention, and disaggregated topologies.
 if [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "glm5.2" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
-    git clone https://github.com/SemiAnalysisAI/srt-slurm.git "$SRT_REPO_DIR"
+    git clone --branch v1.0.50 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
-    git checkout ff57ec45f9fba76f58f0255c8f2a83c335c1bdc0 || exit 1
-    test "$(git rev-parse HEAD)" = "ff57ec45f9fba76f58f0255c8f2a83c335c1bdc0" || {
-        echo "Error: SemiAnalysisAI/srt-slurm PR #4 resolved to an unexpected commit" >&2
+    test "$(git rev-parse HEAD)" = "e4019633c9e2bc25f38c44b81edf52bb0504d937" || {
+        echo "Error: NVIDIA/srt-slurm v1.0.50 resolved to an unexpected commit" >&2
         exit 1
     }
     mkdir -p recipes/sglang/glm5.2/gb200-fp4/agentic
@@ -618,10 +616,6 @@ cat > srtslurm.yaml <<EOF
 default_account: "${SLURM_ACCOUNT}"
 default_partition: "${SLURM_PARTITION}"
 default_time_limit: "6:00:00"
-
-# Persist exact realized srun commands under logs/launch-plan so the normal
-# multinode server-log artifact upload captures them.
-record_launch_plan: true
 
 # Resource defaults
 gpus_per_node: 4
