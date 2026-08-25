@@ -3,7 +3,7 @@
 # validated MI355X curve to the pinned public vLLM v0.27.1 ROCm image.
 #
 # The image is treated as immutable input: all edits are marker-gated and the
-# benchmark container is ephemeral. See docs/waiver/PENDING-minimaxm3-agentx.md.
+# benchmark container is ephemeral. See docs/waiver/2726.md.
 set -euo pipefail
 
 readonly IMAGE_EXPECTED="vllm/vllm-openai-rocm:v0.27.1"
