@@ -319,3 +319,305 @@ def test_run_agentic_power_records_adapter_failure_before_returning(
     validation = json.loads((result_dir / "power_validation.json").read_text())
     assert validation["power_valid"] is False
     assert "incomplete_token_accounting" in validation["reasons"]
+
+
+def _set_multinode_window_environment(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    logs_root: Path,
+    concurrencies: str = "8 16",
+) -> tuple[Path, Path]:
+    window_dir = logs_root / "power" / "windows"
+    result_root = logs_root
+    window_dir.mkdir(parents=True)
+    monkeypatch.setenv("SRT_MEASUREMENT_WINDOW_DIR", str(window_dir))
+    monkeypatch.setenv("SRT_MEASUREMENT_WINDOW_BENCHMARK_TYPE", "custom")
+    monkeypatch.setenv("SRT_MEASUREMENT_WINDOW_CONCURRENCIES", concurrencies)
+    monkeypatch.setenv("SRT_MEASUREMENT_WINDOW_RESULT_ROOT", str(result_root))
+    return window_dir, result_root
+
+
+def test_multinode_window_writer_publishes_boundary_identical_result_last(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from utils.agentic.aggregation import power_adapter
+
+    logs_root = tmp_path / "logs"
+    result_dir = _write_artifacts(logs_root / "agentic" / "conc_8")
+    window_dir, result_root = _set_multinode_window_environment(
+        monkeypatch,
+        logs_root=logs_root,
+    )
+    writes: list[Path] = []
+    original_write = power_adapter._write_json_atomic
+
+    def record_write(path: Path, payload: dict) -> None:
+        writes.append(path)
+        original_write(path, payload)
+
+    monkeypatch.setattr(power_adapter, "_write_json_atomic", record_write)
+    monkeypatch.setattr(power_adapter.time, "time", lambda: 1_700_000_000.0)
+
+    assert power_adapter.write_multinode_power_window(
+        result_dir=result_dir,
+        concurrency=8,
+        state="running",
+        require_power=True,
+    ) == 0
+
+    stem = "agentic_power_concurrency_8"
+    formal_result = result_dir / f"{stem}.json"
+    formal_window = window_dir / f"{stem}.json"
+    running = json.loads(formal_window.read_text())
+    assert running == {
+        "schema_version": 1,
+        "benchmark_type": "custom",
+        "result_path": formal_result.relative_to(result_root).as_posix(),
+        "concurrency": 8,
+        "benchmark_start_time_unix": 1_700_000_000.0,
+        "benchmark_end_time_unix": None,
+        "duration": None,
+        "clock_source": "head_node_unix_clock",
+        "status": "running",
+        "reason": None,
+    }
+    assert not formal_result.exists()
+
+    assert power_adapter.write_multinode_power_window(
+        result_dir=result_dir,
+        concurrency=8,
+        state="completed",
+        require_power=True,
+    ) == 0
+
+    result_payload = json.loads(formal_result.read_text())
+    completed = json.loads(formal_window.read_text())
+    assert result_payload == {
+        "max_concurrency": 8,
+        "benchmark_start_time_unix": 1_700_000_001.0,
+        "benchmark_end_time_unix": 1_700_000_004.0,
+        "duration": 3.0,
+        "completed": 2,
+        "total_input_tokens": 300,
+        "total_output_tokens": 150,
+    }
+    assert completed["status"] == "completed"
+    assert completed["benchmark_start_time_unix"] == result_payload["benchmark_start_time_unix"]
+    assert completed["benchmark_end_time_unix"] == result_payload["benchmark_end_time_unix"]
+    assert completed["duration"] == result_payload["duration"]
+    assert writes[-2:] == [formal_result, formal_window]
+
+
+@pytest.mark.parametrize(
+    ("environment", "require_power", "expected_exit"),
+    [
+        ({}, False, 0),
+        ({}, True, 1),
+        (
+            {
+                "SRT_MEASUREMENT_WINDOW_BENCHMARK_TYPE": "sa-bench",
+                "SRT_MEASUREMENT_WINDOW_CONCURRENCIES": "8",
+            },
+            True,
+            1,
+        ),
+        ({"SRT_MEASUREMENT_WINDOW_CONCURRENCIES": "16"}, True, 1),
+    ],
+)
+def test_multinode_window_writer_fails_closed_on_invalid_formal_environment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    environment: dict[str, str],
+    require_power: bool,
+    expected_exit: int,
+):
+    from utils.agentic.aggregation.power_adapter import write_multinode_power_window
+
+    logs_root = tmp_path / "logs"
+    result_dir = logs_root / "agentic" / "conc_8"
+    result_dir.mkdir(parents=True)
+    window_dir = logs_root / "power" / "windows"
+    window_dir.mkdir(parents=True)
+    defaults = {
+        "SRT_MEASUREMENT_WINDOW_DIR": str(window_dir),
+        "SRT_MEASUREMENT_WINDOW_BENCHMARK_TYPE": "custom",
+        "SRT_MEASUREMENT_WINDOW_CONCURRENCIES": "8 16",
+        "SRT_MEASUREMENT_WINDOW_RESULT_ROOT": str(logs_root),
+    }
+    defaults.update(environment)
+    if not environment:
+        defaults = {}
+    for name in (
+        "SRT_MEASUREMENT_WINDOW_DIR",
+        "SRT_MEASUREMENT_WINDOW_BENCHMARK_TYPE",
+        "SRT_MEASUREMENT_WINDOW_CONCURRENCIES",
+        "SRT_MEASUREMENT_WINDOW_RESULT_ROOT",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in defaults.items():
+        monkeypatch.setenv(name, value)
+
+    exit_code = write_multinode_power_window(
+        result_dir=result_dir,
+        concurrency=8,
+        state="running",
+        require_power=require_power,
+    )
+
+    assert exit_code == expected_exit
+    assert "formal measurement-window contract" in capsys.readouterr().err
+
+
+def test_multinode_aggregation_uses_central_package_and_aggregate_topology(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from utils.agentic.aggregation import power_adapter
+
+    logs_root = tmp_path / "logs"
+    result_dir = logs_root / "agentic" / "conc_8"
+    result_dir.mkdir(parents=True)
+    bench_result = result_dir / "agentic_power_concurrency_8.json"
+    bench_result.write_text(json.dumps({"max_concurrency": 8}))
+    agg_result = tmp_path / "agg_agentx_conc8.json"
+    agg_result.write_text(
+        json.dumps(
+            {"disagg": True, "num_prefill_gpu": 16, "num_decode_gpu": 16}
+        ),
+        encoding="utf-8",
+    )
+    power_dir = logs_root / "power"
+    power_dir.mkdir(parents=True)
+    calls: list[dict] = []
+
+    def fake_run(**kwargs) -> int:
+        calls.append(kwargs)
+        return 0
+
+    monkeypatch.setattr(power_adapter, "run_multinode_power", fake_run)
+
+    exit_code = power_adapter.run_multinode_agentic_power(
+        result_dir=result_dir,
+        agg_result=agg_result,
+        power_dir=power_dir,
+        logs_root=logs_root,
+        expected_producer_sha="a1b8c7af10c00e5ea40074aebdc0086189bbc064",
+        require_power=True,
+    )
+
+    assert exit_code == 0
+    assert calls == [
+        {
+            "power_dir": power_dir,
+            "bench_result": bench_result,
+            "agg_result": agg_result,
+            "prefill_gpus": 16,
+            "decode_gpus": 16,
+            "aggregate_gpus": 0,
+            "expected_producer_sha": "a1b8c7af10c00e5ea40074aebdc0086189bbc064",
+            "logs_root": logs_root,
+            "validation_result": result_dir / "power_validation.json",
+            "require_power": True,
+        }
+    ]
+
+
+def test_multinode_aggregation_maps_aggregate_deployment_to_agg_role(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from utils.agentic.aggregation import power_adapter
+
+    logs_root = tmp_path / "logs"
+    result_dir = logs_root / "agentic" / "conc_8"
+    result_dir.mkdir(parents=True)
+    bench_result = result_dir / "agentic_power_concurrency_8.json"
+    bench_result.write_text(json.dumps({"max_concurrency": 8}))
+    agg_result = tmp_path / "agg_agentx_conc8.json"
+    agg_result.write_text(
+        json.dumps(
+            {"disagg": False, "num_prefill_gpu": 8, "num_decode_gpu": 0}
+        ),
+        encoding="utf-8",
+    )
+    power_dir = logs_root / "power"
+    power_dir.mkdir(parents=True)
+    calls: list[dict] = []
+
+    def fake_run(**kwargs) -> int:
+        calls.append(kwargs)
+        return 0
+
+    monkeypatch.setattr(power_adapter, "run_multinode_power", fake_run)
+
+    assert power_adapter.run_multinode_agentic_power(
+        result_dir=result_dir,
+        agg_result=agg_result,
+        power_dir=power_dir,
+        logs_root=logs_root,
+        expected_producer_sha="a" * 40,
+        require_power=True,
+    ) == 0
+    assert calls == [
+        {
+            "power_dir": power_dir,
+            "bench_result": bench_result,
+            "agg_result": agg_result,
+            "prefill_gpus": 0,
+            "decode_gpus": 0,
+            "aggregate_gpus": 8,
+            "expected_producer_sha": "a" * 40,
+            "logs_root": logs_root,
+            "validation_result": result_dir / "power_validation.json",
+            "require_power": True,
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {},
+        {"disagg": "false", "num_prefill_gpu": 16, "num_decode_gpu": 0},
+        {"disagg": True, "num_prefill_gpu": True, "num_decode_gpu": 16},
+        {"disagg": True, "num_prefill_gpu": 16.5, "num_decode_gpu": 16},
+        {"disagg": True, "num_prefill_gpu": 0, "num_decode_gpu": 0},
+        {"disagg": True, "num_prefill_gpu": -1, "num_decode_gpu": 16},
+    ],
+)
+def test_multinode_aggregation_rejects_invalid_aggregate_topology(
+    tmp_path: Path,
+    payload: dict,
+):
+    from utils.agentic.aggregation.power_adapter import run_multinode_agentic_power
+
+    logs_root = tmp_path / "logs"
+    result_dir = logs_root / "agentic" / "conc_8"
+    result_dir.mkdir(parents=True)
+    (result_dir / "agentic_power_concurrency_8.json").write_text(
+        json.dumps({"max_concurrency": 8})
+    )
+    agg_result = tmp_path / "agg.json"
+    stale_metrics = {
+        "avg_power_w": 999,
+        "prefill_avg_power_w": 999,
+        "decode_avg_power_w": 999,
+        "prefill_gpu_energy_j": 999,
+        "decode_gpu_energy_j": 999,
+    }
+    agg_result.write_text(json.dumps({**stale_metrics, **payload}))
+
+    assert run_multinode_agentic_power(
+        result_dir=result_dir,
+        agg_result=agg_result,
+        power_dir=logs_root / "power",
+        logs_root=logs_root,
+        expected_producer_sha="a" * 40,
+        require_power=True,
+    ) == 1
+    aggregate = json.loads(agg_result.read_text())
+    assert aggregate["power_valid"] == 0
+    assert aggregate["power_metric_schema_version"] == 2
+    assert stale_metrics.keys().isdisjoint(aggregate)

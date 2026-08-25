@@ -6399,3 +6399,13 @@
     - "Switch --disable-shared-experts-fusion to --enforce-shared-experts-fusion, which fuses the single shared expert into the routed list. The tuned MoE tables in this image cover the resulting (inter_dim 384, expert 385, topk 7) shape at the token sizes this workload hits."
     - "Split the parallelism by concurrency: add a TP4 arm at [1, 2, 4, 8, 10] with no host KV tier, where halving the GPUs per replica raises throughput per GPU, and remove the TP8 no-offload arm [1, 2, 4, 8, 16]. This drops the published TP8 concurrency 1, 2, 4, 8 and 16 points and adds TP4 concurrency 1, 2, 4, 8 and 10."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2713
+
+- config-keys:
+    - glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-2p2d
+    - dsv4-fp8-h200-dynamo-sglang-agentic-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Require dcgm-power telemetry on the GLM-5.2 H200 disaggregated AgentX recipe."
+    - "Enable dcgm-power telemetry on the DSV4 H200 aggregated AgentX recipe."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2684

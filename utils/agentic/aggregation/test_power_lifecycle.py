@@ -22,10 +22,15 @@ def _run_lifecycle(
     is_multinode: bool = False,
     enable_power: bool = True,
     require_power: bool = False,
+    formal_multinode_power: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     result_dir = tmp_path / "results"
     result_dir.mkdir()
     event_log = tmp_path / "events.log"
+    formal_window_dir = str(tmp_path / "power/windows") if formal_multinode_power else ""
+    formal_benchmark_type = "custom" if formal_multinode_power else ""
+    formal_concurrencies = "8 16" if formal_multinode_power else ""
+    formal_result_root = str(tmp_path) if formal_multinode_power else ""
     script = f"""
 source {str(BENCHMARK_LIB)!r}
 start_gpu_monitor() {{
@@ -72,6 +77,11 @@ PCP_SIZE=2
 IS_MULTINODE={'true' if is_multinode else 'false'}
 ENABLE_AGENTX_POWER={'1' if enable_power else '0'}
 REQUIRE_POWER={'1' if require_power else '0'}
+CONC=8
+SRT_MEASUREMENT_WINDOW_DIR={formal_window_dir!r}
+SRT_MEASUREMENT_WINDOW_BENCHMARK_TYPE={formal_benchmark_type!r}
+SRT_MEASUREMENT_WINDOW_CONCURRENCIES={formal_concurrencies!r}
+SRT_MEASUREMENT_WINDOW_RESULT_ROOT={formal_result_root!r}
 set +e
 run_agentic_replay_and_write_outputs {str(result_dir)!r}
 rc=$?
@@ -145,6 +155,44 @@ def test_multinode_and_explicit_opt_out_skip_local_power(
     events = _events(tmp_path)
     assert not any(event.startswith("monitor-") for event in events)
     assert not any(event.startswith("adapter:") for event in events)
+
+
+def test_multinode_formal_window_wraps_replay_without_local_monitor(tmp_path: Path):
+    result = _run_lifecycle(
+        tmp_path,
+        is_multinode=True,
+        formal_multinode_power=True,
+        require_power=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    events = _events(tmp_path)
+    assert not any(event.startswith("monitor-") for event in events)
+    adapters = [event for event in events if event.startswith("adapter:")]
+    assert len(adapters) == 2
+    assert "--write-multinode-window running" in adapters[0]
+    assert "--write-multinode-window completed" in adapters[1]
+    assert "--concurrency 8" in adapters[0]
+    assert "--require-power" in adapters[0]
+    assert events.index(adapters[0]) < events.index("replay")
+    assert events.index("aggregate") < events.index(adapters[1])
+    captured_offset = (tmp_path / "results/agentic_power_timezone_offset.txt").read_text().strip()
+    assert re.fullmatch(r"[+-]\d{4}", captured_offset)
+
+
+def test_multinode_formal_window_is_left_running_when_replay_is_interrupted(tmp_path: Path):
+    result = _run_lifecycle(
+        tmp_path,
+        replay_rc=143,
+        is_multinode=True,
+        formal_multinode_power=True,
+        require_power=True,
+    )
+
+    assert result.returncode == 143, result.stderr
+    adapters = [event for event in _events(tmp_path) if event.startswith("adapter:")]
+    assert len(adapters) == 1
+    assert "--write-multinode-window running" in adapters[0]
 
 
 def test_shared_lifecycle_installs_idempotent_signal_cleanup():
