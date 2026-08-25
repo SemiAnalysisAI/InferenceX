@@ -108,7 +108,7 @@ The table also records both the agreed plan-of-record (PoR) draft-model mapping 
 
 | Model | Primary native/upstream engines | Agreed draft model(s) (PoR) | Proposed draft model(s) pending partner alignment | Additional engines |
 |---|---|---|---|---|
-| DeepSeek-V4-Pro 1.6T (`dsv4`) | native/upstream vLLM engine and native/upstream SGLang engine | native MTP | `deepseek-ai/DeepSeek-V4-Pro-DSpark`, proposed for AgentX only under the same synthetic-acceptance methodology and pending partner alignment. Single-turn 8k1k remains on the native MTP heads. | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
+| DeepSeek-V4-Pro 1.6T (`dsv4`) | native/upstream vLLM engine and native/upstream SGLang engine | native MTP (Single-turn 8k1k); native DSpark heads `deepseek-ai/DeepSeek-V4-Pro-0813` (Agentic coding only, under the same synthetic-acceptance methodology as Kimi-K3's DSpark PoR) | None | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
 | Kimi-K3 (`kimik3`) | native/upstream vLLM engine | `Inferact/Kimi-K3-DSpark` | None | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
 | MiniMax-M3 (`minimaxm3`) | native/upstream vLLM engine | `Inferact/MiniMax-M3-EAGLE3` and/or `Inferact/MiniMax-M3-EAGLE3-GQA` | None | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
 | GLM-5.2 (`glm5.2`) | native/upstream SGLang engine | native MTP | None | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |

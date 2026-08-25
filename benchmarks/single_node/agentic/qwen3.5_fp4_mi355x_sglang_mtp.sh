@@ -94,6 +94,7 @@ SGLANG_CMD=(
     --model-loader-extra-config '{"enable_multithread_load": true}'
     --watchdog-timeout 1200
     --page-size 16
+    --kv-cache-dtype fp8_e4m3
     --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
     --max-prefill-tokens 32768

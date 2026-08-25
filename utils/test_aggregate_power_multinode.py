@@ -54,13 +54,22 @@ class Package:
         self.agg_result = root / "agg_renamed_by_launcher.json"
         self.validation_result = root / "power_validation.json"
 
-    def run(self, *, prefill_gpus=2, decode_gpus=2, sha=PRODUCER_SHA, require_power=False):
+    def run(
+        self,
+        *,
+        prefill_gpus=2,
+        decode_gpus=2,
+        aggregate_gpus=0,
+        sha=PRODUCER_SHA,
+        require_power=False,
+    ):
         return apm.run(
             self.power_dir,
             self.bench_result,
             self.agg_result,
             prefill_gpus=prefill_gpus,
             decode_gpus=decode_gpus,
+            aggregate_gpus=aggregate_gpus,
             expected_producer_sha=sha,
             logs_root=self.logs_root,
             validation_result=self.validation_result,
@@ -213,6 +222,7 @@ def assert_invalid(pkg, expected_reason, **run_kwargs):
     """Both modes must reject: metrics withheld always, exit code differs."""
     assert pkg.run(require_power=False, **run_kwargs) == 0
     agg = pkg.agg()
+    assert agg["power_metric_schema_version"] == 2
     assert agg["power_valid"] == 0
     for key in apm.WHOLE_METRIC_KEYS + apm.ROLE_METRIC_KEYS:
         assert key not in agg
@@ -229,6 +239,7 @@ class TestValidPackage:
         assert pkg.run() == 0
 
         agg = pkg.agg()
+        assert agg["power_metric_schema_version"] == 2
         assert agg["power_valid"] == 1
         assert agg["avg_power_w"] == 350.0
         assert agg["avg_total_gpu_power_w"] == 1400.0
@@ -281,6 +292,91 @@ class TestValidPackage:
         pkg = build_package(tmp_path)
         assert pkg.run(require_power=True) == 0
         assert pkg.agg()["power_valid"] == 1
+
+    def test_aggregate_topology_emits_only_whole_deployment_metrics(self, tmp_path):
+        pkg = build_package(tmp_path)
+        manifest_path = pkg.power_dir / "manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        for device in manifest["expected_devices"]:
+            for assignment in device["assignments"]:
+                assignment["worker_role"] = "agg"
+                assignment["het_group"] = None
+        manifest_path.write_text(json.dumps(manifest, indent=2))
+
+        assert pkg.run(
+            prefill_gpus=0,
+            decode_gpus=0,
+            aggregate_gpus=4,
+            require_power=True,
+        ) == 0
+
+        agg = pkg.agg()
+        assert agg["power_valid"] == 1
+        assert agg["avg_power_w"] == 350.0
+        assert agg["total_gpu_energy_j"] == 84000.0
+        assert set(apm.ROLE_METRIC_KEYS).isdisjoint(agg)
+        assert set(pkg.sidecar()["per_gpu_role"].values()) == {"agg"}
+
+    def test_agentx_adapter_consumes_a_real_custom_benchmark_package(self, tmp_path):
+        from utils.agentic.aggregation.power_adapter import run_multinode_agentic_power
+
+        pkg = build_package(tmp_path)
+        result_dir = pkg.logs_root / "agentic" / "conc_4"
+        result_dir.mkdir(parents=True)
+        stem = "agentic_power_concurrency_4"
+        formal_result = result_dir / f"{stem}.json"
+        pkg.original_result.replace(formal_result)
+
+        old_window = pkg.windows_dir / f"{RESULT_STEM}.json"
+        window = json.loads(old_window.read_text())
+        window.update(
+            {
+                "benchmark_type": "custom",
+                "result_path": f"agentic/conc_4/{stem}.json",
+            }
+        )
+        old_window.unlink()
+        (pkg.windows_dir / f"{stem}.json").write_text(json.dumps(window, indent=2))
+
+        manifest_path = pkg.power_dir / "manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        manifest["expected_windows"] = [
+            {"benchmark_type": "custom", "concurrency": 4}
+        ]
+        manifest["window_validations"][0].update(
+            {
+                "benchmark_type": "custom",
+                "window_file": f"windows/{stem}.json",
+            }
+        )
+        manifest_path.write_text(json.dumps(manifest, indent=2))
+        pkg.agg_result.write_text(
+            json.dumps(
+                {
+                    "hw": "h200",
+                    "conc": 4,
+                    "disagg": True,
+                    "num_prefill_gpu": 2,
+                    "num_decode_gpu": 2,
+                }
+            )
+        )
+
+        assert run_multinode_agentic_power(
+            result_dir=result_dir,
+            agg_result=pkg.agg_result,
+            power_dir=pkg.power_dir,
+            logs_root=pkg.logs_root,
+            expected_producer_sha=PRODUCER_SHA,
+            require_power=True,
+        ) == 0
+
+        agg = pkg.agg()
+        assert agg["power_valid"] == 1
+        assert agg["prefill_avg_power_w"] == 400.0
+        assert agg["decode_avg_power_w"] == 300.0
+        validation = json.loads((result_dir / "power_validation.json").read_text())
+        assert validation["selected_window"]["window_file"] == f"windows/{stem}.json"
 
     def test_trapezoid_matches_hand_computed_ramp(self, tmp_path):
         # node-d/0 ramps linearly 300 -> 364 W across the samples; the
@@ -437,6 +533,24 @@ class TestTopologyGates:
     def test_role_counts_must_match_workflow_env(self, tmp_path):
         pkg = build_package(tmp_path)
         assert_invalid(pkg, "topology_env_mismatch", prefill_gpus=4, decode_gpus=2)
+
+    def test_aggregate_role_count_must_match_aggregate_topology(self, tmp_path):
+        pkg = build_package(tmp_path)
+        manifest_path = pkg.power_dir / "manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        for device in manifest["expected_devices"]:
+            for assignment in device["assignments"]:
+                assignment["worker_role"] = "agg"
+                assignment["het_group"] = None
+        manifest_path.write_text(json.dumps(manifest, indent=2))
+
+        assert_invalid(
+            pkg,
+            "topology_env_mismatch",
+            prefill_gpus=0,
+            decode_gpus=0,
+            aggregate_gpus=8,
+        )
 
     def test_roles_sharing_het_group_rejected(self, tmp_path):
         pkg = build_package(tmp_path)

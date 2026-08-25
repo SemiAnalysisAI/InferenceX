@@ -102,36 +102,39 @@ fi
 PARALLEL_ARGS=(--tp "$TP")
 METRICS_ARGS=(--enable-metrics --enable-cache-report)
 CHUNKED_PREFILL_SIZE=8192
+SWA_FULL_TOKENS_RATIO=0.1
 if [ "$DP_ATTENTION" = "true" ]; then
-    DEEPEP_CONFIG='{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
-    export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=1
-    export SGLANG_OPT_FIX_HASH_MEGA_MOE=1
-    export SGLANG_OPT_USE_FAST_MASK_EP=1
-    export SGLANG_OPT_FIX_MEGA_MOE_MEMORY=1
-    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=4096
-    export SGLANG_OPT_FIX_NEXTN_MEGA_MOE=1
-    export SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=0
+    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_FP4_ACTS=1
+    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_MXF4_KIND=1
+    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=8320
     PARALLEL_ARGS+=(
         --dp "$TP"
         --tokenizer-worker-num "$TP"
+        --enable-prefill-delayer
+        --prefill-decode-interval 10
         --enable-dp-attention
         --enable-dp-attention-local-control-broadcast
         --incremental-streaming-output
         --stream-interval 20
         --dist-init-addr "127.0.0.1:$((PORT + 2000))"
         --ep-size "$EP_SIZE"
-        --moe-a2a-backend deepep
-        --deepep-config "$DEEPEP_CONFIG"
+        --moe-a2a-backend megamoe
+        --enable-deepseek-v4-fp4-indexer
+        --disable-shared-experts-fusion
+        --disable-flashinfer-autotune
     )
-    CHUNKED_PREFILL_SIZE=32768
+    # SGLang divides this global budget by dp_size. Keep the tuned 8192-token
+    # per-rank budget for every DP-attention topology.
+    CHUNKED_PREFILL_SIZE=$((8192 * TP))
+    SWA_FULL_TOKENS_RATIO=0.02
 else
     PARALLEL_ARGS+=(
         --moe-runner-backend flashinfer_mxfp4
+        --enable-deepseek-v4-fp4-indexer
         --disable-flashinfer-autotune
     )
 fi
 
-MODEL_ARGS=()
 # The B200-specialized image deadlocks immediately after weight loading when
 # forced through the B300 compressed-attention/page-size overrides.
 # DeepGEMM's DSv4 indexer needs a multi-GiB temporary allocation at long
@@ -142,8 +145,8 @@ MEM_FRACTION_STATIC=0.88
 # AgentX concurrency counts live session trees, not individual requests.
 # Allow subagent fan-out to exceed CONC without clipping request bursts.
 MAX_RUNNING_REQUESTS=$((2 * CONC))
-CUDA_GRAPH_MAX_BS=$CONC
-[ "$CUDA_GRAPH_MAX_BS" -gt 64 ] && CUDA_GRAPH_MAX_BS=64
+CUDA_GRAPH_MAX_BS=$((2 * CONC))
+CUDA_GRAPH_ARGS=(--cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS")
 
 export PYTHONNOUSERSITE=1
 export TORCH_CUDA_ARCH_LIST=10.0
@@ -186,9 +189,9 @@ SGLANG_CMD=(
     --trust-remote-code
     "${PARALLEL_ARGS[@]}"
     --mem-fraction-static "$MEM_FRACTION_STATIC"
-    --swa-full-tokens-ratio 0.1
+    --swa-full-tokens-ratio "$SWA_FULL_TOKENS_RATIO"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
-    --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
+    "${CUDA_GRAPH_ARGS[@]}"
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
     --tool-call-parser deepseekv4
     --reasoning-parser deepseek-v4
@@ -202,7 +205,6 @@ SGLANG_CMD=(
     # across local ranks so post-load weight repacking reads from page cache
     # instead of issuing redundant fragmented mmap faults from every rank.
     --weight-loader-prefetch-checkpoints
-    "${MODEL_ARGS[@]}"
     "${METRICS_ARGS[@]}"
     "${CACHE_ARGS[@]}"
 )
