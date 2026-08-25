@@ -2,7 +2,7 @@ base:
   name: b300-fp4-glm5.2-agentx-agg
   model:
     path: glm-5.2-fp4
-    container: nightly-20260824
+    container: lmsysorg/sglang:nightly-dev-cu13-20260824-95f5ecd3
     precision: fp4
   identity:
     model:

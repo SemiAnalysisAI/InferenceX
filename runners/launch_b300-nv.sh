@@ -79,7 +79,9 @@ if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == 
     # Must precede the generic IS_AGENTIC catch-all below (it clones a different fork).
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR" || exit 1
-    git checkout main
+    # NVIDIA/srt-slurm#313 is still open, so pin its reviewed recipe contract.
+    git fetch origin pull/313/head || exit 1
+    git checkout --detach 93fae852166a30f3cc054c8616228bf62c69c48c || exit 1
     mkdir -p recipes/sglang/glm5.2/b300-fp4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5.2/b300-fp4" recipes/sglang/glm5.2/b300-fp4
 elif [[ "$IS_AGENTIC" == "1" ]]; then
