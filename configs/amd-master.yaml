@@ -650,11 +650,21 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
 # shards the KV read across all 8 GPUs and the LMCache DRAM tier backs the
 # paged KV.
 # Two utilization blocks because the per-rank CPU split differs:
-#   0.534 -> 1601 GB aggregate -> 200 GB/rank, all paged KV (conc 8, 12).
-#   0.598 -> 1793 GB aggregate -> 224 GB/rank, split 192 GB paged KV + 32 GB
+#   0.268 ->  803 GB aggregate -> 100 GB/rank, all paged KV (conc 8, 12).
+#   0.343 -> 1028 GB aggregate -> 128 GB/rank, split 96 GB paged KV + 32 GB
 #            for ATOM's CPU state tier (conc 16 and up). K3 is a hybrid, so a
 #            resumed agentic turn needs the KDA recurrent state back and the
 #            paged KV tier alone cannot restore one.
+# The paged-KV half of that budget is deliberately smaller than the recipe was
+# measured with (200 and 192 GB/rank). Every rank pins its own pool, and at the
+# measured sizes the eight ranks finished pinning more than 600 s apart, which
+# is exactly PyTorch's hardcoded NCCL process-group timeout: the ranks that
+# arrived first at the barrier ending allocate_kv_cache() timed out waiting for
+# rank 0 and the ModelRunner processes died before the server ever served a
+# request. Halving the paged-KV pool halves the pinning work. It costs little:
+# the CPU tier's measured hit rate was 0.0% at concurrency 8 and 12 and 0.3-2.4%
+# above that, and 96 GB/rank still holds ~53M tokens, roughly 530 full 100k-token
+# contexts. The state tier is left at 32 GB/rank.
 kimik3-fp4-mi355x-atom-agentic-mtp:
   image: rocm/atom-dev:ubuntu24.04_py3.12_pytorch_release_2.10.0_kimi_k3_agentic_0821
   model: moonshotai/Kimi-K3
@@ -665,11 +675,11 @@ kimik3-fp4-mi355x-atom-agentic-mtp:
   multinode: false
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.534
+    - dram-utilization: 0.268
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4], spec-decoding: mtp }
       - { tp: 8, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [8, 12], spec-decoding: mtp }
-    - dram-utilization: 0.598
+    - dram-utilization: 0.343
       search-space:
       - { tp: 8, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [16, 32, 40, 56], spec-decoding: mtp }
 
