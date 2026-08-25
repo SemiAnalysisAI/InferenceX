@@ -8563,33 +8563,46 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2:
           dp-attn: false
 
 dsv4-fp4-gb300-dynamo-sglang-agentic-agg:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260719-99f5a6f4
+  image: lmsysorg/sglang:nightly-dev-cu13-20260821-f825d729
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:gb300-nv
   precision: fp4
   framework: dynamo-sglang
-  router: { name: dynamo-router, version: "1.3.0.dev20260718" }
+  router: { name: dynamo-router, version: "1.4.0" }
   multinode: true
   disagg: false
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       - spec-decoding: mtp
-        conc-list: [2, 4, 8, 16]
-        kv-offloading: dram
-        kv-offload-backend: { name: hicache }
+        conc-list: [1, 4]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/agentic/agg-gb300-tp8-mtp-lowlatency.yaml"
+        decode:
+          num-worker: 0
+          tp: 8
+          ep: 1
+          dp-attn: false
+    - search-space:
+      - spec-decoding: mtp
+        conc-list: [8]
         prefill:
           num-worker: 1
           tp: 4
           ep: 1
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/deepseek-v4/agentic/agg-gb300-tp4-mtp-kvoffload.yaml"
-        # Aggregated worker: prefill's GPUs also serve decode, so decode has no
-        # separate allocation (num-worker: 0). Deployment is recipe-driven
-        # (agg_workers: 1); this only makes GPU accounting count 4, not 4+4.
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/agentic/agg-gb300-tp4-mtp-lowlatency.yaml"
         decode:
           num-worker: 0
           tp: 4
@@ -8597,13 +8610,13 @@ dsv4-fp4-gb300-dynamo-sglang-agentic-agg:
           dp-attn: false
 
 dsv4-fp4-gb300-dynamo-sglang-agentic-disagg:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260719-99f5a6f4
+  image: lmsysorg/sglang:nightly-dev-cu13-20260821-f825d729
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:gb300-nv
   precision: fp4
   framework: dynamo-sglang
-  router: { name: dynamo-router, version: "1.3.0.dev20260718" }
+  router: { name: dynamo-router, version: "1.4.0" }
   kv-p2p-transfer: mooncake
   multinode: true
   disagg: true
@@ -8621,6 +8634,8 @@ dsv4-fp4-gb300-dynamo-sglang-agentic-disagg:
           ep: 8
           dp-attn: true
           additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
           - "CONFIG_FILE=recipes/sglang/deepseek-v4/agentic/disagg-gb300-2p1d-dep8-tp4-c80-mtp-kvoffload.yaml"
         decode:
           num-worker: 1
@@ -8637,6 +8652,8 @@ dsv4-fp4-gb300-dynamo-sglang-agentic-disagg:
           ep: 8
           dp-attn: true
           additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
           - "CONFIG_FILE=recipes/sglang/deepseek-v4/agentic/disagg-gb300-2p4d-dep8-dep16-c256-mtp-kvoffload.yaml"
         decode:
           num-worker: 1
@@ -8653,6 +8670,8 @@ dsv4-fp4-gb300-dynamo-sglang-agentic-disagg:
           ep: 8
           dp-attn: true
           additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
           - "CONFIG_FILE=recipes/sglang/deepseek-v4/agentic/disagg-gb300-4p4d-dep8-dep16-c512-mtp-kvoffload.yaml"
         decode:
           num-worker: 1
@@ -8669,6 +8688,8 @@ dsv4-fp4-gb300-dynamo-sglang-agentic-disagg:
           ep: 8
           dp-attn: true
           additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
           - "CONFIG_FILE=recipes/sglang/deepseek-v4/agentic/disagg-gb300-6p4d-dep8-dep16-c768-mtp-kvoffload.yaml"
         decode:
           num-worker: 1
@@ -8680,12 +8701,14 @@ dsv4-fp4-gb300-dynamo-sglang-agentic-disagg:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         prefill:
-          num-worker: 6
+          num-worker: 5
           tp: 8
           ep: 8
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/deepseek-v4/agentic/disagg-gb300-12p4d-dep8-dep16-c1536-mtp-kvoffload.yaml"
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/agentic/disagg-gb300-10p4d-dep8-dep16-c1536-mtp-kvoffload.yaml"
         decode:
           num-worker: 1
           tp: 16
