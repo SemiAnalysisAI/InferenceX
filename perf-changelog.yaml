@@ -6389,6 +6389,28 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2650
 
 - config-keys:
+    - dsv4-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update image from lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260813 to lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260822."
+    - "Enable SGLANG_OPT_USE_AITER_BATCHED_GEMM=1, the aiter batched GEMM for the absorbed MLA projections, which defaults off."
+    - "Raise mem-fraction-static from 0.85 to 0.89, enlarging the full-attention KV pool. The DSv4 compressor state pools are sized from that pool and allocated after it, outside this budget, so the remainder still has to cover them."
+    - "Switch --disable-shared-experts-fusion to --enforce-shared-experts-fusion, which fuses the single shared expert into the routed list. The tuned MoE tables in this image cover the resulting (inter_dim 384, expert 385, topk 7) shape at the token sizes this workload hits."
+    - "Split the parallelism by concurrency: add a TP4 arm at [1, 2, 4, 8, 10] with no host KV tier, where halving the GPUs per replica raises throughput per GPU, and remove the TP8 no-offload arm [1, 2, 4, 8, 16]. This drops the published TP8 concurrency 1, 2, 4, 8 and 16 points and adds TP4 concurrency 1, 2, 4, 8 and 10."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2713
+
+- config-keys:
+    - glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-2p2d
+    - dsv4-fp8-h200-dynamo-sglang-agentic-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Require dcgm-power telemetry on the GLM-5.2 H200 disaggregated AgentX recipe."
+    - "Enable dcgm-power telemetry on the DSV4 H200 aggregated AgentX recipe."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2684
+
+- config-keys:
     - dsv4-fp4-b300-sglang-agentic-hicache-mtp
   scenario-type:
     - agentic-coding
@@ -6405,3 +6427,4 @@
     - "Raise dram-utilization from 0.80 to 0.95, matching the vLLM agentic lane on the same runner, and the TP>=8 hicache ratio from 2 to 3 so the CPU tier reflects the allocated budget. DSv4 HiCache takes a host/device token ratio, not bytes, so the recipe cannot apply TOTAL_CPU_DRAM_GB directly, and host capacity scales with both the ratio and device KV -- meaning it also grows with mem-fraction-static. Measured at ratio 2 / mem-fraction 0.835 the tier allocates 999 GB (124.88 GB per rank across 8 ranks), a third of the 2,849 GB the vLLM agentic lane consumes. ratio 4 at mem-fraction 0.93 overshot the other way, leaving 5.84 GB free on a 2,964 GB node and failing to allocate the V4 paged pool; ratio 3 keeps the tier near 2 TB with room for the paged pool, page cache, AIPerf and the router. The TP<8 ratio is left at its existing value of 8."
     - "Costs TTFT (p50 2.2x, p90 3.3x); AgentX is closed-loop so this is already priced into the throughput figures"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2701
+  
