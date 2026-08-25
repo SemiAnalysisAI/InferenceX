@@ -452,8 +452,10 @@ def run_multinode_agentic_power(
 
     prefill_gpus = _gpu_count(aggregate.get("num_prefill_gpu"))
     decode_gpus = _gpu_count(aggregate.get("num_decode_gpu"))
+    disagg = aggregate.get("disagg")
     if (
-        prefill_gpus is None
+        not isinstance(disagg, bool)
+        or prefill_gpus is None
         or decode_gpus is None
         or prefill_gpus + decode_gpus <= 0
     ):
@@ -488,13 +490,20 @@ def run_multinode_agentic_power(
 
     assert prefill_gpus is not None
     assert decode_gpus is not None
+    assert isinstance(disagg, bool)
     assert bench_result is not None
+    aggregate_gpus = 0
+    if not disagg:
+        aggregate_gpus = prefill_gpus + decode_gpus
+        prefill_gpus = 0
+        decode_gpus = 0
     return run_multinode_power(
         power_dir=power_dir,
         bench_result=bench_result,
         agg_result=agg_result,
         prefill_gpus=prefill_gpus,
         decode_gpus=decode_gpus,
+        aggregate_gpus=aggregate_gpus,
         expected_producer_sha=expected_producer_sha,
         logs_root=logs_root,
         validation_result=validation_result,
