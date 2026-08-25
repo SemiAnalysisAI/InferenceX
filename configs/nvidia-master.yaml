@@ -2417,7 +2417,7 @@ dsr1-fp4-gb200-vllm-router-agentic-agg:
           dp-attn: true
           additional-settings:
           - "SRT_SLURM_REPOSITORY=https://github.com/SemiAnalysisAI/srt-slurm.git"
-          - "SRT_SLURM_REF=20e4762a6d2f90f99eaa9f58eb29bcbeafa0f339"
+          - "SRT_SLURM_REF=f7b5fe5f08740667d756785086d5a3e9800ce060"
           - "CONFIG_FILE=recipes/vllm/deepseek-r1/agentic/agg-gb200-dep4-vllm-router-agentic.yaml"
         decode:
           num-worker: 0
@@ -2447,7 +2447,7 @@ dsr1-fp4-gb200-vllm-router-agentic-agg-dep8:
           dp-attn: true
           additional-settings:
           - "SRT_SLURM_REPOSITORY=https://github.com/SemiAnalysisAI/srt-slurm.git"
-          - "SRT_SLURM_REF=20e4762a6d2f90f99eaa9f58eb29bcbeafa0f339"
+          - "SRT_SLURM_REF=f7b5fe5f08740667d756785086d5a3e9800ce060"
           - "CONFIG_FILE=recipes/vllm/deepseek-r1/agentic/agg-gb200-dep8-vllm-router-agentic.yaml"
         decode:
           num-worker: 0
@@ -2478,7 +2478,7 @@ dsr1-fp4-gb200-vllm-router-agentic-disagg:
           dp-attn: true
           additional-settings:
           - "SRT_SLURM_REPOSITORY=https://github.com/SemiAnalysisAI/srt-slurm.git"
-          - "SRT_SLURM_REF=20e4762a6d2f90f99eaa9f58eb29bcbeafa0f339"
+          - "SRT_SLURM_REF=f7b5fe5f08740667d756785086d5a3e9800ce060"
           - "CONFIG_FILE=recipes/vllm/deepseek-r1/agentic/disagg-gb200-1p2d-dep4-vllm-router-agentic.yaml"
         decode:
           num-worker: 2
@@ -2509,7 +2509,7 @@ dsr1-fp4-gb200-vllm-router-agentic-disagg-2p2d:
           dp-attn: true
           additional-settings:
           - "SRT_SLURM_REPOSITORY=https://github.com/SemiAnalysisAI/srt-slurm.git"
-          - "SRT_SLURM_REF=20e4762a6d2f90f99eaa9f58eb29bcbeafa0f339"
+          - "SRT_SLURM_REF=f7b5fe5f08740667d756785086d5a3e9800ce060"
           - "CONFIG_FILE=recipes/vllm/deepseek-r1/agentic/disagg-gb200-2p2d-dep4-vllm-router-agentic.yaml"
         decode:
           num-worker: 2

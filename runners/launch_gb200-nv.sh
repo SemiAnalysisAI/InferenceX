@@ -405,7 +405,7 @@ fi
 # metrics discovery across aggregate, DP-attention, and disaggregated topologies.
 if [[ "$IS_AGENTIC" == "1" && "$FRAMEWORK" == "vllm-router" ]]; then
     SRT_SLURM_REPOSITORY="${SRT_SLURM_REPOSITORY:-https://github.com/SemiAnalysisAI/srt-slurm.git}"
-    SRT_SLURM_REF="${SRT_SLURM_REF:-20e4762a6d2f90f99eaa9f58eb29bcbeafa0f339}"
+    SRT_SLURM_REF="${SRT_SLURM_REF:-f7b5fe5f08740667d756785086d5a3e9800ce060}"
     git clone "$SRT_SLURM_REPOSITORY" "$SRT_REPO_DIR" || exit 1
     cd "$SRT_REPO_DIR" || exit 1
     git checkout --detach "$SRT_SLURM_REF" || exit 1
