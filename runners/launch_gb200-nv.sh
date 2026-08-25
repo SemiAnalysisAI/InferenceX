@@ -223,7 +223,7 @@ elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
         echo "Unsupported model prefix: $MODEL_PREFIX. Supported prefixes are: gptoss, dsr1, kimik2.5, or glm5"
         exit 1
     fi
-elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
+elif [[ $FRAMEWORK == "dynamo-vllm" || $FRAMEWORK == "vllm-router" ]]; then
     if [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/kimi-k2.5-nvfp4"
         export SRT_SLURM_MODEL_PREFIX="kimi-k2.5-nvfp4"
@@ -245,6 +245,9 @@ elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/DeepSeek-V4-Pro"
         export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
         MODEL_PATHS_EXTRA='  "deepseek-v4-pro-mxfp4": "/mnt/lustre01/models/DeepSeek-V4-Pro"'
+    elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
+        export MODEL_PATH="/mnt/lustre01/models/DeepSeek-R1-0528-NVFP4-v2"
+        export SRT_SLURM_MODEL_PREFIX="dsr1-nvfp4"
     elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/MiniMax-M2.5-NVFP4"
         export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-nvfp4"
@@ -258,7 +261,7 @@ elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/MiniMax-M3-NVFP4"
         export SRT_SLURM_MODEL_PREFIX="minimax-m3-nvfp4"
     else
-        echo "Unsupported model prefix/precision combination: $MODEL_PREFIX/$PRECISION. Supported combinations for dynamo-vllm: kimik2.5/fp4, kimik3/fp4, dsv4/fp4, minimaxm2.5/fp4, minimaxm2.5/fp8, minimaxm3/fp4, minimaxm3/fp8"
+        echo "Unsupported model prefix/precision combination: $MODEL_PREFIX/$PRECISION. Supported combinations for vLLM backends: dsr1/fp4, kimik2.5/fp4, kimik3/fp4, dsv4/fp4, minimaxm2.5/fp4, minimaxm2.5/fp8, minimaxm3/fp4, minimaxm3/fp8"
         exit 1
     fi
 else
@@ -269,7 +272,7 @@ NGINX_IMAGE="nginx:1.27.4"
 
 uses_watchtower_shared_fs() {
     case "$MODEL_PREFIX" in
-        minimaxm2.5|minimaxm3|kimik2.5|kimik3|qwen3.5|glm5.2) return 0 ;;
+        dsr1|minimaxm2.5|minimaxm3|kimik2.5|kimik3|qwen3.5|glm5.2) return 0 ;;
     esac
     # dsv4 multinode runs only under dynamo-vllm on watchtower, which likewise
     # needs the srt-slurm workspace/outputs on a compute-visible shared FS
@@ -400,7 +403,22 @@ fi
 
 # GLM-5.2 and MiniMax-M3 AgentX use v1.0.50 for complete logical-worker
 # metrics discovery across aggregate, DP-attention, and disaggregated topologies.
-if [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "glm5.2" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
+if [[ "$IS_AGENTIC" == "1" && "$FRAMEWORK" == "vllm-router" ]]; then
+    SRT_SLURM_REPOSITORY="${SRT_SLURM_REPOSITORY:-https://github.com/SemiAnalysisAI/srt-slurm.git}"
+    SRT_SLURM_REF="${SRT_SLURM_REF:-20e4762a6d2f90f99eaa9f58eb29bcbeafa0f339}"
+    git clone "$SRT_SLURM_REPOSITORY" "$SRT_REPO_DIR" || exit 1
+    cd "$SRT_REPO_DIR" || exit 1
+    git checkout --detach "$SRT_SLURM_REF" || exit 1
+    test "$(git rev-parse HEAD)" = "$SRT_SLURM_REF" || {
+        echo "Error: srt-slurm checkout does not match requested exact commit $SRT_SLURM_REF" >&2
+        exit 1
+    }
+    mkdir -p recipes/vllm/deepseek-r1/agentic configs
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-r1/agentic" \
+        recipes/vllm/deepseek-r1/agentic
+    cp "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/native-vllm-router-deps.sh" \
+        configs/native-vllm-router-deps.sh
+elif [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "glm5.2" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
     git clone --branch v1.0.50 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
     test "$(git rev-parse HEAD)" = "e4019633c9e2bc25f38c44b81edf52bb0504d937" || {
@@ -631,6 +649,7 @@ ${MODEL_PATHS_EXTRA}
 containers:
   dynamo-trtllm: ${SQUASH_FILE}
   dynamo-sglang: ${SQUASH_FILE}
+  vllm-router: ${SQUASH_FILE}
   "${IMAGE}": ${SQUASH_FILE}
   nginx-sqsh: ${NGINX_SQUASH_FILE}
 # srtctl defaults this to true, which adds #SBATCH --segment=<total_nodes>.
@@ -772,6 +791,10 @@ LOGS_DIR="outputs/$JOB_ID/logs"
 LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
 
 stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || exit 1
+
+if [[ "$FRAMEWORK" == "vllm-router" ]]; then
+    wait_for_slurm_job_success "$JOB_ID" || exit 1
+fi
 
 set -x
 

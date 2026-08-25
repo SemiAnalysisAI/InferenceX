@@ -18,6 +18,46 @@ slurm_job_is_active() {
     squeue -j "$job_id" --noheader 2>/dev/null | grep -q "$job_id"
 }
 
+wait_for_slurm_job_success() {
+    local job_id="$1"
+    local attempts="${SLURM_ACCOUNTING_ATTEMPTS:-24}"
+    local interval="${SLURM_ACCOUNTING_INTERVAL_SECONDS:-5}"
+    local attempt record state exit_code
+
+    if ! command -v sacct >/dev/null 2>&1; then
+        echo "ERROR: sacct is required to verify Slurm job $job_id" >&2
+        return 1
+    fi
+
+    for ((attempt = 1; attempt <= attempts; attempt++)); do
+        record=$(sacct -X -n -P -j "$job_id" -o JobIDRaw,State,ExitCode 2>/dev/null \
+            | awk -F'|' -v job_id="$job_id" '$1 == job_id { print $2 "|" $3; exit }')
+        if [[ -n "$record" ]]; then
+            state="${record%%|*}"
+            exit_code="${record#*|}"
+            state="${state%% *}"
+            state="${state%%+}"
+
+            if [[ "$state" == "COMPLETED" && "$exit_code" == "0:0" ]]; then
+                echo "Slurm job $job_id completed successfully ($state, exit $exit_code)"
+                return 0
+            fi
+
+            case "$state" in
+                BOOT_FAIL|CANCELLED|DEADLINE|FAILED|NODE_FAIL|OUT_OF_MEMORY|PREEMPTED|REVOKED|SPECIAL_EXIT|TIMEOUT)
+                    echo "ERROR: Slurm job $job_id ended in $state with exit $exit_code" >&2
+                    return 1
+                    ;;
+            esac
+        fi
+        sleep "$interval"
+    done
+
+    echo "ERROR: Slurm accounting did not report a successful terminal state for job $job_id" >&2
+    [[ -z "${record:-}" ]] || echo "Last accounting record: $record" >&2
+    return 1
+}
+
 stream_slurm_job_log() {
     local job_id="$1"
     local log_file="$2"
