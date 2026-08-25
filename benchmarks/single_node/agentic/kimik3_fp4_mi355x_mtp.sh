@@ -4,10 +4,6 @@ set -x
 source "$(dirname "$0")/../../benchmark_lib.sh"
 wait_for_amd_gpu_clean
 
-export EVAL_FRAMEWORK="lm-eval"
-EVAL_ONLY="${EVAL_ONLY:-false}"
-EVAL_LIMIT="${EVAL_LIMIT:-200}"
-export EVAL_ONLY EVAL_LIMIT
 export AIPERF_EXPERIMENTAL_FAST=0
 export AIPERF_WARMUP_REQUESTS_PER_LANE=1
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE
