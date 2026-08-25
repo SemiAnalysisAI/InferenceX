@@ -6466,4 +6466,17 @@
     - "Warm the aggregate low-latency profiles with the standard ten requests per trajectory lane instead of one, so they enter the profiling window from the same live state as every other AgentX recipe."
     - "Reduce the concurrency-1536 disaggregated topology from six to five DEP8 prefill workers while retaining one DEP16 decode worker."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2644
+
+- config-keys:
+    - dsr1-fp4-gb200-vllm-router-agentic-agg
+    - dsr1-fp4-gb200-vllm-router-agentic-agg-dep8
+    - dsr1-fp4-gb200-vllm-router-agentic-disagg
+    - dsr1-fp4-gb200-vllm-router-agentic-disagg-2p2d
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Validate the upstream-native vLLM Router implementation from SemiAnalysisAI/srt-slurm PR #6 on the exact pinned head."
+    - "Exercise only Router-relevant topologies: single-node aggregate DEP4, multi-node aggregate DEP8, disaggregated 1P/2D DEP4, and disaggregated 2P/2D DEP4."
+    - "Use consistent-hash routing with stable AgentX correlation IDs forwarded as X-Session-ID, require every advertised base to pass direct readiness, and collect every logical backend metrics endpoint."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2731
   
