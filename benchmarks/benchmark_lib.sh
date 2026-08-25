@@ -67,8 +67,10 @@ require_agentic_kv_offload_backend() {
     esac
 }
 
-# Agentic replays must use the model's native context limit. Ignore inherited
-# workflow or shell overrides so neither the server nor AIPerf applies a cap.
+# Agentic replays normally use the model's native context limit. Ignore the
+# workflow's generated MAX_MODEL_LEN so it cannot accidentally cap a native
+# AgentX recipe. Recipes that intentionally serve below the native limit can
+# opt in with AIPERF_MAX_CONTEXT_LENGTH.
 _benchmark_caller="${BASH_SOURCE[1]:-}"
 if [[ "$_benchmark_caller" == */agentic/* ||
       "$_benchmark_caller" == */agentic_*.sh ||
@@ -1973,6 +1975,7 @@ build_replay_cmd() {
     local result_dir="$1"
     local duration="$DURATION"
     local warmup_requests_per_lane="${AIPERF_WARMUP_REQUESTS_PER_LANE:-10}"
+    local max_context_length="${AIPERF_MAX_CONTEXT_LENGTH:-${MAX_MODEL_LEN:-}}"
 
     # Fast mode minimizes setup by advancing each trajectory lane only once
     # and shortens profiling to 20 minutes.
@@ -2092,8 +2095,12 @@ build_replay_cmd() {
     # server. The WEKA corpus contains a few very long parent/subagent traces;
     # if we mmap and replay them against a smaller-context server they become
     # deterministic 4xxs and can still pressure the engine while queued.
-    if [ -n "${MAX_MODEL_LEN:-}" ] && [ "$MAX_MODEL_LEN" != "0" ]; then
-        REPLAY_CMD+=" --max-context-length $MAX_MODEL_LEN"
+    if [ -n "$max_context_length" ] && [ "$max_context_length" != "0" ]; then
+        if ! [[ "$max_context_length" =~ ^[1-9][0-9]*$ ]]; then
+            echo "Error: max context length must be a positive integer, got '$max_context_length'" >&2
+            return 1
+        fi
+        REPLAY_CMD+=" --max-context-length $max_context_length"
     fi
     # Default --num-dataset-entries is 100; the with-subagents Weka corpus
     # has 393. Cap at 393 so all unique traces are loaded (the loader treats
