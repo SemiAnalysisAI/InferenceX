@@ -6258,7 +6258,6 @@
   scenario-type:
     - fixed-seq-len
   description:
-    - "Bump image from lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260730 to lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260818"
+    - "Bump image from lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260730 to lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260825"
     - "Serve both arms with an fp8_e4m3 KV cache."
-    - "Disable shared-experts fusion on the MTP arm."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2640
