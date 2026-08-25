@@ -6415,7 +6415,7 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Publish the validated MiniMax-M3 MI355X AgentX TP4 curve with GPU-resident concurrency 1, 5, 10, and 32 plus vLLM Simple CPU KV offload at concurrency 15, 20, 25, 30, and 32."
+    - "Publish the validated MiniMax-M3 MI355X AgentX TP4 Pareto sweep with GPU-resident concurrency 1, 5, and 10 plus vLLM Simple CPU KV offload at concurrency 15, 20, 25, 30, and 32."
     - "Use the public vllm/vllm-openai-rocm:v0.27.1 image, EAGLE3 level 4 with the committed thinking-on synthetic acceptance length 3.02 for throughput, real target verification for eval, AITER unified attention, a 32K draft window, FP8 target/indexer KV, and max-num-seqs 256."
     - "Apply the exact pinned vLLM/AITER runtime delta documented by the PR waiver and precompile reachable AgentX kernels before measurement; record image, source, and patch hashes beside every result."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2726

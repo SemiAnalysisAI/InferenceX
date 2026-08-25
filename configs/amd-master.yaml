@@ -1678,7 +1678,7 @@ minimaxm3-fp4-mi355x-vllm-agentic-mtp:
     # the closest supported matrix budget to the validated 1547 GB run.
     - dram-utilization: 1.0
       search-space:
-      - { tp: 4, kv-offloading: none, conc-list: [1, 5, 10, 32], spec-decoding: mtp }
+      - { tp: 4, kv-offloading: none, conc-list: [1, 5, 10], spec-decoding: mtp }
       - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [15, 20, 25, 30, 32], spec-decoding: mtp }
 
 # GLM-5.2 FP4 agentic-coding benchmark on MI355X via SGLang with MTP speculative
