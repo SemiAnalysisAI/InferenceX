@@ -1,7 +1,7 @@
-name: "disagg-gb300-12p4d-dep8-dep16-c1536-mtp-kvoffload"
+name: "disagg-gb300-10p4d-dep8-dep16-c1536-mtp-kvoffload"
 
 # Agentic-coding SGLang disaggregated Pareto recipe for DeepSeek-V4-Pro on GB300
-# (12P x DEP8 / 4D x DEP16, MTP + hierarchical-cache KV offload), tuned for concurrency 1536.
+# (10P x DEP8 / 4D x DEP16, MTP + hierarchical-cache KV offload), tuned for concurrency 1536.
 #
 # Uses the flat single-variant srtctl schema the agentic CI flow expects;
 # resources + backend (prefill/decode env + sglang_config) are normalized
@@ -13,12 +13,17 @@ model:
   container: "dynamo-sglang"
   precision: "fp4"
 
+identity:
+  model:
+    repo: "deepseek-ai/DeepSeek-V4-Pro"
+  container:
+    image: "lmsysorg/sglang:nightly-dev-cu13-20260821-f825d729"
+  frameworks:
+    dynamo: "1.4.0"
+
 dynamo:
   install: true
-  wheel: "1.3.0.dev20260718"
-
-slurm:
-  time_limit: "8:00:00"
+  wheel: "1.4.0"
 
 health_check:
   max_attempts: 1440
@@ -27,9 +32,9 @@ health_check:
 resources:
   gpu_type: gb300
   gpus_per_node: 4
-  prefill_nodes: 12
+  prefill_nodes: 10
   decode_nodes: 4
-  prefill_workers: 6
+  prefill_workers: 5
   decode_workers: 1
   gpus_per_prefill: 8
   gpus_per_decode: 16
@@ -94,9 +99,6 @@ backend:
 
   decode_environment:
     SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "900"
-    SGLANG_SIMULATE_ACC_LEN: '2.49'
-    SGLANG_SIMULATE_ACC_METHOD: match-expected
-    SGLANG_SIMULATE_ACC_TOKEN_MODE: "real-draft-token"
     PIP_BREAK_SYSTEM_PACKAGES: '1'
     PYTHONUNBUFFERED: '1'
     SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
