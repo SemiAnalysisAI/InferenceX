@@ -80,8 +80,19 @@ srun --jobid="$JOB_ID" --job-name="$RUNNER_NAME" bash -c '
     if unsquashfs -l "$1" >/dev/null 2>&1; then
         echo "Squash file already exists and is valid, skipping import"
     else
-        rm -f "$1"
-        enroot import -o "$1" "docker://$3"
+        for attempt in 1 2 3 4; do
+            rm -f "$1"
+            if enroot import -o "$1" "docker://$3" && \
+                    unsquashfs -l "$1" >/dev/null 2>&1; then
+                break
+            fi
+            rm -f "$1"
+            if (( attempt == 4 )); then
+                echo "Failed to import $3 after $attempt attempts" >&2
+                exit 1
+            fi
+            sleep $((attempt * 15))
+        done
     fi
 ' bash "$SQUASH_FILE" "$LOCK_FILE" "$IMAGE" "$COMPUTE_TMPDIR"
 
