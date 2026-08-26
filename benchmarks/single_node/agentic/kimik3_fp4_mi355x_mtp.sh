@@ -249,8 +249,14 @@ trap 'exit 143' TERM
 KV_BLOCK_SIZE="${KV_BLOCK_SIZE:-}"
 if [ -z "$KV_BLOCK_SIZE" ] && agentic_kv_offload_enabled; then
     if [ "${KV_OFFLOAD_BACKEND:-}" = "lmcache" ] || [ "${K3_NATIVE_KV_PAGE:-0}" = "1" ]; then
-        # Native page, and mnbt comes down to match. LMCache cannot take the
-        # forced page (see above): 832512/1536 = 542, 832512/4608 = 180.667.
+        # Native page, stated explicitly rather than left unset. Leaving it
+        # empty made the LMCache chunk alignment fall back to a literal 256 and
+        # request 2048 where vLLM wanted 1536*8=12288 -- the page has to be a
+        # known number here because the chunk is derived from it. 1536 is what
+        # vLLM auto-sizes to for this model (confirmed twice: the first
+        # step-alignment error reported block_size=1536, and the mamba view's
+        # 832512 elems/block divides by it exactly).
+        KV_BLOCK_SIZE=1536
         MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-2048}"
     else
         KV_BLOCK_SIZE=4608
@@ -418,7 +424,11 @@ PYVER
     # block across every rank. At page 4608 and dcp 8 that is 36864 tokens.
     # This is also the floor: mnbt 8192 pins the page into (4096, 8192], so
     # page*dcp cannot come out below ~32k however the page is chosen.
-    LMCACHE_BLOCK_ALIGN=$(( ${KV_BLOCK_SIZE:-256} * ${DCP_SIZE:-1} ))
+    if [ -z "${KV_BLOCK_SIZE:-}" ]; then
+        echo "Error: KV_BLOCK_SIZE must be known to derive the LMCache chunk" >&2
+        exit 1
+    fi
+    LMCACHE_BLOCK_ALIGN=$(( KV_BLOCK_SIZE * ${DCP_SIZE:-1} ))
     LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-$LMCACHE_BLOCK_ALIGN}"
     if [ $((LMCACHE_CHUNK_SIZE % LMCACHE_BLOCK_ALIGN)) -ne 0 ]; then
         echo "Error: LMCACHE_CHUNK_SIZE=$LMCACHE_CHUNK_SIZE must be a multiple of" >&2
