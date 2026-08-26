@@ -112,12 +112,21 @@ K3_OVERLAY_APPLIED=0
 K3_OVERLAY_PATCH="${K3_OVERLAY_PATCH:-$(dirname "$0")/k3_patches/vllm_nightly_a9a17e70_3pr.patch}"
 if [ -f "$K3_OVERLAY_PATCH" ]; then
     SITE_PKGS=$(python3 -c 'import vllm,os;print(os.path.dirname(os.path.dirname(vllm.__file__)))')
-    if ( cd "$SITE_PKGS" && patch -p1 --forward --batch --dry-run < "$K3_OVERLAY_PATCH" ) >/dev/null 2>&1; then
+    if ( cd "$SITE_PKGS" && patch -p1 --forward --batch --dry-run < "$K3_OVERLAY_PATCH" ) \
+            >/tmp/k3_overlay_dryrun.log 2>&1; then
         echo "Applying K3 overlay $K3_OVERLAY_PATCH into $SITE_PKGS"
         ( cd "$SITE_PKGS" && patch -p1 --forward --batch < "$K3_OVERLAY_PATCH" ) || true
         K3_OVERLAY_APPLIED=1
     else
+        # Print why. A silent skip here costs a whole CI cycle to diagnose, and
+        # the same diff can apply against the registry image while failing
+        # against a pre-converted squashfs of nominally the same tag.
         echo "K3 overlay does not match this image, skipping: $K3_OVERLAY_PATCH"
+        echo "--- overlay dry-run output (first 40 lines) ---"
+        head -40 /tmp/k3_overlay_dryrun.log || true
+        echo "--- installed vLLM ---"
+        python3 -c 'import vllm;print("vllm",vllm.__version__)' || true
+        echo "----------------------------------------------"
     fi
 fi
 
