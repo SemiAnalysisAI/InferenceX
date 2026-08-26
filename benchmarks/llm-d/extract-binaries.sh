@@ -13,12 +13,19 @@
 #   ./extract-binaries.sh                 # uses binaries.env defaults
 #   LLMD_BIN_DIR=/some/dir ./extract-binaries.sh
 #   LLMD_BIN_PLATFORM=linux/amd64 ./extract-binaries.sh   # for an x86 test
+#   BINARIES_ENV_FILE=binaries-b200-v0.10.0.env ./extract-binaries.sh
+#     # pull a different set of image pins (e.g. a router-version bump
+#     # scoped to one cluster) without touching the shared binaries.env
 
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BINARIES_ENV_FILE="${BINARIES_ENV_FILE:-$HERE/binaries.env}"
+# Resolve a bare filename against this script's directory, so
+# BINARIES_ENV_FILE=foo.env works regardless of the caller's cwd.
+[[ "$BINARIES_ENV_FILE" != /* ]] && BINARIES_ENV_FILE="$HERE/$BINARIES_ENV_FILE"
 # shellcheck source=/dev/null
-source "$HERE/binaries.env"
+source "$BINARIES_ENV_FILE"
 
 echo "Extracting llm-d binaries -> $LLMD_BIN_DIR (platform $LLMD_BIN_PLATFORM)"
 mkdir -p "$LLMD_BIN_DIR"

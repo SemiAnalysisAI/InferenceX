@@ -216,13 +216,13 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         # B200-only EPP/pd-sidecar binary pin (v0.10.0, needed for the
         # agentX-ported disagg-profile-handler `deciders:` EPP shape). Points
         # at a dedicated path so it never collides with GB200's shared
-        # binaries.env / v0.9.0 path - see benchmarks/llm-d/binaries.env for
-        # the mechanism. NOTE: this path must be populated once (out of band,
-        # on a host with docker + registry access) via:
-        #   LLMD_BIN_DIR=/home/sa-shared/llm-d-bins-v0.10.0 \
-        #   EPP_FROM_IMAGE=ghcr.io/llm-d/llm-d-router-endpoint-picker:v0.10.0 \
-        #   ROUTING_SIDECAR_IMAGE=ghcr.io/llm-d/llm-d-router-disagg-sidecar:v0.10.0 \
-        #   benchmarks/llm-d/extract-binaries.sh
+        # binaries.env / v0.9.0 path - see
+        # benchmarks/llm-d/binaries-b200-v0.10.0.env for the pins and
+        # benchmarks/llm-d/binaries.env for the general mechanism. NOTE: this
+        # path must be populated once (out of band, on a host with docker +
+        # registry access and the /home/sa-shared mount) via:
+        #   BINARIES_ENV_FILE=binaries-b200-v0.10.0.env \
+        #     benchmarks/llm-d/extract-binaries.sh
         # before this recipe can actually run; job.slurm's pyxis mount loop is
         # a no-op (falls back to the image's baked-in v0.9.0) until then.
         export LLMD_BIN_DIR="${LLMD_BIN_DIR:-/home/sa-shared/llm-d-bins-v0.10.0}"
