@@ -109,7 +109,14 @@ export DCP_SIZE
 # of hard-failing them, while a matching image gets the overlay with no config
 # plumbing. `patch --forward` makes it idempotent.
 K3_OVERLAY_APPLIED=0
-K3_OVERLAY_PATCH="${K3_OVERLAY_PATCH:-$(dirname "$0")/k3_patches/vllm_nightly_a9a17e70_3pr.patch}"
+# Absolute, always: the patch is fed to `patch` on the far side of a
+# `cd "$SITE_PKGS"`, so a relative path resolves against site-packages and
+# silently vanishes even though the -f test passed from the workspace root.
+K3_OVERLAY_PATCH="${K3_OVERLAY_PATCH:-$(cd "$(dirname "$0")" && pwd)/k3_patches/vllm_nightly_a9a17e70_3pr.patch}"
+case "$K3_OVERLAY_PATCH" in
+    /*) ;;
+    *) K3_OVERLAY_PATCH="$(cd "$(dirname "$K3_OVERLAY_PATCH")" && pwd)/$(basename "$K3_OVERLAY_PATCH")" ;;
+esac
 if [ -f "$K3_OVERLAY_PATCH" ]; then
     SITE_PKGS=$(python3 -c 'import vllm,os;print(os.path.dirname(os.path.dirname(vllm.__file__)))')
     if ( cd "$SITE_PKGS" && patch -p1 --forward --batch --dry-run < "$K3_OVERLAY_PATCH" ) \
