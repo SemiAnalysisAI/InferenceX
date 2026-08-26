@@ -207,6 +207,8 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     if [[ "$USES_DCGM_POWER" == "1" ]]; then
         DCGM_EXPORTER_IMAGE="nvcr.io/nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless"
+        # enroot resolves bare paths against Docker Hub; nvcr.io pulls need the registry# form
+        DCGM_EXPORTER_ENROOT_REF="${DCGM_EXPORTER_IMAGE/nvcr.io\//nvcr.io#}"
         DCGM_EXPORTER_SQSH="/data/gharunners/containers/$(echo "$DCGM_EXPORTER_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
         if ! unsquashfs -l "$DCGM_EXPORTER_SQSH" >/dev/null 2>&1; then
             DCGM_EXPORTER_LOCK="${DCGM_EXPORTER_SQSH}.lock"
@@ -223,7 +225,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
                     rm -f \"$DCGM_EXPORTER_SQSH\"
                     export ENROOT_CACHE_PATH=\${HOME}/.cache/enroot
                     mkdir -p \"\$ENROOT_CACHE_PATH\"
-                    enroot import -o \"$DCGM_EXPORTER_SQSH\" docker://$DCGM_EXPORTER_IMAGE
+                    enroot import -o \"$DCGM_EXPORTER_SQSH\" \"docker://$DCGM_EXPORTER_ENROOT_REF\"
                 "
         fi
         test -r "$DCGM_EXPORTER_SQSH" || { echo "Error: DCGM exporter squash is not readable: $DCGM_EXPORTER_SQSH" >&2; exit 1; }

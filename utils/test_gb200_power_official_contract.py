@@ -87,7 +87,11 @@ def assert_pinned_clone_contract(launcher):
 
 def assert_exporter_provisioning(launcher):
     assert f'DCGM_EXPORTER_IMAGE="{EXPORTER_IMAGE}"' in launcher
-    assert 'import_squash "$DCGM_EXPORTER_SQSH" "$DCGM_EXPORTER_IMAGE"' in launcher
+    assert (
+        'DCGM_EXPORTER_ENROOT_REF="${DCGM_EXPORTER_IMAGE/nvcr.io\\//nvcr.io#}"'
+        in launcher
+    )
+    assert 'import_squash "$DCGM_EXPORTER_SQSH" "$DCGM_EXPORTER_ENROOT_REF"' in launcher
     assert 'test -r "$DCGM_EXPORTER_SQSH"' in launcher
     assert (
         'sha256sum "$DCGM_EXPORTER_SQSH" > "$GITHUB_WORKSPACE/exporter-image.sha256"'
