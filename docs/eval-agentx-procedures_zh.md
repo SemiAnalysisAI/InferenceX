@@ -175,6 +175,8 @@ gh run download "$RUN_ID" --repo SemiAnalysisAI/InferenceX \
 
 AgentX 是 AIPerf `inferencex-agentx-mvp` trace replay，不是固定 token 的合成 benchmark。仓库默认设置对每条 trajectory lane 额外执行十个 warmup 请求，并使用 recipe 配置的 profile 时长。`agentx-fast` 强制每条 lane 只运行一个 warmup 请求，并将 profile 设为 1,200 秒。它只影响单节点和多节点 AgentX 吞吐量；定长序列吞吐量与 eval 保持 canonical。Fast 运行不符合 artifact reuse 条件（[工作流策略](../.github/workflows/README.md#agentx-fast-mode)、[Fast replay 设置](../benchmarks/benchmark_lib.sh#L1824-L1848)）。
 
+对于未发布到 package index 的 engine 或 router wheel，必须保证构建可复现且 artifact 不可变：在 launcher 旁签入源码 patch 与构建器，打 patch 前校验上游 wheel 的 digest，分配明确的 local version，并通过带 SHA256 fragment 的精确 URL 安装已发布 artifact。本地 backport 不得冒用尚未发布的上游版本号。
+
 目标 canonical 运行（使用配置的 duration 和 warmup；不要加 fast 或 duration override）：
 
 ```bash

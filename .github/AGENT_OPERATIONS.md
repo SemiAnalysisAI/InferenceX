@@ -96,7 +96,7 @@ Multinode disaggregated results add `prefill_gpu_energy_j`, `decode_gpu_energy_j
 
 Every power result — valid or invalid, single-node or multinode — carries `power_metric_schema_version`. Version 2 defines each unprefixed `joules_per_*` field as whole-deployment GPU-board energy over the named denominator; role-scoped energy uses the explicit `prefill_*` / `decode_*` keys. Rows without the field predate the whole-deployment switch and their unprefixed joules are not comparable across topologies.
 
-For srt-slurm recipes, `telemetry: {provider: dcgm-power}` enables official energy collection. `runners/launch_gb200-nv.sh` and `runners/launch_gb300-nv.sh` are the source of truth for `POWER_SRT_SLURM_PIN`. CI derives `POWER_PRODUCER_SHA` from the launcher stamp. `utils/test_gb200_power_official_contract.py` and `utils/test_gb300_power_official_contract.py` enforce the recipe/launcher contract. Eligible recipe-gated `dynamo-sglang` dcgm-power lanes are validated.
+For srt-slurm recipes, `telemetry: {provider: dcgm-power}` enables official energy collection. `runners/launch_gb200-nv.sh`, `runners/launch_gb300-nv.sh`, and `runners/launch_h200-dgxc-slurm.sh` are the source of truth for `POWER_SRT_SLURM_PIN`. CI derives `POWER_PRODUCER_SHA` from the launcher stamp. `utils/test_gb200_power_official_contract.py`, `utils/test_gb300_power_official_contract.py`, and `utils/test_h200_power_official_contract.py` enforce the recipe/launcher contract. Eligible recipe-gated `dynamo-sglang` dcgm-power lanes are validated.
 
 Power audit artifacts are named `power_audit_<result>` and contain `power_validation_<result>.json` for single-node runs or `power_validation_<result>_*.json` for multinode runs. They are uploaded even when validation fails.
 

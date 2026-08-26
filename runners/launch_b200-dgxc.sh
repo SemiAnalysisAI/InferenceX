@@ -138,7 +138,9 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         export UCX_NET_DEVICES="${UCX_NET_DEVICES:-mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1,mlx5_4:1,mlx5_5:1,mlx5_6:1,mlx5_7:1}"
         export UCX_MEMTYPE_CACHE="${UCX_MEMTYPE_CACHE:-n}"
         export UCX_MEMTYPE_REG_WHOLE="${UCX_MEMTYPE_REG_WHOLE:-n}"
-        TILERT_DISAGG="$GITHUB_WORKSPACE/benchmarks/multi_node/${EXP_NAME%%_*}_${PRECISION}_b200_${FRAMEWORK}-disagg.sh"
+        TILERT_SUBDIR="multi_node"
+        [[ "${SCENARIO_SUBDIR}" == "agentic/" ]] && TILERT_SUBDIR="multi_node/agentic"
+        TILERT_DISAGG="$GITHUB_WORKSPACE/benchmarks/${TILERT_SUBDIR}/${EXP_NAME%%_*}_${PRECISION}_b200_${FRAMEWORK}-disagg.sh"
         [[ -f "$TILERT_DISAGG" ]] || { echo "tilert disagg script not found: $TILERT_DISAGG"; exit 1; }
         exec bash "$TILERT_DISAGG"
         exit 1
