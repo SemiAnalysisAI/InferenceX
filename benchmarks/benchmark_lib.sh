@@ -1067,6 +1067,16 @@ launch_agentic_profile_trigger() {
         fi
     }
 
+    # A second profile session has crashed dynamo-vllm workers (segfault in
+    # the multiproc executor when the steady-window session started; the first
+    # session captured and flushed cleanly). Default dynamo-vllm to a single
+    # capture window; set PROFILE_PREFILL_DELAY_SECONDS explicitly to opt back
+    # into the dual-window capture.
+    if [[ ${#dynamo_targets[@]} -gt 0 && "${FRAMEWORK:-}" == *vllm* \
+          && -z "${PROFILE_PREFILL_DELAY_SECONDS:-}" ]]; then
+        prefill_delay=0
+    fi
+
     (
         if [[ "$prefill_delay" -gt 0 && "$prefill_delay" -lt "$delay" ]]; then
             sleep "$prefill_delay"
