@@ -1,21 +1,162 @@
 """Comprehensive tests for generate_sweep_configs.py"""
-import pytest
+
 import argparse
 import copy
 from pathlib import Path
+
+import pytest
 from generate_sweep_configs import (
     MIN_EVAL_CONC,
-    seq_len_stoi,
-    seq_len_itos,
-    seq_len_to_str,
-    generate_full_sweep,
-    generate_test_config_sweep,
-    mark_eval_entries,
-    mark_all_eval_entries,
+    add_multinode_node_count,
     apply_node_type_defaults,
     expand_config_keys,
+    generate_full_sweep,
+    generate_test_config_sweep,
+    mark_all_eval_entries,
+    mark_eval_entries,
+    multinode_node_count,
+    multinode_worker_pair,
+    seq_len_itos,
+    seq_len_stoi,
+    seq_len_to_str,
 )
 from validation import load_config_files, load_runner_file
+
+
+def test_aggregated_multinode_node_count_uses_explicit_num_nodes():
+    entry = {
+        "runner": "unknown",
+        "disagg": False,
+        "prefill": {},
+        "decode": {},
+    }
+
+    add_multinode_node_count(entry, {}, num_nodes=3)
+
+    assert entry["node-count"] == 3
+
+
+def test_disaggregated_multinode_node_count_rejects_num_nodes():
+    entry = {
+        "runner": "unknown",
+        "disagg": True,
+        "prefill": {},
+        "decode": {},
+    }
+
+    with pytest.raises(ValueError, match="num-nodes.*disaggregated"):
+        add_multinode_node_count(entry, {}, num_nodes=3)
+
+
+def test_aggregated_worker_expands_to_legacy_matrix_pair():
+    benchmark = {
+        "worker": {
+            "num-worker": 2,
+            "tp": 8,
+            "pp": 2,
+            "ep": 1,
+            "dp-attn": False,
+            "additional-settings": ["CONFIG_FILE=recipes/aggregate.yaml"],
+        }
+    }
+
+    prefill, decode = multinode_worker_pair(benchmark, disagg=False)
+
+    assert prefill == {
+        "num-worker": 2,
+        "tp": 8,
+        "pp": 2,
+        "dcp-size": 1,
+        "pcp-size": 1,
+        "ep": 1,
+        "dp-attn": False,
+        "additional-settings": ["CONFIG_FILE=recipes/aggregate.yaml"],
+    }
+    assert decode == {
+        "num-worker": 0,
+        "tp": 8,
+        "pp": 2,
+        "dcp-size": 1,
+        "pcp-size": 1,
+        "ep": 1,
+        "dp-attn": False,
+    }
+
+
+def test_multinode_node_count_uses_role_gpu_footprints(sample_runner_config):
+    prefill = {"num-worker": 3, "tp": 2, "pp": 1, "pcp-size": 1}
+    decode = {"num-worker": 2, "tp": 8, "pp": 1, "pcp-size": 1}
+
+    assert multinode_node_count(
+        prefill, decode, "cluster:b300-nv", sample_runner_config
+    ) == 3
+
+
+def test_multinode_node_count_honors_explicit_role_node_settings():
+    prefill = {
+        "num-worker": 1,
+        "tp": 8,
+        "additional-settings": ["PREFILL_NODES=2"],
+    }
+    decode = {
+        "num-worker": 1,
+        "tp": 8,
+        "additional-settings": ["DECODE_NODES=1"],
+    }
+
+    assert multinode_node_count(prefill, decode, "unknown", {}) == 3
+
+
+def test_multinode_node_count_resolves_heterogeneous_worker_hardware(
+    sample_runner_config,
+):
+    prefill = {"hardware": "gb200", "num-worker": 5, "tp": 4}
+    decode = {"hardware": "h100", "num-worker": 1, "tp": 8}
+
+    assert multinode_node_count(
+        prefill, decode, "gb200", sample_runner_config
+    ) == 6
+
+
+def test_multinode_node_count_prefers_checked_in_recipe_resources(
+    sample_runner_config,
+):
+    prefill = {
+        "num-worker": 3,
+        "tp": 1,
+        "additional-settings": [
+            (
+                "CONFIG_FILE=recipes/vllm/kimi-k2.5-fp4/8k1k/"
+                "disagg-gb200-3p1d-dep4-dep16.yaml"
+            )
+        ],
+    }
+    decode = {"num-worker": 1, "tp": 1}
+
+    assert multinode_node_count(
+        prefill, decode, "cluster:gb200-nv", sample_runner_config
+    ) == 7
+
+
+def test_multinode_node_count_resolves_repo_relative_recipe_path(
+    sample_runner_config,
+):
+    prefill = {
+        "num-worker": 1,
+        "tp": 8,
+        "additional-settings": [
+            (
+                "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/"
+                "trtllm/glm5.2/gb300-fp4/agentic/"
+                "dynamo-agg-gb300-tp8-c1-b2-mtp8.yaml"
+            )
+        ],
+    }
+    decode = {"num-worker": 0, "tp": 8}
+
+    assert multinode_node_count(
+        prefill, decode, "cluster:gb300-nv", sample_runner_config
+    ) == 2
 
 
 # =============================================================================
@@ -117,7 +258,7 @@ def sample_runner_config():
     return {
         "labels": {
             "h100": ["h100-cr_0", "h100-cr_1", "h100-cw_0", "h100-cw_1"],
-            "h200": ["h200-cw_0", "h200-cw_1", "h200-nb_0", "h200-nb_1"],
+            "h200": ["h200-cw_0", "h200-cw_1"],
             "b200": ["b200-nvd_0", "b200-nvd_1", "b200-dgxc_1"],
             "b300": ["b300-nv_0", "b300-nv_1"],
             "cluster:b300-nv": ["b300-nv_0", "b300-nv_1"],
@@ -381,7 +522,7 @@ class TestMarkEvalEntries:
         matrix_values = [
             {
                 "model": "deepseek-ai/DeepSeek-R1-0528",
-                "runner": "b200-multinode",
+                "runner": "cluster:b200-dgxc",
                 "framework": "dynamo-trt",
                 "precision": "fp8",
                 "isl": 8192,
@@ -413,7 +554,7 @@ class TestMarkEvalEntries:
         matrix_values = [
             {
                 "model": "deepseek-ai/DeepSeek-R1-0528",
-                "runner": "b200-multinode",
+                "runner": "cluster:b200-dgxc",
                 "framework": "dynamo-trt",
                 "precision": "fp8",
                 "isl": 8192,
@@ -435,7 +576,7 @@ class TestMarkEvalEntries:
             },
             {
                 "model": "deepseek-ai/DeepSeek-R1-0528",
-                "runner": "b200-multinode",
+                "runner": "cluster:b200-dgxc",
                 "framework": "dynamo-trt",
                 "precision": "fp8",
                 "isl": 8192,
@@ -1196,6 +1337,8 @@ class TestGenerateFullSweepMultiNode:
                 "framework": "dynamo-trt",
                 "runner": "h200",
                 "multinode": True,
+                "disagg": True,
+                "kv-p2p-transfer": "nixl",
                 "scenarios": {
                     "fixed-seq-len": [
 
@@ -1459,6 +1602,8 @@ class TestEdgeCases:
                 "framework": "dynamo-trt",
                 "runner": "gb200",
                 "multinode": True,
+                "disagg": True,
+                "kv-p2p-transfer": "nixl",
                 "scenarios": {
                     "fixed-seq-len": [
 
@@ -1577,6 +1722,8 @@ class TestEdgeCases:
                 "framework": "dynamo-trt",
                 "runner": "gb200",
                 "multinode": True,
+                "disagg": True,
+                "kv-p2p-transfer": "nixl",
                 "scenarios": {
                     "fixed-seq-len": [
 
@@ -1625,6 +1772,8 @@ class TestEdgeCases:
                 "framework": "dynamo-trt",
                 "runner": "gb200",
                 "multinode": True,
+                "disagg": True,
+                "kv-p2p-transfer": "nixl",
                 "scenarios": {
                     "fixed-seq-len": [
 
