@@ -293,11 +293,25 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     #
     # MP connector, not the in-engine LMCacheConnectorV1: the integrated one
     # faults at conc>=4 on ROCm with a GPU memory access fault.
-    LMCACHE_VERSION="${LMCACHE_VERSION:-0.5.5.dev19+rocm7.2}"
+    # UNPINNED by default, deliberately. The nightly channel keeps exactly one
+    # dev wheel and prunes the rest: 0.5.5.dev19 was published, used, and gone
+    # within the hour, which is a hard install failure for anything that names
+    # it. Resolve whatever the channel currently holds and record it instead.
+    # Set LMCACHE_VERSION (with LMCACHE_ROCM_TAG=v0.5.4rc4-rocm for a tagged
+    # release) when an exact rerun matters more than being current.
+    LMCACHE_VERSION="${LMCACHE_VERSION:-}"
     LMCACHE_ROCM_TAG="${LMCACHE_ROCM_TAG:-nightly-rocm}"
     LMCACHE_ROCM_INDEX="https://github.com/LMCache/LMCache/releases/expanded_assets/${LMCACHE_ROCM_TAG}"
-    echo "Installing lmcache==${LMCACHE_VERSION} from ${LMCACHE_ROCM_TAG}"
-    pip install --no-cache-dir "lmcache==${LMCACHE_VERSION}" \
+    if [ -n "$LMCACHE_VERSION" ]; then
+        LMCACHE_SPEC="lmcache==${LMCACHE_VERSION}"
+    else
+        LMCACHE_SPEC="lmcache"
+    fi
+    echo "Installing ${LMCACHE_SPEC} from ${LMCACHE_ROCM_TAG}"
+    # --pre: the ROCm wheels are dev builds and pip skips them otherwise.
+    # --upgrade: the image already ships 0.5.3, and without it pip calls the
+    # requirement satisfied and silently leaves that in place.
+    pip install --no-cache-dir --pre --upgrade "$LMCACHE_SPEC" \
         --find-links "$LMCACHE_ROCM_INDEX"
 
     # vllm#51718 removed get_kv_cache_layout, which LMCache still imports; without
@@ -311,8 +325,10 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     python3 - "$LMCACHE_VERSION" <<'PYVER' || exit 1
 import sys, lmcache
 want, got = sys.argv[1], lmcache.__version__
-print(f"lmcache installed: {got} (requested {want})")
-sys.exit(0 if got.split("+")[0] == want.split("+")[0] else 1)
+print(f"lmcache installed: {got}" + (f" (requested {want})" if want else " (unpinned)"))
+# Only assert when pinned; unpinned resolves to whatever the channel holds, and
+# that resolved string is what gets reported, so there is nothing to contradict.
+sys.exit(0 if not want or got.split("+")[0] == want.split("+")[0] else 1)
 PYVER
 
     LMCACHE_LOG="${LMCACHE_LOG:-$RESULT_DIR/lmcache.log}"
