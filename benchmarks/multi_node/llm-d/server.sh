@@ -25,6 +25,15 @@ NODE_RANK="${NODE_RANK:-${SLURM_PROCID:-0}}"
 PREFILL_NODES="${PREFILL_NODES:-1}"
 DECODE_NODES="${DECODE_NODES:-1}"
 GPUS_PER_NODE="${GPUS_PER_NODE:-8}"
+# Aggregated mode: no decode role at all, so no P/D KV handoff (no
+# pd-sidecar, no NixlConnector) - the single engine does prefill+decode
+# in-process. DECODE_NODES=0 is the only signal for this; everything else
+# (coordinator gating, kv_transfer_config) derives from it below.
+if [[ "$DECODE_NODES" -eq 0 ]]; then
+    IS_AGGREGATED=1
+else
+    IS_AGGREGATED=0
+fi
 VLLM_PORT=8200
 SIDECAR_PORT=8000
 ENVOY_PORT=8080
@@ -210,24 +219,28 @@ fi
 # ----------------------------------------------------------------
 # Bring up vLLM engine (every node)
 # ----------------------------------------------------------------
-# KV role: prefill=producer, decode=consumer (override via KV_ROLE_OVERRIDE).
-if [[ -n "${KV_ROLE_OVERRIDE:-}" ]]; then
-    KV_ROLE="$KV_ROLE_OVERRIDE"
-elif [[ "$ROLE" == "prefill" ]]; then
-    KV_ROLE="kv_producer"
-else
-    KV_ROLE="kv_consumer"
-fi
-KV_TRANSFER_CONFIG="{\"kv_connector\":\"NixlConnector\",\"kv_role\":\"$KV_ROLE\",\"kv_load_failure_policy\":\"fail\"}"
-
 COMMON_ARGS=(
     --port "$VLLM_PORT"
     --served-model-name "$MODEL_NAME"
     --trust-remote-code
     --disable-access-log-for-endpoints=/health,/metrics
     --tensor-parallel-size "$TP_SIZE"
-    --kv_transfer_config "$KV_TRANSFER_CONFIG"
 )
+# KV role: prefill=producer, decode=consumer (override via KV_ROLE_OVERRIDE).
+# Aggregated mode has no second engine to hand KV off to (no pd-sidecar
+# either), so skip --kv_transfer_config entirely rather than standing up a
+# NixlConnector producer with no consumer ever pulling from it.
+if [[ "$IS_AGGREGATED" -eq 0 ]]; then
+    if [[ -n "${KV_ROLE_OVERRIDE:-}" ]]; then
+        KV_ROLE="$KV_ROLE_OVERRIDE"
+    elif [[ "$ROLE" == "prefill" ]]; then
+        KV_ROLE="kv_producer"
+    else
+        KV_ROLE="kv_consumer"
+    fi
+    KV_TRANSFER_CONFIG="{\"kv_connector\":\"NixlConnector\",\"kv_role\":\"$KV_ROLE\",\"kv_load_failure_policy\":\"fail\"}"
+    COMMON_ARGS+=(--kv_transfer_config "$KV_TRANSFER_CONFIG")
+fi
 # A single frontend (HTTP + tokenize + DP load-balance) is CPU-bound and caps
 # throughput, so run several. Incompatible with --headless, so it is the one
 # flag the headless-worker branch below drops. Overridable via LLMD_API_SERVER_COUNT.
@@ -311,6 +324,10 @@ fi
 # endpoint per node. Pure-TP: only the TP-group leader has an api-server
 # (followers are --headless), so only the leader runs a sidecar and only leaders
 # are listed as endpoints.
+#
+# Aggregated mode (IS_AGGREGATED=1): ROLE is never "decode" (no decode nodes
+# exist at all), so this is already a no-op there - correct, since the single
+# engine needs no P/D handoff.
 if [[ "$ROLE" == "decode" && ( "$ROLE_ENABLE_EP" == "true" || "$LWS_WORKER_INDEX" -eq 0 ) ]]; then
     SIDECAR_CONNECTOR="nixlv2"
     SIDECAR_FLAGS=(--port="$SIDECAR_PORT" --vllm-port="$VLLM_PORT"
@@ -325,9 +342,14 @@ if [[ "$ROLE" == "decode" && ( "$ROLE_ENABLE_EP" == "true" || "$LWS_WORKER_INDEX
 fi
 
 # ================================================================
-# Coordinator (decode leader): endpoints, EPP, Envoy, bench, eval
+# Coordinator: endpoints, EPP, Envoy, bench, eval
 # ================================================================
-if [[ "$ROLE" == "decode" && "$LWS_WORKER_INDEX" -eq 0 ]]; then
+# Normally the decode leader. In aggregated mode (IS_AGGREGATED=1) there is
+# no decode role at all, so the sole engine's leader (rank 0, which is
+# always ROLE=prefill there since PREFILL_NODES=NUM_NODES) takes over the
+# coordinator duties instead.
+if [[ ( "$ROLE" == "decode" && "$LWS_WORKER_INDEX" -eq 0 ) || \
+      ( "$IS_AGGREGATED" -eq 1 && "$ROLE" == "prefill" && "$NODE_RANK" -eq 0 ) ]]; then
 
     # Release the allocation whenever the coordinator exits.
     BENCH_DONE_MARKER="$BENCHMARK_LOGS_DIR/.bench_done.$SLURM_JOB_ID"
@@ -351,7 +373,10 @@ VLLM_PORT = int('$VLLM_PORT')
 SIDECAR_PORT = int('$SIDECAR_PORT')
 # ALL_IPS is rank-ordered: ranks [0:pn] are prefill nodes, [pn:pn+dn] decode.
 prefill_ips = all_ips[:pn] or [os.environ['PREFILL_LEADER_IP']]
-decode_ips = all_ips[pn:pn + dn] or [os.environ['DECODE_LEADER_IP']]
+# dn == 0 (aggregated mode): no decode role at all. DECODE_LEADER_IP is ''
+# in that case (see job.slurm), so decode_ips must NOT fall back to it -
+# that would emit a bogus decode-0 endpoint with an empty address.
+decode_ips = (all_ips[pn:pn + dn] or [os.environ['DECODE_LEADER_IP']]) if dn > 0 else []
 endpoints = []
 
 def add_role(role, ips, base_port, group_size=1):
@@ -369,6 +394,8 @@ def add_role(role, ips, base_port, group_size=1):
 # endpoint per node for DEP8, or one per TP-group leader for pure-TP.
 add_role('prefill', prefill_ips, VLLM_PORT)
 decode_group = 1 if decode_ep else max(1, dn // decode_workers)
+# dn == 0 -> decode_ips == [] -> add_role emits zero decode endpoints
+# (aggregated mode: everything routes through the 'prefill'-labeled pool).
 add_role('decode', decode_ips, SIDECAR_PORT, group_size=decode_group)
 yaml.safe_dump({'endpoints': endpoints}, open('/tmp/endpoints.yaml', 'w'))
 print(f'endpoints.yaml ({len(endpoints)} endpoints):')

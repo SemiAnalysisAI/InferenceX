@@ -1,0 +1,132 @@
+# DeepSeek-V4-Pro (FP4) on B200, aggregated TP8 (one engine does both
+# prefill and decode) via llmd-vllm. agentX-flavored sibling of the
+# disagg dsv4-fp4-b200-agentx-1p1d-dep8-dep8.yaml recipe.
+#
+# Topology: B200 = 8 GPUs/node, so TP8 fits on exactly ONE node (unlike
+# GB200's 4 GPUs/node, where agentX's ix-agg-base.yaml/agg-tp8.yaml needs
+# `lws: {size: 2, replicas: 1}` spanning 2 nodes). PREFILL_NODES=1
+# DECODE_NODES=0 GPUS_PER_NODE=8 -> 1 node / 8 GPUs total. Since the role
+# never spans >1 node, server.sh's LWS_GROUP_SIZE is always 1 here, so the
+# cross-node --headless multi-node-TP / NVSHMEM-ibgda code paths never
+# activate; this is a plain single-node `vllm serve --tensor-parallel-size 8`.
+#
+# Aggregated-mode wiring (InferenceX-side, applies to every agg recipe):
+#   - No decode role exists at all (DECODE_NODES=0), so there is no
+#     pd-sidecar and no P/D KV handoff - server.sh skips
+#     --kv_transfer_config entirely for this recipe.
+#   - Per the process_result.py / dynamo-vllm precedent (e.g.
+#     dsv4-fp4-gb200-dynamo-vllm-agentic-mtp2-agg in nvidia-master.yaml),
+#     the single engine is mapped to the "prefill" role (PREFILL_NODES=all,
+#     DECODE_NODES=0) so multinode result aggregation counts its GPUs once
+#     and process_result.py's `prefill_gpus > 0` invariant holds. This is
+#     the opposite of agentX's own K8s naming (roles: [{name: decode}]),
+#     which is a gateway/InferencePool convention that doesn't carry over.
+#   - Rank 0 (the only rank here) takes over EPP/Envoy/bench coordinator
+#     duties normally owned by the decode leader (server.sh's aggregated
+#     coordinator gate).
+#
+# Source (agentX): llm-manifesto/models/deepseek-v4-ix/ix-agg-base.yaml +
+# agg-tp8.yaml. Dropped: the commented-out SimpleCPUOffloadConnector
+# kv_transfer_config (aggregated needs no KV transfer at all here),
+# VLLM_USE_V2_MODEL_RUNNER (no precedent in any InferenceX llm-d recipe),
+# DG_JIT_CACHE_DIR (a K8s-pod-local /tmp path, not meaningful across SLURM
+# job containers). max_model_len is set to 9280 (ISL 8192 + OSL 1024 +
+# headroom, matching the existing InferenceX recipes) instead of agentX's
+# general-purpose 1048576, since this recipe only ever serves the fixed
+# 8k/1k benchmark.
+#
+# ---- EPP scheduling config ----
+# Unlike the disagg recipe (which ports an exact agentX EPP snapshot),
+# agentX's aggregated K8s deployments route via a Gateway API InferencePool
+# (`routing: {kind: load_aware, target_role: decode}`), not llm-d's EPP
+# YAML schema - there is nothing to port directly. This is a purpose-built,
+# minimal EPP config instead: exactly one schedulingProfile, so llm-d
+# auto-selects the single-profile-handler (no disagg-profile-handler/decider
+# needed - there is only one pool to route to). `prefill-filter` matches
+# the endpoints.yaml labels server.sh always emits for the sole role
+# (llm-d.ai/role: prefill, see above). Every plugin here already exists in
+# the default v0.9.0 image-baked binaries, so this recipe does NOT need the
+# v0.10.0 router bump the disagg recipe requires.
+apiVersion: llm-d.ai/v1alpha1
+kind: EndpointPickerConfig
+
+plugins:
+  - name: file-disc
+    type: file-discovery
+    parameters:
+      path: /tmp/endpoints.yaml
+      watchFile: false
+
+  - type: prefill-filter
+  - type: queue-scorer
+  - type: kv-cache-utilization-scorer
+  - type: active-request-scorer
+  - type: prefix-cache-scorer
+
+schedulingProfiles:
+  - name: default
+    plugins:
+      - pluginRef: prefill-filter
+      - pluginRef: queue-scorer
+        weight: 2
+      - pluginRef: kv-cache-utilization-scorer
+        weight: 2
+      - pluginRef: active-request-scorer
+        weight: 1
+      - pluginRef: prefix-cache-scorer
+        weight: 3
+
+dataLayer:
+  discovery:
+    pluginRef: file-disc
+
+# ---- Per-role vLLM flags ----
+# Ported from agentX's ix-agg-base.yaml (roles[0], extended by agg-tp8.yaml).
+# TP=8, no DP/EP (pure tensor-parallel). FLASHINFER_MLA_SPARSE_DSV4
+# attention, matching the disagg recipe's DEP8 roles. enable-expert-parallel
+# must be explicit false here: server.sh defaults ROLE_ENABLE_EP to true
+# when a recipe omits the key (the H200 1P+1D DEP8 shape), which would be
+# wrong for pure TP8.
+#
+# No `decode:` block: server.sh only ever reads the section named after the
+# node's own ROLE, which is always "prefill" for this recipe (DECODE_NODES=0).
+prefill:
+  tp: 8
+  enable-expert-parallel: false
+  extra-args: >-
+    --kv-cache-dtype fp8
+    --gpu-memory-utilization 0.92
+    --max-model-len 9280
+    --max-num-seqs 32
+    --max-num-batched-tokens 8192
+    --max-cudagraph-capture-size 32
+    --block-size 256
+    --tokenizer-mode deepseek_v4
+    --disable-custom-all-reduce
+    --enable-cumem-allocator
+    --no-disable-hybrid-kv-cache-manager
+    --no-enable-flashinfer-autotune
+    --compilation-config {"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}
+    --attention-config {"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"use_fp4_indexer_cache":true}
+  env:
+    VLLM_USE_RUST_FRONTEND: "1"
+    VLLM_SERVER_DEV_MODE: "1"
+    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+    VLLM_RPC_TIMEOUT: "600000"
+    VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
+    VLLM_DSV4_MEGA_FP8_COMBINE: "1"
+    VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
+    VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "1024"
+    TILELANG_CLEANUP_TEMP_FILES: "1"
+    # Intra-node (NVLink) TP8 allreduce tuning - real cross-GPU allreduce
+    # traffic here (unlike the DEP8 recipes, which have no TP>1 role), so
+    # ported as-is from ix-agg-base.yaml rather than dropped.
+    VLLM_USE_NCCL_SYMM_MEM: "0"
+    VLLM_ALLREDUCE_USE_SYMM_MEM: "0"
+    VLLM_ALLREDUCE_USE_FLASHINFER: "1"
+    VLLM_FLASHINFER_ALLREDUCE_BACKEND: "auto"
+    NCCL_P2P_LEVEL: "NVL"
+
+# ---- SLURM resource directives ----
+slurm:
+  time_limit: "08:00:00"

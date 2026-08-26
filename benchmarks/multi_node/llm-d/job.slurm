@@ -48,8 +48,17 @@ fi
 #   prefill workers = ranks 1 .. PREFILL_NODES-1
 #   decode  leader = rank PREFILL_NODES (also coordinator: EPP + Envoy + bench)
 #   decode  workers = ranks PREFILL_NODES+1 .. NUM_NODES-1
+#
+# Aggregated mode (DECODE_NODES=0): there is no decode role at all, so
+# IPS[$PREFILL_NODES] would be an out-of-bounds read (IPS only has
+# PREFILL_NODES entries). Leave the decode addresses empty; server.sh's
+# aggregated coordinator gate (rank 0, ROLE=prefill) never reads them.
 PREFILL_LEADER_IP="${IPS[0]}"
-DECODE_LEADER_IP="${IPS[$PREFILL_NODES]}"
+if [[ "$DECODE_NODES" -gt 0 ]]; then
+    DECODE_LEADER_IP="${IPS[$PREFILL_NODES]}"
+else
+    DECODE_LEADER_IP=""
+fi
 
 # DP leader addresses for vLLM --data-parallel-address (rank 0 of each instance).
 PREFILL_DP_ADDR="$PREFILL_LEADER_IP"

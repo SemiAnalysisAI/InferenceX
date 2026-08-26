@@ -4570,6 +4570,72 @@ dsv4-fp4-b200-llmd-vllm-agentx:
           - "DECODE_NODES=1"
           - "GPUS_PER_NODE=8"
 
+# Aggregated (TP8 / DEP8) sibling of dsv4-fp4-b200-llmd-vllm-agentx: one
+# engine per topology does both prefill and decode (no P/D split, no
+# pd-sidecar, no kv_transfer_config - see the recipe files' header
+# comments). Separate top-level key because `disagg:` is a whole-key
+# property. Uses the default v0.9.0 EPP/pd-sidecar binaries (no router
+# bump needed - the aggregated EPP config only uses plugins already
+# present there). conc-lists mirror the agentX dspark historical runs:
+# results/dsv4-pro-dspark/results_ilmarkov-2-ix-agg-tp8-dspark-v3-long
+# (tp8) and results_ilmarkov-ix-agg-dep8-dspark-1308-long (dep8).
+dsv4-fp4-b200-llmd-vllm-agentx-agg:
+  image: quay.io/rh-ee-imarkov/llm-d-nokube-vllm:vllm0.26@sha256:a9095d4c835935c4070be2040de0a5ef3b44098f603092ab66d743b0e731b7b4
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: b200-multinode
+  precision: fp4
+  framework: llmd-vllm
+  router: { name: llm-d-router, version: "0.9.0" }
+  multinode: true
+  disagg: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # Aggregated TP8 (1 node / 8 GPUs; pure tensor-parallel, no EP).
+      - spec-decoding: "none"
+        conc-list: [1, 2, 4, 8, 12]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "GPUS_PER_NODE=8"
+          - "CONFIG_FILE=dsv4-fp4-b200-agentx-agg-tp8.yaml"
+        # The aggregate worker also performs decode; keep the decode worker
+        # count at zero so result aggregation counts eight GPUs only once
+        # (matches dsv4-fp4-gb200-dynamo-vllm-agentic-mtp2-agg's convention).
+        decode:
+          num-worker: 0
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=0"
+      # Aggregated DEP8 (1 node / 8 GPUs; DP=8 + EP).
+      - spec-decoding: "none"
+        conc-list: [12, 16, 32, 52, 72]
+        prefill:
+          num-worker: 1
+          tp: 1
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "GPUS_PER_NODE=8"
+          - "CONFIG_FILE=dsv4-fp4-b200-agentx-agg-dep8.yaml"
+        decode:
+          num-worker: 0
+          tp: 1
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=0"
+
 # MTP2 variant of dsv4-fp4-gb200-dynamo-vllm. Uses the vLLM 0.20.1 image
 # and hand-picked 8k/1k Pareto points mirrored from NVIDIA/srt-slurm.
 dsv4-fp4-gb200-dynamo-vllm-mtp2:

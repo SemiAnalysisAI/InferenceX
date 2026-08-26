@@ -6395,3 +6395,12 @@
     - "Wire a FRAMEWORK==llmd-vllm dispatch into runners/launch_b200-dgxc-slurm.sh (self-contained, bypasses the srtctl/srt-slurm path used by the other B200 multinode frameworks)"
     - "Pin a B200-only EPP/pd-sidecar v0.10.0 binary override (LLMD_BIN_DIR) for the disagg-profile-handler deciders: EPP shape; GB200's shared v0.9.0 binaries/path are untouched"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PLACEHOLDER
+
+- config-keys:
+    - dsv4-fp4-b200-llmd-vllm-agentx-agg
+  description:
+    - "Add DeepSeek-V4-Pro FP4 B200 llmd-vllm aggregated benchmark (TP8 and DEP8, 1 node / 8 GPUs each, one engine does both prefill and decode), porting the agentX (llm-manifesto) ix-agg-base/agg-tp8 and ix-agg-dep-base/agg-dep8 per-role vLLM tuning"
+    - "Extend server.sh/job.slurm with an aggregated (DECODE_NODES=0) mode: no decode role, no pd-sidecar, no --kv_transfer_config, and the sole engine's rank 0 takes over the EPP/Envoy/bench coordinator duties normally owned by the decode leader"
+    - "Add a minimal single-schedulingProfile EPP config for aggregated recipes (no disagg-profile-handler needed); uses the existing default v0.9.0 EPP/pd-sidecar binaries, no router bump required"
+    - "Branch runners/launch_b200-dgxc-slurm.sh's llmd-vllm wrapper-script selection on DISAGG (true -> disagg wrapper, false -> new aggregated wrapper)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PLACEHOLDER

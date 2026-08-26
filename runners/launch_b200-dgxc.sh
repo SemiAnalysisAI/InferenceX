@@ -231,7 +231,15 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         export BENCHMARK_LOGS_DIR="$GITHUB_WORKSPACE/benchmark_logs"
         mkdir -p "$BENCHMARK_LOGS_DIR"
 
-        SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_b200_llmd-vllm-disagg.sh"
+        # DISAGG is exported job-wide from the master config's `disagg:` key
+        # (see benchmark-multinode-tmpl.yml). true -> the P/D disagg wrapper
+        # (1P-DEP8/1D-DEP8); false -> the aggregated wrapper (TP8/DEP8, one
+        # engine does both prefill and decode, DECODE_NODES=0).
+        if [[ "${DISAGG:-true}" == "true" ]]; then
+            SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_b200_llmd-vllm-disagg.sh"
+        else
+            SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_b200_llmd-vllm-agg.sh"
+        fi
         BENCH_SCRIPT="benchmarks/multi_node/${SCRIPT_NAME}"
         if [[ ! -f "$BENCH_SCRIPT" ]]; then
             echo "Error: llm-d wrapper not found: $BENCH_SCRIPT" >&2
