@@ -91,11 +91,9 @@ fi
 USE_SGLANG_ROUTER=false
 SGLANG_BACKEND_PORT="$PORT"
 ROUTER_LOG="$RESULT_DIR/router.log"
-ROUTER_POLICY=consistent_hashing
-ROUTER_POLICY_ARGS=()
 if [ "$DP_ATTENTION" = "true" ]; then
     USE_SGLANG_ROUTER=true
-    ROUTER_POLICY=cache_aware
+    ROUTER_POLICY_ARGS=()
     export AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID=true
     SGLANG_BACKEND_PORT=$((PORT + 1))
     SGLANG_ROUTER_METRICS_PORT=$((PORT + 10000))
@@ -106,15 +104,13 @@ PARALLEL_ARGS=(--tp "$TP")
 METRICS_ARGS=(--enable-metrics --enable-cache-report)
 CHUNKED_PREFILL_SIZE=8192
 SWA_FULL_TOKENS_RATIO=0.1
-MEM_FRACTION_STATIC=0.88
-PREFILL_DECODE_INTERVAL=20
+MEM_FRACTION_STATIC=0.90
 if [ "$DP_ATTENTION" = "true" ]; then
     export SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_FP4_ACTS=1
     export SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_MXF4_KIND=1
     export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=8320
 
     PREFILL_DECODE_INTERVAL=24
-    MEM_FRACTION_STATIC=0.90
     # SGLang divides this global budget by dp_size. Conc 64/96 retain the
     # validated 8192-token per-rank budget.
     CHUNKED_PREFILL_SIZE=$((8192 * TP))
@@ -172,8 +168,6 @@ if [ "$DP_ATTENTION" = "true" ] && { [ "$CONC" -eq 128 ] || [ "$CONC" -eq 160 ];
     CUDA_GRAPH_MAX_BS=32
 fi
 CUDA_GRAPH_ARGS=(--cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS")
-
-echo "SGLang B200 tuning: conc=$CONC dp_attention=$DP_ATTENTION interval=$PREFILL_DECODE_INTERVAL mem_fraction=$MEM_FRACTION_STATIC chunked_prefill=$CHUNKED_PREFILL_SIZE cuda_graph_max_bs=$CUDA_GRAPH_MAX_BS router_policy=$ROUTER_POLICY"
 
 export PYTHONNOUSERSITE=1
 export TORCH_CUDA_ARCH_LIST=10.0
@@ -269,7 +263,7 @@ if [ "$USE_SGLANG_ROUTER" = "true" ]; then
     echo "Starting SGLang router on port $PORT for $TP DP ranks..."
     "${SGLANG_ROUTER_CMD[@]}" \
         --worker-urls "http://localhost:$SGLANG_BACKEND_PORT" \
-        --policy "$ROUTER_POLICY" \
+        --policy cache_aware \
         "${ROUTER_POLICY_ARGS[@]}" \
         --request-id-headers x-correlation-id \
         --dp-aware \

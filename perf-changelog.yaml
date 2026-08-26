@@ -6583,6 +6583,6 @@
     - agentic-coding
   description:
     - "Refresh the B200 SGLang AgentX curve with validated TP8/DP8/EP8 HiCache profiles at DP-attention concurrencies 64, 96, 128, and 160."
-    - "Use --prefill-decode-interval 24 at concurrency 64, 96, and 128; retain interval 20 at concurrency 160."
-    - "Use cache-aware routing for the DP-attention profiles. At concurrency 128 and 160, use mem-fraction-static 0.91, a 49152-token global chunked-prefill budget, CUDA graph maximum batch size 32, and total-requests DP balancing; set the cache-aware absolute balance threshold to 32 at concurrency 160."
+    - "Scope cache-aware routing and --prefill-decode-interval to the DP-attention profiles: use interval 24 at concurrency 64, 96, and 128, and interval 20 at concurrency 160."
+    - "Use mem-fraction-static 0.90 as the common TP and DP default. At concurrency 128 and 160, retain the measured 0.91 profile together with a 49152-token global chunked-prefill budget, CUDA graph maximum batch size 32, and total-requests DP balancing; set the cache-aware absolute balance threshold to 32 at concurrency 160."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2718
