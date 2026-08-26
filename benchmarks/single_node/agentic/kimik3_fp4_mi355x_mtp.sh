@@ -300,6 +300,11 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     pip install --no-cache-dir "lmcache==${LMCACHE_VERSION}" \
         --find-links "$LMCACHE_ROCM_INDEX"
 
+    # vllm#51718 removed get_kv_cache_layout, which LMCache still imports; without
+    # this its layout hint is empty and _MambaUnifiedViewEdit rejects "none".
+    # Runs after the install so a fresh wheel cannot undo it.
+    python3 "$(dirname "$0")/k3_patches/lmcache_kv_layout_shim.py"
+
     python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null
     # Assert rather than trust: KV_OFFLOAD_BACKEND_METADATA reports a version
     # into the aggregated result, and a silent mismatch there mislabels the run.
