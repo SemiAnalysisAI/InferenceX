@@ -15,9 +15,6 @@ labels:
     - h100-dgxc-slurm_10
     - h100-dgxc-slurm_11
     - h100-dgxc-slurm_12
-    - h100-dgxc-slurm_13
-    - h100-dgxc-slurm_14
-    - h100-dgxc-slurm_15
     - h100-dgxc-slurm_16
     - h100-dgxc-slurm_17
     - h100-dgxc-slurm_18
@@ -203,9 +200,6 @@ labels:
     - h100-dgxc-slurm_10
     - h100-dgxc-slurm_11
     - h100-dgxc-slurm_12
-    - h100-dgxc-slurm_13
-    - h100-dgxc-slurm_14
-    - h100-dgxc-slurm_15
     - h100-dgxc-slurm_16
     - h100-dgxc-slurm_17
     - h100-dgxc-slurm_18
