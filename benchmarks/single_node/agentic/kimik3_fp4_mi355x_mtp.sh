@@ -40,7 +40,7 @@ set -x
 #   KV_BLOCK_SIZE            unset  (unset -> 1536 for LMCache/native-page,
 #                                    4608 for other offloaded cells, else vLLM sizes it)
 #   MAX_MODEL_LEN            1M     
-#   SPEC_DECODE              true   (this is the _mtp DSpark recipe; =false for a no-spec A/B)
+#   SPEC_DECODE              true   (=false for the no-spec wrapper)
 #   SPEC_NUM_TOKENS          2      (DSpark draft length; validated by the _mtp config)
 #   DCP_SIZE                 1      (>1 sends the target's KV across the TP ranks;
 #                                    needs vllm#51705, applied in-container)
@@ -123,8 +123,11 @@ if [ -f "$K3_OVERLAY_PATCH" ]; then
     if ( cd "$SITE_PKGS" && patch -p1 --forward --batch --dry-run < "$K3_OVERLAY_PATCH" ) \
             >/tmp/k3_overlay_dryrun.log 2>&1; then
         echo "Applying K3 overlay $K3_OVERLAY_PATCH into $SITE_PKGS"
-        ( cd "$SITE_PKGS" && patch -p1 --forward --batch < "$K3_OVERLAY_PATCH" ) || true
-        K3_OVERLAY_APPLIED=1
+        if ( cd "$SITE_PKGS" && patch -p1 --forward --batch < "$K3_OVERLAY_PATCH" ); then
+            K3_OVERLAY_APPLIED=1
+        elif [ "${REQUIRE_K3_OVERLAY:-0}" = "1" ]; then
+            exit 1
+        fi
     else
         # Print why. A silent skip here costs a whole CI cycle to diagnose, and
         # the same diff can apply against the registry image while failing
@@ -135,7 +138,13 @@ if [ -f "$K3_OVERLAY_PATCH" ]; then
         echo "--- installed vLLM ---"
         python3 -c 'import vllm;print("vllm",vllm.__version__)' || true
         echo "----------------------------------------------"
+        if [ "${REQUIRE_K3_OVERLAY:-0}" = "1" ]; then
+            exit 1
+        fi
     fi
+elif [ "${REQUIRE_K3_OVERLAY:-0}" = "1" ]; then
+    echo "Required K3 overlay is missing: $K3_OVERLAY_PATCH" >&2
+    exit 1
 fi
 
 # ---- In-container patches ----------------------------------------------------
@@ -248,7 +257,7 @@ trap 'exit 143' TERM
 # forcing the page to reach mnbt 8192 is what breaks the mamba view. The cost
 # of opting out is mnbt, which must then fall in [1536, 3072).
 KV_BLOCK_SIZE="${KV_BLOCK_SIZE:-}"
-if [ -z "$KV_BLOCK_SIZE" ] && agentic_kv_offload_enabled; then
+if [ -z "$KV_BLOCK_SIZE" ] && [ "${K3_AUTO_KV_PAGE:-0}" != "1" ] && agentic_kv_offload_enabled; then
     if [ "${KV_OFFLOAD_BACKEND:-}" = "lmcache" ] || [ "${K3_NATIVE_KV_PAGE:-0}" = "1" ]; then
         # Native page, stated explicitly rather than left unset. Leaving it
         # empty made the LMCache chunk alignment fall back to a literal 256 and
@@ -292,9 +301,13 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     # Identical prefixes must hash to identical block keys across ranks.
     export PYTHONHASHSEED=42
     SIMPLE_LAZY_OFFLOAD="${SIMPLE_LAZY_OFFLOAD:-false}"
+    SIMPLE_EXTRA_CONFIG="\"cpu_bytes_to_use_per_rank\":$CPU_BYTES_PER_RANK,\"lazy_offload\":$SIMPLE_LAZY_OFFLOAD"
+    if [ -n "${SIMPLE_LAZY_OFFLOAD_WATERMARK_RATIO:-}" ]; then
+        SIMPLE_EXTRA_CONFIG+=",\"lazy_offload_watermark_ratio\":$SIMPLE_LAZY_OFFLOAD_WATERMARK_RATIO"
+    fi
     OFFLOAD_ARGS=(
         --kv-transfer-config
-        "{\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use_per_rank\":$CPU_BYTES_PER_RANK,\"lazy_offload\":$SIMPLE_LAZY_OFFLOAD}}"
+        "{\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{$SIMPLE_EXTRA_CONFIG}}"
     )
     echo "SimpleCPUOffloadConnector: ${CPU_BYTES_PER_RANK} B/rank x ${TP} ranks, lazy_offload=$SIMPLE_LAZY_OFFLOAD"
     ;;
@@ -552,22 +565,25 @@ if [ "$DCP_SIZE" -gt 1 ]; then
 fi
 
 # ---- Speculative ------------------------------------------------------------
-SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-2}"
-SYNTHETIC_ACCEPT_LEN=2.51
-# Hosts that pre-stage the draft as a plain directory rather than an HF hub
-# cache cannot resolve the repo id, and downloading it needs egress + a token.
-DRAFT_MODEL="${DRAFT_MODEL:-Inferact/Kimi-K3-DSpark}"
+SPEC_ARGS=()
+if [ "${SPEC_DECODE:-true}" = "true" ]; then
+    SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-2}"
+    SYNTHETIC_ACCEPT_LEN=2.51
+    # Hosts that pre-stage the draft as a plain directory rather than an HF hub
+    # cache cannot resolve the repo id, and downloading it needs egress + a token.
+    DRAFT_MODEL="${DRAFT_MODEL:-Inferact/Kimi-K3-DSpark}"
 
-if [ "${EVAL_ONLY:-false}" = "true" ]; then
-    SPEC_ARGS=(
-        --speculative-config
-        "{\"model\":\"$DRAFT_MODEL\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"block\"}"
-    )
-else
-    SPEC_ARGS=(
-        --speculative-config
-        "{\"model\":\"$DRAFT_MODEL\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
-    )
+    if [ "${EVAL_ONLY:-false}" = "true" ]; then
+        SPEC_ARGS=(
+            --speculative-config
+            "{\"model\":\"$DRAFT_MODEL\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"block\"}"
+        )
+    else
+        SPEC_ARGS=(
+            --speculative-config
+            "{\"model\":\"$DRAFT_MODEL\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
+        )
+    fi
 fi
 
 # ---- Async scheduling / KV block-pool stability ------------------------------
@@ -626,9 +642,14 @@ if [ "$DCP_SIZE" -gt 1 ]; then
     MLA_PREFILL_BACKEND="${MLA_PREFILL_BACKEND:-FLASH_ATTN}"
 fi
 MLA_PREFILL_BACKEND="${MLA_PREFILL_BACKEND:-ROCM_AITER_FA}"
-MLA_PREFILL_ARGS=()
-if [ -n "$MLA_PREFILL_BACKEND" ]; then
-    MLA_PREFILL_ARGS=(
+ATTENTION_ARGS=()
+if [ -n "${ATTENTION_BACKEND:-}" ]; then
+    ATTENTION_ARGS+=(--attention-backend "$ATTENTION_BACKEND")
+fi
+if [ -n "${ATTENTION_CONFIG_JSON:-}" ]; then
+    ATTENTION_ARGS+=(--attention-config "$ATTENTION_CONFIG_JSON")
+elif [ -n "$MLA_PREFILL_BACKEND" ]; then
+    ATTENTION_ARGS+=(
         --attention-config
         "{\"mla_prefill_backend\":\"$MLA_PREFILL_BACKEND\"}"
     )
@@ -637,10 +658,24 @@ fi
 # ---- HIP graph ------------------------------------------------------------
 MAX_NUM_SEQS="${MAX_NUM_SEQS:-$(( CONC * 2 ))}"
 MAX_CUDAGRAPH_CAPTURE_SIZE="${MAX_CUDAGRAPH_CAPTURE_SIZE:-$(( MAX_NUM_SEQS * 3 ))}"
-CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 1 "$MAX_CUDAGRAPH_CAPTURE_SIZE")"
-COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}")
+CUDAGRAPH_CAPTURE_SIZES="${CUDAGRAPH_CAPTURE_SIZES:-$(seq -s, 1 "$MAX_CUDAGRAPH_CAPTURE_SIZE")}"
+COMPILATION_CUSTOM_OPS="${COMPILATION_CUSTOM_OPS:-\"+fused_rms_norm_gated\"}"
+COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[$COMPILATION_CUSTOM_OPS],\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}")
 
-GPU_MEM_UTIL="0.9"
+GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.9}"
+
+STREAM_ARGS=()
+if [ -n "${STREAM_INTERVAL:-}" ]; then
+    STREAM_ARGS=(--stream-interval "$STREAM_INTERVAL")
+fi
+
+PREFIX_CACHE_ARGS=()
+if [ -n "${PREFIX_MATCH_UNIT:-}" ]; then
+    PREFIX_CACHE_ARGS+=(--prefix-match-unit "$PREFIX_MATCH_UNIT")
+fi
+if [ -n "${PREFIX_CACHING_HASH_ALGO:-}" ]; then
+    PREFIX_CACHE_ARGS+=(--prefix-caching-hash-algo "$PREFIX_CACHING_HASH_ALGO")
+fi
 
 echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
@@ -664,13 +699,15 @@ VLLM_CMD=(
     --tool-call-parser kimi_k3
     --reasoning-parser kimi_k3
     --max-model-len 1048576
+    "${STREAM_ARGS[@]}"
     --enable-prefix-caching
+    "${PREFIX_CACHE_ARGS[@]}"
     --kv-cache-dtype "fp8"
     --max-num-batched-tokens "${MAX_NUM_BATCHED_TOKENS:-8192}"
     "${KV_BLOCK_ARGS[@]}"
     "${MAMBA_BLOCK_ARGS[@]}"
     "${ASYNC_SCHED_ARGS[@]}"
-    "${MLA_PREFILL_ARGS[@]}"
+    "${ATTENTION_ARGS[@]}"
     "${COMPILATION_CONFIG_ARGS[@]}"
     "${SPEC_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
