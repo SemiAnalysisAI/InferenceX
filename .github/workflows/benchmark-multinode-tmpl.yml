@@ -347,11 +347,13 @@ jobs:
       - name: Slurm cleanup (pre-run)
         run: &slurm-cleanup |
           if command -v squeue >/dev/null 2>&1; then
-            echo "[Slurm] Cleaning up jobs named: ${{ runner.name }} ..."
-            scancel --user="$USER" --name="${{ runner.name }}" || true
-            while [ -n "$(squeue --user="$USER" --name='${{ runner.name }}' --noheader --format='%i')" ]; do
-              squeue --user="$USER" --name="${{ runner.name }}"
-              sleep 5
+            for job_name in "${{ runner.name }}" "inferencex-${{ runner.name }}"; do
+              echo "[Slurm] Cleaning up jobs named: $job_name ..."
+              scancel --user="$USER" --name="$job_name" || true
+              while [ -n "$(squeue --user="$USER" --name="$job_name" --noheader --format='%i')" ]; do
+                squeue --user="$USER" --name="$job_name"
+                sleep 5
+              done
             done
           fi
 
