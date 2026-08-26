@@ -2,7 +2,7 @@ dsr1-fp4-b200-dynamo-trt:
   image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post1
   model: deepseek-r1-fp4
   model-prefix: dsr1
-  runner: b200-multinode
+  runner: cluster:b200-dgxc
   precision: fp4
   framework: dynamo-trt
   router: { name: dynamo-router, version: "0.8.1.post1" }
@@ -210,7 +210,7 @@ dsr1-fp8-b200-dynamo-trt:
   image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post2
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
-  runner: b200-multinode
+  runner: cluster:b200-dgxc
   precision: fp8
   framework: dynamo-trt
   router: { name: dynamo-router, version: "0.8.1.post2" }
@@ -3657,7 +3657,7 @@ dsr1-fp4-b200-dynamo-sglang:
   image: lmsysorg/sglang:v0.5.8.post1-cu130-runtime
   model: deepseek-r1-fp4
   model-prefix: dsr1
-  runner: b200-multinode
+  runner: cluster:b200-dgxc
   precision: fp4
   framework: dynamo-sglang
   router: { name: dynamo-router, version: "0.8.0" }
@@ -3739,7 +3739,7 @@ dsr1-fp8-b200-dynamo-sglang:
   image: lmsysorg/sglang:v0.5.8.post1-cu130-amd64
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
-  runner: b200-multinode
+  runner: cluster:b200-dgxc
   precision: fp8
   framework: dynamo-sglang
   kv-p2p-transfer: nixl
@@ -3862,7 +3862,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
   image: lmsysorg/sglang:v0.5.8.post1-cu130-amd64
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
-  runner: b200-multinode
+  runner: cluster:b200-dgxc
   precision: fp8
   framework: dynamo-sglang
   kv-p2p-transfer: nixl
@@ -3992,7 +3992,7 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
   image: "lmsysorg/sglang:v0.5.12.post1"
   model: deepseek-r1-fp4
   model-prefix: dsr1
-  runner: b200-multinode
+  runner: cluster:b200-dgxc
   precision: fp4
   framework: dynamo-sglang
   router: { name: dynamo-router, version: "5b4bc1dd70965017a737c71b19db5a0aeaa88727" }
@@ -4240,7 +4240,7 @@ dsv4-fp4-b200-dynamo-vllm:
   image: vllm/vllm-openai:v0.23.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
-  runner: b200-multinode
+  runner: cluster:b200-dgxc
   precision: fp4
   framework: dynamo-vllm
   router: { name: dynamo-router, version: "1.2.0.dev20260426" }
@@ -9755,7 +9755,7 @@ glm5.1-fp8-b200-tilert:
   image: ghcr.io/tile-ai/tilert:0.1.5
   model: zai-org/GLM-5.1-FP8
   model-prefix: glm5.1
-  runner: b200-multinode
+  runner: cluster:b200-dgxc
   precision: fp8
   framework: tilert
   router: { name: tilert-pd-router, version: "0.1.5.post3" }

@@ -74,10 +74,6 @@ labels:
     - b200-dgxc_07
     - b200-dgxc_08
     - b200-dgxc_09
-  b200-multinode:
-    - b200-dgxc-slurm_7
-    - b200-dgxc-slurm_8
-    - b200-dgxc-slurm_9
   b200-new:
     - b200-nscale-slurm_0
     - b200-nscale-slurm_1
