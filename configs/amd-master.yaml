@@ -693,6 +693,32 @@ kimik3-fp4-mi355x-vllm-agentic-mtp-dcp-lmcache:
       search-space:
       - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.5.dev24+rocm7.2" }, conc-list: [8], spec-decoding: mtp }
 
+# DCP 8 at c8 WITHOUT a KV connector. This is the LMCache cell above with the
+# connector removed, because LMCache cannot run against a post-vllm#51718
+# nightly: it calls the removed get_kv_cache_layout, and restoring that only
+# moves the failure into _MambaUnifiedViewEdit, which cannot view this vLLM's
+# mamba KV tensor under either legacy layout (832512 elems/block / 4608 =
+# 180.667 for both NHD and HND -- structural, not a layout choice). Newest ROCm
+# wheel as of 2026-08-26 is 0.5.5.dev24 and still has the old import.
+#
+# So this measures the half that IS reachable today: DCP 8 on the latest
+# nightly via the merged #51705 overlay. Pairs with the c4 kvnone arm of
+# kimik3-fp4-mi355x-vllm-agentic-mtp-dcp and with the c8 kvnone arm of -mtp.
+# Restore the LMCache cell once LMCache ships #51718 support.
+kimik3-fp4-mi355x-vllm-agentic-mtp-dcp-nightly:
+  image: vllm/vllm-openai-rocm:nightly-a9a17e7095a66ef6c6685a1c7ddd657781a78d3c
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.65
+      search-space:
+      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: none, conc-list: [8], spec-decoding: mtp }
+
 # One cell, for isolating the aiter moe_sorting fault run 32215249474 hit on both
 # DCP cells. Same as the c4 arm above; the comm backend is not expressible in the
 # search space, so the variable moves in the recipe (DCP_COMM_BACKEND, a2a there
