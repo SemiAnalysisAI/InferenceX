@@ -71,6 +71,7 @@ def valid_multinode_matrix_entry():
         "framework": "dynamo-trt",
         "spec-decoding": "none",
         "runner": "gb200",
+        "node-count": 6,
         "isl": 1024,
         "osl": 1024,
         "prefill": {
@@ -644,6 +645,21 @@ class TestMultiNodeMatrixEntry:
         """Conc must be a list for multinode."""
         valid_multinode_matrix_entry["conc"] = 2150  # Single int, not list
         with pytest.raises(Exception):
+            MultiNodeMatrixEntry(**valid_multinode_matrix_entry)
+
+    def test_node_count_is_required(self, valid_multinode_matrix_entry):
+        """A multinode row cannot silently degrade to a one-node request."""
+        del valid_multinode_matrix_entry["node-count"]
+        with pytest.raises(Exception, match="node-count"):
+            MultiNodeMatrixEntry(**valid_multinode_matrix_entry)
+
+    @pytest.mark.parametrize("node_count", [0, -1, True, "2"])
+    def test_node_count_is_a_strict_positive_integer(
+        self, valid_multinode_matrix_entry, node_count
+    ):
+        """Invalid node requests fail before reaching the reusable workflow."""
+        valid_multinode_matrix_entry["node-count"] = node_count
+        with pytest.raises(Exception, match="node-count"):
             MultiNodeMatrixEntry(**valid_multinode_matrix_entry)
 
     def test_missing_prefill(self, valid_multinode_matrix_entry):
@@ -1518,6 +1534,7 @@ MULTINODE_AGENTIC_EVAL_ROW = {
     "image": "lmsysorg/sglang-rocm:v0.5.15", "model": "deepseek-ai/DeepSeek-V4-Pro",
     "model-prefix": "dsv4", "precision": "fp4", "framework": "sglang-disagg",
     "spec-decoding": "none", "runner": "cluster:mi355x-amds",
+    "node-count": 2,
     "prefill": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
     "decode": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
     "conc": [32], "kv-offloading": "dram",
@@ -1592,6 +1609,12 @@ class TestMultiNodeAgenticMatrixEntry:
         assert entry.run_eval is True
         assert entry.eval_only is True
         assert entry.eval_conc == 32
+
+    def test_node_count_is_required(self):
+        row = dict(MULTINODE_AGENTIC_EVAL_ROW)
+        del row["node-count"]
+        with pytest.raises(Exception, match="node-count"):
+            MultiNodeAgenticMatrixEntry(**row)
 
     def test_validate_agentic_matrix_entry_dispatches_on_prefill_key(self):
         """The dispatcher in validate_agentic_matrix_entry() picks

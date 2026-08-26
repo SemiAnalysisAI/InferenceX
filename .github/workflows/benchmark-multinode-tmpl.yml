@@ -9,7 +9,7 @@ on:
       node-count:
         description: "Total Slurm nodes required by this benchmark"
         required: true
-        type: string
+        type: number
       priority:
         description: "Higher-is-sooner CI priority score"
         required: true
@@ -292,7 +292,7 @@ jobs:
       ${{ fromJSON(
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
         (
-          vars.NODE_SLOT_SCHEDULER_ENABLED == 'true' && inputs.node-count != '' &&
+          vars.NODE_SLOT_SCHEDULER_ENABLED == 'true' &&
           (
             inputs.skip-queue-pr != '' &&
             format(
