@@ -150,7 +150,7 @@ Other offloading tiers, including NVMe KV cache offloading, are outside the init
 
 | Model architecture class | Prefix | Date added | Active scenarios | Deprecated scenarios |
 |---|---|---|---|---|
-| Qwen3.8-Flash-Next | `qwen3.8next` | TBD | Agentic coding | |
+| Qwen3.8-Flash-Next | `qwen3.8next` | 2026-08-26 ([#2742](https://github.com/SemiAnalysisAI/InferenceX/pull/2742)) | Agentic coding | |
 | Kimi-K3 | `kimik3` | 2026-07-27 ([#2391](https://github.com/SemiAnalysisAI/InferenceX/pull/2391)) | Agentic coding (DSpark only) | Agentic coding non-DSpark arm (deprecated from day 0) |
 | GLM-5.2 | `glm5.2` | 2026-07-18 ([#2268](https://github.com/SemiAnalysisAI/InferenceX/pull/2268)) | Agentic coding (the non-MTP arm still runs while the MTP-only transition remains pending, as explained in the Deprecation Notice) | |
 | MiniMax-M3 | `minimaxm3` | 2026-06-12 ([#1724](https://github.com/SemiAnalysisAI/InferenceX/pull/1724)) | Agentic coding | Single-turn 1k1k, Single-turn 8k1k (removed 2026-08-04, [#2493](https://github.com/SemiAnalysisAI/InferenceX/pull/2493)) |
