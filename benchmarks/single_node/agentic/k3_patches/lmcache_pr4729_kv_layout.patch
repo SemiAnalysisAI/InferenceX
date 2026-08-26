@@ -1,0 +1,217 @@
+diff --git a/lmcache/integration/vllm/lmcache_mp_connector.py b/lmcache/integration/vllm/lmcache_mp_connector.py
+index bbb6e6a2850..c9bfe201d63 100644
+--- a/lmcache/integration/vllm/lmcache_mp_connector.py
++++ b/lmcache/integration/vllm/lmcache_mp_connector.py
+@@ -481,7 +481,7 @@ def register_kv_caches(self, kv_caches: dict[str, torch.Tensor]):
+         kv_cache_config = getattr(self, "_kv_cache_config", None)
+         # Must precede both group-info creation and transfer registration so
+         # they see the same edited views.
+-        layout_hints = vllm_layout_hints()
++        layout_hints = vllm_layout_hints(self._vllm_config)
+         kv_caches = apply_kv_cache_group_edits(
+             kv_cache_config, kv_caches, layout_hints=layout_hints
+         )
+@@ -1025,22 +1025,31 @@ def take_events(self) -> Iterable["KVCacheEvent"]:
+ 
+     @classmethod
+     def get_required_kvcache_layout(cls, vllm_config: "VllmConfig") -> str | None:
+-        """
+-        Get the required KV cache layout for this connector.
++        """Return LMCache's preferred KV cache layout.
++
++        Mirrors ``NixlConnector``: prefer the head-contiguous layout for
++        non-MLA models and defer for MLA, where the layout is immaterial
++        (single latent head). A preference only fills the resolution slot
++        below backend-required and ``VLLM_KV_CACHE_LAYOUT``; layouts forced
++        past it are still validated at registration by
++        ``normalize_kv_layout``.
++
+         Args:
+             vllm_config (VllmConfig): the vllm config.
+ 
+         Returns:
+-            str: the required KV cache layout. e.g. HND, or NHD.
+-            None if the connector does not require a specific layout.
++            The preferred layout name, or None to defer to vLLM.
+         """
+-
+-        if cls is KVConnectorBase_V1:
+-            raise TypeError(
+-                "get_required_kvcache_layout should not be called "
+-                "on the abstract base class"
+-            )
+-        return None
++        model_config = getattr(vllm_config, "model_config", None)
++        if model_config is None or model_config.use_mla:
++            return None
++        if not hasattr(vllm_config.cache_config, "kv_cache_layout"):
++            return "HND"
++        # Must be string-identical to NixlConnector's preference:
++        # MultiConnector rejects two distinct non-None strings even when
++        # they alias the same layout, and LMCache+NIXL is the common PD
++        # pairing.
++        return "LBHNC"
+ 
+     def get_finished_count(self) -> int | None:
+         """
+diff --git a/lmcache/integration/vllm/utils.py b/lmcache/integration/vllm/utils.py
+index 262159efd53..dd07989d774 100644
+--- a/lmcache/integration/vllm/utils.py
++++ b/lmcache/integration/vllm/utils.py
+@@ -36,34 +36,78 @@ def is_false(value: str) -> bool:
+     return value.lower() in ("false", "0", "no", "n", "off")
+ 
+ 
+-def vllm_layout_hints() -> "LayoutHints":
++def vllm_layout_hints(vllm_config: "VllmConfig | None" = None) -> "LayoutHints":
+     """Build layout_hints dict by querying vLLM at runtime."""
+     hints: dict[str, str] = {}
+-    kv_layout = try_get_vllm_kv_cache_layout()
++    kv_layout = try_get_vllm_kv_cache_layout(vllm_config)
+     if kv_layout is not None:
+         hints["kv_layout"] = kv_layout
+     return hints  # type: ignore[return-value]
+ 
+ 
+-def try_get_vllm_kv_cache_layout() -> Literal["NHD", "HND"] | None:
+-    """Try to query the KV cache layout from vLLM at runtime.
++_VLLM_KV_LAYOUT_ALIASES = {"LBNHC": "NHD", "LBHNC": "HND"}
++_UNSUPPORTED_VLLM_KV_LAYOUTS = frozenset({"LHBNC", "BLHNC", "BLNHC", "BHLNC"})
++_KNOWN_VLLM_KV_LAYOUTS = (
++    "NHD",
++    "HND",
++    "LBNHC",
++    "LBHNC",
++    "LHBNC",
++    "BLHNC",
++    "BLNHC",
++    "BHLNC",
++)
++
++
++def translate_vllm_kv_cache_layout(kv_cache_layout: str) -> Literal["NHD", "HND"]:
++    """Translate a vLLM ``KVCacheLayout`` name to the ``kv_layout`` hint.
++
++    ``LayoutHints.kv_layout`` is strictly ``NHD``/``HND``; engine KV formats
++    live in ``EngineKVFormat``. The layer-compact standardized layouts map
++    onto that pair, the rest cannot be expressed yet.
++
++    Raises:
++        NotImplementedError: for standardized layouts LMCache cannot
++            transfer yet. Registration must fail here -- treating them as
++            NHD/HND would silently corrupt the cache.
++        ValueError: for names that are not vLLM KV cache layouts at all.
++    """
++    translated = _VLLM_KV_LAYOUT_ALIASES.get(kv_cache_layout, kv_cache_layout)
++    if translated in ("NHD", "HND"):
++        return translated  # type: ignore[return-value]
++    if translated in _UNSUPPORTED_VLLM_KV_LAYOUTS:
++        raise NotImplementedError(
++            f"LMCache does not support the {kv_cache_layout!r} KV cache layout yet. "
++            "If it was selected via VLLM_KV_CACHE_LAYOUT, set LBNHC or LBHNC "
++            "instead; if the attention backend requires it (e.g. DeepSeek V4 "
++            "requires BLHNC), LMCache cannot cache this model yet."
++        )
++    raise ValueError(
++        f"Unknown KV cache layout {kv_cache_layout!r}; expected one of "
++        f"{', '.join(_KNOWN_VLLM_KV_LAYOUTS)}."
++    )
+ 
+-    Returns ``"NHD"`` or ``"HND"`` if vLLM is available and the layout
+-    has been configured, otherwise ``None``.
+ 
+-    Please only call this where vllm is available (i.e. not in the MP server)
+-    We will print an error if we try to get vllm kv layout where vllm
+-    is not available.
+-    """
++def try_get_vllm_kv_cache_layout(
++    vllm_config: "VllmConfig | None" = None,
++) -> Literal["NHD", "HND"] | None:
++    """Query vLLM's resolved KV cache layout, normalized to ``NHD``/``HND``.
+ 
+-    # Third Party
++    Returns ``None`` when vLLM is unavailable (i.e. the MP server) or the
++    layout has not been resolved yet.
++
++    Raises:
++        NotImplementedError: if vLLM resolved a standardized layout LMCache
++            cannot transfer yet. Registration must fail here -- falling back
++            to a guessed layout would silently corrupt the cache.
++    """
+     try:
+-        # Third Party
+-        from vllm.v1.attention.backends.utils import (  # type: ignore[import-untyped]
+-            get_kv_cache_layout,
+-        )
++        if vllm_config is None:
++            # Third Party
++            from vllm.config import get_current_vllm_config
+ 
+-        return get_kv_cache_layout()
++            vllm_config = get_current_vllm_config()
++        cache_config = vllm_config.cache_config
+     except Exception:
+         logger.error(
+             "vLLM is not available but tried to query kv cache "
+@@ -71,6 +115,28 @@ def try_get_vllm_kv_cache_layout() -> Literal["NHD", "HND"] | None:
+         )
+         return None
+ 
++    # vllm#51718 and later: the engine core resolves the layout once into
++    # CacheConfig, and the attention-backend query below no longer exists.
++    if hasattr(cache_config, "kv_cache_layout"):
++        kv_layout = cache_config.kv_cache_layout
++        if kv_layout is None:
++            logger.warning(
++                "vLLM has not resolved a KV cache layout yet; "
++                "skipping the kv_layout hint"
++            )
++            return None
++        return translate_vllm_kv_cache_layout(kv_layout)
++
++    try:
++        # Third Party
++        from vllm.v1.attention.backends.utils import (  # type: ignore[import-untyped]
++            get_kv_cache_layout,
++        )
++    except Exception:
++        logger.error("Could not query the KV cache layout from this vLLM version")
++        return None
++    return translate_vllm_kv_cache_layout(get_kv_cache_layout())
++
+ 
+ def lmcache_get_or_create_config() -> LMCacheEngineConfig:
+     """Get the LMCache configuration from the environment variable
+diff --git a/lmcache/integration/vllm/vllm_service_factory.py b/lmcache/integration/vllm/vllm_service_factory.py
+index 8ca487f4c5a..3ffc93441c4 100644
+--- a/lmcache/integration/vllm/vllm_service_factory.py
++++ b/lmcache/integration/vllm/vllm_service_factory.py
+@@ -204,7 +204,7 @@ def get_or_create_lmcache_engine(self) -> Optional[LMCacheEngine]:
+                 self.lmcache_config,
+                 self.metadata,
+                 EngineType.VLLM,
+-                layout_hints=vllm_layout_hints(),
++                layout_hints=vllm_layout_hints(self.vllm_config),
+             )
+ 
+         engine = LMCacheEngineBuilder.get_or_create(
+diff --git a/lmcache/v1/gpu_connector/kv_format/detectors/vllm.py b/lmcache/v1/gpu_connector/kv_format/detectors/vllm.py
+index 25fa66bb068..67bc236704d 100644
+--- a/lmcache/v1/gpu_connector/kv_format/detectors/vllm.py
++++ b/lmcache/v1/gpu_connector/kv_format/detectors/vllm.py
+@@ -25,7 +25,14 @@ def resolve_vllm_kv_layout(
+     """Resolve vLLM's KV layout from engine hints and backend behavior."""
+     if cpu_attention_backend:
+         return "HND"
+-    return layout_hints.get("kv_layout", "NHD")
++    kv_layout = layout_hints.get("kv_layout", "NHD")
++    if kv_layout not in ("NHD", "HND"):
++        raise ValueError(
++            f"kv_layout hint must be 'NHD' or 'HND', got {kv_layout!r}; "
++            "engine adapters translate engine-specific layout names "
++            "before sending hints."
++        )
++    return kv_layout
+ 
+ 
+ class VLLM_Detector(EngineDetector):

@@ -336,6 +336,31 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     # Do not re-add a layout shim; it lets LMCache past a check that is
     # correctly stopping it and risks mis-viewing KV rather than failing.
 
+    # LMCache/LMCache#4729 "Restore vLLM KV cache layout discovery after
+    # vllm#51718". #51718 removed vllm.v1.attention.backends.utils.
+    # get_kv_cache_layout, which this integration imported; without the PR the
+    # kv_layout hint silently vanishes and registration dies with
+    # "Unsupported kv_layout: none". The PR reads the layout from its
+    # post-#51718 home (CacheConfig.kv_cache_layout) and translates
+    # LBNHC->NHD / LBHNC->HND, raising NotImplementedError on the four layouts
+    # LMCache cannot transfer rather than guessing.
+    #
+    # Applied as a patch because the PR is still OPEN, so no wheel carries it.
+    # Drop this once it lands in a nightly-rocm build.
+    LMC_PATCH="$(cd "$(dirname "$0")" && pwd)/k3_patches/lmcache_pr4729_kv_layout.patch"
+    LMC_SITE=$(python3 -c 'import lmcache,os;print(os.path.dirname(os.path.dirname(lmcache.__file__)))')
+    echo "Applying LMCache #4729 from $LMC_PATCH into $LMC_SITE"
+    ( cd "$LMC_SITE" && patch -p1 --forward --batch < "$LMC_PATCH" ) || true
+    # Fail closed: without the discovery fix the run dies ~40 min later at KV
+    # registration, so assert the symbol is present before serving.
+    python3 - <<'PYLMC' || exit 1
+import sys
+from lmcache.integration.vllm import utils as u
+ok = hasattr(u, "translate_vllm_kv_cache_layout")
+print(f"LMCache #4729 check: translate_vllm_kv_cache_layout present={ok}")
+sys.exit(0 if ok else 1)
+PYLMC
+
     python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null
     # Assert rather than trust: KV_OFFLOAD_BACKEND_METADATA reports a version
     # into the aggregated result, and a silent mismatch there mislabels the run.
