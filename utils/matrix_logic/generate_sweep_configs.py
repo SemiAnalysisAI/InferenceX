@@ -94,8 +94,8 @@ def _hardware_family(label: str) -> str:
 def scheduling_gpus_per_node(label: str, runner_data: dict) -> int:
     """Resolve GPUs per node for an abstract runner or worker hardware label.
 
-    Scheduling labels such as ``b200-multinode`` do not currently duplicate
-    the hardware facts stored under ``cluster:b200-dgxc``. Fall back to the
+    Legacy scheduling labels may not duplicate the hardware facts stored under
+    their canonical ``cluster:`` label. Fall back to the
     GPU family when the exact label has no hardware record, while rejecting
     ambiguous families that disagree about node shape.
     """
