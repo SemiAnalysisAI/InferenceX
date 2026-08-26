@@ -20,7 +20,8 @@ check_env_vars \
 
 export QWEN38_SCENARIO=agentic-coding
 export SCENARIO_TYPE=agentic-coding
-export MODEL_PATH=/models/Qwen/Qwen3.8-2.4T-A95B-FP8
+# shellcheck source=benchmarks/multi_node/qwen3.8_vllm_multi_nodes/qwen3.8_env.sh
+source "$GITHUB_WORKSPACE/benchmarks/multi_node/qwen3.8_vllm_multi_nodes/qwen3.8_env.sh"
 export TIME_LIMIT="${TIME_LIMIT:-12:00:00}"
 
 JOB_ID=$(

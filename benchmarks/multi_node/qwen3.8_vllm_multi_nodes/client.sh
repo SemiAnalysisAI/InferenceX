@@ -4,7 +4,9 @@ set -x
 
 SCENARIO="${1:?usage: client.sh agentic-coding}"
 INFMAX_CONTAINER_WORKSPACE="${INFMAX_CONTAINER_WORKSPACE:-/workspace}"
-MODEL_PATH="${MODEL_PATH:-/models/Qwen/Qwen3.8-2.4T-A95B-FP8}"
+RUNTIME_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=benchmarks/multi_node/qwen3.8_vllm_multi_nodes/qwen3.8_env.sh
+source "$RUNTIME_DIR/qwen3.8_env.sh"
 PORT="${PORT:-8000}"
 
 source "$INFMAX_CONTAINER_WORKSPACE/benchmarks/benchmark_lib.sh"

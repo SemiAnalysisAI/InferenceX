@@ -6,7 +6,9 @@ ROLE="${2:?role is required}"
 NODE_IP="${3:?node IP is required}"
 HEAD_IP="${4:?head IP is required}"
 
-MODEL_PATH="${MODEL_PATH:-/models/Qwen/Qwen3.8-2.4T-A95B-FP8}"
+RUNTIME_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=benchmarks/multi_node/qwen3.8_vllm_multi_nodes/qwen3.8_env.sh
+source "$RUNTIME_DIR/qwen3.8_env.sh"
 IMAGE="${IMAGE:-vllm/vllm-openai-rocm:qwen38}"
 GITHUB_WORKSPACE="${GITHUB_WORKSPACE:?GITHUB_WORKSPACE must be set}"
 JOB_LOG_DIR="${JOB_LOG_DIR:?JOB_LOG_DIR must be set}"
@@ -164,7 +166,7 @@ if len(alive) != 2 or gpus != 16:
             "
         ;;
     vllm-running)
-        container_exec pgrep -f 'vllm serve.*/models/Qwen/Qwen3.8-2.4T-A95B-FP8' >/dev/null
+        container_exec pgrep -f "vllm serve.*${MODEL_PATH}" >/dev/null
         ;;
     run-client)
         container_exec \

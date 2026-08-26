@@ -9,7 +9,8 @@ set -euo pipefail
 : "${SCENARIO_TYPE:?SCENARIO_TYPE must be set}"
 
 RUNTIME_DIR="$GITHUB_WORKSPACE/benchmarks/multi_node/qwen3.8_vllm_multi_nodes"
-MODEL_PATH="/models/Qwen/Qwen3.8-2.4T-A95B-FP8"
+# shellcheck source=benchmarks/multi_node/qwen3.8_vllm_multi_nodes/qwen3.8_env.sh
+source "$RUNTIME_DIR/qwen3.8_env.sh"
 JOB_LOG_DIR="$BENCHMARK_LOGS_DIR/logs/slurm_job-${SLURM_JOB_ID}"
 SERVER_READY_TIMEOUT="${VLLM_ENGINE_READY_TIMEOUT_S:-10800}"
 
@@ -57,8 +58,15 @@ echo "Assigned Qwen3.8 Ray worker: $WORKER_NODE ($WORKER_IP)"
 
 manifest_for_node() {
     local node="$1"
-    run_on_node "$node" \
-        python3 "$RUNTIME_DIR/snapshot_manifest.py" "$MODEL_PATH"
+    local manifest
+    if ! manifest="$(run_on_node "$node" \
+        python3 "$RUNTIME_DIR/snapshot_manifest.py" "$MODEL_PATH" 2>&1)"; then
+        echo "ERROR: Qwen3.8 snapshot check failed on $node for $MODEL_PATH" >&2
+        echo "$manifest" >&2
+        echo "Run verify_model_staging.sh and see benchmarks/multi_node/qwen3.8_vllm_multi_nodes/README.md" >&2
+        exit 1
+    fi
+    printf '%s' "$manifest"
 }
 
 HEAD_MANIFEST="$(manifest_for_node "$HEAD_NODE")"

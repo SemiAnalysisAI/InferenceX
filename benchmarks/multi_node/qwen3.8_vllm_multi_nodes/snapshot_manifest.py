@@ -31,7 +31,12 @@ def main() -> int:
     )
 
     if not model_path.is_dir():
-        raise SystemExit(f"model directory does not exist: {model_path}")
+        raise SystemExit(
+            "model directory does not exist: "
+            f"{model_path}\n"
+            "Stage Qwen/Qwen3.8-2.4T-A95B-FP8 on this node and run "
+            "benchmarks/multi_node/qwen3.8_vllm_multi_nodes/verify_model_staging.sh"
+        )
     for path in required_metadata:
         if not path.is_file():
             raise SystemExit(f"required model file does not exist: {path}")
