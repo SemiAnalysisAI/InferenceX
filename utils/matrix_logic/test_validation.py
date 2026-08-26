@@ -190,7 +190,7 @@ def valid_runner_config():
     return {
         "labels": {
             "h100": ["h100-cr_0", "h100-cr_1", "h100-cw_0", "h100-cw_1"],
-            "h200": ["h200-cw_0", "h200-cw_1", "h200-nb_0", "h200-nb_1"],
+            "h200": ["h200-cw_0", "h200-cw_1"],
             "b200": ["b200-nvd_0", "b200-nvd_1", "b200-dgxc_1"],
             "cluster:b200-dgxc": ["b200-dgxc_1"],
             "mi300x": ["mi300x-amd_0", "mi300x-amd_1", "mi300x-cr_0"],
