@@ -4904,7 +4904,7 @@
     - "Add the multi-node agentic runtime plumbing: node-0 sibling benchmark-client container, per-worker metrics scrape, per-concurrency cache flushing, trace replay client, and one allocation per concurrency."
     - "Image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260710"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2170
- 
+
 - config-keys:
     - dsv4-fp4-b200-vllm-agentic
   description:
