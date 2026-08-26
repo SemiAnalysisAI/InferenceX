@@ -92,15 +92,6 @@ DCP_SIZE="${DCP_SIZE:-1}"
 export DCP_SIZE
 
 # ---- In-container patches ----------------------------------------------------
-# Four fixes, all confined to this container's site-packages, all idempotent
-# and all self-disabling once the image ships them:
-#   [1] aiter pybind11 internals mismatch  -> unblocks ROCM_AITER_FA prefill
-#   [2] TritonMLA cudagraph support        -> FULL cudagraphs for DSpark (5.52x TPOT)
-#   [3] KV block-pool negative-count clamp -> stops the mid-run engine crash
-#   [4] vllm#51705                         -> DSpark under DCP (DCP_SIZE>1 only)
-# Set SKIP_KIMI_PATCHES=1 to run stock.
-bash "$(dirname "$0")/apply_k3_container_patches.sh" || true
-
 # ---- Out-of-tree overlay -----------------------------------------------------
 # A unified diff of merged upstream PRs dropped into site-packages, for images
 # newer than the ones k3_patches/ targets. Currently vllm#51705 (DSpark under
@@ -117,16 +108,37 @@ bash "$(dirname "$0")/apply_k3_container_patches.sh" || true
 # running image. That keeps every older cell on its existing patch path instead
 # of hard-failing them, while a matching image gets the overlay with no config
 # plumbing. `patch --forward` makes it idempotent.
+K3_OVERLAY_APPLIED=0
 K3_OVERLAY_PATCH="${K3_OVERLAY_PATCH:-$(dirname "$0")/k3_patches/vllm_nightly_a9a17e70_3pr.patch}"
 if [ -f "$K3_OVERLAY_PATCH" ]; then
     SITE_PKGS=$(python3 -c 'import vllm,os;print(os.path.dirname(os.path.dirname(vllm.__file__)))')
     if ( cd "$SITE_PKGS" && patch -p1 --forward --batch --dry-run < "$K3_OVERLAY_PATCH" ) >/dev/null 2>&1; then
         echo "Applying K3 overlay $K3_OVERLAY_PATCH into $SITE_PKGS"
         ( cd "$SITE_PKGS" && patch -p1 --forward --batch < "$K3_OVERLAY_PATCH" ) || true
+        K3_OVERLAY_APPLIED=1
     else
         echo "K3 overlay does not match this image, skipping: $K3_OVERLAY_PATCH"
     fi
 fi
+
+# ---- In-container patches ----------------------------------------------------
+# Four fixes, all confined to this container's site-packages, all idempotent
+# and all self-disabling once the image ships them:
+#   [1] aiter pybind11 internals mismatch  -> unblocks ROCM_AITER_FA prefill
+#   [2] TritonMLA cudagraph support        -> FULL cudagraphs for DSpark (5.52x TPOT)
+#   [3] KV block-pool negative-count clamp -> stops the mid-run engine crash
+#   [4] vllm#51705                         -> DSpark under DCP (DCP_SIZE>1 only)
+# Set SKIP_KIMI_PATCHES=1 to run stock.
+#
+# The legacy patch script edits triton_mla.py and single_type_kv_cache_manager.py,
+# two of the files the overlay also carries. Running it first shifts their
+# context so the overlay no longer applies and #51705 is silently lost, so the
+# overlay goes first and supersedes the script when it lands.
+if [ "$K3_OVERLAY_APPLIED" = "1" ]; then
+    SKIP_KIMI_PATCHES=1
+    export SKIP_KIMI_PATCHES
+fi
+bash "$(dirname "$0")/apply_k3_container_patches.sh" || true
 
 # Fail closed. vLLM ACCEPTS dcp>1 with dspark and only dies later at model init,
 # so a clean startup banner is not evidence DCP works -- assert the capability
@@ -153,6 +165,13 @@ export VLLM_ROCM_AITER_MLA_ASM_PADDING=asm
 export VLLM_ROCM_USE_AITER=1
 export SAFETENSORS_FAST_GPU=1
 export VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4=1
+# BOTH names. vllm#50582 renamed the vLLM-side flag with no back-compat alias,
+# but aiter still reads the old one (aiter/fused_moe.py defaults it to "0").
+# Setting only one makes vLLM shuffle w13 for one gate mode while aiter runs
+# the kernels for the other: gsm8k 0.00 instead of 1.00, with no other symptom.
+# An agentic cell CANNOT detect this -- DSpark runs synthetic acceptance here,
+# so the accept rate is a supplied constant, not a measurement.
+export AITER_SITUV2_A8W4=1
 export AITER_BF16_FP8_MOE_BOUND=0
 # REQUIRED on ROCm per the upstream recipe: the build auto-enables this to 1.
 export VLLM_USE_BREAKABLE_CUDAGRAPH=0
