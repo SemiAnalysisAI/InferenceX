@@ -6429,6 +6429,44 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2701
 
 - config-keys:
+    - dsv4-fp4-gb200-dynamo-sglang
+    - dsv4-fp4-gb200-dynamo-sglang-mtp
+    - dsv4-fp4-gb300-dynamo-sglang
+    - dsv4-fp4-gb300-dynamo-sglang-mtp
+    - qwen3.5-fp4-gb300-dynamo-sglang
+    - qwen3.5-fp8-gb200-dynamo-sglang
+    - qwen3.5-fp8-gb200-dynamo-sglang-mtp
+    - qwen3.5-fp8-gb300-dynamo-sglang
+    - qwen3.5-fp8-gb300-dynamo-sglang-mtp
+  description:
+    - "Enable dcgm-power telemetry on the 51 remaining eligible GB200 and GB300 recipes, covering all 59 eligible recipes."
+    - "Mark telemetry required on every eligible recipe now that both the GB200 and GB300 pools are available, and leave the 2 dedicated-infra recipes disabled."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2687
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add four proven GB300 AgentX P/D points: c4, c128, c256, and c512."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2665
+  append-only: true
+  
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-agg
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Tune the GB300 SGLang AgentX aggregate low-concurrency frontier with TP8 concurrency 1/4 and TP4 concurrency 8 profiles."
+    - "Update the aggregate and disaggregated configurations to SGLang nightly-dev-cu13-20260821-f825d729 and the Dynamo 1.4.0 release."
+    - "Use phase-specific decode CUDA graph limits and throughput-only synthetic MTP acceptance; eval-only runs retain real target verification."
+    - "Use an eight-hour DSV4 AgentX allocation and pass the configured GB300 Slurm account to image-validation steps."
+    - "Warm the aggregate low-latency profiles with the standard ten requests per trajectory lane instead of one, so they enter the profiling window from the same live state as every other AgentX recipe."
+    - "Reduce the concurrency-1536 disaggregated topology from six to five DEP8 prefill workers while retaining one DEP16 decode worker."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2644
+
+- config-keys:
     - qwen3.5-fp4-mi355x-sglang
     - qwen3.5-fp4-mi355x-sglang-mtp
   scenario-type:
