@@ -14,6 +14,8 @@
 
 SLURM_PARTITION="batch_1"
 SLURM_ACCOUNT="benchmark"
+POWER_SRT_SLURM_URL="https://github.com/edwingao28/srt-slurm.git"
+POWER_SRT_SLURM_PIN="e5c837f06a362dc888dfea2ee588e9f19c298270"
 
 # Node-local NVMe, not a shared filesystem: much faster for the ~1.6T
 # DeepSeek-V4-Pro load, and already pre-staged on every nscale compute node.
@@ -59,12 +61,55 @@ if [[ $FRAMEWORK != "dynamo-vllm" ]] &&
     exit 1
 fi
 
+USES_DCGM_POWER=0
+_POWER_CONFIG_FILE="${CONFIG_FILE:-}"
+if [[ "${EVAL_ONLY:-false}" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
+    _POWER_CONFIG_FILE="$EVAL_CONFIG_FILE"
+fi
+_RECIPE_REL="${_POWER_CONFIG_FILE%%:*}"
+_RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/${_RECIPE_REL#recipes/}"
+if [[ -n "$_POWER_CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
+    /^telemetry:/ { t = 1; next }
+    t && /^[^ ]/  { t = 0 }
+    t && /^  provider: dcgm-power$/ { p = 1 }
+    t && /^  enabled: true$/        { e = 1 }
+    END { exit !(p && e) }
+' "$_RECIPE_SRC"; then
+    USES_DCGM_POWER=1
+fi
+if [[ "$USES_DCGM_POWER" == "1" && (
+    "${IS_AGENTIC:-0}" == "1" ||
+    "$PRECISION" != "fp4" ||
+    ( "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" != "dynamo-sglang" && "$FRAMEWORK" != "dynamo-vllm" ) ||
+    ( "$MODEL_PREFIX" == "kimik2.6" && "$FRAMEWORK" != "dynamo-vllm" ) ||
+    ( "$MODEL_PREFIX" != "dsv4" && "$MODEL_PREFIX" != "kimik2.6" )
+) ]]; then
+    echo "Error: B200 nscale dcgm-power is limited to fixed-sequence DSV4/Kimi-K2.6 FP4 lanes" >&2
+    exit 1
+fi
+
 export SERVED_MODEL_NAME=$MODEL
 
 echo "Cloning srt-slurm repository..."
 SRT_REPO_DIR="srt-slurm"
 rm -rf "$SRT_REPO_DIR"
-if [[ "$IS_AGENTIC" == "1" && $MODEL_PREFIX == "kimik3" ]]; then
+if [[ "$USES_DCGM_POWER" == "1" ]]; then
+    git clone "$POWER_SRT_SLURM_URL" "$SRT_REPO_DIR" || exit 1
+    cd "$SRT_REPO_DIR" || exit 1
+    git checkout "$POWER_SRT_SLURM_PIN" || exit 1
+    test "$(git rev-parse HEAD)" = "$POWER_SRT_SLURM_PIN" || { echo "Error: srt-slurm HEAD does not match POWER_SRT_SLURM_PIN=$POWER_SRT_SLURM_PIN" >&2; exit 1; }
+    git rev-parse HEAD > "$GITHUB_WORKSPACE/power-producer-sha.txt"
+    if [[ "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
+        mkdir -p recipes/sglang/deepseek-v4
+        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4" recipes/sglang/deepseek-v4
+    elif [[ "$MODEL_PREFIX" == "dsv4" ]]; then
+        mkdir -p recipes/vllm/deepseek-v4
+        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
+    else
+        mkdir -p recipes/vllm/kimi-k2.6
+        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k2.6" recipes/vllm/kimi-k2.6
+    fi
+elif [[ "$IS_AGENTIC" == "1" && $MODEL_PREFIX == "kimik3" ]]; then
     # Pin the tested renderer so branch movement cannot change generated rank
     # commands between sweep points.
     git clone --branch main --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
@@ -149,6 +194,17 @@ import_squash() {
 import_squash "$SQUASH_FILE" "$IMAGE" || exit 1
 import_squash "$NGINX_SQUASH_FILE" "$NGINX_IMAGE" || exit 1
 
+if [[ "$USES_DCGM_POWER" == "1" ]]; then
+    DCGM_EXPORTER_IMAGE="nvcr.io/nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless"
+    # enroot resolves bare paths against Docker Hub; nvcr.io pulls need the registry# form
+    DCGM_EXPORTER_ENROOT_REF="${DCGM_EXPORTER_IMAGE/nvcr.io\//nvcr.io#}"
+    DCGM_EXPORTER_SQSH="$SQUASH_DIR/$(echo "$DCGM_EXPORTER_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    import_squash "$DCGM_EXPORTER_SQSH" "$DCGM_EXPORTER_ENROOT_REF" || exit 1
+    test -r "$DCGM_EXPORTER_SQSH" || { echo "Error: DCGM exporter squash not readable: $DCGM_EXPORTER_SQSH" >&2; exit 1; }
+    unsquashfs -l "$DCGM_EXPORTER_SQSH" > /dev/null || { echo "Error: DCGM exporter squash invalid: $DCGM_EXPORTER_SQSH" >&2; exit 1; }
+    sha256sum "$DCGM_EXPORTER_SQSH" > "$GITHUB_WORKSPACE/exporter-image.sha256"
+fi
+
 export ISL="$ISL"
 export OSL="$OSL"
 export EVAL_ONLY="${EVAL_ONLY:-false}"
@@ -193,6 +249,11 @@ use_exclusive_sbatch_directive: true
 ${DEFAULT_MOUNTS_BLOCK}
 EOF
 
+if [[ "$USES_DCGM_POWER" == "1" ]]; then
+    sed -i "/^  nginx-sqsh:/a\\  dcgm-exporter: ${DCGM_EXPORTER_SQSH}" srtslurm.yaml
+    grep -q "^  dcgm-exporter: " srtslurm.yaml || { echo "Error: dcgm-exporter injection failed: nginx-sqsh anchor not found in srtslurm.yaml" >&2; exit 1; }
+fi
+
 echo "Generated srtslurm.yaml:"
 cat srtslurm.yaml
 
@@ -235,7 +296,7 @@ SRTCTL_PREFLIGHT_ARGS=()
 # These weights are staged on the Slurm compute nodes, not the login node.
 if [[ $MODEL_PREFIX == "kimik2.6" ]] ||
    [[ $MODEL_PREFIX == "kimik3" ]] ||
-   [[ $MODEL_PREFIX == "dsv4" && $FRAMEWORK == "dynamo-sglang" ]]; then
+   [[ $MODEL_PREFIX == "dsv4" ]]; then
     SRTCTL_PREFLIGHT_ARGS+=(--no-preflight)
 fi
 
@@ -268,6 +329,12 @@ echo "Collecting results..."
 if [ ! -d "$LOGS_DIR" ]; then
     echo "Warning: Logs directory not found at $LOGS_DIR" >&2
     exit 1
+fi
+
+if [[ "$USES_DCGM_POWER" == "1" ]]; then
+    mkdir -p "$LOGS_DIR/power"
+    cp "$GITHUB_WORKSPACE/exporter-image.sha256" "$LOGS_DIR/power/exporter-image.sha256"
+    cp "$GITHUB_WORKSPACE/power-producer-sha.txt" "$LOGS_DIR/power/power-producer-sha.txt"
 fi
 
 cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
