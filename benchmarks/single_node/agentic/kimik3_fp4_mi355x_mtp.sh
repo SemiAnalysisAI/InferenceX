@@ -37,7 +37,7 @@ set -x
 #   AITER_A8W4               1      (reference; 0 = aiter a16w4 MoE path)
 #   LANGUAGE_MODEL_ONLY      true   
 #   KV_CACHE_DTYPE           fp8    (default for every arm; =auto for a bf16 A/B)
-#   KV_BLOCK_SIZE            unset  (unset -> vLLM sizes the page; 128 under fp8)
+#   KV_BLOCK_SIZE            unset  (unset -> 4608 on offloaded cells, else vLLM sizes it)
 #   MAX_MODEL_LEN            1M     
 #   SPEC_DECODE              true   (this is the _mtp DSpark recipe; =false for a no-spec A/B)
 #   SPEC_NUM_TOKENS          2      (DSpark draft length; validated by the _mtp config)
@@ -387,23 +387,35 @@ if [ "$DCP_SIZE" -gt 1 ]; then
     )
 fi
 
-# ---- Mamba block size --------------------------------------------------------
-# K3's KDA layers make this a Mamba-hybrid, and the scheduler block size is
-# lcm(attention block, mamba block). With an external KV connector attached,
-# LMCache's validate_mamba_step_alignment() demands
+# ---- KV page size ------------------------------------------------------------
+# K3 is a Mamba-hybrid (the KDA linear-attention layers), and attaching ANY KV
+# connector makes LMCache's validate_mamba_step_alignment() require
 #   block_size <= max_num_batched_tokens < 2 * block_size
-# (mamba_cache_mode=align snapshots recurrent state only at step end, so a step
-# advancing more than one block would store null-block garbage under a valid
-# key). The auto-derived block size is 1536, which would force
-# max-num-batched-tokens down to 1536 and gut prefill TTFT. Raising the mamba
-# block instead lifts the whole window: lcm(64, 8192) = 8192, so 8192 batched
-# tokens is legal again. Only needed on the offloaded cells.
-# Defaulted, not just honoured: the constraint is a property of (mamba-hybrid +
-# KV connector), so any offloaded cell needs it and no search-space field
-# expresses it. kvnone cells keep vLLM's auto-derived block size.
-if [ -z "${MAMBA_BLOCK_SIZE:-}" ] && agentic_kv_offload_enabled; then
-    MAMBA_BLOCK_SIZE=8192
+# so every prefill step crosses exactly one block boundary and each boundary
+# gets a recurrent-state snapshot (mamba_cache_mode=align only snapshots at
+# step end, so a step spanning two blocks would store null-block garbage under
+# a valid token hash and corrupt anything resuming from that prefix).
+#
+# The block_size it reads is cache_config.block_size -- the ATTENTION KV page,
+# NOT the scheduler block that --mamba-block-size feeds. vLLM auto-sizes that
+# page to 1536 here, whose legal window [1536, 3072) excludes the 8192 batch
+# this recipe wants, and no mamba-side knob can move it.
+#
+# So set the page instead. 4608 = 3 * 1536 keeps it an exact multiple of the
+# size vLLM picked for itself, and its window [4608, 9216) contains 8192.
+# kvnone cells are unaffected: no connector, no constraint, no override.
+KV_BLOCK_SIZE="${KV_BLOCK_SIZE:-}"
+if [ -z "$KV_BLOCK_SIZE" ] && agentic_kv_offload_enabled; then
+    KV_BLOCK_SIZE=4608
 fi
+KV_BLOCK_ARGS=()
+if [ -n "$KV_BLOCK_SIZE" ]; then
+    KV_BLOCK_ARGS=(--block-size "$KV_BLOCK_SIZE")
+fi
+
+# Optional, unset by default. Feeds the scheduler block via
+# lcm(attention_block * dcp, mamba_block); forcing it interacts badly with a
+# non-power-of-two page, so leave vLLM to size it unless deliberately sweeping.
 MAMBA_BLOCK_ARGS=()
 if [ -n "${MAMBA_BLOCK_SIZE:-}" ]; then
     MAMBA_BLOCK_ARGS=(--mamba-block-size "$MAMBA_BLOCK_SIZE")
@@ -525,6 +537,7 @@ VLLM_CMD=(
     --enable-prefix-caching
     --kv-cache-dtype "fp8"
     --max-num-batched-tokens "${MAX_NUM_BATCHED_TOKENS:-8192}"
+    "${KV_BLOCK_ARGS[@]}"
     "${MAMBA_BLOCK_ARGS[@]}"
     "${ASYNC_SCHED_ARGS[@]}"
     "${MLA_PREFILL_ARGS[@]}"
