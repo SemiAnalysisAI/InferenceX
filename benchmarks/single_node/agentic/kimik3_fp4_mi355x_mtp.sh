@@ -248,14 +248,33 @@ case "${KV_OFFLOAD_BACKEND:-}" in
   lmcache)
     require_agentic_kv_offload_backend "$KV_OFFLOAD_BACKEND"
     # Ported from dsv4_fp4_mi355x_vllm_mtp.sh, minus its from-source LMCache
-    # build: the nightly-a9a17e70 image already ships lmcache 0.5.3 with
-    # lmcache.integration.vllm.lmcache_mp_connector. Pinning to whatever the
-    # image ships is also the only reproducible choice -- the nightly-rocm
-    # LMCache channel is a rolling window and old dev builds get pruned.
+    # build -- a released ROCm wheel is not a code fork, so install it rather
+    # than compiling. Same --find-links pattern the minimaxm3 recipes use.
+    #
+    # The image ships 0.5.3; LMCACHE_VERSION overrides it. Default is the
+    # nightly channel, which is the newest build but a ROLLING window: old dev
+    # builds get pruned within days, so an exact rerun of this cell may become
+    # unobtainable. Set LMCACHE_ROCM_TAG=v0.5.4rc4-rocm with the matching
+    # LMCACHE_VERSION for a pinnable tagged release instead.
     #
     # MP connector, not the in-engine LMCacheConnectorV1: the integrated one
     # faults at conc>=4 on ROCm with a GPU memory access fault.
+    LMCACHE_VERSION="${LMCACHE_VERSION:-0.5.5.dev19+rocm7.2}"
+    LMCACHE_ROCM_TAG="${LMCACHE_ROCM_TAG:-nightly-rocm}"
+    LMCACHE_ROCM_INDEX="https://github.com/LMCache/LMCache/releases/expanded_assets/${LMCACHE_ROCM_TAG}"
+    echo "Installing lmcache==${LMCACHE_VERSION} from ${LMCACHE_ROCM_TAG}"
+    pip install --no-cache-dir "lmcache==${LMCACHE_VERSION}" \
+        --find-links "$LMCACHE_ROCM_INDEX"
+
     python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null
+    # Assert rather than trust: KV_OFFLOAD_BACKEND_METADATA reports a version
+    # into the aggregated result, and a silent mismatch there mislabels the run.
+    python3 - "$LMCACHE_VERSION" <<'PYVER' || exit 1
+import sys, lmcache
+want, got = sys.argv[1], lmcache.__version__
+print(f"lmcache installed: {got} (requested {want})")
+sys.exit(0 if got.split("+")[0] == want.split("+")[0] else 1)
+PYVER
 
     LMCACHE_LOG="${LMCACHE_LOG:-$RESULT_DIR/lmcache.log}"
     LMCACHE_PID=""
