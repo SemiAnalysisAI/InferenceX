@@ -33,9 +33,6 @@ install_agentic_deps
 DCP_SIZE=8
 export DCP_SIZE
 
-export SKIP_PATCH_OPUS_ROWS=1
-bash "$(dirname "$0")/apply_kimi_k3_patches.sh" || true
-
 export VLLM_ROCM_AITER_MLA_ASM_PADDING=asm
 export VLLM_ROCM_USE_AITER=1
 export SAFETENSORS_FAST_GPU=1
