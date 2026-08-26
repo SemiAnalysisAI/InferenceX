@@ -35,11 +35,12 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     export SLURM_JOB_NAME="benchmark-sglang-disagg.job"
 
     export MODEL_NAME=${MODEL##*/}
-    export MODEL_PATH="/it-share/data"
     if [[ "$FRAMEWORK" == "vllm-multi-nodes" ]]; then
         # Qwen3.8 Ray runtime uses locally staged snapshots (default under /models).
         # shellcheck source=benchmarks/multi_node/qwen3.8_vllm_multi_nodes/qwen3.8_env.sh
         source "$GITHUB_WORKSPACE/benchmarks/multi_node/qwen3.8_vllm_multi_nodes/qwen3.8_env.sh"
+    else
+        export MODEL_PATH="/it-share/data"
     fi
     export IBDEVICES="rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7"
     export MORI_RDMA_TC=104
