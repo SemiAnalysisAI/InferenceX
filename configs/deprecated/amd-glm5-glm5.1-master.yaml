@@ -38,7 +38,7 @@ glm5-fp8-mi355x-sglang-disagg:
   image: lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260523
   model: zai-org/GLM-5-FP8
   model-prefix: glm5
-  runner: mi355x-disagg
+  runner: cluster:mi355x-amds
   precision: fp8
   framework: sglang-disagg
   router: { name: sglang-router, version: "0.3.2" }
@@ -157,4 +157,3 @@ glm5-fp8-mi325x-sglang-mtp:
 # to preserve main behavior; PR-branch modifications to those recipes are NOT
 # brought in here.
 # ============================================================================
-
