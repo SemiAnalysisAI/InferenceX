@@ -163,11 +163,11 @@ key off that name:
 
 - `slurm` indicates that the runner submits work through Slurm.
 - The SKU name (`b200`, `b300`, `h200`, `gb300`, …) provides coarse hardware targeting.
-- Exactly one `cluster:<name>` label, such as `cluster:b200-dgxc`, provides the required exact
+- Exactly one `cluster:<name>` label, such as `cluster:b200-nscale`, provides the required exact
   hardware/fleet identity for success-rate reporting and hardware-specific config.
   Every runner in the same physical cluster with identical hardware should use the same
   cluster label.
-- Optional capacity tags, such as `b200-dsv4` and `b300-p1`, carve out dedicated
+- Optional capacity tags, such as `b300-p1`, carve out dedicated
   benchmark subsets.
 
 The per-runner name label (`b300-nv_07`) is what `runs-on` resolves for sweep jobs, so
@@ -175,7 +175,7 @@ always keep it (the script appends it automatically). A typical registered runne
 up with labels like:
 
 ```
-self-hosted, Linux, X64, slurm, b200, b200-dsv4, cluster:b200-dgxc, b200-dgxc_00
+self-hosted, Linux, X64, slurm, b200-nscale, cluster:b200-nscale, b200-nscale-slurm_00
 ```
 
 Labels can be edited later on the runners settings page without re-registering.
@@ -253,12 +253,12 @@ The host side of each is defined in that cluster's `runners/launch_<cluster>.sh`
    each node downloads its own copy, so prefer shared storage where available).
 3. **Pre-staged model weights.** Large models are not downloaded from HF in CI. The
    launch scripts override `MODEL_PATH` to per-cluster staging directories
-   (e.g. `/lustre/fsw/models/...` on b200-dgxc, `/data/models/...` on b300,
+   (e.g. `/lustre/fsw/models/...` on b200-nscale, `/data/models/...` on b300,
    read-only `/scratch/models/` on b300 multinode). Bringing up a new model on a
    cluster means staging the weights there first.
 4. **Squash images.** Launch scripts `enroot import` each Docker image once into a
    `.sqsh` file under a shared `SQUASH_DIR` (e.g. `/home/sa-shared/containers` on
-   b200-dgxc, `/mnt/lustre01/users-public/sa-shared`
+   b200-nscale, `/mnt/lustre01/users-public/sa-shared`
    on gb200), then launch with `--container-image=<file>.sqsh`. This must be on shared
    storage because pyxis reads the file on the **compute** node, and it lets concurrent
    jobs reuse one import instead of each pulling the registry image. Note
