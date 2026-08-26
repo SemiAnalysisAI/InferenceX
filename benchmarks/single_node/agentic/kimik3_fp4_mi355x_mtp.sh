@@ -371,11 +371,19 @@ PYVER
     # is not a multiple of it, so the chunk follows the page. One chunk per
     # block is the finest legal granularity; anything smaller is rejected and
     # anything larger coarsens cache reuse for no gain.
-    LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-${KV_BLOCK_SIZE:-256}}"
-    if [ -n "${KV_BLOCK_SIZE:-}" ] && [ $((LMCACHE_CHUNK_SIZE % KV_BLOCK_SIZE)) -ne 0 ]; then
-        echo "Error: LMCACHE_CHUNK_SIZE=$LMCACHE_CHUNK_SIZE must be a multiple of block size $KV_BLOCK_SIZE" >&2
+    # The alignment is the page SCALED BY DCP -- under decode context
+    # parallelism each rank holds a 1/dcp slice, so a chunk has to cover a whole
+    # block across every rank. At page 4608 and dcp 8 that is 36864 tokens.
+    # This is also the floor: mnbt 8192 pins the page into (4096, 8192], so
+    # page*dcp cannot come out below ~32k however the page is chosen.
+    LMCACHE_BLOCK_ALIGN=$(( ${KV_BLOCK_SIZE:-256} * ${DCP_SIZE:-1} ))
+    LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-$LMCACHE_BLOCK_ALIGN}"
+    if [ $((LMCACHE_CHUNK_SIZE % LMCACHE_BLOCK_ALIGN)) -ne 0 ]; then
+        echo "Error: LMCACHE_CHUNK_SIZE=$LMCACHE_CHUNK_SIZE must be a multiple of" >&2
+        echo "       ${LMCACHE_BLOCK_ALIGN} (block ${KV_BLOCK_SIZE:-256} x dcp ${DCP_SIZE:-1})" >&2
         exit 1
     fi
+    echo "LMCache chunk ${LMCACHE_CHUNK_SIZE} (align ${LMCACHE_BLOCK_ALIGN} = block ${KV_BLOCK_SIZE:-256} x dcp ${DCP_SIZE:-1})"
     LMCACHE_MAX_WORKERS="${LMCACHE_MAX_WORKERS:-$TP}"
     # Without this, identical prompts hash differently per process and the hit
     # rate is silently 0. Must be set on BOTH the server and vllm serve.
