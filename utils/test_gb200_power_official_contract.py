@@ -87,11 +87,6 @@ def assert_pinned_clone_contract(launcher):
 
 def assert_exporter_provisioning(launcher):
     assert f'DCGM_EXPORTER_IMAGE="{EXPORTER_IMAGE}"' in launcher
-    assert (
-        'DCGM_EXPORTER_ENROOT_REF="${DCGM_EXPORTER_IMAGE/nvcr.io\\//nvcr.io#}"'
-        in launcher
-    )
-    assert 'import_squash "$DCGM_EXPORTER_SQSH" "$DCGM_EXPORTER_ENROOT_REF"' in launcher
     assert 'test -r "$DCGM_EXPORTER_SQSH"' in launcher
     assert (
         'sha256sum "$DCGM_EXPORTER_SQSH" > "$GITHUB_WORKSPACE/exporter-image.sha256"'
@@ -134,6 +129,11 @@ def test_launcher_detects_power_lane_from_recipe():
 def test_launcher_provisions_exporter_through_squash_dir_cache():
     launcher = GB200_LAUNCHER.read_text()
     assert_exporter_provisioning(launcher)
+    # import_squash routes through enroot_uri_for_image, which already emits
+    # the registry# form for nvcr.io refs — pass the plain image, not a
+    # pre-converted ref, or the helper double-parses it.
+    assert 'import_squash "$DCGM_EXPORTER_SQSH" "$DCGM_EXPORTER_IMAGE"' in launcher
+    assert 'enroot_uri=$(enroot_uri_for_image "$image")' in launcher
     assert 'DCGM_EXPORTER_SQSH="${SQUASH_DIR}/' in launcher
     assert 'unsquashfs -l "$DCGM_EXPORTER_SQSH"' in launcher
 

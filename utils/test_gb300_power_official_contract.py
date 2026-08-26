@@ -187,6 +187,14 @@ def test_launcher_detects_power_lane_from_recipe():
 def test_launcher_provisions_exporter_through_shared_squash_path():
     launcher = LAUNCHER_PATH.read_text()
     assert_exporter_provisioning(launcher)
+    # This import_squash passes docker://$image straight to enroot, which
+    # resolves bare paths against Docker Hub — the nvcr.io pull needs the
+    # pre-converted registry# ref.
+    assert (
+        'DCGM_EXPORTER_ENROOT_REF="${DCGM_EXPORTER_IMAGE/nvcr.io\\//nvcr.io#}"'
+        in launcher
+    )
+    assert 'import_squash "$DCGM_EXPORTER_SQSH" "$DCGM_EXPORTER_ENROOT_REF"' in launcher
     # No SQUASH_DIR var here; the /data/ mount avoids the /home NFS ELOOP bug.
     assert 'DCGM_EXPORTER_SQSH="/data/home/sa-shared/gharunners/squash/' in launcher
     assert 'srun --account="$SLURM_ACCOUNT" --partition="$SLURM_PARTITION" --exclusive --time=180' in launcher
