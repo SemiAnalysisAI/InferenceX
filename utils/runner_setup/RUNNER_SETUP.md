@@ -180,6 +180,53 @@ self-hosted, Linux, X64, slurm, b200, b200-dsv4, cluster:b200-dgxc, b200-dgxc_00
 
 Labels can be edited later on the runners settings page without re-registering.
 
+### Dynamic Slurm node leases
+
+The optional node-slot scheduler performs weighted admission across every job
+size in one physical Slurm cluster. A job that needs three nodes adds
+`nodes:3` to its queued `runs-on` labels. `nodes:N` is request metadata for the
+trusted priority controller, not a permanent runner capability label.
+
+The controller groups runners by their permanent `cluster:<name>` label. To
+admit a three-node job, it selects three online, unleased runners from one
+compatible cluster and temporarily adds the same `ci-lease-*` label to all
+three. After every lease write succeeds, it adds the job's unique `ci-job-*`,
+`ci-attempt-*`, and `nodes:3` labels to one of those runners as the anchor.
+GitHub can then dispatch only that job, while the other two runners remain idle
+as capacity tokens for the Slurm allocation.
+
+For example, after admitting ten- and eight-node jobs on an 18-node cluster,
+the controller has leased all 18 runners and will not publish the unique label
+for a queued nine-node job. This enforces the aggregate invariant
+`sum(admitted node counts) <= online cluster capacity` across mixed job sizes.
+
+Lease allocation is serialized and two-phase: reserve every capacity token,
+verify the reservation, then publish the anchor's dispatch label. Completion
+and periodic reconciliation remove orphaned leases. Every managed GPU workflow
+must require its unique `ci-job-*` label; a workflow that targets only a generic
+hardware label bypasses admission accounting.
+
+Set `NODE_SLOT_SCHEDULER_ENABLED=true` only after the deployed priority
+controller supports `nodes:N` and `ci-lease-*`. `PRIORITY_SCHEDULER_ENABLED`
+must also remain enabled. If either variable is disabled, workflows omit
+`nodes:N` and retain the existing unweighted behavior. The priority score also
+subtracts `0.001` per additional node so otherwise equal work prefers smaller
+allocations without overriding the existing business-priority signals.
+
+Aggregated multi-node search-space entries can declare `num-nodes`; that value
+becomes the generated `node-count` directly. `num-nodes` is rejected for
+disaggregated entries because their independent prefill and decode allocations
+determine the total. During migration, entries without `num-nodes` derive
+`node-count` from, in precedence order:
+
+1. checked-in srt-slurm recipe `resources`;
+2. explicit `PREFILL_NODES` and `DECODE_NODES` settings; or
+3. worker GPU footprints divided by the relevant hardware's GPUs per node.
+
+Runner leases account for GitHub-managed work only. Slurm remains the final
+capacity authority for external users, reservations, offline compute nodes,
+and allocations submitted outside this admission path.
+
 ## Storage layout
 
 The login node (where the runners live) and the Slurm compute nodes (where benchmarks

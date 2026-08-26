@@ -1,20 +1,24 @@
+import argparse
 import fnmatch
 import json
-import argparse
+import math
+import re
 import sys
 from decimal import Decimal
 from pathlib import Path
+
+import yaml
 
 # Ensure sibling modules are importable regardless of how script is invoked
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from validation import (
-    validate_matrix_entry,
-    validate_agentic_matrix_entry,
+    DEFAULT_AGENTIC_DURATION_SECONDS,
+    Fields,
     load_config_files,
     load_runner_file,
-    Fields,
-    DEFAULT_AGENTIC_DURATION_SECONDS,
+    validate_agentic_matrix_entry,
+    validate_matrix_entry,
 )
 
 seq_len_stoi = {
@@ -80,6 +84,150 @@ def runner_available_cpu_dram_mib(runner: str, runner_data: dict) -> int:
 def runner_gpus_per_node(runner: str, runner_data: dict) -> int:
     """Return GPUs per node for a runner label."""
     return runner_hardware_int(runner, runner_data, Fields.GPUS_PER_NODE.value)
+
+
+def _hardware_family(label: str) -> str:
+    """Return the GPU family encoded in a runner or cluster label."""
+    return label.removeprefix("cluster:").split("-", 1)[0]
+
+
+def scheduling_gpus_per_node(label: str, runner_data: dict) -> int:
+    """Resolve GPUs per node for an abstract runner or worker hardware label.
+
+    Scheduling labels such as ``b200-multinode`` do not currently duplicate
+    the hardware facts stored under ``cluster:b200-dgxc``. Fall back to the
+    GPU family when the exact label has no hardware record, while rejecting
+    ambiguous families that disagree about node shape.
+    """
+    hardware = runner_hardware(runner_data)
+    exact = hardware.get(label)
+    if exact is not None:
+        return exact[Fields.GPUS_PER_NODE.value]
+
+    family = _hardware_family(label)
+    matches = {
+        facts[Fields.GPUS_PER_NODE.value]
+        for hardware_label, facts in hardware.items()
+        if _hardware_family(hardware_label) == family
+    }
+    if len(matches) == 1:
+        return matches.pop()
+    if not matches:
+        raise ValueError(
+            f"Cannot resolve {Fields.GPUS_PER_NODE.value} for '{label}'"
+        )
+    raise ValueError(
+        f"Ambiguous {Fields.GPUS_PER_NODE.value} for '{label}': {sorted(matches)}"
+    )
+
+
+def _worker_node_override(worker: dict, setting_name: str) -> int | None:
+    """Read an explicit role node count from additional settings."""
+    pattern = re.compile(rf"^{re.escape(setting_name)}=(\d+)$")
+    values = []
+    for setting in worker.get(Fields.ADDITIONAL_SETTINGS.value, []) or []:
+        match = pattern.match(setting)
+        if match:
+            values.append(int(match.group(1)))
+    if not values:
+        return None
+    if len(set(values)) != 1 or values[0] <= 0:
+        raise ValueError(f"Conflicting or invalid {setting_name} settings: {values}")
+    return values[0]
+
+
+def recipe_node_count(prefill: dict, decode: dict) -> int | None:
+    """Read the authoritative node count from a checked-in srt-slurm recipe."""
+    config_files = {
+        setting.split("=", 1)[1]
+        for worker in (prefill, decode)
+        for setting in (worker.get(Fields.ADDITIONAL_SETTINGS.value, []) or [])
+        if setting.startswith("CONFIG_FILE=")
+    }
+    if not config_files:
+        return None
+    if len(config_files) != 1:
+        raise ValueError(f"Conflicting CONFIG_FILE settings: {sorted(config_files)}")
+
+    relative_path = config_files.pop().removeprefix("recipes/")
+    recipe_path = (
+        Path(__file__).resolve().parents[2]
+        / "benchmarks"
+        / "multi_node"
+        / "srt-slurm-recipes"
+        / relative_path
+    )
+    if not recipe_path.exists():
+        # Some srt-slurm recipes live only in the runtime image. Their master
+        # config topology remains the best available scheduling estimate.
+        return None
+
+    resources = yaml.safe_load(recipe_path.read_text())["resources"]
+    if "agg_nodes" in resources:
+        return int(resources["agg_nodes"])
+    if "prefill_nodes" in resources and "decode_nodes" in resources:
+        return int(resources["prefill_nodes"]) + int(resources["decode_nodes"])
+    raise ValueError(f"Recipe has no supported node resource fields: {recipe_path}")
+
+
+def worker_node_count(
+    worker: dict,
+    role: str,
+    runner: str,
+    runner_data: dict,
+) -> int:
+    """Return physical nodes consumed by one prefill or decode role."""
+    override = _worker_node_override(worker, f"{role.upper()}_NODES")
+    if override is not None:
+        return override
+
+    hardware_label = worker.get(Fields.HARDWARE.value) or runner
+    gpus_per_node = scheduling_gpus_per_node(hardware_label, runner_data)
+    total_gpus = (
+        worker[Fields.NUM_WORKER.value]
+        * worker[Fields.TP.value]
+        * worker.get(Fields.PP.value, 1)
+        * worker.get(Fields.PCP_SIZE.value, 1)
+    )
+    return math.ceil(total_gpus / gpus_per_node)
+
+
+def multinode_node_count(
+    prefill: dict,
+    decode: dict,
+    runner: str,
+    runner_data: dict,
+) -> int:
+    """Return the total Slurm node request represented by a matrix row."""
+    recipe_count = recipe_node_count(prefill, decode)
+    if recipe_count is not None:
+        return recipe_count
+    return (
+        worker_node_count(prefill, "prefill", runner, runner_data)
+        + worker_node_count(decode, "decode", runner, runner_data)
+    )
+
+
+def add_multinode_node_count(
+    entry: dict,
+    runner_data: dict,
+    num_nodes: int | None,
+) -> dict:
+    """Annotate a multi-node row with its scheduling node count."""
+    if not entry[Fields.DISAGG.value] and num_nodes is not None:
+        entry[Fields.NODE_COUNT.value] = num_nodes
+    elif num_nodes is not None:
+        raise ValueError(
+            f"{Fields.NUM_NODES.value} is not valid for disaggregated entries"
+        )
+    elif runner_data:
+        entry[Fields.NODE_COUNT.value] = multinode_node_count(
+            entry[Fields.PREFILL.value],
+            entry[Fields.DECODE.value],
+            entry[Fields.RUNNER.value],
+            runner_data,
+        )
+    return entry
 
 
 def effective_gpu_count(benchmark: dict) -> int:
@@ -652,6 +800,11 @@ def generate_full_sweep(args, all_config_data, runner_data):
                             Fields.RUN_EVAL.value: False,  # Default, may be overridden by mark_eval_entries
                         }
                         entry.update(component_metadata(bmk, val))
+                        add_multinode_node_count(
+                            entry,
+                            runner_data,
+                            bmk.get(Fields.NUM_NODES.value),
+                        )
 
                         validate_matrix_entry(entry, is_multinode)
                         matrix_values.append(entry)
@@ -868,6 +1021,11 @@ def generate_full_sweep(args, all_config_data, runner_data):
                             if kv_offload_backend is not None:
                                 entry[Fields.KV_OFFLOAD_BACKEND.value] = kv_offload_backend
                             entry.update(component_metadata(bmk, val))
+                            add_multinode_node_count(
+                                entry,
+                                runner_data,
+                                bmk.get(Fields.NUM_NODES.value),
+                            )
                             validate_agentic_matrix_entry(entry)
                             matrix_values.append(entry)
                 else:
@@ -1020,6 +1178,11 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                             Fields.RUN_EVAL.value: False,
                         }
                         entry.update(component_metadata(bmk, val))
+                        add_multinode_node_count(
+                            entry,
+                            runner_data,
+                            bmk.get(Fields.NUM_NODES.value),
+                        )
                         matrix_values.append(validate_matrix_entry(entry, is_multinode=True))
                 else:
                     # Single-node config
@@ -1163,6 +1326,11 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                             if kv_offload_backend is not None:
                                 entry[Fields.KV_OFFLOAD_BACKEND.value] = kv_offload_backend
                             entry.update(component_metadata(bmk, val))
+                            add_multinode_node_count(
+                                entry,
+                                runner_data,
+                                bmk.get(Fields.NUM_NODES.value),
+                            )
                             matrix_values.append(validate_agentic_matrix_entry(entry))
                 else:
                     for conc in conc_values:

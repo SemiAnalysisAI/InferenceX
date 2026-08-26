@@ -1055,6 +1055,51 @@ class TestMasterConfigEntries:
 
         assert config.kv_p2p_transfer == "nixl"
 
+    def test_aggregated_multinode_allows_explicit_num_nodes(
+        self,
+        valid_multinode_master_config,
+    ):
+        """Aggregated search-space entries may set their Slurm node count."""
+        valid_multinode_master_config["disagg"] = False
+        search_entry = valid_multinode_master_config[
+            "scenarios"
+        ]["fixed-seq-len"][0]["search-space"][0]
+        search_entry["num-nodes"] = 3
+
+        config = MultiNodeMasterConfigEntry(**valid_multinode_master_config)
+
+        validated_entry = config.scenarios.fixed_seq_len[0].search_space[0]
+        assert validated_entry.num_nodes == 3
+
+    def test_disaggregated_multinode_rejects_num_nodes(
+        self,
+        valid_multinode_master_config,
+    ):
+        """Disaggregated entries derive nodes from prefill and decode."""
+        search_entry = valid_multinode_master_config[
+            "scenarios"
+        ]["fixed-seq-len"][0]["search-space"][0]
+        search_entry["num-nodes"] = 3
+
+        with pytest.raises(Exception, match="num-nodes is only valid"):
+            MultiNodeMasterConfigEntry(**valid_multinode_master_config)
+
+    @pytest.mark.parametrize("num_nodes", [0, -1, True])
+    def test_aggregated_multinode_rejects_invalid_num_nodes(
+        self,
+        valid_multinode_master_config,
+        num_nodes,
+    ):
+        """Explicit aggregate node counts must be strict positive integers."""
+        valid_multinode_master_config["disagg"] = False
+        search_entry = valid_multinode_master_config[
+            "scenarios"
+        ]["fixed-seq-len"][0]["search-space"][0]
+        search_entry["num-nodes"] = num_nodes
+
+        with pytest.raises(Exception, match="num-nodes"):
+            MultiNodeMasterConfigEntry(**valid_multinode_master_config)
+
     def test_component_metadata_rejects_image_as_version(self):
         """Component versions identify the component, not its container."""
         with pytest.raises(Exception, match="not an image reference"):
