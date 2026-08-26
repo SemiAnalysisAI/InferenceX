@@ -7027,7 +7027,7 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-disagg:
 # published curve.
 qwen3.5-fp4-gb300-dynamo-sglang-agentic-disagg-dep:
   image: lmsysorg/sglang:nightly-dev-cu13-20260818-c0b6474b
-  model: nvidia/Qwen3.5-397B-A17B-NVFP4-V2
+  model: nvidia/Qwen3.5-397B-A17B-NVFP4
   model-prefix: qwen3.5
   runner: cluster:gb300-nv
   precision: fp4
