@@ -149,14 +149,13 @@ def recipe_node_count(prefill: dict, decode: dict) -> int | None:
     if len(config_files) != 1:
         raise ValueError(f"Conflicting CONFIG_FILE settings: {sorted(config_files)}")
 
-    relative_path = config_files.pop().removeprefix("recipes/")
-    recipe_path = (
-        Path(__file__).resolve().parents[2]
-        / "benchmarks"
-        / "multi_node"
-        / "srt-slurm-recipes"
-        / relative_path
-    )
+    config_file = config_files.pop()
+    repo_root = Path(__file__).resolve().parents[2]
+    recipe_root = repo_root / "benchmarks" / "multi_node" / "srt-slurm-recipes"
+    if config_file.startswith("benchmarks/multi_node/srt-slurm-recipes/"):
+        recipe_path = repo_root / config_file
+    else:
+        recipe_path = recipe_root / config_file.removeprefix("recipes/")
     if not recipe_path.exists():
         # Some srt-slurm recipes live only in the runtime image. Their master
         # config topology remains the best available scheduling estimate.
@@ -248,6 +247,30 @@ def with_worker_parallelism_defaults(worker: dict) -> dict:
     }
 
 
+def multinode_worker_pair(benchmark: dict, disagg: bool) -> tuple[dict, dict]:
+    """Return the legacy prefill/decode matrix pair for a master entry."""
+    if disagg:
+        return (
+            with_worker_parallelism_defaults(benchmark[Fields.PREFILL.value]),
+            with_worker_parallelism_defaults(benchmark[Fields.DECODE.value]),
+        )
+
+    worker = with_worker_parallelism_defaults(benchmark[Fields.WORKER.value])
+    prefill = {Fields.NUM_WORKER.value: 1, **worker}
+    decode = {
+        Fields.NUM_WORKER.value: 0,
+        **{
+            key: value
+            for key, value in worker.items()
+            if key not in (
+                Fields.NUM_WORKER.value,
+                Fields.ADDITIONAL_SETTINGS.value,
+            )
+        },
+    }
+    return prefill, decode
+
+
 def worker_gpus_per_node(worker: dict, gpus_per_node: int) -> int:
     """Return GPUs a single worker replica occupies on one node.
 
@@ -309,7 +332,10 @@ def agentic_dram_offload_gb(
     utilization = Decimal(str(agentic_config[Fields.DRAM_UTILIZATION.value]))
     gpus_per_node = runner_gpus_per_node(runner, runner_data)
 
-    if Fields.PREFILL.value in benchmark:
+    if Fields.WORKER.value in benchmark:
+        gpu_count = worker_gpus_per_node(
+            benchmark[Fields.WORKER.value], gpus_per_node)
+    elif Fields.PREFILL.value in benchmark:
         gpu_count = worker_gpus_per_node(
             benchmark[Fields.PREFILL.value], gpus_per_node)
     else:
@@ -732,10 +758,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                     # spec_decoding defaults to "none" if not specified
                     spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
 
-                    prefill = with_worker_parallelism_defaults(
-                        bmk[Fields.PREFILL.value])
-                    decode = with_worker_parallelism_defaults(
-                        bmk[Fields.DECODE.value])
+                    prefill, decode = multinode_worker_pair(bmk, disagg)
 
                     # Get concurrency values (can be list or range)
                     conc_list = bmk.get(Fields.CONC_LIST.value)
@@ -941,10 +964,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
 
             for bmk in bmk_space:
                 if is_multinode:
-                    prefill = with_worker_parallelism_defaults(
-                        bmk[Fields.PREFILL.value])
-                    decode = with_worker_parallelism_defaults(
-                        bmk[Fields.DECODE.value])
+                    prefill, decode = multinode_worker_pair(bmk, disagg)
                     spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
                     kv_offloading = bmk.get(Fields.KV_OFFLOADING.value, "none")
                     kv_offload_backend = bmk.get(Fields.KV_OFFLOAD_BACKEND.value)
@@ -1130,10 +1150,7 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                 if is_multinode:
                     # Multinode config
                     spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
-                    prefill = with_worker_parallelism_defaults(
-                        bmk[Fields.PREFILL.value])
-                    decode = with_worker_parallelism_defaults(
-                        bmk[Fields.DECODE.value])
+                    prefill, decode = multinode_worker_pair(bmk, disagg)
 
                     # Get concurrency values
                     if Fields.CONC_LIST.value in bmk:
@@ -1252,10 +1269,7 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
 
             for bmk in bmk_space:
                 if is_multinode:
-                    prefill = with_worker_parallelism_defaults(
-                        bmk[Fields.PREFILL.value])
-                    decode = with_worker_parallelism_defaults(
-                        bmk[Fields.DECODE.value])
+                    prefill, decode = multinode_worker_pair(bmk, disagg)
                     spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
                     kv_offloading = bmk.get(Fields.KV_OFFLOADING.value, "none")
                     kv_offload_backend = bmk.get(Fields.KV_OFFLOAD_BACKEND.value)
