@@ -6466,8 +6466,16 @@
     - "Warm the aggregate low-latency profiles with the standard ten requests per trajectory lane instead of one, so they enter the profiling window from the same live state as every other AgentX recipe."
     - "Reduce the concurrency-1536 disaggregated topology from six to five DEP8 prefill workers while retaining one DEP16 decode worker."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2644
-<<<<<<< HEAD
-  
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Replace the TP2/EP2 arm with TP2/EP1 so the 2-GPU point matches qwen3.5-fp4-b200-sglang-agentic-mtp."
+    - "Add HiCache host-DRAM KV tier arms at TP4 concurrency 40, 48, 56, and 64 and TP2 concurrency 20, 24, 28, and 32, using hicache ratio 1.5 with write_through, direct io, and page_first_direct layout."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2693
+
 
 - config-keys:
     - kimik2.6-fp4-b200-dynamo-vllm
@@ -6482,14 +6490,3 @@
     - "Required lanes promote exporter startup timeouts, launch failures, and endpoint resolution failures to blocking validation failures, so a recipe cannot publish a result whose power collection never started."
     - "Route only enabled recipes through the immutable producer fork and preserve non-power launcher revisions."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2688
-=======
-
-- config-keys:
-    - qwen3.5-fp4-mi355x-sglang-agentic-mtp
-  scenario-type:
-    - agentic-coding
-  description:
-    - "Replace the TP2/EP2 arm with TP2/EP1 so the 2-GPU point matches qwen3.5-fp4-b200-sglang-agentic-mtp."
-    - "Add HiCache host-DRAM KV tier arms at TP4 concurrency 40, 48, 56, and 64 and TP2 concurrency 20, 24, 28, and 32, using hicache ratio 1.5 with write_through, direct io, and page_first_direct layout."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2693
->>>>>>> origin/main

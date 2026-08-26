@@ -14,7 +14,7 @@ RECIPE_ROOT = REPO_ROOT / "benchmarks/multi_node/srt-slurm-recipes"
 MASTER = REPO_ROOT / "configs/nvidia-master.yaml"
 WORKFLOW = REPO_ROOT / ".github/workflows/test-process-result.yml"
 LAUNCHERS = {
-    "b200-multinode": REPO_ROOT / "runners/launch_b200-dgxc.sh",
+    "cluster:b200-dgxc": REPO_ROOT / "runners/launch_b200-dgxc.sh",
     "b200-nscale": REPO_ROOT / "runners/launch_b200-nscale-slurm.sh",
     "b200-new": REPO_ROOT / "runners/launch_b200-nscale-slurm.sh",
     "b300": REPO_ROOT / "runners/launch_b300-nv.sh",
@@ -72,7 +72,7 @@ POWER_RECIPES = _power_recipes()
 def test_exactly_37_supported_recipes_are_selected_from_the_master_config():
     assert len(POWER_RECIPES) == 37
     assert Counter(item["runner"] for item in POWER_RECIPES.values()) == {
-        "b200-multinode": 5,
+        "cluster:b200-dgxc": 5,
         "b200-nscale": 10,
         "b200-new": 6,
         "b300": 16,
