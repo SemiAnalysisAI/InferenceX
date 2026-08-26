@@ -6467,3 +6467,14 @@
     - "Reduce the concurrency-1536 disaggregated topology from six to five DEP8 prefill workers while retaining one DEP16 decode worker."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2644
   
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump image from lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260818 to lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260825"
+    - "Route multi-GPU collectives through INT8-quantized ROCm quick all-reduce (ROCM_QUICK_REDUCE_QUANTIZATION=INT8), matching the published SGLang cookbook recipe for MXFP4 on MI355X (https://docs.sglang.io/cookbook/autoregressive/Qwen/Qwen3.5). This arm already omits --enable-aiter-allreduce-fusion, so the quick-reduce regime applies with no other launch change: the two paths are mutually exclusive and collectives only fall back to custom all-reduce, where the regime is read, when the fusion flag is off."
+    - "Halve the prefill budget, --max-prefill-tokens and --chunked-prefill-size from 32768 to 16384, matching the B200 sibling recipe qwen3.5_fp4_b200_sglang_mtp.sh."
+    - "Capture the decode CUDA graph to min(2*CONC, 128) instead of min(CONC, 64). The replay keeps --max-running-requests 2*CONC in flight, so a CONC-sized graph dropped every decode batch above CONC onto the eager path. The 128 cap follows the sibling MI355X AgentX recipe dsv4_fp4_mi355x_sglang_mtp.sh."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2693

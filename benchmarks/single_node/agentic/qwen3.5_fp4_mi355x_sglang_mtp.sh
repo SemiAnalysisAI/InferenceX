@@ -65,14 +65,19 @@ if [ "$TP" -ge 4 ]; then
 fi
 
 MAX_RUNNING_REQUESTS=$((2 * CONC))
-CUDA_GRAPH_MAX_BS="$CONC"
-[ "$CUDA_GRAPH_MAX_BS" -gt 64 ] && CUDA_GRAPH_MAX_BS=64
+# Capture the decode graph up to the batch the scheduler can actually build, not
+# just CONC: the replay keeps 2*CONC requests running, so a CONC-sized graph drops
+# every batch above CONC onto the eager path. Cap at 128 as on the sibling MI355X
+# AgentX recipe (dsv4_fp4_mi355x_sglang_mtp.sh).
+CUDA_GRAPH_MAX_BS=$MAX_RUNNING_REQUESTS
+[ "$CUDA_GRAPH_MAX_BS" -gt 128 ] && CUDA_GRAPH_MAX_BS=128
 
 export PYTHONNOUSERSITE=1
 export SGLANG_USE_AITER=1
 export SGLANG_USE_AITER_UNIFIED_ATTN=1
 export AITER_FLYDSL_FORCE=1
 export SGLANG_MAMBA_SSM_DTYPE=bfloat16
+export ROCM_QUICK_REDUCE_QUANTIZATION=INT8
 export SGLANG_TIMEOUT_KEEP_ALIVE=1800
 
 if [ "${EVAL_ONLY:-false}" != "true" ]; then
@@ -97,8 +102,8 @@ SGLANG_CMD=(
     --kv-cache-dtype fp8_e4m3
     --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
-    --max-prefill-tokens 32768
-    --chunked-prefill-size 32768
+    --max-prefill-tokens 16384
+    --chunked-prefill-size 16384
     --scheduler-recv-interval "$SCHEDULER_RECV_INTERVAL"
     --stream-interval 50
     "${TOKENIZER_ARGS[@]}"
