@@ -8444,7 +8444,7 @@ glm5.2-fp4-b200-sglang-agentic-mtp:
       - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 4, 8, 12, 16] }
 
 glm5.2-fp4-b200-dynamo-sglang-agentic-agg:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260805-211ee642
+  image: lmsysorg/sglang:nightly-dev-cu13-20260824-95f5ecd3
   model: nvidia/GLM-5.2-NVFP4
   model-prefix: glm5.2
   runner: cluster:b200-nscale
@@ -8479,7 +8479,7 @@ glm5.2-fp4-b200-dynamo-sglang-agentic-agg:
           dp-attn: false
 
 glm5.2-fp4-b200-dynamo-sglang-agentic-disagg:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260805-211ee642
+  image: lmsysorg/sglang:nightly-dev-cu13-20260824-95f5ecd3
   model: nvidia/GLM-5.2-NVFP4
   model-prefix: glm5.2
   runner: cluster:b200-nscale

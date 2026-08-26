@@ -5,17 +5,17 @@
 name: agentx-1p2d_dtp8-c113
 model:
   path: glm-5.2-fp4
-  container: lmsysorg/sglang:nightly-dev-cu13-20260805-211ee642
+  container: lmsysorg/sglang:nightly-dev-cu13-20260824-95f5ecd3
   precision: fp4
 identity:
   model:
     repo: nvidia/GLM-5.2-NVFP4
     revision: aec724e8c7b8ee9db3b48c01c320f63f9cdaf8aa
   container:
-    image: lmsysorg/sglang:nightly-dev-cu13-20260805-211ee642
+    image: lmsysorg/sglang:nightly-dev-cu13-20260824-95f5ecd3
   frameworks:
     dynamo: 71eb001e17fa73c742f0afe1a6ed96836cb135fd
-    sglang: nightly-dev-cu13-20260805-211ee642
+    sglang: nightly-dev-cu13-20260824-95f5ecd3
 resources:
   gpu_type: b200
   gpus_per_node: 8
@@ -107,7 +107,7 @@ backend:
       context-length: 1048576
       enable-hierarchical-cache: true
       hicache-write-policy: write_back
-      hicache-size: 270
+      hicache-size: 204
       hicache-io-backend: direct
       speculative-algorithm: EAGLE
       speculative-num-steps: 1
