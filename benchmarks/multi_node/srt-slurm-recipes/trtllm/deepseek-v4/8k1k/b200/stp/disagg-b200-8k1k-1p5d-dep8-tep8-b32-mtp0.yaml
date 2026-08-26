@@ -19,6 +19,7 @@ resources:
 backend:
   type: trtllm
   prefill_environment:
+    DYN_DEFAULT_THINKING_MODE: disabled
     TLLM_LOG_LEVEL: INFO
     TRTLLM_SERVER_DISABLE_GC: '1'
     TRTLLM_WORKER_DISABLE_GC: '1'
@@ -31,6 +32,7 @@ backend:
     UCX_TLS: rc,cuda_ipc,cuda_copy,sm,self,tcp
     NIXL_PLUGIN_DIR: /opt/nvidia/nvda_nixl/lib/x86_64-linux-gnu/plugins
   decode_environment:
+    DYN_DEFAULT_THINKING_MODE: disabled
     TLLM_LOG_LEVEL: INFO
     TRTLLM_SERVER_DISABLE_GC: '1'
     TRTLLM_WORKER_DISABLE_GC: '1'
