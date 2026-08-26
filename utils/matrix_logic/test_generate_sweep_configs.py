@@ -522,7 +522,7 @@ class TestMarkEvalEntries:
         matrix_values = [
             {
                 "model": "deepseek-ai/DeepSeek-R1-0528",
-                "runner": "b200-multinode",
+                "runner": "cluster:b200-dgxc",
                 "framework": "dynamo-trt",
                 "precision": "fp8",
                 "isl": 8192,
@@ -554,7 +554,7 @@ class TestMarkEvalEntries:
         matrix_values = [
             {
                 "model": "deepseek-ai/DeepSeek-R1-0528",
-                "runner": "b200-multinode",
+                "runner": "cluster:b200-dgxc",
                 "framework": "dynamo-trt",
                 "precision": "fp8",
                 "isl": 8192,
@@ -576,7 +576,7 @@ class TestMarkEvalEntries:
             },
             {
                 "model": "deepseek-ai/DeepSeek-R1-0528",
-                "runner": "b200-multinode",
+                "runner": "cluster:b200-dgxc",
                 "framework": "dynamo-trt",
                 "precision": "fp8",
                 "isl": 8192,

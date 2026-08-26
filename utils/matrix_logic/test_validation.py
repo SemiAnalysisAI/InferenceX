@@ -1303,7 +1303,7 @@ class TestMasterConfigEntries:
             "model-prefix": "dsr1",
             "precision": "fp4",
             "framework": "dynamo-trt",
-            "runner": "b200-multinode",
+            "runner": "b200",
             "multinode": True,
             "disagg": True,
             "kv-p2p-transfer": "nixl",
