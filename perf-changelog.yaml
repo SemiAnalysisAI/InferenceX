@@ -6467,3 +6467,13 @@
     - "Reduce the concurrency-1536 disaggregated topology from six to five DEP8 prefill workers while retaining one DEP16 decode worker."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2644
   
+
+- config-keys:
+    - dsv4-fp4-b300-sglang-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Revert #2701. Restore the image to lmsysorg/sglang:v0.5.17-cu130, the 42-point search space (TP4 and DEP4 rows included), dram-utilization 0.80, and the pre-#2701 serving flags in the recipe script."
+    - "#2701 served every point on lmsysorg/sglang-staging:dev-cu13-pr-35880, a staging image carrying the unmerged draft sgl-project/sglang#35880, so its results do not correspond to any released SGLang build. Its ingested run (32695861783) has been purged from the dashboard."
+    - "Re-land the tuning once #35880 merges upstream and ships in a released tag."
+  pr-link: XXX

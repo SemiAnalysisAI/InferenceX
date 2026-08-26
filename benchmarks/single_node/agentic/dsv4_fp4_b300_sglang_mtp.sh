@@ -65,17 +65,14 @@ export SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS=1
 CACHE_ARGS=()
 WARMUP_ARGS=()
 if require_agentic_kv_offload_backend hicache; then
-    # DeepSeek V4 HiCache rejects --hicache-size and controls capacity only
-    # through a host/device token ratio, so TOTAL_CPU_DRAM_GB cannot apply
-    # directly. Host capacity scales with BOTH the ratio and device KV, so it
-    # also grows with mem-fraction-static -- the two knobs multiply. Measured:
-    # TP8 ratio=2 at mem-fraction 0.835 gives 999 GB. ratio=4 at mem-fraction
-    # 0.93 overshoots: it left only 5.84 GB free on a 2,964 GB node and the
-    # V4 paged pool failed to allocate. ratio=3 keeps the tier near 2 TB with
-    # room for the paged pool, page cache, AIPerf and the router, while still
-    # well above the old half-node rule that pinned TP8 to ratio=2.
+    # DeepSeek V4 HiCache currently rejects --hicache-size and supports
+    # capacity control only through a host/device token-capacity ratio.
+    # DSv4 exposes capacity as a host/device token ratio rather than bytes.
+    # Measurements put TP8 ratio=2 near 950 GB and TP4 ratio=8 near 1 TB,
+    # both below their configured capacities. The old TP4 ratio=16
+    # used roughly 2 TB and violated the half-node allocation rule.
     if [ "$TP" -ge 8 ]; then
-        DEFAULT_HICACHE_RATIO=3
+        DEFAULT_HICACHE_RATIO=2
     else
         DEFAULT_HICACHE_RATIO=8
     fi
@@ -119,53 +116,21 @@ if [ "$DP_ATTENTION" = "true" ]; then
     PARALLEL_ARGS+=(
         --dp "$TP"
         --tokenizer-worker-num "$TP"
-        --enable-prefill-delayer
-        --prefill-decode-interval 20
         --enable-dp-attention
         --enable-dp-attention-local-control-broadcast
         --incremental-streaming-output
         --stream-interval 20
         --dist-init-addr "127.0.0.1:$((PORT + 2000))"
         --ep-size "$EP_SIZE"
-        --moe-a2a-backend megamoe
-        --enable-deepseek-v4-fp4-indexer
+        --moe-runner-backend flashinfer_mxfp4
         --disable-flashinfer-autotune
     )
-    # DEP4 shards the model over half the node, so per-rank weights roughly
-    # double and the weights-only floor rises above 0.9 (the engine reports a
-    # minimum viable 0.9013 and refuses to start). Keep upstream's 0.95 there.
-    # DEP8 has room for the lower value, which leaves mega-MoE workspace
-    # headroom.
-    if [ "$TP" -ge 8 ]; then
-        # Mega-MoE's transient workspace lives OUTSIDE the static allocation and
-        # needs a single ~7 GB contiguous block, so headroom must grow with
-        # concurrency. Measured at conc 256: 0.835 (~42 GB free) runs; 0.93
-        # (~16 GB free) and 0.95 (~11 GB free) both die with a CUDA OOM on one
-        # DP rank, which then hangs the whole engine in the MLP-sync collective.
-        MEM_FRACTION_STATIC=0.93
-        if [ "$CONC" -ge 512 ]; then
-            MEM_FRACTION_STATIC=0.86
-        elif [ "$CONC" -ge 384 ]; then
-            MEM_FRACTION_STATIC=0.88
-        elif [ "$CONC" -ge 256 ]; then
-            MEM_FRACTION_STATIC=0.9
-        fi
-    else
-        # DEP4 is squeezed from both sides: weights occupy ~90% of each GPU when
-        # the model is sharded over half the node, so the engine refuses to start
-        # below ~0.902 (no KV left), while megamoe still needs its ~7 GB
-        # workspace above the static budget. 0.95 leaves only ~11 GB free -- the
-        # same margin that OOM'd a rank at DEP8 conc 256 -- so use 0.93, which
-        # gives the ~16 GB that DEP8 conc 128 runs with at the same per-rank load
-        # (max-running-requests/dp = 32 in both cases).
-        MEM_FRACTION_STATIC=0.93
+    MEM_FRACTION_STATIC=0.95
+    if [ "$CONC" -ge 512 ]; then
+        # Leave room for FlashInfer's transient MoE workspace at the DEP8 tail.
+        MEM_FRACTION_STATIC=0.94
     fi
-    # --chunked-prefill-size is a GLOBAL budget: server_args.py divides it by
-    # dp_size, and dp_size is TP here. Scale it so every DEP shape gets the
-    # per-rank 8192 that was tuned, rather than 16384/rank at DEP4 -- which
-    # exceeds MegaMoE's per-rank token cap (a startup ValueError) and measured
-    # slower at DEP8 when tried directly.
-    CHUNKED_PREFILL_SIZE=$((8192 * TP))
+    CHUNKED_PREFILL_SIZE=16384
 else
     PARALLEL_ARGS+=(
         --moe-runner-backend flashinfer_mxfp4
@@ -182,23 +147,8 @@ MODEL_ARGS=(
 # AgentX concurrency counts live session trees, not individual requests.
 # Allow subagent fan-out to exceed CONC without clipping request bursts.
 MAX_RUNNING_REQUESTS=$((2 * CONC))
-# Subagent fan-out means live requests exceed CONC (see MAX_RUNNING_REQUESTS
-# above), so sizing decode graphs at CONC would drop every larger batch to
-# eager decode. Capture past the fan-out; the runtime clamps this down to the
-# request pool size anyway.
-CUDA_GRAPH_MAX_BS=$((CONC * 4))
+CUDA_GRAPH_MAX_BS=$CONC
 [ "$CUDA_GRAPH_MAX_BS" -gt 64 ] && CUDA_GRAPH_MAX_BS=64
-
-# --cuda-graph-max-bs is an alias whose dest is cuda_graph_max_bs_decode, so the
-# two forms below are the same knob and must not both be passed.
-CUDA_GRAPH_ARGS=(--cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS")
-SWA_FULL_TOKENS_RATIO=0.1
-if [ "$DP_ATTENTION" = "true" ]; then
-    # Decode graphs must cover the padded MTP batch across all DP ranks, which
-    # exceeds CONC; capping at 64 would fall back to eager decode.
-    CUDA_GRAPH_ARGS=(--cuda-graph-max-bs-decode 544)
-    SWA_FULL_TOKENS_RATIO=0.075
-fi
 
 export PYTHONNOUSERSITE=1
 export TORCH_CUDA_ARCH_LIST=10.0
@@ -218,17 +168,6 @@ export SGLANG_OPT_USE_JIT_NORM=1
 export SGLANG_OPT_USE_JIT_INDEXER_METADATA=1
 export SGLANG_OPT_USE_TOPK_V2=1
 export SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2=1
-if [ "$DP_ATTENTION" = "true" ]; then
-    # MegaMoE's FP4/MXF4 activation path is opt-in -- both flags default False,
-    # so --moe-a2a-backend megamoe alone runs a different kernel than the one
-    # measured. DG_USE_FP4_ACTS / DG_USE_MXF4_KIND are forwarded to DeepGEMM
-    # automatically from these two.
-    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_FP4_ACTS=1
-    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_MXF4_KIND=1
-    # Must cover the per-rank prefill budget (8192) or startup raises; the
-    # extra 128 is headroom over the exact-fit boundary.
-    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=8320
-fi
 if [ "${EVAL_ONLY}" != "true" ]; then
     export SGLANG_SIMULATE_ACC_LEN=2.49
     export SGLANG_SIMULATE_ACC_METHOD=match-expected
@@ -252,9 +191,9 @@ SGLANG_CMD=(
     --trust-remote-code
     "${PARALLEL_ARGS[@]}"
     --mem-fraction-static "$MEM_FRACTION_STATIC"
-    --swa-full-tokens-ratio "$SWA_FULL_TOKENS_RATIO"
+    --swa-full-tokens-ratio 0.1
     --max-running-requests "$MAX_RUNNING_REQUESTS"
-    "${CUDA_GRAPH_ARGS[@]}"
+    --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
     --allow-auto-truncate
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
     --tool-call-parser deepseekv4
@@ -313,16 +252,7 @@ if [ "$USE_SGLANG_ROUTER" = "true" ]; then
         --connect-timeout-secs 900 \
         --request-timeout-secs 14400 \
         --disable-health-check \
-        `# A single transient router->engine send failure would otherwise` \
-        `# surface as a 500, and AgentX aborts the whole run when a root` \
-        `# warmup request fails ("ProfileAborted"). Measured at conc 512:` \
-        `# 22 such transients in one 3600s run, spread over all 8 DP` \
-        `# workers, every one of them recovered by the retry; with retries` \
-        `# disabled a single one killed a 2h15m arm.` \
-        --retry-max-retries 8 \
-        --retry-initial-backoff-ms 500 \
-        --retry-max-backoff-ms 10000 \
-        --retry-backoff-multiplier 2 > "$ROUTER_LOG" 2>&1 &
+        --disable-retries > "$ROUTER_LOG" 2>&1 &
     ROUTER_PID=$!
     echo "Router PID: $ROUTER_PID"
     wait_for_ready \
