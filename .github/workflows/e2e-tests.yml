@@ -261,6 +261,7 @@ jobs:
                   MULTI_AGENTIC_EVAL=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if x.get('scenario-type') == 'agentic-coding' and 'prefill' in x and x.get('run-eval', False)]))" | score_matrix multi-agentic-eval)
                   SINGLE=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' not in x and x.get('scenario-type') != 'agentic-coding' and not x.get('eval-only', False)]))" | score_matrix single)
                   MULTI=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' in x and x.get('scenario-type') != 'agentic-coding' and not x.get('eval-only', False)]))" | score_matrix multi)
+                  EVALS=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' not in x and x.get('scenario-type') != 'agentic-coding' and x.get('run-eval', False)]))" | score_matrix eval)
                   MULTI_EVAL=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' in x and x.get('scenario-type') != 'agentic-coding' and x.get('run-eval', False)]))" | score_matrix multi-eval)
                   {
                     echo "agentic-config=$AGENTIC"
@@ -329,7 +330,7 @@ jobs:
 
     test-sweep-multi-node-evals:
         needs: get-jobs
-        if: ${{ needs.get-jobs.outputs.multi-node-eval-config != '[]' }}
+        if: ${{ needs.get-jobs.outputs.multi-node-eval-config != '[]' && needs.get-jobs.outputs.multi-node-eval-config != '' }}
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node eval /
         strategy:
@@ -429,7 +430,7 @@ jobs:
 
     test-sweep-agentic-evals:
         needs: get-jobs
-        if: ${{ needs.get-jobs.outputs.agentic-eval-config != '[]' }}
+        if: ${{ needs.get-jobs.outputs.agentic-eval-config != '[]' && needs.get-jobs.outputs.agentic-eval-config != '' }}
         uses: ./.github/workflows/benchmark-tmpl.yml
         name: agentic eval /
         strategy:
@@ -530,7 +531,7 @@ jobs:
 
     test-sweep-multi-node-agentic-evals:
         needs: get-jobs
-        if: ${{ needs.get-jobs.outputs.multi-node-agentic-eval-config != '[]' }}
+        if: ${{ needs.get-jobs.outputs.multi-node-agentic-eval-config != '[]' && needs.get-jobs.outputs.multi-node-agentic-eval-config != '' }}
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node agentic eval /
         strategy:
@@ -629,7 +630,7 @@ jobs:
 
     test-sweep-evals:
         needs: get-jobs
-        if: ${{ needs.get-jobs.outputs.eval-config != '[]' }}
+        if: ${{ needs.get-jobs.outputs.eval-config != '[]' && needs.get-jobs.outputs.eval-config != '' }}
         uses: ./.github/workflows/benchmark-tmpl.yml
         name: eval /
         strategy:

@@ -35,7 +35,13 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     export SLURM_JOB_NAME="benchmark-sglang-disagg.job"
 
     export MODEL_NAME=${MODEL##*/}
-    export MODEL_PATH="/it-share/data"
+    if [[ "$FRAMEWORK" == "vllm-multi-nodes" ]]; then
+        # Qwen3.8 Ray runtime uses locally staged snapshots (default under /models).
+        # shellcheck source=benchmarks/multi_node/qwen3.8_vllm_multi_nodes/qwen3.8_env.sh
+        source "$GITHUB_WORKSPACE/benchmarks/multi_node/qwen3.8_vllm_multi_nodes/qwen3.8_env.sh"
+    else
+        export MODEL_PATH="/it-share/data"
+    fi
     export IBDEVICES="rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7"
     export MORI_RDMA_TC=104
 
@@ -77,7 +83,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     fi
 
     SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_mi355x_${FRAMEWORK}.sh"
-    if [[ "$FRAMEWORK" == "sglang-disagg" ]] || [[ "$FRAMEWORK" == "vllm-disagg" ]] || [[ "$FRAMEWORK" == "atom-disagg" ]]; then
+    if [[ "$FRAMEWORK" == "sglang-disagg" ]] || [[ "$FRAMEWORK" == "vllm-disagg" ]] || [[ "$FRAMEWORK" == "atom-disagg" ]] || [[ "$FRAMEWORK" == "vllm-multi-nodes" ]]; then
         # Agentic recipes live under multi_node/agentic/ and export the
         # HiCache tunables (page-size, io-backend, ...); fixed-seq-len recipes
         # live at the multi_node/ root. Honor SCENARIO_SUBDIR so agentic-coding

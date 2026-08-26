@@ -6466,4 +6466,12 @@
     - "Warm the aggregate low-latency profiles with the standard ten requests per trajectory lane instead of one, so they enter the profiling window from the same live state as every other AgentX recipe."
     - "Reduce the concurrency-1536 disaggregated topology from six to five DEP8 prefill workers while retaining one DEP16 decode worker."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2644
-  
+
+- config-keys:
+    - qwen3.8-fp8-mi355x-vllm-multi-nodes-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Qwen3.8-2.4T-A95B FP8 AgentX concurrency-1 on two MI355X nodes with vLLM Ray TP8/PP2 serving."
+    - "Use Slurm-assigned hosts and eno0 addresses, require matching pre-staged model snapshots, and run the vllm/vllm-openai-rocm:qwen38 image with max-model-len auto."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2724
