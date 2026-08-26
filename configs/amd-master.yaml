@@ -1679,11 +1679,13 @@ minimaxm3-fp4-mi355x-vllm-agentic-mtp:
       - { tp: 2, kv-offloading: none, conc-list: [1, 2, 5], spec-decoding: mtp }
       - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.3" }, conc-list: [32, 40], spec-decoding: mtp }
 
-# MiniMax-M3 MXFP4 agentic-coding benchmark on MI355X via ATOM with native MTP.
-# Serve shape follows the upstream ATOM recipe
+# MiniMax-M3 MXFP4 agentic-coding benchmark on MI355X via ATOM with EAGLE3
+# speculative decoding against the Inferact drafter. Server flags are a port
+# of the retired single-turn 8k1k MI355X ATOM recipe; the serve shape follows
+# the upstream ATOM recipe
 # (https://github.com/ROCm/ATOM/blob/main/recipes/Qwen3.5.md): TP4, FP8 KV
-# cache, MTP with three draft tokens, every other knob left at the ATOM
-# default. No KV offloading in this first ATOM AgentX bring-up.
+# cache, three draft tokens, ATOM defaults for everything it does not name.
+# No KV offloading in this first ATOM AgentX bring-up.
 minimaxm3-fp4-mi355x-atom-agentic-mtp:
   image: rocm/atom-dev:nightly_202608251555
   model: amd/MiniMax-M3-MXFP4

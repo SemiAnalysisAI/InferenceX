@@ -6472,7 +6472,9 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Add a day-zero MiniMax-M3 MXFP4 AgentX recipe on MI355X with ATOM native MTP at TP4 and concurrency 1/4/8/12/16."
-    - "Follow the upstream ATOM recipe serve shape: FP8 KV cache, three MTP draft tokens, and ATOM defaults for every other server knob."
-    - "Pin throughput runs to the committed golden acceptance length of 2.83 at three draft tokens; eval-only runs keep real target verification."
+    - "Add a day-zero MiniMax-M3 MXFP4 AgentX recipe on MI355X with ATOM, EAGLE3 speculative decoding against the Inferact drafter, TP4, and concurrency 1/4/8/12/16."
+    - "Port the server flags from the retired single-turn 8k1k MI355X ATOM recipe: same drafter and draft length, ptpc_fp8 online quant exclusions, Triton attention, block size 128, and memory fraction 0.8."
+    - "Follow the upstream ATOM recipe serve shape of TP4 with an FP8 KV cache and three draft tokens, leaving ATOM defaults for every knob the recipe does not name."
+    - "Keep prefix caching enabled and the model default max sequence length, unlike the retired 8k1k recipe."
+    - "Pin throughput runs to the committed golden EAGLE3 acceptance length of 2.83 at three draft tokens; eval-only runs keep real target verification."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2734
