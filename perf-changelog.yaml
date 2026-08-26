@@ -6084,3 +6084,11 @@
     - "Kimi-K3 Agentx Pef Tuning with AITER Backend"
     - "Image : vllm/vllm-openai-rocm:nightly-ac7509e2b1db40fec2f03dde1ed4e9dfdc2338c9"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2602
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp-dcp-lmcache
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Align the LMCache chunk to the LCM of Kimi-K3's DCP-scaled attention page and replicated Mamba-state page so every hybrid KV group can register."
+  pr-link: XXX

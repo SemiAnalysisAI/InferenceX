@@ -37,7 +37,8 @@ set -x
 #   AITER_A8W4               1      (reference; 0 = aiter a16w4 MoE path)
 #   LANGUAGE_MODEL_ONLY      true   
 #   KV_CACHE_DTYPE           fp8    (default for every arm; =auto for a bf16 A/B)
-#   KV_BLOCK_SIZE            unset  (unset -> 4608 on offloaded cells, else vLLM sizes it)
+#   KV_BLOCK_SIZE            unset  (unset -> 1536 for LMCache/native-page,
+#                                    4608 for other offloaded cells, else vLLM sizes it)
 #   MAX_MODEL_LEN            1M     
 #   SPEC_DECODE              true   (this is the _mtp DSpark recipe; =false for a no-spec A/B)
 #   SPEC_NUM_TOKENS          2      (DSpark draft length; validated by the _mtp config)
@@ -414,28 +415,34 @@ PYVER
     # Read locks are leases on chunks lookup promised vLLM it could retrieve.
     # The 300s default expires mid-queue on long-context agentic turns.
     LMCACHE_L1_READ_TTL_SECONDS="${LMCACHE_L1_READ_TTL_SECONDS:-7200}"
-    # LMCache requires chunk_size % vllm_block_size == 0. The page is forced to
-    # 4608 above to satisfy the mamba step-alignment window, and the stock 256
-    # is not a multiple of it, so the chunk follows the page. One chunk per
-    # block is the finest legal granularity; anything smaller is rejected and
-    # anything larger coarsens cache reuse for no gain.
-    # The alignment is the page SCALED BY DCP -- under decode context
-    # parallelism each rank holds a 1/dcp slice, so a chunk has to cover a whole
-    # block across every rank. At page 4608 and dcp 8 that is 36864 tokens.
-    # This is also the floor: mnbt 8192 pins the page into (4096, 8192], so
-    # page*dcp cannot come out below ~32k however the page is chosen.
+    # LMCache requires the chunk to be a multiple of every hybrid KV group's
+    # logical tokens_per_block. K3 has two relevant alignments on this stack:
+    # attention is KV_BLOCK_SIZE scaled by DCP, while the replicated Mamba
+    # state uses 24576 tokens per block. With the native 1536-token page and
+    # DCP8 these are 12288 and 24576, so their LCM is 24576. Derive the LCM so
+    # explicit chunk overrides are checked against both groups as well.
     if [ -z "${KV_BLOCK_SIZE:-}" ]; then
         echo "Error: KV_BLOCK_SIZE must be known to derive the LMCache chunk" >&2
         exit 1
     fi
     LMCACHE_BLOCK_ALIGN=$(( KV_BLOCK_SIZE * ${DCP_SIZE:-1} ))
-    LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-$LMCACHE_BLOCK_ALIGN}"
-    if [ $((LMCACHE_CHUNK_SIZE % LMCACHE_BLOCK_ALIGN)) -ne 0 ]; then
+    LMCACHE_MAMBA_BLOCK_ALIGN="${LMCACHE_MAMBA_BLOCK_ALIGN:-24576}"
+    gcd_a=$LMCACHE_BLOCK_ALIGN
+    gcd_b=$LMCACHE_MAMBA_BLOCK_ALIGN
+    while [ "$gcd_b" -ne 0 ]; do
+        gcd_tmp=$(( gcd_a % gcd_b ))
+        gcd_a=$gcd_b
+        gcd_b=$gcd_tmp
+    done
+    LMCACHE_CHUNK_ALIGN=$(( LMCACHE_BLOCK_ALIGN / gcd_a * LMCACHE_MAMBA_BLOCK_ALIGN ))
+    LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-$LMCACHE_CHUNK_ALIGN}"
+    if [ $((LMCACHE_CHUNK_SIZE % LMCACHE_CHUNK_ALIGN)) -ne 0 ]; then
         echo "Error: LMCACHE_CHUNK_SIZE=$LMCACHE_CHUNK_SIZE must be a multiple of" >&2
-        echo "       ${LMCACHE_BLOCK_ALIGN} (block ${KV_BLOCK_SIZE:-256} x dcp ${DCP_SIZE:-1})" >&2
+        echo "       ${LMCACHE_CHUNK_ALIGN} (LCM of attention ${LMCACHE_BLOCK_ALIGN}" >&2
+        echo "       = block ${KV_BLOCK_SIZE} x dcp ${DCP_SIZE:-1}, and Mamba ${LMCACHE_MAMBA_BLOCK_ALIGN})" >&2
         exit 1
     fi
-    echo "LMCache chunk ${LMCACHE_CHUNK_SIZE} (align ${LMCACHE_BLOCK_ALIGN} = block ${KV_BLOCK_SIZE:-256} x dcp ${DCP_SIZE:-1})"
+    echo "LMCache chunk ${LMCACHE_CHUNK_SIZE} (hybrid align ${LMCACHE_CHUNK_ALIGN}; attention ${LMCACHE_BLOCK_ALIGN}, Mamba ${LMCACHE_MAMBA_BLOCK_ALIGN})"
     LMCACHE_MAX_WORKERS="${LMCACHE_MAX_WORKERS:-$TP}"
     # Without this, identical prompts hash differently per process and the hit
     # rate is silently 0. Must be set on BOTH the server and vllm serve.
