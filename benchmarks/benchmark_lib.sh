@@ -929,35 +929,56 @@ setup_profiling_env() {
 
 # Agentic runs replay traces through aiperf, which has no --profile flag; the
 # engines still expose /start_profile & /stop_profile over HTTP. Arm a
-# background trigger that waits for steady state and then captures a bounded
-# window. sglang auto-stops after num_steps per stage; vllm needs a timed stop.
+# background trigger that captures TWO bounded windows: an early one during
+# ramp (prefill-rich — steady-state agentic decode can go a whole window
+# without an extend step) and a steady-state one. sglang auto-stops after
+# num_steps per stage; vllm needs a timed stop.
 launch_agentic_profile_trigger() {
     profiling_enabled || return 0
     local log_dir="${1:-$(_profile_workspace_dir)}"
     local url="${PROFILE_SERVER_URL:-http://localhost:${PORT:-8888}}"
     local delay="${PROFILE_START_DELAY_SECONDS:-600}"
+    local prefill_delay="${PROFILE_PREFILL_DELAY_SECONDS:-180}"
     local trigger_log="$log_dir/profile_trigger.log"
-    (
-        sleep "$delay"
-        echo "[PROFILE] $(date --iso-8601=seconds) starting capture via $url/start_profile"
+
+    _profile_capture_window() {
+        local label="$1"
+        echo "[PROFILE] $(date --iso-8601=seconds) starting $label capture via $url/start_profile"
         if [[ "${FRAMEWORK:-}" == *vllm* ]]; then
             curl -sS -m 120 -X POST "$url/start_profile" \
                 -H 'Content-Type: application/json' -d '{}' \
-                || echo "[PROFILE] start_profile failed"
+                || echo "[PROFILE] start_profile failed ($label)"
             sleep "${PROFILE_CAPTURE_SECONDS:-15}"
-            echo "[PROFILE] $(date --iso-8601=seconds) stopping capture"
+            echo "[PROFILE] $(date --iso-8601=seconds) stopping $label capture"
             curl -sS -m 600 -X POST "$url/stop_profile" \
                 -H 'Content-Type: application/json' -d '{}' \
-                || echo "[PROFILE] stop_profile failed"
+                || echo "[PROFILE] stop_profile failed ($label)"
         else
             curl -sS -m 120 -X POST "$url/start_profile" \
                 -H 'Content-Type: application/json' \
                 -d "{\"num_steps\": ${PROFILE_NUM_STEPS:-2}, \"merge_profiles\": true, \"profile_by_stage\": true, \"record_shapes\": true, \"with_stack\": ${PROFILE_WITH_STACK:-true}}" \
-                || echo "[PROFILE] start_profile failed"
+                || echo "[PROFILE] start_profile failed ($label)"
         fi
+    }
+
+    (
+        if [[ "$prefill_delay" -gt 0 && "$prefill_delay" -lt "$delay" ]]; then
+            sleep "$prefill_delay"
+            _profile_capture_window "prefill-window"
+            sleep "$((delay - prefill_delay))"
+            # Close the first session if it never reached num_steps; a stop on
+            # an already-stopped profiler is a harmless error.
+            curl -sS -m 600 -X POST "$url/stop_profile" \
+                -H 'Content-Type: application/json' -d '{}' >/dev/null 2>&1 || true
+            # Let the async trace writer flush before the next session starts.
+            sleep 30
+        else
+            sleep "$delay"
+        fi
+        _profile_capture_window "steady-window"
     ) > "$trigger_log" 2>&1 &
     PROFILE_TRIGGER_PID=$!
-    echo "[PROFILE] Capture trigger armed: pid=$PROFILE_TRIGGER_PID delay=${delay}s url=$url log=$trigger_log"
+    echo "[PROFILE] Capture trigger armed: pid=$PROFILE_TRIGGER_PID prefill-delay=${prefill_delay}s steady-delay=${delay}s url=$url log=$trigger_log"
 }
 
 # Reap the trigger and make sure no capture is left open (a stop on an
