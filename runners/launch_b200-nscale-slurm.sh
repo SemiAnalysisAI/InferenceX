@@ -2,15 +2,11 @@
 
 # Standalone launcher for the B200 nscale Slurm cluster.
 #
-# Self-contained on purpose: it does not source or exec launch_b200-dgxc.sh.
-# The two clusters share a shape but not their storage layout — dgxc resolves
-# models and caches under /lustre/fsw, which does not exist here — so coupling
-# them would force every dgxc path to become an override hook and would let a
-# dgxc-only change silently alter nscale runs.
+# Self-contained because Nscale has its own Slurm and storage layout.
 #
 # Scope: multi-node Dynamo-vLLM DeepSeek-V4-Pro and Kimi K2.6 FP4 runs, plus
-# DeepSeek-V4-Pro FP4 Dynamo-SGLang MTP, on the b200-nscale/b200-new runner
-# labels. Anything else exits non-zero.
+# DeepSeek-V4-Pro FP4 Dynamo-SGLang MTP, on the b200-nscale runner label.
+# Anything else exits non-zero.
 
 SLURM_PARTITION="batch_1"
 SLURM_ACCOUNT="benchmark"
@@ -23,8 +19,7 @@ NSCALE_MODEL_ROOT="/scratch/models"
 SQUASH_DIR="/data/home/sa-shared/containers"
 AIPERF_MMAP_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/aiperf-cache"
 HF_HUB_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/hf-hub-cache"
-# Importing the vLLM image over this cluster's shared home is slower than on
-# dgxc, so allow well beyond the 600s that suffices there.
+# Importing the vLLM image over this cluster's shared home can take a while.
 SQUASH_LOCK_TIMEOUT=3600
 
 # shellcheck source=runners/slurm_utils.sh
@@ -34,9 +29,12 @@ set -x
 
 export AIPERF_MMAP_CACHE_HOST_PATH
 
+run_compat_launcher() {
+    exec bash "$(dirname "${BASH_SOURCE[0]}")/launch_b200-nscale-compat.sh"
+}
+
 if [[ "$IS_MULTINODE" != "true" ]]; then
-    echo "launch_b200-nscale-slurm.sh only supports multi-node runs (IS_MULTINODE=$IS_MULTINODE)" >&2
-    exit 1
+    run_compat_launcher
 fi
 
 if [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
@@ -49,16 +47,12 @@ elif [[ $MODEL_PREFIX == "kimik3" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="${MODEL_PATH:-$NSCALE_MODEL_ROOT/Kimi-K3}"
     export SRT_SLURM_MODEL_PREFIX="kimik3"
 else
-    echo "Unsupported model prefix/precision for b200-nscale: $MODEL_PREFIX/$PRECISION" >&2
-    echo "Models staged under $NSCALE_MODEL_ROOT:" >&2
-    ls -la "$NSCALE_MODEL_ROOT" >&2 || true
-    exit 1
+    run_compat_launcher
 fi
 
 if [[ $FRAMEWORK != "dynamo-vllm" ]] &&
    [[ $MODEL_PREFIX != "dsv4" || $PRECISION != "fp4" || $FRAMEWORK != "dynamo-sglang" || $SPEC_DECODING != "mtp" ]]; then
-    echo "Unsupported framework/configuration for b200-nscale: $MODEL_PREFIX/$PRECISION/$FRAMEWORK/$SPEC_DECODING" >&2
-    exit 1
+    run_compat_launcher
 fi
 
 USES_DCGM_POWER=0

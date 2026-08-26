@@ -259,7 +259,7 @@ def sample_runner_config():
         "labels": {
             "h100": ["h100-cr_0", "h100-cr_1", "h100-cw_0", "h100-cw_1"],
             "h200": ["h200-cw_0", "h200-cw_1"],
-            "b200": ["b200-nvd_0", "b200-nvd_1", "b200-dgxc_1"],
+            "b200": ["b200-nvd_0", "b200-nvd_1", "b200-nscale_1"],
             "b300": ["b300-nv_0", "b300-nv_1"],
             "cluster:b300-nv": ["b300-nv_0", "b300-nv_1"],
             "mi300x": ["mi300x-amd_0", "mi300x-amd_1", "mi300x-cr_0"],
@@ -268,7 +268,7 @@ def sample_runner_config():
         "hardware": {
             "cluster:h100-dgxc": {"available-cpu-dram-mib": 2063837, "gpus-per-node": 8},
             "cluster:h200-dgxc": {"available-cpu-dram-mib": 1471356, "gpus-per-node": 8},
-            "cluster:b200-dgxc": {"available-cpu-dram-mib": 3774874, "gpus-per-node": 8},
+            "cluster:b200-nscale": {"available-cpu-dram-mib": 3774874, "gpus-per-node": 8},
             "cluster:b300-nv": {"available-cpu-dram-mib": 2964436, "gpus-per-node": 8},
             "cluster:mi300x-amds": {"available-cpu-dram-mib": 2321924, "gpus-per-node": 8},
             "cluster:mi355x-amds": {"available-cpu-dram-mib": 3095781, "gpus-per-node": 8},
@@ -522,7 +522,7 @@ class TestMarkEvalEntries:
         matrix_values = [
             {
                 "model": "deepseek-ai/DeepSeek-R1-0528",
-                "runner": "cluster:b200-dgxc",
+                "runner": "cluster:b200-nscale",
                 "framework": "dynamo-trt",
                 "precision": "fp8",
                 "isl": 8192,
@@ -554,7 +554,7 @@ class TestMarkEvalEntries:
         matrix_values = [
             {
                 "model": "deepseek-ai/DeepSeek-R1-0528",
-                "runner": "cluster:b200-dgxc",
+                "runner": "cluster:b200-nscale",
                 "framework": "dynamo-trt",
                 "precision": "fp8",
                 "isl": 8192,
@@ -576,7 +576,7 @@ class TestMarkEvalEntries:
             },
             {
                 "model": "deepseek-ai/DeepSeek-R1-0528",
-                "runner": "cluster:b200-dgxc",
+                "runner": "cluster:b200-nscale",
                 "framework": "dynamo-trt",
                 "precision": "fp8",
                 "isl": 8192,

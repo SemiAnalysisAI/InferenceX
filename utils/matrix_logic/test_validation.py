@@ -191,15 +191,15 @@ def valid_runner_config():
         "labels": {
             "h100": ["h100-cr_0", "h100-cr_1", "h100-cw_0", "h100-cw_1"],
             "h200": ["h200-cw_0", "h200-cw_1"],
-            "b200": ["b200-nvd_0", "b200-nvd_1", "b200-dgxc_1"],
-            "cluster:b200-dgxc": ["b200-dgxc_1"],
+            "b200": ["b200-nvd_0", "b200-nvd_1", "b200-nscale_1"],
+            "cluster:b200-nscale": ["b200-nscale_1"],
             "mi300x": ["mi300x-amd_0", "mi300x-amd_1", "mi300x-cr_0"],
             "gb200": ["gb200-nv_0"],
         },
         "hardware": {
             "cluster:h100-dgxc": {"available-cpu-dram-mib": 2063837, "gpus-per-node": 8},
             "cluster:h200-dgxc": {"available-cpu-dram-mib": 1471356, "gpus-per-node": 8},
-            "cluster:b200-dgxc": {"available-cpu-dram-mib": 3774874, "gpus-per-node": 8},
+            "cluster:b200-nscale": {"available-cpu-dram-mib": 3774874, "gpus-per-node": 8},
             "cluster:mi300x-amds": {"available-cpu-dram-mib": 2321924, "gpus-per-node": 8},
             "cluster:gb200-nv": {"available-cpu-dram-mib": 860160, "gpus-per-node": 4},
         },
@@ -389,7 +389,7 @@ class TestAgenticMatrixEntries:
             "model-prefix": "dsv4",
             "precision": "fp4",
             "framework": "vllm",
-            "runner": "cluster:b200-dgxc",
+            "runner": "cluster:b200-nscale",
             "tp": 8,
             "pp": 1,
             "dcp-size": 1,
@@ -1292,8 +1292,8 @@ class TestMasterConfigEntries:
         with pytest.raises(Exception, match="Agentic master configs must use"):
             SingleNodeMasterConfigEntry(**config)
 
-        config["runner"] = "cluster:b200-dgxc"
-        assert SingleNodeMasterConfigEntry(**config).runner == "cluster:b200-dgxc"
+        config["runner"] = "cluster:b200-nscale"
+        assert SingleNodeMasterConfigEntry(**config).runner == "cluster:b200-nscale"
 
     def test_multinode_agentic_master_config_requires_cluster_runner(self):
         """Multinode agentic configs must also pin an exact cluster label."""
@@ -1338,8 +1338,8 @@ class TestMasterConfigEntries:
         with pytest.raises(Exception, match="Agentic master configs must use"):
             MultiNodeMasterConfigEntry(**config)
 
-        config["runner"] = "cluster:b200-dgxc"
-        assert MultiNodeMasterConfigEntry(**config).runner == "cluster:b200-dgxc"
+        config["runner"] = "cluster:b200-nscale"
+        assert MultiNodeMasterConfigEntry(**config).runner == "cluster:b200-nscale"
 
 
 # =============================================================================

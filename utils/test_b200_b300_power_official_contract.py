@@ -14,9 +14,7 @@ RECIPE_ROOT = REPO_ROOT / "benchmarks/multi_node/srt-slurm-recipes"
 MASTER = REPO_ROOT / "configs/nvidia-master.yaml"
 WORKFLOW = REPO_ROOT / ".github/workflows/test-process-result.yml"
 LAUNCHERS = {
-    "cluster:b200-dgxc": REPO_ROOT / "runners/launch_b200-dgxc.sh",
-    "b200-nscale": REPO_ROOT / "runners/launch_b200-nscale-slurm.sh",
-    "b200-new": REPO_ROOT / "runners/launch_b200-nscale-slurm.sh",
+    "cluster:b200-nscale": REPO_ROOT / "runners/launch_b200-nscale-slurm.sh",
     "b300": REPO_ROOT / "runners/launch_b300-nv.sh",
 }
 
@@ -72,9 +70,7 @@ POWER_RECIPES = _power_recipes()
 def test_exactly_37_supported_recipes_are_selected_from_the_master_config():
     assert len(POWER_RECIPES) == 37
     assert Counter(item["runner"] for item in POWER_RECIPES.values()) == {
-        "cluster:b200-dgxc": 5,
-        "b200-nscale": 10,
-        "b200-new": 6,
+        "cluster:b200-nscale": 21,
         "b300": 16,
     }
     assert Counter(item["framework"] for item in POWER_RECIPES.values()) == {
@@ -193,11 +189,6 @@ def test_launchers_provision_and_preserve_power_provenance():
 
 def test_non_power_specialized_clone_revisions_remain_available():
     expected = {
-        "runners/launch_b200-dgxc.sh": {
-            "aflowers/vllm-gb200-v0.20.0",
-            "c180328b98c3793ca84a1e24a030f90545eb7d5d",
-            "df5baa93f4caf5169dea2a4236ad2cc742fe40e7",
-        },
         "runners/launch_b200-nscale-slurm.sh": {
             "04e87fcc505d6d851451781a5499ca19a02ec2b4",
             "aflowers/vllm-gb200-v0.20.0",
@@ -221,8 +212,8 @@ def test_process_result_ci_covers_the_new_contract():
     workflow = WORKFLOW.read_text(encoding="utf-8")
     for path in (
         "configs/nvidia-master.yaml",
-        "runners/launch_b200-dgxc.sh",
         "runners/launch_b200-nscale-slurm.sh",
+        "runners/launch_b200-nscale-compat.sh",
         "runners/launch_b300-nv.sh",
         "utils/test_b200_b300_power_official_contract.py",
     ):
