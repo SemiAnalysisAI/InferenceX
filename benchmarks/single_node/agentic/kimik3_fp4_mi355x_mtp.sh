@@ -223,6 +223,40 @@ trap cleanup_agentic_services EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
+# ---- KV page size ------------------------------------------------------------
+# K3 is a Mamba-hybrid (the KDA linear-attention layers), and attaching ANY KV
+# connector makes LMCache's validate_mamba_step_alignment() require
+#   block_size <= max_num_batched_tokens < 2 * block_size
+# so every prefill step crosses exactly one block boundary and each boundary
+# gets a recurrent-state snapshot (mamba_cache_mode=align only snapshots at
+# step end, so a step spanning two blocks would store null-block garbage under
+# a valid token hash and corrupt anything resuming from that prefix).
+#
+# The block_size it reads is cache_config.block_size -- the ATTENTION KV page,
+# NOT the scheduler block that --mamba-block-size feeds. vLLM auto-sizes that
+# page to 1536 here, whose legal window [1536, 3072) excludes the 8192 batch
+# this recipe wants, and no mamba-side knob can move it.
+#
+# So set the page instead. 4608 = 3 * 1536 keeps it an exact multiple of the
+# size vLLM picked for itself, and its window [4608, 9216) contains 8192.
+# kvnone cells are unaffected: no connector, no constraint, no override.
+KV_BLOCK_SIZE="${KV_BLOCK_SIZE:-}"
+if [ -z "$KV_BLOCK_SIZE" ] && agentic_kv_offload_enabled; then
+    KV_BLOCK_SIZE=4608
+fi
+KV_BLOCK_ARGS=()
+if [ -n "$KV_BLOCK_SIZE" ]; then
+    KV_BLOCK_ARGS=(--block-size "$KV_BLOCK_SIZE")
+fi
+
+# Optional, unset by default. Feeds the scheduler block via
+# lcm(attention_block * dcp, mamba_block); forcing it interacts badly with a
+# non-power-of-two page, so leave vLLM to size it unless deliberately sweeping.
+MAMBA_BLOCK_ARGS=()
+if [ -n "${MAMBA_BLOCK_SIZE:-}" ]; then
+    MAMBA_BLOCK_ARGS=(--mamba-block-size "$MAMBA_BLOCK_SIZE")
+fi
+
 # ---- KV offload -------------------------------------------------------------
 # TOTAL_CPU_DRAM_GB is the aggregate host-DRAM budget the matrix generator
 # derives from dram-utilization and the runner's available-cpu-dram-mib, capped
@@ -311,7 +345,16 @@ PYVER
     # Read locks are leases on chunks lookup promised vLLM it could retrieve.
     # The 300s default expires mid-queue on long-context agentic turns.
     LMCACHE_L1_READ_TTL_SECONDS="${LMCACHE_L1_READ_TTL_SECONDS:-7200}"
-    LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-256}"
+    # LMCache requires chunk_size % vllm_block_size == 0. The page is forced to
+    # 4608 above to satisfy the mamba step-alignment window, and the stock 256
+    # is not a multiple of it, so the chunk follows the page. One chunk per
+    # block is the finest legal granularity; anything smaller is rejected and
+    # anything larger coarsens cache reuse for no gain.
+    LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-${KV_BLOCK_SIZE:-256}}"
+    if [ -n "${KV_BLOCK_SIZE:-}" ] && [ $((LMCACHE_CHUNK_SIZE % KV_BLOCK_SIZE)) -ne 0 ]; then
+        echo "Error: LMCACHE_CHUNK_SIZE=$LMCACHE_CHUNK_SIZE must be a multiple of block size $KV_BLOCK_SIZE" >&2
+        exit 1
+    fi
     LMCACHE_MAX_WORKERS="${LMCACHE_MAX_WORKERS:-$TP}"
     # Without this, identical prompts hash differently per process and the hit
     # rate is silently 0. Must be set on BOTH the server and vllm serve.
@@ -404,40 +447,6 @@ if [ "$DCP_SIZE" -gt 1 ]; then
         --dcp-comm-backend "$DCP_COMM_BACKEND"
         --cp-kv-cache-interleave-size 1
     )
-fi
-
-# ---- KV page size ------------------------------------------------------------
-# K3 is a Mamba-hybrid (the KDA linear-attention layers), and attaching ANY KV
-# connector makes LMCache's validate_mamba_step_alignment() require
-#   block_size <= max_num_batched_tokens < 2 * block_size
-# so every prefill step crosses exactly one block boundary and each boundary
-# gets a recurrent-state snapshot (mamba_cache_mode=align only snapshots at
-# step end, so a step spanning two blocks would store null-block garbage under
-# a valid token hash and corrupt anything resuming from that prefix).
-#
-# The block_size it reads is cache_config.block_size -- the ATTENTION KV page,
-# NOT the scheduler block that --mamba-block-size feeds. vLLM auto-sizes that
-# page to 1536 here, whose legal window [1536, 3072) excludes the 8192 batch
-# this recipe wants, and no mamba-side knob can move it.
-#
-# So set the page instead. 4608 = 3 * 1536 keeps it an exact multiple of the
-# size vLLM picked for itself, and its window [4608, 9216) contains 8192.
-# kvnone cells are unaffected: no connector, no constraint, no override.
-KV_BLOCK_SIZE="${KV_BLOCK_SIZE:-}"
-if [ -z "$KV_BLOCK_SIZE" ] && agentic_kv_offload_enabled; then
-    KV_BLOCK_SIZE=4608
-fi
-KV_BLOCK_ARGS=()
-if [ -n "$KV_BLOCK_SIZE" ]; then
-    KV_BLOCK_ARGS=(--block-size "$KV_BLOCK_SIZE")
-fi
-
-# Optional, unset by default. Feeds the scheduler block via
-# lcm(attention_block * dcp, mamba_block); forcing it interacts badly with a
-# non-power-of-two page, so leave vLLM to size it unless deliberately sweeping.
-MAMBA_BLOCK_ARGS=()
-if [ -n "${MAMBA_BLOCK_SIZE:-}" ]; then
-    MAMBA_BLOCK_ARGS=(--mamba-block-size "$MAMBA_BLOCK_SIZE")
 fi
 
 # ---- Speculative ------------------------------------------------------------
