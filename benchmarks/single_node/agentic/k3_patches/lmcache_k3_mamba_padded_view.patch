@@ -1,0 +1,29 @@
+diff --git a/lmcache/integration/vllm/kv_cache_group_edits.py b/lmcache/integration/vllm/kv_cache_group_edits.py
+index 265ebf7..37a70ea 100644
+--- a/lmcache/integration/vllm/kv_cache_group_edits.py
++++ b/lmcache/integration/vllm/kv_cache_group_edits.py
+@@ -387 +387 @@ class _MambaUnifiedViewEdit(KVCacheGroupEdit):
+-    - [num_blocks, 1, vllm_block_size, head_size]
++    - [num_blocks, vllm_block_size, head_size]
+@@ -409,3 +409,6 @@ class _MambaUnifiedViewEdit(KVCacheGroupEdit):
+-        Convert [num_blocks, 1, 1, context_size] to
+-        [num_blocks, 1, vllm_block_size, head_size] for HND layout, or
+-        [num_blocks, vllm_block_size, 1, head_size] for NHD layout.
++        Convert [num_blocks, 1, 1, context_size] to the rank-3 opaque-page
++        layout [num_blocks, vllm_block_size, head_size].
++
++        Kimi-K3's unified Mamba allocation pads the stride between blocks.
++        LMCache's rank-3 NB_BS_HS transfer path carries that stride explicitly;
++        the rank-4 attention paths assume tight blocks and reject this view.
+@@ -416,9 +419,2 @@ class _MambaUnifiedViewEdit(KVCacheGroupEdit):
+-        kv_layout = layout_hints.get("kv_layout", "none")
+-        if kv_layout == "NHD":
+-            return kv_cache.view(kv_cache.shape[0], spec.block_size, 1, -1)
+-        elif kv_layout == "HND":
+-            return kv_cache.view(kv_cache.shape[0], 1, spec.block_size, -1)
+-        else:
+-            raise ValueError(
+-                f"Unsupported kv_layout: {kv_layout}. Only NHD and HND are supported."
+-            )
++        del layout_hints  # Mamba state bytes have no attention-head ordering.
++        return kv_cache.view(kv_cache.shape[0], spec.block_size, -1)

@@ -358,14 +358,28 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     LMC_SITE=$(python3 -c 'import lmcache,os;print(os.path.dirname(os.path.dirname(lmcache.__file__)))')
     echo "Applying LMCache #4729 from $LMC_PATCH into $LMC_SITE"
     ( cd "$LMC_SITE" && patch -p1 --forward --batch < "$LMC_PATCH" ) || true
+    # Kimi-K3's unified Mamba tensor has dim-0 padding between blocks. The
+    # upstream edit exposes it as a rank-4 attention view, whose LMCache copy
+    # kernels assume tightly packed blocks and reject the registration. Expose
+    # the opaque recurrent state through LMCache's rank-3 NB_BS_HS format,
+    # which carries the real stride(0), without copying the multi-GiB allocation.
+    LMC_MAMBA_PATCH="$(cd "$(dirname "$0")" && pwd)/k3_patches/lmcache_k3_mamba_padded_view.patch"
+    echo "Applying Kimi-K3 padded Mamba view fix from $LMC_MAMBA_PATCH into $LMC_SITE"
+    ( cd "$LMC_SITE" && patch -p1 --forward --batch < "$LMC_MAMBA_PATCH" ) || true
     # Fail closed: without the discovery fix the run dies ~40 min later at KV
-    # registration, so assert the symbol is present before serving.
+    # registration. Also assert the padded Mamba view uses the stride-aware
+    # rank-3 transfer format rather than the tight-only rank-4 attention path.
     python3 - <<'PYLMC' || exit 1
 import sys
+import inspect
+from lmcache.integration.vllm import kv_cache_group_edits as edits
 from lmcache.integration.vllm import utils as u
-ok = hasattr(u, "translate_vllm_kv_cache_layout")
-print(f"LMCache #4729 check: translate_vllm_kv_cache_layout present={ok}")
-sys.exit(0 if ok else 1)
+layout_ok = hasattr(u, "translate_vllm_kv_cache_layout")
+mamba_source = inspect.getsource(edits._MambaUnifiedViewEdit.apply)
+mamba_ok = "spec.block_size, -1" in mamba_source
+print(f"LMCache #4729 check: translate_vllm_kv_cache_layout present={layout_ok}")
+print(f"LMCache K3 Mamba view check: rank3_stride_aware={mamba_ok}")
+sys.exit(0 if layout_ok and mamba_ok else 1)
 PYLMC
 
     python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null

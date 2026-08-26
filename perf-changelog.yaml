@@ -6092,3 +6092,11 @@
   description:
     - "Align the LMCache chunk to the LCM of Kimi-K3's DCP-scaled attention page and replicated Mamba-state page so every hybrid KV group can register."
   pr-link: XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp-dcp-lmcache
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Expose Kimi-K3's padded unified Mamba state through LMCache's stride-aware rank-3 transfer layout so hybrid KV registration preserves page strides."
+  pr-link: XXX
