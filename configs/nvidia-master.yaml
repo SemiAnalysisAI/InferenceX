@@ -8903,6 +8903,93 @@ glm5.2-fp4-b200-sglang-agentic-mtp:
       search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 4, 8, 12, 16] }
 
+glm5.2-fp4-b200-dynamo-sglang-agentic-agg:
+  image: lmsysorg/sglang:nightly-dev-cu13-20260824-95f5ecd3
+  model: nvidia/GLM-5.2-NVFP4
+  model-prefix: glm5.2
+  runner: cluster:b200-nscale
+  precision: fp4
+  framework: dynamo-sglang
+  router: { name: dynamo-router, version: "71eb001e17fa73c742f0afe1a6ed96836cb135fd" }
+  multinode: true
+  disagg: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - spec-decoding: mtp
+        conc-list: [2, 4, 8, 12]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.99"
+          - "CONFIG_FILE=recipes/sglang/glm5.2/b200-fp4/agentic/glm5.2-agentx-agg.yaml"
+        # Aggregated serving runs prefill and decode on the same TP8 worker.
+        # Keep decode at zero so matrix metadata does not double-count GPUs.
+        decode:
+          num-worker: 0
+          tp: 8
+          ep: 1
+          dp-attn: false
+
+glm5.2-fp4-b200-dynamo-sglang-agentic-disagg:
+  image: lmsysorg/sglang:nightly-dev-cu13-20260824-95f5ecd3
+  model: nvidia/GLM-5.2-NVFP4
+  model-prefix: glm5.2
+  runner: cluster:b200-nscale
+  precision: fp4
+  framework: dynamo-sglang
+  router: { name: dynamo-router, version: "71eb001e17fa73c742f0afe1a6ed96836cb135fd" }
+  kv-p2p-transfer: nixl
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - spec-decoding: mtp
+        conc-list: [113]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.5"
+          - "CONFIG_FILE=recipes/sglang/glm5.2/b200-fp4/agentic/glm5.2-agentx-1p2d.yaml"
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 1
+          dp-attn: true
+      - spec-decoding: mtp
+        conc-list: [113]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.5"
+          - "CONFIG_FILE=recipes/sglang/glm5.2/b200-fp4/agentic/glm5.2-agentx-1p3d.yaml"
+        decode:
+          num-worker: 3
+          tp: 8
+          ep: 1
+          dp-attn: true
+
 glm5.2-fp4-gb200-dynamo-sglang-agentic-agg:
   image: lmsysorg/sglang:v0.5.17-cu130
   model: nvidia/GLM-5.2-NVFP4

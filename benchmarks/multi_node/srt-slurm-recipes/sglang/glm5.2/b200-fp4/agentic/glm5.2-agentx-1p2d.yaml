@@ -1,0 +1,174 @@
+# Agentic-coding SGLang disaggregated 1P2D recipe for GLM-5.2-NVFP4 on B200.
+# Expanded from NVIDIA/srt-slurm#314 at 2f43c324211022d367d8130e42499d579ecc90d9.
+# Golden synthetic acceptance is injected only for throughput jobs; EVAL_ONLY
+# retains real target-model verification.
+name: agentx-1p2d_dtp8-c113
+model:
+  path: glm-5.2-fp4
+  container: lmsysorg/sglang:nightly-dev-cu13-20260824-95f5ecd3
+  precision: fp4
+identity:
+  model:
+    repo: nvidia/GLM-5.2-NVFP4
+    revision: aec724e8c7b8ee9db3b48c01c320f63f9cdaf8aa
+  container:
+    image: lmsysorg/sglang:nightly-dev-cu13-20260824-95f5ecd3
+  frameworks:
+    dynamo: 71eb001e17fa73c742f0afe1a6ed96836cb135fd
+    sglang: nightly-dev-cu13-20260824-95f5ecd3
+resources:
+  gpu_type: b200
+  gpus_per_node: 8
+  decode_nodes: 2
+  decode_workers: 2
+  gpus_per_decode: 8
+  gpus_per_prefill: 8
+  prefill_nodes: 1
+  prefill_workers: 1
+frontend:
+  type: dynamo
+  nginx_session_affinity: true
+  nginx_session_affinity_header: X-Dynamo-Session-ID
+  enable_multiple_frontends: true
+  env:
+    PIP_BREAK_SYSTEM_PACKAGES: '1'
+  args:
+    router-mode: kv
+    router-session-affinity-ttl-secs: '3600'
+    active-decode-blocks-threshold: None
+    active-prefill-tokens-threshold: None
+    active-prefill-tokens-threshold-frac: None
+dynamo:
+  hash: 71eb001e17fa73c742f0afe1a6ed96836cb135fd
+  install: true
+backend:
+  type: sglang
+  prefill_environment:
+    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+    PYTHONUNBUFFERED: '1'
+    DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
+    SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: '100000'
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '100000'
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
+    MC_TE_METRIC: 'true'
+    NCCL_CUMEM_ENABLE: '1'
+    SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
+    SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
+    SGLANG_ENABLE_THINKING: '1'
+    SGLANG_ENABLE_UNIFIED_RADIX_TREE: '1'
+    SGLANG_HICACHE_DEBUG_LOG: '1'
+    SGLANG_HICACHE_DEBUG_SAMPLE_RATE: '16384'
+    SGLANG_REASONING_EFFORT: max
+    PIP_BREAK_SYSTEM_PACKAGES: '1'
+  decode_environment:
+    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+    PYTHONUNBUFFERED: '1'
+    DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
+    SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: '100000'
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '100000'
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
+    MC_TE_METRIC: 'true'
+    NCCL_CUMEM_ENABLE: '1'
+    SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
+    SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
+    SGLANG_MOE_NVFP4_DISPATCH: '1'
+    SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '1'
+    SGLANG_ENABLE_THINKING: '1'
+    SGLANG_CLIP_MAX_NEW_TOKENS_ESTIMATION: '8'
+    SGLANG_REASONING_EFFORT: max
+    PIP_BREAK_SYSTEM_PACKAGES: '1'
+  sglang_config:
+    prefill:
+      served-model-name: nvidia/GLM-5.2-NVFP4
+      trust-remote-code: true
+      quantization: modelopt_fp4
+      kv-cache-dtype: fp8_e4m3
+      disaggregation-mode: prefill
+      disaggregation-transfer-backend: nixl
+      tensor-parallel-size: 8
+      data-parallel-size: 8
+      expert-parallel-size: 8
+      enable-dp-attention: true
+      enable-dp-lm-head: true
+      load-balance-method: total_tokens
+      chunked-prefill-size: 65536
+      max-prefill-tokens: 8192
+      max-running-requests: 16
+      cuda-graph-max-bs: 16
+      disable-cuda-graph: true
+      nsa-prefill-backend: trtllm
+      nsa-decode-backend: trtllm
+      moe-runner-backend: flashinfer_cutlass
+      fp4-gemm-backend: flashinfer_cutlass
+      enable-flashinfer-allreduce-fusion: true
+      weight-loader-prefetch-checkpoints: true
+      model-loader-extra-config: '{"enable_multithread_load": true}'
+      mem-fraction-static: 0.8
+      context-length: 1048576
+      enable-hierarchical-cache: true
+      hicache-write-policy: write_back
+      hicache-size: 204
+      hicache-io-backend: direct
+      speculative-algorithm: EAGLE
+      speculative-num-steps: 1
+      speculative-eagle-topk: 1
+      speculative-num-draft-tokens: 2
+      enable-metrics: true
+      enable-cache-report: true
+    decode:
+      served-model-name: nvidia/GLM-5.2-NVFP4
+      trust-remote-code: true
+      quantization: modelopt_fp4
+      kv-cache-dtype: fp8_e4m3
+      disaggregation-mode: decode
+      disaggregation-transfer-backend: nixl
+      disable-radix-cache: true
+      speculative-algorithm: EAGLE
+      speculative-num-steps: 2
+      speculative-eagle-topk: 1
+      speculative-num-draft-tokens: 3
+      tensor-parallel-size: 8
+      data-parallel-size: 8
+      expert-parallel-size: 1
+      enable-dp-attention: true
+      enable-dp-lm-head: true
+      max-running-requests: 16
+      cuda-graph-max-bs: 16
+      chunked-prefill-size: 64
+      context-length: 1048576
+      nsa-prefill-backend: trtllm
+      nsa-decode-backend: trtllm
+      moe-runner-backend: flashinfer_trtllm
+      fp4-gemm-backend: flashinfer_cutlass
+      skip-tokenizer-init: true
+      stream-interval: 30
+      enable-flashinfer-allreduce-fusion: true
+      weight-loader-prefetch-checkpoints: true
+      model-loader-extra-config: '{"enable_multithread_load": true}'
+      mem-fraction-static: 0.9
+      disaggregation-decode-extra-slots: 0
+      enable-metrics: true
+      enable-cache-report: true
+health_check:
+  max_attempts: 1440
+  interval_seconds: 10
+benchmark:
+  type: custom
+  command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+  env:
+    INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
+    RESULT_DIR: /logs/agentic
+    PORT: '8000'
+    IS_MULTINODE: 'true'
+    AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
+    AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+    AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
+    HF_HUB_CACHE: /hf_hub_cache
+infra:
+  etcd_nats_dedicated_node: false
+  nats_max_payload_mb: 64
+sbatch_directives:
+  mem: '0'
+srun_options:
+  mem: '0'
+  container-remap-root: ''
