@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+if [[ -n "${CONFIG_FILE:-}" ]]; then
+    exec bash "$(dirname "${BASH_SOURCE[0]}")/launch_mi355x-amds-srt.sh"
+fi
+
 scancel_sync() {
     local jobid=$1
     local timeout=${2:-600}

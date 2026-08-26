@@ -9,7 +9,7 @@ SRT_SLURM_COMMIT="ad63a66c72404691bdda98c656d6e211156fb582"
 SLURM_PARTITION="compute"
 SGLANG_IMAGE="lmsysorg/sglang:v0.5.16-rocm720-mi35x"
 SHARED_BASE="/it-share/gharunners2/srt-slurm"
-SHARED_IMAGE="${SHARED_BASE}/containers/sglang-v0.5.16-mi35x.sqsh"
+SHARED_IMAGE="${SHARED_BASE}/containers/sglang-rocm-v0.5.16-mi35x-20260728.sqsh"
 SHARED_HF_CACHE="/it-share/hf-hub-cache"
 SHARED_RESULTS="${SHARED_BASE}/results"
 
