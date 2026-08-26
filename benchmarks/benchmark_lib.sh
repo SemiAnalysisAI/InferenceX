@@ -897,7 +897,9 @@ move_profile_trace_for_relay() {
 #                                is triggered (default 600).
 #   PROFILE_NUM_STEPS            sglang: forward steps per stage to capture
 #                                (default 2; auto-stops when reached).
-#   PROFILE_CAPTURE_SECONDS      vllm: timed capture window (default 15).
+#   PROFILE_CAPTURE_SECONDS      vllm: timed capture window (default 5; vllm has
+#                                no step-bounded auto-stop, and eager traces grow
+#                                at hundreds of MB per second across ranks).
 #   PROFILE_WITH_STACK           record python stacks (default true).
 #   PROFILE_OUTPUT_DIR           where the engine writes traces (defaulted by
 #                                setup_profiling_env to <workspace>/profiles).
@@ -1036,7 +1038,7 @@ launch_agentic_profile_trigger() {
         # vllm engines don't auto-stop after num_steps; close the window on a
         # timer (applies to both dynamo-vllm workers and plain vllm servers).
         if [[ "${FRAMEWORK:-}" == *vllm* ]]; then
-            sleep "${PROFILE_CAPTURE_SECONDS:-15}"
+            sleep "${PROFILE_CAPTURE_SECONDS:-5}"
             echo "[PROFILE] $(date --iso-8601=seconds) stopping $label capture"
             _profile_stop_all
         fi
@@ -1229,7 +1231,7 @@ meta = {
         "cuda_graph_disabled": env("PROFILE_DISABLE_CUDA_GRAPH", "1") == "1",
         "num_steps": as_int(env("PROFILE_NUM_STEPS", "2")),
         "start_delay_seconds": as_int(env("PROFILE_START_DELAY_SECONDS", "600")),
-        "capture_seconds": as_int(env("PROFILE_CAPTURE_SECONDS", "15")),
+        "capture_seconds": as_int(env("PROFILE_CAPTURE_SECONDS", "5")),
         "with_stack": env("PROFILE_WITH_STACK", "true") == "true",
         "record_shapes": True,
     },
