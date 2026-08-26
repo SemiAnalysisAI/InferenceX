@@ -236,6 +236,16 @@ on:
         required: false
         type: string
         default: '600'
+      profile-execution-trace:
+        description: "ExecutionTrace capture: '' = engine-side default (on; off only for spec-decode fixed-seq), '1'/'0' force"
+        required: false
+        type: string
+        default: ''
+      profile-with-stack:
+        description: "Record python stacks in profiler sessions ('true'/'false'; agentic ET steady windows force false)"
+        required: false
+        type: string
+        default: 'true'
 
 env:
   RANDOM_RANGE_RATIO: 0.8
@@ -292,12 +302,13 @@ env:
   PROFILE_DISABLE_CUDA_GRAPH: ${{ inputs.profile-keep-cuda-graphs && '0' || '1' }}
   PROFILE_NUM_STEPS: ${{ inputs.profile-num-steps }}
   PROFILE_START_DELAY_SECONDS: ${{ inputs.profile-start-delay-seconds }}
-  # PROFILE_EXECUTION_TRACE (operator-DAG capture alongside the kineto trace;
-  # the launchers deliver the shim to srt-slurm workers via
-  # profile_recipe_inject.py) is deliberately NOT pinned here: the launchers
-  # default it on for profiled runs and off under spec decoding (libtorch's
-  # observer segfaults there); set it explicitly in this block to force
-  # either way.
+  # ExecutionTrace (operator-DAG) capture; the launchers deliver the shim to
+  # srt-slurm workers via profile_recipe_inject.py. Empty input keeps the
+  # launcher default (on, except spec-decode fixed-seq where with_stack + ET
+  # in one session trips a libtorch teardown race at profiler stop; agentic
+  # sglang splits them across capture windows); '1'/'0' force.
+  PROFILE_EXECUTION_TRACE: ${{ inputs.profile-execution-trace }}
+  PROFILE_WITH_STACK: ${{ inputs.profile-with-stack }}
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
 

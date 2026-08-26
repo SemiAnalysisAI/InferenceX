@@ -160,6 +160,29 @@ def main() -> int:
     with open(os.path.join(out_dir, et_files3[-1])) as fh:
         assert json.load(fh)["nodes"], "reused-object session ET JSON is empty"
     print(f"OK: reused profile object (vllm worker pattern) produced {et_files3[-1]}")
+
+    # Per-window control: a .et-disabled marker (in the output dir or its
+    # parent) suppresses the observer for sessions starting while it exists
+    # -- how the agentic trigger keeps ET off the stacked ramp window -- and
+    # removal re-enables it for the next session.
+    def _count_et():
+        return sum(
+            1 for f in os.listdir(out_dir)
+            if f.startswith("et-") and f.endswith(".json")
+        )
+
+    marker = os.path.join(out_dir, ".et-disabled")
+    open(marker, "w").close()
+    prof2.start()
+    model(x)
+    prof2.stop()
+    assert _count_et() == 3, "marker did not suppress the ET observer"
+    os.remove(marker)
+    prof2.start()
+    model(x)
+    prof2.stop()
+    assert _count_et() == 4, "removing the marker did not re-enable ET"
+    print("OK: .et-disabled marker suppresses and re-enables per session")
     return 0
 
 

@@ -43,6 +43,16 @@ on:
         required: false
         type: string
         default: '600'
+      profile-execution-trace:
+        description: "ExecutionTrace capture: '' = default (on; off only for spec-decode fixed-seq), '1'/'0' force"
+        required: false
+        type: string
+        default: ''
+      profile-with-stack:
+        description: "Record python stacks in profiler sessions ('true'/'false'; agentic ET steady windows force false)"
+        required: false
+        type: string
+        default: 'true'
       duration-override:
         description: "Agentic: replay duration in seconds (empty = config value)"
         required: false
@@ -177,6 +187,8 @@ jobs:
       profile-keep-cuda-graphs: ${{ inputs.keep-cuda-graphs }}
       profile-num-steps: ${{ inputs.profile-num-steps }}
       profile-start-delay-seconds: ${{ inputs.profile-start-delay-seconds }}
+      profile-execution-trace: ${{ inputs.profile-execution-trace }}
+      profile-with-stack: ${{ inputs.profile-with-stack }}
 
   profile-agentic:
     needs: get-jobs
@@ -225,6 +237,8 @@ jobs:
       profile-keep-cuda-graphs: ${{ inputs.keep-cuda-graphs }}
       profile-num-steps: ${{ inputs.profile-num-steps }}
       profile-start-delay-seconds: ${{ inputs.profile-start-delay-seconds }}
+      profile-execution-trace: ${{ inputs.profile-execution-trace }}
+      profile-with-stack: ${{ inputs.profile-with-stack }}
 
   profile-multinode-agentic:
     needs: get-jobs
@@ -285,3 +299,5 @@ jobs:
       profile-keep-cuda-graphs: ${{ inputs.keep-cuda-graphs }}
       profile-num-steps: ${{ inputs.profile-num-steps }}
       profile-start-delay-seconds: ${{ inputs.profile-start-delay-seconds }}
+      profile-execution-trace: ${{ inputs.profile-execution-trace }}
+      profile-with-stack: ${{ inputs.profile-with-stack }}

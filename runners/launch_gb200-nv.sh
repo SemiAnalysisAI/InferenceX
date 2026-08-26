@@ -717,13 +717,20 @@ if [[ "${PROFILE:-}" == "1" ]]; then
     if [[ "${PROFILE_DISABLE_CUDA_GRAPH:-1}" == "0" ]]; then
         PROFILE_INJECT_ARGS+=(--keep-cuda-graphs)
     fi
-    # ExecutionTrace defaults off under spec decoding: libtorch's
-    # execution_trace_observer segfaulted sglang schedulers on an EAGLE-MTP
-    # agentic run (run 32992471735); explicit PROFILE_EXECUTION_TRACE=1
-    # still forces it on.
+    # ExecutionTrace default mirrors benchmark_lib's execution_trace_enabled:
+    # on, except spec-decode fixed-seq-len. The risky combination is
+    # with_stack + ET at the same profiler stop (libtorch python-tracer
+    # teardown race under sglang's overlap loop, run 32992471735); agentic
+    # sglang runs avoid it structurally -- the dual-window trigger keeps
+    # stacks on the ramp window with ET suppressed and runs the ET steady
+    # window stackless -- so they stay on even with spec decoding. Explicit
+    # PROFILE_EXECUTION_TRACE=1/0 forces either way.
     PROFILE_ET_DEFAULT=1
     if [[ -n "${SPEC_DECODING:-}" && "${SPEC_DECODING:-none}" != "none" ]]; then
         PROFILE_ET_DEFAULT=0
+        if [[ "${IS_AGENTIC:-0}" == "1" && "${FRAMEWORK:-}" == *sglang* ]]; then
+            PROFILE_ET_DEFAULT=1
+        fi
     fi
     if [[ "${PROFILE_EXECUTION_TRACE:-$PROFILE_ET_DEFAULT}" != "1" ]]; then
         PROFILE_INJECT_ARGS+=(--no-execution-trace)

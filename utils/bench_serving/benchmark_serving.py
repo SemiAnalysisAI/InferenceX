@@ -585,13 +585,25 @@ async def benchmark(
 
     if profile:
         print("Starting profiler...")
+        # with_stack follows PROFILE_WITH_STACK (workflow-plumbed, default
+        # true); operand shapes on cpu_ops are what link kernels back to
+        # operators downstream, so record_shapes is always requested. sglang
+        # honors these fields; vllm's /start_profile ignores the body (it is
+        # configured through VLLM_TORCH_PROFILER_* env), same as the existing
+        # fields here.
+        with_stack = os.environ.get("PROFILE_WITH_STACK",
+                                    "true").lower() in ("1", "true")
         profile_input = RequestFuncInput(model=model_id,
                                          model_name=model_name,
                                          prompt=test_prompt,
                                          api_url=base_url + "/start_profile",
                                          prompt_len=test_prompt_len,
                                          output_len=test_output_len,
-                                         extra_body={"num_steps": 1, "merge_profiles": True, "profile_by_stage": True},
+                                         extra_body={"num_steps": 1,
+                                                     "merge_profiles": True,
+                                                     "profile_by_stage": True,
+                                                     "with_stack": with_stack,
+                                                     "record_shapes": True},
                                          logprobs=logprobs,
                                          best_of=best_of,
                                          multi_modal_content=test_mm_content,

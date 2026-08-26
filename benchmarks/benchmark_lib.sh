@@ -900,7 +900,13 @@ move_profile_trace_for_relay() {
 #   PROFILE_CAPTURE_SECONDS      vllm: timed capture window (default 5; vllm has
 #                                no step-bounded auto-stop, and eager traces grow
 #                                at hundreds of MB per second across ranks).
-#   PROFILE_WITH_STACK           record python stacks (default true).
+#   PROFILE_WITH_STACK           record python stacks (default true). Drives
+#                                the sglang start_profile body on both the
+#                                agentic trigger and the fixed-seq-len path
+#                                (benchmark_serving.py reads it from the
+#                                environment). The agentic steady window
+#                                overrides it to false when ET windowing is
+#                                active (see PROFILE_EXECUTION_TRACE).
 #   PROFILE_OUTPUT_DIR           where the engine writes traces (defaulted by
 #                                setup_profiling_env to <workspace>/profiles).
 #   PROFILE_EXECUTION_TRACE      also record a PyTorch ExecutionTrace
@@ -913,14 +919,17 @@ move_profile_trace_for_relay() {
 #                                nodes join the kineto cpu_ops on rf_id <->
 #                                "Record function id". Files:
 #                                et-<ts>-<host>-pid<P>[-rank<N>]-s<session>.json
-#                                in PROFILE_OUTPUT_DIR. Default 1, except
-#                                SPEC_DECODING runs where it defaults to 0
-#                                (see execution_trace_enabled: libtorch's
-#                                observer segfaults under EAGLE-MTP + overlap
-#                                scheduler on recent sglang nightlies); set
-#                                explicitly to force either way. Multinode
-#                                srt-slurm recipes get the same shim injected
-#                                into the worker environment blocks by
+#                                in PROFILE_OUTPUT_DIR. Default 1; only
+#                                spec-decode fixed-seq-len runs default 0
+#                                (with_stack + ET in one session trips a
+#                                libtorch python-tracer teardown race at
+#                                profiler stop -- see execution_trace_enabled;
+#                                agentic sglang runs sidestep it by splitting
+#                                stacks and ET across capture windows via the
+#                                .et-disabled marker). Set explicitly to force
+#                                either way. Multinode srt-slurm recipes get
+#                                the same shim injected into the worker
+#                                environment blocks by
 #                                utils/profile_recipe_inject.py.
 
 profiling_enabled() {
@@ -949,18 +958,27 @@ setup_profiling_env() {
     setup_execution_trace_env
 }
 
-# ExecutionTrace default: on, EXCEPT under speculative decoding. libtorch's
-# execution_trace_observer segfaulted sglang schedulers mid-batch on an
-# EAGLE-MTP agentic run with the overlap scheduler (dev-nightly-0820 image,
-# run 32992471735: all 8 ranks enabled the observer, scheduler_4 then died
-# with SIGSEGV in _profile_batch_predicate -> run_batch); the same shim
-# captured cleanly on non-spec runs. Explicit PROFILE_EXECUTION_TRACE=1
-# still forces it on for experiments; the workflow templates deliberately
-# leave the variable unset so this default can apply.
+# ExecutionTrace default: on, EXCEPT spec-decode fixed-seq-len runs. The
+# run-32992471735 segfault was NOT the observer's op serialization: the
+# native stack shows the with_stack python tracer's teardown crashing at
+# profiler stop (disableProfiler -> ~KinetoThreadLocalState ->
+# ~PythonTracer -> ThreadLocalResults deque destroy) under sglang's overlap
+# event loop -- a latent libtorch race the ET observer merely exposed by
+# perturbing stop ordering (same config+image profiled fine pre-ET, run
+# 32908753056). The risky combination is with_stack + ET at the same stop.
+# Agentic runs avoid it structurally: the dual-window trigger keeps stacks
+# on the ramp window (ET suppressed via the .et-disabled marker) and runs
+# the ET steady window stackless, so agentic sglang stays default-on even
+# with spec decoding. Fixed-seq-len is a single session where stacks and ET
+# would coincide, so spec-decode fixed configs default off (none in the
+# current dsv4 set). Explicit PROFILE_EXECUTION_TRACE=1/0 forces either way.
 execution_trace_enabled() {
     local default=1
     if [[ -n "${SPEC_DECODING:-}" && "${SPEC_DECODING}" != "none" ]]; then
         default=0
+        if [[ "${IS_AGENTIC:-0}" == "1" && "${FRAMEWORK:-}" == *sglang* ]]; then
+            default=1
+        fi
     fi
     [[ "${PROFILE_EXECUTION_TRACE:-$default}" == "1" ]]
 }
@@ -985,6 +1003,9 @@ setup_execution_trace_env() {
     fi
     export PROFILE_EXECUTION_TRACE_DIR="$PROFILE_OUTPUT_DIR"
     export PYTHONPATH="${shim_dir}${PYTHONPATH:+:${PYTHONPATH}}"
+    # Persistent self-hosted runners reuse <workspace>/profiles; a marker
+    # left by an interrupted agentic trigger must not mute a later run.
+    rm -f "$PROFILE_OUTPUT_DIR/.et-disabled"
     echo "[PROFILE] Execution-trace observer armed: dir=$PROFILE_EXECUTION_TRACE_DIR shim=$shim_dir/sitecustomize.py"
 }
 
@@ -1083,9 +1104,39 @@ launch_agentic_profile_trigger() {
         done
     }
 
+    # Per-window ET/stack policy (sglang frameworks with ET enabled): the
+    # with_stack python tracer has a teardown race at profiler stop under
+    # sglang's overlap event loop that an active ET observer exposes (run
+    # 32992471735; see execution_trace_enabled). Never combine them in one
+    # session: the RAMP window keeps python stacks with ET suppressed (the
+    # shim skips sessions while $PROFILE_OUTPUT_DIR/.et-disabled exists --
+    # workers see the marker through the shared profiles dir / its parent),
+    # and the STEADY window runs with_stack=false with ET on. The collapsed
+    # single-window dynamo-vllm path runs as a steady window. vllm can't
+    # toggle stacks per window (env-configured), so windowing stays
+    # sglang-only and vllm keeps ET on every session as before.
+    local et_windowed=0
+    if execution_trace_enabled && [[ "${FRAMEWORK:-}" == *sglang* ]]; then
+        et_windowed=1
+        export PROFILE_ET_WINDOWED=1
+    fi
+
     _profile_capture_window() {
         local label="$1"
         local u t hostport mode outdir payload
+        local with_stack="${PROFILE_WITH_STACK:-true}"
+        if [[ "$et_windowed" == "1" ]]; then
+            local et_marker="${PROFILE_OUTPUT_DIR:-/logs/profiles}/.et-disabled"
+            mkdir -p "$(dirname "$et_marker")"
+            if [[ "$label" == steady* ]]; then
+                rm -f "$et_marker"
+                with_stack=false
+                echo "[PROFILE] $label: execution trace ON, with_stack=false"
+            else
+                touch "$et_marker"
+                echo "[PROFILE] $label: execution trace OFF, with_stack=$with_stack"
+            fi
+        fi
         for t in "${dynamo_targets[@]}"; do
             hostport="${t%% *}"
             mode="${t##* }"
@@ -1098,7 +1149,7 @@ launch_agentic_profile_trigger() {
             else
                 # dynamo-sglang forwards the body verbatim to sglang's
                 # tokenizer_manager.start_profile.
-                payload="{\"output_dir\": \"$outdir\", \"num_steps\": ${PROFILE_NUM_STEPS:-2}, \"merge_profiles\": true, \"profile_by_stage\": true, \"record_shapes\": true, \"with_stack\": ${PROFILE_WITH_STACK:-true}}"
+                payload="{\"output_dir\": \"$outdir\", \"num_steps\": ${PROFILE_NUM_STEPS:-2}, \"merge_profiles\": true, \"profile_by_stage\": true, \"record_shapes\": true, \"with_stack\": ${with_stack}}"
             fi
             echo "[PROFILE] $(date --iso-8601=seconds) starting $label capture via $hostport ($mode)"
             _dynamo_engine_post "$hostport" start_profile "$payload" \
@@ -1113,7 +1164,7 @@ launch_agentic_profile_trigger() {
             else
                 curl -sS -m 120 -X POST "$u/start_profile" \
                     -H 'Content-Type: application/json' \
-                    -d "{\"num_steps\": ${PROFILE_NUM_STEPS:-2}, \"merge_profiles\": true, \"profile_by_stage\": true, \"record_shapes\": true, \"with_stack\": ${PROFILE_WITH_STACK:-true}}" \
+                    -d "{\"num_steps\": ${PROFILE_NUM_STEPS:-2}, \"merge_profiles\": true, \"profile_by_stage\": true, \"record_shapes\": true, \"with_stack\": ${with_stack}}" \
                     || echo "[PROFILE] start_profile failed ($label, $u)"
             fi
         done
@@ -1170,6 +1221,8 @@ finalize_profile_capture() {
         wait "$PROFILE_TRIGGER_PID" 2>/dev/null || true
         PROFILE_TRIGGER_PID=""
     fi
+    # Drop the per-window ET marker so nothing stale outlives this capture.
+    rm -f "${PROFILE_OUTPUT_DIR:-/logs/profiles}/.et-disabled" 2>/dev/null || true
     local u t resp hostport
     local -a _dyn=()
     mapfile -t _dyn < <(_profile_dynamo_targets)
@@ -1279,7 +1332,9 @@ stage_profile_outputs() {
     local gpu_info=""
     gpu_info="$(nvidia-smi --query-gpu=name,driver_version --format=csv,noheader 2>/dev/null | head -n1 || true)"
 
-    GPU_INFO="$gpu_info" PROFILE_STAGE_DIR="$out_dir" python3 - <<'PYEOF' || echo "[PROFILE] metadata sidecar failed" >&2
+    GPU_INFO="$gpu_info" PROFILE_STAGE_DIR="$out_dir" \
+        PROFILE_ET_ENABLED="$(execution_trace_enabled && echo 1 || echo 0)" \
+        python3 - <<'PYEOF' || echo "[PROFILE] metadata sidecar failed" >&2
 import json, os, socket, datetime
 
 env = os.environ.get
@@ -1338,14 +1393,14 @@ meta = {
         "capture_seconds": as_int(env("PROFILE_CAPTURE_SECONDS", "5")),
         "with_stack": env("PROFILE_WITH_STACK", "true") == "true",
         "record_shapes": True,
-        # ExecutionTrace capture armed for this run (mirrors
-        # execution_trace_enabled: default on, off under spec decoding). The
-        # ET JSONs listed under execution_traces join the kineto cpu_ops via
-        # rf_id <-> "Record function id".
-        "execution_trace": env(
-            "PROFILE_EXECUTION_TRACE",
-            "0" if (env("SPEC_DECODING") or "none") != "none" else "1",
-        ) == "1",
+        # ExecutionTrace capture armed for this run (execution_trace_enabled,
+        # resolved by the staging shell). The ET JSONs listed under
+        # execution_traces join the kineto cpu_ops via rf_id <-> "Record
+        # function id". When execution_trace_windowed is true (agentic sglang
+        # dual-window policy) the ramp window's kineto traces carry python
+        # stacks with no ET, and the steady window is stackless with ET.
+        "execution_trace": env("PROFILE_ET_ENABLED") == "1",
+        "execution_trace_windowed": env("PROFILE_ET_WINDOWED") == "1",
     },
     "traces": sorted(
         f for f in os.listdir(out_dir)

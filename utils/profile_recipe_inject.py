@@ -20,8 +20,10 @@ recipe. Three things are injected:
    the torch profiler exclusively through --profiler-config
    (torch_profiler_record_shapes is off by default and required here).
 4. ExecutionTrace capture (sglang + vllm, unless --no-execution-trace, which
-   the launchers pass for spec-decode recipes -- libtorch's observer segfaults
-   under EAGLE-MTP -- or when PROFILE_EXECUTION_TRACE=0): the
+   the launchers pass when PROFILE_EXECUTION_TRACE resolves off -- default
+   off only for spec-decode fixed-seq-len, where with_stack + ET in one
+   session trips a libtorch python-tracer teardown race at profiler stop;
+   agentic sglang splits stacks and ET across capture windows instead): the
    sitecustomize shim benchmarks/patches/execution_trace_shim/ wraps
    torch.profiler.profile.start/stop to record the operator DAG (dataflow
    edges, joinable to the kineto cpu_ops on rf_id <-> "Record function id")

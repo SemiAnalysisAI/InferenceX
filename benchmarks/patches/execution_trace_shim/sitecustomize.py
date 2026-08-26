@@ -27,7 +27,18 @@ subprocesses inherit the environment, so the shim runs in every python
 interpreter that matters.
 
 Gate: PROFILE_EXECUTION_TRACE_DIR must be set (see PROFILE_EXECUTION_TRACE in
-benchmark_lib.sh). Output per capture session in that dir:
+benchmark_lib.sh). Additionally, a `.et-disabled` marker file in that dir (or
+its parent -- multinode workers write to /logs/profiles/<mode> while the
+benchmark-stage trigger manages /logs/profiles) suppresses the observer for
+sessions that start while it exists. Env is fixed per process but the marker
+is re-checked at every profile.start(), which is how the agentic dual-window
+trigger (launch_agentic_profile_trigger in benchmark_lib.sh) applies its
+per-window policy: kineto stacks on the ramp window without ET, ET on the
+stackless steady window. sglang's with_stack python tracer has a teardown
+race at profiler stop under the overlap scheduler that an active ET observer
+can expose, so the two never ride the same session there. Absent marker =
+observer on (the single-session fixed-seq path has no trigger and relies on
+this default). Output per capture session in that dir:
 et-<unix_ts>-<host>-pid<pid>[-rank<global_rank>]-s<session>.json -- host+pid
 keep names collision-free when many workers share one output dir (multinode
 /logs/profiles), the rank tag is added when torch.distributed is initialized.
@@ -40,6 +51,7 @@ import os
 import sys
 
 _ENV_DIR = "PROFILE_EXECUTION_TRACE_DIR"
+_DISABLE_MARKER = ".et-disabled"
 _TARGET = "torch.profiler"
 
 # Process-globals: the ExecutionTraceObserver callback is a singleton in
@@ -56,11 +68,35 @@ def _warn_once(key, msg):
     print(f"[execution-trace] {msg}", file=sys.stderr, flush=True)
 
 
+def _et_disabled_by_marker(out_dir):
+    """Per-session control: a .et-disabled marker in the output dir (or its
+    parent, for multinode /logs/profiles/<mode> layouts) suppresses the
+    observer for sessions starting while it exists. Re-checked at every
+    profile.start() so the agentic trigger can toggle ET per capture window
+    without touching process env."""
+    clean = out_dir.rstrip("/") or "/"
+    for d in (clean, os.path.dirname(clean) or "/"):
+        try:
+            if os.path.exists(os.path.join(d, _DISABLE_MARKER)):
+                return True
+        except OSError:
+            pass
+    return False
+
+
 def _attach(prof):
     """Register + start an ExecutionTraceObserver alongside a started session."""
     global _active_observer, _session_idx
     out_dir = os.environ.get(_ENV_DIR)
     if not out_dir:
+        return
+    if _et_disabled_by_marker(out_dir):
+        print(
+            f"[execution-trace] {_DISABLE_MARKER} marker present; "
+            "skipping this session",
+            file=sys.stderr,
+            flush=True,
+        )
         return
     if _active_observer is not None:
         # Overlapping sessions in one process (not the engines' pattern, but
