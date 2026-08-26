@@ -221,9 +221,10 @@ env:
   PROFILE_DISABLE_CUDA_GRAPH: ${{ inputs.profile-keep-cuda-graphs && '0' || '1' }}
   PROFILE_NUM_STEPS: ${{ inputs.profile-num-steps }}
   PROFILE_START_DELAY_SECONDS: ${{ inputs.profile-start-delay-seconds }}
-  # ExecutionTrace (operator DAG) capture alongside the kineto trace; only
-  # takes effect for sglang frameworks when PROFILE=1. Set '0' to disable.
-  PROFILE_EXECUTION_TRACE: '1'
+  # PROFILE_EXECUTION_TRACE (operator-DAG capture alongside the kineto trace)
+  # is deliberately NOT pinned here: benchmark_lib.sh defaults it on for
+  # profiled runs and off under spec decoding (libtorch's observer segfaults
+  # there); set it explicitly in this block to force either way.
   RESULT_DIR: /workspace/results
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache

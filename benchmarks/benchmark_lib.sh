@@ -903,16 +903,25 @@ move_profile_trace_for_relay() {
 #   PROFILE_WITH_STACK           record python stacks (default true).
 #   PROFILE_OUTPUT_DIR           where the engine writes traces (defaulted by
 #                                setup_profiling_env to <workspace>/profiles).
-#   PROFILE_EXECUTION_TRACE      sglang frameworks only, default 1: also record
-#                                a PyTorch ExecutionTrace (operator DAG with
-#                                tensor ids -- the dataflow edges kineto traces
-#                                lack) for each capture session, via a
-#                                sitecustomize shim that attaches an
-#                                ExecutionTraceObserver wherever the scheduler
-#                                starts its torch profiler. ET nodes join the
-#                                kineto cpu_ops on rf_id <-> "Record function
-#                                id". Files: et-<ts>-rank<N>-s<session>.json in
-#                                PROFILE_OUTPUT_DIR. Set 0 to disable.
+#   PROFILE_EXECUTION_TRACE      also record a PyTorch ExecutionTrace
+#                                (operator DAG with tensor ids -- the dataflow
+#                                edges kineto traces lack) for each capture
+#                                session, via a sitecustomize shim that
+#                                attaches an ExecutionTraceObserver wherever
+#                                the engine starts its torch profiler (sglang
+#                                scheduler subprocesses, vllm workers). ET
+#                                nodes join the kineto cpu_ops on rf_id <->
+#                                "Record function id". Files:
+#                                et-<ts>-<host>-pid<P>[-rank<N>]-s<session>.json
+#                                in PROFILE_OUTPUT_DIR. Default 1, except
+#                                SPEC_DECODING runs where it defaults to 0
+#                                (see execution_trace_enabled: libtorch's
+#                                observer segfaults under EAGLE-MTP + overlap
+#                                scheduler on recent sglang nightlies); set
+#                                explicitly to force either way. Multinode
+#                                srt-slurm recipes get the same shim injected
+#                                into the worker environment blocks by
+#                                utils/profile_recipe_inject.py.
 
 profiling_enabled() {
     [[ "${PROFILE:-}" == "1" ]]
@@ -940,27 +949,43 @@ setup_profiling_env() {
     setup_execution_trace_env
 }
 
-# ExecutionTrace capture (sglang): sglang's ProfileReq has no execution-trace
-# option, so a sitecustomize PYTHONPATH shim (precedent: _patch_lm_eval) wraps
+# ExecutionTrace default: on, EXCEPT under speculative decoding. libtorch's
+# execution_trace_observer segfaulted sglang schedulers mid-batch on an
+# EAGLE-MTP agentic run with the overlap scheduler (dev-nightly-0820 image,
+# run 32992471735: all 8 ranks enabled the observer, scheduler_4 then died
+# with SIGSEGV in _profile_batch_predicate -> run_batch); the same shim
+# captured cleanly on non-spec runs. Explicit PROFILE_EXECUTION_TRACE=1
+# still forces it on for experiments; the workflow templates deliberately
+# leave the variable unset so this default can apply.
+execution_trace_enabled() {
+    local default=1
+    if [[ -n "${SPEC_DECODING:-}" && "${SPEC_DECODING}" != "none" ]]; then
+        default=0
+    fi
+    [[ "${PROFILE_EXECUTION_TRACE:-$default}" == "1" ]]
+}
+
+# ExecutionTrace capture: neither engine exposes an execution-trace option
+# (sglang's ProfileReq has no field, vllm's ProfilerConfig doesn't either), so
+# a sitecustomize PYTHONPATH shim (precedent: _patch_lm_eval) wraps
 # torch.profiler.profile.start/stop to attach an ExecutionTraceObserver in
-# whichever process runs the kineto session -- i.e. each scheduler subprocess,
-# which inherits PYTHONPATH from the server we launch here. Must run before
-# the server launch, like the rest of setup_profiling_env.
+# whichever process runs the kineto session -- sglang scheduler subprocesses,
+# vllm workers -- all of which inherit PYTHONPATH from the server we launch
+# here. The shim is checked in under its runtime name
+# (patches/execution_trace_shim/sitecustomize.py), so arming it is just
+# putting that directory on PYTHONPATH. Must run before the server launch,
+# like the rest of setup_profiling_env.
 setup_execution_trace_env() {
-    [[ "${PROFILE_EXECUTION_TRACE:-1}" == "1" ]] || return 0
-    [[ "${FRAMEWORK:-}" == *sglang* ]] || return 0
-    local shim_src
-    shim_src="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/patches/sglang_execution_trace_sitecustomize.py"
-    if [[ ! -f "$shim_src" ]]; then
-        echo "[PROFILE] Execution-trace shim not found at $shim_src; skipping." >&2
+    execution_trace_enabled || return 0
+    local shim_dir
+    shim_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/patches/execution_trace_shim"
+    if [[ ! -f "$shim_dir/sitecustomize.py" ]]; then
+        echo "[PROFILE] Execution-trace shim not found at $shim_dir; skipping." >&2
         return 0
     fi
-    export SGLANG_EXECUTION_TRACE_DIR="$PROFILE_OUTPUT_DIR"
-    local shim_dir
-    shim_dir="$(mktemp -d)"
-    cp "$shim_src" "$shim_dir/sitecustomize.py"
+    export PROFILE_EXECUTION_TRACE_DIR="$PROFILE_OUTPUT_DIR"
     export PYTHONPATH="${shim_dir}${PYTHONPATH:+:${PYTHONPATH}}"
-    echo "[PROFILE] Execution-trace observer armed: dir=$SGLANG_EXECUTION_TRACE_DIR shim=$shim_dir/sitecustomize.py"
+    echo "[PROFILE] Execution-trace observer armed: dir=$PROFILE_EXECUTION_TRACE_DIR shim=$shim_dir/sitecustomize.py"
 }
 
 # Agentic runs replay traces through aiperf, which has no --profile flag; the
@@ -1313,9 +1338,14 @@ meta = {
         "capture_seconds": as_int(env("PROFILE_CAPTURE_SECONDS", "5")),
         "with_stack": env("PROFILE_WITH_STACK", "true") == "true",
         "record_shapes": True,
-        # ExecutionTrace observer armed for this run (sglang only); the ET
-        # JSONs join the kineto cpu_ops via rf_id <-> "Record function id".
-        "execution_trace": bool(env("SGLANG_EXECUTION_TRACE_DIR")),
+        # ExecutionTrace capture armed for this run (mirrors
+        # execution_trace_enabled: default on, off under spec decoding). The
+        # ET JSONs listed under execution_traces join the kineto cpu_ops via
+        # rf_id <-> "Record function id".
+        "execution_trace": env(
+            "PROFILE_EXECUTION_TRACE",
+            "0" if (env("SPEC_DECODING") or "none") != "none" else "1",
+        ) == "1",
     },
     "traces": sorted(
         f for f in os.listdir(out_dir)

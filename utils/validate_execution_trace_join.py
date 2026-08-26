@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""GPU-free validation of the sglang ExecutionTrace capture shim.
+"""GPU-free validation of the ExecutionTrace capture shim.
 
-Exercises benchmarks/patches/sglang_execution_trace_sitecustomize.py exactly
-the way an sglang scheduler process does -- construct torch.profiler.profile,
-call .start(), run forwards, call .stop(), export_chrome_trace() -- and then
-proves the two outputs join:
+Exercises benchmarks/patches/execution_trace_shim/sitecustomize.py exactly the
+way the engines do -- construct torch.profiler.profile, call .start(), run
+forwards, call .stop(), export (sglang scheduler pattern; vllm's
+TorchProfilerWrapper reuses one profile object across sessions, covered below)
+-- and then proves the two outputs join:
 
   1. the ET JSON has operator nodes with rf_id and tensor inputs/outputs
      (the dataflow edges kineto lacks), and
@@ -26,13 +27,13 @@ import tempfile
 
 def main() -> int:
     out_dir = tempfile.mkdtemp(prefix="et-validate-")
-    os.environ["SGLANG_EXECUTION_TRACE_DIR"] = out_dir
+    os.environ["PROFILE_EXECUTION_TRACE_DIR"] = out_dir
 
     # Load the shim the same way sitecustomize would (env var already set, so
     # its import hook arms itself before torch.profiler is imported).
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     shim_path = os.path.join(
-        repo_root, "benchmarks", "patches", "sglang_execution_trace_sitecustomize.py"
+        repo_root, "benchmarks", "patches", "execution_trace_shim", "sitecustomize.py"
     )
     assert "torch" not in sys.modules, "import torch after the shim, not before"
     spec = importlib.util.spec_from_file_location("sitecustomize", shim_path)
@@ -130,8 +131,8 @@ def main() -> int:
     print("OK: ET <-> kineto rf_id join validated")
 
     # sglang's profile_by_stage runs two sequential sessions (EXTEND, DECODE)
-    # in the same scheduler process; prove a second observer registers cleanly
-    # after the first unregistered.
+    # in the same scheduler process with fresh profile objects; prove a second
+    # observer registers cleanly after the first unregistered.
     prof2 = torch.profiler.profile(
         activities=[torch.profiler.ProfilerActivity.CPU], record_shapes=True
     )
@@ -144,7 +145,21 @@ def main() -> int:
     assert len(et_files2) == 2, f"expected two ET JSONs after second session, got {et_files2}"
     with open(os.path.join(out_dir, et_files2[-1])) as fh:
         assert json.load(fh)["nodes"], "second session ET JSON is empty"
-    print(f"OK: second (by-stage) session produced {et_files2[-1]}")
+    print(f"OK: second (sglang by-stage) session produced {et_files2[-1]}")
+
+    # vllm's TorchProfilerWrapper keeps ONE profile object per worker and
+    # calls start/stop on it for every capture session; prove the shim
+    # produces a fresh ET file when the same object is restarted.
+    prof2.start()
+    model(x)
+    prof2.stop()
+    et_files3 = sorted(
+        f for f in os.listdir(out_dir) if f.startswith("et-") and f.endswith(".json")
+    )
+    assert len(et_files3) == 3, f"expected three ET JSONs after object reuse, got {et_files3}"
+    with open(os.path.join(out_dir, et_files3[-1])) as fh:
+        assert json.load(fh)["nodes"], "reused-object session ET JSON is empty"
+    print(f"OK: reused profile object (vllm worker pattern) produced {et_files3[-1]}")
     return 0
 
 

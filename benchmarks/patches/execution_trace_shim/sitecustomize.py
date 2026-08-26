@@ -1,42 +1,45 @@
-"""Attach a torch.profiler.ExecutionTraceObserver to sglang profiler sessions.
+"""Attach a torch.profiler.ExecutionTraceObserver to engine profiler sessions.
 
-Kineto traces (what sglang's /start_profile produces) record ops, shapes, and
-kernel timing, but no dataflow edges. PyTorch's ExecutionTraceObserver records
-the operator DAG with tensor ids as JSON; its nodes carry an "rf_id" that joins
+Kineto traces (what /start_profile produces) record ops, shapes, and kernel
+timing, but no dataflow edges. PyTorch's ExecutionTraceObserver records the
+operator DAG with tensor ids as JSON; its nodes carry an "rf_id" that joins
 the Kineto trace's cpu_op "Record function id" args, so the pair yields a true
 dataflow graph aligned with the timeline (this is the join HTA's trace_linker
 and Chakra use).
 
-sglang's ProfileReq has no execution-trace option and the torch profiler is
-constructed inside each scheduler subprocess (SchedulerProfilerManager /
-scheduler_profiler_mixin, depending on version), so this file is applied as a
-`sitecustomize.py` PYTHONPATH shim (same mechanism as utils/evals/patches/
-lm_eval_sitecustomize.py): setup_profiling_env in benchmarks/benchmark_lib.sh
-copies it into a temp dir prepended to PYTHONPATH before the server launches.
-Every python interpreter in the container then imports it at startup --
-including the spawned scheduler processes where the model forward and the
-Kineto capture actually run.
+Neither engine exposes an execution-trace option (sglang's ProfileReq has no
+field for it; vllm's ProfilerConfig doesn't either), and both construct their
+torch profiler inside the process that runs the model forward -- sglang in
+each scheduler subprocess (SchedulerProfilerManager / scheduler_profiler_mixin,
+depending on version), vllm in each worker via TorchProfilerWrapper. Their
+profiler internals also move across releases, so instead of patching engine
+code, this shim wraps torch.profiler.profile.start/stop, which every version
+of both engines calls for its capture sessions. Import-hook based, so
+processes that never import torch.profiler pay nothing.
 
-Rather than patching sglang internals (whose profiler code has moved across
-releases: scheduler.py -> scheduler_profiler_mixin.py ->
-scheduler_components/profiler_manager.py), it wraps
-torch.profiler.profile.start/stop, which every sglang version calls for its
-capture sessions. Import-hook based, so processes that never import
-torch.profiler pay nothing.
+Delivery: this file keeps its runtime name (sitecustomize.py) in the repo, so
+arming it is just putting this directory on PYTHONPATH before the server
+launches -- single-node runs export it in setup_profiling_env
+(benchmarks/benchmark_lib.sh), multinode srt-slurm runs get it injected into
+each worker's environment block by utils/profile_recipe_inject.py (worker
+containers mount the checkout at /infmax-workspace). Spawned engine
+subprocesses inherit the environment, so the shim runs in every python
+interpreter that matters.
 
-Gate: SGLANG_EXECUTION_TRACE_DIR must be set (exported by setup_profiling_env
-when PROFILE=1, FRAMEWORK is sglang-based, and PROFILE_EXECUTION_TRACE=1).
-Output: et-<unix_ts>-rank<global_rank>-s<session>.json per capture session in
-that dir (pid<pid> when torch.distributed is not initialized). Files are
-written as .json.tmp and renamed on a clean stop, so crashed sessions never
-stage a truncated JSON. All failure paths warn and fall through: profiling
-itself must never break because of this shim.
+Gate: PROFILE_EXECUTION_TRACE_DIR must be set (see PROFILE_EXECUTION_TRACE in
+benchmark_lib.sh). Output per capture session in that dir:
+et-<unix_ts>-<host>-pid<pid>[-rank<global_rank>]-s<session>.json -- host+pid
+keep names collision-free when many workers share one output dir (multinode
+/logs/profiles), the rank tag is added when torch.distributed is initialized.
+Files are written as .json.tmp and renamed on a clean stop, so crashed
+sessions never stage a truncated JSON. All failure paths warn and fall
+through: profiling itself must never break because of this shim.
 """
 
 import os
 import sys
 
-_ENV_DIR = "SGLANG_EXECUTION_TRACE_DIR"
+_ENV_DIR = "PROFILE_EXECUTION_TRACE_DIR"
 _TARGET = "torch.profiler"
 
 # Process-globals: the ExecutionTraceObserver callback is a singleton in
@@ -50,7 +53,7 @@ def _warn_once(key, msg):
     if key in _warned:
         return
     _warned.add(key)
-    print(f"[sglang-execution-trace] {msg}", file=sys.stderr, flush=True)
+    print(f"[execution-trace] {msg}", file=sys.stderr, flush=True)
 
 
 def _attach(prof):
@@ -60,20 +63,22 @@ def _attach(prof):
     if not out_dir:
         return
     if _active_observer is not None:
-        # Overlapping sessions in one process (not sglang's pattern, but be
-        # safe): only the first gets an observer.
+        # Overlapping sessions in one process (not the engines' pattern, but
+        # be safe): only the first gets an observer.
         _warn_once("overlap", "observer already active; skipping nested session")
         return
     try:
+        import socket
         import time
 
         from torch.profiler import ExecutionTraceObserver
 
         os.makedirs(out_dir, exist_ok=True)
         _session_idx += 1
+        host = socket.gethostname().split(".")[0] or "unknown"
         tmp_path = os.path.join(
             out_dir,
-            f"et-{int(time.time())}-pid{os.getpid()}-s{_session_idx}.json.tmp",
+            f"et-{int(time.time())}-{host}-pid{os.getpid()}-s{_session_idx}.json.tmp",
         )
         observer = ExecutionTraceObserver()
         observer.register_callback(tmp_path)
@@ -84,7 +89,7 @@ def _attach(prof):
     prof.__dict__["_infx_et_state"] = (observer, tmp_path)
     _active_observer = observer
     print(
-        f"[sglang-execution-trace] recording execution trace -> {tmp_path}",
+        f"[execution-trace] recording execution trace -> {tmp_path}",
         file=sys.stderr,
         flush=True,
     )
@@ -106,24 +111,25 @@ def _finalize(prof):
         return
     _active_observer = None
 
-    rank_tag = f"pid{os.getpid()}"
+    rank_tag = ""
     try:
         import torch.distributed as dist
 
         if dist.is_available() and dist.is_initialized():
-            rank_tag = f"rank{dist.get_rank()}"
+            rank_tag = f"-rank{dist.get_rank()}"
     except Exception:  # noqa: BLE001
         pass
-    final_path = tmp_path[: -len(".json.tmp")]
-    # tmp name is et-<ts>-pid<pid>-s<idx>; swap pid for the global rank when
-    # known (session index disambiguates by-stage sessions within a second).
-    base = os.path.basename(final_path).split("-")
-    base[2] = rank_tag
-    final_path = os.path.join(os.path.dirname(final_path), "-".join(base) + ".json")
+    # tmp name is et-<ts>-<host>-pid<pid>-s<idx>.json.tmp; splice the rank tag
+    # (when known) in front of the session suffix.
+    stem = os.path.basename(tmp_path)[: -len(".json.tmp")]
+    prefix, _, session = stem.rpartition("-")
+    final_path = os.path.join(
+        os.path.dirname(tmp_path), f"{prefix}{rank_tag}-{session}.json"
+    )
     try:
         os.replace(tmp_path, final_path)
         print(
-            f"[sglang-execution-trace] execution trace saved: {final_path}",
+            f"[execution-trace] execution trace saved: {final_path}",
             file=sys.stderr,
             flush=True,
         )

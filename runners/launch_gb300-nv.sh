@@ -526,12 +526,24 @@ sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
 inject_synthetic_acceptance "$CONFIG_PATH" "$FRAMEWORK" || exit 1
 
 # Profiling: mutate the runtime recipe copy so workers run eager with the
-# torch profiler configured, and srtctl exports worker endpoints + profiler
-# dirs to the benchmark stage (see utils/profile_recipe_inject.py).
+# torch profiler configured (plus the ExecutionTrace shim delivered through
+# the /infmax-workspace worker mount), and srtctl exports worker endpoints +
+# profiler dirs to the benchmark stage (see utils/profile_recipe_inject.py).
 if [[ "${PROFILE:-}" == "1" ]]; then
     PROFILE_INJECT_ARGS=("$CONFIG_PATH" --num-steps "${PROFILE_NUM_STEPS:-2}")
     if [[ "${PROFILE_DISABLE_CUDA_GRAPH:-1}" == "0" ]]; then
         PROFILE_INJECT_ARGS+=(--keep-cuda-graphs)
+    fi
+    # ExecutionTrace defaults off under spec decoding: libtorch's
+    # execution_trace_observer segfaulted sglang schedulers on an EAGLE-MTP
+    # agentic run (run 32992471735); explicit PROFILE_EXECUTION_TRACE=1
+    # still forces it on.
+    PROFILE_ET_DEFAULT=1
+    if [[ -n "${SPEC_DECODING:-}" && "${SPEC_DECODING:-none}" != "none" ]]; then
+        PROFILE_ET_DEFAULT=0
+    fi
+    if [[ "${PROFILE_EXECUTION_TRACE:-$PROFILE_ET_DEFAULT}" != "1" ]]; then
+        PROFILE_INJECT_ARGS+=(--no-execution-trace)
     fi
     uv run --no-project --with pyyaml --python 3.12 \
         "$GITHUB_WORKSPACE/utils/profile_recipe_inject.py" "${PROFILE_INJECT_ARGS[@]}" || exit 1
