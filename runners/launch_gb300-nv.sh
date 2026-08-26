@@ -525,6 +525,18 @@ sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
 # tokens still pass target-model verification.
 inject_synthetic_acceptance "$CONFIG_PATH" "$FRAMEWORK" || exit 1
 
+# Profiling: mutate the runtime recipe copy so workers run eager with the
+# torch profiler configured, and srtctl exports worker endpoints + profiler
+# dirs to the benchmark stage (see utils/profile_recipe_inject.py).
+if [[ "${PROFILE:-}" == "1" ]]; then
+    PROFILE_INJECT_ARGS=("$CONFIG_PATH" --num-steps "${PROFILE_NUM_STEPS:-2}")
+    if [[ "${PROFILE_DISABLE_CUDA_GRAPH:-1}" == "0" ]]; then
+        PROFILE_INJECT_ARGS+=(--keep-cuda-graphs)
+    fi
+    uv run --no-project --with pyyaml --python 3.12 \
+        "$GITHUB_WORKSPACE/utils/profile_recipe_inject.py" "${PROFILE_INJECT_ARGS[@]}" || exit 1
+fi
+
 # --no-preflight skips srtctl's pre-submit model-path stat, which runs on
 # the GHA runner host (im-gb300-login-02, an x86 login node). It's required
 # whenever model.path resolves to the node-local /scratch NVMe that the login

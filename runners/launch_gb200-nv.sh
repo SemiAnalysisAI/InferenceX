@@ -708,6 +708,18 @@ sed -i "s/^name:.*/name: \"${SRT_SLURM_JOB_NAME}\"/" "$CONFIG_PATH"
 # override and before srtctl apply so the rendered job picks it up.
 python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" "$CONFIG_PATH" "$FRAMEWORK"
 
+# Profiling: mutate the runtime recipe copy so workers run eager with the
+# torch profiler configured, and srtctl exports worker endpoints + profiler
+# dirs to the benchmark stage (see utils/profile_recipe_inject.py).
+if [[ "${PROFILE:-}" == "1" ]]; then
+    PROFILE_INJECT_ARGS=("$CONFIG_PATH" --num-steps "${PROFILE_NUM_STEPS:-2}")
+    if [[ "${PROFILE_DISABLE_CUDA_GRAPH:-1}" == "0" ]]; then
+        PROFILE_INJECT_ARGS+=(--keep-cuda-graphs)
+    fi
+    uv run --no-project --with pyyaml --python 3.12 \
+        "$GITHUB_WORKSPACE/utils/profile_recipe_inject.py" "${PROFILE_INJECT_ARGS[@]}" || exit 1
+fi
+
 # Don't leak the login-node venv to the compute-node orchestrator. sbatch's
 # default --export=ALL propagates VIRTUAL_ENV (set by `source
 # .venv/bin/activate` above) into job_script_minimal.j2, whose
@@ -807,6 +819,14 @@ if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
             "$INFMAX_WORKSPACE" \
             "$GITHUB_WORKSPACE" \
             "$RESULT_FILENAME" || exit 1
+
+        # Profiled runs stage traces into the compute-visible workspace;
+        # copy them back for the profile_<result> artifact upload when the
+        # benchmark ran from a staged Lustre mirror.
+        if [[ "${PROFILE:-}" == "1" && "$INFMAX_WORKSPACE" != "$GITHUB_WORKSPACE" ]]; then
+            cp -r "$INFMAX_WORKSPACE"/profile_traces_* "$GITHUB_WORKSPACE"/ 2>/dev/null || \
+                echo "Warning: no staged profile traces found in $INFMAX_WORKSPACE" >&2
+        fi
     else
         # Find all fixed-sequence result subdirectories.
         RESULT_SUBDIRS=$(find "$LOGS_DIR" -maxdepth 1 -type d -name "*isl*osl*" 2>/dev/null)

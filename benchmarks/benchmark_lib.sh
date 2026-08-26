@@ -933,31 +933,112 @@ setup_profiling_env() {
 # ramp (prefill-rich — steady-state agentic decode can go a whole window
 # without an extend step) and a steady-state one. sglang auto-stops after
 # num_steps per stage; vllm needs a timed stop.
+# Dynamo (multinode srt-slurm) profiling targets: when the recipe declares a
+# profiling: section, srtctl exports the worker leader endpoints into the
+# benchmark stage (PROFILE_{PREFILL,DECODE,AGG}_ENDPOINTS or _IPS, port
+# defaulting to WORKER_PORT). Dynamo workers expose /engine/start_profile and
+# /engine/stop_profile. Emits "host:port mode" lines.
+_profile_dynamo_targets() {
+    local port="${WORKER_PORT:-9090}"
+    local -a specs=(
+        "prefill ${PROFILE_PREFILL_ENDPOINTS:-${PROFILE_PREFILL_IPS:-}}"
+        "decode ${PROFILE_DECODE_ENDPOINTS:-${PROFILE_DECODE_IPS:-}}"
+        "agg ${PROFILE_AGG_ENDPOINTS:-${PROFILE_AGG_IPS:-}}"
+    )
+    local spec mode list ep
+    for spec in "${specs[@]}"; do
+        mode="${spec%% *}"
+        list="${spec#* }"
+        [[ -z "$list" ]] && continue
+        IFS=',' read -r -a _eps <<< "$list"
+        for ep in "${_eps[@]}"; do
+            [[ -z "$ep" ]] && continue
+            [[ "$ep" != *:* ]] && ep="$ep:$port"
+            printf '%s %s\n' "$ep" "$mode"
+        done
+    done
+}
+
+# Resolve the /start_profile target(s) for the single-server (non-dynamo)
+# path. Priority: explicit PROFILE_SERVER_URL; then the worker leader URLs
+# srt-slurm injects for multinode agentic runs (AIPERF_SERVER_METRICS_URLS is
+# a comma-separated list of per-worker /metrics endpoints — the profiling
+# endpoints live on those same servers, NOT on the nginx/dynamo frontend);
+# else localhost:$PORT.
+_profile_server_urls() {
+    if [[ -n "${PROFILE_SERVER_URL:-}" ]]; then
+        printf '%s\n' "$PROFILE_SERVER_URL"
+        return 0
+    fi
+    if [[ -n "${AIPERF_SERVER_METRICS_URLS:-}" ]]; then
+        local u
+        IFS=',' read -r -a _urls <<< "$AIPERF_SERVER_METRICS_URLS"
+        for u in "${_urls[@]}"; do
+            u="${u%%/metrics*}"
+            [[ -n "$u" ]] && printf '%s\n' "$u"
+        done
+        return 0
+    fi
+    printf '%s\n' "http://localhost:${PORT:-8888}"
+}
+
 launch_agentic_profile_trigger() {
     profiling_enabled || return 0
     local log_dir="${1:-$(_profile_workspace_dir)}"
-    local url="${PROFILE_SERVER_URL:-http://localhost:${PORT:-8888}}"
     local delay="${PROFILE_START_DELAY_SECONDS:-600}"
     local prefill_delay="${PROFILE_PREFILL_DELAY_SECONDS:-180}"
     local trigger_log="$log_dir/profile_trigger.log"
+    local -a dynamo_targets=()
+    mapfile -t dynamo_targets < <(_profile_dynamo_targets)
+    local -a urls=()
+    if [[ ${#dynamo_targets[@]} -eq 0 ]]; then
+        mapfile -t urls < <(_profile_server_urls)
+    fi
+
+    _profile_stop_all() {
+        local u t
+        for t in "${dynamo_targets[@]}"; do
+            curl -sS -m 600 -X POST "http://${t%% *}/engine/stop_profile" \
+                -H 'Content-Type: application/json' -d '{}' >/dev/null 2>&1 || true
+        done
+        for u in "${urls[@]}"; do
+            curl -sS -m 600 -X POST "$u/stop_profile" \
+                -H 'Content-Type: application/json' -d '{}' >/dev/null 2>&1 || true
+        done
+    }
 
     _profile_capture_window() {
         local label="$1"
-        echo "[PROFILE] $(date --iso-8601=seconds) starting $label capture via $url/start_profile"
+        local u t hostport mode outdir
+        for t in "${dynamo_targets[@]}"; do
+            hostport="${t%% *}"
+            mode="${t##* }"
+            outdir="${PROFILE_OUTPUT_DIR:-/logs/profiles}/$mode"
+            echo "[PROFILE] $(date --iso-8601=seconds) starting $label capture via http://$hostport/engine/start_profile ($mode)"
+            curl -sS -m 120 -X POST "http://$hostport/engine/start_profile" \
+                -H 'Content-Type: application/json' \
+                -d "{\"output_dir\": \"$outdir\", \"start_step\": 0, \"num_steps\": ${PROFILE_NUM_STEPS:-2}, \"activities\": [\"CPU\", \"GPU\"]}" \
+                || echo "[PROFILE] start_profile failed ($label, $hostport)"
+        done
+        for u in "${urls[@]}"; do
+            echo "[PROFILE] $(date --iso-8601=seconds) starting $label capture via $u/start_profile"
+            if [[ "${FRAMEWORK:-}" == *vllm* ]]; then
+                curl -sS -m 120 -X POST "$u/start_profile" \
+                    -H 'Content-Type: application/json' -d '{}' \
+                    || echo "[PROFILE] start_profile failed ($label, $u)"
+            else
+                curl -sS -m 120 -X POST "$u/start_profile" \
+                    -H 'Content-Type: application/json' \
+                    -d "{\"num_steps\": ${PROFILE_NUM_STEPS:-2}, \"merge_profiles\": true, \"profile_by_stage\": true, \"record_shapes\": true, \"with_stack\": ${PROFILE_WITH_STACK:-true}}" \
+                    || echo "[PROFILE] start_profile failed ($label, $u)"
+            fi
+        done
+        # vllm engines don't auto-stop after num_steps; close the window on a
+        # timer (applies to both dynamo-vllm workers and plain vllm servers).
         if [[ "${FRAMEWORK:-}" == *vllm* ]]; then
-            curl -sS -m 120 -X POST "$url/start_profile" \
-                -H 'Content-Type: application/json' -d '{}' \
-                || echo "[PROFILE] start_profile failed ($label)"
             sleep "${PROFILE_CAPTURE_SECONDS:-15}"
             echo "[PROFILE] $(date --iso-8601=seconds) stopping $label capture"
-            curl -sS -m 600 -X POST "$url/stop_profile" \
-                -H 'Content-Type: application/json' -d '{}' \
-                || echo "[PROFILE] stop_profile failed ($label)"
-        else
-            curl -sS -m 120 -X POST "$url/start_profile" \
-                -H 'Content-Type: application/json' \
-                -d "{\"num_steps\": ${PROFILE_NUM_STEPS:-2}, \"merge_profiles\": true, \"profile_by_stage\": true, \"record_shapes\": true, \"with_stack\": ${PROFILE_WITH_STACK:-true}}" \
-                || echo "[PROFILE] start_profile failed ($label)"
+            _profile_stop_all
         fi
     }
 
@@ -968,8 +1049,7 @@ launch_agentic_profile_trigger() {
             sleep "$((delay - prefill_delay))"
             # Close the first session if it never reached num_steps; a stop on
             # an already-stopped profiler is a harmless error.
-            curl -sS -m 600 -X POST "$url/stop_profile" \
-                -H 'Content-Type: application/json' -d '{}' >/dev/null 2>&1 || true
+            _profile_stop_all
             # Let the async trace writer flush before the next session starts.
             sleep 30
         else
@@ -978,7 +1058,13 @@ launch_agentic_profile_trigger() {
         _profile_capture_window "steady-window"
     ) > "$trigger_log" 2>&1 &
     PROFILE_TRIGGER_PID=$!
-    echo "[PROFILE] Capture trigger armed: pid=$PROFILE_TRIGGER_PID prefill-delay=${prefill_delay}s steady-delay=${delay}s url=$url log=$trigger_log"
+    local targets=""
+    if [[ ${#dynamo_targets[@]} -gt 0 ]]; then
+        targets="$(printf '%s\n' "${dynamo_targets[@]}" | paste -sd, -)"
+    else
+        targets="$(printf '%s\n' "${urls[@]}" | paste -sd, -)"
+    fi
+    echo "[PROFILE] Capture trigger armed: pid=$PROFILE_TRIGGER_PID prefill-delay=${prefill_delay}s steady-delay=${delay}s targets=$targets log=$trigger_log"
 }
 
 # Reap the trigger and make sure no capture is left open (a stop on an
@@ -989,9 +1075,20 @@ finalize_profile_capture() {
         wait "$PROFILE_TRIGGER_PID" 2>/dev/null || true
         PROFILE_TRIGGER_PID=""
     fi
-    local url="${PROFILE_SERVER_URL:-http://localhost:${PORT:-8888}}"
-    curl -sS -m 600 -X POST "$url/stop_profile" \
-        -H 'Content-Type: application/json' -d '{}' >/dev/null 2>&1 || true
+    local u t
+    local -a _dyn=()
+    mapfile -t _dyn < <(_profile_dynamo_targets)
+    if [[ ${#_dyn[@]} -gt 0 ]]; then
+        for t in "${_dyn[@]}"; do
+            curl -sS -m 600 -X POST "http://${t%% *}/engine/stop_profile" \
+                -H 'Content-Type: application/json' -d '{}' >/dev/null 2>&1 || true
+        done
+        return 0
+    fi
+    while IFS= read -r u; do
+        curl -sS -m 600 -X POST "$u/stop_profile" \
+            -H 'Content-Type: application/json' -d '{}' >/dev/null 2>&1 || true
+    done < <(_profile_server_urls)
 }
 
 # Collect every trace the profiler produced plus a self-describing metadata

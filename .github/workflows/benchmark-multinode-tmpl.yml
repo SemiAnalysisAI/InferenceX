@@ -213,6 +213,29 @@ on:
         description: "Git ref (branch/sha) to checkout"
         required: false
         type: string
+      # Profiling inputs (see benchmarks/benchmark_lib.sh "e2e profiling capture").
+      # Only the agentic path supports profiling on multinode: fixed-seq-len
+      # benchmarks run srt-slurm's own sa-bench client with no trigger hook.
+      profile:
+        description: "Capture a torch-profiler trace during the run and upload it as profile_<result>"
+        required: false
+        type: boolean
+        default: false
+      profile-keep-cuda-graphs:
+        description: "Profile with CUDA graphs enabled (kernels inside graph replay lose operator attribution)"
+        required: false
+        type: boolean
+        default: false
+      profile-num-steps:
+        description: "sglang: forward steps per stage to capture"
+        required: false
+        type: string
+        default: '2'
+      profile-start-delay-seconds:
+        description: "Agentic: steady-state delay before triggering the capture"
+        required: false
+        type: string
+        default: '600'
 
 env:
   RANDOM_RANGE_RATIO: 0.8
@@ -260,6 +283,15 @@ env:
   ROUTER_METADATA: ${{ inputs.router }}
   KV_P2P_TRANSFER: ${{ inputs.kv-p2p-transfer }}
   TOTAL_CPU_DRAM_GB: ${{ inputs.total-cpu-dram-gb }}
+  # Profiling env. Inert unless inputs.profile is true. sbatch --export=ALL
+  # carries these into the allocation, where the agentic benchmark stage's
+  # launch_agentic_profile_trigger/stage_profile_outputs read them; the
+  # launchers additionally inject the server-side profiler env + eager flags
+  # into the srt-slurm recipe when PROFILE=1.
+  PROFILE: ${{ inputs.profile && '1' || '0' }}
+  PROFILE_DISABLE_CUDA_GRAPH: ${{ inputs.profile-keep-cuda-graphs && '0' || '1' }}
+  PROFILE_NUM_STEPS: ${{ inputs.profile-num-steps }}
+  PROFILE_START_DELAY_SECONDS: ${{ inputs.profile-start-delay-seconds }}
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
 
@@ -316,7 +348,7 @@ jobs:
       ${{ inputs.spec-decoding != 'none' && inputs.spec-decoding || '' }}
       ${{ inputs.kv-offloading != '' && inputs.kv-offloading != 'none' && format('{0} KV offload', inputs.kv-offloading) || '' }}
       ${{ inputs.kv-offload-backend != '' && inputs.kv-offload-backend != 'none' && inputs.kv-offload-backend != 'default' && inputs.kv-offload-backend || '' }}
-      c${{ join(fromJson(inputs.conc-list), 'x') }}${{ inputs.eval-only && ' | eval-only' || (inputs.run-eval && ' | eval' || '') }}
+      c${{ join(fromJson(inputs.conc-list), 'x') }}${{ inputs.eval-only && ' | eval-only' || (inputs.run-eval && ' | eval' || '') }}${{ inputs.profile && ' | profile' || '' }}
 
     steps:
       - name: Slurm cleanup (pre-run)
@@ -469,6 +501,19 @@ jobs:
             LOGS/power/**
             LOGS/*/results_*.json
           if-no-files-found: ignore
+
+      - name: Upload profile traces
+        if: ${{ always() && inputs.profile }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: profile_${{ env.RESULT_FILENAME }}
+          # Staged by stage_profile_outputs in the agentic benchmark stage;
+          # the launchers copy the directory back to the workspace when the
+          # allocation writes to a staged mirror.
+          path: |
+            profile_traces_${{ env.RESULT_FILENAME }}/**
+            LOGS/profiles/**
+          if-no-files-found: warn
 
       - name: Upload server logs
         if: always()
