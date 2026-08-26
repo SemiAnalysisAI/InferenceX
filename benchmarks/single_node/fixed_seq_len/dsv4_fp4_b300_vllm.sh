@@ -86,7 +86,7 @@ if profiling_enabled; then
     if profiling_cuda_graph_disabled; then
         PROFILE_VLLM_ARGS+=(--enforce-eager)
     fi
-    PROFILE_VLLM_ARGS+=(--profiler-config "{\"profiler\":\"torch\",\"torch_profiler_dir\":\"$PROFILE_OUTPUT_DIR\",\"torch_profiler_record_shapes\":true}")
+    PROFILE_VLLM_ARGS+=(--profiler-config "{\"profiler\":\"torch\",\"torch_profiler_dir\":\"$PROFILE_OUTPUT_DIR\",\"torch_profiler_record_shapes\":true,\"ignore_frontend\":true,\"max_iterations\":${PROFILE_VLLM_MAX_ITERATIONS:-8}}")
 fi
 
 set -x

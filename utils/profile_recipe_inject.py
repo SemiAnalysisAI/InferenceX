@@ -86,6 +86,11 @@ def main() -> int:
                 "profiler": "torch",
                 "torch_profiler_dir": f"{PROFILES_DIR}/{mode}",
                 "torch_profiler_record_shapes": True,
+                # vllm has no client-side num_steps auto-stop; bound the
+                # session engine-side or eager whole-run traces reach tens
+                # of GB (and one unbounded session OOM-killed a slurm step).
+                "ignore_frontend": True,
+                "max_iterations": max(args.num_steps * 4, 8),
             })
             changed.append(f"{engine_cfg_key}.{phase}.profiler-config (torch)")
 
