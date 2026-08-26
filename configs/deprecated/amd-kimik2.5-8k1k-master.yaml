@@ -86,7 +86,7 @@ kimik2.5-fp4-mi355x-atom-disagg:
   image: rocm/atom:rocm7.2.4_ubuntu24.04_py3.12_pytorch_release_2.10.0_atomesh_202607121715
   model: amd/Kimi-K2.5-MXFP4
   model-prefix: kimik2.5
-  runner: mi355x-disagg
+  runner: cluster:mi355x-amds
   precision: fp4
   framework: atom-disagg
   kv-p2p-transfer: mooncake
@@ -139,7 +139,7 @@ kimik2.5-fp4-mi355x-vllm-disagg:
   image: vllm/vllm-openai-rocm:nightly-2afa3f7e950264bb179d030c23a1ed1f46558fd9
   model: amd/Kimi-K2.5-MXFP4
   model-prefix: kimik2.5
-  runner: mi355x-disagg
+  runner: cluster:mi355x-amds
   precision: fp4
   framework: vllm-disagg
   router: { name: vllm-router, version: "0.1.14" }

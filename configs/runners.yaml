@@ -22,11 +22,6 @@ labels:
     - h100-dgxc-slurm_17
     - h100-dgxc-slurm_18
     - h100-dgxc-slurm_19
-  h100-multinode:
-    - h100-dgxc-slurm_16
-    - h100-dgxc-slurm_17
-    - h100-dgxc-slurm_18
-    - h100-dgxc-slurm_19
   h200:
     - h200-cw_00
     - h200-cw_01
@@ -41,10 +36,6 @@ labels:
     - h200-dgxc-slurm_8
     - h200-dgxc-slurm_9
     - h200-dgxc-slurm_10
-    - h200-dgxc-slurm_11
-    - h200-dgxc-slurm_12
-    - h200-dgxc-slurm_13
-  h200-multinode:
     - h200-dgxc-slurm_11
     - h200-dgxc-slurm_12
     - h200-dgxc-slurm_13
@@ -104,10 +95,6 @@ labels:
     - mi300x-amds_06
     - mi300x-amds_07
     - mi300x-amds_08
-  mi300x-disagg:
-    - mi300x-amds_06
-    - mi300x-amds_07
-    - mi300x-amds_08
   mi325x:
     - mi325x-amds_00
     - mi325x-amds_01
@@ -115,14 +102,6 @@ labels:
     - mi325x-amds_03
     - mi325x-amds_04
     - mi325x-amds_05
-    - mi325x-amds_06
-    - mi325x-amds_07
-    - mi325x-amds_08
-  mi325x-disagg:
-    - mi325x-amds_00
-    - mi325x-amds_01
-    - mi325x-amds_02
-    - mi325x-amds_03
     - mi325x-amds_06
     - mi325x-amds_07
     - mi325x-amds_08
@@ -136,16 +115,6 @@ labels:
     - mi355x-amds_06
     - mi355x-amds_07
     - mi355x-amds_08
-  mi355x-disagg:
-    - mi355x-amds_06
-    - mi355x-amds_07
-    - mi355x-amds_08
-    - mi355x-amds_12
-    - mi355x-amds_14
-    - mi355x-amds_16
-    - mi355x-amds_17
-    - mi355x-amds_18
-    - mi355x-amds_19
   gb200:
     - gb200-nv_0
     - gb200-nv_1
@@ -163,12 +132,6 @@ labels:
     - b300-nv_10
     - b300-nv_11
     - b300-nv_12
-    - b300-nv_13
-    - b300-nv_14
-    - b300-nv_15
-    - b300-nv_16
-    - b300-nv_17
-  b300-p1:
     - b300-nv_13
     - b300-nv_14
     - b300-nv_15

@@ -610,7 +610,7 @@ class TestMarkEvalEntries:
         def entry(prefill_workers, decode_workers, conc):
             return {
                 "model": "deepseek-ai/DeepSeek-R1-0528",
-                "runner": "mi355x-disagg",
+                "runner": "cluster:mi355x-amds",
                 "framework": "vllm-disagg",
                 "precision": "fp8",
                 "isl": 8192,
@@ -647,7 +647,7 @@ class TestMarkEvalEntries:
         """Split concurrency rows for one parallelism should produce one eval job."""
         base_entry = {
             "model": "deepseek-ai/DeepSeek-R1-0528",
-            "runner": "mi355x-disagg",
+            "runner": "cluster:mi355x-amds",
             "framework": "sglang-disagg",
             "precision": "fp4",
             "isl": 8192,
