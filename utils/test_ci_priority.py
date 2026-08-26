@@ -54,6 +54,33 @@ def test_main_branch_jobs_receive_an_automatic_boost():
     ) == Decimal("3.000")
 
 
+def test_smaller_node_allocations_win_otherwise_equal_priority_ties():
+    entry = {"runner": "h100", "framework": "trt"}
+
+    assert calculate_priority({**entry, "node-count": 1}, POLICY) == Decimal("1.000")
+    assert calculate_priority({**entry, "node-count": 2}, POLICY) == Decimal("0.999")
+    assert calculate_priority({**entry, "node-count": 3}, POLICY) == Decimal("0.998")
+
+
+def test_node_count_tiebreaker_survives_classifier_projection():
+    entry = {"runner": "h100", "framework": "trt", "node-count": 3}
+
+    assert calculate_priority(
+        entry,
+        POLICY,
+        PriorityContext(criteria=frozenset()),
+    ) == Decimal("0.998")
+
+
+@pytest.mark.parametrize("node_count", [0, -1, 1.5, True])
+def test_node_count_must_be_a_positive_integer(node_count):
+    with pytest.raises(ValueError, match="positive integer"):
+        calculate_priority(
+            {"runner": "h100", "framework": "trt", "node-count": node_count},
+            POLICY,
+        )
+
+
 def test_patchwork_score_uses_half_up_rounding():
     policy = deepcopy(POLICY)
     policy["labels"]["patchwork"]["score"] = 0.7225
