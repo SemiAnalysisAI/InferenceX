@@ -903,6 +903,16 @@ move_profile_trace_for_relay() {
 #   PROFILE_WITH_STACK           record python stacks (default true).
 #   PROFILE_OUTPUT_DIR           where the engine writes traces (defaulted by
 #                                setup_profiling_env to <workspace>/profiles).
+#   PROFILE_EXECUTION_TRACE      sglang frameworks only, default 1: also record
+#                                a PyTorch ExecutionTrace (operator DAG with
+#                                tensor ids -- the dataflow edges kineto traces
+#                                lack) for each capture session, via a
+#                                sitecustomize shim that attaches an
+#                                ExecutionTraceObserver wherever the scheduler
+#                                starts its torch profiler. ET nodes join the
+#                                kineto cpu_ops on rf_id <-> "Record function
+#                                id". Files: et-<ts>-rank<N>-s<session>.json in
+#                                PROFILE_OUTPUT_DIR. Set 0 to disable.
 
 profiling_enabled() {
     [[ "${PROFILE:-}" == "1" ]]
@@ -927,6 +937,30 @@ setup_profiling_env() {
     export VLLM_TORCH_PROFILER_RECORD_SHAPES=1
     export VLLM_TORCH_PROFILER_WITH_STACK=1
     echo "[PROFILE] Profiler output dir: $PROFILE_OUTPUT_DIR (cuda graphs $(profiling_cuda_graph_disabled && echo disabled || echo enabled))"
+    setup_execution_trace_env
+}
+
+# ExecutionTrace capture (sglang): sglang's ProfileReq has no execution-trace
+# option, so a sitecustomize PYTHONPATH shim (precedent: _patch_lm_eval) wraps
+# torch.profiler.profile.start/stop to attach an ExecutionTraceObserver in
+# whichever process runs the kineto session -- i.e. each scheduler subprocess,
+# which inherits PYTHONPATH from the server we launch here. Must run before
+# the server launch, like the rest of setup_profiling_env.
+setup_execution_trace_env() {
+    [[ "${PROFILE_EXECUTION_TRACE:-1}" == "1" ]] || return 0
+    [[ "${FRAMEWORK:-}" == *sglang* ]] || return 0
+    local shim_src
+    shim_src="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/patches/sglang_execution_trace_sitecustomize.py"
+    if [[ ! -f "$shim_src" ]]; then
+        echo "[PROFILE] Execution-trace shim not found at $shim_src; skipping." >&2
+        return 0
+    fi
+    export SGLANG_EXECUTION_TRACE_DIR="$PROFILE_OUTPUT_DIR"
+    local shim_dir
+    shim_dir="$(mktemp -d)"
+    cp "$shim_src" "$shim_dir/sitecustomize.py"
+    export PYTHONPATH="${shim_dir}${PYTHONPATH:+:${PYTHONPATH}}"
+    echo "[PROFILE] Execution-trace observer armed: dir=$SGLANG_EXECUTION_TRACE_DIR shim=$shim_dir/sitecustomize.py"
 }
 
 # Agentic runs replay traces through aiperf, which has no --profile flag; the
@@ -1164,11 +1198,12 @@ stage_profile_outputs() {
     # for at least one to appear.
     local -a traces=()
     local waited=0 flush_wait="${PROFILE_FLUSH_WAIT_SECONDS:-180}"
-    local canon=""
+    local canon="" kineto_count=0
     declare -A seen_canon
     while :; do
         traces=()
         seen_canon=()
+        kineto_count=0
         while IFS= read -r -d '' f; do
             [[ "$(basename "$f")" == profile_*.trace.json.gz ]] && continue
             # The search roots overlap (e.g. <ws> at depth 2 also covers
@@ -1177,10 +1212,15 @@ stage_profile_outputs() {
             [[ -n "${seen_canon[$canon]:-}" ]] && continue
             seen_canon[$canon]=1
             traces+=("$f")
+            [[ "$(basename "$f")" == *.trace.json* ]] && kineto_count=$((kineto_count + 1))
         done < <(find "${roots[@]}" -maxdepth 2 -type f \
-                     \( -name "*.trace.json" -o -name "*.trace.json.gz" \) \
+                     \( -name "*.trace.json" -o -name "*.trace.json.gz" \
+                        -o -name "et-*.json" -o -name "et-*.json.gz" \) \
                      -print0 2>/dev/null | sort -z)
-        [[ ${#traces[@]} -gt 0 || $waited -ge $flush_wait ]] && break
+        # Execution-trace JSONs finalize just before the kineto export starts;
+        # keep waiting until a kineto trace shows up so an early ET file can't
+        # cut the flush wait short.
+        [[ $kineto_count -gt 0 || $waited -ge $flush_wait ]] && break
         sleep 10
         waited=$((waited + 10))
     done
@@ -1273,10 +1313,17 @@ meta = {
         "capture_seconds": as_int(env("PROFILE_CAPTURE_SECONDS", "5")),
         "with_stack": env("PROFILE_WITH_STACK", "true") == "true",
         "record_shapes": True,
+        # ExecutionTrace observer armed for this run (sglang only); the ET
+        # JSONs join the kineto cpu_ops via rf_id <-> "Record function id".
+        "execution_trace": bool(env("SGLANG_EXECUTION_TRACE_DIR")),
     },
     "traces": sorted(
         f for f in os.listdir(out_dir)
         if f.endswith((".trace.json", ".trace.json.gz"))
+    ),
+    "execution_traces": sorted(
+        f for f in os.listdir(out_dir)
+        if f.startswith("et-") and f.endswith((".json", ".json.gz"))
     ),
 }
 with open(os.path.join(out_dir, "profile_meta.json"), "w") as fh:

@@ -221,6 +221,9 @@ env:
   PROFILE_DISABLE_CUDA_GRAPH: ${{ inputs.profile-keep-cuda-graphs && '0' || '1' }}
   PROFILE_NUM_STEPS: ${{ inputs.profile-num-steps }}
   PROFILE_START_DELAY_SECONDS: ${{ inputs.profile-start-delay-seconds }}
+  # ExecutionTrace (operator DAG) capture alongside the kineto trace; only
+  # takes effect for sglang frameworks when PROFILE=1. Set '0' to disable.
+  PROFILE_EXECUTION_TRACE: '1'
   RESULT_DIR: /workspace/results
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
