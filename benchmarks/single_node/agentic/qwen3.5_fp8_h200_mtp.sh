@@ -7,7 +7,7 @@ set -x
 # only, per the AgentX policy that new agentic arms ship with speculative
 # decoding enabled rather than as an STP/MTP A/B (MODELS.md).
 #
-# Structure follows the proven agentic/qwen3.5_fp8_h100.sh replay path
+# Structure follows the proven H100 MTP AgentX replay path
 # (HiCache host-DRAM offload, the multi_tokenizer cached_tokens_details patch,
 # aiperf-driven trace replay). H200's 141 GB HBM3e is roomier than H100's 80 GB,
 # so --mem-fraction-static is 0.8 rather than 0.75, matching

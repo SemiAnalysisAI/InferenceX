@@ -137,6 +137,19 @@ srun_options:
   mem: "0"
   container-remap-root: ""
 
+telemetry:
+  enabled: true
+  provider: dcgm-power
+  default_frequency: 1.0
+  storage_subdir: power
+  required: true
+  startup_timeout_seconds: 120
+  request_timeout_seconds: 2
+  collector_join_timeout_seconds: 10
+  dcgm_exporter:
+    container_image: dcgm-exporter
+    port: 9401
+
 benchmark:
   type: custom
   command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh

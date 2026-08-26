@@ -183,12 +183,80 @@ if [[ -n "${NODE_LIST//[[:space:]]/}" ]]; then
     NODELIST_OPT=(--nodelist "$NODELIST_CSV")
 fi
 
-# Optional: exclude specific nodes (e.g. nodes with broken Docker sockets).
-# Set SLURM_EXCLUDE_NODES env var to a comma-separated list of hostnames.
+# Optional: exclude specific nodes for known-bad (FRAMEWORK, MODEL_NAME)
+# combos (e.g. nodes with broken Docker sockets), looked up from
+# node_excludes.yaml. Set SLURM_EXCLUDE_NODES to override with an explicit
+# comma-separated hostname list (takes precedence over the file).
+#
+# Resolution must fail loudly (not silently yield an empty exclude list) if
+# it can't be trusted: a submit host missing python3/PyYAML, or a genuine
+# parse error, must not silently reintroduce the known-bad-node issue this
+# exclusion mechanism exists to prevent.
 EXCLUDE_OPT=()
-SLURM_EXCLUDE_NODES="${SLURM_EXCLUDE_NODES:-mia1-p01-g09,mia1-p01-g10,mia1-p01-g11,mia1-p01-g12}"
+NODE_EXCLUDES_YAML="$(dirname "$0")/node_excludes.yaml"
 if [[ -n "${SLURM_EXCLUDE_NODES:-}" ]]; then
-    EXCLUDE_OPT=(--exclude "$SLURM_EXCLUDE_NODES")
+    RESOLVED_EXCLUDE_NODES="$SLURM_EXCLUDE_NODES"
+elif [[ -f "$NODE_EXCLUDES_YAML" ]]; then
+    if command -v python3 >/dev/null 2>&1 && python3 -c "import yaml" >/dev/null 2>&1; then
+        RESOLVED_EXCLUDE_NODES=$(python3 -c "
+import yaml
+
+with open('${NODE_EXCLUDES_YAML}') as f:
+    cfg = yaml.safe_load(f) or {}
+
+framework = '${FRAMEWORK}'
+model = '${MODEL_NAME}'
+for rule in cfg.get('rules', []):
+    if rule.get('framework') == framework and model in (rule.get('models') or []):
+        print(rule.get('exclude_nodes', ''))
+        break
+")
+        PYTHON_EXCLUDE_RC=$?
+        if [[ $PYTHON_EXCLUDE_RC -ne 0 ]]; then
+            echo "Error: python3 failed (exit ${PYTHON_EXCLUDE_RC}) parsing ${NODE_EXCLUDES_YAML}" >&2
+            echo "Error: fix the YAML, or set SLURM_EXCLUDE_NODES to bypass this lookup." >&2
+            exit 1
+        fi
+    else
+        # Fall back to an awk parser (mirrors job.slurm's awk-based models.yaml
+        # parsing) matched to node_excludes.yaml's fixed rule/models/exclude_nodes
+        # shape. Only exercised when python3 or its yaml module is unavailable.
+        echo "Warning: python3/PyYAML unavailable on submit host; falling back to awk parsing of ${NODE_EXCLUDES_YAML}" >&2
+        RESOLVED_EXCLUDE_NODES=$(awk -v fw="$FRAMEWORK" -v model="$MODEL_NAME" '
+            /^  - framework:/ {
+                line = $0
+                sub(/^  - framework: */, "", line)
+                fw_match = (line == fw)
+                model_match = 0
+                next
+            }
+            fw_match && /^      - / {
+                m = $0
+                sub(/^      - */, "", m)
+                gsub(/^"|"$/, "", m)
+                if (m == model) model_match = 1
+                next
+            }
+            fw_match && model_match && /^    exclude_nodes:/ {
+                val = $0
+                sub(/^ *exclude_nodes: */, "", val)
+                gsub(/^"|"$/, "", val)
+                print val
+                exit
+            }
+        ' "$NODE_EXCLUDES_YAML")
+        AWK_EXCLUDE_RC=$?
+        if [[ $AWK_EXCLUDE_RC -ne 0 ]]; then
+            echo "Error: awk fallback failed (exit ${AWK_EXCLUDE_RC}) parsing ${NODE_EXCLUDES_YAML}" >&2
+            echo "Error: fix the YAML/parser, or set SLURM_EXCLUDE_NODES to bypass this lookup." >&2
+            exit 1
+        fi
+    fi
+else
+    RESOLVED_EXCLUDE_NODES=""
+fi
+if [[ -n "$RESOLVED_EXCLUDE_NODES" ]]; then
+    EXCLUDE_OPT=(--exclude "$RESOLVED_EXCLUDE_NODES")
 fi
 
 # =============================================================================

@@ -670,6 +670,7 @@ def test_run_skips_when_bench_window_missing(tmp_path: Path):
     assert "avg_power_w" not in patched
     assert patched == {
         "hw": "h200",
+        "power_metric_schema_version": 2,
         "power_valid": 0,
     }
 
@@ -755,6 +756,7 @@ def test_run_emits_complete_whole_deployment_metric_contract(tmp_path: Path):
 
     assert exit_code == 0
     patched = json.loads(agg.read_text())
+    assert patched["power_metric_schema_version"] == 2
     assert type(patched["power_valid"]) is int
     assert patched["power_valid"] == 1
     assert "power_invalid_reasons" not in patched
@@ -809,6 +811,7 @@ def test_run_best_effort_marks_invalid_power_and_preserves_benchmark(tmp_path: P
     patched = json.loads(agg.read_text())
     assert patched["hw"] == "h200"
     assert patched["conc"] == 4
+    assert patched["power_metric_schema_version"] == 2
     assert type(patched["power_valid"]) is int
     assert patched["power_valid"] == 0
     assert "power_invalid_reasons" not in patched

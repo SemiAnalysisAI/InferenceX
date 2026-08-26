@@ -1,0 +1,87 @@
+name: "minimax-m3-vllm-agg-gb200-tp4-vllm-simple-agentic"
+
+model:
+  path: "minimax-m3-nvfp4"
+  container: "vllm/vllm-openai:v0.27.1"
+  precision: "fp4"
+
+identity:
+  model: { repo: "nvidia/MiniMax-M3-NVFP4" }
+  container: { image: "vllm/vllm-openai:v0.27.1" }
+  frameworks: { dynamo: "1.3.1" }
+
+dynamo: { version: "1.3.1", install: true }
+environment: { ETCD_LEASE_TTL: "7200" }
+slurm: { time_limit: "12:00:00" }
+health_check: { max_attempts: 2160, interval_seconds: 10 }
+resources: { gpu_type: "gb200", gpus_per_node: 4, agg_nodes: 1, agg_workers: 1, gpus_per_agg: 4 }
+infra: { etcd_nats_dedicated_node: false, nats_max_payload_mb: 32 }
+
+frontend:
+  type: dynamo
+  enable_multiple_frontends: false
+  env: { DYN_TCP_REQUEST_TIMEOUT: "60" }
+  args: { router-mode: "kv", router-kv-events: true, router-reset-states: true, router-temperature: "0", router-session-affinity-ttl-secs: 14400, kv-cache-block-size: 128 }
+
+backend:
+  type: vllm
+  connector: null
+  kv_events_config: { aggregated: true }
+  aggregated_environment:
+    VLLM_ENGINE_READY_TIMEOUT_S: "7200"
+    VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
+    VLLM_FLOAT32_MATMUL_PRECISION: "high"
+    VLLM_FLASHINFER_ALLREDUCE_BACKEND: "trtllm"
+    VLLM_LOG_STATS_INTERVAL: "1"
+    VLLM_USE_SIMPLE_KV_OFFLOAD: "1"
+    NCCL_CUMEM_ENABLE: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_NVLS_ENABLE: "1"
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_NET_DEVICES: "mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1"
+    UCX_TLS: "cuda_copy,cuda_ipc,rc"
+    NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
+  vllm_config:
+    aggregated:
+      served-model-name: "nvidia/MiniMax-M3-NVFP4"
+      tensor-parallel-size: 4
+      pipeline-parallel-size: 1
+      trust-remote-code: true
+      enable-prefix-caching: true
+      kv-cache-metrics: true
+      attention-config: '{"backend":"FLASHINFER","use_trtllm_attention":true,"indexer_kv_dtype":"fp8","minimax_m3_msa_decode_backend":"cutlass"}'
+      block-size: 128
+      gpu-memory-utilization: 0.9
+      max-model-len: 1048576
+      language-model-only: true
+      kv-cache-dtype: "fp8"
+      speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN"}'
+      kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":549755813888,"cpu_bytes_to_use_per_rank":137438953472,"lazy_offload":false}}'
+      stream-interval: 20
+      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY"}'
+      max-cudagraph-capture-size: 512
+      max-num-batched-tokens: 16384
+      no-enable-flashinfer-autotune: true
+      reasoning-parser: "minimax_m3"
+      dyn-tool-call-parser: "minimax_m3"
+      dyn-reasoning-parser: "minimax_m3"
+
+sbatch_directives: { cpus-per-task: "144", mem: "0" }
+srun_options: { container-remap-root: "" }
+
+benchmark:
+  type: custom
+  command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+  env:
+    INFMAX_CONTAINER_WORKSPACE: "/infmax-workspace"
+    RESULT_DIR: "/logs/agentic"
+    PORT: "8000"
+    IS_MULTINODE: "true"
+    AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
+    AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
+    AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: "14400"
+    AIPERF_EXTRA_INPUTS: "thinking:true"
+    AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:"
+    AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
+    HF_HUB_CACHE: "/hf_hub_cache"
+    WEKA_LOADER_OVERRIDE: "semianalysis_cc_traces_weka_062126"
