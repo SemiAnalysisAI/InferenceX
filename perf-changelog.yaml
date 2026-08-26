@@ -6467,3 +6467,12 @@
     - "Reduce the concurrency-1536 disaggregated topology from six to five DEP8 prefill workers while retaining one DEP16 decode worker."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2644
   
+- config-keys:
+    - minimaxm3-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a day-zero MiniMax-M3 MXFP4 AgentX recipe on MI355X with ATOM native MTP at TP4 and concurrency 1/4/8/12/16."
+    - "Follow the upstream ATOM recipe serve shape: FP8 KV cache, three MTP draft tokens, and ATOM defaults for every other server knob."
+    - "Pin throughput runs to the committed golden acceptance length of 2.83 at three draft tokens; eval-only runs keep real target verification."
+  pr-link: TBD
