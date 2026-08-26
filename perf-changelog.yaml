@@ -6475,4 +6475,4 @@
     - "Add a day-zero MiniMax-M3 MXFP4 AgentX recipe on MI355X with ATOM, EAGLE3 speculative decoding, and TP4 at concurrency 1/4/8/12/16."
     - "Pin throughput runs to the committed golden EAGLE3 acceptance length of 2.83 at three draft tokens; eval-only runs keep real target verification."
     - "Keep ATOM prefix caching enabled for the trace-replay workload instead of the disabled setting the retired single-turn 8k1k recipe used."
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2733
