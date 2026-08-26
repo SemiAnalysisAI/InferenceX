@@ -91,8 +91,11 @@ fi
 USE_SGLANG_ROUTER=false
 SGLANG_BACKEND_PORT="$PORT"
 ROUTER_LOG="$RESULT_DIR/router.log"
+ROUTER_POLICY=consistent_hashing
+ROUTER_POLICY_ARGS=()
 if [ "$DP_ATTENTION" = "true" ]; then
     USE_SGLANG_ROUTER=true
+    ROUTER_POLICY=cache_aware
     export AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID=true
     SGLANG_BACKEND_PORT=$((PORT + 1))
     SGLANG_ROUTER_METRICS_PORT=$((PORT + 10000))
@@ -103,14 +106,39 @@ PARALLEL_ARGS=(--tp "$TP")
 METRICS_ARGS=(--enable-metrics --enable-cache-report)
 CHUNKED_PREFILL_SIZE=8192
 SWA_FULL_TOKENS_RATIO=0.1
+MEM_FRACTION_STATIC=0.88
+PREFILL_DECODE_INTERVAL=20
 if [ "$DP_ATTENTION" = "true" ]; then
     export SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_FP4_ACTS=1
     export SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_MXF4_KIND=1
     export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=8320
+
+    PREFILL_DECODE_INTERVAL=24
+    MEM_FRACTION_STATIC=0.90
+    # SGLang divides this global budget by dp_size. Conc 64/96 retain the
+    # validated 8192-token per-rank budget.
+    CHUNKED_PREFILL_SIZE=$((8192 * TP))
+    SWA_FULL_TOKENS_RATIO=0.02
+
+    # The higher-concurrency points use the validated memory-safe profile:
+    # 6144 prefill tokens/rank, a compact decode graph, balanced DP admission,
+    # and one-second load snapshots for the total-requests controller.
+    if [ "$CONC" -eq 128 ] || [ "$CONC" -eq 160 ]; then
+        MEM_FRACTION_STATIC=0.91
+        CHUNKED_PREFILL_SIZE=$((6144 * TP))
+        PARALLEL_ARGS+=(--load-balance-method total_requests)
+        METRICS_ARGS+=(--load-snapshot-publish-interval 1)
+        export AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID=true
+    fi
+    if [ "$CONC" -eq 160 ]; then
+        PREFILL_DECODE_INTERVAL=20
+        ROUTER_POLICY_ARGS+=(--balance-abs-threshold 32)
+    fi
+
     PARALLEL_ARGS+=(
         --dp "$TP"
         --tokenizer-worker-num "$TP"
-        --prefill-decode-interval 20
+        --prefill-decode-interval "$PREFILL_DECODE_INTERVAL"
         --enable-dp-attention
         --enable-dp-attention-local-control-broadcast
         --incremental-streaming-output
@@ -122,10 +150,6 @@ if [ "$DP_ATTENTION" = "true" ]; then
         --disable-shared-experts-fusion
         --disable-flashinfer-autotune
     )
-    # SGLang divides this global budget by dp_size. Keep the tuned 8192-token
-    # per-rank budget for every DP-attention topology.
-    CHUNKED_PREFILL_SIZE=$((8192 * TP))
-    SWA_FULL_TOKENS_RATIO=0.02
 else
     PARALLEL_ARGS+=(
         --moe-runner-backend flashinfer_mxfp4
@@ -137,15 +161,19 @@ fi
 # The B200-specialized image deadlocks immediately after weight loading when
 # forced through the B300 compressed-attention/page-size overrides.
 # DeepGEMM's DSv4 indexer needs a multi-GiB temporary allocation at long
-# contexts. Leave the same HBM headroom used by the B300 recipe so a nearly
-# full GPU KV cache does not OOM while HiCache is spilling to host memory.
-MEM_FRACTION_STATIC=0.88
+# contexts. The selected fractions preserve the measured indexer and CUDA
+# graph headroom while HiCache spills to host memory.
 
 # AgentX concurrency counts live session trees, not individual requests.
 # Allow subagent fan-out to exceed CONC without clipping request bursts.
 MAX_RUNNING_REQUESTS=$((2 * CONC))
 CUDA_GRAPH_MAX_BS=$((2 * CONC))
+if [ "$DP_ATTENTION" = "true" ] && { [ "$CONC" -eq 128 ] || [ "$CONC" -eq 160 ]; }; then
+    CUDA_GRAPH_MAX_BS=32
+fi
 CUDA_GRAPH_ARGS=(--cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS")
+
+echo "SGLang B200 tuning: conc=$CONC dp_attention=$DP_ATTENTION interval=$PREFILL_DECODE_INTERVAL mem_fraction=$MEM_FRACTION_STATIC chunked_prefill=$CHUNKED_PREFILL_SIZE cuda_graph_max_bs=$CUDA_GRAPH_MAX_BS router_policy=$ROUTER_POLICY"
 
 export PYTHONNOUSERSITE=1
 export TORCH_CUDA_ARCH_LIST=10.0
@@ -204,6 +232,7 @@ SGLANG_CMD=(
     # across local ranks so post-load weight repacking reads from page cache
     # instead of issuing redundant fragmented mmap faults from every rank.
     --weight-loader-prefetch-checkpoints
+    --model-loader-extra-config '{"enable_multithread_load": true}'
     "${METRICS_ARGS[@]}"
     "${CACHE_ARGS[@]}"
 )
@@ -240,7 +269,8 @@ if [ "$USE_SGLANG_ROUTER" = "true" ]; then
     echo "Starting SGLang router on port $PORT for $TP DP ranks..."
     "${SGLANG_ROUTER_CMD[@]}" \
         --worker-urls "http://localhost:$SGLANG_BACKEND_PORT" \
-        --policy consistent_hashing \
+        --policy "$ROUTER_POLICY" \
+        "${ROUTER_POLICY_ARGS[@]}" \
         --request-id-headers x-correlation-id \
         --dp-aware \
         --host 0.0.0.0 \

@@ -6582,6 +6582,7 @@
   scenario-type:
     - agentic-coding
   description:
-    - "On the DP-attention path, remove --enable-prefill-delayer and increase --prefill-decode-interval from 10 to 20 to improve the P90 TTFT and TPOT balance."
-    - "Retain the existing TP8/DP8/EP8 topology, HiCache, MegaMoE, 65536-token global chunked-prefill budget, and 2x-concurrency request and CUDA-graph limits."
+    - "Refresh the B200 SGLang AgentX curve with validated TP8/DP8/EP8 HiCache profiles at DP-attention concurrencies 64, 96, 128, and 160."
+    - "Use --prefill-decode-interval 24 at concurrency 64, 96, and 128; retain interval 20 at concurrency 160."
+    - "Use cache-aware routing for the DP-attention profiles. At concurrency 128 and 160, use mem-fraction-static 0.91, a 49152-token global chunked-prefill budget, CUDA graph maximum batch size 32, and total-requests DP balancing; set the cache-aware absolute balance threshold to 32 at concurrency 160."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2718
