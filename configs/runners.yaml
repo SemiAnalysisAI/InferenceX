@@ -30,8 +30,6 @@ labels:
   h200:
     - h200-cw_00
     - h200-cw_01
-    - h200-nb_0
-    - h200-nb_1
     - h200-dgxc-slurm_0
     - h200-dgxc-slurm_1
     - h200-dgxc-slurm_2
@@ -230,8 +228,6 @@ labels:
     - h200-dgxc-slurm_11
     - h200-dgxc-slurm_12
     - h200-dgxc-slurm_13
-  cluster:h200-nb:
-    - h200-nb_0
   cluster:b200-nscale:
     - b200-nscale-slurm_0
     - b200-nscale-slurm_1
@@ -334,9 +330,6 @@ hardware:
     gpus-per-node: 8
   cluster:h200-cw:
     available-cpu-dram-mib: 1_998_848
-    gpus-per-node: 8
-  cluster:h200-nb:
-    available-cpu-dram-mib: 1_472_512
     gpus-per-node: 8
   cluster:b200-dgxc:
     available-cpu-dram-mib: 3_095_781
