@@ -33,7 +33,7 @@ set -x
 # Perf-search knobs. Each defaults to the reference command's value, so an
 # otherwise-unset run reproduces the reference exactly:
 #   GPU_MEM_UTIL             0.95   (reference)
-#   MAX_NUM_BATCHED_TOKENS   8192   (default)
+#   MAX_NUM_BATCHED_TOKENS   8192   (default; 2048 under K3_NATIVE_KV_PAGE)
 #   AITER_A8W4               1      (reference; 0 = aiter a16w4 MoE path)
 #   LANGUAGE_MODEL_ONLY      true   
 #   KV_CACHE_DTYPE           fp8    (default for every arm; =auto for a bf16 A/B)
@@ -240,9 +240,21 @@ trap 'exit 143' TERM
 # So set the page instead. 4608 = 3 * 1536 keeps it an exact multiple of the
 # size vLLM picked for itself, and its window [4608, 9216) contains 8192.
 # kvnone cells are unaffected: no connector, no constraint, no override.
+# K3_NATIVE_KV_PAGE=1 opts out of the override and keeps vLLM's own page.
+# That matters for LMCache: its _MambaUnifiedViewEdit views the KDA tensor as
+# [num_blocks, page, 1, -1], and the per-block element count (832512 measured)
+# divides by the native 1536 page exactly (542) but not by 4608 (180.667). So
+# forcing the page to reach mnbt 8192 is what breaks the mamba view. The cost
+# of opting out is mnbt, which must then fall in [1536, 3072).
 KV_BLOCK_SIZE="${KV_BLOCK_SIZE:-}"
 if [ -z "$KV_BLOCK_SIZE" ] && agentic_kv_offload_enabled; then
-    KV_BLOCK_SIZE=4608
+    if [ "${KV_OFFLOAD_BACKEND:-}" = "lmcache" ] || [ "${K3_NATIVE_KV_PAGE:-0}" = "1" ]; then
+        # Native page, and mnbt comes down to match. LMCache cannot take the
+        # forced page (see above): 832512/1536 = 542, 832512/4608 = 180.667.
+        MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-2048}"
+    else
+        KV_BLOCK_SIZE=4608
+    fi
 fi
 KV_BLOCK_ARGS=()
 if [ -n "$KV_BLOCK_SIZE" ]; then
