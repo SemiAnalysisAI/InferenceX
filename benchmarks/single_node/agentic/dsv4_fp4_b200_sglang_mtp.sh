@@ -116,11 +116,9 @@ if [ "$DP_ATTENTION" = "true" ]; then
     CHUNKED_PREFILL_SIZE=$((8192 * TP))
     SWA_FULL_TOKENS_RATIO=0.02
 
-    # The higher-concurrency points use the validated memory-safe profile:
-    # 6144 prefill tokens/rank, a compact decode graph, balanced DP admission,
-    # and one-second load snapshots for the total-requests controller.
+    # The higher-concurrency points use a reduced prefill budget, a compact
+    # decode graph, balanced DP admission, and one-second load snapshots.
     if [ "$CONC" -eq 128 ] || [ "$CONC" -eq 160 ]; then
-        MEM_FRACTION_STATIC=0.91
         CHUNKED_PREFILL_SIZE=$((6144 * TP))
         PARALLEL_ARGS+=(--load-balance-method total_requests)
         METRICS_ARGS+=(--load-snapshot-publish-interval 1)
