@@ -101,7 +101,7 @@ dsr1-fp8-mi325x-sglang:
 # 4-512); the FP4->FP8 dequant (~1.05TB) fits 8x192GB only at TP8. Launch
 # script dsv4_fp8_mi300x.sh carries the deepseek_v4 + gfx942 AITER flags.
 dsv4-fp8-mi300x-vllm:
-  image: vllm/vllm-openai-rocm:nightly-311b3513af33bc29b4acb2fde2e9313e5e9966a0
+  image: vllm/vllm-openai-rocm:nightly-09663abde0f50944a8d5ea30120666024b503faa
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi300x
@@ -122,7 +122,7 @@ dsv4-fp8-mi300x-vllm:
 # routing to dsv4_fp8_mi300x_mtp.sh; benchmark uses --dsv4 chat-template
 # encoding (required for meaningful MTP acceptance).
 dsv4-fp8-mi300x-vllm-mtp:
-  image: vllm/vllm-openai-rocm:nightly-311b3513af33bc29b4acb2fde2e9313e5e9966a0
+  image: vllm/vllm-openai-rocm:nightly-09663abde0f50944a8d5ea30120666024b503faa
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi300x
