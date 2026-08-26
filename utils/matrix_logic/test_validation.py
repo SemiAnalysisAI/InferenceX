@@ -832,6 +832,23 @@ class TestSingleNodeSearchSpaceEntry:
 class TestMultiNodeSearchSpaceEntry:
     """Tests for MultiNodeSearchSpaceEntry model."""
 
+    def test_valid_aggregate_worker(self):
+        """An aggregate entry has one worker rather than serving roles."""
+        entry = MultiNodeSearchSpaceEntry(**{
+            "worker": {
+                "tp": 8,
+                "pp": 2,
+                "ep": 1,
+                "dp-attn": False,
+            },
+            "num-nodes": 2,
+            "conc-list": [1, 2, 4],
+        })
+        assert entry.worker.tp == 8
+        assert entry.worker.pp == 2
+        assert entry.prefill is None
+        assert entry.decode is None
+
     def test_valid_with_conc_list(self):
         """Valid multinode search space with list (like gb200 config)."""
         entry = MultiNodeSearchSpaceEntry(**{
@@ -978,6 +995,20 @@ class TestSeqLenConfigs:
 # Test MasterConfigEntry models
 # =============================================================================
 
+def make_aggregated_multinode_master_config(config, num_nodes=3):
+    """Convert the disaggregated fixture to one aggregate worker."""
+    config["disagg"] = False
+    search_entry = config[
+        "scenarios"
+    ]["fixed-seq-len"][0]["search-space"][0]
+    worker = search_entry.pop("prefill")
+    search_entry.pop("decode")
+    worker.pop("num-worker")
+    search_entry["worker"] = worker
+    search_entry["num-nodes"] = num_nodes
+    return search_entry
+
+
 class TestMasterConfigEntries:
     """Tests for master config entry models."""
 
@@ -1049,7 +1080,7 @@ class TestMasterConfigEntries:
         valid_multinode_master_config,
     ):
         """P2P transfer is not restricted to disaggregated multinode serving."""
-        valid_multinode_master_config["disagg"] = False
+        make_aggregated_multinode_master_config(valid_multinode_master_config)
 
         config = MultiNodeMasterConfigEntry(**valid_multinode_master_config)
 
@@ -1059,17 +1090,39 @@ class TestMasterConfigEntries:
         self,
         valid_multinode_master_config,
     ):
-        """Aggregated search-space entries may set their Slurm node count."""
-        valid_multinode_master_config["disagg"] = False
-        search_entry = valid_multinode_master_config[
-            "scenarios"
-        ]["fixed-seq-len"][0]["search-space"][0]
-        search_entry["num-nodes"] = 3
+        """Aggregated entries require one worker and a Slurm node count."""
+        make_aggregated_multinode_master_config(valid_multinode_master_config)
 
         config = MultiNodeMasterConfigEntry(**valid_multinode_master_config)
 
         validated_entry = config.scenarios.fixed_seq_len[0].search_space[0]
         assert validated_entry.num_nodes == 3
+        assert validated_entry.worker.tp == 4
+        assert validated_entry.prefill is None
+        assert validated_entry.decode is None
+
+    def test_aggregated_multinode_requires_num_nodes(
+        self,
+        valid_multinode_master_config,
+    ):
+        """Every aggregate multi-node entry must declare its allocation."""
+        search_entry = make_aggregated_multinode_master_config(
+            valid_multinode_master_config
+        )
+        search_entry.pop("num-nodes")
+
+        with pytest.raises(Exception, match="disagg=false requires num-nodes"):
+            MultiNodeMasterConfigEntry(**valid_multinode_master_config)
+
+    def test_aggregated_multinode_rejects_prefill_decode(
+        self,
+        valid_multinode_master_config,
+    ):
+        """Aggregate master entries cannot model separate serving roles."""
+        valid_multinode_master_config["disagg"] = False
+
+        with pytest.raises(Exception, match="disagg=false requires one worker"):
+            MultiNodeMasterConfigEntry(**valid_multinode_master_config)
 
     def test_disaggregated_multinode_rejects_num_nodes(
         self,
@@ -1081,7 +1134,7 @@ class TestMasterConfigEntries:
         ]["fixed-seq-len"][0]["search-space"][0]
         search_entry["num-nodes"] = 3
 
-        with pytest.raises(Exception, match="num-nodes is only valid"):
+        with pytest.raises(Exception, match="disagg=true.*num-nodes"):
             MultiNodeMasterConfigEntry(**valid_multinode_master_config)
 
     @pytest.mark.parametrize("num_nodes", [0, -1, True])
@@ -1091,11 +1144,10 @@ class TestMasterConfigEntries:
         num_nodes,
     ):
         """Explicit aggregate node counts must be strict positive integers."""
-        valid_multinode_master_config["disagg"] = False
-        search_entry = valid_multinode_master_config[
-            "scenarios"
-        ]["fixed-seq-len"][0]["search-space"][0]
-        search_entry["num-nodes"] = num_nodes
+        make_aggregated_multinode_master_config(
+            valid_multinode_master_config,
+            num_nodes=num_nodes,
+        )
 
         with pytest.raises(Exception, match="num-nodes"):
             MultiNodeMasterConfigEntry(**valid_multinode_master_config)
