@@ -661,6 +661,38 @@ kimik3-fp4-mi355x-vllm-agentic-mtp-dcp:
       - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: none, conc-list: [4], spec-decoding: mtp }
       - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [8], spec-decoding: mtp }
 
+# c8 on the LATEST public nightly with DCP 8 and LMCache, i.e. the combination
+# the AMD side currently has no number for. Three deltas from -dcp above, all
+# deliberate:
+#
+#   image             nightly-a9a17e70 (2026-08-25) instead of ac7509e2. The
+#                     older tag predates the SITUV2 flag rename and much of the
+#                     K3 model code now in main.
+#   kv-offload-backend  lmcache instead of vllm-simple. 0.5.3 is what this image
+#                     already ships, so the recipe skips the from-source build.
+#   dcp-size 8        unchanged from -dcp, but on this base it needs the merged
+#                     overlay (k3_patches/vllm_nightly_a9a17e70_3pr.patch), NOT
+#                     the squashed vllm_51705_dcp.patch -- #51705 was rewritten
+#                     and the old diff no longer applies. The recipe dry-runs
+#                     the overlay and asserts the DCP capability before serving.
+#
+# Pairs with the c8 dram arm of -mtp (vllm-simple, dcp 1) for a like-for-like
+# read on what DCP 8 + LMCache buys. Note DCP 8 is a KV capacity REGRESSION here
+# (2,795,917 -> 1,932,335 tokens), so it has to beat that before it is a win.
+kimik3-fp4-mi355x-vllm-agentic-mtp-dcp-lmcache:
+  image: vllm/vllm-openai-rocm:nightly-a9a17e7095a66ef6c6685a1c7ddd657781a78d3c
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.65
+      search-space:
+      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.3" }, conc-list: [8], spec-decoding: mtp }
+
 # One cell, for isolating the aiter moe_sorting fault run 32215249474 hit on both
 # DCP cells. Same as the c4 arm above; the comm backend is not expressible in the
 # search space, so the variable moves in the recipe (DCP_COMM_BACKEND, a2a there

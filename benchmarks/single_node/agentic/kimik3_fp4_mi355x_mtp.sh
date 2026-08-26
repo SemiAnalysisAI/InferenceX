@@ -101,6 +101,49 @@ export DCP_SIZE
 # Set SKIP_KIMI_PATCHES=1 to run stock.
 bash "$(dirname "$0")/apply_k3_container_patches.sh" || true
 
+# ---- Out-of-tree overlay -----------------------------------------------------
+# A unified diff of merged upstream PRs dropped into site-packages, for images
+# newer than the ones k3_patches/ targets. Currently vllm#51705 (DSpark under
+# DCP) + #52707 (KV block-pool clamp) + #53222 (AITER MoE chunking), merged onto
+# the nightly-a9a17e70 base.
+#
+# On that base the squashed k3_patches/vllm_51705_dcp.patch no longer applies
+# (the PR was rewritten: the DCP gate is now the capability flag
+# supports_non_causal_multi_token_dcp on the builder class, not the old
+# dcp_local_verify_row_lens plumbing), which is why this exists as a separate
+# merged diff rather than another entry in the patch script.
+#
+# SELF-SELECTING: dry-run first, and skip quietly if the diff does not match the
+# running image. That keeps every older cell on its existing patch path instead
+# of hard-failing them, while a matching image gets the overlay with no config
+# plumbing. `patch --forward` makes it idempotent.
+K3_OVERLAY_PATCH="${K3_OVERLAY_PATCH:-$(dirname "$0")/k3_patches/vllm_nightly_a9a17e70_3pr.patch}"
+if [ -f "$K3_OVERLAY_PATCH" ]; then
+    SITE_PKGS=$(python3 -c 'import vllm,os;print(os.path.dirname(os.path.dirname(vllm.__file__)))')
+    if ( cd "$SITE_PKGS" && patch -p1 --forward --batch --dry-run < "$K3_OVERLAY_PATCH" ) >/dev/null 2>&1; then
+        echo "Applying K3 overlay $K3_OVERLAY_PATCH into $SITE_PKGS"
+        ( cd "$SITE_PKGS" && patch -p1 --forward --batch < "$K3_OVERLAY_PATCH" ) || true
+    else
+        echo "K3 overlay does not match this image, skipping: $K3_OVERLAY_PATCH"
+    fi
+fi
+
+# Fail closed. vLLM ACCEPTS dcp>1 with dspark and only dies later at model init,
+# so a clean startup banner is not evidence DCP works -- assert the capability
+# up front rather than discovering it 10 minutes into a bring-up.
+if [ "$DCP_SIZE" -gt 1 ]; then
+    python3 - <<'PYEOF' || exit 1
+import sys
+from vllm.v1.attention.backends.mla.triton_mla import TritonMLAMetadataBuilder as B
+ok = bool(getattr(B, "supports_non_causal_multi_token_dcp", False))
+print(f"DCP capability check: supports_non_causal_multi_token_dcp={ok}")
+if not ok:
+    print("vLLM lacks vllm#51705; dcp>1 with DSpark would fail at model init.",
+          file=sys.stderr)
+sys.exit(0 if ok else 1)
+PYEOF
+fi
+
 # ---- Reference env block ----------------------------------------------------
 # Keep ALL of these. Commenting them out does not avoid the AITER FMHA crash:
 # that crash is gated on VLLM_ROCM_USE_AITER alone (AiterFlashAttnPrefillBackend
@@ -167,6 +210,104 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     )
     echo "SimpleCPUOffloadConnector: ${CPU_BYTES_PER_RANK} B/rank x ${TP} ranks, lazy_offload=$SIMPLE_LAZY_OFFLOAD"
     ;;
+  lmcache)
+    require_agentic_kv_offload_backend "$KV_OFFLOAD_BACKEND"
+    # Ported from dsv4_fp4_mi355x_vllm_mtp.sh, minus its from-source LMCache
+    # build: the nightly-a9a17e70 image already ships lmcache 0.5.3 with
+    # lmcache.integration.vllm.lmcache_mp_connector. Pinning to whatever the
+    # image ships is also the only reproducible choice -- the nightly-rocm
+    # LMCache channel is a rolling window and old dev builds get pruned.
+    #
+    # MP connector, not the in-engine LMCacheConnectorV1: the integrated one
+    # faults at conc>=4 on ROCm with a GPU memory access fault.
+    python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null
+
+    LMCACHE_LOG="${LMCACHE_LOG:-$RESULT_DIR/lmcache.log}"
+    LMCACHE_PID=""
+
+    cleanup_lmcache_server() {
+        if [[ -n "$LMCACHE_PID" ]] && kill -0 "$LMCACHE_PID" 2>/dev/null; then
+            kill "$LMCACHE_PID" 2>/dev/null || true
+            wait "$LMCACHE_PID" 2>/dev/null || true
+        fi
+    }
+    cleanup_agentic_services() {
+        local exit_code=$?
+        trap - EXIT INT TERM
+        set +e
+        stop_background_process_tree "$SERVER_PID" "vLLM server" 60
+        cleanup_lmcache_server
+        exit "$exit_code"
+    }
+    trap cleanup_agentic_services EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+
+    LMCACHE_HOST="${LMCACHE_HOST:-127.0.0.1}"
+    LMCACHE_PORT="${LMCACHE_PORT:-5555}"
+    LMCACHE_HTTP_PORT="${LMCACHE_HTTP_PORT:-8080}"
+    # LMCacheMPConnector concatenates lmcache.mp.host and port into the ZMQ
+    # endpoint, so the server binds a raw host but the connector gets tcp://.
+    LMCACHE_CONNECT_HOST="${LMCACHE_CONNECT_HOST:-tcp://$LMCACHE_HOST}"
+    # The MP server owns the whole pool; do not divide by TP the way the
+    # integrated backend does. Must stay under container /dev/shm or LMCache
+    # silently falls back to slow pickle transfers instead of the SHM path.
+    LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-$TOTAL_CPU_DRAM_GB}"
+    LMCACHE_L1_INIT_SIZE_GB="${LMCACHE_L1_INIT_SIZE_GB:-20}"
+    # Read locks are leases on chunks lookup promised vLLM it could retrieve.
+    # The 300s default expires mid-queue on long-context agentic turns.
+    LMCACHE_L1_READ_TTL_SECONDS="${LMCACHE_L1_READ_TTL_SECONDS:-7200}"
+    LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-256}"
+    LMCACHE_MAX_WORKERS="${LMCACHE_MAX_WORKERS:-$TP}"
+    # Without this, identical prompts hash differently per process and the hit
+    # rate is silently 0. Must be set on BOTH the server and vllm serve.
+    export PYTHONHASHSEED="${PYTHONHASHSEED:-0}"
+    export LMCACHE_BLOCKING_TIMEOUT_SECS=1200
+
+    echo "Starting LMCache MP server (l1=${LMCACHE_L1_SIZE_GB} GB)..."
+    LMCACHE_CMD=(
+        lmcache server
+        --host "$LMCACHE_HOST"
+        --port "$LMCACHE_PORT"
+        --http-host "$LMCACHE_HOST"
+        --http-port "$LMCACHE_HTTP_PORT"
+        --l1-size-gb "$LMCACHE_L1_SIZE_GB"
+        --l1-init-size-gb "$LMCACHE_L1_INIT_SIZE_GB"
+        --l1-read-ttl-seconds "$LMCACHE_L1_READ_TTL_SECONDS"
+        --chunk-size "$LMCACHE_CHUNK_SIZE"
+        --max-workers "$LMCACHE_MAX_WORKERS"
+        --eviction-policy LRU
+        --supported-transfer-mode lmcache_driven
+    )
+    printf '%q ' "${LMCACHE_CMD[@]}" > "$RESULT_DIR/lmcache_command.txt"
+    printf '\n' >> "$RESULT_DIR/lmcache_command.txt"
+    "${LMCACHE_CMD[@]}" > "$LMCACHE_LOG" 2>&1 &
+    LMCACHE_PID=$!
+    echo "LMCache server PID: $LMCACHE_PID"
+
+    for ((i = 1; i <= ${LMCACHE_READY_ATTEMPTS:-300}; i++)); do
+        if curl --output /dev/null --silent --fail \
+            "http://127.0.0.1:${LMCACHE_HTTP_PORT}/healthcheck"; then
+            echo "LMCache server healthy after ${i}s"
+            break
+        fi
+        if [[ -n "$LMCACHE_PID" ]] && ! kill -0 "$LMCACHE_PID" 2>/dev/null; then
+            echo "LMCache server died before becoming healthy. Log follows:" >&2
+            cat "$LMCACHE_LOG" >&2 || true
+            exit 1
+        fi
+        sleep 1
+    done
+
+    OFFLOAD_ARGS=(
+        --kv-transfer-config
+        "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_connector_module_path\":\"lmcache.integration.vllm.lmcache_mp_connector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.host\":\"$LMCACHE_CONNECT_HOST\",\"lmcache.mp.port\":$LMCACHE_PORT,\"lmcache.mp.mq_timeout\":6000.0}}"
+    )
+    ;;
+  *)
+    echo "Error: unsupported KV_OFFLOAD_BACKEND '${KV_OFFLOAD_BACKEND:-}' (expected: vllm-simple, lmcache)" >&2
+    exit 1
+    ;;
 esac
 fi
 
@@ -211,19 +352,44 @@ if [ "$DCP_SIZE" -gt 1 ]; then
     )
 fi
 
+# ---- Mamba block size --------------------------------------------------------
+# K3's KDA layers make this a Mamba-hybrid, and the scheduler block size is
+# lcm(attention block, mamba block). With an external KV connector attached,
+# LMCache's validate_mamba_step_alignment() demands
+#   block_size <= max_num_batched_tokens < 2 * block_size
+# (mamba_cache_mode=align snapshots recurrent state only at step end, so a step
+# advancing more than one block would store null-block garbage under a valid
+# key). The auto-derived block size is 1536, which would force
+# max-num-batched-tokens down to 1536 and gut prefill TTFT. Raising the mamba
+# block instead lifts the whole window: lcm(64, 8192) = 8192, so 8192 batched
+# tokens is legal again. Only needed on the offloaded cells.
+# Defaulted, not just honoured: the constraint is a property of (mamba-hybrid +
+# KV connector), so any offloaded cell needs it and no search-space field
+# expresses it. kvnone cells keep vLLM's auto-derived block size.
+if [ -z "${MAMBA_BLOCK_SIZE:-}" ] && agentic_kv_offload_enabled; then
+    MAMBA_BLOCK_SIZE=8192
+fi
+MAMBA_BLOCK_ARGS=()
+if [ -n "${MAMBA_BLOCK_SIZE:-}" ]; then
+    MAMBA_BLOCK_ARGS=(--mamba-block-size "$MAMBA_BLOCK_SIZE")
+fi
+
 # ---- Speculative ------------------------------------------------------------
 SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-2}"
 SYNTHETIC_ACCEPT_LEN=2.51
+# Hosts that pre-stage the draft as a plain directory rather than an HF hub
+# cache cannot resolve the repo id, and downloading it needs egress + a token.
+DRAFT_MODEL="${DRAFT_MODEL:-Inferact/Kimi-K3-DSpark}"
 
 if [ "${EVAL_ONLY:-false}" = "true" ]; then
     SPEC_ARGS=(
         --speculative-config
-        "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"block\"}"
+        "{\"model\":\"$DRAFT_MODEL\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"block\"}"
     )
 else
     SPEC_ARGS=(
         --speculative-config
-        "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
+        "{\"model\":\"$DRAFT_MODEL\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
     )
 fi
 
@@ -323,7 +489,8 @@ VLLM_CMD=(
     --max-model-len 1048576
     --enable-prefix-caching
     --kv-cache-dtype "fp8"
-    --max-num-batched-tokens 8192
+    --max-num-batched-tokens "${MAX_NUM_BATCHED_TOKENS:-8192}"
+    "${MAMBA_BLOCK_ARGS[@]}"
     "${ASYNC_SCHED_ARGS[@]}"
     "${MLA_PREFILL_ARGS[@]}"
     "${COMPILATION_CONFIG_ARGS[@]}"
