@@ -997,11 +997,26 @@ launch_agentic_profile_trigger() {
         mapfile -t urls < <(_profile_server_urls)
     fi
 
+    # POST to a dynamo worker's engine route. dynamo >=1.3 namespaces the
+    # profile handlers under /engine/control/<name>; older builds expose
+    # /engine/<name>. Try the control route first and fall back when the
+    # router reports an unknown route.
+    _dynamo_engine_post() {
+        local hostport="$1" name="$2" payload="$3"
+        local resp
+        resp="$(curl -sS -m 120 -X POST "http://$hostport/engine/control/$name" \
+            -H 'Content-Type: application/json' -d "$payload" 2>&1)" || true
+        if [[ "$resp" == *"Route not found"* || "$resp" == *"not found"* ]]; then
+            resp="$(curl -sS -m 120 -X POST "http://$hostport/engine/$name" \
+                -H 'Content-Type: application/json' -d "$payload" 2>&1)" || true
+        fi
+        echo "[PROFILE] $name @ $hostport -> $resp"
+    }
+
     _profile_stop_all() {
         local u t
         for t in "${dynamo_targets[@]}"; do
-            curl -sS -m 600 -X POST "http://${t%% *}/engine/stop_profile" \
-                -H 'Content-Type: application/json' -d '{}' >/dev/null 2>&1 || true
+            _dynamo_engine_post "${t%% *}" stop_profile '{}' >/dev/null 2>&1 || true
         done
         for u in "${urls[@]}"; do
             curl -sS -m 600 -X POST "$u/stop_profile" \
@@ -1011,15 +1026,23 @@ launch_agentic_profile_trigger() {
 
     _profile_capture_window() {
         local label="$1"
-        local u t hostport mode outdir
+        local u t hostport mode outdir payload
         for t in "${dynamo_targets[@]}"; do
             hostport="${t%% *}"
             mode="${t##* }"
             outdir="${PROFILE_OUTPUT_DIR:-/logs/profiles}/$mode"
-            echo "[PROFILE] $(date --iso-8601=seconds) starting $label capture via http://$hostport/engine/start_profile ($mode)"
-            curl -sS -m 120 -X POST "http://$hostport/engine/start_profile" \
-                -H 'Content-Type: application/json' \
-                -d "{\"output_dir\": \"$outdir\", \"start_step\": 0, \"num_steps\": ${PROFILE_NUM_STEPS:-2}, \"activities\": [\"CPU\", \"GPU\"]}" \
+            if [[ "${FRAMEWORK:-}" == *vllm* ]]; then
+                # dynamo-vllm's handler only accepts profile_prefix; the
+                # output dir and record_shapes come from the worker's
+                # --profiler-config (injected by profile_recipe_inject.py).
+                payload='{}'
+            else
+                # dynamo-sglang forwards the body verbatim to sglang's
+                # tokenizer_manager.start_profile.
+                payload="{\"output_dir\": \"$outdir\", \"num_steps\": ${PROFILE_NUM_STEPS:-2}, \"merge_profiles\": true, \"profile_by_stage\": true, \"record_shapes\": true, \"with_stack\": ${PROFILE_WITH_STACK:-true}}"
+            fi
+            echo "[PROFILE] $(date --iso-8601=seconds) starting $label capture via $hostport ($mode)"
+            _dynamo_engine_post "$hostport" start_profile "$payload" \
                 || echo "[PROFILE] start_profile failed ($label, $hostport)"
         done
         for u in "${urls[@]}"; do
@@ -1077,13 +1100,18 @@ finalize_profile_capture() {
         wait "$PROFILE_TRIGGER_PID" 2>/dev/null || true
         PROFILE_TRIGGER_PID=""
     fi
-    local u t
+    local u t resp hostport
     local -a _dyn=()
     mapfile -t _dyn < <(_profile_dynamo_targets)
     if [[ ${#_dyn[@]} -gt 0 ]]; then
         for t in "${_dyn[@]}"; do
-            curl -sS -m 600 -X POST "http://${t%% *}/engine/stop_profile" \
-                -H 'Content-Type: application/json' -d '{}' >/dev/null 2>&1 || true
+            hostport="${t%% *}"
+            resp="$(curl -sS -m 600 -X POST "http://$hostport/engine/control/stop_profile" \
+                -H 'Content-Type: application/json' -d '{}' 2>&1)" || true
+            if [[ "$resp" == *"Route not found"* || "$resp" == *"not found"* ]]; then
+                curl -sS -m 600 -X POST "http://$hostport/engine/stop_profile" \
+                    -H 'Content-Type: application/json' -d '{}' >/dev/null 2>&1 || true
+            fi
         done
         return 0
     fi
