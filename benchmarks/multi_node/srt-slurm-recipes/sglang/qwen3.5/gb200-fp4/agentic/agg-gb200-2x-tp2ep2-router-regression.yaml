@@ -64,7 +64,6 @@ backend:
       mamba-max-states-per-path: 1
       weight-loader-prefetch-checkpoints: true
       weight-loader-prefetch-num-threads: 4
-      weight-loader-drop-cache-after-load: true
       enable-metrics: true
       enable-cache-report: true
 
