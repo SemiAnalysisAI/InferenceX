@@ -6910,3 +6910,13 @@
   description:
     - "Repin the image from vllm/vllm-openai-rocm:nightly-311b3513af33bc29b4acb2fde2e9313e5e9966a0 to the 2026-09-05 ROCm nightly (nightly-e962733e08d10f7ca65dac4df99e116460b8b174, digest sha256:511755968434e26da590c3398f1e8a6399be4416226d5779ce92fb0655811a9c). Docker Hub last pushed it at 2026-09-05T05:27:09Z and the tag commit is vllm-project/vllm@e962733e."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2841
+
+- config-keys:
+    - qwen3.8next-fp4-b200-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add the day-zero Qwen3.8-Flash-Next NVFP4 AgentX recipe on B200 with SGLang native NEXTN MTP at TP4 and concurrency 1/4/8/12/16."
+    - "Serve RadixArk/Qwen3.8-Flash-Next-NVFP4 with modelopt_fp4 quantization, the trtllm_mha attention backend, and the flashinfer_trtllm MoE runner, following the Qwen3.5 NVFP4 B200 sibling."
+    - "Pin throughput runs to an interim acceptance length of 3.24 measured at three speculative tokens; eval-only runs keep real target verification."
+  pr-link: TBD
