@@ -190,9 +190,15 @@ def _finalize(prof):
 # falls back to the raw callable for that call signature.
 # ---------------------------------------------------------------------------
 
+import threading  # noqa: E402
+
 _dispatch_lib = None
 _dispatch_idx = 0
 _proxy_registry = []  # every _LauncherProxy, for the per-session report
+# schema-less objects (kernel plans) ride past the dispatcher here: the
+# wrapper stores them right before invoking the op, the impl pops them —
+# synchronous same-thread dispatch makes this safe.
+_OPAQUE_TLS = threading.local()
 
 
 def collections_counter():
@@ -316,13 +322,53 @@ def _ret_schema(result):
     return None
 
 
-def _register_dispatch_op(shortname, fn, args, ret_schema):
-    """Define etshim::<shortname>_<n> with a schema derived from this call."""
+def _extract_tensors(obj, cap=64):
+    """Tensors reachable one level deep in an arbitrary object's fields.
+
+    Plan/metadata objects (compress_forward's CompressorPrefillPlan) have no
+    torch schema representation, but their tensor fields are exactly the
+    dataflow that must be recorded — the object itself rides a thread-local
+    side channel around the dispatcher (see _OPAQUE_TLS).
+    """
+    fields = None
+    if hasattr(obj, "__dict__"):
+        fields = list(vars(obj).values())
+    elif hasattr(obj, "_fields"):  # namedtuple
+        fields = [getattr(obj, f, None) for f in obj._fields]
+    elif hasattr(obj, "__slots__"):
+        fields = [getattr(obj, s, None) for s in obj.__slots__ if isinstance(s, str)]
+    if not fields:
+        return []
+    out = []
+    for v in fields:
+        if len(out) >= cap:
+            break
+        if _type_key(v) == "T":
+            out.append(v)
+        elif isinstance(v, (tuple, list)):
+            for x in v:
+                if _type_key(x) == "T" and len(out) < cap:
+                    out.append(x)
+    return out
+
+
+def _register_dispatch_op(shortname, fn, args, ret_schema, opaque_pos=()):
+    """Define etshim::<shortname>_<n> with a schema derived from this call.
+
+    `args` are the ORIGINAL flattened arguments; positions in `opaque_pos`
+    hold schema-less objects that are scheduled as their extracted tensors
+    (Tensor?[]) while the real object is restored from _OPAQUE_TLS in the
+    impl.
+    """
     global _dispatch_lib, _dispatch_idx
     from torch.library import Library
 
+    opaque = frozenset(opaque_pos)
     parts = []
     for i, a in enumerate(args):
+        if i in opaque:
+            parts.append(f"Tensor?[] a{i}")
+            continue
         k = _type_key(a)
         tmpl = _SCHEMA_OF_KEY.get(k)
         if tmpl is None:
@@ -338,12 +384,22 @@ def _register_dispatch_op(shortname, fn, args, ret_schema):
     # where the launcher was originally called with tuples (deep_gemm indexes
     # its (tensor, scale) pairs)
     tuple_idxs = frozenset(
-        i for i, a in enumerate(args) if _type_key(a) in _TUPLE_KEYS
+        i for i, a in enumerate(args) if i not in opaque and _type_key(a) in _TUPLE_KEYS
     )
     call_fn = fn
-    if tuple_idxs:
-        def call_fn(*a, _fn=fn, _idxs=tuple_idxs):
-            return _fn(*(tuple(x) if i in _idxs else x for i, x in enumerate(a)))
+    if tuple_idxs or opaque:
+        def call_fn(*a, _fn=fn, _idxs=tuple_idxs, _op=tuple(sorted(opaque))):
+            b = list(a)
+            for i in _idxs:
+                if isinstance(b[i], list):
+                    b[i] = tuple(b[i])
+            if _op:
+                objs = _OPAQUE_TLS.__dict__.pop("objs", None)
+                if objs is None:
+                    raise RuntimeError("etshim opaque side channel empty")
+                for j, i in enumerate(_op):
+                    b[i] = objs[j]
+            return _fn(*b)
     if ret_schema.startswith("(") and ret_schema != "()":
         # multi-return ops must hand the dispatcher a tuple
         _dispatch_lib.impl(
@@ -399,7 +455,19 @@ class _LauncherProxy:
         else:
             flat, split = args, None
         try:
-            key = (tuple(_type_key(a) for a in flat), split)
+            keys = []
+            opq = []
+            for i, a in enumerate(flat):
+                k = _type_key(a)
+                if k is None:
+                    # schema-less object: schedule its extracted tensors,
+                    # side-channel the object itself (see _OPAQUE_TLS)
+                    keys.append(f"O:{type(a).__name__}")
+                    opq.append(i)
+                else:
+                    keys.append(k)
+            key = (tuple(keys), split)
+            opq = tuple(opq)
         except Exception:  # noqa: BLE001
             stats["typekey_failed"] += 1
             return fn(*args, **kwargs)
@@ -426,10 +494,12 @@ class _LauncherProxy:
                         target,
                         flat,
                         ret_schema,
+                        opaque_pos=opq,
                     )
                     if new_op is None:
                         bad = next(
-                            (type(a).__name__ for a in flat if _type_key(a) is None),
+                            (type(a).__name__ for i, a in enumerate(flat)
+                             if i not in opq and _type_key(a) is None),
                             "?",
                         )
                         stats[f"args_not_schemable:{bad}"] += 1
@@ -449,10 +519,18 @@ class _LauncherProxy:
                 ops[key] = False
             return result
         try:
-            result = op(*flat)
+            if opq:
+                sched = list(flat)
+                for i in opq:
+                    sched[i] = _extract_tensors(flat[i])
+                _OPAQUE_TLS.objs = [flat[i] for i in opq]
+                result = op(*sched)
+            else:
+                result = op(*flat)
             stats["dispatched"] += 1
             return result
         except Exception as exc:  # noqa: BLE001
+            _OPAQUE_TLS.__dict__.pop("objs", None)
             stats[f"call_failed:{type(exc).__name__}"] += 1
             _warn_once(
                 f"dispatch-call-{self._infx_qualname}",
