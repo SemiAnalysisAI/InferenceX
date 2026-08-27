@@ -568,7 +568,20 @@ fi
 SPEC_ARGS=()
 if [ "${SPEC_DECODE:-true}" = "true" ]; then
     SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-2}"
-    SYNTHETIC_ACCEPT_LEN=2.51
+    case "$SPEC_NUM_TOKENS" in
+        1) SYNTHETIC_ACCEPT_LEN=1.85 ;;
+        2) SYNTHETIC_ACCEPT_LEN=2.51 ;;
+        3) SYNTHETIC_ACCEPT_LEN=3.00 ;;
+        4) SYNTHETIC_ACCEPT_LEN=3.36 ;;
+        5) SYNTHETIC_ACCEPT_LEN=3.62 ;;
+        6) SYNTHETIC_ACCEPT_LEN=3.75 ;;
+        7) SYNTHETIC_ACCEPT_LEN=3.84 ;;
+        8) SYNTHETIC_ACCEPT_LEN=4.00 ;;
+        *)
+            echo "Error: no probabilistic/block golden AL for DSpark K=$SPEC_NUM_TOKENS." >&2
+            exit 1
+            ;;
+    esac
     # Hosts that pre-stage the draft as a plain directory rather than an HF hub
     # cache cannot resolve the repo id, and downloading it needs egress + a token.
     DRAFT_MODEL="${DRAFT_MODEL:-Inferact/Kimi-K3-DSpark}"

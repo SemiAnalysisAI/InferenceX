@@ -6110,3 +6110,12 @@
     - "Carry the required DCP/hybrid-cache fixes, bounded lazy-offload LRU scan, fused Kimi-K3 RMSNorm, vLLM #52968 model fusions, and #53166 chunked-context fusion as a fail-closed runtime overlay."
     - "Local 131k/1k screening reached 71,266 total tok/s at c32 with 23.43 s p90 TTFT and 75,893 total tok/s at c40 with 28.70 s p90 TTFT."
   pr-link: XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-dcp-simple-v466
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Extend the MI355X v466 TP8/DCP8 SimpleCPU sweep with DSpark K=3 at c8/c12 and the validated no-spec configuration at c16/c32/c40/c56."
+    - "Use the committed probabilistic/block golden acceptance length 3.00 for K=3 while keeping A2A, AITER MLA query quantization, full CUDA graphs, and the 512 GB lazy SimpleCPU tier aligned with run 33011732207."
+  pr-link: XXX
