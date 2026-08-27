@@ -606,13 +606,6 @@ if [ "${ASYNC_SCHEDULING:-0}" != "1" ]; then
     ASYNC_SCHED_ARGS=(--no-async-scheduling)
 fi
 
-# ---- MLA prefill backend -----------------------------------------------------
-MLA_PREFILL_BACKEND="${MLA_PREFILL_BACKEND:-ROCM_AITER_MLA}"
-ATTENTION_ARGS+=(
-    --attention-config
-    "{\"mla_prefill_backend\":\"$MLA_PREFILL_BACKEND\"}"
-)
-
 # ---- HIP graph ------------------------------------------------------------
 MAX_CUDAGRAPH_CAPTURE_SIZE="${MAX_CUDAGRAPH_CAPTURE_SIZE:-$(( MAX_NUM_SEQS * (1 + SPEC_NUM_TOKENS) ))}"
 CUDAGRAPH_CAPTURE_SIZES="${CUDAGRAPH_CAPTURE_SIZES:-$(seq -s, 2 "$MAX_CUDAGRAPH_CAPTURE_SIZE")}"
@@ -662,7 +655,7 @@ VLLM_CMD=(
     "${KV_BLOCK_ARGS[@]}"
     "${MAMBA_BLOCK_ARGS[@]}"
     "${ASYNC_SCHED_ARGS[@]}"
-    "${ATTENTION_ARGS[@]}"
+    --attention-backend ROCM_AITER_MLA
     "${COMPILATION_CONFIG_ARGS[@]}"
     "${SPEC_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
