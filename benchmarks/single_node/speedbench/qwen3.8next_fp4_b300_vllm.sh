@@ -175,10 +175,12 @@ fi
 # to /v1/completions, so thinking mode cannot be enabled via --extra-body or
 # --default-chat-template-kwargs. vllm-project/vllm#44244 added a proper
 # --chat-template-kwargs option upstream; images built before it need this
-# patch. The shim detects upstream support and becomes a no-op when present,
-# so it is safe on both old and new benchmark images. Each edit is applied
-# only if its half is missing, so partially patched images work too.
-# TODO: delete once every image this collector runs on ships #44244.
+# patch. Support is detected structurally rather than by matching a fixed
+# multi-line anchor, because the exact neighbours of each line drift upstream
+# (skip_chat_template= now sits between output_len= and the forwarded kwarg).
+# The shim is a no-op on images that already have support, patches only the
+# halves that are missing, and dumps the surrounding source when it cannot
+# find what it needs. TODO: delete once every image ships #44244.
 apply_chat_template_kwargs_shim() {
     echo "=== Checking vLLM benchmark for --chat-template-kwargs support ==="
     python3 - <<'PYEOF'
@@ -192,13 +194,34 @@ import vllm.benchmarks.datasets.datasets as D
 serve_src = open(S.__file__).read()
 ds_src = open(D.__file__).read()
 
-# Upstream (vllm-project/vllm#44244) and the older shim produce equivalent
-# behavior through slightly different source, so probe for the behavior.
+
+def speed_bench_block(src):
+    """Byte range of the speed_bench entry in get_samples' dataset_mapping."""
+    i = src.find('"speed_bench": lambda:')
+    if i == -1:
+        return None, None
+    end = src.find("\n        }", i)
+    return i, (len(src) if end == -1 else end)
+
+
+def dump(src, needle, path, what):
+    print(f"ERROR: {what} not found in {path}", file=sys.stderr)
+    i = src.find(needle)
+    if i == -1:
+        print(f"  (marker {needle!r} absent entirely)", file=sys.stderr)
+    else:
+        lo = src.rfind("\n", 0, max(0, i - 600)) + 1
+        hi = src.find("\n", i + 600)
+        print("  surrounding source:\n" + src[lo:hi if hi != -1 else None],
+              file=sys.stderr)
+
+
+# --- Detect the three halves of #44244 independently ------------------------
 serve_ok = '"--chat-template-kwargs"' in serve_src
-speed_bench_ok = re.search(
-    r"output_len=args\.speed_bench_output_len,\s*\n\s*chat_template_kwargs=",
-    ds_src,
-) is not None
+
+sb_start, sb_end = speed_bench_block(ds_src)
+speed_bench_ok = sb_start is not None and "chat_template_kwargs" in ds_src[sb_start:sb_end]
+
 sample_ok = "chat_template_kwargs" in inspect.signature(D.CustomDataset.sample).parameters
 
 if serve_ok and speed_bench_ok and sample_ok:
@@ -209,14 +232,7 @@ if serve_ok and speed_bench_ok and sample_ok:
 print(f"patching: serve_cli={serve_ok} speed_bench_dispatch={speed_bench_ok} "
       f"custom_dataset_sample={sample_ok}")
 
-
-def splice(src, old, new, path):
-    n = src.count(old)
-    assert n == 1, f"anchor matched {n} times in {path}, aborting:\n{old[:80]}..."
-    return src.replace(old, new, 1)
-
-
-# Edit 1: serve.py -- declare the --chat-template-kwargs argument before --extra-body
+# --- Edit 1: serve.py declares the --chat-template-kwargs argument ----------
 if not serve_ok:
     serve_old = """    parser.add_argument(
         "--extra-body","""
@@ -229,20 +245,29 @@ if not serve_ok:
     )
     parser.add_argument(
         "--extra-body","""
-    serve_src = splice(serve_src, serve_old, serve_new, S.__file__)
-    open(S.__file__, "w").write(serve_src)
+    if serve_src.count(serve_old) != 1:
+        dump(serve_src, '"--extra-body"', S.__file__, "--extra-body anchor")
+        sys.exit(1)
+    open(S.__file__, "w").write(serve_src.replace(serve_old, serve_new, 1))
     print("patched OK ->", S.__file__)
 
-# Edit 2: datasets.py -- forward chat_template_kwargs into the speed_bench .sample() call
+# --- Edit 2: forward the kwarg into the speed_bench .sample() call ----------
 if not speed_bench_ok:
-    disp_old = """                output_len=args.speed_bench_output_len,
-                enable_multimodal_chat=args.enable_multimodal_chat,"""
-    disp_new = """                output_len=args.speed_bench_output_len,
-                chat_template_kwargs=getattr(args, "chat_template_kwargs", None),
-                enable_multimodal_chat=args.enable_multimodal_chat,"""
-    ds_src = splice(ds_src, disp_old, disp_new, D.__file__)
+    if sb_start is None:
+        dump(ds_src, '"speed_bench"', D.__file__, "speed_bench dispatch")
+        sys.exit(1)
+    block = ds_src[sb_start:sb_end]
+    m = re.search(r"^([ \t]*)output_len=args\.speed_bench_output_len,\n", block, re.M)
+    if not m:
+        dump(ds_src, "speed_bench_output_len", D.__file__,
+             "output_len anchor inside the speed_bench block")
+        sys.exit(1)
+    line = (m.group(1)
+            + 'chat_template_kwargs=getattr(args, "chat_template_kwargs", None),\n')
+    block = block[:m.end()] + line + block[m.end():]
+    ds_src = ds_src[:sb_start] + block + ds_src[sb_end:]
 
-# Edit 3: datasets.py -- forward chat_template_kwargs into CustomDataset.sample's template call
+# --- Edit 3: apply the kwarg in CustomDataset.sample's template call --------
 if not sample_ok:
     samp_old = """                # apply template
                 if not skip_chat_template:
@@ -250,9 +275,7 @@ if not sample_ok:
                         [{"role": "user", "content": prompt}],
                         add_generation_prompt=True,
                         tokenize=False,
-                    )
-
-                prompt_len = len(tokenizer(prompt).input_ids)"""
+                    )"""
     samp_new = """                # apply template
                 if not skip_chat_template:
                     _ctk = kwargs.get("chat_template_kwargs") or {}
@@ -261,10 +284,12 @@ if not sample_ok:
                         add_generation_prompt=True,
                         tokenize=False,
                         **_ctk,
-                    )
-
-                prompt_len = len(tokenizer(prompt).input_ids)"""
-    ds_src = splice(ds_src, samp_old, samp_new, D.__file__)
+                    )"""
+    if ds_src.count(samp_old) != 1:
+        dump(ds_src, "apply_chat_template", D.__file__,
+             "CustomDataset.sample apply_chat_template anchor")
+        sys.exit(1)
+    ds_src = ds_src.replace(samp_old, samp_new, 1)
 
 if not speed_bench_ok or not sample_ok:
     open(D.__file__, "w").write(ds_src)
