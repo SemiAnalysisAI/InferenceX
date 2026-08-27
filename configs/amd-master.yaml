@@ -270,10 +270,10 @@ qwen3.5-fp8-mi355x-atom-mtp:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
 
 qwen3.5-fp8-mi355x-sglang-disagg:
-  image: lmsysorg/sglang:v0.5.14-rocm720-mi35x
+  image: lmsysorg/sglang:v0.5.16-rocm720-mi35x
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
-  runner: mi355x-disagg
+  runner: cluster:mi355x-amds
   precision: fp8
   framework: sglang-disagg
   router: { name: sglang-router, version: "0.3.2" }
@@ -285,21 +285,20 @@ qwen3.5-fp8-mi355x-sglang-disagg:
     - isl: 8192
       osl: 1024
       search-space:
-      # 1P+1D TP8/EP1 low-concurrency sweep.
-      # dp-attn intentionally false (matches the 1k1k row): with
-      # --enable-dp-attention + --moe-a2a-backend mori, sglang auto-promotes
-      # moe_ep_size=tp_size=8, but is_deepep_class_backend() excludes MoRI,
-      # so num_shared_slots stays at the global value (1) and the
+      # 1P+1D TP4P+TP8D/EP1 baseline (no speculative decoding).
+      # TP4 prefill saves 4 GPUs vs TP8P while delivering identical decode
+      # interactivity and 24-31% better throughput/GPU (12 vs 16 GPUs).
+      # dp-attn intentionally false: with --enable-dp-attention +
+      # --moe-a2a-backend mori, sglang auto-promotes moe_ep_size=tp_size,
+      # but is_deepep_class_backend() excludes MoRI, so
+      # num_shared_slots stays at the global value (1) and the
       # (num_experts - num_shared_slots) % moe_ep_size assertion in
       # fused_moe_triton/layer.py fires for Qwen3.5 (512 routed + 1 shared).
-      # Track upstream sglang for a fix; flip back to dp-attn=true once
-      # MoRI is added to is_deepep_class_backend() or shared-slot
-      # accounting is reconciled.
       - spec-decoding: "none"
         conc-list: [ 8, 16, 32, 64, 128 ]
         prefill:
           num-worker: 1
-          tp: 8
+          tp: 4
           ep: 1
           dp-attn: false
           additional-settings:
@@ -362,7 +361,7 @@ qwen3.5-fp4-mi355x-sglang-mtp:
       - { tp: 4, conc-start: 4, conc-end: 16, spec-decoding: mtp }
 
 qwen3.5-fp4-mi355x-sglang-agentic-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260811
+  image: lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260818
   model: amd/Qwen3.5-397B-A17B-MXFP4
   model-prefix: qwen3.5
   runner: cluster:mi355x-amds
@@ -373,14 +372,16 @@ qwen3.5-fp4-mi355x-sglang-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16, 20] }
       - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16, 20, 24, 28, 32, 40] }
+      - { tp: 2, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16, 20] }
+      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [40, 48, 56, 64] }
+      - { tp: 2, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [20, 24, 28, 32] }
 
 qwen3.5-fp4-mi355x-sglang-disagg:
   image: lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260523
   model: amd/Qwen3.5-397B-A17B-MXFP4
   model-prefix: qwen3.5
-  runner: mi355x-disagg
+  runner: cluster:mi355x-amds
   precision: fp4
   framework: sglang-disagg
   router: { name: sglang-router, version: "0.3.2" }
@@ -477,7 +478,7 @@ dsr1-fp8-mi355x-sglang-disagg:
   image: rocm/sgl-dev:sglang-0.5.9-rocm720-mi35x-mori-0227-2
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
-  runner: mi355x-disagg
+  runner: cluster:mi355x-amds
   precision: fp8
   framework: sglang-disagg
   router: { name: sglang-router, version: "0.3.2" }
@@ -552,7 +553,7 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
   image: rocm/sgl-dev:sglang-0.5.9-rocm720-mi35x-mori-0227-2
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
-  runner: mi355x-disagg
+  runner: cluster:mi355x-amds
   precision: fp8
   framework: sglang-disagg
   router: { name: sglang-router, version: "0.3.2" }
@@ -773,11 +774,40 @@ kimik3-fp4-mi355x-vllm-agentic-mtp-dcp-simple-v466-k6:
       search-space:
       - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [1], spec-decoding: mtp }
 
+# Kimi-K3 MXFP4 agentic-coding benchmark on MI355X via ATOM with DSpark
+# speculative decoding (2 draft tokens -> golden AL 2.51,
+# golden_al_distribution/kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml,
+# the same golden the vLLM arm feeds to synthetic_acceptance_length).
+# Companion to kimik3-fp4-mi355x-vllm-agentic-mtp: same checkpoint, same
+# runner, same concurrency points, so the two engines are directly comparable.
+# TP8 only -- the 1.56 TB MXFP4 checkpoint is ~195 GB/GPU and TP4 cannot load,
+# which is also why there is no DP-attention arm.
+# Concurrency 1 and 4 are GPU-resident. 8 and 10 add the LMCache DRAM tier and
+# ATOM's CPU state-offload tier together: K3 is a hybrid, so a resumed agentic
+# turn needs the KDA recurrent state back, and the paged KV tier alone cannot
+# restore one. dram-utilization 0.086 puts the aggregate budget at 257 GB, so
+# the script's divide-by-TP lands on exactly the 32 GB per rank the recipe was
+# measured with (0.085 gives 254, which floors to 31).
+kimik3-fp4-mi355x-atom-agentic-mtp:
+  image: rocm/atom-dev:ubuntu24.04_py3.12_pytorch_release_2.10.0_kimi_k3_agentic_0820
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: atom
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.086
+      search-space:
+      - { tp: 8, kv-offloading: none, conc-list: [1, 4], spec-decoding: mtp }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [8, 10], spec-decoding: mtp }
+
 dsr1-fp4-mi355x-sglang-disagg:
   image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519
   model: amd/DeepSeek-R1-0528-MXFP4-v2
   model-prefix: dsr1
-  runner: mi355x-disagg
+  runner: cluster:mi355x-amds
   precision: fp4
   framework: sglang-disagg
   router: { name: sglang-router, version: "0.3.2" }
@@ -908,7 +938,7 @@ dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
   image: lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260529
   model: amd/DeepSeek-R1-0528-MXFP4-v2
   model-prefix: dsr1
-  runner: mi355x-disagg
+  runner: cluster:mi355x-amds
   precision: fp4
   framework: sglang-disagg
   router: { name: sglang-router, version: "0.3.2" }
@@ -1078,7 +1108,7 @@ dsv4-fp4-mi355x-sglang-disagg:
   image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260701
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
-  runner: mi355x-disagg
+  runner: cluster:mi355x-amds
   precision: fp4
   framework: sglang-disagg
   router: { name: sglang-router, version: "0.3.2" }
@@ -1161,7 +1191,7 @@ dsv4-fp4-mi355x-sglang-disagg-mtp:
   image: lmsysorg/sglang-rocm:v0.5.15-rocm720-mi35x-20260713
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
-  runner: mi355x-disagg
+  runner: cluster:mi355x-amds
   precision: fp4
   framework: sglang-disagg
   router: { name: sglang-router, version: "0.3.2" }
@@ -1403,7 +1433,7 @@ qwen3.5-fp8-mi325x-sglang-mtp:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
 
 dsv4-fp4-mi355x-vllm-agentic-mtp:
-  image: vllm/vllm-openai-rocm:nightly-821717118fc26667dd474b9b0ab81d29259dfc5c
+  image: vllm/vllm-openai-rocm:nightly-311b3513af33bc29b4acb2fde2e9313e5e9966a0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:mi355x-amds
@@ -1414,17 +1444,33 @@ dsv4-fp4-mi355x-vllm-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.60
       search-space:
-      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 8, 16, 32, 40, 48] }
+      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 8, 16, 32, 40, 48, 56, 64] }
       - { tp: 8, ep: 1, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [64], router: { name: vllm-router, version: "0.1.14" } }
       # LMCache invalid-block recovery currently assumes one KV-cache group,
       # while MTP creates two. Restore these points after the upstream hybrid
       # KV recovery fix lands: https://github.com/vllm-project/vllm/pull/45497
 
+# DeepSeek-V4-Pro FP4 AgentX on one MI355X node using ATOM MTP. Throughput
+# uses the thinking_on golden AL 2.49 for three draft tokens; eval uses real
+# MTP acceptance. max-num-seqs is set to 2x concurrency by the recipe.
+dsv4-fp4-mi355x-atom-agentic-mtp:
+  image: rocm/atom-dev:nightly_202608201032
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: atom
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 48] }
+
 dsr1-fp4-mi355x-sglang-disagg-mtp:
   image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519
   model: amd/DeepSeek-R1-0528-MXFP4-v2
   model-prefix: dsr1
-  runner: mi355x-disagg
+  runner: cluster:mi355x-amds
   precision: fp4
   framework: sglang-disagg
   router: { name: sglang-router, version: "0.3.2" }
@@ -1650,7 +1696,7 @@ minimaxm3-fp8-mi325x-vllm-agentic-mtp:
       - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8, 10, 12, 14, 16, 18] }
 
 dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260719
+  image: lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260817
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:mi355x-amds
@@ -1664,7 +1710,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp:
     - dram-utilization: 0.80
       search-space:
       - spec-decoding: "mtp"
-        conc-list: [ 1,2,4,8,16,32 ]
+        conc-list: [ 1,2,4,8,16,32,48,64 ]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         prefill:
@@ -1684,7 +1730,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=3"
       - spec-decoding: "mtp"
-        conc-list: [ 96, 128 ]
+        conc-list: [ 64, 96, 128, 192 ]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         prefill:
@@ -1788,19 +1834,28 @@ glm5.2-fp4-mi355x-sglang-agentic-mtp:
       search-space:
       - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 2, 4, 8, 10, 12, 16], spec-decoding: mtp }
       - { tp: 8, ep: 8, kv-offloading: none, conc-list: [1, 2, 4], spec-decoding: mtp }
+# GLM-5.2 FP4 agentic-coding benchmark on MI355X via ATOM with MTP speculative
+# decoding. TP4 uses LMCache DRAM offload; TP8 is GPU-resident with no KV offload.
+# Recipe is from PR https://github.com/ROCm/ATOM/pull/1877
+glm5.2-fp4-mi355x-atom-agentic-mtp:
+  image: rocm/atom-dev:ubuntu24.04_py3.12_pytorch_release_2.10.0_glm52_agentic_0813
+  model: amd/GLM-5.2-MXFP4
+  model-prefix: glm5.2
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: atom
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.14
+      search-space:
+       - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [2, 4, 8, 10], spec-decoding: mtp }
+       - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4], spec-decoding: mtp }
 
-# DeepSeek-V4-Pro FP4 agentic-coding benchmark on MI355X via SGLang with the
-# in-checkpoint MTP head (EAGLE path, depth 3 -> golden AL 2.49 for
-# thinking_on, golden_al_distribution/dsv4_mtp.yaml). Restores the single-node
-# SGLang AgentX coverage removed in de493d859 (PR #2531, which deleted the
-# spec-none dsv4-fp4-mi355x-sglang-agentic-hicache key and its script) so the
-# aggregated SGLang path is comparable with dsv4-fp4-mi355x-vllm-agentic-mtp
-# and dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp. The image matches the
-# already-green disagg AgentX entry. Pure TP8 only: DSA + dp-attention hangs a
-# collective under long-context prefill, so no DEP arm ships until that path is
-# validated. conc 16 appears on both arms to isolate the host KV tier's gain.
+
+
 dsv4-fp4-mi355x-sglang-agentic-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260813
+  image: lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260822
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:mi355x-amds
@@ -1811,5 +1866,5 @@ dsv4-fp4-mi355x-sglang-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, conc-list: [1, 2, 4, 8, 16], spec-decoding: mtp }
+      - { tp: 4, ep: 1, dp-attn: false, kv-offloading: none, conc-list: [1, 2, 4, 8, 10], spec-decoding: mtp }
       - { tp: 8, ep: 1, dp-attn: false, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 32, 48], spec-decoding: mtp }
