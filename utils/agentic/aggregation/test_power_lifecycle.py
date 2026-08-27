@@ -305,7 +305,7 @@ def _run_amd_stop(
     tmp_path: Path,
     *,
     producer_script: str,
-    timeout_s: int,
+    timeout_s: int | str,
     interval: int = 1,
     setup_script: str = "",
 ) -> subprocess.CompletedProcess[str]:
@@ -359,6 +359,8 @@ def _min_covered_tick(csv_path: Path) -> int:
                 power = float((row.get("socket_power") or "").strip())
             except ValueError:
                 continue
+            if timestamp > 1e12:  # millisecond epoch, mirror _parse_timestamp
+                timestamp /= 1000.0
             gpu = (row.get("gpu") or "").strip()
             if not gpu or power <= 0:
                 continue
@@ -455,6 +457,56 @@ done
     pre, post = _stop_epochs(tmp_path)
     assert post - pre >= 2
     _assert_producer_dead(tmp_path)
+
+
+def test_amd_stop_survives_non_integer_timeout(tmp_path: Path):
+    producer = """
+while :; do
+    now=$(date +%s)
+    emit_row "$now" 0 500
+    emit_row "$now" 1 505
+    sleep 0.2
+done
+"""
+    started = time.monotonic()
+    result = _run_amd_stop(tmp_path, producer_script=producer, timeout_s="30s")
+    duration = time.monotonic() - started
+
+    assert result.returncode == 0, result.stderr
+    # A non-integer timeout must not unwind stop_gpu_monitor via a bash
+    # arithmetic error (which would leak the monitor and skip tail repair
+    # and the energy sidecar): it warns, falls back to 30, and still waits.
+    assert "ignoring non-integer AMD_MONITOR_STOP_TIMEOUT_S='30s'" in result.stderr
+    assert "never covered the stop request" not in result.stdout + result.stderr
+    pre, _ = _stop_epochs(tmp_path)
+    assert _min_covered_tick(tmp_path / "gpu_metrics.csv") >= pre + 1
+    _assert_producer_dead(tmp_path)
+    assert duration < 10
+
+
+def test_amd_stop_normalizes_millisecond_epoch_timestamps(tmp_path: Path):
+    producer = """
+while :; do
+    now=$(( $(date +%s) * 1000 + 123 ))
+    emit_row "$now" 0 500
+    emit_row "$now" 1 505
+    sleep 0.2
+done
+"""
+    started = time.monotonic()
+    result = _run_amd_stop(tmp_path, producer_script=producer, timeout_s=30)
+    duration = time.monotonic() - started
+
+    assert result.returncode == 0, result.stderr
+    # Raw millisecond epochs (~1.8e12) dwarf any second-scale target, so
+    # without normalization the poll would return
+    # instantly with zero tail coverage; mirrored _parse_timestamp
+    # normalization makes the poll wait for real coverage instead.
+    assert "never covered the stop request" not in result.stdout + result.stderr
+    pre, _ = _stop_epochs(tmp_path)
+    assert _min_covered_tick(tmp_path / "gpu_metrics.csv") >= pre + 1
+    _assert_producer_dead(tmp_path)
+    assert duration < 10
 
 
 def test_amd_stop_falls_back_to_fixed_tail_for_iso_timestamps(tmp_path: Path):
