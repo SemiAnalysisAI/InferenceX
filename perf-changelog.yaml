@@ -6785,3 +6785,16 @@
     - "Remove the active and deprecated MI355X matrix entries that depended on amd_utils; configuration-specific child PRs reintroduce the active production lanes as native srt-slurm recipes."
     - "Preserve the retired AgentX launch contract in the shared srt path: route DP-attention sessions by correlation ID, flush every advertised worker cache before each concurrency point, and run the MI355X RDMA device/QoS/DCQCN plus bare-process GPU drain preflights on every allocated host."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2542
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-disagg
+    - dsv4-fp4-mi355x-sglang-disagg-mtp
+  description:
+    - "Port the production MI355X DeepSeek V4 fixed-sequence STP and MTP disaggregated search spaces from the model-specific AMD submit/helper stack to srt-slurm."
+    - "Preserve TP8 c1,c2,c4,c8,c16,c32,c64,c128 and DEP8/DPA c256,c512 for both STP and MTP; each of the four topology allocations now iterates its original concurrency points without reloading the model between points."
+    - "Preserve two-step EAGLE MTP on TP8 and one-step EAGLE MTP on DEP8, with the native SGLang Router frontend and AMD MoRI KV/MoE transport."
+    - "Use the runtime-verified lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260719 image and srt-slurm PR #7 commit 10a58d2ebb4d756c423424049c736b909b72e14f, including native AMD routing, ATOM/AToMesh TCP support, recipe-aware setup preflight, DP-aware P/D rank routing, multi-node rank-offset preservation, and ATOM recipe flag normalization."
+    - "Run fixed 8192-input/1024-output random workloads through the unchanged utils/bench_serving/benchmark_serving.py custom benchmark and remove the superseded dsv4_fp4_mi355x_sglang-disagg.sh wrapper."
+    - "Set both MTP server roles to the workflow's 9472-token admission budget: DeepSeek V4 chat encoding adds three framing tokens, so the prior 9217 limit rejected every 8195-input/1024-output request before inference."
+    - "Enable SGLang's documented prefill-DP rank query fallback on both DEP8/DPA recipes; the first hardware run showed native-router rank selection diverging from bootstrap_room, which otherwise rejected every affected KV transfer before the later timeout."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2630
