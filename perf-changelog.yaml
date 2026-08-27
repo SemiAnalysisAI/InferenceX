@@ -6499,4 +6499,4 @@
     - "Mirror the H200 arm, adjusted for the smaller part: TP8 with EP8 rather than TP4 with EP4, and memory fraction 0.75 rather than 0.85."
     - "Use a float32 Mamba SSM state, as Hopper's flashinfer verify kernel requires, unlike the bfloat16 the Blackwell arms must use."
     - "Pin throughput runs to the committed golden thinking_on acceptance length of 2.32 at three speculative tokens; eval-only runs keep real target verification."
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2756
