@@ -6487,13 +6487,3 @@
     - "Retain the existing aggregate and disaggregated GB300 entries unchanged so their published high-interactivity points stay on the curve."
     - "Dispatch the Qwen3.5 GB300 matrix through the restricted batch_2 partition and the slurm-shared tree, matching where the runner now accepts jobs; batch_1 with the benchmark account rejects every srun with an invalid account/partition combination. Unrelated matrices keep the upstream defaults."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/232
-
-- config-keys:
-    - qwen3.5-fp4-gb300-dynamo-sglang-agentic-disagg-dep
-  scenario-type:
-    - agentic-coding
-  description:
-    - "Restore the concurrency-1 DEP4-to-TP8 latency-tail point with native request-batch-1 CUDA Graph capture."
-    - "Disable attention TP gather on the pure TP8/DP1/EP1 decode worker and use the default graph buckets; the same-recipe CMH probe improved P90 interactivity from 447.07 to 634.46 tok/s/user."
-    - "Run the full PR sweep to validate the configuration end to end because the local disaggregated probe later stopped making request progress."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/232
