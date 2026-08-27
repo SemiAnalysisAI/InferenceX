@@ -6551,5 +6551,5 @@
     - "Change the c1 latency topology from DEP8 prefill plus TP8 decode to TP8 plus TP8 because official vLLM Router exposes one intra-node DP expansion factor for both pools; the mixed topology would expand the TP8 decode URL into nonexistent DP ranks."
     - "Delete the now-unused llm-d container build, EPP/Envoy configuration, sidecars, wrapper, bespoke Slurm scripts, and their documentation."
     - "Use the custom-benchmark contract's injected SRT_FRONTEND_HOST and SRT_FRONTEND_PORT for the resolved vLLM Router endpoint, and verify the backend's exact runtime vLLM 0.26.0 identity."
-    - "Pin srt-slurm PR #7 at a2e458649f2d9de246954aaf0a900fc664811217 so multi-node hybrid-DP pools retain their nonzero global rank offsets instead of being re-expanded by vLLM Router into invalid local ranks that return HTTP 500."
+    - "Pin srt-slurm PR #7 at 10a58d2ebb4d756c423424049c736b909b72e14f so multi-node hybrid-DP pools retain their nonzero global rank offsets instead of being re-expanded by vLLM Router into invalid local ranks that return HTTP 500; this revision also normalizes ATOM recipe flags."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2757
