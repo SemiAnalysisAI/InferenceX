@@ -149,6 +149,17 @@ if ! sed -n '/elif isinstance(output, BatchStrOutput):/,/input_token_logprobs_va
 fi
 
 { set +x; } 2>/dev/null
+# AgentX concurrency counts live session trees rather than individual HTTP
+# requests. Leave room for subagent fan-out, and do not spend HBM capturing
+# graphs above the batch sizes that stay useful for this long-context workload.
+# The Qwen3.5 H200 template left both flags commented out, so neither variable
+# existed; NEXTN silently caps --max-running-requests at 48 when it is unset.
+MAX_RUNNING_REQUESTS=$((2 * CONC))
+CUDA_GRAPH_MAX_BS="$CONC"
+if [ "$CUDA_GRAPH_MAX_BS" -gt 64 ]; then
+    CUDA_GRAPH_MAX_BS=64
+fi
+
 SGLANG_CMD=(
     python3 -m sglang.launch_server
     --model-path "$MODEL_PATH"
