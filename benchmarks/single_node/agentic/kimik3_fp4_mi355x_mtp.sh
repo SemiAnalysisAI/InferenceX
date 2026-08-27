@@ -157,7 +157,7 @@ MLA_PREFILL_ARGS=(--attention-config "{\"mla_prefill_backend\":\"ROCM_AITER_FA\"
 
 MAX_NUM_SEQS=$(( CONC * 2 ))
 if [ "$MAX_NUM_SEQS" -lt 8 ]; then MAX_NUM_SEQS=8; fi
-if [ "$MAX_NUM_SEQS" -gt 24 ]; then MAX_NUM_SEQS=80; fi
+if [ "$MAX_NUM_SEQS" -gt 80 ]; then MAX_NUM_SEQS=80; fi
 
 SPEC_ROWS=1
 if [ "${#SPEC_ARGS[@]}" -gt 0 ]; then SPEC_ROWS=$(( SPEC_NUM_TOKENS + 1 )); fi
@@ -197,15 +197,16 @@ VLLM_CMD=(
     "${COMPILATION_CONFIG_ARGS[@]}"
 )
 
-SERVER_PID=$!
-echo "Server PID: $SERVER_PID"
-
 for _a in CP_ARGS SPEC_ARGS CHUNKED_PREFILL_ARGS ASYNC_SCHED_ARGS MLA_PREFILL_ARGS OFFLOAD_ARGS COMPILATION_CONFIG_ARGS; do
     grep -q "\${$_a\[@\]}" "$0" || echo "[orphan-check] WARNING: $_a is built but never passed to VLLM_CMD" >&2
 done
 
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
 printf '\n' | tee -a "$RESULT_DIR/vllm_command.txt"
+
+"${VLLM_CMD[@]}" > "$SERVER_LOG" 2>&1 &
+SERVER_PID=$!
+echo "Server PID: $SERVER_PID"
 
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
