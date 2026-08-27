@@ -6594,7 +6594,6 @@
   description:
     - "Update the vLLM B200 Kimi-K3 AgentX configs."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2776
-
 - config-keys:
     - kimik3-fp4-mi355x-vllm-agentic-mtp
   scenario-type:
@@ -6662,3 +6661,13 @@
     - "Bump image from lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260726 to lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260828"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2763
   
+- config-keys:
+    - qwen3-0.6b-fp16-mi355x-sglang-srt-agg
+    - qwen3-0.6b-fp16-mi355x-sglang-srt-disagg
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Add small-model aggregate and 1P1D disaggregated correctness lanes for the shared MI355X srt-slurm launcher."
+    - "Use the native SGLang router for request routing and AMD MoRI for disaggregated KV transfer, without Dynamo, NIXL, or the deleted amd_utils control plane."
+    - "Remove the active and deprecated MI355X matrix entries that depended on amd_utils; configuration-specific child PRs reintroduce the active production lanes as native srt-slurm recipes."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2542
