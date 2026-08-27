@@ -62,18 +62,6 @@ set +x
 
 export NCCL_IB_HCA=${NCCL_IB_HCA:-$IBDEVICES}
 
-# Inter-node NCCL over this bnxt_re RoCE fabric. Only matters for multi-node TP/EP
-# workers (e.g. decode TP16 over 2 nodes); inert for the single-node-worker tests
-# (1-4), which do no inter-node NCCL.
-#
-# GID index 3 is the routable RoCEv2 entry (fd93:16d3:59b6:012*); without it NCCL
-# falls back to RoCEv1 (GID idx 0, link-local) and cross-node comm init hangs. This
-# selects a GID table entry rather than a QoS class, so it has no MoRI counterpart
-# and stays a standalone default. NCCL_IB_TC / NCCL_IB_SL are instead derived from
-# the detected MoRI QoS class further down, so both transports end up on the same
-# lossless class. Override for a cluster with a different GID layout.
-export NCCL_IB_GID_INDEX="${NCCL_IB_GID_INDEX:-3}"
-
 # =============================================================================
 # MoRI-specific environment
 # =============================================================================
