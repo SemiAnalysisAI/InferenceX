@@ -6585,7 +6585,7 @@
     - "Add the day-zero Qwen3.8-Flash-Next NVFP4 AgentX recipe on B200 with SGLang native NEXTN MTP at TP4 and concurrency 1/4/8/12/16."
     - "Serve RadixArk/Qwen3.8-Flash-Next-NVFP4 with modelopt_fp4 quantization, the trtllm_mha attention backend, and the flashinfer_trtllm MoE runner, following the Qwen3.5 NVFP4 B200 sibling."
     - "Pin throughput runs to an interim acceptance length of 3.24 measured at three speculative tokens; eval-only runs keep real target verification."
-    - "Route the qwen3.8next fp4 prefix to its staged checkpoint in the B200 nscale launcher, which previously rejected the prefix outright."
+    - "Route the qwen3.8next fp4 prefix in the B200 nscale launcher, which previously rejected the prefix outright, and fetch the checkpoint from HuggingFace into a shared-storage cache instead of requiring it pre-staged under the models tree."
     - "Correct the serve flags to the SGLang cookbook's verified single-node command for this model: TP1 rather than TP4, the flashinfer linear-attention prefill and decode backends, bfloat16 Mamba SSM, and checkpoint-derived quantization."
     - "Set the acceptance length to the committed golden thinking_on value of 2.32 at three speculative tokens, replacing the interim 3.24."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2751

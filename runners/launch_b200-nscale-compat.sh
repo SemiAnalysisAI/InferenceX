@@ -93,23 +93,15 @@ elif [[ $MODEL_PREFIX == "kimik3" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/scratch/models/Kimi-K3"
     export SRT_SLURM_MODEL_PREFIX="kimik3"
 elif [[ $MODEL_PREFIX == "qwen3.8next" && $PRECISION == "fp4" ]]; then
-    # Qwen3.8-Flash-Next NVFP4. Like the dsv4 branch, prefer an explicitly
-    # supplied MODEL_PATH, then a staged directory, so a differently named
-    # staging dir does not need a code change here. This launcher bind-mounts
-    # MODEL_PATH into the container and exports MODEL=$MODEL_PATH, so there is
-    # no hf-download fallback: the checkpoint must be staged on the cluster.
-    SELECTED_MODEL_PATH=""
-    if [[ -n "${MODEL_PATH:-}" && -d "${MODEL_PATH}" ]]; then
-        SELECTED_MODEL_PATH="$MODEL_PATH"
-    else
-        for candidate in /scratch/models/Qwen3.8-Flash-Next-NVFP4 /scratch/models/Qwen3.8-Flash-Next-FP8 /scratch/models/Qwen3.8-Flash-Next; do
-            if [[ -d "$candidate" ]]; then
-                SELECTED_MODEL_PATH="$candidate"
-                break
-            fi
-        done
-    fi
-    export MODEL_PATH="${SELECTED_MODEL_PATH:-/scratch/models/Qwen3.8-Flash-Next-NVFP4}"
+    # Qwen3.8-Flash-Next NVFP4 is not pre-staged under /scratch/models, so this
+    # branch does not point at the staging tree. It hands the bench script a
+    # writable cache directory on the shared /scratch filesystem and lets the
+    # script's own `hf download --local-dir "$MODEL_PATH"` populate it on the
+    # first run; later runs find it already there. KEEP_HF_MODEL_ID keeps MODEL
+    # as the HuggingFace repo id further down, because `hf download` needs a
+    # repo id and every other branch here overwrites MODEL with the local path.
+    export MODEL_PATH="${MODEL_PATH:-/scratch/hf-models/Qwen3.8-Flash-Next-NVFP4}"
+    export KEEP_HF_MODEL_ID=1
     export SRT_SLURM_MODEL_PREFIX="qwen3.8next-fp4"
 else
     echo "Unsupported model prefix/precision: $MODEL_PREFIX/$PRECISION"
@@ -595,7 +587,17 @@ else
     # Point the bench script at the resolved MODEL_PATH instead of
     # pulling from the HF hub cache. Bench scripts skip `hf download` when
     # MODEL is a local path.
-    export MODEL="$MODEL_PATH"
+    if [[ "${KEEP_HF_MODEL_ID:-0}" == "1" ]]; then
+        # The bench script downloads into MODEL_PATH itself, so MODEL has to
+        # stay a HuggingFace repo id. Create the directory first: it is bind
+        # mounted below and srun fails outright on a missing mount source.
+        if ! mkdir -p "$MODEL_PATH"; then
+            echo "Error: cannot create $MODEL_PATH on shared storage; the bind mount below would fail" >&2
+            exit 1
+        fi
+    else
+        export MODEL="$MODEL_PATH"
+    fi
 
     # Use flock to serialize concurrent imports to the same squash file
     # Override ENROOT_CACHE_PATH to avoid permission issues with system-wide cache on worker nodes
