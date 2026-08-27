@@ -441,7 +441,12 @@ collx_salloc_jobid() {
     return 1
   fi
   collx_log "scheduler-request=submit"
-  if ! (salloc "$@" --no-shell) > "$log" 2>&1; then
+  # Fleet convention (runners/launch_*.sh): a CI allocation is named after its
+  # GHA runner so operators can squeue/scancel by --name. RUNNER_NAME is set by
+  # the Actions runner on every step; hand launches without it keep the default.
+  local name_args=()
+  [ -z "${RUNNER_NAME:-}" ] || name_args=(--job-name="$RUNNER_NAME")
+  if ! (salloc ${name_args[@]+"${name_args[@]}"} "$@" --no-shell) > "$log" 2>&1; then
     collx_log "ERROR: scheduler allocation failed"
     collx_log_tail "$log"
     return 1
