@@ -92,6 +92,25 @@ elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" ]]; then
 elif [[ $MODEL_PREFIX == "kimik3" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/scratch/models/Kimi-K3"
     export SRT_SLURM_MODEL_PREFIX="kimik3"
+elif [[ $MODEL_PREFIX == "qwen3.8next" && $PRECISION == "fp4" ]]; then
+    # Qwen3.8-Flash-Next NVFP4. Like the dsv4 branch, prefer an explicitly
+    # supplied MODEL_PATH, then a staged directory, so a differently named
+    # staging dir does not need a code change here. This launcher bind-mounts
+    # MODEL_PATH into the container and exports MODEL=$MODEL_PATH, so there is
+    # no hf-download fallback: the checkpoint must be staged on the cluster.
+    SELECTED_MODEL_PATH=""
+    if [[ -n "${MODEL_PATH:-}" && -d "${MODEL_PATH}" ]]; then
+        SELECTED_MODEL_PATH="$MODEL_PATH"
+    else
+        for candidate in /scratch/models/Qwen3.8-Flash-Next-NVFP4 /scratch/models/Qwen3.8-Flash-Next-FP8 /scratch/models/Qwen3.8-Flash-Next; do
+            if [[ -d "$candidate" ]]; then
+                SELECTED_MODEL_PATH="$candidate"
+                break
+            fi
+        done
+    fi
+    export MODEL_PATH="${SELECTED_MODEL_PATH:-/scratch/models/Qwen3.8-Flash-Next-NVFP4}"
+    export SRT_SLURM_MODEL_PREFIX="qwen3.8next-fp4"
 else
     echo "Unsupported model prefix/precision: $MODEL_PREFIX/$PRECISION"
     echo "Available models under /scratch/models:"
