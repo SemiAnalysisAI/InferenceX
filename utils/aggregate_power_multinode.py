@@ -2,8 +2,9 @@
 
 Consumes the srt-slurm ``dcgm-power`` artifact package (v1 wire contract:
 ``power/{manifest.json, samples.csv, windows/*.json}``) produced for
-disaggregated multinode runs, re-validates it independently, and patches
-role-level and whole-deployment energy metrics into the aggregate JSON.
+multinode runs, re-validates it independently, and patches whole-deployment
+energy metrics plus role-level metrics for disaggregated deployments into the
+aggregate JSON.
 
 Trust model: the producer's stored ``publication_valid`` verdict is never
 trusted. Validity is recomputed here from the persisted bytes (mirroring
@@ -38,13 +39,24 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
-from aggregate_power import (
-    BenchmarkData,
-    _append_reason,
-    _integrate_device,
-    _load_benchmark_data,
-    _write_json_atomic,
-)
+try:
+    from .aggregate_power import (
+        POWER_METRIC_SCHEMA_VERSION,
+        BenchmarkData,
+        _append_reason,
+        _integrate_device,
+        _load_benchmark_data,
+        _write_json_atomic,
+    )
+except ImportError:  # Direct execution: python utils/aggregate_power_multinode.py
+    from aggregate_power import (
+        POWER_METRIC_SCHEMA_VERSION,
+        BenchmarkData,
+        _append_reason,
+        _integrate_device,
+        _load_benchmark_data,
+        _write_json_atomic,
+    )
 
 # --- srt-slurm dcgm-power v1 wire contract (mirrored constants) -------------
 
@@ -879,6 +891,7 @@ def validate_and_integrate(
     benchmark: BenchmarkData | None,
     prefill_gpus: int,
     decode_gpus: int,
+    aggregate_gpus: int,
     expected_producer_sha: str | None,
 ) -> MultinodePowerAudit:
     """Recompute package validity, cross-check verdicts, and integrate energy."""
@@ -983,16 +996,28 @@ def validate_and_integrate(
         elif audit.stored_publication_valid is not True:
             _add_reason(audit, "package_recompute_invalid", "stored and recomputed both invalid")
 
-    # Gate: role topology must match the workflow's own GPU counts, with
-    # prefill and decode in distinct heterogeneous Slurm groups when the
-    # deployment uses het jobs at all.
+    # Gate: role topology must match the workflow's own GPU counts. Aggregate
+    # workers are mutually exclusive with disaggregated prefill/decode workers;
+    # this prevents phase-local fields from being fabricated for shared GPUs.
     expected_roles = {}
+    if aggregate_gpus > 0 and (prefill_gpus > 0 or decode_gpus > 0):
+        _add_reason(
+            audit,
+            "topology_env_mismatch",
+            "aggregate GPUs cannot be combined with prefill/decode GPUs",
+        )
     if prefill_gpus > 0:
         expected_roles["prefill"] = prefill_gpus
     if decode_gpus > 0:
         expected_roles["decode"] = decode_gpus
+    if aggregate_gpus > 0:
+        expected_roles["agg"] = aggregate_gpus
     if not expected_roles:
-        _add_reason(audit, "topology_env_mismatch", "PREFILL_GPUS/DECODE_GPUS are both zero")
+        _add_reason(
+            audit,
+            "topology_env_mismatch",
+            "prefill, decode, and aggregate GPU counts are all zero",
+        )
     elif roles:
         topology_failures = _check_role_topology(expected_devices, roles, expected_roles)
         for failure in topology_failures:
@@ -1165,6 +1190,7 @@ def _patch_agg(agg_path: Path, audit: MultinodePowerAudit) -> None:
     data = json.loads(agg_path.read_text(encoding="utf-8"))
     for key in _ALL_POWER_METRIC_KEYS:
         data.pop(key, None)
+    data["power_metric_schema_version"] = POWER_METRIC_SCHEMA_VERSION
     data["power_valid"] = int(audit.power_valid)
     data.pop("power_invalid_reasons", None)
     if audit.power_valid:
@@ -1238,6 +1264,7 @@ def run(
     decode_gpus: int,
     expected_producer_sha: str | None,
     logs_root: Path,
+    aggregate_gpus: int = 0,
     validation_result: Path | None = None,
     require_power: bool = False,
 ) -> int:
@@ -1258,6 +1285,7 @@ def run(
         benchmark=effective_benchmark,
         prefill_gpus=prefill_gpus,
         decode_gpus=decode_gpus,
+        aggregate_gpus=aggregate_gpus,
         expected_producer_sha=expected_producer_sha,
     )
     for reason in benchmark_reasons:
@@ -1359,6 +1387,12 @@ def main() -> int:
         help="Expected decode GPU count from the workflow's DECODE_GPUS",
     )
     parser.add_argument(
+        "--aggregate-gpus",
+        type=int,
+        default=0,
+        help="Expected aggregate-worker GPU count (mutually exclusive with prefill/decode)",
+    )
+    parser.add_argument(
         "--expected-producer-sha",
         default=os.environ.get("POWER_PRODUCER_SHA") or None,
         help="Required srt-slurm producer git commit (env POWER_PRODUCER_SHA)",
@@ -1381,6 +1415,7 @@ def main() -> int:
         args.agg_result,
         prefill_gpus=args.prefill_gpus,
         decode_gpus=args.decode_gpus,
+        aggregate_gpus=args.aggregate_gpus,
         expected_producer_sha=args.expected_producer_sha,
         logs_root=args.logs_root,
         validation_result=args.validation_result,

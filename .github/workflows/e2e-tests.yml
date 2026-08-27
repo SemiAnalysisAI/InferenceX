@@ -26,7 +26,7 @@ on:
                 type: string
                 default: ""
             require-power:
-                description: "Fail fixed-sequence jobs when GPU power is invalid"
+                description: "Fail benchmark jobs when GPU power is invalid"
                 required: false
                 type: boolean
                 default: false
@@ -106,7 +106,7 @@ on:
                 type: string
                 default: ""
             require-power:
-                description: "Fail fixed-sequence jobs when GPU power is invalid"
+                description: "Fail benchmark jobs when GPU power is invalid"
                 required: false
                 type: boolean
                 default: false
@@ -288,6 +288,7 @@ jobs:
             osl: ${{ matrix.config.osl }}
             max-model-len: ${{ matrix.config.max-model-len }}
             runner: ${{ matrix.config.runner }}
+            node-count: ${{ matrix.config.node-count }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             image: ${{ matrix.config.image }}
@@ -342,6 +343,7 @@ jobs:
             osl: ${{ matrix.config.osl }}
             max-model-len: ${{ matrix.config.max-model-len }}
             runner: ${{ matrix.config.runner }}
+            node-count: ${{ matrix.config.node-count }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             image: ${{ matrix.config.image }}
@@ -423,6 +425,7 @@ jobs:
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ 'false' }}
             run-eval: false
+            require-power: ${{ inputs.require-power }}
             scenario-type: agentic-coding
             ref: ${{ inputs.ref }}
 
@@ -452,14 +455,14 @@ jobs:
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.conc }}
             kv-offloading: ${{ matrix.config.kv-offloading }}
-            kv-offload-backend: ${{ matrix.config.kv-offload-backend }}
+            kv-offload-backend: ${{ matrix.config['kv-offload-backend'].name }}
             total-cpu-dram-gb: ${{ matrix.config.total-cpu-dram-gb }}
             duration: ${{ inputs.agentx-fast && '1200' || (inputs.duration-override != '' && inputs.duration-override || matrix.config.duration) }}
             agentx-fast: ${{ inputs.agentx-fast }}
             isl: '0'
             osl: '0'
             max-model-len: '0'
-            spec-decoding: 'none'
+            spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ 'false' }}
             run-eval: true
             eval-only: true
@@ -485,6 +488,7 @@ jobs:
             osl: '0'
             max-model-len: '0'
             runner: ${{ matrix.config.runner }}
+            node-count: ${{ matrix.config.node-count }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             image: ${{ matrix.config.image }}
@@ -522,6 +526,8 @@ jobs:
             duration: ${{ inputs.agentx-fast && '1200' || (inputs.duration-override != '' && inputs.duration-override || matrix.config.duration) }}
             agentx-fast: ${{ inputs.agentx-fast }}
             run-eval: false
+            require-power: ${{ inputs.require-power }}
+            power-producer-sha: ${{ inputs.power-producer-sha }}
             scenario-type: agentic-coding
             ref: ${{ inputs.ref }}
 
@@ -542,6 +548,7 @@ jobs:
             osl: '0'
             max-model-len: '0'
             runner: ${{ matrix.config.runner }}
+            node-count: ${{ matrix.config.node-count }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             image: ${{ matrix.config.image }}
