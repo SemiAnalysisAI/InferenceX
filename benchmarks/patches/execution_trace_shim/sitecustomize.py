@@ -245,9 +245,27 @@ def _type_key(a):
         return "i"
     if isinstance(a, float):
         return "f"
+    if isinstance(a, str):
+        return "s"
     type_name = type(a).__name__
     if type_name == "Tensor":
         return "T"
+    if type_name == "dtype":
+        return "d"
+    if type_name == "device":
+        return "D"
+    # containers: deep_gemm's API passes (tensor, scale) pairs, shape args are
+    # int tuples. The container kind is part of the key so the impl can
+    # rebuild the original type (the dispatcher hands lists to the impl).
+    if isinstance(a, (tuple, list)) and a:
+        kinds = {_type_key(x) for x in a}
+        tag = "t" if isinstance(a, tuple) else "l"
+        if kinds == {"T"}:
+            return tag + "T"
+        if kinds <= {"i", "b"}:
+            return tag + "i"
+        if kinds == {"f"}:
+            return tag + "f"
     return None
 
 
@@ -257,7 +275,19 @@ _SCHEMA_OF_KEY = {
     "b": "bool a{i}",
     "i": "int a{i}",
     "f": "float a{i}",
+    "s": "str a{i}",
+    "d": "ScalarType a{i}",
+    "D": "Device a{i}",
+    "tT": "Tensor(a{i}!)[] a{i}",
+    "lT": "Tensor(a{i}!)[] a{i}",
+    "ti": "int[] a{i}",
+    "li": "int[] a{i}",
+    "tf": "float[] a{i}",
+    "lf": "float[] a{i}",
 }
+
+# keys whose dispatched value arrives as a list but must be rebuilt as a tuple
+_TUPLE_KEYS = {"tT", "ti", "tf"}
 
 
 def _ret_schema(result):
@@ -296,11 +326,23 @@ def _register_dispatch_op(shortname, fn, args, ret_schema):
     safe = "".join(ch if ch.isalnum() or ch == "_" else "_" for ch in shortname)
     opname = f"{safe}_{_dispatch_idx}"
     _dispatch_lib.define(f"{opname}({', '.join(parts)}) -> {ret_schema}")
+    # the dispatcher hands list values for Tensor[]/int[] args; rebuild tuples
+    # where the launcher was originally called with tuples (deep_gemm indexes
+    # its (tensor, scale) pairs)
+    tuple_idxs = frozenset(
+        i for i, a in enumerate(args) if _type_key(a) in _TUPLE_KEYS
+    )
+    call_fn = fn
+    if tuple_idxs:
+        def call_fn(*a, _fn=fn, _idxs=tuple_idxs):
+            return _fn(*(tuple(x) if i in _idxs else x for i, x in enumerate(a)))
     if ret_schema.startswith("(") and ret_schema != "()":
         # multi-return ops must hand the dispatcher a tuple
-        _dispatch_lib.impl(opname, lambda *a: tuple(fn(*a)), "CompositeExplicitAutograd")
+        _dispatch_lib.impl(
+            opname, lambda *a: tuple(call_fn(*a)), "CompositeExplicitAutograd"
+        )
     else:
-        _dispatch_lib.impl(opname, lambda *a: fn(*a), "CompositeExplicitAutograd")
+        _dispatch_lib.impl(opname, lambda *a: call_fn(*a), "CompositeExplicitAutograd")
     import torch
 
     return getattr(torch.ops.etshim, opname).default
@@ -378,7 +420,11 @@ class _LauncherProxy:
                         ret_schema,
                     )
                     if new_op is None:
-                        stats["args_not_schemable"] += 1
+                        bad = next(
+                            (type(a).__name__ for a in flat if _type_key(a) is None),
+                            "?",
+                        )
+                        stats[f"args_not_schemable:{bad}"] += 1
                         ops[key] = False
                     else:
                         if isinstance(result, list):
