@@ -1155,7 +1155,7 @@ dsv4-fp4-b300-sglang:
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 4096, conc-end: 4096 }
 
 dsv4-fp4-b300-sglang-agentic-hicache-mtp:
-  image: lmsysorg/sglang-staging:dev-cu13-pr-35880
+  image: lmsysorg/sglang:nightly-dev-cu13-20260827-20621aa1
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:b300-nv

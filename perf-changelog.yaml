@@ -6537,3 +6537,13 @@
     - "Use a float32 Mamba SSM state, as Hopper's flashinfer verify kernel requires, unlike the bfloat16 the Blackwell arms must use."
     - "Pin throughput runs to the committed golden thinking_on acceptance length of 2.32 at three speculative tokens; eval-only runs keep real target verification."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2756
+
+- config-keys:
+    - dsv4-fp4-b300-sglang-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump image from lmsysorg/sglang-staging:dev-cu13-pr-35880 to lmsysorg/sglang:nightly-dev-cu13-20260827-20621aa1, moving the lane off a hand-built staging tag and back onto a published nightly. Build commit 20621aa14b is on sgl-project/sglang main, so every point is now reproducible from a public image; the staging tag it replaces was a one-off build carrying an unmerged draft and no longer resolves in lmsysorg/sglang."
+    - "Retains --prefill-decode-interval 20. sgl-project/sglang#35017 merged upstream on 2026-08-19, ahead of this nightly's build commit, so the flag and the +28% output throughput at conc 128 that #2701 measured are both preserved on a released build."
+    - "Known regression risk at DEP8 conc 384/512/576: this nightly does NOT carry the HiCache load-back fix. sgl-project/sglang#34975 and its cherry-pick #35880 are both still open as of this bump, and at build commit 20621aa1 mem_cache/unified_cache/unified_tree_core.py still declares load_back_pending_id as a single Optional[int] anchor with the 'node N pinned by load-back M, new anchor N' assertion intact. A node pinned by two concurrent H->D load-backs therefore still trips it: eight schedulers exit at once and the surviving DP ranks block forever in the MLP-sync collective, so in-flight requests never return and the client sees zero errors. The assertion is reachable only under --hicache-write-policy write_back, which this recipe still sets by default. This bump is deliberately image-only, so the write policy, search space, dram-utilization and every serving flag from #2701 are left untouched; re-pin to a nightly that includes #34975 once it merges."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PENDING
