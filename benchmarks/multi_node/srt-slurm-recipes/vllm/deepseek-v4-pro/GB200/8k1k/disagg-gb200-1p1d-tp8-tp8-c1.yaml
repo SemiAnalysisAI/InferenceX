@@ -36,6 +36,8 @@ resources:
 frontend:
   type: vllm-router
   enable_multiple_frontends: false
+  args:
+    request-timeout-secs: 21600
 
 backend:
   type: vllm
