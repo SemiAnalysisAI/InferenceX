@@ -146,7 +146,11 @@ caller-side mix-up, guarded upstream by ROCm/mori#546), and with the corrected c
 combine is clean through T=512 — but a residual stochastic corruption remains from T~128 under
 repeated execution and at prefill token counts, independent of per-pair drains (not a
 buffer-reuse race; suspected driver-level, ionic 25.11 vs upstream's non-reproducing 26.03).
-The tw pairs additionally have no cross-node GPU fabric.
+The tw pairs additionally have no cross-node GPU fabric. mi355x EP16 currently has no
+publishable transport: UCCL-EP's CPU-proxy RDMA is functional on the Pollara fabric but roughly
+13x under its upstream-documented bandwidth (~6 GB/s vs 82 GB/s), unchanged by GPU-memory
+registration mode (DMA-BUF vs peer-memory) or traffic class — an ionic-driver-level suspect.
+UCCL-EP EP16 is registered on b200-nscale, where it runs at full health on bare-metal IB.
 MoRI runs under its MANUAL launch mode with a pinned launch config, because that is what the engines
 run: neither vLLM nor SGLang sets `MORI_EP_LAUNCH_CONFIG_MODE`, and both pin block_num 80,
 rdma_block_num 0, and `warp_num_per_block` 16 for the intra-node kernel, on dispatch and combine
