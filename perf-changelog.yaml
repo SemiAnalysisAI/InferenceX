@@ -6545,4 +6545,4 @@
     - "Convert TileRT decode weights once under a shared lock, publish the cache atomically, and keep prefill and decode in their role-specific vLLM 0.26.0 and TileRT 0.1.5 images."
     - "Pass only the real vLLM prefill Prometheus endpoint to AIPerf; TileRT decode exposes health and token-transfer APIs but no /metrics route."
     - "Pin SemiAnalysisAI/srt-slurm PR #10 commit 7ce31513dde2448a1f8ff5f356b0ce39f743f4c1, stacked on the AMD/native-router PR #7 and base runtime PR #1."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2750
