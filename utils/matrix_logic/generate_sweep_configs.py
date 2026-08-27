@@ -440,9 +440,14 @@ def _multinode_parallelism_key(entry: dict) -> tuple:
         Fields.EVAL_ALL_CONCS.value,
         Fields.EXP_NAME.value,
     }
+    ignore_recipe_identity = entry.get(Fields.EVAL_CONC.value) is not None
+
     def eval_topology_value(key, value):
-        """Exclude recipe identity while retaining topology-affecting settings."""
-        if key not in (Fields.PREFILL.value, Fields.DECODE.value):
+        """Group explicit bounded evals by topology, not split recipe path."""
+        if (
+            not ignore_recipe_identity
+            or key not in (Fields.PREFILL.value, Fields.DECODE.value)
+        ):
             return value
         worker = dict(value)
         settings = worker.get(Fields.ADDITIONAL_SETTINGS.value, []) or []

@@ -491,6 +491,36 @@ class TestMarkEvalEntries:
 
         assert sum(entry["run-eval"] for entry in result) == 2
 
+    def test_default_eval_selection_keeps_recipe_identity(self):
+        """Existing recipes remain independent unless they opt into an eval bound."""
+        common = {
+            "model": "m", "runner": "cluster:gb200-nv", "framework": "vllm",
+            "precision": "fp4", "isl": 8192, "osl": 1024,
+            "spec-decoding": "none", "disagg": True,
+            "decode": {"num-worker": 1, "tp": 1, "ep": 8, "dp-attn": True},
+            "conc": [256],
+        }
+        matrix_values = [
+            {
+                **common,
+                "prefill": {
+                    "num-worker": 1, "tp": 1, "ep": 8, "dp-attn": True,
+                    "additional-settings": ["CONFIG_FILE=recipes/a.yaml"],
+                },
+            },
+            {
+                **common,
+                "prefill": {
+                    "num-worker": 1, "tp": 1, "ep": 8, "dp-attn": True,
+                    "additional-settings": ["CONFIG_FILE=recipes/b.yaml"],
+                },
+            },
+        ]
+
+        result = mark_eval_entries(matrix_values)
+
+        assert sum(entry["run-eval"] for entry in result) == 2
+
     def test_multinode_agentic_groups_are_independent_per_topology(self):
         """Two distinct multi-node agentic topologies (e.g. differing by
         prefill EP/DP) must each get their own eval row."""
