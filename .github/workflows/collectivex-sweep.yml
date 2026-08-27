@@ -114,15 +114,29 @@ jobs:
     runs-on: >-
       ${{ fromJSON(
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
-        format(
-          '["self-hosted",{0},{1},{2}]',
-          toJSON(matrix.sku),
-          toJSON(format(
-            'ci-job-{0}-{1}',
-            needs.setup.outputs.priority,
-            matrix.queue-token
-          )),
-          toJSON(format('ci-attempt-{0}', github.run_attempt))
+        (
+          vars.NODE_SLOT_SCHEDULER_ENABLED == 'true' &&
+          format(
+            '["self-hosted",{0},{1},{2},{3}]',
+            toJSON(matrix.sku),
+            toJSON(format('nodes:{0}', matrix.nodes)),
+            toJSON(format(
+              'ci-job-{0}-{1}',
+              needs.setup.outputs.priority,
+              matrix.queue-token
+            )),
+            toJSON(format('ci-attempt-{0}', github.run_attempt))
+          ) ||
+          format(
+            '["self-hosted",{0},{1},{2}]',
+            toJSON(matrix.sku),
+            toJSON(format(
+              'ci-job-{0}-{1}',
+              needs.setup.outputs.priority,
+              matrix.queue-token
+            )),
+            toJSON(format('ci-attempt-{0}', github.run_attempt))
+          )
         ) ||
         format('[{0}]', toJSON(matrix.sku))
       ) }}

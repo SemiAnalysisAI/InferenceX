@@ -47,7 +47,7 @@ _FP16 = "fp16"
 
 
 def _runner_family(runner: str) -> str:
-    """Reduce a specific runner tag (e.g. "b200-dsv4", "cluster:b200-dgxc") to a
+    """Reduce a specific runner tag (e.g. "cluster:b200-nscale", "b300-p1") to a
     GPU family ("b200", "b300", "h200", "h100", "gb200", "gb300", "mi300x",
     "mi325x", "mi355x")."""
     r = runner.lower()

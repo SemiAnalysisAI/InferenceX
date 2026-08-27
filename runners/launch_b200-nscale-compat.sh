@@ -1,7 +1,8 @@
 #!/usr/bin/bash
 
-# System-specific configuration for B200 DGXC Slurm cluster
-SLURM_PARTITION="${SLURM_PARTITION:-gpu-2}"
+# Compatibility launcher for B200 Nscale configurations that have not yet
+# moved to the native srt-slurm path in launch_b200-nscale-slurm.sh.
+SLURM_PARTITION="${SLURM_PARTITION:-batch_1}"
 SLURM_ACCOUNT="${SLURM_ACCOUNT:-benchmark}"
 POWER_SRT_SLURM_URL="https://github.com/edwingao28/srt-slurm.git"
 POWER_SRT_SLURM_PIN="e5c837f06a362dc888dfea2ee588e9f19c298270"
@@ -11,33 +12,33 @@ set -x
 # MODEL_PATH: Override with pre-downloaded paths on cluster-accessible storage.
 # Bench scripts and srt-slurm yaml configs specify HuggingFace model IDs for
 # portability, but we resolve to pre-staged paths here to avoid repeated
-# downloading on every dgxc node. Runs for both single-node and multinode
+# downloading on every Nscale node. Runs for both single-node and multinode
 # launches.
 if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="/scratch/fsw/models/DeepSeek-R1-0528-NVFP4-v2"
+    export MODEL_PATH="/scratch/models/DeepSeek-R1-0528-NVFP4-v2"
     export SRT_SLURM_MODEL_PREFIX="dsr1"
 elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
-    export MODEL_PATH="/lustre/fsw/models/dsr1-0528-fp8"
+    export MODEL_PATH="/scratch/models/DeepSeek-R1-0528"
     export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
 elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
     SELECTED_MODEL_PATH=""
     if [[ -n "${MODEL_PATH:-}" && -d "${MODEL_PATH}" ]]; then
         SELECTED_MODEL_PATH="$MODEL_PATH"
     else
-        for candidate in /lustre/fsw/models/deepseek-v4-pro /lustre/fsw/models/dsv4-pro /lustre/fsw/models/DeepSeek-V4-Pro; do
+        for candidate in /scratch/models/DeepSeek-V4-Pro /scratch/models/DeepSeek-V4-Pro-NVFP4 /scratch/models/DeepSeek-V4-Pro-0813; do
             if [[ -d "$candidate" ]]; then
                 SELECTED_MODEL_PATH="$candidate"
                 break
             fi
         done
     fi
-    export MODEL_PATH="${SELECTED_MODEL_PATH:-/lustre/fsw/models/deepseek-v4-pro}"
+    export MODEL_PATH="${SELECTED_MODEL_PATH:-/scratch/models/DeepSeek-V4-Pro}"
     export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
 elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "bf16" ]]; then
-    export MODEL_PATH="/lustre/fsw/models/Qwen3.5-397B-A17B"
+    export MODEL_PATH="/scratch/models/Qwen3.5-397B-A17B"
     export SRT_SLURM_MODEL_PREFIX="qwen3.5"
 elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp8" ]]; then
-    export MODEL_PATH="/lustre/fsw/models/Qwen3.5-397B-A17B-FP8"
+    export MODEL_PATH="/scratch/models/Qwen3.5-397B-A17B-FP8"
     export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp8"
 # qwen3.5 fp4 spans two checkpoints, so this must branch on the checkpoint and
 # not on MODEL_PREFIX+PRECISION alone: the sglang keys moved to NVFP4-V2 while
@@ -47,96 +48,64 @@ elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp8" ]]; then
 # serve V2 weights to the TRT configs while publishing them under the old
 # checkpoint name.
 elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp4" && $MODEL == *NVFP4-V2 ]]; then
-    export MODEL_PATH="/scratch/fsw/models/Qwen3.5-397B-A17B-NVFP4-V2"
+    export MODEL_PATH="/scratch/models/Qwen3.5-397B-A17B-NVFP4-V2"
     export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp4"
 elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="/lustre/fsw/models/Qwen3.5-397B-A17B-NVFP4"
+    export MODEL_PATH="/scratch/models/Qwen3.5-397B-A17B-NVFP4"
     export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp4"
 elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp8" ]]; then
-    export MODEL_PATH="/lustre/fsw/models/GLM-5-FP8"
+    export MODEL_PATH="/scratch/models/GLM-5-FP8"
     export SRT_SLURM_MODEL_PREFIX="glm5-fp8"
 elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp8" ]]; then
-    # GLM-5.1 retired in July and its weights were cleaned out of the
-    # SRE-owned (root-only) /lustre/fsw/models tree, so this checkpoint is
-    # staged on the sa-shared-writable home Lustre mount instead. That mount
-    # is compute-visible at the same path, and the launcher bind-mounts
-    # $MODEL_PATH by name into the container.
-    export MODEL_PATH="/home/sa-shared/models/GLM-5.1-FP8"
+    export MODEL_PATH="/scratch/models/GLM-5.1-FP8"
     export SRT_SLURM_MODEL_PREFIX="glm5.1-fp8"
 elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="/lustre/fsw/models/GLM-5-NVFP4"
+    export MODEL_PATH="/scratch/models/GLM-5-NVFP4"
     export SRT_SLURM_MODEL_PREFIX="glm5-fp4"
 elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp4" ]]; then
-    # Day-zero on b200-dgxc: GLM-5.2-NVFP4 may not be in the SRE-staged trees
-    # yet. Probe them first (same shape as the dsv4 branch above), then fall
-    # back to the sa-shared-writable gharunners tree, which the bench script's
-    # `hf download` guard populates on first use. The fallback dir is created
-    # here because --container-mounts needs the host path to exist.
-    #
-    # A candidate must hold at least one weight shard, not merely exist. The
-    # gharunners path was already there in run 30729467646 holding config.json
-    # and five other metadata files and no weights at all, and a bare -d test
-    # would pick such a stub over a real copy in another tree.
-    SELECTED_MODEL_PATH=""
-    if [[ -n "${MODEL_PATH:-}" && -d "${MODEL_PATH}" ]]; then
-        SELECTED_MODEL_PATH="$MODEL_PATH"
-    else
-        for candidate in /lustre/fsw/models/GLM-5.2-NVFP4 /scratch/fsw/models/GLM-5.2-NVFP4 /lustre/fsw/gharunners/models/GLM-5.2-NVFP4; do
-            if [[ -d "$candidate" ]] && ls "$candidate"/*.safetensors >/dev/null 2>&1; then
-                SELECTED_MODEL_PATH="$candidate"
-                break
-            fi
-        done
-    fi
-    export MODEL_PATH="${SELECTED_MODEL_PATH:-/lustre/fsw/gharunners/models/GLM-5.2-NVFP4}"
-    mkdir -p "$MODEL_PATH"
+    export MODEL_PATH="${MODEL_PATH:-/scratch/models/GLM-5.2-NVFP4}"
     export SRT_SLURM_MODEL_PREFIX="glm5.2-fp4"
 elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "int4" ]]; then
-    export MODEL_PATH="/lustre/fsw/models/Kimi-K2.5"
+    export MODEL_PATH="/scratch/models/Kimi-K2.5"
     export SRT_SLURM_MODEL_PREFIX="kimik2.5"
 elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="/lustre/fsw/models/Kimi-K2.5-NVFP4"
+    export MODEL_PATH="/scratch/models/Kimi-K2.5-NVFP4"
     export SRT_SLURM_MODEL_PREFIX="kimik2.5-fp4"
 elif [[ $MODEL_PREFIX == "kimik2.6" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="${MODEL_PATH:-/lustre/fsw/models/Kimi-K2.6-NVFP4}"
+    export MODEL_PATH="${MODEL_PATH:-/scratch/models/Kimi-K2.6-NVFP4}"
     export SRT_SLURM_MODEL_PREFIX="kimi-k2.6-nvfp4"
 elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp8" ]]; then
-    export MODEL_PATH="/lustre/fsw/models/MiniMax-M2.5"
+    export MODEL_PATH="/scratch/models/MiniMax-M2.5"
     export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-fp8"
 elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="/lustre/fsw/models/MiniMax-M2.5-NVFP4"
+    export MODEL_PATH="/scratch/models/MiniMax-M2.5-NVFP4"
     export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-nvfp4"
 elif [[ $MODEL_PREFIX == "gptoss" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="/lustre/fsw/models/gpt-oss-120b"
+    export MODEL_PATH="/scratch/models/gpt-oss-120b"
     export SRT_SLURM_MODEL_PREFIX="gptoss"
 elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
-    # Day-zero: MiniMax-M3-MXFP8 is not in the SRE-staged /lustre/fsw/models
-    # tree (root-owned); it lives in the sa-shared-writable gharunners tree.
-    export MODEL_PATH="/lustre/fsw/gharunners/models/MiniMax-M3-MXFP8"
+    export MODEL_PATH="/scratch/models/MiniMax-M3-MXFP8"
     export SRT_SLURM_MODEL_PREFIX="minimax-m3-mxfp8"
 elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="/scratch/fsw/models/MiniMax-M3-NVFP4"
+    export MODEL_PATH="/scratch/models/MiniMax-M3-NVFP4"
     export SRT_SLURM_MODEL_PREFIX="nvidia/MiniMax-M3-NVFP4"
 elif [[ $MODEL_PREFIX == "kimik3" && $PRECISION == "fp4" ]]; then
-    # Native MXFP4 checkpoint, pre-staged on the SRE-managed Lustre tree.
-    export MODEL_PATH="/lustre/fsw/models/Kimi-K3"
+    export MODEL_PATH="/scratch/models/Kimi-K3"
     export SRT_SLURM_MODEL_PREFIX="kimik3"
 else
     echo "Unsupported model prefix/precision: $MODEL_PREFIX/$PRECISION"
-    echo "Available models under /lustre/fsw/models:"
-    ls -la /lustre/fsw/models
+    echo "Available models under /scratch/models:"
+    ls -la /scratch/models
     exit 1
 fi
 
-export AIPERF_MMAP_CACHE_HOST_PATH="/lustre/fsw/gharunners/aiperf-cache"
+export AIPERF_MMAP_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/aiperf-cache"
 
 if [[ "$IS_MULTINODE" == "true" ]]; then
     if [[ "$FRAMEWORK" == "tilert" ]]; then
         export SLURM_PARTITION SLURM_ACCOUNT
-        export TILERT_WEIGHTS_DIR="${TILERT_WEIGHTS_DIR:-/lustre/fsw/gharunners/models/${MODEL_PREFIX}-${PRECISION}-tilert-8shard}"
-        # These nodes expose eight RoCE HCAs, mlx5_0..mlx5_7 (all PORT_ACTIVE,
-        # link_layer Ethernet); there is no mlx5_10/mlx5_11 here. Verified
-        # with ibv_devinfo inside a pyxis container on an allocated gpu-2 node.
+        export TILERT_WEIGHTS_DIR="${TILERT_WEIGHTS_DIR:-/scratch/models/${MODEL_PREFIX}-${PRECISION}-tilert-8shard}"
+        # Nscale exposes eight RoCE HCAs, mlx5_0..mlx5_7.
         export UCX_NET_DEVICES="${UCX_NET_DEVICES:-mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1,mlx5_4:1,mlx5_5:1,mlx5_6:1,mlx5_7:1}"
         export UCX_MEMTYPE_CACHE="${UCX_MEMTYPE_CACHE:-n}"
         export UCX_MEMTYPE_REG_WHOLE="${UCX_MEMTYPE_REG_WHOLE:-n}"
@@ -182,7 +151,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         "$PRECISION" != "fp4" ||
         "$FRAMEWORK" != "dynamo-vllm"
     ) ]]; then
-        echo "Error: B200 DGXC dcgm-power is limited to fixed-sequence DSV4 FP4 dynamo-vllm" >&2
+        echo "Error: B200 Nscale dcgm-power is limited to fixed-sequence DSV4 FP4 dynamo-vllm" >&2
         exit 1
     fi
 
@@ -279,7 +248,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     # Map container images to local squash files
     NGINX_IMAGE="nginx:1.27.4"
-    SQUASH_DIR="${B200_SQUASH_DIR:-/home/sa-shared/containers}"
+    SQUASH_DIR="${B200_SQUASH_DIR:-/data/home/sa-shared/containers}"
     if [[ $MODEL_PREFIX == "minimaxm2.5" && $FRAMEWORK == "dynamo-vllm" ]]; then
         SQUASH_DIR="${B200_SQUASH_DIR:-/home/slurm-shared/gharunners/squash}"
     fi
@@ -345,7 +314,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     # HF_HUB_CACHE=/hf_hub_cache).
     DEFAULT_MOUNTS_BLOCK=""
     if [[ "$IS_AGENTIC" == "1" ]]; then
-        HF_HUB_CACHE_HOST_PATH="/lustre/fsw/gharunners/hf-hub-cache"
+        HF_HUB_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/hf-hub-cache"
         mkdir -p "$AIPERF_MMAP_CACHE_HOST_PATH" "$HF_HUB_CACHE_HOST_PATH"
         chmod 777 "$AIPERF_MMAP_CACHE_HOST_PATH" "$HF_HUB_CACHE_HOST_PATH" 2>/dev/null || true
         DEFAULT_MOUNTS_BLOCK="default_mounts:
@@ -399,7 +368,7 @@ EOF
 
     echo "Submitting job with srtctl..."
     echo "MODEL_PATH=$MODEL_PATH (exists=$(test -d "$MODEL_PATH" && echo yes || echo NO))"
-    ls -ld "$MODEL_PATH" 2>&1 || ls /lustre/fsw/models/ 2>&1 | head -40
+    ls -ld "$MODEL_PATH" 2>&1 || ls /scratch/models/ 2>&1 | head -40
 
     # An eval row may point at a committed real-verification recipe while its
     # throughput row keeps synthetic golden acceptance. Only configs that set
@@ -572,7 +541,7 @@ EOF
 
 else
 
-    SQUASH_FILE="/home/sa-shared/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    SQUASH_FILE="/data/home/sa-shared/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
     SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
     # Prefer a framework-tagged script (e.g. dsv4_fp4_b200_vllm.sh) so models
@@ -596,10 +565,8 @@ else
         CONTAINER_MOUNT_DIR=/workspace
     fi
 
-    # b200-dgxc cluster was re-partitioned to gpu-1 / gpu-2; the prior gpu-10
-    # and gpu-15 names no longer exist. gpu-2 currently has 10 fully-idle GPU
-    # nodes (all of gpu-2-[0-9]); gpu-1 has 2 drained (gpu-1-4, gpu-1-8). We
-    # land on gpu-2 to avoid drained nodes and skip the per-node excludes.
+    # The runner lease reserves the Slurm nodes before this single-node job is
+    # submitted to the Nscale batch_1 partition.
     export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
 
     SALLOC_TIME_LIMIT="${SALLOC_TIME_LIMIT:-480}"

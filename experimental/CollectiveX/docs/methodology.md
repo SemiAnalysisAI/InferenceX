@@ -125,7 +125,7 @@ and identical traffic, while its EP8 rows are correct. The deficit is confined t
 sustains ~34 GB/s per node against a nominal 8x400G (~4.2 GB/s per GPU-NIC pair) where bare-metal
 h100 reaches wire rate. Reordering the NIC-PE mapping to pair each rank with its socket-local NIC
 changed nothing (478µs against a 480µs baseline), which rules the selector out and points at the
-GDR path being degraded wholesale inside the guest. The retired b200-dgxc pool showed the same
+GDR path being degraded wholesale inside the guest. The retired b200-nscale pool showed the same
 shape. Treat EP16 rows from a virtualized pool as a lower bound on the hardware until the host's
 ACS/IOMMU configuration is confirmed.
 

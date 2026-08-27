@@ -30,7 +30,7 @@ def test_combined_high_value_signals_outrank_baseline_job():
     }
     high_value = {
         **baseline,
-        "runner": "cluster:b200-dgxc",
+        "runner": "cluster:b200-nscale",
         "framework": "sglang",
         "model-prefix": "dsv4",
         "precision": "fp4",

@@ -219,7 +219,7 @@ def add_multinode_node_count(
         raise ValueError(
             f"{Fields.NUM_NODES.value} is not valid for disaggregated entries"
         )
-    elif runner_data:
+    else:
         entry[Fields.NODE_COUNT.value] = multinode_node_count(
             entry[Fields.PREFILL.value],
             entry[Fields.DECODE.value],
