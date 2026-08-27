@@ -97,6 +97,19 @@ jobs:
 
           filt = data[:1]
 
+          for entry in filt:
+            node_count = entry.get('node-count', 1)
+            if isinstance(node_count, bool) or not isinstance(node_count, int) or node_count != 1:
+              print(
+                'Profile supports only validated single-node matrix entries; '
+                f'got node-count={node_count!r}.',
+                file=sys.stderr,
+              )
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                f.write("filtered=[]\ncount=0\n")
+              raise SystemExit(1)
+            entry['node-count'] = node_count
+
           out = json.dumps(filt)
           print(out)
           with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
@@ -121,15 +134,29 @@ jobs:
     runs-on: >-
       ${{ fromJSON(
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
-        format(
-          '["self-hosted",{0},{1},{2}]',
-          toJSON(matrix.config.runner),
-          toJSON(format(
-            'ci-job-{0}-{1}',
-            matrix.config.priority,
-            matrix.config['queue-token']
-          )),
-          toJSON(format('ci-attempt-{0}', github.run_attempt))
+        (
+          vars.NODE_SLOT_SCHEDULER_ENABLED == 'true' &&
+          format(
+            '["self-hosted",{0},{1},{2},{3}]',
+            toJSON(matrix.config.runner),
+            toJSON(format('nodes:{0}', matrix.config['node-count'])),
+            toJSON(format(
+              'ci-job-{0}-{1}',
+              matrix.config.priority,
+              matrix.config['queue-token']
+            )),
+            toJSON(format('ci-attempt-{0}', github.run_attempt))
+          ) ||
+          format(
+            '["self-hosted",{0},{1},{2}]',
+            toJSON(matrix.config.runner),
+            toJSON(format(
+              'ci-job-{0}-{1}',
+              matrix.config.priority,
+              matrix.config['queue-token']
+            )),
+            toJSON(format('ci-attempt-{0}', github.run_attempt))
+          )
         ) ||
         format('[{0}]', toJSON(matrix.config.runner))
       ) }}

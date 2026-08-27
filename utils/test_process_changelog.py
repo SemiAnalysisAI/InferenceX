@@ -1139,6 +1139,7 @@ def test_eval_rows_split_into_multinode_fixed_and_agentic_buckets(
         "image": "lmsysorg/sglang-rocm:v0.5.15", "model": "deepseek-ai/DeepSeek-V4-Pro",
         "model-prefix": "dsv4", "precision": "fp4", "framework": "sglang-disagg",
         "spec-decoding": "none", "runner": "cluster:mi355x-amds",
+        "node-count": 2,
         "prefill": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
         "decode": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
         "disagg": True, "kv-p2p-transfer": "mori",

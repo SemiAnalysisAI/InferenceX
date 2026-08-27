@@ -163,11 +163,11 @@ key off that name:
 
 - `slurm` indicates that the runner submits work through Slurm.
 - The SKU name (`b200`, `b300`, `h200`, `gb300`, …) provides coarse hardware targeting.
-- Exactly one `cluster:<name>` label, such as `cluster:b200-dgxc`, provides the required exact
+- Exactly one `cluster:<name>` label, such as `cluster:b200-nscale`, provides the required exact
   hardware/fleet identity for success-rate reporting and hardware-specific config.
   Every runner in the same physical cluster with identical hardware should use the same
   cluster label.
-- Optional capacity tags, such as `b200-dsv4` and `b300-p1`, carve out dedicated
+- Optional capacity tags, such as `b300-p1`, carve out dedicated
   benchmark subsets.
 
 The per-runner name label (`b300-nv_07`) is what `runs-on` resolves for sweep jobs, so
@@ -175,10 +175,62 @@ always keep it (the script appends it automatically). A typical registered runne
 up with labels like:
 
 ```
-self-hosted, Linux, X64, slurm, b200, b200-dsv4, cluster:b200-dgxc, b200-dgxc_00
+self-hosted, Linux, X64, slurm, b200-nscale, cluster:b200-nscale, b200-nscale-slurm_00
 ```
 
 Labels can be edited later on the runners settings page without re-registering.
+
+### Dynamic Slurm node leases
+
+The optional node-slot scheduler performs weighted admission across every job
+size in one physical Slurm cluster. A job that needs three nodes adds
+`nodes:3` to its queued `runs-on` labels. `nodes:N` is request metadata for the
+trusted priority controller, not a permanent runner capability label.
+
+The controller groups runners by their permanent `cluster:<name>` label. To
+admit a three-node job, it selects three online, unleased runners from one
+compatible cluster and temporarily adds the same `ci-lease-*` label to all
+three. After every lease write succeeds, it adds the job's unique `ci-job-*`,
+`ci-attempt-*`, and `nodes:3` labels to one of those runners as the anchor.
+GitHub can then dispatch only that job, while the other two runners remain idle
+as capacity tokens for the Slurm allocation.
+
+For example, after admitting ten- and eight-node jobs on an 18-node cluster,
+the controller has leased all 18 runners and will not publish the unique label
+for a queued nine-node job. This enforces the aggregate invariant
+`sum(admitted node counts) <= online cluster capacity` across mixed job sizes.
+
+Lease allocation is serialized and two-phase: reserve every capacity token,
+verify the reservation, then publish the anchor's dispatch label. Completion
+and periodic reconciliation remove orphaned leases. Every managed GPU workflow
+must require its unique `ci-job-*` label; a workflow that targets only a generic
+hardware label bypasses admission accounting.
+
+Set `NODE_SLOT_SCHEDULER_ENABLED=true` only after the deployed priority
+controller supports `nodes:N` and `ci-lease-*`. `PRIORITY_SCHEDULER_ENABLED`
+must also remain enabled. If either variable is disabled, workflows omit
+`nodes:N` and retain the existing unweighted behavior. The priority score also
+subtracts `0.001` per additional node so otherwise equal work prefers smaller
+allocations without overriding the existing business-priority signals.
+
+Aggregated multi-node search-space entries must declare one aggregate `worker`
+role and `num-nodes`; that value becomes the generated `node-count` directly.
+The worker may set `num-worker` when the aggregate engine uses multiple process
+replicas, otherwise it defaults to one. The generator expands this role into
+the legacy internal prefill/decode matrix shape expected by the launcher.
+Aggregate master entries cannot declare separate `prefill` or `decode` roles.
+
+Disaggregated entries must declare `prefill` and `decode`, and reject both
+`worker` and `num-nodes`. Their generated `node-count` is derived from, in
+precedence order:
+
+1. checked-in srt-slurm recipe `resources`;
+2. explicit `PREFILL_NODES` and `DECODE_NODES` settings; or
+3. worker GPU footprints divided by the relevant hardware's GPUs per node.
+
+Runner leases account for GitHub-managed work only. Slurm remains the final
+capacity authority for external users, reservations, offline compute nodes,
+and allocations submitted outside this admission path.
 
 ## Storage layout
 
@@ -201,12 +253,12 @@ The host side of each is defined in that cluster's `runners/launch_<cluster>.sh`
    each node downloads its own copy, so prefer shared storage where available).
 3. **Pre-staged model weights.** Large models are not downloaded from HF in CI. The
    launch scripts override `MODEL_PATH` to per-cluster staging directories
-   (e.g. `/lustre/fsw/models/...` on b200-dgxc, `/data/models/...` on b300,
+   (e.g. `/lustre/fsw/models/...` on b200-nscale, `/data/models/...` on b300,
    read-only `/scratch/models/` on b300 multinode). Bringing up a new model on a
    cluster means staging the weights there first.
 4. **Squash images.** Launch scripts `enroot import` each Docker image once into a
    `.sqsh` file under a shared `SQUASH_DIR` (e.g. `/home/sa-shared/containers` on
-   b200-dgxc, `/mnt/lustre01/users-public/sa-shared`
+   b200-nscale, `/mnt/lustre01/users-public/sa-shared`
    on gb200), then launch with `--container-image=<file>.sqsh`. This must be on shared
    storage because pyxis reads the file on the **compute** node, and it lets concurrent
    jobs reuse one import instead of each pulling the registry image. Note
