@@ -39,8 +39,8 @@ export PREFIX_MATCH_UNIT=128
 export PREFIX_CACHING_HASH_ALGO=sha256
 
 export VLLM_ALLOW_DCP_FULL_CUDAGRAPH=1
-export MAX_CUDAGRAPH_CAPTURE_SIZE=4096
-export CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 1 80),128,256,512,1024,2048,4096"
+export MAX_CUDAGRAPH_CAPTURE_SIZE=80
+export CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 1 80)"
 export COMPILATION_CUSTOM_OPS='"+fused_rms_norm_gated","+quant_fp8","+grouped_topk","+sparse_attn_indexer","none"'
 
 export HSA_NO_SCRATCH_RECLAIM=1
