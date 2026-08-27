@@ -63,7 +63,11 @@ else
     default_cudagraph_capture_sizes="$(seq -s, 1 "$default_cudagraph_capture_size")"
 fi
 
-export GPU_MEM_UTIL=0.90
+if [ "${CONC:?CONC is required}" -eq 16 ]; then
+    export GPU_MEM_UTIL=0.88
+else
+    export GPU_MEM_UTIL=0.90
+fi
 export MAX_NUM_BATCHED_TOKENS=16384
 export MAX_NUM_SEQS="${MAX_NUM_SEQS:-$default_max_num_seqs}"
 export K3_AUTO_KV_PAGE=1

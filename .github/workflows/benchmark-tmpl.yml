@@ -204,6 +204,8 @@ env:
   MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
   # These b300 nodes are currently broken.
   SALLOC_EXCLUDE: 'b300-005,b300-006'
+  # This MI355X node has persistent pre-existing VRAM allocations.
+  MI355X_SALLOC_EXCLUDE: 'mia1-p01-g18'
 
 permissions:
   contents: read
