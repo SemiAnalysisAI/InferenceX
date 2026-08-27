@@ -92,60 +92,21 @@ install_agentic_deps
 DCP_SIZE="${DCP_SIZE:-1}"
 export DCP_SIZE
 
-# ---- In-container patches ----------------------------------------------------
 # ---- Out-of-tree overlay -----------------------------------------------------
-# A unified diff of merged upstream PRs dropped into site-packages, for images
-# newer than the ones k3_patches/ targets. Currently vllm#51705 (DSpark under
-# DCP) + #52707 (KV block-pool clamp) + #53222 (AITER MoE chunking), merged onto
-# the nightly-a9a17e70 base.
-#
-# On that base the squashed k3_patches/vllm_51705_dcp.patch no longer applies
-# (the PR was rewritten: the DCP gate is now the capability flag
-# supports_non_causal_multi_token_dcp on the builder class, not the old
-# dcp_local_verify_row_lens plumbing), which is why this exists as a separate
-# merged diff rather than another entry in the patch script.
-#
-# SELF-SELECTING: dry-run first, and skip quietly if the diff does not match the
-# running image. That keeps every older cell on its existing patch path instead
-# of hard-failing them, while a matching image gets the overlay with no config
-# plumbing. `patch --forward` makes it idempotent.
-K3_OVERLAY_APPLIED=0
+# Apply the tuned nightly overlay directly into site-packages.
 # Absolute, always: the patch is fed to `patch` on the far side of a
 # `cd "$SITE_PKGS"`, so a relative path resolves against site-packages and
 # silently vanishes even though the -f test passed from the workspace root.
+K3_OVERLAY_APPLIED=0
 K3_OVERLAY_PATCH="${K3_OVERLAY_PATCH:-$(cd "$(dirname "$0")" && pwd)/k3_patches/vllm_nightly_46638857_k3_tuned.patch}"
 case "$K3_OVERLAY_PATCH" in
     /*) ;;
     *) K3_OVERLAY_PATCH="$(cd "$(dirname "$K3_OVERLAY_PATCH")" && pwd)/$(basename "$K3_OVERLAY_PATCH")" ;;
 esac
-if [ -f "$K3_OVERLAY_PATCH" ]; then
-    SITE_PKGS=$(python3 -c 'import vllm,os;print(os.path.dirname(os.path.dirname(vllm.__file__)))')
-    if ( cd "$SITE_PKGS" && patch -p1 --forward --batch --dry-run < "$K3_OVERLAY_PATCH" ) \
-            >/tmp/k3_overlay_dryrun.log 2>&1; then
-        echo "Applying K3 overlay $K3_OVERLAY_PATCH into $SITE_PKGS"
-        if ( cd "$SITE_PKGS" && patch -p1 --forward --batch < "$K3_OVERLAY_PATCH" ); then
-            K3_OVERLAY_APPLIED=1
-        elif [ "${REQUIRE_K3_OVERLAY:-0}" = "1" ]; then
-            exit 1
-        fi
-    else
-        # Print why. A silent skip here costs a whole CI cycle to diagnose, and
-        # the same diff can apply against the registry image while failing
-        # against a pre-converted squashfs of nominally the same tag.
-        echo "K3 overlay does not match this image, skipping: $K3_OVERLAY_PATCH"
-        echo "--- overlay dry-run output (first 40 lines) ---"
-        head -40 /tmp/k3_overlay_dryrun.log || true
-        echo "--- installed vLLM ---"
-        python3 -c 'import vllm;print("vllm",vllm.__version__)' || true
-        echo "----------------------------------------------"
-        if [ "${REQUIRE_K3_OVERLAY:-0}" = "1" ]; then
-            exit 1
-        fi
-    fi
-elif [ "${REQUIRE_K3_OVERLAY:-0}" = "1" ]; then
-    echo "Required K3 overlay is missing: $K3_OVERLAY_PATCH" >&2
-    exit 1
-fi
+SITE_PKGS=$(python3 -c 'import vllm,os;print(os.path.dirname(os.path.dirname(vllm.__file__)))')
+echo "Applying K3 overlay $K3_OVERLAY_PATCH into $SITE_PKGS"
+( cd "$SITE_PKGS" && patch -p1 --forward --batch < "$K3_OVERLAY_PATCH" )
+K3_OVERLAY_APPLIED=1
 
 # ---- In-container patches ----------------------------------------------------
 # Four fixes, all confined to this container's site-packages, all idempotent
