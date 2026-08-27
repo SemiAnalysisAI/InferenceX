@@ -424,10 +424,24 @@ exec python3 bench/run_ep.py "$@"
 BASH
 }
 
+# Slurm job name for dashboard correlation. inferencex-dash's cluster collector
+# samples allocation names (sacct JobName) and the dashboard joins them against
+# the GHA job's runner_name — the production runners' convention
+# (--job-name="$RUNNER_NAME"). Fall back to a fixed label for hand-driven runs;
+# reject anything that is not a plain Slurm-safe token rather than quoting it.
+collx_slurm_job_name() {
+  local name="${RUNNER_NAME:-}"
+  [[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]] || name="collectivex"
+  printf '%s' "$name"
+}
+
 # Allocate via salloc's stable grant message and assign JOB_ID in this shell.
 # Record it so workflow cleanup can release a launcher interrupted by Actions.
+# The job name is prepended so a caller-supplied --job-name still wins (salloc
+# takes the last occurrence).
 collx_salloc_jobid() {
   local log_label=scheduler-allocation log job_id root="${COLLX_JOB_ROOT:-}"
+  set -- --job-name="$(collx_slurm_job_name)" "$@"
   case "${COLLX_SALLOC_ATTEMPT:-1}" in
     1) ;;
     2|3) log_label+="-a${COLLX_SALLOC_ATTEMPT}" ;;
