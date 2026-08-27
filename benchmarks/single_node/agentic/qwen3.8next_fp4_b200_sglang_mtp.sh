@@ -12,6 +12,10 @@ set -x
 # matches the same flag the Qwen3.5 NVFP4 sibling uses. The model ships native
 # MTP modules (kept unquantized by the checkpoint's ignore list), so NEXTN
 # needs no external drafter.
+#
+# TP1: the cookbook's verified single-node command for this model is --tp 1 on
+# both Blackwell parts. 126 GiB of NVFP4 weights fit on one B200, so the
+# model is not sharded and every rank-crossing collective disappears.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -116,14 +120,12 @@ export SGLANG_ENABLE_FLASHINFER_GEMM=true
 export SGLANG_TIMEOUT_KEEP_ALIVE=1800
 
 if [ "${EVAL_ONLY:-false}" != "true" ]; then
-    # Qwen3.8-Flash-Next acceptance length, SPEED-Bench coding.
-    # --speculative-num-steps 3 with 4 draft tokens is 3 speculative
-    # tokens per verification step, i.e. the MTP=3 cell -> AL 3.24.
-    # Measured thinking=off in speedbench-al run 33031708148; the
-    # thinking=on collection is still in flight, so this is an
-    # interim value and is not yet a committed golden_al_distribution
-    # curve. Refresh once qwen3.8next_mtp.yaml lands.
-    export SGLANG_SIMULATE_ACC_LEN=3.24
+    # golden_al_distribution/qwen3.8next_mtp.yaml:
+    # qwen3.8-flash-next-fp8.thinking_on[3] = 2.32.
+    # --speculative-num-steps 3 with 4 draft tokens is 3 speculative tokens
+    # per verification step, i.e. the MTP=3 cell. AgentX replays run with
+    # thinking on, so the thinking_on row is the right one.
+    export SGLANG_SIMULATE_ACC_LEN=2.32
     export SGLANG_SIMULATE_ACC_METHOD=match-expected
     export SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token
 fi
@@ -136,28 +138,27 @@ SGLANG_CMD=(
     --port "$PORT"
     --trust-remote-code
     "${PARALLEL_ARGS[@]}"
-    --enable-symm-mem
-    --quantization modelopt_fp4
-    --fp4-gemm-backend flashinfer_cutlass
-    --kv-cache-dtype fp8_e4m3
+    # Verified flags from the SGLang cookbook playground for this model on
+    # B200 / NVFP4 / single node. Quantization is read from the
+    # checkpoint, so no --quantization flag; the hybrid GDN linear-attention
+    # layers take their own backends rather than --attention-backend.
+    --linear-attn-prefill-backend flashinfer
+    --linear-attn-decode-backend flashinfer
     --mamba-ssm-dtype bfloat16
-    --attention-backend trtllm_mha
-    --moe-runner-backend flashinfer_trtllm
-    --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
+    --speculative-algorithm NEXTN
+    --speculative-num-steps 3
+    --speculative-eagle-topk 1
+    --speculative-num-draft-tokens 4
+    --reasoning-parser auto
+    # NEXTN silently resets --max-running-requests to 48 when it is unset, so
+    # this must stay explicit and sized to the AgentX concurrency.
     --max-running-requests "$MAX_RUNNING_REQUESTS"
-    --max-prefill-tokens 16384
-    --chunked-prefill-size 16384
+    --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
     --mem-fraction-static 0.80
     --stream-interval 50
     --scheduler-recv-interval "$SCHEDULER_RECV_INTERVAL"
     "${TOKENIZER_ARGS[@]}"
     --tokenizer-path "$MODEL"
-    --reasoning-parser qwen3
-    --tool-call-parser qwen3_coder
-    --speculative-algorithm NEXTN
-    --speculative-num-steps 3
-    --speculative-eagle-topk 1
-    --speculative-num-draft-tokens 4
     --enable-metrics
     --enable-cache-report
     "${CACHE_ARGS[@]}"
