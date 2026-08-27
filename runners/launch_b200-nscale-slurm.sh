@@ -108,7 +108,7 @@ if [[ "$USES_DCGM_POWER" == "1" ]]; then
         mkdir -p recipes/vllm/kimi-k2.6
         cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k2.6" recipes/vllm/kimi-k2.6
     fi
-elif [[ "$IS_AGENTIC" == "1" && $MODEL_PREFIX == "glm5.1" && $FRAMEWORK == "tilert" ]]; then
+elif [[ $MODEL_PREFIX == "glm5.1" && $FRAMEWORK == "tilert" ]]; then
     git clone "$TILERT_SRT_SLURM_URL" "$SRT_REPO_DIR" || exit 1
     cd "$SRT_REPO_DIR" || exit 1
     git checkout "$TILERT_SRT_SLURM_PIN" || exit 1
@@ -116,9 +116,9 @@ elif [[ "$IS_AGENTIC" == "1" && $MODEL_PREFIX == "glm5.1" && $FRAMEWORK == "tile
         echo "Error: srt-slurm HEAD does not match TILERT_SRT_SLURM_PIN=$TILERT_SRT_SLURM_PIN" >&2
         exit 1
     }
-    mkdir -p recipes/tilert/glm5.1/b200-fp8/agentic || exit 1
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/tilert/glm5.1/b200-fp8/agentic" \
-        recipes/tilert/glm5.1/b200-fp8/agentic || exit 1
+    mkdir -p recipes/tilert/glm5.1/b200-fp8 || exit 1
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/tilert/glm5.1/b200-fp8" \
+        recipes/tilert/glm5.1/b200-fp8 || exit 1
 elif [[ "$IS_AGENTIC" == "1" && $MODEL_PREFIX == "kimik3" ]]; then
     # Pin the tested renderer so branch movement cannot change generated rank
     # commands between sweep points.
@@ -180,7 +180,6 @@ NGINX_SQUASH_FILE="$SQUASH_DIR/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh
 enroot_uri_for_image() {
     local image_ref="$1"
     local first_component="${image_ref%%/*}"
-
     if [[ "$image_ref" == */* && (
         "$first_component" == *.* ||
         "$first_component" == *:* ||
@@ -262,10 +261,18 @@ if [[ "$IS_AGENTIC" == "1" ]]; then
 fi
 if [[ $FRAMEWORK == "tilert" ]]; then
     TILERT_WEIGHTS_HOST_PATH="/data/home/sa-shared/gharunners/tilert-cache"
-    mkdir -p "$TILERT_WEIGHTS_HOST_PATH"
-    DEFAULT_MOUNTS_BLOCK="${DEFAULT_MOUNTS_BLOCK}
+    mkdir -p "$HF_HUB_CACHE_HOST_PATH" "$TILERT_WEIGHTS_HOST_PATH"
+    chmod 777 "$HF_HUB_CACHE_HOST_PATH" 2>/dev/null || true
+    if [[ -n "$DEFAULT_MOUNTS_BLOCK" ]]; then
+        DEFAULT_MOUNTS_BLOCK="${DEFAULT_MOUNTS_BLOCK}
   ${GITHUB_WORKSPACE}: /infmax-workspace
   ${TILERT_WEIGHTS_HOST_PATH}: ${TILERT_WEIGHTS_HOST_PATH}"
+    else
+        DEFAULT_MOUNTS_BLOCK="default_mounts:
+  ${HF_HUB_CACHE_HOST_PATH}: /hf_hub_cache
+  ${GITHUB_WORKSPACE}: /infmax-workspace
+  ${TILERT_WEIGHTS_HOST_PATH}: ${TILERT_WEIGHTS_HOST_PATH}"
+    fi
 fi
 
 SRTCTL_ROOT="${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"

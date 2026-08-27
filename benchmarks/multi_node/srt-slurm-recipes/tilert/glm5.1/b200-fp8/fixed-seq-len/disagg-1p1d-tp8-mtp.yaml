@@ -1,0 +1,113 @@
+name: "b200-glm51-tilert-fixed-disagg-1p1d-tp8-mtp"
+
+model:
+  path: "hf:zai-org/GLM-5.1-FP8"
+  container: "tilert-decode"
+  precision: "fp8"
+
+identity:
+  model:
+    repo: "zai-org/GLM-5.1-FP8"
+  container:
+    image: "ghcr.io/tile-ai/tilert:0.1.5"
+  frameworks:
+    tilert: "0.1.5.post3"
+    vllm: "0.26.0"
+    nixl: "1.3.1"
+
+dynamo:
+  install: false
+
+setup_script: tilert_setup.sh
+
+slurm:
+  time_limit: "04:00:00"
+
+resources:
+  gpu_type: "b200"
+  gpus_per_node: 8
+  prefill_nodes: 1
+  decode_nodes: 1
+  prefill_workers: 1
+  decode_workers: 1
+  gpus_per_prefill: 8
+  gpus_per_decode: 8
+
+frontend:
+  type: tilert-router
+  enable_multiple_frontends: false
+  env:
+    TILERT_ROLE: router
+  args:
+    parser: none
+    queue-timeout: 0
+
+backend:
+  type: tilert
+  prefill_container: "tilert-prefill"
+  model_profile: "glm5"
+  weight_model_type: "glm-5"
+  weights_dir: "/data/home/sa-shared/gharunners/tilert-cache/glm5.1-fp8-8shard"
+  max_seq_len: 202752
+  kv_cache_dtype: "fp8"
+  prefill_kv_cache_dtype: "fp8_ds_mla"
+  transport: nixl
+  with_mtp: true
+  speculative_tokens: 1
+  prefill_environment: &common_environment
+    HF_HOME: "/hf_hub_cache"
+    HF_HUB_CACHE: "/hf_hub_cache/hub"
+    HUGGINGFACE_HUB_CACHE: "/hf_hub_cache/hub"
+    PYTHONUNBUFFERED: "1"
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_MEMTYPE_REG_WHOLE: "n"
+  decode_environment:
+    <<: *common_environment
+  tilert_config:
+    prefill:
+      enforce-eager: true
+      trust-remote-code: true
+      gpu-memory-utilization: 0.75
+
+srun_options:
+  container-writable: ""
+  container-remap-root: ""
+
+health_check:
+  max_attempts: 720
+  interval_seconds: 5
+
+benchmark:
+  type: custom
+  command: |
+    set -euo pipefail
+    result_dir="/logs/${ISL}isl${OSL}osl"
+    mkdir -p "$result_dir"
+    for concurrency in $CONC_LIST; do
+      num_prompts=$((concurrency * 10))
+      if (( num_prompts < 16 )); then
+        num_prompts=16
+      fi
+      python /infmax-workspace/utils/bench_serving/benchmark_serving.py \
+        --backend openai-chat \
+        --base-url "http://${SRT_FRONTEND_HOST}:${SRT_FRONTEND_PORT}" \
+        --endpoint /v1/chat/completions \
+        --dataset-name random \
+        --model zai-org/GLM-5.1-FP8 \
+        --tokenizer zai-org/GLM-5.1-FP8 \
+        --random-input-len "$ISL" \
+        --random-output-len "$OSL" \
+        --random-range-ratio "$RANDOM_RANGE_RATIO" \
+        --num-prompts "$num_prompts" \
+        --max-concurrency "$concurrency" \
+        --ignore-eos \
+        --use-chat-template \
+        --trust-remote-code \
+        --save-result \
+        --result-dir "$result_dir" \
+        --result-filename "results_concurrency_${concurrency}_gpus_16_ctx_8_gen_8.json"
+    done
+  env:
+    HF_HOME: "/hf_hub_cache"
+    HF_HUB_CACHE: "/hf_hub_cache/hub"
+    HUGGINGFACE_HUB_CACHE: "/hf_hub_cache/hub"
