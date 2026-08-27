@@ -3,8 +3,8 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "$0")" && pwd)"
 
-# DSpark K=6 counterpart of the tuned nightly-46638857 no-spec path. Retain
-# its model, graph, and kernel tuning while using a GPU-resident TP8-only cache.
+# DSpark counterpart of the tuned nightly-46638857 no-spec path. Low-concurrency
+# GPU-resident TP8-only cells use K=6; DCP8/SimpleCPU cells use K=3.
 if [ "${SPEC_DECODING:-none}" != "mtp" ]; then
     echo "Error: this recipe requires DSpark speculative decoding." >&2
     exit 1
@@ -19,7 +19,21 @@ if [ -r /proc/sys/kernel/numa_balancing ]; then
 fi
 
 export SPEC_DECODE=true
-export SPEC_NUM_TOKENS=6
+case "${DCP_SIZE:-1}:${KV_OFFLOADING:-none}:${KV_OFFLOAD_BACKEND:-}" in
+    1:none:)
+        export SPEC_NUM_TOKENS=6
+        ;;
+    8:dram:vllm-simple)
+        export SPEC_NUM_TOKENS=3
+        export DCP_COMM_BACKEND=a2a
+        export SIMPLE_LAZY_OFFLOAD=true
+        export SIMPLE_LAZY_OFFLOAD_WATERMARK_RATIO=1.0
+        ;;
+    *)
+        echo "Error: unsupported Kimi-K3 DSpark topology: DCP_SIZE=${DCP_SIZE:-1}, KV_OFFLOADING=${KV_OFFLOADING:-none}, KV_OFFLOAD_BACKEND=${KV_OFFLOAD_BACKEND:-}" >&2
+        exit 1
+        ;;
+esac
 export K3_OVERLAY_PATCH="$script_dir/k3_patches/vllm_nightly_46638857_k3_tuned.patch"
 export REQUIRE_K3_OVERLAY=1
 

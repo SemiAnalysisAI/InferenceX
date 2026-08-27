@@ -738,8 +738,9 @@ kimik3-fp4-mi355x-vllm-agentic-mtp-dcp-isolate:
       search-space:
       - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: none, conc-list: [4], spec-decoding: mtp }
 
-# Tuned no-spec Kimi-K3 stack on nightly-46638857: DCP8/A2A, AITER MLA,
-# full CUDA graphs, and lazy SimpleCPU KV offload with the bounded-LRU fix.
+# Tuned Kimi-K3 stack on nightly-46638857: DCP8/A2A, AITER MLA, full CUDA
+# graphs, and lazy SimpleCPU KV offload with the bounded-LRU fix. The c8/c12
+# latency points use DSpark K=3; c16 and above use no speculative decoding.
 # 0.171 of the AgentX 3 TB host-memory ceiling resolves to 512 GB.
 kimik3-fp4-mi355x-vllm-agentic-dcp-simple-v466:
   image: vllm/vllm-openai-rocm:nightly-46638857fdbb30e0c232c9e8f9cb1ff6d6f545c3
@@ -753,7 +754,8 @@ kimik3-fp4-mi355x-vllm-agentic-dcp-simple-v466:
     agentic-coding:
     - dram-utilization: 0.171
       search-space:
-      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [32, 40], spec-decoding: none }
+      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [8, 12], spec-decoding: mtp }
+      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [16, 32, 40, 52], spec-decoding: none }
 
 # GPU-resident baseline for the v466 DSpark K=6 latency points. DCP and the
 # external KV connector are disabled so TP8 is the only parallel dimension.

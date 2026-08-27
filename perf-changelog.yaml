@@ -6119,3 +6119,12 @@
     - "Add c1/c4 GPU-resident baselines for the MI355X v466 DSpark K=6 configuration using TP8 only, with DCP and external KV offload disabled."
     - "Pin synthetic acceptance to the committed probabilistic/block golden AL of 3.75 for K=6."
   pr-link: XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-dcp-simple-v466
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Run DSpark K=3 at c8/c12 and the validated no-spec TP8/DCP8 SimpleCPU configuration at c16/c32/c40/c52."
+    - "Use the committed probabilistic/block golden acceptance length 3.00 for K=3 while retaining A2A, AITER MLA query quantization, full CUDA graphs, and the 512 GB lazy SimpleCPU tier."
+  pr-link: XXX
