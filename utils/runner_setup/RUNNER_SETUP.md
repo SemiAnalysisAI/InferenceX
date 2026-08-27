@@ -209,9 +209,10 @@ hardware label bypasses admission accounting.
 Set `NODE_SLOT_SCHEDULER_ENABLED=true` only after the deployed priority
 controller supports `nodes:N` and `ci-lease-*`. `PRIORITY_SCHEDULER_ENABLED`
 must also remain enabled. If either variable is disabled, workflows omit
-`nodes:N` and retain the existing unweighted behavior. The priority score also
-subtracts `0.001` per additional node so otherwise equal work prefers smaller
-allocations without overriding the existing business-priority signals.
+`nodes:N` and retain the existing unweighted behavior. Node count is capacity
+demand, not a business-priority signal. The dashboard controller packs jobs
+within each business-priority band, maximizing admitted jobs and then occupied
+nodes without allowing lower-priority work to displace a higher-priority band.
 
 Aggregated multi-node search-space entries must declare one aggregate `worker`
 role and `num-nodes`; that value becomes the generated `node-count` directly.

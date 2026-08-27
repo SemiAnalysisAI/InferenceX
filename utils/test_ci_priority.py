@@ -54,22 +54,30 @@ def test_main_branch_jobs_receive_an_automatic_boost():
     ) == Decimal("3.000")
 
 
-def test_smaller_node_allocations_win_otherwise_equal_priority_ties():
+def test_kimi_k3_and_dsv4_receive_the_same_model_priority():
+    entry = {"runner": "h100", "framework": "trt"}
+
+    assert calculate_priority(
+        {**entry, "model-prefix": "kimik3"}, POLICY
+    ) == calculate_priority({**entry, "model-prefix": "dsv4"}, POLICY)
+
+
+def test_node_count_does_not_change_business_priority():
     entry = {"runner": "h100", "framework": "trt"}
 
     assert calculate_priority({**entry, "node-count": 1}, POLICY) == Decimal("1.000")
-    assert calculate_priority({**entry, "node-count": 2}, POLICY) == Decimal("0.999")
-    assert calculate_priority({**entry, "node-count": 3}, POLICY) == Decimal("0.998")
+    assert calculate_priority({**entry, "node-count": 2}, POLICY) == Decimal("1.000")
+    assert calculate_priority({**entry, "node-count": 3}, POLICY) == Decimal("1.000")
 
 
-def test_node_count_tiebreaker_survives_classifier_projection():
+def test_node_count_validation_survives_classifier_projection():
     entry = {"runner": "h100", "framework": "trt", "node-count": 3}
 
     assert calculate_priority(
         entry,
         POLICY,
         PriorityContext(criteria=frozenset()),
-    ) == Decimal("0.998")
+    ) == Decimal("1.000")
 
 
 @pytest.mark.parametrize("node_count", [0, -1, 1.5, True])
