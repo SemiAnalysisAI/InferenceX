@@ -425,7 +425,7 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     mkdir -p recipes/vllm/deepseek-v4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
 elif [[ $FRAMEWORK == "vllm" && $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
-    SRT_SLURM_PIN="76e7d76961b2dcb27cb05c1e9e0910ceb75104ec"
+    SRT_SLURM_PIN="a2e458649f2d9de246954aaf0a900fc664811217"
     git clone https://github.com/SemiAnalysisAI/srt-slurm.git "$SRT_REPO_DIR" || exit 1
     cd "$SRT_REPO_DIR" || exit 1
     git checkout "$SRT_SLURM_PIN" || exit 1
