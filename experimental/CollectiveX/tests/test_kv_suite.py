@@ -254,10 +254,11 @@ class KVGrid(unittest.TestCase):
         base.update(overrides)
         return argparse.Namespace(**base)
 
-    def test_descriptor_budget_sheds_batches_but_keeps_a_scaling_step(self):
+    def test_descriptor_budget_sheds_batches_but_keeps_a_chartable_ladder(self):
         # 512k page-16 is ~2.1M descriptors per request: over budget at any
-        # batch above 1, but the two smallest batches must survive so the
-        # batch axis keeps a one-to-two scaling step everywhere. The 32k cells
+        # batch above 1, but the LADDER_FLOOR smallest batches must survive so
+        # every point keeps a chartable batch ladder (the frontier draws its
+        # line through the ladder at the largest measured ISL). The 32k cells
         # of the original grid must keep their full batch ladder.
         import run_kv
 
@@ -268,13 +269,13 @@ class KVGrid(unittest.TestCase):
         self.assertEqual(allowed[8192, 16], [1, 2, 4, 8, 16, 32, 64])
         self.assertEqual(allowed[32768, 16], [1, 2, 4, 8, 16])
         self.assertEqual(allowed[32768, 64], [1, 2, 4, 8, 16, 32])
-        self.assertEqual(allowed[131072, 16], [1, 2, 4])
-        self.assertEqual(allowed[131072, 64], [1, 2, 4, 8])
-        self.assertEqual(allowed[524288, 16], [1, 2])
-        self.assertEqual(allowed[524288, 64], [1, 2])
+        self.assertEqual(allowed[131072, 16], [1, 2, 4, 8, 16])
+        self.assertEqual(allowed[131072, 64], [1, 2, 4, 8, 16])
+        self.assertEqual(allowed[524288, 16], [1, 2, 4, 8, 16])
+        self.assertEqual(allowed[524288, 64], [1, 2, 4, 8, 16])
         for cfg, batch_list in points:
             self.assertLessEqual(cfg["pool_bytes"], run_kv.POOL_BUDGET)
-            for batch in batch_list[2:]:
+            for batch in batch_list[run_kv.LADDER_FLOOR:]:
                 self.assertLessEqual(batch * cfg["descs"], run_kv.DESC_BUDGET)
 
     def test_pool_budget_sheds_largest_batches_not_the_point(self):
@@ -295,12 +296,12 @@ class KVGrid(unittest.TestCase):
         self.assertEqual(points[0][1], [1, 4])
         self.assertLessEqual(points[0][0]["pool_bytes"], budget)
 
-    def test_pool_budget_overrides_the_two_batch_floor(self):
-        # The descriptor floor keeps the two smallest batches, but the pool
-        # budget is a hard memory limit and must still shed a floor-kept
-        # batch. Pin the budget between 512k page-16's batch-1 and batch-2
-        # pool sizes: batch 2 survives the descriptor floor, then the pool
-        # loop must drop it, leaving [1].
+    def test_pool_budget_overrides_the_ladder_floor(self):
+        # The descriptor floor keeps the LADDER_FLOOR smallest batches, but
+        # the pool budget is a hard memory limit and must still shed a
+        # floor-kept batch. Pin the budget to 512k page-16's batch-1 pool
+        # size: every larger batch survives the descriptor floor, then the
+        # pool loop must drop them all, leaving [1].
         import kv_workload
         import run_kv
 

@@ -50,13 +50,15 @@ case "$COLLX_BENCH" in
   nixl | mooncake | mori-io)
     # The dense kv grid (six ISLs, twelve batch rungs, two trials) is ~1.6x
     # the four-ISL grid whose slowest lane here (h200 mooncake) was ~50
-    # minutes of case work, so budget ~105 minutes. A still-short exclusive
-    # ask backfills into scheduling gaps that a multi-hour one waits out
-    # (h200 pool contention). The guard clears the projected case with real
-    # margin yet fires before the allocation dies, keeping a slow case a
-    # clean per-case kill instead of a lost allocation.
-    TIME_MIN=180
-    export COLLX_RUN_TIMEOUT="${COLLX_RUN_TIMEOUT:-9000}"
+    # minutes of case work (~105 minutes), and the five-rung ladder floor in
+    # run_kv._grid is a further 1.63x of descriptor work, so budget ~170
+    # minutes. A still-short exclusive ask backfills into scheduling gaps
+    # that a multi-hour one waits out (h200 pool contention). The guard
+    # clears the projected case with real margin yet fires before the
+    # allocation dies, keeping a slow case a clean per-case kill instead of
+    # a lost allocation.
+    TIME_MIN=210
+    export COLLX_RUN_TIMEOUT="${COLLX_RUN_TIMEOUT:-11400}"
     ;;
 esac
 IMAGE="$COLLX_IMAGE"

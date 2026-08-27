@@ -38,11 +38,15 @@ POOL_BUDGET = 64 << 30
 # Burst posting ceiling: a burst posts batch x descs descriptors, and the
 # per-descriptor floor makes time linear in that product (a 512k-ISL page-16
 # request alone is ~2.1M descriptors). Sized to keep every <=32k cell of the
-# original grid while holding the slowest lane inside the per-case guard. The
-# two smallest requested batches ride over this budget so every point keeps a
-# one-to-two scaling step on the batch axis (512k page-16 runs its batch-2
-# burst ~2x over budget by design — bounded, and priced into the gb-nv guard).
+# original grid while holding the slowest lane inside the per-case guard.
 DESC_BUDGET = 2_250_000
+# The LADDER_FLOOR smallest requested batches ride over DESC_BUDGET anyway:
+# the frontier chart draws its line through the batch ladder at the largest
+# measured ISL, and budget shedding alone leaves that ladder 2-3 points —
+# not interpretable. Five rungs keep every point chartable while bounding
+# the overrun (512k page-16 tops out at batch 6, ~5.6x budget; the extra
+# work is ~1.6x grid-wide and is priced into all three kv launcher guards).
+LADDER_FLOOR = 5
 
 
 def add_kv_args(ap: argparse.ArgumentParser) -> None:
@@ -127,12 +131,12 @@ def kv_case(args) -> dict:
 
 def _grid(args) -> tuple[list[tuple[dict, list[int]]], list[int], list[int]]:
     """(cfg, allowed_batches) per (isl, page) point. Batches whose burst would
-    exceed DESC_BUDGET are shed first (the two smallest requested batches are
-    always kept, so a single request stays measurable at every point and the
-    batch axis keeps a one-to-two scaling step), then the point is planned for
-    the largest surviving batch whose pool fits POOL_BUDGET. Smaller batches
-    share that cfg (and pool), so batch is the only variable across a point's
-    rows."""
+    exceed DESC_BUDGET are shed first (the LADDER_FLOOR smallest requested
+    batches are always kept, so every point carries a chartable batch ladder
+    even where a single request nearly fills the budget), then the point is
+    planned for the largest surviving batch whose pool fits POOL_BUDGET.
+    Smaller batches share that cfg (and pool), so batch is the only variable
+    across a point's rows."""
     preset = args.workload_name.removeprefix("kv-")
     isls = [int(v) for v in args.isl_ladder.split()]
     pages = [int(v) for v in args.page_tokens.split()]
@@ -144,7 +148,8 @@ def _grid(args) -> tuple[list[tuple[dict, list[int]]], list[int], list[int]]:
             probe = kv_workload.plan_config(preset, args.precision, isl, page,
                                             args.pool_slack)
             allowed = [batch for batch in batches
-                       if batch in batches[:2] or batch * probe["descs"] <= DESC_BUDGET]
+                       if batch in batches[:LADDER_FLOOR]
+                       or batch * probe["descs"] <= DESC_BUDGET]
             while allowed:
                 cfg = kv_workload.plan_config(preset, args.precision, isl, page,
                                               args.pool_slack, batch_max=allowed[-1])

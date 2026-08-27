@@ -38,11 +38,12 @@ case "$COLLX_BENCH" in
   mori-io | mooncake)
     # kv-transfer suite. The dense kv grid (six ISLs, twelve batch rungs,
     # two trials) is ~1.6x the four-ISL grid whose mi355x mori-io leg ran
-    # ~55 minutes, so the flat 60-minute ask would now die mid-case; the
-    # guard fires before the raised allocation does, keeping a slow case a
-    # clean per-case kill instead of a lost allocation.
-    TIME_MIN=180
-    export COLLX_RUN_TIMEOUT="${COLLX_RUN_TIMEOUT:-9000}"
+    # ~55 minutes (~90 minutes), and the five-rung ladder floor in
+    # run_kv._grid is a further 1.63x of descriptor work, so ~145 minutes;
+    # the guard fires before the raised allocation does, keeping a slow
+    # case a clean per-case kill instead of a lost allocation.
+    TIME_MIN=210
+    export COLLX_RUN_TIMEOUT="${COLLX_RUN_TIMEOUT:-11400}"
     ;;
   *) collx_die "unsupported AMD backend: $COLLX_BENCH" ;;
 esac
