@@ -246,3 +246,15 @@ def test_amd_multinode_container_forwards_eval_concurrency_list() -> None:
     ).read_text()
     assert 'expected_concs="${EVAL_CONC}"' in workflow
     assert 'validate_scores.py --expected-concs "${expected_concs}"' in workflow
+
+
+def test_amd_srt_launcher_streams_canonical_slurm_stdout() -> None:
+    launcher = (
+        Path(__file__).resolve().parents[2]
+        / "runners"
+        / "launch_mi355x-amds-srt.sh"
+    ).read_text()
+
+    assert 'source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"' in launcher
+    assert 'LOG_FILE="${OUTPUT_LOG_DIR}/sweep_${JOB_ID}.log"' in launcher
+    assert 'stream_slurm_job_log "$JOB_ID" "$LOG_FILE"' in launcher
