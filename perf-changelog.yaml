@@ -6563,3 +6563,16 @@
     - "Filter AgentX traces at the same 202,752-token context limit used by both TileRT roles so oversized Weka trajectories are excluded before replay."
     - "Pin SemiAnalysisAI/srt-slurm PR #10 commit d1e6c97b3baf3e87103b6d83189544c3c7d61c38, stacked on the AMD/native-router PR #7 and base runtime PR #1, including explicit native HTTP dependencies, GLM-5.1-compatible Transformers v5 router tokenization, incomplete-snapshot recovery, backend-declared conversion GPU resources, pre-container NVIDIA driver-hook activation, and lossless Slurm container-environment exports."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2750
+
+- config-keys:
+    - qwen3.5-fp4-gb300-dynamo-trt
+    - qwen3.5-fp4-gb300-dynamo-trt-mtp
+  description:
+    - "Refresh Qwen3.5-397B-A17B-NVFP4 GB300 disaggregated TensorRT-LLM+Dynamo STP and MTP (3-token, with one 2-token point) 8k1k configurations with a new locally validated recipe sweep from srt-slurm."
+    - "Image bumped from nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc18 to 1.3.0rc24; kv-p2p-transfer switched from ucx to nixl for the STP config to match the new recipes' NIXL cache-transceiver backend (the MTP config was already nixl)."
+    - "Switch checkpoint from nvidia/Qwen3.5-397B-A17B-NVFP4 to nvidia/Qwen3.5-397B-A17B-NVFP4-V2 (https://huggingface.co/nvidia/Qwen3.5-397B-A17B-NVFP4-V2), matching the checkpoint already used by the dynamo-sglang and dynamo-trt-agentic-disagg GB300 configs."
+    - "STP: 10 configs from 1P2D (conc 42) to 24P1D (conc 8192)."
+    - "MTP: 10 configs from 1P2D (conc 20) to 26P1D (conc 4301, 2-token draft); the 24P1D/conc 8192 tail point shares its recipe with the STP curve, where MTP no longer helps at saturation."
+    - "Recipes sourced from srt-slurm (recipes/trtllm/qwen3.5-fp4/inferencex/gb300/{mtp,stp})."
+    - "Runner: launch_gb300-nv.sh bumped from NVIDIA/srt-slurm@v1.0.29 to v1.0.72 for the dynamo-trt+qwen3.5+fp4 path."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2730
