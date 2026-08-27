@@ -48,9 +48,15 @@ NGPUS="${COLLX_NGPUS:-$((NODES * GPN))}"
 TIME_MIN="${COLLX_TIME:-$DEFAULT_TIME}"
 case "$COLLX_BENCH" in
   nixl | mooncake | mori-io)
-    # kv cases finish in ~45 minutes; a short exclusive ask backfills into
-    # scheduling gaps that a multi-hour one waits out (h200 pool contention).
-    TIME_MIN=150
+    # The dense kv grid (six ISLs, twelve batch rungs, two trials) is ~1.6x
+    # the four-ISL grid whose slowest lane here (h200 mooncake) was ~50
+    # minutes of case work, so budget ~105 minutes. A still-short exclusive
+    # ask backfills into scheduling gaps that a multi-hour one waits out
+    # (h200 pool contention). The guard clears the projected case with real
+    # margin yet fires before the allocation dies, keeping a slow case a
+    # clean per-case kill instead of a lost allocation.
+    TIME_MIN=180
+    export COLLX_RUN_TIMEOUT="${COLLX_RUN_TIMEOUT:-9000}"
     ;;
 esac
 IMAGE="$COLLX_IMAGE"

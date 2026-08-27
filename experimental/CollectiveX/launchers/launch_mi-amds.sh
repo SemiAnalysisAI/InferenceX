@@ -35,7 +35,15 @@ MOUNT_DIR=/ix
 TS="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
 case "$COLLX_BENCH" in
   mori | uccl-ep) ;;
-  mori-io | mooncake) ;;  # kv-transfer suite
+  mori-io | mooncake)
+    # kv-transfer suite. The dense kv grid (six ISLs, twelve batch rungs,
+    # two trials) is ~1.6x the four-ISL grid whose mi355x mori-io leg ran
+    # ~55 minutes, so the flat 60-minute ask would now die mid-case; the
+    # guard fires before the raised allocation does, keeping a slow case a
+    # clean per-case kill instead of a lost allocation.
+    TIME_MIN=180
+    export COLLX_RUN_TIMEOUT="${COLLX_RUN_TIMEOUT:-9000}"
+    ;;
   *) collx_die "unsupported AMD backend: $COLLX_BENCH" ;;
 esac
 

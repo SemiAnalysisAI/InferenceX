@@ -7,8 +7,10 @@
     ]
   },
   "isl_ladder": [
+    2048,
     8192,
     32768,
+    65536,
     131072,
     524288
   ],
@@ -19,10 +21,15 @@
   "batch_sizes": [
     1,
     2,
+    3,
     4,
+    6,
     8,
+    12,
     16,
+    24,
     32,
+    48,
     64
   ],
   "ops": [
@@ -32,7 +39,7 @@
   "timing": {
     "warmup_per_trial": 2,
     "reps_per_trial": 8,
-    "trials_per_point": 3
+    "trials_per_point": 2
   },
   "pool_slack": 2.0,
   "seed": 67

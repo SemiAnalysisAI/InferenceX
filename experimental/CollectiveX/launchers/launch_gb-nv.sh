@@ -32,9 +32,11 @@ if [ "$PRODUCT" = gb200 ]; then default_time=30; else default_time=90; fi
 TIME_MIN="${COLLX_TIME:-$default_time}"
 case "$COLLX_BENCH" in
   nixl | mooncake)
-    # kv cases run up to ~135 minutes on the mnnvl descriptor floor; keep the
-    # allocation ask small enough to backfill on a contended pool.
-    TIME_MIN=180
+    # The dense grid (six ISLs, twelve batch rungs, two trials) is roughly
+    # 1.6x the honest work of the four-ISL grid that ran ~135 minutes on the
+    # mnnvl descriptor floor; 240 keeps the 2-node x 1-GPU ask small enough
+    # to backfill on a contended pool while clearing the raised guard below.
+    TIME_MIN=240
     ;;
 esac
 IMAGE="$COLLX_IMAGE"
@@ -52,12 +54,13 @@ export COLLX_NGPUS="$NGPUS"
 case "$COLLX_BENCH" in
   deepep-v2 | nccl-ep | flashinfer-ep) ;;
   nixl | mooncake)
-    # A dense kv grid on the mnnvl descriptor floor is ~135 minutes of honest
-    # work, nearly all of it timed bursts (run 31565324148: 8101 s job wall,
-    # 7967 s of burst p50s). The guard must clear that with real margin yet
-    # still fire before the 180-minute allocation dies, so the failure stays a
+    # The four-ISL grid was ~135 minutes of honest work on the mnnvl
+    # descriptor floor, nearly all of it timed bursts (run 31565324148:
+    # 8101 s job wall, 7967 s of burst p50s); the dense grid is ~1.6x that,
+    # so ~215 minutes. The guard must clear it with real margin yet still
+    # fire before the 240-minute allocation dies, so the failure stays a
     # clean per-case kill instead of a lost allocation.
-    export COLLX_RUN_TIMEOUT="${COLLX_RUN_TIMEOUT:-10500}"
+    export COLLX_RUN_TIMEOUT="${COLLX_RUN_TIMEOUT:-13200}"
     ;;  # kv-transfer suite
   *) collx_die "unsupported $PRODUCT backend: $COLLX_BENCH" ;;
 esac
