@@ -2,7 +2,7 @@
 set -euo pipefail
 set -x
 
-# AgentX trace replay for Qwen3.8-Flash-Next BF16 on MI355X with SGLang.
+# AgentX trace replay for Qwen3.8-Flash-Next FP8 on MI355X with SGLang.
 # Day-zero recipe; SGLang is the plan-of-record engine for this model
 # (MODELS.md).
 #
@@ -14,19 +14,28 @@ set -x
 #     it. Until then this arm is not directly comparable to the spec-decode
 #     NVIDIA arms on the published frontier.
 #
-#   * BF16, not FP8 or FP4. NVFP4 is greyed out for MI355X in the cookbook and
-#     there is no AMD FP4 checkpoint. FP8 does not load either: this image's
-#     model code classifies model.layers.N.ple.ple_embedding.ngram_embedding
-#     as an unquantized module and asserts its weight_scale is 1.0, while the
-#     FP8 checkpoint genuinely quantizes it and ships a real scale:
-#       AssertionError: Expected 1.0, got 0.00019931793212890625 in skipped
-#       model.layers.1.ple.ple_embedding.ngram_embedding.weight_scale
-#       qwen4_exp.py:2039 in load_weights
-#     The checkpoint's modules_to_not_convert lists ple.conv1d, ple.key_proj
-#     and ple.value_proj but not the ngram embedding, so the skip set is being
-#     matched too broadly on the .ple. prefix. No serve flag changes that. The
-#     BF16 checkpoint (335.3 GiB, no quantization_config at all) has no scales
-#     to mis-handle. Revert to FP8 once a fixed ROCm image ships.
+#   * FP8, not FP4. NVFP4 is greyed out for MI355X in the SGLang cookbook and
+#     there is no AMD FP4 checkpoint for this model.
+#
+# KNOWN BLOCKER, upstream, not in this recipe: on the current
+# lmsysorg/sglang-rocm:qwen38flashnext image the server aborts while loading
+# weights with
+#   AssertionError: Expected 1.0, got 0.00019931793212890625 in skipped
+#   model.layers.1.ple.ple_embedding.ngram_embedding.weight_scale
+#   qwen4_exp.py:2039 in load_weights
+# The model registers no parameter for the PLE ngram embedding, so load_weights
+# takes the "skipped" branch, which assumes any orphaned _scale must be a no-op
+# and asserts it is 1.0. The checkpoint really does quantize that embedding:
+# its 128 shard_N.weight tensors are F8_E4M3 with a single BF16 weight_scale of
+# ~1.99e-4, and modules_to_not_convert lists ple.conv1d, ple.key_proj and
+# ple.value_proj but not the ngram embedding.
+#
+# Suppressing the assert is NOT a fix: the shards would load as raw FP8 with
+# the scale never applied, leaving that embedding wrong by ~5000x with no error
+# reported. The CUDA image carries a different SGLang build and loads the same
+# checkpoint, so this is specific to the ROCm build. It clears when that image
+# implements the quantized PLE ngram embedding; the recipe below is otherwise
+# the cookbook's verified balanced command and needs no further change.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
