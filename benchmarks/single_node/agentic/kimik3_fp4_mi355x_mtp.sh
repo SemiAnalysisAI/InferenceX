@@ -568,7 +568,19 @@ fi
 SPEC_ARGS=()
 if [ "${SPEC_DECODE:-true}" = "true" ]; then
     SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-2}"
-    SYNTHETIC_ACCEPT_LEN=2.51
+    case "$SPEC_NUM_TOKENS" in
+      2) DEFAULT_SYNTHETIC_ACCEPT_LEN=2.51 ;;
+      6) DEFAULT_SYNTHETIC_ACCEPT_LEN=3.75 ;;
+      *)
+        if [ -z "${SYNTHETIC_ACCEPT_LEN:-}" ]; then
+            echo "Error: no Kimi-K3 golden synthetic acceptance length for k=$SPEC_NUM_TOKENS." >&2
+            exit 1
+        fi
+        DEFAULT_SYNTHETIC_ACCEPT_LEN="$SYNTHETIC_ACCEPT_LEN"
+        ;;
+    esac
+    SYNTHETIC_ACCEPT_LEN="${SYNTHETIC_ACCEPT_LEN:-$DEFAULT_SYNTHETIC_ACCEPT_LEN}"
+    echo "DSpark synthetic acceptance: k=$SPEC_NUM_TOKENS, length=$SYNTHETIC_ACCEPT_LEN"
     # Hosts that pre-stage the draft as a plain directory rather than an HF hub
     # cache cannot resolve the repo id, and downloading it needs egress + a token.
     DRAFT_MODEL="${DRAFT_MODEL:-Inferact/Kimi-K3-DSpark}"
