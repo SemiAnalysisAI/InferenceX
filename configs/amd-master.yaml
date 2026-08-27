@@ -759,6 +759,22 @@ kimik3-fp4-mi355x-vllm-agentic-dcp-simple-v466:
       - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [8, 12, 16], spec-decoding: mtp }
       - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [32, 40, 52], spec-decoding: none }
 
+# Diagnostic control for the c16 prefix-cache crash: keep the v466 TP8/DCP8
+# serving stack while removing both DSpark and the external KV connector.
+kimik3-fp4-mi355x-vllm-agentic-dcp-v466-c16-control:
+  image: vllm/vllm-openai-rocm:nightly-46638857fdbb30e0c232c9e8f9cb1ff6d6f545c3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.171
+      search-space:
+      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: none, conc-list: [16], spec-decoding: none }
+
 # GPU-resident baseline for the v466 DSpark K=6 latency points. DCP and the
 # external KV connector are disabled so TP8 is the only parallel dimension.
 kimik3-fp4-mi355x-vllm-agentic-k6-v466-tp8:
