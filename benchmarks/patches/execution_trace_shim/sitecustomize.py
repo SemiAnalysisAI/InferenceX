@@ -172,6 +172,7 @@ def _finalize(prof):
         )
     except OSError as exc:
         _warn_once("rename", f"failed to rename {tmp_path}: {exc!r}")
+    _write_dispatch_report(os.path.dirname(tmp_path), _session_idx)
 
 
 # ---------------------------------------------------------------------------
@@ -191,10 +192,47 @@ def _finalize(prof):
 
 _dispatch_lib = None
 _dispatch_idx = 0
+_proxy_registry = []  # every _LauncherProxy, for the per-session report
+
+
+def collections_counter():
+    import collections
+
+    return collections.Counter()
 
 
 def _dispatch_enabled():
     return os.environ.get(_ENV_DISPATCH, "1") != "0"
+
+
+def _write_dispatch_report(out_dir, session_idx):
+    """Sidecar accounting of what each proxied launcher did this session.
+
+    Lands in the profile artifact next to the ET json, so failures to
+    dispatch are diagnosable from the artifact instead of worker stderr.
+    """
+    stats = {}
+    for p in _proxy_registry:
+        s = p._infx_stats
+        if s:
+            stats[p._infx_qualname] = dict(s)
+            s.clear()
+    if not stats:
+        return
+    try:
+        import json
+        import socket
+
+        host = socket.gethostname().split(".")[0] or "unknown"
+        path = os.path.join(
+            out_dir, f"et-dispatch-report-{host}-pid{os.getpid()}-s{session_idx}.json"
+        )
+        with open(path, "w") as fh:
+            json.dump(stats, fh, indent=1, sort_keys=True)
+        print(f"[execution-trace] dispatch report saved: {path}",
+              file=sys.stderr, flush=True)
+    except Exception as exc:  # noqa: BLE001
+        _warn_once("report", f"failed to write dispatch report: {exc!r}")
 
 
 def _type_key(a):
@@ -279,60 +317,23 @@ class _LauncherProxy:
         object.__setattr__(self, "_infx_fn", fn)
         object.__setattr__(self, "_infx_qualname", qualname)
         object.__setattr__(self, "_infx_ops", {})
-        object.__setattr__(self, "_infx_sig", None)  # lazily-resolved signature
+        object.__setattr__(self, "_infx_stats", collections_counter())
+        _proxy_registry.append(self)
 
-    def _siginfo(self):
-        """(signature, param names, keyword-only start index) or False."""
-        info = self._infx_sig
-        if info is None:
-            import inspect
+    def _target(self, split):
+        """A positional-only callable equivalent to fn for a flattened call.
 
-            try:
-                sig = inspect.signature(self._infx_fn)
-                names, kw_start = [], None
-                for p in sig.parameters.values():
-                    if p.kind in (p.VAR_POSITIONAL, p.VAR_KEYWORD):
-                        raise ValueError("varargs")
-                    if p.kind == p.KEYWORD_ONLY and kw_start is None:
-                        kw_start = len(names)
-                    names.append(p.name)
-                info = (sig, tuple(names), len(names) if kw_start is None else kw_start)
-            except (TypeError, ValueError):
-                info = False
-            object.__setattr__(self, "_infx_sig", info)
-        return info
-
-    def _flatten(self, args, kwargs):
-        """Positional arg list for (args, kwargs), or None when not bindable."""
-        if not kwargs:
-            return args
-        info = self._siginfo()
-        if info is False:
-            return None
-        sig, names, _kw_start = info
-        try:
-            bound = sig.bind(*args, **kwargs)
-            bound.apply_defaults()
-            return tuple(bound.arguments[p] for p in names)
-        except TypeError:
-            return None
-
-    def _positional_target(self, n_args):
-        """A positional-only callable equivalent to fn for n_args arguments.
-
-        Keyword-only parameters (mhc_pre's `*, norm_weight=None, ...`) are
-        re-mapped back to keywords at call time.
+        Keyword arguments are flattened by CALL SHAPE (sorted names appended
+        after the positionals) and re-applied by name here — no
+        inspect.signature involved, so pybind builtins, **kwargs forwarders,
+        and keyword-only parameters all work.
         """
-        fn = self._infx_fn
-        info = self._infx_sig  # resolved by _flatten when kwargs were bound
-        if not info or info is False:
-            return fn
-        _sig, names, kw_start = info
-        if n_args <= kw_start:
-            return fn
+        if split is None:
+            return self._infx_fn
+        npos, names = split
 
-        def call(*a, _fn=fn, _names=names, _k=kw_start):
-            return _fn(*a[:_k], **dict(zip(_names[_k:], a[_k:])))
+        def call(*a, _fn=self._infx_fn, _names=names, _k=npos):
+            return _fn(*a[:_k], **dict(zip(_names, a[_k:])))
 
         return call
 
@@ -340,40 +341,53 @@ class _LauncherProxy:
         fn = self._infx_fn
         if _active_observer is None:
             return fn(*args, **kwargs)
-        flat = self._flatten(args, kwargs)
-        if flat is None:
-            return fn(*args, **kwargs)
+        stats = self._infx_stats
+        if kwargs:
+            names = tuple(sorted(kwargs))
+            flat = args + tuple(kwargs[n] for n in names)
+            split = (len(args), names)
+        else:
+            flat, split = args, None
         try:
-            key = tuple(_type_key(a) for a in flat)
+            key = (tuple(_type_key(a) for a in flat), split)
         except Exception:  # noqa: BLE001
+            stats["typekey_failed"] += 1
             return fn(*args, **kwargs)
         ops = self._infx_ops
         op = ops.get(key)
         if op is False:
+            stats["raw_fallback"] += 1
             return fn(*args, **kwargs)
         if op is None:
             # First call for this signature runs raw to learn the return
             # kind; anything but None / Tensor / tuple-of-Tensors is not
             # schema-able.
-            target = self._positional_target(len(flat))
+            target = self._target(split)
             result = target(*flat)
+            stats["raw_learn"] += 1
             try:
                 ret_schema = _ret_schema(result)
-                if ret_schema is not None:
+                if ret_schema is None:
+                    stats["ret_not_schemable"] += 1
+                    ops[key] = False
+                else:
                     new_op = _register_dispatch_op(
                         self._infx_qualname.rsplit(".", 1)[-1],
                         target,
                         flat,
                         ret_schema,
                     )
-                    if new_op is not None and isinstance(result, list):
-                        # dispatcher returns tuples; preserve the raw shape
-                        base_op = new_op
-                        new_op = lambda *a: list(base_op(*a))  # noqa: E731
-                    ops[key] = new_op if new_op is not None else False
-                else:
-                    ops[key] = False
+                    if new_op is None:
+                        stats["args_not_schemable"] += 1
+                        ops[key] = False
+                    else:
+                        if isinstance(result, list):
+                            # dispatcher returns tuples; preserve raw shape
+                            base_op = new_op
+                            new_op = lambda *a: list(base_op(*a))  # noqa: E731
+                        ops[key] = new_op
             except Exception as exc:  # noqa: BLE001
+                stats["define_failed"] += 1
                 _warn_once(
                     f"dispatch-def-{self._infx_qualname}",
                     f"cannot register dispatch op for {self._infx_qualname}: {exc!r}",
@@ -381,8 +395,11 @@ class _LauncherProxy:
                 ops[key] = False
             return result
         try:
-            return op(*flat)
+            result = op(*flat)
+            stats["dispatched"] += 1
+            return result
         except Exception as exc:  # noqa: BLE001
+            stats["call_failed"] += 1
             _warn_once(
                 f"dispatch-call-{self._infx_qualname}",
                 f"dispatch call failed for {self._infx_qualname}, "
