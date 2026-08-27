@@ -51,8 +51,8 @@ export PREFIX_CACHING_HASH_ALGO=sha256
 
 export VLLM_ALLOW_DCP_FULL_CUDAGRAPH=1
 if [ "${DCP_SIZE:-1}" -eq 1 ] && [ "${KV_OFFLOADING:-none}" = "none" ]; then
-    default_cudagraph_capture_size=32
-    default_cudagraph_capture_sizes="$(seq -s, 1 32)"
+    default_cudagraph_capture_size=64
+    default_cudagraph_capture_sizes="$(seq -s, 1 64)"
 else
     default_cudagraph_capture_size=4096
     default_cudagraph_capture_sizes="$(seq -s, 1 80),128,256,512,1024,2048,4096"
