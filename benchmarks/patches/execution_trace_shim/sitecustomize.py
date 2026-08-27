@@ -453,7 +453,7 @@ class _LauncherProxy:
             stats["dispatched"] += 1
             return result
         except Exception as exc:  # noqa: BLE001
-            stats["call_failed"] += 1
+            stats[f"call_failed:{type(exc).__name__}"] += 1
             _warn_once(
                 f"dispatch-call-{self._infx_qualname}",
                 f"dispatch call failed for {self._infx_qualname}, "
