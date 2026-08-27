@@ -222,7 +222,25 @@ _SCHEMA_OF_KEY = {
 }
 
 
-def _register_dispatch_op(shortname, fn, args, ret_is_tensor):
+def _ret_schema(result):
+    """Return-type schema for a first-call result, or None if not schema-able.
+
+    None -> "()", Tensor -> "Tensor", tuple/list of Tensors -> "(Tensor, ...)"
+    (kernels like compress_forward / moe_fused_gate / mhc_pre return tuples).
+    """
+    if result is None:
+        return "()"
+    import torch
+
+    if isinstance(result, torch.Tensor):
+        return "Tensor"
+    if (isinstance(result, (tuple, list)) and result
+            and all(isinstance(r, torch.Tensor) for r in result)):
+        return "(" + ", ".join(["Tensor"] * len(result)) + ")"
+    return None
+
+
+def _register_dispatch_op(shortname, fn, args, ret_schema):
     """Define etshim::<shortname>_<n> with a schema derived from this call."""
     global _dispatch_lib, _dispatch_idx
     from torch.library import Library
@@ -234,14 +252,17 @@ def _register_dispatch_op(shortname, fn, args, ret_is_tensor):
         if tmpl is None:
             return None
         parts.append(tmpl.format(i=i))
-    ret = "Tensor" if ret_is_tensor else "()"
     if _dispatch_lib is None:
         _dispatch_lib = Library("etshim", "DEF")
     _dispatch_idx += 1
     safe = "".join(ch if ch.isalnum() or ch == "_" else "_" for ch in shortname)
     opname = f"{safe}_{_dispatch_idx}"
-    _dispatch_lib.define(f"{opname}({', '.join(parts)}) -> {ret}")
-    _dispatch_lib.impl(opname, lambda *a: fn(*a), "CompositeExplicitAutograd")
+    _dispatch_lib.define(f"{opname}({', '.join(parts)}) -> {ret_schema}")
+    if ret_schema.startswith("(") and ret_schema != "()":
+        # multi-return ops must hand the dispatcher a tuple
+        _dispatch_lib.impl(opname, lambda *a: tuple(fn(*a)), "CompositeExplicitAutograd")
+    else:
+        _dispatch_lib.impl(opname, lambda *a: fn(*a), "CompositeExplicitAutograd")
     import torch
 
     return getattr(torch.ops.etshim, opname).default
@@ -260,33 +281,60 @@ class _LauncherProxy:
         object.__setattr__(self, "_infx_ops", {})
         object.__setattr__(self, "_infx_sig", None)  # lazily-resolved signature
 
-    def _flatten(self, args, kwargs):
-        """Positional arg list for (args, kwargs), or None when not bindable."""
-        if not kwargs:
-            return args
-        sig = self._infx_sig
-        if sig is None:
+    def _siginfo(self):
+        """(signature, param names, keyword-only start index) or False."""
+        info = self._infx_sig
+        if info is None:
             import inspect
 
             try:
                 sig = inspect.signature(self._infx_fn)
+                names, kw_start = [], None
                 for p in sig.parameters.values():
-                    if p.kind in (p.VAR_POSITIONAL, p.VAR_KEYWORD, p.KEYWORD_ONLY):
-                        # keyword-only is flattenable in principle, but the
-                        # call-order contract gets murky — skip.
-                        sig = False
-                        break
+                    if p.kind in (p.VAR_POSITIONAL, p.VAR_KEYWORD):
+                        raise ValueError("varargs")
+                    if p.kind == p.KEYWORD_ONLY and kw_start is None:
+                        kw_start = len(names)
+                    names.append(p.name)
+                info = (sig, tuple(names), len(names) if kw_start is None else kw_start)
             except (TypeError, ValueError):
-                sig = False
-            object.__setattr__(self, "_infx_sig", sig)
-        if sig is False:
+                info = False
+            object.__setattr__(self, "_infx_sig", info)
+        return info
+
+    def _flatten(self, args, kwargs):
+        """Positional arg list for (args, kwargs), or None when not bindable."""
+        if not kwargs:
+            return args
+        info = self._siginfo()
+        if info is False:
             return None
+        sig, names, _kw_start = info
         try:
             bound = sig.bind(*args, **kwargs)
             bound.apply_defaults()
-            return tuple(bound.arguments[p] for p in sig.parameters)
+            return tuple(bound.arguments[p] for p in names)
         except TypeError:
             return None
+
+    def _positional_target(self, n_args):
+        """A positional-only callable equivalent to fn for n_args arguments.
+
+        Keyword-only parameters (mhc_pre's `*, norm_weight=None, ...`) are
+        re-mapped back to keywords at call time.
+        """
+        fn = self._infx_fn
+        info = self._infx_sig  # resolved by _flatten when kwargs were bound
+        if not info or info is False:
+            return fn
+        _sig, names, kw_start = info
+        if n_args <= kw_start:
+            return fn
+
+        def call(*a, _fn=fn, _names=names, _k=kw_start):
+            return _fn(*a[:_k], **dict(zip(_names[_k:], a[_k:])))
+
+        return call
 
     def __call__(self, *args, **kwargs):
         fn = self._infx_fn
@@ -305,18 +353,23 @@ class _LauncherProxy:
             return fn(*args, **kwargs)
         if op is None:
             # First call for this signature runs raw to learn the return
-            # kind; anything but None/Tensor is not schema-able.
-            result = fn(*flat)
+            # kind; anything but None / Tensor / tuple-of-Tensors is not
+            # schema-able.
+            target = self._positional_target(len(flat))
+            result = target(*flat)
             try:
-                import torch
-
-                if result is None or isinstance(result, torch.Tensor):
+                ret_schema = _ret_schema(result)
+                if ret_schema is not None:
                     new_op = _register_dispatch_op(
                         self._infx_qualname.rsplit(".", 1)[-1],
-                        fn,
+                        target,
                         flat,
-                        result is not None,
+                        ret_schema,
                     )
+                    if new_op is not None and isinstance(result, list):
+                        # dispatcher returns tuples; preserve the raw shape
+                        base_op = new_op
+                        new_op = lambda *a: list(base_op(*a))  # noqa: E731
                     ops[key] = new_op if new_op is not None else False
                 else:
                     ops[key] = False
@@ -497,7 +550,18 @@ class _ModuleImportHook:
 # public callable defined under each root gets the etshim trampoline. Roots
 # and their submodules are matched by prefix (sglang.jit_kernel.dsv4.*, the
 # flashinfer wrappers around cute-dsl/trtllm/triton kernels, ...).
-_DISPATCH_PREFIXES = ("deep_gemm", "sglang.jit_kernel", "flashinfer")
+# sglang.srt.layers.mhc and deep_gemm_wrapper are hooked at the python-wrapper
+# level because their inner launches evade lower hooks: tilelang kernels load
+# straight from the on-disk JIT cache on warm starts (never passing through
+# tilelang.jit), and deep_gemm's pybind builtins have no python signature to
+# bind keyword arguments against.
+_DISPATCH_PREFIXES = (
+    "deep_gemm",
+    "sglang.jit_kernel",
+    "sglang.srt.layers.mhc",
+    "sglang.srt.layers.deep_gemm_wrapper",
+    "flashinfer",
+)
 
 
 def _install():
