@@ -145,7 +145,7 @@ if [ "$DP_ATTENTION" = "true" ]; then
     SGLANG_ROUTER_METRICS_PORT=$((PORT + 10000))
     SGLANG_ROUTER_CMD=(python3 -m sglang_router.launch_router)
 
-    export SGLANG_SHARED_EXPERT_TP1=1
+    export SGLANG_SHARED_EXPERT_TP1=0
     export SGLANG_DP_SHARED_EXPERT_LOCAL=1
     export SGLANG_DP_USE_GATHERV=1
     export SGLANG_DP_USE_REDUCE_SCATTER=1
