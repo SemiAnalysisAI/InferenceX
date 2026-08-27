@@ -32,9 +32,11 @@ frontend:
   type: sglang
   enable_multiple_frontends: false
   args:
-    policy: round_robin
-    prefill-policy: round_robin
-    decode-policy: round_robin
+    policy: random
+    prefill-policy: random
+    decode-policy: random
+    cb-timeout-duration-secs: 15
+    retry-max-retries: 3
 
 backend:
   type: sglang
@@ -45,12 +47,16 @@ backend:
     PYTHONUNBUFFERED: "1"
     TORCH_NCCL_BLOCKING_WAIT: "1"
     NCCL_BLOCKING_WAIT: "1"
+    NCCL_IB_HCA: "rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7"
     HSA_NO_SCRATCH_RECLAIM: "0"
     GPU_MAX_HW_QUEUES: "5"
+    AITER_LOG_LEVEL: "ERROR"
     SGLANG_AITER_MLA_PERSIST: "0"
     SGLANG_ENABLE_UNIFIED_RADIX_TREE: "1"
     SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: "1"
     SGLANG_MORI_DISPATCH_DTYPE: "auto"
+    SGLANG_MORI_QP_PER_TRANSFER: "4"
+    SGLANG_MORI_NUM_WORKERS: "4"
     SGLANG_MORI_DISPATCH_INTER_KERNEL_SWITCH_THRESHOLD: "4096"
     SGLANG_OPT_DEEPGEMM_HC_PRENORM: "false"
     SGLANG_USE_AITER: "1"
@@ -69,6 +75,8 @@ backend:
     SGLANG_OPT_USE_MULTI_STREAM_OVERLAP: "false"
     SGLANG_ROCM_USE_MULTI_STREAM: "false"
     AITER_BF16_FP8_MOE_BOUND: "0"
+    SGLANG_DEFAULT_THINKING: "1"
+    SGLANG_DSV4_REASONING_EFFORT: "high"
     SGLANG_EAGER_INPUT_NO_COPY: "true"
     SGLANG_SHARED_EXPERT_TP1: "1"
     SGLANG_DP_SHARED_EXPERT_LOCAL: "1"
@@ -76,22 +84,34 @@ backend:
     SGLANG_DP_USE_REDUCE_SCATTER: "1"
     IBDEVICES: "rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7"
     MORI_RDMA_TC: "104"
-    MORI_IO_SQ_BACKOFF_TIMEOUT_US: "500000"
+    MORI_IO_SQ_BACKOFF_TIMEOUT_US: "50000"
     MORI_IO_QP_MAX_SEND_WR: "32767"
+    MORI_IO_QP_MAX_CQE: "32768"
+    MORI_IO_QP_MAX_SGE: "2"
+    MORI_IO_TC_DISABLE: "0"
+    MORI_SHMEM_MODE: "ISOLATION"
+    MORI_EP_LAUNCH_CONFIG_MODE: "AUTO"
+    MORI_APP_LOG_LEVEL: "WARNING"
     SGLANG_MORI_COMBINE_DTYPE: "auto"
     SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "16384"
-    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "1800"
-    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "1800"
+    SGLANG_ENABLE_SPEC_V2: "1"
+    SGLANG_ENABLE_OVERLAP_PLAN_STREAM: "0"
+    SGLANG_LOG_MS: "true"
+    SGLANG_DISAGGREGATION_NUM_PRE_ALLOCATE_REQS: "32"
+    SGLANG_HEALTH_CHECK_TIMEOUT: "600"
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "3600"
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "3600"
   decode_environment:
     <<: *common_environment
-    SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "1024"
+    SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "128"
   sglang_config:
     prefill: &common_server
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       trust-remote-code: true
       tp-size: 8
       watchdog-timeout: 3600
-      load-balance-method: auto
+      decode-log-interval: 100
+      load-balance-method: round_robin
       kv-cache-dtype: fp8_e4m3
       attention-backend: dsv4
       page-size: 256
@@ -117,7 +137,7 @@ backend:
       disable-radix-cache: false
       disable-cuda-graph: false
       prefill-round-robin-balance: true
-      cuda-graph-bs: [1, 2, 4, 8, 16, 32, 64, 128]
+      cuda-graph-bs: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128]
 
 sbatch_directives:
   cpus-per-task: "128"
@@ -139,7 +159,7 @@ benchmark:
     result_root="/results/${SLURM_JOB_ID}/fixed-seq"
     mkdir -p "${result_root}"
     trap 'tar -C /logs -czf "'"${result_root}"'/runtime-logs.tar.gz" . 2>/dev/null || true' EXIT
-    for concurrency in 1 2 4 8 16 32 64 128; do
+    for concurrency in ${CONC_LIST}; do
       num_prompts=$((concurrency * 10))
       if (( num_prompts < 16 )); then num_prompts=16; fi
       python3 /infmax-workspace/utils/bench_serving/benchmark_serving.py \

@@ -6791,7 +6791,8 @@
     - dsv4-fp4-mi355x-sglang-disagg-mtp
   description:
     - "Port the production MI355X DeepSeek V4 fixed-sequence STP and MTP disaggregated search spaces from the model-specific AMD submit/helper stack to srt-slurm."
-    - "Preserve TP8 c1,c2,c4,c8,c16,c32,c64,c128 and DEP8/DPA c256,c512 for both STP and MTP; each of the four topology allocations now iterates its original concurrency points without reloading the model between points."
+    - "Preserve the original matrix grouping for both STP and MTP: each TP8 allocation iterates c1,c2,c4,c8,c16,c32,c64,c128, while DEP8/DPA c256 and c512 remain separate point-sized allocations so admission and MoRI dispatch sizing match each point."
+    - "Preserve the proven server-side round-robin load balancer, fixed-sequence router random/retry policy, full decode CUDA-graph batch range, and DeepSeek V4 runtime defaults from the successful legacy STP and MTP sweeps."
     - "Preserve two-step EAGLE MTP on TP8 and one-step EAGLE MTP on DEP8, with the native SGLang Router frontend and AMD MoRI KV/MoE transport."
     - "Use the runtime-verified lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260719 image and srt-slurm PR #7 commit 10a58d2ebb4d756c423424049c736b909b72e14f, including native AMD routing, ATOM/AToMesh TCP support, recipe-aware setup preflight, DP-aware P/D rank routing, multi-node rank-offset preservation, and ATOM recipe flag normalization."
     - "Run fixed 8192-input/1024-output random workloads through the unchanged utils/bench_serving/benchmark_serving.py custom benchmark and remove the superseded dsv4_fp4_mi355x_sglang-disagg.sh wrapper."
