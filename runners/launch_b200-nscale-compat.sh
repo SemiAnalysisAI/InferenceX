@@ -93,23 +93,23 @@ elif [[ $MODEL_PREFIX == "kimik3" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/scratch/models/Kimi-K3"
     export SRT_SLURM_MODEL_PREFIX="kimik3"
 elif [[ $MODEL_PREFIX == "qwen3.8next" && $PRECISION == "fp4" ]]; then
-    # Qwen3.8-Flash-Next NVFP4 is not staged on this cluster, so this branch
-    # does not point at the staging tree. The bench script's own
-    # `hf download --local-dir "$MODEL_PATH"` populates it instead, and
-    # KEEP_HF_MODEL_ID below keeps MODEL a HuggingFace repo id so that call has
-    # something valid to fetch.
-    #
-    # The target is node-local scratch, not the shared home. /tmp on a compute
-    # node is /dev/md0 with ~17 TB free; $HOME is NFSv4. Downloading 126 GiB to
-    # the shared home made every cell in the matrix write the same tree from a
-    # different node, and huggingface_hub failed reading a shard back with
-    #   OSError: [Errno 521] ... layer-00007-experts-0256-0383.safetensors
-    # a stale-handle class error. Node-local storage makes each node fetch its
-    # own copy -- about 2.5 minutes at the 861 MB/s these nodes sustain -- and
-    # removes cross-node sharing from the picture entirely. The directory is
-    # created with srun so it lands on the allocated node.
-    export MODEL_PATH="${MODEL_PATH:-/tmp/inferencex-models/Qwen3.8-Flash-Next-NVFP4}"
-    export KEEP_HF_MODEL_ID=1
+    # Staged on the compute nodes like every other model here, so this is the
+    # ordinary branch again: no hf download and no writable target needed.
+    # Verified on im-b200-c004: 126 GB, index present, 206/206 shards, no
+    # .incomplete leftovers. The candidate search mirrors the dsv4 branch so a
+    # differently named staging directory needs no code change.
+    SELECTED_MODEL_PATH=""
+    if [[ -n "${MODEL_PATH:-}" && -d "${MODEL_PATH}" ]]; then
+        SELECTED_MODEL_PATH="$MODEL_PATH"
+    else
+        for candidate in /scratch/models/Qwen3.8-Flash-Next-NVFP4 /scratch/models/Qwen3.8-Flash-Next; do
+            if [[ -d "$candidate" ]]; then
+                SELECTED_MODEL_PATH="$candidate"
+                break
+            fi
+        done
+    fi
+    export MODEL_PATH="${SELECTED_MODEL_PATH:-/scratch/models/Qwen3.8-Flash-Next-NVFP4}"
     export SRT_SLURM_MODEL_PREFIX="qwen3.8next-fp4"
 else
     echo "Unsupported model prefix/precision: $MODEL_PREFIX/$PRECISION"
@@ -595,20 +595,7 @@ else
     # Point the bench script at the resolved MODEL_PATH instead of
     # pulling from the HF hub cache. Bench scripts skip `hf download` when
     # MODEL is a local path.
-    if [[ "${KEEP_HF_MODEL_ID:-0}" == "1" ]]; then
-        # The bench script downloads into MODEL_PATH itself, so MODEL has to
-        # stay a HuggingFace repo id. Create the directory first: it is bind
-        # mounted below and srun fails outright on a missing mount source.
-        # Create it ON THE ALLOCATED NODE, because MODEL_PATH is node-local
-        # scratch: /tmp is /dev/md0 with ~17 TB free on these nodes, while the
-        # login node has an unrelated /tmp of its own.
-        if ! srun --jobid="$JOB_ID" mkdir -p "$MODEL_PATH"; then
-            echo "Error: cannot create $MODEL_PATH on the compute node; the bind mount below would fail" >&2
-            exit 1
-        fi
-    else
-        export MODEL="$MODEL_PATH"
-    fi
+    export MODEL="$MODEL_PATH"
 
     # Use flock to serialize concurrent imports to the same squash file
     # Override ENROOT_CACHE_PATH to avoid permission issues with system-wide cache on worker nodes
