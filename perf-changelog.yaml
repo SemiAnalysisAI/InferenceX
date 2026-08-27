@@ -6490,3 +6490,12 @@
     - "Required lanes promote exporter startup timeouts, launch failures, and endpoint resolution failures to blocking validation failures, so a recipe cannot publish a result whose power collection never started."
     - "Route only enabled recipes through the immutable producer fork and preserve non-power launcher revisions."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2688
+- config-keys:
+    - qwen3.8next-fp8-mi355x-sglang-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add the day-zero Qwen3.8-Flash-Next FP8 AgentX recipe on MI355X with SGLang at TP4 and concurrency 1/4/8/12/16."
+    - "Run without speculative decoding because the MI355X SGLang path for this model does not drive MTP yet, so this arm carries no synthetic-acceptance pin."
+    - "Serve the FP8 checkpoint because no AMD FP4 checkpoint exists for this model yet."
+  pr-link: TBD
