@@ -7031,6 +7031,23 @@ qwen3.5-fp4-b300-sglang-agentic-mtp:
       - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16, 20, 24, 28, 32] }
       - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [36, 44, 52] }
 
+
+# Qwen3.8-Flash-Next NVFP4 AgentX on B300 via SGLang with native NEXTN MTP.
+# Day-zero recipe; mirrors the B200 arm. TP1 per the cookbook's verified
+# single-node command: 126 GiB of NVFP4 weights fit on one B300.
+qwen3.8next-fp4-b300-sglang-agentic-mtp:
+  image: lmsysorg/sglang:qwen38flashnext
+  model: RadixArk/Qwen3.8-Flash-Next-NVFP4
+  model-prefix: qwen3.8next
+  runner: cluster:b300-nv
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.8
+      search-space:
+      - { tp: 1, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16] }
 # Controlled AgentX power A/B: identical software, topology, MTP settings,
 # concurrency, and memory tier across FP8 and FP4. The HBM-only rows measure
 # the natural AgentX prefix-cache workload; HiCache isolates host-tier effects.
