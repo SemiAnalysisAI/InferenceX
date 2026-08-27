@@ -581,6 +581,8 @@ class MultiNodeSearchSpaceEntry(BaseModel):
         default=None, alias=Fields.CONC_END.value)
     conc_list: Optional[List[int]] = Field(
         default=None, alias=Fields.CONC_LIST.value)
+    eval_conc: Optional[int] = Field(
+        default=None, alias=Fields.EVAL_CONC.value, gt=0, strict=True)
 
     @model_validator(mode='after')
     def validate_conc_fields(self):

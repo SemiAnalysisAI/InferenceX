@@ -418,6 +418,79 @@ class TestMarkEvalEntries:
         assert marked[0]["conc"] == [32]
         assert marked[0]["eval-conc"] == 32
 
+    def test_multinode_explicit_eval_concurrency_ignores_recipe_identity(self):
+        """Split recipes for one topology share one bounded correctness eval."""
+        common = {
+            "model": "m", "runner": "cluster:gb200-nv", "framework": "vllm",
+            "precision": "fp4", "isl": 8192, "osl": 1024,
+            "spec-decoding": "none", "disagg": True,
+            "decode": {
+                "num-worker": 1, "tp": 1, "ep": 8, "dp-attn": True,
+                "additional-settings": [],
+            },
+            "eval-conc": 256,
+        }
+        matrix_values = [
+            {
+                **common,
+                "conc": [256],
+                "prefill": {
+                    "num-worker": 1, "tp": 1, "ep": 8, "dp-attn": True,
+                    "additional-settings": ["CONFIG_FILE=recipes/c256.yaml"],
+                },
+            },
+            {
+                **common,
+                "conc": [1024],
+                "prefill": {
+                    "num-worker": 1, "tp": 1, "ep": 8, "dp-attn": True,
+                    "additional-settings": ["CONFIG_FILE=recipes/c1024.yaml"],
+                },
+            },
+        ]
+
+        result = mark_eval_entries(matrix_values)
+
+        marked = [entry for entry in result if entry["run-eval"]]
+        assert len(marked) == 1
+        assert marked[0]["conc"] == [256]
+        assert marked[0]["eval-conc"] == 256
+
+    def test_multinode_eval_group_preserves_topology_settings(self):
+        """Non-recipe additional settings still define distinct eval groups."""
+        common = {
+            "model": "m", "runner": "cluster:gb200-nv", "framework": "vllm",
+            "precision": "fp4", "isl": 8192, "osl": 1024,
+            "spec-decoding": "none", "disagg": True,
+            "decode": {"num-worker": 1, "tp": 1, "ep": 8, "dp-attn": True},
+            "conc": [256],
+            "eval-conc": 128,
+        }
+        matrix_values = [
+            {
+                **common,
+                "prefill": {
+                    "num-worker": 1, "tp": 1, "ep": 8, "dp-attn": True,
+                    "additional-settings": [
+                        "CONFIG_FILE=recipes/a.yaml", "PREFILL_NODES=2",
+                    ],
+                },
+            },
+            {
+                **common,
+                "prefill": {
+                    "num-worker": 1, "tp": 1, "ep": 8, "dp-attn": True,
+                    "additional-settings": [
+                        "CONFIG_FILE=recipes/b.yaml", "PREFILL_NODES=4",
+                    ],
+                },
+            },
+        ]
+
+        result = mark_eval_entries(matrix_values)
+
+        assert sum(entry["run-eval"] for entry in result) == 2
+
     def test_multinode_agentic_groups_are_independent_per_topology(self):
         """Two distinct multi-node agentic topologies (e.g. differing by
         prefill EP/DP) must each get their own eval row."""

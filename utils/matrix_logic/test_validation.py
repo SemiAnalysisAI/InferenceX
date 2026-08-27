@@ -887,6 +887,46 @@ class TestMultiNodeSearchSpaceEntry:
         assert entry.prefill.num_worker == 5
         assert entry.decode.tp == 8
 
+    def test_valid_with_explicit_eval_concurrency(self):
+        """A correctness eval may use a bounded load below a throughput point."""
+        entry = MultiNodeSearchSpaceEntry(**{
+            "prefill": {
+                "num-worker": 1,
+                "tp": 8,
+                "ep": 1,
+                "dp-attn": False,
+            },
+            "decode": {
+                "num-worker": 1,
+                "tp": 8,
+                "ep": 1,
+                "dp-attn": False,
+            },
+            "conc-list": [4096],
+            "eval-conc": 256,
+        })
+        assert entry.eval_conc == 256
+
+    @pytest.mark.parametrize("invalid_eval_conc", [0, -1, 1.5, "256"])
+    def test_explicit_eval_concurrency_is_strictly_positive(self, invalid_eval_conc):
+        with pytest.raises(Exception):
+            MultiNodeSearchSpaceEntry(**{
+                "prefill": {
+                    "num-worker": 1,
+                    "tp": 8,
+                    "ep": 1,
+                    "dp-attn": False,
+                },
+                "decode": {
+                    "num-worker": 1,
+                    "tp": 8,
+                    "ep": 1,
+                    "dp-attn": False,
+                },
+                "conc-list": [4096],
+                "eval-conc": invalid_eval_conc,
+            })
+
     def test_valid_with_conc_range(self):
         """Valid multinode search space with range."""
         entry = MultiNodeSearchSpaceEntry(**{

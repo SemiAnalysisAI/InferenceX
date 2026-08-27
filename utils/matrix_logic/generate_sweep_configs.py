@@ -440,8 +440,20 @@ def _multinode_parallelism_key(entry: dict) -> tuple:
         Fields.EVAL_ALL_CONCS.value,
         Fields.EXP_NAME.value,
     }
+    def eval_topology_value(key, value):
+        """Exclude recipe identity while retaining topology-affecting settings."""
+        if key not in (Fields.PREFILL.value, Fields.DECODE.value):
+            return value
+        worker = dict(value)
+        settings = worker.get(Fields.ADDITIONAL_SETTINGS.value, []) or []
+        worker[Fields.ADDITIONAL_SETTINGS.value] = [
+            setting for setting in settings
+            if not setting.startswith("CONFIG_FILE=")
+        ]
+        return worker
+
     return tuple(sorted(
-        (key, _freeze_matrix_value(value))
+        (key, _freeze_matrix_value(eval_topology_value(key, value)))
         for key, value in entry.items()
         if key not in ignored_fields
     ))
@@ -475,6 +487,13 @@ def mark_eval_entries(matrix_values: list[dict], include_agentic: bool = False) 
     mn_eval_conc = {}  # index -> chosen eval concurrency for multinode entries
 
     def _eligible_eval_concs(entry):
+        explicit_eval_conc = entry.get(Fields.EVAL_CONC.value)
+        if explicit_eval_conc is not None:
+            return (
+                [explicit_eval_conc]
+                if explicit_eval_conc >= MIN_EVAL_CONC
+                else []
+            )
         conc = entry[Fields.CONC.value]
         conc_values = conc if isinstance(conc, list) else [conc]
         return sorted(c for c in conc_values if c >= MIN_EVAL_CONC)
@@ -823,6 +842,8 @@ def generate_full_sweep(args, all_config_data, runner_data):
                             Fields.RUN_EVAL.value: False,  # Default, may be overridden by mark_eval_entries
                         }
                         entry.update(component_metadata(bmk, val))
+                        if Fields.EVAL_CONC.value in bmk:
+                            entry[Fields.EVAL_CONC.value] = bmk[Fields.EVAL_CONC.value]
                         add_multinode_node_count(
                             entry,
                             runner_data,
@@ -1195,6 +1216,8 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                             Fields.RUN_EVAL.value: False,
                         }
                         entry.update(component_metadata(bmk, val))
+                        if Fields.EVAL_CONC.value in bmk:
+                            entry[Fields.EVAL_CONC.value] = bmk[Fields.EVAL_CONC.value]
                         add_multinode_node_count(
                             entry,
                             runner_data,
