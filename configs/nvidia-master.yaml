@@ -2517,6 +2517,67 @@ dsr1-fp4-gb200-vllm-router-agentic-disagg-2p2d:
           ep: 4
           dp-attn: true
 
+qwen35-fp4-gb200-sglang-router-regression-agg:
+  image: lmsysorg/sglang:nightly-dev-20260818-c0b6474b
+  model: nvidia/Qwen3.5-397B-A17B-NVFP4-V2
+  model-prefix: qwen3.5
+  runner: cluster:gb200-nv
+  precision: fp4
+  framework: sglang
+  router: { name: sglang-router, version: native }
+  multinode: true
+  disagg: false
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - spec-decoding: mtp
+        conc-list: [16]
+        prefill:
+          num-worker: 2
+          tp: 2
+          ep: 2
+          dp-attn: false
+          additional-settings:
+          - "SRT_SLURM_REPOSITORY=https://github.com/SemiAnalysisAI/srt-slurm.git"
+          - "SRT_SLURM_REF=8db08ff77bb614335c75b1d11119b94ef585d826"
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb200-fp4/agentic/agg-gb200-2x-tp2ep2-router-regression.yaml"
+        decode:
+          num-worker: 0
+          tp: 2
+          ep: 2
+          dp-attn: false
+
+qwen35-fp4-gb200-sglang-router-regression-disagg:
+  image: lmsysorg/sglang:nightly-dev-20260818-c0b6474b
+  model: nvidia/Qwen3.5-397B-A17B-NVFP4-V2
+  model-prefix: qwen3.5
+  runner: cluster:gb200-nv
+  precision: fp4
+  framework: sglang
+  router: { name: sglang-router, version: native }
+  kv-p2p-transfer: nixl
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - spec-decoding: mtp
+        conc-list: [16]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: false
+          additional-settings:
+          - "SRT_SLURM_REPOSITORY=https://github.com/SemiAnalysisAI/srt-slurm.git"
+          - "SRT_SLURM_REF=8db08ff77bb614335c75b1d11119b94ef585d826"
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb200-fp4/agentic/disagg-gb200-1p1d-tp2ep2-router-regression.yaml"
+        decode:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: false
+
 dsr1-fp4-gb200-dynamo-trt:
   image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post2
   model: nvidia/DeepSeek-R1-0528-NVFP4-v2

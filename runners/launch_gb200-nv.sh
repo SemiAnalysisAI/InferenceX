@@ -156,7 +156,7 @@ fi
 # The yaml files specify HuggingFace model IDs for portability, but we use
 # local paths to avoid repeated downloading on the shared GB200 cluster.
 MODEL_PATHS_EXTRA=""
-if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
+if [[ $FRAMEWORK == "dynamo-sglang" || $FRAMEWORK == "sglang" ]]; then
     export CONFIG_DIR="/mnt/lustre01/artifacts/sglang-configs/1k1k"
     if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528"
@@ -418,6 +418,19 @@ if [[ "$IS_AGENTIC" == "1" && "$FRAMEWORK" == "vllm-router" ]]; then
         recipes/vllm/deepseek-r1/agentic
     cp "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/native-vllm-router-deps.sh" \
         configs/native-vllm-router-deps.sh
+elif [[ "$IS_AGENTIC" == "1" && "$FRAMEWORK" == "sglang" && "$MODEL_PREFIX" == "qwen3.5" ]]; then
+    SRT_SLURM_REPOSITORY="${SRT_SLURM_REPOSITORY:-https://github.com/SemiAnalysisAI/srt-slurm.git}"
+    SRT_SLURM_REF="${SRT_SLURM_REF:-8db08ff77bb614335c75b1d11119b94ef585d826}"
+    git clone "$SRT_SLURM_REPOSITORY" "$SRT_REPO_DIR" || exit 1
+    cd "$SRT_REPO_DIR" || exit 1
+    git checkout --detach "$SRT_SLURM_REF" || exit 1
+    test "$(git rev-parse HEAD)" = "$SRT_SLURM_REF" || {
+        echo "Error: srt-slurm checkout does not match requested exact commit $SRT_SLURM_REF" >&2
+        exit 1
+    }
+    mkdir -p recipes/sglang/qwen3.5/gb200-fp4/agentic
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb200-fp4/agentic" \
+        recipes/sglang/qwen3.5/gb200-fp4/agentic
 elif [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "glm5.2" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
     git clone --branch v1.0.50 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
