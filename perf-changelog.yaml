@@ -6498,4 +6498,4 @@
     - "Add the day-zero Qwen3.8-Flash-Next NVFP4 AgentX recipe on B300 with SGLang native NEXTN MTP at TP4 and concurrency 1/4/8/12/16."
     - "Serve RadixArk/Qwen3.8-Flash-Next-NVFP4 with modelopt_fp4 quantization, the trtllm_mha attention backend, and the flashinfer_trtllm MoE runner, following the Qwen3.5 NVFP4 B300 sibling."
     - "Pin throughput runs to an interim acceptance length of 3.24 measured at three speculative tokens; eval-only runs keep real target verification."
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2752
