@@ -164,6 +164,48 @@ if [ "$EP_SIZE" -gt 1 ]; then
     PARALLEL_ARGS+=(--ep-size "$EP_SIZE")
 fi
 
+# ---- Prefill context parallelism with two-batch overlap ----------------------
+
+PREFILL_CP="${PREFILL_CP:-true}"
+CP_STRATEGY="${CP_STRATEGY:-interleave}"
+ENABLE_TBO="${ENABLE_TBO:-true}"
+CP_ARGS=()
+SHARED_EXPERTS_FUSION_ARG=--enforce-shared-experts-fusion
+
+if [ "$PREFILL_CP" = "true" ]; then
+    # SGLang requires dp_size == 1 and tp_size <= 8 here; check it now so the
+    # error is easy to read.
+    if [ "$DP_ATTENTION" = "true" ]; then
+        echo "Error: PREFILL_CP=true is incompatible with DP_ATTENTION=true; interleave DSA CP requires dp_size=1" >&2
+        exit 1
+    fi
+    if [ "$TP" -gt 8 ]; then
+        echo "Error: PREFILL_CP=true requires TP<=8 (single machine), got TP=$TP" >&2
+        exit 1
+    fi
+    case "$CP_STRATEGY" in
+        interleave | zigzag) ;;
+        *) echo "Error: unknown CP_STRATEGY '$CP_STRATEGY' (expected: interleave | zigzag)" >&2; exit 1 ;;
+    esac
+
+    # TBO and per-layer stream overlap fight for the same ROCm queues, so turn
+    # the stream knobs off. CP sets moe_dense_tp_size=1, so the dense FFN goes
+    # through the DP gather / reduce-scatter path.
+    export SGLANG_OPT_USE_MULTI_STREAM_OVERLAP=false
+    export SGLANG_ROCM_USE_MULTI_STREAM=false
+    export SGLANG_DP_USE_GATHERV=1
+    export SGLANG_DP_USE_REDUCE_SCATTER=1
+    export GPU_MAX_HW_QUEUES=5
+
+    CP_ARGS=(--enable-prefill-cp --cp-strategy "$CP_STRATEGY")
+    if [ "$ENABLE_TBO" = "true" ]; then
+        CP_ARGS+=(--enable-two-batch-overlap)
+        # V4 does not turn shared-experts fusion off under TBO by itself.
+        SHARED_EXPERTS_FUSION_ARG=--disable-shared-experts-fusion
+    fi
+    echo "Prefill CP on: strategy=$CP_STRATEGY tbo=$ENABLE_TBO attn_cp_size=$TP $SHARED_EXPERTS_FUSION_ARG"
+fi
+
 # AgentX concurrency counts live session trees, not individual requests.
 # Subagent fan-out can push instantaneous request concurrency above CONC, so
 # leave 2x headroom rather than clipping those bursts at the scheduler.
@@ -218,7 +260,7 @@ SGLANG_CMD=(
     --page-size 256
     --swa-full-tokens-ratio 0.10
     --kv-cache-dtype fp8_e4m3
-    --enforce-shared-experts-fusion
+    "$SHARED_EXPERTS_FUSION_ARG"
     --tool-call-parser deepseekv4
     --reasoning-parser deepseek-v4
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
@@ -227,6 +269,7 @@ SGLANG_CMD=(
     --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
     "${SPEC_ARGS[@]}"
     "${CACHE_ARGS[@]}"
+    "${CP_ARGS[@]}"
     # MTP draft-token forward passes under long-context agentic load block the
     # scheduler long enough to trip the 1800s watchdog mid-warmup.
     --watchdog-timeout 3600
