@@ -179,7 +179,15 @@ SGLANG_CMD=(
     --chunked-prefill-size 8192
     --linear-attn-prefill-backend flashinfer
     --linear-attn-decode-backend flashinfer
-    --mamba-ssm-dtype bfloat16
+    # float32, not the cookbook's bfloat16. With NEXTN enabled the GDN linear
+    # attention backend routes verification through flashinfer's
+    # gated_delta_rule_mtp, which asserts initial_state.dtype == torch.float32
+    # and aborts CUDA graph capture on a bf16 SSM state:
+    #   AssertionError: initial_state must be float32, got torch.bfloat16
+    #   flashinfer/gdn_decode.py:761, via gdn_backend.py target_verify
+    # The cookbook command pairs bfloat16 with NEXTN, but this flashinfer build
+    # rejects that combination, and the state dtype is the half that can move.
+    --mamba-ssm-dtype float32
     "${SPEC_ARGS[@]}"
     --reasoning-parser auto
     # NEXTN silently resets --max-running-requests to 48 when it is unset, so
