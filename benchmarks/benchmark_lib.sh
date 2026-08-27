@@ -1718,6 +1718,10 @@ install_agentic_deps() {
         -e "$AIPERF_DIR" \
         "datasets>=4.7.0" \
         "huggingface_hub[cli]>=0.25.0" \
+        # Kimi-K3 tokenizer fallback path may require either sentencepiece or
+        # tiktoken when no prebuilt fast tokenizer artifact is available.
+        sentencepiece \
+        tiktoken \
         urllib3 \
         requests
 
