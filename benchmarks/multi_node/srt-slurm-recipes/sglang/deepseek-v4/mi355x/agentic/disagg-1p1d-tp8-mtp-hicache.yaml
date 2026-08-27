@@ -134,7 +134,10 @@ backend:
       chunked-prefill-size: 8192
       disable-cuda-graph: true
       enable-hierarchical-cache: true
-      hicache-ratio: 1
+      # Bound the host tier on nodes that reserve 2.8 TiB for HugeTLB. Ratio 1
+      # exhausts the remaining ordinary memory while the eight TP ranks build
+      # their host pools; 0.5 retains a useful DRAM tier without swap thrash.
+      hicache-ratio: 0.5
       hicache-io-backend: direct
       hicache-mem-layout: page_first
       hicache-write-policy: write_through
