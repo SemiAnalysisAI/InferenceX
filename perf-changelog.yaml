@@ -6587,3 +6587,12 @@
     - "Use the native SGLang router for request routing and AMD MoRI for disaggregated KV transfer, without Dynamo, NIXL, or the deleted amd_utils control plane."
     - "Remove the active and deprecated MI355X matrix entries that depended on amd_utils; configuration-specific child PRs reintroduce the active production lanes as native srt-slurm recipes."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2542
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang-disagg
+  description:
+    - "Replace the model-specific amd_utils launcher with native srt-slurm orchestration using SGLang Router and AMD MoRI for the existing 1P1D TP8 MI355X MXFP4 topology."
+    - "Run the complete 8k1k c8/c16/c32/c64/c128/c256/c512 search space in one eight-hour Slurm allocation through the repository's unchanged benchmark_serving.py custom benchmark."
+    - "Upgrade the disaggregated lane from SGLang ROCm v0.5.12.post1 to the current v0.5.17 MI35X image while retaining AITer attention, FP8 KV cache, and the production model identity."
+    - "Pin SemiAnalysisAI/srt-slurm PR #7 at 10a58d2ebb4d756c423424049c736b909b72e14f so native routing includes the validated DP-aware SGLang P/D rank contract, multi-node rank-offset preservation, and ATOM recipe flag normalization."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2629
