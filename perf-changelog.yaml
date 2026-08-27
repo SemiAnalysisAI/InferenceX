@@ -6558,3 +6558,17 @@
     - "Use the native SGLang router for request routing and AMD MoRI for disaggregated KV transfer, without Dynamo, NIXL, or the deleted amd_utils control plane."
     - "Remove the active and deprecated MI355X matrix entries that depended on amd_utils; configuration-specific child PRs reintroduce the active production lanes as native srt-slurm recipes."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2542
+
+- config-keys:
+    - dsr1-fp8-mi355x-sglang-disagg
+    - dsr1-fp8-mi355x-sglang-disagg-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Replace the DeepSeek-R1 FP8 model-specific amd_utils launcher with native srt-slurm orchestration using SGLang Router and AMD MoRI on MI355X."
+    - "Preserve all six production STP/MTP topology families and every original 8k1k point: 2P1D DEP8/DPA at c1024/c2048, 1P2D TP8 at c4-c256 for STP and c2-c256 for MTP2, and 1P1D TP4-to-TP8 at c1-c64."
+    - "Use the current lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260809 runtime, explicit role-specific MoRI dispatch limits, FP8 KV cache, AITer attention, and NEXTN draft depths matching the former MTP configurations."
+    - "Run the repository's unchanged benchmark_serving.py through srt-slurm's custom benchmark contract, with one allocation per topology to amortize model initialization across its concurrency sweep."
+    - "Expose the complete 163-shard legacy checkpoint as a zero-copy canonical Hugging Face cache seed rather than copying or downloading another 688.6 GB model tree."
+    - "Pin SemiAnalysisAI/srt-slurm PR #7 at 10a58d2ebb4d756c423424049c736b909b72e14f so every DP-attention P/D topology uses the validated SGLang rank-routing contract, multi-node rank-offset preservation, and ATOM recipe flag normalization."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2631
