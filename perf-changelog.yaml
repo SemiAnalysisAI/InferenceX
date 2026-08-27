@@ -6588,4 +6588,5 @@
     - "Route the qwen3.8next fp4 prefix in the B200 nscale launcher, which previously rejected the prefix outright, and fetch the checkpoint from HuggingFace into a shared-storage cache instead of requiring it pre-staged under the models tree."
     - "Correct the serve flags to the SGLang cookbook's verified single-node command for this model: TP1 rather than TP4, the flashinfer linear-attention prefill and decode backends, bfloat16 Mamba SSM, and checkpoint-derived quantization."
     - "Set the acceptance length to the committed golden thinking_on value of 2.32 at three speculative tokens, replacing the interim 3.24."
+    - "Use a float32 Mamba SSM state: flashinfer's gated_delta_rule_mtp verify kernel asserts float32 and aborts CUDA graph capture on the bfloat16 state the cookbook command specifies."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2751
