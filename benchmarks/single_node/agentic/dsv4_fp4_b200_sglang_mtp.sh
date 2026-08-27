@@ -115,18 +115,11 @@ if [ "$DP_ATTENTION" = "true" ]; then
     export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=8320
 
     PREFILL_DECODE_INTERVAL=24
-    # SGLang divides this global budget by dp_size. Keep 6144 tokens per rank
-    # for every DP-attention profile so the FP4 indexer retains HBM headroom.
-    CHUNKED_PREFILL_SIZE=$((6144 * TP))
-    SWA_FULL_TOKENS_RATIO=0.02
 
-    # Conc 128/160 additionally use balanced DP admission and one-second load
-    # snapshots.
-    if [ "$CONC" -eq 128 ] || [ "$CONC" -eq 160 ]; then
-        PARALLEL_ARGS+=(--load-balance-method total_requests)
-        METRICS_ARGS+=(--load-snapshot-publish-interval 1)
-        export AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID=true
-    fi
+    # Keep DP admission and session routing uniform across the DEP8 curve.
+    PARALLEL_ARGS+=(--load-balance-method total_requests)
+    METRICS_ARGS+=(--load-snapshot-publish-interval 1)
+    export AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID=true
     if [ "$CONC" -eq 160 ]; then
         # Leave enough HBM for the FP4 indexer's context-dependent workspace.
         # At 0.90 the canonical NScale warmup had 3.68 GiB free when the
@@ -151,6 +144,10 @@ if [ "$DP_ATTENTION" = "true" ]; then
         --disable-shared-experts-fusion
         --disable-flashinfer-autotune
     )
+    # SGLang divides this global budget by dp_size. Keep 6144 tokens per rank
+    # for every DP-attention profile so the FP4 indexer retains HBM headroom.
+    CHUNKED_PREFILL_SIZE=$((6144 * TP))
+    SWA_FULL_TOKENS_RATIO=0.02
 else
     PARALLEL_ARGS+=(
         --moe-runner-backend flashinfer_mxfp4
