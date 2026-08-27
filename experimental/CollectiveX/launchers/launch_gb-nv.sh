@@ -30,20 +30,50 @@ SCALE_UP_DOMAIN="${COLLX_SCALE_UP_DOMAIN:-72}"
 NGPUS="${COLLX_NGPUS:-$((NODES * GPN))}"
 if [ "$PRODUCT" = gb200 ]; then default_time=30; else default_time=90; fi
 TIME_MIN="${COLLX_TIME:-$default_time}"
+case "$COLLX_BENCH" in
+  nixl | mooncake)
+    # The dense grid (six ISLs, twelve batch rungs, two trials) is roughly
+    # 1.6x the honest work of the four-ISL grid that ran ~135 minutes on the
+    # mnnvl descriptor floor; 240 keeps the 2-node x 1-GPU ask small enough
+    # to backfill on a contended pool while clearing the raised guard below.
+    TIME_MIN=240
+    ;;
+esac
 IMAGE="$COLLX_IMAGE"
 TS="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
-export COLLX_TRANSPORT=mnnvl
+# EP on a GB rack always stays inside the NVL72 domain, but a kv-transfer
+# shard names its fabric: an rdma leg is real cross-node InfiniBand and must
+# get the same fail-closed network profile + validation every other scale-out
+# fabric gets, so its transport label must not read mnnvl.
+case "$COLLX_BENCH:${COLLX_MODE:-}" in
+  nixl:rdma | mooncake:rdma) export COLLX_TRANSPORT=mnnvl-rdma ;;
+  *) export COLLX_TRANSPORT=mnnvl ;;
+esac
 export COLLX_NODES="$NODES" COLLX_GPUS_PER_NODE="$GPN" COLLX_SCALE_UP_DOMAIN="$SCALE_UP_DOMAIN"
 export COLLX_NGPUS="$NGPUS"
 case "$COLLX_BENCH" in
   deepep-v2 | nccl-ep | flashinfer-ep) ;;
-  *) collx_die "unsupported $PRODUCT EP backend: $COLLX_BENCH" ;;
+  nixl | mooncake)
+    # The four-ISL grid was ~135 minutes of honest work on the mnnvl
+    # descriptor floor, nearly all of it timed bursts (run 31565324148:
+    # 8101 s job wall, 7967 s of burst p50s); the dense grid is ~1.6x that,
+    # so ~215 minutes. The guard must clear it with real margin yet still
+    # fire before the 240-minute allocation dies, so the failure stays a
+    # clean per-case kill instead of a lost allocation.
+    export COLLX_RUN_TIMEOUT="${COLLX_RUN_TIMEOUT:-13200}"
+    ;;  # kv-transfer suite
+  *) collx_die "unsupported $PRODUCT backend: $COLLX_BENCH" ;;
 esac
 collx_require_vars COLLX_IMAGE COLLX_IMAGE_PLATFORM COLLX_PARTITION COLLX_ACCOUNT COLLX_SQUASH_DIR COLLX_STAGE_DIR
 [ "$PRODUCT" != gb300 ] || collx_require_vars COLLX_ENROOT_CACHE_PATH
 PARTITION="$COLLX_PARTITION"; ACCOUNT="$COLLX_ACCOUNT"; SQUASH_DIR="$COLLX_SQUASH_DIR"
 [ -z "${COLLX_ENROOT_CACHE_PATH:-}" ] || export ENROOT_CACHE_PATH="$COLLX_ENROOT_CACHE_PATH"
-export NCCL_CUMEM_ENABLE=1 NCCL_MNNVL_ENABLE=1 MC_FORCE_MNNVL=1
+export NCCL_CUMEM_ENABLE=1 NCCL_MNNVL_ENABLE=1
+# MC_FORCE_MNNVL is mooncake's only reader here: it makes the engine install
+# ONLY its cross-node NVLink transport, which cannot open another host's
+# segments in the pinned wheel (cudaIpcOpenMemHandle: invalid resource handle,
+# kv CI run 3). The mooncake kv row declares the rdma lane, so it opts out.
+[ "$COLLX_BENCH" = mooncake ] || export MC_FORCE_MNNVL=1
 collx_apply_network_profile "$NODES" "$COLLX_TRANSPORT"
 
 collx_log "$PRODUCT nodes=$NODES x ${GPN}gpu world=$NGPUS bench=$COLLX_BENCH"
@@ -75,6 +105,14 @@ allocation=(--partition="$PARTITION" --account="$ACCOUNT" --nodes="$NODES"
 [ -z "${COLLX_EXCLUDE_NODES:-}" ] || allocation+=(--exclude="$COLLX_EXCLUDE_NODES")
 collx_salloc_jobid "${allocation[@]}"
 [ -n "$JOB_ID" ] || collx_die "no JOB_ID from salloc"
+# The rdma kv legs are the only gb-nv shards that leave the NVL domain; prove
+# their pinned socket interface and HCAs on the allocation like every other
+# scale-out launcher does (mnnvl shards skip, as elsewhere).
+if [ "$COLLX_TRANSPORT" != mnnvl ] \
+    && ! collx_validate_network_profile_on_job "$JOB_ID" "$NODES" "$COLLX_TRANSPORT"; then
+  collx_cleanup_allocation
+  collx_die "network profile validation failed on the allocation"
+fi
 
 # ---- container-import: squash file resolved on the allocation ---------------
 SQUASH_FILE="$(collx_ensure_squash_on_job "$JOB_ID" "$SQUASH_DIR" "$IMAGE")"

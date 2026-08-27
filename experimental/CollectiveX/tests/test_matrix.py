@@ -19,7 +19,10 @@ import config  # noqa: E402
 
 
 def matrix(**options):
-    return sweep_matrix.resolve_matrix(**options)
+    # These are the EP suite's contracts; kv-transfer has its own tests, and
+    # tests/test_kv_suite.py pins that resolving both suites never perturbs the
+    # EP half. Scoping here keeps every exhaustive assertion below exact.
+    return sweep_matrix.resolve_matrix(suites="ep-core", **options)
 
 
 def cells(document, project=("sku", "ep"), **filters):

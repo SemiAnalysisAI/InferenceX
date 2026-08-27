@@ -1,8 +1,9 @@
 # CollectiveX
 
-CollectiveX is an experimental MoE expert-parallel communication benchmark. It measures dispatch,
-combine, and paired roundtrip latency across EP libraries and accelerator systems, then uploads
-neutral result artifacts.
+CollectiveX is an experimental inference-communication benchmark. Its EP suite measures MoE
+dispatch, combine, and paired roundtrip latency across EP libraries and accelerator systems; its
+KV-transfer suite measures disaggregated-serving KV-cache handoffs across transfer libraries and
+fabrics. Both upload neutral result artifacts.
 
 CollectiveX schedules benchmarks, executes them on real allocations, and uploads the neutral
 artifacts each run emits. It does not validate those artifacts, promote, rank, recommend, select, or
@@ -148,6 +149,31 @@ hybrid path with GIN, two logical scale-out domains represented by two physical 
 scale-up ranks per domain. GB EP16 remains MNNVL scale-up and therefore uses LSA. Whether a given
 SKU/backend/EP cell is attempted is a capability fact. Whether it succeeded is decided by the
 benchmark's return code.
+
+## KV-Cache Transfer Suite
+
+`kv-transfer` legs run 2 nodes x 1 GPU — the per-worker prefill/decode pair a
+disaggregated deployment actually forms — and move bursts of 1 to 32 concurrent
+requests' paged KV as per-request layer-major descriptor lists over seed-keyed
+random block tables (the post-fragmentation layout vLLM and SGLang post; a
+burst posts every request's prepped transfer, then awaits them all), plus one
+contiguous bulk row as the wire-speed ceiling. The workload is transcribed from
+what vLLM allocates for the model it serves: `kv-dsv4` = DeepSeek-V4-Pro's mixed
+cache (30 Compressed Sparse Attention layers at 4 tokens per 576 B entry plus
+their 132 B indexer entries, 31 Heavily Compressed Attention layers at 128
+tokens per entry, and the 128-token sliding-window cache on all 61 layers; fp8
+by architecture); ISL
+8k to 512k at page sizes 16 and 64 tokens; `pull` (READ, vLLM NixlConnector) and `push` (WRITE,
+SGLang disagg) both timed from the initiator with offset-pattern verification on
+the destination pool in both directions. Backends: `nixl` (what Dynamo, vLLM,
+and SGLang ship), `mooncake` (NVIDIA-only; the wheel links libcuda at import),
+and `mori-io` (AMD's native engine) where the registry's `kv_backends` map
+enables them; no entry, no legs, mirroring `ll_backends`. A backend entry may
+restrict ops, pin an image, or set a NIC filter (mooncake on mi355x is
+push-only from AMD's atom-dev image over the GPU-paired Pollara NIC; upstream
+ionic RDMA READ is broken). Fabrics: `rdma`
+(torch pools) and, on GB racks, `mnnvl` (cuMem FABRIC pools; see the
+methodology for the bulk-vs-paged lane inversion that row exists to publish).
 
 ## Workflow And Artifacts
 

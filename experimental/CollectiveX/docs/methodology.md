@@ -452,6 +452,80 @@ rates are named `rate_at_latency_percentile`: bytes or tokens divided by the mat
 percentile. They are lower-tail service rates at p99 latency, not p99 percentiles of an inverted
 rate distribution.
 
+## KV-Cache Transfer Suite
+
+`suite: kv-transfer` measures the prefill→decode KV handoff of disaggregated serving as the
+libraries engines ship perform it: one-sided RDMA over registered GPU pools, initiated by one side
+(`pull` = READ, the vLLM NixlConnector shape; `push` = WRITE, the SGLang disagg shape). A leg is
+2 nodes x 1 GPU — the per-worker pair — with rank 0 owning the target pool and rank 1 posting and
+timing every transfer. Control is a gloo group (payload exchange + lockstep barriers); data never
+rides it.
+
+The transferred object is a burst of `batch` concurrent requests' paged KV: per request, `isl`
+tokens (8k / 32k / 128k / 512k) paged at 16 or 64 tokens per block, per layer, addressed
+layer-major over a `[layer][page]` pool through seed-keyed random block tables on BOTH sides
+(batched requests slice disjoint ranges of one permutation, as live requests never alias pages) —
+the post-fragmentation layout a connector actually posts, not a contiguous buffer. Each request is its own prepped transfer; a
+burst posts all of them, then awaits all, the way a decode step admits several requests at once.
+Workload presets are transcribed from what vLLM actually allocates for the model class, region by
+region. `kv-dsv4` is DeepSeek-V4-Pro as vLLM serves it (MXFP4 checkpoints included — quantization
+covers weights, the cache layout is architectural): the config's `compress_ratios` interleave 30
+Compressed Sparse Attention layers (4 tokens per compressed entry) with 31 Heavily Compressed
+Attention layers (128 tokens per entry); every compressed entry is vLLM's 576 B `fp8_ds_mla` slot
+(UE8M0 block-scaled fp8 packed with the bf16 rope dims); CSA layers add a 132 B/entry lightning-
+indexer cache (128 fp8 + 4 scale bytes); and all 61 layers keep a 128-token uncompressed sliding-
+window cache that is its own paged cache spec, so the connector transfers it too. Precision is
+pinned fp8 because the dtype mix is architectural, and the whole thing computes to a few percent
+of an equivalent dense GQA-bf16 cache. Compression trades bytes for descriptor count: the small
+entries it produces push transfers into the per-descriptor regime, so the paged rows sit far
+below each lane's `bulk` row — one single-descriptor transfer of the request's total bytes per
+ISL, the wire-speed ceiling the paged rows are read against (bulk rows are batch 1 by
+construction). Two budgets shed a point's largest batches rather than dropping the point, and the two
+smallest batches always survive, so a single request stays measurable everywhere and every point
+keeps a one-to-two scaling step on the batch axis: a per-rank pool budget (64 GiB, sized to the
+fleet's smallest HBM, and a hard memory limit the two-batch floor never overrides), and a
+per-burst descriptor budget (a 512k-ISL page-16 request alone is ~2.1M descriptors, and posting
+time is linear in batch x descriptors on the per-descriptor floor, so unbounded bursts would trip
+the per-case time guard; the floor deliberately runs that point's batch-2 burst ~2x over budget,
+bounded work that the gb-nv per-case guard is sized for).
+
+Timing is host wall clock around post→completion — completion of a one-sided transfer is
+host-visible and no local kernel participates, so CUDA events have nothing to bracket. Descriptor
+build + handle creation are reported separately as `prep_ms` (engines amortize them through
+prepped-handle reuse) and never inside the timed transfer. Every point reports pooled
+trials x reps percentiles, GB/s at p50, and a verification verdict: the destination pool is
+pattern-checked after `pull` on the initiator and after `push` on the target (an offset-derived
+byte pattern makes any page's expected contents computable from its offset alone), covering every
+request in the burst against its own block tables — concurrent same-session requests are exactly
+where corruption would hide, so a passing request 0 is never taken as evidence for the others.
+Both pools are repainted between points. A failed verify flips the document `invalid` and the
+leg red.
+
+A registry backend can carry restrictions: `ops` when a fabric serves one direction only
+(mooncake on mi355x runs `push` — AMD's atom-dev build moves WRITE at wire speed over the
+GPU-paired Pollara NIC, while upstream ionic RDMA READ completes with retry-exceeded and one
+failed READ poisons the engine, which is also why ATOM's production connector is write-only),
+`image_ref` when the build ships only inside a specific image, and `device` for engine NIC
+filters (`{gpu}` expands to the physical GPU index; registering GPU memory on a non-paired
+NIC fails and cross-rail pairs are unroutable). The summary's `op` column names the measured
+direction.
+
+Fabrics are a case dimension. `rdma` runs on torch (cudaMalloc) pools. `mnnvl` allocates the
+pools with cuMem FABRIC handles (kv_pool.FabricPool; needs a live nvidia-imex domain), because
+UCX's cross-node cuda_ipc only engages on fabric-mappable memory: on cudaMalloc pools the flag
+is silently inert and the transfer rides the IB rails with byte-identical numbers. Measured on
+GB200, the two lanes invert with transfer shape: mnnvl moves contiguous bulk at 636-707 GB/s
+(7.9x the 4-rail IB 89.8) but pays ~3.9 µs per descriptor copy, so paged rows drop BELOW the IB
+lane (19.5-34.3 vs 74.6-85.0 GB/s at 64-token pages). A paged-KV engine inside one rack is
+better served by the rails unless it coalesces; that comparison is exactly what the two fabric
+rows publish.
+
+Other lane facts, measured on the metal: 16-token pages are per-descriptor-bound (~1.5 µs/desc
+on x86 CX-7, ~0.9 µs on Grace, ~0.95 µs through Mooncake's batch path) and land at 25-45% of the
+64-token pages' bandwidth; single-WR bulk transfers above the provider's max message size must
+be split (the MoRI adapter caps WRs at 1 GiB); and Mooncake is NVIDIA-only at the binary level
+(the wheel links libcuda.so.1 at import; measured failing on mi355x).
+
 ## Correctness
 
 An implementation-independent oracle uses an expert-specific deterministic transform so wrong expert

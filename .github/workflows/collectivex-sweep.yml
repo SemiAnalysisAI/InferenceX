@@ -32,8 +32,12 @@ on:
         type: choice
         default: ''
         options: ['', dequant]
+      suites:
+        description: "Comma-list of suites to resolve (ep-core, kv-transfer); blank = all suites"
+        type: string
+        default: ''
 concurrency:
-  group: cx-${{ github.ref }}-${{ inputs.backend }}-${{ inputs.only_sku }}
+  group: cx-${{ github.ref }}-${{ inputs.backend }}-${{ inputs.only_sku }}-${{ inputs.suites }}
   cancel-in-progress: false
 
 jobs:
@@ -61,6 +65,7 @@ jobs:
           INPUT_EXCLUDE_SKUS: ${{ inputs.exclude_skus }}
           INPUT_EP_SIZES: ${{ inputs.ep_sizes }}
           INPUT_MODES: ${{ inputs.modes }}
+          INPUT_SUITES: ${{ inputs.suites }}
           RUN_ID: ${{ github.run_id }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
@@ -70,6 +75,7 @@ jobs:
           [ -n "$INPUT_EXCLUDE_SKUS" ] && args+=(--exclude-skus "$INPUT_EXCLUDE_SKUS")
           [ -n "$INPUT_EP_SIZES" ] && args+=(--ep-sizes "$INPUT_EP_SIZES")
           [ -n "$INPUT_MODES" ] && args+=(--modes "$INPUT_MODES")
+          [ -n "$INPUT_SUITES" ] && args+=(--suites "$INPUT_SUITES")
           python3 sweep_matrix.py "${args[@]}" --out matrix_full.json >/dev/null
           python3 - "$GITHUB_OUTPUT" <<'PY'
           import hashlib
@@ -144,6 +150,8 @@ jobs:
     timeout-minutes: 350
     env:
       COLLX_BENCH: ${{ matrix.backend }}
+      COLLX_MODE: ${{ matrix.mode }}
+      COLLX_IMAGE_OVERRIDE: ${{ matrix.image_ref || '' }}
       COLLX_NODES: ${{ matrix.nodes }}
       COLLX_GPUS_PER_NODE: ${{ matrix.gpus_per_node }}
       COLLX_SCALE_UP_DOMAIN: ${{ matrix.scale_up_domain }}

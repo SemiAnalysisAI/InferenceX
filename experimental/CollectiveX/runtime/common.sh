@@ -420,7 +420,10 @@ if [ "${COLLX_NODES:-1}" -gt 1 ] && [ "${COLLX_TRANSPORT:-}" != mnnvl ]; then
 fi
 export RANK="$SLURM_PROCID" WORLD_SIZE="$SLURM_NTASKS"
 export LOCAL_RANK="$SLURM_LOCALID" LOCAL_WORLD_SIZE="$COLLX_GPUS_PER_NODE"
-exec python3 bench/run_ep.py "$@"
+entry=run_ep
+if [ "${1:-}" = "--entrypoint" ]; then entry="${2:-}"; shift 2; fi
+case "$entry" in run_ep|run_kv) ;; *) exit 67 ;; esac
+exec python3 "bench/${entry}.py" "$@"
 BASH
 }
 
@@ -482,6 +485,13 @@ collx_cleanup_allocation() {
 # digest-qualified Docker Hub reference non-interactively.
 collx_select_image() {
   local image="$1"
+  # A registry kv backend may ship only inside a specific image (e.g. AMD's
+  # atom-dev mooncake build); the matrix carries that ref onto the shard and
+  # the workflow exports it here.
+  if [ -n "${COLLX_IMAGE_OVERRIDE:-}" ]; then
+    collx_log "image override for bench=$COLLX_BENCH: $COLLX_IMAGE_OVERRIDE"
+    image="$COLLX_IMAGE_OVERRIDE"
+  fi
   [[ "$image" =~ ^[A-Za-z0-9._/-]+:[A-Za-z0-9._-]+$ ]] \
     || collx_die "configured image reference is malformed"
   export COLLECTIVEX_IMAGE="$image"

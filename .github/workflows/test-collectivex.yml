@@ -41,6 +41,9 @@ jobs:
           # ep_flashinfer's combine-model switch compares wheel versions with
           # packaging.version; the benchmark image ships it, this runner does not.
           pip install packaging
+          # The kv-transfer workload/geometry tests are numpy math (the cpu
+          # torch wheel does not pull numpy in).
+          pip install numpy
 
       # Every skip in this suite is torch-gated, so a missing torch turns the oracle
       # checks into silent passes. Fail here instead, where the cause is obvious.
