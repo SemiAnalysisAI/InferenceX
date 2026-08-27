@@ -6110,3 +6110,12 @@
     - "Carry the required DCP/hybrid-cache fixes, bounded lazy-offload LRU scan, fused Kimi-K3 RMSNorm, vLLM #52968 model fusions, and #53166 chunked-context fusion as a fail-closed runtime overlay."
     - "Local 131k/1k screening reached 71,266 total tok/s at c32 with 23.43 s p90 TTFT and 75,893 total tok/s at c40 with 28.70 s p90 TTFT."
   pr-link: XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-k6-v466-tp8
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add c1/c4 GPU-resident baselines for the MI355X v466 DSpark K=6 configuration using TP8 only, with DCP and external KV offload disabled."
+    - "Pin synthetic acceptance to the committed probabilistic/block golden AL of 3.75 for K=6."
+  pr-link: XXX
