@@ -45,7 +45,7 @@ backend:
     TORCH_CUDA_ARCH_LIST: "10.0"
   decode_environment: *worker_environment
   sglang_config:
-    prefill: &worker_config
+    prefill:
       served-model-name: nvidia/Qwen3.5-397B-A17B-NVFP4-V2
       model-path: /model/
       trust-remote-code: true
@@ -68,25 +68,73 @@ backend:
       speculative-num-steps: 3
       speculative-eagle-topk: 1
       speculative-num-draft-tokens: 4
-      cuda-graph-max-bs: 64
       max-running-requests: 80
-      max-prefill-tokens: 16384
-      chunked-prefill-size: 16384
+      chunked-prefill-size: 65536
       mem-fraction-static: 0.80
       max-mamba-cache-size: 320
       allow-auto-truncate: true
       stream-interval: 50
       scheduler-recv-interval: 10
+      load-balance-method: round_robin
+      page-size: 64
+      disable-cuda-graph: true
+      mamba-scheduler-strategy: extra_buffer
+      mamba-track-interval: 2048
       mamba-max-states-per-path: 1
+      enable-hierarchical-cache: true
+      hicache-write-policy: write_back
+      hicache-io-backend: kernel
+      hicache-mem-layout: page_first_direct
+      hicache-ratio: 0.9
+      watchdog-timeout: 1000000
       weight-loader-prefetch-checkpoints: true
       weight-loader-prefetch-num-threads: 4
       disaggregation-transfer-backend: nixl
       enable-metrics: true
       enable-cache-report: true
     decode:
-      <<: *worker_config
+      served-model-name: nvidia/Qwen3.5-397B-A17B-NVFP4-V2
+      model-path: /model/
+      trust-remote-code: true
+      tensor-parallel-size: 2
+      data-parallel-size: 1
+      expert-parallel-size: 2
+      enable-dp-attention: false
+      enable-dp-lm-head: false
+      enable-symm-mem: false
+      quantization: modelopt_fp4
+      fp4-gemm-backend: flashinfer_cutlass
+      kv-cache-dtype: fp8_e4m3
+      mamba-ssm-dtype: bfloat16
+      attention-backend: trtllm_mha
+      linear-attn-prefill-backend: flashinfer
+      linear-attn-decode-backend: flashinfer
+      moe-runner-backend: flashinfer_trtllm
+      speculative-moe-runner-backend: flashinfer_trtllm
+      speculative-algorithm: NEXTN
+      speculative-num-steps: 3
+      speculative-eagle-topk: 1
+      speculative-num-draft-tokens: 4
       disable-radix-cache: true
-      mem-fraction-static: 0.80
+      prefill-round-robin-balance: true
+      chunked-prefill-size: 4096
+      mem-fraction-static: 0.75
+      max-running-requests: 80
+      cuda-graph-max-bs: 128
+      max-mamba-cache-size: 80
+      allow-auto-truncate: true
+      stream-interval: 50
+      scheduler-recv-interval: 10
+      mamba-scheduler-strategy: no_buffer
+      mamba-track-interval: 128
+      mamba-max-states-per-path: -1
+      page-size: 64
+      watchdog-timeout: 1000000
+      weight-loader-prefetch-checkpoints: true
+      weight-loader-prefetch-num-threads: 4
+      disaggregation-transfer-backend: nixl
+      enable-metrics: true
+      enable-cache-report: true
 
 sbatch_directives: { mem: "0", cpus-per-task: "144" }
 srun_options: { mem: "0", container-remap-root: "" }
