@@ -6499,4 +6499,5 @@
     - "Run without speculative decoding because the MI355X SGLang path for this model does not drive MTP yet, so this arm carries no synthetic-acceptance pin."
     - "Serve the FP8 checkpoint because no AMD FP4 checkpoint exists for this model yet and NVFP4 is unavailable for MI355X."
     - "Correct the serve flags to the SGLang cookbook's verified balanced single-node command for this model: TP8 rather than TP4, page size 32, automatic KV cache dtype, chunked prefill 16384, memory fraction 0.9, and multithreaded model loading."
+    - "Mount the repository away from the container path this image keeps its python packages under, so the bind mount stops hiding the SGLang and aiter trees the image puts on PYTHONPATH."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2754
