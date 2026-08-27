@@ -37,9 +37,19 @@ esac
 export K3_OVERLAY_PATCH="$script_dir/k3_patches/vllm_nightly_46638857_k3_tuned.patch"
 export REQUIRE_K3_OVERLAY=1
 
+if [ "${DCP_SIZE:-1}" -eq 1 ] && [ "${KV_OFFLOADING:-none}" = "none" ]; then
+    default_max_num_seqs=8
+    default_cudagraph_capture_size=64
+    default_cudagraph_capture_sizes="$(seq -s, 1 64)"
+else
+    default_max_num_seqs=80
+    default_cudagraph_capture_size=4096
+    default_cudagraph_capture_sizes="$(seq -s, 1 80),128,256,512,1024,2048,4096"
+fi
+
 export GPU_MEM_UTIL=0.90
 export MAX_NUM_BATCHED_TOKENS=16384
-export MAX_NUM_SEQS=80
+export MAX_NUM_SEQS="${MAX_NUM_SEQS:-$default_max_num_seqs}"
 export K3_AUTO_KV_PAGE=1
 export ASYNC_SCHEDULING=1
 
@@ -50,13 +60,6 @@ export PREFIX_MATCH_UNIT=128
 export PREFIX_CACHING_HASH_ALGO=sha256
 
 export VLLM_ALLOW_DCP_FULL_CUDAGRAPH=1
-if [ "${DCP_SIZE:-1}" -eq 1 ] && [ "${KV_OFFLOADING:-none}" = "none" ]; then
-    default_cudagraph_capture_size=64
-    default_cudagraph_capture_sizes="$(seq -s, 1 64)"
-else
-    default_cudagraph_capture_size=4096
-    default_cudagraph_capture_sizes="$(seq -s, 1 80),128,256,512,1024,2048,4096"
-fi
 export MAX_CUDAGRAPH_CAPTURE_SIZE="${MAX_CUDAGRAPH_CAPTURE_SIZE:-$default_cudagraph_capture_size}"
 export CUDAGRAPH_CAPTURE_SIZES="${CUDAGRAPH_CAPTURE_SIZES:-$default_cudagraph_capture_sizes}"
 export COMPILATION_CUSTOM_OPS='"+fused_rms_norm_gated","+quant_fp8","+grouped_topk","+sparse_attn_indexer","none"'
