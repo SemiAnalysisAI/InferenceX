@@ -6544,7 +6544,8 @@
     - fixed-seq-len
   description:
     - "Replace the manual llm-d, EPP, Envoy, pd-sidecar, and Slurm orchestration with srt-slurm's native vLLM backend and official vLLM Router 0.1.15 frontend, using NIXL for P/D KV transfer."
-    - "Run InferenceX's checked-in benchmark_serving.py directly through srt-slurm's custom benchmark contract; preserve the c1, c256, c512, c1024, and c4096 search points while collapsing equal-topology points into one model load."
+    - "Run InferenceX's checked-in benchmark_serving.py directly through srt-slurm's custom benchmark contract; preserve the c1, c256, c512, c1024, and c4096 search points."
+    - "Isolate c256, c512, and c1024 in separate equal-topology allocations with observed-runtime-sized 4h, 6h, and 12h limits; the first hardware sweep showed that chaining their complete 8k/1k corpora cannot fit a single eight-hour allocation."
     - "Change the c1 latency topology from DEP8 prefill plus TP8 decode to TP8 plus TP8 because official vLLM Router exposes one intra-node DP expansion factor for both pools; the mixed topology would expand the TP8 decode URL into nonexistent DP ranks."
     - "Delete the now-unused llm-d container build, EPP/Envoy configuration, sidecars, wrapper, bespoke Slurm scripts, and their documentation."
     - "Use the custom-benchmark contract's injected SRT_FRONTEND_HOST and SRT_FRONTEND_PORT for the resolved vLLM Router endpoint, and verify the backend's exact runtime vLLM 0.26.0 identity."

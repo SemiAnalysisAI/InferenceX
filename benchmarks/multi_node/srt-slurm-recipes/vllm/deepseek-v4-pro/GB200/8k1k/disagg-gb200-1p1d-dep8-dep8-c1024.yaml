@@ -1,4 +1,4 @@
-name: "dsv4-gb200-vllm-router-1p1d-dep8-dep8-c256-c512-c1024"
+name: "dsv4-gb200-vllm-router-1p1d-dep8-dep8-c1024"
 setup_script: "install-vllm-router.sh"
 
 model:
@@ -15,7 +15,7 @@ identity:
     vllm: "0.26.0"
 
 slurm:
-  time_limit: "8:00:00"
+  time_limit: "12:00:00"
 
 health_check:
   max_attempts: 2160
@@ -131,10 +131,10 @@ benchmark:
     set -euo pipefail
     result_dir=/logs/vllm_isl_8192_osl_1024
     mkdir -p "$result_dir"
-    for concurrency in 256 512 1024; do
-      num_prompts=$((concurrency * 10))
-      num_warmups=$((concurrency * 2))
-      python3 /infmax-workspace/utils/bench_serving/benchmark_serving.py \
+    concurrency=1024
+    num_prompts=$((concurrency * 10))
+    num_warmups=$((concurrency * 2))
+    python3 /infmax-workspace/utils/bench_serving/benchmark_serving.py \
         --backend openai \
         --base-url "http://$SRT_FRONTEND_HOST:$SRT_FRONTEND_PORT" \
         --endpoint /v1/completions \
@@ -160,4 +160,3 @@ benchmark:
         --save-result \
         --result-dir "$result_dir" \
         --result-filename "results_concurrency_${concurrency}_gpus_16_ctx_8_gen_8.json"
-    done
