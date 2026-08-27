@@ -125,7 +125,7 @@ The table also records both the agreed plan-of-record (PoR) draft-model mapping 
 | MiniMax-M3 (`minimaxm3`) | native/upstream vLLM engine | `Inferact/MiniMax-M3-EAGLE3` and/or `Inferact/MiniMax-M3-EAGLE3-GQA` | None | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
 | GLM-5.2 (`glm5.2`) | native/upstream SGLang engine | native MTP | None | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
 | Qwen3.5-397B-A17B (`qwen3.5`) | native/upstream SGLang engine | native MTP | None | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
-| Qwen3.8-Flash-Next (`qwen3.8next`) | native/upstream SGLang engine | TBD (pending model release) | None | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
+| Qwen3.8-Flash-Next (`qwen3.8next`) | native/upstream SGLang engine | TBD | native MTP (built-in 4B multi-step module; golden AL collector: [`qwen3.8next_fp4_b300_vllm.sh`](benchmarks/single_node/speedbench/qwen3.8next_fp4_b300_vllm.sh)) | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
 
 ### KV cache offloading policy
 
