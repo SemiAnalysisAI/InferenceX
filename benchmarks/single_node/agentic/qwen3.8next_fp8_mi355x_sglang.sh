@@ -100,23 +100,24 @@ SGLANG_CMD=(
     --host 0.0.0.0
     --port "$PORT"
     --trust-remote-code
-    "${PARALLEL_ARGS[@]}"
+    # Verified flags from the SGLang cookbook playground for this model on
+    # MI355X / FP8 / balanced / single node. Low-latency and high-throughput
+    # are not offered for this part, and NVFP4 is greyed out, so balanced FP8
+    # at TP8 is the whole of the verified AMD surface today.
+    --tp-size "$TP"
     --attention-backend aiter
-    --mem-fraction-static 0.80
-    --model-loader-extra-config '{"enable_multithread_load": true}'
+    --page-size 32
+    --kv-cache-dtype auto
+    --chunked-prefill-size 16384
     --watchdog-timeout 1200
-    --page-size 16
-    --kv-cache-dtype fp8_e4m3
-    --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
+    --mem-fraction-static 0.9
+    --model-loader-extra-config '{"enable_multithread_load": true}'
     --max-running-requests "$MAX_RUNNING_REQUESTS"
-    --max-prefill-tokens 32768
-    --chunked-prefill-size 32768
-    --scheduler-recv-interval "$SCHEDULER_RECV_INTERVAL"
+    --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
     --stream-interval 50
+    --scheduler-recv-interval "$SCHEDULER_RECV_INTERVAL"
     "${TOKENIZER_ARGS[@]}"
     --tokenizer-path "$MODEL"
-    --reasoning-parser qwen3
-    --tool-call-parser qwen3_coder
     --enable-metrics
     --enable-cache-report
     "${CACHE_ARGS[@]}"

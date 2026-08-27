@@ -6497,5 +6497,6 @@
   description:
     - "Add the day-zero Qwen3.8-Flash-Next FP8 AgentX recipe on MI355X with SGLang at TP4 and concurrency 1/4/8/12/16."
     - "Run without speculative decoding because the MI355X SGLang path for this model does not drive MTP yet, so this arm carries no synthetic-acceptance pin."
-    - "Serve the FP8 checkpoint because no AMD FP4 checkpoint exists for this model yet."
+    - "Serve the FP8 checkpoint because no AMD FP4 checkpoint exists for this model yet and NVFP4 is unavailable for MI355X."
+    - "Correct the serve flags to the SGLang cookbook's verified balanced single-node command for this model: TP8 rather than TP4, page size 32, automatic KV cache dtype, chunked prefill 16384, memory fraction 0.9, and multithreaded model loading."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2754
