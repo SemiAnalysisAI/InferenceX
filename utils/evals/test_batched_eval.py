@@ -228,17 +228,15 @@ def test_validate_scores_checks_threshold_for_every_concurrency(
 
 
 def test_amd_multinode_container_forwards_eval_concurrency_list() -> None:
-    job_slurm = (
+    launcher = (
         Path(__file__).resolve().parents[2]
-        / "benchmarks"
-        / "multi_node"
-        / "amd_utils"
-        / "job.slurm"
+        / "runners"
+        / "launch_mi355x-amds-srt.sh"
     )
-    contents = job_slurm.read_text()
+    contents = launcher.read_text()
 
-    assert r'-e \"EVAL_CONC=\$EVAL_CONC\"' in contents
-    assert "-e EVAL_CONC\n" not in contents
+    assert '    "EVAL_CONC",' in contents
+    assert 'benchmark_env[key] = value' in contents
 
     workflow = (
         Path(__file__).resolve().parents[2]
