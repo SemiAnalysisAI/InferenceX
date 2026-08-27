@@ -12,6 +12,8 @@ SLURM_PARTITION="batch_1"
 SLURM_ACCOUNT="benchmark"
 POWER_SRT_SLURM_URL="https://github.com/edwingao28/srt-slurm.git"
 POWER_SRT_SLURM_PIN="e5c837f06a362dc888dfea2ee588e9f19c298270"
+TILERT_SRT_SLURM_URL="https://github.com/SemiAnalysisAI/srt-slurm.git"
+TILERT_SRT_SLURM_PIN="d1e6c97b3baf3e87103b6d83189544c3c7d61c38"
 
 # Node-local NVMe, not a shared filesystem: much faster for the ~1.6T
 # DeepSeek-V4-Pro load, and already pre-staged on every nscale compute node.
@@ -46,12 +48,15 @@ elif [[ $MODEL_PREFIX == "kimik2.6" && $PRECISION == "fp4" ]]; then
 elif [[ $MODEL_PREFIX == "kimik3" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="${MODEL_PATH:-$NSCALE_MODEL_ROOT/Kimi-K3}"
     export SRT_SLURM_MODEL_PREFIX="kimik3"
+elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp8" && $FRAMEWORK == "tilert" ]]; then
+    export SRT_SLURM_MODEL_PREFIX="glm5.1-fp8"
 else
     run_compat_launcher
 fi
 
 if [[ $FRAMEWORK != "dynamo-vllm" ]] &&
-   [[ $MODEL_PREFIX != "dsv4" || $PRECISION != "fp4" || $FRAMEWORK != "dynamo-sglang" || $SPEC_DECODING != "mtp" ]]; then
+   [[ $MODEL_PREFIX != "dsv4" || $PRECISION != "fp4" || $FRAMEWORK != "dynamo-sglang" || $SPEC_DECODING != "mtp" ]] &&
+   [[ $MODEL_PREFIX != "glm5.1" || $PRECISION != "fp8" || $FRAMEWORK != "tilert" || $SPEC_DECODING != "mtp" ]]; then
     run_compat_launcher
 fi
 
@@ -103,6 +108,17 @@ if [[ "$USES_DCGM_POWER" == "1" ]]; then
         mkdir -p recipes/vllm/kimi-k2.6
         cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k2.6" recipes/vllm/kimi-k2.6
     fi
+elif [[ "$IS_AGENTIC" == "1" && $MODEL_PREFIX == "glm5.1" && $FRAMEWORK == "tilert" ]]; then
+    git clone "$TILERT_SRT_SLURM_URL" "$SRT_REPO_DIR" || exit 1
+    cd "$SRT_REPO_DIR" || exit 1
+    git checkout "$TILERT_SRT_SLURM_PIN" || exit 1
+    test "$(git rev-parse HEAD)" = "$TILERT_SRT_SLURM_PIN" || {
+        echo "Error: srt-slurm HEAD does not match TILERT_SRT_SLURM_PIN=$TILERT_SRT_SLURM_PIN" >&2
+        exit 1
+    }
+    mkdir -p recipes/tilert/glm5.1/b200-fp8/agentic || exit 1
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/tilert/glm5.1/b200-fp8/agentic" \
+        recipes/tilert/glm5.1/b200-fp8/agentic || exit 1
 elif [[ "$IS_AGENTIC" == "1" && $MODEL_PREFIX == "kimik3" ]]; then
     # Pin the tested renderer so branch movement cannot change generated rank
     # commands between sweep points.
@@ -158,13 +174,32 @@ chmod a+rx "$SQUASH_DIR" || true
 SQUASH_FILE="$SQUASH_DIR/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 NGINX_SQUASH_FILE="$SQUASH_DIR/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
+# Enroot treats docker://foo/bar as a Docker Hub path. Preserve that form for
+# ordinary Docker Hub images, but use Enroot's explicit registry separator for
+# fully qualified references such as ghcr.io/tile-ai/tilert.
+enroot_uri_for_image() {
+    local image_ref="$1"
+    local first_component="${image_ref%%/*}"
+
+    if [[ "$image_ref" == */* && (
+        "$first_component" == *.* ||
+        "$first_component" == *:* ||
+        "$first_component" == "localhost"
+    ) ]]; then
+        printf 'docker://%s#%s\n' "$first_component" "${image_ref#*/}"
+    else
+        printf 'docker://%s\n' "$image_ref"
+    fi
+}
+
 # Import containers via enroot, serialized so concurrent runners on this
 # cluster don't race on the same squash file.
 import_squash() {
     local squash_file="$1"
     local image_ref="$2"
-    local image_key
+    local image_key enroot_uri
     image_key=$(echo "$image_ref" | sed 's/[\/:@#]/_/g')
+    enroot_uri=$(enroot_uri_for_image "$image_ref") || exit 1
     local lock_dir="${SQUASH_DIR}/.locks"
     mkdir -p "$lock_dir"
     local lock_file="${lock_dir}/${image_key}.lock"
@@ -175,7 +210,7 @@ import_squash() {
             echo "Squash file already exists and is valid, skipping import: $squash_file"
         else
             rm -f "$squash_file"
-            enroot import -o "$squash_file" "docker://$image_ref"
+            enroot import -o "$squash_file" "$enroot_uri"
             if ! unsquashfs -l "$squash_file" > /dev/null 2>&1; then
                 echo "Error: enroot import did not produce a valid squash file: $squash_file" >&2
                 exit 1
@@ -188,9 +223,19 @@ import_squash() {
 import_squash "$SQUASH_FILE" "$IMAGE" || exit 1
 import_squash "$NGINX_SQUASH_FILE" "$NGINX_IMAGE" || exit 1
 
+PREFILL_SQUASH_FILE=""
+TILERT_CONTAINER_BLOCK=""
+if [[ $FRAMEWORK == "tilert" ]]; then
+    : "${PREFILL_IMAGE:?PREFILL_IMAGE is required for TileRT prefill}"
+    PREFILL_SQUASH_FILE="$SQUASH_DIR/$(echo "$PREFILL_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    import_squash "$PREFILL_SQUASH_FILE" "$PREFILL_IMAGE" || exit 1
+    TILERT_CONTAINER_BLOCK="
+  tilert-decode: ${SQUASH_FILE}
+  tilert-prefill: ${PREFILL_SQUASH_FILE}"
+fi
+
 if [[ "$USES_DCGM_POWER" == "1" ]]; then
     DCGM_EXPORTER_IMAGE="nvcr.io/nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless"
-    # enroot resolves bare paths against Docker Hub; nvcr.io pulls need the registry# form
     DCGM_EXPORTER_ENROOT_REF="${DCGM_EXPORTER_IMAGE/nvcr.io\//nvcr.io#}"
     DCGM_EXPORTER_SQSH="$SQUASH_DIR/$(echo "$DCGM_EXPORTER_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     import_squash "$DCGM_EXPORTER_SQSH" "$DCGM_EXPORTER_ENROOT_REF" || exit 1
@@ -214,6 +259,13 @@ if [[ "$IS_AGENTIC" == "1" ]]; then
     DEFAULT_MOUNTS_BLOCK="default_mounts:
   ${AIPERF_MMAP_CACHE_HOST_PATH}: /aiperf_mmap_cache
   ${HF_HUB_CACHE_HOST_PATH}: /hf_hub_cache"
+fi
+if [[ $FRAMEWORK == "tilert" ]]; then
+    TILERT_WEIGHTS_HOST_PATH="/data/home/sa-shared/gharunners/tilert-cache"
+    mkdir -p "$TILERT_WEIGHTS_HOST_PATH"
+    DEFAULT_MOUNTS_BLOCK="${DEFAULT_MOUNTS_BLOCK}
+  ${GITHUB_WORKSPACE}: /infmax-workspace
+  ${TILERT_WEIGHTS_HOST_PATH}: ${TILERT_WEIGHTS_HOST_PATH}"
 fi
 
 SRTCTL_ROOT="${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"
@@ -239,6 +291,7 @@ containers:
   dynamo-sglang: "${SQUASH_FILE}"
   "${IMAGE}": "${SQUASH_FILE}"
   nginx-sqsh: "${NGINX_SQUASH_FILE}"
+${TILERT_CONTAINER_BLOCK}
 use_exclusive_sbatch_directive: true
 ${DEFAULT_MOUNTS_BLOCK}
 EOF

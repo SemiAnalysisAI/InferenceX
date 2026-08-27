@@ -6490,7 +6490,6 @@
     - "Required lanes promote exporter startup timeouts, launch failures, and endpoint resolution failures to blocking validation failures, so a recipe cannot publish a result whose power collection never started."
     - "Route only enabled recipes through the immutable producer fork and preserve non-power launcher revisions."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2688
-
 - config-keys:
     - qwen3.8next-fp8-h200-sglang-agentic-mtp
   scenario-type:
@@ -6537,3 +6536,14 @@
     - "Use a float32 Mamba SSM state, as Hopper's flashinfer verify kernel requires, unlike the bfloat16 the Blackwell arms must use."
     - "Pin throughput runs to the committed golden thinking_on acceptance length of 2.32 at three speculative tokens; eval-only runs keep real target verification."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2756
+
+- config-keys:
+    - glm5.1-fp8-b200-tilert-agentic
+  description:
+    - "Port the B200 GLM-5.1 FP8 TileRT AgentX MTP 1P1D configuration from its manual salloc/srun launcher to native srt-slurm orchestration."
+    - "Use srt-slurm's explicit vLLM-prefill/TileRT-decode topology and the official TileRT P/D router without Dynamo or the legacy submit.sh/run_node.sh control plane."
+    - "Convert TileRT decode weights once under a shared lock, publish the cache atomically, and keep prefill and decode in their role-specific vLLM 0.26.0 and TileRT 0.1.5 images."
+    - "Pass only the real vLLM prefill Prometheus endpoint to AIPerf; TileRT decode exposes health and token-transfer APIs but no /metrics route."
+    - "Filter AgentX traces at the same 202,752-token context limit used by both TileRT roles so oversized Weka trajectories are excluded before replay."
+    - "Pin SemiAnalysisAI/srt-slurm PR #10 commit d1e6c97b3baf3e87103b6d83189544c3c7d61c38, stacked on the AMD/native-router PR #7 and base runtime PR #1, including explicit native HTTP dependencies, GLM-5.1-compatible Transformers v5 router tokenization, incomplete-snapshot recovery, backend-declared conversion GPU resources, pre-container NVIDIA driver-hook activation, and lossless Slurm container-environment exports."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2750

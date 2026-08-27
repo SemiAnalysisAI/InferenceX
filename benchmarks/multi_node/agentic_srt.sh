@@ -9,6 +9,19 @@ set -x
 INFMAX_CONTAINER_WORKSPACE="${INFMAX_CONTAINER_WORKSPACE:-/infmax-workspace}"
 source "$INFMAX_CONTAINER_WORKSPACE/benchmarks/benchmark_lib.sh"
 
+# benchmark_lib deliberately clears inherited MAX_MODEL_LEN for AgentX so a
+# workflow default cannot silently truncate a model's native context. Native
+# srt-slurm topologies may still expose a smaller, explicit service limit (for
+# example when both P/D roles are configured identically below model-native
+# context). Restore that limit only through this dedicated opt-in.
+if [[ -n "${AIPERF_MAX_CONTEXT_LENGTH:-}" ]]; then
+    if ! [[ "$AIPERF_MAX_CONTEXT_LENGTH" =~ ^[1-9][0-9]*$ ]]; then
+        echo "ERROR: AIPERF_MAX_CONTEXT_LENGTH must be a positive integer" >&2
+        exit 1
+    fi
+    export MAX_MODEL_LEN="$AIPERF_MAX_CONTEXT_LENGTH"
+fi
+
 check_env_vars MODEL MODEL_PREFIX FRAMEWORK PRECISION CONC RESULT_FILENAME DURATION
 
 BASE_RESULT_DIR="${RESULT_DIR:-/logs/agentic}"

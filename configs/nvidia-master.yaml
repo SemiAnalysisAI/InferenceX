@@ -9884,6 +9884,7 @@ glm5.1-fp8-b200-tilert-agentic:
           additional-settings:
           - "PREFILL_IMAGE=vllm/vllm-openai:v0.26.0"
           - "PREFILL_NODES=1"
+          - "CONFIG_FILE=recipes/tilert/glm5.1/b200-fp8/agentic/disagg-1p1d-tp8-mtp.yaml"
         decode:
           num-worker: 1
           tp: 8
