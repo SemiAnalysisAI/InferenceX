@@ -6537,3 +6537,14 @@
     - "Use a float32 Mamba SSM state, as Hopper's flashinfer verify kernel requires, unlike the bfloat16 the Blackwell arms must use."
     - "Pin throughput runs to the committed golden thinking_on acceptance length of 2.32 at three speculative tokens; eval-only runs keep real target verification."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2756
+
+- config-keys:
+    - dsv4-fp4-gb200-llmd-vllm
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Replace the manual llm-d, EPP, Envoy, pd-sidecar, and Slurm orchestration with srt-slurm's native vLLM backend and official vLLM Router 0.1.15 frontend, using NIXL for P/D KV transfer."
+    - "Run InferenceX's checked-in benchmark_serving.py directly through srt-slurm's custom benchmark contract; preserve the c1, c256, c512, c1024, and c4096 search points while collapsing equal-topology points into one model load."
+    - "Change the c1 latency topology from DEP8 prefill plus TP8 decode to TP8 plus TP8 because official vLLM Router exposes one intra-node DP expansion factor for both pools; the mixed topology would expand the TP8 decode URL into nonexistent DP ranks."
+    - "Delete the now-unused llm-d container build, EPP/Envoy configuration, sidecars, wrapper, bespoke Slurm scripts, and their documentation."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2757
