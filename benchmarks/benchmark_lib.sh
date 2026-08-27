@@ -266,9 +266,14 @@ _amd_monitor_min_covered_tick() {
             if (cell[power_col] !~ /^[0-9]+(\.[0-9]+)?$/) next
             if (cell[power_col] + 0 <= 0) next
             if (cell[gpu_col] == "") next
+            ts = cell[1] + 0
+            # Mirror _parse_timestamp in utils/aggregate_power.py: normalize
+            # millisecond epochs so a ms-stamping amd-smi build cannot
+            # trivially satisfy any second-scale stop target.
+            if (ts > 1e12) ts /= 1000
             gpu = cell[gpu_col]
-            if (!(gpu in newest) || cell[1] + 0 > newest[gpu])
-                newest[gpu] = cell[1] + 0
+            if (!(gpu in newest) || ts > newest[gpu])
+                newest[gpu] = ts
         }
         END {
             have = 0
@@ -286,12 +291,20 @@ _amd_monitor_min_covered_tick() {
 # on timeout or early monitor death it warns and lets aggregation attribute
 # the missing coverage (fail-safe, never fail-silent).
 _wait_for_amd_stop_coverage() {
-    local target deadline covered
-    if [[ "${AMD_MONITOR_STOP_TIMEOUT_S:-30}" -le 0 ]]; then
+    local target deadline covered timeout_s
+    # A non-integer timeout (e.g. "30s") would abort the whole stop_gpu_monitor
+    # call under `set -e` at the arithmetic below, leaking the monitor process
+    # and skipping tail repair + the energy sidecar; fall back to the default.
+    timeout_s="${AMD_MONITOR_STOP_TIMEOUT_S:-30}"
+    if [[ ! "$timeout_s" =~ ^-?[0-9]+$ ]]; then
+        echo "[GPU Monitor] Warning: ignoring non-integer AMD_MONITOR_STOP_TIMEOUT_S='$timeout_s', using 30" >&2
+        timeout_s=30
+    fi
+    if [[ "$timeout_s" -le 0 ]]; then
         return 0
     fi
     target=$(( $(date +%s) + 1 ))
-    deadline=$(( target + ${AMD_MONITOR_STOP_TIMEOUT_S:-30} ))
+    deadline=$(( target + timeout_s ))
     while :; do
         covered=$(_amd_monitor_min_covered_tick)
         if [[ -z "$covered" ]]; then
@@ -308,7 +321,7 @@ _wait_for_amd_stop_coverage() {
             return 0
         fi
         if [[ "$(date +%s)" -ge "$deadline" ]]; then
-            echo "[GPU Monitor] Warning: AMD telemetry never covered the stop request within ${AMD_MONITOR_STOP_TIMEOUT_S}s (covered=$covered target=$target)" >&2
+            echo "[GPU Monitor] Warning: AMD telemetry never covered the stop request within ${timeout_s}s (covered=$covered target=$target)" >&2
             return 0
         fi
         sleep 1
