@@ -7184,6 +7184,25 @@ qwen3.5-fp8-h200-sglang-agentic-mtp:
       - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [4, 8, 12, 16] }
       - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [4, 8, 12, 16] }
 
+
+# Qwen3.8-Flash-Next FP8 AgentX on H200 via SGLang with native NEXTN MTP.
+# Day-zero recipe. H200 is Hopper, so this arm is FP8: NVFP4 is greyed out for
+# this part in the SGLang cookbook. TP4 with EP4 per the cookbook's verified
+# low-latency single-node command, which shards the 512-expert MoE with expert
+# parallelism rather than sharding attention eight ways.
+qwen3.8next-fp8-h200-sglang-agentic-mtp:
+  image: lmsysorg/sglang:qwen38flashnext
+  model: Qwen/Qwen3.8-Flash-Next-FP8
+  model-prefix: qwen3.8next
+  runner: cluster:h200-dgxc
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.8
+      search-space:
+      - { tp: 4, ep: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16] }
 # H200 AgentX MTP frontier with DRAM HiCache. This is intentionally an MTP-only
 # submission; the model's non-speculative AgentX arm is not included.
 qwen3.5-fp8-h200-sglang-agentic-hicache-mtp:
