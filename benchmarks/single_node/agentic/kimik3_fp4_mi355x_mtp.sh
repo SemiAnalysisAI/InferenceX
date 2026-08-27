@@ -197,6 +197,9 @@ VLLM_CMD=(
     "${COMPILATION_CONFIG_ARGS[@]}"
 )
 
+SERVER_PID=$!
+echo "Server PID: $SERVER_PID"
+
 for _a in CP_ARGS SPEC_ARGS CHUNKED_PREFILL_ARGS ASYNC_SCHED_ARGS MLA_PREFILL_ARGS OFFLOAD_ARGS COMPILATION_CONFIG_ARGS; do
     grep -q "\${$_a\[@\]}" "$0" || echo "[orphan-check] WARNING: $_a is built but never passed to VLLM_CMD" >&2
 done
