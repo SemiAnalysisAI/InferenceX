@@ -111,15 +111,19 @@ if [ "$DP_ATTENTION" = "true" ]; then
     export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=8320
 
     PREFILL_DECODE_INTERVAL=24
-    # SGLang divides this global budget by dp_size. Conc 64/96 retain the
+    # SGLang divides this global budget by dp_size. Conc 64 retains the
     # validated 8192-token per-rank budget.
     CHUNKED_PREFILL_SIZE=$((8192 * TP))
     SWA_FULL_TOKENS_RATIO=0.02
 
-    # The higher-concurrency points use a reduced prefill budget, a compact
-    # decode graph, balanced DP admission, and one-second load snapshots.
-    if [ "$CONC" -eq 128 ] || [ "$CONC" -eq 160 ]; then
+    # Keep enough HBM workspace for the FP4 indexer at higher concurrency.
+    if [ "$CONC" -eq 96 ] || [ "$CONC" -eq 128 ] || [ "$CONC" -eq 160 ]; then
         CHUNKED_PREFILL_SIZE=$((6144 * TP))
+    fi
+
+    # Conc 128/160 additionally use balanced DP admission and one-second load
+    # snapshots.
+    if [ "$CONC" -eq 128 ] || [ "$CONC" -eq 160 ]; then
         PARALLEL_ARGS+=(--load-balance-method total_requests)
         METRICS_ARGS+=(--load-snapshot-publish-interval 1)
         export AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID=true
@@ -162,7 +166,7 @@ fi
 # Allow subagent fan-out to exceed CONC without clipping request bursts.
 MAX_RUNNING_REQUESTS=$((2 * CONC))
 CUDA_GRAPH_MAX_BS=$((2 * CONC))
-if [ "$DP_ATTENTION" = "true" ] && { [ "$CONC" -eq 128 ] || [ "$CONC" -eq 160 ]; }; then
+if [ "$DP_ATTENTION" = "true" ] && { [ "$CONC" -eq 96 ] || [ "$CONC" -eq 128 ] || [ "$CONC" -eq 160 ]; }; then
     CUDA_GRAPH_MAX_BS=32
 fi
 CUDA_GRAPH_ARGS=(--cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS")
