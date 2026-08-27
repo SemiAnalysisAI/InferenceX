@@ -450,11 +450,12 @@ def _multinode_parallelism_key(entry: dict) -> tuple:
         ):
             return value
         worker = dict(value)
-        settings = worker.get(Fields.ADDITIONAL_SETTINGS.value, []) or []
-        worker[Fields.ADDITIONAL_SETTINGS.value] = [
-            setting for setting in settings
-            if not setting.startswith("CONFIG_FILE=")
-        ]
+        settings_key = Fields.ADDITIONAL_SETTINGS.value
+        if settings_key in worker:
+            worker[settings_key] = [
+                setting for setting in (worker[settings_key] or [])
+                if not setting.startswith("CONFIG_FILE=")
+            ]
         return worker
 
     return tuple(sorted(
