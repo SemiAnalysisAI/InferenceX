@@ -51,6 +51,7 @@ import os
 import sys
 
 _ENV_DIR = "PROFILE_EXECUTION_TRACE_DIR"
+_ENV_DISPATCH = "PROFILE_ET_DISPATCH"  # "0" disables the launcher trampoline
 _DISABLE_MARKER = ".et-disabled"
 _TARGET = "torch.profiler"
 
@@ -173,6 +174,198 @@ def _finalize(prof):
         _warn_once("rename", f"failed to rename {tmp_path}: {exc!r}")
 
 
+# ---------------------------------------------------------------------------
+# Launcher dispatch trampoline.
+#
+# Kernels launched outside the torch dispatcher (tilelang JIT kernels,
+# deep_gemm's python entrypoints) are invisible to both Kineto op attribution
+# and the ExecutionTraceObserver: nothing records their tensor arguments, so
+# the captured operator DAG has holes at every such launch. While an ET
+# session is active, calls to those launchers are routed through dynamically
+# registered torch.library custom ops (namespace `etshim`) whose only impl is
+# the original callable — the dispatcher then records the call with its full
+# tensor argument list like any other op. Outside ET sessions every call goes
+# straight through (one flag check of overhead). Any failure permanently
+# falls back to the raw callable for that call signature.
+# ---------------------------------------------------------------------------
+
+_dispatch_lib = None
+_dispatch_idx = 0
+
+
+def _dispatch_enabled():
+    return os.environ.get(_ENV_DISPATCH, "1") != "0"
+
+
+def _type_key(a):
+    # bool must be tested before int (bool subclasses int)
+    if isinstance(a, bool):
+        return "b"
+    if isinstance(a, int):
+        return "i"
+    if isinstance(a, float):
+        return "f"
+    type_name = type(a).__name__
+    if type_name == "Tensor":
+        return "T"
+    return None
+
+
+def _register_dispatch_op(qualname, fn, args, ret_is_tensor):
+    """Define etshim::<name>_<n> with a schema derived from this call's args."""
+    global _dispatch_lib, _dispatch_idx
+    from torch.library import Library
+
+    parts = []
+    for i, a in enumerate(args):
+        k = _type_key(a)
+        if k == "T":
+            parts.append(f"Tensor(a{i}!) a{i}")  # assume mutable: out-params
+        elif k == "b":
+            parts.append(f"bool a{i}")
+        elif k == "i":
+            parts.append(f"int a{i}")
+        elif k == "f":
+            parts.append(f"float a{i}")
+        else:
+            return None
+    ret = "Tensor" if ret_is_tensor else "()"
+    if _dispatch_lib is None:
+        _dispatch_lib = Library("etshim", "DEF")
+    _dispatch_idx += 1
+    safe = "".join(ch if ch.isalnum() or ch == "_" else "_" for ch in qualname)
+    opname = f"{safe}_{_dispatch_idx}"
+    _dispatch_lib.define(f"{opname}({', '.join(parts)}) -> {ret}")
+    _dispatch_lib.impl(opname, lambda *a: fn(*a), "CompositeExplicitAutograd")
+    import torch
+
+    return getattr(torch.ops.etshim, opname).default
+
+
+class _LauncherProxy:
+    """Callable proxy that dispatches through etshim ops during ET sessions.
+
+    Attribute access forwards to the wrapped callable so decorated objects
+    that expose helper methods keep working.
+    """
+
+    def __init__(self, qualname, fn):
+        object.__setattr__(self, "_infx_fn", fn)
+        object.__setattr__(self, "_infx_qualname", qualname)
+        object.__setattr__(self, "_infx_ops", {})
+
+    def __call__(self, *args, **kwargs):
+        fn = self._infx_fn
+        if kwargs or _active_observer is None:
+            return fn(*args, **kwargs)
+        try:
+            key = tuple(_type_key(a) for a in args)
+        except Exception:  # noqa: BLE001
+            return fn(*args)
+        ops = self._infx_ops
+        op = ops.get(key)
+        if op is False:
+            return fn(*args)
+        if op is None:
+            # First call for this signature runs raw to learn the return
+            # kind; anything but None/Tensor is not schema-able.
+            result = fn(*args)
+            try:
+                import torch
+
+                if result is None or isinstance(result, torch.Tensor):
+                    new_op = _register_dispatch_op(
+                        self._infx_qualname, fn, args, result is not None
+                    )
+                    ops[key] = new_op if new_op is not None else False
+                else:
+                    ops[key] = False
+            except Exception as exc:  # noqa: BLE001
+                _warn_once(
+                    f"dispatch-def-{self._infx_qualname}",
+                    f"cannot register dispatch op for {self._infx_qualname}: {exc!r}",
+                )
+                ops[key] = False
+            return result
+        try:
+            return op(*args)
+        except Exception as exc:  # noqa: BLE001
+            _warn_once(
+                f"dispatch-call-{self._infx_qualname}",
+                f"dispatch call failed for {self._infx_qualname}, "
+                f"falling back to raw: {exc!r}",
+            )
+            ops[key] = False
+            return self._infx_fn(*args)
+
+    def __getattr__(self, item):
+        return getattr(object.__getattribute__(self, "_infx_fn"), item)
+
+    def __repr__(self):
+        return f"<etshim launcher proxy for {self._infx_fn!r}>"
+
+
+def _maybe_proxy(qualname, obj):
+    if not callable(obj) or isinstance(obj, _LauncherProxy) or isinstance(obj, type):
+        return obj
+    return _LauncherProxy(qualname, obj)
+
+
+def _hook_tilelang(module):
+    """Wrap tilelang.jit so decorated kernels dispatch through etshim ops."""
+    orig = getattr(module, "jit", None)
+    if orig is None or getattr(orig, "_infx_et_patched", False):
+        return
+    import functools
+
+    @functools.wraps(orig)
+    def jit(*args, **kwargs):
+        # bare form: @tilelang.jit
+        if len(args) == 1 and callable(args[0]) and not kwargs:
+            fn = args[0]
+            return _maybe_proxy(
+                f"tilelang.{getattr(fn, '__name__', 'kernel')}", orig(fn)
+            )
+        deco = orig(*args, **kwargs)
+        if not callable(deco):
+            return deco
+
+        @functools.wraps(deco)
+        def wrapped_deco(fn):
+            return _maybe_proxy(
+                f"tilelang.{getattr(fn, '__name__', 'kernel')}", deco(fn)
+            )
+
+        return wrapped_deco
+
+    jit._infx_et_patched = True
+    module.jit = jit
+    print("[execution-trace] tilelang.jit launcher trampoline armed",
+          file=sys.stderr, flush=True)
+
+
+def _hook_deep_gemm(module):
+    """Proxy deep_gemm's public module-level callables."""
+    if getattr(module, "_infx_et_patched", False):
+        return
+    wrapped = 0
+    for attr in dir(module):
+        if attr.startswith("_"):
+            continue
+        try:
+            val = getattr(module, attr)
+        except Exception:  # noqa: BLE001
+            continue
+        if callable(val) and not isinstance(val, type) and getattr(
+            val, "__module__", ""
+        ).startswith("deep_gemm"):
+            setattr(module, attr, _maybe_proxy(f"deep_gemm.{attr}", val))
+            wrapped += 1
+    module._infx_et_patched = True
+    print(f"[execution-trace] deep_gemm launcher trampoline armed "
+          f"({wrapped} callables)", file=sys.stderr, flush=True)
+
+
 def _patch_profiler_module(module):
     """Wrap torch.profiler.profile.start/stop (idempotent)."""
     profile_cls = getattr(module, "profile", None)
@@ -198,36 +391,40 @@ def _patch_profiler_module(module):
     profile_cls._infx_et_patched = True
 
 
-class _ProfilerImportHook:
-    """Meta-path finder that patches torch.profiler right after it executes.
+class _ModuleImportHook:
+    """Meta-path finder that patches target modules right after they execute.
 
     sitecustomize runs before torch is importable state-wise (and importing
-    torch in every python process would be prohibitively slow), so the patch
-    is deferred until the process actually imports torch.profiler.
+    torch in every python process would be prohibitively slow), so patches
+    are deferred until the process actually imports each target.
     """
 
     _busy = False
 
+    def __init__(self, patchers):
+        self._patchers = patchers  # fullname -> patch fn
+
     def find_spec(self, fullname, path=None, target=None):
-        if fullname != _TARGET or _ProfilerImportHook._busy:
+        if fullname not in self._patchers or _ModuleImportHook._busy:
             return None
         import importlib.util
 
-        _ProfilerImportHook._busy = True
+        _ModuleImportHook._busy = True
         try:
             spec = importlib.util.find_spec(fullname)
         finally:
-            _ProfilerImportHook._busy = False
+            _ModuleImportHook._busy = False
         if spec is None or spec.loader is None:
             return None
         orig_exec_module = spec.loader.exec_module
+        patcher = self._patchers[fullname]
 
         def exec_module(module):
             orig_exec_module(module)
             try:
-                _patch_profiler_module(module)
+                patcher(module)
             except Exception as exc:  # noqa: BLE001
-                _warn_once("patch", f"failed to patch torch.profiler: {exc!r}")
+                _warn_once("patch", f"failed to patch {fullname}: {exc!r}")
 
         # FileFinder builds a fresh loader instance per spec, so shadowing
         # exec_module on this instance only affects this one import.
@@ -238,11 +435,22 @@ class _ProfilerImportHook:
 def _install():
     if not os.environ.get(_ENV_DIR):
         return
-    existing = sys.modules.get(_TARGET)
-    if existing is not None:
-        _patch_profiler_module(existing)
-        return
-    sys.meta_path.insert(0, _ProfilerImportHook())
+    patchers = {_TARGET: _patch_profiler_module}
+    if _dispatch_enabled():
+        patchers["tilelang"] = _hook_tilelang
+        patchers["deep_gemm"] = _hook_deep_gemm
+    pending = {}
+    for fullname, patcher in patchers.items():
+        existing = sys.modules.get(fullname)
+        if existing is not None:
+            try:
+                patcher(existing)
+            except Exception as exc:  # noqa: BLE001
+                _warn_once("patch", f"failed to patch {fullname}: {exc!r}")
+        else:
+            pending[fullname] = patcher
+    if pending:
+        sys.meta_path.insert(0, _ModuleImportHook(pending))
 
 
 _install()
