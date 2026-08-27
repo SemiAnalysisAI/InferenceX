@@ -130,7 +130,7 @@ jobs:
             inputs.skip_queue_pr != '' &&
             format(
               '["self-hosted",{0},{1},{2},{3},{4}]',
-              toJSON(matrix.sku),
+              toJSON(matrix.runner),
               toJSON(format('nodes:{0}', matrix.nodes)),
               toJSON(format(
                 'ci-job-{0}-{1}',
@@ -142,7 +142,7 @@ jobs:
             ) ||
             format(
               '["self-hosted",{0},{1},{2},{3}]',
-              toJSON(matrix.sku),
+              toJSON(matrix.runner),
               toJSON(format('nodes:{0}', matrix.nodes)),
               toJSON(format(
                 'ci-job-{0}-{1}',
@@ -154,7 +154,7 @@ jobs:
           ) ||
           format(
             '["self-hosted",{0},{1},{2}]',
-            toJSON(matrix.sku),
+            toJSON(matrix.runner),
             toJSON(format(
               'ci-job-{0}-{1}',
               needs.setup.outputs.priority,
@@ -163,9 +163,9 @@ jobs:
             toJSON(format('ci-attempt-{0}', github.run_attempt))
           )
         ) ||
-        format('[{0}]', toJSON(matrix.sku))
+        format('[{0}]', toJSON(matrix.runner))
       ) }}
-    name: p${{ needs.setup.outputs.priority }} | ${{ matrix.sku }} ${{ matrix.backend }} shard ${{ matrix.id }}
+    name: p${{ needs.setup.outputs.priority }} | ${{ matrix.runner }} ${{ matrix.backend }} shard ${{ matrix.id }}
     timeout-minutes: 350
     env:
       COLLX_BENCH: ${{ matrix.backend }}

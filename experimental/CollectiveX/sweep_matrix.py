@@ -349,6 +349,7 @@ def resolve_matrix(
         shards_by_sku.setdefault(sku, []).append({
             "id": f"{sku}-kv-{kv_backend}-{fabric}",
             "sku": sku,
+            "runner": PLATFORMS[sku].get("runner", sku),
             "backend": kv_backend,
             "mode": fabric,
             "image_ref": spec["image_ref"] or "",
@@ -366,6 +367,7 @@ def resolve_matrix(
         shards_by_sku.setdefault(sku, []).append({
             "id": f"{sku}-{target}{mode_segment}-{precision}-n{nodes}",
             "sku": sku,
+            "runner": PLATFORMS[sku].get("runner", sku),
             "backend": target,
             "mode": mode,
             "launcher": PLATFORMS[sku]["launcher"],
