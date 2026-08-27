@@ -67,11 +67,15 @@ if require_agentic_kv_offload_backend hicache; then
     # DeepSeek V4 HiCache currently rejects --hicache-size and supports
     # capacity control only through a host/device token-capacity ratio.
     # DSv4 exposes capacity as a host/device token ratio rather than bytes.
-    # B200 ratio=8 stays below the configured host-memory capacity for the
-    # currently supported TP8 shape.
-    DEFAULT_HICACHE_RATIO=8
+    # DEP8 shards the host pools and fits ratio=8 on NScale. The replicated
+    # TP8 pools need a lower ratio: 2.75 allocates about 121 GiB per rank and
+    # leaves startup headroom on the 1.7 TiB NScale hosts.
+    DEFAULT_HICACHE_RATIO=2.75
+    if [ "$DP_ATTENTION" = "true" ]; then
+        DEFAULT_HICACHE_RATIO=8
+    fi
     HICACHE_RATIO="${HICACHE_RATIO:-$DEFAULT_HICACHE_RATIO}"
-    if [ "$HICACHE_RATIO" -gt "$DEFAULT_HICACHE_RATIO" ]; then
+    if awk -v ratio="$HICACHE_RATIO" -v max="$DEFAULT_HICACHE_RATIO" 'BEGIN { exit !(ratio > max) }'; then
         echo "Error: HICACHE_RATIO=$HICACHE_RATIO exceeds configured limit $DEFAULT_HICACHE_RATIO" >&2
         exit 1
     fi
