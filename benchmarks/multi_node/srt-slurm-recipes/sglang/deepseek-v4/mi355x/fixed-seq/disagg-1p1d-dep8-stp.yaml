@@ -105,7 +105,7 @@ backend:
     SGLANG_DISAGGREGATION_FORCE_QUERY_PREFILL_DP_RANK: "1"
   decode_environment:
     <<: *common_environment
-    SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "1024"
+    SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "128"
   sglang_config:
     prefill: &common_server
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
