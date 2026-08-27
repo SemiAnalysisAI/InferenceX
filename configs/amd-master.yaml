@@ -638,7 +638,7 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
       #- { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 4], spec-decoding: mtp }
       #- { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [8, 10, 16, 20], spec-decoding: mtp }
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1], spec-decoding: mtp }
-      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [52], spec-decoding: mtp }
+      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [8, 52], spec-decoding: mtp }
 
 # DCP A/B against kimik3-fp4-mi355x-vllm-agentic-mtp. Same image, same recipe,
 # same KV-offload arm per concurrency -- the ONLY delta is dcp-size 8, so c4 and
