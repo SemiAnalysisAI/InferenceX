@@ -2530,7 +2530,7 @@ qwen35-fp4-gb200-sglang-router-regression-disagg:
     agentic-coding:
     - search-space:
       - spec-decoding: mtp
-        conc-list: [16]
+        conc-list: [2]
         prefill:
           num-worker: 1
           tp: 2
