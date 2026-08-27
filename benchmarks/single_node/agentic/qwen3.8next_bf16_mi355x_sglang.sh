@@ -2,9 +2,31 @@
 set -euo pipefail
 set -x
 
-# AgentX trace replay for Qwen3.5-397B-A17B MXFP4 on MI355X with SGLang
-# native EAGLE MTP. Throughput uses the committed golden synthetic
-# acceptance length; evaluation retains real target-model verification.
+# AgentX trace replay for Qwen3.8-Flash-Next BF16 on MI355X with SGLang.
+# Day-zero recipe; SGLang is the plan-of-record engine for this model
+# (MODELS.md).
+#
+# Two deliberate differences from the NVIDIA arms:
+#
+#   * No speculative decoding. The MI355X SGLang path for this model does not
+#     drive MTP yet, so this arm runs the target model alone and carries no
+#     synthetic-acceptance pin. Add MTP and the golden AL once ROCm supports
+#     it. Until then this arm is not directly comparable to the spec-decode
+#     NVIDIA arms on the published frontier.
+#
+#   * BF16, not FP8 or FP4. NVFP4 is greyed out for MI355X in the cookbook and
+#     there is no AMD FP4 checkpoint. FP8 does not load either: this image's
+#     model code classifies model.layers.N.ple.ple_embedding.ngram_embedding
+#     as an unquantized module and asserts its weight_scale is 1.0, while the
+#     FP8 checkpoint genuinely quantizes it and ships a real scale:
+#       AssertionError: Expected 1.0, got 0.00019931793212890625 in skipped
+#       model.layers.1.ple.ple_embedding.ngram_embedding.weight_scale
+#       qwen4_exp.py:2039 in load_weights
+#     The checkpoint's modules_to_not_convert lists ple.conv1d, ple.key_proj
+#     and ple.value_proj but not the ngram embedding, so the skip set is being
+#     matched too broadly on the .ple. prefix. No serve flag changes that. The
+#     BF16 checkpoint (335.3 GiB, no quantization_config at all) has no scales
+#     to mis-handle. Revert to FP8 once a fixed ROCm image ships.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
