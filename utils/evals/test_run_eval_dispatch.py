@@ -143,15 +143,18 @@ PATH="$SHIM_DIR:$PATH" run_lm_eval --port 9999 2>&1
 '''
 
 
-def _run_lm_eval_cmdline(*, eval_limit=None) -> str:
+def _run_lm_eval_cmdline(*, eval_limit=None, eval_server_host=None) -> str:
     env = {
         **os.environ,
         "BENCHMARK_LIB": str(BENCHMARK_LIB),
         "KV_OFFLOADING": "none",
     }
     env.pop("EVAL_LIMIT", None)
+    env.pop("EVAL_SERVER_HOST", None)
     if eval_limit is not None:
         env["EVAL_LIMIT"] = str(eval_limit)
+    if eval_server_host is not None:
+        env["EVAL_SERVER_HOST"] = eval_server_host
     res = subprocess.run(
         ["bash", "-c", _EVAL_LIMIT_SCRIPT],
         env=env,
@@ -175,6 +178,11 @@ def test_eval_limit_absent_when_unset():
 def test_lm_eval_defaults_to_gsm8k():
     out = _run_lm_eval_cmdline()
     assert "utils/evals/gsm8k.yaml" in out
+
+
+def test_lm_eval_uses_routed_server_host_when_set():
+    out = _run_lm_eval_cmdline(eval_server_host="10.0.0.42")
+    assert "base_url=http://10.0.0.42:9999/v1/chat/completions" in out
 
 
 
