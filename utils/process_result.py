@@ -67,6 +67,7 @@ def record_power_internal_error(
     try:
         from aggregate_power import (
             _POWER_METRIC_KEYS,
+            POWER_METRIC_SCHEMA_VERSION,
             _empty_integration,
             _validation_payload,
             _write_json_atomic,
@@ -77,6 +78,7 @@ def record_power_internal_error(
             agg_data.pop(key, None)
         for key in _MULTINODE_ROLE_METRIC_KEYS:
             agg_data.pop(key, None)
+        agg_data["power_metric_schema_version"] = POWER_METRIC_SCHEMA_VERSION
         agg_data["power_valid"] = 0
         agg_data.pop("power_invalid_reasons", None)
         _write_json_atomic(agg_result, agg_data)

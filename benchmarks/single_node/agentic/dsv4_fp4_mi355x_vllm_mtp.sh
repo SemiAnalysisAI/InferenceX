@@ -371,10 +371,21 @@ if [ "$EP_SIZE" -gt 1 ]; then
     EP_ARGS=(--enable-expert-parallel)
 fi
 
+DP_SCHED_ARGS=()
+if [ "$DP_ATTENTION" = "true" ]; then
+    DP_SCHED_ARGS=(
+        --prefill-schedule-interval 8
+        --long-prefill-token-threshold 16384
+    )
+fi
+
 # AgentX concurrency counts live session trees, not individual requests.
 # Subagent fan-out can push instantaneous request concurrency above CONC, so
 # leave 2x headroom rather than clipping those bursts at the scheduler.
 MAX_NUM_SEQS=$((2 * CONC))
+if [ "$DP_ATTENTION" = "true" ]; then
+    MAX_NUM_SEQS="$CONC"
+fi
 
 # DeepSeek-V4-Pro ships a native MTP head. AgentX throughput pins its
 # three-token draft to the committed thinking-on golden acceptance length;
@@ -390,8 +401,9 @@ fi
 echo "Starting vllm server..."
 set -x
 export VLLM_ROCM_USE_AITER=1
-#export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
+export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 export VLLM_ROCM_USE_AITER_MOE=1
+export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
 
 sleep 180
 
@@ -404,9 +416,11 @@ VLLM_CMD=(
     --async-scheduling
     --distributed-executor-backend mp
     --kv-cache-dtype fp8
+    --max-num-batched-tokens 8192
     "${PARALLEL_ARGS[@]}"
     "${EP_ARGS[@]}"
-    --gpu-memory-utilization 0.8
+    "${DP_SCHED_ARGS[@]}"
+    --gpu-memory-utilization 0.86
     --moe-backend aiter
     --compilation-config '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE"}'
     --speculative-config "$SPEC_CONFIG"
