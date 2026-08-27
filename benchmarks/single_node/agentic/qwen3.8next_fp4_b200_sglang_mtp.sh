@@ -32,10 +32,79 @@ if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
 fi
 
-if [[ -n "${MODEL_PATH:-}" ]]; then
-    if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
-        hf download "$MODEL" --local-dir "$MODEL_PATH"
+# The B200 nscale launcher hands us a shared directory rather than a staged
+# checkpoint, and several matrix cells run against it at once, so "non-empty"
+# is not the same as "complete". A first cell whose download stalls leaves a
+# partial tree that every later cell accepts and serves: that is how this arm
+# produced a fully loaded server and gsm8k exact_match 0.0000, with 81 GB of
+# 126 GB on disk, 8 leftover .incomplete files and no index. Check the index
+# and every shard it names instead, and let hf download resume the rest --
+# it is incremental, so re-running it on a partial tree is cheap and correct.
+model_download_is_complete() {
+    local dir="$1"
+    local index="$dir/model.safetensors.index.json"
+    [[ -f "$index" ]] || return 1
+    if [[ -n "$(find "$dir" -name '*.incomplete' -print -quit 2>/dev/null)" ]]; then
+        return 1
     fi
+    python3 - "$dir" <<'PYEOF'
+import json, os, sys
+
+directory = sys.argv[1]
+index = os.path.join(directory, "model.safetensors.index.json")
+try:
+    shards = set(json.load(open(index))["weight_map"].values())
+except Exception:
+    sys.exit(1)
+missing = [s for s in sorted(shards) if not os.path.isfile(os.path.join(directory, s))]
+if missing:
+    print(f"checkpoint incomplete: {len(missing)}/{len(shards)} shards missing, "
+          f"first {missing[0]}", file=sys.stderr)
+    sys.exit(1)
+sys.exit(0)
+PYEOF
+}
+
+download_model_once() {
+    # Serialize across the matrix cells sharing this directory. Without the
+    # lock the completeness check turns "one cell downloads" into "every cell
+    # downloads into the same tree at once", and hf download names its
+    # .incomplete files by content hash, so the concurrent writers collide on
+    # the same paths. The first holder downloads; the rest wake up, find the
+    # checkpoint complete and skip. flock matches what the launcher already
+    # does for squashfs imports.
+    local lock="${MODEL_PATH}.lock"
+    mkdir -p "$(dirname "$MODEL_PATH")"
+    if ! command -v flock >/dev/null 2>&1; then
+        echo "WARNING: flock unavailable; downloading without the cross-cell lock" >&2
+        _download_model_if_needed
+        return
+    fi
+    exec 9>"$lock"
+    if ! flock -w 5400 9; then
+        echo "WARNING: timed out waiting for $lock; proceeding unlocked" >&2
+    fi
+    _download_model_if_needed
+    exec 9>&-
+}
+
+_download_model_if_needed() {
+    if model_download_is_complete "$MODEL_PATH"; then
+        echo "Checkpoint already complete at $MODEL_PATH"
+        return
+    fi
+    echo "Downloading $MODEL into $MODEL_PATH (absent or incomplete)"
+    # Xet stalled this transfer twice at exactly 81 GB, once from a login node
+    # and once from inside a job. The plain HTTPS path does not.
+    HF_HUB_DISABLE_XET=1 hf download "$MODEL" --local-dir "$MODEL_PATH"
+    if ! model_download_is_complete "$MODEL_PATH"; then
+        echo "Error: $MODEL_PATH is still incomplete after hf download" >&2
+        exit 1
+    fi
+}
+
+if [[ -n "${MODEL_PATH:-}" ]]; then
+    download_model_once
 else
     hf download "$MODEL"
     export MODEL_PATH="$MODEL"
