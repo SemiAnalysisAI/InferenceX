@@ -6589,5 +6589,5 @@
     - "Correct the serve flags to the SGLang cookbook's verified single-node command for this model: TP1 rather than TP4, the flashinfer linear-attention prefill and decode backends, bfloat16 Mamba SSM, and checkpoint-derived quantization."
     - "Set the acceptance length to the committed golden thinking_on value of 2.32 at three speculative tokens, replacing the interim 3.24."
     - "Keep the bfloat16 Mamba SSM state the cookbook specifies: SGLang requires it on SM100 or newer whenever the flashinfer linear-attention decode backend is selected."
-    - "Treat the shared checkpoint directory as complete only when the index and every shard it names are present, take a cross-cell lock around the download, and disable Xet for it, after a stalled partial download was served as a finished model."
+    - "Download the checkpoint to node-local scratch rather than the shared home, and treat it as complete only when the index and every shard it names are present, after a stalled partial download was served as a finished model and a shared-home download hit a stale-handle error."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2751

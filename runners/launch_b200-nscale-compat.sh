@@ -94,17 +94,21 @@ elif [[ $MODEL_PREFIX == "kimik3" && $PRECISION == "fp4" ]]; then
     export SRT_SLURM_MODEL_PREFIX="kimik3"
 elif [[ $MODEL_PREFIX == "qwen3.8next" && $PRECISION == "fp4" ]]; then
     # Qwen3.8-Flash-Next NVFP4 is not staged on this cluster, so this branch
-    # does not point at the staging tree. Note /scratch is NOT the same
-    # filesystem on both sides: on the login node it is a symlink to NFS
-    # /data/scratch, while on a compute node it is node-local /dev/md0 xfs that
-    # holds the staged models and is not writable by the runner account. The
-    # home directory is the one path that is shared, writable and identical on
-    # both, so the checkpoint goes there and the bench script's own
-    # `hf download --local-dir "$MODEL_PATH"` populates it on the first run.
-    # KEEP_HF_MODEL_ID keeps MODEL as the HuggingFace repo id further down,
-    # because `hf download` needs a repo id and every other branch here
-    # overwrites MODEL with the local path.
-    export MODEL_PATH="${MODEL_PATH:-${HOME}/models/Qwen3.8-Flash-Next-NVFP4}"
+    # does not point at the staging tree. The bench script's own
+    # `hf download --local-dir "$MODEL_PATH"` populates it instead, and
+    # KEEP_HF_MODEL_ID below keeps MODEL a HuggingFace repo id so that call has
+    # something valid to fetch.
+    #
+    # The target is node-local scratch, not the shared home. /tmp on a compute
+    # node is /dev/md0 with ~17 TB free; $HOME is NFSv4. Downloading 126 GiB to
+    # the shared home made every cell in the matrix write the same tree from a
+    # different node, and huggingface_hub failed reading a shard back with
+    #   OSError: [Errno 521] ... layer-00007-experts-0256-0383.safetensors
+    # a stale-handle class error. Node-local storage makes each node fetch its
+    # own copy -- about 2.5 minutes at the 861 MB/s these nodes sustain -- and
+    # removes cross-node sharing from the picture entirely. The directory is
+    # created with srun so it lands on the allocated node.
+    export MODEL_PATH="${MODEL_PATH:-/tmp/inferencex-models/Qwen3.8-Flash-Next-NVFP4}"
     export KEEP_HF_MODEL_ID=1
     export SRT_SLURM_MODEL_PREFIX="qwen3.8next-fp4"
 else
@@ -595,9 +599,11 @@ else
         # The bench script downloads into MODEL_PATH itself, so MODEL has to
         # stay a HuggingFace repo id. Create the directory first: it is bind
         # mounted below and srun fails outright on a missing mount source.
-        if ! mkdir -p "$MODEL_PATH"; then
-            echo "Error: cannot create $MODEL_PATH on shared storage; the bind mount below would fail" >&2
-            echo "Note: compute-node /scratch is node-local and not writable here; use a path under \$HOME" >&2
+        # Create it ON THE ALLOCATED NODE, because MODEL_PATH is node-local
+        # scratch: /tmp is /dev/md0 with ~17 TB free on these nodes, while the
+        # login node has an unrelated /tmp of its own.
+        if ! srun --jobid="$JOB_ID" mkdir -p "$MODEL_PATH"; then
+            echo "Error: cannot create $MODEL_PATH on the compute node; the bind mount below would fail" >&2
             exit 1
         fi
     else
