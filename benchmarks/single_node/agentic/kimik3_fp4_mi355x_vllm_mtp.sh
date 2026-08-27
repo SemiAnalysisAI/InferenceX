@@ -50,8 +50,15 @@ export PREFIX_MATCH_UNIT=128
 export PREFIX_CACHING_HASH_ALGO=sha256
 
 export VLLM_ALLOW_DCP_FULL_CUDAGRAPH=1
-export MAX_CUDAGRAPH_CAPTURE_SIZE=4096
-export CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 1 80),128,256,512,1024,2048,4096"
+if [ "${DCP_SIZE:-1}" -eq 1 ] && [ "${KV_OFFLOADING:-none}" = "none" ]; then
+    default_cudagraph_capture_size=32
+    default_cudagraph_capture_sizes="$(seq -s, 1 32)"
+else
+    default_cudagraph_capture_size=4096
+    default_cudagraph_capture_sizes="$(seq -s, 1 80),128,256,512,1024,2048,4096"
+fi
+export MAX_CUDAGRAPH_CAPTURE_SIZE="${MAX_CUDAGRAPH_CAPTURE_SIZE:-$default_cudagraph_capture_size}"
+export CUDAGRAPH_CAPTURE_SIZES="${CUDAGRAPH_CAPTURE_SIZES:-$default_cudagraph_capture_sizes}"
 export COMPILATION_CUSTOM_OPS='"+fused_rms_norm_gated","+quant_fp8","+grouped_topk","+sparse_attn_indexer","none"'
 
 export HSA_NO_SCRATCH_RECLAIM=1
