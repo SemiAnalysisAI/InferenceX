@@ -18,6 +18,7 @@ Guidance for AI agents working with InferenceX.
 
 ## Non-negotiable benchmark invariants
 
+- Every priority-scheduled benchmark job on a self-hosted cluster must request exactly one `nodes:N` label, where `N` is the positive integer number of physical Slurm nodes required. Single-node jobs use `nodes:1`; generated multi-node jobs must forward their computed `node-count`. A queued job missing this label is ineligible for priority scheduling, and labels cannot be added retroactively, so fix the source branch and dispatch a new run.
 - Every change that can affect benchmark performance and every recipe addition or modification requires a new `perf-changelog.yaml` entry. The file is append-only and byte-sensitive. Preserve all existing bytes and separator whitespace, and append only at the tail.
 - Multi-node srt-slurm changes update the recipe YAML and matching master config together. For image bumps, `model.container` must equal `image`.
 - Every `*_mtp.sh` passes `--use-chat-template` to `run_benchmark_serving`.
