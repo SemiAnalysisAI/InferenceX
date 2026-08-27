@@ -635,8 +635,10 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.65
       search-space:
-      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 4], spec-decoding: mtp }
-      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [8, 10, 16, 20], spec-decoding: mtp }
+      #- { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 4], spec-decoding: mtp }
+      #- { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [8, 10, 16, 20], spec-decoding: mtp }
+      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1], spec-decoding: mtp }
+      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [52], spec-decoding: mtp }
 
 # DCP A/B against kimik3-fp4-mi355x-vllm-agentic-mtp. Same image, same recipe,
 # same KV-offload arm per concurrency -- the ONLY delta is dcp-size 8, so c4 and
@@ -658,8 +660,8 @@ kimik3-fp4-mi355x-vllm-agentic-mtp-dcp:
     agentic-coding:
     - dram-utilization: 0.65
       search-space:
-      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: none, conc-list: [4], spec-decoding: mtp }
-      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [8], spec-decoding: mtp }
+      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: none, conc-list: [1], spec-decoding: mtp }
+      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [8, 52], spec-decoding: mtp }
 
 # c8 on the LATEST public nightly with DCP 8 and LMCache, i.e. the combination
 # the AMD side currently has no number for. Three deltas from -dcp above, all

@@ -565,107 +565,92 @@ if [ "$DCP_SIZE" -gt 1 ]; then
 fi
 
 # ---- Speculative ------------------------------------------------------------
-SPEC_ARGS=()
-if [ "${SPEC_DECODE:-true}" = "true" ]; then
-    SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-2}"
-    case "$SPEC_NUM_TOKENS" in
-      2) DEFAULT_SYNTHETIC_ACCEPT_LEN=2.51 ;;
-      6) DEFAULT_SYNTHETIC_ACCEPT_LEN=3.75 ;;
-      *)
-        if [ -z "${SYNTHETIC_ACCEPT_LEN:-}" ]; then
-            echo "Error: no Kimi-K3 golden synthetic acceptance length for k=$SPEC_NUM_TOKENS." >&2
-            exit 1
-        fi
-        DEFAULT_SYNTHETIC_ACCEPT_LEN="$SYNTHETIC_ACCEPT_LEN"
+# ---- Per-concurrency knobs --------------------------------------------------
+case "$CONC" in
+    1|2|4)
+        MAX_NUM_SEQS=32
+        MAX_NUM_BATCHED_TOKENS=8192
+        GPU_MEM_UTIL=0.88
+        SPEC_NUM_TOKENS=7
+        SYNTHETIC_ACCEPT_LEN=3.84
         ;;
-    esac
-    SYNTHETIC_ACCEPT_LEN="${SYNTHETIC_ACCEPT_LEN:-$DEFAULT_SYNTHETIC_ACCEPT_LEN}"
-    echo "DSpark synthetic acceptance: k=$SPEC_NUM_TOKENS, length=$SYNTHETIC_ACCEPT_LEN"
-    # Hosts that pre-stage the draft as a plain directory rather than an HF hub
-    # cache cannot resolve the repo id, and downloading it needs egress + a token.
-    DRAFT_MODEL="${DRAFT_MODEL:-Inferact/Kimi-K3-DSpark}"
+    8)
+        MAX_NUM_SEQS=32
+        MAX_NUM_BATCHED_TOKENS=4096
+        GPU_MEM_UTIL=0.9
+        SPEC_NUM_TOKENS=3
+        SYNTHETIC_ACCEPT_LEN=3.00
+        ;;
+    12)
+        MAX_NUM_SEQS=24
+        MAX_NUM_BATCHED_TOKENS=4096
+        GPU_MEM_UTIL=0.9
+        SPEC_NUM_TOKENS=3
+        SYNTHETIC_ACCEPT_LEN=3.00
+        ;;
+    16)
+        MAX_NUM_SEQS=32
+        MAX_NUM_BATCHED_TOKENS=8192
+        GPU_MEM_UTIL=0.9
+        SPEC_NUM_TOKENS=3
+        SYNTHETIC_ACCEPT_LEN=3.00
+        ;;
+    32)
+        MAX_NUM_SEQS=64
+        MAX_NUM_BATCHED_TOKENS=8192
+        GPU_MEM_UTIL=0.9
+        SPEC_NUM_TOKENS=0
+        SYNTHETIC_ACCEPT_LEN=0
+        ;;
+    40)
+        MAX_NUM_SEQS=80
+        MAX_NUM_BATCHED_TOKENS=8192
+        GPU_MEM_UTIL=0.9
+        SPEC_NUM_TOKENS=0
+        SYNTHETIC_ACCEPT_LEN=0
+        ;;
+    56)
+        MAX_NUM_SEQS=72
+        MAX_NUM_BATCHED_TOKENS=4096
+        GPU_MEM_UTIL=0.9
+        SPEC_NUM_TOKENS=0
+        SYNTHETIC_ACCEPT_LEN=0
+        ;;
+    *)
+        MAX_NUM_SEQS=$(( CONC * 2 ))
+        MAX_NUM_BATCHED_TOKENS=4096
+        GPU_MEM_UTIL=0.88
+        SPEC_NUM_TOKENS=0
+        SYNTHETIC_ACCEPT_LEN=0
+        ;;
+esac
 
-    if [ "${EVAL_ONLY:-false}" = "true" ]; then
+SPEC_ARGS=()
+if [ "$SPEC_NUM_TOKENS" -gt 0 ]; then
+    SPEC_ARGS=(
+        --speculative-config
+        "{\"model\":\"$DRAFT_MODEL\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
+    )
+    if [ "${EVAL_ONLY}" != "true" ]; then
         SPEC_ARGS=(
             --speculative-config
             "{\"model\":\"$DRAFT_MODEL\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"block\"}"
-        )
-    else
-        SPEC_ARGS=(
-            --speculative-config
-            "{\"model\":\"$DRAFT_MODEL\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
         )
     fi
 fi
 
 # ---- Async scheduling / KV block-pool stability ------------------------------
-# DSpark is the ONLY spec method exempted from vLLM's async-scheduling disable
-# list (config/vllm.py:1181), so async_scheduling resolves True here. That gives
-# max_concurrent_batches = pp_size + 1 = 2 (vllm.py:563-569), and with
-# kv_role=kv_both (is_kv_consumer=True) the scheduler sets defer_block_free=True
-# (sched/scheduler.py:155-157). Its own comment: "a step may still be writing a
-# freed request's KV blocks. A consumer KV Connector can reallocate and fill
-# those blocks via a load that isn't ordered against that write."
-#
-# That limbo state matches our crash signature exactly -- the engine dies with
-#   block_pool.py:667  assert block.ref_cnt == 0
-# i.e. a block sitting on the FREE list that is still referenced. Crash time
-# scales inversely with concurrency: c10 survived 3612 s, c12 died at 487 s,
-# c16 at 354 s. Note vLLM already disables async scheduling for ROCm DeepEP DBO
-# because "that combination can corrupt" state.
-#
-# Setting max_concurrent_batches back to 1 makes defer_block_free unreachable.
-# Cost: async scheduling exists to fill GPU-utilisation gaps, so expect to give
-# some throughput back. Set ASYNC_SCHEDULING=1 to restore the default.
 ASYNC_SCHED_ARGS=()
 if [ "${ASYNC_SCHEDULING:-0}" != "1" ]; then
     ASYNC_SCHED_ARGS=(--no-async-scheduling)
 fi
 
 # ---- MLA prefill backend -----------------------------------------------------
-# On ROCm the prefill priority is [ROCM_AITER_FA, FLASH_ATTN]. ROCM_AITER_FA
-# JIT-builds module_fmha_fwd_bf16_opus at runtime; that module registers its own
-# aiter_tensor_t, distinct from the one in the prebuilt module_aiter_core, so the
-# first call dies with:
-#   TypeError: fmha_fwd_bf16_opus_fwd(): incompatible function arguments
-# during compile_or_warm_up_model -> _dummy_run, before the server binds.
-# Pinning FLASH_ATTN keeps every AITER MoE kernel (and its throughput) while
-# skipping only the broken FMHA prefill path.
-# UPDATE: the AITER packaging issue is now fixed at source by
-# apply_kimi_k3_patches.sh (run above), so ROCM_AITER_FA is usable again and
-# is the default. Measured on 8x MI355X / Kimi-K3 MXFP4 TP8, cold prefill:
-#   ~24k ctx  FLASH_ATTN 12,953 -> AITER 13,524 tok/s  (+4.4%)
-#   ~93k ctx  FLASH_ATTN 11,174 -> AITER 13,423 tok/s  (+20.1%)
-# This workload averages ~99k input tokens, so the ~93k figure is the relevant
-# one. Set MLA_PREFILL_BACKEND=FLASH_ATTN to fall back if AITER regresses.
-#
-# Under DCP the default flips back to FLASH_ATTN. Runs 32215249474 and
-# 32216365989 both died with an HSA_STATUS_ERROR_EXCEPTION 0x1016 on all 8 ranks
-# on the first real ~99k-token prefill -- never in warmup, never at dcp=1. The
-# reported kernel moved between runs (aiter moe_sorting, then the attn_res
-# triton kernel) with a generic `unspecified launch failure`, which is what an
-# ASYNC fault in an earlier kernel looks like: the next launch is simply the one
-# that finds the queue dead. Both reported sites sit downstream of the MLA
-# prefill, and mla_attention.py:809-811,839-840 already route dcp_world_size>1
-# away from the fast paths onto the chunked-context merge, so AITER's FMHA
-# prefill is the standing suspect. Set MLA_PREFILL_BACKEND explicitly to
-# override either default.
-if [ "$DCP_SIZE" -gt 1 ]; then
-    MLA_PREFILL_BACKEND="${MLA_PREFILL_BACKEND:-FLASH_ATTN}"
-fi
 MLA_PREFILL_BACKEND="${MLA_PREFILL_BACKEND:-ROCM_AITER_FA}"
-ATTENTION_ARGS=()
-if [ -n "${ATTENTION_BACKEND:-}" ]; then
-    ATTENTION_ARGS+=(--attention-backend "$ATTENTION_BACKEND")
-fi
-if [ -n "${ATTENTION_CONFIG_JSON:-}" ]; then
-    ATTENTION_ARGS+=(--attention-config "$ATTENTION_CONFIG_JSON")
-elif [ -n "$MLA_PREFILL_BACKEND" ]; then
-    ATTENTION_ARGS+=(
-        --attention-config
-        "{\"mla_prefill_backend\":\"$MLA_PREFILL_BACKEND\"}"
-    )
-fi
+ATTENTION_ARGS+=(
+    --attention-config
+    "{\"mla_prefill_backend\":\"$MLA_PREFILL_BACKEND\"}"
+)
 
 # ---- HIP graph ------------------------------------------------------------
 MAX_NUM_SEQS="${MAX_NUM_SEQS:-$(( CONC * 2 ))}"
