@@ -1,0 +1,188 @@
+name: "mi355x-dsv4-agentic-disagg-1p1d-tp8-mtp-hicache"
+
+model:
+  path: "hf:deepseek-ai/DeepSeek-V4-Pro"
+  container: "sglang-rocm-dsv4-mi355x"
+  precision: "fp4"
+
+identity:
+  model:
+    repo: "deepseek-ai/DeepSeek-V4-Pro"
+  container:
+    image: "lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260817"
+  frameworks:
+    sglang: "0.5.17.dev20260817+gd97b796c16"
+    sglang-router: "0.3.2"
+    amd-mori: "0.5.17.dev20260817+gd97b796c16"
+
+slurm:
+  time_limit: "04:00:00"
+
+resources:
+  gpu_type: "mi355x"
+  gpus_per_node: 8
+  prefill_nodes: 1
+  decode_nodes: 1
+  prefill_workers: 1
+  decode_workers: 1
+  gpus_per_prefill: 8
+  gpus_per_decode: 8
+
+frontend:
+  type: sglang
+  enable_multiple_frontends: false
+  args:
+    policy: consistent_hashing
+    dp-aware: true
+    cache-threshold: 0.3
+    balance-abs-threshold: 2
+    balance-rel-threshold: 1.1
+    disable-circuit-breaker: true
+    health-failure-threshold: 100
+    health-check-timeout-secs: 600
+    health-check-interval-secs: 30
+
+backend:
+  type: sglang
+  prefill_environment: &common_environment
+    HF_HOME: "/hf_hub_cache"
+    HF_HUB_CACHE: "/hf_hub_cache/hub"
+    HUGGINGFACE_HUB_CACHE: "/hf_hub_cache/hub"
+    PYTHONUNBUFFERED: "1"
+    # Validated DeepSeek V4 ROCm kernel routing. These settings keep FP4 MoE,
+    # indexer, MLA, and fused-compress dispatch on the supported MI355X paths.
+    TORCH_NCCL_BLOCKING_WAIT: "1"
+    NCCL_BLOCKING_WAIT: "1"
+    HSA_NO_SCRATCH_RECLAIM: "0"
+    GPU_MAX_HW_QUEUES: "5"
+    SGLANG_AITER_MLA_PERSIST: "0"
+    SGLANG_ENABLE_UNIFIED_RADIX_TREE: "1"
+    SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: "1"
+    SGLANG_MORI_DISPATCH_DTYPE: "auto"
+    SGLANG_MORI_DISPATCH_INTER_KERNEL_SWITCH_THRESHOLD: "4096"
+    SGLANG_DEFAULT_THINKING: "1"
+    SGLANG_DSV4_REASONING_EFFORT: "high"
+    SGLANG_OPT_DEEPGEMM_HC_PRENORM: "false"
+    SGLANG_USE_AITER: "1"
+    SGLANG_USE_ROCM700A: "0"
+    SGLANG_OPT_USE_FUSED_COMPRESS: "true"
+    SGLANG_HACK_FLASHMLA_BACKEND: "unified_kv_triton"
+    SGLANG_OPT_FP8_WO_A_GEMM: "false"
+    SGLANG_OPT_USE_JIT_INDEXER_METADATA: "false"
+    SGLANG_OPT_USE_TOPK_V2: "false"
+    SGLANG_OPT_USE_AITER_INDEXER: "true"
+    SGLANG_OPT_USE_TILELANG_INDEXER: "false"
+    SGLANG_OPT_USE_TILELANG_MHC_PRE: "false"
+    SGLANG_OPT_USE_TILELANG_MHC_POST: "false"
+    SGLANG_FP8_PAGED_MQA_LOGITS_TORCH: "1"
+    SGLANG_OPT_USE_FUSED_COMPRESS_TRITON: "true"
+    SGLANG_OPT_USE_MULTI_STREAM_OVERLAP: "false"
+    SGLANG_ROCM_USE_MULTI_STREAM: "false"
+    AITER_BF16_FP8_MOE_BOUND: "0"
+    SGLANG_EAGER_INPUT_NO_COPY: "true"
+    SGLANG_SHARED_EXPERT_TP1: "1"
+    SGLANG_DP_SHARED_EXPERT_LOCAL: "1"
+    SGLANG_DP_USE_GATHERV: "1"
+    SGLANG_DP_USE_REDUCE_SCATTER: "1"
+    IBDEVICES: "rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7"
+    MORI_RDMA_TC: "104"
+    MORI_IO_SQ_BACKOFF_TIMEOUT_US: "500000"
+    MORI_IO_QP_MAX_SEND_WR: "32767"
+    SGLANG_MORI_COMBINE_DTYPE: "auto"
+    SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "16384"
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "1800"
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "1800"
+  decode_environment:
+    <<: *common_environment
+    SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "1024"
+    SGLANG_SIMULATE_ACC_LEN: "2.49"
+    SGLANG_SIMULATE_ACC_METHOD: "match-expected"
+    SGLANG_SIMULATE_ACC_TOKEN_MODE: "real-draft-token"
+  sglang_config:
+    prefill: &common_server
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      trust-remote-code: true
+      tp-size: 8
+      watchdog-timeout: 3600
+      # Let SGLang choose the role-correct PD policy: follow_bootstrap_room on
+      # prefill workers and round_robin on decode workers.
+      load-balance-method: auto
+      kv-cache-dtype: fp8_e4m3
+      attention-backend: dsv4
+      page-size: 256
+      swa-full-tokens-ratio: 0.1
+      disable-shared-experts-fusion: true
+      tool-call-parser: deepseekv4
+      reasoning-parser: deepseek-v4
+      disaggregation-transfer-backend: mori
+      log-level: info
+      log-level-http: error
+      speculative-algorithm: EAGLE
+      speculative-eagle-topk: 1
+      speculative-num-steps: 3
+      speculative-num-draft-tokens: 4
+      context-length: 1048576
+      enable-metrics: true
+      enable-cache-report: true
+      # Keep the reduced prefill device pool, but bound its proportional host
+      # tier.  This image resolves 0.72 to a 6.41M-token device pool; ratio 4
+      # made all eight TP ranks allocate 157-174 GiB host buffers and pushed
+      # the 3 TiB node past 181 GiB of swap before readiness.  Ratio 2 still
+      # provides twice the device capacity in DRAM with ample host headroom.
+      mem-fraction-static: 0.72
+      max-running-requests: 64
+      chunked-prefill-size: 8192
+      disable-cuda-graph: true
+      enable-hierarchical-cache: true
+      hicache-ratio: 1
+      hicache-io-backend: direct
+      hicache-mem-layout: page_first
+      hicache-write-policy: write_through
+      hicache-storage-prefetch-policy: best_effort
+    decode:
+      <<: *common_server
+      mem-fraction-static: 0.85
+      max-running-requests: 128
+      chunked-prefill-size: null
+      disable-cuda-graph: false
+      enable-hierarchical-cache: false
+      hicache-ratio: null
+      hicache-io-backend: null
+      hicache-mem-layout: null
+      hicache-write-policy: null
+      hicache-storage-prefetch-policy: null
+      prefill-round-robin-balance: true
+      cuda-graph-bs: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128]
+
+sbatch_directives:
+  # SGLang maps the eight TP ranks across the MI355X host CPU topology. Give
+  # each backend task the complete node cpuset so every placement stays within
+  # its Slurm allocation.
+  cpus-per-task: "128"
+  mem: "0"
+
+srun_options:
+  mem: "0"
+  container-writable: ""
+  container-remap-root: ""
+
+health_check:
+  max_attempts: 720
+  interval_seconds: 5
+
+benchmark:
+  type: custom
+  command: |
+    set -euo pipefail
+    mkdir -p /infmax-workspace/LOGS/agentic
+    export RESULT_DIR=/infmax-workspace/LOGS/agentic
+    export AGENTIC_OUTPUT_DIR=/infmax-workspace
+    exec bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+  env:
+    INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
+    PORT: "8000"
+    IS_MULTINODE: "true"
+    AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
+    AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
+    HF_HUB_CACHE: "/hf_hub_cache/hub"
+    WEKA_LOADER_OVERRIDE: "semianalysis_cc_traces_weka_062126"

@@ -6684,3 +6684,21 @@
     - "Remove the active and deprecated MI355X matrix entries that depended on amd_utils; configuration-specific child PRs reintroduce the active production lanes as native srt-slurm recipes."
     - "Preserve the retired AgentX launch contract in the shared srt path: route DP-attention sessions by correlation ID, flush every advertised worker cache before each concurrency point, and run the MI355X RDMA device/QoS/DCQCN plus bare-process GPU drain preflights on every allocated host."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2542
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp
+  description:
+    - "Port the merged MI355X DeepSeek V4 AgentX MTP 1P1D search space from the legacy AMD multinode launcher to srt-slurm."
+    - "Use srt-slurm's native SGLang Router frontend and AMD MoRI transport without Dynamo, NATS, etcd, or NIXL."
+    - "Preserve the current TP8/EP1 and TP8/EP8/DPA concurrency grids, EAGLE MTP, the golden simulated average length, HiCache settings, and logical prefill/decode server-metrics collection through the custom AgentX benchmark."
+    - "Remove the superseded DSV4-specific amd_utils benchmark wrapper, model stanza, HiCache override plumbing, and hard-coded synthetic-acceptance injection; the srt-slurm recipes now own those settings directly."
+    - "Allocate all 128 logical CPUs per MI355X backend node so SGLang TP8 affinity follows the complete host topology, and pin srt-slurm diagnostics that preserve failure-log tails containing non-UTF-8 ROCm compiler output."
+    - "Move the known-green DeepSeek V4 ROCm kernel-routing contract into each self-contained srt-slurm recipe; this avoids the unsupported AITer fused-MoE heuristic dispatch path while keeping legacy harness-only environment indirection removed."
+    - "Declare the exact SGLang and AMD MoRI runtime fingerprint reported by the pinned ROCm image so srt-slurm identity verification is reproducible."
+    - "Rebase the AMD runtime on the active native-router branch and wait for every advertised SGLang HTTP worker to become healthy before launching Model Gateway, preventing slow ROCm startup from permanently dropping a static prefill worker after the router's one-shot registration timeout."
+    - "Pin the MI355X launcher to srt-slurm PR #7 commit 76e7d76961b2dcb27cb05c1e9e0910ceb75104ec, including the AMD runtime, native routers, SGLang worker-readiness gate, ATOM/AToMesh TCP layer, and recipe-aware setup preflight."
+    - "Preserve the latest upstream August SGLang runtime and expanded TP8 and DP+EP concurrency grids; size DP+EP admission and MoRI decode dispatch from each generated matrix point."
+    - "Keep the TP8/EP1 prefill device pool at mem-fraction-static 0.72, but reduce its HiCache ratio from 4 to 1. MI355X nodes reserve different amounts of RAM as HugeTLB; on a node with 2.8 TiB reserved, ratio 2 exhausted the remaining ordinary memory and drove all eight schedulers into page wait with 514 GiB of swap in use. Ratio 1 retains a DRAM tier equal to device KV capacity while fitting the least-available node."
+    - "Keep the DP-attention prefill device pool at mem-fraction-static 0.85, but reduce its HiCache ratio from 3 to 0.5. Each of the eight independent schedulers owns its own device pool, so ratio 2 consumed about 1.16 TiB of resident host memory. Ratio 0.5 retains an aggregate host tier equal to half of device KV capacity while bounding the expected private buffers near 290 GiB so the topology also fits nodes whose HugeTLB reservation leaves only about 370 GiB of ordinary RAM."
+    - "Advance the srt-slurm PR #7 pin to 10a58d2ebb4d756c423424049c736b909b72e14f so DP-attention SGLang P/D workers consistently register and query the intended prefill DP rank instead of conflicting on bootstrap rooms under load; the same stack revision also preserves vLLM Router multi-node DP rank offsets and normalizes ATOM recipe flags for the dependent migration series."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2555
