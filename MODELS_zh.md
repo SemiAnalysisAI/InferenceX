@@ -125,7 +125,7 @@ InferenceX 支持 SGLang 和 vLLM 双方的维护者，并响应 AI 实验室和
 | MiniMax-M3（`minimaxm3`） | 原生/上游 vLLM 引擎 | `Inferact/MiniMax-M3-EAGLE3` 和/或 `Inferact/MiniMax-M3-EAGLE3-GQA` | 无 | 按照上述提交顺序指南及例外处理的其他非 vLLM/SGLang 引擎 |
 | GLM-5.2（`glm5.2`） | 原生/上游 SGLang 引擎 | 原生 MTP | 无 | 按照上述提交顺序指南及例外处理的其他非 vLLM/SGLang 引擎 |
 | Qwen3.5-397B-A17B（`qwen3.5`） | 原生/上游 SGLang 引擎 | 原生 MTP | 无 | 按照上述提交顺序指南及例外处理的其他非 vLLM/SGLang 引擎 |
-| Qwen3.8-Flash-Next（`qwen3.8next`） | 原生/上游 SGLang 引擎 | 待定（等待模型发布） | 无 | 按照上述提交顺序指南及例外处理的其他非 vLLM/SGLang 引擎 |
+| Qwen3.8-Flash-Next（`qwen3.8next`） | 原生/上游 SGLang 引擎 | 待定 | 原生 MTP（内置 4B 多步预测模块；黄金 AL 采集脚本：[`qwen3.8next_fp4_b300_vllm.sh`](benchmarks/single_node/speedbench/qwen3.8next_fp4_b300_vllm.sh)） | 按照上述提交顺序指南及例外处理的其他非 vLLM/SGLang 引擎 |
 
 ### KV 缓存卸载策略
 
