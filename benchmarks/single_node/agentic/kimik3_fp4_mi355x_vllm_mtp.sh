@@ -42,9 +42,9 @@ if [ "${DCP_SIZE:-1}" -eq 1 ] && [ "${KV_OFFLOADING:-none}" = "none" ]; then
     default_cudagraph_capture_size=64
     default_cudagraph_capture_sizes="$(seq -s, 1 64)"
 else
-    default_max_num_seqs=80
-    default_cudagraph_capture_size=4096
-    default_cudagraph_capture_sizes="$(seq -s, 1 80),128,256,512,1024,2048,4096"
+    default_max_num_seqs=24
+    default_cudagraph_capture_size=128
+    default_cudagraph_capture_sizes="$(seq -s, 1 128)"
 fi
 
 export GPU_MEM_UTIL=0.90
