@@ -138,6 +138,36 @@ jobs:
             emit()
             raise SystemExit(1)
 
+          if multinode:
+            node_count = entry.get('node-count')
+            if (
+              isinstance(node_count, bool)
+              or not isinstance(node_count, int)
+              or node_count <= 0
+            ):
+              print(
+                'Multinode profiling requires a validated positive integer '
+                f'node-count; got {node_count!r}.',
+                file=sys.stderr,
+              )
+              emit()
+              raise SystemExit(1)
+          else:
+            node_count = entry.get('node-count', 1)
+            if (
+              isinstance(node_count, bool)
+              or not isinstance(node_count, int)
+              or node_count != 1
+            ):
+              print(
+                'Single-node profiling requires node-count=1; '
+                f'got {node_count!r}.',
+                file=sys.stderr,
+              )
+              emit()
+              raise SystemExit(1)
+            entry['node-count'] = 1
+
           print('selected entry:', json.dumps(entry))
           if multinode:
             emit(multinode_agentic=[entry])
@@ -257,6 +287,7 @@ jobs:
       osl: '0'
       max-model-len: '0'
       runner: ${{ matrix.config.runner }}
+      node-count: ${{ matrix.config['node-count'] }}
       priority: ${{ matrix.config.priority }}
       queue-token: ${{ matrix.config['queue-token'] }}
       image: ${{ matrix.config.image }}

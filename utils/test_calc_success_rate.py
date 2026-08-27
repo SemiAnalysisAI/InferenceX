@@ -5,7 +5,7 @@ def test_load_hardware_labels_uses_cluster_labels():
     labels = success_rate.load_hardware_labels()
 
     assert "b300-nv" in labels
-    assert "b300-cw" in labels
+    assert "h100-cw" in labels
     assert "gb300-nv" in labels
     assert "b300" not in labels
     assert all(not label.startswith("cluster:") for label in labels)

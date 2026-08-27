@@ -6,6 +6,10 @@ on:
       runner:
         required: true
         type: string
+      node-count:
+        description: "Total Slurm nodes required by this benchmark"
+        required: true
+        type: number
       priority:
         description: "Higher-is-sooner CI priority score"
         required: true
@@ -337,19 +341,40 @@ jobs:
       ${{ fromJSON(
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
         (
-          inputs.skip-queue-pr != '' &&
-          format(
-            '["self-hosted",{0},{1},{2},{3}]',
-            toJSON(inputs.runner),
-            toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
-            toJSON(format('ci-attempt-{0}', github.run_attempt)),
-            toJSON(format('ci-skip-queue-pr-{0}', inputs.skip-queue-pr))
+          vars.NODE_SLOT_SCHEDULER_ENABLED == 'true' &&
+          (
+            inputs.skip-queue-pr != '' &&
+            format(
+              '["self-hosted",{0},{1},{2},{3},{4}]',
+              toJSON(inputs.runner),
+              toJSON(format('nodes:{0}', inputs.node-count)),
+              toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
+              toJSON(format('ci-attempt-{0}', github.run_attempt)),
+              toJSON(format('ci-skip-queue-pr-{0}', inputs.skip-queue-pr))
+            ) ||
+            format(
+              '["self-hosted",{0},{1},{2},{3}]',
+              toJSON(inputs.runner),
+              toJSON(format('nodes:{0}', inputs.node-count)),
+              toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
+              toJSON(format('ci-attempt-{0}', github.run_attempt))
+            )
           ) ||
-          format(
-            '["self-hosted",{0},{1},{2}]',
-            toJSON(inputs.runner),
-            toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
-            toJSON(format('ci-attempt-{0}', github.run_attempt))
+          (
+            inputs.skip-queue-pr != '' &&
+            format(
+              '["self-hosted",{0},{1},{2},{3}]',
+              toJSON(inputs.runner),
+              toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
+              toJSON(format('ci-attempt-{0}', github.run_attempt)),
+              toJSON(format('ci-skip-queue-pr-{0}', inputs.skip-queue-pr))
+            ) ||
+            format(
+              '["self-hosted",{0},{1},{2}]',
+              toJSON(inputs.runner),
+              toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
+              toJSON(format('ci-attempt-{0}', github.run_attempt))
+            )
           )
         ) ||
         format('[{0}]', toJSON(inputs.runner))
@@ -371,11 +396,13 @@ jobs:
       - name: Slurm cleanup (pre-run)
         run: &slurm-cleanup |
           if command -v squeue >/dev/null 2>&1; then
-            echo "[Slurm] Cleaning up jobs named: ${{ runner.name }} ..."
-            scancel --user="$USER" --name="${{ runner.name }}" || true
-            while [ -n "$(squeue --user="$USER" --name='${{ runner.name }}' --noheader --format='%i')" ]; do
-              squeue --user="$USER" --name="${{ runner.name }}"
-              sleep 5
+            for job_name in "${{ runner.name }}" "inferencex-${{ runner.name }}"; do
+              echo "[Slurm] Cleaning up jobs named: $job_name ..."
+              scancel --user="$USER" --name="$job_name" || true
+              while [ -n "$(squeue --user="$USER" --name="$job_name" --noheader --format='%i')" ]; do
+                squeue --user="$USER" --name="$job_name"
+                sleep 5
+              done
             done
           fi
 
