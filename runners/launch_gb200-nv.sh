@@ -420,7 +420,7 @@ if [[ "$IS_AGENTIC" == "1" && "$FRAMEWORK" == "vllm-router" ]]; then
         configs/native-vllm-router-deps.sh
 elif [[ "$IS_AGENTIC" == "1" && "$FRAMEWORK" == "sglang" && "$MODEL_PREFIX" == "qwen3.5" ]]; then
     SRT_SLURM_REPOSITORY="${SRT_SLURM_REPOSITORY:-https://github.com/SemiAnalysisAI/srt-slurm.git}"
-    SRT_SLURM_REF="${SRT_SLURM_REF:-8db08ff77bb614335c75b1d11119b94ef585d826}"
+    SRT_SLURM_REF="${SRT_SLURM_REF:-449affc4e2332dc45e8ea52a6218b5562365fd80}"
     git clone "$SRT_SLURM_REPOSITORY" "$SRT_REPO_DIR" || exit 1
     cd "$SRT_REPO_DIR" || exit 1
     git checkout --detach "$SRT_SLURM_REF" || exit 1

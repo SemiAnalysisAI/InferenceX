@@ -10,7 +10,7 @@ set -x
 #
 # Port of the validated agentic/glm5.2_fp4_b300_sglang_mtp.sh. The B200 deltas
 # are the two blocks marked "B200:" below -- the checkpoint-resolution guard
-# (b200-dgxc rewrites MODEL to a cluster-local path) and --mem-fraction-static.
+# (b200-nscale rewrites MODEL to a cluster-local path) and --mem-fraction-static.
 # Everything else is the B300 script unchanged so the two curves stay
 # comparable.
 #
@@ -37,13 +37,13 @@ if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
 fi
 
-# B200: runners/launch_b200-dgxc.sh resolves the checkpoint to a cluster-local
+# B200: runners/launch_b200-nscale-slurm.sh resolves the checkpoint to a cluster-local
 # path and then rewrites MODEL to that path, so `hf download "$MODEL"` cannot
 # work on this runner. Keep the HF repo id separate for the day-zero case where
 # GLM-5.2-NVFP4 has not been staged yet.
 HF_MODEL_ID="${HF_MODEL_ID:-nvidia/GLM-5.2-NVFP4}"
 
-# A non-empty directory is NOT a staged checkpoint. b200-dgxc already had
+# A non-empty directory is NOT a staged checkpoint. b200-nscale already had
 # /lustre/fsw/gharunners/models/GLM-5.2-NVFP4 holding config.json,
 # generation_config.json, hf_quant_config.json, chat_template.jinja, README.md
 # and .quant_summary.txt and NOTHING else -- an aborted or metadata-only pull.
