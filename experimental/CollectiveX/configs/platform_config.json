@@ -84,7 +84,7 @@
         "account": "benchmark",
         "qos": "batch_1_qos",
         "squash_dir": "/data/home/sa-shared/sqsh",
-        "exclude_nodes": "b300-005,b300-018"
+        "exclude_nodes": "b300-005,b300-009,b300-018"
       },
       "network": {
         "socket_ifname": "bond0",
