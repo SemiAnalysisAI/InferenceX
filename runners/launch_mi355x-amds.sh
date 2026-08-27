@@ -313,12 +313,32 @@ else
         BENCHMARK_SCRIPT="$SCRIPT_FALLBACK"
     fi
 
+    # Some bring-up images ship their python packages under /workspace and put
+    # them on PYTHONPATH, e.g. the qwen38flashnext ROCm image sets
+    #   PYTHONPATH=/workspace/sglang-qwen-next/python:/workspace/aiter-pr4882
+    # and has no pip-installed sglang at all. Bind mounting the repo over
+    # /workspace masks those trees, and the server dies with
+    # "No module named 'sglang'". Mount the repo elsewhere for such images and
+    # move RESULT_DIR with it; the host side of the mount is unchanged, so the
+    # workflow's artifact staging still finds everything under GITHUB_WORKSPACE.
+    WS_MOUNT_DIR="/workspace"
+    if [[ "$IMAGE" == *qwen38flashnext* ]]; then
+        WS_MOUNT_DIR="/inferencex"
+        export RESULT_DIR="${RESULT_DIR/#\/workspace//inferencex}"
+        # benchmark_lib.sh resolves AGENTIC_DIR, AIPERF_DIR and every `cd` into
+        # the repo through this variable, which defaults to /workspace. Move it
+        # with the mount or install_agentic_deps looks for the requirements
+        # file at /workspace/utils/... inside the image and fails.
+        export INFMAX_CONTAINER_WORKSPACE="$WS_MOUNT_DIR"
+        echo "Image ships packages under /workspace; mounting the repo at $WS_MOUNT_DIR (RESULT_DIR=$RESULT_DIR)"
+    fi
+
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
-        --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache \
+        --container-mounts=$GITHUB_WORKSPACE:$WS_MOUNT_DIR/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache \
         $SLRUM_HOME_MOUNT \
         --container-writable \
-        --container-workdir=/workspace/ \
+        --container-workdir=$WS_MOUNT_DIR/ \
         --container-remap-root \
         --no-container-entrypoint --export=ALL,AIPERF_DATASET_MMAP_CACHE_DIR=/aiperf_mmap_cache \
         bash "$BENCHMARK_SCRIPT"
