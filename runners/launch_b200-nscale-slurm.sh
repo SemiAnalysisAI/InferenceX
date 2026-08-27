@@ -174,13 +174,32 @@ chmod a+rx "$SQUASH_DIR" || true
 SQUASH_FILE="$SQUASH_DIR/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 NGINX_SQUASH_FILE="$SQUASH_DIR/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
+# Enroot treats docker://foo/bar as a Docker Hub path. Preserve that form for
+# ordinary Docker Hub images, but use Enroot's explicit registry separator for
+# fully qualified references such as ghcr.io/tile-ai/tilert.
+enroot_uri_for_image() {
+    local image_ref="$1"
+    local first_component="${image_ref%%/*}"
+
+    if [[ "$image_ref" == */* && (
+        "$first_component" == *.* ||
+        "$first_component" == *:* ||
+        "$first_component" == "localhost"
+    ) ]]; then
+        printf 'docker://%s#%s\n' "$first_component" "${image_ref#*/}"
+    else
+        printf 'docker://%s\n' "$image_ref"
+    fi
+}
+
 # Import containers via enroot, serialized so concurrent runners on this
 # cluster don't race on the same squash file.
 import_squash() {
     local squash_file="$1"
     local image_ref="$2"
-    local image_key
+    local image_key enroot_uri
     image_key=$(echo "$image_ref" | sed 's/[\/:@#]/_/g')
+    enroot_uri=$(enroot_uri_for_image "$image_ref") || exit 1
     local lock_dir="${SQUASH_DIR}/.locks"
     mkdir -p "$lock_dir"
     local lock_file="${lock_dir}/${image_key}.lock"
@@ -191,7 +210,7 @@ import_squash() {
             echo "Squash file already exists and is valid, skipping import: $squash_file"
         else
             rm -f "$squash_file"
-            enroot import -o "$squash_file" "docker://$image_ref"
+            enroot import -o "$squash_file" "$enroot_uri"
             if ! unsquashfs -l "$squash_file" > /dev/null 2>&1; then
                 echo "Error: enroot import did not produce a valid squash file: $squash_file" >&2
                 exit 1
@@ -217,7 +236,6 @@ fi
 
 if [[ "$USES_DCGM_POWER" == "1" ]]; then
     DCGM_EXPORTER_IMAGE="nvcr.io/nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless"
-    # enroot resolves bare paths against Docker Hub; nvcr.io pulls need the registry# form
     DCGM_EXPORTER_ENROOT_REF="${DCGM_EXPORTER_IMAGE/nvcr.io\//nvcr.io#}"
     DCGM_EXPORTER_SQSH="$SQUASH_DIR/$(echo "$DCGM_EXPORTER_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     import_squash "$DCGM_EXPORTER_SQSH" "$DCGM_EXPORTER_ENROOT_REF" || exit 1
