@@ -108,6 +108,7 @@ backend:
     prefill:
       served-model-name: nvidia/Qwen3.5-397B-A17B-NVFP4
       enable-cache-report: true
+      enable-metrics: true
       model-path: /model/
       trust-remote-code: true
       quantization: modelopt_fp4
@@ -161,6 +162,7 @@ backend:
     decode:
       served-model-name: nvidia/Qwen3.5-397B-A17B-NVFP4
       enable-cache-report: true
+      enable-metrics: true
       model-path: /model/
       trust-remote-code: true
       quantization: modelopt_fp4
