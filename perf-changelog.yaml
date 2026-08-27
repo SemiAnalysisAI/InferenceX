@@ -6558,3 +6558,18 @@
     - "Use the native SGLang router for request routing and AMD MoRI for disaggregated KV transfer, without Dynamo, NIXL, or the deleted amd_utils control plane."
     - "Remove the active and deprecated MI355X matrix entries that depended on amd_utils; configuration-specific child PRs reintroduce the active production lanes as native srt-slurm recipes."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2542
+
+- config-keys:
+    - dsr1-fp4-mi355x-sglang-disagg
+    - dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp
+    - dsr1-fp4-mi355x-sglang-disagg-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Replace the DeepSeek-R1 MXFP4 model-specific amd_utils launcher with native srt-slurm orchestration using SGLang Router and AMD MoRI on MI355X."
+    - "Preserve the complete production STP and MTP 8k1k search space as 12 explicit runtime selectors: TP8 and DEP8/DPA 1P1D, 1P2D, and 2P1D topologies spanning c1 through c4096 with one-, two-, and three-step NEXTN variants."
+    - "Use lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260809, the existing shared 78-shard MXFP4 checkpoint, FP8 KV cache, AITer attention, role-specific MoRI tuning, and the SGLang/DeepSeek-R1-NextN draft model."
+    - "Run the repository's unchanged benchmark_serving.py through srt-slurm's custom benchmark contract, with one allocation per topology and tuning family to amortize model initialization across each concurrency sweep."
+    - "Validate local production checkpoints before submission and prefetch optional external draft repositories once into the canonical shared Hugging Face cache instead of downloading them independently on every prefill and decode worker."
+    - "Pin SemiAnalysisAI/srt-slurm PR #7 at 10a58d2ebb4d756c423424049c736b909b72e14f so DP-attention SGLang workers inherit the validated P/D rank-routing contract, multi-node rank-offset preservation, and ATOM recipe flag normalization."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2633
