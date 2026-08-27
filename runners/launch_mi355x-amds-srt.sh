@@ -184,20 +184,34 @@ forwarded = (
     "AIPERF_EXPERIMENTAL_FAST",
     "CONC",
     "CONC_LIST",
+    "DECODE_DP_ATTN",
+    "DECODE_EP",
+    "DECODE_NUM_WORKERS",
+    "DECODE_PCP_SIZE",
+    "DECODE_PP_SIZE",
+    "DECODE_TP",
     "DURATION",
     "EVAL_CONC",
     "EVAL_LIMIT",
     "EVAL_ONLY",
     "FRAMEWORK",
     "IS_AGENTIC",
+    "ISL",
     "KV_OFFLOADING",
     "MAX_MODEL_LEN",
     "MODEL",
     "MODEL_PREFIX",
+    "PREFILL_DP_ATTN",
+    "PREFILL_EP",
+    "PREFILL_NUM_WORKERS",
+    "PREFILL_PCP_SIZE",
+    "PREFILL_PP_SIZE",
+    "PREFILL_TP",
     "PRECISION",
     "RESULT_FILENAME",
     "RUN_EVAL",
     "RUNNER_TYPE",
+    "OSL",
     "SPEC_DECODING",
     "TOTAL_CPU_DRAM_GB",
 )
@@ -206,27 +220,38 @@ for key in forwarded:
     if value:
         benchmark_env[key] = value
 
-# The legacy MI355X launcher sized DP+EP admission and MoRI decode dispatch
-# from each matrix point, rather than from a fixed recipe-wide ceiling. Keep
-# that behavior when a single recipe is reused across multiple concurrencies.
+# The legacy MI355X launcher sized DP+EP admission from the largest
+# concurrency exercised by a recipe. It also honored a model-specific MoRI
+# dispatch pin when present; only the inter-kernel switch threshold was
+# derived per topology. Preserve those semantics rather than treating MTP
+# draft tokens as additional independent requests.
 if (
     os.environ.get("PREFILL_DP_ATTN", "false").lower() == "true"
     and int(os.environ.get("PREFILL_EP", "1")) > 1
 ):
-    concurrency = int(os.environ["CONC"])
+    concurrency_text = os.environ.get("CONC_LIST") or os.environ.get("CONC")
+    if not concurrency_text:
+        raise SystemExit("DP+EP recipe requires CONC_LIST or CONC")
+    concurrency_values = concurrency_text.split()
+    concurrency = max(int(value) for value in concurrency_values)
     prefill = recipe["backend"]["sglang_config"]["prefill"]
     decode = recipe["backend"]["sglang_config"]["decode"]
     prefill["max-running-requests"] = concurrency
     decode["max-running-requests"] = concurrency
 
     decode_tp = int(os.environ["DECODE_TP"])
-    mtp_size = int(os.environ.get("DECODE_MTP_SIZE", "0"))
     decode_environment = recipe["backend"]["decode_environment"]
-    decode_environment["SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK"] = str(
-        concurrency // decode_tp * (mtp_size + 1)
+    dispatch_tokens = max(1, concurrency // decode_tp)
+    decode_environment.setdefault(
+        "SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK", str(dispatch_tokens)
+    )
+    decode_environment["SGLANG_MORI_DISPATCH_INTER_KERNEL_SWITCH_THRESHOLD"] = str(
+        2 * dispatch_tokens
     )
 
-if os.environ.get("EVAL_ONLY", "false").lower() == "true" or os.environ.get("RUN_EVAL", "false").lower() == "true":
+eval_only = os.environ.get("EVAL_ONLY", "false").lower() == "true"
+run_eval = os.environ.get("RUN_EVAL", "false").lower() == "true"
+if eval_only or run_eval:
     decode_env = recipe.get("backend", {}).get("decode_environment", {})
     for key in (
         "SGLANG_SIMULATE_ACC_LEN",
@@ -237,6 +262,72 @@ if os.environ.get("EVAL_ONLY", "false").lower() == "true" or os.environ.get("RUN
     server_config = recipe.get("backend", {}).get("sglang_config", {})
     for mode in ("prefill", "decode"):
         server_config.get(mode, {}).pop("ep-dispatch-algorithm", None)
+
+    resources = recipe.get("resources", {})
+    prefill = server_config.get("prefill", server_config.get("aggregated", {}))
+    decode = server_config.get("decode", prefill)
+
+    def topology_value(config, *keys, default=1):
+        for key in keys:
+            if key in config:
+                return int(config[key])
+        return default
+
+    topology_defaults = {
+        "IS_MULTINODE": "true",
+        "MODEL_NAME": os.environ["MODEL"],
+        "EVAL_MAX_MODEL_LEN": str(
+            prefill.get(
+                "context-length", os.environ.get("MAX_MODEL_LEN", "16384")
+            )
+        ),
+        "PREFILL_TP": str(
+            topology_value(prefill, "tp-size", "tensor-parallel-size")
+        ),
+        "PREFILL_EP": str(
+            topology_value(prefill, "ep-size", "expert-parallel-size")
+        ),
+        "PREFILL_NUM_WORKERS": str(
+            resources.get("prefill_workers", resources.get("agg_workers", 1))
+        ),
+        "DECODE_TP": str(
+            topology_value(decode, "tp-size", "tensor-parallel-size")
+        ),
+        "DECODE_EP": str(
+            topology_value(decode, "ep-size", "expert-parallel-size")
+        ),
+        "DECODE_NUM_WORKERS": str(
+            resources.get("decode_workers", resources.get("agg_workers", 1))
+        ),
+        "PREFILL_DP_ATTN": str(prefill.get("enable-dp-attention", False)).lower(),
+        "DECODE_DP_ATTN": str(decode.get("enable-dp-attention", False)).lower(),
+    }
+    for key, value in topology_defaults.items():
+        benchmark_env.setdefault(key, value)
+
+    eval_command = r'''
+set -euo pipefail
+eval_root="/results/${SLURM_JOB_ID}/eval"
+mkdir -p "${eval_root}"
+cd "${eval_root}"
+source /infmax-workspace/benchmarks/benchmark_lib.sh
+export EVAL_SERVER_HOST="${SRT_FRONTEND_HOST}"
+if [[ -n "${EVAL_CONC:-}" ]]; then
+  export EVAL_CONCURRENT_REQUESTS="${EVAL_CONC}"
+else
+  export EVAL_CONCURRENT_REQUESTS="$(printf '%s\n' "${CONC_LIST:-${CONC:-1}}" | tr ' ' '\n' | sort -n | tail -1)"
+fi
+export CONC="${EVAL_CONCURRENT_REQUESTS}"
+bridge_disagg_eval_metadata
+run_eval --framework lm-eval --port "${SRT_FRONTEND_PORT}"
+append_lm_eval_summary
+'''.strip()
+    if eval_only:
+        recipe["benchmark"]["command"] = eval_command
+    else:
+        recipe["benchmark"]["command"] = (
+            recipe["benchmark"]["command"].rstrip() + "\n" + eval_command
+        )
 recipe_path.write_text(yaml.safe_dump(recipe, sort_keys=False))
 PY
 
@@ -291,7 +382,7 @@ else
     TOTAL_GPUS=$((PREFILL_NUM_WORKERS * PREFILL_TP * ${PREFILL_PP_SIZE:-1} * ${PREFILL_PCP_SIZE:-1}))
 fi
 
-if [[ "${IS_AGENTIC:-0}" == "1" ]]; then
+if [[ "${EVAL_ONLY:-false}" != "true" && "${IS_AGENTIC:-0}" == "1" ]]; then
     shopt -s nullglob
     RESULTS=("$GITHUB_WORKSPACE/${RESULT_FILENAME}"_conc*.json)
     shopt -u nullglob
@@ -300,7 +391,7 @@ if [[ "${IS_AGENTIC:-0}" == "1" ]]; then
         exit 1
     }
     printf 'Collected %s\n' "${RESULTS[@]}"
-else
+elif [[ "${EVAL_ONLY:-false}" != "true" ]]; then
     shopt -s nullglob
     RESULTS=("$RESULT_DIR"/fixed-seq/*.json)
     shopt -u nullglob
@@ -316,6 +407,14 @@ else
         cp "$result" "$output"
         echo "Collected $output"
     done
+fi
+
+if [[ "${RUN_EVAL:-false}" == "true" || "${EVAL_ONLY:-false}" == "true" ]]; then
+    if [[ "${EVAL_ONLY:-false}" == "true" && ! -f "$RESULT_DIR/eval/meta_env.json" ]]; then
+        echo "No eval metadata found in $RESULT_DIR/eval" >&2
+        exit 1
+    fi
+    copy_eval_artifacts "$RESULT_DIR/eval" "$GITHUB_WORKSPACE" || exit 1
 fi
 
 if [[ "$JOB_STATE" != COMPLETED || "$JOB_EXIT" != 0:0 ]]; then

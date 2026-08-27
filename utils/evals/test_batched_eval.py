@@ -237,6 +237,8 @@ def test_amd_multinode_container_forwards_eval_concurrency_list() -> None:
 
     assert '    "EVAL_CONC",' in contents
     assert 'benchmark_env[key] = value' in contents
+    assert 'export EVAL_SERVER_HOST="${SRT_FRONTEND_HOST}"' in contents
+    assert 'copy_eval_artifacts "$RESULT_DIR/eval"' in contents
 
     workflow = (
         Path(__file__).resolve().parents[2]
@@ -258,3 +260,16 @@ def test_amd_srt_launcher_streams_canonical_slurm_stdout() -> None:
     assert 'source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"' in launcher
     assert 'LOG_FILE="${OUTPUT_LOG_DIR}/sweep_${JOB_ID}.log"' in launcher
     assert 'stream_slurm_job_log "$JOB_ID" "$LOG_FILE"' in launcher
+
+
+def test_amd_srt_launcher_preserves_mori_dispatch_pin() -> None:
+    launcher = (
+        Path(__file__).resolve().parents[2]
+        / "runners"
+        / "launch_mi355x-amds-srt.sh"
+    ).read_text()
+
+    assert 'decode_environment.setdefault(' in launcher
+    assert '"SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK", str(dispatch_tokens)' in launcher
+    assert '"SGLANG_MORI_DISPATCH_INTER_KERNEL_SWITCH_THRESHOLD"' in launcher
+    assert "mtp_size + 1" not in launcher
