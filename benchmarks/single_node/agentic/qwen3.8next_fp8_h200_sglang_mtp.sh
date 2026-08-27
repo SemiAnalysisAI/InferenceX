@@ -109,7 +109,7 @@ export SGLANG_ENABLE_SPEC_V2=1
 # 3 speculative tokens per step (num-steps 3, eagle-topk 1, 4 draft tokens),
 # the same MTP shape as the fixed-seq-len Qwen3.5 recipes.
 SPEC_ARGS=(
-    --speculative-algorithm EAGLE
+    --speculative-algorithm NEXTN
     --speculative-num-steps 3
     --speculative-eagle-topk 1
     --speculative-num-draft-tokens 4
@@ -127,14 +127,12 @@ SPEC_ARGS=(
 # regardless of the target logits, so generated text is wrong and the eval would
 # score ~0.
 if [ "${EVAL_ONLY:-false}" != "true" ]; then
-    # Qwen3.8-Flash-Next acceptance length, SPEED-Bench coding.
-    # --speculative-num-steps 3 with 4 draft tokens is 3 speculative
-    # tokens per verification step, i.e. the MTP=3 cell -> AL 3.24.
-    # Measured thinking=off in speedbench-al run 33031708148; the
-    # thinking=on collection is still in flight, so this is an
-    # interim value and is not yet a committed golden_al_distribution
-    # curve. Refresh once qwen3.8next_mtp.yaml lands.
-    export SGLANG_SIMULATE_ACC_LEN=3.24
+    # golden_al_distribution/qwen3.8next_mtp.yaml:
+    # qwen3.8-flash-next-fp8.thinking_on[3] = 2.32.
+    # --speculative-num-steps 3 with 4 draft tokens is 3 speculative tokens
+    # per verification step, i.e. the MTP=3 cell. AgentX replays run with
+    # thinking on, so the thinking_on row is the right one.
+    export SGLANG_SIMULATE_ACC_LEN=2.32
     export SGLANG_SIMULATE_ACC_METHOD=match-expected
     export SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token
 fi
@@ -153,29 +151,35 @@ fi
 { set +x; } 2>/dev/null
 SGLANG_CMD=(
     python3 -m sglang.launch_server
-    --model-path="$MODEL_PATH" --served-model-name="$MODEL"
-    --host=0.0.0.0
-    --port="$PORT"
+    --model-path "$MODEL_PATH"
+    --served-model-name "$MODEL"
+    --host 0.0.0.0
+    --port "$PORT"
     --trust-remote-code
-    --tensor-parallel-size="$TP"
-    --data-parallel-size=1
-    --expert-parallel-size="$EP_SIZE"
-    --quantization fp8
-    --kv-cache-dtype fp8_e4m3
+    # Verified flags from the SGLang cookbook playground for this model on
+    # H200 / FP8 / low latency / single node. NVFP4 is greyed out for Hopper,
+    # so FP8 is the whole verified surface here. TP4 with EP4, not TP8: the
+    # cookbook shards the 512-expert MoE across four ranks with expert
+    # parallelism rather than sharding attention eight ways.
+    --tp-size "$TP"
+    --ep-size "$EP_SIZE"
+    --dp-size 1
+    --mem-fraction-static 0.85
+    --chunked-prefill-size 8192
+    --linear-attn-prefill-backend flashinfer
+    --linear-attn-decode-backend flashinfer
     --mamba-ssm-dtype bfloat16
-    --attention-backend flashinfer
-    --enable-flashinfer-allreduce-fusion
-    # --cuda-graph-max-bs "$CONC"
-    # --max-running-requests "$CONC"
-    # --max-prefill-tokens 8192
-    # --chunked-prefill-size 8192
-    --mem-fraction-static 0.8
+    "${SPEC_ARGS[@]}"
+    --reasoning-parser auto
+    # NEXTN silently resets --max-running-requests to 48 when it is unset, so
+    # this must stay explicit and sized to the AgentX concurrency.
+    --max-running-requests "$MAX_RUNNING_REQUESTS"
+    --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
     --stream-interval 50
     --scheduler-recv-interval "$SCHEDULER_RECV_INTERVAL"
     --tokenizer-worker-num 6
     --tokenizer-path "$MODEL"
     --enable-metrics
-    "${SPEC_ARGS[@]}"
     "${CACHE_ARGS[@]}"
 )
 printf '%q ' "${SGLANG_CMD[@]}" | tee "$RESULT_DIR/sglang_command.txt"
