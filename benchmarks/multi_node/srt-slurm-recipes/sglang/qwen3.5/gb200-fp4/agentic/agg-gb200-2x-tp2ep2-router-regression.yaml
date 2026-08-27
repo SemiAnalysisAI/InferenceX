@@ -77,6 +77,9 @@ benchmark:
     INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
     RESULT_DIR: /logs/agentic
     PORT: "8000"
+    DURATION: "60"
+    AIPERF_EXPERIMENTAL_FAST: "0"
+    AIPERF_WARMUP_REQUESTS_PER_LANE: "1"
     IS_MULTINODE: "false"
     TP: "2"
     AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
