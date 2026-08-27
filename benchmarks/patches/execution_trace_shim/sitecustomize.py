@@ -247,21 +247,27 @@ def _type_key(a):
         return "f"
     if isinstance(a, str):
         return "s"
+    # mro walk instead of an exact name: weights arrive as torch.nn.Parameter
+    # (a Tensor subclass), and torch itself may not be importable yet here
+    for cls in type(a).__mro__:
+        if cls.__name__ == "Tensor":
+            return "T"
     type_name = type(a).__name__
-    if type_name == "Tensor":
-        return "T"
     if type_name == "dtype":
         return "d"
     if type_name == "device":
         return "D"
-    # containers: deep_gemm's API passes (tensor, scale) pairs, shape args are
-    # int tuples. The container kind is part of the key so the impl can
-    # rebuild the original type (the dispatcher hands lists to the impl).
+    # containers: deep_gemm's API passes (tensor, scale) pairs — scale may be
+    # None — and shape args are int tuples. The container kind is part of the
+    # key so the impl can rebuild the original type (the dispatcher hands
+    # lists to the impl).
     if isinstance(a, (tuple, list)) and a:
         kinds = {_type_key(x) for x in a}
         tag = "t" if isinstance(a, tuple) else "l"
         if kinds == {"T"}:
             return tag + "T"
+        if kinds <= {"T", "n"}:
+            return tag + "To"
         if kinds <= {"i", "b"}:
             return tag + "i"
         if kinds == {"f"}:
@@ -280,6 +286,8 @@ _SCHEMA_OF_KEY = {
     "D": "Device a{i}",
     "tT": "Tensor(a{i}!)[] a{i}",
     "lT": "Tensor(a{i}!)[] a{i}",
+    "tTo": "Tensor?[] a{i}",
+    "lTo": "Tensor?[] a{i}",
     "ti": "int[] a{i}",
     "li": "int[] a{i}",
     "tf": "float[] a{i}",
@@ -287,7 +295,7 @@ _SCHEMA_OF_KEY = {
 }
 
 # keys whose dispatched value arrives as a list but must be rebuilt as a tuple
-_TUPLE_KEYS = {"tT", "ti", "tf"}
+_TUPLE_KEYS = {"tT", "tTo", "ti", "tf"}
 
 
 def _ret_schema(result):
