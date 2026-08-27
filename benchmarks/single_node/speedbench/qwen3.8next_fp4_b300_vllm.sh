@@ -170,37 +170,73 @@ if [[ ! -f "$SPEEDBENCH_DIR/qualitative.jsonl" ]]; then
     exit 1
 fi
 
-# ---- Temporary shim: add a real --chat-template-kwargs CLI option ----
-# Upstream gap (until vllm-project/vllm#44244 lands): speed_bench/CustomDataset
-# pre-renders the chat template client-side WITHOUT chat_template_kwargs and
-# posts to /v1/completions, so thinking mode cannot be enabled via --extra-body
-# or --default-chat-template-kwargs. This wires a proper --chat-template-kwargs
-# option through get_samples into CustomDataset.sample's apply_chat_template.
-# Model agnostic (forwards whatever dict it is given). TODO: delete once #44244
-# is released in the benchmark image; idempotent (marker check), safe to leave.
+# ---- Compatibility shim: ensure --chat-template-kwargs exists ----
+# speed_bench/CustomDataset pre-renders the chat template client-side and posts
+# to /v1/completions, so thinking mode cannot be enabled via --extra-body or
+# --default-chat-template-kwargs. vllm-project/vllm#44244 added a proper
+# --chat-template-kwargs option upstream; images built before it need this
+# patch. Support is detected structurally rather than by matching a fixed
+# multi-line anchor, because the exact neighbours of each line drift upstream
+# (skip_chat_template= now sits between output_len= and the forwarded kwarg).
+# The shim is a no-op on images that already have support, patches only the
+# halves that are missing, and dumps the surrounding source when it cannot
+# find what it needs. TODO: delete once every image ships #44244.
 apply_chat_template_kwargs_shim() {
-    echo "=== Patching vLLM benchmark to add --chat-template-kwargs (temporary shim) ==="
+    echo "=== Checking vLLM benchmark for --chat-template-kwargs support ==="
     python3 - <<'PYEOF'
+import inspect
+import re
+import sys
+
 import vllm.benchmarks.serve as S
 import vllm.benchmarks.datasets.datasets as D
 
-def patch(mod, edits, marker):
-    f = mod.__file__
-    src = open(f).read()
-    if marker in src:
-        print("already patched:", f)
-        return
-    for old, new in edits:
-        n = src.count(old)
-        assert n == 1, f"anchor matched {n} times in {f}, aborting:\n{old[:80]}..."
-        src = src.replace(old, new, 1)
-    open(f, "w").write(src)
-    print("patched OK ->", f)
+serve_src = open(S.__file__).read()
+ds_src = open(D.__file__).read()
 
-# Edit 1: serve.py -- declare the --chat-template-kwargs argument before --extra-body
-serve_old = '''    parser.add_argument(
-        "--extra-body",'''
-serve_new = '''    parser.add_argument(
+
+def speed_bench_block(src):
+    """Byte range of the speed_bench entry in get_samples' dataset_mapping."""
+    i = src.find('"speed_bench": lambda:')
+    if i == -1:
+        return None, None
+    end = src.find("\n        }", i)
+    return i, (len(src) if end == -1 else end)
+
+
+def dump(src, needle, path, what):
+    print(f"ERROR: {what} not found in {path}", file=sys.stderr)
+    i = src.find(needle)
+    if i == -1:
+        print(f"  (marker {needle!r} absent entirely)", file=sys.stderr)
+    else:
+        lo = src.rfind("\n", 0, max(0, i - 600)) + 1
+        hi = src.find("\n", i + 600)
+        print("  surrounding source:\n" + src[lo:hi if hi != -1 else None],
+              file=sys.stderr)
+
+
+# --- Detect the three halves of #44244 independently ------------------------
+serve_ok = '"--chat-template-kwargs"' in serve_src
+
+sb_start, sb_end = speed_bench_block(ds_src)
+speed_bench_ok = sb_start is not None and "chat_template_kwargs" in ds_src[sb_start:sb_end]
+
+sample_ok = "chat_template_kwargs" in inspect.signature(D.CustomDataset.sample).parameters
+
+if serve_ok and speed_bench_ok and sample_ok:
+    print("upstream --chat-template-kwargs support detected "
+          "(vllm-project/vllm#44244); skipping shim")
+    sys.exit(0)
+
+print(f"patching: serve_cli={serve_ok} speed_bench_dispatch={speed_bench_ok} "
+      f"custom_dataset_sample={sample_ok}")
+
+# --- Edit 1: serve.py declares the --chat-template-kwargs argument ----------
+if not serve_ok:
+    serve_old = """    parser.add_argument(
+        "--extra-body","""
+    serve_new = """    parser.add_argument(
         "--chat-template-kwargs",
         type=json.loads,
         default=None,
@@ -208,27 +244,39 @@ serve_new = '''    parser.add_argument(
         "client-side prompt rendering, e.g. to enable reasoning mode.",
     )
     parser.add_argument(
-        "--extra-body",'''
-patch(S, [(serve_old, serve_new)], marker='"--chat-template-kwargs"')
+        "--extra-body","""
+    if serve_src.count(serve_old) != 1:
+        dump(serve_src, '"--extra-body"', S.__file__, "--extra-body anchor")
+        sys.exit(1)
+    open(S.__file__, "w").write(serve_src.replace(serve_old, serve_new, 1))
+    print("patched OK ->", S.__file__)
 
-# Edit 2: datasets.py -- forward args.chat_template_kwargs into the speed_bench .sample() call
-disp_old = '''                output_len=args.speed_bench_output_len,
-                enable_multimodal_chat=args.enable_multimodal_chat,'''
-disp_new = '''                output_len=args.speed_bench_output_len,
-                chat_template_kwargs=args.chat_template_kwargs,
-                enable_multimodal_chat=args.enable_multimodal_chat,'''
+# --- Edit 2: forward the kwarg into the speed_bench .sample() call ----------
+if not speed_bench_ok:
+    if sb_start is None:
+        dump(ds_src, '"speed_bench"', D.__file__, "speed_bench dispatch")
+        sys.exit(1)
+    block = ds_src[sb_start:sb_end]
+    m = re.search(r"^([ \t]*)output_len=args\.speed_bench_output_len,\n", block, re.M)
+    if not m:
+        dump(ds_src, "speed_bench_output_len", D.__file__,
+             "output_len anchor inside the speed_bench block")
+        sys.exit(1)
+    line = (m.group(1)
+            + 'chat_template_kwargs=getattr(args, "chat_template_kwargs", None),\n')
+    block = block[:m.end()] + line + block[m.end():]
+    ds_src = ds_src[:sb_start] + block + ds_src[sb_end:]
 
-# Edit 3: datasets.py -- forward chat_template_kwargs into CustomDataset.sample's template call
-samp_old = '''                # apply template
+# --- Edit 3: apply the kwarg in CustomDataset.sample's template call --------
+if not sample_ok:
+    samp_old = """                # apply template
                 if not skip_chat_template:
                     prompt = tokenizer.apply_chat_template(
                         [{"role": "user", "content": prompt}],
                         add_generation_prompt=True,
                         tokenize=False,
-                    )
-
-                prompt_len = len(tokenizer(prompt).input_ids)'''
-samp_new = '''                # apply template
+                    )"""
+    samp_new = """                # apply template
                 if not skip_chat_template:
                     _ctk = kwargs.get("chat_template_kwargs") or {}
                     prompt = tokenizer.apply_chat_template(
@@ -236,11 +284,16 @@ samp_new = '''                # apply template
                         add_generation_prompt=True,
                         tokenize=False,
                         **_ctk,
-                    )
+                    )"""
+    if ds_src.count(samp_old) != 1:
+        dump(ds_src, "apply_chat_template", D.__file__,
+             "CustomDataset.sample apply_chat_template anchor")
+        sys.exit(1)
+    ds_src = ds_src.replace(samp_old, samp_new, 1)
 
-                prompt_len = len(tokenizer(prompt).input_ids)'''
-patch(D, [(disp_old, disp_new), (samp_old, samp_new)],
-      marker="chat_template_kwargs=args.chat_template_kwargs")
+if not speed_bench_ok or not sample_ok:
+    open(D.__file__, "w").write(ds_src)
+    print("patched OK ->", D.__file__)
 PYEOF
 }
 
@@ -250,7 +303,7 @@ if [[ " $THINKING_MODES " == *" on "*  && -n "$CHAT_TEMPLATE_KWARGS_ON"  ]]; the
 if [[ " $THINKING_MODES " == *" off "* && -n "$CHAT_TEMPLATE_KWARGS_OFF" ]]; then NEED_SHIM=1; fi
 if [[ "$NEED_SHIM" == "1" ]]; then
     if ! apply_chat_template_kwargs_shim; then
-        echo "CRITICAL: --chat-template-kwargs shim failed — aborting"
+        echo "CRITICAL: --chat-template-kwargs support is missing and the shim failed — aborting"
         exit 1
     fi
 fi
