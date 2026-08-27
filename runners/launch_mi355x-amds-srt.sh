@@ -4,6 +4,9 @@ set -euo pipefail
 # Shared MI355X entry point for AMD-capable srt-slurm recipes. Matrix rows opt
 # in explicitly with CONFIG_FILE; recipe files own model- and topology-specific
 # behavior while this launcher owns staging, submission, logs, and results.
+# shellcheck source=runners/slurm_utils.sh
+source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
+
 SRT_SLURM_REPOSITORY="https://github.com/SemiAnalysisAI/srt-slurm.git"
 SRT_SLURM_COMMIT="c87d7b34b009be920896126013ad6dc74c5a99d5"
 SLURM_PARTITION="compute"
@@ -261,10 +264,9 @@ JOB_ID=$(grep -oE 'Job [0-9]+' <<< "$SRTCTL_OUTPUT" | awk '{print $2}' | tail -1
 [[ -n "$JOB_ID" ]] || { echo "Unable to parse srt-slurm job ID" >&2; exit 1; }
 echo "SRT_SLURM_JOB_ID=$JOB_ID"
 
-while squeue --noheader --jobs "$JOB_ID" | grep -q .; do
-    squeue --noheader --jobs "$JOB_ID" --format='srt-slurm %i %T %M %R'
-    sleep 15
-done
+OUTPUT_LOG_DIR="${SHARED_BASE}/outputs/${JOB_ID}/logs"
+LOG_FILE="${OUTPUT_LOG_DIR}/sweep_${JOB_ID}.log"
+stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || exit 1
 
 read -r JOB_STATE JOB_EXIT JOB_NODELIST < <(
     sacct -X --noheader --parsable2 --jobs "$JOB_ID" \
@@ -273,7 +275,6 @@ read -r JOB_STATE JOB_EXIT JOB_NODELIST < <(
 echo "srt-slurm job ${JOB_ID}: state=${JOB_STATE} exit=${JOB_EXIT} nodes=${JOB_NODELIST}"
 
 RESULT_DIR="${SHARED_RESULTS}/${JOB_ID}"
-OUTPUT_LOG_DIR="${SHARED_BASE}/outputs/${JOB_ID}/logs"
 mkdir -p "$GITHUB_WORKSPACE/LOGS"
 if [[ -d "$OUTPUT_LOG_DIR" ]]; then
     tar -C "$OUTPUT_LOG_DIR" -czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" .
