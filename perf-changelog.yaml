@@ -6554,5 +6554,5 @@
     - "Port the B200 GLM-5.1 FP8 TileRT fixed-sequence MTP 1P1D configurations from the manual multi-node launcher to native srt-slurm orchestration."
     - "Preserve the existing 1k/1k and 8k/1k concurrency-1 search points while using the native vLLM-prefill, TileRT-decode, and TileRT-router topology."
     - "Run the existing InferenceX benchmark_serving.py directly through srt-slurm's custom benchmark interface instead of maintaining a downstream benchmark implementation."
-    - "Remove the legacy fixed-sequence TileRT launcher entrypoint and pin SemiAnalysisAI/srt-slurm PR #10 commit 5821eb285dd7dd7fdca83f0481b360dae56e8587, including explicit native HTTP dependencies, incomplete-snapshot recovery, GPU-scoped TileRT preparation, NVIDIA Enroot/Pyxis driver-hook activation, and lossless Slurm container-environment exports."
+    - "Remove the legacy fixed-sequence TileRT launcher entrypoint and pin SemiAnalysisAI/srt-slurm PR #10 commit d1e6c97b3baf3e87103b6d83189544c3c7d61c38, including explicit native HTTP dependencies, GLM-5.1-compatible Transformers v5 router tokenization, incomplete-snapshot recovery, GPU-scoped TileRT preparation, NVIDIA Enroot/Pyxis driver-hook activation, and lossless Slurm container-environment exports."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2755
