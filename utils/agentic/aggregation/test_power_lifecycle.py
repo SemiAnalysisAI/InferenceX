@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import os
 import re
 import signal
@@ -198,8 +199,9 @@ def test_multinode_formal_window_is_left_running_when_replay_is_interrupted(tmp_
 def test_shared_lifecycle_installs_idempotent_signal_cleanup():
     benchmark_lib = BENCHMARK_LIB.read_text()
 
-    assert "trap '_stop_agentx_power_monitor; exit 130' INT" in benchmark_lib
-    assert "trap '_stop_agentx_power_monitor; exit 143' TERM" in benchmark_lib
+    assert "trap '_stop_agentx_power_monitor abort' EXIT" in benchmark_lib
+    assert "trap '_stop_agentx_power_monitor abort; exit 130' INT" in benchmark_lib
+    assert "trap '_stop_agentx_power_monitor abort; exit 143' TERM" in benchmark_lib
     assert 'if [ "$agentx_monitor_stopped" = "0" ]' in benchmark_lib
 
 
@@ -230,7 +232,9 @@ source {str(BENCHMARK_LIB)!r}
 start_gpu_monitor() {{
     printf 'monitor-pid:%s\n' "${{BASHPID:-$$}}" >> {str(event_log)!r}
 }}
-stop_gpu_monitor() {{ printf 'monitor-stop\n' >> {str(event_log)!r}; }}
+stop_gpu_monitor() {{
+    printf 'monitor-stop:%s\n' "${{AMD_MONITOR_STOP_TIMEOUT_S:-unset}}" >> {str(event_log)!r}
+}}
 fake_replay() {{ sleep 30; }}
 trap 'printf "parent-exit\\n" >> {str(event_log)!r}' EXIT
 trap 'printf "parent-int\\n" >> {str(event_log)!r}; exit 130' INT
@@ -263,7 +267,212 @@ run_agentic_replay_and_write_outputs {str(result_dir)!r}
 
     assert proc.returncode == expected_rc, stderr
     events = _events(tmp_path)
-    assert events.count("monitor-stop") == 1
+    stop_events = [event for event in events if event.startswith("monitor-stop")]
+    # Signal teardown must stop exactly once, in abort mode: the coverage wait
+    # is skipped by setting AMD_MONITOR_STOP_TIMEOUT_S=0 before stopping.
+    assert stop_events == ["monitor-stop:0"]
     expected_parent_event = "parent-int" if sent_signal == signal.SIGINT else "parent-term"
     assert expected_parent_event in events
     assert events[-1] == "parent-exit"
+
+
+# --------------------------------------------------------------------------- #
+# stop_gpu_monitor AMD coverage wait (runs the real helper, no stubs)
+# --------------------------------------------------------------------------- #
+
+# AMDSMI 26.2.0 `metric -p -c -t -u -w 1 --csv` header (order-faithful subset,
+# measured on MI355X; mirrors test_detect_columns_amd_watch_mode_real_header).
+_MI355X_WATCH_HEADER = (
+    "timestamp,gpu,gfx_activity,umc_activity,mm_activity,vcn_activity,"
+    "jpeg_activity,gfx_busy_inst_xcp_0,jpeg_busy_xcp_0,vcn_busy_xcp_0,"
+    "socket_power,gfx_voltage,soc_voltage,mem_voltage,throttle_status,"
+    "power_management,gfx_0_clk,mem_0_clk,edge,hotspot,mem"
+)
+
+# amd-smi quotes list-valued cells with embedded commas; the coverage helper
+# must keep the power cell at its header-relative position through them.
+_WATCH_ROW_FORMAT = (
+    "%s,%s,0,0,N/A,\"['N/A', 'N/A']\",\"['N/A', 'N/A']\",\"[0, 0]\","
+    "\"[0, 0]\",\"[0, 0]\",%s,N/A,N/A,N/A,N/A,ENABLED,1404,2000,N/A,40,25\\n"
+)
+
+
+def _bash_single_quote(text: str) -> str:
+    return "'" + text.replace("'", "'\\''") + "'"
+
+
+def _run_amd_stop(
+    tmp_path: Path,
+    *,
+    producer_script: str,
+    timeout_s: int,
+    interval: int = 1,
+    setup_script: str = "",
+) -> subprocess.CompletedProcess[str]:
+    """Run the real stop_gpu_monitor against a scripted AMD telemetry producer."""
+    csv_path = tmp_path / "gpu_metrics.csv"
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    amd_smi = bin_dir / "amd-smi"
+    # Quiet stand-in for the _energy_end sidecar snapshot taken at stop.
+    amd_smi.write_text("#!/bin/bash\nprintf 'gpu,total_energy_consumption\\n0,100.0\\n'\n")
+    amd_smi.chmod(0o755)
+    script = f"""
+source {str(BENCHMARK_LIB)!r}
+GPU_METRICS_CSV={str(csv_path)!r}
+printf '%s\\n' {_bash_single_quote(_MI355X_WATCH_HEADER)} > "$GPU_METRICS_CSV"
+emit_row() {{
+    printf {_bash_single_quote(_WATCH_ROW_FORMAT)} "$1" "$2" "$3" >> "$GPU_METRICS_CSV"
+}}
+{setup_script}
+( {producer_script} ) &
+GPU_MONITOR_PID=$!
+printf '%s\\n' "$GPU_MONITOR_PID" > {str(tmp_path / "producer.pid")!r}
+GPU_MONITOR_VENDOR=amd
+GPU_MONITOR_INTERVAL={interval}
+AMD_MONITOR_STOP_TIMEOUT_S={timeout_s}
+date +%s > {str(tmp_path / "pre.txt")!r}
+stop_gpu_monitor
+date +%s > {str(tmp_path / "post.txt")!r}
+"""
+    return subprocess.run(
+        ["bash", "-c", script],
+        env={
+            **os.environ,
+            "PATH": f"{bin_dir}:/usr/bin:/bin",
+            "PYTHONDONTWRITEBYTECODE": "1",
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=60,
+    )
+
+
+def _min_covered_tick(csv_path: Path) -> int:
+    """Newest usable tick (numeric ts, power > 0) covered by every GPU."""
+    newest: dict[str, float] = {}
+    with csv_path.open(newline="", encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            try:
+                timestamp = float((row.get("timestamp") or "").strip())
+                power = float((row.get("socket_power") or "").strip())
+            except ValueError:
+                continue
+            gpu = (row.get("gpu") or "").strip()
+            if not gpu or power <= 0:
+                continue
+            newest[gpu] = max(newest.get(gpu, 0.0), timestamp)
+    assert newest, "no usable telemetry rows"
+    return int(min(newest.values()))
+
+
+def _stop_epochs(tmp_path: Path) -> tuple[int, int]:
+    pre = int((tmp_path / "pre.txt").read_text().strip())
+    post = int((tmp_path / "post.txt").read_text().strip())
+    return pre, post
+
+
+def _assert_producer_dead(tmp_path: Path) -> None:
+    producer_pid = int((tmp_path / "producer.pid").read_text().strip())
+    with pytest.raises(ProcessLookupError):
+        os.kill(producer_pid, 0)
+
+
+def test_amd_stop_waits_until_every_gpu_covers_stop_request(tmp_path: Path):
+    producer = """
+while :; do
+    now=$(date +%s)
+    emit_row "$now" 0 500
+    emit_row "$now" 1 505
+    sleep 0.2
+done
+"""
+    started = time.monotonic()
+    result = _run_amd_stop(tmp_path, producer_script=producer, timeout_s=30)
+    duration = time.monotonic() - started
+
+    assert result.returncode == 0, result.stderr
+    assert "never covered the stop request" not in result.stdout + result.stderr
+    pre, _ = _stop_epochs(tmp_path)
+    # Every GPU has a usable tick at/after the first whole second past stop
+    # entry, so any fractional window end before the stop is bracketed.
+    assert _min_covered_tick(tmp_path / "gpu_metrics.csv") >= pre + 1
+    _assert_producer_dead(tmp_path)
+    assert duration < 10
+
+
+def test_amd_stop_ignores_degenerate_rows_for_coverage(tmp_path: Path):
+    setup = """
+stale=$(( $(date +%s) - 30 ))
+emit_row "$stale" 0 500
+emit_row "$stale" 1 505
+"""
+    producer = """
+while :; do
+    now=$(date +%s)
+    emit_row "$now" 0 N/A
+    emit_row "$now" 1 N/A
+    sleep 0.2
+done
+"""
+    result = _run_amd_stop(
+        tmp_path,
+        producer_script=producer,
+        timeout_s=2,
+        setup_script=setup,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "never covered the stop request" in result.stderr
+    pre, post = _stop_epochs(tmp_path)
+    assert post - pre >= 2
+    _assert_producer_dead(tmp_path)
+
+
+def test_amd_stop_requires_coverage_per_gpu(tmp_path: Path):
+    setup = """
+stale=$(( $(date +%s) - 30 ))
+emit_row "$stale" 1 505
+"""
+    producer = """
+while :; do
+    emit_row "$(date +%s)" 0 500
+    sleep 0.2
+done
+"""
+    result = _run_amd_stop(
+        tmp_path,
+        producer_script=producer,
+        timeout_s=2,
+        setup_script=setup,
+    )
+
+    assert result.returncode == 0, result.stderr
+    # GPU 1 never covers the stop request, so min-over-GPUs coverage times out
+    # even though GPU 0 keeps producing fresh usable ticks.
+    assert "never covered the stop request" in result.stderr
+    pre, post = _stop_epochs(tmp_path)
+    assert post - pre >= 2
+    _assert_producer_dead(tmp_path)
+
+
+def test_amd_stop_falls_back_to_fixed_tail_for_iso_timestamps(tmp_path: Path):
+    producer = """
+while :; do
+    emit_row "$(date +%Y-%m-%dT%H:%M:%S)" 0 500
+    sleep 0.2
+done
+"""
+    started = time.monotonic()
+    result = _run_amd_stop(tmp_path, producer_script=producer, timeout_s=30, interval=0)
+    duration = time.monotonic() - started
+
+    assert result.returncode == 0, result.stderr
+    assert "never covered the stop request" not in result.stdout + result.stderr
+    assert "exited before covering" not in result.stdout + result.stderr
+    pre, post = _stop_epochs(tmp_path)
+    # Non-epoch timestamps keep the legacy interval+2 fixed tail (one shot).
+    assert post - pre >= 2
+    assert duration < 10
+    _assert_producer_dead(tmp_path)

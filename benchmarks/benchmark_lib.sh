@@ -111,6 +111,8 @@ unset _benchmark_caller
 GPU_MONITOR_PID=""
 GPU_MONITOR_VENDOR=""
 GPU_MONITOR_INTERVAL=1
+# Bounded wait for AMD telemetry to cover a stop request; 0 skips the wait.
+AMD_MONITOR_STOP_TIMEOUT_S="${AMD_MONITOR_STOP_TIMEOUT_S:-30}"
 GPU_METRICS_CSV="${GPU_METRICS_CSV:-gpu_metrics.csv}"
 NVIDIA_GPU_MONITOR_QUERY="timestamp,index,power.draw,temperature.gpu,clocks.current.sm,clocks.current.memory,utilization.gpu,utilization.memory"
 export GPU_METRICS_CSV
@@ -166,17 +168,18 @@ start_gpu_monitor() {
 # Stop the background GPU monitor and report file size.
 stop_gpu_monitor() {
     if [[ -n "$GPU_MONITOR_PID" ]] && kill -0 "$GPU_MONITOR_PID" 2>/dev/null; then
-        # benchmark_end_time_unix is recorded shortly before the benchmark
-        # process exits, so the stream must cover one more sample past it for
-        # deterministic boundary interpolation. NVIDIA appends a one-shot
-        # post-exit sample below; amd-smi one-shot CSV has no timestamp column,
-        # so the AMD path instead lets the watch stream emit final ticks before
-        # the kill. Two extra intervals: amd-smi stamps integer seconds, so a
-        # tick in the same second as the window end still fails bracketing —
-        # the stream needs a tick at the NEXT whole second (measured on MI355X:
-        # end=...153.325 vs last sample ...153.0).
+        # The aggregator requires, for every GPU, a usable sample stamped at or
+        # after the (fractional) benchmark window end, which is always <= the
+        # wall clock when this stop runs. NVIDIA appends a one-shot post-exit
+        # sample below; amd-smi one-shot CSV has no timestamp column, so the
+        # AMD path polls the output file until every GPU's watch stream shows
+        # a usable tick at the next whole second — amd-smi stamps integer
+        # seconds, so that tick strictly covers any fractional window end
+        # (measured on MI355X: end=...609.157 vs last sample ...605). Observing
+        # the file rather than sleeping also defeats pipe-buffer loss when the
+        # awk consumer is killed: covered rows are already on disk.
         if [[ "$GPU_MONITOR_VENDOR" == "amd" ]]; then
-            sleep $(( ${GPU_MONITOR_INTERVAL:-1} + 2 ))
+            _wait_for_amd_stop_coverage
         fi
         kill "$GPU_MONITOR_PID" 2>/dev/null
         wait "$GPU_MONITOR_PID" 2>/dev/null || true
@@ -220,6 +223,96 @@ _repair_truncated_gpu_metrics_tail() {
         fi
     fi
     return 0
+}
+
+# Print the newest telemetry tick (whole epoch seconds) that EVERY observed
+# GPU has covered with a usable sample (numeric epoch timestamp, numeric
+# power > 0), or nothing when the stream holds no usable epoch-stamped row
+# (e.g. an amd-smi build emitting ISO timestamps). Column detection mirrors
+# _POWER_COL_RE/_POWER_EXCLUDE_RE/_GPU_INDEX_COL_RE in utils/aggregate_power.py.
+# POSIX awk only: the ROCm container images ship mawk/busybox awk.
+_amd_monitor_min_covered_tick() {
+    [[ -f "$GPU_METRICS_CSV" ]] || return 0
+    awk -F, '
+        NR == 1 {
+            for (i = 1; i <= NF; i++) {
+                name = tolower($i)
+                gsub(/^ +| +$/, "", name)
+                sub(/\r$/, "", name)
+                if (!power_col && name ~ /power/ && name !~ /limit|cap|max|min/)
+                    power_col = i
+                if (!gpu_col && name ~ /^(index|gpu|gpu_id|gpu_index|card|device)$/)
+                    gpu_col = i
+            }
+            next
+        }
+        !power_col || !gpu_col { next }
+        {
+            # amd-smi quotes list-valued cells that embed commas; neutralize
+            # them so the power cell keeps its header-relative position.
+            line = $0
+            sub(/\r$/, "", line)
+            if (line ~ /"/) {
+                n = split(line, seg, /"/)
+                line = ""
+                for (i = 1; i <= n; i++) {
+                    if (i % 2 == 0) gsub(/,/, ";", seg[i])
+                    line = line seg[i]
+                }
+            }
+            count = split(line, cell, /,/)
+            if (count < power_col || count < gpu_col) next
+            if (cell[1] !~ /^[0-9]+(\.[0-9]+)?$/) next
+            if (cell[power_col] !~ /^[0-9]+(\.[0-9]+)?$/) next
+            if (cell[power_col] + 0 <= 0) next
+            if (cell[gpu_col] == "") next
+            gpu = cell[gpu_col]
+            if (!(gpu in newest) || cell[1] + 0 > newest[gpu])
+                newest[gpu] = cell[1] + 0
+        }
+        END {
+            have = 0
+            for (gpu in newest)
+                if (!have || newest[gpu] < min) { min = newest[gpu]; have = 1 }
+            if (have) printf "%d\n", min
+        }
+    ' "$GPU_METRICS_CSV" 2>/dev/null
+    return 0
+}
+
+# Block until every observed GPU has a usable tick at/after the first whole
+# second past stop entry, so any window end preceding the stop request is
+# bracketed on file. Bounded by AMD_MONITOR_STOP_TIMEOUT_S; always returns 0 —
+# on timeout or early monitor death it warns and lets aggregation attribute
+# the missing coverage (fail-safe, never fail-silent).
+_wait_for_amd_stop_coverage() {
+    local target deadline covered
+    if [[ "${AMD_MONITOR_STOP_TIMEOUT_S:-30}" -le 0 ]]; then
+        return 0
+    fi
+    target=$(( $(date +%s) + 1 ))
+    deadline=$(( target + ${AMD_MONITOR_STOP_TIMEOUT_S:-30} ))
+    while :; do
+        covered=$(_amd_monitor_min_covered_tick)
+        if [[ -z "$covered" ]]; then
+            # Non-epoch timestamps or an unusable stream: keep the legacy
+            # fixed tail so older amd-smi builds behave exactly as before.
+            sleep $(( ${GPU_MONITOR_INTERVAL:-1} + 2 ))
+            return 0
+        fi
+        if [[ "$covered" -ge "$target" ]]; then
+            return 0
+        fi
+        if ! _background_process_is_running "$GPU_MONITOR_PID"; then
+            echo "[GPU Monitor] Warning: AMD monitor exited before covering the stop request (covered=$covered target=$target)" >&2
+            return 0
+        fi
+        if [[ "$(date +%s)" -ge "$deadline" ]]; then
+            echo "[GPU Monitor] Warning: AMD telemetry never covered the stop request within ${AMD_MONITOR_STOP_TIMEOUT_S}s (covered=$covered target=$target)" >&2
+            return 0
+        fi
+        sleep 1
+    done
 }
 
 # Write one best-effort amd-smi snapshot; remove the file rather than keep a
@@ -2206,8 +2299,14 @@ run_agentic_replay_and_write_outputs() (
     esac
 
     _stop_agentx_power_monitor() {
+        local mode="${1:-}"
         if [ "$agentx_monitor_stopped" = "0" ]; then
             agentx_monitor_stopped=1
+            if [ "$mode" = "abort" ]; then
+                # A cancelled run's power validity is moot; skip the AMD
+                # coverage wait so signal teardown stays fast.
+                AMD_MONITOR_STOP_TIMEOUT_S=0
+            fi
             stop_gpu_monitor
         fi
     }
@@ -2252,10 +2351,12 @@ run_agentic_replay_and_write_outputs() (
         agentx_monitor_stopped=0
         # This function runs in a subshell, so these handlers cannot replace
         # launcher-owned traps. The stopped flag keeps explicit and signal/EXIT
-        # cleanup idempotent.
-        trap '_stop_agentx_power_monitor' EXIT
-        trap '_stop_agentx_power_monitor; exit 130' INT
-        trap '_stop_agentx_power_monitor; exit 143' TERM
+        # cleanup idempotent. Abort mode only ever fires when the explicit
+        # post-replay stop did not run (abnormal exit), where the coverage
+        # wait would only slow teardown down.
+        trap '_stop_agentx_power_monitor abort' EXIT
+        trap '_stop_agentx_power_monitor abort; exit 130' INT
+        trap '_stop_agentx_power_monitor abort; exit 143' TERM
     fi
 
     echo "$REPLAY_CMD" > "$result_dir/benchmark_command.txt"
