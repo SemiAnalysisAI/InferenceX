@@ -4,7 +4,8 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "$0")" && pwd)"
 
 # DSpark counterpart of the tuned nightly-46638857 no-spec path. Low-concurrency
-# GPU-resident TP8-only cells use K=6; DCP8/SimpleCPU cells use K=3.
+# GPU-resident TP8-only cells use K=6; DCP8/SimpleCPU cells use K=3 through c12
+# and K=2 at c16.
 if [ "${SPEC_DECODING:-none}" != "mtp" ]; then
     echo "Error: this recipe requires DSpark speculative decoding." >&2
     exit 1
@@ -24,7 +25,18 @@ case "${DCP_SIZE:-1}:${KV_OFFLOADING:-none}:${KV_OFFLOAD_BACKEND:-}" in
         export SPEC_NUM_TOKENS=6
         ;;
     8:dram:vllm-simple)
-        export SPEC_NUM_TOKENS=3
+        case "${CONC:?CONC is required}" in
+            8|12)
+                export SPEC_NUM_TOKENS=3
+                ;;
+            16)
+                export SPEC_NUM_TOKENS=2
+                ;;
+            *)
+                echo "Error: unsupported Kimi-K3 DCP8 DSpark concurrency: $CONC" >&2
+                exit 1
+                ;;
+        esac
         export DCP_COMM_BACKEND=a2a
         export SIMPLE_LAZY_OFFLOAD=true
         export SIMPLE_LAZY_OFFLOAD_WATERMARK_RATIO=1.0
@@ -42,9 +54,13 @@ if [ "${DCP_SIZE:-1}" -eq 1 ] && [ "${KV_OFFLOADING:-none}" = "none" ]; then
     default_cudagraph_capture_size=64
     default_cudagraph_capture_sizes="$(seq -s, 1 64)"
 else
-    default_max_num_seqs=24
-    default_cudagraph_capture_size=128
-    default_cudagraph_capture_sizes="$(seq -s, 1 128)"
+    default_max_num_seqs=$((2 * CONC))
+    if [ "$CONC" -eq 8 ]; then
+        default_cudagraph_capture_size=64
+    else
+        default_cudagraph_capture_size=128
+    fi
+    default_cudagraph_capture_sizes="$(seq -s, 1 "$default_cudagraph_capture_size")"
 fi
 
 export GPU_MEM_UTIL=0.90
