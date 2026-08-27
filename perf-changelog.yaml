@@ -6546,6 +6546,6 @@
     - "Preserve the current one-prefill TP4 plus one-decode TP8 topology and the 8k1k concurrency 8/16/32/64/128 search space."
     - "Run all five points in one eight-hour Slurm allocation through the unchanged benchmark_serving.py custom benchmark."
     - "Use the existing lmsysorg/sglang:v0.5.16-rocm720-mi35x image, FP8 KV cache, and AITer attention settings."
-    - "Pin the launcher to SemiAnalysisAI/srt-slurm PR #7 revision a2e458649f2d9de246954aaf0a900fc664811217, including DP-aware SGLang P/D rank routing and multi-node rank-offset preservation."
+    - "Pin the launcher to SemiAnalysisAI/srt-slurm PR #7 revision 10a58d2ebb4d756c423424049c736b909b72e14f, including DP-aware SGLang P/D rank routing, multi-node rank-offset preservation, and ATOM recipe flag normalization."
     - "Reuse validated MI355X Hugging Face cache trees through the standard $HF_HOME/hub layout under a per-model lock."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2628
