@@ -199,6 +199,8 @@ def _dispatch_enabled():
 
 def _type_key(a):
     # bool must be tested before int (bool subclasses int)
+    if a is None:
+        return "n"  # schema'd as Tensor? and always passed None
     if isinstance(a, bool):
         return "b"
     if isinstance(a, int):
@@ -211,29 +213,32 @@ def _type_key(a):
     return None
 
 
-def _register_dispatch_op(qualname, fn, args, ret_is_tensor):
-    """Define etshim::<name>_<n> with a schema derived from this call's args."""
+_SCHEMA_OF_KEY = {
+    "T": "Tensor(a{i}!) a{i}",  # assume mutable: out-params are the norm here
+    "n": "Tensor? a{i}",
+    "b": "bool a{i}",
+    "i": "int a{i}",
+    "f": "float a{i}",
+}
+
+
+def _register_dispatch_op(shortname, fn, args, ret_is_tensor):
+    """Define etshim::<shortname>_<n> with a schema derived from this call."""
     global _dispatch_lib, _dispatch_idx
     from torch.library import Library
 
     parts = []
     for i, a in enumerate(args):
         k = _type_key(a)
-        if k == "T":
-            parts.append(f"Tensor(a{i}!) a{i}")  # assume mutable: out-params
-        elif k == "b":
-            parts.append(f"bool a{i}")
-        elif k == "i":
-            parts.append(f"int a{i}")
-        elif k == "f":
-            parts.append(f"float a{i}")
-        else:
+        tmpl = _SCHEMA_OF_KEY.get(k)
+        if tmpl is None:
             return None
+        parts.append(tmpl.format(i=i))
     ret = "Tensor" if ret_is_tensor else "()"
     if _dispatch_lib is None:
         _dispatch_lib = Library("etshim", "DEF")
     _dispatch_idx += 1
-    safe = "".join(ch if ch.isalnum() or ch == "_" else "_" for ch in qualname)
+    safe = "".join(ch if ch.isalnum() or ch == "_" else "_" for ch in shortname)
     opname = f"{safe}_{_dispatch_idx}"
     _dispatch_lib.define(f"{opname}({', '.join(parts)}) -> {ret}")
     _dispatch_lib.impl(opname, lambda *a: fn(*a), "CompositeExplicitAutograd")
@@ -253,29 +258,64 @@ class _LauncherProxy:
         object.__setattr__(self, "_infx_fn", fn)
         object.__setattr__(self, "_infx_qualname", qualname)
         object.__setattr__(self, "_infx_ops", {})
+        object.__setattr__(self, "_infx_sig", None)  # lazily-resolved signature
+
+    def _flatten(self, args, kwargs):
+        """Positional arg list for (args, kwargs), or None when not bindable."""
+        if not kwargs:
+            return args
+        sig = self._infx_sig
+        if sig is None:
+            import inspect
+
+            try:
+                sig = inspect.signature(self._infx_fn)
+                for p in sig.parameters.values():
+                    if p.kind in (p.VAR_POSITIONAL, p.VAR_KEYWORD, p.KEYWORD_ONLY):
+                        # keyword-only is flattenable in principle, but the
+                        # call-order contract gets murky — skip.
+                        sig = False
+                        break
+            except (TypeError, ValueError):
+                sig = False
+            object.__setattr__(self, "_infx_sig", sig)
+        if sig is False:
+            return None
+        try:
+            bound = sig.bind(*args, **kwargs)
+            bound.apply_defaults()
+            return tuple(bound.arguments[p] for p in sig.parameters)
+        except TypeError:
+            return None
 
     def __call__(self, *args, **kwargs):
         fn = self._infx_fn
-        if kwargs or _active_observer is None:
+        if _active_observer is None:
+            return fn(*args, **kwargs)
+        flat = self._flatten(args, kwargs)
+        if flat is None:
             return fn(*args, **kwargs)
         try:
-            key = tuple(_type_key(a) for a in args)
+            key = tuple(_type_key(a) for a in flat)
         except Exception:  # noqa: BLE001
-            return fn(*args)
+            return fn(*args, **kwargs)
         ops = self._infx_ops
         op = ops.get(key)
         if op is False:
-            return fn(*args)
+            return fn(*args, **kwargs)
         if op is None:
             # First call for this signature runs raw to learn the return
             # kind; anything but None/Tensor is not schema-able.
-            result = fn(*args)
+            result = fn(*flat)
             try:
                 import torch
 
                 if result is None or isinstance(result, torch.Tensor):
                     new_op = _register_dispatch_op(
-                        self._infx_qualname, fn, args, result is not None
+                        self._infx_qualname.rsplit(".", 1)[-1],
+                        fn,
+                        flat,
+                        result is not None,
                     )
                     ops[key] = new_op if new_op is not None else False
                 else:
@@ -288,7 +328,7 @@ class _LauncherProxy:
                 ops[key] = False
             return result
         try:
-            return op(*args)
+            return op(*flat)
         except Exception as exc:  # noqa: BLE001
             _warn_once(
                 f"dispatch-call-{self._infx_qualname}",
@@ -296,7 +336,7 @@ class _LauncherProxy:
                 f"falling back to raw: {exc!r}",
             )
             ops[key] = False
-            return self._infx_fn(*args)
+            return self._infx_fn(*args, **kwargs)
 
     def __getattr__(self, item):
         return getattr(object.__getattribute__(self, "_infx_fn"), item)
@@ -344,26 +384,36 @@ def _hook_tilelang(module):
           file=sys.stderr, flush=True)
 
 
-def _hook_deep_gemm(module):
-    """Proxy deep_gemm's public module-level callables."""
-    if getattr(module, "_infx_et_patched", False):
-        return
-    wrapped = 0
-    for attr in dir(module):
-        if attr.startswith("_"):
-            continue
-        try:
-            val = getattr(module, attr)
-        except Exception:  # noqa: BLE001
-            continue
-        if callable(val) and not isinstance(val, type) and getattr(
-            val, "__module__", ""
-        ).startswith("deep_gemm"):
-            setattr(module, attr, _maybe_proxy(f"deep_gemm.{attr}", val))
-            wrapped += 1
-    module._infx_et_patched = True
-    print(f"[execution-trace] deep_gemm launcher trampoline armed "
-          f"({wrapped} callables)", file=sys.stderr, flush=True)
+def _hook_module_functions(root):
+    """Patcher proxying a module's public module-level callables.
+
+    Only callables DEFINED under `root` (by __module__) are proxied, so
+    re-exports of aten/foreign functions are left alone.
+    """
+
+    def patch(module):
+        if getattr(module, "_infx_et_patched", False):
+            return
+        wrapped = 0
+        for attr in dir(module):
+            if attr.startswith("_"):
+                continue
+            try:
+                val = getattr(module, attr)
+            except Exception:  # noqa: BLE001
+                continue
+            if callable(val) and not isinstance(val, type) and getattr(
+                val, "__module__", ""
+            ).startswith(root):
+                setattr(module, attr, _maybe_proxy(f"{module.__name__}.{attr}", val))
+                wrapped += 1
+        module._infx_et_patched = True
+        if wrapped:
+            print(f"[execution-trace] launcher trampoline armed on "
+                  f"{module.__name__} ({wrapped} callables)",
+                  file=sys.stderr, flush=True)
+
+    return patch
 
 
 def _patch_profiler_module(module):
@@ -401,11 +451,23 @@ class _ModuleImportHook:
 
     _busy = False
 
-    def __init__(self, patchers):
+    def __init__(self, patchers, prefix_patchers=()):
         self._patchers = patchers  # fullname -> patch fn
+        # (prefix, patch fn): applies to the prefix module AND its submodules
+        self._prefix_patchers = tuple(prefix_patchers)
+
+    def _patcher_for(self, fullname):
+        p = self._patchers.get(fullname)
+        if p is not None:
+            return p
+        for prefix, patcher in self._prefix_patchers:
+            if fullname == prefix or fullname.startswith(prefix + "."):
+                return patcher
+        return None
 
     def find_spec(self, fullname, path=None, target=None):
-        if fullname not in self._patchers or _ModuleImportHook._busy:
+        patcher = self._patcher_for(fullname)
+        if patcher is None or _ModuleImportHook._busy:
             return None
         import importlib.util
 
@@ -417,7 +479,6 @@ class _ModuleImportHook:
         if spec is None or spec.loader is None:
             return None
         orig_exec_module = spec.loader.exec_module
-        patcher = self._patchers[fullname]
 
         def exec_module(module):
             orig_exec_module(module)
@@ -432,13 +493,21 @@ class _ModuleImportHook:
         return spec
 
 
+# Module families whose python launchers bypass the torch dispatcher; every
+# public callable defined under each root gets the etshim trampoline. Roots
+# and their submodules are matched by prefix (sglang.jit_kernel.dsv4.*, the
+# flashinfer wrappers around cute-dsl/trtllm/triton kernels, ...).
+_DISPATCH_PREFIXES = ("deep_gemm", "sglang.jit_kernel", "flashinfer")
+
+
 def _install():
     if not os.environ.get(_ENV_DIR):
         return
     patchers = {_TARGET: _patch_profiler_module}
+    prefix_patchers = []
     if _dispatch_enabled():
         patchers["tilelang"] = _hook_tilelang
-        patchers["deep_gemm"] = _hook_deep_gemm
+        prefix_patchers = [(p, _hook_module_functions(p)) for p in _DISPATCH_PREFIXES]
     pending = {}
     for fullname, patcher in patchers.items():
         existing = sys.modules.get(fullname)
@@ -449,8 +518,8 @@ def _install():
                 _warn_once("patch", f"failed to patch {fullname}: {exc!r}")
         else:
             pending[fullname] = patcher
-    if pending:
-        sys.meta_path.insert(0, _ModuleImportHook(pending))
+    if pending or prefix_patchers:
+        sys.meta_path.insert(0, _ModuleImportHook(pending, prefix_patchers))
 
 
 _install()
