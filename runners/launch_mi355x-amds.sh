@@ -325,6 +325,11 @@ else
     if [[ "$IMAGE" == *qwen38flashnext* ]]; then
         WS_MOUNT_DIR="/inferencex"
         export RESULT_DIR="${RESULT_DIR/#\/workspace//inferencex}"
+        # benchmark_lib.sh resolves AGENTIC_DIR, AIPERF_DIR and every `cd` into
+        # the repo through this variable, which defaults to /workspace. Move it
+        # with the mount or install_agentic_deps looks for the requirements
+        # file at /workspace/utils/... inside the image and fails.
+        export INFMAX_CONTAINER_WORKSPACE="$WS_MOUNT_DIR"
         echo "Image ships packages under /workspace; mounting the repo at $WS_MOUNT_DIR (RESULT_DIR=$RESULT_DIR)"
     fi
 
