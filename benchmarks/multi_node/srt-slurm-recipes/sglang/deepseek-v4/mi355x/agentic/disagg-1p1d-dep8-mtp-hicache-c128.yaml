@@ -106,9 +106,7 @@ backend:
       ep-size: 8
       dp-size: 8
       watchdog-timeout: 3600
-      # DP prefill must follow the bootstrap-room rank selected by the native
-      # router; SGLang's role-aware auto policy keeps decode round-robin.
-      load-balance-method: auto
+      load-balance-method: round_robin
       kv-cache-dtype: fp8_e4m3
       attention-backend: dsv4
       page-size: 256
@@ -136,13 +134,7 @@ backend:
       chunked-prefill-size: 65536
       disable-cuda-graph: true
       enable-hierarchical-cache: true
-      # DP-attention owns one device and host KV pool per rank.  At ratio 3,
-      # the eight 7.91M-token device pools allocate about 1.2 TiB of private
-      # host KV in addition to the shared model mappings and force nodes with
-      # large HugeTLB reservations into sustained swap during startup.  Ratio
-      # 0.5 preserves a bounded host tier while fitting the least-available
-      # node in the pool.
-      hicache-ratio: 0.5
+      hicache-ratio: 3
       hicache-io-backend: direct
       hicache-mem-layout: page_first
       hicache-write-policy: write_through

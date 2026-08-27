@@ -104,9 +104,7 @@ backend:
       trust-remote-code: true
       tp-size: 8
       watchdog-timeout: 3600
-      # Let SGLang choose the role-correct PD policy: follow_bootstrap_room on
-      # prefill workers and round_robin on decode workers.
-      load-balance-method: auto
+      load-balance-method: round_robin
       kv-cache-dtype: fp8_e4m3
       attention-backend: dsv4
       page-size: 256
@@ -124,20 +122,12 @@ backend:
       context-length: 1048576
       enable-metrics: true
       enable-cache-report: true
-      # Keep the reduced prefill device pool, but bound its proportional host
-      # tier.  This image resolves 0.72 to a 6.41M-token device pool; ratio 4
-      # made all eight TP ranks allocate 157-174 GiB host buffers and pushed
-      # the 3 TiB node past 181 GiB of swap before readiness.  Ratio 2 still
-      # provides twice the device capacity in DRAM with ample host headroom.
-      mem-fraction-static: 0.72
+      mem-fraction-static: 0.85
       max-running-requests: 64
       chunked-prefill-size: 8192
       disable-cuda-graph: true
       enable-hierarchical-cache: true
-      # Bound the host tier on nodes that reserve 2.8 TiB for HugeTLB. Ratio 1
-      # exhausts the remaining ordinary memory while the eight TP ranks build
-      # their host pools; 0.5 retains a useful DRAM tier without swap thrash.
-      hicache-ratio: 0.5
+      hicache-ratio: 3
       hicache-io-backend: direct
       hicache-mem-layout: page_first
       hicache-write-policy: write_through
