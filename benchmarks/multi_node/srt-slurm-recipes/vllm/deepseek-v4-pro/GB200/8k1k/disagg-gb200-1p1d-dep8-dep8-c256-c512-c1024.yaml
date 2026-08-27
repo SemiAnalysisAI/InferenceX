@@ -12,8 +12,7 @@ identity:
   container:
     image: "quay.io/rh-ee-imarkov/llm-d-nokube-vllm:vllm0.26@sha256:a9095d4c835935c4070be2040de0a5ef3b44098f603092ab66d743b0e731b7b4"
   frameworks:
-    vllm: "0.26"
-    vllm-router: "0.1.15"
+    vllm: "0.26.0"
 
 slurm:
   time_limit: "8:00:00"
@@ -137,7 +136,7 @@ benchmark:
       num_warmups=$((concurrency * 2))
       python3 /infmax-workspace/utils/bench_serving/benchmark_serving.py \
         --backend openai \
-        --base-url "$SRT_FRONTEND_URL" \
+        --base-url "http://$SRT_FRONTEND_HOST:$SRT_FRONTEND_PORT" \
         --endpoint /v1/completions \
         --model deepseek-ai/DeepSeek-V4-Pro \
         --served-model-name deepseek-ai/DeepSeek-V4-Pro \
