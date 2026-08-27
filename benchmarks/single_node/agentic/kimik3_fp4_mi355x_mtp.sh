@@ -30,7 +30,7 @@ amd-smi || true
 resolve_trace_source
 install_agentic_deps
 
-DCP_SIZE=8
+if [ "$CONC" -le 4 ]; then LOW_CONC_INTERACTIVE=1; DCP_SIZE=1; else LOW_CONC_INTERACTIVE=0; DCP_SIZE=8; fi
 export DCP_SIZE
 
 export VLLM_ROCM_AITER_MLA_ASM_PADDING=asm
@@ -68,18 +68,12 @@ trap 'exit 143' TERM
 
 export PYTHONHASHSEED=42
 
-# KV offload. TOTAL_CPU_DRAM_GB is the aggregate host-DRAM budget the matrix
-# generator derives from dram-utilization and the runner's available CPU DRAM;
-# per the agentic README it must be consumed as given, never replaced with a
-# model-specific constant. Worth 3.3x on the non-DCP path (T92 vs T64), so the
-# absence of this block is not a neutral simplification.
 OFFLOAD_ARGS=()
 if agentic_kv_offload_enabled; then
     case "${KV_OFFLOAD_BACKEND:-}" in
       vllm-simple)
         require_agentic_kv_offload_backend "$KV_OFFLOAD_BACKEND"
         CPU_BYTES_PER_RANK=$(( TOTAL_CPU_DRAM_GB * 1000 * 1000 * 1000 / TOTAL_RANKS ))
-        # Identical prefixes must hash to identical block keys across ranks.
         export PYTHONHASHSEED=42
         SIMPLE_LAZY_OFFLOAD="${SIMPLE_LAZY_OFFLOAD:-false}"
         OFFLOAD_ARGS=(
@@ -95,6 +89,12 @@ if agentic_kv_offload_enabled; then
 fi
 
 KV_CACHE_DTYPE=fp8
+EP_ARGS=()
+if [ "${EP_SIZE:-1}" -gt 1 ]; then
+    EP_ARGS=(--enable-expert-parallel)
+    echo "EP: expert parallelism ON (EP_SIZE=$EP_SIZE)"
+fi
+
 CP_ARGS=(
     --decode-context-parallel-size "$DCP_SIZE"
     --dcp-comm-backend a2a
@@ -111,19 +111,41 @@ export AITER_DISABLE_FMHA_OPUS=1
 export VLLM_ROCM_USE_AITER_MLA=1
 export AITER_DISABLE_FMHA_OPUS=1
 
+SPEC_ENABLE="${SPEC_DECODING:-}"
+case "${RESULT_FILENAME:-}" in *_spec-mtp_*) SPEC_ENABLE=mtp;; esac
+if [ "$LOW_CONC_INTERACTIVE" != "1" ]; then SPEC_ENABLE=""; fi
 SPEC_ARGS=()
+if [ "$SPEC_ENABLE" = "mtp" ]; then
+    SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-8}"
+    case "$SPEC_NUM_TOKENS" in
+        8) SYNTHETIC_ACCEPT_LEN=4.00 ;;
+        *) echo "[spec] no golden AL wired for num_speculative_tokens=$SPEC_NUM_TOKENS; take it from golden_al_distribution/kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml and add the case" >&2; exit 1 ;;
+    esac
+    SPEC_ARGS=(
+        --speculative-config
+        "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
+    )
+    echo "MTP: speculative decoding ON (k=$SPEC_NUM_TOKENS, synthetic accept=$SYNTHETIC_ACCEPT_LEN)"
+fi
 
 CHUNKED_PREFILL_ARGS=(--max-num-batched-tokens 8192)
 ASYNC_SCHED_ARGS=(--no-async-scheduling)
 MLA_PREFILL_ARGS=(--attention-config "{\"mla_prefill_backend\":\"ROCM_AITER_FA\"}")
 
-MAX_NUM_SEQS=80
-CUDAGRAPH_CAPTURE_SIZES="1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80"
-MAX_CUDAGRAPH_CAPTURE_SIZE=80
+MAX_NUM_SEQS=$(( CONC + CONC / 4 ))
+if [ "$MAX_NUM_SEQS" -lt 8 ]; then MAX_NUM_SEQS=8; fi
+if [ "$MAX_NUM_SEQS" -gt 80 ]; then MAX_NUM_SEQS=80; fi
+
+SPEC_ROWS=1
+if [ "${#SPEC_ARGS[@]}" -gt 0 ]; then SPEC_ROWS=$(( SPEC_NUM_TOKENS + 1 )); fi
+MAX_CUDAGRAPH_CAPTURE_SIZE=$(( MAX_NUM_SEQS * SPEC_ROWS ))
+CUDAGRAPH_CAPTURE_SIZES=$(seq -s, 1 "$MAX_CUDAGRAPH_CAPTURE_SIZE")
+echo "graphs: dense ladder 1..$MAX_CUDAGRAPH_CAPTURE_SIZE (mns=$MAX_NUM_SEQS x $SPEC_ROWS rows), DCP=$DCP_SIZE"
 CUDAGRAPH_MODE=FULL_AND_PIECEWISE
 COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"$CUDAGRAPH_MODE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}")
 
 GPU_MEM_UTIL=0.9
+
 
 VLLM_CMD=(
     vllm serve "$MODEL_PATH" --served-model-name "$MODEL"
@@ -146,11 +168,16 @@ VLLM_CMD=(
     "${CHUNKED_PREFILL_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
     "${CP_ARGS[@]}"
+    "${EP_ARGS[@]}"
     "${SPEC_ARGS[@]}"
     "${ASYNC_SCHED_ARGS[@]}"
     "${MLA_PREFILL_ARGS[@]}"
     "${COMPILATION_CONFIG_ARGS[@]}"
 )
+
+for _a in CP_ARGS SPEC_ARGS CHUNKED_PREFILL_ARGS ASYNC_SCHED_ARGS MLA_PREFILL_ARGS OFFLOAD_ARGS COMPILATION_CONFIG_ARGS; do
+    grep -q "\${$_a\[@\]}" "$0" || echo "[orphan-check] WARNING: $_a is built but never passed to VLLM_CMD" >&2
+done
 
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
 printf '\n' | tee -a "$RESULT_DIR/vllm_command.txt"
@@ -161,7 +188,7 @@ echo "Server PID: $SERVER_PID"
 
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-if [ "${EVAL_ONLY}" = "true" ]; then
+if [ "${EVAL_ONLY:-false}" = "true" ]; then
     run_eval --port "$PORT"
 else
     build_replay_cmd "$RESULT_DIR"
