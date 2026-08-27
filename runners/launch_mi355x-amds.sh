@@ -264,10 +264,9 @@ else
     LOCK_FILE="${SQUASH_FILE}.lock"
 
     export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
-    SALLOC_NODE_ARGS=("--nodelist=mia1-p01-g09")
+
     set -x
-    # salloc --partition=$PARTITION --gres=gpu:$GPU_COUNT --exclusive --cpus-per-task=128 --time=500 --no-shell --job-name="$RUNNER_NAME"
-    salloc --partition=$PARTITION --gres=gpu:$GPU_COUNT --exclusive --cpus-per-task=128 --time=500 --no-shell --job-name="$RUNNER_NAME" "${SALLOC_NODE_ARGS[@]}"
+    salloc --partition=$PARTITION --gres=gpu:$GPU_COUNT --exclusive --cpus-per-task=128 --time=500 --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -h -o %A | head -n1)
 
     srun --jobid=$JOB_ID bash -c "docker stop \$(docker ps -a -q)"
