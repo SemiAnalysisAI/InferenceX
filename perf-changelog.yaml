@@ -6857,5 +6857,5 @@
     - "Use the hardware-proven Mooncake TCP transport for the initial correctness sweep; validate the updated ROCm RDMA path separately before changing production transport."
     - "Use the ATOM image's bundled native AToMesh binary directly, without Infera source overlays or Infera routing, and archive the complete runtime logs from the custom benchmark."
     - "Run the current rocm/atom-dev nightly_202608251555 image at ATOM commit 4e0848dcdf94f3d4be0c1e3ce51db99bc93f8b8c, whose bundled native AToMesh and Mooncake implementation are used without downstream source patches."
-    - "Pin SemiAnalysisAI/srt-slurm PR #7 at 10a58d2ebb4d756c423424049c736b909b72e14f so this ATOM/AToMesh port shares the latest validated AMD orchestration base, including native-router data-parallel rank preservation and ATOM recipe flag normalization."
+    - "Pin SemiAnalysisAI/srt-slurm PR #7 at c87d7b34b009be920896126013ad6dc74c5a99d5 so this ATOM/AToMesh port shares the latest validated AMD orchestration base, including native-router data-parallel rank preservation and ATOM recipe flag normalization."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2627
