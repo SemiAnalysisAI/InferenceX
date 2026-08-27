@@ -99,59 +99,6 @@ import_squash() {
     ) || exit 1
 }
 
-if [[ "$FRAMEWORK" == "llmd-vllm" ]]; then
-    if [[ "$MODEL_PREFIX" == "dsv4" && "$PRECISION" == "fp4" ]]; then
-        export MODEL_PATH="/mnt/numa1/models/DeepSeek-V4-Pro"
-        export MODEL_NAME="deepseek-ai/DeepSeek-V4-Pro"
-    else
-        echo "Unsupported MODEL_PREFIX/PRECISION for llmd-vllm on GB200: $MODEL_PREFIX/$PRECISION" >&2
-        exit 1
-    fi
-
-    SQUASH_FILE="${SQUASH_DIR}/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-    import_squash "$SQUASH_FILE" "$IMAGE"
-
-    export LLMD_CONTAINER_ENGINE=pyxis
-    export LLMD_SQUASH_FILE="$SQUASH_FILE"
-
-    export BENCHMARK_LOGS_DIR="$GITHUB_WORKSPACE/benchmark_logs"
-    mkdir -p "$BENCHMARK_LOGS_DIR"
-
-    SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_gb200_llmd-vllm-disagg.sh"
-    BENCH_SCRIPT="benchmarks/multi_node/${SCRIPT_NAME}"
-    if [[ ! -f "$BENCH_SCRIPT" ]]; then
-        echo "Error: llm-d wrapper not found: $BENCH_SCRIPT" >&2
-        exit 1
-    fi
-
-    JOB_ID=$(bash "$BENCH_SCRIPT")
-    if [[ -z "$JOB_ID" ]]; then
-        echo "Error: failed to submit llm-d job" >&2
-        exit 1
-    fi
-    echo "Submitted llm-d job: $JOB_ID"
-
-    trap 'bundle_server_logs "$BENCHMARK_LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"; scancel "$JOB_ID" 2>/dev/null || true' EXIT INT TERM HUP
-
-    LOG_FILE="${BENCHMARK_LOGS_DIR}/slurm_job-${JOB_ID}.out"
-    stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || exit 1
-
-    while IFS= read -r -d '' result_file; do
-        copy_to_workspace "$result_file" "$GITHUB_WORKSPACE/$(basename "$result_file")" || exit 1
-    done < <(find "$BENCHMARK_LOGS_DIR" -name "${RESULT_FILENAME}*.json" -print0 2>/dev/null)
-
-    if [[ "${RUN_EVAL:-false}" == "true" ]]; then
-        EVAL_DIR=$(find "$BENCHMARK_LOGS_DIR" -type d -name eval_results -print -quit 2>/dev/null)
-        if [[ -z "$EVAL_DIR" ]]; then
-            EVAL_DIR="$BENCHMARK_LOGS_DIR/eval_results"
-        fi
-        copy_eval_artifacts "$EVAL_DIR" "$GITHUB_WORKSPACE" || exit 1
-    fi
-
-    scancel "$JOB_ID" 2>/dev/null || true
-    exit 0
-fi
-
 # MODEL_PATH: Override with pre-downloaded paths on GB200 runner
 # The yaml files specify HuggingFace model IDs for portability, but we use
 # local paths to avoid repeated downloading on the shared GB200 cluster.
@@ -223,7 +170,7 @@ elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
         echo "Unsupported model prefix: $MODEL_PREFIX. Supported prefixes are: gptoss, dsr1, kimik2.5, or glm5"
         exit 1
     fi
-elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
+elif [[ $FRAMEWORK == "dynamo-vllm" || $FRAMEWORK == "vllm" ]]; then
     if [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/kimi-k2.5-nvfp4"
         export SRT_SLURM_MODEL_PREFIX="kimi-k2.5-nvfp4"
@@ -242,7 +189,13 @@ elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
         # params (e.g. ffn.experts.w13_input_scale), which KeyErrors at load.
         # The lowercase Lustre sibling is the FP8 checkpoint, so name the
         # CamelCase FP4 path explicitly (Linux is case-sensitive).
-        export MODEL_PATH="/mnt/lustre01/models/DeepSeek-V4-Pro"
+        if [[ "$FRAMEWORK" == "vllm" ]]; then
+            # Preserve the checkpoint used by the historical llm-d series.
+            # It is pre-staged at the same node-local path on every GB200 node.
+            export MODEL_PATH="/mnt/numa1/models/DeepSeek-V4-Pro"
+        else
+            export MODEL_PATH="/mnt/lustre01/models/DeepSeek-V4-Pro"
+        fi
         export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
         MODEL_PATHS_EXTRA='  "deepseek-v4-pro-mxfp4": "/mnt/lustre01/models/DeepSeek-V4-Pro"'
     elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" ]]; then
@@ -258,7 +211,7 @@ elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/MiniMax-M3-NVFP4"
         export SRT_SLURM_MODEL_PREFIX="minimax-m3-nvfp4"
     else
-        echo "Unsupported model prefix/precision combination: $MODEL_PREFIX/$PRECISION. Supported combinations for dynamo-vllm: kimik2.5/fp4, kimik3/fp4, dsv4/fp4, minimaxm2.5/fp4, minimaxm2.5/fp8, minimaxm3/fp4, minimaxm3/fp8"
+        echo "Unsupported model prefix/precision combination: $MODEL_PREFIX/$PRECISION. Supported combinations for vllm paths: kimik2.5/fp4, kimik3/fp4, dsv4/fp4, minimaxm2.5/fp4, minimaxm2.5/fp8, minimaxm3/fp4, minimaxm3/fp8"
         exit 1
     fi
 else
@@ -271,10 +224,10 @@ uses_watchtower_shared_fs() {
     case "$MODEL_PREFIX" in
         minimaxm2.5|minimaxm3|kimik2.5|kimik3|qwen3.5|glm5.2) return 0 ;;
     esac
-    # dsv4 multinode runs only under dynamo-vllm on watchtower, which likewise
+    # DSV4 multinode runs under Dynamo-vLLM or direct vLLM Router on watchtower.
     # needs the srt-slurm workspace/outputs on a compute-visible shared FS
     # (the runner home is not cross-mounted to compute nodes).
-    [[ "$FRAMEWORK" == "dynamo-vllm" && "$MODEL_PREFIX" == "dsv4" ]] && return 0
+    [[ ( "$FRAMEWORK" == "dynamo-vllm" || "$FRAMEWORK" == "vllm" ) && "$MODEL_PREFIX" == "dsv4" ]] && return 0
     return 1
 }
 
@@ -471,6 +424,22 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     # `recipes/vllm/deepseek-v4/deepseek-v4/...` in that case).
     mkdir -p recipes/vllm/deepseek-v4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
+elif [[ $FRAMEWORK == "vllm" && $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
+    SRT_SLURM_PIN="76e7d76961b2dcb27cb05c1e9e0910ceb75104ec"
+    git clone https://github.com/SemiAnalysisAI/srt-slurm.git "$SRT_REPO_DIR" || exit 1
+    cd "$SRT_REPO_DIR" || exit 1
+    git checkout "$SRT_SLURM_PIN" || exit 1
+    test "$(git rev-parse HEAD)" = "$SRT_SLURM_PIN" || {
+        echo "Error: srt-slurm HEAD does not match SRT_SLURM_PIN=$SRT_SLURM_PIN" >&2
+        exit 1
+    }
+    mkdir -p recipes/vllm/deepseek-v4-pro/GB200/8k1k configs
+    cp -rT \
+        "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4-pro/GB200/8k1k" \
+        recipes/vllm/deepseek-v4-pro/GB200/8k1k
+    cp \
+        "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/install-vllm-router.sh" \
+        configs/install-vllm-router.sh
 elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
     if [[ "$USES_DCGM_POWER" == "1" ]]; then
         # Note (wenyao): on this cluster the DSV4-Pro checkpoint lives on the
@@ -584,6 +553,29 @@ if uses_watchtower_shared_fs; then
     SRTCTL_ROOT="$SRT_REPO_DIR"
 fi
 
+# Resolve a compute-visible InferenceX checkout before rendering mounts. The
+# fixed-sequence custom benchmark invokes the checked-in benchmark_serving.py
+# directly; it must therefore see the same checkout from every allocated node.
+export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
+if uses_watchtower_shared_fs; then
+    WORKSPACE_FS_TYPE=$(findmnt -n -o FSTYPE -T "$GITHUB_WORKSPACE" 2>/dev/null || true)
+    if [[ "$WORKSPACE_FS_TYPE" == "lustre" ]]; then
+        echo "Using existing Lustre-backed INFMAX_WORKSPACE=$INFMAX_WORKSPACE"
+    else
+        SHARED_INFMAX_WORKSPACE="${SHARED_BASE}/infmax-workspace-${RUN_KEY}"
+        mkdir -p "$SHARED_INFMAX_WORKSPACE" || exit 1
+        rsync -a --delete \
+            --exclude='.git/' \
+            --exclude='srt-slurm*/' \
+            --exclude='outputs/' \
+            --exclude='LOGS/' \
+            --exclude='*.sqsh' \
+            "${GITHUB_WORKSPACE}/" "${SHARED_INFMAX_WORKSPACE}/" || exit 1
+        export INFMAX_WORKSPACE="$SHARED_INFMAX_WORKSPACE"
+        echo "Staged node-local workspace to INFMAX_WORKSPACE=$INFMAX_WORKSPACE"
+    fi
+fi
+
 # Agentic runs bind-mount two persistent caches into every worker container
 # (Lustre, shared across nodes): aiperf's content-addressed dataset mmap
 # cache (~65 GB per corpus, re-tokenized from scratch without it) and the
@@ -606,6 +598,9 @@ if [[ "$IS_AGENTIC" == "1" ]]; then
         DEFAULT_MOUNTS_BLOCK+="
   ${DYNAMO_WHEELS_CACHE_HOST_PATH}: /configs/dynamo-wheels"
     fi
+elif [[ "$FRAMEWORK" == "vllm" && "$MODEL_PREFIX" == "dsv4" ]]; then
+    DEFAULT_MOUNTS_BLOCK="default_mounts:
+  ${INFMAX_WORKSPACE}: /infmax-workspace"
 fi
 
 echo "Creating srtslurm.yaml configuration..."
@@ -656,30 +651,6 @@ cat srtslurm.yaml
 
 echo "Running make setup..."
 make setup ARCH=aarch64 || exit 1
-
-# Export eval-related env vars for srt-slurm post-benchmark eval. Current
-# Watchtower runners keep GITHUB_WORKSPACE on Lustre, so compute nodes can
-# mount it directly; avoid copying the checkout from Lustre back to Lustre.
-# Retain staging as a fallback for runners whose workspace is node-local.
-export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
-if uses_watchtower_shared_fs; then
-    WORKSPACE_FS_TYPE=$(findmnt -n -o FSTYPE -T "$GITHUB_WORKSPACE" 2>/dev/null || true)
-    if [[ "$WORKSPACE_FS_TYPE" == "lustre" ]]; then
-        echo "Using existing Lustre-backed INFMAX_WORKSPACE=$INFMAX_WORKSPACE"
-    else
-        SHARED_INFMAX_WORKSPACE="${SHARED_BASE}/infmax-workspace-${RUN_KEY}"
-        mkdir -p "$SHARED_INFMAX_WORKSPACE" || exit 1
-        rsync -a --delete \
-            --exclude='.git/' \
-            --exclude='srt-slurm*/' \
-            --exclude='outputs/' \
-            --exclude='LOGS/' \
-            --exclude='*.sqsh' \
-            "${GITHUB_WORKSPACE}/" "${SHARED_INFMAX_WORKSPACE}/" || exit 1
-        export INFMAX_WORKSPACE="$SHARED_INFMAX_WORKSPACE"
-        echo "Staged node-local workspace to INFMAX_WORKSPACE=$INFMAX_WORKSPACE"
-    fi
-fi
 
 echo "Submitting job with srtctl..."
 

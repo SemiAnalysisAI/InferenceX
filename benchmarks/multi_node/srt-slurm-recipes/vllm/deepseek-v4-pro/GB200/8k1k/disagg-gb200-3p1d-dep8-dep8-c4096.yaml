@@ -1,0 +1,161 @@
+name: "dsv4-gb200-vllm-router-3p1d-dep8-dep8-c4096"
+setup_script: "install-vllm-router.sh"
+
+model:
+  path: "deepseek-v4-pro"
+  container: "quay.io/rh-ee-imarkov/llm-d-nokube-vllm:vllm0.26@sha256:a9095d4c835935c4070be2040de0a5ef3b44098f603092ab66d743b0e731b7b4"
+  precision: "fp4"
+
+identity:
+  model:
+    repo: "deepseek-ai/DeepSeek-V4-Pro"
+  container:
+    image: "quay.io/rh-ee-imarkov/llm-d-nokube-vllm:vllm0.26@sha256:a9095d4c835935c4070be2040de0a5ef3b44098f603092ab66d743b0e731b7b4"
+  frameworks:
+    vllm: "0.26"
+    vllm-router: "0.1.15"
+
+slurm:
+  time_limit: "8:00:00"
+
+health_check:
+  max_attempts: 2160
+  interval_seconds: 10
+
+resources:
+  gpu_type: "gb200"
+  gpus_per_node: 4
+  het_jobs: false
+  spread_workers: false
+  prefill_nodes: 6
+  decode_nodes: 2
+  prefill_workers: 3
+  decode_workers: 1
+  gpus_per_prefill: 8
+  gpus_per_decode: 8
+
+frontend:
+  type: vllm-router
+  enable_multiple_frontends: false
+
+backend:
+  type: vllm
+  connector: nixl
+  dp_launch_mode: per_node
+  vllm_config:
+    prefill:
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      kv-cache-dtype: fp8
+      tensor-parallel-size: 1
+      pipeline-parallel-size: 1
+      data-parallel-size: 8
+      enable-expert-parallel: true
+      enable-ep-weight-filter: true
+      enforce-eager: true
+      max-model-len: 9280
+      max-num-seqs: 16
+      max-num-batched-tokens: 32768
+      trust-remote-code: true
+      enable-cumem-allocator: true
+      no-enable-prefix-caching: true
+      no-enable-flashinfer-autotune: true
+      no-async-scheduling: true
+      block-size: 256
+      gpu-memory-utilization: 0.92
+      no-disable-hybrid-kv-cache-manager: true
+      tokenizer-mode: deepseek_v4
+      moe-backend: deep_gemm_mega_moe
+      numa-bind: true
+    decode:
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      kv-cache-dtype: fp8
+      tensor-parallel-size: 1
+      pipeline-parallel-size: 1
+      data-parallel-size: 8
+      enable-expert-parallel: true
+      enable-ep-weight-filter: true
+      max-model-len: 9280
+      max-num-seqs: 512
+      max-num-batched-tokens: 512
+      max-cudagraph-capture-size: 512
+      trust-remote-code: true
+      enable-cumem-allocator: true
+      no-enable-prefix-caching: true
+      no-enable-flashinfer-autotune: true
+      block-size: 256
+      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
+      gpu-memory-utilization: 0.9
+      no-disable-hybrid-kv-cache-manager: true
+      tokenizer-mode: deepseek_v4
+      moe-backend: deep_gemm_mega_moe
+  prefill_environment:
+    VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "1024"
+    VLLM_MAX_TOKENS_PER_EXPERT_FP4_MOE: "2048"
+  decode_environment: {}
+
+environment:
+  NCCL_CUMEM_ENABLE: "1"
+  NCCL_MNNVL_ENABLE: "1"
+  NCCL_NVLS_ENABLE: "1"
+  NCCL_P2P_LEVEL: "NVL"
+  NCCL_NET_GDR_C2C: "1"
+  UCX_MEMTYPE_CACHE: "n"
+  UCX_MEMTYPE_REG_WHOLE: "n"
+  UCX_TLS: "cuda_copy,cuda_ipc,rc,tcp"
+  UCX_CUDA_IPC_ENABLE_MNNVL: "y"
+  NVSHMEM_REMOTE_TRANSPORT: "none"
+  NVSHMEM_ENABLE_NIC_PE_MAPPING: "1"
+  NVSHMEM_HCA_PE_MAPPING: "mlx5_0:1:1,mlx5_1:1:1,mlx5_3:1:1,mlx5_4:1:1"
+  NVSHMEM_CUMEM_HANDLE_TYPE: "FABRIC"
+  NVSHMEM_DISABLE_CUDA_VMM: "0"
+  VLLM_USE_NCCL_SYMM_MEM: "0"
+  VLLM_SKIP_P2P_CHECK: "1"
+  VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
+  VLLM_USE_DEEP_GEMM: "1"
+  VLLM_USE_RUST_FRONTEND: "1"
+  VLLM_HTTP_TIMEOUT_KEEP_ALIVE: "120"
+  VLLM_ENGINE_READY_TIMEOUT_S: "1800"
+  TILELANG_CLEANUP_TEMP_FILES: "1"
+  NVIDIA_GDRCOPY: "enabled"
+  TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
+
+sbatch_directives:
+  cpus-per-task: "72"
+
+srun_options:
+  container-remap-root: ""
+  container-writable: ""
+
+benchmark:
+  type: custom
+  command: |
+    set -euo pipefail
+    result_dir=/logs/vllm_isl_8192_osl_1024
+    mkdir -p "$result_dir"
+    concurrency=4096
+    python3 /infmax-workspace/utils/bench_serving/benchmark_serving.py \
+      --backend openai \
+      --base-url "$SRT_FRONTEND_URL" \
+      --endpoint /v1/completions \
+      --model deepseek-ai/DeepSeek-V4-Pro \
+      --served-model-name deepseek-ai/DeepSeek-V4-Pro \
+      --tokenizer /model \
+      --tokenizer-mode deepseek_v4 \
+      --dataset-name random \
+      --random-input-len 8192 \
+      --random-output-len 1024 \
+      --random-range-ratio 1.0 \
+      --random-num-workers 96 \
+      --num-prompts 40960 \
+      --max-concurrency "$concurrency" \
+      --request-rate inf \
+      --num-warmups 8192 \
+      --ignore-eos \
+      --trust-remote-code \
+      --use-chat-template \
+      --dsv4 \
+      --seed 0 \
+      --percentile-metrics ttft,tpot,itl,e2el \
+      --save-result \
+      --result-dir "$result_dir" \
+      --result-filename "results_concurrency_${concurrency}_gpus_32_ctx_24_gen_8.json"
