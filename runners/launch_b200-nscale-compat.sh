@@ -93,14 +93,18 @@ elif [[ $MODEL_PREFIX == "kimik3" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/scratch/models/Kimi-K3"
     export SRT_SLURM_MODEL_PREFIX="kimik3"
 elif [[ $MODEL_PREFIX == "qwen3.8next" && $PRECISION == "fp4" ]]; then
-    # Qwen3.8-Flash-Next NVFP4 is not pre-staged under /scratch/models, so this
-    # branch does not point at the staging tree. It hands the bench script a
-    # writable cache directory on the shared /scratch filesystem and lets the
-    # script's own `hf download --local-dir "$MODEL_PATH"` populate it on the
-    # first run; later runs find it already there. KEEP_HF_MODEL_ID keeps MODEL
-    # as the HuggingFace repo id further down, because `hf download` needs a
-    # repo id and every other branch here overwrites MODEL with the local path.
-    export MODEL_PATH="${MODEL_PATH:-/scratch/hf-models/Qwen3.8-Flash-Next-NVFP4}"
+    # Qwen3.8-Flash-Next NVFP4 is not staged on this cluster, so this branch
+    # does not point at the staging tree. Note /scratch is NOT the same
+    # filesystem on both sides: on the login node it is a symlink to NFS
+    # /data/scratch, while on a compute node it is node-local /dev/md0 xfs that
+    # holds the staged models and is not writable by the runner account. The
+    # home directory is the one path that is shared, writable and identical on
+    # both, so the checkpoint goes there and the bench script's own
+    # `hf download --local-dir "$MODEL_PATH"` populates it on the first run.
+    # KEEP_HF_MODEL_ID keeps MODEL as the HuggingFace repo id further down,
+    # because `hf download` needs a repo id and every other branch here
+    # overwrites MODEL with the local path.
+    export MODEL_PATH="${MODEL_PATH:-${HOME}/models/Qwen3.8-Flash-Next-NVFP4}"
     export KEEP_HF_MODEL_ID=1
     export SRT_SLURM_MODEL_PREFIX="qwen3.8next-fp4"
 else
@@ -593,6 +597,7 @@ else
         # mounted below and srun fails outright on a missing mount source.
         if ! mkdir -p "$MODEL_PATH"; then
             echo "Error: cannot create $MODEL_PATH on shared storage; the bind mount below would fail" >&2
+            echo "Note: compute-node /scratch is node-local and not writable here; use a path under \$HOME" >&2
             exit 1
         fi
     else
