@@ -13,7 +13,7 @@ SLURM_ACCOUNT="benchmark"
 POWER_SRT_SLURM_URL="https://github.com/edwingao28/srt-slurm.git"
 POWER_SRT_SLURM_PIN="e5c837f06a362dc888dfea2ee588e9f19c298270"
 TILERT_SRT_SLURM_URL="https://github.com/SemiAnalysisAI/srt-slurm.git"
-TILERT_SRT_SLURM_PIN="424414003e22b4817d7825bdca43e9d506f810dc"
+TILERT_SRT_SLURM_PIN="73f0d8e7d160f0b74f744a583422bce9c5c89a39"
 
 # Node-local NVMe, not a shared filesystem: much faster for the ~1.6T
 # DeepSeek-V4-Pro load, and already pre-staged on every nscale compute node.

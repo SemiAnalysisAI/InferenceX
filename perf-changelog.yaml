@@ -6544,5 +6544,5 @@
     - "Use srt-slurm's explicit vLLM-prefill/TileRT-decode topology and the official TileRT P/D router without Dynamo or the legacy submit.sh/run_node.sh control plane."
     - "Convert TileRT decode weights once under a shared lock, publish the cache atomically, and keep prefill and decode in their role-specific vLLM 0.26.0 and TileRT 0.1.5 images."
     - "Pass only the real vLLM prefill Prometheus endpoint to AIPerf; TileRT decode exposes health and token-transfer APIs but no /metrics route."
-    - "Pin SemiAnalysisAI/srt-slurm PR #10 commit 424414003e22b4817d7825bdca43e9d506f810dc, stacked on the AMD/native-router PR #7 and base runtime PR #1, including explicit native HTTP dependencies and incomplete-snapshot recovery before TileRT conversion."
+    - "Pin SemiAnalysisAI/srt-slurm PR #10 commit 73f0d8e7d160f0b74f744a583422bce9c5c89a39, stacked on the AMD/native-router PR #7 and base runtime PR #1, including explicit native HTTP dependencies, incomplete-snapshot recovery, and a step-level GPU allocation for TileRT conversion."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2750
