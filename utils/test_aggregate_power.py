@@ -573,6 +573,182 @@ def test_run_rejects_malformed_telemetry_inside_window(
     assert audit["reasons"] == [expected_reason]
 
 
+# --------------------------------------------------------------------------- #
+# Boundary-degenerate teardown rows (outside the window, inside the band)
+# --------------------------------------------------------------------------- #
+
+# AMDSMI 26.2.0 `metric -p -c -t -u -w 1 --csv` header (order-faithful subset,
+# measured on MI355X; see test_detect_columns_amd_watch_mode_real_header).
+_MI355X_WATCH_HEADER = (
+    "timestamp,gpu,gfx_activity,umc_activity,mm_activity,vcn_activity,"
+    "jpeg_activity,gfx_busy_inst_xcp_0,jpeg_busy_xcp_0,vcn_busy_xcp_0,"
+    "socket_power,gfx_voltage,soc_voltage,mem_voltage,throttle_status,"
+    "power_management,gfx_0_clk,mem_0_clk,edge,hotspot,mem"
+)
+
+
+def _mi355x_watch_row(timestamp: int, gpu: int, socket_power: str) -> str:
+    """One data row in the shape captured from run 32433563482 (conc1):
+    integer-second epoch, quoted list cells with embedded commas, N/A cells,
+    and a trailing carriage return."""
+    return (
+        f"{timestamp},{gpu},0,0,N/A,\"['N/A', 'N/A', 'N/A', 'N/A']\","
+        "\"['N/A', 'N/A']\",\"[0, 0, 0, 0, 0, 0, 0, 0]\",\"[0, 0]\",\"[0, 0]\","
+        f"{socket_power},N/A,N/A,N/A,N/A,ENABLED,1404,2000,N/A,40,25\r"
+    )
+
+
+def test_integrate_power_skips_na_power_rows_outside_window(tmp_path: Path):
+    """N/A-power teardown rows past the window end are counted, not poisonous."""
+    csv = tmp_path / "gpu_metrics.csv"
+    base = 1_700_000_000.0
+    lines = ["timestamp,gpu,socket_power,temperature"]
+    for offset in range(-2, 13):
+        for gpu in range(2):
+            lines.append(f"{base + offset},{gpu},500.0,65")
+    for gpu in range(2):
+        lines.append(f"{base + 11},{gpu},N/A,65")
+    csv.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    result = integrate_power(
+        csv,
+        start_unix=base,
+        end_unix=base + 10,
+        expected_num_gpus=2,
+    )
+
+    assert result.power_valid is True
+    assert result.invalid_reasons == ()
+    assert result.boundary_degenerate_rows == {"0": 1, "1": 1}
+    assert result.total_gpu_energy_j == pytest.approx(10_000.0)
+
+
+def test_integrate_power_does_not_bracket_with_zero_power_tail(tmp_path: Path):
+    """A 0 W teardown row past the window end must not fake end bracketing.
+
+    Legacy behavior accepted the 0 W row as a valid boundary sample, corrupting
+    the end interpolation with a bogus value; this intentionally flips that
+    case to an explicit benchmark_window_not_bracketed failure."""
+    csv = tmp_path / "gpu_metrics.csv"
+    base = 1_700_000_000.0
+    lines = ["timestamp,gpu,socket_power,temperature"]
+    # Good rows stop at end-4; the only post-end sample per GPU has power 0.
+    for offset in range(-1, 7):
+        for gpu in range(2):
+            lines.append(f"{base + offset},{gpu},500.0,65")
+    for gpu in range(2):
+        lines.append(f"{base + 11},{gpu},0,65")
+    csv.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    result = integrate_power(
+        csv,
+        start_unix=base,
+        end_unix=base + 10,
+        expected_num_gpus=2,
+    )
+
+    assert result.power_valid is False
+    assert "benchmark_window_not_bracketed" in result.invalid_reasons
+    assert result.boundary_degenerate_rows == {"0": 1, "1": 1}
+
+
+def test_integrate_power_keeps_zero_power_semantics_inside_window(tmp_path: Path):
+    """Frozen legacy behavior: an in-window 0 W sample still integrates."""
+    csv = tmp_path / "gpu_metrics.csv"
+    base = 1_700_000_000.0
+    lines = ["timestamp,gpu,socket_power,temperature"]
+    for offset in range(-1, 12):
+        watts = "0.0" if offset == 5 else "500.0"
+        lines.append(f"{base + offset},0,{watts},65")
+    csv.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    result = integrate_power(
+        csv,
+        start_unix=base,
+        end_unix=base + 10,
+        expected_num_gpus=1,
+    )
+
+    assert result.power_valid is True
+    assert result.invalid_reasons == ()
+    assert result.boundary_degenerate_rows == {}
+    # Trapezoids dip to 0 at t=5: 8 x 500 + 2 x 250 = 4500 J.
+    assert result.total_gpu_energy_j == pytest.approx(4_500.0)
+
+
+def test_run_writes_boundary_degenerate_rows_to_sidecar(tmp_path: Path):
+    base = 1_700_000_000.0
+    csv = tmp_path / "gpu_metrics.csv"
+    _write_constant_window_samples(
+        csv,
+        start=base,
+        end=base + 10,
+        watts_per_gpu=500.0,
+        num_gpus=2,
+    )
+    bench = tmp_path / "bench.json"
+    agg = tmp_path / "agg.json"
+    validation = tmp_path / "power_validation.json"
+    _write_bench_result(
+        bench,
+        start=base,
+        end=base + 10,
+        duration=10.0,
+        total_output=2_000,
+        total_input=10_000,
+    )
+    agg.write_text(json.dumps({"hw": "mi355x"}), encoding="utf-8")
+
+    exit_code = run(csv, bench, agg, expected_num_gpus=2, validation_result=validation)
+
+    assert exit_code == 0
+    audit = json.loads(validation.read_text())
+    # Present-and-empty for clean streams: readers can rely on the key.
+    assert audit["boundary_degenerate_rows"] == {}
+
+
+def test_integrate_power_regression_mi355x_integer_ticks_end_gap(tmp_path: Path):
+    """Run-32433563482 conc1 regression: amd-smi integer-second ticks stop 4 s
+    before the fractional aiperf window end (last tick 1787277605 vs end
+    ...609.157497), so bracketing fails and the producer-side telemetry loss is
+    attributed as benchmark_window_not_bracketed on every GPU.
+
+    The retrieved artifact's trailing rows all carry valid socket_power
+    (254-264 W) with N/A activity/voltage cells; the N/A- and 0-power teardown
+    rows appended past the window end are the documented synthetic degenerate
+    shapes, asserting they are counted rather than used for bracketing."""
+    csv = tmp_path / "gpu_metrics.csv"
+    start = 1_787_277_560.155891
+    end = 1_787_277_609.157497
+    last_tick = 1_787_277_605
+    powers = [259, 255, 263, 264, 256, 254, 259, 259]
+    lines = [_MI355X_WATCH_HEADER]
+    for tick in range(1_787_277_555, last_tick + 1):
+        for gpu in range(8):
+            lines.append(_mi355x_watch_row(tick, gpu, str(powers[gpu])))
+        # amd-smi watch mode emits a blank line between tick groups.
+        lines.append("")
+    for gpu in range(8):
+        lines.append(_mi355x_watch_row(1_787_277_610, gpu, "N/A"))
+    for gpu in range(8):
+        lines.append(_mi355x_watch_row(1_787_277_611, gpu, "0"))
+    csv.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    result = integrate_power(
+        csv,
+        start_unix=start,
+        end_unix=end,
+        expected_num_gpus=8,
+    )
+
+    assert result.power_valid is False
+    assert result.invalid_reasons == ("benchmark_window_not_bracketed",)
+    assert result.device_issues == {
+        str(gpu): ["benchmark_window_not_bracketed"] for gpu in range(8)
+    }
+    assert result.boundary_degenerate_rows == {str(gpu): 2 for gpu in range(8)}
+
+
 def test_run_patches_agg_with_power_and_joules(tmp_path: Path):
     base = 1_700_000_000.0
     csv = tmp_path / "gpu_metrics.csv"
