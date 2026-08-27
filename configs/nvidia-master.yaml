@@ -7394,8 +7394,9 @@ qwen3.5-fp4-b200-sglang-agentic-mtp:
 
 
 # Qwen3.8-Flash-Next NVFP4 AgentX on B200 via SGLang with native NEXTN MTP.
-# Day-zero recipe: SGLang is the plan-of-record engine for this model. TP4 at
-# 126 GiB of NVFP4 weights leaves ample HBM for the 256k-capped agentic traces.
+# Day-zero recipe: SGLang is the plan-of-record engine for this model. TP1 per
+# the cookbook's verified single-node command; 126 GiB of NVFP4 weights fit on
+# one B200, so the model is not sharded.
 qwen3.8next-fp4-b200-sglang-agentic-mtp:
   image: lmsysorg/sglang:qwen38flashnext
   model: RadixArk/Qwen3.8-Flash-Next-NVFP4
@@ -7408,7 +7409,7 @@ qwen3.8next-fp4-b200-sglang-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.8
       search-space:
-      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16] }
+      - { tp: 1, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16] }
 qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp:
   image: lmsysorg/sglang:nightly-dev-20260818-c0b6474b
   model: nvidia/Qwen3.5-397B-A17B-NVFP4-V2
