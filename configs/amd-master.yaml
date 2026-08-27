@@ -771,7 +771,7 @@ kimik2.5-fp4-mi355x-vllm-disagg:
 # model spec decoding on BOTH P and D, MoRIIO KDA P/D transfer + Mooncake DRAM
 # KV offload). vLLM K3/DSpark + MoRIIO-KDA fixes are online-installed from the
 # YukioZzz/vllm fork branch on top of the prebuilt kimi-k3 image (Mooncake
-# v0.3.11.post1 also built at job runtime by server_vllm.sh). conc-list [16] is
+# v0.3.11.post1 also built at job runtime by server_vllm.sh). conc-list [40] is
 # the current post-fix DSpark+DCP validation target.
 # image/model/draft match the single-node reference PR #2403
 # (kimik3-fp4-mi355x-vllm-agentic-dspark) and the validated local 1P1D run
@@ -801,7 +801,7 @@ kimik3-fp4-mi355x-vllm-disagg-agentic:
     - dram-utilization: 0.80
       search-space:
       - spec-decoding: draft_model
-        conc-list: [ 16 ]
+        conc-list: [ 40 ]
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
         prefill:
