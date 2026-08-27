@@ -6499,5 +6499,5 @@
     - "Serve RadixArk/Qwen3.8-Flash-Next-NVFP4 with modelopt_fp4 quantization, the trtllm_mha attention backend, and the flashinfer_trtllm MoE runner, following the Qwen3.5 NVFP4 B300 sibling."
     - "Correct the serve flags to the SGLang cookbook's verified single-node command for this model: TP1 rather than TP4, the flashinfer linear-attention prefill and decode backends, bfloat16 Mamba SSM, and checkpoint-derived quantization."
     - "Pin throughput runs to the committed golden thinking_on acceptance length of 2.32 at three speculative tokens; eval-only runs keep real target verification."
-    - "Use a float32 Mamba SSM state: flashinfer's gated_delta_rule_mtp verify kernel asserts float32 and aborts CUDA graph capture on the bfloat16 state the cookbook command specifies."
+    - "Keep the bfloat16 Mamba SSM state the cookbook specifies: SGLang requires it on SM100 or newer whenever the flashinfer linear-attention decode backend is selected."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2752

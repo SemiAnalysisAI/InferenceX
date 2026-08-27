@@ -144,14 +144,12 @@ SGLANG_CMD=(
     # layers take their own backends rather than --attention-backend.
     --linear-attn-prefill-backend flashinfer
     --linear-attn-decode-backend flashinfer
-    # float32, not the cookbook's bfloat16. With NEXTN enabled the GDN linear
-    # attention backend routes verification through flashinfer's
-    # gated_delta_rule_mtp, which asserts initial_state.dtype == torch.float32
-    # and aborts CUDA graph capture on a bf16 SSM state:
-    #   AssertionError: initial_state must be float32, got torch.bfloat16
-    #   flashinfer/gdn_decode.py:761, via gdn_backend.py target_verify
-    # Confirmed on the H200 arm; same backend, same kernel, same NEXTN here.
-    --mamba-ssm-dtype float32
+    # bfloat16 is mandatory on Blackwell: SGLang rejects the launch outright
+    # with "--linear-attn-decode-backend flashinfer on SM100+ requires
+    # --mamba-ssm-dtype bfloat16". Hopper wants the opposite -- flashinfer's
+    # gated_delta_rule_mtp verify kernel asserts a float32 state there -- so
+    # the H200 arm sets float32 and this one must not follow it.
+    --mamba-ssm-dtype bfloat16
     --speculative-algorithm NEXTN
     --speculative-num-steps 3
     --speculative-eagle-topk 1
