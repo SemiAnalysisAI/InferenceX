@@ -113,7 +113,7 @@ K3_OVERLAY_APPLIED=0
 # Absolute, always: the patch is fed to `patch` on the far side of a
 # `cd "$SITE_PKGS"`, so a relative path resolves against site-packages and
 # silently vanishes even though the -f test passed from the workspace root.
-K3_OVERLAY_PATCH="${K3_OVERLAY_PATCH:-$(cd "$(dirname "$0")" && pwd)/k3_patches/vllm_nightly_a9a17e70_3pr.patch}"
+K3_OVERLAY_PATCH="${K3_OVERLAY_PATCH:-$(cd "$(dirname "$0")" && pwd)/k3_patches/vllm_nightly_46638857_k3_tuned.patch}"
 case "$K3_OVERLAY_PATCH" in
     /*) ;;
     *) K3_OVERLAY_PATCH="$(cd "$(dirname "$K3_OVERLAY_PATCH")" && pwd)/$(basename "$K3_OVERLAY_PATCH")" ;;
