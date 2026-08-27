@@ -67,6 +67,13 @@ class VllmBackend(ServerMetricsBackend):
         flat["server_external_cache_hit_rate"] = external_rate
         flat["server_cpu_cache_hit_rate"] = external_rate
 
+        cached_by_tier_source = sum_by_label(
+            metrics,
+            "vllm:prompt_tokens_cached_by_source",
+            "source",
+            preferred_keys=("total", "sum", "max", "avg"),
+        )
+
         prompt_by_source = sum_by_label(
             metrics,
             "vllm:prompt_tokens_by_source",
@@ -142,6 +149,7 @@ class VllmBackend(ServerMetricsBackend):
                 "prefix_cache_queries": prefix_queries,
                 "external_prefix_cache_hits": external_hits,
                 "external_prefix_cache_queries": external_queries,
+                "cached_tokens_by_source": cached_by_tier_source,
             }
         )
         nested["kv_cache"].update(
@@ -258,6 +266,7 @@ def _vllm_sources(metrics: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
         "vllm:prefix_cache_queries",
         "vllm:kv_cache_usage_perc",
         "vllm:prompt_tokens_by_source",
+        "vllm:prompt_tokens_cached_by_source",
     ):
         for series in metric_series(metrics, metric_name):
             source_ids.add(_source_id(series))
