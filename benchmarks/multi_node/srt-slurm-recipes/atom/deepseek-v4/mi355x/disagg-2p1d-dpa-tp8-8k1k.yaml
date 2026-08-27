@@ -1,0 +1,120 @@
+# DeepSeek-V4-Pro 2P1D ATOM P/D serving on MI355X. Each logical endpoint
+# occupies one TP8 node; the two prefill endpoints and decode endpoint use
+# data-parallel attention/TBO as in the legacy production configuration.
+
+name: "mi355x-atom-dsv4-disagg-2p1d-dpa-tp8-8k1k"
+
+model:
+  path: "hf:deepseek-ai/DeepSeek-V4-Pro"
+  container: "atom-nightly-202608251555"
+  precision: "fp4"
+
+identity:
+  model:
+    repo: "deepseek-ai/DeepSeek-V4-Pro"
+  container:
+    image: "rocm/atom-dev:nightly_202608251555"
+  frameworks:
+    atom: "0.1.6rc1.dev336+g4e0848dcd"
+    atomesh: "4e0848dcdf94f3d4be0c1e3ce51db99bc93f8b8c"
+
+slurm:
+  time_limit: "08:00:00"
+
+resources:
+  gpu_type: "mi355x"
+  gpus_per_node: 8
+  prefill_nodes: 2
+  decode_nodes: 1
+  prefill_workers: 2
+  decode_workers: 1
+  gpus_per_prefill: 8
+  gpus_per_decode: 8
+
+frontend:
+  type: atomesh
+  enable_multiple_frontends: false
+  args:
+    policy: random
+
+backend:
+  type: atom
+  connector: mooncake
+  mooncake_protocol: tcp
+  prefill_environment: &worker_environment
+    HF_HOME: "/hf_hub_cache"
+    HF_HUB_CACHE: "/hf_hub_cache/hub"
+    HUGGINGFACE_HUB_CACHE: "/hf_hub_cache/hub"
+    PYTHONUNBUFFERED: "1"
+    OMP_NUM_THREADS: "1"
+    ATOM_MOE_GU_ITLV: "1"
+    AITER_BF16_FP8_MOE_BOUND: "0"
+    GPU_MAX_HW_QUEUES: "5"
+    ATOM_CPU_AFFINITY: "1"
+  decode_environment: *worker_environment
+  atom_config:
+    prefill:
+      kv_cache_dtype: fp8
+      gpu-memory-utilization: 0.85
+      max-num-seqs: 256
+      block-size: 16
+      no-enable_prefix_caching: true
+      enable-dp-attention: true
+      enable-tbo: true
+      trust-remote-code: true
+    decode:
+      kv_cache_dtype: fp8
+      gpu-memory-utilization: 0.85
+      max-num-seqs: 2048
+      block-size: 16
+      no-enable_prefix_caching: true
+      enable-dp-attention: true
+      enable-tbo: true
+      trust-remote-code: true
+
+srun_options:
+  container-writable: ""
+  container-remap-root: ""
+  mem: "0"
+
+health_check:
+  max_attempts: 720
+  interval_seconds: 5
+
+benchmark:
+  type: custom
+  command: |
+    set -euo pipefail
+    result_root="/results/${SLURM_JOB_ID}"
+    mkdir -p "${result_root}/fixed-seq"
+    archive_runtime_logs() {
+      tar -C /logs -czf "${result_root}/runtime-logs.tar.gz" . 2>/dev/null || true
+    }
+    trap archive_runtime_logs EXIT
+    for concurrency in 256 512 768 1024 2048; do
+      num_prompts=$((concurrency * 10))
+      python3 /infmax-workspace/utils/bench_serving/benchmark_serving.py \
+        --backend openai \
+        --base-url "http://${SRT_FRONTEND_HOST}:${SRT_FRONTEND_PORT}" \
+        --endpoint /v1/completions \
+        --model deepseek-ai/DeepSeek-V4-Pro \
+        --tokenizer deepseek-ai/DeepSeek-V4-Pro \
+        --dataset-name random \
+        --random-input-len 8192 \
+        --random-output-len 1024 \
+        --random-range-ratio 1.0 \
+        --num-warmups "$((concurrency * 2))" \
+        --num-prompts "${num_prompts}" \
+        --max-concurrency "${concurrency}" \
+        --request-rate inf \
+        --ignore-eos \
+        --trust-remote-code \
+        --percentile-metrics ttft,tpot,itl,e2el \
+        --save-result \
+        --result-dir "${result_root}/fixed-seq" \
+        --result-filename "dsv4-atom-mi355x-disagg-2p1d-dpa-tp8-isl8192-osl1024-c${concurrency}.json"
+    done
+  env:
+    HF_HOME: /hf_hub_cache
+    HF_HUB_CACHE: /hf_hub_cache/hub
+    HUGGINGFACE_HUB_CACHE: /hf_hub_cache/hub

@@ -6847,3 +6847,15 @@
     - "Keep the workflow's host-only Python bytecode-cache prefix out of Slurm submissions, matching the legacy explicit Docker environment without changing serving arguments."
     - "Restore the legacy unlimited RDMA memory-lock limit and pin ATOM's literal worker model identity for evaluation routing."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2542
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom-disagg
+  description:
+    - "Port the DeepSeek-V4-Pro FP4 MI355X ATOM disaggregated 8k/1k submission from the configuration-specific AMD launcher to srt-slurm ATOM orchestration and native AToMesh routing."
+    - "Preserve all original search points: 1P1D TP8 at concurrency 4, 8, 16, 32, 64, and 128; 2P1D DPA+TP8 at concurrency 256, 512, 768, 1024, and 2048."
+    - "Use the unchanged InferenceX benchmark_serving.py through the custom benchmark contract and remove the exact legacy wrapper plus its obsolete deprecated 1k/1k entry."
+    - "Use the hardware-proven Mooncake TCP transport for the initial correctness sweep; validate the updated ROCm RDMA path separately before changing production transport."
+    - "Use the ATOM image's bundled native AToMesh binary directly, without Infera source overlays or Infera routing, and archive the complete runtime logs from the custom benchmark."
+    - "Run the current rocm/atom-dev nightly_202608251555 image at ATOM commit 4e0848dcdf94f3d4be0c1e3ce51db99bc93f8b8c, whose bundled native AToMesh and Mooncake implementation are used without downstream source patches."
+    - "Pin SemiAnalysisAI/srt-slurm PR #7 at 10a58d2ebb4d756c423424049c736b909b72e14f so this ATOM/AToMesh port shares the latest validated AMD orchestration base, including native-router data-parallel rank preservation and ATOM recipe flag normalization."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2627
