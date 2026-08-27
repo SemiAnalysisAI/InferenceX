@@ -115,15 +115,10 @@ if [ "$DP_ATTENTION" = "true" ]; then
     export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=8320
 
     PREFILL_DECODE_INTERVAL=24
-    # SGLang divides this global budget by dp_size. Conc 64 retains the
-    # validated 8192-token per-rank budget.
-    CHUNKED_PREFILL_SIZE=$((8192 * TP))
+    # SGLang divides this global budget by dp_size. Keep 6144 tokens per rank
+    # for every DP-attention profile so the FP4 indexer retains HBM headroom.
+    CHUNKED_PREFILL_SIZE=$((6144 * TP))
     SWA_FULL_TOKENS_RATIO=0.02
-
-    # Keep enough HBM workspace for the FP4 indexer at higher concurrency.
-    if [ "$CONC" -eq 96 ] || [ "$CONC" -eq 128 ] || [ "$CONC" -eq 160 ]; then
-        CHUNKED_PREFILL_SIZE=$((6144 * TP))
-    fi
 
     # Conc 128/160 additionally use balanced DP admission and one-second load
     # snapshots.
@@ -174,7 +169,7 @@ fi
 # Allow subagent fan-out to exceed CONC without clipping request bursts.
 MAX_RUNNING_REQUESTS=$((2 * CONC))
 CUDA_GRAPH_MAX_BS=$((2 * CONC))
-if [ "$DP_ATTENTION" = "true" ] && { [ "$CONC" -eq 96 ] || [ "$CONC" -eq 128 ] || [ "$CONC" -eq 160 ]; }; then
+if [ "$DP_ATTENTION" = "true" ]; then
     CUDA_GRAPH_MAX_BS=32
 fi
 CUDA_GRAPH_ARGS=(--cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS")
