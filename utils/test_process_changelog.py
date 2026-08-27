@@ -58,6 +58,23 @@ def test_recipe_fingerprint_reaches_all_e2e_benchmark_jobs():
     assert workflow.count("recipe-fingerprint: ${{ matrix.config") == 8
 
 
+def test_agentic_eval_forwards_runtime_topology_and_kv_backend():
+    workflow = (Path(__file__).parents[1] / ".github/workflows/e2e-tests.yml").read_text()
+    job = workflow.split("test-sweep-agentic-evals:", 1)[1].split(
+        "test-sweep-multi-node-agentic:", 1
+    )[0]
+
+    for mapping in (
+        "pp: ${{ matrix.config.pp }}",
+        "dcp-size: ${{ matrix.config.dcp-size }}",
+        "pcp-size: ${{ matrix.config.pcp-size }}",
+        "kv-offload-backend: ${{ matrix.config['kv-offload-backend'].name }}",
+        "kv-offload-backend-metadata: ${{ matrix.config['kv-offload-backend']",
+        "spec-decoding: ${{ matrix.config.spec-decoding }}",
+    ):
+        assert mapping in job
+
+
 def test_recipe_fingerprint_disambiguates_result_and_artifact_names():
     repo_root = Path(__file__).parents[1]
     for template_name in ("benchmark-tmpl.yml", "benchmark-multinode-tmpl.yml"):

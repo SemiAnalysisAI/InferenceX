@@ -448,19 +448,25 @@ jobs:
             model-prefix: ${{ matrix.config.model-prefix }}
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
+            router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
+            kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
             tp: ${{ matrix.config.tp }}
+            pp: ${{ matrix.config.pp }}
+            dcp-size: ${{ matrix.config.dcp-size }}
+            pcp-size: ${{ matrix.config.pcp-size }}
             ep: ${{ matrix.config.ep }}
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.conc }}
             kv-offloading: ${{ matrix.config.kv-offloading }}
-            kv-offload-backend: ${{ matrix.config.kv-offload-backend }}
+            kv-offload-backend: ${{ matrix.config['kv-offload-backend'].name }}
+            kv-offload-backend-metadata: ${{ matrix.config['kv-offload-backend'] && toJson(matrix.config['kv-offload-backend']) || '' }}
             total-cpu-dram-gb: ${{ matrix.config.total-cpu-dram-gb }}
             duration: ${{ inputs.agentx-fast && '1200' || (inputs.duration-override != '' && inputs.duration-override || matrix.config.duration) }}
             agentx-fast: ${{ inputs.agentx-fast }}
             isl: '0'
             osl: '0'
             max-model-len: '0'
-            spec-decoding: 'none'
+            spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ 'false' }}
             run-eval: true
             eval-only: true
