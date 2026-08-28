@@ -677,8 +677,8 @@ kimik3-fp4-mi355x-atom-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.268
       search-space:
-      - { tp: 8, kv-offloading: none, conc-list: [1, 2], spec-decoding: mtp }
-      - { tp: 8, dcp-size: 8, kv-offloading: none, conc-list: [4], spec-decoding: mtp }
+      - { tp: 8, kv-offloading: none, conc-list: [2], spec-decoding: mtp }
+      - { tp: 8, dcp-size: 8, kv-offloading: none, conc-list: [1, 4], spec-decoding: mtp }
       - { tp: 8, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [8, 12], spec-decoding: mtp }
     - dram-utilization: 0.343
       search-space:

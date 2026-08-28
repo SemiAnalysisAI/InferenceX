@@ -6483,3 +6483,11 @@
     - "Reduce the concurrency-1536 disaggregated topology from six to five DEP8 prefill workers while retaining one DEP16 decode worker."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2644
   
+
+- config-keys:
+    - kimik3-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a Kimi-K3 MI355X ATOM concurrency-1 DCP8 causal control while preserving the C1 draft, scheduler, memory, graph, and no-offload settings. This separates the DCP1-versus-DCP8 topology effect from the ATOM-versus-vLLM stack effect before attributing the remaining B300 gap to kernels."
+  pr-link: XXX
