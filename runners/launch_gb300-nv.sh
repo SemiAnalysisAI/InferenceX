@@ -422,6 +422,10 @@ else
 fi
 
 echo "Installing srtctl..."
+if [[ "$IS_AGENTIC" == "1" && "$FRAMEWORK" == "dynamo-trt" && ( "$MODEL_PREFIX" == "qwen3.5" || "$MODEL_PREFIX" == "glm5.2" || "$MODEL_PREFIX" == "dsv4" ) ]]; then
+    sed -i 's#git clone https://github.com/ai-dynamo/dynamo.git#git clone https://github.com/cquil11/dynamo.git#' src/srtctl/core/schema.py
+    grep -q 'git clone https://github.com/cquil11/dynamo.git' src/srtctl/core/schema.py || exit 1
+fi
 export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
 curl -LsSf https://astral.sh/uv/install.sh | sh
 export PATH="$UV_INSTALL_DIR:$PATH"

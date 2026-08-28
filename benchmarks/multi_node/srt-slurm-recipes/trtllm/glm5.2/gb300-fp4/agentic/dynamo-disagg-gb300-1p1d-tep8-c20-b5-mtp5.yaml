@@ -7,7 +7,7 @@ model:
 
 dynamo:
   install: true
-  wheel: 1.4.0.dev20260807
+  hash: a78bfc90616668c9d149174656b62bf9f67599ae
   request_plane: tcp
 
 health_check:
@@ -135,7 +135,7 @@ backend:
         max_draft_len: 5
       stream_interval: 20
       tensor_parallel_size: 8
-  publish_events_and_metrics: true
+  publish_events_and_metrics: false
 
 frontend:
   type: dynamo
