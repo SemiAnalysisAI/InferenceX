@@ -47,6 +47,9 @@ cleanup_services() {
     set +e
     stop_background_process_tree "$SERVER_PID" "vLLM server" 60
     stop_background_process_tree "$MOONCAKE_MASTER_PID" "Mooncake master" 30
+    if [[ -n "${NVME_OFFLOAD_DIR:-}" ]]; then
+        find "$NVME_OFFLOAD_DIR" -mindepth 1 -delete
+    fi
     exit "$exit_code"
 }
 trap cleanup_services EXIT
@@ -102,6 +105,7 @@ elif [ "$KV_OFFLOADING" = "nvme" ]; then
     : "${NVME_OFFLOAD_DIR:?NVME_OFFLOAD_DIR must be mounted by the H100 launcher}"
     NVME_OFFLOAD_TOTAL_BYTES=8000000000000
     NVME_OFFLOAD_PER_RANK_BYTES=$((NVME_OFFLOAD_TOTAL_BYTES / TP))
+    # vLLM appends .rank_<CUDA device index> to give each TP rank its own file.
     OFFLOAD_ARGS=(
         --kv-transfer-config
         "{\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"kv_offload_backend\":\"disk\",\"disk_path\":\"$NVME_OFFLOAD_DIR/cache.bin\",\"disk_capacity_bytes\":$NVME_OFFLOAD_PER_RANK_BYTES,\"disk_buffer_slots\":4,\"lazy_offload\":false}}"

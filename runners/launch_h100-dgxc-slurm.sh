@@ -289,23 +289,7 @@ else
 
     export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
 
-    if [[ -z "${SALLOC_TIME_LIMIT:-}" ]]; then
-        if [[ "${SCENARIO_TYPE:-}" == "agentic-coding" ]]; then
-            # AgentX includes large snapshot-prefill warmup before its timed
-            # profile. MiniMax-M3 can exceed three hours end-to-end even when
-            # the measured profile itself is only one hour.
-            SALLOC_TIME_LIMIT=300
-        else
-            SALLOC_TIME_LIMIT=180
-        fi
-    fi
-
-    # hpc-gpu-1-17 consistently fails NCCL initialization because P2P is
-    # disabled between NVLink-connected GPUs 5 and 0. Keep this H100-specific
-    # default separate from SALLOC_EXCLUDE, which currently contains B300 node
-    # names in the shared benchmark workflow. The override makes the node
-    # usable again without a code change after the hardware is repaired.
-    SALLOC_EXCLUDE_H100="${SALLOC_EXCLUDE_H100:-hpc-gpu-1-17}"
+    SALLOC_TIME_LIMIT="${SALLOC_TIME_LIMIT:-300}"
     SALLOC_ARGS=(
         --partition="$SLURM_PARTITION"
         --account="$SLURM_ACCOUNT"
@@ -315,65 +299,27 @@ else
         --no-shell
         --job-name="$RUNNER_NAME"
     )
-    if [[ -n "$SALLOC_EXCLUDE_H100" ]]; then
-        SALLOC_ARGS+=(--exclude="$SALLOC_EXCLUDE_H100")
-    fi
     salloc "${SALLOC_ARGS[@]}"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
     if [[ -z "$JOB_ID" ]]; then
         echo "ERROR: failed to resolve H100 Slurm allocation" >&2
         exit 1
     fi
-    NVME_HOST_DIR=""
-    H100_OFFLOAD_CLEANUP_TIMEOUT_S="${H100_OFFLOAD_CLEANUP_TIMEOUT_S:-120}"
-    run_bounded_cleanup_step() {
-        local description="$1"
-        shift
-        local rc
-        if timeout --kill-after=15s "${H100_OFFLOAD_CLEANUP_TIMEOUT_S}s" \
-            srun --jobid="$JOB_ID" "$@"; then
-            return 0
-        else
-            rc=$?
-            echo "WARNING: H100 cleanup step '$description' failed or timed out after ${H100_OFFLOAD_CLEANUP_TIMEOUT_S}s (rc=$rc)" >&2
-            return "$rc"
-        fi
-    }
-    cleanup_offload_shm() {
-        # Native vLLM tiering backs its DRAM tier with a shared-memory file.
-        # Abruptly cancelled jobs can leave a nearly 1 TB file behind, which
-        # makes the next exclusive job on the node hang under memory pressure.
-        run_bounded_cleanup_step "vLLM offload shared memory" bash -c \
-            'find /dev/shm -maxdepth 1 -type f -user "$(id -u)" -name "vllm_offload_*.mmap" -delete'
-    }
     cleanup_allocation() {
         local rc=$?
         trap - EXIT INT TERM
-        if [[ -n "$NVME_HOST_DIR" ]]; then
-            run_bounded_cleanup_step "NVMe offload directory $NVME_HOST_DIR" \
-                bash -c "rm -rf -- '$NVME_HOST_DIR'" 2>/dev/null || true
-        fi
-        cleanup_offload_shm 2>/dev/null || true
         scancel "$JOB_ID" 2>/dev/null || true
         exit "$rc"
     }
     trap cleanup_allocation EXIT INT TERM
 
-    # The allocation is exclusive, so any user-owned vLLM offload mmap left
-    # on this node is stale from an earlier job and is safe to remove.
-    cleanup_offload_shm
-
     NVME_CONTAINER_MOUNT=""
     if [[ "${KV_OFFLOADING:-none}" == "nvme" || "${KV_OFFLOADING:-none}" == "dram+nvme" ]]; then
         NVME_HOST_ROOT="/mnt/numa0/enroot/cache/group-$(id -g)"
         NVME_HOST_DIR="$NVME_HOST_ROOT/inferencex-kv-$JOB_ID"
-        NVME_OWNER_UID="$(id -u)"
-        run_bounded_cleanup_step "stale NVMe offload directories" bash -c "
+        srun --jobid="$JOB_ID" bash -c "
             set -e
             test -w '$NVME_HOST_ROOT'
-            find '$NVME_HOST_ROOT' -mindepth 1 -maxdepth 1 -type d \
-                -uid '$NVME_OWNER_UID' -name 'inferencex-kv-*' \
-                -exec rm -rf -- {} +
             mkdir -m 700 '$NVME_HOST_DIR'
             findmnt -T '$NVME_HOST_DIR'
         "
