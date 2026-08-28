@@ -34,7 +34,13 @@ from kv_backend import time_bursts  # noqa: E402
 BULK_CAP = 8 << 30
 # Pool ceiling per rank: fits the fleet's smallest HBM (h200, 141 GB) next to
 # the bulk buffer; grid points shed their largest batches to stay under it.
-POOL_BUDGET = 64 << 30
+# A launcher may lower it (COLLX_KV_POOL_BUDGET, bytes) where an engine/NIC
+# pairing cannot register a pool this large: mooncake on the mi355x ionic
+# NICs fails ibv_reg_mr with ENOMEM between the 20 GiB pool the mixed batch
+# ladder planned (green) and the 53 GiB the power-of-two ladder plans (red
+# on two independent allocations), while mori-io registers the same pool
+# fine, so the cap is per-launcher, not fleet-wide.
+POOL_BUDGET = int(os.environ.get("COLLX_KV_POOL_BUDGET", 64 << 30))
 # Burst posting ceiling: a burst posts batch x descs descriptors, and the
 # per-descriptor floor makes time linear in that product (a 512k-ISL page-16
 # request alone is ~2.1M descriptors). Sized to keep every <=32k cell of the

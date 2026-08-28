@@ -44,6 +44,15 @@ case "$COLLX_BENCH" in
     # clean per-case kill instead of a lost allocation.
     TIME_MIN=210
     export COLLX_RUN_TIMEOUT="${COLLX_RUN_TIMEOUT:-11400}"
+    # Mooncake's transfer engine cannot register the power-of-two ladder's
+    # 53 GiB pool on the ionic NICs (ibv_reg_mr ENOMEM, deterministic on two
+    # independent allocations: runs 33137809635 and 33150394862), while
+    # mori-io registers the same pool fine. Cap mooncake's pool at the size
+    # the mixed ladder proved green; run_kv sheds the top 512k-ISL rungs to
+    # fit, and every other grid point keeps its full ladder.
+    if [ "$COLLX_BENCH" = mooncake ]; then
+      export COLLX_KV_POOL_BUDGET="${COLLX_KV_POOL_BUDGET:-$((20 << 30))}"
+    fi
     ;;
   *) collx_die "unsupported AMD backend: $COLLX_BENCH" ;;
 esac
