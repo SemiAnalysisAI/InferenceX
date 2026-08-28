@@ -6587,4 +6587,3 @@
     - "Fail the smoke when the source metric is missing or non-positive, or when the device/CPU test exposes an unexpected source label."
     - "Add reusable H100/H200 validators for device, CPU, native disk, generic external connector, and real NIXL producer/consumer paths."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2766
-  append-only: true
