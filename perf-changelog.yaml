@@ -6576,3 +6576,11 @@
     - "Recipes sourced from srt-slurm (recipes/trtllm/qwen3.5-fp4/inferencex/gb300/{mtp,stp})."
     - "Runner: launch_gb300-nv.sh bumped from NVIDIA/srt-slurm@v1.0.29 to v1.0.72 for the dynamo-trt+qwen3.5+fp4 path."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2730
+
+- config-keys:
+    - minimaxm3-fp4-b200-trtllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh MiniMax M3 B200 AgentX to collect TensorRT-LLM server metrics and update the image to 1.3.0rc24."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2771
