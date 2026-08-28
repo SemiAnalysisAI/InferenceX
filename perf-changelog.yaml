@@ -6120,3 +6120,12 @@
     - "Four points: c1 TP8 no-DCP DSpark K=6, c16 TP8/DCP8 DSpark K=3, and c40/c52 TP8/DCP8 no-spec, where c40 pairs 1:1 with the SimpleCPU c40 run so the connector is the single delta."
     - "Scale DSpark CUDA graph capture to the K+1 verification block per concurrency (c1 14, c16 128) instead of the MAX_NUM_SEQS*3 default, which is a K+1 frozen at K=2 and drops decode to eager at any other K."
   pr-link: XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-dcp-v466-simple
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add the SimpleCPU-enabled A/B partner of kimik3-fp4-mi355x-vllm-agentic-dcp-v466-kvnone, identical cell for cell with the 512 GB lazy SimpleCPU KV tier switched back on."
+    - "Generated cells differ from the kvnone key only in kv-offloading, kv-offload-backend, and total-cpu-dram-gb, so the pair prices the connector at c1, c16, c40, and c52 rather than only at the c40 point that already has a baseline."
+  pr-link: XXX
