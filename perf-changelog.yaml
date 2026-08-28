@@ -6576,3 +6576,15 @@
     - "Recipes sourced from srt-slurm (recipes/trtllm/qwen3.5-fp4/inferencex/gb300/{mtp,stp})."
     - "Runner: launch_gb300-nv.sh bumped from NVIDIA/srt-slurm@v1.0.29 to v1.0.72 for the dynamo-trt+qwen3.5+fp4 path."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2730
+
+- config-keys:
+    - minimaxm3-fp8-h100-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Run the official H100 MiniMax-M3 AgentX sweep on the patched vLLM image that exports cached prompt tokens by physical source tier."
+    - "Retain the no-offload TP8 points at concurrency 1-8 and the Mooncake DRAM points at concurrency 5-10; add NVMe-only points at concurrency 7-14 using SimpleCPUOffloadConnector's disk backend with 8 TB aggregate capacity."
+    - "Add the same concurrency 7-14 range with declarative kv-offloading [dram, nvme], mapped by the vLLM recipe to OffloadingConnector's TieringOffloadingSpec with an LRU DRAM primary tier and node-local filesystem secondary tier."
+    - "Mount a job-scoped directory from the H100 node's native NVMe filesystem into the Pyxis container and remove it during allocation cleanup."
+    - "Collect the vLLM Prometheus endpoint through AIPerf so artifacts include vllm:prompt_tokens_cached_by_source alongside the native KV-offload tiering counters."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2775
