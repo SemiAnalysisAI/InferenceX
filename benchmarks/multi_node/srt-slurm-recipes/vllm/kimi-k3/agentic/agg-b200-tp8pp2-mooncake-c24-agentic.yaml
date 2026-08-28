@@ -1,4 +1,4 @@
-name: "kimik3-vllm-agg-b200-tp8pp2-mooncake-c16-agentic"
+name: "kimik3-vllm-agg-b200-tp8pp2-mooncake-c24-agentic"
 
 model:
   path: "kimik3"
@@ -99,9 +99,9 @@ backend:
       tool-call-parser: kimi_k3
       reasoning-parser: kimi_k3
       language-model-only: true
-      max-num-seqs: 32
+      max-num-seqs: 48
       max-num-batched-tokens: 8192
-      speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":7,"method":"dspark","attention_backend":"TOKENSPEED_MLA","draft_sample_method":"probabilistic"}'
+      speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":4,"method":"dspark","attention_backend":"TOKENSPEED_MLA","draft_sample_method":"probabilistic"}'
       prefix-match-unit: 128
       compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[8,16,24,40,56,64,80,104,128,256,512,1024,2048,4096,8192]}'
 
