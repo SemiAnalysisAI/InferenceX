@@ -15,7 +15,7 @@ OPERATOR_FIELDS = {
 }
 NETWORK_FIELDS = {
     "socket_ifname", "rdma_devices", "ib_gid_index", "rdma_service_level",
-    "rdma_traffic_class", "rail_isolated",
+    "rdma_traffic_class", "rail_isolated", "single_node_rdma_devices",
 }
 # Timing knobs, in the order the legacy colon-string encoded them, paired with the run_ep flag
 # each one drives. The names match configs/sweep.json so a case's timing block is readable
