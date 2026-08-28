@@ -32,12 +32,12 @@ if [ "$PRODUCT" = gb200 ]; then default_time=30; else default_time=90; fi
 TIME_MIN="${COLLX_TIME:-$default_time}"
 case "$COLLX_BENCH" in
   nixl | mooncake)
-    # The dense grid (six ISLs, twelve batch rungs, two trials) was ~215
-    # minutes on the mnnvl descriptor floor; the five-rung ladder floor in
-    # run_kv._grid is another 1.63x of descriptor work grid-wide, so ~350
-    # minutes. 420 clears the raised guard below with setup margin; the ask
+    # The five-rung-floor grid measured ~285 minutes on the mnnvl descriptor
+    # floor (run 33097162900), and the power-of-two batch ladder in
+    # kv_sweep.json is another ~1.33x of descriptor work grid-wide, so ~380
+    # minutes. 460 clears the raised guard below with setup margin; the ask
     # stays 2 nodes x 1 GPU, so it still backfills on a contended pool.
-    TIME_MIN=420
+    TIME_MIN=460
     ;;
 esac
 IMAGE="$COLLX_IMAGE"
@@ -55,15 +55,14 @@ export COLLX_NGPUS="$NGPUS"
 case "$COLLX_BENCH" in
   deepep-v2 | nccl-ep | flashinfer-ep) ;;
   nixl | mooncake)
-    # The four-ISL grid was ~135 minutes of honest work on the mnnvl
-    # descriptor floor, nearly all of it timed bursts (run 31565324148:
-    # 8101 s job wall, 7967 s of burst p50s); the dense grid is ~1.6x that
-    # (~215 minutes), and the five-rung ladder floor in run_kv._grid is a
-    # further 1.63x of descriptor work, so ~350 minutes. The guard must
-    # clear it with real margin yet still fire before the 420-minute
-    # allocation dies, so the failure stays a clean per-case kill instead
-    # of a lost allocation.
-    export COLLX_RUN_TIMEOUT="${COLLX_RUN_TIMEOUT:-22800}"
+    # The five-rung-floor grid measured ~285 minutes end to end on the
+    # mnnvl descriptor floor (run 33097162900), nearly all of it timed
+    # bursts, and the power-of-two batch ladder in kv_sweep.json is another
+    # ~1.33x of descriptor work grid-wide, so ~380 minutes projected. The
+    # guard must clear that with real margin yet still fire before the
+    # 460-minute allocation dies, so the failure stays a clean per-case
+    # kill instead of a lost allocation.
+    export COLLX_RUN_TIMEOUT="${COLLX_RUN_TIMEOUT:-25200}"
     ;;  # kv-transfer suite
   *) collx_die "unsupported $PRODUCT backend: $COLLX_BENCH" ;;
 esac

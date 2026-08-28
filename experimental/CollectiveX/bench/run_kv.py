@@ -44,8 +44,9 @@ DESC_BUDGET = 2_250_000
 # the frontier chart draws its line through the batch ladder at the largest
 # measured ISL, and budget shedding alone leaves that ladder 2-3 points —
 # not interpretable. Five rungs keep every point chartable while bounding
-# the overrun (512k page-16 tops out at batch 6, ~5.6x budget; the extra
-# work is ~1.6x grid-wide and is priced into all three kv launcher guards).
+# the overrun (on the power-of-two ladder, 512k page-16 tops out at batch
+# 16, ~15x budget for that one burst; grid-wide the floor costs ~1.33x the
+# mixed twelve-rung grid and is priced into all three kv launcher guards).
 LADDER_FLOOR = 5
 
 

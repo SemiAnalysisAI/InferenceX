@@ -36,12 +36,12 @@ TS="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
 case "$COLLX_BENCH" in
   mori | uccl-ep) ;;
   mori-io | mooncake)
-    # kv-transfer suite. The dense kv grid (six ISLs, twelve batch rungs,
-    # two trials) is ~1.6x the four-ISL grid whose mi355x mori-io leg ran
-    # ~55 minutes (~90 minutes), and the five-rung ladder floor in
-    # run_kv._grid is a further 1.63x of descriptor work, so ~145 minutes;
-    # the guard fires before the raised allocation does, keeping a slow
-    # case a clean per-case kill instead of a lost allocation.
+    # kv-transfer suite. The five-rung-floor grid's mi355x mori-io leg
+    # measured ~60 minutes (run 33097162900), and the power-of-two batch
+    # ladder in kv_sweep.json is another ~1.33x of descriptor work
+    # grid-wide, so ~80 minutes; the guard clears that with real margin
+    # yet fires before the raised allocation does, keeping a slow case a
+    # clean per-case kill instead of a lost allocation.
     TIME_MIN=210
     export COLLX_RUN_TIMEOUT="${COLLX_RUN_TIMEOUT:-11400}"
     ;;

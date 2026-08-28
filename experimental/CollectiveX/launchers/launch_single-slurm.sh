@@ -48,11 +48,10 @@ NGPUS="${COLLX_NGPUS:-$((NODES * GPN))}"
 TIME_MIN="${COLLX_TIME:-$DEFAULT_TIME}"
 case "$COLLX_BENCH" in
   nixl | mooncake | mori-io)
-    # The dense kv grid (six ISLs, twelve batch rungs, two trials) is ~1.6x
-    # the four-ISL grid whose slowest lane here (h200 mooncake) was ~50
-    # minutes of case work (~105 minutes), and the five-rung ladder floor in
-    # run_kv._grid is a further 1.63x of descriptor work, so budget ~170
-    # minutes. A still-short exclusive ask backfills into scheduling gaps
+    # The five-rung-floor grid's slowest lane here (b200 mooncake) measured
+    # ~96 minutes (run 33097162900), and the power-of-two batch ladder in
+    # kv_sweep.json is another ~1.33x of descriptor work grid-wide, so
+    # budget ~130 minutes. A still-short exclusive ask backfills into gaps
     # that a multi-hour one waits out (h200 pool contention). The guard
     # clears the projected case with real margin yet fires before the
     # allocation dies, keeping a slow case a clean per-case kill instead of
