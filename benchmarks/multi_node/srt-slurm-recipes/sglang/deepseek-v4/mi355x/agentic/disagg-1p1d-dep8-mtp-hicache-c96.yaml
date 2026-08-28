@@ -16,7 +16,7 @@ identity:
     amd-mori: "0.5.17.dev20260817+gd97b796c16"
 
 slurm:
-  time_limit: "04:00:00"
+  time_limit: "08:00:00"
 
 resources:
   gpu_type: "mi355x"
