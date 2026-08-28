@@ -289,7 +289,25 @@ else
 
     export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
 
-    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$GPU_COUNT --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
+    if [[ -z "${SALLOC_TIME_LIMIT:-}" ]]; then
+        if [[ "${SCENARIO_TYPE:-}" == "agentic-coding" ]]; then
+            # AgentX includes large snapshot-prefill warmup before its timed
+            # profile. MiniMax-M3 can exceed three hours end-to-end even when
+            # the measured profile itself is only one hour.
+            SALLOC_TIME_LIMIT=300
+        else
+            SALLOC_TIME_LIMIT=180
+        fi
+    fi
+
+    salloc \
+        --partition="$SLURM_PARTITION" \
+        --account="$SLURM_ACCOUNT" \
+        --gres="gpu:$GPU_COUNT" \
+        --exclusive \
+        --time="$SALLOC_TIME_LIMIT" \
+        --no-shell \
+        --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
     if [[ -z "$JOB_ID" ]]; then
         echo "ERROR: failed to resolve H100 Slurm allocation" >&2
