@@ -66,6 +66,8 @@ export SGLANG_TIMEOUT_KEEP_ALIVE=900
 # v1 dispatches to the precompiled HIP op in sgl-kernel (upstream MI355X CI
 # runs DSA models the same way).
 export SGLANG_OPT_USE_TOPK_V2=false
+# FlyDSL token sorting for MoE dispatch — matches Atom's default for GLM-5.2.
+export AITER_USE_FLYDSL_MOE_SORTING=1
  
 # HiCache L2 (host DRAM), optionally extended with Mooncake L3.
 # KV_OFFLOADING=dram requires KV_OFFLOAD_BACKEND=hicache or mooncake.
@@ -236,6 +238,8 @@ SGLANG_CMD=(
     "${CACHE_ARGS[@]}"
     --watchdog-timeout 1800
     --enable-metrics
+    --enable-aiter-allreduce-fusion
+    --enable-fused-qk-norm-rope
 )
  
 printf '%q ' "${SGLANG_CMD[@]}" | tee "$RESULT_DIR/sglang_command.txt"

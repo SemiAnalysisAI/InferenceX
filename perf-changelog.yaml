@@ -6576,3 +6576,13 @@
     - "Recipes sourced from srt-slurm (recipes/trtllm/qwen3.5-fp4/inferencex/gb300/{mtp,stp})."
     - "Runner: launch_gb300-nv.sh bumped from NVIDIA/srt-slurm@v1.0.29 to v1.0.72 for the dynamo-trt+qwen3.5+fp4 path."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2730
+
+- config-keys:
+    - glm5.2-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable aiter allreduce+RMSNorm fusion (--enable-aiter-allreduce-fusion) and fused QK-norm+RoPE (--enable-fused-qk-norm-rope) for GLM-5.2 MXFP4 MI355X SGLang, matching Atom's default kernel dispatch."
+    - "Add AITER_USE_FLYDSL_MOE_SORTING=1 for FlyDSL token sorting in MoE dispatch."
+    - "Measured +23.6% P90 E2E normalized interactivity (41.9 → 51.8 tok/s/user) at CONC=8 with TP=4/EP=4 HiCache on the AgentX cc-traces workload."
+    - "All three flags activate existing aiter kernels already present in the container image; no kernel code changes required."
