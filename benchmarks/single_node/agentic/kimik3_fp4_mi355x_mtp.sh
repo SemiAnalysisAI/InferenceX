@@ -528,7 +528,14 @@ fi
 # ---- Speculative ------------------------------------------------------------
 # ---- Per-concurrency knobs --------------------------------------------------
 case "$CONC" in
-    1|2|4)
+    1)
+        MAX_NUM_SEQS=2
+        MAX_NUM_BATCHED_TOKENS=8192
+        GPU_MEM_UTIL=0.9
+        SPEC_NUM_TOKENS=6
+        SYNTHETIC_ACCEPT_LEN=3.75
+        ;;
+    2|4)
         MAX_NUM_SEQS=32
         MAX_NUM_BATCHED_TOKENS=8192
         GPU_MEM_UTIL=0.88
