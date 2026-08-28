@@ -112,7 +112,7 @@ backend:
         - cuda_core
       pipeline_parallel_size: 1
       print_iter_log: true
-      return_perf_metrics: true
+      return_perf_metrics: false
       scheduler_config:
         capacity_scheduler_policy: MAX_UTILIZATION
       tensor_parallel_size: 1
@@ -178,7 +178,7 @@ backend:
         - cuda_core
       pipeline_parallel_size: 1
       print_iter_log: true
-      return_perf_metrics: true
+      return_perf_metrics: false
       scheduler_config:
         capacity_scheduler_policy: GUARANTEED_NO_EVICT
       speculative_config:
