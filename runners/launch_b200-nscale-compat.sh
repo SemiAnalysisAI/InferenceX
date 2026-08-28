@@ -92,6 +92,25 @@ elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" ]]; then
 elif [[ $MODEL_PREFIX == "kimik3" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/scratch/models/Kimi-K3"
     export SRT_SLURM_MODEL_PREFIX="kimik3"
+elif [[ $MODEL_PREFIX == "qwen3.8next" && $PRECISION == "fp4" ]]; then
+    # Staged on the compute nodes like every other model here, so this is the
+    # ordinary branch again: no hf download and no writable target needed.
+    # Verified on im-b200-c004: 126 GB, index present, 206/206 shards, no
+    # .incomplete leftovers. The candidate search mirrors the dsv4 branch so a
+    # differently named staging directory needs no code change.
+    SELECTED_MODEL_PATH=""
+    if [[ -n "${MODEL_PATH:-}" && -d "${MODEL_PATH}" ]]; then
+        SELECTED_MODEL_PATH="$MODEL_PATH"
+    else
+        for candidate in /scratch/models/Qwen3.8-Flash-Next-NVFP4 /scratch/models/Qwen3.8-Flash-Next; do
+            if [[ -d "$candidate" ]]; then
+                SELECTED_MODEL_PATH="$candidate"
+                break
+            fi
+        done
+    fi
+    export MODEL_PATH="${SELECTED_MODEL_PATH:-/scratch/models/Qwen3.8-Flash-Next-NVFP4}"
+    export SRT_SLURM_MODEL_PREFIX="qwen3.8next-fp4"
 else
     echo "Unsupported model prefix/precision: $MODEL_PREFIX/$PRECISION"
     echo "Available models under /scratch/models:"
