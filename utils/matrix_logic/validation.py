@@ -703,6 +703,11 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
                 )
             _validate_tp_context_topology(self)
         if has_aggregate_worker or has_complete_multinode:
+            if self.kv_offloading in ("nvme", ["dram", "nvme"]):
+                raise ValueError(
+                    f"{Fields.KV_OFFLOADING.value}={self.kv_offloading!r} is "
+                    "currently supported only for single-node agentic entries"
+                )
             explicitly_single_node_fields = {
                 "pp",
                 "dcp_size",

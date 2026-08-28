@@ -555,6 +555,24 @@ class TestAgenticMatrixEntries:
         assert config.search_space[0].kv_offloading == ["dram", "nvme"]
         assert config.dram_utilization == 0.99
 
+    @pytest.mark.parametrize("kv_offloading", ["nvme", ["dram", "nvme"]])
+    def test_nvme_kv_offload_rejects_multinode_agentic_entries(
+        self, kv_offloading
+    ):
+        with pytest.raises(Exception, match="only for single-node agentic"):
+            AgenticCodingSearchSpaceEntry(**{
+                "worker": {
+                    "tp": 8,
+                    "pp": 1,
+                    "ep": 1,
+                    "dp-attn": False,
+                },
+                "num-nodes": 2,
+                "kv-offloading": kv_offloading,
+                "kv-offload-backend": {"name": "vllm-native"},
+                "conc-list": [7],
+            })
+
     def test_agentic_search_space_rejects_total_cpu_dram_gb(self):
         with pytest.raises(Exception, match="total-cpu-dram-gb"):
             AgenticCodingSearchSpaceEntry(**{
