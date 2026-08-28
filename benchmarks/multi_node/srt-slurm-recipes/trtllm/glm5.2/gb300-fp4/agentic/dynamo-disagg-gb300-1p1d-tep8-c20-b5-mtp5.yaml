@@ -2,7 +2,7 @@ name: dynamo-disagg-gb300-1p1d-tep8-c20-b5-mtp5
 
 model:
   path: nvidia/GLM-5.2-NVFP4
-  container: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc24
+  container: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc22.post1
   precision: fp4
 
 dynamo:
@@ -43,7 +43,6 @@ backend:
     TRTLLM_KV_CACHE_TRANSFER_TIMEOUT_SEC: "600"
     UCX_CUDA_IPC_ENABLE_MNNVL: "y"
     UCX_RNDV_SCHEME: put_zcopy
-    TRTLLM_NIXL_INTERFACE: enP22s22f0np0
     TRTLLM_KVCACHE_SEND_BUFFER_COUNT: "1"
     TRTLLM_KVCACHE_RECV_BUFFER_COUNT: "1"
     TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS: "2.61"
@@ -60,9 +59,9 @@ backend:
         kv_cache_routing_max_sessions: 65536
       cache_transceiver_config:
         backend: NIXL
-        transceiver_runtime: CPP
+        transceiver_runtime: PYTHON
         kv_cache_bounce_size_mb: 5120
-        max_tokens_in_buffer: 720896
+        max_tokens_in_buffer: 1048576
         kv_transfer_timeout_ms: 600000
       cuda_graph_config: null
       disable_overlap_scheduler: false
@@ -73,11 +72,11 @@ backend:
         dtype: fp8
         enable_block_reuse: true
         event_buffer_max_size: 0
-        free_gpu_memory_fraction: 0.55
+        free_gpu_memory_fraction: 0.75
         host_cache_size: 137438953472
         tokens_per_block: 64
       max_batch_size: 256
-      max_num_tokens: 4096
+      max_num_tokens: 8192
       max_seq_len: 1048576
       moe_config:
         backend: CUTEDSL
@@ -99,9 +98,9 @@ backend:
     decode:
       cache_transceiver_config:
         backend: NIXL
-        transceiver_runtime: CPP
+        transceiver_runtime: PYTHON
         kv_cache_bounce_size_mb: 5120
-        max_tokens_in_buffer: 720896
+        max_tokens_in_buffer: 1048576
         kv_transfer_timeout_ms: 600000
       cuda_graph_config:
         batch_sizes: [1, 2, 4, 5]
@@ -112,7 +111,7 @@ backend:
         dtype: fp8
         enable_block_reuse: false
         event_buffer_max_size: 0
-        free_gpu_memory_fraction: 0.45
+        free_gpu_memory_fraction: 0.8
         tokens_per_block: 64
       max_batch_size: 5
       max_num_tokens: 128

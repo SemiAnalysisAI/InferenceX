@@ -9155,7 +9155,7 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg:
 # GLM-5.2 NVFP4 TensorRT-LLM AgentX on GB300 with Dynamo aggregated serving.
 # One TP8 worker serves prefill and decode on the same eight GPUs at concurrency 1.
 glm5.2-fp4-gb300-dynamo-trt-agentic-agg-mtp:
-  image: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc24
+  image: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc22.post1
   model: nvidia/GLM-5.2-NVFP4
   model-prefix: glm5.2
   runner: cluster:gb300-nv
@@ -9182,7 +9182,7 @@ glm5.2-fp4-gb300-dynamo-trt-agentic-agg-mtp:
 # GLM-5.2 NVFP4 TensorRT-LLM AgentX on GB300 with Dynamo disaggregated serving.
 # Six topology variants use NIXL KV transfer and MTP3/MTP5 decoding.
 glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
-  image: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc24
+  image: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc22.post1
   model: nvidia/GLM-5.2-NVFP4
   model-prefix: glm5.2
   runner: cluster:gb300-nv
@@ -9199,7 +9199,7 @@ glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
       - spec-decoding: mtp
         conc-list: [30]
         kv-offloading: dram
-        kv-offload-backend: { name: native, version: "1.3.0rc24" }
+        kv-offload-backend: { name: native, version: "1.3.0rc22.post1" }
         prefill:
           num-worker: 1
           tp: 4
@@ -9216,7 +9216,7 @@ glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
       - spec-decoding: mtp
         conc-list: [20]
         kv-offloading: dram
-        kv-offload-backend: { name: native, version: "1.3.0rc24" }
+        kv-offload-backend: { name: native, version: "1.3.0rc22.post1" }
         prefill:
           num-worker: 1
           tp: 4
@@ -9233,7 +9233,7 @@ glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
       - spec-decoding: mtp
         conc-list: [60]
         kv-offloading: dram
-        kv-offload-backend: { name: native, version: "1.3.0rc24" }
+        kv-offload-backend: { name: native, version: "1.3.0rc22.post1" }
         prefill:
           num-worker: 3
           tp: 4
@@ -9250,7 +9250,7 @@ glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
       - spec-decoding: mtp
         conc-list: [152]
         kv-offloading: dram
-        kv-offload-backend: { name: native, version: "1.3.0rc24" }
+        kv-offload-backend: { name: native, version: "1.3.0rc22.post1" }
         prefill:
           num-worker: 5
           tp: 4
@@ -9267,7 +9267,7 @@ glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
       - spec-decoding: mtp
         conc-list: [259]
         kv-offloading: dram
-        kv-offload-backend: { name: native, version: "1.3.0rc24" }
+        kv-offload-backend: { name: native, version: "1.3.0rc22.post1" }
         prefill:
           num-worker: 8
           tp: 4
@@ -9284,7 +9284,7 @@ glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
       - spec-decoding: mtp
         conc-list: [227]
         kv-offloading: dram
-        kv-offload-backend: { name: native, version: "1.3.0rc24" }
+        kv-offload-backend: { name: native, version: "1.3.0rc22.post1" }
         prefill:
           num-worker: 6
           tp: 4
