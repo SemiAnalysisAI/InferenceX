@@ -221,7 +221,11 @@ def _write_dispatch_report(out_dir, session_idx):
     for p in _proxy_registry:
         s = p._infx_stats
         if s:
-            stats[p._infx_qualname] = dict(s)
+            entry = dict(s)
+            last_err = getattr(p, "_infx_last_err", None)
+            if last_err:
+                entry["last_error"] = last_err
+            stats[p._infx_qualname] = entry
             s.clear()
     if not stats:
         return
@@ -292,8 +296,8 @@ _SCHEMA_OF_KEY = {
     "D": "Device a{i}",
     "tT": "Tensor(a{i}!)[] a{i}",
     "lT": "Tensor(a{i}!)[] a{i}",
-    "tTo": "Tensor?[] a{i}",
-    "lTo": "Tensor?[] a{i}",
+    "tTo": "Tensor(a{i}!)?[] a{i}",
+    "lTo": "Tensor(a{i}!)?[] a{i}",
     "ti": "int[] a{i}",
     "li": "int[] a{i}",
     "tf": "float[] a{i}",
@@ -367,7 +371,8 @@ def _register_dispatch_op(shortname, fn, args, ret_schema, opaque_pos=()):
     parts = []
     for i, a in enumerate(args):
         if i in opaque:
-            parts.append(f"Tensor?[] a{i}")
+            # plan objects hold workspaces the kernel writes — declare mutable
+            parts.append(f"Tensor(a{i}!)?[] a{i}")
             continue
         k = _type_key(a)
         tmpl = _SCHEMA_OF_KEY.get(k)
@@ -512,6 +517,7 @@ class _LauncherProxy:
                         ops[key] = new_op
             except Exception as exc:  # noqa: BLE001
                 stats["define_failed"] += 1
+                object.__setattr__(self, "_infx_last_err", str(exc)[:240])
                 _warn_once(
                     f"dispatch-def-{self._infx_qualname}",
                     f"cannot register dispatch op for {self._infx_qualname}: {exc!r}",
@@ -532,6 +538,7 @@ class _LauncherProxy:
         except Exception as exc:  # noqa: BLE001
             _OPAQUE_TLS.__dict__.pop("objs", None)
             stats[f"call_failed:{type(exc).__name__}"] += 1
+            object.__setattr__(self, "_infx_last_err", str(exc)[:240])
             _warn_once(
                 f"dispatch-call-{self._infx_qualname}",
                 f"dispatch call failed for {self._infx_qualname}, "
@@ -710,6 +717,11 @@ _DISPATCH_PREFIXES = (
     "sglang.srt.layers.mhc",
     "sglang.srt.layers.deep_gemm_wrapper",
     "flashinfer",
+    # vllm's dsv4 indexer kernels (fused_inv_rope_fp8_quant,
+    # cp_gather_indexer_k_quant_cache) launch outside the dispatcher too
+    "vllm.model_executor",
+    "vllm.attention",
+    "vllm.v1.attention",
 )
 
 
