@@ -266,6 +266,19 @@ git diff --check origin/main...HEAD
 
 权威来源：[完整失败摄取恢复命令](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.claude/commands/recover-failed-ingest.md)。
 
+## H100 offload 清理停滞
+
+H100 AgentX 基准可能已经完成并写出所有结果文件，但 GitHub 任务仍停留在 `Launch job script`。请在登录节点检查 launcher 进程树。若以下任一命令的子进程长时间运行，说明停滞发生在 teardown，而不是基准本身：
+
+```text
+srun --jobid=<id> bash -c find /dev/shm ... vllm_offload_*.mmap ... -delete
+srun --jobid=<id> bash -c rm -rf -- /mnt/numa0/.../inferencex-kv-<id>
+```
+
+干预前必须保留并验证结果文件。H100 launcher 使用 `H100_OFFLOAD_CLEANUP_TIMEOUT_S` 限制每个运行前和运行后的 offload 清理步骤；默认超时为 120 秒，随后保留 15 秒强制终止窗口。运行后超时按 best-effort 处理：launcher 会取消 allocation，并保留基准退出状态，使 artifact 上传可以继续。运行前超时则会 fail closed，因为残留的共享内存或 NVMe 状态可能使下一次基准结果无效。
+
+对于在该保护逻辑加入前已经启动的任务，只有在确认基准输出完整后，才能终止登录节点上卡住的 `srun` client。随后 launcher 的 cleanup trap 会继续执行 `scancel` 来释放 allocation。不要取消 GitHub 任务，也不要删除其工作区，否则可能丢失仍可上传的证据。
+
 ## AMD root-owned 工作区的预防与恢复
 
 ### 防止复发

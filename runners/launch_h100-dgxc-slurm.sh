@@ -325,18 +325,33 @@ else
         exit 1
     fi
     NVME_HOST_DIR=""
+    H100_OFFLOAD_CLEANUP_TIMEOUT_S="${H100_OFFLOAD_CLEANUP_TIMEOUT_S:-120}"
+    run_bounded_cleanup_step() {
+        local description="$1"
+        shift
+        local rc
+        if timeout --kill-after=15s "${H100_OFFLOAD_CLEANUP_TIMEOUT_S}s" \
+            srun --jobid="$JOB_ID" "$@"; then
+            return 0
+        else
+            rc=$?
+            echo "WARNING: H100 cleanup step '$description' failed or timed out after ${H100_OFFLOAD_CLEANUP_TIMEOUT_S}s (rc=$rc)" >&2
+            return "$rc"
+        fi
+    }
     cleanup_offload_shm() {
         # Native vLLM tiering backs its DRAM tier with a shared-memory file.
         # Abruptly cancelled jobs can leave a nearly 1 TB file behind, which
         # makes the next exclusive job on the node hang under memory pressure.
-        srun --jobid="$JOB_ID" bash -c \
+        run_bounded_cleanup_step "vLLM offload shared memory" bash -c \
             'find /dev/shm -maxdepth 1 -type f -user "$(id -u)" -name "vllm_offload_*.mmap" -delete'
     }
     cleanup_allocation() {
         local rc=$?
         trap - EXIT INT TERM
         if [[ -n "$NVME_HOST_DIR" ]]; then
-            srun --jobid="$JOB_ID" bash -c "rm -rf -- '$NVME_HOST_DIR'" 2>/dev/null || true
+            run_bounded_cleanup_step "NVMe offload directory $NVME_HOST_DIR" \
+                bash -c "rm -rf -- '$NVME_HOST_DIR'" 2>/dev/null || true
         fi
         cleanup_offload_shm 2>/dev/null || true
         scancel "$JOB_ID" 2>/dev/null || true
@@ -353,7 +368,7 @@ else
         NVME_HOST_ROOT="/mnt/numa0/enroot/cache/group-$(id -g)"
         NVME_HOST_DIR="$NVME_HOST_ROOT/inferencex-kv-$JOB_ID"
         NVME_OWNER_UID="$(id -u)"
-        srun --jobid="$JOB_ID" bash -c "
+        run_bounded_cleanup_step "stale NVMe offload directories" bash -c "
             set -e
             test -w '$NVME_HOST_ROOT'
             find '$NVME_HOST_ROOT' -mindepth 1 -maxdepth 1 -type d \
