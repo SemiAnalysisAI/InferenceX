@@ -617,7 +617,7 @@ if [ "${ASYNC_SCHEDULING:-0}" != "1" ]; then
 fi
 
 # ---- HIP graph ------------------------------------------------------------
-MAX_CUDAGRAPH_CAPTURE_SIZE="${MAX_CUDAGRAPH_CAPTURE_SIZE:-$(( MAX_NUM_SEQS * (1 + SPEC_NUM_TOKENS) ))}"
+MAX_CUDAGRAPH_CAPTURE_SIZE="${MAX_CUDAGRAPH_CAPTURE_SIZE:-$(( CONC * (1 + SPEC_NUM_TOKENS) ))}"
 CUDAGRAPH_CAPTURE_SIZES="${CUDAGRAPH_CAPTURE_SIZES:-$(seq -s, 2 "$MAX_CUDAGRAPH_CAPTURE_SIZE")}"
 COMPILATION_CUSTOM_OPS="${COMPILATION_CUSTOM_OPS:-\"+fused_rms_norm_gated\"}"
 COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[$COMPILATION_CUSTOM_OPS],\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}")
