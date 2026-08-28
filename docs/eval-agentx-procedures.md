@@ -302,6 +302,13 @@ grep -E 'Phase warmup progress|WARMUP cache pressure|Phase warmup complete|Phase
 date -u
 ```
 
+For a bounded replay diagnostic, `AIPERF_TRAJECTORY_START_MIN_RATIO` and
+`AIPERF_TRAJECTORY_START_MAX_RATIO` can override the normal `0.25`/`0.75`
+snapshot range used by `build_replay_cmd`. Keep the defaults for comparable
+performance runs. Any run that changes the range, uses a local trace subset,
+or enables kernel serialization is diagnostic-only and must not be published
+as performance evidence.
+
 Report phase elapsed/remaining, last log update, error count, request/queue/KV trends, files and metric sources inspected, and separate expected benchmark completion from expected GitHub completion. A run is not green until required artifacts upload and the workflow accepts them.
 
 ## 10. Short-circuit rules

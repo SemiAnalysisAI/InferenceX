@@ -302,6 +302,12 @@ grep -E 'Phase warmup progress|WARMUP cache pressure|Phase warmup complete|Phase
 date -u
 ```
 
+进行有界重放诊断时，可以通过 `AIPERF_TRAJECTORY_START_MIN_RATIO` 和
+`AIPERF_TRAJECTORY_START_MAX_RATIO` 覆盖 `build_replay_cmd` 通常使用的
+`0.25`/`0.75` 快照范围。可比较的性能运行必须保留默认值。任何修改该范围、
+使用本地 trace 子集或启用 kernel serialization 的运行都仅用于诊断，不能作为
+性能结果发布。
+
 报告 phase 已用/剩余时间、最后日志更新时间、错误数、request/queue/KV 趋势、已检查的文件和 metric source，并分别给出预计 benchmark 完成时间与预计 GitHub 完成时间。在必需 artifact 上传且工作流接受它们之前，运行不能算 green。
 
 ## 10. 提前终止规则

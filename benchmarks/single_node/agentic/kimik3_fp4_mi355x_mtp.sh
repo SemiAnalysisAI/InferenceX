@@ -28,8 +28,38 @@ fi
 
 rocm-smi || true
 amd-smi || true
-resolve_trace_source
-install_agentic_deps
+
+# Diagnostic-only branch for the C1 vLLM illegal-address failure seen in
+# workflow 33201837952. Replaying the single implicated trace from t=0 reaches
+# the root/subagent fan-out directly, while AMD_SERIALIZE_KERNEL=3 turns the
+# asynchronous device fault into a route-specific synchronous traceback. This
+# mode is deliberately invalid for performance comparison.
+K3_C1_ROUTE_DIAGNOSTIC="${K3_C1_ROUTE_DIAGNOSTIC:-1}"
+K3_C1_DIAGNOSTIC_DIR=""
+if [[ "$CONC" == "1" && "$K3_C1_ROUTE_DIAGNOSTIC" == "1" ]]; then
+    install_agentic_deps
+    K3_C1_DIAGNOSTIC_DIR=$(mktemp -d /tmp/k3-c1-route-diagnostic.XXXXXX)
+    K3_C1_DIAGNOSTIC_TRACE="$K3_C1_DIAGNOSTIC_DIR/0196085d85d2075a50b74cd8795ffbdcea9a.jsonl"
+    K3_C1_DIAGNOSTIC_DATASET_COMMIT="23f152f6f0f9399a85901b89a6458def0ef16729"
+    K3_C1_DIAGNOSTIC_RANGE="3244902-10813108"
+    K3_C1_DIAGNOSTIC_SHA256="787d2316a1a74e86f0814615661e9a3c00d68c6a213b8b67fe579fa0a55e0df1"
+    K3_C1_DIAGNOSTIC_URL="https://huggingface.co/datasets/semianalysisai/cc-traces-weka-062126/resolve/$K3_C1_DIAGNOSTIC_DATASET_COMMIT/traces.jsonl"
+    curl --fail --location --retry 3 --retry-all-errors \
+        --range "$K3_C1_DIAGNOSTIC_RANGE" \
+        --output "$K3_C1_DIAGNOSTIC_TRACE" \
+        "$K3_C1_DIAGNOSTIC_URL"
+    printf '%s  %s\n' "$K3_C1_DIAGNOSTIC_SHA256" "$K3_C1_DIAGNOSTIC_TRACE" \
+        | sha256sum --check --strict
+    TRACE_SOURCE_FLAG="--input-file $K3_C1_DIAGNOSTIC_TRACE --custom-dataset-type weka_trace"
+    export AMD_SERIALIZE_KERNEL=3
+    export AIPERF_UNSAFE_OVERRIDE=true
+    export AIPERF_TRAJECTORY_START_MIN_RATIO=0.0
+    export AIPERF_TRAJECTORY_START_MAX_RATIO=0.0
+    echo "[k3-c1-route-diagnostic] trace=0196085d85d2075a50b74cd8795ffbdcea9a dataset_commit=$K3_C1_DIAGNOSTIC_DATASET_COMMIT range=$K3_C1_DIAGNOSTIC_RANGE sha256=$K3_C1_DIAGNOSTIC_SHA256 serialize=$AMD_SERIALIZE_KERNEL"
+else
+    resolve_trace_source
+    install_agentic_deps
+fi
 
 if [ -n "${DCP_SIZE:-}" ]; then
     DCP_SOURCE=matrix
@@ -61,6 +91,21 @@ export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=1200
 
 SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
+if [[ -n "$K3_C1_DIAGNOSTIC_DIR" ]]; then
+    cat > "$RESULT_DIR/k3_c1_route_diagnostic.json" <<EOF
+{
+  "performance_valid": false,
+  "purpose": "synchronize the C1 MI355X vLLM illegal-address failure to its originating kernel route",
+  "source_workflow_run": 33201837952,
+  "trace_id": "0196085d85d2075a50b74cd8795ffbdcea9a",
+  "dataset_commit": "$K3_C1_DIAGNOSTIC_DATASET_COMMIT",
+  "byte_range": "$K3_C1_DIAGNOSTIC_RANGE",
+  "trace_sha256": "$K3_C1_DIAGNOSTIC_SHA256",
+  "amd_serialize_kernel": "$AMD_SERIALIZE_KERNEL",
+  "trajectory_start_ratio": 0.0
+}
+EOF
+fi
 SERVER_PID=""
 
 cleanup_agentic_services() {

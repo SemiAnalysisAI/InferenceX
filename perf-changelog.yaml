@@ -6500,3 +6500,13 @@
     - "Pin aigmkt/kimi-k3-vllm:latest to registry digest sha256:7f0dfe6304c9a82621f1be5fc17bd0ced3a968ba9462f05e51de28df8b4aa50d so the recovery result cannot drift with the mutable tag."
     - "Use the control to separate ATOM framework/model-runner overhead from the residual ROCm kernel and platform gap. The earlier exploratory MI355X-vLLM C1 run used 8 draft tokens, acceptance length 4.00, max-num-seqs 8, GPU memory utilization 0.90, and a different graph ladder, then ended in an asynchronous HIP illegal-memory-access failure, so it is not comparison evidence."
   pr-link: XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a diagnostic-only C1 replay for workflow 33201837952's asynchronous HIP illegal-address failure. The branch downloads and verifies the single implicated AgentX trace at pinned dataset commit 23f152f6f0f9399a85901b89a6458def0ef16729, starts it at trace time zero, and enables AMD_SERIALIZE_KERNEL=3 so the originating kernel route can fail synchronously."
+    - "Stamp performance_valid=false in the diagnostic metadata. This 900-second local-trace run is not throughput or latency evidence and must only be used to select one subsequent backend-route control."
+    - "Allow build_replay_cmd's normal 0.25/0.75 trajectory snapshot range to be overridden through explicit AIPERF_TRAJECTORY_START_MIN_RATIO and AIPERF_TRAJECTORY_START_MAX_RATIO environment variables while preserving the existing defaults for all ordinary runs."
+  pr-link: XXX

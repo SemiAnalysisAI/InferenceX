@@ -1973,6 +1973,8 @@ build_replay_cmd() {
     local result_dir="$1"
     local duration="$DURATION"
     local warmup_requests_per_lane="${AIPERF_WARMUP_REQUESTS_PER_LANE:-10}"
+    local trajectory_start_min_ratio="${AIPERF_TRAJECTORY_START_MIN_RATIO:-0.25}"
+    local trajectory_start_max_ratio="${AIPERF_TRAJECTORY_START_MAX_RATIO:-0.75}"
 
     # Fast mode minimizes setup by advancing each trajectory lane only once
     # and shortens profiling to 20 minutes.
@@ -2020,11 +2022,11 @@ build_replay_cmd() {
     # live sample while retaining AIPERF_FAILED_REQUEST_THRESHOLD as the strict
     # post-run validity gate below.
     REPLAY_CMD+=" --failed-request-threshold $AIPERF_LIVE_FAILED_REQUEST_THRESHOLD"
-    # Sample each trajectory's warmup start position uniformly from
-    # [25%, 75%] of the trace's turn count, clamped by AIPerf to leave at
-    # least one profile turn after warmup.
-    REPLAY_CMD+=" --trajectory-start-min-ratio 0.25"
-    REPLAY_CMD+=" --trajectory-start-max-ratio 0.75"
+    # Sample each trajectory's warmup start position uniformly from the normal
+    # [25%, 75%] range. Explicit overrides are reserved for bounded replay
+    # diagnostics and make the resulting run non-comparable.
+    REPLAY_CMD+=" --trajectory-start-min-ratio $trajectory_start_min_ratio"
+    REPLAY_CMD+=" --trajectory-start-max-ratio $trajectory_start_max_ratio"
     # After the normal t* snapshot primers, advance every trajectory lane by
     # this many additional one-token requests with no idle delay. Profiling
     # begins after those requests drain and resumes from the resulting live
