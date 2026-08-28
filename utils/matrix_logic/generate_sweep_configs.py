@@ -322,7 +322,7 @@ def agentic_dram_offload_gb(
       budgeted separately if it ever gains its own pool).
     """
     kv_offloading = benchmark.get(Fields.KV_OFFLOADING.value, "none")
-    if kv_offloading != "dram":
+    if kv_offloading not in {"dram", "tiered"}:
         return 0
 
     available_mib = min(

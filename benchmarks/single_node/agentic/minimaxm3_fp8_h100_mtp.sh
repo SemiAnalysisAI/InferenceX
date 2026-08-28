@@ -106,6 +106,20 @@ elif [ "$KV_OFFLOADING" = "nvme" ]; then
         --kv-transfer-config
         "{\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"kv_offload_backend\":\"disk\",\"disk_path\":\"$NVME_OFFLOAD_DIR/cache.bin\",\"disk_capacity_bytes\":$NVME_OFFLOAD_PER_RANK_BYTES,\"disk_buffer_slots\":4,\"lazy_offload\":false}}"
     )
+elif [ "$KV_OFFLOADING" = "tiered" ]; then
+    require_agentic_kv_offload_backend vllm-native
+    : "${NVME_OFFLOAD_DIR:?NVME_OFFLOAD_DIR must be mounted by the H100 launcher}"
+    TOTAL_CPU_DRAM_GIB=$((TOTAL_CPU_DRAM_GB * 1000000000 / 1073741824))
+    PER_RANK_GIB=$(((TOTAL_CPU_DRAM_GIB - MODEL_CHECKPOINT_PAGE_CACHE_GIB) / TP - MODEL_CPU_OFFLOAD_GB - MOONCAKE_LOCAL_BUFFER_GIB))
+    if (( PER_RANK_GIB <= 0 )); then
+        echo "Error: CPU DRAM budget is too small for checkpoint cache, model, and tiered KV offload" >&2
+        exit 1
+    fi
+    CPU_OFFLOAD_TOTAL_BYTES=$((PER_RANK_GIB * TP * 1073741824))
+    OFFLOAD_ARGS=(
+        --kv-transfer-config
+        "{\"kv_connector\":\"OffloadingConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"spec_name\":\"TieringOffloadingSpec\",\"cpu_bytes_to_use\":$CPU_OFFLOAD_TOTAL_BYTES,\"eviction_policy\":\"lru\",\"secondary_tiers\":[{\"type\":\"fs\",\"root_dir\":\"$NVME_OFFLOAD_DIR\",\"n_read_threads\":32,\"n_write_threads\":16,\"locality\":\"LOCAL\"}]}}"
+    )
 else
     echo "Error: unsupported KV_OFFLOADING='$KV_OFFLOADING'" >&2
     exit 1
