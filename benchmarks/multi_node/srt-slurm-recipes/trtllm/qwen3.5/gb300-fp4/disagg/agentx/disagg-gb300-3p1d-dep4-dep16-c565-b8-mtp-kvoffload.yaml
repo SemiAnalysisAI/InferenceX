@@ -6,7 +6,7 @@ model:
 
 dynamo:
   install: true
-  wheel: 1.4.0.dev20260807
+  hash: a78bfc90616668c9d149174656b62bf9f67599ae
 
 identity:
   model:
@@ -32,7 +32,7 @@ resources:
   gpus_per_decode: 16
 backend:
   type: trtllm
-  publish_events_and_metrics: true
+  publish_events_and_metrics: false
   prefill_environment:
     CUDA_SCALE_LAUNCH_QUEUES: 4x
     MIMALLOC_ARENA_RESERVE: '0'
