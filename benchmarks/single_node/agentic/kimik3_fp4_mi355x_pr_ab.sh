@@ -18,6 +18,7 @@ case "${SPEC_DECODING:-none}:${CONC:?CONC is required}:${DCP_SIZE:-1}:${KV_OFFLO
     mtp:1:1:none:)
         export SPEC_DECODE=true
         export SPEC_NUM_TOKENS=6
+        export ASYNC_SCHEDULING=1
         export GPU_MEM_UTIL=0.90
         export MAX_NUM_BATCHED_TOKENS=8192
         export MAX_NUM_SEQS=20
@@ -26,6 +27,12 @@ case "${SPEC_DECODING:-none}:${CONC:?CONC is required}:${DCP_SIZE:-1}:${KV_OFFLO
     mtp:16:8:none:)
         export SPEC_DECODE=true
         export SPEC_NUM_TOKENS=3
+        # With two in-flight scheduler batches, the next schedule observes
+        # unverified DSpark placeholders as cacheable tokens. Under partial
+        # DCP prefix reuse that eventually tries to re-cache an already-hashed
+        # block. Both PR arms reproduced block_pool.py:288; serialize C16 until
+        # vLLM has a commit/rollback lifecycle for eager cache registration.
+        export ASYNC_SCHEDULING=0
         export GPU_MEM_UTIL=0.86
         export MAX_NUM_BATCHED_TOKENS=8192
         export MAX_NUM_SEQS=32
@@ -33,6 +40,7 @@ case "${SPEC_DECODING:-none}:${CONC:?CONC is required}:${DCP_SIZE:-1}:${KV_OFFLO
         ;;
     none:52:8:none:)
         export SPEC_DECODE=false
+        export ASYNC_SCHEDULING=1
         export GPU_MEM_UTIL=0.88
         export MAX_NUM_BATCHED_TOKENS=4096
         export MAX_NUM_SEQS=72
@@ -40,6 +48,7 @@ case "${SPEC_DECODING:-none}:${CONC:?CONC is required}:${DCP_SIZE:-1}:${KV_OFFLO
         ;;
     none:52:8:dram:vllm-simple)
         export SPEC_DECODE=false
+        export ASYNC_SCHEDULING=1
         export GPU_MEM_UTIL=0.88
         export MAX_NUM_BATCHED_TOKENS=16384
         export MAX_NUM_SEQS=80
@@ -56,7 +65,6 @@ esac
 export REQUIRE_K3_OVERLAY=1
 export DCP_COMM_BACKEND=a2a
 export K3_AUTO_KV_PAGE=1
-export ASYNC_SCHEDULING=1
 
 export ATTENTION_BACKEND=ROCM_AITER_MLA
 export ATTENTION_CONFIG_JSON='{"use_prefill_query_quantization":true}'
