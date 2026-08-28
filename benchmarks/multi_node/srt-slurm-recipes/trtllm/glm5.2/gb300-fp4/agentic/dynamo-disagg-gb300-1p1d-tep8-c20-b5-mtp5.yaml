@@ -7,7 +7,7 @@ model:
 
 dynamo:
   install: true
-  hash: a78bfc90616668c9d149174656b62bf9f67599ae
+  hash: 2cbbdc863c336c2cfffa2a3668e2a6661801b259
   request_plane: tcp
 
 health_check:
