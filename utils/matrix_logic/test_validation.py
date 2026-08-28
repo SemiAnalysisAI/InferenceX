@@ -530,6 +530,31 @@ class TestAgenticMatrixEntries:
                 }],
             })
 
+    def test_tiered_kv_offload_requires_dram_utilization(self):
+        with pytest.raises(Exception, match="dram-utilization"):
+            AgenticCodingConfig(**{
+                "search-space": [{
+                    "tp": 8,
+                    "kv-offloading": "tiered",
+                    "kv-offload-backend": {"name": "vllm-native"},
+                    "conc-list": [7, 8],
+                }],
+            })
+
+    def test_tiered_kv_offload_accepts_dram_capacity_config(self):
+        config = AgenticCodingConfig(**{
+            "dram-utilization": 0.99,
+            "search-space": [{
+                "tp": 8,
+                "kv-offloading": "tiered",
+                "kv-offload-backend": {"name": "vllm-native"},
+                "conc-list": [7, 8],
+            }],
+        })
+
+        assert config.search_space[0].kv_offloading == "tiered"
+        assert config.dram_utilization == 0.99
+
     def test_agentic_search_space_rejects_total_cpu_dram_gb(self):
         with pytest.raises(Exception, match="total-cpu-dram-gb"):
             AgenticCodingSearchSpaceEntry(**{
