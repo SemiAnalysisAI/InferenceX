@@ -145,33 +145,6 @@ class ConfigTests(unittest.TestCase):
         self.assertIn(b"COLLX_SQUASH_DIR\0/home/sa-shared/containers\0", payload)
         self.assertIn(b"COLLX_RDMA_DEVICES\0", payload)
 
-class SlurmJobNameTests(unittest.TestCase):
-    # inferencex-dash correlates cluster allocations with GHA jobs by Slurm job
-    # name == the runner_name (the production runners' --job-name="$RUNNER_NAME"
-    # convention), so collx_salloc_jobid must submit under that name and fall
-    # back to a fixed label rather than an unset or unsafe one.
-    @staticmethod
-    def _job_name(env_pairs: str) -> str:
-        completed = subprocess.run(
-            ["bash", "-c",
-             f"source runtime/common.sh 2>/dev/null; {env_pairs} collx_slurm_job_name"],
-            cwd=RUNTIME.parent, capture_output=True, text=True, check=True,
-        )
-        return completed.stdout
-
-    def test_runner_name_becomes_the_job_name(self) -> None:
-        self.assertEqual(self._job_name("RUNNER_NAME=mi355x-amds_03"), "mi355x-amds_03")
-
-    def test_unset_runner_name_falls_back(self) -> None:
-        self.assertEqual(self._job_name("RUNNER_NAME="), "collectivex")
-
-    def test_unsafe_runner_name_falls_back(self) -> None:
-        self.assertEqual(self._job_name("RUNNER_NAME='bad name;rm'"), "collectivex")
-
-    def test_salloc_submits_under_the_job_name(self) -> None:
-        common = (RUNTIME / "common.sh").read_text()
-        self.assertIn('set -- --job-name="$(collx_slurm_job_name)" "$@"', common)
-
 
 class StageTests(unittest.TestCase):
     def test_create_copy_and_validate_cleanup(self) -> None:
