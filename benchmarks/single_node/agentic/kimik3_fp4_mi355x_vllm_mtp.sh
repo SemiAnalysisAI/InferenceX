@@ -22,8 +22,16 @@ if [ -r /proc/sys/kernel/numa_balancing ]; then
 fi
 
 export SPEC_DECODE=true
-export SPEC_NUM_TOKENS=6
-export SYNTHETIC_ACCEPT_LEN=3.75
+# K=6 is the c1 latency point; higher concurrency runs K=3, where every drafted
+# position still lands inside the observed acceptance window instead of paying
+# a full-context draft forward that is guaranteed to be discarded.
+if [ "${CONC}" -le 1 ]; then
+    export SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-6}"
+    export SYNTHETIC_ACCEPT_LEN="${SYNTHETIC_ACCEPT_LEN:-3.75}"
+else
+    export SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-3}"
+    export SYNTHETIC_ACCEPT_LEN="${SYNTHETIC_ACCEPT_LEN:-3.0}"
+fi
 export K3_OVERLAY_PATCH="$script_dir/k3_patches/vllm_nightly_46638857_k3_tuned.patch"
 export REQUIRE_K3_OVERLAY=1
 

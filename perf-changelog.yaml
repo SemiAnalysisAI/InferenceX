@@ -6110,3 +6110,13 @@
     - "Carry the required DCP/hybrid-cache fixes, bounded lazy-offload LRU scan, fused Kimi-K3 RMSNorm, vLLM #52968 model fusions, and #53166 chunked-context fusion as a fail-closed runtime overlay."
     - "Local 131k/1k screening reached 71,266 total tok/s at c32 with 23.43 s p90 TTFT and 75,893 total tok/s at c40 with 28.70 s p90 TTFT."
   pr-link: XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-dcp-v466-kvnone
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add the tuned MI355X Kimi-K3 v466 stack with the SimpleCPU KV connector removed, isolating what the CPU tier contributes: on the c40 reference run it answered 0.00085 of its lookups while the GPU prefix cache answered 0.914."
+    - "Four points: c1 TP8 no-DCP DSpark K=6, c16 TP8/DCP8 DSpark K=3, and c40/c52 TP8/DCP8 no-spec, where c40 pairs 1:1 with the SimpleCPU c40 run so the connector is the single delta."
+    - "Scale DSpark CUDA graph capture to the K+1 verification block per concurrency (c1 14, c16 128) instead of the MAX_NUM_SEQS*3 default, which is a K+1 frozen at K=2 and drops decode to eager at any other K."
+  pr-link: XXX
