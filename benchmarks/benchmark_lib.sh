@@ -49,7 +49,7 @@ require_agentic_kv_offload_backend() {
             fi
             return 1
             ;;
-        dram|nvme|tiered)
+        dram|nvme|dram+nvme)
             if [[ "${KV_OFFLOAD_BACKEND:-}" != "$expected_backend" ]]; then
                 echo "Error: expected KV_OFFLOAD_BACKEND=$expected_backend when KV_OFFLOADING=$KV_OFFLOADING, got '${KV_OFFLOAD_BACKEND:-}'" >&2
                 exit 1
@@ -61,7 +61,7 @@ require_agentic_kv_offload_backend() {
             return 0
             ;;
         *)
-            echo "Error: unsupported KV_OFFLOADING value '$KV_OFFLOADING' (expected one of: none, dram, nvme, tiered)" >&2
+            echo "Error: unsupported KV_OFFLOADING value '$KV_OFFLOADING' (expected one of: none, dram, nvme, dram+nvme)" >&2
             exit 1
             ;;
     esac
@@ -86,7 +86,7 @@ if [[ "$_benchmark_caller" == */agentic/* ||
                 exit 1
             fi
             ;;
-        dram|nvme|tiered)
+        dram|nvme|dram+nvme)
             if [[ -z "${KV_OFFLOAD_BACKEND:-}" || "${KV_OFFLOAD_BACKEND:-}" == "none" ]]; then
                 echo "Error: KV_OFFLOAD_BACKEND is required when KV_OFFLOADING=$KV_OFFLOADING" >&2
                 exit 1
@@ -97,7 +97,7 @@ if [[ "$_benchmark_caller" == */agentic/* ||
             fi
             ;;
         *)
-            echo "Error: unsupported KV_OFFLOADING value '$KV_OFFLOADING' (expected one of: none, dram, nvme, tiered)" >&2
+            echo "Error: unsupported KV_OFFLOADING value '$KV_OFFLOADING' (expected one of: none, dram, nvme, dram+nvme)" >&2
             exit 1
             ;;
     esac

@@ -14,6 +14,11 @@ import yaml
 
 CLUSTER_LABEL_PREFIX = "cluster:"
 DEFAULT_AGENTIC_DURATION_SECONDS = 3600
+KVOffloadingTier = Literal["dram", "nvme"]
+KVOffloadingConfig = Union[
+    Literal["none", "dram", "nvme"],
+    List[KVOffloadingTier],
+]
 
 """
     The below class defines the field names expected to be present in the JSON entries
@@ -318,7 +323,7 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
         default="none", alias=Fields.SPEC_DECODING.value
     )
     conc: int
-    kv_offloading: Literal["none", "dram", "nvme", "tiered"] = Field(
+    kv_offloading: Literal["none", "dram", "nvme", "dram+nvme"] = Field(
         alias=Fields.KV_OFFLOADING.value
     )
     kv_offload_backend: Optional[KVOffloadBackendMetadata] = Field(
@@ -513,7 +518,13 @@ def _validate_kv_offload_fields(self):
                 f"{Fields.KV_OFFLOADING.value}"
             )
         return self
-    if self.kv_offloading == "none":
+    if isinstance(self.kv_offloading, list):
+        if self.kv_offloading != ["dram", "nvme"]:
+            raise ValueError(
+                f"The only supported multi-tier {Fields.KV_OFFLOADING.value} "
+                "configuration is ['dram', 'nvme']"
+            )
+    elif self.kv_offloading == "none":
         if backend is not None:
             raise ValueError(
                 f"{Fields.KV_OFFLOAD_BACKEND.value} can only be set when "
@@ -644,7 +655,7 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
     decode: Optional[WorkerConfig] = None
     num_nodes: Optional[int] = Field(
         default=None, alias=Fields.NUM_NODES.value, gt=0, strict=True)
-    kv_offloading: Optional[Literal["none", "dram", "nvme", "tiered"]] = Field(
+    kv_offloading: Optional[KVOffloadingConfig] = Field(
         default=None, alias=Fields.KV_OFFLOADING.value
     )
     kv_offload_backend: Optional[KVOffloadBackendMetadata] = Field(
@@ -726,7 +737,7 @@ class AgenticCodingConfig(BaseModel):
     @model_validator(mode='after')
     def validate_dram_offload_capacity(self):
         for entry in self.search_space:
-            if entry.kv_offloading not in {"dram", "tiered"}:
+            if entry.kv_offloading != "dram" and entry.kv_offloading != ["dram", "nvme"]:
                 continue
             if self.dram_utilization is None:
                 raise ValueError(

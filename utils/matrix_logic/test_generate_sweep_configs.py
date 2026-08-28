@@ -2385,7 +2385,7 @@ class TestGenerateTestConfigSweep:
         }
         assert all(entry["duration"] == 3600 for entry in result)
 
-    def test_tiered_agentic_uses_dram_budget_and_distinct_name(
+    def test_multi_tier_agentic_uses_dram_budget_and_distinct_name(
         self, sample_runner_config
     ):
         config = {
@@ -2409,7 +2409,7 @@ class TestGenerateTestConfigSweep:
                             },
                             {
                                 "tp": 8,
-                                "kv-offloading": "tiered",
+                                "kv-offloading": ["dram", "nvme"],
                                 "kv-offload-backend": {"name": "vllm-native"},
                                 "conc-list": [7],
                             },
@@ -2428,11 +2428,11 @@ class TestGenerateTestConfigSweep:
 
         result = generate_test_config_sweep(args, config, sample_runner_config)
 
-        assert [entry["kv-offloading"] for entry in result] == ["nvme", "tiered"]
+        assert [entry["kv-offloading"] for entry in result] == ["nvme", "dram+nvme"]
         assert [entry["total-cpu-dram-gb"] for entry in result] == [0, 2399]
         assert [entry["exp-name"] for entry in result] == [
             "dsv4_tp8_conc7_kvnvme-vllm-simple",
-            "dsv4_tp8_conc7_kvtiered-vllm-native",
+            "dsv4_tp8_conc7_kvdram+nvme-vllm-native",
         ]
 
     def test_agentic_node_dram_rejects_tp_above_runner_gpus(self, sample_runner_config):

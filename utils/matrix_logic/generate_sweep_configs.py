@@ -322,7 +322,7 @@ def agentic_dram_offload_gb(
       budgeted separately if it ever gains its own pool).
     """
     kv_offloading = benchmark.get(Fields.KV_OFFLOADING.value, "none")
-    if kv_offloading not in {"dram", "tiered"}:
+    if kv_offloading != "dram" and kv_offloading != ["dram", "nvme"]:
         return 0
 
     available_mib = min(
@@ -356,13 +356,21 @@ def agentic_dram_offload_gb(
 
 
 def agentic_kv_offload_suffix(
-    kv_offloading: str,
+    kv_offloading: str | list[str],
     kv_offload_backend: dict | None,
 ) -> str:
     """Return a compact exp-name suffix for agentic KV offload settings."""
     if kv_offloading == "none":
         return "kvnone"
-    return f"kv{kv_offloading}-{kv_offload_backend['name']}"
+    mode = "+".join(kv_offloading) if isinstance(kv_offloading, list) else kv_offloading
+    return f"kv{mode}-{kv_offload_backend['name']}"
+
+
+def agentic_kv_offload_runtime_value(kv_offloading: str | list[str]) -> str:
+    """Convert declarative tier lists into the workflow's string input."""
+    if isinstance(kv_offloading, list):
+        return "+".join(kv_offloading)
+    return kv_offloading
 
 
 def multinode_agentic_exp_name(
@@ -1029,7 +1037,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                                 Fields.PREFILL.value: prefill,
                                 Fields.DECODE.value: decode,
                                 Fields.CONC.value: conc_batch,
-                                Fields.KV_OFFLOADING.value: kv_offloading,
+                                Fields.KV_OFFLOADING.value: agentic_kv_offload_runtime_value(kv_offloading),
                                 Fields.TOTAL_CPU_DRAM_GB.value: total_cpu_dram_gb,
                                 Fields.DURATION.value: duration,
                                 Fields.EXP_NAME.value: multinode_agentic_exp_name(
@@ -1066,7 +1074,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                                 Fields.DP_ATTN.value: dp_attn if dp_attn is not None else False,
                                 Fields.SPEC_DECODING.value: spec_decoding,
                                 Fields.CONC.value: conc,
-                                Fields.KV_OFFLOADING.value: kv_offloading,
+                                Fields.KV_OFFLOADING.value: agentic_kv_offload_runtime_value(kv_offloading),
                                 Fields.TOTAL_CPU_DRAM_GB.value: total_cpu_dram_gb,
                                 Fields.DURATION.value: duration,
                                 Fields.EXP_NAME.value: (
@@ -1328,7 +1336,7 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                                 Fields.PREFILL.value: prefill,
                                 Fields.DECODE.value: decode,
                                 Fields.CONC.value: conc_batch,
-                                Fields.KV_OFFLOADING.value: kv_offloading,
+                                Fields.KV_OFFLOADING.value: agentic_kv_offload_runtime_value(kv_offloading),
                                 Fields.TOTAL_CPU_DRAM_GB.value: total_cpu_dram_gb,
                                 Fields.DURATION.value: duration,
                                 Fields.EXP_NAME.value: multinode_agentic_exp_name(
@@ -1364,7 +1372,7 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                                 Fields.DP_ATTN.value: dp_attn if dp_attn is not None else False,
                                 Fields.SPEC_DECODING.value: spec_decoding,
                                 Fields.CONC.value: conc,
-                                Fields.KV_OFFLOADING.value: kv_offloading,
+                                Fields.KV_OFFLOADING.value: agentic_kv_offload_runtime_value(kv_offloading),
                                 Fields.TOTAL_CPU_DRAM_GB.value: total_cpu_dram_gb,
                                 Fields.DURATION.value: duration,
                                 Fields.EXP_NAME.value: (
