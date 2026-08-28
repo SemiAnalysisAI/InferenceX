@@ -90,6 +90,8 @@ while time.monotonic() < deadline:
             worker_metrics = fetch_metrics(worker_url)
             worker_active += metric_sum(worker_metrics, "vllm:num_requests_running")
             worker_active += metric_sum(worker_metrics, "vllm:num_requests_waiting")
+            worker_active += metric_sum(worker_metrics, "trtllm_num_requests_running")
+            worker_active += metric_sum(worker_metrics, "trtllm_num_requests_waiting")
         print(
             f"Agentic drain status: frontend_active={frontend_active:g} "
             f"worker_running_or_waiting={worker_active:g}",
