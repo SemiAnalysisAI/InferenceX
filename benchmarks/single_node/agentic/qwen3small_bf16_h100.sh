@@ -24,9 +24,14 @@ else
     MODEL_PATH="$MODEL"
 fi
 
-export WEKA_LOADER_OVERRIDE=semianalysis_cc_traces_weka_062126_256k
-resolve_trace_source
 install_agentic_deps
+# The canonical AgentX corpus deliberately contains only long-context traces;
+# its 256k-capped variant has no trajectories that fit Qwen3-0.6B's native
+# 40,960-token window. This plumbing smoke therefore uses a checked-in Weka
+# trajectory with the same growing-prefix shape. AgentX marks the result as an
+# unsafe/non-submission run because the fixture is local and intentionally tiny.
+export TRACE_SOURCE_FLAG="--input-file /workspace/utils/agentic/fixtures/vllm_cache_source_weka --custom-dataset-type weka_trace"
+export AIPERF_UNSAFE_OVERRIDE=true
 
 SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
