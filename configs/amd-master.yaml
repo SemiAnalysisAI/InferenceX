@@ -652,7 +652,9 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
 # Two utilization blocks because the per-rank CPU split differs:
 #   0.268 ->  803 GB aggregate -> 100 GB/rank, all paged KV (conc 8, 12).
 #   0.343 -> 1028 GB aggregate -> 128 GB/rank, split 96 GB paged KV + 32 GB
-#            for ATOM's CPU state tier (conc 16 and up). K3 is a hybrid, so a
+#            for ATOM's CPU state tier (conc 16-40); the concurrency-56
+#            diagnostic reserves 64 GB/rank for state while keeping the same
+#            128 GB/rank total. K3 is a hybrid, so a
 #            resumed agentic turn needs the KDA recurrent state back and the
 #            paged KV tier alone cannot restore one.
 # The paged-KV half of that budget is deliberately smaller than the recipe was
@@ -663,8 +665,8 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
 # rank 0 and the ModelRunner processes died before the server ever served a
 # request. Halving the paged-KV pool halves the pinning work. It costs little:
 # the CPU tier's measured hit rate was 0.0% at concurrency 8 and 12 and 0.3-2.4%
-# above that, and 96 GB/rank still holds ~53M tokens, roughly 530 full 100k-token
-# contexts. The state tier is left at 32 GB/rank.
+# above that. The standard split leaves 96 GB/rank for paged KV and 32 GB/rank
+# for state; the concurrency-56 diagnostic uses a 64/64 split.
 kimik3-fp4-mi355x-atom-agentic-mtp:
   image: rocm/atom-dev:ubuntu24.04_py3.12_pytorch_release_2.10.0_kimi_k3_agentic_0821
   model: moonshotai/Kimi-K3

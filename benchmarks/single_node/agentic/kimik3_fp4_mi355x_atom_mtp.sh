@@ -133,8 +133,9 @@ case "$CONC" in
         SPEC_DECODE_AL=3.00
         STATE_OFFLOAD_CPU_GIB=0
         ;;
-    # LMCache paged-KV tier plus ATOM's CPU state tier, 32 GB/rank carved out
-    # for the KDA recurrent state.
+    # LMCache paged-KV tier plus ATOM's CPU state tier. Concurrency 16-40
+    # reserves 32 GB/rank; the C56 causal control repartitions the same total
+    # CPU budget to 64 GB/rank state plus 64 GB/rank paged KV.
     16)
         MAX_NUM_SEQS=32
         MAX_NUM_BATCHED_TOKENS=8192
@@ -173,7 +174,7 @@ case "$CONC" in
         STATE_CHECKPOINT_SLOTS=""
         NUM_SPEC_TOKENS=0
         SPEC_DECODE_AL=0
-        STATE_OFFLOAD_CPU_GIB=32
+        STATE_OFFLOAD_CPU_GIB=64
         ;;
     *)
         echo "Unsupported CONC=$CONC" >&2
