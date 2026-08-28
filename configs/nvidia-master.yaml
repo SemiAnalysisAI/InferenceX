@@ -7180,6 +7180,26 @@ dsv4-fp4-gb300-dynamo-vllm-agentic:
           ep: 8
           dp-attn: true
 
+# Short-lived integration lane for the vLLM physical cache-source metric PR.
+# It deliberately uses a small model and one GPU: this validates AgentX metric
+# collection/aggregation for GPU-resident and native DRAM-offload sources, not
+# model performance. Remove the temporary image once the vLLM PR has a durable
+# published build.
+qwen3small-bf16-h100-vllm-agentic-cache-source:
+  image: ttl.sh/cquil11-vllm-tier-dfb25dbef4-20260828:24h
+  model: Qwen/Qwen3-0.6B
+  model-prefix: qwen3small
+  runner: cluster:h100-dgxc
+  precision: bf16
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.05
+      search-space:
+      - { tp: 1, kv-offloading: none, conc-list: [1] }
+      - { tp: 1, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [4] }
+
 qwen3.5-fp8-h100-sglang-agentic:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8

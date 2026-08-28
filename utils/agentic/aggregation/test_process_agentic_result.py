@@ -1180,6 +1180,51 @@ def test_processor_aggregates_across_multiple_series(tmp_path: Path):
     assert agg["server_metrics"]["cache"]["gpu_cache_hit_rate"] == pytest.approx(0.3)
 
 
+def test_processor_surfaces_vllm_cached_tokens_by_physical_tier(tmp_path: Path):
+    result_dir = _write_fixture(tmp_path)
+    artifact = result_dir / "aiperf_artifacts"
+    server_metrics = {
+        "metrics": {
+            "vllm:prompt_tokens_cached_by_source": {
+                "type": "counter",
+                "series": [
+                    {
+                        "endpoint_url": "http://prefill-0:8000/metrics",
+                        "labels": {"source": "device", "engine": "0"},
+                        "stats": {"total": 400.0},
+                    },
+                    {
+                        "endpoint_url": "http://prefill-0:8000/metrics",
+                        "labels": {"source": "cpu", "engine": "0"},
+                        "stats": {"total": 100.0},
+                    },
+                    {
+                        "endpoint_url": "http://prefill-1:8000/metrics",
+                        "labels": {"source": "device", "engine": "1"},
+                        "stats": {"total": 250.0},
+                    },
+                    {
+                        "endpoint_url": "http://prefill-1:8000/metrics",
+                        "labels": {"source": "disk", "engine": "1"},
+                        "stats": {"total": 75.0},
+                    },
+                ],
+            }
+        }
+    }
+    with open(artifact / "server_metrics_export.json", "w") as f:
+        json.dump(server_metrics, f)
+
+    agg = _run_processor(result_dir, tmp_path / "out")
+
+    assert agg["server_metrics"]["cache"]["cached_tokens_by_source"] == {
+        "device": 650.0,
+        "cpu": 100.0,
+        "disk": 75.0,
+    }
+    assert len(agg["server_metrics"]["sources"]) == 2
+
+
 def test_processor_surfaces_vllm_kv_offload_transfer_stats(tmp_path: Path):
     result_dir = _write_fixture(tmp_path)
     artifact = result_dir / "aiperf_artifacts"

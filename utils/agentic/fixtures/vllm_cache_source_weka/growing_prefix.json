@@ -1,0 +1,19 @@
+{
+  "id": "vllm_cache_source_growing_prefix",
+  "models": ["Qwen/Qwen3-0.6B"],
+  "block_size": 1024,
+  "hash_id_scope": "local",
+  "requests": [
+    {"t": 0.0, "type": "n", "model": "Qwen/Qwen3-0.6B", "in": 8192, "out": 16, "hash_ids": [1, 2, 3, 4, 5, 6, 7, 8], "input_types": ["text"], "output_types": ["text"], "stop": "end_turn", "api_time": 0.1, "think_time": 0.0},
+    {"t": 0.1, "type": "n", "model": "Qwen/Qwen3-0.6B", "in": 11264, "out": 16, "hash_ids": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], "input_types": ["text"], "output_types": ["text"], "stop": "end_turn", "api_time": 0.1, "think_time": 0.0},
+    {"t": 0.2, "type": "n", "model": "Qwen/Qwen3-0.6B", "in": 14336, "out": 16, "hash_ids": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14], "input_types": ["text"], "output_types": ["text"], "stop": "end_turn", "api_time": 0.1, "think_time": 0.0},
+    {"t": 0.3, "type": "n", "model": "Qwen/Qwen3-0.6B", "in": 17408, "out": 16, "hash_ids": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17], "input_types": ["text"], "output_types": ["text"], "stop": "end_turn", "api_time": 0.1, "think_time": 0.0},
+    {"t": 0.4, "type": "n", "model": "Qwen/Qwen3-0.6B", "in": 20480, "out": 16, "hash_ids": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20], "input_types": ["text"], "output_types": ["text"], "stop": "end_turn", "api_time": 0.1, "think_time": 0.0},
+    {"t": 0.5, "type": "n", "model": "Qwen/Qwen3-0.6B", "in": 23552, "out": 16, "hash_ids": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23], "input_types": ["text"], "output_types": ["text"], "stop": "end_turn", "api_time": 0.1, "think_time": 0.0},
+    {"t": 0.6, "type": "n", "model": "Qwen/Qwen3-0.6B", "in": 26624, "out": 16, "hash_ids": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26], "input_types": ["text"], "output_types": ["text"], "stop": "end_turn", "api_time": 0.1, "think_time": 0.0},
+    {"t": 0.7, "type": "n", "model": "Qwen/Qwen3-0.6B", "in": 29696, "out": 16, "hash_ids": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29], "input_types": ["text"], "output_types": ["text"], "stop": "end_turn", "api_time": 0.1, "think_time": 0.0},
+    {"t": 0.8, "type": "n", "model": "Qwen/Qwen3-0.6B", "in": 32768, "out": 16, "hash_ids": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32], "input_types": ["text"], "output_types": ["text"], "stop": "end_turn", "api_time": 0.1, "think_time": 0.0},
+    {"t": 0.9, "type": "n", "model": "Qwen/Qwen3-0.6B", "in": 35840, "out": 16, "hash_ids": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35], "input_types": ["text"], "output_types": ["text"], "stop": "end_turn", "api_time": 0.1, "think_time": 0.0},
+    {"t": 1.0, "type": "n", "model": "Qwen/Qwen3-0.6B", "in": 38912, "out": 16, "hash_ids": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38], "input_types": ["text"], "output_types": ["text"], "stop": "end_turn", "api_time": 0.1, "think_time": 0.0}
+  ]
+}
