@@ -7186,7 +7186,7 @@ dsv4-fp4-gb300-dynamo-vllm-agentic:
 # model performance. Remove the temporary image once the vLLM PR has a durable
 # published build.
 qwen3small-bf16-h100-vllm-agentic-cache-source:
-  image: ttl.sh/cquil11-vllm-tier-2aae64f950-20260827:24h
+  image: ttl.sh/cquil11-vllm-tier-dfb25dbef4-20260828:24h
   model: Qwen/Qwen3-0.6B
   model-prefix: qwen3small
   runner: cluster:h100-dgxc
