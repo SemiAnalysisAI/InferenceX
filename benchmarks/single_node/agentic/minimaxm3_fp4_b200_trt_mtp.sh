@@ -45,6 +45,9 @@ fi
 nvidia-smi
 resolve_trace_source
 install_agentic_deps
+# rc23 gates Prometheus and its expensive per-step timing collector behind the
+# same option. Keep Prometheus request/iteration metrics without timing payloads.
+disable_trtllm_detailed_perf_metrics
 
 # kv_cache_config.host_cache_size is pinned per topology in ser.yaml below
 # (200 GiB at TP8, 250 GiB at TP4 -- see $mem_off), NOT derived from
