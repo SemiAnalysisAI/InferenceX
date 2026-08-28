@@ -114,6 +114,8 @@ if [ "$DP_ATTENTION" = "true" ]; then
     export SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_MXF4_KIND=1
     export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=8320
 
+    # Leave HBM headroom for the FP4 indexer's context-dependent workspace.
+    MEM_FRACTION_STATIC=0.88
     PREFILL_DECODE_INTERVAL=24
 
     # Keep DP admission and session routing uniform across the DEP8 curve.
@@ -121,10 +123,6 @@ if [ "$DP_ATTENTION" = "true" ]; then
     METRICS_ARGS+=(--load-snapshot-publish-interval 1)
     export AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID=true
     if [ "$CONC" -eq 160 ]; then
-        # Leave enough HBM for the FP4 indexer's context-dependent workspace.
-        # At 0.90 the canonical NScale warmup had 3.68 GiB free when the
-        # indexer requested 5.27 GiB; 0.88 adds about 3.57 GiB of headroom.
-        MEM_FRACTION_STATIC=0.88
         PREFILL_DECODE_INTERVAL=20
         ROUTER_POLICY_ARGS+=(--balance-abs-threshold 32)
     fi
