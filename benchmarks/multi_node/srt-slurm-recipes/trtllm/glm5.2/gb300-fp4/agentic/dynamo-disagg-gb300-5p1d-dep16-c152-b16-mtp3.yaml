@@ -179,4 +179,4 @@ benchmark:
     AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
     AIPERF_REQUIRED_SERVER_METRIC_PREFIX: trtllm_kv_cache_utilization
     OPENAI_API_KEY: EMPTY
-    KV_OFFLOADING: none
+    KV_OFFLOADING: dram
