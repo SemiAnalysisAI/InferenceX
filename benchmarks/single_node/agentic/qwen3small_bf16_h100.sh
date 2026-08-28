@@ -44,9 +44,16 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 OFFLOAD_ARGS=()
+GPU_MEMORY_UTILIZATION=0.80
+EXPECTED_CACHE_SOURCE=device
 if [[ "$KV_OFFLOADING" == "none" ]]; then
     require_agentic_kv_offload_none
 elif require_agentic_kv_offload_backend vllm-simple; then
+    # Keep only enough GPU KV for one native-length request. Multiple AgentX
+    # lanes then evict one another's prefixes into the CPU tier and exercise
+    # physical reload attribution, rather than reporting device hits only.
+    GPU_MEMORY_UTILIZATION=0.10
+    EXPECTED_CACHE_SOURCE=cpu
     CPU_OFFLOAD_BYTES=$((TOTAL_CPU_DRAM_GB * 1000 * 1000 * 1000))
     OFFLOAD_CONFIG=$(printf \
         '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"kv_offload_backend":"cpu","cpu_bytes_to_use":%d,"lazy_offload":false}}' \
@@ -60,8 +67,10 @@ fi
 export AIPERF_SERVER_METRICS_URLS="http://127.0.0.1:${PORT}/metrics"
 export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="vllm:"
 export PYTHONNOUSERSITE=1
-export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
 export VLLM_ENABLE_CUDA_COMPATIBILITY=1
+# Qwen3-0.6B's native context is 40,960 tokens. Use the same limit for vLLM
+# and AgentX trace selection so an oversized warmup request cannot reach CUDA.
+export MAX_MODEL_LEN=40960
 
 VLLM_CMD=(
     vllm serve "$MODEL_PATH"
@@ -69,9 +78,9 @@ VLLM_CMD=(
     --host 0.0.0.0
     --port "$PORT"
     --tensor-parallel-size 1
-    --max-model-len 262144
+    --max-model-len "$MAX_MODEL_LEN"
     --max-num-seqs 8
-    --gpu-memory-utilization 0.80
+    --gpu-memory-utilization "$GPU_MEMORY_UTILIZATION"
     --enable-prefix-caching
     "${OFFLOAD_ARGS[@]}"
 )
@@ -88,11 +97,13 @@ else
     build_replay_cmd "$RESULT_DIR"
     run_agentic_replay_and_write_outputs "$RESULT_DIR"
 
-    python3 - "$RESULT_DIR/aiperf_artifacts/server_metrics_export.json" <<'PY'
+    python3 - "$RESULT_DIR/aiperf_artifacts/server_metrics_export.json" \
+        "$EXPECTED_CACHE_SOURCE" <<'PY'
 import json
 import sys
 
 path = sys.argv[1]
+expected_source = sys.argv[2]
 with open(path) as file:
     metrics = json.load(file).get("metrics", {})
 
@@ -112,6 +123,10 @@ if unexpected:
     raise SystemExit(f"unexpected cache-source labels: {sorted(unexpected)}")
 if sum(totals.values()) <= 0:
     raise SystemExit(f"no positive cached-token source samples: {totals}")
+if totals.get(expected_source, 0) <= 0:
+    raise SystemExit(
+        f"expected positive {expected_source!r} cached-token samples: {totals}"
+    )
 print(f"validated AgentX cached-token sources: {totals}")
 PY
 fi
