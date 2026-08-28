@@ -38,6 +38,7 @@ class PlatformRegistryTests(unittest.TestCase):
     NETWORK_FIELDS = {
         "socket_ifname", "rdma_devices", "ib_gid_index",
         "rdma_service_level", "rdma_traffic_class", "rail_isolated",
+        "single_node_rdma_devices",
     }
 
     def test_every_platform_entry_is_complete_and_typed(self) -> None:
@@ -144,6 +145,48 @@ class ConfigTests(unittest.TestCase):
         self.assertIn(b"COLLX_PARTITION\0main\0", payload)
         self.assertIn(b"COLLX_SQUASH_DIR\0/home/sa-shared/containers\0", payload)
         self.assertIn(b"COLLX_RDMA_DEVICES\0", payload)
+
+class SingleNodeHcaOverrideTests(unittest.TestCase):
+    # collx_apply_network_profile's single-node early return must still honor a
+    # SKU's pinned single-node HCA list (b300: DeepEP's legacy LL Buffer
+    # self-enables IBGDA even single-node, and only the storage-IB rails accept
+    # AH/DCT creation), while scale-out runs keep resolving NVSHMEM_HCA_LIST
+    # from the ordinary scale-out selector.
+    @staticmethod
+    def _profile_env(script: str) -> str:
+        completed = subprocess.run(
+            ["bash", "-c", script], cwd=RUNTIME.parent,
+            capture_output=True, text=True, check=True,
+        )
+        return completed.stdout.strip().splitlines()[-1]
+
+    def test_single_node_override_exports_the_pinned_hca_list(self) -> None:
+        line = self._profile_env(
+            "source runtime/common.sh 2>/dev/null;"
+            " export COLLX_SINGLE_NODE_RDMA_DEVICES='mlx5_12:1,mlx5_13:1';"
+            " collx_apply_network_profile 1 nvlink;"
+            " echo \"${NVSHMEM_HCA_LIST:-unset}\""
+        )
+        self.assertEqual(line, "mlx5_12:1,mlx5_13:1")
+
+    def test_single_node_without_override_exports_nothing(self) -> None:
+        line = self._profile_env(
+            "source runtime/common.sh 2>/dev/null;"
+            " collx_apply_network_profile 1 nvlink;"
+            " echo \"${NVSHMEM_HCA_LIST:-unset}\""
+        )
+        self.assertEqual(line, "unset")
+
+    def test_scale_out_ignores_the_single_node_selector(self) -> None:
+        line = self._profile_env(
+            "source runtime/common.sh 2>/dev/null;"
+            " export COLLX_SINGLE_NODE_RDMA_DEVICES='mlx5_12:1';"
+            " export COLLX_RDMA_DEVICES='mlx5_0:1,mlx5_1:1';"
+            " collx_apply_network_profile 2 nvlink-rdma;"
+            " echo \"${NVSHMEM_HCA_LIST:-unset}\""
+        )
+        self.assertEqual(line, "mlx5_0:1,mlx5_1:1")
+
 
 class StageTests(unittest.TestCase):
     def test_create_copy_and_validate_cleanup(self) -> None:

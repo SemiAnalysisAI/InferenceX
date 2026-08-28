@@ -279,7 +279,6 @@ def test_nvidia_srt_launchers_prepare_kimi_eval_dispatch() -> None:
     launchers = (
         REPO_ROOT / "runners/launch_h100-dgxc-slurm.sh",
         REPO_ROOT / "runners/launch_h200-dgxc-slurm.sh",
-        REPO_ROOT / "runners/launch_b200-dgxc.sh",
         REPO_ROOT / "runners/launch_b200-nscale-slurm.sh",
         REPO_ROOT / "runners/launch_b300-nv.sh",
         REPO_ROOT / "runners/launch_gb200-nv.sh",
@@ -315,21 +314,35 @@ def test_gb200_kimi_compilation_config_preserves_all_settings() -> None:
         assert compilation_config["pass_config"]["fuse_allreduce_rms"] is False
 
 
-def test_gb200_dynamo_kimi_recipes_configure_tool_parser() -> None:
+def test_gb200_kimi_recipes_configure_tool_parser() -> None:
     recipe_dir = (
         REPO_ROOT / "benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic"
     )
-    recipes = [
-        yaml.safe_load(path.read_text())
-        for path in recipe_dir.glob("agg-gb200-*-agentic.yaml")
-    ]
+    recipe_paths = sorted(recipe_dir.glob("agg-gb200-*-agentic.yaml"))
+    frontend_counts = {"dynamo": 0, "vllm": 0}
 
-    assert recipes
-    for recipe in recipes:
+    assert len(recipe_paths) == 11
+    for recipe_path in recipe_paths:
+        recipe = yaml.safe_load(recipe_path.read_text())
         frontend = recipe["frontend"]
-        assert frontend["type"] == "dynamo"
+        frontend_type = frontend["type"]
         config = recipe["backend"]["vllm_config"]["aggregated"]
-        assert config["dyn-tool-call-parser"] == "kimi_k3"
+        assert frontend_type in frontend_counts, recipe_path
+        frontend_counts[frontend_type] += 1
+        if frontend_type == "dynamo":
+            args = frontend["args"]
+            assert args["dyn-chat-processor"] == "vllm", recipe_path
+            assert args["tool-call-parser"] == "kimi_k3", recipe_path
+            assert args["reasoning-parser"] == "kimi_k3", recipe_path
+            assert args["enable-auto-tool-choice"] is True, recipe_path
+            assert config["dyn-tool-call-parser"] == "kimi_k3", recipe_path
+            assert config["dyn-reasoning-parser"] == "kimi_k3", recipe_path
+        else:
+            assert config["enable-auto-tool-choice"] is True, recipe_path
+            assert config["tool-call-parser"] == "kimi_k3", recipe_path
+            assert config["reasoning-parser"] == "kimi_k3", recipe_path
+
+    assert frontend_counts == {"dynamo": 6, "vllm": 5}
 
 
 def test_gb200_dynamo_minimax_recipes_configure_frontend_tool_parser() -> None:
@@ -388,7 +401,7 @@ def test_dynamo_sglang_agentic_recipes_parse_tools_at_frontend() -> None:
             assert args["reasoning-parser"] == reasoning_parser, recipe_path
             checked += 1
 
-    assert checked == 14
+    assert checked == 15
 
 
 def test_swebench_container_paths_forward_modal_credentials() -> None:

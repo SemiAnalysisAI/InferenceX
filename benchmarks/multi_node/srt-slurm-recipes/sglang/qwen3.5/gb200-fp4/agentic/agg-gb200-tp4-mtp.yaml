@@ -2,12 +2,12 @@ name: qwen35-gb200-sglang-agentic-mtp-agg-tp4
 
 model:
   path: qwen3.5-fp4
-  container: dynamo-sglang
+  container: lmsysorg/sglang:nightly-dev-20260818-c0b6474b
   precision: fp4
 
 identity:
   model: { repo: nvidia/Qwen3.5-397B-A17B-NVFP4-V2 }
-  container: { image: lmsysorg/sglang:v0.5.17-cu130 }
+  container: { image: lmsysorg/sglang:nightly-dev-20260818-c0b6474b }
 
 slurm: { time_limit: "8:00:00" }
 health_check: { max_attempts: 2160, interval_seconds: 10 }
@@ -61,7 +61,7 @@ backend:
       speculative-eagle-topk: 1
       speculative-num-draft-tokens: 4
       cuda-graph-max-bs: 64
-      max-running-requests: 160
+      max-running-requests: 80
       max-prefill-tokens: 16384
       chunked-prefill-size: 16384
       mem-fraction-static: 0.80
@@ -71,6 +71,9 @@ backend:
       scheduler-recv-interval: 10
       tokenizer-worker-num: 6
       mamba-max-states-per-path: 1
+      weight-loader-prefetch-checkpoints: true
+      weight-loader-prefetch-num-threads: 4
+      weight-loader-drop-cache-after-load: true
       enable-metrics: true
       enable-cache-report: true
 

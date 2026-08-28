@@ -10,7 +10,8 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 
 
 check_env_vars \
-    MODEL TP CONC EP_SIZE RESULT_DIR DURATION
+    MODEL TP CONC EP_SIZE KV_OFFLOADING \
+    TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
 
 SCHEDULER_RECV_INTERVAL=${SCHEDULER_RECV_INTERVAL:-30}
 
@@ -51,6 +52,22 @@ cleanup_agentic_services() {
 trap cleanup_agentic_services EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
+
+CACHE_ARGS=()
+if require_agentic_kv_offload_backend hicache; then
+    HICACHE_RATIO="${HICACHE_RATIO:-1.5}"
+    HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through}"
+    HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
+    HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first_direct}"
+    echo "HiCache CPU tier: ratio=$HICACHE_RATIO, write_policy=$HICACHE_WRITE_POLICY, io_backend=$HICACHE_IO_BACKEND, mem_layout=$HICACHE_MEM_LAYOUT, dram_budget=${TOTAL_CPU_DRAM_GB} GB, tp=$TP"
+    CACHE_ARGS=(
+        --enable-hierarchical-cache
+        --hicache-ratio "$HICACHE_RATIO"
+        --hicache-write-policy "$HICACHE_WRITE_POLICY"
+        --hicache-io-backend "$HICACHE_IO_BACKEND"
+        --hicache-mem-layout "$HICACHE_MEM_LAYOUT"
+    )
+fi
 
 PARALLEL_ARGS=(
     --tp "$TP"
@@ -93,6 +110,7 @@ SGLANG_CMD=(
     --model-loader-extra-config '{"enable_multithread_load": true}'
     --watchdog-timeout 1200
     --page-size 16
+    --kv-cache-dtype fp8_e4m3
     --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
     --max-prefill-tokens 32768
@@ -109,6 +127,7 @@ SGLANG_CMD=(
     --speculative-num-draft-tokens 4
     --enable-metrics
     --enable-cache-report
+    "${CACHE_ARGS[@]}"
 )
 
 printf '%q ' "${SGLANG_CMD[@]}" | tee "$RESULT_DIR/sglang_command.txt"

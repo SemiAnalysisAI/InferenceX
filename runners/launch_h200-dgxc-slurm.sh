@@ -7,6 +7,12 @@ SLURM_ACCOUNT="sa-shared"
 HF_HUB_CACHE_MOUNT="${HF_HUB_CACHE_MOUNT:-/models/gharunners/hf-hub-cache}"
 AIPERF_MMAP_CACHE_HOST_PATH="${AIPERF_MMAP_CACHE_HOST_PATH:-/home/sa-shared/gharunners/ai-perf-cache}"
 
+# Immutable producer prerequisite for the GLM-5.2 AgentX lane. This fork is
+# intentionally long-lived; update the SHA only after reviewing a new fork
+# commit and re-running the H200 hardware gate.
+POWER_SRT_SLURM_URL="https://github.com/edwingao28/srt-slurm.git"
+POWER_SRT_SLURM_PIN="e5c837f06a362dc888dfea2ee588e9f19c298270"
+
 set -x
 
 source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
@@ -19,6 +25,34 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     fi
     CONFIG_PATH="${CONFIG_FILE%%:*}"
     LOCAL_CONFIG_FILE="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/${CONFIG_PATH#recipes/}"
+
+    # The producer pin decision is recipe-driven. Upstream-only recipes have
+    # no workspace mirror and remain non-power.
+    USES_DCGM_POWER=0
+    _RECIPE_REL="${CONFIG_FILE%%:*}"
+    _RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/${_RECIPE_REL#recipes/}"
+    if [[ -n "$CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
+        /^telemetry:/ { t = 1; next }
+        t && /^[^ ]/  { t = 0 }
+        t && /^  provider: dcgm-power$/ { p = 1 }
+        t && /^  enabled: true$/        { e = 1 }
+        END { exit !(p && e) }
+    ' "$_RECIPE_SRC"; then
+        USES_DCGM_POWER=1
+    fi
+
+    # Only explicitly reviewed H200 FP8 AgentX recipes may use dcgm-power.
+    # Future recipes must earn a separate cluster smoke instead of inheriting
+    # this lane.
+    if [[ "$USES_DCGM_POWER" == "1" && (
+        "$IS_AGENTIC" != "1" ||
+        "$FRAMEWORK" != "dynamo-sglang" ||
+        ( "$MODEL_PREFIX" != "glm5.2" && "$MODEL_PREFIX" != "dsv4" ) ||
+        "$PRECISION" != "fp8"
+    ) ]]; then
+        echo "Error: H200 dcgm-power is validated only for AgentX dynamo-sglang glm5.2/fp8 or dsv4/fp8" >&2
+        exit 1
+    fi
 
     # MODEL_PATH: Override with pre-downloaded paths on H200 runner
     # The yaml files specify HuggingFace model IDs for portability, but we use
@@ -74,11 +108,32 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         rm -rf "$SRT_REPO_DIR"
     fi
 
-    if [[ $IS_AGENTIC == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.2" ]]; then
-        # v1.0.44 includes the AgentX custom benchmark integration and passes
-        # every logical SGLang worker's Prometheus URL to AIPerf.
-        git clone --branch v1.0.44 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-        cd "$SRT_REPO_DIR"
+    if [[ $IS_AGENTIC == "1" && $FRAMEWORK == "dynamo-sglang" && (
+        "$MODEL_PREFIX" == "glm5.2" || "$MODEL_PREFIX" == "dsv4"
+    ) ]]; then
+        if [[ "$USES_DCGM_POWER" == "1" ]]; then
+            # The pinned fork carries the v1.0.44 AgentX lifecycle plus the formal
+            # custom-benchmark dcgm-power contract used by the allowlisted recipes.
+            git clone "$POWER_SRT_SLURM_URL" "$SRT_REPO_DIR"
+            cd "$SRT_REPO_DIR"
+            git checkout "$POWER_SRT_SLURM_PIN" || exit 1
+            test "$(git rev-parse HEAD)" = "$POWER_SRT_SLURM_PIN" || { echo "Error: srt-slurm HEAD does not match POWER_SRT_SLURM_PIN=$POWER_SRT_SLURM_PIN" >&2; exit 1; }
+            git rev-parse HEAD > "$GITHUB_WORKSPACE/power-producer-sha.txt"
+        elif [[ "$MODEL_PREFIX" == "dsv4" ]]; then
+            # Non-power DSV4 runs keep the upstream release their perf-changelog
+            # provenance records. v1.0.38 also injects every logical SGLang worker
+            # leader's /metrics URL into AIPERF_SERVER_METRICS_URLS for custom
+            # benchmarks; v1.0.10 wired that only for built-in AIPerf runners, so
+            # the AgentX trace artifacts came back with no backend engine series
+            # behind them.
+            git clone --branch v1.0.38 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+            cd "$SRT_REPO_DIR"
+        else
+            # v1.0.44 includes the AgentX custom benchmark integration and passes
+            # every logical SGLang worker's Prometheus URL to AIPerf.
+            git clone --branch v1.0.44 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+            cd "$SRT_REPO_DIR"
+        fi
     elif [[ $IS_AGENTIC == "1" && $FRAMEWORK == "vllm" && $MODEL_PREFIX == "kimik3" ]]; then
         git clone https://github.com/functionstackx/srt-slurm-nv.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR"
@@ -86,18 +141,6 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         mkdir -p recipes/vllm/kimi-k3/agentic
         cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
             recipes/vllm/kimi-k3/agentic
-    elif [[ $IS_AGENTIC == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
-        # Overlay the single H200 aggregated recipe on the upstream release
-        # that provides custom benchmarks, Dynamo wheels, and affinity config.
-        # v1.0.38 also injects every logical SGLang worker leader's /metrics URL
-        # into AIPERF_SERVER_METRICS_URLS for custom benchmarks; v1.0.10 wired
-        # that only for built-in AIPerf runners, so the AgentX trace artifacts
-        # came back with no backend engine series behind them.
-        git clone --branch v1.0.38 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-        cd "$SRT_REPO_DIR"
-        mkdir -p recipes/sglang/deepseek-v4/agentic
-        cp "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/agentic/agg-h200-tp8-mtp-kvoffload.yaml" \
-            recipes/sglang/deepseek-v4/agentic/
     elif [[ "$IS_AGENTIC" == "1" ]]; then
         git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR"
@@ -166,6 +209,32 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
             "
     fi
 
+    if [[ "$USES_DCGM_POWER" == "1" ]]; then
+        DCGM_EXPORTER_IMAGE="nvcr.io/nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless"
+        DCGM_EXPORTER_SQSH="/data/gharunners/containers/$(echo "$DCGM_EXPORTER_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+        if ! unsquashfs -l "$DCGM_EXPORTER_SQSH" >/dev/null 2>&1; then
+            DCGM_EXPORTER_LOCK="${DCGM_EXPORTER_SQSH}.lock"
+            mkdir -p "$(dirname "$DCGM_EXPORTER_SQSH")"
+            srun --partition="$SLURM_PARTITION" --account="$SLURM_ACCOUNT" \
+                --nodes=1 --ntasks=1 --time=30 --job-name="$RUNNER_NAME" \
+                bash -c "
+                    set -euo pipefail
+                    exec 9>\"$DCGM_EXPORTER_LOCK\"
+                    flock -w 1800 9
+                    if unsquashfs -l \"$DCGM_EXPORTER_SQSH\" >/dev/null 2>&1; then
+                        exit 0
+                    fi
+                    rm -f \"$DCGM_EXPORTER_SQSH\"
+                    export ENROOT_CACHE_PATH=\${HOME}/.cache/enroot
+                    mkdir -p \"\$ENROOT_CACHE_PATH\"
+                    enroot import -o \"$DCGM_EXPORTER_SQSH\" docker://$DCGM_EXPORTER_IMAGE
+                "
+        fi
+        test -r "$DCGM_EXPORTER_SQSH" || { echo "Error: DCGM exporter squash is not readable: $DCGM_EXPORTER_SQSH" >&2; exit 1; }
+        unsquashfs -l "$DCGM_EXPORTER_SQSH" >/dev/null || { echo "Error: DCGM exporter squash is invalid: $DCGM_EXPORTER_SQSH" >&2; exit 1; }
+        sha256sum "$DCGM_EXPORTER_SQSH" > "$GITHUB_WORKSPACE/exporter-image.sha256"
+    fi
+
     export ISL="$ISL"
     export OSL="$OSL"
     export EVAL_ONLY="${EVAL_ONLY:-false}"
@@ -217,6 +286,11 @@ use_exclusive_sbatch_directive: false
 ${DEFAULT_MOUNTS_BLOCK}
 EOF
 
+    if [[ "$USES_DCGM_POWER" == "1" ]]; then
+        sed -i "/^  nginx-sqsh:/a\\  dcgm-exporter: ${DCGM_EXPORTER_SQSH}" srtslurm.yaml
+        grep -q "^  dcgm-exporter: " srtslurm.yaml || { echo "Error: dcgm-exporter injection failed: nginx-sqsh anchor not found in srtslurm.yaml" >&2; exit 1; }
+    fi
+
     echo "Generated srtslurm.yaml:"
     cat srtslurm.yaml
 
@@ -226,6 +300,12 @@ EOF
     if [[ -f "$LOCAL_CONFIG_FILE" ]]; then
         mkdir -p "$(dirname "$CONFIG_PATH")"
         cp "$LOCAL_CONFIG_FILE" "$CONFIG_PATH"
+    fi
+
+    if [[ "$USES_DCGM_POWER" == "1" ]]; then
+        read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
+        python "$GITHUB_WORKSPACE/runners/inject_srt_power_concurrencies.py" \
+            "$CONFIG_PATH" "${POWER_CONCURRENCIES[@]}"
     fi
 
     # Export eval-related env vars for srt-slurm post-benchmark eval
@@ -277,6 +357,30 @@ EOF
     fi
 
     echo "Found logs directory: $LOGS_DIR"
+
+    if [[ "$USES_DCGM_POWER" == "1" ]]; then
+        POWER_LOGS_ROOT=$(cd "$LOGS_DIR" && pwd -P)
+        read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
+        for concurrency in "${POWER_CONCURRENCIES[@]}"; do
+            power_args=(
+                --result-dir "$POWER_LOGS_ROOT/agentic/conc_${concurrency}"
+                --agg-result "$GITHUB_WORKSPACE/${RESULT_FILENAME}_conc${concurrency}.json"
+                --power-dir "$POWER_LOGS_ROOT/power"
+                --logs-root "$POWER_LOGS_ROOT"
+                --expected-producer-sha "$POWER_SRT_SLURM_PIN"
+            )
+            case "${REQUIRE_POWER:-0}" in
+                1|true|TRUE|yes|YES) power_args+=(--require-power) ;;
+            esac
+            (
+                cd "$GITHUB_WORKSPACE"
+                python -m utils.agentic.aggregation.power_adapter "${power_args[@]}"
+            ) || exit 1
+        done
+        mkdir -p "$LOGS_DIR/power"
+        cp "$GITHUB_WORKSPACE/exporter-image.sha256" "$LOGS_DIR/power/exporter-image.sha256"
+        cp "$GITHUB_WORKSPACE/power-producer-sha.txt" "$LOGS_DIR/power/power-producer-sha.txt"
+    fi
 
     cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
     bundle_server_logs "$LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"
@@ -356,7 +460,7 @@ EOF
     find . -name '.nfs*' -delete 2>/dev/null || true
 
 else
-    SQUASH_FILE="/data/gharunners/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    SQUASH_FILE="/data/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
     # Convert pyxis image format (nvcr.io#path) to docker format (nvcr.io/path) for enroot import
     DOCKER_IMAGE=$(echo "$IMAGE" | sed 's/#/\//g')

@@ -3170,7 +3170,7 @@ build_replay_cmd() {
     # rolling TTFT/ITL/throughput block and emit it every 30 seconds.
     export AIPERF_UI_REALTIME_METRICS_ENABLED=true
     REPLAY_CMD="$AIPERF_CLI profile --scenario inferencex-agentx-mvp"
-    REPLAY_CMD+=" --url http://localhost:$PORT"
+    REPLAY_CMD+=" --url ${AIPERF_SERVER_URL:-http://localhost:$PORT}"
     REPLAY_CMD+=" --endpoint /v1/chat/completions"
     REPLAY_CMD+=" --endpoint-type chat"
     REPLAY_CMD+=" --streaming"
@@ -3358,10 +3358,79 @@ validate_required_agentic_server_metrics() {
     echo "Validated required AIPerf server metrics prefix '$required_prefix'"
 }
 
-run_agentic_replay_and_write_outputs() {
+run_agentic_replay_and_write_outputs() (
     local result_dir="$1"
     local replay_rc
     local validation_rc
+    local power_rc=0
+    local agentx_power_enabled=0
+    local agentx_multinode_power_enabled=0
+    local agentx_monitor_stopped=1
+
+    case "${ENABLE_AGENTX_POWER:-1}" in
+        1|true|TRUE|yes|YES)
+            if [ "${IS_MULTINODE:-false}" = "true" ]; then
+                if [ -n "${SRT_MEASUREMENT_WINDOW_DIR:-}" ]; then
+                    agentx_multinode_power_enabled=1
+                fi
+            else
+                agentx_power_enabled=1
+            fi
+            ;;
+    esac
+
+    _stop_agentx_power_monitor() {
+        if [ "$agentx_monitor_stopped" = "0" ]; then
+            agentx_monitor_stopped=1
+            stop_gpu_monitor
+        fi
+    }
+
+    _write_agentx_multinode_window() {
+        local state="$1"
+        local -a power_args
+        power_args=(
+            --result-dir "$result_dir"
+            --concurrency "${CONC:?CONC must be set for multinode AgentX power}"
+            --write-multinode-window "$state"
+        )
+        case "${REQUIRE_POWER:-0}" in
+            1|true|TRUE|yes|YES) power_args+=(--require-power) ;;
+        esac
+        (
+            cd "$INFMAX_CONTAINER_WORKSPACE"
+            "$AIPERF_PYTHON" -m utils.agentic.aggregation.power_adapter "${power_args[@]}"
+        )
+    }
+
+    if [ "$agentx_power_enabled" = "1" ] || [ "$agentx_multinode_power_enabled" = "1" ]; then
+        # AIPerf currently exports naive local datetimes while SMI emits the
+        # same host wall clock. Capture the launch-time offset so the adapter
+        # can attach it explicitly before normalizing the profiling window.
+        date +%z > "$result_dir/agentic_power_timezone_offset.txt"
+    fi
+
+    if [ "$agentx_multinode_power_enabled" = "1" ]; then
+        set +e
+        _write_agentx_multinode_window running
+        power_rc=$?
+        set -e
+        if [ "$power_rc" -ne 0 ]; then
+            echo "ERROR: failed to publish the AgentX formal running power window" >&2
+            return "$power_rc"
+        fi
+    fi
+
+    if [ "$agentx_power_enabled" = "1" ]; then
+        start_gpu_monitor --output "$result_dir/gpu_metrics.csv"
+        agentx_monitor_stopped=0
+        # This function runs in a subshell, so these handlers cannot replace
+        # launcher-owned traps. The stopped flag keeps explicit and signal/EXIT
+        # cleanup idempotent.
+        trap '_stop_agentx_power_monitor' EXIT
+        trap '_stop_agentx_power_monitor; exit 130' INT
+        trap '_stop_agentx_power_monitor; exit 143' TERM
+    fi
 
     echo "$REPLAY_CMD" > "$result_dir/benchmark_command.txt"
 
@@ -3372,7 +3441,40 @@ run_agentic_replay_and_write_outputs() {
     set +x
     set -e
 
+    if [ "$agentx_power_enabled" = "1" ]; then
+        _stop_agentx_power_monitor
+        trap - EXIT INT TERM
+    fi
+
     write_agentic_result_json "$result_dir"
+
+    if [ "$agentx_multinode_power_enabled" = "1" ] && [ "$replay_rc" -eq 0 ]; then
+        set +e
+        _write_agentx_multinode_window completed
+        power_rc=$?
+        set -e
+    fi
+
+    if [ "$agentx_power_enabled" = "1" ]; then
+        local expected_num_gpus
+        local -a power_args
+        expected_num_gpus=$((${TP:-1} * ${PP_SIZE:-1} * ${PCP_SIZE:-1}))
+        power_args=(
+            --result-dir "$result_dir"
+            --agg-result "${AGENTIC_OUTPUT_DIR:-$INFMAX_CONTAINER_WORKSPACE}/$RESULT_FILENAME.json"
+            --expected-num-gpus "$expected_num_gpus"
+        )
+        case "${REQUIRE_POWER:-0}" in
+            1|true|TRUE|yes|YES) power_args+=(--require-power) ;;
+        esac
+        set +e
+        (
+            cd "$INFMAX_CONTAINER_WORKSPACE"
+            "$AIPERF_PYTHON" -m utils.agentic.aggregation.power_adapter "${power_args[@]}"
+        )
+        power_rc=$?
+        set -e
+    fi
 
     "$AIPERF_PYTHON" "$AGENTIC_DIR/scripts/analyze_benchmark_distributions.py" \
         "$result_dir/aiperf_artifacts" -o "$result_dir" 2>&1 || true
@@ -3397,5 +3499,10 @@ run_agentic_replay_and_write_outputs() {
         return "$validation_rc"
     fi
 
+    if [ "$power_rc" -ne 0 ]; then
+        echo "ERROR: AgentX power validation failed after writing audit artifacts" >&2
+        return "$power_rc"
+    fi
+
     validate_required_agentic_server_metrics "$result_dir"
-}
+)

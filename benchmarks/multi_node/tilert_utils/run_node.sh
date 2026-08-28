@@ -23,6 +23,18 @@ PREFILL_KV_DTYPE=${PREFILL_KV_DTYPE:-fp8_ds_mla}
 PREFILL_SPEC=(--speculative-config '{"method":"mtp","num_speculative_tokens":1}')
 DECODE_MTP=(--with-mtp)
 
+TILERT_IS_AGENTIC=0
+if [[ "${IS_AGENTIC:-0}" == "1" || "${SCENARIO_TYPE:-}" == "agentic-coding" ]]; then
+    TILERT_IS_AGENTIC=1
+fi
+
+if [[ "$TILERT_IS_AGENTIC" == "1" ]]; then
+    TILERT_QUEUE_TIMEOUT=${TILERT_QUEUE_TIMEOUT:-1800}
+fi
+TILERT_QUEUE_TIMEOUT=${TILERT_QUEUE_TIMEOUT:-0}
+
+AGENTIC_LOGS_DIR=${AGENTIC_LOGS_DIR:-$RESULT_DIR/LOGS/agentic}
+
 : "${DECODE_HOST:?DECODE_HOST is unset -- submit.sh must export it}"
 : "${PREFILL_HOST:?PREFILL_HOST is unset -- submit.sh must export it}"
 : "${TILERT_ROLE:?TILERT_ROLE is unset -- submit.sh must set it to decode or prefill}"
@@ -156,8 +168,10 @@ start_decode() {
 }
 
 start_prefill() {
+    local served=("$MODEL_NAME")
+    [[ -n "${MODEL:-}" && "$MODEL" != "$MODEL_NAME" ]] && served+=("$MODEL")
     local cmd=(vllm serve "$MODEL_PATH"
-        --served-model-name "$MODEL_NAME" --port "$PREFILL_PORT"
+        --served-model-name "${served[@]}" --port "$PREFILL_PORT"
         --tensor-parallel-size "$PREFILL_TP" --max-model-len "$MAX_MODEL_LEN"
         --enforce-eager --trust-remote-code --return-tokens-as-token-ids
         --gpu-memory-utilization "$GPU_MEM_UTIL" --kv-cache-dtype "$PREFILL_KV_DTYPE"
@@ -171,7 +185,8 @@ start_router() {
     local cmd=(env CUDA_VISIBLE_DEVICES= "${PY:-python}" -m tilert.pd_vllm.pd_router
         --vllm-url "http://$PREFILL_HOST:$PREFILL_PORT"
         --decode "$DECODE_HOST:$DECODE_CTRL_PORT:$DECODE_HTTP_PORT"
-        --port "$ROUTER_PORT" --model-path "$MODEL_PATH" --parser "$TILERT_PARSER")
+        --port "$ROUTER_PORT" --model-path "$MODEL_PATH" --parser "$TILERT_PARSER"
+        --queue-timeout "$TILERT_QUEUE_TIMEOUT")
     log_and_run_bg router "$BENCHMARK_LOGS_DIR/tilert_router.log" "${cmd[@]}"
     ROUTER_PID=$LAST_BG_PID
 }
@@ -213,16 +228,37 @@ run_bench_and_eval() {
             || { rc=$?; echo "[bench] WARNING: conc=$conc failed/timed out (rc=$rc)"; }
     done
     fi
-    if [[ "${RUN_EVAL}" = "true" ]]; then
-        if [[ -n "${EVAL_CONC:-}" ]]; then
-            export EVAL_CONCURRENT_REQUESTS="$EVAL_CONC"
-        else
-            export EVAL_CONCURRENT_REQUESTS="$(tr ' ' '\n' <<< "$CONC_LIST" | sort -n | tail -1)"
-        fi
-        export CONC="$EVAL_CONCURRENT_REQUESTS"
-        run_eval --port "$ROUTER_PORT"
-        append_lm_eval_summary
+    run_lm_eval
+    return $rc
+}
+
+run_lm_eval() {
+    [[ "${RUN_EVAL}" = "true" ]] || return 0
+    if [[ -n "${EVAL_CONC:-}" ]]; then
+        export EVAL_CONCURRENT_REQUESTS="$EVAL_CONC"
+    else
+        export EVAL_CONCURRENT_REQUESTS="$(tr ' ' '\n' <<< "$CONC_LIST" | sort -n | tail -1)"
     fi
+    export CONC="$EVAL_CONCURRENT_REQUESTS"
+    run_eval --port "$ROUTER_PORT"
+    append_lm_eval_summary
+}
+
+run_agentic_replay() {
+    wait_for_server_ready --port "$ROUTER_PORT" \
+        --server-log "$BENCHMARK_LOGS_DIR/tilert_router.log" --server-pid "$ROUTER_PID"
+    local rc=0 conc conc_result_dir
+    local result_filename_base="$RESULT_FILENAME"
+    for conc in $CONC_LIST; do
+        conc_result_dir="$AGENTIC_LOGS_DIR/conc_${conc}"
+        mkdir -p "$conc_result_dir"
+        export CONC="$conc"
+        export RESULT_FILENAME="${result_filename_base}_conc${conc}"
+        build_replay_cmd "$conc_result_dir"
+        run_agentic_replay_and_write_outputs "$conc_result_dir" \
+            || { rc=$?; echo "[agentic] WARNING: conc=$conc failed/timed out (rc=$rc)"; }
+    done
+    export RESULT_FILENAME="$result_filename_base"
     return $rc
 }
 
@@ -249,13 +285,21 @@ case "$TILERT_ROLE" in
     prefill)
         rdma_preflight || exit 1
         rm -f "$DONE_SENTINEL"
+        if [[ "$TILERT_IS_AGENTIC" == "1" ]]; then
+            resolve_trace_source
+            install_agentic_deps
+        fi
         wait_for_tcp "$DECODE_HOST" "$DECODE_CTRL_PORT" "$DECODE_WAIT" \
             || echo "[prefill] WARNING: timed out waiting for the decode ctrl port ($DECODE_HOST:$DECODE_CTRL_PORT), starting anyway"
         start_prefill
         wait_for_tcp "$PREFILL_HOST" "$PREFILL_PORT" "${PREFILL_WAIT:-3600}" \
             || echo "[prefill] WARNING: timed out waiting for the vLLM port ($PREFILL_HOST:$PREFILL_PORT), continuing (see $BENCHMARK_LOGS_DIR/tilert_prefill.log)"
         start_router
-        run_bench_and_eval; BENCH_RC=$?
+        if [[ "$TILERT_IS_AGENTIC" == "1" ]]; then
+            run_agentic_replay; BENCH_RC=$?
+        else
+            run_bench_and_eval; BENCH_RC=$?
+        fi
         touch "$DONE_SENTINEL"
         kill "$ROUTER_PID" "$PREFILL_PID" 2>/dev/null || true
         exit $BENCH_RC
