@@ -54,7 +54,7 @@
       "scale_up_domain": 8,
       "scale_up_transport": "nvlink",
       "launcher": "single-slurm",
-      "backends": {"deepep-v2": [8, 16], "uccl-ep": [8], "nccl-ep": [8]},
+      "backends": {"deepep-v2": [8, 16], "uccl-ep": [8, 16], "nccl-ep": [8]},
       "ll_backends": {"deepep-v2": [8, 16], "uccl-ep": [8], "nccl-ep": [8]},
       "fabric": {"nic": "8x ConnectX-7-class 400G InfiniBand rails (bare metal, gdrdrv)", "switch": "InfiniBand (model not surveyed)"},
       "operator": {
