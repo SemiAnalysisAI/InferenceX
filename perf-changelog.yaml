@@ -6490,3 +6490,13 @@
     - "Required lanes promote exporter startup timeouts, launch failures, and endpoint resolution failures to blocking validation failures, so a recipe cannot publish a result whose power collection never started."
     - "Route only enabled recipes through the immutable producer fork and preserve non-power launcher revisions."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2688
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a controlled MI355X-vLLM concurrency-1 comparison against the authoritative ATOM and B300 AgentX runs: DCP1, 7 DSpark draft tokens, synthetic acceptance length 3.84, max-num-seqs 32, max-num-batched-tokens 8192, GPU memory utilization 0.88, no KV offload, and graph sizes 1/2/4/8/16/32."
+    - "Pin aigmkt/kimi-k3-vllm:latest to registry digest sha256:7f0dfe6304c9a82621f1be5fc17bd0ced3a968ba9462f05e51de28df8b4aa50d so the recovery result cannot drift with the mutable tag."
+    - "Use the control to separate ATOM framework/model-runner overhead from the residual ROCm kernel and platform gap. The earlier exploratory MI355X-vLLM C1 run used 8 draft tokens, acceptance length 4.00, max-num-seqs 8, GPU memory utilization 0.90, and a different graph ladder, then ended in an asynchronous HIP illegal-memory-access failure, so it is not comparison evidence."
+  pr-link: XXX

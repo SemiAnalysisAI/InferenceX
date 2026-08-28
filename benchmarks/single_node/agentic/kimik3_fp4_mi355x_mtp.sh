@@ -128,7 +128,11 @@ export AITER_DISABLE_FMHA_OPUS=1
 SPEC_ENABLE="${SPEC_DECODING:-}"
 case "${RESULT_FILENAME:-}" in *_spec-mtp_*) SPEC_ENABLE=mtp;; esac
 case "$CONC" in
-    1|2|4)   SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-8}" ;;
+    # Match the authoritative ATOM and B300 C1 comparator: k=7 and synthetic
+    # acceptance length 3.84. The earlier exploratory MI355X-vLLM run used
+    # k=8/4.00 and is not a framework-isolating control.
+    1)       SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-7}" ;;
+    2|4)     SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-8}" ;;
     *)       SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-0}" ;;
 esac
 if [ "$SPEC_NUM_TOKENS" -eq 0 ]; then SPEC_ENABLE=""; fi
@@ -145,7 +149,11 @@ if [ "$SPEC_ENABLE" = "mtp" ]; then
         8) SYNTHETIC_ACCEPT_LEN=4.00 ;;
         *) echo "[spec] no golden AL wired for num_speculative_tokens=$SPEC_NUM_TOKENS; take it from golden_al_distribution/kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml and add the case" >&2; exit 1 ;;
     esac
-    DRAFT_KV_DTYPE="${DRAFT_KV_DTYPE:-fp8}"
+    if [ "$CONC" -eq 1 ]; then
+        DRAFT_KV_DTYPE="${DRAFT_KV_DTYPE:-auto}"
+    else
+        DRAFT_KV_DTYPE="${DRAFT_KV_DTYPE:-fp8}"
+    fi
     SPEC_ARGS=(
         --speculative-config
         "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"$DRAFT_KV_DTYPE\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
@@ -165,7 +173,10 @@ LOAD_FORMAT="${LOAD_FORMAT:-auto}"
 echo "[load] load_format=$LOAD_FORMAT conc=$CONC"
 
 if [ -z "${MAX_NUM_SEQS:-}" ]; then
-    if [ "$DCP_SIZE" -gt 1 ]; then
+    if [ "$CONC" -eq 1 ]; then
+        # Match the authoritative ATOM C1 request-pool setting.
+        MAX_NUM_SEQS=32
+    elif [ "$DCP_SIZE" -gt 1 ]; then
         MAX_NUM_SEQS=80
     else
         MAX_NUM_SEQS=$(( CONC + CONC / 4 ))
@@ -178,23 +189,35 @@ if [ "$MAX_NUM_SEQS" -ge 80 ] && ! agentic_kv_offload_enabled; then
     echo "[mns] note: mns=$MAX_NUM_SEQS with KV_OFFLOADING=${KV_OFFLOADING:-none}. Proven on mi355x-amds_01 (8204 tok/s/GPU); OOMs on mi355x-amd_b23_07. Export MAX_NUM_SEQS=65 if HSA_STATUS_ERROR_OUT_OF_RESOURCES."
 fi
 
-SPEC_ROWS=1
-if [ "${#SPEC_ARGS[@]}" -gt 0 ]; then SPEC_ROWS=$(( SPEC_NUM_TOKENS + 1 )); fi
-if [ "$CONC" -le 4 ]; then
-    LADDER_MAX=16
-elif [ "$CONC" -le 16 ]; then
-    LADDER_MAX=32
+if [ "$CONC" -eq 1 ]; then
+    # Match ATOM's effective C1 graph ladder after its schedulability clamp.
+    MAX_CUDAGRAPH_CAPTURE_SIZE=32
+    CUDAGRAPH_CAPTURE_SIZES="1,2,4,8,16,32"
+    echo "graphs: ATOM-matched ladder [$CUDAGRAPH_CAPTURE_SIZES], DCP=$DCP_SIZE"
 else
-    LADDER_MAX=80
+    SPEC_ROWS=1
+    if [ "${#SPEC_ARGS[@]}" -gt 0 ]; then SPEC_ROWS=$(( SPEC_NUM_TOKENS + 1 )); fi
+    if [ "$CONC" -le 4 ]; then
+        LADDER_MAX=16
+    elif [ "$CONC" -le 16 ]; then
+        LADDER_MAX=32
+    else
+        LADDER_MAX=80
+    fi
+    MAX_CUDAGRAPH_CAPTURE_SIZE=$(( MAX_NUM_SEQS * SPEC_ROWS ))
+    if [ "$MAX_CUDAGRAPH_CAPTURE_SIZE" -gt "$LADDER_MAX" ]; then MAX_CUDAGRAPH_CAPTURE_SIZE=$LADDER_MAX; fi
+    CUDAGRAPH_CAPTURE_SIZES=$(seq -s, 1 "$MAX_CUDAGRAPH_CAPTURE_SIZE")
+    echo "graphs: dense ladder 1..$MAX_CUDAGRAPH_CAPTURE_SIZE (mns=$MAX_NUM_SEQS x $SPEC_ROWS rows), DCP=$DCP_SIZE"
 fi
-MAX_CUDAGRAPH_CAPTURE_SIZE=$(( MAX_NUM_SEQS * SPEC_ROWS ))
-if [ "$MAX_CUDAGRAPH_CAPTURE_SIZE" -gt "$LADDER_MAX" ]; then MAX_CUDAGRAPH_CAPTURE_SIZE=$LADDER_MAX; fi
-CUDAGRAPH_CAPTURE_SIZES=$(seq -s, 1 "$MAX_CUDAGRAPH_CAPTURE_SIZE")
-echo "graphs: dense ladder 1..$MAX_CUDAGRAPH_CAPTURE_SIZE (mns=$MAX_NUM_SEQS x $SPEC_ROWS rows), DCP=$DCP_SIZE"
 CUDAGRAPH_MODE=FULL_AND_PIECEWISE
 COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"$CUDAGRAPH_MODE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}")
 
-GPU_MEM_UTIL=0.9
+if [ "$CONC" -eq 1 ]; then
+    GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.88}"
+else
+    GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.9}"
+fi
+echo "[gap-control] conc=$CONC dcp=$DCP_SIZE spec_tokens=$SPEC_NUM_TOKENS max_num_seqs=$MAX_NUM_SEQS max_num_batched_tokens=${MAX_BATCHED_TOKENS:-8192} gpu_memory_utilization=$GPU_MEM_UTIL graphs=[$CUDAGRAPH_CAPTURE_SIZES]"
 
 VLLM_CMD=(
     vllm serve "$MODEL_PATH" --served-model-name "$MODEL"
