@@ -96,6 +96,29 @@ SERVER_PID=$!
 
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
+# Scrapers establish a counter baseline from their first observation. Ensure
+# every built-in physical tier exists at zero before warmup traffic, otherwise
+# tokens served before a newly labelled series first appears are lost from the
+# exported delta.
+python3 - "http://127.0.0.1:${PORT}" <<'PY'
+import math
+import sys
+
+from utils.validate_vllm_cache_source_metrics import snapshot
+
+builtins = {"device", "cpu", "disk", "mixed", "external"}
+observed = snapshot(sys.argv[1]).cached_by_source
+if set(observed) != builtins:
+    raise SystemExit(
+        f"startup cache-source labels differ: expected {sorted(builtins)}, "
+        f"observed {observed}"
+    )
+nonzero = {source: value for source, value in observed.items() if not math.isclose(value, 0)}
+if nonzero:
+    raise SystemExit(f"startup cache-source counters are not zero: {nonzero}")
+print(f"validated startup cache-source series: {observed}")
+PY
+
 if [[ "$EVAL_ONLY" == "true" ]]; then
     run_eval --port "$PORT"
 else
@@ -105,6 +128,7 @@ else
     python3 - "$RESULT_DIR/aiperf_artifacts/server_metrics_export.json" \
         "$EXPECTED_CACHE_SOURCE" <<'PY'
 import json
+import math
 import sys
 
 path = sys.argv[1]
@@ -112,26 +136,61 @@ expected_source = sys.argv[2]
 with open(path) as file:
     metrics = json.load(file).get("metrics", {})
 
-entry = metrics.get("vllm:prompt_tokens_cached_by_source")
-if not isinstance(entry, dict):
-    raise SystemExit("missing vllm:prompt_tokens_cached_by_source export")
+def series_totals(name, label=None):
+    entry = metrics.get(name)
+    if not isinstance(entry, dict):
+        raise SystemExit(f"missing {name} export")
+    totals = {}
+    for series in entry.get("series", []):
+        value = series.get("stats", {}).get("total")
+        if value is None:
+            continue
+        key = series.get("labels", {}).get(label) if label else "total"
+        if key is not None:
+            totals[key] = totals.get(key, 0.0) + float(value)
+    return totals
 
-totals = {}
-for series in entry.get("series", []):
-    source = series.get("labels", {}).get("source")
-    value = series.get("stats", {}).get("total")
-    if source is not None and value is not None:
-        totals[source] = totals.get(source, 0.0) + float(value)
 
-unexpected = set(totals) - {"device", "cpu"}
-if unexpected:
-    raise SystemExit(f"unexpected cache-source labels: {sorted(unexpected)}")
-if sum(totals.values()) <= 0:
-    raise SystemExit(f"no positive cached-token source samples: {totals}")
-if totals.get(expected_source, 0) <= 0:
+cached_total = sum(series_totals("vllm:prompt_tokens_cached").values())
+physical = series_totals("vllm:prompt_tokens_cached_by_source", "source")
+logical = series_totals("vllm:prompt_tokens_by_source", "source")
+
+builtins = {"device", "cpu", "disk", "mixed", "external"}
+if set(physical) != builtins:
     raise SystemExit(
-        f"expected positive {expected_source!r} cached-token samples: {totals}"
+        f"exported cache-source labels differ: expected {sorted(builtins)}, "
+        f"observed {physical}"
     )
-print(f"validated AgentX cached-token sources: {totals}")
+unexpected_positive = {
+    source: value
+    for source, value in physical.items()
+    if source not in {"device", "cpu"} and not math.isclose(value, 0)
+}
+if unexpected_positive:
+    raise SystemExit(f"unexpected positive cache-source totals: {unexpected_positive}")
+if cached_total <= 0:
+    raise SystemExit(f"no cached prompt tokens were exported: {cached_total}")
+if physical.get(expected_source, 0) <= 0:
+    raise SystemExit(
+        f"expected positive {expected_source!r} cached-token samples: {physical}"
+    )
+physical_total = sum(physical.values())
+logical_total = sum(
+    logical.get(source, 0)
+    for source in ("local_cache_hit", "external_kv_transfer")
+)
+for description, observed in (
+    ("physical cache-source", physical_total),
+    ("logical cache-source", logical_total),
+):
+    if not math.isclose(observed, cached_total, rel_tol=0, abs_tol=0.5):
+        raise SystemExit(
+            f"{description} total does not conserve cached tokens: "
+            f"observed={observed}, cached={cached_total}"
+        )
+print(
+    "validated AgentX cached-token conservation: "
+    f"cached={cached_total}, physical={physical}, logical={logical}"
+)
 PY
 fi
