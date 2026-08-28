@@ -6578,6 +6578,24 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2730
 
 - config-keys:
+    - dsv4-fp4-b200-sglang-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh the B200 SGLang AgentX curve with validated TP8/DP8/EP8 HiCache profiles at DP-attention concurrencies 64, 96, 128, and 160."
+    - "Use lmsysorg/sglang:nightly-dev-20260827-20621aa1 for the B200 SGLang AgentX sweep."
+    - "Scope cache-aware routing and --prefill-decode-interval to the DP-attention profiles: use interval 24 at concurrency 64, 96, and 128, and interval 20 at concurrency 160."
+    - "Use mem-fraction-static 0.88 for every DP-attention profile while retaining 0.90 for TP profiles. Full c96 and c128 sweeps at 0.90 exhausted HBM in the context-dependent FP4-indexer workspace; lowering the fraction adds about 3.57 GiB of headroom per GPU. Across every DP-attention profile, use a 49152-token global chunked-prefill budget, CUDA graph maximum batch size 32, total-requests DP balancing, one-second load snapshots, and correlation-ID session routing; set the cache-aware absolute balance threshold to 32 at concurrency 160."
+    - "Fit the HiCache tier to NScale host memory by using ratio 2.75 for replicated TP8 profiles and retaining ratio 8 for sharded DP8 profiles. Ratio 8 on TP8 requests about 351 GiB per rank and fails host-pool initialization on a 1.7 TiB NScale node; ratio 2.75 targets about 121 GiB per rank while leaving startup headroom."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2718
+
+- config-keys:
+    - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
+  description:
+    - "Update the vLLM B200 Kimi-K3 AgentX configs."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2776
+  
+- config-keys:
     - minimaxm3-fp4-b200-trtllm-agentic-mtp
   scenario-type:
     - agentic-coding
