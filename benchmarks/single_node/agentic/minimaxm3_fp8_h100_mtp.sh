@@ -2,7 +2,7 @@
 set -eo pipefail
 set -x
 
-# H100 MiniMax-M3 MXFP8 AgentX with EAGLE3 and optional Mooncake DRAM KV offload.
+# H100 MiniMax-M3 MXFP8 AgentX with EAGLE3 and optional DRAM or NVMe KV offload.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -96,6 +96,15 @@ EOF
     OFFLOAD_ARGS=(
         --kv-transfer-config
         '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true}}'
+    )
+elif [ "$KV_OFFLOADING" = "nvme" ]; then
+    require_agentic_kv_offload_backend vllm-simple
+    : "${NVME_OFFLOAD_DIR:?NVME_OFFLOAD_DIR must be mounted by the H100 launcher}"
+    NVME_OFFLOAD_TOTAL_BYTES=8000000000000
+    NVME_OFFLOAD_PER_RANK_BYTES=$((NVME_OFFLOAD_TOTAL_BYTES / TP))
+    OFFLOAD_ARGS=(
+        --kv-transfer-config
+        "{\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"kv_offload_backend\":\"disk\",\"disk_path\":\"$NVME_OFFLOAD_DIR/cache.bin\",\"disk_capacity_bytes\":$NVME_OFFLOAD_PER_RANK_BYTES,\"disk_buffer_slots\":4,\"lazy_offload\":false}}"
     )
 else
     echo "Error: unsupported KV_OFFLOADING='$KV_OFFLOADING'" >&2

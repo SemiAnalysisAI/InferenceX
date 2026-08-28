@@ -318,7 +318,7 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
         default="none", alias=Fields.SPEC_DECODING.value
     )
     conc: int
-    kv_offloading: Literal["none", "dram"] = Field(
+    kv_offloading: Literal["none", "dram", "nvme"] = Field(
         alias=Fields.KV_OFFLOADING.value
     )
     kv_offload_backend: Optional[KVOffloadBackendMetadata] = Field(
@@ -644,7 +644,7 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
     decode: Optional[WorkerConfig] = None
     num_nodes: Optional[int] = Field(
         default=None, alias=Fields.NUM_NODES.value, gt=0, strict=True)
-    kv_offloading: Optional[Literal["none", "dram"]] = Field(
+    kv_offloading: Optional[Literal["none", "dram", "nvme"]] = Field(
         default=None, alias=Fields.KV_OFFLOADING.value
     )
     kv_offload_backend: Optional[KVOffloadBackendMetadata] = Field(

@@ -295,7 +295,26 @@ else
         echo "ERROR: failed to resolve H100 Slurm allocation" >&2
         exit 1
     fi
-    trap 'rc=$?; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT
+    NVME_HOST_DIR=""
+    cleanup_allocation() {
+        local rc=$?
+        trap - EXIT INT TERM
+        if [[ -n "$NVME_HOST_DIR" ]]; then
+            srun --jobid="$JOB_ID" bash -c "rm -rf -- '$NVME_HOST_DIR'" 2>/dev/null || true
+        fi
+        scancel "$JOB_ID" 2>/dev/null || true
+        exit "$rc"
+    }
+    trap cleanup_allocation EXIT INT TERM
+
+    NVME_CONTAINER_MOUNT=""
+    if [[ "${KV_OFFLOADING:-none}" == "nvme" ]]; then
+        NVME_HOST_ROOT="/mnt/numa0/enroot/cache/group-$(id -g)"
+        NVME_HOST_DIR="$NVME_HOST_ROOT/inferencex-kv-$JOB_ID"
+        srun --jobid="$JOB_ID" bash -c "set -e; test -w '$NVME_HOST_ROOT'; mkdir -m 700 '$NVME_HOST_DIR'; findmnt -T '$NVME_HOST_DIR'"
+        NVME_CONTAINER_MOUNT=",$NVME_HOST_DIR:/kv-offload"
+        export NVME_OFFLOAD_DIR=/kv-offload
+    fi
 
     # flock-serialize the enroot import so concurrent sweep jobs on the same
     # shared NFS path don't race each other into 'File already exists' (race
@@ -317,7 +336,7 @@ else
 
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
-        --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache \
+        --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache$NVME_CONTAINER_MOUNT \
         --no-container-mount-home \
         --container-workdir=/workspace/ \
         --no-container-entrypoint --export=ALL,PORT=8888,AIPERF_DATASET_MMAP_CACHE_DIR=/aiperf_mmap_cache \
