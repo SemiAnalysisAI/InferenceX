@@ -300,14 +300,25 @@ else
         fi
     fi
 
-    salloc \
-        --partition="$SLURM_PARTITION" \
-        --account="$SLURM_ACCOUNT" \
-        --gres="gpu:$GPU_COUNT" \
-        --exclusive \
-        --time="$SALLOC_TIME_LIMIT" \
-        --no-shell \
+    # hpc-gpu-1-17 consistently fails NCCL initialization because P2P is
+    # disabled between NVLink-connected GPUs 5 and 0. Keep this H100-specific
+    # default separate from SALLOC_EXCLUDE, which currently contains B300 node
+    # names in the shared benchmark workflow. The override makes the node
+    # usable again without a code change after the hardware is repaired.
+    SALLOC_EXCLUDE_H100="${SALLOC_EXCLUDE_H100:-hpc-gpu-1-17}"
+    SALLOC_ARGS=(
+        --partition="$SLURM_PARTITION"
+        --account="$SLURM_ACCOUNT"
+        --gres="gpu:$GPU_COUNT"
+        --exclusive
+        --time="$SALLOC_TIME_LIMIT"
+        --no-shell
         --job-name="$RUNNER_NAME"
+    )
+    if [[ -n "$SALLOC_EXCLUDE_H100" ]]; then
+        SALLOC_ARGS+=(--exclude="$SALLOC_EXCLUDE_H100")
+    fi
+    salloc "${SALLOC_ARGS[@]}"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
     if [[ -z "$JOB_ID" ]]; then
         echo "ERROR: failed to resolve H100 Slurm allocation" >&2
