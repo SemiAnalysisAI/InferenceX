@@ -59,7 +59,7 @@ backend:
         kv_cache_routing_max_sessions: 65536
       cache_transceiver_config:
         backend: NIXL
-        transceiver_runtime: PYTHON
+        transceiver_runtime: CPP
         kv_cache_bounce_size_mb: 5120
         max_tokens_in_buffer: 1048576
         kv_transfer_timeout_ms: 600000
@@ -98,7 +98,7 @@ backend:
     decode:
       cache_transceiver_config:
         backend: NIXL
-        transceiver_runtime: PYTHON
+        transceiver_runtime: CPP
         kv_cache_bounce_size_mb: 5120
         max_tokens_in_buffer: 1048576
         kv_transfer_timeout_ms: 600000
