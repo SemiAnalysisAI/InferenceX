@@ -8,7 +8,7 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
 
 SRT_SLURM_REPOSITORY="https://github.com/SemiAnalysisAI/srt-slurm.git"
-SRT_SLURM_COMMIT="c87d7b34b009be920896126013ad6dc74c5a99d5"
+SRT_SLURM_COMMIT="aefb15ca0decbccd3ee8c715dbd48393ae018862"
 SLURM_PARTITION="compute"
 SHARED_BASE="/it-share/gharunners2/srt-slurm"
 SHARED_HF_CACHE="/it-share/hf-hub-cache"
@@ -174,6 +174,10 @@ profile_path.write_text(
 )
 
 recipe = yaml.safe_load(recipe_path.read_text())
+host_setup_script = Path(workspace) / "runners" / "prepare_mi355x_srt_host.sh"
+if not host_setup_script.is_file():
+    raise SystemExit(f"missing MI355X host setup script: {host_setup_script}")
+recipe["host_setup_script"] = str(host_setup_script)
 container_alias = recipe["model"]["container"]
 profile = yaml.safe_load(profile_path.read_text())
 profile.setdefault("containers", {})[container_alias] = image_path
