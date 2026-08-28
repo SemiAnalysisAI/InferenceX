@@ -44,6 +44,9 @@ fi
 nvidia-smi
 resolve_trace_source
 install_agentic_deps
+# rc23 gates Prometheus and its expensive per-step timing collector behind the
+# same option. Keep Prometheus request/iteration metrics without timing payloads.
+disable_trtllm_detailed_perf_metrics
 
 SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
