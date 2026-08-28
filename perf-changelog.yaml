@@ -6483,3 +6483,11 @@
     - "Reduce the concurrency-1536 disaggregated topology from six to five DEP8 prefill workers while retaining one DEP16 decode worker."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2644
   
+
+- config-keys:
+    - kimik3-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Run the Kimi-K3 MI355X ATOM concurrency-56 causal control with max-num-batched-tokens increased from 4,096 to 8,192 while preserving the 32 GiB/rank recurrent-state tier and every other serving setting."
+  pr-link: XXX

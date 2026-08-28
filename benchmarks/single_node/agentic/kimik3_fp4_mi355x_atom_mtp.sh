@@ -167,7 +167,7 @@ case "$CONC" in
         ;;
     56)
         MAX_NUM_SEQS=72
-        MAX_NUM_BATCHED_TOKENS=4096
+        MAX_NUM_BATCHED_TOKENS=8192
         GPU_MEM_UTIL=0.88
         ATOM_ENABLE_REPLAYSSM=0
         STATE_CHECKPOINT_SLOTS=""
