@@ -31,7 +31,6 @@ amd-smi || true
 resolve_trace_source
 install_agentic_deps
 
-if [ "$CONC" -le 4 ]; then LOW_CONC_INTERACTIVE=1; else LOW_CONC_INTERACTIVE=0; fi
 if [ -n "${DCP_SIZE:-}" ]; then
     DCP_SOURCE=matrix
 else
@@ -117,37 +116,44 @@ if [ "$DCP_SIZE" -gt 1 ]; then
     export VLLM_ALLOW_DCP_FULL_CUDAGRAPH=1
     export VLLM_DCP_Q_REPLICATE=1
     echo "[dcp] ENABLED size=$DCP_SIZE backend=a2a interleave=1"
+elif [ "${DCP_COMM_ARGS_AT_1:-0}" = "1" ]; then
+    CP_ARGS+=(--dcp-comm-backend a2a --cp-kv-cache-interleave-size 1)
+    echo "[dcp] size=1, comm args RETAINED (a2a, interleave=1), no DCP env"
 else
     echo "[dcp] DISABLED -- no DCP args, no DCP env"
 fi
-export VLLM_USE_DIRECT_DCP_A2A=0
-export VLLM_USE_DIRECT_DCP_Q_GATHER=0
-export VLLM_USE_DIRECT_DCP_KV_GATHER=0
-export VLLM_ALLOW_DCP_FULL_CUDAGRAPH=1
-export VLLM_DCP_Q_REPLICATE=1
-export VLLM_ROCM_USE_AITER_MLA=1
-export AITER_DISABLE_FMHA_OPUS=1
 export VLLM_ROCM_USE_AITER_MLA=1
 export AITER_DISABLE_FMHA_OPUS=1
 
 SPEC_ENABLE="${SPEC_DECODING:-}"
 case "${RESULT_FILENAME:-}" in *_spec-mtp_*) SPEC_ENABLE=mtp;; esac
-if [ "$LOW_CONC_INTERACTIVE" != "1" ]; then SPEC_ENABLE=""; fi
+case "$CONC" in
+    1|2|4)   SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-8}" ;;
+    *)       SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-0}" ;;
+esac
+if [ "$SPEC_NUM_TOKENS" -eq 0 ]; then SPEC_ENABLE=""; fi
 SPEC_ARGS=()
 if [ "$SPEC_ENABLE" = "mtp" ]; then
-    SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-8}"
     case "$SPEC_NUM_TOKENS" in
+        1) SYNTHETIC_ACCEPT_LEN=1.85 ;;
+        2) SYNTHETIC_ACCEPT_LEN=2.51 ;;
+        3) SYNTHETIC_ACCEPT_LEN=3.00 ;;
+        4) SYNTHETIC_ACCEPT_LEN=3.36 ;;
+        5) SYNTHETIC_ACCEPT_LEN=3.62 ;;
+        6) SYNTHETIC_ACCEPT_LEN=3.75 ;;
+        7) SYNTHETIC_ACCEPT_LEN=3.84 ;;
         8) SYNTHETIC_ACCEPT_LEN=4.00 ;;
         *) echo "[spec] no golden AL wired for num_speculative_tokens=$SPEC_NUM_TOKENS; take it from golden_al_distribution/kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml and add the case" >&2; exit 1 ;;
     esac
+    DRAFT_KV_DTYPE="${DRAFT_KV_DTYPE:-fp8}"
     SPEC_ARGS=(
         --speculative-config
-        "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
+        "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"$DRAFT_KV_DTYPE\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
     )
-    echo "MTP: speculative decoding ON (k=$SPEC_NUM_TOKENS, synthetic accept=$SYNTHETIC_ACCEPT_LEN)"
+    echo "MTP: speculative decoding ON (k=$SPEC_NUM_TOKENS, synthetic accept=$SYNTHETIC_ACCEPT_LEN, draft kv=$DRAFT_KV_DTYPE)"
 fi
 
-CHUNKED_PREFILL_ARGS=(--max-num-batched-tokens 8192)
+CHUNKED_PREFILL_ARGS=(--max-num-batched-tokens "${MAX_BATCHED_TOKENS:-8192}")
 if [ "${ASYNC_SCHED:-0}" = "1" ]; then
     ASYNC_SCHED_ARGS=(--async-scheduling)
 else
@@ -155,13 +161,34 @@ else
 fi
 MLA_PREFILL_ARGS=(--attention-config "{\"mla_prefill_backend\":\"ROCM_AITER_FA\"}")
 
-MAX_NUM_SEQS=$(( CONC * 2 ))
-if [ "$MAX_NUM_SEQS" -lt 8 ]; then MAX_NUM_SEQS=8; fi
-if [ "$MAX_NUM_SEQS" -gt 80 ]; then MAX_NUM_SEQS=80; fi
+LOAD_FORMAT="${LOAD_FORMAT:-auto}"
+echo "[load] load_format=$LOAD_FORMAT conc=$CONC"
+
+if [ -z "${MAX_NUM_SEQS:-}" ]; then
+    if [ "$DCP_SIZE" -gt 1 ]; then
+        MAX_NUM_SEQS=80
+    else
+        MAX_NUM_SEQS=$(( CONC + CONC / 4 ))
+        if [ "$MAX_NUM_SEQS" -lt 8 ]; then MAX_NUM_SEQS=8; fi
+        if [ "$MAX_NUM_SEQS" -gt 80 ]; then MAX_NUM_SEQS=80; fi
+    fi
+fi
+echo "[mns] max_num_seqs=$MAX_NUM_SEQS conc=$CONC offload=${KV_OFFLOADING:-none}"
+if [ "$MAX_NUM_SEQS" -ge 80 ] && ! agentic_kv_offload_enabled; then
+    echo "[mns] note: mns=$MAX_NUM_SEQS with KV_OFFLOADING=${KV_OFFLOADING:-none}. Proven on mi355x-amds_01 (8204 tok/s/GPU); OOMs on mi355x-amd_b23_07. Export MAX_NUM_SEQS=65 if HSA_STATUS_ERROR_OUT_OF_RESOURCES."
+fi
 
 SPEC_ROWS=1
 if [ "${#SPEC_ARGS[@]}" -gt 0 ]; then SPEC_ROWS=$(( SPEC_NUM_TOKENS + 1 )); fi
+if [ "$CONC" -le 4 ]; then
+    LADDER_MAX=16
+elif [ "$CONC" -le 16 ]; then
+    LADDER_MAX=32
+else
+    LADDER_MAX=80
+fi
 MAX_CUDAGRAPH_CAPTURE_SIZE=$(( MAX_NUM_SEQS * SPEC_ROWS ))
+if [ "$MAX_CUDAGRAPH_CAPTURE_SIZE" -gt "$LADDER_MAX" ]; then MAX_CUDAGRAPH_CAPTURE_SIZE=$LADDER_MAX; fi
 CUDAGRAPH_CAPTURE_SIZES=$(seq -s, 1 "$MAX_CUDAGRAPH_CAPTURE_SIZE")
 echo "graphs: dense ladder 1..$MAX_CUDAGRAPH_CAPTURE_SIZE (mns=$MAX_NUM_SEQS x $SPEC_ROWS rows), DCP=$DCP_SIZE"
 CUDAGRAPH_MODE=FULL_AND_PIECEWISE
@@ -176,7 +203,7 @@ VLLM_CMD=(
     --trust-remote-code
     --moe-backend auto
     --tensor-parallel-size "$TP"
-    --load-format fastsafetensors
+    --load-format "$LOAD_FORMAT"
     --gpu-memory-utilization "$GPU_MEM_UTIL"
     --language-model-only
     --max-num-seqs "$MAX_NUM_SEQS"
