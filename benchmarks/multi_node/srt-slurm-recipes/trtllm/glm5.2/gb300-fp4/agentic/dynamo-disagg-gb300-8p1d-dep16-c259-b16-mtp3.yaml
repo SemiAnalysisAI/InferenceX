@@ -73,7 +73,7 @@ backend:
         dtype: fp8
         enable_block_reuse: true
         event_buffer_max_size: 0
-        free_gpu_memory_fraction: 0.3
+        free_gpu_memory_fraction: 0.55
         host_cache_size: 137438953472
         tokens_per_block: 64
       max_batch_size: 256
