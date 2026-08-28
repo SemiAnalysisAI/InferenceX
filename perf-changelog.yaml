@@ -6576,3 +6576,15 @@
     - "Recipes sourced from srt-slurm (recipes/trtllm/qwen3.5-fp4/inferencex/gb300/{mtp,stp})."
     - "Runner: launch_gb300-nv.sh bumped from NVIDIA/srt-slurm@v1.0.29 to v1.0.72 for the dynamo-trt+qwen3.5+fp4 path."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2730
+
+- config-keys:
+    - qwen3small-bf16-h100-vllm-agentic-cache-source
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a two-point H100 AgentX integration smoke for vLLM physical cached-token source metrics: GPU-resident KV and 13 GB native CPU KV offload at TP1/concurrency 1."
+    - "Ingest vllm:prompt_tokens_cached_by_source into server_metrics.cache.cached_tokens_by_source and aggregate labels across metrics endpoints and engine ranks."
+    - "Fail the smoke when the source metric is missing or non-positive, or when the device/CPU test exposes an unexpected source label."
+    - "Add reusable H100/H200 validators for device, CPU, native disk, generic external connector, and real NIXL producer/consumer paths."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2766
+  append-only: true
