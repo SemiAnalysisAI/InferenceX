@@ -6482,7 +6482,6 @@
     - "Warm the aggregate low-latency profiles with the standard ten requests per trajectory lane instead of one, so they enter the profiling window from the same live state as every other AgentX recipe."
     - "Reduce the concurrency-1536 disaggregated topology from six to five DEP8 prefill workers while retaining one DEP16 decode worker."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2644
-
 - config-keys:
     - qwen3.5-fp4-mi355x-sglang-agentic-mtp
   scenario-type:
@@ -6492,6 +6491,18 @@
     - "Add HiCache host-DRAM KV tier arms at TP4 concurrency 40, 48, 56, and 64 and TP2 concurrency 20, 24, 28, and 32, using hicache ratio 1.5 with write_through, direct io, and page_first_direct layout."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2693
 
+- config-keys:
+    - qwen3.5-fp4-gb300-dynamo-sglang-agentic-disagg-dep
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Measure a fresh GB300 Qwen3.5 NVFP4-V2 disaggregated AgentX Pareto on the stock lmsysorg/sglang:nightly-dev-cu13-20260818-c0b6474b container with no engine patches."
+    - "Saturate the throughput end with a 3-prefill/2-decode DEP4 shape at concurrency 704, which reaches 121,845 total tok/s/chip on 20 chips."
+    - "Own the middle of the curve with a 3-prefill/1-decode DEP4 to DEP16 shape swept at concurrency 565, 384, 256 and 192, where the 16-way decode replica spreads attention widely enough that lowering concurrency buys interactivity cheaply."
+    - "Reach the latency tail with a 1-prefill/1-decode DEP4 to plain TP8 shape at concurrency 32 and 16; prefill and decode disagree on attention TP size there, so those recipes set SGLANG_DISAGG_STAGING_BUFFER=1 for heterogeneous-TP KV transfer."
+    - "Retain the existing aggregate and disaggregated GB300 entries unchanged so their published high-interactivity points stay on the curve."
+    - "Dispatch the Qwen3.5 GB300 matrix through the restricted batch_2 partition and the slurm-shared tree, matching where the runner now accepts jobs; batch_1 with the benchmark account rejects every srun with an invalid account/partition combination. Unrelated matrices keep the upstream defaults."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/232
 
 - config-keys:
     - kimik2.6-fp4-b200-dynamo-vllm

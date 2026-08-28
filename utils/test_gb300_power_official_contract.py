@@ -187,8 +187,11 @@ def test_launcher_detects_power_lane_from_recipe():
 def test_launcher_provisions_exporter_through_shared_squash_path():
     launcher = LAUNCHER_PATH.read_text()
     assert_exporter_provisioning(launcher)
-    # No SQUASH_DIR var here; the /data/ mount avoids the /home NFS ELOOP bug.
-    assert 'DCGM_EXPORTER_SQSH="/data/home/sa-shared/gharunners/squash/' in launcher
+    # Keep the squash cache on the /data/ mount while selecting the shared
+    # runner tree that matches the workload's SLURM account.
+    assert 'export GB300_SHARED_ROOT="/data/home/slurm-shared/gharunners"' in launcher
+    assert 'export GB300_SHARED_ROOT="/data/home/sa-shared/gharunners"' in launcher
+    assert 'DCGM_EXPORTER_SQSH="${GB300_SHARED_ROOT}/squash/' in launcher
     assert 'srun --account="$SLURM_ACCOUNT" --partition="$SLURM_PARTITION" --exclusive --time=180' in launcher
     assert 'srun --account="$SLURM_ACCOUNT" --partition="$SLURM_PARTITION" --exclusive --time=30 bash -c "unsquashfs -l' in launcher
 
