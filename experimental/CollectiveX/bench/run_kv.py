@@ -194,7 +194,14 @@ def main() -> int:
     torch.cuda.set_device(local_rank)
     device = torch.device(f"cuda:{local_rank}")
     role = "target" if rank == 0 else "initiator"
-    dist.init_process_group("gloo", rank=rank, world_size=world_size)
+    # A single grid point's timed stretch can run far past gloo's 30-minute
+    # default recv timeout (the descriptor-floor lanes post tens of millions
+    # of descriptors per burst, and the target rank waits silently at the
+    # next gather the whole time). Size the control-plane timeout to the
+    # per-case hang guard so the guard, not gloo, decides when a run died.
+    grace_s = int(os.environ.get("COLLX_RUN_TIMEOUT", "21600"))
+    dist.init_process_group("gloo", rank=rank, world_size=world_size,
+                            timeout=_dt.timedelta(seconds=grace_s))
 
     if args.backend == "mori-io":
         from kv_mori_io import MoRIIOBackend as Backend
