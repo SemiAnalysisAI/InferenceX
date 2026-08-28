@@ -72,7 +72,7 @@ disable_trtllm_detailed_perf_metrics() {
     local py_executor
     local detailed_metrics_gate="enabled=getattr(self.llm_args, 'return_perf_metrics', False))"
 
-    trtllm_root=$(python3 -c 'from pathlib import Path; import tensorrt_llm; print(Path(tensorrt_llm.__file__).parent)')
+    trtllm_root=$(python3 -c 'from importlib.util import find_spec; from pathlib import Path; print(Path(find_spec("tensorrt_llm").origin).parent)')
     py_executor="$trtllm_root/_torch/pyexecutor/py_executor.py"
     if ! grep -Fq "$detailed_metrics_gate" "$py_executor"; then
         echo "Error: unsupported TensorRT-LLM detailed metrics implementation in $py_executor" >&2
