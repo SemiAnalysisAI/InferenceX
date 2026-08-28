@@ -17,8 +17,8 @@ check_env_vars MODEL TP CONC PORT KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DUR
 
 DRAFT_MODEL="Inferact/MiniMax-M3-EAGLE3-GQA"
 NUM_SPEC_TOKENS=3
-export AIPERF_SERVER_METRICS_URLS="http://localhost:${PORT}/metrics"
-export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="trtllm_"
+export AIPERF_SERVER_METRICS_URLS="http://localhost:${PORT}/prometheus/metrics"
+export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="trtllm_kv_cache_utilization"
 # Golden AL: golden_al_distribution/minimaxm3_eagle3_gqa.yaml
 # minimax-m3.thinking_on[3] = 2.78.
 
