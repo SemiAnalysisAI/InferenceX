@@ -140,6 +140,34 @@ elif [ "${REQUIRE_K3_OVERLAY:-0}" = "1" ]; then
     exit 1
 fi
 
+# Optional second overlay for shared fixes discovered while running the A/B.
+# The Kimi-K3 PR comparison wrapper requires vllm#52972 here: without it,
+# repeated decode-side registration can resurrect a retired partial-prefix
+# hash and later crash cache_full_blocks under DCP prefix-cache reuse.
+K3_POST_OVERLAY_PATCH="${K3_POST_OVERLAY_PATCH:-}"
+if [ -n "$K3_POST_OVERLAY_PATCH" ]; then
+    case "$K3_POST_OVERLAY_PATCH" in
+        /*) ;;
+        *) K3_POST_OVERLAY_PATCH="$(cd "$(dirname "$K3_POST_OVERLAY_PATCH")" && pwd)/$(basename "$K3_POST_OVERLAY_PATCH")" ;;
+    esac
+    if [ ! -f "$K3_POST_OVERLAY_PATCH" ]; then
+        echo "Post-overlay patch is missing: $K3_POST_OVERLAY_PATCH" >&2
+        if [ "${REQUIRE_K3_POST_OVERLAY:-0}" = "1" ]; then
+            exit 1
+        fi
+    elif ( cd "$SITE_PKGS" && patch -p1 --forward --batch --dry-run < "$K3_POST_OVERLAY_PATCH" ) \
+            >/tmp/k3_post_overlay_dryrun.log 2>&1; then
+        echo "Applying K3 post-overlay $K3_POST_OVERLAY_PATCH into $SITE_PKGS"
+        ( cd "$SITE_PKGS" && patch -p1 --forward --batch < "$K3_POST_OVERLAY_PATCH" )
+    else
+        echo "K3 post-overlay does not match this image: $K3_POST_OVERLAY_PATCH" >&2
+        head -40 /tmp/k3_post_overlay_dryrun.log >&2 || true
+        if [ "${REQUIRE_K3_POST_OVERLAY:-0}" = "1" ]; then
+            exit 1
+        fi
+    fi
+fi
+
 # ---- In-container patches ----------------------------------------------------
 # Four fixes, all confined to this container's site-packages, all idempotent
 # and all self-disabling once the image ships them:

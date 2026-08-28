@@ -6586,4 +6586,5 @@
     - "Add a seven-cell MI355X diagnostic A/B on pinned vLLM nightly 46638857: C1 TP8/DCP1 DSpark K=6, C16 TP8/DCP8 DSpark K=3, and C52 TP8/DCP8 without speculative decoding for both patch stacks, plus a five-PR C52 SimpleCPU-offload cell."
     - "The four-PR overlay pins vLLM PR heads #51705 (67a7f987), #52033 (be2e65d7), #53598 (3f010a43), and #52968 (5bd7afc2); the five-PR overlay differs only by adding #53166 (f556140f)."
     - "Keep KV offload disabled in the six direct-comparison cells; the seventh cell enables lazy vllm-simple offload with a 512 GB aggregate host-memory budget."
+    - "Apply vLLM #52972 (cd195178) to both arms after both C16 cells exposed its stale partial-prefix-hash crash during benchmark warmup."
   pr-link: XXX

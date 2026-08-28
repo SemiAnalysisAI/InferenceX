@@ -1,0 +1,66 @@
+diff --git a/vllm/v1/core/block_pool.py b/vllm/v1/core/block_pool.py
+index a8a6c1ca9..aef8960a5 100644
+--- a/vllm/v1/core/block_pool.py
++++ b/vllm/v1/core/block_pool.py
+@@ -481,2 +481,8 @@ class BlockPool:
+-            The hash key with group ID if a partial entry can be registered;
+-            otherwise ``None`` for null blocks.
++            The hash key with group ID if a partial entry was registered.
++            ``None`` if the entry was refused: either ``block`` is a null
++            block, or ``block`` already carries a hash covering at least
++            ``num_tokens``, which means this boundary has been superseded
++            (see the promotion note below). Callers that key follow-up
++            bookkeeping off this value -- e.g.
++            ``MambaManager._cache_partial_tail_block`` -- must treat both
++            refusals the same way: nothing was registered.
+@@ -494,0 +501 @@ class BlockPool:
++        incoming_num_tokens = num_hash_blocks * self.hash_block_size
+@@ -499,0 +507,20 @@ class BlockPool:
++        # The two branches below split on the direction of the comparison
++        # between the hash the block already carries and the one being
++        # registered, and they are not symmetric.
++        #
++        # Existing hash covers *fewer* tokens: a partial entry is growing
++        # forward inside its block (8 -> 10 tokens). The shorter key is
++        # genuinely superseded, so retire it and register the longer one.
++        #
++        # Existing hash covers *at least as many* tokens: the block has been
++        # promoted past this boundary -- cache_full_blocks already removed the
++        # partial key and announced it as BlockRemoved. Re-registering here
++        # would resurrect a retired key in cached_block_hash_to_block and emit
++        # a contradictory BlockStored for a hash the server has already told
++        # subscribers is gone. Refuse instead.
++        if (
++            not already_cached
++            and block.block_hash_num_tokens is not None
++            and block.block_hash_num_tokens >= incoming_num_tokens
++        ):
++            return None
+@@ -504 +531 @@ class BlockPool:
+-            and block.block_hash_num_tokens < num_hash_blocks * self.hash_block_size
++            and block.block_hash_num_tokens < incoming_num_tokens
+@@ -511 +538 @@ class BlockPool:
+-            num_tokens=num_hash_blocks * self.hash_block_size,
++            num_tokens=incoming_num_tokens,
+diff --git a/vllm/v1/core/single_type_kv_cache_manager.py b/vllm/v1/core/single_type_kv_cache_manager.py
+index 9e7025111..c81569310 100644
+--- a/vllm/v1/core/single_type_kv_cache_manager.py
++++ b/vllm/v1/core/single_type_kv_cache_manager.py
+@@ -843,0 +844,14 @@ class FullAttentionManager(SingleTypeKVCacheManager):
++        # boundary_tokens is derived from the fixed request.num_prompt_tokens,
++        # so this method re-fires on every decode step for the lifetime of the
++        # request -- including after cache_full_blocks has promoted the block
++        # past the boundary. Skip those calls once the block's own hash already
++        # covers the boundary. BlockPool.cache_partial_block refuses the same
++        # case, so this is belt-and-braces for correctness; what it adds is
++        # keeping the steady-state decode path out of the pool entirely rather
++        # than re-deriving the partial hash every step only to have it refused.
++        target_block = blocks[block_idx]
++        if (
++            target_block.block_hash_num_tokens is not None
++            and target_block.block_hash_num_tokens >= boundary_tokens
++        ):
++            return
+@@ -846 +860 @@ class FullAttentionManager(SingleTypeKVCacheManager):
+-            block=blocks[block_idx],
++            block=target_block,

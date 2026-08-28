@@ -8,6 +8,12 @@ if [ -z "${K3_OVERLAY_PATCH:-}" ]; then
     exit 1
 fi
 
+# Both comparison arms need the upstream stale partial-prefix fix discovered
+# while exercising C16. Keep it separate so the original four-vs-five-PR
+# performance delta remains explicit in K3_OVERLAY_PATCH.
+export K3_POST_OVERLAY_PATCH="${K3_POST_OVERLAY_PATCH:-$script_dir/k3_patches/vllm_pr52972_stale_partial_hash.patch}"
+export REQUIRE_K3_POST_OVERLAY=1
+
 case "${SPEC_DECODING:-none}:${CONC:?CONC is required}:${DCP_SIZE:-1}:${KV_OFFLOADING:-none}:${KV_OFFLOAD_BACKEND:-}" in
     mtp:1:1:none:)
         export SPEC_DECODE=true
