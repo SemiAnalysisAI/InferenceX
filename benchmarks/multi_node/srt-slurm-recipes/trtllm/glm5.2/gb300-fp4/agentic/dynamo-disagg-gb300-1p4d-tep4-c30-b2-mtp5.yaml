@@ -85,7 +85,7 @@ backend:
       pipeline_parallel_size: 1
       print_iter_log: true
       enable_iter_perf_stats: true
-      return_perf_metrics: true
+      return_perf_metrics: false
       scheduler_config:
         capacity_scheduler_policy: MAX_UTILIZATION
       sparse_attention_config:
@@ -124,7 +124,7 @@ backend:
       pipeline_parallel_size: 1
       print_iter_log: true
       enable_iter_perf_stats: true
-      return_perf_metrics: true
+      return_perf_metrics: false
       sparse_attention_config:
         algorithm: dsa
         enable_heuristic_topk: true
