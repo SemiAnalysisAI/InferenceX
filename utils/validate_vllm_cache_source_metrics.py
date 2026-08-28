@@ -24,7 +24,6 @@ from typing import Any
 _SAMPLE_RE = re.compile(
     r'^(?P<name>[^\s{]+)(?:\{(?P<labels>.*)\})?\s+(?P<value>[-+0-9.eE]+)$'
 )
-_LABEL_RE = re.compile(r'(?P<key>[a-zA-Z_][a-zA-Z0-9_]*)="(?P<value>(?:\\.|[^"])*)"')
 _CACHED_TOTAL = "vllm:prompt_tokens_cached_total"
 _CACHED_BY_SOURCE = "vllm:prompt_tokens_cached_by_source_total"
 _PROMPT_BY_SOURCE = "vllm:prompt_tokens_by_source_total"
@@ -94,10 +93,70 @@ def _json_request(
 def _parse_labels(raw_labels: str | None) -> dict[str, str]:
     if raw_labels is None:
         return {}
-    return {
-        match.group("key"): bytes(match.group("value"), "utf-8").decode("unicode_escape")
-        for match in _LABEL_RE.finditer(raw_labels)
-    }
+
+    labels: dict[str, str] = {}
+    cursor = 0
+    length = len(raw_labels)
+
+    def fail(message: str) -> ValidationError:
+        return ValidationError(
+            f"invalid Prometheus labels at offset {cursor}: {message}: {raw_labels!r}"
+        )
+
+    while cursor < length:
+        while cursor < length and raw_labels[cursor] in " \t":
+            cursor += 1
+        key_start = cursor
+        if cursor >= length or not (raw_labels[cursor].isalpha() or raw_labels[cursor] == "_"):
+            raise fail("expected label name")
+        cursor += 1
+        while cursor < length and (
+            raw_labels[cursor].isalnum() or raw_labels[cursor] == "_"
+        ):
+            cursor += 1
+        key = raw_labels[key_start:cursor]
+
+        if cursor >= length or raw_labels[cursor] != "=":
+            raise fail("expected '='")
+        cursor += 1
+        if cursor >= length or raw_labels[cursor] != '"':
+            raise fail("expected opening quote")
+        cursor += 1
+
+        value: list[str] = []
+        while cursor < length and raw_labels[cursor] != '"':
+            character = raw_labels[cursor]
+            cursor += 1
+            if character != "\\":
+                value.append(character)
+                continue
+            if cursor >= length:
+                raise fail("unterminated escape")
+            escaped = raw_labels[cursor]
+            cursor += 1
+            if escaped == "n":
+                value.append("\n")
+            elif escaped in {'"', "\\"}:
+                value.append(escaped)
+            else:
+                raise fail(f"unsupported escape {escaped!r}")
+
+        if cursor >= length:
+            raise fail("unterminated quoted value")
+        cursor += 1
+        labels[key] = "".join(value)
+
+        while cursor < length and raw_labels[cursor] in " \t":
+            cursor += 1
+        if cursor == length:
+            break
+        if raw_labels[cursor] != ",":
+            raise fail("expected ','")
+        cursor += 1
+        if cursor == length:
+            raise fail("trailing ','")
+
+    return labels
 
 
 def snapshot(base_url: str) -> Snapshot:
