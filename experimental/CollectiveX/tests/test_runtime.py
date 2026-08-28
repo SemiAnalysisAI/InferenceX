@@ -145,7 +145,6 @@ class ConfigTests(unittest.TestCase):
         self.assertIn(b"COLLX_SQUASH_DIR\0/home/sa-shared/containers\0", payload)
         self.assertIn(b"COLLX_RDMA_DEVICES\0", payload)
 
-
 class StageTests(unittest.TestCase):
     def test_create_copy_and_validate_cleanup(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
