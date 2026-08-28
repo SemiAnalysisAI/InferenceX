@@ -69,7 +69,9 @@ else
     exit 1
 fi
 
-export AIPERF_SERVER_METRICS_URLS="http://127.0.0.1:${PORT}/metrics"
+# Match the benchmark request URL's hostname so AIPerf de-duplicates its
+# auto-discovered endpoint and this explicit metrics endpoint.
+export AIPERF_SERVER_METRICS_URLS="http://localhost:${PORT}/metrics"
 export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="vllm:"
 export PYTHONNOUSERSITE=1
 export VLLM_ENABLE_CUDA_COMPATIBILITY=1
@@ -126,13 +128,14 @@ else
     run_agentic_replay_and_write_outputs "$RESULT_DIR"
 
     python3 - "$RESULT_DIR/aiperf_artifacts/server_metrics_export.json" \
-        "$EXPECTED_CACHE_SOURCE" <<'PY'
+        "$EXPECTED_CACHE_SOURCE" "$AIPERF_SERVER_METRICS_URLS" <<'PY'
 import json
 import math
 import sys
 
 path = sys.argv[1]
 expected_source = sys.argv[2]
+expected_endpoint = sys.argv[3]
 with open(path) as file:
     metrics = json.load(file).get("metrics", {})
 
@@ -154,6 +157,17 @@ def series_totals(name, label=None):
 cached_total = sum(series_totals("vllm:prompt_tokens_cached").values())
 physical = series_totals("vllm:prompt_tokens_cached_by_source", "source")
 logical = series_totals("vllm:prompt_tokens_by_source", "source")
+
+physical_entry = metrics["vllm:prompt_tokens_cached_by_source"]
+endpoints = {
+    series.get("endpoint_url")
+    for series in physical_entry.get("series", [])
+    if series.get("endpoint_url") is not None
+}
+if endpoints != {expected_endpoint}:
+    raise SystemExit(
+        f"cache-source export contains duplicate or unexpected endpoints: {endpoints}"
+    )
 
 builtins = {"device", "cpu", "disk", "mixed", "external"}
 if set(physical) != builtins:
