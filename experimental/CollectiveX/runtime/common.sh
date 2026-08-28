@@ -90,7 +90,7 @@ collx_load_operator_config() {
   unset ENROOT_CACHE_PATH
   unset COLLX_EXCLUDE_NODES COLLX_NODELIST COLLX_LOCK_DIR COLLX_MASTER_PORT
   unset COLLX_SOCKET_IFNAME COLLX_RDMA_DEVICES COLLX_IB_GID_INDEX COLLX_RDMA_SERVICE_LEVEL
-  unset COLLX_RDMA_TRAFFIC_CLASS COLLX_RAIL_ISOLATED
+  unset COLLX_RDMA_TRAFFIC_CLASS COLLX_RAIL_ISOLATED COLLX_SINGLE_NODE_RDMA_DEVICES
   unset MASTER_ADDR MASTER_PORT RANK WORLD_SIZE LOCAL_RANK LOCAL_WORLD_SIZE
   config_path="${COLLECTIVEX_OPERATOR_CONFIG:-${XDG_CONFIG_HOME:-${HOME}/.config}/inferencex/collectivex.json}"
   if [ ! -e "$config_path" ]; then
@@ -190,6 +190,21 @@ collx_apply_network_profile() {
   # NVLink/XGMI path (DeepEP's allow_nvlink_for_low_latency_mode; MoRI's IntraNodeLL), so
   # they need no scale-out RDMA env and must NOT force IBGDA — verified on h200 EP8 with
   # /dev/gdrdrv absent (forcing IBGDA there would fail, as it did historically on b300).
+  #
+  # Exception: a SKU may pin a single-node HCA list. DeepEP's legacy LL Buffer
+  # self-enables IBGDA even single-node, and on b300 the image's baked
+  # NVSHMEM_HCA_PE_MAPPING steers that init onto the GPU-fabric RoCE rails, where
+  # ibv_create_ah fails at every GID index (ibgda.cpp "Unable to create ah" ->
+  # "create DCT share err"). The storage-IB rails accept AH/DCT creation, and with
+  # allow_nvlink_for_low_latency_mode the kernels move all intra-node traffic over
+  # NVLink, so those rails carry init-time control traffic only. HCA_LIST wins over
+  # the baked PE mapping (NVSHMEM warns and honors HCA_LIST) — verified on-metal
+  # 2026-07-08 (b300-010, production shape, PASS with and without the baked mapping).
+  if [ "$nodes" -le 1 ] && [ -n "${COLLX_SINGLE_NODE_RDMA_DEVICES:-}" ]; then
+    [[ "$COLLX_SINGLE_NODE_RDMA_DEVICES" =~ ^[A-Za-z][A-Za-z0-9_.-]{0,31}(:[1-9][0-9]*)?(,[A-Za-z][A-Za-z0-9_.-]{0,31}(:[1-9][0-9]*)?)*$ ]] \
+      || collx_die "invalid private single-node RDMA device selector"
+    export NVSHMEM_HCA_LIST="$COLLX_SINGLE_NODE_RDMA_DEVICES"
+  fi
   { [ "$nodes" -gt 1 ] && [ "$transport" != mnnvl ]; } || return 0
   [ -n "${COLLX_RDMA_DEVICES:-}" ] \
     || collx_die "RDMA execution requires a private device selector"
@@ -424,10 +439,24 @@ exec python3 bench/run_ep.py "$@"
 BASH
 }
 
+# Slurm job name for dashboard correlation. inferencex-dash's cluster collector
+# samples allocation names (sacct JobName) and the dashboard joins them against
+# the GHA job's runner_name — the production runners' convention
+# (--job-name="$RUNNER_NAME"). Fall back to a fixed label for hand-driven runs;
+# reject anything that is not a plain Slurm-safe token rather than quoting it.
+collx_slurm_job_name() {
+  local name="${RUNNER_NAME:-}"
+  [[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]] || name="collectivex"
+  printf '%s' "$name"
+}
+
 # Allocate via salloc's stable grant message and assign JOB_ID in this shell.
 # Record it so workflow cleanup can release a launcher interrupted by Actions.
+# The job name is prepended so a caller-supplied --job-name still wins (salloc
+# takes the last occurrence).
 collx_salloc_jobid() {
   local log_label=scheduler-allocation log job_id root="${COLLX_JOB_ROOT:-}"
+  set -- --job-name="$(collx_slurm_job_name)" "$@"
   case "${COLLX_SALLOC_ATTEMPT:-1}" in
     1) ;;
     2|3) log_label+="-a${COLLX_SALLOC_ATTEMPT}" ;;
