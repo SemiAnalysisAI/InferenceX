@@ -525,14 +525,18 @@ class _LauncherProxy:
                 ops[key] = False
             return result
         try:
+            # tuple args must go to the dispatcher as lists — some torch
+            # builds refuse to cast a python tuple to Tensor[] ("Unable to
+            # cast (tensor(...)..."); the impl rebuilds tuples (_TUPLE_KEYS)
+            sched = [
+                list(a) if isinstance(a, tuple) and _type_key(a) in _TUPLE_KEYS else a
+                for a in flat
+            ]
             if opq:
-                sched = list(flat)
                 for i in opq:
                     sched[i] = _extract_tensors(flat[i])
                 _OPAQUE_TLS.objs = [flat[i] for i in opq]
-                result = op(*sched)
-            else:
-                result = op(*flat)
+            result = op(*sched)
             stats["dispatched"] += 1
             return result
         except Exception as exc:  # noqa: BLE001
