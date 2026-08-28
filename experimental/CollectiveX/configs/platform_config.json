@@ -292,9 +292,18 @@
           8
         ]
       },
+      "kv_backends": {
+        "nixl": [
+          "rdma",
+          "mnnvl"
+        ],
+        "mooncake": [
+          "rdma"
+        ]
+      },
       "fabric": {
-        "nic": "MNNVL (scale-out not used)",
-        "switch": "NVLink NVL72"
+        "nic": "4x ConnectX-8 XDR800 InfiniBand (KV scale-out; EP stays MNNVL)",
+        "switch": "NVLink NVL72 + Quantum-X800"
       },
       "operator": {
         "partition": "batch_1",
@@ -303,6 +312,10 @@
         "squash_dir": "/data/home/sa-shared/collectivex/containers",
         "enroot_cache_path": "/data/home/sa-shared/collectivex/enroot-cache",
         "exclude_nodes": "im-gb300-r01-c003,im-gb300-r01-c005"
+      },
+      "network": {
+        "socket_ifname": "enP22s22f0np0",
+        "rdma_devices": "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
       }
     },
     "mi325x-tw": {
