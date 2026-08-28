@@ -48,7 +48,7 @@ cleanup_services() {
     stop_background_process_tree "$SERVER_PID" "vLLM server" 60
     stop_background_process_tree "$MOONCAKE_MASTER_PID" "Mooncake master" 30
     if [[ -n "${NVME_OFFLOAD_DIR:-}" ]]; then
-        find "$NVME_OFFLOAD_DIR" -mindepth 1 -delete
+        timeout --kill-after=5s 120s find "$NVME_OFFLOAD_DIR" -mindepth 1 -delete
     fi
     exit "$exit_code"
 }
