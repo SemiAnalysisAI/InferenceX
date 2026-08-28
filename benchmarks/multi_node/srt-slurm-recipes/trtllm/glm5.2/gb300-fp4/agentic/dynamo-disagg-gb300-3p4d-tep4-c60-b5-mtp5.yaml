@@ -62,7 +62,7 @@ backend:
         backend: NIXL
         transceiver_runtime: CPP
         kv_cache_bounce_size_mb: 5120
-        max_tokens_in_buffer: 16384
+        max_tokens_in_buffer: 720896
         kv_transfer_timeout_ms: 600000
       cuda_graph_config: null
       disable_overlap_scheduler: false
@@ -73,7 +73,7 @@ backend:
         dtype: fp8
         enable_block_reuse: true
         event_buffer_max_size: 0
-        free_gpu_memory_fraction: 0.75
+        free_gpu_memory_fraction: 0.3
         host_cache_size: 137438953472
         tokens_per_block: 64
       max_batch_size: 256
@@ -101,7 +101,7 @@ backend:
         backend: NIXL
         transceiver_runtime: CPP
         kv_cache_bounce_size_mb: 5120
-        max_tokens_in_buffer: 16384
+        max_tokens_in_buffer: 720896
         kv_transfer_timeout_ms: 600000
       cuda_graph_config:
         batch_sizes: [1, 2, 4, 5]
@@ -112,7 +112,7 @@ backend:
         dtype: fp8
         enable_block_reuse: false
         event_buffer_max_size: 0
-        free_gpu_memory_fraction: 0.8
+        free_gpu_memory_fraction: 0.45
         tokens_per_block: 64
       max_batch_size: 5
       max_num_tokens: 128
