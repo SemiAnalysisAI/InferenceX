@@ -13,10 +13,12 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 
 export EVAL_FRAMEWORK="lm-eval"
 
-check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EVAL_ONLY
+check_env_vars MODEL TP CONC PORT KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EVAL_ONLY
 
 DRAFT_MODEL="Inferact/MiniMax-M3-EAGLE3-GQA"
 NUM_SPEC_TOKENS=3
+export AIPERF_SERVER_METRICS_URLS="http://localhost:${PORT}/metrics"
+export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="trtllm_"
 # Golden AL for the GQA draft head: golden_al_distribution/minimaxm3_eagle3_gqa.yaml
 # minimax-m3.thinking_on[3].
 
@@ -136,6 +138,8 @@ trust_remote_code: true
 reasoning_parser: minimax_m3
 stream_interval: 20
 print_iter_log: true
+enable_iter_perf_stats: true
+return_perf_metrics: true
 num_postprocess_workers: 8
 enable_attention_dp: false
 EOF
