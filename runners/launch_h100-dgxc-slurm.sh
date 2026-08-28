@@ -325,16 +325,28 @@ else
         exit 1
     fi
     NVME_HOST_DIR=""
+    cleanup_offload_shm() {
+        # Native vLLM tiering backs its DRAM tier with a shared-memory file.
+        # Abruptly cancelled jobs can leave a nearly 1 TB file behind, which
+        # makes the next exclusive job on the node hang under memory pressure.
+        srun --jobid="$JOB_ID" bash -c \
+            'find /dev/shm -maxdepth 1 -type f -user "$(id -u)" -name "vllm_offload_*.mmap" -delete'
+    }
     cleanup_allocation() {
         local rc=$?
         trap - EXIT INT TERM
         if [[ -n "$NVME_HOST_DIR" ]]; then
             srun --jobid="$JOB_ID" bash -c "rm -rf -- '$NVME_HOST_DIR'" 2>/dev/null || true
         fi
+        cleanup_offload_shm 2>/dev/null || true
         scancel "$JOB_ID" 2>/dev/null || true
         exit "$rc"
     }
     trap cleanup_allocation EXIT INT TERM
+
+    # The allocation is exclusive, so any user-owned vLLM offload mmap left
+    # on this node is stale from an earlier job and is safe to remove.
+    cleanup_offload_shm
 
     NVME_CONTAINER_MOUNT=""
     if [[ "${KV_OFFLOADING:-none}" == "nvme" || "${KV_OFFLOADING:-none}" == "dram+nvme" ]]; then
