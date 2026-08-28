@@ -128,7 +128,7 @@ SGLANG_BACKEND_PORT="$PORT"
 # (the conc>=16 queue-saturation / decode-stall failure mode). 8192 = 32*256,
 # a page-size multiple well under the dsv4 compressor kernel's uint16 token
 # cap; same value the multi-node DeepSeek-V4-Pro-AgentX no_dp profile uses.
-CHUNKED_PREFILL_SIZE=8192
+CHUNKED_PREFILL_SIZE=16384
 # MTP adds a draft KV pool and extra graph captures on top of the spec-none
 # footprint, which ran at 0.90.
 MEM_FRACTION_STATIC=0.85
@@ -147,7 +147,7 @@ if [ "$DP_ATTENTION" = "true" ]; then
     export GPU_MAX_HW_QUEUES=5
 
     # Chunked prefill is a whole-engine budget, so widen it by the DP degree.
-    CHUNKED_PREFILL_SIZE=$((8192 * TP))
+    CHUNKED_PREFILL_SIZE=$((16384 * TP))
     PARALLEL_ARGS+=(
         --dp "$TP"
         --enable-dp-attention
