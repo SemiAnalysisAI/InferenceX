@@ -166,7 +166,13 @@ jobs:
         format('[{0}]', toJSON(matrix.runner))
       ) }}
     name: p${{ needs.setup.outputs.priority }} | ${{ matrix.runner }} ${{ matrix.backend }} shard ${{ matrix.id }}
-    timeout-minutes: 350
+    # Must sit above every launcher's largest Slurm allocation plus setup,
+    # or GitHub cancels a healthy shard before the launcher's own guards can
+    # act: the kv gb200 mnnvl leg holds a 460 minute allocation with a 420
+    # minute per-case guard inside it (run 33150394862 was cancelled here at
+    # 350 minutes while doing honest work). EP shards finish far earlier and
+    # are unaffected by the ceiling.
+    timeout-minutes: 480
     env:
       COLLX_BENCH: ${{ matrix.backend }}
       COLLX_MODE: ${{ matrix.mode }}
