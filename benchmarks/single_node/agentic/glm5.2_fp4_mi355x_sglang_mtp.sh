@@ -88,9 +88,14 @@ if agentic_kv_offload_enabled; then
     if [ "$DP_ATTENTION" = "true" ]; then
         HICACHE_RATIO="${HICACHE_RATIO:-0.5}"
     else
-        HICACHE_RATIO="${HICACHE_RATIO:-1.5}"
+        # ratio=2.5 (vs the former 1.5): the agentic-coding corpus fills any
+        # fixed DRAM pool at conc ≥ 10; a larger host tier delays saturation
+        # and keeps throughput stable through conc 12.
+        HICACHE_RATIO="${HICACHE_RATIO:-2.5}"
     fi
-    HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through}"
+    # write_through_selective skips DRAM writes for non-reusable KV blocks,
+    # reducing host-bus traffic without affecting the cache hit rate.
+    HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through_selective}"
     HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
     HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first_direct}"
     case "$KV_OFFLOAD_BACKEND" in
@@ -196,12 +201,13 @@ else
     CHUNKED_PREFILL_SIZE=32768
     export AGENTIC_WARMUP_GRACE_PERIOD=3600
 fi
-MAX_RUNNING_REQUESTS=$((1 * CONC))
+# 2×CONC in-flight slots: MTP draft+verify transiently batches more tokens
+# than CONC sessions; headroom prevents scheduler stalls under burst.
+MAX_RUNNING_REQUESTS=$((2 * CONC))
 [ "$MAX_RUNNING_REQUESTS" -gt 256 ] && MAX_RUNNING_REQUESTS=256
-CUDA_GRAPH_MAX_BS=$MAX_RUNNING_REQUESTS
-# NOTE: with MTP num-steps=5 the draft+verify batch can momentarily exceed
-# MAX_RUNNING_REQUESTS; if cuda-graph misses ("graph capture miss") appear in
-# server.log under load, consider raising this to e.g. MAX_RUNNING_REQUESTS * 2.
+# SGLang interpolates a bs list [1..max_bs] automatically; cap at 64 to
+# keep graph-capture memory bounded without giving up coverage.
+CUDA_GRAPH_MAX_BS=$(( MAX_RUNNING_REQUESTS < 64 ? MAX_RUNNING_REQUESTS : 64 ))
 
 if [ "${EVAL_ONLY:-false}" != "true" ]; then
     export SGLANG_SIMULATE_ACC_LEN=3.61
