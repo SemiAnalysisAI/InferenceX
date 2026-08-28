@@ -80,7 +80,7 @@ class MoRIBackend(EPBackend):
         # (kernel, generation label, (block_num, rdma_block_num, dispatch_warps, combine_warps))
         # Scale-up matches what the engines pin: vLLM and SGLang both set block_num 80,
         # rdma_block_num 0 and one warp_num_per_block of 16 for dispatch and combine alike. 16 is
-        # also the kernel ceiling (kMaxWarpGroups 8 x kWarpsPerGroup 2). Scale-out is unchanged.
+        # also the kernel ceiling (kMaxWarpGroups 8 x kWarpsPerGroup 2).
         kernel_name, self.kernel_generation, blocks = (
             ("InterNodeV1", "inter-node-v1", (96, 64, 8, 8)) if scale_out
             else ("IntraNode", "intranode", (80, 0, 16, 16))
@@ -286,10 +286,18 @@ class MoRIBackend(EPBackend):
         return None
 
     def combine(self, p, h):
+        # `indices` must be this rank's own [T, topk] routing -- the tensor handed to
+        # dispatch() -- never dispatch()'s returned recv-slot-layout indices. InterNodeV1's
+        # combine keys tokenIndices by this rank's own token id (the interNodeDispSendMap
+        # key), so recv-layout indices make its node predicate answer from an unrelated
+        # token's routing and silently drop or pollute cross-node partials (ROCm/mori#475;
+        # upstream now rejects the mismatched row count, ROCm/mori#546). The intranode
+        # kernels reach the gather through dispatch-side metadata instead and do not
+        # consume the routing content, which is why EP8 was always clean.
         combined, _weights = self.op.combine(
             h.combine_input,
             None,
-            h.dispatch_indices,
+            p.indices,
             block_num=self.block_num,
             rdma_block_num=self.rdma_block_num,
             warp_per_block=self.combine_warps,

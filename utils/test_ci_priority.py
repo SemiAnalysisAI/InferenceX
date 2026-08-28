@@ -1,4 +1,5 @@
 import json
+import re
 import shlex
 from copy import deepcopy
 from decimal import Decimal
@@ -260,3 +261,17 @@ def test_queue_tokens_change_between_run_attempts():
         "123:2",
         ("0",),
     )
+
+
+def test_e2e_matrix_outputs_reference_initialized_shell_variables():
+    workflow = (
+        Path(__file__).parents[1] / ".github" / "workflows" / "e2e-tests.yml"
+    ).read_text()
+    assignments = set(
+        re.findall(r"^\s*([A-Z][A-Z0-9_]*)=\$\(", workflow, re.MULTILINE)
+    )
+    output_variables = set(
+        re.findall(r'^\s*echo "[a-z-]+=\$([A-Z][A-Z0-9_]*)"', workflow, re.MULTILINE)
+    )
+
+    assert output_variables <= assignments

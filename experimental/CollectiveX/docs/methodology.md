@@ -140,7 +140,17 @@ request NCCL Device API LSA and fail closed unless the realized LSA team covers 
 x86 EP16 scale-out uses the hybrid path with GIN and requires two logical scale-out domains
 represented by two physical RDMA ranks, with eight scale-up ranks per domain. GB EP16 remains MNNVL
 scale-up and uses LSA. MoRI EP8 uses the direct IntraNode kernel on every CDNA SKU. Its EP16 InterNodeV1 path is
-configured but unsupported (transport-layer combine corruption, ROCm/mori#475) and never dispatched.
+configured but unsupported and never dispatched: `combine()` takes the rank's own routing tensor,
+not dispatch's returned recv-slot indices (part of the ROCm/mori#475 corruption was that
+caller-side mix-up, guarded upstream by ROCm/mori#546), and with the corrected call single-shot
+combine is clean through T=512 — but a residual stochastic corruption remains from T~128 under
+repeated execution and at prefill token counts, independent of per-pair drains (not a
+buffer-reuse race; suspected driver-level, ionic 25.11 vs upstream's non-reproducing 26.03).
+The tw pairs additionally have no cross-node GPU fabric. mi355x EP16 currently has no
+publishable transport: UCCL-EP's CPU-proxy RDMA is functional on the Pollara fabric but roughly
+13x under its upstream-documented bandwidth (~6 GB/s vs 82 GB/s), unchanged by GPU-memory
+registration mode (DMA-BUF vs peer-memory) or traffic class — an ionic-driver-level suspect.
+UCCL-EP EP16 is registered on b200-nscale, where it runs at full health on bare-metal IB.
 MoRI runs under its MANUAL launch mode with a pinned launch config, because that is what the engines
 run: neither vLLM nor SGLang sets `MORI_EP_LAUNCH_CONFIG_MODE`, and both pin block_num 80,
 rdma_block_num 0, and `warp_num_per_block` 16 for the intra-node kernel, on dispatch and combine
