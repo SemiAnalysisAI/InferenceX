@@ -6578,7 +6578,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2730
 
 - config-keys:
-    - kimik3-fp4-b200-dynamo-vllm-agentic
     - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
   description:
     - "Update the vLLM B200 Kimi-K3 AgentX configs."
