@@ -266,19 +266,6 @@ After pushing, never rebase, locally squash, amend, or force-push this carrier c
 
 Canonical source: [complete failed-ingest recovery command](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.claude/commands/recover-failed-ingest.md).
 
-## H100 offload cleanup stalls
-
-An H100 AgentX benchmark can finish and write all result files while the GitHub job remains in `Launch job script`. Check the launcher process tree on the login node. A long-running child matching either of these commands means teardown, rather than the benchmark, is stalled:
-
-```text
-srun --jobid=<id> bash -c find /dev/shm ... vllm_offload_*.mmap ... -delete
-srun --jobid=<id> bash -c rm -rf -- /mnt/numa0/.../inferencex-kv-<id>
-```
-
-Preserve and verify the result files before intervening. The H100 launcher bounds each pre-run and post-run offload cleanup step with `H100_OFFLOAD_CLEANUP_TIMEOUT_S` (120 seconds by default), followed by a 15-second forced-termination window. A post-run timeout is best-effort: the launcher cancels the allocation and preserves the benchmark exit status so artifact uploads can proceed. A pre-run timeout fails closed because stale shared memory or NVMe state can invalidate the next benchmark.
-
-For an already-running job created before this guard existed, terminate only the stuck login-node `srun` client after confirming the benchmark outputs are complete. The launcher's cleanup trap then continues to `scancel` the allocation. Do not cancel the GitHub job or delete its workspace; doing so can discard uploadable evidence.
-
 ## AMD root-owned workspace prevention and recovery
 
 ### Prevent recurrence

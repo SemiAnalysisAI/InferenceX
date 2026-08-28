@@ -290,16 +290,9 @@ else
     export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
 
     SALLOC_TIME_LIMIT="${SALLOC_TIME_LIMIT:-300}"
-    SALLOC_ARGS=(
-        --partition="$SLURM_PARTITION"
-        --account="$SLURM_ACCOUNT"
-        --gres="gpu:$GPU_COUNT"
-        --exclusive
-        --time="$SALLOC_TIME_LIMIT"
-        --no-shell
-        --job-name="$RUNNER_NAME"
-    )
-    salloc "${SALLOC_ARGS[@]}"
+    salloc --partition="$SLURM_PARTITION" --account="$SLURM_ACCOUNT" \
+        --gres="gpu:$GPU_COUNT" --exclusive --time="$SALLOC_TIME_LIMIT" \
+        --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
     if [[ -z "$JOB_ID" ]]; then
         echo "ERROR: failed to resolve H100 Slurm allocation" >&2
