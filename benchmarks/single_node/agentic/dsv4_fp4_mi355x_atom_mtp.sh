@@ -14,11 +14,9 @@ if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
 fi
 
-if [ "$TP" -ne 8 ] || [ "$EP_SIZE" -ne 1 ] || [ "$DP_ATTENTION" != "false" ]; then
-    echo "This recipe requires TP=8, EP_SIZE=1, and DP_ATTENTION=false" >&2
-    exit 1
-fi
 require_agentic_kv_offload_none
+
+echo "Attention mode: $([ "$DP_ATTENTION" = "true" ] && echo dp || echo tp) (DP_ATTENTION=$DP_ATTENTION, CONC=$CONC)"
 
 if [[ -n "${ROCR_VISIBLE_DEVICES:-}" ]]; then
     export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
@@ -48,14 +46,32 @@ export ATOM_DEBUG_PREFIX_HITS=1
 export ATOM_PROFILER_MORE=0
 export ATOM_PROFILER_TIMEOUT=1200
 
-# AgentX/AIPerf network, failure, warmup, and trace-gap settings from the
-# validated one-hour baseline.
+# DP-attention runs layer ATOM's DPA routing and two-batch-overlap knobs on top of
+# the TP settings above (recipe section "Server - DP attention"); exported only for
+# the DP band. ATOM_DP_SESSION_AFFINITY is not optional: without it a session's
+# turns scatter across DP ranks, the prefix KV written by one turn is unreachable
+# by the next, and the multi-turn agentic workload collapses to cold prefill.
+# GPU_MAX_HW_QUEUES and ATOM_NUMA_BIND are prerequisites of --enable-tbo.
+DP_ATTN_ARGS=()
+if [ "$DP_ATTENTION" = "true" ]; then
+    export GPU_MAX_HW_QUEUES=5
+    export ATOM_NUMA_BIND=1
+    export ATOM_DP_SESSION_AFFINITY=1
+    export ATOM_DP_LB_REQ_EQUIV=512
+    export ATOM_ENABLE_PREFILL_DELAYER=1
+    export ATOM_PREFILL_DECODE_INTERVAL=10
+    # Client-side counterpart to session affinity: make AIPerf emit a stable
+    # session id (x-dynamo-session-id, falling back to the always-sent
+    # x-correlation-id) so the DPA router pins each conversation to one rank.
+    export AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID=true
+    export AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID=true
+    DP_ATTN_ARGS=(--enable-dp-attention --enable-tbo)
+fi
+
+# Raise the AIPerf HTTP TCP user timeout to 900000 ms (15 min), well above the
+# aiperf default of 30000 ms (30 s), so long-stalling AgentX request
+# connections are not torn down as dead during extended server-side pauses.
 export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
-export AIPERF_FAILED_REQUEST_THRESHOLD=0.10
-export AIPERF_LIVE_FAILED_REQUEST_THRESHOLD=0.10
-export AIPERF_TRACE_IDLE_GAP_CAP_SECONDS=300
-export AIPERF_WARMUP_REQUESTS_PER_LANE=10
-export AIPERF_BENCHMARK_GRACE_PERIOD=30
 
 # Require ATOM Prometheus metrics in every official result.
 export AIPERF_SERVER_METRICS_URLS="http://localhost:${PORT}/metrics"
@@ -83,8 +99,7 @@ trap 'exit 143' TERM
 MAX_NUM_SEQS=$((2 * CONC))
 
 # golden_al_distribution/dsv4_mtp.yaml: thinking_on, 3 draft tokens -> AL 2.49
-# --spec-decode-acceptance-length 2.49.
-# https://github.com/ROCm/ATOM/pull/1948
+# https://github.com/SemiAnalysisAI/InferenceX/blob/main/golden_al_distribution/dsv4_mtp.yaml
 NUM_SPEC_TOKENS=3
 SPEC_DECODE_AL=2.49
 SPEC_ARGS=(
@@ -113,6 +128,7 @@ ATOM_CMD=(
     --level 3
     --cudagraph-mode FULL
     "${SPEC_ARGS[@]}"
+    "${DP_ATTN_ARGS[@]}"
     --max-num-seqs "$MAX_NUM_SEQS"
 )
 write_command "$RESULT_DIR/server_command.txt" "${ATOM_CMD[@]}"
