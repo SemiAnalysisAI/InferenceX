@@ -352,7 +352,16 @@ else
     if [[ "${KV_OFFLOADING:-none}" == "nvme" || "${KV_OFFLOADING:-none}" == "dram+nvme" ]]; then
         NVME_HOST_ROOT="/mnt/numa0/enroot/cache/group-$(id -g)"
         NVME_HOST_DIR="$NVME_HOST_ROOT/inferencex-kv-$JOB_ID"
-        srun --jobid="$JOB_ID" bash -c "set -e; test -w '$NVME_HOST_ROOT'; mkdir -m 700 '$NVME_HOST_DIR'; findmnt -T '$NVME_HOST_DIR'"
+        NVME_OWNER_UID="$(id -u)"
+        srun --jobid="$JOB_ID" bash -c "
+            set -e
+            test -w '$NVME_HOST_ROOT'
+            find '$NVME_HOST_ROOT' -mindepth 1 -maxdepth 1 -type d \
+                -uid '$NVME_OWNER_UID' -name 'inferencex-kv-*' \
+                -exec rm -rf -- {} +
+            mkdir -m 700 '$NVME_HOST_DIR'
+            findmnt -T '$NVME_HOST_DIR'
+        "
         NVME_CONTAINER_MOUNT=",$NVME_HOST_DIR:/kv-offload"
         export NVME_OFFLOAD_DIR=/kv-offload
     fi
