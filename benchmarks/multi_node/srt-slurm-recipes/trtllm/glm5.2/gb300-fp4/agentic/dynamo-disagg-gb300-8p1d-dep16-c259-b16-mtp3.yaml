@@ -76,7 +76,7 @@ backend:
         host_cache_size: 137438953472
         tokens_per_block: 64
       max_batch_size: 256
-      max_num_tokens: 4096
+      max_num_tokens: 2048
       max_seq_len: 1048576
       moe_config:
         backend: CUTEDSL
