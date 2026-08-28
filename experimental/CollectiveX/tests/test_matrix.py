@@ -45,6 +45,20 @@ def cells(document, project=("sku", "ep"), **filters):
 
 
 class MatrixTests(unittest.TestCase):
+    def test_every_shard_has_an_exact_positive_node_request(self):
+        document = matrix(backend="all")
+        self.assertTrue(document["include"])
+        for shard in document["include"]:
+            with self.subTest(shard=shard["id"]):
+                self.assertIs(type(shard["nodes"]), int)
+                self.assertGreater(shard["nodes"], 0)
+                self.assertTrue(shard["id"].endswith(f"-n{shard['nodes']}"))
+                self.assertTrue(shard["cases"])
+                self.assertEqual(
+                    {case["nodes"] for case in shard["cases"]},
+                    {shard["nodes"]},
+                )
+
     def test_sku_and_ep_filters_only_remove_cases(self):
         # Subtractive with ONE deliberate exception: naming an off-path precision explicitly
         # opts its rows back in (see OFF_PATH_PRECISIONS), so the fp8 subset is compared

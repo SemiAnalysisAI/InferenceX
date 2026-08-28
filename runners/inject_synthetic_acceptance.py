@@ -40,6 +40,10 @@ from synthetic_injectors import get_injector
 MODEL_PREFIX_TO_YAML_KEY = {
     "dsv4": "deepseek-v4-pro",
     "dsr1": "deepseek-r1",
+    # DSpark ships as its own checkpoint (deepseek-ai/DeepSeek-V4-Pro-DSpark,
+    # dated 0813), distinct from the plain MTP checkpoint above.
+    "dsv4dspark": "deepseek-v4-pro-0813",
+    "dsv4dsparkprob": "deepseek-v4-pro-0813",
 }
 
 

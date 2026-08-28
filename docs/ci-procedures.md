@@ -131,6 +131,14 @@ jq -r '
 
 Confirm the intended image, model, hardware/cluster label, single- versus multi-node topology, input/output lengths, concurrency, TP/EP, decoding mode, and eval flags. Empty output is not a successful preflight.
 
+Every generated multi-node row must contain a strict positive integer
+`node-count`. When node-slot scheduling is enabled, the reusable workflow
+publishes that value as the `nodes:N` request label; missing or invalid demand
+fails matrix validation instead of silently entering the one-node queue.
+Direct priority-scheduled workflows that do not use the master-config generator
+must publish their own exact demand (for example, CollectiveX uses each shard's
+generated `nodes` value).
+
 Eval switches are exact:
 
 - Default: throughput entries plus the selected default fixed-sequence eval subset.

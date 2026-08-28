@@ -67,11 +67,15 @@ if require_agentic_kv_offload_backend hicache; then
     # DeepSeek V4 HiCache currently rejects --hicache-size and supports
     # capacity control only through a host/device token-capacity ratio.
     # DSv4 exposes capacity as a host/device token ratio rather than bytes.
-    # B200 ratio=8 stays below the configured host-memory capacity for the
-    # currently supported TP8 shape.
-    DEFAULT_HICACHE_RATIO=8
+    # DEP8 shards the host pools and fits ratio=8 on NScale. The replicated
+    # TP8 pools need a lower ratio: 2.75 allocates about 121 GiB per rank and
+    # leaves startup headroom on the 1.7 TiB NScale hosts.
+    DEFAULT_HICACHE_RATIO=2.75
+    if [ "$DP_ATTENTION" = "true" ]; then
+        DEFAULT_HICACHE_RATIO=8
+    fi
     HICACHE_RATIO="${HICACHE_RATIO:-$DEFAULT_HICACHE_RATIO}"
-    if [ "$HICACHE_RATIO" -gt "$DEFAULT_HICACHE_RATIO" ]; then
+    if awk -v ratio="$HICACHE_RATIO" -v max="$DEFAULT_HICACHE_RATIO" 'BEGIN { exit !(ratio > max) }'; then
         echo "Error: HICACHE_RATIO=$HICACHE_RATIO exceeds configured limit $DEFAULT_HICACHE_RATIO" >&2
         exit 1
     fi
@@ -93,6 +97,7 @@ SGLANG_BACKEND_PORT="$PORT"
 ROUTER_LOG="$RESULT_DIR/router.log"
 if [ "$DP_ATTENTION" = "true" ]; then
     USE_SGLANG_ROUTER=true
+    ROUTER_POLICY_ARGS=()
     export AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID=true
     SGLANG_BACKEND_PORT=$((PORT + 1))
     SGLANG_ROUTER_METRICS_PORT=$((PORT + 10000))
@@ -102,48 +107,67 @@ fi
 PARALLEL_ARGS=(--tp "$TP")
 METRICS_ARGS=(--enable-metrics --enable-cache-report)
 CHUNKED_PREFILL_SIZE=8192
+SWA_FULL_TOKENS_RATIO=0.1
+MEM_FRACTION_STATIC=0.90
 if [ "$DP_ATTENTION" = "true" ]; then
-    DEEPEP_CONFIG='{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
-    export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=1
-    export SGLANG_OPT_FIX_HASH_MEGA_MOE=1
-    export SGLANG_OPT_USE_FAST_MASK_EP=1
-    export SGLANG_OPT_FIX_MEGA_MOE_MEMORY=1
-    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=4096
-    export SGLANG_OPT_FIX_NEXTN_MEGA_MOE=1
-    export SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=0
+    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_FP4_ACTS=1
+    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_MXF4_KIND=1
+    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=8320
+
+    # Leave HBM headroom for the FP4 indexer's context-dependent workspace.
+    MEM_FRACTION_STATIC=0.88
+    PREFILL_DECODE_INTERVAL=24
+
+    # Keep DP admission and session routing uniform across the DEP8 curve.
+    PARALLEL_ARGS+=(--load-balance-method total_requests)
+    METRICS_ARGS+=(--load-snapshot-publish-interval 1)
+    export AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID=true
+    if [ "$CONC" -eq 160 ]; then
+        PREFILL_DECODE_INTERVAL=20
+        ROUTER_POLICY_ARGS+=(--balance-abs-threshold 32)
+    fi
+
     PARALLEL_ARGS+=(
         --dp "$TP"
         --tokenizer-worker-num "$TP"
+        --prefill-decode-interval "$PREFILL_DECODE_INTERVAL"
         --enable-dp-attention
         --enable-dp-attention-local-control-broadcast
         --incremental-streaming-output
         --stream-interval 20
         --dist-init-addr "127.0.0.1:$((PORT + 2000))"
         --ep-size "$EP_SIZE"
-        --moe-a2a-backend deepep
-        --deepep-config "$DEEPEP_CONFIG"
+        --moe-a2a-backend megamoe
+        --enable-deepseek-v4-fp4-indexer
+        --disable-shared-experts-fusion
+        --disable-flashinfer-autotune
     )
-    CHUNKED_PREFILL_SIZE=32768
+    # SGLang divides this global budget by dp_size. Keep 6144 tokens per rank
+    # for every DP-attention profile so the FP4 indexer retains HBM headroom.
+    CHUNKED_PREFILL_SIZE=$((6144 * TP))
+    SWA_FULL_TOKENS_RATIO=0.02
 else
     PARALLEL_ARGS+=(
         --moe-runner-backend flashinfer_mxfp4
+        --enable-deepseek-v4-fp4-indexer
         --disable-flashinfer-autotune
     )
 fi
 
-MODEL_ARGS=()
 # The B200-specialized image deadlocks immediately after weight loading when
 # forced through the B300 compressed-attention/page-size overrides.
 # DeepGEMM's DSv4 indexer needs a multi-GiB temporary allocation at long
-# contexts. Leave the same HBM headroom used by the B300 recipe so a nearly
-# full GPU KV cache does not OOM while HiCache is spilling to host memory.
-MEM_FRACTION_STATIC=0.88
+# contexts. The selected fractions preserve the measured indexer and CUDA
+# graph headroom while HiCache spills to host memory.
 
 # AgentX concurrency counts live session trees, not individual requests.
 # Allow subagent fan-out to exceed CONC without clipping request bursts.
 MAX_RUNNING_REQUESTS=$((2 * CONC))
-CUDA_GRAPH_MAX_BS=$CONC
-[ "$CUDA_GRAPH_MAX_BS" -gt 64 ] && CUDA_GRAPH_MAX_BS=64
+CUDA_GRAPH_MAX_BS=$((2 * CONC))
+if [ "$DP_ATTENTION" = "true" ]; then
+    CUDA_GRAPH_MAX_BS=32
+fi
+CUDA_GRAPH_ARGS=(--cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS")
 
 export PYTHONNOUSERSITE=1
 export TORCH_CUDA_ARCH_LIST=10.0
@@ -186,9 +210,9 @@ SGLANG_CMD=(
     --trust-remote-code
     "${PARALLEL_ARGS[@]}"
     --mem-fraction-static "$MEM_FRACTION_STATIC"
-    --swa-full-tokens-ratio 0.1
+    --swa-full-tokens-ratio "$SWA_FULL_TOKENS_RATIO"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
-    --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
+    "${CUDA_GRAPH_ARGS[@]}"
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
     --tool-call-parser deepseekv4
     --reasoning-parser deepseek-v4
@@ -202,7 +226,7 @@ SGLANG_CMD=(
     # across local ranks so post-load weight repacking reads from page cache
     # instead of issuing redundant fragmented mmap faults from every rank.
     --weight-loader-prefetch-checkpoints
-    "${MODEL_ARGS[@]}"
+    --model-loader-extra-config '{"enable_multithread_load": true}'
     "${METRICS_ARGS[@]}"
     "${CACHE_ARGS[@]}"
 )
@@ -239,7 +263,8 @@ if [ "$USE_SGLANG_ROUTER" = "true" ]; then
     echo "Starting SGLang router on port $PORT for $TP DP ranks..."
     "${SGLANG_ROUTER_CMD[@]}" \
         --worker-urls "http://localhost:$SGLANG_BACKEND_PORT" \
-        --policy consistent_hashing \
+        --policy cache_aware \
+        "${ROUTER_POLICY_ARGS[@]}" \
         --request-id-headers x-correlation-id \
         --dp-aware \
         --host 0.0.0.0 \
