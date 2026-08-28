@@ -6576,3 +6576,14 @@
     - "Recipes sourced from srt-slurm (recipes/trtllm/qwen3.5-fp4/inferencex/gb300/{mtp,stp})."
     - "Runner: launch_gb300-nv.sh bumped from NVIDIA/srt-slurm@v1.0.29 to v1.0.72 for the dynamo-trt+qwen3.5+fp4 path."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2730
+
+- config-keys:
+    - kimik3pr4-fp4-mi355x-vllm-agentic
+    - kimik3pr5-fp4-mi355x-vllm-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a seven-cell MI355X diagnostic A/B on pinned vLLM nightly 46638857: C1 TP8/DCP1 DSpark K=6, C16 TP8/DCP8 DSpark K=3, and C52 TP8/DCP8 without speculative decoding for both patch stacks, plus a five-PR C52 SimpleCPU-offload cell."
+    - "The four-PR overlay pins vLLM PR heads #51705 (67a7f987), #52033 (be2e65d7), #53598 (3f010a43), and #52968 (5bd7afc2); the five-PR overlay differs only by adding #53166 (f556140f)."
+    - "Keep KV offload disabled in the six direct-comparison cells; the seventh cell enables lazy vllm-simple offload with a 512 GB aggregate host-memory budget."
+  pr-link: XXX

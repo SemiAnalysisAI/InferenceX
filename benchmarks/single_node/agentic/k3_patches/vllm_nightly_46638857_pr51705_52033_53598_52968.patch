@@ -1,0 +1,3396 @@
+diff --git a/vllm/model_executor/layers/fused_moe/runner/moe_runner.py b/vllm/model_executor/layers/fused_moe/runner/moe_runner.py
+index 66ad630e680bad888a5c2c6f8ad10b3f69a733d9..2f072d14b480babe8e2a2e474763db21a5a5c9fd 100644
+--- a/vllm/model_executor/layers/fused_moe/runner/moe_runner.py
++++ b/vllm/model_executor/layers/fused_moe/runner/moe_runner.py
+@@ -283,11 +283,24 @@ class MoERunner(MoERunnerInterface):
+         self._shared_experts: SharedExperts | None = None
+         if shared_experts is not None:
+             can_overlap = lambda: self._quant_method.mk_can_overlap_shared_experts
++            # When unquantized, shared expert inputs alias the hidden states,
++            # which can lead to race condition in multi-stream mode. Quantized
++            # routed experts copy the input into a fresh buffer first, breaking
++            # the alias, so overlap is safe. Only observed on ROCm.
++            routed_input_is_quantized = lambda: (
++                self.routed_experts.quant_method.moe_quant_config is not None
++                and self.routed_experts.quant_method.moe_quant_config.quant_dtype
++                is not None
++            )
++            is_multistream_safe = lambda: (
++                not current_platform.is_rocm() or routed_input_is_quantized()
++            )
+             self._shared_experts = SharedExperts(
+                 shared_experts,
+                 moe_config=moe_config,
+                 enable_dbo=enable_dbo,
+                 mk_can_overlap_shared_experts=can_overlap,
++                is_multistream_safe=is_multistream_safe,
+             )
+
+         # Needed for string -> MoERunner layer lookup in custom ops.
+@@ -582,12 +595,17 @@ class MoERunner(MoERunnerInterface):
+         router_logits: torch.Tensor,
+         shared_experts_input: torch.Tensor | None,
+         input_ids: torch.Tensor | None = None,
++        shared_experts_overlapping: bool = False,
+     ) -> tuple[torch.Tensor | None, torch.Tensor | UnfinalizedMoEOutput]:
+         """Run expert routing and the fused MoE kernel via the quant method.
+
+         Orchestrates shared expert execution (before/after), expert selection
+         via the router, and the actual fused MoE computation. Returns
+         (shared_expert_output, fused_expert_output).
++
++        `shared_experts_overlapping` should be True only if using multi-stream
++        overlap. Then the shared expert was already launched in a separate
++        stream, so the results only have to be awaited here.
+         """
+         self._maybe_apply_shared_experts(
+             shared_experts_input, SharedExpertsOrder.NO_OVERLAP
+@@ -617,10 +635,9 @@ class MoERunner(MoERunnerInterface):
+                 shared_experts_input=shared_experts_input,
+             )
+
+-        self._maybe_apply_shared_experts(
+-            shared_experts_input,
+-            SharedExpertsOrder.MULTI_STREAM_OVERLAPPED,
+-        )
++        if shared_experts_overlapping:
++            assert self._shared_experts is not None
++            self._shared_experts.wait()
+
+         return (
+             self._shared_experts.output if self._shared_experts is not None else None,
+@@ -642,18 +659,6 @@ class MoERunner(MoERunnerInterface):
+             else nullcontext()
+         )
+
+-    def _maybe_sync_shared_experts_stream(
+-        self,
+-        shared_experts_input: torch.Tensor | None,
+-    ):
+-        # If router/gate provided, then apply it here.
+-        # (Note: This code runs only when "overlapped mode" is on to allow
+-        #        parallel execution of shared experts with the RoutedExperts via
+-        #        separate cuda stream)
+-        if self._shared_experts is not None:
+-            assert shared_experts_input is not None
+-            self._shared_experts.maybe_sync_shared_experts_stream(shared_experts_input)
+-
+     def _maybe_add_zero_expert_output(
+         self,
+         result: torch.Tensor,
+@@ -878,8 +883,13 @@ class MoERunner(MoERunnerInterface):
+         # TODO(bnell): this can be removed after MK migration is complete.
+         self.routed_experts._ensure_moe_quant_config_init()
+
+-        # Sync aux and main stream for shared expert multi-stream overlap.
+-        self._maybe_sync_shared_experts_stream(shared_experts_input)
++        # If using multi-stream overlap for shared experts, we must launch it
++        # before routed expert dispatch.
++        shared_experts_overlapping = False
++        if self._shared_experts is not None:
++            shared_experts_overlapping = self._shared_experts.maybe_forward_async(
++                shared_experts_input
++            )
+
+         # If the Runner holds the gate, apply it after the stream sync,
+         # so it can run overlapped with the
+@@ -905,6 +915,7 @@ class MoERunner(MoERunnerInterface):
+                 router_logits=router_logits,
+                 shared_experts_input=shared_experts_input,
+                 input_ids=input_ids,
++                shared_experts_overlapping=shared_experts_overlapping,
+             )
+
+             return self._maybe_combine(
+diff --git a/vllm/model_executor/layers/fused_moe/runner/shared_experts.py b/vllm/model_executor/layers/fused_moe/runner/shared_experts.py
+index 17faeffd29f3740d31edede21595c72ebcf058e4..5b9587c8530b937fa32d0d2d9c29f9eb98c7a317 100644
+--- a/vllm/model_executor/layers/fused_moe/runner/shared_experts.py
++++ b/vllm/model_executor/layers/fused_moe/runner/shared_experts.py
+@@ -43,6 +43,7 @@ class SharedExperts(torch.nn.Module):
+         moe_config: FusedMoEConfig,
+         enable_dbo: bool,
+         mk_can_overlap_shared_experts: Callable[[], bool],
++        is_multistream_safe: Callable[[], bool],
+     ):
+         super().__init__()
+
+@@ -57,6 +58,10 @@ class SharedExperts(torch.nn.Module):
+
+         self._mk_can_overlap_shared_experts = mk_can_overlap_shared_experts
+
++        # Might not be safe to run multi-stream mode if routed and shared experts
++        # alias the same inputs
++        self._is_multistream_safe = is_multistream_safe
++
+         # Allow disabling of the separate shared experts stream for
+         # debug purposes.
+         # TODO: Remove this after more extensive testings with TP/DP
+@@ -65,11 +70,12 @@ class SharedExperts(torch.nn.Module):
+             logger.debug_once("Disabling MoE shared_experts cuda stream")
+             self._stream = None
+         else:
+-            # TODO(rob): enable shared expert overlap with non-cuda-alike.
+-            # aux_stream() returns None on non-cuda-alike platforms.
+             self._stream = aux_stream()
+             if self._stream is not None:
+                 logger.debug_once("Enabled separate cuda stream for MoE shared_experts")
++                # One pair per DBO ubatch id to sync aux and main stream.
++                self._input_ready_event = [torch.cuda.Event(), torch.cuda.Event()]
++                self._output_ready_event = [torch.cuda.Event(), torch.cuda.Event()]
+
+     # TODO(bnell): Hack for elastic_ep. Get rid of this
+     def _set_moe_config(self, new_moe_config: FusedMoEConfig):
+@@ -106,11 +112,19 @@ class SharedExperts(torch.nn.Module):
+         if self._mk_can_overlap_shared_experts():
+             return SharedExpertsOrder.MK_INTERNAL_OVERLAPPED
+
++        # On ROCm, empirically only DP-only deployments benefit from the overlap.
++        overlap_is_beneficial = not current_platform.is_rocm() or (
++            self._moe_config.moe_parallel_config.dp_size > 1
++            and self._moe_config.moe_parallel_config.tp_size == 1
++        )
++
+         should_run_shared_in_aux_stream = (
+-            current_platform.is_cuda()
++            current_platform.is_cuda_alike()
+             and self._stream is not None
+             and hidden_states.shape[0]
+             <= envs.VLLM_SHARED_EXPERTS_STREAM_TOKEN_THRESHOLD
++            and overlap_is_beneficial
++            and self._is_multistream_safe()
+         )
+
+         if should_run_shared_in_aux_stream:
+@@ -118,38 +132,31 @@ class SharedExperts(torch.nn.Module):
+         else:
+             return SharedExpertsOrder.NO_OVERLAP
+
+-    def maybe_sync_shared_experts_stream(
+-        self,
+-        shared_experts_input: torch.Tensor,
+-    ):
+-        experts_order = self._determine_shared_experts_order(shared_experts_input)
+-
+-        if experts_order == SharedExpertsOrder.MULTI_STREAM_OVERLAPPED:
+-            assert self._stream is not None
+-
+-            # Record that the clone will be used by shared_experts_stream
+-            # to avoid gc issue from deallocation of hidden_states_clone
+-            # For more details: https://docs.pytorch.org/docs/stable/generated/torch.Tensor.record_stream.html # noqa: E501
+-            # NOTE: We don't need shared_output.record_stream(current_stream())
+-            # because we synch the streams before using shared_output.
+-            shared_experts_input.record_stream(self._stream)
+-
+-            # Mark sync start point for the aux stream since we will
+-            # run in parallel with router/gate.
+-            self._stream.wait_stream(current_stream())
+-
+-    def _run_in_aux_stream(
+-        self,
+-        shared_experts_input: torch.Tensor,
+-    ) -> torch.Tensor:
+-        # TODO: assert that maybe_sync_shared_experts_stream has been called.
+-
+-        # Run shared experts in parallel on a separate stream.
++    def maybe_forward_async(self, shared_experts_input: torch.Tensor) -> bool:
++        """Enqueue shared experts on the aux stream without waiting for them.
++
++        Returns true if the shared experts were enqueued, false otherwise. Call
++        `wait` to wait for the shared experts to finish if this returns true.
++        """
++        if (
++            self._determine_shared_experts_order(shared_experts_input)
++            != SharedExpertsOrder.MULTI_STREAM_OVERLAPPED
++        ):
++            return False
++        assert self._stream is not None
++        idx = self._output_idx
++        assert self._output[idx] is None
++        self._input_ready_event[idx].record(current_stream())
+         with torch.cuda.stream(self._stream):
+-            output = self._layer(shared_experts_input)
+-        current_stream().wait_stream(self._stream)
++            self._input_ready_event[idx].wait(self._stream)
++            self._output[idx] = self._layer(shared_experts_input)
++            self._output_ready_event[idx].record(self._stream)
++        return True
+
+-        return output
++    def wait(self) -> None:
++        """Block the main stream until `maybe_forward_async` output is ready."""
++        assert self._stream is not None
++        self._output_ready_event[self._output_idx].wait(current_stream())
+
+     @property
+     def _output_idx(self) -> int:
+@@ -174,11 +181,6 @@ class SharedExperts(torch.nn.Module):
+
+         assert self._output[self._output_idx] is None
+
+-        if order == SharedExpertsOrder.MULTI_STREAM_OVERLAPPED:
+-            self._output[self._output_idx] = self._run_in_aux_stream(
+-                shared_experts_input
+-            )
+-        else:
+-            self._output[self._output_idx] = self._layer(shared_experts_input)
++        self._output[self._output_idx] = self._layer(shared_experts_input)
+
+         assert self._output[self._output_idx] is not None
+diff --git a/vllm/model_executor/layers/fused_sigmoid_gate.py b/vllm/model_executor/layers/fused_sigmoid_gate.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..5a38be6a4bceea82b44009be9cb898e52e8d968f
+--- /dev/null
++++ b/vllm/model_executor/layers/fused_sigmoid_gate.py
+@@ -0,0 +1,56 @@
++# SPDX-License-Identifier: Apache-2.0
++# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
++"""
++Fused ``attn_out * sigmoid(gate)`` for MLA output gating.
++"""
++
++from functools import cache
++
++import torch
++
++from vllm.triton_utils import tl, triton
++
++
++@triton.jit
++def _sigmoid_mul_kernel(
++    attn_ptr,
++    gate_ptr,
++    numel,
++    BLOCK: tl.constexpr,
++):
++    offs = tl.program_id(0).to(tl.int64) * BLOCK + tl.arange(0, BLOCK)
++    mask = offs < numel
++    gate = tl.load(gate_ptr + offs, mask=mask, other=0.0).to(tl.float32)
++    s = tl.sigmoid(gate).to(gate_ptr.dtype.element_ty).to(tl.float32)
++    attn = tl.load(attn_ptr + offs, mask=mask, other=0.0).to(tl.float32)
++    tl.store(attn_ptr + offs, attn * s, mask=mask)
++
++
++@cache
++def _on_gfx942() -> bool:
++    from vllm.platforms import current_platform
++
++    if not current_platform.is_rocm():
++        return False
++    from vllm.platforms.rocm import on_gfx942
++
++    return on_gfx942()
++
++
++def fused_sigmoid_mul_(attn_out: torch.Tensor, gate: torch.Tensor) -> torch.Tensor:
++    # Fall back to non fused if layouts dont qualify
++    if (
++        attn_out.shape != gate.shape
++        or not attn_out.is_contiguous()
++        or not gate.is_contiguous()
++        or attn_out.dtype != gate.dtype
++    ):
++        return attn_out * gate.sigmoid()
++    numel = attn_out.numel()
++    if numel == 0:
++        return attn_out
++    BLOCK = 4096 if _on_gfx942() else 1024
++    _sigmoid_mul_kernel[(triton.cdiv(numel, BLOCK),)](
++        attn_out, gate, numel, BLOCK=BLOCK, num_warps=4
++    )
++    return attn_out
+diff --git a/vllm/model_executor/layers/mamba/gdn/kimi_gdn_linear_attn.py b/vllm/model_executor/layers/mamba/gdn/kimi_gdn_linear_attn.py
+index bf81cdd75f49f666a9e1a9b8190c9292050b7bf9..dbe7336faa41a89947f4a3146c46894e4c47966a 100644
+--- a/vllm/model_executor/layers/mamba/gdn/kimi_gdn_linear_attn.py
++++ b/vllm/model_executor/layers/mamba/gdn/kimi_gdn_linear_attn.py
+@@ -596,9 +596,11 @@ class KimiGatedDeltaNetAttention(GatedDeltaNetAttention):
+             else:
+                 # pure-decode non-spec batch
+                 assert non_spec_state_indices_tensor is not None
++                # Under spec decode this can be a strided 1-D view, which the
++                # packed KDA decode kernel rejects.
+                 decode_conv_indices = non_spec_state_indices_tensor[
+                     : mixed_qkv_ns.size(0)
+-                ]
++                ].contiguous()
+                 # Sibling beta and, for full-rank gates, output-gate views
+                 # remain live, so write the conv output separately.
+                 packed_conv_out = torch.empty(
+diff --git a/vllm/model_executor/layers/mla.py b/vllm/model_executor/layers/mla.py
+index 6c0e8e069fc7a42b428c7a5ec3676c87e7854ab7..5e3f1372c70d6b76343bcf6d9faefcdc98831c5d 100644
+--- a/vllm/model_executor/layers/mla.py
++++ b/vllm/model_executor/layers/mla.py
+@@ -7,6 +7,7 @@ import torch
+ from vllm.config import CacheConfig
+ from vllm.model_executor.custom_op import PluggableLayer
+ from vllm.model_executor.layers.attention import MLAAttention
++from vllm.model_executor.layers.fused_sigmoid_gate import fused_sigmoid_mul_
+ from vllm.model_executor.layers.quantization import QuantizationConfig
+ from vllm.platforms import current_platform
+
+@@ -221,6 +222,10 @@ class MultiHeadLatentAttentionWrapper(PluggableLayer):
+         )
+
+         if self.g_proj is not None:
+-            attn_out = attn_out * self.g_proj(hidden_states)[0].sigmoid()
++            gate = self.g_proj(hidden_states)[0]
++            if current_platform.is_rocm():
++                attn_out = fused_sigmoid_mul_(attn_out, gate)
++            else:
++                attn_out = attn_out * gate.sigmoid()
+
+         return self.o_proj(attn_out)[0]
+diff --git a/vllm/models/kimi_k3/amd/kda.py b/vllm/models/kimi_k3/amd/kda.py
+index e20a6136e148d195a0abdce8d225f0ccb439cea0..5a434b9da21825ca2adb8410e930e871da027827 100644
+--- a/vllm/models/kimi_k3/amd/kda.py
++++ b/vllm/models/kimi_k3/amd/kda.py
+@@ -32,7 +32,6 @@ from vllm.model_executor.layers.mamba.mamba_utils import (
+     is_conv_state_dim_first,
+ )
+ from vllm.model_executor.layers.mamba.ops.causal_conv1d import (
+-    causal_conv1d_fn,
+     causal_conv1d_update,
+ )
+ from vllm.model_executor.layers.mamba.ops.gather_initial_states import (
+@@ -41,6 +40,9 @@ from vllm.model_executor.layers.mamba.ops.gather_initial_states import (
+ from vllm.model_executor.model_loader.weight_utils import sharded_weight_loader
+ from vllm.model_executor.utils import set_weight_attrs
+ from vllm.models.kimi_k3.amd.kda_metadata import KimiK3ROCmKDABackend
++from vllm.models.kimi_k3.amd.ops.fused_qkv_conv1d import (
++    fused_qkv_causal_conv1d_fn,
++)
+ from vllm.models.kimi_k3.amd.ops.kda_decode import (
+     is_fused_kda_decode_supported,
+     make_decode_conv1d_weight_loader,
+@@ -260,8 +262,7 @@ class KimiK3DeltaAttention(GatedDeltaNetAttention):
+         self,
+         hidden_states: torch.Tensor,
+         positions: torch.Tensor,
+-        output: torch.Tensor,
+-    ) -> None:
++    ) -> torch.Tensor:
+         num_tokens = hidden_states.size(0)
+         projected_qkvgfab = self.in_proj_qkvgfab(hidden_states)[0]
+
+@@ -295,7 +296,7 @@ class KimiK3DeltaAttention(GatedDeltaNetAttention):
+             core_attn_out=core_attn_out,
+         )
+         core_attn_out = rearrange(core_attn_out, "1 n h d -> n (h d)")
+-        output[:] = self.o_proj(core_attn_out)[0]
++        return self.o_proj(core_attn_out)[0]
+
+     @eager_break_during_capture
+     def _forward(
+@@ -370,12 +371,6 @@ class KimiK3DeltaAttention(GatedDeltaNetAttention):
+         conv_weights = self.conv1d.weight.view(
+             self.conv1d.weight.size(0), self.conv1d.weight.size(2)
+         )
+-        q_conv_weight, k_conv_weight, v_conv_weight = conv_weights.split(
+-            self.local_projection_size, dim=0
+-        )
+-        q_conv_state, k_conv_state, v_conv_state = conv_state.split(
+-            self.local_projection_size, dim=-2
+-        )
+
+         # Split tokens into the multi-query spec-decode part and the remaining
+         # (prefill / plain decode) part.
+@@ -452,38 +447,24 @@ class KimiK3DeltaAttention(GatedDeltaNetAttention):
+
+         # ---------- non-spec path (prefill or plain decode) ----------
+         core_attn_out_non_spec = None
++        non_spec_placed = False
+         if mixed_qkv_ns is not None:
+             assert g1_ns is not None and beta_ns is not None
+             if m.num_prefills > 0:
+-                q_ns, k_ns, v_ns = mixed_qkv_ns.split(
+-                    self.local_projection_size, dim=-1
++                #Fused conv, keeps things updated in place like the seperate calls before
++                q_ns, k_ns, v_ns = fused_qkv_causal_conv1d_fn(
++                    mixed_qkv_ns.transpose(0, 1),
++                    conv_weights,
++                    None,
++                    conv_state,
++                    non_spec_query_start_loc,
++                    self.local_projection_size,
++                    self.local_projection_size,
++                    cache_indices=non_spec_state_indices_tensor,
++                    has_initial_state=has_initial_state,
++                    activation="silu",
++                    metadata=m,
+                 )
+-
+-                # Packed prefill conv would require copying V solely to make
+-                # it dense for KDA. Separate calls accept the strided inputs
+-                # and produce dense Q/K/V without that extra traffic.
+-                # TODO: Use packed conv once every KDA prefill backend accepts
+-                # row-strided Q/K/V directly.
+-                def _prefill_conv(
+-                    x: torch.Tensor,
+-                    state: torch.Tensor,
+-                    weight: torch.Tensor,
+-                ) -> torch.Tensor:
+-                    return causal_conv1d_fn(
+-                        x.transpose(0, 1),
+-                        weight,
+-                        None,
+-                        activation="silu",
+-                        conv_states=state,
+-                        has_initial_state=has_initial_state,
+-                        cache_indices=non_spec_state_indices_tensor,
+-                        query_start_loc=non_spec_query_start_loc,
+-                        metadata=m,
+-                    ).transpose(0, 1)
+-
+-                q_ns = _prefill_conv(q_ns, q_conv_state, q_conv_weight)
+-                k_ns = _prefill_conv(k_ns, k_conv_state, k_conv_weight)
+-                v_ns = _prefill_conv(v_ns, v_conv_state, v_conv_weight)
+                 q_ns, k_ns, v_ns = (
+                     rearrange(x, "n (h d) -> 1 n h d", d=self.head_dim)
+                     for x in (q_ns, k_ns, v_ns)
+@@ -560,10 +541,14 @@ class KimiK3DeltaAttention(GatedDeltaNetAttention):
+                 recurrent_state[prefill_state_indices] = last_recurrent_state
+
+                 if split_non_spec:
+-                    # Restore decode-first token order for the merge below.
+-                    core_attn_out_non_spec = torch.cat(
+-                        [core_attn_out_decode, core_attn_out_non_spec], dim=1
++                    core_attn_out_prefill = core_attn_out_non_spec
++                    core_attn_out_non_spec = core_attn_out[:, :num_actual_tokens]
++                    torch.cat(
++                        [core_attn_out_decode, core_attn_out_prefill],
++                        dim=1,
++                        out=core_attn_out_non_spec,
+                     )
++                    non_spec_placed = True
+
+             else:
+                 # pure-decode non-spec batch
+@@ -601,15 +586,11 @@ class KimiK3DeltaAttention(GatedDeltaNetAttention):
+
+         # ---------- merge spec and non-spec outputs ----------
+         if core_attn_out_spec is not None and core_attn_out_non_spec is not None:
+-            # Mixed batches require indexed placement in the original order.
+-            merged = torch.empty(
+-                (1, num_actual_tokens, *core_attn_out_spec.shape[2:]),
+-                dtype=core_attn_out_spec.dtype,
+-                device=core_attn_out_spec.device,
+-            )
++            merged = core_attn_out[:, :num_actual_tokens]
+             merged.index_copy_(1, spec_token_indx, core_attn_out_spec)
+             merged.index_copy_(1, non_spec_token_indx, core_attn_out_non_spec)
+-            core_attn_out[0, :num_actual_tokens] = merged[0, :num_actual_tokens]
++        elif non_spec_placed:
++            pass
+         elif core_attn_out_non_spec is not None:
+             core_attn_out[0, :num_actual_tokens] = core_attn_out_non_spec[
+                 0, :num_actual_tokens
+diff --git a/vllm/models/kimi_k3/amd/linear.py b/vllm/models/kimi_k3/amd/linear.py
+index 835c3be4dbee9b60144915617516bbfaec1b7a81..9ecccaf137111ba36681eff9a3002c3cc9738e71 100644
+--- a/vllm/models/kimi_k3/amd/linear.py
++++ b/vllm/models/kimi_k3/amd/linear.py
+@@ -457,9 +457,8 @@ class KimiMLAAttention(nn.Module):
+         self,
+         positions: torch.Tensor,
+         hidden_states: torch.Tensor,
+-        output: torch.Tensor,
+-    ) -> None:
+-        output[:] = self.mla_attn(positions, hidden_states)
++    ) -> torch.Tensor:
++        return self.mla_attn(positions, hidden_states)
+
+
+ class KimiDecoderLayer(nn.Module):
+@@ -583,24 +582,30 @@ class KimiDecoderLayer(nn.Module):
+         positions: torch.Tensor,
+         hidden_states: torch.Tensor,
+     ) -> torch.Tensor:
+-        attn_output = torch.empty_like(hidden_states)
+-        self.self_attn(
++        return self.self_attn(
+             hidden_states=hidden_states,
+             positions=positions,
+-            output=attn_output,
+         )
+-        return attn_output
+
+     def forward(
+         self,
+         positions: torch.Tensor,
+         hidden_states: torch.Tensor,
+         residual: torch.Tensor | None,
++        pending_add: torch.Tensor | None = None,
+         **kwargs,
+-    ) -> tuple[torch.Tensor, torch.Tensor]:
++    ) -> (
++        tuple[torch.Tensor, torch.Tensor]
++        | tuple[torch.Tensor, torch.Tensor, torch.Tensor]
++    ):
+         if self.use_attn_residuals:
+             assert residual is not None
+-            return self.forward_attn_residual(positions, hidden_states, residual)
++            return self.forward_attn_residual(
++                positions, hidden_states, residual, pending_add
++            )
++
++        # Only the attn-residual path defers the MLP add
++        assert pending_add is None
+
+         # Self Attention
+         if residual is None:
+@@ -621,7 +626,8 @@ class KimiDecoderLayer(nn.Module):
+         positions: torch.Tensor,
+         hidden_states: torch.Tensor,
+         block_residual: torch.Tensor,
+-    ) -> tuple[torch.Tensor, torch.Tensor]:
++        pending_add: torch.Tensor | None = None,
++    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+         prefix_sum = hidden_states
+         hidden_states = _apply_attn_res(
+             prefix_sum,
+@@ -629,6 +635,7 @@ class KimiDecoderLayer(nn.Module):
+             self.self_attention_res_proj,
+             self.self_attention_res_norm,
+             self.prev_valid_blocks,
++            delta=pending_add,
+             output_norm=self.input_layernorm,
+             block_write_idx=(self.block_write_idx if self.is_block_write_layer else -1),
+         )
+@@ -658,8 +665,7 @@ class KimiDecoderLayer(nn.Module):
+         )
+
+         hidden_states = self.mlp(hidden_states)
+-        prefix_sum = prefix_sum + hidden_states
+-        return prefix_sum, block_residual
++        return prefix_sum, block_residual, hidden_states
+
+
+ class KimiLinearModel(nn.Module, EagleModelMixin):
+@@ -815,23 +821,32 @@ class KimiLinearModel(nn.Module, EagleModelMixin):
+             block_residual[:, : residual.size(1), :].copy_(residual)
+         residual = block_residual
+
++        # Each layer hands its MLP output back unsummed
++        # next layer attn-res kernel folds it
++        pending_add: torch.Tensor | None = None
+         for layer_idx, layer in enumerate(
+             self.layers[self.start_layer : self.end_layer],
+             start=self.start_layer,
+         ):
+-            hidden_states, residual = layer(
++            hidden_states, residual, pending_add = layer(
+                 positions=positions,
+                 hidden_states=hidden_states,
+                 residual=residual,
++                pending_add=pending_add,
+             )
+             if (layer_idx + 1) in self.aux_hidden_state_layers:
+-                # AMD attn-res layer already returns prefix_sum + MLP delta as
+-                # hidden_states; the override drops the block bank in residual.
++                captured = (
++                    hidden_states
++                    if pending_add is None
++                    else hidden_states + pending_add
++                )
+                 self._maybe_add_hidden_state(
+-                    aux_hidden_states, layer_idx + 1, hidden_states, residual
++                    aux_hidden_states, layer_idx + 1, captured, residual
+                 )
+
+         if not get_pp_group().is_last_rank:
++            if pending_add is not None:
++                hidden_states = hidden_states + pending_add
+             return IntermediateTensors(
+                 {"hidden_states": hidden_states, "residual": residual}
+             )
+@@ -842,6 +857,7 @@ class KimiLinearModel(nn.Module, EagleModelMixin):
+             self.output_attn_res_proj,
+             self.output_attn_res_norm,
+             attn_res_block_num,
++            delta=pending_add,
+         )
+         # NOTE: the final norm is applied in compute_logits instead of here, so
+         # the MTP draft model receives the pre-norm hidden states.
+diff --git a/vllm/models/kimi_k3/amd/ops/fused_qkv_conv1d.py b/vllm/models/kimi_k3/amd/ops/fused_qkv_conv1d.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..f0f883f04ff33a275fc2371352a8029016189ead
+--- /dev/null
++++ b/vllm/models/kimi_k3/amd/ops/fused_qkv_conv1d.py
+@@ -0,0 +1,700 @@
++# SPDX-License-Identifier: Apache-2.0
++# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
++# Ported over from ATOM
++# One kernel reads the packed row-strided
++# mixed_qkv and scatters dense q/k/v; conv state updated in place.
++
++import numpy as np
++import torch
++
++from vllm.triton_utils import tl, triton
++from vllm.v1.attention.backends.utils import NULL_BLOCK_ID, PAD_SLOT_ID
++
++
++@triton.jit()
++def _causal_conv1d_fwd_kernel(  # continuous batching
++    x_ptr,  # (dim, cu_seqlen) holding `batch` of actual sequences + padded sequences
++    w_ptr,  # (dim, width)
++    bias_ptr,
++    initial_states_ptr,  # conv_states_ptr
++    cache_indices_ptr,  # (batch, n_blocks + padding) The second dimension contains
++    cache_indices_in_ptr,  # same shape — cache slots the INITIAL state is read
++    # from. Equal to cache_indices_ptr unless the caller forked the state.
++    has_initial_states_ptr,
++    query_start_loc_ptr,
++    batch_ptr,
++    token_chunk_offset_ptr,
++    block_idx_first_scheduled_token,  # (batch,)
++    block_idx_last_scheduled_token,  # (batch,)
++    initial_state_idx,  # (batch,)
++    num_computed_tokens,  # (batch,)
++    query_ptr,  # (k_dim_size, seqlen)
++    key_ptr,  # (k_dim_size, seqlen)
++    value_ptr,  # (v_dim_size, seqlen)
++    dim: tl.constexpr,
++    k_dim_size: tl.constexpr,
++    v_dim_size: tl.constexpr,
++    seqlen: tl.int32,  # cu_seqlen
++    num_cache_lines: tl.constexpr,  # added to support vLLM larger cache lines
++    stride_x_dim: tl.constexpr,  # stride to get to next feature-value,
++    stride_x_token: tl.constexpr,
++    stride_w_dim: tl.constexpr,  # stride to get to next dim-axis value
++    stride_w_width: tl.constexpr,  # stride to get to next width-axis value
++    stride_istate_seq: tl.constexpr,
++    stride_istate_dim: tl.constexpr,
++    stride_istate_token: tl.constexpr,
++    stride_cache_indices: tl.constexpr,
++    query_dim_stride: tl.constexpr,
++    query_token_stride: tl.constexpr,
++    key_dim_stride: tl.constexpr,
++    key_token_stride: tl.constexpr,
++    value_dim_stride: tl.constexpr,
++    value_token_stride: tl.constexpr,
++    stride_block_m: tl.constexpr,  # Stride block to align divided by BLOCK_M
++    pad_slot_id: tl.constexpr,
++    null_block_id: tl.constexpr,
++    HAS_BIAS: tl.constexpr,
++    KERNEL_WIDTH: tl.constexpr,
++    SILU_ACTIVATION: tl.constexpr,
++    IS_APC_ENABLED: tl.constexpr,
++    USE_PAD_SLOT: tl.constexpr,
++    HAS_NULL_BLOCK: tl.constexpr,
++    NP2_STATELEN: tl.constexpr,
++    BLOCK_M: tl.constexpr,
++    BLOCK_N: tl.constexpr,
++):
++    k_start_dim = k_dim_size
++    v_start_dim = k_dim_size * 2
++    conv_states_ptr = initial_states_ptr
++    conv_state_indices_ptr = cache_indices_ptr
++    conv_state_in_indices_ptr = cache_indices_in_ptr
++    stride_conv_state_seq = stride_istate_seq
++    stride_conv_state_dim = stride_istate_dim
++    stride_conv_state_tok = stride_istate_token
++    state_len = (
++        KERNEL_WIDTH - 1
++    )  # can be passed via argument if it's not the same as this value
++
++    idx_seq = tl.load(batch_ptr + tl.program_id(0)).to(tl.int64)
++    chunk_offset = tl.load(token_chunk_offset_ptr + tl.program_id(0))
++
++    idx_feats = tl.program_id(1) * BLOCK_N + tl.arange(0, BLOCK_N)
++
++    q_feat_idx = idx_feats
++    k_feat_idx = idx_feats - k_start_dim
++    v_feat_idx = idx_feats - v_start_dim
++    is_q_block = idx_feats < k_start_dim
++    is_k_block = (idx_feats >= k_start_dim) & (idx_feats < v_start_dim)
++    is_v_block = idx_feats >= v_start_dim
++
++    if idx_seq == pad_slot_id:
++        return
++
++    sequence_start_index = tl.load(query_start_loc_ptr + idx_seq)
++    sequence_end_index = tl.load(query_start_loc_ptr + idx_seq + 1)
++    seqlen = sequence_end_index - sequence_start_index
++
++    B_size: tl.constexpr = stride_block_m * BLOCK_M
++
++    if IS_APC_ENABLED:
++        current_first_index = tl.load(block_idx_first_scheduled_token + idx_seq)
++        current_last_index = tl.load(block_idx_last_scheduled_token + idx_seq)
++        sequence_completed_index = tl.load(num_computed_tokens + idx_seq)
++
++        sequence_completed_offset_token = sequence_completed_index % B_size
++        seq_completed_offset = B_size - sequence_completed_offset_token
++        seq_end_offset = (seqlen - seq_completed_offset) % B_size
++        last_full_block_token_index = sequence_end_index - seq_end_offset
++        if seq_end_offset == 0:
++            last_full_block_token_index = last_full_block_token_index - B_size
++
++        n_block_to_fill = current_last_index - current_first_index
++
++        conv_state_init_index = tl.load(initial_state_idx + idx_seq)
++    else:
++        n_block_to_fill = 0
++        current_last_index = 0
++        conv_state_init_index = 0
++        current_first_index = 0
++        last_full_block_token_index = 0
++
++    token_offset = BLOCK_M * chunk_offset
++    segment_len = min(BLOCK_M, seqlen - token_offset)
++
++    x_base = (
++        x_ptr + sequence_start_index * stride_x_token + idx_feats * stride_x_dim
++    )  # [BLOCK_N,]
++
++    conv_states_input_coord = tl.load(
++        conv_state_in_indices_ptr
++        + idx_seq * stride_cache_indices
++        + conv_state_init_index
++    ).to(tl.int64)
++
++    if USE_PAD_SLOT:  # noqa
++        if conv_states_input_coord == pad_slot_id:
++            return
++    if HAS_NULL_BLOCK:  # noqa
++        if conv_states_input_coord == null_block_id:
++            # null block (padding sequence): no output, no state touch —
++            # the reserved null block.
++            return
++    # Read side. Equals the write side unless the caller forked the state, so
++    # through this one would leave the fork's destination untouched and clobber
++    conv_states_base = (
++        conv_states_ptr
++        + (conv_states_input_coord * stride_conv_state_seq)
++        + (idx_feats * stride_conv_state_dim)
++    )  # [BLOCK_N,]
++    conv_states_output_coord = tl.load(
++        conv_state_indices_ptr + idx_seq * stride_cache_indices + current_last_index
++    ).to(tl.int64)
++    if HAS_NULL_BLOCK:  # noqa
++        if conv_states_output_coord == null_block_id:
++            return
++    conv_states_out_base = (
++        conv_states_ptr
++        + (conv_states_output_coord * stride_conv_state_seq)
++        + (idx_feats * stride_conv_state_dim)
++    )  # [BLOCK_N,]
++
++    w_base = w_ptr + (idx_feats * stride_w_dim)  # [BLOCK_N,]
++
++    if chunk_offset == 0:
++        load_init_state = tl.load(has_initial_states_ptr + idx_seq).to(tl.int1)
++        if load_init_state:
++            prior_tokens = conv_states_base + (state_len - 1) * stride_conv_state_tok
++            mask_w = idx_feats < dim
++            if KERNEL_WIDTH == 2:
++                conv_states_ptrs = prior_tokens  # [BLOCK_N]
++                col0 = tl.load(conv_states_ptrs, mask_w, 0.0)
++            if KERNEL_WIDTH == 3:
++                conv_states_ptrs = prior_tokens  # [BLOCK_N]
++                col1 = tl.load(conv_states_ptrs, mask_w, 0.0)
++                conv_states_ptrs = prior_tokens - 1 * stride_conv_state_tok  # [BLOCK_N]
++                col0 = tl.load(conv_states_ptrs, mask_w, 0.0)
++            if KERNEL_WIDTH == 4:
++                conv_states_ptrs = prior_tokens  # [BLOCK_N]
++                col2 = tl.load(conv_states_ptrs, mask_w, 0.0)
++                conv_states_ptrs = prior_tokens - 1 * stride_conv_state_tok  # [BLOCK_N]
++                col1 = tl.load(conv_states_ptrs, mask_w, 0.0)
++                conv_states_ptrs = prior_tokens - 2 * stride_conv_state_tok  # [BLOCK_N]
++                col0 = tl.load(conv_states_ptrs, mask_w, 0.0)
++            if KERNEL_WIDTH == 5:
++                conv_states_ptrs = prior_tokens  # [BLOCK_N]
++                _col3 = tl.load(conv_states_ptrs, mask_w, 0.0)
++                conv_states_ptrs = prior_tokens - 1 * stride_conv_state_tok  # [BLOCK_N]
++                col2 = tl.load(conv_states_ptrs, mask_w, 0.0)
++                conv_states_ptrs = prior_tokens - 2 * stride_conv_state_tok  # [BLOCK_N]
++                col1 = tl.load(conv_states_ptrs, mask_w, 0.0)
++                conv_states_ptrs = prior_tokens - 3 * stride_conv_state_tok  # [BLOCK_N]
++                col0 = tl.load(conv_states_ptrs, mask_w, 0.0)
++        else:
++            if KERNEL_WIDTH >= 2:  # STRATEGY1
++                col0 = tl.zeros((BLOCK_N,), dtype=x_ptr.dtype.element_ty)
++            if KERNEL_WIDTH >= 3:  # STRATEGY1
++                col1 = tl.zeros((BLOCK_N,), dtype=x_ptr.dtype.element_ty)
++            if KERNEL_WIDTH >= 4:  # STRATEGY1
++                col2 = tl.zeros((BLOCK_N,), dtype=x_ptr.dtype.element_ty)
++            if KERNEL_WIDTH >= 5:  # STRATEGY1
++                _col3 = tl.zeros((BLOCK_N,), dtype=x_ptr.dtype.element_ty)
++
++        if (
++            state_len <= seqlen
++        ):  # SMALL_CACHE=True (only move part of 'x' into conv_state cache)
++            idx_tokens_last = (seqlen - state_len) + tl.arange(
++                0, NP2_STATELEN
++            )  # [BLOCK_M]
++            x_ptrs = (
++                x_ptr
++                + ((sequence_start_index + idx_tokens_last) * stride_x_token)[:, None]
++                + (idx_feats * stride_x_dim)[None, :]
++            )  # [BLOCK_M,BLOCK_N,]
++            mask_x = (
++                (idx_tokens_last >= 0)[:, None]
++                & (idx_tokens_last < seqlen)[:, None]
++                & (idx_feats < dim)[None, :]
++            )  # token-index  # token-index  # feature-index
++            loaded_x = tl.load(x_ptrs, mask_x, 0.0)
++            idx_tokens_conv = tl.arange(0, NP2_STATELEN)  # [BLOCK_M]
++
++            conv_states_ptrs_target = (
++                conv_states_out_base[None, :]
++                + (idx_tokens_conv * stride_conv_state_tok)[:, None]
++            )
++
++            mask = (idx_tokens_conv < state_len)[:, None] & (idx_feats < dim)[None, :]
++            tl.debug_barrier()  #  NOTE: use this due to bug in Triton compiler
++            tl.store(conv_states_ptrs_target, loaded_x, mask)
++
++        else:
++            if load_init_state:
++                idx_tokens_conv = tl.arange(0, NP2_STATELEN)  # [BLOCK_M]
++
++                conv_states_ptrs_source = (
++                    conv_states_ptr
++                    + (conv_states_input_coord * stride_conv_state_seq)
++                    + (idx_feats * stride_conv_state_dim)[None, :]
++                    + ((idx_tokens_conv + seqlen) * stride_conv_state_tok)[:, None]
++                )  # [BLOCK_M, BLOCK_N]
++                mask = (
++                    (conv_states_input_coord < num_cache_lines)
++                    & ((idx_tokens_conv + seqlen) < state_len)[:, None]
++                    & (idx_feats < dim)[None, :]
++                )
++                conv_state = tl.load(conv_states_ptrs_source, mask, other=0.0)
++
++                VAL = state_len - seqlen
++
++                x_ptrs = (
++                    x_base[None, :]
++                    + ((idx_tokens_conv - VAL) * stride_x_token)[:, None]
++                )  # [BLOCK_M, BLOCK_N]
++
++                mask_x = (
++                    (idx_tokens_conv - VAL >= 0)[:, None]
++                    & (idx_tokens_conv - VAL < seqlen)[:, None]
++                    & (idx_feats < dim)[None, :]
++                )  # token-index  # token-index  # feature-index
++                loaded_x = tl.load(x_ptrs, mask_x, 0.0)
++
++                # needed: tl.where does not enforce ordering when its data
++                tl.debug_barrier()
++                new_conv_state = tl.where(
++                    mask, conv_state, loaded_x
++                )  # BUG in 'tl.where'  which requires a barrier before this
++                conv_states_ptrs_target = (
++                    conv_states_out_base
++                    + (idx_tokens_conv * stride_conv_state_tok)[:, None]
++                )  # [BLOCK_M, BLOCK_N]
++                mask = (idx_tokens_conv < state_len)[:, None] & (idx_feats < dim)[
++                    None, :
++                ]
++                tl.store(conv_states_ptrs_target, new_conv_state, mask)
++            else:  # load_init_state == False
++                idx_tokens_conv = tl.arange(0, NP2_STATELEN)  # [BLOCK_M]
++
++                VAL = state_len - seqlen
++
++                x_ptrs = (
++                    x_base[None, :]
++                    + ((idx_tokens_conv - VAL) * stride_x_token)[:, None]
++                )  # [BLOCK_M, BLOCK_N]
++
++                mask_x = (
++                    (idx_tokens_conv - VAL >= 0)[:, None]
++                    & (idx_tokens_conv - VAL < seqlen)[:, None]
++                    & (idx_feats < dim)[None, :]
++                )  # token-index  # token-index  # feature-index
++                new_conv_state = tl.load(x_ptrs, mask_x, 0.0)
++
++                conv_states_ptrs_target = (
++                    conv_states_out_base
++                    + (idx_tokens_conv * stride_conv_state_tok)[:, None]
++                )  # [BLOCK_M, BLOCK_N]
++                mask = (idx_tokens_conv < state_len)[:, None] & (idx_feats < dim)[
++                    None, :
++                ]
++                tl.store(conv_states_ptrs_target, new_conv_state, mask)
++
++    else:  # chunk_offset > 0
++        load_init_state = True
++        prior_tokens = x_base + (token_offset - 1) * stride_x_token
++        mask_w = idx_feats < dim
++        if KERNEL_WIDTH == 2:
++            conv_states_ptrs = prior_tokens  # [BLOCK_N]
++            col0 = tl.load(conv_states_ptrs, mask_w, 0.0, cache_modifier=".ca")
++        if KERNEL_WIDTH == 3:
++            conv_states_ptrs = prior_tokens  # [BLOCK_N]
++            col1 = tl.load(conv_states_ptrs, mask_w, 0.0, cache_modifier=".ca")
++            conv_states_ptrs = prior_tokens - 1 * stride_x_token  # [BLOCK_N]
++            col0 = tl.load(conv_states_ptrs, mask_w, 0.0, cache_modifier=".ca")
++        if KERNEL_WIDTH == 4:
++            conv_states_ptrs = prior_tokens  # [BLOCK_N]
++            col2 = tl.load(conv_states_ptrs, mask_w, 0.0, cache_modifier=".ca")
++            conv_states_ptrs = prior_tokens - 1 * stride_x_token  # [BLOCK_N]
++            col1 = tl.load(conv_states_ptrs, mask_w, 0.0, cache_modifier=".ca")
++            conv_states_ptrs = prior_tokens - 2 * stride_x_token  # [BLOCK_N]
++            col0 = tl.load(conv_states_ptrs, mask_w, 0.0, cache_modifier=".ca")
++        if KERNEL_WIDTH == 5:
++            conv_states_ptrs = prior_tokens  # [BLOCK_N]
++            _col3 = tl.load(conv_states_ptrs, mask_w, 0.0, cache_modifier=".ca")
++            conv_states_ptrs = prior_tokens - 1 * stride_x_token  # [BLOCK_N]
++            col2 = tl.load(conv_states_ptrs, mask_w, 0.0, cache_modifier=".ca")
++            conv_states_ptrs = prior_tokens - 2 * stride_x_token  # [BLOCK_N]
++            col1 = tl.load(conv_states_ptrs, mask_w, 0.0, cache_modifier=".ca")
++            conv_states_ptrs = prior_tokens - 3 * stride_x_token  # [BLOCK_N]
++            col0 = tl.load(conv_states_ptrs, mask_w, 0.0, cache_modifier=".ca")
++
++        if (chunk_offset - 1) < n_block_to_fill:
++            idx_tokens_last = (
++                last_full_block_token_index
++                - (n_block_to_fill - chunk_offset) * B_size
++                - state_len
++            ) + tl.arange(0, NP2_STATELEN)  # [BLOCK_M]
++            x_ptrs = (
++                x_ptr
++                + (idx_tokens_last * stride_x_token)[:, None]
++                + (idx_feats * stride_x_dim)[None, :]
++            )  # [BLOCK_M,BLOCK_N,]
++
++            mask_x = (idx_tokens_last >= 0)[:, None] & (idx_feats < dim)[
++                None, :
++            ]  # token-index  # token-index  # feature-index
++            loaded_x = tl.load(x_ptrs, mask_x, 0.0)
++            idx_tokens_conv = tl.arange(0, NP2_STATELEN)  # [BLOCK_M]
++
++            conv_states_output_coord = tl.load(
++                conv_state_indices_ptr
++                + idx_seq * stride_cache_indices
++                + current_first_index
++                + (chunk_offset - 1)
++            ).to(tl.int64)
++
++            conv_states_ptrs_target = (
++                conv_states_ptr
++                + (conv_states_output_coord * stride_conv_state_seq)  # Offset from seq
++                + (idx_feats * stride_conv_state_dim)
++            )[None, :] + (  # [BLOCK_N,]
++                idx_tokens_conv * stride_conv_state_tok
++            )[:, None]
++
++            mask = (idx_tokens_conv < state_len)[:, None] & (idx_feats < dim)[None, :]
++            tl.debug_barrier()  #  NOTE: use this due to bug in Triton compiler
++            tl.store(conv_states_ptrs_target, loaded_x, mask)
++
++    if HAS_BIAS:
++        bias = bias_ptr + idx_feats
++        mask_bias = idx_feats < dim
++        acc_preload = tl.load(bias, mask=mask_bias, other=0.0).to(
++            tl.float32
++        )  # [BLOCK_N]
++    else:
++        acc_preload = tl.zeros((BLOCK_N,), dtype=tl.float32)
++
++    x_base_1d = x_base + token_offset * stride_x_token  # starting of chunk
++
++    mask_w = idx_feats < dim
++    if KERNEL_WIDTH >= 2:
++        w_ptrs = w_base + (0 * stride_w_width)  # [BLOCK_N] tensor
++        w_col0 = tl.load(w_ptrs, mask_w, other=0.0)
++        w_ptrs = w_base + (1 * stride_w_width)  # [BLOCK_N] tensor
++        w_col1 = tl.load(w_ptrs, mask_w, other=0.0)
++    if KERNEL_WIDTH >= 3:
++        w_ptrs = w_base + (2 * stride_w_width)  # [BLOCK_N] tensor
++        w_col2 = tl.load(w_ptrs, mask_w, other=0.0)
++    if KERNEL_WIDTH >= 4:
++        w_ptrs = w_base + (3 * stride_w_width)  # [BLOCK_N] tensor
++        w_col3 = tl.load(w_ptrs, mask_w, other=0.0)
++    mask_x_1d = idx_feats < dim
++    for idx_token in range(segment_len):
++        acc = acc_preload
++
++        matrix_w = w_col0
++        matrix_x = col0
++        for j in tl.static_range(KERNEL_WIDTH):
++            if KERNEL_WIDTH == 2:
++                if j == 1:  # KERNEL_WIDTH-1:
++                    matrix_w = w_col1
++                    x_ptrs_1d = x_base_1d + idx_token * stride_x_token  # [BLOCK_N]
++                    matrix_x = tl.load(x_ptrs_1d, mask=mask_x_1d)
++            elif KERNEL_WIDTH == 3:
++                if j == 1:
++                    matrix_w = w_col1
++                    matrix_x = col1
++                elif j == 2:
++                    matrix_w = w_col2
++                    x_ptrs_1d = x_base_1d + idx_token * stride_x_token  # [BLOCK_N]
++                    matrix_x = tl.load(x_ptrs_1d, mask=mask_x_1d)
++            elif KERNEL_WIDTH == 4:
++                if j == 1:
++                    matrix_w = w_col1
++                    matrix_x = col1
++                elif j == 2:
++                    matrix_w = w_col2
++                    matrix_x = col2
++                elif j == 3:
++                    matrix_w = w_col3
++                    x_ptrs_1d = x_base_1d + idx_token * stride_x_token  # [BLOCK_N]
++                    matrix_x = tl.load(x_ptrs_1d, mask=mask_x_1d)
++
++            acc += matrix_x * matrix_w  # [BLOCK_N]
++
++        if KERNEL_WIDTH == 2:
++            col0 = matrix_x
++        elif KERNEL_WIDTH == 3:
++            col0 = col1
++            col1 = matrix_x
++        elif KERNEL_WIDTH == 4:
++            col0 = col1
++            col1 = col2
++            col2 = matrix_x
++
++        if SILU_ACTIVATION:
++            acc = acc / (1 + tl.exp(-acc))
++
++        token_pos = sequence_start_index + token_offset + idx_token
++        mask_token = idx_token < segment_len
++
++        q_ptrs = (
++            query_ptr + token_pos * query_token_stride + q_feat_idx * query_dim_stride
++        )
++        tl.store(q_ptrs, acc, mask=mask_token & is_q_block)
++
++        k_ptrs = key_ptr + token_pos * key_token_stride + k_feat_idx * key_dim_stride
++        tl.store(k_ptrs, acc, mask=mask_token & is_k_block)
++
++        v_ptrs = (
++            value_ptr + token_pos * value_token_stride + v_feat_idx * value_dim_stride
++        )
++        tl.store(v_ptrs, acc, mask=mask_token & is_v_block)
++
++
++def fused_qkv_causal_conv1d_fn(
++    x: torch.Tensor,
++    weight: torch.Tensor,
++    bias: torch.Tensor | None,
++    conv_states: torch.Tensor,
++    query_start_loc: torch.Tensor,
++    k_dim_size: int,
++    v_dim_size: int,
++    cache_indices: torch.Tensor | None = None,
++    cache_indices_in: torch.Tensor | None = None,
++    has_initial_state: torch.Tensor | None = None,
++    activation: str | None = "silu",
++    pad_slot_id: int = PAD_SLOT_ID,
++    null_block_id: int = NULL_BLOCK_ID,
++    block_idx_first_scheduled_token: torch.Tensor | None = None,
++    block_idx_last_scheduled_token: torch.Tensor | None = None,
++    initial_state_idx: torch.Tensor | None = None,
++    num_computed_tokens: torch.Tensor | None = None,
++    block_size_to_align=0,
++    metadata=None,
++    validate_data=False,
++    BLOCK_M: int = 8,
++    BLOCK_N: int = 256,
++    num_warps: int = 4,
++    num_stages: int = 2,
++):
++    """Fused packed-QKV causal conv1d over a varlen continuous batch.
++
++    x: (3*k_dim+..., cu_seqlen) channel-last packed qkv (strided ok).
++    weight: (dim, width); conv_states: (cache_lines, dim, width-1), updated
++    in place via cache_indices (cache_indices_in when the state is forked).
++    query_start_loc: (batch+1) int32 cumulative lengths. cache index equal
++    to pad_slot_id skips the sequence; null_block_id (vLLM's reserved
++    padding block, 0) skips it entirely -- no output, no state touch.
++    Returns dense token-major (query, key, value).
++    """
++    if isinstance(activation, bool) and activation:
++        activation = "silu"
++
++    args = None
++    x = x.to(conv_states.dtype)
++    if metadata is not None:
++        nums_dict = metadata.nums_dict
++        args = nums_dict
++        batch_ptr = metadata.batch_ptr
++        token_chunk_offset_ptr = metadata.token_chunk_offset_ptr
++    else:
++        seqlens = query_start_loc.diff().to("cpu")
++        args = seqlens
++        MAX_NUM_PROGRAMS = 1024
++
++        batch_ptr = torch.full(
++            (MAX_NUM_PROGRAMS,), PAD_SLOT_ID, dtype=torch.int32, device=x.device
++        )  # tracking which seq-idx the Triton program is handling
++        token_chunk_offset_ptr = torch.full(
++            (MAX_NUM_PROGRAMS,), PAD_SLOT_ID, dtype=torch.int32, device=x.device
++        )  # tracking BLOCK_M-based index in the sequence the Triton program is handling
++
++    is_channel_last = (x.stride(0) == 1) & (x.stride(1) > 1)
++    dim, cu_seqlen = x.shape
++    _, width = weight.shape
++    state_len = width - 1
++    np2_statelen = triton.next_power_of_2(state_len)
++
++    padded_batch = query_start_loc.size(0) - 1
++    stride_x_dim = x.stride(0)
++    stride_x_token = x.stride(1)
++    stride_w_dim = weight.stride(0)
++    stride_w_width = weight.stride(1)
++    stride_istate_seq = 0
++    stride_istate_dim = 0
++    stride_istate_token = 0
++    num_cache_lines = 0
++    query = torch.empty([cu_seqlen, k_dim_size], dtype=x.dtype, device=x.device)
++    key = torch.empty([cu_seqlen, k_dim_size], dtype=x.dtype, device=x.device)
++    value = torch.empty([cu_seqlen, v_dim_size], dtype=x.dtype, device=x.device)
++
++    query_token_stride = query.stride(0)
++    key_token_stride = key.stride(0)
++    value_token_stride = value.stride(0)
++    query_dim_stride = query.stride(1)
++    key_dim_stride = key.stride(1)
++    value_dim_stride = value.stride(1)
++
++    if conv_states is not None:
++        num_cache_lines = conv_states.size(0)
++        assert (
++            num_cache_lines == conv_states.shape[0]
++            and dim == conv_states.shape[1]
++            and width - 1 <= conv_states.shape[2]
++        )
++        stride_istate_seq = conv_states.stride(0)
++        stride_istate_dim = conv_states.stride(1)
++        stride_istate_token = conv_states.stride(2)
++
++    stride_cache_indices = cache_indices.stride(0) if cache_indices is not None else 0
++
++    if validate_data:
++        assert x.dim() == 2
++        assert query_start_loc is not None
++        assert query_start_loc.dim() == 1
++        assert x.stride(0) == 1 or x.stride(1) == 1
++        if bias is not None:
++            assert bias.dim() == 1
++            assert dim == bias.size(0)
++        if cache_indices is not None:
++            assert cache_indices.dim() == 1
++            assert padded_batch == cache_indices.size(0)
++        if has_initial_state is not None:
++            assert has_initial_state.size() == (padded_batch,)
++            assert conv_states is not None, (
++                "ERROR: `has_initial_state` is used, which needs also `conv_states`"
++            )
++        assert weight.stride(1) == 1
++        assert (dim, width) == weight.shape
++        assert is_channel_last, "Need to run in channel-last layout"
++        if block_size_to_align is not None and block_size_to_align > 0:
++            assert (block_size_to_align % BLOCK_M) == 0, (
++                "The mamba block size needs to be divisible by the BLOCK_M"
++            )
++        else:
++            block_size_to_align = BLOCK_M
++
++    if metadata is None:
++
++        def num_program(META, seqlens):
++            tot = 0
++
++            mlist = []
++            offsetlist = []  # type: ignore
++
++            nums = -(-seqlens // META["BLOCK_M"])
++
++            tot = nums.sum().item()
++            mlist = np.repeat(np.arange(len(nums)), nums)
++            for idx, num in enumerate(nums):
++                offsetlist.extend(
++                    range(num)
++                )  # chunk-idx if a sequence is split into multiple chunks
++
++            if META["batch_ptr"].nelement() < len(mlist):
++                newlen = len(mlist) + 1
++                META["batch_ptr"].resize_(newlen).fill_(PAD_SLOT_ID)
++                META["token_chunk_offset_ptr"].resize_(newlen).fill_(PAD_SLOT_ID)
++
++            if META["batch_ptr"].nelement() >= len(mlist):
++                META["batch_ptr"][0 : len(mlist)].copy_(
++                    torch.from_numpy(np.array(mlist))
++                )
++                META["token_chunk_offset_ptr"][0 : len(mlist)].copy_(
++                    torch.from_numpy(np.array(offsetlist))
++                )
++
++            META["batch_ptr"] = META["batch_ptr"].to(META["x_ptr"].device)
++            META["token_chunk_offset_ptr"] = META["token_chunk_offset_ptr"].to(
++                META["x_ptr"].device
++            )
++            return tot
++
++    else:
++
++        def num_program(META, nums_dict):
++            tot = nums_dict[META["BLOCK_M"]]["tot"]
++
++            mlist = nums_dict[META["BLOCK_M"]]["mlist"]
++            mlist_len = nums_dict[META["BLOCK_M"]]["mlist_len"]
++
++            offsetlist = nums_dict[META["BLOCK_M"]]["offsetlist"]
++
++            if nums_dict[META["BLOCK_M"]]["batch_ptr"] is not None:
++                META["batch_ptr"] = nums_dict[META["BLOCK_M"]]["batch_ptr"]
++                META["token_chunk_offset_ptr"] = nums_dict[META["BLOCK_M"]][
++                    "token_chunk_offset_ptr"
++                ]
++            else:
++                if META["batch_ptr"].nelement() < mlist_len:
++                    newlen = mlist_len + 1
++                    META["batch_ptr"].resize_(newlen).fill_(PAD_SLOT_ID)
++                    META["token_chunk_offset_ptr"].resize_(newlen).fill_(PAD_SLOT_ID)
++
++                if META["batch_ptr"].nelement() >= mlist_len:
++                    META["batch_ptr"][0:mlist_len].copy_(mlist)
++                    META["token_chunk_offset_ptr"][0:mlist_len].copy_(offsetlist)
++            return tot
++
++    def grid(META):
++        return (
++            num_program(META, args),
++            triton.cdiv(dim, META["BLOCK_N"]),
++        )
++
++    if batch_ptr.device != x.device:
++        batch_ptr = batch_ptr.to(x.device)
++        token_chunk_offset_ptr = token_chunk_offset_ptr.to(x.device)
++
++    _causal_conv1d_fwd_kernel[grid](
++        x,
++        weight,
++        bias,
++        conv_states,
++        cache_indices,
++        cache_indices if cache_indices_in is None else cache_indices_in,
++        has_initial_state,
++        query_start_loc,
++        batch_ptr,
++        token_chunk_offset_ptr,
++        block_idx_first_scheduled_token,
++        block_idx_last_scheduled_token,
++        initial_state_idx,
++        num_computed_tokens,
++        query,
++        key,
++        value,
++        dim,
++        k_dim_size,
++        v_dim_size,
++        cu_seqlen,
++        num_cache_lines,
++        stride_x_dim,
++        stride_x_token,
++        stride_w_dim,
++        stride_w_width,
++        stride_istate_seq,
++        stride_istate_dim,
++        stride_istate_token,
++        stride_cache_indices,
++        query_dim_stride,
++        query_token_stride,
++        key_dim_stride,
++        key_token_stride,
++        value_dim_stride,
++        value_token_stride,
++        block_size_to_align // BLOCK_M,
++        pad_slot_id,
++        null_block_id,
++        HAS_BIAS=bias is not None,
++        KERNEL_WIDTH=width,
++        SILU_ACTIVATION=activation in ["silu", "swish"],
++        IS_APC_ENABLED=block_idx_last_scheduled_token is not None,
++        USE_PAD_SLOT=pad_slot_id is not None,
++        HAS_NULL_BLOCK=null_block_id is not None,
++        NP2_STATELEN=np2_statelen,
++        BLOCK_M=BLOCK_M,
++        BLOCK_N=BLOCK_N,
++        num_warps=num_warps,
++        num_stages=num_stages,
++    )
++    return query, key, value
+diff --git a/vllm/models/kimi_k3/nvidia/mla.py b/vllm/models/kimi_k3/nvidia/mla.py
+index 21be0c398fc9eec1f8016af4dc9ef7bb5fe2425a..ab09f66862c503c64c7e26a685810e277365afb4 100644
+--- a/vllm/models/kimi_k3/nvidia/mla.py
++++ b/vllm/models/kimi_k3/nvidia/mla.py
+@@ -42,7 +42,7 @@ from vllm.config import (
+     VllmConfig,
+     get_current_vllm_config,
+ )
+-from vllm.distributed import get_tensor_model_parallel_world_size
++from vllm.distributed import get_dcp_group, get_tensor_model_parallel_world_size
+ from vllm.forward_context import get_forward_context
+ from vllm.logger import init_logger
+ from vllm.model_executor.layers.attention.attention import (
+@@ -191,6 +191,8 @@ class MultiHeadLatentAttention(nn.Module, AttentionLayerBase):
+         self.num_heads = num_heads
+         self.num_local_heads = num_heads // tp_size
+
++        parallel_config = get_current_vllm_config().parallel_config
++
+         # ---- Pre-attention projections (fusable front-end) ----
+         # Two query variants: a low-rank q-LoRA path (Kimi-K3) fused with the
+         # kv-down proj, or an uncompressed q path (Kimi-Linear, ``q_lora_rank``
+@@ -339,7 +341,6 @@ class MultiHeadLatentAttention(nn.Module, AttentionLayerBase):
+         self.q_pad_num_heads = getattr(self.impl, "q_pad_num_heads", None)
+
+         vllm_config = get_current_vllm_config()
+-        parallel_config = vllm_config.parallel_config
+         assert parallel_config.prefill_context_parallel_size == 1, (
+             "Kimi-K3 MultiHeadLatentAttention does not support prefill context "
+             "parallelism."
+@@ -435,7 +436,6 @@ class MultiHeadLatentAttention(nn.Module, AttentionLayerBase):
+         replace_parameter(self, "W_UV", W_UV.transpose(0, 1), prefer_copy=True)
+         # (L, N, P) -> (N, P, L)
+         replace_parameter(self, "W_UK_T", W_UK.permute(1, 2, 0), prefer_copy=True)
+-
+         quant_method = (
+             self.quant_config.get_quant_method(self, prefix=self.layer_name)
+             if self.quant_config
+@@ -644,9 +644,36 @@ class MultiHeadLatentAttention(nn.Module, AttentionLayerBase):
+                 assert self.dcp_manager is not None
+                 assert self.dcp_manager.query_gather is not None
+                 mqa_q = self.dcp_manager.query_gather(mqa_q)
+-            latent_out, lse = self.impl.forward_mqa(  # type: ignore[attr-defined]
+-                mqa_q, self._attn_read_kv_cache(), attn_metadata, self
++            use_verify_window = (
++                getattr(self.impl, "supports_dcp_verify_window", False)
++                and self.dcp_world_size > 1
++                and get_dcp_group().rank_in_group == 0
++                and attn_metadata.decode is not None
++                and attn_metadata.decode.max_qo_len is not None
++                and attn_metadata.decode.max_qo_len > 1
++                and self.rotary_emb is None
+             )
++            if use_verify_window:
++                # The target uses NoPE, so the in-hand latent window already
++                # matches the cache layout expected by the dense verify stage.
++                k_window = torch.cat(
++                    [
++                        kv_c_normed[:num_mqa_tokens],
++                        k_pe[:num_mqa_tokens],
++                    ],
++                    dim=-1,
++                )
++                latent_out, lse = self.impl.forward_mqa_with_dcp_verify_window(  # type: ignore[attr-defined]
++                    mqa_q,
++                    self._attn_read_kv_cache(),
++                    attn_metadata,
++                    self,
++                    k_window,
++                )
++            else:
++                latent_out, lse = self.impl.forward_mqa(  # type: ignore[attr-defined]
++                    mqa_q, self._attn_read_kv_cache(), attn_metadata, self
++                )
+             if self.dcp_world_size > 1:
+                 assert lse is not None
+                 assert self.dcp_manager is not None
+diff --git a/vllm/platforms/rocm.py b/vllm/platforms/rocm.py
+index 9072c71426998f276752c918ce5cd5efbf873aa1..ffbeefda0c7de9bad23619f5b934fbbe77d4a38a 100644
+--- a/vllm/platforms/rocm.py
++++ b/vllm/platforms/rocm.py
+@@ -901,16 +901,8 @@ class RocmPlatform(Platform):
+         parallel_config = vllm_config.parallel_config
+
+         if compilation_config.cudagraph_mode.has_full_cudagraphs():
+-            # decode context parallel does not support full cudagraphs
+-            if parallel_config.decode_context_parallel_size > 1:
+-                logger.warning_once(
+-                    "Decode context parallel (DCP) is enabled, which is "
+-                    "incompatible with full CUDA graphs. "
+-                    "Overriding cudagraph_mode to PIECEWISE."
+-                )
+-                compilation_config.cudagraph_mode = CUDAGraphMode.PIECEWISE
+             # prefill context parallel do not support full cudagraphs
+-            elif parallel_config.prefill_context_parallel_size > 1:
++            if parallel_config.prefill_context_parallel_size > 1:
+                 logger.warning_once(
+                     "Prefill context parallel (PCP) is enabled, which is "
+                     "incompatible with full CUDA graphs. "
+diff --git a/vllm/v1/attention/backends/mla/rocm_aiter_mla.py b/vllm/v1/attention/backends/mla/rocm_aiter_mla.py
+index 51f487947a2b07103169a205bac8162dab78e59d..50339b8ba6293427521204ff77f96f6d959698f4 100644
+--- a/vllm/v1/attention/backends/mla/rocm_aiter_mla.py
++++ b/vllm/v1/attention/backends/mla/rocm_aiter_mla.py
+@@ -2,15 +2,18 @@
+ # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
+ import functools
++import inspect
+ from dataclasses import dataclass
+ from pathlib import Path
+ from typing import ClassVar, Final
+
++import regex as re
+ import torch
+
+ from vllm._aiter_ops import rocm_aiter_ops
+ from vllm.config import VllmConfig
+ from vllm.config.cache import CacheDType
++from vllm.distributed import get_dcp_group
+ from vllm.logger import init_logger
+ from vllm.model_executor.layers.attention.mla_attention import (
+     MLACommonBackend,
+@@ -21,17 +24,32 @@ from vllm.model_executor.layers.attention.mla_attention import (
+     QueryLenSupport,
+ )
+ from vllm.triton_utils import tl, triton
++from vllm.utils.math_utils import cdiv, largest_power_of_2_divisor
+ from vllm.v1.attention.backend import (
+     AttentionCGSupport,
+     AttentionLayer,
+     CommonAttentionMetadata,
+     MultipleOf,
+ )
++from vllm.v1.attention.backends.utils import (
++    get_dcp_local_seq_lens,
++    get_num_attention_heads_from_layers,
++)
++from vllm.v1.attention.ops.merge_attn_states import merge_attn_states
++from vllm.v1.attention.ops.rocm_aiter_mla_reduce import (
++    reduce_mla_segment_partials,
++)
+ from vllm.v1.kv_cache_interface import AttentionSpec, is_quantized_kv_cache
+
+ logger = init_logger(__name__)
+
+
++def _segmented_mla_page_size(block_size: int) -> int:
++    """Largest supported power-of-two subpage dividing a physical KV block."""
++    assert block_size > 0
++    return min(128, largest_power_of_2_divisor(block_size))
++
++
+ @functools.lru_cache(maxsize=1)
+ def _get_mla_gluon():
+     """Load the small-head Gluon MLA entry point."""
+@@ -137,6 +155,57 @@ def _gluon_mla_decode_supported() -> bool:
+     return on_gfx950()
+
+
++@functools.lru_cache(maxsize=1)
++def _get_segmented_mla_decode():
++    """Load AITER's segmented MLA decode with unreduced partial output."""
++    from aiter.ops.triton.attention.mla import mla_decode_fwd
++
++    return mla_decode_fwd
++
++
++@functools.lru_cache(maxsize=1)
++def _get_aiter_mla_decode():
++    from aiter.mla import mla_decode_fwd
++
++    return mla_decode_fwd
++
++
++@functools.lru_cache(maxsize=1)
++def _segmented_mla_decode_supported() -> bool:
++    """Whether AITER exposes the segmented MLA decode used by DCP verify."""
++    if not _gluon_mla_decode_supported():
++        return False
++    try:
++        _get_segmented_mla_decode()
++    except Exception:  # noqa: BLE001
++        return False
++    return True
++
++
++@functools.lru_cache(maxsize=1)
++def _gluon_mla_wrapper_source() -> str | None:
++    try:
++        return inspect.getsource(_get_mla_gluon())
++    except Exception:  # noqa: BLE001
++        return None
++
++
++_GLUON_MAX_HEADS_PATTERN = re.compile(r"requires nhead <= (\d+)")
++
++
++@functools.lru_cache(maxsize=1)
++def _gluon_mla_max_bh16_heads() -> int:
++    """Read the supported head bound from the installed AITER wrapper."""
++    fallback = AiterMLAHelper._AITER_MIN_MLA_HEADS
++    source = _gluon_mla_wrapper_source()
++    if source is None:
++        return fallback
++    match = _GLUON_MAX_HEADS_PATTERN.search(source)
++    if match is None:
++        return fallback
++    return max(fallback, int(match.group(1)))
++
++
+ def _aiter_mla_small_head_mode() -> str:
+     """Small-head (<16) MLA decode kernel selection.
+
+@@ -164,6 +233,60 @@ def _aiter_mla_small_head_mode() -> str:
+     return mode
+
+
++def _dense_causal_mla_attn(
++    q_nope: torch.Tensor,
++    q_pe: torch.Tensor,
++    k_window: torch.Tensor,
++    scale: float,
++    qlen: int,
++    kv_lora_rank: int,
++) -> tuple[torch.Tensor, torch.Tensor]:
++    """Dense causal MLA over the in-hand verify window.
++
++    ``q_*`` are ``[R*qlen, H, D]``; ``k_window`` is ``[R*qlen, kv_lora+rope]``
++    in the same request/token order. Returns ``(out, lse)`` with natural-log
++    LSE so it combines with Gluon ``return_lse=True``.
++    """
++    num_rows, num_heads, _ = q_nope.shape
++    assert num_rows % qlen == 0, f"rows {num_rows} not divisible by qlen={qlen}"
++    bs = num_rows // qlen
++    q = torch.cat([q_nope, q_pe], dim=-1)
++    qb = q.view(bs, qlen, num_heads, -1)
++    kb = k_window.view(bs, qlen, -1)
++    scores = torch.einsum("bihd,bjd->bhij", qb, kb).float() * scale
++    causal = torch.ones(qlen, qlen, dtype=torch.bool, device=q.device).tril()
++    scores = scores.masked_fill(~causal, float("-inf"))
++    lse = torch.logsumexp(scores, dim=-1)  # [bs, H, qlen], natural log
++    probs = torch.exp(scores - lse.unsqueeze(-1))
++    vb = kb[..., :kv_lora_rank].float()
++    out = torch.einsum("bhij,bjd->bihd", probs, vb)
++    return (
++        out.reshape(num_rows, num_heads, kv_lora_rank).to(q_nope.dtype),
++        lse.permute(0, 2, 1).reshape(num_rows, num_heads),
++    )
++
++
++def _lse_combine_natural(
++    out_a: torch.Tensor,
++    lse_a: torch.Tensor,
++    out_b: torch.Tensor,
++    lse_b: torch.Tensor,
++    out_dtype: torch.dtype,
++) -> tuple[torch.Tensor, torch.Tensor]:
++    """Merge two partial attentions over disjoint keys (natural-log LSE)."""
++    out = torch.empty_like(out_a, dtype=out_dtype)
++    lse = torch.empty_like(lse_a.transpose(0, 1))
++    merge_attn_states(
++        output=out,
++        output_lse=lse,
++        prefix_output=out_a,
++        prefix_lse=lse_a.transpose(0, 1),
++        suffix_output=out_b,
++        suffix_lse=lse_b.transpose(0, 1),
++    )
++    return out, lse.transpose(0, 1)
++
++
+ class AiterMLABackend(MLACommonBackend):
+     supported_dtypes: ClassVar[list[torch.dtype]] = [torch.float16, torch.bfloat16]
+     supported_kv_cache_dtypes: ClassVar[list[CacheDType]] = [
+@@ -215,8 +338,19 @@ class AiterMLADecodeMetadata(MLACommonDecodeMetadata):
+     attn_out_dtype: torch.dtype = torch.bfloat16
+     # The max query output length: int
+     max_qo_len: int | None = None
++    # Kernel max_qo_len after optional ASM LSE-PS pad (None = no pad).
++    kernel_max_qo_len: int | None = None
+     # Minimum KV length used by Gluon to choose a safe split count.
+     min_kv_seq_len: int = 1
++    # Per-token causal KV views for multi-token Gluon verification.
++    verify_row_indptr: torch.Tensor | None = None
++    verify_row_page_table: torch.Tensor | None = None
++    verify_row_lens: torch.Tensor | None = None
++    verify_min_kv_seq_len: int = 1
++    # Committed-shard metadata for segmented DCP verification.
++    dcp_verify_block_table: torch.Tensor | None = None
++    dcp_verify_qo_indptr: torch.Tensor | None = None
++    dcp_verify_max_kv_seq_len: int = 1
+     # Small-head decode uses Gluon (avoids padding to 16).
+     use_gluon_decode: bool = False
+     # Whether persistent MLA metadata was computed
+@@ -305,13 +439,38 @@ class AiterMLAMetadataBuilder(MLACommonMetadataBuilder[AiterMLAMetadata]):
+         vllm_config: VllmConfig,
+         device: torch.device,
+     ):
++        parallel_config = vllm_config.parallel_config
++        group_dcp_world_size = parallel_config.decode_context_parallel_size
++        # A draft group can have its own head count, so resolve it per layer the
++        # way the common builder does rather than off the model config.
++        gathered_num_heads = (
++            get_num_attention_heads_from_layers(vllm_config, layer_names)
++            or vllm_config.model_config.get_num_attention_heads(parallel_config)
++        ) * group_dcp_world_size
++        supports_dcp_with_varlen = (
++            parallel_config.cp_kv_cache_interleave_size == 1
++            and AiterMLAHelper.use_gluon_verify(
++                gathered_num_heads,
++                2,
++                vllm_config.cache_config.cache_dtype,
++                group_dcp_world_size,
++            )
++        )
+         super().__init__(
+-            kv_cache_spec, layer_names, vllm_config, device, AiterMLAMetadata
++            kv_cache_spec,
++            layer_names,
++            vllm_config,
++            device,
++            AiterMLAMetadata,
++            supports_dcp_with_varlen=supports_dcp_with_varlen,
+         )
+
+         self.compilation_config = vllm_config.compilation_config
+         self.decode_attn_out_dtype = vllm_config.model_config.dtype
+
++        # Needed to place a verify row's causal window on this rank's KV shard.
++        self.dcp_rank = get_dcp_group().rank_in_group if self.dcp_world_size > 1 else 0
++
+         # reorder_batch_threshold is the largest query length decode can be
+         # handed, and already accounts for the drafting scheme. A method-name
+         # whitelist sizes unlisted drafters for qlen=1, which closes the
+@@ -323,6 +482,11 @@ class AiterMLAMetadataBuilder(MLACommonMetadataBuilder[AiterMLAMetadata]):
+         # (e.g. 16 with Eagle3), we expand block-level indices into per-token
+         # flat indices since the aiter kernel always uses page_size=1 internally.
+         self.kernel_block_size = kv_cache_spec.block_size
++        num_dcp_partitions = self.dcp_world_size * self.cp_kv_cache_interleave_size
++        self._dcp_verify_graph_max_kv_seq_len = (
++            cdiv(vllm_config.model_config.max_model_len, num_dcp_partitions)
++            * self.cp_kv_cache_interleave_size
++        )
+
+         # In the flat view (.view(-1,1,1,H)), each token is its own page,
+         # so max_num_pages_per_req = max_model_len regardless of
+@@ -351,10 +515,12 @@ class AiterMLAMetadataBuilder(MLACommonMetadataBuilder[AiterMLAMetadata]):
+
+         from aiter import dtypes, get_mla_metadata_info_v1
+
++        # Decode kernels consume the DCP-gathered query heads.
++        self._decode_num_heads = self.num_heads * self.dcp_world_size
+         # Keep metadata sizing consistent with the padded tensor shape passed
+-        # to mla_decode_fwd.
++        # to mla_decode_fwd, including native 24-head AITER builds.
+         self._num_attention_heads = AiterMLAHelper.get_actual_mla_num_heads(
+-            self.num_heads
++            self._decode_num_heads
+         )
+         kv_cache_dtype_str = getattr(vllm_config.cache_config, "cache_dtype", "auto")
+         if kv_cache_dtype_str in ("fp8", "fp8_e4m3", "fp8_e5m2"):
+@@ -430,6 +596,16 @@ class AiterMLAMetadataBuilder(MLACommonMetadataBuilder[AiterMLAMetadata]):
+                 device,
+             )
+
++        # Persistent buffers for the verify flatten's per-row paged-KV view. A
++        # captured graph reads the addresses handed to it at capture time, and
++        # the view's page count varies per step, so it cannot be a fresh
++        # allocation. Only sized when a verify can actually take the flatten.
++        self._verify_row_indptr: torch.Tensor | None = None
++        self._verify_row_page_table: torch.Tensor | None = None
++        self._verify_row_lens: torch.Tensor | None = None
++        self._dcp_verify_block_table: torch.Tensor | None = None
++        self._dcp_verify_qo_indptr: torch.Tensor | None = None
++        self._graph_seq_lens: torch.Tensor | None = None
+         if self.compilation_config.cudagraph_mode.has_full_cudagraphs():
+             self.paged_kv_indptr = torch.zeros(
+                 max_num_reqs + 1, dtype=torch.int32, device=device
+@@ -439,6 +615,49 @@ class AiterMLAMetadataBuilder(MLACommonMetadataBuilder[AiterMLAMetadata]):
+                 max_num_reqs + 1, dtype=torch.int32, device=device
+             )
+
++            # Full graphs require a stable address after uniform-MTP padding.
++            self._graph_seq_lens = torch.zeros(
++                max_num_reqs, dtype=torch.int32, device=device
++            )
++
++            if AiterMLAHelper.use_gluon_verify(
++                self._decode_num_heads,
++                self._mtp_decode_qlen,
++                self._kv_cache_dtype_str,
++                self.dcp_world_size,
++            ):
++                max_verify_rows = max_num_reqs * self._mtp_decode_qlen
++                self._verify_row_lens = torch.zeros(
++                    max_verify_rows, dtype=torch.int32, device=device
++                )
++                if self.dcp_world_size > 1:
++                    segmented_page_size = _segmented_mla_page_size(
++                        self.kernel_block_size
++                    )
++                    max_local_pages = cdiv(
++                        self._dcp_verify_graph_max_kv_seq_len,
++                        segmented_page_size,
++                    )
++                    self._dcp_verify_block_table = torch.zeros(
++                        (max_verify_rows, max_local_pages),
++                        dtype=torch.int32,
++                        device=device,
++                    )
++                    self._dcp_verify_qo_indptr = torch.arange(
++                        max_verify_rows + 1,
++                        dtype=torch.int32,
++                        device=device,
++                    )
++                else:
++                    self._verify_row_indptr = torch.zeros(
++                        max_verify_rows + 1, dtype=torch.int32, device=device
++                    )
++                    self._verify_row_page_table = torch.zeros(
++                        max_verify_rows * max_num_pages_per_req,
++                        dtype=torch.int32,
++                        device=device,
++                    )
++
+     def _init_fp8_prefill_ps_buffers(
+         self,
+         max_num_reqs: int,
+@@ -619,6 +838,149 @@ class AiterMLAMetadataBuilder(MLACommonMetadataBuilder[AiterMLAMetadata]):
+         metadata.fp8_prefill_max_q_len = prefill.max_query_len
+         metadata.fp8_prefill_num_partial_tiles = num_partial_tiles
+
++    def _build_verify_row_view(
++        self,
++        qlen: int,
++        paged_kv_indptr: torch.Tensor,
++        paged_kv_indices: torch.Tensor,
++    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, int]:
++        """Flatten a non-DCP verify into one causal paged-KV row per token."""
++        assert self.dcp_world_size == 1
++        num_reqs = paged_kv_indptr.numel() - 1
++        device = paged_kv_indptr.device
++        seq_lens = paged_kv_indptr[1:] - paged_kv_indptr[:-1]
++        offsets = torch.arange(qlen, device=device, dtype=seq_lens.dtype)
++        row_lens = (
++            (seq_lens.unsqueeze(1) - (qlen - 1) + offsets).clamp_min_(0).flatten()
++        )
++        row_indptr = torch.cat([paged_kv_indptr.new_zeros(1), row_lens.cumsum(0)]).to(
++            torch.int32
++        )
++        total_pages = int(row_indptr[-1].item())
++        row_starts = row_indptr[:-1].to(torch.int64).repeat_interleave(row_lens)
++        within_row = (
++            torch.arange(total_pages, device=device, dtype=torch.int64) - row_starts
++        )
++        row_req = torch.arange(num_reqs, device=device).repeat_interleave(qlen)
++        src = paged_kv_indptr[row_req].to(torch.int64).repeat_interleave(row_lens)
++        row_page_table = paged_kv_indices[src + within_row]
++
++        if self._verify_row_page_table is not None:
++            assert self._verify_row_indptr is not None
++            assert self._verify_row_lens is not None
++            assert total_pages <= self._verify_row_page_table.numel(), (
++                f"the verify's per-row view needs {total_pages} pages but the "
++                f"cudagraph buffer holds {self._verify_row_page_table.numel()}"
++            )
++            num_rows = row_lens.numel()
++            self._verify_row_lens[:num_rows].copy_(row_lens, non_blocking=True)
++            self._verify_row_indptr[: num_rows + 1].copy_(row_indptr, non_blocking=True)
++            self._verify_row_page_table[:total_pages].copy_(
++                row_page_table, non_blocking=True
++            )
++            row_lens = self._verify_row_lens[:num_rows]
++            row_indptr = self._verify_row_indptr[: num_rows + 1]
++            # The whole buffer, not a slice: a captured batch fixes the row count
++            # but not the page count, and the kernel reads the table through
++            # row_indptr rather than through its length.
++            row_page_table = self._verify_row_page_table
++
++        # Captured split counts must remain valid when replayed with shorter rows.
++        min_row_kv_len = (
++            1
++            if self.compilation_config.cudagraph_mode.has_full_cudagraphs()
++            else int(row_lens.min())
++        )
++        return row_indptr, row_page_table, row_lens, min_row_kv_len
++
++    def _build_dcp_verify_row_view(
++        self,
++        qlen: int,
++        block_table: torch.Tensor,
++        dcp_tot_seq_lens: torch.Tensor,
++    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, int]:
++        """Build committed-shard rows for segmented DCP verification."""
++        assert self.dcp_world_size > 1
++        num_reqs = dcp_tot_seq_lens.numel()
++        committed = (dcp_tot_seq_lens - qlen).clamp(min=0)
++        per_req_lens = get_dcp_local_seq_lens(
++            committed,
++            self.dcp_world_size,
++            self.dcp_rank,
++            self.cp_kv_cache_interleave_size,
++        )
++        row_lens = per_req_lens.repeat_interleave(qlen)
++        num_rows = row_lens.numel()
++        max_kv_seq_len = (
++            self._dcp_verify_graph_max_kv_seq_len
++            if self.compilation_config.cudagraph_mode.has_full_cudagraphs()
++            else max(1, int(row_lens.max().item()))
++        )
++        page_size = _segmented_mla_page_size(self.kernel_block_size)
++        pages_per_block = self.kernel_block_size // page_size
++        max_local_pages = cdiv(max_kv_seq_len, page_size)
++        if self._dcp_verify_block_table is not None:
++            assert self._dcp_verify_qo_indptr is not None
++            assert self._verify_row_lens is not None
++            assert max_local_pages <= self._dcp_verify_block_table.shape[1]
++            row_block_table = self._dcp_verify_block_table[:num_rows]
++            self._verify_row_lens[:num_rows].copy_(row_lens, non_blocking=True)
++            row_lens = self._verify_row_lens[:num_rows]
++            qo_indptr = self._dcp_verify_qo_indptr[: num_rows + 1]
++        else:
++            row_block_table = torch.empty(
++                (num_rows, max_local_pages),
++                dtype=torch.int32,
++                device=block_table.device,
++            )
++            qo_indptr = torch.arange(
++                num_rows + 1,
++                dtype=torch.int32,
++                device=block_table.device,
++            )
++        self._fill_dcp_verify_page_table(
++            row_block_table,
++            block_table,
++            num_reqs,
++            qlen,
++            pages_per_block,
++            max_local_pages,
++        )
++        return row_block_table, row_lens, qo_indptr, max_kv_seq_len
++
++    def _fill_dcp_verify_page_table(
++        self,
++        row_block_table: torch.Tensor,
++        block_table: torch.Tensor,
++        num_reqs: int,
++        qlen: int,
++        pages_per_block: int,
++        max_local_pages: int,
++    ) -> None:
++        if block_table.is_cuda:
++            _expand_dcp_verify_subpages_kernel[(num_reqs,)](
++                row_block_table,
++                block_table,
++                row_block_table.stride(0),
++                block_table.stride(0),
++                qlen=qlen,
++                pages_per_block=pages_per_block,
++                max_local_pages=max_local_pages,
++                BLOCK=64,
++            )
++            return
++        max_local_blocks = cdiv(max_local_pages, pages_per_block)
++        subpage_offsets = torch.arange(
++            pages_per_block,
++            dtype=block_table.dtype,
++            device=block_table.device,
++        )
++        per_req_page_table = (
++            block_table[:num_reqs, :max_local_blocks, None] * pages_per_block
++            + subpage_offsets
++        ).flatten(1)[:, :max_local_pages]
++        row_block_table.copy_(per_req_page_table.repeat_interleave(qlen, dim=0))
++
+     def _build_decode(
+         self,
+         block_table_tensor: torch.Tensor,
+@@ -641,7 +1003,6 @@ class AiterMLAMetadataBuilder(MLACommonMetadataBuilder[AiterMLAMetadata]):
+         pad_uniform_mtp = padded_mtp_qo_len > 0
+
+         seq_lens_for_kernel = seq_lens_device
+-        num_kernel_reqs = num_reqs
+         if pad_uniform_mtp:
+             qo_lens_device = (
+                 query_start_loc_device[1 : num_reqs + 1]
+@@ -653,9 +1014,15 @@ class AiterMLAMetadataBuilder(MLACommonMetadataBuilder[AiterMLAMetadata]):
+                 seq_lens_for_kernel.new_full((), max_qo_len),
+             )
+
++        if self._graph_seq_lens is not None:
++            self._graph_seq_lens[:num_reqs].copy_(
++                seq_lens_for_kernel, non_blocking=True
++            )
++            seq_lens_for_kernel = self._graph_seq_lens[:num_reqs]
++
+         # The aiter kernel always operates with page_size=1 (the wrapper
+         # flattens kv_buffer). last_page_len is always 1.
+-        paged_kv_last_page_len = self.paged_kv_last_page_len[:num_kernel_reqs]
++        paged_kv_last_page_len = self.paged_kv_last_page_len[:num_reqs]
+
+         # indptr: cumsum of seq_lens (one page per token in the flat view)
+         paged_kv_indptr = torch.cat(
+@@ -665,93 +1032,97 @@ class AiterMLAMetadataBuilder(MLACommonMetadataBuilder[AiterMLAMetadata]):
+             ]
+         )
+         use_gluon_decode = AiterMLAHelper.use_gluon_decode(
+-            self.num_heads, int(max_qo_len), self._kv_cache_dtype_str
++            self._decode_num_heads,
++            int(max_qo_len),
++            self._kv_cache_dtype_str,
++            self.dcp_world_size,
+         )
+-
+-        if self.compilation_config.cudagraph_mode.has_full_cudagraphs():
+-            self.paged_kv_indices.fill_(-1)
+-
+-        # Expand block_table entries into per-token flat indices.
+-        # When kernel_block_size=1, this degrades to a direct copy (identical
+-        # to the original _copy_page_indices_kernel).
+-        # When kernel_block_size=K>1, block_table entry b covering K tokens
+-        # gets expanded to flat indices b*K, b*K+1, ..., b*K+(K-1).
+-        _expand_page_indices_kernel[(num_reqs,)](
+-            self.paged_kv_indices,
+-            block_table_tensor,
+-            block_table_tensor.stride(0),
+-            paged_kv_indptr,
+-            seq_lens_for_kernel,
+-            KERNEL_BLOCK_SIZE=self.kernel_block_size,
+-            BLOCK_SIZE=1024,
++        use_gluon_verify = AiterMLAHelper.use_gluon_verify(
++            self._decode_num_heads,
++            int(max_qo_len),
++            self._kv_cache_dtype_str,
++            self.dcp_world_size,
+         )
++        skip_paged_kv_expand = use_gluon_verify and self.dcp_world_size > 1
++
++        if not skip_paged_kv_expand:
++            if self.compilation_config.cudagraph_mode.has_full_cudagraphs():
++                self.paged_kv_indices.fill_(-1)
++
++            # Expand block_table entries into per-token flat indices.
++            # When kernel_block_size=1, this degrades to a direct copy (identical
++            # to the original _copy_page_indices_kernel).
++            # When kernel_block_size=K>1, block_table entry b covering K tokens
++            # gets expanded to flat indices b*K, b*K+1, ..., b*K+(K-1).
++            _expand_page_indices_kernel[(num_reqs,)](
++                self.paged_kv_indices,
++                block_table_tensor,
++                block_table_tensor.stride(0),
++                paged_kv_indptr,
++                seq_lens_for_kernel,
++                KERNEL_BLOCK_SIZE=self.kernel_block_size,
++                BLOCK_SIZE=1024,
++            )
+         paged_kv_indices = self.paged_kv_indices
+
+         if self.compilation_config.cudagraph_mode.has_full_cudagraphs():
+-            self.paged_kv_indptr[: 1 + num_kernel_reqs].copy_(
++            self.paged_kv_indptr[: 1 + num_reqs].copy_(
+                 paged_kv_indptr, non_blocking=True
+             )
+-            self.paged_kv_indptr[1 + num_kernel_reqs :].fill_(paged_kv_indptr[-1])
+-            paged_kv_indptr = self.paged_kv_indptr[: 1 + num_kernel_reqs]
+-
+-            # paged_kv_last_page_len already uses the pre-initialized buffer slice
+-            # (set above), so no copy needed - buffer is always 1s.
++            self.paged_kv_indptr[1 + num_reqs :].fill_(paged_kv_indptr[-1])
++            paged_kv_indptr = self.paged_kv_indptr[: 1 + num_reqs]
+
+             if pad_uniform_mtp:
+-                qo_indptr_src = torch.arange(
+-                    0,
+-                    (num_kernel_reqs + 1) * max_qo_len,
+-                    step=max_qo_len,
+-                    dtype=torch.int32,
+-                    device=device,
++                qo_indptr_src = AiterMLAHelper.qo_indptr_for_uniform_qlen(
++                    num_reqs, int(max_qo_len), device
+                 )
+             else:
+-                qo_indptr_src = query_start_loc_device[: 1 + num_kernel_reqs]
+-            self.qo_indptr[: 1 + num_kernel_reqs].copy_(
+-                qo_indptr_src, non_blocking=True
+-            )
+-            self.qo_indptr[1 + num_kernel_reqs :] = qo_indptr_src[-1]
+-            qo_indptr = self.qo_indptr[: 1 + num_kernel_reqs]
++                qo_indptr_src = query_start_loc_device[: 1 + num_reqs]
++            self.qo_indptr[: 1 + num_reqs].copy_(qo_indptr_src, non_blocking=True)
++            self.qo_indptr[1 + num_reqs :] = qo_indptr_src[-1]
++            qo_indptr = self.qo_indptr[: 1 + num_reqs]
+
+         else:
+             if max_qo_len == 1:
+-                qo_indptr = torch.arange(
+-                    0,
+-                    num_kernel_reqs + 1,
+-                    step=1,
+-                    dtype=torch.int32,
+-                    device=device,
++                qo_indptr = AiterMLAHelper.qo_indptr_for_uniform_qlen(
++                    num_reqs, 1, device
+                 )
+             else:
+                 if pad_uniform_mtp:
+-                    qo_indptr = torch.arange(
+-                        0,
+-                        (num_kernel_reqs + 1) * max_qo_len,
+-                        step=max_qo_len,
+-                        dtype=torch.int32,
+-                        device=device,
++                    qo_indptr = AiterMLAHelper.qo_indptr_for_uniform_qlen(
++                        num_reqs, int(max_qo_len), device
+                     )
+                 else:
+-                    qo_indptr = query_start_loc_device[: 1 + num_kernel_reqs]
++                    qo_indptr = query_start_loc_device[: 1 + num_reqs]
+
+-        # Only the asm decode consumes the schedule, so gate on the routing
+-        # rather than on num_heads >= 16, which denies it to a padded rank
+-        # running the same asm kernels. The two predicates are disjoint --
+-        # decode is qlen==1, verify is qlen>1 -- and cover both Gluon entries.
++        # Only ASM routes consume persistent scheduling metadata.
+         has_persistent_metadata = False
+-        use_persistent_metadata = (
+-            not AiterMLAHelper.use_gluon_decode(
+-                self.num_heads, max_qo_len, self._kv_cache_dtype_str
+-            )
+-            and not AiterMLAHelper.use_gluon_verify(
+-                self.num_heads, max_qo_len, self._kv_cache_dtype_str
++        # Uniform verify with qlen in {2,3} can ride the qlen=4 ASM LSE-PS
++        # entry via leading pad rows (Gluon verify skips this path).
++        kernel_max_qo_len = max_qo_len
++        asm_kernel_qlen = AiterMLAHelper.asm_lse_ps_kernel_qlen(int(max_qo_len))
++        can_asm_qlen_pad = (
++            not use_gluon_decode
++            and not use_gluon_verify
++            and asm_kernel_qlen is not None
++            and asm_kernel_qlen > max_qo_len
++            and (pad_uniform_mtp or torch.all(qo_len == max_qo_len))
++        )
++        if can_asm_qlen_pad:
++            assert asm_kernel_qlen is not None
++            kernel_max_qo_len = asm_kernel_qlen
++            qo_indptr = AiterMLAHelper.qo_indptr_for_uniform_qlen(
++                num_reqs, kernel_max_qo_len, device
+             )
++        use_persistent_metadata = (
++            not use_gluon_decode
++            and not use_gluon_verify
+             # A padded rank has no bf16 persistent kernel past qlen 4 where the
+             # gfx950 fold is absent; the non-persistent entry covers it. fp8
+             # keeps the schedule -- its fold rejects non-persistent outright.
+             and (
+-                self.num_heads >= AiterMLAHelper._AITER_MIN_MLA_HEADS
+-                or max_qo_len <= AiterMLAHelper._ASM_PADDED_MAX_PS_QLEN
++                self._decode_num_heads >= AiterMLAHelper._AITER_MIN_MLA_HEADS
++                or kernel_max_qo_len <= AiterMLAHelper._ASM_PADDED_MAX_PS_QLEN
+                 or is_quantized_kv_cache(self._kv_cache_dtype_str)
+             )
+             and max_qo_len >= 1
+@@ -761,7 +1132,11 @@ class AiterMLAMetadataBuilder(MLACommonMetadataBuilder[AiterMLAMetadata]):
+             from aiter import get_mla_metadata_v1
+
+             uni_qo_len = (
+-                max_qo_len if pad_uniform_mtp or torch.all(qo_len == max_qo_len) else -1
++                kernel_max_qo_len
++                if can_asm_qlen_pad
++                or pad_uniform_mtp
++                or torch.all(qo_len == max_qo_len)
++                else -1
+             )
+             get_mla_metadata_v1(
+                 qo_indptr,
+@@ -778,7 +1153,7 @@ class AiterMLAMetadataBuilder(MLACommonMetadataBuilder[AiterMLAMetadata]):
+                 self._mla_reduce_partial_map,
+                 page_size=1,
+                 kv_granularity=16,
+-                max_seqlen_qo=max_qo_len,
++                max_seqlen_qo=kernel_max_qo_len,
+                 uni_seqlen_qo=uni_qo_len,
+                 fast_mode=True,
+                 dtype_q=self._mla_q_dtype,
+@@ -786,6 +1161,35 @@ class AiterMLAMetadataBuilder(MLACommonMetadataBuilder[AiterMLAMetadata]):
+             )
+             has_persistent_metadata = True
+
++        row_indptr = row_page_table = row_lens = None
++        min_row_kv_len = 1
++        dcp_verify_block_table = dcp_verify_qo_indptr = None
++        dcp_verify_max_kv_seq_len = 1
++        if use_gluon_verify:
++            if self.dcp_world_size > 1:
++                assert dcp_tot_seq_lens_device is not None
++                (
++                    dcp_verify_block_table,
++                    row_lens,
++                    dcp_verify_qo_indptr,
++                    dcp_verify_max_kv_seq_len,
++                ) = self._build_dcp_verify_row_view(
++                    int(max_qo_len),
++                    block_table_tensor,
++                    dcp_tot_seq_lens_device,
++                )
++            else:
++                (
++                    row_indptr,
++                    row_page_table,
++                    row_lens,
++                    min_row_kv_len,
++                ) = self._build_verify_row_view(
++                    int(max_qo_len),
++                    paged_kv_indptr,
++                    paged_kv_indices,
++                )
++
+         attn_metadata = AiterMLADecodeMetadata(
+             block_table=block_table_tensor,
+             seq_lens=seq_lens_for_kernel,
+@@ -795,6 +1199,16 @@ class AiterMLAMetadataBuilder(MLACommonMetadataBuilder[AiterMLAMetadata]):
+             qo_indptr=qo_indptr,
+             dcp_tot_seq_lens=dcp_tot_seq_lens_device,
+             max_qo_len=max_qo_len,
++            kernel_max_qo_len=(
++                kernel_max_qo_len if kernel_max_qo_len != max_qo_len else None
++            ),
++            verify_row_indptr=row_indptr,
++            verify_row_page_table=row_page_table,
++            verify_row_lens=row_lens,
++            verify_min_kv_seq_len=min_row_kv_len,
++            dcp_verify_block_table=dcp_verify_block_table,
++            dcp_verify_qo_indptr=dcp_verify_qo_indptr,
++            dcp_verify_max_kv_seq_len=dcp_verify_max_kv_seq_len,
+             use_gluon_decode=use_gluon_decode,
+             attn_out_dtype=self.decode_attn_out_dtype,
+             has_persistent_metadata=has_persistent_metadata,
+@@ -881,6 +1295,39 @@ def _expand_page_indices_kernel(
+         )
+
+
++@triton.jit
++def _expand_dcp_verify_subpages_kernel(
++    out_ptr,
++    block_table_ptr,
++    out_stride0,
++    block_table_stride,
++    qlen: tl.constexpr,
++    pages_per_block: tl.constexpr,
++    max_local_pages: tl.constexpr,
++    BLOCK: tl.constexpr,
++):
++    """Write 128-token subpage IDs into the DCP verify block table."""
++    req_idx = tl.program_id(0)
++    page_off = tl.arange(0, BLOCK)
++    for start in tl.range(0, max_local_pages, BLOCK):
++        pages = start + page_off
++        mask = pages < max_local_pages
++        block_idx = pages // pages_per_block
++        sub = pages % pages_per_block
++        block_ids = tl.load(
++            block_table_ptr + req_idx * block_table_stride + block_idx,
++            mask=mask,
++            other=0,
++        )
++        page_ids = block_ids * pages_per_block + sub
++        for q in tl.static_range(qlen):
++            tl.store(
++                out_ptr + (req_idx * qlen + q) * out_stride0 + pages,
++                page_ids,
++                mask=mask,
++            )
++
++
+ class AiterMLAHelper:
+     """
+     AITER MLA persistent (asm) decode requires a multiple of 16 heads. Unaligned
+@@ -897,8 +1344,89 @@ class AiterMLAHelper:
+     # for. Above it only the non-persistent qseqlen=8 entry exists, and the
+     # fold that reaches a persistent one is gfx950-only.
+     _ASM_PADDED_MAX_PS_QLEN: Final = 4
++    # bf16 gqa=16 ASM PS exposes return_lse only for qseqlen in {1, 4}.
++    # Uniform qlen in {2, 3} pads up to 4 with leading dummy rows so each
++    # real row keeps its causal window (ASM windows are right-aligned).
++    _ASM_LSE_PS_PAD_QLEN: Final = 4
+     _AITER_UNSUPPORTED_HEADS: ClassVar[tuple[int, ...]] = ()
+
++    @staticmethod
++    def asm_lse_ps_kernel_qlen(logical_qlen: int) -> int | None:
++        """Map logical qlen to an LSE-capable ASM PS ``max_seqlen_qo``.
++
++        ``1``/``4`` are native; ``2``/``3`` pad to ``4``; otherwise ``None``.
++        """
++        if logical_qlen == 1:
++            return 1
++        if 1 < logical_qlen <= AiterMLAHelper._ASM_LSE_PS_PAD_QLEN:
++            return AiterMLAHelper._ASM_LSE_PS_PAD_QLEN
++        return None
++
++    @staticmethod
++    def pad_uniform_q_to_kernel_qlen(
++        q: torch.Tensor,
++        logical_qlen: int,
++        kernel_qlen: int,
++    ) -> torch.Tensor:
++        """Prepend per-request zero rows so ``[R*logical, H, D]`` becomes
++        ``[R*kernel, H, D]``. Leading pads preserve ASM right-aligned causal
++        windows; callers must widen ``qo_indptr`` and
++        :meth:`unpad_uniform_rows` on output/LSE.
++        """
++        if kernel_qlen == logical_qlen:
++            return q
++        if kernel_qlen < logical_qlen:
++            raise ValueError(
++                f"kernel_qlen ({kernel_qlen}) < logical_qlen ({logical_qlen})"
++            )
++        if q.shape[0] % logical_qlen != 0:
++            raise ValueError(
++                f"Q rows {q.shape[0]} not divisible by logical_qlen={logical_qlen}"
++            )
++        num_reqs = q.shape[0] // logical_qlen
++        pad = kernel_qlen - logical_qlen
++        q_blk = q.view(num_reqs, logical_qlen, *q.shape[1:])
++        zeros = q.new_zeros((num_reqs, pad, *q.shape[1:]))
++        return torch.cat([zeros, q_blk], dim=1).reshape(
++            num_reqs * kernel_qlen, *q.shape[1:]
++        )
++
++    @staticmethod
++    def unpad_uniform_rows(
++        x: torch.Tensor,
++        logical_qlen: int,
++        kernel_qlen: int,
++    ) -> torch.Tensor:
++        """Drop leading pad rows from :meth:`pad_uniform_q_to_kernel_qlen`."""
++        if kernel_qlen == logical_qlen:
++            return x
++        if x.shape[0] % kernel_qlen != 0:
++            raise ValueError(
++                f"rows {x.shape[0]} not divisible by kernel_qlen={kernel_qlen}"
++            )
++        num_reqs = x.shape[0] // kernel_qlen
++        return (
++            x.view(num_reqs, kernel_qlen, *x.shape[1:])[:, kernel_qlen - logical_qlen :]
++            .reshape(num_reqs * logical_qlen, *x.shape[1:])
++            .contiguous()
++        )
++
++    @staticmethod
++    def qo_indptr_for_uniform_qlen(
++        num_reqs: int,
++        qlen: int,
++        device: torch.device,
++        dtype: torch.dtype = torch.int32,
++    ) -> torch.Tensor:
++        """Build ``[0, qlen, 2*qlen, ..., num_reqs*qlen]``."""
++        return torch.arange(
++            0,
++            (num_reqs + 1) * qlen,
++            step=qlen,
++            dtype=dtype,
++            device=device,
++        )
++
+     @staticmethod
+     def check_num_heads_validity(num_heads: int):
+         assert AiterMLAHelper.is_valid_num_heads(num_heads), (
+@@ -944,27 +1472,36 @@ class AiterMLAHelper:
+
+     @staticmethod
+     def get_mla_unpadded_o(num_heads: int, o: torch.Tensor) -> torch.Tensor:
++        return AiterMLAHelper._get_mla_unpadded_heads(num_heads, o)
++
++    @staticmethod
++    def _get_mla_unpadded_heads(num_heads: int, tensor: torch.Tensor) -> torch.Tensor:
+         m = AiterMLAHelper.get_actual_mla_num_heads(num_heads)
+         if num_heads == m:
+-            return o
++            return tensor
+         if m % num_heads == 0:
+-            return o[:, :: m // num_heads, :]
+-        # Undo the tile-padding from get_mla_padded_q: the real heads are the
+-        # first num_heads.
+-        return o[:, :num_heads, :]
++            return tensor[:, :: m // num_heads, ...]
++        return tensor[:, :num_heads, ...]
+
+     @staticmethod
+-    def use_gluon_decode(num_heads: int, max_qo_len: int, kv_cache_dtype: str) -> bool:
+-        # Small-head (<16) single-token decode takes either the Gluon kernel or
+-        # the padded asm persistent decode, selected by
+-        # VLLM_ROCM_AITER_MLA_ASM_PADDING and the arch (Gluon is gfx950 only).
+-        m = AiterMLAHelper._AITER_MIN_MLA_HEADS
+-        if num_heads >= m or max_qo_len != 1:
++    def get_mla_unpadded_lse(num_heads: int, lse: torch.Tensor) -> torch.Tensor:
++        return AiterMLAHelper._get_mla_unpadded_heads(num_heads, lse)
++
++    @staticmethod
++    def _gluon_max_heads(dcp_world_size: int) -> int:
++        if dcp_world_size > 1:
++            return _gluon_mla_max_bh16_heads()
++        return AiterMLAHelper._AITER_MIN_MLA_HEADS - 1
++
++    @staticmethod
++    def use_gluon_decode(
++        num_heads: int, max_qo_len: int, kv_cache_dtype: str, dcp_world_size: int = 1
++    ) -> bool:
++        if max_qo_len != 1:
++            return False
++        if num_heads > AiterMLAHelper._gluon_max_heads(dcp_world_size):
+             return False
+-        # Gluon's only fp8-KV regime, bh16bn128, is a bf16-query kernel with a
+-        # hardcoded scale that asserts batch_size == 1, so it cannot serve a
+-        # decode batch. Checked before the mode knob: an explicit "gluon"
+-        # request under fp8 would assert immediately.
++        # The available FP8 Gluon kernel supports only batch size one.
+         if is_quantized_kv_cache(kv_cache_dtype):
+             return False
+         mode = _aiter_mla_small_head_mode()
+@@ -973,27 +1510,41 @@ class AiterMLAHelper:
+         gluon_supported = _gluon_mla_decode_supported()
+         if mode == "gluon":
+             return gluon_supported
+-        return m % num_heads == 0 and gluon_supported
++        return AiterMLAHelper._AITER_MIN_MLA_HEADS % num_heads == 0 and gluon_supported
+
+     @staticmethod
+-    def use_gluon_verify(num_heads: int, max_qo_len: int, kv_cache_dtype: str) -> bool:
+-        """Whether a small-head multi-token verify is flattened onto Gluon.
+-
+-        bf16 has no gqa<16, qseqlen>1 asm kernel, so the verify is flattened
+-        into per-token Gluon decodes. fp8 has one via the q-row fold and must
+-        not come here: the flatten hands Gluon the batch size its fp8 regime
+-        asserts against. A predicate rather than inline in forward_mqa so the
+-        builder sees the same answer the impl acts on.
+-        """
+-        if num_heads >= AiterMLAHelper._AITER_MIN_MLA_HEADS or max_qo_len <= 1:
++    def use_gluon_verify(
++        num_heads: int,
++        max_qo_len: int,
++        kv_cache_dtype: str,
++        dcp_world_size: int = 1,
++    ) -> bool:
++        """Whether multi-token verification uses a decode-kernel path."""
++        if max_qo_len <= 1:
+             return False
++        if dcp_world_size > 1:
++            return _segmented_mla_decode_supported()
+         if is_quantized_kv_cache(kv_cache_dtype):
+             return False
+-        # Same arch and mode gating as use_gluon_decode.
+-        return _aiter_mla_small_head_mode() != "asm" and _gluon_mla_decode_supported()
++        if num_heads > AiterMLAHelper._gluon_max_heads(dcp_world_size):
++            return False
++        if not _gluon_mla_decode_supported():
++            return False
++        return _aiter_mla_small_head_mode() != "asm"
+
+
+ class AiterMLAImpl(MLACommonImpl[AiterMLAMetadata]):
++    # Both decode paths can hand back a natural-log softmax LSE for the DCP
++    # cross-rank merge: Gluon takes return_lse, and the asm kernel returns one
++    # through aiter's native entry point (the vLLM custom-op wrapper drops it).
++    can_return_lse_for_decode: bool = True
++    supports_dcp_verify_window: ClassVar[bool] = True
++
++    @property
++    def _decode_num_heads(self) -> int:
++        """Return the query-head count after DCP gathering."""
++        return self.num_heads * self.dcp_world_size
++
+     def __init__(
+         self,
+         num_heads: int,
+@@ -1023,6 +1574,7 @@ class AiterMLAImpl(MLACommonImpl[AiterMLAMetadata]):
+             **mla_args,
+         )
+         AiterMLAHelper.check_num_heads_validity(num_heads)
++        AiterMLAHelper.check_num_heads_validity(self._decode_num_heads)
+
+         unsupported_features = [alibi_slopes, sliding_window, logits_soft_cap]
+         if any(unsupported_features):
+@@ -1228,6 +1780,112 @@ class AiterMLAImpl(MLACommonImpl[AiterMLAMetadata]):
+         kv_c_and_k_pe_cache: torch.Tensor,
+         attn_metadata: AiterMLAMetadata,
+         layer: AttentionLayer,
++    ) -> tuple[torch.Tensor, torch.Tensor | None]:
++        return self._forward_mqa(
++            q, kv_c_and_k_pe_cache, attn_metadata, layer, k_window=None
++        )
++
++    def _merge_rank0_in_hand_window(
++        self,
++        o: torch.Tensor,
++        lse: torch.Tensor,
++        q_nope: torch.Tensor,
++        q_pe: torch.Tensor,
++        k_window: torch.Tensor | None,
++        qlen: int,
++        out_dtype: torch.dtype,
++    ) -> tuple[torch.Tensor, torch.Tensor]:
++        if k_window is None or self.dcp_rank != 0:
++            return o, lse
++        out_b, lse_b = _dense_causal_mla_attn(
++            q_nope,
++            q_pe,
++            k_window,
++            self.scale,
++            qlen,
++            self.kv_lora_rank,
++        )
++        return _lse_combine_natural(o, lse, out_b, lse_b, out_dtype)
++
++    def _forward_segmented_dcp_verify(
++        self,
++        q_nope: torch.Tensor,
++        q_pe: torch.Tensor,
++        row_lens: torch.Tensor,
++        kv_c_and_k_pe_cache: torch.Tensor,
++        decode: AiterMLADecodeMetadata,
++        layer: AttentionLayer,
++        k_window: torch.Tensor | None,
++    ) -> tuple[torch.Tensor, torch.Tensor]:
++        """Run segmented shard attention and merge the rank-0 causal window."""
++        assert decode.dcp_verify_block_table is not None
++        assert decode.dcp_verify_qo_indptr is not None
++        assert decode.max_qo_len is not None
++        q_mla = torch.cat([q_nope, q_pe], dim=-1)
++        page_size = _segmented_mla_page_size(kv_c_and_k_pe_cache.shape[1])
++        # skip_reduce with NUM_SEGMENTS>1 does not write `out`; reuse q_mla as
++        # the unused pointer so we do not allocate a second kv_lora_rank buffer.
++        segment_partials = _get_segmented_mla_decode()(
++            q_mla,
++            kv_c_and_k_pe_cache.view(
++                -1,
++                page_size,
++                1,
++                kv_c_and_k_pe_cache.shape[-1],
++            ),
++            q_mla,
++            decode.dcp_verify_qo_indptr,
++            row_lens,
++            decode.dcp_verify_max_kv_seq_len,
++            decode.dcp_verify_block_table,
++            self.scale,
++            self.kv_lora_rank,
++            self.qk_rope_head_dim,
++            causal=True,
++            q_descale=None,
++            kv_descale=layer._k_scale,
++            skip_reduce=True,
++        )
++        assert isinstance(segment_partials, tuple) and len(segment_partials) == 3, (
++            "AITER segmented MLA verify must return segment partials "
++            "when skip_reduce=True."
++        )
++        segm_output, segm_max, segm_expsum = segment_partials
++        o, lse = reduce_mla_segment_partials(
++            segm_output,
++            segm_max,
++            segm_expsum,
++            row_lens,
++            page_size,
++            decode.attn_out_dtype,
++        )
++        return self._merge_rank0_in_hand_window(
++            o,
++            lse,
++            q_nope,
++            q_pe,
++            k_window,
++            int(decode.max_qo_len),
++            decode.attn_out_dtype,
++        )
++
++    def forward_mqa_with_dcp_verify_window(
++        self,
++        q: torch.Tensor | tuple[torch.Tensor, torch.Tensor],
++        kv_c_and_k_pe_cache: torch.Tensor,
++        attn_metadata: AiterMLAMetadata,
++        layer: AttentionLayer,
++        k_window: torch.Tensor,
++    ) -> tuple[torch.Tensor, torch.Tensor | None]:
++        return self._forward_mqa(q, kv_c_and_k_pe_cache, attn_metadata, layer, k_window)
++
++    def _forward_mqa(
++        self,
++        q: torch.Tensor | tuple[torch.Tensor, torch.Tensor],
++        kv_c_and_k_pe_cache: torch.Tensor,
++        attn_metadata: AiterMLAMetadata,
++        layer: AttentionLayer,
++        k_window: torch.Tensor | None,
+     ) -> tuple[torch.Tensor, torch.Tensor | None]:
+         assert kv_c_and_k_pe_cache.numel() > 0
+         assert attn_metadata.decode is not None
+@@ -1253,7 +1911,8 @@ class AiterMLAImpl(MLACommonImpl[AiterMLAMetadata]):
+             )
+             kv_buffer = kv_c_and_k_pe_cache.reshape(-1, kv_c_and_k_pe_cache.shape[-1])
+             mla_gluon = _get_mla_gluon()
+-            mla_gluon(
++            need_lse = self.dcp_world_size > 1
++            gluon_ret = mla_gluon(
+                 q_nope=q_nope,
+                 q_pe=q_pe,
+                 kv_c=kv_buffer,
+@@ -1266,23 +1925,29 @@ class AiterMLAImpl(MLACommonImpl[AiterMLAMetadata]):
+                 use_2d_view=False,
+                 kv_scale=1.0,
+                 min_kv_seq_len=decode.min_kv_seq_len,
++                return_lse=need_lse,
+             )
+-            return o, None
++            lse = gluon_ret[1] if isinstance(gluon_ret, tuple) else None
++            if need_lse:
++                assert lse is not None, (
++                    "aiter mla_gluon(return_lse=True) returned no LSE; upgrade aiter "
++                    "to a build with gluon LSE support."
++                )
++                lse = lse.reshape(B, num_q_heads)
++            return o, lse
+
+-        # 12-head (<16) multi-token verify (DSpark): the asm path has no
+-        # gqa<16, qseqlen>1 kernel. Flatten each verify token to its own
+-        # qseqlen=1 gluon decode, mirroring the TRITON_MLA / sparse-backend
+-        # flatten but on the fast gluon kernel. The block is causal -- the
+-        # target is checking draft tokens, so position t must not see t+1 --
+-        # and attention rows are independent, so giving row t the KV range
+-        # [0, context + t] is exactly causal multi-token attention.
+-        # Arch, mode and dtype gating all live in use_gluon_verify, so that the
+-        # builder -- which has to know whether the asm decode will run -- sees
+-        # the same answer as this branch.
++        # Each verification row gets its own causal KV view.
+         if AiterMLAHelper.use_gluon_verify(
+-            self.num_heads, int(decode.max_qo_len), self.kv_cache_dtype
++            self._decode_num_heads,
++            int(decode.max_qo_len),
++            self.kv_cache_dtype,
++            self.dcp_world_size,
+         ):
+-            qlen = int(decode.max_qo_len)
++            row_lens = decode.verify_row_lens
++            assert row_lens is not None, (
++                "the verify's per-row paged-KV view is missing; the builder and "
++                "the impl disagree on whether the Gluon flatten runs."
++            )
+             if type(q) is tuple:
+                 q_nope, q_pe = q
+             else:
+@@ -1290,6 +1955,27 @@ class AiterMLAImpl(MLACommonImpl[AiterMLAMetadata]):
+                     q, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1
+                 )
+             B, num_q_heads, _ = q_nope.shape
++            assert row_lens.numel() == B, (
++                f"the verify has {B} query rows but the per-row view holds "
++                f"{row_lens.numel()}"
++            )
++            # FP8 Gluon reads BF16 queries and folds the KV scale into QK.
++            kv_scale = 1.0
++            if is_quantized_kv_cache(self.kv_cache_dtype):
++                kv_scale = getattr(layer, "_k_scale_float", 1.0)
++                if q_nope.dtype != torch.bfloat16:
++                    q_nope = q_nope.to(torch.bfloat16) * layer._q_scale
++                    q_pe = q_pe.to(torch.bfloat16) * layer._q_scale
++            if self.dcp_world_size > 1:
++                return self._forward_segmented_dcp_verify(
++                    q_nope,
++                    q_pe,
++                    row_lens,
++                    kv_c_and_k_pe_cache,
++                    decode,
++                    layer,
++                    k_window,
++                )
+             o = torch.empty(
+                 B,
+                 num_q_heads,
+@@ -1297,57 +1983,25 @@ class AiterMLAImpl(MLACommonImpl[AiterMLAMetadata]):
+                 dtype=decode.attn_out_dtype,
+                 device=q_nope.device,
+             )
++
+             kv_buffer = kv_c_and_k_pe_cache.reshape(-1, kv_c_and_k_pe_cache.shape[-1])
+-            # Expand per-request paged-KV to per-verify-token. Row r*qlen+t is
+-            # request r's verify token t, and seq_lens counts the tokens
+-            # scheduled in this step, so a request's KV range already spans its
+-            # whole verify block and context_r = seq_len_r - qlen. Token t may
+-            # attend to [0, context_r + t], i.e. seq_len_r - (qlen - 1) + t
+-            # entries. paged_kv_indices lists a request's pages in ascending
+-            # position order, so each row's causal window is a prefix of that
+-            # request's slice and only the row length changes. Rows clamp to
+-            # zero for cudagraph padding requests, whose seq_len is 0. Fully
+-            # vectorized (no host loop).
+-            old_indptr = decode.paged_kv_indptr
+-            per_req_len = old_indptr[1:] - old_indptr[:-1]
+-            dev = q_nope.device
+-            row_req = torch.arange(per_req_len.shape[0], device=dev).repeat_interleave(
+-                qlen
+-            )
+-            row_len = (
+-                (
+-                    per_req_len.unsqueeze(1)
+-                    - (qlen - 1)
+-                    + torch.arange(qlen, device=dev, dtype=per_req_len.dtype)
+-                )
+-                .clamp_(min=0)
+-                .flatten()
+-            )
+-            new_indptr = torch.cat([old_indptr.new_zeros(1), row_len.cumsum(0)]).to(
+-                torch.int32
+-            )
+-            total = int(new_indptr[-1].item())
+-            within = torch.arange(total, device=dev, dtype=torch.int64) - new_indptr[
+-                :-1
+-            ].to(torch.int64).repeat_interleave(row_len)
+-            src = (
+-                old_indptr[row_req].to(torch.int64).repeat_interleave(row_len) + within
+-            )
+-            new_indices = decode.paged_kv_indices[src]
+             mla_gluon = _get_mla_gluon()
+             mla_gluon(
+                 q_nope=q_nope,
+                 q_pe=q_pe,
+                 kv_c=kv_buffer,
+                 o=o,
+-                page_table=new_indices,
+-                seq_info=new_indptr,
++                page_table=decode.verify_row_page_table,
++                seq_info=decode.verify_row_indptr,
+                 sm_scale=self.scale,
+                 k_pe=None,
+                 kv_pe_offset=self.kv_lora_rank,
+                 use_2d_view=False,
+-                kv_scale=1.0,
+-                min_kv_seq_len=int(row_len.min()),
++                # A scalar because the kernel folds it into the QK temperature;
++                # a tensor would arrive as a pointer.
++                kv_scale=kv_scale,
++                min_kv_seq_len=decode.verify_min_kv_seq_len,
++                return_lse=False,
+             )
+             return o, None
+
+@@ -1356,9 +2010,21 @@ class AiterMLAImpl(MLACommonImpl[AiterMLAMetadata]):
+
+         assert isinstance(q, torch.Tensor)
+         B = q.shape[0]
++        logical_qlen = int(decode.max_qo_len)
++        kernel_qlen = int(decode.kernel_max_qo_len or logical_qlen)
+
+-        mla_padded_q = AiterMLAHelper.get_mla_padded_q(self.num_heads, q)
+-        mla_num_heads = AiterMLAHelper.get_actual_mla_num_heads(self.num_heads)
++        assert q.shape[1] == self._decode_num_heads, (
++            "ROCM_AITER_MLA decode expected the DCP-gathered query head count "
++            f"{self._decode_num_heads}, got {q.shape[1]}"
++        )
++        # Pad before head-padding so both share the same token axis.
++        if kernel_qlen != logical_qlen:
++            q = AiterMLAHelper.pad_uniform_q_to_kernel_qlen(
++                q, logical_qlen, kernel_qlen
++            )
++            B = q.shape[0]
++        mla_padded_q = AiterMLAHelper.get_mla_padded_q(self._decode_num_heads, q)
++        mla_num_heads = AiterMLAHelper.get_actual_mla_num_heads(self._decode_num_heads)
+         o = torch.empty(
+             B,
+             mla_num_heads,
+@@ -1366,7 +2032,7 @@ class AiterMLAImpl(MLACommonImpl[AiterMLAMetadata]):
+             dtype=attn_metadata.decode.attn_out_dtype,
+             device=q.device,
+         )
+-        if decode.max_qo_len > 1 and not decode.has_persistent_metadata:
++        if logical_qlen > 1 and not decode.has_persistent_metadata:
+             # MTP verification can call the AITER MLA decode kernel with
+             # qlen > 1. If that path is running without persistent metadata,
+             # zero-fill so unwritten lanes cannot leak into logits.
+@@ -1390,17 +2056,57 @@ class AiterMLAImpl(MLACommonImpl[AiterMLAMetadata]):
+                 reduce_partial_map=attn_metadata.reduce_partial_map,
+             )
+
+-        rocm_aiter_ops.mla_decode_fwd(
+-            mla_padded_q,
+-            kv_buffer,
+-            o,
+-            self.scale,
+-            decode.qo_indptr,
+-            decode.max_qo_len,
+-            decode.paged_kv_indptr,
+-            decode.paged_kv_indices,
+-            decode.paged_kv_last_page_len,
+-            **mla_kwargs,
+-        )
++        lse = None
++        if self.dcp_world_size > 1:
++            if logical_qlen != 1:
++                # DCP multi-token verification requires segmented MLA.
++                raise NotImplementedError(
++                    "ROCM_AITER_MLA DCP multi-token verify requires the "
++                    "segmented MLA path; got max_qo_len="
++                    f"{logical_qlen} on the ASM path "
++                    f"(kernel_qlen={kernel_qlen})."
++                )
++            # The vLLM custom-op wrapper exposes only the in-place output and
++            # drops aiter's final LSE, which the cross-shard merge needs, so go
++            # through aiter's native entry point on the DCP path.
++            _, lse = _get_aiter_mla_decode()(
++                mla_padded_q,
++                kv_buffer.view(-1, 1, 1, mla_padded_q.shape[-1]),
++                o,
++                decode.qo_indptr,
++                decode.paged_kv_indptr,
++                decode.paged_kv_indices,
++                decode.paged_kv_last_page_len,
++                kernel_qlen,
++                sm_scale=self.scale,
++                return_lse=True,
++                **mla_kwargs,
++            )
++            assert lse is not None, (
++                "aiter mla_decode_fwd(return_lse=True) returned no LSE; upgrade "
++                "aiter to a build with decode LSE support."
++            )
++        else:
++            rocm_aiter_ops.mla_decode_fwd(
++                mla_padded_q,
++                kv_buffer,
++                o,
++                self.scale,
++                decode.qo_indptr,
++                kernel_qlen,
++                decode.paged_kv_indptr,
++                decode.paged_kv_indices,
++                decode.paged_kv_last_page_len,
++                **mla_kwargs,
++            )
+
+-        return AiterMLAHelper.get_mla_unpadded_o(self.num_heads, o), None
++        output = AiterMLAHelper.get_mla_unpadded_o(self._decode_num_heads, o)
++        if kernel_qlen != logical_qlen:
++            output = AiterMLAHelper.unpad_uniform_rows(
++                output, logical_qlen, kernel_qlen
++            )
++        if lse is not None:
++            lse = AiterMLAHelper.get_mla_unpadded_lse(self._decode_num_heads, lse)
++            if kernel_qlen != logical_qlen:
++                lse = AiterMLAHelper.unpad_uniform_rows(lse, logical_qlen, kernel_qlen)
++        return output, lse
+diff --git a/vllm/v1/attention/backends/mla/triton_mla.py b/vllm/v1/attention/backends/mla/triton_mla.py
+index 6275778902f81934601f89ae05b0d2af3ffd94b6..1499db19e828574cc78a4a23f1fbd1968e92e90a 100644
+--- a/vllm/v1/attention/backends/mla/triton_mla.py
++++ b/vllm/v1/attention/backends/mla/triton_mla.py
+@@ -48,22 +48,28 @@ def _compute_num_kv_splits(max_seq_len: int, sm_count: int) -> int:
+
+
+ class TritonMLAMetadataBuilder(MLACommonMetadataBuilder[MLACommonMetadata]):
+-    _cudagraph_support: ClassVar[AttentionCGSupport] = (
+-        AttentionCGSupport.UNIFORM_SINGLE_TOKEN_DECODE
+-    )
+-    # Non-causal DSpark block is flattened to one decode row per query token in
+-    # forward_mqa, so no intra-block causal masking is required.
++    # UNIFORM_BATCH so DSpark draft does not demote the process to PIECEWISE.
++    _cudagraph_support: ClassVar[AttentionCGSupport] = AttentionCGSupport.UNIFORM_BATCH
++    # forward_mqa flattens each non-causal block to one decode row per token.
+     supports_non_causal_multi_token_decode: ClassVar[bool] = True
++    # The common MLA DCP path gathers query heads, runs each local KV shard,
++    # then combines shard outputs with LSE. The flattened DSpark rows use the
++    # same path and therefore support non-causal multi-token decode with DCP.
++    supports_non_causal_multi_token_dcp: ClassVar[bool] = True
+
+     def __init__(self, kv_cache_spec, layer_names, vllm_config, device):
+         super().__init__(kv_cache_spec, layer_names, vllm_config, device)
+         # DCP local sequence lengths are not advanced between draft steps.
+         self.supports_draft_decode_metadata_update = self.dcp_world_size == 1
+-        # Only the non-causal DSpark draft group serves multi-token blocks via
+-        # the decode path; raise its reorder threshold to the spec block length
+-        # so full-cudagraph capture admits it. Causal usage stays single-token.
++        # Raise reorder threshold to the spec block length for non-causal draft.
++        # supports_dcp_with_varlen keeps the threshold under DCP>1 (otherwise
++        # clamp-to-1 blocks FULL capture of max_query_len=1+num_spec).
+         if getattr(self, "non_causal_multi_token_decode", False):
+-            self._init_reorder_batch_threshold(1, supports_spec_as_decode=True)
++            self._init_reorder_batch_threshold(
++                1,
++                supports_spec_as_decode=True,
++                supports_dcp_with_varlen=True,
++            )
+         self._reserve_attn_logits_workspace()
+
+     def update_draft_decode_metadata(self, _metadata: MLACommonMetadata) -> None:
+diff --git a/vllm/v1/attention/ops/rocm_aiter_mla_reduce.py b/vllm/v1/attention/ops/rocm_aiter_mla_reduce.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..f2884eed2fd2b6c08012a70c9b57e79ec7dcebec
+--- /dev/null
++++ b/vllm/v1/attention/ops/rocm_aiter_mla_reduce.py
+@@ -0,0 +1,128 @@
++# SPDX-License-Identifier: Apache-2.0
++# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
++"""Reduce AITER segmented MLA partials and return natural-log LSE."""
++
++import torch
++
++from vllm.triton_utils import LOGE2, tl, triton
++
++
++@triton.jit
++def _reduce_mla_segment_partials_kernel(
++    out_ptr,
++    lse_ptr,
++    segm_output_ptr,
++    segm_max_ptr,
++    segm_expsum_ptr,
++    seq_lens_ptr,
++    num_query_heads: tl.constexpr,
++    out_stride0: tl.int64,
++    out_stride1: tl.int64,
++    lse_stride0: tl.int64,
++    TILE_SIZE: tl.constexpr,
++    KV_LORA_RANK: tl.constexpr,
++    NUM_SEGMENTS_PER_SEQ: tl.constexpr,
++    LOGE2: tl.constexpr,
++):
++    token_idx = tl.program_id(0)
++    head_idx = tl.program_id(1)
++
++    seq_len = tl.load(seq_lens_ptr + token_idx)
++    tiles_per_segment = tl.maximum(
++        1, tl.cdiv(seq_len, NUM_SEGMENTS_PER_SEQ * TILE_SIZE)
++    )
++    active_segments = tl.where(
++        seq_len > 0,
++        tl.cdiv(seq_len, tiles_per_segment * TILE_SIZE),
++        0,
++    )
++    segment_offsets = tl.arange(0, NUM_SEGMENTS_PER_SEQ)
++    segment_mask = segment_offsets < active_segments
++
++    segment_base = (
++        token_idx.to(tl.int64) * (num_query_heads * NUM_SEGMENTS_PER_SEQ)
++        + head_idx * NUM_SEGMENTS_PER_SEQ
++    )
++    segment_indices = segment_base + segment_offsets
++    segment_max = tl.load(
++        segm_max_ptr + segment_indices,
++        mask=segment_mask,
++        other=float("-inf"),
++    )
++    overall_max = tl.max(segment_max)
++
++    segment_expsum = tl.load(
++        segm_expsum_ptr + segment_indices,
++        mask=segment_mask,
++        other=0.0,
++    )
++    segment_weight = tl.where(
++        segment_mask,
++        tl.exp2(segment_max - overall_max),
++        0.0,
++    )
++    overall_expsum = tl.sum(segment_expsum * segment_weight)
++
++    output_offsets = (
++        token_idx.to(tl.int64) * (num_query_heads * NUM_SEGMENTS_PER_SEQ * KV_LORA_RANK)
++        + head_idx * (NUM_SEGMENTS_PER_SEQ * KV_LORA_RANK)
++        + segment_offsets[:, None] * KV_LORA_RANK
++        + tl.arange(0, KV_LORA_RANK)[None, :]
++    )
++    segment_output = tl.load(
++        segm_output_ptr + output_offsets,
++        mask=segment_mask[:, None],
++        other=0.0,
++    )
++    accumulator = tl.sum(segment_output * segment_weight[:, None], axis=0)
++    accumulator = tl.where(overall_expsum == 0.0, 0.0, accumulator / overall_expsum)
++    lse = tl.where(
++        overall_expsum == 0.0,
++        float("-inf"),
++        (overall_max + tl.log2(overall_expsum)) * LOGE2,
++    )
++
++    output_indices = (
++        token_idx * out_stride0 + head_idx * out_stride1 + tl.arange(0, KV_LORA_RANK)
++    )
++    tl.store(out_ptr + output_indices, accumulator)
++    tl.store(lse_ptr + token_idx * lse_stride0 + head_idx, lse)
++
++
++def reduce_mla_segment_partials(
++    segm_output: torch.Tensor,
++    segm_max: torch.Tensor,
++    segm_expsum: torch.Tensor,
++    seq_lens: torch.Tensor,
++    tile_size: int,
++    out_dtype: torch.dtype,
++) -> tuple[torch.Tensor, torch.Tensor]:
++    """Merge AITER base-2 segment partials into output and natural-log LSE."""
++    num_tokens, num_heads, num_segments, kv_lora_rank = segm_output.shape
++    output = torch.empty(
++        (num_tokens, num_heads, kv_lora_rank),
++        dtype=out_dtype,
++        device=segm_output.device,
++    )
++    lse = torch.empty(
++        (num_tokens, num_heads),
++        dtype=torch.float32,
++        device=segm_output.device,
++    )
++    _reduce_mla_segment_partials_kernel[(num_tokens, num_heads)](
++        output,
++        lse,
++        segm_output,
++        segm_max,
++        segm_expsum,
++        seq_lens,
++        num_query_heads=num_heads,
++        out_stride0=output.stride(0),
++        out_stride1=output.stride(1),
++        lse_stride0=lse.stride(0),
++        TILE_SIZE=tile_size,
++        KV_LORA_RANK=kv_lora_rank,
++        NUM_SEGMENTS_PER_SEQ=num_segments,
++        LOGE2=LOGE2,
++    )
++    return output, lse
+diff --git a/vllm/v1/core/kv_cache_coordinator.py b/vllm/v1/core/kv_cache_coordinator.py
+index 767ea003348310eefaefed8d64a4d616e560e8d3..6db610d4b5fcb52fc9284a971b6a66b4253cfc35 100644
+--- a/vllm/v1/core/kv_cache_coordinator.py
++++ b/vllm/v1/core/kv_cache_coordinator.py
+@@ -11,6 +11,7 @@ from vllm.v1.core.kv_cache_metrics import KVCacheMetricsCollector
+ from vllm.v1.core.kv_cache_utils import (
+     BlockHash,
+     KVCacheBlock,
++    dcp_world_size_for_kv_cache_spec,
+ )
+ from vllm.v1.core.single_type_kv_cache_manager import (
+     CrossAttentionManager,
+@@ -141,7 +142,9 @@ class KVCacheCoordinator(ABC):
+                 block_pool=self.block_pool,
+                 enable_caching=enable_caching,
+                 kv_cache_group_id=i,
+-                dcp_world_size=dcp_world_size,
++                dcp_world_size=dcp_world_size_for_kv_cache_spec(
++                    kv_cache_group.kv_cache_spec, dcp_world_size
++                ),
+                 pcp_world_size=pcp_world_size,
+                 scheduler_block_size=self.scheduler_block_size,
+                 needs_kv_cache_zeroing=self.kv_cache_config.needs_kv_cache_zeroing,
+@@ -506,11 +509,9 @@ class UnitaryKVCacheCoordinator(KVCacheCoordinator):
+             num_prefill_lookahead=num_prefill_lookahead,
+         )
+         self.kv_cache_spec = self.kv_cache_config.kv_cache_groups[0].kv_cache_spec
+-        self.block_size = self.kv_cache_spec.block_size
+-        self.dcp_world_size = dcp_world_size
++        self.dcp_world_size = self.single_type_managers[0].dcp_world_size
+         self.pcp_world_size = pcp_world_size
+-        if dcp_world_size > 1:
+-            self.block_size *= dcp_world_size
++        self.block_size = self.single_type_managers[0].block_size
+         # For models using only Mamba, block_size is set to max_model_len when
+         # prefix caching is disabled, and hash_block_size validation is skipped.
+         assert not enable_caching or (hash_block_size == self.block_size), (
+@@ -634,7 +635,16 @@ class HybridKVCacheCoordinator(KVCacheCoordinator):
+             )
+             for g in kv_cache_config.kv_cache_groups
+         )
+-        self.enable_partial_hash_hits = has_partial_mamba_group
++        has_dcp_partial_full_attention_group = dcp_world_size > 1 and any(
++            isinstance(g.kv_cache_spec, FullAttentionSpec)
++            and manager.block_size > hash_block_size
++            for g, manager in zip(
++                kv_cache_config.kv_cache_groups, self.single_type_managers
++            )
++        )
++        self.enable_partial_hash_hits = (
++            has_partial_mamba_group or has_dcp_partial_full_attention_group
++        )
+         if self.enable_partial_hash_hits:
+             unsupported_partial_hit_managers = {
+                 type(manager).__name__
+@@ -649,6 +659,9 @@ class HybridKVCacheCoordinator(KVCacheCoordinator):
+                     "cache managers require block-aligned lookups: %s.",
+                     ", ".join(sorted(unsupported_partial_hit_managers)),
+                 )
++        cache_hit_alignment_tokens = self._cache_hit_alignment_tokens
++        for manager in self.single_type_managers:
++            manager.cache_hit_alignment_tokens = cache_hit_alignment_tokens
+         self.verify_and_split_kv_cache_groups()
+
+     @property
+@@ -724,8 +737,31 @@ class HybridKVCacheCoordinator(KVCacheCoordinator):
+             return num_tokens
+         return round_down(num_tokens, self.scheduler_block_size)
+
++    def _eagle_replay_boundaries(self, request: Request) -> tuple[int, ...]:
++        """Return Mamba states needed after the dense group applies EAGLE."""
++        max_hit_length = round_down(
++            request.num_prompt_tokens - 1,
++            self._cache_hit_alignment_tokens,
++        )
++        replay_boundaries: set[int] = set()
++        for group in self.attention_groups:
++            if not isinstance(group.spec, FullAttentionSpec) or not group.use_eagle:
++                continue
++            manager = self.single_type_managers[group.group_ids[0]]
++            drop_tokens = manager.block_size
++            if (
++                self.enable_partial_hash_hits
++                and manager.supports_fine_grained_hash_lookup
++                and manager.block_size > self.hash_block_size
++            ):
++                drop_tokens = self.hash_block_size
++            if (replay_boundary := max_hit_length - drop_tokens) > 0:
++                replay_boundaries.add(replay_boundary)
++        return tuple(sorted(replay_boundaries))
++
+     def cache_blocks(self, request: Request, num_computed_tokens: int) -> None:
+         cached_num_computed_tokens = self._align_cacheable(num_computed_tokens)
++        eagle_replay_boundaries = self._eagle_replay_boundaries(request)
+         for manager in self.single_type_managers:
+             num_tokens_to_cache = cached_num_computed_tokens
+             # EAGLE groups match one block past each aligned boundary and drop
+@@ -744,14 +780,18 @@ class HybridKVCacheCoordinator(KVCacheCoordinator):
+                     num_finalized_computed_tokens,
+                     cached_num_finalized_computed_tokens + manager.block_size,
+                 )
+-            # The manager already knows the fine hit granularity
+-            # (``scheduler_block_size``); retention is passed separately so it
+-            # can keep both the coarse segment tails and the fine replay
+-            # boundary (which needs the fine value).
++            # The manager already knows its cache-hit alignment. Retention is
++            # passed separately so it can keep coarse segment tails and fine
++            # replay boundaries.
+             manager.cache_blocks(
+                 request,
+                 num_tokens_to_cache,
+                 retention_interval=self.retention_interval,
++                extra_reachable_boundaries=(
++                    eagle_replay_boundaries
++                    if isinstance(manager.kv_cache_spec, MambaSpec)
++                    else ()
++                ),
+             )
+
+     def find_longest_cache_hit(
+@@ -843,11 +883,12 @@ class HybridKVCacheCoordinator(KVCacheCoordinator):
+                     kv_cache_spec=spec,
+                     drop_eagle_block=drop_eagle_block,
+                     alignment_tokens=self._cache_hit_alignment_tokens,
+-                    dcp_world_size=(
+-                        self.dcp_world_size
+-                        if isinstance(spec, FullAttentionSpec)
+-                        else 1
+-                    ),
++                    dcp_world_size=self.single_type_managers[
++                        first_group_id
++                    ].dcp_world_size,
++                    pcp_world_size=self.single_type_managers[
++                        first_group_id
++                    ].pcp_world_size,
+                 )
+                 if drop_eagle_block:
+                     eagle_verified.add(idx)
+@@ -904,6 +945,7 @@ class HybridKVCacheCoordinator(KVCacheCoordinator):
+         hit_lengths: list[int] = [0] * num_groups
+
+         for spec, group_ids, manager_cls, use_eagle in self.attention_groups:
++            manager = self.single_type_managers[group_ids[0]]
+             blocks, group_hit = manager_cls.find_longest_cache_hit(
+                 block_hashes=block_hashes,
+                 max_length=max_cache_hit_length,
+@@ -912,6 +954,8 @@ class HybridKVCacheCoordinator(KVCacheCoordinator):
+                 kv_cache_spec=spec,
+                 drop_eagle_block=use_eagle,
+                 alignment_tokens=self._cache_hit_alignment_tokens,
++                dcp_world_size=manager.dcp_world_size,
++                pcp_world_size=manager.pcp_world_size,
+             )
+             for gid, blks in zip(group_ids, blocks):
+                 hit_blocks[gid] = blks
+diff --git a/vllm/v1/core/kv_cache_utils.py b/vllm/v1/core/kv_cache_utils.py
+index 337a55aa6cd09b4ba986cdcab6ad17c3dd84a436..03a5508279cc0c694f77f77b4d4916b6e06f8d7d 100644
+--- a/vllm/v1/core/kv_cache_utils.py
++++ b/vllm/v1/core/kv_cache_utils.py
+@@ -647,6 +647,28 @@ def hash_block_tokens(
+     )
+
+
++def dcp_world_size_for_kv_cache_spec(spec: KVCacheSpec, dcp_world_size: int) -> int:
++    """Return the DCP size that owns this group's block geometry.
++
++    Full-attention KV (including MLA) is sharded across DCP ranks, so prefix
++    hashing and manager ``block_size`` use the process DCP size. Other specs
++    keep replicated per-rank state (Mamba, sliding window, chunked-local) and
++    must keep ``dcp_world_size=1`` even when the process runs with DCP > 1.
++
++    Draft MLA groups on the sharded DSpark path are ``FullAttentionSpec`` /
++    ``MLAAttentionSpec`` and therefore keep the process DCP size. A replicated
++    draft group would need a different spec, not this helper.
++    """
++    if dcp_world_size <= 1:
++        return 1
++    inner = spec
++    if isinstance(spec, UniformTypeKVCacheSpecs):
++        inner = next(iter(spec.kv_cache_specs.values()))
++    if isinstance(inner, FullAttentionSpec):
++        return dcp_world_size
++    return 1
++
++
+ def resolve_kv_cache_block_sizes(
+     kv_cache_config: KVCacheConfig,
+     vllm_config: VllmConfig,
+diff --git a/vllm/v1/core/sched/scheduler.py b/vllm/v1/core/sched/scheduler.py
+index c373d5cf5c8751c08d119afeb9eac7704855cd51..5d8eee97dfd86278fd350d68fa6b1c55d18eba19 100644
+--- a/vllm/v1/core/sched/scheduler.py
++++ b/vllm/v1/core/sched/scheduler.py
+@@ -442,6 +442,10 @@ class Scheduler(SchedulerInterface):
+             if self.mamba_partial_cache_hit
+             else 0
+         )
++        eagle_replay_boundary = 0
++        if self.use_eagle and tail_boundary:
++            eagle_hit_boundary = tail_boundary - self.hash_block_size
++            eagle_replay_boundary = eagle_hit_boundary // block_size * block_size
+         stops = (
+             # Same invariant: a chunk starting mid-block stops at the boundary
+             # rather than running past it.
+@@ -453,6 +457,10 @@ class Scheduler(SchedulerInterface):
+             tail_boundary
+             if last_cache_position < tail_boundary < request.num_prompt_tokens
+             else 0,
++            # Fine-grained EAGLE drops one hash unit from the dense-group hit.
++            # Materialize the Mamba state at the block boundary from which the
++            # reconciled hybrid hit can replay.
++            eagle_replay_boundary,
+             # Marconi shared-prefix junction, block-floored (a sub-block
+             # junction's state is not separately cacheable): cache its state
+             # so sibling requests sharing the prefix can reuse it.
+diff --git a/vllm/v1/core/single_type_kv_cache_manager.py b/vllm/v1/core/single_type_kv_cache_manager.py
+index ceb56a59875f78e030448a5bef78df12cfc5a96d..9e70251112755d83a6a8abdc9818f5e7c4f7851a 100644
+--- a/vllm/v1/core/single_type_kv_cache_manager.py
++++ b/vllm/v1/core/single_type_kv_cache_manager.py
+@@ -6,6 +6,7 @@ from collections import defaultdict
+ from collections.abc import Sequence
+ from typing import ClassVar
+
++from vllm.logger import init_logger
+ from vllm.utils.math_utils import cdiv
+ from vllm.v1.core.block_pool import BlockPool
+ from vllm.v1.core.kv_cache_utils import (
+@@ -32,6 +33,8 @@ from vllm.v1.kv_cache_interface import (
+ from vllm.v1.kv_cache_spec_registry import KVCacheSpecRegistry
+ from vllm.v1.request import Request
+
++logger = init_logger(__name__)
++
+
+ class SingleTypeKVCacheManager(ABC):
+     """
+@@ -71,6 +74,11 @@ class SingleTypeKVCacheManager(ABC):
+                 block until the request finishes.
+         """
+         self.scheduler_block_size = scheduler_block_size
++        # Prefix-cache retention normally follows the scheduler's shared
++        # alignment. Hybrid fine-grained lookup can lower that boundary to the
++        # hash block size; the coordinator updates this after it verifies that
++        # every participating manager supports the finer lookup.
++        self.cache_hit_alignment_tokens = scheduler_block_size
+         # The block size for this manager; used for actual block allocation.
+         self.block_size = kv_cache_spec.block_size
+         self.dcp_world_size = dcp_world_size
+@@ -347,11 +355,22 @@ class SingleTypeKVCacheManager(ABC):
+             # Replacing in place keeps the length-based allocation below
+             # correct; the extra block was reserved by
+             # get_num_blocks_to_allocate.
+-            block_idx, source_block = self._partial_hit_reqs.pop(request_id)
+-            cow_block = self.block_pool.get_new_blocks(1)[0]
+-            self._apply_cow(request_id, block_idx, source_block, cow_block)
+-            self.new_block_ids.append(cow_block.block_id)
+-            cow_blocks.append(cow_block)
++            block_idx, _ = self._partial_hit_reqs.pop(request_id)
++            req_blocks = self.req_to_blocks[request_id]
++            if block_idx < len(req_blocks):
++                source_block = req_blocks[block_idx]
++                cow_block = self.block_pool.get_new_blocks(1)[0]
++                self._apply_cow(request_id, block_idx, source_block, cow_block)
++                self.new_block_ids.append(cow_block.block_id)
++                cow_blocks.append(cow_block)
++            else:
++                logger.debug(
++                    "Skipping CoW for request %s: partial-hit block %d is past "
++                    "its %d allocated blocks.",
++                    request_id,
++                    block_idx,
++                    len(req_blocks),
++                )
+
+         req_blocks = self.req_to_blocks[request_id]
+         num_required_blocks = cdiv(num_tokens, self.block_size)
+@@ -426,6 +445,7 @@ class SingleTypeKVCacheManager(ABC):
+         request: Request,
+         num_tokens: int,
+         retention_interval: int | None = None,
++        extra_reachable_boundaries: Sequence[int] = (),
+     ) -> None:
+         """
+         Cache the blocks for the request.
+@@ -438,6 +458,8 @@ class SingleTypeKVCacheManager(ABC):
+                 keeps dense checkpointing; ``0`` keeps only the latest replay
+                 boundary; a positive multiple of ``scheduler_block_size`` keeps
+                 a tail once per that-sized segment. Only SWA acts on it.
++            extra_reachable_boundaries: Additional token positions whose state
++                must remain reusable after cross-group cache-hit reconciliation.
+         """
+         num_cached_blocks = self.num_cached_block.get(request.request_id, 0)
+         num_full_blocks = num_tokens // self.block_size
+@@ -451,11 +473,12 @@ class SingleTypeKVCacheManager(ABC):
+         reachable_boundaries = [request.num_prompt_tokens - 1]
+         if request.shared_prefix_boundary:
+             reachable_boundaries.append(request.shared_prefix_boundary)
++        reachable_boundaries.extend(extra_reachable_boundaries)
+
+         block_mask = self.reachable_block_mask(
+             start_block=num_cached_blocks,
+             end_block=num_full_blocks,
+-            alignment_tokens=self.scheduler_block_size,
++            alignment_tokens=self.cache_hit_alignment_tokens,
+             kv_cache_spec=self.kv_cache_spec,
+             use_eagle=self.use_eagle,
+             retention_interval=retention_interval,
+@@ -783,8 +806,14 @@ class FullAttentionManager(SingleTypeKVCacheManager):
+         request: Request,
+         num_tokens: int,
+         retention_interval: int | None = None,
++        extra_reachable_boundaries: Sequence[int] = (),
+     ) -> None:
+-        super().cache_blocks(request, num_tokens, retention_interval=retention_interval)
++        super().cache_blocks(
++            request,
++            num_tokens,
++            retention_interval=retention_interval,
++            extra_reachable_boundaries=extra_reachable_boundaries,
++        )
+         hash_block_size = self.block_pool.hash_block_size
+         if self.block_size == hash_block_size:
+             return
+@@ -1712,9 +1741,15 @@ class MambaManager(SingleTypeKVCacheManager):
+         request: Request,
+         num_tokens: int,
+         retention_interval: int | None = None,
++        extra_reachable_boundaries: Sequence[int] = (),
+     ) -> None:
+         num_cached_blocks_before = self.num_cached_block.get(request.request_id, 0)
+-        super().cache_blocks(request, num_tokens, retention_interval=retention_interval)
++        super().cache_blocks(
++            request,
++            num_tokens,
++            retention_interval=retention_interval,
++            extra_reachable_boundaries=extra_reachable_boundaries,
++        )
+         num_cached_blocks_after = self.num_cached_block.get(request.request_id, 0)
+         if self.mamba_cache_mode == "align":
+             partial_hash = self._cache_partial_tail_block(request, num_tokens)
+@@ -1807,6 +1842,7 @@ class CrossAttentionManager(SingleTypeKVCacheManager):
+         request: Request,
+         num_tokens: int,
+         retention_interval: int | None = None,
++        extra_reachable_boundaries: Sequence[int] = (),
+     ) -> None:
+         # We do not cache blocks for cross-attention to be shared between
+         # requests, so this method is not relevant.
+diff --git a/vllm/v1/kv_cache_interface.py b/vllm/v1/kv_cache_interface.py
+index 55c9e806a5e790c67ba59a344f60de1b540fa5ec..03d39144881ae2ce7faeaf8b11db3a9aa7ba3836 100644
+--- a/vllm/v1/kv_cache_interface.py
++++ b/vllm/v1/kv_cache_interface.py
+@@ -569,6 +569,14 @@ class MLAAttentionSpec(FullAttentionSpec):
+             "All attention layers in the same KV cache group must use the same "
+             "quantization method, tokens per state, and model version."
+         )
++        # The metadata builder reads this once per group, so mixing causal
++        # target layers with non-causal draft layers would route the target
++        # through the draft decode path.
++        non_causal_mtd_set = set(spec.non_causal_multi_token_decode for spec in specs)
++        assert len(non_causal_mtd_set) == 1, (
++            "All attention layers in the same KV cache group must agree on "
++            "non_causal_multi_token_decode."
++        )
+         merged_spec = cls(
+             block_size=specs[0].block_size,
+             num_kv_heads=specs[0].num_kv_heads,
+@@ -581,9 +589,7 @@ class MLAAttentionSpec(FullAttentionSpec):
+             cache_dtype_str=cache_dtype_str_set.pop(),
+             tokens_per_state=tokens_per_state_set.pop(),
+             model_version=model_version_set.pop(),
+-            non_causal_multi_token_decode=any(
+-                spec.non_causal_multi_token_decode for spec in specs
+-            ),
++            non_causal_multi_token_decode=non_causal_mtd_set.pop(),
+         )
+         for spec in specs:
+             for f in fields(AttentionSpec):
+diff --git a/vllm/v1/worker/gpu/spec_decode/dflash/cudagraph.py b/vllm/v1/worker/gpu/spec_decode/dflash/cudagraph.py
+index c68b5497458bdf9398afcfe0b2d4f7d25892406f..4930fe619b1732cf9d837398685aaa6345fc9ffb 100644
+--- a/vllm/v1/worker/gpu/spec_decode/dflash/cudagraph.py
++++ b/vllm/v1/worker/gpu/spec_decode/dflash/cudagraph.py
+@@ -39,20 +39,23 @@ def _prepare_dflash_inputs_to_capture(
+         slot_mappings, kv_cache_config
+     )
+
++    # Capture and replay must share the persistent DCP sequence-length buffer.
++    dcp_local_seq_lens = None
++    if block_tables.cp_size > 1:
++        prepare_dcp_local_seq_lens(
++            input_buffers.dcp_local_seq_lens,
++            input_batch.seq_lens,
++            num_reqs,
++            block_tables.cp_size,
++            block_tables.cp_rank,
++            block_tables.cp_interleave,
++        )
++        dcp_local_seq_lens = input_buffers.dcp_local_seq_lens[:num_reqs]
++        input_batch.dcp_local_seq_lens = dcp_local_seq_lens
++
+     attn_metadata = None
+     if not skip_attn:
+         query_start_loc_cpu = torch.from_numpy(input_batch.query_start_loc_np)
+-        dcp_local_seq_lens = None
+-        if block_tables.cp_size > 1:
+-            prepare_dcp_local_seq_lens(
+-                input_buffers.dcp_local_seq_lens,
+-                input_buffers.seq_lens,
+-                num_reqs,
+-                block_tables.cp_size,
+-                block_tables.cp_rank,
+-                block_tables.cp_interleave,
+-            )
+-            dcp_local_seq_lens = input_buffers.dcp_local_seq_lens
+         attn_metadata = build_attn_metadata(
+             attn_groups=attn_groups,
+             num_reqs=num_reqs,
+diff --git a/vllm/v1/worker/gpu/spec_decode/speculator.py b/vllm/v1/worker/gpu/spec_decode/speculator.py
+index 8427bf3d002f54f66aaae6aed1c23e84e2413542..e747d818afe2951896a3e9ca40cfe815706499f6 100644
+--- a/vllm/v1/worker/gpu/spec_decode/speculator.py
++++ b/vllm/v1/worker/gpu/spec_decode/speculator.py
+@@ -11,6 +11,7 @@ import torch.nn as nn
+ from vllm.config import VllmConfig, get_layers_from_vllm_config
+ from vllm.config.compilation import CUDAGraphMode
+ from vllm.distributed.eplb.eplb_state import EplbState
++from vllm.distributed.parallel_state import get_dcp_group
+ from vllm.logger import init_logger
+ from vllm.model_executor.layers.attention_layer_base import AttentionLayerBase
+ from vllm.model_executor.models import supports_multimodal_embeddings
+@@ -21,6 +22,7 @@ from vllm.v1.worker.gpu.attn_utils import (
+     init_attn_backend,
+ )
+ from vllm.v1.worker.gpu.block_table import BlockTables
++from vllm.v1.worker.gpu.cp_utils import prepare_dcp_local_seq_lens
+ from vllm.v1.worker.gpu.input_batch import InputBatch, InputBuffers
+ from vllm.v1.worker.gpu.model_states.interface import ModelState
+ from vllm.v1.worker.gpu.sample.gumbel import gumbel_sample
+@@ -273,6 +275,20 @@ class DraftModelSpeculator(BaseSpeculator):
+             out=draft_seq_lens_cpu_upper_bound[:num_reqs],
+         )
+         draft_seq_lens_cpu_upper_bound[:num_reqs].clamp_(max=self.max_model_len)
++        parallel_config = self.vllm_config.parallel_config
++        dcp_size = parallel_config.decode_context_parallel_size
++        if dcp_local_seq_lens is None and dcp_size > 1:
++            prepare_dcp_local_seq_lens(
++                self.input_buffers.dcp_local_seq_lens,
++                self.input_buffers.seq_lens,
++                num_reqs,
++                dcp_size,
++                get_dcp_group().rank_in_group,
++                parallel_config.cp_kv_cache_interleave_size,
++            )
++            dcp_local_seq_lens = self.input_buffers.dcp_local_seq_lens[
++                :num_reqs_padded
++            ]
+         attn_metadata = build_attn_metadata(
+             attn_groups=self.attn_groups,
+             num_reqs=num_reqs_padded,

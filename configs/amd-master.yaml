@@ -639,6 +639,43 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
       - { tp: 8, kv-offloading: none, conc-list: [1, 4, 8] , spec-decoding: mtp}
       - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [10], spec-decoding: mtp }
 
+# Diagnostic A/B on a single pinned vLLM nightly. The two configurations are
+# identical except that the second overlay adds vllm#53166. C1 uses DSpark K=6,
+# C16 uses K=3 with DCP8, and C52 disables speculative decoding. The extra
+# vllm-simple C52 cell uses the same five-PR overlay as the GPU-resident C52.
+kimik3pr4-fp4-mi355x-vllm-agentic:
+  image: vllm/vllm-openai-rocm:nightly-46638857fdbb30e0c232c9e8f9cb1ff6d6f545c3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3pr4
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.171
+      search-space:
+      - { tp: 8, ep: 1, dcp-size: 1, kv-offloading: none, conc-list: [1], spec-decoding: mtp }
+      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: none, conc-list: [16], spec-decoding: mtp }
+      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: none, conc-list: [52], spec-decoding: none }
+
+kimik3pr5-fp4-mi355x-vllm-agentic:
+  image: vllm/vllm-openai-rocm:nightly-46638857fdbb30e0c232c9e8f9cb1ff6d6f545c3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3pr5
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.171
+      search-space:
+      - { tp: 8, ep: 1, dcp-size: 1, kv-offloading: none, conc-list: [1], spec-decoding: mtp }
+      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: none, conc-list: [16], spec-decoding: mtp }
+      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: none, conc-list: [52], spec-decoding: none }
+      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [52], spec-decoding: none }
+
 # Kimi-K3 MXFP4 agentic-coding benchmark on MI355X via ATOM with DSpark
 # speculative decoding. Acceptance is pinned to the committed golden curve in
 # golden_al_distribution/kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml
