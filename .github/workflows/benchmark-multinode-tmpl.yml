@@ -369,6 +369,11 @@ jobs:
           # git dir whose HEAD does not resolve to a commit is dropped
           # together with its worktree so checkout re-clones it.
           repo_dir="${{ github.workspace }}"
+          legacy_amd_dir="${repo_dir}/benchmarks/multi_node/amd_utils"
+          if [ -d "${legacy_amd_dir}" ] && [ -n "$(find "${legacy_amd_dir}" -xdev \! -user "$(id -u)" -print -quit)" ]; then
+            echo "[git-repair] Reclaiming legacy AMD workspace files created by containers"
+            sudo -n chown -R "$(id -u):$(id -g)" "${legacy_amd_dir}"
+          fi
           if [ -d "${repo_dir}/.git" ]; then
             find "${repo_dir}/.git" -name index.lock -type f -delete || true
             for gitdir in "${repo_dir}"/.git/modules/* "${repo_dir}"/.git/modules/*/*; do
