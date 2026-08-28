@@ -61,7 +61,7 @@ backend:
         backend: NIXL
         transceiver_runtime: CPP
         kv_cache_bounce_size_mb: 5120
-        max_tokens_in_buffer: 1048576
+        max_tokens_in_buffer: 16384
         kv_transfer_timeout_ms: 600000
       cuda_graph_config: null
       disable_overlap_scheduler: false
@@ -76,7 +76,7 @@ backend:
         host_cache_size: 137438953472
         tokens_per_block: 64
       max_batch_size: 256
-      max_num_tokens: 2048
+      max_num_tokens: 4096
       max_seq_len: 1048576
       moe_config:
         backend: CUTEDSL
@@ -100,7 +100,7 @@ backend:
         backend: NIXL
         transceiver_runtime: CPP
         kv_cache_bounce_size_mb: 5120
-        max_tokens_in_buffer: 1048576
+        max_tokens_in_buffer: 16384
         kv_transfer_timeout_ms: 600000
       cuda_graph_config:
         batch_sizes: [1, 2]
