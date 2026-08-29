@@ -304,21 +304,22 @@ else
     fi
     trap 'rc=$?; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT
 
-    # flock-serialize the enroot import so concurrent sweep jobs on the same
-    # shared NFS path don't race each other into 'File already exists' (race
-    # observed on PR #1509: 13/30 jobs failed, all on the dgxc-slurm runners
-    # hitting the same /mnt/nfs/lustre/containers/<image>.sqsh path). Matches
-    # the canonical pattern already used in launch_h100-cw.sh + the mi3xx
-    # launchers. The skip-if-valid check avoids re-downloading when the file
-    # was successfully created by an earlier job.
+    # Check the shared cache before opening its lock. A valid squash file is
+    # immutable, so readers do not need to touch a lock owned by another user.
     srun --jobid=$JOB_ID bash -c "
-        exec 9>\"$LOCK_FILE\"
-        flock -w 600 9 || { echo 'Failed to acquire lock for $SQUASH_FILE'; exit 1; }
         if unsquashfs -l \"$SQUASH_FILE\" > /dev/null 2>&1; then
             echo 'Squash file already exists and is valid, skipping import'
         else
-            rm -f \"$SQUASH_FILE\"
-            enroot import -o \"$SQUASH_FILE\" docker://$IMAGE
+            if ! { exec 9>\"$LOCK_FILE\"; } 2>/dev/null; then
+                exec 9<\"$LOCK_FILE\" || { echo 'Failed to open lock for $SQUASH_FILE'; exit 1; }
+            fi
+            flock -w 600 9 || { echo 'Failed to acquire lock for $SQUASH_FILE'; exit 1; }
+            if unsquashfs -l \"$SQUASH_FILE\" > /dev/null 2>&1; then
+                echo 'Squash file was imported by another job'
+            else
+                rm -f \"$SQUASH_FILE\"
+                enroot import -o \"$SQUASH_FILE\" docker://$IMAGE
+            fi
         fi
     "
 

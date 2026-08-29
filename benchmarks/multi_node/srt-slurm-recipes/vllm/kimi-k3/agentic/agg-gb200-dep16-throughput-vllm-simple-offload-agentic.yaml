@@ -138,7 +138,6 @@ srun_options:
 
 benchmark:
   type: custom
-  aiperf_server_metrics: true
   command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
   env:
     INFMAX_CONTAINER_WORKSPACE: "/infmax-workspace"
