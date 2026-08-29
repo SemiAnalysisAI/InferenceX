@@ -34,6 +34,9 @@ else
 fi
 export K3_OVERLAY_PATCH="$script_dir/k3_patches/vllm_nightly_46638857_k3_tuned.patch"
 export REQUIRE_K3_OVERLAY=1
+# The merged overlay supersedes the legacy patch set, but it predates #52972.
+# Keep that one post-overlay correctness guard enabled for DCP + DSpark.
+export FORCE_PATCH_PARTIAL_PREFIX_52972=1
 
 export DCP_COMM_BACKEND=a2a
 export GPU_MEM_UTIL=0.90

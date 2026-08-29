@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Kimi-K3 / MI355X (gfx950) in-container patches — all three in one place.
+# Kimi-K3 / MI355X (gfx950) in-container patches.
 #
 # Everything here patches files inside the running container only
 # (site-packages). Nothing outside the container is touched. Each patch is
@@ -13,16 +13,20 @@
 #   [2] TritonMLA cudagraph support        -> FULL cudagraphs for DSpark (5.52x TPOT)
 #   [3] KV block-pool negative-count clamp -> stops the mid-run engine crash
 #   [4] vllm-project/vllm#51705            -> DSpark under DCP (only when DCP_SIZE>1)
+#   [5] vllm-project/vllm#52972            -> prevents stale partial-prefix hashes
 #
 # Env:
-#   SKIP_KIMI_PATCHES=1   skip everything
-#   PYTHON=...            interpreter to use (default python3)
+#   SKIP_KIMI_PATCHES=1               skip everything
+#   FORCE_PATCH_PARTIAL_PREFIX_52972=1 apply [5] even when the merged overlay
+#                                       supersedes [1]-[4]
+#   PYTHON=...                        interpreter to use (default python3)
 # =============================================================================
 set -euo pipefail
 PY=${PYTHON:-python3}
 PATCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/k3_patches"
 
-if [ "${SKIP_KIMI_PATCHES:-0}" = "1" ]; then
+if [ "${SKIP_KIMI_PATCHES:-0}" = "1" ] \
+        && [ "${FORCE_PATCH_PARTIAL_PREFIX_52972:-0}" != "1" ]; then
     echo "[kimi-patches] SKIP_KIMI_PATCHES=1, doing nothing."
     exit 0
 fi
@@ -295,6 +299,158 @@ patch_dcp_51705() {
     echo "[$label] applied vllm#51705 (DCP for K3 DSpark)."
 }
 
+# -----------------------------------------------------------------------------
+# [5] vllm-project/vllm#52972: reject stale partial-prefix hash resurrection
+# -----------------------------------------------------------------------------
+# FullAttentionManager rechecks the fixed prompt-tail boundary on every decode
+# step. Once decode fills that cache page, cache_full_blocks promotes the block
+# to a longer hash and retires the partial key. Without these guards, the next
+# step inserts that stale key again. A later prefix hit can then reach a block
+# whose recorded coverage is already equal to or beyond the stale boundary and
+# trip block_pool.py's block_hash_num_tokens assertion. The pool guard is the
+# correctness invariant; the manager guard avoids repeating the rejected work.
+patch_partial_prefix_52972() {
+    local label="partial-prefix-52972"
+    local pool manager
+    pool=$(_modfile vllm.v1.core.block_pool)
+    manager=$(_modfile vllm.v1.core.single_type_kv_cache_manager)
+    if [ -z "$pool" ] || [ ! -f "$pool" ] \
+            || [ -z "$manager" ] || [ ! -f "$manager" ]; then
+        echo "[$label] targets not found; skipping."
+        return 0
+    fi
+    if grep -q "KIMI-PATCH-PARTIAL-PREFIX-52972" "$pool" \
+            && grep -q "KIMI-PATCH-PARTIAL-PREFIX-52972" "$manager"; then
+        echo "[$label] already patched."
+        return 0
+    fi
+
+    cp -n "$pool" "$pool.orig" 2>/dev/null || true
+    cp -n "$manager" "$manager.orig" 2>/dev/null || true
+    if ! $PY - "$pool" "$manager" <<'EOF'
+import io
+import sys
+
+pool_path, manager_path = sys.argv[1:]
+pool_src = io.open(pool_path, encoding="utf-8").read()
+manager_src = io.open(manager_path, encoding="utf-8").read()
+
+pool_old = """        already_cached = block.block_hash == block_hash_with_group_id or (
+            self.cached_block_hash_to_block.contain(
+                block_hash_with_group_id, block.block_id
+            )
+        )
+        if (
+            not already_cached
+            and block.block_hash is not None
+            and block.block_hash_num_tokens is not None
+            and block.block_hash_num_tokens < num_hash_blocks * self.hash_block_size
+        ):
+            removed_hashes = self._remove_cached_block_hashes(block)
+            self._emit_block_removed_events(removed_hashes)
+        self._insert_block_hash(
+            block_hash_with_group_id,
+            block,
+            num_tokens=num_hash_blocks * self.hash_block_size,
+        )"""
+pool_new = """        incoming_num_tokens = num_hash_blocks * self.hash_block_size
+        already_cached = block.block_hash == block_hash_with_group_id or (
+            self.cached_block_hash_to_block.contain(
+                block_hash_with_group_id, block.block_id
+            )
+        )
+        # KIMI-PATCH-PARTIAL-PREFIX-52972: a promoted block has already
+        # superseded this boundary; never resurrect its retired partial hash.
+        if (
+            not already_cached
+            and block.block_hash_num_tokens is not None
+            and block.block_hash_num_tokens >= incoming_num_tokens
+        ):
+            return None
+        if (
+            not already_cached
+            and block.block_hash is not None
+            and block.block_hash_num_tokens is not None
+            and block.block_hash_num_tokens < incoming_num_tokens
+        ):
+            removed_hashes = self._remove_cached_block_hashes(block)
+            self._emit_block_removed_events(removed_hashes)
+        self._insert_block_hash(
+            block_hash_with_group_id,
+            block,
+            num_tokens=incoming_num_tokens,
+        )"""
+
+manager_base_old = """        if block_idx >= len(blocks):
+            return
+        self.block_pool.cache_partial_block(
+            request=request,
+            block=blocks[block_idx],"""
+manager_base_new = """        if block_idx >= len(blocks):
+            return
+        target_block = blocks[block_idx]
+        # KIMI-PATCH-PARTIAL-PREFIX-52972: stop revisiting a prompt-tail
+        # boundary after this block has been promoted beyond it.
+        if (
+            target_block.block_hash_num_tokens is not None
+            and target_block.block_hash_num_tokens >= boundary_tokens
+        ):
+            return
+        self.block_pool.cache_partial_block(
+            request=request,
+            block=target_block,"""
+manager_overlay_old = """        if block_idx >= len(blocks):
+            return
+        partial_hash = self.block_pool.cache_partial_block(
+            request=request,
+            block=blocks[block_idx],"""
+manager_overlay_new = """        if block_idx >= len(blocks):
+            return
+        target_block = blocks[block_idx]
+        # KIMI-PATCH-PARTIAL-PREFIX-52972: stop revisiting a prompt-tail
+        # boundary after this block has been promoted beyond it.
+        if (
+            target_block.block_hash_num_tokens is not None
+            and target_block.block_hash_num_tokens >= boundary_tokens
+        ):
+            return
+        partial_hash = self.block_pool.cache_partial_block(
+            request=request,
+            block=target_block,"""
+
+pool_done = "KIMI-PATCH-PARTIAL-PREFIX-52972" in pool_src
+manager_done = "KIMI-PATCH-PARTIAL-PREFIX-52972" in manager_src
+if not pool_done and pool_src.count(pool_old) != 1:
+    sys.stderr.write("[partial-prefix-52972] block_pool anchor missing or not unique\n")
+    sys.exit(1)
+if not manager_done:
+    base_count = manager_src.count(manager_base_old)
+    overlay_count = manager_src.count(manager_overlay_old)
+    if base_count + overlay_count != 1:
+        sys.stderr.write(
+            "[partial-prefix-52972] manager anchor missing or not unique\n"
+        )
+        sys.exit(1)
+
+if not pool_done:
+    pool_src = pool_src.replace(pool_old, pool_new)
+if not manager_done:
+    if manager_src.count(manager_overlay_old) == 1:
+        manager_src = manager_src.replace(manager_overlay_old, manager_overlay_new)
+    else:
+        manager_src = manager_src.replace(manager_base_old, manager_base_new)
+
+io.open(pool_path, "w", encoding="utf-8").write(pool_src)
+io.open(manager_path, "w", encoding="utf-8").write(manager_src)
+print("[partial-prefix-52972] patched", pool_path)
+print("[partial-prefix-52972] patched", manager_path)
+EOF
+    then
+        echo "[partial-prefix-52972] patch failed; left unchanged." >&2
+        return 0
+    fi
+}
+
 # Per-patch switches, so a single patch can be isolated without disabling the
 # others. Note patch [1] is load-bearing: without it ROCM_AITER_FA prefill dies
 # at warmup with the fmha_fwd_bf16_opus TypeError, so skipping it does not give
@@ -303,25 +459,39 @@ patch_dcp_51705() {
 #   SKIP_PATCH_CUDAGRAPH=1  skip [2] TritonMLA UNIFORM_BATCH   <- the HIP-999 suspect
 #   SKIP_PATCH_BLOCKPOOL=1  skip [3] KV block-pool clamp
 #   SKIP_PATCH_DCP=1        skip [4] vllm#51705 DCP support
+#   SKIP_PATCH_PARTIAL_PREFIX=1 skip [5] vllm#52972 partial-prefix guard
 echo "[kimi-patches] applying in-container patches..."
-if [ "${SKIP_PATCH_AITER:-0}" = "1" ]; then
+if [ "${SKIP_KIMI_PATCHES:-0}" = "1" ]; then
+    echo "[kimi-patches] merged overlay present; skipping superseded patches [1]-[4]."
+elif [ "${SKIP_PATCH_AITER:-0}" = "1" ]; then
     echo "[aiter-pybind11] SKIPPED via SKIP_PATCH_AITER=1"
 else
     patch_aiter_pybind11 || true
 fi
-if [ "${SKIP_PATCH_CUDAGRAPH:-0}" = "1" ]; then
+if [ "${SKIP_KIMI_PATCHES:-0}" = "1" ]; then
+    :
+elif [ "${SKIP_PATCH_CUDAGRAPH:-0}" = "1" ]; then
     echo "[triton-mla-cudagraph] SKIPPED via SKIP_PATCH_CUDAGRAPH=1"
 else
     patch_triton_mla_cudagraph || true
 fi
-if [ "${SKIP_PATCH_BLOCKPOOL:-0}" = "1" ]; then
+if [ "${SKIP_KIMI_PATCHES:-0}" = "1" ]; then
+    :
+elif [ "${SKIP_PATCH_BLOCKPOOL:-0}" = "1" ]; then
     echo "[kv-blockpool] SKIPPED via SKIP_PATCH_BLOCKPOOL=1"
 else
     patch_kv_blockpool || true
 fi
-if [ "${SKIP_PATCH_DCP:-0}" = "1" ]; then
+if [ "${SKIP_KIMI_PATCHES:-0}" = "1" ]; then
+    :
+elif [ "${SKIP_PATCH_DCP:-0}" = "1" ]; then
     echo "[dcp-51705] SKIPPED via SKIP_PATCH_DCP=1"
 else
     patch_dcp_51705 || true
+fi
+if [ "${SKIP_PATCH_PARTIAL_PREFIX:-0}" = "1" ]; then
+    echo "[partial-prefix-52972] SKIPPED via SKIP_PATCH_PARTIAL_PREFIX=1"
+else
+    patch_partial_prefix_52972 || true
 fi
 echo "[kimi-patches] done."
