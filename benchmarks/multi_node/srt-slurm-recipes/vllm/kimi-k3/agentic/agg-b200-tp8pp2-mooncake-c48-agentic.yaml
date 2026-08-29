@@ -101,6 +101,7 @@ backend:
       language-model-only: true
       max-num-seqs: 96
       max-num-batched-tokens: 8192
+      speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":4,"method":"dspark","attention_backend":"TOKENSPEED_MLA","draft_sample_method":"probabilistic"}'
       prefix-match-unit: 128
       compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,7,18,34,53,64,75,100,128,256,512,1024,2048,4096,8192]}'
 
