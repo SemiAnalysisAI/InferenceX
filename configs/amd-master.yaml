@@ -1683,7 +1683,7 @@ dsv4-fp8-mi325x-vllm-mtp:
       - { tp: 8, conc-start: 4, conc-end: 128, spec-decoding: mtp }
 
 minimaxm3-fp4-mi355x-vllm-agentic-mtp:
-  image: vllm/vllm-openai-rocm:v0.27.1
+  image: vllm/vllm-openai-rocm:nightly-6d4562c59b97b4e35d459ff9389e71b6fe4995de
   model: amd/MiniMax-M3-MXFP4
   model-prefix: minimaxm3
   runner: cluster:mi355x-amds

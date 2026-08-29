@@ -6595,3 +6595,11 @@
     - "Update the vLLM B200 Kimi-K3 AgentX configs."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2776
   
+- config-keys:
+    - minimaxm3-fp4-mi355x-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Re-enables the AITER shuffled KV cache layout for MiniMax-M3 sparse PA, which was broken by the KV cache layout standardization in #51718"
+    - "Enabled the ROCM_AITER_UNIFIED_ATTN attention backend for both dense layer attention & spec decoding"
+  pr-link: 
