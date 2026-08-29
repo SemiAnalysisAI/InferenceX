@@ -8,7 +8,7 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
 
 SRT_SLURM_REPOSITORY="https://github.com/SemiAnalysisAI/srt-slurm.git"
-SRT_SLURM_COMMIT="aefb15ca0decbccd3ee8c715dbd48393ae018862"
+SRT_SLURM_COMMIT="55670290d7a8b8fe619b0b33acaeb6822fbcd92c"
 SLURM_PARTITION="compute"
 SHARED_BASE="/it-share/gharunners2/srt-slurm"
 SHARED_HF_CACHE="/it-share/hf-hub-cache"
