@@ -45,22 +45,31 @@ wait_for_openai_endpoint_ready() {
     local start_seconds=$SECONDS
     local next_report=0
     local elapsed percent
+    local served_model="${SERVED_MODEL_NAME:-$MODEL}"
     local models_url="http://localhost:${PORT}/v1/models"
+    while ! curl -fsS --max-time 10 "$models_url" 2>/dev/null \
+        | "$AIPERF_PYTHON" -c '
+import json
+import sys
 
-    while ! curl -fsS --max-time 10 "$models_url" >/dev/null 2>&1; do
+expected = sys.argv[1]
+payload = json.load(sys.stdin)
+models = payload.get("data", [])
+raise SystemExit(0 if any(model.get("id") == expected for model in models) else 1)
+' "$served_model" >/dev/null 2>&1; do
         elapsed=$((SECONDS - start_seconds))
         if [ "$elapsed" -ge "$timeout_seconds" ]; then
-            echo "ERROR: OpenAI endpoint did not become ready within ${timeout_seconds}s: $models_url" >&2
+            echo "ERROR: model '$served_model' did not become ready within ${timeout_seconds}s: $models_url" >&2
             return 1
         fi
         if [ "$elapsed" -ge "$next_report" ]; then
             percent=$((elapsed * 100 / timeout_seconds))
-            echo "Waiting for OpenAI endpoint: ${elapsed}/${timeout_seconds}s (${percent}%)"
+            echo "Waiting for model '$served_model': ${elapsed}/${timeout_seconds}s (${percent}%)"
             next_report=$((next_report + 60))
         fi
         sleep "$poll_seconds"
     done
-    echo "OpenAI endpoint ready: $models_url"
+    echo "OpenAI model ready: $served_model at $models_url"
 }
 
 resolve_trace_source

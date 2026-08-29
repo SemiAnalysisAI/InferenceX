@@ -2516,6 +2516,7 @@ def test_multinode_agentic_waits_for_openai_endpoint_before_requests(
 PORT=8765
 check_env_vars() { :; }
 resolve_trace_source() { echo resolve >> "$EVENTS"; }
+AIPERF_PYTHON=python3
 install_agentic_deps() { echo deps >> "$EVENTS"; }
 build_replay_cmd() { echo build >> "$EVENTS"; }
 run_agentic_replay_and_write_outputs() { echo replay >> "$EVENTS"; }
@@ -2526,6 +2527,7 @@ run_agentic_replay_and_write_outputs() { echo replay >> "$EVENTS"; }
     curl.write_text(
         """#!/usr/bin/env bash
 printf 'curl %s\n' "$*" >> "$EVENTS"
+printf '{"data":[{"id":"test-model"}]}\n'
 """,
         encoding="utf-8",
     )
