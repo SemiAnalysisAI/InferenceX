@@ -6648,3 +6648,11 @@
     - "Add the SimpleCPU-enabled A/B partner of kimik3-fp4-mi355x-vllm-agentic-dcp-v466-kvnone, identical cell for cell with the 512 GB lazy SimpleCPU KV tier switched back on."
     - "Generated cells differ from the kvnone key only in kv-offloading, kv-offload-backend, and total-cpu-dram-gb, so the pair prices the connector at c1, c16, c40, and c52 rather than only at the c40 point that already has a baseline."
   pr-link: XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-dcp-v466-kvnone
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Align the TP8/DCP1 C1 point with the validated low-concurrency serving envelope: K6 with synthetic AL 3.75, 8K batched tokens, max-num-seqs 20, and full/piecewise graph capture sizes 2 through 60; retain the existing C16 settings unchanged."
+  pr-link: XXX

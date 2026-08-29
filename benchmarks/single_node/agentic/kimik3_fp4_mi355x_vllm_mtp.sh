@@ -40,7 +40,6 @@ export FORCE_PATCH_PARTIAL_PREFIX_52972=1
 
 export DCP_COMM_BACKEND=a2a
 export GPU_MEM_UTIL=0.90
-export MAX_NUM_BATCHED_TOKENS=16384
 export K3_AUTO_KV_PAGE=1
 export SIMPLE_LAZY_OFFLOAD=true
 export SIMPLE_LAZY_OFFLOAD_WATERMARK_RATIO=1.0
@@ -52,11 +51,20 @@ export PREFIX_MATCH_UNIT=128
 export PREFIX_CACHING_HASH_ALGO=sha256
 
 export VLLM_ALLOW_DCP_FULL_CUDAGRAPH=1
-max_num_seqs=$(( CONC * 2 ))
-max_cudagraph_capture_size=$(( max_num_seqs * (SPEC_NUM_TOKENS + 1) ))
+if [ "${CONC}" -le 1 ]; then
+    export MAX_NUM_BATCHED_TOKENS=8192
+    max_num_seqs=20
+    max_cudagraph_capture_size=60
+    cudagraph_capture_sizes="$(seq -s, 2 "$max_cudagraph_capture_size")"
+else
+    export MAX_NUM_BATCHED_TOKENS=16384
+    max_num_seqs=$(( CONC * 2 ))
+    max_cudagraph_capture_size=$(( max_num_seqs * (SPEC_NUM_TOKENS + 1) ))
+    cudagraph_capture_sizes="$(seq -s, 1 "$max_cudagraph_capture_size")"
+fi
 export MAX_NUM_SEQS="$max_num_seqs"
 export MAX_CUDAGRAPH_CAPTURE_SIZE="$max_cudagraph_capture_size"
-export CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 1 "$max_cudagraph_capture_size")"
+export CUDAGRAPH_CAPTURE_SIZES="$cudagraph_capture_sizes"
 export COMPILATION_CUSTOM_OPS='"+fused_rms_norm_gated","+quant_fp8","+grouped_topk","+sparse_attn_indexer","none"'
 
 export HSA_NO_SCRATCH_RECLAIM=1

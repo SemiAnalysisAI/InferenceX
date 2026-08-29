@@ -779,7 +779,8 @@ kimik3-fp4-mi355x-vllm-agentic-mtp-dcp-simple-v466-k6:
 #
 # Four points, deliberately not uniform:
 #   c1   TP8 only. No DCP: at one lane there is no sequence to shard, and DCP is
-#        a KV capacity regression, so it would cost without paying back. K=6.
+#        a KV capacity regression, so it would cost without paying back. K=6,
+#        8K batched tokens, max-num-seqs 20, and graph capture sizes 2..60.
 #   c16  DCP8 + DSpark K=3.
 #   c40  DCP8, no spec. Pairs 1:1 with run 33011732207 -- same image, same args,
 #        the connector is the single delta.
