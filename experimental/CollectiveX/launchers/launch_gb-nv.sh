@@ -37,7 +37,10 @@ case "$COLLX_BENCH" in
     # kv_sweep.json is another ~1.33x of descriptor work grid-wide, so ~380
     # minutes. 460 clears the raised guard below with setup margin; the ask
     # stays 2 nodes x 1 GPU, so it still backfills on a contended pool.
-    TIME_MIN=460
+    # gb300 paces ~1.8x gb200 at isl >= 131072 over mnnvl (run 33244478580
+    # and the 2026-08-29 hand retest agree across two node pairs, so it is
+    # the platform, not a sick pair), projecting ~600 minutes grid-wide.
+    if [ "$PRODUCT" = gb300 ]; then TIME_MIN=690; else TIME_MIN=460; fi
     ;;
 esac
 IMAGE="$COLLX_IMAGE"
@@ -60,9 +63,12 @@ case "$COLLX_BENCH" in
     # bursts, and the power-of-two batch ladder in kv_sweep.json is another
     # ~1.33x of descriptor work grid-wide, so ~380 minutes projected. The
     # guard must clear that with real margin yet still fire before the
-    # 460-minute allocation dies, so the failure stays a clean per-case
-    # kill instead of a lost allocation.
-    export COLLX_RUN_TIMEOUT="${COLLX_RUN_TIMEOUT:-25200}"
+    # allocation above dies, so the failure stays a clean per-case kill
+    # instead of a lost allocation. gb300's ~1.8x pacing at the top isls
+    # projects ~600 minutes, so its guard sits at 660 inside the 690
+    # allocation.
+    if [ "$PRODUCT" = gb300 ]; then default_guard=39600; else default_guard=25200; fi
+    export COLLX_RUN_TIMEOUT="${COLLX_RUN_TIMEOUT:-$default_guard}"
     ;;  # kv-transfer suite
   *) collx_die "unsupported $PRODUCT backend: $COLLX_BENCH" ;;
 esac
