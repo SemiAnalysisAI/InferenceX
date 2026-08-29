@@ -21,10 +21,7 @@ from validation import (
     validate_matrix_entry,
 )
 
-seq_len_stoi = {
-    "1k1k": (1024, 1024),
-    "8k1k": (8192, 1024)
-}
+seq_len_stoi = {"1k1k": (1024, 1024), "8k1k": (8192, 1024)}
 
 MIN_EVAL_CONC = 16
 # Bound how many multinode agentic conc points share one server allocation.
@@ -46,6 +43,7 @@ def seq_len_to_str(isl: int, osl: int) -> str:
     otherwise returns 'isl_osl' format.
     """
     return seq_len_itos.get((isl, osl), f"{isl}_{osl}")
+
 
 def freeze_config_value(value):
     """Convert JSON-shaped config values into deterministic hashable values."""
@@ -109,9 +107,7 @@ def trim_conc(entries: list[dict]) -> list[dict]:
             kept_entry = {**kept_entry, "run-eval": True}
             if kept_entry.get("prefill") is not None:
                 kept_entry["eval-conc"] = minimum_concurrency(kept_entry)
-            if any(
-                out[index].get("eval-all-concs") is True for index in indices
-            ):
+            if any(out[index].get("eval-all-concs") is True for index in indices):
                 kept_entry["eval-all-concs"] = True
             out[keep] = kept_entry
         drop.update(index for index in indices if index != keep)
@@ -183,9 +179,7 @@ def scheduling_gpus_per_node(label: str, runner_data: dict) -> int:
     if len(matches) == 1:
         return matches.pop()
     if not matches:
-        raise ValueError(
-            f"Cannot resolve {Fields.GPUS_PER_NODE.value} for '{label}'"
-        )
+        raise ValueError(f"Cannot resolve {Fields.GPUS_PER_NODE.value} for '{label}'")
     raise ValueError(
         f"Ambiguous {Fields.GPUS_PER_NODE.value} for '{label}': {sorted(matches)}"
     )
@@ -271,10 +265,9 @@ def multinode_node_count(
     recipe_count = recipe_node_count(prefill, decode)
     if recipe_count is not None:
         return recipe_count
-    return (
-        worker_node_count(prefill, "prefill", runner, runner_data)
-        + worker_node_count(decode, "decode", runner, runner_data)
-    )
+    return worker_node_count(
+        prefill, "prefill", runner, runner_data
+    ) + worker_node_count(decode, "decode", runner, runner_data)
 
 
 def add_multinode_node_count(
@@ -307,6 +300,7 @@ def effective_gpu_count(benchmark: dict) -> int:
         * benchmark.get(Fields.PCP_SIZE.value, 1)
     )
 
+
 def with_worker_parallelism_defaults(worker: dict) -> dict:
     """Return a worker config with explicit parallelism defaults."""
     return {
@@ -332,7 +326,8 @@ def multinode_worker_pair(benchmark: dict, disagg: bool) -> tuple[dict, dict]:
         **{
             key: value
             for key, value in worker.items()
-            if key not in (
+            if key
+            not in (
                 Fields.NUM_WORKER.value,
                 Fields.ADDITIONAL_SETTINGS.value,
             )
@@ -403,11 +398,9 @@ def agentic_dram_offload_gb(
     gpus_per_node = runner_gpus_per_node(runner, runner_data)
 
     if Fields.WORKER.value in benchmark:
-        gpu_count = worker_gpus_per_node(
-            benchmark[Fields.WORKER.value], gpus_per_node)
+        gpu_count = worker_gpus_per_node(benchmark[Fields.WORKER.value], gpus_per_node)
     elif Fields.PREFILL.value in benchmark:
-        gpu_count = worker_gpus_per_node(
-            benchmark[Fields.PREFILL.value], gpus_per_node)
+        gpu_count = worker_gpus_per_node(benchmark[Fields.PREFILL.value], gpus_per_node)
     else:
         gpu_count = effective_gpu_count(benchmark)
         if gpu_count > gpus_per_node:
@@ -419,8 +412,7 @@ def agentic_dram_offload_gb(
                 f"{Fields.GPUS_PER_NODE.value}={gpus_per_node} for runner '{runner}'"
             )
     proportional_bytes = (
-        Decimal(available_mib) * BYTES_PER_MIB * utilization
-        * gpu_count / gpus_per_node
+        Decimal(available_mib) * BYTES_PER_MIB * utilization * gpu_count / gpus_per_node
     )
     return int(proportional_bytes / BYTES_PER_GB)
 
@@ -448,8 +440,7 @@ def multinode_agentic_exp_name(
         ep = worker.get(Fields.EP.value, 1)
         dpa = worker.get(Fields.DP_ATTN.value, False)
         tag = (
-            f"{role_prefix}{worker[Fields.NUM_WORKER.value]}"
-            f"x{worker[Fields.TP.value]}"
+            f"{role_prefix}{worker[Fields.NUM_WORKER.value]}x{worker[Fields.TP.value]}"
         )
         if ep != 1:
             tag += f"ep{ep}"
@@ -477,16 +468,17 @@ def component_metadata(benchmark: dict, config: dict) -> dict:
 def chunk_multinode_agentic_concurrencies(conc_values: list[int]) -> list[list[int]]:
     """Bound sequential agentic profiles sharing one server allocation."""
     size = MAX_MULTINODE_AGENTIC_CONCURRENCIES_PER_ALLOCATION
-    return [conc_values[index:index + size] for index in range(0, len(conc_values), size)]
+    return [
+        conc_values[index : index + size] for index in range(0, len(conc_values), size)
+    ]
 
 
 def _freeze_matrix_value(value):
     """Convert nested matrix values into hashable equivalents."""
     if isinstance(value, dict):
-        return tuple(sorted(
-            (key, _freeze_matrix_value(item))
-            for key, item in value.items()
-        ))
+        return tuple(
+            sorted((key, _freeze_matrix_value(item)) for key, item in value.items())
+        )
     if isinstance(value, list):
         return tuple(_freeze_matrix_value(item) for item in value)
     return value
@@ -510,14 +502,18 @@ def _multinode_parallelism_key(entry: dict) -> tuple:
         Fields.EVAL_ALL_CONCS.value,
         Fields.EXP_NAME.value,
     }
-    return tuple(sorted(
-        (key, _freeze_matrix_value(value))
-        for key, value in entry.items()
-        if key not in ignored_fields
-    ))
+    return tuple(
+        sorted(
+            (key, _freeze_matrix_value(value))
+            for key, value in entry.items()
+            if key not in ignored_fields
+        )
+    )
 
 
-def mark_eval_entries(matrix_values: list[dict], include_agentic: bool = False) -> list[dict]:
+def mark_eval_entries(
+    matrix_values: list[dict], include_agentic: bool = False
+) -> list[dict]:
     """Eval selection policy:
     - Single-node: only consider 8k1k (isl=8192, osl=1024).
       For each unique (model, runner, framework, precision, isl, osl, spec-decoding, dp-attn):
@@ -554,7 +550,10 @@ def mark_eval_entries(matrix_values: list[dict], include_agentic: bool = False) 
     for i, entry in enumerate(matrix_values):
         if Fields.TP.value not in entry:
             continue
-        if entry.get(Fields.ISL.value) != target_isl or entry.get(Fields.OSL.value) != target_osl:
+        if (
+            entry.get(Fields.ISL.value) != target_isl
+            or entry.get(Fields.OSL.value) != target_osl
+        ):
             continue
         if not _eligible_eval_concs(entry):
             continue
@@ -586,7 +585,10 @@ def mark_eval_entries(matrix_values: list[dict], include_agentic: bool = False) 
             continue
         if Fields.PREFILL.value not in entry:
             continue
-        if entry.get(Fields.ISL.value) != target_isl or entry.get(Fields.OSL.value) != target_osl:
+        if (
+            entry.get(Fields.ISL.value) != target_isl
+            or entry.get(Fields.OSL.value) != target_osl
+        ):
             continue
         eval_concs = _eligible_eval_concs(entry)
         if not eval_concs:
@@ -606,13 +608,15 @@ def mark_eval_entries(matrix_values: list[dict], include_agentic: bool = False) 
         # The selected eval subset uses exactly one conc per group.
         ag_mn_groups = defaultdict(list)
         for i, entry in enumerate(matrix_values):
-            if entry.get(Fields.SCENARIO_TYPE.value) != 'agentic-coding':
+            if entry.get(Fields.SCENARIO_TYPE.value) != "agentic-coding":
                 continue
             if Fields.PREFILL.value in entry:
                 eval_concs = _eligible_eval_concs(entry)
                 if not eval_concs:
                     continue
-                ag_mn_groups[_multinode_parallelism_key(entry)].append((i, eval_concs[-1]))
+                ag_mn_groups[_multinode_parallelism_key(entry)].append(
+                    (i, eval_concs[-1])
+                )
                 continue
             conc = entry[Fields.CONC.value]
             conc_val = max(conc) if isinstance(conc, list) else conc
@@ -659,7 +663,7 @@ def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
     target_isl, target_osl = seq_len_stoi["8k1k"]
 
     for entry in matrix_values:
-        if entry.get(Fields.SCENARIO_TYPE.value) == 'agentic-coding':
+        if entry.get(Fields.SCENARIO_TYPE.value) == "agentic-coding":
             if Fields.PREFILL.value not in entry:
                 entry[Fields.RUN_EVAL.value] = True
                 expanded_entries.append(entry)
@@ -700,9 +704,9 @@ def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
             parallelism_key = _multinode_parallelism_key(entry)
             if parallelism_key in multinode_indices:
                 existing = expanded_entries[multinode_indices[parallelism_key]]
-                existing[Fields.CONC.value] = sorted(set(
-                    existing[Fields.CONC.value] + conc_values
-                ))
+                existing[Fields.CONC.value] = sorted(
+                    set(existing[Fields.CONC.value] + conc_values)
+                )
                 continue
 
             batched_entry = {
@@ -748,7 +752,8 @@ def generate_full_sweep(args, all_config_data, runner_data):
         if invalid_runners:
             raise ValueError(
                 f"Invalid runner type(s): {invalid_runners}. "
-                f"Valid runner types are: {', '.join(sorted(valid_runner_types))}")
+                f"Valid runner types are: {', '.join(sorted(valid_runner_types))}"
+            )
 
     matrix_values = []
 
@@ -757,7 +762,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
     if args.seq_lens:
         seq_lens_filter = {seq_len_stoi[sl] for sl in args.seq_lens}
 
-    # Iterate through all configurations and apply filters as specified (this is just "selecting" 
+    # Iterate through all configurations and apply filters as specified (this is just "selecting"
     # configs from all of the master configs subject to some pattern matching)
     for key, val in all_config_data.items():
         # Filter by model prefix if specified
@@ -783,8 +788,14 @@ def generate_full_sweep(args, all_config_data, runner_data):
         disagg = val.get(Fields.DISAGG.value, False)
 
         scenarios = val[Fields.SCENARIOS.value]
-        scenario_filter = set(args.scenario_type) if getattr(args, 'scenario_type', None) else None
-        seq_len_configs = scenarios.get(Fields.FIXED_SEQ_LEN.value, []) if (scenario_filter is None or 'fixed-seq-len' in scenario_filter) else []
+        scenario_filter = (
+            set(args.scenario_type) if getattr(args, "scenario_type", None) else None
+        )
+        seq_len_configs = (
+            scenarios.get(Fields.FIXED_SEQ_LEN.value, [])
+            if (scenario_filter is None or "fixed-seq-len" in scenario_filter)
+            else []
+        )
         image = val[Fields.IMAGE.value]
         model = val[Fields.MODEL.value]
         precision = val[Fields.PRECISION.value]
@@ -797,7 +808,8 @@ def generate_full_sweep(args, all_config_data, runner_data):
         if args.runner_node_filter:
             runner_nodes = runner_nodes_for_label(runner, runner_data)
             runner_nodes_to_use = [
-                node for node in runner_nodes if args.runner_node_filter in node]
+                node for node in runner_nodes if args.runner_node_filter in node
+            ]
             if not runner_nodes_to_use:
                 # No matching nodes for this config's runner type, skip this config
                 continue
@@ -867,7 +879,9 @@ def generate_full_sweep(args, all_config_data, runner_data):
                             conc_values = filtered_conc
 
                     seq_len_str = seq_len_to_str(isl, osl)
-                    runners_for_entry = runner_nodes_to_use if runner_nodes_to_use else [runner]
+                    runners_for_entry = (
+                        runner_nodes_to_use if runner_nodes_to_use else [runner]
+                    )
 
                     for runner_value in runners_for_entry:
                         entry = {
@@ -930,8 +944,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                             if args.min_conc <= 0:
                                 continue
                             conc_values = [
-                                conc for conc in conc_values
-                                if conc >= args.min_conc
+                                conc for conc in conc_values if conc >= args.min_conc
                             ]
                             if not conc_values:
                                 continue
@@ -940,13 +953,10 @@ def generate_full_sweep(args, all_config_data, runner_data):
                             if args.max_conc <= 0:
                                 continue
                             filtered_conc = [
-                                conc for conc in conc_values
-                                if conc <= args.max_conc
+                                conc for conc in conc_values if conc <= args.max_conc
                             ]
                             conc_values = (
-                                filtered_conc
-                                if filtered_conc
-                                else [args.max_conc]
+                                filtered_conc if filtered_conc else [args.max_conc]
                             )
                     else:
                         conc_start = bmk[Fields.CONC_START.value]
@@ -981,7 +991,9 @@ def generate_full_sweep(args, all_config_data, runner_data):
                                 conc = conc_end
 
                     seq_len_str = seq_len_to_str(isl, osl)
-                    runners_for_entry = runner_nodes_to_use if runner_nodes_to_use else [runner]
+                    runners_for_entry = (
+                        runner_nodes_to_use if runner_nodes_to_use else [runner]
+                    )
 
                     for conc in conc_values:
                         for runner_value in runners_for_entry:
@@ -1018,7 +1030,11 @@ def generate_full_sweep(args, all_config_data, runner_data):
                             matrix_values.append(entry)
 
         # ---- Agentic-coding scenarios ----
-        agentic_configs = scenarios.get(Fields.AGENTIC_CODING.value, []) if (scenario_filter is None or 'agentic-coding' in scenario_filter) else []
+        agentic_configs = (
+            scenarios.get(Fields.AGENTIC_CODING.value, [])
+            if (scenario_filter is None or "agentic-coding" in scenario_filter)
+            else []
+        )
         if is_multinode and not args.multi_node:
             continue
         if not is_multinode and not args.single_node:
@@ -1045,7 +1061,8 @@ def generate_full_sweep(args, all_config_data, runner_data):
                     kv_offloading = bmk[Fields.KV_OFFLOADING.value]
                     kv_offload_backend = bmk.get(Fields.KV_OFFLOAD_BACKEND.value)
                 total_cpu_dram_gb = agentic_dram_offload_gb(
-                    agentic_config, bmk, runner, runner_data)
+                    agentic_config, bmk, runner, runner_data
+                )
 
                 # Get concurrency values
                 conc_list = bmk.get(Fields.CONC_LIST.value)
@@ -1072,7 +1089,9 @@ def generate_full_sweep(args, all_config_data, runner_data):
                 if not conc_values:
                     continue
 
-                runners_for_entry = runner_nodes_to_use if runner_nodes_to_use else [runner]
+                runners_for_entry = (
+                    runner_nodes_to_use if runner_nodes_to_use else [runner]
+                )
 
                 if is_multinode:
                     # Preserve historical exp-names for the default (no offload)
@@ -1083,7 +1102,9 @@ def generate_full_sweep(args, all_config_data, runner_data):
                         else ""
                     )
                     for runner_value in runners_for_entry:
-                        for conc_batch in chunk_multinode_agentic_concurrencies(conc_values):
+                        for conc_batch in chunk_multinode_agentic_concurrencies(
+                            conc_values
+                        ):
                             entry = {
                                 Fields.IMAGE.value: image,
                                 Fields.MODEL.value: model,
@@ -1099,13 +1120,19 @@ def generate_full_sweep(args, all_config_data, runner_data):
                                 Fields.TOTAL_CPU_DRAM_GB.value: total_cpu_dram_gb,
                                 Fields.DURATION.value: duration,
                                 Fields.EXP_NAME.value: multinode_agentic_exp_name(
-                                    model_code, prefill, decode, conc_batch, offload_suffix
+                                    model_code,
+                                    prefill,
+                                    decode,
+                                    conc_batch,
+                                    offload_suffix,
                                 ),
                                 Fields.DISAGG.value: disagg,
                                 Fields.SCENARIO_TYPE.value: "agentic-coding",
                             }
                             if kv_offload_backend is not None:
-                                entry[Fields.KV_OFFLOAD_BACKEND.value] = kv_offload_backend
+                                entry[Fields.KV_OFFLOAD_BACKEND.value] = (
+                                    kv_offload_backend
+                                )
                             entry.update(component_metadata(bmk, val))
                             add_multinode_node_count(
                                 entry,
@@ -1129,7 +1156,9 @@ def generate_full_sweep(args, all_config_data, runner_data):
                                 Fields.DCP_SIZE.value: dcp_size,
                                 Fields.PCP_SIZE.value: pcp_size,
                                 Fields.EP.value: ep if ep is not None else 1,
-                                Fields.DP_ATTN.value: dp_attn if dp_attn is not None else False,
+                                Fields.DP_ATTN.value: dp_attn
+                                if dp_attn is not None
+                                else False,
                                 Fields.SPEC_DECODING.value: spec_decoding,
                                 Fields.CONC.value: conc,
                                 Fields.KV_OFFLOADING.value: kv_offloading,
@@ -1138,12 +1167,18 @@ def generate_full_sweep(args, all_config_data, runner_data):
                                 Fields.EXP_NAME.value: (
                                     f"{model_code}_tp{tp}_conc{conc}_"
                                     f"{agentic_kv_offload_suffix(kv_offloading, kv_offload_backend)}"
-                                    + (f"_spec-{spec_decoding}" if spec_decoding != "none" else "")
+                                    + (
+                                        f"_spec-{spec_decoding}"
+                                        if spec_decoding != "none"
+                                        else ""
+                                    )
                                 ),
                                 Fields.SCENARIO_TYPE.value: "agentic-coding",
                             }
                             if kv_offload_backend is not None:
-                                entry[Fields.KV_OFFLOAD_BACKEND.value] = kv_offload_backend
+                                entry[Fields.KV_OFFLOAD_BACKEND.value] = (
+                                    kv_offload_backend
+                                )
                             entry.update(component_metadata(bmk, val))
                             validate_agentic_matrix_entry(entry)
                             matrix_values.append(entry)
@@ -1151,7 +1186,9 @@ def generate_full_sweep(args, all_config_data, runner_data):
     return matrix_values
 
 
-def _runner_values_for_filter(runner: str, runner_data: dict, runner_node_filter: str | None) -> list[str]:
+def _runner_values_for_filter(
+    runner: str, runner_data: dict, runner_node_filter: str | None
+) -> list[str]:
     if not runner_node_filter:
         return [runner]
 
@@ -1191,18 +1228,25 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
         framework = val[Fields.FRAMEWORK.value]
         runner = val[Fields.RUNNER.value]
         runners_for_entry = _runner_values_for_filter(
-            runner, runner_data, getattr(args, 'runner_node_filter', None))
+            runner, runner_data, getattr(args, "runner_node_filter", None)
+        )
         if not runners_for_entry:
             continue
         disagg = val.get(Fields.DISAGG.value, False)
 
         # Build seq-len filter if --seq-lens was provided
         seq_lens_filter = None
-        if getattr(args, 'seq_lens', None):
+        if getattr(args, "seq_lens", None):
             seq_lens_filter = {seq_len_stoi[s] for s in args.seq_lens}
 
-        scenario_filter = set(args.scenario_type) if getattr(args, 'scenario_type', None) else None
-        fixed_configs = val[Fields.SCENARIOS.value].get(Fields.FIXED_SEQ_LEN.value, []) if (scenario_filter is None or 'fixed-seq-len' in scenario_filter) else []
+        scenario_filter = (
+            set(args.scenario_type) if getattr(args, "scenario_type", None) else None
+        )
+        fixed_configs = (
+            val[Fields.SCENARIOS.value].get(Fields.FIXED_SEQ_LEN.value, [])
+            if (scenario_filter is None or "fixed-seq-len" in scenario_filter)
+            else []
+        )
         for seq_len_config in fixed_configs:
             isl = seq_len_config[Fields.ISL.value]
             osl = seq_len_config[Fields.OSL.value]
@@ -1235,7 +1279,7 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                                 conc = conc_end
 
                     # Apply --conc filter if provided (only for test-config)
-                    if getattr(args, 'conc', None):
+                    if getattr(args, "conc", None):
                         conc_values = [c for c in conc_values if c in args.conc]
                         if not conc_values:
                             # No intersection with requested conc values; skip
@@ -1266,7 +1310,9 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                             runner_data,
                             bmk.get(Fields.NUM_NODES.value),
                         )
-                        matrix_values.append(validate_matrix_entry(entry, is_multinode=True))
+                        matrix_values.append(
+                            validate_matrix_entry(entry, is_multinode=True)
+                        )
                 else:
                     # Single-node config
                     tp = bmk[Fields.TP.value]
@@ -1294,7 +1340,7 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                                 conc = conc_end
 
                     # Apply --conc filter if provided (only for test-config)
-                    if getattr(args, 'conc', None):
+                    if getattr(args, "conc", None):
                         conc_values = [c for c in conc_values if c in args.conc]
                         if not conc_values:
                             # No intersection with requested conc values; skip
@@ -1318,17 +1364,25 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                                 Fields.CONC.value: conc,
                                 Fields.MAX_MODEL_LEN.value: isl + osl + 256,
                                 Fields.EP.value: ep if ep is not None else 1,
-                                Fields.DP_ATTN.value: dp_attn if dp_attn is not None else False,
+                                Fields.DP_ATTN.value: dp_attn
+                                if dp_attn is not None
+                                else False,
                                 Fields.SPEC_DECODING.value: spec_decoding,
                                 Fields.EXP_NAME.value: f"{model_code}_{seq_len_str}",
                                 Fields.DISAGG.value: disagg,
                                 Fields.RUN_EVAL.value: False,
                             }
                             entry.update(component_metadata(bmk, val))
-                            matrix_values.append(validate_matrix_entry(entry, is_multinode=False))
+                            matrix_values.append(
+                                validate_matrix_entry(entry, is_multinode=False)
+                            )
 
         # ---- Agentic-coding scenarios ----
-        agentic_configs = val[Fields.SCENARIOS.value].get(Fields.AGENTIC_CODING.value, []) if (scenario_filter is None or 'agentic-coding' in scenario_filter) else []
+        agentic_configs = (
+            val[Fields.SCENARIOS.value].get(Fields.AGENTIC_CODING.value, [])
+            if (scenario_filter is None or "agentic-coding" in scenario_filter)
+            else []
+        )
         for agentic_config in agentic_configs:
             duration = DEFAULT_AGENTIC_DURATION_SECONDS
             bmk_space = agentic_config[Fields.SEARCH_SPACE.value]
@@ -1350,7 +1404,8 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                     kv_offloading = bmk[Fields.KV_OFFLOADING.value]
                     kv_offload_backend = bmk.get(Fields.KV_OFFLOAD_BACKEND.value)
                 total_cpu_dram_gb = agentic_dram_offload_gb(
-                    agentic_config, bmk, runner, runner_data)
+                    agentic_config, bmk, runner, runner_data
+                )
 
                 conc_list = bmk.get(Fields.CONC_LIST.value)
                 if conc_list:
@@ -1368,7 +1423,7 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                         if conc > conc_end:
                             conc = conc_end
 
-                if getattr(args, 'conc', None):
+                if getattr(args, "conc", None):
                     conc_values = [c for c in conc_values if c in args.conc]
                 if not conc_values:
                     continue
@@ -1382,7 +1437,9 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                         else ""
                     )
                     for runner_value in runners_for_entry:
-                        for conc_batch in chunk_multinode_agentic_concurrencies(conc_values):
+                        for conc_batch in chunk_multinode_agentic_concurrencies(
+                            conc_values
+                        ):
                             entry = {
                                 Fields.IMAGE.value: image,
                                 Fields.MODEL.value: model,
@@ -1398,13 +1455,19 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                                 Fields.TOTAL_CPU_DRAM_GB.value: total_cpu_dram_gb,
                                 Fields.DURATION.value: duration,
                                 Fields.EXP_NAME.value: multinode_agentic_exp_name(
-                                    model_code, prefill, decode, conc_batch, offload_suffix
+                                    model_code,
+                                    prefill,
+                                    decode,
+                                    conc_batch,
+                                    offload_suffix,
                                 ),
                                 Fields.DISAGG.value: disagg,
                                 Fields.SCENARIO_TYPE.value: "agentic-coding",
                             }
                             if kv_offload_backend is not None:
-                                entry[Fields.KV_OFFLOAD_BACKEND.value] = kv_offload_backend
+                                entry[Fields.KV_OFFLOAD_BACKEND.value] = (
+                                    kv_offload_backend
+                                )
                             entry.update(component_metadata(bmk, val))
                             add_multinode_node_count(
                                 entry,
@@ -1427,7 +1490,9 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                                 Fields.DCP_SIZE.value: dcp_size,
                                 Fields.PCP_SIZE.value: pcp_size,
                                 Fields.EP.value: ep if ep is not None else 1,
-                                Fields.DP_ATTN.value: dp_attn if dp_attn is not None else False,
+                                Fields.DP_ATTN.value: dp_attn
+                                if dp_attn is not None
+                                else False,
                                 Fields.SPEC_DECODING.value: spec_decoding,
                                 Fields.CONC.value: conc,
                                 Fields.KV_OFFLOADING.value: kv_offloading,
@@ -1436,12 +1501,18 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                                 Fields.EXP_NAME.value: (
                                     f"{model_code}_tp{tp}_conc{conc}_"
                                     f"{agentic_kv_offload_suffix(kv_offloading, kv_offload_backend)}"
-                                    + (f"_spec-{spec_decoding}" if spec_decoding != "none" else "")
+                                    + (
+                                        f"_spec-{spec_decoding}"
+                                        if spec_decoding != "none"
+                                        else ""
+                                    )
                                 ),
                                 Fields.SCENARIO_TYPE.value: "agentic-coding",
                             }
                             if kv_offload_backend is not None:
-                                entry[Fields.KV_OFFLOAD_BACKEND.value] = kv_offload_backend
+                                entry[Fields.KV_OFFLOAD_BACKEND.value] = (
+                                    kv_offload_backend
+                                )
                             entry.update(component_metadata(bmk, val))
                             matrix_values.append(validate_agentic_matrix_entry(entry))
 
@@ -1460,7 +1531,7 @@ def expand_config_keys(config_keys, available_keys):
     available = list(available_keys)
     seen = {}  # use dict to preserve insertion order
     for key in config_keys:
-        if '*' in key or '?' in key:
+        if "*" in key or "?" in key:
             matches = fnmatch.filter(available, key)
             if not matches:
                 raise ValueError(
@@ -1479,9 +1550,32 @@ def expand_config_keys(config_keys, available_keys):
     return list(seen)
 
 
+def filter_exp_names(entries: list[dict], exp_names: list[str]) -> list[dict]:
+    """Select exact generated experiment identities and reject ambiguity."""
+    requested = set(exp_names)
+    if len(requested) != len(exp_names):
+        raise ValueError("--exp-names contains duplicate values")
+
+    matches: dict[str, int] = {name: 0 for name in exp_names}
+    for entry in entries:
+        exp_name = entry.get(Fields.EXP_NAME.value)
+        if exp_name in matches:
+            matches[exp_name] += 1
+
+    missing = sorted(name for name, count in matches.items() if count == 0)
+    ambiguous = sorted(name for name, count in matches.items() if count > 1)
+    if missing:
+        raise ValueError("Experiment name(s) not found: " + ", ".join(missing))
+    if ambiguous:
+        raise ValueError(
+            "Experiment name(s) matched multiple rows: " + ", ".join(ambiguous)
+        )
+    return [entry for entry in entries if entry.get(Fields.EXP_NAME.value) in requested]
+
+
 def apply_node_type_defaults(args):
     """Default both single_node and multi_node to True when neither is specified."""
-    if hasattr(args, 'single_node') and hasattr(args, 'multi_node'):
+    if hasattr(args, "single_node") and hasattr(args, "multi_node"):
         if not args.single_node and not args.multi_node:
             args.single_node = True
             args.multi_node = True
@@ -1492,191 +1586,194 @@ def main():
     # Create parent parser with common arguments
     parent_parser = argparse.ArgumentParser(add_help=False)
     parent_parser.add_argument(
-        '--config-files',
-        nargs='+',
+        "--config-files",
+        nargs="+",
         required=True,
-        help='One or more configuration files (YAML format)'
+        help="One or more configuration files (YAML format)",
     )
     parent_parser.add_argument(
-        '--runner-config',
-        default='configs/runners.yaml',
-        help='Configuration file holding runner information (YAML format, defaults to configs/runners.yaml)'
+        "--runner-config",
+        default="configs/runners.yaml",
+        help="Configuration file holding runner information (YAML format, defaults to configs/runners.yaml)",
     )
     eval_group = parent_parser.add_mutually_exclusive_group()
     eval_group.add_argument(
-        '--no-evals',
-        action='store_true',
-        help='When specified, skip evals (throughput benchmarks only).'
+        "--no-evals",
+        action="store_true",
+        help="When specified, skip evals (throughput benchmarks only).",
     )
     eval_group.add_argument(
-        '--evals-only',
-        action='store_true',
-        help='When specified, run ONLY the eval subset (excludes non-eval configs).'
+        "--evals-only",
+        action="store_true",
+        help="When specified, run ONLY the eval subset (excludes non-eval configs).",
     )
     parent_parser.add_argument(
-        '--all-evals',
-        action='store_true',
+        "--all-evals",
+        action="store_true",
         help=(
-            'Expand eval selection to every generated fixed-sequence config. '
-            'Can be combined with --evals-only; used alone, it also emits eval-only jobs.'
-        )
+            "Expand eval selection to every generated fixed-sequence config. "
+            "Can be combined with --evals-only; used alone, it also emits eval-only jobs."
+        ),
     )
     parent_parser.add_argument(
-        '--trim-conc',
-        action='store_true',
+        "--trim-conc",
+        action="store_true",
         help=(
-            'Trim each generated deployment shape to its minimum concurrency '
-            'after applying eval selection.'
-        )
+            "Trim each generated deployment shape to its minimum concurrency "
+            "after applying eval selection."
+        ),
     )
     parent_parser.add_argument(
-        '--runner-node-filter',
+        "--runner-node-filter",
         required=False,
-        help='Filter runner nodes by substring match (e.g., "amd" to only include nodes containing that string). Expands each config to individual matching nodes.'
+        help='Filter runner nodes by substring match (e.g., "amd" to only include nodes containing that string). Expands each config to individual matching nodes.',
     )
     parent_parser.add_argument(
-        '--scenario-type',
-        nargs='+',
-        choices=['fixed-seq-len', 'agentic-coding'],
+        "--scenario-type",
+        nargs="+",
+        choices=["fixed-seq-len", "agentic-coding"],
         required=False,
-        help='Scenario type(s) to include. If not specified, all scenario types are generated.'
+        help="Scenario type(s) to include. If not specified, all scenario types are generated.",
     )
 
     # Create main parser
     parser = argparse.ArgumentParser(
-        description='Generate benchmark configurations from YAML config files'
+        description="Generate benchmark configurations from YAML config files"
     )
 
     # Create subparsers for subcommands
     subparsers = parser.add_subparsers(
-        dest='command',
-        required=True,
-        help='Available commands'
+        dest="command", required=True, help="Available commands"
     )
 
     # Subcommand: full-sweep
     full_sweep_parser = subparsers.add_parser(
-        'full-sweep',
+        "full-sweep",
         parents=[parent_parser],
         add_help=False,
-        help='Generate full sweep configurations with optional filtering by model, precision, framework, runner type, and sequence lengths'
+        help="Generate full sweep configurations with optional filtering by model, precision, framework, runner type, and sequence lengths",
     )
     full_sweep_parser.add_argument(
-        '--model-prefix',
-        nargs='+',
+        "--model-prefix",
+        nargs="+",
         required=False,
-        help='Model prefix(es) to filter configurations (optional, can specify multiple)'
+        help="Model prefix(es) to filter configurations (optional, can specify multiple)",
     )
     full_sweep_parser.add_argument(
-        '--precision',
-        nargs='+',
+        "--precision",
+        nargs="+",
         required=False,
-        help='Precision(s) to filter by (e.g., fp4, fp8) (optional, can specify multiple)'
+        help="Precision(s) to filter by (e.g., fp4, fp8) (optional, can specify multiple)",
     )
     full_sweep_parser.add_argument(
-        '--framework',
-        nargs='+',
+        "--framework",
+        nargs="+",
         required=False,
-        help='Framework(s) to filter by (e.g., vllm, trt, sglang) (optional, can specify multiple)'
+        help="Framework(s) to filter by (e.g., vllm, trt, sglang) (optional, can specify multiple)",
     )
     full_sweep_parser.add_argument(
-        '--runner-type',
-        nargs='+',
+        "--runner-type",
+        nargs="+",
         required=False,
-        help='Runner type(s) to filter by (e.g., h200, h100) (optional, can specify multiple)'
+        help="Runner type(s) to filter by (e.g., h200, h100) (optional, can specify multiple)",
     )
     full_sweep_parser.add_argument(
-        '--seq-lens',
-        nargs='+',
+        "--seq-lens",
+        nargs="+",
         choices=list(seq_len_stoi.keys()),
         required=False,
-        help=f"Sequence length configurations to include: {', '.join(seq_len_stoi.keys())}. If not specified, all sequence lengths are included."
+        help=f"Sequence length configurations to include: {', '.join(seq_len_stoi.keys())}. If not specified, all sequence lengths are included.",
     )
     full_sweep_parser.add_argument(
-        '--step-size',
+        "--step-size",
         type=int,
         default=2,
-        help='Step size for concurrency values (default: 2)'
+        help="Step size for concurrency values (default: 2)",
     )
     full_sweep_parser.add_argument(
-        '--min-conc',
+        "--min-conc",
         type=int,
         required=False,
-        help='Minimum concurrency value to include (filters out lower concurrency values)'
+        help="Minimum concurrency value to include (filters out lower concurrency values)",
     )
     full_sweep_parser.add_argument(
-        '--max-conc',
+        "--max-conc",
         type=int,
         required=False,
-        help='Maximum concurrency value to include (filters out higher concurrency values)'
+        help="Maximum concurrency value to include (filters out higher concurrency values)",
     )
     full_sweep_parser.add_argument(
-        '--max-tp',
+        "--max-tp",
         type=int,
         required=False,
-        help='Maximum tensor parallelism value to include (single-node only)'
+        help="Maximum tensor parallelism value to include (single-node only)",
     )
     full_sweep_parser.add_argument(
-        '--max-ep',
+        "--max-ep",
         type=int,
         required=False,
-        help='Maximum expert parallelism value to include (single-node only)'
+        help="Maximum expert parallelism value to include (single-node only)",
     )
     full_sweep_parser.add_argument(
-        '--single-node',
-        action='store_true',
-        help='Only generate single-node configurations. If neither --single-node nor --multi-node is specified, both types are generated.'
+        "--single-node",
+        action="store_true",
+        help="Only generate single-node configurations. If neither --single-node nor --multi-node is specified, both types are generated.",
     )
     full_sweep_parser.add_argument(
-        '--multi-node',
-        action='store_true',
-        help='Only generate multi-node configurations. If neither --single-node nor --multi-node is specified, both types are generated.'
+        "--multi-node",
+        action="store_true",
+        help="Only generate multi-node configurations. If neither --single-node nor --multi-node is specified, both types are generated.",
     )
     full_sweep_parser.add_argument(
-        '-h', '--help',
-        action='help',
-        help='Show this help message and exit'
+        "-h", "--help", action="help", help="Show this help message and exit"
     )
 
     # Subcommand: test-config
     test_config_keys_parser = subparsers.add_parser(
-        'test-config',
+        "test-config",
         parents=[parent_parser],
         add_help=False,
-        help='Generate full sweep for specific config keys. Validates that all specified keys exist before generating.'
+        help="Generate full sweep for specific config keys. Validates that all specified keys exist before generating.",
     )
     test_config_keys_parser.add_argument(
-        '--config-keys',
-        nargs='+',
+        "--config-keys",
+        nargs="+",
         required=True,
-        help='One or more config keys to generate sweep for (e.g., dsr1-fp4-b200-sglang dsr1-fp8-h200-trt)'
+        help="One or more config keys to generate sweep for (e.g., dsr1-fp4-b200-sglang dsr1-fp8-h200-trt)",
     )
     test_config_keys_parser.add_argument(
-        '--conc',
-        nargs='+',
+        "--conc",
+        nargs="+",
         type=int,
         required=False,
-        help='Only include these concurrency values. Values must exist in the config conc-range/list.'
+        help="Only include these concurrency values. Values must exist in the config conc-range/list.",
     )
     test_config_keys_parser.add_argument(
-        '--seq-lens',
-        nargs='+',
+        "--exp-names",
+        nargs="+",
+        required=False,
+        help=(
+            "Only include exact generated experiment names. Each name must "
+            "match exactly one row after config and concurrency filtering."
+        ),
+    )
+    test_config_keys_parser.add_argument(
+        "--seq-lens",
+        nargs="+",
         choices=list(seq_len_stoi.keys()),
         required=False,
-        help='Only include these sequence length configurations (e.g., 1k1k 8k1k)'
+        help="Only include these sequence length configurations (e.g., 1k1k 8k1k)",
     )
     test_config_keys_parser.add_argument(
-        '-h', '--help',
-        action='help',
-        help='Show this help message and exit'
+        "-h", "--help", action="help", help="Show this help message and exit"
     )
 
     args = parser.parse_args()
     apply_node_type_defaults(args)
-    if args.command == 'full-sweep' and args.step_size <= 1:
+    if args.command == "full-sweep" and args.step_size <= 1:
         parser.error("--step-size must be greater than 1")
     if (
-        args.command == 'full-sweep'
+        args.command == "full-sweep"
         and args.min_conc is not None
         and args.max_conc is not None
         and args.min_conc > args.max_conc
@@ -1690,17 +1787,24 @@ def main():
     runner_data = load_runner_file(args.runner_config)
 
     # Route to appropriate function based on subcommand
-    if args.command == 'full-sweep':
+    if args.command == "full-sweep":
         matrix_values = generate_full_sweep(args, all_config_data, runner_data)
-    elif args.command == 'test-config':
+    elif args.command == "test-config":
         matrix_values = generate_test_config_sweep(args, all_config_data, runner_data)
     else:
         parser.error(f"Unknown command: {args.command}")
-        
+
+    if args.command == "test-config" and args.exp_names:
+        try:
+            matrix_values = filter_exp_names(matrix_values, args.exp_names)
+        except ValueError as error:
+            parser.error(str(error))
 
     # Apply the existing eval policy first, then expand it when requested.
     if not args.no_evals:
-        matrix_values = mark_eval_entries(matrix_values, include_agentic=args.evals_only or args.all_evals)
+        matrix_values = mark_eval_entries(
+            matrix_values, include_agentic=args.evals_only or args.all_evals
+        )
         if args.all_evals:
             matrix_values = mark_all_eval_entries(matrix_values)
 
@@ -1708,7 +1812,9 @@ def main():
         matrix_values = trim_conc(matrix_values)
 
     if args.evals_only or args.all_evals:
-        matrix_values = [e for e in matrix_values if e.get(Fields.RUN_EVAL.value, False)]
+        matrix_values = [
+            e for e in matrix_values if e.get(Fields.RUN_EVAL.value, False)
+        ]
         for entry in matrix_values:
             entry[Fields.EVAL_ONLY.value] = True
 

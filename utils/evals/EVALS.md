@@ -77,6 +77,11 @@ uv run --no-project --with pydantic --with pyyaml --python 3.12 \
   --evals-only --all-evals --trim-conc
 ```
 
+Capacity-limited campaigns can split a `test-config` result with `--conc` and
+`--exp-names`. Each requested experiment name must match exactly one generated
+row, so a shard cannot silently include another deployment that shares the same
+configuration key and concurrency.
+
 Run each generated matrix with the matching vendor smoke and `bfcl_smoke`.
 The full Kimi, MiniMax, and BFCL suites use the same endpoint and artifact
 paths, but are diagnostic model-quality campaigns rather than a replacement
