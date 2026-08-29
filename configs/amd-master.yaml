@@ -1696,7 +1696,6 @@ minimaxm3-fp4-mi355x-vllm-agentic-mtp:
       search-space:
       - { tp: 4, kv-offloading: none, conc-list: [1, 2, 4, 5, 8, 10, 12, 15, 20, 24, 28, 32], spec-decoding: mtp }
       - { tp: 2, kv-offloading: none, conc-list: [1, 2, 5], spec-decoding: mtp }
-      - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.3" }, conc-list: [32, 40], spec-decoding: mtp }
 
 # GLM-5.2 FP4 agentic-coding benchmark on MI355X via SGLang with MTP speculative
 # decoding. Two arms: (1) TP4/EP4 with HiCache KV offloading to DRAM, concurrency
