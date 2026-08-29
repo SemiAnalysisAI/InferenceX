@@ -968,7 +968,6 @@ _install_kimi_vendor_eval_deps() {
         "openai==2.14.0"
         "jsonschema==4.25.1"
         "pytest==8.4.2"
-        "pytest-rerunfailures==16.4"
     )
     if [ "$eval_suite" = "kimi_tool_call_schema_full" ]; then
         packages+=("pytest-xdist==3.8.0")
@@ -992,6 +991,7 @@ _prepare_kimi_vendor_runtime() {
 _prepare_kimi_vendor_verifier() {
     local repo_url="$1"
     local verifier_ref="$2"
+    local expected_archive_sha256="$3"
     local checkout_dir prepare_rc=0
 
     checkout_dir="$(mktemp -d /tmp/kimi-vendor-verifier-XXXXXX)" || {
@@ -999,7 +999,9 @@ _prepare_kimi_vendor_verifier() {
         return 1
     }
 
-    "${VENDOR_VERIFIER_PYTHON:-python3}" - "$repo_url" "$verifier_ref" "$checkout_dir" <<'PY' || prepare_rc=$?
+    "${VENDOR_VERIFIER_PYTHON:-python3}" - \
+        "$repo_url" "$verifier_ref" "$expected_archive_sha256" "$checkout_dir" <<'PY' || prepare_rc=$?
+from hashlib import sha256
 from pathlib import Path
 import re
 import socket
@@ -1012,7 +1014,7 @@ from urllib.parse import quote, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
 
-repo_url, verifier_ref, checkout_dir_arg = sys.argv[1:]
+repo_url, verifier_ref, expected_archive_sha256, checkout_dir_arg = sys.argv[1:]
 checkout_dir = Path(checkout_dir_arg)
 stage = "derive the pinned archive URL"
 
@@ -1030,6 +1032,11 @@ def archive_member_parts(name):
 try:
     if not re.fullmatch(r"[0-9a-fA-F]{40}", verifier_ref):
         raise ValueError(f"expected a 40-character commit SHA, got {verifier_ref!r}")
+    if not re.fullmatch(r"[0-9a-fA-F]{64}", expected_archive_sha256):
+        raise ValueError(
+            "expected a 64-character archive SHA256, got "
+            f"{expected_archive_sha256!r}"
+        )
 
     parsed_repo_url = urlsplit(repo_url)
     if parsed_repo_url.scheme not in ("http", "https") or not parsed_repo_url.netloc:
@@ -1057,6 +1064,7 @@ try:
             archive_file.seek(0)
             archive_file.truncate()
             downloaded = 0
+            digest = sha256()
             deadline = time.monotonic() + 60
             try:
                 with urlopen(request, timeout=60) as response:
@@ -1084,6 +1092,7 @@ try:
                                 "archive download exceeds the 128 MiB safety limit"
                             )
                         archive_file.write(chunk)
+                        digest.update(chunk)
                 break
             except HTTPError as error:
                 if error.code not in (408, 429) and not 500 <= error.code < 600:
@@ -1107,6 +1116,12 @@ try:
                 time.sleep(attempt)
         if downloaded == 0:
             raise ValueError("downloaded archive is empty")
+        actual_archive_sha256 = digest.hexdigest()
+        if actual_archive_sha256 != expected_archive_sha256:
+            raise ValueError(
+                "Kimi-Vendor-Verifier archive SHA256 mismatch: expected "
+                f"{expected_archive_sha256}, got {actual_archive_sha256}"
+            )
         archive_file.seek(0)
 
         stage = "validate the downloaded archive"
@@ -1309,6 +1324,7 @@ _run_kimi_tool_call_schema_eval() {
     local results_dir="${EVAL_RESULT_DIR:-$(mktemp -d /tmp/eval_out-XXXXXX)}"
     local verifier_repo="https://github.com/MoonshotAI/Kimi-Vendor-Verifier.git"
     local verifier_ref="b9ed3a6665bdff2c943246f7d2903cd003d6ddd6"
+    local verifier_archive_sha256="ab933117c894a785978f8aee0f052e5a9096b3029e7962354b1c07ea430588c3"
     local eval_suite="${EVAL_SUITE:-kimi_tool_call_schema}"
     local timeout_seconds=900
     if [ "$eval_suite" = "kimi_tool_call_schema_full" ]; then
@@ -1358,7 +1374,8 @@ _run_kimi_tool_call_schema_eval() {
     fi
     if [ "$setup_rc" -eq 0 ]; then
         checkout_dir=$(
-            _prepare_kimi_vendor_verifier "$verifier_repo" "$verifier_ref"
+            _prepare_kimi_vendor_verifier \
+                "$verifier_repo" "$verifier_ref" "$verifier_archive_sha256"
         ) || {
             setup_rc=$?
             integration_error="Kimi Vendor Verifier checkout failed with exit code ${setup_rc}"
@@ -1645,7 +1662,6 @@ _run_bfcl_suite_eval() {
         --bfcl-project-root "$project_root" \
         "${suite_args[@]}" \
         --num-threads "$num_threads" \
-        --request-timeout-seconds 180 \
         || eval_rc=$?
     local archive_rc=0
     if [ "$archive_upstream" = true ]; then
@@ -1703,22 +1719,6 @@ run_bfcl_eval() {
     esac
 }
 
-_install_minimax_vendor_eval_deps() {
-    local target_dir="$1"
-    "${VENDOR_VERIFIER_PYTHON:-python3}" -m pip install -q --no-cache-dir --target "$target_dir" \
-        "jsonschema==4.25.1"
-}
-
-_prepare_minimax_vendor_runtime() {
-    local runtime_dir install_rc=0
-    runtime_dir="$(mktemp -d /tmp/minimax-vendor-runtime-XXXXXX)" || return $?
-    _install_minimax_vendor_eval_deps "$runtime_dir" >&2 || install_rc=$?
-    if [ "$install_rc" -ne 0 ]; then
-        rm -rf "$runtime_dir"
-        return "$install_rc"
-    fi
-    printf '%s\n' "$runtime_dir"
-}
 
 _write_minimax_vendor_integration_error() {
     local adapter_path="$1"
@@ -1726,12 +1726,12 @@ _write_minimax_vendor_integration_error() {
     local results_dir="$3"
     local message="$4"
 
-    # The adapter's integration-error path is stdlib-only, so it remains usable
-    # when Python provisioning or dependency installation is what failed.
-    "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" \
+    # The failure path is stdlib-only, so it remains usable when runtime
+    # provisioning or dependency installation is what failed.
+    "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" failure \
         --model "$model_name" \
         --output-dir "$results_dir" \
-        --integration-error "$message"
+        --message "$message"
 }
 
 _run_minimax_m3_smoke_eval() {
@@ -1777,9 +1777,9 @@ _run_minimax_m3_smoke_eval() {
         integration_error="MiniMax Provider Verifier Python runtime preparation failed with exit code ${setup_rc}"
     }
     if [ "$setup_rc" -eq 0 ]; then
-        runtime_dir=$(_prepare_minimax_vendor_runtime) || {
+        runtime_dir=$(_prepare_minimax_m3_full_runtime "$adapter_path") || {
             setup_rc=$?
-            integration_error="MiniMax Provider Verifier dependency installation failed with exit code ${setup_rc}"
+            integration_error="MiniMax Provider Verifier pinned runtime preparation failed with exit code ${setup_rc}"
         }
     fi
     if [ "$setup_rc" -ne 0 ]; then
@@ -1797,16 +1797,15 @@ _run_minimax_m3_smoke_eval() {
     fi
 
     local eval_rc=0
-    PYTHONPATH="${runtime_dir}${PYTHONPATH:+:${PYTHONPATH}}" \
-        "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" \
-            --base-url "http://127.0.0.1:${port}/v1" \
-            --api-key EMPTY \
-            --model "$model_name" \
-            --output-dir "$results_dir" \
-            --fixture "$fixture_path" \
-            --request-timeout-seconds 180 \
-            --timeout-seconds 900 \
-            || eval_rc=$?
+    "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" run \
+        --python "${VENDOR_VERIFIER_PYTHON:-python3}" \
+        --source-dir "${runtime_dir}/source" \
+        --dependency-dir "${runtime_dir}/deps" \
+        --base-url "http://127.0.0.1:${port}/v1" \
+        --model "$model_name" \
+        --output-dir "$results_dir" \
+        --fixture "$fixture_path" \
+        || eval_rc=$?
     if [ "$eval_rc" -ne 0 ] \
         && ! _has_eval_result "$results_dir" "results_minimax_vendor_"; then
         integration_error="MiniMax Provider Verifier failed with exit code ${eval_rc}"

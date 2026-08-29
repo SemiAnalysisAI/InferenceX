@@ -24,6 +24,7 @@ def _report(stream_status: str = "passed") -> dict[str, Any]:
         ],
     }
 
+
 def _full_report(*, failed_records: int = 0) -> dict[str, Any]:
     selected_cases: list[dict[str, Any]] = []
     results: list[dict[str, Any]] = []
@@ -42,9 +43,7 @@ def _full_report(*, failed_records: int = 0) -> dict[str, Any]:
                     "suite": "TestSchema",
                     "line": line,
                     "mode": mode,
-                    "status": (
-                        "failed" if len(results) < failed_records else "passed"
-                    ),
+                    "status": ("failed" if len(results) < failed_records else "passed"),
                 }
             )
     return {
@@ -97,15 +96,6 @@ def test_builds_fixed_upstream_pytest_command(tmp_path: Path) -> None:
         "-m",
         "pytest",
         "tests/tool_call_json_schema/test_tool_call_json_schema.py",
-        "--reruns",
-        "6",
-        "--reruns-delay",
-        "3",
-        "--only-rerun",
-        (
-            r"(?i)(Error code: (404|429|5[0-9]{2})|APIConnectionError|"
-            r"APITimeoutError|Connection error|timed out)"
-        ),
         "--base-url",
         "http://127.0.0.1:8000/v1",
         "--api-key",
@@ -126,6 +116,7 @@ def test_builds_fixed_upstream_pytest_command(tmp_path: Path) -> None:
         str(report),
     ]
 
+
 def test_builds_full_upstream_pytest_command(tmp_path: Path) -> None:
     report = tmp_path / kve.NATIVE_REPORT_FILENAME
 
@@ -142,15 +133,6 @@ def test_builds_full_upstream_pytest_command(tmp_path: Path) -> None:
         "tests/tool_call_json_schema/test_tool_call_json_schema.py",
         "-n",
         "8",
-        "--reruns",
-        "6",
-        "--reruns-delay",
-        "3",
-        "--only-rerun",
-        (
-            r"(?i)(Error code: (404|429|5[0-9]{2})|APIConnectionError|"
-            r"APITimeoutError|Connection error|timed out)"
-        ),
         "--base-url",
         "http://127.0.0.1:8000/v1",
         "--api-key",
@@ -253,6 +235,7 @@ def test_projects_upstream_outcomes(
     assert "lm_eval_version" not in projected
     assert (output_dir / kve.NATIVE_REPORT_FILENAME).read_bytes() == native_bytes
 
+
 def test_full_report_projects_all_mode_records_and_defers_quality_gating(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -296,6 +279,7 @@ def test_full_report_projects_all_mode_records_and_defers_quality_gating(
     assert "integration_error" not in projected
     assert (output_dir / kve.NATIVE_REPORT_FILENAME).read_bytes() == native_bytes
 
+
 def test_full_report_classifies_endpoint_failures_as_integration_errors(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -310,9 +294,7 @@ def test_full_report_classifies_endpoint_failures_as_integration_errors(
     def fake_run(
         command: list[str], *, cwd: Path, check: bool, timeout: int
     ) -> SimpleNamespace:
-        Path(command[command.index("--tool-json-report") + 1]).write_bytes(
-            native_bytes
-        )
+        Path(command[command.index("--tool-json-report") + 1]).write_bytes(native_bytes)
         return SimpleNamespace(returncode=1)
 
     monkeypatch.setattr(kve.subprocess, "run", fake_run)
@@ -331,9 +313,10 @@ def test_full_report_classifies_endpoint_failures_as_integration_errors(
     assert _score(output_dir, kve.FULL_TASK_NAME) == 0.0
     assert _n_eff(output_dir, kve.FULL_TASK_NAME) == 0
     assert projected["integration_error"]["type"] == "RuntimeError"
-    assert "endpoint request or response failure" in projected[
-        "integration_error"
-    ]["message"]
+    assert (
+        "endpoint request or response failure"
+        in projected["integration_error"]["message"]
+    )
     assert (output_dir / kve.NATIVE_REPORT_FILENAME).read_bytes() == native_bytes
 
 

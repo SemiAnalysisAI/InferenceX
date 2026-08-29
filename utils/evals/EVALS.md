@@ -123,42 +123,37 @@ launch their existing `*_mtp.sh` server instead of silently falling back to STP.
 
 The smoke runs the unmodified
 [MoonshotAI/Kimi-Vendor-Verifier](https://github.com/MoonshotAI/Kimi-Vendor-Verifier)
-at commit `b9ed3a6665bdff2c943246f7d2903cd003d6ddd6`. Each run downloads the
-fresh pinned GitHub source archive and safely extracts only the upstream pytest
-configuration, tool-call schema tests, and bundled Walle cases. InferenceX does
-not install the verifier package or reimplement its request, streaming, or
-validation logic.
+at commit `b9ed3a6665bdff2c943246f7d2903cd003d6ddd6`. Each run downloads and
+SHA256-verifies the fresh pinned GitHub source archive, then safely extracts
+only the upstream pytest configuration, tool-call schema tests, and bundled
+Walle cases. InferenceX does not install the verifier package or reimplement
+its request, streaming, or validation logic.
 
 System Python 3.12 or newer is preferred and used directly. On older images,
 the runner uses the existing system `pip` to install pinned `uv==0.11.33` under
 a temporary prefix, then provisions an isolated Python 3.12 virtual environment.
 The selected interpreter installs the minimal pinned verifier runtime
-(`httpx[http2]`, `openai`, `jsonschema`, `pytest`, and
-`pytest-rerunfailures`) into a separate temporary package directory, then runs
-upstream `tests/tool_call_json_schema/test_tool_call_json_schema.py` with:
+(`httpx[http2]`, `openai`, `jsonschema`, and `pytest`) into a separate
+temporary package directory, then runs upstream
+`tests/tool_call_json_schema/test_tool_call_json_schema.py` with:
 
 - the local OpenAI-compatible endpoint, `EMPTY` API key, and served model name;
 - `--think-mode none` for other models, or `--think-mode opensource --thinking`
   for `dsv4`, plus `--selection object --max-cases 1 --max-tokens 2048`;
-- up to six three-second reruns, limited to transient HTTP and transport errors;
 - the bundled Walle case directory and `--tool-json-report`.
 
 The temporary Python runtime, package directory, and verifier checkout are
 removed after both successful and failed runs.
 
 The selection is `TestAdditionalProperties:1`, parametrized upstream in
-non-streaming and streaming modes. Pytest makes one initial attempt and up to
-six reruns of each mode at three-second intervals, but only for HTTP 404, 429,
-5xx, connection, and timeout failures. This covers frontends whose health route
-becomes ready shortly before chat completions without retrying schema or
-model-output failures. The unchanged native report remains one final
-outcome per mode because the upstream report deduplicates rerun records by case
-and mode. It is uploaded as `kimi_vendor_report.json`, and
+non-streaming and streaming modes. Each mode runs once through the unchanged
+upstream pytest harness. The unchanged native report remains one final outcome
+per mode. It is uploaded as `kimi_vendor_report.json`, and
 `utils/evals/kimi_vendor_eval.py` projects those two outcomes into the existing
 eval result shape. Both must pass, so the `kimi_tool_call_schema` threshold is
 `1.0`. Setup, timeout, and collection failures emit a zero-score result with
 error metadata. The adapter's 900-second global timeout bounds the entire
-upstream pytest process, including all attempts and rerun delays.
+upstream pytest process.
 
 This smoke validates one object-schema tool call. It does not cover tool choice,
 parallel calls, multi-turn execution, or general agent quality. Multi-value
@@ -180,8 +175,8 @@ Select it explicitly with `eval-framework: kimi-vendor` and
 `eval-suite: kimi_tool_call_schema_full`. Its threshold is `0.0`, so model
 quality is diagnostic while setup, timeout, malformed-report, and integration
 failures still fail through the standard zero-effective-sample error path. The
-full suite reuses the smoke's pinned checkout, retry policy, result envelope,
-artifact staging, collector, and dashboard path.
+full suite reuses the smoke's pinned checkout, stock invocation, result
+envelope, artifact staging, collector, and dashboard path.
 
 ### MiniMax provider compatibility smoke
 
@@ -208,41 +203,31 @@ python3 utils/evals/validate_scores.py
 `85bf180e54e2ab0b31595cfdc697116c4760876d`. The vendored fixture retains
 the full upstream MIT copyright, permission, and warranty notice. It contains
 only upstream zero-based row 71, an `expected_tool_call: true` request
-exercising tool-call trigger and argument-schema validation. The adapter
-applies the pinned validator semantics directly to this fixture; it does not
-download the upstream repository or run the remaining 101 cases.
+exercising tool-call trigger and argument-schema validation.
 
-The adapter sends the request to `${base_url}/chat/completions`. The endpoint
-must accept an OpenAI-compatible Bearer token and chat-completions request body
-and return OpenAI-compatible message, finish-reason, and tool-call fields.
-Redirect responses are rejected before forwarding bearer credentials; the
-local runner supplies `Authorization: Bearer EMPTY`. The smoke uses
-`temperature: 0`, `top_p: 1`, and `max_tokens: 40960`. The token budget matches
-the pinned verifier's MiniMax M3 default and prevents a valid tool-call response
-from ending at the model's common 2048-token generation default. The request
-has a 180-second timeout by default and at most three retries for transport
-failures, HTTP 429, or HTTP 5xx responses (four total attempts); a hard
-900-second global bound covers the smoke.
+Each run downloads and hash-verifies the pinned upstream `verify.py`, complete
+`sample.jsonl`, and validator modules. InferenceX writes row 71 unchanged to a
+temporary JSONL input and invokes the stock verifier with its documented CLI.
+The invocation uses concurrency one, the stock 600-second request timeout and
+three-retry setting, and the documented `--extra-body` override
+`{\"temperature\":0,\"top_p\":1,\"max_tokens\":40960}`. A one-hour outer
+process deadline bounds the stock harness without changing its request,
+response, retry, or scoring code.
 
-`minimax_vendor_report.json` is the native report. It preserves the raw
-response and reports the six upstream-derived metric fields. This Phase 1 case
-exercises `Query-Success-Rate`, `ToolCalls-Trigger-Similarity`,
-`ToolCalls-Schema-Accuracy`, and `Error-Only-Reasoning-Rate`.
-`Language-Following-Success-Rate` and `Scenario-Check-Pass-Rate` have no
-applicable case in this fixture and report `0.0` with zero checked counts.
+`minimax_vendor_report.json` and `minimax_vendor_results.jsonl` are the
+unchanged stock summary and detailed result artifacts. The adapter additionally
+writes exactly one timestamped `results_minimax_vendor_*.json` compatibility
+artifact. Its `result_format` is `inferencex-eval-v1`, `eval_adapter` is
+`minimax-provider-verifier`, task is `minimax_m3_smoke`, and primary metric is
+`exact_match,strict-match`. A completed run records original and effective
+sample counts of one. Its score is the minimum of the stock verifier's
+tool-call match rate, tool-call schema accuracy, and one minus its
+error-only-reasoning rate. The `minimax_m3_smoke` threshold remains `1.0`.
 
-The adapter additionally writes exactly one timestamped
-`results_minimax_vendor_*.json` compatibility artifact. Its `result_format` is
-`inferencex-eval-v1`, `eval_adapter` is `minimax-provider-verifier`, task is
-`minimax_m3_smoke`, and primary metric is `exact_match,strict-match`. A
-completed run records original and effective sample counts of one. Its score
-is `1.0` only when row 71 returns a `tool_calls` finish reason and every
-function call validates against the requested schema. The
-`minimax_m3_smoke` threshold remains `1.0`.
-Both artifacts match the workflows' existing `results*.json` and
-`*_vendor_report.json` upload patterns.
-Setup, integration, timeout, and collection failures still emit a zero-score
-compatibility artifact with error metadata.
+Setup, transport, timeout, malformed native output, and collection failures
+emit a zero-effective-sample compatibility artifact with integration-error
+metadata. A complete stock result below the threshold remains a model-quality
+outcome rather than an integration failure.
 
 This is a fixed single-case provider compatibility smoke, not the full
 102-case MiniMax Provider Verifier, BFCL, or a cross-model quality comparison.
@@ -332,10 +317,12 @@ typically `http://127.0.0.1:$PORT/v1`. The OpenAI SDK appends
 `/chat/completions`; the adapter base URL is not the full endpoint. BFCL does
 not download a model or call a remote inference API.
 
-The smoke fixes temperature to `0`, uses four BFCL worker threads, allows 180
-seconds per OpenAI request, and permits two bounded OpenAI client retries for
-retryable transport and server failures (three total attempts). The whole-suite
-timeout is 900 seconds. Dependency installation is separately bounded at 600
+The smoke fixes temperature to `0` and uses four BFCL worker threads. Request
+construction, response interpretation, and retry behavior remain those of the
+pinned stock BFCL OpenAI-completions handler and OpenAI SDK. The adapter only
+registers the served model against that stock handler. A 900-second external
+process deadline bounds the smoke; the full suites use their declared
+two-hour deadline. Dependency installation is separately bounded at 600
 seconds. Dependency, setup, transport, timeout, and collection failures write
 zero-score artifacts with integration-error metadata and fail the runner
 nonzero. A completed evaluation exits independently of model quality; the
@@ -461,10 +448,10 @@ Key eval functions in `benchmarks/benchmark_lib.sh`:
 | `_install_lm_eval_deps` | Installs lm-eval dependencies |
 | `_prepare_vendor_verifier_python` | Uses system Python 3.12+ or provisions an isolated pinned Python 3.12 runtime for provider verifiers |
 | `_prepare_kimi_vendor_runtime` | Installs the pinned verifier dependencies in an isolated temp path |
-| `_prepare_minimax_vendor_runtime` | Installs the pinned MiniMax adapter dependency in an isolated temp path |
+| `_prepare_minimax_m3_full_runtime` | Downloads hash-verified stock MiniMax sources and installs their pinned dependencies for smoke and full suites |
 | `_prepare_bfcl_runtime` | Installs the verified BFCL wheel in a temporary virtual environment |
 | `_install_bfcl_eval_deps` | Downloads, verifies, and installs the pinned BFCL wheel |
-| `_prepare_kimi_vendor_verifier` | Downloads and safely extracts a fresh subset of the pinned source archive |
+| `_prepare_kimi_vendor_verifier` | Downloads, hash-verifies, and safely extracts a fresh subset of the pinned source archive |
 | `_patch_lm_eval` | Patches lm-eval for reasoning tokens and TRT compatibility |
 | `compute_eval_context_length` | Computes eval context length (requested benchmark context, capped at model native max) |
 | `get_native_max_context_length` | Extracts model's native max context length from HF config |

@@ -9,12 +9,10 @@ import json
 import math
 import os
 import sys
-import time
 import urllib.parse
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from queue import SimpleQueue
 from types import MappingProxyType
 from typing import Any, Protocol
 
@@ -25,8 +23,6 @@ COMPATIBILITY_GLOB = "results_bfcl*.json"
 RESULT_FORMAT = "inferencex-eval-v1"
 ADAPTER_NAME = "bfcl-v4-openai-completions"
 DEFAULT_NUM_THREADS = 4
-DEFAULT_REQUEST_TIMEOUT_SECONDS = 180.0
-DEFAULT_REQUEST_MAX_RETRIES = 2
 REQUIRED_SCORE = 0.75
 
 BFCL_PACKAGE = "bfcl-eval"
@@ -38,9 +34,7 @@ UPSTREAM_REF = f"{BFCL_PACKAGE}=={BFCL_PACKAGE_VERSION}"
 SOURCE_REVISION = "6ea57973c7a6097fd7c5915698c54c17c5b1b6c8"
 VLLM_INTEGRATION_REF = "7ecb11405df86b202f4c5cca322bd133052fee82"
 UPSTREAM_LICENSE = "Apache-2.0"
-UPSTREAM_LICENSE_URL = (
-    f"{UPSTREAM_REPOSITORY}/blob/{SOURCE_REVISION}/LICENSE"
-)
+UPSTREAM_LICENSE_URL = f"{UPSTREAM_REPOSITORY}/blob/{SOURCE_REVISION}/LICENSE"
 UPSTREAM_LICENSE_FILENAME = "BFCL_LICENSE.apache-2.0.txt"
 UPSTREAM_ATTRIBUTION_FILENAME = "BFCL_ATTRIBUTION.json"
 
@@ -65,7 +59,6 @@ class SuiteSpec:
     temperature: float
     default_num_threads: int
     threshold: float
-    maximum_step_limit: int | None = None
     category_limits: tuple[tuple[str, int], ...] = ()
 
     @property
@@ -132,7 +125,6 @@ KIMI_SUITE = SuiteSpec(
     temperature=0.001,
     default_num_threads=16,
     threshold=0.0,
-    maximum_step_limit=10,
     category_limits=(("multi_turn", 240),),
 )
 SUITE_SPECS: Mapping[str, SuiteSpec] = MappingProxyType(
@@ -158,8 +150,6 @@ class UpstreamRunner(Protocol):
         base_url: str,
         api_key: str,
         num_threads: int,
-        request_timeout_seconds: float,
-        request_max_retries: int,
     ) -> None: ...
 
 
@@ -228,26 +218,6 @@ def _positive_int(value: str) -> int:
     return parsed
 
 
-def _nonnegative_int(value: str) -> int:
-    try:
-        parsed = int(value)
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError("must be a non-negative integer") from exc
-    if parsed < 0:
-        raise argparse.ArgumentTypeError("must be a non-negative integer")
-    return parsed
-
-
-def _positive_float(value: str) -> float:
-    try:
-        parsed = float(value)
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError("must be a positive finite number") from exc
-    if not math.isfinite(parsed) or parsed <= 0:
-        raise argparse.ArgumentTypeError("must be a positive finite number")
-    return parsed
-
-
 def _source_details(
     suite: SuiteSpec, case_ids_by_category: Mapping[str, tuple[str, ...]]
 ) -> dict[str, Any]:
@@ -311,8 +281,6 @@ def _native_report(
     model: str,
     base_url: str | None,
     num_threads: int,
-    request_timeout_seconds: float,
-    request_max_retries: int,
     scores: Sequence[CategoryScore] | None,
     integration_error: BaseException | None = None,
 ) -> dict[str, Any]:
@@ -330,8 +298,6 @@ def _native_report(
         "sampling": {
             "temperature": suite.temperature,
             "num_threads": num_threads,
-            "request_timeout_seconds": request_timeout_seconds,
-            "request_max_retries": request_max_retries,
         },
         "summary": {
             "accuracy": accuracy,
@@ -473,6 +439,7 @@ def _prepare_output_paths(output_dir: Path) -> tuple[Path, Path]:
     compatibility_path = output_dir / COMPATIBILITY_FILENAME
     return native_path, compatibility_path
 
+
 def _clear_upstream_modules() -> None:
     """Reload BFCL's import-time paths and limits for each adapter invocation."""
     for module_name in tuple(sys.modules):
@@ -508,15 +475,12 @@ def _function_defaults(function: Callable[..., Any]) -> dict[str, Any]:
     return defaults
 
 
-def _load_dataset_helpers(
-    maximum_step_limit: int | None,
-) -> tuple[Callable[[str], Any], Callable[[list[str]], Any], Callable[[Any], Any]]:
+def _load_dataset_helpers() -> tuple[
+    Callable[[str], Any],
+    Callable[[list[str]], Any],
+    Callable[[Any], Any],
+]:
     """Import BFCL's pinned dataset helpers only when a full suite is selected."""
-    if maximum_step_limit is not None:
-        import bfcl_eval.constants.default_prompts as bfcl_prompts
-
-        # This must happen before importing utils/base_handler for multi-turn.
-        bfcl_prompts.MAXIMUM_STEP_LIMIT = maximum_step_limit
     from bfcl_eval.utils import (
         load_dataset_entry,
         parse_test_category_argument,
@@ -532,9 +496,7 @@ def _build_suite_case_ids(
     if suite is SMOKE_SUITE:
         return dict(SMOKE_CASE_IDS)
 
-    load_dataset_entry, parse_test_category_argument, sort_key = (
-        _load_dataset_helpers(suite.maximum_step_limit)
-    )
+    load_dataset_entry, parse_test_category_argument, sort_key = _load_dataset_helpers()
     category_limits = dict(suite.category_limits)
     selected_by_leaf: dict[str, tuple[str, ...]] = {}
     seen_ids: set[str] = set()
@@ -549,9 +511,7 @@ def _build_suite_case_ids(
             quotas = [len(by_leaf[leaf]) for leaf in leaf_categories]
         else:
             base, extra = divmod(limit, len(leaf_categories))
-            quotas = [
-                base + (index < extra) for index in range(len(leaf_categories))
-            ]
+            quotas = [base + (index < extra) for index in range(len(leaf_categories))]
         for leaf, quota in zip(leaf_categories, quotas, strict=True):
             entries = by_leaf[leaf][:quota]
             ids: list[str] = []
@@ -570,8 +530,7 @@ def _build_suite_case_ids(
             selected_by_leaf[leaf] = tuple(ids)
 
     actual_counts = {
-        category: len(case_ids)
-        for category, case_ids in selected_by_leaf.items()
+        category: len(case_ids) for category, case_ids in selected_by_leaf.items()
     }
     expected_counts = dict(suite.expected_leaf_counts)
     if actual_counts != expected_counts:
@@ -602,8 +561,7 @@ def _read_selected_suite(
         case_ids_by_category[category] = tuple(case_ids)
 
     shape = tuple(
-        (category, len(case_ids))
-        for category, case_ids in case_ids_by_category.items()
+        (category, len(case_ids)) for category, case_ids in case_ids_by_category.items()
     )
     for suite in SUITE_SPECS.values():
         if shape != suite.expected_leaf_counts:
@@ -621,8 +579,6 @@ def _run_upstream(
     base_url: str,
     api_key: str,
     num_threads: int,
-    request_timeout_seconds: float,
-    request_max_retries: int,
 ) -> None:
     """Lazily load and invoke the pinned BFCL API against an existing server."""
     suite, case_ids_by_category = _read_selected_suite(project_root)
@@ -630,37 +586,12 @@ def _run_upstream(
     os.environ["OPENAI_BASE_URL"] = base_url
     os.environ["OPENAI_API_KEY"] = api_key
 
-    if suite.maximum_step_limit is not None:
-        import bfcl_eval.constants.default_prompts as bfcl_prompts
-
-        bfcl_prompts.MAXIMUM_STEP_LIMIT = suite.maximum_step_limit
     import bfcl_eval.constants.model_config as bfcl_model_config
     from bfcl_eval.__main__ import evaluate, generate
     from bfcl_eval.constants.model_config import ModelConfig
     from bfcl_eval.model_handler.api_inference.openai_completion import (
         OpenAICompletionsHandler,
     )
-    request_failures: SimpleQueue[Exception] = SimpleQueue()
-
-    class BoundedOpenAICompletionsHandler(OpenAICompletionsHandler):
-        def _build_client_kwargs(self) -> dict[str, Any]:
-            kwargs = super()._build_client_kwargs()
-            kwargs.update(
-                timeout=request_timeout_seconds,
-                max_retries=request_max_retries,
-            )
-            return kwargs
-
-        def generate_with_backoff(self, **kwargs: Any) -> tuple[Any, float]:
-            # Replace upstream's unbounded RateLimitError decorator with the
-            # OpenAI client's bounded transport and server-error retries.
-            started = time.monotonic()
-            try:
-                response = self.client.chat.completions.create(**kwargs)
-            except Exception as exc:
-                request_failures.put(exc)
-                raise
-            return response, time.monotonic() - started
 
     bfcl_model_config.MODEL_CONFIG_MAPPING[model] = ModelConfig(
         model_name=model,
@@ -668,7 +599,7 @@ def _run_upstream(
         url="",
         org="",
         license="unknown",
-        model_handler=BoundedOpenAICompletionsHandler,
+        model_handler=OpenAICompletionsHandler,
         input_price=None,
         output_price=None,
         is_fc_model=True,
@@ -687,8 +618,6 @@ def _run_upstream(
         allow_overwrite=True,
     )
     generate(**generation_kwargs)
-    if not request_failures.empty():
-        raise request_failures.get()
     _validate_generated_results(project_root, case_ids_by_category)
 
     evaluation_kwargs = _function_defaults(evaluate)
@@ -890,8 +819,6 @@ def publish_integration_error(
             model=model,
             base_url=None,
             num_threads=suite.default_num_threads,
-            request_timeout_seconds=DEFAULT_REQUEST_TIMEOUT_SECONDS,
-            request_max_retries=DEFAULT_REQUEST_MAX_RETRIES,
             scores=None,
             integration_error=error,
         ),
@@ -917,8 +844,6 @@ def run_evaluation(
     bfcl_project_root: Path,
     suite: SuiteSpec = SMOKE_SUITE,
     num_threads: int | None = None,
-    request_timeout_seconds: float = DEFAULT_REQUEST_TIMEOUT_SECONDS,
-    request_max_retries: int = DEFAULT_REQUEST_MAX_RETRIES,
     upstream_runner: UpstreamRunner = _run_upstream,
 ) -> bool:
     """Run one immutable BFCL suite and always publish both report formats."""
@@ -943,19 +868,6 @@ def run_evaluation(
             raise ValueError("num_threads must be a positive integer")
         if resolved_num_threads <= 0:
             raise ValueError("num_threads must be a positive integer")
-        if (
-            isinstance(request_timeout_seconds, bool)
-            or not isinstance(request_timeout_seconds, (int, float))
-            or not math.isfinite(float(request_timeout_seconds))
-            or request_timeout_seconds <= 0
-        ):
-            raise ValueError("request_timeout_seconds must be positive and finite")
-        if (
-            isinstance(request_max_retries, bool)
-            or not isinstance(request_max_retries, int)
-            or request_max_retries < 0
-        ):
-            raise ValueError("request_max_retries must be a non-negative integer")
         if not callable(upstream_runner):
             raise TypeError("upstream_runner must be callable")
 
@@ -970,8 +882,6 @@ def run_evaluation(
             base_url=normalized_url,
             api_key=normalized_key,
             num_threads=resolved_num_threads,
-            request_timeout_seconds=float(request_timeout_seconds),
-            request_max_retries=request_max_retries,
         )
         _validate_generated_results(bfcl_project_root, selected_case_ids)
         scores = _collect_scores(bfcl_project_root, selected_case_ids)
@@ -988,8 +898,6 @@ def run_evaluation(
                 model=model,
                 base_url=base_url,
                 num_threads=resolved_num_threads,
-                request_timeout_seconds=float(request_timeout_seconds),
-                request_max_retries=request_max_retries,
                 scores=None,
                 integration_error=exc,
             ),
@@ -1012,8 +920,6 @@ def run_evaluation(
         model=normalized_model,
         base_url=normalized_url,
         num_threads=resolved_num_threads,
-        request_timeout_seconds=float(request_timeout_seconds),
-        request_max_retries=request_max_retries,
         scores=scores,
     )
     compatibility = _compatibility_result(
@@ -1042,16 +948,6 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=TASK_NAME,
     )
     parser.add_argument("--num-threads", type=_positive_int)
-    parser.add_argument(
-        "--request-timeout-seconds",
-        type=_positive_float,
-        default=DEFAULT_REQUEST_TIMEOUT_SECONDS,
-    )
-    parser.add_argument(
-        "--request-max-retries",
-        type=_nonnegative_int,
-        default=DEFAULT_REQUEST_MAX_RETRIES,
-    )
     parser.add_argument("--integration-error")
     args = parser.parse_args(argv)
     args.num_threads = (
@@ -1089,8 +985,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         bfcl_project_root=args.bfcl_project_root,
         suite=suite,
         num_threads=args.num_threads,
-        request_timeout_seconds=args.request_timeout_seconds,
-        request_max_retries=args.request_max_retries,
     )
     return 0 if passed else 1
 

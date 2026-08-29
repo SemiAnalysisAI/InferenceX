@@ -3,6 +3,7 @@ import json
 import os
 import subprocess
 import sys
+from types import ModuleType
 from pathlib import Path
 from typing import Any
 
@@ -34,7 +35,6 @@ def _score(output_dir: Path) -> float:
     return _compatibility(output_dir)["results"][be.TASK_NAME]["acc,none"]
 
 
-
 def _category_score(
     category: str,
     total_count: int,
@@ -56,6 +56,7 @@ def _category_score(
         total_count=total_count,
     )
 
+
 def test_thresholds_are_stdlib_readable_without_pyyaml(monkeypatch) -> None:
     real_import = builtins.__import__
 
@@ -70,15 +71,14 @@ def test_thresholds_are_stdlib_readable_without_pyyaml(monkeypatch) -> None:
     assert thresholds["default"]["bfcl_smoke"] == 0.75
     assert thresholds["default"]["bfcl_parallel"] == 0.0
 
+
 def test_score_validator_uses_declared_bfcl_metric(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     result = {
         "results": {"bfcl_smoke": {"acc,none": 0.8, "acc_stderr,none": 0.1}},
         "configs": {
-            "bfcl_smoke": {
-                "metric_list": [{"metric": "acc", "aggregation": "mean"}]
-            }
+            "bfcl_smoke": {"metric_list": [{"metric": "acc", "aggregation": "mean"}]}
         },
         "n-samples": {"bfcl_smoke": {"original": 4, "effective": 4}},
     }
@@ -219,8 +219,6 @@ def test_command_defaults_and_required_runtime_inputs(tmp_path: Path) -> None:
     assert args.base_url == "http://localhost:8000/v1"
     assert args.api_key == "EMPTY"
     assert args.num_threads == 4
-    assert args.request_timeout_seconds == 180.0
-    assert args.request_max_retries == 2
     assert args.integration_error is None
     assert args.suite == be.TASK_NAME
     with pytest.raises(SystemExit):
@@ -292,18 +290,9 @@ def test_cli_forwards_selected_suite_on_normal_path(
     assert return_code == 0
     assert invocation["suite"] is be.KIMI_SUITE
     assert invocation["num_threads"] == 16
-    assert invocation["request_max_retries"] == 2
 
 
-
-@pytest.mark.parametrize(
-    ("flag", "value"),
-    (
-        ("--num-threads", "0"),
-        ("--request-timeout-seconds", "nan"),
-        ("--request-max-retries", "-1"),
-    ),
-)
+@pytest.mark.parametrize(("flag", "value"), (("--num-threads", "0"),))
 def test_cli_rejects_invalid_positive_values(
     tmp_path: Path, flag: str, value: str
 ) -> None:
@@ -363,8 +352,6 @@ def test_perfect_score_projects_pinned_ids_and_upstream_headers(
         "base_url": "http://127.0.0.1:8000/v1",
         "api_key": "EMPTY",
         "num_threads": 4,
-        "request_timeout_seconds": 180.0,
-        "request_max_retries": 2,
     }
     assert json.loads(
         (project_root / "test_case_ids_to_generate.json").read_text(encoding="utf-8")
@@ -374,13 +361,13 @@ def test_perfect_score_projects_pinned_ids_and_upstream_headers(
         "parallel": ["parallel_1"],
         "irrelevance": ["irrelevance_0"],
     }
-    assert (project_root / be.UPSTREAM_LICENSE_FILENAME).read_text(
-        encoding="utf-8"
-    ).startswith("                                 Apache License")
+    assert (
+        (project_root / be.UPSTREAM_LICENSE_FILENAME)
+        .read_text(encoding="utf-8")
+        .startswith("                                 Apache License")
+    )
     attribution = json.loads(
-        (project_root / be.UPSTREAM_ATTRIBUTION_FILENAME).read_text(
-            encoding="utf-8"
-        )
+        (project_root / be.UPSTREAM_ATTRIBUTION_FILENAME).read_text(encoding="utf-8")
     )
     assert attribution == {
         "artifact": "BFCL-generated evaluation results",
@@ -746,17 +733,10 @@ def test_full_suite_sets_project_root_before_dataset_import(
     assert observed_roots == [str(project_root)]
 
 
-@pytest.mark.parametrize(
-    ("suite", "expected_step_limit"),
-    (
-        (be.MINIMAX_SUITE, None),
-        (be.KIMI_SUITE, 10),
-    ),
-)
+@pytest.mark.parametrize("suite", (be.MINIMAX_SUITE, be.KIMI_SUITE))
 def test_full_suite_ids_use_exact_sorted_leaf_allocations(
     monkeypatch,
     suite: be.SuiteSpec,
-    expected_step_limit: int | None,
 ) -> None:
     multi_turn_leaves = (
         "multi_turn_base",
@@ -777,7 +757,6 @@ def test_full_suite_ids_use_exact_sorted_leaf_allocations(
         "parallel_multiple": 200,
         **{leaf: 75 for leaf in multi_turn_leaves},
     }
-    observed_step_limits: list[int | None] = []
 
     def load_dataset_entry(category: str) -> list[dict[str, str]]:
         return [
@@ -793,8 +772,7 @@ def test_full_suite_ids_use_exact_sorted_leaf_allocations(
             else categories
         )
 
-    def load_helpers(maximum_step_limit):
-        observed_step_limits.append(maximum_step_limit)
+    def load_helpers():
         return (
             load_dataset_entry,
             parse_test_category_argument,
@@ -805,18 +783,16 @@ def test_full_suite_ids_use_exact_sorted_leaf_allocations(
 
     selected = be._build_suite_case_ids(suite)
 
-    assert observed_step_limits == [expected_step_limit]
-    assert tuple(
-        (category, len(case_ids)) for category, case_ids in selected.items()
-    ) == suite.expected_leaf_counts
-    assert sum(map(len, selected.values())) == suite.expected_sample_count
-    assert all(
-        list(case_ids) == sorted(case_ids) for case_ids in selected.values()
+    assert (
+        tuple((category, len(case_ids)) for category, case_ids in selected.items())
+        == suite.expected_leaf_counts
     )
+    assert sum(map(len, selected.values())) == suite.expected_sample_count
+    assert all(list(case_ids) == sorted(case_ids) for case_ids in selected.values())
     if suite is be.KIMI_SUITE:
-        assert {
-            leaf: len(selected[leaf]) for leaf in multi_turn_leaves
-        } == {leaf: 60 for leaf in multi_turn_leaves}
+        assert {leaf: len(selected[leaf]) for leaf in multi_turn_leaves} == {
+            leaf: 60 for leaf in multi_turn_leaves
+        }
         assert all(selected[leaf][-1].endswith("_059") for leaf in multi_turn_leaves)
 
 
@@ -869,8 +845,7 @@ def test_kimi_projects_namespaced_leaf_and_weighted_aggregate_scores() -> None:
 
     assert compatibility["results"]["bfcl_vllm_kimi"]["acc,none"] == 655 / 1240
     assert (
-        compatibility["results"]["bfcl_vllm_kimi_multi_turn"]["acc,none"]
-        == 105 / 240
+        compatibility["results"]["bfcl_vllm_kimi_multi_turn"]["acc,none"] == 105 / 240
     )
     assert compatibility["n-samples"]["bfcl_vllm_kimi_multi_turn"] == {
         "original": 240,
@@ -910,8 +885,6 @@ def test_selected_suite_integration_error_preserves_suite_identity(
     assert native["sampling"] == {
         "temperature": 0.001,
         "num_threads": 8,
-        "request_timeout_seconds": 180.0,
-        "request_max_retries": 2,
     }
     assert list(compatibility["results"]) == [
         "bfcl_vllm_minimax_m3",
@@ -929,12 +902,7 @@ def test_selected_suite_integration_error_preserves_suite_identity(
 
 def test_score_total_must_match_every_selected_id(tmp_path: Path) -> None:
     project_root = tmp_path / "bfcl"
-    score_path = (
-        project_root
-        / "score"
-        / "model-a"
-        / "BFCL_v4_simple_python_score.json"
-    )
+    score_path = project_root / "score" / "model-a" / "BFCL_v4_simple_python_score.json"
     score_path.parent.mkdir(parents=True)
     score_path.write_text(
         json.dumps({"accuracy": 1.0, "correct_count": 1, "total_count": 1}) + "\n",
@@ -949,3 +917,78 @@ def test_score_total_must_match_every_selected_id(tmp_path: Path) -> None:
             project_root,
             {"simple_python": ("simple_python_0", "simple_python_1")},
         )
+
+
+def test_upstream_registration_uses_exact_stock_openai_handler(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project_root = tmp_path / "bfcl"
+    be._write_id_map(project_root, be.SMOKE_CASE_IDS)
+    model_config_mapping: dict[str, Any] = {}
+
+    class ModelConfig:
+        def __init__(self, **kwargs: Any) -> None:
+            self.__dict__.update(kwargs)
+
+    class OpenAICompletionsHandler:
+        pass
+
+    def generate(**_: Any) -> None:
+        result_dir = project_root / "result" / "model-a"
+        result_dir.mkdir(parents=True)
+        for category, case_ids in be.SMOKE_CASE_IDS.items():
+            (result_dir / f"BFCL_v4_{category}_result.json").write_text(
+                "".join(
+                    json.dumps({"id": case_id, "result": []}) + "\n"
+                    for case_id in case_ids
+                ),
+                encoding="utf-8",
+            )
+
+    def evaluate(**_: Any) -> None:
+        pass
+
+    modules = {
+        "bfcl_eval": ModuleType("bfcl_eval"),
+        "bfcl_eval.constants": ModuleType("bfcl_eval.constants"),
+        "bfcl_eval.constants.model_config": ModuleType(
+            "bfcl_eval.constants.model_config"
+        ),
+        "bfcl_eval.model_handler": ModuleType("bfcl_eval.model_handler"),
+        "bfcl_eval.model_handler.api_inference": ModuleType(
+            "bfcl_eval.model_handler.api_inference"
+        ),
+        "bfcl_eval.model_handler.api_inference.openai_completion": ModuleType(
+            "bfcl_eval.model_handler.api_inference.openai_completion"
+        ),
+        "bfcl_eval.__main__": ModuleType("bfcl_eval.__main__"),
+    }
+    modules[
+        "bfcl_eval.constants.model_config"
+    ].MODEL_CONFIG_MAPPING = model_config_mapping
+    modules["bfcl_eval.constants.model_config"].ModelConfig = ModelConfig
+    modules[
+        "bfcl_eval.model_handler.api_inference.openai_completion"
+    ].OpenAICompletionsHandler = OpenAICompletionsHandler
+    modules["bfcl_eval.__main__"].generate = generate
+    modules["bfcl_eval.__main__"].evaluate = evaluate
+    for name, module in modules.items():
+        if name in {
+            "bfcl_eval",
+            "bfcl_eval.constants",
+            "bfcl_eval.model_handler",
+            "bfcl_eval.model_handler.api_inference",
+        }:
+            module.__path__ = []
+        monkeypatch.setitem(sys.modules, name, module)
+    monkeypatch.setattr(be, "_function_defaults", lambda _: {})
+
+    be._run_upstream(
+        model="model-a",
+        project_root=project_root,
+        base_url="http://127.0.0.1:8000/v1",
+        api_key="EMPTY",
+        num_threads=4,
+    )
+
+    assert model_config_mapping["model-a"].model_handler is OpenAICompletionsHandler

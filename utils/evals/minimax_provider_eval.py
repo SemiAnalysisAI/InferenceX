@@ -1,126 +1,57 @@
 #!/usr/bin/env python3
-"""Run the pinned single-case MiniMax M3 provider compatibility smoke."""
+"""Run a pinned MiniMax M3 smoke subset through the stock provider verifier."""
 
 from __future__ import annotations
 
 import argparse
 import hashlib
-import http.client
 import json
 import math
-import re
-import time
-import urllib.error
+import os
+import subprocess
 import urllib.parse
-import urllib.request
 from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from minimax_m3_full_eval import UPSTREAM_REF, verify_source_tree
+
 TASK_NAME = "minimax_m3_smoke"
 NATIVE_REPORT_FILENAME = "minimax_vendor_report.json"
+NATIVE_RESULTS_FILENAME = "minimax_vendor_results.jsonl"
 COMPATIBILITY_GLOB = "results_minimax_vendor_*.json"
 DEFAULT_FIXTURE_PATH = Path(__file__).with_name("minimax_m3_smoke.json")
-DEFAULT_REQUEST_TIMEOUT_SECONDS = 180.0
-DEFAULT_TIMEOUT_SECONDS = 900.0
-M3_DEFAULT_MAX_TOKENS = 40960
 RESULT_FORMAT = "inferencex-eval-v1"
 ADAPTER_NAME = "minimax-provider-verifier"
 EXPECTED_INDICES = (71,)
-M3_MODEL_REGEX = re.compile(r"(?<![A-Za-z0-9])m3(?![A-Za-z0-9])", re.IGNORECASE)
-UPSTREAM_REF = "85bf180e54e2ab0b31595cfdc697116c4760876d"
-UPSTREAM_SOURCE = (
-    "https://raw.githubusercontent.com/MiniMax-AI/MiniMax-Provider-Verifier/"
-    f"{UPSTREAM_REF}/sample.jsonl"
-)
 EXPECTED_LICENSE_SHA256 = (
     "aa7cec386fcb5e555aba0e8b1c31307940af41967708c9bc0f78b4e02e235dd5"
 )
 EXPECTED_CASE_SHA256 = {
     71: "10272004ae08f4a7d08d2306404f6cbb7bbfa794230e1082a235ded036d550ed",
 }
-MAX_RESPONSE_BYTES = 16 * 1024 * 1024
-RETRY_BACKOFF_SECONDS = (5.0, 10.0, 20.0)
-MAX_ATTEMPTS = len(RETRY_BACKOFF_SECONDS) + 1
+UPSTREAM_SOURCE = (
+    "https://raw.githubusercontent.com/MiniMax-AI/MiniMax-Provider-Verifier/"
+    f"{UPSTREAM_REF}/sample.jsonl"
+)
+UPSTREAM_TIMEOUT_SECONDS = 60 * 60
 
-HttpPost = Callable[..., Any]
-Clock = Callable[[], float]
-Sleeper = Callable[[float], None]
-
-
-class TransportError(OSError):
-    """An HTTP transport failure that may be retried with bounded backoff."""
+Runner = Callable[..., subprocess.CompletedProcess[Any]]
 
 
-class SuiteTimeoutError(TimeoutError):
-    """The global MiniMax smoke deadline was exhausted."""
-
-
-class _RejectRedirects(urllib.request.HTTPRedirectHandler):
-    """Keep bearer credentials on the configured endpoint."""
-
-    def redirect_request(self, *args: Any, **kwargs: Any) -> None:
-        return None
-
-
-_NO_REDIRECT_OPENER = urllib.request.build_opener(_RejectRedirects())
+class SmokeSuiteError(RuntimeError):
+    """The stock verifier could not produce one complete smoke result."""
 
 
 def _mapping(value: Any, name: str) -> Mapping[str, Any]:
     if not isinstance(value, Mapping):
-        raise TypeError(f"{name} must be an object")
+        raise ValueError(f"{name} must be an object")
     return value
 
 
-def _positive_number(value: Any, name: str) -> float:
-    if (
-        isinstance(value, bool)
-        or not isinstance(value, (int, float))
-        or not math.isfinite(value)
-        or value <= 0
-    ):
-        raise ValueError(f"{name} must be a positive finite number")
-    return float(value)
-
-
-def _positive_float(value: str) -> float:
-    try:
-        return _positive_number(float(value), "value")
-    except (TypeError, ValueError) as exc:
-        raise argparse.ArgumentTypeError("must be a positive finite number") from exc
-
-
-def _validate_messages(value: Any, name: str) -> None:
-    if not isinstance(value, list) or not value:
-        raise ValueError(f"{name} must be a non-empty array")
-    for index, message in enumerate(value):
-        item = _mapping(message, f"{name}[{index}]")
-        if not isinstance(item.get("role"), str) or not isinstance(
-            item.get("content"), str
-        ):
-            raise TypeError(f"{name}[{index}] must contain string role and content")
-
-
-def _validate_tools(value: Any, name: str) -> None:
-    if not isinstance(value, list) or not value:
-        raise ValueError(f"{name} must be a non-empty array")
-    for index, tool in enumerate(value):
-        item = _mapping(tool, f"{name}[{index}]")
-        function = _mapping(item.get("function"), f"{name}[{index}].function")
-        if item.get("type") != "function" or not isinstance(function.get("name"), str):
-            raise ValueError(f"{name}[{index}] must define a named function")
-        parameters = _mapping(
-            function.get("parameters"), f"{name}[{index}].function.parameters"
-        )
-        _mapping(
-            parameters.get("properties"),
-            f"{name}[{index}].function.parameters.properties",
-        )
-
-
 def load_fixture(path: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    """Load and validate the exact pinned single-case fixture."""
+    """Load the exact pinned row without modifying its request fields."""
     root = _mapping(json.loads(path.read_text(encoding="utf-8")), "fixture")
     if root.get("source") != UPSTREAM_SOURCE or root.get("ref") != UPSTREAM_REF:
         raise ValueError("fixture source or ref does not match the pinned upstream")
@@ -134,39 +65,23 @@ def load_fixture(path: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         raise ValueError("fixture must preserve the complete upstream MIT notice")
 
     raw_rows = root.get("rows")
-    if not isinstance(raw_rows, list) or len(raw_rows) != len(EXPECTED_INDICES):
+    if not isinstance(raw_rows, list) or len(raw_rows) != 1:
         raise ValueError("fixture must contain exactly one row")
-
-    rows: list[dict[str, Any]] = []
-    for position, raw_row in enumerate(raw_rows):
-        row = dict(_mapping(raw_row, f"fixture.rows[{position}]"))
-        data_index = row.get("data_index")
-        if data_index != EXPECTED_INDICES[position]:
-            raise ValueError("fixture rows must retain upstream order and data_index")
-        case_digest = hashlib.sha256(
-            json.dumps(
-                row,
-                ensure_ascii=False,
-                separators=(",", ":"),
-            ).encode()
-        ).hexdigest()
-        if case_digest != EXPECTED_CASE_SHA256[data_index]:
-            raise ValueError(f"fixture row {data_index} differs from pinned upstream")
-        _validate_messages(row.get("messages"), f"fixture.rows[{position}].messages")
-        if row.get("check_type", []) != []:
-            raise ValueError(f"fixture row {data_index} has unexpected check_type")
-        _validate_tools(row.get("tools"), f"fixture.rows[{position}].tools")
-        if row.get("expected_tool_call") is not True:
-            raise ValueError(f"fixture row {data_index} has an invalid expected label")
-        rows.append(row)
-
-    return dict(root), rows
+    row = dict(_mapping(raw_rows[0], "fixture.rows[0]"))
+    if row.get("data_index") != EXPECTED_INDICES[0]:
+        raise ValueError("fixture row must retain data_index 71")
+    digest = hashlib.sha256(
+        json.dumps(row, ensure_ascii=False, separators=(",", ":")).encode()
+    ).hexdigest()
+    if digest != EXPECTED_CASE_SHA256[EXPECTED_INDICES[0]]:
+        raise ValueError("fixture row 71 differs from pinned upstream")
+    return dict(root), [row]
 
 
-def build_endpoint(base_url: str) -> str:
-    if not isinstance(base_url, str) or not base_url.strip():
+def _normalized_base_url(value: str) -> str:
+    if not isinstance(value, str) or not value.strip():
         raise ValueError("base_url must be a non-empty string")
-    normalized = base_url.strip().rstrip("/")
+    normalized = value.strip().rstrip("/")
     parsed = urllib.parse.urlsplit(normalized)
     if (
         parsed.scheme not in {"http", "https"}
@@ -177,475 +92,86 @@ def build_endpoint(base_url: str) -> str:
         raise ValueError(
             "base_url must be an absolute HTTP(S) URL without query or fragment"
         )
-    return f"{normalized}/chat/completions"
+    return normalized
 
 
-def prepare_request(row: Mapping[str, Any], model: str) -> dict[str, Any]:
-    """Strip evaluator fields and apply the fixed smoke sampling overrides."""
+def prepare_smoke_input(*, fixture_path: Path, destination: Path) -> None:
+    """Write the pinned row as stock verifier JSONL input."""
+    _, rows = load_fixture(fixture_path)
+    destination.write_text(
+        "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows),
+        encoding="utf-8",
+    )
+
+
+def build_verifier_command(
+    *,
+    python: Path,
+    source_dir: Path,
+    sample_path: Path,
+    base_url: str,
+    model: str,
+    output_dir: Path,
+) -> list[str]:
+    """Build one stock verify.py invocation over the pinned smoke row."""
     if not isinstance(model, str) or not model.strip():
         raise ValueError("model must be a non-empty string")
-    request = dict(row)
-    for field in ("data_index", "check_type", "expected_tool_call", "scenario_check"):
-        request.pop(field, None)
-    request.update(
-        model=model,
-        temperature=0,
-        top_p=1,
+    extra_body = json.dumps(
+        {"temperature": 0, "top_p": 1, "max_tokens": 40960},
+        separators=(",", ":"),
     )
-    if M3_MODEL_REGEX.search(model):
-        request["max_tokens"] = M3_DEFAULT_MAX_TOKENS
-    return request
-
-
-def _read_response_body(response: Any, deadline: float) -> bytes:
-    chunks: list[bytes] = []
-    total = 0
-    read_chunk = getattr(response, "read1", response.read)
-    while True:
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            raise TimeoutError("chat completion response exceeded its deadline")
-        sock = getattr(
-            getattr(getattr(response, "fp", None), "raw", None),
-            "_sock",
-            None,
-        )
-        if sock is not None:
-            sock.settimeout(remaining)
-        chunk = read_chunk(64 * 1024)
-        if not chunk:
-            return b"".join(chunks)
-        chunks.append(chunk)
-        total += len(chunk)
-        if total > MAX_RESPONSE_BYTES:
-            raise ValueError(
-                f"chat completion response exceeds {MAX_RESPONSE_BYTES} bytes"
-            )
-
-
-def _default_http_post(
-    *,
-    url: str,
-    headers: Mapping[str, str],
-    payload: Mapping[str, Any],
-    timeout_seconds: float,
-) -> Any:
-    deadline = time.monotonic() + timeout_seconds
-    request = urllib.request.Request(
-        url,
-        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-        headers=dict(headers),
-        method="POST",
-    )
-    try:
-        with _NO_REDIRECT_OPENER.open(request, timeout=timeout_seconds) as response:
-            content = _read_response_body(response, deadline).decode("utf-8")
-    except urllib.error.HTTPError as exc:
-        if exc.code in {404, 429} or 500 <= exc.code < 600:
-            raise TransportError(f"HTTP {exc.code}: {exc.reason}") from exc
-        raise ValueError(
-            f"chat completion request failed with HTTP {exc.code}: {exc.reason}"
-        ) from exc
-    except (
-        urllib.error.URLError,
-        http.client.HTTPException,
-        TimeoutError,
-        OSError,
-    ) as exc:
-        raise TransportError(str(exc)) from exc
-    try:
-        return json.loads(content)
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise ValueError(f"chat completion response is not valid JSON: {exc}") from exc
-
-
-def _validate_chat_completion_response(value: Any) -> Mapping[str, Any]:
-    response = _mapping(value, "chat completion response")
-    choices = response.get("choices")
-    if not isinstance(choices, list) or not choices:
-        raise ValueError(
-            "chat completion response must contain a non-empty choices array"
-        )
-    choice = _mapping(choices[0], "chat completion response.choices[0]")
-    if not isinstance(choice.get("finish_reason"), str):
-        raise TypeError("chat completion response must contain a finish_reason")
-    message = _mapping(
-        choice.get("message"),
-        "chat completion response.choices[0].message",
-    )
-    content = message.get("content")
-    if content is not None and not isinstance(content, str):
-        raise TypeError("chat completion message content must be a string or null")
-    tool_calls = message.get("tool_calls")
-    if tool_calls is not None and not isinstance(tool_calls, list):
-        raise TypeError("chat completion message tool_calls must be an array")
-    if choice["finish_reason"] == "tool_calls":
-        if not tool_calls:
-            raise ValueError(
-                "tool_calls finish reason requires at least one message tool call"
-            )
-    elif tool_calls:
-        raise ValueError("message tool calls require a tool_calls finish reason")
-    return response
-
-
-def _require_tool_validation() -> None:
-    """Fail setup before requests if the pinned schema dependency is unavailable."""
-    try:
-        import jsonschema  # noqa: F401
-    except ImportError as exc:
-        raise RuntimeError("jsonschema is required for tool-call validation") from exc
-
-
-def validate_tool_call(tool_call: Any, tools: list[dict[str, Any]]) -> bool:
-    """Apply pinned JSON Schema validation."""
-    from jsonschema import ValidationError, validate
-
-    try:
-        call = _mapping(tool_call, "tool_call")
-        function = _mapping(call["function"], "tool_call.function")
-        tool_name = function["name"]
-        schema = next(
-            (
-                tool["function"]["parameters"]
-                for tool in tools
-                if tool["function"]["name"] == tool_name
-            ),
-            None,
-        )
-        if not schema:
-            return False
-        args = function["arguments"]
-        if isinstance(args, str):
-            args = json.loads(args)
-        validate(instance=args, schema=schema)
-        return True
-    except (json.JSONDecodeError, ValidationError):
-        return False
-    except Exception:  # noqa: BLE001 - upstream data can fail in arbitrary shapes
-        return False
-
-
-def validate_tool_calls(
-    request: dict[str, Any], response: Any, status: str
-) -> dict[str, Any]:
-    result: dict[str, Any] = {
-        "tool_calls_finish_reason": None,
-        "tool_calls_valid": None,
-        "tool_calls_count": 0,
-    }
-    if status != "success" or not response or "choices" not in response:
-        return result
-    choice = response["choices"][0] if response["choices"] else {}
-    finish_reason = choice.get("finish_reason")
-    result["tool_calls_finish_reason"] = finish_reason
-    if finish_reason == "tool_calls":
-        tools = request.get("tools", [])
-        tool_calls = choice.get("message", {}).get("tool_calls", [])
-        result["tool_calls_count"] = len(tool_calls)
-        if tool_calls:
-            result["tool_calls_valid"] = all(
-                validate_tool_call(tool_call, tools) for tool_call in tool_calls
-            )
-        else:
-            result["tool_calls_valid"] = False
-    return result
-
-
-
-# Adapted verbatim from pinned verify.py::_is_error_only_reasoning_response.
-def _is_error_only_reasoning_response(response: Any) -> bool:
-    try:
-        if not response or "choices" not in response or not response["choices"]:
-            return False
-        message = response["choices"][0].get("message") or {}
-        reasoning = message.get("reasoning") or ""
-        content = message.get("content") or ""
-        tool_calls = message.get("tool_calls")
-        if isinstance(tool_calls, list):
-            has_tool_calls = len(tool_calls) > 0
-        else:
-            has_tool_calls = bool(tool_calls)
-        return bool(reasoning) and (not content) and (not has_tool_calls)
-    except Exception:  # noqa: BLE001 - mirrors the pinned upstream guard
-        return False
-
-
-def _choice_fields(response: Any) -> tuple[Any, Any]:
-    if not isinstance(response, Mapping):
-        return None, None
-    choices = response.get("choices")
-    if not isinstance(choices, list) or not choices:
-        return None, None
-    choice = choices[0]
-    if not isinstance(choice, Mapping):
-        return None, None
-    message = choice.get("message")
-    content = message.get("content") if isinstance(message, Mapping) else None
-    return choice.get("finish_reason"), content
-
-
-def _error_dict(exc: BaseException) -> dict[str, str]:
-    return {"type": type(exc).__name__, "message": str(exc)}
-
-
-def _evaluate_case(
-    *,
-    row: dict[str, Any],
-    model: str,
-    endpoint: str,
-    api_key: str,
-    request_timeout_seconds: float,
-    deadline: float,
-    http_post: HttpPost,
-    clock: Clock,
-    sleeper: Sleeper,
-) -> dict[str, Any]:
-    prepared = prepare_request(row, model)
-    started = clock()
-    response: Any = None
-    status = "failed"
-    attempts = 0
-    request_error: BaseException | None = None
-    suite_timed_out = False
-
-    for attempt in range(MAX_ATTEMPTS):
-        remaining = deadline - clock()
-        if remaining <= 0:
-            request_error = SuiteTimeoutError("global suite timeout exceeded")
-            suite_timed_out = True
-            break
-        attempts += 1
-        try:
-            raw_response = http_post(
-                url=endpoint,
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-                payload=prepared,
-                timeout_seconds=min(request_timeout_seconds, remaining),
-            )
-            if deadline - clock() <= 0:
-                request_error = SuiteTimeoutError("global suite timeout exceeded")
-                response = None
-                suite_timed_out = True
-                break
-            response = dict(_validate_chat_completion_response(raw_response))
-            status = "success"
-            request_error = None
-            break
-        except (TransportError, TimeoutError, OSError) as exc:
-            if deadline - clock() <= 0:
-                request_error = SuiteTimeoutError("global suite timeout exceeded")
-                suite_timed_out = True
-                break
-            request_error = exc
-            if attempt + 1 < MAX_ATTEMPTS:
-                delay = min(RETRY_BACKOFF_SECONDS[attempt], deadline - clock())
-                if delay > 0:
-                    sleeper(delay)
-                continue
-            break
-        except Exception as exc:  # noqa: BLE001 - preserve per-request diagnostics
-            request_error = exc
-            if deadline - clock() <= 0:
-                request_error = SuiteTimeoutError("global suite timeout exceeded")
-                suite_timed_out = True
-            break
-
-    finish_reason, _ = _choice_fields(response)
-    result: dict[str, Any] = {
-        "data_index": row["data_index"],
-        "status": status,
-        "attempts": attempts,
-        "duration_ms": round(max(0.0, clock() - started) * 1000, 3),
-        "expected_tool_call": row.get("expected_tool_call"),
-        "finish_reason": finish_reason,
-        "response": response
-        if response is not None
-        else {"error": _error_dict(request_error or RuntimeError("request failed"))},
-        "error_only_reasoning_checked": 1,
-        "error_only_reasoning": _is_error_only_reasoning_response(response),
-        "integration_failure": isinstance(
-            request_error, (TransportError, TimeoutError, OSError)
-        ),
-    }
-
-    try:
-        result.update(validate_tool_calls(prepared, response, status))
-    except Exception as exc:  # noqa: BLE001 - validators must not abort the report
-        result["validator_error"] = _error_dict(exc)
-
-    failures: list[str] = []
-    if status != "success":
-        failures.append("query_failed")
-    if result["error_only_reasoning"]:
-        failures.append("error_only_reasoning")
-    expected_tool_call = row.get("expected_tool_call")
-    if isinstance(expected_tool_call, bool):
-        expected_finish_reason = "tool_calls" if expected_tool_call else "stop"
-        actual_tool_call = finish_reason == "tool_calls"
-        if finish_reason != expected_finish_reason:
-            failures.append("tool_call_trigger")
-        if (
-            expected_tool_call
-            and actual_tool_call
-            and result.get("tool_calls_valid") is not True
-        ):
-            failures.append("tool_call_schema")
-    if "validator_error" in result:
-        failures.append("validator_error")
-
-    result["case_passed"] = not failures
-    result["failures"] = failures
-    result["suite_timed_out"] = suite_timed_out
-    return result
-
-
-def _ratio(numerator: int, denominator: int) -> float:
-    return numerator / denominator if denominator else 0.0
-
-
-def _summarize(
-    results: list[dict[str, Any]],
-) -> tuple[dict[str, Any], dict[str, float]]:
-    total = len(results)
-    success_count = sum(result.get("status") == "success" for result in results)
-    passed_count = sum(result.get("case_passed") is True for result in results)
-
-    labeled = [
-        result
-        for result in results
-        if result.get("expected_tool_call") is True
-        or result.get("expected_tool_call") is False
+    return [
+        str(python),
+        str(source_dir / "verify.py"),
+        str(sample_path),
+        "--model",
+        model,
+        "--base-url",
+        _normalized_base_url(base_url),
+        "--api-key",
+        "EMPTY",
+        "--concurrency",
+        "1",
+        "--output",
+        str(output_dir / NATIVE_RESULTS_FILENAME),
+        "--summary",
+        str(output_dir / NATIVE_REPORT_FILENAME),
+        "--timeout",
+        "600",
+        "--retries",
+        "3",
+        "--extra-body",
+        extra_body,
     ]
-    true_positive = sum(
-        result["expected_tool_call"] is True
-        and result.get("finish_reason") == "tool_calls"
-        for result in labeled
-    )
-    false_negative = sum(
-        result["expected_tool_call"] is True
-        and result.get("finish_reason") != "tool_calls"
-        for result in labeled
-    )
-    false_positive = sum(
-        result["expected_tool_call"] is False
-        and result.get("finish_reason") == "tool_calls"
-        for result in labeled
-    )
-    expected_tool_finish_stop = sum(
-        result["expected_tool_call"] is True and result.get("finish_reason") == "stop"
-        for result in labeled
-    )
-    expected_stop_finish_stop = sum(
-        result["expected_tool_call"] is False and result.get("finish_reason") == "stop"
-        for result in labeled
-    )
-    precision = _ratio(true_positive, true_positive + false_positive)
-    recall = _ratio(true_positive, true_positive + false_negative)
-    trigger_f1 = (
-        2 * precision * recall / (precision + recall) if precision + recall else 0.0
-    )
-    schema_successes = sum(
-        result.get("expected_tool_call") is True
-        and result.get("finish_reason") == "tool_calls"
-        and result.get("tool_calls_valid") is True
-        for result in labeled
-    )
-
-    language_checked = sum(
-        result.get("language_following_checked") is True for result in results
-    )
-    language_valid = sum(
-        result.get("language_following_valid") is True for result in results
-    )
-    scenario_checked = sum(
-        result.get("scenario_check_checked") is True for result in results
-    )
-    scenario_valid = sum(
-        result.get("scenario_check_valid") is True for result in results
-    )
-    reasoning_errors = sum(
-        result.get("error_only_reasoning") is True for result in results
-    )
-
-    metrics = {
-        "Query-Success-Rate": _ratio(success_count, total),
-        "ToolCalls-Trigger-Similarity": trigger_f1,
-        "ToolCalls-Schema-Accuracy": _ratio(schema_successes, true_positive),
-        "Error-Only-Reasoning-Rate": _ratio(reasoning_errors, total),
-        "Language-Following-Success-Rate": _ratio(language_valid, language_checked),
-        "Scenario-Check-Pass-Rate": _ratio(scenario_valid, scenario_checked),
-    }
-    summary: dict[str, Any] = {
-        "total": total,
-        "passed_count": passed_count,
-        "failed_count": total - passed_count,
-        "success_count": success_count,
-        "failure_count": total - success_count,
-        "tool_calls_finish_tool_calls": true_positive,
-        "tool_calls_finish_stop": expected_tool_finish_stop,
-        "stop_finish_tool_calls": false_positive,
-        "stop_finish_stop": expected_stop_finish_stop,
-        "expected_tool_call_total_count": len(labeled),
-        "tool_calls_successful_count": schema_successes,
-        "tool_calls_schema_validation_error_count": true_positive - schema_successes,
-        "error_only_reasoning_checked_count": total,
-        "error_only_reasoning_count": reasoning_errors,
-        "language_following_checked_count": language_checked,
-        "language_following_valid_count": language_valid,
-        "language_following_invalid_count": language_checked - language_valid,
-        "scenario_check_checked_count": scenario_checked,
-        "scenario_check_valid_count": scenario_valid,
-        "scenario_check_invalid_count": scenario_checked - scenario_valid,
-        "overall_compatibility_score": _ratio(passed_count, len(EXPECTED_INDICES)),
-    }
-    return summary, metrics
 
 
-def _native_report(
-    *,
-    model: str,
-    endpoint: str | None,
-    fixture_metadata: Mapping[str, Any] | None,
-    results: list[dict[str, Any]],
-    completed: bool,
-    integration_error: BaseException | None = None,
-) -> dict[str, Any]:
-    summary, metrics = _summarize(results)
-    report: dict[str, Any] = {
-        "verifier": ADAPTER_NAME,
-        "task": TASK_NAME,
-        "model": model,
-        "endpoint": endpoint,
-        "completed": completed,
-        "threshold": 1.0,
-        "sampling": {
-            "temperature": 0,
-            "top_p": 1,
-            "max_tokens": M3_DEFAULT_MAX_TOKENS,
-        },
-        "source": {
-            "url": (fixture_metadata or {}).get("source", UPSTREAM_SOURCE),
-            "ref": (fixture_metadata or {}).get("ref", UPSTREAM_REF),
-            "indices": list(EXPECTED_INDICES),
-        },
-        "summary": summary,
-        "metrics": metrics,
-        "results": results,
-    }
-    if integration_error is not None:
-        report["integration_error"] = _error_dict(integration_error)
-    return report
+def _error_dict(error: BaseException) -> dict[str, str]:
+    return {"type": type(error).__name__, "message": str(error)}
+
+
+def _rate(value: Any, name: str) -> float:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(value)
+        or not 0.0 <= value <= 1.0
+    ):
+        raise SmokeSuiteError(f"native summary {name} must be a finite rate")
+    return float(value)
+
+
+def _compatibility_path(output_dir: Path) -> Path:
+    for stale_path in output_dir.glob(COMPATIBILITY_GLOB):
+        stale_path.unlink()
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S.%f")
+    return output_dir / f"results_minimax_vendor_{timestamp}.json"
 
 
 def _compatibility_result(
+    *,
     model: str,
     score: float,
-    *,
-    n_samples: int,
+    effective: int,
     integration_error: BaseException | None = None,
 ) -> dict[str, Any]:
     result: dict[str, Any] = {
@@ -662,25 +188,25 @@ def _compatibility_result(
             TASK_NAME: {
                 "metric_list": [{"metric": "exact_match"}],
                 "filter_list": [{"name": "strict-match"}],
+                "native_metrics": [
+                    "tool_calls_match_rate",
+                    "tool_calls_schema_accuracy",
+                    "error_only_reasoning_rate",
+                ],
             }
         },
         "n-samples": {
-            TASK_NAME: {
-                "original": len(EXPECTED_INDICES),
-                "effective": n_samples,
-            }
+            TASK_NAME: {"original": 1, "effective": effective},
+        },
+        "source": {
+            "repository": "MiniMax-AI/MiniMax-Provider-Verifier",
+            "ref": UPSTREAM_REF,
+            "indices": list(EXPECTED_INDICES),
         },
     }
     if integration_error is not None:
         result["integration_error"] = _error_dict(integration_error)
     return result
-
-
-def prepare_compatibility_path(output_dir: Path) -> Path:
-    for stale_path in output_dir.glob(COMPATIBILITY_GLOB):
-        stale_path.unlink()
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S.%f")
-    return output_dir / f"results_minimax_vendor_{timestamp}.json"
 
 
 def _write_json(path: Path, value: Mapping[str, Any]) -> None:
@@ -689,232 +215,172 @@ def _write_json(path: Path, value: Mapping[str, Any]) -> None:
     )
 
 
-def _integration_results(exc: BaseException) -> list[dict[str, Any]]:
-    return [
-        {
-            "data_index": data_index,
-            "status": "failed",
-            "attempts": 0,
-            "expected_tool_call": True
-            if data_index == 71
-            else False
-            if data_index == 101
-            else None,
-            "finish_reason": None,
-            "response": {"error": _error_dict(exc)},
-            "error_only_reasoning_checked": 1,
-            "error_only_reasoning": False,
-            "case_passed": False,
-            "failures": ["integration_error"],
-            "suite_timed_out": isinstance(exc, SuiteTimeoutError),
-        }
-        for data_index in EXPECTED_INDICES
-    ]
+def project_native_artifacts(*, output_dir: Path, model: str) -> Path:
+    """Validate stock outputs and project only their published metrics."""
+    report = _mapping(
+        json.loads((output_dir / NATIVE_REPORT_FILENAME).read_text(encoding="utf-8")),
+        "native summary",
+    )
+    result_lines = (
+        (output_dir / NATIVE_RESULTS_FILENAME).read_text(encoding="utf-8").splitlines()
+    )
+    if len(result_lines) != 1 or not result_lines[0].strip():
+        raise SmokeSuiteError("native results must contain exactly one row")
+    result = _mapping(json.loads(result_lines[0]), "native result")
+    if result.get("data_index") != EXPECTED_INDICES[0]:
+        raise SmokeSuiteError("native result must retain data_index 71")
+    if result.get("status") != "success":
+        raise SmokeSuiteError("native verifier reported a request failure")
+    if report.get("model") != model:
+        raise SmokeSuiteError("native summary model does not match the requested model")
+    if report.get("success_count") != 1 or report.get("failure_count") != 0:
+        raise SmokeSuiteError("native summary does not describe one successful request")
 
-
-def _failed_case_result(row: Mapping[str, Any], exc: BaseException) -> dict[str, Any]:
-    return {
-        "data_index": row["data_index"],
-        "status": "failed",
-        "attempts": 0,
-        "expected_tool_call": row.get("expected_tool_call"),
-        "finish_reason": None,
-        "response": {"error": _error_dict(exc)},
-        "error_only_reasoning_checked": 1,
-        "error_only_reasoning": False,
-        "case_passed": False,
-        "failures": ["adapter_error"],
-        "suite_timed_out": isinstance(exc, SuiteTimeoutError),
-        "integration_failure": True,
-    }
-
-
-def publish_integration_error(
-    *, output_dir: Path, model: str, error: BaseException
-) -> None:
-    """Publish both required zero-score artifacts without loading jsonschema."""
-    output_dir.mkdir(parents=True, exist_ok=True)
-    native_path = output_dir / NATIVE_REPORT_FILENAME
-    native_path.unlink(missing_ok=True)
-    compatibility_path = prepare_compatibility_path(output_dir)
+    match_rate = _rate(report.get("tool_calls_match_rate"), "tool_calls_match_rate")
+    schema_rate = _rate(
+        report.get("tool_calls_schema_accuracy"), "tool_calls_schema_accuracy"
+    )
+    reasoning_error_rate = _rate(
+        report.get("error_only_reasoning_rate"), "error_only_reasoning_rate"
+    )
+    score = min(match_rate, schema_rate, 1.0 - reasoning_error_rate)
+    compatibility_path = _compatibility_path(output_dir)
     _write_json(
-        native_path,
-        _native_report(
+        compatibility_path,
+        _compatibility_result(model=model, score=score, effective=1),
+    )
+    return compatibility_path
+
+
+def publish_failure(*, output_dir: Path, model: str, error: BaseException) -> Path:
+    """Publish integration metadata without rewriting stock artifacts."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    native_report_path = output_dir / NATIVE_REPORT_FILENAME
+    if not native_report_path.exists():
+        _write_json(
+            native_report_path,
+            {
+                "verifier": ADAPTER_NAME,
+                "task": TASK_NAME,
+                "model": model,
+                "completed": False,
+                "source": {"ref": UPSTREAM_REF, "indices": list(EXPECTED_INDICES)},
+                "integration_error": _error_dict(error),
+            },
+        )
+    compatibility_path = _compatibility_path(output_dir)
+    _write_json(
+        compatibility_path,
+        _compatibility_result(
             model=model,
-            endpoint=None,
-            fixture_metadata=None,
-            results=_integration_results(error),
-            completed=False,
+            score=0.0,
+            effective=0,
             integration_error=error,
         ),
     )
-    _write_json(
-        compatibility_path,
-        _compatibility_result(model, 0.0, n_samples=0, integration_error=error),
-    )
+    return compatibility_path
 
 
 def run_evaluation(
     *,
+    python: Path,
+    source_dir: Path,
+    dependency_dir: Path,
     base_url: str,
-    api_key: str,
     model: str,
     output_dir: Path,
     fixture_path: Path = DEFAULT_FIXTURE_PATH,
-    request_timeout_seconds: float = DEFAULT_REQUEST_TIMEOUT_SECONDS,
-    timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
-    http_post: HttpPost = _default_http_post,
-    clock: Clock = time.monotonic,
-    sleeper: Sleeper = time.sleep,
+    runner: Runner = subprocess.run,
 ) -> bool:
-    """Run the pinned case and always publish both artifacts."""
+    """Run the stock upstream verifier once, then project its native metrics."""
     output_dir.mkdir(parents=True, exist_ok=True)
-    native_path = output_dir / NATIVE_REPORT_FILENAME
-    native_path.unlink(missing_ok=True)
-    compatibility_path = prepare_compatibility_path(output_dir)
-
+    for filename in (NATIVE_REPORT_FILENAME, NATIVE_RESULTS_FILENAME):
+        (output_dir / filename).unlink(missing_ok=True)
+    for stale_path in output_dir.glob(COMPATIBILITY_GLOB):
+        stale_path.unlink()
+    smoke_input = output_dir / "minimax_vendor_smoke_input.jsonl"
+    smoke_input.unlink(missing_ok=True)
     try:
-        request_timeout = _positive_number(
-            request_timeout_seconds, "request_timeout_seconds"
+        verify_source_tree(source_dir)
+        prepare_smoke_input(fixture_path=fixture_path, destination=smoke_input)
+        command = build_verifier_command(
+            python=python,
+            source_dir=source_dir,
+            sample_path=smoke_input,
+            base_url=base_url,
+            model=model,
+            output_dir=output_dir,
         )
-        suite_timeout = _positive_number(timeout_seconds, "timeout_seconds")
-        if not callable(http_post) or not callable(clock) or not callable(sleeper):
-            raise TypeError("http_post, clock, and sleeper must be callable")
-        deadline = clock() + suite_timeout
-        if not isinstance(model, str) or not model.strip():
-            raise ValueError("model must be a non-empty string")
-        if not isinstance(api_key, str) or not api_key:
-            raise ValueError("api_key must be a non-empty string")
-        endpoint = build_endpoint(base_url)
-        fixture_metadata, rows = load_fixture(fixture_path)
-        _require_tool_validation()
+        environment = os.environ.copy()
+        environment["PYTHONPATH"] = os.pathsep.join(
+            (str(source_dir), str(dependency_dir))
+        )
+        environment["PYTHONNOUSERSITE"] = "1"
+        completed = runner(
+            command,
+            env=environment,
+            timeout=UPSTREAM_TIMEOUT_SECONDS,
+            check=False,
+        )
+        if completed.returncode != 0:
+            raise SmokeSuiteError(
+                f"pinned upstream verifier exited with code {completed.returncode}"
+            )
+        project_native_artifacts(output_dir=output_dir, model=model)
     except (
         OSError,
-        RuntimeError,
         ValueError,
-        TypeError,
-        json.JSONDecodeError,
+        SmokeSuiteError,
+        subprocess.TimeoutExpired,
     ) as exc:
-        _write_json(
-            native_path,
-            _native_report(
-                model=model,
-                endpoint=None,
-                fixture_metadata=None,
-                results=_integration_results(exc),
-                completed=False,
-                integration_error=exc,
-            ),
-        )
-        _write_json(
-            compatibility_path,
-            _compatibility_result(model, 0.0, n_samples=0, integration_error=exc),
-        )
+        publish_failure(output_dir=output_dir, model=model, error=exc)
         return False
-
-    results: list[dict[str, Any]] = []
-    for row in rows:
-        try:
-            result = _evaluate_case(
-                row=row,
-                model=model,
-                endpoint=endpoint,
-                api_key=api_key,
-                request_timeout_seconds=request_timeout,
-                deadline=deadline,
-                http_post=http_post,
-                clock=clock,
-                sleeper=sleeper,
-            )
-        except Exception as exc:  # noqa: BLE001 - continue and report every case
-            result = _failed_case_result(row, exc)
-        results.append(result)
-
-    timed_out = any(result["suite_timed_out"] for result in results)
-    failed_integration = next(
-        (result for result in results if result["integration_failure"]),
-        None,
-    )
-    integration_error: BaseException | None = None
-    if timed_out:
-        integration_error = SuiteTimeoutError("global suite timeout exceeded")
-    elif failed_integration is not None:
-        error = failed_integration["response"]["error"]
-        message = str(error.get("message", "request failed"))
-        if error.get("type") == "TransportError":
-            integration_error = TransportError(message)
-        elif error.get("type") in {"TimeoutError", "SuiteTimeoutError"}:
-            integration_error = TimeoutError(message)
-        else:
-            integration_error = RuntimeError(
-                f"{error.get('type', 'adapter error')}: {message}"
-            )
-    completed = integration_error is None
-    native = _native_report(
-        model=model,
-        endpoint=endpoint,
-        fixture_metadata=fixture_metadata,
-        results=results,
-        completed=completed,
-        integration_error=integration_error,
-    )
-    passed_count = native["summary"]["passed_count"]
-    effective = len(results) if completed else 0
-    score = passed_count / len(EXPECTED_INDICES) if completed else 0.0
-    compatibility = _compatibility_result(
-        model,
-        score,
-        n_samples=effective,
-        integration_error=integration_error,
-    )
-    _write_json(native_path, native)
-    _write_json(compatibility_path, compatibility)
-    return completed and passed_count == len(EXPECTED_INDICES)
+    finally:
+        smoke_input.unlink(missing_ok=True)
+    return True
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run the pinned single-case MiniMax M3 provider smoke."
+        description="Run the pinned MiniMax M3 smoke through stock verify.py."
     )
-    parser.add_argument("--base-url")
-    parser.add_argument("--api-key", default="EMPTY")
-    parser.add_argument("--model", required=True)
-    parser.add_argument("--output-dir", required=True, type=Path)
-    parser.add_argument("--fixture", type=Path, default=DEFAULT_FIXTURE_PATH)
-    parser.add_argument(
-        "--request-timeout-seconds",
-        type=_positive_float,
-        default=DEFAULT_REQUEST_TIMEOUT_SECONDS,
-    )
-    parser.add_argument(
-        "--timeout-seconds", type=_positive_float, default=DEFAULT_TIMEOUT_SECONDS
-    )
-    parser.add_argument("--integration-error")
-    args = parser.parse_args(argv)
-    if args.integration_error is None and args.base_url is None:
-        parser.error("--base-url required unless --integration-error is provided")
-    return args
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    run = subparsers.add_parser("run")
+    run.add_argument("--python", required=True, type=Path)
+    run.add_argument("--source-dir", required=True, type=Path)
+    run.add_argument("--dependency-dir", required=True, type=Path)
+    run.add_argument("--base-url", required=True)
+    run.add_argument("--model", required=True)
+    run.add_argument("--output-dir", required=True, type=Path)
+    run.add_argument("--fixture", type=Path, default=DEFAULT_FIXTURE_PATH)
+
+    failure = subparsers.add_parser("failure")
+    failure.add_argument("--model", required=True)
+    failure.add_argument("--output-dir", required=True, type=Path)
+    failure.add_argument("--message", required=True)
+    return parser.parse_args(argv)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
-    if args.integration_error is not None:
-        publish_integration_error(
+    if args.command == "failure":
+        publish_failure(
             output_dir=args.output_dir,
             model=args.model,
-            error=RuntimeError(args.integration_error),
+            error=SmokeSuiteError(args.message),
         )
         return 0
-    passed = run_evaluation(
+    completed = run_evaluation(
+        python=args.python,
+        source_dir=args.source_dir,
+        dependency_dir=args.dependency_dir,
         base_url=args.base_url,
-        api_key=args.api_key,
         model=args.model,
         output_dir=args.output_dir,
         fixture_path=args.fixture,
-        request_timeout_seconds=args.request_timeout_seconds,
-        timeout_seconds=args.timeout_seconds,
     )
-    return 0 if passed else 1
+    return 0 if completed else 1
 
 
 if __name__ == "__main__":

@@ -68,15 +68,6 @@ def build_pytest_command(
         "pytest",
         "tests/tool_call_json_schema/test_tool_call_json_schema.py",
         *parallel_args,
-        "--reruns",
-        "6",
-        "--reruns-delay",
-        "3",
-        "--only-rerun",
-        (
-            r"(?i)(Error code: (404|429|5[0-9]{2})|APIConnectionError|"
-            r"APITimeoutError|Connection error|timed out)"
-        ),
         "--base-url",
         base_url,
         "--api-key",
@@ -99,11 +90,13 @@ def _mapping(value: Any, name: str) -> Mapping[str, Any]:
         raise ValueError(f"{name} must be an object")
     return value
 
+
 def _expected_total(task_name: str) -> int:
     try:
         return EXPECTED_TOTALS[task_name]
     except KeyError as exc:
         raise ValueError(f"unsupported Kimi task: {task_name}") from exc
+
 
 def _endpoint_rejection_messages(report: Any) -> list[str]:
     """Return upstream failures rejected before argument-schema validation."""
@@ -179,15 +172,12 @@ def _project_report(
                 or line < 1
                 or not isinstance(selection_reason, str)
             ):
-                raise ValueError(
-                    f"report.selected_cases[{index}] has invalid identity"
-                )
+                raise ValueError(f"report.selected_cases[{index}] has invalid identity")
             selected_key = (suite, line, selection_reason)
             if selected_key in selected_keys:
                 raise ValueError("report.selected_cases contains a duplicate case")
             selected_keys.add(selected_key)
             selected_identities.add((suite, line))
-
 
     modes: list[str] = []
     case_modes: dict[tuple[str, int], set[str]] = {}
@@ -236,7 +226,9 @@ def _project_report(
     if task_name == TASK_NAME:
         if set(modes) != EXPECTED_MODES or len(modes) != len(set(modes)):
             raise ValueError("report does not contain the expected stream modes")
-    elif any(modes_for_case != EXPECTED_MODES for modes_for_case in case_modes.values()):
+    elif any(
+        modes_for_case != EXPECTED_MODES for modes_for_case in case_modes.values()
+    ):
         raise ValueError(
             "report does not contain exactly one of each stream mode "
             "for every selected suite and line"
@@ -296,6 +288,7 @@ def _compatibility_result(
             "message": str(integration_error),
         }
     return result
+
 
 def _write_native_failure(
     path: Path,
@@ -446,7 +439,6 @@ def _positive_int(value: str) -> int:
     if parsed < 1:
         raise argparse.ArgumentTypeError("must be a positive integer")
     return parsed
-
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
