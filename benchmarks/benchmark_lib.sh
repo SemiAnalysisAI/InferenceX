@@ -1777,7 +1777,7 @@ _run_minimax_m3_smoke_eval() {
         integration_error="MiniMax Provider Verifier Python runtime preparation failed with exit code ${setup_rc}"
     }
     if [ "$setup_rc" -eq 0 ]; then
-        runtime_dir=$(_prepare_minimax_m3_full_runtime "$adapter_path") || {
+        runtime_dir=$(_prepare_minimax_m3_full_runtime) || {
             setup_rc=$?
             integration_error="MiniMax Provider Verifier pinned runtime preparation failed with exit code ${setup_rc}"
         }
@@ -1834,10 +1834,10 @@ _install_minimax_m3_full_deps() {
 }
 
 _prepare_minimax_m3_full_runtime() {
-    local adapter_path="$1"
+    local source_adapter_path="${INFERENCEX_REPO_ROOT}/utils/evals/minimax_m3_full_eval.py"
     local runtime_dir prepare_rc=0
     runtime_dir="$(mktemp -d /tmp/minimax-m3-full-runtime-XXXXXX)" || return $?
-    "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" prepare-source \
+    "${VENDOR_VERIFIER_PYTHON:-python3}" "$source_adapter_path" prepare-source \
         --source-dir "${runtime_dir}/source" >&2 || prepare_rc=$?
     if [ "$prepare_rc" -eq 0 ]; then
         _install_minimax_m3_full_deps "${runtime_dir}/deps" >&2 || prepare_rc=$?
@@ -1903,7 +1903,7 @@ _run_minimax_m3_full_eval() {
         integration_error="MiniMax M3 full Python runtime preparation failed with exit code ${setup_rc}"
     }
     if [ "$setup_rc" -eq 0 ]; then
-        runtime_dir=$(_prepare_minimax_m3_full_runtime "$adapter_path") || {
+        runtime_dir=$(_prepare_minimax_m3_full_runtime) || {
             setup_rc=$?
             integration_error="MiniMax M3 full pinned runtime preparation failed with exit code ${setup_rc}"
         }

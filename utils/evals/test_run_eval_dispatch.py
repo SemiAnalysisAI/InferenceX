@@ -18,6 +18,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BENCHMARK_LIB = REPO_ROOT / "benchmarks" / "benchmark_lib.sh"
+MULTINODE_AGENTIC_SCRIPT = REPO_ROOT / "benchmarks/multi_node/agentic_srt.sh"
 SINGLE_NODE_WORKFLOW = REPO_ROOT / ".github/workflows/benchmark-tmpl.yml"
 MULTINODE_WORKFLOW = REPO_ROOT / ".github/workflows/benchmark-multinode-tmpl.yml"
 E2E_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "e2e-tests.yml"
@@ -596,6 +597,45 @@ _install_minimax_m3_full_deps "$RUNTIME_DIR"
     ):
         assert f"PYTHON_ARG=<{requirement}>" in result.stdout
     assert "--break-system-packages" not in result.stdout
+
+
+def test_minimax_runtime_prepares_source_with_full_adapter(tmp_path: Path) -> None:
+    runtime_dir = tmp_path / "runtime"
+    calls_path = tmp_path / "calls"
+    script = r"""
+source "$BENCHMARK_LIB"
+mktemp() {
+    mkdir -p "$RUNTIME_DIR"
+    printf '%s\n' "$RUNTIME_DIR"
+}
+selected_python() {
+    printf 'PYTHON_ARG=<%s>\n' "$@" >> "$CALLS_PATH"
+    mkdir -p "$RUNTIME_DIR/source"
+}
+_install_minimax_m3_full_deps() { mkdir -p "$1"; }
+VENDOR_VERIFIER_PYTHON=selected_python
+prepared_runtime=$(_prepare_minimax_m3_full_runtime)
+printf 'RUNTIME=<%s>\n' "$prepared_runtime"
+"""
+    result = subprocess.run(
+        ["bash", "-c", script],
+        env={
+            **os.environ,
+            "BENCHMARK_LIB": str(BENCHMARK_LIB),
+            "RUNTIME_DIR": str(runtime_dir),
+            "CALLS_PATH": str(calls_path),
+        },
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    calls = calls_path.read_text()
+
+    assert f"PYTHON_ARG=<{REPO_ROOT / 'utils/evals/minimax_m3_full_eval.py'}>" in calls
+    assert "PYTHON_ARG=<prepare-source>" in calls
+    assert f"PYTHON_ARG=<{runtime_dir / 'source'}>" in calls
+    assert "minimax_provider_eval.py" not in calls
+    assert f"RUNTIME=<{runtime_dir}>" in result.stdout
 
 
 def test_minimax_vendor_runner_uses_fixed_adapter_contract(tmp_path: Path) -> None:
@@ -2461,6 +2501,64 @@ def test_qwen_sglang_launchers_expose_structured_tool_calls() -> None:
         command = launcher.read_text()
         assert "--reasoning-parser qwen3" in command
         assert "--tool-call-parser qwen3_coder" in command
+
+
+def test_multinode_agentic_waits_for_openai_endpoint_before_requests(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    bin_dir = tmp_path / "bin"
+    events_path = tmp_path / "events"
+    (workspace / "benchmarks").mkdir(parents=True)
+    bin_dir.mkdir()
+    (workspace / "benchmarks/benchmark_lib.sh").write_text(
+        """
+PORT=8765
+check_env_vars() { :; }
+resolve_trace_source() { echo resolve >> "$EVENTS"; }
+install_agentic_deps() { echo deps >> "$EVENTS"; }
+build_replay_cmd() { echo build >> "$EVENTS"; }
+run_agentic_replay_and_write_outputs() { echo replay >> "$EVENTS"; }
+""",
+        encoding="utf-8",
+    )
+    curl = bin_dir / "curl"
+    curl.write_text(
+        """#!/usr/bin/env bash
+printf 'curl %s\n' "$*" >> "$EVENTS"
+""",
+        encoding="utf-8",
+    )
+    curl.chmod(curl.stat().st_mode | stat.S_IXUSR)
+
+    subprocess.run(
+        ["bash", str(MULTINODE_AGENTIC_SCRIPT)],
+        env={
+            **os.environ,
+            "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+            "INFMAX_CONTAINER_WORKSPACE": str(workspace),
+            "EVENTS": str(events_path),
+            "MODEL": "test-model",
+            "MODEL_PREFIX": "test-prefix",
+            "FRAMEWORK": "dynamo-vllm",
+            "PRECISION": "fp4",
+            "CONC": "1",
+            "RESULT_FILENAME": "result",
+            "RESULT_DIR": str(tmp_path / "results"),
+            "DURATION": "1",
+        },
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+    assert events_path.read_text().splitlines() == [
+        "resolve",
+        "deps",
+        "curl -fsS --max-time 10 http://localhost:8765/v1/models",
+        "build",
+        "replay",
+    ]
 
 
 def test_agentic_eval_workflow_forwards_runner_contract() -> None:

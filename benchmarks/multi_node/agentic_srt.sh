@@ -39,8 +39,33 @@ for concurrency in "${CONCURRENCIES[@]}"; do
     fi
 done
 
+wait_for_openai_endpoint_ready() {
+    local timeout_seconds="${AIPERF_ENDPOINT_READY_TIMEOUT_SECONDS:-1800}"
+    local poll_seconds=5
+    local start_seconds=$SECONDS
+    local next_report=0
+    local elapsed percent
+    local models_url="http://localhost:${PORT}/v1/models"
+
+    while ! curl -fsS --max-time 10 "$models_url" >/dev/null 2>&1; do
+        elapsed=$((SECONDS - start_seconds))
+        if [ "$elapsed" -ge "$timeout_seconds" ]; then
+            echo "ERROR: OpenAI endpoint did not become ready within ${timeout_seconds}s: $models_url" >&2
+            return 1
+        fi
+        if [ "$elapsed" -ge "$next_report" ]; then
+            percent=$((elapsed * 100 / timeout_seconds))
+            echo "Waiting for OpenAI endpoint: ${elapsed}/${timeout_seconds}s (${percent}%)"
+            next_report=$((next_report + 60))
+        fi
+        sleep "$poll_seconds"
+    done
+    echo "OpenAI endpoint ready: $models_url"
+}
+
 resolve_trace_source
 install_agentic_deps
+wait_for_openai_endpoint_ready
 
 wait_for_agentic_servers_idle() {
     local timeout_seconds="${AIPERF_DRAIN_TIMEOUT_SECONDS:-1800}"
