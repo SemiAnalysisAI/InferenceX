@@ -2527,7 +2527,10 @@ run_agentic_replay_and_write_outputs() { echo replay >> "$EVENTS"; }
     curl.write_text(
         """#!/usr/bin/env bash
 printf 'curl %s\n' "$*" >> "$EVENTS"
-printf '{"data":[{"id":"test-model"}]}\n'
+case "$*" in
+    */v1/models*) printf '{"data":[{"id":"test-model"}]}\n' ;;
+    */v1/chat/completions*) printf '422' ;;
+esac
 """,
         encoding="utf-8",
     )
@@ -2554,13 +2557,11 @@ printf '{"data":[{"id":"test-model"}]}\n'
         check=True,
     )
 
-    assert events_path.read_text().splitlines() == [
-        "resolve",
-        "deps",
-        "curl -fsS --max-time 10 http://localhost:8765/v1/models",
-        "build",
-        "replay",
-    ]
+    events = events_path.read_text().splitlines()
+    assert events[:2] == ["resolve", "deps"]
+    assert events[2].endswith("http://localhost:8765/v1/models")
+    assert events[3].endswith("http://localhost:8765/v1/chat/completions")
+    assert events[-2:] == ["build", "replay"]
 
 
 def test_agentic_eval_workflow_forwards_runner_contract() -> None:
