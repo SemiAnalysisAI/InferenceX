@@ -448,20 +448,26 @@ one-sided kernel within 4% across eight byte-normalized points.
 
 Logical payload bandwidth is:
 
-`logical_payload_bytes / measured_latency_seconds`
+`wire_payload_bytes / measured_latency_seconds`
 
-Payload bytes use rank-deduplicated token-rank activations and exclude expert metadata,
-padding, and backend buffer capacity. BF16 moves 2 bytes per value with no scale payload. An FP8
-dispatch moves 1 byte per value, plus per-128-block FP32 scales for every blockwise codec here (
-DeepEP V2, UCCL-EP and FlashInfer EP, which carries them as a fourth dispatch payload), and none for
-MoRI's plain e4m3 cast, while combine stays BF16, so the dispatch and combine directions can carry
-different byte counts and the roundtrip is their per-field sum. The rank-deduplicated count is exact
-for the normal-mode layout, and for a low-latency kernel that deduplicates per rank (MoRI's
-`IntraNodeLL`, whose combine is an unweighted rank-sum). The low-latency kernels that apply top-k
-weights inside combine instead send one copy per (token, expert) assignment rather than per
-(token, rank), so for a token whose experts share a destination rank this logical count is a lower
-bound on the bytes those kernels move. Each row states which basis it used in `logical_copies`, so
-the two are never silently mixed. Latency (the headline) is
+Every row carries two byte accountings and each excludes expert metadata, padding, and backend
+buffer capacity. `byte_provenance` is the canonical comparable basis: rank-deduplicated
+token-rank activations, one copy per unique (token, dest-rank) pair. `wire_byte_provenance` is
+what the kernels actually move: identical to the canonical basis for every layout that
+deduplicates per rank (all normal modes, and MoRI's low-latency kernels, whose combine is an
+unweighted rank-sum), and one copy per (token, expert) assignment for the low-latency kernels
+that apply top-k weights inside combine (DeepEP V2, UCCL-EP, NCCL EP). For a token whose experts
+share a destination rank the deduplicated count is a lower bound on those kernels' traffic —
+34% low on nccl-ep low-latency EP8 at T=128 — which is why every emitted GB/s divides from the
+WIRE basis; a rate derived from `byte_provenance` on such a row is a lower bound, not the wire
+rate, and is not comparable across backends. Artifacts written before `wire_byte_provenance`
+existed fall back to the deduplicated basis, which only ever understates. `logical_copies`
+states each row's wire basis (`routed`, `assignments`, `wire`), so the two are never silently
+mixed. BF16 moves 2 bytes per value with no scale payload. An FP8 dispatch moves 1 byte per
+value, plus per-128-block FP32 scales for every blockwise codec here (DeepEP V2, UCCL-EP and
+FlashInfer EP, which carries them as a fourth dispatch payload), and none for MoRI's plain e4m3
+cast, while combine stays BF16, so the dispatch and combine directions can carry different byte
+counts and the roundtrip is their per-field sum. Latency (the headline) is
 measured directly and is unaffected. Algorithm bandwidth, bus bandwidth,
 wire utilization, and physical-link utilization are not emitted without a defined primitive model or
 transport counters. Logical bandwidth must never be labeled physical bandwidth. Payload and token
