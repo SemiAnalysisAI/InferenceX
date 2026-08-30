@@ -173,44 +173,71 @@ class ImageDigestResolutionTests(unittest.TestCase):
             probe.resolve_image_digest("ghcr.io/org/image:tag", opener=_Down()), "")
 
 
-# runtime/common.sh collx_squash_path is the stage-once seam: keying the squash by
-# GITHUB_RUN_ID is exactly the defect that re-imported ~30-65GB per run per cluster,
-# so the key must be a pure function of platform + digest + image reference.
+# runtime/common.sh collx_squash_path/collx_squash_verdict are the stage-once seam:
+# keying the squash by GITHUB_RUN_ID is exactly the defect that re-imported 30-65GB
+# per run per cluster, and keying it by digest made a transient registry blip miss
+# the staged file — so the path is a pure function of platform + image reference,
+# and freshness is decided by the verdict against the digest sidecar.
 class SquashCacheKeyTests(unittest.TestCase):
     IMAGE = "rocm/sgl-dev:sglang-v1"
+    DIGEST = "sha256:" + "ab" * 32
 
-    def _path(self, env: dict, image: str | None = None) -> str:
+    def _bash(self, script: str, env: dict, args: list | None = None) -> str:
         result = subprocess.run(
-            ["bash", "-c",
-             f'source "{RUNTIME / "common.sh"}" && collx_squash_path /squash "$1"',
-             "collx", image or self.IMAGE],
+            ["bash", "-c", f'source "{RUNTIME / "common.sh"}" && {script}',
+             "collx", *(args or [])],
             capture_output=True, text=True, check=True,
             env={"PATH": os.environ["PATH"], "COLLX_IMAGE_PLATFORM": "linux/amd64", **env},
         )
         return result.stdout
 
-    def test_the_key_is_invariant_across_runs(self) -> None:
-        first = self._path({"GITHUB_RUN_ID": "1111", "GITHUB_RUN_ATTEMPT": "1"})
-        second = self._path({"GITHUB_RUN_ID": "2222", "GITHUB_RUN_ATTEMPT": "2",
-                             "COLLECTIVEX_EXECUTION_ID": "2222_2_c007"})
-        self.assertEqual(first, second)
-        self.assertNotIn("1111", first)
+    def test_the_path_is_invariant_across_runs_and_digests(self) -> None:
+        paths = {
+            self._bash('collx_squash_path /squash "$1"', env, [self.IMAGE])
+            for env in (
+                {"GITHUB_RUN_ID": "1111", "GITHUB_RUN_ATTEMPT": "1"},
+                {"GITHUB_RUN_ID": "2222", "COLLECTIVEX_EXECUTION_ID": "2222_2_c007"},
+                {"COLLX_IMAGE_DIGEST": self.DIGEST},
+                {},
+            )
+        }
+        self.assertEqual(paths, {"/squash/_rocm_sgl-dev_sglang-v1.sqsh"})
+        arm = self._bash('collx_squash_path /squash "$1"',
+                         {"COLLX_IMAGE_PLATFORM": "linux/arm64"}, [self.IMAGE])
+        self.assertEqual(arm, "/squash/_linux_arm64_rocm_sgl-dev_sglang-v1.sqsh")
 
-    def test_a_resolved_digest_scopes_the_key(self) -> None:
-        path = self._path({"COLLX_IMAGE_DIGEST": "sha256:" + "ab" * 32})
-        self.assertEqual(path, "/squash/_abababababab_rocm_sgl-dev_sglang-v1.sqsh")
+    def _verdict(self, sq: Path, digest: str = "", epoch: str = "") -> str:
+        return self._bash('collx_squash_verdict "$1" "$2" "$3"', {},
+                          [str(sq), digest, epoch])
 
-    def test_an_unresolved_or_malformed_digest_degrades_to_the_tag_key(self) -> None:
-        for env in ({}, {"COLLX_IMAGE_DIGEST": "sha256:short"},
-                    {"COLLX_IMAGE_DIGEST": "md5:" + "ab" * 32}):
-            with self.subTest(env=env):
-                self.assertEqual(self._path(env),
-                                 "/squash/_tag_rocm_sgl-dev_sglang-v1.sqsh")
+    def test_verdict_reuses_what_is_staged_when_the_digest_is_unresolved(self) -> None:
+        # The registry-blip case: a stamped file must be reused, not re-imported,
+        # when this launch could not resolve a digest.
+        with tempfile.TemporaryDirectory() as directory:
+            sq = Path(directory) / "img.sqsh"
+            sq.write_bytes(b"x")
+            (sq.parent / "img.sqsh.digest").write_text(self.DIGEST + "\n")
+            self.assertEqual(self._verdict(sq), "reuse")
 
-    def test_arm64_keys_stay_platform_scoped(self) -> None:
-        path = self._path({"COLLX_IMAGE_PLATFORM": "linux/arm64",
-                           "COLLX_IMAGE_DIGEST": "sha256:" + "cd" * 32})
-        self.assertEqual(path, "/squash/_linux_arm64_cdcdcdcdcdcd_rocm_sgl-dev_sglang-v1.sqsh")
+    def test_verdict_reimports_when_the_tag_moved(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            sq = Path(directory) / "img.sqsh"
+            sq.write_bytes(b"x")
+            (sq.parent / "img.sqsh.digest").write_text(self.DIGEST + "\n")
+            moved = "sha256:" + "cd" * 32
+            self.assertEqual(self._verdict(sq, digest=moved), "digest-moved")
+            self.assertEqual(self._verdict(sq, digest=self.DIGEST), "reuse")
+
+    def test_verdict_refresh_discards_only_pre_launch_files(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            sq = Path(directory) / "img.sqsh"
+            sq.write_bytes(b"x")
+            mtime = int(sq.stat().st_mtime)
+            self.assertEqual(self._verdict(sq, epoch=str(mtime + 10)), "refresh-requested")
+            # A file imported during this launch (mtime >= epoch) is kept, so
+            # concurrent legs of a refreshing run still import exactly once.
+            self.assertEqual(self._verdict(sq, epoch=str(mtime - 10)), "reuse")
+            self.assertEqual(self._verdict(sq.parent / "missing.sqsh"), "absent")
 
 
 class ConfigTests(unittest.TestCase):
