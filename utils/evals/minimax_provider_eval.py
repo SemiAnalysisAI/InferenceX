@@ -15,7 +15,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from minimax_m3_full_eval import UPSTREAM_REF, verify_source_tree
+if __package__:
+    from .minimax_m3_full_eval import UPSTREAM_REF, verify_source_tree
+else:
+    from minimax_m3_full_eval import UPSTREAM_REF, verify_source_tree
 
 TASK_NAME = "minimax_m3_smoke"
 NATIVE_REPORT_FILENAME = "minimax_vendor_report.json"
