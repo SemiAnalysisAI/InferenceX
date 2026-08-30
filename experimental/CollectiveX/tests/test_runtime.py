@@ -17,6 +17,7 @@ import tempfile
 import types
 import unittest
 from unittest import mock
+import urllib.error
 
 
 RUNTIME = Path(__file__).resolve().parents[1] / "runtime"
@@ -92,6 +93,124 @@ class ProbeTests(unittest.TestCase):
             self.assertTrue(cache.is_dir())
             self.assertEqual(cache.parent, parent.resolve())
             self.assertEqual(cache.stat().st_mode & 0o777, 0o700)
+
+
+class _FakeRegistryResponse:
+    def __init__(self, headers: dict | None = None, body: bytes = b""):
+        self.headers = headers or {}
+        self._body = body
+
+    def read(self) -> bytes:
+        return self._body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        return False
+
+
+class _FakeRegistry:
+    """Registry-v2 anonymous token dance: 401 challenge, token grant, digest HEAD."""
+
+    def __init__(self, digest: str):
+        self.digest = digest
+        self.urls: list[str] = []
+
+    def open(self, request, timeout=None):
+        url = request if isinstance(request, str) else request.full_url
+        self.urls.append(url)
+        if "scope=" in url:
+            return _FakeRegistryResponse(body=json.dumps({"token": "anonymous"}).encode())
+        if not request.get_header("Authorization"):
+            raise urllib.error.HTTPError(url, 401, "unauthorized", {
+                "WWW-Authenticate":
+                    'Bearer realm="https://auth.example/token",service="registry.example"',
+            }, None)
+        return _FakeRegistryResponse(headers={"Docker-Content-Digest": self.digest})
+
+
+# The digest is only a cache key for the staged squash, but a wrong or accepted-malformed
+# digest silently degrades stage-once-reuse-many back into per-run imports (or worse,
+# poisons the key), so the resolution path is pinned without touching the network.
+class ImageDigestResolutionTests(unittest.TestCase):
+    DIGEST = "sha256:" + "0123456789abcdef" * 4
+
+    def test_docker_hub_references_get_the_implied_registry(self) -> None:
+        self.assertEqual(probe.registry_reference("rocm/sgl-dev:v1"),
+                         ("registry-1.docker.io", "rocm/sgl-dev", "v1"))
+        self.assertEqual(probe.registry_reference("python:3.12"),
+                         ("registry-1.docker.io", "library/python", "3.12"))
+
+    def test_explicit_registries_pass_through(self) -> None:
+        self.assertEqual(probe.registry_reference("ghcr.io/org/image:tag"),
+                         ("ghcr.io", "org/image", "tag"))
+        self.assertEqual(probe.registry_reference("nvcr.io/nvidia/pytorch:25.06-py3"),
+                         ("nvcr.io", "nvidia/pytorch", "25.06-py3"))
+
+    def test_resolution_follows_the_anonymous_token_dance(self) -> None:
+        registry = _FakeRegistry(self.DIGEST)
+        self.assertEqual(
+            probe.resolve_image_digest("ghcr.io/org/image:tag", opener=registry),
+            self.DIGEST,
+        )
+        self.assertEqual(registry.urls[0], "https://ghcr.io/v2/org/image/manifests/tag")
+        self.assertIn("scope=repository%3Aorg%2Fimage%3Apull", registry.urls[1])
+        self.assertIn("service=registry.example", registry.urls[1])
+
+    def test_a_malformed_digest_or_registry_failure_yields_empty(self) -> None:
+        self.assertEqual(
+            probe.resolve_image_digest("ghcr.io/org/image:tag",
+                                       opener=_FakeRegistry("sha256:nothex")),
+            "",
+        )
+
+        class _Down:
+            def open(self, request, timeout=None):
+                raise OSError("no route")
+
+        self.assertEqual(
+            probe.resolve_image_digest("ghcr.io/org/image:tag", opener=_Down()), "")
+
+
+# runtime/common.sh collx_squash_path is the stage-once seam: keying the squash by
+# GITHUB_RUN_ID is exactly the defect that re-imported ~30-65GB per run per cluster,
+# so the key must be a pure function of platform + digest + image reference.
+class SquashCacheKeyTests(unittest.TestCase):
+    IMAGE = "rocm/sgl-dev:sglang-v1"
+
+    def _path(self, env: dict, image: str | None = None) -> str:
+        result = subprocess.run(
+            ["bash", "-c",
+             f'source "{RUNTIME / "common.sh"}" && collx_squash_path /squash "$1"',
+             "collx", image or self.IMAGE],
+            capture_output=True, text=True, check=True,
+            env={"PATH": os.environ["PATH"], "COLLX_IMAGE_PLATFORM": "linux/amd64", **env},
+        )
+        return result.stdout
+
+    def test_the_key_is_invariant_across_runs(self) -> None:
+        first = self._path({"GITHUB_RUN_ID": "1111", "GITHUB_RUN_ATTEMPT": "1"})
+        second = self._path({"GITHUB_RUN_ID": "2222", "GITHUB_RUN_ATTEMPT": "2",
+                             "COLLECTIVEX_EXECUTION_ID": "2222_2_c007"})
+        self.assertEqual(first, second)
+        self.assertNotIn("1111", first)
+
+    def test_a_resolved_digest_scopes_the_key(self) -> None:
+        path = self._path({"COLLX_IMAGE_DIGEST": "sha256:" + "ab" * 32})
+        self.assertEqual(path, "/squash/_abababababab_rocm_sgl-dev_sglang-v1.sqsh")
+
+    def test_an_unresolved_or_malformed_digest_degrades_to_the_tag_key(self) -> None:
+        for env in ({}, {"COLLX_IMAGE_DIGEST": "sha256:short"},
+                    {"COLLX_IMAGE_DIGEST": "md5:" + "ab" * 32}):
+            with self.subTest(env=env):
+                self.assertEqual(self._path(env),
+                                 "/squash/_tag_rocm_sgl-dev_sglang-v1.sqsh")
+
+    def test_arm64_keys_stay_platform_scoped(self) -> None:
+        path = self._path({"COLLX_IMAGE_PLATFORM": "linux/arm64",
+                           "COLLX_IMAGE_DIGEST": "sha256:" + "cd" * 32})
+        self.assertEqual(path, "/squash/_linux_arm64_cdcdcdcdcdcd_rocm_sgl-dev_sglang-v1.sqsh")
 
 
 class ConfigTests(unittest.TestCase):

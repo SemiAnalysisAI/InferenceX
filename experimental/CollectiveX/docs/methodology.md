@@ -665,8 +665,13 @@ execution-specific private base beneath the validated compute-visible account ho
 
 ## Image Pinning And Build Isolation
 
-Enroot imports configured container tags into a per-run-scoped squash keyed by the image tag and
-image platform, so one run never reuses another run's imported filesystem. Image-provided DeepEP is
+Enroot imports configured container tags into a content-keyed squash (image platform + registry
+manifest digest + image reference), staged once per cluster and reused by every run of the same
+image. The digest is resolved from the submit host at launch, so a tag that moved upstream changes
+the key and forces a fresh import; when the digest cannot be resolved the key degrades to the tag
+and the `refresh_image` dispatch input forces an update. Validity is still proven per use
+(`unsquashfs -l`) before any reuse, and superseded stagings of the same image are age-gate reaped
+after a fresh import. Image-provided DeepEP is
 also checked against exact package versions and its expected API. Source-built DeepEP V2 uses
 a separate mode-0700 cluster-local cache mounted only as `/cx-cache`. Its path binds CPU/GPU
 architecture, image, and upstream commit. The cache is never an artifact. Per-execution
