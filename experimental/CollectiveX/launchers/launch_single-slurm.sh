@@ -138,6 +138,8 @@ for allocation_attempt in 1 2 3; do
   fi
   retryable=0
   [ "$RUNNER:$validation_failure" != h100-dgxc:network ] || retryable=1
+  # b300 carries a rotating set of nodes with inactive RDMA ports; retry elsewhere.
+  [ "$RUNNER:$validation_failure" != b300:network ] || retryable=1
   [ "$RUNNER:$validation_failure" != b300:cuda-context ] || retryable=1
   # A throttled GPU paces every rank, so retrying on another node is right on every SKU.
   [ "$validation_failure" != gpu-health ] || retryable=1
