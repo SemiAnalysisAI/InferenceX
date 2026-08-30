@@ -2542,7 +2542,7 @@ _wait_for_openai_chat_route --port 8765
     )
 
     events = events_path.read_text().splitlines()
-    assert events[0].endswith("http://localhost:8765/")
+    assert events[0].endswith("http://localhost:8765/health")
     assert events[1].endswith("http://localhost:8765/v1/models")
     assert events[2].endswith("http://localhost:8765/v1/chat/completions")
     assert "--data" not in events[2]

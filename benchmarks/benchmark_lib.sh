@@ -2782,7 +2782,7 @@ _wait_for_openai_chat_route() {
     local next_report=0
     local elapsed percent chat_status
     local served_model="${SERVED_MODEL_NAME:-${MODEL:-}}"
-    local root_url models_url chat_url
+    local health_url models_url chat_url
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -2809,14 +2809,14 @@ _wait_for_openai_chat_route() {
         echo "ERROR: MODEL or SERVED_MODEL_NAME is required for chat endpoint readiness" >&2
         return 2
     fi
-    root_url="http://localhost:${port}/"
+    health_url="http://localhost:${port}/health"
     models_url="http://localhost:${port}/v1/models"
     chat_url="http://localhost:${port}/v1/chat/completions"
 
     while true; do
         local model_ready=false
         local server_ready=false
-        if curl -fsS --max-time 10 "$root_url" >/dev/null 2>&1; then
+        if curl -fsS --max-time 10 "$health_url" >/dev/null 2>&1; then
             server_ready=true
         fi
         if curl -fsS --max-time 10 "$models_url" 2>/dev/null \
