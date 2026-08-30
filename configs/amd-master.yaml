@@ -625,7 +625,7 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
           - "DECODE_MTP_SIZE=2"
 
 kimik3-fp4-mi355x-vllm-agentic-mtp:
-  image: vllm/vllm-openai-rocm:nightly-cb8104839c141609d99f1254459ef3a4f1bd4263
+  image: vllm/vllm-openai-rocm:nightly-1dc464d42681d22f38caf1fdc1eb632dc4421c45
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:mi355x-amds
@@ -634,10 +634,10 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
   multinode: false
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.50
+    - dram-utilization: 0.60
       search-space:
-      - { tp: 8, kv-offloading: none, conc-list: [1, 4, 8] , spec-decoding: mtp}
-      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [10], spec-decoding: mtp }
+      - { tp: 8, kv-offloading: none, conc-list: [1, 4, 8, 10, 12] , spec-decoding: mtp}
+      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.5.dev60+rocm7.2" }, conc-list: [4, 8, 10, 12], spec-decoding: mtp }
 
 # Kimi-K3 MXFP4 agentic-coding benchmark on MI355X via ATOM with DSpark
 # speculative decoding. Acceptance is pinned to the committed golden curve in

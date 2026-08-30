@@ -86,8 +86,8 @@ export VLLM_ROCM_AITER_MLA_ASM_PADDING=asm
 export VLLM_ROCM_USE_AITER=1
 export SAFETENSORS_FAST_GPU=1
 export VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4=1
+export AITER_SITUV2_A8W4=1
 export AITER_BF16_FP8_MOE_BOUND=0
-# REQUIRED on ROCm per the upstream recipe: the build auto-enables this to 1.
 export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 
 # Workaround for MEC FW <177 RCCL memory reclaim issue (shared with the other
@@ -109,12 +109,14 @@ SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
 
 SERVER_PID=""
+LMCACHE_PID=""
 
 cleanup_agentic_services() {
     local exit_code=$?
     trap - EXIT INT TERM
     set +e
     stop_background_process_tree "$SERVER_PID" "vLLM server" 60
+    stop_background_process_tree "$LMCACHE_PID" "LMCache server"
     exit "$exit_code"
 }
 trap cleanup_agentic_services EXIT
@@ -143,11 +145,81 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     )
     echo "SimpleCPUOffloadConnector: ${CPU_BYTES_PER_RANK} B/rank x ${TP} ranks, lazy_offload=$SIMPLE_LAZY_OFFLOAD"
     ;;
+      lmcache)
+    require_agentic_kv_offload_backend "$KV_OFFLOAD_BACKEND"
+
+    # Keep the image's tested torch/ROCm stack and install only LMCache's
+    # missing runtime dependencies, same as the MiniMax-M3 lmcache arm.
+    LMCACHE_VERSION="0.5.5.dev60+rocm7.2"
+    LMCACHE_ROCM_INDEX="https://github.com/LMCache/LMCache/releases/expanded_assets/nightly-rocm"
+    agentic_pip_install --quiet --no-cache-dir --no-deps \
+        "sortedcontainers==2.4.0" \
+        "opentelemetry-exporter-prometheus==0.61b0" \
+        "cupy-rocm-7-0==14.1.1" \
+        "lmcache==${LMCACHE_VERSION}" --find-links "$LMCACHE_ROCM_INDEX"
+    python3 -c \
+        "import cupy; import lmcache.integration.vllm.lmcache_mp_connector; import opentelemetry.exporter.prometheus" \
+        >/dev/null
+
+    # One MP server for the node, per the Kimi-K3 recipe
+    # (docs.lmcache.ai/recipes/kimi_k3.html), with --chunk-size sized for
+    # THIS stack rather than the recipe's CUDA-path 768: the connector
+    # requires the chunk to be a multiple of every engine KV group's
+    # tokens_per_block, and the hybrid KDA/MLA layout here registers
+    # attention groups at 1536 ("Setting attention block size to 1536",
+    # run 31644990546) plus a KDA state group at 3072 (run 31645828378),
+    # so 3072 is the minimum valid chunk. The multi-group layout also
+    # requires one object group per sliding-window size:
+    # --separate-object-groups.
+    LMCACHE_PORT=6555
+    LMCACHE_HTTP_PORT=8090
+    LMCACHE_LOG="$RESULT_DIR/lmcache_server.log"
+
+    LMCACHE_L1_SIZE_GB="$TOTAL_CPU_DRAM_GB"
+
+    LMCACHE_CMD=(
+        lmcache server
+        --host 127.0.0.1
+        --port "$LMCACHE_PORT"
+        --http-host 127.0.0.1
+        --http-port "$LMCACHE_HTTP_PORT"
+        --l1-size-gb "$LMCACHE_L1_SIZE_GB"
+        --l1-init-size-gb 10
+        --chunk-size 3072
+        --separate-object-groups
+        --enable-extra-logging
+        --extra-logging-interval 30
+        --max-cpu-workers 8
+        --max-gpu-workers 1
+        --eviction-policy LRU
+        --supported-transfer-mode lmcache_driven
+        --shm-name ""
+    )
+    append_command "$RESULT_DIR/lmcache_command.txt" "${LMCACHE_CMD[@]}"
+    "${LMCACHE_CMD[@]}" > "$LMCACHE_LOG" 2>&1 &
+    LMCACHE_PID=$!
+    wait_for_ready \
+        --endpoint "http://127.0.0.1:${LMCACHE_HTTP_PORT}/healthcheck" \
+        --log "$LMCACHE_LOG" \
+        --pid "$LMCACHE_PID" \
+        --sleep-interval 1 \
+        --timeout 600
+
+    # 100k-330k-token agentic prefixes make single retrieves large; use the
+    # same MQ timeout headroom as the MiniMax-M3 arm.
+    OFFLOAD_ARGS=(
+        --kv-transfer-config
+        "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_connector_module_path\":\"lmcache.integration.vllm.lmcache_mp_connector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.port\":$LMCACHE_PORT,\"lmcache.mp.mq_timeout\":6000.0}}"
+    )
+    ;;
+    *)
+    echo "Error: unsupported KV_OFFLOAD_BACKEND='$KV_OFFLOAD_BACKEND' (expected vllm-simple or lmcache)" >&2
+    exit 1
+    ;;
 esac
 fi
 
 # ---- LLM server  ------------------------------------------------------------
-bash "$(dirname "$0")/apply_k3_container_patches.sh"
 
 # ---- Parallelism ------------------------------------------------------------
 EP_ARGS=()
@@ -156,9 +228,18 @@ if [ "$EP_SIZE" -gt 1 ]; then
 fi
 
 # ---- Speculative ------------------------------------------------------------
-SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-2}"
+if [ "$CONC" = 1 ]; then
+    SYNTHETIC_ACCEPT_LEN=3.75
+    SPEC_NUM_TOKENS=6
+elif [ "$CONC" -le 10 ]; then
 SYNTHETIC_ACCEPT_LEN=2.51
+    SPEC_NUM_TOKENS=2
+else
+    SPEC_NUM_TOKENS=0
+fi
 
+SPEC_ARGS=()
+if [ "$SPEC_NUM_TOKENS" -gt 0 ]; then
 if [ "${EVAL_ONLY:-false}" = "true" ]; then
     SPEC_ARGS=(
         --speculative-config
@@ -169,19 +250,38 @@ else
         --speculative-config
         "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
     )
+    fi
 fi
 
 # ---- HIP graph ------------------------------------------------------------
-MAX_NUM_SEQS=20
-MAX_CUDAGRAPH_CAPTURE_SIZE=60
-CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 1 "$MAX_CUDAGRAPH_CAPTURE_SIZE")"
+MAX_NUM_SEQS=$((2 * CONC))
+MAX_CUDAGRAPH_CAPTURE_SIZE=$((MAX_NUM_SEQS * (1 + SPEC_NUM_TOKENS)))
+CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 2 "$MAX_CUDAGRAPH_CAPTURE_SIZE")"
 COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}")
-
-GPU_MEM_UTIL="0.9"
 
 echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
 export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS="${VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS:-1200}"
+
+
+# DCP shards decode KV across the TP ranks, so it must divide TP.
+DCP_SIZE="${DCP_SIZE:-8}"
+if [ $((TP % DCP_SIZE)) -ne 0 ]; then
+    echo "Error: TP='$TP' must be divisible by DCP_SIZE='$DCP_SIZE'" >&2
+    exit 1
+fi
+CP_ARGS=()
+ATTN_BE_ARGS=()
+if [ "$DCP_SIZE" -gt 1 ]; then
+    CP_ARGS+=(--decode-context-parallel-size "$DCP_SIZE" --dcp-comm-backend a2a)
+    ATTN_BE_ARGS+=(--attention-backend TRITON_MLA)
+    GPU_MEM_UTIL=0.85
+else
+    GPU_MEM_UTIL=0.9
+fi
+export VLLM_USE_DIRECT_DCP_A2A=0
+export VLLM_USE_DIRECT_DCP_Q_GATHER=0
+export VLLM_USE_DIRECT_DCP_KV_GATHER=0
 
 { set +x; } 2>/dev/null
 VLLM_CMD=(
@@ -202,9 +302,13 @@ VLLM_CMD=(
     --max-model-len 1048576
     --enable-prefix-caching
     --kv-cache-dtype "fp8"
+    --max-num-batched-tokens 16384
+    --attention-config '{"mla_prefill_backend":"ROCM_AITER_FA"}'
+    "${ATTN_BE_ARGS[@]}"
     "${COMPILATION_CONFIG_ARGS[@]}"
     "${SPEC_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
+    "${CP_ARGS[@]}"
 )
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
 printf '\n' | tee -a "$RESULT_DIR/vllm_command.txt"
