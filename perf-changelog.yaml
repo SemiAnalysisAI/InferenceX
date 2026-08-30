@@ -6595,3 +6595,14 @@
     - "Update the vLLM B200 Kimi-K3 AgentX configs."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2776
   
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump the MI355X SGLang DeepSeek-V4-Pro FP4 AgentX MTP image from lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260822 to lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260829."
+    - "Export TORCH_BLAS_PREFER_HIPBLASLT=1 to prefer hipBLASLt for dense GEMMs."
+    - "Size chunked-prefill by tensor-parallel degree: 16384 tokens at TP8 and 8192 at TP4, erroring on any other TP."
+    - "Lower GPU_MAX_HW_QUEUES from 5 to 2 on the DP-attention path."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PENDING
