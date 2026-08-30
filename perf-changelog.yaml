@@ -6617,5 +6617,5 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Size each vLLM SimpleCPUOffload backing allocation from its own KV-cache metadata so hybrid MiniMax-M3 cache layouts initialize without invalid tensor views."
+    - "Split heterogeneous vLLM layer-compact KV backing storage into per-layer offload regions so MiniMax-M3 cache layouts initialize without invalid tensor views."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2634

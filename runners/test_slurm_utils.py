@@ -215,15 +215,13 @@ def test_patch_trtllm_chat_store_rejects_unknown_source(tmp_path: Path) -> None:
     assert result.returncode == 1
     assert protocol.read_text() == "unsupported protocol\n"
 
-def test_patch_vllm_simple_kv_offload_sizes_each_allocation(
+def test_patch_vllm_simple_kv_offload_splits_heterogeneous_layers(
     tmp_path: Path,
 ) -> None:
     symbols = runpy.run_path(str(PATCH_VLLM_SIMPLE_KV))
     worker = tmp_path / "worker.py"
     worker.write_text(
-        f"prefix\n{symbols['OLD_BLOCK']}"
-        "        for name, tensor in kv_caches.items():\n"
-        f"{symbols['OLD_STORAGE']}suffix\n"
+        f"prefix\n{symbols['OLD_SETUP']}{symbols['OLD_LOOP']}suffix\n"
     )
 
     first = subprocess.run(
@@ -242,9 +240,12 @@ def test_patch_vllm_simple_kv_offload_sizes_each_allocation(
     patched = worker.read_text()
     assert first.returncode == 0, first.stderr
     assert second.returncode == 0, second.stderr
-    assert symbols["OLD_BLOCK"] not in patched
-    assert patched.count(symbols["NEW_BLOCK"]) == 1
-    assert patched.count(symbols["NEW_STORAGE"]) == 1
+    assert symbols["OLD_SETUP"] not in patched
+    assert symbols["OLD_LOOP"] not in patched
+    assert patched.count(symbols["NEW_SETUP"]) == 1
+    assert patched.count(symbols["NEW_LOOP"]) == 1
+    assert "split_storage_by_layer" in patched
+    assert "tensor.storage_offset() * tensor.element_size()" in patched
     assert "already patched" in second.stdout.lower()
 
 
