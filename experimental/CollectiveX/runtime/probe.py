@@ -5,8 +5,13 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import json
 import os
 from pathlib import Path
+import re
+import urllib.error
+import urllib.parse
+import urllib.request
 
 
 def default_route_interface(route_path: Path = Path("/proc/net/route")) -> str:
@@ -24,6 +29,67 @@ def prepare_cache(parent_path: str) -> str:
     path.mkdir(mode=0o700, parents=True, exist_ok=True)
     os.chmod(path, 0o700)
     return str(path)
+
+
+DIGEST_PATTERN = re.compile(r"sha256:[0-9a-f]{64}")
+# Every manifest media type a tag can point at; a multi-arch tag answers with its index
+# digest, which changes whenever any platform updates -- over-eager, never stale.
+MANIFEST_ACCEPT = ", ".join((
+    "application/vnd.oci.image.index.v1+json",
+    "application/vnd.docker.distribution.manifest.list.v2+json",
+    "application/vnd.oci.image.manifest.v1+json",
+    "application/vnd.docker.distribution.manifest.v2+json",
+))
+
+
+def registry_reference(image: str) -> tuple[str, str, str]:
+    """Split host/repository:tag with Docker Hub's implied-registry rules."""
+    name, _, tag = image.rpartition(":")
+    first, _, rest = name.partition("/")
+    if rest and ("." in first or first == "localhost"):
+        return first, rest, tag
+    return "registry-1.docker.io", name if "/" in name else f"library/{name}", tag
+
+
+def resolve_image_digest(image: str, timeout: float = 10.0, opener=None) -> str:
+    """Manifest digest for a tag via anonymous registry-v2 HEADs (docker.io, ghcr.io and
+    nvcr.io all speak the token dance for public images; nothing is pulled). Empty string
+    on any failure -- the launcher then reuses whatever squash is already staged."""
+    host, repository, tag = registry_reference(image)
+    opener = opener or urllib.request.build_opener()
+    url = f"https://{host}/v2/{repository}/manifests/{tag}"
+
+    def head(token: str = ""):
+        request = urllib.request.Request(
+            url, method="HEAD", headers={"Accept": MANIFEST_ACCEPT})
+        if token:
+            request.add_header("Authorization", f"Bearer {token}")
+        return opener.open(request, timeout=timeout)
+
+    try:
+        try:
+            response = head()
+        except urllib.error.HTTPError as error:
+            challenge = dict(re.findall(r'([A-Za-z_]+)="([^"]*)"',
+                                        error.headers.get("WWW-Authenticate", "")))
+            realm = challenge.get("realm", "")
+            if error.code != 401 or not realm.startswith("https://"):
+                return ""
+            query = {"scope": f"repository:{repository}:pull"}
+            if challenge.get("service"):
+                query["service"] = challenge["service"]
+            with opener.open(f"{realm}?{urllib.parse.urlencode(query)}",
+                             timeout=timeout) as grant:
+                body = json.loads(grant.read().decode())
+            token = body.get("token") or body.get("access_token") or ""
+            if not token:
+                return ""
+            response = head(token)
+        with response:
+            digest = response.headers.get("Docker-Content-Digest", "") or ""
+    except (OSError, ValueError):
+        return ""
+    return digest if DIGEST_PATTERN.fullmatch(digest) else ""
 
 
 def validate_cuda_context(expected: int) -> None:
@@ -205,12 +271,14 @@ def main() -> None:
     commands.add_parser("default-route-interface")
     command = commands.add_parser("prepare-cache"); command.add_argument("parent")
     command = commands.add_parser("cuda-context"); command.add_argument("expected", type=int)
+    command = commands.add_parser("image-digest"); command.add_argument("image")
     commands.add_parser("gpu-health")
     command = commands.add_parser("network-profile"); command.add_argument("socket_names"); command.add_argument("rdma_devices"); command.add_argument("gid_index")
     args = parser.parse_args()
     if args.command == "default-route-interface": print(default_route_interface(), end="")
     elif args.command == "prepare-cache": print(prepare_cache(args.parent), end="")
     elif args.command == "cuda-context": validate_cuda_context(args.expected)
+    elif args.command == "image-digest": print(resolve_image_digest(args.image), end="")
     elif args.command == "gpu-health": validate_gpu_health()
     else: validate_network_profile(args.socket_names, args.rdma_devices, args.gid_index)
 
