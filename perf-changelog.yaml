@@ -6593,3 +6593,12 @@
   description:
     - "Correct srt-slurm's external data-parallel process allocation so Kimi-K3 TP4/DP4 workers receive four GPUs per DP rank instead of one invalid rank per GPU."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2634
+
+- config-keys:
+    - minimaxm3-fp4-b300-trtllm-agentic-mtp
+    - minimaxm3-fp4-b200-trtllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Accept the stock BFCL client's standard store=false chat-completion field instead of rejecting every TensorRT-LLM tool-use request with HTTP 400."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2634

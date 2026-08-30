@@ -10,6 +10,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SLURM_UTILS = REPO_ROOT / "runners" / "slurm_utils.sh"
 PATCH_SRT_EVAL = REPO_ROOT / "runners" / "patch_srt_eval_dispatch.py"
 PATCH_SRT_DP_RANKS = REPO_ROOT / "runners" / "patch_srt_vllm_dp_ranks.py"
+PATCH_TRTLLM_CHAT_STORE = REPO_ROOT / "runners" / "patch_trtllm_chat_store.py"
 INJECT_ACCEPTANCE = REPO_ROOT / "runners" / "inject_synthetic_acceptance.py"
 
 
@@ -162,6 +163,66 @@ def test_patch_srt_vllm_dp_ranks_rejects_unknown_source(tmp_path: Path) -> None:
     assert result.returncode == 1
     assert backend.read_text() == "unsupported backend\n"
 
+
+
+def test_patch_trtllm_chat_store_accepts_false_and_is_idempotent(
+    tmp_path: Path,
+) -> None:
+    protocol = tmp_path / "openai_protocol.py"
+    protocol.write_text(
+        "from typing import Literal, Optional\n\n"
+        "class ChatCompletionRequest(OpenAIBaseModel):\n"
+        "    messages: list\n"
+        "    stream: Optional[bool] = False\n"
+        "    user: Optional[str] = None\n\n"
+        "class ResponsesRequest(OpenAIBaseModel):\n"
+        "    store: Optional[bool] = True\n"
+    )
+
+    first = subprocess.run(
+        ["python3", str(PATCH_TRTLLM_CHAT_STORE), str(protocol)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    second = subprocess.run(
+        ["python3", str(PATCH_TRTLLM_CHAT_STORE), str(protocol)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    patched = protocol.read_text()
+    assert first.returncode == 0, first.stderr
+    assert second.returncode == 0, second.stderr
+    assert patched.count("store: Optional[Literal[False]] = False") == 1
+    assert patched.count("store: Optional[bool] = True") == 1
+    assert "already patched" in second.stdout.lower()
+
+
+def test_patch_trtllm_chat_store_rejects_unknown_source(tmp_path: Path) -> None:
+    protocol = tmp_path / "openai_protocol.py"
+    protocol.write_text("unsupported protocol\n")
+
+    result = subprocess.run(
+        ["python3", str(PATCH_TRTLLM_CHAT_STORE), str(protocol)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert protocol.read_text() == "unsupported protocol\n"
+
+
+def test_minimax_trt_launchers_patch_chat_store_request() -> None:
+    launchers = (
+        REPO_ROOT / "benchmarks/single_node/agentic/minimaxm3_fp4_b200_trt_mtp.sh",
+        REPO_ROOT / "benchmarks/single_node/agentic/minimaxm3_fp4_b300_trt_mtp.sh",
+    )
+
+    for launcher in launchers:
+        assert "patch_trtllm_chat_store.py" in launcher.read_text(), launcher
 
 def test_patch_srt_eval_dispatch_preflights_before_writing(tmp_path: Path) -> None:
     do_sweep = tmp_path / "src/srtctl/cli/do_sweep.py"

@@ -44,6 +44,10 @@ nvidia-smi
 resolve_trace_source
 install_agentic_deps
 
+# BFCL's stock OpenAI client sends the standard `store=false` field. TRT-LLM
+# 1.3 rejects that field even though this server never persists responses.
+python3 "$(dirname "$0")/../../../runners/patch_trtllm_chat_store.py"
+
 # kv_cache_config.host_cache_size is pinned per topology in ser.yaml below
 # (200 GiB at TP8, 250 GiB at TP4 -- see $mem_off), NOT derived from
 # TOTAL_CPU_DRAM_GB.
