@@ -52,7 +52,7 @@ class MoRIIOBackend(KVBackend):
         self._bulk_mem = None
         self._sessions = None
 
-    def register(self, pool, bulk) -> None:
+    def register(self, pool, bulk, reg_layout=None) -> None:
         self._pool_mem = self._engine.register_memory(
             pool.ptr, pool.nbytes, pool.device, self._gpu_location)
         self._bulk_mem = self._engine.register_memory(

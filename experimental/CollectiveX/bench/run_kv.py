@@ -183,6 +183,44 @@ def _grid(args) -> tuple[list[tuple[dict, list[int]]], list[int], list[int]]:
     return points, isls, batches
 
 
+def _harmonize(points) -> list[tuple[int, int, int]]:
+    """Rewrite every cfg's regions onto one shared pool layout and return it
+    as (base, packed_bytes, nbytes) triples, contiguous from zero.
+
+    The shard's configs share one physical pool, but plan_config lays each
+    config's regions out independently, so region bases shift with ISL and no
+    registration cut point is on every config's descriptor grid at once.
+    Giving every region the largest pool_blocks any config plans for it makes
+    the bases config-invariant: a cut on a region's own packed grid is then
+    between descriptors for every config, which is what lets a backend split
+    an oversized registration (b300 NICs refuse cuda registrations past ~8
+    GiB) without a descriptor ever straddling two pieces. Configs planning a
+    different page size carry a different packed grid, so each page family
+    gets its own slab after the previous one. The union can run past the
+    largest single config's per-config POOL_BUDGET check by the smaller
+    configs' head-room; the budget's slack absorbs that."""
+    layout: list[tuple[int, int, int]] = []
+    offset = 0
+    families: dict[int, list[dict]] = {}
+    for cfg, _ in points:
+        families.setdefault(cfg["page_tokens"], []).append(cfg)
+    for cfgs in families.values():
+        shared = []
+        for i, region in enumerate(cfgs[0]["regions"]):
+            packed = region["packed_bytes"]
+            blocks = max(cfg["regions"][i]["pool_blocks"] for cfg in cfgs)
+            shared.append((offset, packed, blocks * packed))
+            offset += blocks * packed
+        for cfg in cfgs:
+            for region, (base, packed, nbytes) in zip(cfg["regions"], shared):
+                region["base"] = base
+                region["pool_blocks"] = nbytes // packed
+        layout.extend(shared)
+    for cfg, _ in points:
+        cfg["pool_bytes"] = offset
+    return layout
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="CollectiveX KV-cache transfer sweep")
     ap.add_argument("--backend", required=True, choices=["nixl", "mori-io", "mooncake"])
@@ -232,6 +270,7 @@ def main() -> int:
         from kv_nixl import NIXLBackend as Backend
 
     points, isls, batches = _grid(args)
+    reg_layout = _harmonize(points)
     ops = args.ops.split()
     pool_bytes = max(cfg["pool_bytes"] for cfg, _ in points)
     bulk_bytes = min(max(cfg["req_bytes"] for cfg, _ in points), BULK_CAP)
@@ -263,7 +302,7 @@ def main() -> int:
 
     repaint()
     backend = Backend(args, role, device)
-    backend.register(pool, bulk)
+    backend.register(pool, bulk, reg_layout=reg_layout)
     payloads = [None, None]
     dist.all_gather_object(payloads, backend.publish())
     backend.connect(payloads[1 - rank])

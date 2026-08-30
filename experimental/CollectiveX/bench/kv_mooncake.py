@@ -105,7 +105,7 @@ class MooncakeBackend(KVBackend):
         workers = max(int(v) for v in str(getattr(args, "batch_sizes", "1")).split())
         self._exec = ThreadPoolExecutor(max_workers=workers)
 
-    def register(self, pool, bulk) -> None:
+    def register(self, pool, bulk, reg_layout=None) -> None:
         self._pool, self._bulk = pool, bulk
         if self._engine.register_memory(pool.ptr, pool.nbytes) != 0 \
                 or self._engine.register_memory(bulk.ptr, bulk.nbytes) != 0:

@@ -30,8 +30,15 @@ class KVBackend:
         self.device = device
 
     # -- lifecycle ------------------------------------------------------------
-    def register(self, pool, bulk) -> None:
-        """Register the pool + bulk tensors with the library."""
+    def register(self, pool, bulk, reg_layout=None) -> None:
+        """Register the pool + bulk tensors with the library.
+
+        ``reg_layout`` is the pool's shared region layout — (base,
+        packed_bytes, nbytes) triples, contiguous from zero and valid for
+        every planned config (run_kv._harmonize). Adapters may use it to
+        split one oversized registration into pieces cut on the descriptor
+        grid, so no descriptor straddles two pieces; ignoring it is valid.
+        """
         raise NotImplementedError
 
     def publish(self) -> dict:

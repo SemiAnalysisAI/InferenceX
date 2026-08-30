@@ -373,6 +373,84 @@ class KVGrid(unittest.TestCase):
         self.assertLessEqual(points[0][0]["pool_bytes"], budget)
 
 
+class RegistrationChunking(unittest.TestCase):
+    # b300's NICs refuse cuda registrations past ~8 GiB, so the NIXL adapter
+    # registers the pool in pieces. The pieces must never cut through a
+    # descriptor of ANY planned config, which _harmonize guarantees by giving
+    # every config one shared region layout.
+
+    def test_harmonize_makes_region_bases_config_invariant(self):
+        import run_kv
+
+        points, _isls, _batches = run_kv._grid(KVGrid._args())
+        layout = run_kv._harmonize(points)
+        total = sum(nbytes for _, _, nbytes in layout)
+        running = 0
+        for base, _packed, nbytes in layout:
+            self.assertEqual(base, running)
+            running += nbytes
+        for cfg, _ in points:
+            self.assertEqual(cfg["pool_bytes"], total)
+            for region, (base, packed, nbytes) in zip(cfg["regions"], layout):
+                self.assertEqual(region["base"], base)
+                self.assertEqual(region["packed_bytes"], packed)
+                self.assertEqual(region["pool_blocks"], nbytes // packed)
+                self.assertLessEqual(region["blocks_req"], region["pool_blocks"])
+
+    def test_reg_spans_cut_each_region_on_its_own_packed_grid(self):
+        import kv_nixl
+        import run_kv
+
+        points, _isls, _batches = run_kv._grid(KVGrid._args())
+        layout = run_kv._harmonize(points)
+        total = sum(nbytes for _, _, nbytes in layout)
+        spans = kv_nixl.reg_spans(total, layout)
+        # The full test grid plans a pool far past one chunk.
+        self.assertGreater(len(spans), 1)
+        # Exact in-order coverage, no gap, no overlap.
+        self.assertEqual(spans[0][0], 0)
+        for (a_off, a_len), (b_off, _) in zip(spans, spans[1:]):
+            self.assertEqual(a_off + a_len, b_off)
+        self.assertEqual(sum(length for _, length in spans), total)
+        for off, length in spans:
+            base, packed, _ = next(entry for entry in reversed(layout)
+                                   if entry[0] <= off)
+            self.assertEqual((off - base) % packed, 0)
+            self.assertLessEqual(length, max(kv_nixl.REG_CHUNK_BYTES, packed))
+
+    def test_no_descriptor_straddles_a_registration_cut(self):
+        # Every block any config can ever address must land whole inside one
+        # registered piece; a tiny cap on a small grid forces many cuts.
+        import bisect
+
+        import kv_nixl
+        import run_kv
+
+        args = KVGrid._args(isl_ladder="2048 8192", batch_sizes="1 4")
+        points, _isls, _batches = run_kv._grid(args)
+        layout = run_kv._harmonize(points)
+        total = sum(nbytes for _, _, nbytes in layout)
+        spans = kv_nixl.reg_spans(total, layout, cap=1 << 24)
+        self.assertGreater(len(spans), len(layout))
+        starts = [off for off, _ in spans]
+        straddles = []
+        for cfg, _ in points:
+            for region in cfg["regions"]:
+                packed = region["packed_bytes"]
+                for block in range(region["pool_blocks"]):
+                    off = region["base"] + block * packed
+                    s_off, s_len = spans[bisect.bisect_right(starts, off) - 1]
+                    if off + packed > s_off + s_len:
+                        straddles.append((region["name"], block))
+        self.assertEqual(straddles, [])
+
+    def test_without_a_layout_the_pool_registers_whole(self):
+        import kv_nixl
+
+        self.assertEqual(kv_nixl.reg_spans(123456, None), [(0, 123456)])
+        self.assertEqual(kv_nixl.reg_spans(123456, []), [(0, 123456)])
+
+
 class KVSummary(unittest.TestCase):
     def test_kv_documents_render_their_own_table(self):
         text = summarize.render([_kv_document()])

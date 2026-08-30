@@ -16,6 +16,35 @@ import numpy as np
 import kv_workload
 from kv_backend import KVBackend
 
+# b300's CX NICs refuse cuda registrations somewhere between 7083 and 8847 MiB
+# (an ~8 GiB MR wall); UCX surfaces no error and the initiator later segfaults
+# in ucp_worker_add_rkey_config resolving the region's rkey. Registering the
+# pool in pieces below the wall sidesteps it everywhere; each region is cut on
+# its own packed-block grid so no transfer descriptor straddles two pieces.
+REG_CHUNK_BYTES = 4 << 30
+
+
+def reg_spans(nbytes: int, layout,
+              cap: int = REG_CHUNK_BYTES) -> list[tuple[int, int]]:
+    """(offset, length) registration pieces covering ``nbytes`` exactly.
+
+    ``layout`` is the pool's shared region layout — (base, packed_bytes,
+    region_nbytes) triples, contiguous from zero and valid for every planned
+    config (run_kv._harmonize). Each region is cut into pieces of the largest
+    multiple of its packed_bytes at most ``cap``; without a layout the pool
+    is registered whole."""
+    if not layout:
+        return [(0, nbytes)]
+    spans = []
+    for base, packed, region_nbytes in layout:
+        chunk = max(cap // packed, 1) * packed
+        spans.extend((base + off, min(chunk, region_nbytes - off))
+                     for off in range(0, region_nbytes, chunk))
+    covered = sum(length for _, length in spans)
+    if covered < nbytes:  # tail the layout does not describe
+        spans.append((covered, nbytes - covered))
+    return spans
+
 
 class NIXLBackend(KVBackend):
     name = "nixl"
@@ -43,11 +72,15 @@ class NIXLBackend(KVBackend):
         self._bulk = None
         self._peer = None
 
-    def register(self, pool, bulk) -> None:
+    def register(self, pool, bulk, reg_layout=None) -> None:
         self._pool, self._bulk = pool, bulk
-        reg = self._agent.get_reg_descs(
-            [(pool.ptr, pool.nbytes, pool.device, "pool"),
-             (bulk.ptr, bulk.nbytes, bulk.device, "bulk")], mem_type="cuda")
+        entries = [(pool.ptr + off, length, pool.device, f"pool{i}")
+                   for i, (off, length) in
+                   enumerate(reg_spans(pool.nbytes, reg_layout))]
+        # bulk rides one whole-request descriptor, so it can never be split;
+        # BULK_CAP bounds it.
+        entries.append((bulk.ptr, bulk.nbytes, bulk.device, "bulk"))
+        reg = self._agent.get_reg_descs(entries, mem_type="cuda")
         if self._agent.register_memory(reg) is None:
             raise RuntimeError("nixl memory registration failed")
 
