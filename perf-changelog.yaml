@@ -6605,4 +6605,4 @@
     - "Export TORCH_BLAS_PREFER_HIPBLASLT=1 to prefer hipBLASLt for dense GEMMs."
     - "Size chunked-prefill by tensor-parallel degree: 16384 tokens at TP8 and 8192 at TP4, erroring on any other TP."
     - "Lower GPU_MAX_HW_QUEUES from 5 to 2 on the DP-attention path."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PENDING
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2784
