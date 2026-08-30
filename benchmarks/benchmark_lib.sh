@@ -2776,7 +2776,9 @@ _wait_for_openai_chat_route() {
     local port="${PORT:-8888}"
     local timeout_seconds="${EVAL_ENDPOINT_READY_TIMEOUT_SECONDS:-1800}"
     local poll_seconds=5
+    local stabilization_seconds="${EVAL_MODEL_STABILIZATION_SECONDS:-30}"
     local start_seconds=$SECONDS
+    local model_ready_since=-1
     local next_report=0
     local elapsed percent chat_status
     local served_model="${SERVED_MODEL_NAME:-${MODEL:-}}"
@@ -2797,6 +2799,10 @@ _wait_for_openai_chat_route() {
     done
     if ! [[ "$timeout_seconds" =~ ^[1-9][0-9]*$ ]]; then
         echo "ERROR: EVAL_ENDPOINT_READY_TIMEOUT_SECONDS must be a positive integer" >&2
+        return 2
+    fi
+    if ! [[ "$stabilization_seconds" =~ ^[0-9]+$ ]]; then
+        echo "ERROR: EVAL_MODEL_STABILIZATION_SECONDS must be a non-negative integer" >&2
         return 2
     fi
     if [ -z "$served_model" ]; then
@@ -2823,11 +2829,19 @@ raise SystemExit(0 if any(model.get("id") == expected for model in models) else 
 
         chat_status=""
         if [ "$model_ready" = true ]; then
+            if [ "$model_ready_since" -lt 0 ]; then
+                model_ready_since=$SECONDS
+            fi
             chat_status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 \
                 "$chat_url" 2>/dev/null)" || true
             case "$chat_status" in
                 401|403|405) break ;;
             esac
+            if [ $((SECONDS - model_ready_since)) -ge "$stabilization_seconds" ]; then
+                break
+            fi
+        else
+            model_ready_since=-1
         fi
 
         elapsed=$((SECONDS - start_seconds))

@@ -2547,6 +2547,40 @@ _wait_for_openai_chat_route --port 8765
     assert "--data" not in events[1]
 
 
+def test_chat_route_readiness_accepts_stable_registered_model(tmp_path: Path) -> None:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    curl = bin_dir / "curl"
+    curl.write_text(
+        """#!/usr/bin/env bash
+case "$*" in
+    */v1/models*) printf '{"data":[{"id":"test-model"}]}\n' ;;
+    */v1/chat/completions*) printf '404' ;;
+esac
+""",
+        encoding="utf-8",
+    )
+    curl.chmod(curl.stat().st_mode | stat.S_IXUSR)
+
+    subprocess.run(
+        [
+            "bash",
+            "-c",
+            'source "$BENCHMARK_LIB"; MODEL=test-model; '
+            "_wait_for_openai_chat_route --port 8765",
+        ],
+        env={
+            **os.environ,
+            "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+            "BENCHMARK_LIB": str(BENCHMARK_LIB),
+            "EVAL_MODEL_STABILIZATION_SECONDS": "0",
+        },
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+
 def test_multinode_agentic_waits_for_openai_endpoint_before_requests(
     tmp_path: Path,
 ) -> None:
