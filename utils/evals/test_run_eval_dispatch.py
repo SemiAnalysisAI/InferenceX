@@ -70,6 +70,54 @@ def _dispatch(
     return res.stdout
 
 
+def test_agentic_dependency_install_is_rootless_without_git(tmp_path: Path) -> None:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_uv = fake_bin / "uv"
+    fake_uv.write_text(
+        "#!/bin/bash\n"
+        "if [[ \"$1\" == \"venv\" ]]; then\n"
+        "  target=\"${@: -1}\"\n"
+        "  mkdir -p \"$target/bin\"\n"
+        "  printf '#!/bin/sh\\nexit 0\\n' > \"$target/bin/aiperf\"\n"
+        "  printf '#!/bin/sh\\nexit 0\\n' > \"$target/bin/hf\"\n"
+        "  chmod +x \"$target/bin/aiperf\" \"$target/bin/hf\"\n"
+        "fi\n"
+    )
+    fake_uv.chmod(0o755)
+    fake_apt = fake_bin / "apt-get"
+    fake_apt.write_text("#!/bin/sh\nexit 97\n")
+    fake_apt.chmod(0o755)
+
+    env = {
+        **os.environ,
+        "AGENTIC_DIR": str(tmp_path / "agentic"),
+        "AIPERF_DIR": str(tmp_path / "aiperf"),
+        "AIPERF_RUNTIME_DIR": str(tmp_path / "runtime"),
+        "BENCHMARK_LIB": str(BENCHMARK_LIB),
+        "FAKE_UV": str(fake_uv),
+        "PATH": f"{fake_bin}:/bin",
+        "PYTHONPYCACHEPREFIX": str(tmp_path / "pycache"),
+    }
+    result = subprocess.run(
+        [
+            "/bin/bash",
+            "-c",
+            'source "$BENCHMARK_LIB"; '
+            'ensure_agentic_uv() { AIPERF_UV_BIN="$FAKE_UV"; }; '
+            "install_agentic_deps",
+        ],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / "runtime/venv/bin/aiperf").is_file()
+    assert (tmp_path / "runtime/venv/bin/hf").is_file()
+
+
 def test_agentic_scenario_defaults_to_gsm8k_lm_eval():
     assert "DISPATCH=lm-eval" in _dispatch(is_agentic="1")
 

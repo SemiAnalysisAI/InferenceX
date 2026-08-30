@@ -3105,13 +3105,8 @@ install_agentic_deps() {
         return
     fi
 
-    # AIPerf must not share site-packages with the inference server. Installing
-    # it into vLLM/SGLang's system Python can upgrade FastAPI, Starlette,
-    # transformers, or other packages while the server imports from that same
-    # environment.
-    if ! command -v git >/dev/null 2>&1; then
-        apt-get update && apt-get install -y git
-    fi
+    # Install from the checked-out aiperf source with uv. This path does not
+    # require git, and rootless Enroot containers cannot mutate dpkg.
 
     ensure_agentic_uv
     rm -rf "$AIPERF_VENV"
