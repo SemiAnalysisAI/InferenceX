@@ -6611,3 +6611,11 @@
   description:
     - "Keep AgentX dependency setup rootless so minimal vLLM images without git do not fail while attempting a privileged apt install."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2634
+
+- config-keys:
+    - minimaxm3-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Size each vLLM SimpleCPUOffload backing allocation from its own KV-cache metadata so hybrid MiniMax-M3 cache layouts initialize without invalid tensor views."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2634

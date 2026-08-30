@@ -11,6 +11,7 @@ SLURM_UTILS = REPO_ROOT / "runners" / "slurm_utils.sh"
 PATCH_SRT_EVAL = REPO_ROOT / "runners" / "patch_srt_eval_dispatch.py"
 PATCH_SRT_DP_RANKS = REPO_ROOT / "runners" / "patch_srt_vllm_dp_ranks.py"
 PATCH_TRTLLM_CHAT_STORE = REPO_ROOT / "runners" / "patch_trtllm_chat_store.py"
+PATCH_VLLM_SIMPLE_KV = REPO_ROOT / "runners" / "patch_vllm_simple_kv_offload.py"
 INJECT_ACCEPTANCE = REPO_ROOT / "runners" / "inject_synthetic_acceptance.py"
 
 
@@ -213,6 +214,64 @@ def test_patch_trtllm_chat_store_rejects_unknown_source(tmp_path: Path) -> None:
 
     assert result.returncode == 1
     assert protocol.read_text() == "unsupported protocol\n"
+
+def test_patch_vllm_simple_kv_offload_sizes_each_allocation(
+    tmp_path: Path,
+) -> None:
+    symbols = runpy.run_path(str(PATCH_VLLM_SIMPLE_KV))
+    worker = tmp_path / "worker.py"
+    worker.write_text(
+        f"prefix\n{symbols['OLD_BLOCK']}"
+        "        for name, tensor in kv_caches.items():\n"
+        f"{symbols['OLD_STORAGE']}suffix\n"
+    )
+
+    first = subprocess.run(
+        ["python3", str(PATCH_VLLM_SIMPLE_KV), str(worker)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    second = subprocess.run(
+        ["python3", str(PATCH_VLLM_SIMPLE_KV), str(worker)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    patched = worker.read_text()
+    assert first.returncode == 0, first.stderr
+    assert second.returncode == 0, second.stderr
+    assert symbols["OLD_BLOCK"] not in patched
+    assert patched.count(symbols["NEW_BLOCK"]) == 1
+    assert patched.count(symbols["NEW_STORAGE"]) == 1
+    assert "already patched" in second.stdout.lower()
+
+
+def test_patch_vllm_simple_kv_offload_rejects_unknown_source(
+    tmp_path: Path,
+) -> None:
+    worker = tmp_path / "worker.py"
+    worker.write_text("unsupported worker\n")
+
+    result = subprocess.run(
+        ["python3", str(PATCH_VLLM_SIMPLE_KV), str(worker)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert worker.read_text() == "unsupported worker\n"
+
+
+def test_minimax_b200_vllm_launcher_patches_simple_kv_offload() -> None:
+    launcher = (
+        REPO_ROOT / "benchmarks/single_node/agentic/minimaxm3_fp4_b200_mtp.sh"
+    )
+
+    assert "patch_vllm_simple_kv_offload.py" in launcher.read_text()
+
 
 
 def test_minimax_trt_launchers_patch_chat_store_request() -> None:
