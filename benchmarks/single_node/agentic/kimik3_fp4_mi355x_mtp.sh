@@ -89,6 +89,7 @@ export VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4=1
 export AITER_SITUV2_A8W4=1
 export AITER_BF16_FP8_MOE_BOUND=0
 export VLLM_USE_BREAKABLE_CUDAGRAPH=0
+export AITER_QUICK_REDUCE_QUANTIZATION=INT4
 
 # Workaround for MEC FW <177 RCCL memory reclaim issue (shared with the other
 # gfx950 recipes in this tree).
