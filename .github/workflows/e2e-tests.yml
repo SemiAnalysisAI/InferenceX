@@ -276,7 +276,7 @@ jobs:
 
     test-sweep-multi-node:
         needs: get-jobs
-        if: ${{ needs.get-jobs.outputs.multi-node-config != '[]' }}
+        if: ${{ needs.get-jobs.outputs.multi-node-config != '' && needs.get-jobs.outputs.multi-node-config != '[]' }}
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node /
         strategy:
@@ -331,7 +331,7 @@ jobs:
 
     test-sweep-multi-node-evals:
         needs: get-jobs
-        if: ${{ needs.get-jobs.outputs.multi-node-eval-config != '[]' }}
+        if: ${{ needs.get-jobs.outputs.multi-node-eval-config != '' && needs.get-jobs.outputs.multi-node-eval-config != '[]' }}
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node eval /
         strategy:
@@ -386,7 +386,7 @@ jobs:
 
     test-sweep-agentic:
         needs: get-jobs
-        if: ${{ needs.get-jobs.outputs.agentic-config != '[]' }}
+        if: ${{ needs.get-jobs.outputs.agentic-config != '' && needs.get-jobs.outputs.agentic-config != '[]' }}
         uses: ./.github/workflows/benchmark-tmpl.yml
         name: agentic /
         strategy:
@@ -432,7 +432,7 @@ jobs:
 
     test-sweep-agentic-evals:
         needs: get-jobs
-        if: ${{ needs.get-jobs.outputs.agentic-eval-config != '[]' }}
+        if: ${{ needs.get-jobs.outputs.agentic-eval-config != '' && needs.get-jobs.outputs.agentic-eval-config != '[]' }}
         uses: ./.github/workflows/benchmark-tmpl.yml
         name: agentic eval /
         strategy:
@@ -480,7 +480,7 @@ jobs:
 
     test-sweep-multi-node-agentic:
         needs: get-jobs
-        if: ${{ needs.get-jobs.outputs.multi-node-agentic-config != '[]' }}
+        if: ${{ needs.get-jobs.outputs.multi-node-agentic-config != '' && needs.get-jobs.outputs.multi-node-agentic-config != '[]' }}
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node agentic /
         strategy:
@@ -540,7 +540,7 @@ jobs:
 
     test-sweep-multi-node-agentic-evals:
         needs: get-jobs
-        if: ${{ needs.get-jobs.outputs.multi-node-agentic-eval-config != '[]' }}
+        if: ${{ needs.get-jobs.outputs.multi-node-agentic-eval-config != '' && needs.get-jobs.outputs.multi-node-agentic-eval-config != '[]' }}
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node agentic eval /
         strategy:
@@ -601,7 +601,7 @@ jobs:
 
     test-sweep-single-node:
         needs: get-jobs
-        if: ${{ needs.get-jobs.outputs.single-node-config != '[]' }}
+        if: ${{ needs.get-jobs.outputs.single-node-config != '' && needs.get-jobs.outputs.single-node-config != '[]' }}
         uses: ./.github/workflows/benchmark-tmpl.yml
         name: single-node /
         strategy:
@@ -640,7 +640,7 @@ jobs:
 
     test-sweep-evals:
         needs: get-jobs
-        if: ${{ needs.get-jobs.outputs.eval-config != '[]' }}
+        if: ${{ needs.get-jobs.outputs.eval-config != '' && needs.get-jobs.outputs.eval-config != '[]' }}
         uses: ./.github/workflows/benchmark-tmpl.yml
         name: eval /
         strategy:

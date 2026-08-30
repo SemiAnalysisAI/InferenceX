@@ -829,21 +829,35 @@ kimik3-fp4-mi355x-vllm-agentic-k6-v466-tp8:
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 4], spec-decoding: mtp }
 
 # Kimi-K3 MXFP4 agentic-coding benchmark on MI355X via ATOM with DSpark
-# speculative decoding (2 draft tokens -> golden AL 2.51,
-# golden_al_distribution/kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml,
-# the same golden the vLLM arm feeds to synthetic_acceptance_length).
-# Companion to kimik3-fp4-mi355x-vllm-agentic-mtp: same checkpoint, same
-# runner, same concurrency points, so the two engines are directly comparable.
+# speculative decoding. Acceptance is pinned to the committed golden curve in
+# golden_al_distribution/kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml
+# at both draft lengths used here: 7 draft tokens -> AL 3.84 at concurrency 1-4,
+# 3 draft tokens -> AL 3.00 from concurrency 8 up.
+# Companion to kimik3-fp4-mi355x-vllm-agentic-mtp: same checkpoint, same runner.
 # TP8 only -- the 1.56 TB MXFP4 checkpoint is ~195 GB/GPU and TP4 cannot load,
 # which is also why there is no DP-attention arm.
-# Concurrency 1 and 4 are GPU-resident. 8 and 10 add the LMCache DRAM tier and
-# ATOM's CPU state-offload tier together: K3 is a hybrid, so a resumed agentic
-# turn needs the KDA recurrent state back, and the paged KV tier alone cannot
-# restore one. dram-utilization 0.086 puts the aggregate budget at 257 GB, so
-# the script's divide-by-TP lands on exactly the 32 GB per rank the recipe was
-# measured with (0.085 gives 254, which floors to 31).
+# Concurrency 1-4 is the latency floor and stays GPU-resident. From concurrency
+# 8 up, decode is KV-bandwidth-bound over 100k+ token contexts, so dcp-size 8
+# shards the KV read across all 8 GPUs and the LMCache DRAM tier backs the
+# paged KV.
+# Two utilization blocks because the per-rank CPU split differs:
+#   0.268 ->  803 GB aggregate -> 100 GB/rank, all paged KV (conc 8, 12).
+#   0.343 -> 1028 GB aggregate -> 128 GB/rank, split 96 GB paged KV + 32 GB
+#            for ATOM's CPU state tier (conc 16 and up). K3 is a hybrid, so a
+#            resumed agentic turn needs the KDA recurrent state back and the
+#            paged KV tier alone cannot restore one.
+# The paged-KV half of that budget is deliberately smaller than the recipe was
+# measured with (200 and 192 GB/rank). Every rank pins its own pool, and at the
+# measured sizes the eight ranks finished pinning more than 600 s apart, which
+# is exactly PyTorch's hardcoded NCCL process-group timeout: the ranks that
+# arrived first at the barrier ending allocate_kv_cache() timed out waiting for
+# rank 0 and the ModelRunner processes died before the server ever served a
+# request. Halving the paged-KV pool halves the pinning work. It costs little:
+# the CPU tier's measured hit rate was 0.0% at concurrency 8 and 12 and 0.3-2.4%
+# above that, and 96 GB/rank still holds ~53M tokens, roughly 530 full 100k-token
+# contexts. The state tier is left at 32 GB/rank.
 kimik3-fp4-mi355x-atom-agentic-mtp:
-  image: rocm/atom-dev:ubuntu24.04_py3.12_pytorch_release_2.10.0_kimi_k3_agentic_0820
+  image: rocm/atom-dev:ubuntu24.04_py3.12_pytorch_release_2.10.0_kimi_k3_agentic_0821
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:mi355x-amds
@@ -852,10 +866,13 @@ kimik3-fp4-mi355x-atom-agentic-mtp:
   multinode: false
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.086
+    - dram-utilization: 0.268
       search-space:
-      - { tp: 8, kv-offloading: none, conc-list: [1, 4], spec-decoding: mtp }
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [8, 10], spec-decoding: mtp }
+      - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4], spec-decoding: mtp }
+      - { tp: 8, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [8, 12], spec-decoding: mtp }
+    - dram-utilization: 0.343
+      search-space:
+      - { tp: 8, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [32, 40, 56], spec-decoding: mtp }
 
 dsr1-fp4-mi355x-sglang-disagg:
   image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519
