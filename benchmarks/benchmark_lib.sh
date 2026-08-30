@@ -2778,11 +2778,11 @@ _wait_for_openai_chat_route() {
     local poll_seconds=5
     local stabilization_seconds="${EVAL_MODEL_STABILIZATION_SECONDS:-30}"
     local start_seconds=$SECONDS
-    local model_ready_since=-1
+    local server_ready_since=-1
     local next_report=0
     local elapsed percent chat_status
     local served_model="${SERVED_MODEL_NAME:-${MODEL:-}}"
-    local models_url chat_url
+    local root_url models_url chat_url
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -2809,11 +2809,16 @@ _wait_for_openai_chat_route() {
         echo "ERROR: MODEL or SERVED_MODEL_NAME is required for chat endpoint readiness" >&2
         return 2
     fi
+    root_url="http://localhost:${port}/"
     models_url="http://localhost:${port}/v1/models"
     chat_url="http://localhost:${port}/v1/chat/completions"
 
     while true; do
         local model_ready=false
+        local server_ready=false
+        if curl -fsS --max-time 10 "$root_url" >/dev/null 2>&1; then
+            server_ready=true
+        fi
         if curl -fsS --max-time 10 "$models_url" 2>/dev/null \
             | python3 -c '
 import json
@@ -2829,19 +2834,21 @@ raise SystemExit(0 if any(model.get("id") == expected for model in models) else 
 
         chat_status=""
         if [ "$model_ready" = true ]; then
-            if [ "$model_ready_since" -lt 0 ]; then
-                model_ready_since=$SECONDS
-            fi
             chat_status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 \
                 "$chat_url" 2>/dev/null)" || true
             case "$chat_status" in
                 401|403|405) break ;;
             esac
-            if [ $((SECONDS - model_ready_since)) -ge "$stabilization_seconds" ]; then
+        fi
+        if [ "$server_ready" = true ]; then
+            if [ "$server_ready_since" -lt 0 ]; then
+                server_ready_since=$SECONDS
+            fi
+            if [ $((SECONDS - server_ready_since)) -ge "$stabilization_seconds" ]; then
                 break
             fi
         else
-            model_ready_since=-1
+            server_ready_since=-1
         fi
 
         elapsed=$((SECONDS - start_seconds))

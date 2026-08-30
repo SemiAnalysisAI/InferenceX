@@ -2542,19 +2542,22 @@ _wait_for_openai_chat_route --port 8765
     )
 
     events = events_path.read_text().splitlines()
-    assert events[0].endswith("http://localhost:8765/v1/models")
-    assert events[1].endswith("http://localhost:8765/v1/chat/completions")
-    assert "--data" not in events[1]
+    assert events[0].endswith("http://localhost:8765/")
+    assert events[1].endswith("http://localhost:8765/v1/models")
+    assert events[2].endswith("http://localhost:8765/v1/chat/completions")
+    assert "--data" not in events[2]
 
 
-def test_chat_route_readiness_accepts_stable_registered_model(tmp_path: Path) -> None:
+def test_chat_route_readiness_accepts_stable_server_with_different_model_id(
+    tmp_path: Path,
+) -> None:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     curl = bin_dir / "curl"
     curl.write_text(
         """#!/usr/bin/env bash
 case "$*" in
-    */v1/models*) printf '{"data":[{"id":"test-model"}]}\n' ;;
+    */v1/models*) printf '{"data":[{"id":"/models/different-model"}]}\n' ;;
     */v1/chat/completions*) printf '404' ;;
 esac
 """,
