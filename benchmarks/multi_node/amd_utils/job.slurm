@@ -154,9 +154,19 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
     done
 
     if [[ -z "$MODEL_PATH" ]]; then
-        echo "FATAL: Model '$MODEL_NAME' not found. Searched:"
-        for p in "${SEARCH_PATHS[@]}"; do echo "  - $p"; done
-        exit 1
+        # Debug / no-weights fallback: for a dummy-weight plumbing smoke (or when
+        # ALLOW_REMOTE_MODEL=1) the checkpoint need not be staged on disk. Fall
+        # back to the HF repo id (reconstructed from the hf_dir "models--org--name")
+        # so vLLM pulls only the config/tokenizer; --load-format dummy skips weights.
+        if [[ "${LOAD_FORMAT:-}" == "dummy" || "${ALLOW_REMOTE_MODEL:-0}" == "1" ]]; then
+            HF_REPO_ID=$(echo "$DISK_DIR_NAME" | sed -E 's/^models--//; s/--/\//')
+            MODEL_PATH="$HF_REPO_ID"
+            echo "WARNING: '$MODEL_NAME' not on disk; LOAD_FORMAT=${LOAD_FORMAT:-} -> using HF repo id '$MODEL_PATH' (config only, dummy weights)"
+        else
+            echo "FATAL: Model '$MODEL_NAME' not found. Searched:"
+            for p in "${SEARCH_PATHS[@]}"; do echo "  - $p"; done
+            exit 1
+        fi
     fi
     echo "Final MODEL_PATH: $MODEL_PATH"
 else
@@ -315,6 +325,29 @@ export BENCH_NUM_PROMPTS_MULTIPLIER=$BENCH_NUM_PROMPTS_MULTIPLIER
 export BENCH_MAX_CONCURRENCY=$BENCH_MAX_CONCURRENCY
 export BENCH_REQUEST_RATE=$BENCH_REQUEST_RATE
 export DRY_RUN="${DRY_RUN:-0}"
+# GPU core dumps are the evidence that is missing when a worker dies on
+# HSA_STATUS_ERROR_EXCEPTION: the process is signalled, so there is no Python traceback
+# either. Mounting a writable directory was not enough -- the runtime still reported
+#   GPU coredump: Directory "/coredumps not writable or does not exist
+# Two things were actually missing:
+#   1. HSA_COREDUMP_PATTERN. Unset, the HSA runtime reads /proc/sys/kernel/core_pattern
+#      and, when that is a pipe handler (systemd-coredump), tries to exec a binary that
+#      does not exist in the container. An explicit file pattern bypasses the handler.
+#   2. RLIMIT_CORE. build_core_dump() checks getrlimit(RLIMIT_CORE) and silently skips
+#      the dump when the file would exceed it, and containers commonly default to 0.
+#      Hence --ulimit core on docker run -- but BOUNDED, not unlimited: a full dump is the
+#      whole VRAM image (measured 4671 PT_LOAD segments, past 71 GB per rank and still
+#      growing, with three ranks dumping at once and the engine hung on shm_broadcast
+#      meanwhile). The PT_NOTE segment that identifies the fault sits at offset ~256 KB,
+#      so a 2 GB cap keeps the useful part and drops the rest; build_core_dump() stops
+#      cleanly at the limit and logs "Core limit file reached. GPU core dump created".
+#      Raise COREDUMP_MAX_BYTES when a full VRAM image is genuinely wanted.
+COREDUMP_DIR="${COREDUMP_DIR:-/tmp/gpu_coredumps-${SLURM_JOB_ID}}"
+export COREDUMP_DIR
+export COREDUMP_MAX_BYTES="${COREDUMP_MAX_BYTES:-2147483648}"
+# %p expands to the pid, so concurrent TP ranks do not collide (the runtime opens with
+# O_EXCL and would otherwise lose all but the first).
+export HSA_COREDUMP_PATTERN="${HSA_COREDUMP_PATTERN:-/coredumps/gpucore.%p}"
 export BENCHMARK_LOGS_DIR="${BENCHMARK_LOGS_DIR:-$(pwd)/benchmark_logs}"
 export KEEP_CONTAINERS="${KEEP_CONTAINERS:-0}"
 export ENGINE=$ENGINE
@@ -336,6 +369,15 @@ export MODAL_TOKEN_SECRET="${MODAL_TOKEN_SECRET:-}"
 export HF_TOKEN="${HF_TOKEN:-}"
 export SCENARIO_TYPE="${SCENARIO_TYPE:-}"
 export EVAL_LIMIT="${EVAL_LIMIT:-}"
+export INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS="${INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS:-}"
+export MC_WORKERS_PER_CTX="${MC_WORKERS_PER_CTX:-}"
+# Mooncake transfer slicing. MC_SLICE_SIZE is RDMA-only; the TCP transport reads
+# MC_TCP_SLICE_SIZE (default 65536). Both are forwarded so the granularity can be tuned
+# without editing server_vllm.sh -- see the SQ-overflow note there.
+export MC_SLICE_SIZE="${MC_SLICE_SIZE:-}"
+export MC_TCP_SLICE_SIZE="${MC_TCP_SLICE_SIZE:-}"
+export MOONCAKE_PREFERRED_SEGMENT="${MOONCAKE_PREFERRED_SEGMENT:-}"
+export MOONCAKE_DIAG_REPLICA_SAMPLE="${MOONCAKE_DIAG_REPLICA_SAMPLE:-}"
 
 SANITIZED_USER=$(echo "$USER_NAME" | tr -c 'a-zA-Z0-9_.-' '_')
 export DOCKER_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_${MODEL_NAME}_${SLURM_JOB_ID}"
@@ -343,7 +385,7 @@ export DOCKER_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_${MODEL_NAME}_${S
 # vLLM external router container.
 # NOTE: vllm/vllm-router only retains ~16 recent nightlies on Docker Hub; older
 # dated tags are garbage-collected (manifest unknown)
-VLLM_ROUTER_IMAGE="${VLLM_ROUTER_IMAGE:-vllm/vllm-router:nightly-20260716-1fbcde7}"
+VLLM_ROUTER_IMAGE="${VLLM_ROUTER_IMAGE:-vllm/vllm-router:nightly-20260830-1d10e71}"
 ROUTER_CONT_NAME="router_vllm_${SANITIZED_USER}_${SLURM_JOB_ID}"
 # Separate agentic benchmark-client container (see CLIENT_IMAGE handling below).
 CLIENT_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_client_${SLURM_JOB_ID}"
@@ -421,6 +463,18 @@ DOCKER_ENV_COMMON=(
     -e BENCH_OUTPUT_LEN=\$BENCH_OUTPUT_LEN
     -e BENCH_RANDOM_RANGE_RATIO=\$BENCH_RANDOM_RANGE_RATIO
     -e BENCH_NUM_PROMPTS_MULTIPLIER=\$BENCH_NUM_PROMPTS_MULTIPLIER
+    -e BENCH_MIN_NUM_PROMPTS=\${BENCH_MIN_NUM_PROMPTS:-}
+    # benchmark_lib.sh honours these three, but on the vLLM path they had no way to
+    # reach the container (server_sglang.sh only forwards them to a CLIENT_IMAGE
+    # sibling). Needed to shorten the aiperf warmup when reproducing a crash:
+    # priming caches is not what triggers it, and the default 10 requests/lane costs
+    # ~9 min per iteration at conc 8.
+    -e AIPERF_WARMUP_REQUESTS_PER_LANE=\${AIPERF_WARMUP_REQUESTS_PER_LANE:-}
+    -e AIPERF_FAILED_REQUEST_THRESHOLD=\${AIPERF_FAILED_REQUEST_THRESHOLD:-}
+    -e AGENTIC_WARMUP_GRACE_PERIOD=\${AGENTIC_WARMUP_GRACE_PERIOD:-}
+    # Debug-only: hold the stack up after the benchmark so the next load run skips the
+    # ~10 min 1P1D bring-up. See KEEP_SERVER_ALIVE in server_vllm.sh.
+    -e KEEP_SERVER_ALIVE=\${KEEP_SERVER_ALIVE:-}
     -e BENCH_MAX_CONCURRENCY=\$BENCH_MAX_CONCURRENCY
     -e BENCH_REQUEST_RATE=\$BENCH_REQUEST_RATE
     -e TQDM_MININTERVAL=\$TQDM_MININTERVAL
@@ -460,12 +514,103 @@ DOCKER_ENV_COMMON=(
     -e PREFILL_CHUNKED_PREFILL_SIZE=\${PREFILL_CHUNKED_PREFILL_SIZE:-}
     -e DISABLE_CUSTOM_ALL_REDUCE=\${DISABLE_CUSTOM_ALL_REDUCE:-}
     -e MAX_MODEL_LEN=\${MAX_MODEL_LEN:-}
+    # Bring-up-only context cap; survives the agentic unset of MAX_MODEL_LEN.
+    -e MAX_MODEL_LEN_OVERRIDE=\${MAX_MODEL_LEN_OVERRIDE:-}
+    -e GPU_MEMORY_UTILIZATION=\${GPU_MEMORY_UTILIZATION:-}
+    -e ENABLE_PREFIX_CACHING=\${ENABLE_PREFIX_CACHING:-0}
     -e DURATION=\${DURATION:-1800}
     -e IS_AGENTIC=\${IS_AGENTIC:-0}
     -e KV_OFFLOADING=\${KV_OFFLOADING:-none}
     -e KV_OFFLOAD_BACKEND=\${KV_OFFLOAD_BACKEND:-}
     -e KV_OFFLOAD_BACKEND_METADATA=\"\${KV_OFFLOAD_BACKEND_METADATA:-}\"
+    -e KV_LOAD_FAILURE_POLICY=\${KV_LOAD_FAILURE_POLICY:-}
+    -e MOONCAKE_LOAD_ASYNC=\${MOONCAKE_LOAD_ASYNC:-}
+    -e MOONCAKE_LOOKUP_ASYNC=\${MOONCAKE_LOOKUP_ASYNC:-}
+    -e MOONCAKE_DECODE_STORE=\${MOONCAKE_DECODE_STORE:-}
+    # MOONCAKE_PREFERRED_SEGMENT=local pins each TP rank to its own segment so KV puts
+    # and gets stay in-process instead of crossing to another rank over TCP loopback.
+    -e MOONCAKE_PREFERRED_SEGMENT=\${MOONCAKE_PREFERRED_SEGMENT:-}
+    # Diagnostic: sample every Nth put and log which segment actually holds the key, to
+    # tell a hard placement guarantee from a soft hint. Off unless set.
+    -e MOONCAKE_DIAG_REPLICA_SAMPLE=\${MOONCAKE_DIAG_REPLICA_SAMPLE:-}
     -e TOTAL_CPU_DRAM_GB=\${TOTAL_CPU_DRAM_GB:-}
+    -e SERVER_UP_TIMEOUT=\${SERVER_UP_TIMEOUT:-}
+    -e HF_HUB_CACHE=\${HF_HUB_CACHE:-/tmp/mooncake-hf-cache}
+    -e INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS=\${INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS:-}
+    -e MC_WORKERS_PER_CTX=\${MC_WORKERS_PER_CTX:-}
+    -e MC_SLICE_SIZE=\${MC_SLICE_SIZE:-}
+    -e MC_TCP_SLICE_SIZE=\${MC_TCP_SLICE_SIZE:-}
+    -e VLLM_PATCH_46240=\${VLLM_PATCH_46240:-}
+    # Generalise aiter MLA head padding so 12 heads/rank (K3 TP8) reach the ASM
+    # decode kernel instead of the batch_size=1 fp8 gluon regime.
+    -e VLLM_PATCH_MLA_HEAD_PAD=\${VLLM_PATCH_MLA_HEAD_PAD:-}
+    # Persistent-mode metadata for qo_len>4 fp8 ASM decode. Shelved (default off).
+    -e VLLM_PATCH_MLA_PERSISTENT_MTP=\${VLLM_PATCH_MLA_PERSISTENT_MTP:-}
+    # Log-only KV-cache layer bucketing dump (padding-waste attribution).
+    -e VLLM_PATCH_KV_GROUP_DEBUG=\${VLLM_PATCH_KV_GROUP_DEBUG:-}
+    # Kimi-K3: online-install the vLLM DSpark/MoRIIO-KDA fork over the base image
+    # (setup_deps.sh install_kimi_k3_vllm_fork). REF empty -> skipped.
+    -e VLLM_K3_FORK_REF=\${VLLM_K3_FORK_REF:-}
+    -e VLLM_K3_FORK_REPO=\${VLLM_K3_FORK_REPO:-}
+    -e VLLM_K3_FORK_TOKEN=\${VLLM_K3_FORK_TOKEN:-}
+    # Debug: dummy-weight / no-draft plumbing smoke (server_vllm.sh honors these).
+    -e LOAD_FORMAT=\${LOAD_FORMAT:-}
+    -e DISABLE_SPECULATIVE=\${DISABLE_SPECULATIVE:-}
+    # --kv-cache-dtype (fp8 halves MLA KV bytes/token -> buys context length).
+    -e KV_CACHE_DTYPE=\${KV_CACHE_DTYPE:-}
+    # Target --attention-backend override (K3 TP8 needs TRITON_MLA; see server_vllm.sh).
+    -e ATTENTION_BACKEND=\${ATTENTION_BACKEND:-}
+    # Draft-model attention backend ("attention_backend" in --speculative-config).
+    -e SPEC_ATTN_BACKEND=\${SPEC_ATTN_BACKEND:-}
+    -e SPEC_DRAFT_SAMPLE_METHOD=\${SPEC_DRAFT_SAMPLE_METHOD:-}
+    -e SPEC_REJECTION_SAMPLE_METHOD=\${SPEC_REJECTION_SAMPLE_METHOD:-}
+    -e SPEC_NUM_TOKENS=\${SPEC_NUM_TOKENS:-}
+    -e SPEC_MODEL=\${SPEC_MODEL:-}
+    -e MAX_NUM_SEQS=\${MAX_NUM_SEQS:-}
+    # Iteration cost. aiperf caches dataset setup under /root/.cache/aiperf, which the
+    # next container recreate throws away, so every run redoes the work behind
+    # "Dataset configured in 111.09 seconds": 38 s scanning the HF trace list over the
+    # network, 55 s building the mmap backing store, 12 s finalising. Pointing
+    # XDG_CACHE_HOME at /run_logs (the host's /tmp, already mounted) makes it survive.
+    #
+    # These defaults have to be absolute. `docker run -e VAR=` sets VAR to the empty
+    # string rather than leaving it unset, and an empty HF_HOME or XDG_CACHE_HOME
+    # makes transformers and datasets join their cache paths onto "" -- i.e. resolve
+    # them relative to the CWD, which is $WS_PATH inside the bind-mounted checkout.
+    # The container runs as root, so that strands root-owned cache dirs in the git
+    # tree; actions/checkout then cannot clean the workspace and every later job on
+    # that runner fails at checkout.
+    #
+    # AIPERF_RUNTIME_DIR is left empty on purpose. benchmark_lib.sh reads it with a
+    # shell :- default, so empty behaves as unset, and that default is per-job
+    # (inferencex-agentic-$SLURM_JOB_ID). Pinning it to one shared path would let
+    # concurrent containers delete each other's venv without saving the rebuild,
+    # since install_agentic_deps does `rm -rf "$AIPERF_VENV"` unconditionally.
+    -e AIPERF_RUNTIME_DIR=\${AIPERF_RUNTIME_DIR:-}
+    -e XDG_CACHE_HOME=\${XDG_CACHE_HOME:-/run_logs/xdg_cache}
+    -e HF_HOME=\${HF_HOME:-/run_logs/hf_cache}
+    -e HF_DATASETS_CACHE=\${HF_DATASETS_CACHE:-/run_logs/hf_cache/datasets}
+    # ROCm kernel-fault localisation. AMD_SERIALIZE_KERNEL=3 makes HIP wait after
+    # every kernel, so an HSA_STATUS_ERROR_EXCEPTION is attributed to the kernel
+    # that caused it instead of surfacing as an async queue abort with no Python
+    # frame anywhere. Slow, so it is opt-in and unset by default.
+    -e HSA_COREDUMP_PATTERN=\${HSA_COREDUMP_PATTERN:-}
+    -e AMD_SERIALIZE_KERNEL=\${AMD_SERIALIZE_KERNEL:-}
+    -e AMD_LOG_LEVEL=\${AMD_LOG_LEVEL:-}
+    -e HIP_LAUNCH_BLOCKING=\${HIP_LAUNCH_BLOCKING:-}
+    -e TORCH_USE_HIP_DSA=\${TORCH_USE_HIP_DSA:-}
+    # Let setup_deps continue when the diagnostics-only RDMA CLI tools cannot be
+    # apt-installed (flaky mirror). Unset in CI -> still a hard failure there.
+    -e ALLOW_MISSING_RDMA_TOOLS=\${ALLOW_MISSING_RDMA_TOOLS:-}
+    # --enforce-eager: mandatory for K3 + ROCM_AITER_MLA at TP8 (12 heads -> the
+    # batch_size=1-only mla_gluon kernel cannot be cudagraph-captured).
+    -e ENFORCE_EAGER=\${ENFORCE_EAGER:-}
+    # aiperf tokenizer override (served-model-name is bare; needs a valid HF id/path).
+    # Name is IX_-prefixed on purpose: an AIPERF_-prefixed env collides with aiperf's
+    # own pydantic settings (field TOKENIZER) and fails to parse a plain string.
+    -e IX_AIPERF_TOKENIZER=\${IX_AIPERF_TOKENIZER:-}
+    # Agentic corpus override (256k-capped variant when server context < 1M).
+    -e WEKA_LOADER_OVERRIDE=\${WEKA_LOADER_OVERRIDE:-}
     -e ENABLE_METRICS=\${ENABLE_METRICS:-0}
     -e PREFILL_ROUTER_POLICY=\${PREFILL_ROUTER_POLICY:-random}
     -e DECODE_ROUTER_POLICY=\${DECODE_ROUTER_POLICY:-random}
@@ -481,6 +626,8 @@ DOCKER_ENV_COMMON=(
     -e DECODE_DP_ATTN=\${DECODE_DP_ATTN:-false}
     -e DECODE_MTP_SIZE=\$DECODE_MTP_SIZE
     -e IS_MULTINODE=\$IS_MULTINODE
+    -e IBDEVICES=\${IBDEVICES:-}
+    -e MORI_RDMA_TC=\${MORI_RDMA_TC:-}
     -e DRY_RUN=\${DRY_RUN:-0}
     # SWE-bench agentic eval runs inside this container and needs Modal/HF
     # credentials to launch sandboxes and download datasets.
@@ -598,9 +745,11 @@ echo \"Rank \$SLURM_PROCID on \$(hostname)\"
 eval \"\$DOCKER_CMD_DETECT\"
 echo \"[docker-detect] rank \$SLURM_PROCID: DOCKER_CMD=\$DOCKER_CMD\"
 
-# Enable out-of-tree RDMA library mounts for atom-disagg (mooncake requires host RDMA stack)
+# Enable out-of-tree RDMA library mounts on MI355X ionic/bnxt nodes. Required for
+# atom-disagg (mooncake) and vllm-disagg (MoRIIO MultiConnector); container bundled
+# libibverbs/libionic may be ABI-incompatible with the host kernel drivers.
 RDMA_MOUNTS=()
-if [[ "$ENGINE" == "atom-disagg" ]]; then
+if [[ "$ENGINE" == "atom-disagg" || "$ENGINE" == "vllm-disagg" ]]; then
 
 # When the container base OS differs from the host (e.g. Ubuntu 24.04 image
 # on a 22.04 host), the container's bundled libibverbs/libionic may be
@@ -674,10 +823,14 @@ if [[ \${#RDMA_MOUNTS[@]} -gt 0 ]]; then
 else
     echo \"[rdma] no out-of-tree RDMA mounts needed\"
 fi
-fi  # end: if ENGINE == atom-disagg
+fi  # end: if ENGINE needs host RDMA bind-mounts
+
+# Node-local landing spot for GPU core dumps (see COREDUMP_DIR above).
+mkdir -p ${COREDUMP_DIR} 2>/dev/null || true
+chmod 1777 ${COREDUMP_DIR} 2>/dev/null || true
 
 # Pre-clean (idempotent): stop then force-remove so GPU VRAM is released
-# before the drain gate. stop-only left containers in Created/Exited state
+# before the sanity gate. stop-only left containers in Created/Exited state
 # on some nodes.
 \$DOCKER_CMD ps -aq --filter \"$CONT_FILTER\" | xargs -r \$DOCKER_CMD rm -f || true
 \$DOCKER_CMD ps -aq | xargs -r \$DOCKER_CMD stop -t 15 || true
@@ -741,6 +894,7 @@ fi
     --ulimit memlock=-1 \
     --ulimit stack=67108864 \
     --ulimit nofile=1048576:1048576 \
+    --ulimit core=\${COREDUMP_MAX_BYTES:-2147483648} \
     --network host \
     --ipc host \
     --group-add video \
@@ -753,6 +907,7 @@ fi
     -v \$HOME/.ssh:/root/.ssh \
     --shm-size 128G \
     -v /tmp:/run_logs \
+    -v ${COREDUMP_DIR}:/coredumps \
     -v ${BENCHMARK_LOGS_DIR}:/benchmark_logs \
     -v ${DI_REPO_DIR}:${DOCKER_MOUNT_PATH} \
     -v ${HICACHE_MC_CONFIG}:/config/hicache_mc.env:ro \

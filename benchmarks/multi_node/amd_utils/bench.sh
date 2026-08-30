@@ -59,9 +59,14 @@ for max_concurrency in "${chosen_concurrencies[@]}"; do
 
     export_file="${profile_folder}/concurrency_${max_concurrency}_req_rate_${chosen_req_rate}_gpus_$((prefill_gpus+decode_gpus))_ctx_${prefill_gpus}_gen_${decode_gpus}"
 
+    # The floor keeps normal sweeps statistically meaningful, but it is fatal for a
+    # long-context plumbing smoke: 16 x 1M-token prefills is tens of minutes of
+    # work to answer a yes/no question. BENCH_MIN_NUM_PROMPTS lets such a run ask
+    # for fewer; unset it and behaviour is exactly as before.
     num_prompts=$(( max_concurrency * num_prompts_multiplier ))
-    if [[ "$num_prompts" -lt 16 ]]; then
-        num_prompts=16
+    min_num_prompts="${BENCH_MIN_NUM_PROMPTS:-16}"
+    if [[ "$num_prompts" -lt "$min_num_prompts" ]]; then
+        num_prompts=$min_num_prompts
     fi
 
     echo "profile_folder: $profile_folder"
