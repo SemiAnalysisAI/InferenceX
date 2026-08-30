@@ -58,6 +58,19 @@ case "$COLLX_BENCH" in
     # a lost allocation.
     TIME_MIN=210
     export COLLX_RUN_TIMEOUT="${COLLX_RUN_TIMEOUT:-11400}"
+    # b300's virtualized pods stop honoring cuda memory registrations past a
+    # per-rank total somewhere between 9552 MiB (green) and 14843 MiB (red):
+    # registration reports no error and the initiator later segfaults
+    # resolving the region's rkey on the first transfer
+    # (ucp_worker_add_rkey_config), whether the pool is registered whole or
+    # in 4 GiB pieces (probes 2026-08-31; BAR1 is 512 GiB, so it is DMA
+    # mapping capacity, not aperture). Cap the pool well under the wall;
+    # run_kv sheds the largest batches to fit, and the piece-wise
+    # registration keeps every piece under the separate ~8 GiB single-MR
+    # wall the same pods carry.
+    if [ "$RUNNER" = b300 ]; then
+      export COLLX_KV_POOL_BUDGET="${COLLX_KV_POOL_BUDGET:-$((8 << 30))}"
+    fi
     ;;
 esac
 IMAGE="$COLLX_IMAGE"
