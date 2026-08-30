@@ -6614,6 +6614,7 @@
 
 - config-keys:
     - minimaxm3-fp4-b200-vllm-agentic-mtp
+    - minimaxm3-fp4-b300-vllm-agentic-mtp
   scenario-type:
     - agentic-coding
   description:

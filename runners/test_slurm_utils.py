@@ -266,13 +266,14 @@ def test_patch_vllm_simple_kv_offload_rejects_unknown_source(
     assert worker.read_text() == "unsupported worker\n"
 
 
-def test_minimax_b200_vllm_launcher_patches_simple_kv_offload() -> None:
-    launcher = (
-        REPO_ROOT / "benchmarks/single_node/agentic/minimaxm3_fp4_b200_mtp.sh"
+def test_minimax_vllm_launchers_patch_simple_kv_offload() -> None:
+    launchers = (
+        REPO_ROOT / "benchmarks/single_node/agentic/minimaxm3_fp4_b200_mtp.sh",
+        REPO_ROOT / "benchmarks/single_node/agentic/minimaxm3_fp4_b300_mtp.sh",
     )
 
-    assert "patch_vllm_simple_kv_offload.py" in launcher.read_text()
-
+    for launcher in launchers:
+        assert "patch_vllm_simple_kv_offload.py" in launcher.read_text(), launcher
 
 
 def test_minimax_trt_launchers_patch_chat_store_request() -> None:
