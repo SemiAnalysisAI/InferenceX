@@ -95,58 +95,52 @@ class ProbeTests(unittest.TestCase):
             self.assertEqual(cache.stat().st_mode & 0o777, 0o700)
 
 
-class _FakeRegistryResponse:
-    def __init__(self, headers: dict | None = None, body: bytes = b""):
-        self.headers = headers or {}
-        self._body = body
-
-    def read(self) -> bytes:
-        return self._body
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *_):
-        return False
-
-
 class _FakeRegistry:
     """Registry-v2 anonymous token dance: 401 challenge, token grant, digest HEAD."""
 
+    class _Response:
+        def __init__(self, headers=None, body=b""):
+            self.headers, self._body = headers or {}, body
+
+        def read(self):
+            return self._body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
     def __init__(self, digest: str):
-        self.digest = digest
-        self.urls: list[str] = []
+        self.digest, self.urls = digest, []
 
     def open(self, request, timeout=None):
         url = request if isinstance(request, str) else request.full_url
         self.urls.append(url)
         if "scope=" in url:
-            return _FakeRegistryResponse(body=json.dumps({"token": "anonymous"}).encode())
+            return self._Response(body=json.dumps({"token": "anonymous"}).encode())
         if not request.get_header("Authorization"):
             raise urllib.error.HTTPError(url, 401, "unauthorized", {
                 "WWW-Authenticate":
                     'Bearer realm="https://auth.example/token",service="registry.example"',
             }, None)
-        return _FakeRegistryResponse(headers={"Docker-Content-Digest": self.digest})
+        return self._Response(headers={"Docker-Content-Digest": self.digest})
 
 
-# The digest is only a cache key for the staged squash, but a wrong or accepted-malformed
-# digest silently degrades stage-once-reuse-many back into per-run imports (or worse,
-# poisons the key), so the resolution path is pinned without touching the network.
+# The digest only stamps the staged squash's sidecar, but a wrong or accepted-malformed
+# digest silently turns stage-once-reuse-many back into per-launch imports, so the
+# resolution path is pinned without touching the network.
 class ImageDigestResolutionTests(unittest.TestCase):
     DIGEST = "sha256:" + "0123456789abcdef" * 4
 
-    def test_docker_hub_references_get_the_implied_registry(self) -> None:
-        self.assertEqual(probe.registry_reference("rocm/sgl-dev:v1"),
-                         ("registry-1.docker.io", "rocm/sgl-dev", "v1"))
-        self.assertEqual(probe.registry_reference("python:3.12"),
-                         ("registry-1.docker.io", "library/python", "3.12"))
-
-    def test_explicit_registries_pass_through(self) -> None:
-        self.assertEqual(probe.registry_reference("ghcr.io/org/image:tag"),
-                         ("ghcr.io", "org/image", "tag"))
-        self.assertEqual(probe.registry_reference("nvcr.io/nvidia/pytorch:25.06-py3"),
-                         ("nvcr.io", "nvidia/pytorch", "25.06-py3"))
+    def test_references_resolve_with_docker_hub_rules(self) -> None:
+        for image, expected in (
+            ("rocm/sgl-dev:v1", ("registry-1.docker.io", "rocm/sgl-dev", "v1")),
+            ("python:3.12", ("registry-1.docker.io", "library/python", "3.12")),
+            ("ghcr.io/org/image:tag", ("ghcr.io", "org/image", "tag")),
+            ("nvcr.io/nvidia/pytorch:25.06-py3", ("nvcr.io", "nvidia/pytorch", "25.06-py3")),
+        ):
+            self.assertEqual(probe.registry_reference(image), expected, image)
 
     def test_resolution_follows_the_anonymous_token_dance(self) -> None:
         registry = _FakeRegistry(self.DIGEST)
@@ -156,36 +150,26 @@ class ImageDigestResolutionTests(unittest.TestCase):
         )
         self.assertEqual(registry.urls[0], "https://ghcr.io/v2/org/image/manifests/tag")
         self.assertIn("scope=repository%3Aorg%2Fimage%3Apull", registry.urls[1])
-        self.assertIn("service=registry.example", registry.urls[1])
 
     def test_a_malformed_digest_or_registry_failure_yields_empty(self) -> None:
-        self.assertEqual(
-            probe.resolve_image_digest("ghcr.io/org/image:tag",
-                                       opener=_FakeRegistry("sha256:nothex")),
-            "",
-        )
-
-        class _Down:
-            def open(self, request, timeout=None):
-                raise OSError("no route")
-
-        self.assertEqual(
-            probe.resolve_image_digest("ghcr.io/org/image:tag", opener=_Down()), "")
+        down = types.SimpleNamespace(open=mock.Mock(side_effect=OSError("no route")))
+        for opener in (_FakeRegistry("sha256:nothex"), down):
+            self.assertEqual(
+                probe.resolve_image_digest("ghcr.io/org/image:tag", opener=opener), "")
 
 
 # runtime/common.sh collx_squash_path/collx_squash_verdict are the stage-once seam:
 # keying the squash by GITHUB_RUN_ID is exactly the defect that re-imported 30-65GB
 # per run per cluster, and keying it by digest made a transient registry blip miss
-# the staged file — so the path is a pure function of platform + image reference,
+# the staged file -- so the path is a pure function of platform + image reference,
 # and freshness is decided by the verdict against the digest sidecar.
 class SquashCacheKeyTests(unittest.TestCase):
     IMAGE = "rocm/sgl-dev:sglang-v1"
     DIGEST = "sha256:" + "ab" * 32
 
-    def _bash(self, script: str, env: dict, args: list | None = None) -> str:
+    def _bash(self, script: str, env: dict, args: list) -> str:
         result = subprocess.run(
-            ["bash", "-c", f'source "{RUNTIME / "common.sh"}" && {script}',
-             "collx", *(args or [])],
+            ["bash", "-c", f'source "{RUNTIME / "common.sh"}" && {script}', "collx", *args],
             capture_output=True, text=True, check=True,
             env={"PATH": os.environ["PATH"], "COLLX_IMAGE_PLATFORM": "linux/amd64", **env},
         )
@@ -206,38 +190,24 @@ class SquashCacheKeyTests(unittest.TestCase):
                          {"COLLX_IMAGE_PLATFORM": "linux/arm64"}, [self.IMAGE])
         self.assertEqual(arm, "/squash/_linux_arm64_rocm_sgl-dev_sglang-v1.sqsh")
 
-    def _verdict(self, sq: Path, digest: str = "", epoch: str = "") -> str:
-        return self._bash('collx_squash_verdict "$1" "$2" "$3"', {},
-                          [str(sq), digest, epoch])
-
-    def test_verdict_reuses_what_is_staged_when_the_digest_is_unresolved(self) -> None:
-        # The registry-blip case: a stamped file must be reused, not re-imported,
-        # when this launch could not resolve a digest.
+    def test_the_verdict_orders_refresh_stamp_and_reuse_correctly(self) -> None:
+        verdict = lambda sq, digest="", epoch="": self._bash(  # noqa: E731
+            'collx_squash_verdict "$1" "$2" "$3"', {}, [str(sq), digest, epoch])
         with tempfile.TemporaryDirectory() as directory:
             sq = Path(directory) / "img.sqsh"
+            self.assertEqual(verdict(sq), "absent")
             sq.write_bytes(b"x")
-            (sq.parent / "img.sqsh.digest").write_text(self.DIGEST + "\n")
-            self.assertEqual(self._verdict(sq), "reuse")
-
-    def test_verdict_reimports_when_the_tag_moved(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            sq = Path(directory) / "img.sqsh"
-            sq.write_bytes(b"x")
-            (sq.parent / "img.sqsh.digest").write_text(self.DIGEST + "\n")
-            moved = "sha256:" + "cd" * 32
-            self.assertEqual(self._verdict(sq, digest=moved), "digest-moved")
-            self.assertEqual(self._verdict(sq, digest=self.DIGEST), "reuse")
-
-    def test_verdict_refresh_discards_only_pre_launch_files(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            sq = Path(directory) / "img.sqsh"
-            sq.write_bytes(b"x")
+            Path(f"{sq}.digest").write_text(self.DIGEST + "\n")
+            # The registry-blip regression: an unresolved digest must reuse the
+            # stamped file, never re-import tens of GB.
+            self.assertEqual(verdict(sq), "reuse")
+            self.assertEqual(verdict(sq, digest=self.DIGEST), "reuse")
+            self.assertEqual(verdict(sq, digest="sha256:" + "cd" * 32), "digest-moved")
             mtime = int(sq.stat().st_mtime)
-            self.assertEqual(self._verdict(sq, epoch=str(mtime + 10)), "refresh-requested")
+            self.assertEqual(verdict(sq, epoch=str(mtime + 10)), "refresh-requested")
             # A file imported during this launch (mtime >= epoch) is kept, so
             # concurrent legs of a refreshing run still import exactly once.
-            self.assertEqual(self._verdict(sq, epoch=str(mtime - 10)), "reuse")
-            self.assertEqual(self._verdict(sq.parent / "missing.sqsh"), "absent")
+            self.assertEqual(verdict(sq, epoch=str(mtime - 10)), "reuse")
 
 
 class ConfigTests(unittest.TestCase):

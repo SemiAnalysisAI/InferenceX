@@ -32,9 +32,8 @@ def prepare_cache(parent_path: str) -> str:
 
 
 DIGEST_PATTERN = re.compile(r"sha256:[0-9a-f]{64}")
-# Every manifest media type a tag can point at; the registry answers with the digest of
-# whichever it holds. For a multi-arch tag that is the index digest, which changes whenever
-# any platform updates — a slightly over-eager cache key, never a stale one.
+# Every manifest media type a tag can point at; a multi-arch tag answers with its index
+# digest, which changes whenever any platform updates -- over-eager, never stale.
 MANIFEST_ACCEPT = ", ".join((
     "application/vnd.oci.image.index.v1+json",
     "application/vnd.docker.distribution.manifest.list.v2+json",
@@ -52,23 +51,11 @@ def registry_reference(image: str) -> tuple[str, str, str]:
     return "registry-1.docker.io", name if "/" in name else f"library/{name}", tag
 
 
-def bearer_challenge(header: str) -> dict[str, str]:
-    scheme, _, params = header.partition(" ")
-    if scheme.lower() != "bearer":
-        return {}
-    return {key.lower(): value
-            for key, value in re.findall(r'([A-Za-z_]+)="([^"]*)"', params)}
-
-
 def resolve_image_digest(image: str, timeout: float = 10.0, opener=None) -> str:
-    """Best-effort manifest digest for a tag; empty string on any failure.
-
-    Anonymous registry-v2 token dance (docker.io/ghcr.io/nvcr.io all speak it for
-    public images). Only HEAD requests — nothing is pulled.
-    """
+    """Manifest digest for a tag via anonymous registry-v2 HEADs (docker.io, ghcr.io and
+    nvcr.io all speak the token dance for public images; nothing is pulled). Empty string
+    on any failure -- the launcher then reuses whatever squash is already staged."""
     host, repository, tag = registry_reference(image)
-    if not tag:
-        return ""
     opener = opener or urllib.request.build_opener()
     url = f"https://{host}/v2/{repository}/manifests/{tag}"
 
@@ -83,11 +70,10 @@ def resolve_image_digest(image: str, timeout: float = 10.0, opener=None) -> str:
         try:
             response = head()
         except urllib.error.HTTPError as error:
-            if error.code != 401:
-                return ""
-            challenge = bearer_challenge(error.headers.get("WWW-Authenticate", ""))
+            challenge = dict(re.findall(r'([A-Za-z_]+)="([^"]*)"',
+                                        error.headers.get("WWW-Authenticate", "")))
             realm = challenge.get("realm", "")
-            if not realm.startswith("https://"):
+            if error.code != 401 or not realm.startswith("https://"):
                 return ""
             query = {"scope": f"repository:{repository}:pull"}
             if challenge.get("service"):

@@ -512,10 +512,10 @@ collx_cleanup_allocation() {
 }
 
 # Import uses the configured tag because Enroot cannot reliably import a
-# digest-qualified Docker Hub reference non-interactively. The digest is still
-# resolved here (best-effort registry HEAD from the submit host) as the squash
-# CACHE KEY only: an unchanged tag reuses the file any earlier run staged, and a
-# tag that moved upstream changes the key, which is what forces the fresh import.
+# digest-qualified Docker Hub reference non-interactively. The digest resolved
+# here (best-effort registry HEAD, submit host) only stamps/checks the staged
+# squash's sidecar: a moved tag re-imports, an unresolved digest reuses what is
+# staged (COLLX_IMAGE_REFRESH=1 is then the update hatch).
 collx_select_image() {
   local image="$1" digest
   [[ "$image" =~ ^[A-Za-z0-9._/-]+:[A-Za-z0-9._-]+$ ]] \
@@ -528,11 +528,8 @@ collx_select_image() {
       export COLLX_IMAGE_DIGEST="$digest"
       collx_log "image digest $digest"
     else
-      # No network path to the registry is not an error: the cache key degrades
-      # to the tag, so a previously staged squash is still preferred over a
-      # re-import; a moved tag then needs COLLX_IMAGE_REFRESH=1 to update.
       unset COLLX_IMAGE_DIGEST
-      collx_log "image digest unresolved; squash cache keyed by tag only"
+      collx_log "image digest unresolved; staged squash reused as-is"
     fi
   fi
 }
