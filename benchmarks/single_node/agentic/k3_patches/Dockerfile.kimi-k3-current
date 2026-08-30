@@ -1,0 +1,12 @@
+ARG BASE_IMAGE=vllm/vllm-openai-rocm:nightly-46638857fdbb30e0c232c9e8f9cb1ff6d6f545c3@sha256:8908b8ab5ba28c3b81f9f42bb72e2421f06a180e001c67c4f10ff7f127c5690b
+FROM ${BASE_IMAGE}
+
+ARG K3_PATCH
+ARG K3_PATCH_SHA256
+COPY ${K3_PATCH} /tmp/k3.patch
+RUN echo "${K3_PATCH_SHA256}  /tmp/k3.patch" | sha256sum -c - \
+    && cd /usr/local/lib/python3.12/dist-packages \
+    && patch -p1 --forward --batch < /tmp/k3.patch \
+    && rm /tmp/k3.patch
+
+LABEL org.opencontainers.image.base.digest="sha256:8908b8ab5ba28c3b81f9f42bb72e2421f06a180e001c67c4f10ff7f127c5690b"
