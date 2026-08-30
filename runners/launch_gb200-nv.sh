@@ -442,6 +442,11 @@ elif [[ "$IS_AGENTIC" == "1" && (( "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" 
 elif [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "kimik3" ]]; then
     git clone --branch v1.0.53 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
     cd "$SRT_REPO_DIR" || exit 1
+    test "$(git rev-parse HEAD)" = "217f94387abeddfed7149a71955dc523e07cd765" || {
+        echo "Error: NVIDIA/srt-slurm v1.0.53 resolved to an unexpected commit" >&2
+        exit 1
+    }
+    python3 "$GITHUB_WORKSPACE/runners/patch_srt_vllm_dp_ranks.py" "$(pwd)" || exit 1
     mkdir -p recipes/vllm/kimi-k3/agentic || exit 1
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
         recipes/vllm/kimi-k3/agentic || exit 1

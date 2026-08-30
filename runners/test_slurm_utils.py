@@ -1,5 +1,6 @@
 import json
 import os
+import runpy
 import subprocess
 from pathlib import Path
 
@@ -8,6 +9,7 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SLURM_UTILS = REPO_ROOT / "runners" / "slurm_utils.sh"
 PATCH_SRT_EVAL = REPO_ROOT / "runners" / "patch_srt_eval_dispatch.py"
+PATCH_SRT_DP_RANKS = REPO_ROOT / "runners" / "patch_srt_vllm_dp_ranks.py"
 INJECT_ACCEPTANCE = REPO_ROOT / "runners" / "inject_synthetic_acceptance.py"
 
 
@@ -112,6 +114,53 @@ def test_patch_srt_eval_dispatch_forwards_selection_and_is_idempotent(
     assert 'stage_eval_artifacts /logs/eval_results "$PWD" || true' in eval_script.read_text()
     assert "cp -v" not in eval_script.read_text()
     assert "already patched" in second.stdout
+
+
+def test_patch_srt_vllm_dp_ranks_groups_tensor_parallel_devices(
+    tmp_path: Path,
+) -> None:
+    symbols = runpy.run_path(str(PATCH_SRT_DP_RANKS))
+    backend = tmp_path / "src/srtctl/backends/vllm.py"
+    backend.parent.mkdir(parents=True)
+    backend.write_text(f"prefix\n{symbols['OLD_BLOCK']}suffix\n")
+
+    first = subprocess.run(
+        ["python3", str(PATCH_SRT_DP_RANKS), str(tmp_path)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    second = subprocess.run(
+        ["python3", str(PATCH_SRT_DP_RANKS), str(tmp_path)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    patched = backend.read_text()
+    assert first.returncode == 0, first.stderr
+    assert second.returncode == 0, second.stderr
+    assert symbols["OLD_BLOCK"] not in patched
+    assert patched.count(symbols["NEW_BLOCK"]) == 1
+    assert "gpus_per_dp_rank = tp_size * pp_size" in patched
+    assert "gpu_indices=rank_gpus" in patched
+    assert "already patched" in second.stdout.lower()
+
+
+def test_patch_srt_vllm_dp_ranks_rejects_unknown_source(tmp_path: Path) -> None:
+    backend = tmp_path / "src/srtctl/backends/vllm.py"
+    backend.parent.mkdir(parents=True)
+    backend.write_text("unsupported backend\n")
+
+    result = subprocess.run(
+        ["python3", str(PATCH_SRT_DP_RANKS), str(tmp_path)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert backend.read_text() == "unsupported backend\n"
 
 
 def test_patch_srt_eval_dispatch_preflights_before_writing(tmp_path: Path) -> None:
