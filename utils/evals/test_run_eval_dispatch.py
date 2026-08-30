@@ -2516,7 +2516,7 @@ def test_chat_route_readiness_requires_model_and_active_route(tmp_path: Path) ->
 printf 'curl %s\n' "$*" >> "$EVENTS"
 case "$*" in
     */v1/models*) printf '{"data":[{"id":"test-model"}]}\n' ;;
-    */v1/chat/completions*) printf '422' ;;
+    */v1/chat/completions*) printf '405' ;;
 esac
 """,
         encoding="utf-8",
@@ -2544,7 +2544,7 @@ _wait_for_openai_chat_route --port 8765
     events = events_path.read_text().splitlines()
     assert events[0].endswith("http://localhost:8765/v1/models")
     assert events[1].endswith("http://localhost:8765/v1/chat/completions")
-    assert '--data {"model": "test-model", "messages": [], "max_tokens": 1}' in events[1]
+    assert "--data" not in events[1]
 
 
 def test_multinode_agentic_waits_for_openai_endpoint_before_requests(
