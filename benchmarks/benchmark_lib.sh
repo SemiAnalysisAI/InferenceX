@@ -2009,15 +2009,14 @@ build_replay_cmd() {
     # dynamo-trt srt-slurm recipes serve "DeepSeek-V4-Pro" while $MODEL is
     # the HF id "deepseek-ai/DeepSeek-V4-Pro"). Mismatches 404 at warmup.
     REPLAY_CMD+=" --model ${SERVED_MODEL_NAME:-$MODEL}"
-    # aiperf loads the tokenizer from --model (an HF id) unless --tokenizer is given.
-    # For vllm-disagg MODEL is the served-model-name (bare, e.g. "Kimi-K3"), which is
-    # NOT a valid HF id -> 404. Allow an explicit tokenizer (full HF id or local path);
-    # default to the resolved MODEL_PATH which is a valid HF id / local dir.
-    # NB: override var must NOT start with AIPERF_ (aiperf reads AIPERF_*-prefixed
-    # env as its own pydantic settings and chokes on a plain string TOKENIZER).
-    _aiperf_tok="${IX_AIPERF_TOKENIZER:-${MODEL_PATH:-}}"
-    if [[ -n "$_aiperf_tok" && "$_aiperf_tok" != "$MODEL" ]]; then
-        REPLAY_CMD+=" --tokenizer $_aiperf_tok"
+    # aiperf's dataset manager resolves the tokenizer from --model by
+    # default, but a SERVED_MODEL_NAME override (above) is a wire name, not
+    # necessarily a valid HF repo id (e.g. "Qwen3.5-397B-A17B-NVFP4-V2" vs
+    # the real "nvidia/Qwen3.5-397B-A17B-NVFP4-V2"), which 404s tokenizer
+    # loading. Always pass the real HF id explicitly.
+    replay_tokenizer="${IX_AIPERF_TOKENIZER:-$MODEL}"
+    if [[ -n "$replay_tokenizer" ]]; then
+        REPLAY_CMD+=" --tokenizer $replay_tokenizer"
     fi
     REPLAY_CMD+=" --concurrency $CONC"
     REPLAY_CMD+=" --benchmark-duration $duration"

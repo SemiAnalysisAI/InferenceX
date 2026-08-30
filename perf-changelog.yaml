@@ -6594,4 +6594,17 @@
   description:
     - "Update the vLLM B200 Kimi-K3 AgentX configs."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2776
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-disagg-agentic
+  description:
+    - "Add Kimi-K3 MXFP4 MI355X vLLM disaggregated agentic serving with a TP8 prefill, TP8/DCP8 decode, MoRIIO P/D transfer, and Mooncake DRAM KV offload."
+    - "Install the pinned K3 MoRIIO/DCP vLLM fork at runtime over the Kimi-K3 image and retain a local runner for hardware validation."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2326
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-disagg-agentic-dummy
+  description:
+    - "Add a model-less Kimi-K3 vLLM-disagg plumbing smoke using dummy weights."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2326
   

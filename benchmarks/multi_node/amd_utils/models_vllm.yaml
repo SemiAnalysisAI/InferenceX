@@ -30,6 +30,43 @@ Kimi-K2.5-MXFP4:
   env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_RMSNORM=1 VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 HSA_NO_SCRATCH_RECLAIM=1 VLLM_ENGINE_READY_TIMEOUT_S=3600"
   hf_dir: "models--amd--Kimi-K2.5-MXFP4"
 
+Kimi-K3:
+  # Kimi-K3 (hybrid: MLA attention + KDA gated-delta-net) MXFP4, disaggregated
+  # 1P1D. The server flags/env below are the VALIDATED local 1P1D MultiConnector
+  # (MoRIIO read + Mooncake DRAM) run (k3-agentx/gen_k3_mc.sh) with the DSpark
+  # arm from PR #2403 (kimik3-fp4-mi355x-vllm-agentic-dspark) layered on top.
+  # Key K3-specific flags (do not drop):
+  #   --reasoning-parser kimi_k3     : K3 chat/reasoning parser
+  #   --attention-backend ROCM_AITER_MLA : main-model MLA backend on gfx950
+  #   --mamba-cache-mode all         : KDA (mamba) recurrent-state cache mode
+  #   --block-size 128               : hybrid KV page size (NOT 1)
+  #   --language-model-only          : text-only agentx replay (skip vision tower)
+  #   --enable-prefix-caching        : required for the Mooncake DRAM cache tier
+  #   --mm-encoder-tp-mode data      : multimodal encoder data-parallel
+  # DSpark (n=7) is baked symmetrically into BOTH prefill and decode so the KDA
+  # conv-state geometry matches on P and D (required for MoRIIO KDA transfer);
+  # method=dspark, draft=Inferact/Kimi-K3-DSpark, TRITON_MLA draft attention,
+  # probabilistic draft sampling + real block rejection (PR #2403). Decode CUDA
+  # graph stays ON (no --enforce-eager). VLLM_SSM_CONV_STATE_LAYOUT=DS gives the
+  # dim-first conv layout the rebased MoRIIO connector packs for contiguous KDA
+  # transfers; VLLM_KV_CACHE_LAYOUT=HND matches the validated run.
+  # --max-num-batched-tokens 4096 / --max-num-seqs 16 are the values PR #2403
+  # pins for the AMD K3 AgentX DSpark reference; do not raise max-num-seqs
+  # without re-checking the aiter MLA decode path (see below).
+  # GMU comes from the recipe (GPU_MEMORY_UTILIZATION). MAX_MODEL_LEN does NOT:
+  # benchmark_lib.sh unsets it for agentic runs, so the effective context is the
+  # native 1M default set in benchmarks/multi_node/agentic/kimik3_*.sh.
+  prefill_flags: "--tensor-parallel-size 8 --moe-backend auto --load-format fastsafetensors --gpu-memory-utilization 0.88 --language-model-only --max-num-seqs 32 --enable-auto-tool-choice --tool-call-parser kimi_k3 --reasoning-parser kimi_k3 --max-model-len 1048576 --enable-prefix-caching --kv-cache-dtype fp8 --no-async-scheduling --attention-config '{\"mla_prefill_backend\":\"ROCM_AITER_FA\"}' --compilation-config '{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":96,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96]}' --enable-prompt-tokens-details"
+  decode_flags: "--tensor-parallel-size 8 --moe-backend auto --load-format fastsafetensors --gpu-memory-utilization 0.88 --language-model-only --max-num-seqs 32 --enable-auto-tool-choice --tool-call-parser kimi_k3 --reasoning-parser kimi_k3 --max-model-len 1048576 --enable-prefix-caching --kv-cache-dtype fp8 --no-async-scheduling --attention-config '{\"mla_prefill_backend\":\"ROCM_AITER_FA\"}' --compilation-config '{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":96,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96]}' --enable-prompt-tokens-details"
+  # VLLM_SERVER_DEV_MODE=1 registers POST /reset_prefix_cache. That is what
+  # trace_replay.sh's CLEAR_CACHE_BETWEEN_CONC uses to make each concurrency point
+  # cold, including the Mooncake tier via ?reset_external=true. Without it the
+  # route 404s and a multi-conc sweep silently measures warm-cache carry-over from
+  # the previous point. It only adds cache-reset endpoints; no serving behaviour
+  # changes.
+  env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4=1 AITER_BF16_FP8_MOE_BOUND=0 VLLM_ROCM_AITER_MLA_ASM_PADDING=asm VLLM_USE_BREAKABLE_CUDAGRAPH=0 SAFETENSORS_FAST_GPU=1 VLLM_SSM_CONV_STATE_LAYOUT=DS VLLM_KV_CACHE_LAYOUT=HND PYTHONHASHSEED=42 HSA_NO_SCRATCH_RECLAIM=0 VLLM_ENGINE_READY_TIMEOUT_S=7200 VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=1200 VLLM_SERVER_DEV_MODE=1"
+  hf_dir: "Kimi-K3"
+
 MiniMax-M2.5:
   # AITER fused-MoE kernel fmoe_bf16_blockscaleFp8_g1u1_vs_silu_32x384 for gfx950 writes OOB when run with MiniMax's shapes at M=8K(=num batched tokens), crashing vllm during AITER warmup.
   # Set token budget to 4k to avoid using that shape, instead of disabling AITER_MOE.

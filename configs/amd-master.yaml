@@ -685,6 +685,151 @@ kimik3-fp4-mi355x-atom-agentic-mtp:
       search-space:
       - { tp: 8, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [32, 40, 56], spec-decoding: mtp }
 
+# Kimi-K3 MXFP4 MI355X vLLM disaggregated agentic (1P1D TP8, MoRIIO KDA P/D
+# transfer, and Mooncake DRAM KV offload). The current concurrency 40 point is
+# the no-draft DCP8 validation target. GMU and MAX_MODEL_LEN intentionally come
+# from the agentic benchmark rather than being pinned here.
+kimik3-fp4-mi355x-vllm-disagg-agentic:
+  image: vllm/vllm-openai-rocm:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm-disagg
+  router: { name: vllm-router, version: "0.1.14" }
+  kv-p2p-transfer: moriio
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - spec-decoding: "none"
+        conc-list: [ 40 ]
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "GPU_MEMORY_UTILIZATION=0.88"
+          - "DISABLE_SPECULATIVE=1"
+          - "IX_AIPERF_TOKENIZER=moonshotai/Kimi-K3"
+          - "VLLM_PATCH_46240=1"
+          - "VLLM_K3_FORK_REF=yichaozhu/k3-tpdcp-hetero"
+          - "HF_HUB_CACHE=/models/.cache/huggingface/hub"
+          - "INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS=32"
+          - "MC_WORKERS_PER_CTX=4"
+        decode:
+          num-worker: 1
+          tp: 8
+          dcp-size: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "VLLM_PATCH_46240=1"
+          - "VLLM_K3_FORK_REF=yichaozhu/k3-tpdcp-hetero"
+          - "HF_HUB_CACHE=/models/.cache/huggingface/hub"
+          - "INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS=32"
+          - "MC_WORKERS_PER_CTX=4"
+          - "MOONCAKE_DECODE_STORE=0"
+          - "DECODE_DCP_COMM=a2a"
+          - "DECODE_CP_KV_CACHE_INTERLEAVE_SIZE=1"
+
+# DEBUG arm: model-less plumbing smoke. Same topology/connectors/mooncake/fork/DSpark
+# as the real recipe, but --load-format dummy (LOAD_FORMAT=dummy) skips the 1.5TB
+# main checkpoint only; draft-model spec decoding (DSpark n=7, symmetric P+D) stays
+# on so MoRIIO KDA transfer geometry matches production. Output is gibberish by
+# design; this arm proves the launcher/connector/Mooncake path at conc 8.
+#
+# AgentX parity is deliberate, per PR #2403 and the merged B300 K3 agentic arm:
+# the UNFILTERED 062126 corpus (kimik3* default, peak trace ~1M tokens), the
+# model's native 1M context, max-num-seqs 16, gmu 0.88. No --max-context-length
+# and no *_256k corpus override -- either would shrink the workload rather than
+# the system. GMU/MAX_MODEL_LEN come from benchmarks/multi_node/agentic/, not
+# from here (benchmark_lib.sh unsets MAX_MODEL_LEN for agentic runs on purpose).
+#
+# Attention stays on models_vllm.yaml's ROCM_AITER_MLA and CUDA graphs stay ON;
+# only fp8 KV is withheld, for a narrow kernel reason. K3 at TP8 is 96/8 = 12 MLA
+# heads/rank (nhead <= 16), and aiter's mla_gluon selects its regime by KV dtype:
+#   bf16 KV -> bh16bn64  (nhead <= 16, batch_size >= 1)   <-- used here
+#   fp8  KV -> bh16bn128 (nhead <= 16, batch_size == 1)
+# so --kv-cache-dtype fp8 is what pins decode to batch 1 and aborts conc > 1 with
+# "mla_gluon[bh16bn128] requires batch_size=1". bf16 KV batches normally, which
+# is why the validated real-weight run (GSM8K 44/50) served fine on aiter MLA.
+# The settings below now match that: KV_CACHE_DTYPE=fp8 and the aiter head-pad
+# patch (which only exists to reach the fp8 ASM decoder) used to be listed here
+# and directly contradicted this paragraph -- and the fp8 ASM path then dies on
+# DSpark anyway, since it rejects qo_len > 4 outside persistent mode while the
+# n=7 verify step presents 8.
+#
+# Graphs: keep them on, but expect PIECEWISE rather than FULL. The DSpark draft
+# cannot leave TRITON_MLA ("non-causal attention not supported" on aiter), and
+# TritonMLABackend only declares UNIFORM_SINGLE_TOKEN_DECODE, so under
+# spec-decode vLLM demotes FULL_AND_PIECEWISE -> PIECEWISE for the whole engine
+# regardless of the target's backend. 35 shapes capture in ~20 s / 0.6 GiB,
+# DSpark speculator included; --enforce-eager was never actually required.
+#
+# Host-DRAM capacity comes from the Mooncake tier instead -- that is the point of
+# this recipe. Sized from dram-utilization below, not pinned here: for
+# cluster:mi355x-amds a TP8 prefill worker resolves to 2400 GB.
+# Validated on MIA g05/g06 via benchmarks/multi_node/local_runner/:
+# warmup 87/87 errors=0, peak_open=8, Mooncake ext_cache_hit ~50%.
+# See k3-disagg-agenticx/spec/debug.md + perf-baseline.md.
+kimik3-fp4-mi355x-vllm-disagg-agentic-dummy:
+  image: vllm/vllm-openai-rocm:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm-disagg
+  router: { name: vllm-router, version: "0.1.14" }
+  kv-p2p-transfer: moriio
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - spec-decoding: draft_model
+        conc-list: [ 8 ]
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "LOAD_FORMAT=dummy"
+          - "IX_AIPERF_TOKENIZER=moonshotai/Kimi-K3"
+          - "VLLM_PATCH_46240=1"
+          - "VLLM_K3_FORK_REF=yichaozhu/moriio-k3-dspark"
+          - "HF_HUB_CACHE=/models/.cache/huggingface/hub"
+          - "INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS=32"
+          - "MC_WORKERS_PER_CTX=4"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "LOAD_FORMAT=dummy"
+          - "IX_AIPERF_TOKENIZER=moonshotai/Kimi-K3"
+          # Was missing on decode while prefill had it, so the scheduler patch
+          # only landed on one side of the pair.
+          - "VLLM_PATCH_46240=1"
+          - "VLLM_K3_FORK_REF=yichaozhu/moriio-k3-dspark"
+          - "HF_HUB_CACHE=/models/.cache/huggingface/hub"
+          - "INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS=32"
+          - "MC_WORKERS_PER_CTX=4"
+
 dsr1-fp4-mi355x-sglang-disagg:
   image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519
   model: amd/DeepSeek-R1-0528-MXFP4-v2
