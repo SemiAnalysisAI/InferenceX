@@ -19,7 +19,8 @@ It does not predict serving throughput without a separate correlation study.
 
 ## Matrix
 
-The implemented workload is `deepseek-v3`: hidden 7168, top-k 8, 256 routed experts, packed
+The implemented workload is `deepseek-v4-pro` (DeepSeek-V4-Pro 1.6T, the `dsv4` model the rest of
+InferenceX benchmarks): hidden 7168, top-k 6, 384 routed experts, packed
 placement, and one pinned fixed resource profile per backend/topology. Combine is always BF16.
 Dispatch precision is a swept dimension, with a BF16 control and, on the backends whose FP8 dispatch is
 supported upstream (DeepEP V2, MoRI, UCCL-EP, FlashInfer EP), an FP8 dispatch (`bf16`, `fp8`),
@@ -87,7 +88,7 @@ emits a case for a precision it does not support. `normal`-mode cases use the
 `layout-and-dispatch-v1` semantics. `low-latency` cases use each backend's decode-kernel semantics
 (detailed below).
 
-- `ep-core`: uniform routing over the workload's token ladders, which for `deepseek-v3` include decode
+- `ep-core`: uniform routing over the workload's token ladders, which for `deepseek-v4-pro` include decode
   T=1..512 powers of two and prefill T=1024..8192 powers of two. Ladders are model-specific and
   live with the workload in `configs/sweep.json`.
 
