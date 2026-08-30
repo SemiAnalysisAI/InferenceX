@@ -2544,6 +2544,7 @@ _wait_for_openai_chat_route --port 8765
     events = events_path.read_text().splitlines()
     assert events[0].endswith("http://localhost:8765/v1/models")
     assert events[1].endswith("http://localhost:8765/v1/chat/completions")
+    assert '--data {"model": "test-model", "messages": [], "max_tokens": 1}' in events[1]
 
 
 def test_multinode_agentic_waits_for_openai_endpoint_before_requests(

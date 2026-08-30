@@ -2778,7 +2778,7 @@ _wait_for_openai_chat_route() {
     local poll_seconds=5
     local start_seconds=$SECONDS
     local next_report=0
-    local elapsed percent chat_status
+    local elapsed percent chat_status chat_probe_payload
     local served_model="${SERVED_MODEL_NAME:-${MODEL:-}}"
     local models_url chat_url
 
@@ -2803,6 +2803,12 @@ _wait_for_openai_chat_route() {
         echo "ERROR: MODEL or SERVED_MODEL_NAME is required for chat endpoint readiness" >&2
         return 2
     fi
+    chat_probe_payload="$(python3 -c '
+import json
+import sys
+
+print(json.dumps({"model": sys.argv[1], "messages": [], "max_tokens": 1}))
+' "$served_model")" || return $?
     models_url="http://localhost:${port}/v1/models"
     chat_url="http://localhost:${port}/v1/chat/completions"
 
@@ -2824,7 +2830,7 @@ raise SystemExit(0 if any(model.get("id") == expected for model in models) else 
         chat_status=""
         if [ "$model_ready" = true ]; then
             chat_status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 \
-                -H 'Content-Type: application/json' --data '{}' "$chat_url" 2>/dev/null)" \
+                -H 'Content-Type: application/json' --data "$chat_probe_payload" "$chat_url" 2>/dev/null)" \
                 || true
             case "$chat_status" in
                 400|401|403|422) break ;;
