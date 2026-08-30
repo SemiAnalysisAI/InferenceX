@@ -480,7 +480,7 @@ def test_eval_validation_uses_logical_runner_from_metadata(
         tmp_path,
         64,
         logical_runner="mi300x",
-        physical_runner="mi300x-amds_04",
+        physical_runner="mi300x-amd_04",
     )
 
     assert validate_eval_artifacts(tmp_path) == []

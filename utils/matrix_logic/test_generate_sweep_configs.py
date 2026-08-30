@@ -285,7 +285,7 @@ def sample_runner_config():
             "cluster:h200-dgxc": {"available-cpu-dram-mib": 1471356, "gpus-per-node": 8},
             "cluster:b200-nscale": {"available-cpu-dram-mib": 3774874, "gpus-per-node": 8},
             "cluster:b300-nv": {"available-cpu-dram-mib": 2964436, "gpus-per-node": 8},
-            "cluster:mi300x-amds": {"available-cpu-dram-mib": 2321924, "gpus-per-node": 8},
+            "cluster:mi300x-amd": {"available-cpu-dram-mib": 1547820, "gpus-per-node": 8},
             "cluster:mi355x-amds": {"available-cpu-dram-mib": 3095781, "gpus-per-node": 8},
             "cluster:gb200-nv": {"available-cpu-dram-mib": 860160, "gpus-per-node": 4},
         },
@@ -2189,7 +2189,7 @@ class TestArgumentDefaults:
 
         assert len(manifest) == 67
         assert manifest_digest == (
-            'b94441edd3d083d3c03a6ed1f3891ee222c420614ba6a2a68802d9a85c128ca2'
+            'f26ea851cda03fb3ead2035cfa90c8a018461c324f02c961455520c6992eb377'
         ), json.dumps(manifest, indent=2)
         for row in rows:
             if isinstance(row['conc'], list):
