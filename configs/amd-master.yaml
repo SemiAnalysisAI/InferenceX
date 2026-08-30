@@ -1750,3 +1750,4 @@ dsv4-fp4-mi355x-sglang-agentic-mtp:
       search-space:
       - { tp: 4, ep: 1, dp-attn: false, kv-offloading: none, conc-list: [1, 2, 4, 8, 10], spec-decoding: mtp }
       - { tp: 8, ep: 1, dp-attn: false, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 32, 48], spec-decoding: mtp }
+      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, conc-list: [16], spec-decoding: mtp }
