@@ -7,7 +7,6 @@ import importlib.util
 import sys
 from pathlib import Path
 
-
 OLD_SETUP = """        logical_storage_bytes = self.kv_cache_config.kv_cache_tensors[0].size
 
         # The DMA backend copies whole blocks as base + block_id * stride(0),
