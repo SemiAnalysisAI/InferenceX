@@ -157,6 +157,16 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         "opentelemetry-exporter-prometheus==0.61b0" \
         "cupy-rocm-7-0==14.1.1" \
         "lmcache==${LMCACHE_VERSION}" --find-links "$LMCACHE_ROCM_INDEX"
+
+    # LMCache 0.5.5's transfer-channel layer eagerly imports the Mooncake
+    # backend (mooncake_te_impl.py), which is dynamically linked against
+    # libglog.so.0. The vLLM ROCm image does not ship glog, so the import
+    # sanity check below (and the LMCache server) would otherwise fail with
+    # "ImportError: libglog.so.0: cannot open shared object file". Provision
+    # glog from the distro before importing.
+    if ! ldconfig -p | grep -q 'libglog\.so\.0'; then
+        apt-get update && apt-get install -y libgoogle-glog0v5
+    fi
     python3 -c \
         "import cupy; import lmcache.integration.vllm.lmcache_mp_connector; import opentelemetry.exporter.prometheus" \
         >/dev/null
