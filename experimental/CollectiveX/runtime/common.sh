@@ -48,6 +48,10 @@ collx_log_tail() {
 # before any SKU-specific work.
 collx_launcher_prologue() {
   JOB_ID=""
+  # One stable timestamp per launcher invocation: the refresh path discards only
+  # squashes staged before this moment, across salloc retries and both nodes.
+  : "${COLLX_LAUNCH_EPOCH:=$(date +%s)}"
+  export COLLX_LAUNCH_EPOCH
   collx_install_launcher_fail_safe
   [ -n "${COLLX_SHARD_FILE:-}" ] || collx_die "COLLX_SHARD_FILE is required"
   collx_load_operator_config
@@ -508,12 +512,26 @@ collx_cleanup_allocation() {
 }
 
 # Import uses the configured tag because Enroot cannot reliably import a
-# digest-qualified Docker Hub reference non-interactively.
+# digest-qualified Docker Hub reference non-interactively. The digest resolved
+# here (best-effort registry HEAD, submit host) only stamps/checks the staged
+# squash's sidecar: a moved tag re-imports, an unresolved digest reuses what is
+# staged (COLLX_IMAGE_REFRESH=1 is then the update hatch).
 collx_select_image() {
-  local image="$1"
+  local image="$1" digest
   [[ "$image" =~ ^[A-Za-z0-9._/-]+:[A-Za-z0-9._-]+$ ]] \
     || collx_die "configured image reference is malformed"
   export COLLECTIVEX_IMAGE="$image"
+  if [[ ! "${COLLX_IMAGE_DIGEST:-}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+    digest="$(python3 "$COLLX_RUNTIME_DIR/probe.py" image-digest "$image" \
+      2>/dev/null)" || digest=""
+    if [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+      export COLLX_IMAGE_DIGEST="$digest"
+      collx_log "image digest $digest"
+    else
+      unset COLLX_IMAGE_DIGEST
+      collx_log "image digest unresolved; staged squash reused as-is"
+    fi
+  fi
 }
 
 # Create a per-UID cache under validated cluster-local storage. Only the fixed
@@ -661,28 +679,50 @@ collx_prepare_stage_dir() {
   export COLLX_STAGE_DIR
 }
 
+# One squash per (platform, image reference) — never per run (the run-scoped key
+# is what used to re-copy 30-65GB every run) and never per digest (a digest-scoped
+# key made a transient registry blip miss the staged file and re-import). The
+# resolved digest lives in a `<sq>.digest` sidecar instead and decides staleness.
 collx_squash_path() {
-  local squash_dir="$1" image="$2" key platform run_scope
+  local squash_dir="$1" image="$2" platform
   case "${COLLX_IMAGE_PLATFORM:-}" in
     linux/amd64) platform="" ;;
     linux/arm64) platform="_linux_arm64" ;;
     *) return 1 ;;
   esac
-  run_scope="${GITHUB_RUN_ID:-${COLLECTIVEX_EXECUTION_ID:-manual}}-${GITHUB_RUN_ATTEMPT:-1}"
-  run_scope="$(printf '%s' "$run_scope" | tr -cs 'A-Za-z0-9_.-' '-')" || return 1
-  run_scope="${run_scope#-}"; run_scope="${run_scope%-}"
-  [ -n "$run_scope" ] || return 1
-  key="${platform}_${run_scope}_$(
-    printf '%s' "$image" | sed 's#[/:@#]#_#g'
-  )"
-  printf '%s' "$squash_dir/${key}.sqsh"
+  printf '%s' "$squash_dir/${platform}_$(printf '%s' "$image" | sed 's#[/:@#]#_#g').sqsh"
+}
+
+# Reuse decision for a staged squash (pure read, callers hold the import lock):
+# echoes "reuse", or why to re-import. An unresolved digest reuses whatever is
+# staged (prefer downloaded over re-import); a resolved digest that differs from
+# the sidecar stamp means the tag moved upstream — that is the update path.
+# refresh_epoch (COLLX_IMAGE_REFRESH=1) discards only files staged before this
+# launch, so concurrent legs of the refreshing run still import exactly once.
+collx_squash_verdict() {
+  local sq="$1" digest="$2" refresh_epoch="$3" stamp="" mtime
+  [ -e "$sq" ] || { printf 'absent'; return; }
+  if [ -n "$refresh_epoch" ]; then
+    # GNU stat on the clusters; the BSD fallback keeps the seam testable on macOS.
+    mtime="$(stat -c %Y "$sq" 2>/dev/null || stat -f %m "$sq" 2>/dev/null || echo 0)"
+    [ "$mtime" -ge "$refresh_epoch" ] || { printf 'refresh-requested'; return; }
+  fi
+  [ ! -f "$sq.digest" ] || IFS= read -r stamp < "$sq.digest" || stamp=""
+  if [ -n "$digest" ] && [ -n "$stamp" ] && [ "$stamp" != "$digest" ]; then
+    printf 'digest-moved'; return
+  fi
+  printf 'reuse'
 }
 
 # collx_ensure_squash <squash_dir> <image>  ->  echoes the squash file path.
-# Imports via Enroot only if a valid squash is not already present, under a lock.
+# Imports via Enroot only when collx_squash_verdict says the staged file cannot
+# be reused (or it fails validation), under a lock.
 collx_ensure_squash() {
-  local squash_dir="$1" image="$2" key sq locks lock_fd log
+  local squash_dir="$1" image="$2" key sq locks lock_fd log verdict refresh_epoch=""
   local enroot_local="" import_rc=0 machine
+  if [ "${COLLX_IMAGE_REFRESH:-0}" = 1 ]; then
+    refresh_epoch="${COLLX_LAUNCH_EPOCH:-$(date +%s)}"
+  fi
   log="$(collx_private_log_path container-import)"
   machine="$(uname -m)"
   case "${COLLX_IMAGE_PLATFORM:-}:$machine" in
@@ -700,18 +740,22 @@ collx_ensure_squash() {
     || { collx_log_tail "$log"; return 1; }
   { exec {lock_fd}>"$locks/${key}.lock"; } 2>> "$log" \
     || { collx_log_tail "$log"; return 1; }
-  # A concurrent leg of the same run holds this lock for its full import
-  # (measured ~18 minutes for the 32 GB sglang squash on b300), so the wait
-  # must outlast an import and a timeout must say so — the empty import log
-  # would otherwise make this the only silent launcher death.
+  # The lock is content-keyed like the squash, so any concurrent leg — same run
+  # or another run importing the same image — holds it for its full import
+  # (measured ~18 minutes for the 32 GB sglang squash on b300); the wait must
+  # outlast an import and a timeout must say so — the empty import log would
+  # otherwise make this the only silent launcher death. The winner's import is
+  # everyone else's cache hit.
   flock -w 2700 "$lock_fd" 2>> "$log" \
     || { collx_log "ERROR: timed out waiting for the container import lock"
          collx_log_tail "$log"; return 1; }
-  if unsquashfs -l "$sq" >/dev/null 2>&1; then
-    collx_log "container squash ready"
+  verdict="$(collx_squash_verdict "$sq" "${COLLX_IMAGE_DIGEST:-}" "$refresh_epoch")"
+  [ "$verdict" != reuse ] || unsquashfs -l "$sq" >/dev/null 2>&1 || verdict=invalid
+  if [ "$verdict" = reuse ]; then
+    collx_log "container squash ready (reusing staged import)"
   else
-    collx_log "importing configured container image"
-    rm -f "$sq" 2>> "$log" \
+    collx_log "importing configured container image ($verdict)"
+    rm -f "$sq" "$sq.digest" 2>> "$log" \
       || { collx_log_tail "$log"; return 1; }
     # </dev/null: never block on an interactive password prompt.
     if [ "${COLLX_ENROOT_LOCAL_IMPORT:-0}" = 1 ]; then
@@ -736,6 +780,16 @@ collx_ensure_squash() {
     fi
     unsquashfs -l "$sq" >> "$log" 2>&1 \
       || { collx_log_tail "$log"; return 1; }
+    # World-readable so a different account's launcher can reuse this staging
+    # instead of dying on pyxis's "Invalid image format" against a 0600 file.
+    # The sidecar records what was imported; empty when the digest was unresolved.
+    chmod a+r "$sq" 2>/dev/null || true
+    printf '%s\n' "${COLLX_IMAGE_DIGEST:-}" > "$sq.digest" 2>> "$log" || true
+    # Retired per-run names of this image never get touched again; the age gate
+    # spares a file a concurrent old-generation run may still be reading.
+    find "$squash_dir" -maxdepth 1 -type f \
+      -name "*_$(printf '%s' "$image" | sed 's#[/:@#]#_#g').sqsh" ! -name "${sq##*/}" \
+      -mmin +2880 -delete 2>/dev/null || true
   fi
   flock -u "$lock_fd"
   exec {lock_fd}>&-
@@ -746,7 +800,10 @@ collx_ensure_squash() {
 # architecture. The squash directory must be shared with the submit host.
 collx_ensure_squash_on_job() {
   local job_id="$1" squash_dir="$2" image="$3" lock_dir="${4:-}" sq key lock
-  local log_label=container-import log attempt rc
+  local log_label=container-import log attempt rc refresh_epoch=""
+  if [ "${COLLX_IMAGE_REFRESH:-0}" = 1 ]; then
+    refresh_epoch="${COLLX_LAUNCH_EPOCH:-$(date +%s)}"
+  fi
   # The import writes tens of GB to whatever the operator gave as squash storage, and on some
   # clusters that storage is a SOFT-mounted network filesystem, i.e. one that returns an error
   # rather than blocking when its transport is briefly unavailable. gb300's /data is NFSv3 over
@@ -782,10 +839,12 @@ collx_ensure_squash_on_job() {
     srun --jobid="$job_id" --nodes="${COLLX_NODES:-1}" --ntasks="${COLLX_NODES:-1}" \
       --ntasks-per-node=1 --chdir=/tmp \
       --export="$(collx_host_exports)" \
-      bash -s -- "$sq" "$lock" "$image" "$COLLX_IMAGE_PLATFORM" \
+      bash -s -- "$sq" "$lock" "$image" "$COLLX_IMAGE_PLATFORM" "$refresh_epoch" \
+      "${COLLX_IMAGE_DIGEST:-}" "$(printf '%s' "$image" | sed 's#[/:@#]#_#g')" \
       > "$log" 2>&1 <<'BASH' || rc=$?
 set -euo pipefail
 sq="$1"; lock="$2"; image="$3"; platform="$4"
+refresh_epoch="${5:-}"; digest="${6:-}"; sanitized="${7:-}"
 machine="$(uname -m)"
 case "$platform:$machine" in
   linux/amd64:x86_64|linux/amd64:amd64|linux/arm64:aarch64|linux/arm64:arm64) ;;
@@ -803,12 +862,37 @@ mkdir -p "$(dirname "$sq")" "$(dirname "$lock")" \
 exec 9>"$lock"
 # Shared storage serializes the import; node-local storage imports in parallel.
 flock 9
-if unsquashfs -l "$sq" >/dev/null 2>&1; then
-  echo 'container squash ready'
+# Same reuse rules as collx_squash_verdict, evaluated per node (storage may be
+# node-local): a refresh discards only files staged before this launcher started
+# (a sibling node's fresh import stays); a resolved digest that differs from the
+# sidecar stamp means the tag moved; an unresolved digest reuses what is staged.
+reuse=yes
+if [ ! -e "$sq" ]; then
+  reuse=absent
+elif [ -n "$refresh_epoch" ] \
+    && [ "$(stat -c %Y "$sq" 2>/dev/null || echo 0)" -lt "$refresh_epoch" ]; then
+  reuse=refresh-requested
 else
-  rm -f -- "$sq"
+  stamp=""
+  [ ! -f "$sq.digest" ] || IFS= read -r stamp < "$sq.digest" || stamp=""
+  if [ -n "$digest" ] && [ -n "$stamp" ] && [ "$stamp" != "$digest" ]; then
+    reuse=digest-moved
+  fi
+fi
+[ "$reuse" != yes ] || unsquashfs -l "$sq" >/dev/null 2>&1 || reuse=invalid
+if [ "$reuse" = yes ]; then
+  echo 'container squash ready (reusing staged import)'
+else
+  echo "importing configured container image ($reuse)"
+  rm -f -- "$sq" "$sq.digest"
   enroot import -o "$sq" "docker://$image" </dev/null
   unsquashfs -l "$sq" >/dev/null 2>&1
+  chmod a+r "$sq" 2>/dev/null || true
+  printf '%s\n' "$digest" > "$sq.digest" || true
+  # Retired per-run names of this image never get touched again; the age gate
+  # spares a file a concurrent old-generation run may still be reading.
+  find "$(dirname "$sq")" -maxdepth 1 -type f -name "*_${sanitized}.sqsh" \
+    ! -name "${sq##*/}" -mmin +2880 -delete 2>/dev/null || true
 fi
 BASH
     [ "$rc" = 0 ] && { printf '%s' "$sq"; return 0; }
