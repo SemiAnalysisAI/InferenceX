@@ -111,6 +111,14 @@ def export_ucx_selectors(environ=os.environ) -> None:
     gid = environ.get("COLLX_IB_GID_INDEX", "")
     if gid and "UCX_IB_GID_INDEX" not in environ:
         environ["UCX_IB_GID_INDEX"] = str(gid)
+    # A host-inherited positive UCX_TLS list without the cuda transports (b300
+    # ships UCX_TLS=rc cluster-wide in /etc/environment, forwarded by srun
+    # --export=ALL) makes ucp close the cuda mds; UCX then classifies VRAM as
+    # host memory and NIXL registration fails with NIXL_ERR_BACKEND. Wire
+    # restrictions are the operator's to keep, so extend rather than override.
+    tls = environ.get("UCX_TLS", "")
+    if tls and tls != "all" and not tls.startswith("^") and "cuda" not in tls:
+        environ["UCX_TLS"] = f"{tls},cuda_copy,cuda_ipc"
 
 
 def exchange_verdict(dist, role, verify_side, verify):

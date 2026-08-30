@@ -203,6 +203,26 @@ class UCXSelectors(unittest.TestCase):
         run_kv.export_ucx_selectors(env)
         self.assertEqual(env["UCX_NET_DEVICES"], "mlx5_18:1,mlx5_19:1")
 
+    def test_positive_tls_list_regains_cuda_transports(self):
+        # b300 exports UCX_TLS=rc cluster-wide; an RC-only context closes the
+        # cuda mds and NIXL registration of VRAM fails with NIXL_ERR_BACKEND.
+        import run_kv
+
+        env = {"UCX_TLS": "rc"}
+        run_kv.export_ucx_selectors(env)
+        self.assertEqual(env["UCX_TLS"], "rc,cuda_copy,cuda_ipc")
+
+    def test_tls_lists_already_covering_cuda_stay_untouched(self):
+        import run_kv
+
+        for tls in ("^tcp", "rc,cuda_copy", "all"):
+            env = {"UCX_TLS": tls}
+            run_kv.export_ucx_selectors(env)
+            self.assertEqual(env["UCX_TLS"], tls)
+        env = {}
+        run_kv.export_ucx_selectors(env)
+        self.assertNotIn("UCX_TLS", env)
+
 
 def _kv_document(status="success", sku="b200-nscale"):
     def row(kind, page, op, gbps, p50, batch=1):
