@@ -26,6 +26,7 @@ This is the mandatory low-context router for InferenceX work. Pick the one page 
 | [`documentation-procedures.md`](./documentation-procedures.md) / [`documentation-procedures_zh.md`](./documentation-procedures_zh.md) | Adding, translating, indexing, reviewing, and maintaining documentation |
 | [`PR_REVIEW_CHECKLIST.md`](./PR_REVIEW_CHECKLIST.md) / [`PR_REVIEW_CHECKLIST_zh.md`](./PR_REVIEW_CHECKLIST_zh.md) | CODEOWNER review and exact sign-off requirements |
 | [`DOCUMENTATION_PLAN.md`](./DOCUMENTATION_PLAN.md) / [`DOCUMENTATION_PLAN_zh.md`](./DOCUMENTATION_PLAN_zh.md) | Remaining documentation gaps, target information architecture, and rollout |
+| [`kimi-k3-mi355x-vllm-current-baseline.md`](./kimi-k3-mi355x-vllm-current-baseline.md) / [`kimi-k3-mi355x-vllm-current-baseline_zh.md`](./kimi-k3-mi355x-vllm-current-baseline_zh.md) | Reproduce the pinned Kimi-K3 MI355X vLLM C1/C16/C52 image patches, serving envelopes, and performance evidence |
 
 ## Authoritative references
 

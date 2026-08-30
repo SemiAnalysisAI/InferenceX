@@ -119,6 +119,10 @@ case "$K3_OVERLAY_PATCH" in
     *) K3_OVERLAY_PATCH="$(cd "$(dirname "$K3_OVERLAY_PATCH")" && pwd)/$(basename "$K3_OVERLAY_PATCH")" ;;
 esac
 if [ -f "$K3_OVERLAY_PATCH" ]; then
+    if [ -n "${K3_OVERLAY_PATCH_SHA256:-}" ]; then
+        printf '%s  %s\n' "$K3_OVERLAY_PATCH_SHA256" \
+            "$K3_OVERLAY_PATCH" | sha256sum -c -
+    fi
     SITE_PKGS=$(python3 -c 'import vllm,os;print(os.path.dirname(os.path.dirname(vllm.__file__)))')
     if ( cd "$SITE_PKGS" && patch -p1 --forward --batch --dry-run < "$K3_OVERLAY_PATCH" ) \
             >/tmp/k3_overlay_dryrun.log 2>&1; then
@@ -145,6 +149,33 @@ if [ -f "$K3_OVERLAY_PATCH" ]; then
 elif [ "${REQUIRE_K3_OVERLAY:-0}" = "1" ]; then
     echo "Required K3 overlay is missing: $K3_OVERLAY_PATCH" >&2
     exit 1
+fi
+
+# Optional delta applied after the primary source overlay. This is used for
+# small, independently testable changes whose context is the patched tree rather
+# than the base image. Keep it fail-closed when explicitly required.
+if [ -n "${K3_POST_OVERLAY_PATCH:-}" ]; then
+    case "$K3_POST_OVERLAY_PATCH" in
+        /*) ;;
+        *) K3_POST_OVERLAY_PATCH="$(cd "$(dirname "$K3_POST_OVERLAY_PATCH")" && pwd)/$(basename "$K3_POST_OVERLAY_PATCH")" ;;
+    esac
+    if [ ! -f "$K3_POST_OVERLAY_PATCH" ]; then
+        echo "Post-overlay patch is missing: $K3_POST_OVERLAY_PATCH" >&2
+        exit 1
+    fi
+    if [ -n "${K3_POST_OVERLAY_PATCH_SHA256:-}" ]; then
+        printf '%s  %s\n' "$K3_POST_OVERLAY_PATCH_SHA256" \
+            "$K3_POST_OVERLAY_PATCH" | sha256sum -c -
+    fi
+    if ! ( cd "$SITE_PKGS" && patch -p1 --forward --batch --dry-run \
+            < "$K3_POST_OVERLAY_PATCH" ) >/tmp/k3_post_overlay_dryrun.log 2>&1; then
+        echo "Post-overlay does not match the patched vLLM tree: $K3_POST_OVERLAY_PATCH" >&2
+        head -40 /tmp/k3_post_overlay_dryrun.log >&2 || true
+        exit 1
+    fi
+    echo "Applying K3 post-overlay $K3_POST_OVERLAY_PATCH into $SITE_PKGS"
+    ( cd "$SITE_PKGS" && patch -p1 --forward --batch \
+        < "$K3_POST_OVERLAY_PATCH" )
 fi
 
 # ---- In-container patches ----------------------------------------------------

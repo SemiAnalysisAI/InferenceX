@@ -1,5 +1,11 @@
 # Kimi-K3 MI355X vLLM current baseline
 
+<div align="center">
+
+**English** | [中文](./kimi-k3-mi355x-vllm-current-baseline_zh.md)
+
+</div>
+
 This document reproduces the C1, C16, and C52 configurations established on
 2026-08-30. The GitHub Actions baseline is run
 [33324464095](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/33324464095)
@@ -164,3 +170,120 @@ gh workflow run .github/workflows/e2e-tests.yml \
 ```
 
 The generated matrix must contain exactly C1, C16, and C52 before dispatch.
+
+## C16 `torch.compile` candidate
+
+The first material C16 improvement after the baseline came from vLLM
+[#52190](https://github.com/vllm-project/vllm/pull/52190), tested at head
+`c70113053761985aa289d5088503731c535dc028`. The baseline logged that
+`torch.compile` was enabled but unsupported by Kimi-K3, so the advertised
+`mla_dual_rms_norm` and `allreduce_rms` fusion passes never received a graph.
+
+The post-overlay patch is:
+
+```text
+vllm_nightly_46638857_k3_compile_52190_delta.patch
+SHA256 de1ac272820122281f865c4f81d3f7a87e03c0cb42feb59390d9012b9bb88c00
+```
+
+It is applied after
+`vllm_nightly_46638857_k3_c16_c52_current.patch` and changes five files:
+
+- `vllm/config/compilation.py`
+- `vllm/models/kimi_k3/amd/kda.py`
+- `vllm/models/kimi_k3/amd/latent_moe_runner.py`
+- `vllm/models/kimi_k3/amd/linear.py`
+- `vllm/models/kimi_k3/amd/ops/attn_res.py`
+
+The delta preserves the accepted downstream KDA checkpoint, partial-tail, and
+latent-MoE implementation. It adds Kimi-K3 compile support, makes the in-place
+KDA core and attention-residual launcher compiler-visible custom operations,
+adds the KDA core to the default graph splitting operations, and moves
+one-time latent-tail logging out of compiled forward paths.
+
+Build the clean C16 image with:
+
+```bash
+docker build \
+  -f benchmarks/single_node/agentic/k3_patches/Dockerfile.kimi-k3-c16-compile52190 \
+  -t kimi-k3-vllm:c16-compile52190-20260831 .
+```
+
+This Dockerfile was build-tested on `mi355x-17`. The local image ID was:
+
+```text
+sha256:e2fb0e238e7612f06cc47d656009584f8cc902b90bb1119c2b66e9330d3b3d1b
+```
+
+All 36 unique source paths touched by the base and delta patches matched the
+tested runtime overlay byte-for-byte after the build. The image labels record
+the base digest and #52190 head.
+
+Two identical C16 synthetic screens first isolated the compile change with no
+MTP, no offload, DCP8/A2A, MNS80, MBT8192, GMU0.86, and graph capture sizes 1
+through 80:
+
+| Arm | Aggregate tok/s | Tok/s/GPU | Mean TPOT | P99 TPOT | Requests |
+|---|---:|---:|---:|---:|---:|
+| Exact control | 40,005.53 | 5,000.69 | 34.493 ms | 37.043 ms | 96/96 |
+| Compile run 1 | 46,106.25 | 5,763.28 | 31.357 ms | 32.559 ms | 96/96 |
+| Compile run 2 | 46,039.66 | 5,754.96 | 31.410 ms | 32.370 ms | 96/96 |
+
+The two-run average is 46,072.96 tok/s aggregate, or 5,759.12 tok/s/GPU:
+15.17% above the exact control. Mean TPOT improved by 9.01%, and average P99
+TPOT improved by 12.36%.
+
+Artifacts on `mi355x-17`:
+
+```text
+/home/hyukjlee/k3-c16-compile-52190-screen-20260831/results/c16_compile52190_nospec_nooffload_noreplay_20260830T172845Z
+/home/hyukjlee/k3-c16-compile-52190-repeat2-20260831/results/c16_compile52190_repeat2_nospec_nooffload_noreplay_20260830T173800Z
+```
+
+Adding DSpark K=3 with probabilistic drafting and synthetic acceptance length
+3.00 to that compiled configuration produced:
+
+| Aggregate tok/s | Tok/s/GPU | Mean TPOT | P99 TPOT | Requests |
+|---:|---:|---:|---:|---:|
+| 63,226.07 | 7,903.26 | 22.71 ms | 23.08 ms | 96/96 |
+
+Artifact on `mi355x-17`:
+
+```text
+/home/hyukjlee/k3-c16-compile-52190-mtp3-20260831/results/c16_compile52190_mtp3_k3_synthetic_nooffload_noreplay_20260830T174817Z
+```
+
+The final candidate uses synthetic rejection only for performance measurement.
+Accuracy is checked separately with the same server envelope and DSpark K=3,
+changing only `rejection_sample_method` to `block`, using GSM8K and
+`lm-eval --limit 128`. That check passed 128/128 for both strict match and
+flexible extraction. Real block rejection reported mean acceptance length
+approximately 3.46 and about 82% drafted-token acceptance.
+
+Accuracy artifact on `mi355x-17`:
+
+```text
+/home/hyukjlee/k3-c16-compile-52190-mtp3-accuracy-20260831/results/gsm8k_limit128_c16_compile52190_mtp3_block_20260830T180014Z
+```
+
+The 3,600-second AIPerf gate remains mandatory before treating this delta as
+the release configuration.
+
+## Final candidate dispatch
+
+The final matrix keeps the accepted C1 and C52 configurations and changes C16
+to the compiled DSpark K=3 configuration above. Dispatch it with:
+
+```bash
+gh workflow run .github/workflows/e2e-tests.yml \
+  --repo SemiAnalysisAI/InferenceX \
+  --ref main \
+  -f ref=amd/kimi-k3-compile52190-final-20260831 \
+  -f generate-cli-command='test-config --config-files ./configs/amd-master.yaml --config-keys kimik3-fp4-mi355x-vllm-agentic-compile52190-final' \
+  -f test-name='Kimi K3 compile52190 final C1 C16 C52' \
+  -f duration-override=3600 \
+  -f fail-fast=false
+```
+
+Before dispatch, confirm that the generated matrix contains exactly C1, C16,
+and C52, with C16 marked `spec-decoding: mtp`.

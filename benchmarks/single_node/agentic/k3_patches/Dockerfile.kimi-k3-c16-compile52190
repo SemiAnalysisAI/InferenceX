@@ -1,0 +1,15 @@
+ARG BASE_IMAGE=vllm/vllm-openai-rocm:nightly-46638857fdbb30e0c232c9e8f9cb1ff6d6f545c3@sha256:8908b8ab5ba28c3b81f9f42bb72e2421f06a180e001c67c4f10ff7f127c5690b
+FROM ${BASE_IMAGE}
+
+COPY benchmarks/single_node/agentic/k3_patches/vllm_nightly_46638857_k3_c16_c52_current.patch /tmp/k3-base.patch
+COPY benchmarks/single_node/agentic/k3_patches/vllm_nightly_46638857_k3_compile_52190_delta.patch /tmp/k3-compile.patch
+
+RUN echo "90f975fad15722494366153ec3f32a14c4445bfa88c51ec53043b88eaf64dcc0  /tmp/k3-base.patch" | sha256sum -c - \
+    && echo "de1ac272820122281f865c4f81d3f7a87e03c0cb42feb59390d9012b9bb88c00  /tmp/k3-compile.patch" | sha256sum -c - \
+    && cd /usr/local/lib/python3.12/dist-packages \
+    && patch -p1 --forward --batch < /tmp/k3-base.patch \
+    && patch -p1 --forward --batch < /tmp/k3-compile.patch \
+    && rm /tmp/k3-base.patch /tmp/k3-compile.patch
+
+LABEL org.opencontainers.image.base.digest="sha256:8908b8ab5ba28c3b81f9f42bb72e2421f06a180e001c67c4f10ff7f127c5690b"
+LABEL org.opencontainers.image.vllm.pr.52190="c70113053761985aa289d5088503731c535dc028"

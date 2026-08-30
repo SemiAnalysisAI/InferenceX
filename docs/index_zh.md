@@ -26,6 +26,7 @@
 | [`documentation-procedures.md`](./documentation-procedures.md) / [`documentation-procedures_zh.md`](./documentation-procedures_zh.md) | 新增、翻译、索引、审阅与维护文档 |
 | [`PR_REVIEW_CHECKLIST.md`](./PR_REVIEW_CHECKLIST.md) / [`PR_REVIEW_CHECKLIST_zh.md`](./PR_REVIEW_CHECKLIST_zh.md) | CODEOWNER 审阅与精确签署要求 |
 | [`DOCUMENTATION_PLAN.md`](./DOCUMENTATION_PLAN.md) / [`DOCUMENTATION_PLAN_zh.md`](./DOCUMENTATION_PLAN_zh.md) | 剩余文档缺口、目标信息架构与落地计划 |
+| [`kimi-k3-mi355x-vllm-current-baseline.md`](./kimi-k3-mi355x-vllm-current-baseline.md) / [`kimi-k3-mi355x-vllm-current-baseline_zh.md`](./kimi-k3-mi355x-vllm-current-baseline_zh.md) | 复现固定的 Kimi-K3 MI355X vLLM C1/C16/C52 镜像补丁、服务配置与性能证据 |
 
 ## 权威参考
 

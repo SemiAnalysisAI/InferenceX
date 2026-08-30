@@ -1,0 +1,262 @@
+diff --git a/vllm/config/compilation.py b/vllm/config/compilation.py
+index 3cd227d72c..873d701cbb 100644
+--- a/vllm/config/compilation.py
++++ b/vllm/config/compilation.py
+@@ -770,6 +770,7 @@ class CompilationConfig:
+         "vllm::linear_attention",
+         "vllm::qwen_gdn_attention_core",
+         "vllm::qwen_gdn_attention_core_fused_norm_packed",
++        "vllm::kimi_kda_attention_core",
+         "vllm::gdn_attention_core_xpu",
+         "vllm::olmo_hybrid_gdn_full_forward",
+         "vllm::sparse_attn_indexer",
+diff --git a/vllm/models/kimi_k3/amd/kda.py b/vllm/models/kimi_k3/amd/kda.py
+index 69f6362220..18659df2ab 100644
+--- a/vllm/models/kimi_k3/amd/kda.py
++++ b/vllm/models/kimi_k3/amd/kda.py
+@@ -41,6 +41,7 @@ from vllm.model_executor.layers.mamba.ops.gather_initial_states import (
+ )
+ from vllm.model_executor.model_loader.weight_utils import sharded_weight_loader
+ from vllm.model_executor.utils import set_weight_attrs
++from vllm.utils.torch_utils import direct_register_custom_op
+ from vllm.models.kimi_k3.amd.kda_metadata import (
+     KimiK3ROCmKDABackend,
+     KimiK3ROCmKDAMetadata,
+@@ -354,12 +355,13 @@ class KimiK3DeltaAttention(GatedDeltaNetAttention):
+             device=hidden_states.device,
+         )
+ 
+-        self._forward(
+-            mixed_qkv=mixed_qkv,
+-            g1=g1,
+-            g2=g2,
+-            beta=beta,
+-            core_attn_out=core_attn_out,
++        torch.ops.vllm.kimi_kda_attention_core(
++            mixed_qkv,
++            g1,
++            g2,
++            beta,
++            core_attn_out,
++            self.prefix,
+         )
+         core_attn_out = rearrange(core_attn_out, "1 n h d -> n (h d)")
+         return self.o_proj(core_attn_out)[0]
+@@ -708,3 +710,42 @@ class KimiK3DeltaAttention(GatedDeltaNetAttention):
+         else:
+             assert core_attn_out_spec is not None
+         core_attn_out.copy_(self.o_norm(core_attn_out, g2))
++
++
++def kimi_kda_attention_core(
++    mixed_qkv: torch.Tensor,
++    g1: torch.Tensor,
++    g2: torch.Tensor,
++    beta: torch.Tensor,
++    core_attn_out: torch.Tensor,
++    layer_name: str,
++) -> None:
++    """Run the in-place KDA core outside the compiled graph."""
++    forward_context = get_forward_context()
++    self = forward_context.no_compile_layers[layer_name]
++    self._forward(
++        mixed_qkv=mixed_qkv,
++        g1=g1,
++        g2=g2,
++        beta=beta,
++        core_attn_out=core_attn_out,
++    )
++
++
++def kimi_kda_attention_core_fake(
++    mixed_qkv: torch.Tensor,
++    g1: torch.Tensor,
++    g2: torch.Tensor,
++    beta: torch.Tensor,
++    core_attn_out: torch.Tensor,
++    layer_name: str,
++) -> None:
++    return
++
++
++direct_register_custom_op(
++    op_name="kimi_kda_attention_core",
++    op_func=kimi_kda_attention_core,
++    mutates_args=["core_attn_out"],
++    fake_impl=kimi_kda_attention_core_fake,
++)
+diff --git a/vllm/models/kimi_k3/amd/latent_moe_runner.py b/vllm/models/kimi_k3/amd/latent_moe_runner.py
+index 00e3cca4da..07639633d0 100644
+--- a/vllm/models/kimi_k3/amd/latent_moe_runner.py
++++ b/vllm/models/kimi_k3/amd/latent_moe_runner.py
+@@ -67,8 +67,18 @@ class ROCmLatentMoERunner(MoERunner):
+ 
+         # Overlap the shared-expert all-reduce with the tier-1 up-projection.
+         self._shared_ar_events = (torch.cuda.Event(), torch.cuda.Event())
+-        self._logged_column_parallel = False
+-        self._logged_overlap_fallback = False
++        if self._column_parallel_shardable():
++            logger.info_once(
++                "Kimi-K3 latent-MoE tail: up-projecting only this rank's "
++                "hidden shard into the shared output.",
++                scope="global",
++            )
++        else:
++            logger.warning_once(
++                "K3 latent-MoE tail is not shardable under this config, "
++                "falling back to the replicated up-projection.",
++                scope="global",
++            )
+ 
+     def _use_fused_path(self) -> bool:
+         # The fused path merges the latent and shared reductions into one
+@@ -107,13 +117,6 @@ class ROCmLatentMoERunner(MoERunner):
+         # otherwise the overlap tier is correct at any size.
+         if self._column_parallel_shardable():
+             return ROCmLatentTailTier.COLUMN_PARALLEL
+-        if not self._logged_overlap_fallback:
+-            self._logged_overlap_fallback = True
+-            logger.warning_once(
+-                "K3 latent-MoE tail is not shardable under this config, "
+-                "falling back to the replicated up-projection.",
+-                scope="global",
+-            )
+         return ROCmLatentTailTier.ALLREDUCE_OVERLAP
+ 
+     def _allreduce_norm_latent_out(
+@@ -193,14 +196,6 @@ class ROCmLatentMoERunner(MoERunner):
+         """
+         Tier 2: column-parallel up-projection folded into the final reduce.
+         """
+-        if not self._logged_column_parallel:
+-            self._logged_column_parallel = True
+-            logger.info_once(
+-                "Kimi-K3 latent-MoE tail: up-projecting only this rank's "
+-                "hidden shard into the shared output.",
+-                scope="global",
+-            )
+-
+         transform = self.routed_output_transform
+         assert transform is not None
+ 
+diff --git a/vllm/models/kimi_k3/amd/linear.py b/vllm/models/kimi_k3/amd/linear.py
+index 93a4fd2c9a..bb60c2ac71 100644
+--- a/vllm/models/kimi_k3/amd/linear.py
++++ b/vllm/models/kimi_k3/amd/linear.py
+@@ -7,6 +7,7 @@ from typing import Any
+ import torch
+ from torch import nn
+ 
++from vllm.compilation.decorators import support_torch_compile
+ from vllm.config import CacheConfig, VllmConfig
+ from vllm.distributed import (
+     get_pp_group,
+@@ -669,6 +670,7 @@ class KimiDecoderLayer(nn.Module):
+         return prefix_sum, block_residual, hidden_states
+ 
+ 
++@support_torch_compile
+ class KimiLinearModel(nn.Module, EagleModelMixin):
+     def __init__(self, *, vllm_config: VllmConfig, prefix: str = ""):
+         super().__init__()
+diff --git a/vllm/models/kimi_k3/amd/ops/attn_res.py b/vllm/models/kimi_k3/amd/ops/attn_res.py
+index 5802e60367..b62839ec16 100644
+--- a/vllm/models/kimi_k3/amd/ops/attn_res.py
++++ b/vllm/models/kimi_k3/amd/ops/attn_res.py
+@@ -11,6 +11,7 @@
+ import torch
+ 
+ from vllm.triton_utils import tl, triton
++from vllm.utils.torch_utils import direct_register_custom_op
+ 
+ 
+ @triton.jit
+@@ -136,7 +137,7 @@ def _attn_res_kernel(
+     )
+ 
+ 
+-def attn_res(
++def _attn_res_impl(
+     prefix: torch.Tensor,
+     delta: torch.Tensor | None,
+     blocks: torch.Tensor,
+@@ -191,3 +192,79 @@ def attn_res(
+         num_stages=2,
+     )
+     return output
++
++
++def _kimi_attn_res(
++    prefix: torch.Tensor,
++    delta: torch.Tensor | None,
++    blocks: torch.Tensor,
++    norm_weight: torch.Tensor,
++    qk_weight: torch.Tensor,
++    output_norm_weight: torch.Tensor | None,
++    num_blocks: int,
++    block_write_idx: int,
++    eps: float,
++    output_norm_eps: float,
++) -> torch.Tensor:
++    return _attn_res_impl(
++        prefix,
++        delta,
++        blocks,
++        norm_weight,
++        qk_weight,
++        output_norm_weight,
++        num_blocks,
++        block_write_idx,
++        eps,
++        output_norm_eps,
++    )
++
++
++def _kimi_attn_res_fake(
++    prefix: torch.Tensor,
++    delta: torch.Tensor | None,
++    blocks: torch.Tensor,
++    norm_weight: torch.Tensor,
++    qk_weight: torch.Tensor,
++    output_norm_weight: torch.Tensor | None,
++    num_blocks: int,
++    block_write_idx: int,
++    eps: float,
++    output_norm_eps: float,
++) -> torch.Tensor:
++    return prefix.new_empty(prefix.shape)
++
++
++direct_register_custom_op(
++    op_name="kimi_attn_res",
++    op_func=_kimi_attn_res,
++    mutates_args=["blocks"],
++    fake_impl=_kimi_attn_res_fake,
++)
++
++
++def attn_res(
++    prefix: torch.Tensor,
++    delta: torch.Tensor | None,
++    blocks: torch.Tensor,
++    norm_weight: torch.Tensor,
++    qk_weight: torch.Tensor,
++    output_norm_weight: torch.Tensor | None,
++    num_blocks: int,
++    block_write_idx: int,
++    eps: float,
++    output_norm_eps: float,
++) -> torch.Tensor:
++    """Run the shape-dependent, in-place attention residual outside Dynamo."""
++    return torch.ops.vllm.kimi_attn_res(
++        prefix,
++        delta,
++        blocks,
++        norm_weight,
++        qk_weight,
++        output_norm_weight,
++        num_blocks,
++        block_write_idx,
++        eps,
++        output_norm_eps,
++    )

@@ -24,11 +24,15 @@ fi
 
 export SPEC_DECODE=false
 export K3_OVERLAY_PATCH="$script_dir/k3_patches/vllm_nightly_46638857_k3_c16_c52_current.patch"
+export K3_OVERLAY_PATCH_SHA256=90f975fad15722494366153ec3f32a14c4445bfa88c51ec53043b88eaf64dcc0
 export REQUIRE_K3_OVERLAY=1
+unset K3_POST_OVERLAY_PATCH K3_POST_OVERLAY_PATCH_SHA256
 
 export DCP_COMM_BACKEND=a2a
 case "${CONC:?CONC is required}:${KV_OFFLOADING:-none}:${KV_OFFLOAD_BACKEND:-}" in
     16:none:)
+        export K3_POST_OVERLAY_PATCH="$script_dir/k3_patches/vllm_nightly_46638857_k3_compile_52190_delta.patch"
+        export K3_POST_OVERLAY_PATCH_SHA256=de1ac272820122281f865c4f81d3f7a87e03c0cb42feb59390d9012b9bb88c00
         export GPU_MEM_UTIL=0.86
         export MAX_NUM_BATCHED_TOKENS=8192
         export ASYNC_SCHEDULING=0

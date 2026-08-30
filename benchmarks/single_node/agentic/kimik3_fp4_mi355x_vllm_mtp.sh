@@ -3,16 +3,10 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "$0")" && pwd)"
 
-# Reproduction of the accepted C1 baseline on nightly-46638857.
+# Reproduction of the accepted C1 baseline and the compiled C16 candidate on
+# nightly-46638857.
 if [ "${SPEC_DECODING:-none}" != "mtp" ]; then
     echo "Error: this recipe requires DSpark speculative decoding." >&2
-    exit 1
-fi
-
-if [ "${CONC:?CONC is required}" -ne 1 ] \
-        || [ "${DCP_SIZE:-1}" -ne 1 ] \
-        || [ "${KV_OFFLOADING:-none}" != "none" ]; then
-    echo "Error: this pinned recipe supports only C1 TP8/DCP1 without offload." >&2
     exit 1
 fi
 
@@ -25,15 +19,43 @@ if [ -r /proc/sys/kernel/numa_balancing ]; then
 fi
 
 export SPEC_DECODE=true
-export SPEC_NUM_TOKENS=6
-export SYNTHETIC_ACCEPT_LEN=3.84
-export K3_OVERLAY_PATCH="$script_dir/k3_patches/vllm_nightly_46638857_k3_c1_current.patch"
 export REQUIRE_K3_OVERLAY=1
+unset K3_OVERLAY_PATCH_SHA256
+unset K3_POST_OVERLAY_PATCH K3_POST_OVERLAY_PATCH_SHA256
 
-export DCP_COMM_BACKEND=ag_rs
-export GPU_MEM_UTIL=0.875
-export MAX_NUM_BATCHED_TOKENS=8192
-export MAX_NUM_SEQS=2
+case "${CONC:?CONC is required}:${DCP_SIZE:-1}:${KV_OFFLOADING:-none}" in
+    1:1:none)
+        export SPEC_NUM_TOKENS=6
+        export SYNTHETIC_ACCEPT_LEN=3.84
+        export K3_OVERLAY_PATCH="$script_dir/k3_patches/vllm_nightly_46638857_k3_c1_current.patch"
+        export K3_OVERLAY_PATCH_SHA256=554ec6384b4ae143df42b223af66a8365e2b466c7ea691ed6c5a26a8749a4e6d
+        export DCP_COMM_BACKEND=ag_rs
+        export GPU_MEM_UTIL=0.875
+        export MAX_NUM_BATCHED_TOKENS=8192
+        export MAX_NUM_SEQS=2
+        export MAX_CUDAGRAPH_CAPTURE_SIZE=16
+        export CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 1 16)"
+        ;;
+    16:8:none)
+        export SPEC_NUM_TOKENS=3
+        export SYNTHETIC_ACCEPT_LEN=3.00
+        export K3_OVERLAY_PATCH="$script_dir/k3_patches/vllm_nightly_46638857_k3_c16_c52_current.patch"
+        export K3_OVERLAY_PATCH_SHA256=90f975fad15722494366153ec3f32a14c4445bfa88c51ec53043b88eaf64dcc0
+        export K3_POST_OVERLAY_PATCH="$script_dir/k3_patches/vllm_nightly_46638857_k3_compile_52190_delta.patch"
+        export K3_POST_OVERLAY_PATCH_SHA256=de1ac272820122281f865c4f81d3f7a87e03c0cb42feb59390d9012b9bb88c00
+        export DCP_COMM_BACKEND=a2a
+        export GPU_MEM_UTIL=0.86
+        export MAX_NUM_BATCHED_TOKENS=8192
+        export MAX_NUM_SEQS=80
+        export MAX_CUDAGRAPH_CAPTURE_SIZE=80
+        export CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 1 80)"
+        ;;
+    *)
+        echo "Error: unsupported pinned Kimi-K3 MTP arm: C${CONC}, DCP=${DCP_SIZE:-1}, KV_OFFLOADING=${KV_OFFLOADING:-none}" >&2
+        exit 1
+        ;;
+esac
+
 export K3_AUTO_KV_PAGE=1
 export ASYNC_SCHEDULING=0
 
@@ -44,8 +66,6 @@ export PREFIX_MATCH_UNIT=128
 export PREFIX_CACHING_HASH_ALGO=sha256
 
 export VLLM_ALLOW_DCP_FULL_CUDAGRAPH=1
-export MAX_CUDAGRAPH_CAPTURE_SIZE=16
-export CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 1 16)"
 export COMPILATION_CUSTOM_OPS='"+fused_rms_norm_gated","+quant_fp8","+grouped_topk","+sparse_attn_indexer","none"'
 
 export HSA_NO_SCRATCH_RECLAIM=1

@@ -6543,3 +6543,14 @@
     - "Add a c16 TP8/DCP8 GPU-resident, non-speculative diagnostic control for the prefix-cache crash in run 33087993363."
     - "Keep the same vLLM v466 tuned overlay while removing both DSpark speculative decoding and SimpleCPU KV offload."
   pr-link: XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-current-baseline
+    - kimik3-fp4-mi355x-vllm-agentic-compile52190-final
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a reproducible MI355X Kimi-K3 C1/C16/C52 final candidate while retaining the accepted C1 and C52 serving envelopes."
+    - "Apply the SHA-verified vLLM #52190 delta after the C16/C52 overlay and run C16 with DSpark K=3, DCP8/A2A, no KV offload, MNS80, MBT8192, GMU0.86, and CUDA graph sizes 1 through 80."
+    - "Pin both primary overlays by SHA256 and include a clean Dockerfile that bakes the C16/C52 base patch followed by the five-file #52190 delta into nightly-46638857."
+  pr-link: TBD
