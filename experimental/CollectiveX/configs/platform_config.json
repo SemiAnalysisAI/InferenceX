@@ -185,6 +185,14 @@
           8
         ]
       },
+      "kv_backends": {
+        "nixl": [
+          "rdma"
+        ],
+        "mooncake": [
+          "rdma"
+        ]
+      },
       "fabric": {
         "nic": "ConnectX-8 2x400GbE",
         "switch": "NVIDIA Spectrum-X SN5600 (51.2T)"
