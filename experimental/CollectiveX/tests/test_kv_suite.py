@@ -208,8 +208,11 @@ def _kv_document(status="success", sku="b200-nscale"):
     def row(kind, page, op, gbps, p50, batch=1):
         return {"kind": kind, "preset": "dsv4", "isl": 32768, "page_tokens": page,
                 "op": op, "descs": 1, "req_bytes": 1, "batch": batch, "prep_ms": 0.1,
-                "latency_ms": {"p50": p50, "p95": p50, "min": p50, "max": p50, "n": 24},
-                "gbps_p50": gbps, "verify": {"passed": status == "success", "detail": ""}}
+                "latency_ms": {"p50": p50, "p95": p50, "min": p50, "max": p50, "n": 48},
+                "request_ms": {"p50": p50, "p95": p50, "min": p50, "max": p50,
+                               "n": 48 * batch},
+                "gbps_p50": gbps, "gbps_p50_incl_prep": gbps,
+                "verify": {"passed": status == "success", "detail": ""}}
 
     return {
         "version": 1,
@@ -219,11 +222,12 @@ def _kv_document(status="success", sku="b200-nscale"):
             "mode": "rdma", "phase": "xfer", "ep": 2, "routing": "paged",
             "precision": "fp8"}}},
         "measurement": {"rows": [
-            row("paged", 64, "pull", 43.4, 53.1),
-            row("paged", 64, "pull", 96.2, 21.4, batch=16),
-            row("paged", 16, "pull", 12.4, 185.2),
+            row("paged", 256, "pull", 43.4, 53.1),
+            row("paged", 256, "pull", 96.2, 21.4, batch=16),
+            # a smaller measured block must lose to the production block size
+            row("paged", 128, "pull", 12.4, 185.2),
             row("bulk", None, "pull", 48.3, 47.7),
-            row("paged", 64, "push", 48.4, 47.6),
+            row("paged", 256, "push", 48.4, 47.6),
         ]},
         "topology": {"gpus_per_node": 1, "scale_up_domain": 8, "nodes": 2},
         "outcome": {"status": status, "reasons": []},
@@ -237,10 +241,21 @@ class BurstTiming(unittest.TestCase):
         order = []
         pairs = [(lambda i=i: order.append(("post", i)),
                   lambda i=i: order.append(("wait", i))) for i in range(3)]
-        samples = time_bursts(pairs, warmup=1, reps=2)
-        self.assertEqual(len(samples), 2)
+        burst_ms, request_ms = time_bursts(pairs, warmup=1, reps=2)
+        self.assertEqual(len(burst_ms), 2)
+        # one completion mark per request per kept rep, in posting order
+        self.assertEqual(len(request_ms), 2 * 3)
         self.assertEqual(order[:6], [("post", 0), ("post", 1), ("post", 2),
                                      ("wait", 0), ("wait", 1), ("wait", 2)])
+
+    def test_the_burst_sample_is_the_last_request_mark(self):
+        from kv_backend import time_bursts
+
+        pairs = [(lambda: None, lambda: None)] * 2
+        burst_ms, request_ms = time_bursts(pairs, warmup=0, reps=1)
+        self.assertEqual(burst_ms[0], request_ms[-1])
+        # marks are offsets from the burst start, so they never decrease
+        self.assertEqual(request_ms, sorted(request_ms))
 
 
 class KVGrid(unittest.TestCase):
@@ -249,44 +264,63 @@ class KVGrid(unittest.TestCase):
         import argparse
 
         base = dict(workload_name="kv-dsv4", precision="fp8",
-                    isl_ladder="8192 32768 131072 524288", page_tokens="16 64",
+                    isl_ladder="8192 32768 131072 524288", page_tokens="256",
                     batch_sizes="1 2 4 8 16 32 64", pool_slack=2.0)
         base.update(overrides)
         return argparse.Namespace(**base)
 
-    def test_descriptor_budget_sheds_batches_but_keeps_a_chartable_ladder(self):
-        # 512k page-16 is ~2.1M descriptors per request: over budget at any
-        # batch above 1, but the LADDER_FLOOR smallest batches must survive so
-        # every point keeps a chartable batch ladder (the frontier draws its
-        # line through the ladder at the largest measured ISL). The 32k cells
-        # of the original grid must keep their full batch ladder.
+    def test_the_packed_grid_sheds_only_where_the_pool_budget_bites(self):
+        # Packed block-major geometry: a 512k-ISL block-256 request is 6,146
+        # descriptors, so no batch on this ladder nears DESC_BUDGET. Only the
+        # 512k point sheds, and via the pool budget: its batch-32 pool plans
+        # ~118 GB against the 64 GiB budget, batch 16 fits at ~59 GB.
         import run_kv
 
         points, isls, batches = run_kv._grid(self._args())
         self.assertEqual((isls, batches),
                          ([8192, 32768, 131072, 524288], [1, 2, 4, 8, 16, 32, 64]))
-        allowed = {(cfg["isl"], cfg["page_tokens"]): allowed for cfg, allowed in points}
-        self.assertEqual(allowed[8192, 16], [1, 2, 4, 8, 16, 32, 64])
-        self.assertEqual(allowed[32768, 16], [1, 2, 4, 8, 16])
-        self.assertEqual(allowed[32768, 64], [1, 2, 4, 8, 16, 32])
-        self.assertEqual(allowed[131072, 16], [1, 2, 4, 8, 16])
-        self.assertEqual(allowed[131072, 64], [1, 2, 4, 8, 16])
-        self.assertEqual(allowed[524288, 16], [1, 2, 4, 8, 16])
-        self.assertEqual(allowed[524288, 64], [1, 2, 4, 8, 16])
+        allowed = {cfg["isl"]: allowed for cfg, allowed in points}
+        self.assertEqual(allowed[8192], [1, 2, 4, 8, 16, 32, 64])
+        self.assertEqual(allowed[32768], [1, 2, 4, 8, 16, 32, 64])
+        self.assertEqual(allowed[131072], [1, 2, 4, 8, 16, 32, 64])
+        self.assertEqual(allowed[524288], [1, 2, 4, 8, 16])
         for cfg, batch_list in points:
+            self.assertEqual(cfg["descs"], 3 * -(-cfg["isl"] // 256) + 2)
             self.assertLessEqual(cfg["pool_bytes"], run_kv.POOL_BUDGET)
             for batch in batch_list[run_kv.LADDER_FLOOR:]:
                 self.assertLessEqual(batch * cfg["descs"], run_kv.DESC_BUDGET)
 
-    def test_pool_budget_sheds_largest_batches_not_the_point(self):
-        # A point whose largest batch cannot fit the pool budget must survive
-        # with the batches that do. dsv4 alone never nears the production
-        # budget, so pin it between batch-4 and batch-16 pool sizes.
+    def test_descriptor_budget_sheds_batches_but_keeps_a_chartable_ladder(self):
+        # DESC_BUDGET stays as the fail-closed guard for future presets whose
+        # bursts are descriptor-bound. Pin it to 4 requests' descriptors at
+        # the largest ISL: batches above the per-point allowance shed, but the
+        # LADDER_FLOOR smallest batches always survive so every point keeps a
+        # chartable batch ladder (the frontier draws its line through the
+        # ladder at the largest measured ISL).
         import kv_workload
         import run_kv
 
-        args = self._args(isl_ladder="32768", page_tokens="64", batch_sizes="1 4 16")
-        budget = kv_workload.plan_config("dsv4", "fp8", 32768, 64,
+        probe = kv_workload.plan_config("dsv4", "fp8", 524288, 256)
+        saved, run_kv.DESC_BUDGET = run_kv.DESC_BUDGET, 4 * probe["descs"]
+        try:
+            points, _isls, _batches = run_kv._grid(self._args())
+        finally:
+            run_kv.DESC_BUDGET = saved
+        allowed = {cfg["isl"]: allowed for cfg, allowed in points}
+        self.assertEqual(allowed[8192], [1, 2, 4, 8, 16, 32, 64])   # 98 descs/req
+        self.assertEqual(allowed[32768], [1, 2, 4, 8, 16, 32])      # 386
+        self.assertEqual(allowed[131072], [1, 2, 4, 8, 16])         # 1538, floor
+        self.assertEqual(allowed[524288], [1, 2, 4, 8, 16])         # 6146, floor
+
+    def test_pool_budget_sheds_largest_batches_not_the_point(self):
+        # A point whose largest batch cannot fit the pool budget must survive
+        # with the batches that do: pin the budget between the batch-4 and
+        # batch-16 pool sizes.
+        import kv_workload
+        import run_kv
+
+        args = self._args(isl_ladder="32768", batch_sizes="1 4 16")
+        budget = kv_workload.plan_config("dsv4", "fp8", 32768, 256,
                                          2.0, batch_max=4)["pool_bytes"]
         saved, run_kv.POOL_BUDGET = run_kv.POOL_BUDGET, budget
         try:
@@ -299,14 +333,14 @@ class KVGrid(unittest.TestCase):
     def test_pool_budget_overrides_the_ladder_floor(self):
         # The descriptor floor keeps the LADDER_FLOOR smallest batches, but
         # the pool budget is a hard memory limit and must still shed a
-        # floor-kept batch. Pin the budget to 512k page-16's batch-1 pool
+        # floor-kept batch. Pin the budget to the 512k point's batch-1 pool
         # size: every larger batch survives the descriptor floor, then the
         # pool loop must drop them all, leaving [1].
         import kv_workload
         import run_kv
 
-        args = self._args(isl_ladder="524288", page_tokens="16")
-        budget = kv_workload.plan_config("dsv4", "fp8", 524288, 16,
+        args = self._args(isl_ladder="524288")
+        budget = kv_workload.plan_config("dsv4", "fp8", 524288, 256,
                                          2.0, batch_max=1)["pool_bytes"]
         saved, run_kv.POOL_BUDGET = run_kv.POOL_BUDGET, budget
         try:
@@ -321,7 +355,7 @@ class KVSummary(unittest.TestCase):
     def test_kv_documents_render_their_own_table(self):
         text = summarize.render([_kv_document()])
         self.assertIn("KV-transfer results", text)
-        self.assertIn("| pull | 43.4 | 96.2 | 12.4 | 48.3 | 53.1 |", text)
+        self.assertIn("| pull | 43.4 | 96.2 | 48.3 | 53.1 |", text)
 
     def test_a_push_only_document_reads_its_push_lane(self):
         doc = _kv_document()

@@ -42,9 +42,11 @@ BULK_CAP = 8 << 30
 # fine, so the cap is per-launcher, not fleet-wide.
 POOL_BUDGET = int(os.environ.get("COLLX_KV_POOL_BUDGET", 64 << 30))
 # Burst posting ceiling: a burst posts batch x descs descriptors, and the
-# per-descriptor floor makes time linear in that product (a 512k-ISL page-16
-# request alone is ~2.1M descriptors). Sized to keep every <=32k cell of the
-# original grid while holding the slowest lane inside the per-case guard.
+# per-descriptor floor makes time linear in that product. On the packed
+# block-major geometry a request is only ceil(isl/block) descriptors per
+# group (a 512k-ISL block-256 request is ~6.1k), so the production grid sits
+# far under this; the budget stays as the fail-closed guard for future
+# presets or small block sizes.
 DESC_BUDGET = 2_250_000
 # The LADDER_FLOOR smallest requested batches ride over DESC_BUDGET anyway:
 # the frontier chart draws its line through the batch ladder at the largest
@@ -63,7 +65,9 @@ def add_kv_args(ap: argparse.ArgumentParser) -> None:
                     help="which lane the SKU row claims; mnnvl additionally sets "
                          "UCX_CUDA_IPC_ENABLE_MNNVL=y for the UCX-backed libraries")
     ap.add_argument("--isl-ladder", default="512 4096 32768")
-    ap.add_argument("--page-tokens", default="16 64")
+    ap.add_argument("--page-tokens", default="256",
+                    help="vLLM block size in tokens; dsv4 needs a multiple of "
+                         "128 (HCA states) and vLLM serves it at 256")
     ap.add_argument("--ops", default="pull push")
     ap.add_argument("--batch-sizes", default="1",
                     help="requests per burst; each is a separate prepped transfer, "
@@ -200,11 +204,11 @@ def main() -> int:
     torch.cuda.set_device(local_rank)
     device = torch.device(f"cuda:{local_rank}")
     role = "target" if rank == 0 else "initiator"
-    # A single grid point's timed stretch can run far past gloo's 30-minute
-    # default recv timeout (the descriptor-floor lanes post tens of millions
-    # of descriptors per burst, and the target rank waits silently at the
-    # next gather the whole time). Size the control-plane timeout to the
-    # per-case hang guard so the guard, not gloo, decides when a run died.
+    # A single grid point's timed stretch can run past gloo's 30-minute
+    # default recv timeout (a slow lane's large-ISL bursts, while the target
+    # rank waits silently at the next gather). Size the control-plane timeout
+    # to the per-case hang guard so the guard, not gloo, decides when a run
+    # died.
     grace_s = int(os.environ.get("COLLX_RUN_TIMEOUT", "21600"))
     dist.init_process_group("gloo", rank=rank, world_size=world_size,
                             timeout=_dt.timedelta(seconds=grace_s))
@@ -282,8 +286,11 @@ def main() -> int:
             prep_s = sum(m[2] for m in made)
             pairs = [m[:2] for m in made]
             samples: list[float] = []
+            request_samples: list[float] = []
             for _ in range(args.trials):
-                samples.extend(time_bursts(pairs, args.warmup, args.reps))
+                burst_ms, request_ms = time_bursts(pairs, args.warmup, args.reps)
+                samples.extend(burst_ms)
+                request_samples.extend(request_ms)
         dist.barrier()  # transfers complete before anyone inspects pools
         verdict = exchange_verdict(
             dist, role, verify_side,
@@ -293,13 +300,23 @@ def main() -> int:
         if role != "initiator":
             return None
         stats = kv_workload.pcts(samples)
+        request_stats = kv_workload.pcts(request_samples)
+        prep_ms = prep_s * 1e3
         gbps = cfg_row["req_bytes"] * cfg_row["batch"] / stats["p50"] / 1e6
+        # The cold-path rate: a burst whose descriptors and handles are built
+        # fresh (unique block tables, no prepped-handle reuse) pays prep once.
+        gbps_incl_prep = (cfg_row["req_bytes"] * cfg_row["batch"]
+                          / (stats["p50"] + prep_ms) / 1e6)
         return {
             **{k: v for k, v in cfg_row.items() if not k.startswith("_")},
             "op": op,
-            "prep_ms": round(prep_s * 1e3, 3),
+            "prep_ms": round(prep_ms, 3),
             "latency_ms": {k: round(v, 3) for k, v in stats.items()},
+            # Host-observed completion of each individual request within its
+            # burst (waits drain in posting order, so each is an upper bound).
+            "request_ms": {k: round(v, 3) for k, v in request_stats.items()},
             "gbps_p50": round(gbps, 2),
+            "gbps_p50_incl_prep": round(gbps_incl_prep, 2),
             "verify": verdict,
         }
 
@@ -336,7 +353,9 @@ def main() -> int:
 
     for isl in isls:
         preset = args.workload_name.removeprefix("kv-")
-        cfg = kv_workload.plan_config(preset, args.precision, isl, 64, args.pool_slack)
+        block_tokens = int(args.page_tokens.split()[0])
+        cfg = kv_workload.plan_config(preset, args.precision, isl, block_tokens,
+                                      args.pool_slack)
         nbytes = min(cfg["req_bytes"], bulk_bytes)
         base = {"kind": "bulk", "preset": preset, "isl": isl, "page_tokens": None,
                 "layers": cfg["layers"], "page_bytes": None, "descs": 1, "batch": 1,

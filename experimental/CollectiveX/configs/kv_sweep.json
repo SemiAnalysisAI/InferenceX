@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "suite": "kv-transfer",
   "workloads": {
     "kv-dsv4": [
@@ -15,8 +15,7 @@
     524288
   ],
   "page_tokens": [
-    16,
-    64
+    256
   ],
   "batch_sizes": [
     1,
@@ -32,8 +31,8 @@
   ],
   "timing": {
     "warmup_per_trial": 2,
-    "reps_per_trial": 8,
-    "trials_per_point": 2
+    "reps_per_trial": 16,
+    "trials_per_point": 3
   },
   "pool_slack": 2.0,
   "seed": 67

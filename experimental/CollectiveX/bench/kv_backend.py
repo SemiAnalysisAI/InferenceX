@@ -60,20 +60,31 @@ class KVBackend:
 
     def make_bulk(self, nbytes: int, op: str):
         """Return (post, wait, prep_seconds) for one contiguous transfer of
-        ``nbytes`` — the single-descriptor wire-speed ceiling row."""
+        ``nbytes`` — the single-descriptor contiguous baseline row (logical
+        payload over host-observed completion; not a proven physical wire
+        rate — backends may split large operations internally)."""
         raise NotImplementedError
 
 
-def time_bursts(transfers, warmup: int, reps: int) -> list[float]:
-    """Wall-clock ms per completed burst (post all, then wait all), warmups
-    dropped. ``transfers`` is a list of (post, wait) pairs — one per request."""
-    samples = []
+def time_bursts(transfers, warmup: int, reps: int) -> tuple[list[float], list[float]]:
+    """(burst_ms, request_ms), warmups dropped. ``transfers`` is a list of
+    (post, wait) pairs — one per request. A burst posts every request, then
+    drains the waits in posting order; burst_ms is post-of-first to
+    completion-of-last, and request_ms records each individual request's
+    host-observed completion offset from the burst start. Because the waits
+    drain in posting order, a request's mark upper-bounds its true completion
+    (a later request that finished early is observed at its wait's turn)."""
+    burst_ms: list[float] = []
+    request_ms: list[float] = []
     for rep in range(warmup + reps):
         start = time.perf_counter()
         for post, _ in transfers:
             post()
+        marks = []
         for _, wait in transfers:
             wait()
+            marks.append((time.perf_counter() - start) * 1e3)
         if rep >= warmup:
-            samples.append((time.perf_counter() - start) * 1e3)
-    return samples
+            burst_ms.append(marks[-1])
+            request_ms.extend(marks)
+    return burst_ms, request_ms
