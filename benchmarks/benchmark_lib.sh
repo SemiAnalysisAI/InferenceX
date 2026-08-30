@@ -2772,6 +2772,81 @@ run_swebench_eval() {
     fi
 }
 
+_wait_for_openai_chat_route() {
+    local port="${PORT:-8888}"
+    local timeout_seconds="${EVAL_ENDPOINT_READY_TIMEOUT_SECONDS:-1800}"
+    local poll_seconds=5
+    local start_seconds=$SECONDS
+    local next_report=0
+    local elapsed percent chat_status
+    local served_model="${SERVED_MODEL_NAME:-${MODEL:-}}"
+    local models_url chat_url
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --port)
+                if [[ $# -lt 2 || -z "${2:-}" || "${2:-}" == --* ]]; then
+                    echo "ERROR: --port requires a value" >&2
+                    return 2
+                fi
+                port="$2"
+                shift 2
+                ;;
+            *) shift ;;
+        esac
+    done
+    if ! [[ "$timeout_seconds" =~ ^[1-9][0-9]*$ ]]; then
+        echo "ERROR: EVAL_ENDPOINT_READY_TIMEOUT_SECONDS must be a positive integer" >&2
+        return 2
+    fi
+    if [ -z "$served_model" ]; then
+        echo "ERROR: MODEL or SERVED_MODEL_NAME is required for chat endpoint readiness" >&2
+        return 2
+    fi
+    models_url="http://localhost:${port}/v1/models"
+    chat_url="http://localhost:${port}/v1/chat/completions"
+
+    while true; do
+        local model_ready=false
+        if curl -fsS --max-time 10 "$models_url" 2>/dev/null \
+            | python3 -c '
+import json
+import sys
+
+expected = sys.argv[1]
+payload = json.load(sys.stdin)
+models = payload.get("data", [])
+raise SystemExit(0 if any(model.get("id") == expected for model in models) else 1)
+' "$served_model" >/dev/null 2>&1; then
+            model_ready=true
+        fi
+
+        chat_status=""
+        if [ "$model_ready" = true ]; then
+            chat_status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 \
+                -H 'Content-Type: application/json' --data '{}' "$chat_url" 2>/dev/null)" \
+                || true
+            case "$chat_status" in
+                400|401|403|422) break ;;
+            esac
+        fi
+
+        elapsed=$((SECONDS - start_seconds))
+        if [ "$elapsed" -ge "$timeout_seconds" ]; then
+            echo "ERROR: chat endpoint for model '$served_model' did not become ready within ${timeout_seconds}s: $chat_url" >&2
+            return 1
+        fi
+        if [ "$elapsed" -ge "$next_report" ]; then
+            percent=$((elapsed * 100 / timeout_seconds))
+            echo "Waiting for chat endpoint for model '$served_model': ${elapsed}/${timeout_seconds}s (${percent}%)"
+            next_report=$((next_report + 60))
+        fi
+        sleep "$poll_seconds"
+    done
+    echo "OpenAI chat endpoint ready for model '$served_model': $chat_url"
+}
+
+
 # ------------------------------
 # Unified eval entrypoint
 # ------------------------------
@@ -2833,6 +2908,14 @@ run_eval() {
         && [ "$framework" != "bfcl" ]; then
         echo "ERROR: EVAL_SUITE is only supported with kimi-vendor, minimax-vendor, or bfcl" >&2
         return 2
+    fi
+
+    if [ "${EVAL_ONLY:-false}" = "true" ]; then
+        case "$framework" in
+            kimi-vendor|minimax-vendor|bfcl)
+                _wait_for_openai_chat_route "${forwarded[@]}" || return $?
+                ;;
+        esac
     fi
 
     # Explicit verifier suites use fixed request budgets and do not consume

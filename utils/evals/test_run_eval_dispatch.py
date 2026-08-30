@@ -29,6 +29,7 @@ QWEN_SGLANG_MTP_LAUNCHERS = (
 
 _SCRIPT = r"""
 source "$BENCHMARK_LIB"
+_wait_for_openai_chat_route() { echo "READY=$*"; }
 run_lm_eval()       { echo "DISPATCH=lm-eval"; }
 run_swebench_eval() { echo "DISPATCH=swebench"; }
 run_kimi_vendor_eval() { echo "DISPATCH=kimi-vendor"; }
@@ -263,6 +264,7 @@ printf 'FINAL_SUITE=%s\n' "${EVAL_SUITE-unset}"
 def test_kimi_default_suite_reaches_eval_only_metadata() -> None:
     script = r"""
 source "$BENCHMARK_LIB"
+_wait_for_openai_chat_route() { :; }
 run_kimi_vendor_eval() { echo "DISPATCH=$EVAL_SUITE"; }
 append_lm_eval_summary() { echo "METADATA=$EVAL_COMPLETED_SUITE"; }
 export EVAL_FRAMEWORK=kimi-vendor
@@ -288,6 +290,7 @@ run_eval --port 8888
 def test_agentic_eval_propagates_artifact_staging_failure() -> None:
     script = r"""
 source "$BENCHMARK_LIB"
+_wait_for_openai_chat_route() { :; }
 run_kimi_vendor_eval() { :; }
 append_lm_eval_summary() { return 73; }
 export EVAL_FRAMEWORK=kimi-vendor
@@ -2503,26 +2506,10 @@ def test_qwen_sglang_launchers_expose_structured_tool_calls() -> None:
         assert "--tool-call-parser qwen3_coder" in command
 
 
-def test_multinode_agentic_waits_for_openai_endpoint_before_requests(
-    tmp_path: Path,
-) -> None:
-    workspace = tmp_path / "workspace"
+def test_chat_route_readiness_requires_model_and_active_route(tmp_path: Path) -> None:
     bin_dir = tmp_path / "bin"
     events_path = tmp_path / "events"
-    (workspace / "benchmarks").mkdir(parents=True)
     bin_dir.mkdir()
-    (workspace / "benchmarks/benchmark_lib.sh").write_text(
-        """
-PORT=8765
-check_env_vars() { :; }
-resolve_trace_source() { echo resolve >> "$EVENTS"; }
-AIPERF_PYTHON=python3
-install_agentic_deps() { echo deps >> "$EVENTS"; }
-build_replay_cmd() { echo build >> "$EVENTS"; }
-run_agentic_replay_and_write_outputs() { echo replay >> "$EVENTS"; }
-""",
-        encoding="utf-8",
-    )
     curl = bin_dir / "curl"
     curl.write_text(
         """#!/usr/bin/env bash
@@ -2535,12 +2522,54 @@ esac
         encoding="utf-8",
     )
     curl.chmod(curl.stat().st_mode | stat.S_IXUSR)
+    script = r"""
+source "$BENCHMARK_LIB"
+MODEL=test-model
+_wait_for_openai_chat_route --port 8765
+"""
+
+    subprocess.run(
+        ["bash", "-c", script],
+        env={
+            **os.environ,
+            "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+            "BENCHMARK_LIB": str(BENCHMARK_LIB),
+            "EVENTS": str(events_path),
+        },
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+    events = events_path.read_text().splitlines()
+    assert events[0].endswith("http://localhost:8765/v1/models")
+    assert events[1].endswith("http://localhost:8765/v1/chat/completions")
+
+
+def test_multinode_agentic_waits_for_openai_endpoint_before_requests(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    events_path = tmp_path / "events"
+    (workspace / "benchmarks").mkdir(parents=True)
+    (workspace / "benchmarks/benchmark_lib.sh").write_text(
+        """
+PORT=8765
+check_env_vars() { :; }
+resolve_trace_source() { echo resolve >> "$EVENTS"; }
+AIPERF_PYTHON=python3
+install_agentic_deps() { echo deps >> "$EVENTS"; }
+_wait_for_openai_chat_route() { echo "ready $*" >> "$EVENTS"; }
+build_replay_cmd() { echo build >> "$EVENTS"; }
+run_agentic_replay_and_write_outputs() { echo replay >> "$EVENTS"; }
+""",
+        encoding="utf-8",
+    )
 
     subprocess.run(
         ["bash", str(MULTINODE_AGENTIC_SCRIPT)],
         env={
             **os.environ,
-            "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
             "INFMAX_CONTAINER_WORKSPACE": str(workspace),
             "EVENTS": str(events_path),
             "MODEL": "test-model",
@@ -2557,11 +2586,13 @@ esac
         check=True,
     )
 
-    events = events_path.read_text().splitlines()
-    assert events[:2] == ["resolve", "deps"]
-    assert events[2].endswith("http://localhost:8765/v1/models")
-    assert events[3].endswith("http://localhost:8765/v1/chat/completions")
-    assert events[-2:] == ["build", "replay"]
+    assert events_path.read_text().splitlines() == [
+        "resolve",
+        "deps",
+        "ready --port 8765",
+        "build",
+        "replay",
+    ]
 
 
 def test_agentic_eval_workflow_forwards_runner_contract() -> None:

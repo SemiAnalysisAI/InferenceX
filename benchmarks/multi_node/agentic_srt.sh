@@ -39,59 +39,10 @@ for concurrency in "${CONCURRENCIES[@]}"; do
     fi
 done
 
-wait_for_openai_endpoint_ready() {
-    local timeout_seconds="${AIPERF_ENDPOINT_READY_TIMEOUT_SECONDS:-1800}"
-    local poll_seconds=5
-    local start_seconds=$SECONDS
-    local next_report=0
-    local elapsed percent chat_status
-    local served_model="${SERVED_MODEL_NAME:-$MODEL}"
-    local models_url="http://localhost:${PORT}/v1/models"
-    local chat_url="http://localhost:${PORT}/v1/chat/completions"
-
-    while true; do
-        local model_ready=false
-        if curl -fsS --max-time 10 "$models_url" 2>/dev/null \
-            | "$AIPERF_PYTHON" -c '
-import json
-import sys
-
-expected = sys.argv[1]
-payload = json.load(sys.stdin)
-models = payload.get("data", [])
-raise SystemExit(0 if any(model.get("id") == expected for model in models) else 1)
-' "$served_model" >/dev/null 2>&1; then
-            model_ready=true
-        fi
-
-        chat_status=""
-        if [ "$model_ready" = true ]; then
-            chat_status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 \
-                -H 'Content-Type: application/json' --data '{}' "$chat_url" 2>/dev/null)" \
-                || true
-            case "$chat_status" in
-                400|401|403|422) break ;;
-            esac
-        fi
-
-        elapsed=$((SECONDS - start_seconds))
-        if [ "$elapsed" -ge "$timeout_seconds" ]; then
-            echo "ERROR: chat endpoint for model '$served_model' did not become ready within ${timeout_seconds}s: $chat_url" >&2
-            return 1
-        fi
-        if [ "$elapsed" -ge "$next_report" ]; then
-            percent=$((elapsed * 100 / timeout_seconds))
-            echo "Waiting for chat endpoint for model '$served_model': ${elapsed}/${timeout_seconds}s (${percent}%)"
-            next_report=$((next_report + 60))
-        fi
-        sleep "$poll_seconds"
-    done
-    echo "OpenAI chat endpoint ready for model '$served_model': $chat_url"
-}
 
 resolve_trace_source
 install_agentic_deps
-wait_for_openai_endpoint_ready
+_wait_for_openai_chat_route --port "$PORT"
 
 wait_for_agentic_servers_idle() {
     local timeout_seconds="${AIPERF_DRAIN_TIMEOUT_SECONDS:-1800}"
