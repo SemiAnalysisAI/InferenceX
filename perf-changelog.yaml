@@ -6674,3 +6674,9 @@
     - "Bump image from lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260726 to lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260828"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2763
   
+- config-keys:
+    - qwen3.5-fp4-b200-sglang-mtp
+  description:
+    - "Use Triton linear attention with FlashInfer decode and prefill GDN backends for the TP2/EP2 Qwen3.5 FP4 B200 MTP points at concurrency 16, 32, and 64."
+    - "Keep all other topology and concurrency points on the existing backend defaults."
+  pr-link: TBD
