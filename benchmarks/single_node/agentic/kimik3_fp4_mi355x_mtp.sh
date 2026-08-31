@@ -68,11 +68,11 @@ trap 'exit 143' TERM
 
 # conc <= 16 -> ladder 32, else ladder 64. mns clamped to the ladder so a batch
 # can never exceed a captured graph size.
-if [ "$CONC" -le 16 ]; then LADDER=16; else LADDER=64; fi
+if [ "$CONC" -le 16 ]; then LADDER=32; else LADDER=64; fi
 MAX_NUM_SEQS="${MAX_NUM_SEQS:-$LADDER}"
 if [ "$MAX_NUM_SEQS" -gt "$LADDER" ]; then MAX_NUM_SEQS=$LADDER; fi
 
-if [ "$CONC" -le 4 ]; then DCP_SIZE=1; GPU_MEM_UTIL=0.92; else DCP_SIZE=8; GPU_MEM_UTIL=0.9; fi
+if [ "$CONC" -le 4 ]; then DCP_SIZE=1; GPU_MEM_UTIL=0.90; else DCP_SIZE=8; GPU_MEM_UTIL=0.9; fi
 export DCP_SIZE
 
 CP_ARGS=(--attention-backend ROCM_AITER_MLA)
