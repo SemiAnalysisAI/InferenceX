@@ -205,7 +205,7 @@ VLLM_CMD=(
     --trust-remote-code
     --moe-backend auto
     --tensor-parallel-size "$TP"
-    --load-format "$LOAD_FORMAT"
+    --load-format fastsafetensors
     --gpu-memory-utilization "$GPU_MEM_UTIL"
     --language-model-only
     --max-num-seqs "$MAX_NUM_SEQS"
