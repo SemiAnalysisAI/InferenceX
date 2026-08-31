@@ -47,10 +47,13 @@ class KVMatrix(unittest.TestCase):
                 self.assertEqual({c["ops"] for c in shard["cases"]}, {"push"})
                 self.assertEqual({c["kv_device"] for c in shard["cases"]}, {"rdma{gpu}"})
                 self.assertTrue(shard["image_ref"].startswith("rocm/atom-dev:"))
-            elif shard["sku"] == "b300" and shard["backend"] == "mooncake":
-                # b300 pods expose two RDMA rails that are not cross-routable;
-                # the image's engine draws the peer NIC per request, so every
-                # cross-rail draw pays a 1s handshake timeout. Pin one rail.
+            elif shard["sku"] == "b300":
+                # b300 pods expose two RDMA rails that are not cross-routable.
+                # mooncake: the image's engine draws the peer NIC per request
+                # blind to endpoint health, so every cross-rail draw stalls ~1s.
+                # nixl: unpinned UCX pull degrades reproducibly across node
+                # pairs while push stays at line rate; pinning one rail takes
+                # multi-rail selection out of the measurement.
                 self.assertEqual({c["ops"] for c in shard["cases"]}, {"pull push"})
                 self.assertEqual({c["kv_device"] for c in shard["cases"]}, {"mlx5_0"})
                 self.assertEqual(shard["image_ref"], "")
@@ -203,6 +206,29 @@ class UCXSelectors(unittest.TestCase):
         run_kv.export_ucx_selectors(env)
         self.assertEqual(env["UCX_NET_DEVICES"], "rdma0:1")
         self.assertEqual(env["UCX_IB_GID_INDEX"], "1")
+
+    def test_registry_device_pin_narrows_the_inventory(self):
+        # A kv_device pin on a UCX-backed case wins over the operator's full
+        # RDMA inventory: rail-isolated pods (b300) publish one-rail rows.
+        import run_kv
+
+        env = {"COLLX_RDMA_DEVICES": "mlx5_0,mlx5_1"}
+        run_kv.export_ucx_selectors(env, device="mlx5_0")
+        self.assertEqual(env["UCX_NET_DEVICES"], "mlx5_0:1")
+
+    def test_device_pin_defers_to_explicit_ucx_env(self):
+        import run_kv
+
+        env = {"UCX_NET_DEVICES": "rdma0:1"}
+        run_kv.export_ucx_selectors(env, device="mlx5_0")
+        self.assertEqual(env["UCX_NET_DEVICES"], "rdma0:1")
+
+    def test_empty_device_pin_keeps_the_inventory_path(self):
+        import run_kv
+
+        env = {"COLLX_RDMA_DEVICES": "mlx5_0,mlx5_1"}
+        run_kv.export_ucx_selectors(env, device="")
+        self.assertEqual(env["UCX_NET_DEVICES"], "mlx5_0:1,mlx5_1:1")
 
     def test_ports_in_selectors_pass_through(self):
         import run_kv

@@ -186,9 +186,12 @@
         ]
       },
       "kv_backends": {
-        "nixl": [
-          "rdma"
-        ],
+        "nixl": {
+          "fabrics": [
+            "rdma"
+          ],
+          "device": "mlx5_0"
+        },
         "mooncake": {
           "fabrics": [
             "rdma"

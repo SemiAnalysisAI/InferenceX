@@ -92,19 +92,26 @@ def add_kv_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--kv-mori-chunking", action="store_true")
     ap.add_argument("--kv-device", default="",
                     help="engine NIC filter template; {gpu} expands to the "
-                         "physical GPU index (GPU-paired NICs, e.g. Pollara)")
+                         "physical GPU index (GPU-paired NICs, e.g. Pollara). "
+                         "For nixl it is a literal netdev comma-list pinning "
+                         "UCX_NET_DEVICES below the operator inventory")
     ap.add_argument("--kv-mori-port", type=int, default=48810)
     ap.add_argument("--kv-mc-port", type=int, default=48830)
 
 
-def export_ucx_selectors(environ=os.environ) -> None:
+def export_ucx_selectors(environ=os.environ, device: str = "") -> None:
     """Pin the UCX fabric to the operator's validated RDMA selectors.
 
     UCX auto-selection is a wrong-fabric trap on several SKUs (b200-nscale's
     quad-port aux card, b300's storage IB), and the launcher's network profile
     only exports the COLLX_* names. Explicit UCX_* values always win.
+
+    ``device`` is the case's registry NIC pin (kv_device) for a UCX-backed
+    engine: a literal netdev comma-list that narrows UCX below the operator
+    inventory, for rail-isolated pods where multi-rail selection is the
+    variance source under measurement.
     """
-    devices = environ.get("COLLX_RDMA_DEVICES", "")
+    devices = device or environ.get("COLLX_RDMA_DEVICES", "")
     if devices and "UCX_NET_DEVICES" not in environ:
         environ["UCX_NET_DEVICES"] = ",".join(
             device if ":" in device else f"{device}:1"
@@ -240,7 +247,8 @@ def main() -> int:
         os.environ.setdefault("UCX_CUDA_IPC_ENABLE_MNNVL", "y")
     if args.socket_ifname:
         os.environ.setdefault("GLOO_SOCKET_IFNAME", args.socket_ifname)
-    export_ucx_selectors()
+    export_ucx_selectors(
+        device=args.kv_device if args.backend == "nixl" else "")
 
     import torch
     import torch.distributed as dist

@@ -65,6 +65,9 @@ class NIXLBackend(KVBackend):
                     continue
         except Exception:
             self.library_version = None
+        # The registry pin run_kv hands to UCX_NET_DEVICES for this case;
+        # None means UCX chose among the operator inventory itself.
+        self.nic_filter = getattr(args, "kv_device", "") or None
         # prog thread on, listener off: metadata goes through the harness exchange.
         self._agent = nixl_agent(role, nixl_agent_config(True, False, 0, backends=["UCX"]))
         self._handles = []
