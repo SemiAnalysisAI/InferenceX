@@ -528,10 +528,15 @@ expose two rails whose cross pairs do not route, and the image-provided pre-0.3.
 draws the peer NIC per request with no view of endpoint health, so every cross-rail draw
 pays the worker pool's ~1 s inactive-endpoint hold before the per-slice retry walks to the
 routable rail (the hold at `worker_pool.cpp` is the stall quantum — the handshake socket
-timeout is 60 s and never fires). The published b300 mooncake row is therefore a one-rail
-measurement whose ~48 GB/s ceiling sits at half the unpinned nixl plateau; the row's
-`implementation.nic_filter` records the pin. The summary's `op` column names the measured
-direction.
+timeout is 60 s and never fires). b300 nixl carries the same pin: for a UCX-backed engine
+`device` lands in `UCX_NET_DEVICES` (overriding the blanket 16-device value b300 forwards
+from `/etc/environment`, which otherwise swallows every selector the harness sets), because
+UCX's own two-rail selection served READs at anywhere from 18 to 83 GB/s across repeated
+runs and node pairs while WRITEs held line rate; on one rail both directions sit at
+47.7–49.0 GB/s with p95/p50 ≤ 1.01. Published b300 kv rows are therefore one-rail
+measurements — ~49 GB/s nixl, ~48 GB/s mooncake ceilings, directly comparable — and the
+row's `implementation.nic_filter` records the pin. The summary's `op` column names the
+measured direction.
 
 Fabrics are a case dimension. `rdma` runs on torch (cudaMalloc) pools. `mnnvl` allocates the
 pools with cuMem FABRIC handles (kv_pool.FabricPool; needs a live nvidia-imex domain), because
