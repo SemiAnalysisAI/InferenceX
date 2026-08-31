@@ -272,4 +272,5 @@ def test_amd_srt_launcher_preserves_mori_dispatch_pin() -> None:
     assert 'decode_environment.setdefault(' in launcher
     assert '"SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK", str(dispatch_tokens)' in launcher
     assert '"SGLANG_MORI_DISPATCH_INTER_KERNEL_SWITCH_THRESHOLD"' in launcher
-    assert "mtp_size + 1" not in launcher
+    assert 'if "MORI_MAX_DISPATCH_TOKENS_DECODE" in decode_environment:' in launcher
+    assert "dispatch_tokens * (mtp_size + 1)" in launcher

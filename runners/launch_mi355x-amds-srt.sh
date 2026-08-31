@@ -249,6 +249,14 @@ if (
     decode_environment.setdefault(
         "SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK", str(dispatch_tokens)
     )
+    # The retired launcher also exposed its harness-level dispatch budget to
+    # the server environment after scaling it by the MTP draft width. Keep that
+    # auxiliary value distinct from the model-specific per-rank SGLang pin.
+    if "MORI_MAX_DISPATCH_TOKENS_DECODE" in decode_environment:
+        mtp_size = int(os.environ.get("DECODE_MTP_SIZE", "0"))
+        decode_environment["MORI_MAX_DISPATCH_TOKENS_DECODE"] = str(
+            dispatch_tokens * (mtp_size + 1)
+        )
     decode_environment["SGLANG_MORI_DISPATCH_INTER_KERNEL_SWITCH_THRESHOLD"] = str(
         2 * dispatch_tokens
     )

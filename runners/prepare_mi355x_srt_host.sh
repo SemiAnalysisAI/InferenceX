@@ -1,6 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+"$(dirname "${BASH_SOURCE[0]}")/check_mi355x_rdma.sh"
+
+# Preserve the legacy bare-process GPU drain gate. Slurm owns the node, but a
+# process left outside the prior job's container can still retain VRAM and make
+# the next model load fail much later with a misleading OOM.
+(
+    unset IS_AGENTIC SCENARIO_TYPE
+    # shellcheck source=benchmarks/benchmark_lib.sh
+    source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh"
+    wait_for_amd_gpu_clean
+)
+
 # Some MI355X experiments reserve large 2 MiB HugeTLB pools and leave the
 # reservation behind after their Slurm allocation exits. Those free hugepages
 # remain unavailable to ordinary host allocations, which can make a later
