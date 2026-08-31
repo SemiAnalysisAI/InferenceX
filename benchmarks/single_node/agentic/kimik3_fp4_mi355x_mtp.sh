@@ -81,6 +81,11 @@ amd-smi || true
 resolve_trace_source
 install_agentic_deps
 
+# Controlled C14 experiment: apply only vLLM #53222 and enable its opt-in
+# fused-MoE token chunking. LMCache's independent chunk size remains 3072.
+bash "$(dirname "$0")/apply_k3_vllm_pr53222.sh"
+export VLLM_ROCM_AITER_MOE_CHUNK_TOKENS=2048
+
 # ---- Reference env block ----------------------------------------------------
 export VLLM_ROCM_AITER_MLA_ASM_PADDING=asm
 export VLLM_ROCM_USE_AITER=1

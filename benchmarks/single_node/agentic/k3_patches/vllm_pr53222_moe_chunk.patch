@@ -1,0 +1,111 @@
+diff --git a/vllm/_aiter_ops.py b/vllm/_aiter_ops.py
+index 9e1fb6fd880..d8a11ec899b 100644
+--- a/vllm/_aiter_ops.py
++++ b/vllm/_aiter_ops.py
+@@ -1730,6 +1730,7 @@ class rocm_aiter_ops:
+     """
+ 
+     _MOE_DISPATCH_POLICY: int | None = None
++    _MOE_CHUNK_TOKENS: int | None = None
+ 
+     @classmethod
+     @if_aiter_supported
+@@ -1741,6 +1742,16 @@ class rocm_aiter_ops:
+             cls._MOE_DISPATCH_POLICY = envs.VLLM_ROCM_AITER_MOE_DISPATCH_POLICY
+         return cls._MOE_DISPATCH_POLICY
+ 
++    @classmethod
++    @if_aiter_supported
++    def get_moe_chunk_tokens(cls) -> int:
++        """Cached token-chunk size for the fused-MoE experts call."""
++        if cls._MOE_CHUNK_TOKENS is None:
++            import vllm.envs as envs
++
++            cls._MOE_CHUNK_TOKENS = envs.VLLM_ROCM_AITER_MOE_CHUNK_TOKENS
++        return cls._MOE_CHUNK_TOKENS
++
+     # Check if the env variable is set
+     _AITER_ENABLED = envs.VLLM_ROCM_USE_AITER
+     _CUSTOM_ALL_REDUCE_ENABLED = envs.VLLM_ROCM_USE_AITER_CUSTOM_AR
+@@ -1788,6 +1799,7 @@ class rocm_aiter_ops:
+         cls._MOE_SHARED_EXPERTS_ENABLED = envs.VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS
+         cls._MOE_SITUV2_A8W4 = envs.VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4
+         cls._TRITON_UNQUANT_GEMM = envs.VLLM_ROCM_USE_AITER_TRITON_GEMM
++        cls._MOE_CHUNK_TOKENS = None
+ 
+     @staticmethod
+     def get_aiter_activation_type(activation_str: str):
+diff --git a/vllm/envs.py b/vllm/envs.py
+index 6abcb4498a8..78647944478 100755
+--- a/vllm/envs.py
++++ b/vllm/envs.py
+@@ -137,6 +137,7 @@ if TYPE_CHECKING:
+     VLLM_ROCM_USE_AITER_LINEAR_HIPBMM: bool = False
+     VLLM_ROCM_USE_AITER_MOE: bool = True
+     VLLM_ROCM_AITER_MOE_DISPATCH_POLICY: int = 0
++    VLLM_ROCM_AITER_MOE_CHUNK_TOKENS: int = 0
+     VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4: bool = False
+     VLLM_ROCM_USE_AITER_RMSNORM: bool = True
+     VLLM_ROCM_USE_AITER_MLA: bool = True
+@@ -1272,6 +1273,14 @@ environment_variables: dict[str, Callable[[], Any]] = {
+     "VLLM_ROCM_AITER_MOE_DISPATCH_POLICY": lambda: int(
+         os.getenv("VLLM_ROCM_AITER_MOE_DISPATCH_POLICY", "0")
+     ),
++    # Chunk size, in tokens, for the AITER fused-MoE experts call.
++    # AITER allocates its (num_tokens, topk, model_dim) intermediate
++    # internally, so it is invisible to vLLM's memory profiler and cannot be
++    # bounded by the modular-kernel chunking. Set >0 to cap that allocation.
++    #   0 = disabled (default): one call for the whole batch
++    "VLLM_ROCM_AITER_MOE_CHUNK_TOKENS": lambda: int(
++        os.getenv("VLLM_ROCM_AITER_MOE_CHUNK_TOKENS", "0")
++    ),
+     # use aiter rms norm op if aiter ops are enabled.
+     "VLLM_ROCM_USE_AITER_RMSNORM": lambda: (
+         os.getenv("VLLM_ROCM_USE_AITER_RMSNORM", "True").lower() in ("true", "1")
+diff --git a/vllm/model_executor/layers/fused_moe/experts/rocm_aiter_moe.py b/vllm/model_executor/layers/fused_moe/experts/rocm_aiter_moe.py
+index a433b18487d..0d53a3bcfd1 100644
+--- a/vllm/model_executor/layers/fused_moe/experts/rocm_aiter_moe.py
++++ b/vllm/model_executor/layers/fused_moe/experts/rocm_aiter_moe.py
+@@ -543,6 +543,42 @@ class AiterExperts(mk.FusedMoEExpertsModular):
+         else:
+             num_local_tokens = None
+ 
++        # AITER sizes its intermediate off the token count, so slicing the
++        # token dim bounds it. Routing is per-token, so results are unchanged.
++        chunk = rocm_aiter_ops.get_moe_chunk_tokens()
++        num_tokens = hidden_states.shape[0]
++        if chunk > 0 and num_local_tokens is None and num_tokens > chunk:
++            for start in range(0, num_tokens, chunk):
++                end = min(start + chunk, num_tokens)
++                chunk_a1q_scale = a1q_scale
++                if (
++                    chunk_a1q_scale is not None
++                    and chunk_a1q_scale.dim() > 0
++                    and chunk_a1q_scale.shape[0] == num_tokens
++                ):
++                    chunk_a1q_scale = chunk_a1q_scale[start:end]
++                output[start:end].copy_(
++                    rocm_aiter_fused_experts(
++                        hidden_states=hidden_states[start:end],
++                        w1=w1,
++                        w2=w2,
++                        topk_weights=topk_weights[start:end],
++                        topk_ids=topk_ids[start:end],
++                        activation=activation,
++                        apply_router_weight_on_input=apply_router_weight_on_input,
++                        expert_mask=expert_map,
++                        quant_config=self.quant_config,
++                        moe_config=self.moe_config,
++                        a1q_scale=chunk_a1q_scale,
++                        num_local_tokens=None,
++                        output_dtype=output.dtype,
++                        moe_sorting_dispatch_policy=(
++                            rocm_aiter_ops.get_moe_dispatch_policy()
++                        ),
++                    )
++                )
++            return
++
+         result = rocm_aiter_fused_experts(
+             hidden_states=hidden_states,
+             w1=w1,
