@@ -72,6 +72,11 @@ fi
 # aiperf default of 30000 ms (30 s), so long-stalling AgentX request
 # connections are not torn down as dead during extended server-side pauses.
 export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
+export AIPERF_TIMING_CANCEL_DRAIN_TIMEOUT=300
+export AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES=0
+export AIPERF_DATASET_CONFIGURATION_TIMEOUT=1800
+export AIPERF_SERVICE_PROFILE_CONFIGURE_TIMEOUT=1800
+export AIPERF_UI_REALTIME_METRICS_ENABLED=true
 
 # Require ATOM Prometheus metrics in every official result.
 export AIPERF_SERVER_METRICS_URLS="http://localhost:${PORT}/metrics"
