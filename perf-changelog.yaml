@@ -6651,3 +6651,12 @@
     - "Set --cp-kv-cache-interleave-size 1 whenever DCP is enabled, as required by LMCacheMPConnector's DCP validation."
     - "启用 DCP 时设置 --cp-kv-cache-interleave-size 1，以满足 LMCacheMPConnector 的 DCP 校验要求。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Align the C40 TP8/DCP8 LMCache no-spec test with the validated vLLM SimpleCPU profile: 16K batched tokens, max-num-seqs 80, full DCP CUDA graphs through size 4096, ROCM_AITER_MLA with prefill query quantization, stream interval 10, and 128-token prefix matching."
+    - "将 C40 TP8/DCP8 LMCache 无推测解码测试与已验证的 vLLM SimpleCPU 配置对齐：16K 批处理 token、max-num-seqs 80、最大尺寸 4096 的完整 DCP CUDA graph、启用预填充查询量化的 ROCM_AITER_MLA、流式间隔 10，以及 128-token 前缀匹配。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

@@ -275,7 +275,7 @@ case "${SPEC_DECODING:-mtp}:$CONC" in
     none:40)
         SPEC_NUM_TOKENS=0
         GPU_MEM_UTIL=0.9
-        MAX_NUM_BATCHED_TOKENS=8192
+        MAX_NUM_BATCHED_TOKENS=16384
         ;;
     *)
         SPEC_NUM_TOKENS=0
@@ -301,9 +301,14 @@ fi
 
 # ---- HIP graph ------------------------------------------------------------
 MAX_NUM_SEQS=$((2 * CONC))
-MAX_CUDAGRAPH_CAPTURE_SIZE=$((MAX_NUM_SEQS * (1 + SPEC_NUM_TOKENS)))
-CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 2 "$MAX_CUDAGRAPH_CAPTURE_SIZE")"
-COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}")
+if [ "${SPEC_DECODING:-mtp}:$CONC" = "none:40" ]; then
+    MAX_CUDAGRAPH_CAPTURE_SIZE=4096
+    CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 1 "$MAX_NUM_SEQS"),128,256,512,1024,2048,4096"
+else
+    MAX_CUDAGRAPH_CAPTURE_SIZE=$((MAX_NUM_SEQS * (1 + SPEC_NUM_TOKENS)))
+    CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 2 "$MAX_CUDAGRAPH_CAPTURE_SIZE")"
+fi
+COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\",\"+quant_fp8\",\"+grouped_topk\",\"+sparse_attn_indexer\",\"none\"],\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}")
 
 echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
@@ -325,11 +330,13 @@ if [ "$DCP_SIZE" -gt 1 ]; then
         --dcp-comm-backend a2a
         --cp-kv-cache-interleave-size 1
     )
-    ATTN_BE_ARGS+=(--attention-backend TRITON_MLA)
+    ATTN_BE_ARGS+=(--attention-backend ROCM_AITER_MLA)
 fi
 export VLLM_USE_DIRECT_DCP_A2A=0
 export VLLM_USE_DIRECT_DCP_Q_GATHER=0
 export VLLM_USE_DIRECT_DCP_KV_GATHER=0
+export VLLM_ALLOW_DCP_FULL_CUDAGRAPH=1
+export PREFIX_CACHING_HASH_ALGO=sha256
 
 { set +x; } 2>/dev/null
 VLLM_CMD=(
@@ -348,10 +355,12 @@ VLLM_CMD=(
     --tool-call-parser kimi_k3
     --reasoning-parser kimi_k3
     --max-model-len 1048576
+    --stream-interval 10
     --enable-prefix-caching
+    --prefix-match-unit 128
     --kv-cache-dtype "fp8"
     --max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS"
-    --attention-config '{"mla_prefill_backend":"ROCM_AITER_FA"}'
+    --attention-config '{"use_prefill_query_quantization":true}'
     "${ATTN_BE_ARGS[@]}"
     "${COMPILATION_CONFIG_ARGS[@]}"
     "${SPEC_ARGS[@]}"
