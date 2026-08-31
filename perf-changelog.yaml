@@ -6653,3 +6653,12 @@
     - "Route multi-GPU collectives through INT8-quantized ROCm quick all-reduce (ROCM_QUICK_REDUCE_QUANTIZATION=INT8) and drop --enable-aiter-allreduce-fusion, aligning both arms with the published SGLang cookbook recipe for MXFP4 on MI355X (https://docs.sglang.io/cookbook/autoregressive/Qwen/Qwen3.5). The two paths are mutually exclusive in SGLang: the AITER fused AR+RMSNorm path is gated on --enable-aiter-allreduce-fusion, and only with it off do collectives fall back to custom all-reduce where the quick-reduce regime applies. This supersedes the aiter allreduce fusion enabled for these two config keys in #1680, so throughput on this arm is not a like-for-like continuation of the previous MXFP4 series."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2640
   
+- config-keys:
+    - qwen3.5-fp8-mi355x-sglang
+    - qwen3.5-fp8-mi355x-sglang-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Bump image from lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260726 to lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260828"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2763
+  
