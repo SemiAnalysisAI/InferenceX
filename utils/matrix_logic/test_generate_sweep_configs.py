@@ -2193,7 +2193,7 @@ class TestArgumentDefaults:
 
         assert len(manifest) == 63
         assert manifest_digest == (
-            '3e4a3195f921e87e97ccfe525b570ba9180ab0acc13206f591d687d9dbe18f14'
+            '1630cdd6fbf77302ee3286b118710576aa090e1502b3e5ec482b7f537a3f1132'
         ), manifest_digest
         for row in rows:
             if isinstance(row['conc'], list):

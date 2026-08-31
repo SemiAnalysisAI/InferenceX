@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-export HF_HUB_CACHE_MOUNT="/raid/hf-hub-cache/"
+export HF_HUB_CACHE_MOUNT="/raid/inferencex/hf-hub-cache/"
 
 PARTITION="compute"
-SQUASH_DIR="/raid/hf-hub-cache/runtime-cache/enroot"
+SQUASH_DIR="/raid/inferencex/squash"
 SQUASH_FILE="$SQUASH_DIR/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 LOCK_FILE="${SQUASH_FILE}.lock"
 COMPUTE_TMPDIR="$SQUASH_DIR/tmp-${UID}"
@@ -21,10 +21,7 @@ export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
 
 set -x
 
-# Exclude known-bad nodes; let Slurm pick from anything else:
-#   chi-mi300x-049: persistent /nvme_home disk-full
-#   chi-mi300x-121: provisioning incomplete; missing /raid and Enroot storage
-JOB_ID=$(set +o pipefail; salloc --partition=$PARTITION --exclude=chi-mi300x-049,chi-mi300x-121 --gres=gpu:$GPU_COUNT --cpus-per-task=256 --time=180 --no-shell --job-name="$RUNNER_NAME" 2>&1 | tee /dev/stderr | grep -oP 'Granted job allocation \K[0-9]+')
+JOB_ID=$(set +o pipefail; salloc --partition=$PARTITION --gres=gpu:$GPU_COUNT --cpus-per-task=128 --time=180 --no-shell --job-name="$RUNNER_NAME" 2>&1 | tee /dev/stderr | grep -oP 'Granted job allocation \K[0-9]+')
 
 if [ -z "$JOB_ID" ]; then
     echo "ERROR: salloc failed to allocate a job" >&2
