@@ -18,9 +18,11 @@ def _native_outputs(
     reasoning_error_rate: float = 0.0,
 ) -> None:
     (output_dir / mpe.NATIVE_RESULTS_FILENAME).write_text(
-        json.dumps({"data_index": 71, "status": status}) + "\n",
+        json.dumps({"data_index": 1, "status": status}) + "\n",
         encoding="utf-8",
     )
+    tool_call_total = 10
+    schema_errors = round((1.0 - schema_rate) * tool_call_total)
     (output_dir / mpe.NATIVE_REPORT_FILENAME).write_text(
         json.dumps(
             {
@@ -28,7 +30,8 @@ def _native_outputs(
                 "success_count": 1 if status == "success" else 0,
                 "failure_count": 0 if status == "success" else 1,
                 "tool_calls_match_rate": match_rate,
-                "tool_calls_schema_accuracy": schema_rate,
+                "tool_calls_schema_validation_error_count": schema_errors,
+                "tool_calls_total_count": tool_call_total,
                 "error_only_reasoning_rate": reasoning_error_rate,
             }
         )
@@ -48,7 +51,8 @@ def test_fixture_is_exact_pinned_upstream_row() -> None:
 
     assert metadata["ref"] == mpe.UPSTREAM_REF
     assert metadata["indices"] == [71]
-    assert [row["data_index"] for row in rows] == [71]
+    assert set(rows[0]) == {"messages", "tools", "expected_tool_call"}
+    assert "data_index" not in rows[0]
 
 
 def test_prepare_smoke_input_preserves_fixture_row(tmp_path: Path) -> None:

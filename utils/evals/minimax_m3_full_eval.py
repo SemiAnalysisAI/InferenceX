@@ -25,7 +25,7 @@ NATIVE_REPORT_FILENAME = "minimax_vendor_report.json"
 NATIVE_RESULTS_FILENAME = "minimax_vendor_results.jsonl"
 COMPATIBILITY_GLOB = "results_minimax_vendor_*.json"
 EXPECTED_RESULT_COUNT = 102
-UPSTREAM_REF = "85bf180e54e2ab0b31595cfdc697116c4760876d"
+UPSTREAM_REF = "c899f95e17bfc4a338ddd4cb1638279125885e55"
 UPSTREAM_BASE_URL = (
     "https://raw.githubusercontent.com/MiniMax-AI/MiniMax-Provider-Verifier/"
     f"{UPSTREAM_REF}"

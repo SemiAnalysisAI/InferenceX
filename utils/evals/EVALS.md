@@ -128,7 +128,7 @@ launch their existing `*_mtp.sh` server instead of silently falling back to STP.
 
 The smoke runs the unmodified
 [MoonshotAI/Kimi-Vendor-Verifier](https://github.com/MoonshotAI/Kimi-Vendor-Verifier)
-at commit `b9ed3a6665bdff2c943246f7d2903cd003d6ddd6`. Each run downloads and
+at commit `3dad65a760a8867cda72f6dd8848d876a4e851b4`. Each run downloads and
 SHA256-verifies the fresh pinned GitHub source archive, then safely extracts
 only the upstream pytest configuration, tool-call schema tests, and bundled
 Walle cases. InferenceX does not install the verifier package or reimplement
@@ -205,7 +205,7 @@ python3 utils/evals/validate_scores.py
 `utils/evals/minimax_m3_smoke.json` is derived from
 [MiniMax-AI/MiniMax-Provider-Verifier](https://github.com/MiniMax-AI/MiniMax-Provider-Verifier)
 `sample.jsonl` at commit
-`85bf180e54e2ab0b31595cfdc697116c4760876d`. The vendored fixture retains
+`c899f95e17bfc4a338ddd4cb1638279125885e55`. The vendored fixture retains
 the full upstream MIT copyright, permission, and warranty notice. It contains
 only upstream zero-based row 71, an `expected_tool_call: true` request
 exercising tool-call trigger and argument-schema validation.
@@ -258,7 +258,7 @@ python3 utils/evals/validate_scores.py
 
 The runner downloads only the eight source and validator files allowlisted in
 `utils/evals/minimax_m3_full_eval.py` at commit
-`85bf180e54e2ab0b31595cfdc697116c4760876d`, verifies each SHA256, and executes
+`c899f95e17bfc4a338ddd4cb1638279125885e55`, verifies each SHA256, and executes
 the pinned `verify.py` once. It uses five workers, a 600-second request timeout,
 three upstream retries, and a seven-hour whole-suite timeout. The workflow
 retains at least one hour for artifact staging, score validation, and cleanup.

@@ -339,7 +339,6 @@ def run_evaluation(
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
 ) -> bool:
     """Run upstream pytest and always attempt to publish a compatibility result."""
-    expected_total = _expected_total(task_name)
     output_dir.mkdir(parents=True, exist_ok=True)
     native_report = output_dir / NATIVE_REPORT_FILENAME
     compatibility_path = prepare_compatibility_path(output_dir)

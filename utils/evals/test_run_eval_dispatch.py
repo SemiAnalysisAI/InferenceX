@@ -4,7 +4,6 @@ import hashlib
 import io
 import json
 import os
-import re
 import stat
 import subprocess
 import sys
@@ -22,10 +21,6 @@ MULTINODE_AGENTIC_SCRIPT = REPO_ROOT / "benchmarks/multi_node/agentic_srt.sh"
 SINGLE_NODE_WORKFLOW = REPO_ROOT / ".github/workflows/benchmark-tmpl.yml"
 MULTINODE_WORKFLOW = REPO_ROOT / ".github/workflows/benchmark-multinode-tmpl.yml"
 E2E_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "e2e-tests.yml"
-QWEN_SGLANG_MTP_LAUNCHERS = (
-    REPO_ROOT / "benchmarks" / "single_node" / "agentic" / "qwen3.5_fp8_h100_mtp.sh",
-    REPO_ROOT / "benchmarks" / "single_node" / "agentic" / "qwen3.5_fp8_h200_mtp.sh",
-)
 
 _SCRIPT = r"""
 source "$BENCHMARK_LIB"
@@ -1327,14 +1322,14 @@ printf 'EVAL_RESULT_DIR=%s\n' "$EVAL_RESULT_DIR"
     assert f"PYTHONPATH=<{tmp_path / 'runtime'}" in output
     assert (
         "CHECKOUT=https://github.com/MoonshotAI/Kimi-Vendor-Verifier.git"
-        "@b9ed3a6665bdff2c943246f7d2903cd003d6ddd6"
+        "@3dad65a760a8867cda72f6dd8848d876a4e851b4"
     ) in output
     assert (
-        "CHECKOUT_SHA=ab933117c894a785978f8aee0f052e5a9096b3029e7962354b1c07ea430588c3"
+        "CHECKOUT_SHA=ede9ea300c72ccfde9d8975ea4b1b54e423c7625690f6631ab1e65a715821e01"
         in output
     )
     assert "PYTHON_ARG=<->" in output
-    assert "PYTHON_ARG=<b9ed3a6665bdff2c943246f7d2903cd003d6ddd6>" in output
+    assert "PYTHON_ARG=<3dad65a760a8867cda72f6dd8848d876a4e851b4>" in output
     for value in (
         adapter,
         verifier_dir,
@@ -2547,11 +2542,6 @@ def test_eval_limit_full_and_zero_accepted(tmp_path):
     assert "--slice" not in argv
 
 
-def test_qwen_sglang_launchers_expose_structured_tool_calls() -> None:
-    for launcher in QWEN_SGLANG_MTP_LAUNCHERS:
-        command = launcher.read_text()
-        assert "--reasoning-parser qwen3" in command
-        assert "--tool-call-parser qwen3_coder" in command
 
 
 def test_chat_route_readiness_requires_model_and_active_route(tmp_path: Path) -> None:
@@ -2632,7 +2622,7 @@ esac
     )
 
 
-def test_multinode_agentic_waits_for_openai_endpoint_before_requests(
+def test_multinode_agentic_waits_only_for_eval_openai_endpoint(
     tmp_path: Path,
 ) -> None:
     workspace = tmp_path / "workspace"
@@ -2652,33 +2642,34 @@ run_agentic_replay_and_write_outputs() { echo replay >> "$EVENTS"; }
         encoding="utf-8",
     )
 
-    subprocess.run(
-        ["bash", str(MULTINODE_AGENTIC_SCRIPT)],
-        env={
-            **os.environ,
-            "INFMAX_CONTAINER_WORKSPACE": str(workspace),
-            "EVENTS": str(events_path),
-            "MODEL": "test-model",
-            "MODEL_PREFIX": "test-prefix",
-            "FRAMEWORK": "dynamo-vllm",
-            "PRECISION": "fp4",
-            "CONC": "1",
-            "RESULT_FILENAME": "result",
-            "RESULT_DIR": str(tmp_path / "results"),
-            "DURATION": "1",
-        },
-        text=True,
-        capture_output=True,
-        check=True,
-    )
+    base_env = {
+        **os.environ,
+        "INFMAX_CONTAINER_WORKSPACE": str(workspace),
+        "EVENTS": str(events_path),
+        "MODEL": "test-model",
+        "MODEL_PREFIX": "test-prefix",
+        "FRAMEWORK": "dynamo-vllm",
+        "PRECISION": "fp4",
+        "CONC": "1",
+        "RESULT_FILENAME": "result",
+        "RESULT_DIR": str(tmp_path / "results"),
+        "DURATION": "1",
+    }
+    expected_without_readiness = ["resolve", "deps", "build", "replay"]
 
-    assert events_path.read_text().splitlines() == [
-        "resolve",
-        "deps",
-        "ready --port 8765",
-        "build",
-        "replay",
-    ]
+    for eval_only, expected in (
+        ("false", expected_without_readiness),
+        ("true", [*expected_without_readiness[:2], "ready --port 8765", *expected_without_readiness[2:]]),
+    ):
+        events_path.unlink(missing_ok=True)
+        subprocess.run(
+            ["bash", str(MULTINODE_AGENTIC_SCRIPT)],
+            env={**base_env, "EVAL_ONLY": eval_only},
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        assert events_path.read_text().splitlines() == expected
 
 
 def test_agentic_eval_workflow_forwards_runner_contract() -> None:

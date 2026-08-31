@@ -1323,8 +1323,8 @@ _run_kimi_tool_call_schema_eval() {
     local port="${PORT:-8888}"
     local results_dir="${EVAL_RESULT_DIR:-$(mktemp -d /tmp/eval_out-XXXXXX)}"
     local verifier_repo="https://github.com/MoonshotAI/Kimi-Vendor-Verifier.git"
-    local verifier_ref="b9ed3a6665bdff2c943246f7d2903cd003d6ddd6"
-    local verifier_archive_sha256="ab933117c894a785978f8aee0f052e5a9096b3029e7962354b1c07ea430588c3"
+    local verifier_ref="3dad65a760a8867cda72f6dd8848d876a4e851b4"
+    local verifier_archive_sha256="ede9ea300c72ccfde9d8975ea4b1b54e423c7625690f6631ab1e65a715821e01"
     local eval_suite="${EVAL_SUITE:-kimi_tool_call_schema}"
     local timeout_seconds=900
     if [ "$eval_suite" = "kimi_tool_call_schema_full" ]; then

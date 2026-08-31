@@ -32,7 +32,7 @@ EXPECTED_LICENSE_SHA256 = (
     "aa7cec386fcb5e555aba0e8b1c31307940af41967708c9bc0f78b4e02e235dd5"
 )
 EXPECTED_CASE_SHA256 = {
-    71: "10272004ae08f4a7d08d2306404f6cbb7bbfa794230e1082a235ded036d550ed",
+    71: "3d51571a1ed7d0bb644c3ae978ef5822b3150479b1e34bbbae7276f671657870",
 }
 UPSTREAM_SOURCE = (
     "https://raw.githubusercontent.com/MiniMax-AI/MiniMax-Provider-Verifier/"
@@ -71,8 +71,8 @@ def load_fixture(path: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     if not isinstance(raw_rows, list) or len(raw_rows) != 1:
         raise ValueError("fixture must contain exactly one row")
     row = dict(_mapping(raw_rows[0], "fixture.rows[0]"))
-    if row.get("data_index") != EXPECTED_INDICES[0]:
-        raise ValueError("fixture row must retain data_index 71")
+    if "data_index" in row:
+        raise ValueError("fixture request must not contain adapter-only data_index")
     digest = hashlib.sha256(
         json.dumps(row, ensure_ascii=False, separators=(",", ":")).encode()
     ).hexdigest()
@@ -163,6 +163,12 @@ def _rate(value: Any, name: str) -> float:
     return float(value)
 
 
+def _nonnegative_count(value: Any, name: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise SmokeSuiteError(f"native summary {name} must be a non-negative integer")
+    return value
+
+
 def _compatibility_path(output_dir: Path) -> Path:
     for stale_path in output_dir.glob(COMPATIBILITY_GLOB):
         stale_path.unlink()
@@ -193,7 +199,8 @@ def _compatibility_result(
                 "filter_list": [{"name": "strict-match"}],
                 "native_metrics": [
                     "tool_calls_match_rate",
-                    "tool_calls_schema_accuracy",
+                    "tool_calls_schema_validation_error_count",
+                    "tool_calls_total_count",
                     "error_only_reasoning_rate",
                 ],
             }
@@ -230,8 +237,8 @@ def project_native_artifacts(*, output_dir: Path, model: str) -> Path:
     if len(result_lines) != 1 or not result_lines[0].strip():
         raise SmokeSuiteError("native results must contain exactly one row")
     result = _mapping(json.loads(result_lines[0]), "native result")
-    if result.get("data_index") != EXPECTED_INDICES[0]:
-        raise SmokeSuiteError("native result must retain data_index 71")
+    if result.get("data_index") != 1:
+        raise SmokeSuiteError("native result must identify the one-row smoke input")
     if result.get("status") != "success":
         raise SmokeSuiteError("native verifier reported a request failure")
     if report.get("model") != model:
@@ -240,9 +247,18 @@ def project_native_artifacts(*, output_dir: Path, model: str) -> Path:
         raise SmokeSuiteError("native summary does not describe one successful request")
 
     match_rate = _rate(report.get("tool_calls_match_rate"), "tool_calls_match_rate")
-    schema_rate = _rate(
-        report.get("tool_calls_schema_accuracy"), "tool_calls_schema_accuracy"
+    schema_errors = _nonnegative_count(
+        report.get("tool_calls_schema_validation_error_count"),
+        "tool_calls_schema_validation_error_count",
     )
+    tool_call_total = _nonnegative_count(
+        report.get("tool_calls_total_count"), "tool_calls_total_count"
+    )
+    if tool_call_total == 0 or schema_errors > tool_call_total:
+        raise SmokeSuiteError(
+            "native summary tool-call schema counts must describe one or more calls"
+        )
+    schema_rate = 1.0 - (schema_errors / tool_call_total)
     reasoning_error_rate = _rate(
         report.get("error_only_reasoning_rate"), "error_only_reasoning_rate"
     )
