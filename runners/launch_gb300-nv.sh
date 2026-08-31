@@ -129,7 +129,7 @@ NGINX_SQUASH_FILE="/data/home/sa-shared/gharunners/squash/$(echo "$NGINX_IMAGE" 
 import_squash() {
     local squash="$1" image="$2"
     local lock="${squash}.lock"
-    srun --partition=$SLURM_PARTITION --exclusive --time=180 bash -c "
+    srun --account="$SLURM_ACCOUNT" --partition="$SLURM_PARTITION" --exclusive --time=180 bash -c "
         exec 9>\"$lock\"
         flock -w 600 9 || { echo 'Failed to acquire lock for $squash' >&2; exit 1; }
         if unsquashfs -l \"$squash\" > /dev/null 2>&1; then
@@ -187,7 +187,7 @@ if [[ "$USES_DCGM_POWER" == "1" ]]; then
     # x86, nodes aarch64).
     import_squash "$DCGM_EXPORTER_SQSH" "$DCGM_EXPORTER_IMAGE"
     test -r "$DCGM_EXPORTER_SQSH" || { echo "Error: DCGM exporter squash not readable: $DCGM_EXPORTER_SQSH" >&2; exit 1; }
-    srun --partition=$SLURM_PARTITION --exclusive --time=30 bash -c "unsquashfs -l \"$DCGM_EXPORTER_SQSH\" > /dev/null" || { echo "Error: DCGM exporter squash invalid: $DCGM_EXPORTER_SQSH" >&2; exit 1; }
+    srun --account="$SLURM_ACCOUNT" --partition="$SLURM_PARTITION" --exclusive --time=30 bash -c "unsquashfs -l \"$DCGM_EXPORTER_SQSH\" > /dev/null" || { echo "Error: DCGM exporter squash invalid: $DCGM_EXPORTER_SQSH" >&2; exit 1; }
     sha256sum "$DCGM_EXPORTER_SQSH" > "$GITHUB_WORKSPACE/exporter-image.sha256"
 fi
 
@@ -411,7 +411,7 @@ elif [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "dsv4" ]]; then
 elif [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp4" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
-    git checkout v1.0.29
+    git checkout v1.0.72
     mkdir -p recipes/trtllm/qwen3.5/gb300-fp4/disagg
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/qwen3.5/gb300-fp4/disagg" \
         recipes/trtllm/qwen3.5/gb300-fp4/disagg
@@ -447,7 +447,7 @@ echo "Configs available at: $SRT_REPO_DIR/"
 SRTCTL_ROOT="${SRT_REPO_DIR}"
 echo "Creating srtslurm.yaml configuration..."
 SRT_DEFAULT_TIME_LIMIT="4:00:00"
-if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "dsv4" ]]; then
+if [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "dsv4" && ( "$FRAMEWORK" == "dynamo-sglang" || "$FRAMEWORK" == "dynamo-trt" ) ]]; then
     SRT_DEFAULT_TIME_LIMIT="8:00:00"
 fi
 cat > srtslurm.yaml <<EOF
@@ -534,7 +534,7 @@ inject_synthetic_acceptance "$CONFIG_PATH" "$FRAMEWORK" || exit 1
 #     /scratch/models, and
 #   - qwen3.5 fp8, whose weights are also on the compute-node /scratch/models
 #     and which runs on srt-slurm:v1.0.25 (the release that has the preflight),
-#   - qwen3.5 fp4 dynamo-trt, which runs on v1.0.29 without that preflight, and
+#   - qwen3.5 fp4 dynamo-trt, which runs on v1.0.72 without that preflight, and
 #   - the qwen3.5 fp4 and dsv4 sglang power lanes, which run the pinned
 #     producer (a main-lineage fork that has the preflight) against the same
 #     /scratch checkpoints.
