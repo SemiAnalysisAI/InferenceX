@@ -295,6 +295,7 @@ export PYTHONNOUSERSITE=1
 export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS="${VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS:-1200}"
 
 
+# ---- DCP       ------------------------------------------------------------
 # DCP shards decode KV across the TP ranks, so it must divide TP.
 DCP_SIZE="${DCP_SIZE:-8}"
 if [ $((TP % DCP_SIZE)) -ne 0 ]; then
