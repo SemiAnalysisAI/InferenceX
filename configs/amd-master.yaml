@@ -1697,6 +1697,23 @@ minimaxm3-fp4-mi355x-vllm-agentic-mtp:
       - { tp: 4, kv-offloading: none, conc-list: [1, 2, 4, 5, 8, 10, 12, 15, 20, 24, 28, 32], spec-decoding: mtp }
       - { tp: 2, kv-offloading: none, conc-list: [1, 2, 5], spec-decoding: mtp }
 
+# MiniMax-M3 MXFP4 agentic-coding benchmark on MI355X via ATOM with EAGLE3
+# speculative decoding. TP4 matches the vLLM sibling: MiniMax-M3 has four KV
+# heads, so one KV head per rank keeps the AITER sparse-attention fast path.
+# No KV offloading in this first ATOM AgentX bring-up.
+minimaxm3-fp4-mi355x-atom-agentic-mtp:
+  image: rocm/atom-dev:nightly_202608251555
+  model: amd/MiniMax-M3-MXFP4
+  model-prefix: minimaxm3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: atom
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - { tp: 4, ep: 1, dp-attn: false, kv-offloading: none, conc-list: [1, 4, 8, 12, 16], spec-decoding: mtp }
+
 # GLM-5.2 FP4 agentic-coding benchmark on MI355X via SGLang with MTP speculative
 # decoding. Two arms: (1) TP4/EP4 with HiCache KV offloading to DRAM, concurrency
 # sweep [1, 2, 4, 8, 10, 12, 16]; (2) TP8/EP8 without KV offloading for low-latency
