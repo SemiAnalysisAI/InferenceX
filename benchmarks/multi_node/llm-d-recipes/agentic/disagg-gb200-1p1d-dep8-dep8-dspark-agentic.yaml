@@ -1,50 +1,7 @@
-# DeepSeek-V4-Pro (FP4) on B200, 1P-DEP8/1D-DEP8 P/D disagg via llmd-vllm.
-#
-# This is the agentX-flavored sibling of dsv4-fp4-gb200-mid-curve-megamoe.yaml:
-# same topology shape (1 prefill DEP8 engine + 1 decode DEP8 engine), but the
-# EPP scheduling config and per-role vLLM tuning are ported from the agentX
-# (llm-manifesto/agentx-mvp) DeepSeek-V4-Pro K8s deployment instead of being
-# InferenceX-native, per direct request. Selected via
-# CONFIG_FILE=dsv4-fp4-b200-agentx-1p1d-dep8-dep8.yaml in the
-# dsv4-fp4-b200-llmd-vllm-agentx master-config key.
-#
-# Topology: B200 = 8 GPUs/node, so each DEP8 role fits on exactly ONE node
-# (unlike GB200's 4 GPUs/node, where the same DEP8 role needs 2 nodes).
-# PREFILL_NODES=1 DECODE_NODES=1 GPUS_PER_NODE=8 -> 2 nodes / 16 GPUs total.
-# Because neither role spans >1 node, server.sh's LWS_GROUP_SIZE is always 1
-# here, so the cross-node --data-parallel-hybrid-lb / NVSHMEM-ibgda code paths
-# never activate - the GB200 recipes' cross-node NIC/NVSHMEM tuning (e.g.
-# NVSHMEM_HCA_PE_MAPPING) simply does not apply and is intentionally omitted.
-#
-# Source (agentX): llm-manifesto/models/deepseek-v4-ix/ix-disagg-base.yaml +
-# 1P-EP8-1D-EP8.yaml. agentX's Mooncake/MultiConnector KV chain and CPU
-# offload are Kubernetes/manifesto-specific and are NOT ported - server.sh
-# hardcodes plain NixlConnector for every llmd-vllm disagg run (no per-recipe
-# override point), matching what the existing GB200 llm-d recipes already do.
-# agentX's kv_cache_metrics/kv_cache_metrics_sample (observability-only, not
-# present in any InferenceX llm-d recipe or confirmed supported by this
-# image's vLLM build) are also dropped as an unnecessary compatibility risk.
-# max_model_len is set to 9280 (ISL 8192 + OSL 1024 + headroom, matching the
-# existing InferenceX GB200 recipes) instead of agentX's general-purpose
-# 1048576, since this recipe only ever serves the fixed 8k/1k benchmark.
-#
-# ---- EPP scheduling config ----
-# Ported EXACTLY (plugin list, parameters, weights) from the agentx-mvp
-# results snapshot manifest.yaml
-# (results/dsv4-pro-dspark/results_ilmarkov-ix-2p-ep8-1d-ep8-dspark-1308-long-v2),
-# which is a real EPP config that ran a 1P-EP8-1D-EP8 DeepSeek-V4-Pro K8s
-# deployment. Only the file-discovery plugin + dataLayer wiring is added on
-# top (InferenceX's own no-Kubernetes addition - agentX's K8s deployment used
-# InferencePool pod discovery instead, which doesn't apply here).
-#
-# This config uses disagg-profile-handler's `deciders: {prefill: ...}`
-# parameter shape (not InferenceX's existing GB200 recipes' `deciderPluginName`
-# shape) and additional plugins (inflight-load-producer,
-# approx-prefix-cache-producer, prefix-cache-affinity-filter,
-# token-load-scorer) not present in the current InferenceX EPP image. This
-# requires the EPP/pd-sidecar binaries to be bumped to v0.10.0 for this
-# recipe - see the LLMD_BIN_DIR override in runners/launch_b200-dgxc-slurm.sh
-# (B200-only; GB200's shared v0.9.0 binaries/path are untouched).
+# DeepSeek-V4-Pro-0813 (DSpark) FP4 B200, P/D disagg 1P-DEP8/1D-DEP8.
+# Always uses Mooncake (P2PHANDSHAKE embedded RDMA prefix-cache).
+# DSpark speculative decoding: prefill 1 token, decode 5 tokens.
+# Requires EPP/pd-sidecar v0.10.0 (disagg-profile-handler deciders shape).
 apiVersion: llm-d.ai/v1alpha1
 kind: EndpointPickerConfig
 
@@ -107,12 +64,6 @@ dataLayer:
   discovery:
     pluginRef: file-disc
 
-# ---- Per-role vLLM flags ----
-# Ported from agentX's ix-disagg-base.yaml (prefill/decode roles) +
-# 1P-EP8-1D-EP8.yaml overrides. Both roles are DEP8 (TP=1, DP=8, EP on),
-# FLASHINFER_MLA_SPARSE_DSV4 attention, deep_gemm_mega_moe MoE backend,
-# EP weight filter (keeps only served experts resident - required for DEP8
-# to avoid OOM). See file header for what was intentionally dropped/adapted.
 prefill:
   tp: 1
   enable-expert-parallel: true
@@ -188,12 +139,6 @@ decode:
     MC_STORE_CLIENT_METRIC_INTERVAL: "5"
     MC_TE_METRIC: "0"
 
-# ---- Mooncake KV store config ----
-# P2PHANDSHAKE embedded mode — no K8s mooncake-master pod needed; nodes
-# negotiate RDMA directly. global_segment_size 140 GB matches the dynamo
-# agentic recipe (srt-slurm-recipes/vllm/deepseek-v4/agentic/). Prefill
-# uses kv_both (store new KV + load cache hits via RDMA); decode uses
-# kv_consumer with lookup disabled (NIXL-only receive, no Mooncake lookup).
 mooncake:
   store_config:
     metadata_server: "P2PHANDSHAKE"
@@ -204,6 +149,5 @@ mooncake:
     mode: "embedded"
     enable_offload: false
 
-# ---- SLURM resource directives ----
 slurm:
   time_limit: "08:00:00"

@@ -1,35 +1,5 @@
-# DeepSeek-V4-Pro (FP4) on B200, aggregated DEP8 (one engine does both
-# prefill and decode) via llmd-vllm. agentX-flavored sibling of
-# dsv4-fp4-b200-agentx-agg-tp8.yaml (same aggregated wiring, DP+EP instead
-# of pure TP).
-#
-# Topology: B200 = 8 GPUs/node, so DEP8 (DP=8, EP on) fits on exactly ONE
-# node (unlike GB200's 4 GPUs/node, where agentX's ix-agg-dep-base.yaml/
-# agg-dep8.yaml needs `lws: {size: 2, replicas: 1}` spanning 2 nodes via
-# hybrid-lb). PREFILL_NODES=1 DECODE_NODES=0 GPUS_PER_NODE=8 -> 1 node / 8
-# GPUs total. Since the role never spans >1 node, server.sh's
-# LWS_GROUP_SIZE is always 1 here, so the cross-node --data-parallel-hybrid-lb
-# / NVSHMEM-ibgda code paths never activate - vLLM runs its DP=8 ranks
-# in-process on the one node.
-#
-# Aggregated-mode wiring: see the header comment in
-# dsv4-fp4-b200-agentx-agg-tp8.yaml (no decode role / no pd-sidecar / no
-# kv_transfer_config, engine mapped to the "prefill" role, rank 0 doubles
-# as EPP/Envoy/bench coordinator). The EPP config below is identical in
-# shape to that recipe's (same rationale: agentX's aggregated K8s config has
-# no llm-d EPP schema to port, so this is a purpose-built minimal
-# single-profile config, no v0.10.0 router bump needed).
-#
-# Source (agentX): llm-manifesto/models/deepseek-v4-ix/ix-agg-dep-base.yaml
-# + agg-dep8.yaml. Dropped entirely (no InferenceX equivalent needed):
-# the `mooncake:` sidecar block and the MultiConnector
-# NixlConnector+SimpleCPUOffloadConnector+MooncakeStoreConnector KV chain
-# (aggregated has no P/D KV transfer at all, see above), and the
-# Mooncake/UCX-specific env (VLLM_MOONCAKE_LOAD_RECV_THREADS,
-# MC_ENABLE_DEST_DEVICE_AFFINITY, UCX_TLS=rc,cuda_copy) that existed only to
-# support that KV chain. max_model_len trimmed to 9280 (ISL 8192 + OSL 1024
-# + headroom) instead of agentX's general-purpose 1048576, matching every
-# other recipe in this directory.
+# DeepSeek-V4-Pro-0813 (DSpark) FP4 B200, aggregated DEP8, 1 node.
+# DSpark speculative decoding: 5 tokens. No Mooncake.
 apiVersion: llm-d.ai/v1alpha1
 kind: EndpointPickerConfig
 
@@ -63,16 +33,6 @@ dataLayer:
   discovery:
     pluginRef: file-disc
 
-# ---- Per-role vLLM flags ----
-# Ported from agentX's ix-agg-dep-base.yaml (roles[0], extended by
-# agg-dep8.yaml). DEP8 (TP=1, DP=8, EP on), FLASHINFER_MLA_SPARSE_DSV4
-# attention, deep_gemm_mega_moe MoE backend, EP weight filter (keeps only
-# served experts resident - required for DEP8 to avoid OOM), matching the
-# disagg recipe's DEP8 roles. tp/enable-expert-parallel are explicit here
-# even though they match server.sh's defaults, for self-documentation.
-#
-# No `decode:` block: server.sh only ever reads the section named after the
-# node's own ROLE, which is always "prefill" for this recipe (DECODE_NODES=0).
 prefill:
   tp: 1
   enable-expert-parallel: true
@@ -104,11 +64,7 @@ prefill:
     VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
     VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
     TILELANG_CLEANUP_TEMP_FILES: "1"
-    # Differs from agg-tp8.yaml's "0" - ported as-is from
-    # ix-agg-dep-base.yaml (DEP8's DP-ranks-as-processes path apparently
-    # wants NCCL symmetric memory enabled, unlike pure TP8's allreduce path).
     VLLM_USE_NCCL_SYMM_MEM: "1"
 
-# ---- SLURM resource directives ----
 slurm:
   time_limit: "08:00:00"
