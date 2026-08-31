@@ -6578,6 +6578,18 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2730
 
 - config-keys:
+    - dsv4-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Split the DeepSeek-V4-Pro FP4 ATOM AgentX MTP sweep into two attention bands per the ROCm/ATOM DeepSeek-V4-Agentic-InferenceX.md recipe: tensor-parallel attention at concurrency 1, 2, 4, 8, and 16, and DP attention at concurrency 48, 64, 96, 128, and 256 (previously a single tensor-parallel band at concurrency 1, 2, 4, 8, 16, 32, and 48)."
+    - "The DP-attention band adds --enable-dp-attention and --enable-tbo plus ATOM's DPA routing knobs (ATOM_DP_SESSION_AFFINITY, ATOM_DP_LB_REQ_EQUIV, ATOM_ENABLE_PREFILL_DELAYER, ATOM_PREFILL_DECODE_INTERVAL), the two-batch-overlap prerequisites GPU_MAX_HW_QUEUES and ATOM_NUMA_BIND, and the AIPerf session-affinity vars that keep each agentic conversation pinned to one DP rank; the tensor-parallel band is otherwise unchanged."
+    - "Session affinity is mandatory for the DP band: without it a session's turns scatter across DP ranks, the prefix KV written by one turn is unreachable by the next, and the multi-turn agentic workload collapses to cold prefill."
+    - "The attention band is selected by the config's dp-attn, propagated to the recipe as DP_ATTENTION, so the script's former DP_ATTENTION=false hard-fail guard is removed."
+    - "Bump the ATOM image from rocm/atom-dev:nightly_202608201032 to nightly_202608280858; FP8 KV/index caches, prefix caching, 32K state checkpoints, 16K batching/prefill chunks, FULL cudagraph mode, three-token MTP with golden AL 2.49, and max-num-seqs at twice concurrency are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2778
+
+- config-keys:
     - dsv4-fp4-b200-sglang-agentic-hicache-mtp
   scenario-type:
     - agentic-coding
