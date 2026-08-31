@@ -6642,3 +6642,14 @@
     - "Capture the decode CUDA graph to min(2*CONC, 128) instead of min(CONC, 64). The replay keeps --max-running-requests 2*CONC in flight, so a CONC-sized graph dropped every decode batch above CONC onto the eager path. The 128 cap follows the sibling MI355X AgentX recipe dsv4_fp4_mi355x_sglang_mtp.sh."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2737
   
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang
+    - qwen3.5-fp4-mi355x-sglang-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Bump image from lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260730 to lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260829"
+    - "Serve both arms with an fp8_e4m3 KV cache."
+    - "Route multi-GPU collectives through INT8-quantized ROCm quick all-reduce (ROCM_QUICK_REDUCE_QUANTIZATION=INT8) and drop --enable-aiter-allreduce-fusion, aligning both arms with the published SGLang cookbook recipe for MXFP4 on MI355X (https://docs.sglang.io/cookbook/autoregressive/Qwen/Qwen3.5). The two paths are mutually exclusive in SGLang: the AITER fused AR+RMSNorm path is gated on --enable-aiter-allreduce-fusion, and only with it off do collectives fall back to custom all-reduce where the quick-reduce regime applies. This supersedes the aiter allreduce fusion enabled for these two config keys in #1680, so throughput on this arm is not a like-for-like continuation of the previous MXFP4 series."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2640
+  
