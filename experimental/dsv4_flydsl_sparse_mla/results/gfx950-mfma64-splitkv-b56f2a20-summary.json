@@ -1,0 +1,266 @@
+{
+  "schema_version": 1,
+  "validation_date_utc": "2026-08-31",
+  "scope": "DSV4 gfx950 FlyDSL sparse-MLA prefill MVP",
+  "provenance": {
+    "architecture": "gfx950",
+    "gpu_count": 1,
+    "gpu": 0,
+    "vllm_target_commit": "91b654ac84638b582b62bb51921248a0d8023902",
+    "vllm_base_commit": "311b3513af33bc29b4acb2fde2e9313e5e9966a0",
+    "aiter_commit": "59799f3a16d6dae44617346630aab7be27226789",
+    "pytorch_pr_194309_implementation_commit": "420a10ffeb2c19dfd27ffd54bab20cfe982cc54e",
+    "pytorch_pr_194309_head_commit": "aa3922d8b012102c6a63f0499dfc521130cc46fc",
+    "flydsl_commit": "421935cc6f09fd9b27d5d5ae52e0960e18834bd5",
+    "flydsl_version": "0.3.1"
+  },
+  "kernel": {
+    "source": "../files/aiter/aiter/ops/flydsl/kernels/sparse_mla.py",
+    "validated_snapshot": "sparse_mla-b56f2a20.py",
+    "sha256": "b56f2a20772abf606594136decf483c52d3a8f9881b7ea25c561ae73f555d2fd",
+    "head_dim": 512,
+    "nope_head_dim": 448,
+    "rope_head_dim": 64,
+    "dtype": "bfloat16",
+    "heads_fast_path": 16,
+    "workgroup_threads": 512,
+    "waves": 8,
+    "waves_per_eu": 2,
+    "lds_bytes": 140288,
+    "gfx950_lds_limit_bytes": 163840,
+    "lds_margin_bytes": 23552,
+    "vgpr": 166,
+    "sgpr": 89,
+    "private_segment_bytes": 0,
+    "scratch_bytes": 0,
+    "spill": false,
+    "isa_sha256": "cc9fd3ecf215810dfa0a8cf70dec676ebf6af77ee2026adbee2c7cad05cce816"
+  },
+  "dispatch": {
+    "feature_gate": "VLLM_ROCM_DSV4_SPARSE_FLYDSL_PREFILL",
+    "feature_gate_default": false,
+    "fallback": "Triton",
+    "split_kv": {
+      "heads": 16,
+      "max_queries_exclusive": 256,
+      "min_dense_row_width": 2048,
+      "max_kv_allocation_bytes": 4294967295
+    }
+  },
+  "correctness": {
+    "expanded_report_cases": 9,
+    "expanded_report_passed": 9,
+    "row_lengths": [
+      0,
+      1,
+      63,
+      64,
+      65,
+      127,
+      128,
+      129,
+      191,
+      192,
+      193,
+      255,
+      256
+    ],
+    "coverage": [
+      "attention sink enabled and disabled",
+      "group 0 empty",
+      "group 1 empty",
+      "both groups empty",
+      "negative slot",
+      "slot equal to num_kv",
+      "late dominant maximum in group 1",
+      "overallocated ragged storage",
+      "greater-than-4-GiB address fallback",
+      "BF16 output and caller-supplied output buffer"
+    ],
+    "max_abs_vs_fp32_reference": 0.001953125,
+    "max_mean_abs_vs_fp32_reference": 0.000029831318897777237,
+    "max_abs_vs_triton": 0.001953125,
+    "large_address": {
+      "status": "pass",
+      "allocation_bytes": 4294969344,
+      "row_byte_offset": 4294968320,
+      "high_slot": 4194305,
+      "heads_tested": [1, 16]
+    },
+    "aiter_pytest": "11 passed",
+    "vllm_dispatch_pytest": "9 passed",
+    "vllm_dense_to_ragged_integration": {
+      "status": "pass",
+      "max_abs": 0.00006103515625,
+      "mean_abs": 0.0000026014613467850722
+    }
+  },
+  "kernel_split_vs_single_group_ms": [
+    {
+      "queries": 1,
+      "row_length": 256,
+      "single_group_ms": 0.037741,
+      "split_kv_ms": 0.039421,
+      "speedup": 0.9574
+    },
+    {
+      "queries": 16,
+      "row_length": 512,
+      "single_group_ms": 0.045581,
+      "split_kv_ms": 0.046101,
+      "speedup": 0.9887
+    },
+    {
+      "queries": 64,
+      "row_length": 2048,
+      "single_group_ms": 0.102001,
+      "split_kv_ms": 0.089701,
+      "speedup": 1.1371
+    },
+    {
+      "queries": 256,
+      "row_length": 2048,
+      "single_group_ms": 0.117881,
+      "split_kv_ms": 0.117981,
+      "speedup": 0.9992
+    }
+  ],
+  "split_kv_grid_speedup_single_over_split": {
+    "row_lengths": [512, 1024, 1536, 2048, 4096],
+    "queries": {
+      "1": [0.959, 1.026, 1.073, 1.105, 1.187],
+      "16": [0.968, 1.035, 1.076, 1.122, 1.191],
+      "32": [0.968, 1.053, 1.095, 1.128, 1.188],
+      "64": [0.975, 1.046, 1.094, 1.117, 1.174],
+      "128": [0.956, 1.020, 1.061, 1.085, 1.149],
+      "192": [0.946, 0.989, 1.012, 1.048, 1.101],
+      "256": [0.936, 0.972, 1.004, 1.017, 1.098]
+    }
+  },
+  "vllm_entrypoint_flydsl_vs_triton_ms": [
+    {
+      "queries": 1,
+      "row_length": 256,
+      "flydsl_ms": 0.092701,
+      "triton_ms": 0.089981,
+      "speedup": 0.971
+    },
+    {
+      "queries": 16,
+      "row_length": 512,
+      "flydsl_ms": 0.105781,
+      "triton_ms": 0.108501,
+      "speedup": 1.026
+    },
+    {
+      "queries": 64,
+      "row_length": 2048,
+      "flydsl_ms": 0.143482,
+      "triton_ms": 0.236783,
+      "speedup": 1.650
+    },
+    {
+      "queries": 192,
+      "row_length": 2048,
+      "flydsl_ms": 0.160502,
+      "triton_ms": 0.241843,
+      "speedup": 1.507
+    },
+    {
+      "queries": 256,
+      "row_length": 2048,
+      "flydsl_ms": 0.166882,
+      "triton_ms": 0.242582,
+      "speedup": 1.454,
+      "mode": "single group"
+    }
+  ],
+  "independent_process_boundary_confirmation": [
+    {
+      "queries": 1,
+      "row_length": 2048,
+      "timed_samples_per_process": 50,
+      "speedups": [1.1056, 1.1036, 1.1060]
+    },
+    {
+      "queries": 192,
+      "row_length": 2048,
+      "timed_samples_per_process": 50,
+      "runs": [
+        {
+          "single_group_ms": 0.113741,
+          "split_kv_ms": 0.109801,
+          "speedup": 1.0359
+        },
+        {
+          "single_group_ms": 0.113642,
+          "split_kv_ms": 0.110002,
+          "speedup": 1.0331
+        },
+        {
+          "single_group_ms": 0.113101,
+          "split_kv_ms": 0.109461,
+          "speedup": 1.0333
+        }
+      ]
+    },
+    {
+      "queries": 256,
+      "row_length": 2048,
+      "timed_samples_per_process": 50,
+      "runs": [
+        {
+          "single_group_ms": 0.117421,
+          "split_kv_ms": 0.119141,
+          "speedup": 0.9856
+        },
+        {
+          "single_group_ms": 0.119941,
+          "split_kv_ms": 0.120201,
+          "speedup": 0.9978
+        },
+        {
+          "single_group_ms": 0.117661,
+          "split_kv_ms": 0.118321,
+          "speedup": 0.9944
+        }
+      ]
+    },
+    {
+      "queries": 192,
+      "row_length": 1024,
+      "timed_samples_per_process": 50,
+      "runs": [
+        {
+          "single_group_ms": 0.072141,
+          "split_kv_ms": 0.071320,
+          "speedup": 1.0115
+        },
+        {
+          "single_group_ms": 0.072861,
+          "split_kv_ms": 0.071521,
+          "speedup": 1.0187
+        },
+        {
+          "single_group_ms": 0.072141,
+          "split_kv_ms": 0.071601,
+          "speedup": 1.0075
+        }
+      ],
+      "earlier_grid_speedup": 0.989,
+      "earlier_independent_speedup": 0.9808,
+      "interpretation": "near parity and not a robust split-KV win"
+    }
+  ],
+  "raw_artifacts": {
+    "status": "not persisted from ephemeral worker storage",
+    "reason": "the allocation ended before artifact copy",
+    "expected_files": [
+      "mfma64-splitkv-b56f2a20-correctness-expanded.json",
+      "mfma64-splitkv-b56f2a20-benchmark.json",
+      "mfma64-splitkv-b56f2a20-grid30.json",
+      "mfma64-splitkv-b56f2a20-wpe12.json",
+      "mfma64-splitkv-b56f2a20-final-isa.s"
+    ]
+  }
+}

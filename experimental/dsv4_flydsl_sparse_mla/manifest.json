@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "description": "Prefill-only DeepSeek-V4 gfx950 FlyDSL sparse-MLA overlay",
+  "scope": {
+    "architecture": "gfx950",
+    "phase": "prefill",
+    "head_dim": 512,
+    "nope_head_dim": 448,
+    "rope_head_dim": 64,
+    "query_dtype": "bfloat16",
+    "kv_dtype": "bfloat16",
+    "output_dtype": "bfloat16",
+    "index_layout": "token-level ragged int32 indices/indptr",
+    "kv_head_layout": "MQA/shared KV",
+    "attention_sink": true,
+    "vllm_feature_gate": "VLLM_ROCM_DSV4_SPARSE_FLYDSL_PREFILL"
+  },
+  "targets": {
+    "vllm": {
+      "commit": "91b654ac84638b582b62bb51921248a0d8023902",
+      "base_commit": "311b3513af33bc29b4acb2fde2e9313e5e9966a0",
+      "sparse_attention_provenance": "423e3081664fcc2b585e3340760efa973fb582e7"
+    },
+    "aiter": {
+      "commit": "59799f3a16d6dae44617346630aab7be27226789",
+      "sparse_decode_provenance": "b3c13c932207bef03aa3a8123bf34acad02f40d3"
+    }
+  },
+  "sources": {
+    "pytorch_pr_194309": {
+      "base_commit": "c240daa13b930742b887cb926b14da06b444e482",
+      "prefill_implementation_commit": "420a10ffeb2c19dfd27ffd54bab20cfe982cc54e",
+      "head_commit": "aa3922d8b012102c6a63f0499dfc521130cc46fc",
+      "source_file": "torch/_inductor/kernel/vendored_templates/flydsl/kernels/flex_attn_fwd_gfx950.py",
+      "helper_file": "torch/_inductor/kernel/vendored_templates/flydsl/kernels/flex_attn_utils.py"
+    },
+    "flydsl": {
+      "version": "0.3.1",
+      "tag_object": "5a43b455d56f594c21457a9802bb21f1a954aba7",
+      "commit": "421935cc6f09fd9b27d5d5ae52e0960e18834bd5"
+    }
+  },
+  "files": {
+    "aiter": [
+      "aiter/ops/flydsl/kernels/sparse_mla.py",
+      "op_tests/flydsl_tests/test_flydsl_sparse_mla.py"
+    ],
+    "vllm": [
+      "tests/v1/attention/test_rocm_sparse_flydsl_dispatch.py"
+    ]
+  },
+  "patches": {
+    "aiter": "patches/aiter.patch",
+    "vllm": "patches/vllm.patch"
+  },
+  "validation": {
+    "summary": "results/gfx950-mfma64-splitkv-b56f2a20-summary.json",
+    "validated_kernel_snapshot": "results/sparse_mla-b56f2a20.py",
+    "kernel_sha256": "b56f2a20772abf606594136decf483c52d3a8f9881b7ea25c561ae73f555d2fd"
+  }
+}

@@ -1,0 +1,262 @@
+diff --git a/vllm/envs.py b/vllm/envs.py
+--- a/vllm/envs.py
++++ b/vllm/envs.py
+@@ -140,6 +140,7 @@ if TYPE_CHECKING:
+     VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4: bool = False
+     VLLM_ROCM_USE_AITER_RMSNORM: bool = True
+     VLLM_ROCM_USE_AITER_MLA: bool = True
++    VLLM_ROCM_DSV4_SPARSE_FLYDSL_PREFILL: bool = False
+     VLLM_ROCM_AITER_MLA_ASM_PADDING: Literal["auto", "gluon", "asm"] = "auto"
+     VLLM_ROCM_USE_AITER_MHA: bool = True
+     VLLM_ROCM_USE_AITER_FP4_ASM_GEMM: bool = False
+@@ -1290,5 +1291,11 @@ environment_variables: dict[str, Callable[[], Any]] = {
+         os.getenv("VLLM_ROCM_USE_AITER_MLA", "True").lower() in ("true", "1")
+     ),
++    # Opt in to the gfx950 FlyDSL DSV4 sparse-MLA prefill MVP. Unsupported
++    # inputs, missing AITER symbols, and launch failures fall back to Triton.
++    "VLLM_ROCM_DSV4_SPARSE_FLYDSL_PREFILL": lambda: (
++        os.getenv("VLLM_ROCM_DSV4_SPARSE_FLYDSL_PREFILL", "False").lower()
++        in ("true", "1")
++    ),
+     # Small-head (<16) AITER MLA decode kernel selection. Small head counts
+     # (e.g. Kimi-K3: 12 heads/rank at TP8, 6 at TP16) can decode either through
+     # the Gluon small-head kernel or through the padded persistent-scheduling
+diff --git a/vllm/v1/attention/ops/rocm_aiter_mla_sparse.py b/vllm/v1/attention/ops/rocm_aiter_mla_sparse.py
+--- a/vllm/v1/attention/ops/rocm_aiter_mla_sparse.py
++++ b/vllm/v1/attention/ops/rocm_aiter_mla_sparse.py
+@@ -9,6 +9,7 @@ import torch.nn.functional as F
+ import vllm.envs as envs
+ from vllm.compilation.breakable_cudagraph import eager_break_during_capture
+ from vllm.forward_context import get_forward_context
++from vllm.logger import init_logger
+ from vllm.platforms import current_platform
+ from vllm.triton_utils import tl, triton
+ from vllm.utils.torch_utils import LayerNameType
+@@ -24,6 +25,8 @@ else:
+     _ON_GFX942 = False
+     _ON_GFX950 = False
+
++logger = init_logger(__name__)
++
+
+ @triton.jit
+ def _indexer_k_quant_and_cache_kernel(
+@@ -1087,6 +1090,9 @@ def rocm_inv_rope_einsum(
+
+ _DSV4_SPARSE_NOPE_DIM = 448
+ _DSV4_SPARSE_ROPE_DIM = 64
++_DSV4_SPARSE_SPLIT_KV_MIN_ROW_LENGTH = 2048
++_DSV4_SPARSE_SPLIT_KV_MAX_QUERIES = 256
++_dsv4_sparse_flydsl_prefill_disabled = False
+
+
+ def _validate_dsv4_sparse_dims(
+@@ -1109,6 +1115,146 @@ def _validate_dsv4_sparse_dims(
+     )
+
+
++def _dsv4_sparse_flydsl_prefill_enabled() -> bool:
++    return bool(
++        envs.VLLM_ROCM_DSV4_SPARSE_FLYDSL_PREFILL
++        and _ON_GFX950
++        and not _dsv4_sparse_flydsl_prefill_disabled
++    )
++
++
++def _should_split_dsv4_sparse_flydsl_prefill(
++    q: torch.Tensor, max_row_length: int
++) -> bool:
++    """Use two KV workers only where gfx950 measurements show a gain."""
++    return bool(
++        q.ndim == 3
++        and q.shape[1] == 16
++        and q.shape[0] < _DSV4_SPARSE_SPLIT_KV_MAX_QUERIES
++        and max_row_length >= _DSV4_SPARSE_SPLIT_KV_MIN_ROW_LENGTH
++    )
++
++
++@functools.lru_cache(maxsize=1)
++def _resolve_dsv4_sparse_flydsl_prefill():
++    """Resolve AITER lazily so the default Triton path has no FlyDSL import."""
++    try:
++        flydsl_ops = importlib.import_module("aiter.ops.flydsl")
++        return getattr(flydsl_ops, "flydsl_sparse_mla_prefill")
++    except (AttributeError, ImportError):
++        return None
++
++
++def _supports_dsv4_sparse_flydsl_prefill(
++    q: torch.Tensor,
++    kv: torch.Tensor,
++    indices: torch.Tensor,
++    indptr: torch.Tensor,
++    attn_sink: torch.Tensor | None,
++    output: torch.Tensor,
++) -> bool:
++    """Return whether the MVP can consume this ragged prefill invocation."""
++    if not _dsv4_sparse_flydsl_prefill_enabled():
++        return False
++    if (
++        q.device.type != "cuda"
++        or kv.device != q.device
++        or indices.device != q.device
++        or indptr.device != q.device
++        or output.device != q.device
++    ):
++        return False
++    if (
++        q.ndim != 3
++        or kv.ndim != 3
++        or kv.shape[1] != 1
++        or q.shape[-1] != _DSV4_SPARSE_NOPE_DIM + _DSV4_SPARSE_ROPE_DIM
++        or kv.shape[-1] != q.shape[-1]
++        or output.shape != q.shape
++    ):
++        return False
++    if (
++        q.dtype != torch.bfloat16
++        or kv.dtype != torch.bfloat16
++        or output.dtype != torch.bfloat16
++        or indices.dtype != torch.int32
++        or indptr.dtype != torch.int32
++    ):
++        return False
++    if (
++        indices.ndim != 1
++        or indptr.ndim != 1
++        or indptr.numel() != q.shape[0] + 1
++    ):
++        return False
++    if not all(
++        tensor.is_contiguous()
++        for tensor in (q, kv, indices, indptr, output)
++    ):
++        return False
++    if attn_sink is not None:
++        if (
++            attn_sink.device != q.device
++            or attn_sink.dtype != torch.float32
++            or attn_sink.ndim != 1
++            or attn_sink.numel() < q.shape[1]
++            or not attn_sink.is_contiguous()
++        ):
++            return False
++    return True
++
++
++def _try_dsv4_sparse_flydsl_prefill(
++    q: torch.Tensor,
++    kv: torch.Tensor,
++    indices: torch.Tensor,
++    indptr: torch.Tensor,
++    scale: float,
++    attn_sink: torch.Tensor | None,
++    output: torch.Tensor,
++    split_kv: bool = False,
++) -> bool:
++    """Try FlyDSL once; on any failure, latch this process onto Triton."""
++    global _dsv4_sparse_flydsl_prefill_disabled
++    if _dsv4_sparse_flydsl_prefill_disabled:
++        return False
++    if not _supports_dsv4_sparse_flydsl_prefill(
++        q, kv, indices, indptr, attn_sink, output
++    ):
++        return False
++
++    try:
++        op = _resolve_dsv4_sparse_flydsl_prefill()
++        if op is None:
++            logger.warning_once(
++                "VLLM_ROCM_DSV4_SPARSE_FLYDSL_PREFILL is enabled, but the pinned "
++                "AITER FlyDSL sparse-MLA symbol is unavailable; using Triton."
++            )
++            return False
++
++        op(
++            q=q,
++            kv=kv.squeeze(1),
++            indices=indices,
++            indptr=indptr,
++            scale=scale,
++            attn_sink=attn_sink,
++            out=output,
++            split_kv=split_kv,
++        )
++    except Exception:  # noqa: BLE001 - fallback is the feature-gate contract
++        _dsv4_sparse_flydsl_prefill_disabled = True
++        logger.warning(
++            "DSV4 sparse-MLA FlyDSL prefill failed; disabling it for this "
++            "process and falling back to Triton.",
++            exc_info=True,
++        )
++        return False
++
++    logger.info_once("Using gfx950 FlyDSL for DSV4 sparse-MLA prefill.")
++    return True
++
++
+ @triton.jit
+ def _pack_dense_prefix_to_ragged_kernel(
+     indices_ptr,
+@@ -2984,26 +3130,38 @@ def rocm_sparse_attn_prefill(
+         "rocm_sparse_attn_prefill",
+     )
+-    if ragged_indices is not None and ragged_indptr is not None:
+-        output_chunk = _rocm_sparse_attn_prefill_ragged_triton(
+-            q=q,
+-            kv=kv.squeeze(1),
+-            indices=ragged_indices,
+-            indptr=ragged_indptr,
+-            scale=scale,
+-            attn_sink=None if attn_sink is None else attn_sink[: q.shape[1]],
+-            nope_head_dim=nope_head_dim,
+-            rope_head_dim=rope_head_dim,
+-        )
+-    else:
+-        indices_2d = indices.reshape(indices.shape[0], -1)
+-        output_chunk = _rocm_sparse_attn_prefill_triton(
+-            q=q,
+-            kv=kv.squeeze(1),
+-            indices=indices_2d,
+-            scale=scale,
+-            attn_sink=None if attn_sink is None else attn_sink[: q.shape[1]],
+-            nope_head_dim=nope_head_dim,
+-            rope_head_dim=rope_head_dim,
+-            topk_length=topk_length,
+-        )
++    indices_2d = indices.reshape(indices.shape[0], -1)
++    if ragged_indices is None or ragged_indptr is None:
++        ragged_indices, ragged_indptr = build_ragged_indices_from_dense(
++            indices_2d,
++            topk_length
++            if topk_length is not None
++            else (indices_2d >= 0).sum(dim=-1, dtype=torch.int32),
++            num_rows=kv.shape[0],
++        )
++
++    sliced_sink = None if attn_sink is None else attn_sink[: q.shape[1]]
++    if _try_dsv4_sparse_flydsl_prefill(
++        q=q,
++        kv=kv,
++        indices=ragged_indices,
++        indptr=ragged_indptr,
++        scale=scale,
++        attn_sink=sliced_sink,
++        output=output,
++        split_kv=_should_split_dsv4_sparse_flydsl_prefill(
++            q, indices_2d.shape[1]
++        ),
++    ):
++        return
++
++    output_chunk = _rocm_sparse_attn_prefill_ragged_triton(
++        q=q,
++        kv=kv.squeeze(1),
++        indices=ragged_indices,
++        indptr=ragged_indptr,
++        scale=scale,
++        attn_sink=sliced_sink,
++        nope_head_dim=nope_head_dim,
++        rope_head_dim=rope_head_dim,
++    )
+     output.copy_(output_chunk.to(output.dtype))

@@ -1,0 +1,21 @@
+diff --git a/aiter/ops/flydsl/__init__.py b/aiter/ops/flydsl/__init__.py
+--- a/aiter/ops/flydsl/__init__.py
++++ b/aiter/ops/flydsl/__init__.py
+@@ -48,6 +48,9 @@ if is_flydsl_available():
+     from .kernels.mqa_logits.fp8_mqa_logits import (
+         flydsl_fp8_mqa_logits,
+     )
++    from .kernels.sparse_mla import (
++        flydsl_sparse_mla_prefill,
++    )
+     from .kernels.mqa_logits.pa_mqa_logits_fp4 import (
+         flydsl_pa_mqa_logits_fp4,
+     )
+@@ -68,6 +71,7 @@ if is_flydsl_available():
+         "compute_varqlen_windows",
+         "flydsl_flash_attn_func",
+         "flydsl_fp8_mqa_logits",
++        "flydsl_sparse_mla_prefill",
+         "flydsl_hgemm",
+         "flydsl_mla_reduce_v1",
+         "flydsl_moe_stage1",
