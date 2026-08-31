@@ -6492,6 +6492,7 @@
     - "Add HiCache host-DRAM KV tier arms at TP4 concurrency 40, 48, 56, and 64 and TP2 concurrency 20, 24, 28, and 32, using hicache ratio 1.5 with write_through, direct io, and page_first_direct layout."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2693
 
+
 - config-keys:
     - kimik2.6-fp4-b200-dynamo-vllm
     - dsv4-fp4-b200-dynamo-vllm
@@ -6589,12 +6590,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2718
 
 - config-keys:
-    - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
-  description:
-    - "Update the vLLM B200 Kimi-K3 AgentX configs."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2776
-
-- config-keys:
     - qwen3.5-fp4-mi355x-sglang-agentic-mtp
   scenario-type:
     - agentic-coding
@@ -6604,3 +6599,10 @@
     - "Halve the prefill budget, --max-prefill-tokens and --chunked-prefill-size from 32768 to 16384, matching the B200 sibling recipe qwen3.5_fp4_b200_sglang_mtp.sh."
     - "Capture the decode CUDA graph to min(2*CONC, 128) instead of min(CONC, 64). The replay keeps --max-running-requests 2*CONC in flight, so a CONC-sized graph dropped every decode batch above CONC onto the eager path. The 128 cap follows the sibling MI355X AgentX recipe dsv4_fp4_mi355x_sglang_mtp.sh."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2737
+
+- config-keys:
+    - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
+  description:
+    - "Update the vLLM B200 Kimi-K3 AgentX configs."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2776
+  
