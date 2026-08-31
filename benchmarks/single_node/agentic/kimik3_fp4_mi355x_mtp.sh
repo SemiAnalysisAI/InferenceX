@@ -248,17 +248,22 @@ if [ "$EP_SIZE" -gt 1 ]; then
 fi
 
 # ---- Speculative / Util------------------------------------------------------
-case "$CONC" in
+case "${SPEC_DECODING:-mtp}:$CONC" in
     # No KV offload; the working set fits in HBM.
-    1)
+    mtp:1)
         SYNTHETIC_ACCEPT_LEN=3.75
         SPEC_NUM_TOKENS=6
         GPU_MEM_UTIL=0.9
         MAX_NUM_BATCHED_TOKENS=16384
         ;;
-    2|4|8|10|12|14)
+    mtp:2|mtp:4|mtp:8|mtp:10|mtp:12|mtp:14|mtp:40)
         SYNTHETIC_ACCEPT_LEN=3.00
         SPEC_NUM_TOKENS=3
+        GPU_MEM_UTIL=0.9
+        MAX_NUM_BATCHED_TOKENS=8192
+        ;;
+    none:40)
+        SPEC_NUM_TOKENS=0
         GPU_MEM_UTIL=0.9
         MAX_NUM_BATCHED_TOKENS=8192
         ;;
