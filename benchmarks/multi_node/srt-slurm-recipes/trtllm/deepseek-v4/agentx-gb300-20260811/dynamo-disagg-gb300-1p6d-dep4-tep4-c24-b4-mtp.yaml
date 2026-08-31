@@ -9,7 +9,6 @@ identity:
   container:
     image: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc24
   frameworks:
-    dynamo: 2cbbdc863c336c2cfffa2a3668e2a6661801b259
     tensorrt_llm: 1.3.0rc24
 dynamo:
   install: true
@@ -149,7 +148,7 @@ frontend:
     PRECISION: fp4
     CONC: '24'
     DURATION: '3600'
-    KV_OFFLOADING: none
+    KV_OFFLOADING: dram
     ETCD_LEASE_TTL: '120'
     DYN_ROUTER_QUEUE_THRESHOLD: None
     DYN_TOKENIZER_CACHE: '1'
@@ -175,7 +174,7 @@ benchmark:
     PRECISION: fp4
     CONC: '24'
     DURATION: '3600'
-    KV_OFFLOADING: none
+    KV_OFFLOADING: dram
     INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
     RESULT_DIR: /logs/agentic
     PORT: '8000'
