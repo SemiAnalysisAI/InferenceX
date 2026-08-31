@@ -170,7 +170,7 @@ if [ -z "${MAX_NUM_SEQS:-}" ]; then
     else
         MAX_NUM_SEQS=$(( CONC + CONC / 4 ))
         if [ "$MAX_NUM_SEQS" -lt 8 ]; then MAX_NUM_SEQS=8; fi
-        if [ "$MAX_NUM_SEQS" -gt 80 ]; then MAX_NUM_SEQS=80; fi
+        if [ "$MAX_NUM_SEQS" -gt 65 ]; then MAX_NUM_SEQS=80; fi
     fi
 fi
 echo "[mns] max_num_seqs=$MAX_NUM_SEQS conc=$CONC offload=${KV_OFFLOADING:-none}"
@@ -183,7 +183,7 @@ if [ "${#SPEC_ARGS[@]}" -gt 0 ]; then SPEC_ROWS=$(( SPEC_NUM_TOKENS + 1 )); fi
 if [ "$CONC" -le 4 ]; then
     LADDER_MAX=32
 else
-    LADDER_MAX=80
+    LADDER_MAX=65
 fi
 MAX_CUDAGRAPH_CAPTURE_SIZE=$(( MAX_NUM_SEQS * SPEC_ROWS ))
 if [ "$MAX_CUDAGRAPH_CAPTURE_SIZE" -gt "$LADDER_MAX" ]; then MAX_CUDAGRAPH_CAPTURE_SIZE=$LADDER_MAX; fi
