@@ -216,12 +216,15 @@ class UCXSelectors(unittest.TestCase):
         run_kv.export_ucx_selectors(env, device="mlx5_0")
         self.assertEqual(env["UCX_NET_DEVICES"], "mlx5_0:1")
 
-    def test_device_pin_defers_to_explicit_ucx_env(self):
+    def test_device_pin_overrides_host_inherited_ucx_env(self):
+        # b300 ships a blanket 16-device UCX_NET_DEVICES in /etc/environment
+        # (forwarded by srun --export=ALL); left standing it silently swallows
+        # the registry pin, so the pin wins — same treatment as UCX_TLS=rc.
         import run_kv
 
         env = {"UCX_NET_DEVICES": "rdma0:1"}
         run_kv.export_ucx_selectors(env, device="mlx5_0")
-        self.assertEqual(env["UCX_NET_DEVICES"], "rdma0:1")
+        self.assertEqual(env["UCX_NET_DEVICES"], "mlx5_0:1")
 
     def test_empty_device_pin_keeps_the_inventory_path(self):
         import run_kv

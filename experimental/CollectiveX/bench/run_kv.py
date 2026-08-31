@@ -109,13 +109,16 @@ def export_ucx_selectors(environ=os.environ, device: str = "") -> None:
     ``device`` is the case's registry NIC pin (kv_device) for a UCX-backed
     engine: a literal netdev comma-list that narrows UCX below the operator
     inventory, for rail-isolated pods where multi-rail selection is the
-    variance source under measurement.
+    variance source under measurement. Unlike the inventory it overrides a
+    host-inherited UCX_NET_DEVICES: b300 ships a blanket 16-device value in
+    /etc/environment (forwarded by srun --export=ALL) that would otherwise
+    silently swallow the pin, the same way its UCX_TLS=rc is dropped below.
     """
     devices = device or environ.get("COLLX_RDMA_DEVICES", "")
-    if devices and "UCX_NET_DEVICES" not in environ:
+    if devices and (device or "UCX_NET_DEVICES" not in environ):
         environ["UCX_NET_DEVICES"] = ",".join(
-            device if ":" in device else f"{device}:1"
-            for device in devices.split(",") if device)
+            dev if ":" in dev else f"{dev}:1"
+            for dev in devices.split(",") if dev)
     gid = environ.get("COLLX_IB_GID_INDEX", "")
     if gid and "UCX_IB_GID_INDEX" not in environ:
         environ["UCX_IB_GID_INDEX"] = str(gid)
