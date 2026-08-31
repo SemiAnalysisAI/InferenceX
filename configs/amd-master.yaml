@@ -636,8 +636,8 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.60
       search-space:
-      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.5.dev63+rocm7.2" }, conc-list: [40], spec-decoding: mtp }
-      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.5.dev63+rocm7.2" }, conc-list: [40], spec-decoding: none }
+      - { tp: 8, dcp-size: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.5.dev63+rocm7.2" }, conc-list: [40], spec-decoding: mtp }
+      - { tp: 8, dcp-size: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.5.dev63+rocm7.2" }, conc-list: [40], spec-decoding: none }
 
 # Kimi-K3 MXFP4 agentic-coding benchmark on MI355X via ATOM with DSpark
 # speculative decoding. Acceptance is pinned to the committed golden curve in
