@@ -6633,3 +6633,12 @@
     - "Run the stock-nightly C40 TP8 LMCache baseline with explicit DCP8 for both DSpark K=3 and no-spec decoding."
     - "使用 stock nightly 在 C40、TP8、LMCache 配置下显式启用 DCP8，并分别运行 DSpark K=3 与无推测解码。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Restrict the C40 TP8/DCP8 LMCache baseline rerun to no-spec decoding because DSpark K=3 is not supported for this case."
+    - "由于此配置不支持 DSpark K=3，将 C40 TP8/DCP8 LMCache 基线重跑限制为无推测解码。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
