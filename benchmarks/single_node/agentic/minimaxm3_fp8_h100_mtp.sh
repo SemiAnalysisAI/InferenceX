@@ -39,6 +39,12 @@ SERVER_LOG="$RESULT_DIR/server.log"
 MOONCAKE_MASTER_LOG="$RESULT_DIR/mooncake_master.log"
 mkdir -p "$RESULT_DIR"
 
+# Native vLLM tiering uses host /dev/shm files that survive a cancelled
+# container. This job owns the node exclusively, so remove only our stale
+# tiering files before reserving DRAM for either offload backend.
+find /dev/shm -maxdepth 1 -type f -user "$(id -u)" \
+    -name 'vllm_offload_*.mmap' -print -delete
+
 SERVER_PID=""
 MOONCAKE_MASTER_PID=""
 cleanup_services() {
@@ -47,6 +53,8 @@ cleanup_services() {
     set +e
     stop_background_process_tree "$SERVER_PID" "vLLM server" 60
     stop_background_process_tree "$MOONCAKE_MASTER_PID" "Mooncake master" 30
+    find /dev/shm -maxdepth 1 -type f -user "$(id -u)" \
+        -name 'vllm_offload_*.mmap' -print -delete
     if [[ -n "${NVME_OFFLOAD_DIR:-}" ]]; then
         timeout --kill-after=5s 120s find "$NVME_OFFLOAD_DIR" -mindepth 1 -delete
     fi
