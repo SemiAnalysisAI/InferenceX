@@ -19,10 +19,9 @@ def spec_tokens_from_recipe(text):
 
 
 def rewrite(content, al, log):
-    """Set throughput-only golden acceptance in each worker role."""
-    content, removed = _SIMULATED_ACCEPTANCE_ENV_RE.subn("", content)
-    if removed:
-        log(f"Replaced {removed} existing SGLANG_SIMULATE_ACC_* variable(s)")
+    """Add throughput-only golden-acceptance variables to each worker role."""
+    if "SGLANG_SIMULATE_ACC_LEN" in content:
+        raise ValueError("recipe already contains SGLANG_SIMULATE_ACC_* variables")
 
     variables = (
         f'\n    SGLANG_SIMULATE_ACC_LEN: "{al:g}"'
@@ -34,7 +33,7 @@ def rewrite(content, al, log):
         content,
     )
     if count:
-        log(f"Set SGLANG_SIMULATE_ACC_* in {count} worker environment block(s)")
+        log(f"Added SGLANG_SIMULATE_ACC_* to {count} worker environment block(s)")
     return rewritten, count
 
 

@@ -44,12 +44,6 @@ frontend:
   type: dynamo
   enable_multiple_frontends: false
   args:
-    # Parse DeepSeek V4 tool tags at the Dynamo frontend so non-streaming
-    # OpenAI responses expose message.tool_calls instead of raw tagged content.
-    dyn-chat-processor: vllm
-    tool-call-parser: deepseek_v4
-    reasoning-parser: deepseek_v4
-    enable-auto-tool-choice: true
     router-mode: kv
     router-reset-states: true
     router-session-affinity-ttl-secs: 14400

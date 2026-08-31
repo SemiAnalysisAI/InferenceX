@@ -396,11 +396,11 @@ def test_eval_only_removes_sglang_simulated_acceptance(tmp_path: Path) -> None:
     assert "KEEP_ME: unchanged" in rewritten
 
 
-def test_sglang_throughput_replaces_existing_simulated_acceptance(
+def test_sglang_throughput_rejects_existing_simulated_acceptance(
     tmp_path: Path,
 ) -> None:
     recipe = tmp_path / "recipe.yaml"
-    recipe.write_text(
+    original = (
         "backend:\n"
         "  aggregated_environment:\n"
         '    SGLANG_SIMULATE_ACC_LEN: "2.99"\n'
@@ -408,6 +408,7 @@ def test_sglang_throughput_replaces_existing_simulated_acceptance(
         '    SGLANG_SIMULATE_ACC_TOKEN_MODE: "real-draft-token"\n'
         "    KEEP_ME: unchanged\n"
     )
+    recipe.write_text(original)
 
     result = subprocess.run(
         ["python3", str(INJECT_ACCEPTANCE), str(recipe), "dynamo-sglang"],
@@ -421,11 +422,10 @@ def test_sglang_throughput_replaces_existing_simulated_acceptance(
         text=True,
     )
 
-    assert result.returncode == 0, result.stderr
-    rewritten = recipe.read_text()
-    assert rewritten.count("SGLANG_SIMULATE_ACC_LEN") == 1
-    assert 'SGLANG_SIMULATE_ACC_LEN: "3.39"' in rewritten
-    assert "KEEP_ME: unchanged" in rewritten
+    assert result.returncode != 0
+    assert "already contains SGLANG_SIMULATE_ACC_" in result.stderr
+    assert recipe.read_text() == original
+
 
 def test_eval_only_acceptance_rewrite_allows_non_speculative_recipe(
     tmp_path: Path,
@@ -543,36 +543,6 @@ def test_mi355_minimax_launcher_configures_reasoning_parser() -> None:
     assert "--tool-call-parser minimax_m3" in launcher
     assert "--reasoning-parser minimax_m3" in launcher
     assert "--enable-auto-tool-choice" in launcher
-
-
-def test_dynamo_sglang_agentic_recipes_parse_tools_at_frontend() -> None:
-    recipe_roots = (
-        (
-            REPO_ROOT
-            / "benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/agentic",
-            ("deepseekv4", "deepseek-v4"),
-        ),
-        (
-            REPO_ROOT
-            / "benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb300-fp4/agentic",
-            ("qwen3_coder", "qwen3"),
-        ),
-    )
-    checked = 0
-
-    for recipe_root, (tool_parser, reasoning_parser) in recipe_roots:
-        for recipe_path in recipe_root.glob("*.yaml"):
-            recipe = yaml.safe_load(recipe_path.read_text())
-            frontend = recipe["frontend"]
-            if frontend["type"] != "dynamo":
-                continue
-            args = frontend["args"]
-            assert args["dyn-chat-processor"] == "sglang", recipe_path
-            assert args["tool-call-parser"] == tool_parser, recipe_path
-            assert args["reasoning-parser"] == reasoning_parser, recipe_path
-            checked += 1
-
-    assert checked == 15
 
 
 def test_swebench_container_paths_forward_modal_credentials() -> None:

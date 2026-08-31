@@ -263,18 +263,19 @@ jobs:
                       echo "generate-cli-command is required outside trusted changelog dispatch mode" >&2
                       exit 1
                     fi
+                    read -r -a GENERATE_ARGS <<< "$GENERATE_COMMAND"
                     if [ "$TRIM_CONC" = "true" ]; then
-                      GENERATE_COMMAND+=" --trim-conc"
+                      GENERATE_ARGS+=(--trim-conc)
                     fi
                     if [ "$ALL_EVALS" = "true" ]; then
-                      GENERATE_COMMAND+=" --all-evals"
+                      GENERATE_ARGS+=(--all-evals)
                     fi
                     if [ "$EVALS_ONLY" = "true" ]; then
-                      GENERATE_COMMAND+=" --evals-only"
+                      GENERATE_ARGS+=(--evals-only)
                     fi
                     CONFIG_JSON=$(uv run --no-project --with pydantic --with pyyaml --python 3.12 \
                       "${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py" \
-                      $GENERATE_COMMAND)
+                      "${GENERATE_ARGS[@]}")
                   fi
                   score_matrix() {
                     local family="$1"

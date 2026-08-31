@@ -35,8 +35,6 @@ backend:
       enable-metrics: true
       model-path: /model/
       trust-remote-code: true
-      reasoning-parser: qwen3
-      tool-call-parser: qwen3_coder
       tensor-parallel-size: 2
       data-parallel-size: 1
       expert-parallel-size: 1

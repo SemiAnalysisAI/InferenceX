@@ -271,8 +271,10 @@ sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
 if [[ "$MODEL_PREFIX" == "minimaxm3" && -n "$MINIMAX_M3_SLURM_EXCLUDED_NODELIST" ]]; then
     sed -i "/^name:.*/a sbatch_directives:\n  exclude: \"${MINIMAX_M3_SLURM_EXCLUDED_NODELIST}\"" "$CONFIG_PATH"
 fi
-python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
-    "$CONFIG_PATH" "$FRAMEWORK" || exit 1
+if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
+    python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
+        "$CONFIG_PATH" "$FRAMEWORK" || exit 1
+fi
 SRTCTL_APPLY_ARGS=(
     -f "$CONFIG_FILE"
     --tags "b300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)"

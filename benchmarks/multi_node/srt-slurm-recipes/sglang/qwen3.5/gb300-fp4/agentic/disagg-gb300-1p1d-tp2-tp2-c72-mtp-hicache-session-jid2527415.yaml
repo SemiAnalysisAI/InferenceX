@@ -31,9 +31,6 @@ frontend:
   env:
     PIP_BREAK_SYSTEM_PACKAGES: '1'
   args:
-    dyn-chat-processor: sglang
-    tool-call-parser: qwen3_coder
-    reasoning-parser: qwen3
     router-mode: kv
     router-session-affinity-ttl-secs: '3600'
     active-decode-blocks-threshold: None
@@ -114,8 +111,6 @@ backend:
       enable-metrics: true
       model-path: /model/
       trust-remote-code: true
-      reasoning-parser: qwen3
-      tool-call-parser: qwen3_coder
       quantization: modelopt_fp4
       kv-cache-dtype: fp8_e4m3
       tensor-parallel-size: 2
@@ -161,8 +156,6 @@ backend:
       quantization: modelopt_fp4
       kv-cache-dtype: fp8_e4m3
       trust-remote-code: true
-      reasoning-parser: qwen3
-      tool-call-parser: qwen3_coder
       tensor-parallel-size: 2
       data-parallel-size: 1
       expert-parallel-size: 1

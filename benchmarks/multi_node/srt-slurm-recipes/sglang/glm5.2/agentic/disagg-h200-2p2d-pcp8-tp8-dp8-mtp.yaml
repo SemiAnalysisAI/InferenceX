@@ -39,11 +39,6 @@ frontend:
     DYN_ROUTER_TEMPERATURE: "10000000"
     PIP_BREAK_SYSTEM_PACKAGES: "1"
   args:
-    # Parse GLM tool tags at the Dynamo frontend so non-stream OpenAI
-    # responses expose message.tool_calls instead of raw tagged content.
-    dyn-chat-processor: sglang
-    tool-call-parser: glm47
-    reasoning-parser: glm45
     router-mode: "kv"
     router-reset-states: true
     active-decode-blocks-threshold: "None"

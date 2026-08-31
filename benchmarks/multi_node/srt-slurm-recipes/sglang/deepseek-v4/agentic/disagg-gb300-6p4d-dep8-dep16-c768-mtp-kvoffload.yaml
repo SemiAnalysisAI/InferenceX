@@ -52,9 +52,6 @@ frontend:
   env:
     PIP_BREAK_SYSTEM_PACKAGES: "1"
   args:
-    dyn-chat-processor: sglang
-    tool-call-parser: deepseekv4
-    reasoning-parser: deepseek-v4
     router-mode: "kv"
     router-session-affinity-ttl-secs: "3600"
     active-decode-blocks-threshold: "None"
@@ -136,8 +133,6 @@ backend:
       enable-metrics: true
       model-path: /model/
       trust-remote-code: true
-      reasoning-parser: deepseek-v4
-      tool-call-parser: deepseekv4
       watchdog-timeout: 86400
       stream-interval: 60
       tp-size: 8
@@ -173,8 +168,6 @@ backend:
       enable-metrics: true
       model-path: /model/
       trust-remote-code: true
-      reasoning-parser: deepseek-v4
-      tool-call-parser: deepseekv4
       watchdog-timeout: 86400
       stream-interval: 60
       tp-size: 16

@@ -6,7 +6,6 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-
 OLD_BLOCK = '''            else:
                 # DP+EP mode: one process per GPU
                 # Each process gets a single GPU and a unique dp_rank

@@ -1878,7 +1878,7 @@ class TestArgumentDefaults:
     def test_runner_config_default_value(self):
         """Verify --runner-config defaults to configs/runners.yaml."""
         import sys
-        from generate_sweep_configs import main
+
 
         # Save original sys.argv
         original_argv = sys.argv
@@ -1895,7 +1895,7 @@ class TestArgumentDefaults:
             # Parse args using the ArgumentParser from main
             # We need to access the parser directly
             import argparse
-            from generate_sweep_configs import main
+
 
             # Create the same parent parser as in main()
             parent_parser = argparse.ArgumentParser(add_help=False)
@@ -2002,6 +2002,7 @@ class TestArgumentDefaults:
         """--all-evals bypasses the default min-conc/highest-median policy but
         still only evaluates 8k1k (1k1k entries are excluded)."""
         import sys
+
         import generate_sweep_configs
 
         monkeypatch.setattr(
@@ -2041,6 +2042,7 @@ class TestArgumentDefaults:
         sample_runner_config,
     ):
         import sys
+
         import generate_sweep_configs
 
         monkeypatch.setattr(
@@ -2078,6 +2080,7 @@ class TestArgumentDefaults:
         sample_runner_config,
     ):
         import sys
+
         import generate_sweep_configs
 
         monkeypatch.setattr(
@@ -2132,6 +2135,7 @@ class TestArgumentDefaults:
         monkeypatch,
     ):
         import sys
+
         import generate_sweep_configs
 
         repo_root = Path(__file__).resolve().parents[2]
@@ -2187,10 +2191,10 @@ class TestArgumentDefaults:
             json.dumps(manifest, separators=(',', ':')).encode()
         ).hexdigest()
 
-        assert len(manifest) == 67
+        assert len(manifest) == 63
         assert manifest_digest == (
-            'b94441edd3d083d3c03a6ed1f3891ee222c420614ba6a2a68802d9a85c128ca2'
-        ), json.dumps(manifest, indent=2)
+            '3e4a3195f921e87e97ccfe525b570ba9180ab0acc13206f591d687d9dbe18f14'
+        ), manifest_digest
         for row in rows:
             if isinstance(row['conc'], list):
                 assert row['conc'] == [row['eval-conc']]
@@ -2204,6 +2208,7 @@ class TestArgumentDefaults:
         sample_runner_config,
     ):
         import sys
+
         import generate_sweep_configs
 
         config = sample_multinode_config
@@ -2246,6 +2251,7 @@ class TestArgumentDefaults:
 
     def test_all_evals_cannot_combine_with_no_evals(self, monkeypatch):
         import sys
+
         import generate_sweep_configs
 
         monkeypatch.setattr(sys, 'argv', [

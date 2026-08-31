@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-import sys
 import json
 import math
 import re
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
 from tabulate import tabulate
 
 MODEL = "Model"

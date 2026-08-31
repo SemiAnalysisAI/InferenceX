@@ -317,8 +317,10 @@ EOF
     sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
     sed -i '/^health_check:/,/^[^ ]/{ /^health_check:/d; /^  /d; }' "$CONFIG_PATH"
     printf '\nhealth_check:\n  max_attempts: 720\n  interval_seconds: 10\n' >> "$CONFIG_PATH"
-    python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
-        "$CONFIG_PATH" "$FRAMEWORK"
+    if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
+        python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
+            "$CONFIG_PATH" "$FRAMEWORK" || exit 1
+    fi
     WORKLOAD_TAG="${ISL}x${OSL}"
     if [[ "$IS_AGENTIC" == "1" ]]; then
         WORKLOAD_TAG="agentic"

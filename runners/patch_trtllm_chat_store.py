@@ -7,7 +7,6 @@ import importlib.util
 import sys
 from pathlib import Path
 
-
 CLASS_HEADER = "class ChatCompletionRequest(OpenAIBaseModel):\n"
 NEXT_CLASS = "\nclass "
 FIELD_ANCHOR = "    stream: Optional[bool] = False\n"

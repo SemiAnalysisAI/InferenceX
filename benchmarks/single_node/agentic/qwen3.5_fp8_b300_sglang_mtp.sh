@@ -8,6 +8,9 @@ set -x
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
+# Use the lightweight GSM8K eval instead of the AgentX SWE-bench default.
+export EVAL_FRAMEWORK="lm-eval"
+
 check_env_vars \
     MODEL TP CONC EP_SIZE KV_OFFLOADING \
     TOTAL_CPU_DRAM_GB RESULT_DIR DURATION

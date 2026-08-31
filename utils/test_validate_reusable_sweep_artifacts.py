@@ -8,9 +8,9 @@ from pathlib import Path
 from validate_reusable_sweep_artifacts import (
     agentic_key,
     benchmark_key,
+    dedupe_reran_evals,
     eval_key,
     eval_result_key,
-    dedupe_reran_evals,
     main,
     validate_agentic_artifacts,
     validate_eval_artifacts,

@@ -524,12 +524,10 @@ fi
 # below still receives the full CONFIG_FILE (with selector).
 CONFIG_PATH="${CONFIG_FILE%%:*}"
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
-python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
-    "$CONFIG_PATH" "$FRAMEWORK" || exit 1
 
 # Throughput recipes opt into synthetic acceptance through the master config.
-# Eval-only jobs leave the checked-in real-MTP recipe unchanged so generated
-# tokens still pass target-model verification.
+# Eval-only jobs remove those settings so generated tokens use real target-model
+# verification.
 inject_synthetic_acceptance "$CONFIG_PATH" "$FRAMEWORK" || exit 1
 
 # --no-preflight skips srtctl's pre-submit model-path stat, which runs on

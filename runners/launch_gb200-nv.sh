@@ -711,10 +711,12 @@ if command -v squeue >/dev/null 2>&1; then
 fi
 sed -i "s/^name:.*/name: \"${SRT_SLURM_JOB_NAME}\"/" "$CONFIG_PATH"
 
-# Restore real acceptance for eval-only jobs, or inject synthetic acceptance
-# when a throughput run explicitly enables it.
-python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
-    "$CONFIG_PATH" "$FRAMEWORK" || exit 1
+# Restore real acceptance only for eval jobs. Throughput recipe rendering remains
+# unchanged by the opt-in evaluator path.
+if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
+    python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
+        "$CONFIG_PATH" "$FRAMEWORK" || exit 1
+fi
 
 # Don't leak the login-node venv to the compute-node orchestrator. sbatch's
 # default --export=ALL propagates VIRTUAL_ENV (set by `source

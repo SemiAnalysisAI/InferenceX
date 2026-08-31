@@ -160,8 +160,6 @@ SGLANG_CMD=(
     --scheduler-recv-interval "$SCHEDULER_RECV_INTERVAL"
     --tokenizer-worker-num 6
     --tokenizer-path "$MODEL"
-    --reasoning-parser qwen3
-    --tool-call-parser qwen3_coder
     --enable-metrics
     "${SPEC_ARGS[@]}"
     "${CACHE_ARGS[@]}"
