@@ -6613,6 +6613,7 @@
     - "Add DeepSeek-V4-Pro-0813 (DSpark) FP4 B200 llmd-vllm P/D disagg benchmark (1P DEP8 + 1D DEP8, 2 nodes / 16 GPUs total); always uses Mooncake RDMA prefix-cache; DSpark speculative decoding (prefill 1 token, decode 5 tokens)"
     - "Wire a FRAMEWORK==llmd-vllm dispatch into runners/launch_b200-nscale-compat.sh (self-contained, bypasses the srtctl/srt-slurm path)"
     - "Pin a disagg-only EPP/pd-sidecar v0.10.0 binary override (LLMD_BIN_DIR=/home/sa-shared/llm-d-bins-v0.10.0) required for the disagg-profile-handler deciders: EPP shape; aggregated runs use the image-baked v0.9.0 binaries"
+    - "Fix MODEL_PATH for -0813 checkpoint: unconditionally set /scratch/models/DeepSeek-V4-Pro-0813 in the launcher's -0813 branch so the outer script's pre-exported non-0813 path is always overridden"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
 
 - config-keys:
@@ -6622,4 +6623,5 @@
     - "Extend server.sh/job.slurm with aggregated (DECODE_NODES=0) mode: no decode role, no pd-sidecar; rank 0 takes over EPP/Envoy/bench coordinator duties"
     - "Add Mooncake (P2PHANDSHAKE embedded RDMA) for the DEP8+Mooncake arm via agentic/agg-gb200-dep8-dspark-mooncake-agentic.yaml; server.sh wires MultiConnector (NixlConnector + MooncakeStoreConnector, kv_both role) when MOONCAKE_CONFIG_PATH is set in aggregated mode"
     - "Branch runners/launch_b200-nscale-compat.sh llmd-vllm wrapper selection on DISAGG (true -> disagg, false -> aggregated)"
+    - "Fix MODEL_PATH for -0813 checkpoint: unconditionally set /scratch/models/DeepSeek-V4-Pro-0813 in the launcher's -0813 branch so the outer script's pre-exported non-0813 path is always overridden"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719

@@ -21,7 +21,7 @@ elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH="/scratch/models/DeepSeek-R1-0528"
     export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
 elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" && "$MODEL" == *-0813 ]]; then
-    export MODEL_PATH="${MODEL_PATH:-/scratch/models/DeepSeek-V4-Pro-0813}"
+    export MODEL_PATH="/scratch/models/DeepSeek-V4-Pro-0813"
     export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
 elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
     SELECTED_MODEL_PATH=""
