@@ -16,12 +16,12 @@ def _native_outputs(
     match_rate: float = 1.0,
     schema_rate: float = 1.0,
     reasoning_error_rate: float = 0.0,
+    tool_call_total: int = 10,
 ) -> None:
     (output_dir / mpe.NATIVE_RESULTS_FILENAME).write_text(
         json.dumps({"data_index": 1, "status": status}) + "\n",
         encoding="utf-8",
     )
-    tool_call_total = 10
     schema_errors = round((1.0 - schema_rate) * tool_call_total)
     (output_dir / mpe.NATIVE_REPORT_FILENAME).write_text(
         json.dumps(
@@ -158,6 +158,37 @@ def test_completed_model_failure_is_not_reclassified_as_integration_error(
 
     def runner(command: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
         _native_outputs(output_dir, match_rate=0.0, schema_rate=0.0)
+        return subprocess.CompletedProcess(command, 0)
+
+    passed = mpe.run_evaluation(
+        python=Path("python"),
+        source_dir=source_dir,
+        dependency_dir=dependency_dir,
+        base_url="http://127.0.0.1:8000/v1",
+        model="MiniMax-M3",
+        output_dir=output_dir,
+        runner=runner,
+    )
+
+    assert passed is True
+    compatibility = _compatibility(output_dir)
+    assert compatibility["results"][mpe.TASK_NAME]["exact_match,strict-match"] == 0.0
+    assert compatibility["n-samples"][mpe.TASK_NAME]["effective"] == 1
+    assert "integration_error" not in compatibility
+
+
+def test_completed_zero_tool_call_result_is_model_failure(
+    tmp_path: Path, monkeypatch
+) -> None:
+    output_dir = tmp_path / "output"
+    source_dir = tmp_path / "source"
+    dependency_dir = tmp_path / "deps"
+    source_dir.mkdir()
+    dependency_dir.mkdir()
+    monkeypatch.setattr(mpe, "verify_source_tree", lambda _: None)
+
+    def runner(command: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
+        _native_outputs(output_dir, match_rate=0.0, tool_call_total=0)
         return subprocess.CompletedProcess(command, 0)
 
     passed = mpe.run_evaluation(

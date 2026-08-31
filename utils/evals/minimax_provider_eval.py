@@ -254,11 +254,13 @@ def project_native_artifacts(*, output_dir: Path, model: str) -> Path:
     tool_call_total = _nonnegative_count(
         report.get("tool_calls_total_count"), "tool_calls_total_count"
     )
-    if tool_call_total == 0 or schema_errors > tool_call_total:
+    if schema_errors > tool_call_total:
         raise SmokeSuiteError(
-            "native summary tool-call schema counts must describe one or more calls"
+            "native summary tool-call schema counts are inconsistent"
         )
-    schema_rate = 1.0 - (schema_errors / tool_call_total)
+    schema_rate = (
+        0.0 if tool_call_total == 0 else 1.0 - (schema_errors / tool_call_total)
+    )
     reasoning_error_rate = _rate(
         report.get("error_only_reasoning_rate"), "error_only_reasoning_rate"
     )

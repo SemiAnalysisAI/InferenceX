@@ -227,7 +227,9 @@ artifact. Its `result_format` is `inferencex-eval-v1`, `eval_adapter` is
 `exact_match,strict-match`. A completed run records original and effective
 sample counts of one. Its score is the minimum of the stock verifier's
 tool-call match rate, tool-call schema accuracy, and one minus its
-error-only-reasoning rate. The `minimax_m3_smoke` threshold remains `1.0`.
+error-only-reasoning rate. A successful request that emits no tool calls has
+zero schema accuracy, so it remains an effective model-quality result rather
+than an integration failure. The `minimax_m3_smoke` threshold remains `1.0`.
 
 Setup, transport, timeout, malformed native output, and collection failures
 emit a zero-effective-sample compatibility artifact with integration-error
