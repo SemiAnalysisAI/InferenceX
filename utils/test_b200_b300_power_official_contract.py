@@ -17,6 +17,7 @@ LAUNCHERS = {
     "cluster:b200-nscale": REPO_ROOT / "runners/launch_b200-nscale-slurm.sh",
     "b300": REPO_ROOT / "runners/launch_b300-nv.sh",
 }
+POWER_FRAMEWORKS = {"dynamo-sglang", "dynamo-vllm"}
 
 PRODUCER_URL = "https://github.com/edwingao28/srt-slurm.git"
 PRODUCER_SHA = "e5c837f06a362dc888dfea2ee588e9f19c298270"
@@ -49,6 +50,7 @@ def _power_recipes():
         if (
             runner not in LAUNCHERS
             or config.get("model-prefix") not in {"dsv4", "kimik2.6"}
+            or config.get("framework") not in POWER_FRAMEWORKS
             or not config.get("disagg")
         ):
             continue
