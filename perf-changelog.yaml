@@ -6660,3 +6660,12 @@
     - "Align the C40 TP8/DCP8 LMCache no-spec test with the validated vLLM SimpleCPU profile: 16K batched tokens, max-num-seqs 80, full DCP CUDA graphs through size 4096, ROCM_AITER_MLA with prefill query quantization, stream interval 10, and 128-token prefix matching."
     - "将 C40 TP8/DCP8 LMCache 无推测解码测试与已验证的 vLLM SimpleCPU 配置对齐：16K 批处理 token、max-num-seqs 80、最大尺寸 4096 的完整 DCP CUDA graph、启用预填充查询量化的 ROCM_AITER_MLA、流式间隔 10，以及 128-token 前缀匹配。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Keep TRITON_MLA for DCP8 decode after ROCM_AITER_MLA failed startup because AiterMLAImpl does not return the softmax LSE required by DCP; retain ROCM_AITER_FA and query quantization for prefill."
+    - "由于 AiterMLAImpl 不返回 DCP 所需的 softmax LSE，ROCM_AITER_MLA 在启动时失败，因此 DCP8 解码继续使用 TRITON_MLA；预填充仍保留 ROCM_AITER_FA 和查询量化。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

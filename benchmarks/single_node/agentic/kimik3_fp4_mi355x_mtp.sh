@@ -330,7 +330,7 @@ if [ "$DCP_SIZE" -gt 1 ]; then
         --dcp-comm-backend a2a
         --cp-kv-cache-interleave-size 1
     )
-    ATTN_BE_ARGS+=(--attention-backend ROCM_AITER_MLA)
+    ATTN_BE_ARGS+=(--attention-backend TRITON_MLA)
 fi
 export VLLM_USE_DIRECT_DCP_A2A=0
 export VLLM_USE_DIRECT_DCP_Q_GATHER=0
@@ -360,7 +360,7 @@ VLLM_CMD=(
     --prefix-match-unit 128
     --kv-cache-dtype "fp8"
     --max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS"
-    --attention-config '{"use_prefill_query_quantization":true}'
+    --attention-config '{"mla_prefill_backend":"ROCM_AITER_FA","use_prefill_query_quantization":true}'
     "${ATTN_BE_ARGS[@]}"
     "${COMPILATION_CONFIG_ARGS[@]}"
     "${SPEC_ARGS[@]}"
