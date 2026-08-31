@@ -8,7 +8,7 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
 
 SRT_SLURM_REPOSITORY="https://github.com/SemiAnalysisAI/srt-slurm.git"
-SRT_SLURM_COMMIT="bab93d6f058823f2e9ef2057e14d8823796854e6"
+SRT_SLURM_COMMIT="02ce6d6ec7ccc7cba7a97328a156b2380d885e46"
 SLURM_PARTITION="compute"
 SHARED_BASE="/it-share/gharunners2/srt-slurm"
 SHARED_HF_CACHE="/it-share/hf-hub-cache"
@@ -322,6 +322,7 @@ set -euo pipefail
 eval_root="/results/${SLURM_JOB_ID}/eval"
 mkdir -p "${eval_root}"
 cd "${eval_root}"
+export SRTCTL_LM_EVAL_RESULT_DIR="${eval_root}"
 source /infmax-workspace/benchmarks/benchmark_lib.sh
 export EVAL_SERVER_HOST="${SRT_FRONTEND_HOST}"
 if [[ -n "${EVAL_CONC:-}" ]]; then

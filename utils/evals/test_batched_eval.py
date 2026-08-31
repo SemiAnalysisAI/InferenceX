@@ -238,6 +238,7 @@ def test_amd_multinode_container_forwards_eval_concurrency_list() -> None:
     assert '    "EVAL_CONC",' in contents
     assert 'benchmark_env[key] = value' in contents
     assert 'export EVAL_SERVER_HOST="${SRT_FRONTEND_HOST}"' in contents
+    assert 'export SRTCTL_LM_EVAL_RESULT_DIR="${eval_root}"' in contents
     assert 'copy_eval_artifacts "$RESULT_DIR/eval"' in contents
 
     workflow = (
