@@ -164,26 +164,19 @@ MLA_PREFILL_ARGS=(--attention-config "{\"mla_prefill_backend\":\"ROCM_AITER_FA\"
 LOAD_FORMAT="${LOAD_FORMAT:-safetensors}"
 echo "[load] load_format=$LOAD_FORMAT conc=$CONC"
 
-if [ -z "${MAX_NUM_SEQS:-}" ]; then
-    if [ "$DCP_SIZE" -gt 1 ]; then
-        MAX_NUM_SEQS=80
-    else
-        MAX_NUM_SEQS=$(( CONC + CONC / 4 ))
-        if [ "$MAX_NUM_SEQS" -lt 8 ]; then MAX_NUM_SEQS=8; fi
-        if [ "$MAX_NUM_SEQS" -gt 65 ]; then MAX_NUM_SEQS=80; fi
-    fi
-fi
 echo "[mns] max_num_seqs=$MAX_NUM_SEQS conc=$CONC offload=${KV_OFFLOADING:-none}"
-if [ "$MAX_NUM_SEQS" -ge 80 ] && ! agentic_kv_offload_enabled; then
-    echo "[mns] note: mns=$MAX_NUM_SEQS with KV_OFFLOADING=${KV_OFFLOADING:-none}. Proven on mi355x-amds_01 (8204 tok/s/GPU); OOMs on mi355x-amd_b23_07. Export MAX_NUM_SEQS=65 if HSA_STATUS_ERROR_OUT_OF_RESOURCES."
-fi
 
 SPEC_ROWS=1
 if [ "${#SPEC_ARGS[@]}" -gt 0 ]; then SPEC_ROWS=$(( SPEC_NUM_TOKENS + 1 )); fi
+
+MAX_NUM_SEQS=64
+LADDER_MAX=64
 if [ "$CONC" -le 4 ]; then
+    MAX_NUM_SEQS=32
     LADDER_MAX=32
 else
-    LADDER_MAX=65
+    MAX_NUM_SEQS=64
+    LADDER_MAX=64
 fi
 MAX_CUDAGRAPH_CAPTURE_SIZE=$(( MAX_NUM_SEQS * SPEC_ROWS ))
 if [ "$MAX_CUDAGRAPH_CAPTURE_SIZE" -gt "$LADDER_MAX" ]; then MAX_CUDAGRAPH_CAPTURE_SIZE=$LADDER_MAX; fi
