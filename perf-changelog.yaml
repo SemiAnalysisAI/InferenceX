@@ -6668,4 +6668,4 @@
     - agentic-coding
   description:
     - "Add GLM-5.2 NVFP4 B300 Dynamo+TensorRT-LLM AgentX recipes with compact worker packing."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2789
