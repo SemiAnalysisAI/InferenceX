@@ -6642,3 +6642,12 @@
     - "Restrict the C40 TP8/DCP8 LMCache baseline rerun to no-spec decoding because DSpark K=3 is not supported for this case."
     - "由于此配置不支持 DSpark K=3，将 C40 TP8/DCP8 LMCache 基线重跑限制为无推测解码。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Set --cp-kv-cache-interleave-size 1 whenever DCP is enabled, as required by LMCacheMPConnector's DCP validation."
+    - "启用 DCP 时设置 --cp-kv-cache-interleave-size 1，以满足 LMCacheMPConnector 的 DCP 校验要求。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

@@ -310,7 +310,11 @@ fi
 CP_ARGS=()
 ATTN_BE_ARGS=()
 if [ "$DCP_SIZE" -gt 1 ]; then
-    CP_ARGS+=(--decode-context-parallel-size "$DCP_SIZE" --dcp-comm-backend a2a)
+    CP_ARGS+=(
+        --decode-context-parallel-size "$DCP_SIZE"
+        --dcp-comm-backend a2a
+        --cp-kv-cache-interleave-size 1
+    )
     ATTN_BE_ARGS+=(--attention-backend TRITON_MLA)
 fi
 export VLLM_USE_DIRECT_DCP_A2A=0
