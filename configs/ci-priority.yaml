@@ -21,6 +21,8 @@ adjustments:
     eagle: 0.75
     eagle3: 0.75
   framework-prefix:
+    # Match the explicit Router runtime before the broader vLLM prefix.
+    vllm-router: 0.5
     sglang: 0.5
     vllm: 0.5
     dynamo-sglang: 0.5
