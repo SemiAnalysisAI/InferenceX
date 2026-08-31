@@ -6681,4 +6681,5 @@
     - "Add B200 DeepSeek-V4-Pro disaggregated dynamo-trtllm 8k1k recipes."
     - "Use the TensorRT-LLM release image with the configured Dynamo wheel across DEP and TEP prefill/decode topologies."
     - "Include MTP and non-MTP recipe variants with the existing model-path resolution."
+    - "Use the workflow timeout for the disaggregated recipes instead of a shorter recipe-level Slurm limit."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2721

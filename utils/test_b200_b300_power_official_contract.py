@@ -49,6 +49,7 @@ def _power_recipes():
         if (
             runner not in LAUNCHERS
             or config.get("model-prefix") not in {"dsv4", "kimik2.6"}
+            or config.get("framework") not in {"dynamo-sglang", "dynamo-vllm"}
             or not config.get("disagg")
         ):
             continue
