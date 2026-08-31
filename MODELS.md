@@ -50,7 +50,7 @@ Speculative-decoding A/B retirements apply to each pair below. The spec-decode a
 |---|---|---|
 | DeepSeek-V4-Pro 1.6T (`dsv4`) | Single-turn 8k1k | Agentic coding, including the MTP and DSpark arms |
 
-Rationale: `dsv4` carries the largest single-turn footprint in the repository. 45 active config keys use the 8k1k scenario, 32 in `configs/nvidia-master.yaml` and 13 in `configs/amd-master.yaml`, spanning H200, B200, B300, GB200, GB300, MI300X, MI325X, and MI355X across vLLM, SGLang, TensorRT-LLM, ATOM, Dynamo, and llm-d. That is a large share of every full sweep. AgentX trace replay is the scenario AI labs and the ML community ask about, and DeepSeek-V4-Pro's 19 agentic config keys are the part of `dsv4` that feeds the published North Star Pareto frontier. Retiring the fixed-sequence-length arm frees cluster hours for AgentX and for new frontier models such as Qwen3.8 2.4T without reducing what we publish for this model. Single-turn 8k1k stays active for the other models that still list it.
+Rationale: `dsv4` carries the largest single-turn footprint in the repository. 45 active config keys use the 8k1k scenario, 32 in `configs/nvidia-master.yaml` and 13 in `configs/amd-master.yaml`, spanning H200, B200, B300, GB200, GB300, MI300X, MI325X, and MI355X across vLLM, SGLang, TensorRT-LLM, ATOM, Dynamo, and llm-d. That is a large share of every full sweep. AgentX trace replay is the scenario AI labs and the ML community ask about, and DeepSeek-V4-Pro's 19 agentic config keys are the part of `dsv4` that feeds the published North Star Pareto frontier. Retiring the fixed-sequence-length arm frees cluster hours for AgentX and for new frontier models such as Qwen3.8-Flash-Next without reducing what we publish for this model. Single-turn 8k1k stays active for the other models that still list it.
 
 **Status: not yet enacted.** All 45 8k1k config keys still run. On enactment they are removed from the active master configs and archived under [`configs/deprecated/`](configs/deprecated/), with their benchmark scripts moved to the sibling `deprecated/` directories, matching how [#2493](https://github.com/SemiAnalysisAI/InferenceX/pull/2493) and [#2527](https://github.com/SemiAnalysisAI/InferenceX/pull/2527) were carried out. The SPEED-Bench acceptance-length scripts for `dsv4` are intentionally kept. Speedbench is driven by `speedbench-al.yml`, not the master configs.
 
@@ -125,6 +125,7 @@ The table also records both the agreed plan-of-record (PoR) draft-model mapping 
 | MiniMax-M3 (`minimaxm3`) | native/upstream vLLM engine | `Inferact/MiniMax-M3-EAGLE3` and/or `Inferact/MiniMax-M3-EAGLE3-GQA` | None | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
 | GLM-5.2 (`glm5.2`) | native/upstream SGLang engine | native MTP | None | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
 | Qwen3.5-397B-A17B (`qwen3.5`) | native/upstream SGLang engine | native MTP | None | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
+| Qwen3.8-Flash-Next (`qwen3.8next`) | native/upstream SGLang engine | TBD | native MTP (built-in 4B multi-step module; golden AL collector: [`qwen3.8next_fp4_b300_vllm.sh`](benchmarks/single_node/speedbench/qwen3.8next_fp4_b300_vllm.sh)) | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
 
 ### KV cache offloading policy
 
@@ -149,7 +150,7 @@ Other offloading tiers, including NVMe KV cache offloading, are outside the init
 
 | Model architecture class | Prefix | Date added | Active scenarios | Deprecated scenarios |
 |---|---|---|---|---|
-| Qwen3.8 2.4T | `qwen3.8` | TBD | Agentic coding | |
+| Qwen3.8-Flash-Next | `qwen3.8next` | 2026-08-26 ([#2742](https://github.com/SemiAnalysisAI/InferenceX/pull/2742)) | Agentic coding | |
 | Kimi-K3 | `kimik3` | 2026-07-27 ([#2391](https://github.com/SemiAnalysisAI/InferenceX/pull/2391)) | Agentic coding (DSpark only) | Agentic coding non-DSpark arm (deprecated from day 0) |
 | GLM-5.2 | `glm5.2` | 2026-07-18 ([#2268](https://github.com/SemiAnalysisAI/InferenceX/pull/2268)) | Agentic coding (the non-MTP arm still runs while the MTP-only transition remains pending, as explained in the Deprecation Notice) | |
 | MiniMax-M3 | `minimaxm3` | 2026-06-12 ([#1724](https://github.com/SemiAnalysisAI/InferenceX/pull/1724)) | Agentic coding | Single-turn 1k1k, Single-turn 8k1k (removed 2026-08-04, [#2493](https://github.com/SemiAnalysisAI/InferenceX/pull/2493)) |

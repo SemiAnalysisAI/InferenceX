@@ -67,7 +67,7 @@ elif not glob.glob(os.path.join(d, "*.safetensors")):
 PYEOF
 }
 
-# B200: runners/launch_b200-dgxc.sh resolves the checkpoint to a cluster-local
+# B200: runners/launch_b200-nscale-slurm.sh resolves the checkpoint to a cluster-local
 # path (/scratch/fsw/models/MiniMax-M3-NVFP4) and then rewrites MODEL to that
 # path before handing off to this script, so `hf download "$MODEL"` cannot work
 # on this runner the way it does on b300-nv, where MODEL stays the HF repo id.
@@ -106,7 +106,7 @@ else
 fi
 
 # B200: the B300 sibling stages the draft under /data/models, which does not
-# exist on b200-dgxc. The launcher bind-mounts only $MODEL_PATH itself
+# exist on b200-nscale. The launcher bind-mounts only $MODEL_PATH itself
 # (--container-mounts=...,$MODEL_PATH:$MODEL_PATH,...), so its parent exists
 # solely inside the container overlay -- writable, but per-job. Stage the draft
 # there rather than inside $MODEL_PATH, which is the shared read-mostly
