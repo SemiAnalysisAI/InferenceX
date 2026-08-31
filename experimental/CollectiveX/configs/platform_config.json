@@ -124,7 +124,7 @@
       "scale_up_transport": "mnnvl",
       "launcher": "gb-nv",
       "backends": {"deepep-v2": [8, 16], "nccl-ep": [8, 16], "flashinfer-ep": [8, 16]},
-      "ll_backends": {"deepep-v2": [8, 16]},
+      "ll_backends": {},
       "fabric": {"nic": "MNNVL (scale-out not used)", "switch": "NVLink NVL72"},
       "operator": {
         "partition": "batch_1",
