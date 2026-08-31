@@ -6607,3 +6607,11 @@
     - "Raise dram-utilization from 0.50 to 0.60, extend the none-offload conc-list from [1, 4, 8] to [1, 4, 8, 10, 12], and set the lmcache arm conc-list to [4, 8, 10, 12]."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2787
 
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Run a controlled C40 AgentX comparison with vLLM #53222, LMCache, and matched DSpark K=3 versus no-spec decoding; use max-num-seqs 80 and CUDA graph maxima 320/80 respectively."
+    - "运行受控的 C40 AgentX 对比：使用 vLLM #53222 和 LMCache，对比 DSpark K=3 与无推测解码；max-num-seqs 固定为 80，CUDA graph 上限分别为 320/80。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
