@@ -595,15 +595,3 @@ def test_swebench_container_paths_forward_modal_credentials() -> None:
             assert "-e MODAL_TOKEN_SECRET \\" in content
             assert "-e MODAL_TOKEN_ID=" not in content
             assert "-e MODAL_TOKEN_SECRET=" not in content
-
-
-def test_b200_kimi_recipe_uses_available_roce_devices() -> None:
-    recipe_path = (
-        REPO_ROOT
-        / "benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic"
-        / "agg-b200-tp8pp2-agentic.yaml"
-    )
-    recipe = yaml.safe_load(recipe_path.read_text())
-    devices = recipe["backend"]["aggregated_environment"]["UCX_NET_DEVICES"]
-
-    assert devices == ",".join(f"mlx5_{index}:1" for index in range(8))

@@ -172,9 +172,9 @@ fi
 # Synthetic acceptance standardizes throughput against the committed golden
 # EAGLE3-GQA curve. Accuracy evals must use real target verification.
 if [ "${EVAL_ONLY}" = "true" ]; then
-    SPEC_CONFIG="{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"TRITON_ATTN\"}"
+    SPEC_CONFIG="{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"ROCM_AITER_UNIFIED_ATTN\"}"
 else
-    SPEC_CONFIG="{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"TRITON_ATTN\", \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
+    SPEC_CONFIG="{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"ROCM_AITER_UNIFIED_ATTN\", \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
 fi
 
 echo "Starting vllm server..."
@@ -211,7 +211,7 @@ VLLM_CMD=(
     --max-num-batched-tokens 32768
     --language-model-only
     --enable-prefix-caching
-    --attention-backend TRITON_ATTN
+    --attention-backend ROCM_AITER_UNIFIED_ATTN
     --moe-backend aiter
     --kv-cache-dtype fp8
     --tool-call-parser minimax_m3
@@ -220,7 +220,6 @@ VLLM_CMD=(
     --default-chat-template-kwargs '{"thinking_mode":"enabled"}'
     --max-num-seqs "$((2 * CONC))"
     --stream-interval 20
-    --hf-overrides '{"text_config": {"use_index_cache": true, "index_topk_freq": 4}}'
     --speculative-config "$SPEC_CONFIG"
     "${OFFLOAD_ARGS[@]}"
 )
