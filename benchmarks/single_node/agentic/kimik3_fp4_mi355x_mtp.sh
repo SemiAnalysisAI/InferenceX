@@ -111,6 +111,8 @@ COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"
 
 echo "[cfg] conc=$CONC dcp=$DCP_SIZE gmu=$GPU_MEM_UTIL mns=$MAX_NUM_SEQS ladder=1..$LADDER spec=${#SPEC_ARGS[@]} offload=${KV_OFFLOADING:-none}"
 
+if [ "$CONC" -le 4 ]; then MAX_NUM_BATCHED_TOKENS=16384; else MAX_NUM_BATCHED_TOKENS=8192; fi
+
 VLLM_CMD=(
     vllm serve "$MODEL_PATH" --served-model-name "$MODEL"
     --host 0.0.0.0
@@ -122,7 +124,7 @@ VLLM_CMD=(
     --gpu-memory-utilization "$GPU_MEM_UTIL"
     --language-model-only
     --max-num-seqs "$MAX_NUM_SEQS"
-    --max-num-batched-tokens 8192
+    --max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS"
     --kv-cache-dtype fp8
     --enable-auto-tool-choice
     --tool-call-parser kimi_k3
