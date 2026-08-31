@@ -81,6 +81,10 @@ amd-smi || true
 resolve_trace_source
 install_agentic_deps
 
+# Controlled C14 experiment: replace only AITER runtime files with the
+# SHA-verified #4521 + #4964 build. No vLLM source is modified in this arm.
+bash "$(dirname "$0")/apply_k3_aiter_cprr_only.sh"
+
 # ---- Reference env block ----------------------------------------------------
 export VLLM_ROCM_AITER_MLA_ASM_PADDING=asm
 export VLLM_ROCM_USE_AITER=1
