@@ -406,8 +406,9 @@ EOF
     sed -i 's/^  max_attempts: [0-9]*/  max_attempts: 720/' "${CONFIG_FILE%%:*}"
 
     SRTCTL_PREFLIGHT_ARGS=()
-    # Kimi K2.6 weights are staged on the Slurm compute nodes, not the login node.
-    if [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "kimik2.6" && $PRECISION == "fp4" ]]; then
+    # Local-NVMe weights are staged on the Slurm compute nodes, not the login node.
+    if [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "kimik2.6" && $PRECISION == "fp4" ]] ||
+        [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
         SRTCTL_PREFLIGHT_ARGS+=(--no-preflight)
     fi
 
