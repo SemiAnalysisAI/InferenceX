@@ -122,6 +122,12 @@ ATOM_CMD=(
     --served-model-name "$MODEL"
     --host 0.0.0.0
     --server-port "$PORT"
+    # uvicorn defaults to a 5s idle keep-alive; AIPerf pools sockets for far
+    # longer (aiohttp ~15s) and warmup inter-turn gaps under backlog exceed 5s,
+    # so the server closes an idle pooled socket and the reused write hits
+    # 'Connection reset by peer' (errno 104). One such reset on a root AgentX
+    # warmup request aborts the whole run. Outlast the client idle window.
+    --timeout-keep-alive 900
     --tensor-parallel-size "$TP"
     --kv-cache-dtype fp8
     --index-cache-dtype fp4
