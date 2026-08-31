@@ -6603,4 +6603,16 @@
   description:
     - "Update the vLLM B200 Kimi-K3 AgentX configs."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2776
-  
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump the vLLM ROCm image from nightly-cb8104839c141609d99f1254459ef3a4f1bd4263 to nightly-1dc464d42681d22f38caf1fdc1eb632dc4421c45 and drop apply_k3_container_patches.sh (the patches are now baked into the image); add AITER_SITUV2_A8W4=1."
+    - "Replace the vllm-simple DRAM offload arm with an LMCache MP-connector arm (lmcache 0.5.5.dev60+rocm7.2), running one per-node MP server with --chunk-size 3072 (the minimum multiple of the hybrid KDA/MLA 1536/3072 KV group sizes) and --separate-object-groups; mq_timeout raised to 6000s for the large agentic prefixes."
+    - "Add decode context parallel (DCP_SIZE=8, --dcp-comm-backend a2a, TRITON_MLA attention backend) with GPU_MEM_UTIL lowered to 0.85, --max-num-batched-tokens 16384, and mla_prefill_backend=ROCM_AITER_FA."
+    - "Make speculative decoding concurrency-adaptive: concurrency 1 uses 6 draft tokens (synthetic acceptance 3.75), concurrency <=10 uses 2 tokens (2.51), and higher concurrencies disable MTP; MAX_NUM_SEQS is now 2*CONC with CUDA-graph capture sizes scaled to (1+SPEC_NUM_TOKENS)."
+    - "Raise dram-utilization from 0.50 to 0.60, extend the none-offload conc-list from [1, 4, 8] to [1, 4, 8, 10, 12], and set the lmcache arm conc-list to [4, 8, 10, 12]."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2787
+
