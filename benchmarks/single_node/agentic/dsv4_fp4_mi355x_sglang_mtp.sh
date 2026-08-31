@@ -73,6 +73,7 @@ export SGLANG_DSV4_REASONING_EFFORT=high
 export SGLANG_USE_ROCM700A=0
 export SGLANG_HACK_FLASHMLA_BACKEND=unified_kv_triton
 export AITER_BF16_FP8_MOE_BOUND=0
+export TORCH_BLAS_PREFER_HIPBLASLT=1
 # aiter batched GEMM for the absorbed MLA projections, carried by the v0.5.18
 # image and off by default in environ.py.
 export SGLANG_OPT_USE_AITER_BATCHED_GEMM=1
@@ -131,7 +132,14 @@ SGLANG_BACKEND_PORT="$PORT"
 # (the conc>=16 queue-saturation / decode-stall failure mode). 8192 = 32*256,
 # a page-size multiple well under the dsv4 compressor kernel's uint16 token
 # cap; same value the multi-node DeepSeek-V4-Pro-AgentX no_dp profile uses.
-CHUNKED_PREFILL_SIZE=8192
+if [ "$TP" -eq 8 ]; then
+    CHUNKED_PREFILL_SIZE=16384
+elif [ "$TP" -eq 4 ]; then
+    CHUNKED_PREFILL_SIZE=8192
+else
+    echo "Error: unsupported TP '$TP' (expected: 4 or 8)" >&2
+    exit 1
+fi
 # MTP adds a draft KV pool and extra graph captures on top of the spec-none
 # footprint, which ran at 0.90. 0.89 recovers most of that: the DSv4 compressor
 # state pools are sized from the full-attention pool and allocated after it,
@@ -149,7 +157,7 @@ if [ "$DP_ATTENTION" = "true" ]; then
     export SGLANG_DP_SHARED_EXPERT_LOCAL=1
     export SGLANG_DP_USE_GATHERV=1
     export SGLANG_DP_USE_REDUCE_SCATTER=1
-    export GPU_MAX_HW_QUEUES=5
+    export GPU_MAX_HW_QUEUES=2
 
     # Chunked prefill is a whole-engine budget, so widen it by the DP degree.
     CHUNKED_PREFILL_SIZE=$((8192 * TP))
