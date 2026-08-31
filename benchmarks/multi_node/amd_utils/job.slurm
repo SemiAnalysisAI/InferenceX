@@ -376,6 +376,11 @@ export MC_WORKERS_PER_CTX="${MC_WORKERS_PER_CTX:-}"
 # without editing server_vllm.sh -- see the SQ-overflow note there.
 export MC_SLICE_SIZE="${MC_SLICE_SIZE:-}"
 export MC_TCP_SLICE_SIZE="${MC_TCP_SLICE_SIZE:-}"
+export MC_STORE_USE_HUGEPAGE="${MC_STORE_USE_HUGEPAGE:-}"
+export MC_STORE_HUGEPAGE_SIZE="${MC_STORE_HUGEPAGE_SIZE:-}"
+export MC_STORE_NR_HUGEPAGES="${MC_STORE_NR_HUGEPAGES:-}"
+export MC_STORE_LOCAL_BUFFER_GB="${MC_STORE_LOCAL_BUFFER_GB:-4}"
+export MC_STORE_HUGEPAGE_MARGIN_GB="${MC_STORE_HUGEPAGE_MARGIN_GB:-16}"
 export MOONCAKE_PREFERRED_SEGMENT="${MOONCAKE_PREFERRED_SEGMENT:-}"
 export MOONCAKE_DIAG_REPLICA_SAMPLE="${MOONCAKE_DIAG_REPLICA_SAMPLE:-}"
 
@@ -416,6 +421,22 @@ else
     echo "[WARN] $RDMA_CHECK_SCRIPT not found; skipping RDMA QoS/DCQCN pre-flight check"
 fi
 
+HUGEPAGE_HELPER="$(pwd)/helpers/hugepage_setup.sh"
+HUGEPAGE_CONFIGURED=0
+HUGEPAGE_NODELIST=""
+
+restore_hugepages() {
+  if [[ "$HUGEPAGE_CONFIGURED" != "1" || -z "$HUGEPAGE_NODELIST" ]]; then
+    return 0
+  fi
+  local node_count
+  node_count=$(tr ',' '\n' <<< "$HUGEPAGE_NODELIST" | grep -c .)
+  srun --nodes="$node_count" --ntasks="$node_count" --ntasks-per-node=1 \
+    --nodelist="$HUGEPAGE_NODELIST" \
+    bash "$HUGEPAGE_HELPER" restore "$SLURM_JOB_ID" 2>/dev/null || true
+  HUGEPAGE_CONFIGURED=0
+}
+
 cleanup() {
   echo "[${SLURM_JOB_ID}] termination received on $(hostname); cleaning up container + stale logs..."
   # Backstop: on scancel/timeout/step-hang the foreground `exec docker run`
@@ -425,11 +446,13 @@ cleanup() {
   # other users' containers. (Ported from InferenceY 51ebfa88.)
   srun --nodelist="$SELECTED_NODELIST_SRUN" \
     bash -c 'eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD rm -f '"$DOCKER_CONT_NAME"' 2>/dev/null || true' 2>/dev/null || true
+  restore_hugepages
   rm -rf ${SLURM_SUBMIT_DIR}/logs 2>/dev/null || true
   echo "[${SLURM_JOB_ID}] cleanup done."
 }
 
 trap cleanup INT TERM HUP
+trap restore_hugepages EXIT
 
 # Force NFS cache refresh on all nodes
 echo "Refreshing NFS caches on all nodes..."
@@ -441,6 +464,49 @@ srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c '
     echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null 2>&1 || true
     echo "NFS cache refreshed on $(hostname)"
 '
+
+# Reserve HugeTLB on every node that instantiates Mooncake. Prefill nodes are
+# first in SELECTED_NODES. Decode nodes need the pool only when their Mooncake
+# store has not been explicitly disabled.
+if [[ "${MC_STORE_USE_HUGEPAGE:-0}" == "1" ]]; then
+    if [[ "${MC_STORE_HUGEPAGE_SIZE:-}" != "2MB" ]]; then
+        echo "ERROR: host HugeTLB setup currently supports MC_STORE_HUGEPAGE_SIZE=2MB only" >&2
+        exit 1
+    fi
+    if [[ ! "${TOTAL_CPU_DRAM_GB:-}" =~ ^[1-9][0-9]*$ ||
+          ! "${PREFILL_TP_SIZE:-}" =~ ^[1-9][0-9]*$ ||
+          ! "$MC_STORE_LOCAL_BUFFER_GB" =~ ^[1-9][0-9]*$ ||
+          ! "$MC_STORE_HUGEPAGE_MARGIN_GB" =~ ^[0-9]+$ ]]; then
+        echo "ERROR: HugeTLB sizing requires positive TOTAL_CPU_DRAM_GB, PREFILL_TP_SIZE, and MC_STORE_LOCAL_BUFFER_GB" >&2
+        exit 1
+    fi
+    # 2 MiB pages/GiB = 512. TOTAL_CPU_DRAM_GB covers all TP ranks'
+    # global segments. Include every rank's local buffer plus headroom for
+    # allocator alignment and metadata. An explicit page count overrides this.
+    MC_STORE_NR_HUGEPAGES="${MC_STORE_NR_HUGEPAGES:-$((
+        (TOTAL_CPU_DRAM_GB + PREFILL_TP_SIZE * MC_STORE_LOCAL_BUFFER_GB +
+         MC_STORE_HUGEPAGE_MARGIN_GB) * 512
+    ))}"
+    export MC_STORE_NR_HUGEPAGES
+    if [[ ! "$MC_STORE_NR_HUGEPAGES" =~ ^[1-9][0-9]*$ ]]; then
+        echo "ERROR: MC_STORE_NR_HUGEPAGES must be a positive integer" >&2
+        exit 1
+    fi
+    if [[ "${MOONCAKE_DECODE_STORE:-1}" == "0" ]]; then
+        HUGEPAGE_NODELIST=$(echo "$SELECTED_NODES" | head -n "$xP" | paste -sd,)
+    else
+        HUGEPAGE_NODELIST="$SELECTED_NODELIST_SRUN"
+    fi
+    HUGEPAGE_CONFIGURED=1
+    HUGEPAGE_NODE_COUNT=$(tr ',' '\n' <<< "$HUGEPAGE_NODELIST" | grep -c .)
+    echo "[hugetlb] reserving ${MC_STORE_NR_HUGEPAGES} x 2 MiB pages on ${HUGEPAGE_NODELIST}"
+    if ! srun --nodes="$HUGEPAGE_NODE_COUNT" --ntasks="$HUGEPAGE_NODE_COUNT" \
+        --ntasks-per-node=1 --nodelist="$HUGEPAGE_NODELIST" \
+        bash "$HUGEPAGE_HELPER" reserve "$SLURM_JOB_ID" "$MC_STORE_NR_HUGEPAGES"; then
+        restore_hugepages
+        exit 1
+    fi
+fi
 
 # =============================================================================
 # Build engine-specific Docker environment variables
@@ -540,6 +606,8 @@ DOCKER_ENV_COMMON=(
     -e MC_WORKERS_PER_CTX=\${MC_WORKERS_PER_CTX:-}
     -e MC_SLICE_SIZE=\${MC_SLICE_SIZE:-}
     -e MC_TCP_SLICE_SIZE=\${MC_TCP_SLICE_SIZE:-}
+    -e MC_STORE_USE_HUGEPAGE=\${MC_STORE_USE_HUGEPAGE:-}
+    -e MC_STORE_HUGEPAGE_SIZE=\${MC_STORE_HUGEPAGE_SIZE:-}
     -e VLLM_PATCH_46240=\${VLLM_PATCH_46240:-}
     # Generalise aiter MLA head padding so 12 heads/rank (K3 TP8) reach the ASM
     # decode kernel instead of the batch_size=1 fp8 gluon regime.
@@ -931,6 +999,8 @@ echo \"[rank 0] Main container exited (rc=\$DOCKER_EXIT_CODE). Stopping vllm-rou
 \$DOCKER_CMD rm -f \"$ROUTER_CONT_NAME\" 2>/dev/null || true
 exit \$DOCKER_EXIT_CODE
 "
+
+restore_hugepages
 
 if [[ "${KEEP_CONTAINERS}" != "1" ]]; then
     srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c 'eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD rm -f '"$DOCKER_CONT_NAME"' '"$CLIENT_CONT_NAME"' 2>/dev/null || true'

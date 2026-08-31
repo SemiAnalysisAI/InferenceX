@@ -81,6 +81,18 @@ if [[ "$KV_OFFLOADING" != "none" ]]; then
     export KV_OFFLOAD_BACKEND="${KV_OFFLOAD_BACKEND:-mooncake}"
 fi
 
+# Mooncake registers a very large host DRAM tier with the RNIC. Back it with
+# 2 MiB HugeTLB pages so the NIC does not exhaust its page-table entries on the
+# 4 KiB mapping. job.slurm reserves this pool on Mooncake-enabled nodes before
+# starting Docker and restores the previous host setting on exit.
+if [[ "$KV_OFFLOADING" == "dram" && "${KV_OFFLOAD_BACKEND:-}" == "mooncake" ]]; then
+    export MC_STORE_USE_HUGEPAGE="${MC_STORE_USE_HUGEPAGE:-1}"
+    export MC_STORE_HUGEPAGE_SIZE="${MC_STORE_HUGEPAGE_SIZE:-2MB}"
+    export MC_STORE_LOCAL_BUFFER_GB="${MC_STORE_LOCAL_BUFFER_GB:-4}"
+    export MC_STORE_HUGEPAGE_MARGIN_GB="${MC_STORE_HUGEPAGE_MARGIN_GB:-16}"
+    export MOONCAKE_DECODE_STORE="${MOONCAKE_DECODE_STORE:-0}"
+fi
+
 export ENABLE_METRICS="${ENABLE_METRICS:-1}"
 
 if [[ "${PREFILL_EP:-1}" -eq 1 ]]; then

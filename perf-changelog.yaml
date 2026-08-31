@@ -6608,3 +6608,12 @@
     - "Add a model-less Kimi-K3 vLLM-disagg plumbing smoke using dummy weights."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2326
   
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-disagg-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Back the Mooncake host DRAM tier with 2 MiB HugeTLB pages so large RDMA registrations do not exhaust RNIC page-table entries."
+    - "Reserve and verify the computed host HugeTLB pool before container startup, pass the strict Mooncake hugepage environment into the container, and restore the previous host setting on every exit path."
+    - "Keep decode-side Mooncake disabled and size the prefill reservation from the resolved DRAM tier, TP-local buffers, and allocator headroom."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2326

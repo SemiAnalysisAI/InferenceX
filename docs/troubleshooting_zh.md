@@ -95,6 +95,15 @@ Setup 阶段的删除错误通常意味着陈旧分支或改变空白的合并�
 
 [`wait_for_server_ready`](../benchmarks/benchmark_lib.sh) 会区分“服务器在日志出现前死亡”“服务器在健康前死亡”和进程存活但 `/health` 尚未通过。保留服务器日志和 PID 状态；仅有工作流最终超时不能构成诊断。
 
+对于 RDMA 上的 Mooncake DRAM 层，宿主内存申请成功并不能证明 RNIC 可以用
+4 KiB 页高效映射同一片内存。大容量 DRAM 层必须在 Docker 启动前于宿主预留
+HugeTLB，并向容器传入 `MC_STORE_USE_HUGEPAGE=1` 和
+`MC_STORE_HUGEPAGE_SIZE=2MB`。预留量应根据最终 DRAM 层总量、每个 TP rank
+的本地 buffer 及 allocator 余量计算；`sysctl` 后必须验证
+`HugePages_Total`，并在正常退出和信号退出时都恢复宿主原值。不要用
+`max_mr_size` 替代 HugeTLB：它是 RNIC 能力值，不能减少基于 4 KiB 页的内存
+所产生的页表项。
+
 使用最早出现的具体特征：
 
 - **镜像拉取/tag 失败：**修改运行时标志前验证精确 registry tag 或 digest 是否存在。[`KLAUD_DEBUG.md` §6](../KLAUD_DEBUG.md#6-docker-image-tag-gotchas) 警告不要从带日期的 nightly 推导 release tag。

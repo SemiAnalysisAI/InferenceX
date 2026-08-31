@@ -95,6 +95,16 @@ For recovery, follow [`.claude/commands/clean-amd-mi355-runner-root-files.md`](.
 
 [`wait_for_server_ready`](../benchmarks/benchmark_lib.sh) distinguishes “server died before log,” “server died before healthy,” and a live process whose `/health` endpoint has not passed. Preserve the server log and PID status. The workflow's final timeout alone is not a diagnosis.
 
+For Mooncake DRAM tiers on RDMA, a successful host allocation does not prove
+that the RNIC can map the same memory efficiently with 4 KiB pages. Large tiers
+must reserve HugeTLB on the host before Docker starts and pass
+`MC_STORE_USE_HUGEPAGE=1` plus `MC_STORE_HUGEPAGE_SIZE=2MB` into the container.
+Size the reservation from the final total DRAM tier, every TP rank's local
+buffer, and allocator headroom; verify `HugePages_Total` after `sysctl`, and
+restore the prior host value on every normal or signal-driven exit. Do not use
+`max_mr_size` as a substitute for HugeTLB: it is an RNIC capability and does
+not reduce the page-table entries of a 4 KiB-backed allocation.
+
 Use the earliest specific signature:
 
 - **Image pull/tag failure:** verify the exact registry tag or digest exists before touching runtime flags. [`KLAUD_DEBUG.md` §6](../KLAUD_DEBUG.md#6-docker-image-tag-gotchas) warns against deriving release tags from dated nightlies.
