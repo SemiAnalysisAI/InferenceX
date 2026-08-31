@@ -50,7 +50,7 @@ InferenceX-e2e 运行在数量固定且有限的 GPU 资源池上，并由一支
 |---|---|---|
 | DeepSeek-V4-Pro 1.6T（`dsv4`） | 单轮 8k1k | 智能体编码，含 MTP 与 DSpark 分支 |
 
-原因：`dsv4` 是本仓库中单轮场景占用最大的模型。当前有 45 个启用的配置项使用 8k1k 场景（`configs/nvidia-master.yaml` 32 个，`configs/amd-master.yaml` 13 个），覆盖 H200、B200、B300、GB200、GB300、MI300X、MI325X 与 MI355X，涉及 vLLM、SGLang、TensorRT-LLM、ATOM、Dynamo 与 llm-d，在每一轮完整 sweep 中占比可观。AgentX 轨迹回放才是 AI 实验室与 ML 社区真正关注的场景，而 DeepSeek-V4-Pro 的 19 个智能体编码配置项正是 `dsv4` 中支撑已发布北极星（North Star）帕累托前沿的部分。下线固定序列长度分支可为 AgentX 以及 Qwen3.8 2.4T 等新前沿模型腾出集群机时，同时不减少该模型对外发布的内容。对于仍列有该场景的其他模型，单轮 8k1k 保持启用。
+原因：`dsv4` 是本仓库中单轮场景占用最大的模型。当前有 45 个启用的配置项使用 8k1k 场景（`configs/nvidia-master.yaml` 32 个，`configs/amd-master.yaml` 13 个），覆盖 H200、B200、B300、GB200、GB300、MI300X、MI325X 与 MI355X，涉及 vLLM、SGLang、TensorRT-LLM、ATOM、Dynamo 与 llm-d，在每一轮完整 sweep 中占比可观。AgentX 轨迹回放才是 AI 实验室与 ML 社区真正关注的场景，而 DeepSeek-V4-Pro 的 19 个智能体编码配置项正是 `dsv4` 中支撑已发布北极星（North Star）帕累托前沿的部分。下线固定序列长度分支可为 AgentX 以及 Qwen3.8-Flash-Next 等新前沿模型腾出集群机时，同时不减少该模型对外发布的内容。对于仍列有该场景的其他模型，单轮 8k1k 保持启用。
 
 **状态：尚未执行。** 全部 45 个 8k1k 配置项仍在运行。执行时将从启用的主配置中移除并归档至 [`configs/deprecated/`](configs/deprecated/)，对应基准测试脚本移入同级 `deprecated/` 目录，与 [#2493](https://github.com/SemiAnalysisAI/InferenceX/pull/2493) 和 [#2527](https://github.com/SemiAnalysisAI/InferenceX/pull/2527) 的做法一致。`dsv4` 的 SPEED-Bench 接受长度脚本予以保留。Speedbench 由 `speedbench-al.yml` 驱动，不经过主配置。
 
@@ -125,6 +125,7 @@ InferenceX 支持 SGLang 和 vLLM 双方的维护者，并响应 AI 实验室和
 | MiniMax-M3（`minimaxm3`） | 原生/上游 vLLM 引擎 | `Inferact/MiniMax-M3-EAGLE3` 和/或 `Inferact/MiniMax-M3-EAGLE3-GQA` | 无 | 按照上述提交顺序指南及例外处理的其他非 vLLM/SGLang 引擎 |
 | GLM-5.2（`glm5.2`） | 原生/上游 SGLang 引擎 | 原生 MTP | 无 | 按照上述提交顺序指南及例外处理的其他非 vLLM/SGLang 引擎 |
 | Qwen3.5-397B-A17B（`qwen3.5`） | 原生/上游 SGLang 引擎 | 原生 MTP | 无 | 按照上述提交顺序指南及例外处理的其他非 vLLM/SGLang 引擎 |
+| Qwen3.8-Flash-Next（`qwen3.8next`） | 原生/上游 SGLang 引擎 | 待定 | 原生 MTP（内置 4B 多步预测模块；黄金 AL 采集脚本：[`qwen3.8next_fp4_b300_vllm.sh`](benchmarks/single_node/speedbench/qwen3.8next_fp4_b300_vllm.sh)） | 按照上述提交顺序指南及例外处理的其他非 vLLM/SGLang 引擎 |
 
 ### KV 缓存卸载策略
 
@@ -149,7 +150,7 @@ InferenceX 支持 SGLang 和 vLLM 双方的维护者，并响应 AI 实验室和
 
 | 模型架构类别 | 前缀 | 加入日期 | 启用场景 | 已弃用场景 |
 |---|---|---|---|---|
-| Qwen3.8 2.4T | `qwen3.8` | 待定 | 智能体编码 | |
+| Qwen3.8-Flash-Next | `qwen3.8next` | 2026-08-26（[#2742](https://github.com/SemiAnalysisAI/InferenceX/pull/2742)） | 智能体编码 | |
 | Kimi-K3 | `kimik3` | 2026-07-27 ([#2391](https://github.com/SemiAnalysisAI/InferenceX/pull/2391)) | 智能体编码（仅 DSpark） | 智能体编码非 DSpark 分支（自第 0 天起弃用） |
 | GLM-5.2 | `glm5.2` | 2026-07-18（[#2268](https://github.com/SemiAnalysisAI/InferenceX/pull/2268)） | 智能体编码（非 MTP 分支仍在运行，「仅 MTP」转换仍待执行，见弃用公告） | |
 | MiniMax-M3 | `minimaxm3` | 2026-06-12（[#1724](https://github.com/SemiAnalysisAI/InferenceX/pull/1724)） | 智能体编码 | 单轮 1k1k、单轮 8k1k（2026-08-04 移除，[#2493](https://github.com/SemiAnalysisAI/InferenceX/pull/2493)） |

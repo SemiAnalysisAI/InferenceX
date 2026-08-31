@@ -147,7 +147,7 @@ def fixed_result(conc: int) -> dict:
 
 def agentic_result(conc: int = 16) -> dict:
     return {
-        "hw": "b200-dgxc",
+        "hw": "b200-nscale",
         "infmax_model_prefix": "dsv4",
         "framework": "vllm",
         "precision": "fp4",
