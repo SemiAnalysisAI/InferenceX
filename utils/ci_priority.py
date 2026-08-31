@@ -149,7 +149,6 @@ def calculate_priority(
         or node_count < 1
     ):
         raise ValueError(f"node-count must be a positive integer, got {node_count!r}")
-    score += _decimal(adjustments.get("additional-node", 0)) * (node_count - 1)
 
     if entry.get("prefill") is not None:
         score += _decimal(adjustments.get("multi-node", 0))
