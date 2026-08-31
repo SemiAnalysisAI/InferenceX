@@ -257,8 +257,8 @@ case "$CONC" in
         MAX_NUM_BATCHED_TOKENS=16384
         ;;
     2|4|8|10|12|14)
-        SYNTHETIC_ACCEPT_LEN=2.51
-        SPEC_NUM_TOKENS=2
+        SYNTHETIC_ACCEPT_LEN=3.00
+        SPEC_NUM_TOKENS=3
         GPU_MEM_UTIL=0.9
         MAX_NUM_BATCHED_TOKENS=8192
         ;;
