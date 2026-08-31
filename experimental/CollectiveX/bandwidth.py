@@ -178,6 +178,10 @@ def render(documents: list[dict]) -> str:
         "marks an extrapolated alpha, and rungs failing the correctness gate are excluded.",
         "",
     ]
+    # kv-transfer documents have their own row model (per-transfer, no
+    # tokens_per_rank or routing); this renderer reads only EP-suite rows.
+    documents = [d for d in documents
+                 if d["identity"]["case_factors"]["case"].get("suite") != "kv-transfer"]
     for document in sorted(documents, key=_sort_key):
         case = document["identity"]["case_factors"]["case"]
         ep = _ep(document)
