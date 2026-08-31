@@ -96,6 +96,16 @@ if agentic_kv_offload_enabled; then
     esac
 fi
 
+MAX_NUM_SEQS=64
+LADDER_MAX=64
+if [ "$CONC" -le 4 ]; then
+    MAX_NUM_SEQS=32
+    LADDER_MAX=32
+else
+    MAX_NUM_SEQS=64
+    LADDER_MAX=64
+fi
+
 KV_CACHE_DTYPE=fp8
 EP_ARGS=()
 if [ "${EP_SIZE:-1}" -gt 1 ]; then
@@ -169,15 +179,7 @@ echo "[mns] max_num_seqs=$MAX_NUM_SEQS conc=$CONC offload=${KV_OFFLOADING:-none}
 SPEC_ROWS=1
 if [ "${#SPEC_ARGS[@]}" -gt 0 ]; then SPEC_ROWS=$(( SPEC_NUM_TOKENS + 1 )); fi
 
-MAX_NUM_SEQS=64
-LADDER_MAX=64
-if [ "$CONC" -le 4 ]; then
-    MAX_NUM_SEQS=32
-    LADDER_MAX=32
-else
-    MAX_NUM_SEQS=64
-    LADDER_MAX=64
-fi
+
 MAX_CUDAGRAPH_CAPTURE_SIZE=$(( MAX_NUM_SEQS * SPEC_ROWS ))
 if [ "$MAX_CUDAGRAPH_CAPTURE_SIZE" -gt "$LADDER_MAX" ]; then MAX_CUDAGRAPH_CAPTURE_SIZE=$LADDER_MAX; fi
 CUDAGRAPH_CAPTURE_SIZES=$(seq -s, 1 "$MAX_CUDAGRAPH_CAPTURE_SIZE")
