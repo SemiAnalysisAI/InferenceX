@@ -6662,3 +6662,10 @@
     - "Bump image from lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260726 to lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260828"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2763
   
+- config-keys:
+    - glm5.2-fp4-b300-dynamo-trt-agentic-mtp-compact
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GLM-5.2 NVFP4 B300 Dynamo+TensorRT-LLM AgentX recipes with compact worker packing."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

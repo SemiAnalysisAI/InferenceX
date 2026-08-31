@@ -1,0 +1,242 @@
+backend:
+  decode_environment:
+    DYN_ENGINE_CONV_AFFINITY: '1'
+    DYN_PUBLISH_KV_EVENTS: '0'
+    DYN_TOKENIZER: fastokens
+    DYN_TRTLLM_ENABLE_ATTENTION_DP: '1'
+    HF_HUB_DISABLE_PROGRESS_BARS: '1'
+    HF_HUB_OFFLINE: '1'
+    MIMALLOC_PURGE_DELAY: '0'
+    NCCL_GRAPH_MIXING_SUPPORT: '0'
+    PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+    SRT_FABRIC_MODE: bia_faithful
+    TLLM_ADP_ROUTER_MATCH_RATE_THRESHOLD: '0.10'
+    TLLM_EXECUTOR_BATCH_RESP_IN_AWAIT: '1'
+    TLLM_EXECUTOR_USE_FILE_SOCKET: '1'
+    TLLM_LOG_LEVEL: INFO
+    TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS: '2.61'
+    TQDM_DISABLE: '1'
+    TRANSFORMERS_OFFLINE: '1'
+    TRTLLM_CTX_LOCAL_HCA_PIN: '1'
+    TRTLLM_ENABLE_PDL: '1'
+    TRTLLM_KVCACHE_RECV_BUFFER_COUNT: '1'
+    TRTLLM_KVCACHE_SEND_BUFFER_COUNT: '1'
+    TRTLLM_KV_CACHE_TRANSFER_TIMEOUT_SEC: '600'
+    TRTLLM_SERVER_DISABLE_GC: '1'
+    TRTLLM_SERVE_ENABLE_MSGSPEC: '1'
+    TRTLLM_WORKER_DISABLE_GC: '1'
+    UCX_LOG_LEVEL: info
+    UCX_MAX_HCA_PER_GPU: inf
+    UCX_MAX_RNDV_RAILS: '2'
+    UCX_RNDV_SCHEME: put_zcopy
+  prefill_environment:
+    DYN_ENGINE_CONV_AFFINITY: '1'
+    DYN_PUBLISH_KV_EVENTS: '0'
+    DYN_TOKENIZER: fastokens
+    DYN_TRTLLM_ENABLE_ATTENTION_DP: '1'
+    HF_HUB_DISABLE_PROGRESS_BARS: '1'
+    HF_HUB_OFFLINE: '1'
+    MIMALLOC_PURGE_DELAY: '0'
+    NCCL_GRAPH_MIXING_SUPPORT: '0'
+    PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+    SRT_FABRIC_MODE: bia_faithful
+    TLLM_ADP_ROUTER_MATCH_RATE_THRESHOLD: '0.10'
+    TLLM_EXECUTOR_BATCH_RESP_IN_AWAIT: '1'
+    TLLM_EXECUTOR_USE_FILE_SOCKET: '1'
+    TLLM_LOG_LEVEL: INFO
+    TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS: '2.61'
+    TQDM_DISABLE: '1'
+    TRANSFORMERS_OFFLINE: '1'
+    TRTLLM_CTX_LOCAL_HCA_PIN: '1'
+    TRTLLM_ENABLE_PDL: '1'
+    TRTLLM_KVCACHE_RECV_BUFFER_COUNT: '1'
+    TRTLLM_KVCACHE_SEND_BUFFER_COUNT: '1'
+    TRTLLM_KV_CACHE_TRANSFER_TIMEOUT_SEC: '600'
+    TRTLLM_SERVER_DISABLE_GC: '1'
+    TRTLLM_SERVE_ENABLE_MSGSPEC: '1'
+    TRTLLM_WORKER_DISABLE_GC: '1'
+    UCX_LOG_LEVEL: info
+    UCX_MAX_HCA_PER_GPU: inf
+    UCX_MAX_RNDV_RAILS: '2'
+    UCX_RNDV_SCHEME: put_zcopy
+  publish_events_and_metrics: false
+  trtllm_config:
+    decode:
+      backend: pytorch
+      cache_transceiver_config:
+        backend: NIXL
+        kv_cache_bounce_size_mb: '5120'
+        kv_transfer_timeout_ms: 600000
+        max_tokens_in_buffer: 1048576
+        transceiver_runtime: PYTHON
+      cuda_graph_config:
+        batch_sizes:
+        - 1
+        - 2
+        - 4
+        - 5
+        enable_padding: true
+      enable_attention_dp: false
+      gpus_per_node: 8
+      kv_cache_config:
+        dtype: fp8
+        enable_block_reuse: false
+        event_buffer_max_size: 0
+        free_gpu_memory_fraction: 0.8
+        host_cache_size: 0
+        tokens_per_block: 64
+      max_batch_size: 5
+      max_num_tokens: 128
+      max_seq_len: 1048576
+      moe_config:
+        backend: TRTLLM
+        use_low_precision_moe_combine: true
+      moe_expert_parallel_size: 1
+      num_postprocess_workers: 4
+      perf_metrics_max_requests: 100000
+      pipeline_parallel_size: 1
+      print_iter_log: true
+      return_perf_metrics: true
+      sparse_attention_config:
+        algorithm: dsa
+        enable_heuristic_topk: true
+        use_cute_dsl_paged_mqa_logits: true
+      speculative_config:
+        decoding_type: MTP
+        max_draft_len: 5
+      stream_interval: 20
+      tensor_parallel_size: 8
+      trust_remote_code: true
+    prefill:
+      attention_dp_config:
+        enable_kv_cache_aware_routing: false
+        kv_cache_routing_conversation_affinity: true
+        kv_cache_routing_max_sessions: 65536
+      backend: pytorch
+      cache_transceiver_config:
+        backend: NIXL
+        kv_cache_bounce_size_mb: '5120'
+        kv_transfer_timeout_ms: 600000
+        max_tokens_in_buffer: 1048576
+        transceiver_runtime: PYTHON
+      cuda_graph_config: null
+      disable_overlap_scheduler: true
+      enable_attention_dp: true
+      enable_chunked_prefill: true
+      gpus_per_node: 8
+      kv_cache_config:
+        dtype: fp8
+        enable_block_reuse: true
+        event_buffer_max_size: 0
+        free_gpu_memory_fraction: 0.75
+        host_cache_size: 412316860416
+        tokens_per_block: 64
+      max_batch_size: 256
+      max_num_tokens: 8192
+      max_seq_len: 1048576
+      moe_config:
+        backend: CUTEDSL
+      moe_expert_parallel_size: 4
+      num_postprocess_workers: 8
+      perf_metrics_max_requests: 100000
+      pipeline_parallel_size: 1
+      print_iter_log: true
+      return_perf_metrics: true
+      scheduler_config:
+        capacity_scheduler_policy: MAX_UTILIZATION
+        context_chunking_policy: EQUAL_PROGRESS
+      sparse_attention_config:
+        algorithm: dsa
+        enable_heuristic_topk: true
+      speculative_config:
+        decoding_type: MTP
+        num_nextn_predict_layers: 5
+      tensor_parallel_size: 4
+      trust_remote_code: true
+  type: trtllm
+benchmark:
+  type: custom
+  client_placement: first_decode
+  command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+  env:
+    AIPERF_DATASET_CONFIGURATION_TIMEOUT: '1800'
+    AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
+    AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES: '0'
+    AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: '3600'
+    AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
+    AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: 'true'
+    AIPERF_SERVICE_PROFILE_CONFIGURE_TIMEOUT: '1800'
+    AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
+    CONC: '20'
+    DURATION: '3600'
+    FRAMEWORK: dynamo-trt
+    HF_HUB_CACHE: /hf_hub_cache
+    HF_HUB_DISABLE_PROGRESS_BARS: '1'
+    INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
+    IS_MULTINODE: 'true'
+    KV_OFFLOADING: none
+    MAX_MODEL_LEN: '1048576'
+    MODEL: nvidia/GLM-5.2-NVFP4
+    MODEL_PREFIX: glm5.2
+    OPENAI_API_KEY: EMPTY
+    PORT: '8000'
+    PRECISION: fp4
+    RESULT_DIR: /logs/agentic
+    RESULT_FILENAME: glm52_fp4_dynamo-trt_1p1d-compact_c20
+    SERVED_MODEL_NAME: GLM-5.2-NVFP4
+    TQDM_DISABLE: '1'
+    WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
+dynamo:
+  remap_root: false  # Preserve the invoking UID for PMIx authentication.
+  install: true
+  request_plane: tcp
+  version: 1.4.0
+frontend:
+  args:
+    active-decode-blocks-threshold: None
+    active-prefill-tokens-threshold: None
+    active-prefill-tokens-threshold-frac: None
+    no-kv-events: true
+    router-mode: kv
+  enable_multiple_frontends: false
+  env:
+    DYN_LOG: warn
+    DYN_ROUTER_QUEUE_THRESHOLD: None
+    DYN_ROUTER_SESSION_AFFINITY_TTL_SECS: '14400'
+    DYN_ROUTER_TEMPERATURE: '0'
+    DYN_TCP_REQUEST_TIMEOUT: '30'
+    DYN_TOKENIZER: fastokens
+    DYN_TOKENIZER_CACHE: '1'
+    DYN_TOKENIZER_CACHE_BYTES: '8000000000'
+    ETCD_LEASE_TTL: '120'
+  orchestrator_placement: first_decode
+  type: dynamo
+health_check:
+  interval_seconds: 10
+  max_attempts: 540
+identity:
+  model:
+    repo: nvidia/GLM-5.2-NVFP4
+  container:
+    image: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc22.post1
+  frameworks:
+    dynamo: 1.4.0
+    tensorrt_llm: 1.3.0rc22.post1
+model:
+  path: nvidia/GLM-5.2-NVFP4
+  container: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc22.post1
+  precision: fp4
+name: dynamo-disagg-b300-1p1d-tep8-compact-c20-b5-mtp5
+resources:
+  decode_nodes: 1
+  decode_workers: 1
+  gpu_type: b300
+  gpus_per_decode: 8
+  gpus_per_node: 8
+  gpus_per_prefill: 4
+  prefill_nodes: 1
+  prefill_workers: 1
+sbatch_directives:
+  exclude: b300-001,b300-005,b300-006,b300-007,b300-009,b300-010,b300-014,b300-015,b300-016,b300-017
+srun_options:
+  cpu-bind: verbose,mask_cpu:0x0000000000000000ffffffffffffffff0000000000000000ffffffffffffffff,0x0000000000000000ffffffffffffffff0000000000000000ffffffffffffffff,0x0000000000000000ffffffffffffffff0000000000000000ffffffffffffffff,0x0000000000000000ffffffffffffffff0000000000000000ffffffffffffffff,0xffffffffffffffff0000000000000000ffffffffffffffff0000000000000000,0xffffffffffffffff0000000000000000ffffffffffffffff0000000000000000,0xffffffffffffffff0000000000000000ffffffffffffffff0000000000000000,0xffffffffffffffff0000000000000000ffffffffffffffff0000000000000000
