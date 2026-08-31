@@ -23,6 +23,7 @@ if [ -r /proc/sys/kernel/numa_balancing ]; then
 fi
 
 export SPEC_DECODE=false
+export AMD_GPU_CLEAN_VRAM_MAX_PERCENT=2
 export K3_OVERLAY_PATCH="$script_dir/k3_patches/vllm_nightly_46638857_k3_c16_c52_current.patch"
 export K3_OVERLAY_PATCH_SHA256=90f975fad15722494366153ec3f32a14c4445bfa88c51ec53043b88eaf64dcc0
 export REQUIRE_K3_OVERLAY=1
@@ -40,7 +41,7 @@ case "${CONC:?CONC is required}:${KV_OFFLOADING:-none}:${KV_OFFLOAD_BACKEND:-}" 
         export CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 1 80)"
         ;;
     52:dram:vllm-simple)
-        export GPU_MEM_UTIL=0.90
+        export GPU_MEM_UTIL=0.88
         export MAX_NUM_BATCHED_TOKENS=16384
         export ASYNC_SCHEDULING=1
         export MAX_CUDAGRAPH_CAPTURE_SIZE=4096

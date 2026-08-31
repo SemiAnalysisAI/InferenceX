@@ -27,6 +27,7 @@
 | [`PR_REVIEW_CHECKLIST.md`](./PR_REVIEW_CHECKLIST.md) / [`PR_REVIEW_CHECKLIST_zh.md`](./PR_REVIEW_CHECKLIST_zh.md) | CODEOWNER 审阅与精确签署要求 |
 | [`DOCUMENTATION_PLAN.md`](./DOCUMENTATION_PLAN.md) / [`DOCUMENTATION_PLAN_zh.md`](./DOCUMENTATION_PLAN_zh.md) | 剩余文档缺口、目标信息架构与落地计划 |
 | [`kimi-k3-mi355x-vllm-current-baseline.md`](./kimi-k3-mi355x-vllm-current-baseline.md) / [`kimi-k3-mi355x-vllm-current-baseline_zh.md`](./kimi-k3-mi355x-vllm-current-baseline_zh.md) | 复现固定的 Kimi-K3 MI355X vLLM C1/C16/C52 镜像补丁、服务配置与性能证据 |
+| [`kimi-k3-mi355x-vllm-image-reproduction.md`](./kimi-k3-mi355x-vllm-image-reproduction.md) / [`kimi-k3-mi355x-vllm-image-reproduction_zh.md`](./kimi-k3-mi355x-vllm-image-reproduction_zh.md) | 重建并逐字节校验 Kimi-K3 C16 vLLM/AITER CPRR 镜像，包括精确的 PR 与自定义修复来源 |
 
 ## 权威参考
 

@@ -260,10 +260,77 @@ token acceptance 约为 82%。
 
 在将该 delta 视为发布配置前，仍必须完成 3,600 秒 AIPerf 门禁。
 
+## C16 CPRR 交互性修复
+
+C16 剩余差距的主要原因并不只是 GPU stream 数量。Atom profile 确实使用
+了一个有效的辅助 stream，但其主 decode stream 同样更快。尤其是，Atom
+的 DCP verification 使用 context-parallel round-robin（CPRR）MLA kernel，
+每 step 约 0.91 ms；此前 vLLM profile 的 MLA 每 step 约 9.50 ms。
+
+最终候选因此保留 vLLM #52190，并加入兼容的 AITER CPRR 重建：
+
+```text
+AITER #4521 head:
+  0cbedbb1bc5b3b254dd12ca4e8d3c7638b86830b
+
+AITER #4964 commits replayed in order:
+  b989492aa7b9baf7fccd46cd137a3d25dec264ef
+  1fd8439223328072b189f988e8358be6cacd7893
+  d579b1afd70d3fd65580181a0222b541ac3d1075
+  5432e1a06ecf67782f553106bf5eca66dd01b789
+
+Compatible result:
+  3281ad690206e4ab9b08eb3a5eddeaaf57b13f19
+
+Runtime-manifest SHA256:
+  cb6f7ab6210d876e674f276cbaacf638936358cc12c1f89622084a611bb1d342
+```
+
+直接基于 nightly 镜像内保留的旧 AITER 源码重建 #4964 并不安全：这样会
+丢弃 #4521 的 Python/C++ ABI 与 dispatcher，但仍保留调用新接口的代码，
+并已复现 GPU memory-access fault。仓库内的 runtime bundle 则包含匹配的
+dispatcher、metadata 源码、完整 gfx950 MLA registry，以及两个预编译
+module。
+
+选定的 C16 配置为：
+
+- 性能测试使用 DSpark K=3 与 synthetic acceptance length 3.00
+- 准确率测试使用 block rejection
+- TP8/DCP8、A2A、无 KV offload
+- MNS6、MBT8192、GMU0.84
+- graph sizes `1,2,4,6,8,12,16,20,24`
+- 关闭 async scheduling、ReplaySSM 与强制 shared-expert stream
+
+Synthetic `vllm bench serve` screen 完成 96/96 个请求，aggregate throughput
+为 65,132.82 tok/s，即 **8,141.60 tok/s/GPU**，**P90 TPOT 为 16.02 ms**。
+该配置在目标 7,381.5 tok/s/GPU 之上保留约 10% 吞吐余量，并将 MNS8 的
+P90 TPOT 再降低 1.18 ms。
+
+强制 shared-expert stream 更慢。vLLM #53940 加上缺失的 AITER A4W4
+selector 也已验证，log 确认使用 `afp4_wfp4`；其结果为
+9,396.09 tok/s/GPU 与 18.10 ms P90 TPOT，落后于 A8W4/CPRR frontier，
+因此没有纳入最终镜像。
+
+完整的 hash 校验构建步骤以及精确的 PR/自定义修复清单记录在
+[Kimi-K3 MI355X vLLM 镜像复现](./kimi-k3-mi355x-vllm-image-reproduction_zh.md)。
+干净 Dockerfile 已在 `mi355x-17` 上成功构建；其安装的 vLLM/AITER
+runtime 文件与已验证的 CPRR 镜像逐字节一致。
+
+精确的干净镜像 MNS6/CG24 准确率运行使用 block rejection 与
+`lm-eval --limit 128`，通过 GSM8K five-shot：strict match 与 flexible
+extraction 均为 128/128。Mean acceptance length 为 3.44-3.49，
+drafted-token acceptance 为 81.2%-83.1%。Log 中没有 worker death、OOM、
+GPU fault 或 missing kernel，teardown 后八张 GPU 均恢复为 0% use 与
+0% allocated VRAM。产物为：
+
+```text
+/home/hyukjlee/k3-c16-clean-cprr-accuracy-20260831/results/gsm8k_limit128_c16_clean_cprr_mns6_cg24_block_20260830T234636Z
+```
+
 ## 最终候选派发
 
 最终矩阵保留已接受的 C1 和 C52 配置，并将 C16 改为上述 compiled
-DSpark K=3 配置。派发命令为：
+DSpark K=3 CPRR 配置。派发命令为：
 
 ```bash
 gh workflow run .github/workflows/e2e-tests.yml \
@@ -276,5 +343,11 @@ gh workflow run .github/workflows/e2e-tests.yml \
   -f fail-fast=false
 ```
 
-派发前确认生成矩阵正好包含 C1、C16 和 C52，且 C16 标记为
-`spec-decoding: mtp`。
+较早的 pre-CPRR 命令已派发为 GitHub Actions 运行
+[33327926372](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/33327926372)。
+`get-jobs` 阶段成功，并且只生成了三个单节点（`nodes:1`）测试：使用 MTP
+的 C1、使用 DCP8 和 MTP 的 C16，以及使用 DCP8 和 `vllm-simple` DRAM
+卸载的 C52。该运行不能作为 release 结果：旧的 C16 AITER 重建存在 ABI
+不兼容，而 GMU0.90 的 C52 遇到 HSA resource pressure。CPRR runtime
+bundle 修复了前者，C52 wrapper 现使用 GMU0.88。发布最终镜像前，应在
+此处记录替代的 3,600 秒运行及其完整指标。

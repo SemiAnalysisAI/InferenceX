@@ -6659,3 +6659,14 @@
     - "Apply the SHA-verified vLLM #52190 delta after the C16/C52 overlay and run C16 with DSpark K=3, DCP8/A2A, no KV offload, MNS80, MBT8192, GMU0.86, and CUDA graph sizes 1 through 80."
     - "Pin both primary overlays by SHA256 and include a clean Dockerfile that bakes the C16/C52 base patch followed by the five-file #52190 delta into nightly-46638857."
   pr-link: TBD
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-compile52190-final
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add the SHA-verified AITER CPRR runtime reconstructed from AITER #4521 plus the four #4964 commits, avoiding the ABI-incompatible rebuild from the stale source retained by the pinned nightly."
+    - "Select the C16 DSpark K=3 latency envelope at DCP8/A2A, no KV offload, MNS6, MBT8192, GMU0.84, and sparse CUDA graph sizes through 24; the synthetic screen reached 8,141.60 tok/s/GPU at 16.02 ms P90 TPOT with 96/96 requests."
+    - "Keep forced shared-expert multi-stream disabled and retain the tuned A8W4 SiTUv2 path; the exact forced-stream and Atom-style A4W4 screens were slower on the measured throughput/latency frontier."
+    - "Include a clean Dockerfile and reproduction guide that pin the nightly digest, vLLM #52190 head, AITER #4521/#4964 commits, runtime-manifest hash, byte-verification commands, and accuracy/long-run release gates."
+  pr-link: TBD

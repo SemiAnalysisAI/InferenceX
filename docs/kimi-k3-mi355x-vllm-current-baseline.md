@@ -269,10 +269,79 @@ Accuracy artifact on `mi355x-17`:
 The 3,600-second AIPerf gate remains mandatory before treating this delta as
 the release configuration.
 
+## C16 CPRR interactivity fix
+
+The remaining C16 gap was not primarily the number of GPU streams. The Atom
+profile used a useful auxiliary stream, but its main decode stream was also
+faster. In particular, Atom's DCP verification used a context-parallel
+round-robin (CPRR) MLA kernel at roughly 0.91 ms/step, while the earlier vLLM
+profile spent roughly 9.50 ms/step in MLA.
+
+The final candidate therefore keeps vLLM #52190 and adds a compatible AITER
+CPRR reconstruction:
+
+```text
+AITER #4521 head:
+  0cbedbb1bc5b3b254dd12ca4e8d3c7638b86830b
+
+AITER #4964 commits replayed in order:
+  b989492aa7b9baf7fccd46cd137a3d25dec264ef
+  1fd8439223328072b189f988e8358be6cacd7893
+  d579b1afd70d3fd65580181a0222b541ac3d1075
+  5432e1a06ecf67782f553106bf5eca66dd01b789
+
+Compatible result:
+  3281ad690206e4ab9b08eb3a5eddeaaf57b13f19
+
+Runtime-manifest SHA256:
+  cb6f7ab6210d876e674f276cbaacf638936358cc12c1f89622084a611bb1d342
+```
+
+Rebuilding #4964 directly from the older AITER source retained inside the
+nightly image is unsafe: it discards the #4521 Python/C++ ABI and dispatcher
+while leaving newer callers installed. That path reproduced GPU memory-access
+faults. The checked-in runtime bundle instead contains the matching dispatcher,
+metadata sources, full gfx950 MLA registry, and the two prebuilt modules.
+
+The selected C16 envelope is:
+
+- DSpark K=3 with synthetic acceptance length 3.00 for performance
+- block rejection for accuracy
+- TP8/DCP8 with A2A, no KV offload
+- MNS6, MBT8192, GMU0.84
+- graph sizes `1,2,4,6,8,12,16,20,24`
+- async scheduling, ReplaySSM, and forced shared-expert streaming disabled
+
+The synthetic `vllm bench serve` screen completed 96/96 requests at
+65,132.82 aggregate tok/s, **8,141.60 tok/s/GPU**, and **16.02 ms P90 TPOT**.
+This keeps about 10% throughput headroom over the requested 7,381.5
+tok/s/GPU while improving the MNS8 P90 TPOT from 17.20 ms.
+
+Forced shared-expert streaming was slower. vLLM #53940 plus the missing AITER
+A4W4 selector was also tested with logs confirming `afp4_wfp4`; it completed
+at 9,396.09 tok/s/GPU and 18.10 ms P90 TPOT, behind the A8W4/CPRR frontier, so
+it is not included in the final image.
+
+The full, hash-checked build procedure and the exact PR/custom-fix inventory
+are in [Kimi-K3 MI355X vLLM image reproduction](./kimi-k3-mi355x-vllm-image-reproduction.md).
+The clean Dockerfile was built successfully on `mi355x-17`; its installed
+vLLM/AITER runtime files match the tested CPRR image byte for byte.
+
+The exact clean-image MNS6/CG24 accuracy run passed GSM8K five-shot with block
+rejection and `lm-eval --limit 128`: strict match and flexible extraction were
+both 128/128. Mean acceptance length was 3.44-3.49 and drafted-token acceptance
+was 81.2%-83.1%. The log contained no worker death, OOM, GPU fault, or missing
+kernel, and all eight GPUs returned to zero use and zero allocated VRAM. The
+artifact is:
+
+```text
+/home/hyukjlee/k3-c16-clean-cprr-accuracy-20260831/results/gsm8k_limit128_c16_clean_cprr_mns6_cg24_block_20260830T234636Z
+```
+
 ## Final candidate dispatch
 
 The final matrix keeps the accepted C1 and C52 configurations and changes C16
-to the compiled DSpark K=3 configuration above. Dispatch it with:
+to the compiled DSpark K=3 CPRR configuration above. Dispatch it with:
 
 ```bash
 gh workflow run .github/workflows/e2e-tests.yml \
@@ -285,5 +354,12 @@ gh workflow run .github/workflows/e2e-tests.yml \
   -f fail-fast=false
 ```
 
-Before dispatch, confirm that the generated matrix contains exactly C1, C16,
-and C52, with C16 marked `spec-decoding: mtp`.
+An earlier pre-CPRR command was dispatched as GitHub Actions run
+[33327926372](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/33327926372).
+The `get-jobs` stage succeeded and generated exactly three single-node
+(`nodes:1`) arms: C1 with MTP, C16 with DCP8 and MTP, and C52 with DCP8 and
+`vllm-simple` DRAM offload. That run is not a release result: the stale C16
+AITER reconstruction was ABI-incompatible, and C52 at GMU0.90 hit HSA resource
+pressure. The CPRR runtime bundle fixes the former; the C52 wrapper now uses
+GMU0.88. Record the replacement 3,600-second run and its completed metrics here
+before publishing the release image.

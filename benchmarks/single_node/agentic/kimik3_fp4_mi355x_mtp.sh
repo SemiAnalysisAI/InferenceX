@@ -178,6 +178,50 @@ if [ -n "${K3_POST_OVERLAY_PATCH:-}" ]; then
         < "$K3_POST_OVERLAY_PATCH" )
 fi
 
+# Optional exact AITER/vLLM runtime bundle. The C16 CPRR candidate uses the
+# AITER #4521-compatible source base with the four #4964 commits replayed on
+# top, plus the matching prebuilt gfx950 MLA modules. Rebuilding the older
+# source retained by the nightly is unsafe because it discards #4521's Python
+# and C++ ABI changes while leaving callers from the newer dispatcher in place.
+if [ -n "${K3_CPRR_RUNTIME_BUNDLE:-}" ]; then
+    SITE_PKGS="${SITE_PKGS:?site-packages path was not resolved by the required overlay}"
+    case "$K3_CPRR_RUNTIME_BUNDLE" in
+        /*) ;;
+        *) K3_CPRR_RUNTIME_BUNDLE="$(cd "$(dirname "$K3_CPRR_RUNTIME_BUNDLE")" \
+            && pwd)/$(basename "$K3_CPRR_RUNTIME_BUNDLE")" ;;
+    esac
+    manifest="$K3_CPRR_RUNTIME_BUNDLE/SHA256SUMS"
+    if [ ! -f "$manifest" ]; then
+        echo "CPRR runtime manifest is missing: $manifest" >&2
+        exit 1
+    fi
+    if [ -n "${K3_CPRR_RUNTIME_MANIFEST_SHA256:-}" ]; then
+        printf '%s  %s\n' "$K3_CPRR_RUNTIME_MANIFEST_SHA256" "$manifest" \
+            | sha256sum -c -
+    fi
+    ( cd "$K3_CPRR_RUNTIME_BUNDLE" && sha256sum -c SHA256SUMS )
+
+    install -m 0644 "$K3_CPRR_RUNTIME_BUNDLE/vllm/rocm_aiter_mla.py" \
+        "$SITE_PKGS/vllm/v1/attention/backends/mla/rocm_aiter_mla.py"
+    install -m 0644 "$K3_CPRR_RUNTIME_BUNDLE/aiter/mla.py" \
+        "$SITE_PKGS/aiter/mla.py"
+    install -m 0644 "$K3_CPRR_RUNTIME_BUNDLE/aiter/ops/attention.py" \
+        "$SITE_PKGS/aiter/ops/attention.py"
+    install -m 0644 \
+        "$K3_CPRR_RUNTIME_BUNDLE/csrc/py_itfs_cu/asm_mla.cu" \
+        "$SITE_PKGS/aiter_meta/csrc/py_itfs_cu/asm_mla.cu"
+    install -m 0644 \
+        "$K3_CPRR_RUNTIME_BUNDLE/csrc/kernels/mla/metadata/v1_2_device.cuh" \
+        "$SITE_PKGS/aiter_meta/csrc/kernels/mla/metadata/v1_2_device.cuh"
+    cp -a "$K3_CPRR_RUNTIME_BUNDLE/hsa/gfx950/mla/." \
+        "$SITE_PKGS/aiter_meta/hsa/gfx950/mla/"
+    install -m 0755 "$K3_CPRR_RUNTIME_BUNDLE/jit/module_mla_asm.so" \
+        "$SITE_PKGS/aiter/jit/module_mla_asm.so"
+    install -m 0755 "$K3_CPRR_RUNTIME_BUNDLE/jit/module_mla_metadata.so" \
+        "$SITE_PKGS/aiter/jit/module_mla_metadata.so"
+    echo "Installed SHA-verified Kimi-K3 CPRR runtime bundle."
+fi
+
 # ---- In-container patches ----------------------------------------------------
 # Four fixes, all confined to this container's site-packages, all idempotent
 # and all self-disabling once the image ships them:

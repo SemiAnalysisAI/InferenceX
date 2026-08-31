@@ -20,8 +20,10 @@ fi
 
 export SPEC_DECODE=true
 export REQUIRE_K3_OVERLAY=1
+export AMD_GPU_CLEAN_VRAM_MAX_PERCENT=2
 unset K3_OVERLAY_PATCH_SHA256
 unset K3_POST_OVERLAY_PATCH K3_POST_OVERLAY_PATCH_SHA256
+unset K3_CPRR_RUNTIME_BUNDLE K3_CPRR_RUNTIME_MANIFEST_SHA256
 
 case "${CONC:?CONC is required}:${DCP_SIZE:-1}:${KV_OFFLOADING:-none}" in
     1:1:none)
@@ -43,12 +45,17 @@ case "${CONC:?CONC is required}:${DCP_SIZE:-1}:${KV_OFFLOADING:-none}" in
         export K3_OVERLAY_PATCH_SHA256=90f975fad15722494366153ec3f32a14c4445bfa88c51ec53043b88eaf64dcc0
         export K3_POST_OVERLAY_PATCH="$script_dir/k3_patches/vllm_nightly_46638857_k3_compile_52190_delta.patch"
         export K3_POST_OVERLAY_PATCH_SHA256=de1ac272820122281f865c4f81d3f7a87e03c0cb42feb59390d9012b9bb88c00
+        export K3_CPRR_RUNTIME_BUNDLE="$script_dir/k3_patches/aiter_pr4521_plus_4964_runtime"
+        export K3_CPRR_RUNTIME_MANIFEST_SHA256=cb6f7ab6210d876e674f276cbaacf638936358cc12c1f89622084a611bb1d342
         export DCP_COMM_BACKEND=a2a
-        export GPU_MEM_UTIL=0.86
+        # CPRR removes the dominant DCP8 verification cost. Keep only six
+        # active sequences so the long-context C16 tail stays interactive;
+        # the synthetic screen still clears 8.1K total tok/s/GPU.
+        export GPU_MEM_UTIL=0.84
         export MAX_NUM_BATCHED_TOKENS=8192
-        export MAX_NUM_SEQS=80
-        export MAX_CUDAGRAPH_CAPTURE_SIZE=80
-        export CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 1 80)"
+        export MAX_NUM_SEQS=6
+        export MAX_CUDAGRAPH_CAPTURE_SIZE=24
+        export CUDAGRAPH_CAPTURE_SIZES=1,2,4,6,8,12,16,20,24
         ;;
     *)
         echo "Error: unsupported pinned Kimi-K3 MTP arm: C${CONC}, DCP=${DCP_SIZE:-1}, KV_OFFLOADING=${KV_OFFLOADING:-none}" >&2
