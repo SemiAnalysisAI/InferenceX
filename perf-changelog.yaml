@@ -6590,15 +6590,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2718
 
 - config-keys:
-    - qwen3.5-fp8-mi355x-sglang
-    - qwen3.5-fp8-mi355x-sglang-mtp
-  scenario-type:
-    - fixed-seq-len
-  description:
-    - "Bump image from lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260726 to lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260828"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2763
-
-- config-keys:
     - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
   description:
     - "Update the vLLM B200 Kimi-K3 AgentX configs."
@@ -6616,3 +6607,11 @@
     - "Raise dram-utilization from 0.50 to 0.60, extend the none-offload conc-list from [1, 4, 8] to [1, 4, 8, 10, 12], and set the lmcache arm conc-list to [4, 8, 10, 12]."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2787
 
+- config-keys:
+    - qwen3.5-fp8-mi355x-sglang
+    - qwen3.5-fp8-mi355x-sglang-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Bump image from lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260726 to lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260828"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2763
