@@ -159,6 +159,15 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         "cupy-rocm-7-0==14.1.1" \
         "lmcache==${LMCACHE_VERSION}" --find-links "$LMCACHE_ROCM_INDEX"
 
+    # vLLM #54457 distinguishes block-oriented PD connectors from CPU
+    # offload connectors before forcing DCP interleave to block_size. LMCache
+    # MP keeps each DCP shard on its matching rank, so preserve its required
+    # token-strided interleave (1) instead of rewriting it to 1536.
+    SITE_PACKAGES=$(python3 -c \
+        'import pathlib, vllm; print(pathlib.Path(vllm.__file__).parent.parent)')
+    patch -d "$SITE_PACKAGES" -p1 --forward --batch < \
+        "$INFMAX_CONTAINER_WORKSPACE/patches/vllm_pr54457_lmcache_mp_dcp.diff"
+
     # LMCache 0.5.5's transfer-channel layer eagerly imports the Mooncake
     # backend (mooncake_te_impl.py -> `from mooncake.engine import
     # TransferEngine`), whose native .so resolves all of its DT_NEEDED libs at
@@ -178,24 +187,25 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         fi
     done
     python3 -c \
-        "import cupy; import lmcache.integration.vllm.lmcache_mp_connector; import opentelemetry.exporter.prometheus" \
+        "import cupy; from lmcache.integration.vllm.lmcache_mp_connector import LMCacheMPConnector as C; assert C.requires_dcp_block_aligned_interleave is False; import opentelemetry.exporter.prometheus" \
         >/dev/null
 
     # One MP server for the node, per the Kimi-K3 recipe
     # (docs.lmcache.ai/recipes/kimi_k3.html), with --chunk-size sized for
     # THIS stack rather than the recipe's CUDA-path 768: the connector
     # requires the chunk to be a multiple of every engine KV group's
-    # tokens_per_block, and the hybrid KDA/MLA layout here registers
-    # attention groups at 1536 ("Setting attention block size to 1536",
-    # run 31644990546) plus a KDA state group at 3072 (run 31645828378),
-    # so 3072 is the minimum valid chunk. The multi-group layout also
-    # requires one object group per sliding-window size:
+    # tokens_per_block. The hybrid KDA/MLA layout registers attention groups
+    # at 1536 tokens and a KDA state group at 3072. Under DCP, LMCache scales
+    # the attention group by DCP_SIZE, so DCP8 requires 1536 * 8 = 12288,
+    # which is also divisible by the KDA group size. The multi-group layout
+    # also requires one object group per sliding-window size:
     # --separate-object-groups.
     LMCACHE_PORT=6555
     LMCACHE_HTTP_PORT=8090
     LMCACHE_LOG="$RESULT_DIR/lmcache_server.log"
 
     LMCACHE_L1_SIZE_GB="$TOTAL_CPU_DRAM_GB"
+    LMCACHE_CHUNK_SIZE=$((1536 * ${DCP_SIZE:-8}))
 
     LMCACHE_CMD=(
         lmcache server
@@ -205,7 +215,7 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         --http-port "$LMCACHE_HTTP_PORT"
         --l1-size-gb "$LMCACHE_L1_SIZE_GB"
         --l1-init-size-gb 10
-        --chunk-size 3072
+        --chunk-size "$LMCACHE_CHUNK_SIZE"
         --separate-object-groups
         --enable-extra-logging
         --extra-logging-interval 30
@@ -356,7 +366,7 @@ echo "Server PID: $SERVER_PID"
 
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-if [ "${EVAL_ONLY}" = "true" ]; then
+if [ "${EVAL_ONLY:-false}" = "true" ]; then
     run_eval --port "$PORT"
 else
     build_replay_cmd "$RESULT_DIR"

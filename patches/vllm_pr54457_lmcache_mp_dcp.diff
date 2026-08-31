@@ -1,0 +1,69 @@
+diff --git a/vllm/config/vllm.py b/vllm/config/vllm.py
+--- a/vllm/config/vllm.py
++++ b/vllm/config/vllm.py
+@@ -2772,17 +2772,25 @@ def adjust_dcp_kv_cache_interleave_size(
+             and self.kv_transfer_config.kv_connector is not None
+             and self.parallel_config.cp_kv_cache_interleave_size != local_block_size
+         ):
+-            interleave = self.parallel_config.cp_kv_cache_interleave_size
+-            self.parallel_config.cp_kv_cache_interleave_size = local_block_size
+-            logger.info_once(
+-                "When using PD disaggregation with DCP "
+-                "(decode_context_parallel_size=%d), "
+-                "cp_kv_cache_interleave_size is automatically adjusted "
+-                "from %d to block_size %d for block-level alignment.",
+-                dcp_size,
+-                interleave,
+-                local_block_size,
++            from vllm.distributed.kv_transfer.kv_connector.factory import (
++                KVConnectorFactory,
+             )
++
++            connector_cls = KVConnectorFactory.get_connector_class(
++                self.kv_transfer_config
++            )
++            if connector_cls.requires_dcp_block_aligned_interleave:
++                interleave = self.parallel_config.cp_kv_cache_interleave_size
++                self.parallel_config.cp_kv_cache_interleave_size = local_block_size
++                logger.info_once(
++                    "When using PD disaggregation with DCP "
++                    "(decode_context_parallel_size=%d), "
++                    "cp_kv_cache_interleave_size is automatically adjusted "
++                    "from %d to block_size %d for block-level alignment.",
++                    dcp_size,
++                    interleave,
++                    local_block_size,
++                )
+ 
+     def validate_block_size(self) -> None:
+         """Validate block_size against DCP and mamba constraints.
+diff --git a/vllm/distributed/kv_transfer/kv_connector/v1/base.py b/vllm/distributed/kv_transfer/kv_connector/v1/base.py
+--- a/vllm/distributed/kv_transfer/kv_connector/v1/base.py
++++ b/vllm/distributed/kv_transfer/kv_connector/v1/base.py
+@@ -173,6 +173,14 @@ class KVConnectorBase_V1(ABC):
+     Base class for KV connectors.
+     """
+ 
++    requires_dcp_block_aligned_interleave: bool = True
++    """Whether this connector needs cp_kv_cache_interleave_size pinned to block_size
++    when decode_context_parallel_size > 1.
++
++    Connectors that only move KV within the same DCP rank (e.g. CPU offloading) should
++    set this to False.
++    """
++
+     @property
+     def supports_divergent_local_hybrid_hits(self) -> bool:
+         """Whether external hits can complete divergent local hybrid hits.
+diff --git a/lmcache/integration/vllm/lmcache_mp_connector.py b/lmcache/integration/vllm/lmcache_mp_connector.py
+--- a/lmcache/integration/vllm/lmcache_mp_connector.py
++++ b/lmcache/integration/vllm/lmcache_mp_connector.py
+@@ -443,6 +443,8 @@ class LMCacheMPConnector(KVConnectorBase_V1):
+     The connector for LMCache multi-process mode.
+     """
+ 
++    requires_dcp_block_aligned_interleave = False
++
+     def __init__(
+         self,
+         vllm_config: "VllmConfig",
