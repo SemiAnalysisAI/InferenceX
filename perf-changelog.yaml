@@ -6404,3 +6404,11 @@
     - "Add a minimal single-schedulingProfile EPP config for aggregated recipes (no disagg-profile-handler needed); uses the existing default v0.9.0 EPP/pd-sidecar binaries, no router bump required"
     - "Branch runners/launch_b200-dgxc-slurm.sh's llmd-vllm wrapper-script selection on DISAGG (true -> disagg wrapper, false -> new aggregated wrapper)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PLACEHOLDER
+
+- config-keys:
+    - dsv4-fp4-b200-llmd-vllm-agentx
+  description:
+    - "Add Mooncake prefix-cache KV store for the disagg DEP8 arm at concurrencies [52, 72]"
+    - "Extend server.sh to parse a `mooncake.store_config` key from llm-d recipe YAMLs: writes /tmp/mooncake_config.json, sets MOONCAKE_CONFIG_PATH, and wires MultiConnector (NixlConnector + MooncakeStoreConnector) instead of plain NixlConnector; prefill uses kv_both, decode kv_consumer with lookup disabled"
+    - "Add dsv4-fp4-b200-agentx-1p1d-dep8-dep8-mooncake.yaml recipe with Mooncake store_config (P2PHANDSHAKE embedded, 140 GB segment, mlx5_0..3 RDMA) and MC_* env vars, mirroring the dynamo-vllm agentic GB200 disagg recipe"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719

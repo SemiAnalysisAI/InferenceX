@@ -167,6 +167,38 @@ fi
 echo "Resolved $ROLE TP_SIZE=$TP_SIZE ROLE_ENABLE_EP=$ROLE_ENABLE_EP"
 
 # ----------------------------------------------------------------
+# Mooncake KV store (optional, from recipe top-level `mooncake:` key)
+# ----------------------------------------------------------------
+# When a recipe sets `mooncake.store_config`, write the JSON config to
+# /tmp/mooncake_config.json and set MOONCAKE_CONFIG_PATH. The KV transfer
+# config section below will then build a MultiConnector chain
+# (NixlConnector + MooncakeStoreConnector) instead of plain NixlConnector.
+# Mooncake uses P2PHANDSHAKE embedded mode (no external metadata server)
+# so no K8s sidecar is required - nodes negotiate directly via RDMA.
+MOONCAKE_CONFIG_PATH=""
+if [[ -n "${CONFIG_FILE:-}" && -f "/etc/llmd-recipes/${CONFIG_FILE}" ]]; then
+    _MC_JSON=$(python3 - <<PY
+import yaml, json, sys
+recipe = yaml.safe_load(open('/etc/llmd-recipes/${CONFIG_FILE}'))
+mc = (recipe.get('mooncake') or {}).get('store_config')
+if not mc:
+    print('')
+else:
+    print(json.dumps(mc))
+PY
+)
+    if [[ -n "$_MC_JSON" ]]; then
+        echo "$_MC_JSON" > /tmp/mooncake_config.json
+        MOONCAKE_CONFIG_PATH=/tmp/mooncake_config.json
+        export MOONCAKE_CONFIG_PATH
+        echo "Mooncake enabled: config at $MOONCAKE_CONFIG_PATH"
+        # Install mooncake if the image does not bundle it.
+        python3 -c "import mooncake_transfer_engine" 2>/dev/null || \
+            pip install --quiet mooncake-transfer-engine-cuda13==0.3.12.post1
+    fi
+fi
+
+# ----------------------------------------------------------------
 # Transport env (NCCL / UCX / NIXL), recipe-overridable
 # ----------------------------------------------------------------
 export GLOO_SOCKET_IFNAME=${GLOO_SOCKET_IFNAME:-$DEFAULT_IFACE}
@@ -227,9 +259,11 @@ COMMON_ARGS=(
     --tensor-parallel-size "$TP_SIZE"
 )
 # KV role: prefill=producer, decode=consumer (override via KV_ROLE_OVERRIDE).
-# Aggregated mode has no second engine to hand KV off to (no pd-sidecar
-# either), so skip --kv_transfer_config entirely rather than standing up a
-# NixlConnector producer with no consumer ever pulling from it.
+# Aggregated mode normally has no second engine to hand KV off to (no
+# pd-sidecar either), so --kv_transfer_config is skipped. Exception: when
+# Mooncake is enabled on an aggregated recipe, a MultiConnector
+# (NixlConnector + MooncakeStoreConnector) is wired with kv_both so DP ranks
+# can share prefix-cache blocks across runs via the Mooncake RDMA store.
 if [[ "$IS_AGGREGATED" -eq 0 ]]; then
     if [[ -n "${KV_ROLE_OVERRIDE:-}" ]]; then
         KV_ROLE="$KV_ROLE_OVERRIDE"
@@ -238,7 +272,27 @@ if [[ "$IS_AGGREGATED" -eq 0 ]]; then
     else
         KV_ROLE="kv_consumer"
     fi
-    KV_TRANSFER_CONFIG="{\"kv_connector\":\"NixlConnector\",\"kv_role\":\"$KV_ROLE\",\"kv_load_failure_policy\":\"fail\"}"
+    if [[ -n "${MOONCAKE_CONFIG_PATH:-}" ]]; then
+        # MultiConnector: NixlConnector handles direct P/D KV transfer;
+        # MooncakeStoreConnector enables cross-node prefix-cache lookup via RDMA.
+        # Prefill uses kv_both so it can both store new KV and load cache hits.
+        # Decode uses kv_consumer with lookup disabled (it only receives from NIXL).
+        if [[ "$ROLE" == "prefill" ]]; then
+            _KV_OUTER="kv_both"
+            _MC_EXTRA='"load_async":true,"lookup_async":true,"enable_cross_layers_blocks":false,"enable_offload":false'
+        else
+            _KV_OUTER="kv_consumer"
+            _MC_EXTRA='"load_async":true,"lookup_async":false,"enable_lookup":false,"enable_cross_layers_blocks":false,"enable_offload":false'
+        fi
+        KV_TRANSFER_CONFIG="{\"kv_connector\":\"MultiConnector\",\"kv_role\":\"${_KV_OUTER}\",\"kv_connector_extra_config\":{\"connectors\":[{\"kv_connector\":\"NixlConnector\",\"kv_role\":\"${_KV_OUTER}\",\"kv_load_failure_policy\":\"fail\",\"kv_buffer_device\":\"cuda\",\"kv_connector_extra_config\":{\"enforce_handshake_compat\":false,\"enable_cross_layers_blocks\":false}},{\"kv_connector\":\"MooncakeStoreConnector\",\"kv_role\":\"${_KV_OUTER}\",\"kv_connector_extra_config\":{${_MC_EXTRA}}}]}}"
+    else
+        KV_TRANSFER_CONFIG="{\"kv_connector\":\"NixlConnector\",\"kv_role\":\"$KV_ROLE\",\"kv_load_failure_policy\":\"fail\"}"
+    fi
+    COMMON_ARGS+=(--kv_transfer_config "$KV_TRANSFER_CONFIG")
+elif [[ -n "${MOONCAKE_CONFIG_PATH:-}" ]]; then
+    # Aggregated + Mooncake: single role acts as kv_both (stores new KV and
+    # loads cache hits from the Mooncake RDMA store for prefix-cache sharing).
+    KV_TRANSFER_CONFIG="{\"kv_connector\":\"MultiConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"connectors\":[{\"kv_connector\":\"NixlConnector\",\"kv_role\":\"kv_both\",\"kv_load_failure_policy\":\"fail\",\"kv_buffer_device\":\"cuda\",\"kv_connector_extra_config\":{\"enforce_handshake_compat\":false,\"enable_cross_layers_blocks\":false}},{\"kv_connector\":\"MooncakeStoreConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"load_async\":true,\"lookup_async\":true,\"enable_cross_layers_blocks\":false,\"enable_offload\":false}}]}}"
     COMMON_ARGS+=(--kv_transfer_config "$KV_TRANSFER_CONFIG")
 fi
 # A single frontend (HTTP + tokenize + DP load-balance) is CPU-bound and caps

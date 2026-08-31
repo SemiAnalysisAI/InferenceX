@@ -121,9 +121,10 @@ prefill:
     --enforce-eager
     --gpu-memory-utilization 0.97
     --max-model-len 9280
-    --max-num-seqs 64
+    --max-num-seqs 16
     --max-num-batched-tokens 8192
     --long-prefill-token-threshold 1024
+    --speculative-config {"method":"dspark","num_speculative_tokens":1,"draft_sample_method":"probabilistic","attention_backend":"FLASHINFER_MLA_SPARSE_DSV4","enable_adaptive_verification":true}
     --enable-cumem-allocator
     --block-size 256
     --tokenizer-mode deepseek_v4
@@ -144,15 +145,21 @@ prefill:
     VLLM_HTTP_TIMEOUT_KEEP_ALIVE: "120"
     TILELANG_CLEANUP_TEMP_FILES: "1"
     TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
+    VLLM_MOONCAKE_LOAD_RECV_THREADS: "20"
+    MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
+    MC_STORE_CLIENT_METRIC: "1"
+    MC_STORE_CLIENT_METRIC_INTERVAL: "5"
+    MC_TE_METRIC: "0"
 
 decode:
   tp: 1
   enable-expert-parallel: true
   extra-args: >-
     --kv-cache-dtype fp8
-    --max-num-seqs 64
+    --max-num-seqs 32
     --max-num-batched-tokens 256
-    --max-cudagraph-capture-size 64
+    --max-cudagraph-capture-size 256
+    --speculative-config {"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","attention_backend":"FLASHINFER_MLA_SPARSE_DSV4","enable_adaptive_verification":true}
     --gpu-memory-utilization 0.95
     --max-model-len 9280
     --enable-cumem-allocator
@@ -175,6 +182,27 @@ decode:
     VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
     TILELANG_CLEANUP_TEMP_FILES: "1"
     TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
+    VLLM_MOONCAKE_LOAD_RECV_THREADS: "20"
+    MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
+    MC_STORE_CLIENT_METRIC: "1"
+    MC_STORE_CLIENT_METRIC_INTERVAL: "5"
+    MC_TE_METRIC: "0"
+
+# ---- Mooncake KV store config ----
+# P2PHANDSHAKE embedded mode — no K8s mooncake-master pod needed; nodes
+# negotiate RDMA directly. global_segment_size 140 GB matches the dynamo
+# agentic recipe (srt-slurm-recipes/vllm/deepseek-v4/agentic/). Prefill
+# uses kv_both (store new KV + load cache hits via RDMA); decode uses
+# kv_consumer with lookup disabled (NIXL-only receive, no Mooncake lookup).
+mooncake:
+  store_config:
+    metadata_server: "P2PHANDSHAKE"
+    global_segment_size: "140GB"
+    local_buffer_size: "4GB"
+    protocol: "rdma"
+    device_name: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
+    mode: "embedded"
+    enable_offload: false
 
 # ---- SLURM resource directives ----
 slurm:

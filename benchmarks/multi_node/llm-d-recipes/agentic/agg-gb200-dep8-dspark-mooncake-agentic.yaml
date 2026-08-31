@@ -1,0 +1,96 @@
+# DeepSeek-V4-Pro (FP4) on B200, aggregated DEP8 with Mooncake prefix-cache
+# KV store enabled. Sibling of agg-gb200-dep8-dspark-agentic.yaml; adds a
+# `mooncake:` section so server.sh wires a MultiConnector
+# (NixlConnector + MooncakeStoreConnector) for cross-run prefix-cache sharing
+# via RDMA between DP ranks. See server.sh's aggregated+Mooncake branch for
+# the kv_both role assignment.
+#
+# EPP config and per-role vLLM flags are identical to the base dep8 recipe.
+# Mooncake store config (P2PHANDSHAKE embedded mode, 140 GB segment) matches
+# the disagg-gb200-1p1d-dep8-dep8-dspark-agentic.yaml recipe.
+apiVersion: llm-d.ai/v1alpha1
+kind: EndpointPickerConfig
+
+plugins:
+  - name: file-disc
+    type: file-discovery
+    parameters:
+      path: /tmp/endpoints.yaml
+      watchFile: false
+
+  - type: prefill-filter
+  - type: queue-scorer
+  - type: kv-cache-utilization-scorer
+  - type: active-request-scorer
+  - type: prefix-cache-scorer
+
+schedulingProfiles:
+  - name: default
+    plugins:
+      - pluginRef: prefill-filter
+      - pluginRef: queue-scorer
+        weight: 2
+      - pluginRef: kv-cache-utilization-scorer
+        weight: 2
+      - pluginRef: active-request-scorer
+        weight: 1
+      - pluginRef: prefix-cache-scorer
+        weight: 3
+
+dataLayer:
+  discovery:
+    pluginRef: file-disc
+
+# ---- Per-role vLLM flags ----
+prefill:
+  tp: 1
+  enable-expert-parallel: true
+  extra-args: >-
+    --kv-cache-dtype fp8
+    --gpu-memory-utilization 0.92
+    --max-model-len 9280
+    --max-num-seqs 64
+    --max-num-batched-tokens 8192
+    --max-cudagraph-capture-size 64
+    --block-size 256
+    --tokenizer-mode deepseek_v4
+    --moe-backend deep_gemm_mega_moe
+    --enable-ep-weight-filter
+    --enable-cumem-allocator
+    --no-disable-hybrid-kv-cache-manager
+    --no-enable-flashinfer-autotune
+    --numa-bind
+    --compilation-config {"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}
+    --speculative-config {"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","attention_backend":"FLASHINFER_MLA_SPARSE_DSV4","enable_adaptive_verification":true}
+    --attention-config {"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"use_fp4_indexer_cache":true}
+  env:
+    VLLM_USE_RUST_FRONTEND: "1"
+    VLLM_SERVER_DEV_MODE: "1"
+    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+    VLLM_RPC_TIMEOUT: "600000"
+    VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
+    VLLM_DSV4_MEGA_FP8_COMBINE: "1"
+    VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
+    VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
+    TILELANG_CLEANUP_TEMP_FILES: "1"
+    VLLM_USE_NCCL_SYMM_MEM: "1"
+    VLLM_MOONCAKE_LOAD_RECV_THREADS: "20"
+    MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
+    MC_STORE_CLIENT_METRIC: "1"
+    MC_STORE_CLIENT_METRIC_INTERVAL: "5"
+    MC_TE_METRIC: "0"
+
+# ---- Mooncake KV store config ----
+mooncake:
+  store_config:
+    metadata_server: "P2PHANDSHAKE"
+    global_segment_size: "140GB"
+    local_buffer_size: "4GB"
+    protocol: "rdma"
+    device_name: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
+    mode: "embedded"
+    enable_offload: false
+
+# ---- SLURM resource directives ----
+slurm:
+  time_limit: "08:00:00"
