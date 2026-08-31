@@ -6608,6 +6608,41 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2787
 
 - config-keys:
+    - minimaxm3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump image from vllm/vllm-openai-rocm:v0.27.1 to vllm/vllm-openai-rocm:nightly-6d4562c59b97b4e35d459ff9389e71b6fe4995de. This pin is what re-enables the AITER shuffled KV cache layout for MiniMax-M3 sparse PA, which was broken by the KV cache layout standardization in https://github.com/vllm-project/vllm/pull/51718. The recipe's TP4 VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1 export is unchanged by this PR, so the restored layout behavior is attributable to the image pin rather than to the benchmark script, and the two must move together to reproduce these numbers."
+    - "Route dense-layer attention and EAGLE3 speculative decoding through ROCM_AITER_UNIFIED_ATTN instead of TRITON_ATTN, both in the server --attention-backend flag and in the speculative-config attention_backend for the throughput branch (synthetic acceptance) and the eval-only branch (real target verification)."
+    - "Drop the --hf-overrides that forced text_config use_index_cache true and index_topk_freq 4. The pinned nightly supplies the sparse-PA index-cache and top-k refresh behavior itself, so the override is redundant; because it rewrites the served model config, removing it is architecture-affecting rather than a measurement no-op."
+    - "Drop the TP4 LMCache DRAM KV-offloading sweep points at concurrency 32 and 40 (kv-offload-backend lmcache 0.5.3). The agentic-coding search space is now GPU-resident only, TP4 at concurrency 1 through 32 and TP2 at 1, 2, and 5, so this config no longer reports any DRAM-offload points."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2781
+  
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump the MI355X SGLang DeepSeek-V4-Pro FP4 AgentX MTP image from lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260822 to lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260829."
+    - "Export TORCH_BLAS_PREFER_HIPBLASLT=1 to prefer hipBLASLt for dense GEMMs."
+    - "Size chunked-prefill by tensor-parallel degree: 16384 tokens at TP8 and 8192 at TP4, erroring on any other TP."
+    - "Lower GPU_MAX_HW_QUEUES from 5 to 2 on the DP-attention path."
+    - "Add a TP8 EP1 no-offload spec-decoding mtp arm at concurrency 16."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2784
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump image from lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260818 to lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260829"
+    - "Route multi-GPU collectives through INT8-quantized ROCm quick all-reduce (ROCM_QUICK_REDUCE_QUANTIZATION=INT8), matching the published SGLang cookbook recipe for MXFP4 on MI355X (https://docs.sglang.io/cookbook/autoregressive/Qwen/Qwen3.5). This arm already omits --enable-aiter-allreduce-fusion, so the quick-reduce regime applies with no other launch change: the two paths are mutually exclusive and collectives only fall back to custom all-reduce, where the regime is read, when the fusion flag is off."
+    - "Halve the prefill budget, --max-prefill-tokens and --chunked-prefill-size from 32768 to 16384, matching the B200 sibling recipe qwen3.5_fp4_b200_sglang_mtp.sh."
+    - "Capture the decode CUDA graph to min(2*CONC, 128) instead of min(CONC, 64). The replay keeps --max-running-requests 2*CONC in flight, so a CONC-sized graph dropped every decode batch above CONC onto the eager path. The 128 cap follows the sibling MI355X AgentX recipe dsv4_fp4_mi355x_sglang_mtp.sh."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2737
+  
+- config-keys:
     - qwen3.5-fp4-mi355x-sglang
     - qwen3.5-fp4-mi355x-sglang-mtp
   scenario-type:
