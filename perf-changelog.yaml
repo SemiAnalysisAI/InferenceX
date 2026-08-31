@@ -6691,3 +6691,9 @@
     - "Use raw synthetic benchmark inputs across the ten disaggregated 8k/1k STP recipes."
     - "Image: lmsysorg/sglang:nightly-dev-cu13-20260821-f825d729"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2560
+
+- config-keys:
+    - dsv4-fp4-b200-dynamo-sglang
+  description:
+    - "Enable the required DCGM power telemetry contract across all ten B200 disaggregated STP recipes."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2560
