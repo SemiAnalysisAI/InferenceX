@@ -3,6 +3,8 @@
 # System-specific configuration for B300 NV Slurm cluster (sa-shared)
 SLURM_PARTITION="batch_1"
 SLURM_ACCOUNT="benchmark"
+POWER_SRT_SLURM_URL="https://github.com/edwingao28/srt-slurm.git"
+POWER_SRT_SLURM_PIN="e5c837f06a362dc888dfea2ee588e9f19c298270"
 # b300-018 repeatedly times out UCX/NIXL transfers; allow an empty override to disable this.
 MINIMAX_M3_SLURM_EXCLUDED_NODELIST="${MINIMAX_M3_SLURM_EXCLUDED_NODELIST-b300-018}"
 
@@ -13,6 +15,28 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 # Validate framework
 if [[ $FRAMEWORK != "dynamo-sglang" && $FRAMEWORK != "dynamo-trt" && $FRAMEWORK != "dynamo-vllm" ]]; then
     echo "Unsupported framework: $FRAMEWORK. Supported frameworks are: dynamo-trt, dynamo-sglang, dynamo-vllm"
+    exit 1
+fi
+
+USES_DCGM_POWER=0
+_RECIPE_REL="${CONFIG_FILE%%:*}"
+_RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/${_RECIPE_REL#recipes/}"
+if [[ -n "$CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
+    /^telemetry:/ { t = 1; next }
+    t && /^[^ ]/  { t = 0 }
+    t && /^  provider: dcgm-power$/ { p = 1 }
+    t && /^  enabled: true$/        { e = 1 }
+    END { exit !(p && e) }
+' "$_RECIPE_SRC"; then
+    USES_DCGM_POWER=1
+fi
+if [[ "$USES_DCGM_POWER" == "1" && (
+    "${IS_AGENTIC:-0}" == "1" ||
+    "$MODEL_PREFIX" != "dsv4" ||
+    "$PRECISION" != "fp4" ||
+    ( "$FRAMEWORK" != "dynamo-sglang" && "$FRAMEWORK" != "dynamo-vllm" )
+) ]]; then
+    echo "Error: B300 dcgm-power is limited to fixed-sequence DSV4 FP4 dynamo-sglang/vllm" >&2
     exit 1
 fi
 
@@ -70,7 +94,20 @@ if [ -d "$SRT_REPO_DIR" ]; then
 fi
 
 # TODO(CJQ): make first class upon srt-slurm upstream refactor
-if [[ "$IS_AGENTIC" == "1" ]]; then
+if [[ "$USES_DCGM_POWER" == "1" ]]; then
+    git clone "$POWER_SRT_SLURM_URL" "$SRT_REPO_DIR" || exit 1
+    cd "$SRT_REPO_DIR" || exit 1
+    git checkout "$POWER_SRT_SLURM_PIN" || exit 1
+    test "$(git rev-parse HEAD)" = "$POWER_SRT_SLURM_PIN" || { echo "Error: srt-slurm HEAD does not match POWER_SRT_SLURM_PIN=$POWER_SRT_SLURM_PIN" >&2; exit 1; }
+    git rev-parse HEAD > "$GITHUB_WORKSPACE/power-producer-sha.txt"
+    if [[ "$FRAMEWORK" == "dynamo-sglang" ]]; then
+        mkdir -p recipes/sglang/deepseek-v4
+        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4" recipes/sglang/deepseek-v4
+    else
+        mkdir -p recipes/vllm/deepseek-v4
+        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
+    fi
+elif [[ "$IS_AGENTIC" == "1" ]]; then
     git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR" || exit 1
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
@@ -139,6 +176,27 @@ NGINX_SQUASH_FILE="/data/squash/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqs
 srun -N 1 -A $SLURM_ACCOUNT -p $SLURM_PARTITION bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
 srun -N 1 -A $SLURM_ACCOUNT -p $SLURM_PARTITION bash -c "enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE"
 
+if [[ "$USES_DCGM_POWER" == "1" ]]; then
+    DCGM_EXPORTER_IMAGE="nvcr.io/nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless"
+    # enroot resolves bare paths against Docker Hub; nvcr.io pulls need the registry# form
+    DCGM_EXPORTER_ENROOT_REF="${DCGM_EXPORTER_IMAGE/nvcr.io\//nvcr.io#}"
+    DCGM_EXPORTER_SQSH="/data/squash/$(echo "$DCGM_EXPORTER_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    DCGM_EXPORTER_LOCK="${DCGM_EXPORTER_SQSH}.lock"
+    srun -N 1 -A "$SLURM_ACCOUNT" -p "$SLURM_PARTITION" bash -c "
+        set -euo pipefail
+        exec 9>\"$DCGM_EXPORTER_LOCK\"
+        flock -w 1800 9
+        if unsquashfs -l \"$DCGM_EXPORTER_SQSH\" > /dev/null 2>&1; then
+            exit 0
+        fi
+        rm -f \"$DCGM_EXPORTER_SQSH\"
+        enroot import -o \"$DCGM_EXPORTER_SQSH\" \"docker://$DCGM_EXPORTER_ENROOT_REF\"
+        unsquashfs -l \"$DCGM_EXPORTER_SQSH\" > /dev/null
+    " || exit 1
+    test -r "$DCGM_EXPORTER_SQSH" || { echo "Error: DCGM exporter squash not readable: $DCGM_EXPORTER_SQSH" >&2; exit 1; }
+    sha256sum "$DCGM_EXPORTER_SQSH" > "$GITHUB_WORKSPACE/exporter-image.sha256"
+fi
+
 export ISL="$ISL"
 export OSL="$OSL"
 export EVAL_ONLY="${EVAL_ONLY:-false}"
@@ -172,6 +230,11 @@ use_exclusive_sbatch_directive: true
 default_mounts:
   "/opt/ucx-no-ud": "/usr/local/ucx"
 EOF
+
+if [[ "$USES_DCGM_POWER" == "1" ]]; then
+    sed -i "/^  nginx-sqsh:/a\\  dcgm-exporter: ${DCGM_EXPORTER_SQSH}" srtslurm.yaml
+    grep -q "^  dcgm-exporter: " srtslurm.yaml || { echo "Error: dcgm-exporter injection failed: nginx-sqsh anchor not found in srtslurm.yaml" >&2; exit 1; }
+fi
 
 echo "Generated srtslurm.yaml:"
 cat srtslurm.yaml
@@ -288,6 +351,12 @@ fi
 
 echo "Found logs directory: $LOGS_DIR"
 
+if [[ "$USES_DCGM_POWER" == "1" ]]; then
+    mkdir -p "$LOGS_DIR/power"
+    cp "$GITHUB_WORKSPACE/exporter-image.sha256" "$LOGS_DIR/power/exporter-image.sha256"
+    cp "$GITHUB_WORKSPACE/power-producer-sha.txt" "$LOGS_DIR/power/power-producer-sha.txt"
+fi
+
 cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
 tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" .
 
@@ -383,6 +452,7 @@ else
         DeepSeek-R1-0528-NVFP4-v2
         DeepSeek-V4-Flash
         DeepSeek-V4-Pro
+        DeepSeek-V4-Pro-0813
         GLM-5-FP8
         GLM-5-NVFP4
         GLM-5.1

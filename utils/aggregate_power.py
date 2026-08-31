@@ -46,6 +46,12 @@ _POWER_METRIC_KEYS = {
     "joules_per_total_token",
 }
 
+# The unprefixed joules_per_* fields silently switched from role-local to
+# whole-deployment energy when multinode aggregation landed, and the values
+# alone cannot distinguish the two. Stamp the semantics so consumers fail
+# closed on unversioned rows instead of guessing.
+POWER_METRIC_SCHEMA_VERSION = 2
+
 
 @dataclass(frozen=True)
 class PowerIntegration:
@@ -756,6 +762,7 @@ def _patch_power_result(
         data.pop(key, None)
     # Keep the canonical aggregate numeric-only for InferenceX-app's metric
     # auto-capture. Detailed reason codes live in the validation sidecar.
+    data["power_metric_schema_version"] = POWER_METRIC_SCHEMA_VERSION
     data["power_valid"] = int(power_valid)
     data.pop("power_invalid_reasons", None)
     if power_valid:

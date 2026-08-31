@@ -35,4 +35,4 @@ def get_injector(framework):
 
 # Import backends after register/get_injector are defined so each module can
 # call register() at import time. Add new frameworks (sglang, trtllm, ...) here.
-from . import vllm  # noqa: E402,F401
+from . import sglang, vllm  # noqa: E402,F401

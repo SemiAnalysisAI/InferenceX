@@ -411,6 +411,7 @@ jobs:
         secrets: inherit
         with:
             exp-name: ${{ matrix.config.exp-name }}
+            recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             isl: ${{ matrix.config.isl }}
             osl: ${{ matrix.config.osl }}
             max-model-len: ${{ matrix.config.max-model-len }}
@@ -458,6 +459,7 @@ jobs:
             osl: ${{ matrix.config.osl }}
             max-model-len: ${{ matrix.config.max-model-len }}
             runner: ${{ matrix.config.runner }}
+            node-count: ${{ matrix.config.node-count }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
@@ -469,6 +471,7 @@ jobs:
             router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
             kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
             exp-name: ${{ matrix.config.exp-name }}
+            recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             conc-list: ${{ toJson(matrix.config.conc) }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
@@ -533,6 +536,7 @@ jobs:
         secrets: inherit
         with: &single-node-inputs
             exp-name: ${{ matrix.config.exp-name }}
+            recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             isl: ${{ matrix.config.isl }}
             osl: ${{ matrix.config.osl }}
             max-model-len: ${{ matrix.config.max-model-len }}
@@ -597,6 +601,7 @@ jobs:
         secrets: inherit
         with:
             exp-name: ${{ matrix.config.exp-name }}
+            recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             runner: ${{ matrix.config.runner }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
@@ -648,10 +653,12 @@ jobs:
         secrets: inherit
         with:
             exp-name: ${{ matrix.config.exp-name }}
+            recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             isl: '0'
             osl: '0'
             max-model-len: '0'
             runner: ${{ matrix.config.runner }}
+            node-count: ${{ matrix.config.node-count }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
@@ -713,6 +720,7 @@ jobs:
         secrets: inherit
         with:
             exp-name: ${{ matrix.config.exp-name }}
+            recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             isl: ${{ matrix.config.isl }}
             osl: ${{ matrix.config.osl }}
             max-model-len: ${{ matrix.config.max-model-len }}
@@ -762,6 +770,7 @@ jobs:
         secrets: inherit
         with:
             exp-name: ${{ matrix.config.exp-name }}
+            recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             runner: ${{ matrix.config.runner }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
@@ -814,10 +823,12 @@ jobs:
         secrets: inherit
         with:
             exp-name: ${{ matrix.config.exp-name }}
+            recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             isl: ${{ matrix.config.isl }}
             osl: ${{ matrix.config.osl }}
             max-model-len: ${{ matrix.config.max-model-len }}
             runner: ${{ matrix.config.runner }}
+            node-count: ${{ matrix.config.node-count }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
@@ -879,10 +890,12 @@ jobs:
         secrets: inherit
         with:
             exp-name: ${{ matrix.config.exp-name }}
+            recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             isl: '0'
             osl: '0'
             max-model-len: '0'
             runner: ${{ matrix.config.runner }}
+            node-count: ${{ matrix.config.node-count }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}

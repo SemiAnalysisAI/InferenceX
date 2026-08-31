@@ -6,6 +6,10 @@ on:
       runner:
         required: true
         type: string
+      node-count:
+        description: "Total Slurm nodes required by this benchmark"
+        required: true
+        type: number
       priority:
         description: "Higher-is-sooner CI priority score"
         required: true
@@ -37,6 +41,11 @@ on:
       exp-name:
         required: true
         type: string
+      recipe-fingerprint:
+        description: "Deterministic generated-recipe identity"
+        required: false
+        type: string
+        default: ''
       isl:
         required: true
         type: string
@@ -217,6 +226,7 @@ env:
   # once; sbatch/srun inherit this env so the token reaches the workers.
   HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
   EXP_NAME: ${{ inputs.exp-name }}
+  RECIPE_FINGERPRINT: ${{ inputs.recipe-fingerprint }}
   IMAGE: ${{ inputs.image }}
   MODEL_PREFIX: ${{ inputs.model-prefix }}
   MODEL: ${{ inputs.model }}
@@ -282,19 +292,40 @@ jobs:
       ${{ fromJSON(
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
         (
-          inputs.skip-queue-pr != '' &&
-          format(
-            '["self-hosted",{0},{1},{2},{3}]',
-            toJSON(inputs.runner),
-            toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
-            toJSON(format('ci-attempt-{0}', github.run_attempt)),
-            toJSON(format('ci-skip-queue-pr-{0}', inputs.skip-queue-pr))
+          vars.NODE_SLOT_SCHEDULER_ENABLED == 'true' &&
+          (
+            inputs.skip-queue-pr != '' &&
+            format(
+              '["self-hosted",{0},{1},{2},{3},{4}]',
+              toJSON(inputs.runner),
+              toJSON(format('nodes:{0}', inputs.node-count)),
+              toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
+              toJSON(format('ci-attempt-{0}', github.run_attempt)),
+              toJSON(format('ci-skip-queue-pr-{0}', inputs.skip-queue-pr))
+            ) ||
+            format(
+              '["self-hosted",{0},{1},{2},{3}]',
+              toJSON(inputs.runner),
+              toJSON(format('nodes:{0}', inputs.node-count)),
+              toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
+              toJSON(format('ci-attempt-{0}', github.run_attempt))
+            )
           ) ||
-          format(
-            '["self-hosted",{0},{1},{2}]',
-            toJSON(inputs.runner),
-            toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
-            toJSON(format('ci-attempt-{0}', github.run_attempt))
+          (
+            inputs.skip-queue-pr != '' &&
+            format(
+              '["self-hosted",{0},{1},{2},{3}]',
+              toJSON(inputs.runner),
+              toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
+              toJSON(format('ci-attempt-{0}', github.run_attempt)),
+              toJSON(format('ci-skip-queue-pr-{0}', inputs.skip-queue-pr))
+            ) ||
+            format(
+              '["self-hosted",{0},{1},{2}]',
+              toJSON(inputs.runner),
+              toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
+              toJSON(format('ci-attempt-{0}', github.run_attempt))
+            )
           )
         ) ||
         format('[{0}]', toJSON(inputs.runner))
@@ -316,11 +347,38 @@ jobs:
       - name: Slurm cleanup (pre-run)
         run: &slurm-cleanup |
           if command -v squeue >/dev/null 2>&1; then
-            echo "[Slurm] Cleaning up jobs named: ${{ runner.name }} ..."
-            scancel --user="$USER" --name="${{ runner.name }}" || true
-            while [ -n "$(squeue --user="$USER" --name='${{ runner.name }}' --noheader --format='%i')" ]; do
-              squeue --user="$USER" --name="${{ runner.name }}"
-              sleep 5
+            for job_name in "${{ runner.name }}" "inferencex-${{ runner.name }}"; do
+              echo "[Slurm] Cleaning up jobs named: $job_name ..."
+              scancel --user="$USER" --name="$job_name" || true
+              while [ -n "$(squeue --user="$USER" --name="$job_name" --noheader --format='%i')" ]; do
+                squeue --user="$USER" --name="$job_name"
+                sleep 5
+              done
+            done
+          fi
+
+      - name: Repair stale git state (pre-run)
+        run: |
+          # Interrupted runs leave index.lock files and corrupt submodule git
+          # dirs behind in the persistent self-hosted workspace, and both make
+          # actions/checkout fail before any benchmark starts. The runner
+          # executes one job at a time, so any lock found here is stale by
+          # definition. Grouping dirs (e.g. .git/modules/utils) hold only
+          # nested module dirs, so any dir carrying top-level files is a
+          # module git dir — a truncated clone may lack HEAD entirely, and a
+          # git dir whose HEAD does not resolve to a commit is dropped
+          # together with its worktree so checkout re-clones it.
+          repo_dir="${{ github.workspace }}"
+          if [ -d "${repo_dir}/.git" ]; then
+            find "${repo_dir}/.git" -name index.lock -type f -delete || true
+            for gitdir in "${repo_dir}"/.git/modules/* "${repo_dir}"/.git/modules/*/*; do
+              [ -d "${gitdir}" ] || continue
+              [ -n "$(find "${gitdir}" -maxdepth 1 -type f -print -quit)" ] || continue
+              if ! git --git-dir="${gitdir}" rev-parse --verify 'HEAD^{commit}' >/dev/null 2>&1; then
+                rel="${gitdir##*/.git/modules/}"
+                echo "[git-repair] Removing corrupt submodule state: ${rel}"
+                rm -rf "${gitdir}" "${repo_dir:?}/${rel}"
+              fi
             done
           fi
 
@@ -336,10 +394,13 @@ jobs:
         env:
           RUNNER_NAME: ${{ runner.name }}
           RUNNER_TYPE: ${{ inputs.runner }}
-          # Hash uniquely on all prefill/decode parallelism fields, worker counts, serving mode, concurrency, and runner.
-          RESULT_FILENAME: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_prefill-tp${{ env.PREFILL_TP }}-pp${{ env.PREFILL_PP_SIZE }}-dcp${{ env.PREFILL_DCP_SIZE }}-pcp${{ env.PREFILL_PCP_SIZE }}-ep${{ env.PREFILL_EP }}-dp${{ env.PREFILL_DP_ATTN }}-nw${{ env.PREFILL_NUM_WORKERS }}_decode-tp${{ env.DECODE_TP }}-pp${{ env.DECODE_PP_SIZE }}-dcp${{ env.DECODE_DCP_SIZE }}-pcp${{ env.DECODE_PCP_SIZE }}-ep${{ env.DECODE_EP }}-dp${{ env.DECODE_DP_ATTN }}-nw${{ env.DECODE_NUM_WORKERS }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ join(fromJson(inputs.conc-list), 'x') }}_${{ runner.name }}
+          RESULT_FILENAME_BASE: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_prefill-tp${{ env.PREFILL_TP }}-pp${{ env.PREFILL_PP_SIZE }}-dcp${{ env.PREFILL_DCP_SIZE }}-pcp${{ env.PREFILL_PCP_SIZE }}-ep${{ env.PREFILL_EP }}-dp${{ env.PREFILL_DP_ATTN }}-nw${{ env.PREFILL_NUM_WORKERS }}_decode-tp${{ env.DECODE_TP }}-pp${{ env.DECODE_PP_SIZE }}-dcp${{ env.DECODE_DCP_SIZE }}-pcp${{ env.DECODE_PCP_SIZE }}-ep${{ env.DECODE_EP }}-dp${{ env.DECODE_DP_ATTN }}-nw${{ env.DECODE_NUM_WORKERS }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ join(fromJson(inputs.conc-list), 'x') }}_${{ runner.name }}
         run: |
           set -x
+          export RESULT_FILENAME="$RESULT_FILENAME_BASE"
+          if [ -n "$RECIPE_FINGERPRINT" ]; then
+            export RESULT_FILENAME="${RESULT_FILENAME}_recipe-${RECIPE_FINGERPRINT:0:16}"
+          fi
           # Export RESULT_FILENAME early so it's available for artifact uploads even if cancelled
           echo "RESULT_FILENAME=${RESULT_FILENAME}" >> "$GITHUB_ENV"
 

@@ -36,6 +36,11 @@ on:
       exp-name:
         required: true
         type: string
+      recipe-fingerprint:
+        description: "Deterministic generated-recipe identity"
+        required: false
+        type: string
+        default: ''
       isl:
         required: true
         type: string
@@ -130,7 +135,7 @@ on:
         type: string
         default: '3600'
       require-power:
-        description: "Fail fixed-sequence result processing when GPU power is invalid"
+        description: "Fail result processing when GPU power is invalid"
         required: false
         type: boolean
         default: false
@@ -154,6 +159,7 @@ env:
   HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
   HF_HUB_CACHE: '/mnt/hf_hub_cache/'
   EXP_NAME: ${{ inputs.exp-name }}
+  RECIPE_FINGERPRINT: ${{ inputs.recipe-fingerprint }}
   MODEL: ${{ inputs.model }}
   MODEL_PREFIX: ${{ inputs.model-prefix }}
   ISL: ${{ inputs.isl }}
@@ -208,19 +214,40 @@ jobs:
       ${{ fromJSON(
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
         (
-          inputs.skip-queue-pr != '' &&
-          format(
-            '["self-hosted",{0},{1},{2},{3}]',
-            toJSON(inputs.runner),
-            toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
-            toJSON(format('ci-attempt-{0}', github.run_attempt)),
-            toJSON(format('ci-skip-queue-pr-{0}', inputs.skip-queue-pr))
+          vars.NODE_SLOT_SCHEDULER_ENABLED == 'true' &&
+          (
+            inputs.skip-queue-pr != '' &&
+            format(
+              '["self-hosted",{0},{1},{2},{3},{4}]',
+              toJSON(inputs.runner),
+              toJSON('nodes:1'),
+              toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
+              toJSON(format('ci-attempt-{0}', github.run_attempt)),
+              toJSON(format('ci-skip-queue-pr-{0}', inputs.skip-queue-pr))
+            ) ||
+            format(
+              '["self-hosted",{0},{1},{2},{3}]',
+              toJSON(inputs.runner),
+              toJSON('nodes:1'),
+              toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
+              toJSON(format('ci-attempt-{0}', github.run_attempt))
+            )
           ) ||
-          format(
-            '["self-hosted",{0},{1},{2}]',
-            toJSON(inputs.runner),
-            toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
-            toJSON(format('ci-attempt-{0}', github.run_attempt))
+          (
+            inputs.skip-queue-pr != '' &&
+            format(
+              '["self-hosted",{0},{1},{2},{3}]',
+              toJSON(inputs.runner),
+              toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
+              toJSON(format('ci-attempt-{0}', github.run_attempt)),
+              toJSON(format('ci-skip-queue-pr-{0}', inputs.skip-queue-pr))
+            ) ||
+            format(
+              '["self-hosted",{0},{1},{2}]',
+              toJSON(inputs.runner),
+              toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
+              toJSON(format('ci-attempt-{0}', github.run_attempt))
+            )
           )
         ) ||
         format('[{0}]', toJSON(inputs.runner))
@@ -257,6 +284,31 @@ jobs:
             done
           fi
 
+      - name: Repair stale git state (pre-run)
+        run: |
+          # Interrupted runs leave index.lock files and corrupt submodule git
+          # dirs behind in the persistent self-hosted workspace, and both make
+          # actions/checkout fail before any benchmark starts. The runner
+          # executes one job at a time, so any lock found here is stale by
+          # definition. Grouping dirs (e.g. .git/modules/utils) hold only
+          # nested module dirs, so any dir carrying top-level files is a
+          # module git dir — a truncated clone may lack HEAD entirely, and a
+          # git dir whose HEAD does not resolve to a commit is dropped
+          # together with its worktree so checkout re-clones it.
+          repo_dir="${{ github.workspace }}"
+          if [ -d "${repo_dir}/.git" ]; then
+            find "${repo_dir}/.git" -name index.lock -type f -delete || true
+            for gitdir in "${repo_dir}"/.git/modules/* "${repo_dir}"/.git/modules/*/*; do
+              [ -d "${gitdir}" ] || continue
+              [ -n "$(find "${gitdir}" -maxdepth 1 -type f -print -quit)" ] || continue
+              if ! git --git-dir="${gitdir}" rev-parse --verify 'HEAD^{commit}' >/dev/null 2>&1; then
+                rel="${gitdir##*/.git/modules/}"
+                echo "[git-repair] Removing corrupt submodule state: ${rel}"
+                rm -rf "${gitdir}" "${repo_dir:?}/${rel}"
+              fi
+            done
+          fi
+
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           token: ${{ secrets.REPO_PAT }}
@@ -269,17 +321,20 @@ jobs:
         env:
           RUNNER_NAME: ${{ runner.name }}
           RUNNER_TYPE: ${{ inputs.runner }}
-          # Hash uniquely on {EXP_NAME}_{PRECISION}_{FRAMEWORK}_tp{}-pp{}-dcp{}-pcp{}-ep{}-dpa{}_disagg-{}_spec-{}_conc{}_{runner}
-          RESULT_FILENAME: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_tp${{ env.TP }}-pp${{ env.PP_SIZE }}-dcp${{ env.DCP_SIZE }}-pcp${{ env.PCP_SIZE }}-ep${{ env.EP_SIZE }}-dpa${{ env.DP_ATTENTION }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ env.CONC }}_${{ runner.name }}
+          RESULT_FILENAME_BASE: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_tp${{ env.TP }}-pp${{ env.PP_SIZE }}-dcp${{ env.DCP_SIZE }}-pcp${{ env.PCP_SIZE }}-ep${{ env.EP_SIZE }}-dpa${{ env.DP_ATTENTION }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ env.CONC }}_${{ runner.name }}
           # Suppress per-job eval markdown from being appended to the step summary.
           # We'll publish a single combined eval table in the collection job instead.
           GITHUB_STEP_SUMMARY: ''
         run: |
+          export RESULT_FILENAME="$RESULT_FILENAME_BASE"
+          if [ -n "$RECIPE_FINGERPRINT" ]; then
+            export RESULT_FILENAME="${RESULT_FILENAME}_recipe-${RECIPE_FINGERPRINT:0:16}"
+          fi
           export GPU_COUNT=$((TP * PP_SIZE * PCP_SIZE))
           echo "GPU_COUNT=${GPU_COUNT}" >> "$GITHUB_ENV"
 
           # Export RESULT_FILENAME early so it's available for artifact uploads even if cancelled
-          echo "RESULT_FILENAME=${RESULT_FILENAME}" >> $GITHUB_ENV
+          echo "RESULT_FILENAME=${RESULT_FILENAME}" >> "$GITHUB_ENV"
 
           bash ./runners/launch_${RUNNER_NAME%%_*}.sh
 

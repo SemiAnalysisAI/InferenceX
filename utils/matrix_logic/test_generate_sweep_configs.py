@@ -1,19 +1,174 @@
 """Comprehensive tests for generate_sweep_configs.py"""
-import pytest
+
 import argparse
 import copy
+from pathlib import Path
+
+import pytest
 from generate_sweep_configs import (
     MIN_EVAL_CONC,
-    seq_len_stoi,
-    seq_len_itos,
-    seq_len_to_str,
-    generate_full_sweep,
-    generate_test_config_sweep,
-    mark_eval_entries,
-    mark_all_eval_entries,
+    add_multinode_node_count,
     apply_node_type_defaults,
     expand_config_keys,
+    generate_full_sweep,
+    generate_test_config_sweep,
+    mark_all_eval_entries,
+    mark_eval_entries,
+    multinode_node_count,
+    multinode_worker_pair,
+    seq_len_itos,
+    seq_len_stoi,
+    seq_len_to_str,
 )
+from validation import load_config_files, load_runner_file
+
+
+def test_aggregated_multinode_node_count_uses_explicit_num_nodes():
+    entry = {
+        "runner": "unknown",
+        "disagg": False,
+        "prefill": {},
+        "decode": {},
+    }
+
+    add_multinode_node_count(entry, {}, num_nodes=3)
+
+    assert entry["node-count"] == 3
+
+
+def test_disaggregated_multinode_node_count_rejects_num_nodes():
+    entry = {
+        "runner": "unknown",
+        "disagg": True,
+        "prefill": {},
+        "decode": {},
+    }
+
+    with pytest.raises(ValueError, match="num-nodes.*disaggregated"):
+        add_multinode_node_count(entry, {}, num_nodes=3)
+
+
+def test_disaggregated_multinode_node_count_requires_hardware_inventory():
+    entry = {
+        "runner": "cluster:unknown",
+        "disagg": True,
+        "prefill": {"num-worker": 1, "tp": 8},
+        "decode": {"num-worker": 1, "tp": 8},
+    }
+
+    with pytest.raises(ValueError, match="Cannot resolve gpus-per-node"):
+        add_multinode_node_count(entry, {}, num_nodes=None)
+
+
+def test_aggregated_worker_expands_to_legacy_matrix_pair():
+    benchmark = {
+        "worker": {
+            "num-worker": 2,
+            "tp": 8,
+            "pp": 2,
+            "ep": 1,
+            "dp-attn": False,
+            "additional-settings": ["CONFIG_FILE=recipes/aggregate.yaml"],
+        }
+    }
+
+    prefill, decode = multinode_worker_pair(benchmark, disagg=False)
+
+    assert prefill == {
+        "num-worker": 2,
+        "tp": 8,
+        "pp": 2,
+        "dcp-size": 1,
+        "pcp-size": 1,
+        "ep": 1,
+        "dp-attn": False,
+        "additional-settings": ["CONFIG_FILE=recipes/aggregate.yaml"],
+    }
+    assert decode == {
+        "num-worker": 0,
+        "tp": 8,
+        "pp": 2,
+        "dcp-size": 1,
+        "pcp-size": 1,
+        "ep": 1,
+        "dp-attn": False,
+    }
+
+
+def test_multinode_node_count_uses_role_gpu_footprints(sample_runner_config):
+    prefill = {"num-worker": 3, "tp": 2, "pp": 1, "pcp-size": 1}
+    decode = {"num-worker": 2, "tp": 8, "pp": 1, "pcp-size": 1}
+
+    assert multinode_node_count(
+        prefill, decode, "cluster:b300-nv", sample_runner_config
+    ) == 3
+
+
+def test_multinode_node_count_honors_explicit_role_node_settings():
+    prefill = {
+        "num-worker": 1,
+        "tp": 8,
+        "additional-settings": ["PREFILL_NODES=2"],
+    }
+    decode = {
+        "num-worker": 1,
+        "tp": 8,
+        "additional-settings": ["DECODE_NODES=1"],
+    }
+
+    assert multinode_node_count(prefill, decode, "unknown", {}) == 3
+
+
+def test_multinode_node_count_resolves_heterogeneous_worker_hardware(
+    sample_runner_config,
+):
+    prefill = {"hardware": "gb200", "num-worker": 5, "tp": 4}
+    decode = {"hardware": "h100", "num-worker": 1, "tp": 8}
+
+    assert multinode_node_count(
+        prefill, decode, "gb200", sample_runner_config
+    ) == 6
+
+
+def test_multinode_node_count_prefers_checked_in_recipe_resources(
+    sample_runner_config,
+):
+    prefill = {
+        "num-worker": 3,
+        "tp": 1,
+        "additional-settings": [
+            (
+                "CONFIG_FILE=recipes/vllm/kimi-k2.5-fp4/8k1k/"
+                "disagg-gb200-3p1d-dep4-dep16.yaml"
+            )
+        ],
+    }
+    decode = {"num-worker": 1, "tp": 1}
+
+    assert multinode_node_count(
+        prefill, decode, "cluster:gb200-nv", sample_runner_config
+    ) == 7
+
+
+def test_multinode_node_count_resolves_repo_relative_recipe_path(
+    sample_runner_config,
+):
+    prefill = {
+        "num-worker": 1,
+        "tp": 8,
+        "additional-settings": [
+            (
+                "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/"
+                "trtllm/glm5.2/gb300-fp4/agentic/"
+                "dynamo-agg-gb300-tp8-c1-b2-mtp8.yaml"
+            )
+        ],
+    }
+    decode = {"num-worker": 0, "tp": 8}
+
+    assert multinode_node_count(
+        prefill, decode, "cluster:gb300-nv", sample_runner_config
+    ) == 2
 
 
 # =============================================================================
@@ -115,8 +270,8 @@ def sample_runner_config():
     return {
         "labels": {
             "h100": ["h100-cr_0", "h100-cr_1", "h100-cw_0", "h100-cw_1"],
-            "h200": ["h200-cw_0", "h200-cw_1", "h200-nb_0", "h200-nb_1"],
-            "b200": ["b200-nvd_0", "b200-nvd_1", "b200-dgxc_1"],
+            "h200": ["h200-cw_0", "h200-cw_1"],
+            "b200": ["b200-nvd_0", "b200-nvd_1", "b200-nscale_1"],
             "b300": ["b300-nv_0", "b300-nv_1"],
             "cluster:b300-nv": ["b300-nv_0", "b300-nv_1"],
             "mi300x": ["mi300x-amd_0", "mi300x-amd_1", "mi300x-cr_0"],
@@ -125,7 +280,7 @@ def sample_runner_config():
         "hardware": {
             "cluster:h100-dgxc": {"available-cpu-dram-mib": 2063837, "gpus-per-node": 8},
             "cluster:h200-dgxc": {"available-cpu-dram-mib": 1471356, "gpus-per-node": 8},
-            "cluster:b200-dgxc": {"available-cpu-dram-mib": 3774874, "gpus-per-node": 8},
+            "cluster:b200-nscale": {"available-cpu-dram-mib": 3774874, "gpus-per-node": 8},
             "cluster:b300-nv": {"available-cpu-dram-mib": 2964436, "gpus-per-node": 8},
             "cluster:mi300x-amds": {"available-cpu-dram-mib": 2321924, "gpus-per-node": 8},
             "cluster:mi355x-amds": {"available-cpu-dram-mib": 3095781, "gpus-per-node": 8},
@@ -379,7 +534,7 @@ class TestMarkEvalEntries:
         matrix_values = [
             {
                 "model": "deepseek-ai/DeepSeek-R1-0528",
-                "runner": "b200-multinode",
+                "runner": "cluster:b200-nscale",
                 "framework": "dynamo-trt",
                 "precision": "fp8",
                 "isl": 8192,
@@ -411,7 +566,7 @@ class TestMarkEvalEntries:
         matrix_values = [
             {
                 "model": "deepseek-ai/DeepSeek-R1-0528",
-                "runner": "b200-multinode",
+                "runner": "cluster:b200-nscale",
                 "framework": "dynamo-trt",
                 "precision": "fp8",
                 "isl": 8192,
@@ -433,7 +588,7 @@ class TestMarkEvalEntries:
             },
             {
                 "model": "deepseek-ai/DeepSeek-R1-0528",
-                "runner": "b200-multinode",
+                "runner": "cluster:b200-nscale",
                 "framework": "dynamo-trt",
                 "precision": "fp8",
                 "isl": 8192,
@@ -467,7 +622,7 @@ class TestMarkEvalEntries:
         def entry(prefill_workers, decode_workers, conc):
             return {
                 "model": "deepseek-ai/DeepSeek-R1-0528",
-                "runner": "mi355x-disagg",
+                "runner": "cluster:mi355x-amds",
                 "framework": "vllm-disagg",
                 "precision": "fp8",
                 "isl": 8192,
@@ -504,7 +659,7 @@ class TestMarkEvalEntries:
         """Split concurrency rows for one parallelism should produce one eval job."""
         base_entry = {
             "model": "deepseek-ai/DeepSeek-R1-0528",
-            "runner": "mi355x-disagg",
+            "runner": "cluster:mi355x-amds",
             "framework": "sglang-disagg",
             "precision": "fp4",
             "isl": 8192,
@@ -1194,6 +1349,8 @@ class TestGenerateFullSweepMultiNode:
                 "framework": "dynamo-trt",
                 "runner": "h200",
                 "multinode": True,
+                "disagg": True,
+                "kv-p2p-transfer": "nixl",
                 "scenarios": {
                     "fixed-seq-len": [
 
@@ -1457,6 +1614,8 @@ class TestEdgeCases:
                 "framework": "dynamo-trt",
                 "runner": "gb200",
                 "multinode": True,
+                "disagg": True,
+                "kv-p2p-transfer": "nixl",
                 "scenarios": {
                     "fixed-seq-len": [
 
@@ -1575,6 +1734,8 @@ class TestEdgeCases:
                 "framework": "dynamo-trt",
                 "runner": "gb200",
                 "multinode": True,
+                "disagg": True,
+                "kv-p2p-transfer": "nixl",
                 "scenarios": {
                     "fixed-seq-len": [
 
@@ -1623,6 +1784,8 @@ class TestEdgeCases:
                 "framework": "dynamo-trt",
                 "runner": "gb200",
                 "multinode": True,
+                "disagg": True,
+                "kv-p2p-transfer": "nixl",
                 "scenarios": {
                     "fixed-seq-len": [
 
@@ -2260,7 +2423,9 @@ class TestGenerateTestConfigSweep:
         with pytest.raises(ValueError, match="exceeds gpus-per-node"):
             generate_test_config_sweep(args, config, runner_config)
 
-    def test_multinode_agentic_groups_concurrencies_per_search_entry(self):
+    def test_multinode_agentic_groups_concurrencies_per_search_entry(
+        self, sample_runner_config
+    ):
         """One server allocation should run exactly one concurrency (one task per conc)."""
         config = {
             "dsv4-agentic-2p1d": {
@@ -2296,7 +2461,7 @@ class TestGenerateTestConfigSweep:
             runner_node_filter=None,
         )
 
-        result = generate_test_config_sweep(args, config)
+        result = generate_test_config_sweep(args, config, sample_runner_config)
 
         assert len(result) == 5
         assert [entry["conc"] for entry in result] == [[16], [32], [64], [128], [256]]
@@ -2313,6 +2478,7 @@ class TestGenerateTestConfigSweep:
         assert result[0]["decode"]["pp"] == 2
         assert result[0]["decode"]["dcp-size"] == 2
         assert result[0]["decode"]["pcp-size"] == 1
+        assert {entry["node-count"] for entry in result} == {9}
 
     def test_multinode_agentic_preserves_kv_offload_fields(self, sample_runner_config):
         config = {
@@ -2604,6 +2770,55 @@ class TestGenerateFullSweepMixed:
             multi_result[0]["decode"]["dcp-size"],
             multi_result[0]["decode"]["pcp-size"],
         ) == (2, 2, 1)
+
+
+class TestAgentXPowerExperimentConfigs:
+    """Contracts for the controlled Qwen3.5 B300 power experiment."""
+
+    def test_qwen_b300_fp4_fp8_memory_tier_matrix_is_balanced(self):
+        repo_root = Path(__file__).resolve().parents[2]
+        config = load_config_files([str(repo_root / "configs/nvidia-master.yaml")])
+        runners = load_runner_file(str(repo_root / "configs/runners.yaml"))
+        args = argparse.Namespace(
+            config_keys=[
+                "qwen3.5-fp8-b300-sglang-agentic-power-ab",
+                "qwen3.5-fp4-b300-sglang-agentic-power-ab",
+            ],
+            seq_lens=None,
+            conc=[16, 32],
+            scenario_type=["agentic-coding"],
+            runner_node_filter=None,
+        )
+
+        result = generate_test_config_sweep(args, config, runners)
+
+        assert len(result) == 8
+        assert {
+            (row["precision"], row["kv-offloading"], row["conc"])
+            for row in result
+        } == {
+            (precision, offload, conc)
+            for precision in ("fp4", "fp8")
+            for offload in ("none", "dram")
+            for conc in (16, 32)
+        }
+        assert {row["image"] for row in result} == {
+            "lmsysorg/sglang:v0.5.16-cu130"
+        }
+        assert all(row["runner"] == "cluster:b300-nv" for row in result)
+        assert all(row["tp"] == 2 and row["ep"] == 2 for row in result)
+        assert all(row["spec-decoding"] == "mtp" for row in result)
+        assert all(row["duration"] == 3600 for row in result)
+        assert all(
+            row.get("kv-offload-backend") == {"name": "hicache"}
+            for row in result
+            if row["kv-offloading"] == "dram"
+        )
+        assert all(
+            "kv-offload-backend" not in row
+            for row in result
+            if row["kv-offloading"] == "none"
+        )
 
 
 # =============================================================================

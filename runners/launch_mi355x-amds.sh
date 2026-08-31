@@ -322,6 +322,7 @@ else
         --container-remap-root \
         --no-container-entrypoint --export=ALL,AIPERF_DATASET_MMAP_CACHE_DIR=/aiperf_mmap_cache \
         bash "$BENCHMARK_SCRIPT"
+    benchmark_rc=$?
 
     scancel $JOB_ID
 
@@ -329,4 +330,6 @@ else
         echo "gpucore files exist. not good"
         rm -f gpucore.*
     fi
+
+    exit "$benchmark_rc"
 fi

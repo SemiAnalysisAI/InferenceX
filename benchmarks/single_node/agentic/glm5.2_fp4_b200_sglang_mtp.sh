@@ -10,7 +10,7 @@ set -x
 #
 # Port of the validated agentic/glm5.2_fp4_b300_sglang_mtp.sh. The B200 deltas
 # are the two blocks marked "B200:" below -- the checkpoint-resolution guard
-# (b200-dgxc rewrites MODEL to a cluster-local path) and --mem-fraction-static.
+# (b200-nscale rewrites MODEL to a cluster-local path) and --mem-fraction-static.
 # Everything else is the B300 script unchanged so the two curves stay
 # comparable.
 #
@@ -37,13 +37,13 @@ if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
 fi
 
-# B200: runners/launch_b200-dgxc.sh resolves the checkpoint to a cluster-local
+# B200: runners/launch_b200-nscale-slurm.sh resolves the checkpoint to a cluster-local
 # path and then rewrites MODEL to that path, so `hf download "$MODEL"` cannot
 # work on this runner. Keep the HF repo id separate for the day-zero case where
 # GLM-5.2-NVFP4 has not been staged yet.
 HF_MODEL_ID="${HF_MODEL_ID:-nvidia/GLM-5.2-NVFP4}"
 
-# A non-empty directory is NOT a staged checkpoint. b200-dgxc already had
+# A non-empty directory is NOT a staged checkpoint. b200-nscale already had
 # /lustre/fsw/gharunners/models/GLM-5.2-NVFP4 holding config.json,
 # generation_config.json, hf_quant_config.json, chat_template.jinja, README.md
 # and .quant_summary.txt and NOTHING else -- an aborted or metadata-only pull.
@@ -118,37 +118,54 @@ if require_agentic_kv_offload_backend hicache; then
     # conc 8 (TP8) / 64 (DP8) and the radix hit rate collapses to <0.1
     # against a ~0.97 theoretical ceiling, so every turn re-prefills its
     # whole history; the host tier restores those hits at C2C bandwidth.
-    # GLM-5.2 is DSA/MLA-family (attention_backend=dsa): every rank holds
-    # complete per-token KV (169.98 GB device pool per rank, replicated on
-    # all 8 ranks), so host capacity is controlled through the host/device
-    # token-capacity ratio like the DSv4 recipe, NOT a per-rank
-    # --hicache-size. A GB-based size of TOTAL_CPU_DRAM_GB/TP pinned the
-    # whole 0.80-DRAM budget (8 x 299 GB) at init on top of 465 GB of
-    # weights and OOM-killed the node (run 29678598595); DSv4's own
-    # ratio=2 default pins 2 x 170 GB x 8 = 2.7 TB here and OOMs too
-    # (GLM-5.2's device pool is far larger than DSv4's). Fractional 0.75
-    # = ~128 GB/rank = ~1.0 TB total, matching the cluster's proven ~1 TB
-    # host-pool envelope; validated on-node 2026-07-19 (boot + 4.2M-token
-    # overflow bench forcing eviction through the DSA KV+INDEXER pools).
-    # The ratio is relative to the device pool, so MTP's slightly smaller
-    # device pool (the nextn layer takes its own KV) only shrinks it.
+    # GLM-5.2 is DSA/MLA-family (attention_backend=dsa): every TP rank holds
+    # complete per-token KV. The original ratio 0.75 gives the main target
+    # host pool only 1,257,728 token slots, which saturates on the c12/c16
+    # working sets. Use an absolute main-pool size at those two points so the
+    # allocation is stable across changes in the HBM pool size. In SGLang
+    # v0.5.16, --hicache-size directly sizes only the target KV host pool;
+    # the DSA indexer and MTP draft pools inherit its token-slot count and use
+    # their own smaller bytes/token. A 270 GB target pool was measured as
+    # 270.00 + 61.88 + 3.46 = 335.34 GB/rank, or 2.683 TB across TP8, with
+    # 6,009,728 slots in each pool. Keep ratio 0.75 on the lower
+    # concurrencies, where the smaller working set does not need the extra
+    # pinned memory.
     DEFAULT_HICACHE_RATIO=0.75
-    HICACHE_RATIO="${HICACHE_RATIO:-$DEFAULT_HICACHE_RATIO}"
-    if awk -v r="$HICACHE_RATIO" -v cap="$DEFAULT_HICACHE_RATIO" 'BEGIN { exit !(r > cap) }'; then
-        echo "Error: HICACHE_RATIO=$HICACHE_RATIO exceeds configured limit $DEFAULT_HICACHE_RATIO" >&2
+    DEFAULT_HICACHE_SIZE=0
+    case "$CONC" in
+        12|16) DEFAULT_HICACHE_SIZE=270 ;;
+    esac
+    MAX_HICACHE_SIZE=270
+    HICACHE_SIZE="${HICACHE_SIZE:-$DEFAULT_HICACHE_SIZE}"
+    if ! [[ "$HICACHE_SIZE" =~ ^[0-9]+$ ]]; then
+        echo "Error: HICACHE_SIZE must be a non-negative integer, got $HICACHE_SIZE" >&2
         exit 1
     fi
+    if awk -v s="$HICACHE_SIZE" -v cap="$MAX_HICACHE_SIZE" 'BEGIN { exit !(s > cap) }'; then
+        echo "Error: HICACHE_SIZE=$HICACHE_SIZE exceeds configured limit $MAX_HICACHE_SIZE" >&2
+        exit 1
+    fi
+    HICACHE_RATIO="${HICACHE_RATIO:-$DEFAULT_HICACHE_RATIO}"
     HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_back}"
     HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
     HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first_direct}"
-    echo "HiCache CPU tier: ratio=$HICACHE_RATIO, capacity=${TOTAL_CPU_DRAM_GB} GB, write_policy=$HICACHE_WRITE_POLICY, io_backend=$HICACHE_IO_BACKEND, mem_layout=$HICACHE_MEM_LAYOUT"
     CACHE_ARGS=(
         --enable-hierarchical-cache
-        --hicache-ratio "$HICACHE_RATIO"
         --hicache-write-policy "$HICACHE_WRITE_POLICY"
         --hicache-io-backend "$HICACHE_IO_BACKEND"
         --hicache-mem-layout "$HICACHE_MEM_LAYOUT"
     )
+    if awk -v s="$HICACHE_SIZE" 'BEGIN { exit !(s > 0) }'; then
+        echo "HiCache CPU tier: target_size=$HICACHE_SIZE GB, total_capacity=${TOTAL_CPU_DRAM_GB} GB, write_policy=$HICACHE_WRITE_POLICY, io_backend=$HICACHE_IO_BACKEND, mem_layout=$HICACHE_MEM_LAYOUT"
+        CACHE_ARGS+=(--hicache-size "$HICACHE_SIZE")
+    else
+        if awk -v r="$HICACHE_RATIO" -v cap="$DEFAULT_HICACHE_RATIO" 'BEGIN { exit !(r > cap) }'; then
+            echo "Error: HICACHE_RATIO=$HICACHE_RATIO exceeds configured limit $DEFAULT_HICACHE_RATIO" >&2
+            exit 1
+        fi
+        echo "HiCache CPU tier: ratio=$HICACHE_RATIO, total_capacity=${TOTAL_CPU_DRAM_GB} GB, write_policy=$HICACHE_WRITE_POLICY, io_backend=$HICACHE_IO_BACKEND, mem_layout=$HICACHE_MEM_LAYOUT"
+        CACHE_ARGS+=(--hicache-ratio "$HICACHE_RATIO")
+    fi
 fi
 
 # With attention-DP, front the DP ranks with sglang-router using consistent

@@ -178,6 +178,12 @@ if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
     elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp8" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/Qwen3.5-397B-A17B-FP8"
         export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp8"
+    elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp4" ]]; then
+        export MODEL_PATH="/mnt/lustre01/models/Qwen3.5-397B-A17B-NVFP4-V2"
+        export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp4"
+    elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp4" ]]; then
+        export MODEL_PATH="/mnt/lustre01/users-public/sa-shared/models/GLM-5.2-NVFP4"
+        export SRT_SLURM_MODEL_PREFIX="glm-5.2-fp4"
     elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp4" ]]; then
         # SRT_SLURM_MODEL_PREFIX matches the model.path alias ("glm-5-fp4")
         # in our GLM-5.1 sglang recipes.
@@ -248,8 +254,11 @@ elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
     elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/MiniMax-M3-MXFP8"
         export SRT_SLURM_MODEL_PREFIX="minimax-m3-mxfp8"
+    elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" ]]; then
+        export MODEL_PATH="/mnt/lustre01/models/MiniMax-M3-NVFP4"
+        export SRT_SLURM_MODEL_PREFIX="minimax-m3-nvfp4"
     else
-        echo "Unsupported model prefix/precision combination: $MODEL_PREFIX/$PRECISION. Supported combinations for dynamo-vllm: kimik2.5/fp4, kimik3/fp4, dsv4/fp4, minimaxm2.5/fp4, minimaxm2.5/fp8, minimaxm3/fp8"
+        echo "Unsupported model prefix/precision combination: $MODEL_PREFIX/$PRECISION. Supported combinations for dynamo-vllm: kimik2.5/fp4, kimik3/fp4, dsv4/fp4, minimaxm2.5/fp4, minimaxm2.5/fp8, minimaxm3/fp4, minimaxm3/fp8"
         exit 1
     fi
 else
@@ -260,7 +269,7 @@ NGINX_IMAGE="nginx:1.27.4"
 
 uses_watchtower_shared_fs() {
     case "$MODEL_PREFIX" in
-        minimaxm2.5|minimaxm3|kimik2.5|kimik3|qwen3.5) return 0 ;;
+        minimaxm2.5|minimaxm3|kimik2.5|kimik3|qwen3.5|glm5.2) return 0 ;;
     esac
     # dsv4 multinode runs only under dynamo-vllm on watchtower, which likewise
     # needs the srt-slurm workspace/outputs on a compute-visible shared FS
@@ -293,11 +302,12 @@ if [[ -n "$CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
     USES_DCGM_POWER=1
 fi
 
-# Note (wenyao): the producer pin descends from the fp8 srt-slurm lineage
-# (cargo/maturin bootstrap); a non-fp8 power recipe would silently clone the
-# wrong lineage, so fail fast instead.
-if [[ "$USES_DCGM_POWER" == "1" && "$PRECISION" != "fp8" ]]; then
-    echo "Error: dcgm-power lanes are only validated for PRECISION=fp8, got: $PRECISION" >&2
+# Note (wenyao): the producer pin follows the srt-slurm main lineage that the
+# dynamo-sglang lanes run on (fp8 validated end-to-end, fp4 recipes
+# parse-verified against the pin); other frameworks clone diverging refs
+# (aflowers branch, sa-submission), so fail fast for them instead.
+if [[ "$USES_DCGM_POWER" == "1" && "$FRAMEWORK" != "dynamo-sglang" ]]; then
+    echo "Error: dcgm-power lanes are only validated for FRAMEWORK=dynamo-sglang, got: $FRAMEWORK" >&2
     exit 1
 fi
 
@@ -388,8 +398,55 @@ if [ -d "$SRT_REPO_DIR" ]; then
     rm -rf "$SRT_REPO_DIR"
 fi
 
-# TODO(CJQ): make first class upon srt-slurm upstream refactor
-if [[ "$IS_AGENTIC" == "1" ]]; then
+# GLM-5.2 and MiniMax-M3 AgentX use v1.0.50 for complete logical-worker
+# metrics discovery across aggregate, DP-attention, and disaggregated topologies.
+if [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "glm5.2" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
+    git clone --branch v1.0.50 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    test "$(git rev-parse HEAD)" = "e4019633c9e2bc25f38c44b81edf52bb0504d937" || {
+        echo "Error: NVIDIA/srt-slurm v1.0.50 resolved to an unexpected commit" >&2
+        exit 1
+    }
+    mkdir -p recipes/sglang/glm5.2/gb200-fp4/agentic
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5.2/gb200-fp4/agentic" \
+        recipes/sglang/glm5.2/gb200-fp4/agentic
+elif [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "minimaxm3" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-vllm" ]]; then
+    git clone --branch v1.0.50 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    test "$(git rev-parse HEAD)" = "e4019633c9e2bc25f38c44b81edf52bb0504d937" || {
+        echo "Error: NVIDIA/srt-slurm v1.0.50 resolved to an unexpected commit" >&2
+        exit 1
+    }
+    mkdir -p recipes/vllm/minimax-m3/gb200-fp4/agentic
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3/gb200-fp4/agentic" \
+        recipes/vllm/minimax-m3/gb200-fp4/agentic
+# These AgentX submissions use released srt-slurm custom-benchmark metrics
+# discovery so AIPerf receives every logical worker endpoint.
+elif [[ "$IS_AGENTIC" == "1" && (( "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-sglang" ) || ( "$MODEL_PREFIX" == "dsv4" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-vllm" )) ]]; then
+    git clone --branch v1.0.45 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    test "$(git rev-parse HEAD)" = "9d8d92b20c350a5d42f0709f5a0b64e30eb37d33" || {
+        echo "Error: NVIDIA/srt-slurm v1.0.45 resolved to an unexpected commit" >&2
+        exit 1
+    }
+    if [[ "$MODEL_PREFIX" == "qwen3.5" ]]; then
+        mkdir -p recipes/sglang/qwen3.5/gb200-fp4/agentic
+        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb200-fp4/agentic" \
+            recipes/sglang/qwen3.5/gb200-fp4/agentic
+    else
+        mkdir -p recipes/vllm/deepseek-v4/agentic
+        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
+            recipes/vllm/deepseek-v4/agentic
+    fi
+# Kimi-K3 requires direct multi-node vLLM frontend support from srt-slurm.
+elif [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "kimik3" ]]; then
+    git clone --branch v1.0.53 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
+    cd "$SRT_REPO_DIR" || exit 1
+    mkdir -p recipes/vllm/kimi-k3/agentic || exit 1
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
+        recipes/vllm/kimi-k3/agentic || exit 1
+# TODO(CJQ): migrate the remaining Agentic model paths to released srt-slurm.
+elif [[ "$IS_AGENTIC" == "1" ]]; then
     # Agentic multi-node pins cquil11/srt-slurm-nv revisions that provide:
     #   - BenchmarkType.CUSTOM + benchmark.command + benchmark.env
     #     (the hook that hands off to benchmarks/multi_node/agentic_srt.sh)
@@ -400,21 +457,10 @@ if [[ "$IS_AGENTIC" == "1" ]]; then
     #     must reach the agentic_srt.sh srun)
     git clone https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
-    if [[ "$MODEL_PREFIX" == "kimik3" ]]; then
-        # Kimi K3 additionally needs vLLM TP groups within data parallel and
-        # every DP engine metrics endpoint exposed to AIPerf.
-        git checkout b1fb626fbdbfe3306dcb51cb181ab35861ec3b1c
-        mkdir -p recipes/vllm/kimi-k3/agentic
-        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
-            recipes/vllm/kimi-k3/agentic
-        cp "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/kimik3-dspark-config-compat.sh" \
-            configs/kimik3-dspark-config-compat.sh
-    else
-        git checkout de59739b172e507e15ebf145bfe305f606e82fbf
-        mkdir -p recipes/vllm/deepseek-v4/agentic
-        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
-            recipes/vllm/deepseek-v4/agentic
-    fi
+    git checkout de59739b172e507e15ebf145bfe305f606e82fbf
+    mkdir -p recipes/vllm/deepseek-v4/agentic
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
+        recipes/vllm/deepseek-v4/agentic
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
@@ -426,10 +472,25 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     mkdir -p recipes/vllm/deepseek-v4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
 elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
-    # Stay on NVIDIA/srt-slurm:main (default) — submission branch no
-    # longer needed; overlay our hand-rolled DSV4 sglang recipes onto it.
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
+    if [[ "$USES_DCGM_POWER" == "1" ]]; then
+        # Note (wenyao): on this cluster the DSV4-Pro checkpoint lives on the
+        # compute-node /mnt/numa1 NVMe (same staging the agentic path and the
+        # llm-d sweeps load from); the lustre alias target the shared dsv4
+        # block exports is not present here. Scoped to the power lane so the
+        # non-power lane keeps whatever the external-cluster staging expects.
+        export MODEL_PATH="/mnt/numa1/models/DeepSeek-V4-Pro"
+        git clone "$POWER_SRT_SLURM_URL" "$SRT_REPO_DIR"
+        cd "$SRT_REPO_DIR"
+        git checkout "$POWER_SRT_SLURM_PIN" || exit 1
+        # The power lane must run the exact pinned producer SHA, never a moving branch.
+        test "$(git rev-parse HEAD)" = "$POWER_SRT_SLURM_PIN" || { echo "Error: srt-slurm HEAD does not match POWER_SRT_SLURM_PIN=$POWER_SRT_SLURM_PIN" >&2; exit 1; }
+        git rev-parse HEAD > "$GITHUB_WORKSPACE/power-producer-sha.txt"
+    else
+        # Stay on NVIDIA/srt-slurm:main (default) — submission branch no
+        # longer needed; overlay our hand-rolled DSV4 sglang recipes onto it.
+        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+        cd "$SRT_REPO_DIR"
+    fi
     mkdir -p recipes/sglang/deepseek-v4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4" recipes/sglang/deepseek-v4
 elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.1" ]]; then
@@ -538,6 +599,13 @@ if [[ "$IS_AGENTIC" == "1" ]]; then
     DEFAULT_MOUNTS_BLOCK="default_mounts:
   ${AIPERF_MMAP_CACHE_HOST_PATH}: /aiperf_mmap_cache
   ${HF_HUB_CACHE_HOST_PATH}: /hf_hub_cache"
+    if uses_watchtower_shared_fs && [[ "$MODEL_PREFIX" == "glm5.2" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
+        DYNAMO_WHEELS_CACHE_HOST_PATH="${SHARED_BASE}/dynamo-wheels"
+        mkdir -p "$DYNAMO_WHEELS_CACHE_HOST_PATH"
+        chmod 777 "$DYNAMO_WHEELS_CACHE_HOST_PATH" 2>/dev/null || true
+        DEFAULT_MOUNTS_BLOCK+="
+  ${DYNAMO_WHEELS_CACHE_HOST_PATH}: /configs/dynamo-wheels"
+    fi
 fi
 
 echo "Creating srtslurm.yaml configuration..."
@@ -649,13 +717,12 @@ python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" "$CONFIG_PATH
 # srtctl itself still resolves through PATH (.venv/bin is on it).
 unset VIRTUAL_ENV
 
-# --no-preflight is only used on the agentic path, where the recipe resolves
-# model.path to /mnt/numa1 (compute-node-only NVMe) that the login-node
-# runner can't see. Fixed-seq-len recipes keep enforcement on.
-PREFLIGHT_ARGS=()
-if [[ "$IS_AGENTIC" == "1" ]]; then
-    PREFLIGHT_ARGS=(--no-preflight)
-fi
+# GB200 recipes resolve model.path through mounts the login-node runner
+# can't reliably stat (compute-node-local NVMe, and lustre paths that
+# aren't cross-mounted on the runner pod), so srtctl's login-node model-FS
+# preflight fails before sbatch. Skip it on both the agentic and
+# fixed-seq-len paths.
+PREFLIGHT_ARGS=(--no-preflight)
 
 SRTCTL_APPLY_ARGS=(
     "${PREFLIGHT_ARGS[@]}"

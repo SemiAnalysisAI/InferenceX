@@ -26,7 +26,7 @@ on:
                 type: string
                 default: ""
             require-power:
-                description: "Fail fixed-sequence jobs when GPU power is invalid"
+                description: "Fail benchmark jobs when GPU power is invalid"
                 required: false
                 type: boolean
                 default: false
@@ -106,7 +106,7 @@ on:
                 type: string
                 default: ""
             require-power:
-                description: "Fail fixed-sequence jobs when GPU power is invalid"
+                description: "Fail benchmark jobs when GPU power is invalid"
                 required: false
                 type: boolean
                 default: false
@@ -261,6 +261,7 @@ jobs:
                   MULTI_AGENTIC_EVAL=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if x.get('scenario-type') == 'agentic-coding' and 'prefill' in x and x.get('run-eval', False)]))" | score_matrix multi-agentic-eval)
                   SINGLE=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' not in x and x.get('scenario-type') != 'agentic-coding' and not x.get('eval-only', False)]))" | score_matrix single)
                   MULTI=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' in x and x.get('scenario-type') != 'agentic-coding' and not x.get('eval-only', False)]))" | score_matrix multi)
+                  EVALS=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' not in x and x.get('scenario-type') != 'agentic-coding' and x.get('run-eval', False)]))" | score_matrix eval)
                   MULTI_EVAL=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' in x and x.get('scenario-type') != 'agentic-coding' and x.get('run-eval', False)]))" | score_matrix multi-eval)
                   {
                     echo "agentic-config=$AGENTIC"
@@ -275,7 +276,7 @@ jobs:
 
     test-sweep-multi-node:
         needs: get-jobs
-        if: ${{ needs.get-jobs.outputs.multi-node-config != '[]' }}
+        if: ${{ needs.get-jobs.outputs.multi-node-config != '' && needs.get-jobs.outputs.multi-node-config != '[]' }}
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node /
         strategy:
@@ -288,6 +289,7 @@ jobs:
             osl: ${{ matrix.config.osl }}
             max-model-len: ${{ matrix.config.max-model-len }}
             runner: ${{ matrix.config.runner }}
+            node-count: ${{ matrix.config.node-count }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             image: ${{ matrix.config.image }}
@@ -298,6 +300,7 @@ jobs:
             router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
             kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
             exp-name: ${{ matrix.config.exp-name }}
+            recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             conc-list: ${{ toJson(matrix.config.conc) }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
@@ -328,7 +331,7 @@ jobs:
 
     test-sweep-multi-node-evals:
         needs: get-jobs
-        if: ${{ needs.get-jobs.outputs.multi-node-eval-config != '[]' }}
+        if: ${{ needs.get-jobs.outputs.multi-node-eval-config != '' && needs.get-jobs.outputs.multi-node-eval-config != '[]' }}
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node eval /
         strategy:
@@ -341,6 +344,7 @@ jobs:
             osl: ${{ matrix.config.osl }}
             max-model-len: ${{ matrix.config.max-model-len }}
             runner: ${{ matrix.config.runner }}
+            node-count: ${{ matrix.config.node-count }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             image: ${{ matrix.config.image }}
@@ -351,6 +355,7 @@ jobs:
             router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
             kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
             exp-name: ${{ matrix.config.exp-name }}
+            recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             conc-list: ${{ toJson(matrix.config.conc) }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
@@ -381,7 +386,7 @@ jobs:
 
     test-sweep-agentic:
         needs: get-jobs
-        if: ${{ needs.get-jobs.outputs.agentic-config != '[]' }}
+        if: ${{ needs.get-jobs.outputs.agentic-config != '' && needs.get-jobs.outputs.agentic-config != '[]' }}
         uses: ./.github/workflows/benchmark-tmpl.yml
         name: agentic /
         strategy:
@@ -391,6 +396,7 @@ jobs:
         secrets: inherit
         with:
             exp-name: ${{ matrix.config.exp-name }}
+            recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             runner: ${{ matrix.config.runner }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
@@ -420,12 +426,13 @@ jobs:
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ 'false' }}
             run-eval: false
+            require-power: ${{ inputs.require-power }}
             scenario-type: agentic-coding
             ref: ${{ inputs.ref }}
 
     test-sweep-agentic-evals:
         needs: get-jobs
-        if: ${{ needs.get-jobs.outputs.agentic-eval-config != '[]' }}
+        if: ${{ needs.get-jobs.outputs.agentic-eval-config != '' && needs.get-jobs.outputs.agentic-eval-config != '[]' }}
         uses: ./.github/workflows/benchmark-tmpl.yml
         name: agentic eval /
         strategy:
@@ -435,6 +442,7 @@ jobs:
         secrets: inherit
         with:
             exp-name: ${{ matrix.config.exp-name }}
+            recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             runner: ${{ matrix.config.runner }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
@@ -448,14 +456,14 @@ jobs:
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.conc }}
             kv-offloading: ${{ matrix.config.kv-offloading }}
-            kv-offload-backend: ${{ matrix.config.kv-offload-backend }}
+            kv-offload-backend: ${{ matrix.config['kv-offload-backend'].name }}
             total-cpu-dram-gb: ${{ matrix.config.total-cpu-dram-gb }}
             duration: ${{ inputs.agentx-fast && '1200' || (inputs.duration-override != '' && inputs.duration-override || matrix.config.duration) }}
             agentx-fast: ${{ inputs.agentx-fast }}
             isl: '0'
             osl: '0'
             max-model-len: '0'
-            spec-decoding: 'none'
+            spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ 'false' }}
             run-eval: true
             eval-only: true
@@ -466,7 +474,7 @@ jobs:
 
     test-sweep-multi-node-agentic:
         needs: get-jobs
-        if: ${{ needs.get-jobs.outputs.multi-node-agentic-config != '[]' }}
+        if: ${{ needs.get-jobs.outputs.multi-node-agentic-config != '' && needs.get-jobs.outputs.multi-node-agentic-config != '[]' }}
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node agentic /
         strategy:
@@ -476,10 +484,12 @@ jobs:
         secrets: inherit
         with:
             exp-name: ${{ matrix.config.exp-name }}
+            recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             isl: '0'
             osl: '0'
             max-model-len: '0'
             runner: ${{ matrix.config.runner }}
+            node-count: ${{ matrix.config.node-count }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             image: ${{ matrix.config.image }}
@@ -517,12 +527,14 @@ jobs:
             duration: ${{ inputs.agentx-fast && '1200' || (inputs.duration-override != '' && inputs.duration-override || matrix.config.duration) }}
             agentx-fast: ${{ inputs.agentx-fast }}
             run-eval: false
+            require-power: ${{ inputs.require-power }}
+            power-producer-sha: ${{ inputs.power-producer-sha }}
             scenario-type: agentic-coding
             ref: ${{ inputs.ref }}
 
     test-sweep-multi-node-agentic-evals:
         needs: get-jobs
-        if: ${{ needs.get-jobs.outputs.multi-node-agentic-eval-config != '[]' }}
+        if: ${{ needs.get-jobs.outputs.multi-node-agentic-eval-config != '' && needs.get-jobs.outputs.multi-node-agentic-eval-config != '[]' }}
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node agentic eval /
         strategy:
@@ -532,10 +544,12 @@ jobs:
         secrets: inherit
         with:
             exp-name: ${{ matrix.config.exp-name }}
+            recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             isl: '0'
             osl: '0'
             max-model-len: '0'
             runner: ${{ matrix.config.runner }}
+            node-count: ${{ matrix.config.node-count }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             image: ${{ matrix.config.image }}
@@ -581,7 +595,7 @@ jobs:
 
     test-sweep-single-node:
         needs: get-jobs
-        if: ${{ needs.get-jobs.outputs.single-node-config != '[]' }}
+        if: ${{ needs.get-jobs.outputs.single-node-config != '' && needs.get-jobs.outputs.single-node-config != '[]' }}
         uses: ./.github/workflows/benchmark-tmpl.yml
         name: single-node /
         strategy:
@@ -591,6 +605,7 @@ jobs:
         secrets: inherit
         with:
             exp-name: ${{ matrix.config.exp-name }}
+            recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             isl: ${{ matrix.config.isl }}
             osl: ${{ matrix.config.osl }}
             max-model-len: ${{ matrix.config.max-model-len }}
@@ -619,7 +634,7 @@ jobs:
 
     test-sweep-evals:
         needs: get-jobs
-        if: ${{ needs.get-jobs.outputs.eval-config != '[]' }}
+        if: ${{ needs.get-jobs.outputs.eval-config != '' && needs.get-jobs.outputs.eval-config != '[]' }}
         uses: ./.github/workflows/benchmark-tmpl.yml
         name: eval /
         strategy:
@@ -629,6 +644,7 @@ jobs:
         secrets: inherit
         with:
             exp-name: ${{ matrix.config.exp-name }}
+            recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             isl: ${{ matrix.config.isl }}
             osl: ${{ matrix.config.osl }}
             max-model-len: ${{ matrix.config.max-model-len }}

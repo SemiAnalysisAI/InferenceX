@@ -343,37 +343,36 @@ check_env_vars() {
     fi
 }
 
-# Wait for server to be ready by polling the health endpoint
-# All parameters are required
-# Parameters:
-#   --port: Server port
-#   --server-log: Path to server log file
-#   --server-pid: Server process ID (required)
-#   --sleep-interval: Sleep interval between health checks (optional, default: 5)
-wait_for_server_ready() {
+# Poll an HTTP endpoint while streaming the owning process log.
+# Required: --endpoint, --log, --pid. A zero timeout waits indefinitely.
+wait_for_ready() {
     set +x
-    local port=""
-    local server_log=""
-    local server_pid=""
+    local endpoint=""
+    local process_log=""
+    local process_pid=""
     local sleep_interval=5
+    local timeout=0
 
-    # Parse arguments
     while [[ $# -gt 0 ]]; do
         case $1 in
-            --port)
-                port="$2"
+            --endpoint)
+                endpoint="$2"
                 shift 2
                 ;;
-            --server-log)
-                server_log="$2"
+            --log)
+                process_log="$2"
                 shift 2
                 ;;
-            --server-pid)
-                server_pid="$2"
+            --pid)
+                process_pid="$2"
                 shift 2
                 ;;
             --sleep-interval)
                 sleep_interval="$2"
+                shift 2
+                ;;
+            --timeout)
+                timeout="$2"
                 shift 2
                 ;;
             *)
@@ -383,41 +382,112 @@ wait_for_server_ready() {
         esac
     done
 
-    # Validate required parameters
-    if [[ -z "$port" ]]; then
-        echo "Error: --port is required"
+    if [[ -z "$endpoint" ]]; then
+        echo "Error: --endpoint is required"
         return 1
     fi
-    if [[ -z "$server_log" ]]; then
-        echo "Error: --server-log is required"
+    if [[ -z "$process_log" ]]; then
+        echo "Error: --log is required"
         return 1
     fi
-    if [[ -z "$server_pid" ]]; then
-        echo "Error: --server-pid is required"
+    if [[ -z "$process_pid" ]]; then
+        echo "Error: --pid is required"
+        return 1
+    fi
+    if [[ ! "$sleep_interval" =~ ^[1-9][0-9]*$ ]]; then
+        echo "Error: --sleep-interval must be a positive integer"
+        return 1
+    fi
+    if [[ ! "$timeout" =~ ^[0-9]+$ ]]; then
+        echo "Error: --timeout must be a non-negative integer"
         return 1
     fi
 
-    # Wait for server log file to be created (container startup may delay this)
-    while [ ! -f "$server_log" ]; do
-        if ! kill -0 "$server_pid" 2>/dev/null; then
-            echo "Server died before creating log file. Exiting."
+    local deadline=0
+    if [[ "$timeout" -gt 0 ]]; then
+        deadline=$((SECONDS + timeout))
+    fi
+
+    while [[ ! -f "$process_log" ]]; do
+        if ! kill -0 "$process_pid" 2>/dev/null; then
+            echo "Process died before creating $process_log." >&2
+            exit 1
+        fi
+        if [[ "$deadline" -gt 0 && "$SECONDS" -ge "$deadline" ]]; then
+            echo "Timed out waiting for $endpoint." >&2
             exit 1
         fi
         sleep 1
     done
 
-    # Show logs until server is ready
-    tail -f -n +1 "$server_log" &
-    local TAIL_PID=$!
-    until curl --output /dev/null --silent --fail http://0.0.0.0:$port/health; do
-        if ! kill -0 "$server_pid" 2>/dev/null; then
-            echo "Server died before becoming healthy. Exiting."
-            kill $TAIL_PID
+    tail -f -n +1 "$process_log" &
+    local tail_pid=$!
+    until curl --output /dev/null --silent --fail "$endpoint"; do
+        if ! kill -0 "$process_pid" 2>/dev/null; then
+            echo "Process died before $endpoint became ready." >&2
+            kill "$tail_pid" 2>/dev/null || true
+            exit 1
+        fi
+        if [[ "$deadline" -gt 0 && "$SECONDS" -ge "$deadline" ]]; then
+            echo "Timed out waiting for $endpoint." >&2
+            kill "$tail_pid" 2>/dev/null || true
             exit 1
         fi
         sleep "$sleep_interval"
     done
-    kill $TAIL_PID
+    kill "$tail_pid" 2>/dev/null || true
+    wait "$tail_pid" 2>/dev/null || true
+}
+
+wait_for_server_ready() {
+    local port=""
+    local server_log=""
+    local server_pid=""
+    local sleep_interval=5
+
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --port) port="$2"; shift 2 ;;
+            --server-log) server_log="$2"; shift 2 ;;
+            --server-pid) server_pid="$2"; shift 2 ;;
+            --sleep-interval) sleep_interval="$2"; shift 2 ;;
+            *) echo "Unknown parameter: $1"; return 1 ;;
+        esac
+    done
+
+    if [[ -z "$port" || -z "$server_log" || -z "$server_pid" ]]; then
+        echo "Error: --port, --server-log, and --server-pid are required"
+        return 1
+    fi
+
+    wait_for_ready \
+        --endpoint "http://0.0.0.0:${port}/health" \
+        --log "$server_log" \
+        --pid "$server_pid" \
+        --sleep-interval "$sleep_interval"
+}
+
+# Persist an argv array in shell-replayable form.
+write_command() {
+    local output_file="$1"
+    shift
+    printf '%q ' "$@" | tee "$output_file"
+    printf '\n' | tee -a "$output_file"
+}
+
+append_command() {
+    local output_file="$1"
+    shift
+    printf '%q ' "$@" >> "$output_file"
+    printf '\n' >> "$output_file"
+}
+
+# Persist an argv array in shell-replayable form.
+write_command() {
+    local output_file="$1"
+    shift
+    printf '%q ' "$@" | tee "$output_file"
+    printf '\n' | tee -a "$output_file"
 }
 
 # Run benchmark serving with standardized parameters
@@ -1150,6 +1220,7 @@ _write_lm_eval_meta_json() {
   "framework": "${fw:-unknown}",
   "precision": "${prec:-unknown}",
   "spec_decoding": "${SPEC_DECODING:-}",
+  "recipe_fingerprint": "${RECIPE_FINGERPRINT:-}",
   "tp": ${TP:-1},
   "pp": ${PP_SIZE:-1},
   "dcp_size": ${DCP_SIZE:-1},
@@ -1925,11 +1996,21 @@ build_replay_cmd() {
     # rolling TTFT/ITL/throughput block and emit it every 30 seconds.
     export AIPERF_UI_REALTIME_METRICS_ENABLED=true
     REPLAY_CMD="$AIPERF_CLI profile --scenario inferencex-agentx-mvp"
-    REPLAY_CMD+=" --url http://localhost:$PORT"
+    REPLAY_CMD+=" --url ${AIPERF_SERVER_URL:-http://localhost:$PORT}"
     REPLAY_CMD+=" --endpoint /v1/chat/completions"
     REPLAY_CMD+=" --endpoint-type chat"
     REPLAY_CMD+=" --streaming"
-    REPLAY_CMD+=" --model $MODEL"
+    # SERVED_MODEL_NAME overrides $MODEL when the frontend registers the
+    # model under a different name than the recipe's model.path alias (e.g.
+    # dynamo-trt srt-slurm recipes serve "DeepSeek-V4-Pro" while $MODEL is
+    # the HF id "deepseek-ai/DeepSeek-V4-Pro"). Mismatches 404 at warmup.
+    REPLAY_CMD+=" --model ${SERVED_MODEL_NAME:-$MODEL}"
+    # aiperf's dataset manager resolves the tokenizer from --model by
+    # default, but a SERVED_MODEL_NAME override (above) is a wire name, not
+    # necessarily a valid HF repo id (e.g. "Qwen3.5-397B-A17B-NVFP4-V2" vs
+    # the real "nvidia/Qwen3.5-397B-A17B-NVFP4-V2"), which 404s tokenizer
+    # loading. Always pass the real HF id explicitly.
+    REPLAY_CMD+=" --tokenizer $MODEL"
     REPLAY_CMD+=" --concurrency $CONC"
     REPLAY_CMD+=" --benchmark-duration $duration"
     REPLAY_CMD+=" --stats-interval 30"
@@ -1968,6 +2049,9 @@ build_replay_cmd() {
     # CPU on minimax-m2.5 at high concurrency. Lossless for vLLM (server
     # usage is authoritative).
     REPLAY_CMD+=" --use-server-token-count"
+    if [ -n "${AIPERF_EXTRA_INPUTS:-}" ]; then
+        REPLAY_CMD+=" --extra-inputs $AIPERF_EXTRA_INPUTS"
+    fi
     # Dynamo's KV router needs an explicit conversation session binding to
     # keep later turns on the prefill worker that owns their prefix blocks.
     # X-Correlation-ID is useful tracing metadata but does not establish that
@@ -2100,10 +2184,79 @@ validate_required_agentic_server_metrics() {
     echo "Validated required AIPerf server metrics prefix '$required_prefix'"
 }
 
-run_agentic_replay_and_write_outputs() {
+run_agentic_replay_and_write_outputs() (
     local result_dir="$1"
     local replay_rc
     local validation_rc
+    local power_rc=0
+    local agentx_power_enabled=0
+    local agentx_multinode_power_enabled=0
+    local agentx_monitor_stopped=1
+
+    case "${ENABLE_AGENTX_POWER:-1}" in
+        1|true|TRUE|yes|YES)
+            if [ "${IS_MULTINODE:-false}" = "true" ]; then
+                if [ -n "${SRT_MEASUREMENT_WINDOW_DIR:-}" ]; then
+                    agentx_multinode_power_enabled=1
+                fi
+            else
+                agentx_power_enabled=1
+            fi
+            ;;
+    esac
+
+    _stop_agentx_power_monitor() {
+        if [ "$agentx_monitor_stopped" = "0" ]; then
+            agentx_monitor_stopped=1
+            stop_gpu_monitor
+        fi
+    }
+
+    _write_agentx_multinode_window() {
+        local state="$1"
+        local -a power_args
+        power_args=(
+            --result-dir "$result_dir"
+            --concurrency "${CONC:?CONC must be set for multinode AgentX power}"
+            --write-multinode-window "$state"
+        )
+        case "${REQUIRE_POWER:-0}" in
+            1|true|TRUE|yes|YES) power_args+=(--require-power) ;;
+        esac
+        (
+            cd "$INFMAX_CONTAINER_WORKSPACE"
+            "$AIPERF_PYTHON" -m utils.agentic.aggregation.power_adapter "${power_args[@]}"
+        )
+    }
+
+    if [ "$agentx_power_enabled" = "1" ] || [ "$agentx_multinode_power_enabled" = "1" ]; then
+        # AIPerf currently exports naive local datetimes while SMI emits the
+        # same host wall clock. Capture the launch-time offset so the adapter
+        # can attach it explicitly before normalizing the profiling window.
+        date +%z > "$result_dir/agentic_power_timezone_offset.txt"
+    fi
+
+    if [ "$agentx_multinode_power_enabled" = "1" ]; then
+        set +e
+        _write_agentx_multinode_window running
+        power_rc=$?
+        set -e
+        if [ "$power_rc" -ne 0 ]; then
+            echo "ERROR: failed to publish the AgentX formal running power window" >&2
+            return "$power_rc"
+        fi
+    fi
+
+    if [ "$agentx_power_enabled" = "1" ]; then
+        start_gpu_monitor --output "$result_dir/gpu_metrics.csv"
+        agentx_monitor_stopped=0
+        # This function runs in a subshell, so these handlers cannot replace
+        # launcher-owned traps. The stopped flag keeps explicit and signal/EXIT
+        # cleanup idempotent.
+        trap '_stop_agentx_power_monitor' EXIT
+        trap '_stop_agentx_power_monitor; exit 130' INT
+        trap '_stop_agentx_power_monitor; exit 143' TERM
+    fi
 
     echo "$REPLAY_CMD" > "$result_dir/benchmark_command.txt"
 
@@ -2114,7 +2267,40 @@ run_agentic_replay_and_write_outputs() {
     set +x
     set -e
 
+    if [ "$agentx_power_enabled" = "1" ]; then
+        _stop_agentx_power_monitor
+        trap - EXIT INT TERM
+    fi
+
     write_agentic_result_json "$result_dir"
+
+    if [ "$agentx_multinode_power_enabled" = "1" ] && [ "$replay_rc" -eq 0 ]; then
+        set +e
+        _write_agentx_multinode_window completed
+        power_rc=$?
+        set -e
+    fi
+
+    if [ "$agentx_power_enabled" = "1" ]; then
+        local expected_num_gpus
+        local -a power_args
+        expected_num_gpus=$((${TP:-1} * ${PP_SIZE:-1} * ${PCP_SIZE:-1}))
+        power_args=(
+            --result-dir "$result_dir"
+            --agg-result "${AGENTIC_OUTPUT_DIR:-$INFMAX_CONTAINER_WORKSPACE}/$RESULT_FILENAME.json"
+            --expected-num-gpus "$expected_num_gpus"
+        )
+        case "${REQUIRE_POWER:-0}" in
+            1|true|TRUE|yes|YES) power_args+=(--require-power) ;;
+        esac
+        set +e
+        (
+            cd "$INFMAX_CONTAINER_WORKSPACE"
+            "$AIPERF_PYTHON" -m utils.agentic.aggregation.power_adapter "${power_args[@]}"
+        )
+        power_rc=$?
+        set -e
+    fi
 
     "$AIPERF_PYTHON" "$AGENTIC_DIR/scripts/analyze_benchmark_distributions.py" \
         "$result_dir/aiperf_artifacts" -o "$result_dir" 2>&1 || true
@@ -2139,5 +2325,10 @@ run_agentic_replay_and_write_outputs() {
         return "$validation_rc"
     fi
 
+    if [ "$power_rc" -ne 0 ]; then
+        echo "ERROR: AgentX power validation failed after writing audit artifacts" >&2
+        return "$power_rc"
+    fi
+
     validate_required_agentic_server_metrics "$result_dir"
-}
+)
