@@ -47,9 +47,17 @@ class KVMatrix(unittest.TestCase):
                 self.assertEqual({c["ops"] for c in shard["cases"]}, {"push"})
                 self.assertEqual({c["kv_device"] for c in shard["cases"]}, {"rdma{gpu}"})
                 self.assertTrue(shard["image_ref"].startswith("rocm/atom-dev:"))
+            elif shard["sku"] == "b300" and shard["backend"] == "mooncake":
+                # b300 pods expose two RDMA rails that are not cross-routable;
+                # the image's engine draws the peer NIC per request, so every
+                # cross-rail draw pays a 1s handshake timeout. Pin one rail.
+                self.assertEqual({c["ops"] for c in shard["cases"]}, {"pull push"})
+                self.assertEqual({c["kv_device"] for c in shard["cases"]}, {"mlx5_0"})
+                self.assertEqual(shard["image_ref"], "")
             else:
                 self.assertEqual({c["ops"] for c in shard["cases"]}, {"pull push"})
                 self.assertEqual(shard["image_ref"], "")
+                self.assertEqual({c["kv_device"] for c in shard["cases"]}, {""})
             for case in shard["cases"]:
                 self.assertEqual(case["suite"], "kv-transfer")
                 self.assertEqual(case["ep"], 2)

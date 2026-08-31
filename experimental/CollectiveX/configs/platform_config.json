@@ -189,9 +189,12 @@
         "nixl": [
           "rdma"
         ],
-        "mooncake": [
-          "rdma"
-        ]
+        "mooncake": {
+          "fabrics": [
+            "rdma"
+          ],
+          "device": "mlx5_0"
+        }
       },
       "fabric": {
         "nic": "ConnectX-8 2x400GbE",
