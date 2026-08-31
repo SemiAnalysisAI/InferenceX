@@ -22,6 +22,7 @@ import argparse
 import datetime as _dt
 import json
 import os
+import socket
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -422,6 +423,8 @@ def main() -> int:
     gathered: list = [None, None]
     dist.all_gather_object(gathered, rows if rank == 1 else None)
     rows = gathered[1] or []
+    hosts: list = [None, None]
+    dist.all_gather_object(hosts, socket.gethostname())
     all_ok = bool(rows) and all(r["verify"]["passed"] for r in rows)
 
     if rank == 0:
@@ -460,10 +463,12 @@ def main() -> int:
                 "fabric": args.fabric,
                 "library_version": getattr(backend, "library_version", None),
                 "maturity": getattr(backend, "maturity", "candidate"),
+                "nic_filter": getattr(backend, "nic_filter", None),
             },
             "topology": {
                 "device_product": torch.cuda.get_device_name(device),
                 "gpus_per_node": args.gpus_per_node,
+                "hosts": hosts,
                 "nodes": 2,
                 "ranks_per_node": 1,
                 "scale_up_domain": args.scale_up_domain,

@@ -53,6 +53,26 @@ def _import_engine():
     return TransferEngine
 
 
+def _engine_version():
+    """The engine build actually imported, not the pin prepare_backend.sh
+    attempted: image-provided builds (b300's pre-0.3.12 lineage, AMD's
+    atom-dev tree) register under varying dist names or none at all, and
+    a null here is what let an image wheel masquerade as the pinned one."""
+    import importlib.metadata as md
+
+    for dist in ("mooncake-transfer-engine", "mooncake"):
+        try:
+            return md.version(dist)
+        except Exception:
+            pass
+    try:
+        import mooncake
+
+        return getattr(mooncake, "__version__", None)
+    except Exception:
+        return None
+
+
 def _physical_gpu_index() -> int:
     """The physical GPU index behind this rank's visible device 0: GPU-paired
     NIC selection (rdma{gpu}) needs the host-level index, which the Slurm
@@ -72,12 +92,7 @@ class MooncakeBackend(KVBackend):
         super().__init__(args, role, device)
         TransferEngine = _import_engine()
 
-        try:
-            import importlib.metadata as md
-
-            self.library_version = md.version("mooncake-transfer-engine")
-        except Exception:
-            self.library_version = None
+        self.library_version = _engine_version()
         # Same-fabric GB pairs: the NVLink-IPC transport claims cross-node
         # segments inside one NVLink domain and then fails the address import
         # (nvlink_transport "Requested address not found", first kv CI run on
@@ -95,6 +110,7 @@ class MooncakeBackend(KVBackend):
         local = f"{self._ip}:{args.kv_mc_port + (0 if role == 'target' else 1)}"
         nic_filter = (getattr(args, "kv_device", "") or "").replace(
             "{gpu}", str(_physical_gpu_index()))
+        self.nic_filter = nic_filter or None
         rc = self._engine.initialize(local, "P2PHANDSHAKE", "rdma", nic_filter)
         if rc != 0:
             raise RuntimeError(f"mooncake initialize failed rc={rc} "

@@ -171,7 +171,9 @@ and `mori-io` (AMD's native engine) where the registry's `kv_backends` map
 enables them; no entry, no legs, mirroring `ll_backends`. A backend entry may
 restrict ops, pin an image, or set a NIC filter (mooncake on mi355x is
 push-only from AMD's atom-dev image over the GPU-paired Pollara NIC; upstream
-ionic RDMA READ is broken). Fabrics: `rdma`
+ionic RDMA READ is broken; b300 mooncake is pinned to one rail because the
+image's engine draws peer NICs blindly and cross-rail draws stall ~1 s — a
+one-rail row, at half the two-rail nixl ceiling). Fabrics: `rdma`
 (torch pools) and, on GB racks, `mnnvl` (cuMem FABRIC pools; see the
 methodology for the bulk-vs-paged lane inversion that row exists to publish).
 

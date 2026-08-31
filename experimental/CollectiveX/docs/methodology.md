@@ -523,7 +523,14 @@ GPU-paired Pollara NIC, while upstream ionic RDMA READ completes with retry-exce
 failed READ poisons the engine, which is also why ATOM's production connector is write-only),
 `image_ref` when the build ships only inside a specific image, and `device` for engine NIC
 filters (`{gpu}` expands to the physical GPU index; registering GPU memory on a non-paired
-NIC fails and cross-rail pairs are unroutable). The summary's `op` column names the measured
+NIC fails and cross-rail pairs are unroutable). On b300, mooncake pins `mlx5_0`: the pods
+expose two rails whose cross pairs do not route, and the image-provided pre-0.3.12 engine
+draws the peer NIC per request with no view of endpoint health, so every cross-rail draw
+pays the worker pool's ~1 s inactive-endpoint hold before the per-slice retry walks to the
+routable rail (the hold at `worker_pool.cpp` is the stall quantum — the handshake socket
+timeout is 60 s and never fires). The published b300 mooncake row is therefore a one-rail
+measurement whose ~48 GB/s ceiling sits at half the unpinned nixl plateau; the row's
+`implementation.nic_filter` records the pin. The summary's `op` column names the measured
 direction.
 
 Fabrics are a case dimension. `rdma` runs on torch (cudaMalloc) pools. `mnnvl` allocates the
