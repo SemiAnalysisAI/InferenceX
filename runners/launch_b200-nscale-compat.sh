@@ -20,12 +20,15 @@ if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
 elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH="/scratch/models/DeepSeek-R1-0528"
     export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
+elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" && "$MODEL" == *-0813 ]]; then
+    export MODEL_PATH="${MODEL_PATH:-/scratch/models/DeepSeek-V4-Pro-0813}"
+    export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
 elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
     SELECTED_MODEL_PATH=""
     if [[ -n "${MODEL_PATH:-}" && -d "${MODEL_PATH}" ]]; then
         SELECTED_MODEL_PATH="$MODEL_PATH"
     else
-        for candidate in /scratch/models/DeepSeek-V4-Pro /scratch/models/DeepSeek-V4-Pro-NVFP4 /scratch/models/DeepSeek-V4-Pro-0813; do
+        for candidate in /scratch/models/DeepSeek-V4-Pro /scratch/models/DeepSeek-V4-Pro-NVFP4; do
             if [[ -d "$candidate" ]]; then
                 SELECTED_MODEL_PATH="$candidate"
                 break
@@ -153,6 +156,8 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
             if [[ "$registry" == "registry-1.docker.io" && "$repository" != */* ]]; then
                 repository="library/$repository"
             fi
+            # Strip any :tag from repository before appending the digest.
+            repository="${repository%%:*}"
             printf 'docker://%s#%s:%s\n' "$registry" "$repository" "$digest"
         }
 
@@ -186,20 +191,6 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         export LLMD_CONTAINER_ENGINE=pyxis
         export LLMD_SQUASH_FILE
 
-        # B200-only EPP/pd-sidecar binary pin (v0.10.0, needed for the
-        # agentX-ported disagg-profile-handler `deciders:` EPP shape). Points
-        # at a dedicated path so it never collides with GB200's shared
-        # binaries.env / v0.9.0 path - see
-        # benchmarks/llm-d/binaries-b200-v0.10.0.env for the pins and
-        # benchmarks/llm-d/binaries.env for the general mechanism. NOTE: this
-        # path must be populated once (out of band, on a host with docker +
-        # registry access and the /home/sa-shared mount) via:
-        #   BINARIES_ENV_FILE=binaries-b200-v0.10.0.env \
-        #     benchmarks/llm-d/extract-binaries.sh
-        # before this recipe can actually run; job.slurm's pyxis mount loop is
-        # a no-op (falls back to the image's baked-in v0.9.0) until then.
-        export LLMD_BIN_DIR="${LLMD_BIN_DIR:-/home/sa-shared/llm-d-bins-v0.10.0}"
-
         export DOCKER_IMAGE_NAME=$IMAGE
         export BENCHMARK_LOGS_DIR="$GITHUB_WORKSPACE/benchmark_logs"
         mkdir -p "$BENCHMARK_LOGS_DIR"
@@ -210,6 +201,11 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         # engine does both prefill and decode, DECODE_NODES=0).
         if [[ "${DISAGG:-true}" == "true" ]]; then
             SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_b200_llmd-vllm-disagg.sh"
+            # EPP/pd-sidecar binaries needed for the disagg-profile-handler `deciders:`
+            # shape. Populate once via:
+            #   BINARIES_ENV_FILE=binaries-b200-v0.10.0.env benchmarks/llm-d/extract-binaries.sh
+            # job.slurm falls back to the image-baked v0.9.0 until this path exists.
+            export LLMD_BIN_DIR="${LLMD_BIN_DIR:-/home/sa-shared/llm-d-bins-v0.10.0}"
         else
             SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_b200_llmd-vllm-agg.sh"
         fi
@@ -219,6 +215,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
             exit 1
         fi
 
+        export SLURM_PARTITION SLURM_ACCOUNT
         JOB_ID=$(bash "$BENCH_SCRIPT")
         if [[ -z "$JOB_ID" ]]; then
             echo "Error: failed to submit llm-d job" >&2

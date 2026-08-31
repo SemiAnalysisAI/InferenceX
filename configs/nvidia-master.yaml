@@ -4502,22 +4502,14 @@ dsv4-fp4-gb200-llmd-vllm:
           - "DECODE_NODES=2"
           - "GPUS_PER_NODE=4"
 
-# DeepSeek-V4-Pro FP4 B200 llmd-vllm, agentX-flavored: EPP scheduling config +
-# per-role vLLM tuning ported from the agentX (llm-manifesto/agentx-mvp) K8s
-# deployment (see benchmarks/multi_node/llm-d-recipes/dsv4-fp4-b200-agentx-
-# 1p1d-dep8-dep8.yaml for the exact port/adaptation notes), rather than
-# InferenceX-native tuning like dsv4-fp4-gb200-llmd-vllm above. Requires the
-# B200-only EPP/pd-sidecar v0.10.0 binary override wired in
-# runners/launch_b200-dgxc-slurm.sh.
-#
-# B200 = 8 GPUs/node, so each DEP8 role fits on ONE node (GB200's 4 GPUs/node
-# needs 2 nodes per role for the same DEP8 shape) - see the recipe file for
-# the full node-math writeup.
+# DeepSeek-V4-Pro-0813 (DSpark) FP4 B200, P/D disagg via llmd-vllm.
+# Always uses Mooncake; DSpark speculative decoding. Requires EPP v0.10.0
+# (LLMD_BIN_DIR override in runners/launch_b200-nscale-compat.sh).
 dsv4-fp4-b200-llmd-vllm-agentx:
   image: quay.io/rh-ee-imarkov/llm-d-nokube-vllm:dspark-0814-nightly
   model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
-  runner: b200-multinode
+  runner: cluster:b200-nscale
   precision: fp4
   framework: llmd-vllm
   router: { name: llm-d-router, version: "0.10.0" }
@@ -4563,7 +4555,7 @@ dsv4-fp4-b200-llmd-vllm-agentx-agg:
   image: quay.io/rh-ee-imarkov/llm-d-nokube-vllm:dspark-0814-nightly
   model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
-  runner: b200-multinode
+  runner: cluster:b200-nscale
   precision: fp4
   framework: llmd-vllm
   router: { name: llm-d-router, version: "0.9.0" }
@@ -4577,63 +4569,45 @@ dsv4-fp4-b200-llmd-vllm-agentx-agg:
       # Aggregated TP8 (1 node / 8 GPUs; pure tensor-parallel, no EP).
       - spec-decoding: "none"
         conc-list: [1, 2, 4, 8, 12]
-        prefill:
+        num-nodes: 1
+        worker:
           num-worker: 1
           tp: 8
           ep: 1
           dp-attn: false
           additional-settings:
           - "PREFILL_NODES=1"
+          - "DECODE_NODES=0"
           - "GPUS_PER_NODE=8"
           - "CONFIG_FILE=agentic/agg-gb200-tp8-dspark-agentic.yaml"
-        # The aggregate worker also performs decode; keep the decode worker
-        # count at zero so result aggregation counts eight GPUs only once
-        # (matches dsv4-fp4-gb200-dynamo-vllm-agentic-mtp2-agg's convention).
-        decode:
-          num-worker: 0
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=0"
       # Aggregated DEP8 (1 node / 8 GPUs; DP=8 + EP), no Mooncake.
       - spec-decoding: "none"
         conc-list: [12, 16, 32]
-        prefill:
+        num-nodes: 1
+        worker:
           num-worker: 1
           tp: 1
           ep: 8
           dp-attn: true
           additional-settings:
           - "PREFILL_NODES=1"
+          - "DECODE_NODES=0"
           - "GPUS_PER_NODE=8"
           - "CONFIG_FILE=agentic/agg-gb200-dep8-dspark-agentic.yaml"
-        decode:
-          num-worker: 0
-          tp: 1
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=0"
       # Aggregated DEP8 with Mooncake prefix-cache KV store.
       - spec-decoding: "none"
         conc-list: [52, 72]
-        prefill:
+        num-nodes: 1
+        worker:
           num-worker: 1
           tp: 1
           ep: 8
           dp-attn: true
           additional-settings:
           - "PREFILL_NODES=1"
+          - "DECODE_NODES=0"
           - "GPUS_PER_NODE=8"
           - "CONFIG_FILE=agentic/agg-gb200-dep8-dspark-mooncake-agentic.yaml"
-        decode:
-          num-worker: 0
-          tp: 1
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=0"
 
 # MTP2 variant of dsv4-fp4-gb200-dynamo-vllm. Uses the vLLM 0.20.1 image
 # and hand-picked 8k/1k Pareto points mirrored from NVIDIA/srt-slurm.
