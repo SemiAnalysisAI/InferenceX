@@ -251,8 +251,8 @@ fi
 case "$CONC" in
     # No KV offload; the working set fits in HBM.
     1)
-        SYNTHETIC_ACCEPT_LEN=3.75
-        SPEC_NUM_TOKENS=6
+        SYNTHETIC_ACCEPT_LEN=3.84
+        SPEC_NUM_TOKENS=7
         GPU_MEM_UTIL=0.9
         MAX_NUM_BATCHED_TOKENS=16384
         ;;
@@ -262,10 +262,17 @@ case "$CONC" in
         GPU_MEM_UTIL=0.9
         MAX_NUM_BATCHED_TOKENS=8192
         ;;
+    2|4|8|10|12|14)
+        SYNTHETIC_ACCEPT_LEN=3.00
+        SPEC_NUM_TOKENS=3
+        GPU_MEM_UTIL=0.9
+        MAX_NUM_BATCHED_TOKENS=8192
+        ;;
     *)
-        SPEC_NUM_TOKENS=0
-        GPU_MEM_UTIL=0.85
-        MAX_NUM_BATCHED_TOKENS=4096
+        SYNTHETIC_ACCEPT_LEN=3.00
+        SPEC_NUM_TOKENS=3
+        GPU_MEM_UTIL=0.9
+        MAX_NUM_BATCHED_TOKENS=8192
         ;;
 esac
 
