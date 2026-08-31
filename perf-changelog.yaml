@@ -6689,5 +6689,5 @@
     - "Switch the DeepSeek-V4-Pro FP4 B200 Dynamo-SGLang STP recipes to NIXL KV transfer."
     - "Refresh the SGLang image and Dynamo source revision, and align runtime environment flags with the updated image."
     - "Use raw synthetic benchmark inputs across the ten disaggregated 8k/1k STP recipes."
-    - "Image: lmsysorg/sglang:nightly-dev-cu13-20260814-c4271c3f"
+    - "Image: lmsysorg/sglang:nightly-dev-cu13-20260821-f825d729"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2560

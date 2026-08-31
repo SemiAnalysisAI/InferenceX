@@ -4681,7 +4681,7 @@ dsv4-fp4-gb200-dynamo-vllm-mtp2-nosynthetic:
 
 # DSV4 B200 disaggregated Dynamo SGLang STP configuration.
 dsv4-fp4-b200-dynamo-sglang:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260814-c4271c3f
+  image: lmsysorg/sglang:nightly-dev-cu13-20260821-f825d729
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b200-nscale
