@@ -192,7 +192,11 @@ echo "graphs: dense ladder 1..$MAX_CUDAGRAPH_CAPTURE_SIZE (mns=$MAX_NUM_SEQS x $
 CUDAGRAPH_MODE=FULL_AND_PIECEWISE
 COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"$CUDAGRAPH_MODE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}")
 
-GPU_MEM_UTIL=0.92
+if [ "$CONC" -le 4 ]; then
+    GPU_MEM_UTIL=0.92
+else
+    GPU_MEM_UTIL=0.90
+fi
 
 VLLM_CMD=(
     vllm serve "$MODEL_PATH" --served-model-name "$MODEL"
