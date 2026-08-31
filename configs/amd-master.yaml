@@ -637,7 +637,7 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
     - dram-utilization: 0.3
       search-space:
       # - { tp: 8, ep: 1, dcp-size: 1, kv-offloading: none, conc-list: [1], spec-decoding: mtp }
-      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: {name : vllm-simple},  name: lmcache conc-list: [60], spec-decoding: mtp}
+      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: none, conc-list: [52], spec-decoding: mtp}
 
 # Kimi-K3 MXFP4 agentic-coding benchmark on MI355X via ATOM with DSpark
 # speculative decoding (2 draft tokens -> golden AL 2.51,
