@@ -4,7 +4,7 @@ argument-hint: [failed-run-or-job-url ...]
 ---
 
 Debug `pyxis: couldn't start container` failures on the MI300X runners
-(`mi300x-amds_*`, nodes `chi-mi300x-*`). The canonical signature in the job log:
+(`mi300x-amd_*`, nodes `chi-mi300x-*`). The canonical signature in the job log:
 
 ```
 error: pyxis:     enroot-nsenter: failed to create user namespace: Permission denied

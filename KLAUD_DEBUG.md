@@ -146,7 +146,7 @@ If a sweep job lands on any of these, it'll never start. Nothing can be done at 
 ### 5.3 `chi-mi300x-049` — `/nvme_home` disk-full
 **Symptom:** pyxis container extraction fails with `No space left on device` writing to `/nvme_home/gharunner/.local/share/enroot/pyxis_*/opt/rocm-*/...`. The `/nvme_home` partition is hosted under `/` on this node and has been chronically near-full.
 
-**Fix already landed:** `runners/launch_mi300x-amds.sh` now pins salloc to only known-good mi300x nodes (`chi-mi300x-[034-036,054,057-058]`). See PR #1462. `chi-mi300x-049` is held in `State=DOWN` by a watchdog on the controller (`/home/gharunner/_audit/drain_049_watchdog.sh`) that re-applies the drain every 10s if SLURM auto-clears it (which it does on dynamic-norm nodes).
+**Legacy fix:** PR #1462 pinned the retired fleet to known-good `chi-mi300x-*` nodes. The replacement fleet uses `runners/launch_mi300x-amd.sh` and relies on current Slurm availability instead of those obsolete hard-coded exclusions.
 
 ### 5.4 `chi-mi325x-pod1-017` — orphaned port-8888 process
 **Symptom:** sglang server bind fails with `[Errno 98] Address already in use` on port 8888. Held by an MLPerf accuracy run started outside SLURM.
@@ -218,7 +218,7 @@ between the PR sweep and merge therefore does not require another GPU sweep.
 
 - **`gh pr edit` silently aborts** on a Projects-classic deprecation GraphQL error. Title/body updates won't apply. Use `gh api -X PATCH "repos/<org>/<repo>/pulls/<N>" -f title="..." -F body=@file.md` instead.
 - The same issue affects adding labels. Use `gh api -X POST "repos/<org>/<repo>/issues/<N>/labels" -f "labels[]=<name>"`.
-- `gh pr view ... --jq .headRefName` output can have a trailing `\r`. Strip it: `gh pr view <N> --json headRefName --jq .headRefName | tr -d '\r\n'`. Otherwise shell concatenation produces `branchunners/launch_mi300x-amds.sh`-style corruption.
+- `gh pr view ... --jq .headRefName` output can have a trailing `\r`. Strip it: `gh pr view <N> --json headRefName --jq .headRefName | tr -d '\r\n'`. Otherwise shell concatenation produces `branchunners/launch_mi300x-amd.sh`-style corruption.
 - `gh pr list --json statusCheckRollup` **truncates** each PR's rollup. Never trust it for per-check filters. Re-query each PR individually with `gh pr view <N> --json statusCheckRollup`.
 - `gh` and the GitHub Actions API: `conclusion` is `""` (empty string, not `null`) for in-flight checks, so `jq`'s `// .status` fallback doesn't trigger. Use:
   ```jq

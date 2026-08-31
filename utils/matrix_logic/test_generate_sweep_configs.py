@@ -282,7 +282,7 @@ def sample_runner_config():
             "cluster:h200-dgxc": {"available-cpu-dram-mib": 1471356, "gpus-per-node": 8},
             "cluster:b200-nscale": {"available-cpu-dram-mib": 3774874, "gpus-per-node": 8},
             "cluster:b300-nv": {"available-cpu-dram-mib": 2964436, "gpus-per-node": 8},
-            "cluster:mi300x-amds": {"available-cpu-dram-mib": 2321924, "gpus-per-node": 8},
+            "cluster:mi300x-amd": {"available-cpu-dram-mib": 1500000, "gpus-per-node": 8},
             "cluster:mi355x-amds": {"available-cpu-dram-mib": 3095781, "gpus-per-node": 8},
             "cluster:gb200-nv": {"available-cpu-dram-mib": 860160, "gpus-per-node": 4},
         },

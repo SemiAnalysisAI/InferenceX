@@ -317,7 +317,7 @@ jumpbox 没有 sudo；需要使用 agent forwarding 连接到在 `/it-share` 上
 
 ## MI300X 集群调试：enroot/pyxis 用户命名空间故障
 
-`mi300x-amds_*` / `chi-mi300x-*` 上的典型特征：
+`mi300x-amd_*` / `chi-mi300x-*` 上的典型特征：
 
 ```text
 error: pyxis:     enroot-nsenter: failed to create user namespace: Permission denied

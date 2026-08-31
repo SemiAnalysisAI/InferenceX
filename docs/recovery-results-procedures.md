@@ -317,7 +317,7 @@ Canonical source: [MI355X root-owned file recovery](https://github.com/SemiAnaly
 
 ## MI300X cluster debugging: enroot/pyxis user-namespace failures
 
-Canonical signature on `mi300x-amds_*` / `chi-mi300x-*`:
+Canonical signature on `mi300x-amd_*` / `chi-mi300x-*`:
 
 ```text
 error: pyxis:     enroot-nsenter: failed to create user namespace: Permission denied
