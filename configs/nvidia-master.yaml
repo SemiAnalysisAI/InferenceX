@@ -948,7 +948,7 @@ dsv4-fp4-b200-vllm:
   image: vllm/vllm-openai:nightly-821717118fc26667dd474b9b0ab81d29259dfc5c
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
-  runner: cluster:b200-dgxc
+  runner: cluster:b200-nscale
   precision: fp4
   framework: vllm
   multinode: false
@@ -959,22 +959,6 @@ dsv4-fp4-b200-vllm:
       search-space:
       - { tp: 8, conc-start: 1, conc-end: 256 }
       - { tp: 8, ep: 8, conc-start: 1, conc-end: 256 }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 1024 }
-m:
-  image: vllm/vllm-openai:v0.26.0
-  model: deepseek-ai/DeepSeek-V4-Pro
-  model-prefix: dsv4
-  runner: cluster:b200-nscale
-  precision: fp4
-  framework: vllm
-  multinode: false
-  scenarios:
-    fixed-seq-len:
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 8, conc-start: 1, conc-end: 64 }
-      - { tp: 8, ep: 8, conc-start: 128, conc-end: 256 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 1024 }
 
 dsv4-fp4-b200-vllm-agentic-mtp:

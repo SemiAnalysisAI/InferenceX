@@ -6673,9 +6673,9 @@
   description:
     - "Bump image from lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260726 to lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260828"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2763
-
+  
 - config-keys:
     - dsv4-fp4-b200-vllm
   description:
-    - "B200 DSv4 FP4 vLLM: nightly image, new sweep (TP8, TEP8, DEP8), megamoe when ep>1, gmu 0.95, cap max-model-len 12288"
+    - "B200 DSv4 FP4 vLLM: use the nightly image, route to Nscale B200, pin the NVFP4 model path, enable megamoe for EP, set GPU memory utilization to 0.95, and cap max model length at 12288"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2534
