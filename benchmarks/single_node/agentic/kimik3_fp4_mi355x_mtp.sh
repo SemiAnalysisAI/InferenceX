@@ -254,15 +254,18 @@ case "$CONC" in
         SYNTHETIC_ACCEPT_LEN=3.75
         SPEC_NUM_TOKENS=6
         GPU_MEM_UTIL=0.9
+        MAX_NUM_BATCHED_TOKENS=16384
         ;;
     2|4|8|10|12)
         SYNTHETIC_ACCEPT_LEN=2.51
         SPEC_NUM_TOKENS=2
         GPU_MEM_UTIL=0.88
+        MAX_NUM_BATCHED_TOKENS=8192
         ;;
     *)
         SPEC_NUM_TOKENS=0
         GPU_MEM_UTIL=0.85
+        MAX_NUM_BATCHED_TOKENS=4096
         ;;
 esac
 
@@ -327,7 +330,7 @@ VLLM_CMD=(
     --max-model-len 1048576
     --enable-prefix-caching
     --kv-cache-dtype "fp8"
-    --max-num-batched-tokens 8192
+    --max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS"
     --attention-config '{"mla_prefill_backend":"ROCM_AITER_FA"}'
     "${ATTN_BE_ARGS[@]}"
     "${COMPILATION_CONFIG_ARGS[@]}"
