@@ -4684,7 +4684,7 @@ dsv4-fp4-b200-dynamo-sglang:
   image: lmsysorg/sglang:nightly-dev-cu13-20260821-f825d729
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
-  runner: b200-nscale
+  runner: cluster:b200-nscale
   precision: fp4
   framework: dynamo-sglang
   router: { name: dynamo-router, version: "86f84b9486905c2bfaa4b756c9fa39f04ecf5ebd" }
