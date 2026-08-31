@@ -160,14 +160,23 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         "lmcache==${LMCACHE_VERSION}" --find-links "$LMCACHE_ROCM_INDEX"
 
     # LMCache 0.5.5's transfer-channel layer eagerly imports the Mooncake
-    # backend (mooncake_te_impl.py), which is dynamically linked against
-    # libglog.so.0. The vLLM ROCm image does not ship glog, so the import
-    # sanity check below (and the LMCache server) would otherwise fail with
-    # "ImportError: libglog.so.0: cannot open shared object file". Provision
-    # glog from the distro before importing.
-    if ! ldconfig -p | grep -q 'libglog\.so\.0'; then
-        apt-get update && apt-get install -y libgoogle-glog0v5
-    fi
+    # backend (mooncake_te_impl.py -> `from mooncake.engine import
+    # TransferEngine`), whose native .so resolves all of its DT_NEEDED libs at
+    # import. The vLLM ROCm image ships none of them, so the import sanity
+    # check below (and the LMCache server) would otherwise fail with
+    # "ImportError: lib*.so: cannot open shared object file" (first libglog,
+    # then libjsoncpp, ...). Provision Mooncake's full runtime lib set from the
+    # distro before importing. apt-get install is idempotent, so run it
+    # whenever any of the libs is still missing rather than gating on one.
+    LMCACHE_NATIVE_LIBS=(libglog.so.0 libjsoncpp.so.25 libibverbs.so.1 librdmacm.so.1 libnuma.so.1)
+    for lib in "${LMCACHE_NATIVE_LIBS[@]}"; do
+        if ! ldconfig -p | grep -q "$lib"; then
+            apt-get update
+            apt-get install -y \
+                libgoogle-glog0v5 libjsoncpp25 libibverbs1 librdmacm1 libnuma1
+            break
+        fi
+    done
     python3 -c \
         "import cupy; import lmcache.integration.vllm.lmcache_mp_connector; import opentelemetry.exporter.prometheus" \
         >/dev/null
@@ -238,16 +247,24 @@ if [ "$EP_SIZE" -gt 1 ]; then
     EP_ARGS=(--enable-expert-parallel)
 fi
 
-# ---- Speculative ------------------------------------------------------------
-if [ "$CONC" = 1 ]; then
-    SYNTHETIC_ACCEPT_LEN=3.75
-    SPEC_NUM_TOKENS=6
-elif [ "$CONC" -le 10 ]; then
-SYNTHETIC_ACCEPT_LEN=2.51
-    SPEC_NUM_TOKENS=2
-else
-    SPEC_NUM_TOKENS=0
-fi
+# ---- Speculative / Util------------------------------------------------------
+case "$CONC" in
+    # No KV offload; the working set fits in HBM.
+    1)
+        SYNTHETIC_ACCEPT_LEN=3.75
+        SPEC_NUM_TOKENS=6
+        GPU_MEM_UTIL=0.9
+        ;;
+    2|4|8|10|12)
+        SYNTHETIC_ACCEPT_LEN=2.51
+        SPEC_NUM_TOKENS=2
+        GPU_MEM_UTIL=0.88
+        ;;
+    *)
+        SPEC_NUM_TOKENS=0
+        GPU_MEM_UTIL=0.85
+        ;;
+esac
 
 SPEC_ARGS=()
 if [ "$SPEC_NUM_TOKENS" -gt 0 ]; then
@@ -286,9 +303,6 @@ ATTN_BE_ARGS=()
 if [ "$DCP_SIZE" -gt 1 ]; then
     CP_ARGS+=(--decode-context-parallel-size "$DCP_SIZE" --dcp-comm-backend a2a)
     ATTN_BE_ARGS+=(--attention-backend TRITON_MLA)
-    GPU_MEM_UTIL=0.85
-else
-    GPU_MEM_UTIL=0.9
 fi
 export VLLM_USE_DIRECT_DCP_A2A=0
 export VLLM_USE_DIRECT_DCP_Q_GATHER=0
@@ -313,7 +327,7 @@ VLLM_CMD=(
     --max-model-len 1048576
     --enable-prefix-caching
     --kv-cache-dtype "fp8"
-    --max-num-batched-tokens 16384
+    --max-num-batched-tokens 8192
     --attention-config '{"mla_prefill_backend":"ROCM_AITER_FA"}'
     "${ATTN_BE_ARGS[@]}"
     "${COMPILATION_CONFIG_ARGS[@]}"
