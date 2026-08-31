@@ -6607,3 +6607,14 @@
     - "Raise dram-utilization from 0.50 to 0.60, extend the none-offload conc-list from [1, 4, 8] to [1, 4, 8, 10, 12], and set the lmcache arm conc-list to [4, 8, 10, 12]."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2787
 
+- config-keys:
+    - minimaxm3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump image from vllm/vllm-openai-rocm:v0.27.1 to vllm/vllm-openai-rocm:nightly-6d4562c59b97b4e35d459ff9389e71b6fe4995de. This pin is what re-enables the AITER shuffled KV cache layout for MiniMax-M3 sparse PA, which was broken by the KV cache layout standardization in https://github.com/vllm-project/vllm/pull/51718. The recipe's TP4 VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1 export is unchanged by this PR, so the restored layout behavior is attributable to the image pin rather than to the benchmark script, and the two must move together to reproduce these numbers."
+    - "Route dense-layer attention and EAGLE3 speculative decoding through ROCM_AITER_UNIFIED_ATTN instead of TRITON_ATTN, both in the server --attention-backend flag and in the speculative-config attention_backend for the throughput branch (synthetic acceptance) and the eval-only branch (real target verification)."
+    - "Drop the --hf-overrides that forced text_config use_index_cache true and index_topk_freq 4. The pinned nightly supplies the sparse-PA index-cache and top-k refresh behavior itself, so the override is redundant; because it rewrites the served model config, removing it is architecture-affecting rather than a measurement no-op."
+    - "Drop the TP4 LMCache DRAM KV-offloading sweep points at concurrency 32 and 40 (kv-offload-backend lmcache 0.5.3). The agentic-coding search space is now GPU-resident only, TP4 at concurrency 1 through 32 and TP2 at 1, 2, and 5, so this config no longer reports any DRAM-offload points."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2781
+  
