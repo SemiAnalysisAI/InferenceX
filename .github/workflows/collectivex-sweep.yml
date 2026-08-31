@@ -27,6 +27,10 @@ on:
         description: "Keep only shards in this comma-list of modes (normal, low-latency); low-latency is a decode-only EP8 addition; blank = all"
         type: string
         default: ''
+      refresh_image:
+        description: "Force a fresh container image import even when a staged squash exists — only needed when a tag moved upstream and its digest could not be resolved from the submit host"
+        type: boolean
+        default: false
       fp8_consume:
         description: "DIAGNOSTIC ONLY. 'dequant' puts the FP8 dequant back inside the chain, so staging is no longer hoisted; changes what is measured. Blank = native (the production model)."
         type: choice
@@ -114,15 +118,29 @@ jobs:
     runs-on: >-
       ${{ fromJSON(
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
-        format(
-          '["self-hosted",{0},{1},{2}]',
-          toJSON(matrix.sku),
-          toJSON(format(
-            'ci-job-{0}-{1}',
-            needs.setup.outputs.priority,
-            matrix.queue-token
-          )),
-          toJSON(format('ci-attempt-{0}', github.run_attempt))
+        (
+          vars.NODE_SLOT_SCHEDULER_ENABLED == 'true' &&
+          format(
+            '["self-hosted",{0},{1},{2},{3}]',
+            toJSON(matrix.sku),
+            toJSON(format('nodes:{0}', matrix.nodes)),
+            toJSON(format(
+              'ci-job-{0}-{1}',
+              needs.setup.outputs.priority,
+              matrix.queue-token
+            )),
+            toJSON(format('ci-attempt-{0}', github.run_attempt))
+          ) ||
+          format(
+            '["self-hosted",{0},{1},{2}]',
+            toJSON(matrix.sku),
+            toJSON(format(
+              'ci-job-{0}-{1}',
+              needs.setup.outputs.priority,
+              matrix.queue-token
+            )),
+            toJSON(format('ci-attempt-{0}', github.run_attempt))
+          )
         ) ||
         format('[{0}]', toJSON(matrix.sku))
       ) }}
@@ -143,6 +161,9 @@ jobs:
       # unrecognised value, and a blank input would set the variable to "" -- which is not
       # "unset", so os.environ.get's default never applies and every leg would die at import.
       CX_FP8_CONSUME: ${{ inputs.fp8_consume || 'native' }}
+      # The squash cache is content-keyed, so updates normally ride the digest;
+      # this is the manual override for a moved tag with an unresolvable digest.
+      COLLX_IMAGE_REFRESH: ${{ inputs.refresh_image && '1' || '0' }}
       # Consolidated shards run one bounded build-group in one Slurm allocation;
       # every production pool accepts 300 minutes. Allocations release as soon as
       # the shard finishes.

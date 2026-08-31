@@ -3,8 +3,7 @@ set -euo pipefail
 set -x
 
 # Agentic trace replay benchmark for Qwen3.5 FP8 on H100 using SGLang with MTP
-# speculative decoding -- the spec-decoding=mtp variant of
-# agentic/qwen3.5_fp8_h100.sh.
+# speculative decoding.
 #
 # H100 has 80 GB HBM3 (vs B300's 192 GB), so weights + KV fit tighter.
 # Mem-fraction-static lowered to 0.75 and chunked-prefill-size halved to

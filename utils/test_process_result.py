@@ -52,6 +52,7 @@ def base_env_vars():
         "DISAGG": "false",
         "MODEL_PREFIX": "dsr1",
         "IMAGE": "test-image",
+        "RECIPE_FINGERPRINT": "a" * 64,
     }
 
 
@@ -215,6 +216,7 @@ class TestProcessResultScript:
         assert output_data["isl"] == 1024
         assert output_data["osl"] == 1024
         assert output_data["disagg"] is False
+        assert output_data["recipe_fingerprint"] == "a" * 64
 
         # Verify single-node specific fields
         assert output_data["is_multinode"] is False
@@ -875,6 +877,7 @@ class TestPowerAggregationIntegration:
 
         assert result.returncode == 0, result.stderr
         agg = json.loads((tmp_path / "agg_benchmark_result.json").read_text())
+        assert agg["power_metric_schema_version"] == 2
         assert agg["power_valid"] == 1
         assert agg["total_gpu_energy_j"] == pytest.approx(40_000.0)
         validation = json.loads(
@@ -914,6 +917,7 @@ class TestPowerAggregationIntegration:
 
         assert result.returncode == expected_returncode
         agg = json.loads((tmp_path / "agg_benchmark_result.json").read_text())
+        assert agg["power_metric_schema_version"] == 2
         assert agg["power_valid"] == 0
         assert "power_invalid_reasons" not in agg
         validation = json.loads(
@@ -1221,6 +1225,7 @@ class TestMultinodePower:
 
         assert result.returncode == 0, f"Script failed: {result.stderr}"
         agg = json.loads((tmp_path / "agg_benchmark_result.json").read_text())
+        assert agg["power_metric_schema_version"] == 2
         assert agg["power_valid"] == 1
         assert agg["prefill_gpu_energy_j"] == 48000.0
         assert agg["decode_gpu_energy_j"] == 36000.0
@@ -1233,6 +1238,7 @@ class TestMultinodePower:
 
         assert result.returncode == 0, f"Script failed: {result.stderr}"
         agg = json.loads((tmp_path / "agg_benchmark_result.json").read_text())
+        assert agg["power_metric_schema_version"] == 2
         assert agg["power_valid"] == 0
         for key in WHOLE_METRIC_KEYS + ROLE_METRIC_KEYS:
             assert key not in agg
@@ -1356,3 +1362,7 @@ printf '%s' "$GPU_METRICS_CSV"
             "test-sweep-evals:", 1
         )[0]
         assert "require-power: ${{ inputs.require-power }}" in single_node_job
+        agentic_job = workflow.split("test-sweep-agentic:", 1)[1].split(
+            "test-sweep-agentic-evals:", 1
+        )[0]
+        assert "require-power: ${{ inputs.require-power }}" in agentic_job

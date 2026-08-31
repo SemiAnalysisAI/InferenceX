@@ -19,7 +19,7 @@ You are an automated merge-gate auditor for InferenceX.
 A CODEOWNER (`${SIGNOFF_AUTHOR}`) just posted the reviewer
 sign-off checklist (as a ${SIGNOFF_KIND}) that marks
 PR #${PR_NUMBER} as ready to merge. Your job is to
-INDEPENDENTLY verify the checks below (0-10). Do not trust the reviewer's checkmarks.
+INDEPENDENTLY verify the checks below (0-12). Do not trust the reviewer's checkmarks.
 Re-derive every conclusion from CODEOWNERS, CI runs, the PR diff, the master
 configs, and the linked recipe yourself. Be rigorous and specific. The checks encode
 the merge standard in `docs/PR_REVIEW_CHECKLIST.md`. Read it in the checked-out
@@ -359,8 +359,38 @@ Verify BOTH:
   unless the sign-off documents a sanctioned exception.
 - N/A if the PR has no agentic speculative-decoding changes (state that in one line).
 
+## Check 12 — Append-only changes only add new points to an unchanged curve
+APPLICABILITY: this check applies when any new `perf-changelog.yaml` entry contains
+`append-only: true`. If none does, report N/A.
+- Confirm every new changelog entry in the sweep is append-only; mixed regular and
+  append-only entries are not allowed.
+- Inspect the complete PR diff without using a file allowlist. Supporting code,
+  benchmark scripts, launchers, helpers, and other files may change. Their path alone
+  is never a reason to fail; determine whether each benchmark-affecting change is
+  behaviorally isolated to the appended points.
+- For every selected config, compare the generated matrix at the PR base and head.
+  Treat the complete base matrix as an immutable subset of the head matrix: every
+  existing point must remain present with the same image and complete recipe. The
+  head may add concurrency points or entirely new recipe variants, such as a new
+  tensor-parallelism value, inside the selected existing config/scenario. Every
+  addition must retain the target visual curve's one non-null image.
+- Trace the selected config and generated runtime values through every affected file
+  into the changed behavior. The behavior must be reachable only for the corresponding
+  newly appended points. PASS when the controlling condition is uniquely satisfied by
+  those points. FAIL an unguarded/shared setup change, a condition also satisfied by an
+  existing point, or any case where exclusivity cannot be proven from the diff.
+- FAIL if any existing point or recipe is rerun, removed, or modified. New configs and
+  scenarios are out of scope, but new generated recipe variants inside the selected
+  existing config/scenario are allowed. Other benchmark-affecting changes are permitted
+  only under the behavioral-isolation rule above.
+- Treat the repository's append-only matrix validation as supporting evidence, but
+  verify the diff independently and name the offending field/path when failing. Each
+  config revision is rendered with its own generator, validation code, and runner
+  metadata, but this does not mechanically prove that launcher or benchmark-script
+  changes are isolated at runtime.
+
 ## Verdict and output
-Decide PASS only if Checks 0-11 ALL pass. A check reported as `N/A` counts as a pass.
+Decide PASS only if Checks 0-12 ALL pass. A check reported as `N/A` counts as a pass.
 Keep the `N/A — <reason>` row so the reviewer sees it was considered. Post EXACTLY ONE summary comment on
 PR #${PR_NUMBER} using `gh pr comment`. Start the comment with
 the hidden marker so reruns are identifiable:
@@ -386,7 +416,7 @@ single terse line. Rules:
   restating the checklist, no hedging ("if X then maybe Y"). Make the call. Link the
   run/recipe instead of describing it.
 
-- If everything is to standard: post the verdict header + the twelve one-line rows
+- If everything is to standard: post the verdict header + the thirteen one-line rows
 - If anything is NOT to standard: the verdict header must be immediately followed by a
   line that @-mentions the sign-off author as `@${SIGNOFF_AUTHOR}`
   with the blocking summary. Then the per-check lines, each failing one led by its root

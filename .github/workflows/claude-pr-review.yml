@@ -134,6 +134,16 @@ jobs:
               - This is a 🔴 **BLOCKING** issue
               - Comment: "New `perf-changelog.yaml` entries must be appended to the END of the file. The file is read chronologically (oldest at top, newest at bottom), so inserting in the middle or prepending breaks the ordering. Please move the new entry(ies) to the bottom of the file."
 
+            ### Append-only Perf Changelog Safety:
+            When a new `perf-changelog.yaml` entry contains `append-only: true`, verify the complete PR diff before approving it:
+            - Do not use a file allowlist. Supporting code, benchmark scripts, launchers, helpers, and other files may change. Inspect the complete diff and judge whether each benchmark-affecting change is behaviorally isolated to the appended points.
+            - Every newly added changelog entry must contain `append-only: true`; append-only and regular entries may not be mixed.
+            - Treat the generated base matrix as an immutable subset of the generated head matrix. Every existing point must remain present with the same image and complete recipe. Additions may include new concurrency values or entirely new recipe variants (for example, a new tensor-parallelism value) inside the selected existing config/scenario, but they must retain the existing visual curve's single non-null image.
+            - Benchmark or launch logic may change only when every changed behavior is on a control-flow path uniquely gated to the corresponding newly appended points. Trace the selected config and generated runtime values through every affected file into the condition. Confirm the path cannot be reached by any existing point. Unguarded/shared setup changes, or a branch also used by an existing concurrency/config/scenario, are blocking.
+            - No existing point, recipe variant, config, or scenario may be removed or replaced. New configs and scenarios are out of scope for append-only mode; new generated variants inside the selected existing config/scenario are allowed.
+            - Eval modifiers (`evals-only`, `all-evals`, `eval-min-prefill-ep`) are not allowed.
+            If any condition fails, report a 🔴 **BLOCKING** issue. Never reject a change merely because of its file path; reject it when its benchmark effect is not exclusive to the appended points or the exclusivity cannot be proven from the diff.
+
             ## Terminology:
             - **STP (Single Token Prediction)**: Standard autoregressive decoding — one token per forward pass. No speculative decoding or MTP. Benchmarks labeled "STP only" use vanilla decoding.
             - **MTP (Multi-Token Prediction)**: Predicts multiple tokens per forward pass using speculative decoding (e.g., EAGLE, NEXTN).

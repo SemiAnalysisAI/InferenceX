@@ -106,7 +106,7 @@ benchmark:
   concurrencies: "12"
   req_rate: inf
   random_range_ratio: 0.8
-  use_chat_template: true
+  use_chat_template: false
   custom_tokenizer: "sa_bench_tokenizers.sglang_deepseek_v4.SGLangDeepseekV4Tokenizer"
 frontend:
   type: dynamo

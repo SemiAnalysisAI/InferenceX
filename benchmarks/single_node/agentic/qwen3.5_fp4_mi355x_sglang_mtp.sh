@@ -11,7 +11,8 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 export EVAL_FRAMEWORK="lm-eval"
 
 check_env_vars \
-    MODEL TP CONC EP_SIZE RESULT_DIR DURATION
+    MODEL TP CONC EP_SIZE KV_OFFLOADING \
+    TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
 
 SCHEDULER_RECV_INTERVAL=${SCHEDULER_RECV_INTERVAL:-30}
 
@@ -53,6 +54,22 @@ trap cleanup_agentic_services EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
+CACHE_ARGS=()
+if require_agentic_kv_offload_backend hicache; then
+    HICACHE_RATIO="${HICACHE_RATIO:-1.5}"
+    HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through}"
+    HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
+    HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first_direct}"
+    echo "HiCache CPU tier: ratio=$HICACHE_RATIO, write_policy=$HICACHE_WRITE_POLICY, io_backend=$HICACHE_IO_BACKEND, mem_layout=$HICACHE_MEM_LAYOUT, dram_budget=${TOTAL_CPU_DRAM_GB} GB, tp=$TP"
+    CACHE_ARGS=(
+        --enable-hierarchical-cache
+        --hicache-ratio "$HICACHE_RATIO"
+        --hicache-write-policy "$HICACHE_WRITE_POLICY"
+        --hicache-io-backend "$HICACHE_IO_BACKEND"
+        --hicache-mem-layout "$HICACHE_MEM_LAYOUT"
+    )
+fi
+
 PARALLEL_ARGS=(
     --tp "$TP"
     --dp 1
@@ -65,14 +82,15 @@ if [ "$TP" -ge 4 ]; then
 fi
 
 MAX_RUNNING_REQUESTS=$((2 * CONC))
-CUDA_GRAPH_MAX_BS="$CONC"
-[ "$CUDA_GRAPH_MAX_BS" -gt 64 ] && CUDA_GRAPH_MAX_BS=64
+CUDA_GRAPH_MAX_BS=$MAX_RUNNING_REQUESTS
+[ "$CUDA_GRAPH_MAX_BS" -gt 128 ] && CUDA_GRAPH_MAX_BS=128
 
 export PYTHONNOUSERSITE=1
 export SGLANG_USE_AITER=1
 export SGLANG_USE_AITER_UNIFIED_ATTN=1
 export AITER_FLYDSL_FORCE=1
 export SGLANG_MAMBA_SSM_DTYPE=bfloat16
+export ROCM_QUICK_REDUCE_QUANTIZATION=INT8
 export SGLANG_TIMEOUT_KEEP_ALIVE=1800
 
 if [ "${EVAL_ONLY:-false}" != "true" ]; then
@@ -94,10 +112,11 @@ SGLANG_CMD=(
     --model-loader-extra-config '{"enable_multithread_load": true}'
     --watchdog-timeout 1200
     --page-size 16
+    --kv-cache-dtype fp8_e4m3
     --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
-    --max-prefill-tokens 32768
-    --chunked-prefill-size 32768
+    --max-prefill-tokens 16384
+    --chunked-prefill-size 16384
     --scheduler-recv-interval "$SCHEDULER_RECV_INTERVAL"
     --stream-interval 50
     "${TOKENIZER_ARGS[@]}"
@@ -110,6 +129,7 @@ SGLANG_CMD=(
     --speculative-num-draft-tokens 4
     --enable-metrics
     --enable-cache-report
+    "${CACHE_ARGS[@]}"
 )
 
 printf '%q ' "${SGLANG_CMD[@]}" | tee "$RESULT_DIR/sglang_command.txt"

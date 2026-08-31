@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import statistics
 from collections.abc import Iterable
 from pathlib import Path
@@ -104,7 +105,11 @@ def extract_per_record_ints(records: list[dict[str, Any]], key: str) -> list[int
 
 
 def _ms_to_s(values_ms: Iterable[float]) -> list[float]:
-    return [value / 1000.0 for value in values_ms if value is not None and value > 0]
+    return [
+        value / 1000.0
+        for value in values_ms
+        if value is not None and math.isfinite(value) and value > 0
+    ]
 
 
 def _distribution(prefix: str, values: list[int]) -> dict[str, float]:
@@ -136,7 +141,7 @@ def _interactivity_stats(
     itl_prefix: str = "itl",
     intvty_prefix: str = "intvty",
 ) -> dict[str, float]:
-    """Derive slow-tail interactivity from the matching ITL statistic."""
+    """Derive slow-tail interactivity from the matching latency statistic."""
     out: dict[str, float] = {}
     for key in ("mean", "p50", "p75", "p90", "p95"):
         value = itl_stats.get(f"{key}_{itl_prefix}")
@@ -151,6 +156,34 @@ def _interactivity_stats(
     return out
 
 
+def _e2e_normalized_interactivity_stats(
+    records: list[dict[str, Any]],
+) -> dict[str, float]:
+    """Derive per-user output rate from each request's E2EL/OSL ratio."""
+    e2el_per_osl: list[float] = []
+    for record in records:
+        e2el_ms = to_float(_metric_value(record, "request_latency"))
+        osl = to_float(_metric_value(record, "output_sequence_length"))
+        if (
+            e2el_ms is None
+            or osl is None
+            or not math.isfinite(e2el_ms)
+            or not math.isfinite(osl)
+            or e2el_ms <= 0
+            or osl <= 0
+        ):
+            continue
+        e2el_per_osl.append(e2el_ms / 1000.0 / osl)
+
+    ratio_stats = stats_for("e2el_per_osl", e2el_per_osl)
+    return _interactivity_stats(
+        ratio_stats,
+        e2el_per_osl,
+        itl_prefix="e2el_per_osl",
+        intvty_prefix="e2e_norm_intvty",
+    )
+
+
 def compute_latency_stats(records: list[dict[str, Any]]) -> tuple[dict[str, Any], dict[str, Any]]:
     ttfts = _ms_to_s(extract_per_record_floats(records, "time_to_first_token"))
     e2els = _ms_to_s(extract_per_record_floats(records, "request_latency"))
@@ -163,6 +196,7 @@ def compute_latency_stats(records: list[dict[str, Any]]) -> tuple[dict[str, Any]
     itl_stats = stats_for("itl", itls)
     tpot_stats = stats_for("tpot", itls)
     intvty_stats = _interactivity_stats(itl_stats, itls)
+    e2e_norm_intvty_stats = _e2e_normalized_interactivity_stats(records)
     full_response_itl_stats = stats_for("full_response_itl", full_response_itls)
     full_response_intvty_stats = _interactivity_stats(
         full_response_itl_stats,
@@ -177,6 +211,7 @@ def compute_latency_stats(records: list[dict[str, Any]]) -> tuple[dict[str, Any]
     flat.update(itl_stats)
     flat.update(tpot_stats)
     flat.update(intvty_stats)
+    flat.update(e2e_norm_intvty_stats)
     flat.update(full_response_itl_stats)
     flat.update(full_response_intvty_stats)
 
@@ -186,6 +221,9 @@ def compute_latency_stats(records: list[dict[str, Any]]) -> tuple[dict[str, Any]
         "itl": _nest_stats("itl", itl_stats),
         "tpot": _nest_stats("tpot", tpot_stats),
         "intvty": _nest_stats("intvty", intvty_stats),
+        "e2e_norm_intvty": _nest_stats(
+            "e2e_norm_intvty", e2e_norm_intvty_stats
+        ),
         "full_response_itl": _nest_stats(
             "full_response_itl", full_response_itl_stats
         ),
