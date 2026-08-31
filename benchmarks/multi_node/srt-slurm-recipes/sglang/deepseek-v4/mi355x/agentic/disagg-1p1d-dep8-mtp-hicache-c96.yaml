@@ -48,11 +48,17 @@ backend:
     HF_HOME: "/hf_hub_cache"
     HF_HUB_CACHE: "/hf_hub_cache/hub"
     HUGGINGFACE_HUB_CACHE: "/hf_hub_cache/hub"
+    PYTHONDONTWRITEBYTECODE: "1"
     PYTHONUNBUFFERED: "1"
+    PYTHONPATH: "/sgl-workspace/aiter"
     # Validated DeepSeek V4 ROCm kernel routing. These settings keep FP4 MoE,
     # indexer, MLA, and fused-compress dispatch on the supported MI355X paths.
     TORCH_NCCL_BLOCKING_WAIT: "1"
     NCCL_BLOCKING_WAIT: "1"
+    NCCL_IB_HCA: "rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7"
+    GLOO_SOCKET_IFNAME: "eno0"
+    NCCL_SOCKET_IFNAME: "eno0"
+    AITER_LOG_LEVEL: "ERROR"
     HSA_NO_SCRATCH_RECLAIM: "0"
     GPU_MAX_HW_QUEUES: "5"
     SGLANG_AITER_MLA_PERSIST: "0"
@@ -88,13 +94,29 @@ backend:
     MORI_RDMA_TC: "104"
     MORI_IO_SQ_BACKOFF_TIMEOUT_US: "500000"
     MORI_IO_QP_MAX_SEND_WR: "32767"
+    MORI_IO_QP_MAX_CQE: "32768"
+    MORI_IO_QP_MAX_SGE: "2"
+    MORI_IO_TC_DISABLE: "0"
+    MORI_SHMEM_MODE: "ISOLATION"
+    MORI_EP_LAUNCH_CONFIG_MODE: "AUTO"
+    MORI_APP_LOG_LEVEL: "WARNING"
     SGLANG_MORI_COMBINE_DTYPE: "auto"
+    SGLANG_MORI_QP_PER_TRANSFER: "4"
+    SGLANG_MORI_NUM_WORKERS: "4"
+    MORI_MAX_DISPATCH_TOKENS_PREFILL: "8192"
+    MORI_MAX_DISPATCH_TOKENS_DECODE: "64"
     SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "16384"
-    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "1800"
-    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "1800"
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "3600"
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "3600"
+    SGLANG_HEALTH_CHECK_TIMEOUT: "600"
+    SGLANG_ENABLE_SPEC_V2: "1"
+    SGLANG_ENABLE_OVERLAP_PLAN_STREAM: "0"
+    SGLANG_LOG_MS: "true"
+    SGLANG_DISAGGREGATION_NUM_PRE_ALLOCATE_REQS: "32"
+    SGLANG_ROUTER_STDOUT_LOGS: "0"
   decode_environment:
     <<: *common_environment
-    SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "48"
+    SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "128"
     SGLANG_SIMULATE_ACC_LEN: "2.49"
     SGLANG_SIMULATE_ACC_METHOD: "match-expected"
     SGLANG_SIMULATE_ACC_TOKEN_MODE: "real-draft-token"
@@ -128,7 +150,6 @@ backend:
       enable-prefill-delayer: true
       context-length: 1048576
       enable-metrics: true
-      enable-cache-report: true
       mem-fraction-static: 0.85
       max-running-requests: 96
       chunked-prefill-size: 65536
@@ -184,4 +205,6 @@ benchmark:
     AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
     AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
     HF_HUB_CACHE: "/hf_hub_cache/hub"
+    TOKENIZERS_PARALLELISM: "false"
+    TRANSFORMERS_VERBOSITY: "error"
     WEKA_LOADER_OVERRIDE: "semianalysis_cc_traces_weka_062126"
