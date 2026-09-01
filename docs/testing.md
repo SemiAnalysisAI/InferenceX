@@ -12,6 +12,7 @@ Use the narrowest check that can falsify the change, then widen only when the ch
 
 - [Sources of truth](#sources-of-truth)
 - [Testing layers](#testing-layers)
+- [Test quality](#test-quality)
 - [Local checks](#local-checks)
 - [Smoke, sweep, and eval](#smoke-sweep-and-eval)
 - [Evidence standard](#evidence-standard)
@@ -40,6 +41,18 @@ These sources outrank this guide when behavior changes. Update the English page 
 | Full sweep and eval | The selected untrimmed matrix and eval jobs execute on the reviewed commit | Correctness of evidence that was not inspected, or unrelated configurations |
 
 A green later layer does not erase missing earlier evidence. For example, a green collector can aggregate an empty set, so review must inspect the underlying executed jobs and artifacts.
+
+## Test quality
+
+Tests protect behavior, not coverage numbers. During review, ask what plausible bug each test would catch and whether it exercises the implementation that ships.
+
+- Prefer a small input with a hand-worked expected result, including relevant boundary, malformed-input, or failure cases. Do not copy the implementation's calculation or call the same helper to produce the expected result.
+- Do not snapshot the current recipe count, model/hardware inventory, image pin, enum definition, or source text. Adding a valid recipe or refactoring equivalent code should not force unrelated assertion changes.
+- Preserve genuine contracts: numerical results, rejected invalid inputs, stable artifact formats, and agreement between independently consumed configurations. Assert only the parts of the contract the consumer needs.
+- Mock external services or processes when necessary, but run the actual behavior under test. A copied parser, filter, or fake implementation cannot detect a regression in the real one.
+- Delete redundant tests without replacement. Extend existing fixtures only when there is a meaningful gap; do not build a new test framework to preserve a test count.
+
+See [Randy Coulman's Tautological Tests](https://randycoulman.com/blog/2016/12/20/tautological-tests/) for the distinction between independent expectations and assertions that merely repeat the implementation.
 
 ## Local checks
 

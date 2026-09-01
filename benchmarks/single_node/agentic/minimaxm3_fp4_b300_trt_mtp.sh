@@ -11,7 +11,7 @@ set -x
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-export EVAL_FRAMEWORK="lm-eval"
+export EVAL_FRAMEWORK="${EVAL_FRAMEWORK:-lm-eval}"
 
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EVAL_ONLY
 
@@ -42,6 +42,10 @@ fi
 nvidia-smi
 resolve_trace_source
 install_agentic_deps
+
+# BFCL's stock OpenAI client sends the standard `store=false` field. TRT-LLM
+# 1.3 rejects that field even though this server never persists responses.
+python3 "$(dirname "$0")/../../../runners/patch_trtllm_chat_store.py"
 
 SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
