@@ -3471,10 +3471,57 @@ validate_required_agentic_server_metrics() {
     echo "Validated required AIPerf server metrics prefix '$required_prefix'"
 }
 
+_start_agentic_vllm_profile_after_warmup() {
+    local benchmark_log="$1"
+    local marker_file="$2"
+    local profile_log="$3"
+    local timeout_seconds="${AGENTIC_PROFILE_START_TIMEOUT_SECONDS:-2400}"
+    local poll_seconds="${AGENTIC_PROFILE_POLL_SECONDS:-0.25}"
+    local deadline=$(( $(date +%s) + timeout_seconds ))
+    local base_url="${AIPERF_SERVER_URL:-http://localhost:${PORT:?PORT must be set for profiling}}"
+
+    while [ "$(date +%s)" -lt "$deadline" ]; do
+        if [ -f "$benchmark_log" ] && \
+                grep -Fq "Phase warmup (warmup) complete" "$benchmark_log"; then
+            echo "[PROFILE] AgentX warmup completed; starting vLLM profiler." | tee -a "$profile_log"
+            if curl --silent --show-error --fail \
+                    --max-time "${AGENTIC_PROFILE_HTTP_TIMEOUT_SECONDS:-1800}" \
+                    -X POST "${base_url%/}/start_profile" >> "$profile_log" 2>&1; then
+                : > "$marker_file"
+                echo "[PROFILE] vLLM profiler started." | tee -a "$profile_log"
+                return 0
+            fi
+            echo "ERROR: vLLM /start_profile failed; see $profile_log" >&2
+            return 1
+        fi
+        sleep "$poll_seconds"
+    done
+
+    echo "ERROR: timed out after ${timeout_seconds}s waiting for AgentX warmup before profiling" \
+        | tee -a "$profile_log" >&2
+    return 1
+}
+
+_stop_agentic_vllm_profile() {
+    local profile_log="$1"
+    local base_url="${AIPERF_SERVER_URL:-http://localhost:${PORT:?PORT must be set for profiling}}"
+
+    echo "[PROFILE] Stopping vLLM profiler and flushing traces." | tee -a "$profile_log"
+    curl --silent --show-error --fail \
+        --max-time "${AGENTIC_PROFILE_HTTP_TIMEOUT_SECONDS:-1800}" \
+        -X POST "${base_url%/}/stop_profile" >> "$profile_log" 2>&1
+    echo "[PROFILE] vLLM profiler stopped." | tee -a "$profile_log"
+}
+
 run_agentic_replay_and_write_outputs() (
     local result_dir="$1"
     local replay_rc
     local validation_rc
+    local profile_rc=0
+    local profile_watcher_pid=""
+    local profile_marker="$result_dir/.vllm_profile_started"
+    local profile_log="$result_dir/vllm_profile_control.log"
+    local benchmark_log="$result_dir/benchmark.log"
     local power_rc=0
     local agentx_power_enabled=0
     local agentx_multinode_power_enabled=0
@@ -3547,12 +3594,38 @@ run_agentic_replay_and_write_outputs() (
 
     echo "$REPLAY_CMD" > "$result_dir/benchmark_command.txt"
 
+    if [ "${PROFILE:-0}" = "1" ] && [ "${FRAMEWORK:-}" = "vllm" ]; then
+        rm -f "$profile_marker"
+        : > "$profile_log"
+        _start_agentic_vllm_profile_after_warmup \
+            "$benchmark_log" "$profile_marker" "$profile_log" &
+        profile_watcher_pid=$!
+    fi
+
     set +e
     set -x
-    $REPLAY_CMD 2>&1 | tee "$result_dir/benchmark.log"
+    $REPLAY_CMD 2>&1 | tee "$benchmark_log"
     replay_rc=${PIPESTATUS[0]}
     set +x
     set -e
+
+    if [ -n "$profile_watcher_pid" ]; then
+        if kill -0 "$profile_watcher_pid" 2>/dev/null; then
+            kill "$profile_watcher_pid" 2>/dev/null || true
+        fi
+        set +e
+        wait "$profile_watcher_pid"
+        profile_rc=$?
+        set -e
+
+        if [ -f "$profile_marker" ]; then
+            set +e
+            _stop_agentic_vllm_profile "$profile_log"
+            profile_rc=$((profile_rc || $?))
+            set -e
+            move_profile_trace_for_relay
+        fi
+    fi
 
     if [ "$agentx_power_enabled" = "1" ]; then
         _stop_agentx_power_monitor
@@ -3605,6 +3678,11 @@ run_agentic_replay_and_write_outputs() (
     if [ "$replay_rc" -ne 0 ]; then
         echo "ERROR: agentic trace replay exited with code $replay_rc after writing available results" >&2
         return "$replay_rc"
+    fi
+
+    if [ "$profile_rc" -ne 0 ]; then
+        echo "ERROR: AgentX vLLM profiling failed after writing available results" >&2
+        return "$profile_rc"
     fi
 
     if [ "$validation_rc" -ne 0 ]; then
