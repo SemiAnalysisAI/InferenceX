@@ -211,6 +211,7 @@ run_bench_and_eval() {
     wait_for_server_ready --port "$ROUTER_PORT" \
         --server-log "$BENCHMARK_LOGS_DIR/tilert_router.log" --server-pid "$ROUTER_PID"
     local rc=0 conc np
+    if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
     for conc in $CONC_LIST; do
         np=$(( conc * 10 ))
         [[ "$np" -lt 16 ]] && np=16
@@ -226,6 +227,7 @@ run_bench_and_eval() {
             --result-filename "$(bench_result_stem "$conc")" --result-dir "$RESULT_DIR" \
             || { rc=$?; echo "[bench] WARNING: conc=$conc failed/timed out (rc=$rc)"; }
     done
+    fi
     run_lm_eval
     return $rc
 }
@@ -238,7 +240,7 @@ run_lm_eval() {
         export EVAL_CONCURRENT_REQUESTS="$(tr ' ' '\n' <<< "$CONC_LIST" | sort -n | tail -1)"
     fi
     export CONC="$EVAL_CONCURRENT_REQUESTS"
-    run_eval --framework lm-eval --port "$ROUTER_PORT"
+    run_eval --port "$ROUTER_PORT"
     append_lm_eval_summary
 }
 

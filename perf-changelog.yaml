@@ -6578,6 +6578,17 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2730
 
 - config-keys:
+    - glm5.2-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Switch the TP8 arm from EP=8 to EP=1: removing the MoE all-to-all collective reduces ITL p50 by ~5% at conc 4 (6.95 ms vs 7.3 ms baseline) and raises interactivity P90 from 105 to 110.5 tok/s/user. Extend the TP8 concurrency sweep to [4, 6, 8, 10] to cover the mid-range crossover region."
+    - "Raise HiCache ratio from 1.5 to 2.5 and switch write policy to write_through_selective (per PR #2679): the agentic-coding corpus saturates any fixed DRAM pool at conc ≥ 10; the larger host tier sustains throughput through conc 12 (+12% tok/s/GPU vs conc 10). Trim the TP4 concurrency list to [1, 2, 4, 8, 10, 12] removing the untested conc 16 point."
+    - "Double MAX_RUNNING_REQUESTS to 2×CONC: MTP draft+verify transiently batches more tokens than CONC sessions; the extra headroom prevents scheduler stalls under burst. Cap CUDA_GRAPH_MAX_BS at 64 (SGLang auto-interpolates a batch-size list up to the cap)."
+    - "Trim TP8/EP=1 concurrency list from [4, 6, 8, 10] to [4, 10]: sweep validation shows c6 and c8 dominated by the TP4/EP4 HiCache arm at those concurrency points."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2777
+
+- config-keys:
     - dsv4-fp4-mi355x-atom-agentic-mtp
   scenario-type:
     - agentic-coding
@@ -6674,6 +6685,95 @@
     - "Bump image from lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260726 to lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260828"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2763
   
+
+- config-keys:
+    - minimaxm3-fp4-b300-vllm-agentic-mtp
+    - minimaxm3-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Replace the expired vLLM nightly image with the current pinned upstream nightly so MiniMax-M3 AgentX jobs can import their container instead of failing with Docker Hub HTTP 404."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2634
+
+- config-keys:
+    - kimik3-fp4-gb200-dynamo-vllm-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Correct srt-slurm's external data-parallel process allocation so Kimi-K3 TP4/DP4 workers receive four GPUs per DP rank instead of one invalid rank per GPU."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2634
+
+- config-keys:
+    - minimaxm3-fp4-b300-trtllm-agentic-mtp
+    - minimaxm3-fp4-b200-trtllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Accept the stock BFCL client's standard store=false chat-completion field instead of rejecting every TensorRT-LLM tool-use request with HTTP 400."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2634
+
+- config-keys:
+    - minimaxm3-fp4-b300-vllm-agentic-mtp
+    - minimaxm3-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Keep AgentX dependency setup rootless so minimal vLLM images without git do not fail while attempting a privileged apt install."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2634
+
+- config-keys:
+    - minimaxm3-fp4-b200-vllm-agentic-mtp
+    - minimaxm3-fp4-b300-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Split heterogeneous vLLM layer-compact KV backing storage into per-layer offload regions so MiniMax-M3 cache layouts initialize without invalid tensor views."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2634
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+    - minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp
+    - minimaxm3-fp4-gb200-dynamo-vllm-agentic-disagg-mtp
+    - minimaxm3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Configure model-specific tool and reasoning parsers for the Kimi-K3 and MiniMax-M3 serving paths so opt-in verifier requests produce structured OpenAI tool calls."
+    - "Limit shared AgentX readiness and synthetic-acceptance rewrites to eval-only runs so default throughput recipe rendering remains unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2634
+
+- config-keys:
+    - dsv4-fp4-b300-sglang-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update SGLang from lmsysorg/sglang-staging:dev-cu13-pr-35880 to lmsysorg/sglang:nightly-dev-cu13-20260827-20621aa1."
+    - "Remove DEP8 HiCache concurrency 64 and 128: 128 ran out of GPU memory at mem-fraction-static=0.93; 64 was unmeasured and used the same memory budget."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2759
+
+- config-keys:
+    - dsv4-fp4-b200-dynamo-sglang
+  description:
+    - "Add a DeepSeek-V4-Pro FP4 Dynamo-SGLang STP configuration for B200 with ten 8k/1k disaggregated topologies."
+    - "Use Mooncake for KV transfer with raw synthetic benchmark inputs."
+    - "Image: lmsysorg/sglang:nightly-dev-cu13-20260708-b3632494"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2560
+
+- config-keys:
+    - dsv4-fp4-b200-dynamo-sglang
+  description:
+    - "Switch the DeepSeek-V4-Pro FP4 B200 Dynamo-SGLang STP recipes to NIXL KV transfer."
+    - "Refresh the SGLang image and Dynamo source revision, and align runtime environment flags with the updated image."
+    - "Use raw synthetic benchmark inputs across the ten disaggregated 8k/1k STP recipes."
+    - "Image: lmsysorg/sglang:nightly-dev-cu13-20260821-f825d729"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2560
+
+- config-keys:
+    - dsv4-fp4-b200-dynamo-sglang
+  description:
+    - "Enable the required DCGM power telemetry contract across all ten B200 disaggregated STP recipes."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2560
+
 - config-keys:
     - dsv4-fp4-b200-vllm
   description:

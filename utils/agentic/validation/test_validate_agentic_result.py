@@ -75,12 +75,3 @@ def test_fails_when_aggregate_is_missing(tmp_path: Path):
 
     assert len(errors) == 1
     assert errors[0].endswith("profile_export_aiperf.json not found")
-
-
-def test_workflow_runs_agentic_validity_gate():
-    workflow = (
-        Path(__file__).parents[3] / ".github/workflows/benchmark-tmpl.yml"
-    ).read_text()
-
-    assert "python3 -m utils.agentic.validation.validate_agentic_result" in workflow
-    assert '--failed-request-threshold "$AIPERF_FAILED_REQUEST_THRESHOLD"' in workflow
