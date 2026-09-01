@@ -6775,6 +6775,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2560
 
 - config-keys:
+    - qwen3.5-fp4-b200-sglang-mtp
+  description:
+    - "Use Triton linear attention with FlashInfer decode and prefill GDN backends for the TP2/EP2 Qwen3.5 FP4 B200 MTP points at concurrency 16, 32, and 64."
+    - "Keep all other topology and concurrency points on the existing backend defaults."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2790
+
+- config-keys:
     - minimaxm3-fp8-h100-vllm-agentic-mtp
   scenario-type:
     - agentic-coding
