@@ -6760,3 +6760,12 @@
     - "Use the validation image's upstream deep_gemm_mega_moe backend for both prefill and decode workers; the older recipe's deep_gemm_amxf4_mega_moe backend name is not supported by this image."
     - "Preserve the proven DEP4/DEP16 topology and single concurrency-256 AgentX point with its eval companion."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2797
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Collect every prefill and decode worker's Prometheus endpoint in the custom AgentX command using srt-slurm's existing endpoint discovery."
+    - "Require the cached-token-by-source metric in exported artifacts; router-only metrics must not pass validation. Preserve the image, topology, concurrency, and eval coverage."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2797

@@ -286,6 +286,8 @@ Topology rules:
 - Disaggregated: inspect every prefill backend, every decode backend, and the frontend/router. A healthy decode pool does not prove prefill/KV transfer health.
 - Confirm the AIPerf command includes all `AIPERF_SERVER_METRICS_URLS`. Missing endpoints produce falsely healthy partial evidence.
 
+On GB300's pinned srt-slurm v1.0.36 custom AgentX path, set `benchmark.env.AIPERF_REQUIRED_SERVER_METRIC_PREFIX` to opt into worker endpoint discovery and require that metric prefix in the exported artifacts. The launcher applies a scoped backport; without the opt-in, the custom command otherwise discovers only the frontend.
+
 Read each endpoint directly when summaries are ambiguous:
 
 ```bash
