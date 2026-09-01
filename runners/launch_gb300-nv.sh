@@ -421,6 +421,11 @@ else
     git checkout sa-submission-q2-2026
 fi
 
+if [[ "${EVAL_FRAMEWORK:-lm-eval}" != "lm-eval" ]]; then
+    python3 "$GITHUB_WORKSPACE/runners/patch_srt_eval_dispatch.py" "$(pwd)" \
+        || exit 1
+fi
+
 echo "Installing srtctl..."
 export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -521,8 +526,8 @@ CONFIG_PATH="${CONFIG_FILE%%:*}"
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
 
 # Throughput recipes opt into synthetic acceptance through the master config.
-# Eval-only jobs leave the checked-in real-MTP recipe unchanged so generated
-# tokens still pass target-model verification.
+# Eval-only jobs remove those settings so generated tokens use real target-model
+# verification.
 inject_synthetic_acceptance "$CONFIG_PATH" "$FRAMEWORK" || exit 1
 
 # --no-preflight skips srtctl's pre-submit model-path stat, which runs on
