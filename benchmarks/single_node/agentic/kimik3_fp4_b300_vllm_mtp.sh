@@ -237,16 +237,21 @@ fi
 
 SPEC_ARGS=()
 if [ "$NUM_SPEC_TOKENS" -gt 0 ]; then
+    DRAFT_ATTN_BACKEND="TOKENSPEED_MLA"
     DRAFT_KV_CONFIG=""
     if [ "$K3_MATCH_MI355X_C1" = "1" ]; then
+        # Match the ROCm control's draft path. TOKENSPEED_MLA only supports
+        # 32/64-token cache blocks, while the explicit FP8 DSpark cache is
+        # constructed with the framework's 16-token draft block size.
+        DRAFT_ATTN_BACKEND="TRITON_MLA"
         DRAFT_KV_CONFIG=', "kv_cache_dtype": "fp8"'
     fi
     # EVAL_ONLY needs real verification: synthetic acceptance commits drafts
     # regardless of target logits and would zero the eval score.
     if [ "${EVAL_ONLY:-false}" = "true" ]; then
-        SPEC_CONFIG="{\"method\": \"dspark\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"TOKENSPEED_MLA\"${DRAFT_KV_CONFIG}, \"draft_sample_method\": \"probabilistic\", \"rejection_sample_method\": \"block\"}"
+        SPEC_CONFIG="{\"method\": \"dspark\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"$DRAFT_ATTN_BACKEND\"${DRAFT_KV_CONFIG}, \"draft_sample_method\": \"probabilistic\", \"rejection_sample_method\": \"block\"}"
     else
-        SPEC_CONFIG="{\"method\": \"dspark\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"TOKENSPEED_MLA\"${DRAFT_KV_CONFIG}, \"draft_sample_method\": \"probabilistic\", \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
+        SPEC_CONFIG="{\"method\": \"dspark\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"$DRAFT_ATTN_BACKEND\"${DRAFT_KV_CONFIG}, \"draft_sample_method\": \"probabilistic\", \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
     fi
     SPEC_ARGS=(--speculative-config "$SPEC_CONFIG")
 fi
