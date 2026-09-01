@@ -44,8 +44,12 @@ for concurrency in "${CONCURRENCIES[@]}"; do
     fi
 done
 
+
 resolve_trace_source
 install_agentic_deps
+if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
+    _wait_for_openai_chat_route --port "$PORT"
+fi
 
 wait_for_agentic_servers_idle() {
     local timeout_seconds="${AIPERF_DRAIN_TIMEOUT_SECONDS:-1800}"
