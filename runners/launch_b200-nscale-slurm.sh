@@ -5,7 +5,8 @@
 # Self-contained because Nscale has its own Slurm and storage layout.
 #
 # Scope: multi-node Dynamo-vLLM DeepSeek-V4-Pro and Kimi K2.6 FP4 runs, plus
-# DeepSeek-V4-Pro FP4 Dynamo-SGLang MTP, on the b200-nscale runner label.
+# DeepSeek-V4-Pro FP4 Dynamo-SGLang STP and MTP runs, on the
+# b200-nscale runner label.
 # Anything else exits non-zero.
 
 SLURM_PARTITION="batch_1"
@@ -55,7 +56,8 @@ else
 fi
 
 if [[ $FRAMEWORK != "dynamo-vllm" ]] &&
-   [[ $MODEL_PREFIX != "dsv4" || $PRECISION != "fp4" || $FRAMEWORK != "dynamo-sglang" || $SPEC_DECODING != "mtp" ]] &&
+   [[ $MODEL_PREFIX != "dsv4" || $PRECISION != "fp4" || $FRAMEWORK != "dynamo-sglang" ||
+      ( $SPEC_DECODING != "none" && $SPEC_DECODING != "mtp" ) ]] &&
    [[ $MODEL_PREFIX != "glm5.1" || $PRECISION != "fp8" || $FRAMEWORK != "tilert" || $SPEC_DECODING != "mtp" ]]; then
     run_compat_launcher
 fi

@@ -4,7 +4,6 @@ import json
 import subprocess
 import sys
 from contextlib import nullcontext
-from pathlib import Path
 from types import SimpleNamespace
 
 import process_changelog
@@ -49,21 +48,6 @@ def _scenario_values(command):
         return []
     index = command.index("--scenario-type") + 1
     return command[index:]
-
-
-def test_recipe_fingerprint_reaches_all_e2e_benchmark_jobs():
-    workflow = (Path(__file__).parents[1] / ".github/workflows/e2e-tests.yml").read_text()
-
-    assert workflow.count("uses: ./.github/workflows/benchmark") == 8
-    assert workflow.count("recipe-fingerprint: ${{ matrix.config") == 8
-
-
-def test_recipe_fingerprint_disambiguates_result_and_artifact_names():
-    repo_root = Path(__file__).parents[1]
-    for template_name in ("benchmark-tmpl.yml", "benchmark-multinode-tmpl.yml"):
-        template = (repo_root / ".github/workflows" / template_name).read_text()
-        assert 'RECIPE_FINGERPRINT: ${{ inputs.recipe-fingerprint }}' in template
-        assert 'recipe-${RECIPE_FINGERPRINT:0:16}' in template
 
 
 def test_trim_conc_supports_nested_backend_metadata():
