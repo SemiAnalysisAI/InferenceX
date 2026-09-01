@@ -8,7 +8,7 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
 
 SRT_SLURM_REPOSITORY="https://github.com/SemiAnalysisAI/srt-slurm.git"
-SRT_SLURM_COMMIT="02ce6d6ec7ccc7cba7a97328a156b2380d885e46"
+SRT_SLURM_COMMIT="f1537b3810ebe4fc287dbc1ad572b370e15fc4d6"
 SLURM_PARTITION="compute"
 SHARED_BASE="/it-share/gharunners2/srt-slurm"
 SHARED_HF_CACHE="/it-share/hf-hub-cache"
@@ -264,6 +264,7 @@ if (
 eval_only = os.environ.get("EVAL_ONLY", "false").lower() == "true"
 run_eval = os.environ.get("RUN_EVAL", "false").lower() == "true"
 if eval_only or run_eval:
+    benchmark_env["SRTCTL_LM_EVAL_RESULT_DIR"] = "/results/{job_id}/eval"
     decode_env = recipe.get("backend", {}).get("decode_environment", {})
     for key in (
         "SGLANG_SIMULATE_ACC_LEN",
