@@ -269,6 +269,9 @@ VLLM_CMD=(
     --max-num-batched-tokens 16384
     --trust-remote-code
     --language-model-only
+    --enable-auto-tool-choice
+    --tool-call-parser kimi_k3
+    --reasoning-parser kimi_k3
     --load-format fastsafetensors
     --moe-backend auto
     --no-enable-flashinfer-autotune

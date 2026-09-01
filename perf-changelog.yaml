@@ -6578,22 +6578,175 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2730
 
 - config-keys:
-    - dsv4-fp4-b300-sglang-agentic-hicache-mtp
+    - glm5.2-fp4-mi355x-sglang-agentic-mtp
   scenario-type:
     - agentic-coding
   description:
-    - "Bump image from lmsysorg/sglang-staging:dev-cu13-pr-35880 to lmsysorg/sglang:nightly-dev-cu13-20260827-20621aa1, moving the lane off a hand-built staging tag and back onto a published nightly. Build commit 20621aa14b is on sgl-project/sglang main, so every point is now reproducible from a public image; the staging tag it replaces was a one-off build carrying an unmerged draft and no longer resolves in lmsysorg/sglang."
-    - "Retains --prefill-decode-interval 20. sgl-project/sglang#35017 merged upstream on 2026-08-19, ahead of this nightly's build commit, so the flag and the +28% output throughput at conc 128 that #2701 measured are both preserved on a released build."
-    - "Known regression risk at DEP8 conc 384/512/576: this nightly does NOT carry the HiCache load-back fix. sgl-project/sglang#34975 and its cherry-pick #35880 are both still open as of this bump, and at build commit 20621aa1 mem_cache/unified_cache/unified_tree_core.py still declares load_back_pending_id as a single Optional[int] anchor with the 'node N pinned by load-back M, new anchor N' assertion intact. A node pinned by two concurrent H->D load-backs therefore still trips it: eight schedulers exit at once and the surviving DP ranks block forever in the MLP-sync collective, so in-flight requests never return and the client sees zero errors. The assertion is reachable only under --hicache-write-policy write_back, which this recipe still sets by default. This bump is deliberately image-only, so the write policy, search space, dram-utilization and every serving flag from #2701 are left untouched; re-pin to a nightly that includes #34975 once it merges."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2759
+    - "Switch the TP8 arm from EP=8 to EP=1: removing the MoE all-to-all collective reduces ITL p50 by ~5% at conc 4 (6.95 ms vs 7.3 ms baseline) and raises interactivity P90 from 105 to 110.5 tok/s/user. Extend the TP8 concurrency sweep to [4, 6, 8, 10] to cover the mid-range crossover region."
+    - "Raise HiCache ratio from 1.5 to 2.5 and switch write policy to write_through_selective (per PR #2679): the agentic-coding corpus saturates any fixed DRAM pool at conc ≥ 10; the larger host tier sustains throughput through conc 12 (+12% tok/s/GPU vs conc 10). Trim the TP4 concurrency list to [1, 2, 4, 8, 10, 12] removing the untested conc 16 point."
+    - "Double MAX_RUNNING_REQUESTS to 2×CONC: MTP draft+verify transiently batches more tokens than CONC sessions; the extra headroom prevents scheduler stalls under burst. Cap CUDA_GRAPH_MAX_BS at 64 (SGLang auto-interpolates a batch-size list up to the cap)."
+    - "Trim TP8/EP=1 concurrency list from [4, 6, 8, 10] to [4, 10]: sweep validation shows c6 and c8 dominated by the TP4/EP4 HiCache arm at those concurrency points."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2777
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Split the DeepSeek-V4-Pro FP4 ATOM AgentX MTP sweep into two attention bands per the ROCm/ATOM DeepSeek-V4-Agentic-InferenceX.md recipe: tensor-parallel attention at concurrency 1, 2, 4, 8, and 16, and DP attention at concurrency 48, 64, 96, 128, and 256 (previously a single tensor-parallel band at concurrency 1, 2, 4, 8, 16, 32, and 48)."
+    - "The DP-attention band adds --enable-dp-attention and --enable-tbo plus ATOM's DPA routing knobs (ATOM_DP_SESSION_AFFINITY, ATOM_DP_LB_REQ_EQUIV, ATOM_ENABLE_PREFILL_DELAYER, ATOM_PREFILL_DECODE_INTERVAL), the two-batch-overlap prerequisites GPU_MAX_HW_QUEUES and ATOM_NUMA_BIND, and the AIPerf session-affinity vars that keep each agentic conversation pinned to one DP rank; the tensor-parallel band is otherwise unchanged."
+    - "Session affinity is mandatory for the DP band: without it a session's turns scatter across DP ranks, the prefix KV written by one turn is unreachable by the next, and the multi-turn agentic workload collapses to cold prefill."
+    - "The attention band is selected by the config's dp-attn, propagated to the recipe as DP_ATTENTION, so the script's former DP_ATTENTION=false hard-fail guard is removed."
+    - "Bump the ATOM image from rocm/atom-dev:nightly_202608201032 to nightly_202608280858; FP8 KV/index caches, prefix caching, 32K state checkpoints, 16K batching/prefill chunks, FULL cudagraph mode, three-token MTP with golden AL 2.49, and max-num-seqs at twice concurrency are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2778
+
+- config-keys:
+    - dsv4-fp4-b200-sglang-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh the B200 SGLang AgentX curve with validated TP8/DP8/EP8 HiCache profiles at DP-attention concurrencies 64, 96, 128, and 160."
+    - "Use lmsysorg/sglang:nightly-dev-20260827-20621aa1 for the B200 SGLang AgentX sweep."
+    - "Scope cache-aware routing and --prefill-decode-interval to the DP-attention profiles: use interval 24 at concurrency 64, 96, and 128, and interval 20 at concurrency 160."
+    - "Use mem-fraction-static 0.88 for every DP-attention profile while retaining 0.90 for TP profiles. Full c96 and c128 sweeps at 0.90 exhausted HBM in the context-dependent FP4-indexer workspace; lowering the fraction adds about 3.57 GiB of headroom per GPU. Across every DP-attention profile, use a 49152-token global chunked-prefill budget, CUDA graph maximum batch size 32, total-requests DP balancing, one-second load snapshots, and correlation-ID session routing; set the cache-aware absolute balance threshold to 32 at concurrency 160."
+    - "Fit the HiCache tier to NScale host memory by using ratio 2.75 for replicated TP8 profiles and retaining ratio 8 for sharded DP8 profiles. Ratio 8 on TP8 requests about 351 GiB per rank and fails host-pool initialization on a 1.7 TiB NScale node; ratio 2.75 targets about 121 GiB per rank while leaving startup headroom."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2718
+
+- config-keys:
+    - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
+  description:
+    - "Update the vLLM B200 Kimi-K3 AgentX configs."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2776
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump the vLLM ROCm image from nightly-cb8104839c141609d99f1254459ef3a4f1bd4263 to nightly-1dc464d42681d22f38caf1fdc1eb632dc4421c45 and drop apply_k3_container_patches.sh (the patches are now baked into the image); add AITER_SITUV2_A8W4=1."
+    - "Replace the vllm-simple DRAM offload arm with an LMCache MP-connector arm (lmcache 0.5.5.dev60+rocm7.2), running one per-node MP server with --chunk-size 3072 (the minimum multiple of the hybrid KDA/MLA 1536/3072 KV group sizes) and --separate-object-groups; mq_timeout raised to 6000s for the large agentic prefixes."
+    - "Add decode context parallel (DCP_SIZE=8, --dcp-comm-backend a2a, TRITON_MLA attention backend) with GPU_MEM_UTIL lowered to 0.85, --max-num-batched-tokens 16384, and mla_prefill_backend=ROCM_AITER_FA."
+    - "Make speculative decoding concurrency-adaptive: concurrency 1 uses 6 draft tokens (synthetic acceptance 3.75), concurrency <=10 uses 2 tokens (2.51), and higher concurrencies disable MTP; MAX_NUM_SEQS is now 2*CONC with CUDA-graph capture sizes scaled to (1+SPEC_NUM_TOKENS)."
+    - "Raise dram-utilization from 0.50 to 0.60, extend the none-offload conc-list from [1, 4, 8] to [1, 4, 8, 10, 12], and set the lmcache arm conc-list to [4, 8, 10, 12]."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2787
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump image from vllm/vllm-openai-rocm:v0.27.1 to vllm/vllm-openai-rocm:nightly-6d4562c59b97b4e35d459ff9389e71b6fe4995de. This pin is what re-enables the AITER shuffled KV cache layout for MiniMax-M3 sparse PA, which was broken by the KV cache layout standardization in https://github.com/vllm-project/vllm/pull/51718. The recipe's TP4 VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1 export is unchanged by this PR, so the restored layout behavior is attributable to the image pin rather than to the benchmark script, and the two must move together to reproduce these numbers."
+    - "Route dense-layer attention and EAGLE3 speculative decoding through ROCM_AITER_UNIFIED_ATTN instead of TRITON_ATTN, both in the server --attention-backend flag and in the speculative-config attention_backend for the throughput branch (synthetic acceptance) and the eval-only branch (real target verification)."
+    - "Drop the --hf-overrides that forced text_config use_index_cache true and index_topk_freq 4. The pinned nightly supplies the sparse-PA index-cache and top-k refresh behavior itself, so the override is redundant; because it rewrites the served model config, removing it is architecture-affecting rather than a measurement no-op."
+    - "Drop the TP4 LMCache DRAM KV-offloading sweep points at concurrency 32 and 40 (kv-offload-backend lmcache 0.5.3). The agentic-coding search space is now GPU-resident only, TP4 at concurrency 1 through 32 and TP2 at 1, 2, and 5, so this config no longer reports any DRAM-offload points."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2781
+  
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump the MI355X SGLang DeepSeek-V4-Pro FP4 AgentX MTP image from lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260822 to lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260829."
+    - "Export TORCH_BLAS_PREFER_HIPBLASLT=1 to prefer hipBLASLt for dense GEMMs."
+    - "Size chunked-prefill by tensor-parallel degree: 16384 tokens at TP8 and 8192 at TP4, erroring on any other TP."
+    - "Lower GPU_MAX_HW_QUEUES from 5 to 2 on the DP-attention path."
+    - "Add a TP8 EP1 no-offload spec-decoding mtp arm at concurrency 16."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2784
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump image from lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260818 to lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260829"
+    - "Route multi-GPU collectives through INT8-quantized ROCm quick all-reduce (ROCM_QUICK_REDUCE_QUANTIZATION=INT8), matching the published SGLang cookbook recipe for MXFP4 on MI355X (https://docs.sglang.io/cookbook/autoregressive/Qwen/Qwen3.5). This arm already omits --enable-aiter-allreduce-fusion, so the quick-reduce regime applies with no other launch change: the two paths are mutually exclusive and collectives only fall back to custom all-reduce, where the regime is read, when the fusion flag is off."
+    - "Halve the prefill budget, --max-prefill-tokens and --chunked-prefill-size from 32768 to 16384, matching the B200 sibling recipe qwen3.5_fp4_b200_sglang_mtp.sh."
+    - "Capture the decode CUDA graph to min(2*CONC, 128) instead of min(CONC, 64). The replay keeps --max-running-requests 2*CONC in flight, so a CONC-sized graph dropped every decode batch above CONC onto the eager path. The 128 cap follows the sibling MI355X AgentX recipe dsv4_fp4_mi355x_sglang_mtp.sh."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2737
+  
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang
+    - qwen3.5-fp4-mi355x-sglang-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Bump image from lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260730 to lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260829"
+    - "Serve both arms with an fp8_e4m3 KV cache."
+    - "Route multi-GPU collectives through INT8-quantized ROCm quick all-reduce (ROCM_QUICK_REDUCE_QUANTIZATION=INT8) and drop --enable-aiter-allreduce-fusion, aligning both arms with the published SGLang cookbook recipe for MXFP4 on MI355X (https://docs.sglang.io/cookbook/autoregressive/Qwen/Qwen3.5). The two paths are mutually exclusive in SGLang: the AITER fused AR+RMSNorm path is gated on --enable-aiter-allreduce-fusion, and only with it off do collectives fall back to custom all-reduce where the quick-reduce regime applies. This supersedes the aiter allreduce fusion enabled for these two config keys in #1680, so throughput on this arm is not a like-for-like continuation of the previous MXFP4 series."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2640
+  
+- config-keys:
+    - qwen3.5-fp8-mi355x-sglang
+    - qwen3.5-fp8-mi355x-sglang-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Bump image from lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260726 to lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260828"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2763
+  
+
+- config-keys:
+    - minimaxm3-fp4-b300-vllm-agentic-mtp
+    - minimaxm3-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Replace the expired vLLM nightly image with the current pinned upstream nightly so MiniMax-M3 AgentX jobs can import their container instead of failing with Docker Hub HTTP 404."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2634
+
+- config-keys:
+    - kimik3-fp4-gb200-dynamo-vllm-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Correct srt-slurm's external data-parallel process allocation so Kimi-K3 TP4/DP4 workers receive four GPUs per DP rank instead of one invalid rank per GPU."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2634
+
+- config-keys:
+    - minimaxm3-fp4-b300-trtllm-agentic-mtp
+    - minimaxm3-fp4-b200-trtllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Accept the stock BFCL client's standard store=false chat-completion field instead of rejecting every TensorRT-LLM tool-use request with HTTP 400."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2634
+
+- config-keys:
+    - minimaxm3-fp4-b300-vllm-agentic-mtp
+    - minimaxm3-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Keep AgentX dependency setup rootless so minimal vLLM images without git do not fail while attempting a privileged apt install."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2634
+
+- config-keys:
+    - minimaxm3-fp4-b200-vllm-agentic-mtp
+    - minimaxm3-fp4-b300-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Split heterogeneous vLLM layer-compact KV backing storage into per-layer offload regions so MiniMax-M3 cache layouts initialize without invalid tensor views."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2634
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+    - minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp
+    - minimaxm3-fp4-gb200-dynamo-vllm-agentic-disagg-mtp
+    - minimaxm3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Configure model-specific tool and reasoning parsers for the Kimi-K3 and MiniMax-M3 serving paths so opt-in verifier requests produce structured OpenAI tool calls."
+    - "Limit shared AgentX readiness and synthetic-acceptance rewrites to eval-only runs so default throughput recipe rendering remains unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2634
 
 - config-keys:
     - dsv4-fp4-b300-sglang-agentic-hicache-mtp
   scenario-type:
     - agentic-coding
   description:
-    - "Drop concurrency 64 and 128 from the DEP8 hicache row, taking the search space from 12 points to 10. Concurrency 128 failed on run 33051183882 under lmsysorg/sglang:nightly-dev-cu13-20260827-20621aa1: DP ranks 3, 4 and 5 raised tvm.error.InternalError CUDA out of memory inside deep_gemm fp8_fp4_paged_mqa_logits within the same second, trying to allocate 5.35 GiB against 4.55 GiB free on a 267.69 GiB part, after which scheduler_0 crashed with exit code -3 and triggered SIGQUIT. AIPerf then aborted with ProfileAborted / warmup_failure at 0 successful of 1383 requests, so the point produced no measurement. Concurrency 64 is dropped with it because both sit in the same mem-fraction-static tier; it had not returned a verdict when the row was cut, so its behaviour on this image is unmeasured rather than known-bad."
-    - "Root cause is the mem-fraction-static ladder, not the concurrency itself. The recipe assigns 0.93 to every point below concurrency 256, then 0.90 at 256, 0.88 at 384 and 0.86 at 512 and above. The higher-concurrency rows therefore reserve more headroom for the MegaMoE transient workspace, which is allocated outside the static budget, and all of 256, 384, 512 and 576 passed on this image. Only the 0.93 tier failed, and only its largest surviving batch. Lowering that tier is the alternative fix and would keep the points; it is deliberately not attempted here so this change stays a search-space cut on top of an image-only bump."
-    - "Removes the published concurrency 64 and 128 points for this key. Concurrency 128 was the point that #2701 cited for --prefill-decode-interval 20 (+28% output throughput, 2,433-2,470 -> 3,127-3,161 tok/s), so that flag stays in the recipe but no longer has a measured point behind it in this lane."
-    - "Corrects the risk note in the preceding entry. That entry predicted DEP8 concurrency 384, 512 and 576 would fail on this image because sgl-project/sglang#34975 and #35880 are unmerged and the load-back pin assertion is still present at build commit 20621aa1. All three passed under --hicache-write-policy write_back on run 33051183882, so the predicted failure did not reproduce. The assertion remains reachable in principle and depends on concurrent load-back timing, so this is one clean sweep rather than evidence that the upstream fix is unnecessary."
+    - "Update SGLang from lmsysorg/sglang-staging:dev-cu13-pr-35880 to lmsysorg/sglang:nightly-dev-cu13-20260827-20621aa1."
+    - "Remove DEP8 HiCache concurrency 64 and 128: 128 ran out of GPU memory at mem-fraction-static=0.93; 64 was unmeasured and used the same memory budget."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2759
