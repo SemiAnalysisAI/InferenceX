@@ -6804,3 +6804,12 @@
   description:
     - "Refresh to collect TensorRT-LLM server metrics."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2772
+
+- config-keys:
+    - glm5.2-fp4-gb300-dynamo-trt-agentic-agg-mtp
+    - glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh to collect TensorRT-LLM server metrics."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2773

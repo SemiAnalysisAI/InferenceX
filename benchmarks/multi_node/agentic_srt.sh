@@ -9,6 +9,11 @@ set -x
 INFMAX_CONTAINER_WORKSPACE="${INFMAX_CONTAINER_WORKSPACE:-/infmax-workspace}"
 source "$INFMAX_CONTAINER_WORKSPACE/benchmarks/benchmark_lib.sh"
 
+if [[ -n "${SRT_FRONTEND_HOST:-}" ]]; then
+    check_env_vars SRT_FRONTEND_PORT
+    export AIPERF_SERVER_URL="http://${SRT_FRONTEND_HOST}:${SRT_FRONTEND_PORT}"
+fi
+
 # benchmark_lib deliberately clears inherited MAX_MODEL_LEN for AgentX so a
 # workflow default cannot silently truncate a model's native context. Native
 # srt-slurm topologies may still expose a smaller, explicit service limit (for
