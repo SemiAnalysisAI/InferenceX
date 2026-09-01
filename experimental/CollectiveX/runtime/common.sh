@@ -21,6 +21,14 @@ COLLX_DEEPEP_V2_REPO="https://github.com/deepseek-ai/DeepEP"
 # resolution for pip wheels. The backend cache is keyed on this value, so a change forces a rebuild.
 COLLX_DEEPEP_V2_COMMIT="01dc3aaac82068020353dce2c302e38153c0bfaa"
 
+# NVSHMEM wheel for the DeepEP V2 build. Must match the image's CUDA line: the cu12
+# wheel's r12 host library on the cu130 images survives on sm90/sm100 but poisons the
+# CUDA context during symmetric-heap init over MNNVL on sm103 (gb300) — buffer creation
+# returns, then every subsequent CUDA call fails cudaErrorUnknown. Stock in-image deep_ep
+# (built against this exact cu13 wheel) runs clean on the same nodes/driver, which is how
+# the wheel was isolated. Folded into the venv cache key, so a change forces a rebuild.
+COLLX_DEEPEP_V2_NVSHMEM_SPEC="nvidia-nvshmem-cu13==3.4.5"
+
 COLLX_UCCL_REPO="https://github.com/uccl-project/uccl"
 COLLX_UCCL_COMMIT="fc1b582031221645ea9fce58aeb57187713145e3"
 

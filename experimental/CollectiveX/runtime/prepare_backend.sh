@@ -129,8 +129,14 @@ deepep_cache_root() {
   base="${COLLX_BACKEND_CACHE_ROOT:-}"
   [[ "$base" = /* ]] || return 1
   image="$(printf '%s' "${COLLECTIVEX_IMAGE:-manual}" | tr -cs 'A-Za-z0-9_.-' '-')"
-  printf '%s/deepep-v2-%s-sm%s-%s-%s' \
-    "$base" "$cpu" "${arch/./}" "${image#-}" "${COLLX_DEEPEP_V2_COMMIT:0:12}"
+  # The NVSHMEM wheel is part of the built venv's identity (see common.sh: the cu12
+  # wheel on cu130 images broke sm103), so it keys the cache and a spec change rebuilds.
+  local nvshmem_key="${COLLX_DEEPEP_V2_NVSHMEM_SPEC#nvidia-}"
+  nvshmem_key="${nvshmem_key//==/-}"
+  [[ "$nvshmem_key" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
+  printf '%s/deepep-v2-%s-sm%s-%s-%s-%s' \
+    "$base" "$cpu" "${arch/./}" "${image#-}" "${COLLX_DEEPEP_V2_COMMIT:0:12}" \
+    "$nvshmem_key"
 }
 
 deepep_activate() {
@@ -145,7 +151,7 @@ deepep_activate() {
   nccl_root="$(nvidia_package_root "$venv/bin/python" nvidia-nccl-cu13 nccl)" \
     || { collx_log "ERROR: DeepEP V2 NCCL package root is unavailable"; return 1; }
   nvshmem_package="$(nvidia_package_root \
-    "$venv/bin/python" nvidia-nvshmem-cu12 nvshmem)" \
+    "$venv/bin/python" "${COLLX_DEEPEP_V2_NVSHMEM_SPEC%%==*}" nvshmem)" \
     || { collx_log "ERROR: DeepEP V2 NVSHMEM package root is unavailable"; return 1; }
   overlay="$(deepep_nvshmem_overlay "$root" "$nvshmem_package")" || return 1
   toolchain="$(cuda_toolchain_paths)" || return 1
@@ -203,7 +209,7 @@ deepep_install() {
   pip=("$venv/bin/python" -m pip install -q --disable-pip-version-check --no-input)
   "${pip[@]}" \
     "pip==26.1.2" "setuptools==82.0.1" "wheel==0.47.0" "ninja==1.13.0" \
-    "numpy==2.2.6" "nvidia-nvshmem-cu12==3.3.9" >&2 2>&1 \
+    "numpy==2.2.6" "$COLLX_DEEPEP_V2_NVSHMEM_SPEC" >&2 2>&1 \
     || { collx_log "ERROR: DeepEP V2 build-tool installation failed"; return 1; }
   "${pip[@]}" --index-url https://download.pytorch.org/whl/cu130 \
     --extra-index-url https://pypi.org/simple "torch==2.10.0" >&2 2>&1 \
