@@ -312,6 +312,23 @@ export VLLM_USE_DIRECT_DCP_A2A=0
 export VLLM_USE_DIRECT_DCP_Q_GATHER=0
 export VLLM_USE_DIRECT_DCP_KV_GATHER=0
 
+PROFILER_ARGS=()
+if [ "${PROFILE:-0}" = "1" ]; then
+    VLLM_TORCH_PROFILER_DIR="${VLLM_TORCH_PROFILER_DIR:-/workspace/vllm_profile}"
+    VLLM_PROFILE_DELAY_ITERATIONS="${VLLM_PROFILE_DELAY_ITERATIONS:-8}"
+    VLLM_PROFILE_MAX_ITERATIONS="${VLLM_PROFILE_MAX_ITERATIONS:-256}"
+    if [[ ! "$VLLM_PROFILE_DELAY_ITERATIONS" =~ ^[0-9]+$ ]] || \
+            [[ ! "$VLLM_PROFILE_MAX_ITERATIONS" =~ ^[1-9][0-9]*$ ]]; then
+        echo "Error: VLLM profile delay/max iterations must be non-negative/positive integers" >&2
+        exit 1
+    fi
+    mkdir -p "$VLLM_TORCH_PROFILER_DIR"
+    PROFILER_ARGS=(
+        --profiler-config
+        "{\"profiler\":\"torch\",\"torch_profiler_dir\":\"$VLLM_TORCH_PROFILER_DIR\",\"torch_profiler_with_stack\":false,\"torch_profiler_record_shapes\":false,\"torch_profiler_with_memory\":false,\"torch_profiler_with_flops\":false,\"torch_profiler_use_gzip\":true,\"torch_profiler_dump_cuda_time_total\":true,\"detailed_trace_annotation\":true,\"ignore_frontend\":true,\"delay_iterations\":$VLLM_PROFILE_DELAY_ITERATIONS,\"max_iterations\":$VLLM_PROFILE_MAX_ITERATIONS}"
+    )
+fi
+
 { set +x; } 2>/dev/null
 VLLM_CMD=(
     vllm serve "$MODEL_PATH" --served-model-name "$MODEL"
@@ -338,6 +355,7 @@ VLLM_CMD=(
     "${SPEC_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
     "${CP_ARGS[@]}"
+    "${PROFILER_ARGS[@]}"
 )
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
 printf '\n' | tee -a "$RESULT_DIR/vllm_command.txt"
