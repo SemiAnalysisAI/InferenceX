@@ -6796,3 +6796,11 @@
   description:
     - "Refresh to collect TensorRT-LLM server metrics."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2771
+
+- config-keys:
+    - minimaxm3-fp4-b300-trtllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh to collect TensorRT-LLM server metrics."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2772
