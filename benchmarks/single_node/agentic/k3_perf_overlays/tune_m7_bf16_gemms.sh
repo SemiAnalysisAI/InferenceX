@@ -57,11 +57,20 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+try:
+    installed_version = importlib.metadata.version("aiter")
+except importlib.metadata.PackageNotFoundError:
+    # The pinned vLLM image installs AITER directly into site-packages without
+    # retaining wheel metadata. Source hashes and /app/versions.txt below are
+    # the authoritative provenance checks for that image layout.
+    installed_version = "source-install-without-dist-info"
+
+
 payload = {
     "source_commit": os.environ["AITER_SOURCE_COMMIT"],
     "source_tag": os.environ["AITER_SOURCE_TAG"],
     "installed_aiter_file": str(installed_root / "__init__.py"),
-    "installed_aiter_version": importlib.metadata.version("aiter"),
+    "installed_aiter_version": installed_version,
     "source_file_sha256": {
         relative: sha256(source_root / relative) for relative in tracked_files
     },
