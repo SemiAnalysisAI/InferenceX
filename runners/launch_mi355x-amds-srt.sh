@@ -322,7 +322,7 @@ set -euo pipefail
 eval_root="/results/${SLURM_JOB_ID}/eval"
 mkdir -p "${eval_root}"
 cd "${eval_root}"
-export LM_EVAL_RESULT_DIR="${eval_root}"
+export SRTCTL_LM_EVAL_RESULT_DIR="${eval_root}"
 source /infmax-workspace/benchmarks/benchmark_lib.sh
 export EVAL_SERVER_HOST="${SRT_FRONTEND_HOST}"
 if [[ -n "${EVAL_CONC:-}" ]]; then
