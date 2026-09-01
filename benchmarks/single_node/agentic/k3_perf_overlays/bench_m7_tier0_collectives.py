@@ -58,6 +58,7 @@ class Case:
 class CapturedPath:
     graph: torch.cuda.CUDAGraph
     output: torch.Tensor
+    initial_output: torch.Tensor
     reset: Callable[[], None]
 
 
@@ -275,7 +276,14 @@ def capture_path(
                 output = launch()
         torch.cuda.synchronize()
 
-    return CapturedPath(graph=graph, output=output, reset=reset)
+    initial_output = output.clone()
+    torch.cuda.synchronize()
+    return CapturedPath(
+        graph=graph,
+        output=output,
+        initial_output=initial_output,
+        reset=reset,
+    )
 
 
 def expected_output(
@@ -311,12 +319,22 @@ def expected_output(
     )
 
 
-def error_metrics(actual: torch.Tensor, expected: torch.Tensor) -> tuple[float, float]:
+def error_metrics(actual: torch.Tensor, expected: torch.Tensor) -> dict[str, float]:
     delta = (actual.float() - expected.float()).abs()
     max_abs = float(delta.max().item())
     denominator = expected.float().abs().clamp_min(1.0e-5)
     max_rel = float((delta / denominator).max().item())
-    return max_abs, max_rel
+    relative_l2 = float(
+        torch.linalg.vector_norm(delta)
+        .div(torch.linalg.vector_norm(expected.float()).clamp_min(1.0e-12))
+        .item()
+    )
+    return {
+        "max_abs": max_abs,
+        "max_rel": max_rel,
+        "mean_abs": float(delta.mean().item()),
+        "relative_l2": relative_l2,
+    }
 
 
 def validate_changed_input_replay(
@@ -333,17 +351,35 @@ def validate_changed_input_replay(
     case.rms_weight.mul_(0.9921875)
     expected = expected_output(case, device_group, world_size)
 
-    errors = {}
+    errors: dict[str, dict[str, float]] = {}
+    replayed_outputs: dict[str, torch.Tensor] = {}
+    failures = []
     for name, path in paths.items():
         path.reset()
         torch.cuda.synchronize()
         dist.barrier(group=cpu_group)
         path.graph.replay()
         torch.cuda.synchronize()
-        torch.testing.assert_close(path.output, expected, atol=8e-2, rtol=3e-2)
-        max_abs, max_rel = error_metrics(path.output, expected)
+        actual = path.output.clone()
+        replayed_outputs[name] = actual
+        fp32_error = error_metrics(actual, expected)
+        changed_input_delta = error_metrics(actual, path.initial_output)
+        if fp32_error["max_abs"] > 1.0 or fp32_error["relative_l2"] > 0.02:
+            failures.append(
+                f"{name} differs materially from the FP32 reference: {fp32_error}"
+            )
+        if changed_input_delta["relative_l2"] < 0.001:
+            failures.append(
+                f"{name} did not respond to changed graph inputs: {changed_input_delta}"
+            )
         error_tensor = torch.tensor(
-            [max_abs, max_rel],
+            [
+                fp32_error["max_abs"],
+                fp32_error["max_rel"],
+                fp32_error["mean_abs"],
+                fp32_error["relative_l2"],
+                changed_input_delta["relative_l2"],
+            ],
             dtype=torch.float64,
             device=case.routed.device,
         )
@@ -351,7 +387,27 @@ def validate_changed_input_replay(
         errors[name] = {
             "max_abs": float(error_tensor[0].item()),
             "max_rel": float(error_tensor[1].item()),
+            "mean_abs": float(error_tensor[2].item()),
+            "relative_l2": float(error_tensor[3].item()),
+            "changed_vs_capture_relative_l2": float(error_tensor[4].item()),
         }
+
+    baseline = replayed_outputs["tier2_baseline"]
+    for name in ("tier0_sequential", "tier0_overlap"):
+        topology_error = error_metrics(replayed_outputs[name], baseline)
+        errors[name].update(
+            {f"vs_tier2_{key}": value for key, value in topology_error.items()}
+        )
+        if topology_error["max_abs"] > 1.0 or topology_error["relative_l2"] > 0.02:
+            failures.append(f"{name} differs materially from Tier-2: {topology_error}")
+
+    if failures:
+        raise AssertionError(
+            "changed-input graph validation failed:\n"
+            + "\n".join(failures)
+            + "\nmetrics="
+            + json.dumps(errors, sort_keys=True)
+        )
     return errors
 
 

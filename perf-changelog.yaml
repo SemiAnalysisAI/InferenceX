@@ -6788,3 +6788,11 @@
   description:
     - "Compare the current Tier-2 Kimi-K3 tail against sequential and dual-communicator overlap variants using AITER reduce-scatter, sharded M=7 projection, and all-gather under changed-input HIP graph replay on eight gfx950 GPUs."
   pr-link: XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Validate changed-input graph replay with relative-L2 and absolute-error bounds appropriate for the BF16 distributed tail, require every path to react to changed inputs, and compare both Tier-0 topologies directly with the current Tier-2 output."
+  pr-link: XXX
