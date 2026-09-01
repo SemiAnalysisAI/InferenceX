@@ -1,13 +1,8 @@
-"""vLLM synthetic-acceptance backend (FRAMEWORK=dynamo-vllm).
+"""vLLM speculative-acceptance recipe rewriting.
 
-Rewrites every ``speculative-config: '<json>'`` entry in an srt-slurm recipe to
-use synthetic rejection sampling: it adds ``rejection_sample_method=synthetic``
-and ``synthetic_acceptance_length=<al>`` to the JSON so the engine emits a
-controlled mean acceptance length instead of running the real draft model.
-
-Registered under the "dynamo-vllm" framework key at import time, so importing
-the ``synthetic_injectors`` package is enough for the generic driver to resolve
-this backend.
+Throughput opt-ins can inject synthetic acceptance. Eval-only runs restore real
+block verification so model outputs remain valid for accuracy checks. The
+backend is registered for both direct vLLM and Dynamo-vLLM recipes.
 """
 
 import json
@@ -57,7 +52,9 @@ def rewrite(content, al, log):
     new_content, count = _SPEC_CONFIG_RE.subn(_replace, content)
 
     if count:
-        after = [ln.strip() for ln in new_content.splitlines() if _SPEC_CONFIG_RE.search(ln)]
+        after = [
+            ln.strip() for ln in new_content.splitlines() if _SPEC_CONFIG_RE.search(ln)
+        ]
         if after:
             log("After:")
             for ln in after:
@@ -66,4 +63,28 @@ def rewrite(content, al, log):
     return new_content, count
 
 
+def rewrite_real(content, log):
+    """Restore real block verification in every synthetic config entry."""
+    modified = 0
+
+    def _replace(match):
+        nonlocal modified
+        spec = json.loads(match.group(1))
+        if (
+            spec.get("rejection_sample_method") != "synthetic"
+            and "synthetic_acceptance_length" not in spec
+        ):
+            return match.group(0)
+        spec["rejection_sample_method"] = "block"
+        spec.pop("synthetic_acceptance_length", None)
+        modified += 1
+        return "speculative-config: '" + json.dumps(spec, separators=(",", ":")) + "'"
+
+    new_content = _SPEC_CONFIG_RE.sub(_replace, content)
+    if modified:
+        log("Restored real block verification for eval-only mode")
+    return new_content, modified
+
+
 register("dynamo-vllm", sys.modules[__name__])
+register("vllm", sys.modules[__name__])
