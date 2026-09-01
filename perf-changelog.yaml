@@ -6821,3 +6821,12 @@
   description:
     - "Refresh to collect TensorRT-LLM server metrics."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2774
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a manual exact TP8/DCP1 concurrency-1 diagnostic selector for the Kimi-K3 MI355X gap study."
+    - "Compare upstream vLLM PR 52494 and a PYNCCL-only collective arm independently without changing the canonical default recipe."
+  pr-link: XXX

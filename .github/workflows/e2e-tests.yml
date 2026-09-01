@@ -40,6 +40,11 @@ on:
                 required: false
                 type: boolean
                 default: false
+            k3-perf-variant:
+                description: "Kimi-K3 C1 diagnostic variant (baseline, mla52494, or pynccl)"
+                required: false
+                type: string
+                default: "baseline"
             eval-limit:
                 description: "Eval instance count: empty/full = whole split (default); N = first-N smoke slice"
                 required: false
@@ -130,6 +135,11 @@ on:
                 required: false
                 type: boolean
                 default: false
+            k3-perf-variant:
+                description: "Kimi-K3 C1 diagnostic variant (baseline, mla52494, or pynccl)"
+                required: false
+                type: string
+                default: "baseline"
             eval-limit:
                 description: "Eval instance count: empty/full = whole split (default); N = first-N smoke slice"
                 required: false
@@ -454,6 +464,7 @@ jobs:
             total-cpu-dram-gb: ${{ matrix.config.total-cpu-dram-gb }}
             duration: ${{ inputs.agentx-fast && '1200' || (inputs.duration-override != '' && inputs.duration-override || matrix.config.duration) }}
             agentx-fast: ${{ inputs.agentx-fast }}
+            k3-perf-variant: ${{ inputs.k3-perf-variant }}
             isl: '0'
             osl: '0'
             max-model-len: '0'
