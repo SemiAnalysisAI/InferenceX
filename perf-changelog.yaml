@@ -6594,11 +6594,12 @@
   description:
     - "Update the vLLM B200 Kimi-K3 AgentX configs."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2776
+  
 
 - config-keys:
     - qwen3.5-fp4-gb300-dynamo-trt-agentic-disagg
   scenario-type:
     - agentic-coding
   description:
-    - "Refresh Qwen3.5 GB300 AgentX to collect TensorRT-LLM server metrics."
+    - "Refresh to collect TensorRT-LLM server metrics."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2770
