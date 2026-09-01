@@ -4,6 +4,8 @@ set -e
 # System-specific configuration for H100 DGXC Slurm cluster
 SLURM_PARTITION="hpc-gpu-1"
 SLURM_ACCOUNT="customer"
+VLLM_AGENTIC_SRT_TAG="v1.0.50"
+VLLM_AGENTIC_SRT_PIN="e4019633c9e2bc25f38c44b81edf52bb0504d937"
 
 # Route spec-decoding=mtp configs to the _mtp benchmark script (parity with
 # the h200 launchers, which have carried SPEC_SUFFIX since #392).
@@ -33,8 +35,16 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
             echo "Unsupported model prefix/precision for dynamo-trt: $MODEL_PREFIX/$PRECISION"
             exit 1
         fi
+    elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
+        if [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
+            export MODEL_PATH="/mnt/nfs/sa-shared/gharunners/hf-hub-cache/models--MiniMaxAI--MiniMax-M3-MXFP8/snapshots/c5454eb03678d8710e54a4e0fc681b9f3b4a3dba"
+            export SRT_SLURM_MODEL_PREFIX="MiniMaxAI/MiniMax-M3-MXFP8"
+        else
+            echo "Unsupported model prefix/precision for dynamo-vllm: $MODEL_PREFIX/$PRECISION"
+            exit 1
+        fi
     else
-        echo "Unsupported framework: $FRAMEWORK. Supported frameworks are: dynamo-trt, dynamo-sglang"
+        echo "Unsupported framework: $FRAMEWORK. Supported frameworks are: dynamo-trt, dynamo-sglang, dynamo-vllm"
         exit 1
     fi
 
@@ -45,8 +55,19 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         rm -rf "$SRT_REPO_DIR"
     fi
 
+    if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
+        git clone --branch "$VLLM_AGENTIC_SRT_TAG" --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+        cd "$SRT_REPO_DIR"
+        test "$(git rev-parse HEAD)" = "$VLLM_AGENTIC_SRT_PIN" || {
+            echo "Error: srt-slurm $VLLM_AGENTIC_SRT_TAG resolved to an unexpected commit" >&2
+            exit 1
+        }
+        mkdir -p recipes/vllm/minimax-m3/h100-fp8/agentic
+        cp -rT \
+            "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3/h100-fp8/agentic" \
+            recipes/vllm/minimax-m3/h100-fp8/agentic
     # TODO(CJQ): make first class upon srt-slurm upstream refactor
-    if [[ "$IS_AGENTIC" == "1" ]]; then
+    elif [[ "$IS_AGENTIC" == "1" ]]; then
         git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR"
     else
@@ -93,6 +114,13 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         # TRT-LLM container mapping - convert IMAGE to srt-slurm format (nvcr.io/ -> nvcr.io#)
         CONTAINER_KEY=$(echo "$IMAGE" | sed 's|nvcr.io/|nvcr.io#|')
         SQUASH_FILE="/mnt/nfs/sa-shared/containers/$(echo "$IMAGE" | sed 's|nvcr.io/||' | sed 's/[\/:@#]/+/g').sqsh"
+    elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
+        CONTAINER_KEY="$IMAGE"
+        SQUASH_FILE="/mnt/nfs/lustre/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+        if ! unsquashfs -l "$SQUASH_FILE" >/dev/null 2>&1; then
+            echo "Error: expected pre-imported vLLM image at $SQUASH_FILE" >&2
+            exit 1
+        fi
     fi
 
     export ISL="$ISL"
@@ -120,6 +148,7 @@ model_paths:
 containers:
   dynamo-trtllm: "${SQUASH_FILE}"
   dynamo-sglang: "${SQUASH_FILE}"
+  dynamo-vllm: "${SQUASH_FILE}"
   nginx-sqsh: "${NGINX_SQUASH_FILE}"
   latest: "${SQUASH_FILE}"
   "${CONTAINER_KEY}": "${SQUASH_FILE}"

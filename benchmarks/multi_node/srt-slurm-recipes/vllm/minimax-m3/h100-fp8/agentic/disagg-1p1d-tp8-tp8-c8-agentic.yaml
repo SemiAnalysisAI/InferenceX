@@ -1,0 +1,128 @@
+name: "minimax-m3-vllm-disagg-h100-1p1d-tp8-tp8-c8-fp8-agentic"
+
+model:
+  path: "MiniMaxAI/MiniMax-M3-MXFP8"
+  container: "ttl.sh/cquil11-vllm-tier-d67b417bca-pr53087-20260901:24h"
+  precision: "fp8"
+
+identity:
+  model:
+    repo: "MiniMaxAI/MiniMax-M3-MXFP8"
+    revision: "c5454eb03678d8710e54a4e0fc681b9f3b4a3dba"
+  container:
+    image: "ttl.sh/cquil11-vllm-tier-d67b417bca-pr53087-20260901:24h"
+  frameworks:
+    dynamo: "1.4.0.dev20260730"
+
+dynamo:
+  install: true
+  version: "1.4.0.dev20260730"
+  request_plane: "nats"
+
+health_check:
+  max_attempts: 720
+  interval_seconds: 10
+
+slurm:
+  time_limit: "5:00:00"
+
+resources:
+  gpu_type: "h100"
+  gpus_per_node: 8
+  prefill_nodes: 1
+  decode_nodes: 1
+  prefill_workers: 1
+  decode_workers: 1
+  gpus_per_prefill: 8
+  gpus_per_decode: 8
+
+infra:
+  etcd_nats_dedicated_node: false
+  nats_max_payload_mb: 32
+
+frontend:
+  type: "dynamo"
+  enable_multiple_frontends: false
+  args:
+    dyn-chat-processor: "vllm"
+    trust-remote-code: true
+    tool-call-parser: "minimax_m3"
+    reasoning-parser: "minimax_m3"
+    enable-auto-tool-choice: true
+    router-mode: "kv"
+    router-kv-events: true
+    router-reset-states: true
+    router-temperature: "0"
+    router-session-affinity-ttl-secs: 14400
+    kv-cache-block-size: 128
+  env:
+    DYN_TCP_REQUEST_TIMEOUT: "60"
+
+backend:
+  type: "vllm"
+  connector: null
+  kv_events_config: true
+
+  prefill_environment: &worker-environment
+    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+    VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
+    VLLM_NIXL_ABORT_REQUEST_TIMEOUT: "300"
+    VLLM_FLOAT32_MATMUL_PRECISION: "high"
+    VLLM_LOG_STATS_INTERVAL: "1"
+    PYTHONNOUSERSITE: "1"
+    NCCL_CUMEM_ENABLE: "1"
+    NCCL_NVLS_ENABLE: "1"
+    UCX_MEMTYPE_CACHE: "n"
+
+  decode_environment: *worker-environment
+
+  vllm_config:
+    prefill: &worker-config
+      served-model-name: "MiniMaxAI/MiniMax-M3-MXFP8"
+      tensor-parallel-size: 8
+      trust-remote-code: true
+      enable-prefix-caching: true
+      kv-cache-metrics: true
+      kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
+      block-size: 128
+      gpu-memory-utilization: 0.90
+      cpu-offload-gb: 26
+      max-model-len: 1048576
+      language-model-only: true
+      kv-cache-dtype: "fp8"
+      attention-backend: "TRITON_ATTN"
+      max-num-seqs: 16
+      max-cudagraph-capture-size: 32
+      max-num-batched-tokens: 16384
+      safetensors-load-strategy: "lazy"
+      enable-prompt-tokens-details: true
+      default-chat-template-kwargs: '{"thinking_mode":"enabled"}'
+      reasoning-parser: "minimax_m3"
+      dyn-tool-call-parser: "minimax_m3"
+      dyn-reasoning-parser: "minimax_m3"
+    decode: *worker-config
+
+sbatch_directives:
+  cpus-per-task: "144"
+  mem: "0"
+
+srun_options:
+  container-remap-root: ""
+
+benchmark:
+  type: "custom"
+  command: "bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh"
+  env:
+    INFMAX_CONTAINER_WORKSPACE: "/infmax-workspace"
+    RESULT_DIR: "/logs/agentic"
+    PORT: "8000"
+    IS_MULTINODE: "true"
+    AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
+    AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
+    AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: "14400"
+    AIPERF_EXTRA_INPUTS: "thinking:true"
+    AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:"
+    AIPERF_SERVER_METRICS_COLLECTION_INTERVAL: "1.0"
+    AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
+    HF_HUB_CACHE: "/hf_hub_cache"
+    WEKA_LOADER_OVERRIDE: "semianalysis_cc_traces_weka_062126"
