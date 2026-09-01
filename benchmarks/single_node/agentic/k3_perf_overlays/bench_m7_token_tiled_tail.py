@@ -12,7 +12,7 @@ from pathlib import Path
 import aiter
 import torch
 from aiter.ops.flydsl.latent_moe_tail import (
-    latent_moe_projection_add,
+    latent_moe_projection,
     latent_moe_tail,
 )
 from bench_latent_moe_tail_small_m import (
@@ -73,13 +73,12 @@ def make_pre_normalized_candidate(
     def operation(case: Case) -> torch.Tensor:
         routed, shared, rms_weight, up_weight = case
         normalized = aiter.rmsnorm2d_fwd(routed, rms_weight, EPSILON)
-        return latent_moe_projection_add(
+        return latent_moe_projection(
             normalized,
-            shared,
             up_weight,
             tokens_per_block=tokens_per_block,
             rows_per_block=rows_per_block,
-        )
+        ).add_(shared)
 
     return operation
 
@@ -169,7 +168,7 @@ def benchmark(args: argparse.Namespace) -> dict:
             for name, (tokens_per_block, rows_per_block) in TILINGS.items()
             for candidate_name, normalization in (
                 (name, "in_kernel"),
-                (f"pre_norm_{name}", "separate_aiter_rmsnorm"),
+                (f"pre_norm_{name}", "separate_aiter_rmsnorm_and_add"),
             )
         },
         "eager_errors": eager_errors,

@@ -5,7 +5,7 @@ result_dir="${1:?usage: run_m7_token_tiled_tail.sh <result-dir>}"
 overlay_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 aiter_repo="https://github.com/andyluo7/aiter.git"
 aiter_ref="codex/k3-m7-token-tiled-20260901"
-aiter_commit="f90f7804f63b4040e45c94cd58114d1364fcd7e9"
+aiter_commit="0f1c7ffcb23774fa3e9ce9878547f9956754d310"
 scratch="$(mktemp -d /tmp/k3-m7-token-tiled.XXXXXX)"
 trap 'rm -rf "$scratch"' EXIT
 
@@ -208,10 +208,10 @@ expected_tilings = {
     "token_tile_2_r7": (2, 7, "in_kernel"),
     "token_tile_4_r4": (4, 4, "in_kernel"),
     "token_tile_7_r2": (7, 2, "in_kernel"),
-    "pre_norm_one_token_r14": (1, 14, "separate_aiter_rmsnorm"),
-    "pre_norm_token_tile_2_r7": (2, 7, "separate_aiter_rmsnorm"),
-    "pre_norm_token_tile_4_r4": (4, 4, "separate_aiter_rmsnorm"),
-    "pre_norm_token_tile_7_r2": (7, 2, "separate_aiter_rmsnorm"),
+    "pre_norm_one_token_r14": (1, 14, "separate_aiter_rmsnorm_and_add"),
+    "pre_norm_token_tile_2_r7": (2, 7, "separate_aiter_rmsnorm_and_add"),
+    "pre_norm_token_tile_4_r4": (4, 4, "separate_aiter_rmsnorm_and_add"),
+    "pre_norm_token_tile_7_r2": (7, 2, "separate_aiter_rmsnorm_and_add"),
 }
 for name, expected in expected_tilings.items():
     actual = tilings.get(name, {})
