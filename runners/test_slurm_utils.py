@@ -464,6 +464,18 @@ def test_nvidia_srt_launchers_prepare_kimi_eval_dispatch() -> None:
         assert 'EVAL_FRAMEWORK:-lm-eval}" != "lm-eval"' in content
         assert "inject_synthetic_acceptance" in content
 
+def test_gb200_acceptance_driver_is_unconditional_and_fail_closed() -> None:
+    content = (REPO_ROOT / "runners/launch_gb200-nv.sh").read_text()
+    command = (
+        'python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py"'
+    )
+    command_index = content.index(command)
+
+    assert content.rfind("\nfi", 0, command_index) > content.rfind(
+        "\nif ", 0, command_index
+    )
+    assert "|| exit 1" in content[command_index : command_index + 180]
+
 
 def test_gb200_kimi_compilation_config_preserves_all_settings() -> None:
     recipes = {
