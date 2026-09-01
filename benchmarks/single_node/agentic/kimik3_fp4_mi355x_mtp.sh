@@ -71,7 +71,7 @@ if [ "$CONC" -le 4 ]; then
     SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-8}"
     SPEC_ROWS=$(( SPEC_NUM_TOKENS + 1 ))
     if [ "${EVAL_ONLY:-false}" = "true" ]; then
-        SPEC_VERIFY="\"rejection_sample_method\":\"standard\""
+        SPEC_VERIFY="\"rejection_sample_method\":\"block\""
     else
         SPEC_VERIFY="\"rejection_sample_method\":\"synthetic\",\"synthetic_acceptance_length\":4.0"
     fi
