@@ -1,7 +1,8 @@
 """Comprehensive tests for generate_sweep_configs.py"""
-
 import argparse
 import copy
+import hashlib
+import json
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,7 @@ from generate_sweep_configs import (
     add_multinode_node_count,
     apply_node_type_defaults,
     expand_config_keys,
+    filter_exp_names,
     generate_full_sweep,
     generate_test_config_sweep,
     mark_all_eval_entries,
@@ -19,6 +21,7 @@ from generate_sweep_configs import (
     seq_len_itos,
     seq_len_stoi,
     seq_len_to_str,
+    trim_conc,
 )
 from validation import load_config_files, load_runner_file
 
@@ -282,7 +285,7 @@ def sample_runner_config():
             "cluster:h200-dgxc": {"available-cpu-dram-mib": 1471356, "gpus-per-node": 8},
             "cluster:b200-nscale": {"available-cpu-dram-mib": 3774874, "gpus-per-node": 8},
             "cluster:b300-nv": {"available-cpu-dram-mib": 2964436, "gpus-per-node": 8},
-            "cluster:mi300x-amds": {"available-cpu-dram-mib": 2321924, "gpus-per-node": 8},
+            "cluster:mi300x-amd": {"available-cpu-dram-mib": 1547820, "gpus-per-node": 8},
             "cluster:mi355x-amds": {"available-cpu-dram-mib": 3095781, "gpus-per-node": 8},
             "cluster:gb200-nv": {"available-cpu-dram-mib": 860160, "gpus-per-node": 4},
         },
@@ -468,6 +471,100 @@ class TestMarkEvalEntries:
         assert len(marked) == 0, (
             f"Expected 0 agentic entries marked run-eval in default mode, got {len(marked)}"
         )
+
+    def test_default_marks_every_supported_vendor_point(self):
+        matrix_values = [
+            {
+                "scenario-type": "agentic-coding",
+                "model-prefix": model_prefix,
+                "model": model_prefix,
+                "runner": "b300",
+                "framework": "vllm",
+                "precision": "fp4",
+                "tp": 8,
+                "conc": conc,
+            }
+            for model_prefix in ("kimik3", "minimaxm3")
+            for conc in (1, 64)
+        ]
+        matrix_values.append({
+            "scenario-type": "agentic-coding",
+            "model-prefix": "minimaxm3-bfcl",
+            "model": "unsupported",
+            "runner": "b300",
+            "framework": "vllm",
+            "precision": "fp4",
+            "tp": 8,
+            "conc": 64,
+        })
+
+        result = mark_eval_entries(matrix_values)
+
+        expected = {
+            "kimik3": ("kimi-vendor", "kimi_tool_call_schema"),
+            "minimaxm3": ("minimax-vendor", "minimax_m3_smoke"),
+        }
+        for model_prefix, eval_spec in expected.items():
+            rows = [row for row in result if row["model-prefix"] == model_prefix]
+            assert {row["conc"] for row in rows} == {1, 64}
+            assert all(row["run-eval"] is True for row in rows)
+            assert {
+                (row["eval-framework"], row["eval-suite"]) for row in rows
+            } == {eval_spec}
+
+        unsupported = result[-1]
+        assert unsupported["run-eval"] is False
+        assert "eval-framework" not in unsupported
+        assert all(row.get("eval-framework") != "bfcl" for row in result)
+
+    def test_default_marks_every_multinode_vendor_point(self):
+        common = {
+            "scenario-type": "agentic-coding",
+            "model-prefix": "kimik3",
+            "model": "kimi",
+            "runner": "gb200",
+            "framework": "sglang-disagg",
+            "precision": "fp4",
+            "spec-decoding": "none",
+            "disagg": True,
+            "prefill": {"num-worker": 1, "tp": 8},
+            "decode": {"num-worker": 1, "tp": 8},
+        }
+        matrix_values = [
+            {**common, "conc": [2], "exp-name": "kimi-conc2"},
+            {**common, "conc": [32], "exp-name": "kimi-conc32"},
+        ]
+
+        result = mark_eval_entries(matrix_values)
+
+        assert len(result) == 2
+        assert all(row["run-eval"] is True for row in result)
+        assert [row["eval-conc"] for row in result] == [2, 32]
+        assert all(row["eval-framework"] == "kimi-vendor" for row in result)
+        assert all(
+            row["eval-suite"] == "kimi_tool_call_schema" for row in result
+        )
+
+    def test_fixed_sequence_eval_uses_lm_eval_metadata(self):
+        matrix_values = [{
+            "model": "m",
+            "runner": "b200",
+            "framework": "vllm",
+            "precision": "fp8",
+            "isl": 8192,
+            "osl": 1024,
+            "spec-decoding": "none",
+            "dp-attn": False,
+            "tp": 8,
+            "conc": MIN_EVAL_CONC,
+        }]
+
+        result = mark_eval_entries(matrix_values)
+
+        assert result[0]["run-eval"] is True
+        assert result[0]["eval-framework"] == "lm-eval"
+        assert result[0]["eval-suite"] == ""
+
 
     def test_single_node_skips_eval_entries_below_min_conc(self):
         """Single-node eval selection should ignore conc values below MIN_EVAL_CONC."""
@@ -893,11 +990,11 @@ class TestMarkAllEvalEntries:
         assert result[0]['run-eval'] is True
         assert 'eval-conc' not in result[0]
 
-    def test_marks_multinode_agentic_entries_for_swebench(self):
-        """Unlike fixed-seq-len multi-node (which batches every concurrency
-        into one lm-eval row via eval-all-concs), multi-node agentic rows for
-        the same topology are merged but only their highest conc is marked
-        via eval-conc, since SWE-bench doesn't support batched concurrencies."""
+    def test_marks_multinode_agentic_entries_for_gsm8k(self):
+        """Unlike fixed-seq-len multi-node evals, generic agentic rows with the
+        same topology merge but select only their highest concurrency through
+        eval-conc.
+        """
         common = {
             'scenario-type': 'agentic-coding',
             'model': 'm', 'runner': 'r', 'framework': 'sglang-disagg',
@@ -918,6 +1015,33 @@ class TestMarkAllEvalEntries:
         assert result[0]['conc'] == [2, 16, 32]
         assert result[0]['eval-conc'] == 32
         assert 'eval-all-concs' not in result[0]
+
+    def test_keeps_every_multinode_vendor_point_separate(self):
+        common = {
+            "scenario-type": "agentic-coding",
+            "model-prefix": "minimaxm3",
+            "model": "minimax",
+            "runner": "gb200",
+            "framework": "sglang-disagg",
+            "precision": "fp4",
+            "spec-decoding": "none",
+            "disagg": True,
+            "prefill": {"num-worker": 1, "tp": 8},
+            "decode": {"num-worker": 1, "tp": 8},
+        }
+        entries = [
+            {**common, "conc": [2], "exp-name": "minimax-conc2"},
+            {**common, "conc": [32], "exp-name": "minimax-conc32"},
+        ]
+
+        result = mark_all_eval_entries(mark_eval_entries(entries))
+
+        assert len(result) == 2
+        assert [row["conc"] for row in result] == [[2], [32]]
+        assert [row["eval-conc"] for row in result] == [2, 32]
+        assert all(row["eval-framework"] == "minimax-vendor" for row in result)
+        assert all(row["eval-suite"] == "minimax_m3_smoke" for row in result)
+
 
 
 # =============================================================================
@@ -1875,7 +1999,7 @@ class TestArgumentDefaults:
     def test_runner_config_default_value(self):
         """Verify --runner-config defaults to configs/runners.yaml."""
         import sys
-        from generate_sweep_configs import main
+
 
         # Save original sys.argv
         original_argv = sys.argv
@@ -1892,7 +2016,7 @@ class TestArgumentDefaults:
             # Parse args using the ArgumentParser from main
             # We need to access the parser directly
             import argparse
-            from generate_sweep_configs import main
+
 
             # Create the same parent parser as in main()
             parent_parser = argparse.ArgumentParser(add_help=False)
@@ -1999,6 +2123,7 @@ class TestArgumentDefaults:
         """--all-evals bypasses the default min-conc/highest-median policy but
         still only evaluates 8k1k (1k1k entries are excluded)."""
         import sys
+
         import generate_sweep_configs
 
         monkeypatch.setattr(
@@ -2038,6 +2163,7 @@ class TestArgumentDefaults:
         sample_runner_config,
     ):
         import sys
+
         import generate_sweep_configs
 
         monkeypatch.setattr(
@@ -2068,6 +2194,196 @@ class TestArgumentDefaults:
         assert all(entry['run-eval'] is True for entry in result)
         assert all(entry['eval-only'] is True for entry in result)
 
+    def test_trim_conc_reduces_generated_eval_matrix(
+        self,
+        monkeypatch,
+        sample_single_node_config,
+        sample_runner_config,
+    ):
+        import sys
+
+        import generate_sweep_configs
+
+        monkeypatch.setattr(
+            generate_sweep_configs,
+            'load_config_files',
+            lambda _: sample_single_node_config,
+        )
+        monkeypatch.setattr(
+            generate_sweep_configs,
+            'load_runner_file',
+            lambda _: sample_runner_config,
+        )
+        monkeypatch.setattr(sys, 'argv', [
+            'generate_sweep_configs.py',
+            'test-config',
+            '--config-files', 'dummy.yaml',
+            '--config-keys', 'dsr1-fp8-mi300x-sglang',
+            '--evals-only',
+            '--all-evals',
+            '--trim-conc',
+        ])
+
+        result = generate_sweep_configs.main()
+
+        assert len(result) == 1
+        assert result[0]['conc'] == 4
+        assert result[0]['run-eval'] is True
+        assert result[0]['eval-only'] is True
+
+    def test_trim_conc_updates_multinode_dispatch_concurrency(self):
+        low_entry = {
+            'prefill': {'num-worker': 1, 'tp': 8},
+            'decode': {'num-worker': 0, 'tp': 8},
+            'conc': [4],
+        }
+        high_entry = {
+            **low_entry,
+            'conc': [64],
+            'run-eval': True,
+            'eval-conc': 64,
+        }
+
+        result = trim_conc([high_entry, low_entry])
+
+        assert len(result) == 1
+        assert result[0]['conc'] == [4]
+        assert result[0]['eval-conc'] == 4
+        assert result[0]['run-eval'] is True
+
+    def test_kimi_minimax_default_matrix_marks_every_current_point(
+        self,
+        monkeypatch,
+    ):
+        import sys
+
+        import generate_sweep_configs
+
+        repo_root = Path(__file__).resolve().parents[2]
+        monkeypatch.setattr(sys, 'argv', [
+            'generate_sweep_configs.py',
+            'full-sweep',
+            '--config-files',
+            str(repo_root / 'configs/nvidia-master.yaml'),
+            str(repo_root / 'configs/amd-master.yaml'),
+            '--runner-config',
+            str(repo_root / 'configs/runners.yaml'),
+            '--model-prefix',
+            'kimik3',
+            'minimaxm3',
+            '--scenario-type',
+            'agentic-coding',
+        ])
+
+        rows = generate_sweep_configs.main()
+
+        expected_eval_specs = {
+            'kimik3': ('kimi-vendor', 'kimi_tool_call_schema'),
+            'minimaxm3': ('minimax-vendor', 'minimax_m3_smoke'),
+        }
+        assert {row['model-prefix'] for row in rows} == set(expected_eval_specs)
+        assert all(row['run-eval'] is True for row in rows)
+        assert all(row.get('eval-only') is not True for row in rows)
+        assert {
+            (
+                row['model-prefix'],
+                row['eval-framework'],
+                row['eval-suite'],
+            )
+            for row in rows
+        } == {
+            (model_prefix, *eval_spec)
+            for model_prefix, eval_spec in expected_eval_specs.items()
+        }
+        assert all(row['eval-framework'] != 'bfcl' for row in rows)
+
+
+    def test_kimi_minimax_trimmed_eval_matrix_covers_current_configs(
+        self,
+        monkeypatch,
+    ):
+        import sys
+
+        import generate_sweep_configs
+
+        repo_root = Path(__file__).resolve().parents[2]
+        monkeypatch.setattr(sys, 'argv', [
+            'generate_sweep_configs.py',
+            'full-sweep',
+            '--config-files',
+            str(repo_root / 'configs/nvidia-master.yaml'),
+            str(repo_root / 'configs/amd-master.yaml'),
+            '--runner-config',
+            str(repo_root / 'configs/runners.yaml'),
+            '--model-prefix',
+            'kimik3',
+            'minimaxm3',
+            '--scenario-type',
+            'agentic-coding',
+            '--evals-only',
+            '--all-evals',
+            '--trim-conc',
+        ])
+
+        rows = generate_sweep_configs.main()
+        manifest_fields = (
+            'model-prefix',
+            'runner',
+            'framework',
+            'precision',
+            'tp',
+            'pp',
+            'dcp-size',
+            'pcp-size',
+            'ep',
+            'dp-attn',
+            'prefill',
+            'decode',
+            'disagg',
+            'kv-offloading',
+            'kv-offload-backend',
+            'spec-decoding',
+            'exp-name',
+        )
+        manifest = sorted(
+            tuple(
+                (
+                    field,
+                    generate_sweep_configs.freeze_config_value(row.get(field)),
+                )
+                for field in manifest_fields
+            )
+            for row in rows
+        )
+        manifest_digest = hashlib.sha256(
+            json.dumps(manifest, separators=(',', ':')).encode()
+        ).hexdigest()
+
+        assert len(manifest) == 63
+        assert manifest_digest == (
+            '1630cdd6fbf77302ee3286b118710576aa090e1502b3e5ec482b7f537a3f1132'
+        ), manifest_digest
+        for row in rows:
+            if isinstance(row['conc'], list):
+                assert row['conc'] == [row['eval-conc']]
+        assert all(row['run-eval'] is True for row in rows)
+        assert all(row['eval-only'] is True for row in rows)
+        expected_eval_specs = {
+            'kimik3': ('kimi-vendor', 'kimi_tool_call_schema'),
+            'minimaxm3': ('minimax-vendor', 'minimax_m3_smoke'),
+        }
+        assert {
+            (
+                row['model-prefix'],
+                row['eval-framework'],
+                row['eval-suite'],
+            )
+            for row in rows
+        } == {
+            (model_prefix, *eval_spec)
+            for model_prefix, eval_spec in expected_eval_specs.items()
+        }
+
     def test_all_evals_batches_each_multinode_concurrency(
         self,
         monkeypatch,
@@ -2075,6 +2391,7 @@ class TestArgumentDefaults:
         sample_runner_config,
     ):
         import sys
+
         import generate_sweep_configs
 
         config = sample_multinode_config
@@ -2117,6 +2434,7 @@ class TestArgumentDefaults:
 
     def test_all_evals_cannot_combine_with_no_evals(self, monkeypatch):
         import sys
+
         import generate_sweep_configs
 
         monkeypatch.setattr(sys, 'argv', [
@@ -2869,6 +3187,46 @@ class TestAgentXPowerExperimentConfigs:
             for row in result
             if row["kv-offloading"] == "none"
         )
+
+
+# =============================================================================
+# Test filter_exp_names
+# =============================================================================
+
+
+class TestFilterExpNames:
+    def test_selects_exact_names_in_matrix_order(self):
+        entries = [
+            {"exp-name": "deployment-a", "conc": 1},
+            {"exp-name": "deployment-b", "conc": 1},
+            {"exp-name": "deployment-c", "conc": 2},
+        ]
+
+        result = filter_exp_names(entries, ["deployment-b", "deployment-a"])
+
+        assert result == entries[:2]
+
+    @pytest.mark.parametrize(
+        ("entries", "names", "message"),
+        (
+            ([{"exp-name": "deployment-a"}], ["missing"], "not found"),
+            (
+                [{"exp-name": "deployment-a"}, {"exp-name": "deployment-a"}],
+                ["deployment-a"],
+                "multiple rows",
+            ),
+            (
+                [{"exp-name": "deployment-a"}],
+                ["deployment-a", "deployment-a"],
+                "duplicate values",
+            ),
+        ),
+    )
+    def test_rejects_missing_ambiguous_or_duplicate_names(
+        self, entries, names, message
+    ):
+        with pytest.raises(ValueError, match=message):
+            filter_exp_names(entries, names)
 
 
 # =============================================================================
