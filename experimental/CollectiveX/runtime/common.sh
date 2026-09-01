@@ -38,6 +38,13 @@ COLLX_DEEPEP_V2_NVSHMEM_SPEC="nvidia-nvshmem-cu13==3.4.5"
 # venv cache key, so a change forces a rebuild.
 COLLX_DEEPEP_V2_TORCH_SPEC="torch==2.11.0"
 
+# Build-recipe generation for the DeepEP venv cache key. Bump when the BUILD FLAGS
+# change without any pin changing — "dlarch1" marks the fix that pins the RDC
+# device-link arch via NVCC_PREPEND_FLAGS (the bare dlink defaulted to sm_75 and
+# produced unloadable kernels; venvs built before this carry .ready and would
+# otherwise be reused broken).
+COLLX_DEEPEP_V2_BUILD_GEN="dlarch1"
+
 COLLX_UCCL_REPO="https://github.com/uccl-project/uccl"
 COLLX_UCCL_COMMIT="fc1b582031221645ea9fce58aeb57187713145e3"
 

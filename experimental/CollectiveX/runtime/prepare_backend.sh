@@ -134,10 +134,12 @@ deepep_cache_root() {
   local nvshmem_key="${COLLX_DEEPEP_V2_NVSHMEM_SPEC#nvidia-}"
   nvshmem_key="${nvshmem_key//==/-}"
   local torch_key="${COLLX_DEEPEP_V2_TORCH_SPEC//==/-}"
-  [[ "$nvshmem_key" =~ ^[A-Za-z0-9._-]+$ && "$torch_key" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
-  printf '%s/deepep-v2-%s-sm%s-%s-%s-%s-%s' \
+  local build_gen="${COLLX_DEEPEP_V2_BUILD_GEN:?}"
+  [[ "$nvshmem_key" =~ ^[A-Za-z0-9._-]+$ && "$torch_key" =~ ^[A-Za-z0-9._-]+$ \
+     && "$build_gen" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
+  printf '%s/deepep-v2-%s-sm%s-%s-%s-%s-%s-%s' \
     "$base" "$cpu" "${arch/./}" "${image#-}" "${COLLX_DEEPEP_V2_COMMIT:0:12}" \
-    "$torch_key" "$nvshmem_key"
+    "$torch_key" "$nvshmem_key" "$build_gen"
 }
 
 deepep_activate() {
@@ -222,7 +224,15 @@ deepep_install() {
     || { collx_log "ERROR: DeepEP V2 environment activation failed"; return 1; }
   collx_materialize_deepep_source "$source_dir" \
     || { collx_log "ERROR: DeepEP V2 staged source is invalid"; return 1; }
+  # The RDC device-link step (nvcc -dlink) receives NO -gencode from the extension
+  # build, so nvcc falls back to ITS default arch (sm_75 on CUDA 13) and relinks the
+  # correctly-compiled sm-specific objects into an sm_75 device image — kernels that
+  # can never load on the target GPU (gb300/sm103: cudaErrorUnknown at first launch;
+  # proven by build log: every compile line -gencode sm_103, step 9/9 -dlink bare).
+  # NVCC_PREPEND_FLAGS reaches every nvcc invocation including the dlink.
+  local gencode="-gencode=arch=compute_${arch/./},code=sm_${arch/./}"
   (cd "$source_dir" && TORCH_CUDA_ARCH_LIST="$arch" MAX_JOBS=16 \
+    NVCC_PREPEND_FLAGS="$gencode ${NVCC_PREPEND_FLAGS:-}" \
     "$venv/bin/python" -m pip install -q --no-build-isolation --no-deps \
       --force-reinstall .) >&2 2>&1 \
     || { collx_log "ERROR: DeepEP V2 build failed"; return 1; }
