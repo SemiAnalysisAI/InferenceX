@@ -1194,14 +1194,11 @@ dsv4-fp4-mi355x-sglang-mtp:
 #
 # DeepSeek-V4-Pro is FP4+FP8 mixed (FP4 MoE expert weights, FP8 for the
 # rest); InferenceX classifies this as fp4 — same as the sister sglang
-# and atom DSv4 mi355x entries below. Image and serving flags follow the
-# validated recipe from vllm-project/recipes#433: AITER+AITER_LINEAR, mp
-# executor, triton_unfused MoE (required for the FP4 expert format),
-# async scheduling, max-num-seqs=128, max-num-batched-tokens=8192,
-# gpu-mem-util=0.6. TP8 sweeps conc 4-64; DEP8 has a single conc=64
-# probe to validate the ROCm DP+EP path.
+# and atom DSv4 mi355x entries below. The serving recipe enables AITER
+# explicitly; the pinned nightly then auto-selects its ROCm DeepSeek-V4
+# mHC, sparse-indexer, attention, and compressor-GEMM optimizations.
 dsv4-fp4-mi355x-vllm:
-  image: vllm/vllm-openai-rocm:nightly-09663abde0f50944a8d5ea30120666024b503faa
+  image: vllm/vllm-openai-rocm:nightly-7c5dc571cbd1064ecc8a9b1045637ff647aa22cb
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x
@@ -1221,10 +1218,10 @@ dsv4-fp4-mi355x-vllm:
 # vllm-project/vllm#43385 (ROCm DeepSeek-V4 MTP, merged 2026-05-24, included in
 # v0.22.0). Full conc 4-512 range maps the complete crossover curve: MTP wins
 # at low batch (PR perf data: +75% @ conc1, +38% @ conc8) and falls behind STP
-# above ~conc32 (-37% @ conc32). Image reuses the base entry's v0.22.0 ROCm
-# build, which already contains the MTP commit.
+# above ~conc32 (-37% @ conc32). Image reuses the base entry's pinned ROCm
+# nightly, which includes the MTP path and subsequent DSV4 kernel updates.
 dsv4-fp4-mi355x-vllm-mtp:
-  image: vllm/vllm-openai-rocm:nightly-09663abde0f50944a8d5ea30120666024b503faa
+  image: vllm/vllm-openai-rocm:nightly-7c5dc571cbd1064ecc8a9b1045637ff647aa22cb
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x
