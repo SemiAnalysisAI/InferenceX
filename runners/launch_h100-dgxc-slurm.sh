@@ -62,6 +62,9 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
             echo "Error: srt-slurm $VLLM_AGENTIC_SRT_TAG resolved to an unexpected commit" >&2
             exit 1
         }
+        # The 18 GB validation image can take more than srt-slurm's default
+        # five-minute window to unpack on a cold H100 node.
+        sed -i 's/timeout=300/timeout=900/g' src/srtctl/cli/do_sweep.py
         mkdir -p recipes/vllm/minimax-m3/h100-fp8/agentic
         cp -rT \
             "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3/h100-fp8/agentic" \
