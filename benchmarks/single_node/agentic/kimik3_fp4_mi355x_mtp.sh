@@ -70,7 +70,12 @@ SPEC_ROWS=1
 if [ "$CONC" -le 4 ]; then
     SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-8}"
     SPEC_ROWS=$(( SPEC_NUM_TOKENS + 1 ))
-    SPEC_ARGS=(--speculative-config "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"synthetic\",\"synthetic_acceptance_length\":4.0}")
+    if [ "${EVAL_ONLY:-false}" = "true" ]; then
+        SPEC_VERIFY="\"rejection_sample_method\":\"standard\""
+    else
+        SPEC_VERIFY="\"rejection_sample_method\":\"synthetic\",\"synthetic_acceptance_length\":4.0"
+    fi
+    SPEC_ARGS=(--speculative-config "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",$SPEC_VERIFY}")
     MAX_NUM_SEQS=1
     MAX_BATCHED_TOKENS=8192
     DCP_SIZE=1
@@ -102,6 +107,7 @@ fi
 EP_ARGS=()
 if [ "${EP_SIZE:-1}" -gt 1 ]; then EP_ARGS=(--enable-expert-parallel); fi
 
+echo "[spec] verify=${SPEC_VERIFY:-none}"
 echo "[cfg] conc=$CONC dcp=$DCP_SIZE gmu=$GPU_MEM_UTIL mns=$MAX_NUM_SEQS ladder=1..$LADDER (mns x $SPEC_ROWS) chunk=$MAX_BATCHED_TOKENS spec=${#SPEC_ARGS[@]} offload=${KV_OFFLOADING:-none}"
 
 VLLM_CMD=(
