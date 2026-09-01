@@ -6753,3 +6753,11 @@
     - "Evaluate the Kimi-K3 torch.compile and post-grad fusion path from upstream vLLM PR 52190 as an independent arm."
     - "Tune and graph-replay validate the six exact M=7 BF16 GEMM shapes observed in the Kimi-K3 AgentX concurrency-one decode path."
   pr-link: XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Benchmark the exact gfx950 Kimi-K3 M=7 latent-MoE tail prototype with M=1-14 correctness coverage, changed-input HIP graph replay, rotating projection weights, and pinned AITER provenance."
+  pr-link: XXX

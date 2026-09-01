@@ -69,6 +69,11 @@ if [[ "$K3_PERF_VARIANT" == "m7gemmtune" ]]; then
     bash "$(dirname "$0")/k3_perf_overlays/tune_m7_bf16_gemms.sh" "$RESULT_DIR"
     exit 0
 fi
+if [[ "$K3_PERF_VARIANT" == "m7latenttail" ]]; then
+    mkdir -p "$RESULT_DIR"
+    bash "$(dirname "$0")/k3_perf_overlays/run_m7_latent_tail.sh" "$RESULT_DIR"
+    exit 0
+fi
 
 # `hf download` creates the target dir if missing and is itself idempotent. The
 # 1.56 TB checkpoint is normally pre-staged, so these calls are a no-op there.
