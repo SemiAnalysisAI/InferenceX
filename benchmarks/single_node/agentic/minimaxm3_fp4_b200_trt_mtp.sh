@@ -11,7 +11,7 @@ set -x
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-export EVAL_FRAMEWORK="lm-eval"
+export EVAL_FRAMEWORK="${EVAL_FRAMEWORK:-lm-eval}"
 
 check_env_vars MODEL TP CONC PORT KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EVAL_ONLY
 
@@ -48,6 +48,10 @@ install_agentic_deps
 # rc23 gates Prometheus and its expensive per-step timing collector behind the
 # same option. Keep Prometheus request/iteration metrics without timing payloads.
 disable_trtllm_detailed_perf_metrics
+
+# BFCL's stock OpenAI client sends the standard `store=false` field. TRT-LLM
+# 1.3 rejects that field even though this server never persists responses.
+python3 "$(dirname "$0")/../../../runners/patch_trtllm_chat_store.py"
 
 # kv_cache_config.host_cache_size is pinned per topology in ser.yaml below
 # (200 GiB at TP8, 250 GiB at TP4 -- see $mem_off), NOT derived from

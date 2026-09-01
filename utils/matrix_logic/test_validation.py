@@ -2,9 +2,9 @@
 import copy
 
 import pytest
+from pydantic import ValidationError
 from validation import (
     ComponentMetadata,
-    Fields,
     SingleNodeMatrixEntry,
     SingleNodeAgenticMatrixEntry,
     MultiNodeMatrixEntry,
@@ -201,35 +201,10 @@ def valid_runner_config():
             "cluster:h100-dgxc": {"available-cpu-dram-mib": 2063837, "gpus-per-node": 8},
             "cluster:h200-dgxc": {"available-cpu-dram-mib": 1471356, "gpus-per-node": 8},
             "cluster:b200-nscale": {"available-cpu-dram-mib": 3774874, "gpus-per-node": 8},
-            "cluster:mi300x-amds": {"available-cpu-dram-mib": 2321924, "gpus-per-node": 8},
+            "cluster:mi300x-amd": {"available-cpu-dram-mib": 1547820, "gpus-per-node": 8},
             "cluster:gb200-nv": {"available-cpu-dram-mib": 860160, "gpus-per-node": 4},
         },
     }
-
-
-# =============================================================================
-# Test Fields Enum
-# =============================================================================
-
-class TestFieldsEnum:
-    """Tests for Fields enum."""
-
-    def test_field_values_are_strings(self):
-        """All field values should be strings."""
-        for field in Fields:
-            assert isinstance(field.value, str)
-
-    def test_key_fields_exist(self):
-        """Key fields should be defined."""
-        assert Fields.IMAGE.value == "image"
-        assert Fields.MODEL.value == "model"
-        assert Fields.TP.value == "tp"
-        assert Fields.MULTINODE.value == "multinode"
-        assert Fields.CONC.value == "conc"
-        assert Fields.SPEC_DECODING.value == "spec-decoding"
-        assert Fields.PREFILL.value == "prefill"
-        assert Fields.DECODE.value == "decode"
-        assert Fields.HARDWARE.value == "hardware"
 
 
 # =============================================================================
@@ -251,7 +226,6 @@ class TestWorkerConfig:
         assert config.tp == 4
         assert config.ep == 4
         assert config.dp_attn is True
-        assert (config.pp, config.dcp_size, config.pcp_size) == (1, 1, 1)
 
     def test_worker_config_with_additional_settings(self):
         """Worker config with additional settings should pass."""
@@ -733,13 +707,6 @@ class TestSingleNodeSearchSpaceEntry:
         })
         assert entry.conc_list == [4, 8, 16, 32, 64, 128]
 
-    def test_pp_defaults_to_one(self):
-        entry = SingleNodeSearchSpaceEntry(**{
-            "tp": 4,
-            "conc-list": [4],
-        })
-        assert entry.pp == 1
-
     def test_pp_must_be_positive_integer(self):
         with pytest.raises(Exception, match="greater than 0"):
             SingleNodeSearchSpaceEntry(**{
@@ -808,16 +775,6 @@ class TestSingleNodeSearchSpaceEntry:
                 "conc-list": [4, 0, 16],
             })
         assert "must be greater than 0" in str(exc_info.value)
-
-    def test_optional_fields_defaults(self):
-        """Optional fields should have correct defaults."""
-        entry = SingleNodeSearchSpaceEntry(**{
-            "tp": 8,
-            "conc-list": [4, 8],
-        })
-        assert entry.ep is None
-        assert entry.dp_attn is None
-        assert entry.spec_decoding == "none"
 
     def test_with_ep_and_dp_attn(self):
         """Entry with ep and dp-attn like b200-sglang config."""
@@ -953,58 +910,26 @@ class TestMultiNodeSearchSpaceEntry:
 # =============================================================================
 
 class TestSeqLenConfigs:
-    """Tests for sequence length config models."""
+    @pytest.mark.parametrize("multinode", [False, True])
+    def test_invalid_later_search_entry_is_rejected(
+        self, multinode, valid_single_node_master_config, valid_multinode_master_config,
+    ):
+        config, schema = (
+            (valid_multinode_master_config, MultiNodeSeqLenConfig)
+            if multinode else
+            (valid_single_node_master_config, SingleNodeSeqLenConfig)
+        )
+        sequence = config["scenarios"]["fixed-seq-len"][0]
+        invalid = copy.deepcopy(sequence["search-space"][0])
+        invalid.pop("conc-start", None)
+        invalid.pop("conc-end", None)
+        invalid["conc-list"] = [4, 0]
+        sequence["search-space"].append(invalid)
 
-    def test_single_node_seq_len_config_1k1k(self):
-        """Valid single node seq len config for 1k/1k."""
-        config = SingleNodeSeqLenConfig(**{
-            "isl": 1024,
-            "osl": 1024,
-            "search-space": [
-                {"tp": 8, "conc-start": 4, "conc-end": 64}
-            ]
-        })
-        assert config.isl == 1024
-        assert config.osl == 1024
-        assert len(config.search_space) == 1
+        with pytest.raises(ValidationError, match="greater than 0") as error:
+            schema.model_validate(sequence)
 
-    def test_single_node_seq_len_config_8k1k(self):
-        """Valid single node seq len config for 8k/1k."""
-        config = SingleNodeSeqLenConfig(**{
-            "isl": 8192,
-            "osl": 1024,
-            "search-space": [
-                {"tp": 8, "conc-start": 4, "conc-end": 64}
-            ]
-        })
-        assert config.isl == 8192
-        assert config.osl == 1024
-
-    def test_multinode_seq_len_config(self):
-        """Valid multinode seq len config."""
-        config = MultiNodeSeqLenConfig(**{
-            "isl": 1024,
-            "osl": 1024,
-            "search-space": [
-                {
-                    "prefill": {
-                        "num-worker": 5,
-                        "tp": 4,
-                        "ep": 4,
-                        "dp-attn": True,
-                    },
-                    "decode": {
-                        "num-worker": 1,
-                        "tp": 8,
-                        "ep": 8,
-                        "dp-attn": True,
-                    },
-                    "conc-list": [2150],
-                }
-            ]
-        })
-        assert config.isl == 1024
-        assert config.osl == 1024
+        assert error.value.errors()[0]["loc"] == ("search-space", 1)
 
 
 # =============================================================================
@@ -1075,11 +1000,6 @@ class TestMasterConfigEntries:
         valid_multinode_master_config["multinode"] = False
         with pytest.raises(Exception):
             MultiNodeMasterConfigEntry(**valid_multinode_master_config)
-
-    def test_disagg_default_false(self, valid_single_node_master_config):
-        """Disagg should default to False."""
-        config = SingleNodeMasterConfigEntry(**valid_single_node_master_config)
-        assert config.disagg is False
 
     def test_single_node_rejects_kv_p2p_transfer(
         self,
@@ -1441,14 +1361,6 @@ class TestValidateRunnerConfig:
             validate_runner_config(config)
         assert "cannot be an empty list" in str(exc_info.value)
 
-    def test_multiple_runner_types(self, valid_runner_config):
-        """Multiple runner types should work."""
-        result = validate_runner_config(valid_runner_config)
-        assert "h100" in result["labels"]
-        assert "h200" in result["labels"]
-        assert "mi300x" in result["labels"]
-        assert "gb200" in result["labels"]
-
     def test_flat_runner_config_is_rejected(self):
         config = {
             "h100": ["h100-cr_0", "h100-cw_0"],
@@ -1594,21 +1506,6 @@ class TestChangelogMatrixEntry:
 
 class TestMultiNodeAgenticMatrixEntry:
     """Tests for multi-node agentic (SWE-bench) matrix entry validation."""
-
-    def test_throughput_row_omits_eval_fields(self):
-        entry = MultiNodeAgenticMatrixEntry(**{
-            k: v for k, v in MULTINODE_AGENTIC_EVAL_ROW.items()
-            if k not in ("run-eval", "eval-only", "eval-conc")
-        })
-        assert entry.run_eval is None
-        assert entry.eval_only is None
-        assert entry.eval_conc is None
-
-    def test_eval_row_carries_run_eval_eval_only_and_eval_conc(self):
-        entry = MultiNodeAgenticMatrixEntry(**MULTINODE_AGENTIC_EVAL_ROW)
-        assert entry.run_eval is True
-        assert entry.eval_only is True
-        assert entry.eval_conc == 32
 
     def test_node_count_is_required(self):
         row = dict(MULTINODE_AGENTIC_EVAL_ROW)

@@ -421,7 +421,16 @@ else
     git checkout sa-submission-q2-2026
 fi
 
+if [[ "${EVAL_FRAMEWORK:-lm-eval}" != "lm-eval" ]]; then
+    python3 "$GITHUB_WORKSPACE/runners/patch_srt_eval_dispatch.py" "$(pwd)" \
+        || exit 1
+fi
+
 echo "Installing srtctl..."
+if [[ "$IS_AGENTIC" == "1" && "$FRAMEWORK" == "dynamo-trt" && ( "$MODEL_PREFIX" == "qwen3.5" || "$MODEL_PREFIX" == "glm5.2" || "$MODEL_PREFIX" == "dsv4" ) ]]; then
+    sed -i 's#git clone https://github.com/ai-dynamo/dynamo.git#git clone https://github.com/cquil11/dynamo.git#' src/srtctl/core/schema.py
+    grep -q 'git clone https://github.com/cquil11/dynamo.git' src/srtctl/core/schema.py || exit 1
+fi
 export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
 curl -LsSf https://astral.sh/uv/install.sh | sh
 export PATH="$UV_INSTALL_DIR:$PATH"
@@ -521,8 +530,8 @@ CONFIG_PATH="${CONFIG_FILE%%:*}"
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
 
 # Throughput recipes opt into synthetic acceptance through the master config.
-# Eval-only jobs leave the checked-in real-MTP recipe unchanged so generated
-# tokens still pass target-model verification.
+# Eval-only jobs remove those settings so generated tokens use real target-model
+# verification.
 inject_synthetic_acceptance "$CONFIG_PATH" "$FRAMEWORK" || exit 1
 
 # --no-preflight skips srtctl's pre-submit model-path stat, which runs on
