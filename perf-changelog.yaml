@@ -6739,5 +6739,5 @@
   description:
     - "Bump the DeepSeek-V4-Pro FP4 MI355X 8k/1k STP and MTP images from nightly-09663abde0f50944a8d5ea30120666024b503faa to the 2026-09-01 ROCm nightly nightly-7c5dc571cbd1064ecc8a9b1045637ff647aa22cb (digest sha256:f0bdaf5217a09949842b45c1ea1f12260d3205ec81f143b320dfc2eb3ec95e55)."
     - "Pick up the latest automatic ROCm DeepSeek-V4 optimizations, including fused mHC post/pre plus RMSNorm, gfx950 C4A top-k dispatch, fused C4 compressor GEMMs, fused SWA q/kv RMSNorm plus q FP8 quantization, and medium-batch cooperative top-k tuning."
-    - "Keep the existing VLLM_ROCM_USE_AITER=1, VLLM_ROCM_USE_AITER_MOE=1, and --moe-backend aiter settings; no additional serving flag is required for these kernels."
+    - "Keep the existing VLLM_ROCM_USE_AITER=1, VLLM_ROCM_USE_AITER_MOE=1, and --moe-backend aiter settings, and explicitly add VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 plus VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 to both STP and MTP paths. The current checkpoint's shared-expert path does not satisfy the latest vLLM fusion conditions, so that fusion flag self-disables while preserving recipe parity."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2792

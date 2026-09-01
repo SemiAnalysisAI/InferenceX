@@ -1194,9 +1194,11 @@ dsv4-fp4-mi355x-sglang-mtp:
 #
 # DeepSeek-V4-Pro is FP4+FP8 mixed (FP4 MoE expert weights, FP8 for the
 # rest); InferenceX classifies this as fp4 — same as the sister sglang
-# and atom DSv4 mi355x entries below. The serving recipe enables AITER
-# explicitly; the pinned nightly then auto-selects its ROCm DeepSeek-V4
-# mHC, sparse-indexer, attention, and compressor-GEMM optimizations.
+# and atom DSv4 mi355x entries below. The serving recipe enables AITER,
+# shared-expert fusion, and INT4 quick-reduce explicitly; the pinned nightly
+# then auto-selects its ROCm DeepSeek-V4 mHC, sparse-indexer, attention, and
+# compressor-GEMM optimizations. Shared-expert fusion self-disables when the
+# checkpoint path is not eligible.
 dsv4-fp4-mi355x-vllm:
   image: vllm/vllm-openai-rocm:nightly-7c5dc571cbd1064ecc8a9b1045637ff647aa22cb
   model: deepseek-ai/DeepSeek-V4-Pro

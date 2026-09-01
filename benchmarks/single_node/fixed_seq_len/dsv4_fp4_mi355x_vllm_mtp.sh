@@ -41,6 +41,10 @@ fi
 
 export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_USE_AITER_MOE=1
+# Keep the upstream ROCm recipe knobs explicit. The shared-expert fusion
+# self-disables when this checkpoint's shared-expert path is not eligible.
+export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
+export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
