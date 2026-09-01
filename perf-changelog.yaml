@@ -6750,4 +6750,5 @@
     - "Add a manual exact TP8/DCP1 concurrency-1 diagnostic selector for the Kimi-K3 MI355X gap study."
     - "Compare upstream vLLM PR 52494 and a PYNCCL-only collective arm independently without changing the canonical default recipe."
     - "Evaluate a clean ROCm Tier-1 latent-MoE overlap candidate derived from upstream vLLM PR 51437."
+    - "Evaluate the Kimi-K3 torch.compile and post-grad fusion path from upstream vLLM PR 52190 as an independent arm."
   pr-link: XXX

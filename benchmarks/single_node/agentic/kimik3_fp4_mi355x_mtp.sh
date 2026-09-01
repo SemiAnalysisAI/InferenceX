@@ -101,6 +101,9 @@ case "$K3_PERF_VARIANT" in
     tier1)
         bash "$(dirname "$0")/k3_perf_overlays/apply_vllm_overlay.sh" tier1
         ;;
+    compile52190)
+        bash "$(dirname "$0")/k3_perf_overlays/apply_vllm_overlay.sh" compile52190
+        ;;
     pynccl)
         export K3_DISABLE_CUSTOM_ALL_REDUCE=1
         ;;

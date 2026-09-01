@@ -41,7 +41,7 @@ on:
                 type: boolean
                 default: false
             k3-perf-variant:
-                description: "Kimi-K3 C1 diagnostic variant (baseline, mla52494, tier1, or pynccl)"
+                description: "Kimi-K3 C1 diagnostic variant (baseline, mla52494, tier1, compile52190, or pynccl)"
                 required: false
                 type: string
                 default: "baseline"
@@ -136,7 +136,7 @@ on:
                 type: boolean
                 default: false
             k3-perf-variant:
-                description: "Kimi-K3 C1 diagnostic variant (baseline, mla52494, tier1, or pynccl)"
+                description: "Kimi-K3 C1 diagnostic variant (baseline, mla52494, tier1, compile52190, or pynccl)"
                 required: false
                 type: string
                 default: "baseline"

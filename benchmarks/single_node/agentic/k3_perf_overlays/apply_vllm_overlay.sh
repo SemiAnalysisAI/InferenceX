@@ -32,6 +32,31 @@ case "$variant" in
             "29f057131bc4970cc44a0727a802cb0f29789da0e26629a222b5784aadaaea27"
         )
         ;;
+    compile52190)
+        patch_file="$overlay_dir/vllm_k3_compile52190.patch"
+        expected_patch_sha="164509dae2072ceb6260ffd9b5695fa2efc2a55a4ef12df083f5c110390741ff"
+        target_relpaths=(
+            "vllm/config/compilation.py"
+            "vllm/models/kimi_k3/amd/kda.py"
+            "vllm/models/kimi_k3/amd/latent_moe_runner.py"
+            "vllm/models/kimi_k3/amd/linear.py"
+            "vllm/models/kimi_k3/amd/ops/attn_res.py"
+        )
+        expected_before_shas=(
+            "255c802c30fd1b116eb4bb477f816af70872fc3dd92b88477fe54b5f595da5e2"
+            "6b8ad0fd1ebe626245a35cf3be598883d8c543b0cd288c383ede40b4c82821a7"
+            "e6235f947b0a1d89327a7e11391a4d26c3f4fa57c1af804384acf55b0c1041ee"
+            "f06a6408231150c797e99d8ae6d91d2993d90d69a061230747217386bb7d9d15"
+            "ade95f1859ac26569f2833487490d672b3831364f7fe492153c005e181ff3a1e"
+        )
+        expected_after_shas=(
+            "9d17df12823a62d345ff08fac118ef0b1d281ebbdb6cd9e8cc9ad41221196458"
+            "5bcb8996181396cb019a95447089fc0f55adf3a545a4165b2b43700583b17a86"
+            "f05c9a1d79b1e8697a5f66007a5c502a878d6c86fc9f884acae0deb5f9341f42"
+            "326adb617d8772ce99fbcc894bb4e3e5687e24ad3212591eceda447cc23774b9"
+            "0a779ad4ecfc6e2489edd67dd328b6ff064a574cf605803ede35f27d10b69278"
+        )
+        ;;
     *)
         echo "Error: unsupported Kimi-K3 vLLM overlay '$variant'" >&2
         exit 1
