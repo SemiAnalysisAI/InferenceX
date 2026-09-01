@@ -1,6 +1,5 @@
 import json
 import shlex
-from copy import deepcopy
 from decimal import Decimal
 from pathlib import Path
 
@@ -17,10 +16,39 @@ from ci_priority import (
 )
 
 
-POLICY = load_policy(Path(__file__).parents[1] / "configs" / "ci-priority.yaml")
+@pytest.fixture
+def policy():
+    """Controlled weights test scoring independently of the live scheduling policy."""
+    return {
+        "version": 1,
+        "base-score": 10,
+        "adjustments": {
+            "event": {"push": 7},
+            "additional-node": -0.125,
+            "multi-node": 1,
+            "agentic": 2,
+            "eval-only": 0.375,
+            "precision": {"fp4": 3},
+            "spec-decoding": {"mtp": 4},
+            "framework-prefix": {"vllm": 5, "sglang": 6},
+            "model-prefix": {"dsv4": 8, "dsr1": 9, "qwen3.5": 11},
+        },
+        "labels": {
+            "patchwork": {
+                "names": ["ci-patchwork"],
+                "waived-by": ["ci-patchwork-waived"],
+                "score": -5,
+            },
+            "checklist-complete": {
+                "names": ["ci-checklist-complete"],
+                "adjustment": 1.5,
+            },
+            "skip-queue": {"name": "skip_queue"},
+        },
+    }
 
 
-def test_combined_high_value_signals_outrank_baseline_job():
+def test_combined_signals_add_their_configured_weights(policy):
     baseline = {
         "runner": "h100",
         "framework": "trt",
@@ -40,49 +68,48 @@ def test_combined_high_value_signals_outrank_baseline_job():
         "decode": {"hardware": "b200"},
     }
 
-    assert calculate_priority(high_value, POLICY) == Decimal("6.000")
-    assert calculate_priority(baseline, POLICY) == Decimal("1.000")
+    assert calculate_priority(high_value, policy) == Decimal("34.000")
+    assert calculate_priority(baseline, policy) == Decimal("10.000")
 
 
-def test_main_branch_jobs_receive_an_automatic_boost():
+def test_event_adjustment_is_applied(policy):
     entry = {"runner": "h100", "framework": "trt"}
 
     assert calculate_priority(
         entry,
-        POLICY,
+        policy,
         PriorityContext(event_name="push"),
-    ) == Decimal("3.000")
+    ) == Decimal("17.000")
 
 
-def test_smaller_node_allocations_win_otherwise_equal_priority_ties():
+def test_node_adjustment_applies_only_to_additional_nodes(policy):
     entry = {"runner": "h100", "framework": "trt"}
 
-    assert calculate_priority({**entry, "node-count": 1}, POLICY) == Decimal("1.000")
-    assert calculate_priority({**entry, "node-count": 2}, POLICY) == Decimal("0.999")
-    assert calculate_priority({**entry, "node-count": 3}, POLICY) == Decimal("0.998")
+    assert calculate_priority({**entry, "node-count": 1}, policy) == Decimal("10.000")
+    assert calculate_priority({**entry, "node-count": 2}, policy) == Decimal("9.875")
+    assert calculate_priority({**entry, "node-count": 3}, policy) == Decimal("9.750")
 
 
-def test_node_count_tiebreaker_survives_classifier_projection():
+def test_node_count_tiebreaker_survives_classifier_projection(policy):
     entry = {"runner": "h100", "framework": "trt", "node-count": 3}
 
     assert calculate_priority(
         entry,
-        POLICY,
+        policy,
         PriorityContext(criteria=frozenset()),
-    ) == Decimal("0.998")
+    ) == Decimal("9.750")
 
 
-@pytest.mark.parametrize("node_count", [0, -1, 1.5, True])
-def test_node_count_must_be_a_positive_integer(node_count):
+@pytest.mark.parametrize("node_count", [0, -1, 1.5, True, None, "2"])
+def test_node_count_must_be_a_positive_integer(node_count, policy):
     with pytest.raises(ValueError, match="positive integer"):
         calculate_priority(
             {"runner": "h100", "framework": "trt", "node-count": node_count},
-            POLICY,
+            policy,
         )
 
 
-def test_patchwork_score_uses_half_up_rounding():
-    policy = deepcopy(POLICY)
+def test_patchwork_score_uses_half_up_rounding(policy):
     policy["labels"]["patchwork"]["score"] = 0.7225
     entry = {"runner": "h100", "framework": "trt"}
 
@@ -93,12 +120,12 @@ def test_patchwork_score_uses_half_up_rounding():
     ) == Decimal("0.723")
 
 
-def test_skip_queue_request_keeps_numeric_priority():
+def test_skip_queue_request_keeps_numeric_priority(policy):
     entry = {"runner": "h100", "framework": "sglang", "precision": "fp4"}
 
     annotated = annotate_jobs(
         [entry],
-        POLICY,
+        policy,
         PriorityContext(
             labels=frozenset({"skip_queue"}),
             pr_number=2124,
@@ -107,42 +134,42 @@ def test_skip_queue_request_keeps_numeric_priority():
 
     assert calculate_priority(
         entry,
-        POLICY,
+        policy,
         PriorityContext(labels=frozenset({"skip_queue"})),
-    ) == Decimal("2.250")
-    assert annotated[0]["priority"] == "2.250"
+    ) == Decimal("19.000")
+    assert annotated[0]["priority"] == "19.000"
     assert annotated[0]["skip-queue-pr"] == 2124
 
 
-def test_patchwork_label_forces_bottom_priority_without_waiver():
+def test_patchwork_override_precedes_other_adjustments_unless_waived(policy):
     entry = {"runner": "b200", "framework": "sglang", "precision": "fp4"}
 
     assert calculate_priority(
         entry,
-        POLICY,
+        policy,
         PriorityContext(labels=frozenset({"ci-patchwork"})),
-    ) == Decimal("0.000")
+    ) == Decimal("-5.000")
     assert calculate_priority(
         entry,
-        POLICY,
+        policy,
         PriorityContext(labels=frozenset({"ci-patchwork", "ci-patchwork-waived"})),
-    ) > Decimal("0.000")
+    ) == Decimal("19.000")
     assert calculate_priority(
         entry,
-        POLICY,
+        policy,
         PriorityContext(criteria=frozenset({"patchwork"})),
-    ) == Decimal("0.000")
+    ) == Decimal("-5.000")
     assert calculate_priority(
         entry,
-        POLICY,
+        policy,
         PriorityContext(
             labels=frozenset({"ci-patchwork-waived"}),
             criteria=frozenset({"patchwork"}),
         ),
-    ) > Decimal("0.000")
+    ) == Decimal("10.000")
 
 
-def test_priority_criteria_drive_all_configured_adjustments():
+def test_priority_criteria_require_matching_job_fields(policy):
     criteria = frozenset({"multi-node", "agentic", "fp4", "mtp", "vllm", "dsr1"})
     equivalent_entry = {
         "prefill": {},
@@ -156,47 +183,47 @@ def test_priority_criteria_drive_all_configured_adjustments():
 
     assert calculate_priority(
         entry,
-        POLICY,
+        policy,
         PriorityContext(criteria=criteria),
-    ) == calculate_priority(equivalent_entry, POLICY)
+    ) == Decimal("34.000")
     unrelated_entry = {"runner": "h100", "framework": "trt"}
     assert calculate_priority(
         unrelated_entry,
-        POLICY,
+        policy,
         PriorityContext(criteria=criteria),
-    ) == Decimal("1.000")
+    ) == Decimal("10.000")
 
 
-def test_checklist_label_applies_alongside_classifier_criteria():
+def test_checklist_label_applies_alongside_classifier_criteria(policy):
     entry = {"runner": "h100", "framework": "trt"}
 
     assert calculate_priority(
         entry,
-        POLICY,
+        policy,
         PriorityContext(
             labels=frozenset({"ci-checklist-complete"}),
             criteria=frozenset(),
         ),
-    ) == Decimal("1.250")
+    ) == Decimal("11.500")
 
 
-def test_priority_criteria_reject_unknown_values_and_allow_mixed_jobs():
+def test_priority_criteria_reject_unknown_values_and_allow_mixed_jobs(policy):
     entry = {"runner": "h100", "framework": "vllm"}
 
     with pytest.raises(ValueError, match="Unknown CI priority criteria"):
         calculate_priority(
             entry,
-            POLICY,
+            policy,
             PriorityContext(criteria=frozenset({"unknown"})),
         )
     assert calculate_priority(
         entry,
-        POLICY,
+        policy,
         PriorityContext(criteria=frozenset({"vllm", "sglang"})),
-    ) == Decimal("1.500")
+    ) == Decimal("15.000")
 
 
-def test_priority_labels_do_not_override_automatic_score():
+def test_priority_labels_do_not_override_automatic_score(policy):
     entry = {"runner": "h100", "framework": "trt"}
     labels = frozenset(
         {"ci-priority:p0", "ci-priority:p4.5", "ci-priority:p1000000"}
@@ -204,12 +231,12 @@ def test_priority_labels_do_not_override_automatic_score():
 
     assert calculate_priority(
         entry,
-        POLICY,
+        policy,
         PriorityContext(labels=labels),
-    ) == Decimal("1.000")
+    ) == Decimal("10.000")
 
 
-def test_annotation_only_touches_runnable_matrix_entries():
+def test_annotation_only_touches_runnable_matrix_entries(policy):
     payload = {
         "single_node": {
             "1k1k": [
@@ -225,16 +252,17 @@ def test_annotation_only_touches_runnable_matrix_entries():
         "changelog_metadata": {"runner": "not-a-job"},
     }
 
-    annotated = annotate_jobs(payload, POLICY)
+    annotated = annotate_jobs(payload, policy)
 
-    assert annotated["single_node"]["1k1k"][0]["priority"] == "3.750"
-    assert len(annotated["single_node"]["1k1k"][0]["queue-token"]) == 32
+    assert annotated["single_node"]["1k1k"][0]["priority"] == "34.000"
+    assert annotated["single_node"]["1k1k"][0]["queue-token"]
     assert "priority" not in annotated["changelog_metadata"]
     assert "priority" not in payload["single_node"]["1k1k"][0]
     assert "queue-token" not in payload["single_node"]["1k1k"][0]
 
 
 def test_classifier_schema_matches_the_policy_vocabulary():
+    policy = load_policy(Path(__file__).parents[1] / "configs" / "ci-priority.yaml")
     workflow = yaml.safe_load(
         (
             Path(__file__).parents[1] / ".github" / "workflows" / "run-sweep.yml"
@@ -249,7 +277,7 @@ def test_classifier_schema_matches_the_policy_vocabulary():
     schema = json.loads(arguments[arguments.index("--json-schema") + 1])
     schema_criteria = schema["properties"]["criteria"]["items"]["enum"]
 
-    assert set(schema_criteria) == set(supported_criteria(POLICY))
+    assert set(schema_criteria) == set(supported_criteria(policy))
 
 
 def test_queue_tokens_change_between_run_attempts():
@@ -260,3 +288,16 @@ def test_queue_tokens_change_between_run_attempts():
         "123:2",
         ("0",),
     )
+
+
+def test_queue_tokens_are_stable_for_reordered_keys_but_distinct_for_duplicate_jobs():
+    entry = {"runner": "example", "framework": "vllm"}
+    reordered = {"framework": "vllm", "runner": "example"}
+
+    assert queue_token(entry, "run", ("0",)) == queue_token(reordered, "run", ("0",))
+    assert queue_token(entry, "run", ("0",)) != queue_token(entry, "run", ("1",))
+
+
+@pytest.mark.parametrize("framework,expected", [("vllm", "15"), ("vllm-disagg", "15"), ("vllmish", "10")])
+def test_framework_prefix_matching_requires_a_separator(policy, framework, expected):
+    assert calculate_priority({"framework": framework}, policy) == Decimal(expected)

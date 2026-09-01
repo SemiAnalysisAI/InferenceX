@@ -1,22 +1,57 @@
-# Model thresholds override task defaults.
-default:
-  gsm8k: 0.90
-  gpqa_diamond_cot_n_shot: 0.30
-  swebench_lite: 0.50
-models:
-  dsr1:
-    gsm8k: 0.91
-  dsv4:
-    gsm8k: 0.91
-  glm5:
-    gsm8k: 0.94
-  glm5.1:
-    gsm8k: 0.93
-  gptoss:
-    gsm8k: 0.91
-  kimik2.5:
-    gsm8k: 0.90
-  minimaxm2.5:
-    gsm8k: 0.92
-  qwen3.5:
-    gsm8k: 0.94
+{
+  "default": {
+    "gsm8k": 0.90,
+    "kimi_tool_call_schema": 0.0,
+    "kimi_tool_call_schema_full": 0.0,
+    "minimax_m3_smoke": 0.0,
+    "minimax_m3_full": 0.0,
+    "bfcl_smoke": 0.0,
+    "bfcl_simple_python": 0.0,
+    "bfcl_multiple": 0.0,
+    "bfcl_parallel": 0.0,
+    "bfcl_irrelevance": 0.0,
+    "bfcl_vllm_minimax_m3": 0.0,
+    "bfcl_vllm_minimax_m3_simple_python": 0.0,
+    "bfcl_vllm_minimax_m3_multiple": 0.0,
+    "bfcl_vllm_minimax_m3_parallel": 0.0,
+    "bfcl_vllm_minimax_m3_parallel_multiple": 0.0,
+    "bfcl_vllm_kimi": 0.0,
+    "bfcl_vllm_kimi_simple_python": 0.0,
+    "bfcl_vllm_kimi_multiple": 0.0,
+    "bfcl_vllm_kimi_parallel": 0.0,
+    "bfcl_vllm_kimi_parallel_multiple": 0.0,
+    "bfcl_vllm_kimi_multi_turn": 0.0,
+    "bfcl_vllm_kimi_multi_turn_base": 0.0,
+    "bfcl_vllm_kimi_multi_turn_miss_func": 0.0,
+    "bfcl_vllm_kimi_multi_turn_miss_param": 0.0,
+    "bfcl_vllm_kimi_multi_turn_long_context": 0.0,
+    "gpqa_diamond_cot_n_shot": 0.30,
+    "swebench_lite": 0.50
+  },
+  "models": {
+    "dsr1": {
+      "gsm8k": 0.91
+    },
+    "dsv4": {
+      "gsm8k": 0.91
+    },
+    "glm5": {
+      "gsm8k": 0.94
+    },
+    "glm5.1": {
+      "gsm8k": 0.93
+    },
+    "gptoss": {
+      "gsm8k": 0.91
+    },
+    "kimik2.5": {
+      "gsm8k": 0.90
+    },
+    "minimaxm2.5": {
+      "gsm8k": 0.92
+    },
+    "qwen3.5": {
+      "gsm8k": 0.94
+    }
+  }
+}

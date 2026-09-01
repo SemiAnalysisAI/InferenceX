@@ -90,6 +90,8 @@ class Fields(Enum):
     EVAL_ONLY = 'eval-only'
     EVAL_CONC = 'eval-conc'
     EVAL_ALL_CONCS = 'eval-all-concs'
+    EVAL_FRAMEWORK = 'eval-framework'
+    EVAL_SUITE = 'eval-suite'
 
 
 """
@@ -178,6 +180,10 @@ class SingleNodeMatrixEntry(BaseModel):
     disagg: Literal[False]
     run_eval: bool = Field(alias=Fields.RUN_EVAL.value)
     eval_only: bool = Field(alias=Fields.EVAL_ONLY.value, default=False)
+    eval_framework: Optional[str] = Field(
+        default=None, alias=Fields.EVAL_FRAMEWORK.value
+    )
+    eval_suite: Optional[str] = Field(default=None, alias=Fields.EVAL_SUITE.value)
     router: Optional[ComponentMetadata] = None
     recipe_fingerprint: Optional[str] = Field(
         default=None,
@@ -274,6 +280,10 @@ class MultiNodeMatrixEntry(BaseModel):
     eval_all_concs: bool = Field(
         default=False, alias=Fields.EVAL_ALL_CONCS.value
     )
+    eval_framework: Optional[str] = Field(
+        default=None, alias=Fields.EVAL_FRAMEWORK.value
+    )
+    eval_suite: Optional[str] = Field(default=None, alias=Fields.EVAL_SUITE.value)
     router: Optional[ComponentMetadata] = None
     kv_p2p_transfer: Optional[str] = Field(
         default=None, alias=Fields.KV_P2P_TRANSFER.value, min_length=1
@@ -329,10 +339,14 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
     duration: int = Field(alias=Fields.DURATION.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     scenario_type: str = Field(alias=Fields.SCENARIO_TYPE.value)
-    # Agentic GSM8K eval rows carry run-eval/eval-only; benchmark rows
-    # omit them, and exclude_none keeps them out of dumped benchmark output.
+    # Agentic eval rows carry selection and evaluator metadata. Benchmark-only
+    # rows omit them, and exclude_none keeps them out of dumped matrix output.
     run_eval: Optional[bool] = Field(default=None, alias=Fields.RUN_EVAL.value)
     eval_only: Optional[bool] = Field(default=None, alias=Fields.EVAL_ONLY.value)
+    eval_framework: Optional[str] = Field(
+        default=None, alias=Fields.EVAL_FRAMEWORK.value
+    )
+    eval_suite: Optional[str] = Field(default=None, alias=Fields.EVAL_SUITE.value)
     recipe_fingerprint: Optional[str] = Field(
         default=None,
         alias=Fields.RECIPE_FINGERPRINT.value,
@@ -378,13 +392,17 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     disagg: bool
     scenario_type: str = Field(alias=Fields.SCENARIO_TYPE.value)
-    # Agentic eval rows (SWE-bench) carry run-eval/eval-only/eval-conc;
-    # benchmark rows omit them, and exclude_none keeps them out of dumped
-    # throughput output. SWE-bench doesn't support batched concurrencies
-    # (unlike lm-eval), so there is no eval-all-concs field here.
+    # Agentic eval rows carry selection, concurrency, and evaluator metadata.
+    # Benchmark-only rows omit them, and exclude_none keeps them out of dumped
+    # matrix output. Multi-node agentic evals run one selected concurrency per
+    # job, so they do not use eval-all-concs.
     run_eval: Optional[bool] = Field(default=None, alias=Fields.RUN_EVAL.value)
     eval_only: Optional[bool] = Field(default=None, alias=Fields.EVAL_ONLY.value)
     eval_conc: Optional[int] = Field(default=None, alias=Fields.EVAL_CONC.value)
+    eval_framework: Optional[str] = Field(
+        default=None, alias=Fields.EVAL_FRAMEWORK.value
+    )
+    eval_suite: Optional[str] = Field(default=None, alias=Fields.EVAL_SUITE.value)
     recipe_fingerprint: Optional[str] = Field(
         default=None,
         alias=Fields.RECIPE_FINGERPRINT.value,
