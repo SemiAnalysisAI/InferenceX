@@ -41,14 +41,14 @@ MOE_ARGS=()
 if [ "${EP_SIZE:-1}" -gt 1 ]; then
     EP_ARGS=(--enable-expert-parallel)
     # The pinned checkpoint uses ModelOpt NVFP4 expert weights. Native
-    # DeepGEMM MegaMoE expects MXFP4 weights; use the NVFP4-compatible backend.
-    MOE_ARGS=(--moe-backend flashinfer_moe_ep_mega_cutedsl)
+    # DeepGEMM MegaMoE expects MXFP4 weights; use FlashInfer CuTeDSL instead.
+    MOE_ARGS=(--moe-backend flashinfer_cutedsl)
 fi
 
 GMU_ARGS=()
 PREFILL_SCHEDULE_ARGS=()
 if [ "${DP_ATTENTION}" = "true" ]; then
-    # FlashInfer MoE EP does not support EPLB.
+    # Keep EPLB disabled for the FlashInfer CuTeDSL path.
     PREFILL_SCHEDULE_ARGS=(--prefill-schedule-interval 4)
 fi
 

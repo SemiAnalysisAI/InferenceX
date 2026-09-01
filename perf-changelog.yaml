@@ -6785,3 +6785,9 @@
   description:
     - "Use the NVFP4-compatible FlashInfer MegaMoE backend for expert-parallel scenarios and keep EPLB disabled for that backend"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2534
+
+- config-keys:
+    - dsv4-fp4-b200-vllm
+  description:
+    - "Use the standard FlashInfer CuTeDSL NVFP4 backend for expert-parallel scenarios while keeping EPLB disabled"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2534
