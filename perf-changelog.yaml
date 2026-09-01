@@ -6775,5 +6775,5 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Compare M=7 gfx950 latent-MoE tail token tilings that reuse each projection row across two, four, or seven tokens under changed-input HIP graph replay."
+    - "Compare M=7 gfx950 latent-MoE tail token tilings that reuse each projection row across two, four, or seven tokens, both with in-kernel normalization and with one separate AITER RMSNorm, under changed-input HIP graph replay."
   pr-link: XXX

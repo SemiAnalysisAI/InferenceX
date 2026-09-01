@@ -5,7 +5,7 @@ result_dir="${1:?usage: run_m7_token_tiled_tail.sh <result-dir>}"
 overlay_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 aiter_repo="https://github.com/andyluo7/aiter.git"
 aiter_ref="codex/k3-m7-token-tiled-20260901"
-aiter_commit="5f7b52f1f42284e1db6e7a0c48312939a79bb1d2"
+aiter_commit="f90f7804f63b4040e45c94cd58114d1364fcd7e9"
 scratch="$(mktemp -d /tmp/k3-m7-token-tiled.XXXXXX)"
 trap 'rm -rf "$scratch"' EXIT
 
@@ -189,6 +189,10 @@ expected_paths = {
     "token_tile_2_r7",
     "token_tile_4_r4",
     "token_tile_7_r2",
+    "pre_norm_one_token_r14",
+    "pre_norm_token_tile_2_r7",
+    "pre_norm_token_tile_4_r4",
+    "pre_norm_token_tile_7_r2",
 }
 timings = result.get("p50_us", {})
 if set(timings) != expected_paths:
@@ -200,14 +204,23 @@ if set(replay_paths) != expected_paths:
     raise SystemExit(f"missing changed-input replay path: {replay_paths}")
 tilings = result.get("tilings", {})
 expected_tilings = {
-    "one_token_r14": (1, 14),
-    "token_tile_2_r7": (2, 7),
-    "token_tile_4_r4": (4, 4),
-    "token_tile_7_r2": (7, 2),
+    "one_token_r14": (1, 14, "in_kernel"),
+    "token_tile_2_r7": (2, 7, "in_kernel"),
+    "token_tile_4_r4": (4, 4, "in_kernel"),
+    "token_tile_7_r2": (7, 2, "in_kernel"),
+    "pre_norm_one_token_r14": (1, 14, "separate_aiter_rmsnorm"),
+    "pre_norm_token_tile_2_r7": (2, 7, "separate_aiter_rmsnorm"),
+    "pre_norm_token_tile_4_r4": (4, 4, "separate_aiter_rmsnorm"),
+    "pre_norm_token_tile_7_r2": (7, 2, "separate_aiter_rmsnorm"),
 }
 for name, expected in expected_tilings.items():
     actual = tilings.get(name, {})
-    if (actual.get("tokens_per_block"), actual.get("rows_per_block")) != expected:
+    observed = (
+        actual.get("tokens_per_block"),
+        actual.get("rows_per_block"),
+        actual.get("normalization"),
+    )
+    if observed != expected:
         raise SystemExit(f"unexpected tiling metadata for {name}: {actual}")
 print(
     "M=7 token-tail graph replay completed: "

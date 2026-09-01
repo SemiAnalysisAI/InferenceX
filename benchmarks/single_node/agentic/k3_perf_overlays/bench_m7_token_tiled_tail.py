@@ -9,8 +9,12 @@ import math
 import statistics
 from pathlib import Path
 
+import aiter
 import torch
-from aiter.ops.flydsl.latent_moe_tail import latent_moe_tail
+from aiter.ops.flydsl.latent_moe_tail import (
+    latent_moe_projection_add,
+    latent_moe_tail,
+)
 from bench_latent_moe_tail_small_m import (
     EPSILON,
     HIDDEN,
@@ -42,7 +46,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--operations-per-graph", type=int, default=24)
     parser.add_argument("--warmup-operations", type=int, default=2400)
     parser.add_argument("--replays-per-trial", type=int, default=20)
-    parser.add_argument("--trials", type=int, default=24)
+    parser.add_argument("--trials", type=int, default=40)
     parser.add_argument("--output", type=Path)
     return parser.parse_args()
 
@@ -56,6 +60,23 @@ def make_candidate(tokens_per_block: int, rows_per_block: int) -> Operation:
             rms_weight,
             up_weight,
             EPSILON,
+            tokens_per_block=tokens_per_block,
+            rows_per_block=rows_per_block,
+        )
+
+    return operation
+
+
+def make_pre_normalized_candidate(
+    tokens_per_block: int, rows_per_block: int
+) -> Operation:
+    def operation(case: Case) -> torch.Tensor:
+        routed, shared, rms_weight, up_weight = case
+        normalized = aiter.rmsnorm2d_fwd(routed, rms_weight, EPSILON)
+        return latent_moe_projection_add(
+            normalized,
+            shared,
+            up_weight,
             tokens_per_block=tokens_per_block,
             rows_per_block=rows_per_block,
         )
@@ -79,6 +100,12 @@ def benchmark(args: argparse.Namespace) -> dict:
         "control": control,
         **{
             name: make_candidate(tokens_per_block, rows_per_block)
+            for name, (tokens_per_block, rows_per_block) in TILINGS.items()
+        },
+        **{
+            f"pre_norm_{name}": make_pre_normalized_candidate(
+                tokens_per_block, rows_per_block
+            )
             for name, (tokens_per_block, rows_per_block) in TILINGS.items()
         },
     }
@@ -129,7 +156,8 @@ def benchmark(args: argparse.Namespace) -> dict:
     return {
         "num_tokens": NUM_TOKENS,
         "tilings": {
-            name: {
+            candidate_name: {
+                "normalization": normalization,
                 "tokens_per_block": tokens_per_block,
                 "rows_per_block": rows_per_block,
                 "token_groups": math.ceil(NUM_TOKENS / tokens_per_block),
@@ -139,6 +167,10 @@ def benchmark(args: argparse.Namespace) -> dict:
                 / math.ceil(NUM_TOKENS / tokens_per_block),
             }
             for name, (tokens_per_block, rows_per_block) in TILINGS.items()
+            for candidate_name, normalization in (
+                (name, "in_kernel"),
+                (f"pre_norm_{name}", "separate_aiter_rmsnorm"),
+            )
         },
         "eager_errors": eager_errors,
         "changed_input_graph_replay": replay_errors,
