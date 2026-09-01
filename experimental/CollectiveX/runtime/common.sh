@@ -29,6 +29,15 @@ COLLX_DEEPEP_V2_COMMIT="01dc3aaac82068020353dce2c302e38153c0bfaa"
 # the wheel was isolated. Folded into the venv cache key, so a change forces a rebuild.
 COLLX_DEEPEP_V2_NVSHMEM_SPEC="nvidia-nvshmem-cu13==3.4.5"
 
+# Torch for the DeepEP V2 venv. 2.10.0+cu130's bundled CUDA userland poisons the CUDA
+# context during nvshmem symmetric-heap init over MNNVL on sm103/driver 580.159.03 (gb300):
+# buffer creation returns, every rank's next CUDA call fails cudaErrorUnknown. Isolated by
+# a same-recipe venv that differs ONLY in torch (2.11.0 green, 2.10.0 red, on the same
+# nodes; jobs 27760 vs 27430) — the pin, the nvshmem wheel, the rack and the driver were
+# each falsified first. 2.11.0 is also what the cu130 image itself ships. Folded into the
+# venv cache key, so a change forces a rebuild.
+COLLX_DEEPEP_V2_TORCH_SPEC="torch==2.11.0"
+
 COLLX_UCCL_REPO="https://github.com/uccl-project/uccl"
 COLLX_UCCL_COMMIT="fc1b582031221645ea9fce58aeb57187713145e3"
 

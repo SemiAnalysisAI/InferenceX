@@ -133,10 +133,11 @@ deepep_cache_root() {
   # wheel on cu130 images broke sm103), so it keys the cache and a spec change rebuilds.
   local nvshmem_key="${COLLX_DEEPEP_V2_NVSHMEM_SPEC#nvidia-}"
   nvshmem_key="${nvshmem_key//==/-}"
-  [[ "$nvshmem_key" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
-  printf '%s/deepep-v2-%s-sm%s-%s-%s-%s' \
+  local torch_key="${COLLX_DEEPEP_V2_TORCH_SPEC//==/-}"
+  [[ "$nvshmem_key" =~ ^[A-Za-z0-9._-]+$ && "$torch_key" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
+  printf '%s/deepep-v2-%s-sm%s-%s-%s-%s-%s' \
     "$base" "$cpu" "${arch/./}" "${image#-}" "${COLLX_DEEPEP_V2_COMMIT:0:12}" \
-    "$nvshmem_key"
+    "$torch_key" "$nvshmem_key"
 }
 
 deepep_activate() {
@@ -212,7 +213,7 @@ deepep_install() {
     "numpy==2.2.6" "$COLLX_DEEPEP_V2_NVSHMEM_SPEC" >&2 2>&1 \
     || { collx_log "ERROR: DeepEP V2 build-tool installation failed"; return 1; }
   "${pip[@]}" --index-url https://download.pytorch.org/whl/cu130 \
-    --extra-index-url https://pypi.org/simple "torch==2.10.0" >&2 2>&1 \
+    --extra-index-url https://pypi.org/simple "$COLLX_DEEPEP_V2_TORCH_SPEC" >&2 2>&1 \
     || { collx_log "ERROR: torch 2.10.0+cu130 installation failed"; return 1; }
   # Torch pins NCCL 2.28.9; ElasticBuffer requires 2.30.4.
   "${pip[@]}" --force-reinstall --no-deps "nvidia-nccl-cu13==2.30.4" >&2 2>&1 \
