@@ -44,6 +44,13 @@ set -x
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
+if [ "${EVAL_ONLY:-false}" = "true" ]; then
+    export HF_HOME="${EVAL_HF_HOME:-/tmp/inferencex-eval-hf-cache}"
+    export HF_HUB_CACHE="$HF_HOME/hub"
+    export HF_DATASETS_CACHE="$HF_HOME/datasets"
+    mkdir -p "$HF_HUB_CACHE" "$HF_DATASETS_CACHE"
+fi
+
 wait_for_amd_gpu_clean
 
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE
