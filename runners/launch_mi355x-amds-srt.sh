@@ -214,6 +214,7 @@ forwarded = (
     "PREFILL_PP_SIZE",
     "PREFILL_TP",
     "PRECISION",
+    "RANDOM_RANGE_RATIO",
     "RESULT_FILENAME",
     "RUN_EVAL",
     "RUNNER_TYPE",
