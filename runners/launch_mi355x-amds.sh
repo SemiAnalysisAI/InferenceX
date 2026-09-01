@@ -286,6 +286,7 @@ else
     "
 
     export VLLM_CACHE_ROOT="/it-share/gharunners/.cache/vllm"
+    export VLLM_ROCM_DSV4_SPARSE_FLYDSL_PREFILL=False
         #--container-mount-home \
 
     if [[ "$FRAMEWORK" == "atom" ]] || [[ "$FRAMEWORK" == "sglang" ]]; then

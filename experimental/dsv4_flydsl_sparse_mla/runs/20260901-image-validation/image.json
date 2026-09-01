@@ -1,0 +1,12 @@
+{
+  "aiter_commit": "59799f3a16d6dae44617346630aab7be27226789",
+  "aiter_wheel_sha256": "7771ec053a2a5815bbb45a0e2a4cd6c2cd8b820dec4c5fe7b0956159ec7adac1",
+  "base_image": "vllm/vllm-openai-rocm@sha256:4b403315f9a0d9b0ed4221dfc7ea04538701b4de0ce283c0e2cee622b217ff89",
+  "flydsl_commit": "421935cc6f09fd9b27d5d5ae52e0960e18834bd5",
+  "image": "jiahcao/vllm-dsv4@sha256:58507b78c86005d0e5c0cd4b98f6082d66161083e3a3289cbebe8cb7c014761e",
+  "image_tag": "jiahcao/vllm-dsv4:flydsl-b56f2a20-20260901",
+  "inferencex_commit": "a9698060cb854e730c54cd908102f36f3c245c3b",
+  "kernel_sha256": "b56f2a20772abf606594136decf483c52d3a8f9881b7ea25c561ae73f555d2fd",
+  "vllm_base_commit": "311b3513af33bc29b4acb2fde2e9313e5e9966a0",
+  "vllm_target_commit": "91b654ac84638b582b62bb51921248a0d8023902"
+}

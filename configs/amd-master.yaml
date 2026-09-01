@@ -1320,6 +1320,24 @@ dsv4-fp4-mi355x-vllm-mtp:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 512, spec-decoding: mtp }
 
+# Temporary TP8-only smoke config for the gfx950 FlyDSL sparse-MLA image.
+# Keep this isolated from the production sweep and do not add it to
+# perf-changelog.yaml.
+dsv4-fp4-mi355x-vllm-mtp-flydsl-8k1k-tp8-c48:
+  image: jiahcao/vllm-dsv4@sha256:58507b78c86005d0e5c0cd4b98f6082d66161083e3a3289cbebe8cb7c014761e
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: mi355x
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, ep: 1, dp-attn: false, conc-start: 48, conc-end: 48, spec-decoding: mtp }
+
 dsv4-fp4-mi355x-atom:
   image: rocm/atom-dev:nightly_202607231538
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -1476,6 +1494,24 @@ dsv4-fp4-mi355x-vllm-agentic-mtp:
       # router is required -- it expands the single HTTP backend into one logical
       # worker per DP rank and stamps X-data-parallel-rank on forwarded requests.
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [32, 48, 64], router: { name: vllm-router, version: "0.1.14" } }
+
+# Temporary AgentX A/B config for the gfx950 FlyDSL sparse-MLA image. It is
+# deliberately limited to pure TP8 at c48: no DEP8, DP-attention, router, or
+# KV offload. Baseline and treatment refs differ only in the launcher feature
+# gate.
+dsv4-fp4-mi355x-vllm-agentic-mtp-flydsl-tp8-c48:
+  image: jiahcao/vllm-dsv4@sha256:58507b78c86005d0e5c0cd4b98f6082d66161083e3a3289cbebe8cb7c014761e
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.60
+      search-space:
+      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [48] }
 
 # DSv4-Pro FP4 on MI355X via SGLang. Uses a rocm720 mi35x image built off the
 # amd/deepseek_v4 branch in sgl-project/sglang; the SHA is encoded in the

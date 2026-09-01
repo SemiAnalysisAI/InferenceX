@@ -1,0 +1,7 @@
+torch 2.12.0+git6bbd260 7.2.53211
+device  gfx950:sramecc+:xnack-
+vllm 0.27.2rc1.dev150+g311b3513a /usr/local/lib/python3.12/dist-packages/vllm/__init__.py
+amd-aiter 0.1.1.dev2788+g59799f3a1.d20260901 /usr/local/lib/python3.12/dist-packages/aiter/__init__.py
+flydsl 0.3.1 /usr/local/lib/python3.12/dist-packages/flydsl/__init__.py
+kernel_sha256 b56f2a20772abf606594136decf483c52d3a8f9881b7ea25c561ae73f555d2fd
+symbol aiter.ops.flydsl.kernels.sparse_mla flydsl_sparse_mla_prefill
