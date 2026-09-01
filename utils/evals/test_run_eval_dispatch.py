@@ -2685,6 +2685,20 @@ run_agentic_replay_and_write_outputs() { echo replay >> "$EVENTS"; }
 def test_agentic_eval_workflow_forwards_runner_contract() -> None:
     workflow = yaml.safe_load(E2E_WORKFLOW.read_text())
     forwarded = workflow["jobs"]["test-sweep-agentic-evals"]["with"]
+    throughput = workflow["jobs"]["test-sweep-agentic"]["with"]
+
+    for field in (
+        "router",
+        "kv-p2p-transfer",
+        "tp",
+        "pp",
+        "dcp-size",
+        "pcp-size",
+        "ep",
+        "dp-attn",
+    ):
+        assert forwarded[field] == throughput[field]
+
 
     assert forwarded["spec-decoding"] == "${{ matrix.config.spec-decoding }}"
     assert forwarded["eval-framework"] == AUTO_EVAL_FRAMEWORK_EXPR
