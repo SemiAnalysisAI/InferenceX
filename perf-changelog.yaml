@@ -6785,4 +6785,4 @@
     - "Shared-experts fusion is now per-arm: kept enforced on the tensor-parallel arms and disabled under DP attention, matching the DP baselines."
     - "Raise mem-fraction-static from 0.89 to 0.90. swa-full-tokens-ratio becomes per-arm: 0.10 on the tensor-parallel arms as before, 0.15 under DP attention."
     - "Drop concurrency 2 and 10 from the TP4 arm, leaving [1, 4, 8], and drop concurrency 16 from the TP8 hicache arm, leaving [32, 48]. Concurrency 16 remains on the TP8 no-offload arm."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2800
