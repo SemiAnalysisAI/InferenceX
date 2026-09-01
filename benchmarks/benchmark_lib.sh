@@ -8,6 +8,12 @@
 export PYTHONDONTWRITEBYTECODE=1
 export PYTHONPYCACHEPREFIX="${PYTHONPYCACHEPREFIX:-/tmp/inferencex-pycache}"
 mkdir -p "$PYTHONPYCACHEPREFIX" 2>/dev/null || true
+INFERENCEX_BENCHMARK_LIB_DIR="$(
+    cd "$(dirname "${BASH_SOURCE[0]}")" && pwd
+)"
+INFERENCEX_REPO_ROOT="$(
+    cd "$INFERENCEX_BENCHMARK_LIB_DIR/.." && pwd
+)"
 
 # Inference server port shared by every benchmark recipe. Launchers that need
 # a non-default value (e.g. launch_mi355x-amds.sh derives PORT from RUNNER_NAME
@@ -902,8 +908,1083 @@ _install_lm_eval_deps() {
     fi
 }
 
+_prepare_vendor_verifier_python() {
+    local verifier_name="$1"
+    local runtime_prefix="$2"
+    local use_system_site_packages="${3:-false}"
+    local minimum_python_minor="${4:-12}"
+
+    VENDOR_VERIFIER_PYTHON=python3
+    VENDOR_VERIFIER_PYTHON_CLEANUP_DIR=""
+    export VENDOR_VERIFIER_PYTHON VENDOR_VERIFIER_PYTHON_CLEANUP_DIR
+
+    local system_python_is_compatible=false
+    if python3 -c \
+        'import sys; raise SystemExit(sys.version_info < (3, int(sys.argv[1])))' \
+        "$minimum_python_minor"; then
+        system_python_is_compatible=true
+        if [ "$use_system_site_packages" != "true" ]; then
+            return 0
+        fi
+    fi
+
+    local python_dir uv_prefix uv_bin venv_dir prepare_rc=0
+    python_dir="$(mktemp -d "/tmp/${runtime_prefix}-XXXXXX")" || {
+        echo "ERROR: could not create a temporary Python directory for ${verifier_name}" >&2
+        return 1
+    }
+    VENDOR_VERIFIER_PYTHON_CLEANUP_DIR="$python_dir"
+    export VENDOR_VERIFIER_PYTHON_CLEANUP_DIR
+
+    venv_dir="${python_dir}/venv"
+    if [ "$system_python_is_compatible" = "true" ]; then
+        python3 -m venv --system-site-packages "$venv_dir" || prepare_rc=$?
+    else
+        uv_prefix="${python_dir}/uv"
+        uv_bin="${uv_prefix}/bin/uv"
+        python3 -m pip install -q --no-cache-dir --break-system-packages \
+            --prefix "$uv_prefix" "uv==0.11.33" || prepare_rc=$?
+        if [ "$prepare_rc" -eq 0 ] && [ ! -x "$uv_bin" ]; then
+            echo "ERROR: pinned uv installation did not create ${uv_bin}" >&2
+            prepare_rc=1
+        fi
+        if [ "$prepare_rc" -eq 0 ]; then
+            local system_site_packages_args=()
+            if [ "$use_system_site_packages" = "true" ]; then
+                system_site_packages_args+=(--system-site-packages)
+            fi
+            UV_CACHE_DIR="${python_dir}/uv-cache" \
+            UV_PYTHON_INSTALL_DIR="${python_dir}/python" \
+                "$uv_bin" venv --python "3.${minimum_python_minor}" --seed \
+                    "${system_site_packages_args[@]}" "$venv_dir" \
+                || prepare_rc=$?
+        fi
+    fi
+    if [ "$prepare_rc" -eq 0 ] && [ ! -x "${venv_dir}/bin/python" ]; then
+        echo "ERROR: pinned Python setup did not create the ${verifier_name} interpreter" >&2
+        prepare_rc=1
+    fi
+    if [ "$prepare_rc" -ne 0 ]; then
+        rm -rf "$python_dir" || true
+        VENDOR_VERIFIER_PYTHON=python3
+        VENDOR_VERIFIER_PYTHON_CLEANUP_DIR=""
+        export VENDOR_VERIFIER_PYTHON VENDOR_VERIFIER_PYTHON_CLEANUP_DIR
+        return "$prepare_rc"
+    fi
+
+    VENDOR_VERIFIER_PYTHON="${venv_dir}/bin/python"
+    export VENDOR_VERIFIER_PYTHON
+}
+
+_install_kimi_vendor_eval_deps() {
+    local target_dir="$1"
+    local eval_suite="${2:-kimi_tool_call_schema}"
+    local -a packages=(
+        "httpx[http2]==0.28.1"
+        "openai==2.14.0"
+        "jsonschema==4.25.1"
+        "pytest==8.4.2"
+    )
+    if [ "$eval_suite" = "kimi_tool_call_schema_full" ]; then
+        packages+=("pytest-xdist==3.8.0")
+    fi
+    "${VENDOR_VERIFIER_PYTHON:-python3}" -m pip install -q --no-cache-dir \
+        --target "$target_dir" "${packages[@]}"
+}
+
+_prepare_kimi_vendor_runtime() {
+    local eval_suite="${1:-kimi_tool_call_schema}"
+    local runtime_dir install_rc=0
+    runtime_dir="$(mktemp -d /tmp/kimi-vendor-runtime-XXXXXX)" || return $?
+    _install_kimi_vendor_eval_deps "$runtime_dir" "$eval_suite" >&2 || install_rc=$?
+    if [ "$install_rc" -ne 0 ]; then
+        rm -rf "$runtime_dir"
+        return "$install_rc"
+    fi
+    printf '%s\n' "$runtime_dir"
+}
+
+_prepare_kimi_vendor_verifier() {
+    local repo_url="$1"
+    local verifier_ref="$2"
+    local expected_archive_sha256="$3"
+    local checkout_dir prepare_rc=0
+
+    checkout_dir="$(mktemp -d /tmp/kimi-vendor-verifier-XXXXXX)" || {
+        echo "ERROR: could not create a temporary directory for Kimi-Vendor-Verifier" >&2
+        return 1
+    }
+
+    "${VENDOR_VERIFIER_PYTHON:-python3}" - \
+        "$repo_url" "$verifier_ref" "$expected_archive_sha256" "$checkout_dir" <<'PY' || prepare_rc=$?
+from hashlib import sha256
+from pathlib import Path
+import re
+import socket
+import sys
+import tarfile
+import tempfile
+import time
+from urllib.error import HTTPError, URLError
+from urllib.parse import quote, urlsplit, urlunsplit
+from urllib.request import Request, urlopen
+
+
+repo_url, verifier_ref, expected_archive_sha256, checkout_dir_arg = sys.argv[1:]
+checkout_dir = Path(checkout_dir_arg)
+stage = "derive the pinned archive URL"
+
+
+def archive_member_parts(name):
+    if not name or "\x00" in name or "\\" in name or name.startswith("/"):
+        raise ValueError(f"unsafe archive member path: {name!r}")
+    normalized = name.rstrip("/")
+    parts = normalized.split("/")
+    if not normalized or any(part in ("", ".", "..") for part in parts):
+        raise ValueError(f"unsafe archive member path: {name!r}")
+    return tuple(parts)
+
+
+try:
+    if not re.fullmatch(r"[0-9a-fA-F]{40}", verifier_ref):
+        raise ValueError(f"expected a 40-character commit SHA, got {verifier_ref!r}")
+    if not re.fullmatch(r"[0-9a-fA-F]{64}", expected_archive_sha256):
+        raise ValueError(
+            "expected a 64-character archive SHA256, got "
+            f"{expected_archive_sha256!r}"
+        )
+
+    parsed_repo_url = urlsplit(repo_url)
+    if parsed_repo_url.scheme not in ("http", "https") or not parsed_repo_url.netloc:
+        raise ValueError(f"unsupported repository URL: {repo_url!r}")
+    if parsed_repo_url.query or parsed_repo_url.fragment:
+        raise ValueError(f"repository URL must not contain a query or fragment: {repo_url!r}")
+    repo_path = parsed_repo_url.path.rstrip("/")
+    if repo_path.endswith(".git"):
+        repo_path = repo_path[:-4]
+    if not repo_path:
+        raise ValueError(f"repository URL has no repository path: {repo_url!r}")
+    archive_path = f"{repo_path}/archive/{quote(verifier_ref, safe='')}.tar.gz"
+    archive_url = urlunsplit(
+        (parsed_repo_url.scheme, parsed_repo_url.netloc, archive_path, "", "")
+    )
+
+    stage = f"download {archive_url}"
+    request = Request(
+        archive_url,
+        headers={"User-Agent": "InferenceX-Kimi-Vendor-Verifier"},
+    )
+    with tempfile.TemporaryFile() as archive_file:
+        downloaded = 0
+        for attempt in range(1, 4):
+            archive_file.seek(0)
+            archive_file.truncate()
+            downloaded = 0
+            digest = sha256()
+            deadline = time.monotonic() + 60
+            try:
+                with urlopen(request, timeout=60) as response:
+                    while True:
+                        remaining = deadline - time.monotonic()
+                        if remaining <= 0:
+                            raise TimeoutError(
+                                "archive download exceeded the 60-second deadline"
+                            )
+                        sock = getattr(getattr(response, "fp", None), "raw", None)
+                        sock = getattr(sock, "_sock", None)
+                        if sock is not None:
+                            sock.settimeout(max(0.001, remaining))
+                        try:
+                            chunk = response.read(1024 * 1024)
+                        except socket.timeout as error:
+                            raise TimeoutError(
+                                "archive download exceeded the 60-second deadline"
+                            ) from error
+                        if not chunk:
+                            break
+                        downloaded += len(chunk)
+                        if downloaded > 128 * 1024 * 1024:
+                            raise ValueError(
+                                "archive download exceeds the 128 MiB safety limit"
+                            )
+                        archive_file.write(chunk)
+                        digest.update(chunk)
+                break
+            except HTTPError as error:
+                if error.code not in (408, 429) and not 500 <= error.code < 600:
+                    raise
+                if attempt == 3:
+                    raise
+                print(
+                    f"WARN: Kimi-Vendor-Verifier archive download attempt "
+                    f"{attempt}/3 failed: {error}; retrying",
+                    file=sys.stderr,
+                )
+                time.sleep(attempt)
+            except (TimeoutError, URLError, ConnectionError) as error:
+                if attempt == 3:
+                    raise
+                print(
+                    f"WARN: Kimi-Vendor-Verifier archive download attempt "
+                    f"{attempt}/3 failed: {error}; retrying",
+                    file=sys.stderr,
+                )
+                time.sleep(attempt)
+        if downloaded == 0:
+            raise ValueError("downloaded archive is empty")
+        actual_archive_sha256 = digest.hexdigest()
+        if actual_archive_sha256 != expected_archive_sha256:
+            raise ValueError(
+                "Kimi-Vendor-Verifier archive SHA256 mismatch: expected "
+                f"{expected_archive_sha256}, got {actual_archive_sha256}"
+            )
+        archive_file.seek(0)
+
+        stage = "validate the downloaded archive"
+        required_files = {
+            "pyproject.toml",
+            "tests/conftest.py",
+            "tests/__init__.py",
+            "tests/tool_call_json_schema/conftest.py",
+            "tests/tool_call_json_schema/__init__.py",
+            "tests/tool_call_json_schema/test_tool_call_json_schema.py",
+            "tests/tool_call_json_schema/validator.py",
+            "testdata/walle_validator_cases/validator_cases/TestAdditionalProperties/valid.jsonl",
+            "testdata/walle_validator_cases/validator_cases/TestAnyOf/valid.jsonl",
+            "testdata/walle_validator_cases/validator_cases/TestBasicTypes/valid.jsonl",
+            "testdata/walle_validator_cases/validator_cases/TestDefs/valid.jsonl",
+            "testdata/walle_validator_cases/validator_cases/TestDescription/valid.jsonl",
+            "testdata/walle_validator_cases/validator_cases/TestEnforcerCases/valid.jsonl",
+            "testdata/walle_validator_cases/validator_cases/TestID/valid.jsonl",
+            "testdata/walle_validator_cases/validator_cases/TestKeywordsValidation/valid.jsonl",
+            "testdata/walle_validator_cases/validator_cases/TestNestedDefsDepth/valid.jsonl",
+            "testdata/walle_validator_cases/validator_cases/TestNumberFormat/valid.jsonl",
+            "testdata/walle_validator_cases/validator_cases/TestRangeConstraints/valid.jsonl",
+            "testdata/walle_validator_cases/validator_cases/TestRefInProperties/valid.jsonl",
+            "testdata/walle_validator_cases/validator_cases/TestReferences/valid.jsonl",
+            "testdata/walle_validator_cases/validator_cases/TestRequired/valid.jsonl",
+            "testdata/walle_validator_cases/validator_cases/TestSingleTypeInArray/valid.jsonl",
+            "testdata/walle_validator_cases/validator_cases/TestTypeLocation/valid.jsonl",
+        }
+        selected_files = {}
+        archive_roots = set()
+        member_count = 0
+        archive_size = 0
+        selected_size = 0
+
+        with tarfile.open(fileobj=archive_file, mode="r|gz") as archive:
+            for member in archive:
+                member_count += 1
+                if member_count > 100_000:
+                    raise ValueError("archive contains more than 100000 members")
+                if member.size < 0:
+                    raise ValueError(
+                        f"archive member has a negative size: {member.name!r}"
+                    )
+                archive_size += member.size
+                if archive_size > 512 * 1024 * 1024:
+                    raise ValueError("expanded archive exceeds the 512 MiB safety limit")
+
+                parts = archive_member_parts(member.name)
+                archive_roots.add(parts[0])
+                if len(archive_roots) > 1:
+                    roots = ", ".join(sorted(archive_roots))
+                    raise ValueError(f"archive has multiple roots: {roots}")
+                if not (member.isdir() or member.isfile()):
+                    raise ValueError(
+                        f"archive member has unsafe type: {member.name!r}"
+                    )
+                if len(parts) == 1:
+                    continue
+
+                relative_path = "/".join(parts[1:])
+                if relative_path not in required_files:
+                    continue
+                if relative_path in selected_files:
+                    raise ValueError(
+                        f"archive contains duplicate selected path: {relative_path!r}"
+                    )
+                if not member.isfile():
+                    raise ValueError(
+                        f"required path is not a regular file: {relative_path}"
+                    )
+                selected_size += member.size
+                if selected_size > 256 * 1024 * 1024:
+                    raise ValueError(
+                        "selected archive subset exceeds the 256 MiB safety limit"
+                    )
+                source = archive.extractfile(member)
+                if source is None:
+                    raise ValueError(f"could not read archive member: {member.name!r}")
+                with source:
+                    content = source.read(member.size + 1)
+                if len(content) != member.size:
+                    raise ValueError(
+                        f"archive member size mismatch: {member.name!r}"
+                    )
+                selected_files[relative_path] = content
+
+        if member_count == 0:
+            raise ValueError("archive contains no members")
+        if len(archive_roots) != 1:
+            raise ValueError("archive does not have exactly one root")
+        missing_files = sorted(required_files - selected_files.keys())
+        if missing_files:
+            raise ValueError(
+                "archive is missing required files: " + ", ".join(missing_files)
+            )
+
+        stage = "extract the verified archive subset"
+        if any(checkout_dir.iterdir()):
+            raise ValueError(f"checkout directory is not empty: {checkout_dir}")
+        for relative_path, content in selected_files.items():
+            destination = checkout_dir.joinpath(*relative_path.split("/"))
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            with destination.open("xb") as output:
+                output.write(content)
+except Exception as error:
+    print(
+        f"ERROR: failed to {stage} for Kimi-Vendor-Verifier "
+        f"at {verifier_ref}: {error}",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
+PY
+
+    if [ "$prepare_rc" -ne 0 ]; then
+        if ! rm -rf "$checkout_dir"; then
+            echo "ERROR: failed to remove partial Kimi-Vendor-Verifier directory ${checkout_dir}" >&2
+        fi
+        return "$prepare_rc"
+    fi
+
+    printf '%s\n' "$checkout_dir"
+}
+
+_cleanup_vendor_eval() {
+    local path
+    for path in "$@"; do
+        [ -z "$path" ] || rm -rf "$path" || true
+    done
+}
+
+_has_eval_result() {
+    local results_dir="$1"
+    local filename_prefix="$2"
+    local matches=("${results_dir}/${filename_prefix}"*.json)
+    [ -f "${matches[0]}" ]
+}
+
+_prepare_eval_artifact_family() {
+    local results_dir="$1"
+    local family="$2"
+    local artifact rm_rc=0
+    local artifacts=()
+
+    export EVAL_RESULT_DIR=""
+    case "$family" in
+        kimi)
+            artifacts=(
+                "${results_dir}"/results_kimi_vendor_*.json
+                "${results_dir}/kimi_vendor_report.json"
+            )
+            ;;
+        minimax)
+            artifacts=(
+                "${results_dir}"/results_minimax_vendor_*.json
+                "${results_dir}/minimax_vendor_report.json"
+                "${results_dir}/minimax_vendor_results.jsonl"
+            )
+            ;;
+        bfcl)
+            artifacts=(
+                "${results_dir}"/results_bfcl*.json
+                "${results_dir}/bfcl_report.json"
+                "${results_dir}/bfcl_upstream_artifacts.tar.gz"
+            )
+            ;;
+        *)
+            echo "ERROR: unsupported eval artifact family '${family}'" >&2
+            return 2
+            ;;
+    esac
+
+    for artifact in "${artifacts[@]}"; do
+        if [ -e "$artifact" ] || [ -L "$artifact" ]; then
+            rm -f -- "$artifact" || rm_rc=$?
+            if [ "$rm_rc" -ne 0 ]; then
+                echo "ERROR: failed to remove stale eval artifact ${artifact}" >&2
+                return "$rm_rc"
+            fi
+        fi
+    done
+    export EVAL_RESULT_DIR="$results_dir"
+}
+
+_write_kimi_vendor_integration_error() {
+    local adapter_path="$1"
+    local model_name="$2"
+    local results_dir="$3"
+    local task_name="$4"
+    local message="$5"
+
+    "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" \
+        --model "$model_name" \
+        --output-dir "$results_dir" \
+        --task-name "$task_name" \
+        --integration-error "$message"
+}
+
+_run_kimi_tool_call_schema_eval() {
+    local port="${PORT:-8888}"
+    local results_dir="${EVAL_RESULT_DIR:-$(mktemp -d /tmp/eval_out-XXXXXX)}"
+    local verifier_repo="https://github.com/MoonshotAI/Kimi-Vendor-Verifier.git"
+    local verifier_ref="3dad65a760a8867cda72f6dd8848d876a4e851b4"
+    local verifier_archive_sha256="ede9ea300c72ccfde9d8975ea4b1b54e423c7625690f6631ab1e65a715821e01"
+    local eval_suite="${EVAL_SUITE:-kimi_tool_call_schema}"
+    local timeout_seconds=900
+    if [ "$eval_suite" = "kimi_tool_call_schema_full" ]; then
+        timeout_seconds=7200
+    fi
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --port|--results-dir)
+                if [[ $# -lt 2 || -z "${2:-}" || "${2:-}" == --* ]]; then
+                    echo "ERROR: $1 requires a value" >&2
+                    return 2
+                fi
+                case "$1" in
+                    --port)        port="$2" ;;
+                    --results-dir) results_dir="$2" ;;
+                esac
+                shift 2
+                ;;
+            *)
+                echo "Unknown parameter: $1" >&2
+                return 2
+                ;;
+        esac
+    done
+
+
+    local model_name="${MODEL_NAME:-${MODEL:-}}"
+    local adapter_path="${INFERENCEX_REPO_ROOT}/utils/evals/kimi_vendor_eval.py"
+    local runtime_dir=""
+    local checkout_dir=""
+
+    mkdir -p "$results_dir" || return $?
+    results_dir="$(cd "$results_dir" && pwd)" || return $?
+    _prepare_eval_artifact_family "$results_dir" kimi || return $?
+
+    local setup_rc=0 integration_error=""
+    _prepare_vendor_verifier_python "Kimi-Vendor-Verifier" "kimi-vendor-python" || {
+        setup_rc=$?
+        integration_error="Kimi Vendor Verifier Python runtime preparation failed with exit code ${setup_rc}"
+    }
+    if [ "$setup_rc" -eq 0 ]; then
+        runtime_dir=$(_prepare_kimi_vendor_runtime "$eval_suite") || {
+            setup_rc=$?
+            integration_error="Kimi Vendor Verifier dependency installation failed with exit code ${setup_rc}"
+        }
+    fi
+    if [ "$setup_rc" -eq 0 ]; then
+        checkout_dir=$(
+            _prepare_kimi_vendor_verifier \
+                "$verifier_repo" "$verifier_ref" "$verifier_archive_sha256"
+        ) || {
+            setup_rc=$?
+            integration_error="Kimi Vendor Verifier checkout failed with exit code ${setup_rc}"
+        }
+    fi
+    if [ "$setup_rc" -ne 0 ]; then
+        echo "ERROR: ${integration_error}" >&2
+        local artifact_rc=0
+        _write_kimi_vendor_integration_error \
+            "$adapter_path" "$model_name" "$results_dir" "$eval_suite" \
+            "$integration_error" || artifact_rc=$?
+        if [ "$artifact_rc" -ne 0 ]; then
+            echo "ERROR: failed to write Kimi verifier failure artifact (exit code ${artifact_rc})" >&2
+        fi
+        _cleanup_vendor_eval \
+            "$runtime_dir" "$checkout_dir" "${VENDOR_VERIFIER_PYTHON_CLEANUP_DIR:-}"
+        return "$setup_rc"
+    fi
+
+    local eval_rc=0
+    PYTHONPATH="${runtime_dir}${PYTHONPATH:+:${PYTHONPATH}}" \
+        "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" \
+            --verifier-dir "$checkout_dir" \
+            --base-url "http://127.0.0.1:${port}/v1" \
+            --api-key EMPTY \
+            --model "$model_name" \
+            --model-prefix "${MODEL_PREFIX:-}" \
+            --output-dir "$results_dir" \
+            --task-name "$eval_suite" \
+            --timeout-seconds "$timeout_seconds" \
+            || eval_rc=$?
+    if [ "$eval_rc" -ne 0 ] \
+        && ! _has_eval_result "$results_dir" "results_kimi_vendor_"; then
+        integration_error="Kimi Vendor Verifier failed with exit code ${eval_rc}"
+        local artifact_rc=0
+        _write_kimi_vendor_integration_error \
+            "$adapter_path" "$model_name" "$results_dir" "$eval_suite" \
+            "$integration_error" || artifact_rc=$?
+        if [ "$artifact_rc" -ne 0 ]; then
+            echo "ERROR: failed to write Kimi verifier failure artifact (exit code ${artifact_rc})" >&2
+        fi
+    fi
+    _cleanup_vendor_eval \
+        "$runtime_dir" "$checkout_dir" "${VENDOR_VERIFIER_PYTHON_CLEANUP_DIR:-}"
+    return "$eval_rc"
+}
+
+run_kimi_vendor_eval() {
+    local eval_suite="${EVAL_SUITE:-kimi_tool_call_schema}"
+    export EVAL_SUITE="$eval_suite"
+
+    case "$eval_suite" in
+        kimi_tool_call_schema|kimi_tool_call_schema_full)
+            _run_kimi_tool_call_schema_eval "$@"
+            ;;
+        *)
+            echo "ERROR: unsupported Kimi Vendor Verifier suite '${eval_suite}'" >&2
+            export EVAL_RESULT_DIR=""
+            return 2
+            ;;
+    esac
+}
+
+_install_bfcl_eval_deps() {
+    local download_dir="$1"
+    local wheel_url="https://files.pythonhosted.org/packages/ba/41/ed458527c770c50225b60bae3b0c3444b26804ee455fa2d8f187018d2cb2/bfcl_eval-2026.3.23-py3-none-any.whl"
+    local wheel_sha256="3bb6dfa5f0c68ad403c9ec50b00db2bb3b4cc9b38ab1ff33f48fe30d853d3a0a"
+    local wheel_path="${download_dir}/bfcl_eval-2026.3.23-py3-none-any.whl"
+
+    "${VENDOR_VERIFIER_PYTHON:-python3}" - \
+        "$wheel_url" "$wheel_sha256" "$wheel_path" <<'PY' || return $?
+from hashlib import sha256
+from pathlib import Path
+import sys
+from urllib.request import Request, urlopen
+
+wheel_url, expected_sha256, wheel_path_arg = sys.argv[1:]
+wheel_path = Path(wheel_path_arg)
+digest = sha256()
+downloaded = 0
+request = Request(
+    wheel_url,
+    headers={"User-Agent": "InferenceX-BFCL-Smoke"},
+)
+
+try:
+    with urlopen(request, timeout=180) as response, wheel_path.open("xb") as output:
+        while chunk := response.read(1024 * 1024):
+            downloaded += len(chunk)
+            if downloaded > 512 * 1024 * 1024:
+                raise ValueError("BFCL wheel exceeds the 512 MiB safety limit")
+            digest.update(chunk)
+            output.write(chunk)
+    if downloaded == 0:
+        raise ValueError("downloaded BFCL wheel is empty")
+    actual_sha256 = digest.hexdigest()
+    if actual_sha256 != expected_sha256:
+        raise ValueError(
+            f"BFCL wheel SHA256 mismatch: expected {expected_sha256}, "
+            f"got {actual_sha256}"
+        )
+except Exception as error:
+    wheel_path.unlink(missing_ok=True)
+    print(f"ERROR: failed to download and verify the pinned BFCL wheel: {error}", file=sys.stderr)
+    raise SystemExit(1)
+PY
+
+    timeout 600 "${VENDOR_VERIFIER_PYTHON:-python3}" -m pip install \
+        -q --no-cache-dir "$wheel_path" "soundfile==0.13.1"
+}
+
+_prepare_bfcl_runtime() {
+    local runtime_dir install_rc=0
+    runtime_dir="$(mktemp -d /tmp/bfcl-runtime-XXXXXX)" || return $?
+    _install_bfcl_eval_deps "$runtime_dir" >&2 || install_rc=$?
+    if [ "$install_rc" -ne 0 ]; then
+        rm -rf "$runtime_dir"
+        return "$install_rc"
+    fi
+    printf '%s\n' "$runtime_dir"
+}
+
+_archive_bfcl_upstream_artifacts() {
+    local project_root="$1"
+    local archive_path="$2"
+
+    "${VENDOR_VERIFIER_PYTHON:-python3}" - "$project_root" "$archive_path" <<'PY'
+import gzip
+import os
+from pathlib import Path
+import tarfile
+import sys
+
+project_root = Path(sys.argv[1])
+archive_path = Path(sys.argv[2])
+temporary_path = archive_path.with_name(f".{archive_path.name}.tmp")
+temporary_path.unlink(missing_ok=True)
+
+try:
+    with (
+        temporary_path.open("xb") as raw_archive,
+        gzip.GzipFile(filename="", mode="wb", fileobj=raw_archive, mtime=0) as compressed,
+        tarfile.open(fileobj=compressed, mode="w", format=tarfile.PAX_FORMAT) as archive,
+    ):
+        for path in sorted(
+            project_root.rglob("*"),
+            key=lambda candidate: candidate.relative_to(project_root).as_posix(),
+        ):
+            relative_path = path.relative_to(project_root).as_posix()
+            if path.is_symlink():
+                raise ValueError(f"refusing to archive symbolic link: {relative_path}")
+            info = archive.gettarinfo(str(path), arcname=relative_path)
+            info.uid = 0
+            info.gid = 0
+            info.uname = ""
+            info.gname = ""
+            info.mtime = 0
+            if info.isdir():
+                archive.addfile(info)
+            elif info.isfile():
+                with path.open("rb") as source:
+                    archive.addfile(info, source)
+            else:
+                raise ValueError(f"refusing to archive special file: {relative_path}")
+    os.replace(temporary_path, archive_path)
+except BaseException:
+    temporary_path.unlink(missing_ok=True)
+    raise
+PY
+}
+
+_write_bfcl_integration_error() {
+    local adapter_path="$1"
+    local model_name="$2"
+    local results_dir="$3"
+    local message="$4"
+    local suite="$5"
+    local adapter_rc=0
+
+    # Integration errors deliberately make the adapter exit nonzero after
+    # publishing both score artifacts. Treat those artifacts, not that expected
+    # status, as proof that failure reporting succeeded.
+    "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" \
+        --model "$model_name" \
+        --output-dir "$results_dir" \
+        --suite "$suite" \
+        --integration-error "$message" \
+        || adapter_rc=$?
+    if [ -f "${results_dir}/bfcl_report.json" ] \
+        && [ -f "${results_dir}/results_bfcl.json" ]; then
+        return 0
+    fi
+    if [ "$adapter_rc" -eq 0 ]; then
+        return 1
+    fi
+    return "$adapter_rc"
+}
+
+_run_bfcl_suite_eval() {
+    local eval_suite="$1"
+    local num_threads="$2"
+    local process_timeout_seconds="$3"
+    local archive_upstream="$4"
+    shift 4
+
+    local port="${PORT:-8888}"
+    local results_dir="${EVAL_RESULT_DIR:-}"
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --port|--results-dir)
+                if [[ $# -lt 2 || -z "${2:-}" || "${2:-}" == --* ]]; then
+                    echo "ERROR: $1 requires a value" >&2
+                    return 2
+                fi
+                case "$1" in
+                    --port)        port="$2" ;;
+                    --results-dir) results_dir="$2" ;;
+                esac
+                shift 2
+                ;;
+            *)
+                echo "Unknown parameter: $1" >&2
+                return 2
+                ;;
+        esac
+    done
+
+    if [ -z "$results_dir" ]; then
+        results_dir="$(mktemp -d /tmp/eval_out-XXXXXX)" || return $?
+    fi
+
+    local model_name="${MODEL_NAME:-${MODEL:-}}"
+    local adapter_path="${INFERENCEX_REPO_ROOT}/utils/evals/bfcl_adapter.py"
+    local runtime_dir=""
+    local project_root=""
+
+    mkdir -p "$results_dir" || return $?
+    results_dir="$(cd "$results_dir" && pwd)" || return $?
+    _prepare_eval_artifact_family "$results_dir" bfcl || return $?
+
+    local setup_rc=0 integration_error=""
+    _prepare_vendor_verifier_python "BFCL" "bfcl-python" true 10 || {
+        setup_rc=$?
+        integration_error="BFCL Python runtime preparation failed with exit code ${setup_rc}"
+    }
+    if [ "$setup_rc" -eq 0 ]; then
+        runtime_dir=$(_prepare_bfcl_runtime) || {
+            setup_rc=$?
+            integration_error="BFCL dependency installation failed with exit code ${setup_rc}"
+        }
+    fi
+    if [ "$setup_rc" -eq 0 ]; then
+        project_root="$(mktemp -d /tmp/bfcl-project-root-XXXXXX)" || {
+            setup_rc=$?
+            integration_error="BFCL project root preparation failed with exit code ${setup_rc}"
+        }
+    fi
+    if [ "$setup_rc" -ne 0 ]; then
+        echo "ERROR: ${integration_error}" >&2
+        local artifact_rc=0
+        _write_bfcl_integration_error \
+            "$adapter_path" "$model_name" "$results_dir" "$integration_error" \
+            "$eval_suite" || artifact_rc=$?
+        if [ "$artifact_rc" -ne 0 ]; then
+            echo "ERROR: failed to write BFCL failure artifact (exit code ${artifact_rc})" >&2
+        fi
+        _cleanup_vendor_eval \
+            "$runtime_dir" "$project_root" "${VENDOR_VERIFIER_PYTHON_CLEANUP_DIR:-}"
+        return "$setup_rc"
+    fi
+
+    local eval_rc=0
+    local -a suite_args=()
+    if [ "$eval_suite" != "bfcl_smoke" ]; then
+        suite_args=(--suite "$eval_suite")
+    fi
+    timeout "$process_timeout_seconds" \
+        "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" \
+        --base-url "http://127.0.0.1:${port}/v1" \
+        --api-key EMPTY \
+        --model "$model_name" \
+        --output-dir "$results_dir" \
+        --bfcl-project-root "$project_root" \
+        "${suite_args[@]}" \
+        --num-threads "$num_threads" \
+        || eval_rc=$?
+    local archive_rc=0
+    if [ "$archive_upstream" = true ]; then
+        _archive_bfcl_upstream_artifacts \
+            "$project_root" "${results_dir}/bfcl_upstream_artifacts.tar.gz" \
+            || archive_rc=$?
+        if [ "$archive_rc" -ne 0 ]; then
+            echo "ERROR: failed to archive BFCL upstream artifacts (exit code ${archive_rc})" >&2
+        fi
+    fi
+    if [ "$eval_rc" -ne 0 ] \
+        && { [ ! -f "${results_dir}/bfcl_report.json" ] \
+            || [ ! -f "${results_dir}/results_bfcl.json" ]; }; then
+        local integration_error="BFCL evaluation failed with exit code ${eval_rc}"
+        local artifact_rc=0
+        _write_bfcl_integration_error \
+            "$adapter_path" "$model_name" "$results_dir" "$integration_error" \
+            "$eval_suite" || artifact_rc=$?
+        if [ "$artifact_rc" -ne 0 ]; then
+            echo "ERROR: failed to write BFCL failure artifact (exit code ${artifact_rc})" >&2
+        fi
+    fi
+    _cleanup_vendor_eval \
+        "$runtime_dir" "$project_root" "${VENDOR_VERIFIER_PYTHON_CLEANUP_DIR:-}"
+    if [ "$eval_rc" -ne 0 ]; then
+        return "$eval_rc"
+    fi
+    return "$archive_rc"
+}
+
+
+_run_bfcl_smoke_eval() {
+    _run_bfcl_suite_eval bfcl_smoke 4 900 false "$@"
+}
+
+run_bfcl_eval() {
+    local eval_suite="${EVAL_SUITE:-bfcl_smoke}"
+    export EVAL_SUITE="$eval_suite"
+
+    case "$eval_suite" in
+        bfcl_smoke)
+            _run_bfcl_smoke_eval "$@"
+            ;;
+        bfcl_vllm_minimax_m3)
+            _run_bfcl_suite_eval "$eval_suite" 8 7200 true "$@"
+            ;;
+        bfcl_vllm_kimi)
+            _run_bfcl_suite_eval "$eval_suite" 16 14400 true "$@"
+            ;;
+        *)
+            echo "ERROR: unsupported BFCL suite '${eval_suite}'" >&2
+            export EVAL_RESULT_DIR=""
+            return 2
+            ;;
+    esac
+}
+
+
+_write_minimax_vendor_integration_error() {
+    local adapter_path="$1"
+    local model_name="$2"
+    local results_dir="$3"
+    local message="$4"
+
+    # The failure path is stdlib-only, so it remains usable when runtime
+    # provisioning or dependency installation is what failed.
+    "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" failure \
+        --model "$model_name" \
+        --output-dir "$results_dir" \
+        --message "$message"
+}
+
+_run_minimax_m3_smoke_eval() {
+    local port="${PORT:-8888}"
+    local results_dir="${EVAL_RESULT_DIR:-}"
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --port|--results-dir)
+                if [[ $# -lt 2 || -z "${2:-}" || "${2:-}" == --* ]]; then
+                    echo "ERROR: $1 requires a value" >&2
+                    return 2
+                fi
+                case "$1" in
+                    --port)        port="$2" ;;
+                    --results-dir) results_dir="$2" ;;
+                esac
+                shift 2
+                ;;
+            *)
+                echo "Unknown parameter: $1" >&2
+                return 2
+                ;;
+        esac
+    done
+
+    if [ -z "$results_dir" ]; then
+        results_dir="$(mktemp -d /tmp/eval_out-XXXXXX)" || return $?
+    fi
+
+    local model_name="${MODEL_NAME:-${MODEL:-}}"
+    local adapter_path="${INFERENCEX_REPO_ROOT}/utils/evals/minimax_provider_eval.py"
+    local fixture_path="${INFERENCEX_REPO_ROOT}/utils/evals/minimax_m3_smoke.json"
+    local runtime_dir=""
+
+    mkdir -p "$results_dir" || return $?
+    results_dir="$(cd "$results_dir" && pwd)" || return $?
+    _prepare_eval_artifact_family "$results_dir" minimax || return $?
+
+    local setup_rc=0 integration_error=""
+    _prepare_vendor_verifier_python "MiniMax Provider Verifier" "minimax-vendor-python" || {
+        setup_rc=$?
+        integration_error="MiniMax Provider Verifier Python runtime preparation failed with exit code ${setup_rc}"
+    }
+    if [ "$setup_rc" -eq 0 ]; then
+        runtime_dir=$(_prepare_minimax_m3_full_runtime) || {
+            setup_rc=$?
+            integration_error="MiniMax Provider Verifier pinned runtime preparation failed with exit code ${setup_rc}"
+        }
+    fi
+    if [ "$setup_rc" -ne 0 ]; then
+        echo "ERROR: ${integration_error}" >&2
+        local artifact_rc=0
+        _write_minimax_vendor_integration_error \
+            "$adapter_path" "$model_name" "$results_dir" "$integration_error" \
+            || artifact_rc=$?
+        if [ "$artifact_rc" -ne 0 ]; then
+            echo "ERROR: failed to write MiniMax verifier failure artifact (exit code ${artifact_rc})" >&2
+        fi
+        _cleanup_vendor_eval \
+            "$runtime_dir" "${VENDOR_VERIFIER_PYTHON_CLEANUP_DIR:-}"
+        return "$setup_rc"
+    fi
+
+    local eval_rc=0
+    "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" run \
+        --python "${VENDOR_VERIFIER_PYTHON:-python3}" \
+        --source-dir "${runtime_dir}/source" \
+        --dependency-dir "${runtime_dir}/deps" \
+        --base-url "http://127.0.0.1:${port}/v1" \
+        --model "$model_name" \
+        --output-dir "$results_dir" \
+        --fixture "$fixture_path" \
+        || eval_rc=$?
+    if [ "$eval_rc" -ne 0 ] \
+        && ! _has_eval_result "$results_dir" "results_minimax_vendor_"; then
+        integration_error="MiniMax Provider Verifier failed with exit code ${eval_rc}"
+        local artifact_rc=0
+        _write_minimax_vendor_integration_error \
+            "$adapter_path" "$model_name" "$results_dir" "$integration_error" \
+            || artifact_rc=$?
+        if [ "$artifact_rc" -ne 0 ]; then
+            echo "ERROR: failed to write MiniMax verifier failure artifact (exit code ${artifact_rc})" >&2
+        fi
+    fi
+    _cleanup_vendor_eval \
+        "$runtime_dir" "${VENDOR_VERIFIER_PYTHON_CLEANUP_DIR:-}"
+    return "$eval_rc"
+}
+
+_install_minimax_m3_full_deps() {
+    local target_dir="$1"
+    "${VENDOR_VERIFIER_PYTHON:-python3}" -m pip install -q --no-cache-dir --target "$target_dir" \
+        "jsonschema==4.25.1" \
+        "loguru==0.7.3" \
+        "megfile==4.2.5" \
+        "numpy==2.3.4" \
+        "openai==2.7.1" \
+        "tqdm==4.67.1"
+}
+
+_prepare_minimax_m3_full_runtime() {
+    local source_adapter_path="${INFERENCEX_REPO_ROOT}/utils/evals/minimax_m3_full_eval.py"
+    local runtime_dir prepare_rc=0
+    runtime_dir="$(mktemp -d /tmp/minimax-m3-full-runtime-XXXXXX)" || return $?
+    "${VENDOR_VERIFIER_PYTHON:-python3}" "$source_adapter_path" prepare-source \
+        --source-dir "${runtime_dir}/source" >&2 || prepare_rc=$?
+    if [ "$prepare_rc" -eq 0 ]; then
+        _install_minimax_m3_full_deps "${runtime_dir}/deps" >&2 || prepare_rc=$?
+    fi
+    if [ "$prepare_rc" -ne 0 ]; then
+        rm -rf "$runtime_dir"
+        return "$prepare_rc"
+    fi
+    printf '%s\n' "$runtime_dir"
+}
+
+_write_minimax_m3_full_integration_error() {
+    local adapter_path="$1"
+    local model_name="$2"
+    local results_dir="$3"
+    local message="$4"
+
+    "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" failure \
+        --model "$model_name" \
+        --output-dir "$results_dir" \
+        --message "$message"
+}
+
+_run_minimax_m3_full_eval() {
+    local port="${PORT:-8888}"
+    local results_dir="${EVAL_RESULT_DIR:-}"
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --port|--results-dir)
+                if [[ $# -lt 2 || -z "${2:-}" || "${2:-}" == --* ]]; then
+                    echo "ERROR: $1 requires a value" >&2
+                    return 2
+                fi
+                case "$1" in
+                    --port)        port="$2" ;;
+                    --results-dir) results_dir="$2" ;;
+                esac
+                shift 2
+                ;;
+            *)
+                echo "Unknown parameter: $1" >&2
+                return 2
+                ;;
+        esac
+    done
+
+    if [ -z "$results_dir" ]; then
+        results_dir="$(mktemp -d /tmp/eval_out-XXXXXX)" || return $?
+    fi
+
+    local model_name="${MODEL_NAME:-${MODEL:-}}"
+    local adapter_path="${INFERENCEX_REPO_ROOT}/utils/evals/minimax_m3_full_eval.py"
+    local runtime_dir=""
+
+    mkdir -p "$results_dir" || return $?
+    results_dir="$(cd "$results_dir" && pwd)" || return $?
+    _prepare_eval_artifact_family "$results_dir" minimax || return $?
+
+    local setup_rc=0 integration_error=""
+    _prepare_vendor_verifier_python "MiniMax M3 full verifier" "minimax-m3-full-python" || {
+        setup_rc=$?
+        integration_error="MiniMax M3 full Python runtime preparation failed with exit code ${setup_rc}"
+    }
+    if [ "$setup_rc" -eq 0 ]; then
+        runtime_dir=$(_prepare_minimax_m3_full_runtime) || {
+            setup_rc=$?
+            integration_error="MiniMax M3 full pinned runtime preparation failed with exit code ${setup_rc}"
+        }
+    fi
+    if [ "$setup_rc" -ne 0 ]; then
+        echo "ERROR: ${integration_error}" >&2
+        local artifact_rc=0
+        _write_minimax_m3_full_integration_error \
+            "$adapter_path" "$model_name" "$results_dir" "$integration_error" \
+            || artifact_rc=$?
+        if [ "$artifact_rc" -ne 0 ]; then
+            echo "ERROR: failed to write MiniMax full verifier failure artifact (exit code ${artifact_rc})" >&2
+        fi
+        _cleanup_vendor_eval \
+            "$runtime_dir" "${VENDOR_VERIFIER_PYTHON_CLEANUP_DIR:-}"
+        return "$setup_rc"
+    fi
+
+    local eval_rc=0
+    "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" run \
+        --python "${VENDOR_VERIFIER_PYTHON:-python3}" \
+        --source-dir "${runtime_dir}/source" \
+        --dependency-dir "${runtime_dir}/deps" \
+        --base-url "http://127.0.0.1:${port}/v1" \
+        --model "$model_name" \
+        --output-dir "$results_dir" \
+        || eval_rc=$?
+    if [ "$eval_rc" -ne 0 ] \
+        && ! _has_eval_result "$results_dir" "results_minimax_vendor_full_"; then
+        integration_error="MiniMax M3 full verifier failed with exit code ${eval_rc}"
+        local artifact_rc=0
+        _write_minimax_m3_full_integration_error \
+            "$adapter_path" "$model_name" "$results_dir" "$integration_error" \
+            || artifact_rc=$?
+        if [ "$artifact_rc" -ne 0 ]; then
+            echo "ERROR: failed to write MiniMax full verifier failure artifact (exit code ${artifact_rc})" >&2
+        fi
+    fi
+    _cleanup_vendor_eval \
+        "$runtime_dir" "${VENDOR_VERIFIER_PYTHON_CLEANUP_DIR:-}"
+    return "$eval_rc"
+}
+
+
+run_minimax_vendor_eval() {
+    local eval_suite="${EVAL_SUITE:-minimax_m3_smoke}"
+    export EVAL_SUITE="$eval_suite"
+
+    case "$eval_suite" in
+        minimax_m3_smoke)
+            _run_minimax_m3_smoke_eval "$@"
+            ;;
+        minimax_m3_full)
+            _run_minimax_m3_full_eval "$@"
+            ;;
+        *)
+            echo "ERROR: unsupported MiniMax Provider Verifier suite '${eval_suite}'" >&2
+            export EVAL_RESULT_DIR=""
+            return 2
+            ;;
+    esac
+}
+
 _eval_patches_dir() {
-    cd "$(dirname "${BASH_SOURCE[0]}")/../utils/evals/patches" && pwd
+    printf '%s\n' "${INFERENCEX_REPO_ROOT}/utils/evals/patches"
 }
 
 _patch_lm_eval() {
@@ -1012,13 +2093,14 @@ run_lm_eval() {
     done
 
     # Serving images may use a different WORKDIR.
-    local _repo_root
-    _repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    local _repo_root="$INFERENCEX_REPO_ROOT"
     if [[ "$tasks_dir" == *.yaml && "$tasks_dir" != /* \
           && ! -f "$tasks_dir" && -f "$_repo_root/$tasks_dir" ]]; then
         echo "run_lm_eval: anchoring relative task '$tasks_dir' to repo root -> $_repo_root/$tasks_dir"
         tasks_dir="$_repo_root/$tasks_dir"
     fi
+
+    export EVAL_TASKS_DIR="$tasks_dir"
 
     if [ "${INFERENCEX_LM_EVAL_RUNTIME_READY:-false}" != "true" ]; then
         _install_lm_eval_deps
@@ -1135,8 +2217,8 @@ _eval_concs_to_json() {
 }
 
 _env_is_true() {
-    case "${1,,}" in
-        1|true|yes|on) return 0 ;;
+    case "${1:-}" in
+        1|[Tt][Rr][Uu][Ee]|[Yy][Ee][Ss]|[Oo][Nn]) return 0 ;;
         *) return 1 ;;
     esac
 }
@@ -1166,11 +2248,11 @@ _normalize_bool_json() {
 bridge_disagg_eval_metadata() {
     export TP="${PREFILL_TP:-${PREFILL_TP_SIZE:-${TP:-1}}}"
     export PREFILL_TP="${PREFILL_TP:-${PREFILL_TP_SIZE:-${TP:-1}}}"
-    export PREFILL_EP="$(_resolve_disagg_ep "${PREFILL_EP:-1}" "${PREFILL_ENABLE_EP:-false}" "${PREFILL_TP_SIZE:-${PREFILL_TP:-1}}")"
+    export PREFILL_EP="$(_resolve_disagg_ep "${PREFILL_EP:-${EP_SIZE:-${EP:-1}}}" "${PREFILL_ENABLE_EP:-false}" "${PREFILL_TP_SIZE:-${PREFILL_TP:-1}}")"
     export EP_SIZE="${PREFILL_EP}"
     export PREFILL_NUM_WORKERS="${PREFILL_NUM_WORKERS:-${xP:-1}}"
     export DECODE_TP="${DECODE_TP:-${DECODE_TP_SIZE:-${TP:-1}}}"
-    export DECODE_EP="$(_resolve_disagg_ep "${DECODE_EP:-1}" "${DECODE_ENABLE_EP:-false}" "${DECODE_TP_SIZE:-${DECODE_TP:-1}}")"
+    export DECODE_EP="$(_resolve_disagg_ep "${DECODE_EP:-${EP_SIZE:-${EP:-1}}}" "${DECODE_ENABLE_EP:-false}" "${DECODE_TP_SIZE:-${DECODE_TP:-1}}")"
     export DECODE_NUM_WORKERS="${DECODE_NUM_WORKERS:-${yD:-1}}"
 
     local prefill_dp="${PREFILL_DP_ATTN:-${PREFILL_DP_ATTENTION:-${PREFILL_ENABLE_DP:-false}}}"
@@ -1229,6 +2311,13 @@ _write_lm_eval_meta_json() {
             fi
         fi
     fi
+    local eval_suite="${EVAL_COMPLETED_SUITE:-${EVAL_SUITE:-}}"
+    if [ -z "$eval_suite" ] && [ -n "${EVAL_TASKS_DIR:-}" ]; then
+        eval_suite="$(basename "${EVAL_TASKS_DIR}")"
+        eval_suite="${eval_suite%.yaml}"
+        eval_suite="${eval_suite%.yml}"
+    fi
+    eval_suite="${eval_suite:-gsm8k}"
 
     cat > "${meta_json}" <<META
 {
@@ -1236,6 +2325,7 @@ _write_lm_eval_meta_json() {
   "framework": "${fw:-unknown}",
   "precision": "${prec:-unknown}",
   "spec_decoding": "${SPEC_DECODING:-}",
+  "eval_suite": "${eval_suite}",
   "recipe_fingerprint": "${RECIPE_FINGERPRINT:-}",
   "tp": ${TP:-1},
   "pp": ${PP_SIZE:-1},
@@ -1268,7 +2358,11 @@ META
 }
 
 rewrite_lm_eval_meta_env() {
-    _write_lm_eval_meta_json "./meta_env.json" "" "${CONC:-1}"
+    if [ -n "${EVAL_BATCHED_CONCS:-}" ]; then
+        append_lm_eval_summary
+    else
+        _write_lm_eval_meta_json "./meta_env.json" "" "${CONC:-1}"
+    fi
 }
 
 append_lm_eval_summary() {
@@ -1315,25 +2409,49 @@ append_lm_eval_summary() {
         return 0
     fi
 
-    # Move eval artifacts into PWD (no new directories in workspace)
-    if [ -f "${meta_json}" ]; then
-        mv -f "${meta_json}" ./ || echo "WARN: failed to move ${meta_json}" >&2
-    fi
-    if [ -d "${out_dir}" ]; then
-        while IFS= read -r -d '' jf; do
-            base=$(basename "$jf")
-            if [ "$base" != "meta_env.json" ]; then
-                mv -f "$jf" ./ || echo "WARN: failed to move ${jf}" >&2
-            fi
-        done < <(find "${out_dir}" -type f -name "*.json*" -print0 2>/dev/null)
-    fi
+    # Copy the complete allowlisted eval artifact set before removing its temp dir.
+    stage_eval_artifacts "$(pwd)" "$out_dir" || return $?
 
     # Best-effort cleanup of the temp directory
     if [ -n "${out_dir}" ] && [ -d "${out_dir}" ]; then
         rm -rf --one-file-system "${out_dir}" || rm -rf "${out_dir}" || true
     fi
 
-    echo "Moved eval artifacts to: $(pwd)"
+    echo "Staged eval artifacts in: $(pwd)"
+}
+
+stage_eval_artifacts() {
+    local destination="$1"
+    shift
+
+    mkdir -p "$destination" || return $?
+    local source_dir artifact
+    local copied=0
+    local artifacts=()
+    for source_dir in "$@"; do
+        [ -d "$source_dir" ] || continue
+        artifacts=(
+            "$source_dir"/meta_env.json
+            "$source_dir"/results*.json
+            "$source_dir"/*_report.json
+            "$source_dir"/*_results.jsonl
+            "$source_dir"/*_artifacts.tar.gz
+            "$source_dir"/sample*.jsonl
+            "$source_dir"/agent_preds.json
+            "$source_dir"/swebench_report_*.json
+            "$source_dir"/predictions.jsonl
+            "$source_dir"/*.traj*
+        )
+        for artifact in "${artifacts[@]}"; do
+            [ -f "$artifact" ] || continue
+            cp -f "$artifact" "$destination/" || return $?
+            copied=$((copied + 1))
+        done
+    done
+    if [ "$copied" -eq 0 ]; then
+        echo "ERROR: no eval artifacts found to stage" >&2
+        return 1
+    fi
 }
 
 
@@ -1561,6 +2679,7 @@ PYSWEEP
 run_swebench_eval() {
     local out_dir="${EVAL_RESULT_DIR:-$(mktemp -d /tmp/eval_out-XXXXXX)}"
     local task_name="${SWEBENCH_TASK_NAME:-swebench_lite}"
+    export EVAL_SUITE="${EVAL_SUITE:-$task_name}"
     local gen_dir
     gen_dir=$(mktemp -d /tmp/swebench_gen-XXXXXX)
 
@@ -1669,6 +2788,101 @@ run_swebench_eval() {
     fi
 }
 
+_wait_for_openai_chat_route() {
+    local port="${PORT:-8888}"
+    local timeout_seconds="${EVAL_ENDPOINT_READY_TIMEOUT_SECONDS:-1800}"
+    local poll_seconds=5
+    local stabilization_seconds="${EVAL_MODEL_STABILIZATION_SECONDS:-30}"
+    local start_seconds=$SECONDS
+    local server_ready_since=-1
+    local next_report=0
+    local elapsed percent chat_status
+    local served_model="${SERVED_MODEL_NAME:-${MODEL:-}}"
+    local health_url models_url chat_url
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --port)
+                if [[ $# -lt 2 || -z "${2:-}" || "${2:-}" == --* ]]; then
+                    echo "ERROR: --port requires a value" >&2
+                    return 2
+                fi
+                port="$2"
+                shift 2
+                ;;
+            *) shift ;;
+        esac
+    done
+    if ! [[ "$timeout_seconds" =~ ^[1-9][0-9]*$ ]]; then
+        echo "ERROR: EVAL_ENDPOINT_READY_TIMEOUT_SECONDS must be a positive integer" >&2
+        return 2
+    fi
+    if ! [[ "$stabilization_seconds" =~ ^[0-9]+$ ]]; then
+        echo "ERROR: EVAL_MODEL_STABILIZATION_SECONDS must be a non-negative integer" >&2
+        return 2
+    fi
+    if [ -z "$served_model" ]; then
+        echo "ERROR: MODEL or SERVED_MODEL_NAME is required for chat endpoint readiness" >&2
+        return 2
+    fi
+    health_url="http://localhost:${port}/health"
+    models_url="http://localhost:${port}/v1/models"
+    chat_url="http://localhost:${port}/v1/chat/completions"
+
+    while true; do
+        local model_ready=false
+        local server_ready=false
+        if curl -fsS --max-time 10 "$health_url" >/dev/null 2>&1; then
+            server_ready=true
+        fi
+        if curl -fsS --max-time 10 "$models_url" 2>/dev/null \
+            | python3 -c '
+import json
+import sys
+
+expected = sys.argv[1]
+payload = json.load(sys.stdin)
+models = payload.get("data", [])
+raise SystemExit(0 if any(model.get("id") == expected for model in models) else 1)
+' "$served_model" >/dev/null 2>&1; then
+            model_ready=true
+        fi
+
+        chat_status=""
+        if [ "$model_ready" = true ]; then
+            chat_status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 \
+                "$chat_url" 2>/dev/null)" || true
+            case "$chat_status" in
+                401|403|405) break ;;
+            esac
+        fi
+        if [ "$server_ready" = true ]; then
+            if [ "$server_ready_since" -lt 0 ]; then
+                server_ready_since=$SECONDS
+            fi
+            if [ $((SECONDS - server_ready_since)) -ge "$stabilization_seconds" ]; then
+                break
+            fi
+        else
+            server_ready_since=-1
+        fi
+
+        elapsed=$((SECONDS - start_seconds))
+        if [ "$elapsed" -ge "$timeout_seconds" ]; then
+            echo "ERROR: chat endpoint for model '$served_model' did not become ready within ${timeout_seconds}s: $chat_url" >&2
+            return 1
+        fi
+        if [ "$elapsed" -ge "$next_report" ]; then
+            percent=$((elapsed * 100 / timeout_seconds))
+            echo "Waiting for chat endpoint for model '$served_model': ${elapsed}/${timeout_seconds}s (${percent}%)"
+            next_report=$((next_report + 60))
+        fi
+        sleep "$poll_seconds"
+    done
+    echo "OpenAI chat endpoint ready for model '$served_model': $chat_url"
+}
+
+
 # ------------------------------
 # Unified eval entrypoint
 # ------------------------------
@@ -1676,6 +2890,9 @@ run_swebench_eval() {
 run_eval() {
     local cli_framework=""
     local forwarded=()
+    # Keep runner-selected suite identity scoped to this invocation.
+    local EVAL_SUITE="${EVAL_SUITE:-}"
+    unset EVAL_COMPLETED_SUITE
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -1701,9 +2918,48 @@ run_eval() {
     fi
 
     local framework="${EVAL_FRAMEWORK:-${cli_framework:-$scenario_default}}"
+    case "$framework" in
+        kimi-vendor)
+            [ -n "${EVAL_SUITE:-}" ] || EVAL_SUITE="kimi_tool_call_schema"
+            ;;
+        minimax-vendor)
+            [ -n "${EVAL_SUITE:-}" ] || EVAL_SUITE="minimax_m3_smoke"
+            ;;
+        bfcl)
+            [ -n "${EVAL_SUITE:-}" ] || EVAL_SUITE="bfcl_smoke"
+            ;;
+    esac
 
-    # Compute EVAL_MAX_MODEL_LEN if not already set by the calling script
-    if [ -z "${EVAL_MAX_MODEL_LEN:-}" ]; then
+    case "${EVAL_SUITE:-}" in
+        "") ;;
+        *[!A-Za-z0-9_.-]*)
+            echo "ERROR: EVAL_SUITE may contain only letters, digits, '.', '_', and '-'" >&2
+            return 2
+            ;;
+    esac
+
+    if [ -n "${EVAL_SUITE:-}" ] \
+        && [ "$framework" != "kimi-vendor" ] \
+        && [ "$framework" != "minimax-vendor" ] \
+        && [ "$framework" != "bfcl" ]; then
+        echo "ERROR: EVAL_SUITE is only supported with kimi-vendor, minimax-vendor, or bfcl" >&2
+        return 2
+    fi
+
+    if [ "${EVAL_ONLY:-false}" = "true" ]; then
+        case "$framework" in
+            kimi-vendor|minimax-vendor|bfcl)
+                _wait_for_openai_chat_route "${forwarded[@]}" || return $?
+                ;;
+        esac
+    fi
+
+    # Explicit verifier suites use fixed request budgets and do not consume
+    # EVAL_MAX_MODEL_LEN, so avoid loading model configuration for those paths.
+    if [ "$framework" != "kimi-vendor" ] \
+        && [ "$framework" != "minimax-vendor" ] \
+        && [ "$framework" != "bfcl" ] \
+        && [ -z "${EVAL_MAX_MODEL_LEN:-}" ]; then
         compute_eval_context_length "$MODEL" "${MAX_MODEL_LEN:-0}" > /dev/null
     fi
 
@@ -1770,26 +3026,46 @@ run_eval() {
         return 0
     fi
 
+    if [ -n "${EVAL_CONCURRENT_REQUESTS:-}" ]; then
+        export CONC="$EVAL_CONCURRENT_REQUESTS"
+    fi
+
     local eval_rc=0
     case "$framework" in
         lm-eval|lm_eval) run_lm_eval "${forwarded[@]}" || eval_rc=$? ;;
         swebench)        run_swebench_eval "${forwarded[@]}" || eval_rc=$? ;;
+        kimi-vendor)     run_kimi_vendor_eval "${forwarded[@]}" || eval_rc=$? ;;
+        minimax-vendor)  run_minimax_vendor_eval "${forwarded[@]}" || eval_rc=$? ;;
+        bfcl)           run_bfcl_eval "${forwarded[@]}" || eval_rc=$? ;;
         *)               echo "Unknown framework '${framework}'"; eval_rc=1 ;;
     esac
 
-    # Agentic eval-only recipes have no separate staging step.
-    if [ "${EVAL_ONLY:-false}" = "true" ] && [ "$scenario_is_agentic" = "1" ]; then
-        append_lm_eval_summary || true
+    if [ -n "${EVAL_SUITE:-}" ]; then
+        export EVAL_COMPLETED_SUITE="$EVAL_SUITE"
     fi
 
+    local stage_rc=0
+    # Agentic eval-only recipes have no separate staging step. Provider
+    # failures are staged before returning so diagnostic artifacts survive.
+    if { [ "${EVAL_ONLY:-false}" = "true" ] && [ "$scenario_is_agentic" = "1" ]; } \
+        || { { [ "$framework" = "kimi-vendor" ] \
+            || [ "$framework" = "minimax-vendor" ] \
+            || [ "$framework" = "bfcl" ]; } \
+            && [ "$eval_rc" -ne 0 ]; }; then
+        append_lm_eval_summary || stage_rc=$?
+    fi
     if [ "$eval_rc" -ne 0 ]; then
         echo "ERROR: run_eval failed with exit code $eval_rc" >&2
-        if [ "${EVAL_ONLY}" = "true" ]; then
+        if [ "${EVAL_ONLY:-false}" = "true" ]; then
             echo "Eval-only mode: failing after artifact collection" >&2
-            return "$eval_rc"
         fi
+        return "$eval_rc"
     fi
-    return $eval_rc
+    if [ "$stage_rc" -ne 0 ]; then
+        echo "ERROR: eval artifact staging failed with exit code $stage_rc" >&2
+        return "$stage_rc"
+    fi
+    return 0
 }
 
 
@@ -1845,13 +3121,8 @@ install_agentic_deps() {
         return
     fi
 
-    # AIPerf must not share site-packages with the inference server. Installing
-    # it into vLLM/SGLang's system Python can upgrade FastAPI, Starlette,
-    # transformers, or other packages while the server imports from that same
-    # environment.
-    if ! command -v git >/dev/null 2>&1; then
-        apt-get update && apt-get install -y git
-    fi
+    # Install from the checked-out aiperf source with uv. This path does not
+    # require git, and rootless Enroot containers cannot mutate dpkg.
 
     ensure_agentic_uv
     rm -rf "$AIPERF_VENV"
