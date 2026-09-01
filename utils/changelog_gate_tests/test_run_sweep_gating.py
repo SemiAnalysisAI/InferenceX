@@ -25,9 +25,10 @@ _WF = yaml.load(
 )
 CHECK_IF = _WF["jobs"]["check-changelog"]["if"]
 GATE_IF = _WF["jobs"]["reuse-sweep-gate"]["if"]
-CLASSIFIER_IF = next(
-    step["if"] for step in _WF["jobs"]["setup"]["steps"] if step.get("id") == "classify"
+CLASSIFIER_STEP = next(
+    step for step in _WF["jobs"]["setup"]["steps"] if step.get("id") == "classify"
 )
+CLASSIFIER_IF = CLASSIFIER_STEP["if"]
 SETUP_IF = _WF["jobs"]["setup"]["if"]
 PR_TYPES = set(_WF["on"]["pull_request"]["types"])
 
@@ -417,7 +418,7 @@ def test_e2e_workflow_cannot_dispatch_database_ingest() -> None:
     assert "INFX_FRONTEND_PAT" not in workflow
 
 
-def test_priority_classifier_runs_for_enabled_actions() -> None:
+def test_priority_classifier_runs_only_for_enabled_pull_requests() -> None:
     scenario = {
         **_PR,
         "action": "synchronize",
@@ -429,7 +430,12 @@ def test_priority_classifier_runs_for_enabled_actions() -> None:
 
     assert not _eval(CLASSIFIER_IF, disabled)
     assert _eval(CLASSIFIER_IF, enabled_pr)
-    assert _eval(CLASSIFIER_IF, enabled_push)
+    assert not _eval(CLASSIFIER_IF, enabled_push)
+
+
+def test_priority_classifier_uses_read_only_workflow_token() -> None:
+    assert CLASSIFIER_STEP["with"]["github_token"] == "${{ github.token }}"
+    assert "id-token" not in _WF["jobs"]["setup"]["permissions"]
 
 def test_reuse_dispatches_source_directly_without_artifact_relay() -> None:
     jobs = _WF["jobs"]
