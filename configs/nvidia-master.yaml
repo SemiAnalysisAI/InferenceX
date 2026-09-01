@@ -7356,33 +7356,6 @@ minimaxm3-fp8-h100-vllm-agentic-mtp:
       - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 3, 4, 5] }
       - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [6, 8] }
 
-minimaxm3-fp8-h100-dynamo-vllm-agentic-disagg:
-  image: ttl.sh/cquil11-vllm-tier-d67b417bca-pr53087-20260901:24h
-  model: MiniMaxAI/MiniMax-M3-MXFP8
-  model-prefix: minimaxm3
-  runner: cluster:h100-dgxc
-  precision: fp8
-  framework: dynamo-vllm
-  router: { name: dynamo-router, version: "1.4.0.dev20260730" }
-  kv-p2p-transfer: nixl
-  multinode: true
-  disagg: true
-  scenarios:
-    agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
-      - spec-decoding: none
-        kv-offloading: none
-        conc-list: [8]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3/h100-fp8/agentic/disagg-1p1d-tp8-tp8-c8-agentic.yaml"
-        decode: { num-worker: 1, tp: 8, ep: 1, dp-attn: false }
-
 minimaxm3-fp8-h200-vllm-agentic-mtp:
   image: vllm/vllm-openai:v0.27.1
   model: MiniMaxAI/MiniMax-M3-MXFP8
