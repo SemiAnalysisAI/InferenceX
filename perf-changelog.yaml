@@ -6680,4 +6680,4 @@
   description:
     - "Update the CUDA graph capture-size configuration for dsv4-fp8-h200-vllm."
     - "Use explicit capture sizes for concurrency 64 with DP attention while preserving vLLM defaults for other points."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2791
