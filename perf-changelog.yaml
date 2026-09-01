@@ -6674,3 +6674,10 @@
     - "Bump image from lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260726 to lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260828"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2763
   
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp
+  description:
+    - "models.yaml: enable DeepSeek-V4-Pro-AgentX shared-experts fusion."
+    - "prefill.no_dp.chunked_prefill_size: switch from a fixed 8192 to the TP-conditional formula '16384 if PREFILL_TP_SIZE == 8 else 8192'."
+  pr-link: TBD
+  
