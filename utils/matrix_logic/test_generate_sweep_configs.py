@@ -472,6 +472,100 @@ class TestMarkEvalEntries:
             f"Expected 0 agentic entries marked run-eval in default mode, got {len(marked)}"
         )
 
+    def test_default_marks_every_supported_vendor_point(self):
+        matrix_values = [
+            {
+                "scenario-type": "agentic-coding",
+                "model-prefix": model_prefix,
+                "model": model_prefix,
+                "runner": "b300",
+                "framework": "vllm",
+                "precision": "fp4",
+                "tp": 8,
+                "conc": conc,
+            }
+            for model_prefix in ("kimik3", "minimaxm3")
+            for conc in (1, 64)
+        ]
+        matrix_values.append({
+            "scenario-type": "agentic-coding",
+            "model-prefix": "minimaxm3-bfcl",
+            "model": "unsupported",
+            "runner": "b300",
+            "framework": "vllm",
+            "precision": "fp4",
+            "tp": 8,
+            "conc": 64,
+        })
+
+        result = mark_eval_entries(matrix_values)
+
+        expected = {
+            "kimik3": ("kimi-vendor", "kimi_tool_call_schema"),
+            "minimaxm3": ("minimax-vendor", "minimax_m3_smoke"),
+        }
+        for model_prefix, eval_spec in expected.items():
+            rows = [row for row in result if row["model-prefix"] == model_prefix]
+            assert {row["conc"] for row in rows} == {1, 64}
+            assert all(row["run-eval"] is True for row in rows)
+            assert {
+                (row["eval-framework"], row["eval-suite"]) for row in rows
+            } == {eval_spec}
+
+        unsupported = result[-1]
+        assert unsupported["run-eval"] is False
+        assert "eval-framework" not in unsupported
+        assert all(row.get("eval-framework") != "bfcl" for row in result)
+
+    def test_default_marks_every_multinode_vendor_point(self):
+        common = {
+            "scenario-type": "agentic-coding",
+            "model-prefix": "kimik3",
+            "model": "kimi",
+            "runner": "gb200",
+            "framework": "sglang-disagg",
+            "precision": "fp4",
+            "spec-decoding": "none",
+            "disagg": True,
+            "prefill": {"num-worker": 1, "tp": 8},
+            "decode": {"num-worker": 1, "tp": 8},
+        }
+        matrix_values = [
+            {**common, "conc": [2], "exp-name": "kimi-conc2"},
+            {**common, "conc": [32], "exp-name": "kimi-conc32"},
+        ]
+
+        result = mark_eval_entries(matrix_values)
+
+        assert len(result) == 2
+        assert all(row["run-eval"] is True for row in result)
+        assert [row["eval-conc"] for row in result] == [2, 32]
+        assert all(row["eval-framework"] == "kimi-vendor" for row in result)
+        assert all(
+            row["eval-suite"] == "kimi_tool_call_schema" for row in result
+        )
+
+    def test_fixed_sequence_eval_uses_lm_eval_metadata(self):
+        matrix_values = [{
+            "model": "m",
+            "runner": "b200",
+            "framework": "vllm",
+            "precision": "fp8",
+            "isl": 8192,
+            "osl": 1024,
+            "spec-decoding": "none",
+            "dp-attn": False,
+            "tp": 8,
+            "conc": MIN_EVAL_CONC,
+        }]
+
+        result = mark_eval_entries(matrix_values)
+
+        assert result[0]["run-eval"] is True
+        assert result[0]["eval-framework"] == "lm-eval"
+        assert result[0]["eval-suite"] == ""
+
+
     def test_single_node_skips_eval_entries_below_min_conc(self):
         """Single-node eval selection should ignore conc values below MIN_EVAL_CONC."""
         matrix_values = [
@@ -896,11 +990,11 @@ class TestMarkAllEvalEntries:
         assert result[0]['run-eval'] is True
         assert 'eval-conc' not in result[0]
 
-    def test_marks_multinode_agentic_entries_for_swebench(self):
-        """Unlike fixed-seq-len multi-node (which batches every concurrency
-        into one lm-eval row via eval-all-concs), multi-node agentic rows for
-        the same topology are merged but only their highest conc is marked
-        via eval-conc, since SWE-bench doesn't support batched concurrencies."""
+    def test_marks_multinode_agentic_entries_for_gsm8k(self):
+        """Unlike fixed-seq-len multi-node evals, generic agentic rows with the
+        same topology merge but select only their highest concurrency through
+        eval-conc.
+        """
         common = {
             'scenario-type': 'agentic-coding',
             'model': 'm', 'runner': 'r', 'framework': 'sglang-disagg',
@@ -921,6 +1015,33 @@ class TestMarkAllEvalEntries:
         assert result[0]['conc'] == [2, 16, 32]
         assert result[0]['eval-conc'] == 32
         assert 'eval-all-concs' not in result[0]
+
+    def test_keeps_every_multinode_vendor_point_separate(self):
+        common = {
+            "scenario-type": "agentic-coding",
+            "model-prefix": "minimaxm3",
+            "model": "minimax",
+            "runner": "gb200",
+            "framework": "sglang-disagg",
+            "precision": "fp4",
+            "spec-decoding": "none",
+            "disagg": True,
+            "prefill": {"num-worker": 1, "tp": 8},
+            "decode": {"num-worker": 1, "tp": 8},
+        }
+        entries = [
+            {**common, "conc": [2], "exp-name": "minimax-conc2"},
+            {**common, "conc": [32], "exp-name": "minimax-conc32"},
+        ]
+
+        result = mark_all_eval_entries(mark_eval_entries(entries))
+
+        assert len(result) == 2
+        assert [row["conc"] for row in result] == [[2], [32]]
+        assert [row["eval-conc"] for row in result] == [2, 32]
+        assert all(row["eval-framework"] == "minimax-vendor" for row in result)
+        assert all(row["eval-suite"] == "minimax_m3_smoke" for row in result)
+
 
 
 # =============================================================================
@@ -2130,6 +2251,53 @@ class TestArgumentDefaults:
         assert result[0]['eval-conc'] == 4
         assert result[0]['run-eval'] is True
 
+    def test_kimi_minimax_default_matrix_marks_every_current_point(
+        self,
+        monkeypatch,
+    ):
+        import sys
+
+        import generate_sweep_configs
+
+        repo_root = Path(__file__).resolve().parents[2]
+        monkeypatch.setattr(sys, 'argv', [
+            'generate_sweep_configs.py',
+            'full-sweep',
+            '--config-files',
+            str(repo_root / 'configs/nvidia-master.yaml'),
+            str(repo_root / 'configs/amd-master.yaml'),
+            '--runner-config',
+            str(repo_root / 'configs/runners.yaml'),
+            '--model-prefix',
+            'kimik3',
+            'minimaxm3',
+            '--scenario-type',
+            'agentic-coding',
+        ])
+
+        rows = generate_sweep_configs.main()
+
+        expected_eval_specs = {
+            'kimik3': ('kimi-vendor', 'kimi_tool_call_schema'),
+            'minimaxm3': ('minimax-vendor', 'minimax_m3_smoke'),
+        }
+        assert {row['model-prefix'] for row in rows} == set(expected_eval_specs)
+        assert all(row['run-eval'] is True for row in rows)
+        assert all(row.get('eval-only') is not True for row in rows)
+        assert {
+            (
+                row['model-prefix'],
+                row['eval-framework'],
+                row['eval-suite'],
+            )
+            for row in rows
+        } == {
+            (model_prefix, *eval_spec)
+            for model_prefix, eval_spec in expected_eval_specs.items()
+        }
+        assert all(row['eval-framework'] != 'bfcl' for row in rows)
+
+
     def test_kimi_minimax_trimmed_eval_matrix_covers_current_configs(
         self,
         monkeypatch,
@@ -2200,6 +2368,21 @@ class TestArgumentDefaults:
                 assert row['conc'] == [row['eval-conc']]
         assert all(row['run-eval'] is True for row in rows)
         assert all(row['eval-only'] is True for row in rows)
+        expected_eval_specs = {
+            'kimik3': ('kimi-vendor', 'kimi_tool_call_schema'),
+            'minimaxm3': ('minimax-vendor', 'minimax_m3_smoke'),
+        }
+        assert {
+            (
+                row['model-prefix'],
+                row['eval-framework'],
+                row['eval-suite'],
+            )
+            for row in rows
+        } == {
+            (model_prefix, *eval_spec)
+            for model_prefix, eval_spec in expected_eval_specs.items()
+        }
 
     def test_all_evals_batches_each_multinode_concurrency(
         self,

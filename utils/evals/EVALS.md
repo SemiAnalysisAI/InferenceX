@@ -7,19 +7,25 @@ from throughput. Selection lives in `mark_eval_entries()` in
 
 ## Selection
 
-- **Single-node:** 8k1k only, at the highest and median concurrency for every model,
-  runner, framework, precision, TP, and decoding configuration.
-- **Multi-node:** 8k1k only, with one job per parallelism topology at its highest
-  eligible concurrency. Rows differing only by concurrency share a topology.
-- **Agentic (GSM8K), single-node:** highest-conc entry per (model, runner,
-  framework, precision) group.
-- **Agentic (GSM8K), multi-node:** highest eligible concurrency per
-  parallelism topology.
+- **Fixed-sequence, single-node:** 8k1k only, at the highest and median
+  concurrency for every model, runner, framework, precision, TP, and decoding
+  configuration.
+- **Fixed-sequence, multi-node:** 8k1k only, with one job per parallelism
+  topology at its highest eligible concurrency. Rows differing only by
+  concurrency share a topology.
+- **Kimi K3 agentic:** every generated point automatically runs
+  `kimi-vendor` with `kimi_tool_call_schema`.
+- **MiniMax M3 agentic:** every generated point automatically runs
+  `minimax-vendor` with `minimax_m3_smoke`.
+- **Other agentic models (GSM8K):** opt-in through `--evals-only` or
+  `--all-evals`, at the highest concurrency per deployment group.
+- **BFCL:** explicit only. No automatic model mapping selects BFCL.
 
 Generator eval modes:
 
-- Default: throughput plus the selected eval subset.
-- `--no-evals`: throughput only.
+- Default: throughput plus the fixed-sequence subset and every automatically
+  selected Kimi K3 or MiniMax M3 vendor eval.
+- `--no-evals`: throughput only, including no automatic vendor evals.
 - `--evals-only`: selected evals only.
 - `--all-evals`: every eligible fixed-sequence and agentic eval. This is
   equivalent to `--evals-only --all-evals`. Multi-node fixed-sequence
@@ -96,15 +102,19 @@ malformed metadata, duplicates, and raw/aggregate mismatches are not. See
 [workflow reuse](../../.github/workflows/README.md#reusing-an-approved-pr-full-sweep).
 
 ## How?
+
 `run_eval` in `benchmarks/benchmark_lib.sh` dispatches to the selected eval
-runner. Existing jobs continue to use lm-eval with GSM8K by default.
+runner. `e2e-tests.yml` defaults `eval-framework` to `auto`, then reads the
+concrete framework and suite from each eval matrix row. Fixed-sequence and
+opted-in generic agentic evals use
+[lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness)
+(`lm-eval`) with GSM8K. Workflow inputs can explicitly override the
+matrix-selected framework or suite for manual diagnostics.
 
-The default eval framework is [lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness) (`lm-eval`). Agentic eval-only matrix jobs inherit this default and therefore run the same GSM8K task as 8k1k. Explicit agentic runs can still select SWE-bench.
-
-The Kimi smoke is opt-in and applies to supported models exposing a
-tool-aware OpenAI-compatible chat-completions API. Select
-`eval-framework: kimi-vendor` and `eval-suite: kimi_tool_call_schema` on
-`e2e-tests.yml`, or invoke it from the repository root after a server is ready:
+The Kimi smoke runs automatically for every generated `kimik3` agentic point.
+The matrix selects `eval-framework: kimi-vendor` and
+`eval-suite: kimi_tool_call_schema`. To invoke the same smoke manually from the
+repository root after a server is ready:
 
 ```bash
 source benchmarks/benchmark_lib.sh
@@ -120,7 +130,8 @@ The framework selects a suite-specific subprocess adapter, while the suite
 selects a case set understood by that adapter. Each adapter owns its endpoint
 format, dependencies, native report, metrics, and integration-failure policy.
 Kimi, MiniMax, and BFCL use separate explicit `run_eval` cases rather than a
-shared request or report abstraction.
+shared request or report abstraction. Automatic selection chooses only the Kimi
+and MiniMax vendor cases; BFCL remains an explicit workflow override.
 Agentic eval jobs forward the matrix `spec-decoding` value, so MTP entries
 launch their existing `*_mtp.sh` server instead of silently falling back to STP.
 
@@ -186,11 +197,10 @@ envelope, artifact staging, collector, and dashboard path.
 
 ### MiniMax provider compatibility smoke
 
-The Phase 1 MiniMax smoke is opt-in and applies to supported models exposing
-an OpenAI-compatible chat-completions API. Select
-`eval-framework: minimax-vendor` and `eval-suite: minimax_m3_smoke` in
-`e2e-tests.yml`, or run it from the repository root against an already-ready
-server:
+The Phase 1 MiniMax smoke runs automatically for every generated `minimaxm3`
+agentic point. The matrix selects `eval-framework: minimax-vendor` and
+`eval-suite: minimax_m3_smoke`. To invoke the same smoke manually from the
+repository root against an already-ready server:
 
 ```bash
 source benchmarks/benchmark_lib.sh
@@ -566,8 +576,8 @@ attempt cannot replace a newer failed retry.
 |----------|---------|-------------|
 | `RUN_EVAL` | `false` | Enable eval after throughput benchmark |
 | `EVAL_ONLY` | `false` | Skip throughput, only run evals (set by workflow) |
-| `EVAL_FRAMEWORK` | `lm-eval` | Eval runner (`lm-eval`, `swebench`, `kimi-vendor`, or `minimax-vendor`) |
-| `EVAL_SUITE` | basename of `EVAL_TASKS_DIR`, else `gsm8k` | Provider suite selector and artifact identity. External overrides are supported by `kimi-vendor` and `minimax-vendor`; other runners derive it from their task |
+| `EVAL_FRAMEWORK` | Workflow: `auto`; benchmark runner: `lm-eval` | Eval runner (`lm-eval`, `swebench`, `kimi-vendor`, `minimax-vendor`, or `bfcl`). `auto` resolves from matrix metadata before reusable workflow dispatch |
+| `EVAL_SUITE` | Matrix-selected for automatic vendor evals; otherwise basename of `EVAL_TASKS_DIR` or `gsm8k` | Provider suite selector and artifact identity. Explicit workflow overrides remain supported |
 | `EVAL_TASKS_DIR` | `utils/evals/gsm8k.yaml` | Path to lm-eval task YAML |
 | `EVAL_RESULT_DIR` | `/tmp/eval_out-*` | Output directory for eval results |
 | `EVAL_MAX_MODEL_LEN` | `16384` | Max context for eval (set by `compute_eval_context_length`) |

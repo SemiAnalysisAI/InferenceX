@@ -21,6 +21,16 @@ MULTINODE_AGENTIC_SCRIPT = REPO_ROOT / "benchmarks/multi_node/agentic_srt.sh"
 SINGLE_NODE_WORKFLOW = REPO_ROOT / ".github/workflows/benchmark-tmpl.yml"
 MULTINODE_WORKFLOW = REPO_ROOT / ".github/workflows/benchmark-multinode-tmpl.yml"
 E2E_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "e2e-tests.yml"
+AUTO_EVAL_FRAMEWORK_EXPR = (
+    "${{ inputs.eval-framework == 'auto' && "
+    "(matrix.config['eval-framework'] || 'lm-eval') || "
+    "inputs.eval-framework }}"
+)
+AUTO_EVAL_SUITE_EXPR = (
+    "${{ inputs.eval-suite != '' && inputs.eval-suite || "
+    "(inputs.eval-framework == 'auto' && matrix.config['eval-suite'] || '') }}"
+)
+
 
 _SCRIPT = r"""
 source "$BENCHMARK_LIB"
@@ -2677,8 +2687,8 @@ def test_agentic_eval_workflow_forwards_runner_contract() -> None:
     forwarded = workflow["jobs"]["test-sweep-agentic-evals"]["with"]
 
     assert forwarded["spec-decoding"] == "${{ matrix.config.spec-decoding }}"
-    assert forwarded["eval-framework"] == "${{ inputs.eval-framework }}"
-    assert forwarded["eval-suite"] == "${{ inputs.eval-suite }}"
+    assert forwarded["eval-framework"] == AUTO_EVAL_FRAMEWORK_EXPR
+    assert forwarded["eval-suite"] == AUTO_EVAL_SUITE_EXPR
     assert forwarded["kv-offload-backend"] == (
         "${{ matrix.config['kv-offload-backend'].name }}"
     )
@@ -2692,8 +2702,8 @@ def test_fixed_eval_workflows_forward_provider_contract() -> None:
     workflow = yaml.safe_load(E2E_WORKFLOW.read_text())
     for job_name in ("test-sweep-evals", "test-sweep-multi-node-evals"):
         forwarded = workflow["jobs"][job_name]["with"]
-        assert forwarded["eval-framework"] == "${{ inputs.eval-framework }}"
-        assert forwarded["eval-suite"] == "${{ inputs.eval-suite }}"
+        assert forwarded["eval-framework"] == AUTO_EVAL_FRAMEWORK_EXPR
+        assert forwarded["eval-suite"] == AUTO_EVAL_SUITE_EXPR
 
     reusable_workflow = yaml.safe_load(SINGLE_NODE_WORKFLOW.read_text())
     assert reusable_workflow["env"]["EVAL_FRAMEWORK"] == "${{ inputs.eval-framework }}"
@@ -2710,8 +2720,8 @@ def test_multinode_agentic_eval_workflow_forwards_runner_contract() -> None:
     forwarded = workflow["jobs"]["test-sweep-multi-node-agentic-evals"]["with"]
     reusable_workflow = yaml.safe_load(MULTINODE_WORKFLOW.read_text())
 
-    assert forwarded["eval-framework"] == "${{ inputs.eval-framework }}"
-    assert forwarded["eval-suite"] == "${{ inputs.eval-suite }}"
+    assert forwarded["eval-framework"] == AUTO_EVAL_FRAMEWORK_EXPR
+    assert forwarded["eval-suite"] == AUTO_EVAL_SUITE_EXPR
     assert reusable_workflow["env"]["EVAL_FRAMEWORK"] == "${{ inputs.eval-framework }}"
     assert reusable_workflow["env"]["EVAL_SUITE"] == "${{ inputs.eval-suite }}"
     assert "*_report.json" in MULTINODE_WORKFLOW.read_text()
@@ -2720,6 +2730,41 @@ def test_multinode_agentic_eval_workflow_forwards_runner_contract() -> None:
 
     assert "bfcl_vllm_minimax_m3" in MULTINODE_WORKFLOW.read_text()
     assert "bfcl_vllm_kimi" in MULTINODE_WORKFLOW.read_text()
+
+
+def test_e2e_eval_workflow_defaults_to_model_aware_selection() -> None:
+    workflow = yaml.safe_load(E2E_WORKFLOW.read_text())
+    triggers = workflow[True]
+
+    for trigger_name in ("workflow_dispatch", "workflow_call"):
+        eval_input = triggers[trigger_name]["inputs"]["eval-framework"]
+        assert eval_input["default"] == "auto"
+
+    forwarded = workflow["jobs"]["test-sweep-multi-node-evals"]["with"]
+    assert forwarded["eval-conc"] == (
+        "${{ (inputs.eval-framework == 'auto' && "
+        "(matrix.config['eval-framework'] || 'lm-eval') || "
+        "inputs.eval-framework) == 'lm-eval' && "
+        "matrix.config['eval-all-concs'] && join(matrix.config.conc, ' ') || "
+        "matrix.config['eval-conc'] }}"
+    )
+
+
+def test_agentic_throughput_split_keeps_eval_marked_rows() -> None:
+    workflow = yaml.safe_load(E2E_WORKFLOW.read_text())
+    get_jobs = next(
+        step
+        for step in workflow["jobs"]["get-jobs"]["steps"]
+        if step.get("id") == "get-jobs"
+    )
+    split_lines = get_jobs["run"].splitlines()
+
+    for variable in ("AGENTIC", "MULTI_AGENTIC"):
+        line = next(line for line in split_lines if line.strip().startswith(
+            f"{variable}=$("
+        ))
+        assert "not x.get('eval-only', False)" in line
+        assert "not x.get('run-eval', False)" not in line
 
 
 def test_trusted_changelog_matrix_keeps_multinode_agentic_evals() -> None:
