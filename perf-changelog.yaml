@@ -6582,11 +6582,10 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Run the official H100 MiniMax-M3 AgentX sweep on the patched vLLM image that exports cached prompt tokens by physical source tier and includes vLLM PR #53087's bounded fallback for stalled tier-primary writes."
-    - "Retain the no-offload TP8 points at concurrency 1-8 and the Mooncake DRAM points at concurrency 5-10; add NVMe-only points at concurrency 7-14 using SimpleCPUOffloadConnector's disk backend with 8 TB aggregate capacity."
-    - "Add the same concurrency 7-14 range with declarative kv-offloading [dram, nvme], mapped by the vLLM recipe to OffloadingConnector's TieringOffloadingSpec with an LRU DRAM primary tier and node-local filesystem secondary tier."
-    - "Mount a job-scoped directory from the H100 node's native NVMe filesystem into the Pyxis container and clear its contents from the benchmark's existing service-shutdown trap."
-    - "Remove same-user stale native-tier mmap files at startup and after shutdown on the exclusive H100 node so an interrupted run cannot starve later DRAM-offload jobs."
+    - "Run a narrow H100 MiniMax-M3 AgentX validation on the patched vLLM image that exports the bounded cached-token sources device, cpu, disk, p2p, and external and includes vLLM PR #53087's bounded fallback for stalled tier-primary writes."
+    - "Validate one Mooncake DRAM point at TP8 concurrency 8 and one NVMe-only point at TP8 concurrency 30 using SimpleCPUOffloadConnector's disk backend with 8 TB aggregate capacity."
+    - "Validate one declarative kv-offloading [dram, nvme] point at TP8 concurrency 20, mapped by the vLLM recipe to OffloadingConnector's TieringOffloadingSpec with an LRU DRAM primary tier and node-local filesystem secondary tier."
+    - "Mount a job-scoped directory from the H100 node's native NVMe filesystem into the Pyxis container."
     - "Collect the vLLM Prometheus endpoint through AIPerf so artifacts include vllm:prompt_tokens_cached_by_source alongside the native KV-offload tiering counters."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2775
 
