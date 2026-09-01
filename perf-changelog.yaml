@@ -6821,3 +6821,10 @@
   description:
     - "Refresh to collect TensorRT-LLM server metrics."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2774
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable AITER fused allreduce+RMSNorm (--enable-aiter-allreduce-fusion), replacing INT8 QuickReduce. +5.9% output throughput per GPU at TP2/conc4 agentic workload (114.1 -> 120.8 tok/s). -20.1% decode cycle time from kernel-level profiling."
