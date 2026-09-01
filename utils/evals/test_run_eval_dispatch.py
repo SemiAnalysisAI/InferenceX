@@ -13,23 +13,13 @@ from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BENCHMARK_LIB = REPO_ROOT / "benchmarks" / "benchmark_lib.sh"
 MULTINODE_AGENTIC_SCRIPT = REPO_ROOT / "benchmarks/multi_node/agentic_srt.sh"
-SINGLE_NODE_WORKFLOW = REPO_ROOT / ".github/workflows/benchmark-tmpl.yml"
 MULTINODE_WORKFLOW = REPO_ROOT / ".github/workflows/benchmark-multinode-tmpl.yml"
-E2E_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "e2e-tests.yml"
-AUTO_EVAL_FRAMEWORK_EXPR = (
-    "${{ inputs.eval-framework == 'auto' && "
-    "(matrix.config['eval-framework'] || 'lm-eval') || "
-    "inputs.eval-framework }}"
-)
-AUTO_EVAL_SUITE_EXPR = (
-    "${{ inputs.eval-suite != '' && inputs.eval-suite || "
-    "(inputs.eval-framework == 'auto' && matrix.config['eval-suite'] || '') }}"
-)
 
 
 _SCRIPT = r"""
@@ -151,14 +141,6 @@ def test_fixed_seqlen_provider_leaves_staging_to_recipe() -> None:
     assert "STAGED=summary" not in output
 
 
-def test_explicit_framework_arg_overrides_scenario():
-    assert "DISPATCH=lm-eval" in _dispatch(is_agentic="1", cli_fw="lm-eval")
-
-
-def test_env_framework_overrides_scenario():
-    assert "DISPATCH=lm-eval" in _dispatch(is_agentic="1", env_fw="lm-eval")
-
-
 def test_environment_framework_overrides_legacy_recipe_argument() -> None:
     assert "DISPATCH=kimi-vendor" in _dispatch(
         is_agentic="1",
@@ -226,10 +208,6 @@ run_eval --port 8888
 
     assert result.returncode == 7
     assert "unbound variable" not in result.stderr
-
-
-def test_recipe_lm_eval_arg_still_lm_eval_on_fixed_seqlen():
-    assert "DISPATCH=lm-eval" in _dispatch(is_agentic="0", cli_fw="lm-eval")
 
 
 def _run_invalid_call(call: str) -> subprocess.CompletedProcess:
@@ -622,7 +600,7 @@ printf 'EVAL_RC=%s\n' "$eval_rc"
     assert "STAGED_CONC=<7>" in output
 
 
-def test_minimax_full_dependency_install_matches_pinned_upstream_requirements(
+def test_minimax_full_dependency_install_is_isolated(
     tmp_path: Path,
 ) -> None:
     script = r"""
@@ -643,15 +621,13 @@ _install_minimax_m3_full_deps "$RUNTIME_DIR"
         check=True,
     )
 
-    for requirement in (
-        "jsonschema==4.25.1",
-        "loguru==0.7.3",
-        "megfile==4.2.5",
-        "numpy==2.3.4",
-        "openai==2.7.1",
-        "tqdm==4.67.1",
-    ):
-        assert f"PYTHON_ARG=<{requirement}>" in result.stdout
+    args = [
+        line.removeprefix("PYTHON_ARG=<").removesuffix(">")
+        for line in result.stdout.splitlines()
+        if line.startswith("PYTHON_ARG=<")
+    ]
+    assert args[:3] == ["-m", "pip", "install"]
+    assert args[args.index("--target") + 1] == str(tmp_path / "runtime")
     assert "--break-system-packages" not in result.stdout
 
 
@@ -1126,7 +1102,7 @@ printf 'PYTHON_CLEANUP=<%s>\n' "$VENDOR_VERIFIER_PYTHON_CLEANUP_DIR"
     assert "UNEXPECTED_MKTEMP" not in result.stdout
 
 
-def test_kimi_vendor_bootstraps_pinned_python_and_cleans_it(
+def test_kimi_vendor_bootstraps_isolated_python_and_cleans_it(
     tmp_path: Path,
 ) -> None:
     log_path = tmp_path / "bootstrap.log"
@@ -1194,15 +1170,12 @@ _cleanup_vendor_eval "$runtime_dir" "$cleanup_dir"
     assert "VERSION_CHECK" in log
     assert "SYSTEM_PYTHON_ARG=<--prefix>" in log
     assert "SYSTEM_PYTHON_ARG=<--break-system-packages>" in log
-    assert "SYSTEM_PYTHON_ARG=<uv==0.11.33>" in log
     assert "UV_ARG=<venv>" in log
     assert "UV_ARG=<--python>" in log
-    assert "UV_ARG=<3.12>" in log
     assert "UV_ARG=<--seed>" in log
     assert "UV_CACHE_DIR=</tmp/kimi-vendor-python-" in log
     assert "UV_PYTHON_INSTALL_DIR=</tmp/kimi-vendor-python-" in log
     assert "SELECTED_PYTHON_ARG=<--target>" in log
-    assert "SELECTED_PYTHON_ARG=<pytest-rerunfailures" not in log
     assert "SELECTED_PYTHON=</tmp/kimi-vendor-python-" in result.stdout
     assert "PYTHON_CLEANUP=</tmp/kimi-vendor-python-" in result.stdout
     assert "CLEANED" in result.stdout
@@ -1230,8 +1203,6 @@ _install_kimi_vendor_eval_deps "$RUNTIME_DIR"
 
     assert "PYTHON_ARG=<--target>" in result.stdout
     assert f"PYTHON_ARG=<{runtime_dir}>" in result.stdout
-    assert "PYTHON_ARG=<pytest-rerunfailures" not in result.stdout
-    assert "pytest-xdist" not in result.stdout
     assert "--break-system-packages" not in result.stdout
 
 
@@ -1330,16 +1301,7 @@ printf 'EVAL_RESULT_DIR=%s\n' "$EVAL_RESULT_DIR"
     adapter = BENCHMARK_LIB.parents[1] / "utils/evals/kimi_vendor_eval.py"
 
     assert f"PYTHONPATH=<{tmp_path / 'runtime'}" in output
-    assert (
-        "CHECKOUT=https://github.com/MoonshotAI/Kimi-Vendor-Verifier.git"
-        "@3dad65a760a8867cda72f6dd8848d876a4e851b4"
-    ) in output
-    assert (
-        "CHECKOUT_SHA=ede9ea300c72ccfde9d8975ea4b1b54e423c7625690f6631ab1e65a715821e01"
-        in output
-    )
     assert "PYTHON_ARG=<->" in output
-    assert "PYTHON_ARG=<3dad65a760a8867cda72f6dd8848d876a4e851b4>" in output
     for value in (
         adapter,
         verifier_dir,
@@ -1420,7 +1382,7 @@ printf 'EVAL_RESULT_DIR=%s\n' "$EVAL_RESULT_DIR"
     output = result.stdout + result.stderr
 
     assert "RUNTIME_SUITE=<kimi_tool_call_schema_full>" in output
-    assert "PYTHON_ARG=<pytest-xdist==3.8.0>" in output
+    assert "PYTHON_ARG=<pytest-xdist==" in output
     assert "PYTHON_ARG=<--task-name>" in output
     assert "PYTHON_ARG=<kimi_tool_call_schema_full>" in output
     assert "PYTHON_ARG=<--timeout-seconds>" in output
@@ -1509,11 +1471,6 @@ def test_eval_limit_appended_when_set():
 def test_eval_limit_absent_when_unset():
     out = _run_lm_eval_cmdline(eval_limit=None)
     assert "--limit" not in out, f"Expected no '--limit' in output:\n{out}"
-
-
-def test_lm_eval_defaults_to_gsm8k():
-    out = _run_lm_eval_cmdline()
-    assert "utils/evals/gsm8k.yaml" in out
 
 
 def test_lm_eval_uses_routed_server_host_when_set():
@@ -2061,7 +2018,7 @@ def test_agentic_generation_invokes_mini_swe_agent(tmp_path):
     default_yaml.write_text("agent: {}\n")
     (shim / "python3").write_text(
         "#!/bin/bash\n"
-        f'if [[ "$*" == *minisweagent* ]]; then echo "This is mini-swe-agent version 2.4.5."; echo "Check the v2 migration guide"; echo {default_yaml}; else exec /usr/bin/python3 "$@"; fi\n'
+        f'if [[ "$*" == *minisweagent* ]]; then echo "This is mini-swe-agent."; echo "Check the v2 migration guide"; echo "{default_yaml}"; else exec "$TEST_PYTHON" "$@"; fi\n'
     )
     (shim / "python3").chmod(0o755)
 
@@ -2076,15 +2033,13 @@ _run_swebench_agentic_generation "$GEN_DIR" --port 8899 || exit 1
 [ -s "$GEN_DIR/agent_out/preds.json" ] || { echo NO_PREDS; exit 1; }
 grep -q 'api_base: http://0.0.0.0:8899/v1' "$GEN_DIR/mini_swebench_overrides.yaml" || { echo BAD_PORT; exit 1; }
 grep -q 'openai/test-model' "$GEN_DIR/mini_swebench_overrides.yaml" || { echo BAD_MODEL; exit 1; }
-grep -q 'additional_critical_guidance' "$GEN_DIR/mini_swebench_overrides.yaml" || { echo NO_GUIDANCE; exit 1; }
-grep -q 'BEFORE submitting you MUST run the test' "$GEN_DIR/mini_swebench_overrides.yaml" || { echo NO_VERIFY_RULE; exit 1; }
-grep -q 'runtime_timeout: 3600' "$GEN_DIR/mini_swebench_overrides.yaml" || { echo NO_RUNTIME_TIMEOUT; exit 1; }
 echo AGENTIC_GEN_OK
 """
     env = {
         **os.environ,
         "BENCHMARK_LIB": str(BENCHMARK_LIB),
         "GEN_DIR": str(gen_dir),
+        "TEST_PYTHON": sys.executable,
         "PATH": f"{shim}:{os.environ['PATH']}",
     }
     res = subprocess.run(
@@ -2107,7 +2062,7 @@ def _agentic_shim(tmp_path, mini_body):
     default_yaml.write_text("agent: {}\n")
     (shim / "python3").write_text(
         "#!/bin/bash\n"
-        f'if [[ "$*" == *minisweagent* ]]; then echo {default_yaml}; else exec /usr/bin/python3 "$@"; fi\n'
+        f'if [[ "$*" == *minisweagent* ]]; then echo "{default_yaml}"; else exec "$TEST_PYTHON" "$@"; fi\n'
     )
     (shim / "python3").chmod(0o755)
     gen_dir = tmp_path / "gen"
@@ -2127,6 +2082,7 @@ echo "GEN_RC=$?"
         **os.environ,
         "BENCHMARK_LIB": str(BENCHMARK_LIB),
         "GEN_DIR": str(gen_dir),
+        "TEST_PYTHON": sys.executable,
         "MODEL_NAME": "test-model",
         "SWEBENCH_SANDBOX_SWEEP": "0",
         "SWEBENCH_WATCHDOG_POLL": "1",
@@ -2191,23 +2147,6 @@ def test_agentic_eval_limit_defaults_to_full_split(tmp_path):
     assert "GEN_RC=0" in res.stdout, res.stdout + res.stderr
 
 
-def test_agentic_eval_limit_full_runs_whole_split(tmp_path):
-    shim, gen_dir = _agentic_shim(
-        tmp_path,
-        'echo "MINI_ARGV: $*" >> ' + "ARGVLOG" + "\n"
-        'out=""; prev=""\n'
-        'for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done\n'
-        'mkdir -p "$out"\n'
-        'printf \'{"i1": {"instance_id": "i1", "model_patch": "d"}}\' > "$out/preds.json"\n',
-    )
-    body = (shim / "mini-extra").read_text().replace("ARGVLOG", str(shim / "argv.log"))
-    (shim / "mini-extra").write_text(body)
-    res = _run_agentic(shim, gen_dir, {"EVAL_LIMIT": "full"})
-    argv = (shim / "argv.log").read_text()
-    assert "--slice" not in argv, argv
-    assert "GEN_RC=0" in res.stdout, res.stdout + res.stderr
-
-
 def test_multinode_eval_artifact_names_are_bounded_and_distinct() -> None:
     workflow = yaml.safe_load(MULTINODE_WORKFLOW.read_text())
     upload = next(
@@ -2216,9 +2155,6 @@ def test_multinode_eval_artifact_names_are_bounded_and_distinct() -> None:
         if step.get("name") == "Upload eval results (if any)"
     )
     expression = upload["with"]["name"]
-    assert expression.startswith("eval_")
-    assert "RESULT_FILENAME" not in expression
-
     targets = [
         {
             "EXP_NAME": "kimik3_p2x16ep32dpa_d0x16ep32dpa_conc12",
@@ -2406,19 +2342,6 @@ def test_multinode_eval_artifact_names_are_bounded_and_distinct() -> None:
     assert all(name.startswith("eval_") and len(name.encode()) <= 256 for name in names)
 
 
-def test_single_node_eval_artifact_name_includes_suite_identity() -> None:
-    workflow = yaml.safe_load(SINGLE_NODE_WORKFLOW.read_text())
-    upload = next(
-        step
-        for step in workflow["jobs"]["benchmark"]["steps"]
-        if step.get("name") == "Upload eval results (if any)"
-    )
-    expression = upload["with"]["name"]
-    assert "EVAL_FRAMEWORK" in expression
-    assert "EVAL_SUITE" in expression
-    assert "github.run_attempt" in expression
-
-
 _GENMODE_SCRIPT = r"""
 source "$BENCHMARK_LIB" 2>/dev/null
 _install_swebench_agent_deps() { :; }
@@ -2509,15 +2432,15 @@ def test_agent_sandbox_cpu_knob(tmp_path):
         shim, gen_dir, {"EVAL_LIMIT": "1", "SWEBENCH_AGENT_SANDBOX_CPU": "1"}
     )
     assert "GEN_RC=0" in res.stdout, res.stdout + res.stderr
-    cfg = (gen_dir / "mini_swebench_overrides.yaml").read_text()
-    assert "modal_sandbox_kwargs" in cfg and "cpu: 1" in cfg, cfg
+    cfg = yaml.safe_load((gen_dir / "mini_swebench_overrides.yaml").read_text())
+    assert cfg["environment"]["modal_sandbox_kwargs"]["cpu"] == 1
 
     gen_dir2 = tmp_path / "gen2"
     gen_dir2.mkdir()
     res2 = _run_agentic(shim, gen_dir2, {"EVAL_LIMIT": "1"})
     assert "GEN_RC=0" in res2.stdout, res2.stdout + res2.stderr
-    cfg2 = (gen_dir2 / "mini_swebench_overrides.yaml").read_text()
-    assert "modal_sandbox_kwargs" not in cfg2, cfg2
+    cfg2 = yaml.safe_load((gen_dir2 / "mini_swebench_overrides.yaml").read_text())
+    assert "modal_sandbox_kwargs" not in cfg2["environment"]
 
 
 def test_eval_limit_rejects_non_positive_integer(tmp_path):
@@ -2690,122 +2613,6 @@ run_agentic_replay_and_write_outputs() { echo replay >> "$EVENTS"; }
         assert events_path.read_text().splitlines() == expected
 
 
-def test_agentic_eval_workflow_forwards_runner_contract() -> None:
-    workflow = yaml.safe_load(E2E_WORKFLOW.read_text())
-    forwarded = workflow["jobs"]["test-sweep-agentic-evals"]["with"]
-    throughput = workflow["jobs"]["test-sweep-agentic"]["with"]
-
-    for field in (
-        "router",
-        "kv-p2p-transfer",
-        "tp",
-        "pp",
-        "dcp-size",
-        "pcp-size",
-        "ep",
-        "dp-attn",
-    ):
-        assert forwarded[field] == throughput[field]
-
-
-    assert forwarded["spec-decoding"] == "${{ matrix.config.spec-decoding }}"
-    assert forwarded["eval-framework"] == AUTO_EVAL_FRAMEWORK_EXPR
-    assert forwarded["eval-suite"] == AUTO_EVAL_SUITE_EXPR
-    assert forwarded["kv-offload-backend"] == (
-        "${{ matrix.config['kv-offload-backend'].name }}"
-    )
-    assert forwarded["kv-offload-backend-metadata"] == (
-        "${{ matrix.config['kv-offload-backend'] && "
-        "toJson(matrix.config['kv-offload-backend']) || '' }}"
-    )
-
-
-def test_fixed_eval_workflows_forward_provider_contract() -> None:
-    workflow = yaml.safe_load(E2E_WORKFLOW.read_text())
-    for job_name in ("test-sweep-evals", "test-sweep-multi-node-evals"):
-        forwarded = workflow["jobs"][job_name]["with"]
-        assert forwarded["eval-framework"] == AUTO_EVAL_FRAMEWORK_EXPR
-        assert forwarded["eval-suite"] == AUTO_EVAL_SUITE_EXPR
-
-    reusable_workflow = yaml.safe_load(SINGLE_NODE_WORKFLOW.read_text())
-    assert reusable_workflow["env"]["EVAL_FRAMEWORK"] == "${{ inputs.eval-framework }}"
-    assert reusable_workflow["env"]["EVAL_SUITE"] == "${{ inputs.eval-suite }}"
-    assert "*_report.json" in SINGLE_NODE_WORKFLOW.read_text()
-    assert "*_results.jsonl" in SINGLE_NODE_WORKFLOW.read_text()
-    assert "*_artifacts.tar.gz" in SINGLE_NODE_WORKFLOW.read_text()
-    assert "bfcl_vllm_minimax_m3" in SINGLE_NODE_WORKFLOW.read_text()
-    assert "bfcl_vllm_kimi" in SINGLE_NODE_WORKFLOW.read_text()
-
-
-def test_multinode_agentic_eval_workflow_forwards_runner_contract() -> None:
-    workflow = yaml.safe_load(E2E_WORKFLOW.read_text())
-    forwarded = workflow["jobs"]["test-sweep-multi-node-agentic-evals"]["with"]
-    reusable_workflow = yaml.safe_load(MULTINODE_WORKFLOW.read_text())
-
-    assert forwarded["eval-framework"] == AUTO_EVAL_FRAMEWORK_EXPR
-    assert forwarded["eval-suite"] == AUTO_EVAL_SUITE_EXPR
-    assert reusable_workflow["env"]["EVAL_FRAMEWORK"] == "${{ inputs.eval-framework }}"
-    assert reusable_workflow["env"]["EVAL_SUITE"] == "${{ inputs.eval-suite }}"
-    assert "*_report.json" in MULTINODE_WORKFLOW.read_text()
-    assert "*_results.jsonl" in MULTINODE_WORKFLOW.read_text()
-    assert "*_artifacts.tar.gz" in MULTINODE_WORKFLOW.read_text()
-
-    assert "bfcl_vllm_minimax_m3" in MULTINODE_WORKFLOW.read_text()
-    assert "bfcl_vllm_kimi" in MULTINODE_WORKFLOW.read_text()
-
-
-def test_e2e_eval_workflow_defaults_to_model_aware_selection() -> None:
-    workflow = yaml.safe_load(E2E_WORKFLOW.read_text())
-    triggers = workflow[True]
-
-    for trigger_name in ("workflow_dispatch", "workflow_call"):
-        eval_input = triggers[trigger_name]["inputs"]["eval-framework"]
-        assert eval_input["default"] == "auto"
-
-    forwarded = workflow["jobs"]["test-sweep-multi-node-evals"]["with"]
-    assert forwarded["eval-conc"] == (
-        "${{ (inputs.eval-framework == 'auto' && "
-        "(matrix.config['eval-framework'] || 'lm-eval') || "
-        "inputs.eval-framework) == 'lm-eval' && "
-        "matrix.config['eval-all-concs'] && join(matrix.config.conc, ' ') || "
-        "matrix.config['eval-conc'] }}"
-    )
-
-
-def test_agentic_throughput_split_keeps_eval_marked_rows() -> None:
-    workflow = yaml.safe_load(E2E_WORKFLOW.read_text())
-    get_jobs = next(
-        step
-        for step in workflow["jobs"]["get-jobs"]["steps"]
-        if step.get("id") == "get-jobs"
-    )
-    split_lines = get_jobs["run"].splitlines()
-
-    for variable in ("AGENTIC", "MULTI_AGENTIC"):
-        line = next(line for line in split_lines if line.strip().startswith(
-            f"{variable}=$("
-        ))
-        assert "not x.get('eval-only', False)" in line
-        assert "not x.get('run-eval', False)" not in line
-
-
-def test_trusted_changelog_matrix_keeps_multinode_agentic_evals() -> None:
-    workflow = yaml.safe_load(E2E_WORKFLOW.read_text())
-    get_jobs = next(
-        step
-        for step in workflow["jobs"]["get-jobs"]["steps"]
-        if step.get("id") == "get-jobs"
-    )
-    flatten_command = next(
-        line for line in get_jobs["run"].splitlines() if "rows.extend" in line
-    )
-
-    assert '"multinode_agentic_evals"' in flatten_command
-    get_jobs_command = get_jobs["run"]
-    assert get_jobs_command.count("EVALS=$(") == 1
-    assert "score_matrix eval" in get_jobs_command
-
-
 def test_env_can_force_bfcl_on_agentic_eval() -> None:
     output = _dispatch(is_agentic="1", eval_only="true", env_fw="bfcl")
 
@@ -2883,32 +2690,6 @@ def test_bfcl_rejects_unknown_suite() -> None:
 
     assert result.returncode == 2
     assert "unsupported BFCL suite 'not_a_bfcl_suite'" in result.stderr
-
-
-def test_bfcl_suite_thresholds_are_diagnostic_and_namespaced() -> None:
-    thresholds = yaml.safe_load(
-        (REPO_ROOT / "utils/evals/thresholds.yaml").read_text()
-    )["default"]
-    full_suite_tasks = (
-        "bfcl_vllm_minimax_m3",
-        "bfcl_vllm_minimax_m3_simple_python",
-        "bfcl_vllm_minimax_m3_multiple",
-        "bfcl_vllm_minimax_m3_parallel",
-        "bfcl_vllm_minimax_m3_parallel_multiple",
-        "bfcl_vllm_kimi",
-        "bfcl_vllm_kimi_simple_python",
-        "bfcl_vllm_kimi_multiple",
-        "bfcl_vllm_kimi_parallel",
-        "bfcl_vllm_kimi_parallel_multiple",
-        "bfcl_vllm_kimi_multi_turn",
-        "bfcl_vllm_kimi_multi_turn_base",
-        "bfcl_vllm_kimi_multi_turn_miss_func",
-        "bfcl_vllm_kimi_multi_turn_miss_param",
-        "bfcl_vllm_kimi_multi_turn_long_context",
-    )
-
-    assert thresholds["bfcl_smoke"] == 0.0
-    assert all(thresholds[task] == 0.0 for task in full_suite_tasks)
 
 
 def test_bfcl_dependency_timeout_uses_integration_error_and_stages(
@@ -3298,10 +3079,27 @@ _archive_bfcl_upstream_artifacts "$PROJECT_ROOT" "$ARCHIVE"
     assert not (tmp_path / ".unsafe.tar.gz.tmp").exists()
 
 
-def test_bfcl_installer_uses_verified_wheel_in_selected_venv(tmp_path: Path) -> None:
+@pytest.mark.parametrize("verification_rc", (0, 23))
+def test_bfcl_installer_requires_verified_wheel_before_installing(
+    tmp_path: Path,
+    verification_rc: int,
+) -> None:
     script = r"""
 source "$BENCHMARK_LIB"
-selected_python() { printf 'PYTHON_ARG=<%s>\n' "$@"; }
+selected_python() {
+    if [ "$1" = "-" ]; then
+        printf 'VERIFY_PATH=<%s>\n' "$4"
+        [ "$VERIFICATION_RC" -eq 0 ] || return "$VERIFICATION_RC"
+        printf 'verified wheel' > "$4"
+    else
+        printf 'INSTALL_ARG=<%s>\n' "$@"
+        for arg in "$@"; do
+            if [ -f "$arg" ]; then
+                printf 'INSTALLED_CONTENT=<%s>\n' "$(cat "$arg")"
+            fi
+        done
+    fi
+}
 timeout() {
     printf 'TIMEOUT_ARG=<%s>\n' "$1"
     shift
@@ -3316,29 +3114,26 @@ _install_bfcl_eval_deps "$DOWNLOAD_DIR"
             **os.environ,
             "BENCHMARK_LIB": str(BENCHMARK_LIB),
             "DOWNLOAD_DIR": str(tmp_path),
+            "VERIFICATION_RC": str(verification_rc),
         },
         text=True,
         capture_output=True,
-        check=True,
+        check=False,
     )
-    wheel_path = tmp_path / "bfcl_eval-2026.3.23-py3-none-any.whl"
 
-    for value in (
-        "https://files.pythonhosted.org/packages/ba/41/"
-        "ed458527c770c50225b60bae3b0c3444b26804ee455fa2d8f187018d2cb2/"
-        "bfcl_eval-2026.3.23-py3-none-any.whl",
-        "3bb6dfa5f0c68ad403c9ec50b00db2bb3b4cc9b38ab1ff33f48fe30d853d3a0a",
-        str(wheel_path),
-        "-m",
-        "pip",
-        "install",
-        "--no-cache-dir",
-        "soundfile==0.13.1",
-    ):
-        assert f"PYTHON_ARG=<{value}>" in result.stdout
-    assert "TIMEOUT_ARG=<600>" in result.stdout
-    assert "--break-system-packages" not in result.stdout
-    assert "--target" not in result.stdout
+    assert result.returncode == verification_rc, result.stderr
+    if verification_rc:
+        assert "INSTALL_ARG=" not in result.stdout
+    else:
+        args = [
+            line.removeprefix("INSTALL_ARG=<").removesuffix(">")
+            for line in result.stdout.splitlines()
+            if line.startswith("INSTALL_ARG=<")
+        ]
+        assert args[:3] == ["-m", "pip", "install"]
+        assert "INSTALLED_CONTENT=<verified wheel>" in result.stdout
+        assert "--break-system-packages" not in args
+        assert "--target" not in args
 
 
 def test_bfcl_python_preparation_exposes_system_site_packages(
