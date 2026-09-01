@@ -6669,3 +6669,12 @@
     - "Keep TRITON_MLA for DCP8 decode after ROCM_AITER_MLA failed startup because AiterMLAImpl does not return the softmax LSE required by DCP; retain ROCM_AITER_FA and query quantization for prefill."
     - "由于 AiterMLAImpl 不返回 DCP 所需的 softmax LSE，ROCM_AITER_MLA 在启动时失败，因此 DCP8 解码继续使用 TRITON_MLA；预填充仍保留 ROCM_AITER_FA 和查询量化。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Test C40 TP8/DCP8 LMCache no-spec decoding with vLLM nightly 1dc464d plus pinned vLLM PR #51705 and LMCache PR #4834, replacing vLLM PR #54457 while preserving the matched C40 tuning."
+    - "使用 vLLM nightly 1dc464d、固定版本的 vLLM PR #51705 和 LMCache PR #4834 测试 C40 TP8/DCP8 LMCache 无推测解码，以 LMCache PR #4834 替换 vLLM PR #54457，同时保持匹配的 C40 调优参数不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

@@ -152,6 +152,7 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     # Keep the image's tested torch/ROCm stack and install only LMCache's
     # missing runtime dependencies, same as the MiniMax-M3 lmcache arm.
     LMCACHE_VERSION="0.5.5.dev63+rocm7.2"
+    export KV_OFFLOAD_BACKEND_METADATA="{\"name\":\"lmcache\",\"version\":\"${LMCACHE_VERSION}\"}"
     LMCACHE_ROCM_INDEX="https://github.com/LMCache/LMCache/releases/expanded_assets/nightly-rocm"
     agentic_pip_install --quiet --no-cache-dir --no-deps \
         "sortedcontainers==2.4.0" \
@@ -159,14 +160,49 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         "cupy-rocm-7-0==14.1.1" \
         "lmcache==${LMCACHE_VERSION}" --find-links "$LMCACHE_ROCM_INDEX"
 
-    # vLLM #54457 distinguishes block-oriented PD connectors from CPU
-    # offload connectors before forcing DCP interleave to block_size. LMCache
-    # MP keeps each DCP shard on its matching rank, so preserve its required
-    # token-strided interleave (1) instead of rewriting it to 1536.
     SITE_PACKAGES=$(python3 -c \
         'import pathlib, vllm; print(pathlib.Path(vllm.__file__).parent.parent)')
+
+    # LMCache #4834 supports the non-trivial DCP interleave selected by vLLM,
+    # resolves hybrid KV-group geometry from the engine configuration, and
+    # namespaces cache keys by DCP layout. Pin the exact reviewed revision.
+    LMCACHE_PR4834_BASE="1af7803551ab05905cb2c46fba403e1e5c1de575"
+    LMCACHE_PR4834_HEAD="347b0c8a780d550de24fdd508174597e603b3af2"
+    LMCACHE_PR4834_SHA256="25820903e7208fb1a7f263ca41e448e4f041f4af8e88f942dd766f549776a651"
+    LMCACHE_PR4834_SOURCE_SHA256="095f39d10bdc3dfa0f917140ee77c6c007c6c829e58675ffc32f72f796774201"
+    LMCACHE_PR4834_PATCH=$(mktemp)
+    LMCACHE_PR4834_SOURCE_PATCH=$(mktemp)
+    curl --fail --location --silent --show-error \
+        "https://github.com/LMCache/LMCache/compare/${LMCACHE_PR4834_BASE}...${LMCACHE_PR4834_HEAD}.diff" \
+        --output "$LMCACHE_PR4834_PATCH"
+    echo "$LMCACHE_PR4834_SHA256  $LMCACHE_PR4834_PATCH" | sha256sum --check
+    awk '/^diff --git a\/lmcache\// {keep=1} \
+        /^diff --git / && $0 !~ /^diff --git a\/lmcache\// {keep=0} keep' \
+        "$LMCACHE_PR4834_PATCH" > "$LMCACHE_PR4834_SOURCE_PATCH"
+    echo "$LMCACHE_PR4834_SOURCE_SHA256  $LMCACHE_PR4834_SOURCE_PATCH" | \
+        sha256sum --check
     patch -d "$SITE_PACKAGES" -p1 --forward --batch < \
-        "$INFMAX_CONTAINER_WORKSPACE/patches/vllm_pr54457_lmcache_mp_dcp.diff"
+        "$LMCACHE_PR4834_SOURCE_PATCH"
+
+    # vLLM #51705 adds ROCm AITER MLA decode LSE output for DCP and keeps full
+    # CUDA graphs enabled. Pin both compare endpoints and the downloaded diff
+    # checksum so this experiment cannot silently follow later PR revisions.
+    VLLM_PR51705_BASE="e0d27040ddcc5ac31cf01c5b04a7d764ccba656d"
+    VLLM_PR51705_HEAD="e1843114b7c233a9c71ad44b28bf63426ad64836"
+    VLLM_PR51705_SHA256="88a31df8cd0ffd308aa4a5c550142734939a8d83c7132cfa924f8f80b2387b55"
+    VLLM_PR51705_SOURCE_SHA256="063ee0140d559b54da665b6ef95a3bea64b33d6eaff6cb9a827616a6cc4d8890"
+    VLLM_PR51705_PATCH=$(mktemp)
+    VLLM_PR51705_SOURCE_PATCH=$(mktemp)
+    curl --fail --location --silent --show-error \
+        "https://github.com/vllm-project/vllm/compare/${VLLM_PR51705_BASE}...${VLLM_PR51705_HEAD}.diff" \
+        --output "$VLLM_PR51705_PATCH"
+    echo "$VLLM_PR51705_SHA256  $VLLM_PR51705_PATCH" | sha256sum --check
+    sed -n '/^diff --git a\/vllm\//,$p' "$VLLM_PR51705_PATCH" > \
+        "$VLLM_PR51705_SOURCE_PATCH"
+    echo "$VLLM_PR51705_SOURCE_SHA256  $VLLM_PR51705_SOURCE_PATCH" | \
+        sha256sum --check
+    patch -d "$SITE_PACKAGES" -p1 --forward --batch < \
+        "$VLLM_PR51705_SOURCE_PATCH"
 
     # LMCache 0.5.5's transfer-channel layer eagerly imports the Mooncake
     # backend (mooncake_te_impl.py -> `from mooncake.engine import
@@ -187,7 +223,7 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         fi
     done
     python3 -c \
-        "import cupy; from lmcache.integration.vllm.lmcache_mp_connector import LMCacheMPConnector as C; assert C.requires_dcp_block_aligned_interleave is False; import opentelemetry.exporter.prometheus" \
+        "import cupy; from lmcache.integration.vllm.lmcache_mp_connector import get_lmcache_model_name, get_lmcache_scheduler_block_size; assert callable(get_lmcache_model_name); assert callable(get_lmcache_scheduler_block_size); from vllm.v1.attention.backends.mla.rocm_aiter_mla import AiterMLAImpl; assert AiterMLAImpl.can_return_lse_for_decode; assert AiterMLAImpl.lse_base_on_e; import opentelemetry.exporter.prometheus" \
         >/dev/null
 
     # One MP server for the node, per the Kimi-K3 recipe
@@ -289,12 +325,12 @@ if [ "$SPEC_NUM_TOKENS" -gt 0 ]; then
 if [ "${EVAL_ONLY:-false}" = "true" ]; then
     SPEC_ARGS=(
         --speculative-config
-        "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"block\"}"
+        "{\"model\":\"${DRAFT_MODEL:-Inferact/Kimi-K3-DSpark}\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"block\"}"
     )
 else
     SPEC_ARGS=(
         --speculative-config
-        "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
+        "{\"model\":\"${DRAFT_MODEL:-Inferact/Kimi-K3-DSpark}\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
     )
     fi
 fi
@@ -330,7 +366,7 @@ if [ "$DCP_SIZE" -gt 1 ]; then
         --dcp-comm-backend a2a
         --cp-kv-cache-interleave-size 1
     )
-    ATTN_BE_ARGS+=(--attention-backend TRITON_MLA)
+    ATTN_BE_ARGS+=(--attention-backend ROCM_AITER_MLA)
 fi
 export VLLM_USE_DIRECT_DCP_A2A=0
 export VLLM_USE_DIRECT_DCP_Q_GATHER=0
