@@ -98,6 +98,9 @@ case "$K3_PERF_VARIANT" in
     mla52494)
         bash "$(dirname "$0")/k3_perf_overlays/apply_vllm_overlay.sh" pr52494
         ;;
+    tier1)
+        bash "$(dirname "$0")/k3_perf_overlays/apply_vllm_overlay.sh" tier1
+        ;;
     pynccl)
         export K3_DISABLE_CUSTOM_ALL_REDUCE=1
         ;;
