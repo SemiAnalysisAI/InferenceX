@@ -6587,7 +6587,7 @@
     - "Validate one declarative kv-offloading [dram, nvme] point at TP8 concurrency 20, mapped by the vLLM recipe to OffloadingConnector's TieringOffloadingSpec with an LRU DRAM primary tier and node-local filesystem secondary tier."
     - "Mount a job-scoped directory from the H100 node's native NVMe filesystem into the Pyxis container."
     - "Collect the vLLM Prometheus endpoint through AIPerf so artifacts include vllm:prompt_tokens_cached_by_source alongside the native KV-offload tiering counters."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2775
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2796
 
 - config-keys:
     - dsv4-fp4-mi355x-atom-agentic-mtp
