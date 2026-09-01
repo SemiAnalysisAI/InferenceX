@@ -268,50 +268,6 @@ qwen3.5-fp8-mi355x-atom-mtp:
       search-space:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
-
-qwen3.5-fp8-mi355x-sglang-disagg:
-  image: lmsysorg/sglang:v0.5.16-rocm720-mi35x
-  model: Qwen/Qwen3.5-397B-A17B-FP8
-  model-prefix: qwen3.5
-  runner: cluster:mi355x-amds
-  precision: fp8
-  framework: sglang-disagg
-  router: { name: sglang-router, version: "0.3.2" }
-  kv-p2p-transfer: mori
-  multinode: true
-  disagg: true
-  scenarios:
-    fixed-seq-len:
-    - isl: 8192
-      osl: 1024
-      search-space:
-      # 1P+1D TP4P+TP8D/EP1 baseline (no speculative decoding).
-      # TP4 prefill saves 4 GPUs vs TP8P while delivering identical decode
-      # interactivity and 24-31% better throughput/GPU (12 vs 16 GPUs).
-      # dp-attn intentionally false: with --enable-dp-attention +
-      # --moe-a2a-backend mori, sglang auto-promotes moe_ep_size=tp_size,
-      # but is_deepep_class_backend() excludes MoRI, so
-      # num_shared_slots stays at the global value (1) and the
-      # (num_experts - num_shared_slots) % moe_ep_size assertion in
-      # fused_moe_triton/layer.py fires for Qwen3.5 (512 routed + 1 shared).
-      - spec-decoding: "none"
-        conc-list: [ 8, 16, 32, 64, 128 ]
-        prefill:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=0"
-
 qwen3.5-fp4-mi355x-sglang:
   image: lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260829
   model: amd/Qwen3.5-397B-A17B-MXFP4
@@ -376,41 +332,6 @@ qwen3.5-fp4-mi355x-sglang-agentic-mtp:
       - { tp: 2, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16, 20] }
       - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [40, 48, 56, 64] }
       - { tp: 2, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [20, 24, 28, 32] }
-
-qwen3.5-fp4-mi355x-sglang-disagg:
-  image: lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260523
-  model: amd/Qwen3.5-397B-A17B-MXFP4
-  model-prefix: qwen3.5
-  runner: cluster:mi355x-amds
-  precision: fp4
-  framework: sglang-disagg
-  router: { name: sglang-router, version: "0.3.2" }
-  kv-p2p-transfer: mori
-  multinode: true
-  disagg: true
-  scenarios:
-    fixed-seq-len:
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - spec-decoding: "none"
-        conc-list: [ 8, 16, 32, 64, 128, 256, 512 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=0"
-
 qwen3.5-fp8-mi300x-sglang:
   image: lmsysorg/sglang:v0.5.12-rocm720-mi30x
   model: Qwen/Qwen3.5-397B-A17B-FP8
@@ -473,157 +394,6 @@ dsr1-fp8-mi355x-atom-mtp:
       osl: 1024
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 256, spec-decoding: mtp  }
-
-dsr1-fp8-mi355x-sglang-disagg:
-  image: rocm/sgl-dev:sglang-0.5.9-rocm720-mi35x-mori-0227-2
-  model: deepseek-ai/DeepSeek-R1-0528
-  model-prefix: dsr1
-  runner: cluster:mi355x-amds
-  precision: fp8
-  framework: sglang-disagg
-  router: { name: sglang-router, version: "0.3.2" }
-  kv-p2p-transfer: mori
-  multinode: true
-  disagg: true
-  scenarios:
-    fixed-seq-len:
-    - isl: 8192
-      osl: 1024
-      search-space:
-      # non-MTP configurations
-      # "Top of curve" (2 prefill worker at DEP8 and 1 decode worker at DEP8)
-      - spec-decoding: "none"
-        conc-list: [ 1024, 2048 ]
-        prefill:
-          num-worker: 2
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "PREFILL_NODES=2"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=0"
-
-      # "Bottom of curve" (1 prefill worker at TP8 and 2 decode workers at TP8)
-      - spec-decoding: "none"
-        conc-list: [ 256, 128, 64, 32, 16, 8, 4 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-
-        decode:
-          num-worker: 2
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=0"
-
-      - spec-decoding: "none"
-        conc-list: [ 64, 32, 16, 8, 4, 2, 1 ]
-        prefill:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=0"
-
-dsr1-fp8-mi355x-sglang-disagg-mtp:
-  image: rocm/sgl-dev:sglang-0.5.9-rocm720-mi35x-mori-0227-2
-  model: deepseek-ai/DeepSeek-R1-0528
-  model-prefix: dsr1
-  runner: cluster:mi355x-amds
-  precision: fp8
-  framework: sglang-disagg
-  router: { name: sglang-router, version: "0.3.2" }
-  kv-p2p-transfer: mori
-  multinode: true
-  disagg: true
-  scenarios:
-    fixed-seq-len:
-    - isl: 8192
-      osl: 1024
-      search-space:
-      # MTP configurations
-      # "Top of curve" (2 prefill worker at DEP8 and 1 decode worker at DEP8)
-      - spec-decoding: "mtp"
-        conc-list: [ 1024, 2048 ]
-        prefill:
-          num-worker: 2
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "PREFILL_NODES=2"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=1"
-
-      # "Bottom of curve" (1 prefill worker at TP8 and 2 decode workers at TP8)
-      - spec-decoding: "mtp"
-        conc-list: [ 256, 128, 64, 32, 16, 8, 4, 2 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-
-        decode:
-          num-worker: 2
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=2"
-
-      - spec-decoding: "mtp"
-        conc-list: [ 64, 32, 16, 8, 4, 2, 1 ]
-        prefill:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=2"
-
 kimik3-fp4-mi355x-vllm-agentic-mtp:
   image: vllm/vllm-openai-rocm:nightly-1dc464d42681d22f38caf1fdc1eb632dc4421c45
   model: moonshotai/Kimi-K3
@@ -640,11 +410,11 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
       - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.5.dev60+rocm7.2" }, conc-list: [4, 8, 10, 12, 14], spec-decoding: mtp }
 
 # Kimi-K3 MXFP4 agentic-coding benchmark on MI355X via ATOM with DSpark
-# speculative decoding. Acceptance is pinned to the committed golden curve in
-# golden_al_distribution/kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml
-# at both draft lengths used here: 7 draft tokens -> AL 3.84 at concurrency 1-4,
-# 3 draft tokens -> AL 3.00 from concurrency 8 up.
-# Companion to kimik3-fp4-mi355x-vllm-agentic-mtp: same checkpoint, same runner.
+# speculative decoding (2 draft tokens -> golden AL 2.51,
+# golden_al_distribution/kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml,
+# the same golden the vLLM arm feeds to synthetic_acceptance_length).
+# Companion to kimik3-fp4-mi355x-vllm-agentic-mtp: same checkpoint, same
+# runner, same concurrency points, so the two engines are directly comparable.
 # TP8 only -- the 1.56 TB MXFP4 checkpoint is ~195 GB/GPU and TP4 cannot load,
 # which is also why there is no DP-attention arm.
 # Concurrency 1-4 is the latency floor and stays GPU-resident. From concurrency
@@ -684,464 +454,6 @@ kimik3-fp4-mi355x-atom-agentic-mtp:
     - dram-utilization: 0.343
       search-space:
       - { tp: 8, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [32, 40, 56], spec-decoding: mtp }
-
-dsr1-fp4-mi355x-sglang-disagg:
-  image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519
-  model: amd/DeepSeek-R1-0528-MXFP4-v2
-  model-prefix: dsr1
-  runner: cluster:mi355x-amds
-  precision: fp4
-  framework: sglang-disagg
-  router: { name: sglang-router, version: "0.3.2" }
-  kv-p2p-transfer: mori
-  multinode: true
-  disagg: true
-  scenarios:
-    fixed-seq-len:
-    - isl: 8192
-      osl: 1024
-      search-space:
-      # non-MTP configurations
-      # 1P1D pure TP8
-      - spec-decoding: "none"
-        conc-list: [ 1, 2, 4, 8 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=0"
-
-      # 1P2D TP8
-      - spec-decoding: "none"
-        conc-list: [ 2, 4, 8, 16, 32 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 2
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=0"
-
-      # 1P2D TP8
-      - spec-decoding: "none"
-        conc-list: [ 64, 128, 256 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 2
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=0"
-
-      # 1P2D TP4
-      - spec-decoding: "none"
-        conc-list: [ 64, 128, 256 ]
-        prefill:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 2
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=0"
-
-      # 1*DEP8 + 1*DEP8
-      - spec-decoding: "none"
-        conc-list: [ 128, 256, 512 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=0"
-
-      # 2*DEP8 + 1*DEP8
-      - spec-decoding: "none"
-        conc-list: [ 1024, 2048, 4096 ]
-        prefill:
-          num-worker: 2
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "PREFILL_NODES=2"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=0"
-
-dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260529
-  model: amd/DeepSeek-R1-0528-MXFP4-v2
-  model-prefix: dsr1
-  runner: cluster:mi355x-amds
-  precision: fp4
-  framework: sglang-disagg
-  router: { name: sglang-router, version: "0.3.2" }
-  kv-p2p-transfer: mori
-  multinode: true
-  disagg: true
-  scenarios:
-    fixed-seq-len:
-    - isl: 8192
-      osl: 1024
-      search-space:
-      # MTP configurations
-      # 1P1D pure TP8
-      - spec-decoding: "mtp"
-        conc-list: [ 1, 2, 4, 8 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=3"
-
-      # 1P2D TP8
-      - spec-decoding: "mtp"
-        conc-list: [ 2, 4, 8, 16, 32 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 2
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=3"
-
-      # 1P2D TP8
-      - spec-decoding: "mtp"
-        conc-list: [ 32, 64 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 2
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=3"
-
-      # 1*DEP8 + 1*DEP8
-      - spec-decoding: "mtp"
-        conc-list: [ 640, 512 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=3"
-
-      # 1*DEP8 + 1*DEP8
-      - spec-decoding: "mtp"
-        conc-list: [ 256 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=3"
-
-      # 1*DEP8 + 1*DEP8
-      - spec-decoding: "mtp"
-        conc-list: [ 128 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=3"
-
-      # 1*DEP8 + 1*DEP8
-      - spec-decoding: "mtp"
-        conc-list: [ 64 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=3"
-
-      # 2*DEP8 + 1*DEP8
-      - spec-decoding: "mtp"
-        conc-list: [ 1024, 2048, 4096 ]
-        prefill:
-          num-worker: 2
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "PREFILL_NODES=2"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=1"
-
-
-dsv4-fp4-mi355x-sglang-disagg:
-  image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260701
-  model: deepseek-ai/DeepSeek-V4-Pro
-  model-prefix: dsv4
-  runner: cluster:mi355x-amds
-  precision: fp4
-  framework: sglang-disagg
-  router: { name: sglang-router, version: "0.3.2" }
-  kv-p2p-transfer: mori
-  multinode: true
-  disagg: true
-  scenarios:
-    fixed-seq-len:
-    - isl: 8192
-      osl: 1024
-      search-space:
-      # non-MTP configurations
-      # 1P1D pure TP8  (mori KV transfer)
-      - spec-decoding: "none"
-        conc-list: [ 1, 2, 4, 8, 16, 32, 64, 128 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=0"
-      # 1P1D DEP8  (mori KV transfer + mori MoE a2a, dp-attention)
-      - spec-decoding: "none"
-        conc-list: [ 256 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=0"
-
-      - spec-decoding: "none"
-        conc-list: [ 512 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=0"
-
-# MTP variant of dsv4-fp4-mi355x-sglang-disagg (base run 29821778206). Mirrors
-# the base disagg search space and topologies exactly (same 20260701 image,
-# mori KV transfer + MoE a2a, sglang-router --pd-disaggregation) and enables
-# DeepSeek-V4 built-in MTP on the decode side via spec-decoding: mtp — the same
-# enablement path as dsr1-fp8-mi355x-sglang-disagg-mtp. DECODE_MTP_SIZE=1 (draft
-# depth 1) on every arm. Depth 2 was tried on the pure-TP8 (bottom-of-curve) arm,
-# but this 20260701 build's 2-step EAGLE verification is lossy: greedy gsm8k fell
-# to ~0.85 (below the 0.91 dsv4 floor), while depth 1 is lossless (~0.96, matching
-# the spec-none base). So all arms use depth 1. The dsv4 ROCm MTP
-# CUDA-graph fix (sgl-project/sglang#26383, merged 2026-05-27) is already
-# present in the pinned 20260701 nightly, so no image bump is needed.
-dsv4-fp4-mi355x-sglang-disagg-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.15-rocm720-mi35x-20260713
-  model: deepseek-ai/DeepSeek-V4-Pro
-  model-prefix: dsv4
-  runner: cluster:mi355x-amds
-  precision: fp4
-  framework: sglang-disagg
-  router: { name: sglang-router, version: "0.3.2" }
-  kv-p2p-transfer: mori
-  multinode: true
-  disagg: true
-  scenarios:
-    fixed-seq-len:
-    - isl: 8192
-      osl: 1024
-      search-space:
-      # MTP configurations
-      # 1P1D pure TP8  (mori KV transfer)
-      - spec-decoding: "mtp"
-        conc-list: [ 1, 2, 4, 8, 16, 32, 64, 128 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=2"
-      # 1P1D DEP8  (mori KV transfer + mori MoE a2a, dp-attention)
-      - spec-decoding: "mtp"
-        conc-list: [ 256 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=1"
-
-      - spec-decoding: "mtp"
-        conc-list: [ 512 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=1"
-
-
 dsv4-fp4-mi355x-sglang:
   image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260706
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -1499,7 +811,7 @@ dsv4-fp4-mi355x-atom-disagg:
     - isl: 8192
       osl: 1024
       search-space:
-      # 2P1D DPA+TP8 
+      # 2P1D DPA+TP8
       - conc-list: [ 256, 512, 768, 1024, 2048 ]
         prefill:
           num-worker: 2
@@ -1515,7 +827,7 @@ dsv4-fp4-mi355x-atom-disagg:
           dp-attn: true
           additional-settings:
           - "DECODE_NODES=1"
-      # 1P1D TP8 
+      # 1P1D TP8
       - conc-list: [ 4, 8, 16, 32, 64, 128 ]
         prefill:
           num-worker: 1
@@ -1577,70 +889,6 @@ minimaxm3-fp8-mi325x-vllm-agentic-mtp:
     - dram-utilization: 0.20
       search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8, 10, 12, 14, 16, 18] }
-
-dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260817
-  model: deepseek-ai/DeepSeek-V4-Pro
-  model-prefix: dsv4
-  runner: cluster:mi355x-amds
-  precision: fp4
-  framework: sglang-disagg
-  kv-p2p-transfer: mori
-  multinode: true
-  disagg: true
-  scenarios:
-    agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
-      - spec-decoding: "mtp"
-        conc-list: [ 1,2,4,8,16,32,48,64 ]
-        kv-offloading: dram
-        kv-offload-backend: { name: hicache }
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-          - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260719"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=3"
-      - spec-decoding: "mtp"
-        conc-list: [ 64, 96, 128, 192 ]
-        kv-offloading: dram
-        kv-offload-backend: { name: hicache }
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "PREFILL_NODES=1"
-          - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260719"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=3"
-
-# DeepSeek-V4-Pro FP8 single-node on MI325X (gfx942) via vLLM.
-# EXTRAPOLATED bring-up. Same rationale as dsv4-fp8-mi300x-vllm: sglang has no
-# gfx942 build of the dsv4 nvfp4 MoE / TileLang-MLA kernels, so vLLM runs the
-# checkpoint in FP8 via --quantization deepseek_v4_fp8 (dequant FP4 MoE -> FP8),
-# the H200 dsv4 vLLM path. Config mirrors the same-model dsv4-fp4-mi355x-vllm
-# (TP8, conc 4-512); 8x256GB (2TB) has ample headroom for the ~1.05TB FP8
-# footprint. Launch script dsv4_fp8_mi325x.sh carries the deepseek_v4 + gfx942
-# AITER flags.
 dsv4-fp8-mi325x-vllm:
   image: vllm/vllm-openai-rocm:nightly-09663abde0f50944a8d5ea30120666024b503faa
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -1751,3 +999,140 @@ dsv4-fp4-mi355x-sglang-agentic-mtp:
       - { tp: 4, ep: 1, dp-attn: false, kv-offloading: none, conc-list: [1, 2, 4, 8, 10], spec-decoding: mtp }
       - { tp: 8, ep: 1, dp-attn: false, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 32, 48], spec-decoding: mtp }
       - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, conc-list: [16], spec-decoding: mtp }
+
+qwen3-0.6b-fp16-mi355x-sglang-srt-agg:
+  image: lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260809
+  model: Qwen/Qwen3-0.6B
+  model-prefix: qwen3-0.6b
+  runner: cluster:mi355x-amds
+  precision: fp16
+  framework: sglang
+  multinode: true
+  disagg: false
+  router: { name: sglang-router, version: "0.3.2" }
+  scenarios:
+    fixed-seq-len:
+    - isl: 128
+      osl: 32
+      search-space:
+      - conc-list: [1]
+        num-nodes: 1
+        worker:
+          num-worker: 1
+          tp: 1
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/qwen3-0.6b/mi355x/agg-fixed-seq.yaml"
+
+qwen3-0.6b-fp16-mi355x-sglang-srt-disagg:
+  image: lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260809
+  model: Qwen/Qwen3-0.6B
+  model-prefix: qwen3-0.6b
+  runner: cluster:mi355x-amds
+  precision: fp16
+  framework: sglang-disagg
+  multinode: true
+  disagg: true
+  router: { name: sglang-router, version: "0.3.2" }
+  kv-p2p-transfer: mori
+  scenarios:
+    fixed-seq-len:
+    - isl: 128
+      osl: 32
+      search-space:
+      - conc-list: [1]
+        prefill:
+          num-worker: 1
+          tp: 1
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/qwen3-0.6b/mi355x/disagg-1p1d-fixed-seq.yaml"
+        decode:
+          num-worker: 1
+          tp: 1
+          ep: 1
+          dp-attn: false
+
+# Production-scale migration of the existing Qwen3.5 FP8 MI355X P/D lane to
+# srt-slurm. One full TP8 node serves prefill, one TP8 node serves decode, and
+# the request/KV planes remain native SGLang Router + AMD MoRI.
+
+dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp:
+  image: lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260817
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: sglang-disagg
+  kv-p2p-transfer: mori
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - spec-decoding: "mtp"
+        conc-list: [ 1,2,4,8,16,32,48,64 ]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/mi355x/agentic/disagg-1p1d-tp8-mtp-hicache.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_MTP_SIZE=3"
+      - spec-decoding: "mtp"
+        conc-list: [ 64, 96 ]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/mi355x/agentic/disagg-1p1d-dep8-mtp-hicache-c96.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "DECODE_MTP_SIZE=3"
+      - spec-decoding: "mtp"
+        conc-list: [ 128, 192 ]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/mi355x/agentic/disagg-1p1d-dep8-mtp-hicache-c128.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "DECODE_MTP_SIZE=3"
+
+# DeepSeek-V4-Pro FP8 single-node on MI325X (gfx942) via vLLM.
+# EXTRAPOLATED bring-up. Same rationale as dsv4-fp8-mi300x-vllm: sglang has no
+# gfx942 build of the dsv4 nvfp4 MoE / TileLang-MLA kernels, so vLLM runs the
+# checkpoint in FP8 via --quantization deepseek_v4_fp8 (dequant FP4 MoE -> FP8),
+# the H200 dsv4 vLLM path. Config mirrors the same-model dsv4-fp4-mi355x-vllm
+# (TP8, conc 4-512); 8x256GB (2TB) has ample headroom for the ~1.05TB FP8
+# footprint. Launch script dsv4_fp8_mi325x.sh carries the deepseek_v4 + gfx942
+# AITER flags.

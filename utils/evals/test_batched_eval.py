@@ -228,17 +228,22 @@ def test_validate_scores_checks_threshold_for_every_concurrency(
 
 
 def test_amd_multinode_container_forwards_eval_concurrency_list() -> None:
-    job_slurm = (
+    launcher = (
         Path(__file__).resolve().parents[2]
-        / "benchmarks"
-        / "multi_node"
-        / "amd_utils"
-        / "job.slurm"
+        / "runners"
+        / "launch_mi355x-amds-srt.sh"
     )
-    contents = job_slurm.read_text()
+    contents = launcher.read_text()
 
-    assert r'-e \"EVAL_CONC=\$EVAL_CONC\"' in contents
-    assert "-e EVAL_CONC\n" not in contents
+    assert '    "EVAL_CONC",' in contents
+    assert 'benchmark_env[key] = value' in contents
+    assert (
+        'benchmark_env["SRTCTL_LM_EVAL_RESULT_DIR"] = "/results/{job_id}/eval"'
+        in contents
+    )
+    assert 'export EVAL_SERVER_HOST="${SRT_FRONTEND_HOST}"' in contents
+    assert 'export SRTCTL_LM_EVAL_RESULT_DIR="${eval_root}"' in contents
+    assert 'copy_eval_artifacts "$RESULT_DIR/eval"' in contents
 
     workflow = (
         Path(__file__).resolve().parents[2]
@@ -248,3 +253,29 @@ def test_amd_multinode_container_forwards_eval_concurrency_list() -> None:
     ).read_text()
     assert 'expected_concs="${EVAL_CONC}"' in workflow
     assert 'validate_scores.py --expected-concs "${expected_concs}"' in workflow
+
+
+def test_amd_srt_launcher_streams_canonical_slurm_stdout() -> None:
+    launcher = (
+        Path(__file__).resolve().parents[2]
+        / "runners"
+        / "launch_mi355x-amds-srt.sh"
+    ).read_text()
+
+    assert 'source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"' in launcher
+    assert 'LOG_FILE="${OUTPUT_LOG_DIR}/sweep_${JOB_ID}.log"' in launcher
+    assert 'stream_slurm_job_log "$JOB_ID" "$LOG_FILE"' in launcher
+
+
+def test_amd_srt_launcher_preserves_mori_dispatch_pin() -> None:
+    launcher = (
+        Path(__file__).resolve().parents[2]
+        / "runners"
+        / "launch_mi355x-amds-srt.sh"
+    ).read_text()
+
+    assert 'decode_environment.setdefault(' in launcher
+    assert '"SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK", str(dispatch_tokens)' in launcher
+    assert '"SGLANG_MORI_DISPATCH_INTER_KERNEL_SWITCH_THRESHOLD"' in launcher
+    assert 'if "MORI_MAX_DISPATCH_TOKENS_DECODE" in decode_environment:' in launcher
+    assert "dispatch_tokens * (mtp_size + 1)" in launcher
