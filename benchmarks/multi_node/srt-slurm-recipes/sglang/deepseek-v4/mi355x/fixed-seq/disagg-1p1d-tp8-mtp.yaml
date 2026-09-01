@@ -2,18 +2,16 @@ name: "mi355x-dsv4-disagg-1p1d-tp8-mtp-fixed-seq"
 
 model:
   path: "hf:deepseek-ai/DeepSeek-V4-Pro"
-  container: "sglang-rocm-dsv4-mi355x"
+  container: "lmsysorg/sglang-rocm:v0.5.15-rocm720-mi35x-20260713"
   precision: "fp4"
 
 identity:
   model: {repo: "deepseek-ai/DeepSeek-V4-Pro"}
-  container: {image: "lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260719"}
+  container: {image: "lmsysorg/sglang-rocm:v0.5.15-rocm720-mi35x-20260713"}
   frameworks:
-    sglang: "0.5.15.post1.dev20260719+ga03ca46a28"
     sglang-router: "0.3.2"
-    amd-mori: "0.5.15.post1.dev20260719+ga03ca46a28"
 
-slurm: {time_limit: "04:00:00"}
+slurm: {time_limit: "08:00:00"}
 
 resources:
   gpu_type: "mi355x"
@@ -122,13 +120,7 @@ backend:
       speculative-num-steps: 2
       speculative-num-draft-tokens: 3
       log-level: info
-      log-level-http: error
-      # The DSV4 chat encoder adds three framing tokens to the nominal 8192
-      # prompt. Match the workflow's 9472-token admission budget so the full
-      # 1024-token completion fits (8195 + 1024) instead of being rejected.
-      context-length: 9472
-      enable-metrics: true
-      enable-cache-report: true
+      context-length: 9217
       mem-fraction-static: 0.80
       max-running-requests: 128
       chunked-prefill-size: 131072
@@ -139,6 +131,7 @@ backend:
       <<: *common_server
       mem-fraction-static: 0.85
       max-total-tokens: null
+      chunked-prefill-size: null
       disable-radix-cache: false
       disable-cuda-graph: false
       prefill-round-robin-balance: true
@@ -171,12 +164,10 @@ benchmark:
         --endpoint /v1/completions \
         --model deepseek-ai/DeepSeek-V4-Pro \
         --tokenizer deepseek-ai/DeepSeek-V4-Pro \
-        --trust-remote-code \
         --dataset-name random \
         --random-input-len 8192 \
         --random-output-len 1024 \
         --random-range-ratio 1.0 \
-        --random-num-workers 1 \
         --use-chat-template \
         --dsv4 \
         --num-warmups "$((concurrency * 2))" \
@@ -184,12 +175,14 @@ benchmark:
         --max-concurrency "${concurrency}" \
         --request-rate inf \
         --ignore-eos \
-        --disable-tqdm \
+        --percentile-metrics ttft,tpot,itl,e2el \
         --save-result \
         --result-dir "${result_root}" \
         --result-filename "dsv4-fp4-disagg-mtp2-tp8-isl8192-osl1024-c${concurrency}.json"
     done
   env:
+    TRANSFORMERS_VERBOSITY: error
+    TOKENIZERS_PARALLELISM: "false"
     HF_HOME: /hf_hub_cache
     HF_HUB_CACHE: /hf_hub_cache/hub
     HUGGINGFACE_HUB_CACHE: /hf_hub_cache/hub

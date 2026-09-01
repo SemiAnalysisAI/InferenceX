@@ -1065,7 +1065,7 @@ qwen3-0.6b-fp16-mi355x-sglang-srt-disagg:
 # the request/KV planes remain native SGLang Router + AMD MoRI.
 
 dsv4-fp4-mi355x-sglang-disagg:
-  image: lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260719
+  image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260701
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:mi355x-amds
@@ -1133,7 +1133,7 @@ dsv4-fp4-mi355x-sglang-disagg:
 # in one allocation, while each DEP8 point gets its own point-sized allocation.
 
 dsv4-fp4-mi355x-sglang-disagg-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260719
+  image: lmsysorg/sglang-rocm:v0.5.15-rocm720-mi35x-20260713
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:mi355x-amds
