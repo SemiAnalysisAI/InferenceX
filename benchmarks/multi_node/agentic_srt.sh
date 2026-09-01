@@ -39,8 +39,12 @@ for concurrency in "${CONCURRENCIES[@]}"; do
     fi
 done
 
+
 resolve_trace_source
 install_agentic_deps
+if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
+    _wait_for_openai_chat_route --port "$PORT"
+fi
 
 # Preserve the legacy DP-attention replay contract. The SGLang router uses this
 # header to keep every request in one AgentX correlation tree on a stable DP

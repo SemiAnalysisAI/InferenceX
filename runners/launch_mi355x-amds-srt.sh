@@ -196,8 +196,10 @@ forwarded = (
     "DECODE_TP",
     "DURATION",
     "EVAL_CONC",
+    "EVAL_FRAMEWORK",
     "EVAL_LIMIT",
     "EVAL_ONLY",
+    "EVAL_SUITE",
     "FRAMEWORK",
     "IS_AGENTIC",
     "ISL",
@@ -217,6 +219,7 @@ forwarded = (
     "RUNNER_TYPE",
     "OSL",
     "SPEC_DECODING",
+    "SWEBENCH_GEN_MODE",
     "TOTAL_CPU_DRAM_GB",
 )
 for key in forwarded:
@@ -333,7 +336,7 @@ else
 fi
 export CONC="${EVAL_CONCURRENT_REQUESTS}"
 bridge_disagg_eval_metadata
-run_eval --framework lm-eval --port "${SRT_FRONTEND_PORT}"
+run_eval --port "${SRT_FRONTEND_PORT}"
 append_lm_eval_summary
 '''.strip()
     if eval_only:
