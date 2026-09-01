@@ -6810,3 +6810,12 @@
     - "Pin the AgentX client fix that tags automatic warmup baseline scrapes as warmup, preventing warmup counter growth from entering profiling-only token-source totals."
     - "Preserve the proven DEP4/DEP16 topology, concurrency 256, patched vLLM image, full eval, and canonical warmup and one-hour profiling."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2797
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Backport vLLM PR #46906 so Mooncake's external store retains sliding-window prefix checkpoints independently of HBM retention."
+    - "Use the Python-only token-source validation image b7fc8985 while preserving the proven DEP4/DEP16 topology, concurrency 256, full eval, and canonical warmup and one-hour profiling."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2797

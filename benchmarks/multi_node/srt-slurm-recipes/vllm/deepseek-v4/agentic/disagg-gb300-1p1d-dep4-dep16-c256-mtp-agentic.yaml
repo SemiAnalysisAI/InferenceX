@@ -9,14 +9,14 @@ name: "svf-vllm-disagg-gb300-1p1d-dep4-dep16-c256-mtp-agentic"
 
 model:
   path: "deepseek-v4-pro"
-  container: "ttl.sh/cquil11-vllm-tier-7c5dc571-pr53087-d9b6d498-arm64-20260901:24h"
+  container: "ttl.sh/cquil11-vllm-tier-pd-retention-b7fc8985-arm64-20260901:24h"
   precision: "fp4"
 
 identity:
   model:
     repo: "deepseek-ai/DeepSeek-V4-Pro"
   container:
-    image: "ttl.sh/cquil11-vllm-tier-7c5dc571-pr53087-d9b6d498-arm64-20260901:24h"
+    image: "ttl.sh/cquil11-vllm-tier-pd-retention-b7fc8985-arm64-20260901:24h"
   frameworks:
     dynamo: "1.4.0"
 
