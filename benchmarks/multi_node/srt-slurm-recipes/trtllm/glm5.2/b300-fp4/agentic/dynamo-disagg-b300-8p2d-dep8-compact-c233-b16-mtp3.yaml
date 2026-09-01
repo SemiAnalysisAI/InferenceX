@@ -237,6 +237,6 @@ resources:
   prefill_nodes: 4
   prefill_workers: 8
 sbatch_directives:
-  exclude: b300-001,b300-005,b300-006,b300-009,b300-010,b300-014,b300-015,b300-016,b300-017
+  exclude: b300-001,b300-002,b300-004,b300-005,b300-009,b300-010,b300-012,b300-013,b300-014,b300-015,b300-018
 srun_options:
   cpu-bind: verbose,mask_cpu:0x0000000000000000ffffffffffffffff0000000000000000ffffffffffffffff,0x0000000000000000ffffffffffffffff0000000000000000ffffffffffffffff,0x0000000000000000ffffffffffffffff0000000000000000ffffffffffffffff,0x0000000000000000ffffffffffffffff0000000000000000ffffffffffffffff,0xffffffffffffffff0000000000000000ffffffffffffffff0000000000000000,0xffffffffffffffff0000000000000000ffffffffffffffff0000000000000000,0xffffffffffffffff0000000000000000ffffffffffffffff0000000000000000,0xffffffffffffffff0000000000000000ffffffffffffffff0000000000000000
