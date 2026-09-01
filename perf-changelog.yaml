@@ -6801,3 +6801,12 @@
     - "Collect every prefill and decode worker's Prometheus endpoint in the custom AgentX command using srt-slurm's existing endpoint discovery."
     - "Require the cached-token-by-source metric in exported artifacts; router-only metrics must not pass validation. Preserve the image, topology, concurrency, and eval coverage."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2797
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Pin the AgentX client fix that tags automatic warmup baseline scrapes as warmup, preventing warmup counter growth from entering profiling-only token-source totals."
+    - "Preserve the proven DEP4/DEP16 topology, concurrency 256, patched vLLM image, full eval, and canonical warmup and one-hour profiling."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2797
