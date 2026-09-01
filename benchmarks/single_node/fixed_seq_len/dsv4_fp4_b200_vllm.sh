@@ -40,14 +40,15 @@ EP_ARGS=()
 MOE_ARGS=()
 if [ "${EP_SIZE:-1}" -gt 1 ]; then
     EP_ARGS=(--enable-expert-parallel)
-    MOE_ARGS=(--moe-backend deep_gemm_mega_moe)
+    # The pinned checkpoint uses ModelOpt NVFP4 expert weights. Native
+    # DeepGEMM MegaMoE expects MXFP4 weights; use the NVFP4-compatible backend.
+    MOE_ARGS=(--moe-backend flashinfer_moe_ep_mega_cutedsl)
 fi
 
 GMU_ARGS=()
-EPLB_ARGS=()
 PREFILL_SCHEDULE_ARGS=()
 if [ "${DP_ATTENTION}" = "true" ]; then
-    EPLB_ARGS=(--enable-eplb --eplb-config '{"communicator":"torch_nccl", "use_async": false}')
+    # FlashInfer MoE EP does not support EPLB.
     PREFILL_SCHEDULE_ARGS=(--prefill-schedule-interval 4)
 fi
 
@@ -86,7 +87,6 @@ vllm serve "$MODEL" --host 0.0.0.0 --port "$PORT" \
     "${EP_ARGS[@]}" \
     "${GMU_ARGS[@]}" \
     "${MOE_ARGS[@]}" \
-    "${EPLB_ARGS[@]}" \
     "${PREFILL_SCHEDULE_ARGS[@]}" \
     --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}' \
     --attention_config.use_fp4_indexer_cache=True \

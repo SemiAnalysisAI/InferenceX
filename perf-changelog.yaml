@@ -6679,3 +6679,9 @@
   description:
     - "B200 DSv4 FP4 vLLM: use the nightly image, route to Nscale B200, pin the NVFP4 model path, enable megamoe for EP, set GPU memory utilization to 0.95, and cap max model length at 12288"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2534
+
+- config-keys:
+    - dsv4-fp4-b200-vllm
+  description:
+    - "Use the NVFP4-compatible FlashInfer MegaMoE backend for expert-parallel scenarios and keep EPLB disabled for that backend"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2534
