@@ -67,14 +67,14 @@ def _power_recipes():
 POWER_RECIPES = _power_recipes()
 
 
-def test_exactly_37_supported_recipes_are_selected_from_the_master_config():
-    assert len(POWER_RECIPES) == 37
+def test_exactly_47_supported_recipes_are_selected_from_the_master_config():
+    assert len(POWER_RECIPES) == 47
     assert Counter(item["runner"] for item in POWER_RECIPES.values()) == {
-        "cluster:b200-nscale": 21,
+        "cluster:b200-nscale": 31,
         "b300": 16,
     }
     assert Counter(item["framework"] for item in POWER_RECIPES.values()) == {
-        "dynamo-sglang": 18,
+        "dynamo-sglang": 28,
         "dynamo-vllm": 19,
     }
     assert all(
