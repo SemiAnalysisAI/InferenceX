@@ -325,7 +325,10 @@ def test_run_sweep_checks_changelog_before_reuse_and_setup() -> None:
     classifier = next(
         step for step in jobs["setup"]["steps"] if step.get("id") == "classify"
     )
-    assert classifier["if"] == "vars.PRIORITY_SCHEDULER_ENABLED == 'true'"
+    assert classifier["if"] == (
+        "vars.PRIORITY_SCHEDULER_ENABLED == 'true' && "
+        "github.event_name == 'pull_request'"
+    )
     assert (
         "needs.check-changelog.result == 'success'"
         in jobs["reuse-sweep-gate"]["if"]
