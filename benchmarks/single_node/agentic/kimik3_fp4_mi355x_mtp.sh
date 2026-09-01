@@ -361,10 +361,17 @@ fi
 CP_ARGS=()
 ATTN_BE_ARGS=()
 if [ "$DCP_SIZE" -gt 1 ]; then
+    CP_KV_CACHE_INTERLEAVE_SIZE=1
+    if [ "${KV_OFFLOAD_BACKEND:-}" = "lmcache" ]; then
+        # vLLM otherwise adjusts this to the resolved 1536-token attention
+        # block only in worker-local config copies. Pass it explicitly so the
+        # LMCache scheduler and workers use the same DCP cache namespace.
+        CP_KV_CACHE_INTERLEAVE_SIZE=1536
+    fi
     CP_ARGS+=(
         --decode-context-parallel-size "$DCP_SIZE"
         --dcp-comm-backend a2a
-        --cp-kv-cache-interleave-size 1
+        --cp-kv-cache-interleave-size "$CP_KV_CACHE_INTERLEAVE_SIZE"
     )
     ATTN_BE_ARGS+=(--attention-backend ROCM_AITER_MLA)
 fi
