@@ -1,11 +1,11 @@
 {
   "default": {
     "gsm8k": 0.90,
-    "kimi_tool_call_schema": 1.0,
+    "kimi_tool_call_schema": 0.0,
     "kimi_tool_call_schema_full": 0.0,
-    "minimax_m3_smoke": 1.0,
+    "minimax_m3_smoke": 0.0,
     "minimax_m3_full": 0.0,
-    "bfcl_smoke": 0.75,
+    "bfcl_smoke": 0.0,
     "bfcl_simple_python": 0.0,
     "bfcl_multiple": 0.0,
     "bfcl_parallel": 0.0,

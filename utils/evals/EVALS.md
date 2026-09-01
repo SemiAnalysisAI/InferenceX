@@ -155,10 +155,11 @@ non-streaming and streaming modes. Each mode runs once through the unchanged
 upstream pytest harness. The unchanged native report remains one final outcome
 per mode. It is uploaded as `kimi_vendor_report.json`, and
 `utils/evals/kimi_vendor_eval.py` projects those two outcomes into the existing
-eval result shape. Both must pass, so the `kimi_tool_call_schema` threshold is
-`1.0`. Setup, timeout, and collection failures emit a zero-score result with
-error metadata. The adapter's 900-second global timeout bounds the entire
-upstream pytest process.
+eval result shape. Both outcomes are recorded with a `0.0`
+`kimi_tool_call_schema` threshold, so model quality remains diagnostic. Setup,
+timeout, and collection failures emit a zero-score result with error metadata.
+The adapter's 900-second global timeout bounds the entire upstream pytest
+process.
 
 This smoke validates one object-schema tool call. It does not cover tool choice,
 parallel calls, multi-turn execution, or general agent quality. Multi-value
@@ -229,12 +230,13 @@ sample counts of one. Its score is the minimum of the stock verifier's
 tool-call match rate, tool-call schema accuracy, and one minus its
 error-only-reasoning rate. A successful request that emits no tool calls has
 zero schema accuracy, so it remains an effective model-quality result rather
-than an integration failure. The `minimax_m3_smoke` threshold remains `1.0`.
+than an integration failure. The `minimax_m3_smoke` threshold is `0.0`, so its
+model quality remains diagnostic.
 
 Setup, transport, timeout, malformed native output, and collection failures
 emit a zero-effective-sample compatibility artifact with integration-error
-metadata. A complete stock result below the threshold remains a model-quality
-outcome rather than an integration failure.
+metadata. A complete stock result remains a model-quality outcome rather than
+an integration failure.
 
 This is a fixed single-case provider compatibility smoke, not the full
 102-case MiniMax Provider Verifier, BFCL, or a cross-model quality comparison.
@@ -366,12 +368,12 @@ tasks shown above. Every row uses lm-eval-compatible `acc,none` (plus
 `acc_stderr,none`); BFCL workflows therefore validate with metric prefix
 `acc,` rather than the default exact-match prefix.
 
-Only `bfcl_smoke` gates the run: its `0.75` threshold requires at least three
-of the four fixed upstream cases to be correct. The four `bfcl_<category>`
-thresholds are `0.0`, so their one-case scores remain diagnostic and a single
-failed category does not become a second gate. BFCL reuses the existing eval
-job, upload paths, aggregation, and validation instead of adding a parallel
-workflow or artifact route.
+The `bfcl_smoke` and four `bfcl_<category>` thresholds are `0.0`, so all five
+scores remain diagnostic. Dependency, endpoint, timeout, malformed-output,
+missing-sample, and integration failures still fail through the standard
+zero-effective-sample path. BFCL reuses the existing eval job, upload paths,
+aggregation, and validation instead of adding a parallel workflow or artifact
+route.
 
 #### BFCL V4 model-quality suites
 

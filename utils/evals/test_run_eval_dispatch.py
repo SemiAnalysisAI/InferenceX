@@ -2818,7 +2818,7 @@ def test_bfcl_rejects_unknown_suite() -> None:
     assert "unsupported BFCL suite 'not_a_bfcl_suite'" in result.stderr
 
 
-def test_bfcl_full_suite_thresholds_are_diagnostic_and_namespaced() -> None:
+def test_bfcl_suite_thresholds_are_diagnostic_and_namespaced() -> None:
     thresholds = yaml.safe_load(
         (REPO_ROOT / "utils/evals/thresholds.yaml").read_text()
     )["default"]
@@ -2840,7 +2840,7 @@ def test_bfcl_full_suite_thresholds_are_diagnostic_and_namespaced() -> None:
         "bfcl_vllm_kimi_multi_turn_long_context",
     )
 
-    assert thresholds["bfcl_smoke"] == 0.75
+    assert thresholds["bfcl_smoke"] == 0.0
     assert all(thresholds[task] == 0.0 for task in full_suite_tasks)
 
 

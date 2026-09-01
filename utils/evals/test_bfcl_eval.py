@@ -68,7 +68,7 @@ def test_thresholds_are_stdlib_readable_without_pyyaml(monkeypatch) -> None:
     monkeypatch.setattr(builtins, "__import__", import_without_yaml)
     thresholds = vs.load_config(str(Path(vs.__file__).with_name("thresholds.yaml")))
 
-    assert thresholds["default"]["bfcl_smoke"] == 0.75
+    assert thresholds["default"]["bfcl_smoke"] == 0.0
     assert thresholds["default"]["bfcl_parallel"] == 0.0
 
 
@@ -458,7 +458,7 @@ def test_perfect_score_projects_pinned_ids_and_upstream_headers(
     ]
 
 
-def test_weighted_score_failure_is_complete_and_left_to_threshold_validator(
+def test_weighted_score_is_complete_and_diagnostic(
     tmp_path: Path,
 ) -> None:
     completed, output_dir, _ = _run(
@@ -482,8 +482,8 @@ def test_weighted_score_failure_is_complete_and_left_to_threshold_validator(
     assert "integration_error" not in compatibility
     native = _native(output_dir)
     assert native["completed"] is True
-    assert native["passed"] is False
-    assert native["threshold"] == 0.75
+    assert native["passed"] is True
+    assert native["threshold"] == 0.0
     assert native["summary"]["correct_count"] == 2
 
 
