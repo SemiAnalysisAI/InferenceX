@@ -169,7 +169,7 @@ benchmark:
         --dataset-name random \
         --random-input-len 8192 \
         --random-output-len 1024 \
-        --random-range-ratio 1.0 \
+        --random-range-ratio "${RANDOM_RANGE_RATIO:-0.8}" \
         --num-warmups "$((concurrency * 2))" \
         --num-prompts "${num_prompts}" \
         --max-concurrency "${concurrency}" \

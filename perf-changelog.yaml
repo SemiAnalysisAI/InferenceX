@@ -6800,3 +6800,13 @@
     - "Preserve the shared benchmark's default random-data generation, MTP chat encoding, two warmups per concurrency, prompt counts, and TTFT/TPOT/ITL/E2EL percentile reporting; benchmark_serving.py is unchanged."
     - "Pass the legacy rdma0-rdma7 selection explicitly through disaggregation-ib-device for both roles, rather than relying on the old wrapper's IBDEVICES environment indirection."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2630
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-disagg
+    - dsv4-fp4-mi355x-sglang-disagg-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Correct the port's hardcoded random-range-ratio 1.0 to consume the workflow's RANDOM_RANGE_RATIO, with the legacy 0.8 default. The nominal 8192/1024 workload samples lengths just as the original AMD launcher and successful sweep did."
+    - "Keep the original 9217-token context, serving images, MTP settings, and unchanged benchmark_serving.py. No context-limit increase or workload tuning."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2630
