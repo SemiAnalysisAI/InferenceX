@@ -140,12 +140,10 @@ else
     echo "Error: unsupported TP '$TP' (expected: 4 or 8)" >&2
     exit 1
 fi
-# MTP adds a draft KV pool and extra graph captures on top of the spec-none
-# footprint, which ran at 0.90. 0.89 recovers most of that: the DSv4 compressor
-# state pools are sized from the full-attention pool and allocated after it,
-# outside this budget, so the remainder has to stay large enough to cover them.
-MEM_FRACTION_STATIC=0.89
+MEM_FRACTION_STATIC="${MEM_FRACTION_STATIC:-0.90}"
 PARALLEL_ARGS=(--tensor-parallel-size "$TP")
+SHARED_EXPERTS_ARGS=(--enforce-shared-experts-fusion)
+SWA_FULL_TOKENS_RATIO="${SWA_FULL_TOKENS_RATIO:-0.10}"
 if [ "$DP_ATTENTION" = "true" ]; then
     USE_SGLANG_ROUTER=true
     export AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID=true
@@ -158,13 +156,20 @@ if [ "$DP_ATTENTION" = "true" ]; then
     export SGLANG_DP_USE_GATHERV=1
     export SGLANG_DP_USE_REDUCE_SCATTER=1
     export GPU_MAX_HW_QUEUES=2
+    SHARED_EXPERTS_ARGS=(--disable-shared-experts-fusion)
+    SWA_FULL_TOKENS_RATIO="${SWA_FULL_TOKENS_RATIO_DP:-0.15}"
 
     # Chunked prefill is a whole-engine budget, so widen it by the DP degree.
-    CHUNKED_PREFILL_SIZE=$((8192 * TP))
+    CHUNKED_PREFILL_SIZE=$((CHUNKED_PREFILL_SIZE * TP))
     PARALLEL_ARGS+=(
         --dp "$TP"
         --enable-dp-attention
         --enable-prefill-delayer
+        --enable-two-batch-overlap
+        --enable-dp-attention-local-control-broadcast
+        --tokenizer-worker-num "$TP"
+        --stream-interval 20
+        --prefill-decode-interval 10
     )
 fi
 
@@ -224,9 +229,9 @@ SGLANG_CMD=(
     "${PARALLEL_ARGS[@]}"
     --attention-backend dsv4
     --page-size 256
-    --swa-full-tokens-ratio 0.10
+    --swa-full-tokens-ratio "$SWA_FULL_TOKENS_RATIO"
     --kv-cache-dtype fp8_e4m3
-    --enforce-shared-experts-fusion
+    "${SHARED_EXPERTS_ARGS[@]}"
     --tool-call-parser deepseekv4
     --reasoning-parser deepseek-v4
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"

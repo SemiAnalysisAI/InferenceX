@@ -6773,3 +6773,16 @@
   description:
     - "Enable the required DCGM power telemetry contract across all ten B200 disaggregated STP recipes."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2560
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update image from lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260829 to lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260831."
+    - "Add a DP-attention arm: tp 8, ep 1, dp-attn true, hicache host KV tier, concurrency [64, 96, 128]. It runs behind sglang-router with consistent hashing on the AIPerf correlation id so multi-turn sessions stay on the DP rank holding their prefix."
+    - "DP-attention serving flags: --enable-two-batch-overlap, --enable-dp-attention-local-control-broadcast, --tokenizer-worker-num equal to TP, --stream-interval 20 and --prefill-decode-interval 10, alongside the existing --enable-prefill-delayer. Chunked prefill now scales the per-TP base by the DP degree instead of a fixed 8192."
+    - "Shared-experts fusion is now per-arm: kept enforced on the tensor-parallel arms and disabled under DP attention, matching the DP baselines."
+    - "Raise mem-fraction-static from 0.89 to 0.90. swa-full-tokens-ratio becomes per-arm: 0.10 on the tensor-parallel arms as before, 0.15 under DP attention."
+    - "Drop concurrency 2 and 10 from the TP4 arm, leaving [1, 4, 8], and drop concurrency 16 from the TP8 hicache arm, leaving [32, 48]. Concurrency 16 remains on the TP8 no-offload arm."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
