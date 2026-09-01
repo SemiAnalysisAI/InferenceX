@@ -250,7 +250,18 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     LMCACHE_LOG="$RESULT_DIR/lmcache_server.log"
 
     LMCACHE_L1_SIZE_GB="$TOTAL_CPU_DRAM_GB"
-    LMCACHE_CHUNK_SIZE=$((1536 * ${DCP_SIZE:-8}))
+    LMCACHE_ATTN_CHUNK_ALIGN=$((1536 * ${DCP_SIZE:-1}))
+    LMCACHE_STATE_CHUNK_ALIGN=3072
+    gcd_a=$LMCACHE_ATTN_CHUNK_ALIGN
+    gcd_b=$LMCACHE_STATE_CHUNK_ALIGN
+    while [ "$gcd_b" -ne 0 ]; do
+        gcd_tmp=$((gcd_a % gcd_b))
+        gcd_a=$gcd_b
+        gcd_b=$gcd_tmp
+    done
+    LMCACHE_CHUNK_SIZE=$((
+        LMCACHE_ATTN_CHUNK_ALIGN / gcd_a * LMCACHE_STATE_CHUNK_ALIGN
+    ))
 
     LMCACHE_CMD=(
         lmcache server
@@ -317,7 +328,7 @@ case "${SPEC_DECODING:-mtp}:$CONC" in
         GPU_MEM_UTIL=0.9
         MAX_NUM_BATCHED_TOKENS=8192
         ;;
-    none:40)
+    none:40|none:52)
         SPEC_NUM_TOKENS=0
         GPU_MEM_UTIL=0.8
         MAX_NUM_BATCHED_TOKENS=16384
@@ -345,11 +356,12 @@ else
 fi
 
 # ---- HIP graph ------------------------------------------------------------
-MAX_NUM_SEQS=$((2 * CONC))
-if [ "${SPEC_DECODING:-mtp}:$CONC" = "none:40" ]; then
+if [[ "${SPEC_DECODING:-mtp}:$CONC" =~ ^none:(40|52)$ ]]; then
+    MAX_NUM_SEQS=80
     MAX_CUDAGRAPH_CAPTURE_SIZE=4096
     CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 1 "$MAX_NUM_SEQS"),128,256,512,1024,2048,4096"
 else
+    MAX_NUM_SEQS=$((2 * CONC))
     MAX_CUDAGRAPH_CAPTURE_SIZE=$((MAX_NUM_SEQS * (1 + SPEC_NUM_TOKENS)))
     CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 2 "$MAX_CUDAGRAPH_CAPTURE_SIZE")"
 fi
