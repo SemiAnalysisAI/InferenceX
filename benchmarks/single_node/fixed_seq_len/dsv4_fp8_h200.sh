@@ -50,6 +50,21 @@ if [ "${EP_SIZE:-1}" -gt 1 ]; then
     EP_ARGS=(--enable-expert-parallel)
 fi
 
+CAPTURE_SIZES_JSON=""
+if [[ $CONC == 64 && $DP_ATTENTION == "true" ]]; then
+    CAPTURE_SIZES=(1 2 4)
+    for ((capture_size = 8; capture_size <= 16; capture_size += 2)); do
+        CAPTURE_SIZES+=("$capture_size")
+    done
+    for ((capture_size = 24; capture_size <= 248; capture_size += 8)); do
+        CAPTURE_SIZES+=("$capture_size")
+    done
+    for ((capture_size = 256; capture_size <= 512; capture_size += 16)); do
+        CAPTURE_SIZES+=("$capture_size")
+    done
+    CAPTURE_SIZES_JSON=",\"cudagraph_capture_sizes\":[$(IFS=,; echo "${CAPTURE_SIZES[*]}")]"
+fi
+
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
@@ -67,7 +82,7 @@ $MAX_MODEL_LEN_ARG \
 --max-num-seqs 512 \
 --max-num-batched-tokens 512 \
 --no-enable-flashinfer-autotune \
---compilation-config '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY"}' \
+--compilation-config "{\"mode\":0,\"cudagraph_mode\":\"FULL_DECODE_ONLY\"${CAPTURE_SIZES_JSON}}" \
 --tokenizer-mode deepseek_v4 \
 --tool-call-parser deepseek_v4 \
 --enable-auto-tool-choice \
