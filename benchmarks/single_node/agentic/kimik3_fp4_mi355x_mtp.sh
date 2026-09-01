@@ -310,7 +310,7 @@ case "${SPEC_DECODING:-mtp}:$CONC" in
         ;;
     none:40)
         SPEC_NUM_TOKENS=0
-        GPU_MEM_UTIL=0.9
+        GPU_MEM_UTIL=0.8
         MAX_NUM_BATCHED_TOKENS=16384
         ;;
     *)
