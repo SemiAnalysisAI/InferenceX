@@ -45,6 +45,16 @@ on:
                 required: false
                 type: string
                 default: ""
+            eval-framework:
+                description: "Eval runner override (auto uses model-aware selection; lm-eval, swebench, kimi-vendor, minimax-vendor, or bfcl)"
+                required: false
+                type: string
+                default: "auto"
+            eval-suite:
+                description: "Eval suite (kimi_tool_call_schema, kimi_tool_call_schema_full, minimax_m3_smoke, minimax_m3_full, bfcl_smoke, bfcl_vllm_minimax_m3, or bfcl_vllm_kimi); empty for lm-eval and swebench"
+                required: false
+                type: string
+                default: ""
             swebench-gen-mode:
                 description: "SWE-bench generation mode (single-shot | agentic). Empty = agentic (single-shot is an explicit debugging escape hatch)."
                 required: false
@@ -122,6 +132,16 @@ on:
                 default: false
             eval-limit:
                 description: "Eval instance count: empty/full = whole split (default); N = first-N smoke slice"
+                required: false
+                type: string
+                default: ""
+            eval-framework:
+                description: "Eval runner override (auto uses model-aware selection; lm-eval, swebench, kimi-vendor, minimax-vendor, or bfcl)"
+                required: false
+                type: string
+                default: "auto"
+            eval-suite:
+                description: "Eval suite (kimi_tool_call_schema, kimi_tool_call_schema_full, minimax_m3_smoke, minimax_m3_full, bfcl_smoke, bfcl_vllm_minimax_m3, or bfcl_vllm_kimi); empty for lm-eval and swebench"
                 required: false
                 type: string
                 default: ""
@@ -236,16 +256,26 @@ jobs:
                       CMD+=(--evals-only)
                     fi
                     RAW_CONFIG_JSON=$("${CMD[@]}")
-                    CONFIG_JSON=$(python3 -c 'import json,sys; data=json.load(sys.stdin); rows=[row for family in ("single_node","multi_node") for group in data.get(family,{}).values() for row in group]; rows.extend(row for family in ("evals","agentic_evals","multinode_evals") for row in data.get(family,[])); print(json.dumps(rows))' <<<"$RAW_CONFIG_JSON")
+                    CONFIG_JSON=$(python3 -c 'import json,sys; data=json.load(sys.stdin); rows=[row for family in ("single_node","multi_node") for group in data.get(family,{}).values() for row in group]; rows.extend(row for family in ("evals","agentic_evals","multinode_evals","multinode_agentic_evals") for row in data.get(family,[])); print(json.dumps(rows))' <<<"$RAW_CONFIG_JSON")
                   else
                     GENERATE_COMMAND="${{ inputs.generate-cli-command || github.event.inputs.generate-cli-command }}"
                     if [ -z "$GENERATE_COMMAND" ]; then
                       echo "generate-cli-command is required outside trusted changelog dispatch mode" >&2
                       exit 1
                     fi
+                    read -r -a GENERATE_ARGS <<< "$GENERATE_COMMAND"
+                    if [ "$TRIM_CONC" = "true" ]; then
+                      GENERATE_ARGS+=(--trim-conc)
+                    fi
+                    if [ "$ALL_EVALS" = "true" ]; then
+                      GENERATE_ARGS+=(--all-evals)
+                    fi
+                    if [ "$EVALS_ONLY" = "true" ]; then
+                      GENERATE_ARGS+=(--evals-only)
+                    fi
                     CONFIG_JSON=$(uv run --no-project --with pydantic --with pyyaml --python 3.12 \
                       "${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py" \
-                      $GENERATE_COMMAND)
+                      "${GENERATE_ARGS[@]}")
                   fi
                   score_matrix() {
                     local family="$1"
@@ -255,9 +285,9 @@ jobs:
                       --queue-namespace "${{ github.run_id }}:${{ github.run_attempt }}:${family}" \
                       --labels-json "$PR_LABELS"
                   }
-                  AGENTIC=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if x.get('scenario-type') == 'agentic-coding' and 'prefill' not in x and not x.get('run-eval', False)]))" | score_matrix agentic)
+                  AGENTIC=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if x.get('scenario-type') == 'agentic-coding' and 'prefill' not in x and not x.get('eval-only', False)]))" | score_matrix agentic)
                   AGENTIC_EVAL=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if x.get('scenario-type') == 'agentic-coding' and 'prefill' not in x and x.get('run-eval', False)]))" | score_matrix agentic-eval)
-                  MULTI_AGENTIC=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if x.get('scenario-type') == 'agentic-coding' and 'prefill' in x and not x.get('run-eval', False)]))" | score_matrix multi-agentic)
+                  MULTI_AGENTIC=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if x.get('scenario-type') == 'agentic-coding' and 'prefill' in x and not x.get('eval-only', False)]))" | score_matrix multi-agentic)
                   MULTI_AGENTIC_EVAL=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if x.get('scenario-type') == 'agentic-coding' and 'prefill' in x and x.get('run-eval', False)]))" | score_matrix multi-agentic-eval)
                   SINGLE=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' not in x and x.get('scenario-type') != 'agentic-coding' and not x.get('eval-only', False)]))" | score_matrix single)
                   MULTI=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' in x and x.get('scenario-type') != 'agentic-coding' and not x.get('eval-only', False)]))" | score_matrix multi)
@@ -381,7 +411,11 @@ jobs:
             decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
             run-eval: true
             eval-only: true
-            eval-conc: ${{ matrix.config['eval-all-concs'] && join(matrix.config.conc, ' ') || matrix.config['eval-conc'] }}
+            eval-conc: ${{ (inputs.eval-framework == 'auto' && (matrix.config['eval-framework'] || 'lm-eval') || inputs.eval-framework) == 'lm-eval' && matrix.config['eval-all-concs'] && join(matrix.config.conc, ' ') || matrix.config['eval-conc'] }}
+            eval-limit: ${{ inputs.eval-limit }}
+            eval-framework: ${{ inputs.eval-framework == 'auto' && (matrix.config['eval-framework'] || 'lm-eval') || inputs.eval-framework }}
+            eval-suite: ${{ inputs.eval-suite != '' && inputs.eval-suite || (inputs.eval-framework == 'auto' && matrix.config['eval-suite'] || '') }}
+            swebench-gen-mode: ${{ inputs.swebench-gen-mode }}
             ref: ${{ inputs.ref }}
 
     test-sweep-agentic:
@@ -451,12 +485,18 @@ jobs:
             model-prefix: ${{ matrix.config.model-prefix }}
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
+            router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
+            kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
             tp: ${{ matrix.config.tp }}
+            pp: ${{ matrix.config.pp }}
+            dcp-size: ${{ matrix.config.dcp-size }}
+            pcp-size: ${{ matrix.config.pcp-size }}
             ep: ${{ matrix.config.ep }}
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.conc }}
             kv-offloading: ${{ matrix.config.kv-offloading }}
             kv-offload-backend: ${{ matrix.config['kv-offload-backend'].name }}
+            kv-offload-backend-metadata: ${{ matrix.config['kv-offload-backend'] && toJson(matrix.config['kv-offload-backend']) || '' }}
             total-cpu-dram-gb: ${{ matrix.config.total-cpu-dram-gb }}
             duration: ${{ inputs.agentx-fast && '1200' || (inputs.duration-override != '' && inputs.duration-override || matrix.config.duration) }}
             agentx-fast: ${{ inputs.agentx-fast }}
@@ -469,6 +509,8 @@ jobs:
             eval-only: true
             eval-limit: ${{ inputs.eval-limit }}
             swebench-gen-mode: ${{ inputs.swebench-gen-mode }}
+            eval-framework: ${{ inputs.eval-framework == 'auto' && (matrix.config['eval-framework'] || 'lm-eval') || inputs.eval-framework }}
+            eval-suite: ${{ inputs.eval-suite != '' && inputs.eval-suite || (inputs.eval-framework == 'auto' && matrix.config['eval-suite'] || '') }}
             scenario-type: agentic-coding
             ref: ${{ inputs.ref }}
 
@@ -559,7 +601,7 @@ jobs:
             precision: ${{ matrix.config.precision }}
             router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
             kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
-            conc-list: ${{ toJson(matrix.config.conc) }}
+            conc-list: ${{ format('[{0}]', matrix.config['eval-conc']) }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
             prefill-hardware: ${{ matrix.config.prefill.hardware }}
@@ -590,6 +632,8 @@ jobs:
             eval-conc: ${{ matrix.config['eval-conc'] }}
             eval-limit: ${{ inputs.eval-limit }}
             swebench-gen-mode: ${{ inputs.swebench-gen-mode }}
+            eval-framework: ${{ inputs.eval-framework == 'auto' && (matrix.config['eval-framework'] || 'lm-eval') || inputs.eval-framework }}
+            eval-suite: ${{ inputs.eval-suite != '' && inputs.eval-suite || (inputs.eval-framework == 'auto' && matrix.config['eval-suite'] || '') }}
             scenario-type: agentic-coding
             ref: ${{ inputs.ref }}
 
@@ -670,6 +714,9 @@ jobs:
             run-eval: true
             eval-only: true
             eval-limit: ${{ inputs.eval-limit }}
+            eval-framework: ${{ inputs.eval-framework == 'auto' && (matrix.config['eval-framework'] || 'lm-eval') || inputs.eval-framework }}
+            eval-suite: ${{ inputs.eval-suite != '' && inputs.eval-suite || (inputs.eval-framework == 'auto' && matrix.config['eval-suite'] || '') }}
+            swebench-gen-mode: ${{ inputs.swebench-gen-mode }}
             ref: ${{ inputs.ref }}
 
     collect-results:

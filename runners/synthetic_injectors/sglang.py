@@ -7,6 +7,9 @@ from . import register
 
 _SPEC_STEPS_RE = re.compile(r"(?m)^\s+speculative-num-steps:\s*([0-9]+)\s*$")
 _ENV_BLOCK_RE = re.compile(r"(?m)^(  (?:aggregated|prefill|decode)_environment:\s*)$")
+_SIMULATED_ACCEPTANCE_ENV_RE = re.compile(
+    r"(?m)^[ \t]+SGLANG_SIMULATE_ACC_(?:LEN|METHOD|TOKEN_MODE):[^\n]*(?:\n|$)"
+)
 
 
 def spec_tokens_from_recipe(text):
@@ -25,9 +28,20 @@ def rewrite(content, al, log):
         '\n    SGLANG_SIMULATE_ACC_METHOD: "match-expected"'
         '\n    SGLANG_SIMULATE_ACC_TOKEN_MODE: "real-draft-token"'
     )
-    rewritten, count = _ENV_BLOCK_RE.subn(lambda match: match.group(1) + variables, content)
+    rewritten, count = _ENV_BLOCK_RE.subn(
+        lambda match: match.group(1) + variables,
+        content,
+    )
     if count:
         log(f"Added SGLANG_SIMULATE_ACC_* to {count} worker environment block(s)")
+    return rewritten, count
+
+
+def rewrite_real(content, log):
+    """Remove throughput-only simulated-acceptance variables for evals."""
+    rewritten, count = _SIMULATED_ACCEPTANCE_ENV_RE.subn("", content)
+    if count:
+        log(f"Removed {count} SGLANG_SIMULATE_ACC_* environment variable(s)")
     return rewritten, count
 
 

@@ -40,6 +40,11 @@ frontend:
   type: dynamo
   enable_multiple_frontends: false
   args:
+    dyn-chat-processor: "vllm"
+    trust-remote-code: true
+    tool-call-parser: "kimi_k3"
+    reasoning-parser: "kimi_k3"
+    enable-auto-tool-choice: true
     router-mode: "random"
     router-session-affinity-ttl-secs: 900
   env:
@@ -94,6 +99,9 @@ backend:
       max-num-batched-tokens: 8192
       trust-remote-code: true
       language-model-only: true
+      dyn-tool-call-parser: "kimi_k3"
+      reasoning-parser: "kimi_k3"
+      dyn-reasoning-parser: "kimi_k3"
       load-format: "safetensors"
       safetensors-load-strategy: "lazy"
       moe-backend: "auto"

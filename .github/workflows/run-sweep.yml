@@ -864,12 +864,12 @@ jobs:
             eval-only: true
             eval-conc: ${{ matrix.config['eval-all-concs'] && join(matrix.config.conc, ' ') || matrix.config['eval-conc'] }}
 
-    # Multi-node agentic (SWE-bench) eval rows carry the agentic input shape,
-    # so they are dispatched with sweep-multi-node-agentic's inputs rather
-    # than sweep-multi-node-evals' fixed-seq-len inputs (isl/osl/max-model-len,
-    # which agentic rows don't have). SWE-bench doesn't support batched
-    # concurrencies (unlike lm-eval), so eval-conc is always a single value,
-    # never the joined-list form sweep-multi-node-evals uses.
+    # Multi-node agentic GSM8K eval rows carry the agentic input shape, so
+    # they are dispatched with sweep-multi-node-agentic's inputs rather than
+    # sweep-multi-node-evals' fixed-seq-len inputs (isl/osl/max-model-len,
+    # which agentic rows don't have). Agentic selection uses one highest
+    # eval-conc per topology; fixed-sequence --all-evals rows may instead pass
+    # a joined concurrency list to lm-eval.
     sweep-multi-node-agentic-evals:
         needs: [setup, canary-select, canary-sweep]
         if: >-
@@ -906,7 +906,7 @@ jobs:
             precision: ${{ matrix.config.precision }}
             router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
             kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
-            conc-list: ${{ toJson(matrix.config.conc) }}
+            conc-list: ${{ format('[{0}]', matrix.config['eval-conc']) }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
             prefill-hardware: ${{ matrix.config.prefill.hardware }}

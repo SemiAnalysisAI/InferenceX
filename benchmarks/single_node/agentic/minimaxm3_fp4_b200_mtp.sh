@@ -21,8 +21,6 @@ set -x
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-export EVAL_FRAMEWORK="lm-eval"
-
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
 
 DRAFT_MODEL="Inferact/MiniMax-M3-EAGLE3-GQA"
@@ -128,6 +126,7 @@ install_agentic_deps
 
 OFFLOAD_ARGS=()
 if require_agentic_kv_offload_backend vllm-simple; then
+    python3 "$(dirname "$0")/../../../runners/patch_vllm_simple_kv_offload.py"
     CPU_OFFLOAD_BYTES=$((TOTAL_CPU_DRAM_GB * 1024 * 1024 * 1024))
     export VLLM_USE_SIMPLE_KV_OFFLOAD=1
     OFFLOAD_CONFIG=$(printf \

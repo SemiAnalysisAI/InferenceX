@@ -12,7 +12,11 @@ from pathlib import Path
 
 import yaml
 from constants import GENERATE_SWEEPS_PY_SCRIPT, MASTER_CONFIGS
-from matrix_logic.generate_sweep_configs import seq_len_to_str
+from matrix_logic.generate_sweep_configs import (
+    freeze_config_value,
+    seq_len_to_str,
+    trim_conc,
+)
 from matrix_logic.validation import (
     ChangelogEntry,
     ChangelogMatrixEntry,
@@ -29,15 +33,6 @@ class GenerationInputs:
     runner_config: str
 
 
-def _freeze_config_value(value):
-    """Convert JSON-shaped config values into deterministic hashable values."""
-    if isinstance(value, dict):
-        return tuple(
-            sorted((key, _freeze_config_value(item)) for key, item in value.items())
-        )
-    if isinstance(value, list):
-        return tuple(_freeze_config_value(item) for item in value)
-    return value
 
 
 def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:
@@ -65,54 +60,6 @@ def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:
             added_lines.append(line[1:])
 
     return "\n".join(added_lines)
-
-
-def trim_conc(entries: list[dict]) -> list[dict]:
-    """Trim each parallelism config's concurrency sweep to its lowest point.
-
-    Non-full-sweep PRs only need a single concurrency point per parallelism
-    config to validate a change runs end-to-end, so the shared cluster stays
-    clear. Push-to-main and ``full-sweep-enabled`` PRs skip this reduction.
-
-    The retained value is the minimum configured concurrency — independent of
-    the source ordering of ``conc-list`` / ``conc-start``.
-
-    Input comes from ``json.loads(subprocess.stdout)`` so ``conc`` is always
-    ``int`` (single-node) or ``list`` (multi-node). Other fields may contain
-    nested dictionaries or lists, such as KV-offload backend metadata.
-
-    - Single-node entries: group by every configuration field other than
-      ``conc`` and the generated ``exp-name``, then keep only the entry with
-      the lowest ``conc`` per group.
-    - Multi-node entries: trim the ``conc`` list in place to ``[min(conc)]``.
-    """
-    groups: dict[tuple, list[int]] = {}
-    out: list[dict] = []
-
-    for entry in entries:
-        if entry.get("prefill") is not None:
-            conc = entry.get("conc")
-            if isinstance(conc, list) and len(conc) > 1:
-                entry = {**entry, "conc": [min(conc)]}
-            out.append(entry)
-            continue
-
-        key = tuple(
-            sorted(
-                (k, _freeze_config_value(v))
-                for k, v in entry.items()
-                if k not in {"conc", "exp-name"}
-            )
-        )
-        groups.setdefault(key, []).append(len(out))
-        out.append(entry)
-
-    drop: set[int] = set()
-    for idxs in groups.values():
-        if len(idxs) > 1:
-            keep = min(idxs, key=lambda i: out[i]["conc"])
-            drop.update(i for i in idxs if i != keep)
-    return [e for i, e in enumerate(out) if i not in drop]
 
 
 def filter_eval_rows_by_prefill_ep(
@@ -210,7 +157,7 @@ def _matrix_curve_key(entry: dict) -> tuple:
     """Identify one curve while deliberately excluding point-level fields."""
     return tuple(
         sorted(
-            (key, _freeze_config_value(value))
+            (key, freeze_config_value(value))
             for key, value in entry.items()
             if key not in {"conc", "exp-name", "recipe-fingerprint"}
         )

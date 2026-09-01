@@ -54,6 +54,11 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         cd "$SRT_REPO_DIR"
         git checkout sa-submission-q2-2026
     fi
+    if [[ "${EVAL_FRAMEWORK:-lm-eval}" != "lm-eval" ]]; then
+        python3 "$GITHUB_WORKSPACE/runners/patch_srt_eval_dispatch.py" "$(pwd)" \
+            || exit 1
+    fi
+
 
     echo "Installing srtctl..."
     export UV_INSTALL_DIR="/mnt/nfs/sa-shared/.uv/bin"
@@ -145,6 +150,10 @@ EOF
     sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
     # Raise sglang's torch-distributed TCPStore timeout from the 600s gloo default
     sed -i '/^      watchdog-timeout:/a\      dist-timeout: 1800' "${CONFIG_FILE%%:*}"
+    if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
+        python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
+            "${CONFIG_FILE%%:*}" "$FRAMEWORK" || exit 1
+    fi
     SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "h100,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
     echo "$SRTCTL_OUTPUT"
 
@@ -297,21 +306,22 @@ else
     fi
     trap 'rc=$?; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT
 
-    # flock-serialize the enroot import so concurrent sweep jobs on the same
-    # shared NFS path don't race each other into 'File already exists' (race
-    # observed on PR #1509: 13/30 jobs failed, all on the dgxc-slurm runners
-    # hitting the same /mnt/nfs/lustre/containers/<image>.sqsh path). Matches
-    # the canonical pattern already used in launch_h100-cw.sh + the mi3xx
-    # launchers. The skip-if-valid check avoids re-downloading when the file
-    # was successfully created by an earlier job.
+    # Check the shared cache before opening its lock. A valid squash file is
+    # immutable, so readers do not need to touch a lock owned by another user.
     srun --jobid=$JOB_ID bash -c "
-        exec 9>\"$LOCK_FILE\"
-        flock -w 600 9 || { echo 'Failed to acquire lock for $SQUASH_FILE'; exit 1; }
         if unsquashfs -l \"$SQUASH_FILE\" > /dev/null 2>&1; then
             echo 'Squash file already exists and is valid, skipping import'
         else
-            rm -f \"$SQUASH_FILE\"
-            enroot import -o \"$SQUASH_FILE\" docker://$IMAGE
+            if ! { exec 9>\"$LOCK_FILE\"; } 2>/dev/null; then
+                exec 9<\"$LOCK_FILE\" || { echo 'Failed to open lock for $SQUASH_FILE'; exit 1; }
+            fi
+            flock -w 600 9 || { echo 'Failed to acquire lock for $SQUASH_FILE'; exit 1; }
+            if unsquashfs -l \"$SQUASH_FILE\" > /dev/null 2>&1; then
+                echo 'Squash file was imported by another job'
+            else
+                rm -f \"$SQUASH_FILE\"
+                enroot import -o \"$SQUASH_FILE\" docker://$IMAGE
+            fi
         fi
     "
 

@@ -148,6 +148,11 @@ else
     mkdir -p recipes/vllm/kimi-k2.6
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k2.6" recipes/vllm/kimi-k2.6
 fi
+if [[ "${EVAL_FRAMEWORK:-lm-eval}" != "lm-eval" ]]; then
+    python3 "$GITHUB_WORKSPACE/runners/patch_srt_eval_dispatch.py" "$(pwd)" \
+        || exit 1
+fi
+
 
 echo "Installing srtctl..."
 export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
