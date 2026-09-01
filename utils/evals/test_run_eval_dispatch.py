@@ -2780,7 +2780,7 @@ def test_trusted_changelog_matrix_keeps_multinode_agentic_evals() -> None:
 
     assert '"multinode_agentic_evals"' in flatten_command
     get_jobs_command = get_jobs["run"]
-    assert "EVALS=$(" in get_jobs_command
+    assert get_jobs_command.count("EVALS=$(") == 1
     assert "score_matrix eval" in get_jobs_command
 
 
