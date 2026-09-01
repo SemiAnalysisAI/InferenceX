@@ -2092,7 +2092,11 @@ run_lm_eval() {
         export INFERENCEX_LM_EVAL_RUNTIME_READY=true
     fi
 
-    local openai_server_base="http://0.0.0.0:${port}"
+    # Most launchers run eval beside the API process and keep the historical
+    # 0.0.0.0 default. Orchestrators such as srt-slurm can place the benchmark
+    # client on a different node, so allow them to provide the routed host.
+    local openai_server_host="${EVAL_SERVER_HOST:-0.0.0.0}"
+    local openai_server_base="http://${openai_server_host}:${port}"
     local openai_chat_base="${openai_server_base}/v1/chat/completions"
     export OPENAI_API_KEY=${OPENAI_API_KEY:-EMPTY}
     MODEL_NAME=${MODEL_NAME:-$MODEL} # Prefer MODEL_NAME, else MODEL

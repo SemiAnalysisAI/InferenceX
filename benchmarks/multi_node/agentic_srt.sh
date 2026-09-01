@@ -46,6 +46,60 @@ if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
     _wait_for_openai_chat_route --port "$PORT"
 fi
 
+# Preserve the legacy DP-attention replay contract. The SGLang router uses this
+# header to keep every request in one AgentX correlation tree on a stable DP
+# route, which is important for both session continuity and prefix-cache reuse.
+if [[ "${PREFILL_DP_ATTN:-false}" == "true" ]]; then
+    export AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID=true
+fi
+
+# Reset every advertised SGLang worker before each concurrency point, matching
+# the retired amd_utils trace replay. /flush_cache covers GPU radix + host
+# HiCache; the storage-backend endpoint is best-effort because L3 is optional.
+clear_agentic_worker_caches() {
+    local timeout_seconds="${FLUSH_DRAIN_TIMEOUT:-120}"
+    local metrics_csv="${AIPERF_SERVER_METRICS_URLS:-}"
+    if [[ -z "$metrics_csv" ]]; then
+        echo "[clear_caches] WARN: AIPERF_SERVER_METRICS_URLS unset; skipping cache flush" >&2
+        return 0
+    fi
+
+    local -a metrics_urls
+    IFS=',' read -r -a metrics_urls <<< "$metrics_csv"
+    local metrics_url base_url start response code flushed
+    for metrics_url in "${metrics_urls[@]}"; do
+        [[ -n "$metrics_url" ]] || continue
+        base_url="${metrics_url%/metrics}"
+        start=$(date +%s)
+        flushed=0
+        response=""
+        while :; do
+            response=$(curl -sf -m 10 -X POST "${base_url}/flush_cache" 2>/dev/null || true)
+            if grep -qi "Cache flushed" <<< "$response"; then
+                flushed=1
+                break
+            fi
+            if (( $(date +%s) - start >= timeout_seconds )); then
+                break
+            fi
+            sleep 3
+        done
+        if (( flushed )); then
+            echo "[clear_caches] ${base_url}: L1+L2 flushed"
+        else
+            echo "[clear_caches] WARN ${base_url}: L1+L2 flush not confirmed after ${timeout_seconds}s" >&2
+        fi
+
+        code=$(curl -s -m 60 -o /dev/null -w '%{http_code}' \
+            -X POST "${base_url}/hicache/storage-backend/clear" 2>/dev/null || true)
+        if [[ "$code" == "200" ]]; then
+            echo "[clear_caches] ${base_url}: L3 store cleared"
+        else
+            echo "[clear_caches] ${base_url}: L3 clear http=${code:-000} (optional backend unavailable)"
+        fi
+    done
+}
+
 wait_for_agentic_servers_idle() {
     local timeout_seconds="${AIPERF_DRAIN_TIMEOUT_SECONDS:-1800}"
     local poll_seconds="${AIPERF_DRAIN_POLL_SECONDS:-10}"
@@ -129,6 +183,9 @@ for index in "${!CONCURRENCIES[@]}"; do
     mkdir -p "$RESULT_DIR"
 
     echo "Running agentic concurrency $concurrency of: ${CONCURRENCIES[*]}"
+    if [[ "${CLEAR_CACHE_BETWEEN_CONC:-1}" == "1" ]]; then
+        clear_agentic_worker_caches
+    fi
     build_replay_cmd "$RESULT_DIR"
     run_agentic_replay_and_write_outputs "$RESULT_DIR"
 

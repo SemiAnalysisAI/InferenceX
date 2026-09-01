@@ -6773,3 +6773,40 @@
   description:
     - "Enable the required DCGM power telemetry contract across all ten B200 disaggregated STP recipes."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2560
+
+- config-keys:
+    - qwen3-0.6b-fp16-mi355x-sglang-srt-agg
+    - qwen3-0.6b-fp16-mi355x-sglang-srt-disagg
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Add small-model aggregate and 1P1D disaggregated correctness lanes for the shared MI355X srt-slurm launcher."
+    - "Use the native SGLang router for request routing and AMD MoRI for disaggregated KV transfer, without Dynamo, NIXL, or the deleted amd_utils control plane."
+    - "Remove the active and deprecated MI355X matrix entries that depended on amd_utils; configuration-specific child PRs reintroduce the active production lanes as native srt-slurm recipes."
+    - "Preserve the retired AgentX launch contract in the shared srt path: route DP-attention sessions by correlation ID, flush every advertised worker cache before each concurrency point, and run the MI355X RDMA device/QoS/DCQCN plus bare-process GPU drain preflights on every allocated host."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2542
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-disagg
+    - dsv4-fp4-mi355x-sglang-disagg-mtp
+  description:
+    - "Port the production MI355X DeepSeek V4 fixed-sequence STP and MTP disaggregated search spaces from the model-specific AMD submit/helper stack to srt-slurm."
+    - "Preserve the original matrix grouping for both STP and MTP: each TP8 allocation iterates c1,c2,c4,c8,c16,c32,c64,c128, while DEP8/DPA c256 and c512 remain separate point-sized allocations so admission and MoRI dispatch sizing match each point."
+    - "Preserve the proven server-side round-robin load balancer, fixed-sequence router random/retry policy, full decode CUDA-graph batch range, and DeepSeek V4 runtime defaults from the successful legacy STP and MTP sweeps."
+    - "Preserve two-step EAGLE MTP on TP8 and one-step EAGLE MTP on DEP8, with the native SGLang Router frontend and AMD MoRI KV/MoE transport."
+    - "Keep upstream's distinct SGLang images: v0.5.14-rocm720-mi35x-20260701 for STP and v0.5.15-rocm720-mi35x-20260713 for MTP. Use the shared srt-slurm PR #7 runtime pin from #2542."
+    - "Run fixed 8192-input/1024-output random workloads through the unchanged utils/bench_serving/benchmark_serving.py custom benchmark and remove the superseded dsv4_fp4_mi355x_sglang-disagg.sh wrapper."
+    - "Preserve the original 9217-token server context limit and random router policy without adding DP-aware frontend routing. Do not inherit prefill-only chunk sizing into decode."
+    - "Preserve the shared benchmark's default random-data generation, MTP chat encoding, two warmups per concurrency, prompt counts, and TTFT/TPOT/ITL/E2EL percentile reporting; benchmark_serving.py is unchanged."
+    - "Pass the legacy rdma0-rdma7 selection explicitly through disaggregation-ib-device for both roles, rather than relying on the old wrapper's IBDEVICES environment indirection."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2630
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-disagg
+    - dsv4-fp4-mi355x-sglang-disagg-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Correct the port's hardcoded random-range-ratio 1.0 to consume the workflow's RANDOM_RANGE_RATIO, with the legacy 0.8 default. The nominal 8192/1024 workload samples lengths just as the original AMD launcher and successful sweep did."
+    - "Keep the original 9217-token context, serving images, MTP settings, and unchanged benchmark_serving.py. No context-limit increase or workload tuning."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2630
