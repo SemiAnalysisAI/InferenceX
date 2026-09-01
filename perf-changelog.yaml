@@ -6748,6 +6748,6 @@
     - agentic-coding
   description:
     - "Validate source-labeled prompt-token cache metrics on the proven GB300 vLLM disaggregated AgentX topology at concurrency 256."
-    - "Use one TP4 prefill worker and one TP8 decode worker with NIXL KV transfer; transferred prompt-token hits must export source=p2p."
+    - "Use one TP4 prefill worker and one TP16 decode worker with NIXL KV transfer; transferred prompt-token hits must export source=p2p."
     - "Run the Python-only metric overlay built from official vLLM nightly 7c5dc571 and the HIT_PENDING fix from vLLM PR #53087."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2797
