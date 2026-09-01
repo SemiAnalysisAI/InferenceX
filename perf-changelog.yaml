@@ -6761,3 +6761,11 @@
   description:
     - "Benchmark the exact gfx950 Kimi-K3 M=7 latent-MoE tail prototype with M=1-14 correctness coverage, changed-input HIP graph replay, rotating projection weights, and pinned AITER provenance."
   pr-link: XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Extend the gfx950 Kimi-K3 small-M diagnostic to compare the raw Tier-1 torch.mm projection, the tuned ROCm GEMM control, and the native fused latent-MoE tail on identical rotating weights with changed-input HIP graph replay."
+  pr-link: XXX

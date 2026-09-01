@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""Benchmark the Kimi-K3 BF16 latent-MoE tail for graph decode sizes."""
+"""Benchmark Kimi-K3 BF16 projection and fused-tail graph decode paths."""
 
 from __future__ import annotations
 
@@ -64,16 +64,21 @@ def make_cases(num_tokens: int, seed: int) -> list[Case]:
     return result
 
 
-def load_control() -> Operation:
+def load_projection_paths() -> tuple[Operation, Operation]:
     import aiter
     from vllm.model_executor.layers.utils import rocm_unquantized_gemm_impl
+
+    def torch_mm(case: Case) -> torch.Tensor:
+        routed, shared, rms_weight, up_weight = case
+        normalized = aiter.rmsnorm2d_fwd(routed, rms_weight, EPSILON)
+        return torch.mm(normalized, up_weight.T).add_(shared)
 
     def control(case: Case) -> torch.Tensor:
         routed, shared, rms_weight, up_weight = case
         normalized = aiter.rmsnorm2d_fwd(routed, rms_weight, EPSILON)
         return rocm_unquantized_gemm_impl(normalized, up_weight).add_(shared)
 
-    return control
+    return torch_mm, control
 
 
 def candidate(case: Case) -> torch.Tensor:
@@ -162,33 +167,42 @@ def elapsed_us(graph: torch.cuda.CUDAGraph, replays: int, operations: int) -> fl
 
 def benchmark_shape(args: argparse.Namespace, num_tokens: int) -> dict:
     cases = make_cases(num_tokens, args.seed + num_tokens)
-    control = load_control()
-    expected = control(cases[0])
-    actual = candidate(cases[0])
+    torch_mm, control = load_projection_paths()
+    expected = torch_mm(cases[0])
+    control_actual = control(cases[0])
+    candidate_actual = candidate(cases[0])
     torch.cuda.synchronize()
-    assert_close(actual, expected, f"M={num_tokens} eager")
-    eager_error = error_metrics(actual, expected)
+    assert_close(control_actual, expected, f"M={num_tokens} control eager")
+    assert_close(candidate_actual, expected, f"M={num_tokens} candidate eager")
+    eager_error = error_metrics(candidate_actual, control_actual)
 
     graphs = {
+        "torch_mm": capture(torch_mm, cases, args.operations_per_graph),
         "control": capture(control, cases, args.operations_per_graph),
         "candidate": capture(candidate, cases, args.operations_per_graph),
     }
     replay_errors = validate_changed_input_replay(
         graphs,
         cases,
-        control,
+        torch_mm,
         num_tokens,
         args.seed + 1000 + num_tokens,
     )
 
     warmups = math.ceil(args.warmup_operations / args.operations_per_graph)
+    names = tuple(graphs)
     for index in range(warmups * len(graphs)):
-        graphs[("control", "candidate")[index % 2]][0].replay()
+        graphs[names[index % len(names)]][0].replay()
     torch.cuda.synchronize()
 
     samples = {name: [] for name in graphs}
+    timing_orders = (
+        ("torch_mm", "control", "candidate"),
+        ("control", "candidate", "torch_mm"),
+        ("candidate", "torch_mm", "control"),
+    )
     for trial in range(args.trials):
-        order = ("control", "candidate") if trial % 2 == 0 else ("candidate", "control")
+        order = timing_orders[trial % len(timing_orders)]
         for name in order:
             samples[name].append(
                 elapsed_us(
@@ -201,10 +215,16 @@ def benchmark_shape(args: argparse.Namespace, num_tokens: int) -> dict:
     return {
         "num_tokens": num_tokens,
         "eager_error": eager_error,
+        "eager_errors": {
+            "control_vs_torch_mm": error_metrics(control_actual, expected),
+            "candidate_vs_torch_mm": error_metrics(candidate_actual, expected),
+        },
         "changed_input_graph_replay": replay_errors,
         "p50_us": medians,
         "candidate_minus_control_us": medians["candidate"] - medians["control"],
         "speedup": medians["control"] / medians["candidate"],
+        "torch_mm_minus_control_us": medians["torch_mm"] - medians["control"],
+        "torch_mm_over_control_speedup": medians["torch_mm"] / medians["control"],
         "samples_us": samples,
     }
 
