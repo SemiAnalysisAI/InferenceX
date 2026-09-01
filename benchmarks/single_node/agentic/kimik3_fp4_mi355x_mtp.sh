@@ -63,6 +63,13 @@ if [ -n "${ROCR_VISIBLE_DEVICES:-}" ]; then
     export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
 fi
 
+K3_PERF_VARIANT="${K3_PERF_VARIANT:-baseline}"
+if [[ "$K3_PERF_VARIANT" == "m7gemmtune" ]]; then
+    mkdir -p "$RESULT_DIR"
+    bash "$(dirname "$0")/k3_perf_overlays/tune_m7_bf16_gemms.sh" "$RESULT_DIR"
+    exit 0
+fi
+
 # `hf download` creates the target dir if missing and is itself idempotent. The
 # 1.56 TB checkpoint is normally pre-staged, so these calls are a no-op there.
 if [[ -n "${MODEL_PATH:-}" ]]; then
@@ -91,7 +98,6 @@ export AITER_BF16_FP8_MOE_BOUND=0
 export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 export AITER_QUICK_REDUCE_QUANTIZATION=INT4
 
-K3_PERF_VARIANT="${K3_PERF_VARIANT:-baseline}"
 case "$K3_PERF_VARIANT" in
     baseline)
         ;;

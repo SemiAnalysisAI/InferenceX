@@ -6751,4 +6751,5 @@
     - "Compare upstream vLLM PR 52494 and a PYNCCL-only collective arm independently without changing the canonical default recipe."
     - "Evaluate a clean ROCm Tier-1 latent-MoE overlap candidate derived from upstream vLLM PR 51437."
     - "Evaluate the Kimi-K3 torch.compile and post-grad fusion path from upstream vLLM PR 52190 as an independent arm."
+    - "Tune and graph-replay validate the six exact M=7 BF16 GEMM shapes observed in the Kimi-K3 AgentX concurrency-one decode path."
   pr-link: XXX
