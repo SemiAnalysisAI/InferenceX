@@ -47,6 +47,9 @@ if [ "$K3_MATCH_MI355X_C1" = "1" ]; then
         exit 1
     fi
     DCP_SIZE=1
+    # Keep the graph policy aligned with the ROCm C1 recipe. CUDA otherwise
+    # auto-enables breakable graphs, which would confound launch-gap analysis.
+    export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 else
     DCP_SIZE="${DCP_SIZE:-8}"
 fi
@@ -234,12 +237,16 @@ fi
 
 SPEC_ARGS=()
 if [ "$NUM_SPEC_TOKENS" -gt 0 ]; then
+    DRAFT_KV_CONFIG=""
+    if [ "$K3_MATCH_MI355X_C1" = "1" ]; then
+        DRAFT_KV_CONFIG=', "kv_cache_dtype": "fp8"'
+    fi
     # EVAL_ONLY needs real verification: synthetic acceptance commits drafts
     # regardless of target logits and would zero the eval score.
     if [ "${EVAL_ONLY:-false}" = "true" ]; then
-        SPEC_CONFIG="{\"method\": \"dspark\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"TOKENSPEED_MLA\", \"draft_sample_method\": \"probabilistic\", \"rejection_sample_method\": \"block\"}"
+        SPEC_CONFIG="{\"method\": \"dspark\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"TOKENSPEED_MLA\"${DRAFT_KV_CONFIG}, \"draft_sample_method\": \"probabilistic\", \"rejection_sample_method\": \"block\"}"
     else
-        SPEC_CONFIG="{\"method\": \"dspark\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"TOKENSPEED_MLA\", \"draft_sample_method\": \"probabilistic\", \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
+        SPEC_CONFIG="{\"method\": \"dspark\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"TOKENSPEED_MLA\"${DRAFT_KV_CONFIG}, \"draft_sample_method\": \"probabilistic\", \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
     fi
     SPEC_ARGS=(--speculative-config "$SPEC_CONFIG")
 fi
@@ -302,6 +309,16 @@ if [ "${PROFILE:-0}" = "1" ]; then
     )
 fi
 
+MATCHED_SERVER_ARGS=()
+if [ "$K3_MATCH_MI355X_C1" = "1" ]; then
+    MATCHED_SERVER_ARGS=(
+        --enable-auto-tool-choice
+        --tool-call-parser kimi_k3
+        --reasoning-parser kimi_k3
+        --max-model-len 1048576
+    )
+fi
+
 echo "Starting vllm server..."
 
 { set +x; } 2>/dev/null
@@ -316,6 +333,7 @@ VLLM_CMD=(
     --max-num-batched-tokens 16384
     --trust-remote-code
     --language-model-only
+    "${MATCHED_SERVER_ARGS[@]}"
     --load-format fastsafetensors
     --moe-backend auto
     --no-enable-flashinfer-autotune
