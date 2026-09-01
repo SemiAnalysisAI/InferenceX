@@ -6798,4 +6798,5 @@
     - "Run fixed 8192-input/1024-output random workloads through the unchanged utils/bench_serving/benchmark_serving.py custom benchmark and remove the superseded dsv4_fp4_mi355x_sglang-disagg.sh wrapper."
     - "Preserve the original 9217-token server context limit and random router policy without adding DP-aware frontend routing. Do not inherit prefill-only chunk sizing into decode."
     - "Preserve the shared benchmark's default random-data generation, MTP chat encoding, two warmups per concurrency, prompt counts, and TTFT/TPOT/ITL/E2EL percentile reporting; benchmark_serving.py is unchanged."
+    - "Pass the legacy rdma0-rdma7 selection explicitly through disaggregation-ib-device for both roles, rather than relying on the old wrapper's IBDEVICES environment indirection."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2630
