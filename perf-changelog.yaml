@@ -6667,5 +6667,5 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Add GLM-5.2 NVFP4 B300 Dynamo+TensorRT-LLM AgentX recipes with compact worker packing."
+    - "Add the GLM-5.2 NVFP4 B300 Dynamo+TensorRT-LLM AgentX compact 8P/2D configuration at concurrency 233, excluding unavailable B300 nodes from its Slurm allocation."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2789
