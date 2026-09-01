@@ -378,6 +378,14 @@ jobs:
             echo "Kimi-K3 M=7 latent-tail benchmark completed; skipping AgentX result validation."
             exit 0
           fi
+          if [ "${{ inputs.k3-perf-variant }}" = "m7tokentail" ]; then
+            test -s results/k3_m7_token_tiled_benchmark.json
+            test -s results/k3_m7_token_tiled_provenance.json
+            test -s results/k3_m7_token_tiled_tests.log
+            test -s results/k3_m7_token_tiled_SHA256SUMS
+            echo "Kimi-K3 M=7 token-tiled tail benchmark completed; skipping AgentX result validation."
+            exit 0
+          fi
 
           if [ "${{ inputs.eval-only }}" = "true" ]; then
             echo "Eval-only mode: skipping benchmark result file check"
@@ -424,7 +432,7 @@ jobs:
           path: agg_${{ env.RESULT_FILENAME }}.json
 
       - name: Upload agentic aggregated result
-        if: ${{ always() && inputs.scenario-type == 'agentic-coding' && inputs.k3-perf-variant != 'm7gemmtune' && inputs.k3-perf-variant != 'm7latenttail' }}
+        if: ${{ always() && inputs.scenario-type == 'agentic-coding' && inputs.k3-perf-variant != 'm7gemmtune' && inputs.k3-perf-variant != 'm7latenttail' && inputs.k3-perf-variant != 'm7tokentail' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bmk_agentic_${{ env.RESULT_FILENAME }}
@@ -455,6 +463,14 @@ jobs:
         with:
           name: k3_m7_latent_tail_${{ runner.name }}
           path: results/k3_m7_latent_tail_*
+          if-no-files-found: error
+
+      - name: Upload Kimi-K3 M=7 token-tiled tail artifacts
+        if: ${{ always() && inputs.k3-perf-variant == 'm7tokentail' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: k3_m7_token_tiled_${{ runner.name }}
+          path: results/k3_m7_token_tiled_*
           if-no-files-found: error
 
       - name: Upload server logs

@@ -6769,3 +6769,11 @@
   description:
     - "Extend the gfx950 Kimi-K3 small-M diagnostic to compare the raw Tier-1 torch.mm projection, the tuned ROCm GEMM control, and the native fused latent-MoE tail on identical rotating weights with changed-input HIP graph replay."
   pr-link: XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Compare M=7 gfx950 latent-MoE tail token tilings that reuse each projection row across two, four, or seven tokens under changed-input HIP graph replay."
+  pr-link: XXX
