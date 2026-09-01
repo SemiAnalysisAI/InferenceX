@@ -13,7 +13,8 @@ set -x
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR, DURATION
 # Optional:
-#   DCP_SIZE (default 8), KV_OFFLOAD_BACKEND (mooncake, or empty for resident)
+#   DCP_SIZE (default 8), KV_OFFLOAD_BACKEND (mooncake, or empty for resident),
+#   K3_MATCH_MI355X_C1 (set to 1 for the TP8/DCP1 six-draft-token C1 control)
 #
 # TP8 is the only single-node layout: the MXFP4 checkpoint is ~1.5 TB, so TP4
 # would need ~375 GB/GPU against B300's 288 GB.
@@ -36,8 +37,19 @@ if [[ -n "${EP_SIZE:-}" && "${EP_SIZE}" -gt 1 ]]; then
     exit 1
 fi
 
-# DCP shards decode KV across the TP ranks, so it must divide TP.
-DCP_SIZE="${DCP_SIZE:-8}"
+# DCP shards decode KV across the TP ranks, so it must divide TP. The matched
+# C1 diagnostic intentionally mirrors the MI355X topology instead of the
+# production B300 DCP8 recipe.
+K3_MATCH_MI355X_C1="${K3_MATCH_MI355X_C1:-0}"
+if [ "$K3_MATCH_MI355X_C1" = "1" ]; then
+    if [ "$CONC" -ne 1 ] || agentic_kv_offload_enabled; then
+        echo "Error: K3_MATCH_MI355X_C1=1 requires CONC=1 and no KV offload" >&2
+        exit 1
+    fi
+    DCP_SIZE=1
+else
+    DCP_SIZE="${DCP_SIZE:-8}"
+fi
 if [ $((TP % DCP_SIZE)) -ne 0 ]; then
     echo "Error: TP='$TP' must be divisible by DCP_SIZE='$DCP_SIZE'" >&2
     exit 1
@@ -59,7 +71,7 @@ if [[ -n "${MODEL_PATH:-}" ]]; then
     if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
         hf download "$MODEL" --local-dir "$MODEL_PATH"
     fi
-    DRAFT_MODEL_PATH="${WRITABLE_MODELS_DIR:-/data/models}/${DRAFT_MODEL##*/}"
+    DRAFT_MODEL_PATH="${DRAFT_MODEL_PATH:-${WRITABLE_MODELS_DIR:-/data/models}/${DRAFT_MODEL##*/}}"
     if [[ ! -d "$DRAFT_MODEL_PATH" || -z "$(ls -A "$DRAFT_MODEL_PATH" 2>/dev/null)" ]]; then
         hf download "$DRAFT_MODEL" --local-dir "$DRAFT_MODEL_PATH"
     fi
@@ -80,9 +92,15 @@ export VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION=1
 export VLLM_USE_V2_MODEL_RUNNER=1
 # These default to auto, which self-enables on B300; name them so the measured
 # DCP a2a path is the one that runs.
-export VLLM_USE_DIRECT_DCP_A2A=1
-export VLLM_USE_DIRECT_DCP_Q_GATHER=1
-export VLLM_USE_DIRECT_DCP_KV_GATHER=1
+if [ "$DCP_SIZE" -gt 1 ]; then
+    export VLLM_USE_DIRECT_DCP_A2A=1
+    export VLLM_USE_DIRECT_DCP_Q_GATHER=1
+    export VLLM_USE_DIRECT_DCP_KV_GATHER=1
+else
+    export VLLM_USE_DIRECT_DCP_A2A=0
+    export VLLM_USE_DIRECT_DCP_Q_GATHER=0
+    export VLLM_USE_DIRECT_DCP_KV_GATHER=0
+fi
 # ~1.5 TB of MXFP4 shards loads well past the default readiness window.
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_RPC_TIMEOUT=600000
@@ -201,7 +219,10 @@ if [ "${SPEC_DECODING:-none}" != "mtp" ]; then
 fi
 # Draft length by concurrency. The golden AL must track it, from the
 # probabilistic curve in golden_al_distribution/.
-if [ "$CONC" -le 8 ]; then
+if [ "$K3_MATCH_MI355X_C1" = "1" ]; then
+    NUM_SPEC_TOKENS=6
+    SYNTHETIC_ACCEPT_LEN=3.75
+elif [ "$CONC" -le 8 ]; then
     NUM_SPEC_TOKENS=7
     SYNTHETIC_ACCEPT_LEN=3.84
 elif [ "$CONC" -le 16 ]; then
@@ -229,7 +250,9 @@ MAX_NUM_SEQS=$((2 * CONC))
 # pool, the FlashInfer MoE workspace and fragmentation. Only c56 and c70 ran out
 # of it (2.78 GiB wanted, 1.60 GiB free); the pool grows with concurrency, so
 # lower points keep the default and their full KV cache.
-if [ "$CONC" -ge 56 ]; then
+if [ "$K3_MATCH_MI355X_C1" = "1" ]; then
+    GPU_MEM_UTIL=0.90
+elif [ "$CONC" -ge 56 ]; then
     GPU_MEM_UTIL=0.90
 else
     GPU_MEM_UTIL=0.92
@@ -238,22 +261,46 @@ fi
 # Capture sizes: step * 1..min(max-num-seqs, 128), then the fixed powers of two
 # above that. Sizes are tokens when drafting, sequences when not; the 128 caps
 # the number of dense entries, not their value.
-CAPTURE_STEP=$((1 + NUM_SPEC_TOKENS))
-DENSE_COUNT=$MAX_NUM_SEQS
-if [ "$DENSE_COUNT" -gt 128 ]; then
-    DENSE_COUNT=128
-fi
-CAPTURE_SIZES=""
-for ((n = 1; n <= DENSE_COUNT; n++)); do
-    CAPTURE_SIZES+="${CAPTURE_SIZES:+,}$((n * CAPTURE_STEP))"
-done
-DENSE_MAX=$((DENSE_COUNT * CAPTURE_STEP))
-for t in 64 128 256 512 1024 2048 4096 8192; do
-    if [ "$t" -gt "$DENSE_MAX" ]; then
-        CAPTURE_SIZES+=",$t"
+if [ "$K3_MATCH_MI355X_C1" = "1" ]; then
+    CAPTURE_SIZES="$(seq -s, 2 14)"
+    COMPILATION_CONFIG="{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":14,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[${CAPTURE_SIZES}]}"
+    STREAM_INTERVAL=1
+else
+    CAPTURE_STEP=$((1 + NUM_SPEC_TOKENS))
+    DENSE_COUNT=$MAX_NUM_SEQS
+    if [ "$DENSE_COUNT" -gt 128 ]; then
+        DENSE_COUNT=128
     fi
-done
-COMPILATION_CONFIG="{\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"cudagraph_capture_sizes\":[${CAPTURE_SIZES}]}"
+    CAPTURE_SIZES=""
+    for ((n = 1; n <= DENSE_COUNT; n++)); do
+        CAPTURE_SIZES+="${CAPTURE_SIZES:+,}$((n * CAPTURE_STEP))"
+    done
+    DENSE_MAX=$((DENSE_COUNT * CAPTURE_STEP))
+    for t in 64 128 256 512 1024 2048 4096 8192; do
+        if [ "$t" -gt "$DENSE_MAX" ]; then
+            CAPTURE_SIZES+=",$t"
+        fi
+    done
+    COMPILATION_CONFIG="{\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"cudagraph_capture_sizes\":[${CAPTURE_SIZES}]}"
+    STREAM_INTERVAL=10
+fi
+
+PROFILER_ARGS=()
+if [ "${PROFILE:-0}" = "1" ]; then
+    VLLM_TORCH_PROFILER_DIR="${VLLM_TORCH_PROFILER_DIR:-/workspace/vllm_profile}"
+    VLLM_PROFILE_DELAY_ITERATIONS="${VLLM_PROFILE_DELAY_ITERATIONS:-8}"
+    VLLM_PROFILE_MAX_ITERATIONS="${VLLM_PROFILE_MAX_ITERATIONS:-256}"
+    if [[ ! "$VLLM_PROFILE_DELAY_ITERATIONS" =~ ^[0-9]+$ ]] || \
+            [[ ! "$VLLM_PROFILE_MAX_ITERATIONS" =~ ^[1-9][0-9]*$ ]]; then
+        echo "Error: VLLM profile delay/max iterations must be non-negative/positive integers" >&2
+        exit 1
+    fi
+    mkdir -p "$VLLM_TORCH_PROFILER_DIR"
+    PROFILER_ARGS=(
+        --profiler-config
+        "{\"profiler\":\"torch\",\"torch_profiler_dir\":\"$VLLM_TORCH_PROFILER_DIR\",\"torch_profiler_with_stack\":false,\"torch_profiler_record_shapes\":false,\"torch_profiler_with_memory\":false,\"torch_profiler_with_flops\":false,\"torch_profiler_use_gzip\":true,\"torch_profiler_dump_cuda_time_total\":true,\"detailed_trace_annotation\":true,\"ignore_frontend\":true,\"delay_iterations\":$VLLM_PROFILE_DELAY_ITERATIONS,\"max_iterations\":$VLLM_PROFILE_MAX_ITERATIONS}"
+    )
+fi
 
 echo "Starting vllm server..."
 
@@ -276,13 +323,14 @@ VLLM_CMD=(
     --enable-prefix-caching
     --prefix-match-unit 128
     --kv-cache-dtype fp8
-    --stream-interval 10
+    --stream-interval "$STREAM_INTERVAL"
     --attention-backend TOKENSPEED_MLA
     --attention-config '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true}'
     "${SPEC_ARGS[@]}"
     --compilation-config "$COMPILATION_CONFIG"
     --disable-uvicorn-access-log
     "${OFFLOAD_ARGS[@]}"
+    "${PROFILER_ARGS[@]}"
 )
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
 printf '\n' | tee -a "$RESULT_DIR/vllm_command.txt"
