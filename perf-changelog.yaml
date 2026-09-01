@@ -6741,14 +6741,3 @@
     - "Configure model-specific tool and reasoning parsers for the Kimi-K3 and MiniMax-M3 serving paths so opt-in verifier requests produce structured OpenAI tool calls."
     - "Limit shared AgentX readiness and synthetic-acceptance rewrites to eval-only runs so default throughput recipe rendering remains unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2634
-
-- config-keys:
-    - minimaxm3-fp8-h100-dynamo-vllm-agentic-disagg
-  scenario-type:
-    - agentic-coding
-  description:
-    - "Add one H100 MiniMax-M3 MXFP8 AgentX disaggregated validation point at concurrency 8 with one TP8 prefill worker and one TP8 decode worker."
-    - "Transfer KV directly with NixlConnector so the patched vLLM image must export transferred cached prompt tokens with source=p2p."
-    - "Pin NVIDIA/srt-slurm v1.0.50 and collect the Prometheus endpoints of both logical vLLM workers through AIPerf."
-    - "Use ttl.sh/cquil11-vllm-tier-d67b417bca-pr53087-20260901:24h, matching the DRAM, NVMe, and tiered validation sweep in PR #2796."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2797
