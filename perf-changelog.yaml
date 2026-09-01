@@ -6595,10 +6595,11 @@
     - "Update the vLLM B200 Kimi-K3 AgentX configs."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2776
   
+
 - config-keys:
     - minimaxm3-fp4-b200-trtllm-agentic-mtp
   scenario-type:
     - agentic-coding
   description:
-    - "Refresh MiniMax M3 B200 AgentX to collect TensorRT-LLM server metrics."
+    - "Refresh to collect TensorRT-LLM server metrics."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2771
