@@ -372,8 +372,9 @@ wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$S
 
 grep -F "all-reduce backends" "$SERVER_LOG" || true
 if [[ "${K3_DISABLE_CUSTOM_ALL_REDUCE:-0}" == "1" ]]; then
-    if ! grep -F "Using ['PYNCCL'] all-reduce backends" "$SERVER_LOG" >/dev/null; then
-        echo "Error: --disable-custom-all-reduce did not expose a PYNCCL backend" >&2
+    pynccl_tp_signature="Using ['PYNCCL'] all-reduce backends (in dispatch order) for group 'tp:0'"
+    if ! grep -F "$pynccl_tp_signature" "$SERVER_LOG" >/dev/null; then
+        echo "Error: --disable-custom-all-reduce did not select PYNCCL for TP" >&2
         exit 1
     fi
 fi
