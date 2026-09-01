@@ -149,6 +149,10 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         cd "$SRT_REPO_DIR"
         git checkout sa-submission-q2-2026
     fi
+    if [[ "${EVAL_FRAMEWORK:-lm-eval}" != "lm-eval" ]]; then
+        python3 "$GITHUB_WORKSPACE/runners/patch_srt_eval_dispatch.py" "$(pwd)" \
+            || exit 1
+    fi
 
     echo "Installing srtctl..."
     curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -313,6 +317,10 @@ EOF
     sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
     sed -i '/^health_check:/,/^[^ ]/{ /^health_check:/d; /^  /d; }' "$CONFIG_PATH"
     printf '\nhealth_check:\n  max_attempts: 720\n  interval_seconds: 10\n' >> "$CONFIG_PATH"
+    if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
+        python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
+            "$CONFIG_PATH" "$FRAMEWORK" || exit 1
+    fi
     WORKLOAD_TAG="${ISL}x${OSL}"
     if [[ "$IS_AGENTIC" == "1" ]]; then
         WORKLOAD_TAG="agentic"
