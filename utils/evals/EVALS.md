@@ -328,9 +328,9 @@ The smoke fixes temperature to `0` and uses four BFCL worker threads. Request
 construction, response interpretation, and retry behavior remain those of the
 pinned stock BFCL OpenAI-completions handler and OpenAI SDK. The adapter only
 registers the served model against that stock handler. A 900-second external
-process deadline bounds the smoke; the full suites use their declared
-two-hour deadline. Dependency installation is separately bounded at 600
-seconds. Dependency, setup, transport, timeout, and collection failures write
+process deadline bounds the smoke; each full suite uses its declared deadline.
+Dependency installation is separately bounded at 600 seconds. Dependency,
+setup, transport, timeout, and collection failures write
 zero-score artifacts with integration-error metadata and fail the runner
 nonzero. A completed evaluation exits independently of model quality; the
 workflow score-validation step applies the threshold afterward.
@@ -390,10 +390,11 @@ the V4 agentic web-search and memory evaluations.
 Select these suites explicitly with `eval-framework: bfcl`; `bfcl_smoke`
 remains the framework default. Both suites use BFCL's OpenAI completions
 handler against the local endpoint rather than a hosted-provider handler. They
-fix temperature to `0.001`, permit the same two bounded request retries, and
-keep the 180-second per-attempt timeout. MiniMax uses eight worker threads.
-Kimi uses 16 threads and permits up to ten multi-turn steps. The whole-suite
-timeout is 7200 seconds.
+fix temperature to `0.001` and retain the stock handler's request construction,
+response interpretation, and retry behavior. A transport-only subclass pins
+the OpenAI SDK to two retries and a 180-second per-attempt timeout. MiniMax uses
+eight worker threads and a two-hour whole-suite timeout. Kimi uses 16 threads,
+caps multi-turn cases at ten steps, and uses a four-hour whole-suite timeout.
 
 The adapter builds a deterministic run-ID map from the pinned BFCL dataset.
 Single-turn suites select every case in their named categories. The Kimi

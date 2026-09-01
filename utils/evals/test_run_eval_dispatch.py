@@ -3071,11 +3071,11 @@ def test_bfcl_full_suites_use_suite_specific_runtime_and_archive_before_cleanup(
     tmp_path: Path,
 ) -> None:
     suite_contracts = (
-        ("bfcl_vllm_minimax_m3", "8"),
-        ("bfcl_vllm_kimi", "16"),
+        ("bfcl_vllm_minimax_m3", "8", "7200"),
+        ("bfcl_vllm_kimi", "16", "14400"),
     )
 
-    for suite, expected_threads in suite_contracts:
+    for suite, expected_threads, expected_timeout in suite_contracts:
         suite_tmp_path = tmp_path / suite
         suite_tmp_path.mkdir()
         result, paths = _run_bfcl_adapter_command(
@@ -3086,7 +3086,7 @@ def test_bfcl_full_suites_use_suite_specific_runtime_and_archive_before_cleanup(
         output = result.stdout + result.stderr
 
         assert result.returncode == 0, result.stderr
-        assert "TIMEOUT_ARG=<7200>" in output
+        assert f"TIMEOUT_ARG=<{expected_timeout}>" in output
         assert "ADAPTER_ARG=<--suite>" in output
         assert f"ADAPTER_ARG=<{suite}>" in output
         assert f"EVAL_COMPLETED_SUITE={suite}" in output

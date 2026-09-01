@@ -1709,7 +1709,7 @@ run_bfcl_eval() {
             _run_bfcl_suite_eval "$eval_suite" 8 7200 true "$@"
             ;;
         bfcl_vllm_kimi)
-            _run_bfcl_suite_eval "$eval_suite" 16 7200 true "$@"
+            _run_bfcl_suite_eval "$eval_suite" 16 14400 true "$@"
             ;;
         *)
             echo "ERROR: unsupported BFCL suite '${eval_suite}'" >&2

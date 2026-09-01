@@ -919,6 +919,41 @@ def test_score_total_must_match_every_selected_id(tmp_path: Path) -> None:
         )
 
 
+def test_full_suite_handler_bounds_openai_requests() -> None:
+    class StockOpenAICompletionsHandler:
+        def _build_client_kwargs(self) -> dict[str, Any]:
+            return {"api_key": "stock-key"}
+
+    handler = be._bounded_openai_handler(StockOpenAICompletionsHandler)
+
+    assert issubclass(handler, StockOpenAICompletionsHandler)
+    assert handler()._build_client_kwargs() == {
+        "api_key": "stock-key",
+        "timeout": 180,
+        "max_retries": 2,
+    }
+
+
+def test_kimi_suite_caps_multi_turn_steps(monkeypatch: pytest.MonkeyPatch) -> None:
+    constants = ModuleType("bfcl_eval.constants")
+    constants.__path__ = []
+    prompts = ModuleType("bfcl_eval.constants.default_prompts")
+    prompts.MAXIMUM_STEP_LIMIT = 20
+    constants.default_prompts = prompts
+    monkeypatch.setitem(sys.modules, "bfcl_eval.constants", constants)
+    monkeypatch.setitem(
+        sys.modules,
+        "bfcl_eval.constants.default_prompts",
+        prompts,
+    )
+
+    be._apply_suite_runtime_limits(be.MINIMAX_SUITE)
+    assert prompts.MAXIMUM_STEP_LIMIT == 20
+
+    be._apply_suite_runtime_limits(be.KIMI_SUITE)
+    assert prompts.MAXIMUM_STEP_LIMIT == 10
+
+
 def test_upstream_registration_uses_exact_stock_openai_handler(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
