@@ -945,7 +945,7 @@ dsv4-fp4-b200-sglang-agentic-hicache-mtp:
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: mtp, conc-list: [64, 96, 128, 160], router: { name: sglang-router, version: "0.3.2" } }
 
 dsv4-fp4-b200-vllm:
-  image: vllm/vllm-openai:nightly-44fe2a392b71d52a8d72faf2f8278834379482c9
+  image: vllm/vllm-openai:nightly-7c5dc571cbd1064ecc8a9b1045637ff647aa22cb
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:b200-nscale
