@@ -127,7 +127,7 @@ else
 fi
 
 export AIPERF_SERVER_METRICS_URLS="http://localhost:${PORT}/metrics"
-export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="vllm:"
+export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="vllm:prompt_tokens_cached_by_source"
 
 NUM_SPEC_TOKENS=3
 TOKENS_PER_SEQ=$((1 + NUM_SPEC_TOKENS))

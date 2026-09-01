@@ -298,6 +298,10 @@ else
 
     export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
 
+    # This tiered AgentX point needs >4 hours of warmup before its 1-hour profile.
+    if [[ "${MODEL_PREFIX:-}" == "minimaxm3" && "${SCENARIO_TYPE:-}" == "agentic-coding" && "${KV_OFFLOADING:-}" == "dram+nvme" ]]; then
+        SALLOC_TIME_LIMIT="${SALLOC_TIME_LIMIT:-420}"
+    fi
     SALLOC_TIME_LIMIT="${SALLOC_TIME_LIMIT:-300}"
     salloc --partition="$SLURM_PARTITION" --account="$SLURM_ACCOUNT" \
         --gres="gpu:$GPU_COUNT" --exclusive --time="$SALLOC_TIME_LIMIT" \

@@ -6753,3 +6753,13 @@
     - "Mount a job-scoped directory from the H100 node's native NVMe filesystem into the Pyxis container."
     - "Collect the vLLM Prometheus endpoint through AIPerf so artifacts include vllm:prompt_tokens_cached_by_source alongside the native KV-offload tiering counters."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2796
+
+- config-keys:
+    - minimaxm3-fp8-h100-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Allow seven hours for the native DRAM+NVMe point after its canonical warmup exceeded four hours; retain the 300-minute H100 default for other cases."
+    - "Pin the AgentX client fix that excludes automatic warmup baselines from profiling server metrics and require the cached-token-source metric in JSON/CSV artifacts."
+    - "Keep exactly Mooncake DRAM c8, Simple NVMe c30, and native DRAM+NVMe c20, with unchanged canonical warmup, one-hour profiling, images, and full evals."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2796

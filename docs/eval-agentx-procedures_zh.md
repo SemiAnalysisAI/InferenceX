@@ -210,6 +210,11 @@ gh workflow run e2e-tests.yml --repo SemiAnalysisAI/InferenceX --ref "$REF" \
 
 Fast 结果只能作为 bring-up 证据，绝不能替代 canonical candidate。小于 900 秒的 duration 或 `AIPERF_UNSAFE_OVERRIDE=true` 会添加 AIPerf 的 `--unsafe-override` 并将 submission 标记为无效；只能用于 smoke 诊断（[源码](../benchmarks/benchmark_lib.sh#L2266-L2268)）。Fast 运行健康后，必须对完全相同的 candidate 进行 canonical 运行，才能宣称 benchmark 成功。
 
+H100 MiniMax-M3 DRAM+NVMe AgentX 启动器的 Slurm 时限为 420 分钟：
+实测 warmup 本身超过四小时，之后还需运行一小时的 profiling。
+其他 H100 单节点场景仍默认使用 300 分钟；显式设置 `SALLOC_TIME_LIMIT`
+可覆盖任一默认值。canonical 工作负载保持不变。
+
 ## 8. 保留 trace 与运行 provenance
 
 AgentX 默认 replay 已记录的 assistant response。实时服务输出会被测量，但构造后续 turn 时会丢弃。只有在明确要进行不同的 live-assistant 实验时，才设置 `AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES=1`。除非用 `WEKA_LOADER_OVERRIDE` 固定，否则所选 trace corpus 依赖模型 family；resolver 会同时记录 loader 与 Hugging Face dataset（[trace 解析](../benchmarks/benchmark_lib.sh#L2023-L2102)、[replay 语义](../benchmarks/benchmark_lib.sh#L2104-L2270)）。
