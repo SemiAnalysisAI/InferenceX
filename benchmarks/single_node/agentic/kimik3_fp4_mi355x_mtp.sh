@@ -78,8 +78,10 @@ rocm-smi || true
 amd-smi || true
 
 # ---- Resolve traces and install deps ----------------------------------------
-resolve_trace_source
-install_agentic_deps
+if [ "${EVAL_ONLY:-false}" != "true" ]; then
+    resolve_trace_source
+    install_agentic_deps
+fi
 
 # ---- Reference env block ----------------------------------------------------
 export VLLM_ROCM_AITER_MLA_ASM_PADDING=asm
