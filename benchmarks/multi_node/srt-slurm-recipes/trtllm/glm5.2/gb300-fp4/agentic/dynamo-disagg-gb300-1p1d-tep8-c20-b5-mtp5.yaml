@@ -158,7 +158,7 @@ frontend:
 
 benchmark:
   type: custom
-  client_placement: last_decode
+  client_placement: head
   command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
   env:
     INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
