@@ -63,6 +63,16 @@ if [ -n "${ROCR_VISIBLE_DEVICES:-}" ]; then
     export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
 fi
 
+K3_PERF_VARIANT="${K3_PERF_VARIANT:-baseline}"
+if [[ "$K3_PERF_VARIANT" == "m7tier0collectives" ]]; then
+    mkdir -p "$RESULT_DIR"
+    bash "$(dirname "$0")/k3_perf_overlays/run_m7_tier0_collectives.sh" "$RESULT_DIR"
+    exit 0
+fi
+if [[ "$K3_PERF_VARIANT" != "baseline" ]]; then
+    echo "Error: unsupported Kimi-K3 performance variant '$K3_PERF_VARIANT'" >&2
+    exit 1
+fi
 # `hf download` creates the target dir if missing and is itself idempotent. The
 # 1.56 TB checkpoint is normally pre-staged, so these calls are a no-op there.
 if [[ -n "${MODEL_PATH:-}" ]]; then

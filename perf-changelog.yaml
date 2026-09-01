@@ -6780,3 +6780,11 @@
     - "Use Triton linear attention with FlashInfer decode and prefill GDN backends for the TP2/EP2 Qwen3.5 FP4 B200 MTP points at concurrency 16, 32, and 64."
     - "Keep all other topology and concurrency points on the existing backend defaults."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2790
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Compare the current Tier-2 Kimi-K3 tail against sequential and dual-communicator overlap variants using AITER reduce-scatter, sharded M=7 projection, and all-gather under changed-input HIP graph replay on eight gfx950 GPUs."
+  pr-link: XXX

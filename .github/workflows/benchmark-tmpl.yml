@@ -154,6 +154,11 @@ on:
         required: false
         type: boolean
         default: false
+      k3-perf-variant:
+        description: "Kimi-K3 C1 diagnostic variant"
+        required: false
+        type: string
+        default: "baseline"
       eval-limit:
         description: "Eval instance count: empty/full = whole split (default); N = first-N smoke slice"
         required: false
@@ -204,6 +209,7 @@ env:
   DURATION: ${{ inputs.duration }}
   REQUIRE_POWER: ${{ inputs.require-power && '1' || '0' }}
   AIPERF_EXPERIMENTAL_FAST: ${{ inputs.agentx-fast && '1' || '0' }}
+  K3_PERF_VARIANT: ${{ inputs.k3-perf-variant }}
   EVAL_LIMIT: ${{ inputs.eval-limit }}
   SWEBENCH_GEN_MODE: ${{ inputs.swebench-gen-mode }}
   AIPERF_FAILED_REQUEST_THRESHOLD: '0.10'
@@ -357,6 +363,14 @@ jobs:
 
           bash ./runners/launch_${RUNNER_NAME%%_*}.sh
 
+          if [ "${{ inputs.k3-perf-variant }}" = "m7tier0collectives" ]; then
+            test -s results/k3_m7_tier0_collectives_benchmark.json
+            test -s results/k3_m7_tier0_collectives_provenance.json
+            test -s results/k3_m7_tier0_collectives.log
+            test -s results/k3_m7_tier0_collectives_SHA256SUMS
+            echo "Kimi-K3 M=7 Tier-0 collective benchmark completed; skipping AgentX result validation."
+            exit 0
+          fi
           if [ "${{ inputs.eval-only }}" = "true" ]; then
             echo "Eval-only mode: skipping benchmark result file check"
             # Verify eval produced results
@@ -402,7 +416,7 @@ jobs:
           path: agg_${{ env.RESULT_FILENAME }}.json
 
       - name: Upload agentic aggregated result
-        if: ${{ always() && inputs.scenario-type == 'agentic-coding' }}
+        if: ${{ always() && inputs.scenario-type == 'agentic-coding' && inputs.k3-perf-variant != 'm7tier0collectives' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bmk_agentic_${{ env.RESULT_FILENAME }}
@@ -418,6 +432,14 @@ jobs:
             !results/aiperf_artifacts/inputs.json
             !results/aiperf_artifacts/profile_export_raw.jsonl
           if-no-files-found: ignore
+
+      - name: Upload Kimi-K3 M=7 Tier-0 collective artifacts
+        if: ${{ always() && inputs.k3-perf-variant == 'm7tier0collectives' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: k3_m7_tier0_collectives_${{ runner.name }}
+          path: results/k3_m7_tier0_collectives_*
+          if-no-files-found: error
 
       - name: Upload server logs
         if: always()
