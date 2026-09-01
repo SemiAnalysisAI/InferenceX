@@ -91,6 +91,23 @@ export AITER_BF16_FP8_MOE_BOUND=0
 export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 export AITER_QUICK_REDUCE_QUANTIZATION=INT4
 
+K3_PERF_VARIANT="${K3_PERF_VARIANT:-baseline}"
+case "$K3_PERF_VARIANT" in
+    baseline)
+        ;;
+    mla52494)
+        bash "$(dirname "$0")/k3_perf_overlays/apply_vllm_overlay.sh" pr52494
+        ;;
+    pynccl)
+        export K3_DISABLE_CUSTOM_ALL_REDUCE=1
+        ;;
+    *)
+        echo "Error: unsupported Kimi-K3 performance variant '$K3_PERF_VARIANT'" >&2
+        exit 1
+        ;;
+esac
+echo "Kimi-K3 C1 performance variant: $K3_PERF_VARIANT"
+
 # Workaround for MEC FW <177 RCCL memory reclaim issue (shared with the other
 # gfx950 recipes in this tree).
 mec_version=$(rocm-smi --showfw 2>/dev/null | grep MEC | head -n 1 | awk '{print $NF}')
@@ -312,6 +329,11 @@ export VLLM_USE_DIRECT_DCP_A2A=0
 export VLLM_USE_DIRECT_DCP_Q_GATHER=0
 export VLLM_USE_DIRECT_DCP_KV_GATHER=0
 
+CUSTOM_ALL_REDUCE_ARGS=()
+if [[ "${K3_DISABLE_CUSTOM_ALL_REDUCE:-0}" == "1" ]]; then
+    CUSTOM_ALL_REDUCE_ARGS+=(--disable-custom-all-reduce)
+fi
+
 { set +x; } 2>/dev/null
 VLLM_CMD=(
     vllm serve "$MODEL_PATH" --served-model-name "$MODEL"
@@ -334,6 +356,7 @@ VLLM_CMD=(
     --max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS"
     --attention-config '{"mla_prefill_backend":"ROCM_AITER_FA"}'
     "${ATTN_BE_ARGS[@]}"
+    "${CUSTOM_ALL_REDUCE_ARGS[@]}"
     "${COMPILATION_CONFIG_ARGS[@]}"
     "${SPEC_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
@@ -346,6 +369,14 @@ SERVER_PID=$!
 echo "Server PID: $SERVER_PID"
 
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
+
+grep -F "all-reduce backends" "$SERVER_LOG" || true
+if [[ "${K3_DISABLE_CUSTOM_ALL_REDUCE:-0}" == "1" ]]; then
+    if ! grep -F "Using ['PYNCCL'] all-reduce backends" "$SERVER_LOG" >/dev/null; then
+        echo "Error: --disable-custom-all-reduce did not expose a PYNCCL backend" >&2
+        exit 1
+    fi
+fi
 
 if [ "${EVAL_ONLY}" = "true" ]; then
     run_eval --port "$PORT"

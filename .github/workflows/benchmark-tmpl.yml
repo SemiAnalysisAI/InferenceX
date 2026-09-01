@@ -154,6 +154,11 @@ on:
         required: false
         type: boolean
         default: false
+      k3-perf-variant:
+        description: "Kimi-K3 C1 diagnostic variant"
+        required: false
+        type: string
+        default: "baseline"
       eval-limit:
         description: "Eval instance count: empty/full = whole split (default); N = first-N smoke slice"
         required: false
@@ -204,6 +209,7 @@ env:
   DURATION: ${{ inputs.duration }}
   REQUIRE_POWER: ${{ inputs.require-power && '1' || '0' }}
   AIPERF_EXPERIMENTAL_FAST: ${{ inputs.agentx-fast && '1' || '0' }}
+  K3_PERF_VARIANT: ${{ inputs.k3-perf-variant }}
   EVAL_LIMIT: ${{ inputs.eval-limit }}
   SWEBENCH_GEN_MODE: ${{ inputs.swebench-gen-mode }}
   AIPERF_FAILED_REQUEST_THRESHOLD: '0.10'

@@ -6741,3 +6741,12 @@
     - "Configure model-specific tool and reasoning parsers for the Kimi-K3 and MiniMax-M3 serving paths so opt-in verifier requests produce structured OpenAI tool calls."
     - "Limit shared AgentX readiness and synthetic-acceptance rewrites to eval-only runs so default throughput recipe rendering remains unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2634
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a manual exact TP8/DCP1 concurrency-1 diagnostic selector for the Kimi-K3 MI355X gap study."
+    - "Compare upstream vLLM PR 52494 and a PYNCCL-only collective arm independently without changing the canonical default recipe."
+  pr-link: XXX
