@@ -90,7 +90,10 @@ export SGLANG_USE_AITER=1
 export SGLANG_USE_AITER_UNIFIED_ATTN=1
 export AITER_FLYDSL_FORCE=1
 export SGLANG_MAMBA_SSM_DTYPE=bfloat16
-export ROCM_QUICK_REDUCE_QUANTIZATION=INT8
+# Fused AR+RMSNorm via AITER custom allreduce (replaces INT8 QuickReduce;
+# the two are mutually exclusive).  Measured +5.9% output throughput at
+# TP2/conc4 agentic workload vs the QuickReduce baseline.
+# export ROCM_QUICK_REDUCE_QUANTIZATION=INT8
 export SGLANG_TIMEOUT_KEEP_ALIVE=1800
 
 if [ "${EVAL_ONLY:-false}" != "true" ]; then
@@ -127,6 +130,7 @@ SGLANG_CMD=(
     --speculative-num-steps 3
     --speculative-eagle-topk 1
     --speculative-num-draft-tokens 4
+    --enable-aiter-allreduce-fusion
     --enable-metrics
     --enable-cache-report
     "${CACHE_ARGS[@]}"
