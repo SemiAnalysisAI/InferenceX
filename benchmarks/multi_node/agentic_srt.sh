@@ -9,6 +9,11 @@ set -x
 INFMAX_CONTAINER_WORKSPACE="${INFMAX_CONTAINER_WORKSPACE:-/infmax-workspace}"
 source "$INFMAX_CONTAINER_WORKSPACE/benchmarks/benchmark_lib.sh"
 
+if [[ -n "${SRT_FRONTEND_HOST:-}" ]]; then
+    check_env_vars SRT_FRONTEND_PORT
+    export AIPERF_SERVER_URL="http://${SRT_FRONTEND_HOST}:${SRT_FRONTEND_PORT}"
+fi
+
 # benchmark_lib deliberately clears inherited MAX_MODEL_LEN for AgentX so a
 # workflow default cannot silently truncate a model's native context. Native
 # srt-slurm topologies may still expose a smaller, explicit service limit (for
@@ -148,6 +153,8 @@ while time.monotonic() < deadline:
             worker_metrics = fetch_metrics(worker_url)
             worker_active += metric_sum(worker_metrics, "vllm:num_requests_running")
             worker_active += metric_sum(worker_metrics, "vllm:num_requests_waiting")
+            worker_active += metric_sum(worker_metrics, "trtllm_num_requests_running")
+            worker_active += metric_sum(worker_metrics, "trtllm_num_requests_waiting")
         print(
             f"Agentic drain status: frontend_active={frontend_active:g} "
             f"worker_running_or_waiting={worker_active:g}",
