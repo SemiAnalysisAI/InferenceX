@@ -167,33 +167,25 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     agentic_pip_install --quiet --no-cache-dir --no-deps \
         "lmcache==${LMCACHE_VERSION}" --find-links "$LMCACHE_ROCM_INDEX"
 
+    python3 -c \
+        "from lmcache.v1.multiprocess.http_server import run_http_server"
+
     # One MP server for the node, per the Kimi-K3 recipe
     # (docs.lmcache.ai/recipes/kimi_k3.html), with --chunk-size sized for
     # THIS stack rather than the recipe's CUDA-path 768: the connector
     # requires the chunk to be a multiple of every engine KV group's
     # tokens_per_block. The hybrid KDA/MLA layout registers attention groups
-    # at 1536 tokens and a KDA state group at 3072. Under DCP, LMCache scales
-    # the attention group by DCP_SIZE, so DCP8 requires 1536 * 8 = 12288,
-    # which is also divisible by the KDA group size. The multi-group layout
-    # also requires one object group per sliding-window size:
+    # at 1536 tokens and a KDA state group at 3072. Use 12288 for every point,
+    # including DCP1 C14, so it is divisible by both group sizes and matches
+    # the requested LMCache configuration. The multi-group layout also
+    # requires one object group per sliding-window size:
     # --separate-object-groups.
     LMCACHE_PORT=6555
     LMCACHE_HTTP_PORT=8090
     LMCACHE_LOG="$RESULT_DIR/lmcache_server.log"
 
     LMCACHE_L1_SIZE_GB="$TOTAL_CPU_DRAM_GB"
-    LMCACHE_ATTN_CHUNK_ALIGN=$((1536 * ${DCP_SIZE:-1}))
-    LMCACHE_STATE_CHUNK_ALIGN=3072
-    gcd_a=$LMCACHE_ATTN_CHUNK_ALIGN
-    gcd_b=$LMCACHE_STATE_CHUNK_ALIGN
-    while [ "$gcd_b" -ne 0 ]; do
-        gcd_tmp=$((gcd_a % gcd_b))
-        gcd_a=$gcd_b
-        gcd_b=$gcd_tmp
-    done
-    LMCACHE_CHUNK_SIZE=$((
-        LMCACHE_ATTN_CHUNK_ALIGN / gcd_a * LMCACHE_STATE_CHUNK_ALIGN
-    ))
+    LMCACHE_CHUNK_SIZE=12288
 
     LMCACHE_CMD=(
         lmcache server
