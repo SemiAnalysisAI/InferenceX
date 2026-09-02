@@ -6865,3 +6865,11 @@
     - "Add an isolated gfx950 diagnostic for Kimi-K3's FP32 896-expert top-16 router, comparing stock AITER with the hardened radix-select candidate at graph sizes 1, 2, 4, 7, and 14."
     - "Use M=4 as the three-draft C1 promotion shape, and require exact source and binary provenance, eager correctness, changed-input HIP graph replay, dispatch canaries, alternating same-node timing rounds, raw samples, and a projected 92-router-call decode-step saving before natural AgentX validation."
   pr-link: XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Fetch sufficient candidate history for the pinned stock AITER revision so the radix-router diagnostic's fail-closed ancestry check operates on connected commits in a shallow checkout."
+  pr-link: XXX

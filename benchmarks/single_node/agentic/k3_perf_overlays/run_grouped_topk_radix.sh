@@ -23,7 +23,10 @@ stock_jit="$scratch/jit-stock"
 
 git init --quiet "$candidate_checkout"
 git -C "$candidate_checkout" remote add origin "$aiter_repo"
-git -C "$candidate_checkout" fetch --quiet --depth 4 origin "$aiter_ref"
+# Keep enough first-parent history to include the pinned stock revision.  A
+# separate depth-1 fetch of stock_commit leaves it as a disconnected shallow
+# root, which makes merge-base reject a valid ancestor relationship.
+git -C "$candidate_checkout" fetch --quiet --depth 8 origin "$aiter_ref"
 git -C "$candidate_checkout" checkout --quiet --detach FETCH_HEAD
 actual_candidate_commit="$(git -C "$candidate_checkout" rev-parse HEAD)"
 if [[ "$actual_candidate_commit" != "$candidate_commit" ]]; then
@@ -32,7 +35,7 @@ if [[ "$actual_candidate_commit" != "$candidate_commit" ]]; then
     exit 1
 fi
 if ! git -C "$candidate_checkout" cat-file -e "${stock_commit}^{commit}"; then
-    git -C "$candidate_checkout" fetch --quiet --depth 1 origin "$stock_commit"
+    git -C "$candidate_checkout" fetch --quiet --deepen 64 origin "$aiter_ref"
 fi
 if ! git -C "$candidate_checkout" merge-base --is-ancestor \
     "$stock_commit" "$candidate_commit"; then
