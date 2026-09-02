@@ -7,7 +7,7 @@
 # srun-runs server.sh inside one Docker container per node. NODE_RANK
 # (= SLURM_PROCID) drives role selection inside server.sh.
 
-set -euo pipefail
+set -eo pipefail
 
 echo "=== llm-d job start ==="
 echo "UTC: $(TZ=UTC date '+%Y-%m-%d %H:%M:%S %Z')"
@@ -74,7 +74,7 @@ DOCKER_MOUNT_PATH="/workspace"
 
 cleanup() {
     echo "[${SLURM_JOB_ID}] cleanup on $(hostname)"
-    [[ -n "${WATCHER_PID:-}" ]] && kill "$WATCHER_PID" 2>/dev/null || true
+    [[ -n "${WATCHER_PID}" ]] && kill "$WATCHER_PID" 2>/dev/null || true
 }
 trap cleanup INT TERM HUP EXIT
 
@@ -97,8 +97,28 @@ WATCHER_PID=$!
 # for clusters that require enroot+pyxis srun (e.g. gb200-nv, where the
 # SLURM user is not in the docker group). Same env contract on both
 # paths; only the per-node container launch differs.
-LLMD_CONTAINER_ENGINE="${LLMD_CONTAINER_ENGINE:-docker}"
+: "${LLMD_CONTAINER_ENGINE:?Set docker or pyxis in the invoking launcher}"
 echo "LLMD_CONTAINER_ENGINE=$LLMD_CONTAINER_ENGINE"
+
+# Preserve the workflow's AgentX protocol, provenance, offload and physical GPU
+# metadata on both engines. Forward names, not interpolated values: JSON and
+# HF_TOKEN must never be embedded in the nested shell command or printed.
+AGENTIC_ENV_NAMES=(
+    IS_AGENTIC SCENARIO_TYPE CONC CONC_LIST DURATION AIPERF_EXPERIMENTAL_FAST
+    IMAGE RECIPE_FINGERPRINT DISAGG HF_TOKEN
+    KV_OFFLOADING KV_OFFLOAD_BACKEND KV_OFFLOAD_BACKEND_METADATA
+    ROUTER_METADATA KV_P2P_TRANSFER TOTAL_CPU_DRAM_GB
+    PREFILL_NUM_WORKERS PREFILL_TP PREFILL_PP_SIZE PREFILL_PCP_SIZE
+    PREFILL_DCP_SIZE PREFILL_EP PREFILL_DP_ATTN
+    DECODE_NUM_WORKERS DECODE_TP DECODE_PP_SIZE DECODE_PCP_SIZE
+    DECODE_DCP_SIZE DECODE_EP DECODE_DP_ATTN
+)
+AGENTIC_DOCKER_ENV=""
+for env_name in "${AGENTIC_ENV_NAMES[@]}"; do
+    export "$env_name"
+    AGENTIC_DOCKER_ENV+=" -e $env_name"
+done
+AGENTIC_PYXIS_ENV=$(IFS=,; echo "${AGENTIC_ENV_NAMES[*]}")
 
 if [[ "$LLMD_CONTAINER_ENGINE" == "docker" ]]; then
     # One docker run per node, one task per node. server.sh dispatches by NODE_RANK.
@@ -107,7 +127,7 @@ if [[ "$LLMD_CONTAINER_ENGINE" == "docker" ]]; then
         --signal=TERM@30 \
         --unbuffered \
         bash -lc "
-set -euo pipefail
+set -eo pipefail
 echo \"Rank \$SLURM_PROCID on \$(hostname)\"
 
 docker ps -aq --filter name=\"^${DOCKER_CONT_NAME}_\" | xargs -r docker rm -f || true
@@ -167,6 +187,7 @@ exec docker run --rm \
     -e SPEC_DECODING=$SPEC_DECODING \
     -e IS_MULTINODE=$IS_MULTINODE \
     -e CONFIG_FILE=$CONFIG_FILE \
+    $AGENTIC_DOCKER_ENV \
     --name \"${DOCKER_CONT_NAME}_\$SLURM_PROCID\" \
     \"\$DOCKER_IMAGE_NAME\" -lc '
         set -o pipefail
@@ -207,6 +228,8 @@ elif [[ "$LLMD_CONTAINER_ENGINE" == "pyxis" ]]; then
     PYXIS_ENV_LIST+=",RUN_EVAL,EVAL_ONLY,EVAL_CONC,FRAMEWORK,PRECISION,MODEL_PREFIX"
     PYXIS_ENV_LIST+=",RUNNER_TYPE,RESULT_FILENAME,SPEC_DECODING,IS_MULTINODE,CONFIG_FILE"
 
+    PYXIS_ENV_LIST+=",$AGENTIC_PYXIS_ENV"
+
     PYXIS_MOUNTS="${MODEL_DIR}:/models:ro"
     PYXIS_MOUNTS+=",${BENCHMARK_LOGS_DIR}:/benchmark_logs"
     PYXIS_MOUNTS+=",${DI_REPO_DIR}:${DOCKER_MOUNT_PATH}"
@@ -226,7 +249,7 @@ elif [[ "$LLMD_CONTAINER_ENGINE" == "pyxis" ]]; then
     [[ -f "${DI_REPO_DIR}/benchmarks/llm-d/binaries.env" ]] && \
         source "${DI_REPO_DIR}/benchmarks/llm-d/binaries.env"
     for _bin in epp pd-sidecar envoy; do
-        if [[ -n "${LLMD_BIN_DIR:-}" && -x "${LLMD_BIN_DIR}/${_bin}" ]]; then
+        if [[ -n "${LLMD_BIN_DIR}" && -x "${LLMD_BIN_DIR}/${_bin}" ]]; then
             PYXIS_MOUNTS+=",${LLMD_BIN_DIR}/${_bin}:/usr/local/bin/${_bin}:ro"
             echo "Mounting ${LLMD_BIN_DIR}/${_bin} -> /usr/local/bin/${_bin}"
         fi

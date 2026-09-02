@@ -14,17 +14,14 @@
 # via --data-parallel-hybrid-lb; the leader accepts traffic, workers serve their
 # local DP ranks.
 
-set -euo pipefail
+set -eo pipefail
 
 source /workspace/benchmarks/benchmark_lib.sh
 
 # ----------------------------------------------------------------
 # Config + service ports
 # ----------------------------------------------------------------
-NODE_RANK="${NODE_RANK:-${SLURM_PROCID:-0}}"
-PREFILL_NODES="${PREFILL_NODES:-1}"
-DECODE_NODES="${DECODE_NODES:-1}"
-GPUS_PER_NODE="${GPUS_PER_NODE:-8}"
+check_env_vars NODE_RANK PREFILL_NODES DECODE_NODES GPUS_PER_NODE PREFILL_WORKERS DECODE_WORKERS ALL_IPS
 # Aggregated mode: no decode role at all, so no P/D KV handoff (no
 # pd-sidecar, no NixlConnector) - the single engine does prefill+decode
 # in-process. DECODE_NODES=0 is the only signal for this; everything else
@@ -72,7 +69,7 @@ print(ip, iface)
 ' 2>/dev/null) || true
 HOST_IP=$(echo "$_HOST_INFO" | awk '{print $1}')
 DEFAULT_IFACE=$(echo "$_HOST_INFO" | awk '{print $2}')
-DEFAULT_IFACE="${DEFAULT_IFACE:-eth0}"
+check_env_vars HOST_IP DEFAULT_IFACE
 
 VLLM_LOG="/benchmark_logs/vllm_rank${NODE_RANK}.log"
 SIDECAR_LOG="/benchmark_logs/sidecar_rank${NODE_RANK}.log"
@@ -88,9 +85,7 @@ echo "=== rank=$NODE_RANK host=$HOST_IP model=$MODEL ==="
 # engines, each spanning (role_nodes / role_workers) nodes with its own DP
 # coordinator (leader IP) and rank range. workers=1 => one engine over all role
 # nodes (1P+1D / mid-curve); >1 => high-tpt (e.g. 2 prefill : 1 decode, DEP8 each).
-PREFILL_WORKERS="${PREFILL_WORKERS:-1}"
-DECODE_WORKERS="${DECODE_WORKERS:-1}"
-IFS=',' read -r -a _ALL_IPS <<< "${ALL_IPS:-}"
+IFS=',' read -r -a _ALL_IPS <<< "${ALL_IPS}"
 
 if [[ "$NODE_RANK" -lt "$PREFILL_NODES" ]]; then
     ROLE="prefill"
@@ -113,15 +108,9 @@ else
     exit 1
 fi
 
-# Each engine's DP coordinator = its leader node's IP (ALL_IPS[leader rank]);
-# fall back to the role leader env when ALL_IPS is unset.
-if [[ -n "${_ALL_IPS[${_group_leader_rank}]:-}" ]]; then
-    DP_ADDR="${_ALL_IPS[${_group_leader_rank}]}"
-elif [[ "$ROLE" == "prefill" ]]; then
-    DP_ADDR="$PREFILL_DP_ADDR"
-else
-    DP_ADDR="$DECODE_DP_ADDR"
-fi
+# job.slurm supplies the complete rank-ordered address list.
+DP_ADDR="${_ALL_IPS[$_group_leader_rank]}"
+check_env_vars DP_ADDR
 
 DP_SIZE_LOCAL="$GPUS_PER_NODE"
 START_RANK=$((LWS_WORKER_INDEX * DP_SIZE_LOCAL))
@@ -132,6 +121,45 @@ ROLE_ENABLE_EP=true
 
 echo "ROLE=$ROLE DP_SIZE=$DP_SIZE DP_ADDR=$DP_ADDR LWS_WORKER_INDEX=$LWS_WORKER_INDEX START_RANK=$START_RANK"
 
+# Explicit transport baseline; role recipe env is applied afterwards.
+export GLOO_SOCKET_IFNAME=$DEFAULT_IFACE
+export NCCL_SOCKET_IFNAME=$DEFAULT_IFACE
+export VLLM_SKIP_P2P_CHECK=1
+# Randomized DP dummy inputs make idle DP ranks fan their lockstep dummy passes
+# across all experts (full MoE all-to-all), wasting prefill bandwidth; a recipe
+# may set this to 0.
+export VLLM_RANDOMIZE_DP_DUMMY_INPUTS=1
+export VLLM_USE_DEEP_GEMM=1
+# Cold-start budget for engine-core readiness. DSV4-Pro on GB200 cold-starts in
+# ~9-11 min (weight load + DeepGEMM JIT warmup + cudagraph capture + NIXL/UCX
+# handshake); the 600s vLLM default is too tight, so allow 30 min.
+export VLLM_ENGINE_READY_TIMEOUT_S=1800
+# DeepGEMM JIT links -l:libcuda.so.1 at warmup; the compat dir is on
+# LD_LIBRARY_PATH (runtime) but not LIBRARY_PATH (link time). Prepend it, plus
+# the arch-specific toolkit lib dir resolved from `uname -m`.
+case "$(uname -m)" in
+    aarch64|arm64) _NCT_LIB=/usr/lib/aarch64-linux-gnu ;;
+    *)             _NCT_LIB=/usr/lib/x86_64-linux-gnu ;;
+esac
+export LIBRARY_PATH=/usr/local/cuda/compat:${_NCT_LIB}:${LIBRARY_PATH}
+export VLLM_NIXL_SIDE_CHANNEL_HOST="$HOST_IP"
+export VLLM_LOGGING_LEVEL=INFO
+
+# Pin NIXL/UCX to IB verbs (rc) so cross-node KV rides the IB HCAs (job.slurm
+# exposes /dev/infiniband + IPC_LOCK); cuda_copy/cuda_ipc cover intra-node.
+export UCX_TLS=cuda_copy,cuda_ipc,rc
+
+
+if [[ "$LWS_GROUP_SIZE" -gt 1 ]]; then
+    export NVIDIA_GDRCOPY=enabled
+    # ibgda default kept for future DeepEP/wide-EP recipes; a recipe may override
+    # NVSHMEM_REMOTE_TRANSPORT to none.
+    export NVSHMEM_REMOTE_TRANSPORT=ibgda
+    export NVSHMEM_IB_ENABLE_IBGDA=true
+    export NVSHMEM_SYMMETRIC_SIZE=16G
+    export NVSHMEM_BOOTSTRAP_UID_SOCK_IFNAME=$DEFAULT_IFACE
+fi
+
 # ----------------------------------------------------------------
 # Recipe: per-role serve args + env (/etc/llmd-recipes/$CONFIG_FILE)
 # ----------------------------------------------------------------
@@ -140,27 +168,20 @@ echo "ROLE=$ROLE DP_SIZE=$DP_SIZE DP_ADDR=$DP_ADDR LWS_WORKER_INDEX=$LWS_WORKER_
 # verbatim), env (map, exported before vllm serve). Absent keys keep the
 # defaults above, so a recipe with neither tp nor EP is a plain TP=1 DP+EP run.
 ROLE_EXTRA_ARGS=""
-if [[ -n "${CONFIG_FILE:-}" ]]; then
+if [[ -n "${CONFIG_FILE}" ]]; then
     RECIPE_PATH="/etc/llmd-recipes/${CONFIG_FILE}"
     if [[ -f "$RECIPE_PATH" ]]; then
         echo "Loading $ROLE recipe from $RECIPE_PATH"
-        eval "$(python3 - <<PY
-import yaml
-recipe = yaml.safe_load(open('${RECIPE_PATH}'))
-section = recipe.get('${ROLE}', {}) or {}
-extra = (section.get('extra-args') or '').strip()
-print(f'ROLE_EXTRA_ARGS={extra!r}')
-tp = section.get('tp')
-if tp is not None:
-    print(f'TP_SIZE={int(tp)}')
-ep = section.get('enable-expert-parallel')
-if ep is not None:
-    print(f'ROLE_ENABLE_EP={"true" if ep else "false"}')
-for k, v in (section.get('env') or {}).items():
-    print(f'export {k}={v!r}')
-PY
-)"
+        # Keep command substitution separate from eval so renderer failures
+        # (missing golden AL or incorrect offload metadata) stop server startup.
+        ROLE_ASSIGNMENTS=$(python3 /workspace/benchmarks/multi_node/llm-d/recipe.py \
+            "$RECIPE_PATH" --role "$ROLE")
+        eval "$ROLE_ASSIGNMENTS"
     else
+        if [[ "${IS_AGENTIC}" == "1" ]]; then
+            echo "ERROR: AgentX recipe not found: $RECIPE_PATH" >&2
+            exit 1
+        fi
         echo "WARNING: CONFIG_FILE=$CONFIG_FILE but $RECIPE_PATH not found; using defaults" >&2
     fi
 fi
@@ -176,17 +197,9 @@ echo "Resolved $ROLE TP_SIZE=$TP_SIZE ROLE_ENABLE_EP=$ROLE_ENABLE_EP"
 # Mooncake uses P2PHANDSHAKE embedded mode (no external metadata server)
 # so no K8s sidecar is required - nodes negotiate directly via RDMA.
 MOONCAKE_CONFIG_PATH=""
-if [[ -n "${CONFIG_FILE:-}" && -f "/etc/llmd-recipes/${CONFIG_FILE}" ]]; then
-    _MC_JSON=$(python3 - <<PY
-import yaml, json, sys
-recipe = yaml.safe_load(open('/etc/llmd-recipes/${CONFIG_FILE}'))
-mc = (recipe.get('mooncake') or {}).get('store_config')
-if not mc:
-    print('')
-else:
-    print(json.dumps(mc))
-PY
-)
+if [[ -n "${CONFIG_FILE}" && -f "/etc/llmd-recipes/${CONFIG_FILE}" ]]; then
+    _MC_JSON=$(python3 /workspace/benchmarks/multi_node/llm-d/recipe.py \
+        "/etc/llmd-recipes/${CONFIG_FILE}" --mooncake)
     if [[ -n "$_MC_JSON" ]]; then
         echo "$_MC_JSON" > /tmp/mooncake_config.json
         MOONCAKE_CONFIG_PATH=/tmp/mooncake_config.json
@@ -199,53 +212,12 @@ PY
 fi
 
 # ----------------------------------------------------------------
-# Transport env (NCCL / UCX / NIXL), recipe-overridable
-# ----------------------------------------------------------------
-export GLOO_SOCKET_IFNAME=${GLOO_SOCKET_IFNAME:-$DEFAULT_IFACE}
-export NCCL_SOCKET_IFNAME=${NCCL_SOCKET_IFNAME:-$DEFAULT_IFACE}
-export VLLM_SKIP_P2P_CHECK=1
-# Randomized DP dummy inputs make idle DP ranks fan their lockstep dummy passes
-# across all experts (full MoE all-to-all), wasting prefill bandwidth; a recipe
-# may set this to 0.
-export VLLM_RANDOMIZE_DP_DUMMY_INPUTS=${VLLM_RANDOMIZE_DP_DUMMY_INPUTS:-1}
-export VLLM_USE_DEEP_GEMM=1
-# Cold-start budget for engine-core readiness. DSV4-Pro on GB200 cold-starts in
-# ~9-11 min (weight load + DeepGEMM JIT warmup + cudagraph capture + NIXL/UCX
-# handshake); the 600s vLLM default is too tight, so allow 30 min.
-export VLLM_ENGINE_READY_TIMEOUT_S=${VLLM_ENGINE_READY_TIMEOUT_S:-1800}
-# DeepGEMM JIT links -l:libcuda.so.1 at warmup; the compat dir is on
-# LD_LIBRARY_PATH (runtime) but not LIBRARY_PATH (link time). Prepend it, plus
-# the arch-specific toolkit lib dir resolved from `uname -m`.
-case "$(uname -m)" in
-    aarch64|arm64) _NCT_LIB=/usr/lib/aarch64-linux-gnu ;;
-    *)             _NCT_LIB=/usr/lib/x86_64-linux-gnu ;;
-esac
-export LIBRARY_PATH=/usr/local/cuda/compat:${_NCT_LIB}:${LIBRARY_PATH:-}
-export VLLM_NIXL_SIDE_CHANNEL_HOST="$HOST_IP"
-export VLLM_LOGGING_LEVEL=${VLLM_LOGGING_LEVEL:-INFO}
-
-# Pin NIXL/UCX to IB verbs (rc) so cross-node KV rides the IB HCAs (job.slurm
-# exposes /dev/infiniband + IPC_LOCK); cuda_copy/cuda_ipc cover intra-node.
-export UCX_TLS=${UCX_TLS:-cuda_copy,cuda_ipc,rc}
-
-# ----------------------------------------------------------------
 # Wide-EP NVSHMEM / ibgda env (only when an engine spans >1 node)
 # ----------------------------------------------------------------
 # Single-node-per-role recipes avoid DeepEP / NVSHMEM ibgda, so leave these off
 # there to avoid triggering ibgda code paths that are not needed.
-if [[ "$LWS_GROUP_SIZE" -gt 1 ]]; then
-    export NVIDIA_GDRCOPY=enabled
-    # ibgda default kept for future DeepEP/wide-EP recipes; a recipe may override
-    # NVSHMEM_REMOTE_TRANSPORT to none.
-    export NVSHMEM_REMOTE_TRANSPORT=${NVSHMEM_REMOTE_TRANSPORT:-ibgda}
-    export NVSHMEM_IB_ENABLE_IBGDA=${NVSHMEM_IB_ENABLE_IBGDA:-true}
-    export NVSHMEM_SYMMETRIC_SIZE=${NVSHMEM_SYMMETRIC_SIZE:-16G}
-    export NVSHMEM_BOOTSTRAP_UID_SOCK_IFNAME=${NVSHMEM_BOOTSTRAP_UID_SOCK_IFNAME:-$DEFAULT_IFACE}
-    # NVSHMEM ignores NVSHMEM_HCA_PE_MAPPING when NVSHMEM_HCA_LIST is set, so
-    # clear the latter when the recipe provides an explicit PE mapping.
-    if [[ -n "${NVSHMEM_HCA_PE_MAPPING:-}" ]]; then
-        unset NVSHMEM_HCA_LIST 2>/dev/null || true
-    fi
+if [[ "$LWS_GROUP_SIZE" -gt 1 && -n "$NVSHMEM_HCA_PE_MAPPING" ]]; then
+    unset NVSHMEM_HCA_LIST
 fi
 
 # ----------------------------------------------------------------
@@ -265,14 +237,14 @@ COMMON_ARGS=(
 # (NixlConnector + MooncakeStoreConnector) is wired with kv_both so DP ranks
 # can share prefix-cache blocks across runs via the Mooncake RDMA store.
 if [[ "$IS_AGGREGATED" -eq 0 ]]; then
-    if [[ -n "${KV_ROLE_OVERRIDE:-}" ]]; then
+    if [[ -n "${KV_ROLE_OVERRIDE}" ]]; then
         KV_ROLE="$KV_ROLE_OVERRIDE"
     elif [[ "$ROLE" == "prefill" ]]; then
         KV_ROLE="kv_producer"
     else
         KV_ROLE="kv_consumer"
     fi
-    if [[ -n "${MOONCAKE_CONFIG_PATH:-}" ]]; then
+    if [[ -n "${MOONCAKE_CONFIG_PATH}" ]]; then
         # MultiConnector: NixlConnector handles direct P/D KV transfer;
         # MooncakeStoreConnector enables cross-node prefix-cache lookup via RDMA.
         # Prefill uses kv_both so it can both store new KV and load cache hits.
@@ -289,7 +261,7 @@ if [[ "$IS_AGGREGATED" -eq 0 ]]; then
         KV_TRANSFER_CONFIG="{\"kv_connector\":\"NixlConnector\",\"kv_role\":\"$KV_ROLE\",\"kv_load_failure_policy\":\"fail\"}"
     fi
     COMMON_ARGS+=(--kv_transfer_config "$KV_TRANSFER_CONFIG")
-elif [[ -n "${MOONCAKE_CONFIG_PATH:-}" ]]; then
+elif [[ -n "${MOONCAKE_CONFIG_PATH}" ]]; then
     # Aggregated + Mooncake: single role acts as kv_both (stores new KV and
     # loads cache hits from the Mooncake RDMA store for prefix-cache sharing).
     KV_TRANSFER_CONFIG="{\"kv_connector\":\"MultiConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"connectors\":[{\"kv_connector\":\"NixlConnector\",\"kv_role\":\"kv_both\",\"kv_load_failure_policy\":\"fail\",\"kv_buffer_device\":\"cuda\",\"kv_connector_extra_config\":{\"enforce_handshake_compat\":false,\"enable_cross_layers_blocks\":false}},{\"kv_connector\":\"MooncakeStoreConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"load_async\":true,\"lookup_async\":true,\"enable_cross_layers_blocks\":false,\"enable_offload\":false}}]}}"
@@ -302,7 +274,7 @@ fi
 # load-balances its local DP ranks -> ONE serving port (VLLM_PORT) per node, so
 # the local rank-0 health port is always VLLM_PORT.
 HEALTH_PORT="$VLLM_PORT"
-API_SERVER_COUNT="${LLMD_API_SERVER_COUNT:-4}"
+API_SERVER_COUNT="4"
 # Multiple frontends only help the DP (wide-EP) path, where they load-balance
 # across the node's local DP ranks. A pure-TP engine has a single core with one
 # frontend, so it keeps the default count (also avoids --api-server-count
@@ -548,7 +520,7 @@ PY
         {
             echo "=== NET DIAG: decode -> prefill ${ip}:${port} ==="
             echo "[diag] decode node: $(hostname -f 2>/dev/null || hostname) local-ips: $(hostname -I 2>/dev/null)"
-            echo "[diag] ifaces: DEFAULT_IFACE=${DEFAULT_IFACE:-} NCCL_SOCKET_IFNAME=${NCCL_SOCKET_IFNAME:-} GLOO_SOCKET_IFNAME=${GLOO_SOCKET_IFNAME:-}"
+            echo "[diag] ifaces: DEFAULT_IFACE=${DEFAULT_IFACE} NCCL_SOCKET_IFNAME=${NCCL_SOCKET_IFNAME} GLOO_SOCKET_IFNAME=${GLOO_SOCKET_IFNAME}"
             # Local source address the kernel would pick to reach ip: reveals which
             # subnet/interface the route uses, without needing iproute2.
             python3 - "$ip" <<'PY' 2>&1 || true
@@ -632,59 +604,65 @@ PY
     done
     echo "All ${#_prefill_ips[@]} prefill vLLM endpoint(s) ready"
 
-    # ---- Benchmark sweep (one run per concurrency level) ----
-    # BENCH_MAX_CONCURRENCY is an 'x'-delimited list from submit.sh (e.g. "1024x512").
-    IFS='x' read -r -a CONCURRENCIES <<< "$BENCH_MAX_CONCURRENCY"
-    # GPU counts embedded in the result filename as _gpus_/_ctx_/_gen_ tokens so the
-    # CI "Process result" step (benchmark-multinode-tmpl.yml) can parse them and run
-    # process_result.py for llm-d -- same filename convention as amd_utils/bench.sh.
-    # ctx = prefill GPUs, gen = decode GPUs; nodes*GPUS_PER_NODE is correct for any
-    # PREFILL_WORKERS/DECODE_WORKERS split (e.g. high-tpt 2P -> 16 prefill GPUs).
-    _bench_prefill_gpus=$(( PREFILL_NODES * GPUS_PER_NODE ))
-    _bench_decode_gpus=$(( DECODE_NODES * GPUS_PER_NODE ))
-    _bench_total_gpus=$(( _bench_prefill_gpus + _bench_decode_gpus ))
-    for max_concurrency in "${CONCURRENCIES[@]}"; do
-        num_prompts=$(( max_concurrency * BENCH_NUM_PROMPTS_MULTIPLIER ))
-        [[ "$num_prompts" -lt 16 ]] && num_prompts=16
-        # Bench against Envoy (EPP routes to decode; the sidecar pulls from
-        # prefill via NIXL). --bench-serving-dir = the /workspace repo bind-mount;
-        # --tokenizer = /models (served-model-name is not a valid HF repo id).
-        # DSV4-Pro needs trust-remote-code + tokenizer-mode deepseek_v4 (the older
-        # transformers wheel does not register it) + chat template / --dsv4 to
-        # match the dynamo-vllm bench prompt formatting.
-        bench_extra_args=()
-        if [[ "${MODEL_NAME,,}" == *"deepseek-v4"* ]]; then
-            bench_extra_args+=(
-                --trust-remote-code
-                --tokenizer-mode deepseek_v4
-                --use-chat-template
-                --dsv4
-            )
-        fi
+    if [[ "${IS_AGENTIC}" == "1" && "${EVAL_ONLY}" != "true" ]]; then
+        export ENVOY_PORT VLLM_PORT INFMAX_CONTAINER_WORKSPACE
+        bash /workspace/benchmarks/multi_node/llm-d/agentic.sh
+    elif [[ "${EVAL_ONLY}" != "true" ]]; then
+        # ---- Benchmark sweep (one run per concurrency level) ----
+        # BENCH_MAX_CONCURRENCY is an 'x'-delimited list from submit.sh (e.g. "1024x512").
+        IFS='x' read -r -a CONCURRENCIES <<< "$BENCH_MAX_CONCURRENCY"
+        # GPU counts embedded in the result filename as _gpus_/_ctx_/_gen_ tokens so the
+        # CI "Process result" step (benchmark-multinode-tmpl.yml) can parse them and run
+        # process_result.py for llm-d -- same filename convention as amd_utils/bench.sh.
+        # ctx = prefill GPUs, gen = decode GPUs; nodes*GPUS_PER_NODE is correct for any
+        # PREFILL_WORKERS/DECODE_WORKERS split (e.g. high-tpt 2P -> 16 prefill GPUs).
+        _bench_prefill_gpus=$(( PREFILL_NODES * GPUS_PER_NODE ))
+        _bench_decode_gpus=$(( DECODE_NODES * GPUS_PER_NODE ))
+        _bench_total_gpus=$(( _bench_prefill_gpus + _bench_decode_gpus ))
+        for max_concurrency in "${CONCURRENCIES[@]}"; do
+            num_prompts=$(( max_concurrency * BENCH_NUM_PROMPTS_MULTIPLIER ))
+            [[ "$num_prompts" -lt 16 ]] && num_prompts=16
+            # Bench against Envoy (EPP routes to decode; the sidecar pulls from
+            # prefill via NIXL). --bench-serving-dir = the /workspace repo bind-mount;
+            # --tokenizer = /models (served-model-name is not a valid HF repo id).
+            # DSV4-Pro needs trust-remote-code + tokenizer-mode deepseek_v4 (the older
+            # transformers wheel does not register it) + chat template / --dsv4 to
+            # match the dynamo-vllm bench prompt formatting.
+            bench_extra_args=()
+            if [[ "${MODEL_NAME,,}" == *"deepseek-v4"* ]]; then
+                bench_extra_args+=(
+                    --trust-remote-code
+                    --tokenizer-mode deepseek_v4
+                    --use-chat-template
+                    --dsv4
+                )
+            fi
 
-        # Non-fatal: a failed or timed-out conc point must not abort the sweep
-        # or (under set -e) skip the allocation release below. The EXIT trap
-        # releases the allocation regardless, but continuing here lets a
-        # multi-conc sweep record every point it can.
-        run_benchmark_serving \
-            --bench-serving-dir /workspace \
-            --tokenizer /models \
-            --model "$MODEL_NAME" \
-            --port "$ENVOY_PORT" \
-            --backend openai \
-            --input-len "$BENCH_INPUT_LEN" \
-            --output-len "$BENCH_OUTPUT_LEN" \
-            --random-range-ratio "$BENCH_RANDOM_RANGE_RATIO" \
-            --num-prompts "$num_prompts" \
-            --max-concurrency "$max_concurrency" \
-            --result-filename "${RESULT_FILENAME}_c${max_concurrency}_gpus_${_bench_total_gpus}_ctx_${_bench_prefill_gpus}_gen_${_bench_decode_gpus}" \
-            --result-dir "$BENCHMARK_LOGS_DIR/" \
-            "${bench_extra_args[@]}" \
-            || echo "WARNING: benchmark conc=$max_concurrency failed/timed out (rc=$?)"
-    done
+            # Non-fatal: a failed or timed-out conc point must not abort the sweep
+            # or (under set -e) skip the allocation release below. The EXIT trap
+            # releases the allocation regardless, but continuing here lets a
+            # multi-conc sweep record every point it can.
+            run_benchmark_serving \
+                --bench-serving-dir /workspace \
+                --tokenizer /models \
+                --model "$MODEL_NAME" \
+                --port "$ENVOY_PORT" \
+                --backend openai \
+                --input-len "$BENCH_INPUT_LEN" \
+                --output-len "$BENCH_OUTPUT_LEN" \
+                --random-range-ratio "$BENCH_RANDOM_RANGE_RATIO" \
+                --num-prompts "$num_prompts" \
+                --max-concurrency "$max_concurrency" \
+                --result-filename "${RESULT_FILENAME}_c${max_concurrency}_gpus_${_bench_total_gpus}_ctx_${_bench_prefill_gpus}_gen_${_bench_decode_gpus}" \
+                --result-dir "$BENCHMARK_LOGS_DIR/" \
+                "${bench_extra_args[@]}" \
+                || echo "WARNING: benchmark conc=$max_concurrency failed/timed out (rc=$?)"
+        done
+
+    fi
 
     # ---- Eval (optional) ----
-    if [[ "${RUN_EVAL:-false}" == "true" ]]; then
+    if [[ "${RUN_EVAL}" == "true" ]]; then
         # Concurrency for the eval and, crucially, for the concurrency stamped
         # into meta_env.json. run_eval/append_lm_eval_summary read
         # EVAL_CONCURRENT_REQUESTS and CONC (not EVAL_CONC), so mirror the AMD
@@ -695,7 +673,7 @@ PY
         # CONC is empty, the metadata records conc=1, and score verification
         # fails ("eval metadata concurrency does not match workflow request")
         # even when accuracy passes.
-        if [[ -n "${EVAL_CONC:-}" ]]; then
+        if [[ -n "${EVAL_CONC}" ]]; then
             export EVAL_CONCURRENT_REQUESTS="${EVAL_CONC}"
         else
             export EVAL_CONCURRENT_REQUESTS=$(printf '%s' "$BENCH_MAX_CONCURRENCY" | tr 'x' '\n' | sort -n | tail -1)

@@ -8,21 +8,28 @@
 #   SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_b200_llmd-vllm-disagg.sh"
 # from launch_b200-dgxc-slurm.sh.
 
-set -euo pipefail
+set -eo pipefail
 
 source "$(dirname "$0")/../benchmark_lib.sh"
 
 check_env_vars \
     CONC_LIST \
-    ISL \
-    OSL \
     IMAGE \
     MODEL_PATH \
     PREFILL_NODES \
     DECODE_NODES \
     RANDOM_RANGE_RATIO
 
-if [[ -n "${SLURM_JOB_ID:-}" ]]; then
+if [[ "${IS_AGENTIC}" == "1" ]]; then
+    check_env_vars DURATION KV_OFFLOADING
+    # Positional submit.sh placeholders; AgentX never uses fixed token lengths.
+    ISL=0
+    OSL=0
+else
+    check_env_vars ISL OSL
+fi
+
+if [[ -n "${SLURM_JOB_ID}" ]]; then
     echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
@@ -30,21 +37,17 @@ set -x
 
 cd "$GITHUB_WORKSPACE/benchmarks/multi_node/llm-d" || exit 1
 
-# B200 DGX = 8 GPUs per node (submit.sh defaults to 8, explicit for clarity).
-export GPUS_PER_NODE="${GPUS_PER_NODE:-8}"
+# B200 DGX = 8 GPUs per node.
+export GPUS_PER_NODE="8"
 
-export TIME_LIMIT="${TIME_LIMIT:-08:00:00}"
+export TIME_LIMIT="08:00:00"
 export MODEL_PATH=$MODEL_PATH
 export MODEL_NAME=$MODEL_NAME
 export CONTAINER_IMAGE=$IMAGE
 
-# Worker count per role (Option B multi-engine). Prefer an explicit
-# PREFILL_WORKERS/DECODE_WORKERS from the matrix additional-settings; else
-# fall back to the matrix num-worker fields (PREFILL_NUM_WORKERS/
-# DECODE_NUM_WORKERS); else 1 (single engine = unchanged 1P+1D). submit.sh
-# reads these.
-export PREFILL_WORKERS="${PREFILL_WORKERS:-${PREFILL_NUM_WORKERS:-1}}"
-export DECODE_WORKERS="${DECODE_WORKERS:-${DECODE_NUM_WORKERS:-1}}"
+# Worker counts come from the generated matrix.
+export PREFILL_WORKERS="$PREFILL_NUM_WORKERS"
+export DECODE_WORKERS="$DECODE_NUM_WORKERS"
 
 JOB_ID=$(bash ./submit.sh \
     "$PREFILL_NODES" \

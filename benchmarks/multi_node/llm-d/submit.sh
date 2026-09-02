@@ -10,7 +10,7 @@
 #   each instance spans PREFILL_NODES / DECODE_NODES nodes via vLLM
 #   --data-parallel-hybrid-lb. Total nodes = PREFILL_NODES + DECODE_NODES.
 
-set -euo pipefail
+set -eo pipefail
 
 # Repo root resolved from this script's location, so paths below are
 # independent of the caller's $PWD (the wrapper cd's into llm-d/ before
@@ -19,7 +19,7 @@ REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 
 check_env() {
     local name="$1"
-    if [[ -z "${!name:-}" ]]; then
+    if [[ -z "${!name}" ]]; then
         echo "Error: ${name} not set" >&2
         exit 1
     fi
@@ -39,11 +39,11 @@ DECODE_NODES=$2
 ISL=$3
 OSL=$4
 CONCURRENCIES=$5
-REQUEST_RATE=${6:-inf}
-RANDOM_RANGE_RATIO=${7:-0.8}
+REQUEST_RATE=$6
+RANDOM_RANGE_RATIO=$7
 
 NUM_NODES=$((PREFILL_NODES + DECODE_NODES))
-GPUS_PER_NODE="${GPUS_PER_NODE:-8}"
+check_env GPUS_PER_NODE
 
 export DOCKER_IMAGE_NAME=$CONTAINER_IMAGE
 export MODEL_DIR=$MODEL_PATH
@@ -56,8 +56,10 @@ export GPUS_PER_NODE=$GPUS_PER_NODE
 # INDEPENDENT DP/EP engines (default 1 = one engine over all role nodes). Each
 # engine spans role_nodes/workers nodes, so DP_SIZE is PER-ENGINE. Matches how
 # dynamo/AMD and upstream oci-high-tpt run 2P high-tpt (2 prefill : 1 decode).
-export PREFILL_WORKERS="${PREFILL_WORKERS:-1}"
-export DECODE_WORKERS="${DECODE_WORKERS:-1}"
+check_env PREFILL_WORKERS
+export PREFILL_WORKERS
+check_env DECODE_WORKERS
+export DECODE_WORKERS
 if (( PREFILL_NODES % PREFILL_WORKERS != 0 )); then
     echo "Error: PREFILL_NODES ($PREFILL_NODES) not divisible by PREFILL_WORKERS ($PREFILL_WORKERS)" >&2
     exit 1
@@ -74,19 +76,26 @@ export BENCH_MAX_CONCURRENCY=$CONCURRENCIES
 export BENCH_REQUEST_RATE=$REQUEST_RATE
 export BENCH_RANDOM_RANGE_RATIO=$RANDOM_RANGE_RATIO
 # Match the AMD multinode default.
-export BENCH_NUM_PROMPTS_MULTIPLIER="${BENCH_NUM_PROMPTS_MULTIPLIER:-10}"
+export BENCH_NUM_PROMPTS_MULTIPLIER="10"
 
-export RUN_EVAL="${RUN_EVAL:-false}"
-export EVAL_ONLY="${EVAL_ONLY:-false}"
-export EVAL_CONC="${EVAL_CONC:-}"
-export FRAMEWORK="${FRAMEWORK:-llmd-vllm}"
-export PRECISION="${PRECISION:-}"
-export MODEL_PREFIX="${MODEL_PREFIX:-}"
-export RUNNER_TYPE="${RUNNER_TYPE:-}"
-export RESULT_FILENAME="${RESULT_FILENAME:-}"
-export SPEC_DECODING="${SPEC_DECODING:-none}"
-export IS_MULTINODE="${IS_MULTINODE:-true}"
-export CONFIG_FILE="${CONFIG_FILE:-}"
+export RUN_EVAL="${RUN_EVAL}"
+export EVAL_ONLY="${EVAL_ONLY}"
+export EVAL_CONC="${EVAL_CONC}"
+export FRAMEWORK="${FRAMEWORK}"
+export PRECISION="${PRECISION}"
+export MODEL_PREFIX="${MODEL_PREFIX}"
+export RUNNER_TYPE="${RUNNER_TYPE}"
+export RESULT_FILENAME="${RESULT_FILENAME}"
+export SPEC_DECODING="${SPEC_DECODING}"
+export IS_MULTINODE="${IS_MULTINODE}"
+export CONFIG_FILE="${CONFIG_FILE}"
+
+# Explicit fleet/container mapping shared by every llm-d wrapper.
+case "$RUNNER_TYPE" in
+    b200|gb200) export LLMD_CONTAINER_ENGINE=pyxis ;;
+    h200) export LLMD_CONTAINER_ENGINE=docker ;;
+    *) echo "Unsupported llm-d runner hardware: $RUNNER_TYPE" >&2; exit 1 ;;
+esac
 
 # Recipe may override SLURM time limit (longer topologies need more wall time).
 if [[ -n "$CONFIG_FILE" ]]; then

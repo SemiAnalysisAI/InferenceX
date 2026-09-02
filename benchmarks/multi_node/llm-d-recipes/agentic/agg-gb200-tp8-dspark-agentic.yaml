@@ -37,21 +37,23 @@ prefill:
   tp: 8
   # Must be explicit false: server.sh defaults enable-expert-parallel to true.
   enable-expert-parallel: false
+  # No workload-length or sequence cap: use native context and vLLM scheduling defaults.
+  # recipe.py injects DSpark golden AL for AgentX throughput (never accuracy evals).
   extra-args: >-
     --kv-cache-dtype fp8
     --gpu-memory-utilization 0.92
-    --max-model-len 9280
-    --max-num-seqs 32
     --max-num-batched-tokens 8192
-    --max-cudagraph-capture-size 32
     --block-size 256
     --tokenizer-mode deepseek_v4
+    --tool-call-parser deepseek_v4
+    --enable-auto-tool-choice
+    --reasoning-parser deepseek_v4
     --disable-custom-all-reduce
     --enable-cumem-allocator
     --no-disable-hybrid-kv-cache-manager
     --no-enable-flashinfer-autotune
     --compilation-config {"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}
-    --speculative-config {"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","attention_backend":"FLASHINFER_MLA_SPARSE_DSV4","enable_adaptive_verification":true}
+    --speculative-config {"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","attention_backend":"FLASHINFER_MLA_SPARSE_DSV4","enable_adaptive_verification":false}
     --attention-config {"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"use_fp4_indexer_cache":true}
   env:
     VLLM_USE_RUST_FRONTEND: "1"

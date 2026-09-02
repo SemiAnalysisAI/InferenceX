@@ -67,18 +67,21 @@ dataLayer:
 prefill:
   tp: 1
   enable-expert-parallel: true
+  # No workload-length or sequence cap: use native context and vLLM scheduling defaults.
+  # recipe.py injects DSpark golden AL for AgentX throughput (never accuracy evals).
   extra-args: >-
     --kv-cache-dtype fp8
     --enforce-eager
     --gpu-memory-utilization 0.97
-    --max-model-len 9280
-    --max-num-seqs 16
     --max-num-batched-tokens 8192
     --long-prefill-token-threshold 1024
-    --speculative-config {"method":"dspark","num_speculative_tokens":1,"draft_sample_method":"probabilistic","attention_backend":"FLASHINFER_MLA_SPARSE_DSV4","enable_adaptive_verification":true}
+    --speculative-config {"method":"dspark","num_speculative_tokens":1,"draft_sample_method":"probabilistic","attention_backend":"FLASHINFER_MLA_SPARSE_DSV4","enable_adaptive_verification":false}
     --enable-cumem-allocator
     --block-size 256
     --tokenizer-mode deepseek_v4
+    --tool-call-parser deepseek_v4
+    --enable-auto-tool-choice
+    --reasoning-parser deepseek_v4
     --moe-backend deep_gemm_mega_moe
     --enable-ep-weight-filter
     --no-disable-hybrid-kv-cache-manager
@@ -105,18 +108,20 @@ prefill:
 decode:
   tp: 1
   enable-expert-parallel: true
+  # No workload-length or sequence cap: use native context and vLLM scheduling defaults.
+  # recipe.py injects DSpark golden AL for AgentX throughput (never accuracy evals).
   extra-args: >-
     --kv-cache-dtype fp8
-    --max-num-seqs 32
-    --max-num-batched-tokens 256
-    --max-cudagraph-capture-size 256
-    --speculative-config {"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","attention_backend":"FLASHINFER_MLA_SPARSE_DSV4","enable_adaptive_verification":true}
+    --max-num-batched-tokens 8192
+    --speculative-config {"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","attention_backend":"FLASHINFER_MLA_SPARSE_DSV4","enable_adaptive_verification":false}
     --gpu-memory-utilization 0.95
-    --max-model-len 9280
     --enable-cumem-allocator
     --block-size 256
     --compilation-config {"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}
     --tokenizer-mode deepseek_v4
+    --tool-call-parser deepseek_v4
+    --enable-auto-tool-choice
+    --reasoning-parser deepseek_v4
     --moe-backend deep_gemm_mega_moe
     --enable-ep-weight-filter
     --no-disable-hybrid-kv-cache-manager
@@ -142,12 +147,13 @@ decode:
 mooncake:
   store_config:
     metadata_server: "P2PHANDSHAKE"
+    # Standalone fallback; AgentX uses the master YAML per-node DRAM budget / 8 GPUs.
     global_segment_size: "140GB"
     local_buffer_size: "4GB"
     protocol: "rdma"
     device_name: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
     mode: "embedded"
-    enable_offload: false
+    enable_offload: false  # SSD only; the embedded DRAM pool is still enabled.
 
 slurm:
   time_limit: "08:00:00"

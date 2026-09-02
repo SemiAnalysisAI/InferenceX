@@ -6625,3 +6625,15 @@
     - "Branch runners/launch_b200-nscale-compat.sh llmd-vllm wrapper selection on DISAGG (true -> disagg, false -> aggregated)"
     - "Fix MODEL_PATH for -0813 checkpoint: unconditionally set /scratch/models/DeepSeek-V4-Pro-0813 in the launcher's -0813 branch so the outer script's pre-exported non-0813 path is always overridden"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
+
+- config-keys:
+    - dsv4-fp4-b200-llmd-vllm-agentx
+    - dsv4-fp4-b200-llmd-vllm-agentx-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Run the shared AgentX trace replay instead of fixed 8k/1k requests; remove fixed context/sequence/cudagraph limits and enable DeepSeek-V4 chat tool/reasoning parsers."
+    - "Report DSpark as spec-decoding mtp and read the committed DeepSeek-V4-Pro-0813 thinking-on golden AL (K1=1.84, K5=3.61) for synthetic throughput verification; accuracy evals retain real verification."
+    - "Declare Mooncake arms as DRAM offloading, apply the master per-node 0.60 DRAM budget to the embedded per-GPU pools, and report DEP8 as eight physical GPUs. Non-Mooncake arms explicitly disable offloading."
+    - "Forward AgentX provenance, topology and offload metadata through both container engines and stage aggregate/raw artifacts. Remove nounset and environment fallback expressions from the changed Bash launch paths."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719

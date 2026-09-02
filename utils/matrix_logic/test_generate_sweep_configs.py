@@ -23,6 +23,36 @@ from generate_sweep_configs import (
 from validation import load_config_files, load_runner_file
 
 
+def test_llmd_dspark_agentx_registered_matrix():
+    root = Path(__file__).resolve().parents[2]
+    config = load_config_files([str(root / "configs/nvidia-master.yaml")])
+    runners = load_runner_file(str(root / "configs/runners.yaml"))
+    args = argparse.Namespace(
+        config_keys=["dsv4-fp4-b200-llmd-vllm-agentx", "dsv4-fp4-b200-llmd-vllm-agentx-agg"],
+        seq_lens=None, conc=None, scenario_type=["agentic-coding"], runner_node_filter=None,
+    )
+    rows = generate_test_config_sweep(args, config, runners)
+    assert len(rows) == 13
+    recipes = set()
+    for row in rows:
+        assert row["scenario-type"] == "agentic-coding"
+        assert row["spec-decoding"] == "mtp"
+        assert row["prefill"]["tp"] == 8
+        assert row["node-count"] == (2 if row["disagg"] else 1)
+        assert row["duration"] == 3600
+        settings = row["prefill"]["additional-settings"]
+        recipe = next(setting.split("=", 1)[1] for setting in settings if setting.startswith("CONFIG_FILE="))
+        recipes.add(recipe)
+        offloads = row["disagg"] or "mooncake" in recipe
+        assert row["kv-offloading"] == ("dram" if offloads else "none")
+        if offloads:
+            assert row["kv-offload-backend"]["name"] == "mooncake"
+            assert row["total-cpu-dram-gb"] > 0
+        else:
+            assert row["total-cpu-dram-gb"] == 0
+    assert len(recipes) == 4
+
+
 def test_aggregated_multinode_node_count_uses_explicit_num_nodes():
     entry = {
         "runner": "unknown",

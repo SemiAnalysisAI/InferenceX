@@ -142,6 +142,8 @@ llm-d is not the srt-slurm path: InferenceX owns the Slurm allocation and starts
 
 A missing/unset `CONFIG_FILE` silently selects the image's `/etc/epp/config.yaml` fallback and removes recipe-specific vLLM flags. Treat that as a validation failure unless fallback is explicitly intended.
 
+For the B200 DSpark AgentX keys, select `agentic-coding`, `spec-decoding: mtp`, and explicit `kv-offloading`. `server.sh` uses the shared AgentX client via `llm-d/agentic.sh`, with no fixed context/sequence cap. `recipe.py` loads the committed DSpark thinking-on golden AL for throughput; `EVAL_ONLY=true` keeps real verification. Mooncake's embedded store is **DRAM offloading even with `enable_offload: false`** (that flag controls SSD), so declare `kv-offloading: dram`, `kv-offload-backend: { name: mooncake }`, and `dram-utilization`; the runtime divides the generated per-node budget among GPU ranks. The plain TP8/DEP8 arms declare `none`. Bash inputs are explicit constants or caller-supplied values, not fallback expressions. Binary extraction requires an explicit `BINARIES_ENV_FILE`.
+
 ## Update an image
 
 Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../AGENTS.md#non-negotiable-benchmark-invariants), the matching master configs, runtime scripts, and checked-in recipes.

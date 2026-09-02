@@ -38,15 +38,17 @@ dataLayer:
 prefill:
   tp: 1
   enable-expert-parallel: true
+  # No workload-length or sequence cap: use native context and vLLM scheduling defaults.
+  # recipe.py injects DSpark golden AL for AgentX throughput (never accuracy evals).
   extra-args: >-
     --kv-cache-dtype fp8
     --gpu-memory-utilization 0.92
-    --max-model-len 9280
-    --max-num-seqs 64
     --max-num-batched-tokens 8192
-    --max-cudagraph-capture-size 64
     --block-size 256
     --tokenizer-mode deepseek_v4
+    --tool-call-parser deepseek_v4
+    --enable-auto-tool-choice
+    --reasoning-parser deepseek_v4
     --moe-backend deep_gemm_mega_moe
     --enable-ep-weight-filter
     --enable-cumem-allocator
@@ -54,9 +56,10 @@ prefill:
     --no-enable-flashinfer-autotune
     --numa-bind
     --compilation-config {"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}
-    --speculative-config {"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","attention_backend":"FLASHINFER_MLA_SPARSE_DSV4","enable_adaptive_verification":true}
+    --speculative-config {"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","attention_backend":"FLASHINFER_MLA_SPARSE_DSV4","enable_adaptive_verification":false}
     --attention-config {"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"use_fp4_indexer_cache":true}
   env:
+    PYTHONHASHSEED: "0"
     VLLM_USE_RUST_FRONTEND: "1"
     VLLM_SERVER_DEV_MODE: "1"
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
@@ -77,12 +80,13 @@ prefill:
 mooncake:
   store_config:
     metadata_server: "P2PHANDSHAKE"
+    # Standalone fallback; AgentX uses the master YAML per-node DRAM budget / 8 GPUs.
     global_segment_size: "140GB"
     local_buffer_size: "4GB"
     protocol: "rdma"
     device_name: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
     mode: "embedded"
-    enable_offload: false
+    enable_offload: false  # SSD only; the embedded DRAM pool is still enabled.
 
 # ---- SLURM resource directives ----
 slurm:

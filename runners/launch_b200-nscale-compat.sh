@@ -2,8 +2,8 @@
 
 # Compatibility launcher for B200 Nscale configurations that have not yet
 # moved to the native srt-slurm path in launch_b200-nscale-slurm.sh.
-SLURM_PARTITION="${SLURM_PARTITION:-batch_1}"
-SLURM_ACCOUNT="${SLURM_ACCOUNT:-benchmark}"
+SLURM_PARTITION="batch_1"
+SLURM_ACCOUNT="benchmark"
 POWER_SRT_SLURM_URL="https://github.com/edwingao28/srt-slurm.git"
 POWER_SRT_SLURM_PIN="e5c837f06a362dc888dfea2ee588e9f19c298270"
 
@@ -24,18 +24,7 @@ elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" && "$MODEL" == *-0813 ]];
     export MODEL_PATH="/scratch/models/DeepSeek-V4-Pro-0813"
     export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
 elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
-    SELECTED_MODEL_PATH=""
-    if [[ -n "${MODEL_PATH:-}" && -d "${MODEL_PATH}" ]]; then
-        SELECTED_MODEL_PATH="$MODEL_PATH"
-    else
-        for candidate in /scratch/models/DeepSeek-V4-Pro /scratch/models/DeepSeek-V4-Pro-NVFP4; do
-            if [[ -d "$candidate" ]]; then
-                SELECTED_MODEL_PATH="$candidate"
-                break
-            fi
-        done
-    fi
-    export MODEL_PATH="${SELECTED_MODEL_PATH:-/scratch/models/DeepSeek-V4-Pro}"
+    export MODEL_PATH="/scratch/models/DeepSeek-V4-Pro"
     export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
 elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "bf16" ]]; then
     export MODEL_PATH="/scratch/models/Qwen3.5-397B-A17B"
@@ -66,7 +55,7 @@ elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/scratch/models/GLM-5-NVFP4"
     export SRT_SLURM_MODEL_PREFIX="glm5-fp4"
 elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="${MODEL_PATH:-/scratch/models/GLM-5.2-NVFP4}"
+    export MODEL_PATH="/scratch/models/GLM-5.2-NVFP4"
     export SRT_SLURM_MODEL_PREFIX="glm5.2-fp4"
 elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "int4" ]]; then
     export MODEL_PATH="/scratch/models/Kimi-K2.5"
@@ -75,7 +64,7 @@ elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/scratch/models/Kimi-K2.5-NVFP4"
     export SRT_SLURM_MODEL_PREFIX="kimik2.5-fp4"
 elif [[ $MODEL_PREFIX == "kimik2.6" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="${MODEL_PATH:-/scratch/models/Kimi-K2.6-NVFP4}"
+    export MODEL_PATH="/scratch/models/Kimi-K2.6-NVFP4"
     export SRT_SLURM_MODEL_PREFIX="kimi-k2.6-nvfp4"
 elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH="/scratch/models/MiniMax-M2.5"
@@ -183,7 +172,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
             ) || exit 1
         }
 
-        LLMD_SQUASH_DIR="${LLMD_SQUASH_DIR:-/home/sa-shared/containers}"
+        LLMD_SQUASH_DIR="/home/sa-shared/containers"
         mkdir -p "$LLMD_SQUASH_DIR" 2>/dev/null || true
         LLMD_SQUASH_FILE="${LLMD_SQUASH_DIR}/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
         llmd_import_squash "$LLMD_SQUASH_FILE" "$IMAGE"
@@ -199,13 +188,13 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         # (see benchmark-multinode-tmpl.yml). true -> the P/D disagg wrapper
         # (1P-DEP8/1D-DEP8); false -> the aggregated wrapper (TP8/DEP8, one
         # engine does both prefill and decode, DECODE_NODES=0).
-        if [[ "${DISAGG:-true}" == "true" ]]; then
+        if [[ "${DISAGG}" == "true" ]]; then
             SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_b200_llmd-vllm-disagg.sh"
             # EPP/pd-sidecar binaries needed for the disagg-profile-handler `deciders:`
             # shape. Populate once via:
             #   BINARIES_ENV_FILE=binaries-b200-v0.10.0.env benchmarks/llm-d/extract-binaries.sh
             # job.slurm falls back to the image-baked v0.9.0 until this path exists.
-            export LLMD_BIN_DIR="${LLMD_BIN_DIR:-/home/sa-shared/llm-d-bins-v0.10.0}"
+            export LLMD_BIN_DIR="/home/sa-shared/llm-d-bins-v0.10.0"
         else
             SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_b200_llmd-vllm-agg.sh"
         fi
@@ -228,11 +217,18 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         LOG_FILE="${BENCHMARK_LOGS_DIR}/slurm_job-${JOB_ID}.out"
         stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || exit 1
 
-        while IFS= read -r -d '' result_file; do
-            copy_to_workspace "$result_file" "$GITHUB_WORKSPACE/$(basename "$result_file")" || exit 1
-        done < <(find "$BENCHMARK_LOGS_DIR" -name "${RESULT_FILENAME}*.json" -print0 2>/dev/null)
+        if [[ "${IS_AGENTIC}" == "1" && "${EVAL_ONLY}" != "true" ]]; then
+            copy_agentic_results "$BENCHMARK_LOGS_DIR" "$GITHUB_WORKSPACE" "$RESULT_FILENAME" || exit 1
+            # Host-owned artifact staging; containers create no workspace dirs.
+            mkdir -p "$GITHUB_WORKSPACE/LOGS/agentic"
+            cp -R "$BENCHMARK_LOGS_DIR/agentic/." "$GITHUB_WORKSPACE/LOGS/agentic/"
+        else
+            while IFS= read -r -d '' result_file; do
+                copy_to_workspace "$result_file" "$GITHUB_WORKSPACE/$(basename "$result_file")" || exit 1
+            done < <(find "$BENCHMARK_LOGS_DIR" -name "${RESULT_FILENAME}*.json" -print0 2>/dev/null)
+        fi
 
-        if [[ "${RUN_EVAL:-false}" == "true" ]]; then
+        if [[ "${RUN_EVAL}" == "true" ]]; then
             EVAL_DIR=$(find "$BENCHMARK_LOGS_DIR" -type d -name eval_results -print -quit 2>/dev/null)
             [[ -z "$EVAL_DIR" ]] && EVAL_DIR="$BENCHMARK_LOGS_DIR/eval_results"
             copy_eval_artifacts "$EVAL_DIR" "$GITHUB_WORKSPACE" || exit 1
@@ -244,11 +240,11 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     if [[ "$FRAMEWORK" == "tilert" ]]; then
         export SLURM_PARTITION SLURM_ACCOUNT
-        export TILERT_WEIGHTS_DIR="${TILERT_WEIGHTS_DIR:-/scratch/models/${MODEL_PREFIX}-${PRECISION}-tilert-8shard}"
+        export TILERT_WEIGHTS_DIR="/scratch/models/${MODEL_PREFIX}-${PRECISION}-tilert-8shard"
         # Nscale exposes eight RoCE HCAs, mlx5_0..mlx5_7.
-        export UCX_NET_DEVICES="${UCX_NET_DEVICES:-mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1,mlx5_4:1,mlx5_5:1,mlx5_6:1,mlx5_7:1}"
-        export UCX_MEMTYPE_CACHE="${UCX_MEMTYPE_CACHE:-n}"
-        export UCX_MEMTYPE_REG_WHOLE="${UCX_MEMTYPE_REG_WHOLE:-n}"
+        export UCX_NET_DEVICES="mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1,mlx5_4:1,mlx5_5:1,mlx5_6:1,mlx5_7:1"
+        export UCX_MEMTYPE_CACHE="n"
+        export UCX_MEMTYPE_REG_WHOLE="n"
         TILERT_SUBDIR="multi_node"
         [[ "${SCENARIO_SUBDIR}" == "agentic/" ]] && TILERT_SUBDIR="multi_node/agentic"
         TILERT_DISAGG="$GITHUB_WORKSPACE/benchmarks/${TILERT_SUBDIR}/${EXP_NAME%%_*}_${PRECISION}_b200_${FRAMEWORK}-disagg.sh"
@@ -270,8 +266,8 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     fi
 
     USES_DCGM_POWER=0
-    _POWER_CONFIG_FILE="${CONFIG_FILE:-}"
-    if [[ "${EVAL_ONLY:-false}" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
+    _POWER_CONFIG_FILE="${CONFIG_FILE}"
+    if [[ "${EVAL_ONLY}" == "true" && -n "${EVAL_CONFIG_FILE}" ]]; then
         _POWER_CONFIG_FILE="$EVAL_CONFIG_FILE"
     fi
     _RECIPE_REL="${_POWER_CONFIG_FILE%%:*}"
@@ -286,7 +282,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         USES_DCGM_POWER=1
     fi
     if [[ "$USES_DCGM_POWER" == "1" && (
-        "${IS_AGENTIC:-0}" == "1" ||
+        "${IS_AGENTIC}" == "1" ||
         "$MODEL_PREFIX" != "dsv4" ||
         "$PRECISION" != "fp4" ||
         "$FRAMEWORK" != "dynamo-vllm"
@@ -388,9 +384,9 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     # Map container images to local squash files
     NGINX_IMAGE="nginx:1.27.4"
-    SQUASH_DIR="${B200_SQUASH_DIR:-/data/home/sa-shared/containers}"
+    SQUASH_DIR="/data/home/sa-shared/containers"
     if [[ $MODEL_PREFIX == "minimaxm2.5" && $FRAMEWORK == "dynamo-vllm" ]]; then
-        SQUASH_DIR="${B200_SQUASH_DIR:-/home/slurm-shared/gharunners/squash}"
+        SQUASH_DIR="/home/slurm-shared/gharunners/squash"
     fi
     if ! mkdir -p "$SQUASH_DIR" 2>/dev/null || [[ ! -w "$SQUASH_DIR" ]]; then
         echo "Warning: $SQUASH_DIR is not writable; using workspace-local squash cache" >&2
@@ -413,7 +409,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         local lock_file="${lock_dir}/${image_key}.lock"
 
         (
-            flock -w "${B200_SQUASH_LOCK_TIMEOUT:-600}" 9 || { echo "Failed to acquire lock for $squash_file" >&2; exit 1; }
+            flock -w "600" 9 || { echo "Failed to acquire lock for $squash_file" >&2; exit 1; }
             if unsquashfs -l "$squash_file" > /dev/null 2>&1; then
                 echo "Squash file already exists and is valid, skipping import: $squash_file"
             else
@@ -444,7 +440,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     export ISL="$ISL"
     export OSL="$OSL"
-    export EVAL_ONLY="${EVAL_ONLY:-false}"
+    export EVAL_ONLY="${EVAL_ONLY}"
 
     # Agentic runs bind-mount two persistent caches into every worker
     # container (Lustre, shared across nodes): aiperf's content-addressed
@@ -514,7 +510,7 @@ EOF
     # throughput row keeps synthetic golden acceptance. Only configs that set
     # EVAL_CONFIG_FILE opt into this selection; all other configs keep using
     # CONFIG_FILE unchanged.
-    if [[ "${EVAL_ONLY:-false}" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
+    if [[ "${EVAL_ONLY}" == "true" && -n "${EVAL_CONFIG_FILE}" ]]; then
         CONFIG_FILE="$EVAL_CONFIG_FILE"
         echo "EVAL_ONLY=true: selecting real-verification recipe $CONFIG_FILE"
     fi
@@ -605,7 +601,7 @@ EOF
     cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
     tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" .
 
-    if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
+    if [[ "${EVAL_ONLY}" != "true" ]]; then
         # Find all result subdirectories
         RESULT_SUBDIRS=$(find "$LOGS_DIR" -maxdepth 1 -type d -name "*isl*osl*" 2>/dev/null)
 
@@ -653,7 +649,7 @@ EOF
     fi
 
     # Collect eval results if eval was requested
-    if [[ "${RUN_EVAL:-false}" == "true" || "${EVAL_ONLY:-false}" == "true" ]]; then
+    if [[ "${RUN_EVAL}" == "true" || "${EVAL_ONLY}" == "true" ]]; then
         EVAL_DIR="$LOGS_DIR/eval_results"
         if [ -d "$EVAL_DIR" ]; then
             echo "Extracting eval results from $EVAL_DIR"
@@ -707,9 +703,9 @@ else
 
     # The runner lease reserves the Slurm nodes before this single-node job is
     # submitted to the Nscale batch_1 partition.
-    export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
+    export GPU_COUNT="${GPU_COUNT:?GPU_COUNT must be set by the invoking launcher}"
 
-    SALLOC_TIME_LIMIT="${SALLOC_TIME_LIMIT:-480}"
+    SALLOC_TIME_LIMIT="480"
     salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$GPU_COUNT --exclusive --mem=0 --time="$SALLOC_TIME_LIMIT" --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
 

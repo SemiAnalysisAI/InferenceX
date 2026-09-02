@@ -10,17 +10,17 @@
 # benchmarks/llm-d/binaries.env. Idempotent: overwrites in place.
 #
 # Usage:
-#   ./extract-binaries.sh                 # uses binaries.env defaults
-#   LLMD_BIN_DIR=/some/dir ./extract-binaries.sh
-#   LLMD_BIN_PLATFORM=linux/amd64 ./extract-binaries.sh   # for an x86 test
+#   BINARIES_ENV_FILE=binaries.env ./extract-binaries.sh
+#   BINARIES_ENV_FILE=binaries.env LLMD_BIN_DIR=/some/dir ./extract-binaries.sh
+#   BINARIES_ENV_FILE=binaries.env LLMD_BIN_PLATFORM=linux/amd64 ./extract-binaries.sh
 #   BINARIES_ENV_FILE=binaries-b200-v0.10.0.env ./extract-binaries.sh
 #     # pull a different set of image pins (e.g. a router-version bump
 #     # scoped to one cluster) without touching the shared binaries.env
 
-set -euo pipefail
+set -eo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BINARIES_ENV_FILE="${BINARIES_ENV_FILE:-$HERE/binaries.env}"
+: "${BINARIES_ENV_FILE:?Set binaries.env or a cluster-specific pins file}"
 # Resolve a bare filename against this script's directory, so
 # BINARIES_ENV_FILE=foo.env works regardless of the caller's cwd.
 [[ "$BINARIES_ENV_FILE" != /* ]] && BINARIES_ENV_FILE="$HERE/$BINARIES_ENV_FILE"
