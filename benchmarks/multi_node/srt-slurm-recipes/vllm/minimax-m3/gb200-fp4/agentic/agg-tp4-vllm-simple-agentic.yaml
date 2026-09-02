@@ -39,6 +39,9 @@ backend:
   connector: null
   kv_events_config: { aggregated: true }
   aggregated_environment:
+    HF_HUB_CACHE: "/hf_hub_cache"
+    HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
+    TRANSFORMERS_CACHE: "/hf_hub_cache"
     VLLM_ENGINE_READY_TIMEOUT_S: "7200"
     VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
     VLLM_FLOAT32_MATMUL_PRECISION: "high"
