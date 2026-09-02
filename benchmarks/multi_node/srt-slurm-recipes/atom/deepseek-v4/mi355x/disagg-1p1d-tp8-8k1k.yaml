@@ -65,6 +65,8 @@ backend:
   decode_environment: *worker_environment
   atom_config:
     prefill:
+      # Upstream workflow MAX_MODEL_LEN = ISL + OSL + 256.
+      max-model-len: 9472
       kv_cache_dtype: fp8
       gpu-memory-utilization: 0.85
       max-num-seqs: 256
@@ -72,6 +74,7 @@ backend:
       no-enable_prefix_caching: true
       trust-remote-code: true
     decode:
+      max-model-len: 9472
       cudagraph-capture-sizes: "[1,2,4,8,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,136,144,152,160,168,176,184,192,200,208,216,224,232,240,248,256]"
       kv_cache_dtype: fp8
       gpu-memory-utilization: 0.85
