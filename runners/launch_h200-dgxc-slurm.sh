@@ -350,7 +350,7 @@ EOF
     find . -name '.nfs*' -delete 2>/dev/null || true
 
 else
-    SQUASH_FILE="/data/gharunners/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    SQUASH_FILE="/data/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
     # Convert pyxis image format (nvcr.io#path) to docker format (nvcr.io/path) for enroot import
     DOCKER_IMAGE=$(echo "$IMAGE" | sed 's/#/\//g')

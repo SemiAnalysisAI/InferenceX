@@ -44,12 +44,9 @@ elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
     export SERVED_MODEL_NAME="deepseek-r1-fp8"
     export MODEL_PATH=/scratch/models/DeepSeek-R1-0528
     export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
-elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" && $MODEL == "deepseek-ai/DeepSeek-V4-Pro-DSpark" ]]; then
-    # The DSpark checkpoint is staged in the shared runner cache visible from
-    # the GB300 compute nodes. Keep a distinct alias from the legacy MTP
-    # checkpoint so other DSv4 lanes retain their node-local model mapping.
-    export MODEL_PATH="$HF_HUB_CACHE_HOST_PATH/inferencex-models/DeepSeek-V4-Pro-DSpark"
-    export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro-dspark"
+elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" && $MODEL == "deepseek-ai/DeepSeek-V4-Pro-0813" ]]; then
+    export MODEL_PATH="/scratch/models/DeepSeek-V4-Pro-0813"
+    export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro-0813"
 elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
     # Use the node-local /scratch SSD for the 806 GB DSv4-Pro
     # checkpoint. Faster than the Vast NFS path, but this dir only
@@ -92,6 +89,9 @@ elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
 elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH=/scratch/models/Kimi-K2.5-NVFP4
     export SRT_SLURM_MODEL_PREFIX="nvidia/Kimi-K2.5-NVFP4"
+elif [[ $MODEL_PREFIX == "kimik3" && $PRECISION == "fp4" ]]; then
+    export MODEL_PATH=/scratch/models/Kimi-K3
+    export SRT_SLURM_MODEL_PREFIX="moonshotai/Kimi-K3"
 elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp4" ]]; then
     # SRT_SLURM_MODEL_PREFIX must match the model.path alias used in our
     # Qwen3.5 sglang recipes (qwen3.5-fp4).
@@ -103,7 +103,7 @@ elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH=/scratch/models/Qwen3.5-397B-A17B-FP8
     export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp8"
 else
-    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4, glm5-fp4, glm5-fp8, glm5.2-fp4, minimaxm2.5-fp4, minimaxm2.5-fp8, kimik2.5-fp4, qwen3.5-fp4, qwen3.5-fp8"
+    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4, glm5-fp4, glm5-fp8, glm5.2-fp4, minimaxm2.5-fp4, minimaxm2.5-fp8, kimik2.5-fp4, kimik3-fp4, qwen3.5-fp4, qwen3.5-fp8"
     exit 1
 fi
 
@@ -158,11 +158,12 @@ if [[ -n "$CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
     USES_DCGM_POWER=1
 fi
 
-# Note (wenyao): the producer pin descends from the fp8 v1.0.25 lineage
-# (cargo/maturin bootstrap); an fp4 power recipe would silently skip the
-# sa-submission branch it needs, so fail fast instead.
-if [[ "$USES_DCGM_POWER" == "1" && "$PRECISION" != "fp8" ]]; then
-    echo "Error: dcgm-power lanes are only validated for PRECISION=fp8, got: $PRECISION" >&2
+# Note (wenyao): the producer pin follows the srt-slurm main lineage that the
+# dynamo-sglang lanes run on (fp8 validated end-to-end, fp4 recipes
+# parse-verified against the pin); other frameworks clone diverging refs
+# (aflowers branch, sa-submission), so fail fast for them instead.
+if [[ "$USES_DCGM_POWER" == "1" && "$FRAMEWORK" != "dynamo-sglang" ]]; then
+    echo "Error: dcgm-power lanes are only validated for FRAMEWORK=dynamo-sglang, got: $FRAMEWORK" >&2
     exit 1
 fi
 
@@ -196,7 +197,19 @@ SRT_REPO_DIR="${GITHUB_WORKSPACE}/srt-slurm-${GITHUB_RUN_ID:-manual}-${GITHUB_RU
 SRTCTL_SETUP_SCRIPT=""
 rm -rf "$SRT_REPO_DIR"
 
-if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "qwen3.5" ]]; then
+if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "qwen3.5" ]]; then
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    git checkout v1.0.50
+    TRTLLM_RECIPES_DIR="recipes/trtllm/qwen3.5/gb300-fp4/disagg/agentx"
+    mkdir -p "$TRTLLM_RECIPES_DIR"
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/qwen3.5/gb300-fp4/disagg/agentx" \
+        "$TRTLLM_RECIPES_DIR"
+    if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
+        find "$TRTLLM_RECIPES_DIR" -name "*.yaml" \
+            -exec sed -i '/TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS/d' {} +
+    fi
+elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "qwen3.5" ]]; then
     # Qwen3.5 agentic uses NVIDIA/srt-slurm v1.0.38: the two features the
     # cquil11 fork was pinned for are merged upstream (present in v1.0.36) —
     #   - `srtctl apply --no-preflight` (skip the in-process model FS check):
@@ -218,15 +231,18 @@ if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == 
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5" \
         recipes/sglang/qwen3.5
 elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
-    # DSv4 GB300 SGLang agentic uses NVIDIA/srt-slurm v1.0.38. In addition to
+    # DSv4 GB300 SGLang agentic uses NVIDIA/srt-slurm v1.0.40. In addition to
     # the nginx body-size fix, session-affinity frontend, and custom benchmark
     # schema required by these recipes, this release injects every logical
-    # SGLang worker leader's /metrics URL into AIPERF_SERVER_METRICS_URLS.
+    # SGLang worker leader's /metrics URL into AIPERF_SERVER_METRICS_URLS and
+    # supports long-lived nginx keepalive for multi-turn AgentX replay.
     # AgentX forwards that list to aiperf's --server-metrics argument so its
     # trace artifacts include backend metrics for every engine.
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
-    git checkout v1.0.38
+    git checkout v1.0.40
+    cp "$GITHUB_WORKSPACE/runners/patches/sglang-server-args-config-parser-compat.sh" \
+        configs/sglang-server-args-config-parser-compat.sh
     mkdir -p recipes/sglang/deepseek-v4/agentic
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/agentic" \
         recipes/sglang/deepseek-v4/agentic
@@ -251,6 +267,9 @@ elif [[ "$IS_AGENTIC" == "1" ]]; then
     mkdir -p recipes/vllm/deepseek-v4/agentic || exit 1
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
         recipes/vllm/deepseek-v4/agentic || exit 1
+    mkdir -p recipes/vllm/kimi-k3/agentic || exit 1
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
+        recipes/vllm/kimi-k3/agentic || exit 1
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
@@ -259,14 +278,25 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
 elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
     # Fixed-length DeepSeek-V4 recipes are version-controlled in this repository;
-    # overlay them onto the srt-slurm release that bootstraps cargo/maturin for
-    # the hash-pinned Dynamo source build before launch.
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    git checkout v1.0.25
-    mkdir -p recipes/sglang/deepseek-v4/8k1k
+    # overlay them onto the selected srt-slurm checkout. Power lanes use the
+    # exact producer pin and stamp it for strict result provenance; non-power
+    # lanes retain the v1.0.25 release that bootstraps cargo/maturin for the
+    # hash-pinned Dynamo source build before launch.
+    if [[ "$USES_DCGM_POWER" == "1" ]]; then
+        git clone "$POWER_SRT_SLURM_URL" "$SRT_REPO_DIR" || exit 1
+        cd "$SRT_REPO_DIR" || exit 1
+        git checkout "$POWER_SRT_SLURM_PIN" || exit 1
+        # The power lane must run the exact pinned producer SHA, never a moving branch.
+        test "$(git rev-parse HEAD)" = "$POWER_SRT_SLURM_PIN" || { echo "Error: srt-slurm HEAD does not match POWER_SRT_SLURM_PIN=$POWER_SRT_SLURM_PIN" >&2; exit 1; }
+        git rev-parse HEAD > "$GITHUB_WORKSPACE/power-producer-sha.txt"
+    else
+        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
+        cd "$SRT_REPO_DIR" || exit 1
+        git checkout v1.0.25 || exit 1
+    fi
+    mkdir -p recipes/sglang/deepseek-v4/8k1k || exit 1
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/8k1k" \
-        recipes/sglang/deepseek-v4/8k1k
+        recipes/sglang/deepseek-v4/8k1k || exit 1
 elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
@@ -460,8 +490,11 @@ inject_synthetic_acceptance "$CONFIG_PATH" "$FRAMEWORK" || exit 1
 #   - glm5.1, whose GLM-5.1-NVFP4 weights are prestaged on the compute-node
 #     /scratch/models, and
 #   - qwen3.5 fp8, whose weights are also on the compute-node /scratch/models
-#     and which runs on srt-slurm:v1.0.25 (the release that has the preflight;
-#     qwen3.5 fp4 runs on v1.0.29, which has none).
+#     and which runs on srt-slurm:v1.0.25 (the release that has the preflight),
+#   - qwen3.5 fp4 dynamo-trt, which runs on v1.0.29 without that preflight, and
+#   - the qwen3.5 fp4 and dsv4 sglang power lanes, which run the pinned
+#     producer (a main-lineage fork that has the preflight) against the same
+#     /scratch checkpoints.
 # The engine still fails loudly at runtime if the path is genuinely missing on
 # the compute node. Other fixed-seq-len recipes resolve model.path to a
 # login-visible location, so keep the precheck enforced for them.
@@ -469,7 +502,7 @@ SRTCTL_APPLY_ARGS=(
     -f "$CONFIG_FILE"
     --tags "gb300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)"
 )
-if [[ "$IS_AGENTIC" == "1" || "$MODEL_PREFIX" == "glm5.1" || ( "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == "fp8" ) || ( "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-trt" ) ]]; then
+if [[ "$IS_AGENTIC" == "1" || "$MODEL_PREFIX" == "glm5.1" || ( "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == "fp8" ) || ( "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == "fp4" && ( "$FRAMEWORK" == "dynamo-trt" || "$USES_DCGM_POWER" == "1" ) ) || ( "$USES_DCGM_POWER" == "1" && "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" == "dynamo-sglang" ) ]]; then
     SRTCTL_APPLY_ARGS+=(--no-preflight)
 fi
 if [[ -n "$SRTCTL_SETUP_SCRIPT" ]]; then

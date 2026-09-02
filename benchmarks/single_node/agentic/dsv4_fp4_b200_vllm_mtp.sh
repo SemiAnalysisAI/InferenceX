@@ -6,41 +6,27 @@ set -x
 # with MTP speculative decoding (num_speculative_tokens=3): synthetic acceptance
 # length 2.49 for throughput, real target verification for the EVAL_ONLY eval.
 #
-# This MTP-only recipe keeps the established image, engine args, offload, GPU
-# topologies, and agentic aiperf rig, with two speculative-decoding behaviors:
+# This MTP-only recipe keeps the established engine args and agentic AIPerf rig,
+# with two speculative-decoding behaviors:
 #   --speculative-config: synthetic acceptance length 2.49 (throughput) vs real MTP (EVAL_ONLY); see the SPEC_CONFIG block
-#   --max-cudagraph-capture-size expressed in TOKENS (see the capture block below).
+#   cudagraph capture sizes expressed in TOKENS (see the capture block below).
 #
-# Mirrors the fixed-seq-len parallelism options (pure TP and DEP) so the
-# agentic sweep can probe both interactivity and throughput regimes:
-#   pure TP (DP_ATTENTION=false, EP_SIZE=1):  attention TP-sharded across
-#       all $TP GPUs in a single engine. Lower TPOT, lower batch.
-#   TP+EP   (DP_ATTENTION=false, EP_SIZE>1):  attention TP-sharded, MoE
-#       experts EP-sharded within the TP group.
-#   DEP     (DP_ATTENTION=true, EP_SIZE>1):   per-DP-rank attention with
-#       experts EP-sharded across DP ranks (per the vLLM blog recipe).
-#       Highest aggregate throughput at large CONC.
-#
-# Image is configured in nvidia-master.yaml. block_size=256,
-# kv-cache-dtype=fp8, FLASHINFER_MLA_SPARSE_DSV4 attention with the FP4 indexer
-# cache, FULL_DECODE_ONLY cudagraph capture, and (in EP tiers) mega-MoE backend.
+# The throughput sweep uses DEP8 with SimpleCPUOffloadConnector only. The recipe
+# uses FP8 KV cache, sparse DeepSeek-V4 FlashInfer attention with an FP4 indexer
+# cache, mega-MoE, long-prefill chunking, and FULL_DECODE_ONLY CUDA graphs with
+# every decode batch captured explicitly.
 #
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
 #
-# Pure TP is GPU-resident (KV_OFFLOADING=none). DEP tiers offload KV to host
-# DRAM: KV_OFFLOADING=dram requires KV_OFFLOAD_BACKEND=vllm-simple or mooncake.
+# DEP8 offloads KV to host DRAM with KV_OFFLOAD_BACKEND=vllm-simple.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
 
-if [ -z "$DCP_SIZE" ]; then
-    DCP_SIZE=1
-fi
-if [ -z "$PCP_SIZE" ]; then
-    PCP_SIZE=1
-fi
+DCP_SIZE="${DCP_SIZE:-1}"
+PCP_SIZE="${PCP_SIZE:-1}"
 VLLM_CP_ARGS=()
 if [ "$DCP_SIZE" -gt 1 ]; then
     VLLM_CP_ARGS+=(--decode-context-parallel-size "$DCP_SIZE")
@@ -55,6 +41,13 @@ if [[ ! "$GPU_COUNT" =~ ^[1-9][0-9]*$ ]]; then
     exit 1
 fi
 export GPU_COUNT
+
+# Under DP-attention the DP world size equals TP, and the scheduler's global
+# running-sequence budget is 2*CONC. Split that budget evenly across DP ranks.
+if [ "$DP_ATTENTION" = "true" ] && [ $((2 * CONC % TP)) -ne 0 ]; then
+    echo "Error: DEP requires 2*CONC divisible by TP, got CONC='$CONC' and TP='$TP'" >&2
+    exit 1
+fi
 
 if [[ -n "$SLURM_JOB_ID" ]]; then
     echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
@@ -138,8 +131,8 @@ case "$KV_OFFLOAD_BACKEND" in
   "kv_role": "kv_both",
   "kv_connector_extra_config": {
     "cpu_bytes_to_use_per_rank": ${CPU_BYTES_PER_RANK},
-    "lazy_offload": false,
-    "enable_cross_layers_blocks": "true"
+    "enable_cross_layers_blocks": "true",
+    "lazy_offload": false
   }
 }
 EOF
@@ -216,48 +209,68 @@ EOF
 esac
 
 PARALLEL_ARGS=(--tensor-parallel-size "$TP" --data-parallel-size 1)
+MODE_ARGS=()
 if [ "$DP_ATTENTION" = "true" ]; then
     PARALLEL_ARGS=(--tensor-parallel-size 1 --data-parallel-size "$TP")
+    export PYTORCH_ALLOC_CONF=expandable_segments:True
 fi
 
-EP_ARGS=()
-FAST_MOE_ARGS=()
 if [ "$EP_SIZE" -gt 1 ]; then
-    EP_ARGS=(--enable-expert-parallel)
-    FAST_MOE_ARGS=(
-        --moe-backend deep_gemm_amxf4_mega_moe
+    MODE_ARGS+=(
+        --enable-expert-parallel
         --enable-ep-weight-filter
-        --prefill-schedule-interval 16
+        --moe-backend deep_gemm_amxf4_mega_moe
+    )
+fi
+if [ "$DP_ATTENTION" = "true" ]; then
+    # Keep B200's profiled activation footprint within the 0.90 GPU-memory
+    # budget; 16K prefill batches leave too little DeepGEMM runtime headroom.
+    MODE_ARGS+=(
+        --prefill-schedule-interval 8
+        --long-prefill-token-threshold 512
+        --max-num-batched-tokens 8192
     )
 fi
 
-# AgentX concurrency counts live session trees, not individual requests.
-# Subagent fan-out can push instantaneous request concurrency above CONC, so
-# leave 2x headroom rather than clipping those bursts at the scheduler.
-MAX_NUM_SEQS=$((2 * CONC))
+# AgentX concurrency counts live session trees. Subagent fan-out can push the
+# global instantaneous request count above CONC, so retain 2x global headroom
+# while avoiding the old 8x over-allocation of that budget on every DEP rank.
+if [ "$DP_ATTENTION" = "true" ]; then
+    MAX_NUM_SEQS=$((2 * CONC / TP))
+else
+    MAX_NUM_SEQS=$((2 * CONC))
+fi
 
-# MTP: cudagraph capture sizes are in TOKENS. A uniform decode batch of S seqs
-# verifies S*(1+num_speculative_tokens) tokens, so cap capture at
-# MAX_NUM_SEQS*(1+N) tokens -- otherwise vLLM's FULL_DECODE_ONLY ladder tops out
-# at MAX_NUM_SEQS/(1+N) seqs and the largest decode batches fall back to eager.
+# MTP: cudagraph capture sizes are in TOKENS. With num_speculative_tokens=N,
+# every uniform decode batch of S seqs verifies S*(1+N) tokens, so capture the
+# explicit multiples (1+N), 2*(1+N), ..., MAX_NUM_SEQS*(1+N). vLLM rounds
+# configured sizes up to multiples of (1+N) and deduplicates them; a plain
+# 1..MAX_NUM_SEQS list would cover only MAX_NUM_SEQS/(1+N) decode sequences.
 NUM_SPEC_TOKENS=3
+TOKENS_PER_SEQ=$((1 + NUM_SPEC_TOKENS))
 # Throughput pins synthetic MTP acceptance to the dsv4-pro golden AL (thinking_on,
 # num_speculative_tokens=3, golden_al_distribution/dsv4_mtp.yaml). The EVAL_ONLY
 # accuracy run uses real target verification instead -- synthetic acceptance
 # bypasses verification and corrupts the SWE-bench eval (0.0000 score).
-SYNTHETIC_ACCEPT_LEN=2.49
 if [ "${EVAL_ONLY:-false}" = "true" ]; then
     SPEC_CONFIG="{\"method\": \"mtp\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS}"
 else
-    SPEC_CONFIG="{\"method\": \"mtp\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
+    SPEC_CONFIG="{\"method\": \"mtp\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": 2.49}"
 fi
-TOKENS_PER_SEQ=$((1 + NUM_SPEC_TOKENS))
-MAX_CUDAGRAPH_CAPTURE_SIZE=$((MAX_NUM_SEQS * TOKENS_PER_SEQ))
+CUDA_GRAPH_CAPTURE_SIZES=""
+for ((num_seqs = 1; num_seqs <= MAX_NUM_SEQS; num_seqs++)); do
+    if [ -n "$CUDA_GRAPH_CAPTURE_SIZES" ]; then
+        CUDA_GRAPH_CAPTURE_SIZES+=","
+    fi
+    CUDA_GRAPH_CAPTURE_SIZES+="$((num_seqs * TOKENS_PER_SEQ))"
+done
+COMPILATION_CONFIG="{\"cudagraph_mode\":\"FULL_DECODE_ONLY\",\"cudagraph_capture_sizes\":[${CUDA_GRAPH_CAPTURE_SIZES}],\"mode\":0}"
 
 echo "Starting vllm server..."
 export TORCH_CUDA_ARCH_LIST="10.0"
 export PYTHONNOUSERSITE=1
 export VLLM_FLOAT32_MATMUL_PRECISION=high
+GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.90}"
 
 { set +x; } 2>/dev/null
 VLLM_CMD=(
@@ -268,7 +281,7 @@ VLLM_CMD=(
     --kv-cache-dtype fp8
     --block-size 256
     --max-model-len 1048576
-    --gpu-memory-utilization 0.9
+    --gpu-memory-utilization "$GPU_MEMORY_UTILIZATION"
     --numa-bind
     --enable-cumem-allocator
     --no-enable-flashinfer-autotune
@@ -280,13 +293,11 @@ VLLM_CMD=(
     --speculative-config "$SPEC_CONFIG"
     --no-disable-hybrid-kv-cache-manager
     --disable-uvicorn-access-log
-    --compilation-config '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
+    --compilation-config "$COMPILATION_CONFIG"
     --max-num-seqs "$MAX_NUM_SEQS"
-    --max-cudagraph-capture-size "$MAX_CUDAGRAPH_CAPTURE_SIZE"
     "${PARALLEL_ARGS[@]}"
     "${VLLM_CP_ARGS[@]}"
-    "${EP_ARGS[@]}"
-    "${FAST_MOE_ARGS[@]}"
+    "${MODE_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
 )
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"

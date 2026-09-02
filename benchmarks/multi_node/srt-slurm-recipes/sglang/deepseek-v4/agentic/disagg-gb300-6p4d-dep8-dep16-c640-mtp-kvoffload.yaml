@@ -1,4 +1,5 @@
 name: "disagg-gb300-6p4d-dep8-dep16-c640-mtp-kvoffload"
+setup_script: sglang-server-args-config-parser-compat.sh
 
 # Agentic-coding SGLang disaggregated Pareto recipe for DeepSeek-V4-Pro on GB300
 # (6P x DEP8 / 4D x DEP16, DSpark K=6 + hierarchical-cache KV offload), tuned for concurrency 640.
@@ -9,19 +10,19 @@ name: "disagg-gb300-6p4d-dep8-dep16-c640-mtp-kvoffload"
 # Concurrency is exported into agentic_srt.sh from the master-config conc-list.
 
 model:
-  path: "deepseek-v4-pro-dspark"
+  path: "deepseek-v4-pro-0813"
   container: "dynamo-sglang"
   precision: "fp4"
 
 identity:
   model:
-    repo: "deepseek-ai/DeepSeek-V4-Pro-DSpark"
+    repo: "deepseek-ai/DeepSeek-V4-Pro-0813"
   container:
-    image: "lmsysorg/sglang:nightly-dev-cu13-20260816-4a6dc267"
+    image: "lmsysorg/sglang:nightly-dev-cu13-20260829-89816a21"
 
 dynamo:
   install: true
-  hash: "7a4e47ead90ec6b479e397996f6479ce7d251510"
+  wheel: "1.4.0"
 
 slurm:
   time_limit: "8:00:00"
@@ -63,12 +64,13 @@ backend:
   type: sglang
 
   prefill_environment:
+    SGLANG_ENABLE_PREFILL_WAR_READ_DONE: "1"
     SGLANG_RAGGED_VERIFY_MODE: "static"
     SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "900"
     SGLANG_DSV4_MHC_PREWARM: '1'
     PIP_BREAK_SYSTEM_PACKAGES: '1'
     PYTHONUNBUFFERED: '1'
-    SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
+    SGLANG_ENABLE_TP_MEMORY_INBALANCE_CHECK: '0'
     SGLANG_DG_CACHE_DIR: /configs/deepgemm_cache
     SGLANG_JIT_DEEPGEMM_PRECOMPILE: '1'
     SGLANG_JIT_DEEPGEMM_FAST_WARMUP: '1'
@@ -78,8 +80,6 @@ backend:
     SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: "1"
     SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2: '1'
     SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE: '1'
-    SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_FP4_ACTS: '1'
-    SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_MXF4_KIND: '1'
     SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '9216'
     SGLANG_OPT_USE_ONLINE_COMPRESS: '0'
     NCCL_MNNVL_ENABLE: '1'
@@ -94,14 +94,14 @@ backend:
     SGLANG_LOG_FORWARD_ITERS: '1'
     SGLANG_LOG_MS: '1'
     SGLANG_REQUEST_STATE_WAIT_TIMEOUT: '60'
-    SGLANG_ENABLE_UNIFIED_RADIX_TREE: '1'
+    SGLANG_NCCL_ALL_GATHER_IN_OVERLAP_SCHEDULER_SYNC_BATCH: '1'
 
   decode_environment:
     SGLANG_RAGGED_VERIFY_MODE: "static"
     SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "900"
     PIP_BREAK_SYSTEM_PACKAGES: '1'
     PYTHONUNBUFFERED: '1'
-    SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
+    SGLANG_ENABLE_TP_MEMORY_INBALANCE_CHECK: '0'
     SGLANG_DG_CACHE_DIR: /configs/deepgemm_cache
     SGLANG_JIT_DEEPGEMM_PRECOMPILE: '1'
     SGLANG_JIT_DEEPGEMM_FAST_WARMUP: '1'
@@ -110,8 +110,6 @@ backend:
     SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: '1'
     SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: "1"
     SGLANG_OPT_DEEPGEMM_MEGA_MOE: '1'
-    SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_FP4_ACTS: '1'
-    SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_MXF4_KIND: '1'
     SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '4096'
     SGLANG_OPT_USE_ONLINE_COMPRESS: '0'
     NCCL_MNNVL_ENABLE: '1'
@@ -127,13 +125,13 @@ backend:
     SGLANG_LOG_FORWARD_ITERS: '1'
     SGLANG_LOG_MS: '1'
     SGLANG_REQUEST_STATE_WAIT_TIMEOUT: '60'
-    SGLANG_ENABLE_UNIFIED_RADIX_TREE: '1'
 
   sglang_config:
     prefill:
       host: 0.0.0.0
-      served-model-name: deepseek-ai/DeepSeek-V4-Pro-DSpark
+      served-model-name: deepseek-ai/DeepSeek-V4-Pro-0813
       enable-metrics: true
+      enable-cache-report: true
       model-path: /model/
       trust-remote-code: true
       watchdog-timeout: 86400
@@ -145,10 +143,13 @@ backend:
       enable-dp-lm-head: true
       moe-dense-tp-size: 1
       moe-a2a-backend: megamoe
+      enable-deepseek-v4-fp4-indexer: true
+      enable-w4a4-mxfp4-megamoe: true
       disaggregation-transfer-backend: mooncake
       disaggregation-mode: prefill
       load-balance-method: total_tokens
       mem-fraction-static: 0.85
+      page-size: 256
       swa-full-tokens-ratio: 0.02
       max-running-requests: 512
       cuda-graph-max-bs: 512
@@ -168,8 +169,9 @@ backend:
 
     decode:
       host: 0.0.0.0
-      served-model-name: deepseek-ai/DeepSeek-V4-Pro-DSpark
+      served-model-name: deepseek-ai/DeepSeek-V4-Pro-0813
       enable-metrics: true
+      enable-cache-report: true
       model-path: /model/
       trust-remote-code: true
       watchdog-timeout: 86400
@@ -181,10 +183,13 @@ backend:
       enable-dp-lm-head: true
       moe-dense-tp-size: 1
       moe-a2a-backend: megamoe
+      enable-deepseek-v4-fp4-indexer: true
+      enable-w4a4-mxfp4-megamoe: true
       disaggregation-transfer-backend: mooncake
       disaggregation-mode: decode
       load-balance-method: total_tokens
       mem-fraction-static: 0.9
+      page-size: 256
       swa-full-tokens-ratio: 0.02
       max-running-requests: 3072
       cuda-graph-max-bs: 512
@@ -219,4 +224,3 @@ benchmark:
     AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
     AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
     HF_HUB_CACHE: "/hf_hub_cache"
-    INFMAX_AIPERF_TOKENIZER: "/model"

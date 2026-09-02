@@ -1,22 +1,23 @@
 name: "agg-gb300-tp8-mtp-lowlatency"
+setup_script: sglang-server-args-config-parser-compat.sh
 
 # Low-latency AgentX aggregate topology: one TP8 worker spans two
 # four-GPU GB300 nodes and serves both prefill and decode with DSpark K=6.
 
 model:
-  path: "deepseek-v4-pro-dspark"
+  path: "deepseek-v4-pro-0813"
   container: "dynamo-sglang"
   precision: "fp4"
 
 identity:
   model:
-    repo: "deepseek-ai/DeepSeek-V4-Pro-DSpark"
+    repo: "deepseek-ai/DeepSeek-V4-Pro-0813"
   container:
-    image: "lmsysorg/sglang:nightly-dev-cu13-20260816-4a6dc267"
+    image: "lmsysorg/sglang:nightly-dev-cu13-20260829-89816a21"
 
 dynamo:
   install: true
-  hash: "7a4e47ead90ec6b479e397996f6479ce7d251510"
+  wheel: "1.4.0"
 
 slurm:
   time_limit: "4:00:00"
@@ -55,6 +56,7 @@ backend:
   type: sglang
   aggregated_environment:
     SGLANG_RAGGED_VERIFY_MODE: "static"
+    SGLANG_ENABLE_PREFILL_WAR_READ_DONE: "1"
     SGLANG_DEFAULT_THINKING: "1"
     SGLANG_DSV4_REASONING_EFFORT: high
     PIP_BREAK_SYSTEM_PACKAGES: "1"
@@ -69,15 +71,19 @@ backend:
 
   sglang_config:
     aggregated:
-      served-model-name: "deepseek-ai/DeepSeek-V4-Pro-DSpark"
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro-0813"
       enable-metrics: true
+      enable-cache-report: true
       trust-remote-code: true
+      weight-loader-prefetch-checkpoints: true
       stream-interval: 10
       watchdog-timeout: 1000000
       mem-fraction-static: 0.94
+      page-size: 256
       chunked-prefill-size: 8192
       max-prefill-tokens: 8192
       moe-runner-backend: "flashinfer_mxfp4"
+      enable-deepseek-v4-fp4-indexer: true
       disable-flashinfer-autotune: true
       swa-full-tokens-ratio: 0.1
       max-running-requests: 4
@@ -112,7 +118,5 @@ benchmark:
     AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
     AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
     AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
-    AIPERF_WARMUP_REQUESTS_PER_LANE: "1"
     AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
     HF_HUB_CACHE: "/hf_hub_cache"
-    INFMAX_AIPERF_TOKENIZER: "/model"

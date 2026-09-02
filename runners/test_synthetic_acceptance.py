@@ -10,7 +10,7 @@ INJECTOR = REPO_ROOT / "runners" / "inject_synthetic_acceptance.py"
 LAUNCHER = REPO_ROOT / "runners" / "launch_gb300-nv.sh"
 MASTER = REPO_ROOT / "configs" / "nvidia-master.yaml"
 RECIPES = REPO_ROOT / "benchmarks" / "multi_node" / "srt-slurm-recipes"
-GOLDEN_AL = REPO_ROOT / "golden_al_distribution" / "dsv4_0813_dspark_probabilistic.yaml"
+GOLDEN_AL = REPO_ROOT / "golden_al_distribution" / "dsv4-pro-0813-dspark.yaml"
 CONFIG_KEYS = (
     "dsv4-fp4-gb300-dynamo-sglang-agentic-agg",
     "dsv4-fp4-gb300-dynamo-sglang-agentic-disagg",
@@ -38,11 +38,13 @@ def run_injector(
 def _configured_recipe_paths(master: dict) -> set[Path]:
     recipe_paths = set()
     for config_key in CONFIG_KEYS:
-        assert master[config_key]["model"] == "deepseek-ai/DeepSeek-V4-Pro-DSpark"
+        assert master[config_key]["model"] == "deepseek-ai/DeepSeek-V4-Pro-0813"
         for group in master[config_key]["scenarios"]["agentic-coding"]:
             for point in group["search-space"]:
                 assert point["spec-decoding"] == "draft_model"
-                settings = point["prefill"]["additional-settings"]
+                worker = point.get("prefill", point.get("worker"))
+                assert worker is not None
+                settings = worker["additional-settings"]
                 assert "SYNTHETIC_ACCEPTANCE=true" in settings
                 assert "SYNTHETIC_ACCEPTANCE_LENGTH=3.77" in settings
                 config = next(
@@ -72,7 +74,7 @@ def test_gb300_dsv4_configs_inject_only_at_launch() -> None:
     master = yaml.safe_load(MASTER.read_text())
     recipe_paths = _configured_recipe_paths(master)
 
-    assert len(recipe_paths) == 6
+    assert len(recipe_paths) == 7
     for recipe in recipe_paths:
         text = recipe.read_text()
         parsed = yaml.safe_load(text)
@@ -83,11 +85,13 @@ def test_gb300_dsv4_configs_inject_only_at_launch() -> None:
         assert text.count("speculative-dspark-block-size: 6") == worker_count
         assert text.count("speculative-num-draft-tokens: 7") == worker_count
         assert "speculative-algorithm: EAGLE" not in text
-        assert 'path: "deepseek-v4-pro-dspark"' in text
-        assert parsed["benchmark"]["env"]["INFMAX_AIPERF_TOKENIZER"] == "/model"
+        assert 'path: "deepseek-v4-pro-0813"' in text
         assert "AIPERF_TOKENIZER" not in parsed["benchmark"]["env"]
 
     launcher = LAUNCHER.read_text()
+    assert 'MODEL == "deepseek-ai/DeepSeek-V4-Pro-0813"' in launcher
+    assert 'MODEL_PATH="/scratch/models/DeepSeek-V4-Pro-0813"' in launcher
+    assert 'SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro-0813"' in launcher
     source = 'source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"'
     inject = 'inject_synthetic_acceptance "$CONFIG_PATH" "$FRAMEWORK" || exit 1'
     apply = "SRTCTL_OUTPUT=$(srtctl apply"
@@ -102,7 +106,9 @@ def test_gb300_dsv4_dspark6_matches_committed_golden_curve() -> None:
     for config_key in CONFIG_KEYS:
         for group in master[config_key]["scenarios"]["agentic-coding"]:
             for point in group["search-space"]:
-                settings = point["prefill"]["additional-settings"]
+                worker = point.get("prefill", point.get("worker"))
+                assert worker is not None
+                settings = worker["additional-settings"]
                 assert "SYNTHETIC_ACCEPTANCE_LENGTH=3.77" in settings
 
 

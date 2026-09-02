@@ -59,33 +59,35 @@ if require_agentic_kv_offload_backend hicache; then
     # conc 8 (TP8) / 64 (DP8) and the radix hit rate collapses to <0.1
     # against a ~0.97 theoretical ceiling, so every turn re-prefills its
     # whole history; the host tier restores those hits at C2C bandwidth.
-    # GLM-5.2 is DSA/MLA-family (attention_backend=dsa): every rank holds
-    # complete per-token KV (169.98 GB device pool per rank, replicated on
-    # all 8 ranks), so host capacity is controlled through the host/device
-    # token-capacity ratio like the DSv4 recipe, NOT a per-rank
-    # --hicache-size. A GB-based size of TOTAL_CPU_DRAM_GB/TP pinned the
-    # whole 0.80-DRAM budget (8 x 299 GB) at init on top of 465 GB of
-    # weights and OOM-killed the node (run 29678598595); DSv4's own
-    # ratio=2 default pins 2 x 170 GB x 8 = 2.7 TB here and OOMs too
-    # (GLM-5.2's device pool is far larger than DSv4's). Fractional 0.75
-    # = ~128 GB/rank = ~1.0 TB total, matching the cluster's proven ~1 TB
-    # host-pool envelope; validated on-node 2026-07-19 (boot + 4.2M-token
-    # overflow bench forcing eviction through the DSA KV+INDEXER pools).
-    # The ratio is relative to the device pool, so MTP's slightly smaller
-    # device pool (the nextn layer takes its own KV) only shrinks it.
-    DEFAULT_HICACHE_RATIO=0.75
-    HICACHE_RATIO="${HICACHE_RATIO:-$DEFAULT_HICACHE_RATIO}"
-    if awk -v r="$HICACHE_RATIO" -v cap="$DEFAULT_HICACHE_RATIO" 'BEGIN { exit !(r > cap) }'; then
-        echo "Error: HICACHE_RATIO=$HICACHE_RATIO exceeds configured limit $DEFAULT_HICACHE_RATIO" >&2
+    # GLM-5.2 is DSA/MLA-family (attention_backend=dsa): every TP rank holds
+    # complete per-token KV. Use an absolute main-pool size so all points get
+    # the same host token capacity even if the HBM pool changes. In SGLang
+    # v0.5.16, --hicache-size directly sizes only the target KV host pool;
+    # the DSA indexer and MTP draft pools inherit its token-slot count and use
+    # their own smaller bytes/token. A 270 GB target pool was measured as
+    # 270.00 + 61.88 + 3.46 = 335.34 GB/rank, or 2.683 TB across TP8, with
+    # 6,009,728 slots in each pool. This is larger than the ratio-1.50 c16
+    # configuration whose full run improved from 76.26 / 10,311.95 to
+    # 100.49 tok/s/user / 12,120.27 tok/s/GPU and retained ~1.74 TiB minimum
+    # node MemAvailable.
+    DEFAULT_HICACHE_SIZE=270
+    MAX_HICACHE_SIZE=270
+    HICACHE_SIZE="${HICACHE_SIZE:-$DEFAULT_HICACHE_SIZE}"
+    if ! [[ "$HICACHE_SIZE" =~ ^[0-9]+$ ]]; then
+        echo "Error: HICACHE_SIZE must be a positive integer, got $HICACHE_SIZE" >&2
+        exit 1
+    fi
+    if awk -v s="$HICACHE_SIZE" -v cap="$MAX_HICACHE_SIZE" 'BEGIN { exit !(s <= 0 || s > cap) }'; then
+        echo "Error: HICACHE_SIZE=$HICACHE_SIZE must be in (0, $MAX_HICACHE_SIZE]" >&2
         exit 1
     fi
     HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_back}"
     HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
     HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first_direct}"
-    echo "HiCache CPU tier: ratio=$HICACHE_RATIO, capacity=${TOTAL_CPU_DRAM_GB} GB, write_policy=$HICACHE_WRITE_POLICY, io_backend=$HICACHE_IO_BACKEND, mem_layout=$HICACHE_MEM_LAYOUT"
+    echo "HiCache CPU tier: conc=$CONC, target_size=$HICACHE_SIZE GB, total_capacity=${TOTAL_CPU_DRAM_GB} GB, write_policy=$HICACHE_WRITE_POLICY, io_backend=$HICACHE_IO_BACKEND, mem_layout=$HICACHE_MEM_LAYOUT"
     CACHE_ARGS=(
         --enable-hierarchical-cache
-        --hicache-ratio "$HICACHE_RATIO"
+        --hicache-size "$HICACHE_SIZE"
         --hicache-write-policy "$HICACHE_WRITE_POLICY"
         --hicache-io-backend "$HICACHE_IO_BACKEND"
         --hicache-mem-layout "$HICACHE_MEM_LAYOUT"

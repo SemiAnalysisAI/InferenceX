@@ -53,6 +53,23 @@ TensorRT-LLM supports it through [`TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS`](
 TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS=2.5
 ```
 
+ATOM supports it through `--spec-decode-acceptance-length`, which takes the golden AL directly:
+
+```bash
+python -m atom.entrypoints.openai_server \
+  --model MODEL \
+  --draft-model DRAFT_MODEL \
+  --method dspark \
+  --num-speculative-tokens 7 \
+  --spec-decode-acceptance-length 3.78
+```
+
+Acceptance length counts the target's guaranteed verification token, so the golden AL goes in unchanged — no off-by-one — matching vLLM's `synthetic_acceptance_length` and SGLang's `SGLANG_SIMULATE_ACC_LEN`. The value must fall in `[1, num_speculative_tokens + 1]`, and it resolves to the same minimum-variance per-position schedule vLLM derives, so the accepted-length *distribution* matches and not merely its mean. Accepted positions emit the real draft tokens, equivalent to SGLang's `real-draft-token`. The knob has an equivalent rate spelling, `--spec-decode-acceptance-rate`, which takes `(AL - 1) / num_speculative_tokens`; the two are mutually exclusive. Support landed in [ROCm/ATOM#1948](https://github.com/ROCm/ATOM/pull/1948).
+
+Read the realized value back from `average_tokens_per_forward` on the server's `/debug/mtp_stats`, or the `atom:mtp_average_tokens_per_forward` Prometheus metric. ATOM computes it as `1 + accepted draft tokens / verification steps`, the same formula used to collect the golden curves, so the two are directly comparable.
+
+**DSpark note:** ATOM rejects forced acceptance combined with the DSpark confidence scheduler (`--dspark-config '{"confidence_schedule": true}'`), which sizes each request's verify length at runtime and can cap acceptance below the requested length with no way to detect it. The golden DSpark curves were themselves collected without adaptive verification, so leaving it off is also the comparable configuration.
+
 This policy follows the same broad principle as MLPerf Inference: prescribe the workload rules needed for comparable system measurements. InferenceX is evaluating inference-system performance, not the ability to fine-tune a benchmark-specific speculative head.
 
 ## How a golden AL curve is collected
@@ -109,11 +126,13 @@ Before accepting an updated curve, reviewers should verify:
 | Model | Method | Golden YAML | Source run |
 | --- | --- | --- | --- |
 | DeepSeek V4 Pro | MTP | [`dsv4_mtp.yaml`](dsv4_mtp.yaml) | [27180633016](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27180633016) |
-| DeepSeek V4 Pro DSpark | DSpark (probabilistic drafting) | [`dsv4_dspark_probabilistic.yaml`](dsv4_dspark_probabilistic.yaml) | [31279568355](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/31279568355) |
-| DeepSeek V4 Pro 0813 | DSpark (probabilistic drafting) | [`dsv4_0813_dspark_probabilistic.yaml`](dsv4_0813_dspark_probabilistic.yaml) | Provided 2026-08-17; same SpeedBench AL method |
+| DeepSeek V4 Pro 0813 | DSpark (probabilistic draft) | [`dsv4-pro-0813-dspark.yaml`](dsv4-pro-0813-dspark.yaml) | [31742838308](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/31742838308) |
 | Qwen3.5 397B-A17B | MTP | [`qwen3.5_mtp.yaml`](qwen3.5_mtp.yaml) | [27317114007](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27317114007) |
 | Kimi K2.5 | EAGLE3 | [`kimik2.5_eagle3.yaml`](kimik2.5_eagle3.yaml) | [28122195822](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28122195822) |
+| Kimi K3 | DSpark | [`kimik3_dspark.yaml`](kimik3_dspark.yaml) | [30304797750](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/30304797750) |
+| Kimi K3 | DSpark (probabilistic draft, block verify) | [`kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml`](kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml) | [30316471205](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/30316471205) |
 | MiniMax-M3 | EAGLE3 | [`minimaxm3_eagle3.yaml`](minimaxm3_eagle3.yaml) | [28061204145](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28061204145) |
+| MiniMax-M3 | EAGLE3 (GQA) | [`minimaxm3_eagle3_gqa.yaml`](minimaxm3_eagle3_gqa.yaml) | [29784780049](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/29784780049) |
 | GLM-5.2 | MTP | [`glm5.2_mtp.yaml`](glm5.2_mtp.yaml) | [28058352479](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28058352479) |
 
 ## Primary references
@@ -124,6 +143,7 @@ Before accepting an updated curve, reviewers should verify:
 - [SPEED-Bench dataset and dataset card](https://huggingface.co/datasets/nvidia/SPEED-Bench)
 - [vLLM SPEED-Bench integration](https://github.com/vllm-project/vllm/pull/36029)
 - [vLLM synthetic acceptance support](https://github.com/vllm-project/vllm/pull/40662)
+- [ATOM forced acceptance-length support](https://github.com/ROCm/ATOM/pull/1948)
 - [InferenceX synthetic-acceptance tracking issue](https://github.com/SemiAnalysisAI/InferenceX/issues/1651)
 - [InferenceX SPEED-Bench workflow](../.github/workflows/speedbench-al.yml)
 - [InferenceX early reference-alignment PR](https://github.com/SemiAnalysisAI/InferenceX/pull/1592)

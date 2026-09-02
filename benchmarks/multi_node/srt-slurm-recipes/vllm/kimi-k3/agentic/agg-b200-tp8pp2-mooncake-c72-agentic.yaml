@@ -1,18 +1,15 @@
-name: "kimik3-vllm-agg-b200-tp8dp2-latency-dspark-eval-agentic"
+name: "kimik3-vllm-agg-b200-tp8pp2-mooncake-c72-agentic"
 
-# Real-verification eval counterpart to the B200 DEP throughput recipe.
-# It keeps TP8/DP2/EP16 and target settings unchanged; only DSpark acceptance
-# changes from synthetic golden AL to target-verified block.
 model:
   path: "kimik3"
-  container: "vllm/vllm-openai:nightly-b22afe45ac797ae58e67a7a3ad79ee5714024420@sha256:144356af876edbb3a4bfee23e1444b196cc3fdadd0a0c1a7f11f721756972a21"
+  container: "vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-728d3ad"
   precision: "fp4"
 
 identity:
   model:
     repo: "moonshotai/Kimi-K3"
   container:
-    image: "vllm/vllm-openai:nightly-b22afe45ac797ae58e67a7a3ad79ee5714024420@sha256:144356af876edbb3a4bfee23e1444b196cc3fdadd0a0c1a7f11f721756972a21"
+    image: "vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-728d3ad"
 
 dynamo:
   install: false
@@ -42,16 +39,36 @@ frontend:
 backend:
   type: vllm
   connector: null
+  mooncake_kv_store:
+    store_config:
+      metadata_server: "P2PHANDSHAKE"
+      global_segment_size: "200GB"
+      local_buffer_size: "4GB"
+      protocol: "rdma"
+      device_name: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
+      mode: "embedded"
+      enable_offload: false
   aggregated_environment:
-    # TP8 collectives stay within each B200 NVSwitch domain.
     VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION: "1"
+    MC_GID_INDEX: "3"
+    MC_STORE_MEMCPY: "1"
+    MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
+    MC_SLICE_SIZE: "1048576"
+    MC_WORKERS_PER_CTX: "4"
+    VLLM_MOONCAKE_LOAD_RECV_THREADS: "4"
     VLLM_ALLREDUCE_USE_FLASHINFER: "1"
+    VLLM_USE_DIRECT_DCP_A2A: "1"
+    VLLM_USE_DIRECT_DCP_Q_GATHER: "1"
+    VLLM_USE_DIRECT_DCP_KV_GATHER: "1"
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
     VLLM_USE_V2_MODEL_RUNNER: "1"
-    VLLM_USE_RUST_FRONTEND: "1"
     VLLM_SERVER_DEV_MODE: "1"
     VLLM_LOG_STATS_INTERVAL: "1"
+    VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "0"
+    VLLM_RPC_TIMEOUT: "600000"
+    WITH_NVIDIA_PEERMEM: "0"
+    VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: "0"
     NCCL_CUMEM_ENABLE: "1"
     TILELANG_CLEANUP_TEMP_FILES: "1"
     UCX_MEMTYPE_CACHE: "n"
@@ -63,27 +80,29 @@ backend:
     aggregated:
       served-model-name: "moonshotai/Kimi-K3"
       tensor-parallel-size: 8
-      data-parallel-size: 2
-      enable-expert-parallel: true
+      pipeline-parallel-size: 2
+      decode-context-parallel-size: 8
+      dcp-comm-backend: a2a
       trust-remote-code: true
       load-format: fastsafetensors
       moe-backend: auto
-      # Keep headroom for the first FlashInfer MXFP4 MoE workspace.
-      gpu-memory-utilization: 0.90
+      gpu-memory-utilization: 0.92
       no-enable-flashinfer-autotune: true
       max-model-len: 1048576
       kv-cache-dtype: fp8
-      attention-config: '{"use_prefill_query_quantization":true,"mla_prefill_backend":"flashinfer"}'
+      kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false}}'
+      attention-backend: TOKENSPEED_MLA
+      attention-config: '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true}'
       enable-prefix-caching: true
       enable-prompt-tokens-details: true
       enable-auto-tool-choice: true
       tool-call-parser: kimi_k3
       reasoning-parser: kimi_k3
       language-model-only: true
-      max-num-seqs: 8
+      max-num-seqs: 144
       max-num-batched-tokens: 8192
-      # Eval must verify every draft against real target logits.
-      speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":7,"method":"dspark","attention_backend":"FLASHINFER_MLA","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+      prefix-match-unit: 128
+      compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,7,18,34,53,64,75,100,128,256,512,1024,2048,4096,8192]}'
 
 sbatch_directives:
   segment: "1"
@@ -93,12 +112,12 @@ srun_options:
 
 benchmark:
   type: custom
-  aiperf_server_metrics: true
   command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
   env:
     INFMAX_CONTAINER_WORKSPACE: "/infmax-workspace"
     AIPERF_TRACE_IDLE_GAP_CAP_SECONDS: "300"
     AIPERF_LIVE_FAILED_REQUEST_THRESHOLD: "0.25"
+    AIPERF_SERVER_METRICS_URLS: "http://localhost:8000/metrics"
     AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:"
     RESULT_DIR: "/logs/agentic"
     PORT: "8000"

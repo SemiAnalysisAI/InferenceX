@@ -135,7 +135,7 @@ on:
         type: string
         default: '3600'
       require-power:
-        description: "Fail fixed-sequence result processing when GPU power is invalid"
+        description: "Fail result processing when GPU power is invalid"
         required: false
         type: boolean
         default: false

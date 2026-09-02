@@ -39,6 +39,7 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
 from aggregate_power import (
+    POWER_METRIC_SCHEMA_VERSION,
     BenchmarkData,
     _append_reason,
     _integrate_device,
@@ -1165,6 +1166,7 @@ def _patch_agg(agg_path: Path, audit: MultinodePowerAudit) -> None:
     data = json.loads(agg_path.read_text(encoding="utf-8"))
     for key in _ALL_POWER_METRIC_KEYS:
         data.pop(key, None)
+    data["power_metric_schema_version"] = POWER_METRIC_SCHEMA_VERSION
     data["power_valid"] = int(audit.power_valid)
     data.pop("power_invalid_reasons", None)
     if audit.power_valid:
