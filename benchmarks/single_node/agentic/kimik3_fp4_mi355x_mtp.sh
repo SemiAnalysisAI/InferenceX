@@ -198,6 +198,7 @@ case "${KV_OFFLOAD_BACKEND:-}" in
 
     LMCACHE_L1_SIZE_GB="$TOTAL_CPU_DRAM_GB"
     LMCACHE_CHUNK_SIZE=12288
+    LMCACHE_MAX_GPU_WORKERS="${LMCACHE_MAX_GPU_WORKERS:-1}"
 
     LMCACHE_CMD=(
         lmcache server
@@ -212,7 +213,7 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         --enable-extra-logging
         --extra-logging-interval 30
         --max-cpu-workers 8
-        --max-gpu-workers 1
+        --max-gpu-workers "$LMCACHE_MAX_GPU_WORKERS"
         --eviction-policy LRU
         --supported-transfer-mode lmcache_driven
         --shm-name ""
