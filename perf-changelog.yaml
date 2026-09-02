@@ -5595,7 +5595,7 @@
     - "Image ghcr.io/tile-ai/tilert:0.1.5 (tilert 0.1.5.post2 installed at container start); commands aligned to TileRT README Topology A -- NIXL KV transfer, --kv-cache-dtype fp8_ds_mla (prefill) <-> fp8 (decode), max-seq-len 202752; MTP speculative-config wired via spec-decoding=mtp"
     - "Topology: 1 prefill node (TP8) + 1 decode node (TP8), each 8xB200 exclusive; TileRT decode is bs=1 only so conc-list is a single point [1], ISL 1k/8k OSL 1k"
     - "Runner: launch_b200-dgxc.sh tilert early-return branch (zero impact on the dynamo path); tilert_utils/submit.sh issues two srun --ntasks=1, one per role, because prefill and decode need different container images; roles are dispatched by the TILERT_ROLE it exports, and torn down across nodes via a sentinel file on the shared /workspace"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2804
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
 
 - config-keys:
     - qwen3.5-fp8-b200-sglang-agentic-mtp
@@ -6830,4 +6830,4 @@
     - "Refresh the Kimi-K3 MI355X AgentX recipe from the merged PR #2787 baseline to vLLM ROCm nightly 7c5dc571 and LMCache 0.5.5rc3+rocm7.2."
     - "Run C1, C8, and C14 with TP8 DSpark and LMCache DRAM KV offload; run C40 with TP8/DCP8 and no speculative decoding."
     - "Use a 12288-token LMCache chunk and a 1536-token DCP KV-cache interleave; set C40 gpu-memory-utilization to 0.88 while retaining its 16K batched-token, max-num-seqs 80, and full CUDA-graph profile."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2804
