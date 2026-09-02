@@ -6901,3 +6901,12 @@
     - "Add a same-node five-draft baseline/exact-M=6-tuned/five-draft baseline C1 experiment after the golden-depth gate."
     - "Pin the five gfx950 rows selected by run 33591999396, verify AITER and hardware provenance, and exclude the sixth row that missed the strict 3% graph-replay threshold."
   pr-link: XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add bounded all-rank vLLM profiling for the selected Kimi-K3 MI355X concurrency-one draft depth after AgentX warmup."
+    - "Record the exact speculative configuration and upload trace plus runtime evidence without treating the short diagnostic as a canonical score."
+  pr-link: XXX

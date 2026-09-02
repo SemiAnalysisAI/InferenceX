@@ -233,6 +233,12 @@ utilization for every arm so repeated ROCm server startups retain enough
 initialization headroom; the setting remains constant across the paired
 comparison.
 
+For a bounded all-rank trace after choosing the C1 draft depth, dispatch
+`profile.yml` with `k3-perf-variant=baseline` or `spec5golden`. The workflow
+starts profiling only after AgentX warmup completes, records the exact
+speculative configuration, uploads every vLLM rank trace, and labels the
+short-duration result as diagnostic evidence rather than a canonical score.
+
 Targeted AgentX SWE-bench smoke eval (first ten instances, real agentic generation):
 
 ```bash
