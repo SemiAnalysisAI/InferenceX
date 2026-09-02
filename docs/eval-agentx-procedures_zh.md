@@ -218,6 +218,11 @@ baseline/candidate/baseline 流程，只把并发 1 的 draft 数量从 6 改为
 GPU-memory utilization 固定为 0.85，并且只在候选阶段应用精确固定的 vLLM
 metadata-reuse 源码 overlay。候选启动冒烟和完整 benchmark 结束后都会恢复并
 校验原始源码；恢复失败会立即终止 A/B/A，不允许后续 baseline 继续运行。
+若该整体候选未通过，可依次运行 `mlametadatareuseaba`、
+`kdaspecializedaba` 和 `kdametadatareuseaba`。它们分别固定到累积的 vLLM
+提交 `747d030515`、`5c76ec1906` 和 `bbb59bf5a5`，用来区分 MLA schedule
+复用、ROCm KDA 专用 metadata 和 KDA metadata 复用。只有候选启动冒烟设置
+`AMD_SERIALIZE_KERNEL=3` 来同步定位首个失败 kernel；计时阶段明确禁用该设置。
 
 目标 AgentX SWE-bench smoke eval（前十个 instance，真实 agentic generation）：
 

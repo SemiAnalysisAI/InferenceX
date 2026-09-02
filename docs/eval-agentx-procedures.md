@@ -223,7 +223,13 @@ sizes 2 through 14, pins all three arms to GPU-memory utilization 0.85, and
 applies the exact vLLM metadata-reuse source overlay only to the candidate.
 The candidate source is restored and checksum-verified after both its startup
 smoke and full benchmark; restoration failure aborts the A/B/A before a later
-baseline can run.
+baseline can run. To isolate a metadata candidate that fails this gate, use
+`mlametadatareuseaba`, `kdaspecializedaba`, and `kdametadatareuseaba` in that
+order. They pin cumulative vLLM commits `747d030515`, `5c76ec1906`, and
+`bbb59bf5a5`, respectively, so the first failing stage distinguishes MLA
+schedule reuse from ROCm KDA specialization and KDA reuse. Candidate startup
+smokes set `AMD_SERIALIZE_KERNEL=3` for synchronous kernel attribution; timed
+arms explicitly leave serialization disabled.
 
 Targeted AgentX SWE-bench smoke eval (first ten instances, real agentic generation):
 

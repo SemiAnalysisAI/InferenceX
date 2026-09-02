@@ -49,6 +49,23 @@ check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
 K3_PERF_VARIANT="${K3_PERF_VARIANT:-baseline}"
 K3_ABA_GPU_MEM_UTIL=""
 
+metadata_stage_for_variant() {
+    case "$1" in
+        mlametadatareuse)
+            printf '%s\n' mla
+            ;;
+        kdaspecialized)
+            printf '%s\n' kda-specialized
+            ;;
+        metadatareuse|kdametadatareuse)
+            printf '%s\n' kda-reuse
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
 # C1 changes cannot be adjudicated reliably across different physical nodes.
 # These variants keep one exclusive Slurm allocation while
 # running baseline -> candidate -> baseline with fresh server processes. The
@@ -66,6 +83,18 @@ case "$K3_PERF_VARIANT" in
         K3_ABA_CANDIDATE=metadatareuse
         # Match the clean B300 control without changing the canonical C1
         # recipe or the existing A/B/A variants.
+        K3_ABA_GPU_MEM_UTIL=0.85
+        ;;
+    mlametadatareuseaba)
+        K3_ABA_CANDIDATE=mlametadatareuse
+        K3_ABA_GPU_MEM_UTIL=0.85
+        ;;
+    kdaspecializedaba)
+        K3_ABA_CANDIDATE=kdaspecialized
+        K3_ABA_GPU_MEM_UTIL=0.85
+        ;;
+    kdametadatareuseaba)
+        K3_ABA_CANDIDATE=kdametadatareuse
         K3_ABA_GPU_MEM_UTIL=0.85
         ;;
     *)
@@ -224,6 +253,7 @@ if [[ -n "$K3_ABA_CANDIDATE" ]]; then
         local arm_rc=0
         local cleanup_rc=0
         local restore_rc=0
+        local metadata_stage=""
 
         mkdir -p \
             "$arm_result_dir" \
@@ -265,14 +295,14 @@ if [[ -n "$K3_ABA_CANDIDATE" ]]; then
         arm_rc=$?
         set -e
 
-        # The metadata candidate replaces installed vLLM Python sources. Put
-        # the exact baseline files back before any later baseline can start,
-        # even when the candidate process itself failed.
-        if [[ "$variant" == "metadatareuse" ]]; then
+        # Metadata candidates replace installed vLLM Python sources. Put the
+        # exact baseline files back before any later baseline can start, even
+        # when the candidate process itself failed.
+        if metadata_stage="$(metadata_stage_for_variant "$variant")"; then
             K3_ARM_CACHE_ROOT="$arm_cache_root" \
                 RESULT_DIR="$arm_result_dir" \
                 bash "$(dirname "$script_path")/k3_perf_overlays/apply_vllm_metadata_reuse_overlay.sh" \
-                    restore || restore_rc=$?
+                    restore "$metadata_stage" || restore_rc=$?
         fi
 
         if ! verify_aba_arm_cleanup "$label" "$arm_result_dir"; then
@@ -455,9 +485,18 @@ case "$K3_PERF_VARIANT" in
         export AITER_CONFIG_GEMM_BF16="$RESULT_DIR/k3_m7_bf16_runtime_config.csv"
         export AITER_LOG_TUNED_CONFIG=1
         ;;
-    metadatareuse)
+    metadatareuse|mlametadatareuse|kdaspecialized|kdametadatareuse)
+        metadata_stage="$(metadata_stage_for_variant "$K3_PERF_VARIANT")"
+        if [[ "${K3_STARTUP_SMOKE:-0}" == "1" ]]; then
+            # Serialize only the short candidate startup diagnostic so the
+            # first failing kernel is attributed synchronously. Never carry
+            # this into a timed performance arm.
+            export AMD_SERIALIZE_KERNEL=3
+        else
+            unset AMD_SERIALIZE_KERNEL
+        fi
         bash "$(dirname "$0")/k3_perf_overlays/apply_vllm_metadata_reuse_overlay.sh" \
-            apply
+            apply "$metadata_stage"
         ;;
     tritonmla)
         # Preserve AITER for the rest of the ROCm stack while making MLA
@@ -689,6 +728,8 @@ printf 'variant\t%s\nspec_num_tokens\t%s\nsynthetic_acceptance_length\t%s\ngpu_m
     "$GPU_MEM_UTIL" \
     "$MAX_CUDAGRAPH_CAPTURE_SIZE" "$CUDAGRAPH_CAPTURE_SIZES" \
     >"$RESULT_DIR/spec_decode_provenance.tsv"
+printf 'amd_serialize_kernel\t%s\n' "${AMD_SERIALIZE_KERNEL:-unset}" \
+    >>"$RESULT_DIR/spec_decode_provenance.tsv"
 
 echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
