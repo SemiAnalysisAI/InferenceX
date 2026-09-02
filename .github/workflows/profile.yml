@@ -27,7 +27,7 @@ on:
         required: false
         type: string
       k3-perf-variant:
-        description: "Kimi-K3 C1 runtime variant (baseline, spec5golden, or m7tunedgemm)"
+        description: "Kimi-K3 C1 runtime variant (baseline, spec5golden, spec5m6tuned, or m7tunedgemm)"
         required: false
         type: string
         default: 'baseline'
@@ -266,7 +266,7 @@ jobs:
           export GPU_COUNT=$((TP * PP_SIZE * PCP_SIZE))
           echo "GPU_COUNT=${GPU_COUNT}" >> "$GITHUB_ENV"
           case "${K3_PERF_VARIANT:-baseline}" in
-            baseline|spec5golden|m7tunedgemm) ;;
+            baseline|spec5golden|spec5m6tuned|m7tunedgemm) ;;
             *)
               echo "Unsupported k3-perf-variant: ${K3_PERF_VARIANT}" >&2
               exit 1
@@ -345,6 +345,8 @@ jobs:
             results/vllm_command.txt
             results/vllm_profile_control.log
             results/spec_decode_provenance.tsv
+            results/k3_m6_bf16_runtime_config.csv
+            results/k3_m6_bf16_runtime_config_provenance.json
             results/k3_m7_bf16_runtime_config.csv
             results/k3_m7_bf16_runtime_config_provenance.json
           if-no-files-found: warn
