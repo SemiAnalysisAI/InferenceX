@@ -6827,6 +6827,7 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Limit the GB200 aggregate Dynamo-vLLM configuration to the SimpleCPU-offload concurrency 20 and 30 recipes."
+    - "Refresh the full GB200 aggregate Dynamo-vLLM AgentX configuration."
+    - "Use the mounted Hugging Face cache for the TP4 SimpleCPU-offload backend."
     - "Use the committed MiniMax-M3 thinking-on EAGLE3-GQA acceptance target."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2806
