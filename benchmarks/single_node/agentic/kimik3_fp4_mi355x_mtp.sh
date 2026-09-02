@@ -96,7 +96,7 @@ if [ "$DCP_SIZE" -gt 1 ]; then
     CP_ARGS+=(--decode-context-parallel-size "$DCP_SIZE" --dcp-comm-backend a2a --cp-kv-cache-interleave-size 1)
 fi
 
-GPU_MEM_UTIL=0.9
+GPU_MEM_UTIL=0.88
 
 OFFLOAD_ARGS=()
 if agentic_kv_offload_enabled; then
