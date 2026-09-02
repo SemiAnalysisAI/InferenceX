@@ -7825,7 +7825,7 @@ minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp:
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/minimax-m3/gb200-fp4/agentic/agg-tp4-vllm-simple-agentic.yaml"
           - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.83"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.78"
 minimaxm3-fp4-gb200-dynamo-vllm-agentic-disagg-mtp:
   image: vllm/vllm-openai:v0.27.1
   model: nvidia/MiniMax-M3-NVFP4
