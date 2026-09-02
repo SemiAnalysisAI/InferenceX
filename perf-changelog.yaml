@@ -6901,3 +6901,12 @@
     - "Add a fail-closed same-node baseline/radix-router/baseline AgentX validation mode for the Kimi-K3 MI355X concurrency-one workload."
     - "Pin exact stock and candidate AITER commits, rebuild only the grouped-MoE router module per arm, and record source plus binary provenance while retaining the image's common prebuilt AITER modules."
   pr-link: XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Keep the image's validated AITER Python runtime while rebuilding the isolated grouped-MoE router module from the pinned stock or radix source checkout."
+    - "This prevents the newer AITER Python wrapper from being mixed with older image extension binaries, which failed startup because module_rmsnorm_quant lacked the expected current-stream symbol."
+  pr-link: XXX

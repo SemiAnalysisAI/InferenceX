@@ -13,6 +13,7 @@ candidate_commit="d68332357e17e93f0f07d4deb1fba3144239466f"
 candidate_checkout="$session_root/aiter-candidate"
 stock_checkout="$session_root/aiter-stock"
 jit_seed="$session_root/installed-jit-seed"
+image_aiter_json="$session_root/image_aiter.json"
 
 mkdir -p "$result_dir"
 
@@ -47,13 +48,15 @@ expected_commit() {
 
 case "$mode" in
     prepare)
-        if [[ -e "$candidate_checkout" || -e "$stock_checkout" || -e "$jit_seed" ]]; then
+        if [[ -e "$candidate_checkout" || -e "$stock_checkout" || \
+                -e "$jit_seed" || -e "$image_aiter_json" ]]; then
             echo "Error: radix-router session root is not fresh: $session_root" >&2
             exit 1
         fi
         mkdir -p "$session_root" "$jit_seed"
 
-        python3 - "$result_dir/original_aiter.json" <<'PY'
+        python3 - "$image_aiter_json" <<'PY'
+import hashlib
 import importlib.metadata
 import importlib.util
 import json
@@ -70,15 +73,27 @@ for name in ("aiter", "amd-aiter"):
         break
     except importlib.metadata.PackageNotFoundError:
         pass
+package_dir = Path(spec.origin).resolve().parent
+
+
+def sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+tracked_runtime_files = ("__init__.py", "jit/core.py", "ops/topk.py")
 payload = {
     "installed_file": str(Path(spec.origin).resolve()),
     "installed_version": version,
+    "runtime_source_sha256": {
+        relative: sha256(package_dir / relative) for relative in tracked_runtime_files
+    },
 }
 Path(sys.argv[1]).write_text(
     json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
 )
 print(json.dumps(payload, indent=2, sort_keys=True))
 PY
+        cp "$image_aiter_json" "$result_dir/original_aiter.json"
 
         original_jit="$(python3 - <<'PY'
 import importlib.util
@@ -157,14 +172,10 @@ EOF
             exit 1
         fi
 
-        python3 -m pip uninstall -y aiter amd-aiter >/dev/null 2>&1 || true
-        PREBUILD_KERNELS=0 AITER_USE_SYSTEM_TRITON=1 \
-            python3 -m pip install -e "$candidate_checkout" \
-                --no-build-isolation --no-deps
-
         AITER_CANDIDATE="$candidate_checkout" \
         AITER_STOCK="$stock_checkout" \
         AITER_JIT_SEED="$jit_seed" \
+        AITER_IMAGE_METADATA="$image_aiter_json" \
         AITER_REPO="$aiter_repo" \
         AITER_REF="$aiter_ref" \
         AITER_CANDIDATE_COMMIT="$candidate_commit" \
@@ -172,20 +183,28 @@ EOF
         python3 - "$result_dir/radix_router_prepare_provenance.json" <<'PY'
 import hashlib
 import importlib.metadata
+import importlib.util
 import json
 import os
 import subprocess
 import sys
 from pathlib import Path
 
-import aiter
-
 output = Path(sys.argv[1])
 candidate = Path(os.environ["AITER_CANDIDATE"]).resolve()
 stock = Path(os.environ["AITER_STOCK"]).resolve()
-installed = Path(aiter.__file__).resolve()
-if candidate not in installed.parents:
-    raise SystemExit(f"expected editable AITER under {candidate}, got {installed}")
+image_metadata = json.loads(
+    Path(os.environ["AITER_IMAGE_METADATA"]).read_text(encoding="utf-8")
+)
+spec = importlib.util.find_spec("aiter")
+if spec is None or spec.origin is None:
+    raise SystemExit("cannot locate the image's installed AITER package")
+installed = Path(spec.origin).resolve()
+if str(installed) != image_metadata["installed_file"]:
+    raise SystemExit(
+        "image AITER package changed while preparing the radix overlay: "
+        f"expected {image_metadata['installed_file']}, got {installed}"
+    )
 
 runtime_paths = (
     "aiter/ops/topk.py",
@@ -216,6 +235,8 @@ payload = {
     "candidate_commit": os.environ["AITER_CANDIDATE_COMMIT"],
     "installed_file": str(installed),
     "installed_version": version(),
+    "runtime_package_source": "image",
+    "runtime_source_sha256": image_metadata["runtime_source_sha256"],
     "stock_status": subprocess.check_output(
         ["git", "-C", str(stock), "status", "--short"], text=True
     ).splitlines(),
@@ -249,11 +270,18 @@ PY
             git -C "$checkout" status --short >&2
             exit 1
         fi
+        if find -L "${AITER_JIT_DIR:?AITER_JIT_DIR must be set}" -maxdepth 1 \
+                -type f -name 'module_moe_asm*.so' -print -quit | grep -q .; then
+            echo "Error: module_moe_asm must be absent before the selected source is loaded" >&2
+            exit 1
+        fi
         AITER_CHECKOUT="$checkout" \
         AITER_COMMIT="$commit" \
         AITER_IMPLEMENTATION="$implementation" \
+        AITER_IMAGE_METADATA="$image_aiter_json" \
         python3 - "$result_dir/aiter_radix_router_provenance.json" <<'PY'
 import hashlib
+import importlib.metadata
 import json
 import os
 import sys
@@ -261,14 +289,34 @@ from pathlib import Path
 
 import aiter
 import torch
+from aiter.jit import core as aiter_jit_core
 
 output = Path(sys.argv[1])
 checkout = Path(os.environ["AITER_CHECKOUT"]).resolve()
 installed = Path(aiter.__file__).resolve()
-candidate = Path(os.environ["K3_RADIX_SESSION_ROOT"]).resolve() / "aiter-candidate"
-if candidate not in installed.parents:
-    raise SystemExit(f"expected editable AITER under {candidate}, got {installed}")
-if Path(os.environ.get("AITER_META_DIR", "")).resolve() != checkout:
+image_metadata = json.loads(
+    Path(os.environ["AITER_IMAGE_METADATA"]).read_text(encoding="utf-8")
+)
+if str(installed) != image_metadata["installed_file"]:
+    raise SystemExit(
+        f"expected preserved image AITER at {image_metadata['installed_file']}, "
+        f"got {installed}"
+    )
+for name in ("aiter", "amd-aiter"):
+    try:
+        installed_version = importlib.metadata.version(name)
+        break
+    except importlib.metadata.PackageNotFoundError:
+        installed_version = None
+if installed_version != image_metadata["installed_version"]:
+    raise SystemExit(
+        f"expected image AITER version {image_metadata['installed_version']}, "
+        f"got {installed_version}"
+    )
+if (
+    Path(os.environ.get("AITER_META_DIR", "")).resolve() != checkout
+    or Path(aiter_jit_core.AITER_META_DIR).resolve() != checkout
+):
     raise SystemExit("AITER_META_DIR does not match the selected checkout")
 props = torch.cuda.get_device_properties(0)
 arch = str(getattr(props, "gcnArchName", "")).split(":", 1)[0]
@@ -283,6 +331,16 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+package_dir = installed.parent
+for relative, expected_hash in image_metadata["runtime_source_sha256"].items():
+    actual_hash = sha256(package_dir / relative)
+    if actual_hash != expected_hash:
+        raise SystemExit(
+            f"image AITER runtime source changed for {relative}: "
+            f"expected {expected_hash}, got {actual_hash}"
+        )
+
+
 runtime_paths = (
     "aiter/ops/topk.py",
     "csrc/include/moe_op.h",
@@ -293,7 +351,10 @@ payload = {
     "implementation": os.environ["AITER_IMPLEMENTATION"],
     "commit": os.environ["AITER_COMMIT"],
     "aiter_meta_dir": str(checkout),
+    "aiter_meta_dir_runtime": str(Path(aiter_jit_core.AITER_META_DIR).resolve()),
     "aiter_installed_file": str(installed),
+    "aiter_installed_version": installed_version,
+    "runtime_package_source": "image",
     "aiter_rebuild": os.environ.get("AITER_REBUILD"),
     "aiter_jit_dir": os.environ.get("AITER_JIT_DIR"),
     "hip": torch.version.hip,
@@ -317,6 +378,10 @@ PY
             printf '%s\n' "${modules[@]}" >&2
             exit 1
         fi
+        if [[ -L "${modules[0]}" ]]; then
+            echo "Error: rebuilt module_moe_asm must not be an image-cache symlink" >&2
+            exit 1
+        fi
         has_radix=false
         if strings "${modules[0]}" | grep -Fq 'grouped_topk_radix_kernel'; then
             has_radix=true
@@ -335,6 +400,8 @@ PY
             printf 'sha256\t%s\n' "$(sha256sum "${modules[0]}" | awk '{print $1}')"
             printf 'size_bytes\t%s\n' "$(stat -c %s "${modules[0]}")"
             printf 'contains_grouped_topk_radix_kernel\t%s\n' "$has_radix"
+            printf 'contains_set_current_hip_stream\t%s\n' \
+                "$(strings "${modules[0]}" | grep -Fq '_set_current_hip_stream' && printf true || printf false)"
         } >"$result_dir/aiter_radix_router_binary.tsv"
         ;;
 

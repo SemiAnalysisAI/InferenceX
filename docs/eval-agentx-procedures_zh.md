@@ -224,10 +224,10 @@ metadata-reuse 源码 overlay。候选启动冒烟和完整 benchmark 结束后�
 复用、ROCm KDA 专用 metadata 和 KDA metadata 复用。只有候选启动冒烟设置
 `AMD_SERIALIZE_KERNEL=3` 来同步定位首个失败 kernel；计时阶段明确禁用该设置。
 `radixrouteraba` 保持相同的六 draft、2 到 14 图尺寸和 0.85 GPU-memory
-utilization。所有阶段共用同一个精确 AITER Python checkout；两个 baseline 从
+utilization。所有阶段保留镜像中的 AITER Python runtime；两个 baseline 从
 `7f184691e3` 重建 `module_moe_asm`，候选从 `d68332357e` 重建，并为每次启动记录
-源码和二进制哈希。其余 AITER 预编译模块仍使用镜像中的共同 seed，因此实验只
-隔离 wide-router radix dispatch。
+runtime、源码和二进制哈希。其余 AITER 预编译模块仍使用镜像中的共同 seed，
+避免混用扩展 ABI，因此实验只隔离 wide-router radix dispatch。
 
 目标 AgentX SWE-bench smoke eval（前十个 instance，真实 agentic generation）：
 

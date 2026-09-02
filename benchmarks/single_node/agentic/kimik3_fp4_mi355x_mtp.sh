@@ -432,9 +432,11 @@ if [[ -n "$K3_RADIX_SESSION_ROOT" ]]; then
             exit 1
             ;;
     esac
-    # Leave every image-provided module on the common seed. Omitting only
-    # module_moe_asm from the arm cache makes AITER rebuild that module from
-    # the selected stock/candidate source without rebuilding unrelated ops.
+    # Preserve the image's AITER Python package and common prebuilt modules.
+    # Omitting only module_moe_asm makes the image's JIT loader rebuild that
+    # module from the selected stock/candidate source. Installing the newer
+    # candidate Python package here would make it expect a newer extension ABI
+    # from every image-provided module, invalidating this one-variable A/B.
     export AITER_REBUILD=0
     export AITER_USE_SYSTEM_TRITON=1
     mkdir -p "$RESULT_DIR"
