@@ -23,6 +23,12 @@ default_sbatch_directives:
 default_mounts:
   /dev/kfd: /dev/kfd
   /dev/dri: /dev/dri
+  # Use the host's matching verbs ABI and Ionic provider, as the retired AMD
+  # launcher did. Container-packaged providers need not match the host driver.
+  /usr/lib/x86_64-linux-gnu/libibverbs.so.1: /usr/lib/x86_64-linux-gnu/libibverbs.so.1
+  /usr/lib/x86_64-linux-gnu/libionic.so.1: /usr/lib/x86_64-linux-gnu/libionic.so.1
+  /usr/lib/x86_64-linux-gnu/libibverbs/libionic-rdmav34.so: /usr/lib/x86_64-linux-gnu/libibverbs/libionic-rdmav34.so
+  /etc/libibverbs.d: /etc/libibverbs.d
   /it-share/hf-hub-cache: /hf_hub_cache
   # Legacy production checkpoints live here. The launcher may expose one as a
   # zero-copy seed under the canonical /hf_hub_cache/hub layout.
@@ -33,3 +39,6 @@ containers:
   sglang-rocm-v0.5.17-mi35x: /it-share/gharunners2/srt-slurm/containers/sglang-rocm-v0.5.17-mi35x-20260809.sqsh
 
 nginx_raise_ulimit: false
+
+# Preserve the legacy server/evaluation open-file limit inside each task.
+default_bash_preamble: "ulimit -n 65536 2>/dev/null || ulimit -n 8192 2>/dev/null || true"
