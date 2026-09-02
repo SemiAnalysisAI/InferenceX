@@ -224,6 +224,12 @@ committed `3.62` golden acceptance length, followed by a fresh six-draft
 baseline. It keeps every other C1 setting fixed and captures graph sizes 2
 through 12 for the five-draft candidate.
 
+For a bounded all-rank trace after choosing the C1 draft depth, dispatch
+`profile.yml` with `k3-perf-variant=baseline` or `spec5golden`. The workflow
+starts profiling only after AgentX warmup completes, records the exact
+speculative configuration, uploads every vLLM rank trace, and labels the
+short-duration result as diagnostic evidence rather than a canonical score.
+
 Targeted AgentX SWE-bench smoke eval (first ten instances, real agentic generation):
 
 ```bash

@@ -26,6 +26,11 @@ on:
         description: "Ref (branch/sha) to checkout"
         required: false
         type: string
+      k3-perf-variant:
+        description: "Kimi-K3 C1 runtime variant (baseline, spec5golden, or m7tunedgemm)"
+        required: false
+        type: string
+        default: 'baseline'
       agentic-duration-seconds:
         description: "AgentX profiling duration after warmup"
         required: false
@@ -209,6 +214,7 @@ jobs:
       AIPERF_FAILED_REQUEST_THRESHOLD: '0.10'
       ENABLE_AGENTX_POWER: '0'
       RESULT_DIR: /workspace/results
+      K3_PERF_VARIANT: ${{ inputs.k3-perf-variant }}
       MOE_DEBUG: '0'
       MOE_DEBUG_LOG: ${{ (inputs.moe-debug) && '/workspace/moe_debug.tp0.log' || '' }}
       VLLM_PROFILE_DELAY_ITERATIONS: ${{ inputs.profile-delay-iterations }}
@@ -259,8 +265,19 @@ jobs:
           set -euo pipefail
           export GPU_COUNT=$((TP * PP_SIZE * PCP_SIZE))
           echo "GPU_COUNT=${GPU_COUNT}" >> "$GITHUB_ENV"
+          case "${K3_PERF_VARIANT:-baseline}" in
+            baseline|spec5golden|m7tunedgemm) ;;
+            *)
+              echo "Unsupported k3-perf-variant: ${K3_PERF_VARIANT}" >&2
+              exit 1
+              ;;
+          esac
           ep_val="${EP_SIZE:-1}"
-          res_name="${EXP_NAME}_${PRECISION}_${FRAMEWORK}_tp${TP}-pp${PP_SIZE}-dcp${DCP_SIZE}-pcp${PCP_SIZE}_ep${ep_val}_dpa_${DP_ATTENTION}_conc${CONC}_${RUNNER_NAME}"
+          variant_suffix=""
+          if [ "${K3_PERF_VARIANT:-baseline}" != "baseline" ]; then
+            variant_suffix="_${K3_PERF_VARIANT}"
+          fi
+          res_name="${EXP_NAME}_${PRECISION}_${FRAMEWORK}_tp${TP}-pp${PP_SIZE}-dcp${DCP_SIZE}-pcp${PCP_SIZE}_ep${ep_val}_dpa_${DP_ATTENTION}_conc${CONC}_${RUNNER_NAME}${variant_suffix}"
           export RESULT_FILENAME="${res_name}"
           echo "RESULT_FILENAME=${res_name}" >> "$GITHUB_ENV"
 
@@ -327,6 +344,9 @@ jobs:
             results/server.log
             results/vllm_command.txt
             results/vllm_profile_control.log
+            results/spec_decode_provenance.tsv
+            results/k3_m7_bf16_runtime_config.csv
+            results/k3_m7_bf16_runtime_config_provenance.json
           if-no-files-found: warn
 
       - name: Upload profile as artifact

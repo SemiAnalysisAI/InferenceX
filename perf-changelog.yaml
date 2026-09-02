@@ -6883,3 +6883,12 @@
     - "Add an AgentX-valid same-node six-draft/five-draft/six-draft concurrency-one experiment using the committed golden acceptance lengths 3.75 and 3.62."
     - "Keep every other recipe setting fixed, isolate compiler caches and server lifetimes, and capture the exact graph ladder for each draft depth."
   pr-link: XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add bounded all-rank vLLM profiling for the selected Kimi-K3 MI355X concurrency-one draft depth after AgentX warmup."
+    - "Record the exact speculative configuration and upload trace plus runtime evidence without treating the short diagnostic as a canonical score."
+  pr-link: XXX
