@@ -41,7 +41,7 @@ on:
                 type: boolean
                 default: false
             k3-perf-variant:
-                description: "Kimi-K3 C1 diagnostic variant, including m7tunedgemmaba same-node confirmation"
+                description: "Kimi-K3 C1 diagnostic variant, including m7tunedgemmaba and radixrouter"
                 required: false
                 type: string
                 default: "baseline"
@@ -136,7 +136,7 @@ on:
                 type: boolean
                 default: false
             k3-perf-variant:
-                description: "Kimi-K3 C1 diagnostic variant, including m7tunedgemmaba same-node confirmation"
+                description: "Kimi-K3 C1 diagnostic variant, including m7tunedgemmaba and radixrouter"
                 required: false
                 type: string
                 default: "baseline"

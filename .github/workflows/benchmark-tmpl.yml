@@ -363,6 +363,16 @@ jobs:
 
           bash ./runners/launch_${RUNNER_NAME%%_*}.sh
 
+          if [ "${{ inputs.k3-perf-variant }}" = "radixrouter" ]; then
+            test -s results/k3_radix_router_tests.log
+            test -s results/k3_radix_router_comparison.json
+            test -s results/k3_radix_router_comparison.tsv
+            test -s results/k3_radix_router_provenance.json
+            test -s results/k3_radix_router_SHA256SUMS
+            echo "Kimi-K3 radix-router diagnostic completed; skipping AgentX result validation."
+            exit 0
+          fi
+
           if [ "${{ inputs.eval-only }}" = "true" ]; then
             echo "Eval-only mode: skipping benchmark result file check"
             # Verify eval produced results
@@ -408,7 +418,7 @@ jobs:
           path: agg_${{ env.RESULT_FILENAME }}.json
 
       - name: Upload agentic aggregated result
-        if: ${{ always() && inputs.scenario-type == 'agentic-coding' }}
+        if: ${{ always() && inputs.scenario-type == 'agentic-coding' && inputs.k3-perf-variant != 'radixrouter' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bmk_agentic_${{ env.RESULT_FILENAME }}
@@ -424,6 +434,14 @@ jobs:
             !results/aiperf_artifacts/inputs.json
             !results/aiperf_artifacts/profile_export_raw.jsonl
           if-no-files-found: ignore
+
+      - name: Upload Kimi-K3 radix-router diagnostic artifacts
+        if: ${{ always() && inputs.k3-perf-variant == 'radixrouter' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: k3_radix_router_${{ runner.name }}
+          path: results/k3_radix_router_*
+          if-no-files-found: error
 
       - name: Upload server logs
         if: always()

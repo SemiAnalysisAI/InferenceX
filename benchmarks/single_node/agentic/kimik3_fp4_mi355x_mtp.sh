@@ -136,6 +136,21 @@ if [[ -n "$K3_ABA_CANDIDATE" ]]; then
     exit 0
 fi
 
+if [[ "$K3_PERF_VARIANT" == "radixrouter" ]]; then
+    wait_for_amd_gpu_clean
+    if [[ "$TP" != "8" || "$CONC" != "1" || "${DCP_SIZE:-}" != "1" ]]; then
+        echo "Error: radix-router diagnostic requires TP=8, CONC=1, and DCP_SIZE=1" >&2
+        exit 1
+    fi
+    if [[ -n "${ROCR_VISIBLE_DEVICES:-}" ]]; then
+        export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
+    fi
+    mkdir -p "$RESULT_DIR"
+    bash "$(dirname "$0")/k3_perf_overlays/run_grouped_topk_radix.sh" \
+        "$RESULT_DIR"
+    exit 0
+fi
+
 wait_for_amd_gpu_clean
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then

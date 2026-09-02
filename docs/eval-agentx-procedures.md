@@ -210,6 +210,17 @@ and a second fresh baseline for 1,200 seconds each. The candidate stays in the
 standard result layout; both controls and a node/arm manifest are stored under
 `results/same_node_aba/`.
 
+The `radixrouter` diagnostic does not start the model server. On one gfx950 it
+builds the stock and candidate AITER `module_moe_asm` binaries in isolated JIT
+directories, exercises Kimi-K3's actual FP32 896-expert/top-16 contract at
+M=1,2,4,7,14, and alternates stock/candidate timing rounds under HIP graph
+replay. Its artifacts include exact source and binary hashes, dispatch canaries,
+changed-input replay checks, raw timing samples, round drift, and the projected
+saving across 92 router calls per decode step. M=4 is the promotion shape for
+the three-draft C1 path; the other shapes are non-regression controls. A positive
+microbenchmark is only the gate for a separate natural AgentX A/B/A; it is not
+serving evidence.
+
 Targeted AgentX SWE-bench smoke eval (first ten instances, real agentic generation):
 
 ```bash
