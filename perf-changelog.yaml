@@ -6821,3 +6821,12 @@
   description:
     - "Refresh to collect TensorRT-LLM server metrics."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2774
+
+- config-keys:
+    - minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Limit the GB200 aggregate Dynamo-vLLM configuration to the SimpleCPU-offload concurrency 20 and 30 recipes."
+    - "Use the committed MiniMax-M3 thinking-on EAGLE3-GQA acceptance target."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2806
