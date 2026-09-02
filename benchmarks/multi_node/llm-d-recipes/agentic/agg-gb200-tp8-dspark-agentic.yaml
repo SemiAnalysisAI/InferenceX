@@ -10,24 +10,18 @@ plugins:
       path: /tmp/endpoints.yaml
       watchFile: false
 
-  - type: prefill-filter
-  - type: queue-scorer
-  - type: kv-cache-utilization-scorer
   - type: active-request-scorer
-  - type: prefix-cache-scorer
+  - type: queue-scorer
+  - type: weighted-random-picker
 
 schedulingProfiles:
   - name: default
     plugins:
-      - pluginRef: prefill-filter
+      - pluginRef: active-request-scorer
+        weight: 2
       - pluginRef: queue-scorer
         weight: 2
-      - pluginRef: kv-cache-utilization-scorer
-        weight: 2
-      - pluginRef: active-request-scorer
-        weight: 1
-      - pluginRef: prefix-cache-scorer
-        weight: 3
+      - pluginRef: weighted-random-picker
 
 dataLayer:
   discovery:
@@ -39,11 +33,11 @@ prefill:
   enable-expert-parallel: false
   extra-args: >-
     --kv-cache-dtype fp8
-    --gpu-memory-utilization 0.92
-    --max-model-len 9280
+    --gpu-memory-utilization 0.9
+    --max-model-len 1048576
     --max-num-seqs 32
     --max-num-batched-tokens 8192
-    --max-cudagraph-capture-size 32
+    --max-cudagraph-capture-size 96
     --block-size 256
     --tokenizer-mode deepseek_v4
     --disable-custom-all-reduce
@@ -63,11 +57,21 @@ prefill:
     VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
     VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "1024"
     TILELANG_CLEANUP_TEMP_FILES: "1"
+    VLLM_USE_V2_MODEL_RUNNER: "1"
     VLLM_USE_NCCL_SYMM_MEM: "0"  # TP8 intra-node allreduce; DEP8 recipe uses "1"
     VLLM_ALLREDUCE_USE_SYMM_MEM: "0"
     VLLM_ALLREDUCE_USE_FLASHINFER: "1"
     VLLM_FLASHINFER_ALLREDUCE_BACKEND: "auto"
     NCCL_P2P_LEVEL: "NVL"
+    TORCH_SYMMMEM: NVSHMEM
+    DG_JIT_CACHE_DIR: /tmp/dg-cache-dsv4-agentx
+    UCX_TLS: cuda_copy,cuda_ipc,tcp
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_MEMTYPE_REG_WHOLE: "n"
+    UCX_CUDA_IPC_ENABLE_MNNVL: "y"
+    NCCL_CUMEM_ENABLE: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_NVLS_ENABLE: "1"
 
 slurm:
   time_limit: "08:00:00"

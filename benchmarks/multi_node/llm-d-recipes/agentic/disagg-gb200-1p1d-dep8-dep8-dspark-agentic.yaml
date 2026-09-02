@@ -69,13 +69,12 @@ prefill:
   enable-expert-parallel: true
   extra-args: >-
     --kv-cache-dtype fp8
-    --enforce-eager
     --gpu-memory-utilization 0.97
-    --max-model-len 9280
+    --max-model-len 1048576
     --max-num-seqs 16
     --max-num-batched-tokens 8192
     --long-prefill-token-threshold 1024
-    --speculative-config {"method":"dspark","num_speculative_tokens":1,"draft_sample_method":"probabilistic","attention_backend":"FLASHINFER_MLA_SPARSE_DSV4","enable_adaptive_verification":true}
+    --speculative-config {"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","attention_backend":"FLASHINFER_MLA_SPARSE_DSV4","enable_adaptive_verification":true}
     --enable-cumem-allocator
     --block-size 256
     --tokenizer-mode deepseek_v4
@@ -88,16 +87,34 @@ prefill:
   env:
     PYTHONHASHSEED: "0"
     VLLM_USE_RUST_FRONTEND: "1"
+    VLLM_USE_V2_MODEL_RUNNER: "1"
     VLLM_SERVER_DEV_MODE: "1"
+    VLLM_USE_NCCL_SYMM_MEM: "1"
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+    VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
     VLLM_RPC_TIMEOUT: "600000"
     VLLM_LOG_STATS_INTERVAL: "1"
+    VLLM_DSV4_MEGA_FP8_COMBINE: "1"
     VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
     VLLM_HTTP_TIMEOUT_KEEP_ALIVE: "120"
+    VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
+    VLLM_USE_DEEP_GEMM: "1"
+    VLLM_CONNECTOR_PREFETCH_DEPTH: "8"
+    VLLM_CONNECTOR_PREFETCH_KV_CAP: "0.65"
+    VLLM_USE_BREAKABLE_CUDAGRAPH: "0"
     TILELANG_CLEANUP_TEMP_FILES: "1"
+    TORCH_SYMMMEM: NVSHMEM
+    DG_JIT_CACHE_DIR: /tmp/dg-cache-dsv4-agentx
+    UCX_TLS: rc,cuda_copy
+    UCX_MEMTYPE_CACHE: "n"
+    NCCL_CUMEM_ENABLE: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_NVLS_ENABLE: "1"
     TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
     VLLM_MOONCAKE_LOAD_RECV_THREADS: "20"
     MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
+    MC_STORE_RPC_CLIENT_IO_THREADS: "32"
+    MC_TE_RPC_CLIENT_IO_THREADS: "32"
     MC_STORE_CLIENT_METRIC: "1"
     MC_STORE_CLIENT_METRIC_INTERVAL: "5"
     MC_TE_METRIC: "0"
@@ -112,7 +129,7 @@ decode:
     --max-cudagraph-capture-size 256
     --speculative-config {"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","attention_backend":"FLASHINFER_MLA_SPARSE_DSV4","enable_adaptive_verification":true}
     --gpu-memory-utilization 0.95
-    --max-model-len 9280
+    --max-model-len 1048576
     --enable-cumem-allocator
     --block-size 256
     --compilation-config {"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}
@@ -126,12 +143,26 @@ decode:
   env:
     PYTHONHASHSEED: "0"
     VLLM_USE_RUST_FRONTEND: "1"
+    VLLM_USE_V2_MODEL_RUNNER: "1"
     VLLM_SERVER_DEV_MODE: "1"
+    VLLM_USE_NCCL_SYMM_MEM: "1"
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+    VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
     VLLM_RPC_TIMEOUT: "600000"
     VLLM_LOG_STATS_INTERVAL: "1"
+    VLLM_DSV4_MEGA_FP8_COMBINE: "1"
     VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
+    VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
+    VLLM_USE_DEEP_GEMM: "1"
+    VLLM_CONNECTOR_PREFETCH_DEPTH: "8"
     TILELANG_CLEANUP_TEMP_FILES: "1"
+    TORCH_SYMMMEM: NVSHMEM
+    DG_JIT_CACHE_DIR: /tmp/dg-cache-dsv4-agentx
+    UCX_TLS: rc,cuda_copy
+    UCX_MEMTYPE_CACHE: "n"
+    NCCL_CUMEM_ENABLE: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_NVLS_ENABLE: "1"
     TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
     VLLM_MOONCAKE_LOAD_RECV_THREADS: "20"
     MC_ENABLE_DEST_DEVICE_AFFINITY: "1"

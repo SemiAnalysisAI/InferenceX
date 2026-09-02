@@ -6608,7 +6608,9 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2787
 
 - config-keys:
-    - dsv4-fp4-b200-llmd-vllm-agentx
+    - dsv4-fp4-gb200-llmd-vllm-agentx
+  scenario-type:
+    - agentic-coding
   description:
     - "Add DeepSeek-V4-Pro-0813 (DSpark) FP4 B200 llmd-vllm P/D disagg benchmark (1P DEP8 + 1D DEP8, 2 nodes / 16 GPUs total); always uses Mooncake RDMA prefix-cache; DSpark speculative decoding (prefill 1 token, decode 5 tokens)"
     - "Wire a FRAMEWORK==llmd-vllm dispatch into runners/launch_b200-nscale-compat.sh (self-contained, bypasses the srtctl/srt-slurm path)"
@@ -6617,7 +6619,9 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
 
 - config-keys:
-    - dsv4-fp4-b200-llmd-vllm-agentx-agg
+    - dsv4-fp4-gb200-llmd-vllm-agentx-agg
+  scenario-type:
+    - agentic-coding
   description:
     - "Add DeepSeek-V4-Pro-0813 (DSpark) FP4 B200 llmd-vllm aggregated benchmark: TP8 at conc-list [1,2,4,8,12], DEP8 at [12,16,32], DEP8+Mooncake at [52,72] (all 1 node / 8 GPUs, one engine does both prefill and decode)"
     - "Extend server.sh/job.slurm with aggregated (DECODE_NODES=0) mode: no decode role, no pd-sidecar; rank 0 takes over EPP/Envoy/bench coordinator duties"

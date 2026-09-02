@@ -4502,14 +4502,14 @@ dsv4-fp4-gb200-llmd-vllm:
           - "DECODE_NODES=2"
           - "GPUS_PER_NODE=4"
 
-# DeepSeek-V4-Pro-0813 (DSpark) FP4 B200, P/D disagg via llmd-vllm.
+# DeepSeek-V4-Pro-0813 (DSpark) FP4 GB200, P/D disagg via llmd-vllm.
 # Always uses Mooncake; DSpark speculative decoding. Requires EPP v0.10.0
 # (LLMD_BIN_DIR override in runners/launch_b200-nscale-compat.sh).
-dsv4-fp4-b200-llmd-vllm-agentx:
+dsv4-fp4-gb200-llmd-vllm-agentx:
   image: quay.io/rh-ee-imarkov/llm-d-nokube-vllm:dspark-0814-nightly
   model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
-  runner: cluster:b200-nscale
+  runner: gb200
   precision: fp4
   framework: llmd-vllm
   router: { name: llm-d-router, version: "0.10.0" }
@@ -4517,10 +4517,8 @@ dsv4-fp4-b200-llmd-vllm-agentx:
   multinode: true
   disagg: true
   scenarios:
-    fixed-seq-len:
-    - isl: 8192
-      osl: 1024
-      search-space:
+    agentic-coding:
+    - search-space:
       # 1P DEP8 + 1D DEP8 (2 nodes / 16 GPUs). Always Mooncake.
       - spec-decoding: "none"
         conc-list: [64, 128, 192]
@@ -4542,7 +4540,7 @@ dsv4-fp4-b200-llmd-vllm-agentx:
           - "DECODE_NODES=1"
           - "GPUS_PER_NODE=8"
 
-# Aggregated (TP8 / DEP8) sibling of dsv4-fp4-b200-llmd-vllm-agentx: one
+# Aggregated (TP8 / DEP8) sibling of dsv4-fp4-gb200-llmd-vllm-agentx: one
 # engine per topology does both prefill and decode (no P/D split, no
 # pd-sidecar, no kv_transfer_config - see the recipe files' header
 # comments). Separate top-level key because `disagg:` is a whole-key
@@ -4551,21 +4549,19 @@ dsv4-fp4-b200-llmd-vllm-agentx:
 # present there). conc-lists mirror the agentX dspark historical runs:
 # results/dsv4-pro-dspark/results_ilmarkov-2-ix-agg-tp8-dspark-v3-long
 # (tp8) and results_ilmarkov-ix-agg-dep8-dspark-1308-long (dep8).
-dsv4-fp4-b200-llmd-vllm-agentx-agg:
+dsv4-fp4-gb200-llmd-vllm-agentx-agg:
   image: quay.io/rh-ee-imarkov/llm-d-nokube-vllm:dspark-0814-nightly
   model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
-  runner: cluster:b200-nscale
+  runner: gb200
   precision: fp4
   framework: llmd-vllm
   router: { name: llm-d-router, version: "0.9.0" }
   multinode: true
   disagg: false
   scenarios:
-    fixed-seq-len:
-    - isl: 8192
-      osl: 1024
-      search-space:
+    agentic-coding:
+    - search-space:
       # Aggregated TP8 (1 node / 8 GPUs; pure tensor-parallel, no EP).
       - spec-decoding: "none"
         conc-list: [1, 2, 4, 8, 12]

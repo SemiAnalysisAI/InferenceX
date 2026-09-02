@@ -1,5 +1,5 @@
 # DeepSeek-V4-Pro-0813 (DSpark) FP4 B200, aggregated DEP8, 1 node.
-# DSpark speculative decoding: 5 tokens. No Mooncake.
+# DSpark speculative decoding: 5 tokens. No Mooncake. conc-list [12,16,32].
 apiVersion: llm-d.ai/v1alpha1
 kind: EndpointPickerConfig
 
@@ -10,24 +10,38 @@ plugins:
       path: /tmp/endpoints.yaml
       watchFile: false
 
-  - type: prefill-filter
-  - type: queue-scorer
-  - type: kv-cache-utilization-scorer
-  - type: active-request-scorer
+  - type: approx-prefix-cache-producer
+    parameters:
+      autoTune: false
+      blockSizeTokens: 256
+      maxPrefixTokensToMatch: 1048576
+      maxPrefixBlocksToMatch: 4096
+      lruCapacityPerServer: 8967
+  - type: prefix-cache-affinity-filter
+    parameters:
+      peakPrefillThroughput: 4783
+      maxTTFTPenaltyMs: 30000
   - type: prefix-cache-scorer
+  - type: token-load-scorer
+    parameters:
+      queueThresholdTokens: 2295620
+  - type: active-request-scorer
+  - type: queue-scorer
+  - type: max-score-picker
 
 schedulingProfiles:
   - name: default
     plugins:
-      - pluginRef: prefill-filter
-      - pluginRef: queue-scorer
-        weight: 2
-      - pluginRef: kv-cache-utilization-scorer
-        weight: 2
-      - pluginRef: active-request-scorer
-        weight: 1
+      - pluginRef: prefix-cache-affinity-filter
       - pluginRef: prefix-cache-scorer
+        weight: 6
+      - pluginRef: token-load-scorer
         weight: 3
+      - pluginRef: active-request-scorer
+        weight: 2
+      - pluginRef: queue-scorer
+        weight: 3
+      - pluginRef: max-score-picker
 
 dataLayer:
   discovery:
@@ -39,10 +53,10 @@ prefill:
   extra-args: >-
     --kv-cache-dtype fp8
     --gpu-memory-utilization 0.92
-    --max-model-len 9280
+    --max-model-len 1048576
     --max-num-seqs 64
     --max-num-batched-tokens 8192
-    --max-cudagraph-capture-size 64
+    --max-cudagraph-capture-size 192
     --block-size 256
     --tokenizer-mode deepseek_v4
     --moe-backend deep_gemm_mega_moe
@@ -52,19 +66,29 @@ prefill:
     --no-enable-flashinfer-autotune
     --numa-bind
     --compilation-config {"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}
-    --speculative-config {"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","attention_backend":"FLASHINFER_MLA_SPARSE_DSV4","enable_adaptive_verification":true}
+    --speculative-config {"method":"dspark","num_speculative_tokens":5,"enable_adaptive_verification":true,"draft_sample_method":"probabilistic","attention_backend":"FLASHINFER_MLA_SPARSE_DSV4"}
     --attention-config {"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"use_fp4_indexer_cache":true}
   env:
+    PYTHONHASHSEED: "0"
     VLLM_USE_RUST_FRONTEND: "1"
+    VLLM_USE_V2_MODEL_RUNNER: "1"
     VLLM_SERVER_DEV_MODE: "1"
+    VLLM_USE_NCCL_SYMM_MEM: "1"
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     VLLM_RPC_TIMEOUT: "600000"
     VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
     VLLM_DSV4_MEGA_FP8_COMBINE: "1"
     VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
     VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
+    VLLM_USE_DEEP_GEMM: "1"
     TILELANG_CLEANUP_TEMP_FILES: "1"
-    VLLM_USE_NCCL_SYMM_MEM: "1"
+    TORCH_SYMMMEM: NVSHMEM
+    DG_JIT_CACHE_DIR: /tmp/dg-cache-dsv4-agentx
+    UCX_TLS: rc,cuda_copy
+    UCX_MEMTYPE_CACHE: "n"
+    NCCL_CUMEM_ENABLE: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_NVLS_ENABLE: "1"
 
 slurm:
   time_limit: "08:00:00"
