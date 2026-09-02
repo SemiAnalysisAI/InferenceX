@@ -219,6 +219,8 @@ baseline/candidate/baseline 流程，只把并发 1 的 draft 数量从 6 改为
 draft baseline。其余并发 1 设置保持不变，五 draft 候选方案捕获 2 到 12 的
 图尺寸。备用的 `spec4goldenaba` 模式使用相同流程测试四 draft 和已提交的
 黄金接受长度 `3.36`，并捕获 2 到 10 的图尺寸。
+所有同节点 A/B/A 模式在每个阶段都统一使用 `0.85` GPU 显存利用率，为重复
+启动 ROCm 服务保留足够的初始化空间，并确保配对比较中的该设置保持不变。
 
 目标 AgentX SWE-bench smoke eval（前十个 instance，真实 agentic generation）：
 

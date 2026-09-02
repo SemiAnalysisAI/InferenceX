@@ -225,6 +225,9 @@ baseline. It keeps every other C1 setting fixed and captures graph sizes 2
 through 12 for the five-draft candidate. The fallback `spec4goldenaba` mode
 uses the same protocol for four drafts at the committed `3.36` golden
 acceptance length and captures graph sizes 2 through 10.
+All same-node A/B/A modes use `0.85` GPU-memory utilization for every arm so
+repeated ROCm server startups retain enough initialization headroom while the
+paired comparison keeps this setting constant.
 
 Targeted AgentX SWE-bench smoke eval (first ten instances, real agentic generation):
 

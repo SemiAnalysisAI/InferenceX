@@ -6890,5 +6890,5 @@
     - agentic-coding
   description:
     - "Add an AgentX-valid same-node six-draft/four-draft/six-draft concurrency-one fallback using the committed golden acceptance lengths 3.75 and 3.36."
-    - "Keep every other recipe setting fixed and capture graph sizes 2 through 10 for the four-draft candidate."
+    - "Keep every other recipe setting fixed, reserve uniform 0.85 GPU-memory utilization across repeated server starts, and capture graph sizes 2 through 10 for the four-draft candidate."
   pr-link: XXX
