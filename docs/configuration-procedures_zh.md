@@ -142,11 +142,11 @@ llm-d 不是 srt-slurm 路径：InferenceX 自己持有 Slurm allocation，并�
 
 `CONFIG_FILE` 未设置或文件缺失时，会静默选择镜像内 `/etc/epp/config.yaml` fallback，并移除配方特定 vLLM 参数。除非明确打算使用 fallback，否则应将其视为验证失败。
 
-B200 DSpark AgentX 配置使用 `agentic-coding`、`spec-decoding: mtp`，并显式声明 `kv-offloading`。`server.sh` 通过 `llm-d/agentic.sh` 运行共享 AgentX 客户端，不设置固定上下文或序列数上限。`recipe.py` 为吞吐测试读取已提交的 DSpark thinking-on golden AL；`EVAL_ONLY=true` 保留真实验证。Mooncake 的嵌入式存储即使设置 `enable_offload: false` 也属于 **DRAM 卸载**（该开关控制 SSD），因此必须声明 `kv-offloading: dram`、`kv-offload-backend: { name: mooncake }` 和 `dram-utilization`；运行时将生成的每节点内存预算均分给 GPU rank。普通 TP8/DEP8 配置声明 `none`。Bash 输入采用显式常量或调用方提供的值，不使用回退表达式。提取二进制文件时必须显式设置 `BINARIES_ENV_FILE`。
+GB200 DSpark AgentX 配置使用 `cluster:gb200-nv`：TP8/DEP8 跨两个节点（8 GPU），1P-DEP8/1D-DEP8 跨四个节点（16 GPU）。ARM64 镜像摘要包含 router v0.10.0；AgentX 不挂载旧版路由器二进制文件。launcher 使用预先存储的 `DeepSeek-V4-Pro-0813` checkpoint，而非旧版 V4-Pro 权重。
 
-llm-d 将发现的 vLLM `/metrics` 端点导出为 `AIPERF_METRIC_URLS` 和 `AIPERF_SERVER_METRICS_URLS`，确认每个端点返回 vLLM 指标后，通过 `--server-metrics` 传给 AIPerf。抓取使用各服务节点的 vLLM 端口，而非 Envoy 或 P/D sidecar。
+`recipe.py` 为吞吐测试注入 DSpark golden AL；`EVAL_ONLY=true` 保留真实验证。Mooncake 嵌入式存储即使设置 `enable_offload: false` 也属于 DRAM 卸载（该开关控制 SSD）。需声明 `kv-offloading: dram`、`kv-offload-backend: { name: mooncake }` 和 `dram-utilization`；运行时将每节点预算均分给四个 GPU rank。普通 TP8/DEP8 声明 `none`。
 
-两个 B200 DSpark 配置均声明 router v0.10.0，与 DSpark 镜像内置的 EPP/pd-sidecar 一致。在 B200 Nscale 上运行前，确认服务镜像提供 `linux/amd64` 版本；仅支持 ARM64 的 GB200 镜像不兼容。
+服务发现排除无 API 的 TP follower。`agentic.sh` 检查各服务节点的 vLLM `/metrics`，导出 `AIPERF_METRIC_URLS` 和 `AIPERF_SERVER_METRICS_URLS`，再通过 AIPerf 的 `--server-metrics` 传递。Envoy 和 P/D sidecar 的指标不能替代 vLLM 指标。
 
 ## 更新镜像
 

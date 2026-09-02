@@ -142,11 +142,11 @@ llm-d is not the srt-slurm path: InferenceX owns the Slurm allocation and starts
 
 A missing/unset `CONFIG_FILE` silently selects the image's `/etc/epp/config.yaml` fallback and removes recipe-specific vLLM flags. Treat that as a validation failure unless fallback is explicitly intended.
 
-For the B200 DSpark AgentX keys, select `agentic-coding`, `spec-decoding: mtp`, and explicit `kv-offloading`. `server.sh` uses the shared AgentX client via `llm-d/agentic.sh`, with no fixed context/sequence cap. `recipe.py` loads the committed DSpark thinking-on golden AL for throughput; `EVAL_ONLY=true` keeps real verification. Mooncake's embedded store is **DRAM offloading even with `enable_offload: false`** (that flag controls SSD), so declare `kv-offloading: dram`, `kv-offload-backend: { name: mooncake }`, and `dram-utilization`; the runtime divides the generated per-node budget among GPU ranks. The plain TP8/DEP8 arms declare `none`. Bash inputs are explicit constants or caller-supplied values, not fallback expressions. Binary extraction requires an explicit `BINARIES_ENV_FILE`.
+The GB200 DSpark AgentX keys use `cluster:gb200-nv`: TP8/DEP8 spans two nodes (8 GPUs), and 1P-DEP8/1D-DEP8 spans four (16 GPUs). The ARM64 image digest includes router v0.10.0; AgentX does not mount the legacy router binaries. The launcher uses the staged `DeepSeek-V4-Pro-0813` checkpoint, not the older V4-Pro weights.
 
-llm-d exports the discovered vLLM `/metrics` endpoints as `AIPERF_METRIC_URLS` and `AIPERF_SERVER_METRICS_URLS`, checks that each returns vLLM metrics, and forwards them to AIPerf through `--server-metrics`. Scrapes use each serving node’s vLLM port, not Envoy or the P/D sidecar.
+`recipe.py` injects DSpark golden AL for throughput; `EVAL_ONLY=true` keeps real verification. Mooncake's embedded store is DRAM offloading even with `enable_offload: false` (the flag controls SSD). Declare `kv-offloading: dram`, `kv-offload-backend: { name: mooncake }`, and `dram-utilization`; the runtime divides each node's budget among its four GPU ranks. Plain TP8/DEP8 declares `none`.
 
-Both B200 DSpark keys declare router v0.10.0, matching the DSpark image's bundled EPP/pd-sidecar. Verify that the serving image publishes `linux/amd64` before running on B200 Nscale; an ARM64-only GB200 build is not compatible.
+Discovery excludes headless TP followers. `agentic.sh` checks every serving node's vLLM `/metrics`, exports `AIPERF_METRIC_URLS` and `AIPERF_SERVER_METRICS_URLS`, and forwards them through AIPerf's `--server-metrics`. Envoy and P/D-sidecar metrics are not substitutes for vLLM metrics.
 
 ## Update an image
 

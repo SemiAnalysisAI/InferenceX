@@ -48,11 +48,7 @@ fi
 #   prefill workers = ranks 1 .. PREFILL_NODES-1
 #   decode  leader = rank PREFILL_NODES (also coordinator: EPP + Envoy + bench)
 #   decode  workers = ranks PREFILL_NODES+1 .. NUM_NODES-1
-#
-# Aggregated mode (DECODE_NODES=0): there is no decode role at all, so
-# IPS[$PREFILL_NODES] would be an out-of-bounds read (IPS only has
-# PREFILL_NODES entries). Leave the decode addresses empty; server.sh's
-# aggregated coordinator gate (rank 0, ROLE=prefill) never reads them.
+# Aggregated mode has no decode address.
 PREFILL_LEADER_IP="${IPS[0]}"
 if [[ "$DECODE_NODES" -gt 0 ]]; then
     DECODE_LEADER_IP="${IPS[$PREFILL_NODES]}"
@@ -250,23 +246,15 @@ elif [[ "$LLMD_CONTAINER_ENGINE" == "pyxis" ]]; then
     PYXIS_MOUNTS+=",${DI_REPO_DIR}/benchmarks/llm-d/epp-config.yaml:/etc/epp/config.yaml:ro"
     PYXIS_MOUNTS+=",${DI_REPO_DIR}/benchmarks/llm-d/envoy.yaml:/etc/envoy/envoy.yaml:ro"
 
-    # Optional: mount the epp / pd-sidecar / envoy binaries from a shared
-    # filesystem instead of relying on them being baked into the image.
-    # This lets a STOCK vllm/vllm-openai image be used directly (no
-    # combined-image rebuild per vLLM version bump) - see
-    # benchmarks/llm-d/binaries.env + extract-binaries.sh. Each mount is
-    # gated on the file existing, so this is a no-op when the binaries
-    # have not been extracted (the baked-image path keeps working), and
-    # harmless when they have (mounting a binary over the identical one).
-    # shellcheck source=/dev/null
-    [[ -f "${DI_REPO_DIR}/benchmarks/llm-d/binaries.env" ]] && \
+    # AgentX uses the image-bundled router; legacy runs can mount extracted binaries.
+    if [[ "$IS_AGENTIC" != "1" ]]; then
         source "${DI_REPO_DIR}/benchmarks/llm-d/binaries.env"
-    for _bin in epp pd-sidecar envoy; do
-        if [[ -n "${LLMD_BIN_DIR}" && -x "${LLMD_BIN_DIR}/${_bin}" ]]; then
-            PYXIS_MOUNTS+=",${LLMD_BIN_DIR}/${_bin}:/usr/local/bin/${_bin}:ro"
-            echo "Mounting ${LLMD_BIN_DIR}/${_bin} -> /usr/local/bin/${_bin}"
-        fi
-    done
+        for _bin in epp pd-sidecar envoy; do
+            if [[ -x "${LLMD_BIN_DIR}/${_bin}" ]]; then
+                PYXIS_MOUNTS+=",${LLMD_BIN_DIR}/${_bin}:/usr/local/bin/${_bin}:ro"
+            fi
+        done
+    fi
 
     # MODEL_DIR / BENCHMARK_LOGS_DIR / NODE_RANK are translated to their
     # in-container values inside bash -lc (host MODEL_DIR is the source

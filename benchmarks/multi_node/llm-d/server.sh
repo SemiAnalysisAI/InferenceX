@@ -22,15 +22,7 @@ source /workspace/benchmarks/benchmark_lib.sh
 # Config + service ports
 # ----------------------------------------------------------------
 check_env_vars NODE_RANK PREFILL_NODES DECODE_NODES GPUS_PER_NODE PREFILL_WORKERS DECODE_WORKERS ALL_IPS
-# Aggregated mode: no decode role at all, so no P/D KV handoff (no
-# pd-sidecar, no NixlConnector) - the single engine does prefill+decode
-# in-process. DECODE_NODES=0 is the only signal for this; everything else
-# (coordinator gating, kv_transfer_config) derives from it below.
-if [[ "$DECODE_NODES" -eq 0 ]]; then
-    IS_AGGREGATED=1
-else
-    IS_AGGREGATED=0
-fi
+IS_AGGREGATED=$(( DECODE_NODES == 0 ))
 VLLM_PORT=8200
 SIDECAR_PORT=8000
 ENVOY_PORT=8080
@@ -118,6 +110,7 @@ START_RANK=$((LWS_WORKER_INDEX * DP_SIZE_LOCAL))
 # Defaults: TP=1, DP=role_total, EP on (the H200 1P+1D shape). Recipe overrides below.
 TP_SIZE=1
 ROLE_ENABLE_EP=true
+PREFILL_ENABLE_EP=true
 
 echo "ROLE=$ROLE DP_SIZE=$DP_SIZE DP_ADDR=$DP_ADDR LWS_WORKER_INDEX=$LWS_WORKER_INDEX START_RANK=$START_RANK"
 
@@ -205,9 +198,6 @@ if [[ -n "${CONFIG_FILE}" && -f "/etc/llmd-recipes/${CONFIG_FILE}" ]]; then
         MOONCAKE_CONFIG_PATH=/tmp/mooncake_config.json
         export MOONCAKE_CONFIG_PATH
         echo "Mooncake enabled: config at $MOONCAKE_CONFIG_PATH"
-        # Install mooncake if the image does not bundle it.
-        python3 -c "import mooncake_transfer_engine" 2>/dev/null || \
-            pip install --quiet mooncake-transfer-engine-cuda13==0.3.12.post1
     fi
 fi
 
@@ -231,12 +221,7 @@ COMMON_ARGS=(
     --disable-access-log-for-endpoints=/health,/metrics
     --tensor-parallel-size "$TP_SIZE"
 )
-# KV role: prefill=producer, decode=consumer (override via KV_ROLE_OVERRIDE).
-# Aggregated mode normally has no second engine to hand KV off to (no
-# pd-sidecar either), so --kv_transfer_config is skipped. Exception: when
-# Mooncake is enabled on an aggregated recipe, a MultiConnector
-# (NixlConnector + MooncakeStoreConnector) is wired with kv_both so DP ranks
-# can share prefix-cache blocks across runs via the Mooncake RDMA store.
+# Aggregated engines need KV transfer only when Mooncake is enabled.
 if [[ "$IS_AGGREGATED" -eq 0 ]]; then
     if [[ -n "${KV_ROLE_OVERRIDE}" ]]; then
         KV_ROLE="$KV_ROLE_OVERRIDE"
@@ -352,9 +337,6 @@ fi
 # (followers are --headless), so only the leader runs a sidecar and only leaders
 # are listed as endpoints.
 #
-# Aggregated mode (IS_AGGREGATED=1): ROLE is never "decode" (no decode nodes
-# exist at all), so this is already a no-op there - correct, since the single
-# engine needs no P/D handoff.
 if [[ "$ROLE" == "decode" && ( "$ROLE_ENABLE_EP" == "true" || "$LWS_WORKER_INDEX" -eq 0 ) ]]; then
     SIDECAR_CONNECTOR="nixlv2"
     SIDECAR_FLAGS=(--port="$SIDECAR_PORT" --vllm-port="$VLLM_PORT"
@@ -371,10 +353,7 @@ fi
 # ================================================================
 # Coordinator: endpoints, EPP, Envoy, bench, eval
 # ================================================================
-# Normally the decode leader. In aggregated mode (IS_AGGREGATED=1) there is
-# no decode role at all, so the sole engine's leader (rank 0, which is
-# always ROLE=prefill there since PREFILL_NODES=NUM_NODES) takes over the
-# coordinator duties instead.
+# Rank 0 coordinates aggregated runs; the decode leader coordinates P/D runs.
 if [[ ( "$ROLE" == "decode" && "$LWS_WORKER_INDEX" -eq 0 ) || \
       ( "$IS_AGGREGATED" -eq 1 && "$ROLE" == "prefill" && "$NODE_RANK" -eq 0 ) ]]; then
 
@@ -382,52 +361,29 @@ if [[ ( "$ROLE" == "decode" && "$LWS_WORKER_INDEX" -eq 0 ) || \
     BENCH_DONE_MARKER="$BENCHMARK_LOGS_DIR/.bench_done.$SLURM_JOB_ID"
     trap 'touch "$BENCH_DONE_MARKER" 2>/dev/null || true' EXIT
 
-    # ---- Write endpoints.yaml (file-discovery) ----
-    # namespace must match EPP's --pool-namespace (file-discovery filters by it;
-    # the schema default 'default' would drop every entry). See README.md.
+    # DEP registers every node; pure TP registers only each engine's API leader.
     export LLMD_ENDPOINTS_FILE=/tmp/endpoints.yaml
     python3 - <<PY
 import os, yaml
-NS = 'inferencex'
-all_ips = [x for x in os.environ.get('ALL_IPS', '').split(',') if x]
-pn = int(os.environ.get('PREFILL_NODES', '1'))
-dn = int(os.environ.get('DECODE_NODES', '1'))
-decode_workers = max(1, int('$DECODE_WORKERS'))
-# This block runs on the coordinator (a decode node), so ROLE_ENABLE_EP here
-# reflects the DECODE role. EP on => DEP8 hybrid-LB (an api-server per node);
-# EP off => pure-TP (only each TP-group leader has an api-server).
-decode_ep = ('$ROLE_ENABLE_EP' == 'true')
-VLLM_PORT = int('$VLLM_PORT')
-SIDECAR_PORT = int('$SIDECAR_PORT')
-# ALL_IPS is rank-ordered: ranks [0:pn] are prefill nodes, [pn:pn+dn] decode.
-prefill_ips = all_ips[:pn] or [os.environ['PREFILL_LEADER_IP']]
-# dn == 0 (aggregated mode): no decode role at all. DECODE_LEADER_IP is ''
-# in that case (see job.slurm), so decode_ips must NOT fall back to it -
-# that would emit a bogus decode-0 endpoint with an empty address.
-decode_ips = (all_ips[pn:pn + dn] or [os.environ['DECODE_LEADER_IP']]) if dn > 0 else []
+ips = os.environ['ALL_IPS'].split(',')
+pn = int(os.environ['PREFILL_NODES'])
+dn = int(os.environ['DECODE_NODES'])
 endpoints = []
 
-def add_role(role, ips, base_port, group_size=1):
-    # group_size == 1: one endpoint per node (DEP8 hybrid-LB: each node's
-    # api-server / sidecar load-balances its local DP ranks).
-    # group_size  > 1: one endpoint per TP-group leader (pure-TP: followers are
-    # --headless with no api-server), i.e. every group_size-th node IP.
-    serving_ips = ips[::group_size] if group_size > 1 else ips
-    for i, ip in enumerate(serving_ips):
-        endpoints.append({'name': f'{role}-{i}', 'namespace': NS, 'address': ip,
-                          'port': str(base_port), 'labels': {'llm-d.ai/role': role}})
+def add_role(role, addresses, port, group_size):
+    for i, address in enumerate(addresses[::group_size]):
+        endpoints.append({'name': f'{role}-{i}', 'namespace': 'inferencex',
+                          'address': address, 'port': str(port),
+                          'labels': {'llm-d.ai/role': role}})
 
-# Prefill (DEP8 in every current recipe): one endpoint per node, EPP hits vLLM
-# directly (VLLM_PORT). Decode: EPP hits the pd-sidecar (SIDECAR_PORT); one
-# endpoint per node for DEP8, or one per TP-group leader for pure-TP.
-add_role('prefill', prefill_ips, VLLM_PORT)
-decode_group = 1 if decode_ep else max(1, dn // decode_workers)
-# dn == 0 -> decode_ips == [] -> add_role emits zero decode endpoints
-# (aggregated mode: everything routes through the 'prefill'-labeled pool).
-add_role('decode', decode_ips, SIDECAR_PORT, group_size=decode_group)
-yaml.safe_dump({'endpoints': endpoints}, open(os.environ['LLMD_ENDPOINTS_FILE'], 'w'))
-print(f'endpoints.yaml ({len(endpoints)} endpoints):')
-print(open(os.environ['LLMD_ENDPOINTS_FILE']).read())
+prefill_group = 1 if '$PREFILL_ENABLE_EP' == 'true' else pn // int('$PREFILL_WORKERS')
+add_role('prefill', ips[:pn], int('$VLLM_PORT'), prefill_group)
+if dn:
+    decode_group = 1 if '$ROLE_ENABLE_EP' == 'true' else dn // int('$DECODE_WORKERS')
+    add_role('decode', ips[pn:pn + dn], int('$SIDECAR_PORT'), decode_group)
+with open(os.environ['LLMD_ENDPOINTS_FILE'], 'w') as output:
+    yaml.safe_dump({'endpoints': endpoints}, output)
+print(yaml.safe_dump({'endpoints': endpoints}))
 PY
 
     # ---- Bring up EPP ----
@@ -510,8 +466,13 @@ PY
     # IPS[0]. curl gets an explicit connect/max timeout so a blackholed endpoint
     # trips the deadline instead of hanging the whole run (a single timeout-less
     # curl once wedged a 2P run for 7h before it was cancelled).
-    _prefill_ips=( "${_ALL_IPS[@]:0:${PREFILL_NODES}}" )
-    [[ ${#_prefill_ips[@]} -gt 0 ]] || _prefill_ips=( "$PREFILL_LEADER_IP" )
+    mapfile -t _prefill_ips < <(python3 - "$LLMD_ENDPOINTS_FILE" <<'PY'
+import sys, yaml
+for endpoint in yaml.safe_load(open(sys.argv[1]))['endpoints']:
+    if endpoint['labels']['llm-d.ai/role'] == 'prefill':
+        print(endpoint['address'])
+PY
+    )
 
     # On failure, dump enough to tell a server-not-ready problem (TCP connects but
     # /health is slow) apart from a network/subnet problem (TCP connect refused or

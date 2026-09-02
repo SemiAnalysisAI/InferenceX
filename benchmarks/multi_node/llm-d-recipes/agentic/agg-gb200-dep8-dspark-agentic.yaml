@@ -1,4 +1,4 @@
-# DeepSeek-V4-Pro-0813 (DSpark) FP4 B200, aggregated DEP8, 1 node.
+# DeepSeek-V4-Pro-0813 (DSpark) FP4 GB200, aggregated DEP8, 2 nodes.
 # DSpark speculative decoding: 5 tokens. No Mooncake.
 apiVersion: llm-d.ai/v1alpha1
 kind: EndpointPickerConfig
@@ -36,8 +36,6 @@ dataLayer:
 prefill:
   tp: 1
   enable-expert-parallel: true
-  # No workload-length or sequence cap: use native context and vLLM scheduling defaults.
-  # recipe.py injects DSpark golden AL for AgentX throughput (never accuracy evals).
   extra-args: >-
     --kv-cache-dtype fp8
     --gpu-memory-utilization 0.92

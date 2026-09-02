@@ -37,11 +37,11 @@ def role_assignments(recipe: dict, role: str, env: dict) -> str:
             if config.get("method") == "dspark":
                 if env.get("SPEC_DECODING") != "mtp":
                     raise ValueError("DSpark requires SPEC_DECODING=mtp in the master YAML")
-                if env.get("EVAL_ONLY", "false") == "true":
+                if env.get("EVAL_ONLY") == "true":
                     config.pop("synthetic_acceptance_length", None)
                     config.pop("rejection_sample_method", None)
                 else:
-                    if env.get("RUN_EVAL", "false") == "true":
+                    if env.get("RUN_EVAL") == "true":
                         raise ValueError("Run accuracy evals separately with EVAL_ONLY=true, not synthetic AL")
                     if env.get("MODEL_NAME") != "deepseek-ai/DeepSeek-V4-Pro-0813":
                         raise ValueError("No registered DSpark golden AL for this model")
@@ -56,7 +56,8 @@ def role_assignments(recipe: dict, role: str, env: dict) -> str:
                     )
                     print(f"DSpark {role}: K={k}, golden AL={al} ({golden_path.name})", file=sys.stderr)
                 extra = extra[:match.end()] + json.dumps(config, separators=(",", ":")) + extra[match.end() + length:]
-    assignments = [f"ROLE_EXTRA_ARGS={shlex.quote(extra)}"]
+    assignments = [f"ROLE_EXTRA_ARGS={shlex.quote(extra)}",
+                   f"PREFILL_ENABLE_EP={str(recipe.get('prefill', {}).get('enable-expert-parallel', True)).lower()}"]
     if section.get("tp") is not None:
         assignments.append(f"TP_SIZE={int(section['tp'])}")
     if section.get("enable-expert-parallel") is not None:

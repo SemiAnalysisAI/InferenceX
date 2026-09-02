@@ -1,4 +1,4 @@
-# DeepSeek-V4-Pro-0813 (DSpark) FP4 B200, P/D disagg 1P-DEP8/1D-DEP8.
+# DeepSeek-V4-Pro-0813 (DSpark) FP4 GB200, P/D disagg 1P-DEP8/1D-DEP8 (4 nodes).
 # Always uses Mooncake (P2PHANDSHAKE embedded RDMA prefix-cache).
 # DSpark speculative decoding: prefill 1 token, decode 5 tokens.
 # Requires EPP/pd-sidecar v0.10.0 (disagg-profile-handler deciders shape).
@@ -67,8 +67,6 @@ dataLayer:
 prefill:
   tp: 1
   enable-expert-parallel: true
-  # No workload-length or sequence cap: use native context and vLLM scheduling defaults.
-  # recipe.py injects DSpark golden AL for AgentX throughput (never accuracy evals).
   extra-args: >-
     --kv-cache-dtype fp8
     --enforce-eager
@@ -108,8 +106,6 @@ prefill:
 decode:
   tp: 1
   enable-expert-parallel: true
-  # No workload-length or sequence cap: use native context and vLLM scheduling defaults.
-  # recipe.py injects DSpark golden AL for AgentX throughput (never accuracy evals).
   extra-args: >-
     --kv-cache-dtype fp8
     --max-num-batched-tokens 8192
@@ -147,8 +143,6 @@ decode:
 mooncake:
   store_config:
     metadata_server: "P2PHANDSHAKE"
-    # Standalone fallback; AgentX uses the master YAML per-node DRAM budget / 8 GPUs.
-    global_segment_size: "140GB"
     local_buffer_size: "4GB"
     protocol: "rdma"
     device_name: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
