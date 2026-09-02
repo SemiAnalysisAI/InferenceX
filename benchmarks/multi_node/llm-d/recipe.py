@@ -52,7 +52,6 @@ def role_assignments(recipe: dict, role: str, env: dict) -> str:
                     config.update(
                         rejection_sample_method="synthetic",
                         synthetic_acceptance_length=al,
-                        enable_adaptive_verification=False,
                     )
                     print(f"DSpark {role}: K={k}, golden AL={al} ({golden_path.name})", file=sys.stderr)
                 extra = extra[:match.end()] + json.dumps(config, separators=(",", ":")) + extra[match.end() + length:]
