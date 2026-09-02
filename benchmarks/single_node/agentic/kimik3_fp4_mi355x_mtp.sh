@@ -71,6 +71,18 @@ case "$K3_PERF_VARIANT" in
             "$RESULT_DIR" 4
         exit 0
         ;;
+    m5gemmtune)
+        mkdir -p "$RESULT_DIR"
+        bash "$(dirname "$0")/k3_perf_overlays/tune_m7_bf16_gemms.sh" \
+            "$RESULT_DIR" 5
+        exit 0
+        ;;
+    m6gemmtune)
+        mkdir -p "$RESULT_DIR"
+        bash "$(dirname "$0")/k3_perf_overlays/tune_m7_bf16_gemms.sh" \
+            "$RESULT_DIR" 6
+        exit 0
+        ;;
     m7gemmtune)
         mkdir -p "$RESULT_DIR"
         bash "$(dirname "$0")/k3_perf_overlays/tune_m7_bf16_gemms.sh" \

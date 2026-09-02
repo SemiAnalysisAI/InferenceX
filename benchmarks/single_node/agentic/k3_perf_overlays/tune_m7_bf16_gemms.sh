@@ -4,9 +4,9 @@ set -euo pipefail
 result_dir="${1:?usage: tune_m7_bf16_gemms.sh <result-dir> [M]}"
 gemm_m="${2:-7}"
 case "$gemm_m" in
-    4|7) ;;
+    4|5|6|7) ;;
     *)
-        echo "Error: supported Kimi-K3 BF16 GEMM M values are 4 and 7; got $gemm_m" >&2
+        echo "Error: supported Kimi-K3 BF16 GEMM M values are 4, 5, 6, and 7; got $gemm_m" >&2
         exit 1
         ;;
 esac
@@ -37,6 +37,14 @@ case "$gemm_m" in
     4)
         tune_gpus="${K3_M4_GEMM_TUNE_GPUS:-6}"
         tune_timeout="${K3_M4_GEMM_TUNE_TIMEOUT:-1800}"
+        ;;
+    5)
+        tune_gpus="${K3_M5_GEMM_TUNE_GPUS:-6}"
+        tune_timeout="${K3_M5_GEMM_TUNE_TIMEOUT:-1800}"
+        ;;
+    6)
+        tune_gpus="${K3_M6_GEMM_TUNE_GPUS:-6}"
+        tune_timeout="${K3_M6_GEMM_TUNE_TIMEOUT:-1800}"
         ;;
     7)
         tune_gpus="${K3_M7_GEMM_TUNE_GPUS:-6}"

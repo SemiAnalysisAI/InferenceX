@@ -6770,3 +6770,12 @@
     - "Add an exact-M=4 BF16 GEMM tuning diagnostic for the Kimi-K3 three-draft concurrency-one path while preserving the historical exact-M=7 inputs and artifact names."
     - "Use the same six N/K contracts, pinned AITER v0.1.19 provenance, changed-input HIP graph replay, and default/candidate/default timing before any natural AgentX promotion."
   pr-link: XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Extend the exact Kimi-K3 BF16 GEMM diagnostic to M=5 and M=6 for the four- and five-draft golden-acceptance candidates."
+    - "Preserve the six measured N/K contracts, pinned AITER provenance, changed-input graph replay, strict timing gate, and M-specific artifact isolation."
+  pr-link: XXX

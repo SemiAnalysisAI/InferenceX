@@ -196,13 +196,13 @@ gh workflow run e2e-tests.yml --repo SemiAnalysisAI/InferenceX --ref "$REF" \
 ```
 
 对于 Kimi-K3 MI355X 并发 1 的 BF16 GEMM 诊断，
-`k3-perf-variant=m7gemmtune` 保留历史上的六个精确 M=7 shape，
-`k3-perf-variant=m4gemmtune` 则针对三 draft candidate，以相同的 N/K
-组合调优精确 M=4 shape。两个分支都会固定 AITER v0.1.19，要求镜像中已安装的
+`k3-perf-variant=m7gemmtune` 保留历史上的六个精确 M=7 shape。
+`m4gemmtune`、`m5gemmtune` 和 `m6gemmtune` 分支则分别针对三、四、五 draft
+候选方案，以相同的 N/K 组合调优精确 shape。四个分支都会固定 AITER v0.1.19，要求镜像中已安装的
 Python 源码与该 source tag 一致，并通过 changed-input HIP graph replay 和
 default/candidate/default 计时来比较生成的 candidate 配置与镜像默认配置。
-两者分别使用 `k3_m7_bf16_*` 和 `k3_m4_bf16_*` artifact 前缀。M=4 诊断成功
-只能在三 draft 结构实验通过后，授权独立的 natural AgentX A/B/A；它本身不是
+各分支分别使用 `k3_m<M>_bf16_*` artifact 前缀。诊断成功只能在对应的黄金接受
+长度 draft-depth 实验通过后，授权独立的 natural AgentX A/B/A；它本身不是
 serving 性能证据。
 
 目标 AgentX SWE-bench smoke eval（前十个 instance，真实 agentic generation）：

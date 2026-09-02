@@ -196,15 +196,16 @@ gh workflow run e2e-tests.yml --repo SemiAnalysisAI/InferenceX --ref "$REF" \
 ```
 
 For the Kimi-K3 MI355X concurrency-one BF16 GEMM diagnostics,
-`k3-perf-variant=m7gemmtune` retains the historical six exact-M=7 shapes and
-`k3-perf-variant=m4gemmtune` tunes the same N/K contracts at exact M=4 for the
-three-draft candidate. Both variants pin AITER v0.1.19, require the installed
+`k3-perf-variant=m7gemmtune` retains the historical six exact-M=7 shapes. The
+`m4gemmtune`, `m5gemmtune`, and `m6gemmtune` variants tune the same N/K
+contracts for three-, four-, and five-draft candidates respectively. All four
+variants pin AITER v0.1.19, require the installed
 Python sources to match that source tag, and compare the generated candidate
 configuration with the image default under changed-input HIP graph replay and
-default/candidate/default timing. Their artifacts use separate
-`k3_m7_bf16_*` and `k3_m4_bf16_*` prefixes. A successful M=4 diagnostic is
-only authorization for a natural AgentX A/B/A after the three-draft structural
-experiment has passed; it is not serving-performance evidence by itself.
+default/candidate/default timing. Their artifacts use separate `k3_m<M>_bf16_*`
+prefixes. A successful diagnostic only authorizes a natural AgentX A/B/A after
+the matching golden-acceptance draft-depth experiment has passed; it is not
+serving-performance evidence by itself.
 
 Targeted AgentX SWE-bench smoke eval (first ten instances, real agentic generation):
 

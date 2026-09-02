@@ -41,7 +41,7 @@ on:
                 type: boolean
                 default: false
             k3-perf-variant:
-                description: "Kimi-K3 C1 diagnostic variant (baseline, mla52494, tier1, compile52190, pynccl, m4gemmtune, m7gemmtune, or m7latenttail)"
+                description: "Kimi-K3 C1 diagnostic variant (baseline, mla52494, tier1, compile52190, pynccl, m4gemmtune, m5gemmtune, m6gemmtune, m7gemmtune, or m7latenttail)"
                 required: false
                 type: string
                 default: "baseline"
@@ -136,7 +136,7 @@ on:
                 type: boolean
                 default: false
             k3-perf-variant:
-                description: "Kimi-K3 C1 diagnostic variant (baseline, mla52494, tier1, compile52190, pynccl, m4gemmtune, m7gemmtune, or m7latenttail)"
+                description: "Kimi-K3 C1 diagnostic variant (baseline, mla52494, tier1, compile52190, pynccl, m4gemmtune, m5gemmtune, m6gemmtune, m7gemmtune, or m7latenttail)"
                 required: false
                 type: string
                 default: "baseline"
