@@ -47,6 +47,7 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE
 
 K3_PERF_VARIANT="${K3_PERF_VARIANT:-baseline}"
+K3_ABA_BASELINE=baseline
 
 # C1 changes cannot be adjudicated reliably across different physical nodes.
 # These variants keep one exclusive Slurm allocation while
@@ -63,6 +64,10 @@ case "$K3_PERF_VARIANT" in
         ;;
     spec5goldenaba)
         K3_ABA_CANDIDATE=spec5golden
+        ;;
+    spec5m6tunedaba)
+        K3_ABA_BASELINE=spec5golden
+        K3_ABA_CANDIDATE=spec5m6tuned
         ;;
     *)
         K3_ABA_CANDIDATE=""
@@ -91,8 +96,9 @@ if [[ -n "$K3_ABA_CANDIDATE" ]]; then
     fi
     cache_session_root="$(mktemp -d "${TMPDIR:-/tmp}/k3-aba-cache.XXXXXX")"
     mkdir -p "$aba_dir"
-    printf 'node\t%s\nvariant\t%s\ncandidate\t%s\ngpu_memory_utilization\t%s\n' \
-        "$node_name" "$K3_PERF_VARIANT" "$K3_ABA_CANDIDATE" \
+    printf 'node\t%s\nvariant\t%s\nbaseline\t%s\ncandidate\t%s\ngpu_memory_utilization\t%s\n' \
+        "$node_name" "$K3_PERF_VARIANT" "$K3_ABA_BASELINE" \
+        "$K3_ABA_CANDIDATE" \
         "$K3_ABA_GPU_MEM_UTIL" \
         >"$aba_dir/manifest.tsv"
 
@@ -301,11 +307,11 @@ if [[ -n "$K3_ABA_CANDIDATE" ]]; then
 
     # Reproduce the exact baseline -> candidate restart boundary that failed in
     # the earlier M=7 run before committing roughly one hour to three full arms.
-    run_startup_smoke smoke_baseline baseline
+    run_startup_smoke smoke_baseline "$K3_ABA_BASELINE"
     run_startup_smoke smoke_candidate "$K3_ABA_CANDIDATE"
 
     run_aba_arm \
-        baseline_pre baseline \
+        baseline_pre "$K3_ABA_BASELINE" \
         "$aba_dir/baseline_pre" \
         "${root_result_filename}_aba_baseline_pre" \
         "$aba_dir/baseline_pre"
@@ -315,7 +321,7 @@ if [[ -n "$K3_ABA_CANDIDATE" ]]; then
         "$root_result_filename" \
         "$INFMAX_CONTAINER_WORKSPACE"
     run_aba_arm \
-        baseline_post baseline \
+        baseline_post "$K3_ABA_BASELINE" \
         "$aba_dir/baseline_post" \
         "${root_result_filename}_aba_baseline_post" \
         "$aba_dir/baseline_post"
@@ -326,8 +332,9 @@ if [[ -n "$K3_ABA_CANDIDATE" ]]; then
         ! -path '*/SHA256SUMS' -print0 \
         | sort -z \
         | xargs -0 sha256sum >"$aba_dir/SHA256SUMS"
-    printf 'Kimi-K3 same-node A/B/A completed: baseline -> %s -> baseline on %s\n' \
-        "$K3_ABA_CANDIDATE" "$node_name"
+    printf 'Kimi-K3 same-node A/B/A completed: %s -> %s -> %s on %s\n' \
+        "$K3_ABA_BASELINE" "$K3_ABA_CANDIDATE" \
+        "$K3_ABA_BASELINE" "$node_name"
     exit 0
 fi
 
@@ -428,6 +435,12 @@ case "$K3_PERF_VARIANT" in
         bash "$(dirname "$0")/k3_perf_overlays/prepare_m7_bf16_gemm_config.sh" \
             "$RESULT_DIR"
         export AITER_CONFIG_GEMM_BF16="$RESULT_DIR/k3_m7_bf16_runtime_config.csv"
+        export AITER_LOG_TUNED_CONFIG=1
+        ;;
+    spec5m6tuned)
+        bash "$(dirname "$0")/k3_perf_overlays/prepare_m6_bf16_gemm_config.sh" \
+            "$RESULT_DIR"
+        export AITER_CONFIG_GEMM_BF16="$RESULT_DIR/k3_m6_bf16_runtime_config.csv"
         export AITER_LOG_TUNED_CONFIG=1
         ;;
     tritonmla)
@@ -622,7 +635,9 @@ case "$CONC" in
         ;;
 esac
 
-if [[ "$K3_PERF_VARIANT" == "spec3" || "$K3_PERF_VARIANT" == "spec5golden" ]]; then
+if [[ "$K3_PERF_VARIANT" == "spec3" || \
+        "$K3_PERF_VARIANT" == "spec5golden" || \
+        "$K3_PERF_VARIANT" == "spec5m6tuned" ]]; then
     if [[ "$CONC" != "1" || "${DCP_SIZE:-}" != "1" || "$KV_OFFLOADING" != "none" ]]; then
         echo "Error: draft-depth variants require CONC=1, DCP_SIZE=1, and KV_OFFLOADING=none" >&2
         exit 1
@@ -633,7 +648,7 @@ if [[ "$K3_PERF_VARIANT" == "spec3" || "$K3_PERF_VARIANT" == "spec5golden" ]]; t
             # the committed three-draft AgentX golden AL of 3.00.
             SPEC_NUM_TOKENS=3
             ;;
-        spec5golden)
+        spec5golden|spec5m6tuned)
             SPEC_NUM_TOKENS=5
             SYNTHETIC_ACCEPT_LEN=3.62
             ;;

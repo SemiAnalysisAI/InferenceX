@@ -222,10 +222,16 @@ captures 2 through 8. The AgentX-valid `spec5goldenaba` mode instead compares
 the six-draft `3.75` golden-acceptance baseline against five drafts at the
 committed `3.62` golden acceptance length, followed by a fresh six-draft
 baseline. It keeps every other C1 setting fixed and captures graph sizes 2
-through 12 for the five-draft candidate. Same-node A/B/A modes use `0.85`
-GPU-memory utilization for every arm so repeated ROCm server startups retain
-enough initialization headroom; the setting remains constant across the
-paired comparison.
+through 12 for the five-draft candidate. After that depth passes its normalized
+accepted-token gate, `spec5m6tunedaba` keeps five drafts and golden acceptance
+length `3.62` in every arm while comparing the installed BF16 table against the
+five exact-M=6 gfx950 rows selected by run `33591999396`. The selected rows are
+merged into a temporary runtime table only after the launcher verifies their
+checksum, AITER v0.1.19 source hashes, gfx950 architecture, 256-CU count, and
+absence from the installed table. Same-node A/B/A modes use `0.85` GPU-memory
+utilization for every arm so repeated ROCm server startups retain enough
+initialization headroom; the setting remains constant across the paired
+comparison.
 
 Targeted AgentX SWE-bench smoke eval (first ten instances, real agentic generation):
 
