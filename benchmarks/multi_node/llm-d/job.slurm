@@ -7,7 +7,7 @@
 # srun-runs server.sh inside one Docker container per node. NODE_RANK
 # (= SLURM_PROCID) drives role selection inside server.sh.
 
-set -euo pipefail
+set -eo pipefail
 
 echo "=== llm-d job start ==="
 echo "UTC: $(TZ=UTC date '+%Y-%m-%d %H:%M:%S %Z')"
@@ -48,11 +48,7 @@ fi
 #   prefill workers = ranks 1 .. PREFILL_NODES-1
 #   decode  leader = rank PREFILL_NODES (also coordinator: EPP + Envoy + bench)
 #   decode  workers = ranks PREFILL_NODES+1 .. NUM_NODES-1
-#
-# Aggregated mode (DECODE_NODES=0): there is no decode role at all, so
-# IPS[$PREFILL_NODES] would be an out-of-bounds read (IPS only has
-# PREFILL_NODES entries). Leave the decode addresses empty; server.sh's
-# aggregated coordinator gate (rank 0, ROLE=prefill) never reads them.
+# Aggregated mode has no decode address.
 PREFILL_LEADER_IP="${IPS[0]}"
 if [[ "$DECODE_NODES" -gt 0 ]]; then
     DECODE_LEADER_IP="${IPS[$PREFILL_NODES]}"
@@ -74,7 +70,7 @@ DOCKER_MOUNT_PATH="/workspace"
 
 cleanup() {
     echo "[${SLURM_JOB_ID}] cleanup on $(hostname)"
-    [[ -n "${WATCHER_PID:-}" ]] && kill "$WATCHER_PID" 2>/dev/null || true
+    [[ -n "${WATCHER_PID}" ]] && kill "$WATCHER_PID" 2>/dev/null || true
 }
 trap cleanup INT TERM HUP EXIT
 
@@ -97,8 +93,28 @@ WATCHER_PID=$!
 # for clusters that require enroot+pyxis srun (e.g. gb200-nv, where the
 # SLURM user is not in the docker group). Same env contract on both
 # paths; only the per-node container launch differs.
-LLMD_CONTAINER_ENGINE="${LLMD_CONTAINER_ENGINE:-docker}"
+: "${LLMD_CONTAINER_ENGINE:?Set docker or pyxis in the invoking launcher}"
 echo "LLMD_CONTAINER_ENGINE=$LLMD_CONTAINER_ENGINE"
+
+# Preserve the workflow's AgentX protocol, provenance, offload and physical GPU
+# metadata on both engines. Forward names, not interpolated values: JSON and
+# HF_TOKEN must never be embedded in the nested shell command or printed.
+AGENTIC_ENV_NAMES=(
+    IS_AGENTIC SCENARIO_TYPE CONC CONC_LIST DURATION AIPERF_EXPERIMENTAL_FAST
+    IMAGE RECIPE_FINGERPRINT DISAGG HF_TOKEN
+    KV_OFFLOADING KV_OFFLOAD_BACKEND KV_OFFLOAD_BACKEND_METADATA
+    ROUTER_METADATA KV_P2P_TRANSFER TOTAL_CPU_DRAM_GB
+    PREFILL_NUM_WORKERS PREFILL_TP PREFILL_PP_SIZE PREFILL_PCP_SIZE
+    PREFILL_DCP_SIZE PREFILL_EP PREFILL_DP_ATTN
+    DECODE_NUM_WORKERS DECODE_TP DECODE_PP_SIZE DECODE_PCP_SIZE
+    DECODE_DCP_SIZE DECODE_EP DECODE_DP_ATTN
+)
+AGENTIC_DOCKER_ENV=""
+for env_name in "${AGENTIC_ENV_NAMES[@]}"; do
+    export "$env_name"
+    AGENTIC_DOCKER_ENV+=" -e $env_name"
+done
+AGENTIC_PYXIS_ENV=$(IFS=,; echo "${AGENTIC_ENV_NAMES[*]}")
 
 if [[ "$LLMD_CONTAINER_ENGINE" == "docker" ]]; then
     # One docker run per node, one task per node. server.sh dispatches by NODE_RANK.
@@ -107,7 +123,7 @@ if [[ "$LLMD_CONTAINER_ENGINE" == "docker" ]]; then
         --signal=TERM@30 \
         --unbuffered \
         bash -lc "
-set -euo pipefail
+set -eo pipefail
 echo \"Rank \$SLURM_PROCID on \$(hostname)\"
 
 docker ps -aq --filter name=\"^${DOCKER_CONT_NAME}_\" | xargs -r docker rm -f || true
@@ -159,6 +175,15 @@ exec docker run --rm \
     -e RUN_EVAL=$RUN_EVAL \
     -e EVAL_ONLY=$EVAL_ONLY \
     -e EVAL_CONC=$EVAL_CONC \
+    -e EVAL_FRAMEWORK=$EVAL_FRAMEWORK \
+    -e EVAL_LIMIT=$EVAL_LIMIT \
+    -e EVAL_SUITE=$EVAL_SUITE \
+    -e SWEBENCH_GEN_MODE=$SWEBENCH_GEN_MODE \
+    -e SWEBENCH_USE_MODAL=$SWEBENCH_USE_MODAL \
+    -e MODAL_TOKEN_ID \
+    -e MODAL_TOKEN_SECRET \
+    -e IS_AGENTIC=$IS_AGENTIC \
+    -e SCENARIO_TYPE=$SCENARIO_TYPE \
     -e FRAMEWORK=$FRAMEWORK \
     -e PRECISION=$PRECISION \
     -e MODEL_PREFIX=$MODEL_PREFIX \
@@ -167,6 +192,7 @@ exec docker run --rm \
     -e SPEC_DECODING=$SPEC_DECODING \
     -e IS_MULTINODE=$IS_MULTINODE \
     -e CONFIG_FILE=$CONFIG_FILE \
+    $AGENTIC_DOCKER_ENV \
     --name \"${DOCKER_CONT_NAME}_\$SLURM_PROCID\" \
     \"\$DOCKER_IMAGE_NAME\" -lc '
         set -o pipefail
@@ -195,7 +221,9 @@ elif [[ "$LLMD_CONTAINER_ENGINE" == "pyxis" ]]; then
     export PREFILL_DP_SIZE DECODE_DP_SIZE
     export BENCH_INPUT_LEN BENCH_OUTPUT_LEN BENCH_MAX_CONCURRENCY
     export BENCH_REQUEST_RATE BENCH_RANDOM_RANGE_RATIO BENCH_NUM_PROMPTS_MULTIPLIER
-    export RUN_EVAL EVAL_ONLY EVAL_CONC FRAMEWORK PRECISION MODEL_PREFIX
+    export RUN_EVAL EVAL_ONLY EVAL_CONC EVAL_FRAMEWORK EVAL_LIMIT EVAL_SUITE
+    export SWEBENCH_GEN_MODE SWEBENCH_USE_MODAL MODAL_TOKEN_ID MODAL_TOKEN_SECRET
+    export IS_AGENTIC SCENARIO_TYPE FRAMEWORK PRECISION MODEL_PREFIX
     export RUNNER_TYPE RESULT_FILENAME SPEC_DECODING IS_MULTINODE CONFIG_FILE
 
     PYXIS_ENV_LIST="NUM_NODES,PREFILL_NODES,DECODE_NODES,ALL_IPS,PREFILL_LEADER_IP,DECODE_LEADER_IP"
@@ -204,8 +232,12 @@ elif [[ "$LLMD_CONTAINER_ENGINE" == "pyxis" ]]; then
     PYXIS_ENV_LIST+=",PREFILL_DP_SIZE,DECODE_DP_SIZE"
     PYXIS_ENV_LIST+=",BENCH_INPUT_LEN,BENCH_OUTPUT_LEN,BENCH_MAX_CONCURRENCY"
     PYXIS_ENV_LIST+=",BENCH_REQUEST_RATE,BENCH_RANDOM_RANGE_RATIO,BENCH_NUM_PROMPTS_MULTIPLIER"
-    PYXIS_ENV_LIST+=",RUN_EVAL,EVAL_ONLY,EVAL_CONC,FRAMEWORK,PRECISION,MODEL_PREFIX"
+    PYXIS_ENV_LIST+=",RUN_EVAL,EVAL_ONLY,EVAL_CONC,EVAL_FRAMEWORK,EVAL_LIMIT,EVAL_SUITE"
+    PYXIS_ENV_LIST+=",SWEBENCH_GEN_MODE,SWEBENCH_USE_MODAL,MODAL_TOKEN_ID,MODAL_TOKEN_SECRET"
+    PYXIS_ENV_LIST+=",IS_AGENTIC,SCENARIO_TYPE,FRAMEWORK,PRECISION,MODEL_PREFIX"
     PYXIS_ENV_LIST+=",RUNNER_TYPE,RESULT_FILENAME,SPEC_DECODING,IS_MULTINODE,CONFIG_FILE"
+
+    PYXIS_ENV_LIST+=",$AGENTIC_PYXIS_ENV"
 
     PYXIS_MOUNTS="${MODEL_DIR}:/models:ro"
     PYXIS_MOUNTS+=",${BENCHMARK_LOGS_DIR}:/benchmark_logs"
@@ -214,23 +246,15 @@ elif [[ "$LLMD_CONTAINER_ENGINE" == "pyxis" ]]; then
     PYXIS_MOUNTS+=",${DI_REPO_DIR}/benchmarks/llm-d/epp-config.yaml:/etc/epp/config.yaml:ro"
     PYXIS_MOUNTS+=",${DI_REPO_DIR}/benchmarks/llm-d/envoy.yaml:/etc/envoy/envoy.yaml:ro"
 
-    # Optional: mount the epp / pd-sidecar / envoy binaries from a shared
-    # filesystem instead of relying on them being baked into the image.
-    # This lets a STOCK vllm/vllm-openai image be used directly (no
-    # combined-image rebuild per vLLM version bump) - see
-    # benchmarks/llm-d/binaries.env + extract-binaries.sh. Each mount is
-    # gated on the file existing, so this is a no-op when the binaries
-    # have not been extracted (the baked-image path keeps working), and
-    # harmless when they have (mounting a binary over the identical one).
-    # shellcheck source=/dev/null
-    [[ -f "${DI_REPO_DIR}/benchmarks/llm-d/binaries.env" ]] && \
+    # AgentX uses the image-bundled router; legacy runs can mount extracted binaries.
+    if [[ "$IS_AGENTIC" != "1" ]]; then
         source "${DI_REPO_DIR}/benchmarks/llm-d/binaries.env"
-    for _bin in epp pd-sidecar envoy; do
-        if [[ -n "${LLMD_BIN_DIR:-}" && -x "${LLMD_BIN_DIR}/${_bin}" ]]; then
-            PYXIS_MOUNTS+=",${LLMD_BIN_DIR}/${_bin}:/usr/local/bin/${_bin}:ro"
-            echo "Mounting ${LLMD_BIN_DIR}/${_bin} -> /usr/local/bin/${_bin}"
-        fi
-    done
+        for _bin in epp pd-sidecar envoy; do
+            if [[ -x "${LLMD_BIN_DIR}/${_bin}" ]]; then
+                PYXIS_MOUNTS+=",${LLMD_BIN_DIR}/${_bin}:/usr/local/bin/${_bin}:ro"
+            fi
+        done
+    fi
 
     # MODEL_DIR / BENCHMARK_LOGS_DIR / NODE_RANK are translated to their
     # in-container values inside bash -lc (host MODEL_DIR is the source

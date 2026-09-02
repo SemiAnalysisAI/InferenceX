@@ -20,15 +20,12 @@ if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
 elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH="/scratch/models/DeepSeek-R1-0528"
     export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
-elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" && "$MODEL" == *-0813 ]]; then
-    export MODEL_PATH="/scratch/models/DeepSeek-V4-Pro-0813"
-    export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
 elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
     SELECTED_MODEL_PATH=""
     if [[ -n "${MODEL_PATH:-}" && -d "${MODEL_PATH}" ]]; then
         SELECTED_MODEL_PATH="$MODEL_PATH"
     else
-        for candidate in /scratch/models/DeepSeek-V4-Pro /scratch/models/DeepSeek-V4-Pro-NVFP4; do
+        for candidate in /scratch/models/DeepSeek-V4-Pro /scratch/models/DeepSeek-V4-Pro-NVFP4 /scratch/models/DeepSeek-V4-Pro-0813; do
             if [[ -d "$candidate" ]]; then
                 SELECTED_MODEL_PATH="$candidate"
                 break
@@ -105,143 +102,6 @@ fi
 export AIPERF_MMAP_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/aiperf-cache"
 
 if [[ "$IS_MULTINODE" == "true" ]]; then
-    if [[ "$FRAMEWORK" == "llmd-vllm" ]]; then
-        # Self-contained: bypasses the srtctl/srt-slurm path entirely (the
-        # "Validate framework" guard and the dsv4-only-dynamo-vllm guard
-        # further below are srtctl-specific and are never reached from here).
-        # MODEL_PATH is already resolved above (the dsv4/fp4 branch); llm-d
-        # additionally needs MODEL_NAME (served-model-name), which this file
-        # doesn't otherwise set outside the srtctl block - reuse $MODEL (the
-        # master-config `model:` field), matching this file's own
-        # `export SERVED_MODEL_NAME=$MODEL` convention below.
-        if [[ ! ( "$MODEL_PREFIX" == "dsv4" && "$PRECISION" == "fp4" ) ]]; then
-            echo "Unsupported MODEL_PREFIX/PRECISION for llmd-vllm on B200: $MODEL_PREFIX/$PRECISION" >&2
-            exit 1
-        fi
-        export MODEL_NAME="$MODEL"
-
-        source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
-
-        # Enroot 3.x does not parse Docker's tag@digest syntax (the llm-d
-        # image is digest-pinned); build the explicit registry#repo:digest
-        # URI enroot expects.
-        llmd_enroot_uri_for_image() {
-            local image="$1"
-            local image_without_digest="$image"
-            local digest=""
-            local first_component registry repository
-
-            if [[ "$image" == *@sha256:* ]]; then
-                image_without_digest="${image%@*}"
-                digest="${image##*@}"
-            fi
-
-            first_component="${image_without_digest%%/*}"
-            if [[ "$image_without_digest" == */* && ( "$first_component" == *.* || "$first_component" == *:* || "$first_component" == "localhost" ) ]]; then
-                registry="$first_component"
-                repository="${image_without_digest#*/}"
-            else
-                registry="registry-1.docker.io"
-                repository="$image_without_digest"
-            fi
-
-            if [[ -z "$digest" ]]; then
-                if [[ "$registry" == "registry-1.docker.io" ]]; then
-                    printf 'docker://%s\n' "$image"
-                else
-                    printf 'docker://%s#%s\n' "$registry" "$repository"
-                fi
-                return
-            fi
-            if [[ "$registry" == "registry-1.docker.io" && "$repository" != */* ]]; then
-                repository="library/$repository"
-            fi
-            # Strip any :tag from repository before appending the digest.
-            repository="${repository%%:*}"
-            printf 'docker://%s#%s:%s\n' "$registry" "$repository" "$digest"
-        }
-
-        # Separate name from this file's existing (later) `import_squash` used
-        # by the srtctl path, to avoid redefining that function.
-        llmd_import_squash() {
-            local squash="$1" image="$2"
-            local lock="${squash}.lock"
-            local enroot_uri
-            enroot_uri=$(llmd_enroot_uri_for_image "$image") || exit 1
-            (
-                exec 9>"$lock"
-                flock -w 1800 9 || { echo "Failed to acquire lock for $squash" >&2; exit 1; }
-                if unsquashfs -l "$squash" > /dev/null 2>&1; then
-                    echo "Squash file already exists and is valid, skipping import: $squash"
-                else
-                    rm -f "$squash"
-                    if ! enroot import -o "$squash" "$enroot_uri"; then
-                        echo "Error: enroot import failed for $enroot_uri" >&2
-                        exit 1
-                    fi
-                fi
-            ) || exit 1
-        }
-
-        LLMD_SQUASH_DIR="${LLMD_SQUASH_DIR:-/home/sa-shared/containers}"
-        mkdir -p "$LLMD_SQUASH_DIR" 2>/dev/null || true
-        LLMD_SQUASH_FILE="${LLMD_SQUASH_DIR}/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-        llmd_import_squash "$LLMD_SQUASH_FILE" "$IMAGE"
-
-        export LLMD_CONTAINER_ENGINE=pyxis
-        export LLMD_SQUASH_FILE
-
-        export DOCKER_IMAGE_NAME=$IMAGE
-        export BENCHMARK_LOGS_DIR="$GITHUB_WORKSPACE/benchmark_logs"
-        mkdir -p "$BENCHMARK_LOGS_DIR"
-
-        # DISAGG is exported job-wide from the master config's `disagg:` key
-        # (see benchmark-multinode-tmpl.yml). true -> the P/D disagg wrapper
-        # (1P-DEP8/1D-DEP8); false -> the aggregated wrapper (TP8/DEP8, one
-        # engine does both prefill and decode, DECODE_NODES=0).
-        if [[ "${DISAGG:-true}" == "true" ]]; then
-            SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_b200_llmd-vllm-disagg.sh"
-            # EPP/pd-sidecar binaries needed for the disagg-profile-handler `deciders:`
-            # shape. Populate once via:
-            #   BINARIES_ENV_FILE=binaries-b200-v0.10.0.env benchmarks/llm-d/extract-binaries.sh
-            # job.slurm falls back to the image-baked v0.9.0 until this path exists.
-            export LLMD_BIN_DIR="${LLMD_BIN_DIR:-/home/sa-shared/llm-d-bins-v0.10.0}"
-        else
-            SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_b200_llmd-vllm-agg.sh"
-        fi
-        BENCH_SCRIPT="benchmarks/multi_node/${SCRIPT_NAME}"
-        if [[ ! -f "$BENCH_SCRIPT" ]]; then
-            echo "Error: llm-d wrapper not found: $BENCH_SCRIPT" >&2
-            exit 1
-        fi
-
-        export SLURM_PARTITION SLURM_ACCOUNT
-        JOB_ID=$(bash "$BENCH_SCRIPT")
-        if [[ -z "$JOB_ID" ]]; then
-            echo "Error: failed to submit llm-d job" >&2
-            exit 1
-        fi
-        echo "Submitted llm-d job: $JOB_ID"
-
-        trap 'bundle_server_logs "$BENCHMARK_LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"; scancel "$JOB_ID" 2>/dev/null || true' EXIT INT TERM HUP
-
-        LOG_FILE="${BENCHMARK_LOGS_DIR}/slurm_job-${JOB_ID}.out"
-        stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || exit 1
-
-        while IFS= read -r -d '' result_file; do
-            copy_to_workspace "$result_file" "$GITHUB_WORKSPACE/$(basename "$result_file")" || exit 1
-        done < <(find "$BENCHMARK_LOGS_DIR" -name "${RESULT_FILENAME}*.json" -print0 2>/dev/null)
-
-        if [[ "${RUN_EVAL:-false}" == "true" ]]; then
-            EVAL_DIR=$(find "$BENCHMARK_LOGS_DIR" -type d -name eval_results -print -quit 2>/dev/null)
-            [[ -z "$EVAL_DIR" ]] && EVAL_DIR="$BENCHMARK_LOGS_DIR/eval_results"
-            copy_eval_artifacts "$EVAL_DIR" "$GITHUB_WORKSPACE" || exit 1
-        fi
-
-        scancel "$JOB_ID" 2>/dev/null || true
-        exit 0
-    fi
-
     if [[ "$FRAMEWORK" == "tilert" ]]; then
         export SLURM_PARTITION SLURM_ACCOUNT
         export TILERT_WEIGHTS_DIR="${TILERT_WEIGHTS_DIR:-/scratch/models/${MODEL_PREFIX}-${PRECISION}-tilert-8shard}"
@@ -366,6 +226,9 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR" || exit 1
         git checkout sa-submission-q2-2026
+    fi
+    if [[ "${EVAL_FRAMEWORK:-lm-eval}" != "lm-eval" ]]; then
+        python3 "$GITHUB_WORKSPACE/runners/patch_srt_eval_dispatch.py" "$(pwd)" || exit 1
     fi
 
     echo "Installing srtctl..."
@@ -531,6 +394,10 @@ EOF
     # so large-model loads (e.g. DSR1-FP8 ~680GB off shared FS) finish in time.
     # Uses ${CONFIG_FILE%%:*} because CONFIG_FILE may carry an :override[N] suffix.
     sed -i 's/^  max_attempts: [0-9]*/  max_attempts: 720/' "${CONFIG_FILE%%:*}"
+    if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
+        python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
+            "${CONFIG_FILE%%:*}" "$FRAMEWORK" || exit 1
+    fi
 
     SRTCTL_PREFLIGHT_ARGS=()
     # Kimi K2.6 weights are staged on the Slurm compute nodes, not the login node.

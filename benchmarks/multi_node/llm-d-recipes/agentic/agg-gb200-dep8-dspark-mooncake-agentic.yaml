@@ -1,4 +1,4 @@
-# DeepSeek-V4-Pro-0813 (DSpark) FP4 B200, aggregated DEP8 with Mooncake prefix-cache.
+# DeepSeek-V4-Pro-0813 (DSpark) FP4 GB200, aggregated DEP8 with Mooncake prefix-cache.
 # Sibling of agg-gb200-dep8-dspark-agentic.yaml; adds Mooncake (P2PHANDSHAKE embedded RDMA)
 # so server.sh wires MultiConnector (NixlConnector + MooncakeStoreConnector, kv_both role).
 # DSpark 5 speculative tokens. conc-list [52,72].
@@ -56,12 +56,12 @@ prefill:
   extra-args: >-
     --kv-cache-dtype fp8
     --gpu-memory-utilization 0.92
-    --max-model-len 1048576
-    --max-num-seqs 64
     --max-num-batched-tokens 8192
-    --max-cudagraph-capture-size 192
     --block-size 256
     --tokenizer-mode deepseek_v4
+    --tool-call-parser deepseek_v4
+    --enable-auto-tool-choice
+    --reasoning-parser deepseek_v4
     --moe-backend deep_gemm_mega_moe
     --enable-ep-weight-filter
     --enable-cumem-allocator
@@ -102,12 +102,11 @@ prefill:
 mooncake:
   store_config:
     metadata_server: "P2PHANDSHAKE"
-    global_segment_size: "140GB"
     local_buffer_size: "4GB"
     protocol: "rdma"
     device_name: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
     mode: "embedded"
-    enable_offload: false
+    enable_offload: false  # SSD only; the embedded DRAM pool is still enabled.
 
 # ---- SLURM resource directives ----
 slurm:

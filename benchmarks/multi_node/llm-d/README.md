@@ -27,25 +27,14 @@ the coordinator (EPP + Envoy + bench), exactly like the AMD path's
 
 ### Aggregated mode (`yD = 0`)
 
-Setting `DECODE_NODES=0` runs a single engine that does both prefill and
-decode in-process - there is no decode role, no pd-sidecar, and no
-`--kv_transfer_config` (server.sh's `IS_AGGREGATED` flag, derived from
-`DECODE_NODES=0`, gates all three). Rank `0` (the sole engine's leader)
-takes over the coordinator duties (endpoints.yaml + EPP + Envoy + bench)
-that the decode leader normally owns.
+`DECODE_NODES=0` runs one engine for prefill and decode. Rank 0 runs EPP,
+Envoy, and the client; no P/D sidecar is started. Only the Mooncake variant
+uses a KV connector. The master config uses `disagg: false`, `worker`, and
+`num-nodes`; discovery labels its serving endpoints `prefill`.
 
-Per the `process_result.py` / `dynamo-vllm` precedent, the aggregated
-engine is mapped to the **prefill** role in the master config
-(`prefill: {num-worker: 1, ...}`, `decode: {num-worker: 0, ...}`) so
-multinode result aggregation counts its GPUs exactly once and
-`process_result.py`'s `prefill_gpus > 0` invariant holds. `endpoints.yaml`
-still only ever emits `llm-d.ai/role: prefill` entries in this mode (no
-`decode-*` entries at all), so an aggregated recipe's EPP config needs a
-filter matching that role, not a `decode-filter` / disagg split - see
-`benchmarks/multi_node/llm-d-recipes/dsv4-fp4-b200-agentx-agg-{tp8,dep8}.yaml`
-for a minimal single-`schedulingProfile` example (llm-d auto-selects
-`single-profile-handler` when there is exactly one profile, so no
-`disagg-profile-handler`/decider is needed).
+The GB200 AgentX recipes live under `llm-d-recipes/agentic/`. TP8/DEP8 uses
+2 nodes (8 GPUs); 1P-DEP8/1D-DEP8 uses 4 nodes (16 GPUs). Pure TP publishes
+only its leader's API endpoint; DEP publishes an endpoint on every node.
 
 Each instance (prefill or decode) is one vLLM engine spanning multiple
 nodes via `--data-parallel-hybrid-lb`. With `xP=2, yD=2,

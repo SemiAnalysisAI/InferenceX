@@ -1155,7 +1155,7 @@ dsv4-fp4-b300-sglang:
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 4096, conc-end: 4096 }
 
 dsv4-fp4-b300-sglang-agentic-hicache-mtp:
-  image: lmsysorg/sglang-staging:dev-cu13-pr-35880
+  image: lmsysorg/sglang:nightly-dev-cu13-20260827-20621aa1
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:b300-nv
@@ -1167,7 +1167,7 @@ dsv4-fp4-b300-sglang-agentic-hicache-mtp:
     - dram-utilization: 0.95
       search-space:
       - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 8, 16, 32] }
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: mtp, conc-list: [32, 64, 128, 256, 384, 512, 576], router: { name: sglang-router, version: "0.3.2" } }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: mtp, conc-list: [32, 256, 384, 512, 576], router: { name: sglang-router, version: "0.3.2" } }
 
   # DeepSeek-V4-Pro on B300 with EAGLE/MTP speculative decoding. Recipe is
   # selected inside benchmarks/single_node/dsv4_fp4_b300_sglang_mtp.sh by
@@ -4503,13 +4503,13 @@ dsv4-fp4-gb200-llmd-vllm:
           - "GPUS_PER_NODE=4"
 
 # DeepSeek-V4-Pro-0813 (DSpark) FP4 GB200, P/D disagg via llmd-vllm.
-# Always uses Mooncake; DSpark speculative decoding. Requires EPP v0.10.0
-# (LLMD_BIN_DIR override in runners/launch_b200-nscale-compat.sh).
+# Always uses Mooncake; DSpark speculative decoding. The DSpark image
+# bundles EPP/pd-sidecar v0.10.0.
 dsv4-fp4-gb200-llmd-vllm-agentx:
-  image: quay.io/rh-ee-imarkov/llm-d-nokube-vllm:dspark-0814-nightly
+  image: quay.io/rh-ee-imarkov/llm-d-nokube-vllm:dspark-0814-nightly@sha256:00742fdd10e572172d49559e44c357a68c388933c74db2c4e819bf61377a6a95
   model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
-  runner: gb200
+  runner: cluster:gb200-nv
   precision: fp4
   framework: llmd-vllm
   router: { name: llm-d-router, version: "0.10.0" }
@@ -4518,91 +4518,91 @@ dsv4-fp4-gb200-llmd-vllm-agentx:
   disagg: true
   scenarios:
     agentic-coding:
-    - search-space:
-      # 1P DEP8 + 1D DEP8 (2 nodes / 16 GPUs). Always Mooncake.
-      - spec-decoding: "none"
+    - dram-utilization: 0.60
+      search-space:
+      # 1P DEP8 + 1D DEP8 (4 nodes / 16 GPUs). Always Mooncake.
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake }
         conc-list: [64, 128, 192]
         prefill:
           num-worker: 1
-          tp: 1
+          tp: 8
           ep: 8
           dp-attn: true
           additional-settings:
-          - "PREFILL_NODES=1"
-          - "GPUS_PER_NODE=8"
+          - "PREFILL_NODES=2"
+          - "GPUS_PER_NODE=4"
           - "CONFIG_FILE=agentic/disagg-gb200-1p1d-dep8-dep8-dspark-agentic.yaml"
         decode:
           num-worker: 1
-          tp: 1
+          tp: 8
           ep: 8
           dp-attn: true
           additional-settings:
-          - "DECODE_NODES=1"
-          - "GPUS_PER_NODE=8"
+          - "DECODE_NODES=2"
+          - "GPUS_PER_NODE=4"
 
-# Aggregated (TP8 / DEP8) sibling of dsv4-fp4-gb200-llmd-vllm-agentx: one
-# engine per topology does both prefill and decode (no P/D split, no
-# pd-sidecar, no kv_transfer_config - see the recipe files' header
-# comments). Separate top-level key because `disagg:` is a whole-key
-# property. Uses the default v0.9.0 EPP/pd-sidecar binaries (no router
-# bump needed - the aggregated EPP config only uses plugins already
-# present there). conc-lists mirror the agentX dspark historical runs:
-# results/dsv4-pro-dspark/results_ilmarkov-2-ix-agg-tp8-dspark-v3-long
-# (tp8) and results_ilmarkov-ix-agg-dep8-dspark-1308-long (dep8).
+# Aggregated TP8/DEP8; only the Mooncake arm enables DRAM offloading.
 dsv4-fp4-gb200-llmd-vllm-agentx-agg:
-  image: quay.io/rh-ee-imarkov/llm-d-nokube-vllm:dspark-0814-nightly
+  image: quay.io/rh-ee-imarkov/llm-d-nokube-vllm:dspark-0814-nightly@sha256:00742fdd10e572172d49559e44c357a68c388933c74db2c4e819bf61377a6a95
   model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
-  runner: gb200
+  runner: cluster:gb200-nv
   precision: fp4
   framework: llmd-vllm
-  router: { name: llm-d-router, version: "0.9.0" }
+  router: { name: llm-d-router, version: "0.10.0" }
   multinode: true
   disagg: false
   scenarios:
     agentic-coding:
-    - search-space:
-      # Aggregated TP8 (1 node / 8 GPUs; pure tensor-parallel, no EP).
-      - spec-decoding: "none"
+    - dram-utilization: 0.60
+      search-space:
+      # Aggregated TP8 (2 nodes / 8 GPUs; pure tensor-parallel, no EP).
+      - spec-decoding: mtp
+        kv-offloading: none
         conc-list: [1, 2, 4, 8, 12]
-        num-nodes: 1
+        num-nodes: 2
         worker:
           num-worker: 1
           tp: 8
           ep: 1
           dp-attn: false
           additional-settings:
-          - "PREFILL_NODES=1"
+          - "PREFILL_NODES=2"
           - "DECODE_NODES=0"
-          - "GPUS_PER_NODE=8"
+          - "GPUS_PER_NODE=4"
           - "CONFIG_FILE=agentic/agg-gb200-tp8-dspark-agentic.yaml"
-      # Aggregated DEP8 (1 node / 8 GPUs; DP=8 + EP), no Mooncake.
-      - spec-decoding: "none"
+      # Aggregated DEP8 (2 nodes / 8 GPUs; DP=8 + EP), no Mooncake.
+      - spec-decoding: mtp
+        kv-offloading: none
         conc-list: [12, 16, 32]
-        num-nodes: 1
+        num-nodes: 2
         worker:
           num-worker: 1
-          tp: 1
+          tp: 8
           ep: 8
           dp-attn: true
           additional-settings:
-          - "PREFILL_NODES=1"
+          - "PREFILL_NODES=2"
           - "DECODE_NODES=0"
-          - "GPUS_PER_NODE=8"
+          - "GPUS_PER_NODE=4"
           - "CONFIG_FILE=agentic/agg-gb200-dep8-dspark-agentic.yaml"
       # Aggregated DEP8 with Mooncake prefix-cache KV store.
-      - spec-decoding: "none"
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake }
         conc-list: [52, 72]
-        num-nodes: 1
+        num-nodes: 2
         worker:
           num-worker: 1
-          tp: 1
+          tp: 8
           ep: 8
           dp-attn: true
           additional-settings:
-          - "PREFILL_NODES=1"
+          - "PREFILL_NODES=2"
           - "DECODE_NODES=0"
-          - "GPUS_PER_NODE=8"
+          - "GPUS_PER_NODE=4"
           - "CONFIG_FILE=agentic/agg-gb200-dep8-dspark-mooncake-agentic.yaml"
 
 # MTP2 variant of dsv4-fp4-gb200-dynamo-vllm. Uses the vLLM 0.20.1 image
@@ -4778,6 +4778,164 @@ dsv4-fp4-gb200-dynamo-vllm-mtp2-nosynthetic:
           - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb200-high-tpt-megamoe-mtp2.yaml"
         decode:
           num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+
+# DSV4 B200 disaggregated Dynamo SGLang STP configuration.
+dsv4-fp4-b200-dynamo-sglang:
+  image: lmsysorg/sglang:nightly-dev-cu13-20260821-f825d729
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: cluster:b200-nscale
+  precision: fp4
+  framework: dynamo-sglang
+  router: { name: dynamo-router, version: "86f84b9486905c2bfaa4b756c9fa39f04ecf5ebd" }
+  kv-p2p-transfer: nixl
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # 1p1d-tp8-tp8 (pure TP). 2 nodes (1+1).
+      - conc-list: [1]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/disagg-b200-1p1d-tp8-tp8.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+      # 1p1d-dep8-tp8: DEP8 prefill + TP8 decode. 2 nodes (1+1).
+      - conc-list: [32, 64]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/disagg-b200-1p1d-dep8-tp8.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+      # 1p1d-dep8-dep8: DEP8 prefill + DEP8 decode. 2 nodes (1+1).
+      - conc-list: [256, 512]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/disagg-b200-1p1d-dep8-dep8.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+      # 1p4d-dep8-tp8: DEP8 prefill + 4x TP8 decode. 5 nodes (1+4).
+      - conc-list: [64]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/disagg-b200-1p4d-dep8-tp8.yaml"
+        decode:
+          num-worker: 4
+          tp: 8
+          ep: 1
+          dp-attn: false
+      # 1p2d-dep8-dep8: DEP8 prefill + 2x DEP8 decode. 3 nodes (1+2).
+      - conc-list: [256]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/disagg-b200-1p2d-dep8-dep8.yaml"
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: true
+      # 1p4d-dep8-dep8: DEP8 prefill + 4x DEP8 decode. 5 nodes (1+4).
+      - conc-list: [256]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/disagg-b200-1p4d-dep8-dep8.yaml"
+        decode:
+          num-worker: 4
+          tp: 8
+          ep: 8
+          dp-attn: true
+      # 3p2d-dep8-dep8: 3x DEP8 prefill + 2x DEP8 decode. 5 nodes (3+2).
+      - conc-list: [2048]
+        prefill:
+          num-worker: 3
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/disagg-b200-3p2d-dep8-dep8.yaml"
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: true
+      # 4p2d-dep8-dep8: 4x DEP8 prefill + 2x DEP8 decode. 6 nodes (4+2).
+      - conc-list: [4096]
+        prefill:
+          num-worker: 4
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/disagg-b200-4p2d-dep8-dep8.yaml"
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: true
+      # 5p2d-dep8-dep8: 5x DEP8 prefill + 2x DEP8 decode. 7 nodes (5+2).
+      - conc-list: [6144]
+        prefill:
+          num-worker: 5
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/disagg-b200-5p2d-dep8-dep8.yaml"
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: true
+      # 6p2d-dep8-dep8: 6x DEP8 prefill + 2x DEP8 decode. 8 nodes (6+2).
+      - conc-list: [8192]
+        prefill:
+          num-worker: 6
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/disagg-b200-6p2d-dep8-dep8.yaml"
+        decode:
+          num-worker: 2
           tp: 8
           ep: 8
           dp-attn: true
@@ -7554,7 +7712,7 @@ qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp:
           - "CONFIG_FILE=recipes/sglang/qwen3.5/gb200-fp4/agentic/agg-gb200-tp2ep2-mtp-hicache.yaml"
 
 minimaxm3-fp4-b300-vllm-agentic-mtp:
-  image: vllm/vllm-openai:nightly-ac7509e2b1db40fec2f03dde1ed4e9dfdc2338c9
+  image: vllm/vllm-openai:nightly-1dc464d42681d22f38caf1fdc1eb632dc4421c45
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: cluster:b300-nv
@@ -7653,7 +7811,7 @@ minimaxm3-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
           - "EVAL_CONFIG_FILE=recipes/vllm/minimax-m3/agentic/gb300-fp4/2p5d-tp2-tp2-c120-eval-agentic.yaml"
         decode: { num-worker: 5, tp: 2, ep: 1, dp-attn: false }
 minimaxm3-fp4-b300-trtllm-agentic-mtp:
-  image: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc23.post1
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc23.post1
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: cluster:b300-nv
@@ -7708,7 +7866,7 @@ minimaxm3-fp4-b300-trtllm-agentic-mtp:
 # the same 3 TB AgentX ceiling before the proportional-GPU rule is applied.
 # GPU-resident points receive a zero budget.
 minimaxm3-fp4-b200-vllm-agentic-mtp:
-  image: vllm/vllm-openai:nightly-ac7509e2b1db40fec2f03dde1ed4e9dfdc2338c9
+  image: vllm/vllm-openai:nightly-1dc464d42681d22f38caf1fdc1eb632dc4421c45
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: cluster:b200-nscale
@@ -7725,7 +7883,7 @@ minimaxm3-fp4-b200-vllm-agentic-mtp:
       search-space:
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [15, 20, 25, 30, 32, 34, 36, 38, 40] }
 minimaxm3-fp4-b200-trtllm-agentic-mtp:
-  image: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc23.post1
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc23.post1
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: cluster:b200-nscale
