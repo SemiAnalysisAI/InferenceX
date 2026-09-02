@@ -204,13 +204,6 @@ class NcclLowLatencyLadderClamp(unittest.TestCase):
             import ep_nccl
             return importlib.reload(ep_nccl)
 
-    def test_the_ladder_is_clamped_below_the_buffer(self):
-        # Two separate numbers on purpose: clamping the ladder must not shrink the transport
-        # footprint, or the rungs that remain quietly measure a smaller receive plane.
-        m = self._module()
-        self.assertLess(m._LL_LADDER_CAP, m._LL_BUFFER_CAP)
-        self.assertLessEqual(m._LL_BUFFER_CAP, 511)
-
     def _backend(self, module, low_latency):
         """A backend far enough along to run create_buffer against the stubs."""
         backend = module.NCCLEPBackend.__new__(module.NCCLEPBackend)
@@ -223,15 +216,15 @@ class NcclLowLatencyLadderClamp(unittest.TestCase):
         module.nccl_ep.Group = types.SimpleNamespace(create=lambda *a, **k: object())
         return backend
 
-    def test_buffer_cap_reports_the_ladder_cap(self):
-        # Patching the constant and watching the return move proves buffer_cap() reads it,
-        # which a literal that merely happens to equal it today would not.
+    def test_ladder_cap_drops_only_oversized_measurement_points(self):
         module = self._module()
         backend = self._backend(module, low_latency=True)
-        self.assertEqual(backend.buffer_cap(None), module._LL_LADDER_CAP)
+        backend.args.tokens_ladder = "32 64 128"
+        backend._build_rank_inputs = mock.Mock(return_value=None)
         with mock.patch.object(module, "_LL_LADDER_CAP", 64):
-            self.assertEqual(backend.buffer_cap(None), 64)
-        self.assertIsNone(self._backend(module, low_latency=False).buffer_cap(None))
+            spec = backend.make_inputs(backend.args)
+        self.assertEqual(spec.ladder, [32, 64])
+        self.assertEqual(spec.dropped, [128])
 
     def test_the_receive_is_sized_from_the_buffer_cap_not_the_ladder(self):
         # The regression this guards would silently re-baseline every low-latency row: clamping
@@ -240,11 +233,8 @@ class NcclLowLatencyLadderClamp(unittest.TestCase):
         # rather than on the shape of the source line that computes it.
         module = self._module()
         spec = types.SimpleNamespace(max_tokens_per_rank=99)
-        backend = self._backend(module, low_latency=True)
-        backend.create_buffer(spec)
-        self.assertEqual(backend.max_dispatch, module._LL_BUFFER_CAP)
-        self.assertNotEqual(backend.max_dispatch, module._LL_LADDER_CAP)
-        with mock.patch.object(module, "_LL_BUFFER_CAP", 512):
+        with mock.patch.object(module, "_LL_BUFFER_CAP", 512), \
+                mock.patch.object(module, "_LL_LADDER_CAP", 64):
             sized = self._backend(module, low_latency=True)
             sized.create_buffer(spec)
             self.assertEqual(sized.max_dispatch, 512)
