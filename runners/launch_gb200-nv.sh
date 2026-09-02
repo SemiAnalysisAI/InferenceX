@@ -79,7 +79,7 @@ import_squash() {
             echo "Squash file already exists and is valid, skipping import: $squash"
         else
             local enroot_runtime
-            enroot_runtime=$(mktemp -d /tmp/enroot-import.XXXXXX) || exit 1
+            enroot_runtime=$(mktemp -d "${TMPDIR:-/tmp}/enroot-import.XXXXXX") || exit 1
             trap 'rm -rf -- "$enroot_runtime"' EXIT
             export ENROOT_RUNTIME_PATH="$enroot_runtime"
 
