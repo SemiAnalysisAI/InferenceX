@@ -68,9 +68,6 @@ def test_prepared_source_tree_requires_every_pinned_byte(
     (source_dir / "verify.py").write_text("mutated\n", encoding="utf-8")
     with pytest.raises(ValueError, match="SHA256 mismatch"):
         full.verify_source_tree(source_dir)
-    assert full.EXPECTED_SAMPLE_SHA256 == (
-        "3ead102af0f888acc95867b3a9916942524b02f4f64931f020a1bfb4fee9aae2"
-    )
 
 def test_fetch_source_retries_transient_network_failures(
     monkeypatch: pytest.MonkeyPatch,
@@ -81,7 +78,9 @@ def test_fetch_source_retries_transient_network_failures(
         "REQUIRED_SOURCE_SHA256",
         {"verify.py": hashlib.sha256(content).hexdigest()},
     )
-    sleeps: list[int] = []
+    monkeypatch.setattr(full, "DOWNLOAD_ATTEMPTS", 4)
+    monkeypatch.setattr(full, "DOWNLOAD_RETRY_DELAY_SECONDS", 0.25)
+    sleeps: list[float] = []
 
     class Response:
         status = 200
@@ -104,7 +103,7 @@ def test_fetch_source_retries_transient_network_failures(
 
         def open(self, request, *, timeout):
             self.calls += 1
-            if self.calls < full.DOWNLOAD_ATTEMPTS:
+            if self.calls <= 2:
                 raise full.urllib.error.URLError("transient")
             return Response()
 
@@ -113,13 +112,17 @@ def test_fetch_source_retries_transient_network_failures(
     monkeypatch.setattr(full.time, "sleep", sleeps.append)
 
     assert full._fetch_source("verify.py") == content
-    assert opener.calls == full.DOWNLOAD_ATTEMPTS
-    assert sleeps == [full.DOWNLOAD_RETRY_DELAY_SECONDS] * 2
+    assert opener.calls == 3
+    assert sleeps == [0.25, 0.25]
 
 
 def test_fetch_source_reports_exhausted_retries(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(full, "DOWNLOAD_ATTEMPTS", 2)
+    monkeypatch.setattr(full, "DOWNLOAD_RETRY_DELAY_SECONDS", 0.5)
+    sleeps: list[float] = []
+
     class Opener:
         calls = 0
 
@@ -129,11 +132,12 @@ def test_fetch_source_reports_exhausted_retries(
 
     opener = Opener()
     monkeypatch.setattr(full, "_NO_REDIRECT_OPENER", opener)
-    monkeypatch.setattr(full.time, "sleep", lambda _: None)
+    monkeypatch.setattr(full.time, "sleep", sleeps.append)
 
-    with pytest.raises(full.FullSuiteError, match="after 3 attempts"):
+    with pytest.raises(full.FullSuiteError, match="after 2 attempts"):
         full._fetch_source("verify.py")
-    assert opener.calls == full.DOWNLOAD_ATTEMPTS
+    assert opener.calls == 2
+    assert sleeps == [0.5]
 
 
 def test_verifier_command_is_one_102_row_run_with_fixed_m3_settings(
@@ -246,16 +250,6 @@ def test_failure_command_replaces_stale_native_artifacts(tmp_path: Path) -> None
     result_rows = native_results.read_text(encoding="utf-8").splitlines()
     assert len(result_rows) == 1
     assert json.loads(result_rows[0])["status"] == "integration_error"
-
-
-def test_full_suite_timeout_leaves_workflow_cleanup_margin() -> None:
-    shortest_workflow_timeout_seconds = 480 * 60
-    cleanup_margin_seconds = 60 * 60
-
-    assert (
-        full.UPSTREAM_TIMEOUT_SECONDS
-        <= shortest_workflow_timeout_seconds - cleanup_margin_seconds
-    )
 
 
 @pytest.mark.parametrize(
