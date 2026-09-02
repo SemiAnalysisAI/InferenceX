@@ -81,6 +81,7 @@ if [[ -n "$K3_ABA_CANDIDATE" ]]; then
 
     root_result_dir="$RESULT_DIR"
     root_result_filename="${RESULT_FILENAME:?RESULT_FILENAME must be set for same-node A/B/A}"
+    K3_ABA_GPU_MEM_UTIL="0.85"
     aba_dir="$root_result_dir/same_node_aba"
     script_path="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
     node_name="${SLURMD_NODENAME:-$(hostname)}"
@@ -90,8 +91,9 @@ if [[ -n "$K3_ABA_CANDIDATE" ]]; then
     fi
     cache_session_root="$(mktemp -d "${TMPDIR:-/tmp}/k3-aba-cache.XXXXXX")"
     mkdir -p "$aba_dir"
-    printf 'node\t%s\nvariant\t%s\ncandidate\t%s\n' \
+    printf 'node\t%s\nvariant\t%s\ncandidate\t%s\ngpu_memory_utilization\t%s\n' \
         "$node_name" "$K3_PERF_VARIANT" "$K3_ABA_CANDIDATE" \
+        "$K3_ABA_GPU_MEM_UTIL" \
         >"$aba_dir/manifest.tsv"
 
     capture_kfd_owners() {
@@ -241,6 +243,7 @@ if [[ -n "$K3_ABA_CANDIDATE" ]]; then
             >>"$starts_file"
         set +e
         K3_PERF_VARIANT="$variant" \
+            GPU_MEM_UTIL_OVERRIDE="$K3_ABA_GPU_MEM_UTIL" \
             K3_STARTUP_SMOKE="$startup_smoke" \
             K3_ARM_CACHE_ROOT="$arm_cache_root" \
             TRITON_CACHE_DIR="$arm_cache_root/triton" \
@@ -602,7 +605,7 @@ case "$CONC" in
     1)
         SYNTHETIC_ACCEPT_LEN=3.75
         SPEC_NUM_TOKENS=6
-        GPU_MEM_UTIL=0.9
+        GPU_MEM_UTIL="${GPU_MEM_UTIL_OVERRIDE:-0.9}"
         MAX_NUM_BATCHED_TOKENS=16384
         ;;
     2|4|8|10|12|14)
