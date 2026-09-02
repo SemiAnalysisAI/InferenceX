@@ -6695,4 +6695,6 @@
   description:
     - "Repeat the Kimi-K3 vLLM nightly 7c5dc571 C14, C40, and C52 AgentX points with LMCache 0.5.5rc3+rocm7.2 DRAM KV offload; preserve the original TP8, DCP, and speculative-decoding settings and omit C1."
     - "使用 LMCache 0.5.5rc3+rocm7.2 DRAM KV offload 重复 Kimi-K3 vLLM nightly 7c5dc571 的 C14、C40 和 C52 AgentX 测试点；保持原有 TP8、DCP 和推测解码设置，并省略 C1。"
+    - "Use the stock vLLM image without applying runtime PR patches or installing additional dependencies; LMCache PR #4834 is already included in the release wheel."
+    - "使用未经运行时 PR 补丁修改的原始 vLLM 镜像，不安装额外依赖；LMCache PR #4834 已包含在发布 wheel 中。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

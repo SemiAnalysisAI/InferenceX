@@ -158,62 +158,14 @@ case "${KV_OFFLOAD_BACKEND:-}" in
       lmcache)
     require_agentic_kv_offload_backend "$KV_OFFLOAD_BACKEND"
 
-    # Keep the image's tested torch/ROCm stack and install only LMCache's
-    # missing runtime dependencies, same as the MiniMax-M3 lmcache arm.
+    # Keep the stock image's dependency stack and install only the requested
+    # LMCache ROCm wheel.
     LMCACHE_VERSION="0.5.5rc3+rocm7.2"
     export KV_OFFLOAD_BACKEND_METADATA="{\"name\":\"lmcache\",\"version\":\"${LMCACHE_VERSION}\"}"
     LMCACHE_RELEASE="v0.5.5rc3"
     LMCACHE_ROCM_INDEX="https://github.com/LMCache/LMCache/releases/expanded_assets/${LMCACHE_RELEASE}-rocm"
     agentic_pip_install --quiet --no-cache-dir --no-deps \
-        "sortedcontainers==2.4.0" \
-        "opentelemetry-exporter-prometheus==0.61b0" \
-        "cupy-rocm-7-0==14.1.1" \
         "lmcache==${LMCACHE_VERSION}" --find-links "$LMCACHE_ROCM_INDEX"
-
-    SITE_PACKAGES=$(python3 -c \
-        'import pathlib, vllm; print(pathlib.Path(vllm.__file__).parent.parent)')
-
-    # vLLM #51705 adds ROCm AITER MLA decode LSE output for DCP and keeps full
-    # CUDA graphs enabled. Pin both compare endpoints and the downloaded diff
-    # checksum so this experiment cannot silently follow later PR revisions.
-    VLLM_PR51705_BASE="e0d27040ddcc5ac31cf01c5b04a7d764ccba656d"
-    VLLM_PR51705_HEAD="e1843114b7c233a9c71ad44b28bf63426ad64836"
-    VLLM_PR51705_SHA256="88a31df8cd0ffd308aa4a5c550142734939a8d83c7132cfa924f8f80b2387b55"
-    VLLM_PR51705_SOURCE_SHA256="063ee0140d559b54da665b6ef95a3bea64b33d6eaff6cb9a827616a6cc4d8890"
-    VLLM_PR51705_PATCH=$(mktemp)
-    VLLM_PR51705_SOURCE_PATCH=$(mktemp)
-    curl --fail --location --silent --show-error \
-        "https://github.com/vllm-project/vllm/compare/${VLLM_PR51705_BASE}...${VLLM_PR51705_HEAD}.diff" \
-        --output "$VLLM_PR51705_PATCH"
-    echo "$VLLM_PR51705_SHA256  $VLLM_PR51705_PATCH" | sha256sum --check
-    sed -n '/^diff --git a\/vllm\//,$p' "$VLLM_PR51705_PATCH" > \
-        "$VLLM_PR51705_SOURCE_PATCH"
-    echo "$VLLM_PR51705_SOURCE_SHA256  $VLLM_PR51705_SOURCE_PATCH" | \
-        sha256sum --check
-    patch -d "$SITE_PACKAGES" -p1 --forward --batch < \
-        "$VLLM_PR51705_SOURCE_PATCH"
-
-    # LMCache 0.5.5's transfer-channel layer eagerly imports the Mooncake
-    # backend (mooncake_te_impl.py -> `from mooncake.engine import
-    # TransferEngine`), whose native .so resolves all of its DT_NEEDED libs at
-    # import. The vLLM ROCm image ships none of them, so the import sanity
-    # check below (and the LMCache server) would otherwise fail with
-    # "ImportError: lib*.so: cannot open shared object file" (first libglog,
-    # then libjsoncpp, ...). Provision Mooncake's full runtime lib set from the
-    # distro before importing. apt-get install is idempotent, so run it
-    # whenever any of the libs is still missing rather than gating on one.
-    LMCACHE_NATIVE_LIBS=(libglog.so.0 libjsoncpp.so.25 libibverbs.so.1 librdmacm.so.1 libnuma.so.1)
-    for lib in "${LMCACHE_NATIVE_LIBS[@]}"; do
-        if ! ldconfig -p | grep -q "$lib"; then
-            apt-get update
-            apt-get install -y \
-                libgoogle-glog0v5 libjsoncpp25 libibverbs1 librdmacm1 libnuma1
-            break
-        fi
-    done
-    python3 -c \
-        "import cupy; from lmcache.integration.vllm.lmcache_mp_connector import get_lmcache_model_name, get_lmcache_scheduler_block_size; assert callable(get_lmcache_model_name); assert callable(get_lmcache_scheduler_block_size); from vllm.v1.attention.backends.mla.rocm_aiter_mla import AiterMLAImpl; assert AiterMLAImpl.can_return_lse_for_decode; assert AiterMLAImpl.lse_base_on_e; import opentelemetry.exporter.prometheus" \
-        >/dev/null
 
     # One MP server for the node, per the Kimi-K3 recipe
     # (docs.lmcache.ai/recipes/kimi_k3.html), with --chunk-size sized for
