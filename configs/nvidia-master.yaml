@@ -8973,9 +8973,9 @@ glm5.2-fp4-b300-sglang-agentic-mtp:
 # nightly includes FlashInfer 0.6.18's BF16 TRTLLM MoE allocation fix, which is
 # required by GLM-5.2's unquantized EAGLE draft head at CUDA-graph capture.
 #
-# Same single arm as glm5.2-fp4-b300-sglang-agentic-mtp, extended with the c20
-# endpoint: cookbook low-latency TP8 with HiCache host-DRAM offload, conc
-# [1, 4, 8, 12, 16, 20] (steps of at least 2, hard stop at 20). TP8-only for
+# Same single arm and concurrency grid as glm5.2-fp4-b300-sglang-agentic-mtp:
+# cookbook low-latency TP8 with HiCache host-DRAM offload, conc
+# [1, 4, 8, 12, 16] (steps of at least 2, hard stop at 16). TP8-only for
 # memory as well as comparability -- the ~433 GB NVFP4
 # checkpoint needs ~54 GB/GPU across 8 B200s and does not fit below 8.
 glm5.2-fp4-b200-sglang-agentic-mtp:
@@ -8990,7 +8990,7 @@ glm5.2-fp4-b200-sglang-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 4, 8, 12, 16, 20] }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 4, 8, 12, 16] }
 
 glm5.2-fp4-gb200-dynamo-sglang-agentic-agg:
   image: lmsysorg/sglang:v0.5.17-cu130

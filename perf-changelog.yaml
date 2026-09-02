@@ -6828,6 +6828,6 @@
     - agentic-coding
   description:
     - "Pin the GLM-5.2 B200 SGLang AgentX curve to lmsysorg/sglang:nightly-dev-cu13-20260901-07c8f729, which includes FlashInfer 0.6.18's BF16 TRTLLM MoE allocation fix."
-    - "Extend the concurrency grid through c20 and use a 169 GB/rank HiCache target pool at c12, c16, and c20 while retaining ratio mode for lower concurrencies."
+    - "Use a 169 GB/rank HiCache target pool at c12 and c16 while retaining ratio mode for lower concurrencies."
     - "Isolate SGLang runtime caches per Slurm allocation to prevent concurrent sweep cells from sharing per-rank cache files."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2808
