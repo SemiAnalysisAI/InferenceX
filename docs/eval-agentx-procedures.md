@@ -222,7 +222,9 @@ captures 2 through 8. The AgentX-valid `spec5goldenaba` mode instead compares
 the six-draft `3.75` golden-acceptance baseline against five drafts at the
 committed `3.62` golden acceptance length, followed by a fresh six-draft
 baseline. It keeps every other C1 setting fixed and captures graph sizes 2
-through 12 for the five-draft candidate.
+through 12 for the five-draft candidate. The fallback `spec4goldenaba` mode
+uses the same protocol for four drafts at the committed `3.36` golden
+acceptance length and captures graph sizes 2 through 10.
 
 Targeted AgentX SWE-bench smoke eval (first ten instances, real agentic generation):
 
