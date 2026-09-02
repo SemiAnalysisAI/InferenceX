@@ -365,17 +365,29 @@ DeepSeek-R1-0528-MXFP4-v2:
 
 DeepSeek-V4-Pro-AgentX:
   base_flags: "--enforce-shared-experts-fusion --watchdog-timeout 3600 --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend dsv4 --page-size 256 --swa-full-tokens-ratio 0.1 --tool-call-parser deepseekv4 --reasoning-parser deepseek-v4 --disaggregation-transfer-backend mori --log-level info --log-level-http error"
-  dp_flags: "--enable-dp-attention --enable-prefill-delayer"
+  # DP-attention overrides mirror the single-node dsv4-fp4-mi355x-sglang-agentic-mtp
+  # recipe's `if [ "$DP_ATTENTION" = "true" ]` block (InferenceX PR #2800):
+  # --disable-shared-experts-fusion wins over base_flags' --enforce-shared-experts-fusion
+  # (DeepseekV4ForCausalLM.determine_num_fused_shared_experts checks disable first
+  # and returns early, so passing both together is safe), --swa-full-tokens-ratio 0.15
+  # widens the SWA ring for the larger DP batch, and --tokenizer-worker-num matches
+  # the only DP arm's TP (8) today -- bump this if a different-TP DP arm is added.
+  dp_flags: "--enable-dp-attention --enable-prefill-delayer --disable-shared-experts-fusion --swa-full-tokens-ratio 0.15 --enable-dp-attention-local-control-broadcast --tokenizer-worker-num 8 --stream-interval 20 --prefill-decode-interval 10"
   ep_flags: "--ep-dispatch-algorithm fake --moe-a2a-backend mori --deepep-mode normal"
   mtp_flags: "--speculative-algorithm EAGLE --speculative-eagle-topk 1"
   prefill:
-    mem_fraction_static: 0.85
+    mem_fraction_static: 0.90
     disable_radix_cache: false
     disable_cuda_graph: true
     dp:
       max_running_requests: 1024
-      chunked_prefill_size: "MORI_MAX_DISPATCH_TOKENS_PREFILL * PREFILL_TP_SIZE"  # dsv4 compressor kernel uint16 token cap (255*256)
+      chunked_prefill_size: "16384 * PREFILL_TP_SIZE if PREFILL_TP_SIZE == 8 else 8192 * PREFILL_TP_SIZE"  # dsv4 compressor kernel uint16 token cap (255*256)
       context_length: 1048576
+      # Mirrors the single-node recipe's --enable-two-batch-overlap inside the
+      # DP-attention block; prefill-only, matching that recipe's PARALLEL_ARGS
+      # scope. Also flips server_sglang.sh's PREFILL_SDMA_ENV to
+      # MORI_ENABLE_SDMA=true, required alongside two-batch-overlap.
+      enable_two_batch_overlap: true
     no_dp:
       max_running_requests: 64
       # TP8 widens to 16384 to fix the conc>=16 queue-saturation / decode-stall
@@ -386,7 +398,7 @@ DeepSeek-V4-Pro-AgentX:
       chunked_prefill_size: "16384 if PREFILL_TP_SIZE == 8 else 8192"
       context_length: 1048576
   decode:
-    mem_fraction_static: 0.85
+    mem_fraction_static: 0.90
     prefill_round_robin_balance: true
     disagg_decode_enable_radix_cache: false
     dp:
