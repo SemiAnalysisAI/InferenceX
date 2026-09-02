@@ -7,7 +7,7 @@ model:
 
 dynamo:
   install: true
-  wheel: 1.4.0.dev20260807
+  hash: 2cbbdc863c336c2cfffa2a3668e2a6661801b259
   request_plane: tcp
 
 health_check:
@@ -72,6 +72,7 @@ backend:
       perf_metrics_max_requests: 100000
       pipeline_parallel_size: 1
       print_iter_log: true
+      enable_iter_perf_stats: true
       return_perf_metrics: false
       sparse_attention_config:
         algorithm: dsa
@@ -122,6 +123,7 @@ benchmark:
     MAX_MODEL_LEN: '1048576'
     AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
     AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
+    AIPERF_REQUIRED_SERVER_METRIC_PREFIX: trtllm_kv_cache_utilization
     OPENAI_API_KEY: EMPTY
     KV_OFFLOADING: none
     MODEL: nvidia/GLM-5.2-NVFP4
