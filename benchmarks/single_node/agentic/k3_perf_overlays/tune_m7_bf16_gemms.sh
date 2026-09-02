@@ -1,12 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-result_dir="${1:?usage: tune_m7_bf16_gemms.sh <result-dir>}"
+result_dir="${1:?usage: tune_m7_bf16_gemms.sh <result-dir> [M]}"
+gemm_m="${2:-7}"
+case "$gemm_m" in
+    4|7) ;;
+    *)
+        echo "Error: supported Kimi-K3 BF16 GEMM M values are 4 and 7; got $gemm_m" >&2
+        exit 1
+        ;;
+esac
 overlay_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 aiter_repo="https://github.com/ROCm/aiter.git"
 aiter_tag="v0.1.19"
 aiter_commit="31350226161346314b3d8882c8085bd31dce6a34"
-scratch="$(mktemp -d /tmp/k3-m7-bf16-tune.XXXXXX)"
+artifact_prefix="k3_m${gemm_m}_bf16"
+scratch="$(mktemp -d "/tmp/k3-m${gemm_m}-bf16-tune.XXXXXX")"
 trap 'rm -rf "$scratch"' EXIT
 
 # The default arm must use the image's bundled configuration. Do not inherit a
@@ -15,15 +24,27 @@ trap 'rm -rf "$scratch"' EXIT
 unset AITER_CONFIG_GEMM_BF16
 
 mkdir -p "$result_dir"
-input_csv="$overlay_dir/k3_m7_bf16_untuned_gemm.csv"
-candidate_csv="$result_dir/k3_m7_bf16_tuned_candidates.csv"
-profile_csv="$result_dir/k3_m7_bf16_tuning_profile.csv"
-graph_json="$result_dir/k3_m7_bf16_graph_comparison.json"
-selected_csv="$result_dir/k3_m7_bf16_selected.csv"
-tuner_log="$result_dir/k3_m7_bf16_tuner.log"
-provenance_json="$result_dir/k3_m7_bf16_provenance.json"
+input_csv="$overlay_dir/${artifact_prefix}_untuned_gemm.csv"
+candidate_csv="$result_dir/${artifact_prefix}_tuned_candidates.csv"
+profile_csv="$result_dir/${artifact_prefix}_tuning_profile.csv"
+graph_json="$result_dir/${artifact_prefix}_graph_comparison.json"
+selected_csv="$result_dir/${artifact_prefix}_selected.csv"
+tuner_log="$result_dir/${artifact_prefix}_tuner.log"
+provenance_json="$result_dir/${artifact_prefix}_provenance.json"
+sha256_file="$result_dir/${artifact_prefix}_SHA256SUMS"
 
-cp "$input_csv" "$result_dir/k3_m7_bf16_untuned_gemm.csv"
+case "$gemm_m" in
+    4)
+        tune_gpus="${K3_M4_GEMM_TUNE_GPUS:-6}"
+        tune_timeout="${K3_M4_GEMM_TUNE_TIMEOUT:-1800}"
+        ;;
+    7)
+        tune_gpus="${K3_M7_GEMM_TUNE_GPUS:-6}"
+        tune_timeout="${K3_M7_GEMM_TUNE_TIMEOUT:-1800}"
+        ;;
+esac
+
+cp "$input_csv" "$result_dir/${artifact_prefix}_untuned_gemm.csv"
 git clone --filter=blob:none --branch "$aiter_tag" --depth 1 "$aiter_repo" "$scratch/aiter"
 actual_commit="$(git -C "$scratch/aiter" rev-parse HEAD)"
 if [[ "$actual_commit" != "$aiter_commit" ]]; then
@@ -32,6 +53,7 @@ if [[ "$actual_commit" != "$aiter_commit" ]]; then
 fi
 
 AITER_SOURCE_COMMIT="$actual_commit" AITER_SOURCE_TAG="$aiter_tag" \
+AITER_GEMM_M="$gemm_m" \
 AITER_SOURCE_DIR="$scratch/aiter" \
 python3 - "$provenance_json" <<'PY'
 import hashlib
@@ -67,6 +89,7 @@ except importlib.metadata.PackageNotFoundError:
 
 
 payload = {
+    "gemm_m": int(os.environ["AITER_GEMM_M"]),
     "source_commit": os.environ["AITER_SOURCE_COMMIT"],
     "source_tag": os.environ["AITER_SOURCE_TAG"],
     "installed_aiter_file": str(installed_root / "__init__.py"),
@@ -118,8 +141,8 @@ PY
         --libtype all \
         --with-hipblaslt \
         --shape_grouped \
-        --mp "${K3_M7_GEMM_TUNE_GPUS:-6}" \
-        --timeout "${K3_M7_GEMM_TUNE_TIMEOUT:-1800}" \
+        --mp "$tune_gpus" \
+        --timeout "$tune_timeout" \
         --warmup 20 \
         --iters 201 \
         --verbose
@@ -132,7 +155,7 @@ python3 "$overlay_dir/bench_m7_bf16_gemms.py" \
     --output "$graph_json" \
     --selected-csv "$selected_csv"
 
-python3 - "$input_csv" "$candidate_csv" "$graph_json" <<'PY'
+python3 - "$input_csv" "$candidate_csv" "$graph_json" "$gemm_m" <<'PY'
 import csv
 import json
 import sys
@@ -151,8 +174,14 @@ def rows_and_keys(path):
 
 expected_rows, expected = rows_and_keys(sys.argv[1])
 tuned_rows, tuned = rows_and_keys(sys.argv[2])
+expected_m = int(sys.argv[4])
 if len(expected_rows) != len(expected):
     raise SystemExit("input contains duplicate M/N/K shapes")
+if {key[0] for key in expected} != {expected_m}:
+    raise SystemExit(
+        f"input does not contain exactly M={expected_m}: "
+        f"observed={sorted({key[0] for key in expected})}"
+    )
 if len(tuned_rows) != len(tuned):
     raise SystemExit("tuner output contains duplicate M/N/K shapes")
 if tuned != expected:
@@ -168,5 +197,21 @@ if len(comparisons) != len(expected):
     )
 if not summary.get("all_changed_input_graph_replays_passed"):
     raise SystemExit("changed-input HIP graph replay did not pass")
-print(f"Selected {summary['selected_shape_count']} of {len(expected)} exact M=7 shapes")
+print(
+    f"Selected {summary['selected_shape_count']} of {len(expected)} "
+    f"exact M={expected_m} shapes"
+)
 PY
+
+(
+    cd "$result_dir"
+    sha256sum \
+        "$(basename "$input_csv")" \
+        "$(basename "$candidate_csv")" \
+        "$(basename "$profile_csv")" \
+        "$(basename "$graph_json")" \
+        "$(basename "$selected_csv")" \
+        "$(basename "$tuner_log")" \
+        "$(basename "$provenance_json")" \
+        >"$(basename "$sha256_file")"
+)

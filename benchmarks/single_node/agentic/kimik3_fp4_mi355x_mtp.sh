@@ -64,11 +64,20 @@ if [ -n "${ROCR_VISIBLE_DEVICES:-}" ]; then
 fi
 
 K3_PERF_VARIANT="${K3_PERF_VARIANT:-baseline}"
-if [[ "$K3_PERF_VARIANT" == "m7gemmtune" ]]; then
-    mkdir -p "$RESULT_DIR"
-    bash "$(dirname "$0")/k3_perf_overlays/tune_m7_bf16_gemms.sh" "$RESULT_DIR"
-    exit 0
-fi
+case "$K3_PERF_VARIANT" in
+    m4gemmtune)
+        mkdir -p "$RESULT_DIR"
+        bash "$(dirname "$0")/k3_perf_overlays/tune_m7_bf16_gemms.sh" \
+            "$RESULT_DIR" 4
+        exit 0
+        ;;
+    m7gemmtune)
+        mkdir -p "$RESULT_DIR"
+        bash "$(dirname "$0")/k3_perf_overlays/tune_m7_bf16_gemms.sh" \
+            "$RESULT_DIR" 7
+        exit 0
+        ;;
+esac
 if [[ "$K3_PERF_VARIANT" == "m7latenttail" ]]; then
     mkdir -p "$RESULT_DIR"
     bash "$(dirname "$0")/k3_perf_overlays/run_m7_latent_tail.sh" "$RESULT_DIR"

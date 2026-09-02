@@ -6761,3 +6761,12 @@
   description:
     - "Benchmark the exact gfx950 Kimi-K3 M=7 latent-MoE tail prototype with M=1-14 correctness coverage, changed-input HIP graph replay, rotating projection weights, and pinned AITER provenance."
   pr-link: XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add an exact-M=4 BF16 GEMM tuning diagnostic for the Kimi-K3 three-draft concurrency-one path while preserving the historical exact-M=7 inputs and artifact names."
+    - "Use the same six N/K contracts, pinned AITER v0.1.19 provenance, changed-input HIP graph replay, and default/candidate/default timing before any natural AgentX promotion."
+  pr-link: XXX

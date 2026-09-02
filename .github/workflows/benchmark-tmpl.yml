@@ -363,6 +363,17 @@ jobs:
 
           bash ./runners/launch_${RUNNER_NAME%%_*}.sh
 
+          if [ "${{ inputs.k3-perf-variant }}" = "m4gemmtune" ]; then
+            test -s results/k3_m4_bf16_tuned_candidates.csv
+            test -s results/k3_m4_bf16_tuning_profile.csv
+            test -s results/k3_m4_bf16_graph_comparison.json
+            test -s results/k3_m4_bf16_selected.csv
+            test -s results/k3_m4_bf16_provenance.json
+            test -s results/k3_m4_bf16_tuner.log
+            test -s results/k3_m4_bf16_SHA256SUMS
+            echo "Kimi-K3 M=4 GEMM tuning completed; skipping AgentX result validation."
+            exit 0
+          fi
           if [ "${{ inputs.k3-perf-variant }}" = "m7gemmtune" ]; then
             test -s results/k3_m7_bf16_tuned_candidates.csv
             test -s results/k3_m7_bf16_graph_comparison.json
@@ -424,7 +435,7 @@ jobs:
           path: agg_${{ env.RESULT_FILENAME }}.json
 
       - name: Upload agentic aggregated result
-        if: ${{ always() && inputs.scenario-type == 'agentic-coding' && inputs.k3-perf-variant != 'm7gemmtune' && inputs.k3-perf-variant != 'm7latenttail' }}
+        if: ${{ always() && inputs.scenario-type == 'agentic-coding' && inputs.k3-perf-variant != 'm4gemmtune' && inputs.k3-perf-variant != 'm7gemmtune' && inputs.k3-perf-variant != 'm7latenttail' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bmk_agentic_${{ env.RESULT_FILENAME }}
@@ -447,6 +458,14 @@ jobs:
         with:
           name: k3_m7_bf16_gemm_tuning_${{ runner.name }}
           path: results/k3_m7_bf16_*
+          if-no-files-found: error
+
+      - name: Upload Kimi-K3 M=4 GEMM tuning artifacts
+        if: ${{ always() && inputs.k3-perf-variant == 'm4gemmtune' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: k3_m4_bf16_gemm_tuning_${{ runner.name }}
+          path: results/k3_m4_bf16_*
           if-no-files-found: error
 
       - name: Upload Kimi-K3 M=7 latent-tail artifacts

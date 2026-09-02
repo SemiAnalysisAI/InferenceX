@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Graph-replay A/B/A benchmark for Kimi-K3's exact M=7 BF16 GEMMs."""
+"""Graph-replay A/B/A benchmark for exact small-M Kimi-K3 BF16 GEMMs."""
 
 from __future__ import annotations
 
@@ -240,7 +240,15 @@ def run_controller(args: argparse.Namespace) -> None:
     if args.min_speedup_percent < 0:
         raise ValueError("min_speedup_percent must be non-negative")
 
-    with tempfile.TemporaryDirectory(prefix="k3-m7-gemm-graph-") as temp_dir:
+    input_rows = load_shapes(args.input_csv)
+    matrix_ms = {shape_key(row)[0] for row in input_rows}
+    if len(matrix_ms) != 1:
+        raise ValueError(
+            f"input CSV must contain one exact M value, got {sorted(matrix_ms)}"
+        )
+    matrix_m = next(iter(matrix_ms))
+
+    with tempfile.TemporaryDirectory(prefix=f"k3-m{matrix_m}-gemm-graph-") as temp_dir:
         temp = Path(temp_dir)
         default_a = run_subprocess(args, "default-a", temp / "default-a.json", None)
         candidate = run_subprocess(
@@ -257,7 +265,7 @@ def run_controller(args: argparse.Namespace) -> None:
     }
     comparisons: list[dict[str, object]] = []
     selected_keys: set[tuple[int, int, int]] = set()
-    for source_row in load_shapes(args.input_csv):
+    for source_row in input_rows:
         key = shape_key(source_row)
         first_default = indexed["default-a"][key]
         second_default = indexed["default-b"][key]
@@ -291,7 +299,8 @@ def run_controller(args: argparse.Namespace) -> None:
 
     write_selected_csv(args.candidate_csv, args.selected_csv, selected_keys)
     result = {
-        "method": "HIP graph replay with four rotating weights; default/candidate/default",
+        "method": "HIP graph replay with rotating weights; default/candidate/default",
+        "matrix_m": matrix_m,
         "minimum_speedup_percent": args.min_speedup_percent,
         "all_changed_input_graph_replays_passed": True,
         "selected_shape_count": len(selected_keys),
