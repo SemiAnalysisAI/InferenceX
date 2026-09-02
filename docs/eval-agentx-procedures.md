@@ -218,7 +218,11 @@ Enroot allocation and host telemetry can own KFD before the server starts, the
 harness first requires low VRAM and no existing vLLM process, records the KFD
 and shared-memory baseline, and requires every arm to restore that exact state.
 Baseline arms capture graph sizes 2 through 14; the three-draft candidate
-captures 2 through 8.
+captures 2 through 8. The AgentX-valid `spec5goldenaba` mode instead compares
+the six-draft `3.75` golden-acceptance baseline against five drafts at the
+committed `3.62` golden acceptance length, followed by a fresh six-draft
+baseline. It keeps every other C1 setting fixed and captures graph sizes 2
+through 12 for the five-draft candidate.
 
 Targeted AgentX SWE-bench smoke eval (first ten instances, real agentic generation):
 

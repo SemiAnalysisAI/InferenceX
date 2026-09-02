@@ -6874,3 +6874,12 @@
     - "Fix the same-node A/B/A startup gate for Enroot allocations that have a stable KFD owner and inherited shared-memory entries before the first server launch."
     - "Require clean VRAM and no pre-existing vLLM process, record the allocation's initial KFD and shared-memory state, and fail unless every smoke and benchmark arm restores that exact baseline."
   pr-link: XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add an AgentX-valid same-node six-draft/five-draft/six-draft concurrency-one experiment using the committed golden acceptance lengths 3.75 and 3.62."
+    - "Keep every other recipe setting fixed, isolate compiler caches and server lifetimes, and capture the exact graph ladder for each draft depth."
+  pr-link: XXX

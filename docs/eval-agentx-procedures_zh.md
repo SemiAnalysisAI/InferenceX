@@ -213,7 +213,11 @@ baseline/candidate/baseline 流程，只把并发 1 的 draft 数量从 6 改为
 下一台服务前验证 GPU、进程和共享内存都已清理。由于 Enroot 分配和主机监控
 进程可能在服务启动前已经持有 KFD，harness 会先要求低 VRAM 且不存在 vLLM
 进程，记录 KFD 和共享内存基线，并要求每个阶段恢复到完全相同的状态。baseline
-捕获 2 到 14 的图尺寸，三 draft 候选方案捕获 2 到 8。
+捕获 2 到 14 的图尺寸，三 draft 候选方案捕获 2 到 8。符合 AgentX 规则的
+`spec5goldenaba` 模式则比较使用黄金接受长度 `3.75` 的六 draft baseline 与
+使用已提交黄金接受长度 `3.62` 的五 draft 候选方案，随后再运行一个全新的六
+draft baseline。其余并发 1 设置保持不变，五 draft 候选方案捕获 2 到 12 的
+图尺寸。
 
 目标 AgentX SWE-bench smoke eval（前十个 instance，真实 agentic generation）：
 
