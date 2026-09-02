@@ -27,7 +27,7 @@ on:
         required: false
         type: string
       k3-perf-variant:
-        description: "Kimi-K3 C1 runtime variant (baseline, spec5golden, or m7tunedgemm)"
+        description: "Kimi-K3 C1 runtime variant (baseline, spec4golden, spec5golden, or m7tunedgemm)"
         required: false
         type: string
         default: 'baseline'
@@ -215,6 +215,7 @@ jobs:
       ENABLE_AGENTX_POWER: '0'
       RESULT_DIR: /workspace/results
       K3_PERF_VARIANT: ${{ inputs.k3-perf-variant }}
+      GPU_MEM_UTIL_OVERRIDE: '0.85'
       MOE_DEBUG: '0'
       MOE_DEBUG_LOG: ${{ (inputs.moe-debug) && '/workspace/moe_debug.tp0.log' || '' }}
       VLLM_PROFILE_DELAY_ITERATIONS: ${{ inputs.profile-delay-iterations }}
@@ -266,7 +267,7 @@ jobs:
           export GPU_COUNT=$((TP * PP_SIZE * PCP_SIZE))
           echo "GPU_COUNT=${GPU_COUNT}" >> "$GITHUB_ENV"
           case "${K3_PERF_VARIANT:-baseline}" in
-            baseline|spec5golden|m7tunedgemm) ;;
+            baseline|spec4golden|spec5golden|m7tunedgemm) ;;
             *)
               echo "Unsupported k3-perf-variant: ${K3_PERF_VARIANT}" >&2
               exit 1

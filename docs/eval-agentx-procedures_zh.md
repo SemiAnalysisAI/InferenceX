@@ -220,9 +220,10 @@ draft baseline。其余并发 1 设置保持不变，五 draft 候选方案捕�
 图尺寸。
 
 在选定并发 1 的 draft 深度后，可通过 `profile.yml` 并设置
-`k3-perf-variant=baseline` 或 `spec5golden` 获取有界的全 rank trace。工作流仅在
+`k3-perf-variant=baseline`、`spec4golden` 或 `spec5golden` 获取有界的全 rank trace。工作流仅在
 AgentX 预热完成后启动 profiler，记录精确的 speculative 配置，上传所有 vLLM
-rank trace，并将短时运行明确标记为诊断证据，而不是 canonical 分数。
+rank trace，并将短时运行明确标记为诊断证据，而不是 canonical 分数。该流程使用
+`0.85` GPU 显存利用率；如果源码工作区以只读方式挂载，trace 会回退写入可写的结果目录。
 
 目标 AgentX SWE-bench smoke eval（前十个 instance，真实 agentic generation）：
 

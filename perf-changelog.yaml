@@ -6890,5 +6890,5 @@
     - agentic-coding
   description:
     - "Add bounded all-rank vLLM profiling for the selected Kimi-K3 MI355X concurrency-one draft depth after AgentX warmup."
-    - "Record the exact speculative configuration and upload trace plus runtime evidence without treating the short diagnostic as a canonical score."
+    - "Record the exact speculative configuration, reserve 0.85 GPU-memory utilization, and preserve traces through a writable result-directory fallback without treating the short diagnostic as a canonical score."
   pr-link: XXX

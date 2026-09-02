@@ -413,7 +413,7 @@ export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 export AITER_QUICK_REDUCE_QUANTIZATION=INT4
 
 case "$K3_PERF_VARIANT" in
-    baseline|spec3|spec5golden)
+    baseline|spec3|spec4golden|spec5golden)
         ;;
     mla52494)
         bash "$(dirname "$0")/k3_perf_overlays/apply_vllm_overlay.sh" pr52494
@@ -602,7 +602,7 @@ case "$CONC" in
     1)
         SYNTHETIC_ACCEPT_LEN=3.75
         SPEC_NUM_TOKENS=6
-        GPU_MEM_UTIL=0.9
+        GPU_MEM_UTIL="${GPU_MEM_UTIL_OVERRIDE:-0.9}"
         MAX_NUM_BATCHED_TOKENS=16384
         ;;
     2|4|8|10|12|14)
@@ -619,7 +619,7 @@ case "$CONC" in
         ;;
 esac
 
-if [[ "$K3_PERF_VARIANT" == "spec3" || "$K3_PERF_VARIANT" == "spec5golden" ]]; then
+if [[ "$K3_PERF_VARIANT" == "spec3" || "$K3_PERF_VARIANT" == "spec4golden" || "$K3_PERF_VARIANT" == "spec5golden" ]]; then
     if [[ "$CONC" != "1" || "${DCP_SIZE:-}" != "1" || "$KV_OFFLOADING" != "none" ]]; then
         echo "Error: draft-depth variants require CONC=1, DCP_SIZE=1, and KV_OFFLOADING=none" >&2
         exit 1
@@ -629,6 +629,10 @@ if [[ "$K3_PERF_VARIANT" == "spec3" || "$K3_PERF_VARIANT" == "spec5golden" ]]; t
             # Same-acceptance causal ceiling only. This is intentionally not
             # the committed three-draft AgentX golden AL of 3.00.
             SPEC_NUM_TOKENS=3
+            ;;
+        spec4golden)
+            SPEC_NUM_TOKENS=4
+            SYNTHETIC_ACCEPT_LEN=3.36
             ;;
         spec5golden)
             SPEC_NUM_TOKENS=5
