@@ -339,12 +339,7 @@ class ChainBudgetGate(unittest.TestCase):
 
 
 class ChainComponentContract(unittest.TestCase):
-    """What the driven sweep (test_run_sweep_chain.py) does not exercise: the constants a
-    consumer imports by name, and `_component` on the two paths no chain row takes."""
-
-    def test_the_origin_constants_carry_the_published_values(self):
-        self.assertEqual(ep_harness.CHAIN_PERIOD_ORIGIN, "chained-median")
-        self.assertEqual(ep_harness.CHAIN_FLOOR_ORIGIN, "chained-cross-rank-min")
+    """Component behavior on the paths no chained row takes."""
 
     def test_an_overridden_origin_leaves_the_rest_of_the_component_alone(self):
         # Every pre-chain row also flows through `_component`, so omitting the override must

@@ -54,13 +54,22 @@ class Package:
         self.agg_result = root / "agg_renamed_by_launcher.json"
         self.validation_result = root / "power_validation.json"
 
-    def run(self, *, prefill_gpus=2, decode_gpus=2, sha=PRODUCER_SHA, require_power=False):
+    def run(
+        self,
+        *,
+        prefill_gpus=2,
+        decode_gpus=2,
+        aggregate_gpus=0,
+        sha=PRODUCER_SHA,
+        require_power=False,
+    ):
         return apm.run(
             self.power_dir,
             self.bench_result,
             self.agg_result,
             prefill_gpus=prefill_gpus,
             decode_gpus=decode_gpus,
+            aggregate_gpus=aggregate_gpus,
             expected_producer_sha=sha,
             logs_root=self.logs_root,
             validation_result=self.validation_result,
@@ -98,7 +107,11 @@ def build_package(tmp_path, power_fn=None, publication_valid=True, bench_extra=N
     rows, scrapes = _rows(power_fn)
     with open(pkg.power_dir / "samples.csv", "w", newline="") as handle:
         writer = csv.writer(handle)
-        writer.writerow(apm.SAMPLES_HEADER)
+        # Model the producer's wire format independently of the consumer's parser.
+        writer.writerow([
+            "schema_version", "timestamp_unix", "scrape_seq", "hostname",
+            "gpu_index", "gpu_uuid", "power_w",
+        ])
         writer.writerows(rows)
 
     observed = [
@@ -236,15 +249,15 @@ class TestValidPackage:
         assert agg["avg_total_gpu_power_w"] == 1400.0
         assert agg["total_gpu_energy_j"] == 84000.0
         assert agg["joules_per_successful_query"] == 10500.0
-        assert agg["joules_per_input_token"] == round(84000 / 32768, 6)
-        assert agg["joules_per_output_token"] == round(84000 / 4096, 6)
-        assert agg["joules_per_total_token"] == round(84000 / 36864, 6)
+        assert agg["joules_per_input_token"] == 2.563477
+        assert agg["joules_per_output_token"] == 20.507812
+        assert agg["joules_per_total_token"] == 2.278646
         assert agg["prefill_gpu_energy_j"] == 48000.0
         assert agg["decode_gpu_energy_j"] == 36000.0
         assert agg["prefill_avg_power_w"] == 400.0
         assert agg["decode_avg_power_w"] == 300.0
-        assert agg["prefill_joules_per_input_token"] == round(48000 / 32768, 6)
-        assert agg["decode_joules_per_output_token"] == round(36000 / 4096, 6)
+        assert agg["prefill_joules_per_input_token"] == 1.464844
+        assert agg["decode_joules_per_output_token"] == 8.789062
 
         sidecar = pkg.sidecar()
         assert sidecar["power_valid"] is True
@@ -262,10 +275,8 @@ class TestValidPackage:
         }
         assert set(sidecar["per_gpu_energy_j"]) == set(sidecar["per_gpu_role"])
 
-    def test_role_watts_close_over_the_whole_deployment(self, tmp_path):
-        """Role watts weighted by their GPU counts must reproduce the whole-
-        deployment watts -- the topology gate makes the role partition
-        exhaustive. Catches dividing by the total device count."""
+    def test_role_and_deployment_power_use_their_own_gpu_counts(self, tmp_path):
+        """Role means must not divide by the whole deployment's GPU count."""
 
         def ramp(host, idx, ts):
             if (host, idx) == ("node-d", 0):
@@ -275,14 +286,101 @@ class TestValidPackage:
         pkg = build_package(tmp_path, power_fn=ramp)
         assert pkg.run() == 0
         agg = pkg.agg()
-        weighted = 2 * agg["prefill_avg_power_w"] + 2 * agg["decode_avg_power_w"]
-        assert weighted == pytest.approx(agg["avg_total_gpu_power_w"], abs=1e-3)
-        assert weighted / 4 == pytest.approx(agg["avg_power_w"], abs=1e-3)
+        # Decode GPU means are 332 W and 300 W; both prefill GPUs draw 400 W.
+        assert agg["prefill_avg_power_w"] == pytest.approx(400.0)
+        assert agg["decode_avg_power_w"] == pytest.approx(316.0)
+        assert agg["avg_total_gpu_power_w"] == pytest.approx(1432.0)
+        assert agg["avg_power_w"] == pytest.approx(358.0)
 
     def test_strict_mode_passes_on_valid_package(self, tmp_path):
         pkg = build_package(tmp_path)
         assert pkg.run(require_power=True) == 0
         assert pkg.agg()["power_valid"] == 1
+
+    def test_aggregate_topology_emits_only_whole_deployment_metrics(self, tmp_path):
+        pkg = build_package(tmp_path)
+        manifest_path = pkg.power_dir / "manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        for device in manifest["expected_devices"]:
+            for assignment in device["assignments"]:
+                assignment["worker_role"] = "agg"
+                assignment["het_group"] = None
+        manifest_path.write_text(json.dumps(manifest, indent=2))
+
+        assert pkg.run(
+            prefill_gpus=0,
+            decode_gpus=0,
+            aggregate_gpus=4,
+            require_power=True,
+        ) == 0
+
+        agg = pkg.agg()
+        assert agg["power_valid"] == 1
+        assert agg["avg_power_w"] == 350.0
+        assert agg["total_gpu_energy_j"] == 84000.0
+        assert set(apm.ROLE_METRIC_KEYS).isdisjoint(agg)
+        assert set(pkg.sidecar()["per_gpu_role"].values()) == {"agg"}
+
+    def test_agentx_adapter_consumes_a_real_custom_benchmark_package(self, tmp_path):
+        from utils.agentic.aggregation.power_adapter import run_multinode_agentic_power
+
+        pkg = build_package(tmp_path)
+        result_dir = pkg.logs_root / "agentic" / "conc_4"
+        result_dir.mkdir(parents=True)
+        stem = "agentic_power_concurrency_4"
+        formal_result = result_dir / f"{stem}.json"
+        pkg.original_result.replace(formal_result)
+
+        old_window = pkg.windows_dir / f"{RESULT_STEM}.json"
+        window = json.loads(old_window.read_text())
+        window.update(
+            {
+                "benchmark_type": "custom",
+                "result_path": f"agentic/conc_4/{stem}.json",
+            }
+        )
+        old_window.unlink()
+        (pkg.windows_dir / f"{stem}.json").write_text(json.dumps(window, indent=2))
+
+        manifest_path = pkg.power_dir / "manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        manifest["expected_windows"] = [
+            {"benchmark_type": "custom", "concurrency": 4}
+        ]
+        manifest["window_validations"][0].update(
+            {
+                "benchmark_type": "custom",
+                "window_file": f"windows/{stem}.json",
+            }
+        )
+        manifest_path.write_text(json.dumps(manifest, indent=2))
+        pkg.agg_result.write_text(
+            json.dumps(
+                {
+                    "hw": "h200",
+                    "conc": 4,
+                    "disagg": True,
+                    "num_prefill_gpu": 2,
+                    "num_decode_gpu": 2,
+                }
+            )
+        )
+
+        assert run_multinode_agentic_power(
+            result_dir=result_dir,
+            agg_result=pkg.agg_result,
+            power_dir=pkg.power_dir,
+            logs_root=pkg.logs_root,
+            expected_producer_sha=PRODUCER_SHA,
+            require_power=True,
+        ) == 0
+
+        agg = pkg.agg()
+        assert agg["power_valid"] == 1
+        assert agg["prefill_avg_power_w"] == 400.0
+        assert agg["decode_avg_power_w"] == 300.0
+        validation = json.loads((result_dir / "power_validation.json").read_text())
+        assert validation["selected_window"]["window_file"] == f"windows/{stem}.json"
 
     def test_trapezoid_matches_hand_computed_ramp(self, tmp_path):
         # node-d/0 ramps linearly 300 -> 364 W across the samples; the
@@ -296,8 +394,7 @@ class TestValidPackage:
         pkg = build_package(tmp_path, power_fn=ramp)
         assert pkg.run() == 0
         energy = pkg.sidecar()["per_gpu_energy_j"]["node-d/GPU-node-d-0"]
-        expected = (302.0 + 362.0) / 2.0 * 60.0
-        assert abs(energy - expected) / expected < 1e-9
+        assert energy == pytest.approx(19_920.0, rel=1e-9)
 
 
 class TestVerdictAndIdentityGates:
@@ -439,6 +536,24 @@ class TestTopologyGates:
     def test_role_counts_must_match_workflow_env(self, tmp_path):
         pkg = build_package(tmp_path)
         assert_invalid(pkg, "topology_env_mismatch", prefill_gpus=4, decode_gpus=2)
+
+    def test_aggregate_role_count_must_match_aggregate_topology(self, tmp_path):
+        pkg = build_package(tmp_path)
+        manifest_path = pkg.power_dir / "manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        for device in manifest["expected_devices"]:
+            for assignment in device["assignments"]:
+                assignment["worker_role"] = "agg"
+                assignment["het_group"] = None
+        manifest_path.write_text(json.dumps(manifest, indent=2))
+
+        assert_invalid(
+            pkg,
+            "topology_env_mismatch",
+            prefill_gpus=0,
+            decode_gpus=0,
+            aggregate_gpus=8,
+        )
 
     def test_roles_sharing_het_group_rejected(self, tmp_path):
         pkg = build_package(tmp_path)

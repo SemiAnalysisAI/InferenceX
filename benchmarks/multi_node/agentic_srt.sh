@@ -9,6 +9,24 @@ set -x
 INFMAX_CONTAINER_WORKSPACE="${INFMAX_CONTAINER_WORKSPACE:-/infmax-workspace}"
 source "$INFMAX_CONTAINER_WORKSPACE/benchmarks/benchmark_lib.sh"
 
+if [[ -n "${SRT_FRONTEND_HOST:-}" ]]; then
+    check_env_vars SRT_FRONTEND_PORT
+    export AIPERF_SERVER_URL="http://${SRT_FRONTEND_HOST}:${SRT_FRONTEND_PORT}"
+fi
+
+# benchmark_lib deliberately clears inherited MAX_MODEL_LEN for AgentX so a
+# workflow default cannot silently truncate a model's native context. Native
+# srt-slurm topologies may still expose a smaller, explicit service limit (for
+# example when both P/D roles are configured identically below model-native
+# context). Restore that limit only through this dedicated opt-in.
+if [[ -n "${AIPERF_MAX_CONTEXT_LENGTH:-}" ]]; then
+    if ! [[ "$AIPERF_MAX_CONTEXT_LENGTH" =~ ^[1-9][0-9]*$ ]]; then
+        echo "ERROR: AIPERF_MAX_CONTEXT_LENGTH must be a positive integer" >&2
+        exit 1
+    fi
+    export MAX_MODEL_LEN="$AIPERF_MAX_CONTEXT_LENGTH"
+fi
+
 check_env_vars MODEL MODEL_PREFIX FRAMEWORK PRECISION CONC RESULT_FILENAME DURATION
 
 BASE_RESULT_DIR="${RESULT_DIR:-/logs/agentic}"
@@ -26,8 +44,12 @@ for concurrency in "${CONCURRENCIES[@]}"; do
     fi
 done
 
+
 resolve_trace_source
 install_agentic_deps
+if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
+    _wait_for_openai_chat_route --port "$PORT"
+fi
 
 wait_for_agentic_servers_idle() {
     local timeout_seconds="${AIPERF_DRAIN_TIMEOUT_SECONDS:-1800}"
@@ -77,6 +99,8 @@ while time.monotonic() < deadline:
             worker_metrics = fetch_metrics(worker_url)
             worker_active += metric_sum(worker_metrics, "vllm:num_requests_running")
             worker_active += metric_sum(worker_metrics, "vllm:num_requests_waiting")
+            worker_active += metric_sum(worker_metrics, "trtllm_num_requests_running")
+            worker_active += metric_sum(worker_metrics, "trtllm_num_requests_waiting")
         print(
             f"Agentic drain status: frontend_active={frontend_active:g} "
             f"worker_running_or_waiting={worker_active:g}",

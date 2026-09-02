@@ -6,6 +6,10 @@ on:
       runner:
         required: true
         type: string
+      node-count:
+        description: "Total Slurm nodes required by this benchmark"
+        required: true
+        type: number
       priority:
         description: "Higher-is-sooner CI priority score"
         required: true
@@ -138,6 +142,16 @@ on:
         type: boolean
         required: false
         default: false
+      eval-framework:
+        description: "Eval runner (lm-eval, swebench, kimi-vendor, minimax-vendor, or bfcl)"
+        type: string
+        required: false
+        default: "lm-eval"
+      eval-suite:
+        description: "Eval suite (kimi_tool_call_schema, kimi_tool_call_schema_full, minimax_m3_smoke, minimax_m3_full, bfcl_smoke, bfcl_vllm_minimax_m3, or bfcl_vllm_kimi); empty for lm-eval and swebench"
+        type: string
+        required: false
+        default: ""
       eval-conc:
         description: "Concurrency value or space-separated list for eval requests (overrides default max-of-conc-list)"
         type: string
@@ -238,6 +252,8 @@ env:
   DECODE_HARDWARE: ${{ inputs.decode-hardware }}
   RUN_EVAL: ${{ inputs.run-eval }}
   EVAL_ONLY: ${{ inputs.eval-only }}
+  EVAL_FRAMEWORK: ${{ inputs.eval-framework }}
+  EVAL_SUITE: ${{ inputs.eval-suite }}
   EVAL_CONC: ${{ inputs.eval-conc }}
   EVAL_LIMIT: ${{ inputs.eval-limit }}
   SWEBENCH_GEN_MODE: ${{ inputs.swebench-gen-mode }}
@@ -288,19 +304,40 @@ jobs:
       ${{ fromJSON(
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
         (
-          inputs.skip-queue-pr != '' &&
-          format(
-            '["self-hosted",{0},{1},{2},{3}]',
-            toJSON(inputs.runner),
-            toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
-            toJSON(format('ci-attempt-{0}', github.run_attempt)),
-            toJSON(format('ci-skip-queue-pr-{0}', inputs.skip-queue-pr))
+          vars.NODE_SLOT_SCHEDULER_ENABLED == 'true' &&
+          (
+            inputs.skip-queue-pr != '' &&
+            format(
+              '["self-hosted",{0},{1},{2},{3},{4}]',
+              toJSON(inputs.runner),
+              toJSON(format('nodes:{0}', inputs.node-count)),
+              toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
+              toJSON(format('ci-attempt-{0}', github.run_attempt)),
+              toJSON(format('ci-skip-queue-pr-{0}', inputs.skip-queue-pr))
+            ) ||
+            format(
+              '["self-hosted",{0},{1},{2},{3}]',
+              toJSON(inputs.runner),
+              toJSON(format('nodes:{0}', inputs.node-count)),
+              toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
+              toJSON(format('ci-attempt-{0}', github.run_attempt))
+            )
           ) ||
-          format(
-            '["self-hosted",{0},{1},{2}]',
-            toJSON(inputs.runner),
-            toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
-            toJSON(format('ci-attempt-{0}', github.run_attempt))
+          (
+            inputs.skip-queue-pr != '' &&
+            format(
+              '["self-hosted",{0},{1},{2},{3}]',
+              toJSON(inputs.runner),
+              toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
+              toJSON(format('ci-attempt-{0}', github.run_attempt)),
+              toJSON(format('ci-skip-queue-pr-{0}', inputs.skip-queue-pr))
+            ) ||
+            format(
+              '["self-hosted",{0},{1},{2}]',
+              toJSON(inputs.runner),
+              toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
+              toJSON(format('ci-attempt-{0}', github.run_attempt))
+            )
           )
         ) ||
         format('[{0}]', toJSON(inputs.runner))
@@ -322,11 +359,38 @@ jobs:
       - name: Slurm cleanup (pre-run)
         run: &slurm-cleanup |
           if command -v squeue >/dev/null 2>&1; then
-            echo "[Slurm] Cleaning up jobs named: ${{ runner.name }} ..."
-            scancel --user="$USER" --name="${{ runner.name }}" || true
-            while [ -n "$(squeue --user="$USER" --name='${{ runner.name }}' --noheader --format='%i')" ]; do
-              squeue --user="$USER" --name="${{ runner.name }}"
-              sleep 5
+            for job_name in "${{ runner.name }}" "inferencex-${{ runner.name }}"; do
+              echo "[Slurm] Cleaning up jobs named: $job_name ..."
+              scancel --user="$USER" --name="$job_name" || true
+              while [ -n "$(squeue --user="$USER" --name="$job_name" --noheader --format='%i')" ]; do
+                squeue --user="$USER" --name="$job_name"
+                sleep 5
+              done
+            done
+          fi
+
+      - name: Repair stale git state (pre-run)
+        run: |
+          # Interrupted runs leave index.lock files and corrupt submodule git
+          # dirs behind in the persistent self-hosted workspace, and both make
+          # actions/checkout fail before any benchmark starts. The runner
+          # executes one job at a time, so any lock found here is stale by
+          # definition. Grouping dirs (e.g. .git/modules/utils) hold only
+          # nested module dirs, so any dir carrying top-level files is a
+          # module git dir — a truncated clone may lack HEAD entirely, and a
+          # git dir whose HEAD does not resolve to a commit is dropped
+          # together with its worktree so checkout re-clones it.
+          repo_dir="${{ github.workspace }}"
+          if [ -d "${repo_dir}/.git" ]; then
+            find "${repo_dir}/.git" -name index.lock -type f -delete || true
+            for gitdir in "${repo_dir}"/.git/modules/* "${repo_dir}"/.git/modules/*/*; do
+              [ -d "${gitdir}" ] || continue
+              [ -n "$(find "${gitdir}" -maxdepth 1 -type f -print -quit)" ] || continue
+              if ! git --git-dir="${gitdir}" rev-parse --verify 'HEAD^{commit}' >/dev/null 2>&1; then
+                rel="${gitdir##*/.git/modules/}"
+                echo "[git-repair] Removing corrupt submodule state: ${rel}"
+                rm -rf "${gitdir}" "${repo_dir:?}/${rel}"
+              fi
             done
           fi
 
@@ -351,6 +415,9 @@ jobs:
           fi
           # Export RESULT_FILENAME early so it's available for artifact uploads even if cancelled
           echo "RESULT_FILENAME=${RESULT_FILENAME}" >> "$GITHUB_ENV"
+          echo "EVAL_ARTIFACT_RECIPE=${RECIPE_FINGERPRINT:0:16}" >> "$GITHUB_ENV"
+          eval_artifact_conc="$(python3 -c 'import hashlib,os; print(hashlib.sha256(os.environ["CONC_LIST"].encode()).hexdigest()[:12])')"
+          echo "EVAL_ARTIFACT_CONC=${eval_artifact_conc}" >> "$GITHUB_ENV"
 
           export ${{ join(fromJson(inputs.prefill-additional-settings), ' ') }} ${{ join(fromJson(inputs.decode-additional-settings), ' ') }}
           export IS_MULTINODE=true
@@ -476,14 +543,17 @@ jobs:
         if: ${{ always() && (env.RUN_EVAL == 'true' || inputs.eval-only) }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: eval_${{ env.RESULT_FILENAME }}
+          name: eval_${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_p${{ env.PREFILL_NUM_WORKERS }}x${{ env.PREFILL_TP }}p${{ env.PREFILL_PP_SIZE }}c${{ env.PREFILL_DCP_SIZE }}k${{ env.PREFILL_PCP_SIZE }}e${{ env.PREFILL_EP }}d${{ env.PREFILL_DP_ATTN }}_d${{ env.DECODE_NUM_WORKERS }}x${{ env.DECODE_TP }}p${{ env.DECODE_PP_SIZE }}c${{ env.DECODE_DCP_SIZE }}k${{ env.DECODE_PCP_SIZE }}e${{ env.DECODE_EP }}d${{ env.DECODE_DP_ATTN }}_g${{ env.DISAGG }}_r${{ env.EVAL_ARTIFACT_RECIPE }}_c${{ env.EVAL_ARTIFACT_CONC }}_kv${{ env.KV_OFFLOADING }}-${{ env.KV_OFFLOAD_BACKEND }}_spec${{ env.SPEC_DECODING }}_${{ env.EVAL_FRAMEWORK }}_${{ env.EVAL_SUITE }}_${{ runner.name }}_${{ github.run_attempt }}
           path: |
             meta_env.json
             results*.json
+            *_report.json
+            *_results.jsonl
             sample*.jsonl
             agent_preds.json
             predictions.jsonl
             swebench_report_*.json
+            *_artifacts.tar.gz
             *.traj*
           if-no-files-found: ${{ inputs.eval-only && 'error' || 'ignore' }}
 
@@ -501,6 +571,9 @@ jobs:
         run: |
           rm -f meta_env.json || true
           rm -f results*.json || true
+          rm -f -- ./*_report.json || true
+          rm -f -- ./*_results.jsonl || true
+          rm -f -- ./*_artifacts.tar.gz || true
           rm -f sample*.jsonl || true
           rm -f agent_preds.json predictions.jsonl swebench_report_*.json *.traj* || true
 

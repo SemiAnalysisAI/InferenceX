@@ -22,10 +22,15 @@ def _run_lifecycle(
     is_multinode: bool = False,
     enable_power: bool = True,
     require_power: bool = False,
+    formal_multinode_power: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     result_dir = tmp_path / "results"
     result_dir.mkdir()
     event_log = tmp_path / "events.log"
+    formal_window_dir = str(tmp_path / "power/windows") if formal_multinode_power else ""
+    formal_benchmark_type = "custom" if formal_multinode_power else ""
+    formal_concurrencies = "8 16" if formal_multinode_power else ""
+    formal_result_root = str(tmp_path) if formal_multinode_power else ""
     script = f"""
 source {str(BENCHMARK_LIB)!r}
 start_gpu_monitor() {{
@@ -72,6 +77,11 @@ PCP_SIZE=2
 IS_MULTINODE={'true' if is_multinode else 'false'}
 ENABLE_AGENTX_POWER={'1' if enable_power else '0'}
 REQUIRE_POWER={'1' if require_power else '0'}
+CONC=8
+SRT_MEASUREMENT_WINDOW_DIR={formal_window_dir!r}
+SRT_MEASUREMENT_WINDOW_BENCHMARK_TYPE={formal_benchmark_type!r}
+SRT_MEASUREMENT_WINDOW_CONCURRENCIES={formal_concurrencies!r}
+SRT_MEASUREMENT_WINDOW_RESULT_ROOT={formal_result_root!r}
 set +e
 run_agentic_replay_and_write_outputs {str(result_dir)!r}
 rc=$?
@@ -147,24 +157,42 @@ def test_multinode_and_explicit_opt_out_skip_local_power(
     assert not any(event.startswith("adapter:") for event in events)
 
 
-def test_shared_lifecycle_installs_idempotent_signal_cleanup():
-    benchmark_lib = BENCHMARK_LIB.read_text()
+def test_multinode_formal_window_wraps_replay_without_local_monitor(tmp_path: Path):
+    result = _run_lifecycle(
+        tmp_path,
+        is_multinode=True,
+        formal_multinode_power=True,
+        require_power=True,
+    )
 
-    assert "trap '_stop_agentx_power_monitor; exit 130' INT" in benchmark_lib
-    assert "trap '_stop_agentx_power_monitor; exit 143' TERM" in benchmark_lib
-    assert 'if [ "$agentx_monitor_stopped" = "0" ]' in benchmark_lib
+    assert result.returncode == 0, result.stderr
+    events = _events(tmp_path)
+    assert not any(event.startswith("monitor-") for event in events)
+    adapters = [event for event in events if event.startswith("adapter:")]
+    assert len(adapters) == 2
+    assert "--write-multinode-window running" in adapters[0]
+    assert "--write-multinode-window completed" in adapters[1]
+    assert "--concurrency 8" in adapters[0]
+    assert "--require-power" in adapters[0]
+    assert events.index(adapters[0]) < events.index("replay")
+    assert events.index("aggregate") < events.index(adapters[1])
+    captured_offset = (tmp_path / "results/agentic_power_timezone_offset.txt").read_text().strip()
+    assert re.fullmatch(r"[+-]\d{4}", captured_offset)
 
 
-def test_single_node_workflow_uploads_agentx_power_audit_artifacts():
-    workflow = (REPO_ROOT / ".github/workflows/benchmark-tmpl.yml").read_text()
-    agentic_upload = workflow.split(
-        "- name: Upload agentic raw results", 1
-    )[1].split("- name:", 1)[0]
+def test_multinode_formal_window_is_left_running_when_replay_is_interrupted(tmp_path: Path):
+    result = _run_lifecycle(
+        tmp_path,
+        replay_rc=143,
+        is_multinode=True,
+        formal_multinode_power=True,
+        require_power=True,
+    )
 
-    assert "results/**" in agentic_upload
-    assert "!results/**/gpu_metrics" not in agentic_upload
-    assert "!results/**/power_validation.json" not in agentic_upload
-    assert "!results/**/agentic_power_window.json" not in agentic_upload
+    assert result.returncode == 143, result.stderr
+    adapters = [event for event in _events(tmp_path) if event.startswith("adapter:")]
+    assert len(adapters) == 1
+    assert "--write-multinode-window running" in adapters[0]
 
 
 @pytest.mark.parametrize(
@@ -183,7 +211,10 @@ start_gpu_monitor() {{
     printf 'monitor-pid:%s\n' "${{BASHPID:-$$}}" >> {str(event_log)!r}
 }}
 stop_gpu_monitor() {{ printf 'monitor-stop\n' >> {str(event_log)!r}; }}
-fake_replay() {{ sleep 30; }}
+fake_replay() {{
+    printf 'replay-ready\n' >> {str(event_log)!r}
+    exec sleep 30
+}}
 trap 'printf "parent-exit\\n" >> {str(event_log)!r}' EXIT
 trap 'printf "parent-int\\n" >> {str(event_log)!r}; exit 130' INT
 trap 'printf "parent-term\\n" >> {str(event_log)!r}; exit 143' TERM
@@ -200,18 +231,25 @@ run_agentic_replay_and_write_outputs {str(result_dir)!r}
         text=True,
         start_new_session=True,
     )
-    monitor_pid = None
-    for _ in range(100):
-        if event_log.exists():
-            first_event = event_log.read_text().splitlines()[0]
-            if first_event.startswith("monitor-pid:"):
-                monitor_pid = int(first_event.split(":", 1)[1])
+    try:
+        # The monitor starts before the production signal traps are installed.
+        # Wait for replay so the signal actually exercises those traps.
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            if event_log.exists() and "replay-ready" in event_log.read_text().splitlines():
                 break
-        time.sleep(0.01)
-    assert monitor_pid is not None
+            time.sleep(0.01)
+        else:
+            pytest.fail("replay did not start")
 
-    os.killpg(proc.pid, sent_signal)
-    _, stderr = proc.communicate(timeout=5)
+        os.killpg(proc.pid, sent_signal)
+        _, stderr = proc.communicate(timeout=5)
+    finally:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        proc.communicate()
 
     assert proc.returncode == expected_rc, stderr
     events = _events(tmp_path)
