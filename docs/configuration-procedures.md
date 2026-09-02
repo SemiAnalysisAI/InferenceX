@@ -144,6 +144,8 @@ A missing/unset `CONFIG_FILE` silently selects the image's `/etc/epp/config.yaml
 
 For the B200 DSpark AgentX keys, select `agentic-coding`, `spec-decoding: mtp`, and explicit `kv-offloading`. `server.sh` uses the shared AgentX client via `llm-d/agentic.sh`, with no fixed context/sequence cap. `recipe.py` loads the committed DSpark thinking-on golden AL for throughput; `EVAL_ONLY=true` keeps real verification. Mooncake's embedded store is **DRAM offloading even with `enable_offload: false`** (that flag controls SSD), so declare `kv-offloading: dram`, `kv-offload-backend: { name: mooncake }`, and `dram-utilization`; the runtime divides the generated per-node budget among GPU ranks. The plain TP8/DEP8 arms declare `none`. Bash inputs are explicit constants or caller-supplied values, not fallback expressions. Binary extraction requires an explicit `BINARIES_ENV_FILE`.
 
+llm-d exports the discovered vLLM `/metrics` endpoints as `AIPERF_METRIC_URLS` and `AIPERF_SERVER_METRICS_URLS`, checks that each returns vLLM metrics, and forwards them to AIPerf through `--server-metrics`. Scrapes use each serving node’s vLLM port, not Envoy or the P/D sidecar.
+
 ## Update an image
 
 Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../AGENTS.md#non-negotiable-benchmark-invariants), the matching master configs, runtime scripts, and checked-in recipes.

@@ -224,6 +224,7 @@ fi
 # Bring up vLLM engine (every node)
 # ----------------------------------------------------------------
 COMMON_ARGS=(
+    --host 0.0.0.0
     --port "$VLLM_PORT"
     --served-model-name "$MODEL_NAME"
     --trust-remote-code
@@ -384,6 +385,7 @@ if [[ ( "$ROLE" == "decode" && "$LWS_WORKER_INDEX" -eq 0 ) || \
     # ---- Write endpoints.yaml (file-discovery) ----
     # namespace must match EPP's --pool-namespace (file-discovery filters by it;
     # the schema default 'default' would drop every entry). See README.md.
+    export LLMD_ENDPOINTS_FILE=/tmp/endpoints.yaml
     python3 - <<PY
 import os, yaml
 NS = 'inferencex'
@@ -423,9 +425,9 @@ decode_group = 1 if decode_ep else max(1, dn // decode_workers)
 # dn == 0 -> decode_ips == [] -> add_role emits zero decode endpoints
 # (aggregated mode: everything routes through the 'prefill'-labeled pool).
 add_role('decode', decode_ips, SIDECAR_PORT, group_size=decode_group)
-yaml.safe_dump({'endpoints': endpoints}, open('/tmp/endpoints.yaml', 'w'))
+yaml.safe_dump({'endpoints': endpoints}, open(os.environ['LLMD_ENDPOINTS_FILE'], 'w'))
 print(f'endpoints.yaml ({len(endpoints)} endpoints):')
-print(open('/tmp/endpoints.yaml').read())
+print(open(os.environ['LLMD_ENDPOINTS_FILE']).read())
 PY
 
     # ---- Bring up EPP ----
