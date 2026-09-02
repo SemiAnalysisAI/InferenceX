@@ -44,9 +44,99 @@ set -x
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-wait_for_amd_gpu_clean
-
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE
+
+K3_PERF_VARIANT="${K3_PERF_VARIANT:-baseline}"
+
+# Sub-millisecond C1 changes cannot be adjudicated reliably across different
+# physical nodes. These variants keep one exclusive Slurm allocation while
+# running baseline -> candidate -> baseline with fresh server processes. The
+# candidate retains the standard results/aiperf_artifacts layout so the normal
+# workflow validation remains authoritative; both controls are uploaded below
+# results/same_node_aba/.
+case "$K3_PERF_VARIANT" in
+    m7tunedgemmaba)
+        K3_ABA_CANDIDATE=m7tunedgemm
+        ;;
+    *)
+        K3_ABA_CANDIDATE=""
+        ;;
+esac
+
+if [[ -n "$K3_ABA_CANDIDATE" ]]; then
+    if [[ "$CONC" != "1" || "${DCP_SIZE:-}" != "1" || "$KV_OFFLOADING" != "none" ]]; then
+        echo "Error: same-node A/B/A requires CONC=1, DCP_SIZE=1, and KV_OFFLOADING=none" >&2
+        exit 1
+    fi
+    if [[ "$DURATION" != "1200" || "${AIPERF_EXPERIMENTAL_FAST:-0}" != "0" ]]; then
+        echo "Error: same-node A/B/A requires DURATION=1200 and agentx-fast=false" >&2
+        exit 1
+    fi
+
+    root_result_dir="$RESULT_DIR"
+    root_result_filename="${RESULT_FILENAME:?RESULT_FILENAME must be set for same-node A/B/A}"
+    aba_dir="$root_result_dir/same_node_aba"
+    script_path="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+    node_name="${SLURMD_NODENAME:-$(hostname)}"
+
+    if [[ -e "$root_result_dir/aiperf_artifacts" || -e "$aba_dir" ]]; then
+        echo "Error: same-node A/B/A requires a fresh result directory" >&2
+        exit 1
+    fi
+    mkdir -p "$aba_dir"
+    printf 'node\t%s\nvariant\t%s\ncandidate\t%s\n' \
+        "$node_name" "$K3_PERF_VARIANT" "$K3_ABA_CANDIDATE" \
+        >"$aba_dir/manifest.tsv"
+
+    run_aba_arm() {
+        local label="$1"
+        local variant="$2"
+        local arm_result_dir="$3"
+        local arm_result_filename="$4"
+        local arm_output_dir="$5"
+
+        mkdir -p "$arm_result_dir"
+        printf '%s\t%s\t%s\t%s\n' \
+            "$label" "$variant" "$node_name" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            >>"$aba_dir/arm_starts.tsv"
+        K3_PERF_VARIANT="$variant" \
+            RESULT_DIR="$arm_result_dir" \
+            RESULT_FILENAME="$arm_result_filename" \
+            AGENTIC_OUTPUT_DIR="$arm_output_dir" \
+            bash "$script_path"
+        printf '%s\t%s\t%s\t%s\n' \
+            "$label" "$variant" "$node_name" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            >>"$aba_dir/arm_completions.tsv"
+    }
+
+    run_aba_arm \
+        baseline_pre baseline \
+        "$aba_dir/baseline_pre" \
+        "${root_result_filename}_aba_baseline_pre" \
+        "$aba_dir/baseline_pre"
+    run_aba_arm \
+        candidate "$K3_ABA_CANDIDATE" \
+        "$root_result_dir" \
+        "$root_result_filename" \
+        "$INFMAX_CONTAINER_WORKSPACE"
+    run_aba_arm \
+        baseline_post baseline \
+        "$aba_dir/baseline_post" \
+        "${root_result_filename}_aba_baseline_post" \
+        "$aba_dir/baseline_post"
+
+    cp "$INFMAX_CONTAINER_WORKSPACE/$root_result_filename.json" \
+        "$aba_dir/candidate_aggregate.json"
+    find "$root_result_dir" -type f \
+        ! -path '*/SHA256SUMS' -print0 \
+        | sort -z \
+        | xargs -0 sha256sum >"$aba_dir/SHA256SUMS"
+    printf 'Kimi-K3 same-node A/B/A completed: baseline -> %s -> baseline on %s\n' \
+        "$K3_ABA_CANDIDATE" "$node_name"
+    exit 0
+fi
+
+wait_for_amd_gpu_clean
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -91,7 +181,6 @@ export AITER_BF16_FP8_MOE_BOUND=0
 export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 export AITER_QUICK_REDUCE_QUANTIZATION=INT4
 
-K3_PERF_VARIANT="${K3_PERF_VARIANT:-baseline}"
 case "$K3_PERF_VARIANT" in
     baseline)
         ;;
@@ -136,6 +225,7 @@ export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
 # ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
+printf '%s\n' "${SLURMD_NODENAME:-unknown}" >"$RESULT_DIR/slurm_node.txt"
 
 SERVER_PID=""
 LMCACHE_PID=""

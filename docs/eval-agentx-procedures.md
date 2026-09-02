@@ -204,7 +204,11 @@ compare the resulting raw request records with the matching baseline before
 promoting the rows. The `tritonmla` arm disables only AITER MLA so target-model
 decode auto-selection uses `TRITON_MLA`; it keeps the rest of the AITER ROCm
 stack enabled and fails closed unless the selected backend is proven in the
-server log.
+server log. For sub-millisecond confirmation, `m7tunedgemmaba` retains one
+exclusive Slurm allocation and runs a fresh baseline, the exact-M=7 candidate,
+and a second fresh baseline for 1,200 seconds each. The candidate stays in the
+standard result layout; both controls and a node/arm manifest are stored under
+`results/same_node_aba/`.
 
 Targeted AgentX SWE-bench smoke eval (first ten instances, real agentic generation):
 

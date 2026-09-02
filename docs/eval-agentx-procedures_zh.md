@@ -202,7 +202,11 @@ recipe 不变。`m7tunedgemm` 分支只加入通过 changed-input graph replay
 `agentx-fast=false`，将 duration override 设为 1,200 秒，并在提升这些配置
 之前用匹配 baseline 对原始请求记录进行比较。`tritonmla` 分支只禁用 AITER
 MLA，使目标模型解码自动选择 `TRITON_MLA`；其余 AITER ROCm 路径保持启用，
-并且只有在服务日志明确证明后端选择成功时才继续运行。
+并且只有在服务日志明确证明后端选择成功时才继续运行。对于亚毫秒级结果，
+`m7tunedgemmaba` 会在同一个独占 Slurm 分配中依次运行全新 baseline、精确
+M=7 候选方案和第二个全新 baseline，每个阶段运行 1,200 秒。候选方案保留
+标准结果目录结构，两个 baseline 以及节点和阶段清单保存在
+`results/same_node_aba/` 下。
 
 目标 AgentX SWE-bench smoke eval（前十个 instance，真实 agentic generation）：
 
