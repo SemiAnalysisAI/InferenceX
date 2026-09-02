@@ -6794,3 +6794,11 @@
   description:
     - "Replace the floating ATOM latest tag with the exact image digest validated on MI355X."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable prefix caching by default in the MiniMax-M3 ATOM AgentX entrypoint for generated Actions runs."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

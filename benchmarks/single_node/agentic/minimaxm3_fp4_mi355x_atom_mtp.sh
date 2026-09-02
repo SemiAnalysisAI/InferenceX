@@ -293,7 +293,7 @@ ATOM_CMD=(
     "${SPEC_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
 )
-if [[ "${ENABLE_PREFIX_CACHING:-false}" != "true" ]]; then
+if [[ "${ENABLE_PREFIX_CACHING:-true}" != "true" ]]; then
     ATOM_CMD+=(--no-enable_prefix_caching)
 fi
 if declare -F write_command >/dev/null 2>&1; then
