@@ -1,22 +1,22 @@
 # DeepSeek-V4-Pro 1P1D ATOM P/D serving on MI355X. Native AToMesh
 # routes prefill/decode traffic while ATOM transfers KV state through
-# Mooncake TCP. The custom benchmark preserves the legacy 8k/1k search.
+# Mooncake's default RDMA transport. The custom benchmark preserves the
+# legacy 8k/1k search and request-length distribution.
 
 name: "mi355x-atom-dsv4-disagg-1p1d-tp8-8k1k"
 
 model:
   path: "hf:deepseek-ai/DeepSeek-V4-Pro"
-  container: "atom-nightly-202608251555"
+  container: "rocm/atom-dev:nightly_202606101403"
   precision: "fp4"
 
 identity:
   model:
     repo: "deepseek-ai/DeepSeek-V4-Pro"
   container:
-    image: "rocm/atom-dev:nightly_202608251555"
+    image: "rocm/atom-dev:nightly_202606101403"
   frameworks:
-    atom: "0.1.6rc1.dev336+g4e0848dcd"
-    atomesh: "4e0848dcdf94f3d4be0c1e3ce51db99bc93f8b8c"
+    atomesh: "087b82d9c1f630e79149ba37e6213257ec9a76f8"
 
 slurm:
   time_limit: "08:00:00"
@@ -36,20 +36,30 @@ frontend:
   enable_multiple_frontends: false
   args:
     policy: random
+    log-level: info
+    disable-health-check: true
+    disable-circuit-breaker: true
+    prometheus-port: 29100
+
+environment: &runtime_environment
+  HF_HOME: "/hf_hub_cache"
+  HF_HUB_CACHE: "/hf_hub_cache/hub"
+  HUGGINGFACE_HUB_CACHE: "/hf_hub_cache/hub"
+  # Same Mooncake/ROCm lookup order as env_atom.sh in the original image.
+  LD_LIBRARY_PATH: "/opt/venv/lib/python3.10/site-packages/mooncake:/opt/rocm/lib"
+  PYTHONUNBUFFERED: "1"
+  PYTHONDONTWRITEBYTECODE: "1"
+  SAFETENSORS_FAST_GPU: "1"
+  VLLM_LOG_LEVEL: "WARNING"
+  ATOM_LOG_LEVEL: "WARNING"
+  AITER_LOG_LEVEL: "WARNING"
+  LOG_LEVEL: "WARNING"
+  LOGLEVEL: "WARNING"
 
 backend:
   type: atom
   connector: mooncake
-  # The stable image predates Mooncake's ROCm DMA-BUF registration fix. TCP
-  # is the hardware-proven correctness transport; RDMA is validated separately
-  # when the fixed ATOM/Mooncake image is available.
-  mooncake_protocol: tcp
   prefill_environment: &worker_environment
-    HF_HOME: "/hf_hub_cache"
-    HF_HUB_CACHE: "/hf_hub_cache/hub"
-    HUGGINGFACE_HUB_CACHE: "/hf_hub_cache/hub"
-    PYTHONUNBUFFERED: "1"
-    OMP_NUM_THREADS: "1"
     ATOM_MOE_GU_ITLV: "1"
     AITER_BF16_FP8_MOE_BOUND: "0"
   decode_environment: *worker_environment
@@ -62,12 +72,20 @@ backend:
       no-enable_prefix_caching: true
       trust-remote-code: true
     decode:
+      cudagraph-capture-sizes: "[1,2,4,8,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,136,144,152,160,168,176,184,192,200,208,216,224,232,240,248,256]"
       kv_cache_dtype: fp8
       gpu-memory-utilization: 0.85
       max-num-seqs: 128
       block-size: 16
       no-enable_prefix_caching: true
       trust-remote-code: true
+
+# The legacy exclusive allocation exposed the full 128-core, unlimited-memory
+# node; do not inherit the shared small-model profile's 32-core / 128G limits.
+sbatch_directives:
+  cpus-per-task: "128"
+  mem: "0"
+  exclusive: ""
 
 srun_options:
   container-writable: ""
@@ -88,7 +106,7 @@ benchmark:
       tar -C /logs -czf "${result_root}/runtime-logs.tar.gz" . 2>/dev/null || true
     }
     trap archive_runtime_logs EXIT
-    for concurrency in 4 8 16 32 64 128; do
+    for concurrency in ${CONC_LIST}; do
       num_prompts=$((concurrency * 10))
       if (( num_prompts < 16 )); then num_prompts=16; fi
       python3 /infmax-workspace/utils/bench_serving/benchmark_serving.py \
@@ -100,7 +118,7 @@ benchmark:
         --dataset-name random \
         --random-input-len 8192 \
         --random-output-len 1024 \
-        --random-range-ratio 1.0 \
+        --random-range-ratio "${RANDOM_RANGE_RATIO:-0.8}" \
         --num-warmups "$((concurrency * 2))" \
         --num-prompts "${num_prompts}" \
         --max-concurrency "${concurrency}" \
@@ -113,6 +131,4 @@ benchmark:
         --result-filename "dsv4-atom-mi355x-disagg-1p1d-tp8-isl8192-osl1024-c${concurrency}.json"
     done
   env:
-    HF_HOME: /hf_hub_cache
-    HF_HUB_CACHE: /hf_hub_cache/hub
-    HUGGINGFACE_HUB_CACHE: /hf_hub_cache/hub
+    <<: *runtime_environment

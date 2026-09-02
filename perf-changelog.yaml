@@ -6854,8 +6854,7 @@
     - "Port the DeepSeek-V4-Pro FP4 MI355X ATOM disaggregated 8k/1k submission from the configuration-specific AMD launcher to srt-slurm ATOM orchestration and native AToMesh routing."
     - "Preserve all original search points: 1P1D TP8 at concurrency 4, 8, 16, 32, 64, and 128; 2P1D DPA+TP8 at concurrency 256, 512, 768, 1024, and 2048."
     - "Use the unchanged InferenceX benchmark_serving.py through the custom benchmark contract and remove the exact legacy wrapper plus its obsolete deprecated 1k/1k entry."
-    - "Use the hardware-proven Mooncake TCP transport for the initial correctness sweep; validate the updated ROCm RDMA path separately before changing production transport."
+    - "Keep the original image, Mooncake default RDMA transport, random length ratio 0.8, decode graph capture sizes, router options, and TP8 / DP-attention / TBO settings."
     - "Use the ATOM image's bundled native AToMesh binary directly, without Infera source overlays or Infera routing, and archive the complete runtime logs from the custom benchmark."
-    - "Run the current rocm/atom-dev nightly_202608251555 image at ATOM commit 4e0848dcdf94f3d4be0c1e3ce51db99bc93f8b8c, whose bundled native AToMesh and Mooncake implementation are used without downstream source patches."
-    - "Pin SemiAnalysisAI/srt-slurm PR #7 at c87d7b34b009be920896126013ad6dc74c5a99d5 so this ATOM/AToMesh port shares the latest validated AMD orchestration base, including native-router data-parallel rank preservation and ATOM recipe flag normalization."
+    - "Keep rocm/atom-dev:nightly_202606101403 and the original AToMesh revision 087b82d9c1f630e79149ba37e6213257ec9a76f8; use the shared launcher and srt-slurm PR #7 from base PR #2542."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2627
