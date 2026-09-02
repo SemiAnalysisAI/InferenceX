@@ -149,25 +149,18 @@ case "${KV_OFFLOAD_BACKEND:-}" in
       lmcache)
     require_agentic_kv_offload_backend "$KV_OFFLOAD_BACKEND"
 
-    # Keep the image's tested torch/ROCm stack and install only LMCache's
-    # missing runtime dependencies, same as the MiniMax-M3 lmcache arm.
-    LMCACHE_VERSION="0.5.5.dev60+rocm7.2"
-    LMCACHE_ROCM_INDEX="https://github.com/LMCache/LMCache/releases/expanded_assets/nightly-rocm"
+    # Keep the stock image's torch/ROCm stack and install the LMCache runtime
+    # dependencies used by the validated reference run.
+    LMCACHE_VERSION="0.5.5rc3+rocm7.2"
+    export KV_OFFLOAD_BACKEND_METADATA="{\"name\":\"lmcache\",\"version\":\"${LMCACHE_VERSION}\"}"
+    LMCACHE_RELEASE="v0.5.5rc3"
+    LMCACHE_ROCM_INDEX="https://github.com/LMCache/LMCache/releases/expanded_assets/${LMCACHE_RELEASE}-rocm"
     agentic_pip_install --quiet --no-cache-dir --no-deps \
         "sortedcontainers==2.4.0" \
         "opentelemetry-exporter-prometheus==0.61b0" \
         "cupy-rocm-7-0==14.1.1" \
         "lmcache==${LMCACHE_VERSION}" --find-links "$LMCACHE_ROCM_INDEX"
 
-    # LMCache 0.5.5's transfer-channel layer eagerly imports the Mooncake
-    # backend (mooncake_te_impl.py -> `from mooncake.engine import
-    # TransferEngine`), whose native .so resolves all of its DT_NEEDED libs at
-    # import. The vLLM ROCm image ships none of them, so the import sanity
-    # check below (and the LMCache server) would otherwise fail with
-    # "ImportError: lib*.so: cannot open shared object file" (first libglog,
-    # then libjsoncpp, ...). Provision Mooncake's full runtime lib set from the
-    # distro before importing. apt-get install is idempotent, so run it
-    # whenever any of the libs is still missing rather than gating on one.
     LMCACHE_NATIVE_LIBS=(libglog.so.0 libjsoncpp.so.25 libibverbs.so.1 librdmacm.so.1 libnuma.so.1)
     for lib in "${LMCACHE_NATIVE_LIBS[@]}"; do
         if ! ldconfig -p | grep -q "$lib"; then
@@ -178,17 +171,16 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         fi
     done
     python3 -c \
-        "import cupy; import lmcache.integration.vllm.lmcache_mp_connector; import opentelemetry.exporter.prometheus" \
-        >/dev/null
+        "import cupy; import opentelemetry.exporter.prometheus; from lmcache.v1.multiprocess.http_server import run_http_server"
 
     # One MP server for the node, per the Kimi-K3 recipe
     # (docs.lmcache.ai/recipes/kimi_k3.html), with --chunk-size sized for
     # THIS stack rather than the recipe's CUDA-path 768: the connector
     # requires the chunk to be a multiple of every engine KV group's
-    # tokens_per_block, and the hybrid KDA/MLA layout here registers
-    # attention groups at 1536 ("Setting attention block size to 1536",
-    # run 31644990546) plus a KDA state group at 3072 (run 31645828378),
-    # so 3072 is the minimum valid chunk. The multi-group layout also
+    # tokens_per_block. The hybrid KDA/MLA layout registers attention groups
+    # at 1536 tokens and a KDA state group at 3072. Use 12288 for every point
+    # so it is divisible by both group sizes and matches the tested LMCache
+    # scheduler geometry. The multi-group layout also
     # requires one object group per sliding-window size:
     # --separate-object-groups.
     LMCACHE_PORT=6555
@@ -205,7 +197,7 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         --http-port "$LMCACHE_HTTP_PORT"
         --l1-size-gb "$LMCACHE_L1_SIZE_GB"
         --l1-init-size-gb 10
-        --chunk-size 3072
+        --chunk-size 12288
         --separate-object-groups
         --enable-extra-logging
         --extra-logging-interval 30
@@ -248,19 +240,23 @@ if [ "$EP_SIZE" -gt 1 ]; then
 fi
 
 # ---- Speculative / Util------------------------------------------------------
-case "$CONC" in
-    # No KV offload; the working set fits in HBM.
-    1)
+case "${SPEC_DECODING:-mtp}:$CONC" in
+    mtp:1)
         SYNTHETIC_ACCEPT_LEN=3.75
         SPEC_NUM_TOKENS=6
         GPU_MEM_UTIL=0.9
         MAX_NUM_BATCHED_TOKENS=16384
         ;;
-    2|4|8|10|12|14)
+    mtp:2|mtp:4|mtp:8|mtp:10|mtp:12|mtp:14)
         SYNTHETIC_ACCEPT_LEN=3.00
         SPEC_NUM_TOKENS=3
         GPU_MEM_UTIL=0.9
         MAX_NUM_BATCHED_TOKENS=8192
+        ;;
+    none:40)
+        SPEC_NUM_TOKENS=0
+        GPU_MEM_UTIL=0.88
+        MAX_NUM_BATCHED_TOKENS=16384
         ;;
     *)
         SPEC_NUM_TOKENS=0
@@ -285,10 +281,24 @@ else
 fi
 
 # ---- HIP graph ------------------------------------------------------------
-MAX_NUM_SEQS=$((2 * CONC))
-MAX_CUDAGRAPH_CAPTURE_SIZE=$((MAX_NUM_SEQS * (1 + SPEC_NUM_TOKENS)))
-CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 2 "$MAX_CUDAGRAPH_CAPTURE_SIZE")"
-COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}")
+SERVER_STREAM_ARGS=()
+PREFIX_MATCH_ARGS=()
+ATTENTION_CONFIG='{"mla_prefill_backend":"ROCM_AITER_FA"}'
+COMPILATION_CUSTOM_OPS='["+fused_rms_norm_gated"]'
+if [ "${SPEC_DECODING:-mtp}:$CONC" = "none:40" ]; then
+    MAX_NUM_SEQS=80
+    MAX_CUDAGRAPH_CAPTURE_SIZE=4096
+    CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 1 "$MAX_NUM_SEQS"),128,256,512,1024,2048,4096"
+    SERVER_STREAM_ARGS=(--stream-interval 10)
+    PREFIX_MATCH_ARGS=(--prefix-match-unit 128)
+    ATTENTION_CONFIG='{"mla_prefill_backend":"ROCM_AITER_FA","use_prefill_query_quantization":true}'
+    COMPILATION_CUSTOM_OPS='["+fused_rms_norm_gated","+quant_fp8","+grouped_topk","+sparse_attn_indexer","none"]'
+else
+    MAX_NUM_SEQS=$((2 * CONC))
+    MAX_CUDAGRAPH_CAPTURE_SIZE=$((MAX_NUM_SEQS * (1 + SPEC_NUM_TOKENS)))
+    CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 2 "$MAX_CUDAGRAPH_CAPTURE_SIZE")"
+fi
+COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":$COMPILATION_CUSTOM_OPS,\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}")
 
 echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
@@ -305,8 +315,18 @@ fi
 CP_ARGS=()
 ATTN_BE_ARGS=()
 if [ "$DCP_SIZE" -gt 1 ]; then
-    CP_ARGS+=(--decode-context-parallel-size "$DCP_SIZE" --dcp-comm-backend a2a)
-    ATTN_BE_ARGS+=(--attention-backend TRITON_MLA)
+    CP_KV_CACHE_INTERLEAVE_SIZE=1
+    if [ "${KV_OFFLOAD_BACKEND:-}" = "lmcache" ]; then
+        CP_KV_CACHE_INTERLEAVE_SIZE=1536
+    fi
+    CP_ARGS+=(
+        --decode-context-parallel-size "$DCP_SIZE"
+        --dcp-comm-backend a2a
+        --cp-kv-cache-interleave-size "$CP_KV_CACHE_INTERLEAVE_SIZE"
+    )
+    ATTN_BE_ARGS+=(--attention-backend ROCM_AITER_MLA)
+    export VLLM_ALLOW_DCP_FULL_CUDAGRAPH=1
+    export PREFIX_CACHING_HASH_ALGO=sha256
 fi
 export VLLM_USE_DIRECT_DCP_A2A=0
 export VLLM_USE_DIRECT_DCP_Q_GATHER=0
@@ -329,10 +349,12 @@ VLLM_CMD=(
     --tool-call-parser kimi_k3
     --reasoning-parser kimi_k3
     --max-model-len 1048576
+    "${SERVER_STREAM_ARGS[@]}"
     --enable-prefix-caching
+    "${PREFIX_MATCH_ARGS[@]}"
     --kv-cache-dtype "fp8"
     --max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS"
-    --attention-config '{"mla_prefill_backend":"ROCM_AITER_FA"}'
+    --attention-config "$ATTENTION_CONFIG"
     "${ATTN_BE_ARGS[@]}"
     "${COMPILATION_CONFIG_ARGS[@]}"
     "${SPEC_ARGS[@]}"
