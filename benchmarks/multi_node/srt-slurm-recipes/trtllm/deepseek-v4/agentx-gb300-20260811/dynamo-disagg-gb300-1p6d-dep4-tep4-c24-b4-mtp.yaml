@@ -9,11 +9,10 @@ identity:
   container:
     image: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc24
   frameworks:
-    dynamo: 1.4.0.dev20260807
     tensorrt_llm: 1.3.0rc24
 dynamo:
   install: true
-  wheel: 1.4.0.dev20260807
+  hash: 2cbbdc863c336c2cfffa2a3668e2a6661801b259
   request_plane: tcp
 health_check:
   max_attempts: 1440
@@ -90,6 +89,7 @@ backend:
       moe_expert_parallel_size: 4
       pipeline_parallel_size: 1
       print_iter_log: true
+      enable_iter_perf_stats: true
       return_perf_metrics: false
       scheduler_config:
         capacity_scheduler_policy: MAX_UTILIZATION
@@ -129,6 +129,7 @@ backend:
       num_postprocess_workers: 4
       pipeline_parallel_size: 1
       print_iter_log: true
+      enable_iter_perf_stats: true
       return_perf_metrics: false
       sparse_attention_config:
         algorithm: deepseek_v4
@@ -149,6 +150,7 @@ frontend:
     PRECISION: fp4
     CONC: '24'
     DURATION: '3600'
+    KV_OFFLOADING: dram
     ETCD_LEASE_TTL: '120'
     DYN_ROUTER_QUEUE_THRESHOLD: None
     DYN_TOKENIZER_CACHE: '1'
@@ -174,6 +176,7 @@ benchmark:
     PRECISION: fp4
     CONC: '24'
     DURATION: '3600'
+    KV_OFFLOADING: dram
     INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
     RESULT_DIR: /logs/agentic
     PORT: '8000'
@@ -181,6 +184,7 @@ benchmark:
     AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: '14400'
     AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
     AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
+    AIPERF_REQUIRED_SERVER_METRIC_PREFIX: trtllm_kv_cache_utilization
     AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
     HF_HUB_CACHE: /hf_hub_cache
     WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126

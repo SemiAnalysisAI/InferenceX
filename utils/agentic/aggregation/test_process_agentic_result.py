@@ -1313,6 +1313,133 @@ def test_processor_normalizes_sglang_server_metrics(tmp_path: Path):
     assert agg["server_metrics"]["tokens"]["prompt_by_source"]["computed"] == 500.0
 
 
+def test_processor_normalizes_trtllm_server_metrics(tmp_path: Path):
+    result_dir = _write_fixture(tmp_path)
+    artifact = result_dir / "aiperf_artifacts"
+    prefill_url = "http://10.0.0.1:7500/metrics"
+    decode_url = "http://10.0.0.2:7501/metrics"
+    server_metrics = {
+        "metrics": {
+            "dynamo_frontend_input_sequence_tokens": {
+                "type": "counter",
+                "series": [{"stats": {"total": 1000.0}}],
+            },
+            "dynamo_frontend_output_tokens": {
+                "type": "counter",
+                "series": [{"stats": {"total": 200.0}}],
+            },
+            "trtllm_prompt_tokens_total": {
+                "type": "counter",
+                "series": [
+                    {
+                        "endpoint_url": prefill_url,
+                        "labels": {"dynamo_component": "prefill"},
+                        "stats": {"total": 600.0},
+                    },
+                    {
+                        "endpoint_url": decode_url,
+                        "labels": {"dynamo_component": "backend"},
+                        "stats": {"total": 400.0},
+                    },
+                ],
+            },
+            "trtllm_generation_tokens_total": {
+                "type": "counter",
+                "series": [
+                    {
+                        "endpoint_url": decode_url,
+                        "labels": {"dynamo_component": "backend"},
+                        "stats": {"total": 200.0},
+                    }
+                ],
+            },
+            "trtllm_prompt_cached_tokens_total": {
+                "type": "counter",
+                "series": [
+                    {"endpoint_url": prefill_url, "stats": {"total": 200.0}},
+                    {"endpoint_url": decode_url, "stats": {"total": 300.0}},
+                ],
+            },
+            "trtllm_kv_cache_hit_rate": {
+                "type": "gauge",
+                "series": [
+                    {"endpoint_url": prefill_url, "stats": {"avg": 0.4}},
+                    {"endpoint_url": decode_url, "stats": {"avg": 0.6}},
+                ],
+            },
+            "trtllm_kv_cache_utilization": {
+                "type": "gauge",
+                "series": [
+                    {"endpoint_url": prefill_url, "stats": {"max": 0.7}},
+                    {"endpoint_url": decode_url, "stats": {"max": 0.8}},
+                ],
+            },
+            "trtllm_kv_cache_host_utilization": {
+                "type": "gauge",
+                "series": [{"endpoint_url": prefill_url, "stats": {"max": 0.25}}],
+            },
+            "trtllm_kv_cache_offload_bytes_total": {
+                "type": "counter",
+                "series": [
+                    {
+                        "endpoint_url": prefill_url,
+                        "labels": {"disaggregation_mode": "prefill"},
+                        "stats": {"total": 4096.0},
+                    }
+                ],
+            },
+            "trtllm_kv_cache_onboard_bytes_total": {
+                "type": "counter",
+                "series": [
+                    {
+                        "endpoint_url": decode_url,
+                        "labels": {"disaggregation_mode": "decode"},
+                        "stats": {"total": 2048.0},
+                    }
+                ],
+            },
+            "trtllm_kv_cache_max_blocks": {
+                "type": "gauge",
+                "series": [
+                    {"endpoint_url": prefill_url, "stats": {"max": 100.0}},
+                    {"endpoint_url": decode_url, "stats": {"max": 200.0}},
+                ],
+            },
+            "trtllm_kv_cache_tokens_per_block": {
+                "type": "gauge",
+                "series": [
+                    {"endpoint_url": prefill_url, "stats": {"max": 64.0}},
+                    {"endpoint_url": decode_url, "stats": {"max": 64.0}},
+                ],
+            },
+        }
+    }
+    with open(artifact / "server_metrics_export.json", "w") as f:
+        json.dump(server_metrics, f)
+
+    agg = _run_processor(
+        result_dir,
+        tmp_path / "out",
+        env_overrides={"FRAMEWORK": "dynamo-trt", "IS_MULTINODE": "true"},
+    )
+
+    assert agg["server_metrics"]["adapter"] == "trtllm"
+    _assert_stable_server_metrics_schema(agg)
+    assert agg["server_metrics"]["tokens"]["prompt_total"] == 1000
+    assert agg["server_metrics"]["tokens"]["generation_total"] == 200
+    assert agg["server_metrics"]["cache"]["gpu_cache_hit_rate"] == pytest.approx(0.5)
+    assert agg["server_metrics"]["cache"]["overall_cache_hit_rate"] == pytest.approx(0.5)
+    assert agg["server_metrics"]["kv_cache"]["gpu_usage_pct"] == pytest.approx(0.8)
+    assert agg["server_metrics"]["kv_cache"]["cpu_usage_pct"] == pytest.approx(0.25)
+    assert agg["server_metrics"]["kv_cache"]["gpu_total_tokens"] == 19_200
+    assert agg["server_metrics"]["kv_offload"]["bytes_gpu_to_cpu"] == 4096
+    assert agg["server_metrics"]["kv_offload"]["bytes_cpu_to_gpu"] == 2048
+    assert {source["role"] for source in agg["server_metrics"]["sources"]} == {
+        "prefill",
+        "decode",
+    }
+
+
 def test_processor_normalizes_dynamo_server_metrics(tmp_path: Path):
     result_dir = _write_fixture(tmp_path)
     artifact = result_dir / "aiperf_artifacts"
