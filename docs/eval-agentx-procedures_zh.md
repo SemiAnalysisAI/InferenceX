@@ -210,7 +210,7 @@ gh workflow run e2e-tests.yml --repo SemiAnalysisAI/InferenceX --ref "$REF" \
 
 Fast 结果只能作为 bring-up 证据，绝不能替代 canonical candidate。小于 900 秒的 duration 或 `AIPERF_UNSAFE_OVERRIDE=true` 会添加 AIPerf 的 `--unsafe-override` 并将 submission 标记为无效；只能用于 smoke 诊断（[源码](../benchmarks/benchmark_lib.sh#L2266-L2268)）。Fast 运行健康后，必须对完全相同的 candidate 进行 canonical 运行，才能宣称 benchmark 成功。
 
-H100 MiniMax-M3 DRAM+NVMe AgentX 启动器的 Slurm 时限为 420 分钟：
+H100 MiniMax-M3 NVMe 和 DRAM+NVMe AgentX 启动器的 Slurm 时限为 420 分钟：
 实测 warmup 本身超过四小时，之后还需运行一小时的 profiling。
 其他 H100 单节点场景仍默认使用 300 分钟；显式设置 `SALLOC_TIME_LIMIT`
 可覆盖任一默认值。canonical 工作负载保持不变。

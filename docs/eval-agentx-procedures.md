@@ -210,8 +210,8 @@ For a publishable SWE-bench score, omit `eval-limit`. Do not use `single-shot`, 
 
 Treat fast results as bring-up evidence, never as a replacement for the canonical candidate. A duration below 900 seconds or `AIPERF_UNSAFE_OVERRIDE=true` adds AIPerf's `--unsafe-override` and flags the submission invalid. Use it only for smoke diagnosis ([source](../benchmarks/benchmark_lib.sh#L2266-L2268)). After a fast run is healthy, run the exact candidate canonically before claiming benchmark success.
 
-The H100 MiniMax-M3 DRAM+NVMe AgentX launcher allows 420 minutes for Slurm:
-the measured warmup alone took over four hours before the one-hour profile.
+The H100 MiniMax-M3 NVMe and DRAM+NVMe AgentX launcher allows 420 minutes for Slurm:
+measured warmup alone took over four hours before the one-hour profile.
 Other H100 single-node cases retain the 300-minute default, and an explicit
 `SALLOC_TIME_LIMIT` overrides either value. The canonical workload is unchanged.
 

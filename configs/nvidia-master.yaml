@@ -7499,7 +7499,7 @@ qwen3.5-fp4-b200-trt-mtp:
       - { tp: 8, ep: 8, dp-attn: true, spec-decoding: "mtp", conc-list: [128, 256, 1024] }
 
 minimaxm3-fp8-h100-vllm-agentic-mtp:
-  image: ttl.sh/cquil11-vllm-tier-d67b417bca-pr53087-20260901:24h
+  image: ttl.sh/cquil11-vllm-tier-progress-b9e9d720-amd64-20260902:24h
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: cluster:h100-dgxc

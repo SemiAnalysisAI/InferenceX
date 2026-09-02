@@ -26,16 +26,17 @@ def run_bash(command: str, *args: Path | str) -> subprocess.CompletedProcess[str
     )
 
 
-def test_h100_tiered_agentx_time_limit_preserves_defaults_and_override() -> None:
+def test_h100_nvme_agentx_time_limit_preserves_defaults_and_override() -> None:
     launcher = (REPO_ROOT / "runners" / "launch_h100-dgxc-slurm.sh").read_text()
-    start = launcher.index("    # This tiered AgentX point")
+    start = launcher.index("    # These NVMe AgentX points")
     stop = launcher.index("    salloc ", start)
     configure = launcher[start:stop]
     cases = [
         ("minimaxm3", "agentic-coding", "dram+nvme", "", "420"),
         ("minimaxm3", "agentic-coding", "dram+nvme", "480", "480"),
         ("minimaxm3", "agentic-coding", "dram", "", "300"),
-        ("minimaxm3", "agentic-coding", "nvme", "", "300"),
+        ("minimaxm3", "agentic-coding", "nvme", "", "420"),
+        ("minimaxm3", "agentic-coding", "nvme", "480", "480"),
         ("other", "agentic-coding", "dram+nvme", "", "300"),
         ("minimaxm3", "fixed-sequence", "dram+nvme", "", "300"),
     ]

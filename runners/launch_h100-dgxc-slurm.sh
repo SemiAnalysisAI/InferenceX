@@ -298,8 +298,8 @@ else
 
     export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
 
-    # This tiered AgentX point needs >4 hours of warmup before its 1-hour profile.
-    if [[ "${MODEL_PREFIX:-}" == "minimaxm3" && "${SCENARIO_TYPE:-}" == "agentic-coding" && "${KV_OFFLOADING:-}" == "dram+nvme" ]]; then
+    # These NVMe AgentX points can need >4 hours of warmup before a 1-hour profile.
+    if [[ "${MODEL_PREFIX:-}" == "minimaxm3" && "${SCENARIO_TYPE:-}" == "agentic-coding" && ( "${KV_OFFLOADING:-}" == "nvme" || "${KV_OFFLOADING:-}" == "dram+nvme" ) ]]; then
         SALLOC_TIME_LIMIT="${SALLOC_TIME_LIMIT:-420}"
     fi
     SALLOC_TIME_LIMIT="${SALLOC_TIME_LIMIT:-300}"

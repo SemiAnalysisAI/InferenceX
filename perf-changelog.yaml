@@ -6843,3 +6843,13 @@
     - "Pin the AgentX client fix that excludes automatic warmup baselines from profiling server metrics and require the cached-token-source metric in JSON/CSV artifacts."
     - "Keep exactly Mooncake DRAM c8, Simple NVMe c30, and native DRAM+NVMe c20, with unchanged canonical warmup, one-hour profiling, images, and full evals."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2796
+
+- config-keys:
+    - minimaxm3-fp8-h100-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use the Python-only token-source image b9e9d720 on official vLLM nightly 7c5dc571, retaining the HIT_PENDING fix and backporting upstream PR #45406 so an unschedulable queue head cannot strand completed async KV loads."
+    - "Allow seven hours for Simple NVMe as well as native DRAM+NVMe; the NVMe warmup took four hours and its previous five-hour allocation ended before profiling completed."
+    - "Preserve exactly Mooncake DRAM c8, Simple NVMe c30 with 8 TB aggregate capacity, and native DRAM+NVMe c20, with full evals and unchanged canonical warmup and one-hour profiling."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2796
