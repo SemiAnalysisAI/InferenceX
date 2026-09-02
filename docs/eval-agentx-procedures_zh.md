@@ -213,7 +213,7 @@ JIT 目录构建 stock 与 candidate AITER `module_moe_asm` 二进制，并针�
 Kimi-K3 实际使用的 FP32、896 expert、top-16 合约，在 M=1、2、4、7、14 下执行
 HIP graph replay 和交替的 stock/candidate 计时。其 artifact 会保留精确源码与
 二进制哈希、dispatch canary、changed-input replay 检查、原始计时样本、轮次
-漂移，以及按每个 decode step 92 次 router 调用计算的预计节省。M=4 是三 draft
+漂移，以及按每个 decode step 92 次 router 调用计算的预计节省。M=7 是六 draft
 C1 路径的晋级形状，其余形状用于检查非回退。正向 microbenchmark 结果只能作为
 单独 natural AgentX A/B/A 的准入门槛，不能视为 serving 性能证据。
 

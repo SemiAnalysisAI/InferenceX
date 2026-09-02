@@ -6882,3 +6882,12 @@
     - "Treat changed routing weights as observable changed-input HIP graph replay evidence when the radix implementation intentionally preserves expert-ID order."
     - "Retain strict reference-output validation so a replay that actually ignores updated inputs still fails closed."
   pr-link: XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Correct the radix-router promotion shape from M=4 to M=7 so it matches the active six-draft Kimi-K3 concurrency-one workload."
+    - "Keep M=1,2,4,14 as non-regression controls and retain the existing correctness, drift, speedup, and projected decode-step saving gates."
+  pr-link: XXX

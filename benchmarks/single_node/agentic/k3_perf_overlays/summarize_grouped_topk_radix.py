@@ -9,7 +9,7 @@ import statistics
 from pathlib import Path
 
 SHAPES = (1, 2, 4, 7, 14)
-PRIMARY_SHAPE = 4
+PRIMARY_SHAPE = 7
 ROUTER_CALLS_PER_STEP = 92
 
 
