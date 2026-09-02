@@ -158,17 +158,29 @@ case "${KV_OFFLOAD_BACKEND:-}" in
       lmcache)
     require_agentic_kv_offload_backend "$KV_OFFLOAD_BACKEND"
 
-    # Keep the stock image's dependency stack and install only the requested
-    # LMCache ROCm wheel.
+    # Keep the stock image's torch/ROCm stack and install the LMCache runtime
+    # dependencies used by the validated reference run.
     LMCACHE_VERSION="0.5.5rc3+rocm7.2"
     export KV_OFFLOAD_BACKEND_METADATA="{\"name\":\"lmcache\",\"version\":\"${LMCACHE_VERSION}\"}"
     LMCACHE_RELEASE="v0.5.5rc3"
     LMCACHE_ROCM_INDEX="https://github.com/LMCache/LMCache/releases/expanded_assets/${LMCACHE_RELEASE}-rocm"
     agentic_pip_install --quiet --no-cache-dir --no-deps \
+        "sortedcontainers==2.4.0" \
+        "opentelemetry-exporter-prometheus==0.61b0" \
+        "cupy-rocm-7-0==14.1.1" \
         "lmcache==${LMCACHE_VERSION}" --find-links "$LMCACHE_ROCM_INDEX"
 
+    LMCACHE_NATIVE_LIBS=(libglog.so.0 libjsoncpp.so.25 libibverbs.so.1 librdmacm.so.1 libnuma.so.1)
+    for lib in "${LMCACHE_NATIVE_LIBS[@]}"; do
+        if ! ldconfig -p | grep -q "$lib"; then
+            apt-get update
+            apt-get install -y \
+                libgoogle-glog0v5 libjsoncpp25 libibverbs1 librdmacm1 libnuma1
+            break
+        fi
+    done
     python3 -c \
-        "from lmcache.v1.multiprocess.http_server import run_http_server"
+        "import cupy; import opentelemetry.exporter.prometheus; from lmcache.v1.multiprocess.http_server import run_http_server"
 
     # One MP server for the node, per the Kimi-K3 recipe
     # (docs.lmcache.ai/recipes/kimi_k3.html), with --chunk-size sized for
