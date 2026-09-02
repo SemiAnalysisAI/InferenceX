@@ -195,6 +195,15 @@ gh workflow run e2e-tests.yml --repo SemiAnalysisAI/InferenceX --ref "$REF" \
   -f agentx-fast=true
 ```
 
+For the Kimi-K3 MI355X concurrency-one investigation,
+`k3-perf-variant=m7tier0collectives` runs an eight-rank operator diagnostic
+instead of AgentX. It compares the production Tier-2 latent-MoE tail, an
+otherwise identical path using AITER's fused all-reduce plus RMSNorm, and the
+sequential and dual-communicator Tier-0 decompositions. The diagnostic requires
+changed-input HIP graph replay, eager agreement, rotating weights, exact TP8
+route support, and slowest-rank timings before it emits artifacts. It is a
+kernel promotion gate, not serving-performance evidence.
+
 Targeted AgentX SWE-bench smoke eval (first ten instances, real agentic generation):
 
 ```bash

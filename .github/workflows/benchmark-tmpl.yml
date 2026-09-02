@@ -368,7 +368,7 @@ jobs:
             test -s results/k3_m7_tier0_collectives_provenance.json
             test -s results/k3_m7_tier0_collectives.log
             test -s results/k3_m7_tier0_collectives_SHA256SUMS
-            echo "Kimi-K3 M=7 Tier-0 collective benchmark completed; skipping AgentX result validation."
+            echo "Kimi-K3 M=7 collective/fused-AR-RMS benchmark completed; skipping AgentX result validation."
             exit 0
           fi
           if [ "${{ inputs.eval-only }}" = "true" ]; then
@@ -433,7 +433,7 @@ jobs:
             !results/aiperf_artifacts/profile_export_raw.jsonl
           if-no-files-found: ignore
 
-      - name: Upload Kimi-K3 M=7 Tier-0 collective artifacts
+      - name: Upload Kimi-K3 M=7 collective diagnostic artifacts
         if: ${{ always() && inputs.k3-perf-variant == 'm7tier0collectives' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

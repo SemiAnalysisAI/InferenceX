@@ -6845,3 +6845,12 @@
   description:
     - "Validate each Tier-0 graph replay against the same production path in eager mode, seed the changed-input check from a completed graph replay, and retain the idealized FP32 comparison as diagnostic data rather than rejecting the production Tier-2 baseline."
   pr-link: XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Isolate AITER's graph-captured fused all-reduce plus RMSNorm for the exact Kimi-K3 M=7 latent tail while retaining the production Tier-2 sharded projection and final all-reduce."
+    - "Compare the fused path with the current Tier-2 and previously measured Tier-0 collective paths using identical rotating weights, changed-input replay, TP8 correctness, and slowest-rank timing."
+  pr-link: XXX

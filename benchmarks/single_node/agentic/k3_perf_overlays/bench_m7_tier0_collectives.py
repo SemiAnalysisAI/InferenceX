@@ -1,10 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Benchmark a portable ROCm Tier-0 Kimi-K3 latent-MoE tail topology.
+"""Benchmark ROCm Kimi-K3 latent-MoE collective alternatives.
 
 The benchmark compares the current Tier-2 tail against a reduce-scatter,
 sharded projection, and all-gather decomposition.  The overlap arm uses a
 second AITER communicator so the routed all-reduce and shared reduce-scatter
-do not alias the same registered IPC workspace.
+do not alias the same registered IPC workspace.  It also isolates the narrower
+fused all-reduce plus RMSNorm change while retaining the Tier-2 projection and
+final collective.
 """
 
 from __future__ import annotations
@@ -24,6 +26,7 @@ import aiter
 import torch
 import torch.distributed as dist
 import torch.nn.functional as F
+from vllm._aiter_ops import rocm_aiter_ops
 from vllm.config import VllmConfig, set_current_vllm_config
 from vllm.distributed import get_tp_group
 from vllm.distributed.device_communicators.aiter_custom_all_reduce import (
@@ -50,6 +53,7 @@ class Case:
     rms_weight: torch.Tensor
     up_weight_shard: torch.Tensor
     rs_workspace: torch.Tensor
+    zero_residual: torch.Tensor
     start_event: torch.cuda.Event
     done_event: torch.cuda.Event
 
@@ -144,6 +148,11 @@ def make_cases(
                     dtype=torch.bfloat16,
                     device=device,
                 ),
+                zero_residual=torch.zeros(
+                    (NUM_TOKENS, LATENT_SIZE),
+                    dtype=torch.bfloat16,
+                    device=device,
+                ),
                 start_event=torch.cuda.Event(),
                 done_event=torch.cuda.Event(),
             )
@@ -194,6 +203,28 @@ def make_tier2_launch(
     def launch() -> torch.Tensor:
         latent = custom_all_reduce(main_ca, case.routed)
         latent = aiter.rmsnorm2d_fwd(latent, case.rms_weight, RMS_EPS)
+        hidden_shard = case.shared_workspace.narrow(-1, shard_start, SHARD_SIZE)
+        hidden_shard.addmm_(latent, case.up_weight_shard.t())
+        return custom_all_reduce(main_ca, case.shared_workspace)
+
+    return launch
+
+
+def make_fused_ar_rms_tier2_launch(
+    case: Case,
+    main_ca: Any,
+    rank: int,
+    fused_ar_rms: Callable[..., tuple[torch.Tensor, torch.Tensor]],
+) -> Callable[[], torch.Tensor]:
+    shard_start = rank * SHARD_SIZE
+
+    def launch() -> torch.Tensor:
+        latent, _ = fused_ar_rms(
+            input_=case.routed,
+            residual=case.zero_residual,
+            weight=case.rms_weight,
+            epsilon=RMS_EPS,
+        )
         hidden_shard = case.shared_workspace.narrow(-1, shard_start, SHARD_SIZE)
         hidden_shard.addmm_(latent, case.up_weight_shard.t())
         return custom_all_reduce(main_ca, case.shared_workspace)
@@ -421,7 +452,9 @@ def validate_changed_input_replay(
         }
 
     baseline = replayed_outputs["tier2_baseline"]
-    for name in ("tier0_sequential", "tier0_overlap"):
+    for name in paths:
+        if name == "tier2_baseline":
+            continue
         topology_error = error_metrics(replayed_outputs[name], baseline)
         errors[name].update(
             {f"vs_tier2_{key}": value for key, value in topology_error.items()}
@@ -522,6 +555,7 @@ def run(args: argparse.Namespace) -> None:
     if main_wrapper is None or main_wrapper.disabled:
         raise RuntimeError("vLLM did not initialize the AITER custom all-reduce")
     main_ca = main_wrapper.aiter_ca
+    fused_ar_rms = rocm_aiter_ops.get_fused_allreduce_rmsnorm_op()
     shared_wrapper = AiterCustomAllreduce(tp_group.cpu_group, device)
     if shared_wrapper.disabled:
         raise RuntimeError("second AITER communicator is disabled")
@@ -544,6 +578,15 @@ def run(args: argparse.Namespace) -> None:
             "tier2_baseline": [
                 make_tier2_launch(case, main_ca, rank) for case in cases
             ],
+            "tier2_fused_ar_rms": [
+                make_fused_ar_rms_tier2_launch(
+                    case,
+                    main_ca,
+                    rank,
+                    fused_ar_rms,
+                )
+                for case in cases
+            ],
             "tier0_sequential": [
                 make_tier0_sequential_launch(case, main_ca, shared_ca) for case in cases
             ],
@@ -559,6 +602,12 @@ def run(args: argparse.Namespace) -> None:
         paths = {
             "tier2_baseline": capture_path(
                 launches["tier2_baseline"],
+                lambda: reset_tier2(cases),
+                (main_ca,),
+                cpu_group,
+            ),
+            "tier2_fused_ar_rms": capture_path(
+                launches["tier2_fused_ar_rms"],
                 lambda: reset_tier2(cases),
                 (main_ca,),
                 cpu_group,
@@ -611,6 +660,10 @@ def run(args: argparse.Namespace) -> None:
                 "local_custom_all_gather_last_dim": True,
                 "fully_connected": bool(main_ca.fully_connected),
                 "dual_communicator_overlap": True,
+                "fused_allreduce_rmsnorm": True,
+                "dynamic_fused_ar_rms_hidden_dim": bool(
+                    main_wrapper.supports_dynamic_hidden_dim
+                ),
             },
             "rotations": args.rotations,
             "rotating_sharded_weight_bytes_per_rank": (

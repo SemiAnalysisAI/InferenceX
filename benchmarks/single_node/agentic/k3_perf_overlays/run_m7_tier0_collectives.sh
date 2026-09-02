@@ -50,12 +50,17 @@ from pathlib import Path
 import aiter
 import torch
 import vllm
+import vllm._aiter_ops as vllm_aiter_ops
 from aiter.dist.device_communicators.custom_all_reduce import CustomAllreduce
 
 output = Path(sys.argv[1])
 benchmark = Path(sys.argv[2]).resolve()
 checkout = Path(os.environ["AITER_CHECKOUT"]).resolve()
 installed = Path(aiter.__file__).resolve()
+vllm_aiter_ops_path = Path(vllm_aiter_ops.__file__).resolve()
+expected_vllm_aiter_ops_sha256 = (
+    "3ea7b700fe3dba5eb4dfbe533d96651d64d5fe028b9a2dabf76d8360c0c7bf15"
+)
 if checkout not in installed.parents:
     raise SystemExit(f"expected editable AITER under {checkout}, got {installed}")
 
@@ -68,6 +73,8 @@ if properties.multi_processor_count != 256:
 for symbol in ("should_custom_rs", "custom_reduce_scatter", "should_custom_ag", "custom_all_gather"):
     if not hasattr(CustomAllreduce, symbol):
         raise SystemExit(f"installed AITER lacks CustomAllreduce.{symbol}")
+if not hasattr(vllm_aiter_ops.rocm_aiter_ops, "get_fused_allreduce_rmsnorm_op"):
+    raise SystemExit("installed vLLM lacks the AITER fused all-reduce RMSNorm op")
 
 
 def distribution_version() -> str:
@@ -84,6 +91,13 @@ def distribution_version() -> str:
 
 def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+if sha256(vllm_aiter_ops_path) != expected_vllm_aiter_ops_sha256:
+    raise SystemExit(
+        "installed vLLM AITER-op source differs from the pinned baseline: "
+        f"{vllm_aiter_ops_path}"
+    )
 
 
 tracked = (
@@ -112,6 +126,8 @@ payload = {
     "cu_num": properties.multi_processor_count,
     "vllm_version": vllm.__version__,
     "vllm_file": str(Path(vllm.__file__).resolve()),
+    "vllm_aiter_ops_file": str(vllm_aiter_ops_path),
+    "vllm_aiter_ops_sha256": sha256(vllm_aiter_ops_path),
 }
 versions = Path("/app/versions.txt")
 if versions.is_file():
@@ -150,11 +166,18 @@ required_routes = {
     "local_custom_all_gather_last_dim",
     "fully_connected",
     "dual_communicator_overlap",
+    "fused_allreduce_rmsnorm",
+    "dynamic_fused_ar_rms_hidden_dim",
 }
 if set(routes) != required_routes or not all(routes.values()):
     raise SystemExit(f"required AITER collective route was not active: {routes}")
 
-expected_paths = {"tier2_baseline", "tier0_sequential", "tier0_overlap"}
+expected_paths = {
+    "tier2_baseline",
+    "tier2_fused_ar_rms",
+    "tier0_sequential",
+    "tier0_overlap",
+}
 timings = payload.get("timings", {})
 if set(timings) != expected_paths:
     raise SystemExit(f"missing Tier-0 timing path: {timings}")
@@ -173,7 +196,7 @@ for name, errors in replay.items():
         raise SystemExit(f"invalid correctness metrics for {name}: {errors}")
 
 print(
-    "M=7 Tier-0 collective graph replay completed: "
+    "M=7 collective and fused-AR-RMS graph replay completed: "
     + ", ".join(
         f"{name}={timings[name]['median_us']:.3f} us" for name in sorted(timings)
     )

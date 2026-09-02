@@ -195,6 +195,14 @@ gh workflow run e2e-tests.yml --repo SemiAnalysisAI/InferenceX --ref "$REF" \
   -f agentx-fast=true
 ```
 
+在 Kimi-K3 MI355X 并发一调查中，`k3-perf-variant=m7tier0collectives`
+运行八 rank 算子诊断，而不是 AgentX。它比较生产 Tier-2 latent-MoE tail、
+仅将 all-reduce 与 RMSNorm 替换为 AITER 融合实现的同构路径，以及串行和
+双 communicator 的 Tier-0 分解。诊断只有在 changed-input HIP graph
+replay、eager 一致性、轮换权重、准确 TP8 路由支持和最慢 rank 计时全部
+通过后才生成 artifact。该结果是 kernel promotion gate，不是 serving
+性能证据。
+
 目标 AgentX SWE-bench smoke eval（前十个 instance，真实 agentic generation）：
 
 ```bash
