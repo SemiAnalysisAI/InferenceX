@@ -158,7 +158,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
             local enroot_uri
             enroot_uri=$(llmd_enroot_uri_for_image "$image") || exit 1
             (
-                exec 9>"$lock"
+                exec 9>"$lock" || exit 1
                 flock -w 1800 9 || { echo "Failed to acquire lock for $squash" >&2; exit 1; }
                 if unsquashfs -l "$squash" > /dev/null 2>&1; then
                     echo "Squash file already exists and is valid, skipping import: $squash"
@@ -172,8 +172,8 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
             ) || exit 1
         }
 
-        LLMD_SQUASH_DIR="/home/sa-shared/containers"
-        mkdir -p "$LLMD_SQUASH_DIR" 2>/dev/null || true
+        LLMD_SQUASH_DIR="/data/home/sa-shared/containers"
+        mkdir -p "$LLMD_SQUASH_DIR" || exit 1
         LLMD_SQUASH_FILE="${LLMD_SQUASH_DIR}/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
         llmd_import_squash "$LLMD_SQUASH_FILE" "$IMAGE"
 
@@ -194,7 +194,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
             # shape. Populate once via:
             #   BINARIES_ENV_FILE=binaries-b200-v0.10.0.env benchmarks/llm-d/extract-binaries.sh
             # job.slurm falls back to the image-baked v0.9.0 until this path exists.
-            export LLMD_BIN_DIR="/home/sa-shared/llm-d-bins-v0.10.0"
+            export LLMD_BIN_DIR="/data/home/sa-shared/llm-d-bins-v0.10.0"
         else
             SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_b200_llmd-vllm-agg.sh"
         fi
