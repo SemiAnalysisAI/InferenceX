@@ -376,46 +376,13 @@ export MC_WORKERS_PER_CTX="${MC_WORKERS_PER_CTX:-}"
 # without editing server_vllm.sh -- see the SQ-overflow note there.
 export MC_SLICE_SIZE="${MC_SLICE_SIZE:-}"
 export MC_TCP_SLICE_SIZE="${MC_TCP_SLICE_SIZE:-}"
+export MC_STORE_USE_HUGEPAGE="${MC_STORE_USE_HUGEPAGE:-}"
+export MC_STORE_HUGEPAGE_SIZE="${MC_STORE_HUGEPAGE_SIZE:-}"
+export MC_STORE_NR_HUGEPAGES="${MC_STORE_NR_HUGEPAGES:-}"
+export MC_STORE_LOCAL_BUFFER_GB="${MC_STORE_LOCAL_BUFFER_GB:-4}"
+export MC_STORE_HUGEPAGE_MARGIN_GB="${MC_STORE_HUGEPAGE_MARGIN_GB:-16}"
 export MOONCAKE_PREFERRED_SEGMENT="${MOONCAKE_PREFERRED_SEGMENT:-}"
 export MOONCAKE_DIAG_REPLICA_SAMPLE="${MOONCAKE_DIAG_REPLICA_SAMPLE:-}"
-
-# LMCache MP tier (KV_OFFLOAD_BACKEND=lmcache-k3). /dev/shm is the hard cap on the L1 pool, so the
-# container needs a bigger one than the 128G default when the tier is attached: LMCache cannot pin
-# memory on ROCm, so it allocates the whole pool up front out of shm.
-export DOCKER_SHM_SIZE="${DOCKER_SHM_SIZE:-}"
-if [[ -z "$DOCKER_SHM_SIZE" ]]; then
-    if [[ "${KV_OFFLOADING:-none}" == "dram" && "${KV_OFFLOAD_BACKEND:-}" == "lmcache-k3" ]]; then
-        DOCKER_SHM_SIZE=640G
-    else
-        DOCKER_SHM_SIZE=128G
-    fi
-fi
-export DOCKER_SHM_SIZE
-export LMCACHE_ON_DECODE="${LMCACHE_ON_DECODE:-}"
-export LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-}"
-export LMCACHE_L1_SHM_FRACTION="${LMCACHE_L1_SHM_FRACTION:-}"
-export LMCACHE_L1_DEFAULT_GB="${LMCACHE_L1_DEFAULT_GB:-}"
-export LMCACHE_GIT_REF="${LMCACHE_GIT_REF:-}"
-export LMCACHE_MQ_TIMEOUT="${LMCACHE_MQ_TIMEOUT:-}"
-export LMCACHE_MAX_WORKERS="${LMCACHE_MAX_WORKERS:-}"
-export LMCACHE_EVICTION_WATERMARK="${LMCACHE_EVICTION_WATERMARK:-}"
-export LMCACHE_EVICTION_RATIO="${LMCACHE_EVICTION_RATIO:-}"
-export LMCACHE_UNIFIED_BLOCK="${LMCACHE_UNIFIED_BLOCK:-}"
-export LMCACHE_CHUNK_SIZE_OVERRIDE="${LMCACHE_CHUNK_SIZE_OVERRIDE:-}"
-export LMCACHE_MAX_NUM_BATCHED_TOKENS="${LMCACHE_MAX_NUM_BATCHED_TOKENS:-}"
-export LMCACHE_MAX_NUM_SEQS="${LMCACHE_MAX_NUM_SEQS:-}"
-export LMCACHE_GPU_MEM_UTIL="${LMCACHE_GPU_MEM_UTIL:-}"
-export LMCACHE_CONNECTOR_MODULE_PATH="${LMCACHE_CONNECTOR_MODULE_PATH:-}"
-export LMCACHE_READY_ATTEMPTS="${LMCACHE_READY_ATTEMPTS:-}"
-export VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION="${VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION:-}"
-
-# Runtime optimisation patch set (k3_opt_patches.sh): four upstream PRs plus the K3 enablement
-# scripts, carried separately because they are not in the nightly the fork is rebased onto. Off unless
-# K3_OPT_PATCHES=1, and each step is individually skippable via K3_OPT_SKIP_<LABEL> so they can be
-# A/B'd one at a time.
-export K3_OPT_PATCHES="${K3_OPT_PATCHES:-}"
-export K3_BASE_PATCHES_PREAPPLIED="${K3_BASE_PATCHES_PREAPPLIED:-}"
-export K3_OPT_SKIP_BASE="${K3_OPT_SKIP_BASE:-}"
 
 SANITIZED_USER=$(echo "$USER_NAME" | tr -c 'a-zA-Z0-9_.-' '_')
 export DOCKER_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_${MODEL_NAME}_${SLURM_JOB_ID}"
@@ -423,7 +390,7 @@ export DOCKER_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_${MODEL_NAME}_${S
 # vLLM external router container.
 # NOTE: vllm/vllm-router only retains ~16 recent nightlies on Docker Hub; older
 # dated tags are garbage-collected (manifest unknown)
-VLLM_ROUTER_IMAGE="${VLLM_ROUTER_IMAGE:-vllm/vllm-router:nightly-20260816-5002469}"
+VLLM_ROUTER_IMAGE="${VLLM_ROUTER_IMAGE:-vllm/vllm-router:nightly-20260830-1d10e71}"
 ROUTER_CONT_NAME="router_vllm_${SANITIZED_USER}_${SLURM_JOB_ID}"
 # Separate agentic benchmark-client container (see CLIENT_IMAGE handling below).
 CLIENT_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_client_${SLURM_JOB_ID}"
@@ -454,6 +421,22 @@ else
     echo "[WARN] $RDMA_CHECK_SCRIPT not found; skipping RDMA QoS/DCQCN pre-flight check"
 fi
 
+HUGEPAGE_HELPER="$(pwd)/helpers/hugepage_setup.sh"
+HUGEPAGE_CONFIGURED=0
+HUGEPAGE_NODELIST=""
+
+restore_hugepages() {
+  if [[ "$HUGEPAGE_CONFIGURED" != "1" || -z "$HUGEPAGE_NODELIST" ]]; then
+    return 0
+  fi
+  local node_count
+  node_count=$(tr ',' '\n' <<< "$HUGEPAGE_NODELIST" | grep -c .)
+  srun --nodes="$node_count" --ntasks="$node_count" --ntasks-per-node=1 \
+    --nodelist="$HUGEPAGE_NODELIST" \
+    bash "$HUGEPAGE_HELPER" restore "$SLURM_JOB_ID" 2>/dev/null || true
+  HUGEPAGE_CONFIGURED=0
+}
+
 cleanup() {
   echo "[${SLURM_JOB_ID}] termination received on $(hostname); cleaning up container + stale logs..."
   # Backstop: on scancel/timeout/step-hang the foreground `exec docker run`
@@ -463,11 +446,13 @@ cleanup() {
   # other users' containers. (Ported from InferenceY 51ebfa88.)
   srun --nodelist="$SELECTED_NODELIST_SRUN" \
     bash -c 'eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD rm -f '"$DOCKER_CONT_NAME"' 2>/dev/null || true' 2>/dev/null || true
+  restore_hugepages
   rm -rf ${SLURM_SUBMIT_DIR}/logs 2>/dev/null || true
   echo "[${SLURM_JOB_ID}] cleanup done."
 }
 
 trap cleanup INT TERM HUP
+trap restore_hugepages EXIT
 
 # Force NFS cache refresh on all nodes
 echo "Refreshing NFS caches on all nodes..."
@@ -479,6 +464,49 @@ srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c '
     echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null 2>&1 || true
     echo "NFS cache refreshed on $(hostname)"
 '
+
+# Reserve HugeTLB on every node that instantiates Mooncake. Prefill nodes are
+# first in SELECTED_NODES. Decode nodes need the pool only when their Mooncake
+# store has not been explicitly disabled.
+if [[ "${MC_STORE_USE_HUGEPAGE:-0}" == "1" ]]; then
+    if [[ "${MC_STORE_HUGEPAGE_SIZE:-}" != "2MB" ]]; then
+        echo "ERROR: host HugeTLB setup currently supports MC_STORE_HUGEPAGE_SIZE=2MB only" >&2
+        exit 1
+    fi
+    if [[ ! "${TOTAL_CPU_DRAM_GB:-}" =~ ^[1-9][0-9]*$ ||
+          ! "${PREFILL_TP_SIZE:-}" =~ ^[1-9][0-9]*$ ||
+          ! "$MC_STORE_LOCAL_BUFFER_GB" =~ ^[1-9][0-9]*$ ||
+          ! "$MC_STORE_HUGEPAGE_MARGIN_GB" =~ ^[0-9]+$ ]]; then
+        echo "ERROR: HugeTLB sizing requires positive TOTAL_CPU_DRAM_GB, PREFILL_TP_SIZE, and MC_STORE_LOCAL_BUFFER_GB" >&2
+        exit 1
+    fi
+    # 2 MiB pages/GiB = 512. TOTAL_CPU_DRAM_GB covers all TP ranks'
+    # global segments. Include every rank's local buffer plus headroom for
+    # allocator alignment and metadata. An explicit page count overrides this.
+    MC_STORE_NR_HUGEPAGES="${MC_STORE_NR_HUGEPAGES:-$((
+        (TOTAL_CPU_DRAM_GB + PREFILL_TP_SIZE * MC_STORE_LOCAL_BUFFER_GB +
+         MC_STORE_HUGEPAGE_MARGIN_GB) * 512
+    ))}"
+    export MC_STORE_NR_HUGEPAGES
+    if [[ ! "$MC_STORE_NR_HUGEPAGES" =~ ^[1-9][0-9]*$ ]]; then
+        echo "ERROR: MC_STORE_NR_HUGEPAGES must be a positive integer" >&2
+        exit 1
+    fi
+    if [[ "${MOONCAKE_DECODE_STORE:-1}" == "0" ]]; then
+        HUGEPAGE_NODELIST=$(echo "$SELECTED_NODES" | head -n "$xP" | paste -sd,)
+    else
+        HUGEPAGE_NODELIST="$SELECTED_NODELIST_SRUN"
+    fi
+    HUGEPAGE_CONFIGURED=1
+    HUGEPAGE_NODE_COUNT=$(tr ',' '\n' <<< "$HUGEPAGE_NODELIST" | grep -c .)
+    echo "[hugetlb] reserving ${MC_STORE_NR_HUGEPAGES} x 2 MiB pages on ${HUGEPAGE_NODELIST}"
+    if ! srun --nodes="$HUGEPAGE_NODE_COUNT" --ntasks="$HUGEPAGE_NODE_COUNT" \
+        --ntasks-per-node=1 --nodelist="$HUGEPAGE_NODELIST" \
+        bash "$HUGEPAGE_HELPER" reserve "$SLURM_JOB_ID" "$MC_STORE_NR_HUGEPAGES"; then
+        restore_hugepages
+        exit 1
+    fi
+fi
 
 # =============================================================================
 # Build engine-specific Docker environment variables
@@ -571,31 +599,6 @@ DOCKER_ENV_COMMON=(
     # Diagnostic: sample every Nth put and log which segment actually holds the key, to
     # tell a hard placement guarantee from a soft hint. Off unless set.
     -e MOONCAKE_DIAG_REPLICA_SAMPLE=\${MOONCAKE_DIAG_REPLICA_SAMPLE:-}
-    # LMCache MP tier. Geometry overrides are here so an arm can pin N by hand when the engine's own
-    # "Setting attention block size to N tokens" disagrees with the derivation, which is the one
-    # failure the derivation cannot catch itself.
-    -e LMCACHE_ON_DECODE=\${LMCACHE_ON_DECODE:-}
-    -e LMCACHE_L1_SIZE_GB=\${LMCACHE_L1_SIZE_GB:-}
-    -e LMCACHE_L1_SHM_FRACTION=\${LMCACHE_L1_SHM_FRACTION:-}
-    -e LMCACHE_L1_DEFAULT_GB=\${LMCACHE_L1_DEFAULT_GB:-}
-    -e LMCACHE_GIT_REF=\${LMCACHE_GIT_REF:-}
-    -e LMCACHE_MQ_TIMEOUT=\${LMCACHE_MQ_TIMEOUT:-}
-    -e LMCACHE_MAX_WORKERS=\${LMCACHE_MAX_WORKERS:-}
-    -e LMCACHE_EVICTION_WATERMARK=\${LMCACHE_EVICTION_WATERMARK:-}
-    -e LMCACHE_EVICTION_RATIO=\${LMCACHE_EVICTION_RATIO:-}
-    -e LMCACHE_UNIFIED_BLOCK=\${LMCACHE_UNIFIED_BLOCK:-}
-    -e LMCACHE_CHUNK_SIZE_OVERRIDE=\${LMCACHE_CHUNK_SIZE_OVERRIDE:-}
-    -e LMCACHE_MAX_NUM_BATCHED_TOKENS=\${LMCACHE_MAX_NUM_BATCHED_TOKENS:-}
-    -e LMCACHE_MAX_NUM_SEQS=\${LMCACHE_MAX_NUM_SEQS:-}
-    -e LMCACHE_GPU_MEM_UTIL=\${LMCACHE_GPU_MEM_UTIL:-}
-    -e LMCACHE_CONNECTOR_MODULE_PATH=\${LMCACHE_CONNECTOR_MODULE_PATH:-}
-    -e LMCACHE_READY_ATTEMPTS=\${LMCACHE_READY_ATTEMPTS:-}
-    -e VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION=\${VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION:-}
-    # Runtime optimisation patch set. Off unless K3_OPT_PATCHES=1; individual steps are skippable via
-    # K3_OPT_SKIP_<LABEL> so one PR at a time can be attributed.
-    -e K3_OPT_PATCHES=\${K3_OPT_PATCHES:-}
-    -e K3_BASE_PATCHES_PREAPPLIED=\${K3_BASE_PATCHES_PREAPPLIED:-}
-    -e K3_OPT_SKIP_BASE=\${K3_OPT_SKIP_BASE:-}
     -e TOTAL_CPU_DRAM_GB=\${TOTAL_CPU_DRAM_GB:-}
     -e SERVER_UP_TIMEOUT=\${SERVER_UP_TIMEOUT:-}
     -e HF_HUB_CACHE=\${HF_HUB_CACHE:-/tmp/mooncake-hf-cache}
@@ -603,6 +606,8 @@ DOCKER_ENV_COMMON=(
     -e MC_WORKERS_PER_CTX=\${MC_WORKERS_PER_CTX:-}
     -e MC_SLICE_SIZE=\${MC_SLICE_SIZE:-}
     -e MC_TCP_SLICE_SIZE=\${MC_TCP_SLICE_SIZE:-}
+    -e MC_STORE_USE_HUGEPAGE=\${MC_STORE_USE_HUGEPAGE:-}
+    -e MC_STORE_HUGEPAGE_SIZE=\${MC_STORE_HUGEPAGE_SIZE:-}
     -e VLLM_PATCH_46240=\${VLLM_PATCH_46240:-}
     # Generalise aiter MLA head padding so 12 heads/rank (K3 TP8) reach the ASM
     # decode kernel instead of the batch_size=1 fp8 gluon regime.
@@ -630,16 +635,29 @@ DOCKER_ENV_COMMON=(
     -e SPEC_NUM_TOKENS=\${SPEC_NUM_TOKENS:-}
     -e SPEC_MODEL=\${SPEC_MODEL:-}
     -e MAX_NUM_SEQS=\${MAX_NUM_SEQS:-}
-    # Iteration cost. Both of these default to container-local paths, so every run rebuilds the
-    # aiperf venv (132 packages plus a wheel build) and redoes dataset setup, which logs
-    # "Dataset configured in 111.09 seconds": 38 s scanning the HF trace list over the network,
-    # 55 s building the mmap backing store, 12 s finalising -- and then caches it under
-    # /root/.cache/aiperf, which the next container recreate throws away. Pointing them at
-    # /run_logs (the host's /tmp, already mounted) makes both survive.
+    # Iteration cost. aiperf caches dataset setup under /root/.cache/aiperf, which the
+    # next container recreate throws away, so every run redoes the work behind
+    # "Dataset configured in 111.09 seconds": 38 s scanning the HF trace list over the
+    # network, 55 s building the mmap backing store, 12 s finalising. Pointing
+    # XDG_CACHE_HOME at /run_logs (the host's /tmp, already mounted) makes it survive.
+    #
+    # These defaults have to be absolute. `docker run -e VAR=` sets VAR to the empty
+    # string rather than leaving it unset, and an empty HF_HOME or XDG_CACHE_HOME
+    # makes transformers and datasets join their cache paths onto "" -- i.e. resolve
+    # them relative to the CWD, which is $WS_PATH inside the bind-mounted checkout.
+    # The container runs as root, so that strands root-owned cache dirs in the git
+    # tree; actions/checkout then cannot clean the workspace and every later job on
+    # that runner fails at checkout.
+    #
+    # AIPERF_RUNTIME_DIR is left empty on purpose. benchmark_lib.sh reads it with a
+    # shell :- default, so empty behaves as unset, and that default is per-job
+    # (inferencex-agentic-$SLURM_JOB_ID). Pinning it to one shared path would let
+    # concurrent containers delete each other's venv without saving the rebuild,
+    # since install_agentic_deps does `rm -rf "$AIPERF_VENV"` unconditionally.
     -e AIPERF_RUNTIME_DIR=\${AIPERF_RUNTIME_DIR:-}
-    -e XDG_CACHE_HOME=\${XDG_CACHE_HOME:-}
-    -e HF_HOME=\${HF_HOME:-}
-    -e HF_DATASETS_CACHE=\${HF_DATASETS_CACHE:-}
+    -e XDG_CACHE_HOME=\${XDG_CACHE_HOME:-/run_logs/xdg_cache}
+    -e HF_HOME=\${HF_HOME:-/run_logs/hf_cache}
+    -e HF_DATASETS_CACHE=\${HF_DATASETS_CACHE:-/run_logs/hf_cache/datasets}
     # ROCm kernel-fault localisation. AMD_SERIALIZE_KERNEL=3 makes HIP wait after
     # every kernel, so an HSA_STATUS_ERROR_EXCEPTION is attributed to the kernel
     # that caused it instead of surfacing as an async queue abort with no Python
@@ -879,21 +897,21 @@ fi  # end: if ENGINE needs host RDMA bind-mounts
 mkdir -p ${COREDUMP_DIR} 2>/dev/null || true
 chmod 1777 ${COREDUMP_DIR} 2>/dev/null || true
 
-# Pre-clean (idempotent): stop then force-remove so GPU VRAM is released before
-# the sanity gate. stop-only left containers in Created/Exited state on some nodes.
+# Pre-clean (idempotent): stop then force-remove so GPU VRAM is released
+# before the sanity gate. stop-only left containers in Created/Exited state
+# on some nodes.
 \$DOCKER_CMD ps -aq --filter \"$CONT_FILTER\" | xargs -r \$DOCKER_CMD rm -f || true
 \$DOCKER_CMD ps -aq | xargs -r \$DOCKER_CMD stop -t 15 || true
 \$DOCKER_CMD ps -aq | xargs -r \$DOCKER_CMD rm -f || true
 sleep 2
 
-# GPU sanity gate: containers are stopped, so any remaining VRAM use is a bare
-# (non-containerized) process hogging the GPU -- fail fast (and name it)
-# instead of OOMing in model load ~30 min later. set -e + --kill-on-bad-exit
-# tears down the whole job on non-zero exit.
+# GPU drain gate: fail fast on leftover VRAM use instead of OOMing in model
+# load ~15 min later. Reuses wait_for_amd_gpu_clean from benchmark_lib.sh.
 if [[ \"${SKIP_GPU_SANITY:-0}\" == \"1\" ]]; then
-    echo \"[INFO] SKIP_GPU_SANITY=1 set; skipping GPU sanity pre-flight check\"
+    echo \"[INFO] SKIP_GPU_SANITY=1 set; skipping GPU pre-flight drain check\"
 else
-    bash \"$DI_REPO_DIR/benchmarks/multi_node/amd_utils/helpers/gpu_sanity.sh\"
+    # Unset so benchmark_lib.sh's unrelated agentic KV_OFFLOADING check doesn't exit 1 here.
+    bash -c \"unset IS_AGENTIC SCENARIO_TYPE; source $DI_REPO_DIR/benchmarks/benchmark_lib.sh && wait_for_amd_gpu_clean\"
 fi
 
 # Start vLLM external router container on node 0
@@ -955,7 +973,7 @@ fi
     $(command -v nicctl >/dev/null 2>&1 && echo "-v $(which nicctl):/usr/sbin/nicctl") \
     -v ${MODEL_DIR}:/models \
     -v \$HOME/.ssh:/root/.ssh \
-    --shm-size ${DOCKER_SHM_SIZE} \
+    --shm-size 128G \
     -v /tmp:/run_logs \
     -v ${COREDUMP_DIR}:/coredumps \
     -v ${BENCHMARK_LOGS_DIR}:/benchmark_logs \
@@ -981,6 +999,8 @@ echo \"[rank 0] Main container exited (rc=\$DOCKER_EXIT_CODE). Stopping vllm-rou
 \$DOCKER_CMD rm -f \"$ROUTER_CONT_NAME\" 2>/dev/null || true
 exit \$DOCKER_EXIT_CODE
 "
+
+restore_hugepages
 
 if [[ "${KEEP_CONTAINERS}" != "1" ]]; then
     srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c 'eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD rm -f '"$DOCKER_CONT_NAME"' '"$CLIENT_CONT_NAME"' 2>/dev/null || true'

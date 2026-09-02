@@ -755,7 +755,10 @@ _connectors = [
     {
         "kv_connector": "MoRIIOConnector",
         "kv_role": os.environ["MORI_KV_ROLE"],
-        "kv_connector_extra_config": mori_extra,
+        "kv_connector_extra_config": {
+            **mori_extra,
+            "read_mode": (os.environ.get("VLLM_MORIIO_WRITE_MODE") or "0") != "1",
+        },
     }
 ]
 # The tier is the second child, whichever tier it is. Selecting it here rather than by editing the
