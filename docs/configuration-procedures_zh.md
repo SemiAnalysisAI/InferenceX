@@ -146,6 +146,8 @@ B200 DSpark AgentX 配置使用 `agentic-coding`、`spec-decoding: mtp`，并显
 
 llm-d 将发现的 vLLM `/metrics` 端点导出为 `AIPERF_METRIC_URLS` 和 `AIPERF_SERVER_METRICS_URLS`，确认每个端点返回 vLLM 指标后，通过 `--server-metrics` 传给 AIPerf。抓取使用各服务节点的 vLLM 端口，而非 Envoy 或 P/D sidecar。
 
+两个 B200 DSpark 配置均声明 router v0.10.0，与 DSpark 镜像内置的 EPP/pd-sidecar 一致。在 B200 Nscale 上运行前，确认服务镜像提供 `linux/amd64` 版本；仅支持 ARM64 的 GB200 镜像不兼容。
+
 ## 更新镜像
 
 来源：[`AGENTS.md#non-negotiable-benchmark-invariants`](../AGENTS.md#non-negotiable-benchmark-invariants)、对应主配置、运行时脚本与检入的 Recipe。

@@ -146,6 +146,8 @@ For the B200 DSpark AgentX keys, select `agentic-coding`, `spec-decoding: mtp`, 
 
 llm-d exports the discovered vLLM `/metrics` endpoints as `AIPERF_METRIC_URLS` and `AIPERF_SERVER_METRICS_URLS`, checks that each returns vLLM metrics, and forwards them to AIPerf through `--server-metrics`. Scrapes use each serving node’s vLLM port, not Envoy or the P/D sidecar.
 
+Both B200 DSpark keys declare router v0.10.0, matching the DSpark image's bundled EPP/pd-sidecar. Verify that the serving image publishes `linux/amd64` before running on B200 Nscale; an ARM64-only GB200 build is not compatible.
+
 ## Update an image
 
 Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../AGENTS.md#non-negotiable-benchmark-invariants), the matching master configs, runtime scripts, and checked-in recipes.

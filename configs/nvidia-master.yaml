@@ -4503,8 +4503,8 @@ dsv4-fp4-gb200-llmd-vllm:
           - "GPUS_PER_NODE=4"
 
 # DeepSeek-V4-Pro-0813 (DSpark) FP4 B200, P/D disagg via llmd-vllm.
-# Always uses Mooncake; DSpark speculative decoding. Requires EPP v0.10.0
-# (LLMD_BIN_DIR override in runners/launch_b200-nscale-compat.sh).
+# Always uses Mooncake; DSpark speculative decoding. The DSpark image
+# bundles EPP/pd-sidecar v0.10.0.
 dsv4-fp4-b200-llmd-vllm-agentx:
   image: quay.io/rh-ee-imarkov/llm-d-nokube-vllm:dspark-0814-nightly
   model: deepseek-ai/DeepSeek-V4-Pro-0813
@@ -4546,9 +4546,8 @@ dsv4-fp4-b200-llmd-vllm-agentx:
 # Aggregated (TP8 / DEP8) sibling of dsv4-fp4-b200-llmd-vllm-agentx: one
 # engine per topology does both prefill and decode (no P/D split, no
 # pd-sidecar; only the Mooncake arm uses a KV store connector). Separate top-level key because `disagg:` is a whole-key
-# property. Uses the default v0.9.0 EPP/pd-sidecar binaries (no router
-# bump needed - the aggregated EPP config only uses plugins already
-# present there). conc-lists mirror the agentX dspark historical runs:
+# property. Uses the same image-bundled v0.10.0 router as disaggregated runs.
+# conc-lists mirror the agentX dspark historical runs:
 # results/dsv4-pro-dspark/results_ilmarkov-2-ix-agg-tp8-dspark-v3-long
 # (tp8) and results_ilmarkov-ix-agg-dep8-dspark-1308-long (dep8).
 dsv4-fp4-b200-llmd-vllm-agentx-agg:
@@ -4558,7 +4557,7 @@ dsv4-fp4-b200-llmd-vllm-agentx-agg:
   runner: cluster:b200-nscale
   precision: fp4
   framework: llmd-vllm
-  router: { name: llm-d-router, version: "0.9.0" }
+  router: { name: llm-d-router, version: "0.10.0" }
   multinode: true
   disagg: false
   scenarios:

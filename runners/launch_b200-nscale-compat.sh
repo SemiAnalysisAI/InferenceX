@@ -193,7 +193,8 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
             # EPP/pd-sidecar binaries needed for the disagg-profile-handler `deciders:`
             # shape. Populate once via:
             #   BINARIES_ENV_FILE=binaries-b200-v0.10.0.env benchmarks/llm-d/extract-binaries.sh
-            # job.slurm falls back to the image-baked v0.9.0 until this path exists.
+            # The DSpark image already bundles v0.10.0; any mounted copies
+            # must use the same version as the master config.
             export LLMD_BIN_DIR="/data/home/sa-shared/llm-d-bins-v0.10.0"
         else
             SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_b200_llmd-vllm-agg.sh"
