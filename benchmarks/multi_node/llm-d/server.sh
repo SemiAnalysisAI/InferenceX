@@ -683,7 +683,7 @@ PY
         # the host-side workflow checks look; the subshell keeps the cd local.
         (
             cd /workspace
-            run_eval --framework lm-eval --port "$ENVOY_PORT"
+            run_eval --port "$ENVOY_PORT"
             append_lm_eval_summary
         )
     fi

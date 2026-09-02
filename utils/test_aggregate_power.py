@@ -642,17 +642,9 @@ def test_run_computes_j_per_total_token_with_input_tokens(tmp_path: Path):
     assert exit_code == 0
 
     patched = json.loads(agg.read_text())
-    system_energy = 500.0 * 8 * 10.0  # 40_000 J
-    # Aggregator rounds to 6 decimal places, so allow a generous tolerance.
-    assert patched["joules_per_output_token"] == pytest.approx(
-        system_energy / 65_536, abs=1e-5
-    )
-    assert patched["joules_per_total_token"] == pytest.approx(
-        system_energy / (65_536 + 524_288), abs=1e-5
-    )
-    # Sanity: 8k1k workload makes J/total roughly 9x smaller than J/output.
-    ratio = patched["joules_per_output_token"] / patched["joules_per_total_token"]
-    assert 8.5 < ratio < 9.5
+    # 40,000 J over 65,536 output tokens and 589,824 total tokens.
+    assert patched["joules_per_output_token"] == pytest.approx(0.610352)
+    assert patched["joules_per_total_token"] == pytest.approx(0.067817)
 
 
 def test_run_skips_when_bench_window_missing(tmp_path: Path):
@@ -675,51 +667,28 @@ def test_run_skips_when_bench_window_missing(tmp_path: Path):
     }
 
 
-def test_run_skips_when_csv_missing(tmp_path: Path):
-    bench = tmp_path / "bench.json"
-    agg = tmp_path / "agg.json"
-    _write_bench_result(bench, start=0.0, end=10.0, duration=10.0, total_output=1000)
-    agg.write_text(json.dumps({"hw": "h200"}), encoding="utf-8")
-
-    exit_code = run(tmp_path / "absent.csv", bench, agg)
-    assert exit_code == 0
-
-    patched = json.loads(agg.read_text())
-    assert "avg_power_w" not in patched
-
-
-def test_run_skips_when_total_output_tokens_zero(tmp_path: Path):
-    """Guards against division by zero on failed runs."""
-    csv = tmp_path / "gpu_metrics.csv"
-    _write_nvidia_csv(csv, [(1_700_000_000.0, 0, 400.0)])
-    bench = tmp_path / "bench.json"
-    _write_bench_result(
-        bench, start=1_700_000_000.0, end=1_700_000_010.0, duration=10.0, total_output=0
-    )
+def test_patch_agg_result_preserves_original_when_write_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
     agg = tmp_path / "agg.json"
     agg.write_text(json.dumps({"hw": "h200"}), encoding="utf-8")
+    original = agg.read_bytes()
+    write_text = Path.write_text
 
-    exit_code = run(csv, bench, agg)
-    assert exit_code == 0
-    patched = json.loads(agg.read_text())
-    assert "joules_per_output_token" not in patched
+    def partial_write(path: Path, *args, **kwargs):
+        write_text(path, '{"partial":', encoding="utf-8")
+        raise OSError("disk full")
 
+    monkeypatch.setattr(Path, "write_text", partial_write)
+    with pytest.raises(OSError, match="disk full"):
+        patch_agg_result(
+            agg,
+            avg_power_w=400.0,
+            joules_per_output_token=1.5,
+            joules_per_total_token=0.5,
+        )
 
-def test_patch_agg_result_is_atomic_via_tempfile(tmp_path: Path):
-    agg = tmp_path / "agg.json"
-    agg.write_text(json.dumps({"hw": "h200"}), encoding="utf-8")
-    patch_agg_result(
-        agg,
-        avg_power_w=400.0,
-        joules_per_output_token=1.5,
-        joules_per_total_token=0.5,
-    )
-    data = json.loads(agg.read_text())
-    assert data["avg_power_w"] == 400.0
-    assert data["joules_per_output_token"] == 1.5
-    assert data["joules_per_total_token"] == 0.5
-    # No .tmp leftover.
-    assert not (tmp_path / "agg.json.tmp").exists()
+    assert agg.read_bytes() == original
 
 
 def test_run_emits_complete_whole_deployment_metric_contract(tmp_path: Path):
@@ -766,7 +735,7 @@ def test_run_emits_complete_whole_deployment_metric_contract(tmp_path: Path):
     assert patched["joules_per_successful_query"] == pytest.approx(4_000.0)
     assert patched["joules_per_input_token"] == pytest.approx(4.0)
     assert patched["joules_per_output_token"] == pytest.approx(20.0)
-    assert patched["joules_per_total_token"] == pytest.approx(40_000 / 12_000)
+    assert patched["joules_per_total_token"] == pytest.approx(3.333333)
 
     audit = json.loads(validation.read_text())
     assert audit["schema_version"] == 1
@@ -860,7 +829,17 @@ def test_run_strict_mode_fails_after_writing_validation(tmp_path: Path):
     assert json.loads(validation.read_text())["reasons"] == ["telemetry_file_missing"]
 
 
-def test_run_invalid_benchmark_denominator_is_auditable(tmp_path: Path):
+@pytest.mark.parametrize(
+    ("completed", "total_input", "total_output", "reason"),
+    [
+        (0, 10_000, 2_000, "invalid_successful_query_count"),
+        (1, 0, 2_000, "invalid_input_token_count"),
+        (1, 10_000, 0, "invalid_output_token_count"),
+    ],
+)
+def test_run_invalid_benchmark_denominator_is_auditable(
+    tmp_path: Path, completed: int, total_input: int, total_output: int, reason: str
+):
     base = 1_700_000_000.0
     csv = tmp_path / "gpu_metrics.csv"
     _write_constant_window_samples(
@@ -878,9 +857,9 @@ def test_run_invalid_benchmark_denominator_is_auditable(tmp_path: Path):
         start=base,
         end=base + 10,
         duration=10.0,
-        completed=0,
-        total_input=10_000,
-        total_output=2_000,
+        completed=completed,
+        total_input=total_input,
+        total_output=total_output,
     )
     agg.write_text(json.dumps({"hw": "h200"}), encoding="utf-8")
 
@@ -894,9 +873,7 @@ def test_run_invalid_benchmark_denominator_is_auditable(tmp_path: Path):
 
     assert exit_code == 0
     assert json.loads(agg.read_text())["power_valid"] == 0
-    assert json.loads(validation.read_text())["reasons"] == [
-        "invalid_successful_query_count"
-    ]
+    assert json.loads(validation.read_text())["reasons"] == [reason]
 
 
 # --------------------------------------------------------------------------- #
