@@ -68,6 +68,10 @@ elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-
 elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-sglang" ]]; then
     export MODEL_PATH="${MODEL_PATH:-/scratch/models/DeepSeek-V4-Pro}"
     export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
+elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-trt" ]]; then
+    export SERVED_MODEL_NAME="nvidia/GLM-5.2-NVFP4"
+    export MODEL_PATH="/scratch/models/GLM-5.2-NVFP4"
+    export SRT_SLURM_MODEL_PREFIX="nvidia/GLM-5.2-NVFP4"
 elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-vllm" ]]; then
     export MODEL_PATH="/data/models/MiniMax-M2.5-NVFP4"
     export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-nvfp4"
@@ -81,7 +85,7 @@ elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" && $FRAMEWORK == "dy
     export MODEL_PATH="/data/models/MiniMax-M3-MXFP8"
     export SRT_SLURM_MODEL_PREFIX="MiniMaxAI/MiniMax-M3-MXFP8"
 else
-    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4 with dynamo-vllm or dynamo-sglang, minimaxm2.5-fp4 with dynamo-vllm, minimaxm2.5-fp8 with dynamo-vllm, minimaxm3-fp4 with dynamo-vllm, minimaxm3-fp8 with dynamo-vllm"
+    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4 with dynamo-vllm or dynamo-sglang, glm5.2-fp4 with dynamo-trt, minimaxm2.5-fp4 with dynamo-vllm, minimaxm2.5-fp8 with dynamo-vllm, minimaxm3-fp4 with dynamo-vllm, minimaxm3-fp8 with dynamo-vllm"
     exit 1
 fi
 
@@ -106,6 +110,21 @@ if [[ "$USES_DCGM_POWER" == "1" ]]; then
     else
         mkdir -p recipes/vllm/deepseek-v4
         cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
+    fi
+elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "glm5.2" ]]; then
+    # Pin v1.0.74 plus the remap-root opt-out and MPI worker srun options used by
+    # these recipes.
+    SRT_SLURM_REV="824c15e8eccd447bdf79c39d264ebafd10b1dba3"
+    git clone https://github.com/Thunderbeee/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR" || exit 1
+    git checkout --detach "$SRT_SLURM_REV" || exit 1
+    TRTLLM_RECIPES_DIR="benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2"
+    mkdir -p "$TRTLLM_RECIPES_DIR"
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2" \
+        "$TRTLLM_RECIPES_DIR"
+    if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
+        find "$TRTLLM_RECIPES_DIR" -name "*.yaml" \
+            -exec sed -i '/TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS/d' {} +
     fi
 elif [[ "$IS_AGENTIC" == "1" ]]; then
     git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
@@ -206,6 +225,29 @@ export ISL="$ISL"
 export OSL="$OSL"
 export EVAL_ONLY="${EVAL_ONLY:-false}"
 
+DEFAULT_MOUNTS_BLOCK='default_mounts:'
+if [[ $FRAMEWORK != "dynamo-trt" || $MODEL_PREFIX != "glm5.2" ]]; then
+    DEFAULT_MOUNTS_BLOCK+='
+  "/opt/ucx-no-ud": "/usr/local/ucx"'
+else
+    echo "Using the container UCX for glm5.2 dynamo-trt NIXL transfers"
+    # The context HCA pinning preamble below is sourced by srtctl inside EVERY srun
+    # it launches, including the NATS/etcd step, and those run in the container. A
+    # host path is not visible there, so mount the directory that holds it.
+    CTX_HCA_PIN_HOST_DIR="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2/b300-fp4/agentic"
+    DEFAULT_MOUNTS_BLOCK+="
+  \"${CTX_HCA_PIN_HOST_DIR}\": \"/srt-preamble\""
+fi
+if [[ "$IS_AGENTIC" == "1" ]]; then
+    AIPERF_MMAP_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/ai-perf-cache"
+    HF_HUB_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/hf-hub-cache"
+    mkdir -p "$AIPERF_MMAP_CACHE_HOST_PATH" "$HF_HUB_CACHE_HOST_PATH"
+    chmod 777 "$AIPERF_MMAP_CACHE_HOST_PATH" "$HF_HUB_CACHE_HOST_PATH" 2>/dev/null || true
+    DEFAULT_MOUNTS_BLOCK+="
+  \"${AIPERF_MMAP_CACHE_HOST_PATH}\": \"/aiperf_mmap_cache\"
+  \"${HF_HUB_CACHE_HOST_PATH}\": \"/hf_hub_cache\""
+fi
+
 # Create srtslurm.yaml for srtctl
 SRTCTL_ROOT="${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"
 echo "Creating srtslurm.yaml configuration..."
@@ -232,9 +274,22 @@ containers:
   "${IMAGE}": "${SQUASH_FILE}"
   nginx-sqsh: "${NGINX_SQUASH_FILE}"
 use_exclusive_sbatch_directive: true
-default_mounts:
-  "/opt/ucx-no-ud": "/usr/local/ucx"
+${DEFAULT_MOUNTS_BLOCK}
 EOF
+
+# GLM-5.2 dynamo-trt uses per-rank context-side HCA pinning. Decode remains
+# unpinned; no other model or framework is affected.
+if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "glm5.2" ]]; then
+    if [[ ! -f "$CTX_HCA_PIN_HOST_DIR/b300_ctx_hca_pin.sh" ]]; then
+        echo "Error: context HCA pinning preamble not found at $CTX_HCA_PIN_HOST_DIR" >&2
+        exit 1
+    fi
+    # Container path, from the mount added with DEFAULT_MOUNTS_BLOCK above. The
+    # preamble no-ops on every launch whose command does not carry a recognised
+    # SRT_FABRIC_MODE, so the NATS/etcd and frontend steps are unaffected.
+    echo 'default_bash_preamble: ". /srt-preamble/b300_ctx_hca_pin.sh"' >> srtslurm.yaml
+    echo "Context HCA pinning enabled for glm5.2 dynamo-trt (/srt-preamble)"
+fi
 
 if [[ "$USES_DCGM_POWER" == "1" ]]; then
     sed -i "/^  nginx-sqsh:/a\\  dcgm-exporter: ${DCGM_EXPORTER_SQSH}" srtslurm.yaml
@@ -266,6 +321,16 @@ if [[ ! -f "$CONFIG_PATH" ]]; then
     exit 1
 fi
 
+if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "glm5.2" ]]; then
+    sed -i "s|^    RESULT_FILENAME:.*|    RESULT_FILENAME: ${RESULT_FILENAME}|" "$CONFIG_PATH"
+fi
+
+# Eval runs execute lm-eval on the allocation head and connect over loopback.
+# Throughput keeps the frontend on first_decode and the client on last_decode.
+if [[ "${EVAL_ONLY:-false}" == "true" && "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "glm5.2" ]]; then
+    sed -i 's/^  orchestrator_placement: first_decode$/  orchestrator_placement: head/' "$CONFIG_PATH"
+fi
+
 # Override the job name in the recipe with the runner name.
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
 if [[ "$MODEL_PREFIX" == "minimaxm3" && -n "$MINIMAX_M3_SLURM_EXCLUDED_NODELIST" ]]; then
@@ -288,6 +353,9 @@ if [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISION 
     SRTCTL_APPLY_ARGS+=(--no-preflight)
 fi
 if [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" && "$MODEL_PATH" == /scratch/models/* ]]; then
+    SRTCTL_APPLY_ARGS+=(--no-preflight)
+fi
+if [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "glm5.2" && "$MODEL_PATH" == /scratch/models/* ]]; then
     SRTCTL_APPLY_ARGS+=(--no-preflight)
 fi
 if [[ -n "$SRTCTL_SETUP_SCRIPT" ]]; then
@@ -431,6 +499,19 @@ if [[ "${RUN_EVAL:-false}" == "true" || "${EVAL_ONLY:-false}" == "true" ]]; then
     else
         echo "WARNING: RUN_EVAL=true but no eval results found at $EVAL_DIR"
     fi
+
+    # srt-slurm stages eval artifacts but does not write the metadata file
+    # consumed by score validation. Reuse the canonical metadata writer so
+    # topology and recipe identity stay aligned with the workflow inputs.
+    eval_conc_value="${EVAL_CONC:-${CONC:-1}}"
+    (
+        export IS_MULTINODE=true
+        # shellcheck source=benchmarks/benchmark_lib.sh
+        source "$GITHUB_WORKSPACE/benchmarks/benchmark_lib.sh"
+        _write_lm_eval_meta_json \
+            "$GITHUB_WORKSPACE/meta_env.json" "" "$eval_conc_value"
+    )
+    echo "Wrote meta_env.json (conc=${eval_conc_value}, prefix=${MODEL_PREFIX:-unknown})"
 fi
 
 # Clean up srt-slurm outputs to prevent NFS silly-rename lock files

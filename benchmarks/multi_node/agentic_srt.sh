@@ -29,6 +29,13 @@ fi
 
 check_env_vars MODEL MODEL_PREFIX FRAMEWORK PRECISION CONC RESULT_FILENAME DURATION
 
+# Use the exported srt-slurm frontend endpoint when available. Older paths keep
+# benchmark_lib.sh's localhost fallback.
+if [[ -n "${SRT_FRONTEND_HOST:-}" && -n "${SRT_FRONTEND_PORT:-}" ]]; then
+    export AIPERF_SERVER_URL="http://${SRT_FRONTEND_HOST}:${SRT_FRONTEND_PORT}"
+    echo "Using srt-slurm frontend endpoint: $AIPERF_SERVER_URL"
+fi
+
 BASE_RESULT_DIR="${RESULT_DIR:-/logs/agentic}"
 BASE_RESULT_FILENAME="$RESULT_FILENAME"
 read -r -a CONCURRENCIES <<< "${CONC_LIST:-$CONC}"
@@ -54,7 +61,8 @@ fi
 wait_for_agentic_servers_idle() {
     local timeout_seconds="${AIPERF_DRAIN_TIMEOUT_SECONDS:-1800}"
     local poll_seconds="${AIPERF_DRAIN_POLL_SECONDS:-10}"
-    local frontend_metrics_url="http://localhost:${PORT}/metrics"
+    local frontend_metrics_url="${AIPERF_SERVER_URL:-http://localhost:${PORT}}"
+    frontend_metrics_url="${frontend_metrics_url%/}/metrics"
 
     "$AIPERF_PYTHON" - \
         "$timeout_seconds" \
