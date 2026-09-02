@@ -6831,3 +6831,14 @@
     - "Use a 169 GB/rank HiCache target pool at c12 and c16 while retaining ratio mode for lower concurrencies."
     - "Isolate SGLang runtime caches per Slurm allocation to prevent concurrent sweep cells from sharing per-rank cache files."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2808
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add an LMCache 0.5.5rc2 DRAM offload arm at concurrency 56 and 70, where the GPU prefix cache hit rate falls to 88.0% and 59.9%."
+    - "Size the LMCache chunk as block size x DCP size (1536 x 8 = 12288), required for chunking under decode context parallel."
+    - "Raise the LMCache L1 read-lock TTL to 3600s: the lock is held from prefetch to retrieve, and at concurrency 70 a queued request can exceed the 300s default, which fails the retrieve."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2802
+  append-only: true
