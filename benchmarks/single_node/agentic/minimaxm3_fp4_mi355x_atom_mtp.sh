@@ -171,7 +171,7 @@ case "$CONC" in
 esac
 # Official MiniMax-M3 ATOM launch settings. Concurrency remains a benchmark
 # input, while the server capacity knobs follow the validated reference.
-MAX_NUM_SEQS=256
+MAX_NUM_SEQS=$((2 * CONC))
 MAX_NUM_BATCHED_TOKENS=32768
 GPU_MEM_UTIL=0.8
 export ATOM_ENABLE_REPLAYSSM

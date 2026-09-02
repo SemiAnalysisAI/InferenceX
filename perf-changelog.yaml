@@ -6802,3 +6802,11 @@
   description:
     - "Enable prefix caching by default in the MiniMax-M3 ATOM AgentX entrypoint for generated Actions runs."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Scale ATOM max-num-seqs with concurrency using two scheduler slots per AgentX lane."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
