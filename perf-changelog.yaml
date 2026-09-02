@@ -6687,3 +6687,12 @@
     - "Test vLLM nightly 7c5dc571 on Kimi-K3 without LMCache at C1 TP8 DSpark K=6, C14 TP8 DSpark K=3, and C40/C52 TP8/DCP8 no-spec decoding."
     - "在 Kimi-K3 上测试 vLLM nightly 7c5dc571 且不使用 LMCache：C1 使用 TP8 DSpark K=6，C14 使用 TP8 DSpark K=3，C40/C52 使用 TP8/DCP8 无推测解码。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-simple-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Repeat the Kimi-K3 vLLM nightly 7c5dc571 C14, C40, and C52 AgentX points with vLLM SimpleCPU DRAM KV offload; preserve the original TP8, DCP, and speculative-decoding settings and omit C1."
+    - "使用 vLLM SimpleCPU DRAM KV offload 重复 Kimi-K3 vLLM nightly 7c5dc571 的 C14、C40 和 C52 AgentX 测试点；保持原有 TP8、DCP 和推测解码设置，并省略 C1。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
