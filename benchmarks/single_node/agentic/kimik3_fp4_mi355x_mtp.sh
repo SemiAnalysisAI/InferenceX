@@ -47,6 +47,7 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE
 
 K3_PERF_VARIANT="${K3_PERF_VARIANT:-baseline}"
+K3_ABA_GPU_MEM_UTIL=""
 
 # C1 changes cannot be adjudicated reliably across different physical nodes.
 # These variants keep one exclusive Slurm allocation while
@@ -60,6 +61,12 @@ case "$K3_PERF_VARIANT" in
         ;;
     spec3aba)
         K3_ABA_CANDIDATE=spec3
+        ;;
+    metadatareuseaba)
+        K3_ABA_CANDIDATE=metadatareuse
+        # Match the clean B300 control without changing the canonical C1
+        # recipe or the existing A/B/A variants.
+        K3_ABA_GPU_MEM_UTIL=0.85
         ;;
     *)
         K3_ABA_CANDIDATE=""
@@ -87,8 +94,9 @@ if [[ -n "$K3_ABA_CANDIDATE" ]]; then
     fi
     cache_session_root="$(mktemp -d "${TMPDIR:-/tmp}/k3-aba-cache.XXXXXX")"
     mkdir -p "$aba_dir"
-    printf 'node\t%s\nvariant\t%s\ncandidate\t%s\n' \
+    printf 'node\t%s\nvariant\t%s\ncandidate\t%s\ngpu_memory_utilization\t%s\n' \
         "$node_name" "$K3_PERF_VARIANT" "$K3_ABA_CANDIDATE" \
+        "${K3_ABA_GPU_MEM_UTIL:-default}" \
         >"$aba_dir/manifest.tsv"
 
     capture_kfd_owners() {
@@ -214,6 +222,8 @@ if [[ -n "$K3_ABA_CANDIDATE" ]]; then
         local failures_file="$9"
         local arm_cache_root="$cache_session_root/$label"
         local arm_rc=0
+        local cleanup_rc=0
+        local restore_rc=0
 
         mkdir -p \
             "$arm_result_dir" \
@@ -240,6 +250,7 @@ if [[ -n "$K3_ABA_CANDIDATE" ]]; then
         K3_PERF_VARIANT="$variant" \
             K3_STARTUP_SMOKE="$startup_smoke" \
             K3_ARM_CACHE_ROOT="$arm_cache_root" \
+            K3_GPU_MEM_UTIL_OVERRIDE="$K3_ABA_GPU_MEM_UTIL" \
             TRITON_CACHE_DIR="$arm_cache_root/triton" \
             TORCHINDUCTOR_CACHE_DIR="$arm_cache_root/torchinductor" \
             TORCH_EXTENSIONS_DIR="$arm_cache_root/torch_extensions" \
@@ -253,7 +264,27 @@ if [[ -n "$K3_ABA_CANDIDATE" ]]; then
             bash "$script_path"
         arm_rc=$?
         set -e
+
+        # The metadata candidate replaces installed vLLM Python sources. Put
+        # the exact baseline files back before any later baseline can start,
+        # even when the candidate process itself failed.
+        if [[ "$variant" == "metadatareuse" ]]; then
+            K3_ARM_CACHE_ROOT="$arm_cache_root" \
+                RESULT_DIR="$arm_result_dir" \
+                bash "$(dirname "$script_path")/k3_perf_overlays/apply_vllm_metadata_reuse_overlay.sh" \
+                    restore || restore_rc=$?
+        fi
+
         if ! verify_aba_arm_cleanup "$label" "$arm_result_dir"; then
+            cleanup_rc=1
+        fi
+        if ((restore_rc != 0)); then
+            printf '%s\t%s\t%s\t%s\toverlay-restore-rc=%s\n' \
+                "$label" "$variant" "$node_name" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                "$restore_rc" >>"$failures_file"
+            return "$restore_rc"
+        fi
+        if ((cleanup_rc != 0)); then
             printf '%s\t%s\t%s\t%s\tcleanup\n' \
                 "$label" "$variant" "$node_name" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
                 >>"$failures_file"
@@ -423,6 +454,10 @@ case "$K3_PERF_VARIANT" in
             "$RESULT_DIR"
         export AITER_CONFIG_GEMM_BF16="$RESULT_DIR/k3_m7_bf16_runtime_config.csv"
         export AITER_LOG_TUNED_CONFIG=1
+        ;;
+    metadatareuse)
+        bash "$(dirname "$0")/k3_perf_overlays/apply_vllm_metadata_reuse_overlay.sh" \
+            apply
         ;;
     tritonmla)
         # Preserve AITER for the rest of the ROCm stack while making MLA
@@ -616,6 +651,10 @@ case "$CONC" in
         ;;
 esac
 
+if [[ -n "${K3_GPU_MEM_UTIL_OVERRIDE:-}" ]]; then
+    GPU_MEM_UTIL="$K3_GPU_MEM_UTIL_OVERRIDE"
+fi
+
 if [[ "$K3_PERF_VARIANT" == "spec3" ]]; then
     if [[ "$CONC" != "1" || "${DCP_SIZE:-}" != "1" || "$KV_OFFLOADING" != "none" ]]; then
         echo "Error: spec3 requires CONC=1, DCP_SIZE=1, and KV_OFFLOADING=none" >&2
@@ -645,8 +684,9 @@ MAX_NUM_SEQS=$((2 * CONC))
 MAX_CUDAGRAPH_CAPTURE_SIZE=$((MAX_NUM_SEQS * (1 + SPEC_NUM_TOKENS)))
 CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 2 "$MAX_CUDAGRAPH_CAPTURE_SIZE")"
 COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}")
-printf 'variant\t%s\nspec_num_tokens\t%s\nsynthetic_acceptance_length\t%s\nmax_cudagraph_capture_size\t%s\ncudagraph_capture_sizes\t%s\n' \
+printf 'variant\t%s\nspec_num_tokens\t%s\nsynthetic_acceptance_length\t%s\ngpu_memory_utilization\t%s\nmax_cudagraph_capture_size\t%s\ncudagraph_capture_sizes\t%s\n' \
     "$K3_PERF_VARIANT" "$SPEC_NUM_TOKENS" "$SYNTHETIC_ACCEPT_LEN" \
+    "$GPU_MEM_UTIL" \
     "$MAX_CUDAGRAPH_CAPTURE_SIZE" "$CUDAGRAPH_CAPTURE_SIZES" \
     >"$RESULT_DIR/spec_decode_provenance.tsv"
 

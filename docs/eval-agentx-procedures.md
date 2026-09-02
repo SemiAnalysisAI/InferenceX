@@ -218,7 +218,12 @@ Enroot allocation and host telemetry can own KFD before the server starts, the
 harness first requires low VRAM and no existing vLLM process, records the KFD
 and shared-memory baseline, and requires every arm to restore that exact state.
 Baseline arms capture graph sizes 2 through 14; the three-draft candidate
-captures 2 through 8.
+captures 2 through 8. The `metadatareuseaba` mode keeps six drafts and graph
+sizes 2 through 14, pins all three arms to GPU-memory utilization 0.85, and
+applies the exact vLLM metadata-reuse source overlay only to the candidate.
+The candidate source is restored and checksum-verified after both its startup
+smoke and full benchmark; restoration failure aborts the A/B/A before a later
+baseline can run.
 
 Targeted AgentX SWE-bench smoke eval (first ten instances, real agentic generation):
 

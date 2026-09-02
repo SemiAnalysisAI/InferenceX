@@ -214,6 +214,10 @@ baseline/candidate/baseline 流程，只把并发 1 的 draft 数量从 6 改为
 进程可能在服务启动前已经持有 KFD，harness 会先要求低 VRAM 且不存在 vLLM
 进程，记录 KFD 和共享内存基线，并要求每个阶段恢复到完全相同的状态。baseline
 捕获 2 到 14 的图尺寸，三 draft 候选方案捕获 2 到 8。
+`metadatareuseaba` 模式保持六个 draft 和 2 到 14 的图尺寸，将三个阶段的
+GPU-memory utilization 固定为 0.85，并且只在候选阶段应用精确固定的 vLLM
+metadata-reuse 源码 overlay。候选启动冒烟和完整 benchmark 结束后都会恢复并
+校验原始源码；恢复失败会立即终止 A/B/A，不允许后续 baseline 继续运行。
 
 目标 AgentX SWE-bench smoke eval（前十个 instance，真实 agentic generation）：
 
