@@ -804,7 +804,21 @@ _find_latest_profile_trace() {
     printf '%s' "$latest"
 }
 
-# Move profiler trace into a stable workspace path for workflow relay/upload.
+_stage_profile_trace_for_relay() {
+    local trace_file="$1"
+    local dest_trace="$2"
+
+    if [[ "$trace_file" == *.gz ]]; then
+        cp -f "$trace_file" "$dest_trace"
+    else
+        if ! gzip -c "$trace_file" > "$dest_trace"; then
+            rm -f "$dest_trace"
+            return 1
+        fi
+    fi
+}
+
+# Move profiler trace into a stable path for workflow relay/upload.
 move_profile_trace_for_relay() {
     if [[ "${PROFILE:-}" != "1" ]]; then
         return 0
@@ -852,11 +866,33 @@ move_profile_trace_for_relay() {
         return 0
     fi
 
-    local dest_trace="/workspace/profile_${RESULT_FILENAME}.trace.json.gz"
-    if [[ "$trace_file" == *.gz ]]; then
-        cp -f "$trace_file" "$dest_trace"
-    else
-        gzip -c "$trace_file" > "$dest_trace"
+    local relay_dir="${PROFILE_RELAY_DIR:-/workspace}"
+    if ! mkdir -p "$relay_dir" 2>/dev/null || [[ ! -w "$relay_dir" ]]; then
+        if [[ -n "${RESULT_DIR:-}" ]] && \
+                mkdir -p "$RESULT_DIR" 2>/dev/null && [[ -w "$RESULT_DIR" ]]; then
+            echo "[PROFILE] Relay directory '$relay_dir' is not writable; using RESULT_DIR='$RESULT_DIR'." >&2
+            relay_dir="$RESULT_DIR"
+        else
+            echo "[PROFILE] Relay directory '$relay_dir' is not writable; trace remains at '$trace_file'." >&2
+            return 0
+        fi
+    fi
+
+    local dest_trace="${relay_dir%/}/profile_${RESULT_FILENAME}.trace.json.gz"
+    if ! _stage_profile_trace_for_relay "$trace_file" "$dest_trace"; then
+        if [[ -n "${RESULT_DIR:-}" && "$relay_dir" != "$RESULT_DIR" ]] && \
+                mkdir -p "$RESULT_DIR" 2>/dev/null; then
+            relay_dir="$RESULT_DIR"
+            dest_trace="${relay_dir%/}/profile_${RESULT_FILENAME}.trace.json.gz"
+            echo "[PROFILE] Failed to stage under '${PROFILE_RELAY_DIR:-/workspace}'; retrying in RESULT_DIR='$RESULT_DIR'." >&2
+            if ! _stage_profile_trace_for_relay "$trace_file" "$dest_trace"; then
+                echo "[PROFILE] Failed to stage relay trace at '$dest_trace'; trace remains at '$trace_file'." >&2
+                return 0
+            fi
+        else
+            echo "[PROFILE] Failed to stage relay trace at '$dest_trace'; trace remains at '$trace_file'." >&2
+            return 0
+        fi
     fi
 
     echo "[PROFILE] Relay trace prepared: $dest_trace (source: $trace_file)"
