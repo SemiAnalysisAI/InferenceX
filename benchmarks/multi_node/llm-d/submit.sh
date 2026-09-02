@@ -94,9 +94,9 @@ export IS_MULTINODE="${IS_MULTINODE}"
 export CONFIG_FILE="${CONFIG_FILE}"
 
 # Explicit fleet/container mapping shared by every llm-d wrapper.
-case "$RUNNER_TYPE" in
-    b200|gb200) export LLMD_CONTAINER_ENGINE=pyxis ;;
-    h200) export LLMD_CONTAINER_ENGINE=docker ;;
+case "${RUNNER_TYPE#cluster:}" in
+    b200|b200-*|gb200|gb200-*) export LLMD_CONTAINER_ENGINE=pyxis ;;
+    h200|h200-*) export LLMD_CONTAINER_ENGINE=docker ;;
     *) echo "Unsupported llm-d runner hardware: $RUNNER_TYPE" >&2; exit 1 ;;
 esac
 
