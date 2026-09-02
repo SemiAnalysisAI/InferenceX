@@ -14,7 +14,8 @@ set -x
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR, DURATION
 # Optional:
 #   DCP_SIZE (default 8), KV_OFFLOAD_BACKEND (mooncake, or empty for resident),
-#   K3_MATCH_MI355X_C1 (set to 1 for the TP8/DCP1 six-draft-token C1 control)
+#   K3_MATCH_MI355X_C1 (set to 1 for the TP8/DCP1 C1 control)
+#   K3_MATCH_DRAFT_TOKENS (4, 5, or 6; default 6 for the matched C1 control)
 #
 # TP8 is the only single-node layout: the MXFP4 checkpoint is ~1.5 TB, so TP4
 # would need ~375 GB/GPU against B300's 288 GB.
@@ -50,6 +51,14 @@ if [ "$K3_MATCH_MI355X_C1" = "1" ]; then
     # Keep the graph policy aligned with the ROCm C1 recipe. CUDA otherwise
     # auto-enables breakable graphs, which would confound launch-gap analysis.
     export VLLM_USE_BREAKABLE_CUDAGRAPH=0
+    K3_MATCH_DRAFT_TOKENS="${K3_MATCH_DRAFT_TOKENS:-6}"
+    case "$K3_MATCH_DRAFT_TOKENS" in
+        4|5|6) ;;
+        *)
+            echo "Error: K3_MATCH_DRAFT_TOKENS must be 4, 5, or 6, got '$K3_MATCH_DRAFT_TOKENS'" >&2
+            exit 1
+            ;;
+    esac
 else
     DCP_SIZE="${DCP_SIZE:-8}"
 fi
@@ -223,8 +232,12 @@ fi
 # Draft length by concurrency. The golden AL must track it, from the
 # probabilistic curve in golden_al_distribution/.
 if [ "$K3_MATCH_MI355X_C1" = "1" ]; then
-    NUM_SPEC_TOKENS=6
-    SYNTHETIC_ACCEPT_LEN=3.75
+    NUM_SPEC_TOKENS="$K3_MATCH_DRAFT_TOKENS"
+    case "$NUM_SPEC_TOKENS" in
+        4) SYNTHETIC_ACCEPT_LEN=3.36 ;;
+        5) SYNTHETIC_ACCEPT_LEN=3.62 ;;
+        6) SYNTHETIC_ACCEPT_LEN=3.75 ;;
+    esac
 elif [ "$CONC" -le 8 ]; then
     NUM_SPEC_TOKENS=7
     SYNTHETIC_ACCEPT_LEN=3.84
@@ -263,7 +276,7 @@ MAX_NUM_SEQS=$((2 * CONC))
 # of it (2.78 GiB wanted, 1.60 GiB free); the pool grows with concurrency, so
 # lower points keep the default and their full KV cache.
 if [ "$K3_MATCH_MI355X_C1" = "1" ]; then
-    GPU_MEM_UTIL=0.90
+    GPU_MEM_UTIL=0.85
 elif [ "$CONC" -ge 56 ]; then
     GPU_MEM_UTIL=0.90
 else
@@ -274,8 +287,9 @@ fi
 # above that. Sizes are tokens when drafting, sequences when not; the 128 caps
 # the number of dense entries, not their value.
 if [ "$K3_MATCH_MI355X_C1" = "1" ]; then
-    CAPTURE_SIZES="$(seq -s, 2 14)"
-    COMPILATION_CONFIG="{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":14,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[${CAPTURE_SIZES}]}"
+    CAPTURE_MAX=$((2 * (1 + NUM_SPEC_TOKENS)))
+    CAPTURE_SIZES="$(seq -s, 2 "$CAPTURE_MAX")"
+    COMPILATION_CONFIG="{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":${CAPTURE_MAX},\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[${CAPTURE_SIZES}]}"
     STREAM_INTERVAL=1
 else
     CAPTURE_STEP=$((1 + NUM_SPEC_TOKENS))
@@ -295,6 +309,11 @@ else
     done
     COMPILATION_CONFIG="{\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"cudagraph_capture_sizes\":[${CAPTURE_SIZES}]}"
     STREAM_INTERVAL=10
+fi
+
+if [ "$K3_MATCH_MI355X_C1" = "1" ]; then
+    printf 'Matched Kimi-K3 C1: drafts=%s golden_al=%s graph_sizes=2..%s gpu_memory_utilization=%s\n' \
+        "$NUM_SPEC_TOKENS" "$SYNTHETIC_ACCEPT_LEN" "$CAPTURE_MAX" "$GPU_MEM_UTIL"
 fi
 
 PROFILER_ARGS=()
