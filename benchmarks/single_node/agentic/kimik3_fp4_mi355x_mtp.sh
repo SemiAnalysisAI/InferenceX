@@ -104,6 +104,20 @@ if [[ -n "$K3_ABA_CANDIDATE" ]]; then
         fi
     }
 
+    capture_kfd_owner_details() {
+        local owners="$1"
+        local output="$2"
+        local pid
+        : >"$output"
+        while IFS= read -r pid; do
+            [[ "$pid" =~ ^[1-9][0-9]*$ ]] || continue
+            if ! ps -o pid=,ppid=,uid=,stat=,comm=,args= -p "$pid" \
+                    >>"$output" 2>/dev/null; then
+                printf '%s\tprocess-exited-before-inspection\n' "$pid" >>"$output"
+            fi
+        done <"$owners"
+    }
+
     capture_shared_memory() {
         local output="$1"
         find /dev/shm -mindepth 1 -maxdepth 1 -printf '%f\n' 2>/dev/null \
@@ -118,13 +132,22 @@ if [[ -n "$K3_ABA_CANDIDATE" ]]; then
     }
 
     mkdir -p "$aba_dir/cleanup"
+    wait_for_amd_gpu_clean
+    rocm-smi --showmemuse \
+        >"$aba_dir/cleanup/initial_rocm_smi_memuse.txt" 2>&1 || true
     capture_kfd_owners "$aba_dir/cleanup/initial_kfd_owners.txt"
+    capture_kfd_owner_details \
+        "$aba_dir/cleanup/initial_kfd_owners.txt" \
+        "$aba_dir/cleanup/initial_kfd_owner_details.txt"
     capture_shared_memory "$aba_dir/cleanup/initial_shared_memory.txt"
     capture_server_processes "$aba_dir/cleanup/initial_server_processes.txt"
-    if [[ -s "$aba_dir/cleanup/initial_kfd_owners.txt" || \
-          -s "$aba_dir/cleanup/initial_shared_memory.txt" || \
-          -s "$aba_dir/cleanup/initial_server_processes.txt" ]]; then
-        echo "Error: same-node A/B/A allocation was not clean at startup" >&2
+    # Entering an Enroot allocation can itself create a stable KFD owner, and
+    # the shared node may retain harmless Python shared-memory names from older
+    # jobs. Treat those as the allocation baseline after proving VRAM is clean;
+    # every arm must restore exactly this state. A pre-existing vLLM process is
+    # still an unconditional failure.
+    if [[ -s "$aba_dir/cleanup/initial_server_processes.txt" ]]; then
+        echo "Error: same-node A/B/A allocation had a server at startup" >&2
         exit 1
     fi
 
@@ -149,10 +172,15 @@ if [[ -n "$K3_ABA_CANDIDATE" ]]; then
         rocm-smi --showmemuse >"$cleanup_dir/rocm_smi_memuse.txt" 2>&1 || true
         for ((cleanup_attempt = 1; cleanup_attempt <= 120; cleanup_attempt++)); do
             capture_kfd_owners "$cleanup_dir/kfd_owners.txt"
+            capture_kfd_owner_details \
+                "$cleanup_dir/kfd_owners.txt" \
+                "$cleanup_dir/kfd_owner_details.txt"
             capture_shared_memory "$cleanup_dir/shared_memory.txt"
             capture_server_processes "$cleanup_dir/server_processes.txt"
-            if [[ ! -s "$cleanup_dir/kfd_owners.txt" && \
-                  ! -s "$cleanup_dir/server_processes.txt" ]] && \
+            if [[ ! -s "$cleanup_dir/server_processes.txt" ]] && \
+                    cmp -s \
+                        "$aba_dir/cleanup/initial_kfd_owners.txt" \
+                        "$cleanup_dir/kfd_owners.txt" && \
                     cmp -s \
                         "$aba_dir/cleanup/initial_shared_memory.txt" \
                         "$cleanup_dir/shared_memory.txt"; then
@@ -163,6 +191,9 @@ if [[ -n "$K3_ABA_CANDIDATE" ]]; then
         done
         if [[ "$cleanup_complete" != "true" ]]; then
             echo "Error: $label did not release its GPU, process, or shared-memory state" >&2
+            diff -u \
+                "$aba_dir/cleanup/initial_kfd_owners.txt" \
+                "$cleanup_dir/kfd_owners.txt" >&2 || true
             diff -u \
                 "$aba_dir/cleanup/initial_shared_memory.txt" \
                 "$cleanup_dir/shared_memory.txt" >&2 || true

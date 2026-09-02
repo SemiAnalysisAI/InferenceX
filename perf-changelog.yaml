@@ -6865,3 +6865,12 @@
     - "Add a same-node six-draft/three-draft/six-draft C1 experiment that preserves the measured synthetic acceptance length while removing three never-accepted draft positions."
     - "Run a repeated-startup smoke first, isolate compiler caches per launch, and fail closed unless the prior server releases its processes, KFD ownership, VRAM, and shared-memory state."
   pr-link: XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Fix the same-node A/B/A startup gate for Enroot allocations that have a stable KFD owner and inherited shared-memory entries before the first server launch."
+    - "Require clean VRAM and no pre-existing vLLM process, record the allocation's initial KFD and shared-memory state, and fail unless every smoke and benchmark arm restores that exact baseline."
+  pr-link: XXX

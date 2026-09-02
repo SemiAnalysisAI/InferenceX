@@ -213,9 +213,12 @@ baseline/candidate/baseline protocol but changes only the C1 draft count from
 six to three while retaining the synthetic acceptance length of 3.75. It first
 performs a baseline/candidate startup smoke, isolates the Triton,
 TorchInductor, AITER JIT, and Python caches for every launch, and verifies GPU,
-process, and shared-memory cleanup before starting the next server. Baseline
-arms capture graph sizes 2 through 14; the three-draft candidate captures 2
-through 8.
+process, and shared-memory cleanup before starting the next server. Because the
+Enroot allocation and host telemetry can own KFD before the server starts, the
+harness first requires low VRAM and no existing vLLM process, records the KFD
+and shared-memory baseline, and requires every arm to restore that exact state.
+Baseline arms capture graph sizes 2 through 14; the three-draft candidate
+captures 2 through 8.
 
 Targeted AgentX SWE-bench smoke eval (first ten instances, real agentic generation):
 
