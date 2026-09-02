@@ -195,6 +195,13 @@ gh workflow run e2e-tests.yml --repo SemiAnalysisAI/InferenceX --ref "$REF" \
   -f agentx-fast=true
 ```
 
+对于受控的 Kimi-K3 MI355X 并发 1 实验，手动输入
+`k3-perf-variant` 用于选择彼此隔离的运行时实验分支，同时保持生成的
+recipe 不变。`m7tunedgemm` 分支只加入通过 changed-input graph replay
+和严格 tuner 门槛的五条精确 M=7 BF16 配置。运行时必须固定分支 SHA，保持
+`agentx-fast=false`，将 duration override 设为 1,200 秒，并在提升这些配置
+之前用匹配 baseline 对原始请求记录进行比较。
+
 目标 AgentX SWE-bench smoke eval（前十个 instance，真实 agentic generation）：
 
 ```bash

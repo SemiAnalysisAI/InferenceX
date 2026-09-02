@@ -101,6 +101,12 @@ case "$K3_PERF_VARIANT" in
     pynccl)
         export K3_DISABLE_CUSTOM_ALL_REDUCE=1
         ;;
+    m7tunedgemm)
+        bash "$(dirname "$0")/k3_perf_overlays/prepare_m7_bf16_gemm_config.sh" \
+            "$RESULT_DIR"
+        export AITER_CONFIG_GEMM_BF16="$RESULT_DIR/k3_m7_bf16_runtime_config.csv"
+        export AITER_LOG_TUNED_CONFIG=1
+        ;;
     *)
         echo "Error: unsupported Kimi-K3 performance variant '$K3_PERF_VARIANT'" >&2
         exit 1

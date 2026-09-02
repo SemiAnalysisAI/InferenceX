@@ -6830,3 +6830,12 @@
     - "Add a manual exact TP8/DCP1 concurrency-1 diagnostic selector for the Kimi-K3 MI355X gap study."
     - "Compare upstream vLLM PR 52494 and a PYNCCL-only collective arm independently without changing the canonical default recipe."
   pr-link: XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a natural AgentX concurrency-one validation arm for five gfx950 exact-M=7 BF16 GEMM rows selected by changed-input HIP graph replay and strict default/candidate/default timing gates."
+    - "Pin the validated AITER v0.1.19 Python sources and preserve the complete installed BF16 configuration while adding only the five independently promoted dispatch rows."
+  pr-link: XXX
