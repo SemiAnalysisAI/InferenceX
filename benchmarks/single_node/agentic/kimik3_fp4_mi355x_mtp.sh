@@ -107,6 +107,11 @@ case "$K3_PERF_VARIANT" in
         export AITER_CONFIG_GEMM_BF16="$RESULT_DIR/k3_m7_bf16_runtime_config.csv"
         export AITER_LOG_TUNED_CONFIG=1
         ;;
+    tritonmla)
+        # Preserve AITER for the rest of the ROCm stack while making MLA
+        # decode auto-selection choose the Triton backend as an isolated A/B.
+        export VLLM_ROCM_USE_AITER_MLA=0
+        ;;
     *)
         echo "Error: unsupported Kimi-K3 performance variant '$K3_PERF_VARIANT'" >&2
         exit 1
@@ -375,6 +380,17 @@ SERVER_PID=$!
 echo "Server PID: $SERVER_PID"
 
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
+
+if [[ "$K3_PERF_VARIANT" == "tritonmla" ]]; then
+    if ! grep -F "Using TRITON_MLA backend" "$SERVER_LOG" >/dev/null; then
+        echo "Error: tritonmla variant did not select the TRITON_MLA backend" >&2
+        exit 1
+    fi
+    if grep -F "Using ROCM_AITER_MLA backend" "$SERVER_LOG" >/dev/null; then
+        echo "Error: tritonmla variant retained the ROCM_AITER_MLA backend" >&2
+        exit 1
+    fi
+fi
 
 grep -F "all-reduce backends" "$SERVER_LOG" || true
 if [[ "${K3_DISABLE_CUSTOM_ALL_REDUCE:-0}" == "1" ]]; then

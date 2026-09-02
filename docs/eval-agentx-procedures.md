@@ -201,7 +201,10 @@ recipe remains unchanged. The `m7tunedgemm` arm adds only the five exact-M=7
 BF16 rows that passed changed-input graph replay and strict tuner gates. Pin the
 branch SHA, keep `agentx-fast=false`, use a 1,200-second duration override, and
 compare the resulting raw request records with the matching baseline before
-promoting the rows.
+promoting the rows. The `tritonmla` arm disables only AITER MLA so target-model
+decode auto-selection uses `TRITON_MLA`; it keeps the rest of the AITER ROCm
+stack enabled and fails closed unless the selected backend is proven in the
+server log.
 
 Targeted AgentX SWE-bench smoke eval (first ten instances, real agentic generation):
 

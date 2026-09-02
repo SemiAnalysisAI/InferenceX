@@ -200,7 +200,9 @@ gh workflow run e2e-tests.yml --repo SemiAnalysisAI/InferenceX --ref "$REF" \
 recipe 不变。`m7tunedgemm` 分支只加入通过 changed-input graph replay
 和严格 tuner 门槛的五条精确 M=7 BF16 配置。运行时必须固定分支 SHA，保持
 `agentx-fast=false`，将 duration override 设为 1,200 秒，并在提升这些配置
-之前用匹配 baseline 对原始请求记录进行比较。
+之前用匹配 baseline 对原始请求记录进行比较。`tritonmla` 分支只禁用 AITER
+MLA，使目标模型解码自动选择 `TRITON_MLA`；其余 AITER ROCm 路径保持启用，
+并且只有在服务日志明确证明后端选择成功时才继续运行。
 
 目标 AgentX SWE-bench smoke eval（前十个 instance，真实 agentic generation）：
 

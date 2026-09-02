@@ -6839,3 +6839,11 @@
     - "Add a natural AgentX concurrency-one validation arm for five gfx950 exact-M=7 BF16 GEMM rows selected by changed-input HIP graph replay and strict default/candidate/default timing gates."
     - "Pin the validated AITER v0.1.19 Python sources and preserve the complete installed BF16 configuration while adding only the five independently promoted dispatch rows."
   pr-link: XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add an isolated natural AgentX concurrency-one target-MLA backend A/B that disables only AITER MLA, requires server-log proof of TRITON_MLA selection, and leaves the remaining AITER ROCm stack unchanged."
+  pr-link: XXX
