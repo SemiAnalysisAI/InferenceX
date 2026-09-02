@@ -223,7 +223,12 @@ sizes 2 through 14, pins all three arms to GPU-memory utilization 0.85, and
 applies the exact vLLM metadata-reuse source overlay only to the candidate.
 The candidate source is restored and checksum-verified after both its startup
 smoke and full benchmark; restoration failure aborts the A/B/A before a later
-baseline can run.
+baseline can run. The `rocmsharedstreamaba` mode keeps the same six-draft,
+graph-size, memory-utilization, and restart contract while changing only the
+shared-expert execution guard so ROCm uses vLLM's existing auxiliary stream for
+small batches. Before each candidate server launch, all eight GPUs must pass an
+eager and changed-input HIP-graph replay test; the server log must then prove
+that the ROCm auxiliary-stream route executed.
 
 Targeted AgentX SWE-bench smoke eval (first ten instances, real agentic generation):
 

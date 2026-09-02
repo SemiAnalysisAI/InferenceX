@@ -68,6 +68,10 @@ case "$K3_PERF_VARIANT" in
         # recipe or the existing A/B/A variants.
         K3_ABA_GPU_MEM_UTIL=0.85
         ;;
+    rocmsharedstreamaba)
+        K3_ABA_CANDIDATE=rocmsharedstream
+        K3_ABA_GPU_MEM_UTIL=0.85
+        ;;
     *)
         K3_ABA_CANDIDATE=""
         ;;
@@ -274,6 +278,12 @@ if [[ -n "$K3_ABA_CANDIDATE" ]]; then
                 bash "$(dirname "$script_path")/k3_perf_overlays/apply_vllm_metadata_reuse_overlay.sh" \
                     restore || restore_rc=$?
         fi
+        if [[ "$variant" == "rocmsharedstream" ]]; then
+            K3_ARM_CACHE_ROOT="$arm_cache_root" \
+                RESULT_DIR="$arm_result_dir" \
+                bash "$(dirname "$script_path")/k3_perf_overlays/apply_vllm_rocm_shared_experts_stream_overlay.sh" \
+                    restore || restore_rc=$?
+        fi
 
         if ! verify_aba_arm_cleanup "$label" "$arm_result_dir"; then
             cleanup_rc=1
@@ -457,6 +467,10 @@ case "$K3_PERF_VARIANT" in
         ;;
     metadatareuse)
         bash "$(dirname "$0")/k3_perf_overlays/apply_vllm_metadata_reuse_overlay.sh" \
+            apply
+        ;;
+    rocmsharedstream)
+        bash "$(dirname "$0")/k3_perf_overlays/apply_vllm_rocm_shared_experts_stream_overlay.sh" \
             apply
         ;;
     tritonmla)
@@ -761,6 +775,15 @@ if [[ "$K3_PERF_VARIANT" == "tritonmla" ]]; then
     fi
     if grep -F "Using ROCM_AITER_MLA backend" "$SERVER_LOG" >/dev/null; then
         echo "Error: tritonmla variant retained the ROCM_AITER_MLA backend" >&2
+        exit 1
+    fi
+fi
+
+if [[ "$K3_PERF_VARIANT" == "rocmsharedstream" ]]; then
+    if ! grep -F \
+        "Running MoE shared experts on a ROCm auxiliary stream." \
+        "$SERVER_LOG" >/dev/null; then
+        echo "Error: rocmsharedstream did not execute the ROCm auxiliary-stream route" >&2
         exit 1
     fi
 fi

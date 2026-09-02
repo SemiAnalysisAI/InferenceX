@@ -218,6 +218,10 @@ baseline/candidate/baseline 流程，只把并发 1 的 draft 数量从 6 改为
 GPU-memory utilization 固定为 0.85，并且只在候选阶段应用精确固定的 vLLM
 metadata-reuse 源码 overlay。候选启动冒烟和完整 benchmark 结束后都会恢复并
 校验原始源码；恢复失败会立即终止 A/B/A，不允许后续 baseline 继续运行。
+`rocmsharedstreamaba` 保持相同的六 draft、图尺寸、显存比例与重启约束，只修改
+shared-expert 执行条件，让 ROCm 小 batch 使用 vLLM 已有的辅助 stream。每次候选
+server 启动前，八张 GPU 都必须通过 eager 与 changed-input HIP graph replay 测试，
+并且 server log 必须证明 ROCm 辅助 stream 路径确实执行。
 
 目标 AgentX SWE-bench smoke eval（前十个 instance，真实 agentic generation）：
 

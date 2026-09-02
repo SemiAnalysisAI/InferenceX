@@ -1,0 +1,54 @@
+diff --git a/vllm/model_executor/layers/fused_moe/runner/shared_experts.py b/vllm/model_executor/layers/fused_moe/runner/shared_experts.py
+index 17faeffd29..6b118eaa6b 100644
+--- a/vllm/model_executor/layers/fused_moe/runner/shared_experts.py
++++ b/vllm/model_executor/layers/fused_moe/runner/shared_experts.py
+@@ -54,6 +54,7 @@ class SharedExperts(torch.nn.Module):
+         self._output: list[torch.Tensor | None] = [None, None]
+         self._layer = layer
+         self._moe_config = moe_config
++        self._logged_rocm_aux_stream = False
+
+         self._mk_can_overlap_shared_experts = mk_can_overlap_shared_experts
+
+@@ -62,14 +63,16 @@ class SharedExperts(torch.nn.Module):
+         # TODO: Remove this after more extensive testings with TP/DP
+         # and other execution modes
+         if envs.VLLM_DISABLE_SHARED_EXPERTS_STREAM:
+-            logger.debug_once("Disabling MoE shared_experts cuda stream")
++            logger.debug_once("Disabling MoE shared_experts auxiliary stream")
+             self._stream = None
+         else:
+             # TODO(rob): enable shared expert overlap with non-cuda-alike.
+             # aux_stream() returns None on non-cuda-alike platforms.
+             self._stream = aux_stream()
+             if self._stream is not None:
+-                logger.debug_once("Enabled separate cuda stream for MoE shared_experts")
++                logger.debug_once(
++                    "Enabled separate auxiliary stream for MoE shared_experts"
++                )
+
+     # TODO(bnell): Hack for elastic_ep. Get rid of this
+     def _set_moe_config(self, new_moe_config: FusedMoEConfig):
+@@ -107,7 +110,7 @@ class SharedExperts(torch.nn.Module):
+             return SharedExpertsOrder.MK_INTERNAL_OVERLAPPED
+
+         should_run_shared_in_aux_stream = (
+-            current_platform.is_cuda()
++            (current_platform.is_cuda() or current_platform.is_rocm())
+             and self._stream is not None
+             and hidden_states.shape[0]
+             <= envs.VLLM_SHARED_EXPERTS_STREAM_TOKEN_THRESHOLD
+@@ -144,6 +147,13 @@ class SharedExperts(torch.nn.Module):
+     ) -> torch.Tensor:
+         # TODO: assert that maybe_sync_shared_experts_stream has been called.
+
++        if current_platform.is_rocm() and not self._logged_rocm_aux_stream:
++            self._logged_rocm_aux_stream = True
++            logger.info_once(
++                "Running MoE shared experts on a ROCm auxiliary stream.",
++                scope="global",
++            )
++
+         # Run shared experts in parallel on a separate stream.
+         with torch.cuda.stream(self._stream):
+             output = self._layer(shared_experts_input)
