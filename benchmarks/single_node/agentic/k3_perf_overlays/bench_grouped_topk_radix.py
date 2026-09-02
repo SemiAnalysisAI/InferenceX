@@ -198,7 +198,7 @@ def validate_changed_input_replay(
     num_tokens: int,
     seed: int,
 ) -> int:
-    previous_ids = [case.ids.clone() for case in cases]
+    previous_outputs = [(case.ids.clone(), case.weights.clone()) for case in cases]
     changed = make_cases(num_tokens, seed)
     for destination, source in zip(cases, changed, strict=True):
         destination.logits.copy_(source.logits)
@@ -207,11 +207,19 @@ def validate_changed_input_replay(
     torch.cuda.synchronize()
 
     changed_rows = 0
-    for index, (case, old_ids) in enumerate(zip(cases, previous_ids, strict=True)):
+    for index, (case, (old_ids, old_weights)) in enumerate(
+        zip(cases, previous_outputs, strict=True)
+    ):
         assert_case_matches_reference(case, f"M={num_tokens} changed layer={index}")
-        changed_rows += int((case.ids != old_ids).any(dim=-1).sum().item())
+        # The radix implementation deliberately emits a stable expert-id order.
+        # A changed input can therefore retain the same IDs while producing new
+        # routing weights. Count either observable output as proof that replay
+        # consumed the updated graph inputs.
+        changed_ids = (case.ids != old_ids).any(dim=-1)
+        changed_weights = (case.weights != old_weights).any(dim=-1)
+        changed_rows += int((changed_ids | changed_weights).sum().item())
     if changed_rows == 0:
-        raise AssertionError(f"M={num_tokens}: graph replay ignored changed inputs")
+        raise AssertionError(f"M={num_tokens}: graph replay produced unchanged outputs")
     return changed_rows
 
 

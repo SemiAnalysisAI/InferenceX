@@ -6873,3 +6873,12 @@
   description:
     - "Fetch sufficient candidate history for the pinned stock AITER revision so the radix-router diagnostic's fail-closed ancestry check operates on connected commits in a shallow checkout."
   pr-link: XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Treat changed routing weights as observable changed-input HIP graph replay evidence when the radix implementation intentionally preserves expert-ID order."
+    - "Retain strict reference-output validation so a replay that actually ignores updated inputs still fails closed."
+  pr-link: XXX
