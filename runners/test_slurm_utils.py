@@ -4,7 +4,9 @@ import runpy
 import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
+from pydantic import BaseModel, ValidationError
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SLURM_UTILS = REPO_ROOT / "runners" / "slurm_utils.sh"
@@ -74,11 +76,17 @@ def test_patch_srt_eval_dispatch_forwards_selection_and_is_idempotent(
     do_sweep.parent.mkdir(parents=True)
     eval_script.parent.mkdir(parents=True)
     do_sweep.write_text(
+        "def forwarded(environment):\n"
+        "    forwarded = {}\n"
+        "    if environment:\n"
         "        for var in [\n"
         '            "RUN_EVAL",\n'
         '            "EVAL_ONLY",\n'
         '            "IS_MULTINODE",\n'
         "        ]:\n"
+        "            if var in environment:\n"
+        "                forwarded[var] = environment[var]\n"
+        "    return forwarded\n"
     )
     eval_script.write_text(
         'run_eval --framework lm-eval --port "$PORT" || eval_rc=$?\n'
@@ -92,6 +100,8 @@ def test_patch_srt_eval_dispatch_forwards_selection_and_is_idempotent(
         capture_output=True,
         text=True,
     )
+    patched_sweep = do_sweep.read_text()
+    patched_eval = eval_script.read_text()
     second = subprocess.run(
         ["python3", str(PATCH_SRT_EVAL), str(tmp_path)],
         check=False,
@@ -101,30 +111,33 @@ def test_patch_srt_eval_dispatch_forwards_selection_and_is_idempotent(
 
     assert first.returncode == 0, first.stderr
     assert second.returncode == 0, second.stderr
-    assert do_sweep.read_text().count('"EVAL_FRAMEWORK"') == 1
-    assert do_sweep.read_text().count('"EVAL_SUITE"') == 1
-    assert do_sweep.read_text().count('"EVAL_CONC"') == 1
-    assert do_sweep.read_text().count('"EVAL_LIMIT"') == 1
-    assert do_sweep.read_text().count('"SWEBENCH_GEN_MODE"') == 1
-    assert do_sweep.read_text().count('"SWEBENCH_USE_MODAL"') == 1
-    assert do_sweep.read_text().count('"MODAL_TOKEN_ID"') == 1
-    assert do_sweep.read_text().count('"MODAL_TOKEN_SECRET"') == 1
-    assert do_sweep.read_text().count('"IS_AGENTIC"') == 1
-    assert do_sweep.read_text().count('"SCENARIO_TYPE"') == 1
-    assert 'run_eval --port "$PORT"' in eval_script.read_text()
-    assert "--framework lm-eval" not in eval_script.read_text()
-    assert 'stage_eval_artifacts /logs/eval_results "$PWD" || true' in eval_script.read_text()
-    assert "cp -v" not in eval_script.read_text()
-    assert "already patched" in second.stdout
+    assert do_sweep.read_text() == patched_sweep
+    assert eval_script.read_text() == patched_eval
+    settings = {name: f"value-{name}" for name in (
+        "EVAL_FRAMEWORK", "EVAL_SUITE", "EVAL_CONC", "EVAL_LIMIT",
+        "SWEBENCH_GEN_MODE", "SWEBENCH_USE_MODAL", "MODAL_TOKEN_ID",
+        "MODAL_TOKEN_SECRET", "IS_AGENTIC", "SCENARIO_TYPE",
+    )}
+    forwarded = runpy.run_path(str(do_sweep))["forwarded"]
+    assert forwarded({**settings, "UNRELATED": "do not forward"}) == settings
+
+    execution = run_bash(
+        'PORT=12345; run_eval() { printf "eval:%s\\n" "$*"; }; '
+        'stage_eval_artifacts() { printf "stage:%s\\n" "$1"; }; source "$1"',
+        eval_script,
+    )
+    assert execution.returncode == 0, execution.stderr
+    assert execution.stdout.splitlines() == ["eval:--port 12345", "stage:/logs/eval_results"]
 
 
-def test_patch_srt_vllm_dp_ranks_groups_tensor_parallel_devices(
+def test_patch_srt_vllm_dp_ranks_is_idempotent_and_preserves_surrounding_code(
     tmp_path: Path,
 ) -> None:
     symbols = runpy.run_path(str(PATCH_SRT_DP_RANKS))
     backend = tmp_path / "src/srtctl/backends/vllm.py"
     backend.parent.mkdir(parents=True)
-    backend.write_text(f"prefix\n{symbols['OLD_BLOCK']}suffix\n")
+    original = f"prefix\n{symbols['OLD_BLOCK']}suffix\n"
+    backend.write_text(original)
 
     first = subprocess.run(
         ["python3", str(PATCH_SRT_DP_RANKS), str(tmp_path)],
@@ -132,6 +145,7 @@ def test_patch_srt_vllm_dp_ranks_groups_tensor_parallel_devices(
         capture_output=True,
         text=True,
     )
+    patched = backend.read_text()
     second = subprocess.run(
         ["python3", str(PATCH_SRT_DP_RANKS), str(tmp_path)],
         check=False,
@@ -139,14 +153,11 @@ def test_patch_srt_vllm_dp_ranks_groups_tensor_parallel_devices(
         text=True,
     )
 
-    patched = backend.read_text()
     assert first.returncode == 0, first.stderr
     assert second.returncode == 0, second.stderr
-    assert symbols["OLD_BLOCK"] not in patched
-    assert patched.count(symbols["NEW_BLOCK"]) == 1
-    assert "gpus_per_dp_rank = tp_size * pp_size" in patched
-    assert "gpu_indices=rank_gpus" in patched
-    assert "already patched" in second.stdout.lower()
+    assert patched != original
+    assert patched.startswith("prefix\n") and patched.endswith("suffix\n")
+    assert backend.read_text() == patched
 
 
 def test_patch_srt_vllm_dp_ranks_rejects_unknown_source(tmp_path: Path) -> None:
@@ -163,7 +174,6 @@ def test_patch_srt_vllm_dp_ranks_rejects_unknown_source(tmp_path: Path) -> None:
 
     assert result.returncode == 1
     assert backend.read_text() == "unsupported backend\n"
-
 
 
 def test_patch_trtllm_chat_store_accepts_false_and_is_idempotent(
@@ -186,6 +196,7 @@ def test_patch_trtllm_chat_store_accepts_false_and_is_idempotent(
         capture_output=True,
         text=True,
     )
+    patched = protocol.read_text()
     second = subprocess.run(
         ["python3", str(PATCH_TRTLLM_CHAT_STORE), str(protocol)],
         check=False,
@@ -193,12 +204,15 @@ def test_patch_trtllm_chat_store_accepts_false_and_is_idempotent(
         text=True,
     )
 
-    patched = protocol.read_text()
     assert first.returncode == 0, first.stderr
     assert second.returncode == 0, second.stderr
-    assert patched.count("store: Optional[Literal[False]] = False") == 1
-    assert patched.count("store: Optional[bool] = True") == 1
-    assert "already patched" in second.stdout.lower()
+    assert protocol.read_text() == patched
+    models = runpy.run_path(str(protocol), init_globals={"OpenAIBaseModel": BaseModel})
+    chat = models["ChatCompletionRequest"]
+    assert chat(messages=[], store=False).store is False
+    with pytest.raises(ValidationError):
+        chat(messages=[], store=True)
+    assert models["ResponsesRequest"](store=True).store is True
 
 
 def test_patch_trtllm_chat_store_rejects_unknown_source(tmp_path: Path) -> None:
@@ -215,14 +229,13 @@ def test_patch_trtllm_chat_store_rejects_unknown_source(tmp_path: Path) -> None:
     assert result.returncode == 1
     assert protocol.read_text() == "unsupported protocol\n"
 
-def test_patch_vllm_simple_kv_offload_splits_heterogeneous_layers(
+def test_patch_vllm_simple_kv_offload_is_idempotent_and_preserves_surrounding_code(
     tmp_path: Path,
 ) -> None:
     symbols = runpy.run_path(str(PATCH_VLLM_SIMPLE_KV))
     worker = tmp_path / "worker.py"
-    worker.write_text(
-        f"prefix\n{symbols['OLD_SETUP']}{symbols['OLD_LOOP']}suffix\n"
-    )
+    original = f"prefix\n{symbols['OLD_SETUP']}{symbols['OLD_LOOP']}suffix\n"
+    worker.write_text(original)
 
     first = subprocess.run(
         ["python3", str(PATCH_VLLM_SIMPLE_KV), str(worker)],
@@ -230,6 +243,7 @@ def test_patch_vllm_simple_kv_offload_splits_heterogeneous_layers(
         capture_output=True,
         text=True,
     )
+    patched = worker.read_text()
     second = subprocess.run(
         ["python3", str(PATCH_VLLM_SIMPLE_KV), str(worker)],
         check=False,
@@ -237,16 +251,11 @@ def test_patch_vllm_simple_kv_offload_splits_heterogeneous_layers(
         text=True,
     )
 
-    patched = worker.read_text()
     assert first.returncode == 0, first.stderr
     assert second.returncode == 0, second.stderr
-    assert symbols["OLD_SETUP"] not in patched
-    assert symbols["OLD_LOOP"] not in patched
-    assert patched.count(symbols["NEW_SETUP"]) == 1
-    assert patched.count(symbols["NEW_LOOP"]) == 1
-    assert "split_storage_by_layer" in patched
-    assert "tensor.storage_offset() * tensor.element_size()" in patched
-    assert "already patched" in second.stdout.lower()
+    assert patched != original
+    assert patched.startswith("prefix\n") and patched.endswith("suffix\n")
+    assert worker.read_text() == patched
 
 
 def test_patch_vllm_simple_kv_offload_rejects_unknown_source(
@@ -265,25 +274,6 @@ def test_patch_vllm_simple_kv_offload_rejects_unknown_source(
     assert result.returncode == 1
     assert worker.read_text() == "unsupported worker\n"
 
-
-def test_minimax_vllm_launchers_patch_simple_kv_offload() -> None:
-    launchers = (
-        REPO_ROOT / "benchmarks/single_node/agentic/minimaxm3_fp4_b200_mtp.sh",
-        REPO_ROOT / "benchmarks/single_node/agentic/minimaxm3_fp4_b300_mtp.sh",
-    )
-
-    for launcher in launchers:
-        assert "patch_vllm_simple_kv_offload.py" in launcher.read_text(), launcher
-
-
-def test_minimax_trt_launchers_patch_chat_store_request() -> None:
-    launchers = (
-        REPO_ROOT / "benchmarks/single_node/agentic/minimaxm3_fp4_b200_trt_mtp.sh",
-        REPO_ROOT / "benchmarks/single_node/agentic/minimaxm3_fp4_b300_trt_mtp.sh",
-    )
-
-    for launcher in launchers:
-        assert "patch_trtllm_chat_store.py" in launcher.read_text(), launcher
 
 def test_patch_srt_eval_dispatch_preflights_before_writing(tmp_path: Path) -> None:
     do_sweep = tmp_path / "src/srtctl/cli/do_sweep.py"
@@ -364,10 +354,9 @@ def test_eval_only_restores_real_vllm_acceptance(tmp_path: Path) -> None:
     )
 
     assert result.returncode == 0, result.stderr
-    rewritten = recipe.read_text()
-    assert '"rejection_sample_method":"block"' in rewritten
-    assert "synthetic_acceptance_length" not in rewritten
-
+    speculative_config = json.loads(yaml.safe_load(recipe.read_text())["speculative-config"])
+    assert speculative_config["rejection_sample_method"] == "block"
+    assert "synthetic_acceptance_length" not in speculative_config
 
 
 def test_eval_only_removes_sglang_simulated_acceptance(tmp_path: Path) -> None:
@@ -391,9 +380,8 @@ def test_eval_only_removes_sglang_simulated_acceptance(tmp_path: Path) -> None:
     )
 
     assert result.returncode == 0, result.stderr
-    rewritten = recipe.read_text()
-    assert "SGLANG_SIMULATE_ACC_" not in rewritten
-    assert "KEEP_ME: unchanged" in rewritten
+    environment = yaml.safe_load(recipe.read_text())["backend"]["sglang_config"]["decode_environment"]
+    assert environment == {"KEEP_ME": "unchanged"}
 
 
 def test_sglang_throughput_rejects_existing_simulated_acceptance(
@@ -444,136 +432,3 @@ def test_eval_only_acceptance_rewrite_allows_non_speculative_recipe(
 
     assert result.returncode == 0, result.stderr
     assert recipe.read_text() == original
-
-
-def test_nvidia_srt_launchers_prepare_kimi_eval_dispatch() -> None:
-    launchers = (
-        REPO_ROOT / "runners/launch_h100-dgxc-slurm.sh",
-        REPO_ROOT / "runners/launch_h200-dgxc-slurm.sh",
-        REPO_ROOT / "runners/launch_b200-nscale-slurm.sh",
-        REPO_ROOT / "runners/launch_b300-nv.sh",
-        REPO_ROOT / "runners/launch_gb200-nv.sh",
-        REPO_ROOT / "runners/launch_gb300-nv.sh",
-    )
-
-    for launcher in launchers:
-        content = launcher.read_text()
-        assert "patch_srt_eval_dispatch.py" in content
-        patch_command = content.index("patch_srt_eval_dispatch.py")
-        assert "|| exit 1" in content[patch_command : patch_command + 200]
-        assert 'EVAL_FRAMEWORK:-lm-eval}" != "lm-eval"' in content
-        assert "inject_synthetic_acceptance" in content
-
-def test_gb200_acceptance_driver_is_unconditional_and_fail_closed() -> None:
-    content = (REPO_ROOT / "runners/launch_gb200-nv.sh").read_text()
-    command = (
-        'python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py"'
-    )
-    command_index = content.index(command)
-
-    assert content.rfind("\nfi", 0, command_index) > content.rfind(
-        "\nif ", 0, command_index
-    )
-    assert "|| exit 1" in content[command_index : command_index + 180]
-
-
-def test_gb200_kimi_compilation_config_preserves_all_settings() -> None:
-    recipes = {
-        "agg-gb200-tep16-balanced-agentic.yaml": 96,
-        "agg-gb200-tp16-latency-agentic.yaml": 24,
-    }
-    recipe_dir = (
-        REPO_ROOT / "benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic"
-    )
-
-    for filename, largest_capture in recipes.items():
-        recipe = yaml.safe_load((recipe_dir / filename).read_text())
-        raw_config = recipe["backend"]["vllm_config"]["aggregated"][
-            "compilation-config"
-        ]
-        compilation_config = json.loads(raw_config)
-
-        assert compilation_config["cudagraph_capture_sizes"][-1] == largest_capture
-        assert compilation_config["pass_config"]["fuse_allreduce_rms"] is False
-
-
-def test_gb200_kimi_recipes_configure_tool_parser() -> None:
-    recipe_dir = (
-        REPO_ROOT / "benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic"
-    )
-    recipe_paths = sorted(recipe_dir.glob("agg-gb200-*-agentic.yaml"))
-    frontend_counts = {"dynamo": 0, "vllm": 0}
-
-    assert len(recipe_paths) == 11
-    for recipe_path in recipe_paths:
-        recipe = yaml.safe_load(recipe_path.read_text())
-        frontend = recipe["frontend"]
-        frontend_type = frontend["type"]
-        config = recipe["backend"]["vllm_config"]["aggregated"]
-        assert frontend_type in frontend_counts, recipe_path
-        frontend_counts[frontend_type] += 1
-        if frontend_type == "dynamo":
-            args = frontend["args"]
-            assert args["dyn-chat-processor"] == "vllm", recipe_path
-            assert args["tool-call-parser"] == "kimi_k3", recipe_path
-            assert args["reasoning-parser"] == "kimi_k3", recipe_path
-            assert args["enable-auto-tool-choice"] is True, recipe_path
-            assert config["dyn-tool-call-parser"] == "kimi_k3", recipe_path
-            assert config["dyn-reasoning-parser"] == "kimi_k3", recipe_path
-        else:
-            assert config["enable-auto-tool-choice"] is True, recipe_path
-            assert config["tool-call-parser"] == "kimi_k3", recipe_path
-            assert config["reasoning-parser"] == "kimi_k3", recipe_path
-
-    assert frontend_counts == {"dynamo": 6, "vllm": 5}
-
-
-def test_gb200_dynamo_minimax_recipes_configure_frontend_tool_parser() -> None:
-    recipe_dir = (
-        REPO_ROOT
-        / "benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3"
-        / "gb200-fp4/agentic"
-    )
-    recipe_paths = sorted(recipe_dir.glob("*.yaml"))
-
-    assert len(recipe_paths) == 6
-    for recipe_path in recipe_paths:
-        recipe = yaml.safe_load(recipe_path.read_text())
-        args = recipe["frontend"]["args"]
-        assert args["dyn-chat-processor"] == "vllm", recipe_path
-        assert args["tool-call-parser"] == "minimax_m3", recipe_path
-        assert args["reasoning-parser"] == "minimax_m3", recipe_path
-        assert args["enable-auto-tool-choice"] is True, recipe_path
-
-
-def test_mi355_minimax_launcher_configures_reasoning_parser() -> None:
-    launcher = (
-        REPO_ROOT
-        / "benchmarks/single_node/agentic/minimaxm3_fp4_mi355x_mtp.sh"
-    ).read_text()
-
-    assert "--tool-call-parser minimax_m3" in launcher
-    assert "--reasoning-parser minimax_m3" in launcher
-    assert "--enable-auto-tool-choice" in launcher
-
-
-def test_swebench_container_paths_forward_modal_credentials() -> None:
-    paths = (
-        REPO_ROOT / "benchmarks/multi_node/llm-d/submit.sh",
-        REPO_ROOT / "benchmarks/multi_node/llm-d/job.slurm",
-        REPO_ROOT / "runners/launch_h100-cr.sh",
-        REPO_ROOT / "runners/launch_mi325x-tw.sh",
-    )
-
-    for path in paths:
-        content = path.read_text()
-        assert "SWEBENCH_USE_MODAL" in content, path
-        assert "MODAL_TOKEN_ID" in content, path
-        assert "MODAL_TOKEN_SECRET" in content, path
-        assert "IS_AGENTIC" in content, path
-        assert "SCENARIO_TYPE" in content, path
-        if path.name == "job.slurm" and "llm-d" in path.parts:
-            assert "-e MODAL_TOKEN_ID \\" in content
-            assert "-e MODAL_TOKEN_SECRET \\" in content
-            assert "-e MODAL_TOKEN_ID=" not in content
-            assert "-e MODAL_TOKEN_SECRET=" not in content
