@@ -206,7 +206,12 @@ MLA，使目标模型解码自动选择 `TRITON_MLA`；其余 AITER ROCm 路径�
 `m7tunedgemmaba` 会在同一个独占 Slurm 分配中依次运行全新 baseline、精确
 M=7 候选方案和第二个全新 baseline，每个阶段运行 1,200 秒。候选方案保留
 标准结果目录结构，两个 baseline 以及节点和阶段清单保存在
-`results/same_node_aba/` 下。
+`results/same_node_aba/` 下。结构性实验 `spec3aba` 使用相同的
+baseline/candidate/baseline 流程，只把并发 1 的 draft 数量从 6 改为 3，
+同时保持合成接受长度 3.75。它会先执行 baseline/candidate 启动冒烟测试，
+为每次启动隔离 Triton、TorchInductor、AITER JIT 和 Python 缓存，并在启动
+下一台服务前验证 GPU、进程和共享内存都已清理。baseline 捕获 2 到 14 的
+图尺寸，三 draft 候选方案捕获 2 到 8。
 
 目标 AgentX SWE-bench smoke eval（前十个 instance，真实 agentic generation）：
 

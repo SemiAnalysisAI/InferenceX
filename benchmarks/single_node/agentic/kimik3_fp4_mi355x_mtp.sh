@@ -48,8 +48,8 @@ check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
 
 K3_PERF_VARIANT="${K3_PERF_VARIANT:-baseline}"
 
-# Sub-millisecond C1 changes cannot be adjudicated reliably across different
-# physical nodes. These variants keep one exclusive Slurm allocation while
+# C1 changes cannot be adjudicated reliably across different physical nodes.
+# These variants keep one exclusive Slurm allocation while
 # running baseline -> candidate -> baseline with fresh server processes. The
 # candidate retains the standard results/aiperf_artifacts layout so the normal
 # workflow validation remains authoritative; both controls are uploaded below
@@ -57,6 +57,9 @@ K3_PERF_VARIANT="${K3_PERF_VARIANT:-baseline}"
 case "$K3_PERF_VARIANT" in
     m7tunedgemmaba)
         K3_ABA_CANDIDATE=m7tunedgemm
+        ;;
+    spec3aba)
+        K3_ABA_CANDIDATE=spec3
         ;;
     *)
         K3_ABA_CANDIDATE=""
@@ -78,15 +81,174 @@ if [[ -n "$K3_ABA_CANDIDATE" ]]; then
     aba_dir="$root_result_dir/same_node_aba"
     script_path="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
     node_name="${SLURMD_NODENAME:-$(hostname)}"
-
     if [[ -e "$root_result_dir/aiperf_artifacts" || -e "$aba_dir" ]]; then
         echo "Error: same-node A/B/A requires a fresh result directory" >&2
         exit 1
     fi
+    cache_session_root="$(mktemp -d "${TMPDIR:-/tmp}/k3-aba-cache.XXXXXX")"
     mkdir -p "$aba_dir"
     printf 'node\t%s\nvariant\t%s\ncandidate\t%s\n' \
         "$node_name" "$K3_PERF_VARIANT" "$K3_ABA_CANDIDATE" \
         >"$aba_dir/manifest.tsv"
+
+    capture_kfd_owners() {
+        local output="$1"
+        if [[ -d /sys/class/kfd/kfd/proc ]]; then
+            find /sys/class/kfd/kfd/proc -mindepth 1 -maxdepth 1 \
+                -printf '%f\n' 2>/dev/null | LC_ALL=C sort >"$output"
+        elif command -v fuser >/dev/null 2>&1; then
+            fuser /dev/kfd 2>/dev/null \
+                | tr ' ' '\n' | sed '/^$/d' | LC_ALL=C sort -n >"$output" || true
+        else
+            : >"$output"
+        fi
+    }
+
+    capture_shared_memory() {
+        local output="$1"
+        find /dev/shm -mindepth 1 -maxdepth 1 -printf '%f\n' 2>/dev/null \
+            | grep -E '^(nccl|rccl|psm_|sem\.|torch_|vllm)' \
+            | LC_ALL=C sort >"$output" || true
+    }
+
+    capture_server_processes() {
+        local output="$1"
+        pgrep -af '[v]llm serve|VLLM::(EngineCore|Worker)|[m]ultiproc_executor' \
+            >"$output" || true
+    }
+
+    mkdir -p "$aba_dir/cleanup"
+    capture_kfd_owners "$aba_dir/cleanup/initial_kfd_owners.txt"
+    capture_shared_memory "$aba_dir/cleanup/initial_shared_memory.txt"
+    capture_server_processes "$aba_dir/cleanup/initial_server_processes.txt"
+    if [[ -s "$aba_dir/cleanup/initial_kfd_owners.txt" || \
+          -s "$aba_dir/cleanup/initial_shared_memory.txt" || \
+          -s "$aba_dir/cleanup/initial_server_processes.txt" ]]; then
+        echo "Error: same-node A/B/A allocation was not clean at startup" >&2
+        exit 1
+    fi
+
+    verify_aba_arm_cleanup() {
+        local label="$1"
+        local arm_result_dir="$2"
+        local cleanup_dir="$aba_dir/cleanup/$label"
+        local server_pid=""
+        local cleanup_complete=false
+        local cleanup_attempt
+        mkdir -p "$cleanup_dir"
+
+        if [[ -s "$arm_result_dir/server_pid.txt" ]]; then
+            server_pid="$(<"$arm_result_dir/server_pid.txt")"
+            if [[ "$server_pid" =~ ^[1-9][0-9]*$ ]] && kill -0 "$server_pid" 2>/dev/null; then
+                echo "Error: $label server PID $server_pid survived arm cleanup" >&2
+                return 1
+            fi
+        fi
+
+        wait_for_amd_gpu_clean
+        rocm-smi --showmemuse >"$cleanup_dir/rocm_smi_memuse.txt" 2>&1 || true
+        for ((cleanup_attempt = 1; cleanup_attempt <= 120; cleanup_attempt++)); do
+            capture_kfd_owners "$cleanup_dir/kfd_owners.txt"
+            capture_shared_memory "$cleanup_dir/shared_memory.txt"
+            capture_server_processes "$cleanup_dir/server_processes.txt"
+            if [[ ! -s "$cleanup_dir/kfd_owners.txt" && \
+                  ! -s "$cleanup_dir/server_processes.txt" ]] && \
+                    cmp -s \
+                        "$aba_dir/cleanup/initial_shared_memory.txt" \
+                        "$cleanup_dir/shared_memory.txt"; then
+                cleanup_complete=true
+                break
+            fi
+            sleep 1
+        done
+        if [[ "$cleanup_complete" != "true" ]]; then
+            echo "Error: $label did not release its GPU, process, or shared-memory state" >&2
+            diff -u \
+                "$aba_dir/cleanup/initial_shared_memory.txt" \
+                "$cleanup_dir/shared_memory.txt" >&2 || true
+            return 1
+        fi
+        printf 'clean\n' >"$cleanup_dir/status.txt"
+    }
+
+    run_aba_process() {
+        local label="$1"
+        local variant="$2"
+        local arm_result_dir="$3"
+        local arm_result_filename="$4"
+        local arm_output_dir="$5"
+        local startup_smoke="$6"
+        local starts_file="$7"
+        local completions_file="$8"
+        local failures_file="$9"
+        local arm_cache_root="$cache_session_root/$label"
+        local arm_rc=0
+
+        mkdir -p \
+            "$arm_result_dir" \
+            "$arm_cache_root/triton" \
+            "$arm_cache_root/torchinductor" \
+            "$arm_cache_root/torch_extensions" \
+            "$arm_cache_root/aiter_jit" \
+            "$arm_cache_root/flydsl" \
+            "$arm_cache_root/vllm" \
+            "$arm_cache_root/pycache"
+        printf 'TRITON_CACHE_DIR\t%s\nTORCHINDUCTOR_CACHE_DIR\t%s\nTORCH_EXTENSIONS_DIR\t%s\nAITER_JIT_DIR\t%s\nFLYDSL_RUNTIME_CACHE_DIR\t%s\nVLLM_CACHE_ROOT\t%s\nPYTHONPYCACHEPREFIX\t%s\n' \
+            "$arm_cache_root/triton" \
+            "$arm_cache_root/torchinductor" \
+            "$arm_cache_root/torch_extensions" \
+            "$arm_cache_root/aiter_jit" \
+            "$arm_cache_root/flydsl" \
+            "$arm_cache_root/vllm" \
+            "$arm_cache_root/pycache" \
+            >"$arm_result_dir/cache_paths.tsv"
+        printf '%s\t%s\t%s\t%s\n' \
+            "$label" "$variant" "$node_name" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            >>"$starts_file"
+        set +e
+        K3_PERF_VARIANT="$variant" \
+            K3_STARTUP_SMOKE="$startup_smoke" \
+            K3_ARM_CACHE_ROOT="$arm_cache_root" \
+            TRITON_CACHE_DIR="$arm_cache_root/triton" \
+            TORCHINDUCTOR_CACHE_DIR="$arm_cache_root/torchinductor" \
+            TORCH_EXTENSIONS_DIR="$arm_cache_root/torch_extensions" \
+            AITER_JIT_DIR="$arm_cache_root/aiter_jit" \
+            FLYDSL_RUNTIME_CACHE_DIR="$arm_cache_root/flydsl" \
+            VLLM_CACHE_ROOT="$arm_cache_root/vllm" \
+            PYTHONPYCACHEPREFIX="$arm_cache_root/pycache" \
+            RESULT_DIR="$arm_result_dir" \
+            RESULT_FILENAME="$arm_result_filename" \
+            AGENTIC_OUTPUT_DIR="$arm_output_dir" \
+            bash "$script_path"
+        arm_rc=$?
+        set -e
+        if ! verify_aba_arm_cleanup "$label" "$arm_result_dir"; then
+            printf '%s\t%s\t%s\t%s\tcleanup\n' \
+                "$label" "$variant" "$node_name" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                >>"$failures_file"
+            return 1
+        fi
+        if ((arm_rc != 0)); then
+            printf '%s\t%s\t%s\t%s\trc=%s\n' \
+                "$label" "$variant" "$node_name" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                "$arm_rc" >>"$failures_file"
+            return "$arm_rc"
+        fi
+        printf '%s\t%s\t%s\t%s\n' \
+            "$label" "$variant" "$node_name" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            >>"$completions_file"
+    }
+
+    run_startup_smoke() {
+        local label="$1"
+        local variant="$2"
+        local arm_result_dir="$aba_dir/startup_smoke/$label"
+        run_aba_process \
+            "$label" "$variant" "$arm_result_dir" \
+            "${root_result_filename}_${label}" "$arm_result_dir" 1 \
+            "$aba_dir/smoke_starts.tsv" "$aba_dir/smoke_completions.tsv" \
+            "$aba_dir/smoke_failures.tsv"
+    }
 
     run_aba_arm() {
         local label="$1"
@@ -94,20 +256,16 @@ if [[ -n "$K3_ABA_CANDIDATE" ]]; then
         local arm_result_dir="$3"
         local arm_result_filename="$4"
         local arm_output_dir="$5"
-
-        mkdir -p "$arm_result_dir"
-        printf '%s\t%s\t%s\t%s\n' \
-            "$label" "$variant" "$node_name" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            >>"$aba_dir/arm_starts.tsv"
-        K3_PERF_VARIANT="$variant" \
-            RESULT_DIR="$arm_result_dir" \
-            RESULT_FILENAME="$arm_result_filename" \
-            AGENTIC_OUTPUT_DIR="$arm_output_dir" \
-            bash "$script_path"
-        printf '%s\t%s\t%s\t%s\n' \
-            "$label" "$variant" "$node_name" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            >>"$aba_dir/arm_completions.tsv"
+        run_aba_process \
+            "$label" "$variant" "$arm_result_dir" "$arm_result_filename" \
+            "$arm_output_dir" 0 "$aba_dir/arm_starts.tsv" \
+            "$aba_dir/arm_completions.tsv" "$aba_dir/arm_failures.tsv"
     }
+
+    # Reproduce the exact baseline -> candidate restart boundary that failed in
+    # the earlier M=7 run before committing roughly one hour to three full arms.
+    run_startup_smoke smoke_baseline baseline
+    run_startup_smoke smoke_candidate "$K3_ABA_CANDIDATE"
 
     run_aba_arm \
         baseline_pre baseline \
@@ -171,6 +329,45 @@ amd-smi || true
 resolve_trace_source
 install_agentic_deps
 
+if [[ -n "${K3_ARM_CACHE_ROOT:-}" ]]; then
+    aiter_jit_source="$(python3 - <<'PY'
+import importlib.util
+from pathlib import Path
+
+spec = importlib.util.find_spec("aiter")
+if spec is None or spec.origin is None:
+    raise SystemExit("cannot locate installed AITER package")
+print(Path(spec.origin).resolve().parent / "jit")
+PY
+)"
+    if [[ ! -d "$aiter_jit_source" ]]; then
+        echo "Error: installed AITER JIT directory is missing: $aiter_jit_source" >&2
+        exit 1
+    fi
+    shopt -s nullglob
+    for aiter_module in "$aiter_jit_source"/*.so; do
+        ln -s "$aiter_module" "$AITER_JIT_DIR/$(basename "$aiter_module")"
+    done
+    shopt -u nullglob
+    if [[ -d "$aiter_jit_source/flydsl_cache" ]]; then
+        if ! cp -a --reflink=auto \
+            "$aiter_jit_source/flydsl_cache/." "$FLYDSL_RUNTIME_CACHE_DIR/"; then
+            cp -a "$aiter_jit_source/flydsl_cache/." "$FLYDSL_RUNTIME_CACHE_DIR/"
+        fi
+    fi
+    {
+        printf 'K3_ARM_CACHE_ROOT\t%s\n' "$K3_ARM_CACHE_ROOT"
+        printf 'TRITON_CACHE_DIR\t%s\n' "$TRITON_CACHE_DIR"
+        printf 'TORCHINDUCTOR_CACHE_DIR\t%s\n' "$TORCHINDUCTOR_CACHE_DIR"
+        printf 'TORCH_EXTENSIONS_DIR\t%s\n' "$TORCH_EXTENSIONS_DIR"
+        printf 'AITER_JIT_DIR\t%s\n' "$AITER_JIT_DIR"
+        printf 'AITER_JIT_SEED\t%s\n' "$aiter_jit_source"
+        printf 'FLYDSL_RUNTIME_CACHE_DIR\t%s\n' "$FLYDSL_RUNTIME_CACHE_DIR"
+        printf 'VLLM_CACHE_ROOT\t%s\n' "$VLLM_CACHE_ROOT"
+        printf 'PYTHONPYCACHEPREFIX\t%s\n' "$PYTHONPYCACHEPREFIX"
+    } >"$RESULT_DIR/cache_provenance.tsv"
+fi
+
 # ---- Reference env block ----------------------------------------------------
 export VLLM_ROCM_AITER_MLA_ASM_PADDING=asm
 export VLLM_ROCM_USE_AITER=1
@@ -182,7 +379,7 @@ export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 export AITER_QUICK_REDUCE_QUANTIZATION=INT4
 
 case "$K3_PERF_VARIANT" in
-    baseline)
+    baseline|spec3)
         ;;
     mla52494)
         bash "$(dirname "$0")/k3_perf_overlays/apply_vllm_overlay.sh" pr52494
@@ -381,11 +578,21 @@ case "$CONC" in
         MAX_NUM_BATCHED_TOKENS=8192
         ;;
     *)
+        SYNTHETIC_ACCEPT_LEN=0
         SPEC_NUM_TOKENS=0
         GPU_MEM_UTIL=0.85
         MAX_NUM_BATCHED_TOKENS=4096
         ;;
 esac
+
+if [[ "$K3_PERF_VARIANT" == "spec3" ]]; then
+    if [[ "$CONC" != "1" || "${DCP_SIZE:-}" != "1" || "$KV_OFFLOADING" != "none" ]]; then
+        echo "Error: spec3 requires CONC=1, DCP_SIZE=1, and KV_OFFLOADING=none" >&2
+        exit 1
+    fi
+    SPEC_NUM_TOKENS=3
+fi
+echo "Kimi-K3 speculative config: drafts=$SPEC_NUM_TOKENS synthetic_acceptance_length=$SYNTHETIC_ACCEPT_LEN"
 
 SPEC_ARGS=()
 if [ "$SPEC_NUM_TOKENS" -gt 0 ]; then
@@ -407,6 +614,10 @@ MAX_NUM_SEQS=$((2 * CONC))
 MAX_CUDAGRAPH_CAPTURE_SIZE=$((MAX_NUM_SEQS * (1 + SPEC_NUM_TOKENS)))
 CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 2 "$MAX_CUDAGRAPH_CAPTURE_SIZE")"
 COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}")
+printf 'variant\t%s\nspec_num_tokens\t%s\nsynthetic_acceptance_length\t%s\nmax_cudagraph_capture_size\t%s\ncudagraph_capture_sizes\t%s\n' \
+    "$K3_PERF_VARIANT" "$SPEC_NUM_TOKENS" "$SYNTHETIC_ACCEPT_LEN" \
+    "$MAX_CUDAGRAPH_CAPTURE_SIZE" "$CUDAGRAPH_CAPTURE_SIZES" \
+    >"$RESULT_DIR/spec_decode_provenance.tsv"
 
 echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
@@ -467,6 +678,7 @@ printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
 printf '\n' | tee -a "$RESULT_DIR/vllm_command.txt"
 "${VLLM_CMD[@]}" > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
+printf '%s\n' "$SERVER_PID" >"$RESULT_DIR/server_pid.txt"
 echo "Server PID: $SERVER_PID"
 
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
@@ -490,9 +702,26 @@ if [[ "${K3_DISABLE_CUSTOM_ALL_REDUCE:-0}" == "1" ]]; then
     fi
 fi
 
+if ! curl -fsS --max-time 10 "http://localhost:${PORT}/health" >/dev/null; then
+    echo "Error: vLLM server failed the post-start health check" >&2
+    exit 1
+fi
+
+if [[ "${K3_STARTUP_SMOKE:-0}" == "1" ]]; then
+    printf 'healthy\n' >"$RESULT_DIR/startup_smoke_status.txt"
+    echo "Kimi-K3 startup smoke completed: variant=$K3_PERF_VARIANT"
+    exit 0
+fi
+
 if [ "${EVAL_ONLY}" = "true" ]; then
     run_eval --port "$PORT"
 else
     build_replay_cmd "$RESULT_DIR"
     run_agentic_replay_and_write_outputs "$RESULT_DIR"
 fi
+
+if ! curl -fsS --max-time 10 "http://localhost:${PORT}/health" >/dev/null; then
+    echo "Error: vLLM server was unhealthy after the benchmark" >&2
+    exit 1
+fi
+printf 'healthy\n' >"$RESULT_DIR/post_run_health.txt"

@@ -6856,3 +6856,12 @@
     - "Add a fail-closed same-node baseline/candidate/baseline confirmation mode for the exact-M=7 GEMM C1 candidate."
     - "Keep one exclusive Slurm allocation, restart the server for every arm, preserve the candidate's canonical artifact layout, and upload both controls with node and timing manifests."
   pr-link: XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a same-node six-draft/three-draft/six-draft C1 experiment that preserves the measured synthetic acceptance length while removing three never-accepted draft positions."
+    - "Run a repeated-startup smoke first, isolate compiler caches per launch, and fail closed unless the prior server releases its processes, KFD ownership, VRAM, and shared-memory state."
+  pr-link: XXX

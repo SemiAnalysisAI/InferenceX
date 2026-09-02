@@ -208,7 +208,14 @@ server log. For sub-millisecond confirmation, `m7tunedgemmaba` retains one
 exclusive Slurm allocation and runs a fresh baseline, the exact-M=7 candidate,
 and a second fresh baseline for 1,200 seconds each. The candidate stays in the
 standard result layout; both controls and a node/arm manifest are stored under
-`results/same_node_aba/`.
+`results/same_node_aba/`. The structural `spec3aba` mode uses the same
+baseline/candidate/baseline protocol but changes only the C1 draft count from
+six to three while retaining the synthetic acceptance length of 3.75. It first
+performs a baseline/candidate startup smoke, isolates the Triton,
+TorchInductor, AITER JIT, and Python caches for every launch, and verifies GPU,
+process, and shared-memory cleanup before starting the next server. Baseline
+arms capture graph sizes 2 through 14; the three-draft candidate captures 2
+through 8.
 
 Targeted AgentX SWE-bench smoke eval (first ten instances, real agentic generation):
 
