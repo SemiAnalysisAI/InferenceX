@@ -6821,3 +6821,12 @@
   description:
     - "Refresh to collect TensorRT-LLM server metrics."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2774
+
+- config-keys:
+    - minimaxm3-fp4-gb200-dynamo-vllm-agentic-disagg-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GB200 Dynamo-vLLM disaggregated AgentX recipes with TP4 prefill and TP4 or TP8 decode workers."
+    - "Configure Mooncake host KV storage, NIXL over UCX, Dynamo 1.5.0.dev20260819, explicit thinking mode, and the committed MiniMax-M3 EAGLE3-GQA acceptance target."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2807
