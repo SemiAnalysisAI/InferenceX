@@ -252,7 +252,6 @@ fi
 
 # ---- Speculative / Util------------------------------------------------------
 case "${SPEC_DECODING:-mtp}:$CONC" in
-    # No KV offload; the working set fits in HBM.
     mtp:1)
         SYNTHETIC_ACCEPT_LEN=3.75
         SPEC_NUM_TOKENS=6
@@ -265,9 +264,9 @@ case "${SPEC_DECODING:-mtp}:$CONC" in
         GPU_MEM_UTIL=0.9
         MAX_NUM_BATCHED_TOKENS=8192
         ;;
-    none:40|none:52)
+    none:40)
         SPEC_NUM_TOKENS=0
-        GPU_MEM_UTIL=0.8
+        GPU_MEM_UTIL=0.9
         MAX_NUM_BATCHED_TOKENS=16384
         ;;
     *)
@@ -293,16 +292,24 @@ else
 fi
 
 # ---- HIP graph ------------------------------------------------------------
-if [[ "${SPEC_DECODING:-mtp}:$CONC" =~ ^none:(40|52)$ ]]; then
+SERVER_STREAM_ARGS=()
+PREFIX_MATCH_ARGS=()
+ATTENTION_CONFIG='{"mla_prefill_backend":"ROCM_AITER_FA"}'
+COMPILATION_CUSTOM_OPS='["+fused_rms_norm_gated"]'
+if [ "${SPEC_DECODING:-mtp}:$CONC" = "none:40" ]; then
     MAX_NUM_SEQS=80
     MAX_CUDAGRAPH_CAPTURE_SIZE=4096
     CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 1 "$MAX_NUM_SEQS"),128,256,512,1024,2048,4096"
+    SERVER_STREAM_ARGS=(--stream-interval 10)
+    PREFIX_MATCH_ARGS=(--prefix-match-unit 128)
+    ATTENTION_CONFIG='{"mla_prefill_backend":"ROCM_AITER_FA","use_prefill_query_quantization":true}'
+    COMPILATION_CUSTOM_OPS='["+fused_rms_norm_gated","+quant_fp8","+grouped_topk","+sparse_attn_indexer","none"]'
 else
     MAX_NUM_SEQS=$((2 * CONC))
     MAX_CUDAGRAPH_CAPTURE_SIZE=$((MAX_NUM_SEQS * (1 + SPEC_NUM_TOKENS)))
     CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 2 "$MAX_CUDAGRAPH_CAPTURE_SIZE")"
 fi
-COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\",\"+quant_fp8\",\"+grouped_topk\",\"+sparse_attn_indexer\",\"none\"],\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}")
+COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":$COMPILATION_CUSTOM_OPS,\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}")
 
 echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
@@ -332,12 +339,12 @@ if [ "$DCP_SIZE" -gt 1 ]; then
         --cp-kv-cache-interleave-size "$CP_KV_CACHE_INTERLEAVE_SIZE"
     )
     ATTN_BE_ARGS+=(--attention-backend ROCM_AITER_MLA)
+    export VLLM_ALLOW_DCP_FULL_CUDAGRAPH=1
+    export PREFIX_CACHING_HASH_ALGO=sha256
 fi
 export VLLM_USE_DIRECT_DCP_A2A=0
 export VLLM_USE_DIRECT_DCP_Q_GATHER=0
 export VLLM_USE_DIRECT_DCP_KV_GATHER=0
-export VLLM_ALLOW_DCP_FULL_CUDAGRAPH=1
-export PREFIX_CACHING_HASH_ALGO=sha256
 
 { set +x; } 2>/dev/null
 VLLM_CMD=(
@@ -356,12 +363,12 @@ VLLM_CMD=(
     --tool-call-parser kimi_k3
     --reasoning-parser kimi_k3
     --max-model-len 1048576
-    --stream-interval 10
+    "${SERVER_STREAM_ARGS[@]}"
     --enable-prefix-caching
-    --prefix-match-unit 128
+    "${PREFIX_MATCH_ARGS[@]}"
     --kv-cache-dtype "fp8"
     --max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS"
-    --attention-config '{"mla_prefill_backend":"ROCM_AITER_FA","use_prefill_query_quantization":true}'
+    --attention-config "$ATTENTION_CONFIG"
     "${ATTN_BE_ARGS[@]}"
     "${COMPILATION_CONFIG_ARGS[@]}"
     "${SPEC_ARGS[@]}"

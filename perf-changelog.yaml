@@ -6698,3 +6698,12 @@
     - "Use the stock vLLM image without applying runtime PR patches or installing additional dependencies; LMCache PR #4834 is already included in the release wheel."
     - "使用未经运行时 PR 补丁修改的原始 vLLM 镜像，不安装额外依赖；LMCache PR #4834 已包含在发布 wheel 中。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-lmcache-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Run C1, C8, and C14 with the merged PR #2787 tuning, and C40 with the validated TP8/DCP8 no-spec profile from run 33463265881; use vLLM nightly 7c5dc571 and LMCache 0.5.5rc3+rocm7.2 for every point."
+    - "C1、C8 和 C14 使用已合并 PR #2787 的调优配置，C40 使用运行 33463265881 中已验证的 TP8/DCP8 无推测配置；所有测试点统一使用 vLLM nightly 7c5dc571 和 LMCache 0.5.5rc3+rocm7.2。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
