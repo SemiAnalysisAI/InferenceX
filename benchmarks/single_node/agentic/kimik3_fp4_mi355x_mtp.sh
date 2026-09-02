@@ -160,9 +160,10 @@ case "${KV_OFFLOAD_BACKEND:-}" in
 
     # Keep the image's tested torch/ROCm stack and install only LMCache's
     # missing runtime dependencies, same as the MiniMax-M3 lmcache arm.
-    LMCACHE_VERSION="0.5.5.dev63+rocm7.2"
+    LMCACHE_VERSION="0.5.5rc3+rocm7.2"
     export KV_OFFLOAD_BACKEND_METADATA="{\"name\":\"lmcache\",\"version\":\"${LMCACHE_VERSION}\"}"
-    LMCACHE_ROCM_INDEX="https://github.com/LMCache/LMCache/releases/expanded_assets/nightly-rocm"
+    LMCACHE_RELEASE="v0.5.5rc3"
+    LMCACHE_ROCM_INDEX="https://github.com/LMCache/LMCache/releases/expanded_assets/${LMCACHE_RELEASE}-rocm"
     agentic_pip_install --quiet --no-cache-dir --no-deps \
         "sortedcontainers==2.4.0" \
         "opentelemetry-exporter-prometheus==0.61b0" \
@@ -171,27 +172,6 @@ case "${KV_OFFLOAD_BACKEND:-}" in
 
     SITE_PACKAGES=$(python3 -c \
         'import pathlib, vllm; print(pathlib.Path(vllm.__file__).parent.parent)')
-
-    # LMCache #4834 supports the non-trivial DCP interleave selected by vLLM,
-    # resolves hybrid KV-group geometry from the engine configuration, and
-    # namespaces cache keys by DCP layout. Pin the exact reviewed revision.
-    LMCACHE_PR4834_BASE="1af7803551ab05905cb2c46fba403e1e5c1de575"
-    LMCACHE_PR4834_HEAD="347b0c8a780d550de24fdd508174597e603b3af2"
-    LMCACHE_PR4834_SHA256="25820903e7208fb1a7f263ca41e448e4f041f4af8e88f942dd766f549776a651"
-    LMCACHE_PR4834_SOURCE_SHA256="095f39d10bdc3dfa0f917140ee77c6c007c6c829e58675ffc32f72f796774201"
-    LMCACHE_PR4834_PATCH=$(mktemp)
-    LMCACHE_PR4834_SOURCE_PATCH=$(mktemp)
-    curl --fail --location --silent --show-error \
-        "https://github.com/LMCache/LMCache/compare/${LMCACHE_PR4834_BASE}...${LMCACHE_PR4834_HEAD}.diff" \
-        --output "$LMCACHE_PR4834_PATCH"
-    echo "$LMCACHE_PR4834_SHA256  $LMCACHE_PR4834_PATCH" | sha256sum --check
-    awk '/^diff --git a\/lmcache\// {keep=1} \
-        /^diff --git / && $0 !~ /^diff --git a\/lmcache\// {keep=0} keep' \
-        "$LMCACHE_PR4834_PATCH" > "$LMCACHE_PR4834_SOURCE_PATCH"
-    echo "$LMCACHE_PR4834_SOURCE_SHA256  $LMCACHE_PR4834_SOURCE_PATCH" | \
-        sha256sum --check
-    patch -d "$SITE_PACKAGES" -p1 --forward --batch < \
-        "$LMCACHE_PR4834_SOURCE_PATCH"
 
     # vLLM #51705 adds ROCm AITER MLA decode LSE output for DCP and keeps full
     # CUDA graphs enabled. Pin both compare endpoints and the downloaded diff
