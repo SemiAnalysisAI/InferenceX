@@ -6824,31 +6824,11 @@
 
 - config-keys:
     - dsv4-fp4-b200-llmd-vllm-agentx
-  description:
-    - "Add DeepSeek-V4-Pro-0813 (DSpark) FP4 B200 llmd-vllm P/D disagg benchmark (1P DEP8 + 1D DEP8, 2 nodes / 16 GPUs total); always uses Mooncake RDMA prefix-cache; DSpark speculative decoding (prefill 1 token, decode 5 tokens)"
-    - "Wire a FRAMEWORK==llmd-vllm dispatch into runners/launch_b200-nscale-compat.sh (self-contained, bypasses the srtctl/srt-slurm path)"
-    - "Pin a disagg-only EPP/pd-sidecar v0.10.0 binary override (LLMD_BIN_DIR=/home/sa-shared/llm-d-bins-v0.10.0) required for the disagg-profile-handler deciders: EPP shape; aggregated runs use the image-baked v0.9.0 binaries"
-    - "Fix MODEL_PATH for -0813 checkpoint: unconditionally set /scratch/models/DeepSeek-V4-Pro-0813 in the launcher's -0813 branch so the outer script's pre-exported non-0813 path is always overridden"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
-
-- config-keys:
-    - dsv4-fp4-b200-llmd-vllm-agentx-agg
-  description:
-    - "Add DeepSeek-V4-Pro-0813 (DSpark) FP4 B200 llmd-vllm aggregated benchmark: TP8 at conc-list [1,2,4,8,12], DEP8 at [12,16,32], DEP8+Mooncake at [52,72] (all 1 node / 8 GPUs, one engine does both prefill and decode)"
-    - "Extend server.sh/job.slurm with aggregated (DECODE_NODES=0) mode: no decode role, no pd-sidecar; rank 0 takes over EPP/Envoy/bench coordinator duties"
-    - "Add Mooncake (P2PHANDSHAKE embedded RDMA) for the DEP8+Mooncake arm via agentic/agg-gb200-dep8-dspark-mooncake-agentic.yaml; server.sh wires MultiConnector (NixlConnector + MooncakeStoreConnector, kv_both role) when MOONCAKE_CONFIG_PATH is set in aggregated mode"
-    - "Branch runners/launch_b200-nscale-compat.sh llmd-vllm wrapper selection on DISAGG (true -> disagg, false -> aggregated)"
-    - "Fix MODEL_PATH for -0813 checkpoint: unconditionally set /scratch/models/DeepSeek-V4-Pro-0813 in the launcher's -0813 branch so the outer script's pre-exported non-0813 path is always overridden"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
-
-- config-keys:
-    - dsv4-fp4-b200-llmd-vllm-agentx
     - dsv4-fp4-b200-llmd-vllm-agentx-agg
   scenario-type:
     - agentic-coding
   description:
-    - "Run the shared AgentX trace replay instead of fixed 8k/1k requests; remove fixed context/sequence/cudagraph limits and enable DeepSeek-V4 chat tool/reasoning parsers."
-    - "Report DSpark as spec-decoding mtp and read the committed DeepSeek-V4-Pro-0813 thinking-on golden AL (K1=1.84, K5=3.61) for synthetic throughput verification; accuracy evals retain real verification."
-    - "Declare Mooncake arms as DRAM offloading, apply the master per-node 0.60 DRAM budget to the embedded per-GPU pools, and report DEP8 as eight physical GPUs. Non-Mooncake arms explicitly disable offloading."
-    - "Forward AgentX provenance, topology and offload metadata through both container engines and stage aggregate/raw artifacts. Remove nounset and environment fallback expressions from the changed Bash launch paths."
+    - "Add DeepSeek-V4-Pro-0813 FP4 with FP8 KV cache for B200 AgentX trace replay at native context: aggregated TP8/DEP8 (8 GPUs) and NIXL disaggregated 1P-DEP8/1D-DEP8 (16 GPUs)."
+    - "Use DSpark golden AL: K=5, AL=3.61 for aggregated/decode; K=1, AL=1.84 for disaggregated prefill. Disable adaptive verification."
+    - "Enable Mooncake DRAM offloading for disaggregated and aggregated DEP8+Mooncake variants with dram-utilization=0.60; no offloading for plain TP8/DEP8. SSD offloading remains disabled."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
