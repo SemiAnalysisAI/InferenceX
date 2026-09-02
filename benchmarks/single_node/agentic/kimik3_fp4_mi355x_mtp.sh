@@ -70,7 +70,7 @@ SPEC_ROWS=1
 if [ "$CONC" -le 4 ]; then
     SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-8}"
     SPEC_ROWS=$(( SPEC_NUM_TOKENS + 1 ))
-    if [ "${EVAL_ONLY:-false}" = "true" ]; then
+    if [ "${EVAL_ONLY}" = "true" ]; then
         SPEC_VERIFY="\"rejection_sample_method\":\"block\""
     else
         SPEC_VERIFY="\"rejection_sample_method\":\"synthetic\",\"synthetic_acceptance_length\":4.0"
@@ -147,7 +147,7 @@ echo "Server PID: $SERVER_PID"
 
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-if [ "${EVAL_ONLY:-false}" = "true" ]; then
+if [ "${EVAL_ONLY}" = "true" ]; then
     run_eval --port "$PORT"
 else
     build_replay_cmd "$RESULT_DIR"
