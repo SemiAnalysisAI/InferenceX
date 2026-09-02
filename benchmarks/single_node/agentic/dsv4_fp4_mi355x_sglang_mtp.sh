@@ -144,6 +144,7 @@ MEM_FRACTION_STATIC="${MEM_FRACTION_STATIC:-0.90}"
 PARALLEL_ARGS=(--tensor-parallel-size "$TP")
 SHARED_EXPERTS_ARGS=(--enforce-shared-experts-fusion)
 SWA_FULL_TOKENS_RATIO="${SWA_FULL_TOKENS_RATIO:-0.10}"
+export GPU_MAX_HW_QUEUES="${GPU_MAX_HW_QUEUES:-2}"
 if [ "$DP_ATTENTION" = "true" ]; then
     USE_SGLANG_ROUTER=true
     export AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID=true
@@ -155,7 +156,7 @@ if [ "$DP_ATTENTION" = "true" ]; then
     export SGLANG_DP_SHARED_EXPERT_LOCAL=1
     export SGLANG_DP_USE_GATHERV=1
     export SGLANG_DP_USE_REDUCE_SCATTER=1
-    export GPU_MAX_HW_QUEUES=2
+    export GPU_MAX_HW_QUEUES="${GPU_MAX_HW_QUEUES_DP:-5}"
     SHARED_EXPERTS_ARGS=(--disable-shared-experts-fusion)
     SWA_FULL_TOKENS_RATIO="${SWA_FULL_TOKENS_RATIO_DP:-0.15}"
 
