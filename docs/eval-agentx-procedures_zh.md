@@ -219,6 +219,15 @@ GPU-memory utilization 固定为 0.85，并且只在候选阶段应用精确固�
 metadata-reuse 源码 overlay。候选启动冒烟和完整 benchmark 结束后都会恢复并
 校验原始源码；恢复失败会立即终止 A/B/A，不允许后续 baseline 继续运行。
 
+`deferredfinalizeaba` 模式保持相同的六个 draft、有效 M=7 图执行契约以及 0.85
+GPU-memory utilization。它只在候选阶段安装固定到 AITER v0.1.19 的精确源码
+补丁和精确的 vLLM 源码 overlay。启动服务前，必须在八张 GPU 上通过 fused
+top-k route reduction、all-reduce 和 RMSNorm 操作的 eager 正确性与 changed-input
+HIP graph replay 测试。Baseline 阶段会重新安装干净且固定的 AITER checkout；
+每次候选阶段退出时，都必须恢复并校验所有被修改的已安装 vLLM 源码。服务日志
+还必须证明 deferred route-reduction 路径确实执行；仅安装成功或 graph capture
+成功不能作为性能证据。
+
 目标 AgentX SWE-bench smoke eval（前十个 instance，真实 agentic generation）：
 
 ```bash

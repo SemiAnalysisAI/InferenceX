@@ -225,6 +225,16 @@ The candidate source is restored and checksum-verified after both its startup
 smoke and full benchmark; restoration failure aborts the A/B/A before a later
 baseline can run.
 
+The `deferredfinalizeaba` mode keeps the same six-draft, effective-M=7 graph
+contract and GPU-memory utilization 0.85. It installs an exact AITER v0.1.19
+source patch plus an exact vLLM source overlay only for the candidate. Before
+serving, an eight-GPU focused test must pass eager correctness and changed-input
+HIP graph replay for the fused top-k route reduction, all-reduce, and RMSNorm
+operation. Baseline arms reinstall the clean pinned AITER checkout, and every
+candidate exit restores and checksum-verifies all modified installed vLLM
+sources. The server log must prove that the deferred route-reduction path ran;
+successful setup or graph capture alone is not performance evidence.
+
 Targeted AgentX SWE-bench smoke eval (first ten instances, real agentic generation):
 
 ```bash

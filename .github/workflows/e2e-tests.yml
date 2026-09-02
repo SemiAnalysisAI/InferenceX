@@ -41,7 +41,7 @@ on:
                 type: boolean
                 default: false
             k3-perf-variant:
-                description: "Kimi-K3 C1 diagnostic variant, including spec3aba, m7tunedgemmaba, and metadatareuseaba same-node confirmation"
+                description: "Kimi-K3 C1 diagnostic variant, including spec3aba, m7tunedgemmaba, metadatareuseaba, and deferredfinalizeaba same-node confirmation"
                 required: false
                 type: string
                 default: "baseline"
@@ -136,7 +136,7 @@ on:
                 type: boolean
                 default: false
             k3-perf-variant:
-                description: "Kimi-K3 C1 diagnostic variant, including spec3aba, m7tunedgemmaba, and metadatareuseaba same-node confirmation"
+                description: "Kimi-K3 C1 diagnostic variant, including spec3aba, m7tunedgemmaba, metadatareuseaba, and deferredfinalizeaba same-node confirmation"
                 required: false
                 type: string
                 default: "baseline"

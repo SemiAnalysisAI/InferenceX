@@ -6883,3 +6883,12 @@
     - "Add a same-node baseline/candidate/baseline validation mode for graph-stable Kimi-K3 KDA and ROCm MLA metadata reuse at concurrency one."
     - "Pin the candidate to vLLM bbb59bf5a529a863e4ebe3fff6abb01027ffddcf, run every arm at gpu-memory-utilization 0.85, apply the source overlay only to candidate arms, and fail closed unless the original installed sources are checksum-restored after both candidate launches."
   pr-link: XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a same-node baseline/candidate/baseline validation mode for Kimi-K3 deferred MoE finalization at concurrency one."
+    - "Pin AITER and vLLM source patches, require eight-GPU eager and changed-input graph correctness for fused route reduction plus all-reduce and RMSNorm, preserve the six-draft M=7 graph contract, and checksum-restore the baseline runtime after every candidate arm."
+  pr-link: XXX

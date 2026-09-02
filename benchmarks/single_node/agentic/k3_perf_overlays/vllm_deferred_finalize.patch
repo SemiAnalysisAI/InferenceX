@@ -1,0 +1,885 @@
+diff --git a/vllm/_aiter_ops.py b/vllm/_aiter_ops.py
+index 9e1fb6fd88..c4ab864420 100644
+--- a/vllm/_aiter_ops.py
++++ b/vllm/_aiter_ops.py
+@@ -232,6 +232,7 @@ def _rocm_aiter_fused_moe_impl(
+     swiglu_limit: float = 0.0,
+     beta: float | None = None,
+     linear_beta: float | None = None,
++    return_per_slot: bool = False,
+ ) -> torch.Tensor:
+     from aiter import ActivationType, QuantType
+     from aiter.fused_moe import fused_moe
+@@ -248,6 +249,12 @@ def _rocm_aiter_fused_moe_impl(
+     ):
+         extra_kwargs["beta"] = beta
+         extra_kwargs["linear_beta"] = linear_beta
++    if return_per_slot:
++        if not rocm_aiter_ops.fused_moe_supports_return_per_slot():
++            raise RuntimeError(
++                "The installed AITER fused_moe does not support return_per_slot."
++            )
++        extra_kwargs["return_per_slot"] = True
+
+     return fused_moe(
+         hidden_states,
+@@ -300,10 +307,16 @@ def _rocm_aiter_fused_moe_fake(
+     swiglu_limit: float = 0.0,
+     beta: float | None = None,
+     linear_beta: float | None = None,
++    return_per_slot: bool = False,
+ ) -> torch.Tensor:
+-    if output_dtype is not None:
+-        return torch.empty_like(hidden_states, dtype=output_dtype)
+-    return torch.empty_like(hidden_states)
++    dtype = hidden_states.dtype if output_dtype is None else output_dtype
++    if return_per_slot:
++        return torch.empty(
++            (hidden_states.shape[0], topk_ids.shape[1], w2.shape[1]),
++            dtype=dtype,
++            device=hidden_states.device,
++        )
++    return torch.empty_like(hidden_states, dtype=dtype)
+
+
+ def _rocm_aiter_asm_moe_tkw1_impl(
+@@ -938,6 +951,32 @@ def _rocm_aiter_fused_allreduce_rmsnorm_fake(
+     return torch.empty_like(input_), torch.empty_like(residual)
+
+
++def _rocm_aiter_fused_route_reduce_allreduce_rmsnorm_impl(
++    input_: torch.Tensor,
++    weight: torch.Tensor,
++    epsilon: float,
++) -> torch.Tensor:
++    aiter_ar = rocm_aiter_ops.get_aiter_allreduce()
++    assert aiter_ar is not None, "aiter allreduce must be initialized"
++    ca = aiter_ar.aiter_ca
++    result = ca.custom_fused_route_reduce_ar_rms(input_, weight, epsilon)
++    assert result is not None
++    return result
++
++
++def _rocm_aiter_fused_route_reduce_allreduce_rmsnorm_fake(
++    input_: torch.Tensor,
++    weight: torch.Tensor,
++    epsilon: float,
++) -> torch.Tensor:
++    output_shape = (input_.shape[0], input_.shape[-1])
++    return torch.empty(
++        output_shape,
++        dtype=input_.dtype,
++        device=input_.device,
++    )
++
++
+ def _rocm_aiter_fused_allreduce_rmsnorm_quant_per_group_impl(
+     input_: torch.Tensor,
+     residual: torch.Tensor,
+@@ -2083,6 +2122,26 @@ class rocm_aiter_ops:
+
+         return "gate_mode" in inspect.signature(fused_moe).parameters
+
++    @classmethod
++    @if_aiter_supported
++    @functools.cache
++    def fused_moe_supports_return_per_slot(cls) -> bool:
++        import inspect
++
++        from aiter.fused_moe import fused_moe
++
++        return "return_per_slot" in inspect.signature(fused_moe).parameters
++
++    @classmethod
++    @if_aiter_supported
++    @functools.cache
++    def supports_fused_route_reduce_allreduce_rmsnorm(cls) -> bool:
++        from vllm.distributed.device_communicators.aiter_custom_all_reduce import (
++            AiterCustomAllreduce,
++        )
++
++        return AiterCustomAllreduce.build_supports_route_reduce_rmsnorm()
++
+     @staticmethod
+     def register_ops_once() -> None:
+         global _OPS_REGISTERED
+@@ -2311,6 +2370,12 @@ class rocm_aiter_ops:
+                 fake_impl=_rocm_aiter_fused_allreduce_rmsnorm_fake,
+             )
+
++            direct_register_custom_op(
++                op_name="rocm_aiter_fused_route_reduce_allreduce_rmsnorm",
++                op_func=_rocm_aiter_fused_route_reduce_allreduce_rmsnorm_impl,
++                fake_impl=_rocm_aiter_fused_route_reduce_allreduce_rmsnorm_fake,
++            )
++
+             direct_register_custom_op(
+                 op_name="rocm_aiter_fused_allreduce_rmsnorm_quant_per_group",
+                 op_func=(_rocm_aiter_fused_allreduce_rmsnorm_quant_per_group_impl),
+@@ -2391,6 +2456,10 @@ class rocm_aiter_ops:
+     def get_fused_allreduce_rmsnorm_op() -> OpOverload:
+         return torch.ops.vllm.rocm_aiter_fused_allreduce_rmsnorm.default
+
++    @staticmethod
++    def get_fused_route_reduce_allreduce_rmsnorm_op() -> OpOverload:
++        return torch.ops.vllm.rocm_aiter_fused_route_reduce_allreduce_rmsnorm.default
++
+     @staticmethod
+     def get_fused_allreduce_rmsnorm_quant_per_group_op() -> OpOverload:
+         return torch.ops.vllm.rocm_aiter_fused_allreduce_rmsnorm_quant_per_group.default
+@@ -2558,6 +2627,7 @@ class rocm_aiter_ops:
+         swiglu_limit: float = 0.0,
+         beta: float | None = None,
+         linear_beta: float | None = None,
++        return_per_slot: bool = False,
+     ) -> torch.Tensor:
+         return torch.ops.vllm.rocm_aiter_fused_moe(
+             hidden_states,
+@@ -2584,6 +2654,7 @@ class rocm_aiter_ops:
+             swiglu_limit,
+             beta,
+             linear_beta,
++            return_per_slot,
+         )
+
+     @staticmethod
+diff --git a/vllm/distributed/device_communicators/aiter_custom_all_reduce.py b/vllm/distributed/device_communicators/aiter_custom_all_reduce.py
+index 63e06b77a7..5658b43ef8 100644
+--- a/vllm/distributed/device_communicators/aiter_custom_all_reduce.py
++++ b/vllm/distributed/device_communicators/aiter_custom_all_reduce.py
+@@ -74,6 +74,18 @@ class AiterCustomAllreduce:
+         """
+         return hasattr(self._impl, "_pool")
+
++    @property
++    def supports_route_reduce_rmsnorm(self) -> bool:
++        return self.build_supports_route_reduce_rmsnorm()
++
++    @staticmethod
++    def build_supports_route_reduce_rmsnorm() -> bool:
++        from aiter.dist.device_communicators.custom_all_reduce import (
++            CustomAllreduce as _AiterCustomAllreduce,
++        )
++
++        return hasattr(_AiterCustomAllreduce, "custom_fused_route_reduce_ar_rms")
++
+     @staticmethod
+     def build_supports_per_group_quant() -> bool:
+         """True if the running AITER build exposes the per-group AR+RMS+quant
+diff --git a/vllm/model_executor/layers/fused_moe/config.py b/vllm/model_executor/layers/fused_moe/config.py
+index 8736b1393d..7d69191926 100644
+--- a/vllm/model_executor/layers/fused_moe/config.py
++++ b/vllm/model_executor/layers/fused_moe/config.py
+@@ -1323,6 +1323,8 @@ class FusedMoEConfig:
+     defer_moe_finalize: bool = False
+     # Optional consumer capacity for deferred finalize. Negative means unbounded.
+     defer_moe_finalize_max_num_tokens: int = -1
++    # Optional exact token count required by a shape-specialized consumer.
++    defer_moe_finalize_exact_num_tokens: int | None = None
+
+     # SwiGLU clamp limit. When set, backends that do not implement the clamp
+     # are filtered out by `FusedMoEExperts.is_supported_config` so the oracle
+@@ -1463,10 +1465,12 @@ class FusedMoEConfig:
+     def should_defer_moe_finalize(self, num_tokens: int) -> bool:
+         """Return whether this invocation may defer the top-k reduction."""
+         max_num_tokens = self.defer_moe_finalize_max_num_tokens
++        exact_num_tokens = self.defer_moe_finalize_exact_num_tokens
+         return (
+             self.use_deferred_moe_finalize
+             and num_tokens > 0
+             and (max_num_tokens < 0 or num_tokens <= max_num_tokens)
++            and (exact_num_tokens is None or num_tokens == exact_num_tokens)
+         )
+
+     @property
+diff --git a/vllm/model_executor/layers/fused_moe/experts/rocm_aiter_moe.py b/vllm/model_executor/layers/fused_moe/experts/rocm_aiter_moe.py
+index a433b18487..0a3a4c7663 100644
+--- a/vllm/model_executor/layers/fused_moe/experts/rocm_aiter_moe.py
++++ b/vllm/model_executor/layers/fused_moe/experts/rocm_aiter_moe.py
+@@ -14,6 +14,9 @@ from vllm.model_executor.layers.fused_moe.config import (
+     FusedMoEParallelConfig,
+     FusedMoEQuantConfig,
+ )
++from vllm.model_executor.layers.fused_moe.moe_output import (
++    UnfinalizedMoERouteOutput,
++)
+ from vllm.model_executor.layers.fused_moe.topk_weight_and_reduce import (
+     TopKWeightAndReduceNoOP,
+ )
+@@ -246,6 +249,7 @@ def rocm_aiter_fused_experts(
+     num_local_tokens: torch.Tensor | None = None,
+     output_dtype: torch.dtype | None = None,
+     moe_sorting_dispatch_policy: int = 0,
++    return_per_slot: bool = False,
+ ) -> torch.Tensor:
+     """ROCm AITER fused MoE expert computation."""
+     if quant_config is None:
+@@ -414,6 +418,7 @@ def rocm_aiter_fused_experts(
+             moe_sorting_dispatch_policy=moe_sorting_dispatch_policy,
+             beta=moe_config.activation_situ_beta,
+             linear_beta=moe_config.activation_situ_linear_beta,
++            return_per_slot=return_per_slot,
+         )
+
+
+@@ -533,7 +538,7 @@ class AiterExperts(mk.FusedMoEExpertsModular):
+         workspace2: torch.Tensor,
+         expert_tokens_meta: mk.ExpertTokensMetadata | None,
+         apply_router_weight_on_input: bool,
+-    ):
++    ) -> UnfinalizedMoERouteOutput | None:
+         # TODO(rob): rocm_aiter_fused_experts uses self.quant_config's
+         # a_scales for static quantization. Update this to fit better
+         # with the interface once all quant integrations are complete.
+@@ -543,6 +548,9 @@ class AiterExperts(mk.FusedMoEExpertsModular):
+         else:
+             num_local_tokens = None
+
++        defer_finalize = self.moe_config.should_defer_moe_finalize(
++            hidden_states.shape[0]
++        )
+         result = rocm_aiter_fused_experts(
+             hidden_states=hidden_states,
+             w1=w1,
+@@ -558,7 +566,21 @@ class AiterExperts(mk.FusedMoEExpertsModular):
+             num_local_tokens=num_local_tokens,
+             output_dtype=output.dtype,
+             moe_sorting_dispatch_policy=rocm_aiter_ops.get_moe_dispatch_policy(),
++            return_per_slot=defer_finalize,
+         )
++        if defer_finalize:
++            expected_shape = (
++                hidden_states.shape[0],
++                topk_ids.shape[1],
++                w2.shape[1],
++            )
++            if result.shape != expected_shape or not result.is_contiguous():
++                raise RuntimeError(
++                    "AITER deferred MoE output must be contiguous with shape "
++                    f"{expected_shape}, got {tuple(result.shape)}."
++                )
++            return UnfinalizedMoERouteOutput(weighted_routes=result)
++
+         # avoid redundant copy when output is a view of the result
+         if (
+             output.shape == result.shape
+@@ -571,3 +593,4 @@ class AiterExperts(mk.FusedMoEExpertsModular):
+             output.set_(result)
+         else:
+             output.copy_(result)
++        return None
+diff --git a/vllm/model_executor/layers/fused_moe/fused_moe_method_base.py b/vllm/model_executor/layers/fused_moe/fused_moe_method_base.py
+index 3a7c6eedfb..7b39aa1b06 100644
+--- a/vllm/model_executor/layers/fused_moe/fused_moe_method_base.py
++++ b/vllm/model_executor/layers/fused_moe/fused_moe_method_base.py
+@@ -13,7 +13,10 @@ from vllm.model_executor.layers.fused_moe.config import (
+     FusedMoEParallelConfig,
+     FusedMoEQuantConfig,
+ )
+-from vllm.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
++from vllm.model_executor.layers.fused_moe.moe_output import (
++    UnfinalizedMoEOutput,
++    UnfinalizedMoERouteOutput,
++)
+ from vllm.model_executor.layers.quantization.base_config import (
+     QuantizeMethodBase,
+ )
+@@ -150,7 +153,7 @@ class FusedMoEMethodBase(QuantizeMethodBase):
+         topk_ids: torch.Tensor,
+         shared_experts: "SharedExperts | None",
+         shared_experts_input: torch.Tensor | None,
+-    ) -> torch.Tensor:
++    ) -> torch.Tensor | UnfinalizedMoERouteOutput:
+         """
+         Apply the MoE operation using modular kernels.
+
+@@ -162,7 +165,8 @@ class FusedMoEMethodBase(QuantizeMethodBase):
+             shared_experts_input: Input for shared experts (if any)
+
+         Returns:
+-            Output tensor from routed experts.
++            Finalized routed states or weighted per-route states awaiting a
++            consumer-specific reduction.
+         """
+         raise NotImplementedError
+
+diff --git a/vllm/model_executor/layers/fused_moe/fused_moe_modular_method.py b/vllm/model_executor/layers/fused_moe/fused_moe_modular_method.py
+index 5bf694218d..21da8191b5 100644
+--- a/vllm/model_executor/layers/fused_moe/fused_moe_modular_method.py
++++ b/vllm/model_executor/layers/fused_moe/fused_moe_modular_method.py
+@@ -16,6 +16,9 @@ from vllm.model_executor.layers.fused_moe.fused_moe_method_base import (
+ from vllm.model_executor.layers.fused_moe.modular_kernel import (
+     FusedMoEKernel,
+ )
++from vllm.model_executor.layers.fused_moe.moe_output import (
++    UnfinalizedMoERouteOutput,
++)
+ from vllm.model_executor.layers.fused_moe.runner.shared_experts import (
+     SharedExperts,
+ )
+@@ -86,7 +89,7 @@ class FusedMoEModularMethod(FusedMoEMethodBase, CustomOp):
+         topk_ids: torch.Tensor,
+         shared_experts: SharedExperts | None,
+         shared_experts_input: torch.Tensor | None,
+-    ) -> torch.Tensor:
++    ) -> torch.Tensor | UnfinalizedMoERouteOutput:
+         assert self.moe_kernel is not None
+         return self.moe_kernel.apply(
+             hidden_states=x,
+diff --git a/vllm/model_executor/layers/fused_moe/modular_kernel.py b/vllm/model_executor/layers/fused_moe/modular_kernel.py
+index 90736c09a1..fc265517e2 100644
+--- a/vllm/model_executor/layers/fused_moe/modular_kernel.py
++++ b/vllm/model_executor/layers/fused_moe/modular_kernel.py
+@@ -22,7 +22,10 @@ from vllm.model_executor.layers.fused_moe.config import (
+     FusedMoEQuantConfig,
+     RoutingMethodType,
+ )
+-from vllm.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
++from vllm.model_executor.layers.fused_moe.moe_output import (
++    UnfinalizedMoEOutput,
++    UnfinalizedMoERouteOutput,
++)
+ from vllm.model_executor.layers.fused_moe.runner.shared_experts import (
+     SharedExperts,
+     SharedExpertsOrder,
+@@ -263,6 +266,9 @@ class FusedMoEPrepareAndFinalizeModular(FusedMoEPrepareAndFinalize):
+     described above for the Modular case.
+     """
+
++    def supports_deferred_moe_finalize(self) -> bool:
++        return False
++
+     @abstractmethod
+     def prepare(
+         self,
+@@ -936,7 +942,7 @@ class FusedMoEExpertsModular(FusedMoEExperts):
+         workspace2: torch.Tensor,
+         expert_tokens_meta: ExpertTokensMetadata | None,
+         apply_router_weight_on_input: bool,
+-    ) -> None:
++    ) -> UnfinalizedMoERouteOutput | None:
+         """
+         This function computes the intermediate result of a Mixture of Experts
+         (MoE) layer using two sets of weights, w1 and w2.
+@@ -1298,7 +1304,7 @@ class FusedMoEKernelModularImpl:
+         apply_router_weight_on_input: bool,
+         expert_tokens_meta: ExpertTokensMetadata | None,
+         output_alias: torch.Tensor | None = None,
+-    ) -> torch.Tensor:
++    ) -> torch.Tensor | UnfinalizedMoERouteOutput:
+         _, M_full, N, K, top_k = self.fused_experts.moe_problem_size(
+             a1q, w1, w2, topk_ids
+         )
+@@ -1346,7 +1352,7 @@ class FusedMoEKernelModularImpl:
+         elif use_output_alias:
+             fused_out = output_alias
+
+-        self.fused_experts.apply(
++        deferred_output = self.fused_experts.apply(
+             output=fused_out,
+             hidden_states=a1q,
+             w1=w1,
+@@ -1364,6 +1370,9 @@ class FusedMoEKernelModularImpl:
+             apply_router_weight_on_input=apply_router_weight_on_input,
+         )
+
++        if deferred_output is not None:
++            return deferred_output
++
+         return fused_out
+
+     def _finalize(
+@@ -1447,7 +1456,7 @@ class FusedMoEKernelModularImpl:
+         apply_router_weight_on_input: bool = False,
+         shared_experts: SharedExperts | None = None,
+         shared_experts_input: torch.Tensor | None = None,
+-    ) -> torch.Tensor:
++    ) -> torch.Tensor | UnfinalizedMoERouteOutput:
+         """
+         This function computes a Mixture of Experts (MoE) layer using two sets
+         of weights, w1 and w2, and top-k gating mechanism.
+@@ -1518,6 +1527,14 @@ class FusedMoEKernelModularImpl:
+         if lora_ctx is not None:
+             lora_ctx.original_hidden_states = None
+
++        if isinstance(fused_out, UnfinalizedMoERouteOutput):
++            if not self.prepare_finalize.supports_deferred_moe_finalize():
++                raise RuntimeError(
++                    f"{type(self.prepare_finalize).__name__} cannot pass through "
++                    "a deferred MoE route output."
++                )
++            return fused_out
++
+         return self._finalize(
+             output,
+             fused_out,
+@@ -1677,10 +1694,7 @@ class FusedMoEKernel:
+         return self.prepare_finalize.output_is_reduced()
+
+     def supports_deferred_moe_finalize(self) -> bool:
+-        return (
+-            isinstance(self.prepare_finalize, FusedMoEPrepareAndFinalizeMonolithic)
+-            and self.prepare_finalize.supports_deferred_moe_finalize()
+-        )
++        return self.prepare_finalize.supports_deferred_moe_finalize()
+
+     def apply_monolithic(
+         self,
+@@ -1727,7 +1741,7 @@ class FusedMoEKernel:
+         apply_router_weight_on_input: bool,
+         shared_experts: SharedExperts | None = None,
+         shared_experts_input: torch.Tensor | None = None,
+-    ) -> torch.Tensor:
++    ) -> torch.Tensor | UnfinalizedMoERouteOutput:
+         assert isinstance(self.impl, FusedMoEKernelModularImpl)
+         return self.impl.apply(
+             hidden_states=hidden_states,
+diff --git a/vllm/model_executor/layers/fused_moe/moe_output.py b/vllm/model_executor/layers/fused_moe/moe_output.py
+index df1a2685ec..cd303c5b34 100644
+--- a/vllm/model_executor/layers/fused_moe/moe_output.py
++++ b/vllm/model_executor/layers/fused_moe/moe_output.py
+@@ -33,6 +33,19 @@ class UnfinalizedMoEOutput:
+     expanded_idx_to_permuted_idx: torch.Tensor
+
+
++@dataclass
++class UnfinalizedMoERouteOutput:
++    """Already-weighted MoE routes awaiting their top-k reduction.
++
++    ``weighted_routes`` is contiguous and has shape
++    ``[num_tokens, top_k, hidden_dim]``. Each slot has already been multiplied
++    by its routing weight and rounded to the activation dtype, so consumers
++    must sum the slots without applying routing weights again.
++    """
++
++    weighted_routes: torch.Tensor
++
++
+ def convert_flashinfer_moe_output(
+     flashinfer_output: torch.Tensor | list[torch.Tensor],
+     *,
+diff --git a/vllm/model_executor/layers/fused_moe/prepare_finalize/no_dp_ep.py b/vllm/model_executor/layers/fused_moe/prepare_finalize/no_dp_ep.py
+index d13bc20673..6c3ae245a6 100644
+--- a/vllm/model_executor/layers/fused_moe/prepare_finalize/no_dp_ep.py
++++ b/vllm/model_executor/layers/fused_moe/prepare_finalize/no_dp_ep.py
+@@ -38,6 +38,9 @@ def _quantize_input(
+
+
+ class MoEPrepareAndFinalizeNoDPEPModular(mk.FusedMoEPrepareAndFinalizeModular):
++    def supports_deferred_moe_finalize(self) -> bool:
++        return True
++
+     @property
+     def activation_format(self) -> mk.FusedMoEActivationFormat:
+         return mk.FusedMoEActivationFormat.Standard
+diff --git a/vllm/model_executor/layers/fused_moe/routed_experts.py b/vllm/model_executor/layers/fused_moe/routed_experts.py
+index 574d165ef7..8169802da5 100644
+--- a/vllm/model_executor/layers/fused_moe/routed_experts.py
++++ b/vllm/model_executor/layers/fused_moe/routed_experts.py
+@@ -19,7 +19,10 @@ from vllm.model_executor.layers.fused_moe.expert_map_manager import (
+ from vllm.model_executor.layers.fused_moe.fused_moe_method_base import (
+     FusedMoEMethodBase,
+ )
+-from vllm.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
++from vllm.model_executor.layers.fused_moe.moe_output import (
++    UnfinalizedMoEOutput,
++    UnfinalizedMoERouteOutput,
++)
+ from vllm.model_executor.layers.fused_moe.unquantized_fused_moe_method import (
+     UnquantizedFusedMoEMethod,
+ )
+@@ -1214,7 +1217,7 @@ class RoutedExperts(PluggableLayer):
+         topk_ids: torch.Tensor,
+         shared_experts: "SharedExperts | None" = None,
+         shared_experts_input: torch.Tensor | None = None,
+-    ) -> torch.Tensor:
++    ) -> torch.Tensor | UnfinalizedMoERouteOutput:
+         """
+         Execute routed experts using the quantization method's apply function.
+
+diff --git a/vllm/model_executor/layers/fused_moe/runner/moe_runner.py b/vllm/model_executor/layers/fused_moe/runner/moe_runner.py
+index 66ad630e68..a88edbeb27 100644
+--- a/vllm/model_executor/layers/fused_moe/runner/moe_runner.py
++++ b/vllm/model_executor/layers/fused_moe/runner/moe_runner.py
+@@ -28,7 +28,10 @@ from vllm.model_executor.layers.fused_moe.config import (
+ from vllm.model_executor.layers.fused_moe.fused_moe_method_base import (
+     FusedMoEMethodBase,
+ )
+-from vllm.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
++from vllm.model_executor.layers.fused_moe.moe_output import (
++    UnfinalizedMoEOutput,
++    UnfinalizedMoERouteOutput,
++)
+ from vllm.model_executor.layers.fused_moe.routed_experts import (
+     RoutedExperts,
+ )
+@@ -78,7 +81,8 @@ def get_layer_from_name(layer_name: str) -> MoERunnerInterface:
+             raise AssertionError(
+                 "We expected the number of MOE layers in `all_moe_layers` "
+                 "to be equal to the number of "
+-                "{vllm.moe_forward, vllm.moe_forward_shared} calls."
++                "{vllm.moe_forward, vllm.moe_forward_shared, "
++                "vllm.moe_forward_shared_deferred} calls."
+             )
+         layer_name = all_moe_layers[moe_layer_index]
+         forward_context.moe_layer_index += 1
+@@ -194,8 +198,59 @@ def _moe_forward_shared_fake(
+     return shared_out, fused_out
+
+
+-# NOTE: `moe_forward` and `moe_forward_shared` being opaque custom ops is a
+-# load-bearing assumption for the MoE-LoRA dual-stream path.
++def _moe_forward_shared_deferred(
++    hidden_states: torch.Tensor,
++    router_logits: torch.Tensor,
++    shared_experts_input: torch.Tensor | None,
++    input_ids: torch.Tensor | None,
++    layer_name: _layer_name_type,
++    routed_hidden_dim: int,
++    top_k: int,
++) -> tuple[torch.Tensor, torch.Tensor]:
++    layer = get_layer_from_name(_resolve_layer_name(layer_name))
++    result = layer._forward_impl(
++        hidden_states,
++        router_logits,
++        shared_experts_input,
++        input_ids,
++    )
++    if not isinstance(result, tuple):
++        raise RuntimeError("Deferred shared MoE forward requires shared experts.")
++    shared_output, routed_output = result
++    if not isinstance(shared_output, torch.Tensor):
++        raise RuntimeError("Deferred shared MoE forward did not return shared output.")
++    if not isinstance(routed_output, UnfinalizedMoERouteOutput):
++        raise RuntimeError("Deferred shared MoE forward did not return route outputs.")
++    weighted_routes = routed_output.weighted_routes
++    expected_shape = (*hidden_states.shape[:-1], top_k, routed_hidden_dim)
++    if weighted_routes.shape != expected_shape:
++        raise RuntimeError(
++            "Deferred shared MoE forward returned route shape "
++            f"{tuple(weighted_routes.shape)}, expected {expected_shape}."
++        )
++    return shared_output, weighted_routes
++
++
++def _moe_forward_shared_deferred_fake(
++    hidden_states: torch.Tensor,
++    router_logits: torch.Tensor,
++    shared_experts_input: torch.Tensor | None,
++    input_ids: torch.Tensor | None,
++    layer_name: _layer_name_type,
++    routed_hidden_dim: int,
++    top_k: int,
++) -> tuple[torch.Tensor, torch.Tensor]:
++    shared_out = torch.empty_like(
++        hidden_states if shared_experts_input is None else shared_experts_input
++    )
++    routed_out = hidden_states.new_empty(
++        (*hidden_states.shape[:-1], top_k, routed_hidden_dim)
++    )
++    return shared_out, routed_out
++
++
++# NOTE: Keeping MoE execution behind opaque custom ops is a load-bearing
++# assumption for Torch compile and the MoE-LoRA dual-stream path.
+ direct_register_custom_op(
+     op_name="moe_forward",
+     op_func=_moe_forward,
+@@ -213,11 +268,26 @@ direct_register_custom_op(
+ )
+
+
++direct_register_custom_op(
++    op_name="moe_forward_shared_deferred",
++    op_func=_moe_forward_shared_deferred,
++    fake_impl=_moe_forward_shared_deferred_fake,
++    tags=(torch.Tag.needs_fixed_stride_order,),
++)
++
++
+ def _unpack(
+     result: torch.Tensor
+     | UnfinalizedMoEOutput
+-    | tuple[torch.Tensor, torch.Tensor | UnfinalizedMoEOutput],
+-) -> tuple[torch.Tensor | None, torch.Tensor | UnfinalizedMoEOutput]:
++    | UnfinalizedMoERouteOutput
++    | tuple[
++        torch.Tensor,
++        torch.Tensor | UnfinalizedMoEOutput | UnfinalizedMoERouteOutput,
++    ],
++) -> tuple[
++    torch.Tensor | None,
++    torch.Tensor | UnfinalizedMoEOutput | UnfinalizedMoERouteOutput,
++]:
+     if isinstance(result, tuple):
+         return result
+     else:
+@@ -294,6 +364,7 @@ class MoERunner(MoERunnerInterface):
+         self.layer_name = layer_name
+
+         self._forward_entry = self._select_forward()
++        self._forward_shared_deferred_entry = self._select_forward_shared_deferred()
+
+         # For smuggling this layer into the fused moe custom op
+         register_layer_for_moe_forward_op(get_current_vllm_config(), self)
+@@ -316,6 +387,11 @@ class MoERunner(MoERunnerInterface):
+             else torch.ops.vllm.moe_forward_shared
+         )
+
++    def _select_forward_shared_deferred(self) -> Callable:
++        if current_platform.is_tpu() or current_platform.is_cpu():
++            return _moe_forward_shared_deferred
++        return torch.ops.vllm.moe_forward_shared_deferred
++
+     @property
+     def shared_experts(self) -> SharedExperts | None:
+         return self._shared_experts
+@@ -582,7 +658,10 @@ class MoERunner(MoERunnerInterface):
+         router_logits: torch.Tensor,
+         shared_experts_input: torch.Tensor | None,
+         input_ids: torch.Tensor | None = None,
+-    ) -> tuple[torch.Tensor | None, torch.Tensor | UnfinalizedMoEOutput]:
++    ) -> tuple[
++        torch.Tensor | None,
++        torch.Tensor | UnfinalizedMoEOutput | UnfinalizedMoERouteOutput,
++    ]:
+         """Run expert routing and the fused MoE kernel via the quant method.
+
+         Orchestrates shared expert execution (before/after), expert selection
+@@ -818,14 +897,20 @@ class MoERunner(MoERunnerInterface):
+     def _maybe_combine(
+         self,
+         shared_output: torch.Tensor | None,
+-        hidden_states: torch.Tensor | UnfinalizedMoEOutput,
++        hidden_states: torch.Tensor | UnfinalizedMoEOutput | UnfinalizedMoERouteOutput,
+     ) -> (
+         torch.Tensor
+         | UnfinalizedMoEOutput
+-        | tuple[torch.Tensor | None, torch.Tensor | UnfinalizedMoEOutput]
++        | UnfinalizedMoERouteOutput
++        | tuple[
++            torch.Tensor | None,
++            torch.Tensor | UnfinalizedMoEOutput | UnfinalizedMoERouteOutput,
++        ]
+     ):
+         if self.do_naive_dispatch_combine:
+-            if isinstance(hidden_states, UnfinalizedMoEOutput):
++            if isinstance(
++                hidden_states, (UnfinalizedMoEOutput, UnfinalizedMoERouteOutput)
++            ):
+                 raise RuntimeError(
+                     "Naive expert-parallel combine cannot consume a deferred "
+                     "MoE output."
+@@ -839,7 +924,9 @@ class MoERunner(MoERunnerInterface):
+             self.moe_config.pcp_size > 1
+             and not self.moe_config.moe_parallel_config.use_all2all_kernels
+         ):
+-            if isinstance(hidden_states, UnfinalizedMoEOutput):
++            if isinstance(
++                hidden_states, (UnfinalizedMoEOutput, UnfinalizedMoERouteOutput)
++            ):
+                 raise RuntimeError(
+                     "PCP reduce-scatter cannot consume a deferred MoE output."
+                 )
+@@ -860,7 +947,11 @@ class MoERunner(MoERunnerInterface):
+     ) -> (
+         torch.Tensor
+         | UnfinalizedMoEOutput
+-        | tuple[torch.Tensor, torch.Tensor | UnfinalizedMoEOutput]
++        | UnfinalizedMoERouteOutput
++        | tuple[
++            torch.Tensor,
++            torch.Tensor | UnfinalizedMoEOutput | UnfinalizedMoERouteOutput,
++        ]
+     ):
+         """Entry point called by the custom op to run the MoE computation.
+
+diff --git a/vllm/models/kimi_k3/amd/latent_moe_runner.py b/vllm/models/kimi_k3/amd/latent_moe_runner.py
+index 83c953e1a1..9e6fe47236 100644
+--- a/vllm/models/kimi_k3/amd/latent_moe_runner.py
++++ b/vllm/models/kimi_k3/amd/latent_moe_runner.py
+@@ -4,15 +4,25 @@ from typing import cast
+
+ import torch
+
++from vllm._aiter_ops import rocm_aiter_ops
+ from vllm.distributed import (
+     get_tensor_model_parallel_rank,
+     tensor_model_parallel_all_reduce,
+ )
+ from vllm.logger import init_logger
++from vllm.model_executor.layers.fused_moe.activation import MoEActivation
++from vllm.model_executor.layers.fused_moe.experts.rocm_aiter_moe import AiterExperts
+ from vllm.model_executor.layers.fused_moe.runner.moe_runner import MoERunner
++from vllm.platforms.rocm import on_gfx950
+
+ logger = init_logger(__name__)
+
++_DEFERRED_ROUTE_TOKEN_COUNT = 7
++_DEFERRED_ROUTE_TOPK = 16
++_DEFERRED_ROUTE_HIDDEN_DIM = 3584
++_DEFERRED_ROUTE_INTERMEDIATE_DIM = 384
++_DEFERRED_ROUTE_NUM_EXPERTS = 896
++
+
+ class ROCmLatentMoERunner(MoERunner):
+     """MoE runner for latent MoE with a replicated routed up-projection.
+@@ -54,6 +64,111 @@ class ROCmLatentMoERunner(MoERunner):
+                 scope="global",
+             )
+         self._logged_sharded_tail = False
++        self._logged_deferred_route_tail = False
++
++        moe_kernel = self._quant_method.moe_kernel
++        uses_aiter_experts = (
++            moe_kernel is not None
++            and isinstance(moe_kernel.fused_experts, AiterExperts)
++            and moe_kernel.supports_deferred_moe_finalize()
++        )
++        hidden_dim = self.moe_config.hidden_dim_unpadded or self.moe_config.hidden_dim
++        intermediate_dim = (
++            self.moe_config.intermediate_size_per_partition_unpadded
++            or self.moe_config.intermediate_size_per_partition
++        )
++        self._deferred_route_tail_enabled = (
++            self._tail_shardable
++            and not self.enable_dbo
++            and on_gfx950()
++            and uses_aiter_experts
++            and self.moe_config.tp_size == 8
++            and self.moe_config.dp_size == 1
++            and self.moe_config.ep_size == 1
++            and self.moe_config.pcp_size == 1
++            and self.moe_config.num_experts == _DEFERRED_ROUTE_NUM_EXPERTS
++            and self.moe_config.experts_per_token == _DEFERRED_ROUTE_TOPK
++            and hidden_dim == _DEFERRED_ROUTE_HIDDEN_DIM
++            and intermediate_dim == _DEFERRED_ROUTE_INTERMEDIATE_DIM
++            and self.moe_config.activation == MoEActivation.SITU
++            and self.moe_config.in_dtype == torch.bfloat16
++            and transform is not None
++            and transform.norm is not None
++            and rocm_aiter_ops.fused_moe_supports_return_per_slot()
++            and rocm_aiter_ops.supports_fused_route_reduce_allreduce_rmsnorm()
++        )
++        self.moe_config.defer_moe_finalize = self._deferred_route_tail_enabled
++        self.moe_config.defer_moe_finalize_max_num_tokens = (
++            _DEFERRED_ROUTE_TOKEN_COUNT if self._deferred_route_tail_enabled else -1
++        )
++        self.moe_config.defer_moe_finalize_exact_num_tokens = (
++            _DEFERRED_ROUTE_TOKEN_COUNT if self._deferred_route_tail_enabled else None
++        )
++
++    def _reduce_deferred_routes(self, weighted_routes: torch.Tensor) -> torch.Tensor:
++        expected_shape = (
++            _DEFERRED_ROUTE_TOKEN_COUNT,
++            _DEFERRED_ROUTE_TOPK,
++            _DEFERRED_ROUTE_HIDDEN_DIM,
++        )
++        if (
++            weighted_routes.shape != expected_shape
++            or weighted_routes.dtype != torch.bfloat16
++            or not weighted_routes.is_contiguous()
++        ):
++            raise RuntimeError(
++                "Kimi-K3 deferred AITER routes violated the exact fused-tail "
++                f"contract: expected contiguous BF16 {expected_shape}, got "
++                f"{tuple(weighted_routes.shape)} and {weighted_routes.dtype}."
++            )
++
++        transform = self.routed_output_transform
++        assert transform is not None
++        norm = transform.norm
++        assert norm is not None
++        aiter_ar = rocm_aiter_ops.get_aiter_allreduce()
++        can_fuse = (
++            aiter_ar is not None
++            and aiter_ar.supports_route_reduce_rmsnorm
++            and aiter_ar.should_custom_ar(weighted_routes)
++        )
++        if not can_fuse:
++            local_sum = weighted_routes.float().sum(dim=1).to(weighted_routes.dtype)
++            return norm(tensor_model_parallel_all_reduce(local_sum))
++
++        if not self._logged_deferred_route_tail:
++            self._logged_deferred_route_tail = True
++            logger.info_once(
++                "Kimi-K3 latent-MoE tail: using deferred AITER route reduction "
++                "with fused all-reduce and RMSNorm.",
++                scope="global",
++            )
++
++        fused_op = rocm_aiter_ops.get_fused_route_reduce_allreduce_rmsnorm_op()
++        return fused_op(
++            input_=weighted_routes,
++            weight=norm.weight,
++            epsilon=norm.variance_epsilon,
++        )
++
++    def _project_sharded_tail(
++        self,
++        latent: torch.Tensor,
++        shared_output: torch.Tensor,
++        trunc_size: int | None,
++    ) -> torch.Tensor:
++        transform = self.routed_output_transform
++        assert transform is not None
++
++        shard_size = self._up_proj_shard_size
++        shard_start = get_tensor_model_parallel_rank() * shard_size
++        up_proj_shard = transform.up_proj.weight.narrow(0, shard_start, shard_size)
++        hidden_shard = shared_output.narrow(-1, shard_start, shard_size)
++        hidden_shard.addmm_(latent, up_proj_shard.t())
++
++        return self._maybe_reduce_final_output(
++            shared_output, trunc_size, output_is_reduced=False
++        )
+
+     def _shard_up_proj_tail(
+         self,
+@@ -78,19 +193,7 @@ class ROCmLatentMoERunner(MoERunner):
+         latent = tensor_model_parallel_all_reduce(fused_output)
+         if transform.norm is not None:
+             latent = transform.norm(latent)
+-
+-        shard_size = self._up_proj_shard_size
+-        shard_start = get_tensor_model_parallel_rank() * shard_size
+-        up_proj_shard = transform.up_proj.weight.narrow(0, shard_start, shard_size)
+-        hidden_shard = shared_output.narrow(-1, shard_start, shard_size)
+-
+-        # hidden_shard += latent @ up_proj_shard.T, accumulated in the GEMM's
+-        # beta-add epilogue so folding in the shared partial costs no kernel.
+-        hidden_shard.addmm_(latent, up_proj_shard.t())
+-
+-        return self._maybe_reduce_final_output(
+-            shared_output, trunc_size, output_is_reduced=False
+-        )
++        return self._project_sharded_tail(latent, shared_output, trunc_size)
+
+     def forward(
+         self,
+@@ -130,6 +233,25 @@ class ROCmLatentMoERunner(MoERunner):
+             )
+         )
+
++        if (
++            og_hidden_dim_pre_xform is None
++            and self.moe_config.should_defer_moe_finalize(hidden_states.shape[0])
++        ):
++            shared_output, weighted_routes = self._forward_shared_deferred_entry(
++                hidden_states,
++                router_logits,
++                shared_experts_input,
++                input_ids,
++                self._encode_layer_name(),
++                _DEFERRED_ROUTE_HIDDEN_DIM,
++                _DEFERRED_ROUTE_TOPK,
++            )
++            latent = self._reduce_deferred_routes(weighted_routes)
++            result = self._project_sharded_tail(
++                latent, shared_output, og_hidden_dim_post_xform
++            )
++            return self._maybe_add_zero_expert_output(result)
++
+         result = self._forward_entry(
+             hidden_states,
+             router_logits,

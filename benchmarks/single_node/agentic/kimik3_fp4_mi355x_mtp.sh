@@ -48,6 +48,8 @@ check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
 
 K3_PERF_VARIANT="${K3_PERF_VARIANT:-baseline}"
 K3_ABA_GPU_MEM_UTIL=""
+K3_DEFERRED_SESSION_ROOT="${K3_DEFERRED_SESSION_ROOT:-}"
+K3_DEFERRED_VALIDATION_DIR="${K3_DEFERRED_VALIDATION_DIR:-}"
 
 # C1 changes cannot be adjudicated reliably across different physical nodes.
 # These variants keep one exclusive Slurm allocation while
@@ -66,6 +68,10 @@ case "$K3_PERF_VARIANT" in
         K3_ABA_CANDIDATE=metadatareuse
         # Match the clean B300 control without changing the canonical C1
         # recipe or the existing A/B/A variants.
+        K3_ABA_GPU_MEM_UTIL=0.85
+        ;;
+    deferredfinalizeaba)
+        K3_ABA_CANDIDATE=deferredfinalize
         K3_ABA_GPU_MEM_UTIL=0.85
         ;;
     *)
@@ -98,6 +104,19 @@ if [[ -n "$K3_ABA_CANDIDATE" ]]; then
         "$node_name" "$K3_PERF_VARIANT" "$K3_ABA_CANDIDATE" \
         "${K3_ABA_GPU_MEM_UTIL:-default}" \
         >"$aba_dir/manifest.tsv"
+
+    if [[ "$K3_ABA_CANDIDATE" == "deferredfinalize" ]]; then
+        K3_DEFERRED_SESSION_ROOT="$cache_session_root/deferred_finalize"
+        deferred_validation_dir="$aba_dir/deferred_finalize_validation"
+        K3_DEFERRED_VALIDATION_DIR="$deferred_validation_dir"
+        mkdir -p "$K3_DEFERRED_VALIDATION_DIR" "$cache_session_root/prepare"
+        K3_ARM_CACHE_ROOT="$cache_session_root/prepare" \
+            RESULT_DIR="$deferred_validation_dir" \
+            K3_DEFERRED_SESSION_ROOT="$K3_DEFERRED_SESSION_ROOT" \
+            K3_DEFERRED_VALIDATION_DIR="$deferred_validation_dir" \
+            bash "$(dirname "$script_path")/k3_perf_overlays/prepare_deferred_finalize.sh" \
+                prepare
+    fi
 
     capture_kfd_owners() {
         local output="$1"
@@ -251,6 +270,8 @@ if [[ -n "$K3_ABA_CANDIDATE" ]]; then
             K3_STARTUP_SMOKE="$startup_smoke" \
             K3_ARM_CACHE_ROOT="$arm_cache_root" \
             K3_GPU_MEM_UTIL_OVERRIDE="$K3_ABA_GPU_MEM_UTIL" \
+            K3_DEFERRED_SESSION_ROOT="$K3_DEFERRED_SESSION_ROOT" \
+            K3_DEFERRED_VALIDATION_DIR="$K3_DEFERRED_VALIDATION_DIR" \
             TRITON_CACHE_DIR="$arm_cache_root/triton" \
             TORCHINDUCTOR_CACHE_DIR="$arm_cache_root/torchinductor" \
             TORCH_EXTENSIONS_DIR="$arm_cache_root/torch_extensions" \
@@ -272,6 +293,14 @@ if [[ -n "$K3_ABA_CANDIDATE" ]]; then
             K3_ARM_CACHE_ROOT="$arm_cache_root" \
                 RESULT_DIR="$arm_result_dir" \
                 bash "$(dirname "$script_path")/k3_perf_overlays/apply_vllm_metadata_reuse_overlay.sh" \
+                    restore || restore_rc=$?
+        fi
+        if [[ "$variant" == "deferredfinalize" ]]; then
+            K3_ARM_CACHE_ROOT="$arm_cache_root" \
+                RESULT_DIR="$arm_result_dir" \
+                K3_DEFERRED_SESSION_ROOT="$K3_DEFERRED_SESSION_ROOT" \
+                K3_DEFERRED_VALIDATION_DIR="$K3_DEFERRED_VALIDATION_DIR" \
+                bash "$(dirname "$script_path")/k3_perf_overlays/prepare_deferred_finalize.sh" \
                     restore || restore_rc=$?
         fi
 
@@ -442,6 +471,10 @@ export AITER_QUICK_REDUCE_QUANTIZATION=INT4
 
 case "$K3_PERF_VARIANT" in
     baseline|spec3)
+        if [[ -n "$K3_DEFERRED_SESSION_ROOT" ]]; then
+            bash "$(dirname "$0")/k3_perf_overlays/prepare_deferred_finalize.sh" \
+                activate-base
+        fi
         ;;
     mla52494)
         bash "$(dirname "$0")/k3_perf_overlays/apply_vllm_overlay.sh" pr52494
@@ -458,6 +491,11 @@ case "$K3_PERF_VARIANT" in
     metadatareuse)
         bash "$(dirname "$0")/k3_perf_overlays/apply_vllm_metadata_reuse_overlay.sh" \
             apply
+        ;;
+    deferredfinalize)
+        export VLLM_ROCM_USE_AITER_CUSTOM_AR=1
+        bash "$(dirname "$0")/k3_perf_overlays/prepare_deferred_finalize.sh" \
+            activate-candidate
         ;;
     tritonmla)
         # Preserve AITER for the rest of the ROCm stack while making MLA
@@ -761,6 +799,15 @@ if [[ "$K3_PERF_VARIANT" == "tritonmla" ]]; then
     fi
     if grep -F "Using ROCM_AITER_MLA backend" "$SERVER_LOG" >/dev/null; then
         echo "Error: tritonmla variant retained the ROCM_AITER_MLA backend" >&2
+        exit 1
+    fi
+fi
+
+if [[ "$K3_PERF_VARIANT" == "deferredfinalize" ]]; then
+    if ! grep -F \
+        "Kimi-K3 latent-MoE tail: using deferred AITER route reduction with fused all-reduce and RMSNorm." \
+        "$SERVER_LOG" >/dev/null; then
+        echo "Error: deferredfinalize did not execute the fused deferred route" >&2
         exit 1
     fi
 fi

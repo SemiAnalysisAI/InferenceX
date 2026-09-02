@@ -1,0 +1,830 @@
+diff --git a/aiter/dist/device_communicators/custom_all_reduce.py b/aiter/dist/device_communicators/custom_all_reduce.py
+index d728fe8bb..0e0babd19 100644
+--- a/aiter/dist/device_communicators/custom_all_reduce.py
++++ b/aiter/dist/device_communicators/custom_all_reduce.py
+@@ -1451,6 +1451,74 @@ class CustomAllreduce:
+                 return out, res_out, scale_out, bf16_out
+             return out, res_out, scale_out
+
++    def fused_route_reduce_ar_rms(
++        self,
++        inp: torch.Tensor,
++        *,
++        out: Optional[torch.Tensor] = None,
++        w: torch.Tensor,
++        eps: float,
++        registered: bool = False,
++        gemma_norm: bool = False,
++    ) -> torch.Tensor:
++        if inp.ndim != 3 or not inp.is_contiguous():
++            raise ValueError(
++                "route input must be contiguous with shape [tokens, topk, hidden]"
++            )
++        token_num, _, hidden_dim = inp.shape
++        output_shape = (token_num, hidden_dim)
++        if w.ndim != 1 or w.numel() != hidden_dim or not w.is_contiguous():
++            raise ValueError("RMSNorm weight width must match route hidden size")
++        if out is None:
++            out = torch.empty(output_shape, dtype=inp.dtype, device=inp.device)
++        if out.shape != output_shape or not out.is_contiguous():
++            raise ValueError("output must be contiguous with shape [tokens, hidden]")
++        if inp.dtype != w.dtype or inp.dtype != out.dtype:
++            raise ValueError("route input, RMSNorm weight, and output dtypes must match")
++        if inp.device != w.device or inp.device != out.device:
++            raise ValueError("route input, RMSNorm weight, and output devices must match")
++        reg = 0 if registered else self._pool["input"].data_ptr
++        reg_bytes = 0 if registered else self._pool["input"].max_size
++        ops.fused_route_reduce_allreduce_rmsnorm(
++            self._ptr,
++            inp,
++            out,
++            w,
++            eps,
++            reg,
++            reg_bytes,
++            gemma_norm,
++        )
++        return out
++
++    def custom_fused_route_reduce_ar_rms(
++        self,
++        input: torch.Tensor,
++        weight: torch.Tensor,
++        eps: float,
++        gemma_norm: bool = False,
++    ) -> Optional[torch.Tensor]:
++        if self.disabled or not self.should_custom_ar(input):
++            return None
++        if self._IS_CAPTURING:
++            if torch.cuda.is_current_stream_capturing():
++                return self.fused_route_reduce_ar_rms(
++                    input,
++                    w=weight,
++                    eps=eps,
++                    registered=True,
++                    gemma_norm=gemma_norm,
++                )
++            output_shape = (input.shape[0], input.shape[-1])
++            return torch.zeros(output_shape, dtype=input.dtype, device=input.device)
++        return self.fused_route_reduce_ar_rms(
++            input,
++            w=weight,
++            eps=eps,
++            registered=False,
++            gemma_norm=gemma_norm,
++        )
++
+     def custom_fused_ar_rms(
+         self,
+         input: torch.Tensor,
+diff --git a/aiter/fused_moe.py b/aiter/fused_moe.py
+index 75537c760..ba4077f96 100644
+--- a/aiter/fused_moe.py
++++ b/aiter/fused_moe.py
+@@ -426,6 +426,30 @@ def stage2_uses_route_reduce(stage2: Callable) -> bool:
+     return False
+
+
++def _validate_return_per_slot(
++    metadata: "MOEMetadata",
++    *,
++    is_ep: bool,
++    doweight_stage1: bool,
++) -> None:
++    """Reject configurations that cannot expose already-weighted routes."""
++    stage2_func = getattr(metadata.stage2, "func", metadata.stage2)
++    if is_ep:
++        raise ValueError("return_per_slot does not support expert parallelism")
++    if doweight_stage1:
++        raise ValueError(
++            "return_per_slot requires routing weights to be applied in stage 2"
++        )
++    if metadata.run_1stage:
++        raise ValueError("return_per_slot requires a two-stage MoE kernel")
++    if stage2_func is not _flydsl_stage2_wrapper:
++        raise ValueError("return_per_slot requires a FlyDSL stage-2 kernel")
++    if not stage2_uses_route_reduce(metadata.stage2):
++        raise ValueError(
++            "return_per_slot requires a route-reduce FlyDSL stage-2 kernel"
++        )
++
++
+ # Lru cache will using hash to create key, which makes error when w1,w2 shape is symint.
+ # We can use torch.compile(dynamic=False) to avoid
+ @functools.lru_cache(maxsize=2048)
+@@ -468,6 +492,7 @@ def fused_moe(
+     beta=None,
+     linear_beta=None,
+     gate_mode: str | None = GateMode.SEPARATED.value,
++    return_per_slot: bool = False,
+ ):
+     if not block_size_M:
+         block_size_M = -1
+@@ -497,6 +522,7 @@ def fused_moe(
+         beta=beta,
+         linear_beta=linear_beta,
+         gate_mode=gate_mode,
++        return_per_slot=return_per_slot,
+     )
+
+
+@@ -525,13 +551,17 @@ def fused_moe_fake(
+     bias1: Optional[torch.Tensor] = None,
+     bias2: Optional[torch.Tensor] = None,
+     swiglu_limit: Optional[float] = None,
++    beta: Optional[float] = None,
++    linear_beta: Optional[float] = None,
+     gate_mode: str = GateMode.SEPARATED.value,
++    return_per_slot: bool = False,
+ ) -> torch.Tensor:
+     device = topk_ids.device
+     M, topk = topk_ids.shape
+     dtype = hidden_states.dtype if dtype is None else dtype
+     model_dim = w2.shape[1]
+-    moe_buf = torch.empty((M, model_dim), dtype=dtype, device=device)
++    output_shape = (M, topk, model_dim) if return_per_slot else (M, model_dim)
++    moe_buf = torch.empty(output_shape, dtype=dtype, device=device)
+     return moe_buf
+
+
+@@ -564,6 +594,7 @@ def fused_moe_(
+     beta: float | None = None,
+     linear_beta: float | None = None,
+     gate_mode: str = GateMode.SEPARATED.value,
++    return_per_slot: bool = False,
+ ) -> torch.Tensor:
+     # We do such convert since custom_op schema restriction on block_size_M, and Enum type
+     activation = ActivationType(activation)
+@@ -701,6 +732,13 @@ def fused_moe_(
+         has_stage2_bias=bias2 is not None,
+     )
+
++    if return_per_slot:
++        _validate_return_per_slot(
++            metadata,
++            is_ep=expert_mask is not None,
++            doweight_stage1=doweight_stage1,
++        )
++
+     block_size_M = metadata.block_m if block_size_M is None else block_size_M
+     # Ensure block_size_M is int (metadata.block_m from CSV may be float)
+     if block_size_M is not None:
+@@ -850,6 +888,7 @@ def fused_moe_(
+             expert_mask=expert_mask,
+             m_indices=sort_m_indices,
+             reverse_sorted=sort_reverse_sorted,
++            return_per_slot=return_per_slot,
+         )
+
+
+@@ -1258,6 +1297,7 @@ def _flydsl_stage2_wrapper(
+     model_dim_pad: int = 0,
+     expert_mask=None,
+     topk_ids=None,
++    return_per_slot: bool = False,
+     **_kwargs,
+ ):
+     inter_dim_pad, model_dim_pad = _get_padding_for_flydsl(
+@@ -1306,6 +1346,7 @@ def _flydsl_stage2_wrapper(
+         xcd_swizzle=parsed.get("xcd_swizzle", 0),
+         expert_mask=expert_mask,
+         topk_ids=topk_ids,
++        return_per_slot=return_per_slot,
+     )
+
+
+@@ -2516,6 +2557,7 @@ def fused_moe_2stages(
+     expert_mask=None,
+     m_indices=None,
+     reverse_sorted=None,
++    return_per_slot: bool = False,
+ ):
+     quant_func = get_quant(quant_type)
+     gate_mode = GateMode(gate_mode)
+@@ -2799,7 +2841,7 @@ def fused_moe_2stages(
+         sorted_ids,
+         sorted_expert_ids,
+         num_valid_ids,
+-        moe_out,
++        None if return_per_slot else moe_out,
+         topk,
+         w2_scale=(
+             # See stage1 w1_scale note: only reinterpret packed (e8m0) scales;
+@@ -2814,13 +2856,14 @@ def fused_moe_2stages(
+         a2_scale=a2_scale,
+         block_m=block_size_M,
+         sorted_weights=stage2_sorted_weights,
++        return_per_slot=return_per_slot,
+         **extra_stage2_args,
+     )
+     if kernel_bench_callable is not None:
+         kernel_bench_callable.append(("stage2", _stage2_call))
+-    _stage2_call()
++    stage2_out = _stage2_call()
+
+-    return moe_out
++    return stage2_out if return_per_slot else moe_out
+
+
+ def torch_moe_act(act_input, torch_act, inter_dim):
+diff --git a/aiter/jit/utils/torch_guard.py b/aiter/jit/utils/torch_guard.py
+index dd70debe1..9526f7157 100644
+--- a/aiter/jit/utils/torch_guard.py
++++ b/aiter/jit/utils/torch_guard.py
+@@ -84,6 +84,7 @@ NONE_WRAPPED_OP = [
+     "all_gather_reg",
+     "all_gather_unreg",
+     "fused_allreduce_rmsnorm",
++    "fused_route_reduce_allreduce_rmsnorm",
+     "fused_allreduce_rmsnorm_quant",
+     "fused_qknorm_allreduce",
+ ]
+diff --git a/aiter/ops/custom_all_reduce.py b/aiter/ops/custom_all_reduce.py
+index 90a6fc878..efbeb5a2d 100644
+--- a/aiter/ops/custom_all_reduce.py
++++ b/aiter/ops/custom_all_reduce.py
+@@ -86,6 +86,19 @@ def fused_allreduce_rmsnorm(
+ ) -> None: ...
+
+
++@compile_ops("module_custom_all_reduce", develop=True)
++def fused_route_reduce_allreduce_rmsnorm(
++    _fa: int,
++    inp: torch.Tensor,
++    out: torch.Tensor,
++    w: torch.Tensor,
++    eps: float,
++    reg_ptr: int,
++    reg_bytes: int,
++    gemma_norm: bool = False,
++) -> None: ...
++
++
+ @compile_ops("module_custom_all_reduce", develop=True)
+ def fused_allreduce_rmsnorm_pad(
+     _fa: int,
+diff --git a/csrc/include/custom_all_reduce.cuh b/csrc/include/custom_all_reduce.cuh
+index 9e635209c..d39eddf55 100644
+--- a/csrc/include/custom_all_reduce.cuh
++++ b/csrc/include/custom_all_reduce.cuh
+@@ -2046,6 +2046,83 @@ __global__ void __launch_bounds__(1024, 1)
+     }
+ }
+
++template <typename T, int ngpus, bool GEMMA_NORM = false>
++__global__ void __launch_bounds__(1024, 1)
++    route_reduce_allreduce_rmsnorm_kernel_1stage(RankData* _dp,
++                                                 RankSignals sg,
++                                                 Signal* self_sg,
++                                                 int rank,
++                                                 T* __restrict__ output,
++                                                 T* __restrict__ weight,
++                                                 int token_num,
++                                                 int topk,
++                                                 int hidden_dim,
++                                                 float eps)
++{
++    constexpr int pack_size = 16 / sizeof(T);
++    using P                 = typename opus::vector_t<T, pack_size>;
++    using A                 = typename opus::vector_t<opus::fp32_t, pack_size>;
++
++    int block_size         = hidden_dim / pack_size;
++    bool active            = (int)threadIdx.x < block_size;
++    int access_id_in_token = threadIdx.x * pack_size;
++    const P* ptrs[ngpus];
++#pragma unroll
++    for(int i = 0; i < ngpus; ++i)
++        ptrs[i] = reinterpret_cast<const P*>(_dp->ptrs[i]);
++
++    start_sync<ngpus>(sg, self_sg, rank);
++    for(int tidx = blockIdx.x; tidx < token_num; tidx += gridDim.x)
++    {
++        A acc{};
++        P weight_p{};
++        if(active)
++        {
++#pragma unroll
++            for(int r = 0; r < ngpus; ++r)
++            {
++                A local_acc{};
++                for(int slot = 0; slot < topk; ++slot)
++                {
++                    int input_idx =
++                        ((tidx * topk + slot) * hidden_dim + access_id_in_token) / pack_size;
++                    P route = ptrs[r][input_idx];
++#pragma unroll
++                    for(int v = 0; v < pack_size; ++v)
++                        local_acc[v] += upcast_s(route[v]);
++                }
++
++                // The unfused path rounds each rank's top-k reduction to the
++                // activation dtype before the tensor-parallel all-reduce.
++#pragma unroll
++                for(int v = 0; v < pack_size; ++v)
++                    acc[v] += upcast_s(downcast_s<T>(local_acc[v]));
++            }
++
++            // Match the all-reduce output's activation-dtype rounding point
++            // before applying RMSNorm.
++#pragma unroll
++            for(int v = 0; v < pack_size; ++v)
++                acc[v] = upcast_s(downcast_s<T>(acc[v]));
++
++            weight_p = *reinterpret_cast<P*>(weight + access_id_in_token);
++        }
++
++        int out_idx = tidx * hidden_dim + access_id_in_token;
++        ar_fusion_epilogue<P, A, T, T, pack_size, GEMMA_NORM>(acc,
++                                                              weight_p,
++                                                              hidden_dim,
++                                                              eps,
++                                                              out_idx,
++                                                              tidx,
++                                                              (int)blockDim.x,
++                                                              output,
++                                                              nullptr,
++                                                              active,
++                                                              nullptr);
++    }
++}
++
+ // Per-group quant variant of the 1-stage fused allreduce+rmsnorm kernel.
+ // scale_out shape: (m, hidden_dim / group_size) instead of (m, 1).
+ template <typename T, typename OutT, int ngpus, bool GEMMA_NORM = false, bool TRANSPOSE_SCALE = false>
+@@ -2445,6 +2522,33 @@ void allreduce_fusion_kernel_1stage_launcher(RankData* _dp,
+                                                     bf16_output);
+ }
+
++template <typename T, int NGPUS, bool GEMMA_NORM = false>
++void route_reduce_allreduce_rmsnorm_kernel_1stage_launcher(RankData* _dp,
++                                                           RankSignals sg,
++                                                           Signal* self_sg,
++                                                           int rank,
++                                                           T* output,
++                                                           T* weight,
++                                                           int token_num,
++                                                           int topk,
++                                                           int hidden_dim,
++                                                           float eps,
++                                                           hipStream_t stream)
++{
++    constexpr int PACK_SIZE = 16 / sizeof(T);
++    constexpr int WARP_SIZE = 32;
++    int block_size          = hidden_dim / PACK_SIZE;
++    if(block_size > 1024)
++        throw std::runtime_error(
++            "route-reduce fused allreduce rmsnorm requires hidden_dim/pack_size <= 1024");
++    int launch_threads = ((block_size + WARP_SIZE - 1) / WARP_SIZE) * WARP_SIZE;
++    dim3 threads_per_block(launch_threads);
++    dim3 num_blocks(std::min(token_num, kMaxBlocks));
++    route_reduce_allreduce_rmsnorm_kernel_1stage<T, NGPUS, GEMMA_NORM>
++        <<<num_blocks, threads_per_block, 0, stream>>>(
++            _dp, sg, self_sg, rank, output, weight, token_num, topk, hidden_dim, eps);
++}
++
+ template <typename T, int PACK_SIZE>
+ __device__ __forceinline__ typename opus::vector_t<T, PACK_SIZE>
+ apply_neox_rope_pack_shuffle(
+@@ -4388,6 +4492,59 @@ void dispatchFusedAllReduceRMSNorm(hipStream_t stream,
+ #undef launch_fused_allreduce_rmsnorm_pad
+ }
+
++template <typename T>
++void dispatchFusedRouteReduceAllReduceRMSNorm(hipStream_t stream,
++                                              T* input,
++                                              T* output,
++                                              T* weight,
++                                              float eps,
++                                              int token_num,
++                                              int topk,
++                                              int hidden_dim,
++                                              bool gemma_norm = false)
++{
++    constexpr int pack_size = 16 / sizeof(T);
++    if(hidden_dim % pack_size != 0)
++        throw std::runtime_error(
++            "route-reduce fused allreduce rmsnorm requires hidden_dim divisible by pack_size");
++    if(token_num <= 0 || topk <= 0)
++        throw std::runtime_error(
++            "route-reduce fused allreduce rmsnorm requires positive token_num and topk");
++
++    RankData* ptrs = get_buffer_RD(stream, input);
++
++#define DISPATCH_ROUTE_REDUCE_AR_RMS(NGPUS, GEMMA_NORM)                          \
++    route_reduce_allreduce_rmsnorm_kernel_1stage_launcher<T, NGPUS, GEMMA_NORM>( \
++        ptrs, sg_, self_sg_, rank_, output, weight, token_num, topk, hidden_dim, eps, stream)
++
++    switch(world_size_)
++    {
++    case 8:
++        if(gemma_norm)
++            DISPATCH_ROUTE_REDUCE_AR_RMS(8, true);
++        else
++            DISPATCH_ROUTE_REDUCE_AR_RMS(8, false);
++        break;
++    case 4:
++        if(gemma_norm)
++            DISPATCH_ROUTE_REDUCE_AR_RMS(4, true);
++        else
++            DISPATCH_ROUTE_REDUCE_AR_RMS(4, false);
++        break;
++    case 2:
++        if(gemma_norm)
++            DISPATCH_ROUTE_REDUCE_AR_RMS(2, true);
++        else
++            DISPATCH_ROUTE_REDUCE_AR_RMS(2, false);
++        break;
++    default:
++        throw std::runtime_error("route-reduce fused allreduce rmsnorm: unsupported world_size=" +
++                                 std::to_string(world_size_));
++    }
++
++#undef DISPATCH_ROUTE_REDUCE_AR_RMS
++}
++
+ template <typename T, typename QT>
+ void dispatchFusedAllReduceRMSNormQuant(hipStream_t stream,
+                                         T* input,
+diff --git a/csrc/include/custom_all_reduce.h b/csrc/include/custom_all_reduce.h
+index b5d01b38b..d1570d74b 100644
+--- a/csrc/include/custom_all_reduce.h
++++ b/csrc/include/custom_all_reduce.h
+@@ -75,6 +75,14 @@ void fused_allreduce_rmsnorm(fptr_t _fa,
+                              int64_t reg_bytes,
+                              bool use_1stage,
+                              bool gemma_norm = false);
++void fused_route_reduce_allreduce_rmsnorm(fptr_t _fa,
++                                          const aiter_tensor_t& inp,
++                                          const aiter_tensor_t& out,
++                                          const aiter_tensor_t& w,
++                                          double eps,
++                                          int64_t reg_ptr,
++                                          int64_t reg_bytes,
++                                          bool gemma_norm = false);
+ void fused_allreduce_rmsnorm_pad(fptr_t _fa,
+                                  const aiter_tensor_t& inp,
+                                  const aiter_tensor_t& res_inp,
+diff --git a/csrc/include/rocm_ops.hpp b/csrc/include/rocm_ops.hpp
+index d90a9c90d..15dcad4d5 100644
+--- a/csrc/include/rocm_ops.hpp
++++ b/csrc/include/rocm_ops.hpp
+@@ -532,6 +532,16 @@ namespace py = pybind11;
+           py::arg("reg_bytes"),                                                                \
+           py::arg("use_1stage"),                                                               \
+           py::arg("gemma_norm") = false);                                                      \
++    m.def("fused_route_reduce_allreduce_rmsnorm",                                              \
++          &aiter::fused_route_reduce_allreduce_rmsnorm,                                        \
++          py::arg("_fa"),                                                                      \
++          py::arg("inp"),                                                                      \
++          py::arg("out"),                                                                      \
++          py::arg("w"),                                                                        \
++          py::arg("eps"),                                                                      \
++          py::arg("reg_ptr"),                                                                  \
++          py::arg("reg_bytes"),                                                                \
++          py::arg("gemma_norm") = false);                                                      \
+     m.def("fused_allreduce_rmsnorm_pad",                                                       \
+           &aiter::fused_allreduce_rmsnorm_pad,                                                 \
+           py::arg("_fa"),                                                                      \
+diff --git a/csrc/kernels/custom_all_reduce.cu b/csrc/kernels/custom_all_reduce.cu
+index e536f9741..52c95f8e3 100644
+--- a/csrc/kernels/custom_all_reduce.cu
++++ b/csrc/kernels/custom_all_reduce.cu
+@@ -268,6 +268,51 @@ static void _fused_allreduce_rmsnorm(fptr_t _fa,
+ #undef DISPATCH_AR_FUSION
+ }
+
++static void _fused_route_reduce_allreduce_rmsnorm(fptr_t _fa,
++                                                  void* inp,
++                                                  void* out,
++                                                  void* w,
++                                                  AiterDtype dtype,
++                                                  float eps,
++                                                  int token_num,
++                                                  int topk,
++                                                  int hidden_dim,
++                                                  bool gemma_norm)
++{
++    hipStream_t stream = aiter::getCurrentHIPStream();
++    auto fa            = reinterpret_cast<aiter::CustomAllreduce*>(_fa);
++
++#define DISPATCH_ROUTE_REDUCE_AR_RMS(DTYPE)                                            \
++    fa->dispatchFusedRouteReduceAllReduceRMSNorm<DTYPE>(stream,                        \
++                                                        reinterpret_cast<DTYPE*>(inp), \
++                                                        reinterpret_cast<DTYPE*>(out), \
++                                                        reinterpret_cast<DTYPE*>(w),   \
++                                                        eps,                           \
++                                                        token_num,                     \
++                                                        topk,                          \
++                                                        hidden_dim,                    \
++                                                        gemma_norm)
++
++    switch(dtype)
++    {
++    case AITER_DTYPE_fp16: {
++        DISPATCH_ROUTE_REDUCE_AR_RMS(opus::fp16_t);
++        break;
++    }
++#if(__CUDA_ARCH__ >= 800 || !defined(__CUDA_ARCH__))
++    case AITER_DTYPE_bf16: {
++        DISPATCH_ROUTE_REDUCE_AR_RMS(opus::bf16_t);
++        break;
++    }
++#endif
++    default:
++        throw std::runtime_error(
++            "route-reduce fused allreduce rmsnorm only supports float16 and bfloat16");
++    }
++
++#undef DISPATCH_ROUTE_REDUCE_AR_RMS
++}
++
+ static bool _can_pack_2d_last_dim_slice(const aiter_tensor_t& inp, int m, int n)
+ {
+     return inp.dim() == 2 && inp.size(0) == m && inp.size(-1) == n &&
+@@ -549,6 +594,62 @@ void fused_allreduce_rmsnorm(fptr_t _fa,
+     }
+ }
+
++void fused_route_reduce_allreduce_rmsnorm(fptr_t _fa,
++                                          const aiter_tensor_t& inp,
++                                          const aiter_tensor_t& out,
++                                          const aiter_tensor_t& w,
++                                          double eps,
++                                          int64_t reg_ptr,
++                                          int64_t reg_bytes,
++                                          bool gemma_norm)
++{
++    HipDeviceGuard device_guard(inp.device_id);
++    hipStream_t stream = aiter::getCurrentHIPStream();
++    if(inp.dim() != 3 || out.dim() != 2 || w.dim() != 1 || !inp.is_contiguous() ||
++       !out.is_contiguous() || !w.is_contiguous())
++        throw std::runtime_error("route-reduce fused allreduce rmsnorm requires contiguous rank-3 "
++                                 "input, rank-2 output, and rank-1 weight");
++
++    int token_num  = (int)inp.size(0);
++    int topk       = (int)inp.size(1);
++    int hidden_dim = (int)inp.size(2);
++    if((int)w.numel() != hidden_dim || (int)out.size(0) != token_num ||
++       (int)out.size(1) != hidden_dim)
++    {
++        throw std::runtime_error(
++            "route-reduce fused allreduce rmsnorm received incompatible tensor shapes");
++    }
++    if(inp.dtype() != out.dtype() || inp.dtype() != w.dtype())
++    {
++        throw std::runtime_error(
++            "route-reduce fused allreduce rmsnorm requires matching tensor dtypes");
++    }
++    if(inp.device_id != out.device_id || inp.device_id != w.device_id)
++    {
++        throw std::runtime_error(
++            "route-reduce fused allreduce rmsnorm requires tensors on one device");
++    }
++
++    void* input_ptr = inp.data_ptr();
++    if(reg_ptr != 0)
++    {
++        _copy_input_to_registered_buffer(
++            inp, token_num * topk, hidden_dim, stream, reg_ptr, reg_bytes);
++        input_ptr = reinterpret_cast<void*>(reg_ptr);
++    }
++
++    _fused_route_reduce_allreduce_rmsnorm(_fa,
++                                          input_ptr,
++                                          out.data_ptr(),
++                                          w.data_ptr(),
++                                          inp.dtype(),
++                                          (float)eps,
++                                          token_num,
++                                          topk,
++                                          hidden_dim,
++                                          gemma_norm);
++}
++
+ void fused_allreduce_rmsnorm_pad(fptr_t _fa,
+                                  const aiter_tensor_t& inp,
+                                  const aiter_tensor_t& res_inp,
+diff --git a/op_tests/flydsl_tests/test_flydsl_moe_a16wfp4.py b/op_tests/flydsl_tests/test_flydsl_moe_a16wfp4.py
+index 6f003bd9f..93fb9bf20 100644
+--- a/op_tests/flydsl_tests/test_flydsl_moe_a16wfp4.py
++++ b/op_tests/flydsl_tests/test_flydsl_moe_a16wfp4.py
+@@ -19,8 +19,10 @@ Usage:
+ from __future__ import annotations
+
+ import argparse
++import functools
+ import os
+ import sys
++from dataclasses import replace
+
+ _REPO_ROOT = os.path.dirname(
+     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+@@ -32,8 +34,12 @@ import pytest
+ import torch
+
+ import aiter
++import aiter.fused_moe as fused_moe_module
+ from aiter import ActivationType, QuantType, dtypes
+ from aiter.fused_moe import (
++    MOEMetadata,
++    _flydsl_stage2_wrapper,
++    _validate_return_per_slot,
+     fused_topk,
+     moe_sorting,
+     torch_moe_stage1,
+@@ -665,6 +671,7 @@ def test_flydsl_e2e_a16wfp4(
+ @_SKIP_GFX950_FLYDSL
+ @pytest.mark.parametrize("beta,linear_beta", [(1.0, 1.0), (2.0, 1.5)])
+ def test_flydsl_a16wfp4_situv2_fused_moe(
++    monkeypatch,
+     beta,
+     linear_beta,
+     token: int = 128,
+@@ -682,6 +689,7 @@ def test_flydsl_a16wfp4_situv2_fused_moe(
+     """
+     from aiter.fused_moe import fused_moe
+     from aiter.ops.flydsl.moe_common import GateMode
++    from aiter.ops.flydsl.moe_kernels import get_flydsl_kernel_params
+
+     torch.set_default_device("cuda")
+     torch_quant = aiter.get_torch_quant(Q_TYPE)
+@@ -699,6 +707,10 @@ def test_flydsl_a16wfp4_situv2_fused_moe(
+     w2_qt, w2_scale = torch_quant(w2, quant_dtype=Q_DTYPE_W)
+     w1_qt = w1_qt.view(E, inter_dim * 2, model_dim // 2)
+     w2_qt = w2_qt.view(E, model_dim, inter_dim // 2)
++    w1_qt_shuffled = shuffle_weight_a16w4(w1_qt, 16, False)
++    w2_qt_shuffled = shuffle_weight_a16w4(w2_qt, 16, False)
++    w1_scale_shuffled = shuffle_scale_a16w4(w1_scale, E, False)
++    w2_scale_shuffled = e8m0_shuffle(w2_scale)
+
+     ref1 = torch_moe_stage1(
+         inp,
+@@ -727,20 +739,24 @@ def test_flydsl_a16wfp4_situv2_fused_moe(
+         doweight=True,
+     )
+
++    fused_moe_kwargs = {
++        "w1_scale": w1_scale_shuffled,
++        "w2_scale": w2_scale_shuffled,
++        "quant_type": Q_TYPE,
++        "activation": ActivationType.Situv2,
++        "doweight_stage1": False,
++        "beta": beta,
++        "linear_beta": linear_beta,
++        "gate_mode": GateMode.SEPARATED.value,
++    }
++
+     out = fused_moe(
+         inp,
+-        shuffle_weight_a16w4(w1_qt, 16, False),
+-        shuffle_weight_a16w4(w2_qt, 16, False),
++        w1_qt_shuffled,
++        w2_qt_shuffled,
+         topk_weights,
+         topk_ids,
+-        w1_scale=shuffle_scale_a16w4(w1_scale, E, False),
+-        w2_scale=e8m0_shuffle(w2_scale),
+-        quant_type=Q_TYPE,
+-        activation=ActivationType.Situv2,
+-        doweight_stage1=False,
+-        beta=beta,
+-        linear_beta=linear_beta,
+-        gate_mode=GateMode.SEPARATED.value,
++        **fused_moe_kwargs,
+     )
+     torch.cuda.synchronize()
+     passed, max_delta, pct_close = _check_result(ref2, out, pass_pct=90.0)
+@@ -749,6 +765,133 @@ def test_flydsl_a16wfp4_situv2_fused_moe(
+         f"max_delta={max_delta:.4f}, {pct_close:.1f}% close"
+     )
+
++    original_get_2stage_cfgs = fused_moe_module.get_2stage_cfgs
++
++    def force_route_reduce(*args, **kwargs):
++        metadata = original_get_2stage_cfgs(*args, **kwargs)
++        stage2 = metadata.stage2
++        assert isinstance(stage2, functools.partial)
++        assert stage2.func is _flydsl_stage2_wrapper
++        stage2_kwargs = dict(stage2.keywords)
++        kernel_name = stage2_kwargs["kernelName"]
++        if "_reduce" not in kernel_name:
++            kernel_name = kernel_name.replace("_atomic", "_reduce")
++        assert get_flydsl_kernel_params(kernel_name) is not None
++        stage2_kwargs["kernelName"] = kernel_name
++        return replace(
++            metadata,
++            stage2=functools.partial(stage2.func, *stage2.args, **stage2_kwargs),
++        )
++
++    monkeypatch.setattr(
++        fused_moe_module,
++        "get_2stage_cfgs",
++        force_route_reduce,
++    )
++    per_slot = fused_moe(
++        inp,
++        w1_qt_shuffled,
++        w2_qt_shuffled,
++        topk_weights,
++        topk_ids,
++        return_per_slot=True,
++        **fused_moe_kwargs,
++    )
++    torch.cuda.synchronize()
++    assert per_slot.shape == (token, topk, model_dim)
++    assert per_slot.dtype == out.dtype
++    assert per_slot.is_contiguous()
++    route_sum = torch.zeros_like(out, dtype=torch.float32)
++    for slot in range(topk):
++        route_sum.add_(per_slot[:, slot].float())
++    route_sum = route_sum.to(out.dtype)
++    torch.testing.assert_close(route_sum, out, atol=2e-2, rtol=2e-2)
++
++
++def _return_per_slot_metadata(
++    *,
++    run_1stage: bool = False,
++    flydsl: bool = True,
++    route_reduce: bool = True,
++) -> MOEMetadata:
++    if flydsl:
++        mode = "reduce" if route_reduce else "atomic"
++        stage2 = functools.partial(
++            _flydsl_stage2_wrapper,
++            kernelName=f"flydsl_moe2_abf16_wfp4_bf16_t32x128x256_{mode}",
++        )
++    else:
++        stage2 = lambda: None
++    return MOEMetadata(
++        stage1=lambda: None,
++        stage2=stage2,
++        block_m=32,
++        ksplit=0,
++        run_1stage=run_1stage,
++    )
++
++
++@pytest.mark.parametrize(
++    "metadata,is_ep,doweight_stage1,error",
++    [
++        pytest.param(
++            _return_per_slot_metadata(),
++            True,
++            False,
++            "does not support expert parallelism",
++            id="expert-parallel",
++        ),
++        pytest.param(
++            _return_per_slot_metadata(),
++            False,
++            True,
++            "routing weights to be applied in stage 2",
++            id="stage1-weighting",
++        ),
++        pytest.param(
++            _return_per_slot_metadata(run_1stage=True),
++            False,
++            False,
++            "requires a two-stage MoE kernel",
++            id="one-stage",
++        ),
++        pytest.param(
++            _return_per_slot_metadata(flydsl=False),
++            False,
++            False,
++            "requires a FlyDSL stage-2 kernel",
++            id="non-flydsl",
++        ),
++        pytest.param(
++            _return_per_slot_metadata(route_reduce=False),
++            False,
++            False,
++            "requires a route-reduce FlyDSL stage-2 kernel",
++            id="non-reduce",
++        ),
++    ],
++)
++def test_return_per_slot_rejects_unsupported_dispatch(
++    metadata,
++    is_ep,
++    doweight_stage1,
++    error,
++):
++    with pytest.raises(ValueError, match=error):
++        _validate_return_per_slot(
++            metadata,
++            is_ep=is_ep,
++            doweight_stage1=doweight_stage1,
++        )
++
++
++def test_return_per_slot_accepts_route_reduce_flydsl() -> None:
++    _validate_return_per_slot(
++        _return_per_slot_metadata(),
++        is_ep=False,
++        doweight_stage1=False,
++    )
++
+
+ # ---------------------------------------------------------------------------
+ # Regression: a16w4 SiTUv2 end-to-end (stage1 -> stage2) over 128-multiple
