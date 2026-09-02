@@ -6892,3 +6892,12 @@
     - "Split the failed Kimi-K3 metadata-reuse candidate into cumulative MLA reuse, ROCm KDA specialization, and KDA reuse same-node validation stages pinned to exact vLLM commits."
     - "Run candidate startup smokes with synchronous HIP kernel attribution, keep serialization disabled for timed arms, and checksum-restore the installed vLLM sources after every candidate launch."
   pr-link: XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a fail-closed same-node baseline/radix-router/baseline AgentX validation mode for the Kimi-K3 MI355X concurrency-one workload."
+    - "Pin exact stock and candidate AITER commits, rebuild only the grouped-MoE router module per arm, and record source plus binary provenance while retaining the image's common prebuilt AITER modules."
+  pr-link: XXX

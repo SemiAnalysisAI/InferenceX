@@ -229,7 +229,14 @@ order. They pin cumulative vLLM commits `747d030515`, `5c76ec1906`, and
 `bbb59bf5a5`, respectively, so the first failing stage distinguishes MLA
 schedule reuse from ROCm KDA specialization and KDA reuse. Candidate startup
 smokes set `AMD_SERIALIZE_KERNEL=3` for synchronous kernel attribution; timed
-arms explicitly leave serialization disabled.
+arms explicitly leave serialization disabled. The `radixrouteraba` mode keeps
+the same six-draft, graph-size-2-through-14 workload and pins every arm to GPU
+memory utilization 0.85. It installs one exact AITER Python checkout for all
+arms, rebuilds only `module_moe_asm` from stock commit `7f184691e3` for both
+controls and radix commit `d68332357e` for the candidate, and records the
+selected source and rebuilt binary hash for every launch. The image's other
+prebuilt AITER modules remain the common seed, so the comparison isolates the
+wide-router radix dispatch rather than rebuilding the full ROCm stack.
 
 Targeted AgentX SWE-bench smoke eval (first ten instances, real agentic generation):
 

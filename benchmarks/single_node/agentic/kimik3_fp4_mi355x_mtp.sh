@@ -48,6 +48,7 @@ check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
 
 K3_PERF_VARIANT="${K3_PERF_VARIANT:-baseline}"
 K3_ABA_GPU_MEM_UTIL=""
+K3_RADIX_SESSION_ROOT="${K3_RADIX_SESSION_ROOT:-}"
 
 metadata_stage_for_variant() {
     case "$1" in
@@ -97,6 +98,10 @@ case "$K3_PERF_VARIANT" in
         K3_ABA_CANDIDATE=kdametadatareuse
         K3_ABA_GPU_MEM_UTIL=0.85
         ;;
+    radixrouteraba)
+        K3_ABA_CANDIDATE=radixrouter
+        K3_ABA_GPU_MEM_UTIL=0.85
+        ;;
     *)
         K3_ABA_CANDIDATE=""
         ;;
@@ -127,6 +132,14 @@ if [[ -n "$K3_ABA_CANDIDATE" ]]; then
         "$node_name" "$K3_PERF_VARIANT" "$K3_ABA_CANDIDATE" \
         "${K3_ABA_GPU_MEM_UTIL:-default}" \
         >"$aba_dir/manifest.tsv"
+
+    if [[ "$K3_ABA_CANDIDATE" == "radixrouter" ]]; then
+        K3_RADIX_SESSION_ROOT="$cache_session_root/radix_router"
+        mkdir -p "$aba_dir/radix_router_prepare"
+        RESULT_DIR="$aba_dir/radix_router_prepare" \
+            bash "$(dirname "$script_path")/k3_perf_overlays/prepare_aiter_radix_router.sh" \
+                prepare "$K3_RADIX_SESSION_ROOT"
+    fi
 
     capture_kfd_owners() {
         local output="$1"
@@ -281,6 +294,7 @@ if [[ -n "$K3_ABA_CANDIDATE" ]]; then
             K3_STARTUP_SMOKE="$startup_smoke" \
             K3_ARM_CACHE_ROOT="$arm_cache_root" \
             K3_GPU_MEM_UTIL_OVERRIDE="$K3_ABA_GPU_MEM_UTIL" \
+            K3_RADIX_SESSION_ROOT="$K3_RADIX_SESSION_ROOT" \
             TRITON_CACHE_DIR="$arm_cache_root/triton" \
             TORCHINDUCTOR_CACHE_DIR="$arm_cache_root/torchinductor" \
             TORCH_EXTENSIONS_DIR="$arm_cache_root/torch_extensions" \
@@ -403,6 +417,29 @@ if [ -n "${ROCR_VISIBLE_DEVICES:-}" ]; then
     export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
 fi
 
+if [[ -n "$K3_RADIX_SESSION_ROOT" ]]; then
+    case "$K3_PERF_VARIANT" in
+        baseline)
+            K3_RADIX_IMPLEMENTATION=stock
+            export AITER_META_DIR="$K3_RADIX_SESSION_ROOT/aiter-stock"
+            ;;
+        radixrouter)
+            K3_RADIX_IMPLEMENTATION=radix
+            export AITER_META_DIR="$K3_RADIX_SESSION_ROOT/aiter-candidate"
+            ;;
+        *)
+            echo "Error: radix-router session does not support variant '$K3_PERF_VARIANT'" >&2
+            exit 1
+            ;;
+    esac
+    # Leave every image-provided module on the common seed. Omitting only
+    # module_moe_asm from the arm cache makes AITER rebuild that module from
+    # the selected stock/candidate source without rebuilding unrelated ops.
+    export AITER_REBUILD=0
+    export AITER_USE_SYSTEM_TRITON=1
+    mkdir -p "$RESULT_DIR"
+fi
+
 # `hf download` creates the target dir if missing and is itself idempotent. The
 # 1.56 TB checkpoint is normally pre-staged, so these calls are a no-op there.
 if [[ -n "${MODEL_PATH:-}" ]]; then
@@ -422,7 +459,10 @@ resolve_trace_source
 install_agentic_deps
 
 if [[ -n "${K3_ARM_CACHE_ROOT:-}" ]]; then
-    aiter_jit_source="$(python3 - <<'PY'
+    if [[ -n "$K3_RADIX_SESSION_ROOT" ]]; then
+        aiter_jit_source="$K3_RADIX_SESSION_ROOT/installed-jit-seed"
+    else
+        aiter_jit_source="$(python3 - <<'PY'
 import importlib.util
 from pathlib import Path
 
@@ -432,12 +472,17 @@ if spec is None or spec.origin is None:
 print(Path(spec.origin).resolve().parent / "jit")
 PY
 )"
+    fi
     if [[ ! -d "$aiter_jit_source" ]]; then
         echo "Error: installed AITER JIT directory is missing: $aiter_jit_source" >&2
         exit 1
     fi
     shopt -s nullglob
     for aiter_module in "$aiter_jit_source"/*.so; do
+        if [[ -n "$K3_RADIX_SESSION_ROOT" && \
+                "$(basename "$aiter_module")" == module_moe_asm*.so ]]; then
+            continue
+        fi
         ln -s "$aiter_module" "$AITER_JIT_DIR/$(basename "$aiter_module")"
     done
     shopt -u nullglob
@@ -460,6 +505,12 @@ PY
     } >"$RESULT_DIR/cache_provenance.tsv"
 fi
 
+if [[ -n "$K3_RADIX_SESSION_ROOT" ]]; then
+    RESULT_DIR="$RESULT_DIR" \
+        bash "$(dirname "$0")/k3_perf_overlays/prepare_aiter_radix_router.sh" \
+            verify "$K3_RADIX_SESSION_ROOT" "$K3_RADIX_IMPLEMENTATION"
+fi
+
 # ---- Reference env block ----------------------------------------------------
 export VLLM_ROCM_AITER_MLA_ASM_PADDING=asm
 export VLLM_ROCM_USE_AITER=1
@@ -471,7 +522,7 @@ export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 export AITER_QUICK_REDUCE_QUANTIZATION=INT4
 
 case "$K3_PERF_VARIANT" in
-    baseline|spec3)
+    baseline|spec3|radixrouter)
         ;;
     mla52494)
         bash "$(dirname "$0")/k3_perf_overlays/apply_vllm_overlay.sh" pr52494
@@ -794,6 +845,12 @@ printf '%s\n' "$SERVER_PID" >"$RESULT_DIR/server_pid.txt"
 echo "Server PID: $SERVER_PID"
 
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
+
+if [[ -n "$K3_RADIX_SESSION_ROOT" ]]; then
+    RESULT_DIR="$RESULT_DIR" \
+        bash "$(dirname "$0")/k3_perf_overlays/prepare_aiter_radix_router.sh" \
+            record-binary "$K3_RADIX_SESSION_ROOT" "$K3_RADIX_IMPLEMENTATION"
+fi
 
 if [[ "$K3_PERF_VARIANT" == "tritonmla" ]]; then
     if ! grep -F "Using TRITON_MLA backend" "$SERVER_LOG" >/dev/null; then
