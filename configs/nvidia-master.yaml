@@ -7499,7 +7499,7 @@ qwen3.5-fp4-b200-trt-mtp:
       - { tp: 8, ep: 8, dp-attn: true, spec-decoding: "mtp", conc-list: [128, 256, 1024] }
 
 minimaxm3-fp8-h100-vllm-agentic-mtp:
-  image: vllm/vllm-openai:v0.27.1
+  image: ttl.sh/cquil11-vllm-tier-progress-b9e9d720-amd64-20260902:24h
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: cluster:h100-dgxc
@@ -7508,11 +7508,12 @@ minimaxm3-fp8-h100-vllm-agentic-mtp:
   multinode: false
   scenarios:
     agentic-coding:
-    # The fast sweep places the resident HBM cliff between c5 and c6.
+    # Narrow validation sweep for physical cache-source attribution.
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 3, 4, 5] }
-      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [6, 8] }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [8] }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: nvme, kv-offload-backend: { name: vllm-simple }, conc-list: [30] }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: [dram, nvme], kv-offload-backend: { name: vllm-native }, conc-list: [20] }
 
 minimaxm3-fp8-h200-vllm-agentic-mtp:
   image: vllm/vllm-openai:v0.27.1

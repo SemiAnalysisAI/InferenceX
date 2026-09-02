@@ -298,13 +298,40 @@ else
 
     export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
 
-    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$GPU_COUNT --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
+    # These NVMe AgentX points can need >4 hours of warmup before a 1-hour profile.
+    if [[ "${MODEL_PREFIX:-}" == "minimaxm3" && "${SCENARIO_TYPE:-}" == "agentic-coding" && ( "${KV_OFFLOADING:-}" == "nvme" || "${KV_OFFLOADING:-}" == "dram+nvme" ) ]]; then
+        SALLOC_TIME_LIMIT="${SALLOC_TIME_LIMIT:-420}"
+    fi
+    SALLOC_TIME_LIMIT="${SALLOC_TIME_LIMIT:-300}"
+    salloc --partition="$SLURM_PARTITION" --account="$SLURM_ACCOUNT" \
+        --gres="gpu:$GPU_COUNT" --exclusive --time="$SALLOC_TIME_LIMIT" \
+        --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
     if [[ -z "$JOB_ID" ]]; then
         echo "ERROR: failed to resolve H100 Slurm allocation" >&2
         exit 1
     fi
-    trap 'rc=$?; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT
+    cleanup_allocation() {
+        local rc=$?
+        trap - EXIT INT TERM
+        scancel "$JOB_ID" 2>/dev/null || true
+        exit "$rc"
+    }
+    trap cleanup_allocation EXIT INT TERM
+
+    NVME_CONTAINER_MOUNT=""
+    if [[ "${KV_OFFLOADING:-none}" == "nvme" || "${KV_OFFLOADING:-none}" == "dram+nvme" ]]; then
+        NVME_HOST_ROOT="/mnt/numa0/enroot/cache/group-$(id -g)"
+        NVME_HOST_DIR="$NVME_HOST_ROOT/inferencex-kv-$JOB_ID"
+        srun --jobid="$JOB_ID" bash -c "
+            set -e
+            test -w '$NVME_HOST_ROOT'
+            mkdir -m 700 '$NVME_HOST_DIR'
+            findmnt -T '$NVME_HOST_DIR'
+        "
+        NVME_CONTAINER_MOUNT=",$NVME_HOST_DIR:/kv-offload"
+        export NVME_OFFLOAD_DIR=/kv-offload
+    fi
 
     # Check the shared cache before opening its lock. A valid squash file is
     # immutable, so readers do not need to touch a lock owned by another user.
@@ -327,12 +354,10 @@ else
 
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
-        --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache \
+        --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache$NVME_CONTAINER_MOUNT \
         --no-container-mount-home \
         --container-workdir=/workspace/ \
         --no-container-entrypoint --export=ALL,PORT=8888,AIPERF_DATASET_MMAP_CACHE_DIR=/aiperf_mmap_cache \
         bash benchmarks/single_node/${SCENARIO_SUBDIR}${EXP_NAME%%_*}_${PRECISION}_h100${SPEC_SUFFIX}.sh
-
-    scancel $JOB_ID
 
 fi

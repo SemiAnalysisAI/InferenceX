@@ -55,19 +55,19 @@ require_agentic_kv_offload_backend() {
             fi
             return 1
             ;;
-        dram)
+        dram|nvme|dram+nvme)
             if [[ "${KV_OFFLOAD_BACKEND:-}" != "$expected_backend" ]]; then
-                echo "Error: expected KV_OFFLOAD_BACKEND=$expected_backend when KV_OFFLOADING=dram, got '${KV_OFFLOAD_BACKEND:-}'" >&2
+                echo "Error: expected KV_OFFLOAD_BACKEND=$expected_backend when KV_OFFLOADING=$KV_OFFLOADING, got '${KV_OFFLOAD_BACKEND:-}'" >&2
                 exit 1
             fi
-            if [[ ! "${TOTAL_CPU_DRAM_GB:-}" =~ ^[1-9][0-9]*$ ]]; then
-                echo "Error: DRAM KV offloading requires a positive TOTAL_CPU_DRAM_GB capacity" >&2
+            if [[ "$KV_OFFLOADING" != "nvme" && ! "${TOTAL_CPU_DRAM_GB:-}" =~ ^[1-9][0-9]*$ ]]; then
+                echo "Error: $KV_OFFLOADING KV offloading requires a positive TOTAL_CPU_DRAM_GB capacity" >&2
                 exit 1
             fi
             return 0
             ;;
         *)
-            echo "Error: unsupported KV_OFFLOADING value '$KV_OFFLOADING' (expected one of: none, dram)" >&2
+            echo "Error: unsupported KV_OFFLOADING value '$KV_OFFLOADING' (expected one of: none, dram, nvme, dram+nvme)" >&2
             exit 1
             ;;
     esac
@@ -108,18 +108,18 @@ if [[ "$_benchmark_caller" == */agentic/* ||
                 exit 1
             fi
             ;;
-        dram)
+        dram|nvme|dram+nvme)
             if [[ -z "${KV_OFFLOAD_BACKEND:-}" || "${KV_OFFLOAD_BACKEND:-}" == "none" ]]; then
-                echo "Error: KV_OFFLOAD_BACKEND is required when KV_OFFLOADING=dram" >&2
+                echo "Error: KV_OFFLOAD_BACKEND is required when KV_OFFLOADING=$KV_OFFLOADING" >&2
                 exit 1
             fi
-            if [[ ! "${TOTAL_CPU_DRAM_GB:-}" =~ ^[1-9][0-9]*$ ]]; then
-                echo "Error: DRAM KV offloading requires a positive configured TOTAL_CPU_DRAM_GB capacity" >&2
+            if [[ "$KV_OFFLOADING" != "nvme" && ! "${TOTAL_CPU_DRAM_GB:-}" =~ ^[1-9][0-9]*$ ]]; then
+                echo "Error: $KV_OFFLOADING KV offloading requires a positive configured TOTAL_CPU_DRAM_GB capacity" >&2
                 exit 1
             fi
             ;;
         *)
-            echo "Error: unsupported KV_OFFLOADING value '$KV_OFFLOADING' (expected one of: none, dram)" >&2
+            echo "Error: unsupported KV_OFFLOADING value '$KV_OFFLOADING' (expected one of: none, dram, nvme, dram+nvme)" >&2
             exit 1
             ;;
     esac

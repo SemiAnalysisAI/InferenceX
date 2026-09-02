@@ -210,6 +210,11 @@ For a publishable SWE-bench score, omit `eval-limit`. Do not use `single-shot`, 
 
 Treat fast results as bring-up evidence, never as a replacement for the canonical candidate. A duration below 900 seconds or `AIPERF_UNSAFE_OVERRIDE=true` adds AIPerf's `--unsafe-override` and flags the submission invalid. Use it only for smoke diagnosis ([source](../benchmarks/benchmark_lib.sh#L2266-L2268)). After a fast run is healthy, run the exact candidate canonically before claiming benchmark success.
 
+The H100 MiniMax-M3 NVMe and DRAM+NVMe AgentX launcher allows 420 minutes for Slurm:
+measured warmup alone took over four hours before the one-hour profile.
+Other H100 single-node cases retain the 300-minute default, and an explicit
+`SALLOC_TIME_LIMIT` overrides either value. The canonical workload is unchanged.
+
 ## 8. Preserve trace and run provenance
 
 AgentX defaults to recorded assistant-response replay. Live server outputs are measured but discarded when constructing later turns. Set `AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES=1` only for an explicitly different live-assistant experiment. The selected trace corpus is model-family dependent unless `WEKA_LOADER_OVERRIDE` pins it. The resolver logs both loader and Hugging Face dataset ([trace resolution](../benchmarks/benchmark_lib.sh#L2023-L2102), [replay semantics](../benchmarks/benchmark_lib.sh#L2104-L2270)).

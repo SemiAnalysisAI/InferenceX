@@ -26,6 +26,35 @@ def run_bash(command: str, *args: Path | str) -> subprocess.CompletedProcess[str
     )
 
 
+def test_h100_nvme_agentx_time_limit_preserves_defaults_and_override() -> None:
+    launcher = (REPO_ROOT / "runners" / "launch_h100-dgxc-slurm.sh").read_text()
+    start = launcher.index("    # These NVMe AgentX points")
+    stop = launcher.index("    salloc ", start)
+    configure = launcher[start:stop]
+    cases = [
+        ("minimaxm3", "agentic-coding", "dram+nvme", "", "420"),
+        ("minimaxm3", "agentic-coding", "dram+nvme", "480", "480"),
+        ("minimaxm3", "agentic-coding", "dram", "", "300"),
+        ("minimaxm3", "agentic-coding", "nvme", "", "420"),
+        ("minimaxm3", "agentic-coding", "nvme", "480", "480"),
+        ("other", "agentic-coding", "dram+nvme", "", "300"),
+        ("minimaxm3", "fixed-sequence", "dram+nvme", "", "300"),
+    ]
+    for model, scenario, offload, override, expected in cases:
+        result = run_bash(
+            'MODEL_PREFIX="$1"; SCENARIO_TYPE="$2"; KV_OFFLOADING="$3"; '
+            'SALLOC_TIME_LIMIT="$4";\n'
+            + configure
+            + '\nprintf "%s" "$SALLOC_TIME_LIMIT"',
+            model,
+            scenario,
+            offload,
+            override,
+        )
+        assert result.returncode == 0, result.stderr
+        assert result.stdout == expected
+
+
 def test_copy_agentic_results_stages_only_matching_points(tmp_path: Path) -> None:
     source = tmp_path / "source"
     workspace = tmp_path / "workspace"
