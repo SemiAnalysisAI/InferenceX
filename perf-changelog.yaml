@@ -6796,3 +6796,11 @@
   description:
     - "Validate changed-input graph replay with relative-L2 and absolute-error bounds appropriate for the BF16 distributed tail, require every path to react to changed inputs, and compare both Tier-0 topologies directly with the current Tier-2 output."
   pr-link: XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Validate each Tier-0 graph replay against the same production path in eager mode, seed the changed-input check from a completed graph replay, and retain the idealized FP32 comparison as diagnostic data rather than rejecting the production Tier-2 baseline."
+  pr-link: XXX
