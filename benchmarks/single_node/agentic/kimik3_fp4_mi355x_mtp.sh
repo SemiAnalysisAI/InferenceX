@@ -186,8 +186,6 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     LMCACHE_PORT=6555
     LMCACHE_HTTP_PORT=8090
     LMCACHE_LOG="$RESULT_DIR/lmcache_server.log"
-    LMCACHE_HEARTBEAT_INTERVAL=90.0
-    LMCACHE_WORKER_REAP_TIMEOUT=300
 
     LMCACHE_L1_SIZE_GB="$TOTAL_CPU_DRAM_GB"
 
@@ -207,7 +205,6 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         --max-gpu-workers 1
         --eviction-policy LRU
         --supported-transfer-mode lmcache_driven
-        --worker-reap-timeout-seconds "$LMCACHE_WORKER_REAP_TIMEOUT"
         --shm-name ""
     )
     append_command "$RESULT_DIR/lmcache_command.txt" "${LMCACHE_CMD[@]}"
@@ -224,7 +221,7 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     # same MQ timeout headroom as the MiniMax-M3 arm.
     OFFLOAD_ARGS=(
         --kv-transfer-config
-        "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_connector_module_path\":\"lmcache.integration.vllm.lmcache_mp_connector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.port\":$LMCACHE_PORT,\"lmcache.mp.mq_timeout\":6000.0,\"lmcache.mp.heartbeat_interval\":$LMCACHE_HEARTBEAT_INTERVAL}}"
+        "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_connector_module_path\":\"lmcache.integration.vllm.lmcache_mp_connector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.port\":$LMCACHE_PORT,\"lmcache.mp.mq_timeout\":6000.0}}"
     )
     ;;
     *)
@@ -247,13 +244,13 @@ case "${SPEC_DECODING:-mtp}:$CONC" in
     mtp:1)
         SYNTHETIC_ACCEPT_LEN=3.75
         SPEC_NUM_TOKENS=6
-        GPU_MEM_UTIL=0.9
+        GPU_MEM_UTIL=0.88
         MAX_NUM_BATCHED_TOKENS=16384
         ;;
     mtp:2|mtp:4|mtp:8|mtp:10|mtp:12|mtp:14)
         SYNTHETIC_ACCEPT_LEN=3.00
         SPEC_NUM_TOKENS=3
-        GPU_MEM_UTIL=0.9
+        GPU_MEM_UTIL=0.88
         MAX_NUM_BATCHED_TOKENS=8192
         ;;
     none:40|none:44|none:48)
