@@ -61,6 +61,10 @@ install_agentic_deps
 ATOM_RUNTIME_DEPS=/tmp/inferencex-atom-runtime-deps
 /opt/venv/bin/python -m pip install --quiet --target "$ATOM_RUNTIME_DEPS" --no-deps sentencepiece tiktoken
 
+# The pinned ATOM image predates ROCm/ATOM PR #2106. Apply its MiniMax-M3
+# EAGLE3 draft-KV OOM fix before importing the server modules.
+bash "$(dirname "$0")/apply_atom_pr2106_patch.sh"
+
 # Require the ATOM Prometheus stream in every official result. AIPerf
 # deduplicates this endpoint against its automatic localhost discovery.
 export AIPERF_SERVER_METRICS_URLS="http://localhost:${PORT}/metrics"
@@ -278,6 +282,7 @@ echo "SPEC_DECODE_AL=$SPEC_DECODE_AL NUM_SPEC_TOKENS=$NUM_SPEC_TOKENS"
 ATOM_CMD=(
     python -m atom.entrypoints.openai_server
     --model "$MODEL_PATH"
+    --served-model-name "$MODEL"
     --host 0.0.0.0
     --server-port "$PORT"
     --trust-remote-code
