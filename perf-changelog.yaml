@@ -6831,3 +6831,86 @@
     - "Use a 169 GB/rank HiCache target pool at c12 and c16 while retaining ratio mode for lower concurrencies."
     - "Isolate SGLang runtime caches per Slurm allocation to prevent concurrent sweep cells from sharing per-rank cache files."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2808
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Validate source-labeled prompt-token cache metrics on the proven GB300 vLLM disaggregated AgentX topology at concurrency 256."
+    - "Use one TP4 prefill worker and one TP16 decode worker with NIXL KV transfer; transferred prompt-token hits must export source=p2p."
+    - "Run the Python-only metric overlay built from official vLLM nightly 7c5dc571 and the HIT_PENDING fix from vLLM PR #53087."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2797
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use the validation image's upstream deep_gemm_mega_moe backend for both prefill and decode workers; the older recipe's deep_gemm_amxf4_mega_moe backend name is not supported by this image."
+    - "Preserve the proven DEP4/DEP16 topology and single concurrency-256 AgentX point with its eval companion."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2797
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Collect every prefill and decode worker's Prometheus endpoint in the custom AgentX command using srt-slurm's existing endpoint discovery."
+    - "Require the cached-token-by-source metric in exported artifacts; router-only metrics must not pass validation. Preserve the image, topology, concurrency, and eval coverage."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2797
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Pin the AgentX client fix that tags automatic warmup baseline scrapes as warmup, preventing warmup counter growth from entering profiling-only token-source totals."
+    - "Preserve the proven DEP4/DEP16 topology, concurrency 256, patched vLLM image, full eval, and canonical warmup and one-hour profiling."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2797
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Backport vLLM PR #46906 so Mooncake's external store retains sliding-window prefix checkpoints independently of HBM retention."
+    - "Use the Python-only token-source validation image b7fc8985 while preserving the proven DEP4/DEP16 topology, concurrency 256, full eval, and canonical warmup and one-hour profiling."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2797
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use the 4d3c4a23 Python-only validation image with upstream PR #50388 hybrid KV-load recovery, so a missing Mooncake object does not crash DeepSeek-V4's multi-group scheduler."
+    - "Keep failed loads out of cached-token source totals and include the async-load queue-progress fix already validated by the H100 offload sweep."
+    - "Preserve the existing DEP4/DEP16 topology, single concurrency-256 point, real model eval, canonical warmup, and one-hour profiling."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2797
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable recompute for the prefill MultiConnector's optional Mooncake cache loads, using the validation image's tested hybrid recovery when a key disappears after lookup."
+    - "Keep decode-side NIXL transfer failures fail-closed, with unchanged topology, concurrency, eval, warmup, and profiling duration."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2797
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Standardize all remaining GB300 partition overrides in this validation branch on batch_1, including the DeepSeek-V4 and GLM-5.2 TensorRT-LLM configs. Preserve historical changelog entries."
+    - "Keep the official validation sweep limited to the existing vLLM P/D concurrency-256 point and its full evaluation; its launcher already defaults to batch_1. No image, topology, warmup, or profiling changes."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2797
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use the 0d8739d0 Python-only validation image with upstream PR #54853 complete connector block tables and PR #54643 rejected Mooncake-load handling, fixing the missing-current-block-table assertion observed in the P/D warmup."
+    - "Preserve the metric implementation, DEP4/DEP16 topology, single concurrency-256 point, full evaluation, canonical warmup, and one-hour profile."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2797

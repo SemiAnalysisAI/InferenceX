@@ -286,6 +286,8 @@ rg -n -i 'Phase |warmup|profiling|returned=|in_flight=|queue=|kv_usage=|prefix_c
 - Disaggregated：检查每个 prefill backend、每个 decode backend 以及 frontend/router。Decode pool 健康不能证明 prefill/KV transfer 健康。
 - 确认 AIPerf 命令包含所有 `AIPERF_SERVER_METRICS_URLS`；缺少 endpoint 会产生片面而虚假的健康证据。
 
+在 GB300 固定使用的 srt-slurm v1.0.36 自定义 AgentX 路径中，设置 `benchmark.env.AIPERF_REQUIRED_SERVER_METRIC_PREFIX` 可启用 worker endpoint 发现，并要求导出的 artifact 包含该指标前缀。Launcher 会应用限定范围的兼容补丁；未启用时，自定义命令默认只发现 frontend。
+
 Summary 不明确时直接读取每个 endpoint：
 
 ```bash
