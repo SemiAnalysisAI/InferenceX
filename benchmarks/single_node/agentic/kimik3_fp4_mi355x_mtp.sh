@@ -291,10 +291,19 @@ PREFIX_MATCH_ARGS=()
 ATTENTION_CONFIG='{"mla_prefill_backend":"ROCM_AITER_FA"}'
 COMPILATION_CUSTOM_OPS='["+fused_rms_norm_gated"]'
 case "${SPEC_DECODING:-mtp}:$CONC" in
-    none:40|none:44|none:48)
+    none:40|none:44)
     MAX_NUM_SEQS=80
     MAX_CUDAGRAPH_CAPTURE_SIZE=4096
     CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 1 "$MAX_NUM_SEQS"),128,256,512,1024,2048,4096"
+    SERVER_STREAM_ARGS=(--stream-interval 10)
+    PREFIX_MATCH_ARGS=(--prefix-match-unit 128)
+    ATTENTION_CONFIG='{"mla_prefill_backend":"ROCM_AITER_FA","use_prefill_query_quantization":true}'
+    COMPILATION_CUSTOM_OPS='["+fused_rms_norm_gated","+quant_fp8","+grouped_topk","+sparse_attn_indexer","none"]'
+    ;;
+    none:48)
+    MAX_NUM_SEQS=$((2 * CONC))
+    MAX_CUDAGRAPH_CAPTURE_SIZE=$((2 * CONC))
+    CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 2 "$MAX_CUDAGRAPH_CAPTURE_SIZE")"
     SERVER_STREAM_ARGS=(--stream-interval 10)
     PREFIX_MATCH_ARGS=(--prefix-match-unit 128)
     ATTENTION_CONFIG='{"mla_prefill_backend":"ROCM_AITER_FA","use_prefill_query_quantization":true}'

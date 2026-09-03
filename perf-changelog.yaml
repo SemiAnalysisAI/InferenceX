@@ -6839,3 +6839,11 @@
   description:
     - "Run the C44 and C48 isolation cases from the PR #2804 baseline with vLLM ROCm nightly 27a94d1 and gpu-memory-utilization 0.90; retain one LMCache GPU worker and every other server, cache, and CUDA-graph setting."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2804
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Run only the C48 nightly 27a94d1 and gpu-memory-utilization 0.90 candidate with max-num-seqs and maximum CUDA-graph capture size set to twice concurrency (96); retain one LMCache GPU worker and every other server and cache setting."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2804
