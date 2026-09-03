@@ -8074,11 +8074,15 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
   disagg: true
   scenarios:
     agentic-coding:
-    - search-space:
+    # Four DP ranks each reserve 180 GiB on an 840 GiB node.
+    - dram-utilization: 0.857143
+      search-space:
       # Keep the checked-in recipes on real MTP verification. Throughput jobs
       # inject the committed golden AL at launch; EVAL_ONLY leaves them real.
       - spec-decoding: mtp
         conc-list: [1152]
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
         router: { name: dynamo-router, version: "1.3.0.dev20260720" }
         prefill:
           num-worker: 2
@@ -8096,6 +8100,8 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
           dp-attn: true
       - spec-decoding: mtp
         conc-list: [1024]
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
         router: { name: dynamo-router, version: "1.3.0.dev20260720" }
         prefill:
           num-worker: 2
@@ -8113,6 +8119,8 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
           dp-attn: true
       - spec-decoding: mtp
         conc-list: [256]
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
         router: { name: dynamo-router, version: "1.3.0.dev20260720" }
         prefill:
           num-worker: 1
@@ -8130,6 +8138,8 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
           dp-attn: true
       - spec-decoding: mtp
         conc-list: [512]
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
         router: { name: dynamo-router, version: "1.4.0" }
         prefill:
           num-worker: 1
@@ -8164,6 +8174,8 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
           dp-attn: false
       - spec-decoding: mtp
         conc-list: [128]
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
         router: { name: dynamo-router, version: "1.4.0" }
         prefill:
           num-worker: 1
@@ -8181,6 +8193,8 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
           dp-attn: true
       - spec-decoding: mtp
         conc-list: [256]
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
         router: { name: dynamo-router, version: "1.4.0" }
         prefill:
           num-worker: 1
@@ -8265,11 +8279,15 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-mtp2-disagg:
   disagg: true
   scenarios:
     agentic-coding:
-    - search-space:
+    # Four DP ranks each reserve 140 GiB on an 840 GiB node.
+    - dram-utilization: 0.666667
+      search-space:
       # Keep the checked-in recipes on real MTP verification. Throughput jobs
       # inject the committed golden AL at launch; EVAL_ONLY leaves them real.
       - spec-decoding: mtp
         conc-list: [576]
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
         router: { name: dynamo-router, version: "1.3.0.dev20260720" }
         prefill:
           num-worker: 2
@@ -8287,6 +8305,8 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-mtp2-disagg:
           dp-attn: true
       - spec-decoding: mtp
         conc-list: [512]
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
         router: { name: dynamo-router, version: "1.3.0.dev20260720" }
         prefill:
           num-worker: 2
@@ -8304,6 +8324,8 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-mtp2-disagg:
           dp-attn: true
       - spec-decoding: mtp
         conc-list: [256]
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
         router: { name: dynamo-router, version: "1.3.0.dev20260720" }
         prefill:
           num-worker: 1
@@ -8321,6 +8343,8 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-mtp2-disagg:
           dp-attn: true
       - spec-decoding: mtp
         conc-list: [128]
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
         router: { name: dynamo-router, version: "1.3.0.dev20260720" }
         prefill:
           num-worker: 1
