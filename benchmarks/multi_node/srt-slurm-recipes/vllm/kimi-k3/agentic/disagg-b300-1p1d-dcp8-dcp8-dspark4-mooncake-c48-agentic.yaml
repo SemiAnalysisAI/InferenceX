@@ -11,7 +11,7 @@
 #   device_name, UCX_NET_DEVICES -> the six rails read off this cluster
 #   MC_GID_INDEX, UCX_TLS        -> set; b300-nv is RoCE (see below)
 #   HF_HOME                      -> dropped; benchmark.env sets HF_HUB_CACHE
-#   slurm.time_limit             -> 04:00:00, this partition's limit
+#   slurm.time_limit             -> 06:00:00 (see the note in the tool)
 #   rejection_sample_method      -> block, so the eval verifies (see below)
 #   global_segment_size          -> 281GB, matching the B300 arm on main
 #   sbatch_directives.exclude    -> b300-018, which times out UCX/NIXL
@@ -37,7 +37,7 @@ dynamo:
   hash: ba83080ecd31c1ce918559e576d3c5bc9e092ff1
   install: true
 slurm:
-  time_limit: 04:00:00
+  time_limit: 06:00:00
 health_check:
   max_attempts: 720
   interval_seconds: 10
