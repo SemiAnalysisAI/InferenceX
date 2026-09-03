@@ -56,7 +56,7 @@ prefill:
   enable-expert-parallel: true
   extra-args: >-
     --kv-cache-dtype fp8
-    --gpu-memory-utilization 0.9
+    --gpu-memory-utilization 0.88
     --max-num-batched-tokens 8192
     --block-size 256
     --tokenizer-mode deepseek_v4

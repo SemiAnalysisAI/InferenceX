@@ -6838,7 +6838,7 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Add DeepSeek-V4-Pro-0813 FP4/FP8-KV on GB200: 8-GPU TP8/DEP8 aggregation and 16-GPU NIXL 1P/1D DEP8 disaggregation. Use llm-d 0.10.0 with prefix-affinity and token-load routing for DEP8; use a 0.90 GPU-memory budget for long-context workspace headroom."
+    - "Add DeepSeek-V4-Pro-0813 FP4/FP8-KV on GB200: 8-GPU TP8/DEP8 aggregation and 16-GPU NIXL 1P/1D DEP8 disaggregation. Use llm-d 0.10.0 with prefix-affinity and token-load routing for DEP8; use GPU-memory budgets of 0.88 (DEP8) and 0.85 (TP8) for long-context workspace headroom."
     - "Use DSpark golden AL: K=5, AL=3.61 for aggregated/decode; K=1, AL=1.84 for disaggregated prefill. Disable adaptive verification to preserve the fixed draft budget."
     - "Use Mooncake DRAM offloading (dram-utilization=0.60) with one job-local master over GB200 InfiniBand HCAs mlx5_0,1,3,4 for disaggregated and DEP8+Mooncake variants. Plain TP8/DEP8 has no offload; SSD offload is disabled."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719

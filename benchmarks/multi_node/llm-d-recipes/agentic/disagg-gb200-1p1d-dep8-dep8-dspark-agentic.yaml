@@ -69,7 +69,7 @@ prefill:
   enable-expert-parallel: true
   extra-args: >-
     --kv-cache-dtype fp8
-    --gpu-memory-utilization 0.9
+    --gpu-memory-utilization 0.88
     --max-num-batched-tokens 8192
     --long-prefill-token-threshold 1024
     --speculative-config {"method":"dspark","num_speculative_tokens":1,"draft_sample_method":"probabilistic","attention_backend":"FLASHINFER_MLA_SPARSE_DSV4","enable_adaptive_verification":false}
@@ -125,7 +125,7 @@ decode:
   enable-expert-parallel: true
   extra-args: >-
     --kv-cache-dtype fp8
-    --gpu-memory-utilization 0.9
+    --gpu-memory-utilization 0.88
     --max-num-batched-tokens 8192
     --speculative-config {"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","attention_backend":"FLASHINFER_MLA_SPARSE_DSV4","enable_adaptive_verification":false}
     --enable-cumem-allocator
