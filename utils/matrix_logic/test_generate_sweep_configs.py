@@ -2359,9 +2359,9 @@ class TestArgumentDefaults:
             json.dumps(manifest, separators=(',', ':')).encode()
         ).hexdigest()
 
-        assert len(manifest) == 64
+        assert len(manifest) == 65
         assert manifest_digest == (
-            '69a14002a9d9bc807f0ab34138bb7b940e39b1dc3b38ffc20673369639f86984'
+            '65c954899fe920db1ca592bc19bd464018d99d85d48d85cccdf712e9f9696913'
         ), manifest_digest
         for row in rows:
             if isinstance(row['conc'], list):

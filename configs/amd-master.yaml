@@ -698,6 +698,7 @@ minimaxm3-fp4-mi355x-atom-agentic-mtp:
     - dram-utilization: 0.20
       search-space:
       - { tp: 4, kv-offloading: none, conc-list: [1, 2, 4, 5, 8, 10, 12, 15, 20, 24, 28, 32], spec-decoding: mtp }
+      - { tp: 2, kv-offloading: none, conc-list: [1, 2, 5], spec-decoding: mtp }
 
 dsr1-fp4-mi355x-sglang-disagg:
   image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519
