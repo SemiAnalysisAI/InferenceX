@@ -11,8 +11,11 @@
 # are up; what they do not show is which NIC belongs to which GPU, which is
 # what this prints.
 #
-# The topology dump is diagnostic and best-effort. The rail check below is
-# not: it exits non-zero on a mismatch, which fails the job by design.
+# Everything here is diagnostic and best-effort; nothing fails the job. The
+# rail check below reports a mismatch rather than refusing to run, because
+# the pinned set was read off four nodes and the scheduler draws from more
+# than four: a mismatch means this node was never inventoried, which is not
+# the same as this node being broken.
 
 set -uo pipefail
 
@@ -53,9 +56,9 @@ echo "=== [b300-topo] end ==="
 # way, 36 minutes in.
 #
 # The recipe therefore names only rails whose subnet was identical on every
-# node inventoried so far. Assert that here rather than trust it: a node that
-# disagrees fails in seconds and names itself, instead of burning a benchmark
-# window.
+# node inventoried so far -- b300-003, -011, -012 and -019. Check that here
+# rather than trust it, so that if the QP setup does fail later the log
+# already says which node and which rail disagreed.
 EXPECTED_RAILS="mlx5_4:172.16.128 mlx5_8:172.16.64 mlx5_10:172.17.192 \
 mlx5_16:172.17.0 mlx5_20:172.17.128 mlx5_22:172.17.64"
 
@@ -89,12 +92,14 @@ for _pair in $EXPECTED_RAILS; do
 done
 
 if [[ "$_rail_bad" -ne 0 ]]; then
-    echo "[b300-rails] $(hostname) does not match the pinned rail layout." >&2
-    echo "[b300-rails] Add it to sbatch_directives.exclude, or re-pin the rails" >&2
-    echo "[b300-rails] in the b300 Kimi-K3 agentic recipes." >&2
-    exit 1
+    echo "[b300-rails] WARNING: $(hostname) does not match the pinned rail layout." >&2
+    echo "[b300-rails] This node was not in the inventory the rails were read from." >&2
+    echo "[b300-rails] If the Mooncake handshake fails on this job, that is the" >&2
+    echo "[b300-rails] first thing to look at: either exclude the node or re-pin" >&2
+    echo "[b300-rails] device_name in the b300 Kimi-K3 agentic recipes." >&2
+else
+    echo "=== [b300-rails] all pinned rails match ==="
 fi
-echo "=== [b300-rails] all pinned rails match ==="
 
 # Nothing to patch: the image carries the Kimi-K3 stack already. Print what it
 # is, so the log still records which build served the numbers.
