@@ -6896,3 +6896,12 @@
     - "Enable recompute for the prefill MultiConnector's optional Mooncake cache loads, using the validation image's tested hybrid recovery when a key disappears after lookup."
     - "Keep decode-side NIXL transfer failures fail-closed, with unchanged topology, concurrency, eval, warmup, and profiling duration."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2797
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Standardize all remaining GB300 partition overrides in this validation branch on batch_1, including the DeepSeek-V4 and GLM-5.2 TensorRT-LLM configs. Preserve historical changelog entries."
+    - "Keep the official validation sweep limited to the existing vLLM P/D concurrency-256 point and its full evaluation; its launcher already defaults to batch_1. No image, topology, warmup, or profiling changes."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2797
