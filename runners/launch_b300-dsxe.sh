@@ -277,10 +277,13 @@ fi
 
 # Override the job name in the recipe with the runner name.
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
-if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
-    python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
-        "$CONFIG_PATH" "$FRAMEWORK" || exit 1
-fi
+# Call this unconditionally, as launch_gb300-nv.sh does. The helper returns
+# immediately when neither EVAL_ONLY nor SYNTHETIC_ACCEPTANCE is set. Gating it
+# on EVAL_ONLY meant throughput runs never got SYNTHETIC_ACCEPTANCE_LENGTH into
+# speculative-config, so those arms drafted for real and their numbers were not
+# comparable to the gb300-nv runs they exist to be compared against.
+python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
+    "$CONFIG_PATH" "$FRAMEWORK" || exit 1
 
 # Weights live on node-local MODEL_ROOT, which this login host cannot stat, so
 # srtctl's preflight model.path check is always skipped. Runtime loading still

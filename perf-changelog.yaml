@@ -6878,3 +6878,16 @@
   description:
     - "Refresh the Kimi-K3 GB300 AgentX configurations with updated configs."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2811
+
+- config-keys:
+    - kimik3-fp4-b300-dynamo-vllm-agentic-mooncake-dcp8-agg
+    - kimik3-fp4-b300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+    - kimik3-fp4-b300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add the six measured Kimi-K3 B300 AgentX points: aggregated TP8 x DCP8 without speculative decoding at c70, aggregated DSpark-7 at c4 and c1, and 1P1D, 1P2D and 1P3D DCP8 x DCP8 DSpark-4 at c48, c48 and c32."
+    - "Give Kimi-K3 a model path on b300-dsxe and route the agentic scenario to upstream srt-slurm with the in-repo recipes, without which multi-node Kimi-K3 exits as an unsupported model."
+    - "Apply synthetic acceptance on throughput runs, not only eval-only ones, so the pinned acceptance length reaches speculative-config as it already does on gb300-nv."
+    - "Let the fabric select its own paths instead of pinning transfer devices, and check the expected adapter inventory before the engine starts."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PENDING

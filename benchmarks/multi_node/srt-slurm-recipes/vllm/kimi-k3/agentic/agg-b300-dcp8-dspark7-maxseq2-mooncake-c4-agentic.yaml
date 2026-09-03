@@ -1,0 +1,157 @@
+# Kimi-K3 B300 aggregated TP8 x DCP8, agentic coding.
+#
+# Translated from the bia sweep config that measured this point:
+#   AGG/kimi-k3-mxfp4-b300-agg-tp8-agentx-062126-c4-weiaggds7-gmu94.yml
+# Engine flags, environment, Mooncake settings and vllm_config are that file
+# verbatim. The InferenceX plumbing -- identity, benchmark, slurm, the idle-GPU
+# reaper comment -- is taken from agg-gb300-dcp8-dspark7-maxseq2-mooncake-agentic.yaml.
+#
+# Only these fields differ from the measured config, each because b300-nv is
+# not bia:
+#   device_name, UCX_NET_DEVICES -> the six rails read off this cluster
+#   MC_GID_INDEX, UCX_TLS        -> set; b300-nv is RoCE (see below)
+#   HF_HOME                      -> dropped; benchmark.env sets HF_HUB_CACHE
+#   slurm.time_limit             -> 04:00:00, this partition's limit
+#   rejection_sample_method      -> block, so the eval verifies (see below)
+#   global_segment_size          -> 281GB, matching the B300 arm on main
+#   sbatch_directives.exclude    -> b300-018, which times out UCX/NIXL
+#
+# The rails are the part that needs saying. This fabric is rail-isolated: each
+# rail is its own /24 and a QP only comes up when both ends sit on the same
+# one. srtslurm writes a single store config for the whole job, so rails can
+# only be named by index -- and the index is not stable here, because a down
+# card shifts every index above it. Across the nodes inventoried, mlx5_0 is
+# 172.16.192 everywhere except b300-012, and b300-003 swaps mlx5_3 with
+# mlx5_9. Naming either put two nodes on different subnets under one name,
+# which killed one earlier bring-up 36 minutes in. The six named below held on
+# every node with a full inventory, and kimik3-b300-nic-topology.sh re-checks
+# each one's GID subnet at startup so an uninventoried node fails in seconds
+# instead of running to a bad number.
+
+name: kimi-k3-vllm-agg-b300-dcp8-dspark7-maxseq2-mooncake-c4-agentic
+model:
+  path: moonshotai/Kimi-K3
+  container: vllm/vllm-openai:nightly-dev-x86_64-cu13-3696c77
+  precision: fp4
+resources:
+  gpu_type: b300
+  gpus_per_node: 8
+  agg_nodes: 1
+  agg_workers: 1
+  gpus_per_agg: 8
+infra:
+  etcd_nats_dedicated_node: false
+  nats_max_payload_mb: 32
+frontend:
+  type: dynamo
+  enable_multiple_frontends: false
+  args:
+    router-mode: least-loaded
+    router-session-affinity-ttl-secs: 900
+  env:
+    DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: '3600'
+    DYN_TOKENIZER_CACHE_BYTES: '8589934592'
+    PYTHONPYCACHEPREFIX: /tmp/vllm-pycache-kimi-k3
+backend:
+  type: vllm
+  connector: null
+  mooncake_kv_store:
+    master_extra_args:
+    - --default_kv_lease_ttl=60000
+    - --eviction_high_watermark_ratio=0.95
+    - --eviction_ratio=0.10
+    store_config:
+      metadata_server: P2PHANDSHAKE
+      global_segment_size: 281GB
+      local_buffer_size: 4GB
+      protocol: rdma
+      device_name: mlx5_4,mlx5_8,mlx5_10,mlx5_16,mlx5_20,mlx5_22
+      mode: embedded
+      enable_offload: false
+  aggregated_environment:
+    VLLM_ALLREDUCE_USE_FLASHINFER: '1'
+    VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION: '1'
+    VLLM_USE_DIRECT_DCP_A2A: '1'
+    VLLM_USE_DIRECT_DCP_Q_GATHER: '1'
+    VLLM_USE_DIRECT_DCP_KV_GATHER: '1'
+    ETCD_LEASE_TTL: '120'
+    VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+    VLLM_RPC_TIMEOUT: '600000'
+    VLLM_USE_V2_MODEL_RUNNER: '1'
+    VLLM_USE_RUST_FRONTEND: '1'
+    VLLM_MOONCAKE_LOAD_RECV_THREADS: '4'
+    VLLM_PREFIX_CACHE_RETENTION_INTERVAL: '0'
+    VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: '0'
+    MC_SLICE_SIZE: '1048576'
+    WITH_NVIDIA_PEERMEM: '0'
+    VLLM_LOG_STATS_INTERVAL: '1'
+    UCX_NET_DEVICES: mlx5_4:1,mlx5_8:1,mlx5_10:1,mlx5_16:1,mlx5_20:1,mlx5_22:1
+    PYTHONHASHSEED: '42'
+    PYTHONNOUSERSITE: '1'
+    PYTHONUNBUFFERED: '1'
+    TORCH_CUDA_ARCH_LIST: '10.0'
+    MC_GID_INDEX: '3'
+    UCX_TLS: rc,cuda_copy,cuda_ipc,sm,self
+  vllm_config:
+    aggregated:
+      kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"compact_group_io":true,"max_load_batch_keys":2,"enable_offload":false}}'
+      served-model-name: moonshotai/Kimi-K3
+      load-format: fastsafetensors
+      kv-cache-dtype: fp8
+      gpu-memory-utilization: 0.94
+      tensor-parallel-size: 8
+      decode-context-parallel-size: 8
+      dcp-comm-backend: a2a
+      max-num-seqs: 2
+      max-num-batched-tokens: 8192
+      trust-remote-code: true
+      max-cudagraph-capture-size: 1024
+      stream-interval: 10
+      language-model-only: true
+      moe-backend: auto
+      no-enable-flashinfer-autotune: true
+      enable-cumem-allocator: true
+      attention-backend: TOKENSPEED_MLA
+      attention-config: '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true}'
+      speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":7,"rejection_sample_method":"block"}'
+      enable-prefix-caching: true
+      prefix-match-unit: 128
+health_check:
+  max_attempts: 720
+  interval_seconds: 10
+benchmark:
+  type: custom
+  command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+  env:
+    INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
+    AIPERF_TRACE_IDLE_GAP_CAP_SECONDS: '300'
+    AIPERF_LIVE_FAILED_REQUEST_THRESHOLD: '0.25'
+    AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+    AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+    RESULT_DIR: /logs/agentic
+    PORT: '8000'
+    IS_MULTINODE: 'true'
+    AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
+    AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
+    HF_HUB_CACHE: /hf_hub_cache
+    WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
+dynamo:
+  hash: ba83080ecd31c1ce918559e576d3c5bc9e092ff1
+  install: true
+identity:
+  model:
+    repo: moonshotai/Kimi-K3
+  container:
+    image: vllm/vllm-openai:nightly-dev-x86_64-cu13-3696c77
+  frameworks:
+    dynamo: ba83080ecd31c1ce918559e576d3c5bc9e092ff1
+slurm:
+  time_limit: 04:00:00
+sbatch_directives:
+  mem: '0'
+  cpus-per-task: '72'
+  comment: '''{"OccupiedIdleGPUsJobReaper":{"exemptIdleTimeMins":"60","reason":"model_loading","description":"Very large model will take extra loading time."}}'''
+  exclude: b300-018
+srun_options:
+  mem: '0'
+  container-remap-root: ''
