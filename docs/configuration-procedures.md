@@ -142,7 +142,7 @@ llm-d is not the srt-slurm path: InferenceX owns the Slurm allocation and starts
 
 A missing/unset `CONFIG_FILE` silently selects the image's `/etc/epp/config.yaml` fallback and removes recipe-specific vLLM flags. Treat that as a validation failure unless fallback is explicitly intended.
 
-The GB200 DSpark AgentX keys use `cluster:gb200-nv`: TP8/DEP8 spans two nodes (8 GPUs), and 1P-DEP8/1D-DEP8 spans four (16 GPUs). The ARM64 image digest includes router v0.10.0; AgentX does not mount the legacy router binaries. The launcher uses the staged `DeepSeek-V4-Pro-0813` checkpoint, not the older V4-Pro weights.
+The GB200 DSpark AgentX keys use `cluster:gb200-nv`: TP8/DEP8 spans two nodes (8 GPUs), and 1P-DEP8/1D-DEP8 spans four (16 GPUs). The ARM64 image digest includes router v0.10.0; AgentX does not mount the legacy router binaries. Recipes using `token-load-scorer` must explicitly include `inflight-load-producer` to supply its uncached-token dependency. The launcher uses the staged `DeepSeek-V4-Pro-0813` checkpoint, not the older V4-Pro weights.
 
 `recipe.py` injects DSpark golden AL for throughput; `EVAL_ONLY=true` keeps real verification. Keep adaptive verification disabled: its confidence-based draft-budget trimming changes the fixed-K golden AL. Mooncake's embedded store is DRAM offloading even with `enable_offload: false` (the flag controls SSD). Declare `kv-offloading: dram`, `kv-offload-backend: { name: mooncake }`, and `dram-utilization`; the runtime divides each node's budget among its four GPU ranks. Mooncake uses InfiniBand HCAs `mlx5_0,mlx5_1,mlx5_3,mlx5_4`; `mlx5_2` and `mlx5_5` are Ethernet. Plain TP8/DEP8 declares `none`.
 

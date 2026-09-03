@@ -12,6 +12,7 @@ plugins:
       path: /tmp/endpoints.yaml
       watchFile: false
 
+  - type: inflight-load-producer
   - type: approx-prefix-cache-producer
     parameters:
       autoTune: false
