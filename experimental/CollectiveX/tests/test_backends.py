@@ -195,8 +195,9 @@ class FlashInferCombineModelSwitch(unittest.TestCase):
             self.assertFalse(gate(version), f"{version!r} must fall back to the safe model")
 
 
-class NcclLowLatencyLadderClamp(unittest.TestCase):
-    """The measured ladder is clamped below the receive buffer around an unfixed upstream race."""
+class NcclLowLatencyLadderSizing(unittest.TestCase):
+    """The measured ladder and the receive buffer are separate knobs; under nccl-ep v0.2 (combine
+    fence shipped) the ladder is restored to the full buffer, and must never exceed it."""
 
     def _module(self):
         with mock.patch.dict(sys.modules, _stub_modules()):
@@ -204,11 +205,12 @@ class NcclLowLatencyLadderClamp(unittest.TestCase):
             import ep_nccl
             return importlib.reload(ep_nccl)
 
-    def test_the_ladder_is_clamped_below_the_buffer(self):
-        # Two separate numbers on purpose: clamping the ladder must not shrink the transport
-        # footprint, or the rungs that remain quietly measure a smaller receive plane.
+    def test_the_ladder_never_exceeds_the_buffer(self):
+        # Two separate numbers on purpose: a future clamp must shrink only what is MEASURED,
+        # never the transport footprint the remaining rungs are measured against. With the v0.2
+        # fence shipped the clamp is lifted, so equality is the expected state.
         m = self._module()
-        self.assertLess(m._LL_LADDER_CAP, m._LL_BUFFER_CAP)
+        self.assertLessEqual(m._LL_LADDER_CAP, m._LL_BUFFER_CAP)
         self.assertLessEqual(m._LL_BUFFER_CAP, 511)
 
     def _backend(self, module, low_latency):
@@ -240,10 +242,13 @@ class NcclLowLatencyLadderClamp(unittest.TestCase):
         # rather than on the shape of the source line that computes it.
         module = self._module()
         spec = types.SimpleNamespace(max_tokens_per_rank=99)
-        backend = self._backend(module, low_latency=True)
-        backend.create_buffer(spec)
-        self.assertEqual(backend.max_dispatch, module._LL_BUFFER_CAP)
-        self.assertNotEqual(backend.max_dispatch, module._LL_LADDER_CAP)
+        # Force the clamped configuration (ladder < buffer) so the sizing distinction is
+        # actually exercised — the shipping constants are equal under v0.2.
+        with mock.patch.object(module, "_LL_LADDER_CAP", 128):
+            backend = self._backend(module, low_latency=True)
+            backend.create_buffer(spec)
+            self.assertEqual(backend.max_dispatch, module._LL_BUFFER_CAP)
+            self.assertNotEqual(backend.max_dispatch, module._LL_LADDER_CAP)
         with mock.patch.object(module, "_LL_BUFFER_CAP", 512):
             sized = self._backend(module, low_latency=True)
             sized.create_buffer(spec)
