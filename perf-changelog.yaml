@@ -6834,6 +6834,7 @@
 
 - config-keys:
     - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
     - kimik3-fp4-gb300-dynamo-vllm-agentic-mooncake-dcp8-agg
   scenario-type:
     - agentic-coding
