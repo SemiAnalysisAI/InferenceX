@@ -945,7 +945,7 @@ dsv4-fp4-b200-sglang-agentic-hicache-mtp:
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: mtp, conc-list: [64, 96, 128, 160], router: { name: sglang-router, version: "0.3.2" } }
 
 dsv4-fp4-b200-vllm:
-  image: vllm/vllm-openai:v0.25.0
+  image: vllm/vllm-openai:nightly-7c5dc571cbd1064ecc8a9b1045637ff647aa22cb
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:b200-nscale
@@ -957,8 +957,8 @@ dsv4-fp4-b200-vllm:
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 1, conc-end: 64 }
-      - { tp: 8, ep: 8, conc-start: 128, conc-end: 256 }
+      - { tp: 8, conc-start: 1, conc-end: 256 }
+      - { tp: 8, ep: 8, conc-start: 1, conc-end: 256 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 1024 }
 
 dsv4-fp4-b200-vllm-agentic-mtp:
@@ -6865,9 +6865,13 @@ qwen3.5-fp4-gb300-dynamo-trt-agentic-disagg:
   disagg: true
   scenarios:
     agentic-coding:
-    - search-space:
+    # Existing recipes reserve 128 GiB per rank; each node has 840 GiB and 4 GPUs.
+    - dram-utilization: 0.609524
+      search-space:
       # 1P1D: 1 prefill (TP1/EP1/dp-attn), 1 decode (TP2/EP2), conc=44
       - spec-decoding: "mtp"
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.3.0rc24" }
         conc-list: [44]
         prefill:
           num-worker: 1
@@ -6883,6 +6887,8 @@ qwen3.5-fp4-gb300-dynamo-trt-agentic-disagg:
           dp-attn: false
       # 1P7D: 1 prefill (TP4/EP4/dp-attn), 7 decode (TP8/EP8), conc=7
       - spec-decoding: "mtp"
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.3.0rc24" }
         conc-list: [7]
         prefill:
           num-worker: 1
@@ -6898,6 +6904,8 @@ qwen3.5-fp4-gb300-dynamo-trt-agentic-disagg:
           dp-attn: false
       # 2P2D: 2 prefill (TP1/EP1/dp-attn), 2 decode (TP2/EP2), conc=52
       - spec-decoding: "mtp"
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.3.0rc24" }
         conc-list: [52]
         prefill:
           num-worker: 2
@@ -6913,6 +6921,8 @@ qwen3.5-fp4-gb300-dynamo-trt-agentic-disagg:
           dp-attn: false
       # 2P3D: 2 prefill (TP2/EP2), 3 decode (TP8/EP8), conc=96
       - spec-decoding: "mtp"
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.3.0rc24" }
         conc-list: [96]
         prefill:
           num-worker: 2
@@ -6928,6 +6938,8 @@ qwen3.5-fp4-gb300-dynamo-trt-agentic-disagg:
           dp-attn: false
       # 3P1D: 3 prefill (TP4/EP4/dp-attn), 1 decode (TP16/EP16/dp-attn), conc=565
       - spec-decoding: "mtp"
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.3.0rc24" }
         conc-list: [565]
         prefill:
           num-worker: 3
@@ -6943,6 +6955,8 @@ qwen3.5-fp4-gb300-dynamo-trt-agentic-disagg:
           dp-attn: true
       # 3P2D: 3 prefill (TP4/EP4/dp-attn), 2 decode (TP4/EP4/dp-attn), conc=704
       - spec-decoding: "mtp"
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.3.0rc24" }
         conc-list: [704]
         prefill:
           num-worker: 3
@@ -8179,11 +8193,15 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
   disagg: true
   scenarios:
     agentic-coding:
-    - search-space:
+    # Four DP ranks each reserve 180 GiB on an 840 GiB node.
+    - dram-utilization: 0.857143
+      search-space:
       # Keep the checked-in recipes on real MTP verification. Throughput jobs
       # inject the committed golden AL at launch; EVAL_ONLY leaves them real.
       - spec-decoding: mtp
         conc-list: [1152]
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
         router: { name: dynamo-router, version: "1.3.0.dev20260720" }
         prefill:
           num-worker: 2
@@ -8201,6 +8219,8 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
           dp-attn: true
       - spec-decoding: mtp
         conc-list: [1024]
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
         router: { name: dynamo-router, version: "1.3.0.dev20260720" }
         prefill:
           num-worker: 2
@@ -8218,6 +8238,8 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
           dp-attn: true
       - spec-decoding: mtp
         conc-list: [256]
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
         router: { name: dynamo-router, version: "1.3.0.dev20260720" }
         prefill:
           num-worker: 1
@@ -8235,6 +8257,8 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
           dp-attn: true
       - spec-decoding: mtp
         conc-list: [512]
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
         router: { name: dynamo-router, version: "1.4.0" }
         prefill:
           num-worker: 1
@@ -8269,6 +8293,8 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
           dp-attn: false
       - spec-decoding: mtp
         conc-list: [128]
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
         router: { name: dynamo-router, version: "1.4.0" }
         prefill:
           num-worker: 1
@@ -8286,6 +8312,8 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
           dp-attn: true
       - spec-decoding: mtp
         conc-list: [256]
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
         router: { name: dynamo-router, version: "1.4.0" }
         prefill:
           num-worker: 1
@@ -8370,11 +8398,15 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-mtp2-disagg:
   disagg: true
   scenarios:
     agentic-coding:
-    - search-space:
+    # Four DP ranks each reserve 140 GiB on an 840 GiB node.
+    - dram-utilization: 0.666667
+      search-space:
       # Keep the checked-in recipes on real MTP verification. Throughput jobs
       # inject the committed golden AL at launch; EVAL_ONLY leaves them real.
       - spec-decoding: mtp
         conc-list: [576]
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
         router: { name: dynamo-router, version: "1.3.0.dev20260720" }
         prefill:
           num-worker: 2
@@ -8392,6 +8424,8 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-mtp2-disagg:
           dp-attn: true
       - spec-decoding: mtp
         conc-list: [512]
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
         router: { name: dynamo-router, version: "1.3.0.dev20260720" }
         prefill:
           num-worker: 2
@@ -8409,6 +8443,8 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-mtp2-disagg:
           dp-attn: true
       - spec-decoding: mtp
         conc-list: [256]
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
         router: { name: dynamo-router, version: "1.3.0.dev20260720" }
         prefill:
           num-worker: 1
@@ -8426,6 +8462,8 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-mtp2-disagg:
           dp-attn: true
       - spec-decoding: mtp
         conc-list: [128]
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
         router: { name: dynamo-router, version: "1.3.0.dev20260720" }
         prefill:
           num-worker: 1
@@ -8601,7 +8639,7 @@ dsv4-fp4-gb300-dynamo-trt-agentx:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4/agentx-gb300-20260811/dynamo-disagg-gb300-1p4d-dep4-tep8-c4-b1-mtp.yaml"
-          - "SLURM_PARTITION=batch_3"
+          - "SLURM_PARTITION=batch_1"
         decode:
           num-worker: 4
           tp: 8
@@ -8618,7 +8656,7 @@ dsv4-fp4-gb300-dynamo-trt-agentx:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4/agentx-gb300-20260811/dynamo-disagg-gb300-1p6d-dep4-tep4-c24-b4-mtp.yaml"
-          - "SLURM_PARTITION=batch_3"
+          - "SLURM_PARTITION=batch_1"
         decode:
           num-worker: 6
           tp: 4
@@ -8635,7 +8673,7 @@ dsv4-fp4-gb300-dynamo-trt-agentx:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4/agentx-gb300-20260811/dynamo-disagg-gb300-1p1d-dep8-dep32-c388-b4-mtp.yaml"
-          - "SLURM_PARTITION=batch_3"
+          - "SLURM_PARTITION=batch_1"
         decode:
           num-worker: 1
           tp: 32
@@ -8652,7 +8690,7 @@ dsv4-fp4-gb300-dynamo-trt-agentx:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4/agentx-gb300-20260811/dynamo-disagg-gb300-2p1d-dep8-dep32-c736-b8-mtp.yaml"
-          - "SLURM_PARTITION=batch_3"
+          - "SLURM_PARTITION=batch_1"
         decode:
           num-worker: 1
           tp: 32
@@ -8669,7 +8707,7 @@ dsv4-fp4-gb300-dynamo-trt-agentx:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4/agentx-gb300-20260811/dynamo-disagg-gb300-3p1d-dep8-dep16-c1152-b32-mtp.yaml"
-          - "SLURM_PARTITION=batch_3"
+          - "SLURM_PARTITION=batch_1"
         decode:
           num-worker: 1
           tp: 16
@@ -8686,7 +8724,7 @@ dsv4-fp4-gb300-dynamo-trt-agentx:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4/agentx-gb300-20260811/dynamo-disagg-gb300-5p1d-dep8-dep16-c2626-b96-mtp.yaml"
-          - "SLURM_PARTITION=batch_3"
+          - "SLURM_PARTITION=batch_1"
         decode:
           num-worker: 1
           tp: 16
@@ -9456,9 +9494,9 @@ glm5.2-fp4-gb300-dynamo-trt-agentic-agg-mtp:
           dp-attn: false
           additional-settings:
           - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2/gb300-fp4/agentic/dynamo-agg-gb300-tp8-c1-b2-mtp8.yaml"
-          - "SLURM_PARTITION=batch_3"
+          - "SLURM_PARTITION=batch_1"
 # GLM-5.2 NVFP4 TensorRT-LLM AgentX on GB300 with Dynamo disaggregated serving.
-# Six topology variants use NIXL KV transfer and MTP3/MTP5 decoding.
+# Seven topology variants use NIXL KV transfer and MTP3/MTP5 decoding.
 glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
   image: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc22.post1
   model: nvidia/GLM-5.2-NVFP4
@@ -9475,6 +9513,23 @@ glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
     - dram-utilization: 0.15239
       search-space:
       - spec-decoding: mtp
+        conc-list: [1]
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.3.0rc22.post1" }
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2/gb300-fp4/agentic/dynamo-disagg-gb300-1p1d-tp8-c1-b1-mtp5.yaml"
+          - "SLURM_PARTITION=batch_1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
         conc-list: [30]
         kv-offloading: dram
         kv-offload-backend: { name: native, version: "1.3.0rc22.post1" }
@@ -9485,7 +9540,7 @@ glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2/gb300-fp4/agentic/dynamo-disagg-gb300-1p4d-tep4-c30-b2-mtp5.yaml"
-          - "SLURM_PARTITION=batch_3"
+          - "SLURM_PARTITION=batch_1"
         decode:
           num-worker: 4
           tp: 4
@@ -9502,7 +9557,7 @@ glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2/gb300-fp4/agentic/dynamo-disagg-gb300-1p1d-tep8-c20-b5-mtp5.yaml"
-          - "SLURM_PARTITION=batch_3"
+          - "SLURM_PARTITION=batch_1"
         decode:
           num-worker: 1
           tp: 8
@@ -9519,7 +9574,7 @@ glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2/gb300-fp4/agentic/dynamo-disagg-gb300-3p4d-tep4-c60-b5-mtp5.yaml"
-          - "SLURM_PARTITION=batch_3"
+          - "SLURM_PARTITION=batch_1"
         decode:
           num-worker: 4
           tp: 4
@@ -9536,7 +9591,7 @@ glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2/gb300-fp4/agentic/dynamo-disagg-gb300-5p1d-dep16-c152-b16-mtp3.yaml"
-          - "SLURM_PARTITION=batch_3"
+          - "SLURM_PARTITION=batch_1"
         decode:
           num-worker: 1
           tp: 16
@@ -9553,7 +9608,7 @@ glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2/gb300-fp4/agentic/dynamo-disagg-gb300-8p1d-dep16-c259-b16-mtp3.yaml"
-          - "SLURM_PARTITION=batch_3"
+          - "SLURM_PARTITION=batch_1"
         decode:
           num-worker: 1
           tp: 16
@@ -9570,7 +9625,7 @@ glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2/gb300-fp4/agentic/dynamo-disagg-gb300-6p1d-dep8-c227-b16-mtp3.yaml"
-          - "SLURM_PARTITION=batch_3"
+          - "SLURM_PARTITION=batch_1"
         decode:
           num-worker: 1
           tp: 8
