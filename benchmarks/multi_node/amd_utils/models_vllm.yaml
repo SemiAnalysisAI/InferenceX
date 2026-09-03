@@ -30,6 +30,13 @@ Kimi-K2.5-MXFP4:
   env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_RMSNORM=1 VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 HSA_NO_SCRATCH_RECLAIM=1 VLLM_ENGINE_READY_TIMEOUT_S=3600"
   hf_dir: "models--amd--Kimi-K2.5-MXFP4"
 
+Kimi-K3:
+  # Max-throughput no-spec profile. DCP is injected per role by server_vllm.sh.
+  prefill_flags: &kimi_k3_vllm_flags "--tensor-parallel-size 8 --moe-backend auto --load-format fastsafetensors --gpu-memory-utilization 0.90 --language-model-only --max-num-seqs 80 --enable-auto-tool-choice --tool-call-parser kimi_k3 --reasoning-parser kimi_k3 --max-model-len 1048576 --stream-interval 10 --enable-prefix-caching --prefix-match-unit 128 --kv-cache-dtype fp8 --max-num-batched-tokens 16384 --attention-config '{\"mla_prefill_backend\":\"ROCM_AITER_FA\",\"use_prefill_query_quantization\":true}' --attention-backend ROCM_AITER_MLA --compilation-config '{\"mode\":3,\"cudagraph_mode\":\"PIECEWISE\",\"custom_ops\":[\"+fused_rms_norm_gated\",\"+quant_fp8\",\"+grouped_topk\",\"+sparse_attn_indexer\",\"none\"]}'"
+  decode_flags: *kimi_k3_vllm_flags
+  env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4=1 AITER_BF16_FP8_MOE_BOUND=0 VLLM_ROCM_AITER_MLA_ASM_PADDING=asm VLLM_USE_BREAKABLE_CUDAGRAPH=1 SAFETENSORS_FAST_GPU=1 VLLM_SSM_CONV_STATE_LAYOUT=DS VLLM_KV_CACHE_LAYOUT=HND PYTHONHASHSEED=42 HSA_NO_SCRATCH_RECLAIM=0 VLLM_ENGINE_READY_TIMEOUT_S=7200 VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=1200 VLLM_SERVER_DEV_MODE=1"
+  hf_dir: "Kimi-K3"
+
 MiniMax-M2.5:
   # AITER fused-MoE kernel fmoe_bf16_blockscaleFp8_g1u1_vs_silu_32x384 for gfx950 writes OOB when run with MiniMax's shapes at M=8K(=num batched tokens), crashing vllm during AITER warmup.
   # Set token budget to 4k to avoid using that shape, instead of disabling AITER_MOE.
