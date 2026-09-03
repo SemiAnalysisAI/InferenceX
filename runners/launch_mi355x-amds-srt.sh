@@ -360,7 +360,11 @@ export SRTCTL_RUNTIME_SOURCE_DIR="$SRT_REPO_DIR"
 
 echo "Submitting ${CONFIG_PATH} with srt-slurm ${SRT_SLURM_COMMIT}"
 set +e
-SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" \
+# Keep the workflow's host-only bytecode cache out of the serving containers.
+# Unlike Docker's explicit environment, Slurm inherits it; with a / working
+# directory it breaks PyTorch's generated-module imports (CPython #82916).
+# A recipe can still explicitly configure its own container cache environment.
+SRTCTL_OUTPUT=$(env -u PYTHONPYCACHEPREFIX srtctl apply -f "$CONFIG_FILE" \
     --tags "mi355x,inferencex,github-actions,${RUN_KEY}" 2>&1)
 SRTCTL_RC=$?
 set -e

@@ -6844,4 +6844,5 @@
     - "Preserve the retired AgentX launch contract in the shared srt path: route DP-attention sessions by correlation ID, flush every advertised worker cache before each concurrency point, and run the MI355X RDMA device/QoS/DCQCN plus bare-process GPU drain preflights on every allocated host."
     - "Preserve the legacy MI355X host verbs/Ionic provider mounts and task file-descriptor limit; pin the native ATOM CLI spelling and Mooncake address fix from srt-slurm PR #7."
     - "Pin the ATOMesh startup fix so native AMD routing skips Dynamo-only NATS/etcd infrastructure."
+    - "Keep the workflow's host-only Python bytecode-cache prefix out of Slurm submissions, matching the legacy explicit Docker environment without changing serving arguments."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2542
