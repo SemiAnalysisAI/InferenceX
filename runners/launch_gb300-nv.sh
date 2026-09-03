@@ -411,7 +411,7 @@ elif [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "dsv4" ]]; then
 elif [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp4" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
-    git checkout v1.0.29
+    git checkout v1.0.72
     mkdir -p recipes/trtllm/qwen3.5/gb300-fp4/disagg
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/qwen3.5/gb300-fp4/disagg" \
         recipes/trtllm/qwen3.5/gb300-fp4/disagg
@@ -421,7 +421,16 @@ else
     git checkout sa-submission-q2-2026
 fi
 
+if [[ "${EVAL_FRAMEWORK:-lm-eval}" != "lm-eval" ]]; then
+    python3 "$GITHUB_WORKSPACE/runners/patch_srt_eval_dispatch.py" "$(pwd)" \
+        || exit 1
+fi
+
 echo "Installing srtctl..."
+if [[ "$IS_AGENTIC" == "1" && "$FRAMEWORK" == "dynamo-trt" && ( "$MODEL_PREFIX" == "qwen3.5" || "$MODEL_PREFIX" == "glm5.2" || "$MODEL_PREFIX" == "dsv4" ) ]]; then
+    sed -i 's#git clone https://github.com/ai-dynamo/dynamo.git#git clone https://github.com/cquil11/dynamo.git#' src/srtctl/core/schema.py
+    grep -q 'git clone https://github.com/cquil11/dynamo.git' src/srtctl/core/schema.py || exit 1
+fi
 export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
 curl -LsSf https://astral.sh/uv/install.sh | sh
 export PATH="$UV_INSTALL_DIR:$PATH"
@@ -521,8 +530,8 @@ CONFIG_PATH="${CONFIG_FILE%%:*}"
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
 
 # Throughput recipes opt into synthetic acceptance through the master config.
-# Eval-only jobs leave the checked-in real-MTP recipe unchanged so generated
-# tokens still pass target-model verification.
+# Eval-only jobs remove those settings so generated tokens use real target-model
+# verification.
 inject_synthetic_acceptance "$CONFIG_PATH" "$FRAMEWORK" || exit 1
 
 # Profiling: mutate the runtime recipe copy so workers run eager with the
@@ -565,7 +574,7 @@ fi
 #     /scratch/models, and
 #   - qwen3.5 fp8, whose weights are also on the compute-node /scratch/models
 #     and which runs on srt-slurm:v1.0.25 (the release that has the preflight),
-#   - qwen3.5 fp4 dynamo-trt, which runs on v1.0.29 without that preflight, and
+#   - qwen3.5 fp4 dynamo-trt, which runs on v1.0.72 without that preflight, and
 #   - the qwen3.5 fp4 and dsv4 sglang power lanes, which run the pinned
 #     producer (a main-lineage fork that has the preflight) against the same
 #     /scratch checkpoints.
