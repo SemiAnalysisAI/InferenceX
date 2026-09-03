@@ -9,12 +9,123 @@ import yaml
 from pydantic import BaseModel, ValidationError
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+SRT_ADAPTER = REPO_ROOT / "utils" / "srt_slurm.py"
 SLURM_UTILS = REPO_ROOT / "runners" / "slurm_utils.sh"
 PATCH_SRT_EVAL = REPO_ROOT / "runners" / "patch_srt_eval_dispatch.py"
 PATCH_SRT_DP_RANKS = REPO_ROOT / "runners" / "patch_srt_vllm_dp_ranks.py"
 PATCH_TRTLLM_CHAT_STORE = REPO_ROOT / "runners" / "patch_trtllm_chat_store.py"
 PATCH_VLLM_SIMPLE_KV = REPO_ROOT / "runners" / "patch_vllm_simple_kv_offload.py"
 INJECT_ACCEPTANCE = REPO_ROOT / "runners" / "inject_synthetic_acceptance.py"
+
+
+def test_srt_adapter_preserves_serving_recipe_and_uses_native_image_fallback(tmp_path: Path) -> None:
+    prepare = runpy.run_path(str(SRT_ADAPTER))["prepare_recipe"]
+    backend = {"type": "atom", "atom_config": {"prefill": {"kv_cache_dtype": "fp8", "max-num-seqs": 256}}}
+    recipe = {
+        "model": {"container": "model-image"},
+        "backend": backend,
+        "benchmark": {"type": "custom", "command": "run-the-original-benchmark"},
+    }
+    profile = {"default_mounts": {"/host/rdma": "/container/rdma"}}
+    paths = {
+        "workspace": tmp_path / "workspace",
+        "results_root": tmp_path / "results",
+        "aiperf_cache": tmp_path / "aiperf",
+        "image_cache": tmp_path / "images",
+    }
+    env = {"IMAGE": "vendor/engine:pinned", "CONC_LIST": "4 8", "UNRELATED_SECRET": "do-not-forward"}
+    prepared, cluster = prepare(recipe, profile, env, **paths)
+
+    assert prepared["backend"] == backend
+    assert prepared["benchmark"]["command"] == "run-the-original-benchmark"
+    assert prepared["benchmark"]["env"] == {"CONC_LIST": "4 8"}
+    assert "env" not in recipe["benchmark"]
+    assert profile == {"default_mounts": {"/host/rdma": "/container/rdma"}}
+    assert cluster["containers"] == {"model-image": "vendor/engine:pinned"}
+    assert cluster["default_mounts"][str(paths["workspace"])] == "/infmax-workspace"
+    paths["image_cache"].mkdir()
+    cached_image = paths["image_cache"] / "vendor_engine_pinned.sqsh"
+    cached_image.write_bytes(b"cached-image")
+    _, cached_cluster = prepare(recipe, profile, env, **paths)
+    assert cached_cluster["containers"] == {"model-image": str(cached_image)}
+
+
+def test_srt_adapter_preserves_legacy_sglang_admission_and_eval_contract(tmp_path: Path) -> None:
+    prepare = runpy.run_path(str(SRT_ADAPTER))["prepare_recipe"]
+    recipe = {
+        "model": {"container": "image"},
+        "backend": {
+            "type": "sglang",
+            "sglang_config": {
+                "prefill": {"tp-size": 8, "ep-size": 8, "context-length": 9472},
+                "decode": {"tp-size": 8, "ep-dispatch-algorithm": "experimental"},
+            },
+            "decode_environment": {
+                "SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK": "17",
+                "MORI_MAX_DISPATCH_TOKENS_DECODE": "1",
+                "SGLANG_SIMULATE_ACC_LEN": "3",
+            },
+        },
+        "benchmark": {"type": "custom", "command": "original-throughput-command"},
+    }
+    env = {
+        "IMAGE": "vendor/engine:pinned",
+        "MODEL": "vendor/model",
+        "CONC_LIST": "16 64",
+        "PREFILL_DP_ATTN": "true",
+        "PREFILL_EP": "8",
+        "DECODE_TP": "8",
+        "DECODE_MTP_SIZE": "3",
+    }
+    paths = {
+        "workspace": tmp_path,
+        "results_root": tmp_path / "results",
+        "aiperf_cache": tmp_path / "cache",
+        "image_cache": tmp_path / "images",
+    }
+    throughput, _ = prepare(recipe, {}, env, **paths)
+    backend = throughput["backend"]
+    assert backend["sglang_config"]["prefill"]["max-running-requests"] == 64
+    assert backend["sglang_config"]["decode"]["max-running-requests"] == 64
+    assert backend["decode_environment"]["SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK"] == "17"
+    assert backend["decode_environment"]["MORI_MAX_DISPATCH_TOKENS_DECODE"] == "32"
+    assert backend["decode_environment"]["SGLANG_MORI_DISPATCH_INTER_KERNEL_SWITCH_THRESHOLD"] == "16"
+    assert backend["decode_environment"]["SGLANG_SIMULATE_ACC_LEN"] == "3"
+
+    evaluation, _ = prepare(recipe, {}, {**env, "EVAL_ONLY": "true", "EVAL_CONC": "64"}, **paths)
+    assert "SGLANG_SIMULATE_ACC_LEN" not in evaluation["backend"]["decode_environment"]
+    assert "ep-dispatch-algorithm" not in evaluation["backend"]["sglang_config"]["decode"]
+    assert evaluation["benchmark"]["env"]["MODEL_NAME"] == "vendor/model"
+    assert evaluation["benchmark"]["env"]["EVAL_MAX_MODEL_LEN"] == "9472"
+    assert "original-throughput-command" not in evaluation["benchmark"]["command"]
+    assert 'run_eval --port "${SRT_FRONTEND_PORT}"' in evaluation["benchmark"]["command"]
+
+
+def test_srt_result_collection_is_job_scoped_and_preserves_artifact_names(tmp_path: Path) -> None:
+    collect = runpy.run_path(str(SRT_ADAPTER))["collect_results"]
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    results_root = tmp_path / "results"
+    for job_id in ("42", "99"):
+        fixed = results_root / job_id / "fixed-seq"
+        fixed.mkdir(parents=True)
+        (fixed / "benchmark-c8.json").write_text(json.dumps({"job": job_id}))
+    env = {
+        "RESULT_FILENAME": "benchmark",
+        "PREFILL_NUM_WORKERS": "1",
+        "PREFILL_TP": "8",
+        "DECODE_NUM_WORKERS": "1",
+        "DECODE_TP": "8",
+        "DISAGG": "true",
+    }
+    submission = {"slurm_job_id": "42", "output_dir": str(tmp_path / "outputs" / "42")}
+    collect(submission, env, workspace=workspace, results_root=results_root)
+    artifact = workspace / "benchmark_srt-42_conc8_gpus_16_ctx_8_gen_8.json"
+    assert json.loads(artifact.read_text()) == {"job": "42"}
+    assert not list(workspace.glob("*srt-99*"))
+
+    with pytest.raises(ValueError, match="No eval metadata"):
+        collect(submission, {**env, "EVAL_ONLY": "true"}, workspace=workspace, results_root=results_root)
 
 
 def run_bash(command: str, *args: Path | str) -> subprocess.CompletedProcess[str]:

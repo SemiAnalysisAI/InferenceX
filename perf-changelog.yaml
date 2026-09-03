@@ -6847,3 +6847,14 @@
     - "Keep the workflow's host-only Python bytecode-cache prefix out of Slurm submissions, matching the legacy explicit Docker environment without changing serving arguments."
     - "Restore the legacy unlimited RDMA memory-lock limit and pin ATOM's literal worker model identity for evaluation routing."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2542
+
+- config-keys:
+    - qwen3-0.6b-fp16-mi355x-sglang-srt-agg
+    - qwen3-0.6b-fp16-mi355x-sglang-srt-disagg
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Use one MI355X launcher entry point with srt-slurm owning allocation, coordination, log following, and job completion."
+    - "Remove the mandatory host-repair hook, RDMA/GPU-drain helper scripts, and separate image/model staging allocation; use provisioned caches and native Pyxis container lifecycle."
+    - "Keep InferenceX-specific benchmark/eval metadata and artifact collection in a portable adapter while preserving the existing serving and workload settings."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2542

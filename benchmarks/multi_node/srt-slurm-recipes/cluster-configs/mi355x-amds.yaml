@@ -30,8 +30,8 @@ default_mounts:
   /usr/lib/x86_64-linux-gnu/libibverbs/libionic-rdmav34.so: /usr/lib/x86_64-linux-gnu/libibverbs/libionic-rdmav34.so
   /etc/libibverbs.d: /etc/libibverbs.d
   /it-share/hf-hub-cache: /hf_hub_cache
-  # Legacy production checkpoints live here. The launcher may expose one as a
-  # zero-copy seed under the canonical /hf_hub_cache/hub layout.
+  # Some provisioned /hf_hub_cache/hub entries link to checkpoints here.
+  # Keep their absolute symlink targets visible inside the container.
   /it-share/hf_home: /it-share/hf_home
   # The launcher appends the exact shared workspace and result roots.
 
