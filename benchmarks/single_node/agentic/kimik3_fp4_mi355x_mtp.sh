@@ -253,9 +253,14 @@ case "${SPEC_DECODING:-mtp}:$CONC" in
         GPU_MEM_UTIL=0.88
         MAX_NUM_BATCHED_TOKENS=8192
         ;;
-    none:40|none:44|none:48)
+    none:40)
         SPEC_NUM_TOKENS=0
         GPU_MEM_UTIL=0.88
+        MAX_NUM_BATCHED_TOKENS=16384
+        ;;
+    none:44|none:48)
+        SPEC_NUM_TOKENS=0
+        GPU_MEM_UTIL=0.90
         MAX_NUM_BATCHED_TOKENS=16384
         ;;
     *)
