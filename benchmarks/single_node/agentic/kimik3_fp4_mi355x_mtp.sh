@@ -197,6 +197,14 @@ case "${KV_OFFLOAD_BACKEND:-}" in
 
     LMCACHE_L1_SIZE_GB="$TOTAL_CPU_DRAM_GB"
 
+    # DCP shards decode KV across the TP ranks, so the LMCache GPU transfer
+    # pool needs one worker per rank; a non-DCP arm only needs a single worker.
+    if [ "${DCP_SIZE:-1}" -gt 1 ]; then
+        LMCACHE_MAX_GPU_WORKERS=8
+    else
+        LMCACHE_MAX_GPU_WORKERS=1
+    fi
+
     LMCACHE_CMD=(
         lmcache server
         --host 127.0.0.1
@@ -210,7 +218,7 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         --enable-extra-logging
         --extra-logging-interval 30
         --max-cpu-workers 8
-        --max-gpu-workers 8
+        --max-gpu-workers "$LMCACHE_MAX_GPU_WORKERS"
         --eviction-policy LRU
         --supported-transfer-mode lmcache_driven
         --shm-name ""
