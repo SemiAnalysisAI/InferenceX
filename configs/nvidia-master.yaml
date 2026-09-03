@@ -4503,6 +4503,7 @@ dsv4-fp4-gb200-llmd-vllm:
           - "GPUS_PER_NODE=4"
 
 # DeepSeek-V4-Pro-0813 (DSpark) FP4 GB200, P/D disagg via llmd-vllm.
+# Use a 0.90 GPU-memory budget for long-context workspace headroom.
 # Always uses Mooncake; DSpark speculative decoding. The DSpark image
 # bundles EPP/pd-sidecar v0.10.0.
 dsv4-fp4-gb200-llmd-vllm-agentx:

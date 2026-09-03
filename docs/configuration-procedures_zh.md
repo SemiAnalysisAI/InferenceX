@@ -142,7 +142,7 @@ llm-d 不是 srt-slurm 路径：InferenceX 自己持有 Slurm allocation，并�
 
 `CONFIG_FILE` 未设置或文件缺失时，会静默选择镜像内 `/etc/epp/config.yaml` fallback，并移除配方特定 vLLM 参数。除非明确打算使用 fallback，否则应将其视为验证失败。
 
-GB200 DSpark AgentX 配置使用 `cluster:gb200-nv`：TP8/DEP8 跨两个节点（8 GPU），1P-DEP8/1D-DEP8 跨四个节点（16 GPU）。ARM64 镜像摘要包含 router v0.10.0；AgentX 不挂载旧版路由器二进制文件。使用 `token-load-scorer` 的配置必须显式声明 `inflight-load-producer`，以提供其依赖的未缓存 token 数据。launcher 使用预先存储的 `DeepSeek-V4-Pro-0813` checkpoint，而非旧版 V4-Pro 权重。
+GB200 DSpark AgentX 配置使用 `cluster:gb200-nv`：TP8/DEP8 跨两个节点（8 GPU），1P-DEP8/1D-DEP8 跨四个节点（16 GPU）。ARM64 镜像摘要包含 router v0.10.0；AgentX 不挂载旧版路由器二进制文件。使用 `token-load-scorer` 的配置必须显式声明 `inflight-load-producer`，以提供其依赖的未缓存 token 数据。launcher 使用预先存储的 `DeepSeek-V4-Pro-0813` checkpoint，而非旧版 V4-Pro 权重。设置 `gpu-memory-utilization=0.90`：镜像默认值为 0.92，该设置在 DEP8 长上下文回放时导致稀疏注意力索引器内存不足。
 
 `recipe.py` 为吞吐测试注入 DSpark golden AL；`EVAL_ONLY=true` 保留真实验证。保持自适应验证关闭：它根据置信度缩减草稿 token 预算，会改变固定 K 的 golden AL。Mooncake 嵌入式存储即使设置 `enable_offload: false` 也属于 DRAM 卸载（该开关控制 SSD）。需声明 `kv-offloading: dram`、`kv-offload-backend: { name: mooncake }` 和 `dram-utilization`；运行时将每节点预算均分给四个 GPU rank。Rank 0 在端口 50051 启动本次作业专用的 Mooncake master（指标端口为 50052）；所有 rank 等待其就绪后再启动 vLLM。`P2PHANDSHAKE` 不能替代存储 master。Mooncake 使用 InfiniBand HCA `mlx5_0,mlx5_1,mlx5_3,mlx5_4`；`mlx5_2` 和 `mlx5_5` 为以太网设备。普通 TP8/DEP8 声明 `none`。
 
