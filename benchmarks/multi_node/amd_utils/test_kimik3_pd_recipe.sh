@@ -38,11 +38,14 @@ assert any(item.startswith("VLLM_K3_FORK_SHA=f1870840") for item in settings)
 assert "mooncake" not in repr(recipe).lower()
 
 k3 = models["Kimi-K3"]
-assert k3["prefill_flags"] == k3["decode_flags"]
 env = k3["env"]
-assert "VLLM_USE_BREAKABLE_CUDAGRAPH=0" in env
+assert "VLLM_USE_BREAKABLE_CUDAGRAPH" not in env
 assert "VLLM_ALLOW_DCP_FULL_CUDAGRAPH=1" in env
 assert "PREFIX_CACHING_HASH_ALGO=sha256" in env
+assert "VLLM_USE_BREAKABLE_CUDAGRAPH=1" in k3["prefill_env"]
+assert "TORCH_NCCL_BLOCKING_WAIT=1" in k3["prefill_env"]
+assert "VLLM_USE_BREAKABLE_CUDAGRAPH=0" in k3["decode_env"]
+assert "TORCH_NCCL_BLOCKING_WAIT=0" in k3["decode_env"]
 
 flags = k3["prefill_flags"]
 for expected in (
@@ -64,6 +67,13 @@ comp = json.loads(re.search(r"--compilation-config '(\{.*\})'", flags).group(1))
 assert comp["cudagraph_mode"] == "FULL_AND_PIECEWISE"
 assert comp["max_cudagraph_capture_size"] == 4096
 assert comp["cudagraph_capture_sizes"] == list(range(1, 81)) + [128, 256, 512, 1024, 2048, 4096]
+
+decode_comp = json.loads(
+    re.search(r"--compilation-config '(\{.*\})'", k3["decode_flags"]).group(1)
+)
+assert decode_comp["cudagraph_mode"] == "FULL_DECODE_ONLY"
+assert decode_comp["max_cudagraph_capture_size"] == 4096
+assert decode_comp["cudagraph_capture_sizes"] == comp["cudagraph_capture_sizes"]
 PY
 
 echo "Kimi-K3 PD recipe tests passed"
