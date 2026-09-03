@@ -6852,3 +6852,9 @@
     - "Set OMP_NUM_THREADS=1 for the prefill and decode workers across the GB300 Dynamo-TensorRT-LLM AgentX recipe matrix."
     - "Route AgentX replay and drain checks through the srt-slurm frontend endpoint when provided, with a localhost fallback."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2711
+
+- config-keys:
+    - dsv4-fp4-b200-vllm
+  description:
+    - "Refresh the DeepSeek-V4-Pro FP4 B200 vLLM image and search space, pin the Nscale NVFP4 checkpoint, use the FlashInfer CuTeDSL MoE backend for expert-parallel runs with EPLB disabled, set GPU memory utilization to 0.95, and cap the model length at 12288."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2534
