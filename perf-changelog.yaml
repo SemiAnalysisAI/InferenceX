@@ -6826,3 +6826,11 @@
   description:
     - "Add the TP2 no-offload MiniMax-M3 ATOM AgentX MTP search space at concurrencies 1, 2, and 5."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Allow the MiniMax-M3 ATOM AgentX launcher to accept TP2 search-space configurations."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

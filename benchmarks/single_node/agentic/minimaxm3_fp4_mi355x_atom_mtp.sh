@@ -8,8 +8,8 @@ set -x
 # Companion to minimaxm3_fp4_mi355x_mtp.sh, which runs the same checkpoint under
 # vLLM, so the two arms are directly comparable.
 #
-# TP4 follows the official ATOM MiniMax-M3 MXFP4 recipe. TP8 is also accepted
-# for larger-memory variants and manual smoke tests.
+# TP2 and TP4 follow the official ATOM MiniMax-M3 MXFP4 recipe. TP8 is also
+# accepted for larger-memory variants and manual smoke tests.
 #
 # The ATOM image is launched with the official MiniMax attention/index-cache
 # settings; Kimi-specific vLLM patches are not sourced here.
@@ -30,8 +30,8 @@ if [[ -v SLURM_JOB_ID ]]; then
     echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
-if [ "$TP" -ne 4 ] && [ "$TP" -ne 8 ]; then
-    echo "Error: MiniMax-M3 MXFP4 supports TP4 or TP8 on 288 GB gfx950 parts." >&2
+if [ "$TP" -ne 2 ] && [ "$TP" -ne 4 ] && [ "$TP" -ne 8 ]; then
+    echo "Error: MiniMax-M3 MXFP4 supports TP2, TP4, or TP8 on 288 GB gfx950 parts." >&2
     exit 1
 fi
 
