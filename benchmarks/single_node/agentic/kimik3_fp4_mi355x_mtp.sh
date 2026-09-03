@@ -202,7 +202,7 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         --enable-extra-logging
         --extra-logging-interval 30
         --max-cpu-workers 8
-        --max-gpu-workers 1
+        --max-gpu-workers 8
         --eviction-policy LRU
         --supported-transfer-mode lmcache_driven
         --shm-name ""
