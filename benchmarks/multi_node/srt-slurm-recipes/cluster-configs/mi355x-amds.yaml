@@ -40,5 +40,8 @@ containers:
 
 nginx_raise_ulimit: false
 
-# Preserve the legacy server/evaluation open-file limit inside each task.
-default_bash_preamble: "ulimit -n 65536 2>/dev/null || ulimit -n 8192 2>/dev/null || true"
+# Match the legacy Docker --ulimit memlock=-1 for RDMA registrations, as well
+# as the server/evaluation open-file limit. Fail before loading the model if
+# the allocation cannot provide unlimited locked memory.
+default_bash_preamble: >-
+  ulimit -l unlimited && { ulimit -n 65536 2>/dev/null || ulimit -n 8192 2>/dev/null || true; }
