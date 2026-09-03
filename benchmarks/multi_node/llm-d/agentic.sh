@@ -12,23 +12,43 @@ export AGENTIC_OUTPUT_DIR="$BENCHMARK_LOGS_DIR"
 export CONC_LIST="${BENCH_MAX_CONCURRENCY//x/ }"
 export CONC="${CONC_LIST%% *}"
 
-# Discovery already enumerates every DP-serving node and excludes headless TP
-# followers. Scrape vLLM directly, not Envoy or the decode pd-sidecar port.
-AIPERF_METRIC_URLS=$(python3 - "$LLMD_ENDPOINTS_FILE" "$VLLM_PORT" <<'PY'
+# Use discovery's serving nodes, but scrape vLLM rather than the decode sidecar.
+mkdir -p "$RESULT_DIR"
+AIPERF_METRIC_URLS=$(python3 - "$LLMD_ENDPOINTS_FILE" "$VLLM_PORT" \
+    "$RESULT_DIR/llmd_metrics_endpoints.json" "$DECODE_NODES" <<'PY'
+import json
 import sys
 import yaml
 
 with open(sys.argv[1]) as source:
     endpoints = yaml.safe_load(source)["endpoints"]
-addresses = dict.fromkeys(endpoint["address"] for endpoint in endpoints)
-if not addresses:
+metrics_endpoints = {
+    f"http://{endpoint['address']}:{int(sys.argv[2])}/metrics": {
+        "name": endpoint["name"],
+        "role": endpoint["labels"]["llm-d.ai/role"] if int(sys.argv[4]) else "combined",
+    }
+    for endpoint in endpoints
+}
+if not metrics_endpoints:
     raise SystemExit("No llm-d serving endpoints available for metrics")
-print(",".join(f"http://{address}:{int(sys.argv[2])}/metrics" for address in addresses))
+with open(sys.argv[3], "w") as output:
+    json.dump(metrics_endpoints, output, indent=2)
+    output.write("\n")
+print(",".join(metrics_endpoints))
 PY
 )
 export AIPERF_METRIC_URLS
 # benchmark_lib.sh forwards this name to AIPerf's --server-metrics argument.
 export AIPERF_SERVER_METRICS_URLS="$AIPERF_METRIC_URLS"
+export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="vllm:"
+
+# AIPerf also probes the inference URL; it must not return load-balanced counters.
+frontend_metrics_status=$(curl --silent --show-error --connect-timeout 5 --max-time 10 \
+    --output /dev/null --write-out '%{http_code}' "$AIPERF_SERVER_URL/metrics")
+if [[ "$frontend_metrics_status" != "404" ]]; then
+    echo "ERROR: llm-d frontend /metrics must return 404, got $frontend_metrics_status" >&2
+    exit 1
+fi
 
 IFS=',' read -r -a metrics_urls <<< "$AIPERF_METRIC_URLS"
 metrics_probe=$(mktemp /tmp/llmd-metrics.XXXXXX)
