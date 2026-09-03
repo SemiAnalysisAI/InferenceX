@@ -279,7 +279,7 @@ case "$CONC" in
     *)
         SPEC_NUM_TOKENS=0
         GPU_MEM_UTIL=0.9
-        MAX_NUM_BATCHED_TOKENS=8192
+        MAX_NUM_BATCHED_TOKENS=4096
         ;;
 esac
 
