@@ -151,8 +151,9 @@ case "${KV_OFFLOAD_BACKEND:-}" in
 
     # Keep the image's tested torch/ROCm stack and install only LMCache's
     # missing runtime dependencies, same as the MiniMax-M3 lmcache arm.
-    LMCACHE_VERSION="0.5.5rc3"
-    LMCACHE_ROCM_INDEX="https://github.com/LMCache/LMCache/releases/expanded_assets/nightly-rocm"
+    LMCACHE_VERSION="0.5.5.dev60+rocm7.2"
+    LMCACHE_RELEASE="0.5.5rc3"
+    LMCACHE_ROCM_INDEX="https://github.com/LMCache/LMCache/releases/expanded_assets/${LMCACHE_RELEASE}-rocm"
     agentic_pip_install --quiet --no-cache-dir --no-deps \
         "sortedcontainers==2.4.0" \
         "opentelemetry-exporter-prometheus==0.61b0" \
@@ -199,10 +200,14 @@ case "${KV_OFFLOAD_BACKEND:-}" in
 
     # DCP shards decode KV across the TP ranks, so the LMCache GPU transfer
     # pool needs one worker per rank; a non-DCP arm only needs a single worker.
+    # The DCP KV interleave also needs the larger 12288 chunk; a non-DCP arm
+    # uses the 3072 minimum (one KDA state group).
     if [ "${DCP_SIZE:-1}" -gt 1 ]; then
         LMCACHE_MAX_GPU_WORKERS=8
+        LMCACHE_CHUNK_SIZE=12288
     else
         LMCACHE_MAX_GPU_WORKERS=1
+        LMCACHE_CHUNK_SIZE=3072
     fi
 
     LMCACHE_CMD=(
@@ -213,7 +218,7 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         --http-port "$LMCACHE_HTTP_PORT"
         --l1-size-gb "$LMCACHE_L1_SIZE_GB"
         --l1-init-size-gb 10
-        --chunk-size 12288
+        --chunk-size "$LMCACHE_CHUNK_SIZE"
         --separate-object-groups
         --enable-extra-logging
         --extra-logging-interval 30
