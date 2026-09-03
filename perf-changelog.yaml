@@ -6842,4 +6842,4 @@
     - "Use PP4 prefill with DEP4 decode at concurrency 704 and 565, plus two distinct TP2 aggregate concurrency-44 recipes and one TP8 aggregate concurrency-7 recipe."
     - "Keep full MTP and HiCache in every recipe; throughput uses the committed synthetic acceptance lengths while EVAL_ONLY keeps real MTP behavior."
     - "Run the upstream SGLang image as shipped and pin the PP recipes plus router identity to ai-dynamo/dynamo PR 14064 head ad6f7d54ce7b99c53576b10482755c93c921fbac."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2812
