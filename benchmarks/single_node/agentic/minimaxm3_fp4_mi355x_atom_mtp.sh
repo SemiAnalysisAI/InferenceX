@@ -177,7 +177,7 @@ esac
 # input, while the server capacity knobs follow the validated reference.
 MAX_NUM_SEQS=$((2 * CONC))
 MAX_NUM_BATCHED_TOKENS=32768
-GPU_MEM_UTIL=0.8
+GPU_MEM_UTIL=0.9
 export ATOM_ENABLE_REPLAYSSM
 
 # Extra in-GPU state checkpoint slots beyond the in-flight floor. Checkpoints

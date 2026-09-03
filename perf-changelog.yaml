@@ -6834,3 +6834,11 @@
   description:
     - "Allow the MiniMax-M3 ATOM AgentX launcher to accept TP2 search-space configurations."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Raise the MiniMax-M3 ATOM AgentX GPU memory utilization target to 0.9."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
