@@ -6843,3 +6843,12 @@
     - "Add the new concurrency-1 topology to the existing disaggregated configuration key while retaining all published points."
     - "Enable TensorRT-LLM iteration statistics and require KV-cache server metrics for the new concurrency-1 point."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2720
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-trt-agentx
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Set OMP_NUM_THREADS=1 for the prefill and decode workers across the GB300 Dynamo-TensorRT-LLM AgentX recipe matrix."
+    - "Route AgentX replay and drain checks through the srt-slurm frontend endpoint when provided, with a localhost fallback."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2711
