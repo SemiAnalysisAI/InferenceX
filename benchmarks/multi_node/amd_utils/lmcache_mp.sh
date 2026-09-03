@@ -74,7 +74,7 @@ lmcache_mp_size_l1() {
     export LMCACHE_L1_SIZE_GB
 }
 
-lmcache_mp_server_args() {
+lmcache_mp_set_server_defaults() {
     LMCACHE_HOST="${LMCACHE_HOST:-127.0.0.1}"
     LMCACHE_PORT="${LMCACHE_PORT:-6555}"
     LMCACHE_HTTP_PORT="${LMCACHE_HTTP_PORT:-8090}"
@@ -85,6 +85,11 @@ lmcache_mp_server_args() {
     LMCACHE_L1_INIT_SIZE_GB="${LMCACHE_L1_INIT_SIZE_GB:-10}"
     LMCACHE_MAX_CPU_WORKERS="${LMCACHE_MAX_CPU_WORKERS:-8}"
     LMCACHE_MAX_GPU_WORKERS="${LMCACHE_MAX_GPU_WORKERS:-1}"
+    export LMCACHE_HOST LMCACHE_PORT LMCACHE_HTTP_PORT
+}
+
+lmcache_mp_server_args() {
+    lmcache_mp_set_server_defaults
 
     printf '%s\n' \
         lmcache server \
@@ -109,6 +114,9 @@ lmcache_mp_start() {
     local -a cmd
 
     lmcache_mp_size_l1 || return 1
+    # Process substitution runs lmcache_mp_server_args in a subshell. Set the
+    # readiness endpoint in this parent shell before collecting its output.
+    lmcache_mp_set_server_defaults
     mapfile -t cmd < <(lmcache_mp_server_args)
     LMCACHE_LOG="${logdir}/lmcache_${host_name}.log"
     printf '%q ' "${cmd[@]}" > "${logdir}/lmcache_${host_name}_command.txt"

@@ -28,6 +28,17 @@ do
     }
 done
 
+# lmcache_mp_server_args is normally invoked through process substitution.
+# Verify lmcache_mp_start initializes the readiness endpoint in the parent
+# shell instead of losing it with the command-producing subshell.
+tmpdir=$(mktemp -d)
+trap 'rm -rf "$tmpdir"' EXIT
+unset LMCACHE_HOST LMCACHE_PORT LMCACHE_HTTP_PORT
+DRY_RUN=1 lmcache_mp_start "$tmpdir" test-host >/dev/null
+[[ "$LMCACHE_HOST" == 127.0.0.1 ]]
+[[ "$LMCACHE_PORT" == 6555 ]]
+[[ "$LMCACHE_HTTP_PORT" == 8090 ]]
+
 J=$(lmcache_mp_connector_json)
 python3 - "$J" <<'PY'
 import json
