@@ -244,7 +244,7 @@ if [[ "$IS_AGGREGATED" -eq 0 ]]; then
             _KV_OUTER="kv_consumer"
             _MC_EXTRA='"load_async":true,"lookup_async":false,"enable_lookup":false,"enable_cross_layers_blocks":false,"enable_offload":false'
         fi
-        KV_TRANSFER_CONFIG="{\"kv_connector\":\"MultiConnector\",\"kv_role\":\"${_KV_OUTER}\",\"kv_connector_extra_config\":{\"connectors\":[{\"kv_connector\":\"NixlConnector\",\"kv_role\":\"${_KV_OUTER}\",\"kv_load_failure_policy\":\"fail\",\"kv_buffer_device\":\"cuda\",\"kv_connector_extra_config\":{\"enforce_handshake_compat\":false,\"enable_cross_layers_blocks\":false}},{\"kv_connector\":\"MooncakeStoreConnector\",\"kv_role\":\"${_KV_OUTER}\",\"kv_connector_extra_config\":{${_MC_EXTRA}}}]}}"
+        KV_TRANSFER_CONFIG="{\"kv_connector\":\"MultiConnector\",\"kv_role\":\"${_KV_OUTER}\",\"kv_connector_extra_config\":{\"connectors\":[{\"kv_connector\":\"NixlConnector\",\"kv_role\":\"${_KV_OUTER}\",\"kv_load_failure_policy\":\"fail\",\"kv_buffer_device\":\"cuda\",\"kv_connector_extra_config\":{\"enforce_handshake_compat\":false,\"enable_cross_layers_blocks\":false,\"kv_lease_duration\":1800}},{\"kv_connector\":\"MooncakeStoreConnector\",\"kv_role\":\"${_KV_OUTER}\",\"kv_connector_extra_config\":{${_MC_EXTRA}}}]}}"
     else
         KV_TRANSFER_CONFIG="{\"kv_connector\":\"NixlConnector\",\"kv_role\":\"$KV_ROLE\",\"kv_load_failure_policy\":\"fail\"}"
     fi
