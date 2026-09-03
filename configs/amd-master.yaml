@@ -1643,6 +1643,14 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp:
           additional-settings:
           - "PREFILL_NODES=1"
           - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260831"
+          # Host HiCache pool scales linearly with HICACHE_RATIO (host_pages =
+          # int(device_pages * ratio), see sglang's _deepseek_v4_num_host_pages()).
+          # Measured 1,328 GB total (166.00 GB/rank x 8 ranks) at the recipe's
+          # default ratio=3, i.e. ~55.33 GB/rank per unit ratio. ratio=6 ->
+          # ~2,656 GB total, ~89% of the 3 TB/server MODELS.md cap for an
+          # 8/8-GPU config, leaving ~344 GB headroom for non-KV host memory
+          # (OS, MORI pinned buffers, tokenizer/router processes).
+          - "HICACHE_RATIO=6"
         decode:
           num-worker: 1
           tp: 8
