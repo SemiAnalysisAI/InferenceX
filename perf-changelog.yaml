@@ -6843,4 +6843,5 @@
     - "Remove the active and deprecated MI355X matrix entries that depended on amd_utils; configuration-specific child PRs reintroduce the active production lanes as native srt-slurm recipes."
     - "Preserve the retired AgentX launch contract in the shared srt path: route DP-attention sessions by correlation ID, flush every advertised worker cache before each concurrency point, and run the MI355X RDMA device/QoS/DCQCN plus bare-process GPU drain preflights on every allocated host."
     - "Preserve the legacy MI355X host verbs/Ionic provider mounts and task file-descriptor limit; pin the native ATOM CLI spelling and Mooncake address fix from srt-slurm PR #7."
+    - "Pin the ATOMesh startup fix so native AMD routing skips Dynamo-only NATS/etcd infrastructure."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2542
