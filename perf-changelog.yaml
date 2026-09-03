@@ -6829,6 +6829,6 @@
     - agentic-coding
   description:
     - "Add DeepSeek-V4-Pro-0813 FP4 with FP8 KV cache and llm-d router 0.10.0 for GB200 AgentX trace replay at native context: aggregated TP8/DEP8 (2 nodes, 8 GPUs) and NIXL disaggregated 1P-DEP8/1D-DEP8 (4 nodes, 16 GPUs)."
-    - "Use DSpark golden AL: K=5, AL=3.61 for aggregated/decode; K=1, AL=1.84 for disaggregated prefill. Disable adaptive verification."
+    - "Use DSpark golden AL with adaptive verification: K=5, AL=3.61 for aggregated/decode; K=1, AL=1.84 for disaggregated prefill."
     - "Enable Mooncake DRAM offloading for disaggregated and aggregated DEP8+Mooncake variants with dram-utilization=0.60; no offloading for plain TP8/DEP8. SSD offloading remains disabled."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
