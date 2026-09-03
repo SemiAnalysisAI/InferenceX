@@ -68,24 +68,8 @@ _UNIQUE_ID_MAX_BYTES = 256
 # sizes the pre-allocated receive (and so the transport footprint), _LL_LADDER_CAP bounds which
 # token counts are measured. Separating them lets the ladder be clamped around a kernel defect
 # without moving the footprint and silently re-basing the rungs that remain.
-#
-# The ladder sits below the buffer because nccl_ep's low_latency.cu is a port of DeepEP's
-# PRE-FIX low-latency combine: in the combine recv pipeline the reduction warps read shared
-# memory and then mbarrier_arrive(emptyBarriers[stageIdx]) with no fence.proxy.async.shared::cta
-# between, so the producer's next TMA load can overwrite a stage while consumer reads are still
-# in flight. DeepEP closed exactly this with a one-line fence in PR #642; the fence is absent
-# both at our pin and at NVIDIA/nccl master, so it is unfixed upstream.
-#
-# Observed on gb300 EP8 BF16 at T=256: 1 failure in 5 executions, bimodal -- healthy rows give
-# max relative error 0.0039, the failure gave 0.4704, with nothing between, which is a discrete
-# corrupted write rather than tolerance noise.
-#
-# THIS CLAMP IS NOT A SAFETY BOUNDARY. The fence is missing on every combine recv; T=256 is only
-# the rung with the most pipeline iterations, and the receive plane is not even full there. Lower
-# rungs are LESS LIKELY to hit the race, not immune. Restore _LL_LADDER_CAP to _LL_BUFFER_CAP
-# once a fixed wheel ships.
 _LL_BUFFER_CAP = 256
-_LL_LADDER_CAP = 128
+_LL_LADDER_CAP = 256
 
 
 class NCCLEPBackend(EPBackend):
@@ -145,9 +129,7 @@ class NCCLEPBackend(EPBackend):
 
     def buffer_cap(self, args):
         if self._ll:
-            # Bounds which token counts are MEASURED. Below _LL_BUFFER_CAP today because the
-            # combine recv pipeline races (see the constants above); the harness reports every
-            # dropped rung rather than silently truncating.
+            # Bounds which token counts are MEASURED.
             return _LL_LADDER_CAP
         return None
 
