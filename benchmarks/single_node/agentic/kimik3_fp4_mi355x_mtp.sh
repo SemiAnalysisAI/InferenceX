@@ -202,7 +202,7 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         --enable-extra-logging
         --extra-logging-interval 30
         --max-cpu-workers 8
-        --max-gpu-workers 1
+        --max-gpu-workers 8
         --eviction-policy LRU
         --supported-transfer-mode lmcache_driven
         --shm-name ""
@@ -255,7 +255,7 @@ case "${SPEC_DECODING:-mtp}:$CONC" in
         ;;
     none:40|none:44|none:48)
         SPEC_NUM_TOKENS=0
-        GPU_MEM_UTIL=0.88
+        GPU_MEM_UTIL=0.9
         MAX_NUM_BATCHED_TOKENS=16384
         ;;
     *)
