@@ -6840,4 +6840,4 @@
     - agentic-coding
   description:
     - "Refresh the Kimi-K3 GB300 AgentX configurations with updated configs."
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2811
