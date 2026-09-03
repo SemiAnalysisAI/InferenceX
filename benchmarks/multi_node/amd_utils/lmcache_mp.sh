@@ -78,6 +78,9 @@ lmcache_mp_server_args() {
     LMCACHE_HOST="${LMCACHE_HOST:-127.0.0.1}"
     LMCACHE_PORT="${LMCACHE_PORT:-6555}"
     LMCACHE_HTTP_PORT="${LMCACHE_HTTP_PORT:-8090}"
+    # SA DCP8 geometry: 1536-token attention block * DCP=8 = 12288, which is
+    # also the scheduler UNIFIED page. Prefill is DCP=1 but still uses 12288
+    # because it is a valid multiple of every 1536-token hybrid KV group.
     LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-12288}"
     LMCACHE_L1_INIT_SIZE_GB="${LMCACHE_L1_INIT_SIZE_GB:-10}"
     LMCACHE_MAX_CPU_WORKERS="${LMCACHE_MAX_CPU_WORKERS:-8}"

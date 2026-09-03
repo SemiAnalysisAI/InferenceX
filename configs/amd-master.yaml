@@ -685,10 +685,11 @@ kimik3-fp4-mi355x-atom-agentic-mtp:
       search-space:
       - { tp: 8, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [32, 40, 56], spec-decoding: mtp }
 
-# Kimi-K3 MXFP4 MI355X vLLM disaggregated agentic (1P1D TP8/DCP8,
-# MoRIIO P/D transfer, optional LMCache MP DRAM tier).
+# Kimi-K3 MXFP4 MI355X vLLM disaggregated agentic (1P1D). Engine flags match
+# SA single-node none:40 (TP8/DCP8 + LMCacheMP). Allowed PD delta only:
+# prefill TP8 + LMCacheMP + MoRIIO producer; decode TP8/DCP8 + MoRIIO consumer.
 kimik3-fp4-mi355x-vllm-disagg-agentic:
-  image: vllm/vllm-openai-rocm:nightly-1dc464d42681d22f38caf1fdc1eb632dc4421c45
+  image: vllm/vllm-openai-rocm:nightly
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:mi355x-amds
@@ -714,6 +715,8 @@ kimik3-fp4-mi355x-vllm-disagg-agentic:
           additional-settings:
           - "PREFILL_NODES=1"
           - "GPU_MEMORY_UTILIZATION=0.90"
+          - "LMCACHE_CHUNK_SIZE=12288"
+          - "LMCACHE_L1_SIZE_GB=1799"
           - "IX_AIPERF_TOKENIZER=moonshotai/Kimi-K3"
           - "VLLM_K3_FORK_REF=yichaozhu/k3-tpdcp-hetero"
           - "VLLM_K3_FORK_SHA=f1870840bf1fb81564204ae6a26ca625570851f9"
@@ -730,7 +733,7 @@ kimik3-fp4-mi355x-vllm-disagg-agentic:
           - "VLLM_K3_FORK_SHA=f1870840bf1fb81564204ae6a26ca625570851f9"
           - "HF_HUB_CACHE=/models/.cache/huggingface/hub"
           - "DECODE_DCP_COMM=a2a"
-          - "DECODE_CP_KV_CACHE_INTERLEAVE_SIZE=1"
+          - "DECODE_CP_KV_CACHE_INTERLEAVE_SIZE=1536"
 
 dsr1-fp4-mi355x-sglang-disagg:
   image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519

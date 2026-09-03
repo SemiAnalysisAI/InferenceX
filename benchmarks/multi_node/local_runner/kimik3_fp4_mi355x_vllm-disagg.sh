@@ -36,7 +36,7 @@ export MODEL="${MODEL:-moonshotai/Kimi-K3}"
 export MODEL_NAME="${MODEL_NAME:-Kimi-K3}"
 export MODEL_PATH="${MODEL_PATH:-/it-share/hf_cache}"
 export MODEL_DIR="${MODEL_DIR:-$MODEL_PATH}"
-export CONTAINER_IMAGE="${CONTAINER_IMAGE:-vllm/vllm-openai-rocm:nightly-1dc464d42681d22f38caf1fdc1eb632dc4421c45}"
+export CONTAINER_IMAGE="${CONTAINER_IMAGE:-vllm/vllm-openai-rocm:nightly}"
 export IMAGE="${IMAGE:-$CONTAINER_IMAGE}"
 export VLLM_ROUTER_IMAGE="${VLLM_ROUTER_IMAGE:-vllm/vllm-router:nightly}"
 
@@ -72,7 +72,7 @@ export DECODE_EP="${DECODE_EP:-1}"
 export DECODE_DP_ATTN="${DECODE_DP_ATTN:-false}"
 export DECODE_DCP_SIZE="${DECODE_DCP_SIZE:-8}"
 export DECODE_DCP_COMM="${DECODE_DCP_COMM:-a2a}"
-export DECODE_CP_KV_CACHE_INTERLEAVE_SIZE="${DECODE_CP_KV_CACHE_INTERLEAVE_SIZE:-1}"
+export DECODE_CP_KV_CACHE_INTERLEAVE_SIZE="${DECODE_CP_KV_CACHE_INTERLEAVE_SIZE:-1536}"
 
 # --- KV transfer: MoRIIO RDMA P/D + optional LMCache MP -------------------------
 export KV_OFFLOADING="${KV_OFFLOADING:-dram}"
@@ -82,6 +82,8 @@ else
     export KV_OFFLOAD_BACKEND="${KV_OFFLOAD_BACKEND:-lmcache-k3}"
 fi
 export TOTAL_CPU_DRAM_GB="${TOTAL_CPU_DRAM_GB:-1799}"
+export LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-1799}"
+export LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-12288}"
 
 # --- vLLM K3 MoRIIO/KDA fork overlay --------------------------------------------
 export VLLM_K3_FORK_REPO="${VLLM_K3_FORK_REPO:-https://github.com/YukioZzz/vllm}"
