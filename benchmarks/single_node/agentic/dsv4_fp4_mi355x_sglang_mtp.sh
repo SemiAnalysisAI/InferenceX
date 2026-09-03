@@ -74,6 +74,7 @@ export SGLANG_USE_ROCM700A=0
 export SGLANG_HACK_FLASHMLA_BACKEND=unified_kv_triton
 export AITER_BF16_FP8_MOE_BOUND=0
 export TORCH_BLAS_PREFER_HIPBLASLT=1
+export HSA_NO_SCRATCH_RECLAIM=0
 # aiter batched GEMM for the absorbed MLA projections, carried by the v0.5.18
 # image and off by default in environ.py.
 export SGLANG_OPT_USE_AITER_BATCHED_GEMM=1
@@ -134,13 +135,14 @@ SGLANG_BACKEND_PORT="$PORT"
 # cap; same value the multi-node DeepSeek-V4-Pro-AgentX no_dp profile uses.
 if [ "$TP" -eq 8 ]; then
     CHUNKED_PREFILL_SIZE=16384
+    MEM_FRACTION_STATIC="${MEM_FRACTION_STATIC:-0.86}"
 elif [ "$TP" -eq 4 ]; then
     CHUNKED_PREFILL_SIZE=8192
+    MEM_FRACTION_STATIC="${MEM_FRACTION_STATIC:-0.89}"
 else
     echo "Error: unsupported TP '$TP' (expected: 4 or 8)" >&2
     exit 1
 fi
-MEM_FRACTION_STATIC="${MEM_FRACTION_STATIC:-0.90}"
 PARALLEL_ARGS=(--tensor-parallel-size "$TP")
 SHARED_EXPERTS_ARGS=(--enforce-shared-experts-fusion)
 SWA_FULL_TOKENS_RATIO="${SWA_FULL_TOKENS_RATIO:-0.10}"
@@ -229,6 +231,7 @@ SGLANG_CMD=(
     --trust-remote-code
     "${PARALLEL_ARGS[@]}"
     --attention-backend dsv4
+    --enable-deepseek-v4-fp4-indexer
     --page-size 256
     --swa-full-tokens-ratio "$SWA_FULL_TOKENS_RATIO"
     --kv-cache-dtype fp8_e4m3

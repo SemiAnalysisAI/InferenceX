@@ -6823,15 +6823,26 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2774
 
 - config-keys:
+    - glm5.2-fp4-b200-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Pin the GLM-5.2 B200 SGLang AgentX curve to lmsysorg/sglang:nightly-dev-cu13-20260901-07c8f729, which includes FlashInfer 0.6.18's BF16 TRTLLM MoE allocation fix."
+    - "Use a 169 GB/rank HiCache target pool at c12 and c16 while retaining ratio mode for lower concurrencies."
+    - "Isolate SGLang runtime caches per Slurm allocation to prevent concurrent sweep cells from sharing per-rank cache files."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2808
+
+- config-keys:
     - dsv4-fp4-mi355x-sglang-agentic-mtp
   scenario-type:
     - agentic-coding
   description:
     - "Update image from lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260829 to lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260831."
-    - "Add a DP-attention arm: tp 8, ep 1, dp-attn true, hicache host KV tier, concurrency [64, 96, 128]. It runs behind sglang-router with consistent hashing on the AIPerf correlation id so multi-turn sessions stay on the DP rank holding their prefix."
+    - "Add a DP-attention arm: tp 8, ep 1, dp-attn true, hicache host KV tier, concurrency [64, 96, 128, 160]. It runs behind sglang-router with consistent hashing on the AIPerf correlation id so multi-turn sessions stay on the DP rank holding their prefix."
+    - "Serve with --enable-deepseek-v4-fp4-indexer and set HSA_NO_SCRATCH_RECLAIM=0 on all arms."
     - "DP-attention serving flags: --enable-two-batch-overlap, --enable-dp-attention-local-control-broadcast, --tokenizer-worker-num equal to TP, --stream-interval 20 and --prefill-decode-interval 10, alongside the existing --enable-prefill-delayer. Chunked prefill now scales the per-TP base by the DP degree instead of a fixed 8192."
     - "Shared-experts fusion is now per-arm: kept enforced on the tensor-parallel arms and disabled under DP attention, matching the DP baselines."
     - "GPU_MAX_HW_QUEUES is now set explicitly per-arm: 2 on the tensor-parallel arms and 5 under DP attention, the documented companion to two-batch overlap."
-    - "Raise mem-fraction-static from 0.89 to 0.90. swa-full-tokens-ratio becomes per-arm: 0.10 on the tensor-parallel arms as before, 0.15 under DP attention."
+    - "mem-fraction-static becomes per-TP: 0.86 on the TP8 arms, both with and without DP attention, and 0.89 unchanged on TP4. swa-full-tokens-ratio becomes per-arm: 0.10 on the tensor-parallel arms as before, 0.15 under DP attention."
     - "Drop concurrency 2 and 10 from the TP4 arm, leaving [1, 4, 8], and drop concurrency 16 from the TP8 hicache arm, leaving [32, 48]. Concurrency 16 remains on the TP8 no-offload arm."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2800
