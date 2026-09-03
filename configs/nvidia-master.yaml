@@ -8049,7 +8049,7 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-agg:
           - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
           - "CONFIG_FILE=recipes/vllm/deepseek-v4/agentic/agg-gb300-tp4-mtp-agentic.yaml"
 dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
-  image: ttl.sh/cquil11-vllm-tier-pd-recovery-4d3c4a23-arm64-20260903:24h
+  image: ttl.sh/cquil11-vllm-tier-pd-block-state-0d8739d0-arm64-20260903:24h
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:gb300-nv

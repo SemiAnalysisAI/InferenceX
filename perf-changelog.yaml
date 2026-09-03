@@ -6905,3 +6905,12 @@
     - "Standardize all remaining GB300 partition overrides in this validation branch on batch_1, including the DeepSeek-V4 and GLM-5.2 TensorRT-LLM configs. Preserve historical changelog entries."
     - "Keep the official validation sweep limited to the existing vLLM P/D concurrency-256 point and its full evaluation; its launcher already defaults to batch_1. No image, topology, warmup, or profiling changes."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2797
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use the 0d8739d0 Python-only validation image with upstream PR #54853 complete connector block tables and PR #54643 rejected Mooncake-load handling, fixing the missing-current-block-table assertion observed in the P/D warmup."
+    - "Preserve the metric implementation, DEP4/DEP16 topology, single concurrency-256 point, full evaluation, canonical warmup, and one-hour profile."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2797
