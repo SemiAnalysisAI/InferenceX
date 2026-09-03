@@ -343,7 +343,7 @@ export DOCKER_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_${MODEL_NAME}_${S
 # vLLM external router container.
 # NOTE: vllm/vllm-router only retains ~16 recent nightlies on Docker Hub; older
 # dated tags are garbage-collected (manifest unknown)
-VLLM_ROUTER_IMAGE="${VLLM_ROUTER_IMAGE:-vllm/vllm-router:nightly-20260716-1fbcde7}"
+VLLM_ROUTER_IMAGE="${VLLM_ROUTER_IMAGE:-vllm/vllm-router:nightly-20260830-1d10e71}"
 ROUTER_CONT_NAME="router_vllm_${SANITIZED_USER}_${SLURM_JOB_ID}"
 # Separate agentic benchmark-client container (see CLIENT_IMAGE handling below).
 CLIENT_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_client_${SLURM_JOB_ID}"
@@ -451,6 +451,9 @@ DOCKER_ENV_COMMON=(
     -e PREFILL_NUM_WORKERS=\$PREFILL_NUM_WORKERS
     -e PREFILL_ENABLE_EP=\$PREFILL_ENABLE_EP
     -e PREFILL_ENABLE_DP=\$PREFILL_ENABLE_DP
+    -e PREFILL_DCP_SIZE=\${PREFILL_DCP_SIZE:-1}
+    -e PREFILL_DCP_COMM=\${PREFILL_DCP_COMM:-a2a}
+    -e PREFILL_CP_KV_CACHE_INTERLEAVE_SIZE=\${PREFILL_CP_KV_CACHE_INTERLEAVE_SIZE:-1}
     # process_agentic_result.py reads these (distinct from the ENABLE_* launch
     # booleans above) for agg_bmk.json's parallelism metadata; without them it
     # defaulted to ep=1/dp_attention=false even for DEP8 arms.
@@ -465,7 +468,30 @@ DOCKER_ENV_COMMON=(
     -e KV_OFFLOADING=\${KV_OFFLOADING:-none}
     -e KV_OFFLOAD_BACKEND=\${KV_OFFLOAD_BACKEND:-}
     -e KV_OFFLOAD_BACKEND_METADATA=\"\${KV_OFFLOAD_BACKEND_METADATA:-}\"
+    -e KV_LOAD_FAILURE_POLICY=\${KV_LOAD_FAILURE_POLICY:-recompute}
+    -e LMCACHE_GIT_REF=\${LMCACHE_GIT_REF:-}
+    -e LMCACHE_SRC=\${LMCACHE_SRC:-}
+    -e LMCACHE_L1_SIZE_GB=\${LMCACHE_L1_SIZE_GB:-}
+    -e LMCACHE_L1_INIT_SIZE_GB=\${LMCACHE_L1_INIT_SIZE_GB:-}
+    -e LMCACHE_HOST=\${LMCACHE_HOST:-}
+    -e LMCACHE_PORT=\${LMCACHE_PORT:-}
+    -e LMCACHE_HTTP_PORT=\${LMCACHE_HTTP_PORT:-}
+    -e LMCACHE_CHUNK_SIZE=\${LMCACHE_CHUNK_SIZE:-}
+    -e LMCACHE_MQ_TIMEOUT=\${LMCACHE_MQ_TIMEOUT:-}
+    -e LMCACHE_MAX_CPU_WORKERS=\${LMCACHE_MAX_CPU_WORKERS:-}
+    -e LMCACHE_MAX_GPU_WORKERS=\${LMCACHE_MAX_GPU_WORKERS:-}
+    -e LMCACHE_EVICTION_POLICY=\${LMCACHE_EVICTION_POLICY:-}
+    -e LMCACHE_TRANSFER_MODE=\${LMCACHE_TRANSFER_MODE:-}
+    -e LMCACHE_SHM_NAME=\${LMCACHE_SHM_NAME:-}
+    -e LMCACHE_READY_TIMEOUT_S=\${LMCACHE_READY_TIMEOUT_S:-}
+    -e LMCACHE_ON_DECODE=\${LMCACHE_ON_DECODE:-false}
     -e TOTAL_CPU_DRAM_GB=\${TOTAL_CPU_DRAM_GB:-}
+    -e SERVER_UP_TIMEOUT=\${SERVER_UP_TIMEOUT:-}
+    -e VLLM_K3_FORK_REF=\${VLLM_K3_FORK_REF:-}
+    -e VLLM_K3_FORK_REPO=\${VLLM_K3_FORK_REPO:-}
+    -e VLLM_K3_FORK_SHA=\${VLLM_K3_FORK_SHA:-}
+    -e VLLM_K3_FORK_TOKEN=\${VLLM_K3_FORK_TOKEN:-}
+    -e IX_AIPERF_TOKENIZER=\${IX_AIPERF_TOKENIZER:-}
     -e ENABLE_METRICS=\${ENABLE_METRICS:-0}
     -e PREFILL_ROUTER_POLICY=\${PREFILL_ROUTER_POLICY:-random}
     -e DECODE_ROUTER_POLICY=\${DECODE_ROUTER_POLICY:-random}
@@ -476,11 +502,16 @@ DOCKER_ENV_COMMON=(
     -e DECODE_NUM_WORKERS=\$DECODE_NUM_WORKERS
     -e DECODE_ENABLE_EP=\$DECODE_ENABLE_EP
     -e DECODE_ENABLE_DP=\$DECODE_ENABLE_DP
+    -e DECODE_DCP_SIZE=\${DECODE_DCP_SIZE:-1}
+    -e DECODE_DCP_COMM=\${DECODE_DCP_COMM:-a2a}
+    -e DECODE_CP_KV_CACHE_INTERLEAVE_SIZE=\${DECODE_CP_KV_CACHE_INTERLEAVE_SIZE:-1}
     # See PREFILL_EP/PREFILL_DP_ATTN comment above -- decode counterpart.
     -e DECODE_EP=\${DECODE_EP:-1}
     -e DECODE_DP_ATTN=\${DECODE_DP_ATTN:-false}
     -e DECODE_MTP_SIZE=\$DECODE_MTP_SIZE
     -e IS_MULTINODE=\$IS_MULTINODE
+    -e IBDEVICES=\${IBDEVICES:-}
+    -e MORI_RDMA_TC=\${MORI_RDMA_TC:-}
     -e DRY_RUN=\${DRY_RUN:-0}
     # SWE-bench agentic eval runs inside this container and needs Modal/HF
     # credentials to launch sandboxes and download datasets.
@@ -598,9 +629,11 @@ echo \"Rank \$SLURM_PROCID on \$(hostname)\"
 eval \"\$DOCKER_CMD_DETECT\"
 echo \"[docker-detect] rank \$SLURM_PROCID: DOCKER_CMD=\$DOCKER_CMD\"
 
-# Enable out-of-tree RDMA library mounts for atom-disagg (mooncake requires host RDMA stack)
+# Enable out-of-tree RDMA library mounts on MI355X ionic/bnxt nodes. Required for
+# atom-disagg (mooncake) and vllm-disagg (MoRIIO MultiConnector); container bundled
+# libibverbs/libionic may be ABI-incompatible with the host kernel drivers.
 RDMA_MOUNTS=()
-if [[ "$ENGINE" == "atom-disagg" ]]; then
+if [[ "$ENGINE" == "atom-disagg" || "$ENGINE" == "vllm-disagg" ]]; then
 
 # When the container base OS differs from the host (e.g. Ubuntu 24.04 image
 # on a 22.04 host), the container's bundled libibverbs/libionic may be
@@ -674,10 +707,10 @@ if [[ \${#RDMA_MOUNTS[@]} -gt 0 ]]; then
 else
     echo \"[rdma] no out-of-tree RDMA mounts needed\"
 fi
-fi  # end: if ENGINE == atom-disagg
+fi  # end: if ENGINE needs host RDMA bind-mounts
 
 # Pre-clean (idempotent): stop then force-remove so GPU VRAM is released
-# before the drain gate. stop-only left containers in Created/Exited state
+# before the sanity gate. stop-only left containers in Created/Exited state
 # on some nodes.
 \$DOCKER_CMD ps -aq --filter \"$CONT_FILTER\" | xargs -r \$DOCKER_CMD rm -f || true
 \$DOCKER_CMD ps -aq | xargs -r \$DOCKER_CMD stop -t 15 || true

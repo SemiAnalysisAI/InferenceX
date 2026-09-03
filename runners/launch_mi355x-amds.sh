@@ -98,11 +98,27 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     # Give slurm time to start the job and create log file
     sleep 10
 
-    # Wait for log file to appear (also check job is still alive)
+    # Wait for the job to be scheduled and create its log file.
+    #
+    # sbatch is asynchronous, so the job sits PENDING until Slurm finds nodes.
+    # A PENDING job is still listed by squeue, so the liveness check below does
+    # not fire for it -- without a deadline this loop waits for a start that may
+    # never come and burns the whole GH Actions timeout (a K3 run once polled
+    # for 6h against a job that never left PENDING because --exclusive needs
+    # completely empty nodes). Bound it and report why it never started.
+    SCHEDULE_TIMEOUT_S="${SLURM_SCHEDULE_TIMEOUT_S:-5400}"
+    wait_start=$(date +%s)
     while ! ls "$LOG_FILE" &>/dev/null; do
         if ! squeue -u "$USER" --noheader --format='%i' | grep -q "$JOB_ID"; then
             echo "ERROR: Job $JOB_ID failed before creating log file"
             scontrol show job "$JOB_ID"
+            exit 1
+        fi
+        if (( $(date +%s) - wait_start >= SCHEDULE_TIMEOUT_S )); then
+            echo "ERROR: Job $JOB_ID still not started after ${SCHEDULE_TIMEOUT_S}s" >&2
+            squeue -j "$JOB_ID" -o "%.10i %.9T %.20R %.20S" || true
+            scontrol show job "$JOB_ID" || true
+            scancel "$JOB_ID" || true
             exit 1
         fi
         sleep 5

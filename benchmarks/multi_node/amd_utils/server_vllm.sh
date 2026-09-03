@@ -1,4 +1,4 @@
-#!/bin/bash
+﻿#!/bin/bash
 # vLLM Disaggregated Server Launcher with Model-Specific Configurations
 # =============================================================================
 #
@@ -173,18 +173,123 @@ fi
 if [[ "${PREFILL_ENABLE_EP:-false}" == "true" ]] && ! echo "$PREFILL_SERVER_CONFIG" | grep -q -- '--enable-expert-parallel'; then
     PREFILL_SERVER_CONFIG+=" --enable-expert-parallel"
 fi
-if [[ "${PREFILL_ENABLE_DP:-false}" == "true" ]] && ! echo "$PREFILL_SERVER_CONFIG" | grep -q -- '--enable-dp-attention'; then
-    PREFILL_SERVER_CONFIG+=" --enable-dp-attention"
-fi
 if [[ "${DECODE_ENABLE_EP:-false}" == "true" ]] && ! echo "$DECODE_SERVER_CONFIG" | grep -q -- '--enable-expert-parallel'; then
     DECODE_SERVER_CONFIG+=" --enable-expert-parallel"
 fi
-if [[ "${DECODE_ENABLE_DP:-false}" == "true" ]] && ! echo "$DECODE_SERVER_CONFIG" | grep -q -- '--enable-dp-attention'; then
-    DECODE_SERVER_CONFIG+=" --enable-dp-attention"
-fi
+
+apply_vllm_dp_config() {
+    local cfg="$1"
+    local parallel_size="$2"
+    local enabled="${3:-false}"
+
+    cfg=$(echo "$cfg" | sed -E 's/[[:space:]]*--enable-dp-attention//g')
+    cfg=$(echo "$cfg" | sed -E 's/[[:space:]]*--data-parallel-size[[:space:]]+[0-9]+//g')
+    if [[ "$enabled" == "true" ]]; then
+        cfg=$(echo "$cfg" | sed -E "s/--tensor-parallel-size[[:space:]]+[0-9]+/--tensor-parallel-size 1 --data-parallel-size ${parallel_size}/")
+    fi
+    echo "$cfg"
+}
+
+apply_vllm_dcp_config() {
+    local cfg="$1"
+    local dcp_size="${2:-1}"
+    local backend="${3:-a2a}"
+    local interleave="${4:-1}"
+
+    cfg=$(echo "$cfg" | sed -E 's/[[:space:]]*--decode-context-parallel-size[[:space:]]+[0-9]+//g')
+    cfg=$(echo "$cfg" | sed -E 's/[[:space:]]*--dcp-comm-backend[[:space:]]+[^[:space:]]+//g')
+    cfg=$(echo "$cfg" | sed -E 's/[[:space:]]*--cp-kv-cache-interleave-size[[:space:]]+[0-9]+//g')
+    if [[ "$dcp_size" != "1" ]]; then
+        cfg+=" --decode-context-parallel-size ${dcp_size}"
+        cfg+=" --dcp-comm-backend ${backend}"
+        cfg+=" --cp-kv-cache-interleave-size ${interleave}"
+    fi
+    echo "$cfg"
+}
+
+PREFILL_SERVER_CONFIG="$(apply_vllm_dp_config "$PREFILL_SERVER_CONFIG" "${PREFILL_TP_SIZE}" "${PREFILL_ENABLE_DP:-false}")"
+DECODE_SERVER_CONFIG="$(apply_vllm_dp_config "$DECODE_SERVER_CONFIG" "${DECODE_TP_SIZE}" "${DECODE_ENABLE_DP:-false}")"
+PREFILL_SERVER_CONFIG="$(apply_vllm_dcp_config "$PREFILL_SERVER_CONFIG" "${PREFILL_DCP_SIZE:-1}" "${PREFILL_DCP_COMM:-a2a}" "${PREFILL_CP_KV_CACHE_INTERLEAVE_SIZE:-1}")"
+DECODE_SERVER_CONFIG="$(apply_vllm_dcp_config "$DECODE_SERVER_CONFIG" "${DECODE_DCP_SIZE:-1}" "${DECODE_DCP_COMM:-a2a}" "${DECODE_CP_KV_CACHE_INTERLEAVE_SIZE:-1}")"
 
 echo "PREFILL_SERVER_CONFIG (after TP/EP/DP): $PREFILL_SERVER_CONFIG"
 echo "DECODE_SERVER_CONFIG (after TP/EP/DP): $DECODE_SERVER_CONFIG"
+
+case "${KV_OFFLOADING:-none}" in
+    none) ;;
+    dram)
+        if [[ "${KV_OFFLOAD_BACKEND:-}" != "lmcache-k3" ]]; then
+            echo "ERROR: vLLM disagg DRAM offload requires KV_OFFLOAD_BACKEND=lmcache-k3" >&2
+            exit 1
+        fi
+        ;;
+    *)
+        echo "ERROR: vLLM disagg supports KV_OFFLOADING=none or dram" >&2
+        exit 1
+        ;;
+esac
+
+lmcache_attached_to_role() {
+    local mori_role="$1"
+    [[ "${KV_OFFLOADING:-none}" == "dram" ]] || return 1
+    [[ "$mori_role" != "kv_consumer" || "${LMCACHE_ON_DECODE:-false}" == "true" ]]
+}
+
+ensure_lmcache_kv_offload() {
+    local mori_role="$1"
+    lmcache_attached_to_role "$mori_role" || return 0
+    [[ "${KV_OFFLOADING:-none}" == "dram" ]] || return 0
+    [[ -z "${LMCACHE_SETUP_DONE:-}" ]] || return 0
+
+    # shellcheck source=/dev/null
+    . "$(dirname "${BASH_SOURCE[0]}")/lmcache_mp.sh"
+    lmcache_mp_install || exit 1
+    lmcache_mp_assert_hybrid_ok || exit 1
+    lmcache_mp_start "/run_logs/slurm_job-${SLURM_JOB_ID}" "$host_name" || exit 1
+    LMCACHE_SETUP_DONE=1
+}
+
+build_kv_transfer_config_json() {
+    local mori_role="$1"
+    if ! lmcache_attached_to_role "$mori_role"; then
+        cat <<EOF
+{"kv_connector": "MoRIIOConnector", "kv_role": "${mori_role}", "kv_load_failure_policy": "${KV_LOAD_FAILURE_POLICY:-recompute}", "kv_connector_extra_config": {"proxy_ip": "${NODE0_ADDR}", "proxy_ping_port": "${PROXY_PING_PORT}", "http_port": "${SERVER_PORT}", "backend": "${MORIIO_BACKEND:-rdma}", "read_mode": true}}
+EOF
+        return
+    fi
+
+    # shellcheck source=/dev/null
+    . "$(dirname "${BASH_SOURCE[0]}")/lmcache_mp.sh"
+    local lmcache_child
+    lmcache_child="$(lmcache_mp_connector_json)"
+    LMCACHE_CHILD_JSON="$lmcache_child" MORI_KV_ROLE="$mori_role" \
+        NODE0_ADDR="$NODE0_ADDR" PROXY_PING_PORT="$PROXY_PING_PORT" \
+        SERVER_PORT="$SERVER_PORT" MORIIO_BACKEND="${MORIIO_BACKEND:-rdma}" \
+        python3 -c '
+import json, os
+print(json.dumps({
+    "kv_connector": "MultiConnector",
+    "kv_role": "kv_both",
+    "kv_load_failure_policy": os.environ.get("KV_LOAD_FAILURE_POLICY") or "recompute",
+    "kv_connector_extra_config": {
+        "connectors": [
+            {
+                "kv_connector": "MoRIIOConnector",
+                "kv_role": os.environ["MORI_KV_ROLE"],
+                "kv_connector_extra_config": {
+                    "proxy_ip": os.environ["NODE0_ADDR"],
+                    "proxy_ping_port": os.environ["PROXY_PING_PORT"],
+                    "http_port": os.environ["SERVER_PORT"],
+                    "backend": os.environ["MORIIO_BACKEND"],
+                    "read_mode": True,
+                },
+            },
+            json.loads(os.environ["LMCACHE_CHILD_JSON"]),
+        ],
+    },
+}))
+'
+}
 
 # =============================================================================
 # Container Synchronization
@@ -219,6 +324,13 @@ done
 echo "Prefill node IPs: ${PREFILL_ARGS}"
 echo "Decode  node IPs: ${DECODE_ARGS}"
 
+SERVER_METRICS_URLS=()
+SERVER_FLUSH_URLS=()
+for ip in "${IP_ARRAY[@]}"; do
+    SERVER_METRICS_URLS+=("http://${ip}:${SERVER_PORT}/metrics")
+    SERVER_FLUSH_URLS+=("http://${ip}:${SERVER_PORT}")
+done
+
 # MoRI-IO proxy ZMQ registration port (must match vllm-router --vllm-discovery-address)
 PROXY_PING_PORT="${PROXY_PING_PORT:-36367}"
 
@@ -252,6 +364,8 @@ if [ "$NODE_RANK" -eq 0 ]; then
     echo "================================================"
 
     setup_vllm_env
+    ensure_lmcache_kv_offload kv_producer
+    KV_TRANSFER_JSON="$(build_kv_transfer_config_json kv_producer)"
 
     for env_pair in ${PREFILL_MODEL_ENVS}; do
         export "$env_pair"
@@ -266,7 +380,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         --served-model-name ${SERVED_MODEL} \
         --port $SERVER_PORT \
         --trust-remote-code \
-        --kv-transfer-config '{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_producer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\", \"read_mode\": true}}' \
+        --kv-transfer-config '${KV_TRANSFER_JSON}' \
         ${PREFILL_SERVER_CONFIG}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -287,7 +401,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
             --node-ips ${IPADDRS} \
             --node-ports $SERVER_PORT \
             --wait-for-all-ports \
-            --timeout 1800
+            --timeout "${SERVER_UP_TIMEOUT:-1800}"
     fi
 
     echo "Congratulations!!! All prefill and decode servers are up . . ."
@@ -312,10 +426,22 @@ if [ "$NODE_RANK" -eq 0 ]; then
     cd $WS_PATH
 
     export ROUTER_PORT=$ROUTER_PORT
-    BENCH_CMD="bash $WS_PATH/bench.sh ${xP} ${yD} $((PREFILL_TP_SIZE*xP)) $((DECODE_TP_SIZE*yD)) \
-        $MODEL_DIR $MODEL_NAME /run_logs/slurm_job-${SLURM_JOB_ID} ${BENCH_INPUT_LEN} \
-        ${BENCH_OUTPUT_LEN} \"${BENCH_MAX_CONCURRENCY}\" ${BENCH_REQUEST_RATE} \
-        ${BENCH_RANDOM_RANGE_RATIO} ${BENCH_NUM_PROMPTS_MULTIPLIER}"
+    if [[ "${IS_AGENTIC:-0}" == "1" || "${IS_AGENTIC:-}" == "true" ]]; then
+        SERVER_FLUSH_URLS_CSV=$(IFS=,; echo "${SERVER_FLUSH_URLS[*]}")
+        export SERVER_FLUSH_URLS_CSV
+        if [[ "${ENABLE_METRICS:-0}" == "1" ]]; then
+            AIPERF_SERVER_METRICS_URLS=$(IFS=,; echo "${SERVER_METRICS_URLS[*]}")
+            export AIPERF_SERVER_METRICS_URLS
+        fi
+        export ENGINE="${FRAMEWORK:-vllm-disagg}"
+        BENCH_CMD="bash $WS_PATH/trace_replay.sh \
+            $MODEL_DIR $MODEL_NAME $BENCH_MAX_CONCURRENCY /run_logs/slurm_job-${SLURM_JOB_ID}"
+    else
+        BENCH_CMD="bash $WS_PATH/bench.sh ${xP} ${yD} $((PREFILL_TP_SIZE*xP)) $((DECODE_TP_SIZE*yD)) \
+            $MODEL_DIR $MODEL_NAME /run_logs/slurm_job-${SLURM_JOB_ID} ${BENCH_INPUT_LEN} \
+            ${BENCH_OUTPUT_LEN} \"${BENCH_MAX_CONCURRENCY}\" ${BENCH_REQUEST_RATE} \
+            ${BENCH_RANDOM_RANGE_RATIO} ${BENCH_NUM_PROMPTS_MULTIPLIER}"
+    fi
 
     if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
         echo "EVAL_ONLY mode: skipping throughput benchmark"
@@ -415,6 +541,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         sleep 2
         pkill -f "vllm serve" 2>/dev/null || true
     fi
+    declare -F lmcache_mp_stop >/dev/null && lmcache_mp_stop
 
     if [[ "${EVAL_FAILED:-0}" -eq 1 ]]; then
         echo "ERROR: eval failed; exiting node-0 with rc=1"
@@ -426,6 +553,8 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$xP" ]; then
     echo "Using prefill config: $PREFILL_SERVER_CONFIG"
 
     setup_vllm_env
+    ensure_lmcache_kv_offload kv_producer
+    KV_TRANSFER_JSON="$(build_kv_transfer_config_json kv_producer)"
 
     for env_pair in ${PREFILL_MODEL_ENVS}; do
         export "$env_pair"
@@ -437,7 +566,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$xP" ]; then
         --served-model-name ${SERVED_MODEL} \
         --port $SERVER_PORT \
         --trust-remote-code \
-        --kv-transfer-config '{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_producer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\", \"read_mode\": true}}' \
+        --kv-transfer-config '${KV_TRANSFER_JSON}' \
         ${PREFILL_SERVER_CONFIG}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -476,12 +605,15 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$xP" ]; then
 
     echo "Killing the prefill server"
     [[ "$DRY_RUN" -eq 0 ]] && kill $prefill_pid 2>/dev/null || true
+    declare -F lmcache_mp_stop >/dev/null && lmcache_mp_stop
 
 else
     echo "${host_name}:${host_ip} is Decode Node (Model: ${MODEL_NAME})"
     echo "Using decode config: $DECODE_SERVER_CONFIG"
 
     setup_vllm_env
+    ensure_lmcache_kv_offload kv_consumer
+    KV_TRANSFER_JSON="$(build_kv_transfer_config_json kv_consumer)"
 
     for env_pair in ${DECODE_MODEL_ENVS}; do
         export "$env_pair"
@@ -493,7 +625,7 @@ else
         --served-model-name ${SERVED_MODEL} \
         --port $SERVER_PORT \
         --trust-remote-code \
-        --kv-transfer-config '{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_consumer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\", \"read_mode\": true}}' \
+        --kv-transfer-config '${KV_TRANSFER_JSON}' \
         ${DECODE_SERVER_CONFIG}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -532,6 +664,7 @@ else
 
     echo "Killing the decode server"
     [[ "$DRY_RUN" -eq 0 ]] && kill $decode_pid 2>/dev/null || true
+    declare -F lmcache_mp_stop >/dev/null && lmcache_mp_stop
 fi
 
 # echo "Killing the etcd server"

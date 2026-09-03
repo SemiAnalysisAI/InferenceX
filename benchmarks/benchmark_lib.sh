@@ -2010,7 +2010,10 @@ build_replay_cmd() {
     # necessarily a valid HF repo id (e.g. "Qwen3.5-397B-A17B-NVFP4-V2" vs
     # the real "nvidia/Qwen3.5-397B-A17B-NVFP4-V2"), which 404s tokenizer
     # loading. Always pass the real HF id explicitly.
-    REPLAY_CMD+=" --tokenizer $MODEL"
+    replay_tokenizer="${IX_AIPERF_TOKENIZER:-$MODEL}"
+    if [[ -n "$replay_tokenizer" ]]; then
+        REPLAY_CMD+=" --tokenizer $replay_tokenizer"
+    fi
     REPLAY_CMD+=" --concurrency $CONC"
     REPLAY_CMD+=" --benchmark-duration $duration"
     REPLAY_CMD+=" --stats-interval 30"

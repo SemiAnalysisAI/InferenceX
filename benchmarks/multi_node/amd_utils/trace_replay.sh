@@ -55,6 +55,14 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 #       FLUSH_DRAIN_TIMEOUT (default 120s) elapses.
 #   L3 (umbp / mooncake store):         POST /hicache/storage-backend/clear
 #       — HTTP != 200 when L3 is off, tolerated.
+#
+# vLLM speaks neither endpoint. Its equivalent is
+#   POST /reset_prefix_cache?reset_external=<bool>
+# which drops the GPU prefix cache and, with reset_external=true, the
+# connector-managed tier too -- so a vLLM concurrency point can
+# be made as cold as an SGLang one. That route is registered only when the server
+# runs with VLLM_SERVER_DEV_MODE=1; without it every call is a 404 and the sweep
+# silently measures warm-cache carry-over, so the 404 is called out loudly.
 # Best-effort: logs WARN, never hard-fails the sweep.
 clear_kv_caches() {
     local drain_tmo="${FLUSH_DRAIN_TIMEOUT:-120}"
@@ -66,8 +74,44 @@ clear_kv_caches() {
     local -a urls
     IFS=',' read -r -a urls <<< "$urls_csv"
     local url start ok resp code
+    local is_vllm=0
+    [[ "${ENGINE:-}" == vllm* ]] && is_vllm=1
+
     for url in "${urls[@]}"; do
         [[ -n "$url" ]] || continue
+
+        if [[ "$is_vllm" == 1 ]]; then
+            # /reset_prefix_cache?reset_external=true drops the GPU prefix cache and,
+            # when a connector manages one, the external tier as well. It returns
+            # {"success": bool} and reports false (not an HTTP error) while blocks are
+            # still held by running requests or in-flight async offload transfers, so
+            # drain-retry on the body, not just the status.
+            local ext=false
+            [[ "${KV_OFFLOADING:-none}" != "none" ]] && ext=true
+            start=$(date +%s); ok=0; code=000; resp=""
+            while :; do
+                resp=$(curl -s -m 30 -w '\n%{http_code}' \
+                        -X POST "${url}/reset_prefix_cache?reset_external=${ext}" 2>/dev/null)
+                code=$(printf '%s' "$resp" | tail -1)
+                if [[ "$code" == 404 ]]; then
+                    # The route lives behind VLLM_SERVER_DEV_MODE=1. Retrying a
+                    # missing route for the full drain window just burns minutes
+                    # per concurrency point, so say what is wrong and stop.
+                    echo "[clear_caches] WARN ${url}: /reset_prefix_cache is 404 -- the server was not started with VLLM_SERVER_DEV_MODE=1, so caches are NOT being cleared between conc points" >&2
+                    break
+                fi
+                [[ "$code" == 200 ]] && printf '%s' "$resp" | grep -q '"success": *true' && { ok=1; break; }
+                (( $(date +%s) - start >= drain_tmo )) && break
+                sleep 3
+            done
+            if [[ "$ok" == 1 ]]; then
+                echo "[clear_caches] ${url}: prefix cache reset (external=${ext})"
+            elif [[ "$code" != 404 ]]; then
+                echo "[clear_caches] WARN ${url}: reset not confirmed after ${drain_tmo}s (http=${code} body='$(printf '%s' "$resp" | head -1)')" >&2
+            fi
+            continue
+        fi
+
         # L1 + L2: drain-retry until flushed (no-op while requests in flight).
         start=$(date +%s); ok=0; resp=""
         while :; do
