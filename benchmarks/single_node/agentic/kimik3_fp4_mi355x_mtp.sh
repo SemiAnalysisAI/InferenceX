@@ -151,9 +151,13 @@ case "${KV_OFFLOAD_BACKEND:-}" in
 
     # Keep the image's tested torch/ROCm stack and install only LMCache's
     # missing runtime dependencies, same as the MiniMax-M3 lmcache arm.
-    LMCACHE_VERSION="0.5.5.dev60+rocm7.2"
-    LMCACHE_RELEASE="0.5.5rc3"
-    LMCACHE_ROCM_INDEX="https://github.com/LMCache/LMCache/releases/expanded_assets/${LMCACHE_RELEASE}-rocm"
+    # The DCP arm needs the 0.5.5rc3 wheel; the non-DCP arm pins dev60.
+    if [ "${DCP_SIZE:-1}" -gt 1 ]; then
+        LMCACHE_VERSION="0.5.5rc3"
+    else
+        LMCACHE_VERSION="0.5.5.dev60+rocm7.2"
+    fi
+    LMCACHE_ROCM_INDEX="https://github.com/LMCache/LMCache/releases/expanded_assets/nightly-rocm"
     agentic_pip_install --quiet --no-cache-dir --no-deps \
         "sortedcontainers==2.4.0" \
         "opentelemetry-exporter-prometheus==0.61b0" \
