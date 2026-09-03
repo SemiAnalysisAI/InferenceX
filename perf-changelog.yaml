@@ -6839,3 +6839,11 @@
   description:
     - "Run the C48 isolation case from the PR #2804 baseline with only LMCache max-gpu-workers raised from 1 to 2; retain gpu-memory-utilization 0.88 and every other server, cache, and CUDA-graph setting."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2804
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Run only C48 with gpu-memory-utilization 0.90, max-num-seqs 64, maximum CUDA-graph capture size twice concurrency (96), capture sizes 1 through 96, prefill-query quantization enabled, and two LMCache GPU workers; retain every other setting from the PR #2804 baseline."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2804
