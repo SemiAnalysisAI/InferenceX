@@ -144,7 +144,7 @@ llm-d 不是 srt-slurm 路径：InferenceX 自己持有 Slurm allocation，并�
 
 GB200 DSpark AgentX 配置使用 `cluster:gb200-nv`：TP8/DEP8 跨两个节点（8 GPU），1P-DEP8/1D-DEP8 跨四个节点（16 GPU）。ARM64 镜像摘要包含 router v0.10.0；AgentX 不挂载旧版路由器二进制文件。launcher 使用预先存储的 `DeepSeek-V4-Pro-0813` checkpoint，而非旧版 V4-Pro 权重。
 
-`recipe.py` 为吞吐测试注入 DSpark golden AL；`EVAL_ONLY=true` 保留真实验证。Mooncake 嵌入式存储即使设置 `enable_offload: false` 也属于 DRAM 卸载（该开关控制 SSD）。需声明 `kv-offloading: dram`、`kv-offload-backend: { name: mooncake }` 和 `dram-utilization`；运行时将每节点预算均分给四个 GPU rank。普通 TP8/DEP8 声明 `none`。
+`recipe.py` 为吞吐测试注入 DSpark golden AL；`EVAL_ONLY=true` 保留真实验证。保持自适应验证关闭：它根据置信度缩减草稿 token 预算，会改变固定 K 的 golden AL。Mooncake 嵌入式存储即使设置 `enable_offload: false` 也属于 DRAM 卸载（该开关控制 SSD）。需声明 `kv-offloading: dram`、`kv-offload-backend: { name: mooncake }` 和 `dram-utilization`；运行时将每节点预算均分给四个 GPU rank。普通 TP8/DEP8 声明 `none`。
 
 服务发现排除无 API 的 TP follower。`agentic.sh` 检查各服务节点的 vLLM `/metrics`，导出 `AIPERF_METRIC_URLS` 和 `AIPERF_SERVER_METRICS_URLS`，再通过 AIPerf 的 `--server-metrics` 传递。Envoy 和 P/D sidecar 的指标不能替代 vLLM 指标。
 

@@ -144,7 +144,7 @@ A missing/unset `CONFIG_FILE` silently selects the image's `/etc/epp/config.yaml
 
 The GB200 DSpark AgentX keys use `cluster:gb200-nv`: TP8/DEP8 spans two nodes (8 GPUs), and 1P-DEP8/1D-DEP8 spans four (16 GPUs). The ARM64 image digest includes router v0.10.0; AgentX does not mount the legacy router binaries. The launcher uses the staged `DeepSeek-V4-Pro-0813` checkpoint, not the older V4-Pro weights.
 
-`recipe.py` injects DSpark golden AL for throughput; `EVAL_ONLY=true` keeps real verification. Mooncake's embedded store is DRAM offloading even with `enable_offload: false` (the flag controls SSD). Declare `kv-offloading: dram`, `kv-offload-backend: { name: mooncake }`, and `dram-utilization`; the runtime divides each node's budget among its four GPU ranks. Plain TP8/DEP8 declares `none`.
+`recipe.py` injects DSpark golden AL for throughput; `EVAL_ONLY=true` keeps real verification. Keep adaptive verification disabled: its confidence-based draft-budget trimming changes the fixed-K golden AL. Mooncake's embedded store is DRAM offloading even with `enable_offload: false` (the flag controls SSD). Declare `kv-offloading: dram`, `kv-offload-backend: { name: mooncake }`, and `dram-utilization`; the runtime divides each node's budget among its four GPU ranks. Plain TP8/DEP8 declares `none`.
 
 Discovery excludes headless TP followers. `agentic.sh` checks every serving node's vLLM `/metrics`, exports `AIPERF_METRIC_URLS` and `AIPERF_SERVER_METRICS_URLS`, and forwards them through AIPerf's `--server-metrics`. Envoy and P/D-sidecar metrics are not substitutes for vLLM metrics.
 
