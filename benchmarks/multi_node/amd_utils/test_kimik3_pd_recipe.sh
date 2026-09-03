@@ -43,6 +43,7 @@ assert "TOTAL_CPU_DRAM_GB=1799" in settings
 assert "LMCACHE_CHUNK_SIZE=12288" in settings
 assert "LMCACHE_L1_SIZE_GB=1799" in settings
 assert "LMCACHE_MAX_GPU_WORKERS=8" in settings
+assert "SERVER_UP_TIMEOUT=900" in settings
 assert any(item.startswith("VLLM_K3_FORK_SHA=f1870840") for item in settings)
 assert "mooncake" not in repr(recipe).lower()
 
