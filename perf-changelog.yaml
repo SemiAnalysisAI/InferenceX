@@ -6831,3 +6831,11 @@
     - "Run C1, C8, and C14 with TP8 DSpark and LMCache DRAM KV offload; run C40, C44, and C48 with TP8/DCP8 and no speculative decoding."
     - "Use gpu-memory-utilization 0.88 for all six points, a 12288-token LMCache chunk, and a 1536-token DCP KV-cache interleave; C40/C44/C48 retain the 16K batched-token, max-num-seqs 80, and full CUDA-graph profile."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2804
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Run the C48 isolation case from the PR #2804 baseline with only gpu-memory-utilization raised from 0.88 to 0.90; retain one LMCache GPU worker and every other server, cache, and CUDA-graph setting."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2804
