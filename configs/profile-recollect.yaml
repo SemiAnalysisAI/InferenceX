@@ -1,0 +1,16 @@
+# Profile-only variants for re-collecting kernel/op traces on newer engine
+# images than the benchmark matrix pins. Not part of the benchmark sweep.
+dsv4-fp4-b200-vllm-nightly:
+  image: vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-426e59f
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: cluster:b200-nscale
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 1, conc-end: 64 }
