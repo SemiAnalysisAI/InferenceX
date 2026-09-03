@@ -1,4 +1,4 @@
-name: "kimi-k3-vllm-agg-gb300-dcp8-nospec-mooncake-agentic"
+name: "kimi-k3-vllm-agg-gb300-dcp8-dspark4-mooncake-agentic"
 
 model:
   path: "moonshotai/Kimi-K3"
@@ -63,47 +63,38 @@ backend:
       enable_offload: false
   aggregated_environment:
     VLLM_ALLREDUCE_USE_FLASHINFER: "1"
-    VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION: "1"
-    VLLM_USE_V2_MODEL_RUNNER: "1"
-    # Use the direct DCP a2a/gather kernels rather than the collective
-    # fallback, matching the B300 arm (kimik3_fp4_b300_vllm_mtp.sh).
     VLLM_USE_DIRECT_DCP_A2A: "1"
     VLLM_USE_DIRECT_DCP_Q_GATHER: "1"
     VLLM_USE_DIRECT_DCP_KV_GATHER: "1"
     ETCD_LEASE_TTL: "120"
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     VLLM_RPC_TIMEOUT: "600000"
+    VLLM_USE_V2_MODEL_RUNNER: "1"
     VLLM_USE_RUST_FRONTEND: "1"
-    VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "0"
-    VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: "0"
-    PYTHONNOUSERSITE: "1"
-    TORCH_CUDA_ARCH_LIST: "10.0"
-    PYTHONHASHSEED: "42"
-    VLLM_HTTP_TIMEOUT_KEEP_ALIVE: "900"
+    VLLM_MOONCAKE_LOAD_RECV_THREADS: "4"
     MC_SLICE_SIZE: "1048576"
     WITH_NVIDIA_PEERMEM: "0"
-    VLLM_MOONCAKE_LOAD_RECV_THREADS: "4"
+    VLLM_LOG_STATS_INTERVAL: "1"
+
   vllm_config:
     aggregated:
+      kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"compact_group_io":true,"max_load_batch_keys":2,"enable_offload":false}}'
       served-model-name: "moonshotai/Kimi-K3"
+      load-format: "fastsafetensors"
+      kv-cache-dtype: "fp8"
+      gpu-memory-utilization: 0.92
       tensor-parallel-size: 8
       decode-context-parallel-size: 8
       dcp-comm-backend: "a2a"
-      gpu-memory-utilization: 0.92
-      max-num-batched-tokens: 16384
       trust-remote-code: true
-      language-model-only: true
-      load-format: "fastsafetensors"
-      moe-backend: "auto"
-      no-enable-flashinfer-autotune: true
-      enable-prefix-caching: true
-      prefix-match-unit: 128
-      kv-cache-dtype: "fp8"
+      max-cudagraph-capture-size: 512
       stream-interval: 10
+      language-model-only: true
       attention-backend: "TOKENSPEED_MLA"
       attention-config: '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true}'
-      max-cudagraph-capture-size: 1024
-      kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"compact_group_io":true,"max_load_batch_keys":2,"enable_offload":false}}'
+      speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"rejection_sample_method":"block"}'
+      enable-prefix-caching: true
+      prefix-match-unit: 128
 
 sbatch_directives:
   mem: "0"
@@ -120,10 +111,6 @@ benchmark:
   command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
   env:
     INFMAX_CONTAINER_WORKSPACE: "/infmax-workspace"
-    AIPERF_TRACE_IDLE_GAP_CAP_SECONDS: "300"
-    AIPERF_LIVE_FAILED_REQUEST_THRESHOLD: "0.25"
-    AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:"
-    AIPERF_HTTP_TCP_USER_TIMEOUT: "900000"
     RESULT_DIR: "/logs/agentic"
     PORT: "8000"
     IS_MULTINODE: "true"
