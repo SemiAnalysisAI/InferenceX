@@ -17,6 +17,7 @@ models = yaml.safe_load(open(sys.argv[2], encoding="utf-8"))
 recipe = config["kimik3-fp4-mi355x-vllm-disagg-agentic"]
 point = recipe["scenarios"]["agentic-coding"][0]
 arm = point["search-space"][0]
+arm_2p1d = point["search-space"][1]
 assert recipe["image"] == "vllm/vllm-openai-rocm:nightly"
 assert recipe["framework"] == "vllm-disagg"
 assert recipe["kv-p2p-transfer"] == "moriio"
@@ -30,6 +31,11 @@ assert arm["conc-list"] == [40]
 assert arm["kv-offloading"] == "dram"
 assert arm["kv-offload-backend"]["name"] == "lmcache-k3"
 assert arm["kv-offload-backend"]["version"].startswith("git-140819c9")
+assert arm_2p1d["prefill"]["num-worker"] == 2
+assert arm_2p1d["prefill"]["dcp-size"] == 8
+assert arm_2p1d["decode"]["num-worker"] == 1
+assert arm_2p1d["decode"]["dcp-size"] == 8
+assert arm_2p1d["conc-list"] == [70]
 settings = arm["prefill"]["additional-settings"] + arm["decode"]["additional-settings"]
 assert "DECODE_CP_KV_CACHE_INTERLEAVE_SIZE=1536" in settings
 assert "PREFILL_CP_KV_CACHE_INTERLEAVE_SIZE=1536" in settings

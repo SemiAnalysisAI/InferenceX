@@ -739,6 +739,42 @@ kimik3-fp4-mi355x-vllm-disagg-agentic:
           - "HF_HUB_CACHE=/models/.cache/huggingface/hub"
           - "DECODE_DCP_COMM=a2a"
           - "DECODE_CP_KV_CACHE_INTERLEAVE_SIZE=1536"
+      - spec-decoding: "none"
+        conc-list: [ 70 ]
+        kv-offloading: dram
+        kv-offload-backend: { name: lmcache-k3, version: "git-140819c9d57a975dbc5678a6459a218e544cb58b" }
+        prefill:
+          num-worker: 2
+          tp: 8
+          dcp-size: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=2"
+          - "GPU_MEMORY_UTILIZATION=0.90"
+          - "TOTAL_CPU_DRAM_GB=1799"
+          - "LMCACHE_CHUNK_SIZE=12288"
+          - "LMCACHE_L1_SIZE_GB=1799"
+          - "LMCACHE_MAX_GPU_WORKERS=8"
+          - "IX_AIPERF_TOKENIZER=moonshotai/Kimi-K3"
+          - "VLLM_K3_FORK_REF=yichaozhu/k3-tpdcp-hetero"
+          - "VLLM_K3_FORK_SHA=f1870840bf1fb81564204ae6a26ca625570851f9"
+          - "HF_HUB_CACHE=/models/.cache/huggingface/hub"
+          - "PREFILL_DCP_COMM=a2a"
+          - "PREFILL_CP_KV_CACHE_INTERLEAVE_SIZE=1536"
+        decode:
+          num-worker: 1
+          tp: 8
+          dcp-size: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "VLLM_K3_FORK_REF=yichaozhu/k3-tpdcp-hetero"
+          - "VLLM_K3_FORK_SHA=f1870840bf1fb81564204ae6a26ca625570851f9"
+          - "HF_HUB_CACHE=/models/.cache/huggingface/hub"
+          - "DECODE_DCP_COMM=a2a"
+          - "DECODE_CP_KV_CACHE_INTERLEAVE_SIZE=1536"
 
 dsr1-fp4-mi355x-sglang-disagg:
   image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519
