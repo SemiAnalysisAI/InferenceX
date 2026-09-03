@@ -33,7 +33,6 @@ frontend:
     enable-auto-tool-choice: true
     router-mode: "kv"
     router-kv-events: true
-    router-reset-states: true
     router-temperature: "0"
     router-session-affinity-ttl-secs: 14400
     kv-cache-block-size: 128
