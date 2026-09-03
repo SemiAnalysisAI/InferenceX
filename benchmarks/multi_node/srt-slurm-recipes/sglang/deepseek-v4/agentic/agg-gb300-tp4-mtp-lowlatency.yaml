@@ -1,5 +1,4 @@
 name: "agg-gb300-tp4-mtp-lowlatency"
-setup_script: sglang-server-args-config-parser-compat.sh
 
 # Low-latency AgentX aggregate topology: one TP4 worker occupies one
 # four-GPU GB300 node and serves both prefill and decode with DSpark K=6.
@@ -17,7 +16,7 @@ identity:
 
 dynamo:
   install: true
-  wheel: "1.4.0"
+  wheel: "1.5.0.dev20260902"
 
 slurm:
   time_limit: "4:00:00"

@@ -8666,7 +8666,7 @@ dsv4-fp4-gb300-dynamo-sglang-agentic-agg:
   runner: cluster:gb300-nv
   precision: fp4
   framework: dynamo-sglang
-  router: { name: dynamo-router, version: "1.4.0" }
+  router: { name: dynamo-router, version: "1.5.0.dev20260902" }
   multinode: true
   disagg: false
   scenarios:
@@ -8704,7 +8704,7 @@ dsv4-fp4-gb300-dynamo-sglang-agentic-disagg:
   runner: cluster:gb300-nv
   precision: fp4
   framework: dynamo-sglang
-  router: { name: dynamo-router, version: "1.4.0" }
+  router: { name: dynamo-router, version: "1.5.0.dev20260902" }
   kv-p2p-transfer: mooncake
   multinode: true
   disagg: true

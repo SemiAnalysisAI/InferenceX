@@ -1,5 +1,4 @@
 name: "disagg-gb300-2p4d-dep8-dep16-c320-mtp-kvoffload"
-setup_script: sglang-server-args-config-parser-compat.sh
 
 # Agentic-coding SGLang disaggregated Pareto recipe for DeepSeek-V4-Pro on GB300
 # (2P x DEP8 / 4D x DEP16, DSpark K=6 + hierarchical-cache KV offload), tuned for concurrency 320.
@@ -22,7 +21,7 @@ identity:
 
 dynamo:
   install: true
-  wheel: "1.4.0"
+  wheel: "1.5.0.dev20260902"
 
 slurm:
   time_limit: "8:00:00"
