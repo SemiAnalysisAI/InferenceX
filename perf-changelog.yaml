@@ -6837,7 +6837,7 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Update image from lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260829 to lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260831."
+    - "Update image from lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260829 to lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260902."
     - "Add a DP-attention arm: tp 8, ep 1, dp-attn true, hicache host KV tier, concurrency [64, 96, 128, 160]. It runs behind sglang-router with consistent hashing on the AIPerf correlation id so multi-turn sessions stay on the DP rank holding their prefix."
     - "Serve with --enable-deepseek-v4-fp4-indexer and set HSA_NO_SCRATCH_RECLAIM=0 on all arms."
     - "DP-attention serving flags: --enable-two-batch-overlap, --enable-dp-attention-local-control-broadcast, --tokenizer-worker-num equal to TP, --stream-interval 20 and --prefill-decode-interval 10, alongside the existing --enable-prefill-delayer. Chunked prefill now scales the per-TP base by the DP degree instead of a fixed 8192."

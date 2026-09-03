@@ -1742,7 +1742,7 @@ glm5.2-fp4-mi355x-atom-agentic-mtp:
 
 
 dsv4-fp4-mi355x-sglang-agentic-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260831
+  image: lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260902
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:mi355x-amds
