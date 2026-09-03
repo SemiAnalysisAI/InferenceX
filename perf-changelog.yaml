@@ -6831,3 +6831,15 @@
     - "Use a 169 GB/rank HiCache target pool at c12 and c16 while retaining ratio mode for lower concurrencies."
     - "Isolate SGLang runtime caches per Slurm allocation to prevent concurrent sweep cells from sharing per-rank cache files."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2808
+
+- config-keys:
+    - glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a GLM-5.2 concurrency-1 AgentX point using a 1-prefill/1-decode disaggregated topology with TP4 attention-DP prefill and TP8 decode."
+    - "Use MTP depth 5 with the committed golden acceptance target, tensor-parallel MoE on decode, and the CUTEDSL top-k path."
+    - "Align recipe KV offloading with the master config and keep the benchmark client colocated with the frontend orchestrator."
+    - "Add the new concurrency-1 topology to the existing disaggregated configuration key while retaining all published points."
+    - "Enable TensorRT-LLM iteration statistics and require KV-cache server metrics for the new concurrency-1 point."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2720
