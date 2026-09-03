@@ -29,6 +29,38 @@ from generate_sweep_configs import (
 )
 
 
+def test_qwen_gb300_agentic_master_matches_native_offload_recipes():
+    root = Path(__file__).resolve().parents[2]
+    with (root / "configs/nvidia-master.yaml").open() as handle:
+        configs = yaml.safe_load(handle)
+    with (root / "configs/runners.yaml").open() as handle:
+        runners = yaml.safe_load(handle)
+    key = "qwen3.5-fp4-gb300-dynamo-trt-agentic-disagg"
+    config = configs[key]
+    args = argparse.Namespace(
+        config_keys=[key], seq_lens=None, conc=None,
+        scenario_type=["agentic-coding"], runner_node_filter=None,
+    )
+    entries = generate_test_config_sweep(args, {key: config}, runners)
+    assert len(entries) == 6
+    assert sorted(entry["conc"][0] for entry in entries) == [7, 44, 52, 96, 565, 704]
+    for entry in entries:
+        assert entry["kv-offloading"] == "dram"
+        assert entry["kv-offload-backend"] == {"name": "native", "version": "1.3.0rc24"}
+        assert entry["spec-decoding"] == "mtp"
+        settings = entry["prefill"]["additional-settings"]
+        recipe_path = next(value.removeprefix("CONFIG_FILE=") for value in settings
+                           if value.startswith("CONFIG_FILE="))
+        with (root / "benchmarks/multi_node/srt-slurm-recipes" / recipe_path.removeprefix("recipes/")).open() as handle:
+            recipe = yaml.safe_load(handle)
+        assert entry["image"] == recipe["model"]["container"]
+        for role in ("prefill", "decode"):
+            assert recipe["backend"]["trtllm_config"][role]["kv_cache_config"]["host_cache_size"] == 128 * 1024**3
+        # The shared matrix convention reports the prefill node's budget in decimal GB.
+        ranks_per_node = min(entry["prefill"]["tp"], 4)
+        assert entry["total-cpu-dram-gb"] == (128 * 1024**3 * ranks_per_node) // 10**9
+
+
 def test_aggregated_multinode_node_count_uses_explicit_num_nodes():
     entry = {
         "runner": "unknown",
