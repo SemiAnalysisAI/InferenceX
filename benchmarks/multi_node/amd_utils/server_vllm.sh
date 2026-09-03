@@ -38,6 +38,7 @@ BENCH_MAX_CONCURRENCY="${BENCH_MAX_CONCURRENCY:-512}"
 
 DRY_RUN="${DRY_RUN:-0}"
 GPUS_PER_NODE="${GPUS_PER_NODE:-8}"
+SERVER_UP_TIMEOUT="${SERVER_UP_TIMEOUT:-900}"
 
 PREFILL_TP_SIZE="${PREFILL_TP_SIZE:-$GPUS_PER_NODE}"
 DECODE_TP_SIZE="${DECODE_TP_SIZE:-$GPUS_PER_NODE}"
@@ -59,6 +60,16 @@ host_ip=$(ip route get 1.1.1.1 2>/dev/null | awk '/src/ {print $7}')
 rdma_ip=$(hostname -I | tr ' ' '\n' | grep '^192\.168\.' | head -1)
 rdma_ip="${rdma_ip:-$host_ip}"
 host_name=$(hostname)
+
+archive_local_server_logs() {
+    [[ "$DRY_RUN" == 1 ]] && return 0
+    local src="/run_logs/slurm_job-${SLURM_JOB_ID}"
+    local dst="${BENCHMARK_LOGS_DIR:-/benchmark_logs}/logs/slurm_job-${SLURM_JOB_ID}"
+    [[ -d "$src" ]] || return 0
+    mkdir -p "$dst"
+    cp -a "$src"/. "$dst"/ 2>/dev/null || true
+}
+trap archive_local_server_logs EXIT
 
 echo "[INFO] Management IP (barriers/proxy): $host_ip"
 echo "[INFO] RDMA IP (Nixl KV transfer): $rdma_ip"
@@ -401,7 +412,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
             --node-ips ${IPADDRS} \
             --node-ports $SERVER_PORT \
             --wait-for-all-ports \
-            --timeout "${SERVER_UP_TIMEOUT:-1800}"
+            --timeout "$SERVER_UP_TIMEOUT"
     fi
 
     echo "Congratulations!!! All prefill and decode servers are up . . ."
@@ -412,7 +423,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         --node-ports ${ROUTER_PORT} \
         --wait-for-all-health \
         --health-endpoint /health \
-        --timeout 1800"
+        --timeout $SERVER_UP_TIMEOUT"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $HEALTH_BARRIER_CMD"
@@ -584,7 +595,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$xP" ]; then
         --node-ips ${NODE0_ADDR} \
         --node-ports ${ROUTER_PORT} \
         --wait-for-all-ports \
-        --timeout 1800"
+        --timeout $SERVER_UP_TIMEOUT"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BARRIER_CMD"
@@ -643,7 +654,7 @@ else
         --node-ips ${NODE0_ADDR} \
         --node-ports ${ROUTER_PORT} \
         --wait-for-all-ports \
-        --timeout 1800"
+        --timeout $SERVER_UP_TIMEOUT"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BARRIER_CMD"
