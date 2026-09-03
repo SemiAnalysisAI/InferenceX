@@ -9617,7 +9617,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.12.post1" }
-        conc-list: [16, 32, 48, 64]
+        conc-list: [32, 48, 64]
         prefill:
           num-worker: 1
           tp: 8
@@ -9644,52 +9644,6 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
           - "SYNTHETIC_ACCEPTANCE_LENGTH=3.36"
           - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/disagg-gb300-1p3d-dcp8-dcp8-dspark4-mooncake-agentic.yaml"
         decode: { num-worker: 3, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
-# Aggregate global p90-ITL Pareto points. One TP8 x DCP8 worker spans two
-# 4-GPU nodes and serves both phases, so GPUs are counted once.
-kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg:
-  image: vllm/vllm-openai:nightly-dev-arm64-cu13-3696c77
-  model: moonshotai/Kimi-K3
-  model-prefix: kimik3
-  runner: cluster:gb300-nv
-  precision: fp4
-  framework: dynamo-vllm
-  multinode: true
-  disagg: false
-  scenarios:
-    agentic-coding:
-    - dram-utilization: 0.1775
-      search-space:
-      - spec-decoding: mtp
-        kv-offloading: dram
-        kv-offload-backend: { name: mooncake, version: "0.3.12.post1" }
-        conc-list: [32, 36]
-        num-nodes: 2
-        worker:
-          num-worker: 1
-          tp: 8
-          dcp-size: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.36"
-          - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-gb300-dcp8-dspark4-mooncake-agentic.yaml"
-      - spec-decoding: mtp
-        kv-offloading: dram
-        kv-offload-backend: { name: mooncake, version: "0.3.12.post1" }
-        conc-list: [1, 4]
-        num-nodes: 2
-        worker:
-          num-worker: 1
-          tp: 8
-          dcp-size: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.84"
-          - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-gb300-dcp8-dspark7-maxseq2-mooncake-agentic.yaml"
-
 # Aggregate no-spec points measured at concurrency 48 and 70. One TP8 x DCP8 worker
 # spans two 4-GPU nodes and serves both phases.
 kimik3-fp4-gb300-dynamo-vllm-agentic-mooncake-dcp8-agg:
