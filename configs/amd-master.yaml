@@ -719,6 +719,7 @@ kimik3-fp4-mi355x-vllm-disagg-agentic:
           - "TOTAL_CPU_DRAM_GB=1799"
           - "LMCACHE_CHUNK_SIZE=12288"
           - "LMCACHE_L1_SIZE_GB=1799"
+          - "LMCACHE_MAX_GPU_WORKERS=8"
           - "IX_AIPERF_TOKENIZER=moonshotai/Kimi-K3"
           - "VLLM_K3_FORK_REF=yichaozhu/k3-tpdcp-hetero"
           - "VLLM_K3_FORK_SHA=f1870840bf1fb81564204ae6a26ca625570851f9"
