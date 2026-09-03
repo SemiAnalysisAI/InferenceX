@@ -10,6 +10,11 @@
 #     base_flags: str          # Common flags for both prefill and decode
 #     mtp_flags: str           # Appended to decode when DECODE_MTP_SIZE > 0
 #     dp_flags: str            # Appended when DP attention is enabled (prefill or decode)
+#     no_dp_flags: str         # Appended when DP attention is disabled. Mutually exclusive
+#                              # with dp_flags -- use this (not base_flags) for any flag
+#                              # that conflicts with one in dp_flags (e.g. shared-experts
+#                              # fusion), so the two conflicting flags are never both
+#                              # emitted onto the same command line.
 #     ep_flags: str            # Appended when EP is enabled. EP-specific MoE knobs only
 #                              # (a2a backend, deepep mode, ep-dispatch algorithm). With
 #                              # ep=1 these are dropped so the MoE runs tensor-parallel (TP).
@@ -364,14 +369,17 @@ DeepSeek-R1-0528-MXFP4-v2:
       cuda_graph_bs_range: "1-128"
 
 DeepSeek-V4-Pro-AgentX:
-  base_flags: "--enforce-shared-experts-fusion --watchdog-timeout 3600 --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend dsv4 --page-size 256 --swa-full-tokens-ratio 0.1 --tool-call-parser deepseekv4 --reasoning-parser deepseek-v4 --disaggregation-transfer-backend mori --log-level info --log-level-http error"
+  base_flags: "--watchdog-timeout 3600 --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend dsv4 --page-size 256 --swa-full-tokens-ratio 0.1 --tool-call-parser deepseekv4 --reasoning-parser deepseek-v4 --disaggregation-transfer-backend mori --log-level info --log-level-http error"
+  # --enforce-shared-experts-fusion and dp_flags' --disable-shared-experts-fusion
+  # are documented by sglang as mutually exclusive (server_args.py), so each lives
+  # in its own bucket (no_dp_flags / dp_flags) rather than both riding on the
+  # command line at once relying on DeepseekV4ForCausalLM's internal check order.
+  no_dp_flags: "--enforce-shared-experts-fusion"
   # DP-attention overrides mirror the single-node dsv4-fp4-mi355x-sglang-agentic-mtp
   # recipe's `if [ "$DP_ATTENTION" = "true" ]` block (InferenceX PR #2800):
-  # --disable-shared-experts-fusion wins over base_flags' --enforce-shared-experts-fusion
-  # (DeepseekV4ForCausalLM.determine_num_fused_shared_experts checks disable first
-  # and returns early, so passing both together is safe), --swa-full-tokens-ratio 0.15
-  # widens the SWA ring for the larger DP batch, and --tokenizer-worker-num matches
-  # the only DP arm's TP (8) today -- bump this if a different-TP DP arm is added.
+  # --swa-full-tokens-ratio 0.15 widens the SWA ring for the larger DP batch, and
+  # --tokenizer-worker-num matches the only DP arm's TP (8) today -- bump this if
+  # a different-TP DP arm is added.
   dp_flags: "--enable-dp-attention --enable-prefill-delayer --disable-shared-experts-fusion --swa-full-tokens-ratio 0.15 --enable-dp-attention-local-control-broadcast --tokenizer-worker-num 8 --stream-interval 20 --prefill-decode-interval 10"
   ep_flags: "--ep-dispatch-algorithm fake --moe-a2a-backend mori --deepep-mode normal"
   mtp_flags: "--speculative-algorithm EAGLE --speculative-eagle-topk 1"

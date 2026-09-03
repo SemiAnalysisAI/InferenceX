@@ -129,6 +129,7 @@ def parse_range(cuda_range, default_start, default_end):
 print(f'MODEL_BASE_FLAGS=\"{m.get(\"base_flags\", \"\")}\"')
 print(f'MODEL_MTP_FLAGS=\"{m.get(\"mtp_flags\", \"\")}\"')
 print(f'MODEL_DP_FLAGS=\"{m.get(\"dp_flags\", \"\")}\"')
+print(f'MODEL_NO_DP_FLAGS=\"{m.get(\"no_dp_flags\", \"\")}\"')
 print(f'MODEL_EP_FLAGS=\"{m.get(\"ep_flags\", \"\")}\"')
 
 prefill = m.get('prefill', {})
@@ -395,6 +396,7 @@ build_server_config() {
     base_config="$(apply_kv_p2p_transfer_override "$MODEL_BASE_FLAGS")"
     local mtp_config=""
     local dp_config=""
+    local no_dp_config=""
     local ep_config=""
     local specific_config=""
 
@@ -403,9 +405,16 @@ build_server_config() {
         mtp_config="${MODEL_MTP_FLAGS} --speculative-num-steps ${decode_mtp_size} --speculative-num-draft-tokens $((decode_mtp_size + 1))"
     fi
 
-    # DP config (only if DP is enabled)
+    # DP config (only if DP is enabled). no_dp_config is DP's mirror image: flags
+    # that only make sense (or only avoid conflicting with a DP-only flag) when
+    # DP attention is OFF, e.g. --enforce-shared-experts-fusion vs dp_flags'
+    # --disable-shared-experts-fusion. Keeping them in separate, mutually
+    # exclusive buckets means the two conflicting flags are never both emitted
+    # onto the same command line -- unlike base_flags, which always applies.
     if [[ "$enable_dp" == "true" ]]; then
         dp_config="$MODEL_DP_FLAGS"
+    else
+        no_dp_config="$MODEL_NO_DP_FLAGS"
     fi
 
     # EP config (only if EP is enabled): a2a backend, deepep mode, ep-dispatch algo.
@@ -442,6 +451,9 @@ build_server_config() {
     fi
     if [[ -n "$dp_config" ]]; then
         full_config="$full_config $dp_config"
+    fi
+    if [[ -n "$no_dp_config" ]]; then
+        full_config="$full_config $no_dp_config"
     fi
     if [[ -n "$specific_config" ]]; then
         full_config="$full_config $specific_config"
