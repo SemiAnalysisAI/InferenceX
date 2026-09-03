@@ -6877,3 +6877,12 @@
     - "Keep failed loads out of cached-token source totals and include the async-load queue-progress fix already validated by the H100 offload sweep."
     - "Preserve the existing DEP4/DEP16 topology, single concurrency-256 point, real model eval, canonical warmup, and one-hour profiling."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2797
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable recompute for the prefill MultiConnector's optional Mooncake cache loads, using the validation image's tested hybrid recovery when a key disappears after lookup."
+    - "Keep decode-side NIXL transfer failures fail-closed, with unchanged topology, concurrency, eval, warmup, and profiling duration."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2797
