@@ -157,7 +157,9 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     else
         LMCACHE_VERSION="0.5.5.dev60+rocm7.2"
     fi
-    LMCACHE_ROCM_INDEX="https://github.com/LMCache/LMCache/releases/expanded_assets/nightly-rocm"
+    # Both wheels are published on the rolling nightly-rocm asset page.
+    LMCACHE_RELEASE="nightly"
+    LMCACHE_ROCM_INDEX="https://github.com/LMCache/LMCache/releases/expanded_assets/${LMCACHE_RELEASE}-rocm"
     agentic_pip_install --quiet --no-cache-dir --no-deps \
         "sortedcontainers==2.4.0" \
         "opentelemetry-exporter-prometheus==0.61b0" \
