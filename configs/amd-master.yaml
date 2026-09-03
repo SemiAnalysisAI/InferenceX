@@ -1632,7 +1632,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp:
       #     - "DECODE_NODES=1"
       #     - "DECODE_MTP_SIZE=3"
       - spec-decoding: "mtp"
-        conc-list: [ 256 ]
+        conc-list: [ 64, 96, 128, 192, 256 ]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         prefill:
@@ -1650,7 +1650,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp:
           dp-attn: true
           additional-settings:
           - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=3"
+          - "DECODE_MTP_SIZE=1"
 
 # DeepSeek-V4-Pro FP8 single-node on MI325X (gfx942) via vLLM.
 # EXTRAPOLATED bring-up. Same rationale as dsv4-fp8-mi300x-vllm: sglang has no
