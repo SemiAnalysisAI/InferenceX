@@ -35,10 +35,10 @@ set -x
 #   GPU_MEM_UTIL             0.95   (reference)
 #   MAX_NUM_BATCHED_TOKENS   8192   (default)
 #   AITER_A8W4               1      (reference; 0 = aiter a16w4 MoE path)
-#   LANGUAGE_MODEL_ONLY      true   
+#   LANGUAGE_MODEL_ONLY      true
 #   KV_CACHE_DTYPE           fp8    (default for every arm; =auto for a bf16 A/B)
 #   KV_BLOCK_SIZE            unset  (unset -> vLLM sizes the page; 128 under fp8)
-#   MAX_MODEL_LEN            1M     
+#   MAX_MODEL_LEN            1M
 #   SPEC_DECODE              true   (this is the _mtp DSpark recipe; =false for a no-spec A/B)
 #   SPEC_NUM_TOKENS          2      (DSpark draft length; validated by the _mtp config)
 
@@ -151,7 +151,7 @@ case "${KV_OFFLOAD_BACKEND:-}" in
 
     # Keep the image's tested torch/ROCm stack and install only LMCache's
     # missing runtime dependencies, same as the MiniMax-M3 lmcache arm.
-    LMCACHE_VERSION="0.5.5.dev60+rocm7.2"
+    LMCACHE_VERSION="0.5.5rc3"
     LMCACHE_ROCM_INDEX="https://github.com/LMCache/LMCache/releases/expanded_assets/nightly-rocm"
     agentic_pip_install --quiet --no-cache-dir --no-deps \
         "sortedcontainers==2.4.0" \
@@ -205,12 +205,12 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         --http-port "$LMCACHE_HTTP_PORT"
         --l1-size-gb "$LMCACHE_L1_SIZE_GB"
         --l1-init-size-gb 10
-        --chunk-size 3072
+        --chunk-size 12288
         --separate-object-groups
         --enable-extra-logging
         --extra-logging-interval 30
         --max-cpu-workers 8
-        --max-gpu-workers 1
+        --max-gpu-workers 8
         --eviction-policy LRU
         --supported-transfer-mode lmcache_driven
         --shm-name ""
@@ -264,8 +264,8 @@ case "$CONC" in
         ;;
     *)
         SPEC_NUM_TOKENS=0
-        GPU_MEM_UTIL=0.85
-        MAX_NUM_BATCHED_TOKENS=4096
+        GPU_MEM_UTIL=0.9
+        MAX_NUM_BATCHED_TOKENS=8192
         ;;
 esac
 
@@ -306,7 +306,7 @@ CP_ARGS=()
 ATTN_BE_ARGS=()
 if [ "$DCP_SIZE" -gt 1 ]; then
     CP_ARGS+=(--decode-context-parallel-size "$DCP_SIZE" --dcp-comm-backend a2a)
-    ATTN_BE_ARGS+=(--attention-backend TRITON_MLA)
+    ATTN_BE_ARGS+=(--attention-backend ROCM_AITER_MLA)
 fi
 export VLLM_USE_DIRECT_DCP_A2A=0
 export VLLM_USE_DIRECT_DCP_Q_GATHER=0
