@@ -69,10 +69,12 @@ prefill:
   enable-expert-parallel: true
   extra-args: >-
     --kv-cache-dtype fp8
-    --gpu-memory-utilization 0.88
+    --gpu-memory-utilization 0.97
     --max-num-batched-tokens 8192
     --long-prefill-token-threshold 1024
-    --speculative-config {"method":"dspark","num_speculative_tokens":1,"draft_sample_method":"probabilistic","attention_backend":"FLASHINFER_MLA_SPARSE_DSV4","enable_adaptive_verification":false}
+    --max-num-seqs 16
+    --max-model-len 1048576
+    --speculative-config {"method":"dspark","num_speculative_tokens":1,"draft_sample_method":"probabilistic","attention_backend":"FLASHINFER_MLA_SPARSE_DSV4","enable_adaptive_verification":true}
     --enable-cumem-allocator
     --block-size 256
     --tokenizer-mode deepseek_v4
@@ -103,6 +105,10 @@ prefill:
     VLLM_CONNECTOR_PREFETCH_DEPTH: "8"
     VLLM_CONNECTOR_PREFETCH_KV_CAP: "0.65"
     VLLM_USE_BREAKABLE_CUDAGRAPH: "0"
+    FLASH_ATTENTION_CUTE_DSL_CACHE_ENABLED: "1"
+    VLLM_NO_USAGE_STATS: "1"
+    VLLM_LOGGING_LEVEL: INFO
+    TQDM_DISABLE: "1"
     TILELANG_CLEANUP_TEMP_FILES: "1"
     TORCH_SYMMMEM: NVSHMEM
     DG_JIT_CACHE_DIR: /tmp/dg-cache-dsv4-agentx
@@ -125,9 +131,12 @@ decode:
   enable-expert-parallel: true
   extra-args: >-
     --kv-cache-dtype fp8
-    --gpu-memory-utilization 0.88
-    --max-num-batched-tokens 8192
-    --speculative-config {"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","attention_backend":"FLASHINFER_MLA_SPARSE_DSV4","enable_adaptive_verification":false}
+    --gpu-memory-utilization 0.95
+    --max-num-batched-tokens 256
+    --max-num-seqs 32
+    --max-cudagraph-capture-size 256
+    --max-model-len 1048576
+    --speculative-config {"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","attention_backend":"FLASHINFER_MLA_SPARSE_DSV4","enable_adaptive_verification":true}
     --enable-cumem-allocator
     --block-size 256
     --compilation-config {"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}
@@ -156,6 +165,9 @@ decode:
     VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
     VLLM_USE_DEEP_GEMM: "1"
     VLLM_CONNECTOR_PREFETCH_DEPTH: "8"
+    VLLM_NO_USAGE_STATS: "1"
+    VLLM_LOGGING_LEVEL: INFO
+    TQDM_DISABLE: "1"
     TILELANG_CLEANUP_TEMP_FILES: "1"
     TORCH_SYMMMEM: NVSHMEM
     DG_JIT_CACHE_DIR: /tmp/dg-cache-dsv4-agentx
