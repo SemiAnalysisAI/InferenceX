@@ -6841,3 +6841,11 @@
     - "Add a TP8/DCP8 spec-mtp DRAM-offload arm at concurrency 44/48/52."
     - "Retune the LMCache tier (12288-token chunk, 8 GPU workers) and the no-spec decode profile (gpu-memory-utilization 0.9, 8192 batched tokens); switch the DCP attention backend to ROCM_AITER_MLA."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2810
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Run the C48 job-100621375270 configuration with vLLM ROCm nightly 7c5dc571; retain LMCache dev89, gpu-memory-utilization 0.90, max-num-seqs 96, the 96-entry CUDA-graph profile, and every other setting."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2810
