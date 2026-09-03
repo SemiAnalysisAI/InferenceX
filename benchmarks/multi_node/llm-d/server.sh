@@ -183,12 +183,7 @@ echo "Resolved $ROLE TP_SIZE=$TP_SIZE ROLE_ENABLE_EP=$ROLE_ENABLE_EP"
 # ----------------------------------------------------------------
 # Mooncake KV store (optional, from recipe top-level `mooncake:` key)
 # ----------------------------------------------------------------
-# When a recipe sets `mooncake.store_config`, write the JSON config to
-# /tmp/mooncake_config.json and set MOONCAKE_CONFIG_PATH. The KV transfer
-# config section below will then build a MultiConnector chain
-# (NixlConnector + MooncakeStoreConnector) instead of plain NixlConnector.
-# Mooncake uses P2PHANDSHAKE embedded mode (no external metadata server)
-# so no K8s sidecar is required - nodes negotiate directly via RDMA.
+# Embedded stores contribute per-rank DRAM to one job-local Mooncake master.
 MOONCAKE_CONFIG_PATH=""
 if [[ -n "${CONFIG_FILE}" && -f "/etc/llmd-recipes/${CONFIG_FILE}" ]]; then
     _MC_JSON=$(python3 /workspace/benchmarks/multi_node/llm-d/recipe.py \
@@ -198,6 +193,13 @@ if [[ -n "${CONFIG_FILE}" && -f "/etc/llmd-recipes/${CONFIG_FILE}" ]]; then
         MOONCAKE_CONFIG_PATH=/tmp/mooncake_config.json
         export MOONCAKE_CONFIG_PATH
         echo "Mooncake enabled: config at $MOONCAKE_CONFIG_PATH"
+        if [[ "$NODE_RANK" -eq 0 ]]; then
+            mooncake_master --rpc_port=50051 --metrics_port=50052 \
+                > "$BENCHMARK_LOGS_DIR/mooncake_master.log" 2>&1 &
+        fi
+        curl --fail --silent --show-error --connect-timeout 5 --max-time 10 \
+            --retry 30 --retry-connrefused --retry-delay 1 \
+            "http://${_ALL_IPS[0]}:50052/metrics" > /dev/null
     fi
 fi
 

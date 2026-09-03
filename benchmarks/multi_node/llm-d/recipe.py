@@ -73,6 +73,7 @@ def mooncake_config(recipe: dict, env: dict) -> str:
     config = dict(recipe.get("mooncake", {}).get("store_config") or {})
     if not config:
         return ""
+    config["master_server_address"] = f"{env['ALL_IPS'].split(',')[0]}:50051"
     if env.get("IS_AGENTIC") == "1":
         budget_gb = int(env["TOTAL_CPU_DRAM_GB"])
         gpus_per_node = int(env["GPUS_PER_NODE"])
