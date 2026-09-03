@@ -273,7 +273,7 @@ case "$CONC" in
         GPU_MEM_UTIL=0.9
         MAX_NUM_BATCHED_TOKENS=8192
         ;;
-    44|48)
+    44|48|52)
         SPEC_NUM_TOKENS=0
         GPU_MEM_UTIL=0.9
         MAX_NUM_BATCHED_TOKENS=8192
