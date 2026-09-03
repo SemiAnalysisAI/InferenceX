@@ -6823,6 +6823,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2774
 
 - config-keys:
+    - glm5.2-fp4-b200-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Pin the GLM-5.2 B200 SGLang AgentX curve to lmsysorg/sglang:nightly-dev-cu13-20260901-07c8f729, which includes FlashInfer 0.6.18's BF16 TRTLLM MoE allocation fix."
+    - "Use a 169 GB/rank HiCache target pool at c12 and c16 while retaining ratio mode for lower concurrencies."
+    - "Isolate SGLang runtime caches per Slurm allocation to prevent concurrent sweep cells from sharing per-rank cache files."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2808
+
+- config-keys:
     - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
   scenario-type:
     - agentic-coding
