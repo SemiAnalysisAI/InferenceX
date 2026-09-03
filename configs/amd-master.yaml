@@ -687,7 +687,7 @@ kimik3-fp4-mi355x-atom-agentic-mtp:
 
 # Kimi-K3 MXFP4 MI355X vLLM disaggregated agentic (1P1D). Engine flags match
 # SA single-node none:40 (TP8/DCP8 + LMCacheMP). Allowed PD delta only:
-# prefill TP8 + LMCacheMP + MoRIIO producer; decode TP8/DCP8 + MoRIIO consumer.
+# prefill TP8/DCP8 + LMCacheMP + MoRIIO producer; decode TP8/DCP8 + MoRIIO consumer.
 kimik3-fp4-mi355x-vllm-disagg-agentic:
   image: vllm/vllm-openai-rocm:nightly
   model: moonshotai/Kimi-K3
@@ -710,17 +710,21 @@ kimik3-fp4-mi355x-vllm-disagg-agentic:
         prefill:
           num-worker: 1
           tp: 8
+          dcp-size: 8
           ep: 1
           dp-attn: false
           additional-settings:
           - "PREFILL_NODES=1"
           - "GPU_MEMORY_UTILIZATION=0.90"
+          - "TOTAL_CPU_DRAM_GB=1799"
           - "LMCACHE_CHUNK_SIZE=12288"
           - "LMCACHE_L1_SIZE_GB=1799"
           - "IX_AIPERF_TOKENIZER=moonshotai/Kimi-K3"
           - "VLLM_K3_FORK_REF=yichaozhu/k3-tpdcp-hetero"
           - "VLLM_K3_FORK_SHA=f1870840bf1fb81564204ae6a26ca625570851f9"
           - "HF_HUB_CACHE=/models/.cache/huggingface/hub"
+          - "PREFILL_DCP_COMM=a2a"
+          - "PREFILL_CP_KV_CACHE_INTERLEAVE_SIZE=1536"
         decode:
           num-worker: 1
           tp: 8

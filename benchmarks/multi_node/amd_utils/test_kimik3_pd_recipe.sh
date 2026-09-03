@@ -20,8 +20,8 @@ arm = point["search-space"][0]
 assert recipe["image"] == "vllm/vllm-openai-rocm:nightly"
 assert recipe["framework"] == "vllm-disagg"
 assert recipe["kv-p2p-transfer"] == "moriio"
-assert "dcp" not in arm["prefill"]
 assert arm["prefill"]["tp"] == 8
+assert arm["prefill"]["dcp-size"] == 8
 assert arm["decode"]["tp"] == 8
 assert arm["decode"]["dcp-size"] == 8
 assert point["dram-utilization"] == 0.60
@@ -32,6 +32,8 @@ assert arm["kv-offload-backend"]["name"] == "lmcache-k3"
 assert arm["kv-offload-backend"]["version"].startswith("git-140819c9")
 settings = arm["prefill"]["additional-settings"] + arm["decode"]["additional-settings"]
 assert "DECODE_CP_KV_CACHE_INTERLEAVE_SIZE=1536" in settings
+assert "PREFILL_CP_KV_CACHE_INTERLEAVE_SIZE=1536" in settings
+assert "TOTAL_CPU_DRAM_GB=1799" in settings
 assert "LMCACHE_CHUNK_SIZE=12288" in settings
 assert "LMCACHE_L1_SIZE_GB=1799" in settings
 assert any(item.startswith("VLLM_K3_FORK_SHA=f1870840") for item in settings)
@@ -43,7 +45,7 @@ assert "VLLM_USE_BREAKABLE_CUDAGRAPH" not in env
 assert "VLLM_ALLOW_DCP_FULL_CUDAGRAPH=1" in env
 assert "PREFIX_CACHING_HASH_ALGO=sha256" in env
 assert "VLLM_USE_BREAKABLE_CUDAGRAPH=1" in k3["prefill_env"]
-assert "TORCH_NCCL_BLOCKING_WAIT=1" in k3["prefill_env"]
+assert "TORCH_NCCL_BLOCKING_WAIT=0" in k3["prefill_env"]
 assert "VLLM_USE_BREAKABLE_CUDAGRAPH=0" in k3["decode_env"]
 assert "TORCH_NCCL_BLOCKING_WAIT=0" in k3["decode_env"]
 
