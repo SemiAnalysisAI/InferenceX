@@ -6897,4 +6897,4 @@
     - "rc5 carries the DCP cache-identity fix (LMCache #4936): the scheduler and the workers derived different LMCache model names under DCP, so every lookup missed and the DRAM tier was write-only at concurrency 44-52 (120 GB/GPU stored, 0 retrieved, external hit rate 0.0%)."
     - "Derive the LMCache MP server ports from $PORT rather than the fixed 6555/8090, so two cells sharing a runner cannot collide."
     - "Raise the L1 read-lock TTL to 3600s: the lock is held from prefetch through retrieve, and a queued request at these concurrencies exceeds the 300s default and fails the retrieve."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2831
