@@ -35,10 +35,10 @@ set -x
 #   GPU_MEM_UTIL             0.95   (reference)
 #   MAX_NUM_BATCHED_TOKENS   8192   (default)
 #   AITER_A8W4               1      (reference; 0 = aiter a16w4 MoE path)
-#   LANGUAGE_MODEL_ONLY      true   
+#   LANGUAGE_MODEL_ONLY      true
 #   KV_CACHE_DTYPE           fp8    (default for every arm; =auto for a bf16 A/B)
 #   KV_BLOCK_SIZE            unset  (unset -> vLLM sizes the page; 128 under fp8)
-#   MAX_MODEL_LEN            1M     
+#   MAX_MODEL_LEN            1M
 #   SPEC_DECODE              true   (this is the _mtp DSpark recipe; =false for a no-spec A/B)
 #   SPEC_NUM_TOKENS          2      (DSpark draft length; validated by the _mtp config)
 
@@ -149,10 +149,9 @@ case "${KV_OFFLOAD_BACKEND:-}" in
       lmcache)
     require_agentic_kv_offload_backend "$KV_OFFLOAD_BACKEND"
 
-    # Keep the image's tested torch/ROCm stack and install only LMCache's
-    # missing runtime dependencies, same as the MiniMax-M3 lmcache arm.
-    LMCACHE_VERSION="0.5.5.dev60+rocm7.2"
+    LMCACHE_VERSION=0.5.5.dev89+rocm7.2
     LMCACHE_ROCM_INDEX="https://github.com/LMCache/LMCache/releases/expanded_assets/nightly-rocm"
+
     agentic_pip_install --quiet --no-cache-dir --no-deps \
         "sortedcontainers==2.4.0" \
         "opentelemetry-exporter-prometheus==0.61b0" \
@@ -197,6 +196,18 @@ case "${KV_OFFLOAD_BACKEND:-}" in
 
     LMCACHE_L1_SIZE_GB="$TOTAL_CPU_DRAM_GB"
 
+    # DCP shards decode KV across the TP ranks, so the LMCache GPU transfer
+    # pool needs one worker per rank; a non-DCP arm only needs a single worker.
+    # The DCP KV interleave also needs the larger 12288 chunk; a non-DCP arm
+    # uses the 3072 minimum (one KDA state group).
+    if [ "${DCP_SIZE:-1}" -gt 1 ]; then
+        LMCACHE_MAX_GPU_WORKERS=8
+        LMCACHE_CHUNK_SIZE=12288
+    else
+        LMCACHE_MAX_GPU_WORKERS=1
+        LMCACHE_CHUNK_SIZE=3072
+    fi
+
     LMCACHE_CMD=(
         lmcache server
         --host 127.0.0.1
@@ -205,12 +216,12 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         --http-port "$LMCACHE_HTTP_PORT"
         --l1-size-gb "$LMCACHE_L1_SIZE_GB"
         --l1-init-size-gb 10
-        --chunk-size 3072
+        --chunk-size "$LMCACHE_CHUNK_SIZE"
         --separate-object-groups
         --enable-extra-logging
         --extra-logging-interval 30
         --max-cpu-workers 8
-        --max-gpu-workers 1
+        --max-gpu-workers "$LMCACHE_MAX_GPU_WORKERS"
         --eviction-policy LRU
         --supported-transfer-mode lmcache_driven
         --shm-name ""
@@ -256,16 +267,21 @@ case "$CONC" in
         GPU_MEM_UTIL=0.9
         MAX_NUM_BATCHED_TOKENS=16384
         ;;
-    2|4|8|10|12|14)
+    4|8|10|12|14)
         SYNTHETIC_ACCEPT_LEN=3.00
         SPEC_NUM_TOKENS=3
         GPU_MEM_UTIL=0.9
         MAX_NUM_BATCHED_TOKENS=8192
         ;;
+    44|48|52)
+        SPEC_NUM_TOKENS=0
+        GPU_MEM_UTIL=0.9
+        MAX_NUM_BATCHED_TOKENS=8192
+        ;;
     *)
         SPEC_NUM_TOKENS=0
-        GPU_MEM_UTIL=0.85
-        MAX_NUM_BATCHED_TOKENS=4096
+        GPU_MEM_UTIL=0.9
+        MAX_NUM_BATCHED_TOKENS=8192
         ;;
 esac
 
@@ -306,7 +322,7 @@ CP_ARGS=()
 ATTN_BE_ARGS=()
 if [ "$DCP_SIZE" -gt 1 ]; then
     CP_ARGS+=(--decode-context-parallel-size "$DCP_SIZE" --dcp-comm-backend a2a)
-    ATTN_BE_ARGS+=(--attention-backend TRITON_MLA)
+    ATTN_BE_ARGS+=(--attention-backend ROCM_AITER_MLA)
 fi
 export VLLM_USE_DIRECT_DCP_A2A=0
 export VLLM_USE_DIRECT_DCP_Q_GATHER=0
