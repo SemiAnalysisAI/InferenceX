@@ -56,6 +56,7 @@ class Fields(Enum):
 
     # Multinode-specific fields (when MULTINODE = true)
     SPEC_DECODING = 'spec-decoding'
+    WORKER = 'worker'
     PREFILL = 'prefill'
     DECODE = 'decode'
     NUM_WORKER = 'num-worker'
@@ -72,6 +73,8 @@ class Fields(Enum):
     AVAILABLE_CPU_DRAM_MIB = 'available-cpu-dram-mib'
     DRAM_UTILIZATION = 'dram-utilization'
     GPUS_PER_NODE = 'gpus-per-node'
+    NUM_NODES = 'num-nodes'
+    NODE_COUNT = 'node-count'
     DURATION = 'duration'
 
     # Matrix entry fields
@@ -87,6 +90,8 @@ class Fields(Enum):
     EVAL_ONLY = 'eval-only'
     EVAL_CONC = 'eval-conc'
     EVAL_ALL_CONCS = 'eval-all-concs'
+    EVAL_FRAMEWORK = 'eval-framework'
+    EVAL_SUITE = 'eval-suite'
 
 
 """
@@ -175,6 +180,10 @@ class SingleNodeMatrixEntry(BaseModel):
     disagg: Literal[False]
     run_eval: bool = Field(alias=Fields.RUN_EVAL.value)
     eval_only: bool = Field(alias=Fields.EVAL_ONLY.value, default=False)
+    eval_framework: Optional[str] = Field(
+        default=None, alias=Fields.EVAL_FRAMEWORK.value
+    )
+    eval_suite: Optional[str] = Field(default=None, alias=Fields.EVAL_SUITE.value)
     router: Optional[ComponentMetadata] = None
     recipe_fingerprint: Optional[str] = Field(
         default=None,
@@ -202,7 +211,30 @@ class WorkerConfig(BaseModel):
     dp_attn: bool = Field(alias=Fields.DP_ATTN.value)
     hardware: Optional[str] = Field(default=None, min_length=1)
     additional_settings: Optional[List[str]] = Field(
-        default=[], alias=Fields.ADDITIONAL_SETTINGS.value)
+        default_factory=list, alias=Fields.ADDITIONAL_SETTINGS.value)
+
+    @model_validator(mode='after')
+    def validate_worker_topology(self):
+        return _validate_tp_context_topology(self)
+
+
+class AggregateWorkerConfig(BaseModel):
+    """Topology for the aggregate worker role serving prefill and decode."""
+    model_config = ConfigDict(extra='forbid', populate_by_name=True)
+
+    num_worker: int = Field(
+        default=1, alias=Fields.NUM_WORKER.value, gt=0, strict=True)
+    tp: int
+    pp: int = Field(default=1, gt=0, strict=True)
+    dcp_size: int = Field(
+        default=1, alias=Fields.DCP_SIZE.value, gt=0, strict=True)
+    pcp_size: int = Field(
+        default=1, alias=Fields.PCP_SIZE.value, gt=0, strict=True)
+    ep: int
+    dp_attn: bool = Field(alias=Fields.DP_ATTN.value)
+    hardware: Optional[str] = Field(default=None, min_length=1)
+    additional_settings: Optional[List[str]] = Field(
+        default_factory=list, alias=Fields.ADDITIONAL_SETTINGS.value)
 
     @model_validator(mode='after')
     def validate_worker_topology(self):
@@ -233,6 +265,7 @@ class MultiNodeMatrixEntry(BaseModel):
         alias=Fields.SPEC_DECODING.value
     )
     runner: str
+    node_count: int = Field(alias=Fields.NODE_COUNT.value, gt=0, strict=True)
     isl: int
     osl: int
     prefill: WorkerConfig
@@ -247,6 +280,10 @@ class MultiNodeMatrixEntry(BaseModel):
     eval_all_concs: bool = Field(
         default=False, alias=Fields.EVAL_ALL_CONCS.value
     )
+    eval_framework: Optional[str] = Field(
+        default=None, alias=Fields.EVAL_FRAMEWORK.value
+    )
+    eval_suite: Optional[str] = Field(default=None, alias=Fields.EVAL_SUITE.value)
     router: Optional[ComponentMetadata] = None
     kv_p2p_transfer: Optional[str] = Field(
         default=None, alias=Fields.KV_P2P_TRANSFER.value, min_length=1
@@ -302,10 +339,14 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
     duration: int = Field(alias=Fields.DURATION.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     scenario_type: str = Field(alias=Fields.SCENARIO_TYPE.value)
-    # Agentic GSM8K eval rows carry run-eval/eval-only; benchmark rows
-    # omit them, and exclude_none keeps them out of dumped benchmark output.
+    # Agentic eval rows carry selection and evaluator metadata. Benchmark-only
+    # rows omit them, and exclude_none keeps them out of dumped matrix output.
     run_eval: Optional[bool] = Field(default=None, alias=Fields.RUN_EVAL.value)
     eval_only: Optional[bool] = Field(default=None, alias=Fields.EVAL_ONLY.value)
+    eval_framework: Optional[str] = Field(
+        default=None, alias=Fields.EVAL_FRAMEWORK.value
+    )
+    eval_suite: Optional[str] = Field(default=None, alias=Fields.EVAL_SUITE.value)
     recipe_fingerprint: Optional[str] = Field(
         default=None,
         alias=Fields.RECIPE_FINGERPRINT.value,
@@ -334,6 +375,7 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
         alias=Fields.SPEC_DECODING.value
     )
     runner: str
+    node_count: int = Field(alias=Fields.NODE_COUNT.value, gt=0, strict=True)
     prefill: WorkerConfig
     decode: WorkerConfig
     conc: list[int]
@@ -350,13 +392,17 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     disagg: bool
     scenario_type: str = Field(alias=Fields.SCENARIO_TYPE.value)
-    # Agentic eval rows (SWE-bench) carry run-eval/eval-only/eval-conc;
-    # benchmark rows omit them, and exclude_none keeps them out of dumped
-    # throughput output. SWE-bench doesn't support batched concurrencies
-    # (unlike lm-eval), so there is no eval-all-concs field here.
+    # Agentic eval rows carry selection, concurrency, and evaluator metadata.
+    # Benchmark-only rows omit them, and exclude_none keeps them out of dumped
+    # matrix output. Multi-node agentic evals run one selected concurrency per
+    # job, so they do not use eval-all-concs.
     run_eval: Optional[bool] = Field(default=None, alias=Fields.RUN_EVAL.value)
     eval_only: Optional[bool] = Field(default=None, alias=Fields.EVAL_ONLY.value)
     eval_conc: Optional[int] = Field(default=None, alias=Fields.EVAL_CONC.value)
+    eval_framework: Optional[str] = Field(
+        default=None, alias=Fields.EVAL_FRAMEWORK.value
+    )
+    eval_suite: Optional[str] = Field(default=None, alias=Fields.EVAL_SUITE.value)
     recipe_fingerprint: Optional[str] = Field(
         default=None,
         alias=Fields.RECIPE_FINGERPRINT.value,
@@ -538,8 +584,11 @@ class MultiNodeSearchSpaceEntry(BaseModel):
 
     spec_decoding: Literal["mtp", "draft_model", "none"] = Field(
         default="none", alias=Fields.SPEC_DECODING.value)
-    prefill: WorkerConfig
-    decode: WorkerConfig
+    worker: Optional[AggregateWorkerConfig] = None
+    prefill: Optional[WorkerConfig] = None
+    decode: Optional[WorkerConfig] = None
+    num_nodes: Optional[int] = Field(
+        default=None, alias=Fields.NUM_NODES.value, gt=0, strict=True)
     router: Optional[ComponentMetadata] = None
     kv_p2p_transfer: Optional[str] = Field(
         default=None, alias=Fields.KV_P2P_TRANSFER.value, min_length=1
@@ -557,7 +606,21 @@ class MultiNodeSearchSpaceEntry(BaseModel):
 
     @model_validator(mode='after')
     def validate_worker_hardware_pair(self):
-        return _validate_worker_hardware_pair(self)
+        has_worker = self.worker is not None
+        has_any_disagg_worker = self.prefill is not None or self.decode is not None
+        has_complete_disagg_workers = (
+            self.prefill is not None and self.decode is not None
+        )
+        if has_worker == has_any_disagg_worker or (
+            has_any_disagg_worker and not has_complete_disagg_workers
+        ):
+            raise ValueError(
+                "Multinode search-space entries must specify either worker "
+                "or both prefill and decode"
+            )
+        if has_complete_disagg_workers:
+            _validate_worker_hardware_pair(self)
+        return self
 
 
 class SingleNodeSeqLenConfig(BaseModel):
@@ -594,8 +657,11 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
     dp_attn: Optional[bool] = Field(default=None, alias=Fields.DP_ATTN.value)
     spec_decoding: Literal["mtp", "draft_model", "none"] = Field(
         default="none", alias=Fields.SPEC_DECODING.value)
+    worker: Optional[AggregateWorkerConfig] = None
     prefill: Optional[WorkerConfig] = None
     decode: Optional[WorkerConfig] = None
+    num_nodes: Optional[int] = Field(
+        default=None, alias=Fields.NUM_NODES.value, gt=0, strict=True)
     kv_offloading: Optional[Literal["none", "dram"]] = Field(
         default=None, alias=Fields.KV_OFFLOADING.value
     )
@@ -621,14 +687,21 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
     @model_validator(mode='after')
     def validate_topology_fields(self):
         has_single_node = self.tp is not None
+        has_aggregate_worker = self.worker is not None
         has_any_multinode_field = self.prefill is not None or self.decode is not None
         has_complete_multinode = self.prefill is not None and self.decode is not None
-        if has_single_node:
-            valid = not has_any_multinode_field
-        else:
-            valid = has_complete_multinode
-        if not valid:
-            raise ValueError("Agentic search-space entries must specify either tp or both prefill and decode")
+        topology_count = sum((
+            has_single_node,
+            has_aggregate_worker,
+            has_complete_multinode,
+        ))
+        if topology_count != 1 or (
+            has_any_multinode_field and not has_complete_multinode
+        ):
+            raise ValueError(
+                "Agentic search-space entries must specify exactly one of tp, "
+                "worker, or both prefill and decode"
+            )
         if has_single_node:
             if self.kv_offloading is None:
                 raise ValueError(
@@ -636,7 +709,7 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
                     f"{Fields.KV_OFFLOADING.value}"
                 )
             _validate_tp_context_topology(self)
-        if has_complete_multinode:
+        if has_aggregate_worker or has_complete_multinode:
             explicitly_single_node_fields = {
                 "pp",
                 "dcp_size",
@@ -655,7 +728,8 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
                     "Multinode agentic search-space entries cannot specify "
                     f"{field_names}"
                 )
-            _validate_worker_hardware_pair(self)
+            if has_complete_multinode:
+                _validate_worker_hardware_pair(self)
         return self
 
 class AgenticCodingConfig(BaseModel):
@@ -712,9 +786,9 @@ class MultiNodeScenarios(BaseModel):
         return self
 
 
-def _validate_component_metadata_scope(self: BaseModel) -> BaseModel:
-    """Require unambiguous component metadata across a master config."""
-    search_space_entries = [
+def _master_search_space_entries(self: BaseModel) -> list[BaseModel]:
+    """Return every search-space entry in a master config."""
+    return [
         entry
         for scenario_configs in (
             self.scenarios.fixed_seq_len,
@@ -723,6 +797,11 @@ def _validate_component_metadata_scope(self: BaseModel) -> BaseModel:
         for scenario_config in scenario_configs or []
         for entry in scenario_config.search_space
     ]
+
+
+def _validate_component_metadata_scope(self: BaseModel) -> BaseModel:
+    """Require unambiguous component metadata across a master config."""
+    search_space_entries = _master_search_space_entries(self)
 
     for field in (Fields.ROUTER, Fields.KV_P2P_TRANSFER):
         attribute = field.value.replace("-", "_")
@@ -761,6 +840,54 @@ def _validate_component_metadata_scope(self: BaseModel) -> BaseModel:
     return self
 
 
+def _validate_multinode_entry_scope(self: BaseModel) -> BaseModel:
+    """Match each search-space topology to its master serving mode."""
+    search_space_entries = _master_search_space_entries(self)
+    for entry in search_space_entries:
+        worker = getattr(entry, "worker", None)
+        prefill = getattr(entry, "prefill", None)
+        decode = getattr(entry, "decode", None)
+        num_nodes = getattr(entry, "num_nodes", None)
+
+        if not self.multinode:
+            if (
+                worker is not None
+                or prefill is not None
+                or decode is not None
+                or num_nodes is not None
+            ):
+                raise ValueError(
+                    "Single-node search-space entries must specify tp topology "
+                    "and cannot declare worker, prefill, decode, or num-nodes"
+                )
+            continue
+
+        if self.disagg:
+            if worker is not None or num_nodes is not None:
+                raise ValueError(
+                    f"{Fields.DISAGG.value}=true requires prefill and decode "
+                    f"and rejects {Fields.WORKER.value} and "
+                    f"{Fields.NUM_NODES.value}"
+                )
+            if prefill is None or decode is None:
+                raise ValueError(
+                    f"{Fields.DISAGG.value}=true requires prefill and decode"
+                )
+            continue
+
+        if worker is None or prefill is not None or decode is not None:
+            raise ValueError(
+                f"{Fields.DISAGG.value}=false requires one "
+                f"{Fields.WORKER.value} and rejects prefill and decode"
+            )
+        if num_nodes is None:
+            raise ValueError(
+                f"{Fields.DISAGG.value}=false requires "
+                f"{Fields.NUM_NODES.value} in every search-space entry"
+            )
+    return self
+
+
 class SingleNodeMasterConfigEntry(BaseModel):
     """Top-level single node master configuration entry."""
     model_config = ConfigDict(extra='forbid', populate_by_name=True)
@@ -784,6 +911,10 @@ class SingleNodeMasterConfigEntry(BaseModel):
     @model_validator(mode='after')
     def validate_component_metadata_scope(self):
         return _validate_component_metadata_scope(self)
+
+    @model_validator(mode='after')
+    def validate_multinode_entry_scope(self):
+        return _validate_multinode_entry_scope(self)
 
 
 class MultiNodeMasterConfigEntry(BaseModel):
@@ -812,6 +943,10 @@ class MultiNodeMasterConfigEntry(BaseModel):
     @model_validator(mode='after')
     def validate_component_metadata_scope(self):
         return _validate_component_metadata_scope(self)
+
+    @model_validator(mode='after')
+    def validate_multinode_entry_scope(self):
+        return _validate_multinode_entry_scope(self)
 
 
 def validate_master_config(master_configs: dict) -> List[dict]:

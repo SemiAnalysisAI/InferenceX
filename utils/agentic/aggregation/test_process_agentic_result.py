@@ -451,12 +451,11 @@ def test_processor_latency_units_are_seconds(tmp_path: Path):
     agg = _run_processor(result_dir, output_dir)
     latency = agg["request_metrics"]["latency"]
     # Fixture mean ttft = (30+35+32+40+33)/5 = 34.0 ms = 0.034 s.
-    assert 0.020 < latency["ttft"]["mean"] < 0.050, latency["ttft"]["mean"]
-    assert 0.020 < latency["ttft"]["p50"] < 0.050, latency["ttft"]["p50"]
+    assert latency["ttft"]["mean"] == pytest.approx(0.034)
+    assert latency["ttft"]["p50"] == pytest.approx(0.033)
     # Fixture mean e2e = (1000+1100+900+1400+1050)/5 = 1090 ms = 1.09 s.
-    assert 0.5 < latency["e2el"]["mean"] < 2.0, latency["e2el"]["mean"]
-    # mean itl = ~18 ms = 0.018 s.
-    assert 0.010 < latency["itl"]["mean"] < 0.030, latency["itl"]["mean"]
+    assert latency["e2el"]["mean"] == pytest.approx(1.09)
+    assert latency["itl"]["mean"] == pytest.approx(0.01824)
     _assert_stable_request_metrics_schema(agg)
     assert "mean_ttft" not in agg
     assert "p50_ttft" not in agg
@@ -489,12 +488,12 @@ def test_processor_derives_interactivity_from_matching_itl_percentile(
 
     agg = _run_processor(result_dir, tmp_path / "out")
 
-    latency = agg["request_metrics"]["latency"]
-    assert latency["intvty"]["p90"] == pytest.approx(1 / latency["itl"]["p90"], rel=0.01)
-    assert latency["intvty"]["p75"] == pytest.approx(1 / latency["itl"]["p75"], rel=0.01)
-    assert latency["intvty"]["p50"] == pytest.approx(1 / latency["itl"]["p50"], rel=0.01)
-    assert latency["intvty"]["mean"] == pytest.approx(1 / latency["itl"]["mean"], rel=0.01)
-    assert latency["intvty"]["p90"] < 20
+    metric = agg["request_metrics"]["latency"]["intvty"]
+    # Hand-worked ITL p90/p75/p50/mean: 84, 60, 20, 43 1/3 ms.
+    assert metric["p90"] == pytest.approx(11.90476)
+    assert metric["p75"] == pytest.approx(16.66667)
+    assert metric["p50"] == pytest.approx(50.0)
+    assert metric["mean"] == pytest.approx(23.07692)
 
 
 def test_processor_aggregates_e2e_normalized_interactivity_from_slow_tail(
@@ -538,9 +537,9 @@ def test_processor_aggregates_e2e_normalized_interactivity_from_slow_tail(
     agg = _run_processor(result_dir, tmp_path / "out")
     metric = agg["request_metrics"]["latency"]["e2e_norm_intvty"]
 
-    assert metric["mean"] == pytest.approx(1 / 0.03)
-    assert metric["p75"] == pytest.approx(1 / 0.035)
-    assert metric["p90"] == pytest.approx(1 / 0.038)
+    assert metric["mean"] == pytest.approx(33.33333)
+    assert metric["p75"] == pytest.approx(28.57143)
+    assert metric["p90"] == pytest.approx(26.31579)
     assert metric["std"] == pytest.approx(12.5)
     assert metric["p50"] >= metric["p75"] >= metric["p90"] >= metric["p95"]
     assert "p99" not in metric
@@ -645,20 +644,14 @@ def test_processor_throughput_per_gpu(tmp_path: Path):
         output_dir,
         env_overrides={"TP": "4", "PP_SIZE": "2", "DCP_SIZE": "2", "PCP_SIZE": "2"},
     )
-    throughput = agg["request_metrics"]["throughput"]
-    per_gpu = throughput["per_gpu"]
+    per_gpu = agg["request_metrics"]["throughput"]["per_gpu"]
     assert agg["pp"] == 2
     assert agg["dcp_size"] == 2
     assert agg["pcp_size"] == 2
-    assert per_gpu["total_tput_tps"] == pytest.approx(
-        throughput["total"]["tokens_per_second"] / 16
-    )
-    assert per_gpu["input_tput_tps"] == pytest.approx(
-        throughput["input"]["tokens_per_second"] / 16
-    )
-    assert per_gpu["output_tput_tps"] == pytest.approx(
-        throughput["output"]["tokens_per_second"] / 16
-    )
+    # 840 input + 275 output tokens over 4.1 seconds on 16 GPUs.
+    assert per_gpu["total_tput_tps"] == pytest.approx(16.99695)
+    assert per_gpu["input_tput_tps"] == pytest.approx(12.80488)
+    assert per_gpu["output_tput_tps"] == pytest.approx(4.19207)
 
 
 def test_processor_aggregates_full_response_itl_and_interactivity(tmp_path: Path):
@@ -696,11 +689,9 @@ def test_processor_aggregates_full_response_itl_and_interactivity(tmp_path: Path
 
     assert full_response_itl["p50"] == pytest.approx(0.005)
     assert full_response_itl["p75"] == pytest.approx(0.00523)
-    assert full_response_intvty["p50"] == pytest.approx(
-        1 / full_response_itl["p50"]
-    )
-    assert full_response_intvty["p75"] == pytest.approx(1 / 0.0052348955)
-    assert full_response_intvty["p75"] < full_response_intvty["p50"]
+    assert full_response_intvty["p50"] == pytest.approx(200.0)
+    # p75 interpolates to 5.2348955 ms before conversion and rounding.
+    assert full_response_intvty["p75"] == pytest.approx(191.02578)
 
 
 def test_processor_surfaces_allocated_cpu_dram(tmp_path: Path):
@@ -873,8 +864,8 @@ def test_processor_handles_missing_server_metrics(tmp_path: Path):
     assert agg["kv_cache_pool_tokens"] is None
     assert agg["request_metrics"]["cache"]["theoretical_cache_hit_rate"] is None
     # Non-server-derived totals fall back to per-record sums.
-    assert server_metrics["tokens"]["prompt_total"] == 100 + 180 + 120 + 200 + 240
-    assert server_metrics["tokens"]["generation_total"] == 50 + 60 + 40 + 70 + 55
+    assert server_metrics["tokens"]["prompt_total"] == 840
+    assert server_metrics["tokens"]["generation_total"] == 275
     assert server_metrics["tokens"]["requests_completed"] == 5
     _assert_stable_server_metrics_schema(agg)
     assert agg["server_metrics"]["present"] is False
@@ -1322,6 +1313,133 @@ def test_processor_normalizes_sglang_server_metrics(tmp_path: Path):
     assert agg["server_metrics"]["tokens"]["prompt_by_source"]["computed"] == 500.0
 
 
+def test_processor_normalizes_trtllm_server_metrics(tmp_path: Path):
+    result_dir = _write_fixture(tmp_path)
+    artifact = result_dir / "aiperf_artifacts"
+    prefill_url = "http://10.0.0.1:7500/metrics"
+    decode_url = "http://10.0.0.2:7501/metrics"
+    server_metrics = {
+        "metrics": {
+            "dynamo_frontend_input_sequence_tokens": {
+                "type": "counter",
+                "series": [{"stats": {"total": 1000.0}}],
+            },
+            "dynamo_frontend_output_tokens": {
+                "type": "counter",
+                "series": [{"stats": {"total": 200.0}}],
+            },
+            "trtllm_prompt_tokens_total": {
+                "type": "counter",
+                "series": [
+                    {
+                        "endpoint_url": prefill_url,
+                        "labels": {"dynamo_component": "prefill"},
+                        "stats": {"total": 600.0},
+                    },
+                    {
+                        "endpoint_url": decode_url,
+                        "labels": {"dynamo_component": "backend"},
+                        "stats": {"total": 400.0},
+                    },
+                ],
+            },
+            "trtllm_generation_tokens_total": {
+                "type": "counter",
+                "series": [
+                    {
+                        "endpoint_url": decode_url,
+                        "labels": {"dynamo_component": "backend"},
+                        "stats": {"total": 200.0},
+                    }
+                ],
+            },
+            "trtllm_prompt_cached_tokens_total": {
+                "type": "counter",
+                "series": [
+                    {"endpoint_url": prefill_url, "stats": {"total": 200.0}},
+                    {"endpoint_url": decode_url, "stats": {"total": 300.0}},
+                ],
+            },
+            "trtllm_kv_cache_hit_rate": {
+                "type": "gauge",
+                "series": [
+                    {"endpoint_url": prefill_url, "stats": {"avg": 0.4}},
+                    {"endpoint_url": decode_url, "stats": {"avg": 0.6}},
+                ],
+            },
+            "trtllm_kv_cache_utilization": {
+                "type": "gauge",
+                "series": [
+                    {"endpoint_url": prefill_url, "stats": {"max": 0.7}},
+                    {"endpoint_url": decode_url, "stats": {"max": 0.8}},
+                ],
+            },
+            "trtllm_kv_cache_host_utilization": {
+                "type": "gauge",
+                "series": [{"endpoint_url": prefill_url, "stats": {"max": 0.25}}],
+            },
+            "trtllm_kv_cache_offload_bytes_total": {
+                "type": "counter",
+                "series": [
+                    {
+                        "endpoint_url": prefill_url,
+                        "labels": {"disaggregation_mode": "prefill"},
+                        "stats": {"total": 4096.0},
+                    }
+                ],
+            },
+            "trtllm_kv_cache_onboard_bytes_total": {
+                "type": "counter",
+                "series": [
+                    {
+                        "endpoint_url": decode_url,
+                        "labels": {"disaggregation_mode": "decode"},
+                        "stats": {"total": 2048.0},
+                    }
+                ],
+            },
+            "trtllm_kv_cache_max_blocks": {
+                "type": "gauge",
+                "series": [
+                    {"endpoint_url": prefill_url, "stats": {"max": 100.0}},
+                    {"endpoint_url": decode_url, "stats": {"max": 200.0}},
+                ],
+            },
+            "trtllm_kv_cache_tokens_per_block": {
+                "type": "gauge",
+                "series": [
+                    {"endpoint_url": prefill_url, "stats": {"max": 64.0}},
+                    {"endpoint_url": decode_url, "stats": {"max": 64.0}},
+                ],
+            },
+        }
+    }
+    with open(artifact / "server_metrics_export.json", "w") as f:
+        json.dump(server_metrics, f)
+
+    agg = _run_processor(
+        result_dir,
+        tmp_path / "out",
+        env_overrides={"FRAMEWORK": "dynamo-trt", "IS_MULTINODE": "true"},
+    )
+
+    assert agg["server_metrics"]["adapter"] == "trtllm"
+    _assert_stable_server_metrics_schema(agg)
+    assert agg["server_metrics"]["tokens"]["prompt_total"] == 1000
+    assert agg["server_metrics"]["tokens"]["generation_total"] == 200
+    assert agg["server_metrics"]["cache"]["gpu_cache_hit_rate"] == pytest.approx(0.5)
+    assert agg["server_metrics"]["cache"]["overall_cache_hit_rate"] == pytest.approx(0.5)
+    assert agg["server_metrics"]["kv_cache"]["gpu_usage_pct"] == pytest.approx(0.8)
+    assert agg["server_metrics"]["kv_cache"]["cpu_usage_pct"] == pytest.approx(0.25)
+    assert agg["server_metrics"]["kv_cache"]["gpu_total_tokens"] == 19_200
+    assert agg["server_metrics"]["kv_offload"]["bytes_gpu_to_cpu"] == 4096
+    assert agg["server_metrics"]["kv_offload"]["bytes_cpu_to_gpu"] == 2048
+    assert {source["role"] for source in agg["server_metrics"]["sources"]} == {
+        "prefill",
+        "decode",
+    }
+
+
 def test_processor_normalizes_dynamo_server_metrics(tmp_path: Path):
     result_dir = _write_fixture(tmp_path)
     artifact = result_dir / "aiperf_artifacts"
@@ -1479,7 +1597,7 @@ def test_processor_uses_aiperf_theoretical_cache_metric(tmp_path: Path):
     assert agg["request_metrics"]["cache"]["theoretical_cache_hit_rate"] == pytest.approx(0.25)
     # output_tokens_expected populated from trace metadata (5 records: A turns 0,1,2 + B turns 0,1)
     assert agg["request_metrics"]["tokens"]["output_expected"]["mean"] == pytest.approx(
-        (50 + 60 + 55 + 40 + 70) / 5
+        55.0
     )
 
 

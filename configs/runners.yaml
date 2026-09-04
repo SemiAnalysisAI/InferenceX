@@ -22,16 +22,9 @@ labels:
     - h100-dgxc-slurm_17
     - h100-dgxc-slurm_18
     - h100-dgxc-slurm_19
-  h100-multinode:
-    - h100-dgxc-slurm_16
-    - h100-dgxc-slurm_17
-    - h100-dgxc-slurm_18
-    - h100-dgxc-slurm_19
   h200:
     - h200-cw_00
     - h200-cw_01
-    - h200-nb_0
-    - h200-nb_1
     - h200-dgxc-slurm_0
     - h200-dgxc-slurm_1
     - h200-dgxc-slurm_2
@@ -46,74 +39,42 @@ labels:
     - h200-dgxc-slurm_11
     - h200-dgxc-slurm_12
     - h200-dgxc-slurm_13
-  h200-multinode:
-    - h200-dgxc-slurm_11
-    - h200-dgxc-slurm_12
-    - h200-dgxc-slurm_13
   b200:
     - b200-cw_00
     - b200-cw_01
     - b200-nb_0
     - b200-nb_1
-    - b200-dgxc_00
-    - b200-dgxc_01
-    - b200-dgxc_02
-    - b200-dgxc_03
-    - b200-dgxc_04
-    - b200-dgxc_05
-    - b200-dgxc_06
-    - b200-dgxc_07
-    - b200-dgxc_08
-    - b200-dgxc_09
-  b200-dsv4:
-    - b200-dgxc_00
-    - b200-dgxc_01
-    - b200-dgxc_02
-    - b200-dgxc_03
-    - b200-dgxc_04
-    - b200-dgxc_05
-    - b200-dgxc_06
-    - b200-dgxc_07
-    - b200-dgxc_08
-    - b200-dgxc_09
-  b200-multinode:
-    - b200-dgxc-slurm_7
-    - b200-dgxc-slurm_8
-    - b200-dgxc-slurm_9
-  b200-new:
-    - b200-nscale-slurm_0
-    - b200-nscale-slurm_1
-    - b200-nscale-slurm_2
-    - b200-nscale-slurm_3
-    - b200-nscale-slurm_4
-    - b200-nscale-slurm_5
-    - b200-nscale-slurm_6
-    - b200-nscale-slurm_7
-    - b200-nscale-slurm_8
+    - b200-nscale-slurm_00
+    - b200-nscale-slurm_01
+    - b200-nscale-slurm_02
+    - b200-nscale-slurm_03
+    - b200-nscale-slurm_04
+    - b200-nscale-slurm_05
+    - b200-nscale-slurm_06
+    - b200-nscale-slurm_07
+    - b200-nscale-slurm_08
+    - b200-nscale-slurm_09
   b200-nscale:
-    - b200-nscale-slurm_0
-    - b200-nscale-slurm_1
-    - b200-nscale-slurm_2
-    - b200-nscale-slurm_3
-    - b200-nscale-slurm_4
-    - b200-nscale-slurm_5
-    - b200-nscale-slurm_6
-    - b200-nscale-slurm_7
-    - b200-nscale-slurm_8
+    - b200-nscale-slurm_00
+    - b200-nscale-slurm_01
+    - b200-nscale-slurm_02
+    - b200-nscale-slurm_03
+    - b200-nscale-slurm_04
+    - b200-nscale-slurm_05
+    - b200-nscale-slurm_06
+    - b200-nscale-slurm_07
+    - b200-nscale-slurm_08
+    - b200-nscale-slurm_09
   mi300x:
-    - mi300x-amds_00
-    - mi300x-amds_01
-    - mi300x-amds_02
-    - mi300x-amds_03
-    - mi300x-amds_04
-    - mi300x-amds_05
-    - mi300x-amds_06
-    - mi300x-amds_07
-    - mi300x-amds_08
-  mi300x-disagg:
-    - mi300x-amds_06
-    - mi300x-amds_07
-    - mi300x-amds_08
+    - mi300x-amd_00
+    - mi300x-amd_01
+    - mi300x-amd_02
+    - mi300x-amd_03
+    - mi300x-amd_04
+    - mi300x-amd_05
+    - mi300x-amd_06
+    - mi300x-amd_07
+    - mi300x-amd_08
   mi325x:
     - mi325x-amds_00
     - mi325x-amds_01
@@ -121,14 +82,6 @@ labels:
     - mi325x-amds_03
     - mi325x-amds_04
     - mi325x-amds_05
-    - mi325x-amds_06
-    - mi325x-amds_07
-    - mi325x-amds_08
-  mi325x-disagg:
-    - mi325x-amds_00
-    - mi325x-amds_01
-    - mi325x-amds_02
-    - mi325x-amds_03
     - mi325x-amds_06
     - mi325x-amds_07
     - mi325x-amds_08
@@ -142,44 +95,10 @@ labels:
     - mi355x-amds_06
     - mi355x-amds_07
     - mi355x-amds_08
-  mi355x-disagg:
-    - mi355x-amds_06
-    - mi355x-amds_07
-    - mi355x-amds_08
-    - mi355x-amds_12
-    - mi355x-amds_14
-    - mi355x-amds_16
-    - mi355x-amds_17
-    - mi355x-amds_18
-    - mi355x-amds_19
   gb200:
     - gb200-nv_0
     - gb200-nv_1
     - gb200-nv_2
-  b300:
-    - b300-nv_01
-    - b300-nv_02
-    - b300-nv_03
-    - b300-nv_04
-    - b300-nv_05
-    - b300-nv_06
-    - b300-nv_07
-    - b300-nv_08
-    - b300-nv_09
-    - b300-nv_10
-    - b300-nv_11
-    - b300-nv_12
-    - b300-nv_13
-    - b300-nv_14
-    - b300-nv_15
-    - b300-nv_16
-    - b300-nv_17
-  b300-p1:
-    - b300-nv_13
-    - b300-nv_14
-    - b300-nv_15
-    - b300-nv_16
-    - b300-nv_17
   gb300:
     - gb300-nv_0
     - gb300-nv_1
@@ -230,53 +149,17 @@ labels:
     - h200-dgxc-slurm_11
     - h200-dgxc-slurm_12
     - h200-dgxc-slurm_13
-  cluster:h200-nb:
-    - h200-nb_0
   cluster:b200-nscale:
-    - b200-nscale-slurm_0
-    - b200-nscale-slurm_1
-    - b200-nscale-slurm_2
-    - b200-nscale-slurm_3
-    - b200-nscale-slurm_4
-    - b200-nscale-slurm_5
-    - b200-nscale-slurm_6
-    - b200-nscale-slurm_7
-    - b200-nscale-slurm_8
-  cluster:b200-dgxc:
-    - b200-dgxc_00
-    - b200-dgxc_01
-    - b200-dgxc_02
-    - b200-dgxc_03
-    - b200-dgxc_04
-    - b200-dgxc_05
-    - b200-dgxc_06
-    - b200-dgxc_07
-    - b200-dgxc_08
-    - b200-dgxc_09
-  cluster:b300-cw:
-    - b300-cw_0
-    - b300-cw_01
-    - b300-cw_02
-    - b300-cw_03
-    - b300-cw_04
-  cluster:b300-nv:
-    - b300-nv_01
-    - b300-nv_02
-    - b300-nv_03
-    - b300-nv_04
-    - b300-nv_05
-    - b300-nv_06
-    - b300-nv_07
-    - b300-nv_08
-    - b300-nv_09
-    - b300-nv_10
-    - b300-nv_11
-    - b300-nv_12
-    - b300-nv_13
-    - b300-nv_14
-    - b300-nv_15
-    - b300-nv_16
-    - b300-nv_17
+    - b200-nscale-slurm_00
+    - b200-nscale-slurm_01
+    - b200-nscale-slurm_02
+    - b200-nscale-slurm_03
+    - b200-nscale-slurm_04
+    - b200-nscale-slurm_05
+    - b200-nscale-slurm_06
+    - b200-nscale-slurm_07
+    - b200-nscale-slurm_08
+    - b200-nscale-slurm_09
   cluster:gb200-nv:
     - gb200-nv_0
     - gb200-nv_1
@@ -288,16 +171,16 @@ labels:
     - gb300-nv_2
   cluster:rtx6000pro-lat:
     - rtx6000pro-lat_00
-  cluster:mi300x-amds:
-    - mi300x-amds_00
-    - mi300x-amds_01
-    - mi300x-amds_02
-    - mi300x-amds_03
-    - mi300x-amds_04
-    - mi300x-amds_05
-    - mi300x-amds_06
-    - mi300x-amds_07
-    - mi300x-amds_08
+  cluster:mi300x-amd:
+    - mi300x-amd_00
+    - mi300x-amd_01
+    - mi300x-amd_02
+    - mi300x-amd_03
+    - mi300x-amd_04
+    - mi300x-amd_05
+    - mi300x-amd_06
+    - mi300x-amd_07
+    - mi300x-amd_08
   cluster:mi300x-tw:
     - mi300x-tw_00
     - mi300x-tw_01
@@ -335,20 +218,8 @@ hardware:
   cluster:h200-cw:
     available-cpu-dram-mib: 1_998_848
     gpus-per-node: 8
-  cluster:h200-nb:
-    available-cpu-dram-mib: 1_472_512
-    gpus-per-node: 8
-  cluster:b200-dgxc:
-    available-cpu-dram-mib: 3_095_781
-    gpus-per-node: 8
-  b200-nscale:
-    available-cpu-dram-mib: 2_063_920
-    gpus-per-node: 8
   cluster:b200-nscale:
     available-cpu-dram-mib: 2_063_920
-    gpus-per-node: 8
-  cluster:b300-nv:
-    available-cpu-dram-mib: 2_964_436
     gpus-per-node: 8
   cluster:gb200-nv:
     available-cpu-dram-mib: 860_160
@@ -359,8 +230,8 @@ hardware:
   cluster:rtx6000pro-lat:
     available-cpu-dram-mib: 1_500_000
     gpus-per-node: 8
-  cluster:mi300x-amds:
-    available-cpu-dram-mib: 2_321_924
+  cluster:mi300x-amd:
+    available-cpu-dram-mib: 1_547_820
     gpus-per-node: 8
   cluster:mi300x-tw:
     available-cpu-dram-mib: 2_322_328
