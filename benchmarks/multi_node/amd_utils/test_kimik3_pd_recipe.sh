@@ -53,6 +53,7 @@ assert "mooncake" not in repr(recipe).lower()
 
 k3 = models["Kimi-K3"]
 env = k3["env"]
+assert "VLLM_SSM_CONV_STATE_LAYOUT=DS" in env
 assert "VLLM_USE_BREAKABLE_CUDAGRAPH" not in env
 assert "VLLM_ALLOW_DCP_FULL_CUDAGRAPH=1" in env
 assert "PREFIX_CACHING_HASH_ALGO=sha256" in env
