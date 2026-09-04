@@ -128,6 +128,28 @@ else
     fi
 fi
 
+# Fan the detected class out to every transport that touches this fabric. MoRI's KV
+# transfer and NCCL's own collectives have to request the same PFC-protected class,
+# or the lossless guarantee only covers half the inter-node traffic.
+#
+# SL is the 802.1p priority: TC is the IP ToS byte (DSCP<<2) and priority is DSCP>>3,
+# so SL = TC>>5 (e.g. TC=104 -> DSCP 26/AF31 -> SL 3). bnxt_re REJECTS inconsistent
+# DSCP/SL pairs ("Given DSCP N and/or SL M not mapping to lossless queue") and
+# SILENTLY downgrades to the best-effort queue, which surfaces under load as
+# RETRY_EXC_ERR / stalled KV transfers, so every path needs the SL filled in - not
+# just the runner-set one.
+#
+# When detection found nothing these stay unset: requesting a class the fabric does
+# not map to its lossless queue is worse than leaving the transports on the default.
+if [[ -n "${MORI_RDMA_TC:-}" ]]; then
+    [[ -z "${MORI_RDMA_SL:-}" ]] && export MORI_RDMA_SL=$(( MORI_RDMA_TC >> 5 ))
+    export MORI_IO_TC="${MORI_IO_TC:-$MORI_RDMA_TC}"
+    export MORI_IO_SL="${MORI_IO_SL:-$MORI_RDMA_SL}"
+    export NCCL_IB_TC="${NCCL_IB_TC:-$MORI_RDMA_TC}"
+    export NCCL_IB_SL="${NCCL_IB_SL:-$MORI_RDMA_SL}"
+    echo "[INFO] RDMA QoS: MORI_RDMA_TC=$MORI_RDMA_TC MORI_RDMA_SL=$MORI_RDMA_SL MORI_IO_TC=$MORI_IO_TC MORI_IO_SL=$MORI_IO_SL NCCL_IB_TC=$NCCL_IB_TC NCCL_IB_SL=$NCCL_IB_SL"
+fi
+
 # =============================================================================
 # Engine-specific environment
 # =============================================================================
@@ -254,6 +276,23 @@ else
 
     export MORI_MAX_DISPATCH_TOKENS_PREFILL=8192
     export MORI_MAX_DISPATCH_TOKENS_DECODE=512
+
+    # DeepSeek-R1-0528 on MI325X only: 512 undersizes the decode MoRI MoE dispatch
+    # buffer for the conc-32 DP+EP cross-node all-to-all, which stalls under load.
+    # Scoped to this model+SKU because the value also scales the decode
+    # --chunked-prefill-size (via the models.yaml formula) and the inter-kernel
+    # switch threshold below, so it must not move for other SKUs or models.
+    #
+    # RUNNER_TYPE is this repo's hardware identifier: configs/*-master.yaml declares
+    # it per entry ("runner: mi325x"), job.slurm forwards it into the container, and
+    # benchmark_lib.sh records it as the result "hw" field. Matched as a prefix so
+    # label variants such as mi325x-disagg are covered. Deliberately not RUNNER_NAME:
+    # that is the GitHub runner instance (mi325x-amds_00) used host-side to pick the
+    # launcher, and it is never forwarded into the container.
+    if [[ "$MODEL_NAME" == "DeepSeek-R1-0528" ]] && [[ "${RUNNER_TYPE:-}" == mi325x* ]]; then
+        export MORI_MAX_DISPATCH_TOKENS_DECODE=4096
+        echo "[INFO] $RUNNER_TYPE + $MODEL_NAME: MORI_MAX_DISPATCH_TOKENS_DECODE=$MORI_MAX_DISPATCH_TOKENS_DECODE (conc-32 DP+EP cross-node dispatch buffer)"
+    fi
 
     export MORI_MOE_MAX_INPUT_TOKENS_PREFILL=32768
     export MORI_MOE_MAX_INPUT_TOKENS_DECODE=2703
