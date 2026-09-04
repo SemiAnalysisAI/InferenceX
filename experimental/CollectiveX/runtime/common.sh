@@ -31,8 +31,8 @@ COLLX_UCCL_COMMIT="fc1b582031221645ea9fce58aeb57187713145e3"
 # contrib/nccl_ep is absent from the v2.29.x / v2.30.4 release tags, so any such build must use
 # this post-merge master commit (which contains contrib/nccl_ep), NOT a release tag.
 COLLX_NCCL4PY_SPEC="nccl-extensions[cu13]==0.1.0"
-COLLX_NCCL_EP_REPO="https://github.com/NVIDIA/nccl"
-COLLX_NCCL_EP_COMMIT="9d22d5dfec8391ee65b56df139d471f8e08e921e"
+COLLX_NCCL_EP_REPO="https://github.com/NVIDIA/nccl-extensions"
+COLLX_NCCL_EP_COMMIT="e57f0dad43dc1ca5bf96f09bf4075afc2eae6599"
 
 # Print bounded command output without maintaining a parallel failure taxonomy.
 collx_log_tail() {
