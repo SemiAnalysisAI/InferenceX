@@ -6885,3 +6885,23 @@
     - "Remove the mandatory host-repair hook, RDMA/GPU-drain helper scripts, and separate image/model staging allocation; use provisioned caches and native Pyxis container lifecycle."
     - "Keep InferenceX-specific benchmark/eval metadata and artifact collection in a portable adapter while preserving the existing serving and workload settings."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2542
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom-disagg
+  description:
+    - "Port the DeepSeek-V4-Pro FP4 MI355X ATOM disaggregated 8k/1k submission from the configuration-specific AMD launcher to srt-slurm ATOM orchestration and native AToMesh routing."
+    - "Preserve all original search points: 1P1D TP8 at concurrency 4, 8, 16, 32, 64, and 128; 2P1D DPA+TP8 at concurrency 256, 512, 768, 1024, and 2048."
+    - "Use the unchanged InferenceX benchmark_serving.py through the custom benchmark contract and remove the exact legacy wrapper plus its obsolete deprecated 1k/1k entry."
+    - "Keep the original image, Mooncake default RDMA transport, random length ratio 0.8, decode graph capture sizes, router options, and TP8 / DP-attention / TBO settings."
+    - "Use the ATOM image's bundled native AToMesh binary directly, without Infera source overlays or Infera routing, and archive the complete runtime logs from the custom benchmark."
+    - "Keep rocm/atom-dev:nightly_202606101403 and the original AToMesh revision 087b82d9c1f630e79149ba37e6213257ec9a76f8; use the shared launcher and srt-slurm PR #7 from base PR #2542."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2627
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom-disagg
+  description:
+    - "Use the unmodified official rocm/atom-dev:nightly_202609031453 image and its native AToMesh revision f95ef3ec30a16876a676e0af96d60f8e0605c7c5; no source patches, overlays, or custom image."
+    - "The June image ignored max_completion_tokens after AToMesh normalized max_tokens, causing the 2P1D GSM8K decode worker to exceed its context capacity. The upstream ATOM API fix is included in this nightly."
+    - "Use the image-provided ROCm/Mooncake library paths instead of the retired Python 3.10 path; keep all explicit engine options, topologies, concurrency points, benchmark inputs, and eval thresholds unchanged."
+    - "Validate the shared single-entrypoint launcher and native Pyxis lifecycle without host-repair, RDMA-preflight, or GPU-drain scripts."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2627
