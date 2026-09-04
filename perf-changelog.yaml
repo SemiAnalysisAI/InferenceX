@@ -6868,3 +6868,13 @@
   description:
     - "Refresh the DeepSeek-V4-Pro FP4 B200 vLLM image and search space, pin the Nscale NVFP4 checkpoint, use the FlashInfer CuTeDSL MoE backend for expert-parallel runs with EPLB disabled, set GPU memory utilization to 0.95, and cap the model length at 12288."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2534
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang
+    - qwen3.5-fp4-mi355x-sglang-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Serve amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2 instead of amd/Qwen3.5-397B-A17B-MXFP4, the newer AMD checkpoint that keeps MXFP4 MoE weights, quantizes the shared expert into the fused MoE kernel, and runs attention in FP8"
+    - "Drop the TP4 band from both arms: TP4 shards the FP8 linear_attn in_proj_ba to N=32, for which aiter's CK gemm_a8w8_bpreshuffle has no instance (NPerBlock=64, no MN padding), so the server crashes during prefill"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2793
