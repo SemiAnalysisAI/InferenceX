@@ -119,7 +119,7 @@ ROUTER_PID=""
 MOONCAKE_MASTER_PID=""
 
 # The generated TOTAL_CPU_DRAM_GB budget is proportional to allocated GPUs.
-# On cluster:b300-nv, dram-utilization=0.95 gives both DEP4 and DEP8 356 GB per
+# On cluster:b300-dsxe, dram-utilization=0.95 gives both DEP4 and DEP8 356 GB per
 # DP rank (1,424 GB and 2,849 GB total, respectively). TP arms remain GPU-resident.
 OFFLOAD_ARGS=()
 case "$KV_OFFLOAD_BACKEND" in

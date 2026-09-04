@@ -20,7 +20,7 @@ on:
       - 'runners/launch_gb300-nv.sh'
       - 'runners/launch_b200-nscale-slurm.sh'
       - 'runners/launch_b200-nscale-compat.sh'
-      - 'runners/launch_b300-nv.sh'
+      - 'runners/launch_b300-dsxe.sh'
       - 'runners/launch_h200-dgxc-slurm.sh'
       - 'runners/inject_srt_power_concurrencies.py'
       - 'utils/aggregate_power.py'
