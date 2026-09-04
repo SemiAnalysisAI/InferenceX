@@ -689,7 +689,9 @@ kimik3-fp4-mi355x-atom-agentic-mtp:
 # SA single-node none:40 (TP8/DCP8 + LMCacheMP). Allowed PD delta only:
 # prefill TP8/DCP8 + LMCacheMP + MoRIIO producer; decode TP8/DCP8 + MoRIIO consumer.
 kimik3-fp4-mi355x-vllm-disagg-agentic:
-  image: vllm/vllm-openai-rocm:nightly
+  # Pin the 2026-09-03 nightly validated locally. Some SA nodes retain an older
+  # mutable `nightly` tag whose AttentionConfig predates ROCM_AITER_FA.
+  image: vllm/vllm-openai-rocm:nightly@sha256:91e381f072d6a44e1e4c97c82dce06e50e5189905cb3999a11471c5a8fc6a563
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:mi355x-amds

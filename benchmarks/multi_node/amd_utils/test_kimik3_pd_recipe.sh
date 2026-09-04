@@ -18,7 +18,10 @@ recipe = config["kimik3-fp4-mi355x-vllm-disagg-agentic"]
 point = recipe["scenarios"]["agentic-coding"][0]
 arm = point["search-space"][0]
 arm_2p1d = point["search-space"][1]
-assert recipe["image"] == "vllm/vllm-openai-rocm:nightly"
+assert recipe["image"] == (
+    "vllm/vllm-openai-rocm:nightly@"
+    "sha256:91e381f072d6a44e1e4c97c82dce06e50e5189905cb3999a11471c5a8fc6a563"
+)
 assert recipe["framework"] == "vllm-disagg"
 assert recipe["kv-p2p-transfer"] == "moriio"
 assert arm["prefill"]["tp"] == 8
