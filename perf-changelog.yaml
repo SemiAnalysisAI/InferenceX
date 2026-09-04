@@ -6904,4 +6904,4 @@
     - "Port the archived MiniMax-M3 FP4 MI355X 1P1D TP4/TP4 MoRI-IO configuration to native srt-slurm and vLLM Router, retaining all nine 8k/1k concurrency points and explicit engine options."
     - "Use official vLLM ROCm v0.28.0 and vLLM Router nightly-20260903-1d10e71 because both original image tags are no longer published. No engine patches or setup hooks."
     - "Keep this deprecated configuration opt-in; validate through the upstream end-to-end workflow without restoring it to active production sweeps."
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2824
