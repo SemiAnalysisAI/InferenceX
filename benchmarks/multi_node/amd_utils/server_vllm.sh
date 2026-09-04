@@ -307,14 +307,17 @@ print(json.dumps({
 # =============================================================================
 
 echo "Waiting at the container creation barrier on $host_name"
-python3 $WS_PATH/sync.py barrier \
-    --local-ip ${host_ip} \
-    --local-port 5000 \
-    --enable-port \
-    --node-ips ${IPADDRS} \
-    --node-ports 5000 \
-    --wait-for-all-ports \
-    --timeout 600
+if ! python3 $WS_PATH/sync.py barrier \
+        --local-ip ${host_ip} \
+        --local-port 5000 \
+        --enable-port \
+        --node-ips ${IPADDRS} \
+        --node-ports 5000 \
+        --wait-for-all-ports \
+        --timeout 600; then
+    echo "ERROR: container creation barrier failed on $host_name" >&2
+    exit 1
+fi
 
 # =============================================================================
 # Cluster Topology Configuration
@@ -408,11 +411,14 @@ if [ "$NODE_RANK" -eq 0 ]; then
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: skipping barrier (wait-for-all-ports)"
     else
-        python3 $WS_PATH/sync.py barrier \
-            --node-ips ${IPADDRS} \
-            --node-ports $SERVER_PORT \
-            --wait-for-all-ports \
-            --timeout "$SERVER_UP_TIMEOUT"
+        if ! python3 $WS_PATH/sync.py barrier \
+                --node-ips ${IPADDRS} \
+                --node-ports $SERVER_PORT \
+                --wait-for-all-ports \
+                --timeout "$SERVER_UP_TIMEOUT"; then
+            echo "ERROR: prefill/decode server barrier failed after ${SERVER_UP_TIMEOUT}s" >&2
+            exit 1
+        fi
     fi
 
     echo "Congratulations!!! All prefill and decode servers are up . . ."
@@ -428,7 +434,10 @@ if [ "$NODE_RANK" -eq 0 ]; then
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $HEALTH_BARRIER_CMD"
     else
-        eval "$HEALTH_BARRIER_CMD"
+        if ! eval "$HEALTH_BARRIER_CMD"; then
+            echo "ERROR: router health barrier failed after ${SERVER_UP_TIMEOUT}s" >&2
+            exit 1
+        fi
         echo "MoRI-IO proxy is ready for benchmarking"
     fi
 
@@ -600,7 +609,10 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$xP" ]; then
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BARRIER_CMD"
     else
-        eval "$BARRIER_CMD"
+        if ! eval "$BARRIER_CMD"; then
+            echo "ERROR: additional prefill router barrier failed after ${SERVER_UP_TIMEOUT}s" >&2
+            exit 1
+        fi
     fi
 
     echo "Waiting until proxy server closes..."
@@ -659,7 +671,10 @@ else
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BARRIER_CMD"
     else
-        eval "$BARRIER_CMD"
+        if ! eval "$BARRIER_CMD"; then
+            echo "ERROR: decode router barrier failed after ${SERVER_UP_TIMEOUT}s" >&2
+            exit 1
+        fi
     fi
 
     echo "Waiting until proxy server closes..."

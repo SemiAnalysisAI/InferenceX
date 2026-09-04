@@ -61,4 +61,23 @@ for removed in (
     assert removed not in job
 PY
 
+python3 - "$HERE/server_vllm.sh" <<'PY'
+import sys
+
+server = open(sys.argv[1], encoding="utf-8-sig").read()
+for message in (
+    "container creation barrier failed",
+    "prefill/decode server barrier failed",
+    "router health barrier failed",
+    "additional prefill router barrier failed",
+    "decode router barrier failed",
+):
+    assert message in server, message
+
+# A timeout must be fatal instead of falling through to the benchmark or the
+# indefinite router-close wait.
+assert server.count('if ! eval "$BARRIER_CMD"; then') == 2
+assert 'if ! eval "$HEALTH_BARRIER_CMD"; then' in server
+PY
+
 echo "vLLM disagg framework static tests passed"
