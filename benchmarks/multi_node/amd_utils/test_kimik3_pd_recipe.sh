@@ -48,7 +48,7 @@ assert "LMCACHE_L1_SIZE_GB=1799" in settings
 assert "LMCACHE_MAX_GPU_WORKERS=8" in settings
 assert "SERVER_UP_TIMEOUT=900" in settings
 assert "VLLM_K3_FORK_REF=moriio-k3" in settings
-assert any(item.startswith("VLLM_K3_FORK_SHA=ab18a7bb") for item in settings)
+assert any(item.startswith("VLLM_K3_FORK_SHA=69b54085") for item in settings)
 assert "mooncake" not in repr(recipe).lower()
 
 k3 = models["Kimi-K3"]
