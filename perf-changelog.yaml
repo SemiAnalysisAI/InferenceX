@@ -6833,10 +6833,11 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2808
 
 - config-keys:
+    - minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp
     - minimaxm3-fp4-gb200-dynamo-vllm-agentic-disagg-mtp
   scenario-type:
     - agentic-coding
   description:
-    - "Refresh the full GB200 Dynamo-vLLM disaggregated AgentX configuration across the configured topology points."
-    - "Configure Mooncake host KV storage, NIXL over UCX, Dynamo 1.5.0.dev20260819, explicit thinking mode, and the committed MiniMax-M3 EAGLE3-GQA acceptance target."
+    - "Refresh the full GB200 Dynamo-vLLM AgentX configuration across the configured aggregate and disaggregated topology points."
+    - "Retain aggregate SimpleCPU-offload concurrency 20 and 30, and configure Mooncake host KV storage, NIXL over UCX, explicit thinking mode, and the committed MiniMax-M3 EAGLE3-GQA acceptance target."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2807
