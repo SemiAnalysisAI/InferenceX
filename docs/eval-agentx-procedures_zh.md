@@ -173,6 +173,8 @@ gh run download "$RUN_ID" --repo SemiAnalysisAI/InferenceX \
 
 ## 7. 运行 AgentX：快速反馈与 canonical 证据
 
+受控 PowerX 配置 `qwen3.5-fp8-{b200,b300,mi355x}-sglang-agentic-powerx` 使用 TP4、原生解码、前缀复用，且不启用 CPU offload。在采集配置规定的一小时结果前，先验证服务与四张 GPU 的功耗统计边界。recipe 可将 `AIPERF_TOKENIZER` 设为固定版本的模型快照路径，让 replay 与服务使用同一 tokenizer；未设置时仍使用 `MODEL`。
+
 AgentX 是 AIPerf `inferencex-agentx-mvp` trace replay，不是固定 token 的合成 benchmark。仓库默认设置对每条 trajectory lane 额外执行十个 warmup 请求，并使用 recipe 配置的 profile 时长。`agentx-fast` 强制每条 lane 只运行一个 warmup 请求，并将 profile 设为 1,200 秒。它只影响单节点和多节点 AgentX 吞吐量；定长序列吞吐量与 eval 保持 canonical。Fast 运行不符合 artifact reuse 条件（[工作流策略](../.github/workflows/README.md#agentx-fast-mode)、[fast replay 设置](../benchmarks/benchmark_lib.sh#L2104-L2128)）。
 
 对于多节点 srt-slurm 作业，benchmark client 与 frontend 可能运行在不同主机上。`agentic_srt.sh` 会优先使用显式提供的 `AIPERF_SERVER_URL`；否则从 `SRT_FRONTEND_HOST` 和 `SRT_FRONTEND_PORT` 推导地址；仅在没有远端 endpoint 时回退到 `localhost:$PORT`。Trace replay 和并发点之间的 drain 检查必须使用同一个解析后的 endpoint。

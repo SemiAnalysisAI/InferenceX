@@ -1215,6 +1215,20 @@ qwen3.5-fp8-b200-sglang:
       - { tp: 8, conc-start: 4, conc-end: 4 }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
 
+# Controlled PowerX arm; AgentX matrix generation defaults to 3600 seconds.
+qwen3.5-fp8-b200-sglang-agentic-powerx:
+  image: lmsysorg/sglang:v0.5.16-cu130@sha256:7b6a35df9839fd593a94a1eaee82d7777f472225d9f3ad1f8a2e0cb2bd1785d0
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  runner: cluster:b200-nscale
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - { tp: 4, ep: 1, spec-decoding: none, kv-offloading: none, conc-list: [1, 4, 12] }
+
 qwen3.5-fp8-b200-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.16-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
@@ -7200,6 +7214,20 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-disagg:
           dp-attn: false
 
     # ---------- 1k1k high-throughput (wide-EP decode, EAGLE MTP) ----------
+# Controlled PowerX arm; shares the B200 launcher and 3600-second default.
+qwen3.5-fp8-b300-sglang-agentic-powerx:
+  image: lmsysorg/sglang:v0.5.16-cu130@sha256:7b6a35df9839fd593a94a1eaee82d7777f472225d9f3ad1f8a2e0cb2bd1785d0
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  runner: cluster:b300-dsxe
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - { tp: 4, ep: 1, spec-decoding: none, kv-offloading: none, conc-list: [1, 4, 12] }
+
 qwen3.5-fp8-b300-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.16-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
