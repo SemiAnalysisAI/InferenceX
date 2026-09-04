@@ -724,8 +724,8 @@ kimik3-fp4-mi355x-vllm-disagg-agentic:
           - "LMCACHE_MAX_GPU_WORKERS=8"
           - "SERVER_UP_TIMEOUT=900"
           - "IX_AIPERF_TOKENIZER=moonshotai/Kimi-K3"
-          - "VLLM_K3_FORK_REF=yichaozhu/k3-tpdcp-hetero"
-          - "VLLM_K3_FORK_SHA=f1870840bf1fb81564204ae6a26ca625570851f9"
+          - "VLLM_K3_FORK_REF=moriio-k3"
+          - "VLLM_K3_FORK_SHA=ab18a7bbb012af72f676276482e5396fbec2efc8"
           - "HF_HUB_CACHE=/models/.cache/huggingface/hub"
           - "PREFILL_DCP_COMM=a2a"
           - "PREFILL_CP_KV_CACHE_INTERLEAVE_SIZE=1536"
@@ -737,8 +737,8 @@ kimik3-fp4-mi355x-vllm-disagg-agentic:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=1"
-          - "VLLM_K3_FORK_REF=yichaozhu/k3-tpdcp-hetero"
-          - "VLLM_K3_FORK_SHA=f1870840bf1fb81564204ae6a26ca625570851f9"
+          - "VLLM_K3_FORK_REF=moriio-k3"
+          - "VLLM_K3_FORK_SHA=ab18a7bbb012af72f676276482e5396fbec2efc8"
           - "HF_HUB_CACHE=/models/.cache/huggingface/hub"
           - "DECODE_DCP_COMM=a2a"
           - "DECODE_CP_KV_CACHE_INTERLEAVE_SIZE=1536"
@@ -761,8 +761,8 @@ kimik3-fp4-mi355x-vllm-disagg-agentic:
           - "LMCACHE_MAX_GPU_WORKERS=8"
           - "SERVER_UP_TIMEOUT=900"
           - "IX_AIPERF_TOKENIZER=moonshotai/Kimi-K3"
-          - "VLLM_K3_FORK_REF=yichaozhu/k3-tpdcp-hetero"
-          - "VLLM_K3_FORK_SHA=f1870840bf1fb81564204ae6a26ca625570851f9"
+          - "VLLM_K3_FORK_REF=moriio-k3"
+          - "VLLM_K3_FORK_SHA=ab18a7bbb012af72f676276482e5396fbec2efc8"
           - "HF_HUB_CACHE=/models/.cache/huggingface/hub"
           - "PREFILL_DCP_COMM=a2a"
           - "PREFILL_CP_KV_CACHE_INTERLEAVE_SIZE=1536"
@@ -774,8 +774,8 @@ kimik3-fp4-mi355x-vllm-disagg-agentic:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=1"
-          - "VLLM_K3_FORK_REF=yichaozhu/k3-tpdcp-hetero"
-          - "VLLM_K3_FORK_SHA=f1870840bf1fb81564204ae6a26ca625570851f9"
+          - "VLLM_K3_FORK_REF=moriio-k3"
+          - "VLLM_K3_FORK_SHA=ab18a7bbb012af72f676276482e5396fbec2efc8"
           - "HF_HUB_CACHE=/models/.cache/huggingface/hub"
           - "DECODE_DCP_COMM=a2a"
           - "DECODE_CP_KV_CACHE_INTERLEAVE_SIZE=1536"
