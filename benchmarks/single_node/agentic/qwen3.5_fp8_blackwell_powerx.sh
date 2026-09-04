@@ -35,6 +35,8 @@ SERVER_LOG="$RESULT_DIR/server.log"
 install_agentic_deps
 # Staged MODEL_PATH directories do not prove a checkpoint revision. Reuse a
 # pinned HF cache snapshot when available, otherwise download that revision.
+"$AIPERF_HF_CLI" download "$MODEL" --revision "$MODEL_REVISION" --dry-run \
+    | tee "$RESULT_DIR/powerx_model_cache.txt"
 MODEL_PATH=$("$AIPERF_HF_CLI" download "$MODEL" --revision "$MODEL_REVISION")
 export MODEL_PATH
 export AIPERF_TOKENIZER="$MODEL_PATH"

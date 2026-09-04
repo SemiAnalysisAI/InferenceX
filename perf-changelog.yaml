@@ -6889,3 +6889,14 @@
     - "Add controlled Qwen3.5 FP8 TP4 AgentX power configurations for B200, B300, and MI355X with prefix caching and no speculative decoding or CPU offload."
     - "Pin serving images and model weights, require valid GPU power, and allow the replay tokenizer to use the pinned model snapshot."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2827
+
+- config-keys:
+    - qwen3.5-fp8-b200-sglang-agentic-powerx
+    - qwen3.5-fp8-b300-sglang-agentic-powerx
+    - qwen3.5-fp8-mi355x-sglang-agentic-powerx
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Fix digest-pinned image imports for the PowerX qualification runners by reusing the Enroot manifest-reference converter."
+    - "Mount persistent HF caches on the NVIDIA single-node runners and record pinned model cache requirements before download."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2827

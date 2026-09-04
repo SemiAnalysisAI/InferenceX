@@ -1,5 +1,7 @@
 #!/usr/bin/bash
 
+source "$(dirname "${BASH_SOURCE[0]}")/container_utils.sh"
+
 # Compatibility launcher for B200 Nscale configurations that have not yet
 # moved to the native srt-slurm path in launch_b200-nscale-slurm.sh.
 SLURM_PARTITION="${SLURM_PARTITION:-batch_1}"
@@ -570,11 +572,17 @@ else
     salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$GPU_COUNT --exclusive --mem=0 --time="$SALLOC_TIME_LIMIT" --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
 
+    # Keep pinned model snapshots and datasets across single-node jobs.
+    HF_HUB_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/hf-hub-cache"
+    export HF_HUB_CACHE="${HF_HUB_CACHE:-/mnt/hf_hub_cache}"
+    mkdir -p "$HF_HUB_CACHE_HOST_PATH"
+
     # Point the bench script at the resolved MODEL_PATH instead of
     # pulling from the HF hub cache. Bench scripts skip `hf download` when
     # MODEL is a local path.
     export MODEL="$MODEL_PATH"
 
+    ENROOT_IMAGE_URI=$(enroot_uri_for_image "$IMAGE") || exit 1
     # Use flock to serialize concurrent imports to the same squash file
     # Override ENROOT_CACHE_PATH to avoid permission issues with system-wide cache on worker nodes
     srun --jobid=$JOB_ID bash -c "
@@ -586,13 +594,13 @@ else
             echo 'Squash file already exists and is valid, skipping import'
         else
             rm -f \"$SQUASH_FILE\"
-            enroot import -o \"$SQUASH_FILE\" docker://$IMAGE
+            enroot import -o \"$SQUASH_FILE\" \"$ENROOT_IMAGE_URI\"
         fi
     "
 
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
-        --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR,$MODEL_PATH:$MODEL_PATH,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache \
+        --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR,$MODEL_PATH:$MODEL_PATH,$HF_HUB_CACHE_HOST_PATH:$HF_HUB_CACHE,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache \
         --no-container-mount-home \
         --container-workdir=$CONTAINER_MOUNT_DIR \
         --no-container-entrypoint --export=ALL,PORT=8888,AIPERF_DATASET_MMAP_CACHE_DIR=/aiperf_mmap_cache \

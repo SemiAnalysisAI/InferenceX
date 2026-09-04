@@ -41,6 +41,8 @@ PY
 guard_powerx_dataset_revision > "$RESULT_DIR/powerx_dataset_revision.txt"
 resolve_trace_source
 export MODEL_REVISION=ea5b4f81096f3901c91dea97f81324302495781d
+"$AIPERF_HF_CLI" download "$MODEL" --revision "$MODEL_REVISION" --dry-run \
+    | tee "$RESULT_DIR/powerx_model_cache.txt"
 MODEL_PATH=$("$AIPERF_HF_CLI" download "$MODEL" --revision "$MODEL_REVISION")
 export MODEL_PATH
 export AIPERF_TOKENIZER="$MODEL_PATH"

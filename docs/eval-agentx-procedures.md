@@ -340,3 +340,5 @@ Use `scancel` or process termination only with explicit approval and a concrete 
 - Every backend/frontend and metrics source is represented in live evidence.
 - Fast/smoke results are labeled diagnostic. Only the canonical candidate is used for final comparison.
 - Workflow and artifact collection conclude green before success is reported.
+
+The PowerX runners convert Docker digest pins to Enroot manifest references at import time. B200 and B300 mount persistent Hugging Face caches, and the recipes record a pinned-model download dry run before loading weights.

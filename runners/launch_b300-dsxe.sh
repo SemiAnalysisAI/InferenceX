@@ -1,5 +1,7 @@
 #!/usr/bin/bash
 
+source "$(dirname "${BASH_SOURCE[0]}")/container_utils.sh"
+
 # Launcher for the B300 DSXE Slurm cluster (dsxe-sa-b300-prd0), runners run as sa-gha-runner.
 #
 # Every cluster-specific fact lives in this block. The rest of the file is generic:
@@ -87,6 +89,8 @@ import_squash_image() {
     local image_ref="$1"
     local sqsh="$2"
     local lock="${2}.lock"
+    local enroot_uri
+    enroot_uri=$(enroot_uri_for_image "$image_ref") || exit 1
 
     if unsquashfs -l "$sqsh" > /dev/null 2>&1; then
         echo "Squash file already present, skipping import: $sqsh"
@@ -102,7 +106,7 @@ import_squash_image() {
             exit 0
         fi
         rm -f \"$sqsh\"
-        enroot import -o \"$sqsh\" \"docker://$image_ref\"
+        enroot import -o \"$sqsh\" \"$enroot_uri\"
         unsquashfs -l \"$sqsh\" > /dev/null
     " || { echo "Error: enroot import failed for $image_ref -> $sqsh" >&2; exit 1; }
 
@@ -432,9 +436,10 @@ done
 find . -name '.nfs*' -delete 2>/dev/null || true
 
 else
-    # HF_HUB_CACHE is set to help with dataset download inside the container
-    # for eval jobs.
-    export HF_HUB_CACHE="$HOME/.cache/huggingface"
+    # Persist pinned snapshots and datasets even without the home mount.
+    HF_HUB_CACHE_HOST_PATH="/data/home/sa-gha-runner/hf-hub-cache"
+    export HF_HUB_CACHE="${HF_HUB_CACHE:-/mnt/hf_hub_cache}"
+    mkdir -p "$HF_HUB_CACHE_HOST_PATH"
 
     # MODEL stays the HF id for the client; MODEL_PATH is where the server reads
     # weights. Only the root holding MODEL_PATH is mounted -- mounting both roots
@@ -499,6 +504,7 @@ else
     CONTAINER_MOUNTS=(
         "$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR"
         "$MODEL_MOUNT_DIR:$MODEL_MOUNT_DIR"
+        "$HF_HUB_CACHE_HOST_PATH:$HF_HUB_CACHE"
     )
     CONTAINER_MOUNTS_ARG=$(IFS=,; printf '%s' "${CONTAINER_MOUNTS[*]}")
 

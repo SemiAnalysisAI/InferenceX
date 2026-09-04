@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+source "$(dirname "${BASH_SOURCE[0]}")/container_utils.sh"
+
 scancel_sync() {
     local jobid=$1
     local timeout=${2:-600}
@@ -271,6 +273,7 @@ else
 
     srun --jobid=$JOB_ID bash -c "docker stop \$(docker ps -a -q)"
 
+    ENROOT_IMAGE_URI=$(enroot_uri_for_image "$IMAGE") || exit 1
     # Use flock to serialize concurrent imports to the same squash file
     srun --jobid=$JOB_ID bash -c "
         exec 9>\"$LOCK_FILE\"
@@ -279,7 +282,7 @@ else
             echo 'Squash file already exists and is valid, skipping import'
         else
             rm -f \"$SQUASH_FILE\"
-            enroot import -o \"$SQUASH_FILE\" docker://$IMAGE
+            enroot import -o \"$SQUASH_FILE\" \"$ENROOT_IMAGE_URI\"
         fi
     "
 

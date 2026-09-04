@@ -340,3 +340,5 @@ gh run cancel <RUN_ID> --repo SemiAnalysisAI/InferenceX
 - 每个 backend/frontend 与 metrics source 都在实时证据中有所体现。
 - Fast/smoke 结果明确标为诊断用途；只有 canonical candidate 用于最终比较。
 - 在报告成功前，工作流与 artifact collection 均已得出 green 结论。
+
+PowerX runner 在导入时将 Docker digest 转换为 Enroot manifest 引用。B200 和 B300 挂载持久化 Hugging Face 缓存，配置在加载权重前记录固定模型版本的下载预检查。
