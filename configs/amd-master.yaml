@@ -708,7 +708,7 @@ kimik3-fp4-mi355x-vllm-disagg-agentic:
       - spec-decoding: "none"
         conc-list: [ 40 ]
         kv-offloading: dram
-        kv-offload-backend: { name: lmcache-k3, version: "git-140819c9d57a975dbc5678a6459a218e544cb58b" }
+        kv-offload-backend: { name: lmcache-k3, version: "git-d131cecfbda1c73019c56bf5173c6110b6c01f35" }
         prefill:
           num-worker: 1
           tp: 8
@@ -745,7 +745,7 @@ kimik3-fp4-mi355x-vllm-disagg-agentic:
       - spec-decoding: "none"
         conc-list: [ 70 ]
         kv-offloading: dram
-        kv-offload-backend: { name: lmcache-k3, version: "git-140819c9d57a975dbc5678a6459a218e544cb58b" }
+        kv-offload-backend: { name: lmcache-k3, version: "git-d131cecfbda1c73019c56bf5173c6110b6c01f35" }
         prefill:
           num-worker: 2
           tp: 8

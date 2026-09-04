@@ -33,7 +33,7 @@ assert arm["spec-decoding"] == "none"
 assert arm["conc-list"] == [40]
 assert arm["kv-offloading"] == "dram"
 assert arm["kv-offload-backend"]["name"] == "lmcache-k3"
-assert arm["kv-offload-backend"]["version"].startswith("git-140819c9")
+assert arm["kv-offload-backend"]["version"].startswith("git-d131cecf")
 assert arm_2p1d["prefill"]["num-worker"] == 2
 assert arm_2p1d["prefill"]["dcp-size"] == 8
 assert arm_2p1d["decode"]["num-worker"] == 1

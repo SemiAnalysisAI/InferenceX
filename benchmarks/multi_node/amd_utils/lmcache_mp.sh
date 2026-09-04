@@ -18,7 +18,7 @@ lmcache_mp_install_native_deps() {
 }
 
 lmcache_mp_install() {
-    local ref="${LMCACHE_GIT_REF:-140819c9d57a975dbc5678a6459a218e544cb58b}"
+    local ref="${LMCACHE_GIT_REF:-d131cecfbda1c73019c56bf5173c6110b6c01f35}"
     local src="${LMCACHE_SRC:-/opt/lmcache-src}"
     lmcache_mp_install_native_deps || return 1
 
