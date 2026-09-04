@@ -6833,6 +6833,33 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2808
 
 - config-keys:
+    - glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a GLM-5.2 concurrency-1 AgentX point using a 1-prefill/1-decode disaggregated topology with TP4 attention-DP prefill and TP8 decode."
+    - "Use MTP depth 5 with the committed golden acceptance target, tensor-parallel MoE on decode, and the CUTEDSL top-k path."
+    - "Align recipe KV offloading with the master config and keep the benchmark client colocated with the frontend orchestrator."
+    - "Add the new concurrency-1 topology to the existing disaggregated configuration key while retaining all published points."
+    - "Enable TensorRT-LLM iteration statistics and require KV-cache server metrics for the new concurrency-1 point."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2720
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-trt-agentx
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Set OMP_NUM_THREADS=1 for the prefill and decode workers across the GB300 Dynamo-TensorRT-LLM AgentX recipe matrix."
+    - "Route AgentX replay and drain checks through the srt-slurm frontend endpoint when provided, with a localhost fallback."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2711
+
+- config-keys:
+    - dsv4-fp4-b200-vllm
+  description:
+    - "Refresh the DeepSeek-V4-Pro FP4 B200 vLLM image and search space, pin the Nscale NVFP4 checkpoint, use the FlashInfer CuTeDSL MoE backend for expert-parallel runs with EPLB disabled, set GPU memory utilization to 0.95, and cap the model length at 12288."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2534
+
+- config-keys:
     - qwen3-0.6b-fp16-mi355x-sglang-srt-agg
     - qwen3-0.6b-fp16-mi355x-sglang-srt-disagg
   scenario-type:
