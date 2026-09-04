@@ -37,7 +37,13 @@ install_agentic_deps
 # pinned HF cache snapshot when available, otherwise download that revision.
 "$AIPERF_HF_CLI" download "$MODEL" --revision "$MODEL_REVISION" --dry-run \
     | tee "$RESULT_DIR/powerx_model_cache.txt"
-MODEL_PATH=$("$AIPERF_HF_CLI" download "$MODEL" --revision "$MODEL_REVISION")
+MODEL_PATH=$("$AIPERF_PYTHON" - <<'PYMODEL'
+import os
+from huggingface_hub import snapshot_download
+
+print(snapshot_download(os.environ["MODEL"], revision=os.environ["MODEL_REVISION"]))
+PYMODEL
+)
 export MODEL_PATH
 export AIPERF_TOKENIZER="$MODEL_PATH"
 resolve_trace_source
