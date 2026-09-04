@@ -29,6 +29,7 @@ resources:
 backend:
   type: trtllm
   prefill_environment:
+    OMP_NUM_THREADS: '1'
     TLLM_LOG_LEVEL: INFO
     TRTLLM_SERVER_DISABLE_GC: '1'
     TRTLLM_WORKER_DISABLE_GC: '1'
@@ -42,6 +43,7 @@ backend:
     PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
     CUDA_SCALE_LAUNCH_QUEUES: 4x
   decode_environment:
+    OMP_NUM_THREADS: '1'
     TLLM_LOG_LEVEL: INFO
     TRTLLM_SERVER_DISABLE_GC: '1'
     TRTLLM_WORKER_DISABLE_GC: '1'
