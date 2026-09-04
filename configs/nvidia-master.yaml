@@ -9013,8 +9013,8 @@ glm5.2-fp4-b300-sglang-agentic-mtp:
 #
 # Same single arm and concurrency grid as glm5.2-fp4-b300-sglang-agentic-mtp:
 # cookbook low-latency TP8 with HiCache host-DRAM offload, conc
-# [1, 4, 8, 12, 16] (steps of at least 2, hard stop at 16). TP8-only for
-# memory as well as comparability -- the ~433 GB NVFP4
+# [1, 4, 8, 12, 16, 20, 24, 28, 32, 40, 48] (steps of at least 2 through 48).
+# TP8-only for memory as well as comparability -- the ~433 GB NVFP4
 # checkpoint needs ~54 GB/GPU across 8 B200s and does not fit below 8.
 glm5.2-fp4-b200-sglang-agentic-mtp:
   image: lmsysorg/sglang:nightly-dev-cu13-20260901-07c8f729
@@ -9028,7 +9028,7 @@ glm5.2-fp4-b200-sglang-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 4, 8, 12, 16] }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 4, 8, 12, 16, 20, 24, 28, 32, 40, 48] }
 
 glm5.2-fp4-gb200-dynamo-sglang-agentic-agg:
   image: lmsysorg/sglang:v0.5.17-cu130

@@ -120,9 +120,10 @@ if require_agentic_kv_offload_backend hicache; then
     # whole history; the host tier restores those hits at C2C bandwidth.
     # GLM-5.2 is DSA/MLA-family (attention_backend=dsa): every TP rank holds
     # complete per-token KV. The ratio 0.75 gives the main target host pool
-    # only 1,257,728 token slots. Use a 169 GB/rank absolute target pool at
-    # c12/c16 and keep ratio mode at the lower concurrencies, where the
-    # smaller working set does not need the larger pinned allocation.
+    # only 1,257,728 token slots. Use a 169 GB/rank absolute target pool from
+    # c12 upward (c12 through c48) and keep ratio mode at the lower
+    # concurrencies, where the smaller working set does not need the larger
+    # pinned allocation.
     #
     # cluster:b200-nscale advertises 2,063,920 MiB and this config exposes 80%,
     # giving the benchmark 1,731 GB. A 169 GB/rank packed target+MTP pool plus
@@ -132,7 +133,7 @@ if require_agentic_kv_offload_backend hicache; then
     DEFAULT_HICACHE_RATIO=0.75
     DEFAULT_HICACHE_SIZE=0
     case "$CONC" in
-        12|16) DEFAULT_HICACHE_SIZE=169 ;;
+        12|16|20|24|28|32|40|48) DEFAULT_HICACHE_SIZE=169 ;;
     esac
     MAX_HICACHE_SIZE=270
     HICACHE_SIZE="${HICACHE_SIZE:-$DEFAULT_HICACHE_SIZE}"
