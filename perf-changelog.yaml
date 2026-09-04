@@ -6910,3 +6910,13 @@
   description:
     - "Resolve pinned PowerX checkpoint paths through the Hugging Face Python API so formatted CLI output cannot become a server path."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2827
+
+- config-keys:
+    - qwen3.5-fp8-b200-sglang-agentic-powerx
+    - qwen3.5-fp8-b300-sglang-agentic-powerx
+    - qwen3.5-fp8-mi355x-sglang-agentic-powerx
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Keep the pinned PowerX tokenizer path outside AIPerf's structured environment namespace to allow replay client initialization."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2827

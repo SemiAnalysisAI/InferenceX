@@ -45,7 +45,7 @@ print(snapshot_download(os.environ["MODEL"], revision=os.environ["MODEL_REVISION
 PYMODEL
 )
 export MODEL_PATH
-export AIPERF_TOKENIZER="$MODEL_PATH"
+export INFERENCEX_TOKENIZER_PATH="$MODEL_PATH"
 resolve_trace_source
 
 verify_trace_revision() {
