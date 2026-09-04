@@ -150,6 +150,9 @@ if [ "${EVAL_ONLY:-false}" = "true" ]; then
     run_eval --port "$PORT"
 else
     build_replay_cmd "$RESULT_DIR"
+    if [[ "${AIPERF_EXPERIMENTAL_FAST:-0}" == 1 ]]; then
+        REPLAY_CMD+=" --export-outputs-json"
+    fi
     REPLAY_CMD+=" --apply-chat-template"
     REPLAY_CMD+=" --server-metrics http://localhost:$PORT/metrics"
     run_agentic_replay_and_write_outputs "$RESULT_DIR"

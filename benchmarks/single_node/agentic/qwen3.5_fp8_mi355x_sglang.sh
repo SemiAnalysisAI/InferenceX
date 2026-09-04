@@ -132,6 +132,9 @@ if [ "${EVAL_ONLY:-false}" = true ]; then
     run_eval --port "$PORT"
 else
     build_replay_cmd "$RESULT_DIR"
+    if [[ "${AIPERF_EXPERIMENTAL_FAST:-0}" == 1 ]]; then
+        REPLAY_CMD+=" --export-outputs-json"
+    fi
     REPLAY_CMD+=" --apply-chat-template"
     run_agentic_replay_and_write_outputs "$RESULT_DIR"
     guard_powerx_dataset_revision >> "$RESULT_DIR/powerx_dataset_revision.txt"

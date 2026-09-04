@@ -6920,3 +6920,13 @@
   description:
     - "Keep the pinned PowerX tokenizer path outside AIPerf's structured environment namespace to allow replay client initialization."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2827
+
+- config-keys:
+    - qwen3.5-fp8-b200-sglang-agentic-powerx
+    - qwen3.5-fp8-b300-sglang-agentic-powerx
+    - qwen3.5-fp8-mi355x-sglang-agentic-powerx
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Save generated response text with AIPerf's existing output export during fast PowerX qualification; retain canonical replay settings for scored runs."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2827
