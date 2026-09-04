@@ -7978,6 +7978,7 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-mtp-disagg:
     - search-space:
       # One two-tray DEP8 prefill and decode worker covers the balanced region.
       - spec-decoding: mtp
+        kv-offloading: none
         conc-list: [32, 64, 96, 128, 192, 256]
         prefill:
           num-worker: 1
@@ -7995,6 +7996,7 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-mtp-disagg:
           dp-attn: true
       # A second DEP8 prefill worker extends the high-concurrency region.
       - spec-decoding: mtp
+        kv-offloading: none
         conc-list: [192, 256, 384, 512]
         prefill:
           num-worker: 2

@@ -50,7 +50,7 @@ backend:
   type: vllm
   connector: null
   dp_launch_mode: per_node
-  prefill_environment: &worker_environment
+  decode_environment: &worker_environment
     HF_HUB_CACHE: /hf_hub_cache
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     VLLM_RPC_TIMEOUT: "600000"
@@ -66,7 +66,9 @@ backend:
     UCX_NET_DEVICES: "mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1"
     UCX_TLS: "rc,cuda_copy"
     NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
-  decode_environment: *worker_environment
+  prefill_environment:
+    <<: *worker_environment
+    PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
   vllm_config:
     prefill: &dep8_config
       kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
@@ -116,7 +118,8 @@ benchmark:
     IS_MULTINODE: "true"
     AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
     AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
+    AIPERF_HTTP_TCP_USER_TIMEOUT: "900000"
     AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
     HF_HUB_CACHE: /hf_hub_cache
     WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
-    AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:"
+    AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:kv_cache_usage_perc"
