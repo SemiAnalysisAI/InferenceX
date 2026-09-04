@@ -6905,3 +6905,12 @@
     - "Use official vLLM ROCm v0.28.0 and vLLM Router nightly-20260903-1d10e71 because both original image tags are no longer published. No engine patches or setup hooks."
     - "Keep this deprecated configuration opt-in; validate through the upstream end-to-end workflow without restoring it to active production sweeps."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2824
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-vllm-disagg
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Pin srt-slurm 33a3d811b795 for this archived compatibility lane: preserve upstream ephemeral-port allocation for MoRI TP child processes instead of injecting one shared VLLM_PORT scan base."
+    - "Keep the official engine/router images, model options, workload, and all previously validated recipes and runtime pins unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2824
