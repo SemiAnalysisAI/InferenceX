@@ -168,6 +168,18 @@ git clone "$SRT_SLURM_REPO" "$SRT_REPO_DIR" || exit 1
 cd "$SRT_REPO_DIR" || exit 1
 git checkout --quiet "$SRT_SLURM_REF" || exit 1
 git rev-parse HEAD > "$GITHUB_WORKSPACE/srt-slurm-sha.txt"
+
+# Dynamo installation enables enroot root remapping by default. Disable it for
+# DSV4 TensorRT-LLM MPI workers so the container can use the host PMIx socket.
+if [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
+    grep -Fq 'CONTAINER_REMAP_ROOT_EXPORT = {"ENROOT_REMAP_ROOT": "yes"}' \
+        src/srtctl/core/slurm.py || exit 1
+    sed -i 's/CONTAINER_REMAP_ROOT_EXPORT = {"ENROOT_REMAP_ROOT": "yes"}/CONTAINER_REMAP_ROOT_EXPORT = {"ENROOT_REMAP_ROOT": "no"}/' \
+        src/srtctl/core/slurm.py
+    grep -Fq 'CONTAINER_REMAP_ROOT_EXPORT = {"ENROOT_REMAP_ROOT": "no"}' \
+        src/srtctl/core/slurm.py || exit 1
+fi
+
 if [[ "$USES_DCGM_POWER" == "1" ]]; then
     test "$(git rev-parse HEAD)" = "$POWER_SRT_SLURM_PIN" \
         || { echo "Error: srt-slurm HEAD does not match POWER_SRT_SLURM_PIN=$POWER_SRT_SLURM_PIN" >&2; exit 1; }
