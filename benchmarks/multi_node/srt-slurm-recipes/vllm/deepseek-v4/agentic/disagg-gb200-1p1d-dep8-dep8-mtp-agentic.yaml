@@ -50,7 +50,7 @@ backend:
   type: vllm
   connector: null
   dp_launch_mode: per_node
-  prefill_environment: &worker_environment
+  decode_environment: &worker_environment
     HF_HUB_CACHE: /hf_hub_cache
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     VLLM_RPC_TIMEOUT: "600000"
@@ -66,7 +66,9 @@ backend:
     UCX_NET_DEVICES: "mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1"
     UCX_TLS: "rc,cuda_copy"
     NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
-  decode_environment: *worker_environment
+  prefill_environment:
+    <<: *worker_environment
+    PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
   vllm_config:
     prefill: &dep8_config
       kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
