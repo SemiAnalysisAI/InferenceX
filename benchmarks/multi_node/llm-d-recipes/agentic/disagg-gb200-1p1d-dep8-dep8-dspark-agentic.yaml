@@ -69,7 +69,7 @@ prefill:
   enable-expert-parallel: true
   extra-args: >-
     --kv-cache-dtype fp8
-    --gpu-memory-utilization 0.97
+    --gpu-memory-utilization 0.92
     --max-num-batched-tokens 8192
     --long-prefill-token-threshold 1024
     --max-num-seqs 16
@@ -131,7 +131,7 @@ decode:
   enable-expert-parallel: true
   extra-args: >-
     --kv-cache-dtype fp8
-    --gpu-memory-utilization 0.90
+    --gpu-memory-utilization 0.95
     --max-num-batched-tokens 256
     --max-num-seqs 32
     --max-cudagraph-capture-size 256
