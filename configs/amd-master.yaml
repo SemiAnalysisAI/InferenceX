@@ -625,7 +625,7 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
           - "DECODE_MTP_SIZE=2"
 
 kimik3-fp4-mi355x-vllm-agentic-mtp:
-  image: vllm/vllm-openai-rocm:nightly-1dc464d42681d22f38caf1fdc1eb632dc4421c45
+  image: vllm/vllm-openai-rocm:nightly-7c5dc571cbd1064ecc8a9b1045637ff647aa22cb
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:mi355x-amds
@@ -636,8 +636,9 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.60
       search-space:
-      - { tp: 8, kv-offloading: none, conc-list: [1] , spec-decoding: mtp}
-      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.5.dev60+rocm7.2" }, conc-list: [4, 8, 10, 12, 14], spec-decoding: mtp }
+      - { tp: 8, ep: 1, dcp-size: 1, kv-offloading: none, conc-list: [1] , spec-decoding: mtp}
+      - { tp: 8, ep: 1, dcp-size: 1, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.5.dev89+rocm7.2" }, conc-list: [4, 8, 10, 12, 14], spec-decoding: mtp }
+      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.5.dev89+rocm7.2" }, conc-list: [44, 48, 52], spec-decoding: mtp }
 
 # Kimi-K3 MXFP4 agentic-coding benchmark on MI355X via ATOM with DSpark
 # speculative decoding. Acceptance is pinned to the committed golden curve in
@@ -1737,9 +1738,14 @@ minimaxm3-fp4-mi355x-vllm-agentic-mtp:
       - { tp: 2, kv-offloading: none, conc-list: [1, 2, 5], spec-decoding: mtp }
 
 # GLM-5.2 FP4 agentic-coding benchmark on MI355X via SGLang with MTP speculative
-# decoding. Two arms: (1) TP4/EP4 with HiCache KV offloading to DRAM, concurrency
-# sweep [1, 2, 4, 8, 10, 12, 16]; (2) TP8/EP8 without KV offloading for low-latency
-# comparison at conc [1, 2, 4]. SA selects the Pareto-optimal arm per concurrency.
+# decoding. Two arms:
+# (1) TP4/EP4 with HiCache KV offloading to DRAM, concurrency sweep [1, 2, 4, 8, 10, 12];
+#     serves the throughput-dominant regime (conc ≥ 8).
+# (2) TP8/EP1 without KV offloading, concurrency sweep [4, 10];
+#     EP=1 eliminates the MoE all-to-all collective, reducing ITL at low-to-mid
+#     concurrency; GPU-resident KV keeps latency independent of DRAM bandwidth.
+#     c6 and c8 removed after sweep validation: dominated by TP4/EP4 arm.
+# SA selects the Pareto-optimal arm per concurrency point.
 glm5.2-fp4-mi355x-sglang-agentic-mtp:
   image: lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260728
   model: amd/GLM-5.2-MXFP4
@@ -1752,8 +1758,8 @@ glm5.2-fp4-mi355x-sglang-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.8
       search-space:
-      - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 2, 4, 8, 10, 12, 16], spec-decoding: mtp }
-      - { tp: 8, ep: 8, kv-offloading: none, conc-list: [1, 2, 4], spec-decoding: mtp }
+      - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 2, 4, 8, 10, 12], spec-decoding: mtp }
+      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 10], spec-decoding: mtp }
 # GLM-5.2 FP4 agentic-coding benchmark on MI355X via ATOM with MTP speculative
 # decoding. TP4 uses LMCache DRAM offload; TP8 is GPU-resident with no KV offload.
 # Recipe is from PR https://github.com/ROCm/ATOM/pull/1877
