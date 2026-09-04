@@ -6878,3 +6878,20 @@
   description:
     - "Refresh the Kimi-K3 GB300 AgentX configurations with updated configs."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2811
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Switch B200 vLLM AgentX to DeepSeek-V4-Pro-0813 DSpark6 with probabilistic drafting and synthetic acceptance length 3.77; retain real verification for eval."
+    - "Keep the TP8/DEP8 SimpleCPU sweep and add DSpark scheduler headroom."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2302
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Reduce SimpleCPU DRAM utilization from 0.95 to 0.90 to leave host-memory headroom."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2302

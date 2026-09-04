@@ -2,24 +2,25 @@
 set -eo pipefail
 set -x
 
-# Agentic trace replay benchmark for DeepSeek-V4-Pro FP4 on B200 using vLLM,
-# with MTP speculative decoding (num_speculative_tokens=3): synthetic acceptance
-# length 2.49 for throughput, real target verification for the EVAL_ONLY eval.
+# Agentic trace replay benchmark for DeepSeek-V4-Pro-0813 FP4 on B200 using
+# vLLM DSpark (num_speculative_tokens=6, probabilistic drafting): synthetic
+# acceptance length 3.77 for throughput, real target verification for eval.
 #
-# This MTP-only recipe keeps the established engine args and agentic AIPerf rig,
-# with two speculative-decoding behaviors:
-#   --speculative-config: synthetic acceptance length 2.49 (throughput) vs real MTP (EVAL_ONLY); see the SPEC_CONFIG block
+# This DSpark recipe keeps the established engine args and agentic AIPerf rig,
+# with two verification behaviors:
+#   --speculative-config: synthetic acceptance length 3.77 (throughput) vs real
+#       DSpark verification (EVAL_ONLY); see the SPEC_CONFIG block
 #   cudagraph capture sizes expressed in TOKENS (see the capture block below).
 #
-# The throughput sweep uses DEP8 with SimpleCPUOffloadConnector only. The recipe
-# uses FP8 KV cache, sparse DeepSeek-V4 FlashInfer attention with an FP4 indexer
-# cache, mega-MoE, long-prefill chunking, and FULL_DECODE_ONLY CUDA graphs with
-# every decode batch captured explicitly.
+# The throughput sweep uses TP8 and DEP8 with SimpleCPUOffloadConnector. The
+# recipe uses FP8 KV cache, sparse DeepSeek-V4 FlashInfer attention with an FP4
+# indexer cache, mega-MoE, long-prefill chunking, and explicit CUDA graph sizes.
 #
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
 #
-# DEP8 offloads KV to host DRAM with KV_OFFLOAD_BACKEND=vllm-simple.
+# Both TP8 and DEP8 offload KV to host DRAM with
+# KV_OFFLOAD_BACKEND=vllm-simple.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -228,7 +229,6 @@ if [ "$DP_ATTENTION" = "true" ]; then
     MODE_ARGS+=(
         --prefill-schedule-interval 8
         --long-prefill-token-threshold 512
-        --max-num-batched-tokens 8192
     )
 fi
 
@@ -241,21 +241,30 @@ else
     MAX_NUM_SEQS=$((2 * CONC))
 fi
 
-# MTP: cudagraph capture sizes are in TOKENS. With num_speculative_tokens=N,
+# DSpark: cudagraph capture sizes are in TOKENS. With num_speculative_tokens=N,
 # every uniform decode batch of S seqs verifies S*(1+N) tokens, so capture the
 # explicit multiples (1+N), 2*(1+N), ..., MAX_NUM_SEQS*(1+N). vLLM rounds
 # configured sizes up to multiples of (1+N) and deduplicates them; a plain
 # 1..MAX_NUM_SEQS list would cover only MAX_NUM_SEQS/(1+N) decode sequences.
-NUM_SPEC_TOKENS=3
+NUM_SPEC_TOKENS=6
 TOKENS_PER_SEQ=$((1 + NUM_SPEC_TOKENS))
-# Throughput pins synthetic MTP acceptance to the dsv4-pro golden AL (thinking_on,
-# num_speculative_tokens=3, golden_al_distribution/dsv4_mtp.yaml). The EVAL_ONLY
-# accuracy run uses real target verification instead -- synthetic acceptance
-# bypasses verification and corrupts the SWE-bench eval (0.0000 score).
+# Throughput pins synthetic DSpark acceptance to the DeepSeek-V4-Pro-0813
+# golden AL (thinking_on, probabilistic drafting, num_speculative_tokens=6,
+# golden_al_distribution/dsv4-pro-0813-dspark.yaml). The EVAL_ONLY accuracy run
+# uses real target verification instead -- synthetic acceptance bypasses
+# verification and corrupts the SWE-bench eval.
 if [ "${EVAL_ONLY:-false}" = "true" ]; then
-    SPEC_CONFIG="{\"method\": \"mtp\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS}"
+    SPEC_CONFIG="{\"method\": \"dspark\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"draft_sample_method\": \"probabilistic\"}"
 else
-    SPEC_CONFIG="{\"method\": \"mtp\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": 2.49}"
+    SPEC_CONFIG="{\"method\": \"dspark\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"draft_sample_method\": \"probabilistic\", \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": 3.77}"
+fi
+# DSpark reserves a verification slot for every target and draft token on each
+# runnable DEP sequence. Add those slots on top of the established 8192-token
+# prefill budget so enabling the deeper drafter cannot make the scheduler's
+# effective token budget negative.
+if [ "$DP_ATTENTION" = "true" ]; then
+    MAX_NUM_BATCHED_TOKENS=$((8192 + MAX_NUM_SEQS * TOKENS_PER_SEQ))
+    MODE_ARGS+=(--max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS")
 fi
 CAPTURE_SIZE_LIST=()
 for ((num_seqs = 1; num_seqs <= MAX_NUM_SEQS; num_seqs++)); do
