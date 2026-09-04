@@ -149,8 +149,10 @@ case "${KV_OFFLOAD_BACKEND:-}" in
       lmcache)
     require_agentic_kv_offload_backend "$KV_OFFLOAD_BACKEND"
 
-    LMCACHE_VERSION=0.5.5.dev89+rocm7.2
-    LMCACHE_ROCM_INDEX="https://github.com/LMCache/LMCache/releases/expanded_assets/nightly-rocm"
+    # A versioned -rocm release, not nightly-rocm: that tag keeps only the
+    # newest wheel, so an exact .devN pin stops resolving at the next build.
+    LMCACHE_VERSION=0.5.5rc5+rocm7.2
+    LMCACHE_ROCM_INDEX="https://github.com/LMCache/LMCache/releases/expanded_assets/v0.5.5rc5-rocm"
 
     agentic_pip_install --quiet --no-cache-dir --no-deps \
         "sortedcontainers==2.4.0" \
@@ -190,8 +192,10 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     # so 3072 is the minimum valid chunk. The multi-group layout also
     # requires one object group per sliding-window size:
     # --separate-object-groups.
-    LMCACHE_PORT=6555
-    LMCACHE_HTTP_PORT=8090
+    # Derive from $PORT: the launcher assigns it per-runner so two cells
+    # sharing a host do not collide on the MP server.
+    LMCACHE_PORT=$((PORT + 13000))
+    LMCACHE_HTTP_PORT=$((PORT + 14000))
     LMCACHE_LOG="$RESULT_DIR/lmcache_server.log"
 
     LMCACHE_L1_SIZE_GB="$TOTAL_CPU_DRAM_GB"
@@ -216,6 +220,10 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         --http-port "$LMCACHE_HTTP_PORT"
         --l1-size-gb "$LMCACHE_L1_SIZE_GB"
         --l1-init-size-gb 10
+        # The L1 read lock is held from prefetch through retrieve; at these
+        # concurrencies a queued request exceeds the 300s default and the
+        # retrieve fails.
+        --l1-read-ttl-seconds 3600
         --chunk-size "$LMCACHE_CHUNK_SIZE"
         --separate-object-groups
         --enable-extra-logging
