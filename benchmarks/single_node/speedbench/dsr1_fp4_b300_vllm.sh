@@ -28,7 +28,7 @@
 #     shim (the default client-side template render already enables thinking).
 #
 # Checkpoint (B300 / Blackwell): NVFP4 build nvidia/DeepSeek-R1-0528-NVFP4-v2,
-# basename dsr1-fp4 on the runner (resolved by launch_b300-nv.sh).
+# basename dsr1-fp4 on the runner (resolved by launch_b300-dsxe.sh).
 #
 # Usage (inside the vLLM container, on a B300 node):
 #   export MODEL=/data/models/dsr1-fp4
