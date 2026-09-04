@@ -95,7 +95,11 @@ class NCCLEPBackend(EPBackend):
     # semantics are switched to their LL values in __init__ (mirrors ep_deepep_v2).
     #   normal      -> HT / FLAT layout / unweighted-rank-sum combine.
     #   low-latency -> LL / EXPERT_MAJOR layout / source-side weighted-kernel-sum combine.
-    kernel_generation = "nccl-ep-ht"
+    # "-routed" marks the generation whose timed HT dispatch charges the per-step
+    # ncclEpUpdateHandle (see dispatch()); earlier "nccl-ep-ht" rows excluded it and the
+    # docs record that those cannot be separated by any other field — this suffix is the
+    # per-row discriminator that change lacked.
+    kernel_generation = "nccl-ep-ht-routed"
     SUPPORTED_MODES = ("normal", "low-latency")
     SUPPORTED_PRECISIONS = ("bf16",)
     stage_device_work = False
@@ -385,6 +389,17 @@ class NCCLEPBackend(EPBackend):
     def dispatch(self, p):
         h = self._ensure_handle(p)
         stream = self._stream()
+        if not self._ll:
+            # Charge the per-step routing collective to the window. `ncclEpUpdateHandle` is
+            # documented as a "per-step collective: prepare the handle for the given top-k
+            # routing decisions", and production routing changes every MoE layer — a serving
+            # step pays this update before every HT dispatch, at the handle's full token
+            # capacity, exactly as here. Excluding it (as NVIDIA's ep_bench does) made HT
+            # dispatch the one window that omitted its routing/layout work while deepep-v2,
+            # uccl-ep, MoRI and FlashInfer all carry theirs per call. No sync or counter
+            # read here: the bound problem's counters are deterministic and already read
+            # (_bind_ht_recv_count) in the untimed rebind.
+            h.handle.update(h.topk_idx_t, layout_info=h.layout_info, stream=stream)
         if self._ll:
             # LL EXPERT_MAJOR: tokens in, 3D per-expert padded tokens out, per-expert recv
             # counts written into expert_counters. No weights on the dispatch (the gate is

@@ -86,29 +86,30 @@ class MoRIBackend(EPBackend):
             else ("IntraNode", "intranode", (80, 0, 16, 16))
         )
         if self.mode == "low-latency":
-            # LOW-LATENCY (decode) mode: IntraNodeLL, the scale-up low-latency kernel. It is
-            # single-phase (plain dispatch()/combine(), no dispatch_recv/combine_recv split),
-            # pure-intranode (shares the no-RDMA ShmemBufsIntraNode staging with IntraNode, so
-            # no symmetric-heap registration), and returns the same compact [max_recv, hidden]
-            # layout. Its combine keeps the plain rank-deduplicated additive sum (combine is
-            # called with weights=None -> weight_ptr 0 in mori.ops, so the gate is NOT applied
-            # in-kernel), identical in semantics to IntraNode/normal mode ("unweighted-rank-sum",
-            # the base default the harness admits for low-latency) over the same compact
-            # rank-deduplicated receive (the base "token-rank" receive_layout, so the
-            # artifact's wire basis stays rank-deduplicated). So LL differs from the normal
-            # IntraNode path ONLY by kernel_type (set here vs omitted) and timing; every transport
-            # method (dispatch/stage/combine/inspect_dispatch/combine_transformed) is reused as-is.
-            # AsyncLL (enum 4) is deliberately NOT used: it is split-phase (dispatch_recv/
-            # combine_recv) and RDMA-staged, which does not fit the single-call dispatch/stage/
-            # combine contract. Scale-up EP8 decode only; scale-out EP16 LL is out of scope (kept
-            # out of ll_backends). Reuse the IntraNode launch tuning under MANUAL launch mode.
+            # LOW-LATENCY (decode) mode: AsyncLL, because that is what production selects —
+            # SGLang's moriep dispatcher maps EpMode.LOW_LATENCY to AsyncLL (split-phase
+            # dispatch_send/dispatch_recv + combine_send/combine_recv) with block_num 64,
+            # rdma_block_num 32, warp_num_per_block 8, and its low-latency impl asserts the
+            # kernel IS AsyncLL. The previous adapter measured IntraNodeLL, a kernel no engine
+            # deploys for LL, so those rows described an off-production path (their
+            # kernel_generation "intranode-ll" is the discriminator). AsyncLL must be driven
+            # split-phase: mori.ops' dispatch()/combine() under this kernel_type launch only
+            # the SEND side and return without the payload landing (the earlier "fails
+            # silently single-call" finding), so the timed dispatch here is send+recv
+            # back-to-back — the full transport the serving step pays, merely without the
+            # expert GEMM interleaved between the phases.
+            # Combine keeps weights=None (gate not applied in-kernel), and the receive is the
+            # same compact rank-deduplicated [max_recv, hidden] layout, so semantics stay
+            # "unweighted-rank-sum" over "token-rank" and the wire basis stays
+            # rank-deduplicated. Scale-up EP8 decode only; scale-out EP16 LL stays out of
+            # ll_backends.
             if scale_out:
                 raise RuntimeError(
                     "MoRI low-latency is scale-up EP8 only (scale-out EP16 low-latency "
                     "is out of scope; see platform_config ll_backends)"
                 )
             kernel_name, self.kernel_generation, blocks = (
-                "IntraNodeLL", "intranode-ll", (80, 0, 16, 16)
+                "AsyncLL", "async-ll", (64, 32, 8, 8)
             )
         self._kernel_type = None
         if kernel_name != "IntraNode":
@@ -118,6 +119,9 @@ class MoRIBackend(EPBackend):
                     f"this MoRI image lacks EpDispatchCombineKernelType.{kernel_name}"
                 )
             self._kernel_type = getattr(kernel_enum, kernel_name)
+        # AsyncLL's dispatch()/combine() launch only the SEND kernels; the payload lands in
+        # the recv phase, so both timed components must run send+recv back-to-back.
+        self._split_phase = kernel_name == "AsyncLL"
         self._inter_node = kernel_name == "InterNodeV1"
         self.num_qps = 1
         self.block_num, self.rdma_block_num, self.dispatch_warps, self.combine_warps = blocks
@@ -227,6 +231,16 @@ class MoRIBackend(EPBackend):
         self.op = mori.ops.EpDispatchCombineOp(self.config)
         if getattr(self.op, "launch_config_mode", None) != "MANUAL":
             raise RuntimeError("MoRI explicit launch configuration was not applied")
+        # Fail closed rather than measure a silent send-only AsyncLL: without the recv
+        # methods the single-call dispatch returns before any payload lands.
+        if self._split_phase and not (
+            callable(getattr(self.op, "dispatch_recv", None))
+            and callable(getattr(self.op, "combine_recv", None))
+        ):
+            raise RuntimeError(
+                "this MoRI image's AsyncLL lacks the split-phase "
+                "dispatch_recv/combine_recv API the deployed low-latency path drives"
+            )
 
     def semantic_payload(self, x):
         if not self._fp8:
@@ -265,6 +279,10 @@ class MoRIBackend(EPBackend):
                 warp_per_block=self.dispatch_warps,
             )
         )
+        if self._split_phase:
+            # AsyncLL: the call above launched only the send kernels; production pays the
+            # recv phase in the same step (SGLang's dispatch_b), so the timed window does too.
+            self.op.dispatch_recv()
         return types.SimpleNamespace(
             dispatch_output=dispatch_output,
             dispatch_weights=dispatch_weights,
@@ -302,6 +320,9 @@ class MoRIBackend(EPBackend):
             rdma_block_num=self.rdma_block_num,
             warp_per_block=self.combine_warps,
         )
+        if self._split_phase:
+            # AsyncLL combine is send-only until the recv phase lands the reduction.
+            self.op.combine_recv()
         return combined[:p.T]
 
     def inspect_dispatch(self, p, h):
