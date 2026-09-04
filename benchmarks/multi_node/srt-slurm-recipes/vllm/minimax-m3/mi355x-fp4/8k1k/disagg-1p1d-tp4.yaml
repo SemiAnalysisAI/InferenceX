@@ -1,0 +1,147 @@
+# Compatibility validation of the archived MI355X MiniMax-M3 FP4 recipe.
+# Preserve the original TP4/TP4 serving and benchmark settings. srt-slurm
+# owns allocation, native vLLM Router discovery, health, logs, and teardown.
+name: mi355x-vllm-minimaxm3-disagg-1p1d-tp4-8k1k
+
+model:
+  # Same provisioned checkpoint selected by the retired AMD launcher.
+  path: /it-share/data/MiniMax-M3-MXFP4
+  container: vllm/vllm-openai-rocm:v0.28.0
+  precision: fp4
+
+identity:
+  model:
+    repo: amd/MiniMax-M3-MXFP4
+  container:
+    image: vllm/vllm-openai-rocm:v0.28.0
+  frameworks:
+    vllm-router: 1d10e71fb7bb4c0adc9f2c16ec77bf5dd4aa1586
+
+slurm:
+  time_limit: "08:00:00"
+
+resources:
+  gpu_type: mi355x
+  gpus_per_node: 8
+  prefill_nodes: 1
+  decode_nodes: 1
+  prefill_workers: 1
+  decode_workers: 1
+  gpus_per_prefill: 4
+  gpus_per_decode: 4
+
+frontend:
+  type: vllm-router
+  container_image: vllm/vllm-router:nightly-20260903-1d10e71
+  enable_multiple_frontends: false
+  args:
+    policy: consistent_hash
+    prefill-policy: consistent_hash
+    decode-policy: consistent_hash
+    log-level: info
+
+environment: &runtime_environment
+  HF_HOME: /hf_hub_cache
+  HF_HUB_CACHE: /hf_hub_cache
+  HUGGINGFACE_HUB_CACHE: /hf_hub_cache
+  PYTHONDONTWRITEBYTECODE: "1"
+  PYTHONUNBUFFERED: "1"
+  GLOO_SOCKET_IFNAME: eno0
+  NCCL_SOCKET_IFNAME: eno0
+  NCCL_IB_HCA: rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7
+  MORI_RDMA_TC: "104"
+  MORI_IO_SQ_BACKOFF_TIMEOUT_US: "50000"
+  MORI_IO_QP_MAX_SEND_WR: "16384"
+  MORI_IO_QP_MAX_CQE: "32768"
+  MORI_IO_QP_MAX_SGE: "2"
+  MORI_IO_TC_DISABLE: "0"
+  VLLM_USE_V1: "1"
+  VLLM_SERVER_DEV_MODE: "0"
+  VLLM_DISABLE_REQUEST_ID_RANDOMIZATION: "1"
+  VLLM_ROCM_USE_AITER: "1"
+  VLLM_ROCM_USE_AITER_MOE: "1"
+  VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: "1"
+  VLLM_USE_BREAKABLE_CUDAGRAPH: "0"
+  VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+
+backend:
+  type: vllm
+  connector: moriio
+  prefill_environment:
+    VLLM_ROCM_QUICK_REDUCE_QUANTIZATION: INT4
+    VLLM_ROCM_QUICK_REDUCE_MAX_SIZE_BYTES_MB: "2048"
+  vllm_config:
+    prefill: &server_options
+      tensor-parallel-size: 4
+      served-model-name: MiniMax-M3-MXFP4
+      max-num-batched-tokens: 32768
+      max-num-seqs: 512
+      block-size: 128
+      language-model-only: true
+      attention-backend: TRITON_ATTN
+      moe-backend: aiter
+      no-enable-prefix-caching: true
+      gpu-memory-utilization: 0.90
+      tool-call-parser: minimax_m3
+      reasoning-parser: minimax_m3
+      enable-auto-tool-choice: true
+      trust-remote-code: true
+    decode: *server_options
+
+# Preserve the original exclusive two-node allocation, although each worker
+# uses only four GPUs. Do not pack the roles onto one node.
+sbatch_directives:
+  cpus-per-task: "128"
+  mem: "0"
+  exclusive: ""
+
+srun_options:
+  container-writable: ""
+  container-remap-root: ""
+  mem: "0"
+
+health_check:
+  max_attempts: 720
+  interval_seconds: 5
+
+benchmark:
+  type: custom
+  command: |
+    set -euo pipefail
+    result_root="/results/${SLURM_JOB_ID}"
+    mkdir -p "${result_root}/fixed-seq"
+    archive_runtime_logs() {
+      tar -C /logs -czf "${result_root}/runtime-logs.tar.gz" . 2>/dev/null || true
+    }
+    trap archive_runtime_logs EXIT
+    for concurrency in ${CONC_LIST}; do
+      num_prompts=$((concurrency * 10))
+      if (( num_prompts < 16 )); then num_prompts=16; fi
+      python3 /infmax-workspace/utils/bench_serving/benchmark_serving.py \
+        --backend openai \
+        --base-url "http://${SRT_FRONTEND_HOST}:${SRT_FRONTEND_PORT}" \
+        --endpoint /v1/completions \
+        --model MiniMax-M3-MXFP4 \
+        --tokenizer /model \
+        --dataset-name random \
+        --random-input-len 8192 \
+        --random-output-len 1024 \
+        --random-range-ratio "${RANDOM_RANGE_RATIO:-0.8}" \
+        --num-warmups "$((concurrency * 2))" \
+        --num-prompts "${num_prompts}" \
+        --max-concurrency "${concurrency}" \
+        --request-rate inf \
+        --ignore-eos \
+        --trust-remote-code \
+        --percentile-metrics ttft,tpot,itl,e2el \
+        --save-result \
+        --result-dir "${result_root}/fixed-seq" \
+        --result-filename "minimaxm3-vllm-mi355x-disagg-1p1d-tp4-isl8192-osl1024-c${concurrency}.json"
+      # The original vLLM benchmark allowed the idle KV reaper ten seconds.
+      sleep 10
+    done
+  env:
+    <<: *runtime_environment
+    MODEL_NAME: MiniMax-M3-MXFP4
+    TRANSFORMERS_VERBOSITY: error
+    TOKENIZERS_PARALLELISM: "false"
