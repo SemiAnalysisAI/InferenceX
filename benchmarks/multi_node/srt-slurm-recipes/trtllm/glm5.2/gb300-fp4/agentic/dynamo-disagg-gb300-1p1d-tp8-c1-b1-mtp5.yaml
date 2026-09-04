@@ -1,4 +1,4 @@
-name: dynamo-disagg-gb300-1p4d-tep4-c30-b2-mtp5
+name: dynamo-disagg-gb300-1p1d-tp8-c1-b1-mtp5
 
 model:
   path: nvidia/GLM-5.2-NVFP4
@@ -7,7 +7,7 @@ model:
 
 dynamo:
   install: true
-  hash: 2cbbdc863c336c2cfffa2a3668e2a6661801b259
+  wheel: 1.4.0.dev20260807
   request_plane: tcp
 
 health_check:
@@ -20,9 +20,9 @@ resources:
   prefill_nodes: 1
   prefill_workers: 1
   gpus_per_prefill: 4
-  decode_nodes: 4
-  decode_workers: 4
-  gpus_per_decode: 4
+  decode_nodes: 2
+  decode_workers: 1
+  gpus_per_decode: 8
 
 backend:
   type: trtllm
@@ -103,7 +103,7 @@ backend:
         max_tokens_in_buffer: 1048576
         kv_transfer_timeout_ms: 600000
       cuda_graph_config:
-        batch_sizes: [1, 2]
+        batch_sizes: [1]
         enable_padding: true
       enable_attention_dp: false
       trust_remote_code: true
@@ -113,13 +113,13 @@ backend:
         event_buffer_max_size: 0
         free_gpu_memory_fraction: 0.8
         tokens_per_block: 64
-      max_batch_size: 2
+      max_batch_size: 1
       max_num_tokens: 128
       max_seq_len: 1048576
       moe_config:
         backend: TRTLLM
         use_low_precision_moe_combine: true
-      moe_expert_parallel_size: 4
+      moe_expert_parallel_size: 1
       num_postprocess_workers: 4
       pipeline_parallel_size: 1
       print_iter_log: true
@@ -134,7 +134,7 @@ backend:
         decoding_type: MTP
         max_draft_len: 5
       stream_interval: 20
-      tensor_parallel_size: 4
+      tensor_parallel_size: 8
   publish_events_and_metrics: false
 
 frontend:
@@ -160,7 +160,6 @@ frontend:
 
 benchmark:
   type: custom
-  client_placement: head
   command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
   env:
     INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
