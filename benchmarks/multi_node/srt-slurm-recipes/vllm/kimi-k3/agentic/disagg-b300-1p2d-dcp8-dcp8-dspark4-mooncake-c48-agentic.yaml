@@ -8,26 +8,22 @@
 #
 # Only these fields differ from the measured config, each because b300-nv is
 # not bia:
-#   device_name, UCX_NET_DEVICES -> the six rails read off this cluster
-#   MC_GID_INDEX, UCX_TLS        -> set; b300-nv is RoCE (see below)
+#   device_name, UCX_NET_DEVICES -> dropped; see the fabric note below
+#   MC_GID_INDEX, UCX_TLS        -> GID index dropped, UCX_TLS uses srd (below)
 #   HF_HOME                      -> dropped; benchmark.env sets HF_HUB_CACHE
 #   slurm.time_limit             -> 06:00:00 (see the note in the tool)
 #   rejection_sample_method      -> block, so the eval verifies (see below)
 #   draft_sample_method          -> probabilistic, matching the AL's curve
 #   global_segment_size          -> 281GB, matching the B300 arm on main
-#   sbatch_directives.exclude    -> b300-018, which times out UCX/NIXL
 #
-# The rails are the part that needs saying. This fabric is rail-isolated: each
-# rail is its own /24 and a QP only comes up when both ends sit on the same
-# one. srtslurm writes a single store config for the whole job, so rails can
-# only be named by index -- and the index is not stable here, because a down
-# card shifts every index above it. Across the nodes inventoried, mlx5_0 is
-# 172.16.192 everywhere except b300-012, and b300-003 swaps mlx5_3 with
-# mlx5_9. Naming either put two nodes on different subnets under one name,
-# which killed one earlier bring-up 36 minutes in. The six named below held on
-# every node with a full inventory, and kimik3-b300-nic-topology.sh re-checks
-# each one's GID subnet at startup so an uninventoried node fails in seconds
-# instead of running to a bad number.
+# The fabric is the part that needs saying. b300-dsxe is not RoCE: the compute
+# fabric is 16 EFA adapters per node (driver efa, 400 Gb each, two per GPU),
+# presenting no netdev and no IPv4, so there are no per-rail subnets to name and
+# the mlx5 device names the measured config used do not exist here. The
+# inventory was identical on every node checked, so there is also no unstable
+# index to pin around -- which was the reason the measured config named rails at
+# all. Devices are therefore left to the fabric, and UCX_TLS asks for srd, EFA's
+# transport, because EFA does not implement the verbs RC that rc requires.
 
 name: kimi-k3-vllm-disagg-b300-1p2d-dcp8-dcp8-dspark4-mooncake-c48-agentic
 model:
@@ -80,7 +76,6 @@ backend:
       global_segment_size: 281GB
       local_buffer_size: 4GB
       protocol: rdma
-      device_name: mlx5_4,mlx5_8,mlx5_10,mlx5_16,mlx5_20,mlx5_22
       mode: embedded
       enable_offload: false
   prefill_environment:
@@ -116,7 +111,6 @@ backend:
     UCX_RCACHE_MAX_UNRELEASED: '1024'
     UCX_TCP_AF_PRIO: inet
     VLLM_SSM_CONV_STATE_LAYOUT: DS
-    UCX_NET_DEVICES: mlx5_4:1,mlx5_8:1,mlx5_10:1,mlx5_16:1,mlx5_20:1,mlx5_22:1
     DG_JIT_CACHE_DIR: /tmp/dg-cache-kimi-k3-gb300-pd-dspark-mooncake-{job_id}
     PYTHONHASHSEED: '42'
     PYTHONNOUSERSITE: '1'
@@ -125,8 +119,7 @@ backend:
     MC_STORE_CLIENT_METRIC: '1'
     MC_STORE_CLIENT_METRIC_INTERVAL: '5'
     MC_TE_METRIC: '0'
-    MC_GID_INDEX: '3'
-    UCX_TLS: rc,cuda_copy,cuda_ipc,sm,self
+    UCX_TLS: srd,cuda_copy,cuda_ipc,sm,self
   decode_environment:
     VLLM_USE_DIRECT_DCP_A2A: '1'
     VLLM_USE_DIRECT_DCP_Q_GATHER: '1'
@@ -168,8 +161,7 @@ backend:
     MC_STORE_CLIENT_METRIC: '1'
     MC_STORE_CLIENT_METRIC_INTERVAL: '5'
     MC_TE_METRIC: '0'
-    MC_GID_INDEX: '3'
-    UCX_TLS: rc,cuda_copy,cuda_ipc,sm,self
+    UCX_TLS: srd,cuda_copy,cuda_ipc,sm,self
   vllm_config:
     prefill:
       kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"compact_group_io":true,"max_load_batch_keys":2,"enable_cross_layers_blocks":false,"enable_offload":false}}]}}'
@@ -213,7 +205,6 @@ sbatch_directives:
   cpus-per-task: '72'
   mem: '0'
   comment: '''{"OccupiedIdleGPUsJobReaper":{"exemptIdleTimeMins":"60","reason":"model_loading","description":"Very large model will take extra loading time."}}'''
-  exclude: b300-018
 srun_options:
   mem: '0'
   container-remap-root: ''

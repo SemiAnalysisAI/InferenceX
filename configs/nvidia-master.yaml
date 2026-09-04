@@ -9799,7 +9799,7 @@ kimik3-fp4-b300-dynamo-vllm-agentic-mooncake-dcp8-agg:
   image: vllm/vllm-openai:nightly-dev-x86_64-cu13-3696c77
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
-  runner: cluster:b300-nv
+  runner: cluster:b300-dsxe
   precision: fp4
   framework: dynamo-vllm
   multinode: true
@@ -9828,7 +9828,7 @@ kimik3-fp4-b300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg:
   image: vllm/vllm-openai:nightly-dev-x86_64-cu13-3696c77
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
-  runner: cluster:b300-nv
+  runner: cluster:b300-dsxe
   precision: fp4
   framework: dynamo-vllm
   multinode: true
@@ -9874,7 +9874,7 @@ kimik3-fp4-b300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
   image: vllm/vllm-openai:nightly-dev-x86_64-cu13-3696c77
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
-  runner: cluster:b300-nv
+  runner: cluster:b300-dsxe
   precision: fp4
   framework: dynamo-vllm
   router: { name: dynamo-router, version: "ba83080ecd31c1ce918559e576d3c5bc9e092ff1" }
