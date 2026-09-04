@@ -9,6 +9,11 @@ set -x
 INFMAX_CONTAINER_WORKSPACE="${INFMAX_CONTAINER_WORKSPACE:-/infmax-workspace}"
 source "$INFMAX_CONTAINER_WORKSPACE/benchmarks/benchmark_lib.sh"
 
+if [[ -n "${SRT_FRONTEND_HOST:-}" ]]; then
+    check_env_vars SRT_FRONTEND_PORT
+    export AIPERF_SERVER_URL="http://${SRT_FRONTEND_HOST}:${SRT_FRONTEND_PORT}"
+fi
+
 # benchmark_lib deliberately clears inherited MAX_MODEL_LEN for AgentX so a
 # workflow default cannot silently truncate a model's native context. Native
 # srt-slurm topologies may still expose a smaller, explicit service limit (for
@@ -23,6 +28,15 @@ if [[ -n "${AIPERF_MAX_CONTEXT_LENGTH:-}" ]]; then
 fi
 
 check_env_vars MODEL MODEL_PREFIX FRAMEWORK PRECISION CONC RESULT_FILENAME DURATION
+
+if [[ -z "${AIPERF_SERVER_URL:-}" ]]; then
+    if [[ -n "${SRT_FRONTEND_HOST:-}" ]]; then
+        export AIPERF_SERVER_URL="http://${SRT_FRONTEND_HOST}:${SRT_FRONTEND_PORT:-$PORT}"
+    else
+        export AIPERF_SERVER_URL="http://localhost:${PORT}"
+    fi
+fi
+echo "Using srt-slurm frontend endpoint: $AIPERF_SERVER_URL"
 
 BASE_RESULT_DIR="${RESULT_DIR:-/logs/agentic}"
 BASE_RESULT_FILENAME="$RESULT_FILENAME"
@@ -49,7 +63,7 @@ fi
 wait_for_agentic_servers_idle() {
     local timeout_seconds="${AIPERF_DRAIN_TIMEOUT_SECONDS:-1800}"
     local poll_seconds="${AIPERF_DRAIN_POLL_SECONDS:-10}"
-    local frontend_metrics_url="http://localhost:${PORT}/metrics"
+    local frontend_metrics_url="${AIPERF_SERVER_URL%/}/metrics"
 
     "$AIPERF_PYTHON" - \
         "$timeout_seconds" \
@@ -94,6 +108,8 @@ while time.monotonic() < deadline:
             worker_metrics = fetch_metrics(worker_url)
             worker_active += metric_sum(worker_metrics, "vllm:num_requests_running")
             worker_active += metric_sum(worker_metrics, "vllm:num_requests_waiting")
+            worker_active += metric_sum(worker_metrics, "trtllm_num_requests_running")
+            worker_active += metric_sum(worker_metrics, "trtllm_num_requests_waiting")
         print(
             f"Agentic drain status: frontend_active={frontend_active:g} "
             f"worker_running_or_waiting={worker_active:g}",

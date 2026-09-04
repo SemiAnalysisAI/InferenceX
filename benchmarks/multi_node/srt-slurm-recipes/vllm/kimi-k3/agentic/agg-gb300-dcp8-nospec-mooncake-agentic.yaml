@@ -1,17 +1,15 @@
-# Measured p90-ITL Pareto family: OCI jobs 471604 (c32), 471605 (c48), and
-# 471606 (c64), using one aggregate TP8 x DCP8 worker without a draft model.
 name: "kimi-k3-vllm-agg-gb300-dcp8-nospec-mooncake-agentic"
 
 model:
   path: "moonshotai/Kimi-K3"
-  container: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-75c2eef"
+  container: "vllm/vllm-openai:nightly-dev-arm64-cu13-3696c77"
   precision: "fp4"
 
 identity:
   model:
     repo: "moonshotai/Kimi-K3"
   container:
-    image: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-75c2eef"
+    image: "vllm/vllm-openai:nightly-dev-arm64-cu13-3696c77"
   frameworks:
     dynamo: "ba83080ecd31c1ce918559e576d3c5bc9e092ff1"
 
@@ -41,7 +39,7 @@ frontend:
   type: dynamo
   enable_multiple_frontends: false
   args:
-    router-mode: "random"
+    router-mode: "least-loaded"
     router-session-affinity-ttl-secs: 900
   env:
     DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: "3600"
@@ -52,11 +50,12 @@ backend:
   connector: null
   mooncake_kv_store:
     master_extra_args:
+      - "--default_kv_lease_ttl=60000"
       - "--eviction_high_watermark_ratio=0.95"
       - "--eviction_ratio=0.10"
     store_config:
       metadata_server: "P2PHANDSHAKE"
-      global_segment_size: "150GB"
+      global_segment_size: "160GB"
       local_buffer_size: "4GB"
       protocol: "rdma"
       device_name: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
@@ -71,19 +70,17 @@ backend:
     VLLM_USE_DIRECT_DCP_A2A: "1"
     VLLM_USE_DIRECT_DCP_Q_GATHER: "1"
     VLLM_USE_DIRECT_DCP_KV_GATHER: "1"
+    ETCD_LEASE_TTL: "120"
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     VLLM_RPC_TIMEOUT: "600000"
+    VLLM_USE_RUST_FRONTEND: "1"
     VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "0"
     VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: "0"
     PYTHONNOUSERSITE: "1"
     TORCH_CUDA_ARCH_LIST: "10.0"
     PYTHONHASHSEED: "42"
     VLLM_HTTP_TIMEOUT_KEEP_ALIVE: "900"
-    MC_GID_INDEX: "3"
-    MC_STORE_MEMCPY: "1"
-    MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
     MC_SLICE_SIZE: "1048576"
-    MC_WORKERS_PER_CTX: "4"
     WITH_NVIDIA_PEERMEM: "0"
     VLLM_MOONCAKE_LOAD_RECV_THREADS: "4"
   vllm_config:
@@ -106,7 +103,7 @@ backend:
       attention-backend: "TOKENSPEED_MLA"
       attention-config: '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true}'
       max-cudagraph-capture-size: 1024
-      kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false}}'
+      kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"compact_group_io":true,"max_load_batch_keys":2,"enable_offload":false}}'
 
 sbatch_directives:
   mem: "0"

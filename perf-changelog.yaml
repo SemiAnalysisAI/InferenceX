@@ -6775,10 +6775,115 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2560
 
 - config-keys:
+    - qwen3.5-fp4-b200-sglang-mtp
+  description:
+    - "Use Triton linear attention with FlashInfer decode and prefill GDN backends for the TP2/EP2 Qwen3.5 FP4 B200 MTP points at concurrency 16, 32, and 64."
+    - "Keep all other topology and concurrency points on the existing backend defaults."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2790
+
+- config-keys:
+    - qwen3.5-fp4-gb300-dynamo-trt-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh to collect TensorRT-LLM server metrics."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2770
+
+- config-keys:
+    - minimaxm3-fp4-b200-trtllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh to collect TensorRT-LLM server metrics."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2771
+
+- config-keys:
+    - minimaxm3-fp4-b300-trtllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh to collect TensorRT-LLM server metrics."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2772
+
+- config-keys:
+    - glm5.2-fp4-gb300-dynamo-trt-agentic-agg-mtp
+    - glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh to collect TensorRT-LLM server metrics."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2773
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-trt-agentx
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh to collect TensorRT-LLM server metrics."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2774
+
+- config-keys:
+    - glm5.2-fp4-b200-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Pin the GLM-5.2 B200 SGLang AgentX curve to lmsysorg/sglang:nightly-dev-cu13-20260901-07c8f729, which includes FlashInfer 0.6.18's BF16 TRTLLM MoE allocation fix."
+    - "Use a 169 GB/rank HiCache target pool at c12 and c16 while retaining ratio mode for lower concurrencies."
+    - "Isolate SGLang runtime caches per Slurm allocation to prevent concurrent sweep cells from sharing per-rank cache files."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2808
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump the MI355X K3 vLLM recipe to vLLM ROCm nightly 7c5dc571 and LMCache 0.5.5rc3."
+    - "Add a TP8/DCP8 spec-mtp DRAM-offload arm at concurrency 44/48/52."
+    - "Retune the LMCache tier (12288-token chunk, 8 GPU workers) and the no-spec decode profile (gpu-memory-utilization 0.9, 8192 batched tokens); switch the DCP attention backend to ROCM_AITER_MLA."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2810
+
+- config-keys:
+    - glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a GLM-5.2 concurrency-1 AgentX point using a 1-prefill/1-decode disaggregated topology with TP4 attention-DP prefill and TP8 decode."
+    - "Use MTP depth 5 with the committed golden acceptance target, tensor-parallel MoE on decode, and the CUTEDSL top-k path."
+    - "Align recipe KV offloading with the master config and keep the benchmark client colocated with the frontend orchestrator."
+    - "Add the new concurrency-1 topology to the existing disaggregated configuration key while retaining all published points."
+    - "Enable TensorRT-LLM iteration statistics and require KV-cache server metrics for the new concurrency-1 point."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2720
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-trt-agentx
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Set OMP_NUM_THREADS=1 for the prefill and decode workers across the GB300 Dynamo-TensorRT-LLM AgentX recipe matrix."
+    - "Route AgentX replay and drain checks through the srt-slurm frontend endpoint when provided, with a localhost fallback."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2711
+
+- config-keys:
+    - dsv4-fp4-b200-vllm
+  description:
+    - "Refresh the DeepSeek-V4-Pro FP4 B200 vLLM image and search space, pin the Nscale NVFP4 checkpoint, use the FlashInfer CuTeDSL MoE backend for expert-parallel runs with EPLB disabled, set GPU memory utilization to 0.95, and cap the model length at 12288."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2534
+
+- config-keys:
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-mooncake-dcp8-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh the Kimi-K3 GB300 AgentX configurations with updated configs."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2811
+
+- config-keys:
     - dsv4-fp4-b300-dynamo-trt
   description:
     - "Add the DeepSeek-V4-Pro FP4 B300 Dynamo TensorRT-LLM disaggregated configuration with STP and MTP recipe variants."
     - "Run on b300 with the checkpoint at /scratch/models/DeepSeek-V4-Pro and batch_1/benchmark Slurm settings."
-    - "Stage the TensorRT-LLM recipes through launch_b300-nv.sh."
+    - "Stage the TensorRT-LLM recipes through launch_b300-dsxe.sh."
     - "Image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc23"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2596
