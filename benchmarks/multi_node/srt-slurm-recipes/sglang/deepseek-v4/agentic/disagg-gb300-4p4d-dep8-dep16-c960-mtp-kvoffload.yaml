@@ -1,12 +1,12 @@
-name: "disagg-gb300-6p4d-dep8-dep16-c960-mtp-kvoffload"
+name: "disagg-gb300-4p4d-dep8-dep16-c960-mtp-kvoffload"
 
-# Agentic-coding SGLang disaggregated Pareto recipe for DeepSeek-V4-Pro on GB300
-# (6P x DEP8 / 4D x DEP16, DSpark K=6 + hierarchical-cache KV offload), tuned for concurrency 960.
+# Agentic-coding SGLang disaggregated recipe for DeepSeek-V4-Pro on GB300
+# (4P x DEP8 / 4D x DEP16, DSpark K=6 + hierarchical-cache KV offload), tuned for concurrency 960.
 #
-# Uses the flat single-variant srtctl schema the agentic CI flow expects;
-# resources + backend (prefill/decode env + sglang_config) are normalized
-# from the Pareto run.
-# Concurrency is exported into agentic_srt.sh from the master-config conc-list.
+# DEP8-prefill variant aligned with the measured Pareto point: prefill uses
+# tp/dp/ep 8, four nodes, and SGLANG_DSV4_MHC_PREWARM=1.
+# Concurrency is exported into agentic_srt.sh
+# from the master-config conc-list.
 
 model:
   path: "deepseek-v4-pro-0813"
@@ -33,12 +33,11 @@ health_check:
 resources:
   gpu_type: gb300
   gpus_per_node: 4
-  prefill_nodes: 6
+  prefill_nodes: 4
   decode_nodes: 4
-  prefill_workers: 3
+  prefill_workers: 2
   decode_workers: 1
-  gpus_per_prefill: 8
-  gpus_per_decode: 16
+
 
 infra:
   etcd_nats_dedicated_node: true
@@ -66,9 +65,9 @@ backend:
     SGLANG_ENABLE_PREFILL_WAR_READ_DONE: "1"
     SGLANG_RAGGED_VERIFY_MODE: "static"
     SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "900"
-    SGLANG_DSV4_MHC_PREWARM: '1'
     PIP_BREAK_SYSTEM_PACKAGES: '1'
     PYTHONUNBUFFERED: '1'
+    OMP_NUM_THREADS: '1'
     SGLANG_ENABLE_TP_MEMORY_INBALANCE_CHECK: '0'
     SGLANG_DG_CACHE_DIR: /configs/deepgemm_cache
     SGLANG_JIT_DEEPGEMM_PRECOMPILE: '1'
@@ -94,12 +93,14 @@ backend:
     SGLANG_LOG_MS: '1'
     SGLANG_REQUEST_STATE_WAIT_TIMEOUT: '60'
     SGLANG_NCCL_ALL_GATHER_IN_OVERLAP_SCHEDULER_SYNC_BATCH: '1'
+    SGLANG_DSV4_MHC_PREWARM: '1'
 
   decode_environment:
     SGLANG_RAGGED_VERIFY_MODE: "static"
     SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "900"
     PIP_BREAK_SYSTEM_PACKAGES: '1'
     PYTHONUNBUFFERED: '1'
+    OMP_NUM_THREADS: '1'
     SGLANG_ENABLE_TP_MEMORY_INBALANCE_CHECK: '0'
     SGLANG_DG_CACHE_DIR: /configs/deepgemm_cache
     SGLANG_JIT_DEEPGEMM_PRECOMPILE: '1'
@@ -124,6 +125,7 @@ backend:
     SGLANG_LOG_FORWARD_ITERS: '1'
     SGLANG_LOG_MS: '1'
     SGLANG_REQUEST_STATE_WAIT_TIMEOUT: '60'
+    SGLANG_DSV4_MHC_PREWARM: '1'
 
   sglang_config:
     prefill:
@@ -150,8 +152,8 @@ backend:
       mem-fraction-static: 0.85
       page-size: 256
       swa-full-tokens-ratio: 0.02
-      max-running-requests: 512
-      cuda-graph-max-bs: 512
+      max-running-requests: 256
+      cuda-graph-max-bs: 256
       chunked-prefill-size: 65536
       disable-flashinfer-autotune: true
       model-loader-extra-config: '{"enable_multithread_load":true,"num_threads":8}'
@@ -191,7 +193,7 @@ backend:
       page-size: 256
       swa-full-tokens-ratio: 0.02
       max-running-requests: 3072
-      cuda-graph-max-bs: 512
+      cuda-graph-max-bs: 256
       disable-flashinfer-autotune: true
       model-loader-extra-config: '{"enable_multithread_load":true,"num_threads":8}'
       kv-events-config: '{"publisher":"zmq","topic":"kv-events","endpoint":"tcp://*:5567"}'
