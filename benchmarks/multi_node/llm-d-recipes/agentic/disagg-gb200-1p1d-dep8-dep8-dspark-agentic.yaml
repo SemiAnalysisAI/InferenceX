@@ -1,0 +1,196 @@
+# DeepSeek-V4-Pro-0813 (DSpark) FP4 GB200, P/D disagg 1P-DEP8/1D-DEP8 (4 nodes).
+# Always uses Mooncake (P2PHANDSHAKE embedded RDMA prefix-cache).
+# DSpark speculative decoding: prefill 1 token, decode 5 tokens.
+# Requires EPP/pd-sidecar v0.10.0 (disagg-profile-handler deciders shape).
+apiVersion: llm-d.ai/v1alpha1
+kind: EndpointPickerConfig
+
+plugins:
+  - name: file-disc
+    type: file-discovery
+    parameters:
+      path: /tmp/endpoints.yaml
+      watchFile: false
+
+  - type: prefill-filter
+  - type: decode-filter
+  - type: inflight-load-producer
+  - type: approx-prefix-cache-producer
+    parameters:
+      autoTune: false
+      blockSizeTokens: 256
+      maxPrefixTokensToMatch: 1048576
+      maxPrefixBlocksToMatch: 4096
+      lruCapacityPerServer: 45272
+  - type: prefix-cache-affinity-filter
+    parameters:
+      peakPrefillThroughput: 4783
+      maxTTFTPenaltyMs: 30000
+  - type: prefix-cache-scorer
+  - type: token-load-scorer
+    parameters:
+      queueThresholdTokens: 3000000
+  - type: active-request-scorer
+  - type: queue-scorer
+  - type: always-disagg-pd-decider
+  - type: disagg-profile-handler
+    parameters:
+      deciders:
+        prefill: always-disagg-pd-decider
+  - type: max-score-picker
+    name: prefill-picker
+  - type: max-score-picker
+    name: decode-picker
+
+schedulingProfiles:
+  - name: prefill
+    plugins:
+      - pluginRef: prefill-filter
+      - pluginRef: prefix-cache-affinity-filter
+      - pluginRef: prefix-cache-scorer
+        weight: 6
+      - pluginRef: token-load-scorer
+        weight: 3
+      - pluginRef: queue-scorer
+        weight: 3
+      - pluginRef: prefill-picker
+  - name: decode
+    plugins:
+      - pluginRef: decode-filter
+      - pluginRef: active-request-scorer
+      - pluginRef: decode-picker
+
+dataLayer:
+  discovery:
+    pluginRef: file-disc
+
+prefill:
+  tp: 1
+  enable-expert-parallel: true
+  extra-args: >-
+    --kv-cache-dtype fp8
+    --gpu-memory-utilization 0.96
+    --max-num-batched-tokens 8192
+    --long-prefill-token-threshold 1024
+    --max-num-seqs 16
+    --max-model-len 1048576
+    --speculative-config {"method":"dspark","num_speculative_tokens":1,"draft_sample_method":"probabilistic","attention_backend":"FLASHINFER_MLA_SPARSE_DSV4","enable_adaptive_verification":false}
+    --enable-cumem-allocator
+    --block-size 256
+    --tokenizer-mode deepseek_v4
+    --tool-call-parser deepseek_v4
+    --enable-auto-tool-choice
+    --reasoning-parser deepseek_v4
+    --moe-backend deep_gemm_mega_moe
+    --enable-ep-weight-filter
+    --no-disable-hybrid-kv-cache-manager
+    --no-enable-flashinfer-autotune
+    --numa-bind
+    --attention-config {"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"use_fp4_indexer_cache":true}
+  env:
+    PYTHONHASHSEED: "0"
+    VLLM_USE_RUST_FRONTEND: "1"
+    VLLM_USE_V2_MODEL_RUNNER: "1"
+    VLLM_SERVER_DEV_MODE: "1"
+    VLLM_USE_NCCL_SYMM_MEM: "1"
+    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+    VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
+    VLLM_RPC_TIMEOUT: "600000"
+    VLLM_LOG_STATS_INTERVAL: "1"
+    VLLM_DSV4_MEGA_FP8_COMBINE: "1"
+    VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
+    VLLM_HTTP_TIMEOUT_KEEP_ALIVE: "120"
+    VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
+    VLLM_USE_DEEP_GEMM: "1"
+    VLLM_CONNECTOR_PREFETCH_DEPTH: "8"
+    VLLM_CONNECTOR_PREFETCH_KV_CAP: "0.65"
+    VLLM_USE_BREAKABLE_CUDAGRAPH: "0"
+    FLASH_ATTENTION_CUTE_DSL_CACHE_ENABLED: "1"
+    VLLM_NO_USAGE_STATS: "1"
+    VLLM_LOGGING_LEVEL: INFO
+    TQDM_DISABLE: "1"
+    TILELANG_CLEANUP_TEMP_FILES: "1"
+    TORCH_SYMMMEM: NVSHMEM
+    DG_JIT_CACHE_DIR: /tmp/dg-cache-dsv4-agentx
+    UCX_TLS: rc,cuda_copy
+    UCX_MEMTYPE_CACHE: "n"
+    NCCL_CUMEM_ENABLE: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_NVLS_ENABLE: "1"
+    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
+    VLLM_MOONCAKE_LOAD_RECV_THREADS: "20"
+    MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
+    MC_STORE_RPC_CLIENT_IO_THREADS: "32"
+    MC_TE_RPC_CLIENT_IO_THREADS: "32"
+    MC_STORE_CLIENT_METRIC: "1"
+    MC_STORE_CLIENT_METRIC_INTERVAL: "5"
+    MC_TE_METRIC: "0"
+
+decode:
+  tp: 1
+  enable-expert-parallel: true
+  extra-args: >-
+    --kv-cache-dtype fp8
+    --gpu-memory-utilization 0.95
+    --max-num-batched-tokens 256
+    --max-num-seqs 32
+    --max-cudagraph-capture-size 256
+    --max-model-len 1048576
+    --speculative-config {"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","attention_backend":"FLASHINFER_MLA_SPARSE_DSV4","enable_adaptive_verification":false}
+    --enable-cumem-allocator
+    --block-size 256
+    --compilation-config {"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}
+    --tokenizer-mode deepseek_v4
+    --tool-call-parser deepseek_v4
+    --enable-auto-tool-choice
+    --reasoning-parser deepseek_v4
+    --moe-backend deep_gemm_mega_moe
+    --enable-ep-weight-filter
+    --no-disable-hybrid-kv-cache-manager
+    --no-enable-flashinfer-autotune
+    --numa-bind
+    --attention-config {"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"use_fp4_indexer_cache":true}
+  env:
+    PYTHONHASHSEED: "0"
+    VLLM_USE_RUST_FRONTEND: "1"
+    VLLM_USE_V2_MODEL_RUNNER: "1"
+    VLLM_SERVER_DEV_MODE: "1"
+    VLLM_USE_NCCL_SYMM_MEM: "1"
+    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+    VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
+    VLLM_RPC_TIMEOUT: "600000"
+    VLLM_LOG_STATS_INTERVAL: "1"
+    VLLM_DSV4_MEGA_FP8_COMBINE: "1"
+    VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
+    VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
+    VLLM_USE_DEEP_GEMM: "1"
+    VLLM_CONNECTOR_PREFETCH_DEPTH: "8"
+    VLLM_NO_USAGE_STATS: "1"
+    VLLM_LOGGING_LEVEL: INFO
+    TQDM_DISABLE: "1"
+    TILELANG_CLEANUP_TEMP_FILES: "1"
+    TORCH_SYMMMEM: NVSHMEM
+    DG_JIT_CACHE_DIR: /tmp/dg-cache-dsv4-agentx
+    UCX_TLS: rc,cuda_copy
+    UCX_MEMTYPE_CACHE: "n"
+    NCCL_CUMEM_ENABLE: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_NVLS_ENABLE: "1"
+    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
+    VLLM_MOONCAKE_LOAD_RECV_THREADS: "20"
+    MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
+    MC_STORE_CLIENT_METRIC: "1"
+    MC_STORE_CLIENT_METRIC_INTERVAL: "5"
+    MC_TE_METRIC: "0"
+
+mooncake:
+  store_config:
+    metadata_server: "P2PHANDSHAKE"
+    local_buffer_size: "4GB"
+    protocol: "rdma"
+    device_name: "mlx5_0,mlx5_1,mlx5_3,mlx5_4"
+    mode: "embedded"
+    enable_offload: false  # SSD only; the embedded DRAM pool is still enabled.
+
+slurm:
+  time_limit: "08:00:00"

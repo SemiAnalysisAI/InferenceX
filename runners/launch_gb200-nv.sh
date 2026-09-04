@@ -79,7 +79,7 @@ import_squash() {
             echo "Squash file already exists and is valid, skipping import: $squash"
         else
             local enroot_runtime
-            enroot_runtime=$(mktemp -d "${TMPDIR:-/tmp}/enroot-import.XXXXXX") || exit 1
+            enroot_runtime=$(mktemp -d /tmp/enroot-import.XXXXXX) || exit 1
             trap 'rm -rf -- "$enroot_runtime"' EXIT
             export ENROOT_RUNTIME_PATH="$enroot_runtime"
 
@@ -100,7 +100,10 @@ import_squash() {
 }
 
 if [[ "$FRAMEWORK" == "llmd-vllm" ]]; then
-    if [[ "$MODEL_PREFIX" == "dsv4" && "$PRECISION" == "fp4" ]]; then
+    if [[ "$MODEL_PREFIX" == "dsv4" && "$PRECISION" == "fp4" && "$MODEL" == *-0813 ]]; then
+        export MODEL_PATH="/mnt/lustre01/users-public/sa-shared/models/DeepSeek-V4-Pro-0813"
+        export MODEL_NAME="$MODEL"
+    elif [[ "$MODEL_PREFIX" == "dsv4" && "$PRECISION" == "fp4" ]]; then
         export MODEL_PATH="/mnt/numa1/models/DeepSeek-V4-Pro"
         export MODEL_NAME="deepseek-ai/DeepSeek-V4-Pro"
     else
@@ -117,14 +120,18 @@ if [[ "$FRAMEWORK" == "llmd-vllm" ]]; then
     export BENCHMARK_LOGS_DIR="$GITHUB_WORKSPACE/benchmark_logs"
     mkdir -p "$BENCHMARK_LOGS_DIR"
 
-    SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_gb200_llmd-vllm-disagg.sh"
+    if [[ "$DISAGG" == "true" ]]; then
+        SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_gb200_llmd-vllm-disagg.sh"
+    else
+        SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_gb200_llmd-vllm-agg.sh"
+    fi
     BENCH_SCRIPT="benchmarks/multi_node/${SCRIPT_NAME}"
     if [[ ! -f "$BENCH_SCRIPT" ]]; then
         echo "Error: llm-d wrapper not found: $BENCH_SCRIPT" >&2
         exit 1
     fi
 
-    JOB_ID=$(bash "$BENCH_SCRIPT")
+    JOB_ID=$(bash "$BENCH_SCRIPT") || exit 1
     if [[ -z "$JOB_ID" ]]; then
         echo "Error: failed to submit llm-d job" >&2
         exit 1
@@ -140,7 +147,12 @@ if [[ "$FRAMEWORK" == "llmd-vllm" ]]; then
         copy_to_workspace "$result_file" "$GITHUB_WORKSPACE/$(basename "$result_file")" || exit 1
     done < <(find "$BENCHMARK_LOGS_DIR" -name "${RESULT_FILENAME}*.json" -print0 2>/dev/null)
 
-    if [[ "${RUN_EVAL:-false}" == "true" ]]; then
+    if [[ "$IS_AGENTIC" == "1" && "$EVAL_ONLY" != "true" ]]; then
+        mkdir -p "$GITHUB_WORKSPACE/LOGS/agentic"
+        cp -R "$BENCHMARK_LOGS_DIR/agentic/." "$GITHUB_WORKSPACE/LOGS/agentic/" || exit 1
+    fi
+
+    if [[ "${RUN_EVAL}" == "true" ]]; then
         EVAL_DIR=$(find "$BENCHMARK_LOGS_DIR" -type d -name eval_results -print -quit 2>/dev/null)
         if [[ -z "$EVAL_DIR" ]]; then
             EVAL_DIR="$BENCHMARK_LOGS_DIR/eval_results"
@@ -320,7 +332,7 @@ if [[ "$USES_DCGM_POWER" == "1" ]]; then
     sha256sum "$DCGM_EXPORTER_SQSH" > "$GITHUB_WORKSPACE/exporter-image.sha256"
 fi
 
-export EVAL_ONLY="${EVAL_ONLY:-false}"
+export EVAL_ONLY
 
 export ISL="$ISL"
 export OSL="$OSL"
@@ -554,7 +566,7 @@ else
     git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
 fi
-if [[ "${EVAL_FRAMEWORK:-lm-eval}" != "lm-eval" ]]; then
+if [[ "${EVAL_FRAMEWORK}" != "lm-eval" ]]; then
     python3 "$GITHUB_WORKSPACE/runners/patch_srt_eval_dispatch.py" "$(pwd)" || exit 1
 fi
 
@@ -802,7 +814,7 @@ else
     echo "Warning: Logs directory not found at $LOGS_DIR"
 fi
 
-if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
+if [[ "${EVAL_ONLY}" != "true" ]]; then
     if [ ! -d "$LOGS_DIR" ]; then
         exit 1
     fi
@@ -863,6 +875,6 @@ else
 fi
 
 # Collect eval results if eval was requested
-if [[ "${RUN_EVAL:-false}" == "true" || "${EVAL_ONLY:-false}" == "true" ]]; then
+if [[ "${RUN_EVAL}" == "true" || "${EVAL_ONLY}" == "true" ]]; then
     copy_eval_artifacts "$LOGS_DIR/eval_results" "$GITHUB_WORKSPACE" || exit 1
 fi

@@ -6868,3 +6868,14 @@
   description:
     - "Refresh the DeepSeek-V4-Pro FP4 B200 vLLM image and search space, pin the Nscale NVFP4 checkpoint, use the FlashInfer CuTeDSL MoE backend for expert-parallel runs with EPLB disabled, set GPU memory utilization to 0.95, and cap the model length at 12288."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2534
+
+- config-keys:
+    - dsv4-fp4-gb200-llmd-vllm-agentx
+    - dsv4-fp4-gb200-llmd-vllm-agentx-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add DeepSeek-V4-Pro-0813 FP4/FP8-KV on GB200: 8-GPU TP8/DEP8 aggregation, 16-GPU NIXL DEP8 1P/1D, and llm-d 0.10.0 prefix/token-load routing. GPU-memory budgets: TP8 0.85, DEP8 0.88. P/D KV leases last 1800s to cover long-context decode stalls."
+    - "Use fixed-K DSpark golden AL: K=5/AL=3.61 for aggregated/decode; K=1/AL=1.84 for P/D prefill. Adaptive verification is disabled."
+    - "Mooncake variants use DRAM offload at 0.60 utilization, one job-local master, and IB HCAs mlx5_0,1,3,4; no SSD offload. Plain TP8/DEP8 has no offload. Scrape vLLM nodes directly without duplicate frontend counters."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719

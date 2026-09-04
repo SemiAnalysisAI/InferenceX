@@ -68,6 +68,64 @@ def test_copy_agentic_results_fails_when_aggregate_is_missing(
     assert "no run_conc*.json results found" in result.stderr
 
 
+@pytest.mark.parametrize("metrics_body", ["vllm:num_requests_running 0\n", "envoy_http_requests_total 0\n"])
+def test_llmd_agentic_adapter_uses_discovered_worker_metrics(tmp_path: Path, metrics_body: str) -> None:
+    """Check endpoint selection, preflight failure, and the real AIPerf CLI builder."""
+    client = tmp_path / "benchmarks/multi_node/agentic_srt.sh"
+    client.parent.mkdir(parents=True)
+    client.write_text('''source "$REAL_BENCHMARK_LIB"
+build_replay_cmd "$RESULT_DIR"
+export REPLAY_CMD
+python3 - <<'PY'
+import json, os
+keys = ["AIPERF_METRIC_URLS", "AIPERF_SERVER_METRICS_URLS", "REPLAY_CMD"]
+print(json.dumps({key: os.environ[key] for key in keys}))
+PY
+''')
+    # Mock only the HTTP collaborator; the real adapter parses discovery and
+    # selects each serving node, including non-leader DP nodes.
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    curl = bin_dir / "curl"
+    curl.write_text(
+        '#!/usr/bin/env python3\n'
+        'import os, sys\nfrom pathlib import Path\n'
+        'Path(sys.argv[sys.argv.index("--output") + 1]).write_text(os.environ["METRICS_BODY"])\n'
+        'with open(os.environ["METRICS_REQUESTS"], "a") as out:\n'
+        '    out.write(next(arg for arg in sys.argv if arg.startswith("http://")) + "\\n")\n'
+    )
+    curl.chmod(0o755)
+    endpoints = tmp_path / "endpoints.yaml"
+    endpoints.write_text(yaml.safe_dump({"endpoints": [
+        {"address": "10.0.0.1", "port": "8200"},
+        {"address": "10.0.0.2", "port": "8200"},
+        {"address": "10.0.0.3", "port": "8000"},
+    ]}))
+    requests = tmp_path / "metrics-requests.txt"
+    env = dict(os.environ, INFMAX_CONTAINER_WORKSPACE=str(tmp_path),
+               REAL_BENCHMARK_LIB=str(REPO_ROOT / "benchmarks/benchmark_lib.sh"),
+               PATH=str(bin_dir) + os.pathsep + os.environ["PATH"],
+               METRICS_BODY=metrics_body, METRICS_REQUESTS=str(requests),
+               LLMD_ENDPOINTS_FILE=str(endpoints), MODEL_NAME="test-model", MODEL_PREFIX="dsv4",
+               FRAMEWORK="llmd-vllm", DURATION="3600", IS_AGENTIC="1", KV_OFFLOADING="none",
+               ENVOY_PORT="8080", VLLM_PORT="8200", BENCHMARK_LOGS_DIR=str(tmp_path / "logs"),
+               BENCH_MAX_CONCURRENCY="64")
+    result = subprocess.run(["bash", str(REPO_ROOT / "benchmarks/multi_node/llm-d/agentic.sh")],
+                            env=env, text=True, capture_output=True)
+    if metrics_body.startswith("envoy_"):
+        assert result.returncode != 0
+        assert "no vLLM metrics exposed" in result.stderr
+        return
+    assert result.returncode == 0, result.stderr
+    recorded = json.loads(result.stdout.splitlines()[-1])
+    expected_urls = ["http://10.0.0.1:8200/metrics", "http://10.0.0.2:8200/metrics", "http://10.0.0.3:8200/metrics"]
+    assert requests.read_text().splitlines() == expected_urls
+    assert recorded["AIPERF_METRIC_URLS"].split(",") == expected_urls
+    assert recorded["AIPERF_SERVER_METRICS_URLS"].split(",") == expected_urls
+    assert "--url http://localhost:8080 " in recorded["REPLAY_CMD"]
+    assert "--server-metrics " + " ".join(expected_urls) + " " in recorded["REPLAY_CMD"]
+
+
 def test_patch_srt_eval_dispatch_forwards_selection_and_is_idempotent(
     tmp_path: Path,
 ) -> None:

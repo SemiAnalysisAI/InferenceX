@@ -4502,6 +4502,110 @@ dsv4-fp4-gb200-llmd-vllm:
           - "DECODE_NODES=2"
           - "GPUS_PER_NODE=4"
 
+# DeepSeek-V4-Pro-0813 (DSpark) FP4 GB200, P/D disagg via llmd-vllm.
+# Long-context workspace headroom: GPU-memory budgets are 0.88 for DEP8, 0.85 for TP8.
+# Always uses Mooncake; DSpark speculative decoding. The DSpark image
+# bundles EPP/pd-sidecar v0.10.0.
+dsv4-fp4-gb200-llmd-vllm-agentx:
+  image: quay.io/rh-ee-imarkov/llm-d-nokube-vllm:dspark-0814-nightly@sha256:00742fdd10e572172d49559e44c357a68c388933c74db2c4e819bf61377a6a95
+  model: deepseek-ai/DeepSeek-V4-Pro-0813
+  model-prefix: dsv4
+  runner: cluster:gb200-nv
+  precision: fp4
+  framework: llmd-vllm
+  router: { name: llm-d-router, version: "0.10.0" }
+  kv-p2p-transfer: nixl
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.60
+      search-space:
+      # 1P DEP8 + 1D DEP8 (4 nodes / 16 GPUs). Always Mooncake.
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake }
+        conc-list: [64, 128, 160, 192]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=2"
+          - "GPUS_PER_NODE=4"
+          - "CONFIG_FILE=agentic/disagg-gb200-1p1d-dep8-dep8-dspark-agentic.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=2"
+          - "GPUS_PER_NODE=4"
+
+# Aggregated TP8/DEP8; only the Mooncake arm enables DRAM offloading.
+dsv4-fp4-gb200-llmd-vllm-agentx-agg:
+  image: quay.io/rh-ee-imarkov/llm-d-nokube-vllm:dspark-0814-nightly@sha256:00742fdd10e572172d49559e44c357a68c388933c74db2c4e819bf61377a6a95
+  model: deepseek-ai/DeepSeek-V4-Pro-0813
+  model-prefix: dsv4
+  runner: cluster:gb200-nv
+  precision: fp4
+  framework: llmd-vllm
+  router: { name: llm-d-router, version: "0.10.0" }
+  multinode: true
+  disagg: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.60
+      search-space:
+      # Aggregated TP8 (2 nodes / 8 GPUs; pure tensor-parallel, no EP).
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [1, 2, 4, 8, 12]
+        num-nodes: 2
+        worker:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=2"
+          - "DECODE_NODES=0"
+          - "GPUS_PER_NODE=4"
+          - "CONFIG_FILE=agentic/agg-gb200-tp8-dspark-agentic.yaml"
+      # Aggregated DEP8 (2 nodes / 8 GPUs; DP=8 + EP), no Mooncake.
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [12, 16, 32]
+        num-nodes: 2
+        worker:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=2"
+          - "DECODE_NODES=0"
+          - "GPUS_PER_NODE=4"
+          - "CONFIG_FILE=agentic/agg-gb200-dep8-dspark-agentic.yaml"
+      # Aggregated DEP8 with Mooncake prefix-cache KV store.
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake }
+        conc-list: [52, 72]
+        num-nodes: 2
+        worker:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=2"
+          - "DECODE_NODES=0"
+          - "GPUS_PER_NODE=4"
+          - "CONFIG_FILE=agentic/agg-gb200-dep8-dspark-mooncake-agentic.yaml"
+
 # MTP2 variant of dsv4-fp4-gb200-dynamo-vllm. Uses the vLLM 0.20.1 image
 # and hand-picked 8k/1k Pareto points mirrored from NVIDIA/srt-slurm.
 dsv4-fp4-gb200-dynamo-vllm-mtp2:
