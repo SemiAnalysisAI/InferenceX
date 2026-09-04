@@ -420,6 +420,14 @@ elif [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "minimaxm3" && "$PRECISION" =
     mkdir -p recipes/vllm/minimax-m3/gb200-fp4/agentic
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3/gb200-fp4/agentic" \
         recipes/vllm/minimax-m3/gb200-fp4/agentic
+# Collect both nodes' DP metrics for resident DeepSeek-V4 disaggregation.
+elif [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "dsv4" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-vllm" && "$DISAGG" == "true" && "$KV_OFFLOADING" == "none" ]]; then
+    git clone --branch fix/custom-vllm-dp-metrics --single-branch https://github.com/SemiAnalysisAI/srt-slurm.git "$SRT_REPO_DIR" || exit 1
+    cd "$SRT_REPO_DIR" || exit 1
+    git checkout bde8ca8a7a14e124531085cf0d908d3907b11ad6 || exit 1
+    mkdir -p recipes/vllm/deepseek-v4/agentic
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
+        recipes/vllm/deepseek-v4/agentic
 # These AgentX submissions use released srt-slurm custom-benchmark metrics
 # discovery so AIPerf receives every logical worker endpoint.
 elif [[ "$IS_AGENTIC" == "1" && (( "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-sglang" ) || ( "$MODEL_PREFIX" == "dsv4" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-vllm" )) ]]; then

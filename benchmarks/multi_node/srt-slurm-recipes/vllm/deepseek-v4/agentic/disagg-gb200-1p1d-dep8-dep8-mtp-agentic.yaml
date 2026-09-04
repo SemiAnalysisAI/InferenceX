@@ -119,4 +119,4 @@ benchmark:
     AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
     HF_HUB_CACHE: /hf_hub_cache
     WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
-    AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:"
+    AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:kv_cache_usage_perc"
