@@ -6868,3 +6868,13 @@
   description:
     - "Refresh the DeepSeek-V4-Pro FP4 B200 vLLM image and search space, pin the Nscale NVFP4 checkpoint, use the FlashInfer CuTeDSL MoE backend for expert-parallel runs with EPLB disabled, set GPU memory utilization to 0.95, and cap the model length at 12288."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2534
+
+- config-keys:
+    - minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp
+    - minimaxm3-fp4-gb200-dynamo-vllm-agentic-disagg-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh the full GB200 Dynamo-vLLM AgentX configuration across the configured aggregate and disaggregated topology points."
+    - "Retain aggregate SimpleCPU-offload concurrency 20 and 30, and configure Mooncake host KV storage, NIXL over UCX, explicit thinking mode, and the committed MiniMax-M3 EAGLE3-GQA acceptance target."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2807

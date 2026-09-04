@@ -1,0 +1,162 @@
+name: "minimax-m3-vllm-disagg-gb200-1p1d-tp4-tp8-c1-agentic"
+
+model:
+  path: "minimax-m3-nvfp4"
+  container: &container "vllm/vllm-openai@sha256:b9104b7ef3048e42f79fba9ab5da06e5aff8164aca9968692ec2f569aaaf34c6"
+  precision: "fp4"
+
+identity:
+  model: { repo: "nvidia/MiniMax-M3-NVFP4" }
+  container: { image: *container }
+  frameworks: { dynamo: "1.5.0.dev20260819" }
+
+dynamo: { wheel: "1.5.0.dev20260819", install: true }
+environment: { PYTHONHASHSEED: "0" }
+health_check: { max_attempts: 2160, interval_seconds: 10 }
+
+resources:
+  gpu_type: "gb200"
+  gpus_per_node: 4
+  prefill_nodes: 1
+  decode_nodes: 2
+  prefill_workers: 1
+  decode_workers: 1
+  gpus_per_prefill: 4
+  gpus_per_decode: 8
+
+infra: { etcd_nats_dedicated_node: false, nats_max_payload_mb: 32 }
+
+frontend:
+  type: dynamo
+  enable_multiple_frontends: false
+  args:
+    dyn-chat-processor: "vllm"
+    trust-remote-code: true
+    tool-call-parser: "minimax_m3"
+    reasoning-parser: "minimax_m3"
+    enable-auto-tool-choice: true
+    router-mode: "least-loaded"
+    router-session-affinity-ttl-secs: 3600
+  env:
+    DYN_LOG: "info"
+    DYN_TCP_CONNECT_TIMEOUT: "120"
+    DYN_TOKENIZER: "fastokens"
+    DYN_TOKENIZER_CACHE: "1"
+
+backend:
+  type: vllm
+  connector: null
+  dp_launch_mode: per_gpu
+  mooncake_kv_store:
+    env:
+      MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
+      MC_STORE_CLIENT_METRIC: "1"
+      MC_STORE_CLIENT_METRIC_INTERVAL: "5"
+      MC_TE_METRIC: "1"
+    store_config:
+      metadata_server: "P2PHANDSHAKE"
+      global_segment_size: "150GB"
+      local_buffer_size: "4GB"
+      protocol: "rdma"
+      device_name: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
+      mode: "embedded"
+      enable_offload: true
+  prefill_environment: &worker_environment
+    HF_HOME: "/hf_hub_cache"
+    HF_HUB_CACHE: "/hf_hub_cache"
+    HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
+    TRANSFORMERS_CACHE: "/hf_hub_cache"
+    DYN_TCP_CONNECT_TIMEOUT: "120"
+    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+    VLLM_FLOAT32_MATMUL_PRECISION: "high"
+    VLLM_FLASHINFER_ALLREDUCE_BACKEND: "trtllm"
+    VLLM_MOONCAKE_LOAD_RECV_THREADS: "20"
+    VLLM_USE_NCCL_SYMM_MEM: "0"
+    VLLM_ALLREDUCE_USE_SYMM_MEM: "0"
+    NCCL_CUMEM_ENABLE: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_NVLS_ENABLE: "1"
+    NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
+    UCX_CUDA_IPC_ENABLE_MNNVL: "y"
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_MODULE_DIR: "/usr/local/lib/python3.12/dist-packages/nixl_cu13.libs/ucx"
+    UCX_RCACHE_MAX_UNRELEASED: "1024"
+    UCX_RNDV_PIPELINE_ERROR_HANDLING: "y"
+    UCX_TLS: "tcp,cuda_ipc,cuda_copy"
+    WITH_NVIDIA_PEERMEM: "0"
+  decode_environment:
+    <<: *worker_environment
+    VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl"
+  vllm_config:
+    prefill:
+      served-model-name: "nvidia/MiniMax-M3-NVFP4"
+      tensor-parallel-size: 4
+      enable-expert-parallel: true
+      all2all-backend: "flashinfer_nvlink_one_sided"
+      trust-remote-code: true
+      enable-prefix-caching: true
+      language-model-only: true
+      kv-cache-dtype: "fp8"
+      block-size: 128
+      gpu-memory-utilization: 0.9
+      max-num-batched-tokens: 16384
+      max-cudagraph-capture-size: 512
+      stream-interval: 20
+      no-enable-flashinfer-autotune: true
+      enable-cumem-allocator: true
+      numa-bind: true
+      numa-bind-nodes: &numa_nodes [0, 0, 1, 1]
+      attention-config: '{"backend":"FLASHINFER","use_trtllm_attention":true,"indexer_kv_dtype":"fp8"}'
+      speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN","rejection_sample_method":"synthetic","synthetic_acceptance_length":2.78}'
+      kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_connector_extra_config":{"backends":["UCX"],"num_threads":8}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"lookup_async":false,"enable_lookup":false}}]}}'
+      reasoning-parser: "minimax_m3"
+      dyn-tool-call-parser: "minimax_m3"
+      dyn-reasoning-parser: "minimax_m3"
+    decode:
+      served-model-name: "nvidia/MiniMax-M3-NVFP4"
+      tensor-parallel-size: 8
+      enable-expert-parallel: true
+      all2all-backend: "flashinfer_nvlink_one_sided"
+      trust-remote-code: true
+      enable-prefix-caching: true
+      language-model-only: true
+      kv-cache-dtype: "fp8"
+      block-size: 128
+      gpu-memory-utilization: 0.9
+      max-num-batched-tokens: 16384
+      max-num-seqs: 1
+      max-cudagraph-capture-size: 512
+      stream-interval: 20
+      no-enable-flashinfer-autotune: true
+      enable-cumem-allocator: true
+      numa-bind: true
+      numa-bind-nodes: *numa_nodes
+      attention-config: '{"backend":"FLASHINFER","use_trtllm_attention":true,"indexer_kv_dtype":"fp8","minimax_m3_msa_decode_backend":"cutlass"}'
+      speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN","rejection_sample_method":"synthetic","synthetic_acceptance_length":2.78}'
+      kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_connector_extra_config":{"backends":["UCX"],"num_threads":8}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_consumer","kv_connector_extra_config":{"enable_lookup":false}}]}}'
+      reasoning-parser: "minimax_m3"
+      dyn-tool-call-parser: "minimax_m3"
+      dyn-reasoning-parser: "minimax_m3"
+      dyn-default-thinking-mode: "enabled"
+
+sbatch_directives: { cpus-per-task: "144", mem: "0" }
+srun_options: { container-remap-root: "" }
+
+benchmark:
+  type: custom
+  command: "bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh"
+  env:
+    INFMAX_CONTAINER_WORKSPACE: "/infmax-workspace"
+    RESULT_DIR: "/logs/agentic"
+    PORT: "8000"
+    IS_MULTINODE: "true"
+    AGENTIC_WARMUP_GRACE_PERIOD: "1800"
+    AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
+    AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
+    AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: "3600"
+    AIPERF_EXTRA_INPUTS: "thinking:true"
+    AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:"
+    AIPERF_SERVER_METRICS_COLLECTION_INTERVAL: "1.0"
+    AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
+    HF_HUB_CACHE: "/hf_hub_cache"
+    WEKA_LOADER_OVERRIDE: "semianalysis_cc_traces_weka_062126"
