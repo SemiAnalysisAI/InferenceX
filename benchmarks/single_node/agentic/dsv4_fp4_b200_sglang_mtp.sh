@@ -2,7 +2,7 @@
 set -eo pipefail
 set -x
 
-# Agentic trace replay for DeepSeek-V4-Pro FP4 on B200 with native EAGLE MTP.
+# Agentic trace replay for DeepSeek-V4-Pro-0813 FP4 on B200 with DSpark K=6.
 # Throughput uses the committed golden synthetic AL; eval retains real target
 # verification.
 #
@@ -110,8 +110,6 @@ CHUNKED_PREFILL_SIZE=8192
 SWA_FULL_TOKENS_RATIO=0.1
 MEM_FRACTION_STATIC=0.90
 if [ "$DP_ATTENTION" = "true" ]; then
-    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_FP4_ACTS=1
-    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_MXF4_KIND=1
     export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=8320
 
     # Leave HBM headroom for the FP4 indexer's context-dependent workspace.
@@ -132,12 +130,14 @@ if [ "$DP_ATTENTION" = "true" ]; then
         --tokenizer-worker-num "$TP"
         --prefill-decode-interval "$PREFILL_DECODE_INTERVAL"
         --enable-dp-attention
+        --enable-dp-lm-head
         --enable-dp-attention-local-control-broadcast
         --incremental-streaming-output
         --stream-interval 20
         --dist-init-addr "127.0.0.1:$((PORT + 2000))"
         --ep-size "$EP_SIZE"
         --moe-a2a-backend megamoe
+        --enable-w4a4-mxfp4-megamoe
         --enable-deepseek-v4-fp4-indexer
         --disable-shared-experts-fusion
         --disable-flashinfer-autotune
@@ -188,7 +188,7 @@ export SGLANG_OPT_USE_JIT_INDEXER_METADATA=1
 export SGLANG_OPT_USE_TOPK_V2=1
 export SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2=1
 if [ "${EVAL_ONLY}" != "true" ]; then
-    export SGLANG_SIMULATE_ACC_LEN=2.49
+    export SGLANG_SIMULATE_ACC_LEN=3.77
     export SGLANG_SIMULATE_ACC_METHOD=match-expected
     export SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token
 fi
@@ -218,10 +218,11 @@ SGLANG_CMD=(
     --reasoning-parser deepseek-v4
     --chat-template "$SCRIPT_DIR/../chat_templates/deepseek_v4_thinking.jinja"
     --watchdog-timeout 1800
-    --speculative-algorithm EAGLE
-    --speculative-num-steps 3
+    --speculative-algorithm DSPARK
+    --speculative-dspark-block-size 6
+    --speculative-num-steps 1
     --speculative-eagle-topk 1
-    --speculative-num-draft-tokens 4
+    --speculative-num-draft-tokens 7
     # The B200 checkpoint lives on Lustre. Partition sequential prefetching
     # across local ranks so post-load weight repacking reads from page cache
     # instead of issuing redundant fragmented mmap faults from every rank.
