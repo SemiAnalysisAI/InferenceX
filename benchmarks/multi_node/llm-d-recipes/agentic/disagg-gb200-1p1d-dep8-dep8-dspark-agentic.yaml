@@ -131,7 +131,7 @@ decode:
   enable-expert-parallel: true
   extra-args: >-
     --kv-cache-dtype fp8
-    --gpu-memory-utilization 0.95
+    --gpu-memory-utilization 0.90
     --max-num-batched-tokens 256
     --max-num-seqs 32
     --max-cudagraph-capture-size 256
