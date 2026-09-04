@@ -214,8 +214,6 @@ env:
   SWEBENCH_USE_MODAL: 'true'
   MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
   MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
-  # These b300 nodes are currently broken.
-  SALLOC_EXCLUDE: 'b300-005,b300-006,b300-017'
 
 permissions:
   contents: read

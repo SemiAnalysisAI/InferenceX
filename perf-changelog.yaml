@@ -6870,6 +6870,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2534
 
 - config-keys:
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-mooncake-dcp8-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh the Kimi-K3 GB300 AgentX configurations with updated configs."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2811
+
+- config-keys:
     - minimaxm3-fp4-mi355x-vllm-agentic-mtp
   scenario-type:
     - agentic-coding
