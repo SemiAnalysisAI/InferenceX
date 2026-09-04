@@ -6878,4 +6878,4 @@
     - "Use one speculative step, seven draft tokens, and thinking-on golden synthetic acceptance length 3.77 for throughput; eval retains real DSpark verification."
     - "Use SGLang's current W4A4 MegaMoE and DP LM-head flags for DP-attention instead of the deprecated MegaMoE environment variables."
     - "Resolve draft-model jobs through the existing B200 SGLang speculative recipe and the staged DeepSeek-V4-Pro-0813 checkpoint."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2821
