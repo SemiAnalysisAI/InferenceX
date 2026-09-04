@@ -369,7 +369,7 @@ DeepSeek-R1-0528-MXFP4-v2:
       cuda_graph_bs_range: "1-128"
 
 DeepSeek-V4-Pro-AgentX:
-  base_flags: "--watchdog-timeout 3600 --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend dsv4 --page-size 256 --swa-full-tokens-ratio 0.1 --tool-call-parser deepseekv4 --reasoning-parser deepseek-v4 --disaggregation-transfer-backend mori --log-level info --log-level-http error"
+  base_flags: "--enable-deepseek-v4-fp4-indexer --watchdog-timeout 3600 --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend dsv4 --page-size 256 --swa-full-tokens-ratio 0.1 --tool-call-parser deepseekv4 --reasoning-parser deepseek-v4 --disaggregation-transfer-backend mori --log-level info --log-level-http error"
   # --enforce-shared-experts-fusion and dp_flags' --disable-shared-experts-fusion
   # are documented by sglang as mutually exclusive (server_args.py), so each lives
   # in its own bucket (no_dp_flags / dp_flags) rather than both riding on the
@@ -384,7 +384,7 @@ DeepSeek-V4-Pro-AgentX:
   ep_flags: "--ep-dispatch-algorithm fake --moe-a2a-backend mori --deepep-mode normal"
   mtp_flags: "--speculative-algorithm EAGLE --speculative-eagle-topk 1"
   prefill:
-    mem_fraction_static: 0.90
+    mem_fraction_static: 0.86
     disable_radix_cache: false
     disable_cuda_graph: true
     dp:
@@ -406,7 +406,7 @@ DeepSeek-V4-Pro-AgentX:
       chunked_prefill_size: "16384 if PREFILL_TP_SIZE == 8 else 8192"
       context_length: 1048576
   decode:
-    mem_fraction_static: 0.90
+    mem_fraction_static: 0.86
     prefill_round_robin_balance: true
     disagg_decode_enable_radix_cache: false
     dp:

@@ -1579,7 +1579,7 @@ minimaxm3-fp8-mi325x-vllm-agentic-mtp:
       - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8, 10, 12, 14, 16, 18] }
 
 dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260831
+  image: lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260903
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:mi355x-amds
@@ -1592,47 +1592,66 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      # - spec-decoding: "mtp"
-      #   conc-list: [ 1,2,4,8]
-      #   kv-offloading: none
-      #   prefill:
-      #     num-worker: 1
-      #     tp: 4
-      #     ep: 1
-      #     dp-attn: false
-      #     additional-settings:
-      #     - "PREFILL_NODES=1"
-      #     - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260831"
-      #   decode:
-      #     num-worker: 1
-      #     tp: 4
-      #     ep: 1
-      #     dp-attn: false
-      #     additional-settings:
-      #     - "DECODE_NODES=1"
-      #     - "DECODE_MTP_SIZE=3"
-      # - spec-decoding: "mtp"
-      #   conc-list: [ 16, 32, 48, 64 ]
-      #   kv-offloading: dram
-      #   kv-offload-backend: { name: hicache }
-      #   prefill:
-      #     num-worker: 1
-      #     tp: 8
-      #     ep: 1
-      #     dp-attn: false
-      #     additional-settings:
-      #     - "PREFILL_NODES=1"
-      #     - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260831"
-      #   decode:
-      #     num-worker: 1
-      #     tp: 8
-      #     ep: 1
-      #     dp-attn: false
-      #     additional-settings:
-      #     - "DECODE_NODES=1"
-      #     - "DECODE_MTP_SIZE=3"
       - spec-decoding: "mtp"
-        conc-list: [ 256 ]
+        conc-list: [ 1,4,8,10]
+        kv-offloading: none
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260903"
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=3"
+      - spec-decoding: "mtp"
+        conc-list: [ 16]
+        kv-offloading: none
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260903"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=3"
+      - spec-decoding: "mtp"
+        conc-list: [ 32, 48, 64 ]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260903"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=3"
+      - spec-decoding: "mtp"
+        conc-list: [ 64, 96, 128, 192, 256 ]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         prefill:
@@ -1642,22 +1661,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp:
           dp-attn: true
           additional-settings:
           - "PREFILL_NODES=1"
-          - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260831"
-          # HICACHE_RATIO history at conc=256 on this 393-trace dataset:
-          #   ratio=3 (default): host pool saturates to 100% used on every
-          #     rank at conc>=192; peak demand on one rank reached ~25M tokens,
-          #     above the ~19.5M-token cap -> genuine (mild) capacity pressure.
-          #   ratio=6: eliminated saturation (49-67% peak occupancy) but
-          #     regressed total throughput -11% and TTFT +65% mean/+107% p90
-          #     vs ratio=3, with avg host-pool occupancy barely changing
-          #     (~15.5M tokens either way) -> the extra capacity went mostly
-          #     unused (working set is dataset-bounded, not capacity-bound)
-          #     while prefix-cache lookup/restore cost scaled with the larger
-          #     pool size, hurting prefill-side TTFT specifically.
-          #   ratio=4: compromise giving ~33% more headroom than ratio=3
-          #     (to cover the observed ~25M-token peak) without doubling pool
-          #     size the way ratio=6 did.
-          - "HICACHE_RATIO=4"
+          - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260903"
         decode:
           num-worker: 1
           tp: 8
