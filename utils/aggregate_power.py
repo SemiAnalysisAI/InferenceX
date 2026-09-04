@@ -9,7 +9,11 @@ Ordinary benchmark runs are best-effort: invalid telemetry is recorded in the
 aggregate and a validation sidecar, but does not fail the benchmark. Power
 studies can set ``REQUIRE_POWER=1`` to fail after those audit artifacts exist.
 The aggregate carries numeric ``power_valid`` (1/0) for metric ingestion; the
-sidecar is the canonical source for boolean validity and reason codes.
+sidecar is the canonical source for boolean validity and reason codes. Rows in
+the ingest band but outside the formal window whose power is missing,
+non-finite, or <= 0 are teardown noise: they are skipped and counted in the
+sidecar's ``boundary_degenerate_rows`` instead of poisoning validity or faking
+window bracketing.
 """
 
 from __future__ import annotations
@@ -22,7 +26,7 @@ import math
 import os
 import re
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from statistics import mean
@@ -65,6 +69,10 @@ class PowerIntegration:
     per_gpu_max_sample_gap_s: dict[str, float]
     per_gpu_energy_j: dict[str, float]
     device_issues: dict[str, list[str]]
+    # Rows in the ingest band but outside the formal window whose power was
+    # missing/N-A/non-finite/<=0, skipped and counted per GPU; "unknown"
+    # buckets rows without a GPU identity.
+    boundary_degenerate_rows: dict[str, int] = field(default_factory=dict)
     avg_power_w: float | None = None
     avg_total_gpu_power_w: float | None = None
     total_gpu_energy_j: float | None = None
@@ -255,6 +263,7 @@ def _empty_integration(
     *,
     expected_num_gpus: int | None,
     reasons: list[str],
+    boundary_degenerate_rows: dict[str, int] | None = None,
 ) -> PowerIntegration:
     """Build an invalid integration result when no device data is available."""
     return PowerIntegration(
@@ -266,6 +275,7 @@ def _empty_integration(
         per_gpu_max_sample_gap_s={},
         per_gpu_energy_j={},
         device_issues={},
+        boundary_degenerate_rows=boundary_degenerate_rows or {},
     )
 
 
@@ -368,6 +378,7 @@ def integrate_power(
     # expose timestamps at lower resolution than their sampling cadence, so
     # duplicate-timestamp readings are averaged rather than treated as corrupt.
     raw_samples: dict[str, dict[float, list[float]]] = {}
+    boundary_degenerate: dict[str, int] = {}
     saw_missing_gpu_identity = False
     try:
         with csv_path.open("r", newline="", encoding="utf-8", errors="replace") as f:
@@ -408,6 +419,15 @@ def integrate_power(
 
                 power = _parse_power((row.get(power_col) or "").strip())
                 gpu_id = (row.get(gpu_col) or "").strip()
+                if (power is None or not math.isfinite(power) or power <= 0.0) and (
+                    timestamp < start_unix or timestamp > end_unix
+                ):
+                    # SMI teardown rows can carry N/A or 0 W cells: outside the
+                    # formal window they are counted, never used to satisfy
+                    # bracketing or to poison in-window validity.
+                    key = gpu_id or "unknown"
+                    boundary_degenerate[key] = boundary_degenerate.get(key, 0) + 1
+                    continue
                 if power is None:
                     _append_reason(reasons, "invalid_power_sample")
                     continue
@@ -424,6 +444,7 @@ def integrate_power(
         return _empty_integration(
             expected_num_gpus=expected_num_gpus,
             reasons=reasons,
+            boundary_degenerate_rows=boundary_degenerate,
         )
 
     if saw_missing_gpu_identity:
@@ -433,6 +454,7 @@ def integrate_power(
         return _empty_integration(
             expected_num_gpus=expected_num_gpus,
             reasons=reasons,
+            boundary_degenerate_rows=boundary_degenerate,
         )
 
     observed_gpu_ids = tuple(sorted(raw_samples, key=_gpu_sort_key))
@@ -502,6 +524,7 @@ def integrate_power(
         per_gpu_max_sample_gap_s=per_gpu_max_sample_gap_s,
         per_gpu_energy_j=per_gpu_energy_j,
         device_issues=device_issues,
+        boundary_degenerate_rows=boundary_degenerate,
         avg_power_w=avg_power_w,
         avg_total_gpu_power_w=avg_total_gpu_power_w,
         total_gpu_energy_j=total_gpu_energy_j,
@@ -812,6 +835,7 @@ def _validation_payload(
         "per_gpu_max_sample_gap_s": integration.per_gpu_max_sample_gap_s,
         "per_gpu_energy_j": integration.per_gpu_energy_j,
         "device_issues": integration.device_issues,
+        "boundary_degenerate_rows": integration.boundary_degenerate_rows,
         "accumulator_check": accumulator_check,
         "metrics": {
             key: round(value, 6)

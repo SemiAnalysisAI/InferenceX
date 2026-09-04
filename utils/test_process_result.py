@@ -2,6 +2,7 @@
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -964,8 +965,13 @@ stop_gpu_monitor
             final_sample,
         ]
 
-    def test_stop_gpu_monitor_amd_waits_one_tick_and_snapshots_energy(self, tmp_path):
-        """AMD stop lets the watch stream bracket the window, then snapshots energy."""
+    def test_stop_gpu_monitor_amd_covers_stop_request_and_snapshots_energy(self, tmp_path):
+        """AMD stop returns once telemetry covers the stop entry, then snapshots energy.
+
+        A usable tick stamped past the stop request satisfies the coverage
+        poll on its first pass: the legacy fixed tail sleep never runs, the
+        stream is not mutated, and the end-side accumulator snapshot is
+        written."""
         fake_bin = tmp_path / "bin"
         fake_bin.mkdir()
         args_log = tmp_path / "amd_args.txt"
@@ -977,7 +983,8 @@ stop_gpu_monitor
         )
         fake_amd_smi.chmod(0o755)
         sleep_log = tmp_path / "sleep_args.txt"
-        contents = "timestamp,gpu,socket_power\n1785881113,0,238\n"
+        covered_tick = int(time.time()) + 30
+        contents = f"timestamp,gpu,socket_power\n{covered_tick},0,238\n"
         metrics = tmp_path / "gpu_metrics.csv"
         metrics.write_text(contents)
         benchmark_lib = Path(__file__).parents[1] / "benchmarks/benchmark_lib.sh"
@@ -985,7 +992,7 @@ stop_gpu_monitor
 source {str(benchmark_lib)!r}
 kill() {{ return 0; }}
 wait() {{ return 0; }}
-sleep() {{ printf '%s\\n' "$1" > {str(sleep_log)!r}; }}
+sleep() {{ printf '%s\\n' "$1" >> {str(sleep_log)!r}; }}
 GPU_MONITOR_PID=999
 GPU_MONITOR_VENDOR=amd
 GPU_MONITOR_INTERVAL=3
@@ -1006,7 +1013,8 @@ stop_gpu_monitor
         )
 
         assert result.returncode == 0, result.stderr
-        assert sleep_log.read_text().strip() == "5"
+        assert not sleep_log.exists()
+        assert "never covered the stop request" not in result.stderr
         assert metrics.read_text() == contents
         assert "metric -E --csv" in args_log.read_text()
         energy_end = tmp_path / "gpu_metrics_energy_end.csv"
@@ -1035,6 +1043,7 @@ sleep() {{ return 0; }}
 GPU_MONITOR_PID=999
 GPU_MONITOR_VENDOR=amd
 GPU_METRICS_CSV={str(metrics)!r}
+AMD_MONITOR_STOP_TIMEOUT_S=0
 stop_gpu_monitor
 """
         env = {
