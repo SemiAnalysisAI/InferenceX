@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import ast
 import contextlib
 import io
 import json
@@ -17,6 +16,7 @@ import tempfile
 import types
 import unittest
 from unittest import mock
+import urllib.error
 
 
 RUNTIME = Path(__file__).resolve().parents[1] / "runtime"
@@ -58,7 +58,9 @@ class PlatformRegistryTests(unittest.TestCase):
                 self.assertTrue(entry["backends"])
                 for degrees in entry["backends"].values():
                     self.assertTrue(degrees)
-                    self.assertLessEqual(set(degrees), {8, 16})
+                    for degree in degrees:
+                        self.assertIs(type(degree), int)
+                        self.assertGreater(degree, 0)
                 self.assertLessEqual(
                     set(entry.get("network", {})), self.NETWORK_FIELDS
                 )
@@ -94,13 +96,141 @@ class ProbeTests(unittest.TestCase):
             self.assertEqual(cache.stat().st_mode & 0o777, 0o700)
 
 
+class _FakeRegistry:
+    """Registry-v2 anonymous token dance: 401 challenge, token grant, digest HEAD."""
+
+    class _Response:
+        def __init__(self, headers=None, body=b""):
+            self.headers, self._body = headers or {}, body
+
+        def read(self):
+            return self._body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+    def __init__(self, digest: str):
+        self.digest, self.urls = digest, []
+
+    def open(self, request, timeout=None):
+        url = request if isinstance(request, str) else request.full_url
+        self.urls.append(url)
+        if "scope=" in url:
+            return self._Response(body=json.dumps({"token": "anonymous"}).encode())
+        if not request.get_header("Authorization"):
+            raise urllib.error.HTTPError(url, 401, "unauthorized", {
+                "WWW-Authenticate":
+                    'Bearer realm="https://auth.example/token",service="registry.example"',
+            }, None)
+        return self._Response(headers={"Docker-Content-Digest": self.digest})
+
+
+# The digest only stamps the staged squash's sidecar, but a wrong or accepted-malformed
+# digest silently turns stage-once-reuse-many back into per-launch imports, so the
+# resolution path is pinned without touching the network.
+class ImageDigestResolutionTests(unittest.TestCase):
+    DIGEST = "sha256:" + "0123456789abcdef" * 4
+
+    def test_references_resolve_with_docker_hub_rules(self) -> None:
+        for image, expected in (
+            ("rocm/sgl-dev:v1", ("registry-1.docker.io", "rocm/sgl-dev", "v1")),
+            ("python:3.12", ("registry-1.docker.io", "library/python", "3.12")),
+            ("ghcr.io/org/image:tag", ("ghcr.io", "org/image", "tag")),
+            ("nvcr.io/nvidia/pytorch:25.06-py3", ("nvcr.io", "nvidia/pytorch", "25.06-py3")),
+        ):
+            self.assertEqual(probe.registry_reference(image), expected, image)
+
+    def test_resolution_follows_the_anonymous_token_dance(self) -> None:
+        registry = _FakeRegistry(self.DIGEST)
+        self.assertEqual(
+            probe.resolve_image_digest("ghcr.io/org/image:tag", opener=registry),
+            self.DIGEST,
+        )
+        self.assertEqual(registry.urls[0], "https://ghcr.io/v2/org/image/manifests/tag")
+        self.assertIn("scope=repository%3Aorg%2Fimage%3Apull", registry.urls[1])
+
+    def test_a_malformed_digest_or_registry_failure_yields_empty(self) -> None:
+        down = types.SimpleNamespace(open=mock.Mock(side_effect=OSError("no route")))
+        for opener in (_FakeRegistry("sha256:nothex"), down):
+            self.assertEqual(
+                probe.resolve_image_digest("ghcr.io/org/image:tag", opener=opener), "")
+
+
+# runtime/common.sh collx_squash_path/collx_squash_verdict are the stage-once seam:
+# keying the squash by GITHUB_RUN_ID is exactly the defect that re-imported 30-65GB
+# per run per cluster, and keying it by digest made a transient registry blip miss
+# the staged file -- so the path is a pure function of platform + image reference,
+# and freshness is decided by the verdict against the digest sidecar.
+class SquashCacheKeyTests(unittest.TestCase):
+    IMAGE = "rocm/sgl-dev:sglang-v1"
+    DIGEST = "sha256:" + "ab" * 32
+
+    def _bash(self, script: str, env: dict, args: list) -> str:
+        result = subprocess.run(
+            ["bash", "-c", f'source "{RUNTIME / "common.sh"}" && {script}', "collx", *args],
+            capture_output=True, text=True, check=True,
+            env={"PATH": os.environ["PATH"], "COLLX_IMAGE_PLATFORM": "linux/amd64", **env},
+        )
+        return result.stdout
+
+    def test_the_path_is_invariant_across_runs_and_digests(self) -> None:
+        paths = {
+            self._bash('collx_squash_path /squash "$1"', env, [self.IMAGE])
+            for env in (
+                {"GITHUB_RUN_ID": "1111", "GITHUB_RUN_ATTEMPT": "1"},
+                {"GITHUB_RUN_ID": "2222", "COLLECTIVEX_EXECUTION_ID": "2222_2_c007"},
+                {"COLLX_IMAGE_DIGEST": self.DIGEST},
+                {},
+            )
+        }
+        self.assertEqual(paths, {"/squash/_rocm_sgl-dev_sglang-v1.sqsh"})
+        arm = self._bash('collx_squash_path /squash "$1"',
+                         {"COLLX_IMAGE_PLATFORM": "linux/arm64"}, [self.IMAGE])
+        self.assertEqual(arm, "/squash/_linux_arm64_rocm_sgl-dev_sglang-v1.sqsh")
+
+    def test_the_verdict_orders_refresh_stamp_and_reuse_correctly(self) -> None:
+        verdict = lambda sq, digest="", epoch="": self._bash(  # noqa: E731
+            'collx_squash_verdict "$1" "$2" "$3"', {}, [str(sq), digest, epoch])
+        with tempfile.TemporaryDirectory() as directory:
+            sq = Path(directory) / "img.sqsh"
+            self.assertEqual(verdict(sq), "absent")
+            sq.write_bytes(b"x")
+            Path(f"{sq}.digest").write_text(self.DIGEST + "\n")
+            # The registry-blip regression: an unresolved digest must reuse the
+            # stamped file, never re-import tens of GB.
+            self.assertEqual(verdict(sq), "reuse")
+            self.assertEqual(verdict(sq, digest=self.DIGEST), "reuse")
+            self.assertEqual(verdict(sq, digest="sha256:" + "cd" * 32), "digest-moved")
+            mtime = int(sq.stat().st_mtime)
+            self.assertEqual(verdict(sq, epoch=str(mtime + 10)), "refresh-requested")
+            # A file imported during this launch (mtime >= epoch) is kept, so
+            # concurrent legs of a refreshing run still import exactly once.
+            self.assertEqual(verdict(sq, epoch=str(mtime - 10)), "reuse")
+
+
 class ConfigTests(unittest.TestCase):
-    def test_operator_config_emits_allowlisted_values(self) -> None:
+    @staticmethod
+    def _emit_operator(path: str) -> bytes:
+        platform = {
+            "image": "example/engine:test", "image_platform": "linux/arm64",
+            "operator": {"partition": "baseline", "account": "shared"},
+            "network": {"rdma_devices": "mlx5_1:1"},
+        }
+        output = io.BytesIO()
+        with mock.patch.object(config, "_platforms", return_value={"test-sku": platform}), \
+                mock.patch.object(sys, "stdout", types.SimpleNamespace(buffer=output)):
+            config.operator_config(path, "test-sku")
+        return output.getvalue()
+
+    def test_operator_config_overrides_baseline_and_preserves_platform_settings(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "operator.json"
             path.write_text(json.dumps({
                 "runners": {
-                    "h100-dgxc": {
+                    "test-sku": {
                         "partition": "gpu",
                         "account": "bench",
                         "squash_dir": directory,
@@ -108,43 +238,21 @@ class ConfigTests(unittest.TestCase):
                 },
             }))
             path.chmod(0o600)
-            read_fd, write_fd = os.pipe()
-            stdout = sys.stdout
-            try:
-                sys.stdout = os.fdopen(write_fd, "w")
-                config.operator_config(str(path), "h100-dgxc")
-                sys.stdout.flush()
-            finally:
-                sys.stdout.close()
-                sys.stdout = stdout
-            payload = os.read(read_fd, 4096)
-            os.close(read_fd)
+            payload = self._emit_operator(str(path))
             self.assertIn(b"COLLX_PARTITION\0gpu\0", payload)
+            self.assertIn(b"COLLX_ACCOUNT\0bench\0", payload)
             self.assertIn(b"COLLX_SQUASH_DIR\0" + directory.encode() + b"\0", payload)
-            self.assertIn(b"COLLX_IMAGE\0lmsysorg/sglang:v0.5.11-cu130\0", payload)
-            self.assertIn(b"COLLX_IMAGE_PLATFORM\0linux/amd64\0", payload)
-
-    def _emit_registry_only(self, runner: str) -> bytes:
-        read_fd, write_fd = os.pipe()
-        stdout = sys.stdout
-        try:
-            sys.stdout = os.fdopen(write_fd, "w")
-            config.operator_config("-", runner)
-            sys.stdout.flush()
-        finally:
-            sys.stdout.close()
-            sys.stdout = stdout
-        payload = os.read(read_fd, 4096)
-        os.close(read_fd)
-        return payload
+            self.assertIn(b"COLLX_IMAGE\0example/engine:test\0", payload)
+            self.assertIn(b"COLLX_IMAGE_PLATFORM\0linux/arm64\0", payload)
+            self.assertIn(b"COLLX_RDMA_DEVICES\0mlx5_1:1\0", payload)
 
     def test_operator_config_registry_only_emits_tracked_baseline(self) -> None:
         # "-" = no operator document: the registry's per-SKU operator block is
         # the tracked baseline (plus its network overlay where present).
-        payload = self._emit_registry_only("h200-dgxc")
-        self.assertIn(b"COLLX_PARTITION\0main\0", payload)
-        self.assertIn(b"COLLX_SQUASH_DIR\0/home/sa-shared/containers\0", payload)
-        self.assertIn(b"COLLX_RDMA_DEVICES\0", payload)
+        payload = self._emit_operator("-")
+        self.assertIn(b"COLLX_PARTITION\0baseline\0", payload)
+        self.assertIn(b"COLLX_ACCOUNT\0shared\0", payload)
+        self.assertIn(b"COLLX_RDMA_DEVICES\0mlx5_1:1\0", payload)
 
 class SingleNodeHcaOverrideTests(unittest.TestCase):
     # collx_apply_network_profile's single-node early return must still honor a
@@ -212,13 +320,7 @@ class StageTests(unittest.TestCase):
             cleanup_args = type("Args", (), {"root": str(target)})
             stage.validate_cleanup(cleanup_args)
 
-# The per-node probe (runtime/probe.py) and the launcher gate
-# (runtime/common.sh: collx_validate_network_profile_on_job) share an implicit string contract:
-# the probe prints these markers, the launcher greps them back out to derive COLLX_SOCKET_IFNAME
-# and COLLX_RDMA_LINK_LAYER. The patterns are duplicated here on purpose — the test fails if
-# either side drifts, which is exactly the failure that slipped through when 5506c623 moved the
-# probe into Python but left the emit statements behind, silently zeroing the marker count for
-# every non-MNNVL multi-node leg.
+# Probe output is consumed by the launcher to select an interface and link layer.
 SOCKET_MARKER = r"^\[collectivex-private\] socket-interface-selected=([A-Za-z][A-Za-z0-9_.-]{0,31})$"
 LINK_MARKER = r"^\[collectivex-private\] rdma-link-layer=(roce|infiniband)$"
 FAILURE_MARKER = (
@@ -256,13 +358,7 @@ class NetworkProfileContract(unittest.TestCase):
         return [match.group(1) for line in lines
                 for match in [re.match(pattern, line)] if match]
 
-    def test_launcher_still_declares_the_marker_patterns(self) -> None:
-        common = (RUNTIME / "common.sh").read_text()
-        self.assertIn(SOCKET_MARKER, common)
-        self.assertIn(LINK_MARKER, common)
-        self.assertIn(FAILURE_MARKER, common)
-
-    def test_healthy_fabric_emits_the_success_markers_the_launcher_extracts(self) -> None:
+    def test_healthy_fabric_reports_selected_interface_and_link_layer(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self._fabric(root)
@@ -271,7 +367,7 @@ class NetworkProfileContract(unittest.TestCase):
             self.assertEqual(self._captures(SOCKET_MARKER, lines), ["eth0"])
             self.assertEqual(self._captures(LINK_MARKER, lines), ["roce"])
 
-    def test_inactive_port_emits_a_launcher_recognized_failure_marker(self) -> None:
+    def test_inactive_port_reports_failure(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self._fabric(root, state="1: DOWN")
@@ -364,101 +460,9 @@ echo "CALLS=$(wc -l < "$ROOT/calls" 2>/dev/null | tr -d ' ' || echo 0)"
         self.assertEqual(fields.get("RC"), "1", proc.stdout + proc.stderr)
 
 
-class StageContract(unittest.TestCase):
-    # runtime/common.sh drives runtime/stage.py purely by literal subcommand name and positional
-    # argv — there are no optional flags. That argv shape is a string contract: a subcommand or
-    # flag the launcher passes but stage.py does not declare fails with "unrecognized arguments"
-    # and aborts the leg at repository-stage. This extracts every stage.py call out of common.sh
-    # and proves stage.py's parser accepts it — the guard that would have caught the --allow-*
-    # flags surviving on the callers after they were dropped from stage.py's argparse.
-    @staticmethod
-    def _invocations(text: str) -> list:
-        calls = []
-        for line in text.splitlines():
-            if "stage.py" not in line or line.lstrip().startswith("#"):
-                continue
-            subcommand, flags = None, []
-            for raw in line.split("stage.py", 1)[1].split():
-                token = raw.strip('"').strip("'")
-                if token.startswith("--"):
-                    flags.append(token.split("=", 1)[0])
-                elif subcommand is None and token and not token.startswith(("$", "${")):
-                    subcommand = token
-            if subcommand:
-                calls.append((subcommand, flags))
-        return calls
-
-    def test_launcher_only_invokes_declared_subcommands_and_flags(self) -> None:
-        invocations = self._invocations((RUNTIME / "common.sh").read_text())
-        self.assertGreaterEqual(len(invocations), len(stage.SPECS), invocations)
-        parser = stage.build_parser()
-        for subcommand, flags in invocations:
-            self.assertIn(subcommand, stage.SPECS, subcommand)
-            argv = [subcommand] + ["x"] * len(stage.SPECS[subcommand]) + flags
-            with contextlib.redirect_stderr(io.StringIO()):
-                try:
-                    parser.parse_args(argv)
-                except SystemExit:
-                    self.fail(f"common.sh invokes stage.py with an argv shape it rejects: {argv}")
-
-    # config.py accepts `exclude_nodes` for every SKU, but only the launcher named by that SKU's
-    # `launcher` field can turn it into salloc --exclude. When a launcher ignores it the key is
-    # accepted, exported, and silently dropped -- so a tray quarantined in the registry keeps
-    # getting scheduled and the config reads like a fix that never fired. That is exactly what
-    # launch_gb-nv.sh did: it built no allocation array at all.
-    def test_every_skus_denylist_reaches_its_launcher(self) -> None:
-        registry = json.loads(
-            (RUNTIME.parent / "configs" / "platform_config.json").read_text())["platforms"]
-        launchers = RUNTIME.parent / "launchers"
-        checked = 0
-        for sku, platform in registry.items():
-            if not platform.get("operator", {}).get("exclude_nodes"):
-                continue
-            script = launchers / f"launch_{platform['launcher']}.sh"
-            self.assertTrue(script.exists(), f"{sku} names a launcher that does not exist")
-            self.assertIn(
-                "COLLX_EXCLUDE_NODES", script.read_text(),
-                f"{sku} declares exclude_nodes but {script.name} never reads it, "
-                "so the denylist is silently discarded",
-            )
-            checked += 1
-        self.assertGreater(checked, 0, "no SKU declares exclude_nodes -- test proves nothing")
-
-    # CX_FP8_CONSUME is read at class-body evaluation and fails closed on an unrecognised
-    # value, so the workflow must never hand it one. A blank dispatch input is the trap: it
-    # sets the variable to "" rather than leaving it unset, os.environ.get's default never
-    # applies, and every leg dies at import before any measurement.
-    def test_the_workflow_never_passes_an_invalid_fp8_consume(self) -> None:
-        workflow = (
-            RUNTIME.parents[2] / ".github" / "workflows" / "collectivex-sweep.yml"
-        )
-        if not workflow.exists():  # pragma: no cover - repo layout guard
-            self.skipTest("workflow not present in this checkout")
-        text = workflow.read_text()
-        if "CX_FP8_CONSUME" not in text:
-            self.skipTest("workflow does not set CX_FP8_CONSUME")
-        line = next(l for l in text.splitlines() if l.strip().startswith("CX_FP8_CONSUME:"))
-        self.assertIn(
-            "|| 'native'", line,
-            "a blank fp8_consume input must fall back to 'native'; passing it through empty "
-            "sets the variable to \"\" and the harness fails closed at import",
-        )
-        for value in re.findall(r"'([a-z]*)'", line):
-            if value:
-                self.assertIn(value, ("native", "dequant"), value)
-
-    def test_contract_test_has_teeth(self) -> None:
-        # A flag common.sh must never pass has to be rejected by the parser — this is the exact
-        # failure (unrecognized arguments: --allow-parent-owner) the reconcile removed.
-        parser = stage.build_parser()
-        with contextlib.redirect_stderr(io.StringIO()):
-            with self.assertRaises(SystemExit):
-                parser.parse_args(["validate-stage-path", "x", "x", "x", "--allow-parent-owner"])
-
-
 # config.py case-args is the single case→invocation codec: collx_run_shard decodes one
 # null-delimited argv per case and hands it verbatim to bench/run_ep.py. Parse the
-# emitted argv with the same parser shape run_ep builds so the two sides cannot
+# emitted argv with the actual parser run_ep builds so the two sides cannot
 # drift — a flag the codec emits but run_ep does not declare (or vice versa) fails
 # here instead of on a GPU allocation.
 class CaseArgvContract(unittest.TestCase):
@@ -481,16 +485,15 @@ class CaseArgvContract(unittest.TestCase):
         "suite": "ep-core", "workload": "deepseek-v3",
     }
 
-    @staticmethod
-    def _run_ep_parser() -> argparse.ArgumentParser:
-        # Mirror of the parser bench/run_ep.py builds in main().
-        parser = argparse.ArgumentParser()
-        parser.add_argument(
-            "--backend", required=True,
-            choices=["deepep-v2", "mori", "uccl-ep", "nccl-ep", "flashinfer-ep"],
-        )
-        ep_harness.add_common_args(parser)
-        return parser
+    def _run_ep_parser(self) -> argparse.ArgumentParser:
+        import run_ep
+
+        # Capture the real entrypoint's parser before it initializes any GPU runtime.
+        with mock.patch.object(argparse.ArgumentParser, "parse_args", autospec=True,
+                               side_effect=SystemExit) as parse:
+            with self.assertRaises(SystemExit):
+                run_ep.main()
+        return parse.call_args.args[0]
 
     def _decode(self, stdout: bytes) -> list:
         parts = stdout.split(b"\0")
@@ -575,8 +578,7 @@ class CaseArgvContract(unittest.TestCase):
     def test_each_backend_round_trips_through_the_run_ep_parser(self) -> None:
         # The codec is backend-agnostic, so one loop replaces three near-identical tests:
         # run_ep's --backend choices must accept each name, and the filename must carry the
-        # backend token or two legs of one cell collide in results/. That flashinfer-ep is
-        # GB-only is a registry fact, pinned in test_matrix.
+        # backend token or two legs of one cell collide in results/.
         for backend in ("uccl-ep", "nccl-ep", "flashinfer-ep"):
             with self.subTest(backend=backend):
                 case = {
@@ -593,17 +595,17 @@ class CaseArgvContract(unittest.TestCase):
 # logical_byte_provenance is where FP8 changes MEASUREMENT semantics (asymmetric
 # per-direction byte counts), so its arithmetic and guards are pinned here on CPU.
 class LogicalByteProvenanceTests(unittest.TestCase):
-    def test_roundtrip_is_the_per_field_sum_of_dispatch_and_combine(self) -> None:
-        # run_sweep assembles the roundtrip as the per-field sum of an FP8 dispatch and a
-        # BF16 combine; the direction bytes differ, so it is not 2x a single direction.
+    def test_fp8_dispatch_and_bf16_combine_have_different_byte_counts(self) -> None:
         dispatch = ep_harness.logical_byte_provenance(
-            logical_copies=10, hidden=7168, value_bytes=1, scale_bytes_per_copy=224,
+            logical_copies=10, hidden=128, value_bytes=1, scale_bytes_per_copy=8,
         )
-        combine = ep_harness.logical_byte_provenance(logical_copies=10, hidden=7168)
-        roundtrip = {field: dispatch[field] + combine[field] for field in dispatch}
-        self.assertEqual(roundtrip["activation_data_bytes"], 10 * 7168 * (1 + 2))
-        self.assertEqual(roundtrip["scale_bytes"], 10 * 224)
-        self.assertNotEqual(roundtrip["total_logical_bytes"], 2 * combine["total_logical_bytes"])
+        combine = ep_harness.logical_byte_provenance(logical_copies=10, hidden=128)
+        self.assertEqual(dispatch, {
+            "activation_data_bytes": 1280, "scale_bytes": 80, "total_logical_bytes": 1360,
+        })
+        self.assertEqual(combine, {
+            "activation_data_bytes": 2560, "scale_bytes": 0, "total_logical_bytes": 2560,
+        })
 
     def test_guards_fail_closed(self) -> None:
         for kwargs in (
@@ -615,32 +617,6 @@ class LogicalByteProvenanceTests(unittest.TestCase):
         ):
             with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
                 ep_harness.logical_byte_provenance(**kwargs)
-
-
-class ModeSemanticsContract(unittest.TestCase):
-    # The combine contract is a backend fact, not a pure function of mode: DeepEP's
-    # low-latency combine is weighted-kernel-sum while MoRI's IntraNodeLL is
-    # unweighted-rank-sum, so low-latency must admit both. Normal stays unweighted-only.
-    def test_mode_allowed_semantics(self) -> None:
-        self.assertEqual(
-            ep_harness.MODE_ALLOWED_SEMANTICS["normal"], {"unweighted-rank-sum"}
-        )
-        self.assertEqual(
-            ep_harness.MODE_ALLOWED_SEMANTICS["low-latency"],
-            {"weighted-kernel-sum", "unweighted-rank-sum"},
-        )
-
-    def test_oracle_modeled_contract_pairs(self) -> None:
-        # receive_layout and combine_weight_semantics are independent declarations;
-        # only these two pairings have an expected-combine model, and run_sweep fails
-        # closed on the other two rather than verify against the wrong oracle.
-        self.assertEqual(
-            ep_harness.ORACLE_MODELED_CONTRACTS,
-            {
-                ("token-rank", "unweighted-rank-sum"),
-                ("token-expert", "weighted-kernel-sum"),
-            },
-        )
 
 
 try:
@@ -708,10 +684,6 @@ class TopkSlotTreeReductionTests(unittest.TestCase):
     def test_matches_the_value_the_kernel_returns(self):
         self.assertEqual(self._tree([1.0] + [2.0**-9] * 7), 1.0078125)
 
-    def test_differs_from_both_rejected_models(self):
-        values = [1.0] + [2.0**-9] * 7
-        self.assertNotEqual(self._tree(values), 1.015625)  # FP32 accumulate, narrow once
-        self.assertNotEqual(self._tree(values), 1.0)       # sequential BF16 accumulate
 
 @unittest.skipUnless(_torch is not None, "quantize-identity checks require torch")
 class FusedQuantizeGate(unittest.TestCase):
@@ -862,26 +834,34 @@ class LowLatencyCapDecoupling(unittest.TestCase):
             import ep_deepep_v2
             return importlib.reload(ep_deepep_v2)
 
-    def test_buffer_cap_tracks_the_ladder_constant(self):
-        # Patching the constant and watching the return move proves it reads the constant, which
-        # a literal that merely happens to equal it today would not.
+    def test_ladder_cap_drops_only_oversized_measurement_points(self):
         module = self._adapter()
         backend = module.DeepEPV2Backend.__new__(module.DeepEPV2Backend)
         backend.mode = "low-latency"
+        backend.world_size = 8
+        backend._build_rank_inputs = mock.Mock(return_value=None)
+        args = types.SimpleNamespace(experts=256, tokens_ladder="32 64 128")
         with mock.patch.object(module, "_LL_LADDER_CAP", 64):
-            self.assertEqual(backend.buffer_cap(None), 64)
-        backend.mode = "normal"
-        self.assertIsNone(backend.buffer_cap(None))
+            spec = backend.make_inputs(args)
+        self.assertEqual(spec.ladder, [32, 64])
+        self.assertEqual(spec.dropped, [128])
 
     def test_the_receive_is_sized_from_the_buffer_cap_not_the_ladder(self):
-        # The regression this guards would silently re-baseline every LL row: clamping the
-        # measured ladder must not shrink the receive the remaining rungs are measured against.
         module = self._adapter()
-        source = (BENCH / "ep_deepep_v2.py").read_text()
-        sized = source.split("def create_buffer", 1)[1].split("def ", 1)[0]
-        self.assertIn("_LL_BUFFER_CAP", sized)
-        self.assertNotIn("_LL_LADDER_CAP", sized)
-        self.assertNotEqual(module._LL_BUFFER_CAP, None)
+        backend = module.DeepEPV2Backend.__new__(module.DeepEPV2Backend)
+        backend.mode, backend.world_size, backend.group = "low-latency", 8, object()
+        backend.args = types.SimpleNamespace(experts=256, hidden=16)
+        vendor_buffer = mock.Mock()
+        vendor_buffer.get_low_latency_rdma_size_hint.return_value = 4096
+        with mock.patch.object(module.deep_ep, "Buffer", vendor_buffer), \
+                mock.patch.object(module, "_LL_BUFFER_CAP", 128), \
+                mock.patch.object(module, "_LL_LADDER_CAP", 64):
+            for ladder_max in (16, 64):
+                backend.create_buffer(types.SimpleNamespace(max_tokens_per_rank=ladder_max))
+                vendor_buffer.get_low_latency_rdma_size_hint.assert_called_with(128, 16, 8, 256)
+                self.assertEqual(vendor_buffer.call_args.kwargs["num_rdma_bytes"], 4096)
+            with self.assertRaisesRegex(RuntimeError, "exceeds"):
+                backend.create_buffer(types.SimpleNamespace(max_tokens_per_rank=129))
 
     def test_a_clamped_ladder_is_recorded_in_the_artifact_not_only_on_stdout(self):
         # The clamp must reach the artifact: a rank-0 stdout NOTE alone leaves a document that

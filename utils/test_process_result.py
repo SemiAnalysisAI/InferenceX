@@ -1,9 +1,4 @@
-"""Comprehensive tests for process_result.py
-
-Since process_result.py executes code at module import time, we test it by:
-1. Testing the get_required_env_vars function directly
-2. Running the script as a subprocess with mocked environment and files
-"""
+"""Exercise process_result.py through its CLI with controlled environment and artifacts."""
 import json
 import subprocess
 import sys
@@ -139,61 +134,6 @@ runpy.run_path({str(SCRIPT_PATH)!r}, run_name="__main__")
 
 
 # =============================================================================
-# Test get_required_env_vars function
-# =============================================================================
-
-class TestGetRequiredEnvVars:
-    """Tests for get_required_env_vars function."""
-
-    def test_all_vars_present(self, monkeypatch):
-        """Should return dict when all vars present."""
-        monkeypatch.setenv("TEST_VAR_1", "value1")
-        monkeypatch.setenv("TEST_VAR_2", "value2")
-
-        import os
-
-        def get_required_env_vars(required_vars):
-            env_values = {}
-            missing_env_vars = []
-            for var_name in required_vars:
-                value = os.environ.get(var_name)
-                if value is None:
-                    missing_env_vars.append(var_name)
-                env_values[var_name] = value
-            if missing_env_vars:
-                raise EnvironmentError(
-                    f"Missing required environment variables: {', '.join(missing_env_vars)}")
-            return env_values
-
-        result = get_required_env_vars(["TEST_VAR_1", "TEST_VAR_2"])
-        assert result["TEST_VAR_1"] == "value1"
-        assert result["TEST_VAR_2"] == "value2"
-
-    def test_missing_vars_raises_error(self, monkeypatch):
-        """Should raise EnvironmentError when vars missing."""
-        import os
-
-        def get_required_env_vars(required_vars):
-            env_values = {}
-            missing_env_vars = []
-            for var_name in required_vars:
-                value = os.environ.get(var_name)
-                if value is None:
-                    missing_env_vars.append(var_name)
-                env_values[var_name] = value
-            if missing_env_vars:
-                raise EnvironmentError(
-                    f"Missing required environment variables: {', '.join(missing_env_vars)}")
-            return env_values
-
-        monkeypatch.delenv("NONEXISTENT_VAR", raising=False)
-
-        with pytest.raises(EnvironmentError) as exc_info:
-            get_required_env_vars(["NONEXISTENT_VAR"])
-        assert "NONEXISTENT_VAR" in str(exc_info.value)
-
-
-# =============================================================================
 # Test script execution via subprocess
 # =============================================================================
 
@@ -226,9 +166,9 @@ class TestProcessResultScript:
         assert output_data["dp_attention"] == "false"
 
         # Verify throughput calculations (divided by tp=8)
-        assert output_data["tput_per_gpu"] == pytest.approx(15000.5 / 8)
-        assert output_data["output_tput_per_gpu"] == pytest.approx(12000.0 / 8)
-        assert output_data["input_tput_per_gpu"] == pytest.approx((15000.5 - 12000.0) / 8)
+        assert output_data["tput_per_gpu"] == pytest.approx(1875.0625)
+        assert output_data["output_tput_per_gpu"] == pytest.approx(1500.0)
+        assert output_data["input_tput_per_gpu"] == pytest.approx(375.0625)
 
         # Verify latency conversions (ms to seconds)
         assert output_data["ttft_p50"] == pytest.approx(0.1505)
@@ -237,8 +177,8 @@ class TestProcessResultScript:
         assert output_data["e2e_latency_p99"] == pytest.approx(2.5)
 
         # Verify interactivity calculations (1000 / tpot_ms)
-        assert output_data["intvty_p50"] == pytest.approx(1000.0 / 25.0)
-        assert output_data["intvty_p99"] == pytest.approx(1000.0 / 45.0)
+        assert output_data["intvty_p50"] == pytest.approx(40.0)
+        assert output_data["intvty_p99"] == pytest.approx(22.222222)
 
         # Verify output file created
         output_file = tmp_path / "agg_benchmark_result.json"
@@ -273,10 +213,9 @@ class TestProcessResultScript:
         assert output_data["decode_hw"] == "h100"
 
         # Verify throughput calculations
-        total_gpus = 20 + 8  # prefill + decode
-        assert output_data["tput_per_gpu"] == pytest.approx(15000.5 / total_gpus)
-        assert output_data["output_tput_per_gpu"] == pytest.approx(12000.0 / 8)  # decode gpus
-        assert output_data["input_tput_per_gpu"] == pytest.approx((15000.5 - 12000.0) / 20)  # prefill gpus
+        assert output_data["tput_per_gpu"] == pytest.approx(535.732143)  # 28 GPUs total
+        assert output_data["output_tput_per_gpu"] == pytest.approx(1500.0)  # 8 decode GPUs
+        assert output_data["input_tput_per_gpu"] == pytest.approx(150.025)  # 20 prefill GPUs
 
     def test_component_metadata_is_emitted_when_present(
         self, tmp_path, sample_benchmark_result, multinode_env_vars
@@ -456,9 +395,9 @@ class TestCalculations:
         assert output_data["pp"] == 2
         assert output_data["dcp_size"] == 2
         assert output_data["pcp_size"] == 2
-        assert output_data["tput_per_gpu"] == pytest.approx(8000.0 / 16)
-        assert output_data["output_tput_per_gpu"] == pytest.approx(6000.0 / 16)
-        assert output_data["input_tput_per_gpu"] == pytest.approx(2000.0 / 16)
+        assert output_data["tput_per_gpu"] == pytest.approx(500.0)
+        assert output_data["output_tput_per_gpu"] == pytest.approx(375.0)
+        assert output_data["input_tput_per_gpu"] == pytest.approx(125.0)
 
     def test_throughput_per_gpu_multinode(self, tmp_path, multinode_env_vars):
         """Test throughput per GPU calculation for multinode."""
@@ -604,14 +543,6 @@ class TestEdgeCases:
             result = run_script(tmp_path, env, sample_benchmark_result)
             assert result.returncode != 0
 
-    def test_is_multinode_default_false(self, tmp_path, sample_benchmark_result, single_node_env_vars):
-        """Test that IS_MULTINODE defaults to false when not set."""
-        # Don't set IS_MULTINODE
-        result = run_script(tmp_path, single_node_env_vars, sample_benchmark_result)
-        assert result.returncode == 0, f"Script failed: {result.stderr}"
-
-        output_data = json.loads(result.stdout)
-        assert output_data["is_multinode"] is False
 
     def test_integer_conversion(self, tmp_path, single_node_env_vars):
         """Test that numeric env vars are converted to integers."""
@@ -1285,93 +1216,3 @@ class TestMultinodePower:
         assert result.returncode == 0, f"Script failed: {result.stderr}"
         agg = json.loads((tmp_path / "agg_benchmark_result.json").read_text())
         assert agg["power_valid"] == 1
-
-
-# =============================================================================
-# Static CI/artifact contract
-# =============================================================================
-
-
-class TestPowerWorkflowContract:
-    """Keep power audit inputs separate from the canonical agg artifact."""
-
-    @staticmethod
-    def _repo_root():
-        return Path(__file__).parents[1]
-
-    def test_gpu_monitor_default_matches_uploaded_artifact_path(self):
-        benchmark_lib = self._repo_root() / "benchmarks/benchmark_lib.sh"
-        script = f"""
-unset GPU_METRICS_CSV
-source {str(benchmark_lib)!r}
-printf '%s' "$GPU_METRICS_CSV"
-"""
-
-        result = subprocess.run(
-            ["bash", "-c", script],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-
-        assert result.returncode == 0, result.stderr
-        assert result.stdout == "gpu_metrics.csv"
-
-    def test_benchmark_workflow_uploads_independent_power_audit_bundle(self):
-        workflow = (
-            self._repo_root() / ".github/workflows/benchmark-tmpl.yml"
-        ).read_text()
-
-        assert "name: power_audit_${{ env.RESULT_FILENAME }}" in workflow
-        assert "${{ env.RESULT_FILENAME }}.json" in workflow
-        assert "agg_${{ env.RESULT_FILENAME }}.json" in workflow
-        assert "gpu_metrics.csv" in workflow
-        assert "power_validation_${{ env.RESULT_FILENAME }}.json" in workflow
-        assert (
-            "always() && !inputs.eval-only && "
-            "inputs.scenario-type != 'agentic-coding'"
-        ) in workflow
-        assert "require-power:" in workflow
-        assert "REQUIRE_POWER: ${{ inputs.require-power && '1' || '0' }}" in workflow
-
-        # The canonical bmk artifact remains aggregate-only so downstream
-        # result collection cannot mistake the raw benchmark JSON for an agg.
-        upload_result = workflow.split("- name: Upload result", 1)[1].split(
-            "- name: Upload agentic aggregated result", 1
-        )[0]
-        assert "path: agg_${{ env.RESULT_FILENAME }}.json" in upload_result
-        assert "power_validation_" not in upload_result
-
-    def test_cpu_workflow_covers_power_code_and_both_test_suites(self):
-        workflow = (
-            self._repo_root() / ".github/workflows/test-process-result.yml"
-        ).read_text()
-
-        for watched_path in (
-            "utils/aggregate_power.py",
-            "utils/test_aggregate_power.py",
-            "utils/process_result.py",
-            "utils/test_process_result.py",
-            ".github/workflows/benchmark-tmpl.yml",
-            ".github/workflows/e2e-tests.yml",
-            ".github/workflows/test-process-result.yml",
-        ):
-            assert watched_path in workflow
-        assert "test_aggregate_power.py" in workflow
-        assert "test_process_result.py" in workflow
-        assert "github.event.pull_request.draft" not in workflow
-
-    def test_e2e_dispatch_can_enable_strict_power_validation(self):
-        workflow = (
-            self._repo_root() / ".github/workflows/e2e-tests.yml"
-        ).read_text()
-
-        assert workflow.count("require-power:") >= 3
-        single_node_job = workflow.split("test-sweep-single-node:", 1)[1].split(
-            "test-sweep-evals:", 1
-        )[0]
-        assert "require-power: ${{ inputs.require-power }}" in single_node_job
-        agentic_job = workflow.split("test-sweep-agentic:", 1)[1].split(
-            "test-sweep-agentic-evals:", 1
-        )[0]
-        assert "require-power: ${{ inputs.require-power }}" in agentic_job

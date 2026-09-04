@@ -149,6 +149,10 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         cd "$SRT_REPO_DIR"
         git checkout sa-submission-q2-2026
     fi
+    if [[ "${EVAL_FRAMEWORK:-lm-eval}" != "lm-eval" ]]; then
+        python3 "$GITHUB_WORKSPACE/runners/patch_srt_eval_dispatch.py" "$(pwd)" \
+            || exit 1
+    fi
 
     echo "Installing srtctl..."
     curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -207,6 +211,8 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     if [[ "$USES_DCGM_POWER" == "1" ]]; then
         DCGM_EXPORTER_IMAGE="nvcr.io/nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless"
+        # enroot resolves bare paths against Docker Hub; nvcr.io pulls need the registry# form
+        DCGM_EXPORTER_ENROOT_REF="${DCGM_EXPORTER_IMAGE/nvcr.io\//nvcr.io#}"
         DCGM_EXPORTER_SQSH="/data/gharunners/containers/$(echo "$DCGM_EXPORTER_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
         if ! unsquashfs -l "$DCGM_EXPORTER_SQSH" >/dev/null 2>&1; then
             DCGM_EXPORTER_LOCK="${DCGM_EXPORTER_SQSH}.lock"
@@ -223,7 +229,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
                     rm -f \"$DCGM_EXPORTER_SQSH\"
                     export ENROOT_CACHE_PATH=\${HOME}/.cache/enroot
                     mkdir -p \"\$ENROOT_CACHE_PATH\"
-                    enroot import -o \"$DCGM_EXPORTER_SQSH\" docker://$DCGM_EXPORTER_IMAGE
+                    enroot import -o \"$DCGM_EXPORTER_SQSH\" \"docker://$DCGM_EXPORTER_ENROOT_REF\"
                 "
         fi
         test -r "$DCGM_EXPORTER_SQSH" || { echo "Error: DCGM exporter squash is not readable: $DCGM_EXPORTER_SQSH" >&2; exit 1; }
@@ -313,6 +319,10 @@ EOF
     sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
     sed -i '/^health_check:/,/^[^ ]/{ /^health_check:/d; /^  /d; }' "$CONFIG_PATH"
     printf '\nhealth_check:\n  max_attempts: 720\n  interval_seconds: 10\n' >> "$CONFIG_PATH"
+    if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
+        python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
+            "$CONFIG_PATH" "$FRAMEWORK" || exit 1
+    fi
     WORKLOAD_TAG="${ISL}x${OSL}"
     if [[ "$IS_AGENTIC" == "1" ]]; then
         WORKLOAD_TAG="agentic"

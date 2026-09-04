@@ -263,6 +263,7 @@ def _empty_integration(
     *,
     expected_num_gpus: int | None,
     reasons: list[str],
+    boundary_degenerate_rows: dict[str, int] | None = None,
 ) -> PowerIntegration:
     """Build an invalid integration result when no device data is available."""
     return PowerIntegration(
@@ -274,6 +275,7 @@ def _empty_integration(
         per_gpu_max_sample_gap_s={},
         per_gpu_energy_j={},
         device_issues={},
+        boundary_degenerate_rows=boundary_degenerate_rows or {},
     )
 
 
@@ -442,6 +444,7 @@ def integrate_power(
         return _empty_integration(
             expected_num_gpus=expected_num_gpus,
             reasons=reasons,
+            boundary_degenerate_rows=boundary_degenerate,
         )
 
     if saw_missing_gpu_identity:
@@ -451,6 +454,7 @@ def integrate_power(
         return _empty_integration(
             expected_num_gpus=expected_num_gpus,
             reasons=reasons,
+            boundary_degenerate_rows=boundary_degenerate,
         )
 
     observed_gpu_ids = tuple(sorted(raw_samples, key=_gpu_sort_key))

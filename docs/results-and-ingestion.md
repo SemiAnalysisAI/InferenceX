@@ -96,6 +96,12 @@ Single-node GPU count is `tp * pp * pcp_size`. DCP does not multiply the physica
 
 InferenceX-app treats routing fields as columns or config dimensions and stores numeric measurements in `benchmark_results.metrics` JSONB. The mapper supports v1 shared topology, v2 split prefill/decode topology, and nested v3 AgentX metrics. Unknown numeric metrics are retained and warned about, which permits schema growth without silently losing numeric data.
 
+### Power telemetry stop and validation
+
+The single-node AMD monitor in [`benchmark_lib.sh`](../benchmarks/benchmark_lib.sh) waits for every observed GPU to have a positive, numeric power sample at or beyond the first whole second after the stop request. `AMD_MONITOR_STOP_TIMEOUT_S` bounds the wait (default `30`; `0` skips it). Streams without usable epoch timestamps use the legacy fixed tail wait. A timeout does not certify coverage: the aggregator still rejects an unbracketed benchmark window. AgentX cancellation skips the coverage wait and stops the monitor, including when cancellation arrives during a normal stop.
+
+[`aggregate_power.py`](../utils/aggregate_power.py) excludes unusable power rows outside the formal window from integration and bracketing. Within the boundary search band, these rows are counted per GPU in `power_validation.json` under `boundary_degenerate_rows`, even when no usable samples remain. In-window validation is unchanged; these counters are diagnostic evidence, not replacement measurements.
+
 ## Eval artifacts
 
 ### Per-config identity and collection
