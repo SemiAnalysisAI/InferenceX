@@ -209,6 +209,7 @@ VLLM_CMD=(
     --gpu-memory-utilization 0.85
     --enable-chunked-prefill
     --max-num-batched-tokens 32768
+    --compilation-config '{"cudagraph_mode":"FULL_DECODE_ONLY"}'
     --language-model-only
     --enable-prefix-caching
     --attention-backend ROCM_AITER_UNIFIED_ATTN
