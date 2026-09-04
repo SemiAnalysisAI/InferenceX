@@ -398,6 +398,59 @@ class TestCalculations:
         assert output_data["output_tput_per_gpu"] == pytest.approx(375.0)
         assert output_data["input_tput_per_gpu"] == pytest.approx(125.0)
 
+    def test_throughput_per_gpu_single_node_default_dp_size(self, tmp_path, single_node_env_vars):
+        """DP_SIZE defaults to 1 when unset, so existing single-node configs are unaffected."""
+        benchmark_result = {
+            "model_id": "test-model",
+            "max_concurrency": 8,
+            "total_token_throughput": 8000.0,
+            "output_throughput": 6000.0,
+        }
+
+        result = run_script(tmp_path, single_node_env_vars, benchmark_result)
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+
+        output_data = json.loads(result.stdout)
+        assert output_data["dp_size"] == 1
+        assert output_data["tput_per_gpu"] == pytest.approx(8000.0 / 8)
+
+    def test_throughput_per_gpu_single_node_with_dp_size(self, tmp_path, single_node_env_vars):
+        """DP_SIZE multiplies the GPU denominator, e.g. --tensor-parallel-size 1
+        --data-parallel-size 2 running two full-model replicas on 2 GPUs."""
+        benchmark_result = {
+            "model_id": "test-model",
+            "max_concurrency": 8,
+            "total_token_throughput": 8000.0,
+            "output_throughput": 6000.0,
+        }
+
+        env = single_node_env_vars.copy()
+        env.update({"TP": "1", "DP_SIZE": "2"})
+
+        result = run_script(tmp_path, env, benchmark_result)
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+
+        output_data = json.loads(result.stdout)
+        assert output_data["dp_size"] == 2
+        assert output_data["tput_per_gpu"] == pytest.approx(8000.0 / 2)
+        assert output_data["output_tput_per_gpu"] == pytest.approx(6000.0 / 2)
+        assert output_data["input_tput_per_gpu"] == pytest.approx(2000.0 / 2)
+
+    def test_invalid_dp_size_raises_error(self, tmp_path, single_node_env_vars):
+        benchmark_result = {
+            "model_id": "test-model",
+            "max_concurrency": 8,
+            "total_token_throughput": 8000.0,
+            "output_throughput": 6000.0,
+        }
+
+        env = single_node_env_vars.copy()
+        env.update({"DP_SIZE": "0"})
+
+        result = run_script(tmp_path, env, benchmark_result)
+        assert result.returncode != 0
+        assert "DP_SIZE" in result.stderr
+
     def test_throughput_per_gpu_multinode(self, tmp_path, multinode_env_vars):
         """Test throughput per GPU calculation for multinode."""
         benchmark_result = {

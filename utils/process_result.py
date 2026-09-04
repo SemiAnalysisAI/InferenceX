@@ -249,9 +249,10 @@ else:
     pp = int(os.environ.get('PP_SIZE', '1'))
     dcp_size = int(os.environ.get('DCP_SIZE', '1'))
     pcp_size = int(os.environ.get('PCP_SIZE', '1'))
-    if pp <= 0 or dcp_size <= 0 or pcp_size <= 0:
-        raise ValueError("PP_SIZE, DCP_SIZE, and PCP_SIZE must be positive integers.")
-    num_gpus = tp_size * pp * pcp_size
+    dp_size = int(os.environ.get('DP_SIZE', '1'))
+    if pp <= 0 or dcp_size <= 0 or pcp_size <= 0 or dp_size <= 0:
+        raise ValueError("PP_SIZE, DCP_SIZE, PCP_SIZE, and DP_SIZE must be positive integers.")
+    num_gpus = tp_size * pp * pcp_size * dp_size
 
     single_node_data = {
         'is_multinode': False,
@@ -259,6 +260,7 @@ else:
         'pp': pp,
         'dcp_size': dcp_size,
         'pcp_size': pcp_size,
+        'dp_size': dp_size,
         'ep': ep_size,
         'dp_attention': dp_attention,
         'tput_per_gpu': float(bmk_result['total_token_throughput']) / num_gpus,
