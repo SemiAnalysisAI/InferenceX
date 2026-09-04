@@ -6,16 +6,16 @@ name: "mi355x-atom-dsv4-disagg-2p1d-dpa-tp8-8k1k"
 
 model:
   path: "hf:deepseek-ai/DeepSeek-V4-Pro"
-  container: "rocm/atom-dev:nightly_202606101403"
+  container: "rocm/atom-dev:nightly_202609031453"
   precision: "fp4"
 
 identity:
   model:
     repo: "deepseek-ai/DeepSeek-V4-Pro"
   container:
-    image: "rocm/atom-dev:nightly_202606101403"
+    image: "rocm/atom-dev:nightly_202609031453"
   frameworks:
-    atomesh: "087b82d9c1f630e79149ba37e6213257ec9a76f8"
+    atomesh: "f95ef3ec30a16876a676e0af96d60f8e0605c7c5"
 
 slurm:
   time_limit: "08:00:00"
@@ -44,8 +44,7 @@ environment: &runtime_environment
   HF_HOME: "/hf_hub_cache"
   HF_HUB_CACHE: "/hf_hub_cache/hub"
   HUGGINGFACE_HUB_CACHE: "/hf_hub_cache/hub"
-  # Same Mooncake/ROCm lookup order as env_atom.sh in the original image.
-  LD_LIBRARY_PATH: "/opt/venv/lib/python3.10/site-packages/mooncake:/opt/rocm/lib"
+  # Use the official image's ROCm/Mooncake library paths (Python 3.12).
   PYTHONUNBUFFERED: "1"
   PYTHONDONTWRITEBYTECODE: "1"
   SAFETENSORS_FAST_GPU: "1"

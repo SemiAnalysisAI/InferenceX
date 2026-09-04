@@ -796,13 +796,13 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
 # https://github.com/vllm-project/recipes/commit/2a3728ed9892debfd767a72a58ebc90b33f186e5
 # MXFP8 runs from TP=4 on gfx950; block size 128 is mandatory for MSA.
 dsv4-fp4-mi355x-atom-disagg:
-  image: rocm/atom-dev:nightly_202606101403
+  image: rocm/atom-dev:nightly_202609031453
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:mi355x-amds
   precision: fp4
   framework: atom-disagg
-  router: { name: atomesh, version: "087b82d9c1f630e79149ba37e6213257ec9a76f8" }
+  router: { name: atomesh, version: "f95ef3ec30a16876a676e0af96d60f8e0605c7c5" }
   kv-p2p-transfer: mooncake
   multinode: true
   disagg: true
