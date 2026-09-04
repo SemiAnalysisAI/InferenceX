@@ -13,6 +13,7 @@
 #   HF_HOME                      -> dropped; benchmark.env sets HF_HUB_CACHE
 #   slurm.time_limit             -> 06:00:00 (see the note in the tool)
 #   rejection_sample_method      -> block, so the eval verifies (see below)
+#   draft_sample_method          -> probabilistic, matching the AL's curve
 #   global_segment_size          -> 281GB, matching the B300 arm on main
 #   sbatch_directives.exclude    -> b300-018, which times out UCX/NIXL
 #
@@ -188,7 +189,7 @@ backend:
       language-model-only: true
       attention-backend: TOKENSPEED_MLA
       attention-config: '{"mla_prefill_backend": "TRTLLM_RAGGED", "use_prefill_query_quantization": true}'
-      speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"rejection_sample_method":"block"}'
+      speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"rejection_sample_method":"block","draft_sample_method":"probabilistic"}'
       enable-prefix-caching: true
     decode:
       no-enable-flashinfer-autotune: true
@@ -209,7 +210,7 @@ backend:
       language-model-only: true
       attention-backend: TOKENSPEED_MLA
       attention-config: '{"mla_prefill_backend": "TRTLLM_RAGGED", "use_prefill_query_quantization": true}'
-      speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"rejection_sample_method":"block"}'
+      speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"rejection_sample_method":"block","draft_sample_method":"probabilistic"}'
       enable-prefix-caching: true
 sbatch_directives:
   cpus-per-task: '72'
