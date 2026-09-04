@@ -6876,4 +6876,4 @@
   description:
     - "Bump the MI355X MiniMax-M3 AgentX image from vllm/vllm-openai-rocm:nightly-6d4562c59b97b4e35d459ff9389e71b6fe4995de to the latest immutable nightly, vllm/vllm-openai-rocm:nightly-8a728663c1c3eeace834a95f5654fa653cc1998c (digest sha256:0d07767c0b8471eaca0f1eca97899620dfb4ad33ff2f5226789afef1a877e9bc)."
     - "Pick up the optimized BF16 MiniMax-M3 indexer and routed GEMM from vLLM PRs #54682 and #54845; all benchmark settings remain unchanged."
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2825
