@@ -161,6 +161,7 @@ def test_exporter_cold_import_uses_nvidia_registry(
     end_marker = f"\n{indent}fi"
     end = launcher.index(end_marker, start) + len(end_marker)
     source = launcher[start:end].replace(cache_directory, f"{tmp_path}/")
+    source = source.replace("${HOME}/.cache/enroot", "${GITHUB_WORKSPACE}/enroot-cache")
     if "import_squash() {" in launcher:
         helper_start = launcher.index("import_squash() {")
         helper_end = launcher.index("\n}\n", helper_start) + len("\n}")
