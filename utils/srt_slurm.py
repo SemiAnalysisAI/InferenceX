@@ -95,6 +95,9 @@ def prepare_recipe(
     profile.setdefault("default_mounts", {}).update(
         {
             str(workspace): "/infmax-workspace",
+            # Native setup_script paths resolve beneath /configs. Keep recipe
+            # assets in InferenceX without copying them into the runtime checkout.
+            str(workspace / "benchmarks/multi_node/srt-slurm-recipes"): "/configs/inferencex",
             str(results_root): "/results",
             str(aiperf_cache): "/aiperf_mmap_cache",
         }
