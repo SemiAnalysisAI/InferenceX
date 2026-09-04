@@ -556,7 +556,7 @@ PY
     IFS='x' read -r -a CONCURRENCIES <<< "$BENCH_MAX_CONCURRENCY"
     # GPU counts embedded in the result filename as _gpus_/_ctx_/_gen_ tokens so the
     # CI "Process result" step (benchmark-multinode-tmpl.yml) can parse them and run
-    # process_result.py for llm-d -- same filename convention as amd_utils/bench.sh.
+    # process_result.py for llm-d using the standard InferenceX filename convention.
     # ctx = prefill GPUs, gen = decode GPUs; nodes*GPUS_PER_NODE is correct for any
     # PREFILL_WORKERS/DECODE_WORKERS split (e.g. high-tpt 2P -> 16 prefill GPUs).
     _bench_prefill_gpus=$(( PREFILL_NODES * GPUS_PER_NODE ))

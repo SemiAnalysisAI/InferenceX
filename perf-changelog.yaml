@@ -6858,3 +6858,30 @@
   description:
     - "Refresh the DeepSeek-V4-Pro FP4 B200 vLLM image and search space, pin the Nscale NVFP4 checkpoint, use the FlashInfer CuTeDSL MoE backend for expert-parallel runs with EPLB disabled, set GPU memory utilization to 0.95, and cap the model length at 12288."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2534
+
+- config-keys:
+    - qwen3-0.6b-fp16-mi355x-sglang-srt-agg
+    - qwen3-0.6b-fp16-mi355x-sglang-srt-disagg
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Add small-model aggregate and 1P1D disaggregated correctness lanes for the shared MI355X srt-slurm launcher."
+    - "Use the native SGLang router for request routing and AMD MoRI for disaggregated KV transfer, without Dynamo, NIXL, or the deleted amd_utils control plane."
+    - "Remove the active and deprecated MI355X matrix entries that depended on amd_utils; configuration-specific child PRs reintroduce the active production lanes as native srt-slurm recipes."
+    - "Preserve the retired AgentX launch contract in the shared srt path: route DP-attention sessions by correlation ID, flush every advertised worker cache before each concurrency point, and run the MI355X RDMA device/QoS/DCQCN plus bare-process GPU drain preflights on every allocated host."
+    - "Preserve the legacy MI355X host verbs/Ionic provider mounts and task file-descriptor limit; pin the native ATOM CLI spelling and Mooncake address fix from srt-slurm PR #7."
+    - "Pin the ATOMesh startup fix so native AMD routing skips Dynamo-only NATS/etcd infrastructure."
+    - "Keep the workflow's host-only Python bytecode-cache prefix out of Slurm submissions, matching the legacy explicit Docker environment without changing serving arguments."
+    - "Restore the legacy unlimited RDMA memory-lock limit and pin ATOM's literal worker model identity for evaluation routing."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2542
+
+- config-keys:
+    - qwen3-0.6b-fp16-mi355x-sglang-srt-agg
+    - qwen3-0.6b-fp16-mi355x-sglang-srt-disagg
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Use one MI355X launcher entry point with srt-slurm owning allocation, coordination, log following, and job completion."
+    - "Remove the mandatory host-repair hook, RDMA/GPU-drain helper scripts, and separate image/model staging allocation; use provisioned caches and native Pyxis container lifecycle."
+    - "Keep InferenceX-specific benchmark/eval metadata and artifact collection in a portable adapter while preserving the existing serving and workload settings."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2542

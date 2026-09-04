@@ -1,0 +1,47 @@
+# srt-slurm cluster profile for the MI355X AMD Slurm cluster. The login and
+# compute nodes share /it-share, so source, output, image, and result paths do
+# not need node-local transport.
+
+cluster: mi355x-amds
+default_partition: compute
+default_time_limit: "01:00:00"
+output_dir: /it-share/gharunners2/srt-slurm/outputs
+
+gpus_per_node: 8
+accelerator_vendor: amd
+network_interface: eno0
+
+gpu_sbatch_directive: gres
+use_segment_sbatch_directive: false
+use_exclusive_sbatch_directive: false
+runtime_config_transport: shared-filesystem
+
+default_sbatch_directives:
+  cpus-per-task: "32"
+  mem: "128G"
+
+default_mounts:
+  /dev/kfd: /dev/kfd
+  /dev/dri: /dev/dri
+  # Use the host's matching verbs ABI and Ionic provider, as the retired AMD
+  # launcher did. Container-packaged providers need not match the host driver.
+  /usr/lib/x86_64-linux-gnu/libibverbs.so.1: /usr/lib/x86_64-linux-gnu/libibverbs.so.1
+  /usr/lib/x86_64-linux-gnu/libionic.so.1: /usr/lib/x86_64-linux-gnu/libionic.so.1
+  /usr/lib/x86_64-linux-gnu/libibverbs/libionic-rdmav34.so: /usr/lib/x86_64-linux-gnu/libibverbs/libionic-rdmav34.so
+  /etc/libibverbs.d: /etc/libibverbs.d
+  /it-share/hf-hub-cache: /hf_hub_cache
+  # Some provisioned /hf_hub_cache/hub entries link to checkpoints here.
+  # Keep their absolute symlink targets visible inside the container.
+  /it-share/hf_home: /it-share/hf_home
+  # The launcher appends the exact shared workspace and result roots.
+
+containers:
+  sglang-rocm-v0.5.17-mi35x: /it-share/gharunners2/srt-slurm/containers/sglang-rocm-v0.5.17-mi35x-20260809.sqsh
+
+nginx_raise_ulimit: false
+
+# Match the legacy Docker --ulimit memlock=-1 for RDMA registrations, as well
+# as the server/evaluation open-file limit. Fail before loading the model if
+# the allocation cannot provide unlimited locked memory.
+default_bash_preamble: >-
+  ulimit -l unlimited && { ulimit -n 65536 2>/dev/null || ulimit -n 8192 2>/dev/null || true; }

@@ -126,6 +126,22 @@ Mapping source: [`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchm
 
 Do not ship one side alone. `srtctl` reads the recipe, while matrix generation reads the master config. Recipe-only changes can mislabel results. Master-only changes do not alter the deployed recipe.
 
+### AMD srt-slurm ownership
+
+Migrated MI355X entries use the existing `runners/launch_mi355x-amds.sh` entry point.
+It installs the pinned runtime, supplies the cluster profile and shared paths, and
+calls `srtctl apply --json` followed by `srtctl wait`. The portable
+`utils/srt_slurm.py` adapter maps InferenceX benchmark/eval inputs and collects the
+submitted job's artifacts; it does not submit jobs or manage worker processes.
+
+srt-slurm owns allocation, worker/router coordination, readiness, and teardown.
+Pyxis owns container imports and container lifetime. The launcher may reuse an
+existing cached image, but does not create a separate staging allocation. Model
+loading uses the recipe and the profile's mounted cache. Do not add unconditional
+GPU-drain loops, NIC repair, hugepage resets, or other host-repair hooks to recipes.
+Persistent host-resource policy belongs to cluster provisioning, not a benchmark
+port. A dirty host must not be made to appear healthy by changing engine options.
+
 ## Register an llm-d recipe
 
 Sources: [`benchmarks/llm-d/README.md`](../benchmarks/llm-d/README.md), [`benchmarks/multi_node/llm-d/README.md`](../benchmarks/multi_node/llm-d/README.md), [`llm-d-recipes/`](../benchmarks/multi_node/llm-d-recipes/), and the current [`llmd-vllm` benchmark wrapper](../benchmarks/multi_node/dsv4_fp4_gb200_llmd-vllm-disagg.sh).
