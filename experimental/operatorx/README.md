@@ -36,7 +36,7 @@ OPERATORX_PARTITION=batch_1 \
 OPERATORX_ACCOUNT=benchmark \
 OPERATORX_QOS=batch_1_qos \
 OPERATORX_SQUASH_DIR=/data/home/sa-shared/harrison/containers \
-OPERATORX_BACKENDS=torch,deepgemm,flashinfer,sglang \
+OPERATORX_BACKENDS=torch,deepgemm,sglang \
 python3 scripts/submit_run.py nvidia
 ```
 

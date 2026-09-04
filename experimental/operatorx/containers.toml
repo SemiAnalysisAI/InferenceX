@@ -1,9 +1,6 @@
 [nvidia.torch]
 image = "nvcr.io/nvidia/pytorch:26.03-py3"
 
-[nvidia.flashinfer]
-image = "lmsysorg/sglang:latest"
-
 [nvidia.deepgemm]
 image = "lmsysorg/sglang:latest"
 
@@ -11,9 +8,6 @@ image = "lmsysorg/sglang:latest"
 image = "lmsysorg/sglang:latest"
 
 [nvidia.deepep]
-image = "lmsysorg/sglang:latest"
-
-[nvidia.flashinfer_comm]
 image = "lmsysorg/sglang:latest"
 
 [nvidia.sglang_comm]
