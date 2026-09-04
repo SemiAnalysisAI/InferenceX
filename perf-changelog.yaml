@@ -6680,4 +6680,25 @@
     - "models.yaml: enable DeepSeek-V4-Pro-AgentX shared-experts fusion."
     - "prefill.no_dp.chunked_prefill_size: switch from a fixed 8192 to the TP-conditional formula '16384 if PREFILL_TP_SIZE == 8 else 8192'."
   pr-link: TBD
-  
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump the image to lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260831, switch the active DP-attention arm's decode side from ep:8 to ep:1 (DP-attention over TP-sharded MoE instead of expert-parallel dispatch), and widen conc-list to [64, 96, 128, 192, 256]. Keep the TP4/TP8 no-DP arms as commented-out reference."
+    - "models.yaml: round out dp_flags with --tokenizer-worker-num 8, --enable-dp-attention-local-control-broadcast, --stream-interval 20, and --prefill-decode-interval 10 to mirror the single-node DP-attention recipe block; add enable_two_batch_overlap under prefill.dp; raise mem_fraction_static 0.85 -> 0.90 for both prefill and decode."
+    - "env.sh: gate the DP-attention-only SGLang knobs (SGLANG_SHARED_EXPERT_TP1, SGLANG_DP_SHARED_EXPERT_LOCAL, SGLANG_DP_USE_GATHERV, SGLANG_DP_USE_REDUCE_SCATTER, wider GPU_MAX_HW_QUEUES) behind PREFILL_ENABLE_DP/DECODE_ENABLE_DP instead of exporting them unconditionally, so TP-only arms keep GPU_MAX_HW_QUEUES=2; add SGLANG_MORI_RECV_BOUND=1 for the disagg MoRI path."
+    - "Split --enforce-shared-experts-fusion and --disable-shared-experts-fusion into mutually exclusive no_dp_flags/dp_flags buckets (new models.yaml no_dp_flags field plus MODEL_NO_DP_FLAGS in server_sglang.sh's build_server_config()). Both flags previously landed on the DP arm's command line simultaneously and only resolved correctly by relying on the internal check order in DeepseekV4ForCausalLM.determine_num_fused_shared_experts(), not a guaranteed contract."
+    - "Widen decode.dp.cuda_graph_bs_range from 1-128 to 1-256 to cover the widened conc-list."
+    - "Narrow the active search-space conc-list to [256] to iterate faster on the DP-attention arm instead of re-running the full [64, 96, 128, 192, 256] sweep each time."
+    - "HICACHE_RATIO tuning at conc=256 on the 393-conversation trace dataset: raising the prefill arm's ratio from the recipe default of 3 to 6 eliminated host-pool saturation (every rank sat at 100% used/total tokens at conc>=192 with ratio=3), but regressed total throughput -11% (628,012 -> 557,850 tok/s) and TTFT +65%/+107% (mean/p90) at conc=256, because average host-pool occupancy barely moved (~15.5M tokens either way) while prefix-cache lookup/restore cost scaled with the larger pool -- the working set is dataset-bounded, not capacity-bound. Settled on ratio=4, covering the ~25M-token peak observed on the busiest rank without doubling pool size the way ratio=6 did."
+  pr-link: TBD
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump the image from lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260831 to lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260903, which picks up gfx95 (MI350X/MI355X) support for DeepSeek-V4's sparse-attention FP4 indexer via AITER kernels (sglang PR #37353, merged 2026-09-02). The flag was previously gated to NVIDIA SM100/SM120 only and hard-failed on AMD."
+    - "models.yaml: add --enable-deepseek-v4-fp4-indexer to DeepSeek-V4-Pro-AgentX base_flags. The FP4 indexer shrinks the per-token indexer KV-cache entry from 132 bytes (fp8) to 68 bytes, freeing GPU KV capacity; upstream's own benchmarks report +5.8% throughput, +7.7% GPU KV capacity, and -5.5% TTFT at conc=48 with HiCache enabled."
+  pr-link: TBD
