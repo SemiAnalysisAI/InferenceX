@@ -14,8 +14,8 @@ set -x
 #   --max-num-seqs 128 --max-num-batched-tokens 4096 --enable-auto-tool-choice
 #   --tool-call-parser kimi_k3 --reasoning-parser kimi_k3
 #
-# with env VLLM_ROCM_USE_AITER=1 SAFETENSORS_FAST_GPU=1 AITER_SITUV2_A8W4=1
-# AITER_BF16_FP8_MOE_BOUND=0 VLLM_USE_BREAKABLE_CUDAGRAPH=0.
+# This experiment overlays the pinned jiacao-amd vLLM and AITER FHMoE sources
+# on that image and enables the Kimi-K3 heterogeneous MXFP4/BF16 MoE path.
 #
 # K3 is a 2.8T-parameter natively-multimodal MoE (896 routed experts, 16/token
 # plus shared) on Kimi Delta Attention, gated MLA and Attention Residuals, with
@@ -81,6 +81,38 @@ amd-smi || true
 resolve_trace_source
 install_agentic_deps
 
+# ---- Kimi-K3 heterogeneous FHMoE source overlay -----------------------------
+# Pin the experiment to the exact vLLM and AITER revisions under test while
+# retaining the reference nightly image for ROCm and compiled dependencies.
+FHMOE_AITER_REPO="https://github.com/jiacao-amd/aiter.git"
+FHMOE_AITER_BRANCH="codex/kimi-k3-fhmoe-prototype"
+FHMOE_AITER_COMMIT="2bb88a7c59554d6d1fde4a6f808b3fc76baa50db"
+FHMOE_VLLM_REPO="https://github.com/jiacao-amd/vllm.git"
+FHMOE_VLLM_BRANCH="codex/kimi-k3-fhmoe-bf16-nightly"
+FHMOE_VLLM_COMMIT="1e095a7d8fbd7de3b83b566b99439b60fdd13b69"
+
+FHMOE_SOURCE_ROOT="$(mktemp -d -p "${TMPDIR:-/tmp}" kimi-k3-fhmoe.XXXXXX)"
+trap 'rm -rf -- "$FHMOE_SOURCE_ROOT"' EXIT
+FHMOE_AITER_DIR="$FHMOE_SOURCE_ROOT/aiter"
+FHMOE_VLLM_DIR="$FHMOE_SOURCE_ROOT/vllm"
+
+git clone --depth 1 --single-branch --branch "$FHMOE_AITER_BRANCH" \
+    "$FHMOE_AITER_REPO" "$FHMOE_AITER_DIR"
+git clone --depth 1 --single-branch --branch "$FHMOE_VLLM_BRANCH" \
+    "$FHMOE_VLLM_REPO" "$FHMOE_VLLM_DIR"
+
+if [[ "$(git -C "$FHMOE_AITER_DIR" rev-parse HEAD)" != "$FHMOE_AITER_COMMIT" ]]; then
+    echo "Error: AITER branch head no longer matches pinned commit $FHMOE_AITER_COMMIT" >&2
+    exit 1
+fi
+if [[ "$(git -C "$FHMOE_VLLM_DIR" rev-parse HEAD)" != "$FHMOE_VLLM_COMMIT" ]]; then
+    echo "Error: vLLM branch head no longer matches pinned commit $FHMOE_VLLM_COMMIT" >&2
+    exit 1
+fi
+
+export PYTHONPATH="$FHMOE_VLLM_DIR:$FHMOE_AITER_DIR${PYTHONPATH:+:$PYTHONPATH}"
+export AITER_JIT_DIR="$FHMOE_AITER_DIR/aiter/jit"
+
 # ---- Reference env block ----------------------------------------------------
 export VLLM_ROCM_AITER_MLA_ASM_PADDING=asm
 export VLLM_ROCM_USE_AITER=1
@@ -88,7 +120,8 @@ export SAFETENSORS_FAST_GPU=1
 export VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4=1
 export AITER_SITUV2_A8W4=1
 export AITER_BF16_FP8_MOE_BOUND=0
-export VLLM_USE_BREAKABLE_CUDAGRAPH=0
+export VLLM_USE_BREAKABLE_CUDAGRAPH=1
+export VLLM_ROCM_KIMI_K3_FHMOE_MXFP4=1
 export AITER_QUICK_REDUCE_QUANTIZATION=INT4
 
 # Workaround for MEC FW <177 RCCL memory reclaim issue (shared with the other
@@ -108,6 +141,9 @@ export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
 # ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
+printf 'vLLM %s\nAITER %s\n' \
+    "$FHMOE_VLLM_COMMIT" "$FHMOE_AITER_COMMIT" \
+    > "$RESULT_DIR/fhmoe_source_commits.txt"
 
 SERVER_PID=""
 LMCACHE_PID=""
@@ -118,6 +154,7 @@ cleanup_agentic_services() {
     set +e
     stop_background_process_tree "$SERVER_PID" "vLLM server" 60
     stop_background_process_tree "$LMCACHE_PID" "LMCache server"
+    rm -rf -- "$FHMOE_SOURCE_ROOT"
     exit "$exit_code"
 }
 trap cleanup_agentic_services EXIT
