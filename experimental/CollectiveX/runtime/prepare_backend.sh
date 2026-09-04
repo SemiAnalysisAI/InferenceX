@@ -408,7 +408,7 @@ uccl_prepare() {
 
 # Slug of the pinned pip spec, safe as a cache-dir path component.
 nccl_ep_spec_slug() {
-  printf '%s' "$COLLX_NCCL4PY_SPEC" | tr -cs 'A-Za-z0-9_.-' '-'
+  printf '%s' "$COLLX_NCCL_EP_SPEC" | tr -cs 'A-Za-z0-9_.-' '-'
 }
 
 # Cache root keyed by cpu + build arch + image + pinned wheel spec, under the shared /cx-cache
@@ -429,8 +429,9 @@ nccl_ep_cache_root() {
 
 # Put the installed wheel ($root/site) on PYTHONPATH for the probe and rank tasks, and the
 # wheel-bundled NCCL runtime lib dir ahead of the image torch's older NCCL on the loader path
-# (nccl.ep needs NCCL >= 2.29.3's Device API + GIN; the image torch bundles an older NCCL). Both
-# PYTHONPATH and LD_LIBRARY_PATH are already carried to the ranks by write_rank_env.
+# (nccl.ep needs a Device API + GIN capable NCCL — the nccl-extensions[cu13] extra pins 2.30.7 —
+# while the image torch bundles an older one). Both PYTHONPATH and LD_LIBRARY_PATH are already
+# carried to the ranks by write_rank_env.
 nccl_ep_activate() {
   local root="$1" site="$1/site" nccl_lib
   [ -d "$site" ] || { collx_log "ERROR: NCCL EP cache site is unavailable"; return 1; }
@@ -459,10 +460,10 @@ import nccl.ep  # noqa: F401
 PY
 }
 
-# Primary install: the published nccl4py[cu13] wheel + deps into $root/site via pip --target
-# (self-contained; the runtime imports it through PYTHONPATH, so cache-hit and cache-miss paths
-# import identically — mirrors uccl_install's copy-to-cache scheme). The from-source fallback
-# (OpenMPI + build NCCL + contrib/nccl_ep from COLLX_NCCL_EP_COMMIT, with a matching launcher
+# Primary install: the published nccl-extensions[cu13] wheel + deps into $root/site via pip
+# --target (self-contained; the runtime imports it through PYTHONPATH, so cache-hit and cache-miss
+# paths import identically — mirrors uccl_install's copy-to-cache scheme). The from-source fallback
+# (OpenMPI + build NCCL + nccl_ep from COLLX_NCCL_EP_COMMIT, with a matching launcher
 # source-staging arm) is deferred until bring-up shows the wheel does not ship libnccl_ep.so.
 nccl_ep_install() {
   local root="$1" site="$1/site"
@@ -471,12 +472,12 @@ nccl_ep_install() {
   fi
   mkdir -m 700 "$root" || { collx_log "ERROR: NCCL EP cache-create failed"; return 1; }
   mkdir -p "$site" || { collx_log "ERROR: NCCL EP cache-site-create failed"; return 1; }
-  collx_log "NCCL EP: installing $COLLX_NCCL4PY_SPEC (pip --target)"
+  collx_log "NCCL EP: installing $COLLX_NCCL_EP_SPEC (pip --target)"
   # --target installs into an isolated tree and does not touch the system env, so PEP 668 does
   # not apply; torch is imported from the image at runtime (nccl.ep's torch interop resolver).
   python3 -m pip install -q --disable-pip-version-check --no-input \
-      --target "$site" "$COLLX_NCCL4PY_SPEC" >&2 2>&1 \
-    || { collx_log "ERROR: NCCL EP nccl4py install failed"; return 1; }
+      --target "$site" "$COLLX_NCCL_EP_SPEC" >&2 2>&1 \
+    || { collx_log "ERROR: NCCL EP wheel install failed"; return 1; }
   nccl_ep_activate "$root" \
     || { collx_log "ERROR: NCCL EP environment activation failed"; return 1; }
   nccl_ep_probe || { collx_log "ERROR: NCCL EP import probe failed"; return 1; }
@@ -495,7 +496,7 @@ nccl_ep_prepare() {
     command -v flock >/dev/null \
       || { collx_log "ERROR: flock is required for NCCL EP caching"; return 1; }
     mkdir -p "${root%/*}" || return 1
-    collx_log "NCCL EP: preparing $COLLX_NCCL4PY_SPEC (shared cache $root)"
+    collx_log "NCCL EP: preparing $COLLX_NCCL_EP_SPEC (shared cache $root)"
     if ! (
       [ ! -L "$lock_path" ] || { collx_log "ERROR: NCCL EP cache lock is unsafe"; exit 1; }
       (umask 077; : >> "$lock_path") && chmod 600 "$lock_path" \
@@ -510,14 +511,14 @@ nccl_ep_prepare() {
     fi
   else
     root="/tmp/collectivex-nccl-ep-cache-$(nccl_ep_spec_slug)"
-    collx_log "NCCL EP: preparing $COLLX_NCCL4PY_SPEC (node-local $root; no shared cache mounted)"
+    collx_log "NCCL EP: preparing $COLLX_NCCL_EP_SPEC (node-local $root; no shared cache mounted)"
     if [ ! -f "$root/.ready" ] || [ ! -d "$root/site" ]; then
       nccl_ep_install "$root" || return 1
     fi
   fi
   nccl_ep_activate "$root" || return 1
   nccl_ep_probe || { collx_log "ERROR: NCCL EP import probe failed"; return 1; }
-  collx_log "NCCL EP ready ($COLLX_NCCL4PY_SPEC; libnccl_ep.so JIT runtime, NCCL Device API LSA/GIN)"
+  collx_log "NCCL EP ready ($COLLX_NCCL_EP_SPEC; libnccl_ep.so JIT runtime, NCCL Device API LSA/GIN)"
 }
 
 # ---- container boundary ----------------------------------------------------

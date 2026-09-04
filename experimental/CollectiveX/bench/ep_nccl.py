@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """NCCL EP adapter: NVIDIA's native MoE dispatch/combine on the NCCL Device API.
 
-NCCL EP (github.com/NVIDIA/nccl/contrib/nccl_ep, arXiv 2603.13606) is a ground-up MoE
-communication library built on NCCL's Device API — LSA (NVLink load/store) intra-node and
-GIN (GPU-Initiated Networking) inter-node — with two algorithms selected per case:
+NCCL EP (https://github.com/NVIDIA/nccl-extensions/tree/main/nccl_ep, arXiv 2603.13606)
+is a ground-up MoE communication library built on NCCL's Device API — LSA (NVLink load/store)
+intra-node and GIN (GPU-Initiated Networking) inter-node — with two algorithms selected per case:
   normal      -> HIGH_THROUGHPUT (HT), the Hybrid-EP-derived prefill/train path. FLAT recv
                  layout ``[N, hidden]`` (one row per received token, no expert structure) with
                  an unweighted rank-sum combine — identical semantics to deepep-v2 normal.
@@ -13,19 +13,25 @@ GIN (GPU-Initiated Networking) inter-node — with two algorithms selected per c
 Because both map exactly onto the two combine contracts CollectiveX already models, the
 scale_up_domain two-level combine oracle in ep_harness applies unchanged.
 
-BF16 only: `contrib/nccl_ep/RELEASE.md` says "No FP8 support", so this adapter does not
-override the FP8 encode hooks (SUPPORTED_PRECISIONS=("bf16",)). Re-test before trusting that
-note — the C library at our pinned commit reads `inputs->scales` and switches on e4m3/e5m2,
-and the two documented FP8 exclusions are expert-major layouts we do not use.
+BF16 only, by adapter scope rather than library limit; NCCL EP v0.2 added dispatch-path
+quantization (`nccl_ep/docs/release/RELEASE_NOTES_v0.2.md`) carrying both recipes this suite
+would need: `QUANT_FWD` forwards caller-supplied scales, matching the `normal`-mode
+caller-prequantized FP8 the other backends run, and `DS_FP8E3M4` quantizes BF16 to E4M3 with
+per-128 FP32 scales inside the LL dispatch, matching their `low-latency` in-kernel path.
+Neither is wired here yet, so this adapter keeps SUPPORTED_PRECISIONS=("bf16",) and emits no
+FP8 case; enabling FP8 support is future work.
+Combine stays BF16 either way: the non-experimental combine path accepts only bf16/fp16/fp32.
 
 Communicator bootstrap: NCCL EP forms its OWN NCCL communicator (separate from PyTorch's
 process group) via ``Communicator.init(nranks, rank, unique_id)``. Upstream broadcasts the
 unique id with MPI; CollectiveX has no MPI, so rank 0 generates the id and we broadcast its
 bytes over the already-initialized torch process group (see ``_bootstrap_comm``).
 
-Python bindings are ``nccl4py`` (``import nccl.core`` + ``nccl.ep``); the API surface used
-here is verified against upstream ``bindings/nccl4py/nccl/ep`` and driven exactly as
-``contrib/nccl_ep/ep_test.py`` drives it.
+Python bindings: ``nccl.ep`` ships in the ``nccl-extensions`` wheel and ``nccl.core`` in its
+``nccl4py`` dependency, so the installed spec (COLLX_NCCL_EP_SPEC) names nccl-extensions and
+pulls nccl4py transitively. The API surface used here is verified against upstream
+``python/nccl/ep`` and driven exactly as
+``nccl_ep/ep_test.py`` drives it.
 """
 from __future__ import annotations
 
@@ -68,24 +74,8 @@ _UNIQUE_ID_MAX_BYTES = 256
 # sizes the pre-allocated receive (and so the transport footprint), _LL_LADDER_CAP bounds which
 # token counts are measured. Separating them lets the ladder be clamped around a kernel defect
 # without moving the footprint and silently re-basing the rungs that remain.
-#
-# The ladder sits below the buffer because nccl_ep's low_latency.cu is a port of DeepEP's
-# PRE-FIX low-latency combine: in the combine recv pipeline the reduction warps read shared
-# memory and then mbarrier_arrive(emptyBarriers[stageIdx]) with no fence.proxy.async.shared::cta
-# between, so the producer's next TMA load can overwrite a stage while consumer reads are still
-# in flight. DeepEP closed exactly this with a one-line fence in PR #642; the fence is absent
-# both at our pin and at NVIDIA/nccl master, so it is unfixed upstream.
-#
-# Observed on gb300 EP8 BF16 at T=256: 1 failure in 5 executions, bimodal -- healthy rows give
-# max relative error 0.0039, the failure gave 0.4704, with nothing between, which is a discrete
-# corrupted write rather than tolerance noise.
-#
-# THIS CLAMP IS NOT A SAFETY BOUNDARY. The fence is missing on every combine recv; T=256 is only
-# the rung with the most pipeline iterations, and the receive plane is not even full there. Lower
-# rungs are LESS LIKELY to hit the race, not immune. Restore _LL_LADDER_CAP to _LL_BUFFER_CAP
-# once a fixed wheel ships.
 _LL_BUFFER_CAP = 256
-_LL_LADDER_CAP = 128
+_LL_LADDER_CAP = 256
 
 
 class NCCLEPBackend(EPBackend):
@@ -145,9 +135,7 @@ class NCCLEPBackend(EPBackend):
 
     def buffer_cap(self, args):
         if self._ll:
-            # Bounds which token counts are MEASURED. Below _LL_BUFFER_CAP today because the
-            # combine recv pipeline races (see the constants above); the harness reports every
-            # dropped rung rather than silently truncating.
+            # Bounds which token counts are MEASURED.
             return _LL_LADDER_CAP
         return None
 
@@ -280,6 +268,8 @@ class NCCLEPBackend(EPBackend):
         does not hang outright, which makes every latency drawn from such a run suspect. Filed
         upstream as NVIDIA/nccl#2303; reproduced on a stock wheel by ladder [1] (one handle,
         clean) vs ladder [1, 2] (two handles, 64 dispatch + 6 combine receive timeouts -> 719).
+        UPDATE: the support for multiple handles per group was added in NCCL EP v0.2, this 
+        backend should support it now. Wiring it is future work.
 
         `ncclEpInitHandle` takes no token count and `ncclEpUpdateHandle` is documented as a
         "per-step collective: prepare the handle for the given top-k routing decisions", so
