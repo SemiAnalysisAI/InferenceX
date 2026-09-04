@@ -28,8 +28,9 @@ unique id with MPI; CollectiveX has no MPI, so rank 0 generates the id and we br
 bytes over the already-initialized torch process group (see ``_bootstrap_comm``).
 
 Python bindings: ``nccl.ep`` ships in the ``nccl-extensions`` wheel and ``nccl.core`` in its
-``nccl4py`` dependency, which is why COLLX_NCCL4PY_SPEC keeps that name. The API surface used
-here is verified against upstream ``python/nccl/ep`` and driven exactly as
+``nccl4py`` dependency, so the installed spec (COLLX_NCCL_EP_SPEC) names nccl-extensions and
+pulls nccl4py transitively. The API surface used here is verified against upstream
+``python/nccl/ep`` and driven exactly as
 ``nccl_ep/ep_test.py`` drives it.
 """
 from __future__ import annotations

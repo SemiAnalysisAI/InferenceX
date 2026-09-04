@@ -30,7 +30,10 @@ COLLX_UCCL_COMMIT="fc1b582031221645ea9fce58aeb57187713145e3"
 # needs). The from-source pins below are the fallback, deferred until on-metal bring-up shows the
 # wheel is insufficient; the commit is the head of the release the wheel is built from, so a
 # from-source build and the wheel resolve to the same nccl_ep tree.
-COLLX_NCCL4PY_SPEC="nccl-extensions[cu13]==0.1.0"
+# The package version and the library version differ on purpose: nccl-extensions 0.1.0 ships
+# NCCL EP v0.2 (NCCL_EP_MAJOR 0 / MINOR 2 in nccl_ep/include/nccl_ep.h). Do not "align" one to
+# the other — the docs refer to the library version, this spec to the package version.
+COLLX_NCCL_EP_SPEC="nccl-extensions[cu13]==0.1.0"
 COLLX_NCCL_EP_REPO="https://github.com/NVIDIA/nccl-extensions"
 COLLX_NCCL_EP_COMMIT="e57f0dad43dc1ca5bf96f09bf4075afc2eae6599"
 
