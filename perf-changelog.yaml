@@ -6888,4 +6888,4 @@
   description:
     - "Add controlled Qwen3.5 FP8 TP4 AgentX power configurations for B200, B300, and MI355X with prefix caching and no speculative decoding or CPU offload."
     - "Pin serving images and model weights, require valid GPU power, and allow the replay tokenizer to use the pinned model snapshot."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2827
