@@ -5500,7 +5500,7 @@ dsv4-fp4-b200-dynamo-sglang-mtp:
           dp-attn: true
 
 dsv4-fp4-b200-dynamo-vllm-mtp:
-  image: vllm/vllm-openai:vllm-x86_64-cu13-0.25.1-7a33ba9
+  image: vllm/vllm-openai:v0.28.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:b200-nscale

@@ -2,12 +2,12 @@ name: "svf-vllm-disagg-b200-1p1d-dep8-tp8-mtp"
 
 model:
   path: "deepseek-v4-pro"
-  container: "vllm/vllm-openai:vllm-x86_64-cu13-0.25.1-7a33ba9"
+  container: "vllm/vllm-openai:v0.28.0"
   precision: "fp4"
 
 dynamo:
   install: true
-  wheel: "1.2.0.dev20260426"
+  wheel: "1.5.0.dev20260904"
 
 sbatch_directives:
   segment: "1"
@@ -71,7 +71,7 @@ backend:
       max-model-len: 9280
       speculative-config: '{"method":"mtp","num_speculative_tokens":3}'
       attention-config: '{"use_fp4_indexer_cache":true}'
-      moe-backend: "deep_gemm_amxf4_mega_moe"
+      moe-backend: "deep_gemm_mega_moe"
       max-num-seqs: 16
       max-num-batched-tokens: 16384
       trust-remote-code: true
