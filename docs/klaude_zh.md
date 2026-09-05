@@ -31,7 +31,7 @@ PR 检查使用 `claude-opus-5`（Opus 5），关闭 fast mode（`fastMode: fals
 
 完成 checkout 和上下文准备后，candidate 工作流将控制权交给 Klaud Cold，并提供 `CLAUDE_PAT`、`ANTHROPIC_API_KEY` 和私有 API 只读密钥。Klaud Cold 将公开观测解析到一个活动主配置族，检查当前镜像和已有 PR，并在**编辑或创建分支/PR 之前**核实检查结果中的目标 ID 和实时容量。随后在使用 GPU 前认领分支，产生实际修改并创建草稿 PR。所有生成的 PR 标题必须以 `[Klaud Cold] ` 开头，后接英文 / 简体中文描述。不得在 GitHub 上 @提及用户/团队，也不得请求 review/re-review；这些操作由自动流程处理。它在认领分支前立即重新检查开放 PR，因为检查只是快照，不能锁住后来创建的人工 PR。有歧义、已退役或已经更新的候选直接停止，不运行扫描。提交、推送、调度、监控、诊断、修复及双语 PR 更新都由同一会话完成。
 
-提示词要求 Klaud Cold 通过 `main` 上现有的 `e2e-tests.yml` 仅测量更新后的镜像及其修复尝试，将实际测量提交的 SHA 传入 `inputs.ref`，将完整配置族的 `test-config` 命令传入 `generate-cli-command`。它读取当前 `configs/*-master.yaml`、`configs/runners.yaml` 并使用现有矩阵生成器 CLI，不再维护另一份 recipe 目录。保留默认 eval、所有配置测试点、物理 `nodes:N` 标签、MTP chat template 和产物约定。定向修复尝试不添加 sweep 标签。定向尝试通过后，Klaud 会在 `perf-changelog.yaml` 物理末尾追加包含 PR URL 的必要条目，保留此前所有字节，并将 `full-sweep-enabled` 作为唯一与 sweep 相关的标签。它会等待针对该 PR 精确 head 的 `run-sweep.yml` 成功结束；这次最终 PR sweep 会产出可用于 staging 和复用的产物。Klaud 不会自行 staging、授权复用、请求 review 或合并。如果完整 sweep 暴露候选问题，它会在剩余修复预算内修复并重复最终 sweep。
+提示词要求 Klaud Cold 通过 `main` 上现有的 `e2e-tests.yml` 仅测量更新后的镜像及其修复尝试，将实际测量提交的 SHA 传入 `inputs.ref`，将完整配置族的 `test-config` 命令传入 `generate-cli-command`。它读取当前 `configs/*-master.yaml`、`configs/runners.yaml` 并使用现有矩阵生成器 CLI，不再维护另一份 recipe 目录。保留默认 eval、所有配置测试点、物理 `nodes:N` 标签、MTP chat template 和产物约定。定向修复尝试不添加 sweep 标签，并保持 PR 为草稿。定向尝试通过后，Klaud 会在 `perf-changelog.yaml` 物理末尾追加包含 PR URL 的必要条目，保留此前所有字节，将 PR 标记为 ready 但不请求 review，并将 `full-sweep-enabled` 作为唯一与 sweep 相关的标签。它会等待针对该 PR 精确 head 的 `run-sweep.yml` 成功结束并产生可复用产物。如果最终 sweep 失败，Klaud 会在任何修复推送之前移除该标签并将 PR 改回草稿，再在剩余修复预算内修复并重复。Klaud 不会自行 staging、授权复用、请求 review 或合并。
 
 每次调度前，使用 `check-capacity --cluster ID` 检查精确目标；通过重复 `--cluster` 指定每个可能的目标。退出状态 0 要求全部目标均通过新鲜度、可用性和低于 20% 利用率检查。如果因容量而停止，Klaud 会取消并确认其所属运行已经结束、关闭已有草稿 PR，并删除远程 Klaud 分支，使后续扫描可以重试该候选。它不会等待恢复、承诺自动继续或创建占位 PR。命令不打印容量详情。
 
@@ -51,7 +51,7 @@ Klaud Cold 调度 `e2e-tests.yml` 时显式设置布尔输入 `klaud-run: true`�
 
 调度运行或创建草稿不代表任务完成。使用 `gh run watch --interval 60` 留在同一会话中等待，工具超时后继续等待，并检查作业级状态，因为 queued 工作流可能包含正在运行的作业。benchmark 矩阵失败后，eval 作业仍可能继续。定位首个服务端错误而非清理阶段症状；在原有范围、预算和容量规则内修复。工具调用被拒绝时改用允许的工具或命令，不得提前报告成功。先将所有尝试的最终结果写入 PR 表格，再报告停止原因、修复次数、已确认的子运行结束状态和 PR URL。不得承诺稍后继续监控，也不得仅为结束会话而取消正常运行。
 
-[Claude Code Stop hook](https://code.claude.com/docs/en/hooks#stop) 运行 `python -m utils.klaude check-stop`，读取候选准备时间之后 `e2e-tests.yml` 手动调度的全部分页，并匹配 `e2e Test - $KLAUDE_TEST_NAME`。每次尝试必须使用固定标识 `klaud-<parent-run-id>-<candidate-id>`。匹配到未结束的运行，或列表不可用/不完整时，阻止正常停止并要求同一 agent 继续。其他候选的运行不受影响；没有所属运行或全部结束时允许停止。hook 不调度、不取消、不修复，也不调用模型。GitHub 作业时限、Claude 内置 Stop-hook 循环上限、API 错误、中断或异常终止仍可能导致任务未完成；它不是外部监督服务。不增加自定义超时或继续执行预算。
+[Claude Code Stop hook](https://code.claude.com/docs/en/hooks#stop) 运行 `python -m utils.klaude check-stop`，读取候选准备时间之后 `e2e-tests.yml` 手动调度的全部分页，并匹配 `e2e Test - $KLAUDE_TEST_NAME`。每次尝试必须使用固定标识 `klaud-<parent-run-id>-<candidate-id>`。匹配到未结束的运行，或列表不可用/不完整时，阻止正常停止并要求同一 agent 继续。候选的开放 PR 添加 `full-sweep-enabled` 后，hook 还会按候选分支和精确 head SHA 跟踪 `run-sweep.yml`。PR 仍为草稿、精确运行不存在或未结束、运行失败，或成功运行缺少可复用 benchmark/eval 产物时，都会阻止停止。其他候选的运行不受影响。hook 不调度、不取消、不修复，也不调用模型。GitHub 作业时限、Claude 内置 Stop-hook 循环上限、API 错误、中断或异常终止仍可能导致任务未完成；它不是外部监督服务。不增加自定义超时或继续执行预算。
 
 action 结束后，`diagnostics` 复用 planner 的脱敏逻辑，仅将 `candidate-diagnostics.json` 上传至 `klaude-candidate-<candidate-id>`。保留 action 结果、允许列表中的终止类型、布尔错误状态、数值型耗时/轮数/成本及固定权限拒绝类别。未知终止类型记为 `unknown`；执行文件缺失或不可读时记为不可用。排除原始消息、结果、命令、路径、错误文本、凭据和私有遥测。runner 仍可用时这些步骤通过 `always()` 执行，不更新 PR，也不恢复 Claude。planner 诊断同步增加相同终止字段。
 
@@ -88,7 +88,7 @@ action 结束后，`diagnostics` 复用 planner 的脱敏逻辑，仅将 `candid
 
 Klaud Cold 只应修改所选主配置族的镜像，以及它已经引用且未被其他配置族共享的 srt-slurm recipe YAML 镜像/后端兼容性设置。模型、精度、拓扑、推测解码、工作负载、命令、资源和 recipe 引用保持不变。`model.container` 及存在时的 `identity.container.image` 必须与主配置镜像一致。共享脚本、launcher、库、工作流/控制文件和无关配置族保持不变。固定镜像必须原样运行：禁止对推理引擎或 serving 技术栈打补丁、改写源码或容器文件、就地修改 site-packages、monkey-patch，以及覆盖安装 fork 或重新构建的 wheel。候选镜像若依赖其中任一操作，Klaud 会将其判定为不兼容。Klaud Cold 使用 **uv** 运行针对性检查；agent 之后没有独立补丁校验器。
 
-定向验证通过后，Klaud 会追加必要的 changelog 条目，同时保持历史字节不变。候选 PR 在最终 `full-sweep-enabled` 运行期间仍保持草稿。现有检查和人工审核仍然有效；没有授权自动 staging、复用、请求 review、合并或绕过规则。
+定向验证通过后，Klaud 会追加必要的 changelog 条目，同时保持历史字节不变。由于 `run-sweep.yml` 会跳过草稿 PR，Klaud 随后将候选标记为 ready，再添加 `full-sweep-enabled`。最终 sweep 失败时，先移除标签并将 PR 改回草稿，再开始修复。现有检查和人工审核仍然有效；没有授权自动 staging、复用、请求 review、合并或绕过规则。
 
 ## 工作流操作与凭据
 

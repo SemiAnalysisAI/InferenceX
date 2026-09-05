@@ -143,12 +143,12 @@ def execution_diagnostics(path: Path) -> dict:
 
 
 def check_stop() -> dict:
-    """Read-only Stop hook: keep the same agent alive while its e2e runs are unfinished."""
+    """Block while owned e2e work or a labeled final PR sweep is unfinished."""
     try:
+        repository = os.environ['GITHUB_REPOSITORY']
         query = urlencode({'event': 'workflow_dispatch', 'per_page': 100,
                            'created': '>=' + os.environ['KLAUDE_STARTED_AT']})
-        pages = github_read(os.environ['GITHUB_REPOSITORY'],
-                            'actions/workflows/e2e-tests.yml/runs?' + query, paginate=True)
+        pages = github_read(repository, 'actions/workflows/e2e-tests.yml/runs?' + query, paginate=True)
         if not isinstance(pages, list) or not pages:
             raise ValueError('Missing run listing')
         runs = [run for page in pages for run in page['workflow_runs']]
@@ -157,10 +157,48 @@ def check_stop() -> dict:
         title = 'e2e Test - ' + os.environ['KLAUDE_TEST_NAME']
         active = [run for run in runs if run['display_title'] == title
                   and (run['status'] != 'completed' or not run.get('conclusion'))]
+        if active:
+            return {'decision': 'block', 'reason': 'Your e2e runs are still queued or running. Continue watching their jobs, inspect results, repair within budget and update the PR table. Do not end with a promise to monitor later or cancel healthy work just to stop. For a valid stop condition, cancel only your unfinished runs and confirm completion.'}
+
+        branch = os.environ['KLAUDE_BRANCH']
+        owner = repository.split('/', 1)[0]
+        query = urlencode({'state': 'open', 'head': owner + ':' + branch, 'per_page': 100})
+        pull_pages = github_read(repository, 'pulls?' + query, paginate=True)
+        pulls = [pull for page in pull_pages for pull in page]
+        if len(pulls) > 1:
+            raise ValueError('Multiple candidate pull requests')
+        if not pulls:
+            return {}
+        pull = pulls[0]
+        labels = {label['name'] for label in pull['labels']}
+        if 'full-sweep-enabled' not in labels:
+            return {}
+        if pull['draft']:
+            return {'decision': 'block', 'reason': 'The final full-sweep label is on a draft PR, so run-sweep jobs are skipped. Mark it ready with gh pr ready, then continue monitoring without requesting review.'}
+
+        query = urlencode({'event': 'pull_request', 'branch': branch, 'per_page': 100,
+                           'created': '>=' + os.environ['KLAUDE_STARTED_AT']})
+        sweep_pages = github_read(repository, 'actions/workflows/run-sweep.yml/runs?' + query, paginate=True)
+        sweep_runs = [run for page in sweep_pages for run in page['workflow_runs']]
+        if any(page['total_count'] > len(sweep_runs) for page in sweep_pages):
+            raise ValueError('Incomplete sweep run listing')
+        exact_runs = [run for run in sweep_runs if run['head_sha'] == pull['head']['sha']]
+        if not exact_runs:
+            return {'decision': 'block', 'reason': 'No final run-sweep.yml run exists for the exact PR head. Keep full-sweep-enabled applied and wait for the labeled run to appear.'}
+        sweep = max(exact_runs, key=lambda run: run['created_at'])
+        if sweep['status'] != 'completed' or not sweep.get('conclusion'):
+            return {'decision': 'block', 'reason': 'The final run-sweep.yml run is still queued or running. Continue monitoring every job and do not stop before it is terminal.'}
+        if sweep['conclusion'] != 'success':
+            return {'decision': 'block', 'reason': 'The final run-sweep.yml run did not succeed. Remove full-sweep-enabled and return the PR to draft before any repair push, then diagnose, repair within budget and repeat final validation.'}
+        artifact_pages = github_read(repository, f'actions/runs/{sweep["id"]}/artifacts?per_page=100', paginate=True)
+        artifacts = [artifact for page in artifact_pages for artifact in page['artifacts']]
+        if any(page['total_count'] > len(artifacts) for page in artifact_pages):
+            raise ValueError('Incomplete artifact listing')
+        reusable = ('results_bmk', 'eval_results_all', 'bmk_agentic_')
+        if not any(not artifact['expired'] and artifact['name'].startswith(reusable) for artifact in artifacts):
+            return {'decision': 'block', 'reason': 'The successful final sweep has no reusable benchmark or eval artifacts. Inspect the run before stopping.'}
     except (KeyError, TypeError, ValueError, subprocess.SubprocessError, OSError):
-        return {'decision': 'block', 'reason': 'Cannot verify owned e2e runs. Inspect GitHub, resolve the read failure and finish monitoring/reporting before stopping. Do not dispatch replacements.'}
-    if active:
-        return {'decision': 'block', 'reason': 'Your e2e runs are still queued or running. Continue watching their jobs, inspect results, repair within budget and update the PR table. Do not end with a promise to monitor later or cancel healthy work just to stop. For a valid stop condition, cancel only your unfinished runs and confirm completion.'}
+        return {'decision': 'block', 'reason': 'Cannot verify owned e2e or final-sweep state. Inspect GitHub, resolve the read failure and finish monitoring/reporting before stopping. Do not dispatch replacements.'}
     return {}
 
 
@@ -237,7 +275,7 @@ def main() -> int:
     selection.add_argument('--execution-file', type=Path, help='Claude execution log; retain numeric metrics and fixed denial categories')
     capacity = commands.add_parser('check-capacity', help='Exit 0 with available nodes below 20%% utilization; otherwise nonzero, without printing telemetry')
     capacity.add_argument('--cluster', required=True, action='append', help='Exact telemetry cluster; repeat for every possible recipe target')
-    commands.add_parser('check-stop', help='Claude Stop hook: block completion while this candidate has unfinished e2e runs')
+    commands.add_parser('check-stop', help='Claude Stop hook: block completion during owned e2e or labeled final-sweep work')
     diagnostics = commands.add_parser('diagnostics', help='Save sanitized Claude termination metrics and permission categories')
     diagnostics.add_argument('--execution-file', type=Path, required=True)
     diagnostics.add_argument('--output', type=Path, required=True)

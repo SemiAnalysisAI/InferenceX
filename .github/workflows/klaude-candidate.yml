@@ -25,6 +25,7 @@ jobs:
     env:
       # Repair attempts after the initial update; the baseline is already published.
       MAX_REPAIRS: '3'
+      KLAUDE_BRANCH: klaude/auto-${{ inputs.candidate }}
       KLAUDE_TEST_NAME: klaud-${{ github.run_id }}-${{ inputs.candidate }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -102,8 +103,9 @@ jobs:
             The pinned image must run as shipped: no engine/serving-stack patches, source or
             container-file rewrites, site-packages edits, monkey-patching, or forked/rebuilt engine wheels.
             If one is required, reject the image as incompatible.
-            Keep the PR draft. After a targeted attempt passes, append one valid perf-changelog.yaml
-            entry at the physical tail with the PR URL; preserve all prior bytes and validate it.
+            Keep the PR draft through targeted attempts. After one passes, append one valid
+            perf-changelog.yaml entry at the physical tail with the PR URL; preserve all prior
+            bytes and validate it.
 
             Use uv and applicable InferenceX checks. Check every exact telemetry cluster from the
             current recipe/runner configuration with repeated --cluster arguments:
@@ -147,10 +149,11 @@ jobs:
             healthy work merely to finish the session. The read-only Stop hook checks owned run status;
             it does not handle repairs or reporting for you. Do not disable it or alter its run marker.
 
-            After a targeted attempt succeeds, commit/push the changelog entry and apply
-            full-sweep-enabled as the sole sweep-related label. Wait for its run-sweep.yml run
-            on the exact PR head to finish successfully;
-            this reusable PR sweep is the final validation. If it exposes a candidate failure, repair within
+            After a targeted attempt succeeds, commit/push the changelog entry, mark the PR ready
+            with gh pr ready (this does not request review), and apply full-sweep-enabled as the sole
+            sweep-related label. Wait for its run-sweep.yml run on the exact PR head to finish
+            successfully with reusable artifacts; this is the final validation. If it fails, remove
+            full-sweep-enabled and return the PR to draft before any repair push, then repair within
             the remaining budget and repeat. Do not stage results, post /reuse-sweep-run, request review or merge.
 
             PR and final report: English/Simplified Chinese Markdown table, one row for the baseline
