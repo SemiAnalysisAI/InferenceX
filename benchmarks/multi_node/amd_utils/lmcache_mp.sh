@@ -18,7 +18,7 @@ lmcache_mp_install_native_deps() {
 }
 
 lmcache_mp_install() {
-    local version="${LMCACHE_VERSION:-0.5.5.dev101+rocm7.2}"
+    local version="${LMCACHE_VERSION:-0.5.5.dev104+rocm7.2}"
     local index="${LMCACHE_ROCM_INDEX:-https://github.com/LMCache/LMCache/releases/expanded_assets/nightly-rocm}"
     lmcache_mp_install_native_deps || return 1
 
@@ -89,9 +89,11 @@ lmcache_mp_set_server_defaults() {
     # because it is a valid multiple of every 1536-token hybrid KV group.
     LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-12288}"
     LMCACHE_L1_INIT_SIZE_GB="${LMCACHE_L1_INIT_SIZE_GB:-10}"
+    LMCACHE_L1_READ_TTL_SECONDS="${LMCACHE_L1_READ_TTL_SECONDS:-1800}"
     LMCACHE_MAX_CPU_WORKERS="${LMCACHE_MAX_CPU_WORKERS:-8}"
     LMCACHE_MAX_GPU_WORKERS="${LMCACHE_MAX_GPU_WORKERS:-1}"
     export LMCACHE_HOST LMCACHE_PORT LMCACHE_HTTP_PORT
+    export LMCACHE_L1_READ_TTL_SECONDS
 }
 
 lmcache_mp_server_args() {
@@ -105,6 +107,7 @@ lmcache_mp_server_args() {
         --http-port "$LMCACHE_HTTP_PORT" \
         --l1-size-gb "$LMCACHE_L1_SIZE_GB" \
         --l1-init-size-gb "$LMCACHE_L1_INIT_SIZE_GB" \
+        --l1-read-ttl-seconds "$LMCACHE_L1_READ_TTL_SECONDS" \
         --chunk-size "$LMCACHE_CHUNK_SIZE" \
         --separate-object-groups \
         --max-cpu-workers "$LMCACHE_MAX_CPU_WORKERS" \

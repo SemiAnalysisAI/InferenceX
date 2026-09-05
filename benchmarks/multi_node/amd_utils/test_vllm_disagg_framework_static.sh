@@ -33,6 +33,8 @@ assert paths == [
     "distributed/kv_transfer/kv_connector/v1/moriio/moriio_connector.py",
     "distributed/kv_transfer/kv_connector/v1/moriio/moriio_engine.py",
     "distributed/kv_transfer/kv_connector/v1/moriio/moriio_layout.py",
+    "v1/core/kv_cache_manager.py",
+    "v1/core/sched/scheduler.py",
     "model_executor/layers/mamba/gdn/kimi_gdn_linear_attn.py",
     "model_executor/models/qwen3_dflash.py",
 ]
@@ -40,6 +42,7 @@ assert "os.walk(" not in text
 assert "VLLM_K3_FORK_SHA" in text
 assert "from vllm.distributed.kv_transfer.kv_connector.v1.multi_connector import MultiConnector" in text
 assert "MoRIIOConnector" in text
+assert "KVCacheManager.group_block_sizes" in text
 PY
 
 grep -q 'export SERVER_FLUSH_URLS_CSV' "$HERE/server_vllm.sh"

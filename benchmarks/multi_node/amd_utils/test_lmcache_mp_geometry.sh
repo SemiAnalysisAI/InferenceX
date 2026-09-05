@@ -20,7 +20,8 @@ for expected in \
     " --max-gpu-workers 1 " \
     " --eviction-policy LRU " \
     " --supported-transfer-mode lmcache_driven " \
-    " --l1-init-size-gb 10 "
+    " --l1-init-size-gb 10 " \
+    " --l1-read-ttl-seconds 1800 "
 do
     [[ "$cmd" == *"$expected"* ]] || {
         echo "missing LMCache command fragment: $expected" >&2
@@ -38,6 +39,7 @@ DRY_RUN=1 lmcache_mp_start "$tmpdir" test-host >/dev/null
 [[ "$LMCACHE_HOST" == 127.0.0.1 ]]
 [[ "$LMCACHE_PORT" == 6555 ]]
 [[ "$LMCACHE_HTTP_PORT" == 8090 ]]
+[[ "$LMCACHE_L1_READ_TTL_SECONDS" == 1800 ]]
 
 J=$(lmcache_mp_connector_json)
 python3 - "$J" <<'PY'
@@ -52,7 +54,7 @@ assert cfg["kv_connector_extra_config"]["lmcache.mp.port"] == 6555
 assert cfg["kv_connector_extra_config"]["lmcache.mp.mq_timeout"] == 6000.0
 PY
 
-grep -q 'LMCACHE_VERSION:-0.5.5.dev101+rocm7.2' "$HERE/lmcache_mp.sh"
+grep -q 'LMCACHE_VERSION:-0.5.5.dev104+rocm7.2' "$HERE/lmcache_mp.sh"
 grep -q 'releases/expanded_assets/nightly-rocm' "$HERE/lmcache_mp.sh"
 grep -q -- 'pip install --quiet --no-cache-dir --no-deps' "$HERE/lmcache_mp.sh"
 ! grep -Eq 'LMCACHE_GIT_REF|git clone|pip install -e' "$HERE/lmcache_mp.sh"

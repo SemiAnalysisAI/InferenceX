@@ -19,7 +19,7 @@ models_path = Path(sys.argv[2])
 recipe = config["kimik3-fp4-mi355x-vllm-disagg-agentic"]
 point = recipe["scenarios"]["agentic-coding"][0]
 arm = point["search-space"][0]
-arm_2p1d = point["search-space"][1]
+assert len(point["search-space"]) == 1
 assert recipe["image"] == (
     "vllm/vllm-openai-rocm:nightly@"
     "sha256:91e381f072d6a44e1e4c97c82dce06e50e5189905cb3999a11471c5a8fc6a563"
@@ -32,27 +32,56 @@ assert arm["decode"]["tp"] == 8
 assert arm["decode"]["dcp-size"] == 8
 assert point["dram-utilization"] == 0.60
 assert arm["spec-decoding"] == "none"
-assert arm["conc-list"] == [1, 40]
+assert arm["conc-list"] == [1, 40, 48, 70]
 assert arm["kv-offloading"] == "dram"
 assert arm["kv-offload-backend"]["name"] == "lmcache-k3"
-assert arm["kv-offload-backend"]["version"] == "0.5.5.dev101+rocm7.2"
-assert arm_2p1d["prefill"]["num-worker"] == 2
-assert arm_2p1d["prefill"]["dcp-size"] == 8
-assert arm_2p1d["decode"]["num-worker"] == 1
-assert arm_2p1d["decode"]["dcp-size"] == 8
-assert arm_2p1d["conc-list"] == [70]
+assert arm["kv-offload-backend"]["version"] == "0.5.5.dev104+rocm7.2"
 settings = arm["prefill"]["additional-settings"] + arm["decode"]["additional-settings"]
 assert "DECODE_CP_KV_CACHE_INTERLEAVE_SIZE=1536" in settings
 assert "PREFILL_CP_KV_CACHE_INTERLEAVE_SIZE=1536" in settings
 assert "TOTAL_CPU_DRAM_GB=1799" in settings
 assert "LMCACHE_CHUNK_SIZE=12288" in settings
 assert "LMCACHE_L1_SIZE_GB=1799" in settings
+assert "LMCACHE_L1_READ_TTL_SECONDS=1800" in settings
 assert "LMCACHE_MAX_GPU_WORKERS=8" in settings
 assert "GPU_MEMORY_UTILIZATION=0.88" in settings
 assert "SERVER_UP_TIMEOUT=900" in settings
-assert "VLLM_K3_FORK_REF=moriio-k3" in settings
-assert any(item.startswith("VLLM_K3_FORK_SHA=0501bd850") for item in settings)
+assert "VLLM_K3_FORK_REF=k3-pd-recovery-integration" in settings
+assert any(item.startswith("VLLM_K3_FORK_SHA=710a6cbef") for item in settings)
 assert "mooncake" not in repr(recipe).lower()
+
+scale_recipe = config["kimik3-fp4-mi355x-vllm-disagg-agentic-decode-scale"]
+scale_arms = scale_recipe["scenarios"]["agentic-coding"][0]["search-space"]
+assert len(scale_arms) == 2
+for scale_arm, num_decode_workers, concurrencies in zip(
+    scale_arms, (2, 3), ([40, 48, 70], [40]), strict=True
+):
+    assert scale_arm["conc-list"] == concurrencies
+    assert scale_arm["spec-decoding"] == "none"
+    assert scale_arm["prefill"]["num-worker"] == 1
+    assert scale_arm["prefill"]["dcp-size"] == 8
+    assert scale_arm["decode"]["num-worker"] == num_decode_workers
+    assert scale_arm["decode"]["dcp-size"] == 8
+    assert f"PREFILL_NODES=1" in scale_arm["prefill"]["additional-settings"]
+    assert (
+        f"DECODE_NODES={num_decode_workers}"
+        in scale_arm["decode"]["additional-settings"]
+    )
+    assert "LMCACHE_ON_DECODE=true" not in repr(scale_arm)
+    scale_settings = (
+        scale_arm["prefill"]["additional-settings"]
+        + scale_arm["decode"]["additional-settings"]
+    )
+    assert "VLLM_K3_FORK_REF=k3-pd-recovery-integration" in scale_settings
+    assert any(
+        item.startswith("VLLM_K3_FORK_SHA=710a6cbef") for item in scale_settings
+    )
+    assert "LMCACHE_L1_READ_TTL_SECONDS=1800" in scale_settings
+    assert scale_arm["kv-offload-backend"] == {
+        "name": "lmcache-k3",
+        "version": "0.5.5.dev104+rocm7.2",
+    }
+assert "mooncake" not in repr(scale_recipe).lower()
 
 k3 = models["Kimi-K3"]
 env = k3["env"]
@@ -69,6 +98,7 @@ server_vllm = models_path.with_name("server_vllm.sh").read_text(encoding="utf-8-
 job_slurm = models_path.with_name("job.slurm").read_text(encoding="utf-8-sig")
 assert "apply_vllm_gpu_memory_utilization" in server_vllm
 assert "-e GPU_MEMORY_UTILIZATION=" in job_slurm
+assert "-e LMCACHE_L1_READ_TTL_SECONDS=" in job_slurm
 
 flags = k3["prefill_flags"]
 for expected in (

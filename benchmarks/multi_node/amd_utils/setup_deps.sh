@@ -179,6 +179,8 @@ files = [
     "distributed/kv_transfer/kv_connector/v1/moriio/moriio_connector.py",
     "distributed/kv_transfer/kv_connector/v1/moriio/moriio_engine.py",
     "distributed/kv_transfer/kv_connector/v1/moriio/moriio_layout.py",
+    "v1/core/kv_cache_manager.py",
+    "v1/core/sched/scheduler.py",
     "model_executor/layers/mamba/gdn/kimi_gdn_linear_attn.py",
     "model_executor/models/qwen3_dflash.py",
 ]
@@ -192,7 +194,7 @@ for rel in files:
 print(f"[SETUP] overlaid {len(files)} allowlisted Python files -> {dstroot}")
 PY
 
-    python3 -c "import vllm; from vllm.distributed.kv_transfer.kv_connector.v1.multi_connector import MultiConnector; from vllm.distributed.kv_transfer.kv_connector.v1.moriio.moriio_connector import MoRIIOConnector; print('[SETUP] vLLM fork overlay import OK', vllm.__file__, MultiConnector, MoRIIOConnector)" \
+    python3 -c "import vllm; from vllm.distributed.kv_transfer.kv_connector.v1.multi_connector import MultiConnector; from vllm.distributed.kv_transfer.kv_connector.v1.moriio.moriio_connector import MoRIIOConnector; from vllm.v1.core.kv_cache_manager import KVCacheManager; assert isinstance(KVCacheManager.group_block_sizes, property); print('[SETUP] vLLM fork overlay import OK', vllm.__file__, MultiConnector, MoRIIOConnector, 'hybrid-load-recovery')" \
         || { echo "[SETUP] ERROR: vLLM import failed after fork overlay"; exit 1; }
 
     touch "$marker"
