@@ -50,7 +50,7 @@ def plan(root: Path, directory: Path) -> None:
     repository = os.environ['GITHUB_REPOSITORY']
     items, issues = fetch_catalog(policy)
     if issues:
-        raise ValueError('Public image/release feed is unavailable or stale')
+        raise ReadError('public-feed-invalid: ' + ', '.join(issues))
     refs = github_read(repository, 'git/matching-refs/heads/klaude/auto-', paginate=True)
     occupied = {ref['ref'].removeprefix('refs/heads/') for page in refs for ref in page}
     pulls = github_read(repository, 'pulls?state=open&per_page=100', paginate=True)
@@ -260,7 +260,14 @@ def main() -> int:
             select(args.directory, args.max_candidates_per_run, args.execution_file)
             return 0
         return 0 if set(args.cluster) <= fetch_capacity(Policy()) else 1
-    except ReadError:
+    except ReadError as error:
+        if args.command == 'plan':
+            # ReadError contains fixed codes only, never response bodies or credentials.
+            message = f'Klaud Cold preparation failed: {error}'
+            print(f'::error::{message}')
+            if filename := os.environ.get('GITHUB_STEP_SUMMARY'):
+                with open(filename, 'a') as output:
+                    output.write(message + '\n')
         return 1
 
 
