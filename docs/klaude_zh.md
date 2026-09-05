@@ -16,6 +16,7 @@ PR 检查使用 `claude-opus-5`（Opus 5），关闭 fast mode（`fastMode: fals
 
 - 公开读取使用 `/api/v1/latest-images` 和 `/api/v1/framework-releases`。候选身份和版本键直接来自响应。版本不匹配和不稳定镜像仅作为检查线索，兼容的新镜像由 Klaud Cold 核实。
 - 私有读取仅使用 `/api/status/clusters`。要求 schema-v6 响应有效且新鲜、API 对集群判定为 `stale: false`、观测与接收时间戳有效且顺序正确、状态为 operational 或 degraded，并且至少有一个空闲节点。集群数据的过期阈值由 API 配置决定；Klaud 的 120 秒限制只用于响应获取/生成时间，不用于集群观测时间。排队任务、调度器预留和优先级覆盖不会改变低于 20% 的利用率规则。
+- 公开 API/CDN 负责 HTTP 缓存的新鲜度；Klaud 校验响应内容和本地获取时间。准备失败时，Actions 日志和摘要会报告具体错误码。
 - `plan` 将公开硬件类别与符合容量条件的遥测集群求交集，按公开候选身份去重，跳过已知 Klaud 分支/PR，再将不同候选随机打乱一次。每个准备好的候选都有机会，无需重复抽取。它通过分页获取匹配的分支和全部开放 PR，包括草稿和任意名称的分支。它一次性预取变更文件路径供检查使用。读取失败或达到 GitHub 的 3,000 个文件上限时，列表保持不完整，交由 Claude 进一步调查；重命名文件同时包含原路径。仓库身份来自 `GITHUB_REPOSITORY`。
 - Claude 根据 runner 和现有配置，对照私有 `capacity.json` 中的路由线索，解析当前配置族及其**全部实际目标集群**。每个目标都必须符合条件；同类硬件的健康兄弟集群不能替代另一个集群。无法证实映射或目标不可用时标记为 `uncertain`，并按随机顺序继续检查，直到补足名额。路由解释仍由 agent 负责，不新增 Python recipe/别名目录。Claude 还会检查开放 PR 的变更文件，再按需阅读正文和 diff。已有镜像更新或重叠的兼容性修改会阻止候选，即使目标镜像 tag 不同；仅涉及相同硬件的无关工作不算重复。结构化决策包含 `candidate-id`、`decision`（`proceed`、`duplicate` 或 `uncertain`）、`family`、精确的 `telemetry-clusters`、重叠 PR 编号列表 `pull-requests` 和不含私有资格数据的简短 `reason`。
 - `select` 仅接受通过校验的 `proceed` 决策，刷新私有容量数据，要求检查结果中的每个目标仍符合条件，按解析后的配置族去重，再按随机顺序应用总数量上限。`capacity-deferred-candidates` 记录最终容量检查未通过的候选。某个配置族被标记为重复或不确定时，即使另一条观测允许继续，也会排除整个配置族。缺失或未检查的候选延后。检查 action 失败、输出格式错误、未知/重复 ID 或容量 API 不可用会让本次选择延后，绝不绕过重叠检查。候选失去容量资格后，可由后续已检查且仍符合条件的配置族补位。
