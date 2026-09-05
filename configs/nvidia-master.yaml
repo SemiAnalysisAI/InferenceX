@@ -1489,7 +1489,7 @@ kimik3-fp4-b300-vllm-agentic-dspark:
   image: vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-5894fdf
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
-  runner: cluster:b300-nv
+  runner: cluster:b300-dsxe
   precision: fp4
   framework: vllm
   multinode: false
@@ -1502,9 +1502,9 @@ kimik3-fp4-b300-vllm-agentic-dspark:
       search-space:
       # TP8-only: a ~1.5 TB MXFP4 checkpoint does not fit below 8 GPUs.
       # One entry for every arm: the recipe drafts at DSpark 7 up to conc 8,
-      # DSpark 3 at conc 16, and not at all above. Keep the concurrencies
+      # DSpark 3 at conc 10-16, and not at all above. Keep the concurrencies
       # disjoint across arms so exp-names stay unique.
-      - { tp: 8, ep: 1, dcp-size: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 70] }
+      - { tp: 8, ep: 1, dcp-size: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [1, 2, 4, 8, 10, 12, 14, 16, 24, 32, 40, 48, 56, 70] }
 
 dsr1-fp8-b200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14

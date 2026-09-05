@@ -5,7 +5,7 @@ set -x
 # Agentic trace replay for Kimi-K3 (MXFP4) on B300: TP8 x DCP8, TokenspeedMLA,
 # Mooncake as the external KV tier. Concurrency selects the arm:
 #   conc <= 8   DSpark level 7, golden AL 3.84
-#   conc 16     DSpark level 3, golden AL 3.00
+#   conc 10-16  DSpark level 3, golden AL 3.00
 #   conc >  16  no drafting
 # Keep the arms disjoint in concurrency: exp-name carries conc and spec but not
 # the arm, so a shared concurrency would collide.
