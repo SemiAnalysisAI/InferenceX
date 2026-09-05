@@ -219,6 +219,15 @@ as occupied. When capacity is the stop reason, cancel and confirm owned runs,
 close the draft PR, and delete its remote Klaud branch so a later sweep can
 select the candidate again. Closing the PR alone does not make it eligible.
 
+### 7.3 Final reusable sweeps require a ready PR
+
+`run-sweep.yml` skips PR jobs while the PR is a draft. After targeted validation,
+append the changelog entry, mark the PR ready, then apply `full-sweep-enabled`.
+If that sweep fails, remove the label and return the PR to draft before pushing
+a repair, or each intermediate push starts another full sweep. The Klaud Stop
+hook tracks a labeled final sweep by candidate branch and exact head SHA and
+requires a successful run with reusable artifacts.
+
 ---
 
 ## 8. gh CLI gotchas
