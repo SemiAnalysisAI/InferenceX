@@ -8,11 +8,13 @@ python3 - "$ROOT/configs/amd-master.yaml" "$HERE/models_vllm.yaml" <<'PY'
 import json
 import re
 import sys
+from pathlib import Path
 
 import yaml
 
 config = yaml.safe_load(open(sys.argv[1], encoding="utf-8"))
 models = yaml.safe_load(open(sys.argv[2], encoding="utf-8"))
+models_path = Path(sys.argv[2])
 
 recipe = config["kimik3-fp4-mi355x-vllm-disagg-agentic"]
 point = recipe["scenarios"]["agentic-coding"][0]
@@ -33,7 +35,7 @@ assert arm["spec-decoding"] == "none"
 assert arm["conc-list"] == [40]
 assert arm["kv-offloading"] == "dram"
 assert arm["kv-offload-backend"]["name"] == "lmcache-k3"
-assert arm["kv-offload-backend"]["version"].startswith("git-d131cecf")
+assert arm["kv-offload-backend"]["version"] == "0.5.5.dev94+rocm7.2"
 assert arm_2p1d["prefill"]["num-worker"] == 2
 assert arm_2p1d["prefill"]["dcp-size"] == 8
 assert arm_2p1d["decode"]["num-worker"] == 1
@@ -46,9 +48,10 @@ assert "TOTAL_CPU_DRAM_GB=1799" in settings
 assert "LMCACHE_CHUNK_SIZE=12288" in settings
 assert "LMCACHE_L1_SIZE_GB=1799" in settings
 assert "LMCACHE_MAX_GPU_WORKERS=8" in settings
+assert "GPU_MEMORY_UTILIZATION=0.88" in settings
 assert "SERVER_UP_TIMEOUT=900" in settings
 assert "VLLM_K3_FORK_REF=moriio-k3" in settings
-assert "VLLM_K3_FORK_SHA=e91a9cd3f" in settings
+assert any(item.startswith("VLLM_K3_FORK_SHA=0501bd850") for item in settings)
 assert "mooncake" not in repr(recipe).lower()
 
 k3 = models["Kimi-K3"]
@@ -61,6 +64,11 @@ assert "VLLM_USE_BREAKABLE_CUDAGRAPH=1" in k3["prefill_env"]
 assert "TORCH_NCCL_BLOCKING_WAIT=0" in k3["prefill_env"]
 assert "VLLM_USE_BREAKABLE_CUDAGRAPH=0" in k3["decode_env"]
 assert "TORCH_NCCL_BLOCKING_WAIT=0" in k3["decode_env"]
+
+server_vllm = models_path.with_name("server_vllm.sh").read_text(encoding="utf-8-sig")
+job_slurm = models_path.with_name("job.slurm").read_text(encoding="utf-8-sig")
+assert "apply_vllm_gpu_memory_utilization" in server_vllm
+assert "-e GPU_MEMORY_UTILIZATION=" in job_slurm
 
 flags = k3["prefill_flags"]
 for expected in (

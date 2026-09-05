@@ -18,30 +18,36 @@ lmcache_mp_install_native_deps() {
 }
 
 lmcache_mp_install() {
-    local ref="${LMCACHE_GIT_REF:-d131cecfbda1c73019c56bf5173c6110b6c01f35}"
-    local src="${LMCACHE_SRC:-/opt/lmcache-src}"
+    local version="${LMCACHE_VERSION:-0.5.5.dev94+rocm7.2}"
+    local index="${LMCACHE_ROCM_INDEX:-https://github.com/LMCache/LMCache/releases/expanded_assets/nightly-rocm}"
     lmcache_mp_install_native_deps || return 1
 
-    if [[ -d "$src/.git" ]] \
-       && [[ "$(git -C "$src" rev-parse HEAD 2>/dev/null)" == "$ref" ]] \
-       && python3 -c "from lmcache.integration.vllm.lmcache_mp_connector import LMCacheMPConnector" 2>/dev/null; then
+    local installed
+    installed=$(python3 -c \
+        'import importlib.metadata; print(importlib.metadata.version("lmcache"))' \
+        2>/dev/null || true)
+    if [[ "$installed" == "$version" ]] \
+       && python3 -c \
+          'from lmcache.integration.vllm.lmcache_mp_connector import LMCacheMPConnector' \
+          2>/dev/null; then
         return 0
     fi
 
-    rm -rf "$src"
-    git clone --filter=blob:none https://github.com/LMCache/LMCache.git "$src" || return 1
-    git -C "$src" checkout --detach "$ref" || return 1
-    (
-        cd "$src"
-        export BUILD_WITH_HIP=1
-        if command -v uv >/dev/null 2>&1; then
-            uv pip install --system -e . --no-build-isolation
-        else
-            python3 -m pip install -e . --no-build-isolation
-        fi
-    ) || return 1
+    # Match the reviewed SA LMCacheMP installation path. The older source pin
+    # predates vLLM's resolved KV-cache-layout API and returns kv_layout=none
+    # during K3 cache registration on the pinned vLLM nightly.
+    rm -rf "${LMCACHE_SRC:-/opt/lmcache-src}"
+    python3 -m pip install --quiet --no-cache-dir --no-deps \
+        sortedcontainers==2.4.0 \
+        opentelemetry-exporter-prometheus==0.61b0 \
+        cupy-rocm-7-0==14.1.1 \
+        "lmcache==$version" \
+        --find-links "$index" || return 1
 
-    if [[ "$(git -C "$src" rev-parse HEAD 2>/dev/null)" != "$ref" ]]; then
+    installed=$(python3 -c \
+        'import importlib.metadata; print(importlib.metadata.version("lmcache"))' \
+        2>/dev/null || true)
+    if [[ "$installed" != "$version" ]]; then
         return 1
     fi
     python3 -c \

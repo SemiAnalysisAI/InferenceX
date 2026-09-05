@@ -52,9 +52,9 @@ assert cfg["kv_connector_extra_config"]["lmcache.mp.port"] == 6555
 assert cfg["kv_connector_extra_config"]["lmcache.mp.mq_timeout"] == 6000.0
 PY
 
-grep -q 'LMCACHE_GIT_REF:-d131cecfbda1c73019c56bf5173c6110b6c01f35' "$HERE/lmcache_mp.sh"
-grep -q 'git clone --filter=blob:none https://github.com/LMCache/LMCache.git' "$HERE/lmcache_mp.sh"
-grep -q -- 'pip install -e . --no-build-isolation' "$HERE/lmcache_mp.sh"
-! grep -Eq 'nightly-rocm|LMCACHE_VERSION' "$HERE/lmcache_mp.sh"
+grep -q 'LMCACHE_VERSION:-0.5.5.dev94+rocm7.2' "$HERE/lmcache_mp.sh"
+grep -q 'releases/expanded_assets/nightly-rocm' "$HERE/lmcache_mp.sh"
+grep -q -- 'pip install --quiet --no-cache-dir --no-deps' "$HERE/lmcache_mp.sh"
+! grep -Eq 'LMCACHE_GIT_REF|git clone|pip install -e' "$HERE/lmcache_mp.sh"
 
 echo "LMCache command and sizing tests passed"

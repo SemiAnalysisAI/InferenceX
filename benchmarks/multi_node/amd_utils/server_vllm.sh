@@ -218,10 +218,25 @@ apply_vllm_dcp_config() {
     echo "$cfg"
 }
 
+apply_vllm_gpu_memory_utilization() {
+    local cfg="$1"
+    local utilization="${2:-}"
+
+    if [[ -z "$utilization" ]]; then
+        echo "$cfg"
+    elif echo "$cfg" | grep -q -- '--gpu-memory-utilization'; then
+        echo "$cfg" | sed -E "s/--gpu-memory-utilization[[:space:]]+[^[:space:]]+/--gpu-memory-utilization ${utilization}/g"
+    else
+        echo "$cfg --gpu-memory-utilization $utilization"
+    fi
+}
+
 PREFILL_SERVER_CONFIG="$(apply_vllm_dp_config "$PREFILL_SERVER_CONFIG" "${PREFILL_TP_SIZE}" "${PREFILL_ENABLE_DP:-false}")"
 DECODE_SERVER_CONFIG="$(apply_vllm_dp_config "$DECODE_SERVER_CONFIG" "${DECODE_TP_SIZE}" "${DECODE_ENABLE_DP:-false}")"
 PREFILL_SERVER_CONFIG="$(apply_vllm_dcp_config "$PREFILL_SERVER_CONFIG" "${PREFILL_DCP_SIZE:-1}" "${PREFILL_DCP_COMM:-a2a}" "${PREFILL_CP_KV_CACHE_INTERLEAVE_SIZE:-1}")"
 DECODE_SERVER_CONFIG="$(apply_vllm_dcp_config "$DECODE_SERVER_CONFIG" "${DECODE_DCP_SIZE:-1}" "${DECODE_DCP_COMM:-a2a}" "${DECODE_CP_KV_CACHE_INTERLEAVE_SIZE:-1}")"
+PREFILL_SERVER_CONFIG="$(apply_vllm_gpu_memory_utilization "$PREFILL_SERVER_CONFIG" "${GPU_MEMORY_UTILIZATION:-}")"
+DECODE_SERVER_CONFIG="$(apply_vllm_gpu_memory_utilization "$DECODE_SERVER_CONFIG" "${GPU_MEMORY_UTILIZATION:-}")"
 
 echo "PREFILL_SERVER_CONFIG (after TP/EP/DP): $PREFILL_SERVER_CONFIG"
 echo "DECODE_SERVER_CONFIG (after TP/EP/DP): $DECODE_SERVER_CONFIG"
