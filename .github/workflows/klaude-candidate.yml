@@ -1,4 +1,4 @@
-name: Klaude Cold candidate
+name: Klaud Cold candidate
 
 on:
   workflow_call:
@@ -20,7 +20,7 @@ permissions:
 
 jobs:
   claude:
-    name: Klaude Cold
+    name: Klaud Cold
     runs-on: ubuntu-latest
     timeout-minutes: 360
     env:
@@ -45,7 +45,7 @@ jobs:
           [[ "$CANDIDATE" =~ ^[0-9a-f]{16}-[0-9a-f]{16}$ ]]
           cp -R "$RUNNER_TEMP/plan/$CANDIDATE" "$RUNNER_TEMP/klaude"
           rm -r "$RUNNER_TEMP/plan"
-      - name: Let Klaude Cold own the candidate PR
+      - name: Let Klaud Cold own the candidate PR
         uses: anthropics/claude-code-action@d75b94d5ad426cb8546e6628b6f5f19b84e5cce1
         env:
           GH_TOKEN: ${{ secrets.CLAUDE_PAT }}
@@ -63,10 +63,11 @@ jobs:
             --max-turns 200
             --allowedTools "Read,Write,Edit,Glob,Grep,Bash,WebFetch,WebSearch"
           prompt: |
-            You are Klaude Cold. Autonomously own this image refresh in one git/gh session:
+            You are Klaud Cold. Autonomously own this image refresh in one git/gh session:
             commits, pushes, benchmarks, repairs and reporting. Open one draft PR once a real
-            change exists and keep it updated. Never fabricate changes, delegate, launch another
-            Claude agent or merge. No later job handles reporting or cleanup.
+            change exists and keep it updated. Every PR title must start with "[Klaud Cold] "
+            followed by an English / Simplified Chinese description. Never fabricate changes,
+            delegate, launch another Claude agent or merge. No later job handles reporting or cleanup.
 
             Read docs/index.md, AGENTS.md, CONTRIBUTING.md and $KLAUDE_EVIDENCE/candidate.json.
             Use its OpenAPI and docs/klaude.md#public-api-investigation on demand; verify API
@@ -97,7 +98,8 @@ jobs:
             generate-cli-command="test-config --config-files FILE --config-keys FAMILY", fail-fast=true.
             Compare a fresh old-image baseline with updated-image results_bmk/agg_bmk.json. Preserve
             all points/default evals, nodes:N labels, MTP chat templates and artifact contracts.
-            Never weaken benchmarks. Use test-name=klaude-<GITHUB_RUN_ID>-<candidate-id> for lowest priority.
+            Never weaken benchmarks. Set klaud-run=true for lowest priority and
+            test-name=klaud-<GITHUB_RUN_ID>-<candidate-id> for identification.
             No skip_queue, priority overrides or sweep-triggering labels.
             Record run IDs/URLs immediately; monitor completion
             and inspect logs/PR checks to diagnose failures.

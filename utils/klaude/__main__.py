@@ -1,8 +1,10 @@
-"""Select Klaude candidates or check capacity before a benchmark dispatch."""
+"""Select Klaud Cold candidates or check capacity before a benchmark dispatch."""
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import json
+import math
 import os
 from pathlib import Path
 import subprocess
@@ -45,7 +47,8 @@ def plan(root: Path, directory: Path) -> None:
     items, issues = fetch_catalog(policy)
     if issues:
         raise ValueError('Public image/release feed is unavailable or stale')
-    occupied = {ref['ref'].removeprefix('refs/heads/') for ref in github_read(repository, 'git/matching-refs/heads/klaude/auto-')}
+    refs = github_read(repository, 'git/matching-refs/heads/klaude/auto-', paginate=True)
+    occupied = {ref['ref'].removeprefix('refs/heads/') for page in refs for ref in page}
     pulls = github_read(repository, 'pulls?state=open&per_page=100', paginate=True)
     occupied.update(pr['head']['ref'] for page in pulls for pr in page)
     occupied.update(pr['head']['ref'].rsplit('-', 1)[0] + '-' for page in pulls for pr in page
@@ -59,6 +62,16 @@ def plan(root: Path, directory: Path) -> None:
     open_prs = [{'number': pr['number'], 'title': pr['title'], 'url': pr['html_url'],
                  'author': pr['user']['login'], 'draft': pr['draft'],
                  'branch': pr['head']['ref'], 'head': pr['head']['sha']} for page in pulls for pr in page]
+    if candidates:
+        for pr in open_prs:
+            try:
+                pages = github_read(repository, f'pulls/{pr["number"]}/files?per_page=100', paginate=True)
+            except (subprocess.SubprocessError, ValueError):
+                pr.update({'files': [], 'files-complete': False})
+                continue
+            pr['files'] = sorted({name for page in pages for file in page
+                                  for name in (file['filename'], file.get('previous_filename')) if name})
+            pr['files-complete'] = sum(len(page) for page in pages) < 3000
     directory.mkdir(parents=True, exist_ok=True)
     (directory / 'candidates.json').write_text(json.dumps(contexts, indent=2, allow_nan=False) + '\n')
     (directory / 'open-prs.json').write_text(json.dumps(open_prs, indent=2) + '\n')
@@ -68,13 +81,44 @@ def plan(root: Path, directory: Path) -> None:
             output.write(f'review_schema={json.dumps(PRReview.model_json_schema(by_alias=True))}\n')
 
 
-def select(directory: Path, max_candidates: int) -> None:
+def review_diagnostics(path: Path) -> dict:
+    try:
+        messages = json.loads(path.read_text())
+        if not isinstance(messages, list):
+            raise ValueError('Expected execution message list')
+    except (OSError, ValueError):
+        return {'execution-log': 'unavailable'}
+    result = next((message for message in reversed(messages)
+                   if isinstance(message, dict) and message.get('type') == 'result'), {})
+    metrics = {key: value for key in ('duration_ms', 'num_turns', 'total_cost_usd')
+               if (type(value := result.get(key)) is int or type(value) is float and math.isfinite(value)) and value >= 0}
+    denials = result.get('permission_denials', [])
+    if not isinstance(denials, list):
+        denials = []
+    tools = {'Read', 'Glob', 'Grep', 'Bash', 'WebFetch', 'WebSearch', 'Write', 'Edit', 'Agent', 'Task', 'StructuredOutput'}
+    denied_tools = Counter(denial['tool_name'] if isinstance(denial.get('tool_name'), str) and denial['tool_name'] in tools else 'other'
+                           for denial in denials if isinstance(denial, dict))
+    return {'execution-log': 'available', 'result-present': bool(result), **metrics,
+            'permission-denials': dict(denied_tools)}
+
+
+def select(directory: Path, max_candidates: int, execution_file: Path | None = None) -> None:
     contexts = json.loads((directory / 'candidates.json').read_text())
-    review = PRReview.model_validate_json(os.environ['KLAUDE_PR_REVIEW']) if contexts else PRReview(decisions=[])
-    known = {candidate['id'] for candidate in contexts}
+    review = PRReview(decisions=[])
+    deferred = None
+    if contexts:
+        if os.environ.get('KLAUDE_REVIEW_OUTCOME', 'success') != 'success':
+            deferred = 'review-action-failed'
+        else:
+            try:
+                review = PRReview.model_validate_json(os.environ.get('KLAUDE_PR_REVIEW', ''))
+                ids = [decision.candidate_id for decision in review.decisions]
+                if len(set(ids)) != len(ids) or not set(ids) <= {candidate['id'] for candidate in contexts}:
+                    raise ValueError('Duplicate or unknown candidate IDs')
+            except ValueError:
+                deferred = 'invalid-review-output'
+                review = PRReview(decisions=[])
     decisions = {decision.candidate_id: decision for decision in review.decisions}
-    if len(decisions) != len(review.decisions) or not decisions.keys() <= known:
-        raise ValueError('PR review contains duplicate or unknown candidate IDs')
     selected = []
     families = {decision.family for decision in review.decisions if decision.decision != 'proceed'}
     for candidate in contexts:
@@ -91,7 +135,16 @@ def select(directory: Path, max_candidates: int) -> None:
         (target / 'candidate.json').write_text(json.dumps(candidate, indent=2, allow_nan=False) + '\n')
     candidates = [candidate['id'] for candidate in selected]
     (directory / 'selection.json').write_text(json.dumps(
-        {'candidates': candidates, **review.model_dump(by_alias=True)}, indent=2) + '\n')
+        {'candidates': candidates, 'deferred-reason': deferred, **review.model_dump(by_alias=True)}, indent=2) + '\n')
+    if execution_file is not None:
+        (directory / 'review-diagnostics.json').write_text(json.dumps(review_diagnostics(execution_file), indent=2) + '\n')
+    summary = f'Klaud Cold: selected {len(candidates)} of {len(contexts)} eligible candidates.'
+    if deferred:
+        summary += f' PR review deferred: {deferred}; no candidates launched.'
+        print(f'::warning::{summary}')
+    if filename := os.environ.get('GITHUB_STEP_SUMMARY'):
+        with open(filename, 'a') as output:
+            output.write(summary + '\n\nSee selection.json and review-diagnostics.json in the klaude-plan artifact.\n')
     if filename := os.environ.get('GITHUB_OUTPUT'):
         with open(filename, 'a') as output:
             output.write(f'selected={str(bool(candidates)).lower()}\ncandidates={json.dumps(candidates)}\n')
@@ -106,6 +159,7 @@ def main() -> int:
     selection = commands.add_parser('select', help='Validate KLAUDE_PR_REVIEW and select nonoverlapping candidates')
     selection.add_argument('--directory', type=Path, required=True)
     selection.add_argument('--max-candidates-per-run', type=int, required=True, help='Maximum candidates to select (1-256)')
+    selection.add_argument('--execution-file', type=Path, help='Claude execution log; retain only numeric metrics and denied tool counts')
     capacity = commands.add_parser('check-capacity', help='Exit 0 below 20% node utilization; otherwise nonzero, without printing telemetry')
     capacity.add_argument('--cluster', required=True)
     args = parser.parse_args()
@@ -116,7 +170,7 @@ def main() -> int:
         if args.command == 'select':
             if not 1 <= args.max_candidates_per_run <= 256:
                 parser.error('--max-candidates-per-run must be between 1 and 256')
-            select(args.directory, args.max_candidates_per_run)
+            select(args.directory, args.max_candidates_per_run, args.execution_file)
             return 0
         return 0 if args.cluster in fetch_capacity(Policy()) else 1
     except ReadError:

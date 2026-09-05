@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import hashlib
 import json
+import math
 import os
 from typing import Any, Callable
 import urllib.error
@@ -21,7 +22,7 @@ ENDPOINTS = {
     "releases": PUBLIC + "/api/v1/framework-releases",
     "clusters": PRIVATE + "/api/status/clusters",
 }
-USER_AGENT = "InferenceX-Klaude-Agent/1.0"
+USER_AGENT = "InferenceX-Klaud-Cold/1.0"
 MAX_BYTES = 16 * 1024 * 1024
 
 
@@ -36,6 +37,13 @@ class NoRedirects(urllib.request.HTTPRedirectHandler):
 
 def reject_nonfinite(value: str):
     raise ReadError("invalid-json-number")
+
+
+def finite_float(value: str) -> float:
+    result = float(value)
+    if not math.isfinite(result):
+        raise ReadError("invalid-json-number")
+    return result
 
 
 def fetch(resource: str, *, token: str | None = None,
@@ -62,7 +70,7 @@ def fetch(resource: str, *, token: str | None = None,
             if "application/json" not in response.headers.get("Content-Type", "").lower():
                 raise ReadError("response-not-json")
             metadata = {key.lower(): response.headers[key] for key in ("Age", "Cache-Control", "Date", "ETag") if key in response.headers}
-        payload = json.loads(raw, parse_constant=reject_nonfinite)
+        payload = json.loads(raw, parse_constant=reject_nonfinite, parse_float=finite_float)
         if resource == "images" and not isinstance(payload, list):
             raise ReadError("invalid-images-payload")
         if resource == "releases" and (not isinstance(payload, dict) or any(

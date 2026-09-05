@@ -1,1 +1,1 @@
-"""Klaude auto-sweep. Importing this package performs no I/O."""
+"""Klaud auto-sweep. Importing this package performs no I/O."""
