@@ -8,7 +8,7 @@
 
 [`klaude-plan.yml`](../.github/workflows/klaude-plan.yml) prepares candidates with Python, uses a short read-only Claude review to exclude overlapping open PRs, then calls [`klaude-candidate.yml`](../.github/workflows/klaude-candidate.yml). One autonomous Klaud Cold session owns each selected candidate's branch, draft PR, benchmarks, repairs and reporting. Its action is the last step; there is no attempt workflow, Python execution controller or downstream reporting job.
 
-The PR review uses `claude-opus-5` (Opus 5), `fastMode: true`, and up to 200 turns. Candidate execution uses `claude-fable-5-1` (Fable 5.1) with fast mode disabled. The agent's display name is **Klaud Cold**; existing `klaude` workflow filenames, CLI, artifact, branch and secret identifiers remain compatible.
+The PR review uses `claude-opus-5` (Opus 5), `fastMode: false`, and up to 200 turns. Candidate execution uses `claude-fable-5-1` (Fable 5.1) with fast mode disabled. The agent's display name is **Klaud Cold**; existing `klaude` workflow filenames, CLI, artifact, branch and secret identifiers remain compatible.
 
 ## Selection
 

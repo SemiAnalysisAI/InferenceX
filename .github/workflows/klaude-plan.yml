@@ -57,7 +57,7 @@ jobs:
           github_token: ${{ github.token }}
           track_progress: false
           settings: |
-            {"fastMode": true}
+            {"fastMode": false}
           claude_args: >-
             --model 'claude-opus-5'
             --max-turns 200

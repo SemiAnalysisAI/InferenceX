@@ -8,7 +8,7 @@
 
 [`klaude-plan.yml`](../.github/workflows/klaude-plan.yml) 使用 Python 准备候选，通过简短的只读 Claude 检查排除与开放 PR 重复的工作，再调用 [`klaude-candidate.yml`](../.github/workflows/klaude-candidate.yml)。每个所选候选由一个自主运行的 Klaud Cold 会话负责分支、草稿 PR、benchmark、修复和报告。Claude action 是最后一步；没有 attempt 工作流、Python 执行控制器或后续报告作业。
 
-PR 检查使用 `claude-opus-5`（Opus 5），开启 `fastMode: true`，最多运行 200 轮。候选执行使用 `claude-fable-5-1`（Fable 5.1），关闭 fast mode。Agent 的显示名称为 **Klaud Cold**；现有 `klaude` 工作流文件名、CLI、产物、分支和 secret 标识保持兼容。
+PR 检查使用 `claude-opus-5`（Opus 5），关闭 fast mode（`fastMode: false`），最多运行 200 轮。候选执行使用 `claude-fable-5-1`（Fable 5.1），关闭 fast mode。Agent 的显示名称为 **Klaud Cold**；现有 `klaude` 工作流文件名、CLI、产物、分支和 secret 标识保持兼容。
 
 ## 候选选择
 
