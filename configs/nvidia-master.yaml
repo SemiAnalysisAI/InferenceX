@@ -3488,7 +3488,7 @@ dsr1-fp8-gb300-dynamo-trt:
           ep: 8
           dp-attn: true
 dsr1-fp8-h200-dynamo-sglang:
-  image: lmsysorg/sglang:v0.5.8.post1-cu130
+  image: lmsysorg/sglang:v0.5.18-cu130
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: cluster:h200-dgxc
