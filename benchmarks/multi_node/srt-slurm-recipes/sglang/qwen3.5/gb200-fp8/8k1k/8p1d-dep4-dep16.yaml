@@ -9,8 +9,11 @@ infra:
   etcd_nats_dedicated_node: true
 
 dynamo:
-  hash: 46520ca59afe992fb5ef61b3197b2316f8df9b2b
-  install: true
+  # lmsysorg/sglang:v0.5.19-cu130 bundles ai-dynamo 1.5.0.dev20260904, built after
+  # dynamo f3d0ed0f/b1c5147f followed SGLang's server_args_config_parser move (#36681).
+  # The previous source pin 46520ca5 (ai-dynamo 1.2.0) imports the removed module and
+  # cannot start on this image, so use the container's bundled Dynamo instead.
+  install: false
 
 frontend:
   type: dynamo
