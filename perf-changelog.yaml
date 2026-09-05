@@ -6922,3 +6922,11 @@
     - "Increase the DEP16 concurrency ladder from 320, 640, 960, and 1280 to 480, 960, 1440, and 1920 after profiling showed request-starved prefill workers at the lower values."
     - "Retain the independently tuned concurrency-1152 2P DEP8 prefill plus DEP12 decode efficiency point."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2623
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Remove the unstable concurrency-1152 2P DEP8 prefill plus DEP12 decode point after repeated benchmark failures."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2623

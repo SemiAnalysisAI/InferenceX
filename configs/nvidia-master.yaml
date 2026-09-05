@@ -8805,24 +8805,6 @@ dsv4-fp4-gb300-dynamo-sglang-agentic-disagg:
           ep: 16
           dp-attn: true
       - spec-decoding: draft_model
-        conc-list: [1152]
-        kv-offloading: dram
-        kv-offload-backend: { name: hicache }
-        prefill:
-          num-worker: 2
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.77"
-          - "CONFIG_FILE=recipes/sglang/deepseek-v4/agentic/disagg-gb300-2p1d-dep8-dep12-c1152-mtp-kvoffload.yaml"
-        decode:
-          num-worker: 1
-          tp: 12
-          ep: 12
-          dp-attn: true
-      - spec-decoding: draft_model
         conc-list: [1920]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
