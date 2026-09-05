@@ -1,4 +1,4 @@
-name: Klaude auto-sweep
+name: Klaud Cold auto-sweep
 
 on:
   workflow_dispatch:
@@ -46,6 +46,8 @@ jobs:
       - name: Check for overlapping open PRs
         id: review
         if: steps.prepare.outputs.has_candidates == 'true'
+        continue-on-error: true
+        timeout-minutes: 15
         uses: anthropics/claude-code-action@d75b94d5ad426cb8546e6628b6f5f19b84e5cce1
         env:
           GH_TOKEN: ${{ github.token }}
@@ -57,15 +59,18 @@ jobs:
           settings: |
             {"fastMode": false}
           claude_args: >-
-            --model 'claude-fable-5-1'
-            --max-turns 20
+            --model 'claude-opus-5'
+            --max-turns 200
+            --add-dir '${{ runner.temp }}/klaude'
             --allowedTools "Read,Glob,Grep,Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh api --method GET:*),Bash(git show:*),Bash(git diff:*)"
             --json-schema '${{ steps.prepare.outputs.review_schema }}'
           prompt: |
-            Review $KLAUDE_EVIDENCE/candidates.json in order against open-prs.json and current
-            repository recipes. Read docs/index.md and AGENTS.md. Use gh to inspect changed files
-            for ALL open PRs, including drafts and arbitrary authors/branches, then relevant bodies
-            and diffs. Titles alone cannot exclude overlap. Check pagination/truncation.
+            Read ${{ runner.temp }}/klaude/candidates.json and ${{ runner.temp }}/klaude/open-prs.json.
+            Review candidates in order against current recipes and the complete open-PR index,
+            including drafts and arbitrary branches. Changed-file paths are already fetched;
+            inspect relevant PR bodies/diffs with direct gh pr view/diff commands. For API reads,
+            use gh api --method GET. Read docs/index.md and AGENTS.md. Titles alone cannot exclude
+            overlap; incomplete file lists require investigation, not assumptions.
 
             Resolve each reviewed candidate to one current configs/*-master.yaml:KEY family.
             Mark duplicate when an open PR owns that family's image refresh or overlapping
@@ -83,7 +88,9 @@ jobs:
         id: select
         env:
           KLAUDE_PR_REVIEW: ${{ steps.review.outputs.structured_output }}
-        run: uv run --no-project --python 3.12 --with "pydantic>=2.10,<3" python -m utils.klaude select --max-candidates-per-run "$MAX_CANDIDATES_PER_RUN" --directory "$RUNNER_TEMP/klaude"
+          KLAUDE_REVIEW_OUTCOME: ${{ steps.review.outcome }}
+          KLAUDE_REVIEW_EXECUTION: ${{ steps.review.outputs.execution_file }}
+        run: uv run --no-project --python 3.12 --with "pydantic>=2.10,<3" python -m utils.klaude select --max-candidates-per-run "$MAX_CANDIDATES_PER_RUN" --directory "$RUNNER_TEMP/klaude" --execution-file "${KLAUDE_REVIEW_EXECUTION:-$RUNNER_TEMP/claude-execution-output.json}"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
@@ -99,7 +106,7 @@ jobs:
       fail-fast: false
       matrix:
         candidate: ${{ fromJSON(needs.plan.outputs.candidates) }}
-    uses: $/.github/workflows/klaude-candidate.yml
+    uses: ./.github/workflows/klaude-candidate.yml
     with:
       candidate: ${{ matrix.candidate }}
     secrets:

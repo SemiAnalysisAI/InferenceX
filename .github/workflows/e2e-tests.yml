@@ -12,6 +12,11 @@ on:
                 required: false
                 type: string
                 default: ""
+            klaud-run:
+                description: "Run Klaud Cold benchmarks at background priority"
+                required: false
+                type: boolean
+                default: false
             test-name:
                 description: "Name for this test run"
                 required: false
@@ -102,6 +107,11 @@ on:
                 required: false
                 type: string
                 default: ""
+            klaud-run:
+                description: "Run Klaud Cold benchmarks at background priority"
+                required: false
+                type: boolean
+                default: false
             test-name:
                 description: "Name for this test run"
                 required: false
@@ -315,6 +325,7 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.multi-node-config) }}
         secrets: inherit
         with:
+            klaud-run: ${{ inputs.klaud-run }}
             isl: ${{ matrix.config.isl }}
             osl: ${{ matrix.config.osl }}
             max-model-len: ${{ matrix.config.max-model-len }}
@@ -370,6 +381,7 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.multi-node-eval-config) }}
         secrets: inherit
         with:
+            klaud-run: ${{ inputs.klaud-run }}
             isl: ${{ matrix.config.isl }}
             osl: ${{ matrix.config.osl }}
             max-model-len: ${{ matrix.config.max-model-len }}
@@ -429,6 +441,7 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.agentic-config) }}
         secrets: inherit
         with:
+            klaud-run: ${{ inputs.klaud-run }}
             exp-name: ${{ matrix.config.exp-name }}
             recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             runner: ${{ matrix.config.runner }}
@@ -475,6 +488,7 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.agentic-eval-config) }}
         secrets: inherit
         with:
+            klaud-run: ${{ inputs.klaud-run }}
             exp-name: ${{ matrix.config.exp-name }}
             recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             runner: ${{ matrix.config.runner }}
@@ -525,6 +539,7 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.multi-node-agentic-config) }}
         secrets: inherit
         with:
+            klaud-run: ${{ inputs.klaud-run }}
             exp-name: ${{ matrix.config.exp-name }}
             recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             isl: '0'
@@ -585,6 +600,7 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.multi-node-agentic-eval-config) }}
         secrets: inherit
         with:
+            klaud-run: ${{ inputs.klaud-run }}
             exp-name: ${{ matrix.config.exp-name }}
             recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             isl: '0'
@@ -648,6 +664,7 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.single-node-config) }}
         secrets: inherit
         with:
+            klaud-run: ${{ inputs.klaud-run }}
             exp-name: ${{ matrix.config.exp-name }}
             recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             isl: ${{ matrix.config.isl }}
@@ -687,6 +704,7 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.eval-config) }}
         secrets: inherit
         with:
+            klaud-run: ${{ inputs.klaud-run }}
             exp-name: ${{ matrix.config.exp-name }}
             recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             isl: ${{ matrix.config.isl }}
