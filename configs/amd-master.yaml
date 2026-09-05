@@ -706,7 +706,7 @@ kimik3-fp4-mi355x-vllm-disagg-agentic:
     - dram-utilization: 0.60
       search-space:
       - spec-decoding: "none"
-        conc-list: [ 40 ]
+        conc-list: [ 1, 40 ]
         kv-offloading: dram
         kv-offload-backend: { name: lmcache-k3, version: "0.5.5.dev94+rocm7.2" }
         prefill:

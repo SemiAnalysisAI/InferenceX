@@ -6594,4 +6594,13 @@
   description:
     - "Update the vLLM B200 Kimi-K3 AgentX configs."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2776
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-disagg-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a concurrency-1 correctness and low-load point to the existing Kimi-K3 MI355X 1P1D TP8/DCP8 MoRIIO and LMCacheMP configuration; retain the validated concurrency-40 and 2P1D concurrency-70 points unchanged."
+    - "在现有 Kimi-K3 MI355X 1P1D TP8/DCP8 MoRIIO 与 LMCacheMP 配置中增加并发 1 的正确性及低负载测试点；保持已验证的并发 40 和 2P1D 并发 70 测试点不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
   

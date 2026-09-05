@@ -32,7 +32,7 @@ assert arm["decode"]["tp"] == 8
 assert arm["decode"]["dcp-size"] == 8
 assert point["dram-utilization"] == 0.60
 assert arm["spec-decoding"] == "none"
-assert arm["conc-list"] == [40]
+assert arm["conc-list"] == [1, 40]
 assert arm["kv-offloading"] == "dram"
 assert arm["kv-offload-backend"]["name"] == "lmcache-k3"
 assert arm["kv-offload-backend"]["version"] == "0.5.5.dev94+rocm7.2"
