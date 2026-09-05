@@ -10,12 +10,13 @@ from pathlib import Path
 import random
 import shlex
 import subprocess
+from urllib.parse import urlencode
 
 from .api import PUBLIC, ReadError, capacity_context, fetch_capacity, fetch_catalog
 from .models import PRReview, Policy, identity
 
 
-def github_read(repository: str, path: str, *, paginate: bool = False) -> list:
+def github_read(repository: str, path: str, *, paginate: bool = False) -> list | dict:
     args = ['gh', 'api', '--method', 'GET']
     if paginate:
         args.extend(['--paginate', '--slurp'])
@@ -113,7 +114,7 @@ def denied_bash_category(denial: dict) -> str:
     return 'other'
 
 
-def review_diagnostics(path: Path) -> dict:
+def execution_diagnostics(path: Path) -> dict:
     try:
         messages = json.loads(path.read_text())
         if not isinstance(messages, list):
@@ -130,10 +131,37 @@ def review_diagnostics(path: Path) -> dict:
     tools = {'Read', 'Glob', 'Grep', 'Bash', 'WebFetch', 'WebSearch', 'Write', 'Edit', 'Agent', 'Task', 'StructuredOutput'}
     denied_tools = Counter(denial['tool_name'] if isinstance(denial.get('tool_name'), str) and denial['tool_name'] in tools else 'other'
                            for denial in denials if isinstance(denial, dict))
+    subtypes = {'success', 'error_max_turns', 'error_during_execution', 'error_max_budget_usd',
+                'error_max_structured_output_retries'}
+    subtype = result.get('subtype')
     return {'execution-log': 'available', 'result-present': bool(result), **metrics,
+            'termination': subtype if isinstance(subtype, str) and subtype in subtypes else 'unknown',
+            'is-error': result.get('is_error') if type(result.get('is_error')) is bool else None,
             'permission-denials': dict(denied_tools),
             'denied-bash-categories': dict(Counter(denied_bash_category(denial) for denial in denials
                                                  if isinstance(denial, dict) and denial.get('tool_name') == 'Bash'))}
+
+
+def check_stop() -> dict:
+    """Read-only Stop hook: keep the same agent alive while its e2e runs are unfinished."""
+    try:
+        query = urlencode({'event': 'workflow_dispatch', 'per_page': 100,
+                           'created': '>=' + os.environ['KLAUDE_STARTED_AT']})
+        pages = github_read(os.environ['GITHUB_REPOSITORY'],
+                            'actions/workflows/e2e-tests.yml/runs?' + query, paginate=True)
+        if not isinstance(pages, list) or not pages:
+            raise ValueError('Missing run listing')
+        runs = [run for page in pages for run in page['workflow_runs']]
+        if any(page['total_count'] > len(runs) for page in pages):
+            raise ValueError('Incomplete run listing')
+        title = 'e2e Test - ' + os.environ['KLAUDE_TEST_NAME']
+        active = [run for run in runs if run['display_title'] == title
+                  and (run['status'] != 'completed' or not run.get('conclusion'))]
+    except (KeyError, TypeError, ValueError, subprocess.SubprocessError, OSError):
+        return {'decision': 'block', 'reason': 'Cannot verify owned e2e runs. Inspect GitHub, resolve the read failure and finish monitoring/reporting before stopping. Do not dispatch replacements.'}
+    if active:
+        return {'decision': 'block', 'reason': 'Your e2e runs are still queued or running. Continue watching their jobs, inspect results, repair within budget and update the PR table. Do not end with a promise to monitor later or cancel healthy work just to stop. For a valid stop condition, cancel only your unfinished runs and confirm completion.'}
+    return {}
 
 
 def select(directory: Path, max_candidates: int, execution_file: Path | None = None) -> None:
@@ -182,7 +210,7 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
         {'candidates': candidates, 'deferred-reason': deferred, 'capacity-deferred-candidates': capacity_deferred,
          **review.model_dump(by_alias=True)}, indent=2) + '\n')
     if execution_file is not None:
-        (directory / 'review-diagnostics.json').write_text(json.dumps(review_diagnostics(execution_file), indent=2) + '\n')
+        (directory / 'review-diagnostics.json').write_text(json.dumps(execution_diagnostics(execution_file), indent=2) + '\n')
     summary = f'Klaud Cold: selected {len(candidates)} of {len(contexts)} eligible candidates.'
     if deferred:
         summary += f' Invocation deferred: {deferred}; no candidates launched.'
@@ -209,8 +237,20 @@ def main() -> int:
     selection.add_argument('--execution-file', type=Path, help='Claude execution log; retain numeric metrics and fixed denial categories')
     capacity = commands.add_parser('check-capacity', help='Exit 0 with available nodes below 20%% utilization; otherwise nonzero, without printing telemetry')
     capacity.add_argument('--cluster', required=True, action='append', help='Exact telemetry cluster; repeat for every possible recipe target')
+    commands.add_parser('check-stop', help='Claude Stop hook: block completion while this candidate has unfinished e2e runs')
+    diagnostics = commands.add_parser('diagnostics', help='Save sanitized Claude termination metrics and permission categories')
+    diagnostics.add_argument('--execution-file', type=Path, required=True)
+    diagnostics.add_argument('--output', type=Path, required=True)
+    diagnostics.add_argument('--outcome', choices=['success', 'failure', 'cancelled', 'skipped', 'unknown'], default='unknown')
     args = parser.parse_args()
     try:
+        if args.command == 'check-stop':
+            print(json.dumps(check_stop()))
+            return 0
+        if args.command == 'diagnostics':
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(json.dumps({'action-outcome': args.outcome, **execution_diagnostics(args.execution_file)}, indent=2) + '\n')
+            return 0
         if args.command == 'plan':
             plan(args.root, args.directory)
             return 0
