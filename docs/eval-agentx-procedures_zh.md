@@ -173,7 +173,11 @@ gh run download "$RUN_ID" --repo SemiAnalysisAI/InferenceX \
 
 ## 7. 运行 AgentX：快速反馈与 canonical 证据
 
-受控 PowerX 配置 `qwen3.5-fp8-{b200,b300,mi355x}-sglang-agentic-powerx` 使用 TP4、原生解码、前缀复用，且不启用 CPU offload。在采集配置规定的一小时结果前，先验证服务与四张 GPU 的功耗统计边界。recipe 可将 `AIPERF_TOKENIZER` 设为固定版本的模型快照路径，让 replay 与服务使用同一 tokenizer；未设置时仍使用 `MODEL`。
+受控 PowerX 配置 `qwen3.5-fp8-{b200,b300,mi355x}-sglang-agentic-powerx` 使用 TP4、原生解码、前缀复用，且不启用 CPU offload。在采集配置规定的一小时结果前，先验证服务与四张 GPU 的功耗统计边界。recipe 可将 `INFERENCEX_TOKENIZER_PATH` 设为固定版本的模型快照路径，让 replay 与服务使用同一 tokenizer；未设置时仍使用 `MODEL`。
+
+PowerX 的 `EVAL_ONLY` 路径在所选 eval 完成后运行独立的自然结束输出与缓存诊断。它连续两次发送同一份已保存的约 220K-token 上下文，其中包含分布于前、中、后部的三个已知事实；请求设置为 `temperature=0`、`ignore_eos=false`，输出上限为 2,048 tokens。两次回答都必须正确返回事实并自然结束，第二次请求还必须有缓存复用的直接证据。准确请求、完整响应、metrics 快照和判定结果保存在现有结果目录的 `powerx_natural_*` 文件中。该合成诊断独立于计分 replay，不能证明 agent 任务成功。
+
+Canonical AgentX 明确忽略 EOS，以复现 trace 的输出长度。因此，回答结束后的重复续写本身既不能证明服务缺陷，也不能验证自然输出质量；应与遵守 EOS 的独立诊断区分。
 
 AgentX 是 AIPerf `inferencex-agentx-mvp` trace replay，不是固定 token 的合成 benchmark。仓库默认设置对每条 trajectory lane 额外执行十个 warmup 请求，并使用 recipe 配置的 profile 时长。`agentx-fast` 强制每条 lane 只运行一个 warmup 请求，并将 profile 设为 1,200 秒。它只影响单节点和多节点 AgentX 吞吐量；定长序列吞吐量与 eval 保持 canonical。Fast 运行不符合 artifact reuse 条件（[工作流策略](../.github/workflows/README.md#agentx-fast-mode)、[fast replay 设置](../benchmarks/benchmark_lib.sh#L2104-L2128)）。
 
@@ -333,7 +337,7 @@ gh run cancel <RUN_ID> --repo SemiAnalysisAI/InferenceX
 ## 完成检查清单
 
 - 矩阵预览符合预期 scenario、topology、eval mode 与 concurrency。
-- 完整 eval 未设置 `EVAL_LIMIT`；每个预期 batch 点都已完成且有带后缀的结果。
+- 完整 lm-eval 的 `EVAL_LIMIT` 为空；不要向此 runner 传入字符串 `full`。每个预期 batch 点都已完成且有带后缀的结果。
 - `validate_scores.py` 针对预期 task/model 阈值通过。
 - Aggregate 与 raw eval/AgentX artifact 均已下载且内部一致。
 - 已记录 AgentX corpus、replay mode、准确命令、commit、image、recipe、topology 以及 fast/override 状态。

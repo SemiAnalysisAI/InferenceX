@@ -6930,3 +6930,13 @@
   description:
     - "Save generated response text with AIPerf's existing output export during fast PowerX qualification; retain canonical replay settings for scored runs."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2827
+
+- config-keys:
+    - qwen3.5-fp8-b200-sglang-agentic-powerx
+    - qwen3.5-fp8-b300-sglang-agentic-powerx
+    - qwen3.5-fp8-mi355x-sglang-agentic-powerx
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Run a separate EOS-respecting long-context and cache correctness probe after PowerX evals, preserving complete request and response evidence without changing canonical AgentX replay."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2827

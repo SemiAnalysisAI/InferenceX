@@ -148,6 +148,8 @@ capture_cache_metrics
 
 if [ "${EVAL_ONLY:-false}" = "true" ]; then
     run_eval --port "$PORT"
+    "$AIPERF_PYTHON" "$INFERENCEX_REPO_ROOT/utils/powerx_natural_output_probe.py" \
+        --port "$PORT" --model "$MODEL" --tokenizer "$MODEL_PATH" --result-dir "$RESULT_DIR"
 else
     build_replay_cmd "$RESULT_DIR"
     if [[ "${AIPERF_EXPERIMENTAL_FAST:-0}" == 1 ]]; then

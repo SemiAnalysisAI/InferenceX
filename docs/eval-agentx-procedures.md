@@ -173,7 +173,11 @@ Retain `meta_env.json`, `results*.json`, and `sample*.jsonl`. Agentic SWE-bench 
 
 ## 7. Run AgentX: fast feedback versus canonical evidence
 
-The controlled PowerX keys `qwen3.5-fp8-{b200,b300,mi355x}-sglang-agentic-powerx` use TP4, native decoding, prefix reuse and no CPU offload. Qualify their serving and four-GPU power boundaries before collecting the configured one-hour runs. A recipe can set `AIPERF_TOKENIZER` to its pinned model snapshot so replay and serving use the same tokenizer; otherwise replay continues to use `MODEL`.
+The controlled PowerX keys `qwen3.5-fp8-{b200,b300,mi355x}-sglang-agentic-powerx` use TP4, native decoding, prefix reuse and no CPU offload. Qualify their serving and four-GPU power boundaries before collecting the configured one-hour runs. A recipe can set `INFERENCEX_TOKENIZER_PATH` to its pinned model snapshot so replay and serving use the same tokenizer; otherwise replay continues to use `MODEL`.
+
+The PowerX `EVAL_ONLY` path runs a separate natural-output/cache diagnostic after the selected eval finishes. It sends the same saved approximately 220K-token context twice, with three known sentinel facts, `temperature=0`, `ignore_eos=false`, and a 2,048-token output cap. Both answers must return the facts correctly and stop naturally, and the second request must show positive cache reuse. Exact payloads, complete response envelopes, metrics snapshots, and the verdict are retained as `powerx_natural_*` files in the existing result directory. This synthetic diagnostic is separate from scored replay and does not establish agent task success.
+
+Canonical AgentX explicitly suppresses EOS to reproduce trace output lengths. Repetitive text after an answer therefore cannot by itself diagnose a serving defect or validate natural-output quality; keep that behavior separate from the EOS-respecting diagnostic.
 
 AgentX is AIPerf `inferencex-agentx-mvp` trace replay, not a fixed-token synthetic benchmark. The checked-in default uses ten additional warmup requests per trajectory lane and the recipe's configured profile duration. `agentx-fast` forces one warmup request per lane and a 1,200-second profile. It affects single- and multi-node AgentX throughput only. Fixed-sequence throughput and evals remain canonical. Fast runs are not eligible for artifact reuse ([workflow policy](../.github/workflows/README.md#agentx-fast-mode), [fast replay settings](../benchmarks/benchmark_lib.sh#L2104-L2128)).
 
@@ -333,7 +337,7 @@ Use `scancel` or process termination only with explicit approval and a concrete 
 ## Completion checklist
 
 - Matrix preview matches intended scenario, topology, eval mode, and concurrency.
-- Full eval has no `EVAL_LIMIT`, and every expected batch point is completed and has a suffixed result.
+- Full lm-eval has an empty `EVAL_LIMIT`; do not pass the string `full` to this runner. Every expected batch point is completed and has a suffixed result.
 - `validate_scores.py` passes against the intended task/model threshold.
 - Aggregate and raw eval/AgentX artifacts are downloaded and internally consistent.
 - AgentX corpus, replay mode, exact command, commit, image, recipe, topology, and fast/override state are recorded.
