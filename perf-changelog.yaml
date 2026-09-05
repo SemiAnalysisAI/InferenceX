@@ -6612,4 +6612,14 @@
     - "Refresh the Kimi-K3 MI355X LMCacheMP ROCm nightly pin from dev94 to dev101 after the dev94 wheel was removed from the release index; retain the validated connector, cache geometry, and runtime configuration."
     - "由于 dev94 wheel 已从发布索引移除，将 Kimi-K3 MI355X 的 LMCacheMP ROCm nightly 固定版本从 dev94 更新到 dev101；保持已验证的连接器、缓存几何和运行配置不变。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-disagg-agentic
+    - kimik3-fp4-mi355x-vllm-disagg-agentic-decode-scale
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add controlled Kimi-K3 MI355X 1P2D c40/c48/c70 and 1P3D c40 scaling points, retain 1P1D as the c48/c70 baseline, and remove the unvalidated 2P1D c70 arm. All points use no-spec TP8/DCP8, MoRIIO READ, P-only LMCacheMP, and GMU 0.88."
+    - "新增受控的 Kimi-K3 MI355X 1P2D c40/c48/c70 与 1P3D c40 扩展点，保留 1P1D 作为 c48/c70 基线，并移除未经验证的 2P1D c70；所有配置均使用无推测 TP8/DCP8、MoRIIO READ、仅 P 侧 LMCacheMP 和 GMU 0.88。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
   

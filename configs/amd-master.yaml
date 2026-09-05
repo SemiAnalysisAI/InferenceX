@@ -706,7 +706,7 @@ kimik3-fp4-mi355x-vllm-disagg-agentic:
     - dram-utilization: 0.60
       search-space:
       - spec-decoding: "none"
-        conc-list: [ 1, 40 ]
+        conc-list: [ 1, 40, 48, 70 ]
         kv-offloading: dram
         kv-offload-backend: { name: lmcache-k3, version: "0.5.5.dev101+rocm7.2" }
         prefill:
@@ -742,18 +742,36 @@ kimik3-fp4-mi355x-vllm-disagg-agentic:
           - "HF_HUB_CACHE=/models/.cache/huggingface/hub"
           - "DECODE_DCP_COMM=a2a"
           - "DECODE_CP_KV_CACHE_INTERLEAVE_SIZE=1536"
+
+# Decode-scaling comparison for the validated Kimi-K3 1P1D baseline. Kept in
+# a separate key so a targeted --conc 40 dispatch does not rerun the baseline.
+kimik3-fp4-mi355x-vllm-disagg-agentic-decode-scale:
+  image: vllm/vllm-openai-rocm:nightly@sha256:91e381f072d6a44e1e4c97c82dce06e50e5189905cb3999a11471c5a8fc6a563
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm-disagg
+  router: { name: vllm-router, version: "0.1.14" }
+  kv-p2p-transfer: moriio
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.60
+      search-space:
       - spec-decoding: "none"
-        conc-list: [ 70 ]
+        conc-list: [ 40, 48, 70 ]
         kv-offloading: dram
         kv-offload-backend: { name: lmcache-k3, version: "0.5.5.dev101+rocm7.2" }
         prefill:
-          num-worker: 2
+          num-worker: 1
           tp: 8
           dcp-size: 8
           ep: 1
           dp-attn: false
           additional-settings:
-          - "PREFILL_NODES=2"
+          - "PREFILL_NODES=1"
           - "GPU_MEMORY_UTILIZATION=0.88"
           - "TOTAL_CPU_DRAM_GB=1799"
           - "LMCACHE_CHUNK_SIZE=12288"
@@ -767,13 +785,50 @@ kimik3-fp4-mi355x-vllm-disagg-agentic:
           - "PREFILL_DCP_COMM=a2a"
           - "PREFILL_CP_KV_CACHE_INTERLEAVE_SIZE=1536"
         decode:
+          num-worker: 2
+          tp: 8
+          dcp-size: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=2"
+          - "VLLM_K3_FORK_REF=moriio-k3"
+          - "VLLM_K3_FORK_SHA=0501bd8507d339fe37e755bff49d32d8cd6e4485"
+          - "HF_HUB_CACHE=/models/.cache/huggingface/hub"
+          - "DECODE_DCP_COMM=a2a"
+          - "DECODE_CP_KV_CACHE_INTERLEAVE_SIZE=1536"
+      - spec-decoding: "none"
+        conc-list: [ 40 ]
+        kv-offloading: dram
+        kv-offload-backend: { name: lmcache-k3, version: "0.5.5.dev101+rocm7.2" }
+        prefill:
           num-worker: 1
           tp: 8
           dcp-size: 8
           ep: 1
           dp-attn: false
           additional-settings:
-          - "DECODE_NODES=1"
+          - "PREFILL_NODES=1"
+          - "GPU_MEMORY_UTILIZATION=0.88"
+          - "TOTAL_CPU_DRAM_GB=1799"
+          - "LMCACHE_CHUNK_SIZE=12288"
+          - "LMCACHE_L1_SIZE_GB=1799"
+          - "LMCACHE_MAX_GPU_WORKERS=8"
+          - "SERVER_UP_TIMEOUT=900"
+          - "IX_AIPERF_TOKENIZER=moonshotai/Kimi-K3"
+          - "VLLM_K3_FORK_REF=moriio-k3"
+          - "VLLM_K3_FORK_SHA=0501bd8507d339fe37e755bff49d32d8cd6e4485"
+          - "HF_HUB_CACHE=/models/.cache/huggingface/hub"
+          - "PREFILL_DCP_COMM=a2a"
+          - "PREFILL_CP_KV_CACHE_INTERLEAVE_SIZE=1536"
+        decode:
+          num-worker: 3
+          tp: 8
+          dcp-size: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=3"
           - "VLLM_K3_FORK_REF=moriio-k3"
           - "VLLM_K3_FORK_SHA=0501bd8507d339fe37e755bff49d32d8cd6e4485"
           - "HF_HUB_CACHE=/models/.cache/huggingface/hub"
