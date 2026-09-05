@@ -1286,7 +1286,7 @@ dsv4-fp4-mi355x-atom-mtp:
       # works only because it's non-MTP (no draft KV layer). MTP stays tp8-only.
 
 dsr1-fp8-mi325x-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.12-rocm700-mi30x
+  image: lmsysorg/sglang:v0.5.19-rocm700-mi30x
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: mi325x
