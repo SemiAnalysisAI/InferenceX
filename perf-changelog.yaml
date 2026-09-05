@@ -6908,6 +6908,6 @@
   scenario-type:
     - agentic-coding
   description:
-    - "At concurrency 1 only, reduce the Kimi-K3 MI355X vLLM DSpark draft depth from 6 to 3 speculative tokens."
-    - "Keep synthetic_acceptance_length=3.75 and every non-C1 recipe setting and concurrency point unchanged; the smaller draft removes three positions that the synthetic acceptance curve always rejects and automatically reduces the maximum decode graph size from 14 to 8 rows."
+    - "At concurrency 1 only, reduce the Kimi-K3 MI355X vLLM DSpark draft depth from 6 to 3 speculative tokens and use the matching committed golden synthetic acceptance length of 3.00 instead of 3.75."
+    - "Keep every other recipe setting and all non-C1 concurrency points unchanged; the smaller draft automatically reduces the maximum decode graph size from 14 to 8 rows."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2845

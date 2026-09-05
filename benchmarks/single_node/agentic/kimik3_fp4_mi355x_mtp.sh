@@ -262,7 +262,7 @@ fi
 case "$CONC" in
     # No KV offload; the working set fits in HBM.
     1)
-        SYNTHETIC_ACCEPT_LEN=3.75
+        SYNTHETIC_ACCEPT_LEN=3.00
         SPEC_NUM_TOKENS=3
         GPU_MEM_UTIL=0.9
         MAX_NUM_BATCHED_TOKENS=16384
