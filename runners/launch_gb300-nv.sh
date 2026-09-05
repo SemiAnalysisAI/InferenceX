@@ -45,6 +45,9 @@ elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
     export SERVED_MODEL_NAME="deepseek-r1-fp8"
     export MODEL_PATH=/scratch/models/DeepSeek-R1-0528
     export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
+elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" && $MODEL == "deepseek-ai/DeepSeek-V4-Pro-0813" ]]; then
+    export MODEL_PATH="/scratch/models/DeepSeek-V4-Pro-0813"
+    export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro-0813"
 elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
     # Use the node-local /scratch SSD for the 806 GB DSv4-Pro
     # checkpoint. Faster than the Vast NFS path, but this dir only
@@ -254,15 +257,16 @@ elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX =
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5" \
         recipes/sglang/qwen3.5
 elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
-    # DSv4 GB300 SGLang agentic uses NVIDIA/srt-slurm v1.0.38. In addition to
+    # DSv4 GB300 SGLang agentic uses NVIDIA/srt-slurm v1.0.40. In addition to
     # the nginx body-size fix, session-affinity frontend, and custom benchmark
     # schema required by these recipes, this release injects every logical
-    # SGLang worker leader's /metrics URL into AIPERF_SERVER_METRICS_URLS.
+    # SGLang worker leader's /metrics URL into AIPERF_SERVER_METRICS_URLS and
+    # supports long-lived nginx keepalive for multi-turn AgentX replay.
     # AgentX forwards that list to aiperf's --server-metrics argument so its
     # trace artifacts include backend metrics for every engine.
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
-    git checkout v1.0.38
+    git checkout v1.0.40
     mkdir -p recipes/sglang/deepseek-v4/agentic
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/agentic" \
         recipes/sglang/deepseek-v4/agentic

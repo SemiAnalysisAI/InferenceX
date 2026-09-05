@@ -6902,3 +6902,31 @@
     - "Lower mem-fraction-static from 0.89 to 0.86 on every arm: TP4, TP8 and TP8 with DP attention. swa-full-tokens-ratio becomes per-arm: 0.10 on the tensor-parallel arms as before, 0.15 under DP attention."
     - "Drop concurrency 2 and 10 from the TP4 arm, leaving [1, 4, 8], and drop concurrency 16 from the TP8 hicache arm, leaving [32, 48]. Concurrency 16 remains on the TP8 no-offload arm."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2800
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-agg
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Replace the GB300 DeepSeek-V4-Pro AgentX MTP serving path with DSpark block size 6 across aggregate and disaggregated recipes."
+    - "Use the DeepSeek-V4-Pro-0813 checkpoint, SGLang 20260829 CUDA 13 nightly, public Dynamo 1.5.0.dev20260902 wheels containing the upstream SGLang config-parser compatibility fix, and thinking-on golden synthetic acceptance length 3.77 for throughput; eval retains real DSpark verification."
+    - "Retune the Pareto ladder to concurrency 1, 4, 8, 320, 640, 960, and 1280, while retaining the concurrency-1152 2P DEP8 prefill plus DEP12 decode efficiency point."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2623
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Increase the DEP16 concurrency ladder from 320, 640, 960, and 1280 to 480, 960, 1440, and 1920 after profiling showed request-starved prefill workers at the lower values."
+    - "Retain the independently tuned concurrency-1152 2P DEP8 prefill plus DEP12 decode efficiency point."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2623
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Remove the unstable concurrency-1152 2P DEP8 prefill plus DEP12 decode point after repeated benchmark failures."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2623
