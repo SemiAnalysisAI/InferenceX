@@ -6902,3 +6902,12 @@
     - "Lower mem-fraction-static from 0.89 to 0.86 on every arm: TP4, TP8 and TP8 with DP attention. swa-full-tokens-ratio becomes per-arm: 0.10 on the tensor-parallel arms as before, 0.15 under DP attention."
     - "Drop concurrency 2 and 10 from the TP4 arm, leaving [1, 4, 8], and drop concurrency 16 from the TP8 hicache arm, leaving [32, 48]. Concurrency 16 remains on the TP8 no-offload arm."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2800
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add concurrency 10, 12 and 14 to the TP8 x DCP8 Mooncake sweep, so the conc-list becomes [1, 2, 4, 8, 10, 12, 14, 16, 24, 32, 40, 48, 56, 70]. The new points fall in the recipe's existing conc 9-16 band and therefore draft with DSpark level 3 at the committed golden AL 3.00, the same arm as concurrency 16."
+    - "Repoint the runner from cluster:b300-nv, whose launcher and runner labels were retired in #2826, to cluster:b300-dsxe so the sweep can schedule."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2846
