@@ -4967,7 +4967,7 @@ dsv4-fp4-gb200-dynamo-sglang:
           dp-attn: true
 
 qwen3.5-fp8-gb200-dynamo-sglang:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260608-303757cc
+  image: lmsysorg/sglang:v0.5.19-cu130@sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: gb200
