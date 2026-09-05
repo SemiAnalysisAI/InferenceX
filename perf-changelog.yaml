@@ -6902,3 +6902,9 @@
     - "Lower mem-fraction-static from 0.89 to 0.86 on every arm: TP4, TP8 and TP8 with DP attention. swa-full-tokens-ratio becomes per-arm: 0.10 on the tensor-parallel arms as before, 0.15 under DP attention."
     - "Drop concurrency 2 and 10 from the TP4 arm, leaving [1, 4, 8], and drop concurrency 16 from the TP8 hicache arm, leaving [32, 48]. Concurrency 16 remains on the TP8 no-offload arm."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2800
+
+- config-keys:
+    - dsr1-fp8-mi325x-sglang-mtp
+  description:
+    - "Update SGLang image from v0.5.12-rocm700-mi30x to v0.5.19-rocm700-mi30x"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2844
