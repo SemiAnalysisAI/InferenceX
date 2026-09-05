@@ -9011,11 +9011,14 @@ glm5.2-fp4-b300-sglang-agentic-mtp:
 # nightly includes FlashInfer 0.6.18's BF16 TRTLLM MoE allocation fix, which is
 # required by GLM-5.2's unquantized EAGLE draft head at CUDA-graph capture.
 #
-# Same single arm and concurrency grid as glm5.2-fp4-b300-sglang-agentic-mtp:
-# cookbook low-latency TP8 with HiCache host-DRAM offload, conc
-# [1, 4, 8, 12, 16, 20, 24, 28, 32, 40, 48] (steps of at least 2 through 48).
-# TP8-only for memory as well as comparability -- the ~433 GB NVFP4
-# checkpoint needs ~54 GB/GPU across 8 B200s and does not fit below 8.
+# Three arms, all TP8 with HiCache host-DRAM offload (steps of at least 2
+# through 48). The cookbook low-latency TP8 arm shares its grid with
+# glm5.2-fp4-b300-sglang-agentic-mtp through conc 16 and stops at 20: past that
+# point TP8 no longer moves the Pareto front. Conc 20 through 48 continue on the
+# EP8 arm (expert-parallel MoE, TP attention) and the DEP8 arm (EP8 plus
+# attention-DP behind sglang-router). 8 GPUs for memory as well as
+# comparability -- the ~433 GB NVFP4 checkpoint needs ~54 GB/GPU across 8 B200s
+# and does not fit below 8.
 glm5.2-fp4-b200-sglang-agentic-mtp:
   image: lmsysorg/sglang:nightly-dev-cu13-20260901-07c8f729
   model: nvidia/GLM-5.2-NVFP4
@@ -9028,7 +9031,9 @@ glm5.2-fp4-b200-sglang-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 4, 8, 12, 16, 20, 24, 28, 32, 40, 48] }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 4, 8, 12, 16, 20] }
+      - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [20, 24, 28, 32, 40, 48] }
+      - { tp: 8, ep: 8, dp-attn: true, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [20, 24, 28, 32, 40, 48], router: { name: sglang-router, version: "0.3.2" } }
 
 glm5.2-fp4-gb200-dynamo-sglang-agentic-agg:
   image: lmsysorg/sglang:v0.5.17-cu130

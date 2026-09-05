@@ -6884,6 +6884,6 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Extend the GLM-5.2 NVFP4 B200 SGLang AgentX MTP TP8 HiCache curve from concurrency 16 to 48 by appending points at 20, 24, 28, 32, 40, and 48, which reuse the 169 GB/rank HiCache target pool already used at 12 and 16; existing points are unchanged."
+    - "Extend the GLM-5.2 NVFP4 B200 SGLang AgentX MTP HiCache curve from concurrency 16 to 48: the TP8 arm gains concurrency 20, and new EP8 and DEP8 (EP8 with attention-DP behind sglang-router) arms cover 20, 24, 28, 32, 40, and 48; existing points are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2828
   append-only: true
