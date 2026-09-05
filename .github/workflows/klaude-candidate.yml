@@ -99,8 +99,11 @@ jobs:
             identity.container.image to the master image. Preserve model, precision, topology,
             speculative decoding, workloads, commands, resources
             and recipe references; leave shared code/workflows and other families untouched.
-            Override the repository append rule: keep perf-changelog.yaml byte-for-byte unchanged,
-            explain the conflict with checks, keep the PR draft and never bypass checks.
+            The pinned image must run as shipped: no engine/serving-stack patches, source or
+            container-file rewrites, site-packages edits, monkey-patching, or forked/rebuilt engine wheels.
+            If one is required, reject the image as incompatible.
+            Keep the PR draft. After a targeted attempt passes, append one valid perf-changelog.yaml
+            entry at the physical tail with the PR URL; preserve all prior bytes and validate it.
 
             Use uv and applicable InferenceX checks. Check every exact telemetry cluster from the
             current recipe/runner configuration with repeated --cluster arguments:
@@ -125,7 +128,7 @@ jobs:
             all points/default evals, nodes:N labels, MTP chat templates and artifact contracts.
             Never weaken benchmarks. Set klaud-run=true for lowest priority and
             test-name=$KLAUDE_TEST_NAME exactly for every attempt so the Stop hook can identify your runs.
-            No skip_queue, priority overrides or sweep-triggering labels.
+            No skip_queue or priority overrides; use no sweep label during targeted attempts.
             Record run IDs/URLs immediately. Stay in this session until ALL their jobs are terminal;
             dispatch or a draft PR is not completion. Use gh run watch --interval 60, resuming it if a
             tool call times out; inspect gh run view --json jobs because queued runs can have active jobs.
@@ -144,8 +147,14 @@ jobs:
             healthy work merely to finish the session. The read-only Stop hook checks owned run status;
             it does not handle repairs or reporting for you. Do not disable it or alter its run marker.
 
+            After a targeted attempt succeeds, commit/push the changelog entry and apply
+            full-sweep-enabled as the sole sweep-related label. Wait for its run-sweep.yml run
+            on the exact PR head to finish successfully;
+            this reusable PR sweep is the final validation. If it exposes a candidate failure, repair within
+            the remaining budget and repeat. Do not stage results, post /reuse-sweep-run, request review or merge.
+
             PR and final report: English/Simplified Chinese Markdown table, one row for the baseline
-            (label its published date) and every update/repair attempt, including failures/cancellations. Include attempt,
+            (label its published date), every update/repair attempt and the final full sweep, including failures/cancellations. Include attempt,
             image/SHA, run URLs, benchmark/eval results, labeled per-point throughput/latency deltas
             versus baseline, and diagnosis. Missing/incomparable measurements: N/A plus reason.
             Exclude invalid/duplicate/unmatched points from improvement claims. State limitations:
