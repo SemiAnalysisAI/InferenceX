@@ -35,7 +35,7 @@ assert arm["spec-decoding"] == "none"
 assert arm["conc-list"] == [1, 40]
 assert arm["kv-offloading"] == "dram"
 assert arm["kv-offload-backend"]["name"] == "lmcache-k3"
-assert arm["kv-offload-backend"]["version"] == "0.5.5.dev94+rocm7.2"
+assert arm["kv-offload-backend"]["version"] == "0.5.5.dev101+rocm7.2"
 assert arm_2p1d["prefill"]["num-worker"] == 2
 assert arm_2p1d["prefill"]["dcp-size"] == 8
 assert arm_2p1d["decode"]["num-worker"] == 1

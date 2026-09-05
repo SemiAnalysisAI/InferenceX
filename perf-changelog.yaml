@@ -6603,4 +6603,13 @@
     - "Add a concurrency-1 correctness and low-load point to the existing Kimi-K3 MI355X 1P1D TP8/DCP8 MoRIIO and LMCacheMP configuration; retain the validated concurrency-40 and 2P1D concurrency-70 points unchanged."
     - "在现有 Kimi-K3 MI355X 1P1D TP8/DCP8 MoRIIO 与 LMCacheMP 配置中增加并发 1 的正确性及低负载测试点；保持已验证的并发 40 和 2P1D 并发 70 测试点不变。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-disagg-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh the Kimi-K3 MI355X LMCacheMP ROCm nightly pin from dev94 to dev101 after the dev94 wheel was removed from the release index; retain the validated connector, cache geometry, and runtime configuration."
+    - "由于 dev94 wheel 已从发布索引移除，将 Kimi-K3 MI355X 的 LMCacheMP ROCm nightly 固定版本从 dev94 更新到 dev101；保持已验证的连接器、缓存几何和运行配置不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
   

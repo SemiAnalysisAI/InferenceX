@@ -52,7 +52,7 @@ assert cfg["kv_connector_extra_config"]["lmcache.mp.port"] == 6555
 assert cfg["kv_connector_extra_config"]["lmcache.mp.mq_timeout"] == 6000.0
 PY
 
-grep -q 'LMCACHE_VERSION:-0.5.5.dev94+rocm7.2' "$HERE/lmcache_mp.sh"
+grep -q 'LMCACHE_VERSION:-0.5.5.dev101+rocm7.2' "$HERE/lmcache_mp.sh"
 grep -q 'releases/expanded_assets/nightly-rocm' "$HERE/lmcache_mp.sh"
 grep -q -- 'pip install --quiet --no-cache-dir --no-deps' "$HERE/lmcache_mp.sh"
 ! grep -Eq 'LMCACHE_GIT_REF|git clone|pip install -e' "$HERE/lmcache_mp.sh"
