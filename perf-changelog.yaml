@@ -6880,6 +6880,30 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2811
 
 - config-keys:
+    - minimaxm3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump the MI355X MiniMax-M3 AgentX image from vllm/vllm-openai-rocm:nightly-6d4562c59b97b4e35d459ff9389e71b6fe4995de to the latest immutable nightly, vllm/vllm-openai-rocm:nightly-8a728663c1c3eeace834a95f5654fa653cc1998c (digest sha256:0d07767c0b8471eaca0f1eca97899620dfb4ad33ff2f5226789afef1a877e9bc)."
+    - "Pick up the optimized BF16 MiniMax-M3 indexer and routed GEMM from vLLM PRs #54682 and #54845; use FULL_DECODE_ONLY CUDA graphs while breakable CUDA graphs remain disabled."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2825
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update image from lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260829 to lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260902."
+    - "Add a DP-attention arm: tp 8, ep 1, dp-attn true, hicache host KV tier, concurrency [64, 96, 128, 160]. It runs behind sglang-router with consistent hashing on the AIPerf correlation id so multi-turn sessions stay on the DP rank holding their prefix."
+    - "Serve with --enable-deepseek-v4-fp4-indexer and set HSA_NO_SCRATCH_RECLAIM=0 on all arms."
+    - "DP-attention serving flags: --enable-two-batch-overlap, --enable-dp-attention-local-control-broadcast, --tokenizer-worker-num equal to TP, --stream-interval 20 and --prefill-decode-interval 10, alongside the existing --enable-prefill-delayer. Chunked prefill now scales the per-TP base by the DP degree instead of a fixed 8192."
+    - "Shared-experts fusion is now per-arm: kept enforced on the tensor-parallel arms and disabled under DP attention, matching the DP baselines."
+    - "GPU_MAX_HW_QUEUES is now set explicitly per-arm: 2 on the tensor-parallel arms and 5 under DP attention, the documented companion to two-batch overlap."
+    - "Lower mem-fraction-static from 0.89 to 0.86 on every arm: TP4, TP8 and TP8 with DP attention. swa-full-tokens-ratio becomes per-arm: 0.10 on the tensor-parallel arms as before, 0.15 under DP attention."
+    - "Drop concurrency 2 and 10 from the TP4 arm, leaving [1, 4, 8], and drop concurrency 16 from the TP8 hicache arm, leaving [32, 48]. Concurrency 16 remains on the TP8 no-offload arm."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2800
+
+- config-keys:
     - glm5.2-fp4-b200-sglang-agentic-mtp
   scenario-type:
     - agentic-coding

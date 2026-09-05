@@ -74,6 +74,7 @@ export SGLANG_USE_ROCM700A=0
 export SGLANG_HACK_FLASHMLA_BACKEND=unified_kv_triton
 export AITER_BF16_FP8_MOE_BOUND=0
 export TORCH_BLAS_PREFER_HIPBLASLT=1
+export HSA_NO_SCRATCH_RECLAIM=0
 # aiter batched GEMM for the absorbed MLA projections, carried by the v0.5.18
 # image and off by default in environ.py.
 export SGLANG_OPT_USE_AITER_BATCHED_GEMM=1
@@ -140,12 +141,11 @@ else
     echo "Error: unsupported TP '$TP' (expected: 4 or 8)" >&2
     exit 1
 fi
-# MTP adds a draft KV pool and extra graph captures on top of the spec-none
-# footprint, which ran at 0.90. 0.89 recovers most of that: the DSv4 compressor
-# state pools are sized from the full-attention pool and allocated after it,
-# outside this budget, so the remainder has to stay large enough to cover them.
-MEM_FRACTION_STATIC=0.89
+MEM_FRACTION_STATIC="${MEM_FRACTION_STATIC:-0.86}"
 PARALLEL_ARGS=(--tensor-parallel-size "$TP")
+SHARED_EXPERTS_ARGS=(--enforce-shared-experts-fusion)
+SWA_FULL_TOKENS_RATIO="${SWA_FULL_TOKENS_RATIO:-0.10}"
+export GPU_MAX_HW_QUEUES="${GPU_MAX_HW_QUEUES:-2}"
 if [ "$DP_ATTENTION" = "true" ]; then
     USE_SGLANG_ROUTER=true
     export AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID=true
@@ -157,14 +157,21 @@ if [ "$DP_ATTENTION" = "true" ]; then
     export SGLANG_DP_SHARED_EXPERT_LOCAL=1
     export SGLANG_DP_USE_GATHERV=1
     export SGLANG_DP_USE_REDUCE_SCATTER=1
-    export GPU_MAX_HW_QUEUES=2
+    export GPU_MAX_HW_QUEUES="${GPU_MAX_HW_QUEUES_DP:-5}"
+    SHARED_EXPERTS_ARGS=(--disable-shared-experts-fusion)
+    SWA_FULL_TOKENS_RATIO="${SWA_FULL_TOKENS_RATIO_DP:-0.15}"
 
     # Chunked prefill is a whole-engine budget, so widen it by the DP degree.
-    CHUNKED_PREFILL_SIZE=$((8192 * TP))
+    CHUNKED_PREFILL_SIZE=$((CHUNKED_PREFILL_SIZE * TP))
     PARALLEL_ARGS+=(
         --dp "$TP"
         --enable-dp-attention
         --enable-prefill-delayer
+        --enable-two-batch-overlap
+        --enable-dp-attention-local-control-broadcast
+        --tokenizer-worker-num "$TP"
+        --stream-interval 20
+        --prefill-decode-interval 10
     )
 fi
 
@@ -223,10 +230,11 @@ SGLANG_CMD=(
     --trust-remote-code
     "${PARALLEL_ARGS[@]}"
     --attention-backend dsv4
+    --enable-deepseek-v4-fp4-indexer
     --page-size 256
-    --swa-full-tokens-ratio 0.10
+    --swa-full-tokens-ratio "$SWA_FULL_TOKENS_RATIO"
     --kv-cache-dtype fp8_e4m3
-    --enforce-shared-experts-fusion
+    "${SHARED_EXPERTS_ARGS[@]}"
     --tool-call-parser deepseekv4
     --reasoning-parser deepseek-v4
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
