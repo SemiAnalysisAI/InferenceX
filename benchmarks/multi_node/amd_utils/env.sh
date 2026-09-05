@@ -334,6 +334,8 @@ else
         unset MORI_MOE_MAX_INPUT_TOKENS_PREFILL
         unset MORI_MOE_MAX_INPUT_TOKENS_DECODE
 
+        export SGLANG_MORI_RECV_BOUND=1
+
         # PER_RANK dispatch tokens pinned independently (16384 prefill / 128
         # decode); server_sglang.sh prefers these over the MORI_MAX_DISPATCH_*
         # coupling when set.
@@ -346,32 +348,49 @@ else
         # Overlap plan stream on for DSv4 (global default is 0)
         # export SGLANG_ENABLE_OVERLAP_PLAN_STREAM=0
 
-        # DSv4 model kernel routing (mirrors the single-node / manual PD recipe)
+        # DSv4 model kernel routing
         export SGLANG_DEFAULT_THINKING=1
         export SGLANG_DSV4_REASONING_EFFORT=high
-        export SGLANG_OPT_DEEPGEMM_HC_PRENORM=false
-        export SGLANG_USE_AITER=1
+        # export SGLANG_OPT_DEEPGEMM_HC_PRENORM=false
+        # export SGLANG_USE_AITER=1
         export SGLANG_USE_ROCM700A=0
-        export SGLANG_OPT_USE_FUSED_COMPRESS=true
+        # export SGLANG_OPT_USE_FUSED_COMPRESS=true
         export SGLANG_HACK_FLASHMLA_BACKEND=unified_kv_triton
-        export SGLANG_OPT_FP8_WO_A_GEMM=false
-        export SGLANG_OPT_USE_JIT_INDEXER_METADATA=false
-        export SGLANG_OPT_USE_TOPK_V2=false
-        export SGLANG_OPT_USE_AITER_INDEXER=${SGLANG_OPT_USE_AITER_INDEXER:-true}
-        export SGLANG_OPT_USE_TILELANG_INDEXER=false
-        export SGLANG_OPT_USE_TILELANG_MHC_PRE=false
-        export SGLANG_OPT_USE_TILELANG_MHC_POST=false
-        export SGLANG_FP8_PAGED_MQA_LOGITS_TORCH=1
-        export SGLANG_OPT_USE_FUSED_COMPRESS_TRITON=true
-        export SGLANG_OPT_USE_MULTI_STREAM_OVERLAP=false
-        export SGLANG_ROCM_USE_MULTI_STREAM=false
+        # export SGLANG_OPT_FP8_WO_A_GEMM=false
+        # export SGLANG_OPT_USE_JIT_INDEXER_METADATA=false
+        # export SGLANG_OPT_USE_TOPK_V2=false
+        # export SGLANG_OPT_USE_AITER_INDEXER=${SGLANG_OPT_USE_AITER_INDEXER:-true}
+        # export SGLANG_OPT_USE_TILELANG_INDEXER=false
+        # export SGLANG_OPT_USE_TILELANG_MHC_PRE=false
+        # export SGLANG_OPT_USE_TILELANG_MHC_POST=false
+        # export SGLANG_FP8_PAGED_MQA_LOGITS_TORCH=1
+        # export SGLANG_OPT_USE_FUSED_COMPRESS_TRITON=true
+        # export SGLANG_OPT_USE_MULTI_STREAM_OVERLAP=false
+        # export SGLANG_ROCM_USE_MULTI_STREAM=false
         export AITER_BF16_FP8_MOE_BOUND=0
-        export SGLANG_EAGER_INPUT_NO_COPY=true
-        export SGLANG_SHARED_EXPERT_TP1=1
-        export SGLANG_DP_SHARED_EXPERT_LOCAL=1
-        export SGLANG_DP_USE_GATHERV=1
-        export SGLANG_DP_USE_REDUCE_SCATTER=1
-        export GPU_MAX_HW_QUEUES=5
+        # export SGLANG_EAGER_INPUT_NO_COPY=true
+        export TORCH_BLAS_PREFER_HIPBLASLT=1
+        # aiter batched GEMM for the absorbed MLA projections, carried by the v0.5.18
+        # image and off by default in environ.py.
+        export SGLANG_OPT_USE_AITER_BATCHED_GEMM=1
+        # DP-attention-only SGLang internal knobs (shared-expert TP1 placement,
+        # gatherv/reduce-scatter collectives) plus the wider HW-queue count DP
+        # ranks need to overlap MoRI dispatch with compute. Mirrors the
+        # single-node dsv4-fp4-mi355x-sglang-agentic-mtp recipe's
+        # `if [ "$DP_ATTENTION" = "true" ]` block (InferenceX PR #2800):
+        # these must NOT apply to the TP-only (no-DP) arms. Multi-node splits
+        # DP-attention per role (PREFILL_ENABLE_DP / DECODE_ENABLE_DP); every
+        # current search-space arm sets both the same way, so either one
+        # flags the whole node.
+        if [[ "$PREFILL_ENABLE_DP" == "true" || "$DECODE_ENABLE_DP" == "true" ]]; then
+            export SGLANG_SHARED_EXPERT_TP1=1
+            export SGLANG_DP_SHARED_EXPERT_LOCAL=1
+            export SGLANG_DP_USE_GATHERV=1
+            export SGLANG_DP_USE_REDUCE_SCATTER=1
+            export GPU_MAX_HW_QUEUES="${GPU_MAX_HW_QUEUES_DP:-5}"
+        else
+            export GPU_MAX_HW_QUEUES=2
+        fi
     fi
 
 fi

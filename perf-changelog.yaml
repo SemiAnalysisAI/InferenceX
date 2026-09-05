@@ -6685,6 +6685,18 @@
     - "Bump image from lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260726 to lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260828"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2763
   
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump the image to lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260903, switch the active DP-attention arm's decode side from ep:8 to ep:1 (DP-attention over TP-sharded MoE instead of expert-parallel dispatch), and widen conc-list to [64, 96, 128, 192, 256]. "
+    - "models.yaml: round out dp_flags with --tokenizer-worker-num 8, --enable-dp-attention-local-control-broadcast, --stream-interval 20, and --prefill-decode-interval 10 to mirror the single-node DP-attention recipe block; add enable_two_batch_overlap under prefill.dp; raise mem_fraction_static 0.85 -> 0.86 for both prefill and decode. add --enable-deepseek-v4-fp4-indexer to DeepSeek-V4-Pro-AgentX base_flags"
+    - "env.sh: gate the DP-attention-only SGLang knobs (SGLANG_SHARED_EXPERT_TP1, SGLANG_DP_SHARED_EXPERT_LOCAL, SGLANG_DP_USE_GATHERV, SGLANG_DP_USE_REDUCE_SCATTER, wider GPU_MAX_HW_QUEUES) behind PREFILL_ENABLE_DP/DECODE_ENABLE_DP instead of exporting them unconditionally, so TP-only arms keep GPU_MAX_HW_QUEUES=2; add SGLANG_MORI_RECV_BOUND=1 for the disagg MoRI path."
+    - "Split --enforce-shared-experts-fusion and --disable-shared-experts-fusion into mutually exclusive no_dp_flags/dp_flags buckets (new models.yaml no_dp_flags field plus MODEL_NO_DP_FLAGS in server_sglang.sh's build_server_config()). Both flags previously landed on the DP arm's command line simultaneously and only resolved correctly by relying on the internal check order in DeepseekV4ForCausalLM.determine_num_fused_shared_experts(), not a guaranteed contract."
+    - "prefill.no_dp.chunked_prefill_size: switch from a fixed 8192 to the TP-conditional formula '16384 if PREFILL_TP_SIZE == 8 else 8192'."
+    - "Widen decode.dp.cuda_graph_bs_range from 1-128 to 1-256 to cover the widened conc-list."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2823
 
 - config-keys:
     - minimaxm3-fp4-b300-vllm-agentic-mtp
