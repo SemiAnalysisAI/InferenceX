@@ -22,7 +22,6 @@ jobs:
   claude:
     name: Klaud Cold
     runs-on: ubuntu-latest
-    timeout-minutes: 360
     env:
       # Repair attempts after the initial update; baseline runs do not count.
       MAX_REPAIRS: '3'
@@ -51,8 +50,6 @@ jobs:
           GH_TOKEN: ${{ secrets.CLAUDE_PAT }}
           KLAUDE_DASHBOARD_API_KEY: ${{ secrets.KLAUDE_DASHBOARD_API_KEY }}
           KLAUDE_EVIDENCE: ${{ runner.temp }}/klaude
-          BASH_DEFAULT_TIMEOUT_MS: '120000'
-          BASH_MAX_TIMEOUT_MS: '4800000'
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.CLAUDE_PAT }}
@@ -61,6 +58,7 @@ jobs:
           claude_args: >-
             --model 'claude-fable-5-1'
             --max-turns 200
+            --add-dir '${{ runner.temp }}/klaude'
             --allowedTools "Read,Write,Edit,Glob,Grep,Bash,WebFetch,WebSearch"
           prompt: |
             You are Klaud Cold. Autonomously own this image refresh in one git/gh session:
@@ -68,14 +66,19 @@ jobs:
             change exists and keep it updated. Every PR title must start with "[Klaud Cold] "
             followed by an English / Simplified Chinese description. Never fabricate changes,
             delegate, launch another Claude agent or merge. No later job handles reporting or cleanup.
+            Never @mention GitHub users/teams or request reviews/re-reviews; reviews are automatic.
 
-            Read docs/index.md, AGENTS.md, CONTRIBUTING.md and $KLAUDE_EVIDENCE/candidate.json.
+            Read docs/index.md, AGENTS.md, CONTRIBUTING.md and ${{ runner.temp }}/klaude/candidate.json.
+            Use Read/Glob/Grep for local inspection and keep scratch files in $KLAUDE_EVIDENCE.
             Use its OpenAPI and docs/klaude.md#public-api-investigation on demand; verify API
             identities/producer URLs and reuse repository/API mappings; never invent alias tables.
             Resolve exactly one live master family and check its current image/existing PRs;
             stop if retired, ambiguous, already updated or owned by another PR.
             Use configs/runners.yaml and the matrix generator for routes, all points and physical
-            node demand. Verify upstream releases/registry for CUDA/ROCm/hardware compatibility;
+            node demand. Verify the reviewed telemetry-clusters cover every actual target; never
+            substitute a healthy sibling cluster. Run the capacity check below BEFORE edits or
+            branch/PR creation as well as before each dispatch. Unknown routes mean defer and stop.
+            Verify upstream releases/registry for CUDA/ROCm/hardware compatibility;
             pin mutable tags by digest. Recheck open PRs immediately before claiming the branch;
             the context's pr-review is a snapshot. Before GPU use, atomically claim the context's exact
             branch at its base SHA; an existing branch means stop. Record family/evidence in PR.
@@ -88,11 +91,13 @@ jobs:
             Override the repository append rule: keep perf-changelog.yaml byte-for-byte unchanged,
             explain the conflict with checks, keep the PR draft and never bypass checks.
 
-            Use uv and applicable InferenceX checks. Before EACH dispatch, resolve the exact telemetry
-            cluster from current runner configuration/private status and run:
+            Use uv and applicable InferenceX checks. Check every exact telemetry cluster from the
+            current recipe/runner configuration with repeated --cluster arguments:
             uv run --no-project --python 3.12 --with "pydantic>=2.10,<3" python -m utils.klaude check-capacity --cluster TELEMETRY_CLUSTER_ID
-            Exit 0 requires node utilization below 20%; ambiguous routing or any other result means
-            defer and stop. Never print private API responses.
+            Exit 0 requires current telemetry, available nodes and node utilization below 20% for
+            ALL targets. Any other result means defer, report and stop; do not wait for recovery
+            or promise automatic continuation. Keep an existing PR draft; create no placeholder PR.
+            Never print private API responses.
 
             Dispatch e2e-tests.yml from main with inputs.ref=exact measured SHA,
             generate-cli-command="test-config --config-files FILE --config-keys FAMILY", fail-fast=true.
