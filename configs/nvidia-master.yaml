@@ -1364,7 +1364,7 @@ qwen3.5-fp4-rtx6000pro-sglang-mtp:
       - { tp: 4, ep: 4, conc-list: [1, 4, 16, 64], spec-decoding: mtp }
 
 qwen3.5-fp4-b300-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.14-cu130
+  image: lmsysorg/sglang:v0.5.19-cu130
   model: nvidia/Qwen3.5-397B-A17B-NVFP4-V2
   model-prefix: qwen3.5
   runner: b300
