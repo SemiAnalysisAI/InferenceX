@@ -164,7 +164,7 @@ def fetch_catalog(policy: Policy) -> tuple[list[dict], list[str]]:
 
 def fresh(value: Any, now: datetime, policy: Policy) -> bool:
     try:
-        return -policy.clock_skew_seconds <= (utc(now) - utc(value)).total_seconds() <= policy.telemetry_max_age_seconds
+        return -policy.clock_skew_seconds <= (utc(now) - utc(value)).total_seconds() <= policy.response_max_age_seconds
     except (ValueError, TypeError, AttributeError):
         return False
 
@@ -184,9 +184,13 @@ def available_clusters(feed: Feed, policy: Policy, now: datetime) -> set[str]:
             if not isinstance(cluster_id, str) or not cluster_id or cluster_id in seen:
                 return set()
             seen.add(cluster_id)
-            if (cluster['stale'] is not False
-                    or not fresh(cluster['observedAt'], now, policy)
-                    or not fresh(cluster['receivedAt'], now, policy)):
+            # The API owns the cluster-age cutoff. Check timestamp validity/order,
+            # but do not impose a second cutoff on its current snapshots.
+            observed, received = utc(cluster['observedAt']), utc(cluster['receivedAt'])
+            generated = utc(raw['generatedAt'])
+            if (cluster['stale'] is not False or cluster['status'] not in ('operational', 'degraded')
+                    or (observed - received).total_seconds() > policy.clock_skew_seconds
+                    or (received - generated).total_seconds() > policy.clock_skew_seconds):
                 continue
             summary = cluster['summary']
             total = summary['totalNodes']
@@ -194,7 +198,8 @@ def available_clusters(feed: Feed, policy: Policy, now: datetime) -> set[str]:
             if (type(total) is not int or total <= 0
                     or any(type(n) is not int or n < 0 for n in counts) or sum(counts) != total):
                 continue
-            if (summary['allocatedNodes'] + summary['mixedNodes']) * 5 < total:
+            # An entirely down/unavailable cluster can also report 0% utilization.
+            if summary['idleNodes'] > 0 and (summary['allocatedNodes'] + summary['mixedNodes']) * 5 < total:
                 available.add(cluster_id)
         return available
     except (KeyError, ValueError, TypeError, AttributeError):
@@ -204,3 +209,15 @@ def available_clusters(feed: Feed, policy: Policy, now: datetime) -> set[str]:
 def fetch_capacity(policy: Policy) -> set[str]:
     return available_clusters(fetch('clusters', token=os.environ.get('KLAUDE_DASHBOARD_API_KEY')),
                               policy, datetime.now(timezone.utc))
+
+
+def capacity_context(policy: Policy) -> dict:
+    """Private routing hints for review, without node counts or raw responses."""
+    feed = fetch('clusters', token=os.environ.get('KLAUDE_DASHBOARD_API_KEY'))
+    available = available_clusters(feed, policy, datetime.now(timezone.utc))
+    try:
+        clusters = sorted({cluster['clusterId'] for cluster in feed.payload['data']['clusters']
+                           if isinstance(cluster['clusterId'], str)})
+    except (KeyError, TypeError):
+        clusters = []
+    return {'telemetry-clusters': clusters, 'eligible-telemetry-clusters': sorted(available)}
