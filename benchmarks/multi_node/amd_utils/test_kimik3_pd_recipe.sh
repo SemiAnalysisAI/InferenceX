@@ -83,6 +83,32 @@ for scale_arm, num_decode_workers, concurrencies in zip(
     }
 assert "mooncake" not in repr(scale_recipe).lower()
 
+balanced_recipe = config[
+    "kimik3-fp4-mi355x-vllm-disagg-agentic-balanced-scale"
+]
+balanced_point = balanced_recipe["scenarios"]["agentic-coding"][0]
+assert balanced_point["dram-utilization"] == 0.60
+assert len(balanced_point["search-space"]) == 1
+balanced_arm = balanced_point["search-space"][0]
+assert balanced_arm["conc-list"] == [70]
+assert balanced_arm["spec-decoding"] == "none"
+assert balanced_arm["prefill"]["num-worker"] == 2
+assert balanced_arm["prefill"]["dcp-size"] == 8
+assert balanced_arm["decode"]["num-worker"] == 2
+assert balanced_arm["decode"]["dcp-size"] == 8
+balanced_settings = (
+    balanced_arm["prefill"]["additional-settings"]
+    + balanced_arm["decode"]["additional-settings"]
+)
+assert "PREFILL_NODES=2" in balanced_settings
+assert "DECODE_NODES=2" in balanced_settings
+assert "LMCACHE_L1_READ_TTL_SECONDS=1800" in balanced_settings
+assert "LMCACHE_ON_DECODE=true" not in repr(balanced_arm)
+assert balanced_arm["kv-offload-backend"] == {
+    "name": "lmcache-k3",
+    "version": "0.5.5.dev104+rocm7.2",
+}
+
 k3 = models["Kimi-K3"]
 env = k3["env"]
 assert "VLLM_SSM_CONV_STATE_LAYOUT=DS" in env
@@ -99,6 +125,7 @@ job_slurm = models_path.with_name("job.slurm").read_text(encoding="utf-8-sig")
 assert "apply_vllm_gpu_memory_utilization" in server_vllm
 assert "-e GPU_MEMORY_UTILIZATION=" in job_slurm
 assert "-e LMCACHE_L1_READ_TTL_SECONDS=" in job_slurm
+assert "-e AIPERF_EXPERIMENTAL_FAST=" in job_slurm
 
 flags = k3["prefill_flags"]
 for expected in (

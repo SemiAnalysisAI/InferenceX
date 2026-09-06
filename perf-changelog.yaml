@@ -6616,10 +6616,11 @@
 - config-keys:
     - kimik3-fp4-mi355x-vllm-disagg-agentic
     - kimik3-fp4-mi355x-vllm-disagg-agentic-decode-scale
+    - kimik3-fp4-mi355x-vllm-disagg-agentic-balanced-scale
   scenario-type:
     - agentic-coding
   description:
-    - "Add controlled Kimi-K3 MI355X 1P2D c40/c48/c70 and 1P3D c40 scaling points, retain 1P1D as the c48/c70 baseline, and remove the unvalidated 2P1D c70 arm. Overlay PR 54733 with MoRIIO so failed hybrid LMCache loads roll back and recompute instead of crashing the scheduler; raise the LMCache L1 read-lock TTL to 1800 seconds because measured c48/c70 prefetch queues exceed the 300-second default."
-    - "新增受控的 Kimi-K3 MI355X 1P2D c40/c48/c70 与 1P3D c40 扩展点，保留 1P1D 作为 c48/c70 基线，并移除未经验证的 2P1D c70；将 PR 54733 与 MoRIIO 一并覆盖，使 hybrid LMCache 加载失败时回退重算；由于实测 c48/c70 预取排队超过默认 300 秒，将 LMCache L1 读锁 TTL 提高到 1800 秒。"
+    - "Add controlled Kimi-K3 MI355X decode-scaling points plus an isolated 2P2D c70 follow-up, and forward AgentX fast mode into the benchmark container for low-cost validation. Overlay PR 54733 with MoRIIO so failed hybrid LMCache loads roll back and recompute instead of crashing the scheduler; raise the LMCache L1 read-lock TTL to 1800 seconds because measured c48/c70 prefetch queues exceed the 300-second default."
+    - "新增受控的 Kimi-K3 MI355X decode 扩展点与独立的 2P2D c70 后续实验，并将 AgentX fast 模式透传到 benchmark 容器用于低成本验证；将 PR 54733 与 MoRIIO 一并覆盖，使 hybrid LMCache 加载失败时回退重算；由于实测 c48/c70 预取排队超过默认 300 秒，将 LMCache L1 读锁 TTL 提高到 1800 秒。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
   

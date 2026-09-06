@@ -838,6 +838,63 @@ kimik3-fp4-mi355x-vllm-disagg-agentic-decode-scale:
           - "DECODE_DCP_COMM=a2a"
           - "DECODE_CP_KV_CACHE_INTERLEAVE_SIZE=1536"
 
+# Balanced c70 follow-up after 1P2D removed decode queueing and exposed a
+# prefill queue. This key is isolated so targeted runs do not repeat the
+# completed decode-scaling matrix.
+kimik3-fp4-mi355x-vllm-disagg-agentic-balanced-scale:
+  image: vllm/vllm-openai-rocm:nightly@sha256:91e381f072d6a44e1e4c97c82dce06e50e5189905cb3999a11471c5a8fc6a563
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm-disagg
+  router: { name: vllm-router, version: "0.1.14" }
+  kv-p2p-transfer: moriio
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.60
+      search-space:
+      - spec-decoding: "none"
+        conc-list: [ 70 ]
+        kv-offloading: dram
+        kv-offload-backend: { name: lmcache-k3, version: "0.5.5.dev104+rocm7.2" }
+        prefill:
+          num-worker: 2
+          tp: 8
+          dcp-size: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=2"
+          - "GPU_MEMORY_UTILIZATION=0.88"
+          - "TOTAL_CPU_DRAM_GB=1799"
+          - "LMCACHE_CHUNK_SIZE=12288"
+          - "LMCACHE_L1_SIZE_GB=1799"
+          - "LMCACHE_L1_READ_TTL_SECONDS=1800"
+          - "LMCACHE_MAX_GPU_WORKERS=8"
+          - "SERVER_UP_TIMEOUT=900"
+          - "IX_AIPERF_TOKENIZER=moonshotai/Kimi-K3"
+          - "VLLM_K3_FORK_REF=k3-pd-recovery-integration"
+          - "VLLM_K3_FORK_SHA=710a6cbef37aa7b7fb88255e09795729483943ad"
+          - "HF_HUB_CACHE=/models/.cache/huggingface/hub"
+          - "PREFILL_DCP_COMM=a2a"
+          - "PREFILL_CP_KV_CACHE_INTERLEAVE_SIZE=1536"
+        decode:
+          num-worker: 2
+          tp: 8
+          dcp-size: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=2"
+          - "VLLM_K3_FORK_REF=k3-pd-recovery-integration"
+          - "VLLM_K3_FORK_SHA=710a6cbef37aa7b7fb88255e09795729483943ad"
+          - "HF_HUB_CACHE=/models/.cache/huggingface/hub"
+          - "DECODE_DCP_COMM=a2a"
+          - "DECODE_CP_KV_CACHE_INTERLEAVE_SIZE=1536"
+
 dsr1-fp4-mi355x-sglang-disagg:
   image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519
   model: amd/DeepSeek-R1-0528-MXFP4-v2
