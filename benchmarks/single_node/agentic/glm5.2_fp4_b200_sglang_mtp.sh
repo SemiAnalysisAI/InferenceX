@@ -19,9 +19,10 @@ set -x
 #   DP_ATTENTION=false -> low-latency arm (TP8, fp8 KV, cutedsl bf16 GEMM)
 #   DP_ATTENTION=true  -> high-throughput DEP arm (TP8 + DP8 attention-DP +
 #                         EP_SIZE expert-parallel MoE via --ep-size)
-# Only the low-latency arm is wired into the master config for this MTP recipe
-# (see the entry comment on glm5.2-fp4-b200-sglang-agentic-mtp); the DEP branch
-# is kept intact so the throughput arm can be added without re-deriving it.
+# The master config wires three arms (see the entry comment on
+# glm5.2-fp4-b200-sglang-agentic-mtp): low-latency TP8 through conc 20, then
+# EP8 (EP_SIZE=8, DP_ATTENTION=false) and DEP8 (EP_SIZE=8, DP_ATTENTION=true)
+# from conc 20 to 48.
 #
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR, DURATION,
@@ -120,9 +121,11 @@ if require_agentic_kv_offload_backend hicache; then
     # whole history; the host tier restores those hits at C2C bandwidth.
     # GLM-5.2 is DSA/MLA-family (attention_backend=dsa): every TP rank holds
     # complete per-token KV. The ratio 0.75 gives the main target host pool
-    # only 1,257,728 token slots. Use a 169 GB/rank absolute target pool at
-    # c12/c16 and keep ratio mode at the lower concurrencies, where the
-    # smaller working set does not need the larger pinned allocation.
+    # only 1,257,728 token slots. Use a 169 GB/rank absolute target pool from
+    # c12 upward (c12 through c48, on every arm) and keep ratio mode at the
+    # lower concurrencies, where the smaller working set does not need the
+    # larger pinned allocation. The per-rank budget below is the same with
+    # attention-DP: each rank then pins the pool for its own sessions only.
     #
     # cluster:b200-nscale advertises 2,063,920 MiB and this config exposes 80%,
     # giving the benchmark 1,731 GB. A 169 GB/rank packed target+MTP pool plus
@@ -132,7 +135,7 @@ if require_agentic_kv_offload_backend hicache; then
     DEFAULT_HICACHE_RATIO=0.75
     DEFAULT_HICACHE_SIZE=0
     case "$CONC" in
-        12|16) DEFAULT_HICACHE_SIZE=169 ;;
+        12|16|20|24|28|32|40|48) DEFAULT_HICACHE_SIZE=169 ;;
     esac
     MAX_HICACHE_SIZE=270
     HICACHE_SIZE="${HICACHE_SIZE:-$DEFAULT_HICACHE_SIZE}"
@@ -208,6 +211,16 @@ if [ "$DP_ATTENTION" = "true" ]; then
         --tokenizer-worker-num "$TP"
         --dist-init-addr "127.0.0.1:$((PORT + 2000))"
     )
+else
+    # Cookbook low-latency levers; the DP-attention cell omits them.
+    PARALLEL_ARGS+=(
+        --kv-cache-dtype fp8_e4m3
+        --bf16-gemm-backend cutedsl
+        --max-prefill-tokens 8192
+    )
+fi
+
+if [ "$EP_SIZE" -gt 1 ]; then
     # GLM-5.2-NVFP4 leaves the MTP/nextn layer unquantized (hf_quant_config
     # excludes model.layers.78*), so the EAGLE draft MoE is bf16 and
     # UnquantizedFusedMoEMethod pins it to the triton runner core. Inheriting
@@ -216,18 +229,11 @@ if [ "$DP_ATTENTION" = "true" ]; then
     # flashinfer to triton is not registered". SGLang handles this in
     # _deepseek_spec_moe_resolution but gates the hook on is_hip(), so on CUDA
     # the draft silently inherits; set upstream's own ROCm values explicitly.
-    # Only needed once expert parallelism puts an a2a in the MoE path -- the
-    # plain-TP arm below has none.
+    # Only needed once expert parallelism puts an a2a in the MoE path, i.e. on
+    # the EP8 and DEP8 arms -- the plain-TP arm (EP_SIZE=1) has none.
     SPEC_ARGS+=(
         --speculative-moe-a2a-backend none
         --speculative-moe-runner-backend triton
-    )
-else
-    # Cookbook low-latency levers; the DP-attention cell omits them.
-    PARALLEL_ARGS+=(
-        --kv-cache-dtype fp8_e4m3
-        --bf16-gemm-backend cutedsl
-        --max-prefill-tokens 8192
     )
 fi
 
