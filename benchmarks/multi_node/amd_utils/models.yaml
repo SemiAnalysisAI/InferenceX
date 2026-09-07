@@ -380,7 +380,7 @@ DeepSeek-V4-Pro-AgentX:
   # --swa-full-tokens-ratio 0.15 widens the SWA ring for the larger DP batch, and
   # --tokenizer-worker-num matches the only DP arm's TP (8) today -- bump this if
   # a different-TP DP arm is added.
-  dp_flags: "--enable-dp-attention --enable-prefill-delayer --disable-shared-experts-fusion --swa-full-tokens-ratio 0.15 --enable-dp-attention-local-control-broadcast --tokenizer-worker-num 8 --stream-interval 20 --prefill-decode-interval 10"
+  dp_flags: "--enable-dp-attention --enable-prefill-delayer --disable-shared-experts-fusion --swa-full-tokens-ratio 0.15 --enable-dp-attention-local-control-broadcast --tokenizer-worker-num 8 --stream-interval 20 --prefill-decode-interval 20"
   ep_flags: "--ep-dispatch-algorithm fake --moe-a2a-backend mori --deepep-mode normal"
   mtp_flags: "--speculative-algorithm EAGLE --speculative-eagle-topk 1"
   prefill:
