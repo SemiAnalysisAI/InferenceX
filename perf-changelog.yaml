@@ -6921,3 +6921,11 @@
     - "Pick up the latest automatic ROCm DeepSeek-V4 optimizations, including fused mHC post/pre plus RMSNorm, gfx950 C4A top-k dispatch, fused C4 compressor GEMMs, fused SWA q/kv RMSNorm plus q FP8 quantization, and medium-batch cooperative top-k tuning."
     - "Keep the existing VLLM_ROCM_USE_AITER=1, VLLM_ROCM_USE_AITER_MOE=1, and --moe-backend aiter settings, and explicitly add VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 plus VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 to both STP and MTP paths. The current checkpoint's shared-expert path does not satisfy the latest vLLM fusion conditions, so that fusion flag self-disables while preserving recipe parity."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2792
+
+- config-keys:
+    - minimaxm3-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update vLLM image from vllm/vllm-openai:nightly-1dc464d42681d22f38caf1fdc1eb632dc4421c45 (2026-08-30 nightly) to vllm/vllm-openai:nightly-d9105ea8001e0a6d77a96327d17515bb5791fb36 (2026-09-07 nightly, digest sha256:254eebf919e8b7b0d530d97fccc606c36f380ff6724d64bc190951bec1aee838, tag commit vllm-project/vllm@d9105ea8). Docker Hub last pushed the tag at 2026-09-07T06:16:01Z."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2860
