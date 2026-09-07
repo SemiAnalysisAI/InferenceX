@@ -150,7 +150,7 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     require_agentic_kv_offload_backend "$KV_OFFLOAD_BACKEND"
 
     case "$CONC" in
-        44|48)
+        44|48|60)
             LMCACHE_VERSION="0.5.5.dev104+rocm7.2"
             ;;
         *)
@@ -281,7 +281,7 @@ case "$CONC" in
         GPU_MEM_UTIL=0.9
         MAX_NUM_BATCHED_TOKENS=8192
         ;;
-    44|48|52)
+    44|48|52|60)
         SPEC_NUM_TOKENS=0
         GPU_MEM_UTIL=0.9
         MAX_NUM_BATCHED_TOKENS=8192

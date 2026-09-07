@@ -277,7 +277,7 @@ else
     if [[ "${MODEL_PREFIX:-}" == "kimik3" &&
           "${FRAMEWORK:-}" == "vllm" &&
           "${SPEC_DECODING:-}" == "mtp" &&
-          "${CONC:-}" == "48" &&
+          ( "${CONC:-}" == "48" || "${CONC:-}" == "60" ) &&
           "${KV_OFFLOADING:-}" == "dram" &&
           "${KV_OFFLOAD_BACKEND_METADATA:-}" == *"0.5.5.dev104+rocm7.2"* ]]; then
         SALLOC_ARGS+=(--exclude=mia1-p01-g15)

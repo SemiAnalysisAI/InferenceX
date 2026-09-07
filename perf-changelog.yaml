@@ -6858,3 +6858,12 @@
   description:
     - "Exclude Slurm node mia1-p01-g15 only for the dev104 concurrency-48 retry after its out-of-resources failure."
   pr-link: TBD
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add concurrency 60 to the TP8/DCP8 LMCache 0.5.5.dev104+rocm7.2 experiment after the concurrency-48 run remained healthy."
+    - "Apply the same narrowly scoped mia1-p01-g15 Slurm exclusion to the concurrency-60 point."
+  pr-link: TBD
