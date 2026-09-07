@@ -112,12 +112,8 @@ def feed_issues(feed: Feed | None, now: datetime, policy: Policy) -> list[str]:
     age = (utc(now) - utc(feed.retrieved_at)).total_seconds()
     if age < -policy.clock_skew_seconds or age > policy.public_max_age_seconds:
         issues.append("feed-retrieval-stale")
-    try:
-        age_header = int(feed.headers.get("age", "0"))
-        if age_header < 0 or age + age_header > policy.public_max_age_seconds:
-            issues.append("feed-cache-stale")
-    except ValueError:
-        issues.append("feed-cache-age-invalid")
+    # The public API/CDN owns cache freshness. Age is time in a shared cache,
+    # not the age of the benchmark data; do not impose a second CDN TTL here.
     return issues
 
 
@@ -159,7 +155,13 @@ def catalog(images: Feed | None, releases: Feed | None, now: datetime, policy: P
 
 
 def fetch_catalog(policy: Policy) -> tuple[list[dict], list[str]]:
-    return catalog(fetch('images'), fetch('releases'), datetime.now(timezone.utc), policy)
+    feeds = {}
+    for resource in ('images', 'releases'):
+        try:
+            feeds[resource] = fetch(resource)
+        except ReadError as error:
+            raise ReadError(f'{resource}:{error}') from None
+    return catalog(feeds['images'], feeds['releases'], datetime.now(timezone.utc), policy)
 
 
 def fresh(value: Any, now: datetime, policy: Policy) -> bool:

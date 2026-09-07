@@ -32,6 +32,7 @@ class Contract(BaseModel):
 class Policy(Contract):
     # Response freshness is separate from the API's configured cluster staleness policy.
     response_max_age_seconds: int = Field(default=120, gt=0, le=120)
+    # Bounds reuse of a local fetch, not the server/CDN's Age header.
     public_max_age_seconds: int = Field(default=7200, gt=0)
     clock_skew_seconds: int = Field(default=5, ge=0, le=30)
 
