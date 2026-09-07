@@ -238,6 +238,89 @@ DECODE_SERVER_CONFIG="$(apply_vllm_dcp_config "$DECODE_SERVER_CONFIG" "${DECODE_
 PREFILL_SERVER_CONFIG="$(apply_vllm_gpu_memory_utilization "$PREFILL_SERVER_CONFIG" "${GPU_MEMORY_UTILIZATION:-}")"
 DECODE_SERVER_CONFIG="$(apply_vllm_gpu_memory_utilization "$DECODE_SERVER_CONFIG" "${GPU_MEMORY_UTILIZATION:-}")"
 
+if [[ "${MODEL_NAME:-}" == "Kimi-K3" && "${SPEC_DECODING:-}" == "mtp" ]]; then
+    apply_numeric_serve_flag() {
+        local cfg="$1"
+        local flag="$2"
+        local value="$3"
+        if echo "$cfg" | grep -q -- "$flag"; then
+            echo "$cfg" | sed -E "s/(${flag}[[:space:]]+)[0-9]+/\\1${value}/g"
+        else
+            echo "$cfg $flag $value"
+        fi
+    }
+
+    apply_quoted_serve_flag() {
+        SERVE_CONFIG="$1" SERVE_FLAG="$2" SERVE_VALUE="$3" python3 - <<'PY'
+import os
+import shlex
+
+tokens = shlex.split(os.environ["SERVE_CONFIG"])
+flag = os.environ["SERVE_FLAG"]
+value = os.environ["SERVE_VALUE"]
+if flag in tokens:
+    index = tokens.index(flag)
+    tokens[index + 1] = value
+else:
+    tokens.extend((flag, value))
+print(shlex.join(tokens))
+PY
+    }
+
+    spec_config=$(python3 - <<'PY'
+import json
+import os
+
+config = {
+    "model": os.environ.get("SPEC_MODEL", "/models/Inferact-Kimi-K3-DSpark"),
+    "num_speculative_tokens": int(os.environ.get("SPEC_NUM_TOKENS", "4")),
+    "method": "dspark",
+    "attention_backend": os.environ.get("SPEC_ATTN_BACKEND", "TRITON_MLA"),
+    "kv_cache_dtype": "auto",
+    "draft_sample_method": os.environ.get(
+        "SPEC_DRAFT_SAMPLE_METHOD", "probabilistic"
+    ),
+    "rejection_sample_method": os.environ.get(
+        "SPEC_REJECTION_SAMPLE_METHOD", "block"
+    ),
+}
+if config["rejection_sample_method"] == "synthetic":
+    config["synthetic_acceptance_length"] = float(
+        os.environ.get("SPEC_SYNTHETIC_ACCEPTANCE_LENGTH", "3.36")
+    )
+print(json.dumps(config, separators=(",", ":")))
+PY
+    )
+    spec_max_num_seqs=${SPEC_MAX_NUM_SEQS:-16}
+    spec_max_num_batched_tokens=${SPEC_MAX_NUM_BATCHED_TOKENS:-4096}
+    # Keep the legacy shared override as a fallback, but allow P/D to retain
+    # their role-specific graph modes. Decode uses full graphs without requiring
+    # breakable piecewise capture; prefill keeps the mixed-batch piecewise path.
+    spec_cudagraph_mode=${SPEC_CUDAGRAPH_MODE:-FULL_AND_PIECEWISE}
+    spec_prefill_cudagraph_mode=${SPEC_PREFILL_CUDAGRAPH_MODE:-$spec_cudagraph_mode}
+    spec_decode_cudagraph_mode=${SPEC_DECODE_CUDAGRAPH_MODE:-$spec_cudagraph_mode}
+    spec_capture_size=$((spec_max_num_seqs * (${SPEC_NUM_TOKENS:-4} + 1)))
+    for role in PREFILL DECODE; do
+        cfg_name="${role}_SERVER_CONFIG"
+        cfg=${!cfg_name}
+        if [[ "$role" == "PREFILL" ]]; then
+            role_cudagraph_mode=$spec_prefill_cudagraph_mode
+        else
+            role_cudagraph_mode=$spec_decode_cudagraph_mode
+        fi
+        spec_compilation_config="{\"mode\":3,\"cudagraph_mode\":\"${role_cudagraph_mode}\",\"max_cudagraph_capture_size\":${spec_capture_size},\"custom_ops\":[\"+fused_rms_norm_gated\"]}"
+        cfg=$(apply_numeric_serve_flag "$cfg" --max-num-seqs "$spec_max_num_seqs")
+        cfg=$(apply_numeric_serve_flag \
+            "$cfg" --max-num-batched-tokens "$spec_max_num_batched_tokens")
+        cfg=$(apply_quoted_serve_flag \
+            "$cfg" --compilation-config "$spec_compilation_config")
+        printf -v "$cfg_name" '%s' "$cfg"
+    done
+    PREFILL_SERVER_CONFIG+=" --speculative-config '${spec_config}'"
+    DECODE_SERVER_CONFIG+=" --speculative-config '${spec_config}'"
+    echo "Applied Kimi-K3 DSpark config to prefill and decode: ${spec_config}; max_num_seqs=${spec_max_num_seqs}; max_num_batched_tokens=${spec_max_num_batched_tokens}; capture_size=${spec_capture_size}; prefill_cudagraph_mode=${spec_prefill_cudagraph_mode}; decode_cudagraph_mode=${spec_decode_cudagraph_mode}"
+fi
+
 echo "PREFILL_SERVER_CONFIG (after TP/EP/DP): $PREFILL_SERVER_CONFIG"
 echo "DECODE_SERVER_CONFIG (after TP/EP/DP): $DECODE_SERVER_CONFIG"
 
@@ -270,6 +353,8 @@ ensure_lmcache_kv_offload() {
     # shellcheck source=/dev/null
     . "$(dirname "${BASH_SOURCE[0]}")/lmcache_mp.sh"
     lmcache_mp_install || exit 1
+    printf '%s\n' "$LMCACHE_RESOLVED_VERSION" \
+        > "/run_logs/slurm_job-${SLURM_JOB_ID}/lmcache_${host_name}_version.txt"
     lmcache_mp_assert_hybrid_ok || exit 1
     lmcache_mp_start "/run_logs/slurm_job-${SLURM_JOB_ID}" "$host_name" || exit 1
     LMCACHE_SETUP_DONE=1

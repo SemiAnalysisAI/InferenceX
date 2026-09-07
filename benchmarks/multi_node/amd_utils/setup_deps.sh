@@ -184,6 +184,8 @@ files = [
     "model_executor/layers/mamba/gdn/kimi_gdn_linear_attn.py",
     "model_executor/models/qwen3_dflash.py",
 ]
+if os.environ.get("SPEC_DECODING") == "mtp":
+    files.append("v1/attention/backends/mla/triton_mla.py")
 for rel in files:
     src = os.path.join(srcroot, rel)
     dst = os.path.join(dstroot, rel)
@@ -193,6 +195,33 @@ for rel in files:
     shutil.copy2(src, dst)
 print(f"[SETUP] overlaid {len(files)} allowlisted Python files -> {dstroot}")
 PY
+
+    if [[ "${VLLM_ROCM_PAGE_ALIGN_KV:-0}" == 1 ]]; then
+        python3 - "$vllm_pkg/v1/worker/utils.py" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text()
+marker = "alignment_offset = (-allocation.data_ptr()) % page_size"
+old = '    buf = torch.zeros(buf_size, dtype=torch.int8, device=device)\n'
+new = '''    if current_platform.is_rocm():
+        allocation = torch.zeros(
+            buf_size + page_size - 1, dtype=torch.int8, device=device
+        )
+        alignment_offset = (-allocation.data_ptr()) % page_size
+        buf = allocation.narrow(0, alignment_offset, buf_size)
+        assert buf.data_ptr() % page_size == 0
+    else:
+        buf = torch.zeros(buf_size, dtype=torch.int8, device=device)
+'''
+if marker not in text:
+    if text.count(old) != 1:
+        raise SystemExit("unexpected vLLM allocate_kv_cache source; refusing patch")
+    path.write_text(text.replace(old, new))
+print("[SETUP] ROCm KV backing page alignment enabled")
+PY
+    fi
 
     python3 -c "import vllm; from vllm.distributed.kv_transfer.kv_connector.v1.multi_connector import MultiConnector; from vllm.distributed.kv_transfer.kv_connector.v1.moriio.moriio_connector import MoRIIOConnector; from vllm.v1.core.kv_cache_manager import KVCacheManager; assert isinstance(KVCacheManager.group_block_sizes, property); print('[SETUP] vLLM fork overlay import OK', vllm.__file__, MultiConnector, MoRIIOConnector, 'hybrid-load-recovery')" \
         || { echo "[SETUP] ERROR: vLLM import failed after fork overlay"; exit 1; }

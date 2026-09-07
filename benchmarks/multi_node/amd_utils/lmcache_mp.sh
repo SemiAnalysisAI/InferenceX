@@ -26,10 +26,12 @@ lmcache_mp_install() {
     installed=$(python3 -c \
         'import importlib.metadata; print(importlib.metadata.version("lmcache"))' \
         2>/dev/null || true)
-    if [[ "$installed" == "$version" ]] \
+    if [[ "$version" != latest-rocm && "$installed" == "$version" ]] \
        && python3 -c \
           'from lmcache.integration.vllm.lmcache_mp_connector import LMCacheMPConnector' \
           2>/dev/null; then
+        LMCACHE_RESOLVED_VERSION="$installed"
+        export LMCACHE_RESOLVED_VERSION
         return 0
     fi
 
@@ -40,16 +42,30 @@ lmcache_mp_install() {
     python3 -m pip install --quiet --no-cache-dir --no-deps \
         sortedcontainers==2.4.0 \
         opentelemetry-exporter-prometheus==0.61b0 \
-        cupy-rocm-7-0==14.1.1 \
-        "lmcache==$version" \
-        --find-links "$index" || return 1
+        cupy-rocm-7-0==14.1.1 || return 1
+    if [[ "$version" == latest-rocm ]]; then
+        python3 -m pip install --quiet --no-cache-dir --no-deps --pre --upgrade \
+            --no-index --find-links "$index" lmcache || return 1
+    else
+        python3 -m pip install --quiet --no-cache-dir --no-deps \
+            "lmcache==$version" --find-links "$index" || return 1
+    fi
 
     installed=$(python3 -c \
         'import importlib.metadata; print(importlib.metadata.version("lmcache"))' \
         2>/dev/null || true)
-    if [[ "$installed" != "$version" ]]; then
+    if [[ "$version" == latest-rocm ]]; then
+        if [[ ! "$installed" =~ ^[0-9]+\.[0-9]+\.[0-9]+.*\+rocm7\.2$ ]]; then
+            echo "ERROR: latest-rocm resolved incompatible LMCache $installed" >&2
+            return 1
+        fi
+    elif [[ "$installed" != "$version" ]]; then
+        echo "ERROR: expected LMCache $version, installed $installed" >&2
         return 1
     fi
+    LMCACHE_RESOLVED_VERSION="$installed"
+    export LMCACHE_RESOLVED_VERSION
+    echo "[lmcache] resolved requested=$version installed=$installed"
     python3 -c \
         "from lmcache.integration.vllm.lmcache_mp_connector import LMCacheMPConnector" \
         || return 1
@@ -57,10 +73,18 @@ lmcache_mp_install() {
 
 lmcache_mp_assert_hybrid_ok() {
     python3 - <<'PY'
+import inspect
+
 from vllm.distributed.kv_transfer.kv_connector.v1.base import SupportsHMA
-from lmcache.integration.vllm.lmcache_mp_connector import LMCacheMPConnector
+from lmcache.integration.vllm.lmcache_mp_connector import (
+    LMCacheMPConnector,
+    get_dcp_decorated_model_name,
+)
 
 assert issubclass(LMCacheMPConnector, SupportsHMA)
+assert "kv_cache_config" in inspect.signature(get_dcp_decorated_model_name).parameters, (
+    "LMCache build lacks the role-invariant DCP interleave fix from LMCache #4936"
+)
 PY
 }
 
@@ -115,6 +139,12 @@ lmcache_mp_server_args() {
         --eviction-policy "${LMCACHE_EVICTION_POLICY:-LRU}" \
         --supported-transfer-mode "${LMCACHE_TRANSFER_MODE:-lmcache_driven}" \
         --shm-name "${LMCACHE_SHM_NAME:-}"
+
+    if [[ -n "${LMCACHE_WORKER_REGISTRATION_GRACE_SECONDS:-}" ]]; then
+        printf '%s\n' \
+            --worker-registration-grace-seconds \
+            "$LMCACHE_WORKER_REGISTRATION_GRACE_SECONDS"
+    fi
 }
 
 lmcache_mp_start() {
