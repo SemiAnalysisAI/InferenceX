@@ -432,3 +432,16 @@ def test_eval_only_acceptance_rewrite_allows_non_speculative_recipe(
 
     assert result.returncode == 0, result.stderr
     assert recipe.read_text() == original
+
+
+def test_b300_dsxe_draft_model_uses_speculative_script_and_writable_hf_cache() -> None:
+    launcher = (REPO_ROOT / "runners/launch_b300-dsxe.sh").read_text()
+
+    assert (
+        '[[ "$SPEC_DECODING" == "mtp" || "$SPEC_DECODING" == "draft_model" ]]'
+        in launcher
+    )
+    assert 'export HF_HOME="$HF_CACHE_CONTAINER_DIR"' in launcher
+    assert 'export HF_HUB_CACHE="$HF_CACHE_CONTAINER_DIR/hub"' in launcher
+    assert 'export HF_XET_CACHE="$HF_CACHE_CONTAINER_DIR/xet"' in launcher
+    assert '"$HF_CACHE_HOST_DIR:$HF_CACHE_CONTAINER_DIR"' in launcher

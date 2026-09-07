@@ -2,7 +2,7 @@
 set -eo pipefail
 set -x
 
-# Agentic trace replay for DeepSeek-V4-Pro FP4 on B300 with native EAGLE MTP.
+# Agentic trace replay for DeepSeek-V4-Pro-0813 FP4 on B300 with DSpark K=6.
 # Throughput uses the committed golden synthetic AL; eval retains real target
 # verification.
 #
@@ -122,12 +122,14 @@ if [ "$DP_ATTENTION" = "true" ]; then
         --enable-prefill-delayer
         --prefill-decode-interval 20
         --enable-dp-attention
+        --enable-dp-lm-head
         --enable-dp-attention-local-control-broadcast
         --incremental-streaming-output
         --stream-interval 20
         --dist-init-addr "127.0.0.1:$((PORT + 2000))"
         --ep-size "$EP_SIZE"
         --moe-a2a-backend megamoe
+        --enable-w4a4-mxfp4-megamoe
         --enable-deepseek-v4-fp4-indexer
         --disable-flashinfer-autotune
     )
@@ -149,6 +151,8 @@ if [ "$DP_ATTENTION" = "true" ]; then
             MEM_FRACTION_STATIC=0.88
         elif [ "$CONC" -ge 256 ]; then
             MEM_FRACTION_STATIC=0.9
+        elif [ "$CONC" -eq 128 ] || [ "$CONC" -eq 64 ] || [ "$CONC" -eq 32 ]; then
+            MEM_FRACTION_STATIC=0.90
         fi
     else
         # DEP4 is squeezed from both sides: weights occupy ~90% of each GPU when
@@ -156,8 +160,7 @@ if [ "$DP_ATTENTION" = "true" ]; then
         # below ~0.902 (no KV left), while megamoe still needs its ~7 GB
         # workspace above the static budget. 0.95 leaves only ~11 GB free -- the
         # same margin that OOM'd a rank at DEP8 conc 256 -- so use 0.93, which
-        # gives the ~16 GB that DEP8 conc 128 runs with at the same per-rank load
-        # (max-running-requests/dp = 32 in both cases).
+        # leaves approximately 16 GB for the MegaMoE workspace.
         MEM_FRACTION_STATIC=0.93
     fi
     # --chunked-prefill-size is a GLOBAL budget: server_args.py divides it by
@@ -194,7 +197,7 @@ CUDA_GRAPH_MAX_BS=$((CONC * 4))
 CUDA_GRAPH_ARGS=(--cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS")
 SWA_FULL_TOKENS_RATIO=0.1
 if [ "$DP_ATTENTION" = "true" ]; then
-    # Decode graphs must cover the padded MTP batch across all DP ranks, which
+    # Decode graphs must cover the padded speculative batch across all DP ranks, which
     # exceeds CONC; capping at 64 would fall back to eager decode.
     CUDA_GRAPH_ARGS=(--cuda-graph-max-bs-decode 544)
     SWA_FULL_TOKENS_RATIO=0.075
@@ -219,18 +222,12 @@ export SGLANG_OPT_USE_JIT_INDEXER_METADATA=1
 export SGLANG_OPT_USE_TOPK_V2=1
 export SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2=1
 if [ "$DP_ATTENTION" = "true" ]; then
-    # MegaMoE's FP4/MXF4 activation path is opt-in -- both flags default False,
-    # so --moe-a2a-backend megamoe alone runs a different kernel than the one
-    # measured. DG_USE_FP4_ACTS / DG_USE_MXF4_KIND are forwarded to DeepGEMM
-    # automatically from these two.
-    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_FP4_ACTS=1
-    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_MXF4_KIND=1
     # Must cover the per-rank prefill budget (8192) or startup raises; the
     # extra 128 is headroom over the exact-fit boundary.
     export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=8320
 fi
 if [ "${EVAL_ONLY}" != "true" ]; then
-    export SGLANG_SIMULATE_ACC_LEN=2.49
+    export SGLANG_SIMULATE_ACC_LEN=3.77
     export SGLANG_SIMULATE_ACC_METHOD=match-expected
     export SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token
 fi
@@ -261,10 +258,11 @@ SGLANG_CMD=(
     --reasoning-parser deepseek-v4
     --chat-template "$SCRIPT_DIR/../chat_templates/deepseek_v4_thinking.jinja"
     --watchdog-timeout 1800
-    --speculative-algorithm EAGLE
-    --speculative-num-steps 3
+    --speculative-algorithm DSPARK
+    --speculative-dspark-block-size 6
+    --speculative-num-steps 1
     --speculative-eagle-topk 1
-    --speculative-num-draft-tokens 4
+    --speculative-num-draft-tokens 7
     "${MODEL_ARGS[@]}"
     "${METRICS_ARGS[@]}"
     "${CACHE_ARGS[@]}"

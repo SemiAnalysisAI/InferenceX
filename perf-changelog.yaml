@@ -6902,3 +6902,15 @@
     - "Lower mem-fraction-static from 0.89 to 0.86 on every arm: TP4, TP8 and TP8 with DP attention. swa-full-tokens-ratio becomes per-arm: 0.10 on the tensor-parallel arms as before, 0.15 under DP attention."
     - "Drop concurrency 2 and 10 from the TP4 arm, leaving [1, 4, 8], and drop concurrency 16 from the TP8 hicache arm, leaving [32, 48]. Concurrency 16 remains on the TP8 no-offload arm."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2800
+
+- config-keys:
+    - dsv4-fp4-b300-sglang-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Replace the B300 DeepSeek-V4-Pro AgentX native EAGLE/MTP serving path with DSpark block size 6 on the DeepSeek-V4-Pro-0813 checkpoint."
+    - "Use one speculative step, seven draft tokens, and thinking-on golden synthetic acceptance length 3.77 for throughput; eval retains real DSpark verification."
+    - "Run on the AWS B300 DSXE cluster with the nightly-dev-20260901-07c8f729 image and route draft-model jobs through the existing speculative benchmark script."
+    - "Use the current W4A4 MegaMoE and DP LM-head flags for DP attention, and reserve additional MegaMoE workspace at high concurrency."
+    - "Mount a writable Hugging Face and Xet cache for AgentX trace downloads."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
