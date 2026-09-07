@@ -205,6 +205,17 @@ NGINX_SQUASH_FILE="$SQUASH_DIR/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh
 import_squash_image "$IMAGE" "$SQUASH_FILE"
 import_squash_image "$NGINX_IMAGE" "$NGINX_SQUASH_FILE"
 
+# The Kimi-K3 EFA recipe uses NIXL's optional LIBFABRIC backend, which is not
+# present in its pinned vLLM image. Build a version-matched overlay once and
+# share it across runs and compute nodes.
+USES_EFA_NIXL=0
+if [[ -n "${_RECIPE_SRC:-}" ]] && grep -q '"LIBFABRIC"' "$_RECIPE_SRC"; then
+    USES_EFA_NIXL=1
+    EFA_NIXL_CACHE_ROOT="${B300_EFA_NIXL_CACHE_ROOT:-/data/home/sa-gha-runner/efa-nixl-1.3.2-efa-1.47.0}"
+    "$GITHUB_WORKSPACE/runners/setup_b300_efa_nixl.sh" \
+        "$SQUASH_FILE" "$EFA_NIXL_CACHE_ROOT" "$SLURM_ACCOUNT" "$SLURM_PARTITION"
+fi
+
 if [[ "$USES_DCGM_POWER" == "1" ]]; then
     DCGM_EXPORTER_IMAGE="nvcr.io/nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless"
     # enroot resolves bare paths against Docker Hub; nvcr.io pulls need the registry# form
@@ -247,6 +258,14 @@ EOF
     if [[ "$USES_DCGM_POWER" == "1" ]]; then
         printf '  dcgm-exporter: "%s"\n' "$DCGM_EXPORTER_SQSH"
     fi
+    if [[ "$USES_EFA_NIXL" == "1" ]]; then
+        cat <<EOF
+default_mounts:
+  "${EFA_NIXL_CACHE_ROOT}/nixl": /nixl_overlay
+  "${EFA_NIXL_CACHE_ROOT}/efa": /opt/amazon/efa
+  "${EFA_NIXL_CACHE_ROOT}/efa-system-libs": /efa_system_libs
+EOF
+    fi
     echo "use_exclusive_sbatch_directive: true"
 } > srtslurm.yaml
 
@@ -277,10 +296,8 @@ fi
 
 # Override the job name in the recipe with the runner name.
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
-if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
-    python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
-        "$CONFIG_PATH" "$FRAMEWORK" || exit 1
-fi
+python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
+    "$CONFIG_PATH" "$FRAMEWORK" || exit 1
 
 # Weights live on node-local MODEL_ROOT, which this login host cannot stat, so
 # srtctl's preflight model.path check is always skipped. Runtime loading still
