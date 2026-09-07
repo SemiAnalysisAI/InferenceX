@@ -6623,4 +6623,12 @@
     - "Add controlled Kimi-K3 MI355X decode-scaling points plus an isolated 2P2D c70 follow-up, and forward AgentX fast mode into the benchmark container for low-cost validation. Overlay PR 54733 with MoRIIO so failed hybrid LMCache loads roll back and recompute instead of crashing the scheduler; raise the LMCache L1 read-lock TTL to 1800 seconds because measured c48/c70 prefetch queues exceed the 300-second default."
     - "新增受控的 Kimi-K3 MI355X decode 扩展点与独立的 2P2D c70 后续实验，并将 AgentX fast 模式透传到 benchmark 容器用于低成本验证；将 PR 54733 与 MoRIIO 一并覆盖，使 hybrid LMCache 加载失败时回退重算；由于实测 c48/c70 预取排队超过默认 300 秒，将 LMCache L1 读锁 TTL 提高到 1800 秒。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
-  
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-disagg-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add an isolated Kimi-K3 MI355X 1P1D TP8/DCP8 DSpark c48 throughput point with synthetic acceptance length 3.36. Retain the validated no-spec AITER, LMCacheMP, memory, and prefix-cache settings; use token-granular DCP interleave plus the validated DSpark graph envelope, overlay the locally validated grouped MoRIIO stack, and resolve the latest compatible ROCm wheel from LMCache's rolling nightly assets while recording the exact installed version."
+    - "新增独立的 Kimi-K3 MI355X 1P1D TP8/DCP8 DSpark c48 吞吐点，synthetic acceptance length 为 3.36；保持已验证的 no-spec AITER、LMCacheMP、内存与 prefix-cache 配置，使用 token 粒度 DCP interleave 和已验证的 DSpark 图范围，覆盖本地已验证的 grouped MoRIIO 代码栈，并从 LMCache 滚动 nightly assets 解析最新兼容 ROCm wheel，同时记录实际安装版本。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

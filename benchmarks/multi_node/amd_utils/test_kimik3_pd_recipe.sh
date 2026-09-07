@@ -50,6 +50,54 @@ assert "VLLM_K3_FORK_REF=k3-pd-recovery-integration" in settings
 assert any(item.startswith("VLLM_K3_FORK_SHA=710a6cbef") for item in settings)
 assert "mooncake" not in repr(recipe).lower()
 
+dspark_recipe = config["kimik3-fp4-mi355x-vllm-disagg-agentic-dspark"]
+dspark_point = dspark_recipe["scenarios"]["agentic-coding"][0]
+assert len(dspark_point["search-space"]) == 1
+assert dspark_recipe["image"] == (
+    "vllm/vllm-openai-rocm@"
+    "sha256:67d4317ba8aa9e60171c4eaa74eda3d1e877011c809aa186687b524ab4472aaa"
+)
+dspark_arm = dspark_point["search-space"][0]
+assert dspark_arm["conc-list"] == [48]
+assert dspark_arm["spec-decoding"] == "mtp"
+assert dspark_arm["prefill"]["num-worker"] == 1
+assert dspark_arm["decode"]["num-worker"] == 1
+assert dspark_arm["prefill"]["dcp-size"] == 8
+assert dspark_arm["decode"]["dcp-size"] == 8
+assert dspark_arm["kv-offload-backend"] == {
+    "name": "lmcache-k3",
+    "version": "nightly-rocm",
+}
+dspark_settings = (
+    dspark_arm["prefill"]["additional-settings"]
+    + dspark_arm["decode"]["additional-settings"]
+)
+for expected in (
+    "PREFILL_CP_KV_CACHE_INTERLEAVE_SIZE=1",
+    "DECODE_CP_KV_CACHE_INTERLEAVE_SIZE=1",
+    "SPEC_NUM_TOKENS=4",
+    "SPEC_ATTN_BACKEND=ROCM_AITER_MLA",
+    "SPEC_KV_CACHE_DTYPE=fp8",
+    "SPEC_REJECTION_SAMPLE_METHOD=synthetic",
+    "SPEC_SYNTHETIC_ACCEPTANCE_LENGTH=3.36",
+    "SPEC_MAX_NUM_SEQS=80",
+    "SPEC_MAX_NUM_BATCHED_TOKENS=16384",
+    "SPEC_PREFILL_CUDAGRAPH_MODE=FULL_AND_PIECEWISE",
+    "SPEC_DECODE_CUDAGRAPH_MODE=FULL_DECODE_ONLY",
+    "LMCACHE_CHUNK_SIZE=12288",
+    "LMCACHE_VERSION=latest-rocm",
+    "LMCACHE_WORKER_REGISTRATION_GRACE_SECONDS=7200",
+):
+    assert expected in dspark_settings
+assert all(
+    "VLLM_K3_FORK_SHA=eeb21ea2634464cba5ffee0ce73518d5a1fcaefa"
+    in settings
+    for settings in (
+        dspark_arm["prefill"]["additional-settings"],
+        dspark_arm["decode"]["additional-settings"],
+    )
+)
+
 scale_recipe = config["kimik3-fp4-mi355x-vllm-disagg-agentic-decode-scale"]
 scale_arms = scale_recipe["scenarios"]["agentic-coding"][0]["search-space"]
 assert len(scale_arms) == 2
@@ -122,10 +170,50 @@ assert "TORCH_NCCL_BLOCKING_WAIT=0" in k3["decode_env"]
 
 server_vllm = models_path.with_name("server_vllm.sh").read_text(encoding="utf-8-sig")
 job_slurm = models_path.with_name("job.slurm").read_text(encoding="utf-8-sig")
+setup_deps = models_path.with_name("setup_deps.sh").read_text(encoding="utf-8-sig")
 assert "apply_vllm_gpu_memory_utilization" in server_vllm
 assert "-e GPU_MEMORY_UTILIZATION=" in job_slurm
 assert "-e LMCACHE_L1_READ_TTL_SECONDS=" in job_slurm
+assert "-e LMCACHE_WORKER_REGISTRATION_GRACE_SECONDS=" in job_slurm
+assert "-e LMCACHE_VERSION=" in job_slurm
 assert "-e AIPERF_EXPERIMENTAL_FAST=" in job_slurm
+for expected in (
+    "SPEC_NUM_TOKENS",
+    "SPEC_MODEL",
+    "SPEC_ATTN_BACKEND",
+    "SPEC_KV_CACHE_DTYPE",
+    "SPEC_DRAFT_SAMPLE_METHOD",
+    "SPEC_REJECTION_SAMPLE_METHOD",
+    "SPEC_SYNTHETIC_ACCEPTANCE_LENGTH",
+    "SPEC_MAX_NUM_SEQS",
+    "SPEC_MAX_NUM_BATCHED_TOKENS",
+    "SPEC_CUDAGRAPH_MODE",
+    "SPEC_PREFILL_CUDAGRAPH_MODE",
+    "SPEC_DECODE_CUDAGRAPH_MODE",
+):
+    assert f"-e {expected}=" in job_slurm
+assert '"${MODEL_NAME:-}" == "Kimi-K3"' in server_vllm
+assert '"${SPEC_DECODING:-}" == "mtp"' in server_vllm
+assert "--speculative-config '${spec_config}'" in server_vllm
+assert "spec_capture_size=" in server_vllm
+assert 'os.environ.get("SPEC_KV_CACHE_DTYPE", "auto")' in server_vllm
+assert "SPEC_PREFILL_CUDAGRAPH_MODE" in server_vllm
+assert "SPEC_DECODE_CUDAGRAPH_MODE" in server_vllm
+assert "role_cudagraph_mode=$spec_prefill_cudagraph_mode" in server_vllm
+assert "role_cudagraph_mode=$spec_decode_cudagraph_mode" in server_vllm
+assert '"v1/attention/backends/mla/triton_mla.py"' in setup_deps
+assert '"v1/attention/backends/mla/rocm_aiter_mla.py"' in setup_deps
+assert '"v1/worker/utils.py"' in setup_deps
+assert '"v1/worker/gpu/spec_decode/dspark/utils.py"' in setup_deps
+assert '"config/cache.py"' in setup_deps
+assert '"v1/core/sched/output.py"' in setup_deps
+assert "VLLM_ROCM_PAGE_ALIGN_KV" not in setup_deps
+assert "-e VLLM_ROCM_PAGE_ALIGN_KV=" not in job_slurm
+lmcache_mp = models_path.with_name("lmcache_mp.sh").read_text(encoding="utf-8-sig")
+assert "latest-rocm" in lmcache_mp
+assert "LMCACHE_RESOLVED_VERSION" in lmcache_mp
+assert "--worker-registration-grace-seconds" in lmcache_mp
+assert '"kv_cache_config" in inspect.signature(get_dcp_decorated_model_name).parameters' in lmcache_mp
 
 flags = k3["prefill_flags"]
 for expected in (

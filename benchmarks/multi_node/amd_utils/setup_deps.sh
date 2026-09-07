@@ -175,15 +175,22 @@ import os, shutil, sys
 
 srcroot, dstroot = sys.argv[1:]
 files = [
+    "config/cache.py",
     "distributed/kv_transfer/kv_connector/v1/moriio/moriio_common.py",
     "distributed/kv_transfer/kv_connector/v1/moriio/moriio_connector.py",
     "distributed/kv_transfer/kv_connector/v1/moriio/moriio_engine.py",
     "distributed/kv_transfer/kv_connector/v1/moriio/moriio_layout.py",
     "v1/core/kv_cache_manager.py",
     "v1/core/sched/scheduler.py",
+    "v1/core/sched/output.py",
+    "v1/worker/utils.py",
+    "v1/worker/gpu/spec_decode/dspark/utils.py",
     "model_executor/layers/mamba/gdn/kimi_gdn_linear_attn.py",
     "model_executor/models/qwen3_dflash.py",
+    "v1/attention/backends/mla/rocm_aiter_mla.py",
 ]
+if os.environ.get("SPEC_DECODING") == "mtp":
+    files.append("v1/attention/backends/mla/triton_mla.py")
 for rel in files:
     src = os.path.join(srcroot, rel)
     dst = os.path.join(dstroot, rel)
