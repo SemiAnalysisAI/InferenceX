@@ -6947,3 +6947,14 @@
     - "Update vLLM ROCm image from vllm/vllm-openai-rocm:v0.27.1 (v0.27.1 release) to vllm/vllm-openai-rocm:nightly-d9105ea8001e0a6d77a96327d17515bb5791fb36 (2026-09-07 upstream ROCm nightly, digest sha256:74d4a95f3ae672ecddf9acb7296917def82d9eca51687fa2862ae72b03ff1907, tag commit vllm-project/vllm@d9105ea8; Docker Hub last pushed 2026-09-07T05:26:48Z). benchmarks/single_node/agentic/minimaxm3_fp8_mi300x_mtp.sh is unchanged: TRITON_ATTN attention, fp8 KV, block-size 128, EAGLE3 speculative decoding with the Inferact MiniMax-M3 EAGLE3-GQA draft and the committed golden synthetic acceptance length, minimax_m3 tool-call and reasoning parsers; the search space is unchanged. The upstream commit-pinned ROCm nightly is the same vllm commit the B200 MiniMax-M3 AgentX recipe moved to in #2860. Note that vllm-openai-rocm commit-nightly tags have expired from Docker Hub within days in the past; node squash caches keep merged configs running, but a re-pin to a durable tag may be needed later."
     - "Add --compilation-config cudagraph_mode=FULL_DECODE_ONLY to the serve command. The upstream nightly does not torch-compile MiniMaxM3SparseForConditionalGeneration, so with VLLM_USE_BREAKABLE_CUDAGRAPH=0 the default FULL_AND_PIECEWISE mode aborts at engine init with piecewise CUDA graphs unavailable (first sweep, run 34174124043, eval cell); full decode-only graphs are what the MI355X MiniMax-M3 sibling runs on its nightly (#2825)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2873
+
+- config-keys:
+    - glm5.2-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Replace HiCache DRAM offload with GPU-resident KV on both arms: GLM-5.2 MLA KV fits entirely in HBM up to conc 8, eliminating host-DRAM dependency and simplifying deployment. Pareto-optimal interactivity P90 equal to or better than the HiCache baseline across c2–c8."
+    - "TP4/EP4 no-KV arm, conc [2, 4, 6, 8]: validated on run 33724174688 (branch testgg-qr-int4). norm_intvty_p90: c2=67.0, c6=66.3, c8=48.7."
+    - "TP8/EP1 no-KV arm, conc [4, 10]: EP=1 eliminates MoE all-to-all collective. c4 validated on run 32986446019 (norm_intvty_p90=69.2, ITL p90=9.05 ms); c10 validated on run 33489967280 via PR#2777 sweep (norm_intvty_p90=38.6)."
+    - "Add optional ROCM_QUICK_REDUCE_QUANTIZATION=INT4 / ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16 env-var hooks in the benchmark script (no-op when unset; enables F-2 quick-reduce probe without a script edit)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2853
