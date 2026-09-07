@@ -6917,4 +6917,4 @@
     - "Update the SGLang image from lmsysorg/sglang:v0.5.14-cu130 to lmsysorg/sglang:v0.5.19-cu130."
     - "Reduce max-prefill-tokens and chunked-prefill-size from 16384 to 8192 to activate the validated FlashInfer GDN prefill path on B200."
     - "Enable symmetric memory alongside FlashInfer all-reduce fusion to measure the combined path and migrate cuda-graph-max-bs to the canonical cuda-graph-max-bs-decode flag."
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2858
