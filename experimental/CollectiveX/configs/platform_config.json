@@ -82,9 +82,8 @@
       "operator": {
         "partition": "batch_1",
         "account": "benchmark",
-        "qos": "batch_1_qos",
-        "squash_dir": "/data/home/sa-shared/sqsh",
-        "exclude_nodes": "b300-001,b300-005,b300-009,b300-016,b300-018"
+        "qos": "normal",
+        "squash_dir": "/data/home/sa-gha-runner/collectivex/containers"
       },
       "network": {
         "socket_ifname": "bond0",
