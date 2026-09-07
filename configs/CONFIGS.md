@@ -152,13 +152,13 @@ hardware facts in the repository. It has two top-level sections:
 
 ```yaml
 labels:
-  cluster:b300-nv:
-    - b300-nv_01
-    - b300-nv_02
+  cluster:b300-dsxe:
+    - b300-dsxe_00
+    - b300-dsxe_01
 
 hardware:
-  cluster:b300-nv:
-    available-cpu-dram-mib: 2964436
+  cluster:b300-dsxe:
+    available-cpu-dram-mib: 3977095
     gpus-per-node: 8
 ```
 

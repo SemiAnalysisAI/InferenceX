@@ -75,7 +75,7 @@ permissions:
 env:
   HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
   HF_HUB_CACHE: '/mnt/hf_hub_cache/'
-  # Drive the single-node path in runners/launch_b300-nv.sh. MODEL is the HF id;
+  # Drive the single-node path in runners/launch_b300-dsxe.sh. MODEL is the HF id;
   # its basename (e.g. DeepSeek-V4-Pro) must be in the launcher's STAGED_MODELS so
   # the launcher resolves MODEL_PATH to the pre-staged local weights and mounts
   # them. The collector serves from MODEL_PATH (see SERVE_MODEL), so no download.

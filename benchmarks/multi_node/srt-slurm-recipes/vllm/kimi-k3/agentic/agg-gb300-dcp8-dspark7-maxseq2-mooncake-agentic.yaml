@@ -1,19 +1,15 @@
-# p90-ITL Pareto family from OCI jobs 471335-471337 and 471341-471342: one
-# aggregate TP8 x DCP8 worker with max-num-seqs 2. Drafts at DSpark K=7 to
-# match the B300 low-latency arm (kimik3_fp4_b300_vllm_mtp.sh drafts at K=7
-# for conc <= 8) rather than the K=4 the measured jobs used.
 name: "kimi-k3-vllm-agg-gb300-dcp8-dspark7-maxseq2-mooncake-agentic"
 
 model:
   path: "moonshotai/Kimi-K3"
-  container: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-75c2eef"
+  container: "vllm/vllm-openai:nightly-dev-arm64-cu13-3696c77"
   precision: "fp4"
 
 identity:
   model:
     repo: "moonshotai/Kimi-K3"
   container:
-    image: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-75c2eef"
+    image: "vllm/vllm-openai:nightly-dev-arm64-cu13-3696c77"
   frameworks:
     dynamo: "ba83080ecd31c1ce918559e576d3c5bc9e092ff1"
 
@@ -43,7 +39,7 @@ frontend:
   type: dynamo
   enable_multiple_frontends: false
   args:
-    router-mode: "random"
+    router-mode: "least-loaded"
     router-session-affinity-ttl-secs: 900
   env:
     DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: "3600"
@@ -54,68 +50,59 @@ backend:
   connector: null
   mooncake_kv_store:
     master_extra_args:
+      - "--default_kv_lease_ttl=60000"
       - "--eviction_high_watermark_ratio=0.95"
       - "--eviction_ratio=0.10"
     store_config:
       metadata_server: "P2PHANDSHAKE"
-      global_segment_size: "150GB"
+      global_segment_size: "160GB"
       local_buffer_size: "4GB"
       protocol: "rdma"
-      # Preserve the proven GB300 runner fabric rather than copying PR #211's
-      # single mlx5_0 rail, which is specific to the rail-isolated B300 fleet.
       device_name: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
       mode: "embedded"
       enable_offload: false
   aggregated_environment:
     VLLM_ALLREDUCE_USE_FLASHINFER: "1"
     VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION: "1"
-    VLLM_USE_V2_MODEL_RUNNER: "1"
-    # Use the direct DCP a2a/gather kernels rather than the collective
-    # fallback, matching the B300 arm (kimik3_fp4_b300_vllm_mtp.sh).
     VLLM_USE_DIRECT_DCP_A2A: "1"
     VLLM_USE_DIRECT_DCP_Q_GATHER: "1"
     VLLM_USE_DIRECT_DCP_KV_GATHER: "1"
+    ETCD_LEASE_TTL: "120"
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     VLLM_RPC_TIMEOUT: "600000"
+    VLLM_USE_V2_MODEL_RUNNER: "1"
+    VLLM_USE_RUST_FRONTEND: "1"
+    VLLM_MOONCAKE_LOAD_RECV_THREADS: "4"
     VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "0"
     VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: "0"
-    PYTHONNOUSERSITE: "1"
-    TORCH_CUDA_ARCH_LIST: "10.0"
-    PYTHONHASHSEED: "42"
-    VLLM_HTTP_TIMEOUT_KEEP_ALIVE: "900"
-    MC_GID_INDEX: "3"
-    MC_STORE_MEMCPY: "1"
-    MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
     MC_SLICE_SIZE: "1048576"
-    MC_WORKERS_PER_CTX: "4"
     WITH_NVIDIA_PEERMEM: "0"
-    VLLM_MOONCAKE_LOAD_RECV_THREADS: "4"
+    VLLM_LOG_STATS_INTERVAL: "1"
+
   vllm_config:
     aggregated:
+      kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"compact_group_io":true,"max_load_batch_keys":2,"enable_offload":false}}'
       served-model-name: "moonshotai/Kimi-K3"
+      load-format: "fastsafetensors"
+      kv-cache-dtype: "fp8"
+      gpu-memory-utilization: 0.92
       tensor-parallel-size: 8
       decode-context-parallel-size: 8
       dcp-comm-backend: "a2a"
       max-num-seqs: 2
-      gpu-memory-utilization: 0.92
       max-num-batched-tokens: 8192
       trust-remote-code: true
+      max-cudagraph-capture-size: 1024
+      stream-interval: 10
       language-model-only: true
-      load-format: "fastsafetensors"
       moe-backend: "auto"
       no-enable-flashinfer-autotune: true
       enable-cumem-allocator: true
-      enable-prefix-caching: true
-      prefix-match-unit: 128
-      kv-cache-dtype: "fp8"
-      stream-interval: 10
       attention-backend: "TOKENSPEED_MLA"
       attention-config: '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true}'
-      # Throughput jobs inject the committed K=7 golden AL (3.84); EVAL_ONLY
-      # preserves this real target-verification configuration.
-      speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":7,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
-      max-cudagraph-capture-size: 1024
-      kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false}}'
+      speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":7,"rejection_sample_method":"block"}'
+      enable-prefix-caching: true
+      prefix-match-unit: 128
 
 sbatch_directives:
   mem: "0"
@@ -132,10 +119,6 @@ benchmark:
   command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
   env:
     INFMAX_CONTAINER_WORKSPACE: "/infmax-workspace"
-    AIPERF_TRACE_IDLE_GAP_CAP_SECONDS: "300"
-    AIPERF_LIVE_FAILED_REQUEST_THRESHOLD: "0.25"
-    AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:"
-    AIPERF_HTTP_TCP_USER_TIMEOUT: "900000"
     RESULT_DIR: "/logs/agentic"
     PORT: "8000"
     IS_MULTINODE: "true"
