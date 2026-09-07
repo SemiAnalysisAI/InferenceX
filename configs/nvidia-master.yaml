@@ -1485,8 +1485,8 @@ kimik3-fp4-b300-vllm-agentic-dspark:
   # and EVAL_ONLY switches to real block verification.
   #
   # The image carries the Kimi-K3 DCP, DSpark-under-DCP and Mooncake-hybrid
-  # changes (vllm-project/vllm agentx-k3 @ 5894fdf).
-  image: vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-5894fdf
+  # changes (vllm-project/vllm agentx-k3 @ 728d3ad).
+  image: vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-728d3ad
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:b300-nv
