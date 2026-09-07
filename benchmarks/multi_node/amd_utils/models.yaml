@@ -389,7 +389,7 @@ DeepSeek-V4-Pro-AgentX:
     disable_cuda_graph: true
     dp:
       max_running_requests: 1024
-      chunked_prefill_size: "8192 * PREFILL_TP_SIZE if PREFILL_TP_SIZE == 8 else 8192 * PREFILL_TP_SIZE"  # dsv4 compressor kernel uint16 token cap (255*256)
+      chunked_prefill_size: "16384 * PREFILL_TP_SIZE if PREFILL_TP_SIZE == 8 else 8192 * PREFILL_TP_SIZE"  # dsv4 compressor kernel uint16 token cap (255*256)
       context_length: 1048576
       # Mirrors the single-node recipe's --enable-two-batch-overlap inside the
       # DP-attention block; prefill-only, matching that recipe's PARALLEL_ARGS
