@@ -6921,3 +6921,11 @@
     - "Pick up the latest automatic ROCm DeepSeek-V4 optimizations, including fused mHC post/pre plus RMSNorm, gfx950 C4A top-k dispatch, fused C4 compressor GEMMs, fused SWA q/kv RMSNorm plus q FP8 quantization, and medium-batch cooperative top-k tuning."
     - "Keep the existing VLLM_ROCM_USE_AITER=1, VLLM_ROCM_USE_AITER_MOE=1, and --moe-backend aiter settings, and explicitly add VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 plus VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 to both STP and MTP paths. The current checkpoint's shared-expert path does not satisfy the latest vLLM fusion conditions, so that fusion flag self-disables while preserving recipe parity."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2792
+
+- config-keys:
+    - glm5.2-fp4-b200-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update SGLang image from lmsysorg/sglang:nightly-dev-cu13-20260901-07c8f729 (2026-09-01 cu13 dev nightly) to lmsysorg/sglang:nightly-dev-cu13-20260907-30705c00 (2026-09-07 cu13 dev nightly, digest sha256:19b8fa1223cc339c1eae7a5b703f1a8c2543b5b119155bf3d7efaef18f77f007, tag commit sgl-project/sglang@30705c00). Docker Hub last pushed the tag at 2026-09-07T01:43:42Z. The newer nightly carries forward the FlashInfer 0.6.18 BF16 TRTLLM MoE allocation fix that the 2026-09-01 pin was taken for. Engine flags, EAGLE MTP settings, golden acceptance length 2.99, HiCache sizing, and the TP8 conc [1, 4, 8, 12, 16] grid are unchanged; the same tag the B200 Qwen3.5 SGLang AgentX recipes moved to in #2861/#2862 and the new FP8 sibling in #2863 starts on."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2864
