@@ -6850,3 +6850,11 @@
   description:
     - "Align MiniMax-M3 ATOM AgentX with the MI355X vLLM arm: EAGLE3-GQA draft, synthetic acceptance length 2.78, and thinking_mode enabled."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2816
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Default to ROCm/ATOM PR #2147 KV-pool forward diff plus MiniMax EAGLE3 scheduler-block alignment; keep PR #2106 selectable via ATOM_PATCH and default EVAL_ONLY to lm-eval gsm8k."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2816

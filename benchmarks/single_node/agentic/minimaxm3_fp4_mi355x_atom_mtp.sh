@@ -64,9 +64,20 @@ install_agentic_deps
 ATOM_RUNTIME_DEPS=/tmp/inferencex-atom-runtime-deps
 /opt/venv/bin/python -m pip install --quiet --target "$ATOM_RUNTIME_DEPS" --no-deps sentencepiece tiktoken
 
-# The pinned ATOM image predates ROCm/ATOM PR #2106. Apply its MiniMax-M3
-# EAGLE3 draft-KV OOM fix before importing the server modules.
-bash "$(dirname "$0")/apply_atom_pr2106_patch.sh"
+# The pinned ATOM image predates upstream KV-pool fixes. Apply #2147 when set,
+# otherwise keep the reviewed #2106 patch for the current recipe image.
+case "${ATOM_PATCH:-2147}" in
+    2147)
+        bash "$(dirname "$0")/apply_atom_pr2147_patch.sh"
+        ;;
+    2106)
+        bash "$(dirname "$0")/apply_atom_pr2106_patch.sh"
+        ;;
+    *)
+        echo "Unsupported ATOM_PATCH=${ATOM_PATCH} (expected 2106 or 2147)" >&2
+        exit 1
+        ;;
+esac
 
 # Require the ATOM Prometheus stream in every official result. AIPerf
 # deduplicates this endpoint against its automatic localhost discovery.
@@ -324,6 +335,8 @@ wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$S
 
 # ---- Run benchmark ----------------------------------------------------------
 if [ "${EVAL_ONLY}" = "true" ]; then
+    export EVAL_FRAMEWORK="${EVAL_FRAMEWORK:-lm-eval}"
+    export EVAL_TASKS_DIR="${EVAL_TASKS_DIR:-utils/evals/gsm8k.yaml}"
     run_eval --port "$PORT"
 else
     build_replay_cmd "$RESULT_DIR"
