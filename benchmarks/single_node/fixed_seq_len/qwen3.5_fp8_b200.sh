@@ -35,16 +35,16 @@ set -x
 PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.0.0.0 --port=$PORT \
 --trust-remote-code \
 --tensor-parallel-size=$TP --data-parallel-size=1 --expert-parallel-size=$EP_SIZE \
---enable-symm-mem \
 --disable-radix-cache \
 --quantization fp8 \
 --kv-cache-dtype fp8_e4m3 \
 --mamba-ssm-dtype bfloat16 \
 --attention-backend trtllm_mha \
 --moe-runner-backend flashinfer_trtllm \
---cuda-graph-max-bs $CONC \
---max-prefill-tokens 16384 \
---chunked-prefill-size 16384 \
+--flashinfer-allreduce-fusion-backend auto \
+--cuda-graph-max-bs-decode $CONC \
+--max-prefill-tokens 8192 \
+--chunked-prefill-size 8192 \
 --mem-fraction-static 0.8 \
 --stream-interval 50 \
 --scheduler-recv-interval $( [[ $CONC -gt 4 ]] && echo 30 || echo 10 ) \

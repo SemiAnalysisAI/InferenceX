@@ -1200,7 +1200,7 @@ dsv4-fp4-b300-sglang-mtp:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 32, spec-decoding: mtp }
 
 qwen3.5-fp8-b200-sglang:
-  image: lmsysorg/sglang:v0.5.14-cu130
+  image: lmsysorg/sglang:v0.5.19-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:b200-nscale
