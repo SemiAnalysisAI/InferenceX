@@ -6912,6 +6912,6 @@
     - agentic-coding
   description:
     - "Repin all three DSv4 MI355X vLLM entries to the first ROCm nightly that ships vllm-project/vllm#53161 (vllm-project/vllm@de69e821), which fuses the DeepSeek-V4 native-FP8 shared expert into the MXFP4 routed-expert AITER kernel (FHMoE). The tag is still nightly-TBD: de69e821 landed after the most recent nightly was cut, so the sha is filled in once that build publishes."
-    - "VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 was already exported by the AgentX script and is added to the 8K/1K STP and MTP scripts by #2792, but on every nightly before de69e821 the request was inert: vLLM's eligibility check rejected this mixed FP4+FP8 checkpoint and the fusion self-disabled at startup. #53161 is what makes the flag take effect."
+    - "Export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 from the 8K/1K STP and MTP scripts; the AgentX script already set it. On every nightly before de69e821 the request was inert: vLLM's eligibility check rejected this mixed FP4+FP8 checkpoint and the fusion self-disabled at startup. #53161 is what makes the flag take effect."
     - "Fusion eligibility is gated on gfx950, tensor parallelism 8, data parallelism 1, no expert parallelism and no EPLB, --moe-backend aiter, BF16 model dtype, and the DeepSeek-V4 block-128 FP8 shared-expert quantization config. All three entries satisfy it; the AgentX DP-attention arm does not and keeps the unfused path."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PENDING
