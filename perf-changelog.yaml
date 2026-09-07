@@ -6920,3 +6920,11 @@
   description:
     - "Experiment: lower gpu-memory-utilization from 0.92 to 0.85 on every Kimi-K3 GB300 aggregate, prefill, and decode GPU; preserve Mooncake DRAM KV offload at 160 GB per node and the baseline concurrency/topology sweep from run 33701025625."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Set max-num-seqs to 512 on all Kimi-K3 GB300 disaggregated prefill and decode workers at gpu-memory-utilization 0.85; avoid CUDA-graph startup failure when the default 1024 sequences exceed the available Mamba cache blocks. Preserve Mooncake DRAM KV offload and benchmark concurrency."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

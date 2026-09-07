@@ -169,9 +169,11 @@ llm-d 不是 srt-slurm 路径：InferenceX 自己持有 Slurm allocation，并�
 
 ## 使用 vLLM 进行低 HBM 容量实验
 
-Kimi-K3 GB300 内存容量实验的六个 `*-mem085.yaml` 配方将 `backend.vllm_config.<role>.gpu-memory-utilization` 从 0.92 降至 0.85。分离式配方必须分别设置 `prefill` 和 `decode`，聚合式配方则设置 `aggregated`，确保每张 GPU 都使用较低的预算。主配置必须引用对应的实验配方。
+Kimi-K3 GB300 内存容量实验的六个实验配方将 `backend.vllm_config.<role>.gpu-memory-utilization` 从 0.92 降至 0.85。分离式配方必须分别设置 `prefill` 和 `decode`，聚合式配方则设置 `aggregated`，确保每张 GPU 都使用较低的预算。主配置必须引用对应的实验配方。
 
 vLLM 的实际参数是 `--gpu-memory-utilization`。它为模型执行器分配预算，其中包括权重和运行时内存，剩余预算用于 GPU KV cache。降低该值前，应检查基线日志中的模型加载内存、激活峰值、CUDA graphs 和可用 KV 内存。在其他开销不变时，每张 GPU 的 KV 内存减少量约为 `(old_fraction - new_fraction) * visible_HBM`。显式设置 `kv-cache-memory-bytes` 会覆盖按利用率计算的缓存大小，因此本实验不要同时设置该参数。保留 Mooncake connector 和主机 DRAM 设置。该方法近似模拟同一 GPU 上的容量缩减，不模拟 HBM 带宽下降，也不是设备级内存硬限制；仍须通过实际启动和基准执行验证。
+
+分离式实验配方还在两个角色中设置 `max-num-seqs: 512`。在 0.85 下，实测 940 个 Mamba cache blocks 无法满足默认 1024 个序列的 CUDA-graph 初始化要求，即使基准并发更低也会失败。除权重和 KV 字节预算外，还须检查缓存块数是否满足引擎序列上限。
 
 ## 验证
 

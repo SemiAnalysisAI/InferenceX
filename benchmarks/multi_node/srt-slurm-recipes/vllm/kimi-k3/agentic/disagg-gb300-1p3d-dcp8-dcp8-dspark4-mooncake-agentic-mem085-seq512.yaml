@@ -1,4 +1,4 @@
-name: "kimi-k3-vllm-disagg-gb300-1p2d-dcp8-dcp8-dspark4-mooncake-agentic-mem085"
+name: "kimi-k3-vllm-disagg-gb300-1p3d-dcp8-dcp8-dspark4-mooncake-agentic-mem085-seq512"
 
 model:
   path: "moonshotai/Kimi-K3"
@@ -28,9 +28,9 @@ resources:
   gpu_type: "gb300"
   gpus_per_node: 4
   prefill_nodes: 2
-  decode_nodes: 4
+  decode_nodes: 6
   prefill_workers: 1
-  decode_workers: 2
+  decode_workers: 3
   gpus_per_prefill: 8
   gpus_per_decode: 8
 
@@ -111,6 +111,7 @@ backend:
       load-format: "fastsafetensors"
       kv-cache-dtype: "fp8"
       gpu-memory-utilization: 0.85
+      max-num-seqs: 512
       tensor-parallel-size: 8
       decode-context-parallel-size: 8
       dcp-comm-backend: "a2a"
@@ -130,6 +131,7 @@ backend:
       load-format: "fastsafetensors"
       kv-cache-dtype: "fp8"
       gpu-memory-utilization: 0.85
+      max-num-seqs: 512
       tensor-parallel-size: 8
       decode-context-parallel-size: 8
       dcp-comm-backend: "a2a"
