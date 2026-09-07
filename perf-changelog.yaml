@@ -6928,5 +6928,5 @@
   description:
     - "Add a matched concurrency-14 AgentX treatment for baseline job 100840215941 with vllm-project/vllm#53940 A4W4 dispatch."
     - "Upgrade the pinned image at runtime to amd-aiter 0.1.21.post1+rocm7.2 with dependency resolution, require FlyDSL 0.3.2, and fail closed unless A4W4 kernels are observed."
-    - "Use LMCache 0.5.5.dev104+rocm7.2 for c14 while preserving the existing recipe topology, DCP1, MTP settings, and one-hour canonical AgentX duration."
+    - "Use LMCache 0.5.5.dev104+rocm7.2 for c14 from its checksum-pinned upstream ROCm build artifact while preserving the existing recipe topology, DCP1, MTP settings, and one-hour canonical AgentX duration."
   pr-link: TBD

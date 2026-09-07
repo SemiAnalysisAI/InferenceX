@@ -184,11 +184,41 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     esac
     LMCACHE_ROCM_INDEX="https://github.com/LMCache/LMCache/releases/expanded_assets/nightly-rocm"
 
+    LMCACHE_INSTALL_TARGET="lmcache==${LMCACHE_VERSION}"
+    LMCACHE_INSTALL_SOURCE_ARGS=(--find-links "$LMCACHE_ROCM_INDEX")
+    if [[ "$LMCACHE_VERSION" == "0.5.5.dev104+rocm7.2" ]]; then
+        # nightly-rocm is a rolling release and no longer lists dev104. Use
+        # the retained artifact from its successful upstream ROCm build.
+        LMCACHE_ARTIFACT_URL="https://nightly.link/LMCache/LMCache/actions/runs/34019401368/release-rocm-artifacts.zip"
+        LMCACHE_ARTIFACT_SHA256="debb75e6fbfbddc2d9a84c526dcbeb396c97d17fc2e43870cb40e7c34d06f79c"
+        LMCACHE_WHEEL_NAME="lmcache-0.5.5.dev104+rocm7.2-cp312-cp312-manylinux_2_35_x86_64.whl"
+        LMCACHE_WHEEL_SHA256="1a896d3fbf65285dba18998c98b79d08268f61fcfb28fe333662637f50f1ae1b"
+        LMCACHE_ARTIFACT_DIR=$(mktemp -d)
+        LMCACHE_ARTIFACT_ZIP="$LMCACHE_ARTIFACT_DIR/release-rocm-artifacts.zip"
+        curl --fail --location --retry 3 --silent --show-error \
+            "$LMCACHE_ARTIFACT_URL" --output "$LMCACHE_ARTIFACT_ZIP"
+        printf '%s  %s\n' "$LMCACHE_ARTIFACT_SHA256" "$LMCACHE_ARTIFACT_ZIP" | \
+            sha256sum --check --status
+        "$AIPERF_PYTHON" -m zipfile -e \
+            "$LMCACHE_ARTIFACT_ZIP" "$LMCACHE_ARTIFACT_DIR"
+        LMCACHE_INSTALL_TARGET="$LMCACHE_ARTIFACT_DIR/$LMCACHE_WHEEL_NAME"
+        printf '%s  %s\n' "$LMCACHE_WHEEL_SHA256" "$LMCACHE_INSTALL_TARGET" | \
+            sha256sum --check --status
+        LMCACHE_INSTALL_SOURCE_ARGS=()
+    fi
+
     agentic_pip_install --quiet --no-cache-dir --no-deps \
+        "${LMCACHE_INSTALL_SOURCE_ARGS[@]}" \
         "sortedcontainers==2.4.0" \
         "opentelemetry-exporter-prometheus==0.61b0" \
         "cupy-rocm-7-0==14.1.1" \
-        "lmcache==${LMCACHE_VERSION}" --find-links "$LMCACHE_ROCM_INDEX"
+        "$LMCACHE_INSTALL_TARGET"
+
+    LMCACHE_INSTALLED_VERSION=$("$AIPERF_UV_BIN" pip show --system lmcache | awk '$1 == "Version:" {print $2}')
+    if [[ "$LMCACHE_INSTALLED_VERSION" != "$LMCACHE_VERSION" ]]; then
+        echo "Error: expected LMCache $LMCACHE_VERSION, got $LMCACHE_INSTALLED_VERSION" >&2
+        exit 1
+    fi
 
     # LMCache 0.5.5's transfer-channel layer eagerly imports the Mooncake
     # backend (mooncake_te_impl.py -> `from mooncake.engine import
