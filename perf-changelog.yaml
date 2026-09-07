@@ -6938,3 +6938,12 @@
   description:
     - "Keep NumPy at the pinned image version 2.3.5 while installing amd-aiter 0.1.21.post1+rocm7.2 so LMCache 0.5.5.dev104+rocm7.2 can load its Numba-backed device operations."
   pr-link: TBD
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a same-node concurrency-14 control that keeps amd-aiter 0.1.21.post1+rocm7.2, FlyDSL 0.3.2, LMCache 0.5.5.dev104+rocm7.2, and the canonical AgentX settings while leaving the pinned vLLM source unpatched."
+    - "Restore AITER_SITUV2_A8W4=1 and fail closed unless the legacy afp8_wfp4 kernels are dispatched, isolating the A4W4 path from the dependency upgrade."
+  pr-link: TBD

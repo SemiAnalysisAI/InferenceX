@@ -14,9 +14,9 @@ set -x
 #   --max-num-seqs 128 --max-num-batched-tokens 4096 --enable-auto-tool-choice
 #   --tool-call-parser kimi_k3 --reasoning-parser kimi_k3
 #
-# with env VLLM_ROCM_USE_AITER=1 SAFETENSORS_FAST_GPU=1 and the local port of
-# vllm-project/vllm#53940 selecting A4W4 SiTUv2 FlyDSL. The historical vLLM
-# toggle stays enabled, while the AITER A8W4 override must stay unset.
+# with env VLLM_ROCM_USE_AITER=1 SAFETENSORS_FAST_GPU=1 and the legacy A8W4
+# SiTUv2 FlyDSL selector. This control keeps the upgraded AITER/FlyDSL packages
+# while deliberately leaving the pinned vLLM source unpatched.
 #
 # K3 is a 2.8T-parameter natively-multimodal MoE (896 routed experts, 16/token
 # plus shared) on Kimi Delta Attention, gated MLA and Attention Residuals, with
@@ -115,14 +115,11 @@ export VLLM_ROCM_AITER_MLA_ASM_PADDING=asm
 export VLLM_ROCM_USE_AITER=1
 export SAFETENSORS_FAST_GPU=1
 export VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4=1
-unset AITER_SITUV2_A8W4
+export AITER_SITUV2_A8W4=1
+unset AITER_SITUV2_A4W4
 export AITER_BF16_FP8_MOE_BOUND=0
 export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 export AITER_QUICK_REDUCE_QUANTIZATION=INT4
-
-# Port vllm-project/vllm#53940 onto the pinned nightly. Fail closed if the
-# image source does not match the expected 7c5dc571 anchors.
-python3 "$(dirname "$0")/patches/vllm_pr53940_a4w4.py"
 
 # Workaround for MEC FW <177 RCCL memory reclaim issue (shared with the other
 # gfx950 recipes in this tree).
@@ -433,17 +430,17 @@ echo "Server PID: $SERVER_PID"
 
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-if ! grep -q "flydsl_moe1_afp4_wfp4" "$SERVER_LOG"; then
-    echo "Error: vLLM PR #53940 did not dispatch an A4W4 FlyDSL MoE kernel" >&2
+if ! grep -q "flydsl_moe1_afp8_wfp4" "$SERVER_LOG"; then
+    echo "Error: upgraded AITER did not dispatch a legacy A8W4 FlyDSL MoE kernel" >&2
     grep -E "flydsl_moe[12]_afp[48]_wfp4|AITER_SITUV2" "$SERVER_LOG" | tail -n 80 >&2 || true
     exit 1
 fi
-if grep -q "flydsl_moe1_afp8_wfp4" "$SERVER_LOG"; then
-    echo "Error: legacy A8W4 FlyDSL MoE dispatch remained active" >&2
+if grep -q "flydsl_moe1_afp4_wfp4" "$SERVER_LOG"; then
+    echo "Error: A4W4 FlyDSL MoE dispatch remained active in the A8W4 control" >&2
     grep -E "flydsl_moe[12]_afp[48]_wfp4" "$SERVER_LOG" | tail -n 80 >&2 || true
     exit 1
 fi
-echo "Verified vLLM PR #53940 A4W4 dispatch in server.log"
+echo "Verified upgraded-AITER legacy A8W4 dispatch in server.log"
 
 if [ "${EVAL_ONLY}" = "true" ]; then
     run_eval --port "$PORT"
