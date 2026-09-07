@@ -2,14 +2,14 @@ name: "kimik3-vllm-agg-b200-tp8pp2-mooncake-c24-agentic"
 
 model:
   path: "kimik3"
-  container: "vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-728d3ad"
+  container: "vllm/vllm-openai:nightly-d9105ea8001e0a6d77a96327d17515bb5791fb36"
   precision: "fp4"
 
 identity:
   model:
     repo: "moonshotai/Kimi-K3"
   container:
-    image: "vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-728d3ad"
+    image: "vllm/vllm-openai:nightly-d9105ea8001e0a6d77a96327d17515bb5791fb36"
 
 dynamo:
   install: false

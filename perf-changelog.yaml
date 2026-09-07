@@ -6921,3 +6921,12 @@
     - "Pick up the latest automatic ROCm DeepSeek-V4 optimizations, including fused mHC post/pre plus RMSNorm, gfx950 C4A top-k dispatch, fused C4 compressor GEMMs, fused SWA q/kv RMSNorm plus q FP8 quantization, and medium-batch cooperative top-k tuning."
     - "Keep the existing VLLM_ROCM_USE_AITER=1, VLLM_ROCM_USE_AITER_MOE=1, and --moe-backend aiter settings, and explicitly add VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 plus VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 to both STP and MTP paths. The current checkpoint's shared-expert path does not satisfy the latest vLLM fusion conditions, so that fusion flag self-disables while preserving recipe parity."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2792
+
+- config-keys:
+    - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move the image from the fork build vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-728d3ad (tag commit 728d3ad09, a branch 12 commits ahead of upstream main: Kimi-K3 DSpark-under-PP draft loader fixes, Mooncake hybrid-attention store patches, hybrid KV-load recompute, DCP dummy-batch fill) to the upstream main nightly vllm/vllm-openai:nightly-d9105ea8001e0a6d77a96327d17515bb5791fb36 (2026-09-07 nightly, digest sha256:254eebf919e8b7b0d530d97fccc606c36f380ff6724d64bc190951bec1aee838, tag commit vllm-project/vllm@d9105ea8; Docker Hub last pushed 2026-09-07T06:16:01Z). The same tag is applied to the seven checked-in srt-slurm recipe YAMLs (agg-b200-tp8pp2-mooncake-c{1,4,8,14,24,48,96}-agentic.yaml), which pin the container independently of the master config."
+    - "Rationale: the fork lineage has no newer tag (nightly-dev-x86_64-cu13.0.1-728d3ad is its latest, pushed 2026-09-04), while upstream main has since merged the two changes it was carrying as patches: vllm#50514 (eagle3 spec decode under pipeline parallelism, merged 2026-09-05) and vllm#50493 (DCP partial prefix cache hits, merged 2026-08-18). Upstream does not carry the fork's Mooncake hybrid-store patches, the PP draft loader fastsafetensors/HF-repo-id fixes, or vllm#50359 (still open), so this sweep is the validation of whether upstream main can now serve the two-node TP8/PP2 DSpark + Mooncake DRAM-offload topology. Recipe flags, golden AL, and the concurrency grid are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2865
