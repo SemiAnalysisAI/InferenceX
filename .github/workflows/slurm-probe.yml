@@ -1,56 +1,83 @@
 name: slurm-probe
 
 on:
-  push:
-    branches: [chore/slurm-probe]
   workflow_dispatch:
     inputs:
       runner:
         description: "runner label to probe"
-        default: gb200
-      jobid:
-        description: "slurm job id to sacct"
-        default: "19603"
+        default: "cluster:mi355x-amds"
 
 jobs:
   probe:
-    runs-on: ${{ github.event.inputs.runner || 'gb200' }}
-    timeout-minutes: 5
+    runs-on: ${{ github.event.inputs.runner || 'cluster:mi355x-amds' }}
+    timeout-minutes: 8
     steps:
-      - name: sacct gb200 job + partition/preempt limits
+      - name: Inspect MI355X GPU holders and Slurm ownership
+        shell: bash
         run: |
           set +e
-          JOBID="${{ github.event.inputs.jobid || '19603' }}"
+
           echo "runner=$RUNNER_NAME host=$(hostname -f 2>/dev/null || hostname) utc=$(date -u +%FT%TZ)"
-          echo "querying slurm job $JOBID"
-          echo
+          echo "=== cluster allocations for target nodes ==="
+          squeue -w mia1-p01-g11,mia1-p01-g15,mia1-p01-g18,mia1-p01-g19 \
+            -o "%.10i %.28j %.16u %.2t %.12M %.12l %.4D %.30R"
 
-          echo "=== sacct: why did job $JOBID end? (State / Reason / Timelimit / Elapsed) ==="
-          sacct -j "$JOBID" --format=JobID,JobName%28,State%20,Reason%24,Timelimit,Elapsed,Start,End,ExitCode,NodeList%24 2>&1 | head -40
-          echo
-          echo "=== sacct parsable (full state+reason, no truncation) ==="
-          sacct -j "$JOBID" -P --format=JobID,JobName,State,Reason,Timelimit,Elapsed,ExitCode,DerivedExitCode 2>&1 | head -20
-          echo
+          for host in mia1-p01-g11 mia1-p01-g15 mia1-p01-g18 mia1-p01-g19; do
+            echo
+            echo "========== ${host} =========="
+            echo "--- Slurm node state ---"
+            scontrol show node "$host" | grep -E \
+              "NodeName=|State=|CfgTRES=|AllocTRES=|RealMemory=|FreeMem=|Reason="
 
-          echo "=== recent gb200/dsr1 jobs (pattern over last 3h) ==="
-          sacct -X --starttime now-3hours --format=JobID,JobName%28,State%18,Timelimit,Elapsed,End 2>&1 | grep -iE "gb200|dsr1|JobID|State|PREEMPT|TIMEOUT|CANCEL" | head -25
-          echo
+            timeout 45 ssh -o BatchMode=yes -o ConnectTimeout=10 \
+              -o StrictHostKeyChecking=no "$host" 'bash -s' <<'REMOTE'
+          set +e
+          hostname -f 2>/dev/null || hostname
+          date -u +%FT%TZ
+          uptime
 
-          echo "=== partition default/max time + preempt mode (is there a ~12min cap?) ==="
-          scontrol show partition 2>&1 | grep -iE "PartitionName|DefaultTime|MaxTime|PreemptMode|GraceTime|QoS" | head -50
-          echo
+          echo "--- host memory ---"
+          free -h
 
-          echo "=== cluster-wide preemption policy ==="
-          scontrol show config 2>&1 | grep -iE "PreemptType|PreemptMode|PreemptExemptTime|KillWait|OverTimeLimit|GraceTime" | head
-          echo
+          echo "--- GPU memory and utilization ---"
+          if command -v rocm-smi >/dev/null 2>&1; then
+            timeout 20 rocm-smi --showmeminfo vram --showuse --showpids
+          elif [ -x /opt/rocm/bin/rocm-smi ]; then
+            timeout 20 /opt/rocm/bin/rocm-smi --showmeminfo vram --showuse --showpids
+          else
+            echo "rocm-smi unavailable"
+          fi
 
-          echo "=== squeue now: what is contending on this cluster ==="
-          timeout 15 squeue -o "%.10i %.34j %.10u %.2t %.10M %.10l %.6D %.20R" 2>&1 | head -40
-          echo
+          echo "--- /dev/kfd holders with Slurm cgroups ---"
+          kfd_pids=$(sudo -n fuser /dev/kfd 2>/dev/null || fuser /dev/kfd 2>/dev/null)
+          if [ -z "$kfd_pids" ]; then
+            echo "no visible /dev/kfd holders"
+          else
+            for pid in $kfd_pids; do
+              ps -p "$pid" -o user:24,pid,ppid,stat,lstart,etime,comm
+              sed -n '1,20p' "/proc/$pid/cgroup" 2>/dev/null
+            done
+          fi
 
-          echo "=== WHO is UID 1010 that cancelled it? (self/automation vs human vs slurm) ==="
-          echo "this runner user: uid=$(id -u) name=$(id -un)"
-          echo "uid 1010 -> $(getent passwd 1010 2>&1 || echo '(no passwd entry)')"
-          scontrol show config 2>&1 | grep -iE "SlurmUser|SlurmctldHost" | head
-          echo "recent scancel in slurmctld (if readable):"
-          journalctl -u slurmctld --since '2026-06-22 23:40' --until '2026-06-22 23:46' --no-pager 2>&1 | grep -iE "19603|cancel|scancel" | head -10 || true
+          echo "--- Slurm-tracked PIDs ---"
+          scontrol listpids 2>&1 | head -n 200
+
+          echo "--- relevant and zombie processes ---"
+          ps -eo user:24,pid,ppid,stat,lstart,etime,comm | awk \
+            'NR == 1 || $4 ~ /^Z/ || $NF ~ /python|vllm|ray|sglang|docker|containerd|enroot|slurmstepd|lmcache/'
+
+          echo "--- running containers ---"
+          if command -v docker >/dev/null 2>&1; then
+            docker ps --format 'table {{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Image}}' 2>&1
+            docker stats --no-stream --format \
+              'table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.PIDs}}' 2>&1
+          else
+            echo "docker unavailable"
+          fi
+
+          echo "--- kernel GPU/OOM events since first failed run ---"
+          journalctl -k --since '2026-09-07 01:00:00 UTC' --no-pager 2>&1 | \
+            grep -Ei 'oom|out of memory|amdgpu|xgmi|ras|gpu reset|process.*killed' | tail -n 120
+          REMOTE
+            echo "ssh_rc=$?"
+          done
