@@ -45,7 +45,6 @@ set -x
 PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path $MODEL_PATH --served-model-name $MODEL --host 0.0.0.0 --port $PORT \
 --trust-remote-code \
 --tensor-parallel-size $TP --data-parallel-size 1 --expert-parallel-size $EP_SIZE \
---enable-symm-mem \
 --disable-radix-cache \
 --quantization fp8 \
 --kv-cache-dtype fp8_e4m3 \
@@ -53,10 +52,11 @@ PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path $MODEL_PATH --se
 --attention-backend trtllm_mha \
 --mm-attention-backend triton_attn \
 --moe-runner-backend flashinfer_trtllm \
---cuda-graph-max-bs $CONC \
+--flashinfer-allreduce-fusion-backend auto \
+--cuda-graph-max-bs-decode $CONC \
 --max-running-requests $CONC \
---max-prefill-tokens 16384 \
---chunked-prefill-size 16384 \
+--max-prefill-tokens 8192 \
+--chunked-prefill-size 8192 \
 --mem-fraction-static 0.8 \
 --stream-interval 50 \
 --scheduler-recv-interval 10 \

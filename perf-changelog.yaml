@@ -6910,3 +6910,11 @@
   description:
     - "Repin the image from vllm/vllm-openai-rocm:nightly-311b3513af33bc29b4acb2fde2e9313e5e9966a0 to the 2026-09-05 ROCm nightly (nightly-e962733e08d10f7ca65dac4df99e116460b8b174, digest sha256:511755968434e26da590c3398f1e8a6399be4416226d5779ce92fb0655811a9c). Docker Hub last pushed it at 2026-09-05T05:27:09Z and the tag commit is vllm-project/vllm@e962733e."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2841
+
+- config-keys:
+    - qwen3.5-fp8-b300-sglang
+  description:
+    - "Update the SGLang image from lmsysorg/sglang:v0.5.12-cu130 to lmsysorg/sglang:v0.5.19-cu130 and route the benchmark to cluster:b300-dsxe."
+    - "Reduce max-prefill-tokens and chunked-prefill-size from 16384 to 8192 to activate the FlashInfer GDN prefill path on Blackwell."
+    - "Use FlashInfer all-reduce fusion instead of symmetric memory and migrate cuda-graph-max-bs to the canonical cuda-graph-max-bs-decode flag."
+  pr-link: TBD
