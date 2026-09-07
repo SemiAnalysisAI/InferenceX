@@ -47,8 +47,9 @@ fi
 export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_USE_AITER_MOE=1
 # Fuses the native-FP8 shared expert into the MXFP4 routed-expert AITER kernel.
-# Requires a build with vllm-project/vllm#53161; self-disables otherwise.
 export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
+# vLLM only clamps torch threads after weight loading; cap from process start.
+export OMP_NUM_THREADS=1
 
 SERVER_LOG=/workspace/server.log
 
