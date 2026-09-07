@@ -85,20 +85,28 @@ install_agentic_deps
 # AITER 0.1.19 from the pinned image predates AITER_SITUV2_A4W4. Install the
 # first release that carries the selector and allow dependency resolution so
 # its matching FlyDSL 0.3.2 replaces the image's incompatible FlyDSL 0.2.4.
+# Keep the image's NumPy version because LMCache's Numba backend rejects 2.5.
 AITER_VERSION="0.1.21.post1+rocm7.2"
 AITER_WHEEL_URL="https://github.com/ROCm/aiter/releases/download/v0.1.21.post1/amd_aiter-0.1.21.post1+rocm7.2.manylinux.2.28-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl"
+NUMPY_VERSION="2.3.5"
 UV_CACHE_DIR="$AIPERF_UV_CACHE_DIR" \
-    "$AIPERF_UV_BIN" pip install --system --reinstall "$AITER_WHEEL_URL"
-"$AIPERF_UV_BIN" pip show --system amd-aiter flydsl
+    "$AIPERF_UV_BIN" pip install --system --reinstall \
+    "$AITER_WHEEL_URL" "numpy==$NUMPY_VERSION"
+"$AIPERF_UV_BIN" pip show --system amd-aiter flydsl numpy
 
 AITER_INSTALLED_VERSION=$("$AIPERF_UV_BIN" pip show --system amd-aiter | awk '$1 == "Version:" {print $2}')
 FLYDSL_INSTALLED_VERSION=$("$AIPERF_UV_BIN" pip show --system flydsl | awk '$1 == "Version:" {print $2}')
+NUMPY_INSTALLED_VERSION=$("$AIPERF_UV_BIN" pip show --system numpy | awk '$1 == "Version:" {print $2}')
 if [[ "$AITER_INSTALLED_VERSION" != "$AITER_VERSION"* ]]; then
     echo "Error: expected amd-aiter $AITER_VERSION, got $AITER_INSTALLED_VERSION" >&2
     exit 1
 fi
 if [[ "$FLYDSL_INSTALLED_VERSION" != "0.3.2" ]]; then
     echo "Error: expected FlyDSL 0.3.2, got $FLYDSL_INSTALLED_VERSION" >&2
+    exit 1
+fi
+if [[ "$NUMPY_INSTALLED_VERSION" != "$NUMPY_VERSION" ]]; then
+    echo "Error: expected NumPy $NUMPY_VERSION, got $NUMPY_INSTALLED_VERSION" >&2
     exit 1
 fi
 

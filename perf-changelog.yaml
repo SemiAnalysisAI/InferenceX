@@ -6930,3 +6930,11 @@
     - "Upgrade the pinned image at runtime to amd-aiter 0.1.21.post1+rocm7.2 with dependency resolution, require FlyDSL 0.3.2, and fail closed unless A4W4 kernels are observed."
     - "Use LMCache 0.5.5.dev104+rocm7.2 for c14 from its checksum-pinned upstream ROCm build artifact while preserving the existing recipe topology, DCP1, MTP settings, and one-hour canonical AgentX duration."
   pr-link: TBD
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Keep NumPy at the pinned image version 2.3.5 while installing amd-aiter 0.1.21.post1+rocm7.2 so LMCache 0.5.5.dev104+rocm7.2 can load its Numba-backed device operations."
+  pr-link: TBD
