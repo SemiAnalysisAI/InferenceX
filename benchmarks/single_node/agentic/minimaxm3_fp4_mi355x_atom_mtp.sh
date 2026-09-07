@@ -48,6 +48,9 @@ else
     export MODEL_PATH="$MODEL"
 fi
 
+DRAFT_MODEL="Inferact/MiniMax-M3-EAGLE3-GQA"
+hf download "$DRAFT_MODEL"
+
 wait_for_amd_gpu_clean
 
 rocm-smi || true
@@ -265,17 +268,21 @@ export ATOM_FORCE_ATTN_TRITON=1
 # costs more in evictions than its reuse is worth on these traces.
 
 # ---- Speculative ------------------------------------------------------------
-# golden_al_distribution/minimaxm3_eagle3_gqa.yaml
-#  3 draft tokens -> AL 2.78
-#  3 draft tokens -> AL 2.78
-# Concurrency 32 and up serve without a draft model: past the throughput knee
-# the draft forward no longer pays for itself against the resident batch.
-# Use the official MiniMax-M3 EAGLE3 draft model and three speculative tokens.
-SPEC_ARGS=(
-    --method eagle3
-    --draft-model Inferact/MiniMax-M3-EAGLE3
-    --num-speculative-tokens 3
-)
+# golden_al_distribution/minimaxm3_eagle3_gqa.yaml:
+# minimax-m3.thinking_on[3] -> AL 2.78
+# Match the MI355X vLLM arm: EAGLE3-GQA draft, synthetic acceptance length on
+# throughput runs, and real target verification on eval-only runs.
+SPEC_ARGS=()
+if [ "$NUM_SPEC_TOKENS" -gt 0 ]; then
+    SPEC_ARGS=(
+        --method eagle3
+        --draft-model "$DRAFT_MODEL"
+        --num-speculative-tokens "$NUM_SPEC_TOKENS"
+    )
+    if [ "${EVAL_ONLY}" != "true" ]; then
+        SPEC_ARGS+=(--spec-decode-acceptance-length "$SPEC_DECODE_AL")
+    fi
+fi
 echo "SPEC_DECODE_AL=$SPEC_DECODE_AL NUM_SPEC_TOKENS=$NUM_SPEC_TOKENS"
 
 # ---- LLM server -------------------------------------------------------------
@@ -295,6 +302,7 @@ ATOM_CMD=(
     --index-cache-dtype fp8
     --hf-overrides '{"use_index_cache": true, "index_topk_freq": 4}'
     --online_quant_config '{"global_quant_config":"ptpc_fp8","exclude_layer":["lm_head","model.embed_tokens","vision_tower","multi_modal_projector","patch_merge_mlp","*block_sparse_moe"]}'
+    --default-chat-template-kwargs '{"thinking_mode":"enabled"}'
     "${SPEC_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
 )
