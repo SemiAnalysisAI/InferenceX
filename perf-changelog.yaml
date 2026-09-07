@@ -6928,3 +6928,11 @@
   description:
     - "Set max-num-seqs to 512 on all Kimi-K3 GB300 disaggregated prefill and decode workers at gpu-memory-utilization 0.85; avoid CUDA-graph startup failure when the default 1024 sequences exceed the available Mamba cache blocks. Preserve Mooncake DRAM KV offload and benchmark concurrency."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg-mem092-control
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a matched Kimi-K3 GB300 disaggregated control at gpu-memory-utilization 0.92 with max-num-seqs 512, holding topology, concurrency, image and Mooncake DRAM offload fixed to isolate the reduced-HBM effect."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

@@ -175,6 +175,8 @@ The vLLM flag is `--gpu-memory-utilization`. It budgets the model executor, incl
 
 The disaggregated experimental recipes also set `max-num-seqs: 512` in both roles. At 0.85, the observed 940 Mamba cache blocks cannot satisfy the default 1024-sequence CUDA-graph initialization requirement, even when benchmark concurrency is lower. Validate cache block counts against the engine sequence limit in addition to weight and KV byte budgets.
 
+Use `kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg-mem092-control` for the matched disaggregated control. Its `*-mem092-seq512.yaml` recipes retain the 512-sequence limit and all serving parameters, changing only GPU utilization to 0.92. Compare each concurrency/topology pair using its run ID and recipe fingerprint; keep all experimental dispatches throughput-only with `--no-evals`.
+
 ## Validate
 
 Run the smallest checks that cover the edited layers.

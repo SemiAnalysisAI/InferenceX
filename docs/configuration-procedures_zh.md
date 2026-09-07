@@ -175,6 +175,8 @@ vLLM 的实际参数是 `--gpu-memory-utilization`。它为模型执行器分配
 
 分离式实验配方还在两个角色中设置 `max-num-seqs: 512`。在 0.85 下，实测 940 个 Mamba cache blocks 无法满足默认 1024 个序列的 CUDA-graph 初始化要求，即使基准并发更低也会失败。除权重和 KV 字节预算外，还须检查缓存块数是否满足引擎序列上限。
 
+使用 `kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg-mem092-control` 作为分离式匹配对照。其 `*-mem092-seq512.yaml` 配方保留 512 个序列的上限及全部服务参数，仅将 GPU 利用率改为 0.92。按 run ID 和配方指纹比较相同并发及拓扑的结果；所有实验调度都使用 `--no-evals`，仅运行吞吐基准。
+
 ## 验证
 
 运行覆盖被修改层的最小检查。
