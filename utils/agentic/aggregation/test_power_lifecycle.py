@@ -233,10 +233,21 @@ run_agentic_replay_and_write_outputs {str(result_dir)!r}
     )
     try:
         # The monitor starts before the production signal traps are installed.
-        # Wait for replay so the signal actually exercises those traps.
+        # Wait until fake_replay has replaced its shell with sleep so signaling
+        # cannot race between the readiness write and exec.
         deadline = time.monotonic() + 5
         while time.monotonic() < deadline:
-            if event_log.exists() and "replay-ready" in event_log.read_text().splitlines():
+            replay_ready = (
+                event_log.exists()
+                and "replay-ready" in event_log.read_text().splitlines()
+            )
+            replay_running = subprocess.run(
+                ["pgrep", "-g", str(proc.pid), "-x", "sleep"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            ).returncode == 0
+            if replay_ready and replay_running:
                 break
             time.sleep(0.01)
         else:
