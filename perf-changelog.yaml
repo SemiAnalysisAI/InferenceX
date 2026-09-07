@@ -6918,5 +6918,5 @@
   description:
     - "Test vllm-project/vllm#53940 on the pinned nightly-7c5dc571 Kimi-K3 MI355X recipe by applying the PR's four runtime-source changes fail-closed inside the writable container."
     - "Switch the existing SiTUv2 routed-MoE path from A8W4 afp8_wfp4 FlyDSL kernels to A4W4 afp4_wfp4 kernels, retain the historical VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4 toggle, and remove the conflicting AITER_SITUV2_A8W4 override."
-    - "Run only the matched concurrency-1 no-offload and concurrency-4 LMCache 0.5.5.dev89+rocm7.2 AgentX points from run 33773561410."
+    - "Run only the matched concurrency-1 no-offload and concurrency-4 AgentX points from run 33773561410, updating c4 to LMCache 0.5.5.dev104+rocm7.2."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
