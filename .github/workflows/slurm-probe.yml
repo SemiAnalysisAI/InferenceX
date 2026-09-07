@@ -12,72 +12,64 @@ jobs:
     runs-on: ${{ github.event.inputs.runner || 'cluster:mi355x-amds' }}
     timeout-minutes: 8
     steps:
-      - name: Inspect MI355X GPU holders and Slurm ownership
+      - name: Inspect possible ownerless MI355X allocations
         shell: bash
         run: |
           set +e
 
           echo "runner=$RUNNER_NAME host=$(hostname -f 2>/dev/null || hostname) utc=$(date -u +%FT%TZ)"
-          echo "=== cluster allocations for target nodes ==="
-          squeue -w mia1-p01-g11,mia1-p01-g15,mia1-p01-g18,mia1-p01-g19 \
+          squeue -w mia1-p01-g11,mia1-p01-g15,mia1-p01-g16,mia1-p01-g18,mia1-p01-g19 \
             -o "%.10i %.28j %.16u %.2t %.12M %.12l %.4D %.30R"
 
-          for host in mia1-p01-g11 mia1-p01-g15 mia1-p01-g18 mia1-p01-g19; do
+          for host in mia1-p01-g11 mia1-p01-g15 mia1-p01-g16 mia1-p01-g18 mia1-p01-g19; do
             echo
             echo "========== ${host} =========="
-            echo "--- Slurm node state ---"
             scontrol show node "$host" | grep -E \
               "NodeName=|State=|CfgTRES=|AllocTRES=|RealMemory=|FreeMem=|Reason="
 
-            timeout 45 ssh -o BatchMode=yes -o ConnectTimeout=10 \
+            timeout 60 ssh -o BatchMode=yes -o ConnectTimeout=10 \
               -o StrictHostKeyChecking=no "$host" 'bash -s' <<'REMOTE'
           set +e
           hostname -f 2>/dev/null || hostname
           date -u +%FT%TZ
-          uptime
+          id
 
-          echo "--- host memory ---"
-          free -h
+          echo "--- unprivileged ROCm view ---"
+          timeout 20 rocm-smi --showmeminfo vram --showuse --showpids 2>&1
 
-          echo "--- GPU memory and utilization ---"
-          if command -v rocm-smi >/dev/null 2>&1; then
-            timeout 20 rocm-smi --showmeminfo vram --showuse --showpids
-          elif [ -x /opt/rocm/bin/rocm-smi ]; then
-            timeout 20 /opt/rocm/bin/rocm-smi --showmeminfo vram --showuse --showpids
-          else
-            echo "rocm-smi unavailable"
-          fi
+          echo "--- noninteractive sudo availability ---"
+          sudo -n true
+          echo "sudo_rc=$?"
 
-          echo "--- /dev/kfd holders with Slurm cgroups ---"
-          kfd_pids=$(sudo -n fuser /dev/kfd 2>/dev/null || fuser /dev/kfd 2>/dev/null)
-          if [ -z "$kfd_pids" ]; then
-            echo "no visible /dev/kfd holders"
-          else
-            for pid in $kfd_pids; do
-              ps -p "$pid" -o user:24,pid,ppid,stat,lstart,etime,comm
-              sed -n '1,20p' "/proc/$pid/cgroup" 2>/dev/null
-            done
-          fi
+          echo "--- privileged ROCm view ---"
+          timeout 20 sudo -n rocm-smi --showmeminfo vram --showuse --showpids 2>&1
+
+          echo "--- privileged /dev/kfd holders ---"
+          timeout 20 sudo -n fuser -v /dev/kfd 2>&1
+
+          echo "--- privileged /dev/dri render holders ---"
+          timeout 20 sudo -n fuser -v /dev/dri/renderD* 2>&1
+
+          echo "--- KFD process registry ---"
+          timeout 20 sudo -n find /sys/class/kfd/kfd/proc -maxdepth 2 \
+            -type f -printf '%p\n' 2>&1 | head -n 240
+
+          echo "--- high-memory and accelerator processes ---"
+          sudo -n ps -eo user:24,pid,ppid,stat,rss,vsz,lstart,etime,comm --sort=-rss | \
+            awk 'NR == 1 || NR <= 45 || $4 ~ /^Z/ || $NF ~ /python|vllm|ray|sglang|aiperf|lmcache/'
 
           echo "--- Slurm-tracked PIDs ---"
-          scontrol listpids 2>&1 | head -n 200
+          scontrol listpids 2>&1 | head -n 240
 
-          echo "--- relevant and zombie processes ---"
-          ps -eo user:24,pid,ppid,stat,lstart,etime,comm | awk \
-            'NR == 1 || $4 ~ /^Z/ || $NF ~ /python|vllm|ray|sglang|docker|containerd|enroot|slurmstepd|lmcache/'
-
-          echo "--- running containers ---"
-          if command -v docker >/dev/null 2>&1; then
-            docker ps --format 'table {{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Image}}' 2>&1
-            docker stats --no-stream --format \
-              'table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.PIDs}}' 2>&1
-          else
-            echo "docker unavailable"
-          fi
+          echo "--- cgroup of aiperf zombie parent when present ---"
+          for pid in $(pgrep -f 'aiperf' | head -n 8); do
+            ps -p "$pid" -o user:24,pid,ppid,stat,lstart,etime,comm
+            sed -n '1,20p' "/proc/$pid/cgroup" 2>/dev/null
+          done
 
           echo "--- kernel GPU/OOM events since first failed run ---"
-          journalctl -k --since '2026-09-07 01:00:00 UTC' --no-pager 2>&1 | \
-            grep -Ei 'oom|out of memory|amdgpu|xgmi|ras|gpu reset|process.*killed' | tail -n 120
+          sudo -n journalctl -k --since '2026-09-07 01:00:00 UTC' --no-pager 2>&1 | \
+            grep -Ei 'oom|out of memory|amdgpu|xgmi|ras|gpu reset|process.*killed' | tail -n 160
           REMOTE
             echo "ssh_rc=$?"
           done
