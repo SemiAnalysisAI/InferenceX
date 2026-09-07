@@ -6902,3 +6902,16 @@
     - "Lower mem-fraction-static from 0.89 to 0.86 on every arm: TP4, TP8 and TP8 with DP attention. swa-full-tokens-ratio becomes per-arm: 0.10 on the tensor-parallel arms as before, 0.15 under DP attention."
     - "Drop concurrency 2 and 10 from the TP4 arm, leaving [1, 4, 8], and drop concurrency 16 from the TP8 hicache arm, leaving [32, 48]. Concurrency 16 remains on the TP8 no-offload arm."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2800
+
+- config-keys:
+    - dsv4-fp4-mi355x-vllm
+    - dsv4-fp4-mi355x-vllm-mtp
+    - dsv4-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - fixed-seq-len
+    - agentic-coding
+  description:
+    - "Repin all three DSv4 MI355X vLLM entries to the first ROCm nightly that ships vllm-project/vllm#53161 (vllm-project/vllm@de69e821), which fuses the DeepSeek-V4 native-FP8 shared expert into the MXFP4 routed-expert AITER kernel (FHMoE)."
+    - "VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 was already exported by the AgentX script and is added to the 8K/1K STP and MTP scripts by #2792, but on every nightly before de69e821 the request was inert: vLLM's eligibility check rejected this mixed FP4+FP8 checkpoint and the fusion self-disabled at startup. #53161 is what makes the flag take effect."
+    - "Fusion eligibility is gated on gfx950, tensor parallelism 8, data parallelism 1, no expert parallelism and no EPLB, --moe-backend aiter, BF16 model dtype, and the DeepSeek-V4 block-128 FP8 shared-expert quantization config. All three entries satisfy it; the AgentX DP-attention arm does not and keeps the unfused path."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PENDING
