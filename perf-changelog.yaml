@@ -5595,7 +5595,7 @@
     - "Image ghcr.io/tile-ai/tilert:0.1.5 (tilert 0.1.5.post2 installed at container start); commands aligned to TileRT README Topology A -- NIXL KV transfer, --kv-cache-dtype fp8_ds_mla (prefill) <-> fp8 (decode), max-seq-len 202752; MTP speculative-config wired via spec-decoding=mtp"
     - "Topology: 1 prefill node (TP8) + 1 decode node (TP8), each 8xB200 exclusive; TileRT decode is bs=1 only so conc-list is a single point [1], ISL 1k/8k OSL 1k"
     - "Runner: launch_b200-dgxc.sh tilert early-return branch (zero impact on the dynamo path); tilert_utils/submit.sh issues two srun --ntasks=1, one per role, because prefill and decode need different container images; roles are dispatched by the TILERT_ROLE it exports, and torn down across nodes via a sentinel file on the shared /workspace"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
 
 - config-keys:
     - qwen3.5-fp8-b200-sglang-agentic-mtp
@@ -6920,3 +6920,13 @@
     - "Switch the existing SiTUv2 routed-MoE path from A8W4 afp8_wfp4 FlyDSL kernels to A4W4 afp4_wfp4 kernels, retain the historical VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4 toggle, and remove the conflicting AITER_SITUV2_A8W4 override."
     - "Run only the matched concurrency-1 no-offload and concurrency-4 AgentX points from run 33773561410, updating c4 to LMCache 0.5.5.dev104+rocm7.2."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a matched concurrency-14 AgentX treatment for baseline job 100840215941 with vllm-project/vllm#53940 A4W4 dispatch."
+    - "Upgrade the pinned image at runtime to amd-aiter 0.1.21.post1+rocm7.2 with dependency resolution, require FlyDSL 0.3.2, and fail closed unless A4W4 kernels are observed."
+    - "Use LMCache 0.5.5.dev104+rocm7.2 for c14 while preserving the existing recipe topology, DCP1, MTP settings, and one-hour canonical AgentX duration."
+  pr-link: TBD

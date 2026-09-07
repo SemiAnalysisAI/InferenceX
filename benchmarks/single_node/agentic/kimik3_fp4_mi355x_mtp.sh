@@ -82,6 +82,26 @@ amd-smi || true
 resolve_trace_source
 install_agentic_deps
 
+# AITER 0.1.19 from the pinned image predates AITER_SITUV2_A4W4. Install the
+# first release that carries the selector and allow dependency resolution so
+# its matching FlyDSL 0.3.2 replaces the image's incompatible FlyDSL 0.2.4.
+AITER_VERSION="0.1.21.post1+rocm7.2"
+AITER_WHEEL_URL="https://github.com/ROCm/aiter/releases/download/v0.1.21.post1/amd_aiter-0.1.21.post1+rocm7.2.manylinux.2.28-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl"
+UV_CACHE_DIR="$AIPERF_UV_CACHE_DIR" \
+    "$AIPERF_UV_BIN" pip install --system --reinstall "$AITER_WHEEL_URL"
+"$AIPERF_UV_BIN" pip show --system amd-aiter flydsl
+
+AITER_INSTALLED_VERSION=$("$AIPERF_UV_BIN" pip show --system amd-aiter | awk '$1 == "Version:" {print $2}')
+FLYDSL_INSTALLED_VERSION=$("$AIPERF_UV_BIN" pip show --system flydsl | awk '$1 == "Version:" {print $2}')
+if [[ "$AITER_INSTALLED_VERSION" != "$AITER_VERSION"* ]]; then
+    echo "Error: expected amd-aiter $AITER_VERSION, got $AITER_INSTALLED_VERSION" >&2
+    exit 1
+fi
+if [[ "$FLYDSL_INSTALLED_VERSION" != "0.3.2" ]]; then
+    echo "Error: expected FlyDSL 0.3.2, got $FLYDSL_INSTALLED_VERSION" >&2
+    exit 1
+fi
+
 # ---- Reference env block ----------------------------------------------------
 export VLLM_ROCM_AITER_MLA_ASM_PADDING=asm
 export VLLM_ROCM_USE_AITER=1
@@ -155,7 +175,7 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     require_agentic_kv_offload_backend "$KV_OFFLOAD_BACKEND"
 
     case "$CONC" in
-        4)
+        4|14)
             LMCACHE_VERSION="0.5.5.dev104+rocm7.2"
             ;;
         *)
