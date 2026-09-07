@@ -6910,4 +6910,4 @@
   description:
     - "Add the Kimi-K3 B300 1P3D AgentX configuration from PR 2814 with NIXL LIBFABRIC transfers over AWS EFA."
     - "Disable vLLM cuMem KV allocation, use DMA-BUF for EFA, and keep the Mooncake host-memory pool on prefill only."
-  pr-link: XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2848
