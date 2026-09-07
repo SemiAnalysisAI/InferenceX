@@ -149,14 +149,22 @@ case "${KV_OFFLOAD_BACKEND:-}" in
       lmcache)
     require_agentic_kv_offload_backend "$KV_OFFLOAD_BACKEND"
 
-    LMCACHE_VERSION=0.5.5.dev89+rocm7.2
+    case "$CONC" in
+        44|48)
+            LMCACHE_VERSION="0.5.5.dev104+rocm7.2"
+            ;;
+        *)
+            LMCACHE_VERSION="0.5.5.dev89+rocm7.2"
+            ;;
+    esac
     LMCACHE_ROCM_INDEX="https://github.com/LMCache/LMCache/releases/expanded_assets/nightly-rocm"
 
     agentic_pip_install --quiet --no-cache-dir --no-deps \
         "sortedcontainers==2.4.0" \
         "opentelemetry-exporter-prometheus==0.61b0" \
-        "cupy-rocm-7-0==14.1.1" \
-        "lmcache==${LMCACHE_VERSION}" --find-links "$LMCACHE_ROCM_INDEX"
+        "cupy-rocm-7-0==14.1.1"
+    agentic_pip_install "lmcache==${LMCACHE_VERSION}" \
+        --no-deps --find-links "$LMCACHE_ROCM_INDEX"
 
     # LMCache 0.5.5's transfer-channel layer eagerly imports the Mooncake
     # backend (mooncake_te_impl.py -> `from mooncake.engine import
