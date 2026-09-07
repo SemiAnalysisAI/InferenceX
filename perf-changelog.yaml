@@ -6850,3 +6850,11 @@
     - "Test the TP8/DCP8 LMCache DRAM-offload arm at concurrency 44 and 48 with lmcache 0.5.5.dev104+rocm7.2 from the nightly ROCm release index."
     - "Keep concurrency 52 on lmcache 0.5.5.dev89+rocm7.2 so the manual test changes only the requested points."
   pr-link: TBD
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Exclude Slurm node mia1-p01-g15 only for the dev104 concurrency-48 retry after its out-of-resources failure."
+  pr-link: TBD

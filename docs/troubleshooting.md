@@ -79,6 +79,11 @@ Classify queue/allocation failures before reading server logs:
 - Rerun only after the runner is healthy. Do not change model parallelism, memory flags, or image merely to escape a bad node.
 - Escalate access, drained-node, socket, storage, and permanent Slurm configuration changes to cluster operators.
 
+For a bounded diagnostic retry, scope a temporary Slurm node exclusion to the
+exact model, framework, concurrency, and backend version in the launcher. Do
+not apply a fleet-wide exclusion or let the diagnostic guard affect unrelated
+benchmark points.
+
 [`KLAUD_DEBUG.md` §5](../KLAUD_DEBUG.md#5-cluster-infrastructure-amd-mi355x--mi300x--mi325x) lists known AMD node, Docker socket, disk, and port incidents. Treat named-node state as historical until current node evidence confirms it.
 
 ### AMD root-owned workspace files

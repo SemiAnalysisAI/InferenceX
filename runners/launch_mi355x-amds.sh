@@ -265,8 +265,26 @@ else
 
     export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
 
+    SALLOC_ARGS=(
+        --partition="$PARTITION"
+        --gres="gpu:$GPU_COUNT"
+        --exclusive
+        --cpus-per-task=128
+        --time=500
+        --no-shell
+        --job-name="$RUNNER_NAME"
+    )
+    if [[ "${MODEL_PREFIX:-}" == "kimik3" &&
+          "${FRAMEWORK:-}" == "vllm" &&
+          "${SPEC_DECODING:-}" == "mtp" &&
+          "${CONC:-}" == "48" &&
+          "${KV_OFFLOADING:-}" == "dram" &&
+          "${KV_OFFLOAD_BACKEND_METADATA:-}" == *"0.5.5.dev104+rocm7.2"* ]]; then
+        SALLOC_ARGS+=(--exclude=mia1-p01-g15)
+    fi
+
     set -x
-    salloc --partition=$PARTITION --gres=gpu:$GPU_COUNT --exclusive --cpus-per-task=128 --time=500 --no-shell --job-name="$RUNNER_NAME"
+    salloc "${SALLOC_ARGS[@]}"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -h -o %A | head -n1)
 
     srun --jobid=$JOB_ID bash -c "docker stop \$(docker ps -a -q)"
