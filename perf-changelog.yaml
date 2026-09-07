@@ -6921,3 +6921,11 @@
     - "Pick up the latest automatic ROCm DeepSeek-V4 optimizations, including fused mHC post/pre plus RMSNorm, gfx950 C4A top-k dispatch, fused C4 compressor GEMMs, fused SWA q/kv RMSNorm plus q FP8 quantization, and medium-batch cooperative top-k tuning."
     - "Keep the existing VLLM_ROCM_USE_AITER=1, VLLM_ROCM_USE_AITER_MOE=1, and --moe-backend aiter settings, and explicitly add VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 plus VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 to both STP and MTP paths. The current checkpoint's shared-expert path does not satisfy the latest vLLM fusion conditions, so that fusion flag self-disables while preserving recipe parity."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2792
+
+- config-keys:
+    - qwen3.5-fp4-b200-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update SGLang image from lmsysorg/sglang:v0.5.16-cu130 (v0.5.16 release, cu130) to lmsysorg/sglang:nightly-dev-cu13-20260907-30705c00 (2026-09-07 cu13 dev nightly, digest sha256:19b8fa1223cc339c1eae7a5b703f1a8c2543b5b119155bf3d7efaef18f77f007, tag commit sgl-project/sglang@30705c00). Docker Hub last pushed the tag at 2026-09-07T01:43:42Z. Engine flags (modelopt_fp4, trtllm_mha, flashinfer_trtllm), NEXTN MTP settings, golden acceptance length 3.39, and the TP2/TP4 concurrency and HiCache grids are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2862
