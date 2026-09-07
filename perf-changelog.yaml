@@ -6902,3 +6902,11 @@
     - "Lower mem-fraction-static from 0.89 to 0.86 on every arm: TP4, TP8 and TP8 with DP attention. swa-full-tokens-ratio becomes per-arm: 0.10 on the tensor-parallel arms as before, 0.15 under DP attention."
     - "Drop concurrency 2 and 10 from the TP4 arm, leaving [1, 4, 8], and drop concurrency 16 from the TP8 hicache arm, leaving [32, 48]. Concurrency 16 remains on the TP8 no-offload arm."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2800
+
+- config-keys:
+    - dsv4-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Repin the image from vllm/vllm-openai-rocm:nightly-311b3513af33bc29b4acb2fde2e9313e5e9966a0 to the 2026-09-05 ROCm nightly (nightly-e962733e08d10f7ca65dac4df99e116460b8b174, digest sha256:511755968434e26da590c3398f1e8a6399be4416226d5779ce92fb0655811a9c). Docker Hub last pushed it at 2026-09-05T05:27:09Z and the tag commit is vllm-project/vllm@e962733e."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2841
