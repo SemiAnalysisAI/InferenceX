@@ -9635,10 +9635,10 @@ qwen3.5-fp8-gb200-dynamo-sglang-mtp:
           ep: 16
           dp-attn: true
 
-# Kimi-K3 GB300 p90-ITL Pareto points. Each DCP8 worker spans two 4-GPU
-# trays: 1P1D uses 16 GPUs and 1P2D uses 24 GPUs.
+# Kimi-K3 GB300 points on the measured global p90-ITL Pareto front. Each
+# DCP8 worker spans two 4-GPU nodes.
 kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
-  image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-75c2eef
+  image: vllm/vllm-openai:nightly-dev-arm64-cu13-3696c77
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:gb300-nv
@@ -9650,14 +9650,14 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
   disagg: true
   scenarios:
     agentic-coding:
-    # 0.1664 resolves to 150 GB of host DRAM per 4-GPU server node on
+    # 0.1775 resolves to 160 GB of host DRAM per 4-GPU server node on
     # cluster:gb300-nv, matching the recipe's Mooncake segment size.
-    - dram-utilization: 0.1664
+    - dram-utilization: 0.1775
       search-space:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.12.post1" }
-        conc-list: [64]
+        conc-list: [48, 52, 56]
         prefill:
           num-worker: 1
           tp: 8
@@ -9672,7 +9672,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.12.post1" }
-        conc-list: [48]
+        conc-list: [32, 48, 64]
         prefill:
           num-worker: 1
           tp: 8
@@ -9684,11 +9684,39 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
           - "SYNTHETIC_ACCEPTANCE_LENGTH=3.36"
           - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/disagg-gb300-1p2d-dcp8-dcp8-dspark4-mooncake-agentic.yaml"
         decode: { num-worker: 2, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.12.post1" }
+        conc-list: [1]
+        prefill:
+          num-worker: 1
+          tp: 8
+          dcp-size: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.84"
+          - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/disagg-gb300-1p3d-dcp8-dcp8-dspark7-mooncake-agentic.yaml"
+        decode: { num-worker: 3, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.12.post1" }
+        conc-list: [32, 48]
+        prefill:
+          num-worker: 1
+          tp: 8
+          dcp-size: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.36"
+          - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/disagg-gb300-1p3d-dcp8-dcp8-dspark4-mooncake-agentic.yaml"
+        decode: { num-worker: 3, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
 
-# Aggregate p90-ITL Pareto points. One TP8 x DCP8 worker spans two 4-GPU nodes
-# and serves both phases; decode num-worker is zero so GPUs are counted once.
 kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg:
-  image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-75c2eef
+  image: vllm/vllm-openai:nightly-dev-arm64-cu13-3696c77
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:gb300-nv
@@ -9698,7 +9726,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg:
   disagg: false
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.1664
+    - dram-utilization: 0.1775
       search-space:
       - spec-decoding: mtp
         kv-offloading: dram
@@ -9713,15 +9741,13 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg:
           dp-attn: false
           additional-settings:
           - "SYNTHETIC_ACCEPTANCE=true"
-          # Golden AL at DSpark K=7 on the probabilistic/block curve, matching
-          # the B300 low-latency arm.
           - "SYNTHETIC_ACCEPTANCE_LENGTH=3.84"
           - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-gb300-dcp8-dspark7-maxseq2-mooncake-agentic.yaml"
 
-# High-throughput aggregate p90-ITL Pareto points without speculative decoding
-# or a max-num-seqs override.
+# Aggregate no-spec points measured at concurrency 48 and 70. One TP8 x DCP8 worker
+# spans two 4-GPU nodes and serves both phases.
 kimik3-fp4-gb300-dynamo-vllm-agentic-mooncake-dcp8-agg:
-  image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-75c2eef
+  image: vllm/vllm-openai:nightly-dev-arm64-cu13-3696c77
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:gb300-nv
@@ -9731,11 +9757,11 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-mooncake-dcp8-agg:
   disagg: false
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.1664
+    - dram-utilization: 0.1775
       search-space:
       - kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.12.post1" }
-        conc-list: [48, 70, 74]
+        conc-list: [48, 70]
         num-nodes: 2
         worker:
           num-worker: 1

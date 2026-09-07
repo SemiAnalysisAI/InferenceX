@@ -39,8 +39,8 @@ that runner label:
 
 ```yaml
 hardware:
-  cluster:b300-nv:
-    available-cpu-dram-mib: 2964436
+  cluster:b300-dsxe:
+    available-cpu-dram-mib: 3977095
     gpus-per-node: 8
 ```
 

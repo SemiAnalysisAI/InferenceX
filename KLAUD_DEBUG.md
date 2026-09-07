@@ -212,6 +212,13 @@ directory to the normal ingestion code. The only reuse-specific substitution is
 that changelog metadata comes from the merge run. A generator-policy change
 between the PR sweep and merge therefore does not require another GPU sweep.
 
+### 7.2 Capacity deferrals must release the candidate claim
+
+The planner ignores closed PRs but treats every matching `klaude/auto-*` branch
+as occupied. When capacity is the stop reason, cancel and confirm owned runs,
+close the draft PR, and delete its remote Klaud branch so a later sweep can
+select the candidate again. Closing the PR alone does not make it eligible.
+
 ---
 
 ## 8. gh CLI gotchas
