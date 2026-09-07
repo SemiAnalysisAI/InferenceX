@@ -158,16 +158,18 @@ if [ "$DP_ATTENTION" = "true" ]; then
     export SGLANG_DP_USE_GATHERV=1
     export SGLANG_DP_USE_REDUCE_SCATTER=1
     export GPU_MAX_HW_QUEUES="${GPU_MAX_HW_QUEUES_DP:-5}"
-    SHARED_EXPERTS_ARGS=(--disable-shared-experts-fusion)
-    SWA_FULL_TOKENS_RATIO="${SWA_FULL_TOKENS_RATIO_DP:-0.15}"
+    SWA_FULL_TOKENS_RATIO="${SWA_FULL_TOKENS_RATIO_DP:-0.10}"
+    MEM_FRACTION_STATIC="${MEM_FRACTION_STATIC_DP:-0.92}"
 
-    # Chunked prefill is a whole-engine budget, so widen it by the DP degree.
-    CHUNKED_PREFILL_SIZE=$((CHUNKED_PREFILL_SIZE * TP))
+    # Chunked prefill is a whole-engine budget. The DP path wants an 8192
+    # per-rank chunk rather than the wider TP-path value, so set the
+    # engine-wide budget from that directly (65536 at TP8).
+    CHUNKED_PREFILL_SIZE=$((8192 * TP))
     PARALLEL_ARGS+=(
         --dp "$TP"
         --enable-dp-attention
         --enable-prefill-delayer
-        --enable-two-batch-overlap
+        --prefill-delayer-token-usage-low-watermark 0.7
         --enable-dp-attention-local-control-broadcast
         --tokenizer-worker-num "$TP"
         --stream-interval 20
@@ -175,15 +177,17 @@ if [ "$DP_ATTENTION" = "true" ]; then
     )
 fi
 
+# Shared-experts fusion is a TP-path optimization; only the all-to-all EP path
+# has to give it up.
 if [ "$EP_SIZE" -gt 1 ]; then
     PARALLEL_ARGS+=(--ep-size "$EP_SIZE")
+    SHARED_EXPERTS_ARGS=(--disable-shared-experts-fusion)
 fi
 
 # AgentX concurrency counts live session trees, not individual requests.
 # Subagent fan-out can push instantaneous request concurrency above CONC, so
 # leave 2x headroom rather than clipping those bursts at the scheduler.
 MAX_RUNNING_REQUESTS=$((2 * CONC))
-[ "$MAX_RUNNING_REQUESTS" -gt 256 ] && MAX_RUNNING_REQUESTS=256
 CUDA_GRAPH_MAX_BS=$MAX_RUNNING_REQUESTS
 [ "$CUDA_GRAPH_MAX_BS" -gt 128 ] && CUDA_GRAPH_MAX_BS=128
 
@@ -198,19 +202,33 @@ fi
 # with eagle-topk 1 (a single MTP chain); NOT NEXTN, whose V3/R1 loader
 # crashes on the V4 architecture. Depth 3 matches the vLLM agentic sibling
 # (dsv4-fp4-mi355x-vllm-agentic-mtp) and the fixed-seq-len SGLang MTP recipe.
+# Depth 3 wins below 256 concurrency; at and above it the batch is already wide
+# enough that the extra draft forward passes cost more than the acceptance buys.
+if [ "$CONC" -lt 256 ]; then
+    SPEC_NUM_STEPS=3
+    SPEC_NUM_DRAFT_TOKENS=4
+else
+    SPEC_NUM_STEPS=1
+    SPEC_NUM_DRAFT_TOKENS=2
+fi
 SPEC_ARGS=(
     --speculative-algorithm EAGLE
-    --speculative-num-steps 3
+    --speculative-num-steps "$SPEC_NUM_STEPS"
     --speculative-eagle-topk 1
-    --speculative-num-draft-tokens 4
+    --speculative-num-draft-tokens "$SPEC_NUM_DRAFT_TOKENS"
 )
 
 # Throughput runs pin acceptance to the committed golden AL for this model,
 # thinking mode, and draft length (golden_al_distribution/dsv4_mtp.yaml:
-# thinking_on, 3 -> 2.49). Eval-only runs keep real target verification so
-# accuracy stays meaningful.
+# thinking_on, 1 -> 1.79, 3 -> 2.49). Eval-only runs keep real target
+# verification so accuracy stays meaningful.
+case "$SPEC_NUM_STEPS" in
+    1) SPEC_ACC_LEN=1.79 ;;
+    3) SPEC_ACC_LEN=2.49 ;;
+    *) echo "Error: no golden AL for speculative-num-steps '$SPEC_NUM_STEPS'" >&2; exit 1 ;;
+esac
 if [ "${EVAL_ONLY:-false}" != "true" ]; then
-    export SGLANG_SIMULATE_ACC_LEN=2.49
+    export SGLANG_SIMULATE_ACC_LEN="$SPEC_ACC_LEN"
     export SGLANG_SIMULATE_ACC_METHOD=match-expected
     export SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token
 fi
