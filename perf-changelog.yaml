@@ -6954,7 +6954,7 @@
     - agentic-coding
   description:
     - "Replace HiCache DRAM offload with GPU-resident KV on both arms: GLM-5.2 MLA KV fits entirely in HBM up to conc 8, eliminating host-DRAM dependency and simplifying deployment. Pareto-optimal interactivity P90 equal to or better than the HiCache baseline across c2–c8."
-    - "TP4/EP4 no-KV arm, conc [2, 4, 6, 8]: validated on run 33724174688 (branch testgg-qr-int4). norm_intvty_p90: c2=67.0, c6=66.3, c8=48.7."
+    - "TP4/EP4 no-KV arm, conc [2, 4, 6, 8]: validated on run 33724174688 (branch testgg-qr-int4). norm_intvty_p90: c2=67.0, c6=66.3, c8=53.7."
     - "TP8/EP1 no-KV arm, conc [4, 10]: EP=1 eliminates MoE all-to-all collective. c4 validated on run 32986446019 (norm_intvty_p90=69.2, ITL p90=9.05 ms); c10 validated on run 33489967280 via PR#2777 sweep (norm_intvty_p90=38.6)."
     - "Add optional ROCM_QUICK_REDUCE_QUANTIZATION=INT4 / ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16 env-var hooks in the benchmark script (no-op when unset; enables F-2 quick-reduce probe without a script edit)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2853
