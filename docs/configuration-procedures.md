@@ -167,6 +167,12 @@ Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../AGENTS.md#non-nego
 7. Add script + master entry + launcher routing + changelog together.
 8. Run Bash syntax and generation checks. Inspect `spec-decoding`, draft/native method, token count, chat-template use, capture range, and resolved script.
 
+## Reduced-HBM experiments with vLLM
+
+For the Kimi-K3 GB300 memory-capacity experiment, the six `*-mem085.yaml` recipes use `backend.vllm_config.<role>.gpu-memory-utilization: 0.85`, down from 0.92. Set this separately for `prefill` and `decode` in disaggregated recipes and for `aggregated` in aggregate recipes so every GPU receives the lower budget. The master config must reference the corresponding experimental recipe.
+
+The vLLM flag is `--gpu-memory-utilization`. It budgets the model executor, including weights and runtime memory; the remaining budget determines GPU KV capacity. Check baseline model loading, peak activations, CUDA graphs, and available KV memory before lowering it. At fixed overhead, the approximate KV reduction per GPU is `(old_fraction - new_fraction) * visible_HBM`. An explicit `kv-cache-memory-bytes` overrides utilization-based sizing, so do not combine it with this experiment. Preserve Mooncake connector and host DRAM settings. This approximates reduced capacity on the same GPU, not reduced HBM bandwidth or a hard device-wide memory cap; startup and benchmark execution remain required proof.
+
 ## Validate
 
 Run the smallest checks that cover the edited layers.

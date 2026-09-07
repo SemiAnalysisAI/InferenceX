@@ -1,4 +1,4 @@
-name: "kimi-k3-vllm-disagg-gb300-1p3d-dcp8-dcp8-dspark4-mooncake-agentic"
+name: "kimi-k3-vllm-disagg-gb300-1p3d-dcp8-dcp8-dspark4-mooncake-agentic-mem085"
 
 model:
   path: "moonshotai/Kimi-K3"
@@ -110,7 +110,7 @@ backend:
       prefix-match-unit: 128
       load-format: "fastsafetensors"
       kv-cache-dtype: "fp8"
-      gpu-memory-utilization: 0.92
+      gpu-memory-utilization: 0.85
       tensor-parallel-size: 8
       decode-context-parallel-size: 8
       dcp-comm-backend: "a2a"
@@ -129,7 +129,7 @@ backend:
       prefix-match-unit: 128
       load-format: "fastsafetensors"
       kv-cache-dtype: "fp8"
-      gpu-memory-utilization: 0.92
+      gpu-memory-utilization: 0.85
       tensor-parallel-size: 8
       decode-context-parallel-size: 8
       dcp-comm-backend: "a2a"

@@ -6910,3 +6910,13 @@
   description:
     - "Repin the image from vllm/vllm-openai-rocm:nightly-311b3513af33bc29b4acb2fde2e9313e5e9966a0 to the 2026-09-05 ROCm nightly (nightly-e962733e08d10f7ca65dac4df99e116460b8b174, digest sha256:511755968434e26da590c3398f1e8a6399be4416226d5779ce92fb0655811a9c). Docker Hub last pushed it at 2026-09-05T05:27:09Z and the tag commit is vllm-project/vllm@e962733e."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2841
+
+- config-keys:
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-mooncake-dcp8-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Experiment: lower gpu-memory-utilization from 0.92 to 0.85 on every Kimi-K3 GB300 aggregate, prefill, and decode GPU; preserve Mooncake DRAM KV offload at 160 GB per node and the baseline concurrency/topology sweep from run 33701025625."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
