@@ -308,7 +308,13 @@ def _verify_telemetry(tree: _Tree, metadata: dict, issues: list[dict], label: st
                 raise _InvalidEvidence("Telemetry lacks explicit compute ownership observations")
             if any(not isinstance(app, dict) or app.get("gpu_uuid") not in selected or type(app.get("pid")) is not int or app["pid"] < 2 for app in apps + owned_apps + foreign):
                 raise _InvalidEvidence("Telemetry compute process observations are malformed")
-            if any(app not in apps for app in owned_apps + foreign) or len(owned_apps) + len(foreign) != len(apps):
+            # Attribution adds identity/diagnostic fields to the raw NVML rows.
+            raw_by_id = {(app["gpu_uuid"], app["pid"]): app for app in apps}
+            partition = owned_apps + foreign
+            partition_by_id = {(app["gpu_uuid"], app["pid"]): app for app in partition}
+            if (len(raw_by_id) != len(apps) or len(partition_by_id) != len(partition)
+                    or raw_by_id.keys() != partition_by_id.keys()
+                    or any(raw_by_id[key].get("memory_used_mib") != partition_by_id[key].get("memory_used_mib") for key in raw_by_id)):
                 raise _InvalidEvidence("Telemetry compute ownership partition is inconsistent")
             no_foreign = no_foreign and not foreign
             sample_count += 1

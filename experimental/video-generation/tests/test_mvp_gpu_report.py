@@ -452,6 +452,56 @@ def test_gpu_label_requires_plausible_owned_process_receipt(tmp_path, field, val
     assert "plausible owned process/session" in page
 
 
+def test_telemetry_identity_annotations_preserve_timing_without_clearing_cleanup_failure(tmp_path):
+    job, _, receipt = fixture_job(tmp_path, evidence="operator_endpoint", receipt_kind="controlled_h3_gpu")
+    for role in receipt["roles"].values():
+        telemetry = job / role["telemetry_path"]
+        samples = [json.loads(line) for line in telemetry.read_text().splitlines()]
+        for sample in samples:
+            for app in sample["owned_compute_apps"]:
+                app["process_identity"] = {"pid": app["pid"], "pgid": 123, "session_id": 123, "start_ticks": 999}
+        telemetry.write_text("\n".join(json.dumps(sample) for sample in samples) + "\n")
+        role["telemetry_sha256"] = hashlib.sha256(telemetry.read_bytes()).hexdigest()
+    receipt.update(status="failed", measurement_status="incomplete", cleanup_status="failed",
+                   failures=["owned runtime cleanup did not establish idle GPUs"])
+    receipt["roles"]["candidate"]["cleanup"].update(status="failed", idle_after=False)
+    write_json(job / "gpu-job.json", receipt)
+    result, _, _ = render(tmp_path, job)
+    assert result["issues"] == []
+    assert all(role["telemetry"]["samples_consistent"] and role["gpu_timing_presented"] for role in result["roles"].values())
+    assert result["status"] == "failed" and result["ci_accepted"] is False
+    assert result["failures"] == receipt["failures"]
+    assert result["roles"]["candidate"]["cleanup"]["status"] == "failed"
+
+
+@pytest.mark.parametrize("defect", ["missing", "overlap", "duplicate", "wrong_pid", "memory"])
+def test_telemetry_ownership_partition_rejects_mismatched_observations(tmp_path, defect):
+    job, _, receipt = fixture_job(tmp_path, evidence="operator_endpoint", receipt_kind="controlled_h3_gpu")
+    role = receipt["roles"]["candidate"]
+    telemetry = job / role["telemetry_path"]
+    samples = [json.loads(line) for line in telemetry.read_text().splitlines()]
+    sample = samples[0]
+    app = sample["owned_compute_apps"][0]
+    if defect == "missing":
+        sample["owned_compute_apps"] = []
+    elif defect == "overlap":
+        sample["unowned_compute_apps"] = [dict(app, ownership_observation="not_owned")]
+    elif defect == "duplicate":
+        sample["compute_apps"].append(dict(app, pid=124))
+        sample["owned_compute_apps"].append(dict(app))
+    elif defect == "wrong_pid":
+        app["pid"] = 124
+    else:
+        app["memory_used_mib"] += 1
+    telemetry.write_text("\n".join(json.dumps(sample) for sample in samples) + "\n")
+    role["telemetry_sha256"] = hashlib.sha256(telemetry.read_bytes()).hexdigest()
+    write_json(job / "gpu-job.json", receipt)
+    result, _, page = render(tmp_path, job)
+    assert result["roles"]["candidate"]["telemetry"]["samples_consistent"] is False
+    assert result["roles"]["candidate"]["gpu_timing_presented"] is False
+    assert "Telemetry compute ownership partition is inconsistent" in page
+
+
 def test_gpu_label_requires_owned_compute_during_measurement(tmp_path):
     job, _, receipt = fixture_job(tmp_path, evidence="operator_endpoint", receipt_kind="controlled_h3_gpu")
     role = receipt["roles"]["candidate"]
