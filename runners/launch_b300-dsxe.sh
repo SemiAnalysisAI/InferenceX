@@ -453,7 +453,7 @@ else
     fi
     export MODEL_PATH="${MODEL_MOUNT_DIR}/${MODEL_BASENAME}"
 
-    SQUASH_FILE="$SQUASH_DIR/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    CONTAINER_IMAGE="$(enroot_uri_for_image "$IMAGE")" || exit 1
     SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
     # Prefer a framework-tagged script (e.g. dsv4_fp4_b300_sglang.sh); fall back to
     # the untagged historical name for scripts that haven't been retagged yet.
@@ -478,8 +478,6 @@ else
     else
         CONTAINER_MOUNT_DIR=/workspace
     fi
-
-    import_squash_image "$IMAGE" "$SQUASH_FILE"
 
     export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
 
@@ -510,7 +508,7 @@ else
 
     srun --jobid="$JOB_ID" \
         --mpi=none \
-        --container-image="$SQUASH_FILE" \
+        --container-image="$CONTAINER_IMAGE" \
         --container-mounts="$CONTAINER_MOUNTS_ARG" \
         --no-container-mount-home \
         --container-remap-root \
