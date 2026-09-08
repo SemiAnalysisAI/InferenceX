@@ -102,6 +102,15 @@ InferenceX-app 将路由字段作为列或配置维度，并把数值测量存�
 
 每个评测上传名为 `eval_<EXP_NAME>_<RESULT_FILENAME>`。当前允许的载荷包括 `meta_env.json`、`results*.json`、样本 JSONL、预测、SWE-bench 报告和轨迹文件。收集器只使用元数据和 lm-eval 结果 JSON 来生成聚合记录。
 
+共享评测元数据写入器保留单节点的 `DP_ATTENTION`，并将其作为
+`prefill_dp_attention` 和 `decode_dp_attention` 的默认值。只有
+`IS_MULTINODE=true` 的任务才会转换独立的 prefill/decode 环境变量；
+这类任务两侧的 DP attention 设置可以不同。收集器不会根据工件名称或
+服务端日志重建拓扑。受旧版无条件转换逻辑影响的历史工件，可能将实际启用
+DP attention 的单节点评测记录为 `false`。修复写入器不会修复这些工件或
+已有数据库记录：应先核实原始任务配置和服务端日志，再更正元数据、重新生成
+聚合结果并重新摄取受影响的数据。
+
 [`utils/collect_eval_results.py`](../utils/collect_eval_results.py) 执行以下规则：
 
 1. 评测集是包含 `meta_env.json` 的根目录或一级子目录。
