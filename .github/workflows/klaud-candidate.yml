@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       # Repair attempts after the initial update; the baseline is already published.
-      MAX_REPAIRS: '3'
+      MAX_REPAIRS: '5'
       KLAUD_BRANCH: klaud/auto-${{ inputs.candidate }}
       KLAUD_TEST_NAME: klaud-${{ github.run_id }}-${{ inputs.candidate }}
     steps:
@@ -166,6 +166,18 @@ jobs:
             Success requires run-sweep.yml on the exact PR head to finish successfully with reusable
             artifacts. On failure remove the label and return to draft BEFORE repair pushes; diagnose,
             repair within the remaining budget and repeat. Recheck capacity before capacity-related recovery.
+
+            Final PR disposition:
+            Validated success: keep the PR open and ready. Otherwise, when stopping with your own PR,
+            record the failure/deferral and evidence, cancel unfinished owned runs and confirm all jobs
+            terminal, finalize attempt outcomes, remove sweep labels, return to draft and close it.
+            Confirmed infrastructure/capacity blockers (e.g. missing staged weights/mounts): delete its
+            remote branch so selection can retry. Confirmed image incompatibility, exhausted image
+            repairs or uncertain causes: retain its branch and explain why; uncertainty requires manual
+            review, not an incompatibility claim. Open PRs block the family; a retained branch blocks
+            only that exact candidate, allowing changed source-image/release metadata to be selected.
+            Never close another owner's PR or delete their branch. Without your own PR, report the
+            stop reason without creating a placeholder; do not remove an existing candidate claim.
 
             Status and history:
             PR body: maintain a short current-status/next-step summary, then vertical sections:
