@@ -9030,6 +9030,36 @@ glm5.2-fp4-b200-sglang-agentic-mtp:
       search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 4, 8, 12, 16] }
 
+# First GLM-5.2 FP8 AgentX recipe on B200, the FP8 precision sibling of
+# glm5.2-fp4-b200-sglang-agentic-mtp. Same spec-decode-only shape per the AgentX
+# policy (MODELS.md): SGLang EAGLE off GLM-5.2's built-in nextn head (num-steps
+# 3, eagle-topk 1, 4 draft tokens = 3 speculative tokens) with acceptance pinned
+# to the golden AL 2.99 (golden_al_distribution/glm5.2_mtp.yaml, thinking_on,
+# K=3) through SGLANG_SIMULATE_ACC_*. That curve was measured on glm-5.2-fp8,
+# i.e. on this checkpoint. Pinned to the 2026-09-08 cu13 dev nightly (the first that carries sgl-project/sglang#38318, the guard for the EAGLE DSA fp8 read-door crash seen on the 2026-09-07 build), the same
+# tag the B200 Qwen3.5 FP8/FP4 SGLang AgentX recipes moved to that day.
+#
+# Same single arm and concurrency grid as the NVFP4 B200 and B300 siblings:
+# cookbook low-latency TP8 with HiCache host-DRAM offload, conc
+# [1, 4, 8, 12, 16] (steps of at least 2, hard stop at 16). TP8-only for
+# memory as well as comparability -- the ~756 GB block-FP8 checkpoint needs
+# ~94.5 GB/GPU across 8 B200s and does not fit below 8; the fp8 KV pool that
+# remains inside --mem-fraction-static 0.83 is ~55 GB/GPU against ~91 GB/GPU
+# on NVFP4, which HiCache absorbs as host spill.
+glm5.2-fp8-b200-sglang-agentic-mtp:
+  image: lmsysorg/sglang:nightly-dev-cu13-20260908-20ca564b
+  model: zai-org/GLM-5.2-FP8
+  model-prefix: glm5.2
+  runner: cluster:b200-nscale
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 4, 8, 12, 16] }
+
 glm5.2-fp4-gb200-dynamo-sglang-agentic-agg:
   image: lmsysorg/sglang:v0.5.17-cu130
   model: nvidia/GLM-5.2-NVFP4
