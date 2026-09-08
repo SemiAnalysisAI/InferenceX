@@ -76,13 +76,7 @@ set -x
 #
 # Import a container image into the shared squash dir. Concurrent callers target the
 # same path, so serialize on a per-file lock and skip when a valid squash file exists.
-# --time bounds the step; an unbounded srun hangs the job if its step is lost.
-#
-# The import itself must run on a compute node: enroot builds the squashfs over an
-# overlay mount, which the shared filesystem cannot back, and the login host is too
-# small to unpack a multi-GB image. Reading the finished file is just I/O, so probe
-# it here first -- a warm cache then costs no Slurm allocation at all. The in-srun
-# check under the lock stays authoritative, so a stale probe only costs one step.
+# Run the import locally on the runner/login host using its Enroot configuration.
 import_squash_image() {
     local image_ref="$1"
     local sqsh="$2"
@@ -93,8 +87,7 @@ import_squash_image() {
         return 0
     fi
 
-    srun -N 1 -A "$SLURM_ACCOUNT" -p "$SLURM_PARTITION" \
-        --time="${ENROOT_IMPORT_TIME_LIMIT:-120}" bash -c "
+    bash -c "
         set -euo pipefail
         exec 9>\"$lock\"
         flock -w 3600 9
