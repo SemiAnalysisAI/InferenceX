@@ -33,7 +33,7 @@ PR 检查使用 `claude-opus-5`（Opus 5），关闭 fast mode（`fastMode: fals
 
 提示词要求 Klaud Cold 通过 `main` 上现有的 `e2e-tests.yml` 仅测量更新后的镜像及其修复尝试，将实际测量提交的 SHA 传入 `inputs.ref`，将完整配置族的 `test-config` 命令传入 `generate-cli-command`。它读取当前 `configs/*-master.yaml`、`configs/runners.yaml` 并使用现有矩阵生成器 CLI，不再维护另一份 recipe 目录。保留默认 eval、所有配置测试点、物理 `nodes:N` 标签、MTP chat template 和产物约定。定向修复尝试不添加 sweep 标签，并保持 PR 为草稿。定向尝试通过后，Klaud 会在 `perf-changelog.yaml` 物理末尾追加包含 PR URL 的必要条目，保留此前所有字节，将 PR 标记为 ready 但不请求 review，并将 `full-sweep-enabled` 作为唯一与 sweep 相关的标签。它会等待针对该 PR 精确 head 的 `run-sweep.yml` 成功结束并产生可复用产物。如果最终 sweep 失败，Klaud 会在任何修复推送之前移除该标签并将 PR 改回草稿，再在剩余修复预算内修复并重复。Klaud 不会自行 staging、授权复用、请求 review 或合并。
 
-每次调度前，使用 `check-capacity --cluster ID` 检查精确目标；通过重复 `--cluster` 指定每个可能的目标。退出状态 0 要求全部目标均通过新鲜度、可用性和低于 20% 利用率检查。如果因容量而停止，Klaud 会取消并确认其所属运行已经结束、关闭已有草稿 PR，并删除远程 Klaud 分支，使后续扫描可以重试该候选。它不会等待恢复、承诺自动继续或创建占位 PR。命令不打印容量详情。
+每次调度前，使用 `check-capacity --cluster ID` 检查精确目标；通过重复 `--cluster` 指定每个可能的目标。退出状态 0 要求全部目标均通过新鲜度、可用性和低于 20% 利用率检查。如果任一阶段因容量而停止，Klaud 会先在已有 PR 表格中写入终态尝试、可公开的延后原因以及确认后的子运行状态。随后取消并确认全部所属运行已经结束、移除所有 sweep 标签、将 PR 改回草稿、关闭 PR，并删除远程 Klaud 分支，使后续扫描可以重试该候选。如果尚无 PR，则在最终响应中记录延后结果，不创建占位 PR。它不会等待恢复或承诺自动继续。命令不打印容量详情。
 
 Klaud Cold 读取运行产物和日志，计算匹配性能差值并在 PR 中发布证据。更新后的镜像能够正常工作、通过所选 benchmark 和默认 eval，即视为成功；性能优化尽力而为，性能回退如实报告，不按百分比阈值拒绝更新。PR 和最终报告必须包含双语 Markdown 汇总表，分别记录带发布日期的已有基线及每次更新或修复尝试：尝试编号、镜像/SHA、运行 URL、benchmark/eval 结果、相对基线的匹配吞吐量和延迟变化，以及诊断结论。明确标注各测试点的差值；对于缺失或不可比较的测量，包括失败或取消的尝试，填写 `N/A` 并说明原因。无效、重复或未匹配的测试点不得用于声称性能提升，并应披露相关限制。所选 benchmark 成功、性能证据完整和全局 PR 审批是不同结论。下方的公开 API 调查指南说明如何按需读取补充信息。公开 dashboard 中已有的数据作为基线；只有新镜像尝试消耗 GPU 时间。空汇总文件和成功的收集作业不能证明 benchmark/eval 成功。原始 benchmark 产物保留在对应 e2e 运行中；结束后仅上传脱敏候选诊断，排除任意临时文件和执行记录。
 
@@ -88,7 +88,7 @@ action 结束后，`diagnostics` 复用 planner 的脱敏逻辑，仅将 `candid
 
 Klaud Cold 只应修改所选主配置族的镜像，以及它已经引用且未被其他配置族共享的 srt-slurm recipe YAML 镜像/后端兼容性设置。模型、精度、拓扑、推测解码、工作负载、命令、资源和 recipe 引用保持不变。`model.container` 及存在时的 `identity.container.image` 必须与主配置镜像一致。共享脚本、launcher、库、工作流/控制文件和无关配置族保持不变。固定镜像必须原样运行：禁止对推理引擎或 serving 技术栈打补丁、改写源码或容器文件、就地修改 site-packages、monkey-patch，以及覆盖安装 fork 或重新构建的 wheel。候选镜像若依赖其中任一操作，Klaud 会将其判定为不兼容。Klaud Cold 使用 **uv** 运行针对性检查；agent 之后没有独立补丁校验器。
 
-定向验证通过后，Klaud 会追加必要的 changelog 条目，同时保持历史字节不变。由于 `run-sweep.yml` 会跳过草稿 PR，Klaud 随后将候选标记为 ready，再添加 `full-sweep-enabled`。最终 sweep 失败时，先移除标签并将 PR 改回草稿，再开始修复。现有检查和人工审核仍然有效；没有授权自动 staging、复用、请求 review、合并或绕过规则。
+定向验证通过后，Klaud 会追加必要的 changelog 条目，同时保持历史字节不变。由于 `run-sweep.yml` 会跳过草稿 PR，Klaud 随后将候选标记为 ready，再添加 `full-sweep-enabled`。最终 sweep 失败时，先移除标签并将 PR 改回草稿，再开始修复。如果容量丢失导致失败或阻止恢复，Klaud 会记录延后结果并执行完整的关闭与释放清理，而不再修复。现有检查和人工审核仍然有效；没有授权自动 staging、复用、请求 review、合并或绕过规则。
 
 ## 工作流操作与凭据
 

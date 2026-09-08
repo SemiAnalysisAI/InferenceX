@@ -112,9 +112,12 @@ jobs:
             uv run --no-project --python 3.12 --with "pydantic>=2.10,<3" python -m utils.klaude check-capacity --cluster TELEMETRY_CLUSTER_ID
             Exit 0 requires current telemetry, available nodes and node utilization below 20% for
             ALL targets. Any other result means defer and stop; do not wait for recovery or promise
-            automatic continuation. If capacity is the stop reason, cancel and confirm owned runs,
-            close any draft PR and delete its remote Klaud branch so later sweeps can retry it.
-            Create no placeholder PR. Never print private API responses.
+            automatic continuation. If capacity is the stop reason at any stage, first update any
+            existing PR table with the terminal attempt, a public-safe deferral reason and confirmed
+            child-run states. Then cancel and confirm all owned runs, remove any sweep label, return
+            the PR to draft, close it and delete its remote Klaud branch so later sweeps can retry it.
+            If no PR exists, report the deferral in your final response. Create no placeholder PR.
+            Never print private API responses.
 
             Dispatch e2e-tests.yml from main with inputs.ref=exact measured SHA,
             generate-cli-command="test-config --config-files FILE --config-keys FAMILY", fail-fast=true.
@@ -154,7 +157,9 @@ jobs:
             sweep-related label. Wait for its run-sweep.yml run on the exact PR head to finish
             successfully with reusable artifacts; this is the final validation. If it fails, remove
             full-sweep-enabled and return the PR to draft before any repair push, then repair within
-            the remaining budget and repeat. Do not stage results, post /reuse-sweep-run, request review or merge.
+            the remaining budget and repeat. If capacity loss caused or prevents recovery from that
+            failure, use the reporting and complete deferral cleanup above instead of repairing.
+            Do not stage results, post /reuse-sweep-run, request review or merge.
 
             PR and final report: English/Simplified Chinese Markdown table, one row for the baseline
             (label its published date), every update/repair attempt and the final full sweep, including failures/cancellations. Include attempt,

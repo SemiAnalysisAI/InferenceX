@@ -215,9 +215,12 @@ between the PR sweep and merge therefore does not require another GPU sweep.
 ### 7.2 Capacity deferrals must release the candidate claim
 
 The planner ignores closed PRs but treats every matching `klaude/auto-*` branch
-as occupied. When capacity is the stop reason, cancel and confirm owned runs,
-close the draft PR, and delete its remote Klaud branch so a later sweep can
-select the candidate again. Closing the PR alone does not make it eligible.
+as occupied. When capacity is the stop reason at any stage, first update an
+existing PR report with the terminal attempt, public-safe deferral reason and
+confirmed child-run states. Then cancel and confirm all owned runs, remove sweep
+labels, return the PR to draft, close it, and delete its remote Klaud branch so
+a later sweep can select the candidate again. Without a PR, report the deferral
+in the agent's final response. Closing the PR alone does not make it eligible.
 
 ### 7.3 Final reusable sweeps require a ready PR
 
