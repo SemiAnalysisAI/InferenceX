@@ -404,6 +404,8 @@ export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 export VLLM_ROCM_USE_AITER_MOE=1
 export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
+# vLLM only clamps torch threads after weight loading; cap from process start.
+export OMP_NUM_THREADS=1
 
 sleep 180
 
