@@ -377,6 +377,31 @@ qwen3.5-fp4-mi355x-sglang-agentic-mtp:
       - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [40, 48, 56, 64] }
       - { tp: 2, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [20, 24, 28, 32] }
 
+# Qwen3.5 FP8 agentic-coding benchmark on MI355X via SGLang with native EAGLE
+# MTP: the FP8 precision sibling of qwen3.5-fp4-mi355x-sglang-agentic-mtp,
+# serving the upstream Qwen/Qwen3.5-397B-A17B-FP8 checkpoint (~406 GB). Same
+# SKU serve shape (AITER unified attention, INT8 quick all-reduce, fp8 KV, 16k
+# prefill budget, HiCache ratio 1.5) and the same golden AL 3.39 at K=3.
+# Arms: TP4/EP1 GPU-resident mirrors the MXFP4 sibling's TP4 arm; TP8/EP1
+# GPU-resident is the MI325X FP8 sibling's TP8 arm trimmed to the same ceiling;
+# TP4/EP1 HiCache mirrors the MXFP4 sibling's TP4 host-tier arm. No TP2 on day
+# zero: ~203 GB/rank of FP8 weights leaves ~27 GB/rank inside 0.80 of 288 GB.
+qwen3.5-fp8-mi355x-sglang-agentic-mtp:
+  image: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260907
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  runner: cluster:mi355x-amds
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16, 20, 24, 28, 32, 40] }
+      - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 16, 24, 32, 40, 48] }
+      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [40, 48, 56, 64] }
+
 qwen3.5-fp4-mi355x-sglang-disagg:
   image: lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260523
   model: amd/Qwen3.5-397B-A17B-MXFP4
