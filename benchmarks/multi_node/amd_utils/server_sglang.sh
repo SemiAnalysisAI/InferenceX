@@ -35,6 +35,9 @@ BENCH_MAX_CONCURRENCY="${BENCH_MAX_CONCURRENCY:-512}"
 
 # Extract the maximum concurrency from the x-delimited list
 BENCH_MAX_CONC_VALUE=$(echo "$BENCH_MAX_CONCURRENCY" | tr 'x' '\n' | sort -n | tail -1)
+# Exported so the models.yaml config-loader's inline Python (eval_formula)
+# can resolve formulas like "BENCH_MAX_CONC_VALUE*2" for max_running_requests.
+export BENCH_MAX_CONC_VALUE
 
 # Dry Run for debugging purpose
 DRY_RUN="${DRY_RUN:-0}"
@@ -122,7 +125,11 @@ def eval_formula(val):
 def parse_range(cuda_range, default_start, default_end):
     if '-' in str(cuda_range):
         s, e = str(cuda_range).split('-')
-        return s, e
+        # Resolve formula strings (e.g. "BENCH_MAX_CONC_VALUE/4") the same way
+        # chunked_prefill_size/max_running_requests do, so a range end like
+        # "1-BENCH_MAX_CONC_VALUE/4" doesn't reach `seq` as a literal,
+        # non-numeric string (which fails outright).
+        return str(eval_formula(s)), str(eval_formula(e))
     return str(default_start), str(default_end)
 
 # Output shell variables
@@ -141,13 +148,20 @@ print(f'PREFILL_DISABLE_CUDA_GRAPH=\"{prefill.get(\"disable_cuda_graph\", False)
 
 dp = prefill.get('dp', {})
 no_dp = prefill.get('no_dp', {})
-print(f'PREFILL_MAX_RUNNING_REQUESTS_DP=\"{dp.get(\"max_running_requests\", 24)}\"')
+# Per-bucket mem_fraction_static override (falls back to the role-level
+# PREFILL_MEM_FRACTION_STATIC above when a model only sets one value for
+# both DP and no-DP, as all but DeepSeek-V4-Pro-AgentX currently do). This is
+# NOT routed through eval_formula(): that helper casts its result to int(),
+# which would silently truncate a float like 0.92 down to 0.
+print(f'PREFILL_MEM_FRACTION_STATIC_DP=\"{dp.get(\"mem_fraction_static\", prefill.get(\"mem_fraction_static\", 0.8))}\"')
+print(f'PREFILL_MEM_FRACTION_STATIC_NO_DP=\"{no_dp.get(\"mem_fraction_static\", prefill.get(\"mem_fraction_static\", 0.8))}\"')
+print(f'PREFILL_MAX_RUNNING_REQUESTS_DP=\"{eval_formula(dp.get(\"max_running_requests\", 24))}\"')
 print(f'PREFILL_CHUNKED_PREFILL_SIZE_DP=\"{eval_formula(dp.get(\"chunked_prefill_size\", 262144))}\"')
 print(f'PREFILL_CUDA_GRAPH_BS_DP=\"{dp.get(\"cuda_graph_bs\", \"1 2 3\")}\"')
 print(f'PREFILL_CONTEXT_LENGTH_DP=\"{dp.get(\"context_length\", \"\")}\"')
 print(f'PREFILL_MAX_TOTAL_TOKENS_DP=\"{dp.get(\"max_total_tokens\", \"\")}\"')
 print(f'PREFILL_ENABLE_TWO_BATCH_OVERLAP_DP=\"{dp.get(\"enable_two_batch_overlap\", False)}\"')
-print(f'PREFILL_MAX_RUNNING_REQUESTS_NO_DP=\"{no_dp.get(\"max_running_requests\", 128)}\"')
+print(f'PREFILL_MAX_RUNNING_REQUESTS_NO_DP=\"{eval_formula(no_dp.get(\"max_running_requests\", 128))}\"')
 print(f'PREFILL_CHUNKED_PREFILL_SIZE_NO_DP=\"{eval_formula(no_dp.get(\"chunked_prefill_size\", 262144))}\"')
 print(f'PREFILL_CONTEXT_LENGTH_NO_DP=\"{no_dp.get(\"context_length\", \"\")}\"')
 print(f'PREFILL_MAX_TOTAL_TOKENS_NO_DP=\"{no_dp.get(\"max_total_tokens\", \"\")}\"')
@@ -164,7 +178,12 @@ ep_only = decode.get('ep_only', {})
 no_dp = decode.get('no_dp', {})
 
 # Decode DP config
-print(f'DECODE_MAX_RUNNING_REQUESTS_DP=\"{dp.get(\"max_running_requests\", 4096)}\"')
+# Per-bucket mem_fraction_static override -- see PREFILL_MEM_FRACTION_STATIC_DP
+# comment above for why this bypasses eval_formula().
+print(f'DECODE_MEM_FRACTION_STATIC_DP=\"{dp.get(\"mem_fraction_static\", decode.get(\"mem_fraction_static\", 0.85))}\"')
+print(f'DECODE_MEM_FRACTION_STATIC_EP_ONLY=\"{ep_only.get(\"mem_fraction_static\", decode.get(\"mem_fraction_static\", 0.85))}\"')
+print(f'DECODE_MEM_FRACTION_STATIC_NO_DP=\"{no_dp.get(\"mem_fraction_static\", decode.get(\"mem_fraction_static\", 0.85))}\"')
+print(f'DECODE_MAX_RUNNING_REQUESTS_DP=\"{eval_formula(dp.get(\"max_running_requests\", 4096))}\"')
 print(f'DECODE_CHUNKED_PREFILL_SIZE_DP=\"{eval_formula(dp.get(\"chunked_prefill_size\", 262144))}\"')
 print(f'DECODE_CONTEXT_LENGTH_DP=\"{dp.get(\"context_length\", \"\")}\"')
 s, e = parse_range(dp.get('cuda_graph_bs_range', '1-160'), 1, 160)
@@ -180,7 +199,7 @@ print(f'DECODE_CUDA_GRAPH_BS_EP_ONLY_START=\"{s}\"')
 print(f'DECODE_CUDA_GRAPH_BS_EP_ONLY_END=\"{e}\"')
 
 # Decode no-DP config
-print(f'DECODE_MAX_RUNNING_REQUESTS_NO_DP=\"{no_dp.get(\"max_running_requests\", 128)}\"')
+print(f'DECODE_MAX_RUNNING_REQUESTS_NO_DP=\"{eval_formula(no_dp.get(\"max_running_requests\", 128))}\"')
 print(f'DECODE_CHUNKED_PREFILL_SIZE_NO_DP=\"{eval_formula(no_dp.get(\"chunked_prefill_size\", 262144))}\"')
 print(f'DECODE_CONTEXT_LENGTH_NO_DP=\"{no_dp.get(\"context_length\", \"\")}\"')
 s, e = parse_range(no_dp.get('cuda_graph_bs_range', '1-128'), 1, 128)
@@ -198,6 +217,7 @@ if [[ "$PREFILL_ENABLE_DP" == "true" ]]; then
     prefill_context_length=$PREFILL_CONTEXT_LENGTH_DP
     prefill_max_total_tokens=$PREFILL_MAX_TOTAL_TOKENS_DP
     prefill_enable_two_batch_overlap=$PREFILL_ENABLE_TWO_BATCH_OVERLAP_DP
+    prefill_mem_fraction_static=$PREFILL_MEM_FRACTION_STATIC_DP
 else
     prefill_cuda_graph_bs=($(seq $PREFILL_CUDA_GRAPH_BS_NO_DP_START $PREFILL_CUDA_GRAPH_BS_NO_DP_END))
     prefill_max_running_requests=$PREFILL_MAX_RUNNING_REQUESTS_NO_DP
@@ -205,6 +225,7 @@ else
     prefill_context_length=$PREFILL_CONTEXT_LENGTH_NO_DP
     prefill_max_total_tokens=$PREFILL_MAX_TOTAL_TOKENS_NO_DP
     prefill_enable_two_batch_overlap="false"
+    prefill_mem_fraction_static=$PREFILL_MEM_FRACTION_STATIC_NO_DP
 fi
 
 # When both DP and EP are enabled, override max-running-requests with max bench concurrency
@@ -219,16 +240,34 @@ fi
 # Compute DP-dependent decode parameters (3-way: DP > EP-only > no_dp)
 if [[ "$DECODE_ENABLE_DP" == "true" ]]; then
     decode_cuda_graph_bs=($(seq $DECODE_CUDA_GRAPH_BS_DP_START $DECODE_CUDA_GRAPH_BS_DP_END))
-    decode_max_running_requests=$((DECODE_CUDA_GRAPH_BS_DP_END * DECODE_TP_SIZE))
+    # decode.dp.max_running_requests (YAML) is honored as an upper bound, not
+    # taken verbatim: the actual admissible concurrency can never exceed what
+    # the captured CUDA-graph range supports (cuda_graph_bs_end * TP_SIZE --
+    # each DP rank runs its own copy of the graph, one request per rank per
+    # step). Every existing model's YAML value (4096/1024/etc.) is already
+    # >= this computed ceiling, so taking the min is a no-op for them; it
+    # only bites for configs (like DeepSeek-V4-Pro-AgentX's
+    # BENCH_MAX_CONC_VALUE*2 formula) that intentionally want a smaller,
+    # concurrency-scaled cap.
+    decode_max_running_requests_computed=$((DECODE_CUDA_GRAPH_BS_DP_END * DECODE_TP_SIZE))
+    if [[ "$decode_max_running_requests_computed" -lt "$DECODE_MAX_RUNNING_REQUESTS_DP" ]]; then
+        decode_max_running_requests=$decode_max_running_requests_computed
+    else
+        decode_max_running_requests=$DECODE_MAX_RUNNING_REQUESTS_DP
+    fi
+    echo "[decode.dp max_running_requests] computed(cuda_graph_bs_end*TP)=$decode_max_running_requests_computed yaml=$DECODE_MAX_RUNNING_REQUESTS_DP -> using $decode_max_running_requests"
     decode_context_length=$DECODE_CONTEXT_LENGTH_DP
+    decode_mem_fraction_static=$DECODE_MEM_FRACTION_STATIC_DP
 elif [[ "$DECODE_ENABLE_EP" == "true" ]]; then
     decode_cuda_graph_bs=($(seq $DECODE_CUDA_GRAPH_BS_EP_ONLY_START $DECODE_CUDA_GRAPH_BS_EP_ONLY_END))
     decode_max_running_requests=$DECODE_MAX_RUNNING_REQUESTS_EP_ONLY
     decode_context_length=$DECODE_CONTEXT_LENGTH_EP_ONLY
+    decode_mem_fraction_static=$DECODE_MEM_FRACTION_STATIC_EP_ONLY
 else
     decode_cuda_graph_bs=($(seq $DECODE_CUDA_GRAPH_BS_NO_DP_START $DECODE_CUDA_GRAPH_BS_NO_DP_END))
     decode_max_running_requests=$DECODE_MAX_RUNNING_REQUESTS_NO_DP
     decode_context_length=$DECODE_CONTEXT_LENGTH_NO_DP
+    decode_mem_fraction_static=$DECODE_MEM_FRACTION_STATIC_NO_DP
 fi
 # In PD-disaggregation the decode must admit requests against the SAME context
 # length as prefill; otherwise decode accepts over-length requests that prefill
@@ -254,9 +293,9 @@ fi
 # Build the composed config strings (equivalent to the old MODEL_PREFILL_CONFIGS / MODEL_DECODE_CONFIGS)
 # disable_cuda_graph (model-level) routes prefill to --disable-cuda-graph instead of --cuda-graph-bs.
 if [[ "$PREFILL_DISABLE_CUDA_GRAPH" == "True" ]] || [[ "$PREFILL_DISABLE_CUDA_GRAPH" == "true" ]]; then
-    PREFILL_MODE_FLAGS="--mem-fraction-static ${PREFILL_MEM_FRACTION_STATIC} --max-running-requests ${prefill_max_running_requests} --chunked-prefill-size ${prefill_chunked_prefill_size} --disable-cuda-graph "
+    PREFILL_MODE_FLAGS="--mem-fraction-static ${prefill_mem_fraction_static} --max-running-requests ${prefill_max_running_requests} --chunked-prefill-size ${prefill_chunked_prefill_size} --disable-cuda-graph "
 else
-    PREFILL_MODE_FLAGS="--mem-fraction-static ${PREFILL_MEM_FRACTION_STATIC} --max-running-requests ${prefill_max_running_requests} --chunked-prefill-size ${prefill_chunked_prefill_size} --cuda-graph-bs ${prefill_cuda_graph_bs[*]} "
+    PREFILL_MODE_FLAGS="--mem-fraction-static ${prefill_mem_fraction_static} --max-running-requests ${prefill_max_running_requests} --chunked-prefill-size ${prefill_chunked_prefill_size} --cuda-graph-bs ${prefill_cuda_graph_bs[*]} "
 fi
 
 if [[ "$PREFILL_DISABLE_RADIX_CACHE" == "True" ]] || [[ "$PREFILL_DISABLE_RADIX_CACHE" == "true" ]]; then
@@ -277,7 +316,7 @@ if [[ "$prefill_enable_two_batch_overlap" == "True" ]] || [[ "$prefill_enable_tw
     PREFILL_SDMA_ENV="MORI_ENABLE_SDMA=true"
 fi
 
-DECODE_MODE_FLAGS="--mem-fraction-static ${DECODE_MEM_FRACTION_STATIC} --max-running-requests ${decode_max_running_requests} --cuda-graph-bs ${decode_cuda_graph_bs[*]} "
+DECODE_MODE_FLAGS="--mem-fraction-static ${decode_mem_fraction_static} --max-running-requests ${decode_max_running_requests} --cuda-graph-bs ${decode_cuda_graph_bs[*]} "
 
 if [[ "$DECODE_PREFILL_ROUND_ROBIN_BALANCE" == "True" ]] || [[ "$DECODE_PREFILL_ROUND_ROBIN_BALANCE" == "true" ]]; then
     DECODE_MODE_FLAGS="$DECODE_MODE_FLAGS --prefill-round-robin-balance"
@@ -413,6 +452,11 @@ build_server_config() {
     # onto the same command line -- unlike base_flags, which always applies.
     if [[ "$enable_dp" == "true" ]]; then
         dp_config="$MODEL_DP_FLAGS"
+        # dp_flags may override a base_flags value (e.g. --swa-full-tokens-ratio);
+        # strip base_config's copy so the flag appears only once on the command line.
+        if [[ "$dp_config" == *"--swa-full-tokens-ratio"* ]]; then
+            base_config="$(echo "$base_config" | sed -E 's/--swa-full-tokens-ratio[[:space:]]+[0-9.]+//')"
+        fi
     else
         no_dp_config="$MODEL_NO_DP_FLAGS"
     fi
@@ -590,9 +634,7 @@ if [[ "$KV_OFFLOADING" != "none" && "$KV_OFFLOAD_BACKEND" == "hicache" ]]; then
     # Prefill always gets HiCache.
     PREFILL_SERVER_CONFIG="$PREFILL_SERVER_CONFIG $(build_hicache_flags "$PREFILL_TP_SIZE")"
 
-
-    DECODE_SERVER_CONFIG="$DECODE_SERVER_CONFIG --page-size ${HICACHE_PAGE_SIZE}"
-    echo "[HiCache] KV_OFFLOADING=${KV_OFFLOADING} backend=${KV_OFFLOAD_BACKEND} applied to prefill only; decode mirrors --page-size ${HICACHE_PAGE_SIZE} for transfer compatibility (chunk cache under the mori transfer backend)"
+    echo "[HiCache] KV_OFFLOADING=${KV_OFFLOADING} backend=${KV_OFFLOAD_BACKEND} applied to prefill only"
     echo "[HiCache] params: io_backend=${HICACHE_IO_BACKEND}, mem_layout=${HICACHE_MEM_LAYOUT}, page_size=${HICACHE_PAGE_SIZE}, write_policy=${HICACHE_WRITE_POLICY}, prefetch_policy=${HICACHE_PREFETCH_POLICY}, storage_backend=${HICACHE_STORAGE_BACKEND:-none}"
     if [[ "$HICACHE_STORAGE_BACKEND" == "mooncake" ]]; then
         echo "[HiCache] Mooncake store: master=${MC_MASTER_ADDR} metadata=${MC_METADATA_SERVER} protocol=${MC_PROTOCOL} device=${MC_DEVICE} segment=${MC_GLOBAL_SEG} threads=${MC_MASTER_THREADS} eviction_watermark=${MC_EVICTION_HIGH_WATERMARK}"

@@ -1631,28 +1631,28 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp:
       #     additional-settings:
       #     - "DECODE_NODES=1"
       #     - "DECODE_MTP_SIZE=3"
-      # - spec-decoding: "mtp"
-      #   conc-list: [ 32, 48, 64 ]
-      #   kv-offloading: dram
-      #   kv-offload-backend: { name: hicache }
-      #   prefill:
-      #     num-worker: 1
-      #     tp: 8
-      #     ep: 1
-      #     dp-attn: false
-      #     additional-settings:
-      #     - "PREFILL_NODES=1"
-      #     - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260903"
-      #   decode:
-      #     num-worker: 1
-      #     tp: 8
-      #     ep: 1
-      #     dp-attn: false
-      #     additional-settings:
-      #     - "DECODE_NODES=1"
-      #     - "DECODE_MTP_SIZE=3"
       - spec-decoding: "mtp"
-        conc-list: [ 128 ]
+        conc-list: [ 32, 64 ]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260907"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=3"
+      - spec-decoding: "mtp"
+        conc-list: [ 128, 256 ]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         prefill:

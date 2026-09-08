@@ -375,46 +375,36 @@ DeepSeek-V4-Pro-AgentX:
   # in its own bucket (no_dp_flags / dp_flags) rather than both riding on the
   # command line at once relying on DeepseekV4ForCausalLM's internal check order.
   no_dp_flags: "--enforce-shared-experts-fusion"
-  # DP-attention overrides mirror the single-node dsv4-fp4-mi355x-sglang-agentic-mtp
-  # recipe's `if [ "$DP_ATTENTION" = "true" ]` block (InferenceX PR #2800):
-  # --swa-full-tokens-ratio 0.15 widens the SWA ring for the larger DP batch, and
-  # --tokenizer-worker-num matches the only DP arm's TP (8) today -- bump this if
-  # a different-TP DP arm is added.
-  dp_flags: "--enable-dp-attention --enable-prefill-delayer --enforce-shared-experts-fusion --swa-full-tokens-ratio 0.15 --enable-dp-attention-local-control-broadcast --tokenizer-worker-num 8 --stream-interval 20 --prefill-decode-interval 10"
+  dp_flags: "--enable-dp-attention --enforce-shared-experts-fusion --swa-full-tokens-ratio 0.15 --enable-dp-attention-local-control-broadcast --tokenizer-worker-num 8 --stream-interval 20 --prefill-decode-interval 10"
   ep_flags: "--ep-dispatch-algorithm fake --moe-a2a-backend mori --deepep-mode normal"
   mtp_flags: "--speculative-algorithm EAGLE --speculative-eagle-topk 1"
   prefill:
-    mem_fraction_static: 0.86
     disable_radix_cache: false
     disable_cuda_graph: true
     dp:
-      max_running_requests: 1024
-      chunked_prefill_size: "8192 * PREFILL_TP_SIZE if PREFILL_TP_SIZE == 8 else 8192 * PREFILL_TP_SIZE"  # dsv4 compressor kernel uint16 token cap (255*256)
+      # Scales with the sweep's own concurrency (2x headroom) rather than a
+      # fixed cap;
+      mem_fraction_static: 0.92
+      max_running_requests: "BENCH_MAX_CONC_VALUE*2"
+      chunked_prefill_size: "8192 * PREFILL_TP_SIZE"
       context_length: 1048576
-      # Mirrors the single-node recipe's --enable-two-batch-overlap inside the
-      # DP-attention block; prefill-only, matching that recipe's PARALLEL_ARGS
-      # scope. Also flips server_sglang.sh's PREFILL_SDMA_ENV to
-      # MORI_ENABLE_SDMA=true, required alongside two-batch-overlap.
       enable_two_batch_overlap: false
     no_dp:
-      max_running_requests: 64
-      # TP8 widens to 16384 to fix the conc>=16 queue-saturation / decode-stall
-      # failure mode; TP4 stays at 8192 = 32*256, a page-size multiple well
-      # under the dsv4 compressor kernel's uint16 token cap. Mirrors the
-      # single-node dsv4-fp4-mi355x-sglang-agentic-mtp recipe's TP-conditional
-      # fix (InferenceX PR #2784).
-      chunked_prefill_size: "16384 if PREFILL_TP_SIZE == 8 else 8192"
+      mem_fraction_static: 0.86
+      max_running_requests: "BENCH_MAX_CONC_VALUE*2"
+      chunked_prefill_size: "16384"
       context_length: 1048576
   decode:
-    mem_fraction_static: 0.86
     prefill_round_robin_balance: true
     disagg_decode_enable_radix_cache: false
     dp:
-      max_running_requests: 1024
-      cuda_graph_bs_range: "1-256"
+      mem_fraction_static: 0.92
+      max_running_requests: "BENCH_MAX_CONC_VALUE*2"
+      cuda_graph_bs_range: "1-BENCH_MAX_CONC_VALUE/4"
     no_dp:
-      max_running_requests: 128
-      cuda_graph_bs_range: "1-128"
+      mem_fraction_static: 0.86
+      max_running_requests: "BENCH_MAX_CONC_VALUE*2"
+      cuda_graph_bs_range: "1-BENCH_MAX_CONC_VALUE*2"
 
 DeepSeek-V4-Pro-DI:
   base_flags: "--decode-log-interval 100 --log-level info --watchdog-timeout 3600 --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend dsv4 --page-size 256 --swa-full-tokens-ratio 0.1 --disable-shared-experts-fusion --tool-call-parser deepseekv4 --reasoning-parser deepseek-v4 --disaggregation-transfer-backend mori"
