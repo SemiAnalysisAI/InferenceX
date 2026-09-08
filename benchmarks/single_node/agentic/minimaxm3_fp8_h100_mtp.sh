@@ -116,7 +116,20 @@ else
     SPEC_CONFIG="{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"FLASH_ATTN\", \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
 fi
 
-MAX_NUM_SEQS=$((2 * CONC))
+# Eval-only runs replay GSM8K through lm_eval at CONC parallel requests
+# (benchmark_lib run_eval: num_concurrent = EVAL_CONCURRENT_REQUESTS or CONC).
+# At CONC 1-3 that is 1319 sequential-ish requests at ~7 s each on H100 and
+# the eval overran the launcher's 180-minute allocation ("CANCELLED ... DUE TO
+# TIME LIMIT" at 96-98%, run 34174431989), while the recipe's previously
+# merged sweep only ever ran the eval at c8 (195 min). Accuracy does not depend
+# on client concurrency, so floor it at 8 for eval-only runs and size
+# --max-num-seqs to admit that many; throughput runs keep 2*CONC.
+EVAL_CONC=$CONC
+if [ "$EVAL_ONLY" = "true" ] && [ "$CONC" -lt 8 ]; then
+    EVAL_CONC=8
+    export EVAL_CONCURRENT_REQUESTS="${EVAL_CONCURRENT_REQUESTS:-$EVAL_CONC}"
+fi
+MAX_NUM_SEQS=$((2 * EVAL_CONC))
 # MTP verifies four tokens per sequence, so CUDA graph capture is token-sized.
 MAX_CUDAGRAPH_CAPTURE_SIZE=$((MAX_NUM_SEQS * TOKENS_PER_SEQ))
 
