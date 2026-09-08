@@ -6958,3 +6958,11 @@
     - "Expand the TP8 and TP4/EP1 sweep coverage through concurrency 640."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2866
   
+
+- config-keys:
+    - minimaxm3-fp8-h100-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update vLLM image from vllm/vllm-openai:v0.27.1 (v0.27.1 release) to vllm/vllm-openai:nightly-d9105ea8001e0a6d77a96327d17515bb5791fb36 (2026-09-07 upstream nightly, digest sha256:254eebf919e8b7b0d530d97fccc606c36f380ff6724d64bc190951bec1aee838, tag commit vllm-project/vllm@d9105ea8; Docker Hub last pushed 2026-09-07T06:16:01Z), the same tag the B200 MiniMax-M3 AgentX recipe moved to in #2860 and the ROCm counterpart of the MI325X/MI300X bumps in #2872/#2873. benchmarks/single_node/agentic/minimaxm3_fp8_h100_mtp.sh is unchanged: TRITON_ATTN attention, fp8 KV, EAGLE3 with the Inferact MiniMax-M3 EAGLE3-GQA draft pinned to FLASH_ATTN and the committed golden synthetic acceptance length 2.78, Mooncake 0.3.11.post1 DRAM offload on the host-tier arm; the resident TP8 c1-c5 and Mooncake DRAM offload c6/c8 grid is unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2874
