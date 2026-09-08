@@ -112,6 +112,21 @@ The runner-name prefix is load-bearing: workflow routing uses `launch_${RUNNER_N
 6. Verify every runner is **Idle** in [repository runner settings](https://github.com/SemiAnalysisAI/InferenceX/settings/actions/runners) before adding it to sweep traffic.
 7. Verify launcher mounts for `_work`, HF cache, staged weights, and squash images from a compute node. Root containers must not leave root-owned files in the shared workspace.
 
+### B300 DSXE image imports
+
+`launch_b300-dsxe.sh` downloads and converts images on the runner/login host,
+before requesting benchmark nodes. Cold imports share a lock to limit login-host
+resource use; validated images are published atomically in the shared squash
+directory. Enroot defaults to two processors and two download connections.
+
+Unpacking uses a private directory under `ENROOT_TEMP_PATH` (default `/tmp`).
+This must be a local filesystem with enough space for the unpacked image layers,
+not Lustre. Set it to a larger local scratch volume when needed. The downloaded
+layer cache defaults to `.enroot-cache` in the shared squash directory;
+`ENROOT_CACHE_PATH` can override it. `ENROOT_IMPORT_TIME_LIMIT` bounds each import
+in minutes (default 120). Compute nodes still need healthy shared-storage access
+to read the completed image and benchmark workspace.
+
 ## Register an srt-slurm recipe
 
 Mapping source: [`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md). Checked-in recipes: [`benchmarks/multi_node/srt-slurm-recipes/`](../benchmarks/multi_node/srt-slurm-recipes/).

@@ -74,39 +74,51 @@ set -x
 # when execution reaches it, so moving this inside either branch silently removes
 # it from the other and the job dies on "command not found" at import time.
 #
-# Import a container image into the shared squash dir. Concurrent callers target the
-# same path, so serialize on a per-file lock and skip when a valid squash file exists.
-# --time bounds the step; an unbounded srun hangs the job if its step is lost.
-#
-# The import itself must run on a compute node: enroot builds the squashfs over an
-# overlay mount, which the shared filesystem cannot back, and the login host is too
-# small to unpack a multi-GB image. Reading the finished file is just I/O, so probe
-# it here first -- a warm cache then costs no Slurm allocation at all. The in-srun
-# check under the lock stays authoritative, so a stale probe only costs one step.
+# Import on the runner/login host; shared storage holds the layer cache and images.
+# Enroot's extracted layers and overlay mount must use node-local scratch.
+# Serialize cold imports across images to bound login-host CPU and disk usage.
 import_squash_image() {
     local image_ref="$1"
     local sqsh="$2"
-    local lock="${2}.lock"
 
     if unsquashfs -l "$sqsh" > /dev/null 2>&1; then
         echo "Squash file already present, skipping import: $sqsh"
         return 0
     fi
 
-    srun -N 1 -A "$SLURM_ACCOUNT" -p "$SLURM_PARTITION" \
-        --time="${ENROOT_IMPORT_TIME_LIMIT:-120}" bash -c "
-        set -euo pipefail
-        exec 9>\"$lock\"
-        flock -w 3600 9
-        if unsquashfs -l \"$sqsh\" > /dev/null 2>&1; then
+    (
+        set -uo pipefail
+        exec 9>"$SQUASH_DIR/.import.lock" || exit 1
+        flock -w 7200 9 || { echo "Timed out waiting for the image import lock" >&2; exit 1; }
+        # Keep the per-image lock compatible with runners on the old launcher.
+        exec 8>"${sqsh}.lock" || exit 1
+        flock -w 7200 8 || { echo "Timed out waiting for $sqsh" >&2; exit 1; }
+        # Another runner may have populated this image while we waited.
+        if unsquashfs -l "$sqsh" > /dev/null 2>&1; then
+            echo "Squash file already present, skipping import: $sqsh"
             exit 0
         fi
-        rm -f \"$sqsh\"
-        enroot import -o \"$sqsh\" \"docker://$image_ref\"
-        unsquashfs -l \"$sqsh\" > /dev/null
-    " || { echo "Error: enroot import failed for $image_ref -> $sqsh" >&2; exit 1; }
 
-    test -r "$sqsh" || { echo "Error: squash file not readable: $sqsh" >&2; exit 1; }
+        local work_dir partial
+        work_dir=$(mktemp -d "${ENROOT_TEMP_PATH:-/tmp}/inferencex-enroot.XXXXXX") || exit 1
+        partial="${sqsh}.tmp.${work_dir##*/}"
+        trap 'rm -f -- "$partial"; rm -rf -- "$work_dir"' EXIT
+        trap 'exit 143' TERM
+        trap 'exit 130' INT
+        export ENROOT_TEMP_PATH="$work_dir"
+        export ENROOT_RUNTIME_PATH="$work_dir/runtime"
+        export ENROOT_DATA_PATH="$work_dir/data"
+        export ENROOT_CACHE_PATH="${ENROOT_CACHE_PATH:-$SQUASH_DIR/.enroot-cache}"
+        export ENROOT_MAX_PROCESSORS="${ENROOT_MAX_PROCESSORS:-2}"
+        export ENROOT_MAX_CONNECTIONS="${ENROOT_MAX_CONNECTIONS:-2}"
+
+        echo "Importing $image_ref on $(hostname) using local scratch $work_dir"
+        timeout --kill-after=30 "${ENROOT_IMPORT_TIME_LIMIT:-120}m" \
+            enroot import -o "$partial" "docker://$image_ref" || exit 1
+        unsquashfs -l "$partial" > /dev/null || exit 1
+        # Publish only a validated image, without exposing partial imports.
+        mv -f -- "$partial" "$sqsh" || exit 1
+    ) || { echo "Error: enroot import failed for $image_ref -> $sqsh" >&2; return 1; }
 }
 
 if [[ "$IS_MULTINODE" == "true" ]]; then
@@ -202,15 +214,15 @@ SQUASH_FILE="$SQUASH_DIR/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 NGINX_SQUASH_FILE="$SQUASH_DIR/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
 # Import containers via enroot
-import_squash_image "$IMAGE" "$SQUASH_FILE"
-import_squash_image "$NGINX_IMAGE" "$NGINX_SQUASH_FILE"
+import_squash_image "$IMAGE" "$SQUASH_FILE" || exit 1
+import_squash_image "$NGINX_IMAGE" "$NGINX_SQUASH_FILE" || exit 1
 
 if [[ "$USES_DCGM_POWER" == "1" ]]; then
     DCGM_EXPORTER_IMAGE="nvcr.io/nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless"
     # enroot resolves bare paths against Docker Hub; nvcr.io pulls need the registry# form
     DCGM_EXPORTER_ENROOT_REF="${DCGM_EXPORTER_IMAGE/nvcr.io\//nvcr.io#}"
     DCGM_EXPORTER_SQSH="$SQUASH_DIR/$(echo "$DCGM_EXPORTER_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-    import_squash_image "$DCGM_EXPORTER_ENROOT_REF" "$DCGM_EXPORTER_SQSH"
+    import_squash_image "$DCGM_EXPORTER_ENROOT_REF" "$DCGM_EXPORTER_SQSH" || exit 1
     sha256sum "$DCGM_EXPORTER_SQSH" > "$GITHUB_WORKSPACE/exporter-image.sha256"
 fi
 
@@ -474,7 +486,7 @@ else
         CONTAINER_MOUNT_DIR=/workspace
     fi
 
-    import_squash_image "$IMAGE" "$SQUASH_FILE"
+    import_squash_image "$IMAGE" "$SQUASH_FILE" || exit 1
 
     export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
 
