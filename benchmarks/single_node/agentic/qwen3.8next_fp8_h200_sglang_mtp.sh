@@ -235,7 +235,10 @@ SGLANG_CMD=(
     --stream-interval 50
     --scheduler-recv-interval "$SCHEDULER_RECV_INTERVAL"
     --tokenizer-worker-num 6
-    --tokenizer-path "$MODEL"
+    # Same path as the weights: when the cached-snapshot fallback is in effect
+    # the HF id would send the tokenizer load back through the shared-cache
+    # lock this run just failed on. Identical to "$MODEL" otherwise.
+    --tokenizer-path "$MODEL_PATH"
     --enable-metrics
     "${CACHE_ARGS[@]}"
 )
