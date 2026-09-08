@@ -338,15 +338,17 @@ fi
 
 "$K3_PYTHON" - <<'VERSIONS' | tee "$RESULT_DIR/runtime-versions.json"
 import json
+import os
 from importlib.metadata import version
 expected = {
     "amd-aiter": "0.1.21.post1+rocm7.2.manylinux.2.28",
     "flydsl": "0.3.2",
-    "lmcache": "0.5.5.dev104+rocm7.2",
     "numpy": "2.3.5",
     "vllm": "0.28.1rc1.dev199+g7c5dc571c.rocm723",
     "torch": "2.12.0+git6bbd260",
 }
+if os.environ.get("KV_OFFLOADING") != "none" and os.environ.get("KV_OFFLOAD_BACKEND") == "lmcache":
+    expected["lmcache"] = "0.5.5.dev104+rocm7.2"
 actual = {name: version(name) for name in expected}
 assert actual == expected, (actual, expected)
 print(json.dumps(actual, indent=2))

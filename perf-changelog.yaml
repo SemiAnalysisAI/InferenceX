@@ -6973,3 +6973,11 @@
     - "Narrow the A4W4/FMHA-v3 experiment to concurrency 1 with GPU-only prefix caching, retaining TP8/DCP1, draft6/AL3.75, the serving envelope, and the canonical one-hour replay."
     - "Bind the serving virtual environment to the image Python and install and verify dependencies through that exact interpreter, avoiding CI's missing CuPy import after installation into a different interpreter."
   pr-link: TBD
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Check the LMCache dev104 runtime pin only when the LMCache CPU connector is enabled, allowing the c1 GPU-only-cache experiment to start with its unused image package unchanged. Retain strict AITER, FlyDSL, NumPy, vLLM, and Torch checks."
+  pr-link: TBD
