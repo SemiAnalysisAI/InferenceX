@@ -266,12 +266,9 @@ else
     export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
 
     set -x
-    TARGET_NODE=mia1-p02-g17
-    scontrol show node "$TARGET_NODE"
-    squeue --nodelist="$TARGET_NODE" --format='%.18i %.30j %.20u %.2t %.12M %R'
-    salloc --partition="$PARTITION" --nodes=1 --nodelist="$TARGET_NODE" \
+    salloc --partition="$PARTITION" --nodes=1 \
         --gres="gpu:$GPU_COUNT" --exclusive --cpus-per-task=128 \
-        --time=240 --no-shell --job-name="$RUNNER_NAME" || exit $?
+        --time=500 --no-shell --job-name="$RUNNER_NAME" || exit $?
     JOB_ID=$(squeue --user="$USER" --name="$RUNNER_NAME" -h -o %A | head -n1)
     [[ "$JOB_ID" =~ ^[0-9]+$ ]] || exit 1
     trap 'scancel "$JOB_ID" || true' EXIT
@@ -279,11 +276,10 @@ else
     trap 'exit 143' TERM
     scontrol show job "$JOB_ID"
 
-    srun --jobid="$JOB_ID" bash -s -- "$TARGET_NODE" <<'NODE_CHECK' || exit $?
+    srun --jobid="$JOB_ID" bash -s <<'NODE_CHECK' || exit $?
 set -euo pipefail
 actual_node=$(hostname -s)
 printf 'Allocated benchmark host: %s\n' "$actual_node"
-[[ "$actual_node" == "$1" ]]
 running=$(docker ps --format '{{.Names}} {{.Status}}')
 if [[ -n "$running" ]]; then
     printf 'Refusing to start with existing containers on %s:\n%s\n' "$actual_node" "$running" >&2
@@ -335,6 +331,10 @@ NODE_CHECK
 
     mkdir -p "$GITHUB_WORKSPACE/results"
     export RESULT_DIR=/results
+    if [[ "${KV_OFFLOADING:-}" == none ]]; then
+        export KV_OFFLOAD_BACKEND=""
+        export KV_OFFLOAD_BACKEND_METADATA=""
+    fi
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
         --container-mounts=$GITHUB_WORKSPACE:/workspace/,$GITHUB_WORKSPACE/results:/results,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache \
