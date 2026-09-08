@@ -9008,7 +9008,7 @@ glm5.2-fp4-b300-sglang-agentic-mtp:
 # (num-steps 3, eagle-topk 1, 4 draft tokens = 3 speculative tokens) with
 # acceptance pinned to the golden AL 2.99 (golden_al_distribution/glm5.2_mtp.yaml,
 # thinking_on, K=3), which was measured on glm-5.2-fp8, i.e. on this checkpoint.
-# Pinned to the 2026-09-07 cu13 dev nightly, the same tag the B200/B300 GLM-5.2
+# Pinned to the 2026-09-08 cu13 dev nightly (the first that carries sgl-project/sglang#38318, the guard for the EAGLE DSA fp8 read-door crash seen on the 2026-09-07 build), the same tag the B200/B300 GLM-5.2
 # and Qwen3.5 SGLang AgentX recipes moved to that day. Runs on cluster:b300-dsxe
 # (cluster:b300-nv was retired in #2826).
 #
@@ -9019,7 +9019,7 @@ glm5.2-fp4-b300-sglang-agentic-mtp:
 # ~94.5 GB/GPU across 8 B300s; the fp8 KV pool that remains inside
 # --mem-fraction-static 0.85 is ~150 GB/GPU against ~187 GB/GPU on NVFP4.
 glm5.2-fp8-b300-sglang-agentic-mtp:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260907-30705c00
+  image: lmsysorg/sglang:nightly-dev-cu13-20260908-20ca564b
   model: zai-org/GLM-5.2-FP8
   model-prefix: glm5.2
   runner: cluster:b300-dsxe
