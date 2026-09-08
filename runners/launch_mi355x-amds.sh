@@ -304,6 +304,13 @@ else
         export HF_HUB_CACHE_MOUNT="/it-share/hf-hub-cache/"
     fi
 
+    # GLM-5.2-FP8 is ~756 GB (141 shards). Pull it once to the NFS share rather
+    # than once per node-local NVMe cache, so every cell of the sweep (which
+    # may land on different nodes) shares a single staged copy.
+    if [[ "$MODEL" == "zai-org/GLM-5.2-FP8" ]]; then
+        export HF_HUB_CACHE_MOUNT="/it-share/hf-hub-cache/"
+    fi
+
     SCRIPT_BASE="${EXP_NAME%%_*}_${PRECISION}_mi355x"
     SCRIPT_FW="benchmarks/single_node/${SCENARIO_SUBDIR:-fixed_seq_len/}${SCRIPT_BASE}_${FRAMEWORK}${SPEC_SUFFIX}.sh"
     SCRIPT_FALLBACK="benchmarks/single_node/${SCENARIO_SUBDIR:-fixed_seq_len/}${SCRIPT_BASE}${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh"
