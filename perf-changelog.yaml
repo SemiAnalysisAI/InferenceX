@@ -7017,3 +7017,12 @@
   description:
     - "Exclude mia1-p01-g16 from the experimental Slurm allocation after run 34203019472 confirmed that the runner user cannot access its Docker socket; retain pooled scheduling across the remaining InferenceX compute nodes and unchanged benchmark semantics."
   pr-link: TBD
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Replace the Docker-daemon container preflight with a rocm-smi KFD process check after runs 34203019472 and 34205522844 showed that the Slurm runner user cannot access Docker on multiple compute nodes."
+    - "Restore pooled scheduling across all InferenceX MI355X compute nodes while retaining fail-closed protection against active GPU workloads and unchanged benchmark semantics."
+  pr-link: TBD

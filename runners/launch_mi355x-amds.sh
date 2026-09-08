@@ -266,10 +266,7 @@ else
     export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
 
     set -x
-    # Run 34203019472 showed that the runner user cannot access Docker on g16.
-    EXCLUDED_NODE=mia1-p01-g16
     salloc --partition="$PARTITION" --nodes=1 \
-        --exclude="$EXCLUDED_NODE" \
         --gres="gpu:$GPU_COUNT" --exclusive --cpus-per-task=128 \
         --time=500 --no-shell --job-name="$RUNNER_NAME" || exit $?
     JOB_ID=$(squeue --user="$USER" --name="$RUNNER_NAME" -h -o %A | head -n1)
@@ -283,9 +280,14 @@ else
 set -euo pipefail
 actual_node=$(hostname -s)
 printf 'Allocated benchmark host: %s\n' "$actual_node"
-running=$(docker ps --format '{{.Names}} {{.Status}}')
-if [[ -n "$running" ]]; then
-    printf 'Refusing to start with existing containers on %s:\n%s\n' "$actual_node" "$running" >&2
+gpu_processes=$(rocm-smi --showpids 2>&1) || {
+    printf 'Unable to inspect GPU processes on %s:\n%s\n' \
+        "$actual_node" "$gpu_processes" >&2
+    exit 1
+}
+if [[ "$gpu_processes" != *"No KFD PIDs currently running"* ]]; then
+    printf 'Refusing to start with active GPU processes on %s:\n%s\n' \
+        "$actual_node" "$gpu_processes" >&2
     exit 2
 fi
 NODE_CHECK
