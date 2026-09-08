@@ -249,7 +249,7 @@ jobs:
                   settings: |
                       {"fastMode": true}
                   claude_args: |
-                      --model 'claude-fable-5'
+                      --model 'claude-fable-5-1'
                       --max-turns 8
                       --allowedTools "Read,Glob,Grep,Bash(git diff:*)"
                       --json-schema '{"type":"object","properties":{"criteria":{"type":"array","items":{"type":"string","enum":["multi-node","agentic","eval-only","fp4","mtp","eagle","eagle3","sglang","vllm","dynamo-sglang","dynamo-vllm","glm5","glm5.1","kimik2.5","kimik3","dsv4","minimaxm3","qwen3.5","dsr1","checklist-complete","patchwork"]},"uniqueItems":true},"reason":{"type":"string"}},"required":["criteria","reason"]}'
