@@ -112,20 +112,6 @@ runner 名称前缀是关键契约：workflow 通过 `launch_${RUNNER_NAME%%_*}.
 6. 将 runner 加入 sweep 流量前，在[仓库 runner 设置页](https://github.com/SemiAnalysisAI/InferenceX/settings/actions/runners)确认每个 runner 都是 **Idle**。
 7. 从计算节点验证 launcher 对 `_work`、HF cache、预置权重和 squash 镜像的挂载。root 容器不得在共享 workspace 留下 root 所有的文件。
 
-### B300 DSXE 镜像导入
-
-`launch_b300-dsxe.sh` 在申请基准测试节点之前，先在运行器所在的登录主机上
-下载并转换镜像。未缓存镜像的导入共用一把锁，以限制登录主机的资源占用；
-镜像通过验证后，才原子发布到共享 squash 目录。Enroot 默认使用两个处理器
-和两个下载连接。
-
-解包使用 `ENROOT_TEMP_PATH`（默认 `/tmp`）下的独立临时目录。该路径必须位于
-本地文件系统，且有足够空间容纳解包后的镜像层，不能使用 Lustre；空间不足时，
-应将其指向更大的本地临时存储卷。下载层缓存默认保存在共享 squash 目录下的
-`.enroot-cache`，可通过 `ENROOT_CACHE_PATH` 覆盖。`ENROOT_IMPORT_TIME_LIMIT`
-以分钟为单位限制单次导入时长（默认 120）。计算节点仍然需要正常的共享存储
-连接，才能读取完成的镜像和基准测试工作区。
-
 ## 注册 srt-slurm 配方
 
 映射来源：[`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md)。检入的配方：[`benchmarks/multi_node/srt-slurm-recipes/`](../benchmarks/multi_node/srt-slurm-recipes/)。
