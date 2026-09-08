@@ -40,12 +40,14 @@ PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.
 --quantization fp8 \
 --kv-cache-dtype fp8_e4m3 \
 --mamba-ssm-dtype bfloat16 \
+--mamba-full-memory-ratio 0.37 \
+--linear-attn-prefill-backend flashinfer \
 --attention-backend trtllm_mha \
---flashinfer-allreduce-fusion-backend auto \
---cuda-graph-max-bs-decode $CONC \
---max-prefill-tokens 8192 \
---chunked-prefill-size 8192 \
---mem-fraction-static 0.8 \
+--moe-runner-backend flashinfer_trtllm \
+--cuda-graph-max-bs $CONC \
+--max-prefill-tokens 32768 \
+--chunked-prefill-size 32768 \
+--mem-fraction-static 0.86 \
 --stream-interval 50 \
 --scheduler-recv-interval $( [[ $CONC -gt 4 ]] && echo 30 || echo 10 ) \
 --tokenizer-worker-num 6 \
