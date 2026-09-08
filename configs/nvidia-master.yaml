@@ -9036,7 +9036,7 @@ glm5.2-fp4-b200-sglang-agentic-mtp:
 # 3, eagle-topk 1, 4 draft tokens = 3 speculative tokens) with acceptance pinned
 # to the golden AL 2.99 (golden_al_distribution/glm5.2_mtp.yaml, thinking_on,
 # K=3) through SGLANG_SIMULATE_ACC_*. That curve was measured on glm-5.2-fp8,
-# i.e. on this checkpoint. Pinned to the 2026-09-07 cu13 dev nightly, the same
+# i.e. on this checkpoint. Pinned to the 2026-09-08 cu13 dev nightly (the first that carries sgl-project/sglang#38318, the guard for the EAGLE DSA fp8 read-door crash seen on the 2026-09-07 build), the same
 # tag the B200 Qwen3.5 FP8/FP4 SGLang AgentX recipes moved to that day.
 #
 # Same single arm and concurrency grid as the NVFP4 B200 and B300 siblings:
@@ -9047,7 +9047,7 @@ glm5.2-fp4-b200-sglang-agentic-mtp:
 # remains inside --mem-fraction-static 0.83 is ~55 GB/GPU against ~91 GB/GPU
 # on NVFP4, which HiCache absorbs as host spill.
 glm5.2-fp8-b200-sglang-agentic-mtp:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260907-30705c00
+  image: lmsysorg/sglang:nightly-dev-cu13-20260908-20ca564b
   model: zai-org/GLM-5.2-FP8
   model-prefix: glm5.2
   runner: cluster:b200-nscale
