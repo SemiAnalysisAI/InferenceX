@@ -6954,4 +6954,4 @@
     - agentic-coding
   description:
     - "Update SGLang ROCm image from lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260728 (v0.5.16, ROCm 7.2) to lmsysorg/sglang-rocm:v0.5.19-rocm10-mi35x-20260906 (v0.5.19, ROCm 10, digest sha256:6117b0572a738e77dee3c0ffc16720c05833d7c1310d670cd874802e902d2073; Docker Hub last pushed 2026-09-06T15:50:31Z). benchmarks/single_node/agentic/glm5.2_fp4_mi355x_sglang_mtp.sh is unchanged: TP4/EP4 HiCache conc [1, 2, 4, 8, 10, 12] and TP8/EP1 GPU-resident conc [1, 2, 4, 10], MTP, write_through_selective, MAX_RUNNING_REQUESTS=2xCONC. This is the remaining MI355X SGLang AgentX key still on the 2026-07-28 v0.5.16 pin; the sibling dsv4-fp4-mi355x-sglang-agentic-mtp already moved to v0.5.18-rocm720-mi35x-20260902 in #2800."
-  pr-link: XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2888
