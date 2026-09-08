@@ -1738,7 +1738,7 @@ glm5.2-fp4-mi355x-sglang-agentic-mtp:
 #     throughput-dominant regime where the working set outgrows the device pool.
 # SA selects the Pareto-optimal arm per concurrency point.
 glm5.2-fp8-mi355x-sglang-agentic-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260907
+  image: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260908
   model: zai-org/GLM-5.2-FP8
   model-prefix: glm5.2
   runner: cluster:mi355x-amds
