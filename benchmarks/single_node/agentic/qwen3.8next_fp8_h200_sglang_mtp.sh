@@ -50,8 +50,46 @@ if [[ -n "${MODEL_PATH:-}" ]]; then
         hf download "$MODEL" --local-dir "$MODEL_PATH"
     fi
 else
-    hf download "$MODEL"
-    export MODEL_PATH="$MODEL"
+    # The shared /mnt/hf_hub_cache on cluster:h200-dgxc holds lock files under
+    # .locks/<repo>/ owned by whichever runner account first downloaded a blob;
+    # filelock creates them 0644, so a job on a different runner account gets
+    # EACCES opening the lock. Qwen/Qwen3.8-Flash-Next-FP8 changed upstream on
+    # 2026-08-31 (a README and config revision) after this recipe merged, so
+    # every `hf download` now wants one new blob and dies on that lock (runs
+    # 34174941536 and 34188408693: "Fetching 144 files: 99%" then
+    # PermissionError; HF_HUB_OFFLINE cannot help because the new revision is
+    # not fully cached). When the online download fails, serve the newest
+    # cached snapshot that is complete -- tokenizer, shard index, and every
+    # shard the index names -- which is the same set of weights this recipe was
+    # validated on. A cache with no complete snapshot still fails loudly.
+    if hf download "$MODEL"; then
+        export MODEL_PATH="$MODEL"
+    else
+        echo "hf download failed online (shared-cache lock permissions?); looking for a complete cached snapshot of $MODEL"
+        HF_SNAPSHOT_ROOT="${HF_HUB_CACHE:-$HOME/.cache/huggingface/hub}/models--${MODEL//\//--}/snapshots"
+        SNAPSHOT=""
+        for d in $(ls -1dt "$HF_SNAPSHOT_ROOT"/*/ 2>/dev/null); do
+            if [[ -f "$d/config.json" && -f "$d/tokenizer_config.json" && -f "$d/model.safetensors.index.json" ]] \
+               && CKPT_DIR="$d" python3 - <<'PYEOF'
+import json, os, sys
+d = os.environ["CKPT_DIR"]
+with open(os.path.join(d, "model.safetensors.index.json")) as fh:
+    shards = sorted(set(json.load(fh)["weight_map"].values()))
+missing = [s for s in shards if not os.path.isfile(os.path.join(d, s))]
+sys.exit(1 if missing else 0)
+PYEOF
+            then
+                SNAPSHOT="${d%/}"
+                break
+            fi
+        done
+        if [[ -z "$SNAPSHOT" ]]; then
+            echo "Error: no complete cached snapshot of $MODEL under $HF_SNAPSHOT_ROOT and the online download failed." >&2
+            exit 1
+        fi
+        echo "Serving cached snapshot $SNAPSHOT"
+        export MODEL_PATH="$SNAPSHOT"
+    fi
 fi
 nvidia-smi
 
@@ -197,7 +235,10 @@ SGLANG_CMD=(
     --stream-interval 50
     --scheduler-recv-interval "$SCHEDULER_RECV_INTERVAL"
     --tokenizer-worker-num 6
-    --tokenizer-path "$MODEL"
+    # Same path as the weights: when the cached-snapshot fallback is in effect
+    # the HF id would send the tokenizer load back through the shared-cache
+    # lock this run just failed on. Identical to "$MODEL" otherwise.
+    --tokenizer-path "$MODEL_PATH"
     --enable-metrics
     "${CACHE_ARGS[@]}"
 )
