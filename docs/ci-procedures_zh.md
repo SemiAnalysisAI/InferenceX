@@ -188,7 +188,7 @@ gh workflow run e2e-tests.yml \
   -f duration-override=''
 ```
 
-在 `amd/k3-c1-dense-fp8-ci-20260908` 实验分支上，单节点 MI355X 启动器会从 InferenceX 的 `compute` 分区申请独占八 GPU Slurm 分配，不固定节点。启动器会记录实际分配的主机名，通过 `rocm-smi` 检查并拒绝已有 KFD GPU 进程，并在退出时释放分配。矩阵仅包含使用 GPU 缓存的 Kimi-K3 c1 用例，对符合条件的稠密层使用 PTPC FP8，并启用 `AITER_FLYDSL_STAGE2_FP8=1`；同时清空未使用的 KV 卸载后端元数据。启动服务前会检查 TP8 权重加载和数值误差；一小时的合成接受率性能测试后，会使用真实 block 接受策略单独评估 32 道 GSM8K 题目。派发时使用完整的 40 位源 SHA；Checkout 会将缩写 SHA 当作分支或标签名。
+在 `amd/k3-c1-dense-fp8-ci-20260908` 实验分支上，单节点 MI355X 启动器会从 InferenceX 的 `compute` 分区申请独占八 GPU Slurm 分配，不固定节点。Enroot/Pyxis 容器启动后，启动器依靠基准脚本现有的 `wait_for_amd_gpu_clean` 检查，并在退出时释放分配。矩阵仅包含使用 GPU 缓存的 Kimi-K3 c1 用例，对符合条件的稠密层使用 PTPC FP8，并启用 `AITER_FLYDSL_STAGE2_FP8=1`；同时清空未使用的 KV 卸载后端元数据。启动服务前会检查 TP8 权重加载和数值误差；一小时的合成接受率性能测试后，会使用真实 block 接受策略单独评估 32 道 GSM8K 题目。
 
 只使用 `gh workflow view ... --ref main --yaml` 展示的输入。不同派发 Ref 的输入可能不同，不得凭假设传入目标 Ref 特有的选项。
 

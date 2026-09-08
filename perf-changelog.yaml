@@ -7026,3 +7026,12 @@
     - "Replace the Docker-daemon container preflight with a rocm-smi KFD process check after runs 34203019472 and 34205522844 showed that the Slurm runner user cannot access Docker on multiple compute nodes."
     - "Restore pooled scheduling across all InferenceX MI355X compute nodes while retaining fail-closed protection against active GPU workloads and unchanged benchmark semantics."
   pr-link: TBD
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Match the proven MI355X Slurm launch path from run 34082683326 by proceeding directly to Enroot/Pyxis after allocation and relying on the benchmark's existing VRAM cleanliness check."
+    - "Remove the Docker API and KFD process preflights, which respectively failed on inaccessible sockets and rejected the zero-VRAM gpuagent service."
+  pr-link: TBD

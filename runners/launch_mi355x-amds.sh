@@ -276,22 +276,6 @@ else
     trap 'exit 143' TERM
     scontrol show job "$JOB_ID"
 
-    srun --jobid="$JOB_ID" bash -s <<'NODE_CHECK' || exit $?
-set -euo pipefail
-actual_node=$(hostname -s)
-printf 'Allocated benchmark host: %s\n' "$actual_node"
-gpu_processes=$(rocm-smi --showpids 2>&1) || {
-    printf 'Unable to inspect GPU processes on %s:\n%s\n' \
-        "$actual_node" "$gpu_processes" >&2
-    exit 1
-}
-if [[ "$gpu_processes" != *"No KFD PIDs currently running"* ]]; then
-    printf 'Refusing to start with active GPU processes on %s:\n%s\n' \
-        "$actual_node" "$gpu_processes" >&2
-    exit 2
-fi
-NODE_CHECK
-
     # Use flock to serialize concurrent imports to the same squash file
     srun --jobid=$JOB_ID bash -c "
         exec 9>\"$LOCK_FILE\"
