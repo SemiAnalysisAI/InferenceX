@@ -96,7 +96,7 @@ Klaud Cold 只应修改所选主配置族的镜像，以及它已经引用且未
 
 ## 工作流操作与凭据
 
-入口工作流仅支持手动触发（`workflow_dispatch`）。每六小时的 cron（`0 */6 * * *`，UTC）仍以注释形式禁用。条件 `github.ref == 'refs/heads/main' && github.run_attempt == 1` 会跳过功能分支、tag 和重新运行。只有 candidate 暴露 `workflow_call`。`klaud-auto-sweep` 并发组不取消已有运行，并防止多次 auto-sweep 调用重叠；同一次调用中的候选并行运行，工作流不额外限制候选并行度。
+入口工作流每六小时运行一次（`0 */6 * * *`，UTC），并支持手动触发（`workflow_dispatch`）。每次调用最多选择两个候选并行运行。条件 `github.ref == 'refs/heads/main' && github.run_attempt == 1` 会跳过功能分支、tag 和重新运行。只有 candidate 暴露 `workflow_call`。`klaud-auto-sweep` 并发组不取消已有运行，并防止多次 auto-sweep 调用重叠；同一次调用中的候选并行运行，工作流不额外限制候选并行度。
 
 planner 的 Python 准备和最终容量检查步骤使用 dashboard key；准备步骤还使用只读工作流 token。限轮数的 Claude PR 检查使用 `ANTHROPIC_API_KEY` 和具有 `pull-requests: read` 权限的只读工作流 token。它接收私有资格线索，但不接收 `CLAUDE_PAT` 或 dashboard key，也不执行 GitHub 写操作。candidate 获得用于分支/PR 写入及 e2e 调度/取消的 `CLAUDE_PAT`、用于 Klaud Cold 的 `ANTHROPIC_API_KEY`，以及覆盖 clusters 的限期 `status:read` `KLAUD_DASHBOARD_API_KEY`。Klaud Cold 不得发布凭据或私有 API 响应。共享 HTTP 读取器固定来源、限制 GET 响应大小并拒绝重定向。非有限 JSON 数值（包括 `1e400` 这样的指数溢出）会在校验或哈希计算前被拒绝。不需要新增控制器、数据库或 environment 配置。
 
