@@ -7009,3 +7009,11 @@
     - "Run the c1 dense PTPC FP8 and AITER_FLYDSL_STAGE2_FP8 experiment on an available InferenceX MI355X compute node instead of pinning the occupied local g17 node; retain exclusive eight-GPU allocation and restore the standard 500-minute allocation limit."
     - "Explicitly clear unused KV offload backend metadata for GPU-only prefix caching; retain the same one-hour profile and numerical and model checks."
   pr-link: TBD
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Exclude mia1-p01-g16 from the experimental Slurm allocation after run 34203019472 confirmed that the runner user cannot access its Docker socket; retain pooled scheduling across the remaining InferenceX compute nodes and unchanged benchmark semantics."
+  pr-link: TBD

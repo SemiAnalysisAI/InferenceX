@@ -266,7 +266,10 @@ else
     export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
 
     set -x
+    # Run 34203019472 showed that the runner user cannot access Docker on g16.
+    EXCLUDED_NODE=mia1-p01-g16
     salloc --partition="$PARTITION" --nodes=1 \
+        --exclude="$EXCLUDED_NODE" \
         --gres="gpu:$GPU_COUNT" --exclusive --cpus-per-task=128 \
         --time=500 --no-shell --job-name="$RUNNER_NAME" || exit $?
     JOB_ID=$(squeue --user="$USER" --name="$RUNNER_NAME" -h -o %A | head -n1)
