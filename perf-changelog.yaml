@@ -6964,3 +6964,12 @@
   description:
     - "Select A4W4 for the c1/c14 treatment by unsetting AITER_SITUV2_A8W4 and setting AITER_SITUV2_A4W4=1; retain the identical Opus-disabled attention, dependency pins, LMCache budget, and canonical replay settings from the A8W4 control."
   pr-link: TBD
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Narrow the A4W4/FMHA-v3 experiment to concurrency 1 with GPU-only prefix caching, retaining TP8/DCP1, draft6/AL3.75, the serving envelope, and the canonical one-hour replay."
+    - "Bind the serving virtual environment to the image Python and install and verify dependencies through that exact interpreter, avoiding CI's missing CuPy import after installation into a different interpreter."
+  pr-link: TBD

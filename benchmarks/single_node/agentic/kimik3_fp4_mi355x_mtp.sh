@@ -92,16 +92,20 @@ install_agentic_deps
 AITER_VERSION="0.1.21.post1+rocm7.2"
 AITER_WHEEL_URL="https://github.com/ROCm/aiter/releases/download/v0.1.21.post1/amd_aiter-0.1.21.post1+rocm7.2.manylinux.2.28-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl"
 NUMPY_VERSION="2.3.5"
-UV_CACHE_DIR="$AIPERF_UV_CACHE_DIR" \
-    "$AIPERF_UV_BIN" pip install --system \
-    "$AITER_WHEEL_URL" "flydsl==0.3.2" "numpy==$NUMPY_VERSION"
-"$AIPERF_UV_BIN" pip show --system amd-aiter flydsl numpy
-"$AIPERF_UV_BIN" venv --system-site-packages --python 3.12 /tmp/k3-serving/.venv
+# Bind serving to the image interpreter: a cached uv-managed Python lacks
+# the image's torch/vLLM packages even with --system-site-packages.
+"$AIPERF_UV_BIN" venv --system-site-packages \
+    --python /usr/bin/python3.12 /tmp/k3-serving/.venv
 K3_PYTHON=/tmp/k3-serving/.venv/bin/python
+UV_CACHE_DIR="$AIPERF_UV_CACHE_DIR" \
+    "$AIPERF_UV_BIN" pip install --python "$K3_PYTHON" \
+    "$AITER_WHEEL_URL" "flydsl==0.3.2" "numpy==$NUMPY_VERSION"
+"$AIPERF_UV_BIN" pip show --python "$K3_PYTHON" amd-aiter flydsl numpy
+"$K3_PYTHON" -c 'import sys, torch, vllm; from importlib.metadata import version; print({"python": sys.executable, "base_prefix": sys.base_prefix, "versions": {name: version(name) for name in ("amd-aiter", "flydsl", "numpy", "torch", "vllm", "triton")}})'
 
-AITER_INSTALLED_VERSION=$("$AIPERF_UV_BIN" pip show --system amd-aiter | awk '$1 == "Version:" {print $2}')
-FLYDSL_INSTALLED_VERSION=$("$AIPERF_UV_BIN" pip show --system flydsl | awk '$1 == "Version:" {print $2}')
-NUMPY_INSTALLED_VERSION=$("$AIPERF_UV_BIN" pip show --system numpy | awk '$1 == "Version:" {print $2}')
+AITER_INSTALLED_VERSION=$("$AIPERF_UV_BIN" pip show --python "$K3_PYTHON" amd-aiter | awk '$1 == "Version:" {print $2}')
+FLYDSL_INSTALLED_VERSION=$("$AIPERF_UV_BIN" pip show --python "$K3_PYTHON" flydsl | awk '$1 == "Version:" {print $2}')
+NUMPY_INSTALLED_VERSION=$("$AIPERF_UV_BIN" pip show --python "$K3_PYTHON" numpy | awk '$1 == "Version:" {print $2}')
 if [[ "$AITER_INSTALLED_VERSION" != "$AITER_VERSION"* ]]; then
     echo "Error: expected amd-aiter $AITER_VERSION, got $AITER_INSTALLED_VERSION" >&2
     exit 1
@@ -222,14 +226,14 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         LMCACHE_INSTALL_SOURCE_ARGS=()
     fi
 
-    "$AIPERF_UV_BIN" pip install --system --quiet --no-cache --no-deps \
+    "$AIPERF_UV_BIN" pip install --python "$K3_PYTHON" --quiet --no-cache --no-deps \
         "${LMCACHE_INSTALL_SOURCE_ARGS[@]}" \
         "sortedcontainers==2.4.0" \
         "opentelemetry-exporter-prometheus==0.61b0" \
         "cupy-rocm-7-0==14.1.1" \
         "$LMCACHE_INSTALL_TARGET"
 
-    LMCACHE_INSTALLED_VERSION=$("$AIPERF_UV_BIN" pip show --system lmcache | awk '$1 == "Version:" {print $2}')
+    LMCACHE_INSTALLED_VERSION=$("$AIPERF_UV_BIN" pip show --python "$K3_PYTHON" lmcache | awk '$1 == "Version:" {print $2}')
     if [[ "$LMCACHE_INSTALLED_VERSION" != "$LMCACHE_VERSION" ]]; then
         echo "Error: expected LMCache $LMCACHE_VERSION, got $LMCACHE_INSTALLED_VERSION" >&2
         exit 1
