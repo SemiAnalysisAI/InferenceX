@@ -1489,11 +1489,44 @@ append_lm_eval_summary >/dev/null
         "CONC": "7",
         "KV_OFFLOADING": "none",
     }
-    for key in ("EVAL_COMPLETED_SUITE", "EVAL_SUITE", "EVAL_TASKS_DIR"):
+    for key in (
+        "EVAL_COMPLETED_SUITE", "EVAL_SUITE", "EVAL_TASKS_DIR",
+        "IS_MULTINODE", "DP_ATTENTION",
+        "PREFILL_DP_ATTN", "PREFILL_DP_ATTENTION", "PREFILL_ENABLE_DP",
+        "DECODE_DP_ATTN", "DECODE_DP_ATTENTION", "DECODE_ENABLE_DP",
+    ):
         env.pop(key, None)
     env.update(overrides)
     subprocess.run(["bash", "-c", script], env=env, check=True)
     return json.loads((work_dir / "meta_env.json").read_text())
+
+
+@pytest.mark.parametrize("dp_attention, expected", [("true", True), ("false", False)])
+def test_summary_preserves_single_node_dp_attention(
+    tmp_path: Path, dp_attention: str, expected: bool,
+) -> None:
+    meta = _summary_metadata(
+        tmp_path, IS_MULTINODE="false", TP="8", EP_SIZE="8",
+        DP_ATTENTION=dp_attention,
+    )
+    assert meta["dp_attention"] is expected
+    assert meta["prefill_dp_attention"] is expected
+    assert meta["decode_dp_attention"] is expected
+    assert meta["tp"] == 8
+    assert meta["ep"] == 8
+
+
+def test_summary_preserves_asymmetric_multinode_dp_attention(tmp_path: Path) -> None:
+    meta = _summary_metadata(
+        tmp_path, IS_MULTINODE="true", DP_ATTENTION="false",
+        PREFILL_TP="4", PREFILL_EP="4", DECODE_TP="8", DECODE_EP="8",
+        PREFILL_DP_ATTN="true", DECODE_DP_ATTN="false",
+    )
+    assert meta["dp_attention"] is True
+    assert meta["prefill_dp_attention"] is True
+    assert meta["decode_dp_attention"] is False
+    assert meta["prefill_tp"] == 4
+    assert meta["decode_tp"] == 8
 
 
 def test_summary_stages_bfcl_upstream_archive_before_cleanup(tmp_path: Path) -> None:
