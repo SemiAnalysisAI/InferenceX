@@ -7240,7 +7240,7 @@ qwen3.8next-fp4-b300-sglang-agentic-mtp:
   image: lmsysorg/sglang:dev-cu13-qwen38-next-local@sha256:9d2a843c706c74bc259c0d9abf360551eb2734e1e7d255ab012a6965f10480b6
   model: RadixArk/Qwen3.8-Flash-Next-NVFP4
   model-prefix: qwen3.8next
-  runner: cluster:b300-nv
+  runner: cluster:b300-dsxe
   precision: fp4
   framework: sglang
   multinode: false
