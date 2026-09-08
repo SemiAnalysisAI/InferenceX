@@ -214,7 +214,7 @@ between the PR sweep and merge therefore does not require another GPU sweep.
 
 ### 7.2 Capacity deferrals must release the candidate claim
 
-The planner ignores closed PRs but treats every matching `klaude/auto-*` branch
+The planner ignores closed PRs but treats every matching `klaud/auto-*` branch
 as occupied. If the capacity check fails before a targeted dispatch, the final
 sweep transition or a recovery dispatch, first record a public-safe deferral and
 current attempt state in any existing PR. Cancel and confirm all owned runs,

@@ -8,6 +8,7 @@ import math
 import os
 from pathlib import Path
 import random
+import re
 import shlex
 import subprocess
 from urllib.parse import urlencode
@@ -25,6 +26,8 @@ def github_read(repository: str, path: str, *, paginate: bool = False) -> list |
 
 
 def choose(items: list[dict], available: set[str], occupied: set[str]) -> list[dict]:
+    # Preserve claims made before the agent's spelling was corrected.
+    occupied = {re.sub(r'^klaud[e]?/auto-', 'klaud/auto-', branch) for branch in occupied}
     selected = []
     seen = set()
     valid = [item for item in items if item['needs-review']]
@@ -34,11 +37,11 @@ def choose(items: list[dict], available: set[str], occupied: set[str]) -> list[d
                    for cluster in available):
             continue
         family = identity({key: row[key] for key in ('model', 'hardware', 'framework', 'precision', 'spec_method', 'disagg')})[:16]
-        prefix = 'klaude/auto-' + family + '-'
+        prefix = 'klaud/auto-' + family + '-'
         branch = prefix + identity([row['image'], item['release']])[:16]
         if family in seen or branch in occupied or prefix in occupied:
             continue
-        selected.append({'id': branch.removeprefix('klaude/auto-'), 'source': row,
+        selected.append({'id': branch.removeprefix('klaud/auto-'), 'source': row,
                          'release': item['release'], 'review-reasons': item['review-reasons'], 'branch': branch})
         seen.add(family)
     random.shuffle(selected)
@@ -51,12 +54,12 @@ def plan(root: Path, directory: Path) -> None:
     items, issues = fetch_catalog(policy)
     if issues:
         raise ReadError('public-feed-invalid: ' + ', '.join(issues))
-    refs = github_read(repository, 'git/matching-refs/heads/klaude/auto-', paginate=True)
+    refs = github_read(repository, 'git/matching-refs/heads/klaud', paginate=True)
     occupied = {ref['ref'].removeprefix('refs/heads/') for page in refs for ref in page}
     pulls = github_read(repository, 'pulls?state=open&per_page=100', paginate=True)
     occupied.update(pr['head']['ref'] for page in pulls for pr in page)
     occupied.update(pr['head']['ref'].rsplit('-', 1)[0] + '-' for page in pulls for pr in page
-                    if pr['head']['ref'].startswith('klaude/auto-'))
+                    if re.match(r'^klaud[e]?/auto-', pr['head']['ref']))
     capacity = capacity_context(policy)
     available = set(capacity['eligible-telemetry-clusters'])
     candidates = choose(items, available, occupied)
@@ -147,20 +150,20 @@ def check_stop() -> dict:
     try:
         repository = os.environ['GITHUB_REPOSITORY']
         query = urlencode({'event': 'workflow_dispatch', 'per_page': 100,
-                           'created': '>=' + os.environ['KLAUDE_STARTED_AT']})
+                           'created': '>=' + os.environ['KLAUD_STARTED_AT']})
         pages = github_read(repository, 'actions/workflows/e2e-tests.yml/runs?' + query, paginate=True)
         if not isinstance(pages, list) or not pages:
             raise ValueError('Missing run listing')
         runs = [run for page in pages for run in page['workflow_runs']]
         if any(page['total_count'] > len(runs) for page in pages):
             raise ValueError('Incomplete run listing')
-        title = 'e2e Test - ' + os.environ['KLAUDE_TEST_NAME']
+        title = 'e2e Test - ' + os.environ['KLAUD_TEST_NAME']
         active = [run for run in runs if run['display_title'] == title
                   and (run['status'] != 'completed' or not run.get('conclusion'))]
         if active:
             return {'decision': 'block', 'reason': 'Your e2e runs are still queued or running. Continue watching their jobs, inspect results, repair within budget and update the PR table. Do not end with a promise to monitor later or cancel healthy work just to stop. For a valid stop condition, cancel only your unfinished runs and confirm completion.'}
 
-        branch = os.environ['KLAUDE_BRANCH']
+        branch = os.environ['KLAUD_BRANCH']
         owner = repository.split('/', 1)[0]
         query = urlencode({'state': 'open', 'head': owner + ':' + branch, 'per_page': 100})
         pull_pages = github_read(repository, 'pulls?' + query, paginate=True)
@@ -177,7 +180,7 @@ def check_stop() -> dict:
             return {'decision': 'block', 'reason': 'The final full-sweep label is on a draft PR, so run-sweep jobs are skipped. Mark it ready with gh pr ready, then continue monitoring without requesting review.'}
 
         query = urlencode({'event': 'pull_request', 'branch': branch, 'per_page': 100,
-                           'created': '>=' + os.environ['KLAUDE_STARTED_AT']})
+                           'created': '>=' + os.environ['KLAUD_STARTED_AT']})
         sweep_pages = github_read(repository, 'actions/workflows/run-sweep.yml/runs?' + query, paginate=True)
         sweep_runs = [run for page in sweep_pages for run in page['workflow_runs']]
         if any(page['total_count'] > len(sweep_runs) for page in sweep_pages):
@@ -210,11 +213,11 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
     review = PRReview(decisions=[])
     deferred = None
     if contexts:
-        if os.environ.get('KLAUDE_REVIEW_OUTCOME', 'success') != 'success':
+        if os.environ.get('KLAUD_REVIEW_OUTCOME', 'success') != 'success':
             deferred = 'review-action-failed'
         else:
             try:
-                review = PRReview.model_validate_json(os.environ.get('KLAUDE_PR_REVIEW', ''))
+                review = PRReview.model_validate_json(os.environ.get('KLAUD_PR_REVIEW', ''))
                 ids = [decision.candidate_id for decision in review.decisions]
                 if len(set(ids)) != len(ids) or not set(ids) <= {candidate['id'] for candidate in contexts}:
                     raise ValueError('Duplicate or unknown candidate IDs')
@@ -260,19 +263,19 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
         summary += f' {len(capacity_deferred)} reviewed candidates deferred by the latest capacity check.'
     if filename := os.environ.get('GITHUB_STEP_SUMMARY'):
         with open(filename, 'a') as output:
-            output.write(summary + '\n\nSee selection.json and review-diagnostics.json in the klaude-plan artifact.\n')
+            output.write(summary + '\n\nSee selection.json and review-diagnostics.json in the klaud-plan artifact.\n')
     if filename := os.environ.get('GITHUB_OUTPUT'):
         with open(filename, 'a') as output:
             output.write(f'selected={str(bool(candidates)).lower()}\ncandidates={json.dumps(candidates)}\n')
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(prog='python -m utils.klaude', description=__doc__)
+    parser = argparse.ArgumentParser(prog='python -m utils.klaud', description=__doc__)
     parser.add_argument('--root', type=Path, default=Path.cwd(), help='InferenceX checkout used to resolve the candidate base SHA')
     commands = parser.add_subparsers(dest='command', required=True)
     prepare = commands.add_parser('plan', help='Prepare candidates and open PRs for overlap review')
     prepare.add_argument('--directory', type=Path, required=True, help='Output directory for candidate context')
-    selection = commands.add_parser('select', help='Validate KLAUDE_PR_REVIEW and select nonoverlapping candidates')
+    selection = commands.add_parser('select', help='Validate KLAUD_PR_REVIEW and select nonoverlapping candidates')
     selection.add_argument('--directory', type=Path, required=True)
     selection.add_argument('--max-candidates-per-run', type=int, required=True, help='Maximum candidates to select (1-256)')
     selection.add_argument('--execution-file', type=Path, help='Claude execution log; retain numeric metrics and fixed denial categories')

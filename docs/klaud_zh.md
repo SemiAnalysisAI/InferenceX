@@ -2,17 +2,17 @@
 
 <div align="center">
 
-[English](./klaude.md) | **中文**
+[English](./klaud.md) | **中文**
 
 </div>
 
-[`klaude-plan.yml`](../.github/workflows/klaude-plan.yml) 使用 Python 准备候选，通过简短的只读 Claude 检查排除与开放 PR 重复的工作，再调用 [`klaude-candidate.yml`](../.github/workflows/klaude-candidate.yml)。每个所选候选由一个自主运行的 Klaud Cold 会话负责分支、草稿 PR、benchmark、修复和报告。只读 Stop hook 在同一会话内检查未结束的运行。后续步骤仅保存脱敏诊断；没有 attempt 工作流、Python 执行控制器或后续报告 agent。
+[`klaud-plan.yml`](../.github/workflows/klaud-plan.yml) 使用 Python 准备候选，通过简短的只读 Claude 检查排除与开放 PR 重复的工作，再调用 [`klaud-candidate.yml`](../.github/workflows/klaud-candidate.yml)。每个所选候选由一个自主运行的 Klaud Cold 会话负责分支、草稿 PR、benchmark、修复和报告。只读 Stop hook 在同一会话内检查未结束的运行。后续步骤仅保存脱敏诊断；没有 attempt 工作流、Python 执行控制器或后续报告 agent。
 
-PR 检查使用 `claude-opus-5`（Opus 5），关闭 fast mode（`fastMode: false`），最多运行 200 轮。候选执行使用 `claude-fable-5-1`（Fable 5.1），关闭 fast mode。Agent 的显示名称为 **Klaud Cold**；现有 `klaude` 工作流文件名、CLI、产物、分支和 secret 标识保持兼容。
+PR 检查使用 `claude-opus-5`（Opus 5），关闭 fast mode（`fastMode: false`），最多运行 200 轮。候选执行使用 `claude-fable-5-1`（Fable 5.1），关闭 fast mode。Agent 的显示名称为 **Klaud Cold**；工作流文件名、CLI、产物、分支及环境变量/secret 标识统一使用 `klaud` / `KLAUD`。旧拼写的候选分支仍会阻止重复选择。调度重命名后的工作流前，须配置 `KLAUD_DASHBOARD_API_KEY`。
 
 ## 候选选择
 
-[`api.py`](../utils/klaude/api.py) 通过同一 HTTP 实现处理公开和私有读取。[统一 CLI](../utils/klaude/__main__.py) 为 `python -m utils.klaude`：`plan --directory DIR` 准备候选和开放 PR；`select --max-candidates-per-run N --directory DIR` 校验 Claude 的结构化 `KLAUDE_PR_REVIEW` 输出并应用工作流中的候选数量上限；`check-capacity --cluster ID` 在调度前重新检查容量。在 `plan` 前传入 `--root PATH`，可指定用于获取候选基准 SHA 的 checkout；不再加载配置文件。
+[`api.py`](../utils/klaud/api.py) 通过同一 HTTP 实现处理公开和私有读取。[统一 CLI](../utils/klaud/__main__.py) 为 `python -m utils.klaud`：`plan --directory DIR` 准备候选和开放 PR；`select --max-candidates-per-run N --directory DIR` 校验 Claude 的结构化 `KLAUD_PR_REVIEW` 输出并应用工作流中的候选数量上限；`check-capacity --cluster ID` 在调度前重新检查容量。在 `plan` 前传入 `--root PATH`，可指定用于获取候选基准 SHA 的 checkout；不再加载配置文件。
 
 - 公开读取使用 `/api/v1/latest-images` 和 `/api/v1/framework-releases`。候选身份和版本键直接来自响应。版本不匹配和不稳定镜像仅作为检查线索，兼容的新镜像由 Klaud Cold 核实。
 - 私有读取仅使用 `/api/status/clusters`。要求 schema-v6 响应有效且新鲜、API 对集群判定为 `stale: false`、观测与接收时间戳有效且顺序正确、状态为 operational 或 degraded，并且至少有一个空闲节点。集群数据的过期阈值由 API 配置决定；Klaud 的 120 秒限制只用于响应获取/生成时间，不用于集群观测时间。排队任务、调度器预留和优先级覆盖不会改变低于 20% 的利用率规则。
@@ -25,7 +25,7 @@ PR 检查使用 `claude-opus-5`（Opus 5），关闭 fast mode（`fastMode: fals
 
 私有容量门槛是 **节点利用率严格低于 20%**：`(summary.allocatedNodes + summary.mixedNodes) * 5 < summary.totalNodes`，不做舍入。完全分配和部分使用的节点均计入已使用节点；恰好 20% 时不放行。不扣除预留节点。要求至少有一个空闲节点，避免整个集群不可用时仍以 0% 利用率通过检查。缺失、无效、不一致、过期或不可用的数据均拒绝。硬件匹配只用于初筛；检查阶段必须解析每个实际目标，选择阶段重新检查这些精确 ID。完整物理节点需求的准入仍由调度器负责。
 
-`klaude-plan` 产物仅显式包含 `candidates.json`、`open-prs.json`、`selection.json`、`review-diagnostics.json` 及每个所选候选的 `candidate.json`。本地 `capacity.json` 为检查阶段提供遥测 ID 和资格线索，**绝不上传**；任意临时文件也不会上传。每份交接文件包含公开观测、版本线索、检查原因、分支、基准 SHA、公开 API 发现 URL 和通过校验的 `pr-review`，不包含私有节点计数或原始遥测。所选候选并行运行，各自获得独立 Klaud Cold 会话。一个候选失败不会取消其他候选。不再复制模型/runner 目录，也不保留 `recipes.py`；agent 使用现有 InferenceX 配置和工具理解实际 recipe。
+`klaud-plan` 产物仅显式包含 `candidates.json`、`open-prs.json`、`selection.json`、`review-diagnostics.json` 及每个所选候选的 `candidate.json`。本地 `capacity.json` 为检查阶段提供遥测 ID 和资格线索，**绝不上传**；任意临时文件也不会上传。每份交接文件包含公开观测、版本线索、检查原因、分支、基准 SHA、公开 API 发现 URL 和通过校验的 `pr-review`，不包含私有节点计数或原始遥测。所选候选并行运行，各自获得独立 Klaud Cold 会话。一个候选失败不会取消其他候选。不再复制模型/runner 目录，也不保留 `recipes.py`；agent 使用现有 InferenceX 配置和工具理解实际 recipe。
 
 ## Klaud Cold 负责执行
 
@@ -39,7 +39,7 @@ Klaud Cold 读取运行产物和日志，计算匹配性能差值并在 PR 中�
 
 无论测试点数量多少，都运行完整的所选配置族。单次 benchmark 运行可能长达三小时；Klaud Cold 在候选作业的总时限内监控其进展。Klaud 不再为单次 benchmark 运行设置额外超时。
 
-两个设置直接保留在工作流中：[`klaude-plan.yml`](../.github/workflows/klaude-plan.yml) 的 `MAX_CANDIDATES_PER_RUN` 控制 planner 的候选数量上限；[`klaude-candidate.yml`](../.github/workflows/klaude-candidate.yml) 的 `MAX_REPAIRS` 将修复次数上限直接传入 agent 提示词。
+两个设置直接保留在工作流中：[`klaud-plan.yml`](../.github/workflows/klaud-plan.yml) 的 `MAX_CANDIDATES_PER_RUN` 控制 planner 的候选数量上限；[`klaud-candidate.yml`](../.github/workflows/klaud-candidate.yml) 的 `MAX_REPAIRS` 将修复次数上限直接传入 agent 提示词。
 
 工作流并发和选择规则由代码强制执行。Klaud Cold 最多运行 200 轮，必须在 GitHub Actions 默认作业时限内完成报告和清理。**修复判断和报告内容仍由 agent 负责；Stop hook 检查所属运行的状态。** Klaud Cold 必须在成功、修复预算耗尽、重复失败无进展、容量丢失或写操作结果不确定时停止，并取消未完成子运行、确认结束。作业超时或 runner/agent 突然终止仍可能留下未结束运行或未完成报告，因为没有后续作业接管。
 
@@ -51,9 +51,9 @@ Klaud Cold 调度 `e2e-tests.yml` 时显式设置布尔输入 `klaud-run: true`�
 
 调度运行或创建草稿不代表任务完成。使用 `gh run watch --interval 60` 留在同一会话中等待，工具超时后继续等待，并检查作业级状态，因为 queued 工作流可能包含正在运行的作业。benchmark 矩阵失败后，eval 作业仍可能继续。定位首个服务端错误而非清理阶段症状；在原有范围、预算和容量规则内修复。工具调用被拒绝时改用允许的工具或命令，不得提前报告成功。先将所有尝试的最终结果写入 PR 表格，再报告停止原因、修复次数、已确认的子运行结束状态和 PR URL。不得承诺稍后继续监控，也不得仅为结束会话而取消正常运行。
 
-[Claude Code Stop hook](https://code.claude.com/docs/en/hooks#stop) 运行 `python -m utils.klaude check-stop`。其查询窗口从父 auto-sweep 的原始创建时间开始，该时间在 candidate 作业重跑时保持不变。上下文准备阶段最多查询四次，重试间隔为 5/10/20 秒；仍失败时终止，不使用更新的时间戳替代。hook 读取匹配的 `e2e-tests.yml` 手动调度全部分页，并匹配 `e2e Test - $KLAUDE_TEST_NAME`；每次尝试必须使用固定标识 `klaud-<parent-run-id>-<candidate-id>`。匹配到未结束的运行，或列表不可用/不完整时，阻止正常停止并要求同一 agent 继续。候选的开放 PR 添加 `full-sweep-enabled` 后，hook 还会按候选分支和精确 head SHA 跟踪 `run-sweep.yml`，并忽略无关标签事件产生、已经结束且所有作业均被跳过的运行。PR 仍为草稿、精确运行不存在或未结束、运行失败，或成功运行缺少可复用 benchmark/eval 产物时，都会阻止停止。其他候选的运行不受影响。hook 不调度、不取消、不修复，也不调用模型。GitHub 作业时限、Claude 内置 Stop-hook 循环上限、API 错误、中断或异常终止仍可能导致任务未完成；它不是外部监督服务。不增加自定义超时或继续执行预算。
+[Claude Code Stop hook](https://code.claude.com/docs/en/hooks#stop) 运行 `python -m utils.klaud check-stop`。其查询窗口从父 auto-sweep 的原始创建时间开始，该时间在 candidate 作业重跑时保持不变。上下文准备阶段最多查询四次，重试间隔为 5/10/20 秒；仍失败时终止，不使用更新的时间戳替代。hook 读取匹配的 `e2e-tests.yml` 手动调度全部分页，并匹配 `e2e Test - $KLAUD_TEST_NAME`；每次尝试必须使用固定标识 `klaud-<parent-run-id>-<candidate-id>`。匹配到未结束的运行，或列表不可用/不完整时，阻止正常停止并要求同一 agent 继续。候选的开放 PR 添加 `full-sweep-enabled` 后，hook 还会按候选分支和精确 head SHA 跟踪 `run-sweep.yml`，并忽略无关标签事件产生、已经结束且所有作业均被跳过的运行。PR 仍为草稿、精确运行不存在或未结束、运行失败，或成功运行缺少可复用 benchmark/eval 产物时，都会阻止停止。其他候选的运行不受影响。hook 不调度、不取消、不修复，也不调用模型。GitHub 作业时限、Claude 内置 Stop-hook 循环上限、API 错误、中断或异常终止仍可能导致任务未完成；它不是外部监督服务。不增加自定义超时或继续执行预算。
 
-action 结束后，`diagnostics` 复用 planner 的脱敏逻辑，仅将 `candidate-diagnostics.json` 上传至 `klaude-candidate-<candidate-id>`。保留 action 结果、允许列表中的终止类型、布尔错误状态、数值型耗时/轮数/成本及固定权限拒绝类别。未知终止类型记为 `unknown`；执行文件缺失或不可读时记为不可用。排除原始消息、结果、命令、路径、错误文本、凭据和私有遥测。runner 仍可用时这些步骤通过 `always()` 执行，不更新 PR，也不恢复 Claude。planner 诊断同步增加相同终止字段。
+action 结束后，`diagnostics` 复用 planner 的脱敏逻辑，仅将 `candidate-diagnostics.json` 上传至 `klaud-candidate-<candidate-id>`。保留 action 结果、允许列表中的终止类型、布尔错误状态、数值型耗时/轮数/成本及固定权限拒绝类别。未知终止类型记为 `unknown`；执行文件缺失或不可读时记为不可用。排除原始消息、结果、命令、路径、错误文本、凭据和私有遥测。runner 仍可用时这些步骤通过 `always()` 执行，不更新 PR，也不恢复 Claude。planner 诊断同步增加相同终止字段。
 
 ## 公开 API 调查
 
@@ -92,11 +92,11 @@ Klaud Cold 只应修改所选主配置族的镜像，以及它已经引用且未
 
 ## 工作流操作与凭据
 
-入口工作流仅支持手动触发（`workflow_dispatch`）。每六小时的 cron（`0 */6 * * *`，UTC）仍以注释形式禁用。条件 `github.ref == 'refs/heads/main' && github.run_attempt == 1` 会跳过功能分支、tag 和重新运行。只有 candidate 暴露 `workflow_call`。`klaude-auto-sweep` 并发组不取消已有运行，并防止多次 auto-sweep 调用重叠；同一次调用中的候选并行运行，工作流不额外限制候选并行度。
+入口工作流仅支持手动触发（`workflow_dispatch`）。每六小时的 cron（`0 */6 * * *`，UTC）仍以注释形式禁用。条件 `github.ref == 'refs/heads/main' && github.run_attempt == 1` 会跳过功能分支、tag 和重新运行。只有 candidate 暴露 `workflow_call`。`klaud-auto-sweep` 并发组不取消已有运行，并防止多次 auto-sweep 调用重叠；同一次调用中的候选并行运行，工作流不额外限制候选并行度。
 
-planner 的 Python 准备和最终容量检查步骤使用 dashboard key；准备步骤还使用只读工作流 token。限轮数的 Claude PR 检查使用 `ANTHROPIC_API_KEY` 和具有 `pull-requests: read` 权限的只读工作流 token。它接收私有资格线索，但不接收 `CLAUDE_PAT` 或 dashboard key，也不执行 GitHub 写操作。candidate 获得用于分支/PR 写入及 e2e 调度/取消的 `CLAUDE_PAT`、用于 Klaud Cold 的 `ANTHROPIC_API_KEY`，以及覆盖 clusters 的限期 `status:read` `KLAUDE_DASHBOARD_API_KEY`。Klaud Cold 不得发布凭据或私有 API 响应。共享 HTTP 读取器固定来源、限制 GET 响应大小并拒绝重定向。非有限 JSON 数值（包括 `1e400` 这样的指数溢出）会在校验或哈希计算前被拒绝。不需要新增控制器、数据库或 environment 配置。
+planner 的 Python 准备和最终容量检查步骤使用 dashboard key；准备步骤还使用只读工作流 token。限轮数的 Claude PR 检查使用 `ANTHROPIC_API_KEY` 和具有 `pull-requests: read` 权限的只读工作流 token。它接收私有资格线索，但不接收 `CLAUDE_PAT` 或 dashboard key，也不执行 GitHub 写操作。candidate 获得用于分支/PR 写入及 e2e 调度/取消的 `CLAUDE_PAT`、用于 Klaud Cold 的 `ANTHROPIC_API_KEY`，以及覆盖 clusters 的限期 `status:read` `KLAUD_DASHBOARD_API_KEY`。Klaud Cold 不得发布凭据或私有 API 响应。共享 HTTP 读取器固定来源、限制 GET 响应大小并拒绝重定向。非有限 JSON 数值（包括 `1e400` 这样的指数溢出）会在校验或哈希计算前被拒绝。不需要新增控制器、数据库或 environment 配置。
 
-所有外部 action 均固定完整提交 SHA，已于 2026-09-04 核对上游 release/tag 元数据和实现测试。内部调用使用 `./.github/workflows/klaude-candidate.yml` 解析调用者的精确提交，并显式传递三个必需 secret。
+所有外部 action 均固定完整提交 SHA，已于 2026-09-04 核对上游 release/tag 元数据和实现测试。内部调用使用 `./.github/workflows/klaud-candidate.yml` 解析调用者的精确提交，并显式传递三个必需 secret。
 
 | Action | 版本 | 提交 |
 | --- | --- | --- |
@@ -109,8 +109,8 @@ planner 的 Python 准备和最终容量检查步骤使用 dashboard key；准�
 ## 本地验证
 
 ```bash
-uv run --no-project --python 3.12 --with "pydantic>=2.10,<3" python -m utils.klaude --help
-uvx zizmor==1.30.0 --offline --no-config --no-ignores .github/workflows/klaude-plan.yml .github/workflows/klaude-candidate.yml
+uv run --no-project --python 3.12 --with "pydantic>=2.10,<3" python -m utils.klaud --help
+uvx zizmor==1.30.0 --offline --no-config --no-ignores .github/workflows/klaud-plan.yml .github/workflows/klaud-candidate.yml
 ```
 
 CLI 和工作流检查不能证明 GPU 实际可运行。Klaud Cold 使用现有 InferenceX 校验和 e2e 工作流验证候选修改。本地验证不调用真实模型、不调度 benchmark、不创建 PR、不部署。

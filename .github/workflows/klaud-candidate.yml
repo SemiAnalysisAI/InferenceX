@@ -7,7 +7,7 @@ on:
         required: true
       CLAUDE_PAT:
         required: true
-      KLAUDE_DASHBOARD_API_KEY:
+      KLAUD_DASHBOARD_API_KEY:
         required: true
     inputs:
       candidate:
@@ -25,8 +25,8 @@ jobs:
     env:
       # Repair attempts after the initial update; the baseline is already published.
       MAX_REPAIRS: '3'
-      KLAUDE_BRANCH: klaude/auto-${{ inputs.candidate }}
-      KLAUDE_TEST_NAME: klaud-${{ github.run_id }}-${{ inputs.candidate }}
+      KLAUD_BRANCH: klaud/auto-${{ inputs.candidate }}
+      KLAUD_TEST_NAME: klaud-${{ github.run_id }}-${{ inputs.candidate }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -37,7 +37,7 @@ jobs:
           python-version: '3.12'
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: klaude-plan
+          name: klaud-plan
           path: ${{ runner.temp }}/plan
       - name: Prepare candidate context
         env:
@@ -45,7 +45,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           [[ "$CANDIDATE" =~ ^[0-9a-f]{16}-[0-9a-f]{16}$ ]]
-          cp -R "$RUNNER_TEMP/plan/$CANDIDATE" "$RUNNER_TEMP/klaude"
+          cp -R "$RUNNER_TEMP/plan/$CANDIDATE" "$RUNNER_TEMP/klaud"
           rm -r "$RUNNER_TEMP/plan"
           for attempt in 1 2 3 4; do
             if started_at="$(gh api --method GET "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --jq .created_at)" &&
@@ -58,14 +58,14 @@ jobs:
             fi
             sleep "$((5 * 2 ** (attempt - 1)))"
           done
-          echo "KLAUDE_STARTED_AT=$started_at" >> "$GITHUB_ENV"
+          echo "KLAUD_STARTED_AT=$started_at" >> "$GITHUB_ENV"
       - name: Let Klaud Cold own the candidate PR
         id: claude
         uses: anthropics/claude-code-action@d75b94d5ad426cb8546e6628b6f5f19b84e5cce1
         env:
           GH_TOKEN: ${{ secrets.CLAUDE_PAT }}
-          KLAUDE_DASHBOARD_API_KEY: ${{ secrets.KLAUDE_DASHBOARD_API_KEY }}
-          KLAUDE_EVIDENCE: ${{ runner.temp }}/klaude
+          KLAUD_DASHBOARD_API_KEY: ${{ secrets.KLAUD_DASHBOARD_API_KEY }}
+          KLAUD_EVIDENCE: ${{ runner.temp }}/klaud
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.CLAUDE_PAT }}
@@ -75,14 +75,14 @@ jobs:
               "hooks": {
                 "Stop": [{"hooks": [{
                   "type": "command",
-                  "command": "cd \"$GITHUB_WORKSPACE\" && uv run --no-project --python 3.12 --with 'pydantic>=2.10,<3' python -m utils.klaude check-stop"
+                  "command": "cd \"$GITHUB_WORKSPACE\" && uv run --no-project --python 3.12 --with 'pydantic>=2.10,<3' python -m utils.klaud check-stop"
                 }]}]
               }
             }
           claude_args: >-
             --model 'claude-fable-5-1'
             --max-turns 200
-            --add-dir '${{ runner.temp }}/klaude'
+            --add-dir '${{ runner.temp }}/klaud'
             --allowedTools "Read,Write,Edit,Glob,Grep,Bash,WebFetch,WebSearch"
           prompt: |
             You are Klaud Cold. Autonomously own this image refresh in one git/gh session:
@@ -92,9 +92,9 @@ jobs:
             delegate, launch another Claude agent or merge. No later job handles reporting or cleanup.
             Never @mention GitHub users/teams or request reviews/re-reviews; reviews are automatic.
 
-            Read docs/index.md, AGENTS.md, CONTRIBUTING.md and ${{ runner.temp }}/klaude/candidate.json.
-            Use Read/Glob/Grep for local inspection and keep scratch files in $KLAUDE_EVIDENCE.
-            Use its OpenAPI and docs/klaude.md#public-api-investigation on demand; verify API
+            Read docs/index.md, AGENTS.md, CONTRIBUTING.md and ${{ runner.temp }}/klaud/candidate.json.
+            Use Read/Glob/Grep for local inspection and keep scratch files in $KLAUD_EVIDENCE.
+            Use its OpenAPI and docs/klaud.md#public-api-investigation on demand; verify API
             identities/producer URLs and reuse repository/API mappings; never invent alias tables.
             Resolve exactly one live master family and check its current image/existing PRs;
             stop if retired, ambiguous, already updated or owned by another PR.
@@ -122,7 +122,7 @@ jobs:
 
             Use uv and applicable InferenceX checks. Check every exact telemetry cluster from the
             current recipe/runner configuration with repeated --cluster arguments:
-            uv run --no-project --python 3.12 --with "pydantic>=2.10,<3" python -m utils.klaude check-capacity --cluster TELEMETRY_CLUSTER_ID
+            uv run --no-project --python 3.12 --with "pydantic>=2.10,<3" python -m utils.klaud check-capacity --cluster TELEMETRY_CLUSTER_ID
             Exit 0 requires current telemetry, available nodes and node utilization below 20% for
             ALL targets. Any other result means defer and stop; do not wait for recovery or promise
             automatic continuation. If this check fails before a targeted dispatch, final-sweep
@@ -146,7 +146,7 @@ jobs:
             Compare it with updated-image results_bmk/agg_bmk.json and actual eval artifacts. Preserve
             all points/default evals, nodes:N labels, MTP chat templates and artifact contracts.
             Never weaken benchmarks. Set klaud-run=true for lowest priority and
-            test-name=$KLAUDE_TEST_NAME exactly for every attempt so the Stop hook can identify your runs.
+            test-name=$KLAUD_TEST_NAME exactly for every attempt so the Stop hook can identify your runs.
             No skip_queue or priority overrides; use no sweep label during targeted attempts.
             Record run IDs/URLs immediately. Stay in this session until ALL their jobs are terminal;
             dispatch or a draft PR is not completion. Use gh run watch --interval 60, resuming it if a
@@ -187,16 +187,16 @@ jobs:
       - name: Save sanitized candidate diagnostics
         if: always()
         env:
-          KLAUDE_EXECUTION: ${{ steps.claude.outputs.execution_file }}
-          KLAUDE_OUTCOME: ${{ steps.claude.outcome }}
+          KLAUD_EXECUTION: ${{ steps.claude.outputs.execution_file }}
+          KLAUD_OUTCOME: ${{ steps.claude.outcome }}
         run: >-
-          uv run --no-project --python 3.12 --with "pydantic>=2.10,<3" python -m utils.klaude diagnostics
-          --execution-file "${KLAUDE_EXECUTION:-$RUNNER_TEMP/claude-execution-output.json}"
-          --outcome "${KLAUDE_OUTCOME:-unknown}" --output "$RUNNER_TEMP/candidate-diagnostics.json"
+          uv run --no-project --python 3.12 --with "pydantic>=2.10,<3" python -m utils.klaud diagnostics
+          --execution-file "${KLAUD_EXECUTION:-$RUNNER_TEMP/claude-execution-output.json}"
+          --outcome "${KLAUD_OUTCOME:-unknown}" --output "$RUNNER_TEMP/candidate-diagnostics.json"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
-          name: klaude-candidate-${{ inputs.candidate }}
+          name: klaud-candidate-${{ inputs.candidate }}
           # Never upload the execution transcript or private API/scratch data.
           path: ${{ runner.temp }}/candidate-diagnostics.json
           retention-days: 14
