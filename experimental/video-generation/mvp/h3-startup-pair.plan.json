@@ -1,0 +1,29 @@
+{
+  "plan_id": "h3-fl2va-t2va-startup-pair-v1",
+  "model_id": "MiniMaxAI/MiniMax-H3",
+  "model_revision": "42ed227ee7df40d41602854ae760620d6eb651fe",
+  "generation": {
+    "duration_seconds": 4,
+    "aspect_ratio": "16:9",
+    "width": 1344,
+    "height": 768,
+    "frame_count": 107,
+    "fps": 24,
+    "audio_sample_rate_hz": 32000,
+    "audio_channels": 2,
+    "num_inference_steps": 50,
+    "flow_shift": 12.0,
+    "audio_flow_shift": 3.0
+  },
+  "cases": [
+    {
+      "case_id": "drum-taps",
+      "prompt": "A single continuous medium shot of a drummer tapping a snare drum three times in a quiet rehearsal room. The drumsticks visibly contact the drumhead on each tap. The three crisp snare hits and the natural room ambience are audible. The camera remains still. No music, speech, subtitles, or scene cuts.",
+      "seed": 11,
+      "requires_motion": true,
+      "requires_sound": true
+    }
+  ],
+  "repetitions": 1,
+  "warmup_runs": 1
+}

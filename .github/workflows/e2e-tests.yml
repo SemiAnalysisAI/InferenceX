@@ -7,6 +7,11 @@ permissions:
 on:
     workflow_dispatch:
         inputs:
+            h3-video:
+                description: "Run only the configured H3 smoke; manual dispatch, no LLM sweep"
+                required: false
+                type: boolean
+                default: false
             generate-cli-command:
                 description: "Command passed to generate matrix script"
                 required: false
@@ -102,6 +107,11 @@ on:
                 default: "[]"
     workflow_call:
         inputs:
+            h3-video:
+                description: "Run only the configured H3 smoke; manual dispatch, no LLM sweep"
+                required: false
+                type: boolean
+                default: false
             generate-cli-command:
                 description: "Command passed to generate matrix script"
                 required: false
@@ -197,7 +207,15 @@ on:
                 default: "[]"
 
 jobs:
+    h3-video:
+        if: ${{ inputs.h3-video }}
+        permissions:
+            contents: read
+            actions: read
+        uses: ./.github/workflows/h3-video.yml
+
     get-jobs:
+        if: ${{ !inputs.h3-video }}
         runs-on: ubuntu-latest
         outputs:
             single-node-config: ${{ steps.get-jobs.outputs.single-node-config }}
@@ -753,7 +771,7 @@ jobs:
 
     calc-success-rate:
         needs: [collect-results, collect-evals]
-        if: ${{ always() }}
+        if: ${{ always() && !inputs.h3-video }}
         runs-on: ubuntu-latest
 
         env:

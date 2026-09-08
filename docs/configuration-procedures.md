@@ -257,6 +257,20 @@ Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../AGENTS.md#non-nego
 6. If the file conflicts with `main`, restore the current `main` version and re-append only this branch's entries. Do not hand-merge reordered history.
 7. Parse the file and confirm the generated changelog selection includes the intended keys before requesting a sweep.
 
+### Separately dispatched experimental workflows
+
+An experimental benchmark outside the LLM master configs can record its change without selecting LLM jobs:
+
+```yaml
+- config-keys: []
+  workflow-dispatch: h3-video.yml
+  description:
+    - "Add a manually dispatched H3 video benchmark"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+```
+
+`workflow-dispatch` must be a local `.yml` or `.yaml` basename under `.github/workflows/`, and that file must declare a `workflow_dispatch` trigger. It requires empty `config-keys` and rejects active LLM eval, scenario, or `append-only` modifiers. Ordinary entries still require real master-config keys. The changelog processor retains the manual entry in metadata but generates no LLM throughput or eval rows for it; ordinary entries in the same diff keep their normal selection. This field does not dispatch the workflow or establish benchmark success. Run the named workflow explicitly and inspect its artifacts. Replace the `XXX` PR-link placeholder when the PR exists.
+
 ## Stop conditions
 
 Stop before dispatching GPU work or claiming the configuration complete when any condition below holds. Obtain the missing fact or fix the source mismatch. Do not guess.

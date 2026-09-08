@@ -1662,3 +1662,25 @@ labels:
         with pytest.raises(ValueError) as exc_info:
             load_runner_file(str(runner_file))
         assert "must be a list" in str(exc_info.value)
+
+
+@pytest.mark.parametrize("updates", [
+    {},
+    {"workflow-dispatch": "../h3-video.yml"},
+    {"workflow-dispatch": "/tmp/h3-video.yml"},
+    {"workflow-dispatch": "https://example.com/video.yml"},
+    {"workflow-dispatch": "h3-video.yml", "config-keys": ["test-config"]},
+    {"workflow-dispatch": "h3-video.yml", "evals-only": True},
+    {"workflow-dispatch": "h3-video.yml", "all-evals": True},
+    {"workflow-dispatch": "h3-video.yml", "append-only": True},
+    {"workflow-dispatch": "h3-video.yml", "eval-min-prefill-ep": 1},
+    {"workflow-dispatch": "h3-video.yml", "scenario-type": ["fixed-seq-len"]},
+])
+def test_manual_changelog_rejects_invalid_selection(updates):
+    with pytest.raises(ValueError):
+        ChangelogEntry.model_validate({
+            "config-keys": [],
+            "description": ["Record a separate manual workload"],
+            "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/XXX",
+            **updates,
+        })

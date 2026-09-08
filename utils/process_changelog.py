@@ -24,6 +24,19 @@ from matrix_logic.validation import (
 )
 
 SCENARIO_TYPES = ("fixed-seq-len", "agentic-coding")
+WORKFLOW_DIR = Path(__file__).resolve().parents[1] / ".github" / "workflows"
+
+
+def validate_manual_workflow(name: str) -> None:
+    path = WORKFLOW_DIR / name
+    if not path.is_file():
+        raise ValueError(f"workflow-dispatch workflow does not exist: {name}")
+    workflow = yaml.load(path.read_text(), Loader=yaml.BaseLoader)
+    triggers = workflow.get("on") if isinstance(workflow, dict) else None
+    if isinstance(triggers, str):
+        triggers = [triggers]
+    if not isinstance(triggers, (dict, list)) or "workflow_dispatch" not in triggers:
+        raise ValueError(f"workflow-dispatch workflow has no workflow_dispatch trigger: {name}")
 
 
 @dataclass(frozen=True)
@@ -373,6 +386,10 @@ def main():
         raise ValueError("No valid YAML entries found in the changelog additions.")
 
     parsed_entries = [ChangelogEntry.model_validate(entry) for entry in changelog_data]
+    for entry in parsed_entries:
+        if entry.workflow_dispatch is not None:
+            validate_manual_workflow(entry.workflow_dispatch)
+    parsed_entries = [entry for entry in parsed_entries if entry.workflow_dispatch is None]
     has_append_only = any(entry.append_only for entry in parsed_entries)
     if has_append_only and not all(entry.append_only for entry in parsed_entries):
         raise ValueError(

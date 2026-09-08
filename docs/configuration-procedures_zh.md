@@ -257,6 +257,20 @@ python -m pytest utils/matrix_logic/ -v
 6. 如果文件与 `main` 冲突，恢复当前 `main` 版本，只重新追加本分支条目。不要手动合并已经重排的历史。
 7. 请求 sweep 前解析文件，并确认生成的 changelog 选择包含预期 key。
 
+### 单独手动派发的实验工作流
+
+不属于 LLM master config 的实验基准可以记录变更，而不选择任何 LLM 任务：
+
+```yaml
+- config-keys: []
+  workflow-dispatch: h3-video.yml
+  description:
+    - "Add a manually dispatched H3 video benchmark"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+```
+
+`workflow-dispatch` 必须是 `.github/workflows/` 下本地 `.yml` 或 `.yaml` 文件的名称，文件必须声明 `workflow_dispatch` 触发器。该模式要求 `config-keys` 为空，不允许启用 LLM eval、scenario 或 `append-only` 选项。普通条目仍须使用真实的 master-config key。changelog 处理器会将手动条目保留在元数据中，但不会为它生成 LLM 吞吐或 eval 任务；同一 diff 中的普通条目仍按原规则选择任务。该字段不会自动派发工作流，也不能证明基准运行成功。请显式运行所列工作流并检查产物。PR 创建后，将链接中的 `XXX` 占位符替换为实际编号。
+
 ## 停止条件
 
 出现以下任何条件时，在派发 GPU 工作或宣称配置完成前停止。取得缺失事实或修复来源不一致；不要猜测。
