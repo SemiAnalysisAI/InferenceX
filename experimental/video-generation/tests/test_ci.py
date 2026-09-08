@@ -46,6 +46,7 @@ def test_allocation_submits_from_receipted_work_directory(tmp_path, monkeypatch)
     scheduler.write_text('#!/bin/sh\npwd > "$H3_TEST_SCHEDULER_CWD"\necho "salloc: Granted job allocation 123"\n')
     scheduler.chmod(0o755)
     observed = tmp_path / "scheduler-cwd"
+    monkeypatch.setenv("RUNNER_NAME", "h3-test-runner")
     monkeypatch.setenv("PATH", str(bin_dir) + os.pathsep + os.environ["PATH"])
     monkeypatch.setenv("H3_TEST_SCHEDULER_CWD", str(observed))
     receipt = ci.allocate(config(tmp_path), run_dir)
