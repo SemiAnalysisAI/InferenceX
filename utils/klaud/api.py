@@ -209,13 +209,13 @@ def available_clusters(feed: Feed, policy: Policy, now: datetime) -> set[str]:
 
 
 def fetch_capacity(policy: Policy) -> set[str]:
-    return available_clusters(fetch('clusters', token=os.environ.get('KLAUDE_DASHBOARD_API_KEY')),
+    return available_clusters(fetch('clusters', token=os.environ.get('KLAUD_DASHBOARD_API_KEY')),
                               policy, datetime.now(timezone.utc))
 
 
 def capacity_context(policy: Policy) -> dict:
     """Private routing hints for review, without node counts or raw responses."""
-    feed = fetch('clusters', token=os.environ.get('KLAUDE_DASHBOARD_API_KEY'))
+    feed = fetch('clusters', token=os.environ.get('KLAUD_DASHBOARD_API_KEY'))
     available = available_clusters(feed, policy, datetime.now(timezone.utc))
     try:
         clusters = sorted({cluster['clusterId'] for cluster in feed.payload['data']['clusters']
