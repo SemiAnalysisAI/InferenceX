@@ -91,9 +91,9 @@ if agentic_kv_offload_enabled; then
         # env-var override for maximum throughput on nodes with >4 TB DRAM.
         HICACHE_RATIO="${HICACHE_RATIO:-1.5}"
     fi
-    # write_through_selective skips DRAM writes for non-reusable KV blocks,
-    # reducing host-bus traffic without affecting the cache hit rate.
-    HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through_selective}"
+    # Keep write_through as the validated baseline. Override
+    # HICACHE_WRITE_POLICY explicitly for selective-write experiments.
+    HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through}"
     HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
     HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first_direct}"
     case "$KV_OFFLOAD_BACKEND" in
