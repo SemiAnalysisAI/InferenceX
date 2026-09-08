@@ -176,6 +176,7 @@ def test_failure_collects_original_outputs_and_preserves_holder(tmp_path, monkey
     cfg = config(tmp_path)
     entry = Path(cfg["runtime"]["entry"])
     entry.write_text("entry")
+    Path(cfg["runtime"]["ready_marker"]).write_text("pinned image and preparation identity")
     cfg["runtime"]["entry_sha256"] = ci.digest(entry)
     receipt, record = allocation(tmp_path)
     monkeypatch.setenv("GITHUB_RUN_ID", "456")
@@ -207,6 +208,8 @@ def test_failure_collects_original_outputs_and_preserves_holder(tmp_path, monkey
     assert manifest["git_commit"] == "a" * 40
     assert manifest["slurm_allocation"]["identity"]["JobId"] == "123"
     assert manifest["evidence"]["ci.json"] == ci.digest(output / "ci.json")
+    assert (output / "runtime-readiness.record").read_text() == "pinned image and preparation identity"
+    assert manifest["evidence"]["runtime-entry.sh"] == ci.digest(entry)
 
 
 def test_timeout_stops_only_its_local_process_group(tmp_path):

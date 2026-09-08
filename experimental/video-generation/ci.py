@@ -401,6 +401,8 @@ def launch(config: dict, output: Path) -> int:
         reused = False
         code = 2
         try:
+            shutil.copyfile(config["runtime"]["entry"], run_dir / "runtime-entry.sh")
+            shutil.copyfile(config["runtime"]["ready_marker"], run_dir / "runtime-readiness.record")
             package = workspace / "campaigns" / config["task_id"] / "packages" / sha
             package_files = stage_package(source, package)
             decision = recover(config, results)
@@ -452,7 +454,7 @@ def launch(config: dict, output: Path) -> int:
                 code = 2
             state.update(finished_at=now(), exit_code=code)
             write(run_dir / "ci.json", state)
-            links = ("ci.json", "allocation.json", "recovery.json", "binding.json", "context.json", "step-result.json",
+            links = ("ci.json", "runtime-entry.sh", "runtime-readiness.record", "allocation.json", "recovery.json", "binding.json", "context.json", "step-result.json",
                      "gpu/spec.json", "gpu/gpu-job.json", "gpu/baseline/run.json", "gpu/candidate/run.json",
                      "gpu/comparison.json", "report/index.html")
             write(run_dir / "manifest.json", {"schema_version": 1, "task_id": config["task_id"],
