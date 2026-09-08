@@ -97,7 +97,7 @@ def validate_config(config: dict) -> dict:
     absolute(config["spec"]["path"])
     resources = config["resources"]
     need(set(resources) == {"gpus", "cpus", "memory_gb", "minutes"}, "Invalid resource request")
-    for key, low, high in (("gpus", 1, 8), ("cpus", 1, 256), ("memory_gb", 1, 1800), ("minutes", 10, 90)):
+    for key, low, high in (("gpus", 1, 8), ("cpus", 1, 128), ("memory_gb", 1, 1400), ("minutes", 10, 90)):
         need(type(resources[key]) is int and low <= resources[key] <= high, "Resource outside bounded H200 budget: " + key)
     need(isinstance(config["allocation_receipts"], list), "allocation_receipts must be a list")
     for path in config["allocation_receipts"]:
@@ -499,15 +499,25 @@ def cuda_devices() -> list[str]:
     return values
 
 
+def workload_complete(verified: dict) -> bool:
+    runs, comparison = verified["runs"], verified["comparison"]
+    return (all(run["summary"]["valid"] == run["summary"]["scheduled"] > 0 for run in runs.values())
+            and bool(comparison["slots"])
+            and all(slot[role]["status"] == "succeeded" and (slot[role].get("media") or {}).get("valid") is True
+                    and not slot[role].get("analysis_error")
+                    for slot in comparison["slots"] for role in ("baseline", "candidate"))
+            and all(check["status"] == "pass" for check in comparison["checks"]
+                    if check["name"] in {"baseline.warmup", "candidate.warmup"}))
+
+
 def smoke_exit(verified: dict, receipt: dict, mode: str) -> int:
-    if receipt.get("regression_status") == "fail":
-        return 1
     if mode == "regression":
+        if receipt.get("regression_status") == "fail":
+            return 1
         return 0 if receipt.get("ci_accepted") is True else 2
-    # Called only after raw evidence verification. Calibration belongs to the
-    # inner regression gate; an incomplete comparison must still fail the lane.
-    comparison = verified["comparison"]
-    return {"pass": 0, "fail": 1, "inconclusive": 2}[comparison["overall_status"]]
+    # Raw verification establishes identity, timing and cleanup. A smoke tests
+    # execution and fresh media validity independently of regression thresholds.
+    return 0 if workload_complete(verified) else 1
 
 
 def inside(run_dir: Path) -> int:
@@ -544,7 +554,7 @@ def inside(run_dir: Path) -> int:
         result.update({key: receipt[key] for key in ("measurement_status", "regression_status", "ci_accepted", "release_qualified")})
         verified = verify_measurement_job(run_dir / "gpu", deadline=time.monotonic() + 120)
         result["exit_code"] = smoke_exit(verified, receipt, config["mode"])
-        result["smoke_completed"] = all(run["summary"]["valid"] == run["summary"]["scheduled"] for run in verified["runs"].values())
+        result["smoke_completed"] = workload_complete(verified)
     except (Exception, KeyboardInterrupt) as error:
         result.update(exit_code=2, error=str(error), smoke_completed=False, ci_accepted=False)
     finally:

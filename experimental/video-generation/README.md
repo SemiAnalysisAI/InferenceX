@@ -89,10 +89,12 @@ are excluded from the upload. Missing reports or media remain missing; fixtures 
 replace them. Persistent source evidence remains at the configured workspace.
 Retain/download the complete artifact before GitHub retention expires.
 
-The CLI returns 0 only for a completed, verified smoke; 1 for a detected regression in verified evidence;
-and 2 for inconclusive infrastructure or an unmet regression gate. A green smoke
-does not turn an uncalibrated inner gate into an accepted regression. Keep
-measurement completion, regression decision, and workflow provenance separate.
+In smoke mode, exit 0 means both roles completed every planned warmup and
+measurement with verified timing, fresh valid media, and clean teardown. Exit 1
+means a completed workload contains an invalid outcome; exit 2 means execution
+or evidence verification failed. Latency/fidelity thresholds remain separate:
+the report can show a failed or inconclusive comparison after a successful smoke.
+Regression mode additionally requires the existing calibrated acceptance gate.
 
 ```bash
 cd experimental/video-generation

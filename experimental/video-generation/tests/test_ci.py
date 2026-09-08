@@ -117,16 +117,36 @@ def test_cleanup_only_cancels_bound_owned_step(tmp_path, monkeypatch):
     assert [call for call in calls if call[0] == "scancel"] == [["scancel", "123.7"]]
 
 
-def test_smoke_completion_does_not_require_or_invent_calibration():
+@pytest.mark.parametrize("comparison_status", ["pass", "fail", "inconclusive"])
+def test_smoke_completion_is_separate_from_regression(comparison_status):
     receipt = {"regression_status": "inconclusive", "ci_accepted": False}
-    verified = {"comparison": {"overall_status": "pass"}}
+    verified = {"comparison": {"overall_status": comparison_status, "checks": [], "slots": [{
+        role: {"status": "succeeded", "media": {"valid": True}, "analysis_error": None}
+        for role in ("baseline", "candidate")}]}, "runs": {
+        role: {"summary": {"scheduled": 1, "valid": 1}} for role in ("baseline", "candidate")}}
     assert ci.smoke_exit(verified, receipt, "smoke") == 0
     assert receipt["ci_accepted"] is False
     assert ci.smoke_exit(verified, receipt, "regression") == 2
-    verified["comparison"]["overall_status"] = "inconclusive"
-    assert ci.smoke_exit(verified, receipt, "smoke") == 2
     receipt["regression_status"] = "fail"
+    assert ci.smoke_exit(verified, receipt, "smoke") == 0
+    assert ci.smoke_exit(verified, receipt, "regression") == 1
+    verified["runs"]["candidate"]["summary"]["valid"] = 0
     assert ci.smoke_exit(verified, receipt, "smoke") == 1
+
+
+@pytest.mark.parametrize("failure", ["decode", "analysis", "warmup"])
+def test_smoke_rejects_fresh_media_failure_despite_recorded_success(failure):
+    observation = {"status": "succeeded", "media": {"valid": True}, "analysis_error": None}
+    comparison = {"slots": [{role: dict(observation) for role in ("baseline", "candidate")}], "checks": []}
+    verified = {"comparison": comparison, "runs": {
+        role: {"summary": {"scheduled": 1, "valid": 1}} for role in ("baseline", "candidate")}}
+    if failure == "decode":
+        comparison["slots"][0]["candidate"]["media"] = {"valid": False}
+    elif failure == "analysis":
+        comparison["slots"][0]["candidate"]["analysis_error"] = "decoder failed"
+    else:
+        comparison["checks"] = [{"name": "candidate.warmup", "status": "inconclusive"}]
+    assert ci.smoke_exit(verified, {"regression_status": "inconclusive"}, "smoke") == 1
 
 
 def test_changed_runtime_blocks_before_scheduler(tmp_path):
