@@ -286,7 +286,7 @@ def _command(argv: list[str], *, timeout: float, cwd: Path | None = None, env: d
 
 
 def source_file_manifest(source: Path, *, timeout: float = 10, deadline: float | None = None, cancelled: threading.Event | None = None) -> dict:
-    """Read-only preparation helper; hash sorted tracked files, never git metadata."""
+    """Generated build metadata is part of the pinned runtime identity."""
     source = Path(source).resolve(strict=True)
     if not source.is_dir():
         raise ValueError("runtime source is not a directory")
@@ -298,6 +298,11 @@ def source_file_manifest(source: Path, *, timeout: float = 10, deadline: float |
     names = sorted(name.decode("utf-8") for name in raw.split(b"\x00") if name)
     if not names or len(names) > 100000:
         raise ValueError("runtime tracked-file inventory is empty or oversized")
+    # setuptools-scm generates this ignored module, and SGLang imports it at
+    # runtime. Pin its bytes while continuing to reject other ignored Python.
+    generated = "python/sglang/_version.py"
+    if generated not in names and ((source / generated).exists() or (source / generated).is_symlink()):
+        names = sorted([*names, generated])
     entries = []
     for name in names:
         _check_deadline(deadline)

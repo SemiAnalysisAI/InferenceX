@@ -254,12 +254,33 @@ def test_source_tree_requires_exact_clean_committed_manifest(tmp_path):
     package.mkdir(parents=True)
     (package / "main.py").write_text("def main(): pass\n")
     (source / "python/sglang/__init__.py").write_text("")
+    (source / ".gitignore").write_text("python/sglang/_version.py\npython/sglang/shadow.py\n")
     subprocess.run(["git", "init", "-q", str(source)], check=True)
     subprocess.run(["git", "-C", str(source), "add", "."], check=True)
     subprocess.run(["git", "-C", str(source), "-c", "user.name=CPU Test", "-c", "user.email=cpu-test@example.invalid", "commit", "-qm", "test fixture"], check=True)
     manifest = gpu.source_file_manifest(source)
     assert manifest["source_sha256"] == gpu._digest(manifest["files"])
     assert len(manifest["revision"]) == 40
+    version = source / "python/sglang/_version.py"
+    version.write_text("__version__ = '1.0.0'\n")
+    prepared = gpu.source_file_manifest(source)
+    version_entry = next(entry for entry in prepared["files"] if entry["path"] == "python/sglang/_version.py")
+    assert version_entry["sha256"] == hashlib.sha256(version.read_bytes()).hexdigest()
+    assert prepared["source_sha256"] != manifest["source_sha256"]
+    version.write_text("__version__ = '1.0.1'\n")
+    assert gpu.source_file_manifest(source)["source_sha256"] != prepared["source_sha256"]
+    shadow = source / "python/sglang/shadow.py"
+    shadow.write_text("unexpected = True\n")
+    with pytest.raises(ValueError, match="untracked/ignored Python"):
+        gpu.source_file_manifest(source)
+    shadow.unlink()
+    version.unlink()
+    outside = tmp_path / "outside.py"
+    outside.write_text("__version__ = 'outside'\n")
+    version.symlink_to(outside)
+    with pytest.raises(ValueError, match="escapes checkout"):
+        gpu.source_file_manifest(source)
+    version.unlink()
     (package / "main.py").write_text("changed\n")
     with pytest.raises(ValueError, match="clean"):
         gpu.source_file_manifest(source)
