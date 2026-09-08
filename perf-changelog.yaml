@@ -5595,7 +5595,7 @@
     - "Image ghcr.io/tile-ai/tilert:0.1.5 (tilert 0.1.5.post2 installed at container start); commands aligned to TileRT README Topology A -- NIXL KV transfer, --kv-cache-dtype fp8_ds_mla (prefill) <-> fp8 (decode), max-seq-len 202752; MTP speculative-config wired via spec-decoding=mtp"
     - "Topology: 1 prefill node (TP8) + 1 decode node (TP8), each 8xB200 exclusive; TileRT decode is bs=1 only so conc-list is a single point [1], ISL 1k/8k OSL 1k"
     - "Runner: launch_b200-dgxc.sh tilert early-return branch (zero impact on the dynamo path); tilert_utils/submit.sh issues two srun --ntasks=1, one per role, because prefill and decode need different container images; roles are dispatched by the TILERT_ROLE it exports, and torn down across nodes via a sentinel file on the shared /workspace"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2878
 
 - config-keys:
     - qwen3.5-fp8-b200-sglang-agentic-mtp
@@ -6933,4 +6933,4 @@
     - "Why the published c512/c576 points looked fine despite the fallback: per-step time rose there too (+17% at c512, +9% at c576) and prefill fell -6.5%, but both points are queue-bound (52-72 queued req/rank vs ~23 at c384), so slower steps pushed decode occupancy up (18.6 -> 23.8 req/rank at c512, full-KV usage 0.371 -> 0.473) and the larger batches absorbed the penalty; c384/c256 are admission-pinned at ~24 req/rank by the prefill-delayer / prefill-decode-interval 20 policy, so the step-time regression passed through 1:1. Restoring FP4 acts should shorten steps at every point; e2e at c512/c576 is expected to hold while occupancy floats back down."
     - "Keep exporting the two deprecated env vars so the recipe still selects FP4 acts on pre-#35918 images; SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=8320 is still a live EnvInt on the new build and is unchanged."
     - "Also retarget the lane from the decommissioned cluster:b300-nv (#2818) to cluster:b300-dsxe (#2826). The DSXE nodes expose available-cpu-dram-mib 3,977,095 vs 2,964,436 on the retired NV fleet; the HiCache ratio-3 host tier is sized off device KV, not total DRAM, so the tier stays ~2 TB and the extra budget is headroom only. All reference numbers above were measured on the NV fleet; this sweep is the first DSXE run for this key and doubles as the cluster A/B check."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2878
