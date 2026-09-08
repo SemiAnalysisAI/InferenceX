@@ -6958,3 +6958,14 @@
     - "Expand the TP8 and TP4/EP1 sweep coverage through concurrency 640."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2866
   
+
+- config-keys:
+    - dsv4-fp4-b200-sglang-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Replace the B200 DeepSeek-V4-Pro AgentX native EAGLE/MTP serving path with DSpark block size 6 on the DeepSeek-V4-Pro-0813 checkpoint."
+    - "Use one speculative step, seven draft tokens, and thinking-on golden synthetic acceptance length 3.77 for throughput; eval retains real DSpark verification."
+    - "Use SGLang's current W4A4 MegaMoE and DP LM-head flags for DP-attention instead of the deprecated MegaMoE environment variables."
+    - "Resolve draft-model jobs through the existing B200 SGLang speculative recipe and the staged DeepSeek-V4-Pro-0813 checkpoint."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2821
