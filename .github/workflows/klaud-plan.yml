@@ -2,8 +2,8 @@ name: Klaud Cold auto-sweep
 
 on:
   workflow_dispatch:
-  # schedule:
-  #   - cron: '0 */6 * * *'
+  schedule:
+    - cron: '0 */6 * * *'
 
 permissions:
   contents: read
@@ -24,7 +24,7 @@ jobs:
       pull-requests: read
     env:
       # Total candidates per invocation; selected candidates run in parallel.
-      MAX_CANDIDATES_PER_RUN: '1'
+      MAX_CANDIDATES_PER_RUN: '2'
     outputs:
       selected: ${{ steps.select.outputs.selected }}
       candidates: ${{ steps.select.outputs.candidates }}

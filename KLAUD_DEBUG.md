@@ -224,6 +224,14 @@ can select the candidate again. Without a PR, report the deferral in the agent's
 final response. A utilization increase after dispatch does not cancel healthy
 work. Closing the PR alone does not make the candidate eligible.
 
+Confirmed infrastructure blockers such as missing staged weights also require a
+failure/deferral report, confirmed child-run completion, PR closure and branch
+deletion at session termination. For image incompatibility, exhausted image
+repairs or uncertain causes, close the unsuccessful PR but retain its branch:
+this blocks the exact candidate without blocking newer releases for the family.
+Uncertain causes require manual review, not an incompatibility claim. Apply
+cleanup only to the session's own PR and runs.
+
 ### 7.3 Final reusable sweeps require a ready PR
 
 `run-sweep.yml` skips PR jobs while the PR is a draft. After targeted validation,
