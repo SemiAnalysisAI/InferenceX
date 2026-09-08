@@ -322,9 +322,9 @@ def _open_response(
     try:
         if parts.scheme == "https":
             # Use system trust roots and hostname verification, never disable TLS.
-            connection.sock = ssl.create_default_context().wrap_socket(
-                connected_socket, server_hostname=parts.hostname
-            )
+            context = ssl.create_default_context()
+            context.minimum_version = ssl.TLSVersion.TLSv1_2
+            connection.sock = context.wrap_socket(connected_socket, server_hostname=parts.hostname)
             connected_socket = connection.sock
         connection.sock.settimeout(min(SOCKET_TIMEOUT_SECONDS, _remaining(deadline)))
         headers = {"Accept": "application/json, video/mp4", "User-Agent": "vgbench-mvp/0.1.0"}
