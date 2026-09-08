@@ -40,12 +40,28 @@ jobs:
           pip install -r .claude/requirements-mcp.txt
           mkdir -p /tmp/inferencemax-mcp
 
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
+      - name: Install Claude Code
+        id: claude-code
+        run: |
+          # The native installer can report success without creating its launcher.
+          npm install --prefix "$RUNNER_TEMP/claude-code" --no-audit --no-fund @anthropic-ai/claude-code@2.1.265
+          claude_path="$RUNNER_TEMP/claude-code/node_modules/.bin/claude"
+          "$claude_path" --version
+          echo "path=$claude_path" >> "$GITHUB_OUTPUT"
+
       - name: PR Review with Claude
         uses: anthropics/claude-code-action@0d0e0876d3eaa933f45dc692f7a4312c83caf36f # v1.0.218
         env:
           INFERENCEMAX_ROOT: ${{ github.workspace }}
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          path_to_claude_code_executable: ${{ steps.claude-code.outputs.path }}
           trigger_phrase: "@pr-claude"
           track_progress: true
           allowed_bots: ''
