@@ -6955,4 +6955,4 @@
   description:
     - "Upgrade the Kimi-K3 MI355X vLLM AgentX LMCache build from 0.5.5.dev89+rocm7.2 to 0.5.5.dev104+rocm7.2 from the nightly ROCm release index, as validated at concurrency 48 in Actions run 34079420322."
     - "Preserve the image, runtime settings, and topology from the full sweep in Actions run 33773561410; run concurrency 1 without offload and LMCache concurrencies 4, 8, 10, 12, 14, 44, and 48, with 48 as the upper bound."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2889
