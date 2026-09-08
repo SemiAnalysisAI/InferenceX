@@ -6958,3 +6958,10 @@
     - "Expand the TP8 and TP4/EP1 sweep coverage through concurrency 640."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2866
   
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-trt-agentx
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Re-run the GB300 Dynamo TensorRT-LLM AgentX configuration to verify KV offload environment propagation."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
