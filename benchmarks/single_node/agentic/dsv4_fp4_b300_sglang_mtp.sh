@@ -128,6 +128,11 @@ if [ "$DP_ATTENTION" = "true" ]; then
         --dist-init-addr "127.0.0.1:$((PORT + 2000))"
         --ep-size "$EP_SIZE"
         --moe-a2a-backend megamoe
+        # sgl-project/sglang#35918 replaced SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_FP4_ACTS
+        # /_USE_MXF4_KIND with this flag; on newer builds the env vars only print a
+        # deprecation warning and forward nothing, so without it MegaMoE silently
+        # falls back from the FP4-acts kernel to the default FP8-acts JIT path.
+        --enable-w4a4-mxfp4-megamoe
         --enable-deepseek-v4-fp4-indexer
         --disable-flashinfer-autotune
     )
@@ -221,8 +226,10 @@ export SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2=1
 if [ "$DP_ATTENTION" = "true" ]; then
     # MegaMoE's FP4/MXF4 activation path is opt-in -- both flags default False,
     # so --moe-a2a-backend megamoe alone runs a different kernel than the one
-    # measured. DG_USE_FP4_ACTS / DG_USE_MXF4_KIND are forwarded to DeepGEMM
-    # automatically from these two.
+    # measured. On builds predating sgl-project/sglang#35918 these two env vars
+    # are what forwards DG_USE_FP4_ACTS / DG_USE_MXF4_KIND to DeepGEMM; on newer
+    # builds they are deprecated no-ops and --enable-w4a4-mxfp4-megamoe (passed
+    # above) carries the forwarding. Export both so the recipe works on either.
     export SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_FP4_ACTS=1
     export SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_MXF4_KIND=1
     # Must cover the per-rank prefill budget (8192) or startup raises; the
