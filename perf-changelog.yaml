@@ -6958,3 +6958,12 @@
     - "Expand the TP8 and TP4/EP1 sweep coverage through concurrency 640."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2866
   
+
+- config-keys:
+    - minimaxm3-fp4-b300-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update vLLM image from vllm/vllm-openai:nightly-1dc464d42681d22f38caf1fdc1eb632dc4421c45 (2026-08-30 nightly) to vllm/vllm-openai:nightly-d9105ea8001e0a6d77a96327d17515bb5791fb36 (2026-09-07 nightly, digest sha256:254eebf919e8b7b0d530d97fccc606c36f380ff6724d64bc190951bec1aee838, tag commit vllm-project/vllm@d9105ea8; Docker Hub last pushed 2026-09-07T06:16:01Z), the same tag the B200/H100/H200 MiniMax-M3 AgentX recipes moved to in #2860/#2874/#2875. benchmarks/single_node/agentic/minimaxm3_fp4_b300_mtp.sh is unchanged: EAGLE3 with the Inferact MiniMax-M3 EAGLE3-GQA draft on FLASH_ATTN, golden synthetic acceptance length 2.78, fp8 KV, max-cudagraph-capture-size 512; the TP8/TP4/TP2 grids with vllm-simple DRAM offload are unchanged."
+    - "Move the recipe from the retired cluster:b300-nv fleet (launcher and runner labels removed in #2826) to cluster:b300-dsxe so the sweep has a runner to schedule on. The runner change means this is not an append-only bump: the whole curve reruns on DSXE."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2883
