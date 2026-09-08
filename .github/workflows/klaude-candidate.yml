@@ -47,8 +47,17 @@ jobs:
           [[ "$CANDIDATE" =~ ^[0-9a-f]{16}-[0-9a-f]{16}$ ]]
           cp -R "$RUNNER_TEMP/plan/$CANDIDATE" "$RUNNER_TEMP/klaude"
           rm -r "$RUNNER_TEMP/plan"
-          started_at="$(gh api --method GET "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --jq .created_at)"
-          [[ "$started_at" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]
+          for attempt in 1 2 3 4; do
+            if started_at="$(gh api --method GET "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --jq .created_at)" &&
+               [[ "$started_at" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]; then
+              break
+            fi
+            if (( attempt == 4 )); then
+              echo '::error::Unable to retrieve the original workflow creation time after four attempts.'
+              exit 1
+            fi
+            sleep "$((5 * 2 ** (attempt - 1)))"
+          done
           echo "KLAUDE_STARTED_AT=$started_at" >> "$GITHUB_ENV"
       - name: Let Klaud Cold own the candidate PR
         id: claude
