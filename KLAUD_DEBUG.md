@@ -226,7 +226,8 @@ append the changelog entry, mark the PR ready, then apply `full-sweep-enabled`.
 If that sweep fails, remove the label and return the PR to draft before pushing
 a repair, or each intermediate push starts another full sweep. The Klaud Stop
 hook tracks a labeled final sweep by candidate branch and exact head SHA and
-requires a successful run with reusable artifacts.
+requires a successful run with reusable artifacts. It ignores completed
+all-skipped runs from unrelated label events on that same SHA.
 
 ---
 

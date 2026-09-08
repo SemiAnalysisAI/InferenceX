@@ -182,7 +182,10 @@ def check_stop() -> dict:
         sweep_runs = [run for page in sweep_pages for run in page['workflow_runs']]
         if any(page['total_count'] > len(sweep_runs) for page in sweep_pages):
             raise ValueError('Incomplete sweep run listing')
-        exact_runs = [run for run in sweep_runs if run['head_sha'] == pull['head']['sha']]
+        # Label churn can create an all-skipped run after the real sweep on the
+        # same SHA. Ignore completed no-op runs so they cannot mask validation.
+        exact_runs = [run for run in sweep_runs if run['head_sha'] == pull['head']['sha']
+                      and (run['status'] != 'completed' or run.get('conclusion') != 'skipped')]
         if not exact_runs:
             return {'decision': 'block', 'reason': 'No final run-sweep.yml run exists for the exact PR head. Keep full-sweep-enabled applied and wait for the labeled run to appear.'}
         sweep = max(exact_runs, key=lambda run: run['created_at'])

@@ -51,7 +51,7 @@ Klaud Cold 调度 `e2e-tests.yml` 时显式设置布尔输入 `klaud-run: true`�
 
 调度运行或创建草稿不代表任务完成。使用 `gh run watch --interval 60` 留在同一会话中等待，工具超时后继续等待，并检查作业级状态，因为 queued 工作流可能包含正在运行的作业。benchmark 矩阵失败后，eval 作业仍可能继续。定位首个服务端错误而非清理阶段症状；在原有范围、预算和容量规则内修复。工具调用被拒绝时改用允许的工具或命令，不得提前报告成功。先将所有尝试的最终结果写入 PR 表格，再报告停止原因、修复次数、已确认的子运行结束状态和 PR URL。不得承诺稍后继续监控，也不得仅为结束会话而取消正常运行。
 
-[Claude Code Stop hook](https://code.claude.com/docs/en/hooks#stop) 运行 `python -m utils.klaude check-stop`，读取候选准备时间之后 `e2e-tests.yml` 手动调度的全部分页，并匹配 `e2e Test - $KLAUDE_TEST_NAME`。每次尝试必须使用固定标识 `klaud-<parent-run-id>-<candidate-id>`。匹配到未结束的运行，或列表不可用/不完整时，阻止正常停止并要求同一 agent 继续。候选的开放 PR 添加 `full-sweep-enabled` 后，hook 还会按候选分支和精确 head SHA 跟踪 `run-sweep.yml`。PR 仍为草稿、精确运行不存在或未结束、运行失败，或成功运行缺少可复用 benchmark/eval 产物时，都会阻止停止。其他候选的运行不受影响。hook 不调度、不取消、不修复，也不调用模型。GitHub 作业时限、Claude 内置 Stop-hook 循环上限、API 错误、中断或异常终止仍可能导致任务未完成；它不是外部监督服务。不增加自定义超时或继续执行预算。
+[Claude Code Stop hook](https://code.claude.com/docs/en/hooks#stop) 运行 `python -m utils.klaude check-stop`，读取候选准备时间之后 `e2e-tests.yml` 手动调度的全部分页，并匹配 `e2e Test - $KLAUDE_TEST_NAME`。每次尝试必须使用固定标识 `klaud-<parent-run-id>-<candidate-id>`。匹配到未结束的运行，或列表不可用/不完整时，阻止正常停止并要求同一 agent 继续。候选的开放 PR 添加 `full-sweep-enabled` 后，hook 还会按候选分支和精确 head SHA 跟踪 `run-sweep.yml`，并忽略无关标签事件产生、已经结束且所有作业均被跳过的运行。PR 仍为草稿、精确运行不存在或未结束、运行失败，或成功运行缺少可复用 benchmark/eval 产物时，都会阻止停止。其他候选的运行不受影响。hook 不调度、不取消、不修复，也不调用模型。GitHub 作业时限、Claude 内置 Stop-hook 循环上限、API 错误、中断或异常终止仍可能导致任务未完成；它不是外部监督服务。不增加自定义超时或继续执行预算。
 
 action 结束后，`diagnostics` 复用 planner 的脱敏逻辑，仅将 `candidate-diagnostics.json` 上传至 `klaude-candidate-<candidate-id>`。保留 action 结果、允许列表中的终止类型、布尔错误状态、数值型耗时/轮数/成本及固定权限拒绝类别。未知终止类型记为 `unknown`；执行文件缺失或不可读时记为不可用。排除原始消息、结果、命令、路径、错误文本、凭据和私有遥测。runner 仍可用时这些步骤通过 `always()` 执行，不更新 PR，也不恢复 Claude。planner 诊断同步增加相同终止字段。
 
