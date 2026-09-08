@@ -73,7 +73,6 @@ if [ "$DP_ATTENTION" = "true" ]; then
     # conversation to one rank.
     export AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID=1
     export AGENTIC_WARMUP_GRACE_PERIOD=3600
-    STATE_CHECKPOINT_INTERVAL_TOKENS=32768
     DEP_ARGS=(
         --enable-dp-attention
         --all2all-backend rccl
