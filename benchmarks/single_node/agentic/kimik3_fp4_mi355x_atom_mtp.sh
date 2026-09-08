@@ -37,6 +37,20 @@ if [[ -v SLURM_JOB_ID ]]; then
     echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
+# The 0907 image was built with podman on a host behind a local squid, and the
+# build environment leaked into the image config: HTTP_PROXY, HTTPS_PROXY,
+# http_proxy, and https_proxy are all baked in as http://127.0.0.1:3128, with
+# NO_PROXY covering only localhost. Nothing listens on that port inside the
+# container on a benchmark node, so every outbound request -- the uv bootstrap
+# and aiperf install in install_agentic_deps, the trace-corpus fetch, and both
+# hf downloads below -- would go to a dead proxy before the server is ever
+# started. The 0821 and 0903 images carried none of these. Clear them, and keep
+# the loopback exemption so the AIPerf client and the /metrics scrape are
+# unaffected either way.
+unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy
+export NO_PROXY="${NO_PROXY:-localhost,127.0.0.1,::1}"
+export no_proxy="$NO_PROXY"
+
 if [ "$TP" -ne 8 ]; then
     echo "Error: Kimi-K3 MXFP4 is a 1.56 TB checkpoint and only fits at TP=8 on" >&2
     echo "       288 GB gfx950 parts (~195 GB/GPU). Got TP=$TP." >&2
