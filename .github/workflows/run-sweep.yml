@@ -109,7 +109,7 @@ jobs:
                   ALL_EVALS: ${{ contains(github.event.pull_request.labels.*.name, 'all-evals') }}
                   EVALS_ONLY: ${{ contains(github.event.pull_request.labels.*.name, 'evals-only') }}
               run: |
-                  pip install pydantic pyyaml
+                  pip install "pydantic>=2" pyyaml
                   CMD=(
                       python3 utils/validate_perf_changelog.py
                       --changelog-file perf-changelog.yaml

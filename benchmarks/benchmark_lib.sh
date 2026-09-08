@@ -2267,7 +2267,12 @@ _write_lm_eval_meta_json() {
     local batch_metadata="${2:-}"
     local metadata_conc="${3:-${CONC:-1}}"
 
-    bridge_disagg_eval_metadata
+    # Single-node jobs already export TP/EP/DP_ATTENTION. The disaggregated
+    # bridge defaults missing per-phase DP flags to false, so applying it to
+    # single-node jobs would overwrite their actual DP-attention setting.
+    if [ "${IS_MULTINODE:-false}" = "true" ]; then
+        bridge_disagg_eval_metadata
+    fi
 
     local model_name="${MODEL_NAME:-$MODEL}"
     local is_multinode_json="false"
