@@ -7237,7 +7237,7 @@ qwen3.5-fp4-b300-sglang-agentic-mtp:
 # Day-zero recipe; mirrors the B200 arm. TP1 per the cookbook's verified
 # single-node command: 126 GiB of NVFP4 weights fit on one B300.
 qwen3.8next-fp4-b300-sglang-agentic-mtp:
-  image: lmsysorg/sglang:qwen38flashnext
+  image: lmsysorg/sglang:dev-cu13-qwen38-next-local@sha256:9d2a843c706c74bc259c0d9abf360551eb2734e1e7d255ab012a6965f10480b6
   model: RadixArk/Qwen3.8-Flash-Next-NVFP4
   model-prefix: qwen3.8next
   runner: cluster:b300-nv
