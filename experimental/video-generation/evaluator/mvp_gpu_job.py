@@ -42,7 +42,13 @@ _ROLES = ("baseline", "candidate")
 _SHA = re.compile(r"[0-9a-f]{64}")
 _REV = re.compile(r"[0-9a-f]{40}")
 _GPU = re.compile(r"GPU-[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}")
-_LAUNCH = "from sglang.cli.main import main; main()"
+_LAUNCH = """import os
+from evaluator.mvp_gpu_job import cuda_devices
+if cuda_devices() != os.environ["VGBENCH_GPU_UUIDS"].split(","):
+    raise RuntimeError("Runtime CUDA device UUIDs differ from assigned GPUs")
+from sglang.cli.main import main
+main()
+"""
 _IDENTITY = (
     "import importlib.util,importlib.metadata,json,os,platform;"
     "s=importlib.util.find_spec('sglang');"
@@ -351,11 +357,31 @@ def _model_manifest(spec: dict, deadline: float, cancelled: threading.Event | No
             "verification": "complete file inventory and SHA256 before launch; not hardware attestation"}
 
 
+def cuda_devices() -> list[str]:
+    # Resolve the current mask through the driver without creating a CUDA context;
+    # nvidia-smi ordinals alone do not establish CUDA device identity.
+    import ctypes
+    cuda = ctypes.CDLL("libcuda.so.1")
+    def ok(code):
+        if code != 0:
+            raise RuntimeError("CUDA driver inventory failed: " + str(code))
+    ok(cuda.cuInit(0))
+    count = ctypes.c_int()
+    ok(cuda.cuDeviceGetCount(ctypes.byref(count)))
+    values = []
+    for ordinal in range(count.value):
+        device, raw = ctypes.c_int(), (ctypes.c_ubyte * 16)()
+        ok(cuda.cuDeviceGet(ctypes.byref(device), ordinal))
+        ok(cuda.cuDeviceGetUuid(ctypes.byref(raw), device))
+        values.append("GPU-" + str(uuid.UUID(bytes=bytes(raw))))
+    return values
+
+
 def _runtime_env(source: str, gpu_uuids: list[str], nonce: str, cache: Path) -> dict[str, str]:
     # Do not inherit authentication, PYTHONPATH, remote endpoints, LD_PRELOAD, or
     # performance overrides. Never overwrite HOME/CODEX_HOME or user caches.
     result = {key: os.environ[key] for key in ("PATH", "HOME", "LANG", "LC_ALL", "TMPDIR") if key in os.environ}
-    result.update({"PYTHONPATH": str(Path(source) / "python"), "PYTHONNOUSERSITE": "1", "PYTHONDONTWRITEBYTECODE": "1",
+    result.update({"PYTHONPATH": os.pathsep.join((str(Path(source) / "python"), str(Path(__file__).resolve().parent.parent))), "PYTHONNOUSERSITE": "1", "PYTHONDONTWRITEBYTECODE": "1",
                    "CUDA_VISIBLE_DEVICES": ",".join(gpu_uuids), "CUDA_DEVICE_ORDER": "PCI_BUS_ID",
                    # Host core discovery ignores container CPU/PID budgets in some native libraries.
                    # Keep the same explicit import/runtime thread policy for both arms and clients.
@@ -945,6 +971,16 @@ def _role(spec: dict, label: str, directory: Path, supervisor: _Supervisor, prob
     role["gpu_before"] = snapshot
     if not _idle(snapshot, spec["limits"]["max_idle_memory_mib"]):
         raise RuntimeError("leased GPUs have existing compute/memory use; no runtime started")
+    # This SGLang revision expects NVML ordinals. The child checks the CUDA
+    # driver's UUID order before importing SGLang; NVML/CUDA order may differ.
+    indices = {device["uuid"]: device["index"] for device in snapshot["gpus"]}
+    selected = [indices[device] for device in spec["gpu_uuids"]]
+    if len(set(selected)) != len(selected) or any(type(index) is not int or index < 0 for index in selected):
+        raise RuntimeError("GPU inventory has invalid or duplicate runtime indices")
+    env["CUDA_VISIBLE_DEVICES"] = ",".join(map(str, selected))
+    env["VGBENCH_GPU_UUIDS"] = ",".join(spec["gpu_uuids"])
+    role["runtime_gpu_binding"] = {"cuda_visible_devices": env["CUDA_VISIBLE_DEVICES"], "expected_gpu_uuids": spec["gpu_uuids"],
+                                   "verification": "child CUDA driver UUID check before SGLang import"}
     _port_available(spec["port"])
     owner = None
     sampler = None

@@ -173,11 +173,28 @@ def test_runtime_env_does_not_inherit_secrets_or_perf_overrides(tmp_path, monkey
     monkeypatch.setenv("LD_PRELOAD", "/untrusted.so")
     actual = gpu._runtime_env("/pinned/source", [GPU], "nonce", tmp_path)
     assert not {"MINIMAX_API_KEY", "SGLANG_ENABLE_CACHE_DIT", "LD_PRELOAD"} & set(actual)
-    assert actual["PYTHONPATH"] == "/pinned/source/python"
+    assert actual["PYTHONPATH"].split(os.pathsep) == ["/pinned/source/python", str(Path(gpu.__file__).resolve().parent.parent)]
     assert actual["CUDA_VISIBLE_DEVICES"] == GPU
     assert actual["HF_HUB_OFFLINE"] == "1"
     if "HOME" in os.environ:
         assert actual["HOME"] == os.environ["HOME"]
+
+
+@pytest.mark.parametrize("visible", [[GPU, "GPU-11111111-1111-1111-1111-111111111111"], [],
+                                     ["GPU-11111111-1111-1111-1111-111111111111", GPU]])
+def test_runtime_launcher_verifies_gpu_mapping_before_model_import(monkeypatch, visible):
+    calls = []
+    expected = [GPU, "GPU-11111111-1111-1111-1111-111111111111"]
+    monkeypatch.setenv("VGBENCH_GPU_UUIDS", ",".join(expected))
+    monkeypatch.setattr(gpu, "cuda_devices", lambda: visible)
+    monkeypatch.setitem(sys.modules, "sglang.cli.main", SimpleNamespace(main=lambda: calls.append("started")))
+    if visible == expected:
+        exec(gpu._LAUNCH, {})
+        assert calls == ["started"]
+    else:
+        with pytest.raises(RuntimeError, match="UUID"):
+            exec(gpu._LAUNCH, {})
+        assert calls == []
 
 
 @pytest.mark.parametrize("ambient", [None, "112", "999999", "auto", ""])
@@ -907,6 +924,9 @@ def test_role_safe_cleanup_preserves_known_candidate_failure(spec, tmp_path, mon
             run_dir.mkdir()
             gpu._write(run_dir / "run.json", {"status": "partial", "evidence_kind": "operator_endpoint", "plan_sha256": gpu._digest(spec["plan"]),
                                              "finished_at": "2026-09-01T00:00:00Z", "summary": {"valid": 7, "failed": 1, "scheduled": 8}})
+        else:
+            assert kwargs["env"]["CUDA_VISIBLE_DEVICES"] == "0"
+            assert kwargs["env"]["VGBENCH_GPU_UUIDS"] == GPU
         return Process()
     supervisor = SimpleNamespace(deadline=time.monotonic()+10, total_deadline=time.monotonic()+10,
                                  cancelled=threading.Event(), check=lambda: None, spawn=spawn)

@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+from types import SimpleNamespace
 
 import pytest
 
@@ -134,6 +135,25 @@ def test_cleanup_only_cancels_bound_owned_step(tmp_path, monkeypatch):
     monkeypatch.setattr(ci, "job_record", lambda job: record)
     assert ci.drain_step(receipt, "h3-test", tmp_path)["status"] == "ended"
     assert [call for call in calls if call[0] == "scancel"] == [["scancel", "123.7"]]
+
+
+@pytest.mark.parametrize("finishes", [True, False])
+def test_allocation_cleanup_waits_for_slurm_epilog_with_finite_deadline(tmp_path, monkeypatch, finishes):
+    receipt, record = allocation(tmp_path)
+    elapsed = [0]
+    monkeypatch.setattr(ci, "time", SimpleNamespace(monotonic=lambda: elapsed[0], sleep=lambda seconds: elapsed.__setitem__(0, elapsed[0] + seconds)))
+    monkeypatch.setattr(ci, "job_record", lambda job: record)
+    def command(argv):
+        if argv[0] == "scancel":
+            return ""
+        return "" if finishes and elapsed[0] >= 20 else "COMPLETING\n"
+    monkeypatch.setattr(ci, "command", command)
+    if finishes:
+        assert ci.stop_allocation(receipt, "h3-test")["status"] == "released"
+    else:
+        with pytest.raises(RuntimeError, match="terminal state"):
+            ci.stop_allocation(receipt, "h3-test")
+        assert elapsed[0] <= 120
 
 
 @pytest.mark.parametrize("comparison_status", ["pass", "fail", "inconclusive"])

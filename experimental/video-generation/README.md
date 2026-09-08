@@ -40,6 +40,11 @@ metadata, forward its command, and propagate its exit code. It translates
 driver UUIDs against that assignment. Do not invoke an old allocating launcher
 as the entry script.
 
+The pinned SGLang runtime expects numeric device IDs. Each H3 child receives the
+selected devices' observed NVML indices, then verifies their ordered CUDA driver
+UUIDs before importing SGLang. An enumeration mismatch fails startup; ownership
+locks and telemetry continue to use the assigned UUIDs.
+
 The adapter recovers task-owned allocation receipts before allocating. Imported
 receipts must match task identity, Unix ownership, and the scheduler's exact
 allocation identity; ambiguous intent blocks another submission. The fixed site

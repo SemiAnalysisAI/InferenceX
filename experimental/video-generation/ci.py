@@ -24,6 +24,8 @@ import time
 import uuid
 from typing import Any, Iterator
 
+from evaluator.mvp_gpu_job import cuda_devices
+
 PARTITION = "main"
 ACCOUNT = "sa-shared"
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,79}")
@@ -227,7 +229,8 @@ def stop_allocation(receipt: dict, task_id: str) -> dict:
     if record["JobState"] not in TERMINAL:
         command(["scancel", receipt["identity"]["JobId"]])
     # scancel success is a request, not a terminal-state observation.
-    for _ in range(15):
+    deadline = time.monotonic() + 90
+    while time.monotonic() < deadline:
         active = command(["squeue", "--noheader", "--jobs=" + receipt["identity"]["JobId"], "--format=%T"]).strip()
         if not active or all(state in TERMINAL for state in active.split()):
             return {"status": "released", "job_id": receipt["identity"]["JobId"]}
@@ -481,25 +484,6 @@ def enter(run_dir: Path) -> None:
     argv = ["/bin/bash", config["runtime"]["entry"], config["runtime"]["python"],
             str(mapped(config, Path(__file__).parent) / "ci.py"), "--inside", str(mapped(config, run_dir))]
     os.execv(argv[0], argv)
-
-
-def cuda_devices() -> list[str]:
-    # Query the CUDA driver under the unmodified Slurm visibility, not physical
-    # nvidia-smi ordinals (which may describe GPUs outside this step).
-    import ctypes
-    cuda = ctypes.CDLL("libcuda.so.1")
-    def ok(code):
-        need(code == 0, "CUDA driver inventory failed: " + str(code))
-    ok(cuda.cuInit(0))
-    count = ctypes.c_int()
-    ok(cuda.cuDeviceGetCount(ctypes.byref(count)))
-    values = []
-    for ordinal in range(count.value):
-        device, raw = ctypes.c_int(), (ctypes.c_ubyte * 16)()
-        ok(cuda.cuDeviceGet(ctypes.byref(device), ordinal))
-        ok(cuda.cuDeviceGetUuid(ctypes.byref(raw), device))
-        values.append("GPU-" + str(uuid.UUID(bytes=bytes(raw))))
-    return values
 
 
 def workload_complete(verified: dict) -> bool:
