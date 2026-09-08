@@ -6914,13 +6914,24 @@
 - config-keys:
     - dsv4-fp4-mi355x-vllm
     - dsv4-fp4-mi355x-vllm-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Bump the DeepSeek-V4-Pro FP4 MI355X 8k/1k STP and MTP images from nightly-09663abde0f50944a8d5ea30120666024b503faa to the 2026-09-01 ROCm nightly nightly-7c5dc571cbd1064ecc8a9b1045637ff647aa22cb (digest sha256:f0bdaf5217a09949842b45c1ea1f12260d3205ec81f143b320dfc2eb3ec95e55)."
+    - "Pick up the latest automatic ROCm DeepSeek-V4 optimizations, including fused mHC post/pre plus RMSNorm, gfx950 C4A top-k dispatch, fused C4 compressor GEMMs, fused SWA q/kv RMSNorm plus q FP8 quantization, and medium-batch cooperative top-k tuning."
+    - "Keep the existing VLLM_ROCM_USE_AITER=1, VLLM_ROCM_USE_AITER_MOE=1, and --moe-backend aiter settings, and explicitly add VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 plus VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 to both STP and MTP paths. The current checkpoint's shared-expert path does not satisfy the latest vLLM fusion conditions, so that fusion flag self-disables while preserving recipe parity."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2792
+
+- config-keys:
+    - dsv4-fp4-mi355x-vllm
+    - dsv4-fp4-mi355x-vllm-mtp
     - dsv4-fp4-mi355x-vllm-agentic-mtp
   scenario-type:
     - fixed-seq-len
     - agentic-coding
   description:
     - "Repin all three DSv4 MI355X vLLM entries to nightly-d9105ea8001e0a6d77a96327d17515bb5791fb36 (Docker Hub pushed 2026-09-07T05:26:48Z), the first ROCm nightly that ships vllm-project/vllm#53161 (vllm-project/vllm@de69e821), which fuses the DeepSeek-V4 native-FP8 shared expert into the MXFP4 routed-expert AITER kernel (FHMoE). The tag commit is 7 commits ahead of de69e821 with nothing behind it."
-    - "This supersedes the AgentX repin in #2841. That tag commit (e962733e) is 28 commits behind de69e821, so it predates FHMoE and the fusion would self-disable; all three entries stay on d9105ea8."
+    - "This supersedes the image bumps in #2841 (AgentX, e962733e) and #2792 (8K/1K STP and MTP, 7c5dc571). Those tag commits are 28 and 266 commits behind de69e821 respectively, so both predate FHMoE and the fusion would self-disable; all three entries stay on d9105ea8."
     - "Export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 from the 8K/1K STP and MTP scripts; the AgentX script already set it. On every nightly before de69e821 the request was inert: vLLM's eligibility check rejected this mixed FP4+FP8 checkpoint and the fusion self-disabled at startup. #53161 is what makes the flag take effect."
     - "Fusion eligibility is gated on gfx950, tensor parallelism 8, data parallelism 1, no expert parallelism and no EPLB, --moe-backend aiter, BF16 model dtype, and the DeepSeek-V4 block-128 FP8 shared-expert quantization config. All three entries satisfy it; the AgentX DP-attention arm does not and keeps the unfused path."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2851
