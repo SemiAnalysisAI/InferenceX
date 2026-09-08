@@ -81,7 +81,7 @@ jobs:
             }
           claude_args: >-
             --model 'claude-fable-5-1'
-            --max-turns 200
+            --max-turns 500
             --add-dir '${{ runner.temp }}/klaud'
             --allowedTools "Read,Write,Edit,Glob,Grep,Bash,WebFetch,WebSearch"
           prompt: |

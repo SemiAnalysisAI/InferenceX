@@ -43,7 +43,7 @@ Klaud Cold 读取运行产物和日志，计算匹配性能差值并在 PR 中�
 
 两个设置直接保留在工作流中：[`klaud-plan.yml`](../.github/workflows/klaud-plan.yml) 的 `MAX_CANDIDATES_PER_RUN` 控制 planner 的候选数量上限；[`klaud-candidate.yml`](../.github/workflows/klaud-candidate.yml) 的 `MAX_REPAIRS` 将修复次数上限直接传入 agent 提示词。
 
-工作流并发和选择规则由代码强制执行。Klaud Cold 最多运行 200 轮，必须在 GitHub Actions 默认作业时限内完成报告和清理。**修复判断和报告内容仍由 agent 负责；Stop hook 检查所属运行的状态。** Klaud Cold 必须在成功、修复预算耗尽、重复失败无进展、容量丢失或写操作结果不确定时停止，并取消未完成子运行、确认结束。作业超时或 runner/agent 突然终止仍可能留下未结束运行或未完成报告，因为没有后续作业接管。
+工作流并发和选择规则由代码强制执行。Klaud Cold 最多运行 500 轮，必须在 GitHub Actions 默认作业时限内完成报告和清理。**修复判断和报告内容仍由 agent 负责；Stop hook 检查所属运行的状态。** Klaud Cold 必须在成功、修复预算耗尽、重复失败无进展、容量丢失或写操作结果不确定时停止，并取消未完成子运行、确认结束。作业超时或 runner/agent 突然终止仍可能留下未结束运行或未完成报告，因为没有后续作业接管。
 
 Klaud Cold 调度 `e2e-tests.yml` 时显式设置布尔输入 `klaud-run: true`，并使用 `klaud-` 测试名称方便识别。手动和复用调用中的该输入均默认为 false，并传递至所有 benchmark/eval 模板。只有这个标志会为作业名称添加 `klaud | ` 前缀，供 InferenceX Dash 优先级调度器识别；普通测试名称不会改变优先级。配套调度器改动使 Klaud 始终排在普通人工任务之后，不受任务到达时间或 recipe 分数影响；Klaud 不获得等待时长加分或节点预留，skip-queue 请求也不生效。Klaud 使用剩余容量，不抢占已经运行的任务。显式管理员优先级覆盖保留原有优先顺序，Klaud 不得主动请求。启用 auto-sweep 前需部署配套 dashboard 调度器改动。
 
@@ -55,7 +55,7 @@ Klaud Cold 调度 `e2e-tests.yml` 时显式设置布尔输入 `klaud-run: true`�
 
 [Claude Code Stop hook](https://code.claude.com/docs/en/hooks#stop) 运行 `python -m utils.klaud check-stop`。其查询窗口从父 auto-sweep 的原始创建时间开始，该时间在 candidate 作业重跑时保持不变。上下文准备阶段最多查询四次，重试间隔为 5/10/20 秒；仍失败时终止，不使用更新的时间戳替代。hook 读取匹配的 `e2e-tests.yml` 手动调度全部分页，并匹配 `e2e Test - $KLAUD_TEST_NAME`；每次尝试必须使用固定标识 `klaud-<parent-run-id>-<candidate-id>`。匹配到未结束的运行，或列表不可用/不完整时，阻止正常停止并要求同一 agent 继续。候选的开放 PR 添加 `full-sweep-enabled` 后，hook 还会按候选分支和精确 head SHA 跟踪 `run-sweep.yml`，并忽略无关标签事件产生、已经结束且所有作业均被跳过的运行。PR 仍为草稿、精确运行不存在或未结束、运行失败，或成功运行缺少可复用 benchmark/eval 产物时，都会阻止停止。其他候选的运行不受影响。hook 不调度、不取消、不修复，也不调用模型。GitHub 作业时限、Claude 内置 Stop-hook 循环上限、API 错误、中断或异常终止仍可能导致任务未完成；它不是外部监督服务。不增加自定义超时或继续执行预算。
 
-action 结束后，`diagnostics` 复用 planner 的脱敏逻辑，仅将 `candidate-diagnostics.json` 上传至 `klaud-candidate-<candidate-id>`。保留 action 结果、允许列尝试章节中的终止类型、布尔错误状态、数值型耗时/轮数/成本及固定权限拒绝类别。未知终止类型记为 `unknown`；执行文件缺失或不可读时记为不可用。排除原始消息、结果、命令、路径、错误文本、凭据和私有遥测。runner 仍可用时这些步骤通过 `always()` 执行，不更新 PR，也不恢复 Claude。planner 诊断同步增加相同终止字段。
+action 结束后，`diagnostics` 复用 planner 的脱敏逻辑，仅将 `candidate-diagnostics.json` 上传至 `klaud-candidate-<candidate-id>`。保留 action 结果、允许列表中的终止类型、布尔错误状态、数值型耗时/轮数/成本及固定权限拒绝类别。未知终止类型记为 `unknown`；执行文件缺失或不可读时记为不可用。排除原始消息、结果、命令、路径、错误文本、凭据和私有遥测。runner 仍可用时这些步骤通过 `always()` 执行，不更新 PR，也不恢复 Claude。planner 诊断同步增加相同终止字段。
 
 ## 公开 API 调查
 
