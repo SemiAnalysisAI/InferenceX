@@ -6940,3 +6940,29 @@
     - "Pick up the latest automatic ROCm DeepSeek-V4 optimizations, including fused mHC post/pre plus RMSNorm, gfx950 C4A top-k dispatch, fused C4 compressor GEMMs, fused SWA q/kv RMSNorm plus q FP8 quantization, and medium-batch cooperative top-k tuning."
     - "Keep the existing VLLM_ROCM_USE_AITER=1, VLLM_ROCM_USE_AITER_MOE=1, and --moe-backend aiter settings, and explicitly add VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 plus VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 to both STP and MTP paths. The current checkpoint's shared-expert path does not satisfy the latest vLLM fusion conditions, so that fusion flag self-disables while preserving recipe parity."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2792
+
+- config-keys:
+    - qwen3.5-fp8-h200-sglang-agentic-mtp
+    - qwen3.5-fp8-h200-sglang-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update SGLang image to lmsysorg/sglang:nightly-dev-cu13-20260907-30705c00 (2026-09-07 cu13 dev nightly, digest sha256:19b8fa1223cc339c1eae7a5b703f1a8c2543b5b119155bf3d7efaef18f77f007, tag commit sgl-project/sglang@30705c00; Docker Hub last pushed 2026-09-07T01:43:42Z) for both H200 Qwen3.5 FP8 SGLang AgentX MTP recipes: qwen3.5-fp8-h200-sglang-agentic-mtp from lmsysorg/sglang:v0.5.16-cu130 (v0.5.16 release) and qwen3.5-fp8-h200-sglang-agentic-hicache-mtp from lmsysorg/sglang:nightly-dev-cu13-20260815-a5ba081f (2026-08-15 nightly). Both route to benchmarks/single_node/agentic/qwen3.5_fp8_h200_mtp.sh, which is unchanged: SGLANG_ENABLE_SPEC_V2 EAGLE MTP at 3 steps, golden acceptance length 3.39, flashinfer attention with allreduce fusion, fp8 quantization and fp8_e4m3 KV, HiCache kernel IO / page_first layout. Concurrency grids unchanged. Same tag the B200 Qwen3.5 FP8/FP4 SGLang AgentX recipes moved to in #2861/#2862."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2868
+
+- config-keys:
+    - minimaxm3-fp8-h200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update vLLM image from vllm/vllm-openai:v0.27.1 (v0.27.1 release) to vllm/vllm-openai:nightly-d9105ea8001e0a6d77a96327d17515bb5791fb36 (2026-09-07 upstream nightly, digest sha256:254eebf919e8b7b0d530d97fccc606c36f380ff6724d64bc190951bec1aee838, tag commit vllm-project/vllm@d9105ea8; Docker Hub last pushed 2026-09-07T06:16:01Z), the same tag the B200 MiniMax-M3 AgentX recipe moved to in #2860 and the ROCm counterpart of the MI325X/MI300X bumps in #2872/#2873. benchmarks/single_node/agentic/minimaxm3_fp8_h200_mtp.sh is unchanged: TRITON_ATTN attention, fp8 KV, EAGLE3 with the Inferact MiniMax-M3 EAGLE3-GQA draft pinned to FLASH_ATTN and the committed golden synthetic acceptance length 2.78, Mooncake 0.3.11.post1 DRAM offload on the host-tier arm; the resident TP8 c1/c2/c4/c6/c8/c10 and Mooncake DRAM offload c12/c14 grid is unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2875
+
+- config-keys:
+    - minimaxm3-fp8-mi300x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update vLLM ROCm image from vllm/vllm-openai-rocm:v0.27.1 (v0.27.1 release) to vllm/vllm-openai-rocm:nightly-d9105ea8001e0a6d77a96327d17515bb5791fb36 (2026-09-07 upstream ROCm nightly, digest sha256:74d4a95f3ae672ecddf9acb7296917def82d9eca51687fa2862ae72b03ff1907, tag commit vllm-project/vllm@d9105ea8; Docker Hub last pushed 2026-09-07T05:26:48Z). benchmarks/single_node/agentic/minimaxm3_fp8_mi300x_mtp.sh is unchanged: TRITON_ATTN attention, fp8 KV, block-size 128, EAGLE3 speculative decoding with the Inferact MiniMax-M3 EAGLE3-GQA draft and the committed golden synthetic acceptance length, minimax_m3 tool-call and reasoning parsers; the search space is unchanged. The upstream commit-pinned ROCm nightly is the same vllm commit the B200 MiniMax-M3 AgentX recipe moved to in #2860. Note that vllm-openai-rocm commit-nightly tags have expired from Docker Hub within days in the past; node squash caches keep merged configs running, but a re-pin to a durable tag may be needed later."
+    - "Add --compilation-config cudagraph_mode=FULL_DECODE_ONLY to the serve command. The upstream nightly does not torch-compile MiniMaxM3SparseForConditionalGeneration, so with VLLM_USE_BREAKABLE_CUDAGRAPH=0 the default FULL_AND_PIECEWISE mode aborts at engine init with piecewise CUDA graphs unavailable (first sweep, run 34174124043, eval cell); full decode-only graphs are what the MI355X MiniMax-M3 sibling runs on its nightly (#2825)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2873
