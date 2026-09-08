@@ -569,7 +569,7 @@ def test_signal_cancels_submission_and_restores_handlers():
 
 def test_clean_group_with_residual_gpu_compute_is_cleanup_failure():
     owner = SimpleNamespace(close=lambda **kwargs: {"status": "clean", "remaining_owned_pids": []})
-    sampler = SimpleNamespace(phase="measurement", done=threading.Event(), stop=lambda **kwargs: None, end_measurement=lambda: None)
+    sampler = SimpleNamespace(samples=[], phase="measurement", done=threading.Event(), stop=lambda **kwargs: None, end_measurement=lambda: None)
     probe = SimpleNamespace(snapshot=lambda **kwargs: snapshot(used=2000, pid=999))
     result = gpu._cleanup_role(owner, sampler, probe, {"cleanup_seconds": 0.1, "max_idle_memory_mib": 1000})
     assert result["status"] == "failed"
@@ -892,6 +892,40 @@ def test_occupied_gpu_preflight_never_spawns_a_runtime(spec, tmp_path, monkeypat
     assert receipt["roles"]["baseline"]["cleanup"]["status"] == "not_started"
 
 
+@pytest.mark.parametrize(("current", "recorded"), [(None, True), ({"pid": 123, "pgid": 100, "session_id": 100, "start_ticks": 200, "state": "Z"}, True),
+                                    ({"pid": 123, "pgid": 999, "session_id": 999, "start_ticks": 300, "state": "R"}, True), (None, False)])
+def test_cleanup_waits_for_recorded_driver_process_release_without_adopting_reused_pid(monkeypatch, current, recorded):
+    process = {"pid": 123, "pgid": 100, "session_id": 100, "start_ticks": 200}
+    sampler = SimpleNamespace(samples=[{"owned_compute_apps": [{"gpu_uuid": GPU, "pid": 123, "process_identity": process}]}],
+                              end_measurement=lambda: None, done=threading.Event(), stop=lambda **kwargs: None)
+    if not recorded:
+        sampler.samples = []
+    owner = SimpleNamespace(close=lambda **kwargs: {"status": "clean", "remaining_owned_pids": []})
+    observations = [snapshot(used=5000, pid=123), snapshot(used=4)]
+    probe = SimpleNamespace(snapshot=lambda **kwargs: observations.pop(0))
+    monkeypatch.setattr(gpu, "_proc_identity", lambda pid: current)
+    result = gpu._cleanup_role(owner, sampler, probe, {"cleanup_seconds": 1, "max_idle_memory_mib": 64})
+    foreign = not recorded or (current is not None and current["start_ticks"] != process["start_ticks"])
+    assert result["status"] == ("failed" if foreign else "clean")
+    assert result["idle_after"] is not foreign
+    assert len(observations) == (1 if foreign else 0)
+
+
+def test_cleanup_driver_wait_respects_original_deadline(monkeypatch):
+    clock = [10.0]
+    monkeypatch.setattr(gpu.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(gpu.time, "sleep", lambda seconds: clock.__setitem__(0, clock[0] + seconds))
+    monkeypatch.setattr(gpu, "_proc_identity", lambda pid: None)
+    sampler = SimpleNamespace(samples=[{"owned_compute_apps": [{"gpu_uuid": GPU, "pid": 123, "process_identity": {}}]}],
+                              end_measurement=lambda: None, done=threading.Event(), stop=lambda **kwargs: None)
+    owner = SimpleNamespace(close=lambda **kwargs: {"status": "clean", "remaining_owned_pids": []})
+    probe = SimpleNamespace(snapshot=lambda **kwargs: snapshot(used=5000, pid=123))
+    result = gpu._cleanup_role(owner, sampler, probe, {"cleanup_seconds": 60, "max_idle_memory_mib": 64}, deadline=10.5)
+    assert clock[0] == 10.5
+    assert result["status"] == "failed" and result["idle_after"] is False
+    assert result["waited_for_driver_pids"] == [123]
+
+
 @pytest.mark.parametrize("startup_exits", [False, True])
 def test_role_safe_cleanup_preserves_known_candidate_failure(spec, tmp_path, monkeypatch, startup_exits):
     directory = tmp_path / "candidate-job"
@@ -913,6 +947,7 @@ def test_role_safe_cleanup_preserves_known_candidate_failure(spec, tmp_path, mon
             path.touch()
             self.done = threading.Event()
             self.failed = threading.Event()
+            self.samples = []
         def start(self): pass
         def begin_measurement(self): pass
         def end_measurement(self): pass

@@ -16,7 +16,7 @@
     "path": "/REPLACE_WITH_FROZEN_GPU_SPEC.json",
     "sha256": "REPLACE_WITH_SHA256"
   },
-  "resources": {"gpus": 4, "cpus": 32, "memory_gb": 256, "minutes": 90},
+  "resources": {"gpus": 4, "cpus": 32, "memory_gb": 1024, "minutes": 90},
   "allocation_receipts": [],
   "mode": "smoke"
 }

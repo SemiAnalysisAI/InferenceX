@@ -942,17 +942,29 @@ def _cleanup_role(owner: OwnedProcess, sampler: _Sampler, probe: GpuProbe, limit
     sampler.stop(deadline=end)
     idle_after = False
     snapshot = None
+    observed = {(app["gpu_uuid"], app["pid"]): app["process_identity"]
+                for sample in sampler.samples for app in sample.get("owned_compute_apps", [])}
+    waited_for = set()
     while time.monotonic() < end:
         snapshot = probe.snapshot(deadline=end)
         if _idle(snapshot, limits["max_idle_memory_mib"]):
             idle_after = True
             break
-        # Do not wait on or kill foreign compute as though we owned it.
-        if snapshot["compute_apps"]:
+        # NVML can retain exited ranks while the driver releases their memory.
+        # Wait only for previously attributed identities, never unknown/reused PIDs.
+        foreign = False
+        for app in snapshot["compute_apps"]:
+            expected = observed.get((app["gpu_uuid"], app["pid"]))
+            current = _proc_identity(app["pid"])
+            if expected is None or (current is not None and any(current[key] != expected[key] for key in ("pid", "pgid", "session_id", "start_ticks"))):
+                foreign = True
+                break
+            waited_for.add(app["pid"])
+        if foreign:
             break
         time.sleep(min(0.2, max(0, end - time.monotonic())))
     return {**receipt, "status": "clean" if receipt["status"] == "clean" and idle_after else "failed",
-            "idle_after": idle_after, "gpu_after": snapshot,
+            "idle_after": idle_after, "gpu_after": snapshot, "waited_for_driver_pids": sorted(waited_for),
             "reason": "owned group drained and leased devices idle" if idle_after else "GPU resources not verified idle after exact-owned cleanup"}
 
 

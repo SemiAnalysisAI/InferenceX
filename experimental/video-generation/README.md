@@ -49,7 +49,9 @@ The adapter recovers task-owned allocation receipts before allocating. Imported
 receipts must match task identity, Unix ownership, and the scheduler's exact
 allocation identity; ambiguous intent blocks another submission. The fixed site
 is `main` / `sa-shared`. A new exclusive allocation reserves eight GPUs;
-the example step selects four GPUs and 32 CPUs. Charge reserved capacity.
+the example step selects four GPUs, 32 CPUs, and 1 TiB of host memory. The pinned
+four-rank loader exceeded 256 GiB during CPU weight staging; 1 TiB is a tested
+working allowance, not a measured minimum. Charge reserved capacity.
 `resources.minutes` is the total allocation cap, at most 90 minutes. The step
 reserves five minutes for outer cleanup, and the supervisor plus ten minutes
 must fit the allocation. For example: 90-minute allocation, 85-minute step,
