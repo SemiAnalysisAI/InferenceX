@@ -6956,3 +6956,11 @@
     - "Compare A8W4 and A4W4 at concurrency 1 and 14 with AITER_DISABLE_FMHA_OPUS=1, pinned AITER 0.1.21.post1, FlyDSL 0.3.2, and LMCache dev104 at both concurrencies."
     - "Preserve the local TP8/DCP1 serving envelopes, 1799 GB LMCache budget, AIPerf revision, ten warmups per lane, and 3600-second duration. Prepare native libraries without a privileged dpkg install and mount result directories outside /workspace."
   pr-link: TBD
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Select A4W4 for the c1/c14 treatment by unsetting AITER_SITUV2_A8W4 and setting AITER_SITUV2_A4W4=1; retain the identical Opus-disabled attention, dependency pins, LMCache budget, and canonical replay settings from the A8W4 control."
+  pr-link: TBD

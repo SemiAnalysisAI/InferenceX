@@ -42,7 +42,7 @@ set -x
 #   SPEC_DECODE              true   (this is the _mtp DSpark recipe; =false for a no-spec A/B)
 #   SPEC_NUM_TOKENS          2      (DSpark draft length; validated by the _mtp config)
 
-K3_PRECISION=a8w4
+K3_PRECISION=a4w4
 export AITER_DISABLE_FMHA_OPUS=1
 export AIPERF_WARMUP_REQUESTS_PER_LANE=10
 export AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES=0
