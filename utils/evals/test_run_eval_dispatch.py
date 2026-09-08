@@ -985,6 +985,7 @@ _prepare_kimi_vendor_verifier "$REPO_URL" "$VERIFIER_REF" "$ARCHIVE_SHA256"
                 "VERIFIER_REF": verifier_ref,
                 "ARCHIVE_SHA256": archive_sha256 or hashlib.sha256(payload).hexdigest(),
             },
+            cwd=tmp_path,
             text=True,
             capture_output=True,
         )

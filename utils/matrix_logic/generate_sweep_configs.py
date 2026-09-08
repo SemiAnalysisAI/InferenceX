@@ -487,18 +487,6 @@ def chunk_multinode_agentic_concurrencies(conc_values: list[int]) -> list[list[i
     return [conc_values[index:index + size] for index in range(0, len(conc_values), size)]
 
 
-def _freeze_matrix_value(value):
-    """Convert nested matrix values into hashable equivalents."""
-    if isinstance(value, dict):
-        return tuple(sorted(
-            (key, _freeze_matrix_value(item))
-            for key, item in value.items()
-        ))
-    if isinstance(value, list):
-        return tuple(_freeze_matrix_value(item) for item in value)
-    return value
-
-
 def _multinode_parallelism_key(entry: dict) -> tuple:
     """Identify a multi-node config independently of eval/concurrency fields.
 
@@ -520,7 +508,7 @@ def _multinode_parallelism_key(entry: dict) -> tuple:
         Fields.EVAL_SUITE.value,
     }
     return tuple(sorted(
-        (key, _freeze_matrix_value(value))
+        (key, freeze_config_value(value))
         for key, value in entry.items()
         if key not in ignored_fields
     ))
@@ -775,6 +763,89 @@ def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
     return expanded_entries
 
 
+def _concurrency_range(start: int, end: int, step: int) -> list[int]:
+    """Expand a validated positive range, including its end even after overshoot."""
+    values = []
+    while start <= end:
+        values.append(start)
+        if start == end:
+            break
+        start = min(start * step, end)
+    return values
+
+
+def _fixed_sequence_entries(
+    config: dict,
+    benchmark: dict,
+    sequence: dict,
+    conc_values: list[int],
+    runners: list[str],
+    runner_data: dict,
+) -> list[dict]:
+    """Build fixed-sequence rows after the command has selected runners and points.
+
+    Callers retain filtering and overrides; this owns row defaults, derived
+    identity, topology and validation for both full-sweep and test-config.
+    """
+    is_multinode = config.get(Fields.MULTINODE.value, False)
+    disagg = config.get(Fields.DISAGG.value, False)
+    isl, osl = sequence[Fields.ISL.value], sequence[Fields.OSL.value]
+    model_code = config[Fields.MODEL_PREFIX.value]
+    spec_decoding = benchmark.get(Fields.SPEC_DECODING.value, "none")
+    if is_multinode:
+        prefill, decode = multinode_worker_pair(benchmark, disagg)
+    else:
+        ep = benchmark.get(Fields.EP.value)
+        dp_attn = benchmark.get(Fields.DP_ATTN.value)
+
+    entries = []
+    # Multi-node rows carry the whole concurrency list; single-node rows carry
+    # one point. Keep point-major, runner-minor order for existing consumers.
+    for conc in [conc_values] if is_multinode else conc_values:
+        for runner in runners:
+            entry = {
+                Fields.IMAGE.value: config[Fields.IMAGE.value],
+                Fields.MODEL.value: config[Fields.MODEL.value],
+                Fields.MODEL_PREFIX.value: model_code,
+                Fields.PRECISION.value: config[Fields.PRECISION.value],
+                Fields.FRAMEWORK.value: config[Fields.FRAMEWORK.value],
+                Fields.RUNNER.value: runner,
+                Fields.ISL.value: isl,
+                Fields.OSL.value: osl,
+            }
+            if is_multinode:
+                entry.update({
+                    Fields.SPEC_DECODING.value: spec_decoding,
+                    Fields.PREFILL.value: prefill,
+                    Fields.DECODE.value: decode,
+                    Fields.CONC.value: conc,
+                    Fields.MAX_MODEL_LEN.value: isl + osl + 256,
+                })
+            else:
+                entry.update({
+                    Fields.TP.value: benchmark[Fields.TP.value],
+                    Fields.PP.value: benchmark.get(Fields.PP.value, 1),
+                    Fields.DCP_SIZE.value: benchmark.get(Fields.DCP_SIZE.value, 1),
+                    Fields.PCP_SIZE.value: benchmark.get(Fields.PCP_SIZE.value, 1),
+                    Fields.CONC.value: conc,
+                    Fields.MAX_MODEL_LEN.value: isl + osl + 256,
+                    Fields.EP.value: ep if ep is not None else 1,
+                    Fields.DP_ATTN.value: dp_attn if dp_attn is not None else False,
+                    Fields.SPEC_DECODING.value: spec_decoding,
+                })
+            entry.update({
+                Fields.EXP_NAME.value: f"{model_code}_{seq_len_to_str(isl, osl)}",
+                Fields.DISAGG.value: disagg,
+                Fields.RUN_EVAL.value: False,
+            })
+            entry.update(component_metadata(benchmark, config))
+            if is_multinode:
+                add_multinode_node_count(
+                    entry, runner_data, benchmark.get(Fields.NUM_NODES.value))
+            entries.append(validate_matrix_entry(entry, is_multinode))
+    return entries
+
+
 def generate_full_sweep(args, all_config_data, runner_data):
     """Generate full sweep configurations with optional filtering.
 
@@ -873,12 +944,6 @@ def generate_full_sweep(args, all_config_data, runner_data):
                     continue
 
                 if is_multinode:
-                    # Multinode configuration
-                    # spec_decoding defaults to "none" if not specified
-                    spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
-
-                    prefill, decode = multinode_worker_pair(bmk, disagg)
-
                     # Get concurrency values (can be list or range)
                     conc_list = bmk.get(Fields.CONC_LIST.value)
                     # If it's a list
@@ -888,15 +953,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                     else:
                         conc_start = bmk[Fields.CONC_START.value]
                         conc_end = bmk[Fields.CONC_END.value]
-                        conc_values = []
-                        conc = conc_start
-                        while conc <= conc_end:
-                            conc_values.append(conc)
-                            if conc == conc_end:
-                                break
-                            conc *= args.step_size
-                            if conc > conc_end:
-                                conc = conc_end
+                        conc_values = _concurrency_range(conc_start, conc_end, args.step_size)
 
                     # Apply min-conc filter if specified
                     if args.min_conc is not None:
@@ -919,46 +976,13 @@ def generate_full_sweep(args, all_config_data, runner_data):
                         else:
                             conc_values = filtered_conc
 
-                    seq_len_str = seq_len_to_str(isl, osl)
                     runners_for_entry = runner_nodes_to_use if runner_nodes_to_use else [runner]
-
-                    for runner_value in runners_for_entry:
-                        entry = {
-                            Fields.IMAGE.value: image,
-                            Fields.MODEL.value: model,
-                            Fields.MODEL_PREFIX.value: model_code,
-                            Fields.PRECISION.value: precision,
-                            Fields.FRAMEWORK.value: framework,
-                            Fields.RUNNER.value: runner_value,
-                            Fields.ISL.value: isl,
-                            Fields.OSL.value: osl,
-                            Fields.SPEC_DECODING.value: spec_decoding,
-                            Fields.PREFILL.value: prefill,
-                            Fields.DECODE.value: decode,
-                            Fields.CONC.value: conc_values,  # Pass the entire list for multinode
-                            Fields.MAX_MODEL_LEN.value: isl + osl + 256,
-                            Fields.EXP_NAME.value: f"{model_code}_{seq_len_str}",
-                            Fields.DISAGG.value: disagg,
-                            Fields.RUN_EVAL.value: False,  # Default, may be overridden by mark_eval_entries
-                        }
-                        entry.update(component_metadata(bmk, val))
-                        add_multinode_node_count(
-                            entry,
-                            runner_data,
-                            bmk.get(Fields.NUM_NODES.value),
-                        )
-
-                        validate_matrix_entry(entry, is_multinode)
-                        matrix_values.append(entry)
+                    matrix_values.extend(_fixed_sequence_entries(
+                        val, bmk, seq_config, conc_values, runners_for_entry, runner_data))
                 else:
                     # Single-node configuration
                     tp = bmk[Fields.TP.value]
-                    pp = bmk.get(Fields.PP.value, 1)
-                    dcp_size = bmk.get(Fields.DCP_SIZE.value, 1)
-                    pcp_size = bmk.get(Fields.PCP_SIZE.value, 1)
                     ep = bmk.get(Fields.EP.value)
-                    dp_attn = bmk.get(Fields.DP_ATTN.value)
-                    spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
 
                     # Apply max-tp filter if specified
                     if args.max_tp is not None:
@@ -1023,52 +1047,12 @@ def generate_full_sweep(args, all_config_data, runner_data):
                             else:
                                 conc_end = min(conc_end, args.max_conc)
 
-                        conc_values = []
-                        conc = conc_start
-                        while conc <= conc_end:
-                            conc_values.append(conc)
-                            if conc == conc_end:
-                                break
-                            conc *= args.step_size
-                            if conc > conc_end:
-                                conc = conc_end
+                        conc_values = _concurrency_range(conc_start, conc_end, args.step_size)
 
-                    seq_len_str = seq_len_to_str(isl, osl)
                     runners_for_entry = runner_nodes_to_use if runner_nodes_to_use else [runner]
-
-                    for conc in conc_values:
-                        for runner_value in runners_for_entry:
-                            entry = {
-                                Fields.IMAGE.value: image,
-                                Fields.MODEL.value: model,
-                                Fields.MODEL_PREFIX.value: model_code,
-                                Fields.PRECISION.value: precision,
-                                Fields.FRAMEWORK.value: framework,
-                                Fields.RUNNER.value: runner_value,
-                                Fields.ISL.value: isl,
-                                Fields.OSL.value: osl,
-                                Fields.TP.value: tp,
-                                Fields.PP.value: pp,
-                                Fields.DCP_SIZE.value: dcp_size,
-                                Fields.PCP_SIZE.value: pcp_size,
-                                Fields.CONC.value: conc,
-                                Fields.MAX_MODEL_LEN.value: isl + osl + 256,
-                                Fields.EP.value: 1,  # Default
-                                Fields.DP_ATTN.value: False,  # Default
-                                Fields.SPEC_DECODING.value: spec_decoding,
-                                Fields.EXP_NAME.value: f"{model_code}_{seq_len_str}",
-                                Fields.DISAGG.value: disagg,
-                                Fields.RUN_EVAL.value: False,  # Default, may be overridden by mark_eval_entries
-                            }
-
-                            if ep is not None:
-                                entry[Fields.EP.value] = ep
-                            if dp_attn is not None:
-                                entry[Fields.DP_ATTN.value] = dp_attn
-
-                            entry.update(component_metadata(bmk, val))
-                            validate_matrix_entry(entry, is_multinode)
-                            matrix_values.append(entry)
+                    matrix_values.extend(_fixed_sequence_entries(
+                        val, {**bmk, Fields.EP.value: ep}, seq_config,
+                        conc_values, runners_for_entry, runner_data))
 
         # ---- Agentic-coding scenarios ----
         agentic_configs = scenarios.get(Fields.AGENTIC_CODING.value, []) if (scenario_filter is None or 'agentic-coding' in scenario_filter) else []
@@ -1107,15 +1091,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                 else:
                     conc_start = bmk[Fields.CONC_START.value]
                     conc_end = bmk[Fields.CONC_END.value]
-                    conc_values = []
-                    conc = conc_start
-                    while conc <= conc_end:
-                        conc_values.append(conc)
-                        if conc == conc_end:
-                            break
-                        conc *= args.step_size
-                        if conc > conc_end:
-                            conc = conc_end
+                    conc_values = _concurrency_range(conc_start, conc_end, args.step_size)
 
                 # Apply conc filters
                 if args.min_conc is not None:
@@ -1263,122 +1239,20 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
             if seq_lens_filter and (isl, osl) not in seq_lens_filter:
                 continue
 
-            seq_len_str = seq_len_to_str(isl, osl)
-
             for bmk in seq_len_config[Fields.SEARCH_SPACE.value]:
-                if is_multinode:
-                    # Multinode config
-                    spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
-                    prefill, decode = multinode_worker_pair(bmk, disagg)
-
-                    # Get concurrency values
-                    if Fields.CONC_LIST.value in bmk:
-                        conc_values = bmk[Fields.CONC_LIST.value]
-                    else:
-                        conc_start = bmk[Fields.CONC_START.value]
-                        conc_end = bmk[Fields.CONC_END.value]
-                        conc_values = []
-                        conc = conc_start
-                        while conc <= conc_end:
-                            conc_values.append(conc)
-                            if conc == conc_end:
-                                break
-                            conc *= 2
-                            if conc > conc_end:
-                                conc = conc_end
-
-                    # Apply --conc filter if provided (only for test-config)
-                    if getattr(args, 'conc', None):
-                        conc_values = [c for c in conc_values if c in args.conc]
-                        if not conc_values:
-                            # No intersection with requested conc values; skip
-                            continue
-
-                    for runner_value in runners_for_entry:
-                        entry = {
-                            Fields.IMAGE.value: image,
-                            Fields.MODEL.value: model,
-                            Fields.MODEL_PREFIX.value: model_code,
-                            Fields.PRECISION.value: precision,
-                            Fields.FRAMEWORK.value: framework,
-                            Fields.RUNNER.value: runner_value,
-                            Fields.ISL.value: isl,
-                            Fields.OSL.value: osl,
-                            Fields.SPEC_DECODING.value: spec_decoding,
-                            Fields.PREFILL.value: prefill,
-                            Fields.DECODE.value: decode,
-                            Fields.CONC.value: conc_values,
-                            Fields.MAX_MODEL_LEN.value: isl + osl + 256,
-                            Fields.EXP_NAME.value: f"{model_code}_{seq_len_str}",
-                            Fields.DISAGG.value: disagg,
-                            Fields.RUN_EVAL.value: False,
-                        }
-                        entry.update(component_metadata(bmk, val))
-                        add_multinode_node_count(
-                            entry,
-                            runner_data,
-                            bmk.get(Fields.NUM_NODES.value),
-                        )
-                        matrix_values.append(validate_matrix_entry(entry, is_multinode=True))
+                if Fields.CONC_LIST.value in bmk:
+                    conc_values = bmk[Fields.CONC_LIST.value]
                 else:
-                    # Single-node config
-                    tp = bmk[Fields.TP.value]
-                    pp = bmk.get(Fields.PP.value, 1)
-                    dcp_size = bmk.get(Fields.DCP_SIZE.value, 1)
-                    pcp_size = bmk.get(Fields.PCP_SIZE.value, 1)
-                    ep = bmk.get(Fields.EP.value)
-                    dp_attn = bmk.get(Fields.DP_ATTN.value)
-                    spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
+                    conc_values = _concurrency_range(
+                        bmk[Fields.CONC_START.value], bmk[Fields.CONC_END.value], 2)
 
-                    # Get concurrency values
-                    if Fields.CONC_LIST.value in bmk:
-                        conc_values = bmk[Fields.CONC_LIST.value]
-                    else:
-                        conc_start = bmk[Fields.CONC_START.value]
-                        conc_end = bmk[Fields.CONC_END.value]
-                        conc_values = []
-                        conc = conc_start
-                        while conc <= conc_end:
-                            conc_values.append(conc)
-                            if conc == conc_end:
-                                break
-                            conc *= 2
-                            if conc > conc_end:
-                                conc = conc_end
+                if getattr(args, 'conc', None):
+                    conc_values = [c for c in conc_values if c in args.conc]
+                    if not conc_values:
+                        continue
 
-                    # Apply --conc filter if provided (only for test-config)
-                    if getattr(args, 'conc', None):
-                        conc_values = [c for c in conc_values if c in args.conc]
-                        if not conc_values:
-                            # No intersection with requested conc values; skip
-                            continue
-
-                    for conc in conc_values:
-                        for runner_value in runners_for_entry:
-                            entry = {
-                                Fields.IMAGE.value: image,
-                                Fields.MODEL.value: model,
-                                Fields.MODEL_PREFIX.value: model_code,
-                                Fields.PRECISION.value: precision,
-                                Fields.FRAMEWORK.value: framework,
-                                Fields.RUNNER.value: runner_value,
-                                Fields.ISL.value: isl,
-                                Fields.OSL.value: osl,
-                                Fields.TP.value: tp,
-                                Fields.PP.value: pp,
-                                Fields.DCP_SIZE.value: dcp_size,
-                                Fields.PCP_SIZE.value: pcp_size,
-                                Fields.CONC.value: conc,
-                                Fields.MAX_MODEL_LEN.value: isl + osl + 256,
-                                Fields.EP.value: ep if ep is not None else 1,
-                                Fields.DP_ATTN.value: dp_attn if dp_attn is not None else False,
-                                Fields.SPEC_DECODING.value: spec_decoding,
-                                Fields.EXP_NAME.value: f"{model_code}_{seq_len_str}",
-                                Fields.DISAGG.value: disagg,
-                                Fields.RUN_EVAL.value: False,
-                            }
-                            entry.update(component_metadata(bmk, val))
-                            matrix_values.append(validate_matrix_entry(entry, is_multinode=False))
+                matrix_values.extend(_fixed_sequence_entries(
+                    val, bmk, seq_len_config, conc_values, runners_for_entry, runner_data))
 
         # ---- Agentic-coding scenarios ----
         agentic_configs = val[Fields.SCENARIOS.value].get(Fields.AGENTIC_CODING.value, []) if (scenario_filter is None or 'agentic-coding' in scenario_filter) else []
@@ -1411,15 +1285,7 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                 else:
                     conc_start = bmk[Fields.CONC_START.value]
                     conc_end = bmk[Fields.CONC_END.value]
-                    conc_values = []
-                    conc = conc_start
-                    while conc <= conc_end:
-                        conc_values.append(conc)
-                        if conc == conc_end:
-                            break
-                        conc *= 2
-                        if conc > conc_end:
-                            conc = conc_end
+                    conc_values = _concurrency_range(conc_start, conc_end, 2)
 
                 if getattr(args, 'conc', None):
                     conc_values = [c for c in conc_values if c in args.conc]
