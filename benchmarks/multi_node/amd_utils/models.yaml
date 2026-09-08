@@ -380,7 +380,7 @@ DeepSeek-V4-Pro-AgentX:
   # --swa-full-tokens-ratio 0.15 widens the SWA ring for the larger DP batch, and
   # --tokenizer-worker-num matches the only DP arm's TP (8) today -- bump this if
   # a different-TP DP arm is added.
-  dp_flags: "--enable-dp-attention --enforce-shared-experts-fusion --swa-full-tokens-ratio 0.15 --enable-dp-attention-local-control-broadcast --tokenizer-worker-num 8 --stream-interval 20 --prefill-decode-interval 10"
+  dp_flags: "--enable-dp-attention --disable-shared-experts-fusion --swa-full-tokens-ratio 0.15 --enable-dp-attention-local-control-broadcast --tokenizer-worker-num 8 --stream-interval 20 --prefill-decode-interval 10"
   ep_flags: "--ep-dispatch-algorithm fake --moe-a2a-backend mori --deepep-mode normal"
   mtp_flags: "--speculative-algorithm EAGLE --speculative-eagle-topk 1"
   prefill:
@@ -389,13 +389,13 @@ DeepSeek-V4-Pro-AgentX:
     disable_cuda_graph: true
     dp:
       max_running_requests: 1024
-      chunked_prefill_size: "16384 * PREFILL_TP_SIZE if PREFILL_TP_SIZE == 8 else 8192 * PREFILL_TP_SIZE"  # dsv4 compressor kernel uint16 token cap (255*256)
+      chunked_prefill_size: "8192 * PREFILL_TP_SIZE if PREFILL_TP_SIZE == 8 else 8192 * PREFILL_TP_SIZE"  # dsv4 compressor kernel uint16 token cap (255*256)
       context_length: 1048576
       # Mirrors the single-node recipe's --enable-two-batch-overlap inside the
       # DP-attention block; prefill-only, matching that recipe's PARALLEL_ARGS
       # scope. Also flips server_sglang.sh's PREFILL_SDMA_ENV to
       # MORI_ENABLE_SDMA=true, required alongside two-batch-overlap.
-      enable_two_batch_overlap: true
+      enable_two_batch_overlap: false
     no_dp:
       max_running_requests: 64
       # TP8 widens to 16384 to fix the conc>=16 queue-saturation / decode-stall
