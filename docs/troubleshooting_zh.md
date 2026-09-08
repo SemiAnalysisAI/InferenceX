@@ -81,6 +81,17 @@ Setup 阶段的删除错误通常意味着陈旧分支或改变空白的合并�
 
 [`KLAUD_DEBUG.md` §5](../KLAUD_DEBUG.md#5-cluster-infrastructure-amd-mi355x--mi300x--mi325x) 列出了已知 AMD 节点、Docker socket、磁盘和端口事故。除非当前节点证据再次确认，否则应把其中点名的节点状态视为历史记录。
 
+### B300 DSXE 共享存储挂起
+
+镜像导入阻塞在 `*.sqsh.lock` 时，可能是 Lustre I/O 故障，甚至还未执行
+`flock`。从节点本地 `/tmp` 执行
+`lctl get_param 'osc.*.import' 'mdc.*.import'` 检查客户端状态；登录节点能访问
+共享存储并不代表计算节点正常。B300 启动器会在导入镜像或启动单节点 Pyxis
+容器前检查客户端是否进入 `FULL` 状态，并用运行器名称命名导入作业，确保
+工作流清理步骤能取消这些作业。检查失败时，必须先修复集群存储再重试。
+具体故障现象和恢复验证要求见
+[B300 事故记录](../KLAUD_DEBUG.md#57-b300-dsxe-lustre-client-eviction-before-image-import)。
+
 ### AMD root 属主工作区文件
 
 其特征是 checkout 清理在 `benchmark_logs/logs/slurm_job-*` 上因 `EACCES` 失败。以 root 运行的 Slurm 容器在取消导致 teardown 跳过时可能遗留 root 属主目录，阻塞该运行器上所有后续任务。[`CONTRIBUTING.md`](../CONTRIBUTING.md#amd-cluster-never-leave-root-owned-files-in-runner-workspaces) 中的预防契约是：

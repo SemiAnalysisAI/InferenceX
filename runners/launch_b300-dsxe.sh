@@ -8,6 +8,9 @@
 SLURM_PARTITION="batch_1"
 SLURM_ACCOUNT="benchmark"
 
+source "$(dirname "${BASH_SOURCE[0]}")/b300_lustre_preflight.sh" || exit 1
+LUSTRE_PREFLIGHT="$(declare -f check_b300_lustre); check_b300_lustre"
+
 # enroot squash images. Must be on storage every compute node mounts and writable
 # by the runner user (/data/squash is root-owned, hence the per-user default).
 SQUASH_DIR="/data/home/sa-gha-runner/squash"
@@ -93,9 +96,19 @@ import_squash_image() {
         return 0
     fi
 
-    srun -N 1 -A "$SLURM_ACCOUNT" -p "$SLURM_PARTITION" \
-        --time="${ENROOT_IMPORT_TIME_LIMIT:-120}" bash -c "
+    local import_args=(
+        -N 1 -n 1 -c 16 --mem=64G
+        -A "$SLURM_ACCOUNT" -p "$SLURM_PARTITION"
+        --job-name="${RUNNER_NAME:?RUNNER_NAME must be set}"
+        --chdir=/tmp
+        --time="${ENROOT_IMPORT_TIME_LIMIT:-120}"
+    )
+    if [[ -n "${SALLOC_EXCLUDE:-}" ]]; then
+        import_args+=(--exclude="$SALLOC_EXCLUDE")
+    fi
+    srun "${import_args[@]}" bash -c "
         set -euo pipefail
+        $LUSTRE_PREFLIGHT || exit 1
         exec 9>\"$lock\"
         flock -w 3600 9
         if unsquashfs -l \"$sqsh\" > /dev/null 2>&1; then
@@ -493,8 +506,13 @@ else
     if [[ -n "${SALLOC_EXCLUDE:-}" ]]; then
         SALLOC_ARGS+=(--exclude="$SALLOC_EXCLUDE")
     fi
-    salloc "${SALLOC_ARGS[@]}"
+    salloc "${SALLOC_ARGS[@]}" || exit 1
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
+
+    # Check outside Pyxis: its image/workspace reads can block in the kernel
+    # before the container starts, even when the login-node image probe passed.
+    srun --jobid="$JOB_ID" --chdir=/tmp \
+        bash -c "$LUSTRE_PREFLIGHT" || exit 1
 
     CONTAINER_MOUNTS=(
         "$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR"

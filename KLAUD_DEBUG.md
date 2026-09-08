@@ -178,6 +178,45 @@ Doesn't survive controller reboots. For permanent removal, a SLURM admin should 
 
 ---
 
+## 5.7 B300 DSXE: Lustre client eviction before image import
+
+**Symptom:** `launch_b300-dsxe.sh` hangs at `exec 9>...sqsh.lock`, or fails
+there with `Input/output error`. No model server has started. In run
+[34177497130](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34177497130),
+Slurm jobs 837 and 838 waited over 100 minutes in `ptlrpc_set_wait` before
+`flock` was invoked. Fresh shared-file writes and existing image reads also
+failed from compute nodes; the login node could read and write the same storage.
+
+**Diagnosis:** inspect local client state from `/tmp`, without first reading a
+script or opening a log on `/data`:
+
+```bash
+lctl get_param 'osc.*.import' 'mdc.*.import' | grep -E 'name:|state:'
+```
+
+Compute clients showed `EVICTED`, `CONNECTING`, or `IDLE` instead of `FULL`.
+On 2026-09-08, a six-MiB write/read probe striped across all three OSTs failed
+or timed out on all nine idle nodes tested: 00, 07, 09, 10, and 13–17. A
+single-file read succeeded on node 13 while its OST0000 connection was broken;
+one successful read is therefore insufficient to declare a node healthy.
+
+**Recovery:** a cluster administrator must diagnose and restore Lustre
+connectivity, then verify client state and shared read/write/fsync across all
+OSTs before rerunning benchmarks. `cjquilici` can switch to `sa-gha-runner`, but
+neither account had root access for repairing mounts or clients. Do not bypass
+this with a different model image or assume an idle Slurm node is healthy.
+
+**Launcher protection:** `b300_lustre_preflight.sh` checks local client state
+before the import opens its lock and before single-node Pyxis startup. It waits
+up to 30 seconds for clients to reach `FULL`, then fails with node/client
+diagnostics. Both checks start in `/tmp` and receive their code through the
+Slurm command, so they do not need a working shared filesystem to load it.
+Import jobs use `RUNNER_NAME` so normal workflow cleanup can cancel them, and
+request 16 CPUs/64 GiB instead of the partition's default whole-node memory.
+`SALLOC_EXCLUDE` applies to imports as well as benchmark allocations.
+
+---
+
 ## 6. Docker image tag gotchas
 
 **Don't invent a "release" tag pattern from a date-suffixed nightly.** `lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x` does **not** exist. Only the dated `v0.5.12-rocm720-mi35x-20260517` does. All MI355X `sglang-rocm:rocm720` tags follow the dated-nightly pattern.

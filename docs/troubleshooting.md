@@ -81,6 +81,17 @@ Classify queue/allocation failures before reading server logs:
 
 [`KLAUD_DEBUG.md` §5](../KLAUD_DEBUG.md#5-cluster-infrastructure-amd-mi355x--mi300x--mi325x) lists known AMD node, Docker socket, disk, and port incidents. Treat named-node state as historical until current node evidence confirms it.
 
+### B300 DSXE shared-storage hangs
+
+An import blocked on `*.sqsh.lock` can be a Lustre I/O failure before `flock`
+even starts. Inspect `lctl get_param 'osc.*.import' 'mdc.*.import'` from
+node-local `/tmp`; login-node access does not prove compute-node health.
+The B300 launcher checks that clients reach `FULL` before importing images or
+starting a single-node Pyxis container, and names import jobs after the runner
+so workflow cleanup can cancel them. A failed check requires cluster storage
+repair before retrying. See [the B300 incident](../KLAUD_DEBUG.md#57-b300-dsxe-lustre-client-eviction-before-image-import)
+for the observed failure and recovery evidence.
+
 ### AMD root-owned workspace files
 
 The signature is checkout cleanup failing with `EACCES` on `benchmark_logs/logs/slurm_job-*`. Root-running Slurm containers may leave root-owned directories when cancellation skips teardown, blocking every later job on that runner. The prevention contract in [`CONTRIBUTING.md`](../CONTRIBUTING.md#amd-cluster-never-leave-root-owned-files-in-runner-workspaces) is:
