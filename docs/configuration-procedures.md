@@ -251,7 +251,7 @@ Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../AGENTS.md#non-nego
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/<number>
 ```
 
-3. Before the PR exists, the model+hardware playbook permits `pr-link: TBD`. Replace it with the real URL immediately after creating the PR.
+3. Before the PR exists, use the validator-supported placeholder `pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX`. Replace it with the real URL immediately after creating the PR.
 4. Never prepend, insert chronologically, sort, reformat, or run a formatter over the file.
 5. Never delete or normalize existing whitespace, including trailing spaces on blank separators. CI depends on historical bytes.
 6. If the file conflicts with `main`, restore the current `main` version and re-append only this branch's entries. Do not hand-merge reordered history.
@@ -269,7 +269,7 @@ Stop before dispatching GPU work or claiming the configuration complete when any
 - An srt-slurm recipe and master entry disagree, `model.container != image`, or upstream recipe validation has not run.
 - An llm-d recipe is missing and would fall back unintentionally, allocation counts disagree, or endpoint discovery cannot satisfy literal-IPv4/unique-name/valid-port rules.
 - An MTP script lacks chat-template benchmarking, the speculative method/token count is unverified, or graph capture exceeds the backend limit.
-- The changelog change would modify historical bytes, is not at EOF, has a conflict, or still has `TBD` when the PR is otherwise ready for sweep.
+- The changelog change would modify historical bytes, is not at EOF, has a conflict, or still has the `/pull/XXX` placeholder when the PR is otherwise ready for sweep.
 - YAML, Bash, strict schema, exact-key generation, launcher simulation, or recipe validation fails.
 
 A configuration is ready for sweep only when the executable files agree, the exact key generates, the runtime route exists, the changelog selects it, and all layer-specific checks above pass.

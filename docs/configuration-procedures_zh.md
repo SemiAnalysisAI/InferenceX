@@ -251,7 +251,7 @@ python -m pytest utils/matrix_logic/ -v
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/<number>
 ```
 
-3. PR 创建前，模型+硬件 playbook 允许 `pr-link: TBD`；创建 PR 后立即替换为真实 URL。
+3. PR 创建前，使用校验器支持的占位符 `pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX`；创建 PR 后立即替换为真实 URL。
 4. 绝不能 prepend、在中间按时间插入、排序、重新格式化，也不能对文件运行 formatter。
 5. 绝不能删除或标准化现有空白，包括空白分隔行上的尾随空格。CI 依赖历史字节。
 6. 如果文件与 `main` 冲突，恢复当前 `main` 版本，只重新追加本分支条目。不要手动合并已经重排的历史。
@@ -269,7 +269,7 @@ python -m pytest utils/matrix_logic/ -v
 - srt-slurm 配方与主条目不一致、`model.container != image`，或尚未运行上游配方验证。
 - llm-d 配方缺失并会意外 fallback、allocation 数不一致，或 endpoint discovery 无法满足 IPv4 字面量/唯一名称/有效端口规则。
 - MTP 脚本缺少 chat-template 基准、speculative 方法/token 数未验证，或 graph capture 超过 backend 上限。
-- changelog 变更会修改历史字节、没有位于 EOF、存在冲突，或 PR 已准备请求 sweep 但仍保留 `TBD`。
+- changelog 变更会修改历史字节、没有位于 EOF、存在冲突，或 PR 已准备请求 sweep 但仍保留 `/pull/XXX` 占位符。
 - YAML、Bash、严格 schema、精确 key 生成、launcher 模拟或配方验证失败。
 
 只有当所有可执行文件一致、精确 key 能生成、运行时路由存在、changelog 能选择该 key，且以上各层检查全部通过时，配置才可以进入 sweep。

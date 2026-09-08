@@ -140,7 +140,8 @@ both `none`/`mtp` to confirm the resolved filename exists.
 
 ## Step 5 — perf-changelog
 
-Append a `- config-keys: [<key>]` block with a clear `description` and `pr-link: TBD`. The
+Append a `- config-keys: [<key>]` block with a clear `description` and
+`pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX`. The
 changelog diff vs `origin/main` is what `process_changelog.py` uses to select the sweep, so a
 new entry is **required** for CI to run your config.
 
