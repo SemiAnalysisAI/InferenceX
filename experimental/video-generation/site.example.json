@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "task_id": "h3-video-ci",
+  "workspace": {
+    "host": "/REPLACE_WITH_PERSISTENT_WORKSPACE",
+    "container": "/work"
+  },
+  "runtime": {
+    "entry": "/REPLACE_WITH_REVIEWED_ENTRY_ONLY_SCRIPT.sh",
+    "entry_sha256": "REPLACE_WITH_SHA256",
+    "rootfs": "/REPLACE_WITH_EXISTING_ROOTFS",
+    "ready_marker": "/REPLACE_WITH_PREPARATION_RECEIPT",
+    "python": "/REPLACE_WITH_PREPARED_PYTHON"
+  },
+  "spec": {
+    "path": "/REPLACE_WITH_FROZEN_GPU_SPEC.json",
+    "sha256": "REPLACE_WITH_SHA256"
+  },
+  "resources": {"gpus": 4, "cpus": 32, "memory_gb": 256, "minutes": 90},
+  "allocation_receipts": [],
+  "mode": "smoke"
+}

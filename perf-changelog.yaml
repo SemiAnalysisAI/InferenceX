@@ -6958,3 +6958,10 @@
     - "Expand the TP8 and TP4/EP1 sweep coverage through concurrency 640."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2866
   
+
+- config-keys: []
+  workflow-dispatch: h3-video.yml
+  description:
+    - "Add an experimental, manually dispatched H3 video benchmark with pinned SGLang execution, native video/audio validation, matched comparisons, and retained evidence artifacts."
+    - "Keep H3 outside the LLM master configs; this entry selects no LLM throughput or evaluation jobs."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

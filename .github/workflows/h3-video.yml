@@ -1,0 +1,119 @@
+name: H3 Video Smoke
+run-name: H3 video smoke - ${{ github.ref_name }}
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: h3-video-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      H3_SOURCE_SHA: ${{ github.sha }}
+    outputs:
+      priority: ${{ steps.queue.outputs.priority }}
+      queue-token: ${{ steps.queue.outputs.queue-token }}
+    steps:
+      - name: Authorize manual repository execution
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            if (context.eventName !== 'workflow_dispatch' ||
+                context.repo.owner !== 'SemiAnalysisAI' || context.repo.repo !== 'InferenceX' ||
+                !context.ref.startsWith('refs/heads/')) {
+              throw new Error('H3 smoke requires manual dispatch of an InferenceX repository branch.');
+            }
+            for (const username of new Set([context.actor, process.env.GITHUB_TRIGGERING_ACTOR])) {
+              const {data} = await github.rest.repos.getCollaboratorPermissionLevel({
+                ...context.repo, username,
+              });
+              if (!['write', 'maintain', 'admin'].includes(data.permission)) {
+                throw new Error(username + ' must have write, maintain, or admin permission.');
+              }
+            }
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - name: Prepare native queue identity
+        id: queue
+        env:
+          H3_SITE_CONFIG: ${{ vars.H3_SITE_CONFIG }}
+          PRIORITY_ENABLED: ${{ vars.PRIORITY_SCHEDULER_ENABLED }}
+          NODE_SLOTS_ENABLED: ${{ vars.NODE_SLOT_SCHEDULER_ENABLED }}
+        run: |
+          set -euo pipefail
+          [[ "$H3_SITE_CONFIG" = /* ]] || { echo 'Set H3_SITE_CONFIG to the reviewed runner-local JSON path.' >&2; exit 1; }
+          if [[ "$PRIORITY_ENABLED" == true && "$NODE_SLOTS_ENABLED" != true ]]; then
+            echo 'H3 priority scheduling requires node-slot admission for nodes:1.' >&2
+            exit 1
+          fi
+          scored=$(printf '%s' '[{"runner":"cluster:h200-dgxc","framework":"sglang","node-count":1}]' |
+            uv run --no-project --with pyyaml --python 3.12 utils/ci_priority.py)
+          echo "priority=$(jq -r '.[0].priority' <<<"$scored")" >> "$GITHUB_OUTPUT"
+          python3 - <<'PY'
+          import hashlib
+          import os
+          identity = f"{os.environ['GITHUB_RUN_ID']}:{os.environ['GITHUB_RUN_ATTEMPT']}:h3-video"
+          token = hashlib.sha256(identity.encode()).hexdigest()[:32]
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f"queue-token={token}\n")
+          PY
+
+  smoke:
+    needs: prepare
+    name: p${{ needs.prepare.outputs.priority }} | H3 video H200 smoke
+    runs-on: >-
+      ${{ fromJSON(
+        vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
+        format('["self-hosted","cluster:h200-dgxc","nodes:1",{0},{1}]',
+          toJSON(format('ci-job-{0}-{1}', needs.prepare.outputs.priority, needs.prepare.outputs.queue-token)),
+          toJSON(format('ci-attempt-{0}', github.run_attempt))) ||
+        '["cluster:h200-dgxc"]'
+      ) }}
+    timeout-minutes: 105
+    env:
+      H3_SITE_CONFIG: ${{ vars.H3_SITE_CONFIG }}
+      H3_SOURCE_SHA: ${{ github.sha }}
+      H3_REPOSITORY: ${{ github.repository }}
+      H3_RUN_ID: ${{ github.run_id }}
+      H3_RUN_ATTEMPT: ${{ github.run_attempt }}
+      H3_WORKFLOW_REF: ${{ github.workflow_ref }}
+      H3_WORKFLOW_SHA: ${{ github.workflow_sha }}
+      H3_ACTOR: ${{ github.actor }}
+      H3_TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+    defaults:
+      run:
+        working-directory: h3-video-source-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Checkout exact dispatched source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.sha }}
+          path: h3-video-source-${{ github.run_id }}-${{ github.run_attempt }}
+          persist-credentials: false
+      - name: Execute configured H3 smoke
+        run: |
+          set -euo pipefail
+          python3 experimental/video-generation/ci.py \
+            --config "$H3_SITE_CONFIG" \
+            --output "$RUNNER_TEMP/h3-video-$H3_RUN_ID-$H3_RUN_ATTEMPT"
+      - name: Preserve H3 evidence, including incomplete attempts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: h3-video-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/h3-video-${{ github.run_id }}-${{ github.run_attempt }}/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14

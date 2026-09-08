@@ -6,6 +6,9 @@ import sys
 from contextlib import nullcontext
 from types import SimpleNamespace
 
+import pytest
+import yaml
+
 import process_changelog
 from matrix_logic.generate_sweep_configs import generate_test_config_sweep
 from matrix_logic.validation import validate_master_config
@@ -1167,3 +1170,81 @@ def test_eval_rows_split_into_multinode_fixed_and_agentic_buckets(
     assert [r["exp-name"] for r in output["multinode_agentic_evals"]] == ["multinode_agentic_eval"]
     assert output["evals"] == []
     assert output["agentic_evals"] == []
+
+
+@pytest.mark.parametrize("ordinary", [False, True])
+def test_manual_workflow_preserves_metadata_without_selecting_llm_jobs(
+    monkeypatch, capsys, tmp_path, ordinary,
+):
+    workflow = tmp_path / "h3-video.yml"
+    workflow.write_text("on:\n  workflow_dispatch:\n")
+    monkeypatch.setattr(process_changelog, "WORKFLOW_DIR", tmp_path)
+    entries = [{
+        "config-keys": [],
+        "workflow-dispatch": "h3-video.yml",
+        "description": ["Add a manually dispatched workload"],
+        "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/XXX",
+    }]
+    if ordinary:
+        entries.append({
+            "config-keys": ["test-config"],
+            "description": ["Update an ordinary LLM recipe"],
+            "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/XXX",
+        })
+    monkeypatch.setattr(
+        process_changelog, "get_added_lines", lambda *_: yaml.safe_dump(entries),
+    )
+    monkeypatch.setattr(
+        process_changelog, "load_config_files", lambda _: {"test-config": {}},
+    )
+    commands = []
+
+    def fake_run(command, **kwargs):
+        commands.append(command)
+        rows = [] if "--evals-only" in command else [_fixed_matrix_row(4)]
+        return SimpleNamespace(stdout=json.dumps(rows))
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(sys, "argv", [
+        "process_changelog.py", "--base-ref", "base", "--head-ref", "head",
+        "--changelog-file", "perf-changelog.yaml",
+    ])
+    process_changelog.main()
+    output = json.loads(capsys.readouterr().out)
+    assert output["changelog_metadata"]["entries"][0]["workflow-dispatch"] == "h3-video.yml"
+    assert output["changelog_metadata"]["entries"][0]["config-keys"] == []
+    assert len(output["changelog_metadata"]["entries"]) == len(entries)
+    assert output["multi_node"] == {}
+    for key in ["evals", "agentic_evals", "multinode_evals", "multinode_agentic_evals"]:
+        assert output[key] == []
+    if ordinary:
+        assert [row["conc"] for row in output["single_node"]["8k1k"]] == [4]
+        assert len(commands) == 2
+        assert all("test-config" in command for command in commands)
+        assert "--no-evals" in commands[0]
+        assert "--evals-only" in commands[1]
+    else:
+        assert output["single_node"] == {}
+        assert commands == []
+
+
+@pytest.mark.parametrize("content", [
+    None,
+    "on:\n  push:\n",
+    "on: [push, pull_request]\n",
+])
+def test_manual_workflow_requires_existing_dispatch_trigger(monkeypatch, tmp_path, content):
+    monkeypatch.setattr(process_changelog, "WORKFLOW_DIR", tmp_path)
+    if content is not None:
+        (tmp_path / "manual.yml").write_text(content)
+    with pytest.raises(ValueError, match="workflow-dispatch workflow"):
+        process_changelog.validate_manual_workflow("manual.yml")
+
+
+@pytest.mark.parametrize("triggers", [
+    "workflow_dispatch", "[push, workflow_dispatch]", "\n  workflow_dispatch:",
+])
+def test_manual_workflow_accepts_github_trigger_forms(monkeypatch, tmp_path, triggers):
+    monkeypatch.setattr(process_changelog, "WORKFLOW_DIR", tmp_path)
+    (tmp_path / "manual.yml").write_text(f"on: {triggers}\n")
+    process_changelog.validate_manual_workflow("manual.yml")
