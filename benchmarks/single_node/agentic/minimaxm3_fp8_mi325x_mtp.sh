@@ -72,6 +72,12 @@ VLLM_CMD=(
     --port "$PORT"
     --tensor-parallel-size "$TP"
     --gpu-memory-utilization 0.90
+    # The upstream nightly does not torch-compile MiniMaxM3SparseForConditionalGeneration,
+    # and with VLLM_USE_BREAKABLE_CUDAGRAPH=0 the default FULL_AND_PIECEWISE graph
+    # mode aborts at init ("piecewise CUDA graphs unavailable ... Set
+    # VLLM_USE_BREAKABLE_CUDAGRAPH=1 or cudagraph_mode=NONE/FULL"; run 34174124043).
+    # Capture full decode-only graphs, as the MI355X sibling does on its nightly (#2825).
+    --compilation-config '{"cudagraph_mode":"FULL_DECODE_ONLY"}'
     --kv-cache-dtype fp8
     --block-size 128
     --language-model-only
