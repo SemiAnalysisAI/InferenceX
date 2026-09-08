@@ -61,6 +61,8 @@ wait_for_amd_gpu_clean
 rocm-smi || true
 amd-smi || true
 
+unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy 
+
 resolve_trace_source
 install_agentic_deps
 
