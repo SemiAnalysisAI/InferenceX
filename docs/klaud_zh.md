@@ -29,6 +29,8 @@ PR 检查使用 `claude-opus-5`（Opus 5），关闭 fast mode（`fastMode: fals
 
 ## Klaud Cold 负责执行
 
+Klaud 在调度、有证据支持的诊断、修复、最终完整扫描开始及结束时发布简短进度评论。等待期间，仅在有实质变化或距离上次更新已过 30 分钟时更新。相邻里程碑合并为一条评论。先更新 PR 正文：简短的当前状态/下一步摘要及尝试表为权威汇总，评论则记录按时间排列的历史。每条评论先写英文，再用 Markdown 水平分隔线（`---`）分隔，最后写简体中文；内容包括状态、已确认或推测的发现、操作/下一步及运行/提交链接。评论只总结可观察的工作，不包含内部推理或原始日志。PR 正文中的尝试表仍为权威汇总，评论不重复整张表。私有数据、凭据、@提及和请求审阅的现有限制仍然适用。
+
 完成 checkout 和上下文准备后，candidate 工作流将控制权交给 Klaud Cold，并提供 `CLAUDE_PAT`、`ANTHROPIC_API_KEY` 和私有 API 只读密钥。Klaud Cold 将公开观测解析到一个活动主配置族，检查当前镜像和已有 PR，并在**编辑或创建分支/PR 之前**核实检查结果中的目标 ID 和实时容量。随后在使用 GPU 前认领分支，产生实际修改并创建草稿 PR。所有生成的 PR 标题必须以 `[Klaud Cold] ` 开头，后接英文 / 简体中文描述。不得在 GitHub 上 @提及用户/团队，也不得请求 review/re-review；这些操作由自动流程处理。它在认领分支前立即重新检查开放 PR，因为检查只是快照，不能锁住后来创建的人工 PR。有歧义、已退役或已经更新的候选直接停止，不运行扫描。提交、推送、调度、监控、诊断、修复及双语 PR 更新都由同一会话完成。
 
 提示词要求 Klaud Cold 通过 `main` 上现有的 `e2e-tests.yml` 仅测量更新后的镜像及其修复尝试，将实际测量提交的 SHA 传入 `inputs.ref`，将完整配置族的 `test-config` 命令传入 `generate-cli-command`。它读取当前 `configs/*-master.yaml`、`configs/runners.yaml` 并使用现有矩阵生成器 CLI，不再维护另一份 recipe 目录。保留默认 eval、所有配置测试点、物理 `nodes:N` 标签、MTP chat template 和产物约定。定向修复尝试不添加 sweep 标签，并保持 PR 为草稿。定向尝试通过后，Klaud 会在 `perf-changelog.yaml` 物理末尾追加包含 PR URL 的必要条目，保留此前所有字节，将 PR 标记为 ready 但不请求 review，并将 `full-sweep-enabled` 作为唯一与 sweep 相关的标签。它会等待针对该 PR 精确 head 的 `run-sweep.yml` 成功结束并产生可复用产物。如果最终 sweep 失败，Klaud 会在任何修复推送之前移除该标签并将 PR 改回草稿，再在剩余修复预算内修复并重复。Klaud 不会自行 staging、授权复用、请求 review 或合并。
