@@ -58,7 +58,11 @@ def test_single_node_pyxis_imports_pinned_image_inside_final_allocation(tmp_path
     )
 
     assert result.returncode == 0, result.stderr
+    args = srun_args.read_text().splitlines()
     assert (
         f"--container-image=docker://registry-1.docker.io#lmsysorg/sglang:{DIGEST}"
-        in srun_args.read_text().splitlines()
+        in args
     )
+    mounts = next(arg for arg in args if arg.startswith("--container-mounts="))
+    assert "/scratch/models:/scratch/models" not in mounts
+    assert "/data/home/sa-gha-runner/models:/data/home/sa-gha-runner/models" in mounts

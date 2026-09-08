@@ -441,18 +441,6 @@ else
     export HF_HUB_CACHE="${HF_HUB_CACHE:-/mnt/hf_hub_cache}"
     mkdir -p "$HF_HUB_CACHE_HOST_PATH"
 
-    # MODEL stays the HF id for the client; MODEL_PATH is where the server reads
-    # weights. Only the root holding MODEL_PATH is mounted -- mounting both roots
-    # makes pyxis fail whenever the unused one is absent on the node.
-    MODEL_BASENAME="${MODEL##*/}"
-    if [[ " ${STAGED_MODELS[*]} " == *" ${MODEL_BASENAME} "* ]]; then
-        MODEL_MOUNT_DIR="$MODEL_ROOT"
-    else
-        MODEL_MOUNT_DIR="$WRITABLE_MODELS_DIR"
-        mkdir -p "$WRITABLE_MODELS_DIR"
-    fi
-    export MODEL_PATH="${MODEL_MOUNT_DIR}/${MODEL_BASENAME}"
-
     CONTAINER_IMAGE="$(enroot_uri_for_image "$IMAGE")" || exit 1
     SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
     # Prefer a framework-tagged script (e.g. dsv4_fp4_b300_sglang.sh); fall back to
@@ -469,6 +457,19 @@ else
     if [[ -n "${BENCH_SCRIPT_OVERRIDE:-}" ]]; then
         BENCH_SCRIPT="$BENCH_SCRIPT_OVERRIDE"
     fi
+
+    # MODEL stays the HF id for the client; MODEL_PATH is where the server reads
+    # weights. Only the root holding MODEL_PATH is mounted -- mounting both roots
+    # makes pyxis fail whenever the unused one is absent on the node.
+    MODEL_BASENAME="${MODEL##*/}"
+    if [[ "$BENCH_SCRIPT" != "benchmarks/single_node/agentic/qwen3.5_fp8_b300_sglang.sh" &&
+          " ${STAGED_MODELS[*]} " == *" ${MODEL_BASENAME} "* ]]; then
+        MODEL_MOUNT_DIR="$MODEL_ROOT"
+    else
+        MODEL_MOUNT_DIR="$WRITABLE_MODELS_DIR"
+        mkdir -p "$WRITABLE_MODELS_DIR"
+    fi
+    export MODEL_PATH="${MODEL_MOUNT_DIR}/${MODEL_BASENAME}"
 
     # These images install sglang editable under /workspace, so the default
     # workspace bind-mount masks the install and breaks `import sglang`. Mount at
