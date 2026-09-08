@@ -6898,3 +6898,12 @@
     - "Derive the LMCache MP server ports from $PORT rather than the fixed 6555/8090, so two cells sharing a runner cannot collide."
     - "Raise the L1 read-lock TTL to 3600s: the lock is held from prefetch through retrieve, and a queued request at these concurrencies exceeds the 300s default and fails the retrieve."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2831
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Raise the LMCache MP heartbeat interval to 60s. The worker pings the server with a timeout equal to the interval, so a single ping slower than the 10s default drops the worker into degraded mode; observed server stalls of 42s and 55s tripped it."
+    - "Raise the server's worker reap timeout to 300s to stay above 3x the heartbeat interval, so the server does not reap a worker's KV cache registration while its ping is still in flight."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2831

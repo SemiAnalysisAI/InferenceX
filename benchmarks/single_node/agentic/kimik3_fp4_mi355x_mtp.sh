@@ -231,6 +231,9 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         --max-cpu-workers 8
         --max-gpu-workers "$LMCACHE_MAX_GPU_WORKERS"
         --eviction-policy LRU
+        # Must stay >= 3 x lmcache.mp.heartbeat_interval, or the server
+        # reaps a worker's registration while its ping is still in flight.
+        --worker-reap-timeout-seconds 300
         --supported-transfer-mode lmcache_driven
         --shm-name ""
     )
@@ -248,7 +251,7 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     # same MQ timeout headroom as the MiniMax-M3 arm.
     OFFLOAD_ARGS=(
         --kv-transfer-config
-        "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_connector_module_path\":\"lmcache.integration.vllm.lmcache_mp_connector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.port\":$LMCACHE_PORT,\"lmcache.mp.mq_timeout\":6000.0}}"
+        "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_connector_module_path\":\"lmcache.integration.vllm.lmcache_mp_connector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.port\":$LMCACHE_PORT,\"lmcache.mp.mq_timeout\":6000.0,\"lmcache.mp.heartbeat_interval\":60.0}}"
     )
     ;;
     *)
