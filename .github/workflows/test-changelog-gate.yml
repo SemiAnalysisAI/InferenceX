@@ -29,6 +29,7 @@ on:
       - "utils/test_collect_eval_results.py"
       - "utils/evals/validate_scores.py"
       - "utils/evals/test_batched_eval.py"
+      - "utils/evals/test_run_eval_dispatch.py"
       - "utils/prepare_perf_changelog_merge.py"
       - "utils/recover_failed_ingest.py"
       - "utils/changelog_gate_tests/test_prepare_perf_changelog_merge.py"
@@ -83,4 +84,5 @@ jobs:
             utils/test_process_changelog.py \
             utils/test_collect_eval_results.py \
             utils/evals/test_batched_eval.py \
+            utils/evals/test_run_eval_dispatch.py \
             -v
