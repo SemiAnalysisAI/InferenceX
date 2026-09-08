@@ -5,7 +5,7 @@ model:
   precision: fp4
 dynamo:
   install: true
-  hash: ad6f7d54ce7b99c53576b10482755c93c921fbac
+  hash: 61c37bc33c3e88da3facaa39fa2b5caf616740ba
 slurm:
   time_limit: '8:00:00'
 health_check:

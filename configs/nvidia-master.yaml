@@ -7210,7 +7210,7 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-pp-pareto:
   runner: cluster:gb300-nv
   precision: fp4
   framework: dynamo-sglang
-  router: { name: dynamo-router, version: "ad6f7d54ce7b99c53576b10482755c93c921fbac" }
+  router: { name: dynamo-router, version: "61c37bc33c3e88da3facaa39fa2b5caf616740ba" }
   kv-p2p-transfer: mooncake
   multinode: true
   disagg: true
