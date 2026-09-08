@@ -686,7 +686,7 @@ kimik3-fp4-mi355x-atom-agentic-mtp:
       - { tp: 8, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [32, 40, 56], spec-decoding: mtp }
 
 minimaxm3-fp4-mi355x-atom-agentic-mtp:
-  image: rocm/atom-dev@sha256:1cd6abf29958cf0c332041b945249f7303ac86a36352f976b26d844ad72b4f5c
+  image: rocm/atom-dev:nightly_202609080825-lirzhang-triton-build
   model: amd/MiniMax-M3-MXFP4
   model-prefix: minimaxm3
   runner: cluster:mi355x-amds

@@ -64,21 +64,6 @@ install_agentic_deps
 ATOM_RUNTIME_DEPS=/tmp/inferencex-atom-runtime-deps
 /opt/venv/bin/python -m pip install --quiet --target "$ATOM_RUNTIME_DEPS" --no-deps sentencepiece tiktoken
 
-# The pinned ATOM image predates upstream KV-pool fixes. Apply #2147 when set,
-# otherwise keep the reviewed #2106 patch for the current recipe image.
-case "${ATOM_PATCH:-2147}" in
-    2147)
-        bash "$(dirname "$0")/apply_atom_pr2147_patch.sh"
-        ;;
-    2106)
-        bash "$(dirname "$0")/apply_atom_pr2106_patch.sh"
-        ;;
-    *)
-        echo "Unsupported ATOM_PATCH=${ATOM_PATCH} (expected 2106 or 2147)" >&2
-        exit 1
-        ;;
-esac
-
 # Require the ATOM Prometheus stream in every official result. AIPerf
 # deduplicates this endpoint against its automatic localhost discovery.
 export AIPERF_SERVER_METRICS_URLS="http://localhost:${PORT}/metrics"
