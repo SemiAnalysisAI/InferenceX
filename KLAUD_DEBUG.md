@@ -215,12 +215,14 @@ between the PR sweep and merge therefore does not require another GPU sweep.
 ### 7.2 Capacity deferrals must release the candidate claim
 
 The planner ignores closed PRs but treats every matching `klaude/auto-*` branch
-as occupied. When capacity is the stop reason at any stage, first update an
-existing PR report with the terminal attempt, public-safe deferral reason and
-confirmed child-run states. Then cancel and confirm all owned runs, remove sweep
-labels, return the PR to draft, close it, and delete its remote Klaud branch so
-a later sweep can select the candidate again. Without a PR, report the deferral
-in the agent's final response. Closing the PR alone does not make it eligible.
+as occupied. If the capacity check fails before a targeted dispatch, the final
+sweep transition or a recovery dispatch, first record a public-safe deferral and
+current attempt state in any existing PR. Cancel and confirm all owned runs,
+update the report with their terminal states, then remove sweep labels, return
+the PR to draft, close it, and delete its remote Klaud branch so a later sweep
+can select the candidate again. Without a PR, report the deferral in the agent's
+final response. A utilization increase after dispatch does not cancel healthy
+work. Closing the PR alone does not make the candidate eligible.
 
 ### 7.3 Final reusable sweeps require a ready PR
 
@@ -230,7 +232,9 @@ If that sweep fails, remove the label and return the PR to draft before pushing
 a repair, or each intermediate push starts another full sweep. The Klaud Stop
 hook tracks a labeled final sweep by candidate branch and exact head SHA and
 requires a successful run with reusable artifacts. It ignores completed
-all-skipped runs from unrelated label events on that same SHA.
+all-skipped runs from unrelated label events on that same SHA. The lookup window
+starts at the parent auto-sweep's original creation time so a candidate-job rerun
+still sees targeted and final sweeps created by its earlier attempt.
 
 ---
 

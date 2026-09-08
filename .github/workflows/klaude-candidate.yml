@@ -42,11 +42,14 @@ jobs:
       - name: Prepare candidate context
         env:
           CANDIDATE: ${{ inputs.candidate }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           [[ "$CANDIDATE" =~ ^[0-9a-f]{16}-[0-9a-f]{16}$ ]]
           cp -R "$RUNNER_TEMP/plan/$CANDIDATE" "$RUNNER_TEMP/klaude"
           rm -r "$RUNNER_TEMP/plan"
-          echo "KLAUDE_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+          started_at="$(gh api --method GET "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --jq .created_at)"
+          [[ "$started_at" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]
+          echo "KLAUDE_STARTED_AT=$started_at" >> "$GITHUB_ENV"
       - name: Let Klaud Cold own the candidate PR
         id: claude
         uses: anthropics/claude-code-action@d75b94d5ad426cb8546e6628b6f5f19b84e5cce1
@@ -89,7 +92,8 @@ jobs:
             Use configs/runners.yaml and the matrix generator for routes, all points and physical
             node demand. Verify the reviewed telemetry-clusters cover every actual target; never
             substitute a healthy sibling cluster. Run the capacity check below BEFORE edits or
-            branch/PR creation as well as before each dispatch. Unknown routes mean defer and stop.
+            branch/PR creation, each targeted dispatch and the final-sweep ready/label transition.
+            Unknown routes mean defer and stop.
             Verify upstream releases/registry for CUDA/ROCm/hardware compatibility;
             pin mutable tags by digest. Recheck open PRs immediately before claiming the branch;
             the context's pr-review is a snapshot. Before GPU use, atomically claim the context's exact
@@ -112,12 +116,13 @@ jobs:
             uv run --no-project --python 3.12 --with "pydantic>=2.10,<3" python -m utils.klaude check-capacity --cluster TELEMETRY_CLUSTER_ID
             Exit 0 requires current telemetry, available nodes and node utilization below 20% for
             ALL targets. Any other result means defer and stop; do not wait for recovery or promise
-            automatic continuation. If capacity is the stop reason at any stage, first update any
-            existing PR table with the terminal attempt, a public-safe deferral reason and confirmed
-            child-run states. Then cancel and confirm all owned runs, remove any sweep label, return
+            automatic continuation. If this check fails before a targeted dispatch, final-sweep
+            transition or recovery dispatch, first record a public-safe capacity deferral and current
+            attempt state in any existing PR. Cancel and confirm all owned runs, then update its table
+            with terminal/cancelled rows and confirmed states. Finally remove any sweep label, return
             the PR to draft, close it and delete its remote Klaud branch so later sweeps can retry it.
-            If no PR exists, report the deferral in your final response. Create no placeholder PR.
-            Never print private API responses.
+            Without a PR, report the deferral in your final response; create no placeholder. Never
+            cancel healthy work merely because utilization rises after dispatch. Never print private API responses.
 
             Dispatch e2e-tests.yml from main with inputs.ref=exact measured SHA,
             generate-cli-command="test-config --config-files FILE --config-keys FAMILY", fail-fast=true.
@@ -157,8 +162,8 @@ jobs:
             sweep-related label. Wait for its run-sweep.yml run on the exact PR head to finish
             successfully with reusable artifacts; this is the final validation. If it fails, remove
             full-sweep-enabled and return the PR to draft before any repair push, then repair within
-            the remaining budget and repeat. If capacity loss caused or prevents recovery from that
-            failure, use the reporting and complete deferral cleanup above instead of repairing.
+            the remaining budget and repeat. If the failure is capacity-related, run the capacity
+            check before recovery; use the complete deferral cleanup above only if that check fails.
             Do not stage results, post /reuse-sweep-run, request review or merge.
 
             PR and final report: English/Simplified Chinese Markdown table, one row for the baseline
