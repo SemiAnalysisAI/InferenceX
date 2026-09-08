@@ -6921,3 +6921,11 @@
     - "Pick up the latest automatic ROCm DeepSeek-V4 optimizations, including fused mHC post/pre plus RMSNorm, gfx950 C4A top-k dispatch, fused C4 compressor GEMMs, fused SWA q/kv RMSNorm plus q FP8 quantization, and medium-batch cooperative top-k tuning."
     - "Keep the existing VLLM_ROCM_USE_AITER=1, VLLM_ROCM_USE_AITER_MOE=1, and --moe-backend aiter settings, and explicitly add VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 plus VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 to both STP and MTP paths. The current checkpoint's shared-expert path does not satisfy the latest vLLM fusion conditions, so that fusion flag self-disables while preserving recipe parity."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2792
+
+- config-keys:
+    - qwen3.5-fp8-mi325x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update SGLang ROCm image from lmsysorg/sglang:v0.5.16-rocm720-mi30x (v0.5.16 release, ROCm 7.2, gfx942) to lmsysorg/sglang-rocm:v0.5.19-rocm720-mi30x-20260907 (2026-09-07 ROCm 7.2 mi30x nightly, digest sha256:e5c773e5c53bbbb341f20584f92040be17b30f7518a2bbe1781f716cd6ea89e1; Docker Hub last pushed 2026-09-07T13:58:10Z), the same rocm720-mi30x nightly flavor the MI300X Qwen3.5 FP8 AgentX sibling already runs. benchmarks/single_node/agentic/qwen3.5_fp8_mi325x_mtp.sh is unchanged: AITER attention with unified attention and allreduce fusion, fp8 quantization and fp8_e4m3 KV, native EAGLE MTP with golden acceptance length 3.39; the TP2/EP2, TP4, TEP4, TP8, and TEP8 concurrency grids are unchanged. Same-day counterpart of the Qwen3.5 SGLang AgentX bumps on B200/H200/H100 (#2861, #2862, #2868, #2869)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2870
