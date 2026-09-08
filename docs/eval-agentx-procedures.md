@@ -338,3 +338,10 @@ Use `scancel` or process termination only with explicit approval and a concrete 
 - Every backend/frontend and metrics source is represented in live evidence.
 - Fast/smoke results are labeled diagnostic. Only the canonical candidate is used for final comparison.
 - Workflow and artifact collection conclude green before success is reported.
+
+The September 8 K3 FMHA experiment branch runs c1 and c14 with LMCache
+`0.5.5.dev104+rocm7.2`, AITER `0.1.21.post1`, FlyDSL `0.3.2`, and
+`AITER_DISABLE_FMHA_OPUS=1`. Separate A8W4 and A4W4 source refs select
+`K3_PRECISION` in the recipe; A4W4 unsets `AITER_SITUV2_A8W4`. Both use the
+canonical 3600-second replay and ten warmup requests per lane. Compare results
+by concurrency and source ref; these are synthetic-acceptance performance runs.

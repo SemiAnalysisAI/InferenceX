@@ -14,9 +14,8 @@ set -x
 #   --max-num-seqs 128 --max-num-batched-tokens 4096 --enable-auto-tool-choice
 #   --tool-call-parser kimi_k3 --reasoning-parser kimi_k3
 #
-# with env VLLM_ROCM_USE_AITER=1 SAFETENSORS_FAST_GPU=1 and the legacy A8W4
-# SiTUv2 FlyDSL selector. This control keeps the upgraded AITER/FlyDSL packages
-# while deliberately leaving the pinned vLLM source unpatched.
+# with Opus FMHA disabled and paired A8W4/A4W4 SiTUv2 selectors.
+# The pinned vLLM source remains unpatched.
 #
 # K3 is a 2.8T-parameter natively-multimodal MoE (896 routed experts, 16/token
 # plus shared) on Kimi Delta Attention, gated MLA and Attention Residuals, with
@@ -43,6 +42,10 @@ set -x
 #   SPEC_DECODE              true   (this is the _mtp DSpark recipe; =false for a no-spec A/B)
 #   SPEC_NUM_TOKENS          2      (DSpark draft length; validated by the _mtp config)
 
+K3_PRECISION=a8w4
+export AITER_DISABLE_FMHA_OPUS=1
+export AIPERF_WARMUP_REQUESTS_PER_LANE=10
+export AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES=0
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
 wait_for_amd_gpu_clean
@@ -90,9 +93,11 @@ AITER_VERSION="0.1.21.post1+rocm7.2"
 AITER_WHEEL_URL="https://github.com/ROCm/aiter/releases/download/v0.1.21.post1/amd_aiter-0.1.21.post1+rocm7.2.manylinux.2.28-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl"
 NUMPY_VERSION="2.3.5"
 UV_CACHE_DIR="$AIPERF_UV_CACHE_DIR" \
-    "$AIPERF_UV_BIN" pip install --system --reinstall \
-    "$AITER_WHEEL_URL" "numpy==$NUMPY_VERSION"
+    "$AIPERF_UV_BIN" pip install --system \
+    "$AITER_WHEEL_URL" "flydsl==0.3.2" "numpy==$NUMPY_VERSION"
 "$AIPERF_UV_BIN" pip show --system amd-aiter flydsl numpy
+"$AIPERF_UV_BIN" venv --system-site-packages --python 3.12 /tmp/k3-serving/.venv
+K3_PYTHON=/tmp/k3-serving/.venv/bin/python
 
 AITER_INSTALLED_VERSION=$("$AIPERF_UV_BIN" pip show --system amd-aiter | awk '$1 == "Version:" {print $2}')
 FLYDSL_INSTALLED_VERSION=$("$AIPERF_UV_BIN" pip show --system flydsl | awk '$1 == "Version:" {print $2}')
@@ -115,8 +120,17 @@ export VLLM_ROCM_AITER_MLA_ASM_PADDING=asm
 export VLLM_ROCM_USE_AITER=1
 export SAFETENSORS_FAST_GPU=1
 export VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4=1
-export AITER_SITUV2_A8W4=1
-unset AITER_SITUV2_A4W4
+case "$K3_PRECISION" in
+    a8w4)
+        export AITER_SITUV2_A8W4=1
+        unset AITER_SITUV2_A4W4
+        ;;
+    a4w4)
+        unset AITER_SITUV2_A8W4
+        export AITER_SITUV2_A4W4=1
+        ;;
+    *) exit 2 ;;
+esac
 export AITER_BF16_FP8_MOE_BOUND=0
 export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 export AITER_QUICK_REDUCE_QUANTIZATION=INT4
@@ -138,6 +152,9 @@ export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
 # ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
+printf '%s\n' "precision=$K3_PRECISION" "AITER_DISABLE_FMHA_OPUS=$AITER_DISABLE_FMHA_OPUS" \
+    "AITER_SITUV2_A8W4=${AITER_SITUV2_A8W4:-unset}" \
+    "AITER_SITUV2_A4W4=${AITER_SITUV2_A4W4:-unset}" > "$RESULT_DIR/dispatch-env.txt"
 
 SERVER_PID=""
 LMCACHE_PID=""
@@ -179,14 +196,7 @@ case "${KV_OFFLOAD_BACKEND:-}" in
       lmcache)
     require_agentic_kv_offload_backend "$KV_OFFLOAD_BACKEND"
 
-    case "$CONC" in
-        4|14)
-            LMCACHE_VERSION="0.5.5.dev104+rocm7.2"
-            ;;
-        *)
-            LMCACHE_VERSION="0.5.5.dev89+rocm7.2"
-            ;;
-    esac
+    LMCACHE_VERSION="0.5.5.dev104+rocm7.2"
     LMCACHE_ROCM_INDEX="https://github.com/LMCache/LMCache/releases/expanded_assets/nightly-rocm"
 
     LMCACHE_INSTALL_TARGET="lmcache==${LMCACHE_VERSION}"
@@ -212,7 +222,7 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         LMCACHE_INSTALL_SOURCE_ARGS=()
     fi
 
-    agentic_pip_install --quiet --no-cache-dir --no-deps \
+    "$AIPERF_UV_BIN" pip install --system --quiet --no-cache --no-deps \
         "${LMCACHE_INSTALL_SOURCE_ARGS[@]}" \
         "sortedcontainers==2.4.0" \
         "opentelemetry-exporter-prometheus==0.61b0" \
@@ -225,25 +235,30 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         exit 1
     fi
 
-    # LMCache 0.5.5's transfer-channel layer eagerly imports the Mooncake
-    # backend (mooncake_te_impl.py -> `from mooncake.engine import
-    # TransferEngine`), whose native .so resolves all of its DT_NEEDED libs at
-    # import. The vLLM ROCm image ships none of them, so the import sanity
-    # check below (and the LMCache server) would otherwise fail with
-    # "ImportError: lib*.so: cannot open shared object file" (first libglog,
-    # then libjsoncpp, ...). Provision Mooncake's full runtime lib set from the
-    # distro before importing. apt-get install is idempotent, so run it
-    # whenever any of the libs is still missing rather than gating on one.
+    # Extract Mooncake runtime libraries without dpkg installation in Enroot.
     LMCACHE_NATIVE_LIBS=(libglog.so.0 libjsoncpp.so.25 libibverbs.so.1 librdmacm.so.1 libnuma.so.1)
     for lib in "${LMCACHE_NATIVE_LIBS[@]}"; do
-        if ! ldconfig -p | grep -q "$lib"; then
-            apt-get update
-            apt-get install -y \
-                libgoogle-glog0v5 libjsoncpp25 libibverbs1 librdmacm1 libnuma1
+        if ! ldconfig -p | grep "$lib" >/dev/null; then
+            native_dir=$(mktemp -d /tmp/k3-native-XXXXXX)
+            mkdir -p "$native_dir/lists/partial" "$native_dir/archives/partial"
+            apt_options=(-o "Dir::State::lists=$native_dir/lists"
+                -o "Dir::Cache::archives=$native_dir/archives"
+                -o APT::Sandbox::User=root)
+            apt-get "${apt_options[@]}" update
+            (
+                cd "$native_dir"
+                apt-get "${apt_options[@]}" download \
+                    libgoogle-glog0v5 libgflags2.2 libjsoncpp25 libibverbs1 \
+                    librdmacm1 libnuma1 libnl-3-200 libnl-route-3-200
+                for deb in ./*.deb; do
+                    dpkg-deb --extract "$deb" "$native_dir/root"
+                done
+            )
+            export LD_LIBRARY_PATH="$native_dir/root/usr/lib/x86_64-linux-gnu:$native_dir/root/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"
             break
         fi
     done
-    python3 -c \
+    "$K3_PYTHON" -c \
         "import cupy; import lmcache.integration.vllm.lmcache_mp_connector; import opentelemetry.exporter.prometheus" \
         >/dev/null
 
@@ -276,7 +291,7 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     fi
 
     LMCACHE_CMD=(
-        lmcache server
+        "$K3_PYTHON" /usr/local/bin/lmcache server
         --host 127.0.0.1
         --port "$LMCACHE_PORT"
         --http-host 127.0.0.1
@@ -317,6 +332,22 @@ case "${KV_OFFLOAD_BACKEND:-}" in
 esac
 fi
 
+"$K3_PYTHON" - <<'VERSIONS' | tee "$RESULT_DIR/runtime-versions.json"
+import json
+from importlib.metadata import version
+expected = {
+    "amd-aiter": "0.1.21.post1+rocm7.2.manylinux.2.28",
+    "flydsl": "0.3.2",
+    "lmcache": "0.5.5.dev104+rocm7.2",
+    "numpy": "2.3.5",
+    "vllm": "0.28.1rc1.dev199+g7c5dc571c.rocm723",
+    "torch": "2.12.0+git6bbd260",
+}
+actual = {name: version(name) for name in expected}
+assert actual == expected, (actual, expected)
+print(json.dumps(actual, indent=2))
+VERSIONS
+
 # ---- LLM server  ------------------------------------------------------------
 
 # ---- Parallelism ------------------------------------------------------------
@@ -327,7 +358,7 @@ fi
 
 # ---- Speculative / Util------------------------------------------------------
 case "$CONC" in
-    # No KV offload; the working set fits in HBM.
+    # Keep the c1 serving envelope identical across precision arms.
     1)
         SYNTHETIC_ACCEPT_LEN=3.75
         SPEC_NUM_TOKENS=6
@@ -397,7 +428,7 @@ export VLLM_USE_DIRECT_DCP_KV_GATHER=0
 
 { set +x; } 2>/dev/null
 VLLM_CMD=(
-    vllm serve "$MODEL_PATH" --served-model-name "$MODEL"
+    "$K3_PYTHON" /usr/local/bin/vllm serve "$MODEL_PATH" --served-model-name "$MODEL"
     --host 0.0.0.0
     --port "$PORT"
     --trust-remote-code
@@ -430,17 +461,22 @@ echo "Server PID: $SERVER_PID"
 
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-if ! grep -q "flydsl_moe1_afp8_wfp4" "$SERVER_LOG"; then
-    echo "Error: upgraded AITER did not dispatch a legacy A8W4 FlyDSL MoE kernel" >&2
-    grep -E "flydsl_moe[12]_afp[48]_wfp4|AITER_SITUV2" "$SERVER_LOG" | tail -n 80 >&2 || true
+if [[ "$K3_PRECISION" == a8w4 ]]; then
+    expected_moe="flydsl_moe1_afp8_wfp4"
+    forbidden_moe="flydsl_moe1_afp4_wfp4"
+else
+    expected_moe="flydsl_moe1_afp4_wfp4"
+    forbidden_moe="flydsl_moe1_afp8_wfp4"
+fi
+if ! grep -q "$expected_moe" "$SERVER_LOG" || grep -q "$forbidden_moe" "$SERVER_LOG"; then
+    echo "ERROR: unexpected MoE dispatch for $K3_PRECISION" >&2
     exit 1
 fi
-if grep -q "flydsl_moe1_afp4_wfp4" "$SERVER_LOG"; then
-    echo "Error: A4W4 FlyDSL MoE dispatch remained active in the A8W4 control" >&2
-    grep -E "flydsl_moe[12]_afp[48]_wfp4" "$SERVER_LOG" | tail -n 80 >&2 || true
+if grep -q 'import \[module_fmha_fwd_bf16_opus\]' "$SERVER_LOG"; then
+    echo "ERROR: Opus attention was loaded with the disable flag set" >&2
     exit 1
 fi
-echo "Verified upgraded-AITER legacy A8W4 dispatch in server.log"
+echo "Verified $K3_PRECISION MoE dispatch and disabled Opus attention"
 
 if [ "${EVAL_ONLY}" = "true" ]; then
     run_eval --port "$PORT"

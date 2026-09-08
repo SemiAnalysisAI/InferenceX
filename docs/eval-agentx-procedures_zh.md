@@ -338,3 +338,10 @@ gh run cancel <RUN_ID> --repo SemiAnalysisAI/InferenceX
 - 每个 backend/frontend 与 metrics source 都在实时证据中有所体现。
 - Fast/smoke 结果明确标为诊断用途；只有 canonical candidate 用于最终比较。
 - 在报告成功前，工作流与 artifact collection 均已得出 green 结论。
+
+9 月 8 日的 K3 FMHA 实验分支在 c1 和 c14 下均使用 LMCache
+`0.5.5.dev104+rocm7.2`、AITER `0.1.21.post1`、FlyDSL `0.3.2`，并设置
+`AITER_DISABLE_FMHA_OPUS=1`。A8W4 和 A4W4 分别使用独立的源码引用，
+通过脚本中的 `K3_PRECISION` 选择精度；A4W4 会取消设置 `AITER_SITUV2_A8W4`。
+两组均使用标准的 3600 秒回放，每条轨迹预热十个请求。比较结果时应同时
+匹配并发数与源码引用；这些测试使用模拟接受长度，仅用于性能评估。
