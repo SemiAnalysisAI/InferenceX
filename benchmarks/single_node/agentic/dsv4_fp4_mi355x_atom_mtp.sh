@@ -72,9 +72,7 @@ if [ "$DP_ATTENTION" = "true" ]; then
     # session id from its correlation id so the DPA router pins each
     # conversation to one rank.
     export AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID=1
-    export AIPERF_HTTP_KEEPALIVE_TIMEOUT=4
     export AGENTIC_WARMUP_GRACE_PERIOD=3600
-    export AIPERF_BENCHMARK_GRACE_PERIOD=30
     STATE_CHECKPOINT_INTERVAL_TOKENS=32768
     DEP_ARGS=(
         --enable-dp-attention
