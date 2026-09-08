@@ -6921,3 +6921,12 @@
     - "Pick up the latest automatic ROCm DeepSeek-V4 optimizations, including fused mHC post/pre plus RMSNorm, gfx950 C4A top-k dispatch, fused C4 compressor GEMMs, fused SWA q/kv RMSNorm plus q FP8 quantization, and medium-batch cooperative top-k tuning."
     - "Keep the existing VLLM_ROCM_USE_AITER=1, VLLM_ROCM_USE_AITER_MOE=1, and --moe-backend aiter settings, and explicitly add VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 plus VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 to both STP and MTP paths. The current checkpoint's shared-expert path does not satisfy the latest vLLM fusion conditions, so that fusion flag self-disables while preserving recipe parity."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2792
+
+- config-keys:
+    - qwen3.8next-fp4-b300-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move the image from the mutable model-branch tag lmsysorg/sglang:qwen38flashnext (last re-pushed 2026-09-03T20:54:46Z, digest sha256:5ae5816783d58e2e56e84d2e863f5441425056f500b7fbd7448c4aae017a2521) to the newest Qwen3.8-Flash-Next model-branch build, lmsysorg/sglang:dev-cu13-qwen38-next-local@sha256:9d2a843c706c74bc259c0d9abf360551eb2734e1e7d255ab012a6965f10480b6 (Docker Hub last pushed 2026-09-07T11:12:42Z), pinned by digest so every node runs the same build; the same move as the H100/H200 siblings in #2876/#2877. Qwen3.8-Flash-Next (architecture Qwen4ExpForConditionalGeneration) is not in SGLang main, v0.5.19, or the 2026-09-07 nightly (nightly-dev-cu13-20260907-30705c00), so no upstream nightly can serve it; the model-branch dev images are the only lineage. benchmarks/single_node/agentic/qwen3.8next_fp4_b300_sglang_mtp.sh is unchanged, as are the serve flags, golden acceptance length, and concurrency grid. The sweep is the validation that this branch build still carries the fixes the recipe relies on."
+    - "Move the recipe from the retired cluster:b300-nv fleet (launcher and runner labels removed in #2826) to cluster:b300-dsxe so the sweep has a runner to schedule on; same repoint as #2829 for the GLM-5.2 B300 sibling. The runner change means this is not an append-only bump: the whole curve reruns on DSXE."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2879
