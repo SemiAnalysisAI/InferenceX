@@ -6947,3 +6947,11 @@
     - "Update vLLM ROCm image from vllm/vllm-openai-rocm:v0.27.1 (v0.27.1 release) to vllm/vllm-openai-rocm:nightly-d9105ea8001e0a6d77a96327d17515bb5791fb36 (2026-09-07 upstream ROCm nightly, digest sha256:74d4a95f3ae672ecddf9acb7296917def82d9eca51687fa2862ae72b03ff1907, tag commit vllm-project/vllm@d9105ea8; Docker Hub last pushed 2026-09-07T05:26:48Z). benchmarks/single_node/agentic/minimaxm3_fp8_mi300x_mtp.sh is unchanged: TRITON_ATTN attention, fp8 KV, block-size 128, EAGLE3 speculative decoding with the Inferact MiniMax-M3 EAGLE3-GQA draft and the committed golden synthetic acceptance length, minimax_m3 tool-call and reasoning parsers; the search space is unchanged. The upstream commit-pinned ROCm nightly is the same vllm commit the B200 MiniMax-M3 AgentX recipe moved to in #2860. Note that vllm-openai-rocm commit-nightly tags have expired from Docker Hub within days in the past; node squash caches keep merged configs running, but a re-pin to a durable tag may be needed later."
     - "Add --compilation-config cudagraph_mode=FULL_DECODE_ONLY to the serve command. The upstream nightly does not torch-compile MiniMaxM3SparseForConditionalGeneration, so with VLLM_USE_BREAKABLE_CUDAGRAPH=0 the default FULL_AND_PIECEWISE mode aborts at engine init with piecewise CUDA graphs unavailable (first sweep, run 34174124043, eval cell); full decode-only graphs are what the MI355X MiniMax-M3 sibling runs on its nightly (#2825)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2873
+
+- config-keys:
+    - glm5.2-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update SGLang ROCm image from lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260728 (v0.5.16, ROCm 7.2) to lmsysorg/sglang-rocm:v0.5.19-rocm10-mi35x-20260906 (v0.5.19, ROCm 10, digest sha256:6117b0572a738e77dee3c0ffc16720c05833d7c1310d670cd874802e902d2073; Docker Hub last pushed 2026-09-06T15:50:31Z). benchmarks/single_node/agentic/glm5.2_fp4_mi355x_sglang_mtp.sh is unchanged: TP4/EP4 HiCache conc [1, 2, 4, 8, 10, 12] and TP8/EP1 GPU-resident conc [1, 2, 4, 10], MTP, write_through_selective, MAX_RUNNING_REQUESTS=2xCONC. This is the remaining MI355X SGLang AgentX key still on the 2026-07-28 v0.5.16 pin; the sibling dsv4-fp4-mi355x-sglang-agentic-mtp already moved to v0.5.18-rocm720-mi35x-20260902 in #2800."
+  pr-link: XXX
