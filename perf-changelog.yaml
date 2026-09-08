@@ -6921,3 +6921,12 @@
     - "Pick up the latest automatic ROCm DeepSeek-V4 optimizations, including fused mHC post/pre plus RMSNorm, gfx950 C4A top-k dispatch, fused C4 compressor GEMMs, fused SWA q/kv RMSNorm plus q FP8 quantization, and medium-batch cooperative top-k tuning."
     - "Keep the existing VLLM_ROCM_USE_AITER=1, VLLM_ROCM_USE_AITER_MOE=1, and --moe-backend aiter settings, and explicitly add VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 plus VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 to both STP and MTP paths. The current checkpoint's shared-expert path does not satisfy the latest vLLM fusion conditions, so that fusion flag self-disables while preserving recipe parity."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2792
+
+- config-keys:
+    - qwen3.5-fp4-b300-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update SGLang image from lmsysorg/sglang:v0.5.16-cu130 (v0.5.16 release) to lmsysorg/sglang:nightly-dev-cu13-20260907-30705c00 (2026-09-07 cu13 dev nightly, digest sha256:19b8fa1223cc339c1eae7a5b703f1a8c2543b5b119155bf3d7efaef18f77f007, tag commit sgl-project/sglang@30705c00; Docker Hub last pushed 2026-09-07T01:43:42Z), the same tag the Qwen3.5 SGLang AgentX recipes on B200/H200/H100 moved to in #2861/#2862/#2868/#2869. benchmarks/single_node/agentic/qwen3.5_fp4_b300_sglang_mtp.sh is unchanged: modelopt_fp4 quantization, fp8_e4m3 KV, trtllm_mha attention, flashinfer_trtllm MoE runner, native NEXTN MTP with golden AL 3.39; the TP4 and TP2/EP2 grids are unchanged. The qwen3.5-fp4-b300-sglang-agentic-power-ab key is deliberately not bumped: it is a controlled FP8/FP4 power matrix that requires an identical SGLang build across both precisions."
+    - "Move the recipe from the retired cluster:b300-nv fleet (launcher and runner labels removed in #2826) to cluster:b300-dsxe so the sweep has a runner to schedule on. The runner change means this is not an append-only bump: the whole curve reruns on DSXE."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2882
