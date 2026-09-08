@@ -50,7 +50,18 @@ if [[ -n "${MODEL_PATH:-}" ]]; then
         hf download "$MODEL" --local-dir "$MODEL_PATH"
     fi
 else
-    hf download "$MODEL"
+    # The shared /mnt/hf_hub_cache on cluster:h200-dgxc holds lock files under
+    # .locks/<repo>/ owned by whichever runner account first downloaded a blob;
+    # filelock creates them 0644, so a job on a different runner account gets
+    # EACCES opening the lock even when every file is already cached (run
+    # 34174941536: "Fetching 144 files: 94%" then PermissionError on
+    # .locks/models--Qwen--Qwen3.8-Flash-Next-FP8/<etag>.lock). Only the
+    # online revalidation takes locks, so on failure resolve the snapshot from
+    # the local cache alone; a genuinely missing file still fails loudly there.
+    if ! hf download "$MODEL"; then
+        echo "hf download failed online (shared-cache lock permissions?); resolving $MODEL from the local HF cache only"
+        HF_HUB_OFFLINE=1 hf download "$MODEL"
+    fi
     export MODEL_PATH="$MODEL"
 fi
 nvidia-smi
