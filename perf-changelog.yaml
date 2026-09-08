@@ -6928,3 +6928,14 @@
     - "Register the server under --served-model-name $MODEL. The AgentX client asks for the model by that name on the wire, and a mismatch with whatever MODEL_PATH resolves to returns HTTP 404 at warmup."
     - "Set LMCACHE_CHUNK_SIZE to 1024 to stay aligned with the block-size 128 times dcp 8 offload hash block. Keep AITER INT4 quick-reduce, AITER SITUV2 A4W4, FlyDSL stage-2 FP8, ptpc_fp8 online quantization excluding embeddings, lm_head, conv1d projections, experts, and the multimodal tower, an FP8 KV cache, a 128-token page, --state-checkpoint-interval-tokens -1, prompt-end-anchor-only state checkpointing, OFFLOAD_PROFILE=1, and OFFLOAD_GPU_STAGING_CHUNKS=32. Keep OFFLOAD_KV_FOR_HYBRID=1 as well, which the ATOM recipe no longer lists: K3 is a hybrid, and if that gate is still off by default the paged KV never reaches the CPU tier at all, which reads as a tier that is on and idle rather than as an error. Setting it is a no-op if the default flipped or the knob went away."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2852
+
+- config-keys:
+    - dsv4-fp4-mi355x-vllm
+    - dsv4-fp4-mi355x-vllm-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Bump the DeepSeek-V4-Pro FP4 MI355X 8k/1k STP and MTP images from nightly-09663abde0f50944a8d5ea30120666024b503faa to the 2026-09-01 ROCm nightly nightly-7c5dc571cbd1064ecc8a9b1045637ff647aa22cb (digest sha256:f0bdaf5217a09949842b45c1ea1f12260d3205ec81f143b320dfc2eb3ec95e55)."
+    - "Pick up the latest automatic ROCm DeepSeek-V4 optimizations, including fused mHC post/pre plus RMSNorm, gfx950 C4A top-k dispatch, fused C4 compressor GEMMs, fused SWA q/kv RMSNorm plus q FP8 quantization, and medium-batch cooperative top-k tuning."
+    - "Keep the existing VLLM_ROCM_USE_AITER=1, VLLM_ROCM_USE_AITER_MOE=1, and --moe-backend aiter settings, and explicitly add VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 plus VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 to both STP and MTP paths. The current checkpoint's shared-expert path does not satisfy the latest vLLM fusion conditions, so that fusion flag self-disables while preserving recipe parity."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2792
