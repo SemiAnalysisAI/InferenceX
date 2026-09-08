@@ -6957,4 +6957,4 @@
     - "Move the concurrency 48/64/96/128/256 ATOM AgentX band from DPA with TBO and the default MoE transport to native RCCL DEP (TP8/DPA8/EP8), while preserving the TP-only concurrency 1/2/4/8/16 band."
     - "Match the validated DEP run: disable EPLB and TBO, use least-tokens routing with session affinity and zero request equivalence, set the state checkpoint interval to 32768 tokens, and use real MTP acceptance on DEP."
     - "Carry over the validated AgentX transport, terminal-MTP, and AIPerf timeout/failure settings for stable multi-turn replay."
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2886
