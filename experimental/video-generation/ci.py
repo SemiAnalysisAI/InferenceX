@@ -183,7 +183,7 @@ def recover(config: dict, result_root: Path) -> dict:
         if reason:
             reasons.append({"job_id": job, "reason": reason})
             continue
-        steps = command(["squeue", "--steps", "--noheader", "--jobs=" + job, "--format=%i|%T|%N|%C|%b"])
+        steps = command(["squeue", "--steps", "--noheader", "--jobs=" + job, "--format=%i|%N"])
         return {"action": "reuse", "receipt": receipt, "record": record, "active_steps": steps, "reasons": reasons}
     if waiting:
         return {"action": "wait", "jobs": waiting, "reasons": reasons}
@@ -205,7 +205,8 @@ def allocate(config: dict, run_dir: Path) -> dict:
             "--time=" + str(request["minutes"]), "--immediate=30",
             "--job-name=" + job_name, "--comment=" + comment, "--chdir=" + str(run_dir)]
     write(run_dir / "allocation-command.json", argv)
-    result = subprocess.run(argv, text=True, capture_output=True, timeout=45, env=environment())
+    # With --no-shell, Slurm records the caller's cwd rather than --chdir.
+    result = subprocess.run(argv, text=True, capture_output=True, timeout=45, env=environment(), cwd=run_dir)
     (run_dir / "salloc.log").write_text(result.stdout + result.stderr)
     granted = re.findall(r"Granted job allocation ([0-9]+)", result.stdout + result.stderr)
     need(len(set(granted)) == 1, "No unambiguous Slurm acknowledgment; allocation intent retained for reconciliation")
@@ -421,7 +422,7 @@ def launch(config: dict, output: Path) -> int:
             state.update(phase="starting", allocation_reused=reused, allocation=receipt, slurm_job=record)
             write(run_dir / "ci.json", state)
             # Any concurrent active measured step means cooperative sharing.
-            active_steps = command(["squeue", "--steps", "--noheader", "--jobs=" + record["JobId"], "--format=%i|%T|%N|%C|%b"])
+            active_steps = command(["squeue", "--steps", "--noheader", "--jobs=" + record["JobId"], "--format=%i|%N"])
             write(run_dir / "context.json", {"config": config, "spec": spec, "allocation": receipt,
                 "node": record["NodeList"], "active_steps": active_steps, "source_sha": sha,
                 "exclusive_node": record.get("OverSubscribe") == "NO" and "gres/gpu=8" in record.get("AllocTRES", "").split(","),
