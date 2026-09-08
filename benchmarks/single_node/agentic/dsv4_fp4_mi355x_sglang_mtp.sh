@@ -126,15 +126,20 @@ fi
 # on the DP rank that holds their radix/hicache prefix.
 USE_SGLANG_ROUTER=false
 SGLANG_BACKEND_PORT="$PORT"
-# Small prefill chunks interleave long-context agentic prefills across
-# requests instead of letting one ~100K-token prefill monopolize the engine
-# (the conc>=16 queue-saturation / decode-stall failure mode). 8192 = 32*256,
-# a page-size multiple well under the dsv4 compressor kernel's uint16 token
-# cap; same value the multi-node DeepSeek-V4-Pro-AgentX no_dp profile uses.
+# Small prefill chunks interleave long-context agentic prefills. The flag is
+# engine-wide and DP divides it by dp_size (=TP), so DP uses 8192*TP to keep
+# 8192 per rank. TP-only: 8192 at TP4, 16384 at TP8.
 case "$TP" in
-    4|8) CHUNKED_PREFILL_SIZE=8192 ;;
+    4|8) ;;
     *) echo "Error: unsupported TP '$TP' (expected: 4 or 8)" >&2; exit 1 ;;
 esac
+if [ "$DP_ATTENTION" = "true" ]; then
+    CHUNKED_PREFILL_SIZE=$((8192 * TP))
+elif [ "$TP" -eq 8 ]; then
+    CHUNKED_PREFILL_SIZE=16384
+else
+    CHUNKED_PREFILL_SIZE=8192
+fi
 MEM_FRACTION_STATIC="${MEM_FRACTION_STATIC:-0.86}"
 PARALLEL_ARGS=(--tensor-parallel-size "$TP")
 SHARED_EXPERTS_ARGS=(--enforce-shared-experts-fusion)
@@ -154,8 +159,6 @@ if [ "$DP_ATTENTION" = "true" ]; then
     export GPU_MAX_HW_QUEUES="${GPU_MAX_HW_QUEUES_DP:-5}"
     MEM_FRACTION_STATIC="${MEM_FRACTION_STATIC_DP:-0.92}"
 
-    # Chunked prefill is a whole-engine budget, so widen it by the DP degree.
-    CHUNKED_PREFILL_SIZE=$((CHUNKED_PREFILL_SIZE * TP))
     PARALLEL_ARGS+=(
         --dp "$TP"
         --enable-dp-attention
