@@ -125,7 +125,7 @@ jobs:
             uv run --no-project --python 3.12 --with "pydantic>=2.10,<3" python -m utils.klaud check-capacity --cluster TELEMETRY_CLUSTER_ID
             Exit 0 requires fresh telemetry, available nodes and utilization <20% on every target.
             Otherwise defer without waiting/promising recovery: report the deferral/current attempt state
-            in any existing PR, cancel and confirm all owned runs, update terminal/cancelled table rows,
+            in any existing PR, cancel and confirm all owned runs, update attempt sections with terminal/cancelled outcomes,
             then remove sweep labels, return to draft, close PR and delete its remote Klaud branch for retry.
             Without a PR, report in the final response; create no placeholder. Do not cancel healthy work
             because utilization rises after dispatch. A capacity-related benchmark failure alone
@@ -156,7 +156,7 @@ jobs:
             ambiguous mutations before retrying. Improvement is best effort; report regressions without
             a rejection threshold. Runs may take three hours; finish within the job limit. On a valid
             stop condition cancel unfinished owned runs and confirm ALL jobs terminal; never cancel healthy
-            work just to finish. No pending/running final rows or promises to monitor later. The read-only
+            work just to finish. No pending/running final outcomes or promises to monitor later. The read-only
             Stop hook checks status, not repairs/reporting; never disable it or change its run marker.
 
             Final validation:
@@ -168,19 +168,25 @@ jobs:
             repair within the remaining budget and repeat. Recheck capacity before capacity-related recovery.
 
             Status and history:
-            PR body: maintain a short current-status/next-step summary and authoritative bilingual table:
-            dated published baseline, every update/repair and final full sweep, including failures/cancellations;
-            attempt, image/SHA, run links, benchmark/eval results, labeled per-point throughput/latency deltas versus baseline
-            and diagnosis. Use N/A + reason for missing/incomparable values; exclude invalid/duplicate/unmatched
-            points from improvement claims. State that green benchmarks do not prove global checks pass.
+            PR body: maintain a short current-status/next-step summary, then vertical sections:
+            Baseline (published date), Initial attempt, Repair 1/${{ env.MAX_REPAIRS }} through
+            Repair N/${{ env.MAX_REPAIRS }} as used, and Final full sweep. Include failed/cancelled
+            attempts; the initial attempt does not consume the repair budget. Under each heading use
+            short bullets for image/commit, run links, changes, benchmark/eval results, labeled per-point
+            throughput/latency deltas versus baseline, diagnosis and next step. Baseline lists source
+            evidence/results; do not invent repair fields for it. Use compact tables only for numeric
+            point comparisons, never for narrative attempt history. Use N/A + reason for missing or
+            incomparable results; exclude invalid/duplicate/unmatched points from improvement claims.
+            English sections first, then a Markdown divider (---), then matching Simplified Chinese
+            sections. State that green benchmarks do not prove global checks pass.
             Comments: append short milestone updates at dispatch, evidence-backed diagnosis, repair,
             final-sweep start and termination; combine adjacent milestones into one comment. While waiting,
             comment only on material changes or after 30 minutes since the last update. Format: English,
             Markdown divider (---), Simplified Chinese; status, confirmed/suspected finding, action/next step,
             run/commit links. Report observable work, not internal deliberation/raw logs; do not duplicate
-            the results table. Update the body first. Before ending, finalize the table and report stop
+            the attempt history. Update the body first. Before ending, finalize each section and report stop
             reason, repair count, confirmed child-run completion and PR URL in the final response, with
-            the bilingual results table.
+            the bilingual vertical results summary.
       - name: Save sanitized candidate diagnostics
         if: always()
         env:
