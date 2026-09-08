@@ -10190,3 +10190,356 @@ glm5.1-fp8-b200-tilert-agentic:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=1"
+
+# GB200-sized HBM budget on GB300: .612 * 276.62 GiB ~= .92 * 184 GiB.
+# TP16/DCP16 on all workers, graph-aware memory sizing, and matched .92 controls.
+kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg-mem0612:
+  image: vllm/vllm-openai:nightly-dev-arm64-cu13-3696c77
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-vllm
+  multinode: true
+  disagg: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.1775
+      search-space:
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend:
+          name: mooncake
+          version: 0.3.12.post1
+        conc-list:
+        - 1
+        - 4
+        num-nodes: 4
+        worker:
+          num-worker: 1
+          tp: 16
+          dcp-size: 16
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - SYNTHETIC_ACCEPTANCE=true
+          - SYNTHETIC_ACCEPTANCE_LENGTH=3.84
+          - CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-gb300-dcp16-dspark7-maxseq2-mooncake-agentic-mem0612.yaml
+kimik3-fp4-gb300-dynamo-vllm-agentic-mooncake-dcp16-agg-mem0612:
+  image: vllm/vllm-openai:nightly-dev-arm64-cu13-3696c77
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-vllm
+  multinode: true
+  disagg: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.1775
+      search-space:
+      - kv-offloading: dram
+        kv-offload-backend:
+          name: mooncake
+          version: 0.3.12.post1
+        conc-list:
+        - 48
+        - 70
+        num-nodes: 4
+        worker:
+          num-worker: 1
+          tp: 16
+          dcp-size: 16
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-gb300-dcp16-nospec-mooncake-agentic-mem0612-seq256.yaml
+kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp16-disagg-mem0612:
+  image: vllm/vllm-openai:nightly-dev-arm64-cu13-3696c77
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-vllm
+  router:
+    name: dynamo-router
+    version: ba83080ecd31c1ce918559e576d3c5bc9e092ff1
+  kv-p2p-transfer: nixl
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.1775
+      search-space:
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend:
+          name: mooncake
+          version: 0.3.12.post1
+        conc-list:
+        - 48
+        - 52
+        - 56
+        prefill:
+          num-worker: 1
+          tp: 16
+          dcp-size: 16
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - SYNTHETIC_ACCEPTANCE=true
+          - SYNTHETIC_ACCEPTANCE_LENGTH=3.36
+          - CONFIG_FILE=recipes/vllm/kimi-k3/agentic/disagg-gb300-1p1d-dcp16-dcp16-dspark4-mooncake-agentic-mem0612-seq256.yaml
+        decode:
+          num-worker: 1
+          tp: 16
+          dcp-size: 16
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend:
+          name: mooncake
+          version: 0.3.12.post1
+        conc-list:
+        - 32
+        - 48
+        - 64
+        prefill:
+          num-worker: 1
+          tp: 16
+          dcp-size: 16
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - SYNTHETIC_ACCEPTANCE=true
+          - SYNTHETIC_ACCEPTANCE_LENGTH=3.36
+          - CONFIG_FILE=recipes/vllm/kimi-k3/agentic/disagg-gb300-1p2d-dcp16-dcp16-dspark4-mooncake-agentic-mem0612-seq256.yaml
+        decode:
+          num-worker: 2
+          tp: 16
+          dcp-size: 16
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend:
+          name: mooncake
+          version: 0.3.12.post1
+        conc-list:
+        - 1
+        prefill:
+          num-worker: 1
+          tp: 16
+          dcp-size: 16
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - SYNTHETIC_ACCEPTANCE=true
+          - SYNTHETIC_ACCEPTANCE_LENGTH=3.84
+          - CONFIG_FILE=recipes/vllm/kimi-k3/agentic/disagg-gb300-1p3d-dcp16-dcp16-dspark7-mooncake-agentic-mem0612-seq256.yaml
+        decode:
+          num-worker: 3
+          tp: 16
+          dcp-size: 16
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend:
+          name: mooncake
+          version: 0.3.12.post1
+        conc-list:
+        - 32
+        - 48
+        prefill:
+          num-worker: 1
+          tp: 16
+          dcp-size: 16
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - SYNTHETIC_ACCEPTANCE=true
+          - SYNTHETIC_ACCEPTANCE_LENGTH=3.36
+          - CONFIG_FILE=recipes/vllm/kimi-k3/agentic/disagg-gb300-1p3d-dcp16-dcp16-dspark4-mooncake-agentic-mem0612-seq256.yaml
+        decode:
+          num-worker: 3
+          tp: 16
+          dcp-size: 16
+          ep: 1
+          dp-attn: false
+kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg-mem092-control:
+  image: vllm/vllm-openai:nightly-dev-arm64-cu13-3696c77
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-vllm
+  multinode: true
+  disagg: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.1775
+      search-space:
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend:
+          name: mooncake
+          version: 0.3.12.post1
+        conc-list:
+        - 1
+        - 4
+        num-nodes: 4
+        worker:
+          num-worker: 1
+          tp: 16
+          dcp-size: 16
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - SYNTHETIC_ACCEPTANCE=true
+          - SYNTHETIC_ACCEPTANCE_LENGTH=3.84
+          - CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-gb300-dcp16-dspark7-maxseq2-mooncake-agentic-mem092-control.yaml
+kimik3-fp4-gb300-dynamo-vllm-agentic-mooncake-dcp16-agg-mem092-control:
+  image: vllm/vllm-openai:nightly-dev-arm64-cu13-3696c77
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-vllm
+  multinode: true
+  disagg: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.1775
+      search-space:
+      - kv-offloading: dram
+        kv-offload-backend:
+          name: mooncake
+          version: 0.3.12.post1
+        conc-list:
+        - 48
+        - 70
+        num-nodes: 4
+        worker:
+          num-worker: 1
+          tp: 16
+          dcp-size: 16
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-gb300-dcp16-nospec-mooncake-agentic-mem092-control-seq256.yaml
+kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp16-disagg-mem092-control:
+  image: vllm/vllm-openai:nightly-dev-arm64-cu13-3696c77
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-vllm
+  router:
+    name: dynamo-router
+    version: ba83080ecd31c1ce918559e576d3c5bc9e092ff1
+  kv-p2p-transfer: nixl
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.1775
+      search-space:
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend:
+          name: mooncake
+          version: 0.3.12.post1
+        conc-list:
+        - 48
+        - 52
+        - 56
+        prefill:
+          num-worker: 1
+          tp: 16
+          dcp-size: 16
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - SYNTHETIC_ACCEPTANCE=true
+          - SYNTHETIC_ACCEPTANCE_LENGTH=3.36
+          - CONFIG_FILE=recipes/vllm/kimi-k3/agentic/disagg-gb300-1p1d-dcp16-dcp16-dspark4-mooncake-agentic-mem092-control-seq256.yaml
+        decode:
+          num-worker: 1
+          tp: 16
+          dcp-size: 16
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend:
+          name: mooncake
+          version: 0.3.12.post1
+        conc-list:
+        - 32
+        - 48
+        - 64
+        prefill:
+          num-worker: 1
+          tp: 16
+          dcp-size: 16
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - SYNTHETIC_ACCEPTANCE=true
+          - SYNTHETIC_ACCEPTANCE_LENGTH=3.36
+          - CONFIG_FILE=recipes/vllm/kimi-k3/agentic/disagg-gb300-1p2d-dcp16-dcp16-dspark4-mooncake-agentic-mem092-control-seq256.yaml
+        decode:
+          num-worker: 2
+          tp: 16
+          dcp-size: 16
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend:
+          name: mooncake
+          version: 0.3.12.post1
+        conc-list:
+        - 1
+        prefill:
+          num-worker: 1
+          tp: 16
+          dcp-size: 16
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - SYNTHETIC_ACCEPTANCE=true
+          - SYNTHETIC_ACCEPTANCE_LENGTH=3.84
+          - CONFIG_FILE=recipes/vllm/kimi-k3/agentic/disagg-gb300-1p3d-dcp16-dcp16-dspark7-mooncake-agentic-mem092-control-seq256.yaml
+        decode:
+          num-worker: 3
+          tp: 16
+          dcp-size: 16
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend:
+          name: mooncake
+          version: 0.3.12.post1
+        conc-list:
+        - 32
+        - 48
+        prefill:
+          num-worker: 1
+          tp: 16
+          dcp-size: 16
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - SYNTHETIC_ACCEPTANCE=true
+          - SYNTHETIC_ACCEPTANCE_LENGTH=3.36
+          - CONFIG_FILE=recipes/vllm/kimi-k3/agentic/disagg-gb300-1p3d-dcp16-dcp16-dspark4-mooncake-agentic-mem092-control-seq256.yaml
+        decode:
+          num-worker: 3
+          tp: 16
+          dcp-size: 16
+          ep: 1
+          dp-attn: false

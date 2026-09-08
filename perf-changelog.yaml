@@ -6936,3 +6936,21 @@
   description:
     - "Add a matched Kimi-K3 GB300 disaggregated control at gpu-memory-utilization 0.92 with max-num-seqs 512, holding topology, concurrency, image and Mooncake DRAM offload fixed to isolate the reduced-HBM effect."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+  - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg-mem0612
+  - kimik3-fp4-gb300-dynamo-vllm-agentic-mooncake-dcp16-agg-mem0612
+  - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp16-disagg-mem0612
+  - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg-mem092-control
+  - kimik3-fp4-gb300-dynamo-vllm-agentic-mooncake-dcp16-agg-mem092-control
+  - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp16-disagg-mem092-control
+  scenario-type:
+  - agentic-coding
+  description:
+  - Add a Kimi-K3 GB300 capacity experiment at gpu-memory-utilization 0.612, matching the 169.28 GiB executor budget measured on GB200
+    at 0.92. Use TP16/DCP16 on every aggregate, prefill, and decode worker to fit the resident weights.
+  - Keep Mooncake DRAM offload at a 160GB segment per client, the current GB300 image, and the original 13 agentic concurrency/topology
+    points. Account for CUDA graphs in memory sizing, use the proven TP16 collective fallback, and cap non-latency engines at 256 sequences.
+  - Add identical TP16/DCP16 controls at 0.92 to separate memory-capacity effects from the parallelism change; dispatch throughput only
+    with --no-evals.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

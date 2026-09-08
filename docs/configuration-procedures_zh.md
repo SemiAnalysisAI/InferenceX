@@ -177,6 +177,12 @@ vLLM 的实际参数是 `--gpu-memory-utilization`。它为模型执行器分配
 
 使用 `kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg-mem092-control` 作为分离式匹配对照。其 `*-mem092-seq512.yaml` 配方保留 512 个序列的上限及全部服务参数，仅将 GPU 利用率改为 0.92。按 run ID 和配方指纹比较相同并发及拓扑的结果；所有实验调度都使用 `--no-evals`，仅运行吞吐基准。
 
+扩展到 GB200 容量时，使用 GB300 的 `dcp16-*-mem0612` 实验配置键及对应的 `dcp16-*-mem092-control` 对照。成功的 GB200 运行 `33444357881` 在启动日志中报告，引擎可见 HBM 为 184.0 GiB，利用率 0.92 对应的执行器预算为 169.28 GiB。GB300 的实测可见容量为 276.62 GiB，因此等效比例为 `0.92 * 184.0 / 276.62 = 0.61196`，取整为 0.612。TP8 的权重本身就超过该预算。成功的 GB200 TP16 运行 `32424103771` 报告，无推测解码时权重约为 129.76 GiB，使用 DSpark 时约为 131.08 GiB；仍须在启动时验证当前镜像的实际分配。
+
+这些新配方为所有 worker 使用 TP16/DCP16，每个 worker 占四个物理节点，并采用 GB200 配方中的 DCP collective 回退路径。因此聚合式作业请求 `nodes:4`；1P/1D、1P/2D、1P/3D 分别请求 `nodes:8`、`nodes:12`、`nodes:16`。启用 `VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=1`，将 CUDA graphs 纳入内存估算。聚合式无推测解码和分离式两个角色均设置 `max-num-seqs: 256`；聚合式低延迟配方保留两个序列。该序列上限是首次验证时的保守选择，并非实测硬件极限。保留 Mooncake 每个客户端 `160GB` 的 segment，以及当前 GB300 镜像、connector、推测解码设置和并发点。不要复制 GB200 TP16 配方中的显式 `kv-cache-memory`，否则会覆盖按利用率计算的缓存大小。TP8/PP2 可作为聚合式备选，但固定版本的 NIXL connector 不支持 Kimi 混合缓存下 PP 大于一的配置。
+
+由于 experiment name 不编码利用率，新低内存组与匹配对照组须分开调度，并使用 `--no-evals`。通过这两组 TP16 配置隔离容量影响；与此前 TP8 运行相比，还会包含并行策略和 GPU 数量变化。只有检查权重、graph 内存、可用 KV、Mamba block 数量，以及所有 prefill/decode 的注册情况后，才能认为内存适配已通过运行时验证。排队中的 sweep 或成功生成矩阵均不构成该证明。
+
 ## 验证
 
 运行覆盖被修改层的最小检查。
