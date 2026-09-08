@@ -6921,3 +6921,13 @@
     - "Pick up the latest automatic ROCm DeepSeek-V4 optimizations, including fused mHC post/pre plus RMSNorm, gfx950 C4A top-k dispatch, fused C4 compressor GEMMs, fused SWA q/kv RMSNorm plus q FP8 quantization, and medium-batch cooperative top-k tuning."
     - "Keep the existing VLLM_ROCM_USE_AITER=1, VLLM_ROCM_USE_AITER_MOE=1, and --moe-backend aiter settings, and explicitly add VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 plus VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 to both STP and MTP paths. The current checkpoint's shared-expert path does not satisfy the latest vLLM fusion conditions, so that fusion flag self-disables while preserving recipe parity."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2792
+
+- config-keys:
+    - glm5.2-fp4-b300-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update SGLang image from lmsysorg/sglang:v0.5.16-cu130 (v0.5.16 release) to lmsysorg/sglang:nightly-dev-cu13-20260907-30705c00 (2026-09-07 cu13 dev nightly, digest sha256:19b8fa1223cc339c1eae7a5b703f1a8c2543b5b119155bf3d7efaef18f77f007, tag commit sgl-project/sglang@30705c00; Docker Hub last pushed 2026-09-07T01:43:42Z), the same tag the B200 GLM-5.2 SGLang AgentX recipes moved to in #2863/#2864. benchmarks/single_node/agentic/glm5.2_fp4_b300_sglang_mtp.sh is unchanged: TP8 low-latency arm, fp8 KV, cutedsl bf16 GEMM, EAGLE MTP at three speculative tokens with golden AL 2.99, 270 GB/rank HiCache target pool; the conc [1, 4, 8, 12, 16] grid is unchanged. Overlaps with the open #2829, which repoints the same key to DSXE and extends the grid to 48; whichever lands second rebases."
+    - "Move the recipe from the retired cluster:b300-nv fleet (launcher and runner labels removed in #2826) to cluster:b300-dsxe so the sweep has a runner to schedule on. The runner change means this is not an append-only bump: the whole curve reruns on DSXE."
+    - "Re-pin from lmsysorg/sglang:nightly-dev-cu13-20260907-30705c00 to lmsysorg/sglang:nightly-dev-cu13-20260908-20ca564b (2026-09-08 cu13 dev nightly, digest sha256:9a352a35c973a2357372e85f3bcb5388b6b3c46c1329165987260f3b089647dc; Docker Hub last pushed 2026-09-08T01:40:59Z, tag commit sgl-project/sglang@20ca564b). The 2026-09-07 build carries an unguarded kv_index_translator.translate_dcp_read_ids call on the DSA fp8 KV read path that the EAGLE draft backend never binds, so GLM-5.2 MTP runs crash intermittently with AttributeError (observed on the MI355X FP8 sibling in run 34173459478 after 74 minutes of serving). sgl-project/sglang#38318 (merged 2026-09-07T20:03Z) adds the None guard and is six commits behind 20ca564b."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2880
