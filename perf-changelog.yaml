@@ -6981,3 +6981,22 @@
   description:
     - "Check the LMCache dev104 runtime pin only when the LMCache CPU connector is enabled, allowing the c1 GPU-only-cache experiment to start with its unused image package unchanged. Retain strict AITER, FlyDSL, NumPy, vLLM, and Torch checks."
   pr-link: TBD
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move the concurrency-1 A4W4/FMHA-v3 GPU-only-cache experiment to an exclusive eight-GPU Slurm allocation on mia1-p02-g17, retaining the existing serving and one-hour AgentX replay settings."
+    - "Log node occupancy and allocated host, verify the requested node, release the allocation on exit, and refuse existing containers instead of stopping unrelated workloads."
+  pr-link: TBD
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Test eligible K3 attention and shared/dense MLP layers with PTPC FP8 while retaining A4W4 routed experts, and enable AITER_FLYDSL_STAGE2_FP8=1 for supported MoE reduction paths."
+    - "Preserve normal BF16 checkpoint loading before conversion, validate TP8 replicated/padded KDA loading and numerical error, and require runtime evidence of dense FP8 before the c1 replay."
+    - "After the unchanged one-hour synthetic-acceptance profile, restart with real block rejection sampling and run a separate 32-sample five-shot GSM8K smoke evaluation."
+  pr-link: TBD

@@ -196,6 +196,8 @@ gh workflow run e2e-tests.yml \
   -f duration-override=''
 ```
 
+On the `amd/k3-c1-g17-slurm-20260908` experiment branch, the single-node MI355X launcher requests an exclusive eight-GPU allocation on `mia1-p02-g17`. It prints node occupancy, checks the allocated hostname, refuses existing Docker containers, and releases its allocation on exit. The matrix is restricted to the Kimi-K3 c1 GPU-only-cache case, with eligible dense layers using PTPC FP8 and `AITER_FLYDSL_STAGE2_FP8=1`. A TP8 loading/numerical preflight precedes serving, and a separate 32-sample GSM8K evaluation with real block acceptance follows the one-hour synthetic-acceptance profile. Dispatch using the full 40-character source SHA; abbreviated SHAs are treated as branch or tag names by checkout.
+
 Use only inputs shown by `gh workflow view ... --ref main --yaml`. Inputs can differ across dispatch refs, so do not pass target-ref-specific options by assumption.
 
 Dispatch is asynchronous and may not immediately appear. Find the run by exact display title instead of assuming the newest run belongs to you:

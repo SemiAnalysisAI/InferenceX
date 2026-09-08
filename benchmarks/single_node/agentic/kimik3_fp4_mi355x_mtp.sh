@@ -44,6 +44,7 @@ set -x
 
 K3_PRECISION=a4w4
 export AITER_DISABLE_FMHA_OPUS=1
+export AITER_FLYDSL_STAGE2_FP8=1
 export AIPERF_WARMUP_REQUESTS_PER_LANE=10
 export AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES=0
 source "$(dirname "$0")/../../benchmark_lib.sh"
@@ -158,7 +159,18 @@ SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
 printf '%s\n' "precision=$K3_PRECISION" "AITER_DISABLE_FMHA_OPUS=$AITER_DISABLE_FMHA_OPUS" \
     "AITER_SITUV2_A8W4=${AITER_SITUV2_A8W4:-unset}" \
-    "AITER_SITUV2_A4W4=${AITER_SITUV2_A4W4:-unset}" > "$RESULT_DIR/dispatch-env.txt"
+    "AITER_SITUV2_A4W4=${AITER_SITUV2_A4W4:-unset}" \
+    "AITER_FLYDSL_STAGE2_FP8=$AITER_FLYDSL_STAGE2_FP8" > "$RESULT_DIR/dispatch-env.txt"
+
+K3_FP8_DIR="$(dirname "$0")/k3_fp8"
+"$K3_PYTHON" "$K3_FP8_DIR/install.py" "$RESULT_DIR/dense-fp8-patch.json"
+"$K3_PYTHON" -m torch.distributed.run --standalone --nproc_per_node=8 \
+    "$K3_FP8_DIR/check_dense_fp8.py" > "$RESULT_DIR/dense-fp8-check.log" 2>&1 || {
+    cat "$RESULT_DIR/dense-fp8-check.log"
+    exit 1
+}
+cat "$RESULT_DIR/dense-fp8-check.log"
+grep -q K3_DENSE_FP8_TP8_CHECK_OK "$RESULT_DIR/dense-fp8-check.log"
 
 SERVER_PID=""
 LMCACHE_PID=""
@@ -482,11 +494,14 @@ if grep -q 'import \[module_fmha_fwd_bf16_opus\]' "$SERVER_LOG"; then
     echo "ERROR: Opus attention was loaded with the disable flag set" >&2
     exit 1
 fi
-echo "Verified $K3_PRECISION MoE dispatch and disabled Opus attention"
+grep -q 'K3_DENSE_FP8_LOADED.*self_attn' "$SERVER_LOG"
+grep -q 'K3_DENSE_FP8_LOADED.*shared_experts' "$SERVER_LOG"
+echo "Verified dense FP8, $K3_PRECISION MoE dispatch and disabled Opus attention"
 
 if [ "${EVAL_ONLY}" = "true" ]; then
     run_eval --port "$PORT"
 else
     build_replay_cmd "$RESULT_DIR"
     run_agentic_replay_and_write_outputs "$RESULT_DIR"
+    source "$K3_FP8_DIR/eval_after_profile.sh"
 fi
