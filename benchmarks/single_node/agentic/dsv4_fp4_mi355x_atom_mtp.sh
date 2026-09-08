@@ -65,10 +65,9 @@ if [ "$DP_ATTENTION" = "true" ]; then
     fi
     # Keep only runtime controls that are not already expressed by DEP_ARGS.
     export ATOM_DP_SESSION_AFFINITY=1
-    export ATOM_DP_LB_REQ_EQUIV=0
-    export ATOM_CANCEL_TERMINAL_MTP_PROPOSAL=1
-    export ATOM_DEFER_MTP_PROPOSAL=1
-    export ATOM_TERMINAL_MTP_FAST_PATH=1
+    export ATOM_DP_LB_REQ_EQUIV=512
+    export ATOM_ENABLE_PREFILL_DELAYER=1
+    export ATOM_PREFILL_DECODE_INTERVAL=10
     # Client-side counterpart to session affinity: make AIPerf emit a stable
     # session id from its correlation id so the DPA router pins each
     # conversation to one rank.
