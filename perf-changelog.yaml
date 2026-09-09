@@ -7087,3 +7087,13 @@
     - "Backport merged upstream vLLM #55712 into the validation image to reject incomplete SWA load windows at unaligned cache-hit boundaries, after tiered runs failed the missing-block assertion."
     - "Keep b0dc209c source-attribution changes, TP8/MTP, c8 DRAM and c14 NVMe/tiered, 128 GB host budgets, and runtime-default CPU threads unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2931
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  no-evals: true
+  description:
+    - "Backport upstream vLLM #50014 unread-promotion protection into the separate validation image after direct B200 diagnostics reproduced native tiered promotion thrashing. Retain the merged #55712 SWA coverage fix and unchanged b0dc209c metrics implementation."
+    - "Keep the same three TP8/MTP points, 128 GB host budgets, GPU utilization 0.85, runtime-default CPU threads, and full AgentX duration. Pinning restored blocks can also delay new stores; this is a backend-fix validation, not a performance-neutral metrics-only comparison."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2931

@@ -962,7 +962,7 @@ dsv4-fp4-b200-vllm:
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 1024 }
 
 dsv4-fp4-b200-vllm-agentic-mtp:
-  image: cquil11/vllm-cache-sources@sha256:1c99dbd9180a67ecbdca455f38d0658563f04257a1f3857aca5b5ef342ddd82a
+  image: cquil11/vllm-cache-sources@sha256:3e5daa6e289046ca99e690a8a91a46a9ffb5a3c213dac6deb9afb06a6ef22188
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:b200-nscale
