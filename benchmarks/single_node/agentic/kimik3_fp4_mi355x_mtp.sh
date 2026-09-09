@@ -4,6 +4,7 @@ set -x
 source "$(dirname "$0")/../../benchmark_lib.sh"
 wait_for_amd_gpu_clean
 
+export EVAL_ONLY="${EVAL_ONLY:-false}"
 export AIPERF_EXPERIMENTAL_FAST=0
 export AIPERF_WARMUP_REQUESTS_PER_LANE=1
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE
@@ -65,38 +66,44 @@ trap cleanup_agentic_services EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
+# C1 is latency-bound and C72/C76 are throughput-bound; they need different
+# geometry. DCP>1 and MTP are mutually exclusive - the MTP draft uses TRITON_MLA,
+# which rejects non-causal MLA under DCP - so C1 runs DCP 1 + MTP, and the high
+# concurrencies run DCP 8 without spec-decode.
 SPEC_ARGS=()
 SPEC_ROWS=1
-if [ "$CONC" -le 4 ]; then
-    SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-8}"
-    SPEC_ROWS=$(( SPEC_NUM_TOKENS + 1 ))
-    if [ "${EVAL_ONLY}" = "true" ]; then
-        SPEC_VERIFY="\"rejection_sample_method\":\"block\""
-    else
-        SPEC_VERIFY="\"rejection_sample_method\":\"synthetic\",\"synthetic_acceptance_length\":4.0"
-    fi
-    SPEC_ARGS=(--speculative-config "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",$SPEC_VERIFY}")
-    MAX_NUM_SEQS=1
-    MAX_BATCHED_TOKENS=8192
-    DCP_SIZE=1
-else
-    MAX_NUM_SEQS=$(( CONC + CONC / 4 ))
-    if [ "$MAX_NUM_SEQS" -gt 80 ]; then MAX_NUM_SEQS=80; fi
-    MAX_BATCHED_TOKENS=8192
-    DCP_SIZE=8
-fi
+case "$CONC" in
+    1|2|4)
+        DCP_SIZE="${DCP_SIZE:-1}"
+        SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-8}"
+        SPEC_ARGS=(--speculative-config "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"fp8\"}")
+        SPEC_ROWS=$(( SPEC_NUM_TOKENS + 1 ))
+        MAX_NUM_SEQS="${MAX_NUM_SEQS:-4}"
+        MAX_BATCHED_TOKENS="${MAX_BATCHED_TOKENS:-8192}"
+        ;;
+    *)
+        DCP_SIZE="${DCP_SIZE:-8}"
+        MAX_BATCHED_TOKENS="${MAX_BATCHED_TOKENS:-16384}"
+        # mns must stay above the peak running count or batches fall off the
+        # cudagraph ladder into eager execution, measured at -39.5%.
+        # Peak observed at C72 was 88, i.e. CONC+16.
+        if [ "$CONC" -le 72 ]; then MAX_NUM_SEQS="${MAX_NUM_SEQS:-96}"
+        else MAX_NUM_SEQS="${MAX_NUM_SEQS:-112}"; fi
+        ;;
+esac
 export DCP_SIZE
+
+GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.90}"
+CUDAGRAPH_MODE="${CUDAGRAPH_MODE:-FULL_DECODE_ONLY}"
 
 LADDER=$(( MAX_NUM_SEQS * SPEC_ROWS ))
 CUDAGRAPH_CAPTURE_SIZES=$(seq -s, 1 "$LADDER")
-COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":$LADDER,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}")
+COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"$CUDAGRAPH_MODE\",\"max_cudagraph_capture_size\":$LADDER,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}")
 
 CP_ARGS=(--attention-backend ROCM_AITER_MLA)
 if [ "$DCP_SIZE" -gt 1 ]; then
     CP_ARGS+=(--decode-context-parallel-size "$DCP_SIZE" --dcp-comm-backend a2a --cp-kv-cache-interleave-size 1)
 fi
-
-GPU_MEM_UTIL=0.88
 
 OFFLOAD_ARGS=()
 if agentic_kv_offload_enabled; then
@@ -107,8 +114,7 @@ fi
 EP_ARGS=()
 if [ "${EP_SIZE:-1}" -gt 1 ]; then EP_ARGS=(--enable-expert-parallel); fi
 
-echo "[spec] verify=${SPEC_VERIFY:-none}"
-echo "[cfg] conc=$CONC dcp=$DCP_SIZE gmu=$GPU_MEM_UTIL mns=$MAX_NUM_SEQS ladder=1..$LADDER (mns x $SPEC_ROWS) chunk=$MAX_BATCHED_TOKENS spec=${#SPEC_ARGS[@]} offload=${KV_OFFLOADING:-none}"
+echo "[cfg] conc=$CONC dcp=$DCP_SIZE gmu=$GPU_MEM_UTIL mns=$MAX_NUM_SEQS ladder=1..$LADDER spec_rows=$SPEC_ROWS chunk=$MAX_BATCHED_TOKENS cudagraph=$CUDAGRAPH_MODE offload=${KV_OFFLOADING:-none}"
 
 VLLM_CMD=(
     vllm serve "$MODEL_PATH" --served-model-name "$MODEL"
@@ -147,7 +153,7 @@ echo "Server PID: $SERVER_PID"
 
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-if [ "${EVAL_ONLY}" = "true" ]; then
+if [ "${EVAL_ONLY:-false}" = "true" ]; then
     run_eval --port "$PORT"
 else
     build_replay_cmd "$RESULT_DIR"
