@@ -930,7 +930,7 @@ dsv4-fp4-b200-sglang:
 
 dsv4-fp4-b200-sglang-agentic-hicache-mtp:
   image: lmsysorg/sglang:nightly-dev-20260827-20621aa1
-  model: deepseek-ai/DeepSeek-V4-Pro
+  model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:b200-nscale
   precision: fp4
@@ -940,9 +940,9 @@ dsv4-fp4-b200-sglang-agentic-hicache-mtp:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 3, 4, 5] }
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: mtp, conc-list: [8, 10, 16] }
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: mtp, conc-list: [64, 96, 128, 160], router: { name: sglang-router, version: "0.3.2" } }
+      - { tp: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 2, 3, 4, 5] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [8, 10, 16] }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [64, 96, 128, 160], router: { name: sglang-router, version: "0.3.2" } }
 
 dsv4-fp4-b200-vllm:
   image: vllm/vllm-openai:nightly-7c5dc571cbd1064ecc8a9b1045637ff647aa22cb
@@ -1200,7 +1200,7 @@ dsv4-fp4-b300-sglang-mtp:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 32, spec-decoding: mtp }
 
 qwen3.5-fp8-b200-sglang:
-  image: lmsysorg/sglang:v0.5.14-cu130
+  image: lmsysorg/sglang:v0.5.19-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:b200-nscale
@@ -1212,8 +1212,9 @@ qwen3.5-fp8-b200-sglang:
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 4 }
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
+      - { tp: 8, conc-start: 1, conc-end: 4 }
+      - { tp: 4, ep: 1, conc-start: 2, conc-end: 512 }
+      - { tp: 4, ep: 1, conc-list: [320, 384, 448, 640] }
 
 qwen3.5-fp8-b200-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.16-cu130
@@ -7388,7 +7389,7 @@ qwen3.5-fp8-h100-sglang-agentic:
 # fixed-seq-len H200 MTP entry already runs conc 4-128 at TP8/EP8 versus H100's
 # 4-32, so the GPU-resident arm extends to 24 and HiCache to 48.
 qwen3.5-fp8-h200-sglang-agentic-mtp:
-  image: lmsysorg/sglang:v0.5.16-cu130
+  image: lmsysorg/sglang:nightly-dev-cu13-20260907-30705c00
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:h200-dgxc
@@ -7424,7 +7425,7 @@ qwen3.8next-fp8-h200-sglang-agentic-mtp:
 # H200 AgentX MTP frontier with DRAM HiCache. This is intentionally an MTP-only
 # submission; the model's non-speculative AgentX arm is not included.
 qwen3.5-fp8-h200-sglang-agentic-hicache-mtp:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260815-a5ba081f
+  image: lmsysorg/sglang:nightly-dev-cu13-20260907-30705c00
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:h200-dgxc
@@ -7529,7 +7530,7 @@ minimaxm3-fp8-h100-vllm-agentic-mtp:
       - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [6, 8] }
 
 minimaxm3-fp8-h200-vllm-agentic-mtp:
-  image: vllm/vllm-openai:v0.27.1
+  image: vllm/vllm-openai:nightly-d9105ea8001e0a6d77a96327d17515bb5791fb36
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: cluster:h200-dgxc

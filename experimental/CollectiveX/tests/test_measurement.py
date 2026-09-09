@@ -179,5 +179,22 @@ class BandwidthMath(unittest.TestCase):
         self.assertIn("[correctness FAILED]", out)
         self.assertIn("excluded 1 gate-failed rung", out)
 
+    def test_wire_basis_bytes_are_preferred_over_the_deduplicated_basis(self):
+        # A token-expert LL row moves one copy per (token, expert): dividing GB/s from the
+        # rank-deduplicated `byte_provenance` published a LOWER BOUND as if it were the wire
+        # rate (34% low on nccl-ep LL EP8 at T=128). With `wire_byte_provenance` present the
+        # fit must use it; the pre-wire fixture rows above pin the fallback path.
+        rows = _linear(LADDER)
+        for row in rows:
+            row["wire_byte_provenance"] = {
+                c: {"total_logical_bytes":
+                    row["byte_provenance"][c]["total_logical_bytes"] * 3 // 2}
+                for c in COMPONENTS
+            }
+        baseline = bandwidth.fit_alpha_beta(_doc(_linear(LADDER)), "dispatch")
+        fit = bandwidth.fit_alpha_beta(_doc(rows), "dispatch")
+        self.assertAlmostEqual(fit.beta_gbps, baseline.beta_gbps * 1.5, places=4)
+
+
 if __name__ == "__main__":
     unittest.main()
