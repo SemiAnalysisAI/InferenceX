@@ -7021,3 +7021,13 @@
     - "Refresh the full GB200 Dynamo-vLLM AgentX configuration across the configured aggregate and disaggregated topology points."
     - "Retain aggregate SimpleCPU-offload concurrency 20 and 30, and configure Mooncake host KV storage, NIXL over UCX, explicit thinking mode, and the committed MiniMax-M3 EAGLE3-GQA acceptance target."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2807
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Validate vLLM cache-source attribution on the existing DeepSeek-V4-Pro B200 TP8 MTP AgentX recipe: native DRAM c8, Simple NVMe c14, and native DRAM+NVMe c14."
+    - "Use cquil11/vllm-cache-sources:b0dc209c-swa-amd64-20260909, built from the exact upstream-base wheel plus cquil11/vllm#2 at b0dc209c14451e9a4e63f1db148ed492d881b765."
+    - "Reduce GPU memory utilization to 0.85 and the tiered host cache to 64 GB to exercise filesystem promotions; retain canonical AgentX duration and collect AIPerf Prometheus exports."
+  pr-link: TBD
