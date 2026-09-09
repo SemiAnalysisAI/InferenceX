@@ -7021,3 +7021,13 @@
     - "Refresh the full GB200 Dynamo-vLLM AgentX configuration across the configured aggregate and disaggregated topology points."
     - "Retain aggregate SimpleCPU-offload concurrency 20 and 30, and configure Mooncake host KV storage, NIXL over UCX, explicit thinking mode, and the committed MiniMax-M3 EAGLE3-GQA acceptance target."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2807
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  no-evals: true
+  description:
+    - "Validate current vLLM SWA cache-source accounting with the proven GB300 1P/1D DEP4-to-DEP16 AgentX c256 recipe from run 33769499103."
+    - "Use Docker Hub image b0dc209c-swa-arm64-20260909, the Python frontend, and all five backend Prometheus endpoints to verify p2p independently of Mooncake external cache hits."
+  pr-link: https://github.com/cquil11/vllm/pull/2

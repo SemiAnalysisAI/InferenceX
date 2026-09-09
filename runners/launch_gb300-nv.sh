@@ -301,6 +301,7 @@ elif [[ "$IS_AGENTIC" == "1" ]]; then
     # Mooncake compatibility. Keep it pinned so sweeps are reproducible.
     git clone --branch v1.0.36 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
     cd "$SRT_REPO_DIR" || exit 1
+    git apply "$GITHUB_WORKSPACE/runners/patches/srt-slurm-custom-metrics.patch" || exit 1
 
     mkdir -p recipes/vllm/deepseek-v4/agentic || exit 1
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \

@@ -1,0 +1,16 @@
+diff --git a/src/srtctl/cli/mixins/benchmark_stage.py b/src/srtctl/cli/mixins/benchmark_stage.py
+--- a/src/srtctl/cli/mixins/benchmark_stage.py
++++ b/src/srtctl/cli/mixins/benchmark_stage.py
+@@ -468,7 +468,10 @@
+-        # Add AIPerf-specific env vars for AIPerf-driven benchmarks only
+-        if isinstance(runner, AIPerfBenchmarkRunner):
++        # Custom AgentX commands opt into worker metrics through their artifact contract.
++        if isinstance(runner, AIPerfBenchmarkRunner) or (
++            runner.name == "Custom"
++            and self.config.benchmark.env.get("AIPERF_REQUIRED_SERVER_METRIC_PREFIX")
++        ):
+             env.update(self._get_aiperf_server_metrics_env())
+             if self.config.benchmark.aiperf_package:
+                 env["AIPERF_PACKAGE"] = self.config.benchmark.aiperf_package
+ 
+         return env
