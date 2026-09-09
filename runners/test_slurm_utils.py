@@ -148,6 +148,26 @@ def test_copy_agentic_results_fails_when_aggregate_is_missing(
     assert "no run_conc*.json results found" in result.stderr
 
 
+def test_b300_dsxe_draft_model_uses_public_paths_and_writable_hf_cache() -> None:
+    launcher = (REPO_ROOT / "runners/launch_b300-dsxe.sh").read_text()
+
+    assert 'SLURM_ACCOUNT="benchmark"' in launcher
+    assert 'SQUASH_DIR="/data/home/sa-gha-runner/squash"' in launcher
+    assert 'SHARED_MODEL_ROOT="/data/models"' in launcher
+    assert 'WRITABLE_MODELS_DIR="/data/home/sa-gha-runner/models"' in launcher
+    assert '[[ "$MODEL_BASENAME" == "DeepSeek-V4-Pro-0813" ]]' in launcher
+    assert 'MODEL_MOUNT_DIR="$SHARED_MODEL_ROOT"' in launcher
+    assert "nv-gha-runner" not in launcher
+    assert (
+        '[[ "$SPEC_DECODING" == "mtp" || "$SPEC_DECODING" == "draft_model" ]]'
+        in launcher
+    )
+    assert 'export HF_HOME="$HF_CACHE_CONTAINER_DIR"' in launcher
+    assert 'export HF_HUB_CACHE="$HF_CACHE_CONTAINER_DIR/hub"' in launcher
+    assert 'export HF_XET_CACHE="$HF_CACHE_CONTAINER_DIR/xet"' in launcher
+    assert '"$HF_CACHE_HOST_DIR:$HF_CACHE_CONTAINER_DIR"' in launcher
+
+
 def test_patch_srt_eval_dispatch_forwards_selection_and_is_idempotent(
     tmp_path: Path,
 ) -> None:

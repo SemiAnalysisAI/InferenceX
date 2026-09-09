@@ -6984,3 +6984,14 @@
     - "Export OMP_NUM_THREADS=1 from all three scripts. vLLM clamps torch threads itself, but only after the weights are loaded: the 'Reducing Torch threads from 16 to 1 for serving' line is emitted after 'Model loading took', so the checkpoint is read with 16 torch threads per worker across 8 workers. Setting it externally caps threads from process start, which is what that log line recommends."
     - "Weight loading currently costs 5760-5946 s (96-99 min) per job on this runner, measured across the c1, c4, c56 and c64 AgentX jobs of run 34087124574 - roughly half of each ~3 h job. It does not affect any measured number: loading completes before warmup and the profiling phase. The effect is also only observable on this runner. A local EXT4 box serves the checkpoint from page cache and loads in ~40 s with or without the cap, so it never exercises the cold-read path. CI reads cold from WEKAFS, where each of the 8 ranks streams the full 805 GiB to slice its own shards - roughly 6.4 TB of aggregate network reads per job - and that is where oversubscribed reader threads cost real time."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2851
+
+- config-keys:
+    - dsv4-fp4-b300-sglang-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Replace the B300 DeepSeek-V4-Pro AgentX native EAGLE/MTP serving path with DSpark block size 6 on the DeepSeek-V4-Pro-0813 checkpoint."
+    - "Use one speculative step, seven draft tokens, and thinking-on golden synthetic acceptance length 3.77 for throughput; eval retains real DSpark verification."
+    - "Use SGLang's current W4A4 MegaMoE and DP LM-head flags for DP attention, with additional MegaMoE workspace headroom at concurrency 32, 64, and 128."
+    - "Route the workload through the B300 DSXE launcher, read weights from /data/models, and mount a writable Hugging Face/Xet cache."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
