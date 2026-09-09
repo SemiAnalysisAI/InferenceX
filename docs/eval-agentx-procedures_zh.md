@@ -222,6 +222,12 @@ Fast 结果只能作为 bring-up 证据，绝不能替代 canonical candidate。
 
 ## 8. 保留 trace 与运行 provenance
 
+GB300 launcher 为固定的 srt-slurm v1.0.36 回移植了 custom runner 的后端指标发现。
+自定义 recipe 通过 `AIPERF_REQUIRED_SERVER_METRIC_PREFIX` 启用此行为；launcher
+应用 `runners/patches/srt-slurm-custom-metrics.patch`。请确认生成的
+`AIPERF_SERVER_METRICS_URLS` 包含所有 prefill 和 decode 后端，而不只是 frontend。
+未启用此选项的 recipe 保持原有行为。
+
 AgentX 默认 replay 已记录的 assistant response。实时服务输出会被测量，但构造后续 turn 时会丢弃。只有在明确要进行不同的 live-assistant 实验时，才设置 `AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES=1`。除非用 `WEKA_LOADER_OVERRIDE` 固定，否则所选 trace corpus 依赖模型 family；resolver 会同时记录 loader 与 Hugging Face dataset（[trace 解析](../benchmarks/benchmark_lib.sh#L2023-L2102)、[replay 语义](../benchmarks/benchmark_lib.sh#L2104-L2270)）。
 
 立即记录 orchestration provenance：

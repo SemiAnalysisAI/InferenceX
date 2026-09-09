@@ -7030,4 +7030,4 @@
   description:
     - "Validate current vLLM SWA cache-source accounting with the proven GB300 1P/1D DEP4-to-DEP16 AgentX c256 recipe from run 33769499103."
     - "Use Docker Hub image b0dc209c-swa-arm64-20260909, the Python frontend, and all five backend Prometheus endpoints to verify p2p independently of Mooncake external cache hits."
-  pr-link: https://github.com/cquil11/vllm/pull/2
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2938
