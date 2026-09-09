@@ -7152,3 +7152,11 @@
   description:
     - "Restore TP4 conc 40/48 LMCache DRAM offload points (CPU 256 GiB/rank, 256-token chunks, no hybrid state tier)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2816
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump MiniMax-M3 ATOM AgentX image to rocm/atom-dev:nightly_202609091233-lirzhang-triton-build."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2816
