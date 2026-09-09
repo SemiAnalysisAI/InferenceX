@@ -21,6 +21,7 @@
 | 理解提前取消行为 | [Canary 与 Fail-fast 语义](#canary-与-fail-fast-语义) |
 | 诊断或重跑 Workflow | [监控与重跑](#监控与重跑) |
 | 检查特权 Workflow 的访问权限 | [基于仓库角色的授权](#基于仓库角色的授权) |
+| 管理 CI Python 依赖 | [CI Python 环境](#ci-python-环境) |
 | 将 PR Run 发布到预发布环境 | [暂存结果](#暂存结果) |
 | 合并时不重复已批准的扫描 | [产物复用与 merge-with-reuse](#产物复用与-merge-with-reuse) |
 | 恢复仅追加 Changelog 的冲突 | [Changelog 冲突恢复](#changelog-冲突恢复) |
@@ -73,7 +74,7 @@ gh workflow view e2e-tests.yml --repo SemiAnalysisAI/InferenceX --ref main --yam
 
 ```bash
 MATRIX=/tmp/inferencex-matrix.json
-uv run --no-project --with pydantic --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --with pydantic --with pyyaml --python 3.12 \
   utils/matrix_logic/generate_sweep_configs.py test-config \
   --config-files configs/nvidia-master.yaml \
   --config-keys dsr1-fp8-h200-sglang \
@@ -86,7 +87,7 @@ python3 -m json.tool "$MATRIX" >/dev/null
 多个 Key 应逐个放在 `--config-keys` 之后。通配模式必须加引号，防止 Shell 展开：
 
 ```bash
-uv run --no-project --with pydantic --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --with pydantic --with pyyaml --python 3.12 \
   utils/matrix_logic/generate_sweep_configs.py test-config \
   --config-files configs/nvidia-master.yaml \
   --config-keys '*-b200-*' \
@@ -99,7 +100,7 @@ uv run --no-project --with pydantic --with pyyaml --python 3.12 \
 `full-sweep` 不一定表示所有配置。可按模型、精度、框架、Runner、序列长度、拓扑、并发、TP/EP 或 Scenario 类型缩小范围：
 
 ```bash
-uv run --no-project --with pydantic --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --with pydantic --with pyyaml --python 3.12 \
   utils/matrix_logic/generate_sweep_configs.py full-sweep \
   --config-files configs/nvidia-master.yaml \
   --single-node \
@@ -147,7 +148,7 @@ Eval 开关语义是明确的：
 对每个修改过的 YAML 文件执行语法解析。它能发现畸形 YAML，但不能验证 GitHub 表达式或 Workflow 依赖连线：
 
 ```bash
-uv run --no-project --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --with pyyaml --python 3.12 \
   python -c 'import sys, yaml; [yaml.safe_load(open(path, encoding="utf-8")) for path in sys.argv[1:]]' \
   configs/nvidia-master.yaml perf-changelog.yaml .github/workflows/e2e-tests.yml
 ```
@@ -162,7 +163,7 @@ uv run --no-project --with pyyaml --python 3.12 \
 
 ```bash
 git fetch origin main
-uv run --no-project --with pydantic --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --with pydantic --with pyyaml --python 3.12 \
   utils/validate_perf_changelog.py \
   --changelog-file perf-changelog.yaml \
   --base-ref origin/main \
@@ -288,6 +289,29 @@ gh run rerun <RUN_ID> --repo SemiAnalysisAI/InferenceX
 
 重跑沿用同一个 Workflow Run ID，但 Attempt 会增加。Artifact API 可能包含多个 Attempt 上传的产物；必须保留 `run_attempt` 并检查 Artifact 时间戳。`run-stats` 会有意统计所有 Attempt 的 Job。如果源码需要变化，不应重跑旧代码：推送修复并监控新 Run。移除再重新添加主扫描标签会强制创建新的 Labeled Run；后续 Commit 也可能使复用资格失效。
 
+## CI Python 环境
+
+需要 Python 包的托管 Job 使用固定 Commit 的 `astral-sh/setup-uv` Action，
+并通过 `uv run --no-project --exclude-newer PT12H --python 3.12` 运行命令。
+使用 `--with` 声明依赖，或通过 `--with-requirements` 复用已有的依赖文件；
+通常无需单独的依赖安装步骤。
+
+12 小时冷却期同时适用于包索引中的直接依赖和传递依赖。缺少上传时间戳的
+分发文件不可用；不得为了通过依赖解析而关闭冷却期。CollectiveX 使用全新的
+虚拟环境和 `uv pip install --exclude-newer PT12H --torch-backend cpu`：仅从
+CPU 索引获取 PyTorch 包，其他依赖从 PyPI 获取，因为 CPU 索引中的这些依赖
+镜像缺少上传时间戳。该 Job 确认安装的 Wheel 不包含 CUDA 或 ROCm 后端。
+
+审阅 Workflow 共用 [`.github/mcp-ci.json`](../.github/mcp-ci.json)，
+通过 uv 和原有依赖文件启动 Python MCP Server。Server 使用 MCP 1.x API；
+依赖文件排除不兼容的 SDK 2.x，CI 在不克隆仓库的情况下验证 Server 构造与发现功能。
+Checkout Ref、凭据和审阅
+策略保持不变。矩阵和 CollectiveX 单元测试现在也会在草稿 PR 上运行，
+以便在请求审阅前验证 CI 环境变更。
+
+仅依赖标准库的辅助程序继续使用 Runner 自带的 Python。基准容器及其框架
+环境仍由现有启动器管理；此次 CI 依赖迁移不会修改这些环境。
+
 ## 基于仓库角色的授权
 
 [`infx.workflows`](../infx/workflows/) 使用 `GITHUB_TOKEN`，复用结果暂存和可信外部
@@ -404,7 +428,7 @@ Helper 会从 Index Stage 1/2/3 读取 Merge Base、PR 与 Main 字节，验证 
 提交后，对 `origin/main` 运行准确 Gate：
 
 ```bash
-uv run --no-project --with pydantic --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --with pydantic --with pyyaml --python 3.12 \
   utils/validate_perf_changelog.py \
   --changelog-file perf-changelog.yaml \
   --base-ref origin/main \

@@ -187,7 +187,7 @@ bash -n runners/launch_<cluster>.sh
 ### 精确 key schema + 矩阵生成
 
 ```bash
-uv run --no-project --with pydantic --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --with pydantic --with pyyaml --python 3.12 \
   utils/matrix_logic/generate_sweep_configs.py test-config \
   --config-files configs/<nvidia|amd>-master.yaml \
   --runner-config configs/runners.yaml \
@@ -197,7 +197,7 @@ uv run --no-project --with pydantic --with pyyaml --python 3.12 \
 ### 过滤后的配置族生成
 
 ```bash
-uv run --no-project --with pydantic --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --with pydantic --with pyyaml --python 3.12 \
   utils/matrix_logic/generate_sweep_configs.py full-sweep \
   --config-files configs/<nvidia|amd>-master.yaml \
   --runner-config configs/runners.yaml \

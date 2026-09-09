@@ -72,13 +72,13 @@ Parsing is only the first gate. Do not report a YAML parse as matrix validation.
 ### Exact config, then filtered family
 
 ```bash
-uv run --no-project --with pydantic --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --with pydantic --with pyyaml --python 3.12 \
   utils/matrix_logic/generate_sweep_configs.py test-config \
   --config-files configs/<nvidia|amd>-master.yaml \
   --runner-config configs/runners.yaml \
   --config-keys <exact-key>
 
-uv run --no-project --with pydantic --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --with pydantic --with pyyaml --python 3.12 \
   utils/matrix_logic/generate_sweep_configs.py full-sweep \
   --config-files configs/<nvidia|amd>-master.yaml \
   --runner-config configs/runners.yaml \

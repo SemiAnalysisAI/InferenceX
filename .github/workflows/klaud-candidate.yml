@@ -50,7 +50,7 @@ jobs:
           cp -R "$RUNNER_TEMP/plan/$CANDIDATE" "$RUNNER_TEMP/klaud"
           echo "KLAUD_EVIDENCE=$RUNNER_TEMP/klaud" >> "$GITHUB_ENV"
           rm -r "$RUNNER_TEMP/plan"
-          outcome_schema=$(uv run --no-project --python 3.12 --with "pydantic>=2.10,<3" python -m utils.klaud outcome-schema)
+          outcome_schema=$(uv run --no-project --exclude-newer PT12H --python 3.12 --with "pydantic>=2.10,<3" python -m utils.klaud outcome-schema)
           echo "outcome-schema=$outcome_schema" >> "$GITHUB_OUTPUT"
       - name: Let Klaud Cold own the candidate PR
         id: claude
@@ -67,7 +67,7 @@ jobs:
               "hooks": {
                 "Stop": [{"hooks": [{
                   "type": "command",
-                  "command": "cd \"$GITHUB_WORKSPACE\" && uv run --no-project --python 3.12 --with 'pydantic>=2.10,<3' python -m utils.klaud check-stop"
+                  "command": "cd \"$GITHUB_WORKSPACE\" && uv run --no-project --exclude-newer PT12H --python 3.12 --with 'pydantic>=2.10,<3' python -m utils.klaud check-stop"
                 }]}]
               }
             }
@@ -131,7 +131,7 @@ jobs:
             Capacity:
             Before edits/branch/PR creation, every targeted dispatch, final-sweep label transition
             and capacity-related recovery, check ALL exact current recipe/runner targets (repeat --cluster):
-            uv run --no-project --python 3.12 --with "pydantic>=2.10,<3" python -m utils.klaud check-capacity --cluster TELEMETRY_CLUSTER_ID
+            uv run --no-project --exclude-newer PT12H --python 3.12 --with "pydantic>=2.10,<3" python -m utils.klaud check-capacity --cluster TELEMETRY_CLUSTER_ID
             Exit 0 requires fresh telemetry, available nodes and utilization <80% on every target.
             Queue eligible jobs; the scheduler decides when their full node demand can start.
             Otherwise defer: record the current attempt state in a comment, then use finish below.
@@ -181,7 +181,7 @@ jobs:
 
             Final PR disposition:
             Finalize attempt comments and write the supplied outcome JSON to $KLAUD_EVIDENCE/requested-outcome.json.
-            Then run: uv run --no-project --python 3.12 --with "pydantic>=2.10,<3" python -m utils.klaud finish --outcome-file "$KLAUD_EVIDENCE/requested-outcome.json"
+            Then run: uv run --no-project --exclude-newer PT12H --python 3.12 --with "pydantic>=2.10,<3" python -m utils.klaud finish --outcome-file "$KLAUD_EVIDENCE/requested-outcome.json"
             finish verifies full matrix/result coverage for validated success, then marks the PR ready.
             Report regressions; positive deltas are not required. Readiness starts no new sweep.
             Otherwise it cancels owned runs, checks terminal state, removes sweep labels, returns the PR
@@ -228,7 +228,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           printf '%s' "$KLAUD_STRUCTURED_OUTCOME" > "$RUNNER_TEMP/candidate-outcome.json"
-          uv run --no-project --python 3.12 --with "pydantic>=2.10,<3" python -m utils.klaud diagnostics \
+          uv run --no-project --exclude-newer PT12H --python 3.12 --with "pydantic>=2.10,<3" python -m utils.klaud diagnostics \
             --execution-file "${KLAUD_EXECUTION:-$RUNNER_TEMP/claude-execution-output.json}" \
             --structured-outcome-file "$RUNNER_TEMP/candidate-outcome.json" \
             --outcome "${KLAUD_OUTCOME:-unknown}" --output "$RUNNER_TEMP/candidate-diagnostics.json"

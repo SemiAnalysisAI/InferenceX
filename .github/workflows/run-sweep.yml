@@ -107,14 +107,17 @@ jobs:
                       echo "skip-pr-sweep=false" >> "$GITHUB_OUTPUT"
                   fi
 
+            - name: Set up uv
+              uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+
             - name: Validate perf-changelog matrix
               env:
                   ALL_EVALS: ${{ contains(github.event.pull_request.labels.*.name, 'all-evals') }}
                   EVALS_ONLY: ${{ contains(github.event.pull_request.labels.*.name, 'evals-only') }}
               run: |
-                  pip install "pydantic>=2" pyyaml
                   CMD=(
-                      python3 utils/validate_perf_changelog.py
+                      uv run --no-project --exclude-newer PT12H --python 3.12
+                      --with "pydantic>=2" --with pyyaml utils/validate_perf_changelog.py
                       --changelog-file perf-changelog.yaml
                       --base-ref "origin/${{ github.base_ref }}"
                       --head-ref "${{ github.event.pull_request.head.sha }}"
@@ -322,7 +325,7 @@ jobs:
                   fi
 
                   CMD=(
-                      uv run --no-project --with pydantic --with pyyaml --python 3.12 \
+                      uv run --no-project --exclude-newer PT12H --with pydantic --with pyyaml --python 3.12 \
                       "${GITHUB_WORKSPACE}/utils/process_changelog.py"
                       --changelog-file "${GITHUB_WORKSPACE}/perf-changelog.yaml"
                       --base-ref "$BASE_REF"
@@ -339,7 +342,7 @@ jobs:
                   fi
 
                   CONFIG_JSON=$("${CMD[@]}")
-                  CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | uv run --no-project --with pyyaml --python 3.12 \
+                  CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | uv run --no-project --exclude-newer PT12H --with pyyaml --python 3.12 \
                     "${GITHUB_WORKSPACE}/utils/ci_priority.py" \
                     --event-name "${{ github.event_name }}" \
                     --queue-namespace "${{ github.run_id }}:${{ github.run_attempt }}" \
@@ -1048,11 +1051,13 @@ jobs:
                   path: ${{ env.RESULTS_DIR }}
                   pattern: results_*
 
-            - name: Install python dependencies
-              run: pip install PyGithub
+            - name: Set up uv
+              uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
             - name: Calculate success rate
-              run: python3 utils/calc_success_rate.py "$STATS_FILENAME"
+              run: >-
+                  uv run --no-project --exclude-newer PT12H --python 3.12 --with PyGithub --with pyyaml
+                  utils/calc_success_rate.py "$STATS_FILENAME"
 
             - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
               with:
@@ -1083,11 +1088,13 @@ jobs:
                   path: results/
                   pattern: results_bmk
 
-            - name: Install dependencies
-              run: pip install psycopg2-binary tabulate
+            - name: Set up uv
+              uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
             - name: Compare results against main
-              run: python3 utils/compare_results.py results/ >> "$GITHUB_STEP_SUMMARY"
+              run: >-
+                  uv run --no-project --exclude-newer PT12H --python 3.12 --with psycopg2-binary --with tabulate
+                  utils/compare_results.py results/ >> "$GITHUB_STEP_SUMMARY"
 
     trigger-ingest:
         needs:

@@ -344,7 +344,7 @@ AgentX 追踪导出的体积更大，并且需要追踪发现、时间线处理�
 3. **验证：** 仅生成该确切键并检查 JSON，不要只查看退出码。
 
    ```bash
-   uv run --no-project --with pydantic --with pyyaml --python 3.12 \
+   uv run --no-project --exclude-newer PT12H --with pydantic --with pyyaml --python 3.12 \
      utils/matrix_logic/generate_sweep_configs.py test-config \
      --config-files configs/nvidia-master.yaml configs/amd-master.yaml \
      --runner-config configs/runners.yaml \

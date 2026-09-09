@@ -250,7 +250,7 @@ jobs:
                       exit 1
                     fi
                     CMD=(
-                      uv run --no-project --with pydantic --with pyyaml --python 3.12
+                      uv run --no-project --exclude-newer PT12H --with pydantic --with pyyaml --python 3.12
                       "${PRIORITY_ROOT}/utils/process_changelog.py"
                       --changelog-file "${GITHUB_WORKSPACE}/perf-changelog.yaml"
                       --base-ref "$CHANGELOG_BASE_REF"
@@ -283,13 +283,13 @@ jobs:
                     if [ "$EVALS_ONLY" = "true" ]; then
                       GENERATE_ARGS+=(--evals-only)
                     fi
-                    CONFIG_JSON=$(uv run --no-project --with pydantic --with pyyaml --python 3.12 \
+                    CONFIG_JSON=$(uv run --no-project --exclude-newer PT12H --with pydantic --with pyyaml --python 3.12 \
                       "${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py" \
                       "${GENERATE_ARGS[@]}")
                   fi
                   score_matrix() {
                     local family="$1"
-                    uv run --no-project --with pyyaml --python 3.12 "${PRIORITY_ROOT}/utils/ci_priority.py" \
+                    uv run --no-project --exclude-newer PT12H --with pyyaml --python 3.12 "${PRIORITY_ROOT}/utils/ci_priority.py" \
                       --policy "${PRIORITY_ROOT}/configs/ci-priority.yaml" \
                       --event-name "${{ github.event_name }}" \
                       --queue-namespace "${{ github.run_id }}:${{ github.run_attempt }}:${family}" \
@@ -773,11 +773,13 @@ jobs:
                   path: ${{ env.RESULTS_DIR }}
                   pattern: results_*
 
-            - name: Install python dependencies
-              run: pip install PyGithub
+            - name: Set up uv
+              uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
             - name: Calculate success rate
-              run: python3 utils/calc_success_rate.py "$STATS_FILENAME"
+              run: >-
+                  uv run --no-project --exclude-newer PT12H --python 3.12 --with PyGithub --with pyyaml
+                  utils/calc_success_rate.py "$STATS_FILENAME"
 
             - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
               with:
