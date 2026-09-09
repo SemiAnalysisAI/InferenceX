@@ -43,6 +43,7 @@ require_agentic_kv_offload_none() {
 
 require_agentic_kv_offload_backend() {
     local expected_backend="$1"
+    local supported_modes="${2:-dram}"
     if [[ -z "${KV_OFFLOADING+x}" || -z "$KV_OFFLOADING" ]]; then
         echo "Error: KV_OFFLOADING must be set for agentic benchmarks" >&2
         exit 1
@@ -55,12 +56,16 @@ require_agentic_kv_offload_backend() {
             fi
             return 1
             ;;
-        dram)
+        dram|nvme|dram+nvme)
+            if [[ " $supported_modes " != *" $KV_OFFLOADING "* ]]; then
+                echo "Error: this recipe does not support $KV_OFFLOADING with $expected_backend" >&2
+                exit 1
+            fi
             if [[ "${KV_OFFLOAD_BACKEND:-}" != "$expected_backend" ]]; then
                 echo "Error: expected KV_OFFLOAD_BACKEND=$expected_backend when KV_OFFLOADING=dram, got '${KV_OFFLOAD_BACKEND:-}'" >&2
                 exit 1
             fi
-            if [[ ! "${TOTAL_CPU_DRAM_GB:-}" =~ ^[1-9][0-9]*$ ]]; then
+            if [[ "$KV_OFFLOADING" != "nvme" && ! "${TOTAL_CPU_DRAM_GB:-}" =~ ^[1-9][0-9]*$ ]]; then
                 echo "Error: DRAM KV offloading requires a positive TOTAL_CPU_DRAM_GB capacity" >&2
                 exit 1
             fi
@@ -108,12 +113,12 @@ if [[ "$_benchmark_caller" == */agentic/* ||
                 exit 1
             fi
             ;;
-        dram)
+        dram|nvme|dram+nvme)
             if [[ -z "${KV_OFFLOAD_BACKEND:-}" || "${KV_OFFLOAD_BACKEND:-}" == "none" ]]; then
                 echo "Error: KV_OFFLOAD_BACKEND is required when KV_OFFLOADING=dram" >&2
                 exit 1
             fi
-            if [[ ! "${TOTAL_CPU_DRAM_GB:-}" =~ ^[1-9][0-9]*$ ]]; then
+            if [[ "$KV_OFFLOADING" != "nvme" && ! "${TOTAL_CPU_DRAM_GB:-}" =~ ^[1-9][0-9]*$ ]]; then
                 echo "Error: DRAM KV offloading requires a positive configured TOTAL_CPU_DRAM_GB capacity" >&2
                 exit 1
             fi

@@ -28,6 +28,9 @@ elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" && $MODEL == "deepseek-ai
 elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
     # Node-local weights are not visible on the runner/login node.
     export MODEL_PATH="/scratch/models/DeepSeek-V4-Pro-NVFP4"
+    if [[ "$FRAMEWORK" == "vllm" ]]; then
+        export MODEL_PATH="/scratch/models/DeepSeek-V4-Pro"
+    fi
     export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
 elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "bf16" ]]; then
     export MODEL_PATH="/scratch/models/Qwen3.5-397B-A17B"
@@ -531,8 +534,33 @@ else
     export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
 
     SALLOC_TIME_LIMIT="${SALLOC_TIME_LIMIT:-480}"
-    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$GPU_COUNT --exclusive --mem=0 --time="$SALLOC_TIME_LIMIT" --no-shell --job-name="$RUNNER_NAME"
+    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$GPU_COUNT --exclusive --mem=0 --time="$SALLOC_TIME_LIMIT" --no-shell --job-name="$RUNNER_NAME" || exit 1
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
+    [[ "$JOB_ID" =~ ^[0-9]+$ ]] || { echo "Could not resolve Slurm allocation" >&2; exit 1; }
+
+    NVME_HOST_DIR=""
+    cleanup_offload_cache() {
+        local rc=$?
+        if [[ -n "$NVME_HOST_DIR" ]]; then
+            timeout --kill-after=10s 60s srun --jobid="$JOB_ID" \
+                rm -rf -- "$NVME_HOST_DIR" || {
+                    echo "NVMe cleanup failed: $NVME_HOST_DIR on job $JOB_ID" >&2
+                    rc=1
+                }
+        fi
+        scancel "$JOB_ID" || true
+        exit "$rc"
+    }
+    trap cleanup_offload_cache EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    EXTRA_MOUNTS=""
+    if [[ "${KV_OFFLOADING:-none}" == *nvme* ]]; then
+        NVME_HOST_DIR="/scratch/inferencex-kv-$JOB_ID"
+        srun --jobid="$JOB_ID" mkdir -m 700 "$NVME_HOST_DIR" || exit 1
+        export NVME_OFFLOAD_DIR=/kv-offload
+        EXTRA_MOUNTS=",$NVME_HOST_DIR:$NVME_OFFLOAD_DIR"
+    fi
 
     # Point the bench script at the resolved MODEL_PATH instead of
     # pulling from the HF hub cache. Bench scripts skip `hf download` when
@@ -552,11 +580,11 @@ else
             rm -f \"$SQUASH_FILE\"
             enroot import -o \"$SQUASH_FILE\" docker://$IMAGE
         fi
-    "
+    " || exit 1
 
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
-        --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR,$MODEL_PATH:$MODEL_PATH,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache \
+        --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR,$MODEL_PATH:$MODEL_PATH,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache$EXTRA_MOUNTS \
         --no-container-mount-home \
         --container-workdir=$CONTAINER_MOUNT_DIR \
         --no-container-entrypoint --export=ALL,PORT=8888,AIPERF_DATASET_MMAP_CACHE_DIR=/aiperf_mmap_cache \

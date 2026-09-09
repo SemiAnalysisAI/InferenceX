@@ -390,6 +390,29 @@ class TestSingleNodeMatrixEntry:
 class TestAgenticMatrixEntries:
     """Tests for agentic coding validation models."""
 
+    @pytest.mark.parametrize("mode", ["nvme", ["dram", "nvme"]])
+    def test_single_node_nvme_modes(self, mode):
+        entry = AgenticCodingSearchSpaceEntry(**{
+            "tp": 8, "kv-offloading": mode,
+            "kv-offload-backend": {"name": "vllm-native"}, "conc-list": [8],
+        })
+        assert entry.kv_offloading == mode
+
+    @pytest.mark.parametrize("mode", [[], ["dram"], ["nvme", "dram"], ["dram", "dram"]])
+    def test_rejects_unsupported_tier_lists(self, mode):
+        with pytest.raises(ValidationError, match="only supported tier list"):
+            AgenticCodingSearchSpaceEntry(**{
+                "tp": 8, "kv-offloading": mode,
+                "kv-offload-backend": {"name": "vllm-native"}, "conc-list": [8],
+            })
+
+    def test_tiered_offload_requires_dram_budget(self):
+        with pytest.raises(ValidationError, match="dram-utilization"):
+            AgenticCodingConfig(**{"search-space": [{
+                "tp": 8, "kv-offloading": ["dram", "nvme"],
+                "kv-offload-backend": {"name": "vllm-native"}, "conc-list": [8],
+            }]})
+
     def test_arbitrary_backend_is_valid_for_single_node_agentic_entry(self):
         entry = SingleNodeAgenticMatrixEntry(**{
             "image": "cquil/vllm-openai:v0.21.0-8813c92",
