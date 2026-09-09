@@ -241,15 +241,17 @@ cleanup only to the session's own PR and runs.
 
 ### 7.3 Final reusable sweeps require a ready PR
 
-`run-sweep.yml` skips PR jobs while the PR is a draft. After targeted validation,
+`run-sweep.yml` skips PR jobs while the PR is a draft. After the trimmed smoke,
 append the changelog entry, mark the PR ready, then apply `full-sweep-enabled`.
 If that sweep fails, remove the label and return the PR to draft before pushing
 a repair, or each intermediate push starts another full sweep. The Klaud Stop
-hook tracks a labeled final sweep by candidate branch and exact head SHA and
-requires a successful run with reusable artifacts. It ignores completed
+hook verifies the `finish` receipt, including exact-head full matrix/result
+coverage, terminal children and failure/deferral reporting and branch cleanup.
+The next autosweep reconciles interrupted sessions recorded in `klaud-ownership`;
+old runs without that ownership record remain maintainer-managed. It ignores completed
 all-skipped runs from unrelated label events on that same SHA. The lookup window
-starts at the parent auto-sweep's original creation time so a candidate-job rerun
-still sees targeted and final sweeps created by its earlier attempt.
+starts at the parent auto-sweep's original creation time. Candidate-job reruns
+are skipped; dispatch a new autosweep so recovery checks the old session first.
 
 ---
 

@@ -6,7 +6,7 @@
 
 </div>
 
-[`klaud-plan.yml`](../.github/workflows/klaud-plan.yml) 使用 Python 准备候选，通过简短的只读 Claude 检查排除与开放 PR 重复的工作，再调用 [`klaud-candidate.yml`](../.github/workflows/klaud-candidate.yml)。每个所选候选由一个自主运行的 Klaud Cold 会话负责分支、草稿 PR、benchmark、修复和报告。只读 Stop hook 在同一会话内检查未结束的运行。后续步骤仅保存脱敏诊断；没有 attempt 工作流、Python 执行控制器或后续报告 agent。
+[`klaud-plan.yml`](../.github/workflows/klaud-plan.yml) 先收尾有记录的中断会话，再用 Python 准备候选，经只读 Claude 检查排除重叠 PR 后调用 [`klaud-candidate.yml`](../.github/workflows/klaud-candidate.yml)。每个候选仍由一个自主 Klaud Cold 会话负责修改、诊断和修复。`finish` 命令验证结果或执行清理，并发布完成记录；只读 Stop hook 和诊断步骤对照 GitHub 验证该记录。恢复工作放在下一次现有 autosweep 中，不增加第二个 agent 或工作流。
 
 PR 检查使用 `claude-opus-5`（Opus 5），关闭 fast mode（`fastMode: false`），最多运行 200 轮。候选执行使用 `claude-fable-5-1`（Fable 5.1），关闭 fast mode。Agent 的显示名称为 **Klaud Cold**；工作流文件名、CLI、产物、分支及环境变量/secret 标识统一使用 `klaud` / `KLAUD`。旧拼写的候选分支仍会阻止重复选择。调度重命名后的工作流前，须配置 `KLAUD_DASHBOARD_API_KEY`。
 
@@ -37,17 +37,17 @@ PR 正文只包含一到两句话说明目标，以及**基线**章节：发布�
 
 完成 checkout 和上下文准备后，candidate 工作流将控制权交给 Klaud Cold，并提供 `CLAUDE_PAT`、`ANTHROPIC_API_KEY` 和私有 API 只读密钥。Klaud Cold 将公开观测解析到一个活动主配置族，检查当前镜像和已有 PR，并在**编辑或创建分支/PR 之前**核实检查结果中的目标 ID 和实时容量。随后在使用 GPU 前认领分支，产生实际修改并创建草稿 PR。所有生成的 PR 标题必须以 `[Klaud Cold] ` 开头，后接英文 / 简体中文描述。不得在 GitHub 上 @提及用户/团队，也不得请求 review/re-review；这些操作由自动流程处理。它在认领分支前立即重新检查开放 PR，因为检查只是快照，不能锁住后来创建的人工 PR。有歧义、已退役或已经更新的候选直接停止，不运行扫描。提交、推送、调度、监控、诊断、修复及双语 PR 更新都由同一会话完成。
 
-提示词要求 Klaud Cold 通过 `main` 上现有的 `e2e-tests.yml` 仅测量更新后的镜像及其修复尝试，将实际测量提交的 SHA 传入 `inputs.ref`，将完整配置族的 `test-config` 命令传入 `generate-cli-command`。它读取当前 `configs/*-master.yaml`、`configs/runners.yaml` 并使用现有矩阵生成器 CLI，不再维护另一份 recipe 目录。保留默认 eval、所有配置测试点、物理 `nodes:N` 标签、MTP chat template 和产物约定。定向修复尝试不添加 sweep 标签，并保持 PR 为草稿。定向尝试通过后，Klaud 会在 `perf-changelog.yaml` 物理末尾追加包含 PR URL 的必要条目，保留此前所有字节，将 PR 标记为 ready 但不请求 review，并将 `full-sweep-enabled` 作为唯一与 sweep 相关的标签。它会等待针对该 PR 精确 head 的 `run-sweep.yml` 成功结束并产生可复用产物。如果最终 sweep 失败，Klaud 会在任何修复推送之前移除该标签并将 PR 改回草稿，再在剩余修复预算内修复并重复。Klaud 不会自行 staging、授权复用、请求 review 或合并。
+定向尝试只测试更新后的镜像：从 `main` 调度 `e2e-tests.yml`，将 `inputs.ref` 设为实际测量 SHA，并使用 `generate-cli-command="test-config --config-files FILE --config-keys FAMILY --trim-conc"`。现有矩阵生成器为每种部署形态保留最低并发，保持原有工作负载及 smoke eval 选择规则。这只能证明启动和兼容性，不能代表完整曲线。smoke 通过后，追加精确配置族的 changelog 条目，不使用场景、eval 选择或 append-only 修饰项；将 PR 标记为 ready 并添加 `full-sweep-enabled`。最终 sweep 保留全部测试点和默认 eval。最终失败后，先移除 sweep 标签并退回草稿，再推送修复。Klaud 不自行 staging、授权复用、请求 review 或合并。
 
 在编辑或创建分支之前、每次定向调度之前，以及最终 sweep 的 ready/标签转换之前，使用 `check-capacity --cluster ID` 检查精确目标；通过重复 `--cluster` 指定每个可能的目标。退出状态 0 要求全部目标均通过新鲜度、可用性和低于 80% 利用率检查。如果该检查在定向调度、最终 sweep 转换或恢复调度之前失败，Klaud 会先在已有 PR 的评论中记录可公开的容量延后原因和当前尝试状态。随后取消并确认全部所属运行已经结束，再用终态或已取消行及确认后的状态更新尝试评论。最后移除所有 sweep 标签、将 PR 改回草稿、关闭 PR，并删除远程 Klaud 分支，使后续扫描可以重试该候选。如果尚无 PR，则在最终响应中记录延后结果，不创建占位 PR。调度后利用率上升不会导致健康运行被取消。Klaud 不会等待恢复或承诺自动继续。命令不打印容量详情。
 
 Klaud Cold 读取运行产物/日志，在评论中维护完整尝试记录。为**首次尝试**、每次实际使用的**修复 N/5**和**最终完整扫描**各创建一条简短的纵向评论；持续更新镜像/SHA、运行链接、修改内容、benchmark/eval 结果、匹配的吞吐量/延迟差值、诊断及下一步，包括最终或已取消的结果。首次尝试不占用五次修复预算。出现实质诊断、修复、最终 sweep 或停止状态变化时，追加简短里程碑评论，链接对应尝试而不重复全部结果。合并相邻里程碑；等待时仅在有实质变化或距离上次更新已过 30 分钟时更新。评论只描述可观察的工作，不包含内部推理或原始日志。紧凑表格只用于数值比较。缺失或不可比较的数值标为 `N/A` 并就地简短说明；无效、重复或未匹配的测试点不得用于声称性能提升，不另设限制章节。定向 benchmark/default eval 通过、精确 head 的最终验证通过和全局 PR 审批是不同结论。性能提升尽力而为，回退如实报告，不设置百分比拒绝阈值。公开 dashboard 数据作为基线，只有新镜像尝试消耗 GPU 时间。空汇总或成功的收集作业不能证明通过。原始产物保留在对应运行中；结束后仅上传脱敏诊断和结构化终态。
 
-无论测试点数量多少，都运行完整的所选配置族。单次 benchmark 运行可能长达三小时；Klaud Cold 在候选作业的总时限内监控其进展。Klaud 不再为单次 benchmark 运行设置额外超时。
+最终 sweep 无论测试点数量多少，都运行完整的所选配置族。单次 benchmark 运行可能长达三小时；Klaud Cold 在候选作业的总时限内监控其进展。Klaud 不再为单次 benchmark 运行设置额外超时。
 
 两个设置直接保留在工作流中：[`klaud-plan.yml`](../.github/workflows/klaud-plan.yml) 的 `MAX_CANDIDATES_PER_RUN` 控制 planner 的候选数量上限；[`klaud-candidate.yml`](../.github/workflows/klaud-candidate.yml) 的 `MAX_REPAIRS` 将修复次数上限直接传入 agent 提示词。
 
-工作流并发和选择规则由代码强制执行。Klaud Cold 最多运行 500 轮，必须在 GitHub Actions 默认作业时限内完成报告和清理。**修复判断和报告内容仍由 agent 负责；Stop hook 检查所属运行的状态。** Klaud Cold 必须在成功、修复预算耗尽、重复失败无进展、容量丢失或写操作结果不确定时停止，并取消未完成子运行、确认结束。作业超时或 runner/agent 突然终止仍可能留下未结束运行或未完成报告，因为没有后续作业接管。
+Klaud Cold 最多运行 500 轮，使用 GitHub Actions 默认作业时限。诊断、修复选择和尝试评论仍由 agent 负责；`finish` 通过代码验证结果覆盖、子运行结束、最终报告和分支处理。作业时限、API 错误或 runner 被终止仍可能中断会话；下一次 autosweep 会在选择新候选前收尾有归属记录的会话。不增加自定义工作流超时。
 
 Klaud Cold 调度 `e2e-tests.yml` 时显式设置布尔输入 `klaud-run: true`，并使用 `klaud-` 测试名称方便识别。手动和复用调用中的该输入均默认为 false，并传递至所有 benchmark/eval 模板。只有这个标志会为作业名称添加 `klaud | ` 前缀，供 InferenceX Dash 优先级调度器识别；普通测试名称不会改变优先级。配套调度器改动使 Klaud 始终排在普通人工任务之后，不受任务到达时间或 recipe 分数影响；Klaud 不获得等待时长加分或节点预留，skip-queue 请求也不生效。Klaud 使用剩余容量，不抢占已经运行的任务。显式管理员优先级覆盖保留原有优先顺序，Klaud 不得主动请求。启用 auto-sweep 前需部署配套 dashboard 调度器改动。
 
@@ -57,9 +57,15 @@ Klaud Cold 调度 `e2e-tests.yml` 时显式设置布尔输入 `klaud-run: true`�
 
 调度运行或创建草稿不代表任务完成。使用 `gh run watch --interval 60` 留在同一会话中等待，工具超时后继续等待，并检查作业级状态，因为 queued 工作流可能包含正在运行的作业。benchmark 矩阵失败后，eval 作业仍可能继续。定位首个服务端错误而非清理阶段症状；在原有范围、预算和容量规则内修复。工具调用被拒绝时改用允许的工具或命令，不得提前报告成功。先将所有尝试的最终结果写入 PR 尝试评论，再报告停止原因、修复次数、已确认的子运行结束状态和 PR URL。不得承诺稍后继续监控，也不得仅为结束会话而取消正常运行。
 
-[Claude Code Stop hook](https://code.claude.com/docs/en/hooks#stop) 运行 `python -m utils.klaud check-stop`。其查询窗口从父 auto-sweep 的原始创建时间开始，该时间在 candidate 作业重跑时保持不变。上下文准备阶段最多查询四次，重试间隔为 5/10/20 秒；仍失败时终止，不使用更新的时间戳替代。hook 读取匹配的 `e2e-tests.yml` 手动调度全部分页，并匹配 `e2e Test - $KLAUD_TEST_NAME`；每次尝试必须使用固定标识 `klaud-<parent-run-id>-<candidate-id>`。匹配到未结束的运行，或列表不可用/不完整时，阻止正常停止并要求同一 agent 继续。hook 还会跟踪同一时间窗口内候选分支上的全部 `run-sweep.yml` 运行，包括旧 head，以及 PR 已关闭或标签已移除的运行。最终 sweep 作业未结束时，一律阻止正常完成。开放 PR 即使没有 `full-sweep-enabled` 也会阻止停止：Klaud 必须完成最终验证，或完成失败/延后报告后关闭自己的 PR。带标签的开放 PR 必须为 ready，且精确 head 的 sweep 成功并存在可复用 benchmark/eval 产物；已结束但被跳过的标签事件运行不算验证。只有维护者明确添加 `klaud-handoff` 才会转移该责任。停滞的草稿绝不是正常完成状态。其他候选的运行不受影响。hook 不调度、不取消、不修复，也不调用模型。GitHub 作业时限、Claude 内置 Stop-hook 循环上限、API 错误、中断或异常终止仍可能导致任务未完成；它不是外部监督服务。不增加自定义超时或继续执行预算。
+[Stop hook](https://code.claude.com/docs/en/hooks#stop) 通过 `check-stop` 检查 `$KLAUD_EVIDENCE/outcome.json`。结束前，将请求的 `CandidateOutcome` JSON 写入单独文件，运行 `uv run --no-project --python 3.12 --with "pydantic>=2.10,<3" python -m utils.klaud finish --outcome-file "$KLAUD_EVIDENCE/requested-outcome.json"`，再原样返回已验证的 `outcome.json`。命令从父运行原始创建时间起发现所有自有定向和最终运行，包括旧 head、已关闭或移除标签的 PR。先发布失败或延后报告，再取消运行；全部结束后才移除 sweep 标签、退回草稿并关闭 PR。`capacity-deferred`/`readiness-blocked` 删除所属 PR 的分支；其他失败结果保留分支。完成记录包含实际运行 ID 和分支策略。取消或标签事件作业仍在进行时，等待后重试 `finish`。维护者接管优先于清理；不覆盖其他所有者、fork、已移动的 head、已合并 PR 或不明确的状态。没有所属 PR 时保留已有分支占用。hook 仅做验证，不修改状态，也不能突破 Claude 内置的停止循环上限。
 
-执行结束后，`diagnostics` 验证结构化终态，并与脱敏运行指标一起写入 `candidate-diagnostics.json`。终态仅允许固定类别（`validated`、`capacity-deferred`、`readiness-blocked`、`incompatible`、`duplicate`、`retired`、`already-updated`、`uncertain`、`failed`、`handoff`、`unexpected-error`）、阶段、数字 PR/运行 ID 和修复次数；不接受自由文本或遥测。作业摘要通过紧凑双语表格链接 PR 和运行，包括未创建 PR 的会话。输出缺失、格式错误或 action 失败时记录 `unexpected-error`，阶段和修复次数为未知，并让报告步骤失败。正常延后表示会话完成，不表示基准验证成功。不得上传原始执行消息、命令、凭据或私有响应。
+执行结束后，`diagnostics` 对照 GitHub 和完成记录验证结构化终态，并与脱敏运行指标一起写入 `candidate-diagnostics.json`。终态仅允许固定类别（`validated`、`capacity-deferred`、`readiness-blocked`、`incompatible`、`duplicate`、`retired`、`already-updated`、`uncertain`、`failed`、`handoff`、`unexpected-error`）、阶段、数字 PR/运行 ID 和修复次数；不接受自由文本或遥测。作业摘要通过紧凑双语表格链接 PR 和运行，包括未创建 PR 的会话。输出缺失、格式错误或 action 失败时记录 `unexpected-error`，阶段和修复次数为未知，并让报告步骤失败。正常延后表示会话完成，不表示基准验证成功。不得上传原始执行消息、命令、凭据或私有响应。
+
+`run-sweep.yml` 为 Klaud 单独上传 `klaud-sweep-manifest`，记录实际调度矩阵、精确 head、运行 ID/attempt 和完整 sweep 状态。验证器按完整 recipe fingerprint、并发量和镜像比较全部 benchmark 点，并复用现有 eval 身份、原始结果及汇总一致性验证器检查所需 eval；缺失、重复或不匹配时拒绝完成。旧运行没有该 manifest 时不能自动认定为已验证。现有 `changelog-metadata` 产物保持原格式。
+
+### 中断恢复
+
+选择步骤在 agent 启动前上传小型 `klaud-ownership` 产物，保存父运行及所选候选的 ID、配置族和基准 SHA，最长保留 90 天。下一次 autosweep 的 `recover` 只读取受信任 `main` 工作流产生的记录，并要求原父运行已结束。它尊重接管或已合并状态，验证已完成结果；遇到中断时，先等待已经调度的精确 head 最终 sweep，保留成功且覆盖完整的结果，否则取消并确认所属作业、发布双语清理报告、关闭未完成 PR，保留原因不明候选的分支供人工审查。待完成清理记录将原因和修复次数绑定到原 PR head；容量清理中途崩溃后，仍会释放分支以便重试。head 已变化时要求人工检查。未知修复次数写为 `null`，不猜测为零。PR 创建时间限定在所属会话内，旧关闭 PR 不会妨碍同名分支的新尝试；恢复前后均检查 head、标签和父运行状态。单个候选状态不明不会阻止检查其他候选，但会暂停新的调度并在摘要中提示检查。父运行的全部候选收尾后，只删除这个待处理归属产物，保留计划、诊断和 PR 报告，避免反复扫描已完成历史。旧版会话或已过期记录不自动迁移；禁用 schedule 或 GitHub 不可用会推迟恢复。恢复不新建 PR、不修复镜像、不合并，也不取消其他人的新运行。
 
 ## 公开 API 调查
 
@@ -98,9 +104,9 @@ Klaud Cold 只应修改所选主配置族的镜像，以及它已经引用且未
 
 ## 工作流操作与凭据
 
-入口工作流每六小时运行一次（`0 */6 * * *`，UTC），并支持手动触发（`workflow_dispatch`）。每次调用最多选择五个候选并行运行。条件 `github.ref == 'refs/heads/main' && github.run_attempt == 1` 会跳过功能分支、tag 和重新运行。只有 candidate 暴露 `workflow_call`。`klaud-auto-sweep` 并发组不取消已有运行，并防止多次 auto-sweep 调用重叠；同一次调用中的候选并行运行，工作流不额外限制候选并行度。
+入口工作流每六小时运行一次（`0 */6 * * *`，UTC），并支持手动触发（`workflow_dispatch`）。每次调用最多选择五个候选并行运行。条件 `github.ref == 'refs/heads/main' && github.run_attempt == 1` 会跳过功能分支、tag 和重新运行。candidate 作业也跳过重跑；应重新调度 autosweep，先执行恢复。只有 candidate 暴露 `workflow_call`。`klaud-auto-sweep` 并发组不取消已有运行，并防止多次 auto-sweep 调用重叠；同一次调用中的候选并行运行，工作流不额外限制候选并行度。
 
-planner 的 Python 准备和最终容量检查步骤使用 dashboard key；准备步骤还使用只读工作流 token。限轮数的 Claude PR 检查使用 `ANTHROPIC_API_KEY` 和具有 `pull-requests: read` 权限的只读工作流 token。它接收私有资格线索，但不接收 `CLAUDE_PAT` 或 dashboard key，也不执行 GitHub 写操作。candidate 获得用于分支/PR 写入及 e2e 调度/取消的 `CLAUDE_PAT`、用于 Klaud Cold 的 `ANTHROPIC_API_KEY`，以及覆盖 clusters 的限期 `status:read` `KLAUD_DASHBOARD_API_KEY`。Klaud Cold 不得发布凭据或私有 API 响应。共享 HTTP 读取器固定来源、限制 GET 响应大小并拒绝重定向。非有限 JSON 数值（包括 `1e400` 这样的指数溢出）会在校验或哈希计算前被拒绝。不需要新增控制器、数据库或 environment 配置。
+恢复步骤单独使用 `CLAUDE_PAT` 执行已确认归属的清理；只读重叠检查 agent 不获得该凭据。planner 的 Python 准备和最终容量检查步骤使用 dashboard key；准备步骤还使用只读工作流 token。限轮数的 Claude PR 检查使用 `ANTHROPIC_API_KEY` 和具有 `pull-requests: read` 权限的只读工作流 token。它接收私有资格线索，但不接收 `CLAUDE_PAT` 或 dashboard key，也不执行 GitHub 写操作。candidate 获得用于分支/PR 写入及 e2e 调度/取消的 `CLAUDE_PAT`、用于 Klaud Cold 的 `ANTHROPIC_API_KEY`，以及覆盖 clusters 的限期 `status:read` `KLAUD_DASHBOARD_API_KEY`。Klaud Cold 不得发布凭据或私有 API 响应。共享 HTTP 读取器固定来源、限制 GET 响应大小并拒绝重定向。非有限 JSON 数值（包括 `1e400` 这样的指数溢出）会在校验或哈希计算前被拒绝。不需要部署额外服务、数据库或新增 environment 配置。
 
 所有外部 action 均固定完整提交 SHA；下表与当前工作流中的固定版本一致。内部调用使用 `./.github/workflows/klaud-candidate.yml` 解析调用者的精确提交，并显式传递三个必需 secret。
 

@@ -8,6 +8,7 @@ on:
 permissions:
   contents: read
   actions: read
+  pull-requests: read
 
 concurrency:
   group: klaud-auto-sweep
@@ -36,6 +37,11 @@ jobs:
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
         with:
           python-version: '3.12'
+      - name: Reconcile interrupted owned candidates
+        env:
+          # Recovery mutates only sessions recorded by this workflow after their parent finishes.
+          GH_TOKEN: ${{ secrets.CLAUDE_PAT }}
+        run: uv run --no-project --python 3.12 --with "pydantic>=2.10,<3" python -m utils.klaud recover
       - name: Prepare eligible candidates and open PRs
         id: prepare
         env:
@@ -102,6 +108,12 @@ jobs:
           KLAUD_REVIEW_OUTCOME: ${{ steps.review.outcome }}
           KLAUD_REVIEW_EXECUTION: ${{ steps.review.outputs.execution_file }}
         run: uv run --no-project --python 3.12 --with "pydantic>=2.10,<3" python -m utils.klaud select --max-candidates-per-run "$MAX_CANDIDATES_PER_RUN" --directory "$RUNNER_TEMP/klaud" --execution-file "${KLAUD_REVIEW_EXECUTION:-$RUNNER_TEMP/claude-execution-output.json}"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: klaud-ownership
+          path: ${{ runner.temp }}/klaud/ownership.json
+          if-no-files-found: error
+          retention-days: 90
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:

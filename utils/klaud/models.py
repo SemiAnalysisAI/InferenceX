@@ -60,6 +60,17 @@ class PRReview(Contract):
     decisions: list[CandidateReview]
 
 
+class OwnedCandidate(Contract):
+    id: str = Field(pattern=r'^[0-9a-f]{16}-[0-9a-f]{16}$')
+    family: str = Field(pattern=r'^configs/[^/:]+-master\.yaml:[^\s:]+$')
+    base: str = Field(pattern=r'^[0-9a-f]{40}$')
+
+
+class Ownership(Contract):
+    run_id: int = Field(gt=0)
+    candidates: list[OwnedCandidate] = Field(max_length=256)
+
+
 class CandidateOutcome(Contract):
     # Only fixed categories and numeric GitHub IDs are safe to publish.
     outcome: Literal['validated', 'capacity-deferred', 'readiness-blocked', 'incompatible',
@@ -71,8 +82,8 @@ class CandidateOutcome(Contract):
 
     @model_validator(mode='after')
     def consistent_outcome(self) -> CandidateOutcome:
-        if self.outcome != 'unexpected-error' and (self.phase == 'unknown' or self.repairs_used is None):
-            raise ValueError('Completed outcomes require phase and repair count')
+        if self.outcome != 'unexpected-error' and self.phase == 'unknown':
+            raise ValueError('Completed outcomes require a known phase')
         if self.outcome in ('validated', 'handoff') and self.pull_request is None:
             raise ValueError('This outcome requires a PR')
         if self.outcome == 'validated' and (not self.run_ids or self.phase != 'final-sweep'):

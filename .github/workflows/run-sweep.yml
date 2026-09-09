@@ -988,18 +988,41 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             - name: Extract and save changelog metadata
+              env:
+                  SWEEP_MATRIX: ${{ needs.setup.outputs.search-space-config }}
+                  SWEEP_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+                  SWEEP_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
+                  FULL_SWEEP: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') && !contains(github.event.pull_request.labels.*.name, 'evals-only') && !contains(github.event.pull_request.labels.*.name, 'agentx-fast') && needs.setup.outputs.reuse-enabled != 'true' }}
               run: |
-                  cat <<'CONFIGEOF' > _full_config.json
-                  ${{ needs.setup.outputs.search-space-config }}
-                  CONFIGEOF
-                  jq '.changelog_metadata' _full_config.json > changelog_metadata.json
-                  rm -f _full_config.json
+                  python3 - <<'PY'
+                  import json, os
+                  from pathlib import Path
+                  matrix = json.loads(os.environ['SWEEP_MATRIX'])
+                  labels = set(json.loads(os.environ['SWEEP_LABELS']) or [])
+                  incompatible = {'sweep-enabled', 'non-canary-full-sweep-enabled', 'full-sweep-fail-fast',
+                                  'full-sweep-fail-fast-no-canary', 'evals-only', 'agentx-fast'}
+                  Path('changelog_metadata.json').write_text(json.dumps(matrix['changelog_metadata']))
+                  Path('sweep_manifest.json').write_text(json.dumps({
+                      'head': os.environ['SWEEP_HEAD'], 'run-id': int(os.environ['GITHUB_RUN_ID']),
+                      'run-attempt': int(os.environ['GITHUB_RUN_ATTEMPT']),
+                      'full-sweep': os.environ['FULL_SWEEP'] == 'true' and not labels & incompatible,
+                      'matrix': matrix,
+                  }))
+                  PY
 
             - name: Upload changelog artifact
               uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
               with:
                   name: changelog-metadata
                   path: changelog_metadata.json
+
+            - name: Upload Klaud validation manifest
+              if: *klaud-run
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: klaud-sweep-manifest
+                  path: sweep_manifest.json
+                  if-no-files-found: error
 
     calc-success-rate:
         needs: collect-results
