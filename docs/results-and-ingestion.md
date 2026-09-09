@@ -159,6 +159,24 @@ The aggregate artifact matches the `bmk_*` collection pattern and therefore also
 
 Server logs are separate `server_logs_<RESULT_FILENAME>` artifacts. The app uses the fully stripped suffix fallback so AgentX rows can find a server log even though the log artifact has no `agentic_` prefix.
 
+Ordinary single-node AgentX runs enable the shared GPU power monitor by default.
+Their `power_audit_<RESULT_FILENAME>` artifact retains the raw telemetry, GPU
+identity, formal measurement window, timezone offset, and validation verdict
+from `results/`. Multinode runs retain the deployment telemetry under
+`LOGS/power/` and per-concurrency window/validation files under `LOGS/agentic/`
+in the same audit artifact. Available audits and AgentX aggregates upload even
+when a benchmark fails. Missing files do not establish power support: a
+multinode recipe also needs a compatible producer and launcher adapter.
+When that measurement-window contract is absent, the aggregate records
+`power_valid: 0` and the audit names `multinode_power_contract_missing`;
+`REQUIRE_POWER=1` also fails the job after preserving available results.
+
+Treat `power_valid: 1` with `power_metric_schema_version: 2` as a GPU telemetry
+verdict, not a request-accounting or model-quality verdict. Before using a point
+as a clean comparison, reconcile issued, completed, cancelled, and errored
+requests with raw profiling records and token totals. GPU-board energy is
+separate from estimated whole-system power.
+
 ### Raw inputs and aggregate schema
 
 [`process_agentic_result.py`](../utils/agentic/aggregation/process_agentic_result.py) resolves the current `results/aiperf_artifacts` layout and a one-child nested layout. It requires `profile_export.jsonl`. It reads these inputs when present:

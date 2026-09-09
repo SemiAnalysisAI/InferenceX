@@ -158,6 +158,19 @@ raw tree:           results/**, excluding inputs.json and profile_export_raw.jso
 
 服务器日志是单独的 `server_logs_<RESULT_FILENAME>` 工件。应用会使用完全移除前缀后的后缀作为回退，从而让 AgentX 记录找到不含 `agentic_` 前缀的日志工件。
 
+普通单节点 AgentX 提交默认启用共享 GPU 功耗监控。
+`power_audit_<RESULT_FILENAME>` 工件保留 `results/` 中的原始遥测、GPU 身份、
+正式测量窗口、时区偏移和校验结果。多节点运行在同一审计工件中保留
+`LOGS/power/` 下的部署遥测，以及 `LOGS/agentic/` 下各并发的窗口和校验文件。
+即使基准测试失败，已有的审计文件和 AgentX 聚合结果仍会上传。
+文件缺失不代表路径支持功耗采集：多节点配方还需要兼容的 producer 和 launcher 适配器。
+缺少测量窗口接口时，聚合结果记录 `power_valid: 0`，审计原因标记为
+`multinode_power_contract_missing`；设置 `REQUIRE_POWER=1` 还会在保留已有结果后使任务失败。
+
+`power_valid: 1` 与 `power_metric_schema_version: 2` 只表示 GPU 遥测有效，
+不代表请求计数或模型质量通过验证。用于可靠对比前，应将已发出、已完成、已取消及
+出错请求数与原始 profiling 记录和 token 总数核对。GPU 板卡能耗与整机功耗估算分开报告。
+
 ### 原始输入和聚合架构
 
 [`process_agentic_result.py`](../utils/agentic/aggregation/process_agentic_result.py) 可解析当前的 `results/aiperf_artifacts` 布局，也可解析只含一个子目录的嵌套布局。它要求存在 `profile_export.jsonl`，并在存在时读取以下输入：
