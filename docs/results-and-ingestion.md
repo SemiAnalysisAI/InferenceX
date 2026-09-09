@@ -182,8 +182,11 @@ current two-node vLLM runtime and the shared AgentX measurement-window contract.
 The launcher validates all deployment telemetry with the shared power adapter
 after the Slurm job and stages diagnostics before returning a validation failure.
 Other K3 concurrency recipes retain their existing producer until validated.
-The C1 recipe uses synthetic acceptance and disables Mooncake offload; its
-master-config DRAM labels do not establish actual host-cache use.
+The seven B200 K3 rows report TP8/PP2/DCP8 and `kv-offloading: none`,
+matching their serving recipes; the Mooncake connector remains configured with
+offload disabled. C1 uses synthetic acceptance. Older artifacts retain their
+original DCP1/DRAM labels and require this identity caveat; the metadata
+correction does not change their serving configuration or measured values.
 
 ### Raw inputs and aggregate schema
 

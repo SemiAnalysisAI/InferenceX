@@ -7153,4 +7153,6 @@
   description:
     - "Enable shared deployment power telemetry for the existing B200 Kimi-K3 C1 recipe. Pin its current two-node vLLM runtime plus AgentX measurement-window support at srt-slurm 80d7203e424f903c9017de4608ee2044afce9574; join and validate power through the existing adapter after the job, retaining invalid diagnostics before failure. Other concurrency recipes and fixed-sequence producer pins are unchanged."
     - "为现有 B200 Kimi-K3 C1 配方启用共享部署功耗遥测，固定兼容双节点 vLLM 与 AgentX 测量窗口的 producer 版本，任务结束后通过现有适配器校验并保留失败诊断。其他并发配方与固定序列 producer 版本保持不变。"
+    - "Correct all seven B200 K3 master rows to DCP8 and KV offload none, removing the inactive Mooncake offload-backend label. Serving recipes, the configured Mooncake connector, and synthetic acceptance remain unchanged; only C1 enables power telemetry. Historical artifacts retain their original DCP1/DRAM metadata."
+    - "将七个 B200 K3 master 配置修正为 DCP8、KV offload none，并移除未启用的 Mooncake offload-backend 标签。服务配方、已配置的 Mooncake connector 与合成接受率保持不变；仍仅 C1 启用功耗遥测。历史工件保留原有 DCP1/DRAM 元数据。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2926

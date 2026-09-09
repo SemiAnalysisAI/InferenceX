@@ -174,8 +174,10 @@ raw tree:           results/**, excluding inputs.json and profile_export_raw.jso
 B200 Kimi-K3 C1 配方使用独立固定版本的 producer，兼容当前双节点 vLLM
 运行时及共享 AgentX 测量窗口接口。Slurm 任务结束后，launcher 通过共享功耗
 适配器校验整个部署的遥测，并在返回校验失败前保留诊断工件。其他 K3 并发配方
-在验证前继续使用原有 producer。C1 配方使用合成接受率并禁用 Mooncake offload；
-master 配置中的 DRAM 标签不代表实际使用了主机缓存。
+在验证前继续使用原有 producer。七个 B200 K3 配置均记录 TP8/PP2/DCP8 和
+`kv-offloading: none`，与服务配方一致；Mooncake connector 仍已配置，但 offload
+保持禁用。C1 使用合成接受率。旧工件保留原有 DCP1/DRAM 标签，解读时必须说明
+这一身份偏差；此次元数据修正不会改变其服务配置或测量值。
 
 ### 原始输入和聚合架构
 
