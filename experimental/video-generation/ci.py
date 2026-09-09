@@ -436,7 +436,7 @@ def prepared_spec(config: dict) -> dict:
     return spec
 
 
-def launch(config: dict, output: Path) -> int:
+def launch(config: dict, output: Path, *, required_allocation: str | None = None) -> int:
     config = validate_config(config)
     run_id = os.environ.get("GITHUB_RUN_ID", "")
     attempt = os.environ.get("GITHUB_RUN_ATTEMPT", "")
@@ -480,6 +480,9 @@ def launch(config: dict, output: Path) -> int:
             package_files = stage_package(source, package)
             decision = recover(config, results)
             write(run_dir / "recovery.json", decision)
+            if required_allocation is not None:
+                need(decision["action"] == "reuse" and decision["receipt"]["identity"]["JobId"] == required_allocation,
+                     "Serving continuation must reuse its original allocation; no replacement requested")
             need(decision["action"] != "wait", "A task-owned allocation is pending or suspended; no duplicate submitted")
             if decision["action"] == "reuse":
                 receipt, reused = decision["receipt"], True

@@ -13,15 +13,15 @@ on:
                 type: boolean
                 default: false
             h3-cluster:
-                description: "Prepared H3 site: h200-dgxc, h100-dgxc, b200-nscale; mi355x-amds preparation only"
+                description: "Prepared H3 site: h200-dgxc, h100-dgxc, b200-nscale; mi355x-amds retained-runtime C1"
                 required: false
                 type: string
                 default: h200-dgxc
             h3-preparation:
-                description: "Optional preparation: amd-node 15m or amd-runtime 60m on 8 GPUs; amd-model needs a source run"
+                description: "Optional preparation: amd-node 15m or amd-runtime 60m on 8 GPUs; amd-model/amd-serving need a source run; amd-serving uses one 120m lease"
                 required: false
                 type: choice
-                options: [none, site-preflight, amd-model, amd-node, amd-runtime, amd-site, amd-rootfs, fidelity]
+                options: [none, site-preflight, amd-model, amd-node, amd-runtime, amd-site, amd-rootfs, amd-serving, fidelity]
                 default: none
             h3-site-config:
                 description: "Pinned runner-local H3 site JSON; empty uses existing H200 configuration"
@@ -139,12 +139,12 @@ on:
                 type: boolean
                 default: false
             h3-cluster:
-                description: "Prepared H3 site: h200-dgxc, h100-dgxc, b200-nscale; mi355x-amds preparation only"
+                description: "Prepared H3 site: h200-dgxc, h100-dgxc, b200-nscale; mi355x-amds retained-runtime C1"
                 required: false
                 type: string
                 default: h200-dgxc
             h3-preparation:
-                description: "Optional preparation: amd-node 15m or amd-runtime 60m on 8 GPUs; amd-model needs a source run"
+                description: "Optional preparation: amd-node 15m or amd-runtime 60m on 8 GPUs; amd-model/amd-serving need a source run; amd-serving uses one 120m lease"
                 required: false
                 type: string
                 default: none
@@ -281,6 +281,7 @@ jobs:
             inspect-amd-node: ${{ inputs.h3-preparation == 'amd-node' }}
             prepare-amd-runtime: ${{ inputs.h3-preparation == 'amd-runtime' }}
             recover-amd-rootfs: ${{ inputs.h3-preparation == 'amd-rootfs' }}
+            run-amd-serving: ${{ inputs.h3-preparation == 'amd-serving' }}
             site-config: ${{ inputs.h3-site-config }}
             source-run-ids: ${{ inputs.h3-reuse-run-ids }}
             inventory-run-id: ${{ inputs.h3-inventory-run-id }}

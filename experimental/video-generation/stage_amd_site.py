@@ -51,7 +51,7 @@ def timing_source(source: Path) -> tuple[Path, dict]:
     return destination, timing.identity()
 
 
-def stage(spec: dict, output: Path, *, server_timing: bool = False) -> dict:
+def stage(spec: dict, output: Path, *, server_timing: bool = False, allocation_minutes: int = 110, destination: Path | None = None) -> dict:
     workspace = WORKSPACE
     control = workspace / "campaigns/h3-cross-hardware"
     readiness = control / "runtime-inspected.json"
@@ -74,8 +74,9 @@ def stage(spec: dict, output: Path, *, server_timing: bool = False) -> dict:
     if server_timing:
         source, instrumentation = timing_source(source)
         identity = source_file_manifest(source)
-    destination = control / ("formal-c1-timing-v1" if server_timing else "formal-c1-v1")
+    destination = destination or control / ("formal-c1-timing-v1" if server_timing else "formal-c1-v1")
     ci.need(not destination.exists(), "AMD formal inputs already exist; inspect and reuse the sealed configuration")
+    source_server = copy.deepcopy(spec["server"])
     spec = copy.deepcopy(spec)
     if server_timing:
         spec["server_timing"] = True
@@ -86,12 +87,14 @@ def stage(spec: dict, output: Path, *, server_timing: bool = False) -> dict:
                 serving={"mode": "closed_loop", "concurrency": 1, "delivery_deadline_seconds": None})
     spec["server"] = {"tp_size": 1, "ulysses_degree": 4, "encoder_parallel": "auto",
                       "performance_mode": "speed", "dit_cpu_offload": False, "attention_backend": "aiter"}
-    spec["limits"].update(job_seconds=6000, startup_seconds=900, request_seconds=900,
+    ci.need(30 <= allocation_minutes <= 110, "AMD serving requires 30–110 remaining allocation minutes")
+    spec["limits"].update(job_seconds=(allocation_minutes - 10) * 60, startup_seconds=900, request_seconds=900,
                           cleanup_seconds=60, command_seconds=30, telemetry_interval_seconds=1)
     spec["authorization"]["approval_reference"] = (
-        "User requested four-hardware end-to-end work in this side conversation on 2026-09-09. "
+        "User authorized MI355X recovery, one warmup and exactly twenty measured attempts on 2026-09-09. "
         "Retain source model-license approval. AMD initial C1 uses 20 measured requests and one separate warmup, "
-        "8 allocated GPUs and 4 participating GPUs, at most 110 allocation minutes. "
+        "8 allocated GPUs and 4 participating GPUs, one allocation capped at 120 minutes, "
+        f"with {allocation_minutes} minutes remaining for serving and ten minutes reserved for cleanup. "
         "Generation compatibility is unverified; retain failures and release the owned allocation.")
     spec["model"]["path"] = str(Path("/work") / Path(model["model_path"]).relative_to(workspace))
     for role in ("baseline", "candidate"):
@@ -109,7 +112,7 @@ def stage(spec: dict, output: Path, *, server_timing: bool = False) -> dict:
               "runtime": {"entry": str(entry), "entry_sha256": ci.digest(entry), "rootfs": str(rootfs),
                           "ready_marker": str(readiness), "python": probe["python"]},
               "spec": {"path": str(destination / "gpu-spec.json"), "sha256": ci.digest(destination / "gpu-spec.json")},
-              "resources": {"gpus": 4, "allocated_gpus": 8, "cpus": 32, "memory_gb": 1024, "minutes": 110},
+              "resources": {"gpus": 4, "allocated_gpus": 8, "cpus": 32, "memory_gb": 1024, "minutes": allocation_minutes},
               "allocation_receipts": [], "mode": "serving-smoke", "concurrencies": [1]}
     config = ci.validate_config(config)
     ci.prepared_spec(config)
@@ -118,6 +121,8 @@ def stage(spec: dict, output: Path, *, server_timing: bool = False) -> dict:
         (output / name).write_bytes((destination / name).read_bytes())
     return {"site_config": str(destination / "site.json"), "source": identity,
             "runtime_inspection": runtime, "instrumentation": instrumentation,
+            "server_configuration_deviation": {"source_server": source_server, "executed_server": spec["server"],
+                "reason": "AMD uses TP1/Ulysses4 with AITER; NVIDIA source settings are retained for explicit comparison."},
             "model_receipt": model, "generation_executed": False,
             "status": "prepared", "compatibility": "Imports checked; allocated HIP identity and full video/audio warmup remain mandatory before measurement"}
 

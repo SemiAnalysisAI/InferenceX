@@ -408,3 +408,25 @@ def test_entry_resolves_device_minors_instead_of_nvml_indices(tmp_path, assignme
     else:
         assert result.returncode != 0
         assert 'lack NVIDIA UUIDs' in result.stderr
+
+
+@pytest.mark.parametrize("decision", [{"action": "allocate"}, {"action": "reuse", "receipt": {"identity": {"JobId": "999"}}}])
+def test_required_lease_never_replaces_or_borrows_another_allocation(tmp_path, monkeypatch, decision):
+    cfg = config(tmp_path)
+    entry = Path(cfg["runtime"]["entry"])
+    entry.write_text("entry")
+    Path(cfg["runtime"]["ready_marker"]).write_text("synthetic readiness")
+    cfg["runtime"]["entry_sha256"] = ci.digest(entry)
+    monkeypatch.setenv("GITHUB_RUN_ID", "456")
+    monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "1")
+    monkeypatch.setenv("H3_SOURCE_SHA", "a" * 40)
+    monkeypatch.setattr(ci, "prepared_spec", lambda cfg: {})
+    monkeypatch.setattr(ci, "command", lambda argv, **kw: "a" * 40 if "rev-parse" in argv else "")
+    monkeypatch.setattr(ci, "stage_package", lambda *args: {})
+    monkeypatch.setattr(ci, "recover", lambda *args: decision)
+    monkeypatch.setattr(ci, "allocate", lambda *args: pytest.fail("must not replace the required allocation"))
+    monkeypatch.setattr(ci, "run_step", lambda *args: pytest.fail("must not enter a different allocation"))
+    monkeypatch.setattr(ci, "stop_allocation", lambda *args: pytest.fail("outer owner releases its allocation"))
+    output = tmp_path / "output"
+    assert ci.launch(cfg, output, required_allocation="123") == 2
+    assert "must reuse its original allocation" in ci.read(output / "ci.json")["error"]

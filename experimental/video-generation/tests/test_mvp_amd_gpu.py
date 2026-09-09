@@ -108,3 +108,10 @@ def test_service_pid_mismatch_never_approves_monitor(monkeypatch):
     monkeypatch.setattr(amd, "_command", lambda *a, **k: "MainPID=42\nExecMainPID=43\nExecStart={ path=/opt/gpuagent/gpuagent ; }\nActiveState=active\nSubState=running\nControlGroup=/system.slice/gpuagent.service\nType=simple\n")
     monkeypatch.setattr(amd, "monitor_process", lambda pid: pytest.fail("mismatched service PID must be rejected"))
     assert amd.observe_system_monitor(1)["status"] == "unverified"
+
+
+def test_unreadable_monitor_identity_remains_a_foreign_process(monkeypatch):
+    def unreadable(pid):
+        raise PermissionError("process identity unavailable")
+    monkeypatch.setattr(amd, "monitor_process", unreadable)
+    assert not amd.is_system_monitor({"pid": 42, "memory_used_mib": 0}, {"status": "verified", "pid": 42})

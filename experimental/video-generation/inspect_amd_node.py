@@ -81,13 +81,14 @@ def inspect_node(run_dir: Path) -> None:
         prepare_on_node(Path(context["workspace"]), run_dir)
 
 
-def inspect(workspace: Path, output: Path, *, prepare_runtime: bool = False) -> int:
+def inspect(workspace: Path, output: Path, *, prepare_runtime: bool = False, serving_continuation: bool = False) -> int:
+    ci.need(not serving_continuation or prepare_runtime, "Serving continuation requires runtime inspection")
     ci.need(workspace.is_absolute(), "Persistent workspace must be absolute")
     run_id, attempt = os.environ["H3_RUN_ID"], os.environ["H3_RUN_ATTEMPT"]
     ci.need(run_id.isdigit() and attempt.isdigit(), "Invalid CI identity")
     root = workspace / "results/h3-cross-hardware"
     root.mkdir(parents=True, exist_ok=True)
-    run_dir = root / f"github-{run_id}-{attempt}"
+    run_dir = root / (f"github-{run_id}-{attempt}" + ("-runtime" if serving_continuation else ""))
     run_dir.mkdir(exist_ok=False)
     account = pwd.getpwuid(os.getuid()).pw_name
     ci.need(account == "cameronamd@semianalysis.com", "Unexpected AMD scheduler identity")
@@ -96,6 +97,8 @@ def inspect(workspace: Path, output: Path, *, prepare_runtime: bool = False) -> 
               "resources": {"gpus": 8, "allocated_gpus": 8, "cpus": 8, "memory_gb": 64, "minutes": 15}}
     if prepare_runtime:
         config["resources"].update(cpus=32, memory_gb=256, minutes=60)
+    if serving_continuation:
+        config["resources"].update(memory_gb=1024, minutes=120)
     state = {"status": "starting", "started_at": ci.now(), "config": config,
              "purpose": "Observe actual AMD device identities, telemetry formats and cached runtimes before adding a GPU adapter",
              "source_sha": os.environ.get("H3_SOURCE_SHA"), "generation_executed": False}
@@ -115,7 +118,9 @@ def inspect(workspace: Path, output: Path, *, prepare_runtime: bool = False) -> 
                     else:
                         ci.need(origin in ({"image": str(IMAGE), "status": "created"},
                                            {"image": str(IMAGE), "status": "recovered"}), "AMD rootfs identity differs")
-                    config["resources"]["minutes"] = 15
+                    if not serving_continuation:
+                        config["resources"]["minutes"] = 15
+                ci.need(not serving_continuation or rootfs.is_dir(), "Serving continuation requires the retained rootfs before allocation")
             recovery = ci.recover(config, root)
             ci.write(run_dir / "recovery.json", recovery)
             ci.need(recovery["action"] != "wait", "Task-owned AMD allocation is waiting; do not submit another")
@@ -138,12 +143,13 @@ def inspect(workspace: Path, output: Path, *, prepare_runtime: bool = False) -> 
             ci.write(run_dir / "context.json", {"allocation": receipt, "node": record["NodeList"],
                                                "workspace": str(workspace), "prepare_runtime": prepare_runtime})
             # The source checkout and result directory are on the shared filesystem.
+            step_minutes = 10 if serving_continuation else config["resources"]["minutes"] - 5
             argv = ["srun", "--jobid=" + record["JobId"], "--nodelist=" + record["NodeList"],
                     "--nodes=1", "--ntasks=1", "--gres=gpu:8", "--cpus-per-task=" + str(config["resources"]["cpus"]), "--cpu-bind=cores",
-                    "--time=" + str(config["resources"]["minutes"] - 5), "--export=NONE", "/usr/bin/python3", str(Path(__file__).resolve()),
+                    "--time=" + str(step_minutes), "--export=NONE", "/usr/bin/python3", str(Path(__file__).resolve()),
                     "--inside", str(run_dir)]
             ci.write(run_dir / "step-command.json", argv)
-            code = ci.run_step(argv, run_dir / "srun.log", (config["resources"]["minutes"] - 4) * 60)
+            code = ci.run_step(argv, run_dir / "srun.log", (step_minutes + 1) * 60)
             ci.need(code == 0 and (run_dir / "node-inventory.json").is_file(), "AMD inventory step failed; inspect retained logs")
             state["status"] = "complete"
         except Exception as error:
@@ -155,7 +161,8 @@ def inspect(workspace: Path, output: Path, *, prepare_runtime: bool = False) -> 
             try:
                 if receipt:
                     state["step_cleanup"] = ci.drain_step(receipt, config["task_id"], run_dir)
-                    state["allocation_cleanup"] = {"status": "retained"} if reused else ci.stop_allocation(receipt, config["task_id"])
+                    retain = reused or (serving_continuation and state["status"] == "complete")
+                    state["allocation_cleanup"] = {"status": "retained"} if retain else ci.stop_allocation(receipt, config["task_id"])
             except Exception as error:
                 state.update(status="failed", cleanup_error=str(error))
                 code = 2

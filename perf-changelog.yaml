@@ -7031,3 +7031,9 @@
   description:
     - "Add opt-in H3 server timing through an explicitly committed patch of the pinned SGLang runtime. Correlate HTTP receipt, accepted job, singleton forward and media-ready events by request ID; retain clock, batch, replica and patch identities. Historical data remains unavailable rather than inferred; select no LLM jobs."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2916
+
+- config-keys: []
+  workflow-dispatch: h3-video.yml
+  description:
+    - "Recover the retained MI355X runtime and run one audio/video warmup plus twenty frozen C1 attempts in the same eight-GPU allocation, with four participating GPUs. Enforce a 120-minute lease, allocation-wide 15-minute readiness gate and ten-minute cleanup reserve; retain the original CI artifact and release receipt. Select no LLM jobs."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2916
