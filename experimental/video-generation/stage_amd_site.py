@@ -1,0 +1,114 @@
+"""Seal AMD C1 inputs after inspection, without allocating or installing."""
+from __future__ import annotations
+
+import argparse
+import copy
+import hashlib
+import json
+import os
+from pathlib import Path
+
+import ci
+from evaluator.mvp_gpu_job import source_file_manifest, validate_gpu_job
+from prepare_amd_runtime import CONTAINER, REVISION
+from stage_model_ci import source_spec
+
+WORKSPACE = Path("/it-share/data/wenyao-minimax-h3/work")
+INPUTS = Path(__file__).parent / "campaigns/h3-cross-hardware"
+
+
+def runtime_probe(record: dict) -> dict:
+    ci.need(record.get("status") == "inspected" and record.get("source_revision") == REVISION,
+            "AMD runtime inspection is missing or has a different source")
+    probe = record["probe"]
+    required = ("torch", "torchvision", "av", "numpy", "diffusers", "transformers", "sglang", "aiter", "triton", "amdsmi")
+    missing = [name for name in required if not probe.get("imports", {}).get(name, {}).get("path")]
+    ci.need(not missing, "AMD runtime imports require preparation: " + ", ".join(missing))
+    ci.need(probe.get("torch_hip") and not probe.get("device_error")
+            and len(probe.get("hip_devices", [])) == 8, "AMD HIP device enumeration is not verified")
+    devices = probe.get("torch_devices", [])
+    ci.need(len(devices) == 8 and all("MI355X" in item["name"] for item in devices),
+            "Runtime is not the inspected eight-MI355X node")
+    ci.need(Path(probe["python"]).is_absolute(), "Inspected Python path must be absolute")
+    return probe
+
+
+def stage(spec: dict, output: Path) -> dict:
+    workspace = WORKSPACE
+    control = workspace / "campaigns/h3-cross-hardware"
+    readiness = control / "runtime-inspected.json"
+    runtime = ci.read(readiness)
+    probe = runtime_probe(runtime)
+    model = ci.read(control / "model-ready.json")
+    entries = spec["model"]["files"]
+    manifest = hashlib.sha256(json.dumps(entries, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    ci.need(model.get("status") == "complete" and model.get("manifest_sha256") == manifest
+            and model.get("model_revision") == spec["model"]["revision"],
+            "Prepared AMD weights differ from the frozen source")
+    rootfs = workspace.parent / "enroot-data" / CONTAINER
+    ci.need(runtime["rootfs"] == str(rootfs) and rootfs.is_dir(), "Prepared AMD rootfs is missing or changed")
+    source = workspace / ("runtime-sglang-" + REVISION)
+    identity = source_file_manifest(source)
+    ci.need(identity["revision"] == REVISION, "AMD source revision changed after inspection")
+    destination = control / "formal-c1-v1"
+    ci.need(not destination.exists(), "AMD formal inputs already exist; inspect and reuse the sealed configuration")
+    spec = copy.deepcopy(spec)
+    plan = ci.read(INPUTS / "formal-8s-plan.json")
+    spec.update(gpu_vendor="amd", job_id=plan["plan_id"], plan=plan,
+                gpu_uuids=[f"00000000-0000-0000-0000-{i:012d}" for i in range(4)],
+                lock_directory="/work/campaigns/h3-cross-hardware/control/gpu-locks", port=30317,
+                serving={"mode": "closed_loop", "concurrency": 1, "delivery_deadline_seconds": None})
+    spec["server"] = {"tp_size": 1, "ulysses_degree": 4, "encoder_parallel": "auto",
+                      "performance_mode": "speed", "dit_cpu_offload": False, "attention_backend": "aiter"}
+    spec["limits"].update(job_seconds=6000, startup_seconds=900, request_seconds=900,
+                          cleanup_seconds=60, command_seconds=30, telemetry_interval_seconds=1)
+    spec["authorization"]["approval_reference"] = (
+        "User requested four-hardware end-to-end work in this side conversation on 2026-09-09. "
+        "Retain source model-license approval. AMD initial C1 uses 20 measured requests and one separate warmup, "
+        "8 allocated GPUs and 4 participating GPUs, at most 110 allocation minutes. "
+        "Generation compatibility is unverified; retain failures and release the owned allocation.")
+    spec["model"]["path"] = str(Path("/work") / Path(model["model_path"]).relative_to(workspace))
+    for role in ("baseline", "candidate"):
+        spec[role] = {"source": "/work/" + source.name, "source_sha256": identity["source_sha256"],
+                      "revision": REVISION, "python": probe["python"]}
+    spec = validate_gpu_job(spec)
+    destination.mkdir()
+    entry = destination / "entry-only.sh"
+    command = '-c \'exec "$@"\' h3-entry "$@"' if 'exec bash "$@"' in (runtime.get("entrypoint") or "") else '"$@"'
+    entry.write_text((INPUTS / "entry-only-amd.sh").read_text().replace("@ENTRY@", command))
+    ci.write(destination / "gpu-spec.json", spec)
+    config = {"schema_version": 1, "task_id": "h3-cross-hardware", "site": ci.AMD_SITE,
+              "workspace": {"host": str(workspace), "container": "/work"},
+              "runtime": {"entry": str(entry), "entry_sha256": ci.digest(entry), "rootfs": str(rootfs),
+                          "ready_marker": str(readiness), "python": probe["python"]},
+              "spec": {"path": str(destination / "gpu-spec.json"), "sha256": ci.digest(destination / "gpu-spec.json")},
+              "resources": {"gpus": 4, "allocated_gpus": 8, "cpus": 32, "memory_gb": 1024, "minutes": 110},
+              "allocation_receipts": [], "mode": "serving-smoke", "concurrencies": [1]}
+    config = ci.validate_config(config)
+    ci.prepared_spec(config)
+    ci.write(destination / "site.json", config)
+    for name in ("entry-only.sh", "gpu-spec.json", "site.json"):
+        (output / name).write_bytes((destination / name).read_bytes())
+    return {"site_config": str(destination / "site.json"), "source": identity,
+            "runtime_inspection": runtime, "model_receipt": model, "generation_executed": False,
+            "status": "prepared", "compatibility": "Imports checked; H3 generation still requires a real run"}
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--source-run-id", required=True)
+    parser.add_argument("--output", required=True, type=Path)
+    args = parser.parse_args()
+    args.output.mkdir(parents=True, exist_ok=True)
+    record = {"status": "preparing", "generation_executed": False,
+              "ci": {key: os.environ.get(key) for key in ("H3_RUN_ID", "H3_SOURCE_SHA")}}
+    try:
+        spec, provenance = source_spec(args.source_run_id, args.output)
+        record.update(provenance)
+        with ci.task_lock(WORKSPACE / "campaigns/h3-cross-hardware/.site-preparation.lock"):
+            record.update(stage(spec, args.output))
+    except Exception as error:
+        record.update(status="failed", error=str(error))
+        raise
+    finally:
+        ci.write(args.output / "site-preparation.json", record)

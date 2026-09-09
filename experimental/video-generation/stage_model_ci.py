@@ -73,6 +73,20 @@ def stage_model(spec: dict, workspace: Path, candidates: list[Path]) -> dict:
             "reuse_candidates": observations, "verification": "complete frozen file sizes and SHA256"}
 
 
+def source_spec(run_id: str, output: Path) -> tuple[dict, dict]:
+    """Read the accepted artifact contract without re-downloading model weights."""
+    ci.need(source_ids(run_id) == [run_id], "One accepted source run is required")
+    source, artifact = verified_execution(run_id)
+    ci.write(output / "source-provenance.json", {"source_ci": source, "source_artifact": artifact})
+    original = output / "source"
+    subprocess.run(["gh", "run", "download", run_id, "--repo", REPOSITORY,
+                    "--name", artifact["name"], "--dir", str(original)], check=True, timeout=180)
+    sums = dict(line.split("  ", 1)[::-1] for line in (original / "SHA256SUMS").read_text().splitlines())
+    path = "gpu/c1/spec.json"
+    ci.need(sums.get(path) == ci.digest(original / path), "Frozen source specification checksum differs")
+    return validate_gpu_job(ci.read(original / path)), {"source_ci": source, "source_artifact": artifact}
+
+
 def prepare(run_id: str, workspace: Path, output: Path) -> None:
     ci.need(source_ids(run_id) == [run_id], "One accepted source run is required")
     ci.need(workspace.is_absolute(), "Persistent workspace must be absolute")
@@ -83,15 +97,8 @@ def prepare(run_id: str, workspace: Path, output: Path) -> None:
               "ci": {key: os.environ.get(key) for key in ("GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "GITHUB_SHA")}}
     ci.write(output / "model-preparation.json", record)
     try:
-        source, artifact = verified_execution(run_id)
-        record.update(source_ci=source, source_artifact=artifact)
-        original = output / "source"
-        subprocess.run(["gh", "run", "download", run_id, "--repo", REPOSITORY,
-                        "--name", artifact["name"], "--dir", str(original)], check=True, timeout=180)
-        sums = dict(line.split("  ", 1)[::-1] for line in (original / "SHA256SUMS").read_text().splitlines())
-        path = "gpu/c1/spec.json"
-        ci.need(sums.get(path) == ci.digest(original / path), "Frozen source specification checksum differs")
-        spec = ci.read(original / path)
+        spec, provenance = source_spec(run_id, output)
+        record.update(provenance)
         workspace.mkdir(parents=True, exist_ok=True)
         with ci.task_lock(workspace / ".model-preparation.lock"):
             revision = spec["model"]["revision"]

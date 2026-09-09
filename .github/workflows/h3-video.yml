@@ -20,6 +20,11 @@ on:
         required: false
         type: boolean
         default: false
+      stage-amd-site:
+        description: "Seal inspected AMD runtime and benchmark inputs without GPUs"
+        required: false
+        type: boolean
+        default: false
       inspect-amd-node:
         description: "Inspect AMD node telemetry and cached images; at most 8 GPUs for 15 minutes"
         required: false
@@ -57,6 +62,11 @@ on:
         default: false
       stage-amd-model:
         description: "Stage frozen model files on AMD without allocating GPUs"
+        required: false
+        type: boolean
+        default: false
+      stage-amd-site:
+        description: "Seal inspected AMD runtime and benchmark inputs without GPUs"
         required: false
         type: boolean
         default: false
@@ -131,6 +141,7 @@ jobs:
           H3_CLUSTER: ${{ inputs.cluster }}
           H3_PREFLIGHT_ONLY: ${{ inputs.preflight-only }}
           H3_STAGE_AMD_MODEL: ${{ inputs.stage-amd-model }}
+          H3_STAGE_AMD_SITE: ${{ inputs.stage-amd-site }}
           H3_INSPECT_AMD_NODE: ${{ inputs.inspect-amd-node }}
           H3_PREPARE_AMD_RUNTIME: ${{ inputs.prepare-amd-runtime }}
           PRIORITY_ENABLED: ${{ vars.PRIORITY_SCHEDULER_ENABLED }}
@@ -139,20 +150,25 @@ jobs:
           H3_INVENTORY_RUN_ID: ${{ inputs.inventory-run-id }}
         run: |
           set -euo pipefail
+          preparations=0
+          for selected in "$H3_PREFLIGHT_ONLY" "$H3_STAGE_AMD_MODEL" "$H3_STAGE_AMD_SITE" "$H3_INSPECT_AMD_NODE" "$H3_PREPARE_AMD_RUNTIME"; do
+            if [[ "$selected" == true ]]; then preparations=$((preparations + 1)); fi
+          done
+          [[ "$preparations" -le 1 ]] || { echo 'Select one H3 preparation operation.' >&2; exit 1; }
           case "$H3_CLUSTER" in
             h200-dgxc) echo 'gpu-model=H200' >> "$GITHUB_OUTPUT" ;;
             h100-dgxc) echo 'gpu-model=H100' >> "$GITHUB_OUTPUT" ;;
             b200-nscale) echo 'gpu-model=B200' >> "$GITHUB_OUTPUT" ;;
             mi355x-amds)
-              [[ "$H3_PREFLIGHT_ONLY" == true || "$H3_STAGE_AMD_MODEL" == true || "$H3_INSPECT_AMD_NODE" == true || "$H3_PREPARE_AMD_RUNTIME" == true ]] || { echo 'AMD H3 execution is not implemented.' >&2; exit 1; }
+              [[ "$H3_PREFLIGHT_ONLY" == true || ( "$H3_STAGE_AMD_MODEL" == true || "$H3_STAGE_AMD_SITE" == true ) || "$H3_INSPECT_AMD_NODE" == true || "$H3_PREPARE_AMD_RUNTIME" == true ]] || { echo 'AMD H3 execution is not implemented.' >&2; exit 1; }
               echo 'gpu-model=MI355X' >> "$GITHUB_OUTPUT" ;;
             *) echo 'Unsupported H3 hardware site.' >&2; exit 1 ;;
           esac
-          if [[ ( "$H3_INSPECT_AMD_NODE" == true || "$H3_PREPARE_AMD_RUNTIME" == true ) && ( "$H3_CLUSTER" != mi355x-amds || "$H3_PREFLIGHT_ONLY" == true || "$H3_STAGE_AMD_MODEL" == true || -n "$H3_SOURCE_RUN_IDS" || -n "$H3_INVENTORY_RUN_ID" ) ]]; then
+          if [[ ( "$H3_INSPECT_AMD_NODE" == true || "$H3_PREPARE_AMD_RUNTIME" == true ) && ( "$H3_CLUSTER" != mi355x-amds || "$H3_PREFLIGHT_ONLY" == true || ( "$H3_STAGE_AMD_MODEL" == true || "$H3_STAGE_AMD_SITE" == true ) || -n "$H3_SOURCE_RUN_IDS" || -n "$H3_INVENTORY_RUN_ID" ) ]]; then
             echo 'AMD node inspection must be a separate operation on mi355x-amds.' >&2
             exit 1
           fi
-          if [[ "$H3_STAGE_AMD_MODEL" == true && ( "$H3_CLUSTER" != mi355x-amds || "$H3_PREFLIGHT_ONLY" == true || -n "$H3_INVENTORY_RUN_ID" || ! "$H3_SOURCE_RUN_IDS" =~ ^[1-9][0-9]{0,19}$ ) ]]; then
+          if [[ ( "$H3_STAGE_AMD_MODEL" == true || "$H3_STAGE_AMD_SITE" == true ) && ( "$H3_CLUSTER" != mi355x-amds || "$H3_PREFLIGHT_ONLY" == true || -n "$H3_INVENTORY_RUN_ID" || ! "$H3_SOURCE_RUN_IDS" =~ ^[1-9][0-9]{0,19}$ ) ]]; then
             echo 'AMD model staging requires exactly one accepted source run and no other operation.' >&2
             exit 1
           fi
@@ -160,7 +176,7 @@ jobs:
             echo 'Site preflight cannot also reprocess benchmark evidence.' >&2
             exit 1
           fi
-          if [[ "$H3_CLUSTER" != h200-dgxc && "$H3_STAGE_AMD_MODEL" != true && ( -n "$H3_SOURCE_RUN_IDS" || -n "$H3_INVENTORY_RUN_ID" ) ]]; then
+          if [[ "$H3_CLUSTER" != h200-dgxc && "$H3_STAGE_AMD_MODEL" != true && "$H3_STAGE_AMD_SITE" != true && ( -n "$H3_SOURCE_RUN_IDS" || -n "$H3_INVENTORY_RUN_ID" ) ]]; then
             echo 'Historical inventory reuse remains specific to the H200 inventory contract.' >&2
             exit 1
           fi
@@ -168,7 +184,7 @@ jobs:
             echo 'Hardware reuse needs one inventory run ID and explicit source executions.' >&2
             exit 1
           fi
-          [[ "$H3_PREFLIGHT_ONLY" == true || "$H3_STAGE_AMD_MODEL" == true || "$H3_INSPECT_AMD_NODE" == true || "$H3_PREPARE_AMD_RUNTIME" == true || "$H3_SITE_CONFIG" = /* ]] || { echo 'Set H3_SITE_CONFIG to the reviewed runner-local JSON path.' >&2; exit 1; }
+          [[ "$H3_PREFLIGHT_ONLY" == true || ( "$H3_STAGE_AMD_MODEL" == true || "$H3_STAGE_AMD_SITE" == true ) || "$H3_INSPECT_AMD_NODE" == true || "$H3_PREPARE_AMD_RUNTIME" == true || "$H3_SITE_CONFIG" = /* ]] || { echo 'Set H3_SITE_CONFIG to the reviewed runner-local JSON path.' >&2; exit 1; }
           if [[ -n "$H3_SOURCE_RUN_IDS" && ! "$H3_SOURCE_RUN_IDS" =~ ^[1-9][0-9]{0,19}(,[1-9][0-9]{0,19})?$ ]]; then
             echo 'Expected one or two comma-separated source run IDs.' >&2
             exit 1
@@ -194,17 +210,17 @@ jobs:
     outputs:
       mode: ${{ steps.execute.outputs.mode }}
     if: ${{ inputs.inventory-run-id == '' }}
-    name: p${{ needs.prepare.outputs.priority }} | ${{ inputs.preflight-only && format('H3 {0} site preflight', needs.prepare.outputs.gpu-model) || inputs.stage-amd-model && 'H3 AMD model preparation (no GPU)' || inputs.prepare-amd-runtime && 'H3 AMD runtime preparation' || inputs.inspect-amd-node && 'H3 AMD node inventory' || inputs.source-run-ids != '' && 'H3 H200 hardware inventory' || format('H3 video {0} smoke', needs.prepare.outputs.gpu-model) }}
+    name: p${{ needs.prepare.outputs.priority }} | ${{ inputs.preflight-only && format('H3 {0} site preflight', needs.prepare.outputs.gpu-model) || inputs.stage-amd-site && 'H3 AMD site preparation (no GPU)' || inputs.stage-amd-model && 'H3 AMD model preparation (no GPU)' || inputs.prepare-amd-runtime && 'H3 AMD runtime preparation' || inputs.inspect-amd-node && 'H3 AMD node inventory' || inputs.source-run-ids != '' && 'H3 H200 hardware inventory' || format('H3 video {0} smoke', needs.prepare.outputs.gpu-model) }}
     runs-on: >-
       ${{ fromJSON(
-        (inputs.preflight-only || inputs.stage-amd-model) && format('["self-hosted","cluster:{0}"]', inputs.cluster) ||
+        (inputs.preflight-only || inputs.stage-amd-model || inputs.stage-amd-site) && format('["self-hosted","cluster:{0}"]', inputs.cluster) ||
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
         format('["self-hosted","cluster:{2}","nodes:1",{0},{1}]',
           toJSON(format('ci-job-{0}-{1}', needs.prepare.outputs.priority, needs.prepare.outputs.queue-token)),
           toJSON(format('ci-attempt-{0}', github.run_attempt)), inputs.cluster) ||
         format('["cluster:{0}"]', inputs.cluster)
       ) }}
-    timeout-minutes: ${{ inputs.preflight-only && 5 || inputs.stage-amd-model && 45 || inputs.prepare-amd-runtime && 70 || inputs.inspect-amd-node && 20 || 255 }}
+    timeout-minutes: ${{ inputs.preflight-only && 5 || inputs.stage-amd-site && 10 || inputs.stage-amd-model && 45 || inputs.prepare-amd-runtime && 70 || inputs.inspect-amd-node && 20 || 255 }}
     env:
       H3_SITE_CONFIG: ${{ inputs.site-config || vars.H3_SITE_CONFIG }}
       H3_CLUSTER: ${{ inputs.cluster }}
@@ -242,6 +258,16 @@ jobs:
             --source-run-id "$H3_SOURCE_RUN_IDS" \
             --workspace /it-share/data/wenyao-minimax-h3/work \
             --output "$RUNNER_TEMP/h3-video-$H3_RUN_ID-$H3_RUN_ATTEMPT"
+      - name: Seal the inspected AMD runtime and frozen C1 inputs without GPUs
+        if: ${{ inputs.stage-amd-site }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          H3_SOURCE_RUN_IDS: ${{ inputs.source-run-ids }}
+        run: |
+          export PYTHONPATH="$PWD"
+          python3 experimental/video-generation/stage_amd_site.py \
+            --source-run-id "$H3_SOURCE_RUN_IDS" \
+            --output "$RUNNER_TEMP/h3-video-$H3_RUN_ID-$H3_RUN_ATTEMPT"
       - name: Inspect AMD device identities and cached runtime candidates
         if: ${{ inputs.inspect-amd-node || inputs.prepare-amd-runtime }}
         run: >-
@@ -251,7 +277,7 @@ jobs:
           --output "$RUNNER_TEMP/h3-video-$H3_RUN_ID-$H3_RUN_ATTEMPT"
       - name: Execute configured H3 smoke
         id: execute
-        if: ${{ inputs.source-run-ids == '' && !inputs.preflight-only && !inputs.stage-amd-model && !inputs.inspect-amd-node && !inputs.prepare-amd-runtime }}
+        if: ${{ inputs.source-run-ids == '' && !inputs.preflight-only && !inputs.stage-amd-model && !inputs.stage-amd-site && !inputs.inspect-amd-node && !inputs.prepare-amd-runtime }}
         run: |
           set -euo pipefail
           python3 - <<'PY'
@@ -269,7 +295,7 @@ jobs:
             --config "$H3_SITE_CONFIG" \
             --output "$RUNNER_TEMP/h3-video-$H3_RUN_ID-$H3_RUN_ATTEMPT"
       - name: Inspect current H200 hardware and power configuration
-        if: ${{ inputs.source-run-ids != '' && !inputs.preflight-only && !inputs.stage-amd-model && !inputs.inspect-amd-node && !inputs.prepare-amd-runtime }}
+        if: ${{ inputs.source-run-ids != '' && !inputs.preflight-only && !inputs.stage-amd-model && !inputs.stage-amd-site && !inputs.inspect-amd-node && !inputs.prepare-amd-runtime }}
         env:
           GH_TOKEN: ${{ github.token }}
           H3_SOURCE_RUN_IDS: ${{ inputs.source-run-ids }}
@@ -284,7 +310,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: ${{ inputs.preflight-only && 'h3-site-preflight' || inputs.stage-amd-model && 'h3-model-preparation' || inputs.prepare-amd-runtime && 'h3-amd-runtime-preparation' || inputs.inspect-amd-node && 'h3-amd-node-inventory' || inputs.source-run-ids != '' && 'h3-hardware' || 'h3-video' }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: ${{ inputs.preflight-only && 'h3-site-preflight' || inputs.stage-amd-site && 'h3-amd-site-preparation' || inputs.stage-amd-model && 'h3-model-preparation' || inputs.prepare-amd-runtime && 'h3-amd-runtime-preparation' || inputs.inspect-amd-node && 'h3-amd-node-inventory' || inputs.source-run-ids != '' && 'h3-hardware' || 'h3-video' }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/h3-video-${{ github.run_id }}-${{ github.run_attempt }}/
           if-no-files-found: error
           compression-level: 0
@@ -292,7 +318,7 @@ jobs:
 
   export:
     needs: [prepare, smoke]
-    if: ${{ always() && !inputs.preflight-only && !inputs.stage-amd-model && !inputs.inspect-amd-node && !inputs.prepare-amd-runtime && needs.prepare.result == 'success' && needs.smoke.outputs.mode != 'serving-smoke' && (needs.smoke.result == 'success' || (inputs.inventory-run-id != '' && needs.smoke.result == 'skipped')) }}
+    if: ${{ always() && !inputs.preflight-only && !inputs.stage-amd-model && !inputs.stage-amd-site && !inputs.inspect-amd-node && !inputs.prepare-amd-runtime && needs.prepare.result == 'success' && needs.smoke.outputs.mode != 'serving-smoke' && (needs.smoke.result == 'success' || (inputs.inventory-run-id != '' && needs.smoke.result == 'skipped')) }}
     name: Verify and export retained H3 results
     runs-on: ubuntu-latest
     timeout-minutes: 15

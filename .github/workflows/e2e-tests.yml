@@ -21,7 +21,7 @@ on:
                 description: "Optional preparation: amd-node 15m or amd-runtime 60m on 8 GPUs; amd-model needs a source run"
                 required: false
                 type: choice
-                options: [none, site-preflight, amd-model, amd-node, amd-runtime]
+                options: [none, site-preflight, amd-model, amd-node, amd-runtime, amd-site]
                 default: none
             h3-site-config:
                 description: "Pinned runner-local H3 site JSON; empty uses existing H200 configuration"
@@ -268,6 +268,7 @@ jobs:
             cluster: ${{ inputs.h3-cluster }}
             preflight-only: ${{ inputs.h3-preparation == 'site-preflight' }}
             stage-amd-model: ${{ inputs.h3-preparation == 'amd-model' }}
+            stage-amd-site: ${{ inputs.h3-preparation == 'amd-site' }}
             inspect-amd-node: ${{ inputs.h3-preparation == 'amd-node' }}
             prepare-amd-runtime: ${{ inputs.h3-preparation == 'amd-runtime' }}
             site-config: ${{ inputs.h3-site-config }}

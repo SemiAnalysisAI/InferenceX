@@ -1,0 +1,162 @@
+{
+  "cases": [
+    {
+      "case_id": "spoken-greeting-s11",
+      "prompt": "A single continuous medium close-up of an adult presenter facing the camera in a quiet studio. The presenter smiles naturally and says clearly, \"Good morning. It is a beautiful day to try something new.\" Mouth movements follow the spoken sentence. The camera remains still. No background music, subtitles, or scene cuts.",
+      "requires_motion": true,
+      "requires_sound": true,
+      "seed": 11
+    },
+    {
+      "case_id": "bicycle-pass-s11",
+      "prompt": "A single continuous eye-level shot of a cyclist riding from left to right across a paved park path, passing the camera and continuing into the distance. The bicycle wheels keep turning and the leaves move gently in the breeze. Tire sounds, wind, and distant birds are audible. No speech, music, subtitles, or scene cuts.",
+      "requires_motion": true,
+      "requires_sound": true,
+      "seed": 11
+    },
+    {
+      "case_id": "spoken-greeting-s29",
+      "prompt": "A single continuous medium close-up of an adult presenter facing the camera in a quiet studio. The presenter smiles naturally and says clearly, \"Good morning. It is a beautiful day to try something new.\" Mouth movements follow the spoken sentence. The camera remains still. No background music, subtitles, or scene cuts.",
+      "requires_motion": true,
+      "requires_sound": true,
+      "seed": 29
+    },
+    {
+      "case_id": "piano-notes-s47",
+      "prompt": "A single continuous close-up of two human hands playing a short, slow melody on an acoustic piano. The fingers visibly press and release the keys, with each note ringing naturally in the room. The camera remains still. The piano is the only prominent sound. No speech, background music, subtitles, or scene cuts.",
+      "requires_motion": true,
+      "requires_sound": true,
+      "seed": 47
+    },
+    {
+      "case_id": "piano-notes-s29",
+      "prompt": "A single continuous close-up of two human hands playing a short, slow melody on an acoustic piano. The fingers visibly press and release the keys, with each note ringing naturally in the room. The camera remains still. The piano is the only prominent sound. No speech, background music, subtitles, or scene cuts.",
+      "requires_motion": true,
+      "requires_sound": true,
+      "seed": 29
+    },
+    {
+      "case_id": "drum-taps-s29",
+      "prompt": "A single continuous medium shot of a drummer tapping a snare drum three times in a quiet rehearsal room. The drumsticks visibly contact the drumhead on each tap. The three crisp snare hits and the natural room ambience are audible. The camera remains still. No music, speech, subtitles, or scene cuts.",
+      "requires_motion": true,
+      "requires_sound": true,
+      "seed": 29
+    },
+    {
+      "case_id": "bicycle-pass-s29",
+      "prompt": "A single continuous eye-level shot of a cyclist riding from left to right across a paved park path, passing the camera and continuing into the distance. The bicycle wheels keep turning and the leaves move gently in the breeze. Tire sounds, wind, and distant birds are audible. No speech, music, subtitles, or scene cuts.",
+      "requires_motion": true,
+      "requires_sound": true,
+      "seed": 29
+    },
+    {
+      "case_id": "water-pour-s47",
+      "prompt": "A single continuous close-up of a person slowly pouring water from a clear glass pitcher into a ceramic cup on a wooden table. The water stream, rising water level, and small ripples are visible. The pouring and gentle splashing are audible in a quiet kitchen. The camera remains still. No speech, music, subtitles, or scene cuts.",
+      "requires_motion": true,
+      "requires_sound": true,
+      "seed": 47
+    },
+    {
+      "case_id": "water-pour-s83",
+      "prompt": "A single continuous close-up of a person slowly pouring water from a clear glass pitcher into a ceramic cup on a wooden table. The water stream, rising water level, and small ripples are visible. The pouring and gentle splashing are audible in a quiet kitchen. The camera remains still. No speech, music, subtitles, or scene cuts.",
+      "requires_motion": true,
+      "requires_sound": true,
+      "seed": 83
+    },
+    {
+      "case_id": "piano-notes-s11",
+      "prompt": "A single continuous close-up of two human hands playing a short, slow melody on an acoustic piano. The fingers visibly press and release the keys, with each note ringing naturally in the room. The camera remains still. The piano is the only prominent sound. No speech, background music, subtitles, or scene cuts.",
+      "requires_motion": true,
+      "requires_sound": true,
+      "seed": 11
+    },
+    {
+      "case_id": "spoken-greeting-s47",
+      "prompt": "A single continuous medium close-up of an adult presenter facing the camera in a quiet studio. The presenter smiles naturally and says clearly, \"Good morning. It is a beautiful day to try something new.\" Mouth movements follow the spoken sentence. The camera remains still. No background music, subtitles, or scene cuts.",
+      "requires_motion": true,
+      "requires_sound": true,
+      "seed": 47
+    },
+    {
+      "case_id": "bicycle-pass-s83",
+      "prompt": "A single continuous eye-level shot of a cyclist riding from left to right across a paved park path, passing the camera and continuing into the distance. The bicycle wheels keep turning and the leaves move gently in the breeze. Tire sounds, wind, and distant birds are audible. No speech, music, subtitles, or scene cuts.",
+      "requires_motion": true,
+      "requires_sound": true,
+      "seed": 83
+    },
+    {
+      "case_id": "bicycle-pass-s47",
+      "prompt": "A single continuous eye-level shot of a cyclist riding from left to right across a paved park path, passing the camera and continuing into the distance. The bicycle wheels keep turning and the leaves move gently in the breeze. Tire sounds, wind, and distant birds are audible. No speech, music, subtitles, or scene cuts.",
+      "requires_motion": true,
+      "requires_sound": true,
+      "seed": 47
+    },
+    {
+      "case_id": "water-pour-s11",
+      "prompt": "A single continuous close-up of a person slowly pouring water from a clear glass pitcher into a ceramic cup on a wooden table. The water stream, rising water level, and small ripples are visible. The pouring and gentle splashing are audible in a quiet kitchen. The camera remains still. No speech, music, subtitles, or scene cuts.",
+      "requires_motion": true,
+      "requires_sound": true,
+      "seed": 11
+    },
+    {
+      "case_id": "drum-taps-s11",
+      "prompt": "A single continuous medium shot of a drummer tapping a snare drum three times in a quiet rehearsal room. The drumsticks visibly contact the drumhead on each tap. The three crisp snare hits and the natural room ambience are audible. The camera remains still. No music, speech, subtitles, or scene cuts.",
+      "requires_motion": true,
+      "requires_sound": true,
+      "seed": 11
+    },
+    {
+      "case_id": "spoken-greeting-s83",
+      "prompt": "A single continuous medium close-up of an adult presenter facing the camera in a quiet studio. The presenter smiles naturally and says clearly, \"Good morning. It is a beautiful day to try something new.\" Mouth movements follow the spoken sentence. The camera remains still. No background music, subtitles, or scene cuts.",
+      "requires_motion": true,
+      "requires_sound": true,
+      "seed": 83
+    },
+    {
+      "case_id": "drum-taps-s83",
+      "prompt": "A single continuous medium shot of a drummer tapping a snare drum three times in a quiet rehearsal room. The drumsticks visibly contact the drumhead on each tap. The three crisp snare hits and the natural room ambience are audible. The camera remains still. No music, speech, subtitles, or scene cuts.",
+      "requires_motion": true,
+      "requires_sound": true,
+      "seed": 83
+    },
+    {
+      "case_id": "water-pour-s29",
+      "prompt": "A single continuous close-up of a person slowly pouring water from a clear glass pitcher into a ceramic cup on a wooden table. The water stream, rising water level, and small ripples are visible. The pouring and gentle splashing are audible in a quiet kitchen. The camera remains still. No speech, music, subtitles, or scene cuts.",
+      "requires_motion": true,
+      "requires_sound": true,
+      "seed": 29
+    },
+    {
+      "case_id": "piano-notes-s83",
+      "prompt": "A single continuous close-up of two human hands playing a short, slow melody on an acoustic piano. The fingers visibly press and release the keys, with each note ringing naturally in the room. The camera remains still. The piano is the only prominent sound. No speech, background music, subtitles, or scene cuts.",
+      "requires_motion": true,
+      "requires_sound": true,
+      "seed": 83
+    },
+    {
+      "case_id": "drum-taps-s47",
+      "prompt": "A single continuous medium shot of a drummer tapping a snare drum three times in a quiet rehearsal room. The drumsticks visibly contact the drumhead on each tap. The three crisp snare hits and the natural room ambience are audible. The camera remains still. No music, speech, subtitles, or scene cuts.",
+      "requires_motion": true,
+      "requires_sound": true,
+      "seed": 47
+    }
+  ],
+  "generation": {
+    "aspect_ratio": "16:9",
+    "audio_channels": 2,
+    "audio_flow_shift": 3.0,
+    "audio_sample_rate_hz": 32000,
+    "duration_seconds": 8,
+    "flow_shift": 12.0,
+    "fps": 24,
+    "frame_count": 192,
+    "height": 768,
+    "num_inference_steps": 50,
+    "width": 1344
+  },
+  "model_id": "MiniMaxAI/MiniMax-H3",
+  "model_revision": "42ed227ee7df40d41602854ae760620d6eb651fe",
+  "plan_id": "h3-cross-hardware-formal-8s-v1",
+  "repetitions": 1,
+  "warmup_runs": 1
+}
