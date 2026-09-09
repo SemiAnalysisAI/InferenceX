@@ -15,6 +15,7 @@ Covers:
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -1246,3 +1247,173 @@ def test_cli_requires_expected_gpu_count(monkeypatch: pytest.MonkeyPatch):
         main()
 
     assert exc_info.value.code == 2
+
+
+@pytest.fixture(params=["single", "multinode"])
+def power_artifacts(tmp_path, request):
+    from functools import partial
+    from test_aggregate_power_multinode import PRODUCER_SHA, build_package
+
+    package = build_package(tmp_path)
+    args = [
+        "--bench-result", str(package.bench_result),
+        "--agg-result", str(package.agg_result),
+        "--validation-result", str(package.validation_result),
+    ]
+    if request.param == "single":
+        telemetry = tmp_path / "gpu_metrics.csv"
+        _write_constant_window_samples(
+            telemetry, start=1000, end=1060, watts_per_gpu=350, num_gpus=4,
+        )
+        runner = partial(
+            run, telemetry, package.bench_result, package.agg_result,
+            expected_num_gpus=4, validation_result=package.validation_result,
+        )
+        args += ["--csv", str(telemetry), "--expected-num-gpus", "4"]
+        script = "aggregate_power"
+    else:
+        telemetry = package.power_dir / "manifest.json"
+        runner = package.run
+        args += [
+            "--power-dir", str(package.power_dir), "--logs-root", str(package.logs_root),
+            "--prefill-gpus", "2", "--decode-gpus", "2", "--expected-producer-sha", PRODUCER_SHA,
+        ]
+        script = "aggregate_power_multinode"
+    return {"package": package, "run": runner, "args": args, "script": script, "telemetry": telemetry}
+
+
+def _run_power_cli(case, *, module=False, args=None, environment=None):
+    repo = Path(__file__).resolve().parents[1]
+    command = [sys.executable, "-E", "-S"]
+    command += ["-m", f"utils.{case['script']}"] if module else [str(repo / "utils" / f"{case['script']}.py")]
+    return subprocess.run(
+        command + (case["args"] if args is None else args),
+        cwd=repo if module else case["package"].root,
+        env={"PATH": "/usr/bin:/bin", **(environment or {})},
+        text=True, capture_output=True, timeout=10,
+    )
+
+
+@pytest.mark.parametrize("module", [False, True], ids=["script-outside-repo", "legacy-module"])
+def test_power_cli_preserves_energy_and_audit_contract(power_artifacts, module):
+    case = power_artifacts
+    result = _run_power_cli(case, module=module)
+    assert result.returncode == 0, result.stderr
+    assert result.stderr == ""
+    # Four GPUs average 350 W for 60 s: 84,000 J, or 10,500 J per completed query.
+    aggregate = case["package"].agg()
+    assert aggregate["avg_power_w"] == 350
+    assert aggregate["total_gpu_energy_j"] == 84000
+    assert aggregate["joules_per_successful_query"] == 10500
+    assert aggregate["power_valid"] == 1
+    audit = case["package"].sidecar()
+    assert audit["power_valid"] is True
+    assert audit["benchmark_window"] == {
+        "start_time_unix": 1000, "end_time_unix": 1060,
+        "reported_duration_s": 60, "integration_duration_s": 60,
+        "completed": 8, "total_input_tokens": 32768, "total_output_tokens": 4096,
+    }
+    assert "total_gpu_energy_j=84000.00" in result.stdout
+
+
+@pytest.mark.parametrize(("env_value", "flag", "status"), [
+    ("", False, 0), ("YES", False, 1), ("false", True, 1), ("on", False, 0),
+])
+def test_power_cli_invalid_telemetry_preserves_strictness(power_artifacts, env_value, flag, status):
+    case = power_artifacts
+    case["telemetry"].unlink()
+    result = _run_power_cli(
+        case, args=case["args"] + (["--require-power"] if flag else []),
+        environment={"REQUIRE_POWER": env_value},
+    )
+    assert result.returncode == status, result.stderr
+    assert result.stdout == ""
+    assert "Power validation failed:" in result.stderr
+    assert case["package"].agg()["power_valid"] == 0
+    assert "total_gpu_energy_j" not in case["package"].agg()
+    audit = case["package"].sidecar()
+    assert audit["power_valid"] is False
+    assert audit["reasons"]
+
+
+@pytest.mark.parametrize(("args", "status"), [(["--help"], 0), ([], 2)])
+def test_power_cli_help_and_argument_errors_outside_repo(power_artifacts, args, status):
+    result = _run_power_cli(power_artifacts, args=args)
+    assert result.returncode == status
+    assert "usage:" in result.stdout + result.stderr
+    assert "Traceback" not in result.stderr
+    assert not power_artifacts["package"].validation_result.exists()
+
+
+@pytest.mark.parametrize("strict", [False, True])
+@pytest.mark.parametrize("failed_artifact", ["aggregate", "validation"])
+def test_power_artifact_replace_failure_preserves_published_state(
+    power_artifacts, monkeypatch, capsys, strict, failed_artifact,
+):
+    case = power_artifacts
+    package = case["package"]
+    original = package.agg_result.read_bytes()
+    failed_path = package.agg_result if failed_artifact == "aggregate" else package.validation_result
+    replace = Path.replace
+
+    def fail_replace(path, target):
+        if target == failed_path:
+            raise OSError("simulated rename failure")
+        return replace(path, target)
+
+    monkeypatch.setattr(Path, "replace", fail_replace)
+    assert case["run"](require_power=strict) == (1 if strict else 0)
+    assert "simulated rename failure" in capsys.readouterr().err
+    if failed_artifact == "aggregate":
+        assert package.agg_result.read_bytes() == original
+        audit = package.sidecar()
+        assert audit["power_valid"] is False
+        assert "aggregate_result_unwritable" in audit["reasons"]
+        assert audit["metrics"] == {}
+    else:
+        assert package.agg()["power_valid"] == 1
+        assert not package.validation_result.exists()
+
+
+def test_power_sidecars_keep_audit_precision_and_omit_nonfinite_metrics(power_artifacts):
+    import aggregate_power as single
+    import aggregate_power_multinode as multinode
+
+    case = power_artifacts
+    package = case["package"]
+    metrics = {
+        "avg_power_w": 12.3456789, "joules_per_output_token": 0.12345678,
+        "total_gpu_energy_j": float("inf"), "joules_per_total_token": float("nan"),
+        "joules_per_input_token": None,
+    }
+    if case["script"] == "aggregate_power":
+        payload = single._validation_payload(
+            csv_path=case["telemetry"], bench_result=package.bench_result, benchmark=None,
+            integration=single._empty_integration(expected_num_gpus=4, reasons=[]),
+            power_valid=False, reasons=[], metrics=metrics, accumulator_check=None,
+        )
+    else:
+        payload = multinode._sidecar_payload(
+            audit=multinode.MultinodePowerAudit(metrics=metrics),
+            power_dir=package.power_dir, bench_result=package.bench_result, benchmark=None,
+        )
+    assert payload["benchmark_window"] is None
+    assert payload["metrics"] == {"avg_power_w": 12.345679, "joules_per_output_token": 0.123457}
+    json.dumps(payload, allow_nan=False)
+
+
+def test_packaged_power_runs_without_legacy_scripts(power_artifacts, tmp_path):
+    import shutil
+
+    repo = Path(__file__).resolve().parents[1]
+    isolated = tmp_path / "package-only"
+    shutil.copytree(repo / "infx", isolated / "infx")
+    module = "single_node" if power_artifacts["script"] == "aggregate_power" else "multinode"
+    result = subprocess.run(
+        [sys.executable, "-E", "-S", "-m", f"infx.results.power.{module}", *power_artifacts["args"]],
+        cwd=isolated, env={"PATH": "/usr/bin:/bin"},
+        text=True, capture_output=True, timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+    assert power_artifacts["package"].agg()["total_gpu_energy_j"] == 84000
+    assert power_artifacts["package"].sidecar()["power_valid"] is True

@@ -208,7 +208,11 @@ result = build_result(raw_benchmark, runtime_env)
 当前处理路径共享两个辅助函数：
 
 - [`parse_component_metadata`](../infx/results/metadata.py) 接收原始 JSON 值和诊断标签。调用方选择 `version` 是否可省略，以及无效输入应抛出 `ValueError` 还是 `SystemExit`，从而保留现有契约。
-- [`with_power_metrics`](../infx/results/power.py) 返回替换了指定指标族的副本，移除旧的有效性原因，并验证、舍入新指标。调用方提供指标键和模式版本，再自行写入工件及验证附属文件。其他指标族因此可以直接复用该转换，无需修改其实现。
+- [`with_power_metrics`](../infx/results/power/__init__.py) 返回替换了指定指标族的副本，移除旧的有效性原因，并验证、舍入新指标。调用方提供指标键和模式版本，再自行写入工件及验证附属文件。其他指标族因此可以直接复用该转换，无需修改其实现。
+
+功耗遥测处理引擎也位于 [`infx.results.power`](../infx/results/power/)：`single_node.run` 读取 GPU 监控 CSV，`multinode.run` 验证 srt-slurm 工件包。两者通过 `common.py` 共享基准窗口解析、单设备能量积分、聚合结果替换及审计序列化，同时保留各自的遥测校验和失败策略。固定序列及 AgentX 适配器直接导入这些引擎；新结果格式可以将其基准窗口和 token 计数提供给匹配的引擎。
+
+现有 `utils/aggregate_power.py` 和 `utils/aggregate_power_multinode.py` 命令继续作为兼容入口，包括从检出目录之外直接执行。旧导入路径解析到对应的引擎模块，因此两种路径引用的是相同的类和函数。`infx` 包可独立于这些入口运行，无需安装步骤或新增运行时依赖。还可以从仓库根目录运行 `python -m infx.results.power.single_node` 和 `python -m infx.results.power.multinode` 来调用引擎。
 
 构建函数测试应使用独立计算预期结果的小样例和只读输入。修改现有适配器时，还应与旧实现比较 CLI 退出状态、诊断信息和生成工件，覆盖无效输入以及严格模式和尽力处理模式下的功耗失败。
 
