@@ -6975,6 +6975,5 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Image : vllm/vllm-openai-rocm:nightly-7c5dc571cbd1064ecc8a9b1045637ff647aa22cb"
+    - "Image : vllm/vllm-openai-rocm:nightly-d9105ea8001e0a6d77a96327d17515bb5791fb36"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2795
- 
