@@ -176,9 +176,11 @@ def available_clusters(feed: Feed, policy: Policy, now: datetime) -> set[str]:
     try:
         raw = feed.payload
         if (feed.error or not fresh(feed.retrieved_at, now, policy)
-                or raw['schemaVersion'] != 6 or raw['kind'] != 'inferencex.status.clusters'
+                or raw['kind'] != 'inferencex.status.clusters'
                 or not fresh(raw['generatedAt'], now, policy) or raw['data']['available'] is not True):
             return set()
+        # Validate the consumed fields, not schemaVersion: additive API changes
+        # must not turn healthy capacity into an empty candidate list.
         available: set[str] = set()
         seen: set[str] = set()
         for cluster in raw['data']['clusters']:
@@ -209,13 +211,13 @@ def available_clusters(feed: Feed, policy: Policy, now: datetime) -> set[str]:
 
 
 def fetch_capacity(policy: Policy) -> set[str]:
-    return available_clusters(fetch('clusters', token=os.environ.get('KLAUDE_DASHBOARD_API_KEY')),
+    return available_clusters(fetch('clusters', token=os.environ.get('KLAUD_DASHBOARD_API_KEY')),
                               policy, datetime.now(timezone.utc))
 
 
 def capacity_context(policy: Policy) -> dict:
     """Private routing hints for review, without node counts or raw responses."""
-    feed = fetch('clusters', token=os.environ.get('KLAUDE_DASHBOARD_API_KEY'))
+    feed = fetch('clusters', token=os.environ.get('KLAUD_DASHBOARD_API_KEY'))
     available = available_clusters(feed, policy, datetime.now(timezone.utc))
     try:
         clusters = sorted({cluster['clusterId'] for cluster in feed.payload['data']['clusters']
