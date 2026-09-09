@@ -4,6 +4,7 @@ import hashlib
 import json
 import re
 import subprocess
+import sys
 import tempfile
 from collections import defaultdict
 from contextlib import contextmanager
@@ -12,12 +13,16 @@ from pathlib import Path
 
 import yaml
 from constants import GENERATE_SWEEPS_PY_SCRIPT, MASTER_CONFIGS, RUNNER_CONFIG
-from matrix_logic.generate_sweep_configs import (
+
+if not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from infx.matrix.generate import (
     freeze_config_value,
     seq_len_to_str,
     trim_conc,
 )
-from matrix_logic.validation import (
+from infx.matrix.validation import (
     ChangelogEntry,
     ChangelogMatrixEntry,
     load_config_files,
@@ -114,6 +119,7 @@ def generation_inputs_at_ref(ref: str):
                 ref,
                 "--",
                 "utils/matrix_logic",
+                "infx",
                 *MASTER_CONFIGS,
                 "configs/runners.yaml",
             ],
