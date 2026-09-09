@@ -63,14 +63,6 @@ jobs:
           workflow = Path(".github/workflows/run-sweep.yml")
           source = workflow.read_text()
 
-          public_block = """\
-                                const inferenceUrl = `https://inferencex.semianalysis.com/inference?unofficialRun=${context.runId}`;
-                                const evaluationUrl = `https://inferencex.semianalysis.com/evaluation?unofficialRun=${context.runId}`;
-                                const body = [
-                                    `see unofficial run visualizer at ${inferenceUrl}`,
-                                    `see unofficial run visualizer at ${evaluationUrl}`,
-                                ].join('\\n');
-          """
           legacy_internal_block = """\
                                 const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
                                 const visualizerUrl = new URL('http://infmax-tools.nvidia.com/');
@@ -85,22 +77,17 @@ jobs:
                                 const body = `see unofficial run visualizer at ${visualizerUrl.toString()}`;
           """
 
-          public_count = source.count(public_block)
           legacy_internal_count = source.count(legacy_internal_block)
           internal_count = source.count(internal_block)
-          if public_count == 1 and legacy_internal_count == 0 and internal_count == 0:
-              workflow.write_text(source.replace(public_block, internal_block, 1))
-              print("Applied the internal InfDash sweep-comment override.")
-          elif public_count == 0 and legacy_internal_count == 1 and internal_count == 0:
+          if legacy_internal_count == 1 and internal_count == 0:
               workflow.write_text(source.replace(legacy_internal_block, internal_block, 1))
               print("Updated the internal InfDash sweep-comment override.")
-          elif public_count == 0 and legacy_internal_count == 0 and internal_count == 1:
+          elif legacy_internal_count == 0 and internal_count == 1:
               print("The internal InfDash sweep-comment override is already present.")
           else:
               raise SystemExit(
-                  "Expected exactly one public, legacy internal, or internal sweep-comment block; "
-                  f"found public={public_count}, legacy_internal={legacy_internal_count}, "
-                  f"internal={internal_count}."
+                  "Expected exactly one legacy internal or internal sweep-comment block; "
+                  f"found legacy_internal={legacy_internal_count}, internal={internal_count}."
               )
           PY
               if ! git diff --quiet -- .github/workflows/run-sweep.yml; then
