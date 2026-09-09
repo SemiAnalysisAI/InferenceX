@@ -308,3 +308,10 @@ Use an exact-source guard and remove the workaround once the image includes
 the fix.
 
 Seen on: #1834.
+
+### 7.4 Compatible capacity schema changes must not hide all candidates
+
+The dashboard advanced to schema version 7 while Klaud required exactly 6, so
+a fresh, available feed produced zero eligible clusters. Validate the consumed
+fields and invariants instead of gating on schemaVersion. Keep freshness, kind,
+availability, count consistency and the strict below-20% utilization checks.
