@@ -21,7 +21,7 @@ on:
                 description: "Optional preparation: amd-node 15m or amd-runtime 60m on 8 GPUs; amd-model needs a source run"
                 required: false
                 type: choice
-                options: [none, site-preflight, amd-model, amd-node, amd-runtime, amd-site]
+                options: [none, site-preflight, amd-model, amd-node, amd-runtime, amd-site, fidelity]
                 default: none
             h3-site-config:
                 description: "Pinned runner-local H3 site JSON; empty uses existing H200 configuration"
@@ -258,8 +258,17 @@ on:
                 default: "[]"
 
 jobs:
+    h3-fidelity:
+        if: ${{ inputs.h3-video && inputs.h3-preparation == 'fidelity' }}
+        permissions:
+            contents: read
+            actions: read
+        uses: ./.github/workflows/h3-fidelity.yml
+        with:
+            source-run-ids: ${{ inputs.h3-reuse-run-ids }}
+
     h3-video:
-        if: ${{ inputs.h3-video }}
+        if: ${{ inputs.h3-video && inputs.h3-preparation != 'fidelity' }}
         permissions:
             contents: read
             actions: read

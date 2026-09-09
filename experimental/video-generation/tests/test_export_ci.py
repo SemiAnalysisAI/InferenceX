@@ -46,6 +46,13 @@ def test_source_ids_preserve_order_without_shell_interpretation():
     assert export_ci.source_ids("34293342829,34291306687") == ["34293342829", "34291306687"]
 
 
+@pytest.mark.parametrize("hardware", ["H100", "B200", "MI355X"])
+def test_serving_sources_accept_verified_cross_hardware_generation(github, hardware):
+    github[1]["jobs"][0]["name"] = f"h3-video / p1.5 | H3 video {hardware} smoke"
+    source, artifact = export_ci.verified_execution("123")
+    assert source["headSha"] == SHA and artifact["id"] == 789
+
+
 def test_inventory_reuse_requires_the_hardware_job_and_artifact(github):
     with pytest.raises(ValueError):
         export_ci.verified_execution("123", inventory=True)
