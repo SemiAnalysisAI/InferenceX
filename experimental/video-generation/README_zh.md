@@ -174,7 +174,7 @@ artifact 检查是独立的验收证据。
 
 本地无法 SSH 到 AMD 时，可设置 `h3-preparation=amd-model`、
 `h3-cluster=mi355x-amds`，并通过 `h3-reuse-run-ids` 指定一个成功的 H200 来源。
-该 CPU 任务优先复用已校验的共享权重，否则在 `/it-share/wenyao-minimax-h3/work`
+该 CPU 任务优先复用已校验的共享权重，否则在 `/it-share/data/wenyao-minimax-h3/work`
 准备来源清单中的模型，逐文件校验大小和 SHA256。`h3-model-preparation` 产物与
 持久化的 `model-ready.json` 仅记录准备结果，不代表 AMD 运行时通过验收，也不分配 GPU。
 

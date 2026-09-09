@@ -222,7 +222,7 @@ independent workflow concurrency groups; each retains its existing Slurm checks.
 For AMD model preparation without local SSH, set `h3-preparation=amd-model`,
 `h3-cluster=mi355x-amds`, and one successful H200 source in `h3-reuse-run-ids`.
 This CPU-only job reuses verified shared weights or stages the exact source
-manifest under `/it-share/wenyao-minimax-h3/work`, checking every size and SHA256.
+manifest under `/it-share/data/wenyao-minimax-h3/work`, checking every size and SHA256.
 Its `h3-model-preparation` artifact and persistent `model-ready.json` are preparation
 receipts; they do not admit an AMD runtime or allocate GPUs.
 

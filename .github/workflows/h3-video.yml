@@ -214,7 +214,7 @@ jobs:
           export PYTHONPATH="$PWD"
           python3 experimental/video-generation/stage_model_ci.py \
             --source-run-id "$H3_SOURCE_RUN_IDS" \
-            --workspace /it-share/wenyao-minimax-h3/work \
+            --workspace /it-share/data/wenyao-minimax-h3/work \
             --output "$RUNNER_TEMP/h3-video-$H3_RUN_ID-$H3_RUN_ATTEMPT"
       - name: Execute configured H3 smoke
         id: execute
