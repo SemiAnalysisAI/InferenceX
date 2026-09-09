@@ -6969,3 +6969,11 @@
     - "Use SGLang's current W4A4 MegaMoE and DP LM-head flags for DP-attention instead of the deprecated MegaMoE environment variables."
     - "Resolve draft-model jobs through the existing B200 SGLang speculative recipe and the staged DeepSeek-V4-Pro-0813 checkpoint."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2821
+
+- config-keys:
+    - qwen3.5-fp4-gb300-dynamo-sglang
+  description:
+    - "Bump the Qwen3.5 FP4 GB300 disaggregated Dynamo-SGLang image from lmsysorg/sglang:v0.5.14-cu130 to lmsysorg/sglang:v0.5.19-cu130."
+    - "Pin Dynamo 1.5.0.dev20260908 in the four 8k1k STP recipes (and the family's router metadata) because Dynamo 1.1.0 imports sglang.srt.server_args_config_parser, which sglang v0.5.19 moved to sglang.srt.utils.server_args_config_parser; no stable Dynamo release carries the compat shim yet."
+    - "Model, topology, concurrency lists, workloads and recipe references are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2909
