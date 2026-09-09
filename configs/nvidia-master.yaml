@@ -6449,7 +6449,7 @@ qwen3.5-fp4-gb300-dynamo-sglang:
   runner: gb300
   precision: fp4
   framework: dynamo-sglang
-  router: { name: dynamo-router, version: "1.1.0" }
+  router: { name: dynamo-router, version: "1.5.0.dev20260908" }
   multinode: true
   disagg: true
   scenarios:

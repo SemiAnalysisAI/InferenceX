@@ -15,7 +15,7 @@ model:
   precision: "fp4"
 
 dynamo:
-  version: "1.1.0"
+  version: "1.5.0.dev20260908"
 
 frontend:
   type: dynamo
