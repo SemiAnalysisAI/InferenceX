@@ -6,9 +6,22 @@ set -x
 
 source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
 
-export SLURM_PARTITION="batch"
-export SLURM_ACCOUNT="benchmark"
-SQUASH_DIR="/mnt/lustre01/users-public/sa-shared"
+export SLURM_PARTITION="batch-blue"
+export SLURM_ACCOUNT="restricted"
+export SBATCH_QOS="batch_blue_qos"
+GB200_SHARED_ROOT="/mnt/lustre01/users/slurm-shared"
+SQUASH_DIR="${GB200_SHARED_ROOT}/squash"
+
+# Watchtower CI and its compute nodes share this root. Fail before importing
+# or submitting if the current runner no longer has the required access.
+mkdir -p "$SQUASH_DIR" || {
+    echo "Error: failed to create GB200 shared squash directory: $SQUASH_DIR" >&2
+    exit 1
+}
+if [[ ! -w "$SQUASH_DIR" ]]; then
+    echo "Error: GB200 shared squash directory is not writable: $SQUASH_DIR" >&2
+    exit 1
+fi
 
 # dcgm-power producer pin — single source of truth for power lanes. Swap
 # URL+PIN here (and identically in launch_gb300-nv.sh) when the upstream
@@ -72,8 +85,19 @@ import_squash() {
     local tmp="${squash}.tmp.$$"
     local enroot_uri
     enroot_uri=$(enroot_uri_for_image "$image") || exit 1
+
+    # A valid shared squash image is immutable and does not need the import
+    # lock. Lock files can outlive a matrix job and be owned read-only by a
+    # different runner account, so fall back to opening an existing lock for
+    # reading before taking the advisory flock.
+    if unsquashfs -l "$squash" > /dev/null 2>&1; then
+        echo "Squash file already exists and is valid, skipping import: $squash"
+        return 0
+    fi
     (
-        exec 9>"$lock"
+        if ! { exec 9>"$lock"; } 2>/dev/null; then
+            exec 9<"$lock" || { echo "Failed to open lock for $squash" >&2; exit 1; }
+        fi
         flock -w 1800 9 || { echo "Failed to acquire lock for $squash" >&2; exit 1; }
         if unsquashfs -l "$squash" > /dev/null 2>&1; then
             echo "Squash file already exists and is valid, skipping import: $squash"
@@ -389,7 +413,11 @@ echo "Cloning srt-slurm repository..."
 SRT_REPO_DIR="srt-slurm"
 SRTCTL_SETUP_SCRIPT=""
 if uses_watchtower_shared_fs; then
-    SHARED_BASE="/mnt/lustre01/users-public/sa-shared/gha-runs"
+    SHARED_BASE="${GB200_SHARED_ROOT}/gha-runs"
+    mkdir -p "$SHARED_BASE" || {
+        echo "Error: failed to create GB200 shared run directory: $SHARED_BASE" >&2
+        exit 1
+    }
     RUN_KEY="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${RUNNER_NAME}-$$"
     SRT_REPO_DIR="${SHARED_BASE}/srt-slurm-${RUN_KEY}"
 fi
@@ -420,24 +448,32 @@ elif [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "minimaxm3" && "$PRECISION" =
     mkdir -p recipes/vllm/minimax-m3/gb200-fp4/agentic
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3/gb200-fp4/agentic" \
         recipes/vllm/minimax-m3/gb200-fp4/agentic
-# These AgentX submissions use released srt-slurm custom-benchmark metrics
-# discovery so AIPerf receives every logical worker endpoint.
-elif [[ "$IS_AGENTIC" == "1" && (( "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-sglang" ) || ( "$MODEL_PREFIX" == "dsv4" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-vllm" )) ]]; then
+# These AgentX submissions use the exact srt-slurm revision from the successful
+# Qwen3.5 campaign. It includes custom-benchmark metrics discovery so AIPerf
+# receives every logical worker endpoint while preserving the campaign's
+# Dynamo/SGLang launch behavior.
+elif [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    git checkout e6e9d8b9bee3e6c85e6f121eb4dacd88d8ca1d2c
+    test "$(git rev-parse HEAD)" = "e6e9d8b9bee3e6c85e6f121eb4dacd88d8ca1d2c" || {
+        echo "Error: NVIDIA/srt-slurm campaign revision resolved unexpectedly" >&2
+        exit 1
+    }
+    mkdir -p recipes/sglang/qwen3.5/gb200-fp4/agentic
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb200-fp4/agentic" \
+        recipes/sglang/qwen3.5/gb200-fp4/agentic
+# DSV4 stays on its independently validated released srt-slurm pin.
+elif [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "dsv4" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-vllm" ]]; then
     git clone --branch v1.0.45 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
     test "$(git rev-parse HEAD)" = "9d8d92b20c350a5d42f0709f5a0b64e30eb37d33" || {
         echo "Error: NVIDIA/srt-slurm v1.0.45 resolved to an unexpected commit" >&2
         exit 1
     }
-    if [[ "$MODEL_PREFIX" == "qwen3.5" ]]; then
-        mkdir -p recipes/sglang/qwen3.5/gb200-fp4/agentic
-        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb200-fp4/agentic" \
-            recipes/sglang/qwen3.5/gb200-fp4/agentic
-    else
-        mkdir -p recipes/vllm/deepseek-v4/agentic
-        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
-            recipes/vllm/deepseek-v4/agentic
-    fi
+    mkdir -p recipes/vllm/deepseek-v4/agentic
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
+        recipes/vllm/deepseek-v4/agentic
 # Kimi-K3 requires direct multi-node vLLM frontend support from srt-slurm.
 elif [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "kimik3" ]]; then
     git clone --branch v1.0.53 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
@@ -600,8 +636,8 @@ fi
 # (AIPERF_DATASET_MMAP_CACHE_DIR=/aiperf_mmap_cache, HF_HUB_CACHE=/hf_hub_cache).
 DEFAULT_MOUNTS_BLOCK=""
 if [[ "$IS_AGENTIC" == "1" ]]; then
-    AIPERF_MMAP_CACHE_HOST_PATH="/mnt/lustre01/users-public/sa-shared/ai-perf-cache"
-    HF_HUB_CACHE_HOST_PATH="/mnt/lustre01/users-public/sa-shared/hf-hub-cache"
+    AIPERF_MMAP_CACHE_HOST_PATH="${GB200_SHARED_ROOT}/ai-perf-cache"
+    HF_HUB_CACHE_HOST_PATH="${GB200_SHARED_ROOT}/hf-hub-cache"
     mkdir -p "$AIPERF_MMAP_CACHE_HOST_PATH" "$HF_HUB_CACHE_HOST_PATH"
     chmod 777 "$AIPERF_MMAP_CACHE_HOST_PATH" "$HF_HUB_CACHE_HOST_PATH" 2>/dev/null || true
     DEFAULT_MOUNTS_BLOCK="default_mounts:
