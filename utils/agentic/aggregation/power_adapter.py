@@ -403,6 +403,10 @@ def _record_multinode_adapter_failure(
     aggregate["power_valid"] = 0
     aggregate.pop("power_invalid_reasons", None)
     _write_json_atomic(agg_result, aggregate)
+    _write_multinode_failure_validation(validation_result, reasons)
+
+
+def _write_multinode_failure_validation(validation_result: Path, reasons: list[str]) -> None:
     _write_json_atomic(
         validation_result,
         {
@@ -531,11 +535,27 @@ def main() -> int:
     if args.multinode_contract_missing:
         if args.agg_result is None:
             parser.error("--agg-result is required with --multinode-contract-missing")
-        _record_multinode_adapter_failure(
-            agg_result=args.agg_result,
-            validation_result=args.result_dir / "power_validation.json",
-            reasons=["multinode_power_contract_missing"],
-        )
+        validation_result = args.result_dir / "power_validation.json"
+        reasons = ["multinode_power_contract_missing"]
+        try:
+            _record_multinode_adapter_failure(
+                agg_result=args.agg_result,
+                validation_result=validation_result,
+                reasons=reasons,
+            )
+        except (OSError, json.JSONDecodeError, ValueError) as exc:
+            print(
+                f"[agentx_power] Failed to record multinode adapter failure: {exc}",
+                file=sys.stderr,
+            )
+            # Preserve the invalid verdict even when there is no usable aggregate.
+            try:
+                _write_multinode_failure_validation(validation_result, reasons)
+            except (OSError, ValueError) as validation_exc:
+                print(
+                    f"[agentx_power] Failed to write power validation: {validation_exc}",
+                    file=sys.stderr,
+                )
         return _fail_multinode_adapter(
             "Multinode AgentX power is unavailable: producer measurement-window contract missing",
             require_power=args.require_power,
