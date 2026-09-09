@@ -76,15 +76,26 @@ case "$CONC" in
     1|2|4)
         DCP_SIZE="${DCP_SIZE:-1}"
         SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-8}"
-        SPEC_ARGS=(--speculative-config "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"fp8\"}")
+        # Golden Kimi-K3 acceptance curve. Without rejection_sample_method
+        # synthetic + this length, the run uses LIVE draft acceptance and the
+        # number is not comparable to other MTP submissions.
+        case "$SPEC_NUM_TOKENS" in
+            1) SYNTHETIC_ACCEPT_LEN=1.85 ;;
+            2) SYNTHETIC_ACCEPT_LEN=2.51 ;;
+            3) SYNTHETIC_ACCEPT_LEN=3.00 ;;
+            4) SYNTHETIC_ACCEPT_LEN=3.36 ;;
+            5) SYNTHETIC_ACCEPT_LEN=3.62 ;;
+            6) SYNTHETIC_ACCEPT_LEN=3.75 ;;
+            7) SYNTHETIC_ACCEPT_LEN=3.84 ;;
+            8) SYNTHETIC_ACCEPT_LEN=4.00 ;;
+            *) echo "[spec] no golden AL for k=$SPEC_NUM_TOKENS" >&2; exit 1 ;;
+        esac
+        DRAFT_KV_DTYPE="${DRAFT_KV_DTYPE:-fp8}"
+        SPEC_ARGS=(--speculative-config "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"$DRAFT_KV_DTYPE\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}")
+        echo "MTP: k=$SPEC_NUM_TOKENS synthetic_accept=$SYNTHETIC_ACCEPT_LEN draft_kv=$DRAFT_KV_DTYPE"
         SPEC_ROWS=$(( SPEC_NUM_TOKENS + 1 ))
         MAX_NUM_SEQS="${MAX_NUM_SEQS:-4}"
         MAX_BATCHED_TOKENS="${MAX_BATCHED_TOKENS:-8192}"
-        ;;
-    44|48|52)
-        SPEC_NUM_TOKENS=0
-        GPU_MEM_UTIL=0.9
-        MAX_NUM_BATCHED_TOKENS=8192
         ;;
     *)
         DCP_SIZE="${DCP_SIZE:-8}"
