@@ -7019,3 +7019,9 @@
   description:
     - "Add explicit AMD H3 vendor binding and AITER/Ulysses launch validation. Match HIP to AMD SMI by PCI BDF, preserve foreign process evidence, use sampled socket power, and account for granted full-node GPU allocations. Runtime generation remains gated until a prepared AMD site passes smoke validation."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2916
+
+- config-keys: []
+  workflow-dispatch: h3-video.yml
+  description:
+    - "Seal AMD C1 serving inputs through CPU-only preparation after runtime inspection, reusing frozen model weights and the shared twenty-request eight-second workload. Record AITER/Ulysses layout and all eight allocated GPUs separately from four participating GPUs; generation compatibility remains unverified. Select no LLM jobs."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2916
