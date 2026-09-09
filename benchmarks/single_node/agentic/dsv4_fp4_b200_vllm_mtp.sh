@@ -101,7 +101,7 @@ export VLLM_ENGINE_READY_TIMEOUT_S=3600
 # store mask. 32k matches the trace-replay tuning validated for this workload.
 export VLLM_PREFIX_CACHE_RETENTION_INTERVAL=32768
 export VLLM_USE_V2_MODEL_RUNNER=1
-export VLLM_USE_RUST_FRONTEND=1
+export VLLM_USE_RUST_FRONTEND=0
 export VLLM_DSV4_MEGA_FP8_COMBINE=1
 export VLLM_RPC_TIMEOUT=600000
 

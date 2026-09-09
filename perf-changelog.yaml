@@ -7059,3 +7059,12 @@
     - "Remove the unproven OMP_NUM_THREADS override; keep the runtime default for official cache-source validation."
   no-evals: true
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2931
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  no-evals: true
+  description:
+    - "Use the Python frontend that exports the fork's cache-source metric; the Rust frontend has its own metrics implementation and does not yet consume the source breakdown. Retain the existing engine, attention, TP8/MTP, and offload settings."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2931
