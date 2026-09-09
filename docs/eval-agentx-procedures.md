@@ -224,6 +224,13 @@ Treat fast results as bring-up evidence, never as a replacement for the canonica
 
 ## 8. Preserve trace and run provenance
 
+The GB300 launcher backports custom-runner backend metrics discovery to its pinned
+srt-slurm v1.0.36. A custom recipe opts in with
+`AIPERF_REQUIRED_SERVER_METRIC_PREFIX`; the launcher applies
+`runners/patches/srt-slurm-custom-metrics.patch`. Verify that the resulting
+`AIPERF_SERVER_METRICS_URLS` includes every prefill and decode backend, not only
+the frontend. Recipes without that opt-in retain their existing behavior.
+
 AgentX defaults to recorded assistant-response replay. Live server outputs are measured but discarded when constructing later turns. Set `AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES=1` only for an explicitly different live-assistant experiment. The selected trace corpus is model-family dependent unless `WEKA_LOADER_OVERRIDE` pins it. The resolver logs both loader and Hugging Face dataset ([trace resolution](../benchmarks/benchmark_lib.sh#L2023-L2102), [replay semantics](../benchmarks/benchmark_lib.sh#L2104-L2270)).
 
 Capture orchestration provenance immediately:
