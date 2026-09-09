@@ -44,6 +44,8 @@ def inspect_node(run_dir: Path) -> None:
                "slurm": {name: os.environ.get(name) for name in
                          ("SLURM_JOB_GPUS", "SLURM_STEP_GPUS", "ROCR_VISIBLE_DEVICES", "HIP_VISIBLE_DEVICES", "CUDA_VISIBLE_DEVICES")}}
     ci.write(run_dir / "binding.json", binding)
+    from evaluator.mvp_amd_gpu import observe_system_monitor
+    ci.write(run_dir / "amd-system-monitor.json", observe_system_monitor(10))
     commands = [["uname", "-a"], ["enroot", "list", "-f"], ["srun", "--help"],
                 ["bash", "-c", "command -v amd-smi rocm-smi rocminfo python3; ls -ld /opt/rocm* /var/lib/enroot /run/enroot /etc/enroot 2>/dev/null"]]
     smi = shutil.which("amd-smi")
@@ -103,8 +105,17 @@ def inspect(workspace: Path, output: Path, *, prepare_runtime: bool = False) -> 
     with ci.task_lock(control / ".node-inventory.lock"):
         try:
             if prepare_runtime:
-                from prepare_amd_runtime import prepare_source
+                from prepare_amd_runtime import prepare_source, interrupted_rootfs, CONTAINER, IMAGE
                 prepare_source(workspace)
+                rootfs = workspace.parent / "enroot-data" / CONTAINER
+                if rootfs.is_dir():
+                    origin = ci.read(rootfs.with_suffix(".image.json"))
+                    if origin == {"image": str(IMAGE), "status": "creating"}:
+                        interrupted_rootfs(workspace)
+                    else:
+                        ci.need(origin in ({"image": str(IMAGE), "status": "created"},
+                                           {"image": str(IMAGE), "status": "recovered"}), "AMD rootfs identity differs")
+                    config["resources"]["minutes"] = 15
             recovery = ci.recover(config, root)
             ci.write(run_dir / "recovery.json", recovery)
             ci.need(recovery["action"] != "wait", "Task-owned AMD allocation is waiting; do not submit another")

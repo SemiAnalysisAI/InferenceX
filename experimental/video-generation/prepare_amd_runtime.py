@@ -29,6 +29,20 @@ Path(sys.argv[1]).write_text(json.dumps(result, indent=2) + "\n")
 '''
 
 
+def interrupted_rootfs(workspace: Path) -> None:
+    rootfs = workspace.parent / "enroot-data" / CONTAINER
+    previous = workspace / "results/h3-cross-hardware/github-34344130223-1"
+    ci.need(rootfs.is_dir() and rootfs.stat().st_uid == os.getuid(), "Task-owned partial rootfs missing")
+    ci.need(ci.read(rootfs.with_suffix(".image.json")) == {"image": str(IMAGE), "status": "creating"},
+            "Unexpected rootfs creation receipt")
+    failed = ci.read(previous / "inventory-status.json")
+    ci.need(failed["allocation_cleanup"]["status"] == "released", "Prior allocation cleanup is not recorded")
+    log = (previous / "srun.log").read_text()
+    ci.need("Ignoring xattrs in filesystem" in log and "created 464452 files" in log
+            and "created 11757 symlinks" in log, "Prior extraction did not reach the recorded completion footer")
+    ci.need((rootfs / "etc/rc").is_file(), "Extracted Enroot entrypoint missing")
+
+
 def recover_rootfs(workspace: Path, output: Path) -> None:
     root = workspace.parent
     rootfs = root / "enroot-data" / CONTAINER
@@ -41,14 +55,7 @@ def recover_rootfs(workspace: Path, output: Path) -> None:
     control = workspace / "campaigns/h3-cross-hardware"
     with ci.task_lock(control / ".node-inventory.lock"), ci.task_lock(root / ".session.lock"):
         try:
-            ci.need(rootfs.is_dir() and rootfs.stat().st_uid == os.getuid(), "Task-owned partial rootfs missing")
-            ci.need(ci.read(origin) == {"image": str(IMAGE), "status": "creating"}, "Unexpected rootfs creation receipt")
-            failed = ci.read(previous / "inventory-status.json")
-            ci.need(failed["allocation_cleanup"]["status"] == "released", "Prior allocation cleanup is not recorded")
-            log = (previous / "srun.log").read_text()
-            ci.need("Ignoring xattrs in filesystem" in log and "created 464452 files" in log
-                    and "created 11757 symlinks" in log, "Prior extraction did not reach the recorded completion footer")
-            ci.need((rootfs / "etc/rc").is_file(), "Extracted Enroot entrypoint missing")
+            interrupted_rootfs(workspace)
             record["entrypoint"] = (rootfs / "etc/rc").read_text()
             prepare_source(workspace)
             env = {**os.environ, "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
@@ -171,9 +178,13 @@ def prepare_on_node(workspace: Path, run_dir: Path) -> None:
         Path(env[key]).mkdir(parents=True, exist_ok=True)
     origin = rootfs.with_suffix(".image.json")
     if rootfs.is_dir():
-        ci.need(origin.is_file() and ci.read(origin) in (
-                    {"image": str(IMAGE), "status": "created"}, {"image": str(IMAGE), "status": "recovered"}),
-                "Existing AMD rootfs has no completed task-owned image receipt; inspect before reuse")
+        if origin.is_file() and ci.read(origin) == {"image": str(IMAGE), "status": "creating"}:
+            interrupted_rootfs(workspace)
+            record["recovery"] = "Reuse completed extraction after CPU runner denied user namespaces; no extraction or full-tree permission rescan"
+        else:
+            ci.need(origin.is_file() and ci.read(origin) in (
+                        {"image": str(IMAGE), "status": "created"}, {"image": str(IMAGE), "status": "recovered"}),
+                    "Existing AMD rootfs has no completed task-owned image receipt; inspect before reuse")
     if not rootfs.is_dir():
         ci.need(IMAGE.is_file(), "Validated cached ROCm image is missing on this node")
         record.update(create_reason="Task-owned named rootfs is missing", image_size_bytes=IMAGE.stat().st_size)
@@ -202,6 +213,7 @@ def prepare_on_node(workspace: Path, run_dir: Path) -> None:
     ci.write(run_dir / "runtime-command.json", argv)
     subprocess.run(argv, env=env, check=True, timeout=300)
     result = ci.read(run_dir / "runtime-probe.json")
+    ci.write(origin, {"image": str(IMAGE), "status": "recovered"})
     record.update(finished_at=ci.now(), probe=result,
                   status="inspected", compatibility="Imports and device enumeration only; H3 generation untested")
     ci.write(run_dir / "runtime-preparation.json", record)

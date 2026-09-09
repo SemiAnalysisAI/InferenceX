@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import subprocess
 
 import ci
 from evaluator.mvp_gpu_job import source_file_manifest, validate_gpu_job
@@ -18,25 +19,44 @@ INPUTS = Path(__file__).parent / "campaigns/h3-cross-hardware"
 
 
 def runtime_probe(record: dict) -> dict:
-    ci.need(record.get("status") == "inspected" and record.get("source_revision") == REVISION,
+    ci.need(record.get("status") in {"inspected", "recovered"} and record.get("source_revision") == REVISION,
             "AMD runtime inspection is missing or has a different source")
     probe = record["probe"]
     required = ("torch", "torchvision", "av", "numpy", "diffusers", "transformers", "sglang", "aiter", "triton", "amdsmi")
     missing = [name for name in required if not probe.get("imports", {}).get(name, {}).get("path")]
     ci.need(not missing, "AMD runtime imports require preparation: " + ", ".join(missing))
-    ci.need(probe.get("torch_hip") and not probe.get("device_error")
-            and len(probe.get("hip_devices", [])) == 8, "AMD HIP device enumeration is not verified")
-    devices = probe.get("torch_devices", [])
-    ci.need(len(devices) == 8 and all("MI355X" in item["name"] for item in devices),
-            "Runtime is not the inspected eight-MI355X node")
+    if record["status"] == "inspected":
+        ci.need(probe.get("torch_hip") and not probe.get("device_error")
+                and len(probe.get("hip_devices", [])) == 8, "AMD HIP device enumeration is not verified")
+        devices = probe.get("torch_devices", [])
+        ci.need(len(devices) == 8 and all("MI355X" in item["name"] for item in devices),
+                "Runtime is not the inspected eight-MI355X node")
     ci.need(Path(probe["python"]).is_absolute(), "Inspected Python path must be absolute")
     return probe
 
 
-def stage(spec: dict, output: Path) -> dict:
+def timing_source(source: Path) -> tuple[Path, dict]:
+    from evaluator import mvp_runtime_timing as timing
+    destination = source.with_name(source.name + "-timing")
+    if not destination.exists():
+        subprocess.run(["git", "-C", str(source), "worktree", "add", "-b", "feat/h3-amd-serving-timing",
+                        str(destination), REVISION], check=True)
+        subprocess.run(["git", "-C", str(destination), "apply", "--check", str(timing.PATCH)], check=True)
+        subprocess.run(["git", "-C", str(destination), "apply", str(timing.PATCH)], check=True)
+        subprocess.run(["git", "-C", str(destination), "add", *timing.PATCHED_FILES], check=True)
+        subprocess.run(["git", "-C", str(destination), "-c", "user.name=H3 Benchmark", "-c", "user.email=h3-benchmark@localhost",
+                        "commit", "-m", "feat: record request-correlated H3 serving stages",
+                        "-m", "记录 H3 请求的服务端阶段时间，保留原始运行时作为基线。"], check=True)
+    timing.validate_source(destination)
+    return destination, timing.identity()
+
+
+def stage(spec: dict, output: Path, *, server_timing: bool = False) -> dict:
     workspace = WORKSPACE
     control = workspace / "campaigns/h3-cross-hardware"
     readiness = control / "runtime-inspected.json"
+    if not readiness.is_file():
+        readiness = control / "rootfs-recovered.json"
     runtime = ci.read(readiness)
     probe = runtime_probe(runtime)
     model = ci.read(control / "model-ready.json")
@@ -50,9 +70,15 @@ def stage(spec: dict, output: Path) -> dict:
     source = workspace / ("runtime-sglang-" + REVISION)
     identity = source_file_manifest(source)
     ci.need(identity["revision"] == REVISION, "AMD source revision changed after inspection")
-    destination = control / "formal-c1-v1"
+    instrumentation = None
+    if server_timing:
+        source, instrumentation = timing_source(source)
+        identity = source_file_manifest(source)
+    destination = control / ("formal-c1-timing-v1" if server_timing else "formal-c1-v1")
     ci.need(not destination.exists(), "AMD formal inputs already exist; inspect and reuse the sealed configuration")
     spec = copy.deepcopy(spec)
+    if server_timing:
+        spec["server_timing"] = True
     plan = ci.read(INPUTS / "formal-8s-plan.json")
     spec.update(gpu_vendor="amd", job_id=plan["plan_id"], plan=plan,
                 gpu_uuids=[f"00000000-0000-0000-0000-{i:012d}" for i in range(4)],
@@ -70,12 +96,13 @@ def stage(spec: dict, output: Path) -> dict:
     spec["model"]["path"] = str(Path("/work") / Path(model["model_path"]).relative_to(workspace))
     for role in ("baseline", "candidate"):
         spec[role] = {"source": "/work/" + source.name, "source_sha256": identity["source_sha256"],
-                      "revision": REVISION, "python": probe["python"]}
+                      "revision": identity["revision"], "python": probe["python"]}
     spec = validate_gpu_job(spec)
     destination.mkdir()
     entry = destination / "entry-only.sh"
     command = '-c \'exec "$@"\' h3-entry "$@"' if 'exec bash "$@"' in (runtime.get("entrypoint") or "") else '"$@"'
-    entry.write_text((INPUTS / "entry-only-amd.sh").read_text().replace("@ENTRY@", command))
+    entry.write_text((INPUTS / "entry-only-amd.sh").read_text().replace("@ENTRY@", command)
+                     .replace("runtime-inspected.json", readiness.name))
     ci.write(destination / "gpu-spec.json", spec)
     config = {"schema_version": 1, "task_id": "h3-cross-hardware", "site": ci.AMD_SITE,
               "workspace": {"host": str(workspace), "container": "/work"},
@@ -90,14 +117,16 @@ def stage(spec: dict, output: Path) -> dict:
     for name in ("entry-only.sh", "gpu-spec.json", "site.json"):
         (output / name).write_bytes((destination / name).read_bytes())
     return {"site_config": str(destination / "site.json"), "source": identity,
-            "runtime_inspection": runtime, "model_receipt": model, "generation_executed": False,
-            "status": "prepared", "compatibility": "Imports checked; H3 generation still requires a real run"}
+            "runtime_inspection": runtime, "instrumentation": instrumentation,
+            "model_receipt": model, "generation_executed": False,
+            "status": "prepared", "compatibility": "Imports checked; allocated HIP identity and full video/audio warmup remain mandatory before measurement"}
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--source-run-id", required=True)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--server-timing", action="store_true")
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     record = {"status": "preparing", "generation_executed": False,
@@ -106,7 +135,7 @@ if __name__ == "__main__":
         spec, provenance = source_spec(args.source_run_id, args.output)
         record.update(provenance)
         with ci.task_lock(WORKSPACE / "campaigns/h3-cross-hardware/.site-preparation.lock"):
-            record.update(stage(spec, args.output))
+            record.update(stage(spec, args.output, server_timing=args.server_timing))
     except Exception as error:
         record.update(status="failed", error=str(error))
         raise

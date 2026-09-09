@@ -560,12 +560,15 @@ def enter(run_dir: Path) -> None:
     env = {**os.environ, "H3_EXPECTED_GPU_MODEL": config.get("site", DEFAULT_SITE)["gpu_model"]}
     if config.get("site") == AMD_SITE:
         from inspect_amd_node import step_gpu_indices
-        from evaluator.mvp_amd_gpu import inventory as amd_inventory, smi
+        from evaluator.mvp_amd_gpu import inventory as amd_inventory, smi, observe_system_monitor
         need(step_gpu_indices(os.environ.get("SLURM_STEP_GPUS", "")) == set(range(8)), "AMD requires all eight GPUs bound to this step")
         observed = amd_inventory(smi("list", 10))
         need(len(observed) == 8, "AMD allocated physical inventory is incomplete")
         write(run_dir / "amd-allocated-devices.json", list(observed.values()))
+        monitor_path = run_dir / "amd-system-monitor.json"
+        write(monitor_path, observe_system_monitor(10))
         env.update(H3_AMD_ALLOCATION_UUIDS=",".join(observed),
+                   H3_AMD_MONITOR_RECEIPT=str(mapped(config, monitor_path)),
                    ROCR_VISIBLE_DEVICES=",".join(str(i) for i in range(config["resources"]["gpus"])))
     argv = ["/bin/bash", config["runtime"]["entry"], config["runtime"]["python"],
             str(mapped(config, Path(__file__).parent) / "ci.py"), "--inside", str(mapped(config, run_dir))]
