@@ -149,8 +149,6 @@ case "${KV_OFFLOAD_BACKEND:-}" in
       lmcache)
     require_agentic_kv_offload_backend "$KV_OFFLOAD_BACKEND"
 
-    # A versioned -rocm release, not nightly-rocm: that tag keeps only the
-    # newest wheel, so an exact .devN pin stops resolving at the next build.
     LMCACHE_VERSION=0.5.5rc5+rocm7.2
     LMCACHE_ROCM_INDEX="https://github.com/LMCache/LMCache/releases/expanded_assets/v0.5.5rc5-rocm"
 

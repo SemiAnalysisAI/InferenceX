@@ -4,6 +4,7 @@ import hashlib
 import json
 import re
 import subprocess
+import sys
 import tempfile
 from collections import defaultdict
 from contextlib import contextmanager
@@ -12,12 +13,16 @@ from pathlib import Path
 
 import yaml
 from constants import GENERATE_SWEEPS_PY_SCRIPT, MASTER_CONFIGS, RUNNER_CONFIG
-from matrix_logic.generate_sweep_configs import (
+
+if not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from infx.matrix.generate import (
     freeze_config_value,
     seq_len_to_str,
     trim_conc,
 )
-from matrix_logic.validation import (
+from infx.matrix.validation import (
     ChangelogEntry,
     ChangelogMatrixEntry,
     load_config_files,
@@ -114,6 +119,7 @@ def generation_inputs_at_ref(ref: str):
                 ref,
                 "--",
                 "utils/matrix_logic",
+                "infx",
                 *MASTER_CONFIGS,
                 "configs/runners.yaml",
             ],
@@ -424,6 +430,10 @@ def main():
         raise ValueError("No valid YAML entries found in the changelog additions.")
 
     parsed_entries = [ChangelogEntry.model_validate(entry) for entry in changelog_data]
+    if any(entry.no_evals for entry in parsed_entries) and (
+        args.all_evals or args.evals_only
+    ):
+        raise ValueError("no-evals entries cannot use all-evals or evals-only modifiers")
     has_append_only = any(entry.append_only for entry in parsed_entries)
     if has_append_only and not all(entry.append_only for entry in parsed_entries):
         raise ValueError(
@@ -516,7 +526,7 @@ def main():
                     head_results = append_only_delta(base_results, head_results)
                 all_benchmark_results.extend(head_results)
 
-        if entry.append_only:
+        if entry.append_only or entry.no_evals:
             continue
 
         eval_groups = group_unseen_scenarios(

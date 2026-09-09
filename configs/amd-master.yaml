@@ -1186,7 +1186,7 @@ dsv4-fp4-mi355x-sglang:
 # fixes the ROCm HIP-radix MTP CUDA-graph bug (the false-EOS symptom in sgl
 # #20404) and validates GSM8K 0.950 with MTP on.
 dsv4-fp4-mi355x-sglang-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260708
+  image: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260907
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x
@@ -1199,7 +1199,7 @@ dsv4-fp4-mi355x-sglang-mtp:
       osl: 1024
       search-space:
       - { tp: 8, dp-attn: true, conc-start: 64, conc-end: 2048, spec-decoding: mtp }
-      - { tp: 8, dp-attn: false, conc-start: 1, conc-end: 32, spec-decoding: mtp }
+      - { tp: 8, dp-attn: false, conc-list: [1, 2, 4, 16, 32], spec-decoding: mtp }
 
 # DSv4 on MI355X via vLLM, using the official vllm/vllm-openai-rocm
 # nightly image. DSv4 base ROCm support (vllm-project/vllm#40871) merged
@@ -1217,10 +1217,11 @@ dsv4-fp4-mi355x-sglang-mtp:
 # and atom DSv4 mi355x entries below. The serving recipe enables AITER,
 # shared-expert fusion, and INT4 quick-reduce explicitly; the pinned nightly
 # then auto-selects its ROCm DeepSeek-V4 mHC, sparse-indexer, attention, and
-# compressor-GEMM optimizations. Shared-expert fusion self-disables when the
-# checkpoint path is not eligible.
+# compressor-GEMM optimizations. Shared-expert fusion (FHMoE) needs
+# vllm-project/vllm#53161, first shipped in this nightly; on earlier builds
+# it self-disabled because this checkpoint path was not eligible.
 dsv4-fp4-mi355x-vllm:
-  image: vllm/vllm-openai-rocm:nightly-7c5dc571cbd1064ecc8a9b1045637ff647aa22cb
+  image: vllm/vllm-openai-rocm:nightly-d9105ea8001e0a6d77a96327d17515bb5791fb36
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x
@@ -1243,7 +1244,7 @@ dsv4-fp4-mi355x-vllm:
 # above ~conc32 (-37% @ conc32). Image reuses the base entry's pinned ROCm
 # nightly, which includes the MTP path and subsequent DSV4 kernel updates.
 dsv4-fp4-mi355x-vllm-mtp:
-  image: vllm/vllm-openai-rocm:nightly-7c5dc571cbd1064ecc8a9b1045637ff647aa22cb
+  image: vllm/vllm-openai-rocm:nightly-d9105ea8001e0a6d77a96327d17515bb5791fb36
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x
@@ -1334,7 +1335,7 @@ qwen3.5-fp8-mi325x-sglang-mtp:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
 
 dsv4-fp4-mi355x-vllm-agentic-mtp:
-  image: vllm/vllm-openai-rocm:nightly-e962733e08d10f7ca65dac4df99e116460b8b174
+  image: vllm/vllm-openai-rocm:nightly-d9105ea8001e0a6d77a96327d17515bb5791fb36
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:mi355x-amds
