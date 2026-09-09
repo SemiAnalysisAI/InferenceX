@@ -1,22 +1,3 @@
 **/__pycache__/**
 **/.coverage
 experimental/multiturn/vllm_benchmark/results/
-
-# Personal tuning files (gg) — not for upstream
-tuner_en.md
-PR_progress.md
-progress.csv
-pareto_plot.py
-pareto_plot.png
-pareto_plot.svg
-gen_progress_csv.py
-ingest_json.py
-backfill_norm_intvty.py
-inspect_artifacts.py
-GG_README.md
-InferenceX_AgentX_AutoTuner_Project.md
-InferenceX_GLM-5.2_interactivity.csv
-agentx_PRs_optimizations(data).csv
-gg_issue_conversation_aware_eviction.md
-history.txt
-.gitcommon
