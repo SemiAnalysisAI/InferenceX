@@ -21,7 +21,7 @@ dynamo:
 setup_script: tilert_setup.sh
 
 slurm:
-  time_limit: "01:00:00"
+  time_limit: "04:00:00"
 
 resources:
   gpu_type: "b200"
@@ -38,8 +38,6 @@ frontend:
   enable_multiple_frontends: false
   env:
     TILERT_ROLE: router
-    PIP_FIND_LINKS: "/data/home/sa-shared/gharunners/tilert-cache/agentx-power-20260909/package-preparation/wheelhouse"
-    PIP_NO_INDEX: "1"
   args:
     parser: none
     queue-timeout: 1800
@@ -57,8 +55,6 @@ backend:
   with_mtp: true
   speculative_tokens: 1
   prefill_environment: &common_environment
-    PIP_FIND_LINKS: "/data/home/sa-shared/gharunners/tilert-cache/agentx-power-20260909/package-preparation/wheelhouse"
-    PIP_NO_INDEX: "1"
     HF_HOME: "/hf_hub_cache"
     HF_HUB_CACHE: "/hf_hub_cache/hub"
     HUGGINGFACE_HUB_CACHE: "/hf_hub_cache/hub"
