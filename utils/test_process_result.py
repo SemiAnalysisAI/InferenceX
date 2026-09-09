@@ -12,6 +12,29 @@ from test_aggregate_power_multinode import PRODUCER_SHA, build_package
 SCRIPT_PATH = Path(__file__).parent / "process_result.py"
 
 
+@pytest.mark.parametrize('fingerprint', ['', 'a' * 64, 'a' * 16 + 'b' * 48])
+def test_long_multinode_names_survive_result_and_power_processing(
+    tmp_path, multinode_env_vars, sample_benchmark_result, fingerprint
+):
+    from result_filename import point_filename, result_stem
+
+    base = ('example_8k1k_fp4_dynamo-sglang_prefill-tp4-pp1-dcp1-pcp1-ep1-dpfalse-nw1_'
+            'decode-tp4-pp1-dcp1-pcp1-ep1-dpfalse-nw1_disagg-true_spec-none_'
+            'conc1x4x8x16x32x64x256_cluster-runner_00')
+    stem = result_stem(base, fingerprint)
+    name = point_filename(stem, 'sa-bench_isl_8192_osl_1024', '16', '8', '4', '4')
+    assert len(('power_validation_' + name + '.tmp').encode()) <= 255
+    env = {**multinode_env_vars, 'RECIPE_FINGERPRINT': fingerprint}
+    result = run_script(tmp_path, env, sample_benchmark_result, name.removesuffix('.json'))
+    assert result.returncode == 0, result.stderr
+    aggregate = json.loads((tmp_path / ('agg_' + name)).read_text())
+    assert aggregate['recipe_fingerprint'] == fingerprint
+    assert aggregate['model'] == 'deepseek-ai/DeepSeek-R1-0528'
+    assert (tmp_path / ('power_validation_' + name)).is_file()
+    # Different full fingerprints must remain distinct even with the same first 16 characters.
+    assert result_stem(base, 'a' * 64) != result_stem(base, 'a' * 16 + 'b' * 48)
+
+
 # =============================================================================
 # Test Fixtures - Based on real benchmark output structure
 # =============================================================================

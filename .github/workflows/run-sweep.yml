@@ -409,6 +409,8 @@ jobs:
                 config: ${{ fromJson(needs.canary-select.outputs.canary-config) }}
         secrets: inherit
         with:
+            # Only same-repository PRs owned by Klaud receive background priority.
+            klaud-run: &klaud-run ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'Klaud-Cold' && (startsWith(github.head_ref, 'klaud/auto-') || startsWith(github.head_ref, 'klaude/auto-')) }}
             exp-name: ${{ matrix.config.exp-name }}
             recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             isl: ${{ matrix.config.isl }}
@@ -454,6 +456,7 @@ jobs:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multi_node['1k1k'] }}
         secrets: inherit
         with: &multi-node-inputs
+            klaud-run: *klaud-run
             isl: ${{ matrix.config.isl }}
             osl: ${{ matrix.config.osl }}
             max-model-len: ${{ matrix.config.max-model-len }}
@@ -534,6 +537,7 @@ jobs:
                 config: ${{ fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['1k1k'] }}
         secrets: inherit
         with: &single-node-inputs
+            klaud-run: *klaud-run
             exp-name: ${{ matrix.config.exp-name }}
             recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             isl: ${{ matrix.config.isl }}
@@ -599,6 +603,7 @@ jobs:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).single_node['agentic'] }}
         secrets: inherit
         with:
+            klaud-run: *klaud-run
             exp-name: ${{ matrix.config.exp-name }}
             recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             runner: ${{ matrix.config.runner }}
@@ -651,6 +656,7 @@ jobs:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multi_node['agentic'] }}
         secrets: inherit
         with:
+            klaud-run: *klaud-run
             exp-name: ${{ matrix.config.exp-name }}
             recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             isl: '0'
@@ -718,6 +724,7 @@ jobs:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).evals }}
         secrets: inherit
         with:
+            klaud-run: *klaud-run
             exp-name: ${{ matrix.config.exp-name }}
             recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             isl: ${{ matrix.config.isl }}
@@ -768,6 +775,7 @@ jobs:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).agentic_evals }}
         secrets: inherit
         with:
+            klaud-run: *klaud-run
             exp-name: ${{ matrix.config.exp-name }}
             recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             runner: ${{ matrix.config.runner }}
@@ -821,6 +829,7 @@ jobs:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multinode_evals }}
         secrets: inherit
         with:
+            klaud-run: *klaud-run
             exp-name: ${{ matrix.config.exp-name }}
             recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             isl: ${{ matrix.config.isl }}
@@ -888,6 +897,7 @@ jobs:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multinode_agentic_evals }}
         secrets: inherit
         with:
+            klaud-run: *klaud-run
             exp-name: ${{ matrix.config.exp-name }}
             recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             isl: '0'

@@ -60,6 +60,28 @@ class PRReview(Contract):
     decisions: list[CandidateReview]
 
 
+class CandidateOutcome(Contract):
+    # Only fixed categories and numeric GitHub IDs are safe to publish.
+    outcome: Literal['validated', 'capacity-deferred', 'readiness-blocked', 'incompatible',
+                     'duplicate', 'retired', 'already-updated', 'uncertain', 'failed', 'handoff', 'unexpected-error']
+    phase: Literal['resolve', 'baseline', 'targeted', 'final-sweep', 'cleanup', 'unknown']
+    pull_request: Annotated[int, Field(gt=0)] | None
+    run_ids: list[Annotated[int, Field(gt=0)]] = Field(max_length=256)
+    repairs_used: int | None = Field(ge=0)
+
+    @model_validator(mode='after')
+    def consistent_outcome(self) -> CandidateOutcome:
+        if self.outcome != 'unexpected-error' and (self.phase == 'unknown' or self.repairs_used is None):
+            raise ValueError('Completed outcomes require phase and repair count')
+        if self.outcome in ('validated', 'handoff') and self.pull_request is None:
+            raise ValueError('This outcome requires a PR')
+        if self.outcome == 'validated' and (not self.run_ids or self.phase != 'final-sweep'):
+            raise ValueError('Validated requires final-sweep evidence')
+        if len(set(self.run_ids)) != len(self.run_ids):
+            raise ValueError('Run IDs must be distinct')
+        return self
+
+
 class Feed(Contract):
     url: str
     retrieved_at: str
