@@ -1,7 +1,10 @@
 """CPU-only matrix and receipt tests; fixture bytes are not generated media."""
 
 import copy
+import subprocess
+import sys
 import time
+from pathlib import Path
 
 import pytest
 
@@ -98,3 +101,10 @@ def test_interrupted_client_intent_is_counted_as_unfinished(spec, tmp_path, monk
     assert result["completion"] == {"scheduled": 12, "attempted": 1, "completed": 0,
                                      "valid": 0, "failed": 12, "not_started": 11, "unfinished": 1}
     assert [cell["status"] for cell in result["cells"]] == ["failed", "not_started", "not_started"]
+
+
+def test_login_preflight_does_not_need_staged_power_module(tmp_path):
+    package = Path(smoke.__file__).resolve().parents[1]
+    subprocess.run([sys.executable, "-I", "-c",
+                    "import sys; sys.path.insert(0, sys.argv[1]); from evaluator.mvp_serving_smoke import validate_spec",
+                    str(package)], cwd=tmp_path, check=True, capture_output=True, text=True)

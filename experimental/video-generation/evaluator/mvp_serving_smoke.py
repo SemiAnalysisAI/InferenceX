@@ -11,7 +11,6 @@ from urllib.parse import quote
 
 from . import mvp_gpu_job as gpu
 from .mvp_gpu_evidence import verify_measurement_job
-from .mvp_power import analyze_power
 from .mvp_report import _CSS, _number
 from .mvp_serving import settings
 from .mvp_runner import _summary
@@ -62,6 +61,8 @@ def _report(root: Path, matrix: dict) -> None:
 
 
 def run_matrix(spec: dict, root: Path) -> dict:
+    from .mvp_power import analyze_power
+
     spec = validate_spec(spec)
     deadline = time.monotonic() + spec["limits"]["job_seconds"]
     matrix = {"schema_version": "1.0.0", "bundle_type": "h3_serving_smoke_matrix", "status": "running",
