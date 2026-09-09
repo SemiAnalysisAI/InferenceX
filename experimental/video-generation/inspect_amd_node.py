@@ -6,10 +6,22 @@ import json
 import os
 from pathlib import Path
 import pwd
+import re
 import shutil
 import subprocess
 
 import ci
+
+
+def step_gpu_indices(value: str) -> set[int]:
+    indices = set()
+    for part in value.split(","):
+        ci.need(re.fullmatch(r"\d{1,2}(?:-\d{1,2})?", part) is not None, "Missing AMD step GPU assignment")
+        limits = [int(item) for item in part.split("-")]
+        first, last = limits[0], limits[-1]
+        ci.need(0 <= first <= last < 8, "Unexpected AMD step GPU assignment")
+        indices.update(range(first, last + 1))
+    return indices
 
 
 def observation(argv: list[str]) -> dict:
@@ -25,6 +37,8 @@ def inspect_node(run_dir: Path) -> None:
     job = context["allocation"]["identity"]["JobId"]
     ci.need(os.environ.get("SLURM_JOB_ID") == job
             and os.environ.get("SLURMD_NODENAME") == context["node"], "Wrong AMD inventory allocation")
+    ci.need(step_gpu_indices(os.environ.get("SLURM_STEP_GPUS", "")) == set(range(8)),
+            "AMD inventory requires the full eight-GPU step binding")
     binding = {"job_id": job, "step_id": os.environ.get("SLURM_STEP_ID"),
                "node": context["node"], "cpu_affinity": sorted(os.sched_getaffinity(0)),
                "slurm": {name: os.environ.get(name) for name in
@@ -82,7 +96,10 @@ def inspect(workspace: Path, output: Path) -> int:
             ci.write(run_dir / "slurm-job.json", record)
             ci.verify_identity(receipt, record, config["task_id"])
             ci.need(record["JobState"] == "RUNNING", "Owned AMD allocation is " + record["JobState"])
-            reason = ci.capacity(record, config["resources"])
+            # AMD AllocTRES omits GPU accounting even for a granted --gres=gpu:8
+            # request. This read-only inventory checks CPU/memory/time here and
+            # verifies the full eight-GPU Slurm step binding before device queries.
+            reason = ci.capacity(record, {**config["resources"], "gpus": 0})
             ci.need(reason is None, "Owned AMD allocation: " + str(reason))
             ci.write(run_dir / "context.json", {"allocation": receipt, "node": record["NodeList"]})
             # The source checkout and result directory are on the shared filesystem.

@@ -18,6 +18,17 @@ def test_wrong_node_stops_before_device_queries(tmp_path, monkeypatch):
     assert not (tmp_path / "binding.json").exists()
 
 
+@pytest.mark.parametrize("value", ["0-7", "0,1,2,3,4,5,6,7"])
+def test_full_amd_step_assignment(value):
+    assert amd.step_gpu_indices(value) == set(range(8))
+
+
+@pytest.mark.parametrize("value", ["", "0-99", "7-0", "0;id"])
+def test_invalid_amd_step_assignment(value):
+    with pytest.raises(ValueError, match="AMD step GPU assignment"):
+        amd.step_gpu_indices(value)
+
+
 @pytest.mark.parametrize("reused", [False, True])
 def test_failed_inventory_drains_only_owned_step_and_preserves_borrowed_allocation(tmp_path, monkeypatch, reused):
     monkeypatch.setenv("H3_RUN_ID", "456")
