@@ -96,8 +96,8 @@ trap 'exit 143' TERM
 # Concurrency 1-4 is the latency floor: everything GPU-resident, no decode
 # context parallelism, the deepest draft the golden curve publishes, and an
 # 8192-token prefill step.
-# Higher concurrency retains ATOM state replay checkpoints; KV offloading is
-# selected independently by KV_OFFLOADING/KV_OFFLOAD_BACKEND below.
+# Higher concurrency enables ATOM ReplaySSM; KV offloading is selected
+# independently by KV_OFFLOADING/KV_OFFLOAD_BACKEND below.
 #
 # STATE_OFFLOAD_CPU_GIB is the per-rank slice of the CPU budget reserved for
 # the MiniMax-M3 state; 0 leaves the whole budget to the paged KV.
@@ -108,19 +108,17 @@ case "$CONC" in
         MAX_NUM_BATCHED_TOKENS=8192
         GPU_MEM_UTIL=0.88
         ATOM_ENABLE_REPLAYSSM=0
-        STATE_CHECKPOINT_SLOTS=""
         NUM_SPEC_TOKENS=3
         SPEC_DECODE_AL=2.78
         STATE_OFFLOAD_CPU_GIB=0
         ;;
-    # Higher concurrency settings retain ATOM's state replay checkpoints. KV
-    # offloading itself is selected by KV_OFFLOADING/KV_OFFLOAD_BACKEND.
+    # Higher concurrency enables ATOM ReplaySSM. KV offloading is selected
+    # independently by KV_OFFLOADING/KV_OFFLOAD_BACKEND.
     8|10|12|14|15|20|24|28)
         MAX_NUM_SEQS=32
         MAX_NUM_BATCHED_TOKENS=4096
         GPU_MEM_UTIL=0.88
         ATOM_ENABLE_REPLAYSSM=1
-        STATE_CHECKPOINT_SLOTS=96
         NUM_SPEC_TOKENS=3
         SPEC_DECODE_AL=2.78
         STATE_OFFLOAD_CPU_GIB=0
@@ -132,7 +130,6 @@ case "$CONC" in
         MAX_NUM_BATCHED_TOKENS=8192
         GPU_MEM_UTIL=0.86
         ATOM_ENABLE_REPLAYSSM=0
-        STATE_CHECKPOINT_SLOTS=""
         NUM_SPEC_TOKENS=3
         SPEC_DECODE_AL=2.78
         STATE_OFFLOAD_CPU_GIB=32
@@ -142,7 +139,6 @@ case "$CONC" in
         MAX_NUM_BATCHED_TOKENS=8192
         GPU_MEM_UTIL=0.86
         ATOM_ENABLE_REPLAYSSM=0
-        STATE_CHECKPOINT_SLOTS=""
         NUM_SPEC_TOKENS=3
         SPEC_DECODE_AL=2.78
         STATE_OFFLOAD_CPU_GIB=32
@@ -152,7 +148,6 @@ case "$CONC" in
         MAX_NUM_BATCHED_TOKENS=4096
         GPU_MEM_UTIL=0.88
         ATOM_ENABLE_REPLAYSSM=0
-        STATE_CHECKPOINT_SLOTS=""
         NUM_SPEC_TOKENS=0
         SPEC_DECODE_AL=0
         STATE_OFFLOAD_CPU_GIB=32
@@ -168,14 +163,6 @@ MAX_NUM_SEQS=$((2 * CONC))
 MAX_NUM_BATCHED_TOKENS=32768
 GPU_MEM_UTIL=0.9
 export ATOM_ENABLE_REPLAYSSM
-
-# Extra in-GPU state checkpoint slots beyond the in-flight floor. Checkpoints
-# and live requests share one pool, so without this the room to retain a
-# checkpoint is whatever max-num-seqs happens to leave.
-STATE_CKPT_ARGS=()
-if [ -n "$STATE_CHECKPOINT_SLOTS" ]; then
-    STATE_CKPT_ARGS=(--state-checkpoint-slots "$STATE_CHECKPOINT_SLOTS")
-fi
 
 # ---- KV offload -------------------------------------------------------------
 # K3 is a hybrid: MiniMax-M3 attention carries a per-request recurrent state
