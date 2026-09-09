@@ -171,6 +171,8 @@ gh run download "$RUN_ID" --repo SemiAnalysisAI/InferenceX \
 
 Retain `meta_env.json`, `results*.json`, and `sample*.jsonl`. Agentic SWE-bench additionally uploads `agent_preds.json`, `predictions.jsonl`, `swebench_report_*.json`, and trajectory files in the single-node template. The aggregate is a navigation aid, not a substitute for raw samples and batch completeness.
 
+Single-concurrency lm-eval can write `results*.json` and `sample*.jsonl` below a model-named subdirectory of `EVAL_RESULT_DIR`. `append_lm_eval_summary` recursively stages only the allowlisted eval artifacts into the workspace root before removing the temporary directory, where the workflow's flat upload patterns can find them.
+
 ## 7. Run AgentX: fast feedback versus canonical evidence
 
 AgentX is AIPerf `inferencex-agentx-mvp` trace replay, not a fixed-token synthetic benchmark. The checked-in default uses ten additional warmup requests per trajectory lane and the recipe's configured profile duration. `agentx-fast` forces one warmup request per lane and a 1,200-second profile. It affects single- and multi-node AgentX throughput only. Fixed-sequence throughput and evals remain canonical. Fast runs are not eligible for artifact reuse ([workflow policy](../.github/workflows/README.md#agentx-fast-mode), [fast replay settings](../benchmarks/benchmark_lib.sh#L2104-L2128)).

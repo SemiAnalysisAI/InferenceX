@@ -171,6 +171,8 @@ gh run download "$RUN_ID" --repo SemiAnalysisAI/InferenceX \
 
 保留 `meta_env.json`、`results*.json` 和 `sample*.jsonl`。Agentic SWE-bench 在单节点模板中还会上传 `agent_preds.json`、`predictions.jsonl`、`swebench_report_*.json` 和 trajectory 文件。Aggregate 是导航工具，不能替代原始样本与 batch 完整性证据。
 
+单并发 lm-eval 可能会把 `results*.json` 和 `sample*.jsonl` 写入 `EVAL_RESULT_DIR` 下以模型命名的子目录。`append_lm_eval_summary` 会在删除临时目录前，递归地把允许列表中的 eval artifact 暂存到 workspace 根目录，使工作流的扁平上传模式能够找到这些文件。
+
 ## 7. 运行 AgentX：快速反馈与 canonical 证据
 
 AgentX 是 AIPerf `inferencex-agentx-mvp` trace replay，不是固定 token 的合成 benchmark。仓库默认设置对每条 trajectory lane 额外执行十个 warmup 请求，并使用 recipe 配置的 profile 时长。`agentx-fast` 强制每条 lane 只运行一个 warmup 请求，并将 profile 设为 1,200 秒。它只影响单节点和多节点 AgentX 吞吐量；定长序列吞吐量与 eval 保持 canonical。Fast 运行不符合 artifact reuse 条件（[工作流策略](../.github/workflows/README.md#agentx-fast-mode)、[fast replay 设置](../benchmarks/benchmark_lib.sh#L2104-L2128)）。
