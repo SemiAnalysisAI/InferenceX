@@ -7027,6 +7027,7 @@
   scenario-type:
     - agentic-coding
   description:
+    - "Add a TP8/DCP8 no-offload point at concurrency 52 so the LMCache DRAM tier can be measured against an otherwise identical GPU-only run at the same concurrency."
     - "Split the TP8/DCP8 arm at concurrency 44/48/52 into its own config key with dram-utilization 0.40 (1199 GB), down from the 1799 GB the shared 0.60 block reserved against a measured 698 GB peak."
     - "Pin lmcache 0.5.5rc5+rocm7.2 from the versioned v0.5.5rc5-rocm release. It carries the DCP cache-identity fix (LMCache #4936), without which the scheduler and the workers derive different LMCache model names under DCP and every lookup misses, leaving the DRAM tier write-only."
     - "Replace the nightly-rocm pin: that rolling tag keeps only its newest wheel, so the previous 0.5.5.dev89+rocm7.2 no longer resolves."
