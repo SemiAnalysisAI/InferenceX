@@ -1,8 +1,7 @@
 // Execute the scripts read from workflow YAML. Only external collaborators are faked.
 const fs = require('node:fs');
-const {spawnSync} = require('node:child_process');
 const input = JSON.parse(fs.readFileSync(0, 'utf8'));
-const output = {writes: [], outputs: {}, failures: [], warnings: []};
+const output = {permissionRequests: [], writes: [], outputs: {}, failures: [], warnings: []};
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 const baseEnv = {...process.env};
 Date.now = () => Date.parse('2026-01-02T12:00:00Z');
@@ -10,6 +9,7 @@ Date.now = () => Date.parse('2026-01-02T12:00:00Z');
 function response(method, args) {
   const data = input.data;
   if (method === 'repos.getCollaboratorPermissionLevel') {
+    output.permissionRequests.push(args);
     if (input.permissionError) throw new Error('permission lookup unavailable');
     return input.permission;
   }
@@ -32,15 +32,6 @@ const rest = new Proxy({}, {get: (_, area) => new Proxy({}, {
   get: (_, name) => async args => ({data: response(`${area}.${name}`, args)}),
 })});
 const github = {rest, paginate: async (fn, args) => (await fn(args)).data};
-const exec = {getExecOutput: async (command, args, options = {}) => {
-  if (command !== 'python3') throw new Error(`Unexpected command: ${command}`);
-  const result = spawnSync(process.env.TEST_PYTHON, args, {
-    encoding: 'utf8', env: process.env, timeout: 20000,
-  });
-  if (result.error) throw result.error;
-  if (result.status && !options.ignoreReturnCode) throw new Error(result.stderr);
-  return {stdout: result.stdout, stderr: result.stderr, exitCode: result.status};
-}};
 
 function resolve(value) {
   return String(value).replace(/\$\{\{\s*(.*?)\s*\}\}/g, (_, path) => {
@@ -67,10 +58,10 @@ function resolve(value) {
     };
     try {
       if (step.with?.script) {
-        await new AsyncFunction('github', 'context', 'core', 'exec', 'setTimeout', step.with.script)(
-          github, input.context, core, exec, callback => callback(),
+        await new AsyncFunction('github', 'context', 'core', 'setTimeout', step.with.script)(
+          github, input.context, core, callback => callback(),
         );
-      } else if (!step.uses?.startsWith('actions/checkout@')) {
+      } else {
         throw new Error(`Unsupported step: ${step.name}`);
       }
     } catch (error) {

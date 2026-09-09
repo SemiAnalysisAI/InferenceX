@@ -25,18 +25,9 @@ jobs:
       issues: read # Read labels and label-history timeline events
       pull-requests: write # Post staging status as github-actions rather than a PAT user
     steps:
-      - name: Checkout trusted workflow helpers
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.workflow_sha }}
-          sparse-checkout: infx
-          persist-credentials: false
-
       - name: Authorize request and resolve source run
         id: request
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
         with:
           github-token: ${{ github.token }}
           script: |
@@ -54,21 +45,28 @@ jobs:
             }
 
             const actor = context.payload.comment.user.login;
-            const {stdout, exitCode} = await exec.getExecOutput(
-              'python3', ['-m', 'infx.workflows', 'authorize', 'stage-results'],
-              {silent: true, ignoreReturnCode: true},
-            );
-            const authorization = JSON.parse(stdout);
-            if (exitCode > 1) throw new Error(authorization.reason);
-            const permission = authorization.permission;
-            if (exitCode !== 0 || authorization.allowed !== true) {
+            const {data: access} = await github.rest.repos.getCollaboratorPermissionLevel({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              username: actor,
+            });
+            if (typeof access?.permission !== 'string' || !access.permission ||
+                typeof access?.role_name !== 'string' || !access.role_name) {
+              throw new Error('Invalid repository permission response.');
+            }
+            const {permission, role_name: role} = access;
+            const trustedPermissions = ['admin', 'maintain', 'write'];
+            if (!trustedPermissions.includes(permission) || !trustedPermissions.includes(role)) {
+              const reason = `@${actor} has repository permission "${permission}" and role "${role}"; ` +
+                'both must be write, maintain, or admin to stage results.';
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: context.issue.number,
-                body: `@${actor} \`/stage-results\` requires write access to this repository.`,
+                body: `${reason}\n\n@${actor} 的仓库权限为 "${permission}"，角色为 "${role}"；` +
+                  '两者都必须是 write、maintain 或 admin 才能暂存结果。',
               });
-              core.setFailed(`Actor ${actor} has ${permission} permission`);
+              core.setFailed(reason);
               return;
             }
 

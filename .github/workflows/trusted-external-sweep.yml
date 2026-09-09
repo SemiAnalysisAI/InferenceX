@@ -27,17 +27,8 @@ jobs:
             )
         runs-on: ubuntu-latest
         steps:
-            - name: Checkout trusted workflow helpers
-              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-              with:
-                  ref: ${{ github.workflow_sha }}
-                  sparse-checkout: infx
-                  persist-credentials: false
-
             - name: Authorize exact external revision and dispatch
               uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-              env:
-                  GITHUB_TOKEN: ${{ github.token }}
               with:
                   github-token: ${{ github.token }}
                   script: |
@@ -49,16 +40,21 @@ jobs:
                         'full-sweep-fail-fast-no-canary',
                       ]);
 
-                      const {stdout, exitCode} = await exec.getExecOutput(
-                        'python3', ['-m', 'infx.workflows', 'authorize', 'trusted-external-sweep'],
-                        {silent: true, ignoreReturnCode: true},
-                      );
-                      const authorization = JSON.parse(stdout);
-                      if (exitCode > 1) throw new Error(authorization.reason);
-                      if (exitCode !== 0 || authorization.allowed !== true) {
+                      const {data: access} = await github.rest.repos.getCollaboratorPermissionLevel({
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        username: context.actor,
+                      });
+                      if (typeof access?.permission !== 'string' || !access.permission ||
+                          typeof access?.role_name !== 'string' || !access.role_name) {
+                        throw new Error('Invalid repository permission response.');
+                      }
+                      const {permission, role_name: role} = access;
+                      const trustedPermissions = ['admin', 'maintain', 'write'];
+                      if (!trustedPermissions.includes(permission) || !trustedPermissions.includes(role)) {
                         core.setFailed(
-                          `@${context.actor} has ${authorization.permission} permission; ` +
-                          'write, maintain, or admin permission is required to authorize external code.',
+                          `@${context.actor} has repository permission "${permission}" and role "${role}"; ` +
+                          'both must be write, maintain, or admin to authorize external code.',
                         );
                         return;
                       }

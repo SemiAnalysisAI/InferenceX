@@ -326,39 +326,27 @@ launchers; this CI dependency migration does not change those environments.
 
 ## Repository-role authorization
 
-[`infx.workflows`](../infx/workflows/) shares the existing repository permission
-check for staging and trusted external sweep dispatch, using `GITHUB_TOKEN`:
+Staging and trusted external sweep dispatch check repository permissions directly
+through `actions/github-script`, using its authenticated `GITHUB_TOKEN` client.
+Both operations require Write, Maintain, or Admin access; Read, Triage, and users
+without repository access cannot perform these operations.
 
-| Repository role | Application tier | Allowed requests |
-| --- | --- | --- |
-| Admin or Maintain | `MAINTAINER` | Staging and external sweep approval |
-| Write | `COLLABORATOR` | Staging and external sweep approval |
-| Read, Triage, or no access | `PUBLIC` | None of these privileged operations |
+Authorization requires both the original base `permission` and effective
+`role_name` to be one of `admin`, `maintain`, or `write`. Missing or malformed
+fields stop the workflow. Unknown and custom roles are denied without falling
+back to the legacy permission field, and API errors stop the workflow. These
+stricter denials are intentional; standard Write access remains sufficient.
+GitHub reports Maintain as Write in the base `permission` field. Denial messages
+include both fields. Organization membership and `author_association` do not
+grant access through these checks; no team-membership token is needed.
 
-The lookup uses repository metadata access; it needs no team-membership token.
-Authorization requires the original base `permission` (`admin`, `maintain`, or
-`write`) and a supported effective `role_name` (Admin, Maintain, or Write).
-Missing, malformed, or unrecognized role names never fall back to the legacy
-permission field. Custom roles are denied until explicitly supported. This is an
-intentional validation change; standard Write access is still sufficient.
-GitHub reports Maintain as Write in the base `permission` field. Unknown operations
-deny; lookup or context errors stop the workflow. Tiers are not inferred from
-organization membership or `author_association`.
-
-The adapter runs with the hosted runner's `python3` and `gh` and has no additional
-Python dependencies: `python3 -m infx.workflows authorize <operation>`. It emits JSON
-and exits 0 for allowed, 1 for denied, and 2 when authorization cannot be established.
 Staging checks the comment author; external approval checks the original
-`github.actor`, including on reruns. Both workflows load helpers from their own
-`github.workflow_sha` with checkout credentials disabled. Other workflows,
-including recovery, retain their original authorization and dispatch behavior.
-Execution credentials and GitHub protections remain explicit in the workflows.
-Role authorization does not replace PR, SHA, label-history, source-run, artifact,
-or CODEOWNER checks.
-
-The changelog-gate test workflow also performs a read-only permission lookup with
-its real `GITHUB_TOKEN` to verify the hosted runner integration. This check does
-not require the actor to have Write access or dispatch any privileged operation.
+`github.actor`, including on reruns. Authorization lives in each trusted workflow
+and needs no repository checkout or Python helper. Existing PR, SHA,
+label-history, source-run, artifact, and CODEOWNER checks remain in place.
+Other workflows, including recovery, retain their original authorization and
+dispatch behavior. Execution credentials and GitHub protections remain explicit
+in the workflows.
 
 ## Stage results
 

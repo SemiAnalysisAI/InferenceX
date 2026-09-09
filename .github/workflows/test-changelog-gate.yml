@@ -78,22 +78,6 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
-      - name: Verify repository permission lookup
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          uv run --no-project --exclude-newer PT12H --python 3.12 python - <<'PY'
-          import os
-          from infx.workflows.github import get_repository_permission
-
-          permission = get_repository_permission(
-              os.environ["GITHUB_REPOSITORY"],
-              os.environ["GITHUB_ACTOR"],
-              os.environ["GITHUB_TOKEN"],
-          )
-          print(f"Repository permission lookup succeeded ({permission.role_name}).")
-          PY
-
       - name: Verify MCP server compatibility
         run: |
           uv run --no-project --exclude-newer PT12H --python 3.12 \

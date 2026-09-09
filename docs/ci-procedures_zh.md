@@ -316,35 +316,22 @@ Checkout Ref、凭据和审阅
 
 ## 基于仓库角色的授权
 
-[`infx.workflows`](../infx/workflows/) 使用 `GITHUB_TOKEN`，复用结果暂存和可信外部
-扫描派发原有的仓库权限检查：
+结果暂存和可信外部扫描派发直接通过 `actions/github-script` 检查仓库权限，
+使用其已通过 `GITHUB_TOKEN` 认证的客户端。两项操作都要求 Write、Maintain 或
+Admin 权限；Read、Triage 以及没有仓库访问权限的用户不能执行这些操作。
 
-| 仓库角色 | 应用权限级别 | 允许的请求 |
-| --- | --- | --- |
-| Admin 或 Maintain | `MAINTAINER` | 结果暂存和批准外部扫描 |
-| Write | `COLLABORATOR` | 结果暂存和批准外部扫描 |
-| Read、Triage 或无访问权限 | `PUBLIC` | 不允许执行上述特权操作 |
+授权要求原有基础 `permission` 和有效 `role_name` 均为 `admin`、`maintain` 或
+`write`。字段缺失或格式无效会终止 Workflow；未知角色和自定义角色会被拒绝，
+绝不回退到旧版权限字段来放行。API 错误也会终止 Workflow。这些更严格的拒绝
+行为属于有意变更；标准 Write 权限仍然足够。GitHub 的基础 `permission` 字段
+会将 Maintain 报告为 Write。拒绝消息会同时显示两个字段。组织成员身份和
+`author_association` 不会通过这些检查赋予访问权限，也无需查询团队成员身份的额外 Token。
 
-查询仅需仓库元数据读取权限，无需用于查询团队成员身份的额外 Token。
-授权同时要求原有的基础 `permission`（`admin`、`maintain` 或 `write`）和受支持的
-有效 `role_name`（Admin、Maintain 或 Write）。当角色名称缺失、格式无效或无法识别时，
-绝不回退到旧版权限字段来放行。自定义角色在得到明确支持之前会被拒绝。
-这是有意增加的校验；标准 Write 权限仍然足够。
-GitHub 的基础 `permission` 字段会将 Maintain 报告为 Write。
-未知操作会被拒绝；查询失败或上下文无效会终止 Workflow。
-组织成员身份和 `author_association` 不会直接赋予权限级别。
-
-适配器使用托管 Runner 自带的 `python3` 和 `gh`，无需额外 Python 依赖：
-`python3 -m infx.workflows authorize <operation>`。命令输出 JSON，允许时退出码为 0，
-拒绝时为 1，无法确认授权时为 2。结果暂存检查评论作者；外部批准检查原始
-`github.actor`，重跑时也不改用重跑者身份。两个 Workflow 均从自己的
-`github.workflow_sha` 加载辅助代码，并禁用 Checkout 凭据持久化。
-其他 Workflow（包括恢复流程）保留原有的授权和派发行为。执行凭据和 GitHub
-保护措施仍在 Workflow 中明确配置。角色授权不能替代 PR、SHA、标签历史、
-Source Run、Artifact 或 CODEOWNER 检查。
-
-Changelog Gate 测试 Workflow 还使用真实的 `GITHUB_TOKEN` 执行只读权限查询，
-以验证托管 Runner 上的集成。此检查不要求触发者具有 Write 权限，也不会派发任何特权操作。
+结果暂存检查评论作者；外部批准检查原始 `github.actor`，重跑时也不改用重跑者
+身份。授权检查保留在各自的可信 Workflow 中，无需仓库 Checkout 或 Python
+辅助程序。现有 PR、SHA、标签历史、Source Run、Artifact 和 CODEOWNER 检查
+保持不变。其他 Workflow（包括恢复流程）保留原有的授权和派发行为。
+执行凭据和 GitHub 保护措施仍在 Workflow 中明确配置。
 
 ## 暂存结果
 
