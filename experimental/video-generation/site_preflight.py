@@ -10,6 +10,23 @@ import shutil
 import subprocess
 
 
+def allocation_observations(root: Path) -> list[dict]:
+    """Read this task's saved scheduler receipts without requesting resources."""
+    records = []
+    for path in sorted(root.glob("*/allocation.json"))[-8:]:
+        receipt = json.loads(path.read_text())
+        identity = receipt.get("identity", {})
+        job = identity.get("JobId", "")
+        if receipt.get("task_id") != "h3-cross-hardware" or not str(job).isdigit():
+            continue
+        result = subprocess.run(["scontrol", "show", "job", "-o", str(job)],
+                                capture_output=True, text=True, timeout=10,
+                                env={**os.environ, "TZ": "UTC", "LC_ALL": "C"})
+        records.append({"receipt": str(path), "identity": identity, "exit_code": result.returncode,
+                        "stdout": result.stdout, "stderr": result.stderr})
+    return records
+
+
 def inspect_site() -> dict:
     user = pwd.getpwuid(os.getuid())
     public_keys = {}
@@ -67,6 +84,8 @@ def inspect_site() -> dict:
         "scheduler_default_account": defaults.stdout if defaults and defaults.returncode == 0 else None,
         "scheduler_active_accounts": sorted(set(active_accounts.stdout.split())) if active_accounts and active_accounts.returncode == 0 else None,
         "runtime_candidates": candidates, "enroot_paths": enroot_paths, "persistent_storage": storage,
+        "saved_allocations": allocation_observations(Path("/it-share/data/wenyao-minimax-h3/work/results/h3-cross-hardware"))
+        if os.environ.get("H3_CLUSTER") == "mi355x-amds" and shutil.which("scontrol") else [],
         "gpu_execution": False, "runtime_compatibility": "not_tested",
     }
 

@@ -78,11 +78,13 @@ def inspect(workspace: Path, output: Path) -> int:
             else:
                 receipt = ci.allocate(config, run_dir)
             record = ci.job_record(receipt["identity"]["JobId"])
-            ci.verify_identity(receipt, record, config["task_id"])
-            ci.need(record["JobState"] == "RUNNING" and ci.capacity(record, config["resources"]) is None,
-                    "Owned AMD allocation cannot serve this bounded inventory")
-            ci.write(run_dir / "context.json", {"allocation": receipt, "node": record["NodeList"]})
             state.update(allocation=receipt, allocation_reused=reused, slurm_job=record)
+            ci.write(run_dir / "slurm-job.json", record)
+            ci.verify_identity(receipt, record, config["task_id"])
+            ci.need(record["JobState"] == "RUNNING", "Owned AMD allocation is " + record["JobState"])
+            reason = ci.capacity(record, config["resources"])
+            ci.need(reason is None, "Owned AMD allocation: " + str(reason))
+            ci.write(run_dir / "context.json", {"allocation": receipt, "node": record["NodeList"]})
             # The source checkout and result directory are on the shared filesystem.
             argv = ["srun", "--jobid=" + record["JobId"], "--nodelist=" + record["NodeList"],
                     "--nodes=1", "--ntasks=1", "--gres=gpu:8", "--cpus-per-task=8", "--cpu-bind=cores",

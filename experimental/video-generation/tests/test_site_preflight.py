@@ -6,6 +6,24 @@ from types import SimpleNamespace
 import pytest
 
 import site_preflight
+import json
+
+
+def test_saved_allocation_status_is_read_without_allocation(tmp_path, monkeypatch):
+    for job, task in (("123", "h3-cross-hardware"), ("456", "another-task")):
+        directory = tmp_path / job
+        directory.mkdir()
+        (directory / "allocation.json").write_text(json.dumps({"task_id": task, "identity": {"JobId": job}}))
+    commands = []
+    def run(argv, **kwargs):
+        commands.append(argv)
+        assert kwargs["env"]["TZ"] == "UTC"
+        return SimpleNamespace(stdout="JobId=123 JobState=CANCELLED", stderr="", returncode=0)
+    monkeypatch.setattr(site_preflight.subprocess, "run", run)
+    result = site_preflight.allocation_observations(tmp_path)
+    assert commands == [["scontrol", "show", "job", "-o", "123"]]
+    assert len(result) == 1
+    assert "CANCELLED" in result[0]["stdout"]
 
 
 @pytest.mark.parametrize("available", [False, True])
