@@ -11,6 +11,14 @@
 
 ## 1. 选择正确的执行模式
 
+若 PR sweep 只需测试吞吐量，请在相应的 `perf-changelog.yaml` 条目中设置
+`no-evals: true`，并使用常规主要标签（包括 `full-sweep-enabled`）。这会跳过
+这些条目的所有 eval 作业，不改变 benchmark 时长或 Prometheus 产物。
+该选项默认为 false，且保留在 changelog 元数据中。其他条目仍可为同一配置
+选择 eval；若需完全禁用，请在所有相关条目中设置该选项。条目中不能同时使用
+`all-evals`、`evals-only` 或 `eval-min-prefill-ep`，PR 也不能同时使用两个 eval
+modifier 中的任意一个。这类运行提供吞吐量证据，不提供模型评估证据。
+
 这里有两个不同层次：矩阵生成器决定**存在哪些作业**，运行时变量决定**已启动作业执行什么操作**。
 
 | 需求 | 生成器/工作流模式 | 运行时行为 |
