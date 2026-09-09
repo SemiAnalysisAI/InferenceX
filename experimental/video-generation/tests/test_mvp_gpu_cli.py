@@ -109,3 +109,12 @@ def test_rendering_failure_evidence_is_not_a_gpu_acceptance(tmp_path, monkeypatc
     ))
     assert main(["gpu-report", str(tmp_path), "--output", str(tmp_path / "report")]) == 0
     assert json.loads(capsys.readouterr().out)["ci_accepted"] is False
+
+
+def test_serving_preview_reports_controls_without_execution(capsys):
+    plan = Path(__file__).parents[1] / 'mvp/h3-smoke.plan.json'
+    assert main(['run', str(plan), '--serving-concurrency', '2', '--delivery-deadline-seconds', '300']) == 0
+    preview = json.loads(capsys.readouterr().out)
+    assert preview['serving'] == {'mode': 'closed_loop', 'concurrency': 2, 'delivery_deadline_seconds': 300}
+    assert preview['evidence_kind'] == 'request_preview_no_generation'
+    assert main(['run', str(plan), '--serving-concurrency', '0']) == 2

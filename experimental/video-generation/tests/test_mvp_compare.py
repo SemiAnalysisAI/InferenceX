@@ -553,3 +553,33 @@ def test_report_exclusive_creation_handles_post_preflight_race(tmp_path, media_s
     other = destination.with_suffix(".comparison.json") if suffix == ".html" else destination
     assert not other.exists()
     assert not (tmp_path / "racing_assets").exists()
+
+
+def test_serving_comparison_uses_delivery_latency_and_checks_real_overlap(tmp_path, media_stub):
+    from evaluator.mvp_serving import settings
+    paths = []
+    for name in ('baseline', 'candidate'):
+        path, run = bundle(tmp_path, name, warmups=0)
+        run['configuration']['serving'] = settings(2)
+        run['configuration_sha256'] = digest(run['configuration'])
+        run['measurement'] = {'boundary': 'submit_to_downloaded_media', 'concurrency': 2,
+                              'start_monotonic_seconds': 0, 'end_monotonic_seconds': 6, 'wall_seconds': 6}
+        for row in run['records']:
+            row.update(submit_to_terminal_seconds=4, submit_to_media_seconds=5, media_validation_seconds=.1,
+                       timing_window={'start_monotonic_seconds': 0, 'transport_end_monotonic_seconds': 5})
+        write_bundle(path, run)
+        paths.append(path)
+    result = compare_runs(*paths, policy=POLICY)
+    assert result['measurement']['performance_mode'] == 'descriptive_only'
+    assert result['measurement']['concurrency'] == 2
+    assert result['baseline']['summary']['latency_median_seconds'] == 5
+    assert result['baseline']['summary']['valid_clips_per_second'] == 2 / 6
+    assert result['slots'][0]['baseline']['latency_boundary'] == 'submit_to_downloaded_media'
+    path = paths[1]
+    run = json.loads((path / 'run.json').read_text())
+    run['measurement']['concurrency'] = 1
+    run['configuration']['serving'] = settings(1)
+    run['configuration_sha256'] = digest(run['configuration'])
+    write_bundle(path, run)
+    with pytest.raises(ValueError, match='exceed declared'):
+        compare_runs(*paths, policy=POLICY)

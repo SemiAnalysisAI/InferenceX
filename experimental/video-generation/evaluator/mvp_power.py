@@ -237,6 +237,26 @@ def analyze_power(role: dict, run: dict, samples: list[dict], events: list[dict]
                         "completed": int(record.get("status") == "succeeded"),
                         "valid_clips": int(record.get("status") == "succeeded" and isinstance(record.get("media"), dict) and record["media"].get("valid") is True),
                         **_timing(record, events, offset, spread)})
+    if run.get("configuration", {}).get("serving"):
+        from .mvp_serving import validate_window
+        try:
+            validate_window(run)
+        except (KeyError, TypeError, ValueError):
+            global_reasons.append("invalid_serving_measurement_window")
+        measured = [window for window in windows if window["phase"] == "measurement"]
+        if measured:
+            starts = [w["start_monotonic_seconds"] for w in measured]
+            ends = [w["end_monotonic_seconds"] for w in measured]
+            # Per-request board power cannot be attributed under concurrency.
+            combined = {"phase": "measurement", "slot_id": None,
+                        "request_slot_ids": [w["slot_id"] for w in measured],
+                        "timing_source": "serving_first_submit_to_last_observed_terminal",
+                        "timing_uncertainty_seconds": max((w["timing_uncertainty_seconds"] or 0 for w in measured)),
+                        "start_monotonic_seconds": min(starts) if all(_number(v) for v in starts) else None,
+                        "end_monotonic_seconds": max(ends) if all(_number(v) for v in ends) else None,
+                        "invalid_reasons": sorted({reason for w in measured for reason in w["invalid_reasons"]}),
+                        **{key: sum(w[key] for w in measured) for key in ("attempted", "completed", "valid_clips")}}
+            windows = [w for w in windows if w["phase"] != "measurement"] + [combined]
     ordered = sorted((window for window in windows if window["start_monotonic_seconds"] is not None), key=lambda window: window["start_monotonic_seconds"])
     for left, right in zip(ordered, ordered[1:]):
         if left["end_monotonic_seconds"] > right["start_monotonic_seconds"]:
@@ -307,7 +327,9 @@ def analyze_power(role: dict, run: dict, samples: list[dict], events: list[dict]
             "semantics": {"scope": "selected_gpu_boards_including_memory; excludes_host_and_unselected_gpus",
                           "power_unit": "W", "energy_unit": "J", "time_unit": "s",
                           "integration": "per_device_trapezoidal_with_linear_boundary_interpolation",
-                          "generation_window": "submit_to_observed_provider_terminal; excludes_client_download_and_decode",
+                          "generation_window": ("first_submit_to_last_observed_provider_terminal; includes_intervening_idle_download_and_validation_time; concurrent_board_energy_integrated_once"
+                                                if run.get("configuration", {}).get("serving") else
+                                                "submit_to_observed_provider_terminal; excludes_client_download_and_decode"),
                           "peak": "maximum_observed_sensor_sample_in_window; not_instantaneous_electrical_peak",
                           "energy_per_valid_clip": "sum_generation_energy_including_failed_or_invalid_completed_attempts_divided_by_technically_valid_clips",
                           "sensor": "nvidia-smi power.draw; H200 NVML trailing_one_second_average; phase_edges_have_sensor_averaging_uncertainty",

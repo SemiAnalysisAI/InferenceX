@@ -22,12 +22,13 @@ VERSION = "1.0.0"
 ROLES = ("baseline", "candidate")
 DEFINITIONS = {
     "latency": {"unit": "s", "window": "request submission through downloaded, technically validated media", "population": "valid measured clips only; excludes warmup and startup"},
-    "valid_clips_per_second": {"unit": "clip/s", "window": "serial measured block including failed attempts", "definition": "valid measured clips divided by measured-block wall seconds; not saturation throughput"},
+    "valid_clips_per_second": {"unit": "clip/s", "window": "recorded measured block including failed attempts; serving mode ends at final delivery/transport failure and excludes subsequent local validation", "definition": "valid measured clips divided by measured-block wall seconds; not saturation throughput"},
+    "serving": {"unit": "per-field: seconds, clip/s, video-second/s, fraction, count", "definition": "closed-loop submission through downloaded media; raw samples and percentile floors retained; deadline goodput requires technical validity, not calibrated perceptual fidelity"},
     "completion": {"unit": "clip", "definition": "scheduled, attempted, completed, valid, failed and not-started measured slots; warmup separate"},
     "gpu_memory": {"unit": "MiB", "window": "role or client workload including warmup, as labelled", "definition": "maximum observed device-used memory per selected GPU, not exact allocator peaks"},
     "gpu_power": {"unit": "W", "window": "startup, warmup, and measured submit-to-terminal generation windows separately", "definition": "timestamped GPU-board sensor watts; aggregate sums selected GPUs; average is integrated energy / covered window duration; peak is observed samples"},
     "gpu_energy": {"unit": "J", "window": "same separately bounded power windows", "definition": "trapezoidal integral of timestamped GPU-board watts; includes GPU idle board draw, excludes CPU/node energy"},
-    "gpu_energy_per_valid_clip": {"unit": "J/clip", "window": "measured submit-to-terminal generation windows", "definition": "energy across all attempted measured generation windows / technically valid measured clips; null for invalid coverage or zero valid clips"},
+    "gpu_energy_per_valid_clip": {"unit": "J/clip", "window": "serial request windows or one serving interval from first submission to last observed terminal, including idle gaps", "definition": "integrated board energy / technically valid measured clips; concurrent requests are not summed; null for invalid coverage or zero valid clips"},
     "media_integrity": {"unit": "per-check units in original media record", "definition": "full-stream video/audio decode, geometry, timestamps, cadence, duration, motion and sound checks; not prompt adherence or human quality"},
     "paired_fidelity": {"unit": "PSNR dB, spectral cosine, absolute RMS ratio error", "definition": "aligned original decoded baseline/candidate outputs; exact video match has null finite PSNR and exact_match=true; not generative quality"},
     "hardware_tdp": {"unit": "W/GPU", "definition": "verified hardware specification, separate from configured/enforced limits and observed watts; generic H200 name does not identify form factor"},
@@ -140,7 +141,7 @@ def _report_references(tree: _Tree, inventory: dict) -> None:
 
 
 def _records(run: dict, role: str) -> list[dict]:
-    return [{key: record.get(key) for key in ("slot_id", "case_id", "seed", "repetition", "phase", "status", "attempted", "latency_seconds", "submit_to_terminal_seconds", "submit_to_media_seconds", "media_validation_seconds", "media", "error")} | {
+    return [{key: record.get(key) for key in ("slot_id", "case_id", "seed", "repetition", "phase", "status", "attempted", "latency_seconds", "submit_to_terminal_seconds", "submit_to_media_seconds", "media_validation_seconds", "media", "error", "job_id", "outcome", "provider_status", "submit_to_accepted_seconds", "server_timings", "timing_window")} | {
         "media_file": {"path": f"gpu/{role}/{record['artifact_path']}", "sha256": record["sha256"]} if record.get("artifact_path") else None,
     } for record in run["records"]]
 
@@ -155,6 +156,7 @@ def _metrics(run: dict, role: dict) -> dict:
         "status": "valid", "latency_seconds": {"values": latencies, "sample_count": summary["latency_samples"],
             **{key: summary[f"latency_{key}_seconds"] for key in ("mean", "median", "min", "max", "sample_stddev")}},
         "valid_clips_per_second": summary["valid_clips_per_second"], "measurement": run["measurement"],
+        "serving": run.get("serving"),
         "completion": {key: summary[key] for key in ("scheduled", "completed", "valid", "failed", "failed_attempts", "invalid_completed", "not_started")} | {
             "attempted": sum(row["attempted"] for row in records), "technical_success_fraction": summary["technical_success_rate"]},
         "startup_seconds": role.get("startup_seconds"),
@@ -298,6 +300,12 @@ def write_result(root: Path, *, producer: dict, source_ci: dict | None = None, h
             "configured_power_limits": _power_limits(receipt["roles"], spec["gpu_uuids"])}
         _hardware_profile(result["hardware"], hardware_profile)
         result["workload"] = {"plan": spec["plan"], "plan_sha256": receipt["plan_sha256"], "server": spec["server"], "comparison": "same_revision_A/A" if spec["baseline"]["revision"] == spec["candidate"]["revision"] else "baseline_candidate"}
+        result["execution"]["deployment"] = {
+            "scope": "single_supervised_endpoint", "replica_count": 1,
+            "gpus_per_replica": len(spec["gpu_uuids"]), "server_configuration": spec["server"],
+            "serving": spec.get("serving"), "configured_batch_size": None, "observed_batch_sizes": None,
+            "full_deployment_cost_usd_per_hour": None,
+        }
         result["policy"] = spec["policy"]
         (root / "power").mkdir()
         for label in ROLES:
@@ -321,7 +329,7 @@ def write_result(root: Path, *, producer: dict, source_ci: dict | None = None, h
             inventory[power_name] = _hash(tree, power_name)
             result["roles"][label] = {"run_id": run["run_id"], "metrics": _metrics(run, role), "records": _records(run, label),
                 "power": {"path": power_name, "sha256": inventory[power_name], "status": power["status"], "schema_version": power["schema_version"], "phases": power["phases"],
-                    "windows": [{key: window.get(key) for key in ("phase", "slot_id", "coverage", "timing_source", "timing_uncertainty_seconds", "invalid_reasons")} for window in power["windows"]]},
+                    "windows": [{key: window.get(key) for key in ("phase", "slot_id", "request_slot_ids", "coverage", "timing_source", "timing_uncertainty_seconds", "invalid_reasons")} for window in power["windows"]]},
                 "raw_telemetry": {"path": f"gpu/{role['telemetry_path']}", "sha256": role["telemetry_sha256"]},
                 "media_evaluator": run["configuration"].get("media_evaluator")}
         result["paired_fidelity"] = {"source": "gpu/comparison.json", "summary": comparison.get("summary"), "checks": comparison["checks"],

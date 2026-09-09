@@ -94,8 +94,12 @@ def _mvp_command(arguments: argparse.Namespace) -> int:
             from .mvp_runner import preview_plan, run_plan
 
             plan = _load_mvp_object(arguments.plan)
+            from .mvp_serving import settings
+            serving = settings(arguments.serving_concurrency, arguments.delivery_deadline_seconds)
             if not arguments.execute:
                 result = preview_plan(plan, runtime=arguments.runtime)
+                if serving:
+                    result["serving"] = serving
                 print(json.dumps(result, indent=2, sort_keys=True, allow_nan=False))
                 return 0
             required = ("endpoint", "runtime_revision", "hardware_label", "model_revision", "output")
@@ -117,6 +121,8 @@ def _mvp_command(arguments: argparse.Namespace) -> int:
                     model_revision=arguments.model_revision,
                     timeout_seconds=arguments.timeout_seconds,
                     api_key_env=arguments.api_key_env,
+                    serving_concurrency=arguments.serving_concurrency,
+                    delivery_deadline_seconds=arguments.delivery_deadline_seconds,
                 )
             finally:
                 signal.signal(signal.SIGTERM, previous_sigterm)
@@ -188,6 +194,8 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--output", type=Path, help="new output directory; existing paths are never overwritten")
     run.add_argument("--timeout-seconds", type=float, default=3600)
     run.add_argument("--api-key-env", help="name of an environment variable containing a bearer token")
+    run.add_argument("--serving-concurrency", type=int, help="opt into closed-loop delivery load with 1-32 concurrent requests; validation is separate")
+    run.add_argument("--delivery-deadline-seconds", type=float, help="optional submit-to-downloaded-media deadline for technical goodput; not an attempt timeout")
 
     compare = subparsers.add_parser("compare", help="compare paired run bundles and return a CI exit code")
     compare.add_argument("baseline", type=Path)

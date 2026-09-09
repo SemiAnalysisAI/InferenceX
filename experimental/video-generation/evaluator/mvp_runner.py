@@ -1,4 +1,4 @@
-"""Serial, auditable client for an operator-managed H3 video endpoint.
+"""Auditable serial and closed-loop serving client for an operator-managed H3 video endpoint.
 
 This module does not launch a server, download weights, verify server identity,
 or contact MiniMax's paid API. ``preview_plan`` is network-free; ``run_plan``
@@ -27,9 +27,12 @@ import threading
 import time
 import urllib.parse
 import uuid
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from .mvp_serving import settings as serving_settings, summarize as serving_summary
 
 
 MODEL_ID = "MiniMaxAI/MiniMax-H3"
@@ -41,6 +44,7 @@ MAX_POLLS = 10000
 SOCKET_TIMEOUT_SECONDS = 30.0
 POLL_INTERVAL_SECONDS = 0.5
 _CHUNK_BYTES = 64 * 1024
+_EVENT_LOCK = threading.Lock()
 _PROTOCOL_SOURCES = {
     "sglang": {
         "repository": "https://github.com/sgl-project/sglang",
@@ -427,7 +431,7 @@ def _write_json(path: Path, value: Any, *, exclusive: bool = False) -> None:
 
 
 def _event(path: Path, event: str, **fields: Any) -> None:
-    with path.open("ab") as handle:
+    with _EVENT_LOCK, path.open("ab") as handle:
         handle.write(canonical_json_bytes({"event": event, "at": _timestamp(), **fields}) + b"\n")
         handle.flush()
         os.fsync(handle.fileno())
@@ -480,8 +484,9 @@ def run_plan(
     plan: dict[str, Any], output_dir: Path, *, endpoint: str, runtime: str = "sglang",
     runtime_revision: str, hardware_label: str, model_revision: str,
     timeout_seconds: float = 3600, api_key_env: str | None = None,
+    serving_concurrency: int | None = None, delivery_deadline_seconds: float | None = None,
 ) -> dict[str, Any]:
-    """Execute a serial run, durably retaining every scheduled outcome.
+    """Execute a serial or explicit closed-loop run, retaining every outcome.
 
     ``completed`` counts completed downloads/analyses; ``valid`` additionally
     requires media-contract success. ``failed = scheduled - valid`` includes
@@ -490,10 +495,11 @@ def run_plan(
     all-scheduled technical-success denominator. No submission is retried.
 
     A client timeout does not cancel server work. To prevent such an unknown
-    job from contaminating concurrency=1, remaining slots are not submitted.
+    job from violating the declared concurrency, remaining slots are not submitted.
     Native media decoding observes a cooperative, not preemptive, deadline.
     """
     frozen = validate_plan(plan)
+    serving = serving_settings(serving_concurrency, delivery_deadline_seconds)
     if runtime not in RUNTIMES:
         raise ValueError("runtime must be sglang or vllm-omni")
     for field, value in (("runtime_revision", runtime_revision), ("hardware_label", hardware_label), ("model_revision", model_revision)):
@@ -562,6 +568,12 @@ def run_plan(
             "deadline": "network watchdog plus cooperative media deadline; one native decoder call may overrun",
         },
     }
+    if serving:
+        from . import mvp_serving
+        configuration["serving"] = serving
+        configuration["serving_source_sha256"] = hashlib.sha256(Path(mvp_serving.__file__).read_bytes()).hexdigest()
+        configuration["measurement_semantics"]["throughput"] = "valid clips / closed-loop delivery wall time, including failures and download; local media validation occurs after delivery"
+        configuration["measurement_semantics"]["deadline"] = "separate bounded transport and local validation phases; unknown remote completion stops new submissions"
     configuration["configuration_sha256"] = _digest(configuration)
     _write_json(directory / "configuration.json", configuration, exclusive=True)
     slots = _slots(frozen)
@@ -576,15 +588,28 @@ def run_plan(
                         "warmup_runs": frozen["warmup_runs"], "wall_seconds": 0.0},
         "records": [], "summary": _summary([], scheduled, 0.0),
     }
+    if serving:
+        run["measurement"].update(boundary="submit_to_downloaded_media", concurrency=serving["concurrency"])
     journal = directory / "events.jsonl"
     _write_json(directory / "run.json", run)
     measured_start = None
     abort_reason = None
     abort_code = "not_started_after_uncertain_remote_completion"
     interrupted = None
-    for slot in slots:
-        if slot["phase"] == "measurement" and measured_start is None:
-            measured_start = time.monotonic()
+    def validate_media(record: dict, deadline: float) -> None:
+        validation_started = time.monotonic()
+        try:
+            media = analyze_media(directory / record["artifact_path"], {**record["expected_media"], "timeout_seconds": _remaining(deadline)})
+        finally:
+            record["media_validation_seconds"] = time.monotonic() - validation_started
+        if not isinstance(media, dict) or not isinstance(media.get("valid"), bool):
+            raise _RequestError("media analyzer returned an invalid contract result")
+        canonical_json_bytes(media)
+        _remaining(deadline)
+        record.update(status="succeeded", media=media, outcome="completed" if media["valid"] else "invalid_media")
+
+    def attempt(slot: dict, *, defer_validation: bool = False) -> dict:
+        nonlocal abort_reason, interrupted
         expected = {**frozen["generation"], "requires_motion": slot["requires_motion"],
                     "requires_sound": slot["requires_sound"], "audio_required": True}
         expected["duration_seconds"] = expected["frame_count"] / expected["fps"]
@@ -594,7 +619,9 @@ def run_plan(
             "latency_seconds": 0.0, "media": None, "error": None,
             "submit_to_terminal_seconds": None, "submit_to_media_seconds": None,
             "media_validation_seconds": None,
-            "attempted": False, "expected_media": expected,
+            "attempted": False, "expected_media": expected, "outcome": "not_started",
+            "job_id": None, "provider_status": None, "submit_to_accepted_seconds": None,
+            "server_timings": None,
         }
         if abort_reason:
             record["error"] = abort_code
@@ -608,6 +635,7 @@ def run_plan(
             # fsync the intent BEFORE the first byte can leave this client.
             _event(journal, "attempt_started", slot_id=slot["slot_id"], payload_sha256=_digest(payload))
             record["attempted"] = True
+            record["outcome"] = "transport_error"
             start = time.monotonic()
             record["timing_window"] = {"start_monotonic_seconds": start, "start_utc": _timestamp(),
                                        "terminal_monotonic_seconds": None, "end_monotonic_seconds": None}
@@ -616,13 +644,17 @@ def run_plan(
             try:
                 reply = _json_request(parts, "POST", api_path, deadline=deadline,
                                       credential=credential, body=body, content_type=content_type)
+                record["submit_to_accepted_seconds"] = time.monotonic() - start
                 identifier = reply.get("id")
                 if not isinstance(identifier, str) or not re.fullmatch(r"[A-Za-z0-9_-][A-Za-z0-9_.-]{0,199}", identifier):
                     raise _RequestError("submission returned a missing or unsafe job identifier")
+                record["job_id"] = identifier
                 _event(journal, "job_submitted", slot_id=slot["slot_id"], job_id=identifier)
                 for poll in range(MAX_POLLS + 1):
                     status = reply.get("status")
+                    record["provider_status"] = status if isinstance(status, str) and status in {"queued", "pending", "in_progress", "processing", "running", "failed", "cancelled", "canceled", "completed", "succeeded", "success"} else None
                     if status in {"failed", "cancelled", "canceled"}:
+                        record["outcome"] = "provider_failed" if status == "failed" else "provider_cancelled"
                         remote_terminal = True
                         record["submit_to_terminal_seconds"] = time.monotonic() - start
                         record["timing_window"]["terminal_monotonic_seconds"] = start + record["submit_to_terminal_seconds"]
@@ -644,18 +676,17 @@ def run_plan(
                                              deadline=deadline, credential=credential, destination=artifact)
                 record["artifact_path"] = artifact.relative_to(directory).as_posix()
                 record["submit_to_media_seconds"] = time.monotonic() - start
-                validation_started = time.monotonic()
-                try:
-                    media = analyze_media(artifact, {**expected, "timeout_seconds": _remaining(deadline)})
-                finally:
-                    record["media_validation_seconds"] = time.monotonic() - validation_started
-                if not isinstance(media, dict) or not isinstance(media.get("valid"), bool):
-                    raise _RequestError("media analyzer returned an invalid contract result")
-                canonical_json_bytes(media)  # forbid NaN/non-JSON outputs before finalizing
-                _remaining(deadline)
-                record.update(status="succeeded", media=media)
+                record["outcome"] = "downloaded"
+                if not defer_validation:
+                    validate_media(record, deadline)
             except (Exception, KeyboardInterrupt) as exc:
                 record["error"] = _safe_error(exc)
+                if isinstance(exc, (TimeoutError, socket.timeout)):
+                    record["outcome"] = "timed_out"
+                elif isinstance(exc, KeyboardInterrupt):
+                    record["outcome"] = "interrupted"
+                elif record["outcome"] == "downloaded":
+                    record["outcome"] = "validation_error"
                 if not remote_terminal:
                     abort_reason = record["error"]
                 if isinstance(exc, KeyboardInterrupt):
@@ -664,17 +695,71 @@ def run_plan(
             finally:
                 record["latency_seconds"] = max(0.0, time.monotonic() - start)
                 record["timing_window"]["end_monotonic_seconds"] = start + record["latency_seconds"]
-                _event(journal, "attempt_finished", record=record)
+                if defer_validation:
+                    record["timing_window"]["transport_end_monotonic_seconds"] = time.monotonic()
+                    _event(journal, "transport_finished", slot_id=record["slot_id"])
+        return record
+
+    order = {slot["slot_id"]: index for index, slot in enumerate(slots)}
+
+    def retain(record: dict) -> None:
+        if record["attempted"]:
+            _event(journal, "attempt_finished", record=record)
+        run["records"].append(record)
+        run["records"].sort(key=lambda item: order[item["slot_id"]])
+        if not serving:
+            run["measurement"]["wall_seconds"] = max(0.0, time.monotonic() - measured_start) if measured_start is not None else 0.0
+        run["summary"] = _summary(run["records"], scheduled, run["measurement"]["wall_seconds"])
+        _write_json(directory / "run.json", run)
+
+    serial_slots = slots if not serving else [slot for slot in slots if slot["phase"] == "warmup"]
+    for slot in serial_slots:
+        if slot["phase"] == "measurement" and measured_start is None:
+            measured_start = time.monotonic()
+        record = attempt(slot)
         if slot["phase"] == "warmup" and not (record["status"] == "succeeded" and record["media"]["valid"] is True):
             abort_reason = abort_reason or "warmup failed technical media contract"
             abort_code = "not_started_after_failed_warmup"
-        run["records"].append(record)
-        wall = max(0.0, time.monotonic() - measured_start) if measured_start is not None else 0.0
-        run["measurement"]["wall_seconds"] = wall
-        run["summary"] = _summary(run["records"], scheduled, wall)
-        _write_json(directory / "run.json", run)
-    wall = max(0.0, time.monotonic() - measured_start) if measured_start is not None else 0.0
-    run["measurement"]["wall_seconds"] = wall
+        retain(record)
+    if serving:
+        measured_start = time.monotonic()
+        run["measurement"]["start_monotonic_seconds"] = measured_start
+        # Keep CPU validation off transport workers so it cannot throttle offered concurrency.
+        with ThreadPoolExecutor(max_workers=serving["concurrency"]) as pool:
+            futures = [pool.submit(attempt, slot, defer_validation=True) for slot in slots if slot["phase"] == "measurement"]
+            pending = set(futures)
+            while pending:
+                try:
+                    done, _ = wait(pending, timeout=0.1, return_when=FIRST_COMPLETED)
+                except KeyboardInterrupt as exc:
+                    interrupted, abort_reason = exc, "interrupted by operator"
+                    continue
+                for future in done:
+                    pending.remove(future)
+                    record = future.result()
+                    if record["outcome"] == "downloaded":
+                        _event(journal, "validation_started", slot_id=record["slot_id"])
+                        try:
+                            validate_media(record, time.monotonic() + timeout_seconds)
+                        except (Exception, KeyboardInterrupt) as exc:
+                            record["error"] = _safe_error(exc)
+                            record["outcome"] = "timed_out" if isinstance(exc, (TimeoutError, socket.timeout)) else "validation_error"
+                            if isinstance(exc, KeyboardInterrupt):
+                                record["outcome"] = "interrupted"
+                                interrupted, abort_reason = exc, record["error"]
+                        finally:
+                            record["latency_seconds"] = time.monotonic() - record["timing_window"]["start_monotonic_seconds"]
+                            record["timing_window"]["end_monotonic_seconds"] = record["timing_window"]["start_monotonic_seconds"] + record["latency_seconds"]
+                    retain(record)
+        end = max((r.get("timing_window", {}).get("transport_end_monotonic_seconds", measured_start)
+                   for r in run["records"] if r["phase"] == "measurement"), default=measured_start)
+        if end == measured_start:
+            end = time.monotonic()
+        run["measurement"].update(end_monotonic_seconds=end, wall_seconds=end - measured_start)
+        run["serving"] = serving_summary(run)
+    else:
+        run["measurement"]["wall_seconds"] = max(0.0, time.monotonic() - measured_start) if measured_start is not None else 0.0
+    wall = run["measurement"]["wall_seconds"]
     warmup_records = [record for record in run["records"] if record["phase"] == "warmup"]
     run["measurement"]["warmup_qualified"] = bool(warmup_records) and all(
         record["status"] == "succeeded" and record["media"]["valid"] is True for record in warmup_records

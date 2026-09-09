@@ -171,7 +171,8 @@ def _media(label: str, observation: dict) -> str:
         reason = observation.get("error") or observation.get("analysis_error") or "No media artifact was produced."
         body = f'<div class="no-media"><strong>No playable artifact</strong><p>{_escape(reason)}</p></div>'
     latency = observation.get("latency_seconds")
-    details = [f'{_number(latency)} s submit → validated media' if latency is not None else 'generation timing not measured']
+    boundary = 'downloaded media' if observation.get('latency_boundary') == 'submit_to_downloaded_media' else 'validated media'
+    details = [f'{_number(latency)} s submit → {boundary}' if latency is not None else 'generation timing not measured']
     if video.get("width") and video.get("height"):
         details.append(f'{video["width"]}×{video["height"]} · {video.get("frame_count", "?")} frames')
     if audio.get("present"):
@@ -238,7 +239,7 @@ def _render(comparison: dict, json_name: str) -> str:
         ("Candidate median latency", f'{_number(right.get("latency_median_seconds"))} s', f'Baseline {_number(left.get("latency_median_seconds"))} s · {_percent(measurement.get("latency_increase_fraction"), signed=True)}'),
         ("Candidate verified-valid clips", f'{right.get("valid", "?")} / {right.get("scheduled", "?")}', f'{_percent(right.get("verified_technical_success_fraction", right.get("technical_success_rate")))} verified yield · failures stay in denominator'),
         ("Matched valid media pairs", str(summary.get("matched_valid_pairs", "?")), f'{summary.get("measurement_slots", "?")} scheduled measurement slots · warmups excluded'),
-        ("Candidate serial throughput", f'{_number(right.get("valid_clips_per_second"), 4)}', 'valid clips / measured wall second · not saturation capacity'),
+        ("Candidate throughput", f'{_number(right.get("valid_clips_per_second"), 4)}', 'valid clips / recorded measurement wall second · not saturation capacity'),
     ]
     if imported:
         cards = [
@@ -281,7 +282,7 @@ def _render(comparison: dict, json_name: str) -> str:
         '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; media-src \'self\' file:; img-src \'self\' data:; base-uri \'none\'; form-action \'none\'">'
         f'<title>{title} · evidence report</title>'
         f'<style>{_CSS}</style></head><body><main><header><div><div class="eyebrow">Video generation benchmark · execution MVP</div>'
-        f'<h1>{title}</h1><p class="sub">' + ('A paired, artifact-backed view of an imported source clip and controlled transformations. Generation performance is not measured.' if imported else 'A paired, artifact-backed view of media validity, implementation fidelity, and serial end-to-end performance.') + '</p></div>'
+        f'<h1>{title}</h1><p class="sub">' + ('A paired, artifact-backed view of an imported source clip and controlled transformations. Generation performance is not measured.' if imported else 'A paired, artifact-backed view of media validity, implementation fidelity, and recorded end-to-end performance.') + '</p></div>'
         f'<a class="download" href="{_escape(quote(json_name))}" download>Download evidence JSON ↗</a></header>'
         f'<aside class="{banner_class}"><strong>{_escape(evidence_title)}</strong><p>{_escape(evidence_note)}</p></aside>'
         f'<div class="decision">{_badge(status)}<h2>{_escape(decision)}</h2></div>'

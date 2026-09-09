@@ -93,6 +93,7 @@ def fixture_server():
 
     def start(*, mode="success", before_submit=None):
         state = {"requests": [], "posts": [], "polls": {}, "auth": [], "mode": mode}
+        submission_lock = threading.Lock()
 
         class Handler(BaseHTTPRequestHandler):
             protocol_version = "HTTP/1.1"
@@ -131,8 +132,9 @@ def fixture_server():
                                for part in message.iter_parts()}
                 else:
                     payload = json.loads(body)
-                state["posts"].append(payload)
-                ordinal = len(state["posts"])
+                with submission_lock:
+                    state["posts"].append(payload)
+                    ordinal = len(state["posts"])
                 if state["mode"] == "http_error":
                     self.send_json(500, {"error": "do-not-log-this-server-secret"})
                 elif state["mode"] == "redirect":
@@ -504,3 +506,76 @@ def test_keyboard_interrupt_retains_inflight_outcome_and_schedule(plan, tmp_path
     assert run["summary"]["failed"] == 4
     assert run["summary"]["not_started"] == 3
     assert run["records"][0]["error"].startswith("interrupted by operator")
+
+
+def test_serving_overlaps_requests_without_waiting_for_local_validation(plan, tmp_path, mocked_media, fixture_server, monkeypatch):
+    plan['warmup_runs'] = 0
+    pair = threading.Barrier(2)
+    submitted = threading.Event()
+    count = [0]
+    lock = threading.Lock()
+
+    def before_submit():
+        with lock:
+            count[0] += 1
+            if count[0] == 4:
+                submitted.set()
+        pair.wait(timeout=2)
+
+    endpoint, state = fixture_server(before_submit=before_submit)
+    analyzer = sys.modules['evaluator.mvp_media'].analyze_media
+
+    def validate_after_submissions(path, expected):
+        assert submitted.wait(2), 'local validation blocked later submissions'
+        return analyzer(path, expected)
+
+    monkeypatch.setattr(sys.modules['evaluator.mvp_media'], 'analyze_media', validate_after_submissions)
+    run = execute(plan, tmp_path / 'serving', endpoint, serving_concurrency=2, delivery_deadline_seconds=10)
+    assert run['status'] == 'complete'
+    assert run['serving']['peak_client_in_flight'] == 2
+    assert run['summary']['valid'] == 4
+    assert run['serving']['deadline_met_valid_clips'] == 4
+    assert run['serving']['client_ready_latency_seconds']['p90'] is None
+    assert run['serving']['observed_batch_sizes'] is None
+    assert len({r['job_id'] for r in run['records']}) == 4
+    assert [r['slot_id'] for r in run['records']] == [s['slot_id'] for s in mvp_runner._slots(plan)]
+    window = run['measurement']
+    assert window['boundary'] == 'submit_to_downloaded_media'
+    assert window['end_monotonic_seconds'] == max(r['timing_window']['transport_end_monotonic_seconds'] for r in run['records'])
+    assert run['summary']['valid_clips_per_second'] == 4 / window['wall_seconds']
+    for record in run['records']:
+        assert 0 <= record['submit_to_accepted_seconds'] <= record['submit_to_terminal_seconds'] <= record['submit_to_media_seconds'] <= record['latency_seconds']
+        assert record['server_timings'] is None
+    assert len(state['posts']) == 4
+
+
+def test_serving_unknown_remote_completion_stops_queued_requests(plan, tmp_path, mocked_media, fixture_server):
+    plan['warmup_runs'] = 0
+    pair = threading.Barrier(2)
+    endpoint, state = fixture_server(mode='timeout', before_submit=lambda: pair.wait(timeout=2))
+    run = execute(plan, tmp_path / 'timeout', endpoint, serving_concurrency=2, timeout_seconds=.1)
+    assert len(state['posts']) == 2
+    assert run['summary']['scheduled'] == run['summary']['failed'] == 4
+    assert run['summary']['not_started'] == 2
+    assert run['serving']['outcomes']['timed_out'] == 2
+    assert run['serving']['outcomes']['not_started'] == 2
+    assert run['serving']['peak_client_in_flight'] == 2
+    assert run['serving']['client_ready_latency_seconds']['sample_count'] == 0
+
+
+def test_serving_failed_warmup_never_submits_measured_requests(plan, tmp_path, mocked_media, fixture_server):
+    mocked_media[1]['valid'] = False
+    endpoint, state = fixture_server()
+    run = execute(plan, tmp_path / 'warmup-failure', endpoint, serving_concurrency=2)
+    assert len(state['posts']) == 1
+    assert run['summary']['not_started'] == 4
+    assert run['measurement']['warmup_status'] == 'failed'
+    assert run['serving']['peak_client_in_flight'] == 0
+
+
+@pytest.mark.parametrize('concurrency,deadline', [(0, None), (33, None), (True, None), (1, float('nan')), (None, 10)])
+def test_invalid_serving_settings_fail_before_output(plan, tmp_path, mocked_media, concurrency, deadline):
+    destination = tmp_path / 'invalid-serving'
+    with pytest.raises(ValueError):
+        execute(plan, destination, 'http://localhost:9', serving_concurrency=concurrency, delivery_deadline_seconds=deadline)
+    assert not destination.exists()

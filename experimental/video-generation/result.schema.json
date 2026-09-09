@@ -30,14 +30,27 @@
   },
   "allOf": [{"if": {"properties": {"status": {"const": "complete"}}}, "then": {"properties": {"workload_status": {"const": "passed"}, "invalid_reasons": {"maxItems": 0}, "execution": {"type": "object"}, "hardware": {"type": "object"}, "workload": {"type": "object"}, "roles": {"required": ["baseline", "candidate"]}, "report_links": {"required": ["original", "power"]}}}}],
   "$defs": {
+    "serving": {
+      "type": "object", "required": ["mode", "concurrency", "capacity_qualified", "client_ready_latency_seconds", "submitted", "outcomes", "peak_client_in_flight", "deadline_met_valid_clips", "deadline_goodput_clips_per_second", "limitations"],
+      "properties": {
+        "mode": {"const": "closed_loop"}, "concurrency": {"type": "integer", "minimum": 1, "maximum": 32},
+        "capacity_qualified": {"const": false}, "submitted": {"type": "integer", "minimum": 0},
+        "peak_client_in_flight": {"type": "integer", "minimum": 0, "maximum": 32},
+        "delivery_deadline_seconds": {"type": ["number", "null"], "exclusiveMinimum": 0},
+        "deadline_met_valid_clips": {"type": ["integer", "null"], "minimum": 0},
+        "deadline_attainment_fraction": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "deadline_goodput_clips_per_second": {"type": ["number", "null"], "minimum": 0},
+        "client_ready_latency_seconds": {"type": "object", "required": ["values", "sample_count", "valid_clip_count", "p50", "p90", "p95", "population", "quantile_method"], "properties": {"values": {"type": "array", "items": {"type": "number", "minimum": 0}}, "sample_count": {"type": "integer", "minimum": 0}, "p50": {"type": ["number", "null"], "minimum": 0}, "p90": {"type": ["number", "null"], "minimum": 0}, "p95": {"type": ["number", "null"], "minimum": 0}}}
+      }
+    },
     "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "gitCommit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
     "reasons": {"type": "array", "items": {"type": "string"}},
     "file": {"type": "object", "required": ["path", "sha256"], "additionalProperties": false, "properties": {"path": {"type": "string", "minLength": 1, "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\\\]+$"}, "sha256": {"$ref": "#/$defs/sha256"}}},
     "role": {"type": "object", "required": ["run_id", "metrics", "records", "power", "raw_telemetry", "media_evaluator"], "additionalProperties": false, "properties": {
       "run_id": {"type": "string"},
-      "metrics": {"type": "object", "required": ["status"], "properties": {"status": {"enum": ["valid", "withheld"]}, "valid_clips_per_second": {"type": "number", "minimum": 0}}},
-      "records": {"type": "array", "items": {"type": "object", "required": ["slot_id", "phase", "status", "attempted", "media", "media_file"], "properties": {"phase": {"enum": ["warmup", "measurement"]}, "status": {"enum": ["succeeded", "failed"]}, "media_file": {"anyOf": [{"$ref": "#/$defs/file"}, {"type": "null"}]}}}},
+      "metrics": {"type": "object", "required": ["status"], "properties": {"status": {"enum": ["valid", "withheld"]}, "valid_clips_per_second": {"type": "number", "minimum": 0}, "serving": {"anyOf": [{"$ref": "#/$defs/serving"}, {"type": "null"}]}}},
+      "records": {"type": "array", "items": {"type": "object", "required": ["slot_id", "phase", "status", "attempted", "media", "media_file"], "properties": {"job_id": {"type": ["string", "null"]}, "submit_to_accepted_seconds": {"type": ["number", "null"], "minimum": 0}, "outcome": {"enum": [null, "completed", "invalid_media", "provider_failed", "provider_cancelled", "timed_out", "transport_error", "validation_error", "interrupted", "not_started"]}, "phase": {"enum": ["warmup", "measurement"]}, "status": {"enum": ["succeeded", "failed"]}, "media_file": {"anyOf": [{"$ref": "#/$defs/file"}, {"type": "null"}]}}}},
       "power": {"type": "object", "required": ["path", "sha256", "status", "phases", "windows"], "properties": {"path": {"type": "string", "pattern": "^power/(baseline|candidate)\\.json$"}, "sha256": {"$ref": "#/$defs/sha256"}, "status": {"enum": ["valid", "partial", "invalid"]}, "phases": {"type": "object", "required": ["startup", "warmup", "measurement"], "additionalProperties": {"$ref": "#/$defs/phase"}}, "windows": {"type": "array"}}},
       "raw_telemetry": {"$ref": "#/$defs/file"}, "media_evaluator": {"type": ["object", "null"]}
     }},

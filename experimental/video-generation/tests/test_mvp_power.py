@@ -189,3 +189,23 @@ def test_malformed_timing_evidence_cannot_publish_power(query):
         events = []
     result = analyze(role, run, samples, events)
     assert result["phases"]["measurement"]["aggregate"] is None
+
+
+def test_serving_integrates_overlapping_gpu_work_once():
+    from evaluator.mvp_serving import settings
+    role, run, samples = data()
+    run['records'].append(record('overlap', 'measurement', 7, 9.5))
+    for row in run['records']:
+        row['timing_window']['transport_end_monotonic_seconds'] = row['timing_window']['end_monotonic_seconds']
+    run['configuration'] = {'serving': settings(2)}
+    run['measurement'] = {'concurrency': 2, 'boundary': 'submit_to_downloaded_media',
+                          'start_monotonic_seconds': 6.5, 'end_monotonic_seconds': 9.75, 'wall_seconds': 3.25}
+    measured = analyze(role, run, samples)['phases']['measurement']
+    assert measured['valid'] is True
+    assert measured['window_count'] == 1
+    assert measured['valid_clips'] == 2
+    assert measured['duration_seconds'] == 3
+    assert measured['aggregate']['energy_j'] == 450
+    assert measured['aggregate']['joules_per_valid_clip'] == 225
+    run['records'][-1]['submit_to_terminal_seconds'] = None
+    assert analyze(role, run, samples)['phases']['measurement']['aggregate'] is None

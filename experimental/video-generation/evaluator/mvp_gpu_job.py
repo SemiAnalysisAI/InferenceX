@@ -154,7 +154,16 @@ def _number(value: Any, label: str, minimum: float, maximum: float, integer: boo
 def validate_gpu_job(spec: dict) -> dict:
     """Pure validation: no filesystem probes, network, GPU calls, or execution."""
     frozen = json.loads(canonical_json_bytes(spec))
-    _keys(frozen, {"schema_version", "job_id", "authorization", "allocation", "gpu_uuids", "port", "lock_directory", "baseline", "candidate", "model", "server", "plan", "policy", "limits"}, "GPU job")
+    _keys(frozen, {"schema_version", "job_id", "authorization", "allocation", "gpu_uuids", "port", "lock_directory", "baseline", "candidate", "model", "server", "plan", "policy", "limits"}, "GPU job", optional={"serving"})
+    if "serving" in frozen:
+        from .mvp_serving import settings
+        load = frozen["serving"]
+        _keys(load, {"concurrency"}, "serving", optional={"mode", "delivery_deadline_seconds"})
+        if load.get("mode", "closed_loop") != "closed_loop":
+            raise ValueError("only closed_loop serving load is supported")
+        if load["concurrency"] is None:
+            raise ValueError("serving requires explicit concurrency")
+        frozen["serving"] = settings(load["concurrency"], load.get("delivery_deadline_seconds"))
     if frozen["schema_version"] != VERSION:
         raise ValueError("unsupported GPU job schema_version")
     if not isinstance(frozen["job_id"], str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,99}", frozen["job_id"]):
@@ -245,6 +254,8 @@ def validate_gpu_job(spec: dict) -> dict:
         raise ValueError("controlled GPU measurements require a separately recorded warmup")
     from .mvp_compare import _policy
     frozen["policy"] = _policy(frozen["policy"])
+    if frozen.get("serving") and frozen["policy"]["calibration_status"] == "operator_calibrated":
+        raise ValueError("serving load requires an uncalibrated policy; serial calibration cannot qualify concurrent delivery metrics")
     memory_gate = frozen["policy"].get("max_memory_increase_fraction")
     if memory_gate is not None:
         _number(memory_gate, "max_memory_increase_fraction", 0, 100)
@@ -928,11 +939,14 @@ def _owned_listener(owner: OwnedProcess, port: int) -> bool:
 class _AttemptMonitor:
     """Preempt native decoder hangs using the client's durable attempt ledger."""
 
-    def __init__(self, journal: Path, seconds: float):
+    def __init__(self, journal: Path, seconds: float, concurrency: int = 1):
         self.journal, self.seconds = journal, seconds
         self.offset = 0
-        self.active_since = None
-        self.active_slot = None
+        self.concurrency = concurrency
+        self.active = {}
+        self.transport = set()
+        self.waiting = set()
+        self.seen = set()
 
     def check(self):
         try:
@@ -948,18 +962,34 @@ class _AttemptMonitor:
                         break
                     self.offset = stream.tell()
                     event = json.loads(line)
+                    slot = event.get("slot_id")
                     if event.get("event") == "attempt_started":
-                        if self.active_slot is not None:
-                            raise RuntimeError("overlapping client attempts violate serial execution")
-                        self.active_slot = event.get("slot_id")
-                        self.active_since = time.monotonic()
+                        if not isinstance(slot, str) or slot in self.seen or len(self.transport) >= self.concurrency:
+                            raise RuntimeError("client attempts exceed declared concurrency or reuse a slot")
+                        self.seen.add(slot)
+                        self.transport.add(slot)
+                        self.active[slot] = time.monotonic()
+                    elif event.get("event") == "transport_finished":
+                        if slot not in self.transport:
+                            raise RuntimeError("transport completion does not match active slot")
+                        self.transport.remove(slot)
+                        self.active.pop(slot)
+                        self.waiting.add(slot)
+                    elif event.get("event") == "validation_started":
+                        if slot not in self.waiting:
+                            raise RuntimeError("validation does not follow completed transport")
+                        self.waiting.remove(slot)
+                        self.active[slot] = time.monotonic()
                     elif event.get("event") == "attempt_finished":
-                        if event.get("record", {}).get("slot_id") != self.active_slot:
+                        slot = event.get("record", {}).get("slot_id")
+                        if slot not in self.active and slot not in self.waiting:
                             raise RuntimeError("attempt ledger completion does not match active slot")
-                        self.active_slot = self.active_since = None
+                        self.active.pop(slot, None)
+                        self.transport.discard(slot)
+                        self.waiting.discard(slot)
         except FileNotFoundError:
             pass
-        if self.active_since is not None and time.monotonic() - self.active_since >= self.seconds:
+        if any(time.monotonic() - start >= self.seconds for start in self.active.values()):
             raise TimeoutError("hard supervised per-attempt deadline exceeded; stopping owned runtime and client")
 
 
@@ -1079,14 +1109,19 @@ def _role(spec: dict, label: str, directory: Path, supervisor: _Supervisor, prob
                 "--endpoint", f"http://127.0.0.1:{spec['port']}", "--runtime-revision", spec[label]["revision"],
                 "--hardware-label", hardware, "--model-revision", spec["model"]["revision"],
                 "--timeout-seconds", str(spec["limits"]["request_seconds"]), "--output", str(directory / label), "--execute"]
+        if spec.get("serving"):
+            argv.extend(["--serving-concurrency", str(spec["serving"]["concurrency"])])
+            if spec["serving"]["delivery_deadline_seconds"] is not None:
+                argv.extend(["--delivery-deadline-seconds", str(spec["serving"]["delivery_deadline_seconds"])])
         client = supervisor.spawn(argv, cwd=directory, env=client_env, stdout=metadata / "client.stdout.json",
                                   stderr=metadata / "client.stderr.log", nonce=nonce)
         role["client_process_identity"] = client.identity
         _write(directory / "gpu-job.json", receipt)
         slot_count = len(spec["plan"]["cases"]) * spec["plan"]["repetitions"] + spec["plan"]["warmup_runs"]
-        client_deadline = min(supervisor.deadline, time.monotonic() + slot_count * spec["limits"]["request_seconds"])
+        phase_count = 2 if spec.get("serving") else 1
+        client_deadline = min(supervisor.deadline, time.monotonic() + phase_count * slot_count * spec["limits"]["request_seconds"])
         code = _wait_client(client, owner, sampler, supervisor, client_deadline,
-                            _AttemptMonitor(directory / label / "events.jsonl", spec["limits"]["request_seconds"]))
+                            _AttemptMonitor(directory / label / "events.jsonl", spec["limits"]["request_seconds"], spec.get("serving", {}).get("concurrency", 1)))
         role["client_exit_code"] = code
         role["power_completion_bracket_recorded"] = sampler.bracket_completion(
             min(supervisor.deadline, time.monotonic() + 3 * spec["limits"]["telemetry_interval_seconds"]))

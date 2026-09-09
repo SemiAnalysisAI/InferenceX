@@ -632,10 +632,10 @@ def test_attempt_watchdog_accepts_completed_slots_and_partial_append(tmp_path):
     path.write_text(json.dumps({"event": "attempt_started", "slot_id": "m1"}) + "\n" + '{"event":')
     monitor = gpu._AttemptMonitor(path, 2)
     monitor.check()
-    assert monitor.active_slot == "m1"
+    assert set(monitor.active) == {"m1"}
     path.write_text(json.dumps({"event": "attempt_started", "slot_id": "m1"}) + "\n" + json.dumps({"event": "attempt_finished", "record": {"slot_id": "m1"}}) + "\n")
     monitor.check()
-    assert monitor.active_slot is None
+    assert not monitor.active
 
 
 def test_signal_cancels_submission_and_restores_handlers():
@@ -795,6 +795,8 @@ def saved_job(spec, directory, *, day=3, candidate_invalid=False):
                   "model_revision": spec["model"]["revision"], "hardware_label": GPU,
                   "client_source_sha256": "d" * 64, "client_environment": {"python": "3.12.1"},
                   "media_evaluator": {"source_sha256": "e" * 64}, "measurement_semantics": {"latency": "real-test-timer"}, "limits": {"timeout_seconds": 5}}
+        if spec.get("serving"):
+            config["serving"] = spec["serving"]
         config["configuration_sha256"] = gpu._digest(config)
         scheduled = sum(row["phase"] == "measurement" for row in records)
         valid = sum(row["phase"] == "measurement" and row["media"]["valid"] for row in records)
@@ -803,6 +805,19 @@ def saved_job(spec, directory, *, day=3, candidate_invalid=False):
                "plan": spec["plan"], "plan_sha256": gpu._digest(spec["plan"]), "configuration": config, "records": records,
                "summary": {"scheduled": scheduled, "valid": valid, "failed": scheduled-valid},
                "measurement": {"boundary": "submit_to_validated_media", "concurrency": 1, "wall_seconds": 0.01}}
+        if spec.get("serving"):
+            from evaluator.mvp_serving import summarize
+            for index, row in enumerate(records):
+                start = 1.01 + index * .002
+                row.update(job_id=f"fixture-{index}", outcome="completed" if row["media"]["valid"] else "invalid_media",
+                           submit_to_accepted_seconds=.0001,
+                           timing_window={"start_monotonic_seconds": start, "transport_end_monotonic_seconds": start + .0005,
+                                          "terminal_monotonic_seconds": start + .0002, "end_monotonic_seconds": start + .001})
+            end = 1.01 + len(records) * .002
+            run["measurement"] = {"boundary": "submit_to_downloaded_media", "concurrency": spec["serving"]["concurrency"],
+                                  "start_monotonic_seconds": 1.01, "end_monotonic_seconds": end, "wall_seconds": end - 1.01}
+            run["serving"] = summarize(run)
+            compared["measurement"].update(boundary="submit_to_downloaded_media", concurrency=spec["serving"]["concurrency"], performance_mode="descriptive_only")
         gpu._write(run_dir / "run.json", run)
         role["run_sha256"] = gpu._hash(run_dir / "run.json")
         compared[label] = {"run_id": run["run_id"], "run_bundle_sha256": role["run_sha256"]}
@@ -1163,3 +1178,58 @@ def test_calibration_preflight_observes_hard_work_deadline(spec, tmp_path):
     with pytest.raises(TimeoutError):
         preflight_calibration(gpu._read(current / "spec.json"), current, started_at="2026-08-03T00:00:00Z",
                               execution_id="not-yet-run", deadline=time.monotonic()-1)
+
+
+def test_serving_watchdog_bounds_transport_and_separate_validation(tmp_path, monkeypatch):
+    clock = [1.0]
+    monkeypatch.setattr(gpu.time, 'monotonic', lambda: clock[0])
+    path = tmp_path / 'events.jsonl'
+    def append(event, slot):
+        with path.open('a') as stream:
+            stream.write(json.dumps({'event': event, 'slot_id': slot, 'record': {'slot_id': slot}}) + '\n')
+    monitor = gpu._AttemptMonitor(path, 2, concurrency=2)
+    append('attempt_started', 'a')
+    append('attempt_started', 'b')
+    monitor.check()
+    append('transport_finished', 'a')
+    append('attempt_started', 'c')
+    append('validation_started', 'a')
+    append('attempt_finished', 'b')
+    append('transport_finished', 'c')
+    monitor.check()
+    assert monitor.transport == set()
+    assert monitor.waiting == {'c'}
+    assert set(monitor.active) == {'a'}
+    clock[0] = 3.1
+    with pytest.raises(TimeoutError):
+        monitor.check()
+
+
+def test_gpu_spec_requires_explicit_valid_serving_load(spec):
+    spec['serving'] = {'concurrency': 2, 'delivery_deadline_seconds': 300}
+    frozen = gpu.validate_gpu_job(spec)
+    assert frozen['serving'] == {'mode': 'closed_loop', 'concurrency': 2, 'delivery_deadline_seconds': 300}
+    spec['serving']['concurrency'] = 33
+    with pytest.raises(ValueError):
+        gpu.validate_gpu_job(spec)
+    spec['serving']['concurrency'] = 2
+    spec['policy']['calibration_status'] = 'operator_calibrated'
+    with pytest.raises(ValueError, match='serving load requires an uncalibrated policy'):
+        gpu.validate_gpu_job(spec)
+
+
+def test_saved_serving_summary_is_recomputed_from_raw_requests(spec, tmp_path):
+    from evaluator.mvp_gpu_evidence import verify_measurement_job
+    spec['serving'] = {'concurrency': 2, 'delivery_deadline_seconds': 300}
+    directory = saved_job(spec, tmp_path / 'serving')
+    verified = verify_measurement_job(directory, deadline=time.monotonic() + 5)
+    assert verified['runs']['candidate']['serving']['capacity_qualified'] is False
+    run_path = directory / 'candidate/run.json'
+    run = gpu._read(run_path)
+    run['serving']['deadline_met_valid_clips'] += 1
+    gpu._write(run_path, run)
+    receipt = gpu._read(directory / 'gpu-job.json')
+    receipt['roles']['candidate']['run_sha256'] = gpu._hash(run_path)
+    gpu._write(directory / 'gpu-job.json', receipt)
+    with pytest.raises(ValueError, match='serving summary differs'):
+        verify_measurement_job(directory, deadline=time.monotonic() + 5)

@@ -17,12 +17,14 @@ def _seal(root):
 
 
 @pytest.fixture
-def bundle(spec, tmp_path):
+def bundle(spec, tmp_path, request):
     root = tmp_path / "artifact"
     root.mkdir()
     spec["plan"]["cases"] = spec["plan"]["cases"][:1]
     spec["plan"]["repetitions"] = 1
     spec["allocation"] = {"mode": "dedicated_ci", "label": "Slurm 456.0 on test-node"}
+    if getattr(request, "param", None):
+        spec["serving"] = request.param
     saved_job(spec, root / "gpu")
     receipt = gpu._read(root / "gpu/gpu-job.json")
     receipt.update(regression_status="inconclusive", ci_accepted=False, release_qualified=False)
@@ -194,3 +196,25 @@ def test_contemporaneous_limits_preserve_each_snapshot_without_claiming_stabilit
         assert limits["status"] == "partial"
         assert limits["by_role"]["baseline"]["after"]["gpus"] is None
     assert result["workload_status"] == "passed"
+
+
+@pytest.mark.parametrize('bundle', [{'concurrency': 2, 'delivery_deadline_seconds': 1}], indirect=True)
+def test_serving_export_keeps_contract_media_and_deployment_identity(bundle):
+    from pathlib import Path
+    import jsonschema
+    result = write_result(bundle, producer=PRODUCER, source_ci=SOURCE_CI)
+    jsonschema.Draft202012Validator(json.loads((Path(__file__).parents[1] / 'result.schema.json').read_text())).validate(result)
+    assert result['schema_version'] == '1.0.0'
+    assert result['execution']['deployment']['replica_count'] == 1
+    assert result['execution']['deployment']['gpus_per_replica'] == 1
+    assert result['execution']['deployment']['configured_batch_size'] is None
+    assert result['hardware']['reserved_gpu_count'] == 8
+    stats = result['roles']['baseline']['metrics']['serving']
+    assert stats['concurrency'] == 2
+    assert stats['deadline_met_valid_clips'] == 1
+    assert stats['client_ready_latency_seconds']['p50'] == .0005
+    assert stats['client_ready_latency_seconds']['p90'] is None
+    assert stats['capacity_qualified'] is False
+    assert result['roles']['baseline']['records'][1]['job_id'] == 'fixture-1'
+    media = result['roles']['baseline']['records'][1]['media_file']
+    assert gpu._hash(bundle / media['path']) == media['sha256']

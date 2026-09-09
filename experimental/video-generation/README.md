@@ -130,6 +130,29 @@ is preserved; the exporter classifies its original XML with the new producer
 commit, accepting PCI IDs with or without `0x`, without querying hardware again.
 See [the retained A/A measurements and their limits](RESULTS.md#observed-aa-evidence).
 
+## Optional serving load
+
+Add `"serving": {"concurrency": 2, "delivery_deadline_seconds": 300}` to the
+reviewed supervisor spec and update its pinned SHA256 in the site configuration.
+This example deadline is operator-selected, not a calibrated acceptance gate.
+Concurrency accepts 1–32; omitting `serving` preserves serial regression behavior.
+The direct client exposes the same options as `--serving-concurrency` and
+`--delivery-deadline-seconds`; without `--execute`, it still only previews.
+
+Each job measures one concurrency against one supervised endpoint. Workers
+submit another request after downloading the previous output; media validation
+runs separately. Warmup stays serial and separate. To compare loads, repeat the
+same frozen prompt/seed/generation plan and runtime on separately recorded jobs,
+including an explicit serving-concurrency-1 control. No load sweep is launched
+automatically. Reuse the existing CI allocation/runtime route and retain every
+request outcome; uncertain remote completion stops new submissions.
+
+This measures closed-loop delivery throughput, not a fixed arrival rate or
+sustainable serving capacity. Server queue/execution timestamps, actual batch
+sizes, multi-replica layouts and full deployment cost remain unavailable.
+Serving runs require an uncalibrated policy. CPU fixtures test the harness;
+they do not establish H3 concurrency support or hardware performance.
+
 ## Results and local checks
 
 Every attempt uploads `h3-video-<run-id>-<attempt>` for 14 days, with compression

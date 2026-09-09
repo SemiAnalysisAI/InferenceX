@@ -162,7 +162,14 @@ def verify_measurement_job(directory: Path, *, deadline: float, require_success:
             raise ValueError("run failure/success denominator does not match raw outcomes")
         measurement = run.get("measurement", {})
         wall = measurement.get("wall_seconds")
-        if measurement.get("boundary") != "submit_to_validated_media" or measurement.get("concurrency") != 1 or not _finite(wall, positive=True) or wall + max(1e-6, attempted_seconds * 1e-6) < attempted_seconds:
+        if not _equal(config.get("serving"), spec.get("serving")):
+            raise ValueError("client serving load differs from supervised specification")
+        if config.get("serving"):
+            from .mvp_serving import summarize, validate_window
+            validate_window(run)
+            if not _equal(run.get("serving"), summarize(run)):
+                raise ValueError("serving summary differs from raw request records")
+        elif measurement.get("boundary") != "submit_to_validated_media" or measurement.get("concurrency") != 1 or not _finite(wall, positive=True) or wall + max(1e-6, attempted_seconds * 1e-6) < attempted_seconds:
             raise ValueError("run timing boundary or serial wall duration is invalid")
         run["_verified_run_sha256"] = role["run_sha256"]
         runs[label] = run
@@ -245,6 +252,8 @@ def verify_calibration(spec: dict, current: dict, *, deadline: float) -> tuple[b
     """Verify 2–4 prior same-build jobs without following nested references."""
     from . import mvp_gpu_job as gpu
 
+    if spec.get("serving"):
+        return False, "serving load is descriptive; serial calibration cannot qualify concurrent delivery metrics"
     if spec["policy"]["calibration_status"] != "operator_calibrated":
         return False, "policy is not calibrated; measurements are useful but CI acceptance is inconclusive"
     references = spec["policy"].get("calibration_evidence")

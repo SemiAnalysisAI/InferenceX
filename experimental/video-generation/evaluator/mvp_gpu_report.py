@@ -431,8 +431,16 @@ def _role(tree: _Tree, label: str, metadata: Any, spec: dict, controlled: bool,
         measurement = run.get("measurement", {})
         if not isinstance(measurement, dict):
             measurement = {}
-        eligible = bool(controlled and bound and config_valid and run.get("evidence_kind") in {"operator_endpoint", "live_h3"}
-                        and measurement.get("boundary") == "submit_to_validated_media" and type(measurement.get("concurrency")) is int and measurement["concurrency"] == 1)
+        timing_valid = measurement.get("boundary") == "submit_to_validated_media" and type(measurement.get("concurrency")) is int and measurement["concurrency"] == 1
+        if configuration.get("serving"):
+            from .mvp_serving import validate_window
+            try:
+                validate_window(run)
+                timing_valid = configuration["serving"] == spec.get("serving")
+            except (ValueError, KeyError, TypeError):
+                timing_valid = False
+                _issue(issues, label, "Invalid serving measurement window; timing withheld")
+        eligible = bool(controlled and bound and config_valid and timing_valid and run.get("evidence_kind") in {"operator_endpoint", "live_h3"})
         if eligible and not _finalized(run):
             _issue(issues, label, "Run is not finalized with ordered timezone-aware timestamps; GPU timing withheld")
             eligible = False
@@ -509,8 +517,9 @@ def _role(tree: _Tree, label: str, metadata: Any, spec: dict, controlled: bool,
     measurement = run.get("measurement", {}) if run else {}
     wall = measurement.get("wall_seconds") if isinstance(measurement, dict) else None
     attempted_sum = sum(row["latency_seconds"] for row in rows if _finite(row["latency_seconds"]))
-    wall_valid = bool(eligible and _finite(wall) and wall > 0 and wall + 1e-6 >= attempted_sum and run and run.get("finished_at"))
-    if eligible and _finite(wall) and wall + 1e-6 < attempted_sum:
+    serving = run.get("configuration", {}).get("serving") if run else None
+    wall_valid = bool(eligible and _finite(wall) and wall > 0 and (serving or wall + 1e-6 >= attempted_sum) and run and run.get("finished_at"))
+    if eligible and not serving and _finite(wall) and wall + 1e-6 < attempted_sum:
         _issue(issues, label, "Measured wall time is shorter than summed serial request times; throughput withheld")
     result["summary"] = {
         "scheduled": len(rows) if schedule else None, "recorded": sum(row["status"] != "not_recorded" for row in rows),
@@ -521,7 +530,16 @@ def _role(tree: _Tree, label: str, metadata: Any, spec: dict, controlled: bool,
         "latency_median_seconds": statistics.median(latencies) if latencies else None, "latency_count": len(latencies),
         "wall_seconds": wall if wall_valid else None, "valid_clips_per_second": len(valid) / wall if wall_valid else None,
         "warmups_scheduled": len(result["warmups"]), "warmups_valid": sum(row["valid"] for row in result["warmups"]),
+        "client_ready_p90_seconds": None, "deadline_goodput_clips_per_second": None,
     }
+    if eligible and serving:
+        from .mvp_serving import summarize
+        stats = summarize(run)
+        result["serving"] = stats
+        # Rejected/hash-mismatched media cannot contribute to report goodput.
+        if len(valid) == stats["client_ready_latency_seconds"]["valid_clip_count"]:
+            result["summary"].update(client_ready_p90_seconds=stats["client_ready_latency_seconds"]["p90"],
+                                     deadline_goodput_clips_per_second=stats["deadline_goodput_clips_per_second"])
     return result
 
 
@@ -605,7 +623,9 @@ def _render(report: dict) -> str:
         ("Not recorded / pending", "not_recorded", False), ("Invalid or unverified media", "unverified_media", False),
         ("Scheduled warmups (not measurements)", "warmups_scheduled", False), ("Valid warmups", "warmups_valid", False),
         ("Valid timed population", "latency_count", False), ("Median submit → validated media (s)", "latency_median_seconds", True),
-        ("Measured serial-block wall time (s)", "wall_seconds", True), ("Valid clips / measured wall second", "valid_clips_per_second", True),
+        ("Recorded measurement wall time (s)", "wall_seconds", True), ("Valid clips / measured wall second", "valid_clips_per_second", True),
+        ("Serving P90 submit → downloaded media (s)", "client_ready_p90_seconds", True),
+        ("Serving valid clips meeting the delivery deadline / s", "deadline_goodput_clips_per_second", True),
     ]
     summary_rows = ''.join(f'<tr><td>{_escape(label)}</td><td>{_escape(_number(b[key]) if number else b[key])}</td><td>{_escape(_number(c[key]) if number else c[key])}</td></tr>' for label, key, number in rows)
     summary_table = '<div class="panel scroll"><table><thead><tr><th>Metric and population</th><th>Baseline</th><th>Candidate</th></tr></thead><tbody>' + summary_rows + '</tbody></table><p class="detail tight">Warmups are recorded separately and excluded from latency and throughput. Medians condition on valid timed clips; missing or failed attempts are not converted to zero latency.</p></div>'
@@ -660,7 +680,7 @@ def _render(report: dict) -> str:
             '<p class="detail">The viewer checks artifact integrity; it does not independently qualify CI or certify a release. Uncalibrated thresholds, shared-host allocation, missing evidence, and same-build repeatability are not a demonstrated performance improvement.</p>'
             f'{problems}<div class="cards">{card_html}</div><section><div class="section-head"><h2>Generated media, side by side</h2><small>Video and native audio use the original exported bytes</small></div>{truncated}{"".join(cases)}</section>'
             f'<section><div class="section-head"><h2>All-slot accounting</h2><small>Recorded media validity is not a prompt-quality score</small></div>{summary_table}{warmup_ledger}</section>'
-            '<section class="panel"><h2>What the timing means</h2><p class="muted">All timing values are seconds. Submit → validated media includes server queueing and generation, status polling, download, and client-side decoding/validation. Terminal observed is poll-observed completion, not exact GPU completion. Download complete includes transfer; client validation is CPU-side analysis. These are not GPU kernel latency or time-to-first-frame measurements.</p><p class="detail">Throughput is valid clips per measured serial-block wall second at concurrency 1, not saturation capacity. Device VRAM is periodically sampled; sampled maxima can miss a true peak and are not process-isolated allocations.</p></section>'
+            '<section class="panel"><h2>What the timing means</h2><p class="muted">All timing values are seconds. Submit → validated media includes server queueing and generation, status polling, download, and client-side decoding/validation. Terminal observed is poll-observed completion, not exact GPU completion. Download complete includes transfer; client validation is CPU-side analysis. These are not GPU kernel latency or time-to-first-frame measurements.</p><p class="detail">Throughput divides valid clips by the recorded measurement wall time. Serial mode includes validation; closed-loop serving mode ends at the final delivery or transport failure and does not wait for local validation. Serving P90 uses technically valid downloaded clips and requires at least 10 samples; the sample floor is not statistical qualification. Deadline goodput counts technically valid clips delivered within the declared deadline. Neither mode establishes sustainable capacity. Device VRAM is periodically sampled; sampled maxima can miss a true peak and are not process-isolated allocations.</p></section>'
             f'<section><div class="section-head"><h2>Identity, resources, and cleanup</h2><small>Supervisor-recorded provenance · not independent attestation</small></div><div class="grid2">{"".join(role_panels)}</div></section>'
             f'<section class="panel"><h2>Recorded comparison checks</h2>{_checks(report["checks"])}<p class="detail tight">Check status: {_escape(report["comparison_status"])}. Checks are read from the hash-bound comparison; this viewer does not rerun the decoder, calibrate thresholds, or make statistical significance claims.</p></section>'
             f'<section class="panel"><h2>Recorded supervisor acceptance</h2>{_kv(gate_fields)}<ul class="notes">{acceptance_notes}</ul><p class="detail">Acceptance is reported, not independently re-evaluated by this viewer. External calibration references are not opened. No release qualification is claimed.</p></section>'

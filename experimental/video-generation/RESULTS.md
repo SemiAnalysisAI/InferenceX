@@ -52,14 +52,16 @@ while the completed H3 job and downloaded artifact identities are checked.
 | Metric | Unit and boundary | Validity and limits |
 | --- | --- | --- |
 | Request latency | Seconds from submission through downloaded and technically validated media | Valid measured clips only; startup and warmup excluded. Retains terminal, download and validation timings. |
-| Valid clips/sec | Valid measured clips / serial measured-block wall seconds | Wall time includes failed attempts; not concurrent saturation capacity. |
+| Valid clips/sec | Valid measured clips / recorded measurement wall seconds | Includes failed attempts. Serial mode includes validation; serving mode ends at final delivery/transport failure. Not sustainable capacity. |
+| Serving delivery latency | Seconds from submission through downloaded media; P50/P90/P95 | Technically valid measured clips only. P90/P95 require at least 10/20 samples; these floors are not statistical qualification. Failures remain in outcome counts. |
+| Deadline goodput | Technically valid, delivered-within-deadline clips / serving wall seconds | Deadline is operator-selected. Attainment fraction divides by all scheduled measured slots, including failures and not-started slots. |
 | Completion | Scheduled, attempted, completed, valid, failed, not-started clips | Completed can still be technically invalid. Warmup records remain separate. |
 | GPU memory | Observed device-used MiB per selected UUID | Existing role-wide and client-including-warmup peaks retain their original boundaries; not exact allocator peaks. |
 | Technical integrity | Full-stream video/audio checks with per-check units | Decode, geometry, duration, timestamps/cadence, motion and sound defects; not semantic or perceptual quality. |
 | Paired fidelity | Video PSNR dB, audio spectral cosine and absolute RMS ratio error | Matching original decoded outputs; exact video match has null finite PSNR and `exact_match=true`. |
 | GPU power | Timestamped W per GPU and summed selected-GPU W | Board sensor readings, including device memory; exclude host power and unselected GPUs. |
 | Average / observed peak power | Integrated J / phase seconds; maximum in-window sensor W | Averages are time weighted. Peaks are sampled observations, not instantaneous electrical peaks. |
-| GPU energy / valid clip | Trapezoidal integrated J / technically valid measured clips | Includes all attempted generation windows, even failed or invalid outputs; excludes download/local decoding. Null if any contributing window is invalid or valid count is zero. |
+| GPU energy / valid clip | Trapezoidal integrated J / technically valid measured clips | Serial request windows exclude download/decode; serving uses one first-submit-to-last-observed-terminal envelope, including intervening idle/download/validation time. Null for invalid coverage or zero valid clips. |
 
 Each power file has versioned `sample_series`, `windows`, `phases`, `semantics`
 and `clock_alignment`. Windows separate startup, each warmup, and each measured
@@ -68,6 +70,23 @@ and uncertainty, exact monotonic bounds, per-GPU sample counts/gaps, covered
 seconds/fraction, boundary bracketing, and invalid reasons. Phase aggregates
 combine only when every requested contributing window is valid. Full time
 series remain downloadable even when derived measurements are withheld.
+
+In serving mode, overlapping measured request intervals become one envelope;
+board energy is integrated once and cannot be attributed per request. Startup
+and warmup remain separate. This generation envelope differs from the delivery
+throughput window, which includes the final download or transport failure.
+
+Optional `roles.<role>.metrics.serving` retains raw delivery latency samples,
+outcome counts, observed submission rate, peak client requests in flight, decoded
+video seconds per second and deadline goodput. `records` retains job IDs and
+client lifecycle timings. Local validation is outside the delivery window but
+can overlap it; polling time is included and is not a server queue measurement.
+`execution.deployment` records one endpoint, selected GPUs and server settings;
+reserved GPUs remain separate in `hardware`. Server queue/execution timestamps,
+actual batching, fixed offered rate and full deployment cost are null. These
+additive fields preserve schema version 1.0.0 and are absent/null on older runs.
+Comparisons require matched workloads and timing boundaries; serving measurements
+remain descriptive and cannot reuse serial regression calibration.
 
 Integration uses the shared InferenceX trapezoidal power integrator with linear
 boundary interpolation and no extrapolation. UUID/ownership, finite readings,

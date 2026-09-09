@@ -262,10 +262,15 @@ def _load_run(directory: Path) -> tuple[dict, dict[str, dict]]:
     measurement = run.get("measurement")
     if not isinstance(measurement, dict):
         raise ValueError("run.measurement must be an object")
-    boundary = "not_measured_imported_media" if run["evidence_kind"] == "imported_media" else "submit_to_validated_media"
+    serving = configuration.get("serving")
+    boundary = "not_measured_imported_media" if run["evidence_kind"] == "imported_media" else ("submit_to_downloaded_media" if serving else "submit_to_validated_media")
     if measurement.get("boundary") != boundary:
         raise ValueError(f"MVP {run['evidence_kind']} comparison requires {boundary} timing boundary")
-    if type(measurement.get("concurrency")) is not int or measurement["concurrency"] != 1:
+    if serving:
+        from .mvp_serving import validate_window
+        if run["evidence_kind"] == "imported_media":
+            raise ValueError("imported media cannot establish serving load")
+    elif type(measurement.get("concurrency")) is not int or measurement["concurrency"] != 1:
         raise ValueError("MVP comparison requires serial concurrency=1 measurements")
     planned = _planned_slots(plan)
     planned_warmups = {
@@ -332,7 +337,9 @@ def _load_run(directory: Path) -> tuple[dict, dict[str, dict]]:
         raise ValueError(f"missing warmup slots: {', '.join(sorted(missing_warmups))}")
     if [record["slot_id"] for record in records] != list(planned_warmups) + list(planned):
         raise ValueError("run records do not follow the frozen execution order")
-    if run["evidence_kind"] != "imported_media":
+    if serving:
+        validate_window(run)
+    if run["evidence_kind"] != "imported_media" and not serving:
         attempted_seconds = sum(
             record["latency_seconds"] for record in measurements.values()
             if record.get("attempted") is not False and _finite(record.get("latency_seconds"), minimum=0)
@@ -360,7 +367,7 @@ def _expected(plan: dict, case: dict) -> dict:
     return generation
 
 
-def _observation(record: dict, expected: dict, *, timing_measured: bool = True) -> dict:
+def _observation(record: dict, expected: dict, *, timing_measured: bool = True, latency_field: str = "latency_seconds") -> dict:
     path = record["_verified_path"]
     analysis, analysis_error = None, None
     if path is not None:
@@ -371,13 +378,14 @@ def _observation(record: dict, expected: dict, *, timing_measured: bool = True) 
             analysis_error = f"{type(error).__name__}: {error}"
     if analysis and analysis.get("sha256") not in {None, record.get("sha256")}:
         raise ValueError(f"{record['slot_id']}: artifact changed between hash verification and media analysis")
-    latency = record.get("latency_seconds") if timing_measured and record.get("attempted") is not False else None
+    latency = record.get(latency_field) if timing_measured and record.get("attempted") is not False else None
     return {
         "status": record["status"],
         "attempted": record.get("attempted", True),
         "artifact_path": str(path) if path else None,
         "sha256": record.get("sha256"),
         "latency_seconds": latency if _finite(latency, minimum=0) else None,
+        "latency_boundary": "submit_to_downloaded_media" if latency_field == "submit_to_media_seconds" else "submit_to_validated_media",
         "media": analysis,
         "error": record.get("error"),
         "analysis_error": analysis_error,
@@ -554,6 +562,10 @@ def _performance_differences(baseline: dict, candidate: dict, slots: list[dict])
     """Compare measured client work as well as operator-declared server class."""
     differences = []
     left, right = baseline["configuration"], candidate["configuration"]
+    if left.get("serving") or right.get("serving"):
+        differences.append("serving delivery measurements are descriptive; the existing serial regression policy is not calibrated for serving load")
+        if _canonical(left.get("serving")) != _canonical(right.get("serving")):
+            differences.append("serving load or delivery deadline differs")
     live = bool({"operator_endpoint", "live_h3"} & {baseline["evidence_kind"], candidate["evidence_kind"]})
     for field in ("hardware_label", "runtime"):
         if left[field] != right[field]:
@@ -620,8 +632,8 @@ def compare_runs(baseline_dir: Path, candidate_dir: Path, *, policy: dict) -> di
     planned = _planned_slots(plan)
     slots = []
     for slot_id, case in planned.items():
-        baseline = _observation(baseline_records[slot_id], _expected(plan, case), timing_measured=baseline_run["evidence_kind"] != "imported_media")
-        candidate = _observation(candidate_records[slot_id], _expected(plan, case), timing_measured=candidate_run["evidence_kind"] != "imported_media")
+        baseline = _observation(baseline_records[slot_id], _expected(plan, case), timing_measured=baseline_run["evidence_kind"] != "imported_media", latency_field="submit_to_media_seconds" if baseline_run["configuration"].get("serving") else "latency_seconds")
+        candidate = _observation(candidate_records[slot_id], _expected(plan, case), timing_measured=candidate_run["evidence_kind"] != "imported_media", latency_field="submit_to_media_seconds" if candidate_run["configuration"].get("serving") else "latency_seconds")
         checks = [_media_check("baseline", baseline), _media_check("candidate", candidate)]
         metrics, notes = {}, []
         if _valid(baseline) and _valid(candidate):
@@ -686,7 +698,8 @@ def compare_runs(baseline_dir: Path, candidate_dir: Path, *, policy: dict) -> di
         "release_qualification_reason": "MVP threshold decisions are not a calibrated, independently verified release qualification.",
         "policy": policy,
         "measurement": {
-            "boundary": baseline_run["measurement"]["boundary"] if baseline_run["measurement"]["boundary"] == candidate_run["measurement"]["boundary"] else "mixed_incomparable_boundaries", "concurrency": 1,
+            "boundary": baseline_run["measurement"]["boundary"] if baseline_run["measurement"]["boundary"] == candidate_run["measurement"]["boundary"] else "mixed_incomparable_boundaries",
+            "concurrency": baseline_run["measurement"]["concurrency"] if baseline_run["measurement"]["concurrency"] == candidate_run["measurement"]["concurrency"] else None,
             "performance_mode": performance_mode,
             "performance_comparability_limitations": different,
             "latency_increase_fraction": increase,
@@ -713,7 +726,7 @@ def compare_runs(baseline_dir: Path, candidate_dir: Path, *, policy: dict) -> di
             "Fixed seeds do not guarantee matching output across different inference implementations; a fidelity failure requires investigation.",
             "Hardware, runtime revision, and model identity are supplied by the operator, not independently verified by this harness.",
             "Timing covers client submission through downloaded, validated media; it is not GPU-only kernel latency.",
-            "Serial valid-clips throughput is not a saturation-capacity or concurrent-serving benchmark.",
+            "Recorded valid-clips throughput is descriptive; serial or closed-loop delivery measurements do not establish sustainable serving capacity.",
             "Thresholds require domain calibration; no human evaluation, statistical significance, or release certification is claimed.",
             "No memory, energy, cost, prompt-following, physics, or perceptual-quality results are inferred from these fidelity checks.",
         ],
