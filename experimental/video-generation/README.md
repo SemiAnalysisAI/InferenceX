@@ -211,7 +211,7 @@ calls. Real CI execution and artifact inspection are separate acceptance evidenc
 
 ## Cross-hardware serving matrices
 
-`h3-preflight-only=true` records the selected CI runner's identity, public SSH
+`h3-preparation=site-preflight` records the selected CI runner's identity, public SSH
 host keys, scheduler account, shared runtime cache candidates, and command
 availability without reserving or querying GPUs. Its
 separate `h3-site-preflight` artifact is not benchmark or runtime qualification
@@ -219,7 +219,7 @@ evidence. It also accepts `mi355x-amds`; actual AMD generation remains unsupport
 Preflight cannot be combined with historical result reuse. Hardware sites have
 independent workflow concurrency groups; each retains its existing Slurm checks.
 
-For AMD model preparation without local SSH, set `h3-stage-amd-model=true`,
+For AMD model preparation without local SSH, set `h3-preparation=amd-model`,
 `h3-cluster=mi355x-amds`, and one successful H200 source in `h3-reuse-run-ids`.
 This CPU-only job reuses verified shared weights or stages the exact source
 manifest under `/it-share/wenyao-minimax-h3/work`, checking every size and SHA256.

@@ -13,20 +13,16 @@ on:
                 type: boolean
                 default: false
             h3-cluster:
-                description: "Prepared H3 site: h200-dgxc, h100-dgxc, b200-nscale; mi355x-amds preflight only"
+                description: "Prepared H3 site: h200-dgxc, h100-dgxc, b200-nscale; mi355x-amds preparation only"
                 required: false
                 type: string
                 default: h200-dgxc
-            h3-preflight-only:
-                description: "Inspect trusted H3 site identity without GPU allocation"
+            h3-preparation:
+                description: "Optional CPU-only preparation; AMD model staging needs one accepted source run"
                 required: false
-                type: boolean
-                default: false
-            h3-stage-amd-model:
-                description: "Stage frozen H3 weights on AMD from one accepted source run; no GPU allocation"
-                required: false
-                type: boolean
-                default: false
+                type: choice
+                options: [none, site-preflight, amd-model]
+                default: none
             h3-site-config:
                 description: "Pinned runner-local H3 site JSON; empty uses existing H200 configuration"
                 required: false
@@ -143,20 +139,15 @@ on:
                 type: boolean
                 default: false
             h3-cluster:
-                description: "Prepared H3 site: h200-dgxc, h100-dgxc, b200-nscale; mi355x-amds preflight only"
+                description: "Prepared H3 site: h200-dgxc, h100-dgxc, b200-nscale; mi355x-amds preparation only"
                 required: false
                 type: string
                 default: h200-dgxc
-            h3-preflight-only:
-                description: "Inspect trusted H3 site identity without GPU allocation"
+            h3-preparation:
+                description: "Optional CPU-only preparation; AMD model staging needs one accepted source run"
                 required: false
-                type: boolean
-                default: false
-            h3-stage-amd-model:
-                description: "Stage frozen H3 weights on AMD from one accepted source run; no GPU allocation"
-                required: false
-                type: boolean
-                default: false
+                type: string
+                default: none
             h3-site-config:
                 description: "Pinned runner-local H3 site JSON; empty uses existing H200 configuration"
                 required: false
@@ -275,8 +266,8 @@ jobs:
         uses: ./.github/workflows/h3-video.yml
         with:
             cluster: ${{ inputs.h3-cluster }}
-            preflight-only: ${{ inputs.h3-preflight-only }}
-            stage-amd-model: ${{ inputs.h3-stage-amd-model }}
+            preflight-only: ${{ inputs.h3-preparation == 'site-preflight' }}
+            stage-amd-model: ${{ inputs.h3-preparation == 'amd-model' }}
             site-config: ${{ inputs.h3-site-config }}
             source-run-ids: ${{ inputs.h3-reuse-run-ids }}
             inventory-run-id: ${{ inputs.h3-inventory-run-id }}

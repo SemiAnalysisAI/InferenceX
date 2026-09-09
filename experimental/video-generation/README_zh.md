@@ -167,12 +167,12 @@ artifact 检查是独立的验收证据。
 
 ## 跨硬件服务测量
 
-`h3-preflight-only=true` 仅记录所选 CI runner 的身份、SSH 主机公钥、调度账户、共享运行时缓存候选和命令路径，
+`h3-preparation=site-preflight` 仅记录所选 CI runner 的身份、SSH 主机公钥、调度账户、共享运行时缓存候选和命令路径，
 不分配或查询 GPU。独立的 `h3-site-preflight` 产物不代表性能结果或运行时验收。
 该模式支持 `mi355x-amds`；AMD 视频生成仍未接入。预检不可同时重放历史结果。
 各硬件站点使用独立的工作流并发组，并保留原有 Slurm 校验。
 
-本地无法 SSH 到 AMD 时，可设置 `h3-stage-amd-model=true`、
+本地无法 SSH 到 AMD 时，可设置 `h3-preparation=amd-model`、
 `h3-cluster=mi355x-amds`，并通过 `h3-reuse-run-ids` 指定一个成功的 H200 来源。
 该 CPU 任务优先复用已校验的共享权重，否则在 `/it-share/wenyao-minimax-h3/work`
 准备来源清单中的模型，逐文件校验大小和 SHA256。`h3-model-preparation` 产物与
