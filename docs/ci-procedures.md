@@ -222,6 +222,10 @@ Do not continue if `RUN_ID` is empty. Run metadata describes the dispatch workfl
 
 ## PR primary and modifier labels
 
+Sweep labels authorize GPU work for same-repository PRs whether draft or ready. Draft status controls review readiness, not sweep eligibility; fork PRs retain their trusted-dispatch path. Adding a sweep label or pushing with one present can start a sweep. Marking ready does not dispatch or repeat one. To start an already-labeled draft that has no run, remove and reapply its sweep label.
+
+The same-repository check applies before checking out PR code in changelog validation as well as before GPU setup. Validation explicitly uses a read-only token without persisted checkout credentials. External PRs still require the separate trusted dispatcher: a write-authorized maintainer labels an open, ready PR and approves its exact head; subsequent external commits require fresh approval. Labels alone never make a fork eligible for the normal sweep pipeline.
+
 [`run-sweep.yml`](../.github/workflows/run-sweep.yml) rejects more than one primary label. Apply exactly one:
 
 | Primary label | Matrix scope | Canary | Matrix fail-fast |

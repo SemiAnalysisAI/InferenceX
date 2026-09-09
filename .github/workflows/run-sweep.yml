@@ -34,7 +34,6 @@ on:
         branches:
             - main
         types:
-            - ready_for_review
             - synchronize
             - labeled
             - unlabeled
@@ -44,9 +43,12 @@ on:
 jobs:
     check-changelog:
         runs-on: ubuntu-latest
+        permissions:
+            contents: read
+        # Labels opt into sweeps regardless of draft status; readiness only starts reviews.
         if: >-
             github.event_name == 'pull_request' &&
-            !github.event.pull_request.draft &&
+            github.event.pull_request.head.repo.full_name == github.repository &&
             (
               (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
               github.event.label.name == 'sweep-enabled' ||
@@ -92,6 +94,7 @@ jobs:
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                   fetch-depth: 0
+                  persist-credentials: false
 
             - name: Read PR sweep policy
               id: sweep_policy
@@ -136,7 +139,6 @@ jobs:
             needs.check-changelog.result == 'success' &&
             github.event_name == 'pull_request' &&
             github.event.action == 'synchronize' &&
-            !github.event.pull_request.draft &&
             !contains(github.event.pull_request.labels.*.name, 'evals-only') &&
             !contains(github.event.pull_request.labels.*.name, 'agentx-fast') &&
             (
@@ -189,7 +191,7 @@ jobs:
             (
               (
                 github.event_name == 'pull_request' &&
-                !github.event.pull_request.draft &&
+                needs.check-changelog.result == 'success' &&
                 github.event.pull_request.head.repo.full_name == github.repository &&
                 needs.check-changelog.outputs.skip-pr-sweep != 'true' &&
                 (
@@ -1205,7 +1207,6 @@ jobs:
             always() &&
             needs.setup.result == 'success' &&
             github.event_name == 'pull_request' &&
-            !github.event.pull_request.draft &&
             (
               contains(github.event.pull_request.labels.*.name, 'sweep-enabled') ||
               contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') ||
