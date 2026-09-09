@@ -219,6 +219,13 @@ evidence. It also accepts `mi355x-amds`; actual AMD generation remains unsupport
 Preflight cannot be combined with historical result reuse. Hardware sites have
 independent workflow concurrency groups; each retains its existing Slurm checks.
 
+For AMD model preparation without local SSH, set `h3-stage-amd-model=true`,
+`h3-cluster=mi355x-amds`, and one successful H200 source in `h3-reuse-run-ids`.
+This CPU-only job reuses verified shared weights or stages the exact source
+manifest under `/it-share/wenyao-minimax-h3/work`, checking every size and SHA256.
+Its `h3-model-preparation` artifact and persistent `model-ready.json` are preparation
+receipts; they do not admit an AMD runtime or allocate GPUs.
+
 The existing `serving-smoke` mode accepts 4–200 measured requests per concurrency
 and an optional site-level `concurrencies` subset, such as `[4]`, to complete a
 missing cell in a new run without repeating finished cells. Omission keeps

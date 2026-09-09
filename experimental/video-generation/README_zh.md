@@ -172,6 +172,12 @@ artifact 检查是独立的验收证据。
 该模式支持 `mi355x-amds`；AMD 视频生成仍未接入。预检不可同时重放历史结果。
 各硬件站点使用独立的工作流并发组，并保留原有 Slurm 校验。
 
+本地无法 SSH 到 AMD 时，可设置 `h3-stage-amd-model=true`、
+`h3-cluster=mi355x-amds`，并通过 `h3-reuse-run-ids` 指定一个成功的 H200 来源。
+该 CPU 任务优先复用已校验的共享权重，否则在 `/it-share/wenyao-minimax-h3/work`
+准备来源清单中的模型，逐文件校验大小和 SHA256。`h3-model-preparation` 产物与
+持久化的 `model-ready.json` 仅记录准备结果，不代表 AMD 运行时通过验收，也不分配 GPU。
+
 站点配置可指定 `concurrencies` 子集（如 `[4]`），用新执行补齐缺失档位，
 无需重复已完成结果。省略时仍运行 `[1, 2, 4]`，产物与逐档证据格式保持不变。
 

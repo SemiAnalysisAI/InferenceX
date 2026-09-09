@@ -22,6 +22,11 @@ on:
                 required: false
                 type: boolean
                 default: false
+            h3-stage-amd-model:
+                description: "Stage frozen H3 weights on AMD from one accepted source run; no GPU allocation"
+                required: false
+                type: boolean
+                default: false
             h3-site-config:
                 description: "Pinned runner-local H3 site JSON; empty uses existing H200 configuration"
                 required: false
@@ -147,6 +152,11 @@ on:
                 required: false
                 type: boolean
                 default: false
+            h3-stage-amd-model:
+                description: "Stage frozen H3 weights on AMD from one accepted source run; no GPU allocation"
+                required: false
+                type: boolean
+                default: false
             h3-site-config:
                 description: "Pinned runner-local H3 site JSON; empty uses existing H200 configuration"
                 required: false
@@ -266,6 +276,7 @@ jobs:
         with:
             cluster: ${{ inputs.h3-cluster }}
             preflight-only: ${{ inputs.h3-preflight-only }}
+            stage-amd-model: ${{ inputs.h3-stage-amd-model }}
             site-config: ${{ inputs.h3-site-config }}
             source-run-ids: ${{ inputs.h3-reuse-run-ids }}
             inventory-run-id: ${{ inputs.h3-inventory-run-id }}

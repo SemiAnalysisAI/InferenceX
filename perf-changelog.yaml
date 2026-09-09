@@ -7001,3 +7001,9 @@
   description:
     - "Allow an explicit H3 serving concurrency subset so missing cells can be completed without repeating finished GPU measurements. Preserve default C1/C2/C4 and per-cell evidence; select no LLM jobs."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2916
+
+- config-keys: []
+  workflow-dispatch: h3-video.yml
+  description:
+    - "Stage exact H3 weights on AMD through an opt-in CPU-only CI preparation job. Reuse verified shared files and retain source-run hashes; do not allocate GPUs or claim runtime compatibility."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2916
