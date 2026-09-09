@@ -52,7 +52,7 @@ PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path $MODEL_PATH --se
 --mamba-ssm-dtype bfloat16 \
 --mamba-full-memory-ratio 0.37 \
 --linear-attn-prefill-backend flashinfer \
---attention-backend flashinfer \
+--attention-backend fa4 \
 --mm-attention-backend triton_attn \
 --moe-runner-backend flashinfer_trtllm \
 --cuda-graph-max-bs $CONC \
