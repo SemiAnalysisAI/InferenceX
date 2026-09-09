@@ -7047,3 +7047,11 @@
   description:
     - "Set OMP_NUM_THREADS=1 explicitly to preserve the proven TP8 recipe's CPU parallelism; the new runtime otherwise selects 24 startup threads per worker on B200 Nscale."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2931
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Remove the unproven OMP_NUM_THREADS override; keep the runtime default for official cache-source validation."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2931
