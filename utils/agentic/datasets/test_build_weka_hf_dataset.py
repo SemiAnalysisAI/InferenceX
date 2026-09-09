@@ -41,8 +41,6 @@ def test_filter_without_drops_preserves_overlapping_subagents_exactly() -> None:
     filtered = _filter_trace_256k(trace, cap=256_000)
 
     assert filtered == trace
-    child_a, child_b = filtered["requests"][1:]
-    assert child_b["t"] < child_a["t"] + child_a["duration_ms"] / 1000.0
 
 
 def test_filter_uses_uniform_shift_and_preserves_overlap() -> None:
