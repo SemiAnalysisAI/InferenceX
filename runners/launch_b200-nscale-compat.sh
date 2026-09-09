@@ -578,7 +578,7 @@ else
             echo 'Squash file already exists and is valid, skipping import'
         else
             rm -f \"$SQUASH_FILE\"
-            enroot import -o \"$SQUASH_FILE\" docker://$IMAGE
+            enroot import -o \"$SQUASH_FILE\" docker://${IMAGE/@/:}
         fi
     " || exit 1
 
