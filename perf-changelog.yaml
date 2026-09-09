@@ -7136,3 +7136,11 @@
   description:
     - "Drop LMCache local disk tier for TP4 conc 40/48; keep CPU-only offload (256 GiB/rank, 256-token chunks)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2816
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Defer TP4 conc 40/48 LMCache DRAM offload from the published search space; recipe remains GPU-resident through conc 32."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2816
