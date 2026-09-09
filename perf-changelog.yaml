@@ -6985,6 +6985,7 @@
     - "Weight loading currently costs 5760-5946 s (96-99 min) per job on this runner, measured across the c1, c4, c56 and c64 AgentX jobs of run 34087124574 - roughly half of each ~3 h job. It does not affect any measured number: loading completes before warmup and the profiling phase. The effect is also only observable on this runner. A local EXT4 box serves the checkpoint from page cache and loads in ~40 s with or without the cap, so it never exercises the cold-read path. CI reads cold from WEKAFS, where each of the 8 ranks streams the full 805 GiB to slice its own shards - roughly 6.4 TB of aggregate network reads per job - and that is where oversubscribed reader threads cost real time."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2851
 
+- config-keys:
     - minimaxm3-fp4-mi355x-atom-agentic-mtp
   scenario-type:
     - agentic-coding
