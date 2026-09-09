@@ -24,6 +24,14 @@ def allocation_observations(root: Path) -> list[dict]:
                                 env={**os.environ, "TZ": "UTC", "LC_ALL": "C"})
         records.append({"receipt": str(path), "identity": identity, "exit_code": result.returncode,
                         "stdout": result.stdout, "stderr": result.stderr})
+        if result.returncode:
+            accounting = subprocess.run(
+                ["sacct", "-X", "-j", str(job), "--noheader", "--parsable2",
+                 "--format=JobID,State,Start,End,AllocCPUS,AllocTRES,ReqTRES,NodeList,Elapsed,ExitCode"],
+                capture_output=True, text=True, timeout=10,
+                env={**os.environ, "TZ": "UTC", "LC_ALL": "C"})
+            records[-1]["accounting"] = {"exit_code": accounting.returncode, "stdout": accounting.stdout,
+                                         "stderr": accounting.stderr}
     return records
 
 
