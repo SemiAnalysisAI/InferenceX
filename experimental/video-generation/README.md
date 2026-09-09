@@ -212,7 +212,8 @@ calls. Real CI execution and artifact inspection are separate acceptance evidenc
 ## Cross-hardware serving matrices
 
 `h3-preflight-only=true` records the selected CI runner's identity, public SSH
-host keys, and command availability without reserving or querying GPUs. Its
+host keys, scheduler account, shared runtime cache candidates, and command
+availability without reserving or querying GPUs. Its
 separate `h3-site-preflight` artifact is not benchmark or runtime qualification
 evidence. It also accepts `mi355x-amds`; actual AMD generation remains unsupported.
 Preflight cannot be combined with historical result reuse. Hardware sites have

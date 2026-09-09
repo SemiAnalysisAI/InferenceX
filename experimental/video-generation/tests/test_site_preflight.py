@@ -12,6 +12,7 @@ import site_preflight
 def test_preflight_reads_only_public_keys_and_keeps_missing_data_explicit(monkeypatch, available):
     key = Path("/etc/ssh/ssh_host_ed25519_key.pub")
     monkeypatch.setattr(Path, "is_file", lambda path: available and path == key)
+    monkeypatch.setattr(Path, "is_dir", lambda path: False)
     reads = []
     def read(path):
         reads.append(path)
@@ -31,4 +32,7 @@ def test_preflight_reads_only_public_keys_and_keeps_missing_data_explicit(monkey
     assert result["previously_known_amd_jumpbox"] is None
     assert result["ssh_host_public_keys"] == ({"ed25519": "ssh-ed25519 public-test-key"} if available else {})
     assert reads == ([key] if available else [])
-    assert commands == ([["ssh-keygen", "-F", "64.139.223.123"]] if available else [])
+    assert result["scheduler_associations"] is None
+    assert result["enroot_paths"] is None
+    assert all(value is None for value in result["runtime_candidates"].values())
+    assert [command[0] for command in commands] == (["ssh-keygen", "sacctmgr"] if available else [])
