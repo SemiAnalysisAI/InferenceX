@@ -317,3 +317,24 @@ def test_export_excludes_only_known_caches_and_preserves_media(tmp_path):
     assert not (target / "gpu/supervisor/baseline/cache").exists()
     assert (cache / "kernel-link").is_symlink()
     assert "kernel-link" not in (target / "SHA256SUMS").read_text()
+
+
+@pytest.mark.parametrize('assignment,success', [('4,5', True), ('4-5', True), ('0,1', False)])
+def test_entry_resolves_device_minors_instead_of_nvml_indices(tmp_path, assignment, success):
+    driver = tmp_path / 'driver'
+    ids = ['GPU-12441e19-6453-d8c4-69a8-9fe1cd8b770c', 'GPU-994fd357-abc0-57a9-12d5-f7d40e741530']
+    for minor, identity in zip((4, 5), ids):
+        info = driver / f'pci-{minor}' / 'information'
+        info.parent.mkdir(parents=True)
+        info.write_text(f'Model: NVIDIA H200\nDevice Minor: {minor}\nGPU UUID: {identity}\n')
+    entry = (Path(ci.__file__).parent / 'runtime-entry.example.sh').read_text()
+    program = entry.split("h3_gpu_uuids=$(python3 - <<'PY'\n", 1)[1].split('\nPY\n)', 1)[0]
+    program = program.replace('/proc/driver/nvidia/gpus', str(driver))
+    result = subprocess.run([sys.executable, '-c', program], env={**os.environ, 'SLURM_STEP_GPUS': assignment},
+                            capture_output=True, text=True)
+    if success:
+        assert result.returncode == 0
+        assert result.stdout.strip() == ','.join(ids)
+    else:
+        assert result.returncode != 0
+        assert 'lack NVIDIA UUIDs' in result.stderr

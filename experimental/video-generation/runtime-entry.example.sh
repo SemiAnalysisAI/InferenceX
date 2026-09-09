@@ -18,10 +18,11 @@ export ENROOT_RUNTIME_PATH="/tmp/inferencex-h3-${SLURM_JOB_ID}-${SLURM_STEP_ID}/
 export ENROOT_TEMP_PATH="/tmp/inferencex-h3-${SLURM_JOB_ID}-${SLURM_STEP_ID}/tmp"
 export ENROOT_CACHE_PATH="$runtime_root/cache"
 
-# SLURM_STEP_GPUS contains global GPU IDs, unlike CUDA's cgroup-local indices.
-# Translate that assignment to physical UUIDs before NVIDIA remounts devices.
-h3_gpu_ids=$(python3 - <<'PY'
+# This site uses AutoDetect=nvidia and /dev/nvidia minor-number ordering.
+# NVML query indices use PCI ordering and differ under partial allocations.
+h3_gpu_uuids=$(python3 - <<'PY'
 import os, re
+from pathlib import Path
 value = os.environ['SLURM_STEP_GPUS']
 if not re.fullmatch(r'[0-9]+(?:-[0-9]+)?(?:,[0-9]+(?:-[0-9]+)?)*', value):
     raise SystemExit('Unsupported Slurm GPU assignment; no index fallback')
@@ -36,16 +37,29 @@ for part in value.split(','):
         raise SystemExit('GPU range outside the single H200 node')
 if len(ids) != len(set(ids)) or not ids or any(i >= 8 for i in ids):
     raise SystemExit('Invalid global GPU assignment')
-print(','.join(map(str, ids)))
+devices = {}
+for path in Path('/proc/driver/nvidia/gpus').glob('*/information'):
+    fields = dict(line.split(':', 1) for line in path.read_text().splitlines() if ':' in line)
+    minor, identity = fields.get('Device Minor', '').strip(), fields.get('GPU UUID', '').strip()
+    if minor.isdigit() and re.fullmatch(r'GPU-[0-9a-fA-F-]{36}', identity):
+        if int(minor) in devices:
+            raise SystemExit('Duplicate NVIDIA device minor')
+        devices[int(minor)] = identity
+if any(index not in devices for index in ids):
+    raise SystemExit('Assigned Slurm device files lack NVIDIA UUIDs')
+print(','.join(devices[index] for index in ids))
 PY
 )
-h3_gpu_rows=$(nvidia-smi --id="$h3_gpu_ids" --query-gpu=uuid,name --format=csv,noheader)
-H3_ASSIGNED_GPU_UUIDS=$(python3 - "$h3_gpu_rows" <<'PY'
+h3_gpu_rows=$(nvidia-smi --id="$h3_gpu_uuids" --query-gpu=uuid,name --format=csv,noheader)
+H3_ASSIGNED_GPU_UUIDS=$(python3 - "$h3_gpu_rows" "$h3_gpu_uuids" <<'PY'
 import csv, re, sys
 rows = list(csv.reader(sys.argv[1].splitlines()))
 if not rows or any(len(row) != 2 or 'H200' not in row[1] or not re.fullmatch(r'GPU-[0-9a-fA-F-]{36}', row[0].strip()) for row in rows):
     raise SystemExit('Assigned hardware is not a physical H200 GPU set')
-print(','.join(row[0].strip() for row in rows))
+observed = [row[0].strip() for row in rows]
+if sorted(observed) != sorted(sys.argv[2].split(',')):
+    raise SystemExit('NVIDIA query differs from assigned physical UUIDs')
+print(','.join(observed))
 PY
 )
 export H3_ASSIGNED_GPU_UUIDS
