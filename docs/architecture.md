@@ -35,8 +35,8 @@ This page explains how a declared benchmark becomes a validated job, a runtime r
 | [`configs/nvidia-master.yaml`](../configs/nvidia-master.yaml), [`configs/amd-master.yaml`](../configs/amd-master.yaml) | Declarative model, image, framework, scenario, topology, and search-space intent |
 | [`configs/runners.yaml`](../configs/runners.yaml) | Scheduling labels, concrete runner names, and hardware facts used during generation |
 | [`perf-changelog.yaml`](../perf-changelog.yaml) | Append-only selection of config keys to run for a change |
-| [`utils/matrix_logic/validation.py`](../utils/matrix_logic/validation.py) | Enforced Pydantic schemas and cross-field invariants |
-| [`utils/matrix_logic/generate_sweep_configs.py`](../utils/matrix_logic/generate_sweep_configs.py) | Search-space expansion, defaults, filters, derived metadata, runner resolution, and eval selection |
+| [`infx/matrix/validation.py`](../infx/matrix/validation.py) | Enforced Pydantic schemas and cross-field invariants |
+| [`infx/matrix/generate.py`](../infx/matrix/generate.py) | Search-space expansion, defaults, filters, derived metadata, runner resolution, and eval selection |
 | [`utils/process_changelog.py`](../utils/process_changelog.py) | Added-changelog extraction, config-key expansion, matrix bucketing, and final matrix validation |
 | [`.github/workflows/run-sweep.yml`](../.github/workflows/run-sweep.yml) | Trigger policy, matrix fan-out, collection dependencies, and cross-repository ingest dispatch |
 | [`.github/workflows/benchmark-tmpl.yml`](../.github/workflows/benchmark-tmpl.yml), [`.github/workflows/benchmark-multinode-tmpl.yml`](../.github/workflows/benchmark-multinode-tmpl.yml) | Reusable job input contract, environment projection, launcher invocation, result checks, and per-job uploads |
@@ -125,9 +125,15 @@ This split has two consequences.
 
 ## Stage 2: validation and matrix generation
 
-[`validation.py`](../utils/matrix_logic/validation.py) validates master files and runner data before generation. Its strict models own accepted aliases and cross-field rules. Examples include mutually exclusive concurrency forms, single-node versus multi-node shapes, component metadata scope, prefill and decode hardware pairing, and cluster-label requirements for agentic scenarios.
+Shared Python implementation lives in the repository-root `infx` package. `infx.matrix.generate` owns generation and `infx.matrix.validation` owns schemas. Python callers should import these canonical paths; further domain modules can join `infx` as needed.
 
-[`generate_sweep_configs.py`](../utils/matrix_logic/generate_sweep_configs.py) then expands validated intent into rows. It owns decisions such as:
+`utils/matrix_logic/generate_sweep_configs.py` and `validation.py` remain thin compatibility entrypoints. Legacy imports resolve to the same module objects, avoiding duplicate schema classes. Existing script commands, arguments, relative input paths, and dependencies are unchanged; running from a checkout requires no package installation. `process_changelog.py` and `validate_perf_changelog.py` import the `infx.matrix` modules directly.
+
+For append-only historical comparisons, `generation_inputs_at_ref` extracts configs, legacy entrypoints, and the `infx` package (when present) from the same Git revision. Revisions before this migration continue to run their standalone generator; newer revisions use their own package code. Working-tree source and configs do not replace historical inputs.
+
+[`validation.py`](../infx/matrix/validation.py) validates master files and runner data before generation. Its strict models own accepted aliases and cross-field rules. Examples include mutually exclusive concurrency forms, single-node versus multi-node shapes, component metadata scope, prefill and decode hardware pairing, and cluster-label requirements for agentic scenarios.
+
+[`infx.matrix.generate`](../infx/matrix/generate.py) then expands validated intent into rows. It owns decisions such as:
 
 - concrete concurrency points from ranges or lists.
 - default parallelism values.
@@ -242,7 +248,7 @@ Use the master entry to answer what should be benchmarked. Use runner config for
 
 ### Matrix derivation has one implementation
 
-Derived concurrency points, eval selection, topology defaults, names, and runner-derived facts belong in `generate_sweep_configs.py`. Workflows should forward matrix fields, not reimplement generator policy in expressions or shell.
+Derived concurrency points, eval selection, topology defaults, names, and runner-derived facts belong in `infx.matrix.generate`. Workflows should forward matrix fields, not reimplement generator policy in expressions or shell.
 
 The `full-sweep` and `test-config` commands share fixed-sequence and AgentX row builders. Command-specific selection remains in the callers; the AgentX builder owns worker defaults, offload budgets, experiment names, node counts, and validation. It validates topology and offload budgets before filtering concurrency, preserves point and runner ordering, and filters AgentX bounds without inventing a capped concurrency point.
 

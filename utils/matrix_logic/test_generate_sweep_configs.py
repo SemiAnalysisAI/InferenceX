@@ -1939,6 +1939,43 @@ class TestEdgeCases:
 class TestCommandLine:
     """Tests for CLI input loading and sweep-selection behavior."""
 
+    @pytest.mark.parametrize("command", ["full-sweep", "test-config"])
+    @pytest.mark.parametrize("invalid", [False, True])
+    def test_script_from_another_directory(
+        self, tmp_path, sample_single_node_config, sample_runner_config,
+        command, invalid,
+    ):
+        """Direct scripts must resolve their own imports and caller-relative inputs."""
+        (tmp_path / "master config.yaml").write_text(yaml.safe_dump(sample_single_node_config))
+        (tmp_path / "runners.yaml").write_text(yaml.safe_dump(sample_runner_config))
+        script = Path(__file__).with_name("generate_sweep_configs.py")
+        args = [
+            command, "--config-files", "master config.yaml",
+            "--runner-config", "runners.yaml", "--seq-lens", "1k1k", "--no-evals",
+        ]
+        if command == "test-config":
+            args += ["--config-keys", "*"]
+        if invalid:
+            args += ["--all-evals"]
+
+        result = subprocess.run(
+            [sys.executable, str(script), *args], cwd=tmp_path,
+            capture_output=True, text=True, check=False,
+        )
+
+        if invalid:
+            assert result.returncode == 2
+            assert result.stdout == ""
+            assert "--all-evals cannot be combined with --no-evals" in result.stderr
+        else:
+            assert result.returncode == 0, result.stderr
+            assert result.stderr == ""
+            rows = json.loads(result.stdout)
+            assert [(r["isl"], r["osl"], r["conc"]) for r in rows] == [
+                (1024, 1024, 4), (1024, 1024, 8), (1024, 1024, 16),
+                (1024, 1024, 32), (1024, 1024, 64),
+            ]
+
     @pytest.mark.parametrize("runner_file", [None, "custom runners.yaml"])
     def test_cli_uses_selected_runner_file(
         self, tmp_path, monkeypatch, sample_single_node_config,
