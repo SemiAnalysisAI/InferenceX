@@ -46,6 +46,15 @@ def test_source_ids_preserve_order_without_shell_interpretation():
     assert export_ci.source_ids("34293342829,34291306687") == ["34293342829", "34291306687"]
 
 
+def test_inventory_reuse_requires_the_hardware_job_and_artifact(github):
+    with pytest.raises(ValueError):
+        export_ci.verified_execution("123", inventory=True)
+    github[1]["jobs"][0]["name"] = "h3-video / p1.500 | H3 H200 hardware inventory"
+    github[2]["name"] = "h3-hardware-123-1"
+    source_ci, artifact = export_ci.verified_execution("123", inventory=True)
+    assert source_ci["databaseId"] == 123 and artifact["name"] == "h3-hardware-123-1"
+
+
 def test_authentication_stays_out_of_saved_public_ci_receipts(github, monkeypatch, tmp_path):
     run, jobs, artifact = github
     sentinel = "CPU-test-authentication-sentinel"
@@ -222,6 +231,48 @@ def test_verified_hardware_preserves_source_and_joins_slurm_identity(tmp_path):
     assert profile["slurm"]["job_id"] == "7"
     assert profile["raw"]["inventory"] == "hardware/nvidia-smi.xml"
     assert (root / "hardware-profile.json").read_bytes() == original
+
+
+def test_reclassify_retained_raw_pci_without_rewriting_the_inventory(tmp_path):
+    root = tmp_path / "hardware"
+    hardware_artifact(root)
+    (root / "nvidia-smi.xml").write_text('<nvidia_smi_log><gpu><uuid>GPU-fixture</uuid><product_name>NVIDIA H200</product_name>'
+        '<pci><pci_device_id>233510DE</pci_device_id><pci_sub_system_id>18BE10DE</pci_sub_system_id></pci></gpu></nvidia_smi_log>')
+    seal(root)
+    original = (root / "hardware-profile.json").read_bytes()
+    profile = export_ci.verified_hardware(root, "999", "1", SHA)
+    assert profile["tdp"]["status"] == "verified" and profile["tdp"]["watts_per_gpu"] == 700
+    assert profile["recorded_tdp_classification"]["status"] == "unknown"
+    assert (root / "hardware-profile.json").read_bytes() == original
+
+
+def test_cpu_export_reuses_independently_verified_inventory_commit(github, monkeypatch, tmp_path):
+    fake_download(monkeypatch)
+    original_download = export_ci.subprocess.run
+    execution = export_ci.verified_execution
+    def admission(run_id, *, inventory=False):
+        if inventory:
+            assert run_id == "456"
+            return {"runAttempt": 2, "headSha": "b" * 40}, {"name": "h3-hardware-456-2"}
+        return execution(run_id)
+    def download(argv, **kwargs):
+        if argv[3] == "456":
+            hardware_artifact(Path(argv[argv.index("--dir") + 1]))
+        else:
+            original_download(argv, **kwargs)
+    observed = []
+    def verify(root, run_id, attempt, sha):
+        observed.append((run_id, attempt, sha))
+        return {"gpu_uuids": ["GPU-fixture"]}
+    monkeypatch.setattr(export_ci, "verified_execution", admission)
+    monkeypatch.setattr(export_ci.subprocess, "run", download)
+    monkeypatch.setattr(export_ci, "verified_hardware", verify)
+    monkeypatch.setattr(export_ci, "write_result", lambda *args, **kwargs: {"status": "complete"})
+    monkeypatch.setattr(export_ci.ci, "allocate", lambda *args, **kwargs: pytest.fail("CPU export allocated GPUs"))
+    output = tmp_path / "output"
+    assert export_ci.publish(["123"], output, None, hardware_run_id="456") == 0
+    assert observed == [("456", "2", "b" * 40)]
+    assert (output / "source-123/hardware/nvidia-smi.xml").is_file()
 
 
 @pytest.mark.parametrize("defect", ["checksum", "cleanup", "step", "gpu", "missing_raw", "invented_tdp"])

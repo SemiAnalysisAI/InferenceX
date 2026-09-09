@@ -319,3 +319,17 @@ def test_inside_rejects_different_interpreter_before_gpu_inventory(tmp_path, mon
     monkeypatch.setattr(inv, "cuda_devices", lambda: pytest.fail("Reject wrong interpreter before any GPU query"))
     assert inv.inside(tmp_path) == 2
     assert "configured container interpreter" in ci.read(tmp_path / "step-result.json")["error"]
+
+
+def test_tdp_accepts_unprefixed_hex_from_live_nvidia_smi_xml():
+    xml = "<nvidia_smi_log>" + xml_gpu(device="233510DE", subsystem="18BE10DE") + "</nvidia_smi_log>"
+    result = inv.classify_tdp(xml, ["GPU-a"])
+    assert result["status"] == "verified"
+    assert result["hardware_variant"] == "H200 SXM" and result["watts_per_gpu"] == 700
+    assert result["evidence"]["devices"][0]["pci_device_id"] == "233510DE"
+
+
+def test_tdp_rejects_invalid_hex_even_with_matching_product_name():
+    xml = "<nvidia_smi_log>" + xml_gpu(device="233510DG", subsystem="18BE10DE") + "</nvidia_smi_log>"
+    result = inv.classify_tdp(xml, ["GPU-a"])
+    assert result["status"] == "unknown" and result["watts_per_gpu"] is None

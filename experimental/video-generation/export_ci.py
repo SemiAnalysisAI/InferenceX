@@ -46,7 +46,7 @@ def api(path: str) -> dict:
     return json.loads(payload)
 
 
-def verified_execution(run_id: str) -> tuple[dict, dict]:
+def verified_execution(run_id: str, *, inventory: bool = False) -> tuple[dict, dict]:
     run = api("actions/runs/" + run_id)
     current_export = (run_id == os.environ.get("GITHUB_RUN_ID")
                       and str(run["run_attempt"]) == os.environ.get("GITHUB_RUN_ATTEMPT")
@@ -57,11 +57,12 @@ def verified_execution(run_id: str) -> tuple[dict, dict]:
             and ((run["status"] == "completed" and run["conclusion"] == "success") or current_export),
             "Source must be a successful manual InferenceX execution or this run's completed H3 job")
     jobs = api(f"actions/runs/{run_id}/attempts/{run['run_attempt']}/jobs")
+    job_name = "H3 H200 hardware inventory" if inventory else "H3 video H200 smoke"
     selected = [job for job in jobs["jobs"] if re.fullmatch(
-        r"(?:h3-video / )?p[0-9]+(?:\.[0-9]+)? \| H3 video H200 smoke", job["name"])]
+        r"(?:h3-video / )?p[0-9]+(?:\.[0-9]+)? \| " + re.escape(job_name), job["name"])]
     ci.need(len(selected) == 1 and selected[0]["status"] == "completed"
             and selected[0]["conclusion"] == "success", "Source lacks a successful H3 Slurm job")
-    name = f"h3-video-{run_id}-{run['run_attempt']}"
+    name = f"h3-{'hardware' if inventory else 'video'}-{run_id}-{run['run_attempt']}"
     artifacts = api(f"actions/runs/{run_id}/artifacts")
     selected_artifacts = [item for item in artifacts["artifacts"] if item["name"] == name]
     ci.need(len(selected_artifacts) == 1, "Expected exactly one original H3 artifact")
@@ -105,16 +106,22 @@ def verified_hardware(root: Path, run_id: str, attempt: str, sha: str) -> dict:
             and state["step_cleanup"]["step_id"] == binding["job_id"] + "." + binding["step_id"]
             and set(profile["gpu_uuids"]) == set(binding["gpu_uuids"]), "Hardware Slurm/GPU identity mismatch")
     from inventory_ci import classify_tdp
-    ci.need(profile["tdp"] == classify_tdp((root / "nvidia-smi.xml").read_text(), profile["gpu_uuids"]),
+    classified = classify_tdp((root / "nvidia-smi.xml").read_text(), profile["gpu_uuids"])
+    ci.need(profile["tdp"] == classified or (profile["tdp"]["status"] == "unknown" and profile["tdp"]["watts_per_gpu"] is None),
             "Hardware TDP profile differs from raw PCI identity")
     ci.need(all(path in expected for path in profile["raw"].values()), "Hardware raw evidence is missing")
+    profile["recorded_tdp_classification"] = profile["tdp"]
+    profile["tdp"] = classified
+    profile["hardware_variant"] = classified["hardware_variant"]
+    profile["variant_status"] = classified["status"]
+    profile["tdp_classifier_git_commit"] = os.environ.get("GITHUB_SHA")
     profile["evidence_root"] = "hardware"
     profile["tdp"]["evidence"]["raw_path"] = "hardware/nvidia-smi.xml"
     profile["raw"] = {name: "hardware/" + path for name, path in profile["raw"].items()}
     return profile
 
 
-def publish(run_ids: list[str], output: Path, hardware: Path | None) -> int:
+def publish(run_ids: list[str], output: Path, hardware: Path | None, *, hardware_run_id: str | None = None) -> int:
     output.mkdir(parents=True, exist_ok=False)
     sha = os.environ.get("GITHUB_SHA", "")
     ci.need(re.fullmatch(r"[0-9a-f]{40}", sha)
@@ -122,7 +129,18 @@ def publish(run_ids: list[str], output: Path, hardware: Path | None) -> int:
     run_id, attempt = os.environ.get("GITHUB_RUN_ID", ""), os.environ.get("GITHUB_RUN_ATTEMPT", "")
     ci.need(run_id.isdigit() and attempt.isdigit() and os.environ.get("GITHUB_REPOSITORY") == REPOSITORY,
             "GitHub export identity required")
-    profile = verified_hardware(hardware, run_id, attempt, sha) if hardware is not None else None
+    ci.need(hardware is None or hardware_run_id is None, "Choose a local hardware artifact or a verified inventory run")
+    if hardware_run_id is not None:
+        ci.need(source_ids(hardware_run_id) == [hardware_run_id], "Expected one inventory run ID")
+        inventory_ci, inventory_artifact = verified_execution(hardware_run_id, inventory=True)
+        hardware = output / "hardware"
+        subprocess.run(["gh", "run", "download", hardware_run_id, "--repo", REPOSITORY,
+                        "--name", inventory_artifact["name"], "--dir", str(hardware)], check=True, timeout=180)
+        profile = verified_hardware(hardware, hardware_run_id, str(inventory_ci["runAttempt"]), inventory_ci["headSha"])
+        profile["verified_ci"] = inventory_ci
+        profile["source_artifact"] = inventory_artifact
+    else:
+        profile = verified_hardware(hardware, run_id, attempt, sha) if hardware is not None else None
     producer = {"git_commit": sha, "ci": {"repository": REPOSITORY, "run_id": run_id,
                 "run_attempt": attempt, "run_url": f"https://github.com/{REPOSITORY}/actions/runs/{run_id}"},
                 "mode": "same_run_export" if run_ids == [run_id] else "verified_artifact_reprocessing; no_new_H3_generation"}
@@ -170,10 +188,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-run-ids", required=True)
     parser.add_argument("--hardware", type=Path)
+    parser.add_argument("--hardware-run-id")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     try:
-        return publish(source_ids(args.source_run_ids), args.output, args.hardware)
+        return publish(source_ids(args.source_run_ids), args.output, args.hardware, hardware_run_id=args.hardware_run_id)
     except (Exception, KeyboardInterrupt) as error:
         args.output.mkdir(parents=True, exist_ok=True)
         ci.write(args.output / "export-error.json", {"error": str(error), "exit_code": 2})

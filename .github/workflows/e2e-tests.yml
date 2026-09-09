@@ -17,6 +17,11 @@ on:
                 required: false
                 type: string
                 default: ""
+            h3-inventory-run-id:
+                description: "Reuse a successful H3 hardware inventory; export on CPU without allocating GPUs"
+                required: false
+                type: string
+                default: ""
             generate-cli-command:
                 description: "Command passed to generate matrix script"
                 required: false
@@ -119,6 +124,11 @@ on:
                 default: false
             h3-reuse-run-ids:
                 description: "Reprocess one or two accepted H3 CI runs (comma-separated); no new H3 generation"
+                required: false
+                type: string
+                default: ""
+            h3-inventory-run-id:
+                description: "Reuse a successful H3 hardware inventory; export on CPU without allocating GPUs"
                 required: false
                 type: string
                 default: ""
@@ -225,6 +235,7 @@ jobs:
         uses: ./.github/workflows/h3-video.yml
         with:
             source-run-ids: ${{ inputs.h3-reuse-run-ids }}
+            inventory-run-id: ${{ inputs.h3-inventory-run-id }}
 
     get-jobs:
         if: ${{ !inputs.h3-video }}

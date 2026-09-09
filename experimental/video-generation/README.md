@@ -93,22 +93,42 @@ verification remain distinct. This lane uses native workflow permission and
 scheduler admission; it does not add an OIDC service or claim independent
 hardware attestation.
 
-To export already accepted H3 evidence without repeating generation, supply one
-or two source run IDs through the same trusted route:
+To export accepted H3 evidence using a retained hardware inventory, supply one
+or two H3 source run IDs and the inventory run ID:
 
 ```bash
 gh workflow run e2e-tests.yml --repo SemiAnalysisAI/InferenceX \
   --ref feat/h3-video-ci -f h3-video=true \
-  -f h3-reuse-run-ids=34291306687,34293342829 -f test-name=h3-power-export
+  -f h3-reuse-run-ids=34291306687,34293342829 \
+  -f h3-inventory-run-id=34297499754 -f test-name=h3-power-export
 ```
 
-The sources must be successful manual executions in this repository. CI verifies
-their commit, original artifacts and persistent Slurm receipts. It inventories
-the same node and GPU UUIDs using the existing runtime, with a fixed ten-minute
-allocation cap (at most 1.3333 reserved GPU-hours), then releases its allocation.
-This records current hardware identity and power limits without loading H3.
-Later limits cannot establish historical generation settings. Existing task
-allocations are checked for reuse before requesting a new one.
+This path uses hosted CPU export and skips the native H200 job. The original
+actor and rerun actor pass the same authorization checks. Hosted export
+independently verifies the accepted H3 executions and the completed inventory
+job, including artifact seals, Git/CI/Slurm identities, and the same physical GPU
+UUIDs. It makes no new GPU queries or model requests. Keep the source artifacts
+within GitHub's retention period.
+
+Omitting `h3-inventory-run-id` records a new inventory through the native Slurm
+route. CI verifies the source commits, original artifacts and persistent Slurm
+receipts, then inventories the same node and GPU UUIDs using the existing runtime.
+The allocation has a fixed ten-minute cap (at most 1.3333 reserved GPU-hours);
+existing task allocations are checked for reuse first. The inventory loads no H3
+model and releases its owned allocation after cleanup. Later power limits cannot
+establish historical generation settings.
+
+The retained [inventory run 34297499754](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34297499754)
+([raw inventory artifact](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34297499754/artifacts/10083702100))
+completed Slurm **82290.0** on `worker-10`, observing the original four UUIDs at
+`2026-09-09T01:02:44Z`. Recorded NVIDIA H200 PCI device/subsystem IDs
+`233510DE` / `18BE10DE` identify H200 SXM, with a manufacturer maximum configurable
+TDP of **700 W per GPU**. At this later observation, configured, enforced, default
+and maximum limits were all 700 W on all four devices. Historical generation
+limits remain unknown. The original inventory profile's unknown classification
+is preserved; the exporter classifies its original XML with the new producer
+commit, accepting PCI IDs with or without `0x`, without querying hardware again.
+See [the retained A/A measurements and their limits](RESULTS.md#observed-aa-evidence).
 
 ## Results and local checks
 
@@ -124,8 +144,9 @@ The hosted export job publishes `h3-results-<run-id>-<attempt>` containing
 `index.json`, the JSON schema, bilingual metric definitions, and one source
 subdirectory per original execution. Each source contains `result.json`, original
 media/logs/report, per-GPU power series, phase integration/coverage and
-`power-report.html`. Reprocessing also publishes `h3-hardware-<run-id>-<attempt>`;
-the verified raw inventory is copied into each result. Original CI identities and
+`power-report.html`. A new inventory job publishes `h3-hardware-<run-id>-<attempt>`;
+CPU-only replay downloads the retained inventory instead. The verified raw
+inventory is copied into each result. Original CI identities and
 checksum seals are preserved separately from exporter identities and new seals.
 Missing or invalid telemetry withholds power; export failures retain error logs
 and return an unsuccessful status. Original workload failures still upload their

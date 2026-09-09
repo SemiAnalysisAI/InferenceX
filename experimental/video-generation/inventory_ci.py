@@ -54,7 +54,9 @@ def classify_tdp(xml_text: str, devices: list[str]) -> dict:
                       "pci_device_id": row.findtext("pci/pci_device_id"),
                       "pci_sub_system_id": row.findtext("pci/pci_sub_system_id")}
             result["evidence"]["devices"].append(device)
-            identity = (str(device["pci_device_id"]).strip().lower(), str(device["pci_sub_system_id"]).strip().lower(), device["product_name"])
+            pci_ids = [str(device[key]).strip().lower() for key in ("pci_device_id", "pci_sub_system_id")]
+            ci.need(all(re.fullmatch(r"(?:0x)?[0-9a-f]{8}", value) for value in pci_ids), "Invalid PCI hexadecimal identity")
+            identity = (*("0x" + value.removeprefix("0x") for value in pci_ids), device["product_name"])
             ci.need(identity in supported, "Unrecognized or inconsistent PCI/product identity")
             variants.add(supported[identity])
         ci.need(len(variants) == 1, "Selected GPUs have different hardware variants")

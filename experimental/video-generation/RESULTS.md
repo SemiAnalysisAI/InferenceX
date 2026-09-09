@@ -140,6 +140,7 @@ and one measured clip per role.
 | --- | ---: | ---: |
 | Submit-to-validated-media latency (s) | 149.768568 | 149.355090 |
 | Aggregate mean GPU-board power (W) | 2737.371816 | 2731.735261 |
+| Mean / verified aggregate specification TDP | 97.7633% | 97.5620% |
 | GPU energy per valid clip (J) | 406794.062298 | 404620.528709 |
 | Sampling coverage fraction | 1.0 | 1.0 |
 | Maximum observed sampling gap (s) | 1.3303 | 1.3567 |
@@ -148,8 +149,25 @@ Per-GPU mean power was approximately **680–688 W**. Both measured generation
 windows were bracketed, with maximum gaps below the 3-second validity limit.
 Power and energy cover submission to observed provider completion; the latency
 row also includes media transfer and validation. These are different boundaries.
-TDP ratios remain pending a verified hardware profile, and the original
-executions did not record their configured power limits.
+The later [hardware inventory run 34297499754](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34297499754)
+([raw inventory artifact](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34297499754/artifacts/10083702100))
+completed Slurm **82290.0** on `worker-10` and observed the original four UUIDs at
+`2026-09-09T01:02:44Z`. NVIDIA H200 PCI device/subsystem IDs `233510DE` / `18BE10DE`
+identify SXM boards, whose manufacturer maximum configurable TDP is
+[700 W each](https://www.nvidia.com/en-us/data-center/h200/), or **2800 W** for the
+four selected GPUs. The measured averages are therefore **97.7633% / 97.5620%**
+of this specification value. Both exceed a descriptive 90% “near TDP” criterion,
+supporting Oren's hypothesis for these measured H3 generation windows. This
+criterion is not a calibrated benchmark gate or evidence of an architectural
+difference from LLMs.
+
+The later inventory recorded configured, enforced, default and maximum limits of
+700 W on all four GPUs. The original generation settings remain unknown. The
+inventory's original profile classified the variant as unknown because its PCI
+IDs omitted `0x`; the exporter now reclassifies the retained XML with its own
+producer commit, preserving the source profile and making no new GPU query.
+Use the [CPU-only replay command](README.md#dispatch-through-inferencex) to reuse
+this verified inventory with the original H3 artifacts.
 
 The earlier four-second A/A execution remains available in
 [CI run 34291306687](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34291306687),
