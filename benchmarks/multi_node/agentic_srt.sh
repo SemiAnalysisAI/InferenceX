@@ -57,7 +57,11 @@ done
 resolve_trace_source
 install_agentic_deps
 if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
-    _wait_for_openai_chat_route --host "${SRT_FRONTEND_HOST:-localhost}" --port "$PORT"
+    if [[ -n "${SRT_FRONTEND_HOST:-}" ]]; then
+        _wait_for_openai_chat_route --host "$SRT_FRONTEND_HOST" --port "$PORT"
+    else
+        _wait_for_openai_chat_route --port "$PORT"
+    fi
 fi
 
 wait_for_agentic_servers_idle() {
