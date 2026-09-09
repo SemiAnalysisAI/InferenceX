@@ -44,9 +44,22 @@ on:
 jobs:
     check-changelog:
         runs-on: ubuntu-latest
+        # Klaud validates in draft. Marking it ready later only starts reviews.
         if: >-
             github.event_name == 'pull_request' &&
-            !github.event.pull_request.draft &&
+            (
+              !github.event.pull_request.draft ||
+              (
+                github.event.pull_request.head.repo.full_name == github.repository &&
+                github.event.pull_request.user.login == 'Klaud-Cold' &&
+                contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled')
+              )
+            ) &&
+            !(
+              github.event.action == 'ready_for_review' &&
+              github.event.pull_request.head.repo.full_name == github.repository &&
+              github.event.pull_request.user.login == 'Klaud-Cold'
+            ) &&
             (
               (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
               github.event.label.name == 'sweep-enabled' ||
@@ -189,7 +202,7 @@ jobs:
             (
               (
                 github.event_name == 'pull_request' &&
-                !github.event.pull_request.draft &&
+                needs.check-changelog.result == 'success' &&
                 github.event.pull_request.head.repo.full_name == github.repository &&
                 needs.check-changelog.outputs.skip-pr-sweep != 'true' &&
                 (
@@ -1205,7 +1218,6 @@ jobs:
             always() &&
             needs.setup.result == 'success' &&
             github.event_name == 'pull_request' &&
-            !github.event.pull_request.draft &&
             (
               contains(github.event.pull_request.labels.*.name, 'sweep-enabled') ||
               contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') ||
