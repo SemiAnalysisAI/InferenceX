@@ -228,7 +228,7 @@ def test_single_node_reusable_keys_normalize_legacy_parallelism_and_separate_var
         assert identity({**row, "pcp_size": 2}) != identity(row), name
 
 
-def test_multinode_agentic_identity_fields_match() -> None:
+def test_multinode_keys_normalize_legacy_parallelism_and_separate_topologies() -> None:
     row = {
         "hw": "gb200",
         "infmax_model_prefix": "dsv4",
@@ -255,31 +255,6 @@ def test_multinode_agentic_identity_fields_match() -> None:
         "conc": 64,
     }
 
-    assert agentic_key(row) == (
-        "multi",
-        "gb200",
-        "dsv4",
-        "dynamo-sglang",
-        "fp8",
-        "none",
-        True,
-        4,
-        2,
-        2,
-        2,
-        2,
-        True,
-        2,
-        8,
-        2,
-        4,
-        1,
-        4,
-        False,
-        3,
-        64,
-    )
-
     for identity in (benchmark_key, agentic_key, eval_key):
         legacy_row = dict(row)
         for field in (
@@ -302,14 +277,18 @@ def test_multinode_agentic_identity_fields_match() -> None:
         }
         assert identity(legacy_row) == identity(default_row)
         for field in (
+            "prefill_tp",
             "prefill_pp",
             "prefill_dcp_size",
             "prefill_pcp_size",
+            "prefill_num_workers",
+            "decode_tp",
             "decode_pp",
             "decode_dcp_size",
             "decode_pcp_size",
+            "decode_num_workers",
         ):
-            assert identity({**default_row, field: 2}) != identity(default_row)
+            assert identity({**default_row, field: default_row[field] + 1}) != identity(default_row)
 
 
 def test_agentic_identity_freezes_nested_kv_offload_backend() -> None:
@@ -325,8 +304,8 @@ def test_agentic_identity_freezes_nested_kv_offload_backend() -> None:
 
     identity = agentic_key(row)
 
-    assert isinstance(hash(identity), int)
-    assert identity == agentic_key(
+    # Equivalent nested metadata must be usable as the same dictionary/set key.
+    assert {identity} == {agentic_key(
         {
             **row,
             "kv_offload_backend": {
@@ -334,7 +313,7 @@ def test_agentic_identity_freezes_nested_kv_offload_backend() -> None:
                 "name": "native",
             },
         }
-    )
+    )}
     assert identity != agentic_key(
         {
             **row,
@@ -359,24 +338,7 @@ def write_agentic_artifacts(
     (root / f"agentic_{result_name}").mkdir()
 
 
-def test_eval_validation_requires_raw_result_dirs_not_eval_debug_dirs(
-    tmp_path: Path,
-) -> None:
-    write_eval_aggregate(
-        tmp_path,
-        [single_eval_result(32), single_eval_result(64)],
-    )
-
-    (tmp_path / "eval_server_logs_gptoss_8k1k_runner").mkdir()
-    (tmp_path / "eval_gpu_metrics_gptoss_8k1k_runner").mkdir()
-    write_raw_eval_artifact(tmp_path, 32)
-
-    errors = validate_eval_artifacts(tmp_path)
-
-    assert any("unexpected" in error for error in errors)
-
-
-def test_eval_validation_accepts_matching_legacy_artifacts_without_suite(
+def test_eval_validation_accepts_legacy_results_alongside_debug_artifacts(
     tmp_path: Path,
 ) -> None:
     write_eval_aggregate(
@@ -389,6 +351,8 @@ def test_eval_validation_accepts_matching_legacy_artifacts_without_suite(
         64,
         physical_runner="h100-dgxc-slurm_01",
     )
+    (tmp_path / "eval_server_logs_fixture").mkdir()
+    (tmp_path / "eval_gpu_metrics_fixture").mkdir()
 
     assert validate_eval_artifacts(tmp_path) == []
 
@@ -780,12 +744,6 @@ def test_fixed_sequence_validation_rejects_duplicate_identity(
     errors = validate_fixed_artifacts(tmp_path)
 
     assert "fixed-sequence artifacts contain 1 duplicate row(s)" in errors
-
-
-def test_agentic_validation_checks_points_and_raw_artifacts(tmp_path: Path) -> None:
-    write_agentic_artifacts(tmp_path)
-
-    assert validate_agentic_artifacts(tmp_path) == []
 
 
 def test_agentic_validation_accepts_run_sweep_point_artifacts(

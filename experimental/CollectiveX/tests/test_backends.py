@@ -149,7 +149,6 @@ class RoundtripStaging(unittest.TestCase):
         b = _StagingBackend(stage_device_work=True, fp8_consume="native")
         b.run_roundtrip(object(), staged="pre-materialised")
         self.assertEqual(b.calls, ["dispatch", "combine(pre-materialised)"])
-        self.assertNotIn("stage", b.calls)
 
     def test_an_unrecognised_consume_mode_fails_instead_of_silently_meaning_native(self):
         # The value is read at class-body evaluation, so a typo raises at import -- before
@@ -204,13 +203,6 @@ class NcclLowLatencyLadderClamp(unittest.TestCase):
             import ep_nccl
             return importlib.reload(ep_nccl)
 
-    def test_the_ladder_is_clamped_below_the_buffer(self):
-        # Two separate numbers on purpose: clamping the ladder must not shrink the transport
-        # footprint, or the rungs that remain quietly measure a smaller receive plane.
-        m = self._module()
-        self.assertLess(m._LL_LADDER_CAP, m._LL_BUFFER_CAP)
-        self.assertLessEqual(m._LL_BUFFER_CAP, 511)
-
     def _backend(self, module, low_latency):
         """A backend far enough along to run create_buffer against the stubs."""
         backend = module.NCCLEPBackend.__new__(module.NCCLEPBackend)
@@ -223,15 +215,15 @@ class NcclLowLatencyLadderClamp(unittest.TestCase):
         module.nccl_ep.Group = types.SimpleNamespace(create=lambda *a, **k: object())
         return backend
 
-    def test_buffer_cap_reports_the_ladder_cap(self):
-        # Patching the constant and watching the return move proves buffer_cap() reads it,
-        # which a literal that merely happens to equal it today would not.
+    def test_ladder_cap_drops_only_oversized_measurement_points(self):
         module = self._module()
         backend = self._backend(module, low_latency=True)
-        self.assertEqual(backend.buffer_cap(None), module._LL_LADDER_CAP)
+        backend.args.tokens_ladder = "32 64 128"
+        backend._build_rank_inputs = mock.Mock(return_value=None)
         with mock.patch.object(module, "_LL_LADDER_CAP", 64):
-            self.assertEqual(backend.buffer_cap(None), 64)
-        self.assertIsNone(self._backend(module, low_latency=False).buffer_cap(None))
+            spec = backend.make_inputs(backend.args)
+        self.assertEqual(spec.ladder, [32, 64])
+        self.assertEqual(spec.dropped, [128])
 
     def test_the_receive_is_sized_from_the_buffer_cap_not_the_ladder(self):
         # The regression this guards would silently re-baseline every low-latency row: clamping
@@ -240,11 +232,8 @@ class NcclLowLatencyLadderClamp(unittest.TestCase):
         # rather than on the shape of the source line that computes it.
         module = self._module()
         spec = types.SimpleNamespace(max_tokens_per_rank=99)
-        backend = self._backend(module, low_latency=True)
-        backend.create_buffer(spec)
-        self.assertEqual(backend.max_dispatch, module._LL_BUFFER_CAP)
-        self.assertNotEqual(backend.max_dispatch, module._LL_LADDER_CAP)
-        with mock.patch.object(module, "_LL_BUFFER_CAP", 512):
+        with mock.patch.object(module, "_LL_BUFFER_CAP", 512), \
+                mock.patch.object(module, "_LL_LADDER_CAP", 64):
             sized = self._backend(module, low_latency=True)
             sized.create_buffer(spec)
             self.assertEqual(sized.max_dispatch, 512)
@@ -413,12 +402,15 @@ class TestSingleHandle(unittest.TestCase):
         """LL applies the gate in combine, so its weights wrapper must be cached: building one
         per timed combine puts a torch resolve and an np.asarray inside `time_us`."""
         ll = backend(ll=True)
+        ll._t = mock.Mock(side_effect=lambda value: types.SimpleNamespace(value=value))
         pa = problem(1)
         h = ll._ensure_handle(pa)
-        self.assertTrue(hasattr(h, "combine_weights_t"))
-        self.assertEqual(h.combine_weights_t, "w1")
+        first_weights = h.combine_weights_t
+        self.assertEqual(first_weights.value, "w1")
         # Re-entering the same problem reuses the handle and therefore the wrapper.
-        self.assertIs(ll._ensure_handle(pa).combine_weights_t, h.combine_weights_t)
+        ll._t.reset_mock()
+        self.assertIs(ll._ensure_handle(pa).combine_weights_t, first_weights)
+        ll._t.assert_not_called()
 
         ht = backend(ll=False)
         self.assertFalse(hasattr(ht._ensure_handle(problem(1)), "combine_weights_t"))

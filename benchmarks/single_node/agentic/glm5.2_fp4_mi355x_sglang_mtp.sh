@@ -72,25 +72,28 @@ export SGLANG_OPT_USE_TOPK_V2=false
 #
 # Per-arm L2 ratio (sizing rationale below) applies to both backends unless
 # overridden via HICACHE_RATIO. TP arm (182.7 GB/rank device pool): the
-# working set oversubscribes the device pool ~3x at conc 32, so the host
-# tier is what carries the radix hits - ratio 1.5 (~2.9 TB pinned incl.
-# sidecars) validates through the conc-24 long-context storm for the
-# mooncake arm. The DP-attention arm (159.4 GB/rank) only runs at conc >=
-# 32, where each DP rank's ~8 sessions nearly fit in its own device pool
-# (~1.5-1.6M of 1.7M tokens at conc 64) and the host tier just absorbs
-# overflow - ratio 1.5 boots but the host OOM killer takes the server
-# mid-storm at conc 48, so it runs ratio 0.5 (~1.2 TB pinned, ~1.8 TB of
-# load headroom) at negligible hit-rate cost. The hicache-only arm has no
-# L3 to fall back on, so these ratios are unvalidated there - override with
-# HICACHE_RATIO if the host OOMs or hit-rate is poor.
+# agentic-coding corpus saturates any fixed DRAM pool at conc ≥ 10; ratio 1.5
+# (~2.9 TB pinned) is the safe default for cluster:mi355x-amds nodes (~3.0 TB
+# available DRAM per runners.yaml). ratio=2.5 (~4.8 TB) yields higher
+# throughput at conc 10-12 but exceeds physical DRAM on these nodes and must
+# be set via HICACHE_RATIO env-var override on nodes that can accommodate it.
+# The DP-attention arm (159.4 GB/rank) only runs at conc >= 32, where the host
+# tier just absorbs overflow - ratio 0.5 (~1.2 TB pinned, ~1.8 TB of load
+# headroom) at negligible hit-rate cost (ratio 1.5 OOMs the host mid-storm at
+# conc 48).
 CACHE_ARGS=()
 if agentic_kv_offload_enabled; then
     if [ "$DP_ATTENTION" = "true" ]; then
         HICACHE_RATIO="${HICACHE_RATIO:-0.5}"
     else
+        # ratio=1.5 (~2.9 TB pinned): safe default within the ~3.0 TB DRAM
+        # available on cluster:mi355x-amds nodes. Set HICACHE_RATIO=2.5 via
+        # env-var override for maximum throughput on nodes with >4 TB DRAM.
         HICACHE_RATIO="${HICACHE_RATIO:-1.5}"
     fi
-    HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through}"
+    # write_through_selective skips DRAM writes for non-reusable KV blocks,
+    # reducing host-bus traffic without affecting the cache hit rate.
+    HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through_selective}"
     HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
     HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first_direct}"
     case "$KV_OFFLOAD_BACKEND" in
@@ -196,12 +199,13 @@ else
     CHUNKED_PREFILL_SIZE=32768
     export AGENTIC_WARMUP_GRACE_PERIOD=3600
 fi
-MAX_RUNNING_REQUESTS=$((1 * CONC))
+# 2×CONC in-flight slots: MTP draft+verify transiently batches more tokens
+# than CONC sessions; headroom prevents scheduler stalls under burst.
+MAX_RUNNING_REQUESTS=$((2 * CONC))
 [ "$MAX_RUNNING_REQUESTS" -gt 256 ] && MAX_RUNNING_REQUESTS=256
-CUDA_GRAPH_MAX_BS=$MAX_RUNNING_REQUESTS
-# NOTE: with MTP num-steps=5 the draft+verify batch can momentarily exceed
-# MAX_RUNNING_REQUESTS; if cuda-graph misses ("graph capture miss") appear in
-# server.log under load, consider raising this to e.g. MAX_RUNNING_REQUESTS * 2.
+# SGLang interpolates a bs list [1..max_bs] automatically; cap at 64 to
+# keep graph-capture memory bounded without giving up coverage.
+CUDA_GRAPH_MAX_BS=$(( MAX_RUNNING_REQUESTS < 64 ? MAX_RUNNING_REQUESTS : 64 ))
 
 if [ "${EVAL_ONLY:-false}" != "true" ]; then
     export SGLANG_SIMULATE_ACC_LEN=3.61

@@ -4,6 +4,8 @@ import json
 import os
 from pathlib import Path
 
+import pytest
+
 from collect_eval_results import (
     EVAL_RESULT_FORMAT,
     build_row,
@@ -11,14 +13,6 @@ from collect_eval_results import (
 )
 from evals.kimi_vendor_eval import RESULT_FORMAT as KIMI_VENDOR_RESULT_FORMAT
 from evals.minimax_provider_eval import RESULT_FORMAT as MINIMAX_RESULT_FORMAT
-
-
-def test_kimi_vendor_result_format_matches_collector_contract() -> None:
-    assert KIMI_VENDOR_RESULT_FORMAT == EVAL_RESULT_FORMAT
-
-
-def test_minimax_result_format_matches_collector_contract() -> None:
-    assert MINIMAX_RESULT_FORMAT == EVAL_RESULT_FORMAT
 
 
 def test_build_row_preserves_sequence_lengths() -> None:
@@ -141,8 +135,9 @@ def test_collect_eval_rows_ignores_failed_batch_points(
 
 
 
-def test_collect_eval_rows_accepts_minimax_compatibility_result(
-    tmp_path: Path,
+@pytest.mark.parametrize("result_format", [KIMI_VENDOR_RESULT_FORMAT, MINIMAX_RESULT_FORMAT])
+def test_collect_eval_rows_accepts_provider_compatibility_result(
+    tmp_path: Path, result_format: str,
 ) -> None:
     artifact_dir = tmp_path / "eval_minimax"
     artifact_dir.mkdir()
@@ -153,7 +148,7 @@ def test_collect_eval_rows_accepts_minimax_compatibility_result(
     _write_lm_eval_result(result_path, 1.0, task="minimax_m3_smoke")
     result = json.loads(result_path.read_text())
     result.pop("lm_eval_version")
-    result["result_format"] = EVAL_RESULT_FORMAT
+    result["result_format"] = result_format
     result["eval_adapter"] = "minimax-provider-verifier"
     result_path.write_text(json.dumps(result))
 

@@ -1,15 +1,109 @@
 """Tests for changelog-driven sweep generation."""
 
 import json
+import shutil
 import subprocess
 import sys
 from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+import yaml
+
 import process_changelog
 from matrix_logic.generate_sweep_configs import generate_test_config_sweep
 from matrix_logic.validation import validate_master_config
+
+
+@pytest.fixture
+def generation_repo(tmp_path, monkeypatch):
+    """An isolated history containing the real generator and controlled inputs."""
+    source = Path(__file__).resolve().parents[1]
+    for directory in ("utils/matrix_logic", "infx"):
+        if (source / directory).exists():
+            shutil.copytree(source / directory, tmp_path / directory)
+    (tmp_path / "configs").mkdir()
+    (tmp_path / "configs/amd-master.yaml").write_text("{}\n")
+    (tmp_path / "configs/runners.yaml").write_text("labels: {fixture: [node-a]}\nhardware: {}\n")
+
+    def git(*args):
+        return subprocess.run(
+            ["git", *args], cwd=tmp_path, capture_output=True, text=True, check=True,
+        ).stdout.strip()
+
+    git("init", "-q")
+    git("config", "user.name", "Test")
+    git("config", "user.email", "test@example.com")
+    for revision, conc in (("older", 2), ("newer", 6)):
+        master = {"fixture": {
+            "image": "example/image:stable", "model": revision, "model-prefix": "dsr1",
+            "precision": "fp8", "framework": "sglang", "runner": "fixture",
+            "multinode": False,
+            "scenarios": {"fixed-seq-len": [{
+                "isl": 1024, "osl": 1024, "search-space": [{"tp": 1, "conc-list": [conc]}],
+            }]},
+        }}
+        (tmp_path / "configs/nvidia-master.yaml").write_text(yaml.safe_dump(master))
+        git("add", ".")
+        git("commit", "-qm", revision)
+        git("tag", revision)
+
+    # Neither uncommitted source nor inputs may leak into historical generation.
+    (tmp_path / "configs/nvidia-master.yaml").write_text("invalid working tree\n")
+    for directory in ("utils/matrix_logic", "infx"):
+        for path in (tmp_path / directory).rglob("*.py"):
+            path.write_text('raise RuntimeError("working tree source was used")\n')
+    monkeypatch.chdir(tmp_path)
+    return tmp_path, git
+
+
+@pytest.mark.parametrize("revision,expected", [("older", ("older", 2)), ("newer", ("newer", 6))])
+def test_historical_generation_uses_committed_source_and_inputs(generation_repo, revision, expected):
+    with process_changelog.generation_inputs_at_ref(revision) as inputs:
+        result = subprocess.run(
+            [sys.executable, inputs.generator_script, "test-config", "--config-files",
+             *inputs.config_files, "--runner-config", inputs.runner_config,
+             "--config-keys", "fixture", "--no-evals"],
+            capture_output=True, text=True, check=True,
+        )
+        rows = json.loads(result.stdout)
+        assert [(row["model"], row["conc"]) for row in rows] == [expected]
+        assert result.stderr == ""
+        extracted_script = Path(inputs.generator_script)
+    assert not extracted_script.exists()
+
+
+def test_historical_generation_rejects_missing_inputs(generation_repo):
+    _, git = generation_repo
+    git("rm", "-f", "configs/runners.yaml")
+    git("commit", "-qm", "missing runner inventory")
+
+    with pytest.raises(ValueError, match="missing generation inputs.*configs/runners.yaml"):
+        with process_changelog.generation_inputs_at_ref("HEAD"):
+            pytest.fail("an incomplete snapshot must not be used for generation")
+
+
+def test_historical_generation_supports_legacy_script_layout(generation_repo):
+    root, git = generation_repo
+    git("rm", "-rf", "--ignore-unmatch", "infx")
+    # The historical command is an external collaborator: exercise extraction
+    # and sibling imports without freezing a past copy of the matrix algorithm.
+    script = root / "utils/matrix_logic/generate_sweep_configs.py"
+    schema = script.with_name("validation.py")
+    script.write_text("from validation import revision\nprint(revision)\n")
+    schema.write_text('revision = "legacy snapshot"\n')
+    git("add", str(script), str(schema))
+    git("commit", "-qm", "legacy generator")
+    schema.write_text('raise RuntimeError("wrong revision")\n')
+
+    with process_changelog.generation_inputs_at_ref("HEAD") as inputs:
+        result = subprocess.run(
+            [sys.executable, inputs.generator_script],
+            capture_output=True, text=True, check=True,
+        )
+        assert result.stdout == "legacy snapshot\n"
+        assert result.stderr == ""
 
 
 def _fixed_matrix_row(
@@ -49,21 +143,6 @@ def _scenario_values(command):
         return []
     index = command.index("--scenario-type") + 1
     return command[index:]
-
-
-def test_recipe_fingerprint_reaches_all_e2e_benchmark_jobs():
-    workflow = (Path(__file__).parents[1] / ".github/workflows/e2e-tests.yml").read_text()
-
-    assert workflow.count("uses: ./.github/workflows/benchmark") == 8
-    assert workflow.count("recipe-fingerprint: ${{ matrix.config") == 8
-
-
-def test_recipe_fingerprint_disambiguates_result_and_artifact_names():
-    repo_root = Path(__file__).parents[1]
-    for template_name in ("benchmark-tmpl.yml", "benchmark-multinode-tmpl.yml"):
-        template = (repo_root / ".github/workflows" / template_name).read_text()
-        assert 'RECIPE_FINGERPRINT: ${{ inputs.recipe-fingerprint }}' in template
-        assert 'recipe-${RECIPE_FINGERPRINT:0:16}' in template
 
 
 def test_trim_conc_supports_nested_backend_metadata():
@@ -449,9 +528,11 @@ def test_append_only_scope_allows_range_to_list_expansion():
     )
 
 
+@pytest.mark.parametrize("trim", [False, True])
 def test_append_only_main_runs_only_added_points_and_skips_evals(
     monkeypatch,
     capsys,
+    trim,
 ):
     added_yaml = """
 - config-keys:
@@ -493,7 +574,7 @@ def test_append_only_main_runs_only_added_points_and_skips_evals(
         "process_changelog.py",
         "--base-ref", "base",
         "--head-ref", "head",
-        "--changelog-file", "perf-changelog.yaml",
+        "--changelog-file", "perf-changelog.yaml", *(["--trim-conc"] if trim else []),
     ])
 
     process_changelog.main()
@@ -508,290 +589,6 @@ def test_append_only_main_runs_only_added_points_and_skips_evals(
     assert commands[1][1] == "base-generate-sweep-configs.py"
     assert commands[0][commands[0].index("--runner-config") + 1] == "configs/runners.yaml"
     assert commands[1][commands[1].index("--runner-config") + 1] == "base-runners.yaml"
-
-
-def test_all_evals_skips_benchmarks_and_uses_all_evals_generator_flag(
-    monkeypatch,
-    capsys,
-):
-    added_yaml = """
-- config-keys:
-    - test-config
-  description:
-    - Run every eval configuration
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1
-  all-evals: true
-"""
-    commands = []
-
-    monkeypatch.setattr(
-        process_changelog,
-        "get_added_lines",
-        lambda *_: added_yaml,
-    )
-    monkeypatch.setattr(
-        process_changelog,
-        "load_config_files",
-        lambda _: {"test-config": {}},
-    )
-
-    def fake_run(command, **kwargs):
-        commands.append(command)
-        return SimpleNamespace(stdout="[]")
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
-    monkeypatch.setattr(sys, "argv", [
-        "process_changelog.py",
-        "--base-ref", "base",
-        "--head-ref", "head",
-        "--changelog-file", "perf-changelog.yaml",
-    ])
-
-    process_changelog.main()
-
-    assert len(commands) == 1
-    assert "--all-evals" in commands[0]
-    assert "--evals-only" in commands[0]
-    assert "--no-evals" not in commands[0]
-    assert _scenario_values(commands[0]) == ["fixed-seq-len", "agentic-coding"]
-
-    output = json.loads(capsys.readouterr().out)
-    assert output["changelog_metadata"]["entries"][0]["all-evals"] is True
-
-
-def test_regular_changelog_entry_keeps_benchmark_and_subset_eval_commands(
-    monkeypatch,
-    capsys,
-):
-    added_yaml = """
-- config-keys:
-    - test-config
-  description:
-    - Run benchmarks and selected evals
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1
-"""
-    commands = []
-
-    monkeypatch.setattr(
-        process_changelog,
-        "get_added_lines",
-        lambda *_: added_yaml,
-    )
-    monkeypatch.setattr(
-        process_changelog,
-        "load_config_files",
-        lambda _: {"test-config": {}},
-    )
-
-    def fake_run(command, **kwargs):
-        commands.append(command)
-        return SimpleNamespace(stdout="[]")
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
-    monkeypatch.setattr(sys, "argv", [
-        "process_changelog.py",
-        "--base-ref", "base",
-        "--head-ref", "head",
-        "--changelog-file", "perf-changelog.yaml",
-    ])
-
-    process_changelog.main()
-
-    assert len(commands) == 2
-    assert "--no-evals" in commands[0]
-    assert "--evals-only" in commands[1]
-    assert "--all-evals" not in commands[1]
-    assert _scenario_values(commands[1]) == ["fixed-seq-len", "agentic-coding"]
-    json.loads(capsys.readouterr().out)
-
-
-def test_cli_all_evals_expands_evals_and_preserves_benchmarks(
-    monkeypatch,
-    capsys,
-):
-    added_yaml = """
-- config-keys:
-    - test-config
-  description:
-    - Run every eval configuration through a PR label
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1
-"""
-    commands = []
-
-    monkeypatch.setattr(
-        process_changelog,
-        "get_added_lines",
-        lambda *_: added_yaml,
-    )
-    monkeypatch.setattr(
-        process_changelog,
-        "load_config_files",
-        lambda _: {"test-config": {}},
-    )
-
-    def fake_run(command, **kwargs):
-        commands.append(command)
-        return SimpleNamespace(stdout="[]")
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
-    monkeypatch.setattr(sys, "argv", [
-        "process_changelog.py",
-        "--base-ref", "base",
-        "--head-ref", "head",
-        "--changelog-file", "perf-changelog.yaml",
-        "--all-evals",
-    ])
-
-    process_changelog.main()
-
-    assert len(commands) == 2
-    assert "--no-evals" in commands[0]
-    assert "--all-evals" not in commands[0]
-    assert "--all-evals" in commands[1]
-    assert "--evals-only" in commands[1]
-    assert _scenario_values(commands[1]) == ["fixed-seq-len", "agentic-coding"]
-    json.loads(capsys.readouterr().out)
-
-
-def test_cli_all_evals_expands_evals_only_entry_without_benchmarks(
-    monkeypatch,
-    capsys,
-):
-    added_yaml = """
-- config-keys:
-    - test-config
-  description:
-    - Expand an eval-only entry through a PR label
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1
-  evals-only: true
-"""
-    commands = []
-
-    monkeypatch.setattr(
-        process_changelog,
-        "get_added_lines",
-        lambda *_: added_yaml,
-    )
-    monkeypatch.setattr(
-        process_changelog,
-        "load_config_files",
-        lambda _: {"test-config": {}},
-    )
-
-    def fake_run(command, **kwargs):
-        commands.append(command)
-        return SimpleNamespace(stdout="[]")
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
-    monkeypatch.setattr(sys, "argv", [
-        "process_changelog.py",
-        "--base-ref", "base",
-        "--head-ref", "head",
-        "--changelog-file", "perf-changelog.yaml",
-        "--all-evals",
-    ])
-
-    process_changelog.main()
-
-    assert len(commands) == 1
-    assert "--all-evals" in commands[0]
-    assert "--evals-only" in commands[0]
-    assert "--no-evals" not in commands[0]
-    json.loads(capsys.readouterr().out)
-
-
-def test_cli_evals_only_suppresses_benchmarks_and_keeps_default_subset(
-    monkeypatch,
-    capsys,
-):
-    added_yaml = """
-- config-keys:
-    - test-config
-  description:
-    - Run only the default eval subset through a PR label
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1
-"""
-    commands = []
-
-    monkeypatch.setattr(
-        process_changelog,
-        "get_added_lines",
-        lambda *_: added_yaml,
-    )
-    monkeypatch.setattr(
-        process_changelog,
-        "load_config_files",
-        lambda _: {"test-config": {}},
-    )
-
-    def fake_run(command, **kwargs):
-        commands.append(command)
-        return SimpleNamespace(stdout="[]")
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
-    monkeypatch.setattr(sys, "argv", [
-        "process_changelog.py",
-        "--base-ref", "base",
-        "--head-ref", "head",
-        "--changelog-file", "perf-changelog.yaml",
-        "--evals-only",
-    ])
-
-    process_changelog.main()
-
-    assert len(commands) == 1
-    assert "--evals-only" in commands[0]
-    assert "--all-evals" not in commands[0]
-    assert "--no-evals" not in commands[0]
-    assert _scenario_values(commands[0]) == ["fixed-seq-len", "agentic-coding"]
-    json.loads(capsys.readouterr().out)
-
-
-def test_cli_eval_modifiers_compose_as_all_evals_without_benchmarks(
-    monkeypatch,
-    capsys,
-):
-    added_yaml = """
-- config-keys:
-    - test-config
-  description:
-    - Run every eval and no throughput through PR labels
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1
-"""
-    commands = []
-
-    monkeypatch.setattr(
-        process_changelog,
-        "get_added_lines",
-        lambda *_: added_yaml,
-    )
-    monkeypatch.setattr(
-        process_changelog,
-        "load_config_files",
-        lambda _: {"test-config": {}},
-    )
-
-    def fake_run(command, **kwargs):
-        commands.append(command)
-        return SimpleNamespace(stdout="[]")
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
-    monkeypatch.setattr(sys, "argv", [
-        "process_changelog.py",
-        "--base-ref", "base",
-        "--head-ref", "head",
-        "--changelog-file", "perf-changelog.yaml",
-        "--all-evals",
-        "--evals-only",
-    ])
-
-    process_changelog.main()
-
-    assert len(commands) == 1
-    assert "--evals-only" in commands[0]
-    assert "--all-evals" in commands[0]
-    assert "--no-evals" not in commands[0]
-    json.loads(capsys.readouterr().out)
 
 
 def test_cli_evals_only_generates_agentic_eval(
@@ -1183,3 +980,156 @@ def test_eval_rows_split_into_multinode_fixed_and_agentic_buckets(
     assert [r["exp-name"] for r in output["multinode_agentic_evals"]] == ["multinode_agentic_eval"]
     assert output["evals"] == []
     assert output["agentic_evals"] == []
+
+
+@pytest.fixture
+def changelog_run(monkeypatch, capsys):
+    """Exercise main and final validation; replace only Git/config/subprocess I/O."""
+    def run(entries, cli_flags=(), generated=None, master=None):
+        entries = [{"config-keys": ["config-a"], "description": ["Controlled change"],
+                    "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1",
+                    **entry} for entry in entries]
+        commands = []
+        monkeypatch.setattr(process_changelog, "get_added_lines", lambda *_: json.dumps(entries))
+        monkeypatch.setattr(process_changelog, "load_config_files",
+                            lambda _: master if master is not None else {"config-b": {}, "config-a": {}})
+        monkeypatch.setattr(sys, "argv", ["process_changelog.py", "--base-ref", "base",
+                            "--head-ref", "head", "--changelog-file", "perf-changelog.yaml", *cli_flags])
+
+        def generate(command, **kwargs):
+            commands.append(command)
+            result = generated(command) if generated else []
+            if isinstance(result, subprocess.CalledProcessError):
+                if kwargs.get("check"):
+                    raise result
+                result = []
+            return SimpleNamespace(stdout=result if isinstance(result, str) else json.dumps(result))
+
+        monkeypatch.setattr(subprocess, "run", generate)
+        process_changelog.main()
+        return json.loads(capsys.readouterr().out), commands
+    return run
+
+
+# The table is the contract: CLI expansion preserves throughput, whereas an
+# entry requesting all evals is eval-only. Trimming affects throughput alone.
+@pytest.mark.parametrize("cli_flags,expected_modes", [
+    ([], ("benchmark-subset", "subset", "all", "all")),
+    (["--all-evals"], ("benchmark-all", "all", "all", "all")),
+    (["--evals-only"], ("subset", "subset", "all", "all")),
+    (["--all-evals", "--evals-only"], ("all", "all", "all", "all")),
+])
+@pytest.mark.parametrize("entry_flags,mode_index", [
+    ({}, 0), ({"evals-only": True}, 1), ({"all-evals": True}, 2),
+    ({"all-evals": True, "evals-only": True}, 3),
+])
+@pytest.mark.parametrize("trim", [False, True])
+def test_cli_entry_mode_truth_table(changelog_run, cli_flags, expected_modes, entry_flags, mode_index, trim):
+    def generate(command):
+        concs = [8, 4] if "--no-evals" in command or "--all-evals" in command else [4]
+        return [_fixed_matrix_row(conc) for conc in concs]
+
+    output, commands = changelog_run([entry_flags], cli_flags + (["--trim-conc"] if trim else []), generate)
+    mode = expected_modes[mode_index]
+    expected_benchmarks = ([4] if trim else [8, 4]) if mode.startswith("benchmark-") else []
+    assert [row["conc"] for row in output["single_node"].get("8k1k", [])] == expected_benchmarks
+    assert [row["conc"] for row in output["evals"]] == ([8, 4] if mode.endswith("all") else [4])
+    assert ["--no-evals" in command for command in commands] == (
+        [True, False] if mode.startswith("benchmark-") else [False])
+    assert ("--all-evals" in commands[-1]) == mode.endswith("all")
+    assert "--evals-only" in commands[-1]
+    assert _scenario_values(commands[-1]) == ["fixed-seq-len", "agentic-coding"]
+    if mode.startswith("benchmark-"):
+        assert "--all-evals" not in commands[0]
+    assert output["changelog_metadata"]["base_ref"] == "base"
+    for flag, value in entry_flags.items():
+        assert output["changelog_metadata"]["entries"][0][flag] is value
+
+
+def test_overlapping_wildcard_scenarios_keep_priority_and_group_order(changelog_run):
+    entries = [
+        {"scenario-type": ["fixed-seq-len"]},
+        {"config-keys": ["config-*", "config-a"], "scenario-type": ["agentic-coding", "fixed-seq-len"]},
+        {"config-keys": ["config-b"], "all-evals": True, "scenario-type": ["agentic-coding"]},
+        {"config-keys": ["config-*"], "evals-only": True, "scenario-type": ["fixed-seq-len"]},
+    ]
+    _, commands = changelog_run(entries)
+    trace = [("benchmark" if "--no-evals" in c else "all" if "--all-evals" in c else "subset",
+              c[c.index("--config-keys") + 1:c.index("--config-files")], _scenario_values(c))
+             for c in commands]
+    assert trace == [
+        ("all", ["config-b"], ["agentic-coding"]),
+        ("benchmark", ["config-a"], ["fixed-seq-len"]),
+        ("subset", ["config-a"], ["fixed-seq-len"]),
+        ("benchmark", ["config-b"], []),
+        ("benchmark", ["config-a"], ["agentic-coding"]),
+        ("subset", ["config-b"], ["fixed-seq-len"]),
+        ("subset", ["config-a"], ["agentic-coding"]),
+    ]
+
+
+@pytest.mark.parametrize("cli_flags", [["--all-evals"], ["--evals-only"], ["--all-evals", "--evals-only"]])
+@pytest.mark.parametrize("trim", [False, True])
+def test_append_only_rejects_cli_eval_modifiers_before_generation(changelog_run, cli_flags, trim):
+    with pytest.raises(ValueError, match="append-only sweeps cannot use"):
+        changelog_run([{"append-only": True}], cli_flags + (["--trim-conc"] if trim else []),
+                      lambda _: pytest.fail("invalid sweep must not invoke the generator"))
+
+
+@pytest.mark.parametrize("entries", [
+    [{"append-only": True}, {}],
+    [{"append-only": True, "all-evals": True}],
+    [{"append-only": True, "evals-only": True}],
+    [{"append-only": True, "eval-min-prefill-ep": 2}],
+])
+def test_append_only_rejects_mixed_or_entry_eval_modes(changelog_run, entries):
+    with pytest.raises(ValueError, match="append-only"):
+        changelog_run(entries, generated=lambda _: pytest.fail("invalid sweep must not invoke the generator"))
+
+
+@pytest.mark.parametrize("stage", ["--no-evals", "--evals-only", "append-head", "append-base"])
+@pytest.mark.parametrize("failure", ["exit", "json"])
+def test_generator_failure_never_publishes_partial_matrix(changelog_run, monkeypatch, capsys, stage, failure):
+    error = subprocess.CalledProcessError(23, ["generator"], stderr="controlled generator failure")
+    append = stage.startswith("append-")
+    if append:
+        monkeypatch.setattr(process_changelog, "generation_inputs_at_ref", lambda _: nullcontext(
+            process_changelog.GenerationInputs(["base-config"], "base-generator", "base-runners")))
+
+    def generate(command):
+        revision_stage = "append-base" if command[1] == "base-generator" else "append-head"
+        if stage in command or (append and stage == revision_stage):
+            return error if failure == "exit" else "not-json"
+        return [_fixed_matrix_row(4), _fixed_matrix_row(8)]
+
+    with pytest.raises(subprocess.CalledProcessError if failure == "exit" else json.JSONDecodeError) as caught:
+        changelog_run([{"append-only": append}], generated=generate)
+    if failure == "exit":
+        assert caught.value is error
+    assert capsys.readouterr().out == ("controlled generator failure\n" if failure == "exit" else "")
+
+
+@pytest.mark.parametrize("keys,message", [
+    (["config-a", "missing"], "not found"),
+    (["config-a", "missing-*"], "No config keys matched"),
+])
+def test_invalid_key_after_valid_key_rejects_entire_selection(changelog_run, keys, message):
+    with pytest.raises(ValueError, match=message):
+        changelog_run([{"config-keys": keys}], generated=lambda _: pytest.fail("keys must resolve before generation"))
+
+
+@pytest.mark.parametrize("threshold,expected", [
+    (None, ["single", "default", "low", "high", "null", "invalid"]),
+    (1, ["single", "default", "low", "high"]),
+    (2, ["single", "low", "high"]),
+    (4, ["single"]),
+])
+def test_eval_prefill_ep_filter_preserves_single_node_and_order(threshold, expected):
+    rows = [
+        {"label": "single"}, {"label": "default", "prefill": {}},
+        {"label": "low", "prefill": {"ep": 2}},
+        {"label": "high", "prefill": {"ep": "3"}},
+        {"label": "null", "prefill": {"ep": None}},
+        {"label": "invalid", "prefill": {"ep": "bad"}},
+    ]
+    assert [row["label"] for row in process_changelog.filter_eval_rows_by_prefill_ep(rows, threshold)] == expected

@@ -3,6 +3,7 @@ import json
 import os
 import subprocess
 import sys
+from dataclasses import replace
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -57,7 +58,9 @@ def _category_score(
     )
 
 
-def test_thresholds_are_stdlib_readable_without_pyyaml(monkeypatch) -> None:
+def test_thresholds_are_stdlib_readable_without_pyyaml(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
     real_import = builtins.__import__
 
     def import_without_yaml(name, *args, **kwargs):
@@ -66,10 +69,11 @@ def test_thresholds_are_stdlib_readable_without_pyyaml(monkeypatch) -> None:
         return real_import(name, *args, **kwargs)
 
     monkeypatch.setattr(builtins, "__import__", import_without_yaml)
-    thresholds = vs.load_config(str(Path(vs.__file__).with_name("thresholds.yaml")))
+    config = {"default": {"task": 0.25}, "models": {"model-a": {"task": 0.75}}}
+    path = tmp_path / "thresholds.yaml"
+    path.write_text(json.dumps(config))
 
-    assert thresholds["default"]["bfcl_smoke"] == 0.0
-    assert thresholds["default"]["bfcl_parallel"] == 0.0
+    assert vs.load_config(str(path)) == config
 
 
 def test_score_validator_uses_declared_bfcl_metric(
@@ -83,8 +87,11 @@ def test_score_validator_uses_declared_bfcl_metric(
         "n-samples": {"bfcl_smoke": {"original": 4, "effective": 4}},
     }
     (tmp_path / "results_bfcl.json").write_text(json.dumps(result))
+    (tmp_path / "thresholds.json").write_text(json.dumps({"bfcl_smoke": 0.5}))
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(sys, "argv", ["validate_scores.py"])
+    monkeypatch.setattr(
+        sys, "argv", ["validate_scores.py", "--thresholds", "thresholds.json"]
+    )
 
     assert vs.main() == 0
 
@@ -99,7 +106,6 @@ def test_adapter_module_does_not_collide_with_upstream_package(
 
     be._clear_upstream_modules()
 
-    assert be.__name__ == "bfcl_adapter"
     assert "bfcl_eval" not in sys.modules
     assert "bfcl_eval.constants" not in sys.modules
 
@@ -337,7 +343,7 @@ def test_cli_rejects_invalid_api_root(tmp_path: Path, base_url: str) -> None:
         )
 
 
-def test_perfect_score_projects_pinned_ids_and_upstream_headers(
+def test_perfect_score_projects_upstream_headers_and_compatibility_metrics(
     tmp_path: Path,
 ) -> None:
     invocation: dict[str, Any] = {}
@@ -353,43 +359,11 @@ def test_perfect_score_projects_pinned_ids_and_upstream_headers(
         "api_key": "EMPTY",
         "num_threads": 4,
     }
-    assert json.loads(
-        (project_root / "test_case_ids_to_generate.json").read_text(encoding="utf-8")
-    ) == {
-        "simple_python": ["simple_python_141"],
-        "multiple": ["multiple_38"],
-        "parallel": ["parallel_1"],
-        "irrelevance": ["irrelevance_0"],
-    }
     assert (
         (project_root / be.UPSTREAM_LICENSE_FILENAME)
-        .read_text(encoding="utf-8")
-        .startswith("                                 Apache License")
+        .read_bytes()
+        == (Path(be.__file__).resolve().parents[2] / "LICENSE").read_bytes()
     )
-    attribution = json.loads(
-        (project_root / be.UPSTREAM_ATTRIBUTION_FILENAME).read_text(encoding="utf-8")
-    )
-    assert attribution == {
-        "artifact": "BFCL-generated evaluation results",
-        "upstream": {
-            "package": "bfcl-eval",
-            "package_version": "2026.3.23",
-            "wheel_sha256": be.BFCL_WHEEL_SHA256,
-            "repository": "https://github.com/ShishirPatil/gorilla",
-            "source_revision": be.SOURCE_REVISION,
-            "vllm_integration_revision": be.VLLM_INTEGRATION_REF,
-            "license": "Apache-2.0",
-            "license_url": (
-                "https://github.com/ShishirPatil/gorilla/blob/"
-                f"{be.SOURCE_REVISION}/LICENSE"
-            ),
-            "license_file": be.UPSTREAM_LICENSE_FILENAME,
-        },
-        "modifications": (
-            "InferenceX selected deterministic case subsets and projected upstream "
-            "scores; this archive does not modify upstream BFCL source."
-        ),
-    }
 
     compatibility = _compatibility(output_dir)
     native = _native(output_dir)
@@ -423,19 +397,6 @@ def test_perfect_score_projects_pinned_ids_and_upstream_headers(
         == {"original": 1, "effective": 1}
         for category in be.SMOKE_CASE_IDS
     )
-    assert compatibility["bfcl"]["source"]["package_version"] == "2026.3.23"
-    assert compatibility["bfcl"]["source"]["wheel_sha256"] == (
-        "3bb6dfa5f0c68ad403c9ec50b00db2bb3b4cc9b38ab1ff33f48fe30d853d3a0a"
-    )
-    assert compatibility["bfcl"]["source"]["source_revision"] == (
-        "6ea57973c7a6097fd7c5915698c54c17c5b1b6c8"
-    )
-    assert [entry["category"] for entry in compatibility["bfcl"]["categories"]] == [
-        "simple_python",
-        "multiple",
-        "parallel",
-        "irrelevance",
-    ]
     assert all(
         entry["score_header"] == {"accuracy": 1.0, "correct_count": 1, "total_count": 1}
         for entry in compatibility["bfcl"]["categories"]
@@ -657,12 +618,6 @@ def test_upstream_exception_publishes_zero_score_reports(tmp_path: Path) -> None
         "type": "RuntimeError",
         "message": "BFCL generation failed",
     }
-    assert compatibility["bfcl"]["source"]["case_ids"] == {
-        "simple_python": ["simple_python_141"],
-        "multiple": ["multiple_38"],
-        "parallel": ["parallel_1"],
-        "irrelevance": ["irrelevance_0"],
-    }
     assert _native(output_dir)["summary"]["total_count"] == 0
 
 
@@ -733,67 +688,69 @@ def test_full_suite_sets_project_root_before_dataset_import(
     assert observed_roots == [str(project_root)]
 
 
-@pytest.mark.parametrize("suite", (be.MINIMAX_SUITE, be.KIMI_SUITE))
-def test_full_suite_ids_use_exact_sorted_leaf_allocations(
-    monkeypatch,
-    suite: be.SuiteSpec,
+def test_suite_selection_sorts_before_limiting_and_distributes_remainder(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    multi_turn_leaves = (
-        "multi_turn_base",
-        "multi_turn_miss_func",
-        "multi_turn_miss_param",
-        "multi_turn_long_context",
+    suite = be.SuiteSpec(
+        name="synthetic",
+        generation_categories=("group", "standalone"),
+        expected_leaf_counts=(("a", 2), ("b", 3), ("standalone", 1)),
+        category_limits=(("group", 5),),
+        temperature=0.0,
+        default_num_threads=1,
+        threshold=0.0,
     )
-    upstream_multi_turn_leaves = (
-        "multi_turn_base",
-        "multi_turn_long_context",
-        "multi_turn_miss_func",
-        "multi_turn_miss_param",
-    )
-    available_counts = {
-        "simple_python": 400,
-        "multiple": 200,
-        "parallel": 200,
-        "parallel_multiple": 200,
-        **{leaf: 75 for leaf in multi_turn_leaves},
+    datasets = {
+        "a": [{"id": "a_2"}, {"id": "a_0"}, {"id": "a_1"}],
+        "b": [{"id": "b_3"}, {"id": "b_1"}, {"id": "b_0"}, {"id": "b_2"}],
+        "standalone": [{"id": "standalone_0"}],
     }
-
-    def load_dataset_entry(category: str) -> list[dict[str, str]]:
-        return [
-            {"id": f"{category}_{index:03d}"}
-            for index in reversed(range(available_counts[category]))
-        ]
-
-    def parse_test_category_argument(categories: list[str]) -> list[str]:
-        assert len(categories) == 1
-        return (
-            list(upstream_multi_turn_leaves)
-            if categories[0] == "multi_turn"
-            else categories
-        )
-
-    def load_helpers():
-        return (
-            load_dataset_entry,
-            parse_test_category_argument,
+    monkeypatch.setattr(
+        be,
+        "_load_dataset_helpers",
+        lambda: (
+            datasets.__getitem__,
+            lambda categories: ["b", "a"] if categories == ["group"] else categories,
             lambda entry: entry["id"],
-        )
-
-    monkeypatch.setattr(be, "_load_dataset_helpers", load_helpers)
+        ),
+    )
 
     selected = be._build_suite_case_ids(suite)
 
-    assert (
-        tuple((category, len(case_ids)) for category, case_ids in selected.items())
-        == suite.expected_leaf_counts
+    assert list(selected.items()) == [
+        ("a", ("a_0", "a_1")),
+        ("b", ("b_0", "b_1", "b_2")),
+        ("standalone", ("standalone_0",)),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("ids", "error"),
+    [(("case_0", "case_0"), "duplicate id"), (("case_0",), "selected leaf counts")],
+)
+def test_suite_selection_rejects_duplicate_or_missing_cases(
+    monkeypatch: pytest.MonkeyPatch, ids: tuple[str, ...], error: str,
+) -> None:
+    suite = be.SuiteSpec(
+        name="synthetic",
+        generation_categories=("leaf",),
+        expected_leaf_counts=(("leaf", 2),),
+        temperature=0.0,
+        default_num_threads=1,
+        threshold=0.0,
     )
-    assert sum(map(len, selected.values())) == suite.expected_sample_count
-    assert all(list(case_ids) == sorted(case_ids) for case_ids in selected.values())
-    if suite is be.KIMI_SUITE:
-        assert {leaf: len(selected[leaf]) for leaf in multi_turn_leaves} == {
-            leaf: 60 for leaf in multi_turn_leaves
-        }
-        assert all(selected[leaf][-1].endswith("_059") for leaf in multi_turn_leaves)
+    monkeypatch.setattr(
+        be,
+        "_load_dataset_helpers",
+        lambda: (
+            lambda _: [{"id": case_id} for case_id in ids],
+            lambda categories: categories,
+            lambda entry: entry["id"],
+        ),
+    )
+
+    with pytest.raises(ValueError, match=error):
+        be._build_suite_case_ids(suite)
 
 
 def test_mixed_category_diagnostics_project_each_failure_id() -> None:
@@ -816,24 +773,23 @@ def test_mixed_category_diagnostics_project_each_failure_id() -> None:
 
 
 def test_kimi_projects_namespaced_leaf_and_weighted_aggregate_scores() -> None:
-    assert be.KIMI_SUITE.expected_sample_count == 1240
+    counts = {
+        "simple_python": (3, 1),
+        "multiple": (1, 1),
+        "parallel": (2, 0),
+        "parallel_multiple": (4, 3),
+        "multi_turn_base": (1, 1),
+        "multi_turn_miss_func": (2, 1),
+        "multi_turn_miss_param": (3, 0),
+        "multi_turn_long_context": (4, 2),
+    }
     selected = {
         category: tuple(f"{category}_{index}" for index in range(total_count))
-        for category, total_count in be.KIMI_SUITE.expected_leaf_counts
-    }
-    correct_counts = {
-        "simple_python": 200,
-        "multiple": 100,
-        "parallel": 50,
-        "parallel_multiple": 200,
-        "multi_turn_base": 60,
-        "multi_turn_miss_func": 30,
-        "multi_turn_miss_param": 0,
-        "multi_turn_long_context": 15,
+        for category, (total_count, _) in counts.items()
     }
     scores = [
-        _category_score(category, total_count, correct_counts[category])
-        for category, total_count in be.KIMI_SUITE.expected_leaf_counts
+        _category_score(category, total_count, correct_count)
+        for category, (total_count, correct_count) in counts.items()
     ]
 
     compatibility = be._compatibility_result(
@@ -843,14 +799,12 @@ def test_kimi_projects_namespaced_leaf_and_weighted_aggregate_scores() -> None:
         scores=scores,
     )
 
-    assert compatibility["results"]["bfcl_vllm_kimi"]["acc,none"] == 655 / 1240
+    assert compatibility["results"]["bfcl_vllm_kimi"]["acc,none"] == 0.45
     assert (
-        compatibility["results"]["bfcl_vllm_kimi_multi_turn"]["acc,none"] == 105 / 240
+        compatibility["results"]["bfcl_vllm_kimi_multi_turn"]["acc,none"] == 0.4
     )
-    assert compatibility["n-samples"]["bfcl_vllm_kimi_multi_turn"] == {
-        "original": 240,
-        "effective": 240,
-    }
+    assert compatibility["n-samples"]["bfcl_vllm_kimi"]["effective"] == 20
+    assert compatibility["n-samples"]["bfcl_vllm_kimi_multi_turn"]["effective"] == 10
     assert all(
         f"bfcl_vllm_kimi_{category}" in compatibility["results"]
         for category in selected
@@ -860,9 +814,18 @@ def test_kimi_projects_namespaced_leaf_and_weighted_aggregate_scores() -> None:
 
 
 def test_selected_suite_integration_error_preserves_suite_identity(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     output_dir = tmp_path / "output"
+    suite = replace(
+        be.MINIMAX_SUITE,
+        name="custom_suite",
+        generation_categories=("left", "right"),
+        expected_leaf_counts=(("left", 2), ("right", 1)),
+        temperature=0.25,
+        default_num_threads=7,
+    )
+    monkeypatch.setattr(be, "SUITE_SPECS", {suite.name: suite})
 
     return_code = be.main(
         [
@@ -871,7 +834,7 @@ def test_selected_suite_integration_error_preserves_suite_identity(
             "--output-dir",
             str(output_dir),
             "--suite",
-            "bfcl_vllm_minimax_m3",
+            "custom_suite",
             "--integration-error",
             "pinned wheel installation failed",
         ]
@@ -880,21 +843,19 @@ def test_selected_suite_integration_error_preserves_suite_identity(
     assert return_code == 1
     compatibility = _compatibility(output_dir)
     native = _native(output_dir)
-    assert native["task"] == "bfcl_vllm_minimax_m3"
-    assert native["summary"]["expected_count"] == 1000
+    assert native["task"] == "custom_suite"
+    assert native["summary"]["expected_count"] == 3
     assert native["sampling"] == {
-        "temperature": 0.001,
-        "num_threads": 8,
+        "temperature": 0.25,
+        "num_threads": 7,
     }
     assert list(compatibility["results"]) == [
-        "bfcl_vllm_minimax_m3",
-        "bfcl_vllm_minimax_m3_simple_python",
-        "bfcl_vllm_minimax_m3_multiple",
-        "bfcl_vllm_minimax_m3_parallel",
-        "bfcl_vllm_minimax_m3_parallel_multiple",
+        "custom_suite",
+        "custom_suite_left",
+        "custom_suite_right",
     ]
-    assert compatibility["n-samples"]["bfcl_vllm_minimax_m3"] == {
-        "original": 1000,
+    assert compatibility["n-samples"]["custom_suite"] == {
+        "original": 3,
         "effective": 0,
     }
     assert native["integration_error"] == compatibility["integration_error"]

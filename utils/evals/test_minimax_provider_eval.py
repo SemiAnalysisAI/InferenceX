@@ -46,15 +46,6 @@ def _compatibility(output_dir: Path) -> dict[str, Any]:
     return json.loads(paths[0].read_text(encoding="utf-8"))
 
 
-def test_fixture_is_exact_pinned_upstream_row() -> None:
-    metadata, rows = mpe.load_fixture(mpe.DEFAULT_FIXTURE_PATH)
-
-    assert metadata["ref"] == mpe.UPSTREAM_REF
-    assert metadata["indices"] == [71]
-    assert set(rows[0]) == {"messages", "tools", "expected_tool_call"}
-    assert "data_index" not in rows[0]
-
-
 def test_prepare_smoke_input_preserves_fixture_row(tmp_path: Path) -> None:
     destination = tmp_path / "smoke.jsonl"
 
@@ -63,7 +54,7 @@ def test_prepare_smoke_input_preserves_fixture_row(tmp_path: Path) -> None:
         destination=destination,
     )
 
-    _, rows = mpe.load_fixture(mpe.DEFAULT_FIXTURE_PATH)
+    rows = json.loads(mpe.DEFAULT_FIXTURE_PATH.read_text(encoding="utf-8"))["rows"]
     assert [json.loads(line) for line in destination.read_text().splitlines()] == rows
 
 

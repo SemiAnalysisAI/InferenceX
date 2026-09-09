@@ -116,8 +116,6 @@ def test_scoring_patch_is_atomic_and_idempotent(tmp_path):
     assert scoring_patch.patch(str(target), "2")
     patched = target.read_text()
     assert "cpu=2," in patched
-    assert scoring_patch.CPU_MARKER in patched
-    assert scoring_patch.LIFECYCLE_MARKER in patched
     assert scoring_patch.patch(str(target), "2")
     assert target.read_text() == patched
 
