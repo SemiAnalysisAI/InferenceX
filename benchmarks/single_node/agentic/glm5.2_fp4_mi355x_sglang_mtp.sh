@@ -62,10 +62,8 @@ export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
 # Outlast the client pool so the race cannot occur.
 export SGLANG_TIMEOUT_KEEP_ALIVE=900
 # The DSA indexer's top-k v2 kernel (default since v0.5.14) is JIT-compiled
-# from CUDA-only source (cooperative_groups.h) and cannot build for gfx950;
-# v1 dispatches to the precompiled HIP op in sgl-kernel (upstream MI355X CI
-# runs DSA models the same way).
-export SGLANG_OPT_USE_TOPK_V2=false
+# PR #36684 & PR #36851 turned the v2 fused top-k on for GLM-5.x on ROCm
+export SGLANG_OPT_USE_TOPK_V2=true
  
 # HiCache L2 (host DRAM), optionally extended with Mooncake L3.
 # KV_OFFLOADING=dram requires KV_OFFLOAD_BACKEND=hicache or mooncake.
