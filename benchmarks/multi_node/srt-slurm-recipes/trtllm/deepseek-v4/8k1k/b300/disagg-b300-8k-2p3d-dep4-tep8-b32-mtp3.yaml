@@ -29,7 +29,7 @@ backend:
     PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
     TLLM_PROFILE_LOG_RANKS: all
     TLLM_METRICS_ALL_RANKS: '1'
-    UCX_TLS: rc,cuda_copy,sm,self
+    UCX_TLS: srd,cuda_copy,sm,self
     UCX_MAX_RNDV_RAILS: '1'
     UCX_MAX_EAGER_RAILS: '1'
     NIXL_PLUGIN_DIR: /opt/nvidia/nvda_nixl/lib/x86_64-linux-gnu/plugins
@@ -42,7 +42,7 @@ backend:
     NCCL_GRAPH_MIXING_SUPPORT: '0'
     MIMALLOC_PURGE_DELAY: '0'
     TLLM_PROFILE_LOG_RANKS: all
-    UCX_TLS: rc,cuda_copy,sm,self
+    UCX_TLS: srd,cuda_copy,sm,self
     UCX_MAX_RNDV_RAILS: '1'
     UCX_MAX_EAGER_RAILS: '1'
     NIXL_PLUGIN_DIR: /opt/nvidia/nvda_nixl/lib/x86_64-linux-gnu/plugins
