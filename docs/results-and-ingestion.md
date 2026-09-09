@@ -177,16 +177,24 @@ as a clean comparison, reconcile issued, completed, cancelled, and errored
 requests with raw profiling records and token totals. GPU-board energy is
 separate from estimated whole-system power.
 
-The B200 Kimi-K3 C1 recipe uses a separate pinned producer that supports its
-current two-node vLLM runtime and the shared AgentX measurement-window contract.
-The launcher validates all deployment telemetry with the shared power adapter
-after the Slurm job and stages diagnostics before returning a validation failure.
-Other K3 concurrency recipes retain their existing producer until validated.
+The seven B200 Kimi-K3 recipes (C1/4/8/14/24/48/96) use a separate pinned
+producer for their two-node vLLM runtime and the shared AgentX measurement-window
+contract. Each recipe declares its own concurrency. The launcher validates all
+deployment telemetry with the shared power adapter after the Slurm job and stages
+diagnostics before returning a validation failure.
+[C1 run 34384240556](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34384240556)
+validated all 16 GPU UUIDs and its full profiling window, including the uploaded
+raw power and aggregate artifacts. This qualifies the common power integration
+path; C4/8/14/24/48/96 measured-data cells remain missing. C1 had 235 successful
+profiling requests out of 236 plus 11 warmup errors, so it is rejected as a clean
+comparison despite valid GPU telemetry.
+
 The seven B200 K3 rows report TP8/PP2/DCP8 and `kv-offloading: none`,
 matching their serving recipes; the Mooncake connector remains configured with
-offload disabled. C1 uses synthetic acceptance. Older artifacts retain their
-original DCP1/DRAM labels and require this identity caveat; the metadata
-correction does not change their serving configuration or measured values.
+offload disabled. C1/4/8/14 use DSpark7 with synthetic acceptance length 3.84,
+C24/48 use DSpark4 with 3.36, and C96 has no speculation. Their serving settings
+are unchanged. Older artifacts retain their original DCP1/DRAM labels and require
+this identity caveat; metadata corrections do not change their measured values.
 
 ### Raw inputs and aggregate schema
 
