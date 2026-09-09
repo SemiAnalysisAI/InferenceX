@@ -2,7 +2,7 @@ name: "kimik3-vllm-agg-h200-tp8dp4ep32-balanced-agentic"
 
 model:
   path: "kimik3"
-  container: "vllm/vllm-openai:kimi-k3"
+  container: "vllm/vllm-openai:v0.29.0@sha256:c2914767605584b6d8f45686b82de173ecc99e781897aa3d0a66dacd72c51ae1"
   precision: "fp4"
 
 identity:
@@ -10,9 +10,9 @@ identity:
     repo: "moonshotai/Kimi-K3"
     revision: "9f62e4e9fffbd0a83ddd60e1c209d828994b3569"
   container:
-    image: "vllm/vllm-openai:kimi-k3"
+    image: "vllm/vllm-openai:v0.29.0@sha256:c2914767605584b6d8f45686b82de173ecc99e781897aa3d0a66dacd72c51ae1"
   frameworks:
-    vllm: "0.1.dev19262+gb6bbf29dd.d20260727"
+    vllm: "0.29.0"
 
 dynamo:
   install: false
