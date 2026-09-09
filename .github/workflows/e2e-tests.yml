@@ -18,10 +18,10 @@ on:
                 type: string
                 default: h200-dgxc
             h3-preparation:
-                description: "Optional CPU-only preparation; AMD model staging needs one accepted source run"
+                description: "Optional preparation: amd-node uses at most 8 GPUs for 15 minutes; amd-model needs a source run"
                 required: false
                 type: choice
-                options: [none, site-preflight, amd-model]
+                options: [none, site-preflight, amd-model, amd-node]
                 default: none
             h3-site-config:
                 description: "Pinned runner-local H3 site JSON; empty uses existing H200 configuration"
@@ -144,7 +144,7 @@ on:
                 type: string
                 default: h200-dgxc
             h3-preparation:
-                description: "Optional CPU-only preparation; AMD model staging needs one accepted source run"
+                description: "Optional preparation: amd-node uses at most 8 GPUs for 15 minutes; amd-model needs a source run"
                 required: false
                 type: string
                 default: none
@@ -268,6 +268,7 @@ jobs:
             cluster: ${{ inputs.h3-cluster }}
             preflight-only: ${{ inputs.h3-preparation == 'site-preflight' }}
             stage-amd-model: ${{ inputs.h3-preparation == 'amd-model' }}
+            inspect-amd-node: ${{ inputs.h3-preparation == 'amd-node' }}
             site-config: ${{ inputs.h3-site-config }}
             source-run-ids: ${{ inputs.h3-reuse-run-ids }}
             inventory-run-id: ${{ inputs.h3-inventory-run-id }}

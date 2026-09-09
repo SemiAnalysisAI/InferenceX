@@ -7005,5 +7005,5 @@
 - config-keys: []
   workflow-dispatch: h3-video.yml
   description:
-    - "Stage exact H3 weights on AMD through an opt-in CPU-only CI preparation job. Reuse verified shared files and retain source-run hashes; do not allocate GPUs or claim runtime compatibility."
+    - "Stage exact H3 weights on AMD through an opt-in CPU-only CI preparation job. Reuse verified shared files and retain source-run hashes; do not allocate GPUs or claim runtime compatibility. A separate node-inventory operation uses existing ownership receipts and at most eight GPUs for 15 minutes; it runs no generation."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2916

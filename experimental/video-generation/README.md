@@ -226,6 +226,11 @@ manifest under `/it-share/data/wenyao-minimax-h3/work`, checking every size and 
 Its `h3-model-preparation` artifact and persistent `model-ready.json` are preparation
 receipts; they do not admit an AMD runtime or allocate GPUs.
 
+`h3-preparation=amd-node` separately inspects the actual AMD node and cached image
+metadata through the existing queue and Slurm receipts. Its cap is eight allocated
+GPUs for 15 minutes, with a 10-minute read-only step. It retains device/telemetry
+output and cleanup evidence; it neither imports an image nor runs H3 generation.
+
 The existing `serving-smoke` mode accepts 4–200 measured requests per concurrency
 and an optional site-level `concurrencies` subset, such as `[4]`, to complete a
 missing cell in a new run without repeating finished cells. Omission keeps
