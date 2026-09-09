@@ -509,6 +509,11 @@ else
     # with multiple inference engines can coexist; fall back to the historical
     # name without an engine suffix (`_trt` for trt, bare for everyone else).
     BENCH_BASE="benchmarks/single_node/${SCENARIO_SUBDIR}${EXP_NAME%%_*}_${PRECISION}_b200"
+    # A DSpark path cannot share the native-MTP script on the same engine because
+    # their attention backends and speculative configurations differ.
+    if [[ "$SPEC_DECODING" == "draft_model" && -f "${BENCH_BASE}_${FRAMEWORK}_dspark.sh" ]]; then
+        SPEC_SUFFIX="_dspark"
+    fi
     BENCH_SCRIPT="${BENCH_BASE}_${FRAMEWORK}${SPEC_SUFFIX}.sh"
     if [[ ! -f "$BENCH_SCRIPT" ]]; then
         BENCH_SCRIPT="${BENCH_BASE}${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh"
