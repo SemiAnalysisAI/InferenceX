@@ -64,3 +64,33 @@ def test_failed_inventory_drains_only_owned_step_and_preserves_borrowed_allocati
     assert cleanup == [("step", "123")] + ([] if reused else [("allocation", "123")])
     assert ci.read(output / "inventory-status.json")["generation_executed"] is False
     assert (output / "SHA256SUMS").is_file()
+
+
+def test_failed_cpu_entry_does_not_approve_partial_rootfs(tmp_path, monkeypatch):
+    import subprocess
+    import prepare_amd_runtime as runtime
+    workspace = tmp_path / "work"
+    (workspace / "campaigns/h3-cross-hardware").mkdir(parents=True)
+    rootfs = tmp_path / "enroot-data" / runtime.CONTAINER
+    (rootfs / "etc").mkdir(parents=True)
+    (rootfs / "etc/rc").write_text('exec "$@"\n')
+    origin = rootfs.with_suffix(".image.json")
+    ci.write(origin, {"image": str(runtime.IMAGE), "status": "creating"})
+    previous = workspace / "results/h3-cross-hardware/github-34344130223-1"
+    previous.mkdir(parents=True)
+    ci.write(previous / "inventory-status.json", {"allocation_cleanup": {"status": "released"}})
+    (previous / "srun.log").write_text("Ignoring xattrs in filesystem\ncreated 464452 files\ncreated 11757 symlinks\n")
+    monkeypatch.setenv("H3_RUN_ID", "987")
+    monkeypatch.setenv("H3_RUN_ATTEMPT", "1")
+    monkeypatch.setattr(runtime, "prepare_source", lambda path: path)
+    def fail_entry(argv, **kwargs):
+        if argv[0].endswith("enroot"):
+            assert not any("/dev/kfd" in arg or "/dev/dri" in arg for arg in argv)
+            raise subprocess.CalledProcessError(1, argv)
+    monkeypatch.setattr(runtime.subprocess, "run", fail_entry)
+    output = tmp_path / "output"
+    with pytest.raises(subprocess.CalledProcessError):
+        runtime.recover_rootfs(workspace, output)
+    assert ci.read(origin)["status"] == "creating"
+    assert ci.read(output / "rootfs-recovery.json")["status"] == "failed"
+    assert not (workspace / "campaigns/h3-cross-hardware/rootfs-recovered.json").exists()
