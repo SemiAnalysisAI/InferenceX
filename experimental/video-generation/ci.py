@@ -342,7 +342,8 @@ def collect(run_dir: Path, output: Path) -> None:
 
 
 def stage_package(source: Path, destination: Path) -> dict[str, str]:
-    selected = {p.relative_to(source).as_posix(): p for p in [*source.glob("*.py"), *(source / "evaluator").glob("*.py")]}
+    selected = {p.relative_to(source).as_posix(): p for p in [*source.glob("*.py"), *(source / "evaluator").glob("*.py"),
+                *(source / "runtime-patches").glob("*.patch")]}
     shared_power = source.parents[1] / "utils" / "aggregate_power.py"
     if shared_power.is_file():
         selected["utils/aggregate_power.py"] = shared_power
@@ -422,7 +423,11 @@ def prepared_spec(config: dict) -> dict:
     # Cheap inventory checks happen before salloc; full pinned source/weight
     # hashing remains in the existing supervisor immediately before execution.
     for role in ("baseline", "candidate"):
-        need(host_path(config, spec[role]["source"]).is_dir(), "Prepared runtime source missing: " + role)
+        source = host_path(config, spec[role]["source"])
+        need(source.is_dir(), "Prepared runtime source missing: " + role)
+        if spec.get("server_timing"):
+            from evaluator.mvp_runtime_timing import validate_source
+            validate_source(source)
     model = host_path(config, spec["model"]["path"])
     for item in spec["model"]["files"]:
         path = model / item["path"]
