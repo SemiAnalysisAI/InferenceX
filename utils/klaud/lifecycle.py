@@ -110,7 +110,8 @@ class Session:
         refs = github.items(self.repository, 'git/matching-refs/heads/' + self.branch)
         return any(ref['ref'] == 'refs/heads/' + self.branch for ref in refs)
 
-    def verify(self, outcome: CandidateOutcome, *, require_report: bool = True) -> None:
+    def verify(self, outcome: CandidateOutcome, *, require_report: bool = True,
+               require_ready: bool = True) -> None:
         pulls = self.pulls()
         pull = pulls[0] if pulls else None
         if outcome.outcome == 'handoff':
@@ -127,7 +128,7 @@ class Session:
         if outcome.pull_request != (pull['number'] if pull else None):
             raise VerificationError('Outcome PR mismatch')
         if outcome.outcome == 'validated':
-            if not pull or pull['state'] != 'open' or pull['draft'] or not any(
+            if not pull or pull['state'] != 'open' or (require_ready and pull['draft']) or not any(
                     label['name'] == 'full-sweep-enabled' for label in pull['labels']):
                 raise VerificationError('Validated PR must remain ready for review')
             if {label['name'] for label in pull['labels']} & SWEEP_LABELS != {'full-sweep-enabled'}:
@@ -172,6 +173,12 @@ class Session:
             raise VerificationError('No explicit maintainer handoff')
         outcome = outcome.model_copy(update={'pull_request': pull['number'] if pull else None,
                                             'run_ids': sorted(run['id'] for run in runs)})
+        if outcome.outcome == 'validated' and pull and pull['draft']:
+            # Reviews start at this transition: prove the final sweep before notifying anyone.
+            self.verify(outcome, require_report=False, require_ready=False)
+            current = self.refresh(pull)
+            if current['draft']:
+                subprocess_ready(self.repository, pull['number'], undo=False)
         if outcome.outcome != 'validated':
             if pull and not self.report(pull):
                 self.refresh(pull)
@@ -214,7 +221,7 @@ class Session:
                     if ref['object']['sha'] != pull['head']['sha']:
                         raise VerificationError('Branch moved during cleanup')
                     github.write(self.repository, 'git/refs/heads/' + self.branch, 'DELETE')
-        # Label changes/closure can enqueue skipped runs. Never report completed cleanup before they finish.
+        # PR transitions can enqueue skipped runs. Wait for them before reporting completion.
         outcome = outcome.model_copy(update={'run_ids': sorted(run['id'] for run in self.runs())})
         self.verify(outcome, require_report=False)
         if pull:
@@ -244,8 +251,8 @@ class Session:
         return outcome
 
 
-def subprocess_ready(repository: str, number: int) -> None:
-    subprocess.run(['gh', 'pr', 'ready', str(number), '--undo', '--repo', repository],
+def subprocess_ready(repository: str, number: int, *, undo: bool = True) -> None:
+    subprocess.run(['gh', 'pr', 'ready', str(number), '--repo', repository] + (['--undo'] if undo else []),
                    check=True, capture_output=True, timeout=60)
 
 
