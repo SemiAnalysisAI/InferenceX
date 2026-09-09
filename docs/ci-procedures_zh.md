@@ -20,6 +20,7 @@
 | 选择 PR 扫描标签 | [PR 主标签与修饰标签](#pr-主标签与修饰标签) |
 | 理解提前取消行为 | [Canary 与 Fail-fast 语义](#canary-与-fail-fast-语义) |
 | 诊断或重跑 Workflow | [监控与重跑](#监控与重跑) |
+| 检查特权 Workflow 的访问权限 | [基于仓库角色的授权](#基于仓库角色的授权) |
 | 将 PR Run 发布到预发布环境 | [暂存结果](#暂存结果) |
 | 合并时不重复已批准的扫描 | [产物复用与 merge-with-reuse](#产物复用与-merge-with-reuse) |
 | 恢复仅追加 Changelog 的冲突 | [Changelog 冲突恢复](#changelog-冲突恢复) |
@@ -287,9 +288,41 @@ gh run rerun <RUN_ID> --repo SemiAnalysisAI/InferenceX
 
 重跑沿用同一个 Workflow Run ID，但 Attempt 会增加。Artifact API 可能包含多个 Attempt 上传的产物；必须保留 `run_attempt` 并检查 Artifact 时间戳。`run-stats` 会有意统计所有 Attempt 的 Job。如果源码需要变化，不应重跑旧代码：推送修复并监控新 Run。移除再重新添加主扫描标签会强制创建新的 Labeled Run；后续 Commit 也可能使复用资格失效。
 
+## 基于仓库角色的授权
+
+[`infx.workflows`](../infx/workflows/) 使用 `GITHUB_TOKEN`，复用结果暂存和可信外部
+扫描派发原有的仓库权限检查：
+
+| 仓库角色 | 应用权限级别 | 允许的请求 |
+| --- | --- | --- |
+| Admin 或 Maintain | `MAINTAINER` | 结果暂存和批准外部扫描 |
+| Write | `COLLABORATOR` | 结果暂存和批准外部扫描 |
+| Read、Triage 或无访问权限 | `PUBLIC` | 不允许执行上述特权操作 |
+
+查询仅需仓库元数据读取权限，无需用于查询团队成员身份的额外 Token。
+授权同时要求原有的基础 `permission`（`admin`、`maintain` 或 `write`）和受支持的
+有效 `role_name`（Admin、Maintain 或 Write）。当角色名称缺失、格式无效或无法识别时，
+绝不回退到旧版权限字段来放行。自定义角色在得到明确支持之前会被拒绝。
+这是有意增加的校验；标准 Write 权限仍然足够。
+GitHub 的基础 `permission` 字段会将 Maintain 报告为 Write。
+未知操作会被拒绝；查询失败或上下文无效会终止 Workflow。
+组织成员身份和 `author_association` 不会直接赋予权限级别。
+
+适配器使用托管 Runner 自带的 `python3` 和 `gh`，无需额外 Python 依赖：
+`python3 -m infx.workflows authorize <operation>`。命令输出 JSON，允许时退出码为 0，
+拒绝时为 1，无法确认授权时为 2。结果暂存检查评论作者；外部批准检查原始
+`github.actor`，重跑时也不改用重跑者身份。两个 Workflow 均从自己的
+`github.workflow_sha` 加载辅助代码，并禁用 Checkout 凭据持久化。
+其他 Workflow（包括恢复流程）保留原有的授权和派发行为。执行凭据和 GitHub
+保护措施仍在 Workflow 中明确配置。角色授权不能替代 PR、SHA、标签历史、
+Source Run、Artifact 或 CODEOWNER 检查。
+
+Changelog Gate 测试 Workflow 还使用真实的 `GITHUB_TOKEN` 执行只读权限查询，
+以验证托管 Runner 上的集成。此检查不要求触发者具有 Write 权限，也不会派发任何特权操作。
+
 ## 暂存结果
 
-[`stage-results.yml`](../.github/workflows/stage-results.yml) 是维护者专用的 PR 结果预发布路径，不能替代合并或生产入库。
+[`stage-results.yml`](../.github/workflows/stage-results.yml) 允许具有 Write、Maintain 或 Admin 权限的用户将 PR 结果发布到预发布环境。它不会执行合并或生产入库。
 
 请求只有在全部满足下列条件时才可暂存：
 

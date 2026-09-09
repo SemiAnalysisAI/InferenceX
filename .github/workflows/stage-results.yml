@@ -25,9 +25,18 @@ jobs:
       issues: read # Read labels and label-history timeline events
       pull-requests: write # Post staging status as github-actions rather than a PAT user
     steps:
+      - name: Checkout trusted workflow helpers
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          sparse-checkout: infx
+          persist-credentials: false
+
       - name: Authorize request and resolve source run
         id: request
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         with:
           github-token: ${{ github.token }}
           script: |
@@ -45,13 +54,14 @@ jobs:
             }
 
             const actor = context.payload.comment.user.login;
-            const permissionResponse = await github.rest.repos.getCollaboratorPermissionLevel({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              username: actor,
-            });
-            const permission = permissionResponse.data.permission;
-            if (!['admin', 'maintain', 'write'].includes(permission)) {
+            const {stdout, exitCode} = await exec.getExecOutput(
+              'python3', ['-m', 'infx.workflows', 'authorize', 'stage-results'],
+              {silent: true, ignoreReturnCode: true},
+            );
+            const authorization = JSON.parse(stdout);
+            if (exitCode > 1) throw new Error(authorization.reason);
+            const permission = authorization.permission;
+            if (exitCode !== 0 || authorization.allowed !== true) {
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,

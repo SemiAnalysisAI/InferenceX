@@ -13,6 +13,7 @@ on:
       - ".github/workflows/profile.yml"
       - ".github/workflows/e2e-tests.yml"
       - ".github/workflows/run-sweep.yml"
+      - ".github/workflows/stage-results.yml"
       - ".github/workflows/speedbench-al.yml"
       - ".github/workflows/test-changelog-gate.yml"
       - ".github/workflows/trusted-external-sweep.yml"
@@ -43,6 +44,8 @@ on:
       - "utils/validate_reusable_sweep_artifacts.py"
       - "utils/changelog_gate_tests/test_validate_perf_changelog.py"
       - "utils/changelog_gate_tests/test_run_sweep_gating.py"
+      - "utils/changelog_gate_tests/test_workflow_authorization.py"
+      - "utils/changelog_gate_tests/workflow_script_runner.cjs"
       - "utils/changelog_gate_tests/conftest.py"
       - "utils/merge_with_reuse.sh"
       - "utils/matrix_logic/**"
@@ -76,6 +79,22 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install pytest pytest-xdist "pydantic>=2" pyyaml tabulate
 
+      - name: Verify repository permission lookup
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import os
+          from infx.workflows.github import get_repository_permission
+
+          permission = get_repository_permission(
+              os.environ["GITHUB_REPOSITORY"],
+              os.environ["GITHUB_ACTOR"],
+              os.environ["GITHUB_TOKEN"],
+          )
+          print(f"Repository permission lookup succeeded ({permission.role_name}).")
+          PY
+
       - name: Run validator, reuse, and gating tests
         run: |
           python -m pytest \
@@ -85,6 +104,7 @@ jobs:
             utils/changelog_gate_tests/test_recover_failed_ingest.py \
             utils/test_validate_reusable_sweep_artifacts.py \
             utils/changelog_gate_tests/test_run_sweep_gating.py \
+            utils/changelog_gate_tests/test_workflow_authorization.py \
             utils/test_ci_priority.py \
             utils/test_process_changelog.py \
             utils/test_collect_eval_results.py \
