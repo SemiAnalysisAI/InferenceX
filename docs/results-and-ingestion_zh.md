@@ -181,6 +181,13 @@ Slurm 任务结束后，launcher 通过共享功耗适配器校验整个部署�
 C1 的 236 个 profiling 请求中有 235 个成功，另有 11 个 warmup 错误，
 因此即使 GPU 遥测有效，也不能作为无错误的对比测量。
 
+B200 K3 配方使用 producer 发现的逻辑 worker leader 指标 URL。AIPerf 也会
+发现推理端点，并合并完全相同的 URL。若覆盖为 `localhost`，同一引擎会以两个
+不同的 URL 标签被重复采集，导致服务器 token 与缓存计数翻倍。C1 的已保留工件
+存在此问题；原始请求计数核对和 GPU 能耗仍然有效，但请求错误使其不能用于
+无错误的对比。不要将服务器累计计数用作原始请求或能耗的分母。理论缓存命中率
+来自 AIPerf 的 profile 聚合；预期输出 trace 元数据另有数据集身份要求。
+
 七个 B200 K3 配置均记录 TP8/PP2/DCP8 和 `kv-offloading: none`，
 与服务配方一致；Mooncake connector 仍已配置，但 offload 保持禁用。
 C1/4/8/14 使用 DSpark7 和合成接受长度 3.84，C24/48 使用 DSpark4 和 3.36，
