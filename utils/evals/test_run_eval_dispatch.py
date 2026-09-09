@@ -2587,7 +2587,7 @@ esac
     )
 
 
-def test_multinode_agentic_waits_only_for_eval_openai_endpoint(
+def test_multinode_agentic_waits_for_openai_endpoint_before_every_run(
     tmp_path: Path,
 ) -> None:
     workspace = tmp_path / "workspace"
@@ -2620,12 +2620,9 @@ run_agentic_replay_and_write_outputs() { echo replay >> "$EVENTS"; }
         "RESULT_DIR": str(tmp_path / "results"),
         "DURATION": "1",
     }
-    expected_without_readiness = ["resolve", "deps", "build", "replay"]
+    expected = ["resolve", "deps", "ready --port 8765", "build", "replay"]
 
-    for eval_only, expected in (
-        ("false", expected_without_readiness),
-        ("true", [*expected_without_readiness[:2], "ready --port 8765", *expected_without_readiness[2:]]),
-    ):
+    for eval_only in ("false", "true"):
         events_path.unlink(missing_ok=True)
         subprocess.run(
             ["bash", str(MULTINODE_AGENTIC_SCRIPT)],
