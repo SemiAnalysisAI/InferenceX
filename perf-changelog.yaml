@@ -7353,4 +7353,4 @@
   description:
     - "Route ordinary B300 AgentX configurations through the registered DSXE runner after retirement of the B300 NV fleet; preserve model, image, serving flags, and concurrency grids. Dedicated power-ab configurations remain unchanged."
     - "将普通 B300 AgentX 配置切换到已注册的 DSXE runner，保留模型、镜像、服务参数及并发配置；不修改独立 power-ab 配置。"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2923
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2927
