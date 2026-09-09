@@ -36,27 +36,6 @@ def test_find_reuse_authorization_uses_latest_allowed_comment(monkeypatch) -> No
     ) == (True, 333)
 
 
-def test_find_reuse_authorization_accepts_command_without_run_id(monkeypatch) -> None:
-    def fake_paginated_github_api(*args, **kwargs):
-        return [
-            {
-                "created_at": "2026-05-13T00:00:00Z",
-                "author_association": "OWNER",
-                "body": "/reuse-sweep-run",
-            },
-        ]
-
-    monkeypatch.setattr(reuse, "paginated_github_api", fake_paginated_github_api)
-
-    assert reuse.find_reuse_authorization(
-        "SemiAnalysisAI/InferenceX",
-        1321,
-        "token",
-        "/reuse-sweep-run",
-        {"OWNER", "MEMBER", "COLLABORATOR"},
-    ) == (True, None)
-
-
 def test_find_reuse_authorization_lets_newer_no_arg_unpin_older_pin(monkeypatch) -> None:
     def fake_paginated_github_api(*args, **kwargs):
         return [

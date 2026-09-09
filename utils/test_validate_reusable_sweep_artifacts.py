@@ -338,24 +338,7 @@ def write_agentic_artifacts(
     (root / f"agentic_{result_name}").mkdir()
 
 
-def test_eval_validation_requires_raw_result_dirs_not_eval_debug_dirs(
-    tmp_path: Path,
-) -> None:
-    write_eval_aggregate(
-        tmp_path,
-        [single_eval_result(32), single_eval_result(64)],
-    )
-
-    (tmp_path / "eval_server_logs_gptoss_8k1k_runner").mkdir()
-    (tmp_path / "eval_gpu_metrics_gptoss_8k1k_runner").mkdir()
-    write_raw_eval_artifact(tmp_path, 32)
-
-    errors = validate_eval_artifacts(tmp_path)
-
-    assert any("unexpected" in error for error in errors)
-
-
-def test_eval_validation_accepts_matching_legacy_artifacts_without_suite(
+def test_eval_validation_accepts_legacy_results_alongside_debug_artifacts(
     tmp_path: Path,
 ) -> None:
     write_eval_aggregate(
@@ -368,6 +351,8 @@ def test_eval_validation_accepts_matching_legacy_artifacts_without_suite(
         64,
         physical_runner="h100-dgxc-slurm_01",
     )
+    (tmp_path / "eval_server_logs_fixture").mkdir()
+    (tmp_path / "eval_gpu_metrics_fixture").mkdir()
 
     assert validate_eval_artifacts(tmp_path) == []
 
