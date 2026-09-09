@@ -15,7 +15,7 @@ import kimi_vendor_eval as kve
 
 def _report(stream_status: str = "passed") -> dict[str, Any]:
     statuses = ["passed", stream_status]
-    by_status = {status: statuses.count(status) for status in set(statuses)}
+    by_status = {status: statuses.count(status) for status in sorted(set(statuses))}
     return {
         "summary": {"total": 2, "by_status": by_status},
         "results": [

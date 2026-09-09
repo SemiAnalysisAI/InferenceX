@@ -43,7 +43,7 @@ This page explains how a declared benchmark becomes a validated job, a runtime r
 | [`runners/`](../runners/) | Fleet-specific model paths, mounts, container or Slurm setup, and benchmark-script routing |
 | [`benchmarks/benchmark_lib.sh`](../benchmarks/benchmark_lib.sh) | Shared server readiness, benchmark client, eval, AgentX replay, and output behavior |
 | [`benchmarks/`](../benchmarks/) | Framework and topology-specific server and client commands |
-| [`utils/process_result.py`](../utils/process_result.py) | Fixed-sequence result normalization and aggregation before upload |
+| [`infx/results/`](../infx/results/) | Importable result builders, component metadata parsing, and power-metric transformations; [`utils/process_result.py`](../utils/process_result.py) preserves the fixed-sequence CLI |
 | [`.github/workflows/collect-results.yml`](../.github/workflows/collect-results.yml), [`.github/workflows/collect-evals.yml`](../.github/workflows/collect-evals.yml) | Run-level benchmark and eval artifact aggregation |
 
 ### InferenceX-app consumers
@@ -192,6 +192,31 @@ Do not use YAML acceptance as proof of execution. A field can be valid and emitt
 The single-node template computes a stable `RESULT_FILENAME` from experiment identity, precision, framework, topology, disaggregation, speculative decoding, concurrency, and concrete runner. The launcher and benchmark code must write the expected file under that identity.
 
 For fixed-sequence throughput jobs, the workflow requires `<RESULT_FILENAME>.json`, then runs [`utils/process_result.py`](../utils/process_result.py) and uploads `agg_<RESULT_FILENAME>.json` as `bmk_<RESULT_FILENAME>`.
+
+### Reusing and extending result processing
+
+[`infx.results.fixed_sequence.build_result`](../infx/results/fixed_sequence.py) accepts a loaded benchmark mapping and an explicit environment mapping. It returns the aggregate dictionary without reading process environment or performing file I/O. Library callers do not need `RESULT_FILENAME`. The existing CLI validates its environment, reads the raw artifact, calls the builder, writes the aggregate, and runs power aggregation with the existing best-effort or `REQUIRE_POWER` policy.
+
+```python
+from infx.results.fixed_sequence import build_result
+
+result = build_result(raw_benchmark, runtime_env)
+```
+
+New formats should expose their own typed builder under `infx/results/`, accepting the inputs that format needs and returning a dictionary. Compose shared transformations as ordinary function calls; keep file discovery, environment defaults, error presentation, and serialization in the format's CLI adapter. Existing AgentX topology and request/server processing retain their own policies.
+
+Two helpers are shared by the current processing paths:
+
+- [`parse_component_metadata`](../infx/results/metadata.py) accepts a raw JSON value and diagnostic label. Callers select whether `version` is optional and whether invalid input raises `ValueError` or `SystemExit`, preserving their existing contracts.
+- [`with_power_metrics`](../infx/results/power/__init__.py) returns a copy with the supplied metric family replaced, removes stale validity reasons, and validates and rounds new metrics. Callers supply metric keys and schema version, then own artifact writes and validation sidecars. This allows another metric family to reuse the transformation without changing its implementation.
+
+Power telemetry engines also live in [`infx.results.power`](../infx/results/power/): `single_node.run` consumes GPU-monitor CSVs, while `multinode.run` validates srt-slurm artifact packages. They share benchmark-window parsing, per-device integration, aggregate replacement, and audit serialization through `common.py`, while retaining their own telemetry validation and failure policies. Fixed-sequence and AgentX adapters import these engines directly; new result formats can supply their benchmark window and token counts to the matching engine.
+
+The existing `utils/aggregate_power.py` and `utils/aggregate_power_multinode.py` commands remain compatibility entrypoints, including direct execution outside the checkout. Legacy imports resolve to the canonical engine modules, so both paths refer to the same classes and functions. The `infx` package runs independently of these wrappers, with no installation step or new runtime dependency. The engines are also callable with `python -m infx.results.power.single_node` and `python -m infx.results.power.multinode` from the repository root.
+
+Test builders with small, independently worked examples and read-only inputs. For changes to an existing adapter, also compare CLI status, diagnostics, and generated artifacts with the previous implementation, including invalid inputs and strict/best-effort power failures.
+
+### Eval and AgentX outputs
 
 For eval-only jobs, throughput output is not required. The workflow instead requires at least one `results*.json`. For jobs marked to run eval, uploads may contain `meta_env.json`, `results*.json`, `sample*.jsonl`, SWE-bench predictions and reports, and trajectory files. [`utils/evals/validate_scores.py`](../utils/evals/validate_scores.py) checks produced eval scores.
 

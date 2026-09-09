@@ -43,7 +43,7 @@
 | [`runners/`](../runners/) | 特定机群的模型路径、挂载、容器或 Slurm 设置以及基准测试脚本路由 |
 | [`benchmarks/benchmark_lib.sh`](../benchmarks/benchmark_lib.sh) | 共享的服务器就绪检查、基准测试客户端、评测、AgentX 重放和输出行为 |
 | [`benchmarks/`](../benchmarks/) | 特定于框架和拓扑的服务器与客户端命令 |
-| [`utils/process_result.py`](../utils/process_result.py) | 上传前对固定序列结果进行规范化和聚合 |
+| [`infx/results/`](../infx/results/) | 可导入的结果构建函数、组件元数据解析和功耗指标转换；[`utils/process_result.py`](../utils/process_result.py) 保留固定序列处理的 CLI |
 | [`.github/workflows/collect-results.yml`](../.github/workflows/collect-results.yml)、[`.github/workflows/collect-evals.yml`](../.github/workflows/collect-evals.yml) | 运行级基准测试和评测工件聚合 |
 
 ### InferenceX-app 使用方
@@ -192,6 +192,31 @@ bash ./runners/launch_${RUNNER_NAME%%_*}.sh
 单节点模板根据实验标识、精度、框架、拓扑、解聚、推测解码、并发度和具体运行器计算稳定的 `RESULT_FILENAME`。启动器和基准测试代码必须以该标识写入预期文件。
 
 对于固定序列吞吐量作业，工作流要求存在 `<RESULT_FILENAME>.json`，随后运行 [`utils/process_result.py`](../utils/process_result.py)，并将 `agg_<RESULT_FILENAME>.json` 作为 `bmk_<RESULT_FILENAME>` 上传。
+
+### 复用与扩展结果处理
+
+[`infx.results.fixed_sequence.build_result`](../infx/results/fixed_sequence.py) 接收已加载的基准测试映射和显式传入的环境变量映射，返回聚合结果字典，不读取进程环境，也不执行文件 I/O。库调用方无需提供 `RESULT_FILENAME`。现有 CLI 会验证环境变量、读取原始工件、调用构建函数、写入聚合结果，并按照原有的尽力处理或 `REQUIRE_POWER` 策略执行功耗聚合。
+
+```python
+from infx.results.fixed_sequence import build_result
+
+result = build_result(raw_benchmark, runtime_env)
+```
+
+新增格式应在 `infx/results/` 下提供带类型标注的构建函数，接收该格式所需的输入并返回字典。通过普通函数调用组合共享转换；文件查找、环境默认值、错误呈现和序列化由该格式的 CLI 适配器负责。现有 AgentX 拓扑及请求和服务器指标处理保留各自的策略。
+
+当前处理路径共享两个辅助函数：
+
+- [`parse_component_metadata`](../infx/results/metadata.py) 接收原始 JSON 值和诊断标签。调用方选择 `version` 是否可省略，以及无效输入应抛出 `ValueError` 还是 `SystemExit`，从而保留现有契约。
+- [`with_power_metrics`](../infx/results/power/__init__.py) 返回替换了指定指标族的副本，移除旧的有效性原因，并验证、舍入新指标。调用方提供指标键和模式版本，再自行写入工件及验证附属文件。其他指标族因此可以直接复用该转换，无需修改其实现。
+
+功耗遥测处理引擎也位于 [`infx.results.power`](../infx/results/power/)：`single_node.run` 读取 GPU 监控 CSV，`multinode.run` 验证 srt-slurm 工件包。两者通过 `common.py` 共享基准窗口解析、单设备能量积分、聚合结果替换及审计序列化，同时保留各自的遥测校验和失败策略。固定序列及 AgentX 适配器直接导入这些引擎；新结果格式可以将其基准窗口和 token 计数提供给匹配的引擎。
+
+现有 `utils/aggregate_power.py` 和 `utils/aggregate_power_multinode.py` 命令继续作为兼容入口，包括从检出目录之外直接执行。旧导入路径解析到对应的引擎模块，因此两种路径引用的是相同的类和函数。`infx` 包可独立于这些入口运行，无需安装步骤或新增运行时依赖。还可以从仓库根目录运行 `python -m infx.results.power.single_node` 和 `python -m infx.results.power.multinode` 来调用引擎。
+
+构建函数测试应使用独立计算预期结果的小样例和只读输入。修改现有适配器时，还应与旧实现比较 CLI 退出状态、诊断信息和生成工件，覆盖无效输入以及严格模式和尽力处理模式下的功耗失败。
+
+### 评测与 AgentX 输出
 
 对于仅评测作业，不要求吞吐量输出。工作流改为要求至少存在一个 `results*.json`。对于标记为运行评测的作业，上传内容可能包含 `meta_env.json`、`results*.json`、`sample*.jsonl`、SWE-bench 预测和报告以及轨迹文件。[`utils/evals/validate_scores.py`](../utils/evals/validate_scores.py) 会检查生成的评测分数。
 
