@@ -194,6 +194,9 @@ C1/4/8/14 使用 DSpark7 和合成接受长度 3.84，C24/48 使用 DSpark4 和 
 C96 不使用推测解码。这些服务设置保持不变。旧工件保留原有 DCP1/DRAM 标签，
 解读时必须说明这一身份偏差；元数据修正不会改变其测量值。
 
+B200 launcher 将普通 DCGM exporter 镜像名传给共享导入工具，仅转换一次 registry
+分隔符。已有 exporter 镜像继续复用；缓存缺失时使用正确的 NVIDIA registry URI。
+
 GLM-5.1 FP8 TileRT 1P1D B200 配方使用独立固定版本的 producer，在保留 TileRT
 运行时与隐式 DCGM 架构的基础上复用共享 custom-window 生命周期。原始回放工件
 写入 `/logs/agentic`，任务结束后由同一适配器与整个部署的遥测关联。launcher

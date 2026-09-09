@@ -206,6 +206,10 @@ C24/48 use DSpark4 with 3.36, and C96 has no speculation. Their serving settings
 are unchanged. Older artifacts retain their original DCP1/DRAM labels and require
 this identity caveat; metadata corrections do not change their measured values.
 
+The B200 launcher passes the plain DCGM exporter image name to its shared import
+helper, which converts the registry separator once. Cached exporter images are
+reused; an absent image uses the same valid NVIDIA registry URI.
+
 The GLM-5.1 FP8 TileRT 1P1D B200 recipe uses a separate producer that preserves
 its TileRT runtime and implicit DCGM schema while adding the shared custom-window
 lifecycle. Raw replay artifacts live under `/logs/agentic`; the same adapter joins

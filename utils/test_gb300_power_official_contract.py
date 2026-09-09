@@ -178,6 +178,7 @@ def _workspace_recipe_path(config_file: str) -> Path:
     [
         ("launch_gb300-nv.sh", "", "/data/home/sa-shared/gharunners/squash/"),
         ("launch_h200-dgxc-slurm.sh", "    ", "/data/gharunners/containers/"),
+        ("launch_b200-nscale-slurm.sh", "", "/data/home/sa-shared/containers/"),
     ],
 )
 def test_exporter_cold_import_uses_nvidia_registry(
@@ -194,6 +195,11 @@ def test_exporter_cold_import_uses_nvidia_registry(
     source = source.replace("${HOME}/.cache/enroot", "${GITHUB_WORKSPACE}/enroot-cache")
     if "import_squash() {" in launcher:
         helper_start = launcher.index("import_squash() {")
+        helper_end = launcher.index("\n}\n", helper_start) + len("\n}")
+        source = launcher[helper_start:helper_end] + "\n" + source
+
+    if "enroot_uri_for_image() {" in launcher:
+        helper_start = launcher.index("enroot_uri_for_image() {")
         helper_end = launcher.index("\n}\n", helper_start) + len("\n}")
         source = launcher[helper_start:helper_end] + "\n" + source
 
@@ -223,6 +229,8 @@ export -f flock unsquashfs enroot sha256sum
         SLURM_ACCOUNT="test",
         SLURM_PARTITION="test",
         RUNNER_NAME="exporter-import-test",
+        SQUASH_DIR=str(tmp_path),
+        SQUASH_LOCK_TIMEOUT="1",
     )
     subprocess.run(
         ["/bin/bash"],
