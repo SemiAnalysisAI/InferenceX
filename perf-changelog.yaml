@@ -6986,6 +6986,20 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2851
 
 - config-keys:
+    - dsv4-fp4-mi355x-sglang-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260907."
+    - "Replace the unconditional --disable-shared-experts-fusion with --enforce-shared-experts-fusion, and move the disable to the EP > 1 branch only."
+    - "Add TORCH_BLAS_PREFER_HIPBLASLT=1 and SGLANG_OPT_USE_AITER_BATCHED_GEMM=1."
+    - "Set GPU_MAX_HW_QUEUES=5 on the DP-attention path, matching the spec-none sibling dsv4_fp4_mi355x_sglang.sh."
+    - "Add --enable-deepseek-v4-fp4-indexer."
+    - "Drop conc 8 from the TP8 no-offload arm, which now sweeps conc [1, 2, 4, 16, 32]."
+    - "Set SGLANG_PREFILL_DELAYER_MAX_PREFILL_BS_WINDOW_SIZE=1 on the DP-attention path."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2910
+
+- config-keys:
     - qwen3.5-fp4-gb300-dynamo-sglang-agentic-pp-pareto
     - qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg-pareto
   scenario-type:
