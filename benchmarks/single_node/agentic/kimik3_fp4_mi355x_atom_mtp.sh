@@ -87,8 +87,15 @@ export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="atom:"
 # mid-request while the server is prefill-bound. Matches the vLLM K3 arm.
 export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
 
-# VRAM space check
-wait_for_amd_gpu_clean
+# VRAM space check. Gate strictly (<=1%, ~2.9 GB on the 288 GB part) rather than
+# the default 10% (~28.8 GB): ATOM sizes the KV pool from torch.cuda.mem_get_info()
+# right after the server starts, so any prior-job VRAM still resident here reads as
+# used, is folded into ATOM's non_torch term, and is subtracted from
+# available_for_kv. Under the 10% gate that residual varies 0-28.8 GB between
+# otherwise-identical reruns, drifting non_torch by several GB (e.g. 25.8 vs 31.8
+# GB on two c4 runs) and moving the KV pool with it. Holding the launch until the
+# device is nearly empty removes that source of drift.
+wait_for_amd_gpu_clean 1
 
 # ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
