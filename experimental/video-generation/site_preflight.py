@@ -42,6 +42,18 @@ def inspect_site() -> dict:
     enroot_config = Path("/etc/enroot/enroot.conf")
     enroot_paths = [line.strip() for line in enroot_config.read_text().splitlines()
                     if line.strip().startswith(("ENROOT_DATA_PATH", "ENROOT_CACHE_PATH", "ENROOT_RUNTIME_PATH"))] if enroot_config.is_file() else None
+    storage = {}
+    for name in ("/it-share", "/it-share/data", "/it-share/hf-hub-cache", "/it-share/gharunners2", user.pw_dir):
+        path = Path(name)
+        if path.is_dir():
+            info = path.stat()
+            mount = subprocess.run(["findmnt", "--target", name, "--noheadings", "--output", "TARGET,SOURCE,FSTYPE"],
+                                   capture_output=True, text=True, timeout=5) if shutil.which("findmnt") else None
+            storage[name] = {"uid": info.st_uid, "gid": info.st_gid, "mode": oct(info.st_mode & 0o777),
+                             "writable": os.access(path, os.W_OK), "free_bytes": shutil.disk_usage(path).free,
+                             "mount": mount.stdout.strip() if mount and mount.returncode == 0 else None}
+        else:
+            storage[name] = None
     return {
         "schema_version": 1, "bundle_type": "h3_site_preflight_no_gpu",
         "hostname": platform.node(), "uid": os.getuid(), "username": user.pw_name,
@@ -54,7 +66,7 @@ def inspect_site() -> dict:
         "scheduler_associations": associations.stdout if associations and associations.returncode == 0 else None,
         "scheduler_default_account": defaults.stdout if defaults and defaults.returncode == 0 else None,
         "scheduler_active_accounts": sorted(set(active_accounts.stdout.split())) if active_accounts and active_accounts.returncode == 0 else None,
-        "runtime_candidates": candidates, "enroot_paths": enroot_paths,
+        "runtime_candidates": candidates, "enroot_paths": enroot_paths, "persistent_storage": storage,
         "gpu_execution": False, "runtime_compatibility": "not_tested",
     }
 
