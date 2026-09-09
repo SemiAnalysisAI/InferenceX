@@ -214,6 +214,8 @@ RUN_ID=$(gh run list \
 
 ## PR 主标签与修饰标签
 
+同仓库 PR 无论处于草稿还是 ready 状态，都由 sweep 标签授权 GPU 运行。草稿状态控制是否开始审阅，不决定 sweep 资格；fork PR 仍使用受信任调度路径。添加 sweep 标签或在保留标签时推送提交可以启动 sweep。标记为 ready 不会调度或重复运行。已带标签但尚无运行的草稿，可先移除再重新添加对应 sweep 标签来启动。
+
 [`run-sweep.yml`](../.github/workflows/run-sweep.yml) 会拒绝多个主标签。必须且只能应用一个：
 
 | 主标签 | 矩阵范围 | Canary | 矩阵 Fail-fast |
