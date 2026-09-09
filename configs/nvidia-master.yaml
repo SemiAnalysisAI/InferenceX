@@ -8187,6 +8187,7 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
           - "SYNTHETIC_ACCEPTANCE=true"
           - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
           - "SLURM_PARTITION=batch_1"
+          # Recipe reserves 0.92 GPU memory on prefill to fit the 1M context with current CUDA graphs.
           - "CONFIG_FILE=recipes/vllm/deepseek-v4/agentic/disagg-gb300-1p1d-dep4-dep16-c256-mtp-agentic.yaml"
         decode:
           num-worker: 1

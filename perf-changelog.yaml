@@ -7041,3 +7041,13 @@
     - "Enable the breakable prefill CUDA graphs required by the current DeepSeek-V4 V2 model runner; retain the tested DEP4/DEP16 topology and c256 workload."
     - "Correct Mooncake backend metadata to 0.3.13.post1, the version installed in the Docker Hub validation image."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2938
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  no-evals: true
+  description:
+    - "Increase only prefill GPU memory utilization from 0.90 to 0.92: current graph capture leaves 11.1 GiB for KV at 0.90, below the 12.33 GiB required for the preserved 1M context."
+    - "Retain the existing DEP4/DEP16 1P/1D c256 AgentX point and decode configuration."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2938
