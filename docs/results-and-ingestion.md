@@ -189,6 +189,16 @@ path; C4/8/14/24/48/96 measured-data cells remain missing. C1 had 235 successful
 profiling requests out of 236 plus 11 warmup errors, so it is rejected as a clean
 comparison despite valid GPU telemetry.
 
+The B200 K3 recipes use the producer's discovered logical-leader metrics URL.
+AIPerf also discovers the inference endpoint and deduplicates identical URLs.
+A `localhost` override would scrape that same engine twice under different URL
+labels and double server token/cache counters. C1's retained artifact has this
+duplication; its raw request reconciliation and GPU energy remain valid, while
+its request errors still exclude it from clean comparisons. Do not use server
+cumulative counters as raw request or energy denominators. Theoretical cache
+hit rate comes from AIPerf's profile aggregate; expected-output trace metadata
+has a separate dataset-identity requirement.
+
 The seven B200 K3 rows report TP8/PP2/DCP8 and `kv-offloading: none`,
 matching their serving recipes; the Mooncake connector remains configured with
 offload disabled. C1/4/8/14 use DSpark7 with synthetic acceptance length 3.84,

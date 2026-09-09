@@ -7010,4 +7010,6 @@
     - "复用 C1 运行 34384240556 作为共享硬件路径证据：全部 16 个 GPU UUID 和完整 profiling 窗口通过功耗校验，工件已上传。该运行仅 235/236 个 profiling 请求成功，另有 11 个 warmup 错误，不能用于无错误的对比。C4/8/14/24/48/96 仍缺少实测数据；服务、模型和合成接受率设置保持不变。"
     - "Correct all seven B200 K3 master rows to DCP8 and KV offload none, removing the inactive Mooncake offload-backend label. The configured Mooncake connector and serving behavior remain unchanged. Historical artifacts retain their original DCP1/DRAM metadata."
     - "将七个 B200 K3 master 配置修正为 DCP8、KV offload none，并移除未启用的 Mooncake offload-backend 标签。已配置的 Mooncake connector 与服务行为保持不变。历史工件保留原有 DCP1/DRAM 元数据。"
+    - "Remove the localhost server-metrics override from the seven B200 K3 recipes. Use the existing producer-discovered leader URL so AIPerf deduplicates it with the inference endpoint instead of counting one engine twice. This changes metric collection only; raw request and GPU energy denominators remain unchanged."
+    - "移除七个 B200 K3 配方中的 localhost 服务器指标覆盖，使用现有 producer 发现的 leader URL，让 AIPerf 与推理端点去重，避免重复统计同一引擎。仅调整指标采集，原始请求与 GPU 能耗分母保持不变。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2926
