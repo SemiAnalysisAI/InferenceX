@@ -10081,6 +10081,7 @@ glm5.1-fp8-b200-tilert:
           additional-settings:
           - "DECODE_NODES=1"
 
+# Shared required DCGM telemetry uses the TileRT-compatible custom-window producer.
 glm5.1-fp8-b200-tilert-agentic:
   image: ghcr.io/tile-ai/tilert:0.1.5
   model: zai-org/GLM-5.1-FP8

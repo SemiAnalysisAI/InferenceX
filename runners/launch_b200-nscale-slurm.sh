@@ -14,6 +14,7 @@ SLURM_ACCOUNT="benchmark"
 POWER_SRT_SLURM_URL="https://github.com/edwingao28/srt-slurm.git"
 POWER_SRT_SLURM_PIN="e5c837f06a362dc888dfea2ee588e9f19c298270"
 AGENTX_POWER_SRT_SLURM_PIN="80d7203e424f903c9017de4608ee2044afce9574"
+TILERT_AGENTX_POWER_SRT_SLURM_PIN="d24ac27bbe65698bf7b68cb7d98eb0f8860d4941"
 TILERT_SRT_SLURM_URL="https://github.com/SemiAnalysisAI/srt-slurm.git"
 TILERT_SRT_SLURM_PIN="d1e6c97b3baf3e87103b6d83189544c3c7d61c38"
 
@@ -71,17 +72,25 @@ if [[ "${EVAL_ONLY:-false}" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
 fi
 _RECIPE_REL="${_POWER_CONFIG_FILE%%:*}"
 _RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/${_RECIPE_REL#recipes/}"
-if [[ -n "$_POWER_CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
+# This producer uses implicit DCGM; keep that schema scoped to its exact recipe.
+IS_TILERT_AGENTX_POWER_RECIPE=0
+if [[ "${IS_AGENTIC:-0}" == "1" && "$MODEL_PREFIX" == "glm5.1" &&
+    "$PRECISION" == "fp8" && "$FRAMEWORK" == "tilert" &&
+    "$_RECIPE_REL" == "recipes/tilert/glm5.1/b200-fp8/agentic/disagg-1p1d-tp8-mtp.yaml" ]]; then
+    IS_TILERT_AGENTX_POWER_RECIPE=1
+fi
+if [[ -n "$_POWER_CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk -v implicit_dcgm="$IS_TILERT_AGENTX_POWER_RECIPE" '
     /^telemetry:/ { t = 1; next }
     t && /^[^ ]/  { t = 0 }
     t && /^  provider: dcgm-power$/ { p = 1 }
     t && /^  enabled: true$/        { e = 1 }
-    END { exit !(p && e) }
+    END { exit !(e && (p || implicit_dcgm == 1)) }
 ' "$_RECIPE_SRC"; then
     USES_DCGM_POWER=1
 fi
 if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" &&
-    "$MODEL_PREFIX" == "kimik3" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-vllm" ]]; then
+    ( ( "$MODEL_PREFIX" == "kimik3" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-vllm" ) ||
+      "$IS_TILERT_AGENTX_POWER_RECIPE" == "1" ) ]]; then
     USES_AGENTX_POWER=1
 elif [[ "$USES_DCGM_POWER" == "1" && (
     "${IS_AGENTIC:-0}" == "1" ||
@@ -90,7 +99,7 @@ elif [[ "$USES_DCGM_POWER" == "1" && (
     ( "$MODEL_PREFIX" == "kimik2.6" && "$FRAMEWORK" != "dynamo-vllm" ) ||
     ( "$MODEL_PREFIX" != "dsv4" && "$MODEL_PREFIX" != "kimik2.6" )
 ) ]]; then
-    echo "Error: B200 nscale dcgm-power requires a supported fixed-sequence lane or Kimi-K3 AgentX vLLM" >&2
+    echo "Error: B200 nscale dcgm-power requires a supported fixed-sequence lane, Kimi-K3 AgentX vLLM, or the GLM-5.1 TileRT AgentX recipe" >&2
     exit 1
 fi
 
@@ -101,7 +110,9 @@ SRT_REPO_DIR="srt-slurm"
 rm -rf "$SRT_REPO_DIR"
 if [[ "$USES_DCGM_POWER" == "1" ]]; then
     SELECTED_POWER_SRT_SLURM_PIN="$POWER_SRT_SLURM_PIN"
-    if [[ "$USES_AGENTX_POWER" == "1" ]]; then
+    if [[ "$IS_TILERT_AGENTX_POWER_RECIPE" == "1" ]]; then
+        SELECTED_POWER_SRT_SLURM_PIN="$TILERT_AGENTX_POWER_SRT_SLURM_PIN"
+    elif [[ "$USES_AGENTX_POWER" == "1" ]]; then
         SELECTED_POWER_SRT_SLURM_PIN="$AGENTX_POWER_SRT_SLURM_PIN"
     fi
     git clone "$POWER_SRT_SLURM_URL" "$SRT_REPO_DIR" || exit 1
@@ -109,7 +120,11 @@ if [[ "$USES_DCGM_POWER" == "1" ]]; then
     git checkout "$SELECTED_POWER_SRT_SLURM_PIN" || exit 1
     test "$(git rev-parse HEAD)" = "$SELECTED_POWER_SRT_SLURM_PIN" || { echo "Error: srt-slurm HEAD does not match selected power producer $SELECTED_POWER_SRT_SLURM_PIN" >&2; exit 1; }
     git rev-parse HEAD > "$GITHUB_WORKSPACE/power-producer-sha.txt"
-    if [[ "$USES_AGENTX_POWER" == "1" ]]; then
+    if [[ "$IS_TILERT_AGENTX_POWER_RECIPE" == "1" ]]; then
+        mkdir -p recipes/tilert/glm5.1/b200-fp8/agentic || exit 1
+        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/tilert/glm5.1/b200-fp8/agentic" \
+            recipes/tilert/glm5.1/b200-fp8/agentic || exit 1
+    elif [[ "$USES_AGENTX_POWER" == "1" ]]; then
         mkdir -p recipes/vllm/kimi-k3/agentic || exit 1
         cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
             recipes/vllm/kimi-k3/agentic || exit 1
@@ -392,7 +407,11 @@ LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
 
 # Waits for the log file to appear, fails fast if the job dies first, then
 # streams until the job leaves the queue.
-stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || exit 1
+AGENTX_POWER_RC=0
+stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || AGENTX_POWER_RC=$?
+if [[ "$AGENTX_POWER_RC" != "0" && "$USES_AGENTX_POWER" != "1" ]]; then
+    exit 1
+fi
 
 set -x
 
@@ -404,8 +423,10 @@ if [ ! -d "$LOGS_DIR" ]; then
     exit 1
 fi
 
-AGENTX_POWER_RC=0
 if [[ "$USES_AGENTX_POWER" == "1" && "${EVAL_ONLY:-false}" != "true" ]]; then
+    if [[ "$IS_TILERT_AGENTX_POWER_RECIPE" == "1" ]]; then
+        record_slurm_completion_status "$JOB_ID" "$LOGS_DIR/power" || AGENTX_POWER_RC=$?
+    fi
     POWER_LOGS_ROOT=$(cd "$LOGS_DIR" && pwd -P)
     read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
     for concurrency in "${POWER_CONCURRENCIES[@]}"; do

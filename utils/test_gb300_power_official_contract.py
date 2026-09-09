@@ -19,6 +19,7 @@ MASTER_CONFIG_PATH = REPO_ROOT / "configs/nvidia-master.yaml"
 FORK_URL = "https://example.test/power-producer.git"
 PRODUCER_PIN = "a" * 40
 AGENTX_PRODUCER_PIN = "b" * 40
+TILERT_PRODUCER_PIN = "c" * 40
 
 
 def _launcher_routing_source(launcher_path: Path = LAUNCHER_PATH) -> str:
@@ -57,13 +58,16 @@ def _run_power_route(
     workspace = tmp_path / "workspace"
     stub_bin = tmp_path / "bin"
     recipe_relative = (
-        "vllm/kimi-k3/agentic" if model_prefix == "kimik3"
+        "tilert/glm5.1/b200-fp8/agentic" if model_prefix == "glm5.1"
+        else "vllm/kimi-k3/agentic" if model_prefix == "kimik3"
         else "sglang/deepseek-v4/8k1k"
     )
     source = workspace / "benchmarks/multi_node/srt-slurm-recipes" / recipe_relative
     source.mkdir(parents=True)
     (source / "overlay-marker.txt").write_text("from-workspace\n")
-    (source / "recipe.yaml").write_text(
+    recipe_name = "disagg-1p1d-tp8-mtp.yaml" if model_prefix == "glm5.1" else "recipe.yaml"
+    (source / recipe_name).write_text(
+        "telemetry:\n  enabled: true\n" if uses_dcgm_power and model_prefix == "glm5.1" else
         "telemetry:\n  enabled: true\n  provider: dcgm-power\n"
         if uses_dcgm_power else "benchmark:\n  type: custom\n"
     )
@@ -127,14 +131,15 @@ set -eo pipefail
 POWER_SRT_SLURM_URL={FORK_URL}
 POWER_SRT_SLURM_PIN={PRODUCER_PIN}
 AGENTX_POWER_SRT_SLURM_PIN={AGENTX_PRODUCER_PIN}
+TILERT_AGENTX_POWER_SRT_SLURM_PIN={TILERT_PRODUCER_PIN}
 IS_AGENTIC={int(is_agentic)}
-FRAMEWORK={"dynamo-vllm" if model_prefix == "kimik3" else "dynamo-sglang"}
+FRAMEWORK={"tilert" if model_prefix == "glm5.1" else "dynamo-vllm" if model_prefix == "kimik3" else "dynamo-sglang"}
 MODEL_PREFIX={model_prefix}
-PRECISION=fp4
+PRECISION={"fp8" if model_prefix == "glm5.1" else "fp4"}
 MODEL=fixture-model
 SPEC_DECODING=
 USES_DCGM_POWER={int(uses_dcgm_power)}
-CONFIG_FILE=recipes/{recipe_relative}/recipe.yaml
+CONFIG_FILE=recipes/{recipe_relative}/{recipe_name}
 GITHUB_WORKSPACE={workspace!s}
 SRT_REPO_DIR={repo_dir!s}
 {routing}
@@ -263,7 +268,8 @@ def test_dsv4_power_route_rejects_unexpected_checkout_before_publishing_stamp(tm
 
 @pytest.mark.parametrize(
     ("model_prefix", "is_agentic", "expected_pin"),
-    [("dsv4", False, PRODUCER_PIN), ("kimik3", True, AGENTX_PRODUCER_PIN)],
+    [("dsv4", False, PRODUCER_PIN), ("kimik3", True, AGENTX_PRODUCER_PIN),
+     ("glm5.1", True, TILERT_PRODUCER_PIN)],
 )
 def test_b200_power_route_preserves_fixed_sequence_and_selects_agentx_producer(
     tmp_path: Path, model_prefix: str, is_agentic: bool, expected_pin: str
@@ -282,9 +288,10 @@ def test_b200_power_route_preserves_fixed_sequence_and_selects_agentx_producer(
     assert marker.read_text() == "from-workspace\n"
 
 
-def test_b200_agentx_power_failure_stages_real_adapter_diagnostics(tmp_path: Path) -> None:
+@pytest.mark.parametrize("is_tilert", [False, True])
+def test_b200_agentx_power_failure_stages_real_adapter_diagnostics(tmp_path: Path, is_tilert: bool) -> None:
     launcher = (REPO_ROOT / "runners/launch_b200-nscale-slurm.sh").read_text()
-    start = launcher.index("AGENTX_POWER_RC=0")
+    start = launcher.index('if [[ "$USES_AGENTX_POWER" == "1" && "${EVAL_ONLY:-false}" != "true" ]]; then')
     end = launcher.index('\nif [[ "${EVAL_ONLY:-false}" != "true" ]]', start)
     source = launcher[start:end]
     logs_root = tmp_path / "producer/logs"
@@ -304,11 +311,13 @@ def test_b200_agentx_power_failure_stages_real_adapter_diagnostics(tmp_path: Pat
         PYTHONPATH=str(REPO_ROOT), USES_AGENTX_POWER="1", USES_DCGM_POWER="1",
         CONC_LIST="1", RESULT_FILENAME="result", EVAL_ONLY="false",
         SELECTED_POWER_SRT_SLURM_PIN=AGENTX_PRODUCER_PIN,
+        IS_TILERT_AGENTX_POWER_RECIPE=str(int(is_tilert)), JOB_ID="12345",
     )
     result = subprocess.run(
         ["/bin/bash"],
         input=(
-            "set -euo pipefail\n"
+            "set -euo pipefail\nAGENTX_POWER_RC=0\n"
+            "sacct() { printf '12345|FAILED|1:0\\n'; }\n"
             f"source {shlex.quote(str(REPO_ROOT / 'runners/slurm_utils.sh'))}\n"
             f"python() {{ {shlex.quote(sys.executable)} \"$@\"; }}\n"
             + source
@@ -325,8 +334,12 @@ def test_b200_agentx_power_failure_stages_real_adapter_diagnostics(tmp_path: Pat
     )
     assert validation["reasons"] == ["formal_benchmark_result_missing"]
     assert (tmp_path / "LOGS/power/power-producer-sha.txt").read_text() == AGENTX_PRODUCER_PIN
+    if is_tilert:
+        assert (tmp_path / "LOGS/power/native-job-status.txt").read_text() == "12345|FAILED|1:0\n"
     with tarfile.open(tmp_path / "multinode_server_logs.tar.gz") as archive:
         assert "./agentic/conc_1/power_validation.json" in archive.getnames()
+        if is_tilert:
+            assert "./power/native-job-status.txt" in archive.getnames()
 
 
 def test_gb300_dsv4_recipe_images_match_their_master_configs():
@@ -348,3 +361,24 @@ def test_gb300_dsv4_recipe_images_match_their_master_configs():
             assert recipe_path.is_file(), (key, config_file)
             recipe_image = yaml.safe_load(recipe_path.read_text())["model"]["container"]
             assert recipe_image == config["image"], (key, config_file)
+
+
+@pytest.mark.parametrize(("terminal_row", "expected_rc"), [("12345|COMPLETED|0:0", 0), ("12345|FAILED|1:0", 1)])
+def test_native_status_retries_accounting_lag_and_preserves_terminal_verdict(
+    tmp_path: Path, terminal_row: str, expected_rc: int,
+) -> None:
+    source = shlex.quote(str(REPO_ROOT / "runners/slurm_utils.sh"))
+    result = subprocess.run(
+        ["/bin/bash"],
+        input=(
+            f"source {source}\n"
+            "sacct() { if [[ ! -e queried ]]; then touch queried; "
+            f"else printf '%s\\n' {shlex.quote(terminal_row)}; fi; }}\n"
+            "sleep() { :; }\n"
+            "record_slurm_completion_status 12345 power\n"
+        ),
+        text=True, capture_output=True, cwd=tmp_path,
+    )
+    assert result.returncode == expected_rc
+    assert (tmp_path / "power/native-job-status-attempts.txt").read_text() == "2\n"
+    assert (tmp_path / "power/native-job-status.txt").read_text() == terminal_row + "\n"

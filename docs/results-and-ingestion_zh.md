@@ -179,6 +179,16 @@ B200 Kimi-K3 C1 配方使用独立固定版本的 producer，兼容当前双节�
 保持禁用。C1 使用合成接受率。旧工件保留原有 DCP1/DRAM 标签，解读时必须说明
 这一身份偏差；此次元数据修正不会改变其服务配置或测量值。
 
+GLM-5.1 FP8 TileRT 1P1D B200 配方使用独立固定版本的 producer，在保留 TileRT
+运行时与隐式 DCGM 架构的基础上复用共享 custom-window 生命周期。原始回放工件
+写入 `/logs/agentic`，任务结束后由同一适配器与整个部署的遥测关联。launcher
+退出前保留 Slurm 原生状态、producer/exporter 身份及失败校验诊断。该路径仍需
+硬件资格验证；其他 TileRT 配方保持不变。TileRT 未提供的 decode cache 指标
+继续标记为不可用，与 GPU 实测功耗是否有效分开报告。有限资格验证中的服务安装通过 `PIP_FIND_LINKS`
+和 `PIP_NO_INDEX` 使用已准备并记录哈希的 wheelhouse；变量仅作用于 prefill、decode
+和 router，benchmark 客户端环境保持不变。离线依赖解析只验证准备阶段，原生 import
+与 GPU 执行仍须实测验证。正式配方保留常规包源与四小时时限。
+
 ### 原始输入和聚合架构
 
 [`process_agentic_result.py`](../utils/agentic/aggregation/process_agentic_result.py) 可解析当前的 `results/aiperf_artifacts` 布局，也可解析只含一个子目录的嵌套布局。它要求存在 `profile_export.jsonl`，并在存在时读取以下输入：

@@ -188,6 +188,20 @@ offload disabled. C1 uses synthetic acceptance. Older artifacts retain their
 original DCP1/DRAM labels and require this identity caveat; the metadata
 correction does not change their serving configuration or measured values.
 
+The GLM-5.1 FP8 TileRT 1P1D B200 recipe uses a separate producer that preserves
+its TileRT runtime and implicit DCGM schema while adding the shared custom-window
+lifecycle. Raw replay artifacts live under `/logs/agentic`; the same adapter joins
+them to deployment-wide telemetry after native completion. Native Slurm status,
+producer/exporter identity, and failed validation diagnostics are retained before
+the launcher exits. This path requires hardware qualification; the other TileRT
+recipes are unchanged. Decode cache metrics remain unavailable where TileRT does
+not expose them, separately from measured GPU power validity. For the bounded qualification, serving-role setup
+uses a prepared, hash-recorded wheelhouse through `PIP_FIND_LINKS` and
+`PIP_NO_INDEX`; these variables are scoped to prefill, decode, and router, leaving
+the benchmark client environment unchanged. Offline dependency resolution is a
+preparation gate; native imports and GPU execution still require validation.
+The final production recipe keeps its normal package sources and four-hour limit.
+
 ### Raw inputs and aggregate schema
 
 [`process_agentic_result.py`](../utils/agentic/aggregation/process_agentic_result.py) resolves the current `results/aiperf_artifacts` layout and a one-child nested layout. It requires `profile_export.jsonl`. It reads these inputs when present:
