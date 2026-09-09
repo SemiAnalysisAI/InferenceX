@@ -3,7 +3,7 @@ name: "disagg-b200-3p2d-dep8-dep8-c2048"
 
 model:
   path: "deepseek-v4-pro"
-  container: "lmsysorg/sglang:nightly-dev-cu13-20260821-f825d729"
+  container: "lmsysorg/sglang:v0.5.19-cu130@sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9"
   precision: "fp4"
 
 dynamo:
