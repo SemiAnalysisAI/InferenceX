@@ -1,16 +1,17 @@
 """Retain runner identity so SSH trust can be checked against exact CI provenance."""
 
 import argparse
-import getpass
 import json
 import os
 from pathlib import Path
 import platform
+import pwd
 import shutil
 import subprocess
 
 
 def inspect_site() -> dict:
+    user = pwd.getpwuid(os.getuid())
     public_keys = {}
     for algorithm in ("ed25519", "ecdsa", "rsa"):
         path = Path(f"/etc/ssh/ssh_host_{algorithm}_key.pub")
@@ -20,7 +21,7 @@ def inspect_site() -> dict:
         ["ssh-keygen", "-F", "64.139.223.123"], capture_output=True, text=True, timeout=5,
     ) if shutil.which("ssh-keygen") else None
     associations = subprocess.run(
-        ["sacctmgr", "-nP", "show", "assoc", "where", f"user={getpass.getuser()}",
+        ["sacctmgr", "-nP", "show", "assoc", "where", f"user={user.pw_name}",
          "format=Account,Partition,QOS,DefaultQOS"], capture_output=True, text=True, timeout=10,
     ) if shutil.which("sacctmgr") else None
     # Shared runtime/model cache candidates are metadata, not proof of compatibility.
@@ -35,7 +36,8 @@ def inspect_site() -> dict:
                     if line.strip().startswith(("ENROOT_DATA_PATH", "ENROOT_CACHE_PATH", "ENROOT_RUNTIME_PATH"))] if enroot_config.is_file() else None
     return {
         "schema_version": 1, "bundle_type": "h3_site_preflight_no_gpu",
-        "hostname": platform.node(), "uid": os.getuid(),
+        "hostname": platform.node(), "uid": os.getuid(), "username": user.pw_name,
+        "user_home": user.pw_dir,
         "cluster": os.environ.get("H3_CLUSTER"), "runner": os.environ.get("RUNNER_NAME"),
         "ci": {key: os.environ.get(key) for key in ("GITHUB_REPOSITORY", "GITHUB_SHA", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT")},
         "commands": {name: shutil.which(name) for name in ("salloc", "srun", "enroot", "amd-smi", "nvidia-smi")},
