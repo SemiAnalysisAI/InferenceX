@@ -1344,7 +1344,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         )
         combine_bytes = logical_byte_provenance(rstats["routed_copies"], args.hidden)
         # Second byte basis, for backends whose wire carries one copy per (token, expert). Which
-        # applies is a property of the RECEIVE, not the mode -- MoRI's IntraNodeLL deduplicates
+        # applies is a property of the RECEIVE, not the mode -- MoRI's LL kernels deduplicate
         # where the other low-latency kernels do not -- so key it on the declared
         # receive layout. `routed_copies` stays the canonical comparable basis.
         assignment_copies = int(sum(rstats["expert_assignments_per_rank"]))
@@ -1357,6 +1357,25 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             field: dispatch_bytes[field] + combine_bytes[field] for field in dispatch_bytes
         }
         stage_bytes = dict.fromkeys(dispatch_bytes, 0)
+        # WIRE bytes: what the kernels actually move, on the basis `wire_basis` declares.
+        # For token-expert receives this is the per-assignment count (topk/fanout above the
+        # rank-deduplicated basis, +34% observed on nccl-ep LL EP8 at T=128); for token-rank
+        # receives it equals the canonical figures. A bandwidth divided from `byte_provenance`
+        # on a token-expert backend is a LOWER BOUND, not the wire rate, and is not comparable
+        # across backends -- consumers computing GB/s must divide from THESE bytes.
+        wire_copies = (
+            assignment_copies if wire_basis == "per-assignment"
+            else int(rstats["routed_copies"])
+        )
+        wire_dispatch_bytes = logical_byte_provenance(
+            wire_copies, args.hidden,
+            backend.dispatch_value_bytes, backend.dispatch_scale_bytes_per_copy,
+        )
+        wire_combine_bytes = logical_byte_provenance(wire_copies, args.hidden)
+        wire_roundtrip_bytes = {
+            field: wire_dispatch_bytes[field] + wire_combine_bytes[field]
+            for field in wire_dispatch_bytes
+        }
         spread = samples[T].spread
         chain = samples[T].chain
         chain_spread = samples[T].chain_spread
@@ -1439,6 +1458,15 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 "combine": combine_bytes,
                 "dispatch": dispatch_bytes,
                 "roundtrip": roundtrip_bytes,
+                "stage": stage_bytes,
+            },
+            # Same fields on the wire basis (`logical_copies.wire`). Identical to
+            # `byte_provenance` for token-rank receives; per-assignment for the LL kernels
+            # that move one copy per (token, expert). Bandwidth = wire bytes / latency.
+            "wire_byte_provenance": {
+                "combine": wire_combine_bytes,
+                "dispatch": wire_dispatch_bytes,
+                "roundtrip": wire_roundtrip_bytes,
                 "stage": stage_bytes,
             },
             # Copy counts behind the byte figures above, so a reader can rebase them: `routed` is
