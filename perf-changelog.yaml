@@ -6971,21 +6971,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2821
 
 - config-keys:
-    - kimik3-fp4-mi355x-vllm-agentic-mtp
+    - kimik3-fp4-mi355x-vllm-agentic-dcp-mtp
   scenario-type:
     - agentic-coding
   description:
-    - "Pin lmcache 0.5.5rc5+rocm7.2 from the versioned v0.5.5rc5-rocm release, replacing the nightly-rocm 0.5.5.dev89+rocm7.2 pin whose wheel that rolling tag no longer carries."
-    - "rc5 carries the DCP cache-identity fix (LMCache #4936): the scheduler and the workers derived different LMCache model names under DCP, so every lookup missed and the DRAM tier was write-only at concurrency 44-52 (120 GB/GPU stored, 0 retrieved, external hit rate 0.0%)."
+    - "Split the TP8/DCP8 arm at concurrency 44/48/52 into its own config key with dram-utilization 0.40 (1199 GB), down from the 1799 GB the shared 0.60 block reserved against a measured 698 GB peak."
+    - "Pin lmcache 0.5.5rc5+rocm7.2 from the versioned v0.5.5rc5-rocm release. It carries the DCP cache-identity fix (LMCache #4936), without which the scheduler and the workers derive different LMCache model names under DCP and every lookup misses, leaving the DRAM tier write-only."
+    - "Replace the nightly-rocm pin: that rolling tag keeps only its newest wheel, so the previous 0.5.5.dev89+rocm7.2 no longer resolves."
     - "Derive the LMCache MP server ports from $PORT rather than the fixed 6555/8090, so two cells sharing a runner cannot collide."
-    - "Raise the L1 read-lock TTL to 3600s: the lock is held from prefetch through retrieve, and a queued request at these concurrencies exceeds the 300s default and fails the retrieve."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2831
-
-- config-keys:
-    - kimik3-fp4-mi355x-vllm-agentic-mtp
-  scenario-type:
-    - agentic-coding
-  description:
-    - "Raise the LMCache MP heartbeat interval to 60s. The worker pings the server with a timeout equal to the interval, so a single ping slower than the 10s default drops the worker into degraded mode; observed server stalls of 42s and 55s tripped it."
-    - "Raise the server's worker reap timeout to 300s to stay above 3x the heartbeat interval, so the server does not reap a worker's KV cache registration while its ping is still in flight."
+    - "Raise the L1 read-lock TTL to 3600s and the MP heartbeat interval to 60s, with a 300s worker reap timeout to stay above 3x the interval. The worker pings with a timeout equal to the interval, so one ping slower than the 10s default drops it into degraded mode, which flags in-flight loads as failed."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2831

@@ -638,6 +638,25 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
       search-space:
       - { tp: 8, ep: 1, dcp-size: 1, kv-offloading: none, conc-list: [1] , spec-decoding: mtp}
       - { tp: 8, ep: 1, dcp-size: 1, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.5rc5+rocm7.2" }, conc-list: [4, 8, 10, 12, 14], spec-decoding: mtp }
+
+# DCP8 companion to kimik3-fp4-mi355x-vllm-agentic-mtp: same checkpoint, runner
+# and recipe, split out so the shard-parallel arm carries its own DRAM budget.
+# dram-utilization 0.40 (1209 GiB) against a measured 698 GiB peak. The shared
+# 0.60 pinned 1799 GB, 60% of the node, and LMCache pins it unswappably in
+# ~9 GB steps: the ramp itself stalls the server past the heartbeat deadline,
+# and the residual pressure stalls the whole host.
+kimik3-fp4-mi355x-vllm-agentic-dcp-mtp:
+  image: vllm/vllm-openai-rocm:nightly-7c5dc571cbd1064ecc8a9b1045637ff647aa22cb
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.40
+      search-space:
       - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.5rc5+rocm7.2" }, conc-list: [44, 48, 52], spec-decoding: mtp }
 
 # Kimi-K3 MXFP4 agentic-coding benchmark on MI355X via ATOM with DSpark
