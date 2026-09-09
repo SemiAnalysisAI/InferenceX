@@ -7013,3 +7013,9 @@
   description:
     - "Add bounded AMD cached-runtime preparation with full eight-GPU step ownership, immutable source checkout, HIP device mapping and retained package import results. Reuse task-owned rootfs receipts; do not upgrade packages or claim H3 generation compatibility."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2916
+
+- config-keys: []
+  workflow-dispatch: h3-video.yml
+  description:
+    - "Add explicit AMD H3 vendor binding and AITER/Ulysses launch validation. Match HIP to AMD SMI by PCI BDF, preserve foreign process evidence, use sampled socket power, and account for granted full-node GPU allocations. Runtime generation remains gated until a prepared AMD site passes smoke validation."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2916

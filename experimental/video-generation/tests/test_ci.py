@@ -64,6 +64,23 @@ def test_h100_site_keeps_full_allocation_separate_from_participating_gpus(tmp_pa
         ci.verify_identity(receipt, record, cfg["task_id"])
 
 
+def test_amd_granted_full_node_requires_explicit_gpu_evidence(tmp_path):
+    cfg = config(tmp_path)
+    cfg.update(mode="serving-smoke", site=dict(ci.AMD_SITE))
+    cfg["resources"].update(gpus=4, allocated_gpus=8)
+    ci.validate_config(cfg)
+    receipt, record = allocation(tmp_path)
+    record.update(Account=ci.AMD_SITE["account"], Partition="compute", AllocTRES="cpu=128,mem=512G,node=1,billing=128", TresPerNode="gres/gpu:8")
+    assert ci.allocated_gpu_count(record) == 8
+    assert ci.capacity(record, cfg["resources"]) is None
+    assert "--gres=gpu:8" in ci.step_argv(cfg, receipt, record, tmp_path, tmp_path)
+    record["OverSubscribe"] = "OK"
+    assert ci.allocated_gpu_count(record) is None
+    assert ci.capacity(record, cfg["resources"]) == "insufficient allocated GPU/CPU/memory capacity"
+    record.update(OverSubscribe="NO", AllocTRES="cpu=128,mem=512G,node=1,gres/gpu=4")
+    assert ci.allocated_gpu_count(record) == 4
+
+
 @pytest.mark.parametrize("change", [
     {"site": {"cluster": "h100-dgxc", "partition": "hpc-gpu-1", "account": "customer", "gpu_model": "H200"}},
     {"site": {"cluster": "unknown", "partition": "main", "account": "customer", "gpu_model": "H200"}},

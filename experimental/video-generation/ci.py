@@ -30,6 +30,7 @@ PARTITION = "main"
 ACCOUNT = "sa-shared"
 DEFAULT_SITE = {"cluster": "h200-dgxc", "partition": PARTITION, "account": ACCOUNT, "gpu_model": "H200"}
 NVIDIA_CLUSTERS = {"h100-dgxc": "H100", "h200-dgxc": "H200", "b200-nscale": "B200"}
+AMD_SITE = {"cluster": "mi355x-amds", "partition": "compute", "account": "cameronamd@semianalysis.com", "gpu_model": "MI355X"}
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,79}")
 SHA = re.compile(r"[0-9a-f]{64}")
 IDENTITY = ("JobId", "JobName", "Comment", "WorkDir", "Account", "Partition", "UserId")
@@ -90,8 +91,8 @@ def validate_config(config: dict) -> dict:
     need(required <= set(config) <= required | {"site", "concurrencies"}, "Unknown or missing site configuration fields")
     site = config.get("site", DEFAULT_SITE)
     need(isinstance(site, dict) and set(site) == set(DEFAULT_SITE), "Invalid site fields")
-    need(site["cluster"] in NVIDIA_CLUSTERS and site["gpu_model"] == NVIDIA_CLUSTERS[site["cluster"]], "Unsupported cluster or GPU model")
-    need(all(isinstance(site[key], str) and NAME.fullmatch(site[key]) for key in ("account", "partition")), "Explicit scheduler account and partition required")
+    need(site == AMD_SITE or (site["cluster"] in NVIDIA_CLUSTERS and site["gpu_model"] == NVIDIA_CLUSTERS[site["cluster"]]), "Unsupported cluster or GPU model")
+    need(site == AMD_SITE or all(isinstance(site[key], str) and NAME.fullmatch(site[key]) for key in ("account", "partition")), "Explicit scheduler account and partition required")
     need(config["schema_version"] == 1 and NAME.fullmatch(config["task_id"]), "Invalid schema_version/task_id")
     need(config["mode"] in {"smoke", "regression", "serving-smoke"}, "mode must be smoke, regression or serving-smoke")
     if "concurrencies" in config:
@@ -117,6 +118,7 @@ def validate_config(config: dict) -> dict:
         need(type(resources[key]) is int and low <= resources[key] <= high, "Resource outside bounded GPU budget: " + key)
     reserved = allocation_gpus(config)
     need(type(reserved) is int and resources["gpus"] <= reserved <= 8, "Allocated GPU budget must cover participating GPUs")
+    need(site != AMD_SITE or reserved == 8, "AMD requires a full eight-GPU allocation before selecting participating HIP devices")
     need(config["mode"] == "serving-smoke" or reserved == 8, "Paired measurements require a full eight-GPU allocation")
     need(isinstance(config["allocation_receipts"], list), "allocation_receipts must be a list")
     for path in config["allocation_receipts"]:
@@ -161,6 +163,20 @@ def verify_identity(receipt: dict, record: dict, task_id: str) -> None:
     need(re.fullmatch(r"[^()]+\(" + str(os.getuid()) + r"\)", record["UserId"]), "Allocation Unix owner differs")
 
 
+def allocated_gpu_count(record: dict) -> int | None:
+    tres = dict(item.split("=", 1) for item in record.get("AllocTRES", "").split(",") if "=" in item)
+    if "gres/gpu" in tres:
+        return int(tres["gres/gpu"])
+    # This AMD site omits GPU AllocTRES. The granted full-node job still records
+    # TresPerNode; a subsequent eight-GPU step and physical UUID inventory are
+    # required before generation. Missing partial allocations remain unknown.
+    if (record.get("Partition") == AMD_SITE["partition"] and record.get("Account") == AMD_SITE["account"]
+            and record.get("OverSubscribe") == "NO" and record.get("NumNodes") == "1"
+            and record.get("TresPerNode") == "gres/gpu:8"):
+        return 8
+    return None
+
+
 def capacity(record: dict, resources: dict, timestamp: datetime | None = None) -> str | None:
     need(record.get("NumNodes") == "1" and NAME.fullmatch(record.get("NodeList", "")), "Reuse requires one explicit node")
     tres = dict(item.split("=", 1) for item in record["AllocTRES"].split(","))
@@ -171,7 +187,7 @@ def capacity(record: dict, resources: dict, timestamp: datetime | None = None) -
     remaining = (end - (timestamp or datetime.now(timezone.utc))).total_seconds()
     if remaining < resources["minutes"] * 60 - 300 + 30:
         return "insufficient remaining allocation time"
-    if int(tres.get("gres/gpu", "0")) < resources["gpus"] or int(record["NumCPUs"]) < resources["cpus"] or memory_gb < resources["memory_gb"]:
+    if (allocated_gpu_count(record) or 0) < resources["gpus"] or int(record["NumCPUs"]) < resources["cpus"] or memory_gb < resources["memory_gb"]:
         return "insufficient allocated GPU/CPU/memory capacity"
     return None
 
@@ -344,10 +360,12 @@ def stage_package(source: Path, destination: Path) -> dict[str, str]:
 
 def step_argv(config: dict, receipt: dict, record: dict, run_dir: Path, package: Path) -> list[str]:
     request = config["resources"]
+    gpu_flags = ["--gres=gpu:8"] if config.get("site") == AMD_SITE else [
+        "--gpus-per-task=" + str(request["gpus"]), "--gpu-bind=verbose,per_task:" + str(request["gpus"])]
     return ["srun", "--jobid=" + receipt["identity"]["JobId"], "--nodelist=" + record["NodeList"],
             "--exclusive", "--exact", "--nodes=1", "--ntasks=1", "--immediate=30", "--kill-on-bad-exit=1",
             "--cpus-per-task=" + str(request["cpus"]), "--cpu-bind=verbose,cores",
-            "--gpus-per-task=" + str(request["gpus"]), "--gpu-bind=verbose,per_task:" + str(request["gpus"]),
+            *gpu_flags,
             "--mem=" + str(request["memory_gb"]) + "G", "--time=" + str(request["minutes"] - 5),
             "--chdir=" + str(run_dir), "--export=PATH,PYTHONDONTWRITEBYTECODE,TZ,LC_ALL",
             "python3", str(package / "ci.py"), "--enter", str(run_dir)]
@@ -388,7 +406,10 @@ def prepared_spec(config: dict) -> dict:
     need(digest(config["spec"]["path"]) == config["spec"]["sha256"], "Prepared GPU specification changed")
     spec = read(config["spec"]["path"])
     # Slurm assigns physical devices later. Validate the rest without a GPU call.
-    spec["gpu_uuids"] = [f"GPU-00000000-0000-0000-0000-{i:012d}" for i in range(config["resources"]["gpus"])]
+    amd = config.get("site") == AMD_SITE
+    need(spec.get("gpu_vendor", "nvidia") == ("amd" if amd else "nvidia"), "Prepared GPU vendor differs from the admitted site")
+    prefix = "" if amd else "GPU-"
+    spec["gpu_uuids"] = [f"{prefix}00000000-0000-0000-0000-{i:012d}" for i in range(config["resources"]["gpus"])]
     from evaluator.mvp_gpu_job import validate_gpu_job
     spec = validate_gpu_job(spec)
     if config["mode"] == "serving-smoke":
@@ -465,8 +486,7 @@ def launch(config: dict, output: Path) -> int:
             need(record["JobState"] == "RUNNING", "Owned allocation is not RUNNING")
             need(capacity(record, config["resources"]) is None, "Allocation cannot serve bounded step")
             if config["mode"] == "serving-smoke":
-                tres = dict(item.split("=", 1) for item in record["AllocTRES"].split(","))
-                need(int(tres.get("gres/gpu", "0")) == reserved_gpus, "Serving allocation GPU count exceeds the declared budget")
+                need(allocated_gpu_count(record) == reserved_gpus, "Serving allocation GPU count exceeds the declared budget")
             need(digest(config["runtime"]["entry"]) == config["runtime"]["entry_sha256"], "Entry changed after preflight")
             state.update(phase="starting", allocation_reused=reused, allocation=receipt, slurm_job=record)
             write(run_dir / "ci.json", state)
@@ -474,7 +494,7 @@ def launch(config: dict, output: Path) -> int:
             active_steps = command(["squeue", "--steps", "--noheader", "--jobs=" + record["JobId"], "--format=%i|%N"])
             write(run_dir / "context.json", {"config": config, "spec": spec, "allocation": receipt,
                 "node": record["NodeList"], "active_steps": active_steps, "source_sha": sha,
-                "exclusive_node": record.get("OverSubscribe") == "NO" and "gres/gpu=8" in record.get("AllocTRES", "").split(","),
+                "exclusive_node": record.get("OverSubscribe") == "NO" and allocated_gpu_count(record) == 8,
                 "package_files": package_files, "run_id": f"github-{run_id}-{attempt}"})
             argv = step_argv(config, receipt, record, run_dir, package)
             write(run_dir / "step-command.json", argv)
@@ -532,9 +552,19 @@ def enter(run_dir: Path) -> None:
     write(run_dir / "binding.json", {"job_id": job, "step_id": step, "node": context["node"],
           "cpu_affinity": sorted(os.sched_getaffinity(0)), "observed_at": now(), "phase": "entering_runtime"})
     need(digest(config["runtime"]["entry"]) == config["runtime"]["entry_sha256"], "Entry changed on compute node")
+    env = {**os.environ, "H3_EXPECTED_GPU_MODEL": config.get("site", DEFAULT_SITE)["gpu_model"]}
+    if config.get("site") == AMD_SITE:
+        from inspect_amd_node import step_gpu_indices
+        from evaluator.mvp_amd_gpu import inventory as amd_inventory, smi
+        need(step_gpu_indices(os.environ.get("SLURM_STEP_GPUS", "")) == set(range(8)), "AMD requires all eight GPUs bound to this step")
+        observed = amd_inventory(smi("list", 10))
+        need(len(observed) == 8, "AMD allocated physical inventory is incomplete")
+        write(run_dir / "amd-allocated-devices.json", list(observed.values()))
+        env.update(H3_AMD_ALLOCATION_UUIDS=",".join(observed),
+                   ROCR_VISIBLE_DEVICES=",".join(str(i) for i in range(config["resources"]["gpus"])))
     argv = ["/bin/bash", config["runtime"]["entry"], config["runtime"]["python"],
             str(mapped(config, Path(__file__).parent) / "ci.py"), "--inside", str(mapped(config, run_dir))]
-    os.execve(argv[0], argv, {**os.environ, "H3_EXPECTED_GPU_MODEL": config.get("site", DEFAULT_SITE)["gpu_model"]})
+    os.execve(argv[0], argv, env)
 
 
 def workload_complete(verified: dict) -> bool:
@@ -570,9 +600,17 @@ def inside(run_dir: Path) -> int:
              and os.environ.get("SLURM_PROCID") == "0" and os.environ.get("SLURM_NTASKS") == "1",
              "Payload is not the exact single-node Slurm task")
         need(inventory(Path(__file__).parent) == context["package_files"], "Staged harness bytes changed")
-        devices = cuda_devices()
-        assigned = os.environ.get("H3_ASSIGNED_GPU_UUIDS", "").split(",")
-        need(set(devices) == set(assigned), "CUDA-visible UUIDs differ from the Slurm global GPU assignment")
+        if config.get("site") == AMD_SITE:
+            from evaluator.mvp_amd_gpu import hip_devices
+            devices = hip_devices()
+            allocated = os.environ.get("H3_AMD_ALLOCATION_UUIDS", "").split(",")
+            physical = read(run_dir / "amd-allocated-devices.json")
+            need(len(set(allocated)) == 8 and set(allocated) == {row["uuid"] for row in physical}
+                 and set(devices) <= set(allocated), "HIP devices differ from the full Slurm-owned AMD inventory")
+        else:
+            devices = cuda_devices()
+            assigned = os.environ.get("H3_ASSIGNED_GPU_UUIDS", "").split(",")
+            need(set(devices) == set(assigned), "CUDA-visible UUIDs differ from the Slurm global GPU assignment")
         cpus = sorted(os.sched_getaffinity(0))
         binding = read(run_dir / "binding.json")
         need(binding["job_id"] == expected and binding["step_id"] == step and binding["cpu_affinity"] == cpus,
@@ -581,7 +619,7 @@ def inside(run_dir: Path) -> int:
         need(len(cpus) >= config["resources"]["cpus"], "Bound step CPU set is too small")
         write(run_dir / "binding.json", {"job_id": expected, "step_id": step, "node": context["node"],
               "gpu_uuids": devices, "cpu_affinity": cpus,
-              "slurm": {key: os.environ.get(key) for key in ("CUDA_VISIBLE_DEVICES", "H3_ORIGINAL_CUDA_VISIBLE_DEVICES", "SLURM_JOB_GPUS", "SLURM_STEP_GPUS", "SLURM_CPU_BIND", "SLURM_CPUS_PER_TASK")}, "observed_at": now()})
+              "slurm": {key: os.environ.get(key) for key in ("CUDA_VISIBLE_DEVICES", "H3_ORIGINAL_CUDA_VISIBLE_DEVICES", "ROCR_VISIBLE_DEVICES", "HIP_VISIBLE_DEVICES", "H3_AMD_ALLOCATION_UUIDS", "SLURM_JOB_GPUS", "SLURM_STEP_GPUS", "SLURM_CPU_BIND", "SLURM_CPUS_PER_TASK")}, "observed_at": now()})
         spec = context["spec"]
         spec["gpu_uuids"], spec["job_id"] = devices, context["run_id"]
         active = [line for line in context["active_steps"].splitlines() if not re.match(r"[0-9]+\.(batch|extern)\|", line)]
