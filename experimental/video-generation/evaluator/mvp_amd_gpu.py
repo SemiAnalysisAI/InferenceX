@@ -2,12 +2,75 @@
 from __future__ import annotations
 
 import ctypes
+import hashlib
 import json
 import math
+import os
+from pathlib import Path
 import re
 import time
 
-from .mvp_gpu_job import _check_deadline, _command, _now
+from .mvp_gpu_job import _check_deadline, _command, _now, _proc_identity
+
+
+def monitor_process(pid: int) -> dict:
+    before = _proc_identity(pid)
+    status = Path(f"/proc/{pid}/status").read_text()
+    cgroup = Path(f"/proc/{pid}/cgroup").read_text()
+    with Path(f"/proc/{pid}/cmdline").open("rb") as stream:
+        executable = stream.read(4096).split(b"\0", 1)[0].decode()
+    after = _proc_identity(pid)
+    if (not before or not after or before["start_ticks"] != after["start_ticks"]
+            or before["ppid"] != 1 or not re.search(r"^Uid:\s+0\s+0\s+0\s+0\s*$", status, re.MULTILINE)
+            or not any(line.endswith(":/system.slice/gpuagent.service") for line in cgroup.splitlines())
+            or not executable.startswith("/")):
+        raise ValueError("GPU monitor process identity is not established")
+    try:
+        if os.readlink(f"/proc/{pid}/exe") != executable:
+            raise ValueError("GPU monitor executable changed")
+        method = "proc exe and systemd ExecStart"
+    except PermissionError:
+        method = "systemd ExecMainPID/ExecStart and proc argv0; proc exe access denied"
+    return {"pid": pid, "start_ticks": before["start_ticks"], "uid": 0,
+            "cgroup": "/system.slice/gpuagent.service", "executable": executable,
+            "executable_verification": method}
+
+
+def observe_system_monitor(timeout: float) -> dict:
+    record = {"service": "gpuagent.service", "observed_at": _now(), "status": "unverified"}
+    try:
+        raw = _command(["systemctl", "show", "gpuagent.service", "--property=MainPID,ExecMainPID,ExecStart,ActiveState,SubState,ControlGroup,Type"], timeout=timeout)
+        properties = dict(line.split("=", 1) for line in raw.splitlines() if "=" in line)
+        pid = int(properties["MainPID"])
+        executable = re.search(r"(?:^|[ {])path=(/[^ ;}]+)", properties["ExecStart"])
+        if (properties["ActiveState"] != "active" or properties["SubState"] != "running"
+                or properties["ControlGroup"] != "/system.slice/gpuagent.service"
+                or properties["Type"] not in {"simple", "exec", "notify"}
+                or pid <= 1 or int(properties["ExecMainPID"]) != pid or executable is None):
+            raise ValueError("GPU monitoring service is not an active direct systemd process")
+        process = monitor_process(pid)
+        binary = Path(executable[1])
+        info = binary.stat()
+        if process["executable"] != str(binary) or not binary.is_file() or info.st_uid != 0 or info.st_mode & 0o022:
+            raise ValueError("GPU monitor executable is not the root-owned service binary")
+        record.update(status="verified", process=process,
+                      executable_sha256=hashlib.sha256(binary.read_bytes()).hexdigest(),
+                      policy="Only this unchanged root service with zero per-process VRAM is excluded from workload contexts; board power still includes its overhead")
+    except Exception as error:
+        record.update(error_type=type(error).__name__, error=str(error))
+    return record
+
+
+def is_system_monitor(app: dict, receipt: dict | None) -> bool:
+    if not receipt or receipt.get("status") != "verified" or app["memory_used_mib"] != 0:
+        return False
+    expected = receipt.get("process", {})
+    if app["pid"] != expected.get("pid"):
+        return False
+    try:
+        return monitor_process(app["pid"]) == expected
+    except (OSError, ValueError):
+        return False
 
 
 def smi(option: str, timeout: float) -> object:
@@ -70,6 +133,8 @@ def number(value: object, unit: str, *, optional: bool = False) -> float | None:
 class AmdGpuProbe:
     def __init__(self, devices: list[str], timeout: float):
         self.devices, self.timeout = devices, timeout
+        monitor = os.environ.get("H3_AMD_MONITOR_RECEIPT")
+        self.monitor = json.loads(Path(monitor).read_text()) if monitor else None
         self.identity = inventory(smi("list", timeout))
         self.static = {row["gpu"]: row for row in smi("static", timeout)}
         if not set(devices) <= self.identity.keys():
@@ -107,7 +172,7 @@ class AmdGpuProbe:
         by_gpu = {row["gpu"]: row["process_list"] for row in processes}
         if len(metrics) != len(rows) or len(by_gpu) != len(processes):
             raise RuntimeError("AMD telemetry contains duplicate GPU records")
-        gpus, apps = [], []
+        gpus, apps, monitors = [], [], []
         for key in self.devices:
             index = self.identity[key]["gpu"]
             raw, static = metrics[index], self.static[index]
@@ -126,9 +191,13 @@ class AmdGpuProbe:
                 if type(proc.get("pid")) is not int or proc["pid"] <= 0:
                     raise RuntimeError("AMD process identity unavailable")
                 memory = number(proc["memory_usage"]["vram_mem"], "B", optional=True)
-                # Keep zero-VRAM contexts until their ownership is established.
-                apps.append({"gpu_uuid": key, "pid": proc["pid"],
-                             "memory_used_mib": memory / 1024**2 if memory is not None else None})
+                app = {"gpu_uuid": key, "pid": proc["pid"],
+                       "memory_used_mib": memory / 1024**2 if memory is not None else None}
+                if is_system_monitor(app, self.monitor):
+                    monitors.append({**app, "identity": self.monitor})
+                else:
+                    apps.append(app)
         return {"at": _now(), "monotonic_seconds": time.monotonic(), "gpus": gpus, "compute_apps": apps,
+                "excluded_system_monitor_contexts": monitors,
                 "power_query": {"start_utc": utc, "start_monotonic_seconds": begin,
                                 "end_monotonic_seconds": end, "field": "amd-smi power.socket_power"}}

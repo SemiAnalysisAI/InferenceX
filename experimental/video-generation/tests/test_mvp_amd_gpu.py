@@ -70,3 +70,41 @@ def test_invalid_power_unit_or_value_is_not_a_measurement(value):
     assert amd.number(value, "W", optional=True) is None
     with pytest.raises(RuntimeError):
         amd.number(value, "W")
+
+
+@pytest.mark.parametrize("change", ["pid", "start_ticks", "executable", "uid", "memory", "unverified"])
+def test_monitor_exception_rejects_changed_or_active_context(monkeypatch, change):
+    identity = {"pid": 15910, "start_ticks": 50, "executable": "/opt/gpuagent/gpuagent", "uid": 0}
+    receipt = {"status": "verified", "process": identity}
+    app = {"pid": 15910, "memory_used_mib": 0}
+    observed = dict(identity)
+    if change == "memory":
+        app["memory_used_mib"] = 1
+    elif change == "unverified":
+        receipt["status"] = "unverified"
+    elif change == "executable":
+        observed[change] = "/tmp/other"
+    else:
+        observed[change] += 1
+    monkeypatch.setattr(amd, "monitor_process", lambda pid: observed)
+    assert not amd.is_system_monitor(app, receipt)
+
+
+def test_verified_monitor_is_retained_separately_from_workload_contexts(monkeypatch):
+    data = observations()
+    monkeypatch.setattr(amd, "smi", lambda option, timeout: copy.deepcopy(data[option]))
+    probe = amd.AmdGpuProbe([GPU], 2)
+    identity = {"pid": 15910, "start_ticks": 50, "executable": "/opt/gpuagent/gpuagent", "uid": 0}
+    probe.monitor = {"status": "verified", "service": "gpuagent.service", "process": identity}
+    monkeypatch.setattr(amd, "monitor_process", lambda pid: dict(identity))
+    result = probe.snapshot()
+    assert result["compute_apps"] == []
+    excluded = result["excluded_system_monitor_contexts"]
+    assert len(excluded) == 1 and excluded[0]["pid"] == 15910 and excluded[0]["gpu_uuid"] == GPU
+    assert excluded[0]["identity"]["service"] == "gpuagent.service"
+
+
+def test_service_pid_mismatch_never_approves_monitor(monkeypatch):
+    monkeypatch.setattr(amd, "_command", lambda *a, **k: "MainPID=42\nExecMainPID=43\nExecStart={ path=/opt/gpuagent/gpuagent ; }\nActiveState=active\nSubState=running\nControlGroup=/system.slice/gpuagent.service\nType=simple\n")
+    monkeypatch.setattr(amd, "monitor_process", lambda pid: pytest.fail("mismatched service PID must be rejected"))
+    assert amd.observe_system_monitor(1)["status"] == "unverified"

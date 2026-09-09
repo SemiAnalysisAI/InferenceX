@@ -35,16 +35,21 @@ def test_unready_runtime_is_rejected(fault):
         stage.runtime_probe(record)
 
 
-def test_seals_matched_workload_and_full_billed_allocation_without_gpu_calls(spec, tmp_path, monkeypatch):
+@pytest.mark.parametrize("readiness", ["inspected", "recovered"])
+def test_seals_matched_workload_and_full_billed_allocation_without_gpu_calls(spec, tmp_path, monkeypatch, readiness):
     workspace = tmp_path
     monkeypatch.setattr(stage, "WORKSPACE", workspace)
     control = workspace / "campaigns/h3-cross-hardware"
     control.mkdir(parents=True)
     rootfs = workspace.parent / "enroot-data" / stage.CONTAINER
-    rootfs.mkdir(parents=True)
+    rootfs.mkdir(parents=True, exist_ok=True)
     record = inspection()
+    record["status"] = readiness
+    if readiness == "recovered":
+        for key in ("torch_hip", "hip_devices", "torch_devices"):
+            record["probe"].pop(key)
     record.update(rootfs=str(rootfs), entrypoint='exec bash "$@"')
-    ci.write(control / "runtime-inspected.json", record)
+    ci.write(control / ("runtime-inspected.json" if readiness == "inspected" else "rootfs-recovered.json"), record)
     entries = spec["model"]["files"]
     ci.write(control / "model-ready.json", {"status": "complete", "model_path": spec["model"]["path"],
              "model_revision": spec["model"]["revision"],
