@@ -4,6 +4,7 @@ run-name: "Config Parsing Pytests PR #${{ github.event.pull_request.number }}"
 on:
   pull_request:
     paths:
+      - 'infx/**'
       - 'utils/matrix_logic/**'
 
 permissions:
