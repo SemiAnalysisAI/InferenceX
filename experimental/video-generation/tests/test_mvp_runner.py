@@ -202,7 +202,9 @@ def test_preview_is_network_free_and_reproduces_frozen_slots(plan, monkeypatch):
 
 
 @pytest.mark.parametrize("runtime", ["sglang", "vllm-omni"])
-def test_local_http_fixture_lifecycle_and_identity(plan, tmp_path, mocked_media, fixture_server, runtime):
+@pytest.mark.parametrize(("duration", "frames"), [(4, 107), (8, 192)])
+def test_local_http_fixture_lifecycle_and_identity(plan, tmp_path, mocked_media, fixture_server, runtime, duration, frames):
+    plan["generation"].update(duration_seconds=duration, frame_count=frames)
     output = tmp_path / runtime
     intents_seen = []
 
@@ -242,18 +244,19 @@ def test_local_http_fixture_lifecycle_and_identity(plan, tmp_path, mocked_media,
     for record in run["records"]:
         assert (output / record["artifact_path"]).read_bytes() == FIXTURE_BYTES
         assert record["sha256"] == hashlib.sha256(FIXTURE_BYTES).hexdigest()
-        assert math.isclose(record["expected_media"]["duration_seconds"], 107 / 24)
+        assert math.isclose(record["expected_media"]["duration_seconds"], frames / 24)
         assert record["expected_media"]["audio_required"] is True
     calls, _ = mocked_media
     assert len(calls) == 5
     assert all(expected["timeout_seconds"] > 0 for _, expected in calls)
     first = server["posts"][0]
     if runtime == "sglang":
-        assert first["target"] == {"duration_seconds": 4, "aspect_ratio": "16:9", "short_edge": 768}
+        assert first["target"] == {"duration_seconds": duration, "aspect_ratio": "16:9", "short_edge": 768}
+        assert "fps" not in first and "num_frames" not in first
         assert first["audio_flow_shift"] == 3
     else:
         assert first["width"] == "1344"
-        assert first["num_frames"] == "107"
+        assert first["num_frames"] == str(frames)
         assert json.loads(first["extra_params"])["audio_flow_shift"] == 3
 
 
@@ -422,6 +425,8 @@ def test_missing_controls_and_revision_drift_fail_before_output(plan, tmp_path, 
 
 @pytest.mark.parametrize("change", [
     {"num_frames": 107}, {"frame_count": 96}, {"width": 1366}, {"scheduler": "secretly-changed"},
+    {"duration_seconds": 8}, {"duration_seconds": 8, "frame_count": 193},
+    {"frame_count": 192}, {"duration_seconds": 6, "frame_count": 158},
 ])
 def test_unsupported_or_inconsistent_generation_contracts_are_rejected(plan, change):
     plan["generation"].update(change)

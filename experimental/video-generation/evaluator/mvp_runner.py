@@ -130,14 +130,14 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("generation.aspect_ratio must be an explicit positive ratio")
     if generation["fps"] != 24 or generation["audio_sample_rate_hz"] != 32000 or generation["audio_channels"] != 2:
         raise ValueError("the H3 contract requires 24 fps and 32000 Hz stereo audio")
-    # Keep the executable MVP to the audited cell until further H3 shape cells
-    # have their own protocol/decoder acceptance tests. Controls stay explicit.
+    # H3 rounds delivery frames differently for these two requested durations.
+    audited_frames = {4: 107, 8: 192}
     audited_cell = {
-        "duration_seconds": 4, "aspect_ratio": "16:9", "width": 1344,
-        "height": 768, "frame_count": 107,
+        "aspect_ratio": "16:9", "width": 1344, "height": 768,
     }
-    if any(generation[key] != value for key, value in audited_cell.items()):
-        raise ValueError("this MVP requires the audited 4s, 16:9, 1344x768, 107-frame H3 cell")
+    if (any(generation[key] != value for key, value in audited_cell.items())
+            or audited_frames.get(generation["duration_seconds"]) != generation["frame_count"]):
+        raise ValueError("this MVP requires a 16:9, 1344x768 H3 cell: 4s/107 frames or 8s/192 frames")
     cases = frozen.get("cases")
     if not isinstance(cases, list) or not cases:
         raise ValueError("cases must be a nonempty array")

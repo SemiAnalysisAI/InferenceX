@@ -7,6 +7,11 @@ SemiAnalysis H200 resources. Its first target is a bounded same-build smoke:
 original generated MP4s, full video/audio validation, measured requests, and
 verified cleanup. It does not publish a native InferenceX database/UI result.
 
+The runner supports two frozen 16:9 cells at 1344×768 and 24 FPS: a 4-second
+request resolves to 107 frames, while an 8-second request resolves to 192 frames.
+These counts follow the pinned H3 runtime's temporal rounding. Freeze a new plan
+for a changed prompt or duration; retain earlier runs as their original cells.
+
 A successful smoke job means the configured measurements and evidence completed.
 Its uncalibrated regression decision remains inconclusive and
 `ci_accepted: false`. No successful H3 run is established by adding these files
