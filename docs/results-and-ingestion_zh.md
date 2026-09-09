@@ -194,6 +194,9 @@ C1/4/8/14 使用 DSpark7 和合成接受长度 3.84，C24/48 使用 DSpark4 和 
 C96 不使用推测解码。这些服务设置保持不变。旧工件保留原有 DCP1/DRAM 标签，
 解读时必须说明这一身份偏差；元数据修正不会改变其测量值。
 
+B200 launcher 将普通 DCGM exporter 镜像名传给共享导入工具，仅转换一次 registry
+分隔符。已有 exporter 镜像继续复用；缓存缺失时使用正确的 NVIDIA registry URI。
+
 ### 原始输入和聚合架构
 
 [`process_agentic_result.py`](../utils/agentic/aggregation/process_agentic_result.py) 可解析当前的 `results/aiperf_artifacts` 布局，也可解析只含一个子目录的嵌套布局。它要求存在 `profile_export.jsonl`，并在存在时读取以下输入：
