@@ -74,7 +74,7 @@ gh workflow view e2e-tests.yml --repo SemiAnalysisAI/InferenceX --ref main --yam
 
 ```bash
 MATRIX=/tmp/inferencex-matrix.json
-uv run --no-project --exclude-newer PT12H --with pydantic --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
   utils/matrix_logic/generate_sweep_configs.py test-config \
   --config-files configs/nvidia-master.yaml \
   --config-keys dsr1-fp8-h200-sglang \
@@ -87,7 +87,7 @@ python3 -m json.tool "$MATRIX" >/dev/null
 多个 Key 应逐个放在 `--config-keys` 之后。通配模式必须加引号，防止 Shell 展开：
 
 ```bash
-uv run --no-project --exclude-newer PT12H --with pydantic --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
   utils/matrix_logic/generate_sweep_configs.py test-config \
   --config-files configs/nvidia-master.yaml \
   --config-keys '*-b200-*' \
@@ -100,7 +100,7 @@ uv run --no-project --exclude-newer PT12H --with pydantic --with pyyaml --python
 `full-sweep` 不一定表示所有配置。可按模型、精度、框架、Runner、序列长度、拓扑、并发、TP/EP 或 Scenario 类型缩小范围：
 
 ```bash
-uv run --no-project --exclude-newer PT12H --with pydantic --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
   utils/matrix_logic/generate_sweep_configs.py full-sweep \
   --config-files configs/nvidia-master.yaml \
   --single-node \
@@ -148,7 +148,7 @@ Eval 开关语义是明确的：
 对每个修改过的 YAML 文件执行语法解析。它能发现畸形 YAML，但不能验证 GitHub 表达式或 Workflow 依赖连线：
 
 ```bash
-uv run --no-project --exclude-newer PT12H --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
   python -c 'import sys, yaml; [yaml.safe_load(open(path, encoding="utf-8")) for path in sys.argv[1:]]' \
   configs/nvidia-master.yaml perf-changelog.yaml .github/workflows/e2e-tests.yml
 ```
@@ -163,7 +163,7 @@ uv run --no-project --exclude-newer PT12H --with pyyaml --python 3.12 \
 
 ```bash
 git fetch origin main
-uv run --no-project --exclude-newer PT12H --with pydantic --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
   utils/validate_perf_changelog.py \
   --changelog-file perf-changelog.yaml \
   --base-ref origin/main \
@@ -295,6 +295,8 @@ gh run rerun <RUN_ID> --repo SemiAnalysisAI/InferenceX
 并通过 `uv run --no-project --exclude-newer PT12H --python 3.12` 运行命令。
 使用 `--with` 声明依赖，或通过 `--with-requirements` 复用已有的依赖文件；
 通常无需单独的依赖安装步骤。
+选项统一按以下顺序排列：`--no-project`、`--exclude-newer`、`--python`、
+`--with`、`--with-requirements`，最后是要执行的命令及其参数。
 
 12 小时冷却期同时适用于包索引中的直接依赖和传递依赖。缺少上传时间戳的
 分发文件不可用；不得为了通过依赖解析而关闭冷却期。CollectiveX 使用全新的
@@ -428,7 +430,7 @@ Helper 会从 Index Stage 1/2/3 读取 Merge Base、PR 与 Main 字节，验证 
 提交后，对 `origin/main` 运行准确 Gate：
 
 ```bash
-uv run --no-project --exclude-newer PT12H --with pydantic --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
   utils/validate_perf_changelog.py \
   --changelog-file perf-changelog.yaml \
   --base-ref origin/main \

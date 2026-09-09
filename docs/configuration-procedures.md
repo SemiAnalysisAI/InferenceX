@@ -187,7 +187,7 @@ bash -n runners/launch_<cluster>.sh
 ### Exact-key schema + matrix generation
 
 ```bash
-uv run --no-project --exclude-newer PT12H --with pydantic --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
   utils/matrix_logic/generate_sweep_configs.py test-config \
   --config-files configs/<nvidia|amd>-master.yaml \
   --runner-config configs/runners.yaml \
@@ -197,7 +197,7 @@ uv run --no-project --exclude-newer PT12H --with pydantic --with pyyaml --python
 ### Filtered family generation
 
 ```bash
-uv run --no-project --exclude-newer PT12H --with pydantic --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
   utils/matrix_logic/generate_sweep_configs.py full-sweep \
   --config-files configs/<nvidia|amd>-master.yaml \
   --runner-config configs/runners.yaml \

@@ -344,7 +344,7 @@ Use this procedure when a row is missing, mislabeled, or unexpected.
 3. **Validation:** Generate only the exact key and inspect the JSON, not just the exit code.
 
    ```bash
-   uv run --no-project --exclude-newer PT12H --with pydantic --with pyyaml --python 3.12 \
+   uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
      utils/matrix_logic/generate_sweep_configs.py test-config \
      --config-files configs/nvidia-master.yaml configs/amd-master.yaml \
      --runner-config configs/runners.yaml \

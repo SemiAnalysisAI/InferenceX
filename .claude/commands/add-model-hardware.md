@@ -149,7 +149,7 @@ new entry is **required** for CI to run your config.
 ```bash
 bash -n benchmarks/single_node/fixed_seq_len/<script>
 python3 -c "import yaml; yaml.safe_load(open('configs/<nvidia|amd>-master.yaml')); yaml.safe_load(open('perf-changelog.yaml'))"
-uv run --no-project --exclude-newer PT12H --with pydantic --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
   utils/matrix_logic/generate_sweep_configs.py test-config \
   --config-files configs/<nvidia|amd>-master.yaml --config-keys <key>
 ```

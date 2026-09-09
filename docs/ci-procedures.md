@@ -74,7 +74,7 @@ Use `test-config` for exact keys or quoted `*`/`?` patterns. `--conc` must be pr
 
 ```bash
 MATRIX=/tmp/inferencex-matrix.json
-uv run --no-project --exclude-newer PT12H --with pydantic --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
   utils/matrix_logic/generate_sweep_configs.py test-config \
   --config-files configs/nvidia-master.yaml \
   --config-keys dsr1-fp8-h200-sglang \
@@ -87,7 +87,7 @@ python3 -m json.tool "$MATRIX" >/dev/null
 For multiple keys, pass each key after `--config-keys`. Quote wildcard patterns so the shell does not expand them:
 
 ```bash
-uv run --no-project --exclude-newer PT12H --with pydantic --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
   utils/matrix_logic/generate_sweep_configs.py test-config \
   --config-files configs/nvidia-master.yaml \
   --config-keys '*-b200-*' \
@@ -100,7 +100,7 @@ uv run --no-project --exclude-newer PT12H --with pydantic --with pyyaml --python
 `full-sweep` does not necessarily mean every configuration. Narrow it by model, precision, framework, runner, sequence length, topology, concurrency, TP/EP, or scenario type:
 
 ```bash
-uv run --no-project --exclude-newer PT12H --with pydantic --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
   utils/matrix_logic/generate_sweep_configs.py full-sweep \
   --config-files configs/nvidia-master.yaml \
   --single-node \
@@ -156,7 +156,7 @@ Eval switches are exact:
 Run a syntax parse on every touched YAML file. This catches malformed YAML but does not validate GitHub expressions or workflow dependency wiring:
 
 ```bash
-uv run --no-project --exclude-newer PT12H --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
   python -c 'import sys, yaml; [yaml.safe_load(open(path, encoding="utf-8")) for path in sys.argv[1:]]' \
   configs/nvidia-master.yaml perf-changelog.yaml .github/workflows/e2e-tests.yml
 ```
@@ -171,7 +171,7 @@ The validator reads Git objects, not uncommitted working-tree bytes. Commit the 
 
 ```bash
 git fetch origin main
-uv run --no-project --exclude-newer PT12H --with pydantic --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
   utils/validate_perf_changelog.py \
   --changelog-file perf-changelog.yaml \
   --base-ref origin/main \
@@ -302,6 +302,8 @@ A rerun remains the same workflow run ID with a higher attempt. Artifact APIs ca
 Hosted jobs that need Python packages use the pinned `astral-sh/setup-uv` action
 and `uv run --no-project --exclude-newer PT12H --python 3.12`. Declare dependencies
 with `--with`, or use `--with-requirements` for an existing requirements file.
+Keep options in this order: `--no-project`, `--exclude-newer`, `--python`,
+`--with`, `--with-requirements`, then the command and its arguments.
 
 The 12-hour cooldown applies to direct and transitive registry dependencies.
 Distributions with missing upload timestamps are unavailable; do not disable the
@@ -442,7 +444,7 @@ The helper reads merge-base/PR/main bytes from index stages 1/2/3, validates the
 After committing, run the exact gate against `origin/main`:
 
 ```bash
-uv run --no-project --exclude-newer PT12H --with pydantic --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
   utils/validate_perf_changelog.py \
   --changelog-file perf-changelog.yaml \
   --base-ref origin/main \

@@ -47,7 +47,7 @@ gh pr edit <PR_NUMBER> --repo SemiAnalysisAI/InferenceX \
 在占用 runner 前预览准确矩阵：
 
 ```bash
-uv run --no-project --exclude-newer PT12H --with pydantic --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
   utils/matrix_logic/generate_sweep_configs.py \
   test-config \
   --config-keys qwen3.5-fp8-b200-sglang-agentic \

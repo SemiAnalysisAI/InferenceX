@@ -325,7 +325,7 @@ jobs:
                   fi
 
                   CMD=(
-                      uv run --no-project --exclude-newer PT12H --with pydantic --with pyyaml --python 3.12 \
+                      uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
                       "${GITHUB_WORKSPACE}/utils/process_changelog.py"
                       --changelog-file "${GITHUB_WORKSPACE}/perf-changelog.yaml"
                       --base-ref "$BASE_REF"
@@ -342,7 +342,7 @@ jobs:
                   fi
 
                   CONFIG_JSON=$("${CMD[@]}")
-                  CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | uv run --no-project --exclude-newer PT12H --with pyyaml --python 3.12 \
+                  CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
                     "${GITHUB_WORKSPACE}/utils/ci_priority.py" \
                     --event-name "${{ github.event_name }}" \
                     --queue-namespace "${{ github.run_id }}:${{ github.run_attempt }}" \
