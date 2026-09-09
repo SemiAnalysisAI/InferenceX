@@ -208,7 +208,11 @@ New formats should expose their own typed builder under `infx/results/`, accepti
 Two helpers are shared by the current processing paths:
 
 - [`parse_component_metadata`](../infx/results/metadata.py) accepts a raw JSON value and diagnostic label. Callers select whether `version` is optional and whether invalid input raises `ValueError` or `SystemExit`, preserving their existing contracts.
-- [`with_power_metrics`](../infx/results/power.py) returns a copy with the supplied metric family replaced, removes stale validity reasons, and validates and rounds new metrics. Callers supply metric keys and schema version, then own artifact writes and validation sidecars. This allows another metric family to reuse the transformation without changing its implementation.
+- [`with_power_metrics`](../infx/results/power/__init__.py) returns a copy with the supplied metric family replaced, removes stale validity reasons, and validates and rounds new metrics. Callers supply metric keys and schema version, then own artifact writes and validation sidecars. This allows another metric family to reuse the transformation without changing its implementation.
+
+Power telemetry engines also live in [`infx.results.power`](../infx/results/power/): `single_node.run` consumes GPU-monitor CSVs, while `multinode.run` validates srt-slurm artifact packages. They share benchmark-window parsing, per-device integration, aggregate replacement, and audit serialization through `common.py`, while retaining their own telemetry validation and failure policies. Fixed-sequence and AgentX adapters import these engines directly; new result formats can supply their benchmark window and token counts to the matching engine.
+
+The existing `utils/aggregate_power.py` and `utils/aggregate_power_multinode.py` commands remain compatibility entrypoints, including direct execution outside the checkout. Legacy imports resolve to the canonical engine modules, so both paths refer to the same classes and functions. The `infx` package runs independently of these wrappers, with no installation step or new runtime dependency. The engines are also callable with `python -m infx.results.power.single_node` and `python -m infx.results.power.multinode` from the repository root.
 
 Test builders with small, independently worked examples and read-only inputs. For changes to an existing adapter, also compare CLI status, diagnostics, and generated artifacts with the previous implementation, including invalid inputs and strict/best-effort power failures.
 

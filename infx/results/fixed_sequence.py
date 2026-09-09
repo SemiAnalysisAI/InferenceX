@@ -193,9 +193,8 @@ def record_power_internal_error(
     """Preserve an auditable invalid result when aggregation fails unexpectedly."""
     reasons = ["aggregation_internal_error"]
     try:
-        from utils.aggregate_power import (
-            _empty_integration,
-            _validation_payload,
+        from .power.single_node import (
+            invalid_validation_payload,
             _write_json_atomic,
         )
 
@@ -209,18 +208,11 @@ def record_power_internal_error(
         )
         _write_json_atomic(agg_result, agg_data)
 
-        validation_data = _validation_payload(
+        validation_data = invalid_validation_payload(
             csv_path=csv_path,
             bench_result=bench_result,
-            benchmark=None,
-            integration=_empty_integration(
-                expected_num_gpus=expected_num_gpus,
-                reasons=reasons,
-            ),
-            power_valid=False,
+            expected_num_gpus=expected_num_gpus,
             reasons=reasons,
-            metrics={},
-            accumulator_check=None,
         )
         validation_data["internal_error"] = {
             "type": type(error).__name__,
@@ -258,7 +250,7 @@ def aggregate_power_result(
         expected_num_gpus = int(env['TP']) * int(env.get('PP_SIZE', '1')) * int(env.get('PCP_SIZE', '1'))
     try:
         if is_multinode:
-            from utils.aggregate_power_multinode import run
+            from .power.multinode import run
 
             return run(
                 source, bench_path, agg_path,
@@ -269,7 +261,7 @@ def aggregate_power_result(
                 validation_result=validation_path,
                 require_power=require_power,
             )
-        from utils.aggregate_power import run
+        from .power.single_node import run
 
         return run(
             csv_path=source,

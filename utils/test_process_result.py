@@ -187,7 +187,7 @@ if {multinode!r}:
     if {fail_import!r}:
         original_import = builtins.__import__
         def failing_import(name, *args, **kwargs):
-            if name.endswith('aggregate_power_multinode'):
+            if name.endswith(('aggregate_power_multinode', 'power.multinode')):
                 raise ImportError("forced import failure")
             return original_import(name, *args, **kwargs)
         builtins.__import__ = failing_import

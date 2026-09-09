@@ -19,14 +19,13 @@ from infx.results.power import (
     with_power_metrics,
 )
 
-from utils.aggregate_power import (
-    _empty_integration,
+from infx.results.power.single_node import (
     _patch_power_result,
-    _validation_payload,
     _write_json_atomic,
+    invalid_validation_payload,
 )
-from utils.aggregate_power import run as run_power
-from utils.aggregate_power_multinode import run as run_multinode_power
+from infx.results.power.single_node import run as run_power
+from infx.results.power.multinode import run as run_multinode_power
 
 from .process_agentic_result import _resolve_artifact_dir
 from .request_metrics import extract_per_record_ints, load_aggregate, load_records
@@ -159,20 +158,12 @@ def _record_adapter_failure(
     csv_path = result_dir / "gpu_metrics.csv"
     window_path = result_dir / "agentic_power_window.json"
     validation_path = result_dir / "power_validation.json"
-    integration = _empty_integration(
-        expected_num_gpus=expected_num_gpus,
-        reasons=reasons,
-    )
     _patch_power_result(agg_result, power_valid=False, metrics={})
-    payload = _validation_payload(
+    payload = invalid_validation_payload(
         csv_path=csv_path,
         bench_result=window_path,
-        benchmark=None,
-        integration=integration,
-        power_valid=False,
+        expected_num_gpus=expected_num_gpus,
         reasons=reasons,
-        metrics={},
-        accumulator_check=None,
     )
     payload["window_source"] = "aiperf_profile_lifecycle"
     _write_json_atomic(validation_path, payload)
