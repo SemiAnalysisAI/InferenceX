@@ -680,6 +680,9 @@ def run_plan(
                 if not defer_validation:
                     validate_media(record, deadline)
             except (Exception, KeyboardInterrupt) as exc:
+                # The deadline watchdog closes sockets, which can surface as EOF instead of socket.timeout.
+                if isinstance(exc, (OSError, http.client.HTTPException)) and time.monotonic() >= deadline:
+                    exc = TimeoutError("attempt deadline exceeded")
                 record["error"] = _safe_error(exc)
                 if isinstance(exc, (TimeoutError, socket.timeout)):
                     record["outcome"] = "timed_out"

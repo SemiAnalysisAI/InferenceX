@@ -1260,8 +1260,8 @@ def _require_linux():
         raise RuntimeError("controlled GPU execution requires Linux /proc ownership checks; preview is cross-platform")
 
 
-def run_gpu_job(spec: dict, output_dir: Path) -> dict:
-    """Actually launch two bounded owned H3 runtime sessions; Linux-only.
+def run_gpu_job(spec: dict, output_dir: Path, *, serving_smoke: bool = False) -> dict:
+    """Launch owned H3 sessions, or one serving smoke session; Linux-only.
 
     Calling this function is execution authorization. CLI callers must put an
     explicit --execute barrier in front of it. No provisioning/download occurs.
@@ -1274,6 +1274,8 @@ def run_gpu_job(spec: dict, output_dir: Path) -> dict:
     acceptance after compute was consumed.
     """
     spec = validate_gpu_job(spec)
+    if serving_smoke and not spec.get("serving"):
+        raise ValueError("single-runtime smoke requires an explicit serving load")
     approval = spec["authorization"]
     if not approval["compute_approved"] or not approval["model_license_reviewed"] or not approval["approval_reference"].strip():
         raise ValueError("GPU execution requires explicit compute approval and model-license review with an approval reference; no work started")
@@ -1285,7 +1287,7 @@ def run_gpu_job(spec: dict, output_dir: Path) -> dict:
     _write(directory / "spec.json", spec)
     _write(directory / "plan.json", spec["plan"])
     _write(directory / "policy.json", spec["policy"])
-    receipt = {"schema_version": VERSION, "bundle_type": "controlled_gpu_job", "job_id": spec["job_id"],
+    receipt = {"schema_version": VERSION, "bundle_type": "controlled_serving_smoke" if serving_smoke else "controlled_gpu_job", "job_id": spec["job_id"],
                "execution_id": uuid.uuid4().hex,
                "evidence_kind": "no_gpu_measurement", "status": "running", "measurement_status": "incomplete",
                "regression_status": "inconclusive", "ci_accepted": False, "release_qualified": False,
@@ -1317,13 +1319,12 @@ def run_gpu_job(spec: dict, output_dir: Path) -> dict:
             probe = GpuProbe(spec["gpu_uuids"], spec["limits"]["command_seconds"])
             with GpuLease(Path(spec["lock_directory"]), spec["gpu_uuids"], spec["job_id"]) as lease:
                 try:
-                    for role in _ROLES:
+                    for role in (("baseline",) if serving_smoke else _ROLES):
                         supervisor.check()
                         _role(spec, role, directory, supervisor, probe, receipt)
                         receipt["evidence_kind"] = "controlled_h3_gpu"
                         _write(directory / "gpu-job.json", receipt)
-                    # Recheck all weights after both runs; source/model mutation
-                    # invalidates identity rather than being silently ignored.
+                    # Model mutation during measurement invalidates the pinned identity.
                     if _model_manifest(spec, supervisor.deadline, supervisor.cancelled) != receipt["model_identity"]:
                         raise RuntimeError("staged model identity changed during measurement")
                     receipt.update(measurement_status="complete", evidence_kind="controlled_h3_gpu", cleanup_status="clean")
@@ -1334,20 +1335,23 @@ def run_gpu_job(spec: dict, output_dir: Path) -> dict:
                         lease.quarantine("GPU idle or exact-owned cleanup was not established; inspect before clearing quarantine")
                     elif receipt["roles"] and all(role.get("cleanup", {}).get("status") == "clean" for role in receipt["roles"].values()):
                         receipt["cleanup_status"] = "clean"
-            # Native decode/comparison is also a supervised child with the same
-            # global work deadline, so a wedged codec cannot retain GPU jobs.
-            metadata = directory / "supervisor"
-            client_env = _runtime_env("", [], uuid.uuid4().hex, metadata / "compare-cache")
-            client_env["PYTHONPATH"] = str(Path(__file__).resolve().parent.parent)
-            compare = supervisor.spawn([sys.executable, "-m", "evaluator.cli", "compare", str(directory / "baseline"), str(directory / "candidate"), "--policy", str(directory / "policy.json")],
-                                       cwd=directory, env=client_env, stdout=directory / "comparison.json", stderr=metadata / "compare.stderr.log", nonce=uuid.uuid4().hex)
-            code = _wait_client(compare, None, None, supervisor, supervisor.deadline)
-            if code not in {0, 1, 2}:
-                raise RuntimeError("supervised comparison process exited abnormally")
-            comparison = _read(directory / "comparison.json")
-            if comparison.get("bundle_type") != "mvp_comparison":
-                raise RuntimeError("supervised comparison did not produce its validated contract")
-            receipt.update(comparison_path="comparison.json", comparison_sha256=_hash(directory / "comparison.json"), status="complete")
+            if serving_smoke:
+                receipt["status"] = "complete"
+            else:
+                # Native decode/comparison is also a supervised child with the same
+                # global work deadline, so a wedged codec cannot retain GPU jobs.
+                metadata = directory / "supervisor"
+                client_env = _runtime_env("", [], uuid.uuid4().hex, metadata / "compare-cache")
+                client_env["PYTHONPATH"] = str(Path(__file__).resolve().parent.parent)
+                compare = supervisor.spawn([sys.executable, "-m", "evaluator.cli", "compare", str(directory / "baseline"), str(directory / "candidate"), "--policy", str(directory / "policy.json")],
+                                           cwd=directory, env=client_env, stdout=directory / "comparison.json", stderr=metadata / "compare.stderr.log", nonce=uuid.uuid4().hex)
+                code = _wait_client(compare, None, None, supervisor, supervisor.deadline)
+                if code not in {0, 1, 2}:
+                    raise RuntimeError("supervised comparison process exited abnormally")
+                comparison = _read(directory / "comparison.json")
+                if comparison.get("bundle_type") != "mvp_comparison":
+                    raise RuntimeError("supervised comparison did not produce its validated contract")
+                receipt.update(comparison_path="comparison.json", comparison_sha256=_hash(directory / "comparison.json"), status="complete")
     except (Exception, KeyboardInterrupt) as error:
         receipt["status"] = "aborted" if isinstance(error, (JobCancelled, KeyboardInterrupt, TimeoutError)) else "failed"
         receipt["failures"].append(str(error) if isinstance(error, (ValueError, RuntimeError, TimeoutError)) else type(error).__name__)
@@ -1357,8 +1361,11 @@ def run_gpu_job(spec: dict, output_dir: Path) -> dict:
     try:
         if receipt["status"] == "complete":
             from .mvp_gpu_evidence import verify_measurement_job
-            verified = verify_measurement_job(directory, deadline=verification_deadline)
-        receipt.update(_gate(spec, receipt, comparison, verified_evidence=verified, deadline=verification_deadline))
+            verified = verify_measurement_job(directory, deadline=verification_deadline, serving_smoke=serving_smoke)
+        if serving_smoke:
+            receipt["measurement_verified"] = verified is not None
+        else:
+            receipt.update(_gate(spec, receipt, comparison, verified_evidence=verified, deadline=verification_deadline))
     except Exception as error:
         receipt.update(regression_status="inconclusive", ci_accepted=False,
                        acceptance_reasons=[f"acceptance evidence could not be verified: {type(error).__name__}"])

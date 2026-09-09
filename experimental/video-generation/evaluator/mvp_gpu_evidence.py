@@ -54,7 +54,7 @@ def _timing(record):
         raise ValueError("recorded timing components are not ordered within their measured boundary")
 
 
-def verify_measurement_job(directory: Path, *, deadline: float, require_success: bool = False) -> dict:
+def verify_measurement_job(directory: Path, *, deadline: float, require_success: bool = False, serving_smoke: bool = False) -> dict:
     """Verify one complete controlled job; never follow its calibration references."""
     from . import mvp_gpu_job as gpu
 
@@ -62,7 +62,10 @@ def verify_measurement_job(directory: Path, *, deadline: float, require_success:
     gpu._check_deadline(deadline)
     spec = gpu.validate_gpu_job(gpu._read(_file(directory, "spec.json")))
     receipt = gpu._read(_file(directory, "gpu-job.json"))
-    if receipt.get("schema_version") != gpu.VERSION or receipt.get("bundle_type") != "controlled_gpu_job" or receipt.get("spec_sha256") != gpu._digest(spec):
+    bundle_type = "controlled_serving_smoke" if serving_smoke else "controlled_gpu_job"
+    if serving_smoke and not spec.get("serving"):
+        raise ValueError("single-runtime smoke requires an explicit serving load")
+    if receipt.get("schema_version") != gpu.VERSION or receipt.get("bundle_type") != bundle_type or receipt.get("spec_sha256") != gpu._digest(spec):
         raise ValueError("GPU job/spec identity is not verified")
     if receipt.get("job_id") != spec["job_id"] or receipt.get("plan_sha256") != gpu._digest(spec["plan"]):
         raise ValueError("GPU job workload identity mismatch")
@@ -79,12 +82,13 @@ def verify_measurement_job(directory: Path, *, deadline: float, require_success:
     model = receipt.get("model_identity", {})
     if model.get("revision") != spec["model"]["revision"] or model.get("manifest_sha256") != gpu._digest(spec["model"]["files"]):
         raise ValueError("GPU job checkpoint manifest is not bound to the specification")
-    if set(receipt.get("roles", {})) != {"baseline", "candidate"}:
-        raise ValueError("both supervised role receipts are required")
+    labels = ("baseline",) if serving_smoke else ("baseline", "candidate")
+    if set(receipt.get("roles", {})) != set(labels):
+        raise ValueError("the exact supervised role receipts are required")
     runs, identities, run_ids, nonces = {}, {}, set(), set()
     expected_slots = _slots(spec["plan"])
     scheduled = sum(slot["phase"] == "measurement" for slot in expected_slots)
-    for label in ("baseline", "candidate"):
+    for label in labels:
         gpu._check_deadline(deadline)
         role = receipt["roles"][label]
         if role.get("status") != "complete" or role.get("client_exit_code") not in {0, 1}:
@@ -220,6 +224,12 @@ def verify_measurement_job(directory: Path, *, deadline: float, require_success:
                                                command_seconds=spec["limits"]["command_seconds"])
         if not recomputed["qualified"] or not _equal(recomputed, role.get("telemetry_summary")):
             raise ValueError("telemetry summary does not match qualified raw observations")
+    verified = {"directory": directory, "spec": spec, "receipt": receipt, "runs": runs, "identities": identities, "run_ids": run_ids,
+                "nonces": nonces, "started": started, "finished": finished, "execution_id": execution_id}
+    if serving_smoke:
+        if receipt.get("comparison_path") is not None or receipt.get("ci_accepted") is not False or receipt.get("release_qualified") is not False:
+            raise ValueError("single-runtime smoke cannot claim paired or calibrated acceptance")
+        return {**verified, "comparison": None}
     compared_path = _file(directory, receipt.get("comparison_path"), required="comparison.json")
     if gpu._hash(compared_path, deadline) != receipt.get("comparison_sha256"):
         raise ValueError("comparison artifact hash mismatch")
@@ -244,8 +254,7 @@ def verify_measurement_job(directory: Path, *, deadline: float, require_success:
     outcome = "fail" if any(check.get("status") == "fail" for check in checks) else "inconclusive" if any(check.get("status") == "inconclusive" for check in checks) else "pass"
     if compared.get("overall_status") != outcome:
         raise ValueError("comparison decision does not match its checks")
-    return {"directory": directory, "spec": spec, "receipt": receipt, "runs": runs, "identities": identities, "run_ids": run_ids,
-            "nonces": nonces, "started": started, "finished": finished, "execution_id": execution_id, "comparison": compared}
+    return {**verified, "comparison": compared}
 
 
 def verify_calibration(spec: dict, current: dict, *, deadline: float) -> tuple[bool, str]:

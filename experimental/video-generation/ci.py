@@ -32,6 +32,7 @@ NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,79}")
 SHA = re.compile(r"[0-9a-f]{64}")
 IDENTITY = ("JobId", "JobName", "Comment", "WorkDir", "Account", "Partition", "UserId")
 CACHE_PATHS = ("gpu/supervisor/baseline/cache", "gpu/supervisor/candidate/cache", "gpu/supervisor/compare-cache")
+CACHE_PATHS += tuple(f"gpu/c{concurrency}/supervisor/baseline/cache" for concurrency in (1, 2, 4))
 TERMINAL = {"COMPLETED", "CANCELLED", "FAILED", "TIMEOUT", "NODE_FAIL", "OUT_OF_MEMORY", "PREEMPTED", "BOOT_FAIL", "DEADLINE"}
 
 
@@ -85,7 +86,7 @@ def host_path(config: dict, container_path: str) -> Path:
 def validate_config(config: dict) -> dict:
     need(set(config) == {"schema_version", "task_id", "workspace", "runtime", "spec", "resources", "allocation_receipts", "mode"}, "Unknown or missing site configuration fields")
     need(config["schema_version"] == 1 and NAME.fullmatch(config["task_id"]), "Invalid schema_version/task_id")
-    need(config["mode"] in {"smoke", "regression"}, "mode must be smoke or regression")
+    need(config["mode"] in {"smoke", "regression", "serving-smoke"}, "mode must be smoke, regression or serving-smoke")
     need(set(config["workspace"]) == {"host", "container"}, "Invalid workspace mapping")
     for value in config["workspace"].values():
         path = absolute(value)
@@ -205,8 +206,9 @@ def allocate(config: dict, run_dir: Path, *, node: str | None = None) -> dict:
     intent = {"task_id": config["task_id"], "job_name": job_name, "comment": comment,
               "work_dir": str(run_dir), "user_id": os.getuid(), "created_at": now()}
     write(run_dir / "allocation-intent.json", intent)
+    placement = ["--gres=gpu:" + str(request["gpus"])] if config["mode"] == "serving-smoke" else ["--exclusive", "--gres=gpu:8"]
     argv = ["salloc", "--no-shell", "--no-bell", "--partition=" + PARTITION, "--account=" + ACCOUNT,
-            "--nodes=1", "--ntasks=1", "--exclusive", "--gres=gpu:8",
+            "--nodes=1", "--ntasks=1", *placement,
             "--cpus-per-task=" + str(request["cpus"]), "--mem=" + str(request["memory_gb"]) + "G",
             "--time=" + str(request["minutes"]), "--immediate=30",
             "--job-name=" + job_name, "--comment=" + comment, "--chdir=" + str(run_dir)]
@@ -361,6 +363,9 @@ def prepared_spec(config: dict) -> dict:
     spec["gpu_uuids"] = [f"GPU-00000000-0000-0000-0000-{i:012d}" for i in range(config["resources"]["gpus"])]
     from evaluator.mvp_gpu_job import validate_gpu_job
     spec = validate_gpu_job(spec)
+    if config["mode"] == "serving-smoke":
+        from evaluator.mvp_serving_smoke import validate_spec
+        validate_spec(spec)
     need(spec["authorization"]["compute_approved"] and spec["authorization"]["model_license_reviewed"]
          and spec["authorization"]["approval_reference"].strip(), "Prepared spec must record compute and model approval")
     need(spec["limits"]["job_seconds"] + 600 <= config["resources"]["minutes"] * 60,
@@ -395,6 +400,7 @@ def launch(config: dict, output: Path) -> int:
     results.mkdir(parents=True, exist_ok=True)
     control.mkdir(parents=True, exist_ok=True)
     run_dir = results / f"github-{run_id}-{attempt}"
+    reserved_gpus = config["resources"]["gpus"] if config["mode"] == "serving-smoke" else 8
     state = {"schema_version": 1, "task_id": config["task_id"], "run_id": run_id, "run_attempt": attempt,
              "source_sha": sha, "started_at": now(), "phase": "preparing", "mode": config["mode"],
              "ci_accepted": False, "release_qualified": False, "persistent_output": str(run_dir),
@@ -405,8 +411,8 @@ def launch(config: dict, output: Path) -> int:
                     "actor": os.environ.get("GITHUB_ACTOR"),
                     "triggering_actor": os.environ.get("GITHUB_TRIGGERING_ACTOR"),
                     "run_url": f"{os.environ.get('GITHUB_SERVER_URL', 'https://github.com')}/{os.environ.get('GITHUB_REPOSITORY', '')}/actions/runs/{run_id}"},
-             "resources": {"requested": config["resources"], "new_allocation_gpus": 8,
-                           "new_allocation_gpu_hours_cap": 8 * config["resources"]["minutes"] / 60}}
+             "resources": {"requested": config["resources"], "new_allocation_gpus": reserved_gpus,
+                           "new_allocation_gpu_hours_cap": reserved_gpus * config["resources"]["minutes"] / 60}}
     with task_lock(control / "ci.lock"):
         run_dir.mkdir(exist_ok=False)
         write(run_dir / "ci.json", state)
@@ -430,6 +436,9 @@ def launch(config: dict, output: Path) -> int:
             verify_identity(receipt, record, config["task_id"])
             need(record["JobState"] == "RUNNING", "Owned allocation is not RUNNING")
             need(capacity(record, config["resources"]) is None, "Allocation cannot serve bounded step")
+            if config["mode"] == "serving-smoke":
+                tres = dict(item.split("=", 1) for item in record["AllocTRES"].split(","))
+                need(int(tres.get("gres/gpu", "0")) == reserved_gpus, "Serving allocation GPU count exceeds the declared budget")
             need(digest(config["runtime"]["entry"]) == config["runtime"]["entry_sha256"], "Entry changed after preflight")
             state.update(phase="starting", allocation_reused=reused, allocation=receipt, slurm_job=record)
             write(run_dir / "ci.json", state)
@@ -470,10 +479,14 @@ def launch(config: dict, output: Path) -> int:
             links = ("ci.json", "runtime-entry.sh", "runtime-readiness.record", "allocation.json", "recovery.json", "binding.json", "context.json", "step-result.json",
                      "gpu/spec.json", "gpu/gpu-job.json", "gpu/baseline/run.json", "gpu/candidate/run.json",
                      "gpu/comparison.json", "report/index.html")
+            if config["mode"] == "serving-smoke":
+                links += ("serving-smoke.json",)
+                links += tuple(f"gpu/c{concurrency}/{path}" for concurrency in (1, 2, 4)
+                               for path in ("spec.json", "gpu-job.json", "baseline/run.json", "power.json"))
             write(run_dir / "manifest.json", {"schema_version": 1, "task_id": config["task_id"],
                 "git_commit": sha, "ci": state["ci"], "run_id": run_id, "run_attempt": attempt,
                 "slurm_allocation": receipt, "runtime": config["runtime"], "prepared_spec": config["spec"],
-                "workload_plan": spec.get("plan"), "resources": state["resources"], "exit_code": code,
+                "workload_plan": spec.get("plan"), "mode": config["mode"], "resources": state["resources"], "exit_code": code,
                 "evidence": {path: digest(run_dir / path) for path in links if (run_dir / path).is_file()},
                 "artifact_checksums": "SHA256SUMS", "excluded_persistent_caches": list(CACHE_PATHS)})
             collect(run_dir, output)
@@ -544,13 +557,21 @@ def inside(run_dir: Path) -> int:
         spec["gpu_uuids"], spec["job_id"] = devices, context["run_id"]
         active = [line for line in context["active_steps"].splitlines() if not re.match(r"[0-9]+\.(batch|extern)\|", line)]
         spec["allocation"] = {"mode": "dedicated_ci" if not active and context["exclusive_node"] else "cooperative_shared", "label": f"Slurm {expected}.{step} on {context['node']}"}
-        from evaluator.mvp_gpu_job import run_gpu_job
-        from evaluator.mvp_gpu_evidence import verify_measurement_job
-        receipt = run_gpu_job(spec, run_dir / "gpu")
-        result.update({key: receipt[key] for key in ("measurement_status", "regression_status", "ci_accepted", "release_qualified")})
-        verified = verify_measurement_job(run_dir / "gpu", deadline=time.monotonic() + 120)
-        result["exit_code"] = smoke_exit(verified, receipt, config["mode"])
-        result["smoke_completed"] = workload_complete(verified)
+        if config["mode"] == "serving-smoke":
+            from evaluator.mvp_serving_smoke import run_matrix
+            matrix = run_matrix(spec, run_dir)
+            complete = matrix["status"] == "complete"
+            result.update(exit_code=0 if complete else 1, smoke_completed=complete,
+                          measurement_status="complete" if complete else "incomplete",
+                          serving_summary="serving-smoke.json")
+        else:
+            from evaluator.mvp_gpu_job import run_gpu_job
+            from evaluator.mvp_gpu_evidence import verify_measurement_job
+            receipt = run_gpu_job(spec, run_dir / "gpu")
+            result.update({key: receipt[key] for key in ("measurement_status", "regression_status", "ci_accepted", "release_qualified")})
+            verified = verify_measurement_job(run_dir / "gpu", deadline=time.monotonic() + 120)
+            result["exit_code"] = smoke_exit(verified, receipt, config["mode"])
+            result["smoke_completed"] = workload_complete(verified)
     except (Exception, KeyboardInterrupt) as error:
         result.update(exit_code=2, error=str(error), smoke_completed=False, ci_accepted=False)
     finally:

@@ -38,7 +38,8 @@ def save_receipt(root, receipt):
     return path
 
 
-def test_allocation_submits_from_receipted_work_directory(tmp_path, monkeypatch):
+@pytest.mark.parametrize("mode", ["smoke", "serving-smoke"])
+def test_allocation_submits_from_receipted_work_directory(tmp_path, monkeypatch, mode):
     run_dir = tmp_path / "results"
     run_dir.mkdir()
     bin_dir = tmp_path / "bin"
@@ -50,8 +51,14 @@ def test_allocation_submits_from_receipted_work_directory(tmp_path, monkeypatch)
     monkeypatch.setenv("RUNNER_NAME", "h3-test-runner")
     monkeypatch.setenv("PATH", str(bin_dir) + os.pathsep + os.environ["PATH"])
     monkeypatch.setenv("H3_TEST_SCHEDULER_CWD", str(observed))
-    receipt = ci.allocate(config(tmp_path), run_dir)
+    cfg = config(tmp_path)
+    cfg["mode"] = mode
+    cfg["resources"]["gpus"] = 2
+    receipt = ci.allocate(cfg, run_dir)
     assert observed.read_text().strip() == receipt["identity"]["WorkDir"] == str(run_dir)
+    argv = json.loads((run_dir / "allocation-command.json").read_text())
+    assert ("--exclusive" in argv) is (mode == "smoke")
+    assert ("--gres=gpu:2" if mode == "serving-smoke" else "--gres=gpu:8") in argv
 
 
 def test_reuse_checks_identity_and_retains_active_step_evidence(tmp_path, monkeypatch):

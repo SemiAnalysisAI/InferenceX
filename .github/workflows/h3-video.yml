@@ -102,6 +102,8 @@ jobs:
 
   smoke:
     needs: prepare
+    outputs:
+      mode: ${{ steps.execute.outputs.mode }}
     if: ${{ inputs.inventory-run-id == '' }}
     name: p${{ needs.prepare.outputs.priority }} | ${{ inputs.source-run-ids != '' && 'H3 H200 hardware inventory' || 'H3 video H200 smoke' }}
     runs-on: >-
@@ -134,9 +136,19 @@ jobs:
           path: h3-video-source-${{ github.run_id }}-${{ github.run_attempt }}
           persist-credentials: false
       - name: Execute configured H3 smoke
+        id: execute
         if: ${{ inputs.source-run-ids == '' }}
         run: |
           set -euo pipefail
+          python3 - <<'PY'
+          import json, os, sys
+          sys.path.insert(0, 'experimental/video-generation')
+          from ci import validate_config
+          with open(os.environ['H3_SITE_CONFIG']) as stream:
+              config = validate_config(json.load(stream))
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as stream:
+              stream.write('mode=' + config['mode'] + '\n')
+          PY
           python3 experimental/video-generation/ci.py \
             --config "$H3_SITE_CONFIG" \
             --output "$RUNNER_TEMP/h3-video-$H3_RUN_ID-$H3_RUN_ATTEMPT"
@@ -164,7 +176,7 @@ jobs:
 
   export:
     needs: [prepare, smoke]
-    if: ${{ always() && needs.prepare.result == 'success' && (needs.smoke.result == 'success' || (inputs.inventory-run-id != '' && needs.smoke.result == 'skipped')) }}
+    if: ${{ always() && needs.prepare.result == 'success' && needs.smoke.outputs.mode != 'serving-smoke' && (needs.smoke.result == 'success' || (inputs.inventory-run-id != '' && needs.smoke.result == 'skipped')) }}
     name: Verify and export retained H3 results
     runs-on: ubuntu-latest
     timeout-minutes: 15

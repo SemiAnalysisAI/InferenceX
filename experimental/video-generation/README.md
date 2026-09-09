@@ -143,8 +143,7 @@ Each job measures one concurrency against one supervised endpoint. Workers
 submit another request after downloading the previous output; media validation
 runs separately. Warmup stays serial and separate. To compare loads, repeat the
 same frozen prompt/seed/generation plan and runtime on separately recorded jobs,
-including an explicit serving-concurrency-1 control. No load sweep is launched
-automatically. Reuse the existing CI allocation/runtime route and retain every
+including an explicit serving-concurrency-1 control. The default mode does not launch a load sweep. Reuse the existing CI allocation/runtime route and retain every
 request outcome; uncertain remote completion stops new submissions.
 
 This measures closed-loop delivery throughput, not a fixed arrival rate or
@@ -152,6 +151,16 @@ sustainable serving capacity. Server queue/execution timestamps, actual batch
 sizes, multi-replica layouts and full deployment cost remain unavailable.
 Serving runs require an uncalibrated policy. CPU fixtures test the harness;
 they do not establish H3 concurrency support or hardware performance.
+
+Set the reviewed site configuration to `"mode": "serving-smoke"` for the bounded
+C1/C2/C4 matrix. Its plan must contain exactly four measured requests, plus
+explicit warmups. It boots the baseline runtime once per cell in one allocation,
+runs twelve measured requests total, and stops after a failed cell. Allocation
+GPU count equals the requested count; ordinary paired smoke keeps its existing
+allocation behavior. `serving-smoke.json`, `gpu/cN/` and `report/index.html` retain
+the matrix, original request/media/telemetry evidence and playable report. An
+interrupted attempt is counted separately from an unstarted request. This mode
+skips the paired frontend export and cannot claim regression acceptance.
 
 ## Results and local checks
 
