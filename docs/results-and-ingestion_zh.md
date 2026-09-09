@@ -171,12 +171,6 @@ raw tree:           results/**, excluding inputs.json and profile_export_raw.jso
 不代表请求计数或模型质量通过验证。用于可靠对比前，应将已发出、已完成、已取消及
 出错请求数与原始 profiling 记录和 token 总数核对。GPU 板卡能耗与整机功耗估算分开报告。
 
-B200 Kimi-K3 C1 配方使用独立固定版本的 producer，兼容当前双节点 vLLM
-运行时及共享 AgentX 测量窗口接口。Slurm 任务结束后，launcher 通过共享功耗
-适配器校验整个部署的遥测，并在返回校验失败前保留诊断工件。其他 K3 并发配方
-在验证前继续使用原有 producer。C1 配方使用合成接受率并禁用 Mooncake offload；
-master 配置中的 DRAM 标签不代表实际使用了主机缓存。
-
 ### 原始输入和聚合架构
 
 [`process_agentic_result.py`](../utils/agentic/aggregation/process_agentic_result.py) 可解析当前的 `results/aiperf_artifacts` 布局，也可解析只含一个子目录的嵌套布局。它要求存在 `profile_export.jsonl`，并在存在时读取以下输入：
