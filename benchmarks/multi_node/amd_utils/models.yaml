@@ -369,7 +369,7 @@ DeepSeek-V4-Pro-AgentX:
   ep_flags: "--ep-dispatch-algorithm fake --moe-a2a-backend mori --deepep-mode normal"
   mtp_flags: "--speculative-algorithm EAGLE --speculative-eagle-topk 1"
   prefill:
-    mem_fraction_static: 0.72
+    mem_fraction_static: 0.85
     disable_radix_cache: false
     disable_cuda_graph: true
     dp:

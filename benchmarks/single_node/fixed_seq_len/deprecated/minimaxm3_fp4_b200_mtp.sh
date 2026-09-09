@@ -22,7 +22,7 @@ check_env_vars \
 
 DRAFT_MODEL="Inferact/MiniMax-M3-EAGLE3"
 
-# launch_b200-dgxc.sh rewrites MODEL to the pre-downloaded path; only download
+# launch_b200-nscale-slurm.sh rewrites MODEL to the pre-downloaded path; only download
 # the target when handed a bare HF id (b200-cw / b200-nb runners). The EAGLE3
 # draft is never pre-staged, so fetch it either way: next to the target weights
 # when MODEL is a local path, into the HF cache otherwise.

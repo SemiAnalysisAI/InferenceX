@@ -1,0 +1,224 @@
+# Source: https://github.com/Inferact/srt-slurm-sa/blob/4a870cd5bc333bf8a312fc65ca1ea82cdab9b2df/recipes/vllm/deepseek-v4-pro/GB300/agentic/agentx-v1.0.1/1p3d-pdep4-dtp8-c3-kv-nixl-mtp-flashinfer-ar-lpt512-psi1.yaml
+# Adapted from the source topology to a 1P4D concurrency-4 point for the
+# InferenceX AgentX harness; eval-only runs continue to verify real MTP output.
+name: "svf-vllm-disagg-gb300-1p4d-dep4-tp8-c4-mtp-agentic"
+
+# GB300 high-interactivity AgentX MTP3 topology: one DEP4 prefill worker
+# feeds four TP8 decode workers at concurrency 4 through NIXL.
+model:
+  path: "deepseek-v4-pro"
+  container: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-426e59f"
+  precision: "fp4"
+
+identity:
+  model:
+    repo: "deepseek-ai/DeepSeek-V4-Pro"
+  container:
+    image: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-426e59f"
+  frameworks:
+    dynamo: "1.4.0"
+
+dynamo:
+  install: true
+  wheel: "1.4.0"
+  request_plane: tcp
+
+environment:
+  DYNAMO_WHEEL_DIRS: "/srtctl-wheels"
+  HF_HUB_CACHE: "/hf_hub_cache"
+  HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
+  TRANSFORMERS_CACHE: "/hf_hub_cache"
+  VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+  VLLM_RPC_TIMEOUT: "600000"
+  VLLM_LOG_STATS_INTERVAL: "1"
+  VLLM_V2_WARMUP_MAX_NUM_SEQS: "20"
+  VLLM_SERVER_DEV_MODE: "1"
+  VLLM_USE_V2_MODEL_RUNNER: "1"
+  VLLM_ALLREDUCE_USE_SYMM_MEM: "0"
+  VLLM_ALLREDUCE_USE_FLASHINFER: "1"
+  VLLM_FLASHINFER_ALLREDUCE_BACKEND: "auto"
+  VLLM_USE_NCCL_SYMM_MEM: "0"
+  TORCH_SYMMMEM: "NVSHMEM"
+  VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
+  VLLM_DSV4_MEGA_FP8_COMBINE: "1"
+  VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "0"
+  DG_JIT_CACHE_DIR: "/tmp/dg-cache-dsv4-gb300-1p4d-{job_id}"
+  # Multi-node TP8 decode spans two GB300 nodes; match the sibling recipes'
+  # NCCL/UCX fabric settings (MNNVL/NVLS, IB HCAs).
+  UCX_MEMTYPE_CACHE: "n"
+  UCX_NET_DEVICES: "mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1"
+  UCX_TLS: "rc,cuda_copy"
+  NCCL_CUMEM_ENABLE: "1"
+  NCCL_MNNVL_ENABLE: "1"
+  NCCL_NVLS_ENABLE: "1"
+  NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
+
+slurm:
+  time_limit: "08:00:00"
+
+health_check:
+  max_attempts: 2160
+  interval_seconds: 10
+
+resources:
+  gpu_type: "gb300"
+  gpus_per_node: 4
+  het_jobs: false
+  spread_workers: false
+  prefill_nodes: 1
+  decode_nodes: 8
+  prefill_workers: 1
+  decode_workers: 4
+  gpus_per_prefill: 4
+  gpus_per_decode: 8
+
+infra:
+  etcd_nats_dedicated_node: false
+  nats_max_payload_mb: 32
+
+frontend:
+  type: dynamo
+  enable_multiple_frontends: false
+  env:
+    MODEL: "deepseek-ai/DeepSeek-V4-Pro"
+    MODEL_PREFIX: "dsv4"
+    FRAMEWORK: "dynamo-vllm"
+    PRECISION: "fp4"
+    CONC: "4"
+    DURATION: "3600"
+    KV_OFFLOADING: "none"
+    ETCD_LEASE_TTL: "120"
+    DYN_ROUTER_QUEUE_THRESHOLD: "None"
+    DYN_TOKENIZER_CACHE: "1"
+    DYN_TOKENIZER_CACHE_BYTES: "8000000000"
+    DYN_TOKENIZER: "fastokens"
+    DYN_ROUTER_SESSION_AFFINITY_TTL_SECS: "14400"
+    DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: "3600"
+  args:
+    router-mode: "kv"
+    active-decode-blocks-threshold: "None"
+    active-prefill-tokens-threshold: "None"
+    active-prefill-tokens-threshold-frac: "None"
+    tokenizer: "fastokens"
+  orchestrator_placement: first_decode
+
+backend:
+  type: vllm
+  connector: null
+  dp_launch_mode: per_node
+  # vLLM KV routing needs prefill KV events so Dynamo can select the
+  # cache-owning PDEP4 rank.
+  kv_events_config:
+    prefill: true
+  vllm_config:
+    prefill:
+      kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}}'
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      safetensors-load-strategy: "prefetch"
+      kv-cache-dtype: "fp8"
+      tensor-parallel-size: 1
+      pipeline-parallel-size: 1
+      data-parallel-size: 4
+      data-parallel-rpc-port: 13345
+      enable-cumem-allocator: true
+      enable-expert-parallel: true
+      enable-ep-weight-filter: true
+      max-model-len: 1048576
+      max-num-seqs: 64
+      max-num-batched-tokens: 8192
+      long-prefill-token-threshold: 512
+      prefill-schedule-interval: 1
+      trust-remote-code: true
+      no-enable-flashinfer-autotune: true
+      block-size: 256
+      gpu-memory-utilization: 0.92
+      no-disable-hybrid-kv-cache-manager: true
+      tokenizer-mode: "deepseek_v4"
+      attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"use_fp4_indexer_cache":true}'
+      moe-backend: "deep_gemm_amxf4_mega_moe"
+      numa-bind: true
+      numa-bind-nodes: [0, 0, 1, 1]
+      speculative-config: '{"method":"mtp","num_speculative_tokens":3}'
+      # MTP capture sizes are tokens: 64 seqs * (1 target + 3 drafts).
+      max-cudagraph-capture-size: 256
+    decode:
+      kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}}'
+      # TP8 spans two GB300 nodes; custom all-reduce is single-node only, so
+      # decode uses the FlashInfer allreduce path like the agg TP8 recipes.
+      disable-custom-all-reduce: true
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      safetensors-load-strategy: "prefetch"
+      kv-cache-dtype: "fp8"
+      tensor-parallel-size: 8
+      pipeline-parallel-size: 1
+      max-model-len: 1048576
+      max-num-seqs: 16
+      max-num-batched-tokens: 64
+      trust-remote-code: true
+      no-enable-flashinfer-autotune: true
+      block-size: 256
+      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
+      # MTP capture sizes are tokens: 16 seqs * (1 target + 3 drafts).
+      max-cudagraph-capture-size: 64
+      gpu-memory-utilization: 0.92
+      no-disable-hybrid-kv-cache-manager: true
+      tokenizer-mode: "deepseek_v4"
+      attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"use_fp4_indexer_cache":true}'
+      speculative-config: '{"method":"mtp","num_speculative_tokens":3}'
+  prefill_environment:
+    VLLM_USE_BREAKABLE_CUDAGRAPH: "0"
+
+setup_script: vllm-container-deps.sh
+
+sbatch_directives:
+  cpus-per-task: "72"
+  mem: "0"
+
+srun_options:
+  container-remap-root: ""
+
+benchmark:
+  # The AgentX client uses localhost:8000, so colocate it with the Dynamo
+  # frontend launched on the first decode node.
+  client_placement: first_decode
+  type: custom
+  use_chat_template: true
+  command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+  env:
+    INFMAX_CONTAINER_WORKSPACE: "/infmax-workspace"
+    RESULT_DIR: "/logs/agentic"
+    PORT: "8000"
+    IS_MULTINODE: "true"
+    MODEL: "deepseek-ai/DeepSeek-V4-Pro"
+    MODEL_PREFIX: "dsv4"
+    SERVED_MODEL_NAME: "deepseek-ai/DeepSeek-V4-Pro"
+    FRAMEWORK: "dynamo-vllm"
+    PRECISION: "fp4"
+    CONC: "4"
+    DURATION: "3600"
+    RUNNER_TYPE: "gb300"
+    IMAGE: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-426e59f"
+    SPEC_DECODING: "mtp"
+    DISAGG: "true"
+    OFFLOADING: "none"
+    KV_OFFLOADING: "none"
+    TP: "8"
+    PREFILL_TP: "1"
+    PREFILL_NUM_WORKERS: "1"
+    PREFILL_EP: "4"
+    DECODE_TP: "8"
+    DECODE_NUM_WORKERS: "4"
+    DECODE_EP: "1"
+    EP_SIZE: "1"
+    AIPERF_MAX_OSL: "none"
+    AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: "14400"
+    AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
+    AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
+    # Avoid concurrent readers observing a mismatched mmap data/index pair.
+    AIPERF_DATASET_MMAP_CACHE_ENABLED: "false"
+    AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
+    HF_HUB_CACHE: "/hf_hub_cache"
+    WEKA_LOADER_OVERRIDE: "semianalysis_cc_traces_weka_062126"
+    NUM_DATASET_ENTRIES: "393"
+    HF_WEKA_DATASET: "semianalysisai/cc-traces-weka-062126"
+    PUBLIC_DATASET: "semianalysis_cc_traces_weka_062126"

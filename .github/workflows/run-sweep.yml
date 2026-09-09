@@ -89,7 +89,7 @@ jobs:
                   fi
 
             - name: Checkout code
-              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                   fetch-depth: 0
 
@@ -109,7 +109,7 @@ jobs:
                   ALL_EVALS: ${{ contains(github.event.pull_request.labels.*.name, 'all-evals') }}
                   EVALS_ONLY: ${{ contains(github.event.pull_request.labels.*.name, 'evals-only') }}
               run: |
-                  pip install pydantic pyyaml
+                  pip install "pydantic>=2" pyyaml
                   CMD=(
                       python3 utils/validate_perf_changelog.py
                       --changelog-file perf-changelog.yaml
@@ -149,7 +149,7 @@ jobs:
             skip-pr-sweep: ${{ steps.gate.outputs.skip-pr-sweep }}
         steps:
             - name: Checkout code
-              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
             - name: Check for reusable sweep authorization
               id: gate
@@ -230,17 +230,20 @@ jobs:
             reuse-source-head-sha: ${{ steps.setup.outputs.reuse-source-head-sha }}
         steps:
             - name: Checkout code
-              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                   fetch-depth: 0
 
-            - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+            - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
             - name: Classify priority criteria
               id: classify
-              if: vars.PRIORITY_SCHEDULER_ENABLED == 'true'
+              if: >-
+                  vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
+                  github.event_name == 'pull_request'
               continue-on-error: true
-              uses: anthropics/claude-code-action@12531344451323133b0493233c759991ac61da12 # v1.0.174
+              uses: anthropics/claude-code-action@0d0e0876d3eaa933f45dc692f7a4312c83caf36f # v1.0.218
               with:
+                  github_token: ${{ github.token }}
                   anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
                   track_progress: false
                   settings: |
@@ -251,11 +254,7 @@ jobs:
                       --allowedTools "Read,Glob,Grep,Bash(git diff:*)"
                       --json-schema '{"type":"object","properties":{"criteria":{"type":"array","items":{"type":"string","enum":["multi-node","agentic","eval-only","fp4","mtp","eagle","eagle3","sglang","vllm","dynamo-sglang","dynamo-vllm","glm5","glm5.1","kimik2.5","kimik3","dsv4","minimaxm3","qwen3.5","dsr1","checklist-complete","patchwork"]},"uniqueItems":true},"reason":{"type":"string"}},"required":["criteria","reason"]}'
                   prompt: |
-                      Inspect this Actions run's change range.
-
-                      - For a pull request, compare the head against its base branch.
-                      - For a push, compare `${{ github.event.before }}` to `${{ github.sha }}`.
-                      - Do not return `checklist-complete` for a push: it is PR-only.
+                      Inspect this pull request's diff against its base branch.
 
                       Return every matching priority criterion:
 
@@ -411,6 +410,7 @@ jobs:
         secrets: inherit
         with:
             exp-name: ${{ matrix.config.exp-name }}
+            recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             isl: ${{ matrix.config.isl }}
             osl: ${{ matrix.config.osl }}
             max-model-len: ${{ matrix.config.max-model-len }}
@@ -458,6 +458,7 @@ jobs:
             osl: ${{ matrix.config.osl }}
             max-model-len: ${{ matrix.config.max-model-len }}
             runner: ${{ matrix.config.runner }}
+            node-count: ${{ matrix.config.node-count }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
@@ -469,6 +470,7 @@ jobs:
             router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
             kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
             exp-name: ${{ matrix.config.exp-name }}
+            recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             conc-list: ${{ toJson(matrix.config.conc) }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
@@ -533,6 +535,7 @@ jobs:
         secrets: inherit
         with: &single-node-inputs
             exp-name: ${{ matrix.config.exp-name }}
+            recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             isl: ${{ matrix.config.isl }}
             osl: ${{ matrix.config.osl }}
             max-model-len: ${{ matrix.config.max-model-len }}
@@ -597,6 +600,7 @@ jobs:
         secrets: inherit
         with:
             exp-name: ${{ matrix.config.exp-name }}
+            recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             runner: ${{ matrix.config.runner }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
@@ -648,10 +652,12 @@ jobs:
         secrets: inherit
         with:
             exp-name: ${{ matrix.config.exp-name }}
+            recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             isl: '0'
             osl: '0'
             max-model-len: '0'
             runner: ${{ matrix.config.runner }}
+            node-count: ${{ matrix.config.node-count }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
@@ -713,6 +719,7 @@ jobs:
         secrets: inherit
         with:
             exp-name: ${{ matrix.config.exp-name }}
+            recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             isl: ${{ matrix.config.isl }}
             osl: ${{ matrix.config.osl }}
             max-model-len: ${{ matrix.config.max-model-len }}
@@ -762,6 +769,7 @@ jobs:
         secrets: inherit
         with:
             exp-name: ${{ matrix.config.exp-name }}
+            recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             runner: ${{ matrix.config.runner }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
@@ -814,10 +822,12 @@ jobs:
         secrets: inherit
         with:
             exp-name: ${{ matrix.config.exp-name }}
+            recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             isl: ${{ matrix.config.isl }}
             osl: ${{ matrix.config.osl }}
             max-model-len: ${{ matrix.config.max-model-len }}
             runner: ${{ matrix.config.runner }}
+            node-count: ${{ matrix.config.node-count }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
@@ -853,12 +863,12 @@ jobs:
             eval-only: true
             eval-conc: ${{ matrix.config['eval-all-concs'] && join(matrix.config.conc, ' ') || matrix.config['eval-conc'] }}
 
-    # Multi-node agentic (SWE-bench) eval rows carry the agentic input shape,
-    # so they are dispatched with sweep-multi-node-agentic's inputs rather
-    # than sweep-multi-node-evals' fixed-seq-len inputs (isl/osl/max-model-len,
-    # which agentic rows don't have). SWE-bench doesn't support batched
-    # concurrencies (unlike lm-eval), so eval-conc is always a single value,
-    # never the joined-list form sweep-multi-node-evals uses.
+    # Multi-node agentic GSM8K eval rows carry the agentic input shape, so
+    # they are dispatched with sweep-multi-node-agentic's inputs rather than
+    # sweep-multi-node-evals' fixed-seq-len inputs (isl/osl/max-model-len,
+    # which agentic rows don't have). Agentic selection uses one highest
+    # eval-conc per topology; fixed-sequence --all-evals rows may instead pass
+    # a joined concurrency list to lm-eval.
     sweep-multi-node-agentic-evals:
         needs: [setup, canary-select, canary-sweep]
         if: >-
@@ -879,10 +889,12 @@ jobs:
         secrets: inherit
         with:
             exp-name: ${{ matrix.config.exp-name }}
+            recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             isl: '0'
             osl: '0'
             max-model-len: '0'
             runner: ${{ matrix.config.runner }}
+            node-count: ${{ matrix.config.node-count }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
@@ -893,7 +905,7 @@ jobs:
             precision: ${{ matrix.config.precision }}
             router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
             kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
-            conc-list: ${{ toJson(matrix.config.conc) }}
+            conc-list: ${{ format('[{0}]', matrix.config['eval-conc']) }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
             prefill-hardware: ${{ matrix.config.prefill.hardware }}
@@ -990,7 +1002,7 @@ jobs:
             GITHUB_TOKEN: ${{ secrets.REPO_PAT }}
 
         steps:
-            - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                   token: ${{ secrets.REPO_PAT }}
                   fetch-depth: 0
@@ -1028,7 +1040,7 @@ jobs:
             DATABASE_URL: ${{ secrets.NEON_PROD_RO_URL }}
 
         steps:
-            - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
             - name: Download results artifacts
               uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1

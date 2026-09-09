@@ -110,6 +110,22 @@ def metric_entry(server_metrics: dict, name: str) -> dict | None:
     return entry if isinstance(entry, dict) else None
 
 
+def first_metric_name(server_metrics: dict, *names: str) -> str:
+    """Return the first metric name present in an AIPerf export."""
+    metrics = server_metrics.get("metrics") or {}
+    return next((name for name in names if name in metrics), names[0])
+
+
+def atom_metric_names(suffix: str) -> tuple[str, str]:
+    """Return direct ATOM and Atomesh-normalized metric names."""
+    return f"atom:{suffix}", f"atom_{suffix}"
+
+
+def has_atom_metrics(server_metrics: dict) -> bool:
+    metrics = server_metrics.get("metrics") or {}
+    return any(name.startswith(("atom:", "atom_")) for name in metrics)
+
+
 def all_series(entry: dict | None) -> list[dict]:
     if entry is None:
         return []
@@ -129,7 +145,9 @@ def series_with_label(
 
 
 def timeseries_from_series(
-    series: dict | None, t0_ns: int | None, value_key_priority=("avg", "rate", "total", "max")
+    series: dict | None,
+    t0_ns: int | None,
+    value_key_priority=("avg", "rate", "total", "max"),
 ) -> tuple[list[float], list[float]]:
     """Extract (relative-time-s, value) pairs from a series' timeslices."""
     if series is None or t0_ns is None:
@@ -153,7 +171,9 @@ def timeseries_from_series(
 
 
 def aggregate_timeseries(
-    server_metrics: dict, name: str, t0_ns: int | None,
+    server_metrics: dict,
+    name: str,
+    t0_ns: int | None,
     *,
     aggregator=sum,
     value_key_priority=("avg", "rate", "total", "max"),
@@ -205,8 +225,13 @@ def rolling_window(n: int, max_window: int = 50) -> int:
 
 
 def panel_kv_cache_usage(ax, server_metrics: dict, t0_ns: int | None) -> None:
+    gpu_metric = first_metric_name(
+        server_metrics,
+        "vllm:kv_cache_usage_perc",
+        *atom_metric_names("kv_cache_usage_ratio"),
+    )
     times, values = aggregate_timeseries(
-        server_metrics, "vllm:kv_cache_usage_perc", t0_ns, aggregator=max
+        server_metrics, gpu_metric, t0_ns, aggregator=max
     )
     cpu_times, cpu_values = aggregate_timeseries(
         server_metrics, "vllm:cpu_kv_cache_usage_perc", t0_ns, aggregator=max
@@ -242,12 +267,18 @@ def panel_kv_cache_usage(ax, server_metrics: dict, t0_ns: int | None) -> None:
 
 
 def panel_queue_depth(ax, server_metrics: dict, t0_ns: int | None) -> None:
-    rt, rv = aggregate_timeseries(
-        server_metrics, "vllm:num_requests_running", t0_ns, aggregator=max
+    running_metric = first_metric_name(
+        server_metrics,
+        "vllm:num_requests_running",
+        *atom_metric_names("requests_running"),
     )
-    wt, wv = aggregate_timeseries(
-        server_metrics, "vllm:num_requests_waiting", t0_ns, aggregator=max
+    waiting_metric = first_metric_name(
+        server_metrics,
+        "vllm:num_requests_waiting",
+        *atom_metric_names("requests_waiting"),
     )
+    rt, rv = aggregate_timeseries(server_metrics, running_metric, t0_ns, aggregator=max)
+    wt, wv = aggregate_timeseries(server_metrics, waiting_metric, t0_ns, aggregator=max)
     if rt:
         win = rolling_window(len(rv))
         running = rolling_average(rv, win) if win > 1 else rv
@@ -298,16 +329,35 @@ def _hit_rate_intervals(
 
 
 def panel_prefix_cache_hit_rate(ax, server_metrics: dict, t0_ns: int | None) -> None:
-    gpu_t, gpu_r = _hit_rate_intervals(
+    atom_metrics = has_atom_metrics(server_metrics)
+    hits_metric = first_metric_name(
         server_metrics,
         "vllm:prefix_cache_hits",
+        *atom_metric_names("prefix_cache_cached_tokens"),
+    )
+    queries_metric = first_metric_name(
+        server_metrics,
         "vllm:prefix_cache_queries",
+        *atom_metric_names("prefix_cache_full_tokens"),
+    )
+    gpu_t, gpu_r = _hit_rate_intervals(
+        server_metrics,
+        hits_metric,
+        queries_metric,
         t0_ns,
     )
+    if atom_metrics:
+        external_hits_metric = first_metric_name(
+            server_metrics, *atom_metric_names("lmcache_loaded_tokens")
+        )
+        external_queries_metric = queries_metric
+    else:
+        external_hits_metric = "vllm:external_prefix_cache_hits"
+        external_queries_metric = "vllm:external_prefix_cache_queries"
     ext_t, ext_r = _hit_rate_intervals(
         server_metrics,
-        "vllm:external_prefix_cache_hits",
-        "vllm:external_prefix_cache_queries",
+        external_hits_metric,
+        external_queries_metric,
         t0_ns,
     )
     if gpu_t:
@@ -358,11 +408,21 @@ def panel_prefix_cache_hit_rate(ax, server_metrics: dict, t0_ns: int | None) -> 
 
 
 def panel_throughput(ax, server_metrics: dict, t0_ns: int | None) -> None:
+    generation_metric = first_metric_name(
+        server_metrics,
+        "vllm:generation_tokens",
+        *atom_metric_names("generation_tokens"),
+    )
+    prompt_metric = first_metric_name(
+        server_metrics,
+        "vllm:prompt_tokens",
+        *atom_metric_names("prompt_tokens"),
+    )
     gen_t, gen_v = aggregate_timeseries(
-        server_metrics, "vllm:generation_tokens", t0_ns, value_key_priority=("rate",)
+        server_metrics, generation_metric, t0_ns, value_key_priority=("rate",)
     )
     prompt_t, prompt_v = aggregate_timeseries(
-        server_metrics, "vllm:prompt_tokens", t0_ns, value_key_priority=("rate",)
+        server_metrics, prompt_metric, t0_ns, value_key_priority=("rate",)
     )
     if gen_t and prompt_t and len(gen_t) == len(prompt_t):
         total = [g + p for g, p in zip(gen_v, prompt_v)]
@@ -396,7 +456,9 @@ def panel_throughput(ax, server_metrics: dict, t0_ns: int | None) -> None:
                 running += total[i] * width
                 elapsed = t - t0 if t > t0 else 1e-9
                 cumulative_total.append(running / elapsed if elapsed > 0 else 0.0)
-            ax.plot(gen_t, cumulative_total, "red", linewidth=2, label="Total Running Avg")
+            ax.plot(
+                gen_t, cumulative_total, "red", linewidth=2, label="Total Running Avg"
+            )
         ax.legend(fontsize=8)
     ax.set_xlabel("Time (s)")
     ax.set_ylabel("Tokens/sec")
@@ -404,18 +466,27 @@ def panel_throughput(ax, server_metrics: dict, t0_ns: int | None) -> None:
     ax.grid(True, alpha=0.3)
 
 
-def panel_kv_offload_transfer_rate(
-    ax, server_metrics: dict, t0_ns: int | None
-) -> None:
-    g2c_t, g2c_v = aggregate_timeseries(
+def panel_kv_offload_transfer_rate(ax, server_metrics: dict, t0_ns: int | None) -> None:
+    atom_metrics = has_atom_metrics(server_metrics)
+    gpu_to_cpu_metric = first_metric_name(
         server_metrics,
         "vllm:kv_offload_bytes_gpu_to_cpu",
+        *atom_metric_names("lmcache_saved_tokens"),
+    )
+    cpu_to_gpu_metric = first_metric_name(
+        server_metrics,
+        "vllm:kv_offload_bytes_cpu_to_gpu",
+        *atom_metric_names("lmcache_loaded_tokens"),
+    )
+    g2c_t, g2c_v = aggregate_timeseries(
+        server_metrics,
+        gpu_to_cpu_metric,
         t0_ns,
         value_key_priority=("rate",),
     )
     c2g_t, c2g_v = aggregate_timeseries(
         server_metrics,
-        "vllm:kv_offload_bytes_cpu_to_gpu",
+        cpu_to_gpu_metric,
         t0_ns,
         value_key_priority=("rate",),
     )
@@ -424,36 +495,52 @@ def panel_kv_offload_transfer_rate(
     )
     if has_data:
         if g2c_t:
-            mb = [v / 1e6 for v in g2c_v]
-            ax.scatter(g2c_t, mb, alpha=0.15, s=3, c="blue")
-            win = rolling_window(len(mb))
+            scaled = [v / 1e6 for v in g2c_v]
+            ax.scatter(g2c_t, scaled, alpha=0.15, s=3, c="blue")
+            win = rolling_window(len(scaled))
             if win > 1:
                 ax.plot(
                     g2c_t,
-                    rolling_average(mb, win),
+                    rolling_average(scaled, win),
                     "b-",
                     linewidth=1.5,
                     label=f"GPU→CPU (avg n={win})",
                 )
             else:
-                ax.plot(g2c_t, mb, "b-", linewidth=1, alpha=0.8, label="GPU→CPU")
+                ax.plot(
+                    g2c_t,
+                    scaled,
+                    "b-",
+                    linewidth=1,
+                    alpha=0.8,
+                    label="GPU→CPU",
+                )
         if c2g_t:
-            mb = [v / 1e6 for v in c2g_v]
-            ax.scatter(c2g_t, mb, alpha=0.15, s=3, c="red")
-            win = rolling_window(len(mb))
+            scaled = [v / 1e6 for v in c2g_v]
+            ax.scatter(c2g_t, scaled, alpha=0.15, s=3, c="red")
+            win = rolling_window(len(scaled))
             if win > 1:
                 ax.plot(
                     c2g_t,
-                    rolling_average(mb, win),
+                    rolling_average(scaled, win),
                     "r-",
                     linewidth=1.5,
                     label=f"CPU→GPU (avg n={win})",
                 )
             else:
-                ax.plot(c2g_t, mb, "r-", linewidth=1, alpha=0.8, label="CPU→GPU")
+                ax.plot(
+                    c2g_t,
+                    scaled,
+                    "r-",
+                    linewidth=1,
+                    alpha=0.8,
+                    label="CPU→GPU",
+                )
         ax.legend(fontsize=8)
     ax.set_xlabel("Time (s)")
-    ax.set_ylabel("Transfer Rate (MB/s)")
+    ax.set_ylabel(
+        "Transfer Rate (M tokens/s)" if atom_metrics else "Transfer Rate (MB/s)"
+    )
     ax.set_title("KV Offload Transfer Rate")
     ax.grid(True, alpha=0.3)
 
@@ -467,14 +554,53 @@ def _prompt_token_source_series(
     return timeseries_from_series(s, t0_ns, value_key_priority=("total",))
 
 
-def panel_prefill_source_breakdown(
-    ax, server_metrics: dict, t0_ns: int | None
-) -> None:
-    c_t, c_v = _prompt_token_source_series(server_metrics, "local_compute", t0_ns)
-    h_t, h_v = _prompt_token_source_series(server_metrics, "local_cache_hit", t0_ns)
-    e_t, e_v = _prompt_token_source_series(
-        server_metrics, "external_kv_transfer", t0_ns
-    )
+def panel_prefill_source_breakdown(ax, server_metrics: dict, t0_ns: int | None) -> None:
+    if has_atom_metrics(server_metrics):
+        full_metric = first_metric_name(
+            server_metrics, *atom_metric_names("prefix_cache_full_tokens")
+        )
+        cached_metric = first_metric_name(
+            server_metrics, *atom_metric_names("prefix_cache_cached_tokens")
+        )
+        loaded_metric = first_metric_name(
+            server_metrics, *atom_metric_names("lmcache_loaded_tokens")
+        )
+        full_t, full_v = aggregate_timeseries(
+            server_metrics,
+            full_metric,
+            t0_ns,
+            value_key_priority=("total",),
+        )
+        cached_t, cached_v = aggregate_timeseries(
+            server_metrics,
+            cached_metric,
+            t0_ns,
+            value_key_priority=("total",),
+        )
+        e_t, e_v = aggregate_timeseries(
+            server_metrics,
+            loaded_metric,
+            t0_ns,
+            value_key_priority=("total",),
+        )
+        all_times = sorted(set(full_t) | set(cached_t) | set(e_t))
+        full_by_t = dict(zip(full_t, full_v))
+        cached_by_t = dict(zip(cached_t, cached_v))
+        ext_by_t = dict(zip(e_t, e_v))
+        c_t = all_times
+        c_v = [
+            max(0.0, full_by_t.get(t, 0.0) - cached_by_t.get(t, 0.0)) for t in all_times
+        ]
+        h_t = all_times
+        h_v = [
+            max(0.0, cached_by_t.get(t, 0.0) - ext_by_t.get(t, 0.0)) for t in all_times
+        ]
+    else:
+        c_t, c_v = _prompt_token_source_series(server_metrics, "local_compute", t0_ns)
+        h_t, h_v = _prompt_token_source_series(server_metrics, "local_cache_hit", t0_ns)
+        e_t, e_v = _prompt_token_source_series(
+            server_metrics, "external_kv_transfer", t0_ns
+        )
     # Align timestamps: use the union of all sample timestamps.
     if not (c_t or h_t or e_t):
         ax.set_xlabel("Time (s)")
@@ -546,6 +672,7 @@ def panel_kv_offload_cumulative(
     title: str,
     color: str,
     t0_ns: int | None,
+    unit: str = "bytes",
 ) -> None:
     times, values = aggregate_timeseries(
         server_metrics, metric_name, t0_ns, value_key_priority=("total",)
@@ -555,11 +682,15 @@ def panel_kv_offload_cumulative(
         running = 0.0
         for v in values:
             running += v
-            cumulative.append(running / 1e9)  # GB
+            cumulative.append(running / (1e6 if unit == "tokens" else 1e9))
         ax.plot(times, cumulative, f"{color}-", linewidth=1.5)
         ax.fill_between(times, cumulative, alpha=0.2, color=color)
     ax.set_xlabel("Time (s)")
-    ax.set_ylabel("Cumulative Transfer (GB)")
+    ax.set_ylabel(
+        "Cumulative Transfer (M tokens)"
+        if unit == "tokens"
+        else "Cumulative Transfer (GB)"
+    )
     ax.set_title(title)
     ax.grid(True, alpha=0.3)
 
@@ -597,8 +728,13 @@ def panel_per_record_metric(
 
 
 def panel_preemptions(ax, server_metrics: dict, t0_ns: int | None) -> None:
+    metric_name = first_metric_name(
+        server_metrics,
+        "vllm:num_preemptions",
+        *atom_metric_names("preemptions"),
+    )
     times, values = aggregate_timeseries(
-        server_metrics, "vllm:num_preemptions", t0_ns, value_key_priority=("total",)
+        server_metrics, metric_name, t0_ns, value_key_priority=("total",)
     )
     if not times:
         ax.set_xlabel("Time (s)")
@@ -708,8 +844,9 @@ def main(argv: list[str]) -> int:
         # Interactivity: tokens/sec from per-token latency (ms).
         interactivities.append(1000.0 / itl if itl and itl > 0 else 0.0)
 
+    atom_metrics = has_atom_metrics(server_metrics)
     fig, axes = plt.subplots(6, 2, figsize=(14, 24))
-    fig.suptitle("vLLM Server Metrics During Benchmark", fontsize=14)
+    fig.suptitle("LLM Server Metrics During Benchmark", fontsize=14)
 
     panel_kv_cache_usage(axes[0, 0], server_metrics, t0_ns)
     panel_queue_depth(axes[0, 1], server_metrics, t0_ns)
@@ -720,18 +857,30 @@ def main(argv: list[str]) -> int:
     panel_kv_offload_cumulative(
         axes[3, 0],
         server_metrics,
-        "vllm:kv_offload_bytes_gpu_to_cpu",
+        (
+            first_metric_name(server_metrics, *atom_metric_names("lmcache_saved_tokens"))
+            if atom_metrics
+            else "vllm:kv_offload_bytes_gpu_to_cpu"
+        ),
         "KV Offload: GPU → CPU (Cumulative)",
         "b",
         t0_ns,
+        unit="tokens" if atom_metrics else "bytes",
     )
     panel_kv_offload_cumulative(
         axes[3, 1],
         server_metrics,
-        "vllm:kv_offload_bytes_cpu_to_gpu",
+        (
+            first_metric_name(
+                server_metrics, *atom_metric_names("lmcache_loaded_tokens")
+            )
+            if atom_metrics
+            else "vllm:kv_offload_bytes_cpu_to_gpu"
+        ),
         "KV Offload: CPU → GPU (Cumulative)",
         "r",
         t0_ns,
+        unit="tokens" if atom_metrics else "bytes",
     )
     panel_per_record_metric(
         axes[4, 0],

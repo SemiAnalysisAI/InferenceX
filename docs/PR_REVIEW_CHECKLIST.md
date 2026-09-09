@@ -28,6 +28,7 @@ As a PR reviewer and CODEOWNER, I have reviewed this and have:
 - [ ] Verified that every single-node vLLM/SGLang recipe in this PR is documented in the official [vLLM recipes](https://recipes.vllm.ai/) and/or the [SGLang cookbook](https://docs.sglang.io/cookbook/intro):
   - [ ] I linked the corresponding upstream PR in the [vLLM recipe repo](https://github.com/vllm-project/recipes) or [SGLang repo](https://github.com/sgl-project/sglang/tree/main/docs_new) and verified that it is **MERGED** before this InferenceX PR merges. An opened, draft, or closed-without-merge upstream PR does not satisfy this requirement. If the matching recipe was already published, I linked the published recipe/cookbook page in the additional detail section below.
 - [ ] Verified that this PR does not patch the inference engine or serving stack — the pinned image must run as shipped. This covers .patch files / git apply / patch, inline patches embedded in benchmark scripts (e.g. a python3/sed heredoc that rewrites installed engine sources before serving), in-place edits of site-packages, monkey-patching, overwriting container files, and installing forked/rebuilt engine wheels on top of the pinned image. The only exception is a patch covered by a filled-out waiver at [docs/waiver/](https://github.com/SemiAnalysisAI/InferenceX/tree/main/docs/waiver)`<PR_NUMBER>.md` — named after the PR that introduces the patch and filed in that same PR, stating what is patched, why the unmodified upstream image cannot run this benchmark, the upstream PR/issue link, and the removal plan — which I have linked below in the additional detail section.
+- [ ] If this PR uses `append-only: true`, verified that it only adds generated points or recipe variants inside a selected existing config/scenario and existing same-image visual curve: every previously generated point remains present with the same recipe, no prior point is removed or rerun, and every benchmark-affecting change in the complete diff can affect only the corresponding newly appended points (never an existing point), regardless of which file contains it.
 - [ ] If any of the above criteria cannot reasonably be satisfied, I have provided additional reasoning below.
 
 ### Additional detail section:
@@ -42,4 +43,3 @@ Signed: `FILL_IN_GITHUB_USERNAME`
 
 
 <img width="569" height="632" alt="image" src="https://github.com/user-attachments/assets/491d9763-ab09-4734-b0f1-39eefe1ab5c4" />
-

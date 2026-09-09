@@ -1,7 +1,8 @@
 name: "svf-vllm-agg-gb300-tp8-mtp-agentic"
 
-# Validated GB300 AgentX aggregate topology: one TP8 worker spans two
-# four-GPU nodes and serves both prefill and decode at concurrency 1.
+# GB300 AgentX aggregate topology: one TP8 worker spans two four-GPU
+# nodes and serves both prefill and decode at concurrency 4. Keep at least
+# 16 sequence slots and otherwise size the scheduler at 4x concurrency.
 
 model:
   path: "deepseek-v4-pro"
@@ -77,7 +78,7 @@ backend:
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     VLLM_RPC_TIMEOUT: "600000"
     VLLM_LOG_STATS_INTERVAL: "1"
-    VLLM_V2_WARMUP_MAX_NUM_SEQS: "32"
+    VLLM_V2_WARMUP_MAX_NUM_SEQS: "16"
     TILELANG_CLEANUP_TEMP_FILES: "1"
     VLLM_USE_NCCL_SYMM_MEM: "0"
     TORCH_SYMMMEM: "NVSHMEM"
@@ -110,18 +111,16 @@ backend:
       tensor-parallel-size: 8
       pipeline-parallel-size: 1
       disable-custom-all-reduce: true
-      enable-cumem-allocator: true
       attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"use_fp4_indexer_cache":true}'
       max-model-len: 1048576
-      max-num-seqs: 32
+      max-num-seqs: 16
       max-num-batched-tokens: 8192
       trust-remote-code: true
       no-enable-flashinfer-autotune: true
       block-size: 256
-      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
-      max-cudagraph-capture-size: 128
-      speculative-config: '{"method":"mtp","num_speculative_tokens":3,"rejection_sample_method":"synthetic","synthetic_acceptance_length":2.49}'
-      gpu-memory-utilization: 0.90
+      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64],"mode":0}'
+      speculative-config: '{"method":"mtp","num_speculative_tokens":3}'
+      gpu-memory-utilization: 0.94
       stream-interval: 10
       no-disable-hybrid-kv-cache-manager: true
       tokenizer-mode: "deepseek_v4"

@@ -113,6 +113,7 @@ def _entry_from_criteria(
             )
             else ""
         ),
+        "node-count": entry.get("node-count", 1),
     }
 
 
@@ -140,6 +141,15 @@ def calculate_priority(
     adjustments = policy["adjustments"]
     score = _decimal(policy["base-score"])
     score += _decimal(adjustments.get("event", {}).get(context.event_name, 0))
+
+    node_count = entry.get("node-count", 1)
+    if (
+        not isinstance(node_count, int)
+        or isinstance(node_count, bool)
+        or node_count < 1
+    ):
+        raise ValueError(f"node-count must be a positive integer, got {node_count!r}")
+    score += _decimal(adjustments.get("additional-node", 0)) * (node_count - 1)
 
     if entry.get("prefill") is not None:
         score += _decimal(adjustments.get("multi-node", 0))

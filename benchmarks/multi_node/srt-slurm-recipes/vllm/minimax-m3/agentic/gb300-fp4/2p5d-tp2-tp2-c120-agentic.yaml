@@ -1,0 +1,163 @@
+name: "minimax-m3-vllm-disagg-gb300-2p5d-tp2-tp2-c120-fp4-agentic"
+
+model:
+  path: "nvidia/MiniMax-M3-NVFP4"
+  container: "vllm/vllm-openai:nightly-5e35a6f4f9bbc217c599692157ca985c894373f7"
+  precision: "fp4"
+
+identity:
+  model:
+    repo: "nvidia/MiniMax-M3-NVFP4"
+  container:
+    image: "vllm/vllm-openai:nightly-5e35a6f4f9bbc217c599692157ca985c894373f7"
+  frameworks:
+    dynamo: "1.4.0.dev20260730"
+
+dynamo:
+  version: "1.4.0.dev20260730"
+  install: true
+
+health_check:
+  max_attempts: 2160
+  interval_seconds: 10
+
+resources:
+  gpu_type: "gb300"
+  gpus_per_node: 4
+  het_jobs: false
+  spread_workers: true
+  prefill_nodes: 2
+  decode_nodes: 5
+  prefill_workers: 2
+  decode_workers: 5
+  gpus_per_prefill: 2
+  gpus_per_decode: 2
+
+infra:
+  etcd_nats_dedicated_node: false
+  nats_max_payload_mb: 32
+
+environment:
+  PYTHONHASHSEED: "0"
+
+frontend:
+  type: dynamo
+  enable_multiple_frontends: true
+  num_additional_frontends: 4
+  nginx_session_affinity: true
+  nginx_session_affinity_header: "X-Dynamo-Session-ID"
+  args:
+    router-mode: "least-loaded"
+    router-session-affinity-ttl-secs: 1800
+  env:
+    DYN_TOKENIZER: "fastokens"
+    DYN_TOKENIZER_CACHE_BYTES: "8589934592"
+    DYN_TCP_CONNECT_TIMEOUT: "120"
+
+backend:
+  type: vllm
+  connector: null
+  dp_launch_mode: per_node
+  mooncake_kv_store:
+    env:
+      MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
+      MC_STORE_CLIENT_METRIC: "1"
+      MC_STORE_CLIENT_METRIC_INTERVAL: "5"
+      MC_TE_METRIC: "0"
+    store_config:
+      metadata_server: "P2PHANDSHAKE"
+      global_segment_size: "200GB"
+      local_buffer_size: "4GB"
+      protocol: "rdma"
+      device_name: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
+      mode: "embedded"
+      enable_offload: true
+  vllm_config:
+    prefill:
+      served-model-name: "nvidia/MiniMax-M3-NVFP4"
+      kv-cache-dtype: "fp8"
+      block-size: 128
+      trust-remote-code: true
+      enable-prefix-caching: true
+      language-model-only: true
+      no-enable-flashinfer-autotune: true
+      reasoning-parser: "minimax_m3"
+      dyn-tool-call-parser: "minimax_m3"
+      dyn-reasoning-parser: "minimax_m3"
+      max-cudagraph-capture-size: 512
+      max-num-batched-tokens: 16384
+      stream-interval: 20
+      gpu-memory-utilization: 0.9
+      tensor-parallel-size: 2
+      enable-expert-parallel: false
+      attention-config: '{"backend":"FLASHINFER","use_trtllm_attention":true,"indexer_kv_dtype":"fp8"}'
+      speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN","rejection_sample_method":"synthetic","synthetic_acceptance_length":2.78}'
+      kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_connector_extra_config":{"backends":["UCX"],"enforce_handshake_compat":false,"read_validation_timeout":30.0}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"lookup_async":true}}]}}'
+      enable-cumem-allocator: true
+    decode:
+      served-model-name: "nvidia/MiniMax-M3-NVFP4"
+      kv-cache-dtype: "fp8"
+      block-size: 128
+      trust-remote-code: true
+      enable-prefix-caching: true
+      language-model-only: true
+      no-enable-flashinfer-autotune: true
+      reasoning-parser: "minimax_m3"
+      dyn-tool-call-parser: "minimax_m3"
+      dyn-reasoning-parser: "minimax_m3"
+      dyn-default-thinking-mode: "enabled"
+      max-cudagraph-capture-size: 512
+      max-num-batched-tokens: 16384
+      max-num-seqs: 1024
+      stream-interval: 20
+      gpu-memory-utilization: 0.9
+      tensor-parallel-size: 2
+      enable-expert-parallel: false
+      attention-config: '{"backend":"FLASHINFER","use_trtllm_attention":true,"indexer_kv_dtype":"fp8","minimax_m3_msa_decode_backend":"cutlass"}'
+      speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN","rejection_sample_method":"synthetic","synthetic_acceptance_length":2.78}'
+      kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_connector_extra_config":{"backends":["UCX"],"enforce_handshake_compat":false,"read_validation_timeout":30.0}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_consumer","kv_connector_extra_config":{"enable_lookup":false}}]}}'
+      enable-cumem-allocator: true
+  prefill_environment: &worker_environment
+    HF_HUB_CACHE: "/hf_hub_cache"
+    HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
+    TRANSFORMERS_CACHE: "/hf_hub_cache"
+    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+    DYN_TCP_CONNECT_TIMEOUT: "120"
+    VLLM_FLOAT32_MATMUL_PRECISION: "high"
+    VLLM_FLASHINFER_ALLREDUCE_BACKEND: "trtllm"
+    VLLM_USE_NCCL_SYMM_MEM: "0"
+    VLLM_ALLREDUCE_USE_SYMM_MEM: "0"
+    VLLM_MOONCAKE_LOAD_RECV_THREADS: "20"
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_CUDA_IPC_ENABLE_MNNVL: "y"
+    UCX_MODULE_DIR: "/usr/local/lib/python3.12/dist-packages/nixl_cu13.libs/ucx"
+    UCX_RNDV_PIPELINE_ERROR_HANDLING: "y"
+    NCCL_CUMEM_ENABLE: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_NVLS_ENABLE: "1"
+    NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
+  decode_environment:
+    <<: *worker_environment
+    VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl"
+
+sbatch_directives:
+  cpus-per-task: "72"
+  mem: "0"
+
+srun_options:
+  container-remap-root: ""
+
+benchmark:
+  type: custom
+  command: "bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh"
+  env:
+    INFMAX_CONTAINER_WORKSPACE: "/infmax-workspace"
+    RESULT_DIR: "/logs/agentic"
+    PORT: "8000"
+    IS_MULTINODE: "true"
+    AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
+    AIPERF_EXTRA_INPUTS: "thinking:true"
+    AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
+    AIPERF_SERVER_METRICS_COLLECTION_INTERVAL: "1.0"
+    HF_HUB_CACHE: "/hf_hub_cache"
+    WEKA_LOADER_OVERRIDE: "semianalysis_cc_traces_weka_062126"

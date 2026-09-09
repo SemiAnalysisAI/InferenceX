@@ -131,6 +131,14 @@ jq -r '
 
 Confirm the intended image, model, hardware/cluster label, single- versus multi-node topology, input/output lengths, concurrency, TP/EP, decoding mode, and eval flags. Empty output is not a successful preflight.
 
+Every generated multi-node row must contain a strict positive integer
+`node-count`. When node-slot scheduling is enabled, the reusable workflow
+publishes that value as the `nodes:N` request label; missing or invalid demand
+fails matrix validation instead of silently entering the one-node queue.
+Direct priority-scheduled workflows that do not use the master-config generator
+must publish their own exact demand (for example, CollectiveX uses each shard's
+generated `nodes` value).
+
 Eval switches are exact:
 
 - Default: throughput entries plus the selected default fixed-sequence eval subset.
@@ -264,6 +272,8 @@ Watch the first canary or matrix failure, then classify it before rerunning:
 - **Runner/infrastructure flake:** runner loss, transient network/storage/service failure, or unrelated cancellation. Preserve logs and rerun only after confirming the change itself is not responsible.
 - **Policy/gate failure:** conflicting labels, invalid changelog, missing authorization, merge conflict, or ineligible artifacts. Correct the gate. GPU reruns will not fix it.
 - **Superseded run:** a later commit or recognized label change cancelled it through workflow concurrency. Monitor the replacement run rather than reviving stale evidence.
+
+The [`PR Review` workflow](../.github/workflows/claude-pr-review.yml) installs a pinned official Claude Code npm package and checks `claude --version` before passing its executable path to the review action. An installation or startup failure means the review did not run; it is not a review finding or a successful review. Check the installation step before retrying.
 
 ### Rerun safely
 

@@ -1,0 +1,193 @@
+name: disagg-gb200-1p4d-dep8-tp4-c48-mtp
+model:
+  path: glm-5.2-fp4
+  container: dynamo-sglang
+  precision: fp4
+identity:
+  model:
+    repo: nvidia/GLM-5.2-NVFP4
+    revision: aec724e8c7b8ee9db3b48c01c320f63f9cdaf8aa
+  container:
+    image: lmsysorg/sglang:nightly-dev-cu13-20260805-211ee642
+  frameworks:
+    dynamo: 71eb001e17fa73c742f0afe1a6ed96836cb135fd
+    sglang: nightly-dev-cu13-20260805-211ee642
+resources:
+  gpu_type: gb200
+  gpus_per_node: 4
+  decode_nodes: 4
+  decode_workers: 4
+  gpus_per_decode: 4
+  gpus_per_prefill: 8
+  prefill_nodes: 2
+  prefill_workers: 1
+frontend:
+  type: dynamo
+  nginx_session_affinity: true
+  nginx_session_affinity_header: X-Dynamo-Session-ID
+  enable_multiple_frontends: true
+  env:
+    PIP_BREAK_SYSTEM_PACKAGES: '1'
+  args:
+    router-mode: kv
+    router-session-affinity-ttl-secs: '3600'
+    active-decode-blocks-threshold: None
+    active-prefill-tokens-threshold: None
+    active-prefill-tokens-threshold-frac: None
+dynamo:
+  hash: 71eb001e17fa73c742f0afe1a6ed96836cb135fd
+  install: true
+backend:
+  type: sglang
+  prefill_environment:
+    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+    PYTHONUNBUFFERED: '1'
+    DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
+    SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: '100000'
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '100000'
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
+    MC_TE_METRIC: 'true'
+    MC_FORCE_MNNVL: '1'
+    NCCL_MNNVL_ENABLE: '1'
+    NCCL_CUMEM_ENABLE: '1'
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+    SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
+    SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
+    SGLANG_ENABLE_THINKING: '1'
+    SGLANG_ENABLE_UNIFIED_RADIX_TREE: '1'
+    SGLANG_HICACHE_DEBUG_LOG: '1'
+    SGLANG_HICACHE_DEBUG_SAMPLE_RATE: '16384'
+    SGLANG_REASONING_EFFORT: max
+    PIP_BREAK_SYSTEM_PACKAGES: '1'
+    UCX_TLS: cuda_copy,cuda_ipc,sm,self,tcp
+    NVSHMEM_REMOTE_TRANSPORT: none
+    SGLANG_DG_CACHE_DIR: /deepgemm_cache
+    FLASHINFER_WORKSPACE_BASE: /flashinfer_cache
+    SGLANG_SIMULATE_ACC_LEN: '2.5'
+  decode_environment:
+    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+    PYTHONUNBUFFERED: '1'
+    DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
+    SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: '100000'
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '100000'
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
+    MC_TE_METRIC: 'true'
+    MC_FORCE_MNNVL: '1'
+    NCCL_MNNVL_ENABLE: '1'
+    NCCL_CUMEM_ENABLE: '1'
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+    SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
+    SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
+    SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '512'
+    SGLANG_MOE_NVFP4_DISPATCH: '1'
+    SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '1'
+    SGLANG_ENABLE_THINKING: '1'
+    SGLANG_CLIP_MAX_NEW_TOKENS_ESTIMATION: '8'
+    SGLANG_REASONING_EFFORT: max
+    PIP_BREAK_SYSTEM_PACKAGES: '1'
+    UCX_TLS: cuda_copy,cuda_ipc,sm,self,tcp
+    NVSHMEM_REMOTE_TRANSPORT: none
+    SGLANG_DG_CACHE_DIR: /deepgemm_cache
+    FLASHINFER_WORKSPACE_BASE: /flashinfer_cache
+    SGLANG_SIMULATE_ACC_LEN: '2.5'
+    SGLANG_SIMULATE_ACC_METHOD: match-expected
+    SGLANG_SIMULATE_ACC_TOKEN_MODE: real-draft-token
+  sglang_config:
+    prefill:
+      served-model-name: nvidia/GLM-5.2-NVFP4
+      trust-remote-code: true
+      quantization: modelopt_fp4
+      kv-cache-dtype: fp8_e4m3
+      disaggregation-mode: prefill
+      disaggregation-transfer-backend: nixl
+      tensor-parallel-size: 8
+      data-parallel-size: 8
+      expert-parallel-size: 8
+      enable-dp-attention: true
+      enable-dp-lm-head: true
+      load-balance-method: total_tokens
+      chunked-prefill-size: 65536
+      max-prefill-tokens: 16384
+      max-running-requests: 16
+      cuda-graph-max-bs: 16
+      disable-cuda-graph: true
+      nsa-prefill-backend: trtllm
+      nsa-decode-backend: trtllm
+      moe-runner-backend: flashinfer_cutlass
+      fp4-gemm-backend: flashinfer_cutlass
+      enable-flashinfer-allreduce-fusion: true
+      weight-loader-prefetch-checkpoints: true
+      model-loader-extra-config: '{"enable_multithread_load": true}'
+      mem-fraction-static: 0.8
+      context-length: 1048576
+      enable-hierarchical-cache: true
+      hicache-write-policy: write_back
+      hicache-size: 135
+      hicache-io-backend: direct
+      speculative-algorithm: EAGLE
+      speculative-num-steps: 1
+      speculative-eagle-topk: 1
+      speculative-num-draft-tokens: 2
+      enable-metrics: true
+      enable-cache-report: true
+    decode:
+      served-model-name: nvidia/GLM-5.2-NVFP4
+      trust-remote-code: true
+      quantization: modelopt_fp4
+      kv-cache-dtype: fp8_e4m3
+      disaggregation-mode: decode
+      disaggregation-transfer-backend: nixl
+      disable-radix-cache: true
+      speculative-algorithm: EAGLE
+      speculative-num-steps: 2
+      speculative-eagle-topk: 1
+      speculative-num-draft-tokens: 3
+      tensor-parallel-size: 4
+      data-parallel-size: 1
+      expert-parallel-size: 1
+      enable-dp-attention: false
+      enable-dp-lm-head: false
+      max-running-requests: 16
+      cuda-graph-max-bs: 16
+      chunked-prefill-size: 64
+      context-length: 1048576
+      nsa-prefill-backend: trtllm
+      nsa-decode-backend: trtllm
+      moe-runner-backend: flashinfer_trtllm
+      fp4-gemm-backend: flashinfer_cutlass
+      skip-tokenizer-init: true
+      stream-interval: 30
+      enable-flashinfer-allreduce-fusion: true
+      weight-loader-prefetch-checkpoints: true
+      model-loader-extra-config: '{"enable_multithread_load": true}'
+      mem-fraction-static: 0.9
+      disaggregation-decode-extra-slots: 0
+      enable-metrics: true
+      enable-cache-report: true
+health_check:
+  max_attempts: 1440
+  interval_seconds: 10
+benchmark:
+  type: custom
+  use_chat_template: true
+  command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+  env:
+    INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
+    RESULT_DIR: /logs/agentic
+    PORT: '8000'
+    IS_MULTINODE: 'true'
+    AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
+    AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+    AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
+    AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+    AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
+    HF_HUB_CACHE: /hf_hub_cache
+infra:
+  etcd_nats_dedicated_node: false
+  nats_max_payload_mb: 64
+sbatch_directives:
+  mem: '0'
+  cpus-per-task: '144'
+srun_options:
+  mem: '0'
+  container-remap-root: ''

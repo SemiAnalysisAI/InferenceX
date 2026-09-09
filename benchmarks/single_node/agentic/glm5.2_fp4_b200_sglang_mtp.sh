@@ -10,7 +10,7 @@ set -x
 #
 # Port of the validated agentic/glm5.2_fp4_b300_sglang_mtp.sh. The B200 deltas
 # are the two blocks marked "B200:" below -- the checkpoint-resolution guard
-# (b200-dgxc rewrites MODEL to a cluster-local path) and --mem-fraction-static.
+# (b200-nscale rewrites MODEL to a cluster-local path) and --mem-fraction-static.
 # Everything else is the B300 script unchanged so the two curves stay
 # comparable.
 #
@@ -37,13 +37,13 @@ if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
 fi
 
-# B200: runners/launch_b200-dgxc.sh resolves the checkpoint to a cluster-local
+# B200: runners/launch_b200-nscale-slurm.sh resolves the checkpoint to a cluster-local
 # path and then rewrites MODEL to that path, so `hf download "$MODEL"` cannot
 # work on this runner. Keep the HF repo id separate for the day-zero case where
 # GLM-5.2-NVFP4 has not been staged yet.
 HF_MODEL_ID="${HF_MODEL_ID:-nvidia/GLM-5.2-NVFP4}"
 
-# A non-empty directory is NOT a staged checkpoint. b200-dgxc already had
+# A non-empty directory is NOT a staged checkpoint. b200-nscale already had
 # /lustre/fsw/gharunners/models/GLM-5.2-NVFP4 holding config.json,
 # generation_config.json, hf_quant_config.json, chat_template.jinja, README.md
 # and .quant_summary.txt and NOTHING else -- an aborted or metadata-only pull.
@@ -118,37 +118,53 @@ if require_agentic_kv_offload_backend hicache; then
     # conc 8 (TP8) / 64 (DP8) and the radix hit rate collapses to <0.1
     # against a ~0.97 theoretical ceiling, so every turn re-prefills its
     # whole history; the host tier restores those hits at C2C bandwidth.
-    # GLM-5.2 is DSA/MLA-family (attention_backend=dsa): every rank holds
-    # complete per-token KV (169.98 GB device pool per rank, replicated on
-    # all 8 ranks), so host capacity is controlled through the host/device
-    # token-capacity ratio like the DSv4 recipe, NOT a per-rank
-    # --hicache-size. A GB-based size of TOTAL_CPU_DRAM_GB/TP pinned the
-    # whole 0.80-DRAM budget (8 x 299 GB) at init on top of 465 GB of
-    # weights and OOM-killed the node (run 29678598595); DSv4's own
-    # ratio=2 default pins 2 x 170 GB x 8 = 2.7 TB here and OOMs too
-    # (GLM-5.2's device pool is far larger than DSv4's). Fractional 0.75
-    # = ~128 GB/rank = ~1.0 TB total, matching the cluster's proven ~1 TB
-    # host-pool envelope; validated on-node 2026-07-19 (boot + 4.2M-token
-    # overflow bench forcing eviction through the DSA KV+INDEXER pools).
-    # The ratio is relative to the device pool, so MTP's slightly smaller
-    # device pool (the nextn layer takes its own KV) only shrinks it.
+    # GLM-5.2 is DSA/MLA-family (attention_backend=dsa): every TP rank holds
+    # complete per-token KV. The ratio 0.75 gives the main target host pool
+    # only 1,257,728 token slots. Use a 169 GB/rank absolute target pool at
+    # c12/c16 and keep ratio mode at the lower concurrencies, where the
+    # smaller working set does not need the larger pinned allocation.
+    #
+    # cluster:b200-nscale advertises 2,063,920 MiB and this config exposes 80%,
+    # giving the benchmark 1,731 GB. A 169 GB/rank packed target+MTP pool plus
+    # the coupled 38.73 GB/rank DSA indexer uses about 1,662 GB across TP8.
+    # Keep the 270 GB ceiling so deployments with more usable host DRAM can
+    # explicitly override the default.
     DEFAULT_HICACHE_RATIO=0.75
-    HICACHE_RATIO="${HICACHE_RATIO:-$DEFAULT_HICACHE_RATIO}"
-    if awk -v r="$HICACHE_RATIO" -v cap="$DEFAULT_HICACHE_RATIO" 'BEGIN { exit !(r > cap) }'; then
-        echo "Error: HICACHE_RATIO=$HICACHE_RATIO exceeds configured limit $DEFAULT_HICACHE_RATIO" >&2
+    DEFAULT_HICACHE_SIZE=0
+    case "$CONC" in
+        12|16) DEFAULT_HICACHE_SIZE=169 ;;
+    esac
+    MAX_HICACHE_SIZE=270
+    HICACHE_SIZE="${HICACHE_SIZE:-$DEFAULT_HICACHE_SIZE}"
+    if ! [[ "$HICACHE_SIZE" =~ ^[0-9]+$ ]]; then
+        echo "Error: HICACHE_SIZE must be a non-negative integer, got $HICACHE_SIZE" >&2
         exit 1
     fi
+    if awk -v s="$HICACHE_SIZE" -v cap="$MAX_HICACHE_SIZE" 'BEGIN { exit !(s > cap) }'; then
+        echo "Error: HICACHE_SIZE=$HICACHE_SIZE exceeds configured limit $MAX_HICACHE_SIZE" >&2
+        exit 1
+    fi
+    HICACHE_RATIO="${HICACHE_RATIO:-$DEFAULT_HICACHE_RATIO}"
     HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_back}"
     HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
     HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first_direct}"
-    echo "HiCache CPU tier: ratio=$HICACHE_RATIO, capacity=${TOTAL_CPU_DRAM_GB} GB, write_policy=$HICACHE_WRITE_POLICY, io_backend=$HICACHE_IO_BACKEND, mem_layout=$HICACHE_MEM_LAYOUT"
     CACHE_ARGS=(
         --enable-hierarchical-cache
-        --hicache-ratio "$HICACHE_RATIO"
         --hicache-write-policy "$HICACHE_WRITE_POLICY"
         --hicache-io-backend "$HICACHE_IO_BACKEND"
         --hicache-mem-layout "$HICACHE_MEM_LAYOUT"
     )
+    if awk -v s="$HICACHE_SIZE" 'BEGIN { exit !(s > 0) }'; then
+        echo "HiCache CPU tier: target_size=$HICACHE_SIZE GB, total_capacity=${TOTAL_CPU_DRAM_GB} GB, write_policy=$HICACHE_WRITE_POLICY, io_backend=$HICACHE_IO_BACKEND, mem_layout=$HICACHE_MEM_LAYOUT"
+        CACHE_ARGS+=(--hicache-size "$HICACHE_SIZE")
+    else
+        if awk -v r="$HICACHE_RATIO" -v cap="$DEFAULT_HICACHE_RATIO" 'BEGIN { exit !(r > cap) }'; then
+            echo "Error: HICACHE_RATIO=$HICACHE_RATIO exceeds configured limit $DEFAULT_HICACHE_RATIO" >&2
+            exit 1
+        fi
+        echo "HiCache CPU tier: ratio=$HICACHE_RATIO, total_capacity=${TOTAL_CPU_DRAM_GB} GB, write_policy=$HICACHE_WRITE_POLICY, io_backend=$HICACHE_IO_BACKEND, mem_layout=$HICACHE_MEM_LAYOUT"
+        CACHE_ARGS+=(--hicache-ratio "$HICACHE_RATIO")
+    fi
 fi
 
 # With attention-DP, front the DP ranks with sglang-router using consistent
@@ -240,6 +256,14 @@ MEM_FRACTION_STATIC="${MEM_FRACTION_STATIC:-0.83}"
 
 export PYTHONNOUSERSITE=1
 export TORCH_CUDA_ARCH_LIST=10.0
+# Each concurrency in a full sweep is a separate Slurm allocation, while the
+# Nscale home directory is shared. Keep SGLang's FlashInfer autotune, Triton,
+# Inductor, and CUDA JIT caches allocation-local so concurrent cells cannot
+# overwrite the same per-rank runtime-cache files. Non-Slurm launchers can
+# provide an explicit SGLANG_CACHE_DIR override.
+if [[ -n "${SLURM_JOB_ID:-}" ]]; then
+    export SGLANG_CACHE_DIR="${SGLANG_CACHE_DIR:-/tmp/sglang-cache-${SLURM_JOB_ID}}"
+fi
 # Agentic warmup dispatches hundreds of large prompts at once; allow up to
 # 15 minutes of TCP progress before AIPerf declares a connection dead.
 export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
@@ -259,10 +283,9 @@ export SGLANG_TIMEOUT_KEEP_ALIVE=900
 # One curve per model: it was collected on the FP8 checkpoint, and the NVFP4
 # checkpoint ships the same nextn head.
 #
-# SGLANG_SIMULATE_ACC_TOKEN_MODE only exists from SGLang v0.5.16, which is why
-# this recipe pins v0.5.16-cu130 rather than the STP sibling's v0.5.15.post1 --
-# an older image would silently honor ACC_LEN/ACC_METHOD and ignore the
-# token-mode half of the contract.
+# SGLANG_SIMULATE_ACC_TOKEN_MODE only exists from SGLang v0.5.16. An older
+# image would silently honor ACC_LEN/ACC_METHOD and ignore the token-mode half
+# of the contract.
 #
 # EVAL_ONLY leaves simulated acceptance off: it commits drafted tokens
 # regardless of the target logits, so generated text is wrong and the eval
