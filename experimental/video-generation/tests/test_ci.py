@@ -38,6 +38,73 @@ def save_receipt(root, receipt):
     return path
 
 
+def test_h100_site_keeps_full_allocation_separate_from_participating_gpus(tmp_path, monkeypatch):
+    monkeypatch.setenv("RUNNER_NAME", "h3-test-runner")
+    cfg = config(tmp_path)
+    cfg.update(mode="serving-smoke", site={"cluster": "h100-dgxc", "partition": "hpc-gpu-1", "account": "customer", "gpu_model": "H100"})
+    cfg["resources"].update(gpus=4, allocated_gpus=8)
+    ci.validate_config(cfg)
+    commands = []
+    def run(argv, **kwargs):
+        commands.append(argv)
+        return SimpleNamespace(stdout="salloc: Granted job allocation 123", stderr="", returncode=0)
+    monkeypatch.setattr(ci.subprocess, "run", run)
+    monkeypatch.setattr(ci, "command", lambda argv: "tester")
+    receipt = ci.allocate(cfg, tmp_path)
+    assert "--partition=hpc-gpu-1" in commands[0] and "--account=customer" in commands[0]
+    assert "--exclusive" in commands[0] and "--gres=gpu:8" in commands[0]
+    assert receipt["site"] == cfg["site"]
+    _, record = allocation(tmp_path)
+    record.update(receipt["identity"])
+    ci.verify_identity(receipt, record, cfg["task_id"])
+    step = ci.step_argv(cfg, receipt, record, tmp_path, tmp_path)
+    assert "--gpus-per-task=4" in step
+    record["Account"] = "other"
+    with pytest.raises(ValueError, match="identity differs"):
+        ci.verify_identity(receipt, record, cfg["task_id"])
+
+
+def test_amd_granted_full_node_requires_explicit_gpu_evidence(tmp_path):
+    cfg = config(tmp_path)
+    cfg.update(mode="serving-smoke", site=dict(ci.AMD_SITE))
+    cfg["resources"].update(gpus=4, allocated_gpus=8)
+    ci.validate_config(cfg)
+    receipt, record = allocation(tmp_path)
+    record.update(Account=ci.AMD_SITE["account"], Partition="compute", AllocTRES="cpu=128,mem=512G,node=1,billing=128", TresPerNode="gres/gpu:8")
+    assert ci.allocated_gpu_count(record) == 8
+    assert ci.capacity(record, cfg["resources"]) is None
+    assert "--gres=gpu:8" in ci.step_argv(cfg, receipt, record, tmp_path, tmp_path)
+    record["OverSubscribe"] = "OK"
+    assert ci.allocated_gpu_count(record) is None
+    assert ci.capacity(record, cfg["resources"]) == "insufficient allocated GPU/CPU/memory capacity"
+    record.update(OverSubscribe="NO", AllocTRES="cpu=128,mem=512G,node=1,gres/gpu=4")
+    assert ci.allocated_gpu_count(record) == 4
+
+
+@pytest.mark.parametrize("change", [
+    {"site": {"cluster": "h100-dgxc", "partition": "hpc-gpu-1", "account": "customer", "gpu_model": "H200"}},
+    {"site": {"cluster": "unknown", "partition": "main", "account": "customer", "gpu_model": "H200"}},
+    {"resources": {"gpus": 4, "allocated_gpus": 2, "cpus": 32, "memory_gb": 512, "minutes": 90}},
+])
+def test_invalid_hardware_or_allocation_budget_is_rejected(tmp_path, change):
+    cfg = config(tmp_path)
+    cfg.update(change)
+    with pytest.raises(ValueError):
+        ci.validate_config(cfg)
+
+
+def test_explicit_concurrency_selection_requires_serving_mode(tmp_path):
+    cfg = config(tmp_path)
+    cfg["concurrencies"] = [4]
+    with pytest.raises(ValueError, match="requires serving-smoke"):
+        ci.validate_config(cfg)
+    cfg["mode"] = "serving-smoke"
+    ci.validate_config(cfg)
+    cfg["concurrencies"] = [1, 1]
+    with pytest.raises(ValueError, match="unique concurrency"):
+        ci.validate_config(cfg)
+
+
 @pytest.mark.parametrize("mode", ["smoke", "serving-smoke"])
 def test_allocation_submits_from_receipted_work_directory(tmp_path, monkeypatch, mode):
     run_dir = tmp_path / "results"
@@ -209,10 +276,13 @@ def test_staging_reuses_identical_source_and_refuses_drift(tmp_path):
     (source / "evaluator").mkdir(parents=True)
     (source / "ci.py").write_text("entry")
     (source / "evaluator" / "__init__.py").write_text("")
+    (source / "runtime-patches").mkdir()
+    (source / "runtime-patches" / "timing.patch").write_text("CPU patch fixture")
     dest = tmp_path / "package"
     original = ci.stage_package(source, dest)
     assert ci.stage_package(source, dest) == original
-    (dest / "ci.py").write_text("tampered")
+    assert (dest / "runtime-patches" / "timing.patch").read_text() == "CPU patch fixture"
+    (dest / "runtime-patches" / "timing.patch").write_text("tampered")
     with pytest.raises(ValueError, match="source differs"):
         ci.stage_package(source, dest)
 
@@ -338,3 +408,25 @@ def test_entry_resolves_device_minors_instead_of_nvml_indices(tmp_path, assignme
     else:
         assert result.returncode != 0
         assert 'lack NVIDIA UUIDs' in result.stderr
+
+
+@pytest.mark.parametrize("decision", [{"action": "allocate"}, {"action": "reuse", "receipt": {"identity": {"JobId": "999"}}}])
+def test_required_lease_never_replaces_or_borrows_another_allocation(tmp_path, monkeypatch, decision):
+    cfg = config(tmp_path)
+    entry = Path(cfg["runtime"]["entry"])
+    entry.write_text("entry")
+    Path(cfg["runtime"]["ready_marker"]).write_text("synthetic readiness")
+    cfg["runtime"]["entry_sha256"] = ci.digest(entry)
+    monkeypatch.setenv("GITHUB_RUN_ID", "456")
+    monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "1")
+    monkeypatch.setenv("H3_SOURCE_SHA", "a" * 40)
+    monkeypatch.setattr(ci, "prepared_spec", lambda cfg: {})
+    monkeypatch.setattr(ci, "command", lambda argv, **kw: "a" * 40 if "rev-parse" in argv else "")
+    monkeypatch.setattr(ci, "stage_package", lambda *args: {})
+    monkeypatch.setattr(ci, "recover", lambda *args: decision)
+    monkeypatch.setattr(ci, "allocate", lambda *args: pytest.fail("must not replace the required allocation"))
+    monkeypatch.setattr(ci, "run_step", lambda *args: pytest.fail("must not enter a different allocation"))
+    monkeypatch.setattr(ci, "stop_allocation", lambda *args: pytest.fail("outer owner releases its allocation"))
+    output = tmp_path / "output"
+    assert ci.launch(cfg, output, required_allocation="123") == 2
+    assert "must reuse its original allocation" in ci.read(output / "ci.json")["error"]

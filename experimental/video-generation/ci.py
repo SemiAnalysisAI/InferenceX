@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""InferenceX H200 Slurm adapter for a prepared, trusted H3 runtime.
+"""InferenceX Slurm adapter for a prepared, trusted H3 runtime.
 
 No SSH, image import, dependency installation, or model download. The submit
 host and compute node share workspace.host, mounted at workspace.container by
@@ -28,6 +28,9 @@ from evaluator.mvp_gpu_job import cuda_devices
 
 PARTITION = "main"
 ACCOUNT = "sa-shared"
+DEFAULT_SITE = {"cluster": "h200-dgxc", "partition": PARTITION, "account": ACCOUNT, "gpu_model": "H200"}
+NVIDIA_CLUSTERS = {"h100-dgxc": "H100", "h200-dgxc": "H200", "b200-nscale": "B200"}
+AMD_SITE = {"cluster": "mi355x-amds", "partition": "compute", "account": "cameronamd@semianalysis.com", "gpu_model": "MI355X"}
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,79}")
 SHA = re.compile(r"[0-9a-f]{64}")
 IDENTITY = ("JobId", "JobName", "Comment", "WorkDir", "Account", "Partition", "UserId")
@@ -84,9 +87,19 @@ def host_path(config: dict, container_path: str) -> Path:
 
 
 def validate_config(config: dict) -> dict:
-    need(set(config) == {"schema_version", "task_id", "workspace", "runtime", "spec", "resources", "allocation_receipts", "mode"}, "Unknown or missing site configuration fields")
+    required = {"schema_version", "task_id", "workspace", "runtime", "spec", "resources", "allocation_receipts", "mode"}
+    need(required <= set(config) <= required | {"site", "concurrencies"}, "Unknown or missing site configuration fields")
+    site = config.get("site", DEFAULT_SITE)
+    need(isinstance(site, dict) and set(site) == set(DEFAULT_SITE), "Invalid site fields")
+    need(site == AMD_SITE or (site["cluster"] in NVIDIA_CLUSTERS and site["gpu_model"] == NVIDIA_CLUSTERS[site["cluster"]]), "Unsupported cluster or GPU model")
+    need(site == AMD_SITE or all(isinstance(site[key], str) and NAME.fullmatch(site[key]) for key in ("account", "partition")), "Explicit scheduler account and partition required")
     need(config["schema_version"] == 1 and NAME.fullmatch(config["task_id"]), "Invalid schema_version/task_id")
     need(config["mode"] in {"smoke", "regression", "serving-smoke"}, "mode must be smoke, regression or serving-smoke")
+    if "concurrencies" in config:
+        need(config["mode"] == "serving-smoke", "Concurrency selection requires serving-smoke")
+        from evaluator.mvp_serving_smoke import validate_concurrencies
+        validate_concurrencies(config["concurrencies"])
+    need(site["cluster"] == "h200-dgxc" or config["mode"] == "serving-smoke", "Cross-hardware sites currently require serving-smoke; paired export remains H200-only")
     need(set(config["workspace"]) == {"host", "container"}, "Invalid workspace mapping")
     for value in config["workspace"].values():
         path = absolute(value)
@@ -99,13 +112,22 @@ def validate_config(config: dict) -> dict:
     need(set(config["spec"]) == {"path", "sha256"} and SHA.fullmatch(config["spec"]["sha256"]), "Pinned prepared spec required")
     absolute(config["spec"]["path"])
     resources = config["resources"]
-    need(set(resources) == {"gpus", "cpus", "memory_gb", "minutes"}, "Invalid resource request")
-    for key, low, high in (("gpus", 1, 8), ("cpus", 1, 128), ("memory_gb", 1, 1400), ("minutes", 10, 90)):
-        need(type(resources[key]) is int and low <= resources[key] <= high, "Resource outside bounded H200 budget: " + key)
+    required_resources = {"gpus", "cpus", "memory_gb", "minutes"}
+    need(required_resources <= set(resources) <= required_resources | {"allocated_gpus"}, "Invalid resource request")
+    for key, low, high in (("gpus", 1, 8), ("cpus", 1, 128), ("memory_gb", 1, 1400), ("minutes", 10, 240)):
+        need(type(resources[key]) is int and low <= resources[key] <= high, "Resource outside bounded GPU budget: " + key)
+    reserved = allocation_gpus(config)
+    need(type(reserved) is int and resources["gpus"] <= reserved <= 8, "Allocated GPU budget must cover participating GPUs")
+    need(site != AMD_SITE or reserved == 8, "AMD requires a full eight-GPU allocation before selecting participating HIP devices")
+    need(config["mode"] == "serving-smoke" or reserved == 8, "Paired measurements require a full eight-GPU allocation")
     need(isinstance(config["allocation_receipts"], list), "allocation_receipts must be a list")
     for path in config["allocation_receipts"]:
         absolute(path)
     return config
+
+
+def allocation_gpus(config: dict) -> int:
+    return config["resources"].get("allocated_gpus", config["resources"]["gpus"] if config["mode"] == "serving-smoke" else 8)
 
 
 def environment() -> dict[str, str]:
@@ -136,8 +158,23 @@ def verify_identity(receipt: dict, record: dict, task_id: str) -> None:
     expected = receipt["identity"]
     need(set(expected) == set(IDENTITY), "Incomplete allocation ownership receipt")
     need(all(record.get(key) == expected[key] for key in IDENTITY), "Slurm allocation identity differs from receipt")
-    need(record["Account"] == ACCOUNT and record["Partition"] == PARTITION, "Allocation is not in the SemiAnalysis H200 pool")
+    site = receipt.get("site", DEFAULT_SITE)
+    need(record["Account"] == site["account"] and record["Partition"] == site["partition"], "Allocation differs from its receipted scheduler pool")
     need(re.fullmatch(r"[^()]+\(" + str(os.getuid()) + r"\)", record["UserId"]), "Allocation Unix owner differs")
+
+
+def allocated_gpu_count(record: dict) -> int | None:
+    tres = dict(item.split("=", 1) for item in record.get("AllocTRES", "").split(",") if "=" in item)
+    if "gres/gpu" in tres:
+        return int(tres["gres/gpu"])
+    # This AMD site omits GPU AllocTRES. The granted full-node job still records
+    # TresPerNode; a subsequent eight-GPU step and physical UUID inventory are
+    # required before generation. Missing partial allocations remain unknown.
+    if (record.get("Partition") == AMD_SITE["partition"] and record.get("Account") == AMD_SITE["account"]
+            and record.get("OverSubscribe") == "NO" and record.get("NumNodes") == "1"
+            and record.get("TresPerNode") == "gres/gpu:8"):
+        return 8
+    return None
 
 
 def capacity(record: dict, resources: dict, timestamp: datetime | None = None) -> str | None:
@@ -150,7 +187,7 @@ def capacity(record: dict, resources: dict, timestamp: datetime | None = None) -
     remaining = (end - (timestamp or datetime.now(timezone.utc))).total_seconds()
     if remaining < resources["minutes"] * 60 - 300 + 30:
         return "insufficient remaining allocation time"
-    if int(tres.get("gres/gpu", "0")) < resources["gpus"] or int(record["NumCPUs"]) < resources["cpus"] or memory_gb < resources["memory_gb"]:
+    if (allocated_gpu_count(record) or 0) < resources["gpus"] or int(record["NumCPUs"]) < resources["cpus"] or memory_gb < resources["memory_gb"]:
         return "insufficient allocated GPU/CPU/memory capacity"
     return None
 
@@ -175,6 +212,9 @@ def recover(config: dict, result_root: Path, *, node: str | None = None) -> dict
             continue
         record = job_record(job)
         verify_identity(receipt, record, config["task_id"])
+        if receipt.get("site", DEFAULT_SITE) != config.get("site", DEFAULT_SITE):
+            reasons.append({"job_id": job, "reason": "allocation belongs to a different hardware site"})
+            continue
         state = record["JobState"]
         if state in TERMINAL:
             reasons.append({"job_id": job, "reason": state})
@@ -203,11 +243,15 @@ def allocate(config: dict, run_dir: Path, *, node: str | None = None) -> dict:
     need(NAME.fullmatch(job_name), "Invalid runner/job name")
     comment = "h3:" + nonce
     request = config["resources"]
+    site = config.get("site", DEFAULT_SITE)
     intent = {"task_id": config["task_id"], "job_name": job_name, "comment": comment,
               "work_dir": str(run_dir), "user_id": os.getuid(), "created_at": now()}
     write(run_dir / "allocation-intent.json", intent)
-    placement = ["--gres=gpu:" + str(request["gpus"])] if config["mode"] == "serving-smoke" else ["--exclusive", "--gres=gpu:8"]
-    argv = ["salloc", "--no-shell", "--no-bell", "--partition=" + PARTITION, "--account=" + ACCOUNT,
+    reserved = allocation_gpus(config)
+    placement = ["--gres=gpu:" + str(reserved)]
+    if reserved == 8:
+        placement.insert(0, "--exclusive")
+    argv = ["salloc", "--no-shell", "--no-bell", "--partition=" + site["partition"], "--account=" + site["account"],
             "--nodes=1", "--ntasks=1", *placement,
             "--cpus-per-task=" + str(request["cpus"]), "--mem=" + str(request["memory_gb"]) + "G",
             "--time=" + str(request["minutes"]), "--immediate=30",
@@ -223,9 +267,9 @@ def allocate(config: dict, run_dir: Path, *, node: str | None = None) -> dict:
     job = granted[0]
     # Save the expected identity before querying, so a lost query can be recovered.
     user = command(["id", "-un"]).strip()
-    receipt = {"task_id": config["task_id"], "created_at": now(), "identity": {
+    receipt = {"task_id": config["task_id"], "created_at": now(), "site": site, "identity": {
         "JobId": job, "JobName": job_name, "Comment": comment, "WorkDir": str(run_dir),
-        "Account": ACCOUNT, "Partition": PARTITION, "UserId": f"{user}({os.getuid()})"}}
+        "Account": site["account"], "Partition": site["partition"], "UserId": f"{user}({os.getuid()})"}}
     write(run_dir / "allocation.json", receipt)
     need(result.returncode == 0, "Slurm returned a failure after granting an allocation; reconcile receipt")
     return receipt
@@ -298,7 +342,8 @@ def collect(run_dir: Path, output: Path) -> None:
 
 
 def stage_package(source: Path, destination: Path) -> dict[str, str]:
-    selected = {p.relative_to(source).as_posix(): p for p in [*source.glob("*.py"), *(source / "evaluator").glob("*.py")]}
+    selected = {p.relative_to(source).as_posix(): p for p in [*source.glob("*.py"), *(source / "evaluator").glob("*.py"),
+                *(source / "runtime-patches").glob("*.patch")]}
     shared_power = source.parents[1] / "utils" / "aggregate_power.py"
     if shared_power.is_file():
         selected["utils/aggregate_power.py"] = shared_power
@@ -316,10 +361,12 @@ def stage_package(source: Path, destination: Path) -> dict[str, str]:
 
 def step_argv(config: dict, receipt: dict, record: dict, run_dir: Path, package: Path) -> list[str]:
     request = config["resources"]
+    gpu_flags = ["--gres=gpu:8"] if config.get("site") == AMD_SITE else [
+        "--gpus-per-task=" + str(request["gpus"]), "--gpu-bind=verbose,per_task:" + str(request["gpus"])]
     return ["srun", "--jobid=" + receipt["identity"]["JobId"], "--nodelist=" + record["NodeList"],
             "--exclusive", "--exact", "--nodes=1", "--ntasks=1", "--immediate=30", "--kill-on-bad-exit=1",
             "--cpus-per-task=" + str(request["cpus"]), "--cpu-bind=verbose,cores",
-            "--gpus-per-task=" + str(request["gpus"]), "--gpu-bind=verbose,per_task:" + str(request["gpus"]),
+            *gpu_flags,
             "--mem=" + str(request["memory_gb"]) + "G", "--time=" + str(request["minutes"] - 5),
             "--chdir=" + str(run_dir), "--export=PATH,PYTHONDONTWRITEBYTECODE,TZ,LC_ALL",
             "python3", str(package / "ci.py"), "--enter", str(run_dir)]
@@ -360,7 +407,10 @@ def prepared_spec(config: dict) -> dict:
     need(digest(config["spec"]["path"]) == config["spec"]["sha256"], "Prepared GPU specification changed")
     spec = read(config["spec"]["path"])
     # Slurm assigns physical devices later. Validate the rest without a GPU call.
-    spec["gpu_uuids"] = [f"GPU-00000000-0000-0000-0000-{i:012d}" for i in range(config["resources"]["gpus"])]
+    amd = config.get("site") == AMD_SITE
+    need(spec.get("gpu_vendor", "nvidia") == ("amd" if amd else "nvidia"), "Prepared GPU vendor differs from the admitted site")
+    prefix = "" if amd else "GPU-"
+    spec["gpu_uuids"] = [f"{prefix}00000000-0000-0000-0000-{i:012d}" for i in range(config["resources"]["gpus"])]
     from evaluator.mvp_gpu_job import validate_gpu_job
     spec = validate_gpu_job(spec)
     if config["mode"] == "serving-smoke":
@@ -373,7 +423,11 @@ def prepared_spec(config: dict) -> dict:
     # Cheap inventory checks happen before salloc; full pinned source/weight
     # hashing remains in the existing supervisor immediately before execution.
     for role in ("baseline", "candidate"):
-        need(host_path(config, spec[role]["source"]).is_dir(), "Prepared runtime source missing: " + role)
+        source = host_path(config, spec[role]["source"])
+        need(source.is_dir(), "Prepared runtime source missing: " + role)
+        if spec.get("server_timing"):
+            from evaluator.mvp_runtime_timing import validate_source
+            validate_source(source)
     model = host_path(config, spec["model"]["path"])
     for item in spec["model"]["files"]:
         path = model / item["path"]
@@ -382,7 +436,7 @@ def prepared_spec(config: dict) -> dict:
     return spec
 
 
-def launch(config: dict, output: Path) -> int:
+def launch(config: dict, output: Path, *, required_allocation: str | None = None) -> int:
     config = validate_config(config)
     run_id = os.environ.get("GITHUB_RUN_ID", "")
     attempt = os.environ.get("GITHUB_RUN_ATTEMPT", "")
@@ -400,9 +454,9 @@ def launch(config: dict, output: Path) -> int:
     results.mkdir(parents=True, exist_ok=True)
     control.mkdir(parents=True, exist_ok=True)
     run_dir = results / f"github-{run_id}-{attempt}"
-    reserved_gpus = config["resources"]["gpus"] if config["mode"] == "serving-smoke" else 8
+    reserved_gpus = allocation_gpus(config)
     state = {"schema_version": 1, "task_id": config["task_id"], "run_id": run_id, "run_attempt": attempt,
-             "source_sha": sha, "started_at": now(), "phase": "preparing", "mode": config["mode"],
+             "source_sha": sha, "started_at": now(), "phase": "preparing", "mode": config["mode"], "site": config.get("site", DEFAULT_SITE),
              "ci_accepted": False, "release_qualified": False, "persistent_output": str(run_dir),
              "excluded_cache_paths": list(CACHE_PATHS),
              "ci": {"repository": os.environ.get("GITHUB_REPOSITORY"),
@@ -426,6 +480,9 @@ def launch(config: dict, output: Path) -> int:
             package_files = stage_package(source, package)
             decision = recover(config, results)
             write(run_dir / "recovery.json", decision)
+            if required_allocation is not None:
+                need(decision["action"] == "reuse" and decision["receipt"]["identity"]["JobId"] == required_allocation,
+                     "Serving continuation must reuse its original allocation; no replacement requested")
             need(decision["action"] != "wait", "A task-owned allocation is pending or suspended; no duplicate submitted")
             if decision["action"] == "reuse":
                 receipt, reused = decision["receipt"], True
@@ -437,8 +494,7 @@ def launch(config: dict, output: Path) -> int:
             need(record["JobState"] == "RUNNING", "Owned allocation is not RUNNING")
             need(capacity(record, config["resources"]) is None, "Allocation cannot serve bounded step")
             if config["mode"] == "serving-smoke":
-                tres = dict(item.split("=", 1) for item in record["AllocTRES"].split(","))
-                need(int(tres.get("gres/gpu", "0")) == reserved_gpus, "Serving allocation GPU count exceeds the declared budget")
+                need(allocated_gpu_count(record) == reserved_gpus, "Serving allocation GPU count exceeds the declared budget")
             need(digest(config["runtime"]["entry"]) == config["runtime"]["entry_sha256"], "Entry changed after preflight")
             state.update(phase="starting", allocation_reused=reused, allocation=receipt, slurm_job=record)
             write(run_dir / "ci.json", state)
@@ -446,7 +502,7 @@ def launch(config: dict, output: Path) -> int:
             active_steps = command(["squeue", "--steps", "--noheader", "--jobs=" + record["JobId"], "--format=%i|%N"])
             write(run_dir / "context.json", {"config": config, "spec": spec, "allocation": receipt,
                 "node": record["NodeList"], "active_steps": active_steps, "source_sha": sha,
-                "exclusive_node": record.get("OverSubscribe") == "NO" and "gres/gpu=8" in record.get("AllocTRES", "").split(","),
+                "exclusive_node": record.get("OverSubscribe") == "NO" and allocated_gpu_count(record) == 8,
                 "package_files": package_files, "run_id": f"github-{run_id}-{attempt}"})
             argv = step_argv(config, receipt, record, run_dir, package)
             write(run_dir / "step-command.json", argv)
@@ -486,7 +542,8 @@ def launch(config: dict, output: Path) -> int:
             write(run_dir / "manifest.json", {"schema_version": 1, "task_id": config["task_id"],
                 "git_commit": sha, "ci": state["ci"], "run_id": run_id, "run_attempt": attempt,
                 "slurm_allocation": receipt, "runtime": config["runtime"], "prepared_spec": config["spec"],
-                "workload_plan": spec.get("plan"), "mode": config["mode"], "resources": state["resources"], "exit_code": code,
+                "workload_plan": spec.get("plan"), "mode": config["mode"], "site": config.get("site", DEFAULT_SITE),
+                "resources": state["resources"], "exit_code": code,
                 "evidence": {path: digest(run_dir / path) for path in links if (run_dir / path).is_file()},
                 "artifact_checksums": "SHA256SUMS", "excluded_persistent_caches": list(CACHE_PATHS)})
             collect(run_dir, output)
@@ -503,9 +560,22 @@ def enter(run_dir: Path) -> None:
     write(run_dir / "binding.json", {"job_id": job, "step_id": step, "node": context["node"],
           "cpu_affinity": sorted(os.sched_getaffinity(0)), "observed_at": now(), "phase": "entering_runtime"})
     need(digest(config["runtime"]["entry"]) == config["runtime"]["entry_sha256"], "Entry changed on compute node")
+    env = {**os.environ, "H3_EXPECTED_GPU_MODEL": config.get("site", DEFAULT_SITE)["gpu_model"]}
+    if config.get("site") == AMD_SITE:
+        from inspect_amd_node import step_gpu_indices
+        from evaluator.mvp_amd_gpu import inventory as amd_inventory, smi, observe_system_monitor
+        need(step_gpu_indices(os.environ.get("SLURM_STEP_GPUS", "")) == set(range(8)), "AMD requires all eight GPUs bound to this step")
+        observed = amd_inventory(smi("list", 10))
+        need(len(observed) == 8, "AMD allocated physical inventory is incomplete")
+        write(run_dir / "amd-allocated-devices.json", list(observed.values()))
+        monitor_path = run_dir / "amd-system-monitor.json"
+        write(monitor_path, observe_system_monitor(10))
+        env.update(H3_AMD_ALLOCATION_UUIDS=",".join(observed),
+                   H3_AMD_MONITOR_RECEIPT=str(mapped(config, monitor_path)),
+                   ROCR_VISIBLE_DEVICES=",".join(str(i) for i in range(config["resources"]["gpus"])))
     argv = ["/bin/bash", config["runtime"]["entry"], config["runtime"]["python"],
             str(mapped(config, Path(__file__).parent) / "ci.py"), "--inside", str(mapped(config, run_dir))]
-    os.execv(argv[0], argv)
+    os.execve(argv[0], argv, env)
 
 
 def workload_complete(verified: dict) -> bool:
@@ -541,9 +611,17 @@ def inside(run_dir: Path) -> int:
              and os.environ.get("SLURM_PROCID") == "0" and os.environ.get("SLURM_NTASKS") == "1",
              "Payload is not the exact single-node Slurm task")
         need(inventory(Path(__file__).parent) == context["package_files"], "Staged harness bytes changed")
-        devices = cuda_devices()
-        assigned = os.environ.get("H3_ASSIGNED_GPU_UUIDS", "").split(",")
-        need(set(devices) == set(assigned), "CUDA-visible UUIDs differ from the Slurm global GPU assignment")
+        if config.get("site") == AMD_SITE:
+            from evaluator.mvp_amd_gpu import hip_devices
+            devices = hip_devices()
+            allocated = os.environ.get("H3_AMD_ALLOCATION_UUIDS", "").split(",")
+            physical = read(run_dir / "amd-allocated-devices.json")
+            need(len(set(allocated)) == 8 and set(allocated) == {row["uuid"] for row in physical}
+                 and set(devices) <= set(allocated), "HIP devices differ from the full Slurm-owned AMD inventory")
+        else:
+            devices = cuda_devices()
+            assigned = os.environ.get("H3_ASSIGNED_GPU_UUIDS", "").split(",")
+            need(set(devices) == set(assigned), "CUDA-visible UUIDs differ from the Slurm global GPU assignment")
         cpus = sorted(os.sched_getaffinity(0))
         binding = read(run_dir / "binding.json")
         need(binding["job_id"] == expected and binding["step_id"] == step and binding["cpu_affinity"] == cpus,
@@ -552,14 +630,14 @@ def inside(run_dir: Path) -> int:
         need(len(cpus) >= config["resources"]["cpus"], "Bound step CPU set is too small")
         write(run_dir / "binding.json", {"job_id": expected, "step_id": step, "node": context["node"],
               "gpu_uuids": devices, "cpu_affinity": cpus,
-              "slurm": {key: os.environ.get(key) for key in ("CUDA_VISIBLE_DEVICES", "H3_ORIGINAL_CUDA_VISIBLE_DEVICES", "SLURM_JOB_GPUS", "SLURM_STEP_GPUS", "SLURM_CPU_BIND", "SLURM_CPUS_PER_TASK")}, "observed_at": now()})
+              "slurm": {key: os.environ.get(key) for key in ("CUDA_VISIBLE_DEVICES", "H3_ORIGINAL_CUDA_VISIBLE_DEVICES", "ROCR_VISIBLE_DEVICES", "HIP_VISIBLE_DEVICES", "H3_AMD_ALLOCATION_UUIDS", "SLURM_JOB_GPUS", "SLURM_STEP_GPUS", "SLURM_CPU_BIND", "SLURM_CPUS_PER_TASK")}, "observed_at": now()})
         spec = context["spec"]
         spec["gpu_uuids"], spec["job_id"] = devices, context["run_id"]
         active = [line for line in context["active_steps"].splitlines() if not re.match(r"[0-9]+\.(batch|extern)\|", line)]
         spec["allocation"] = {"mode": "dedicated_ci" if not active and context["exclusive_node"] else "cooperative_shared", "label": f"Slurm {expected}.{step} on {context['node']}"}
         if config["mode"] == "serving-smoke":
             from evaluator.mvp_serving_smoke import run_matrix
-            matrix = run_matrix(spec, run_dir)
+            matrix = run_matrix(spec, run_dir, concurrencies=config.get("concurrencies", (1, 2, 4)))
             complete = matrix["status"] == "complete"
             result.update(exit_code=0 if complete else 1, smoke_completed=complete,
                           measurement_status="complete" if complete else "incomplete",

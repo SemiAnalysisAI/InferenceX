@@ -6989,3 +6989,51 @@
   description:
     - "Add an opt-in C1/C2/C4 H3 serving smoke with four measured requests per cell, original media and verified telemetry. Reserve only the configured GPUs; keep paired regression/export behavior separate and select no LLM jobs."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2894
+
+- config-keys: []
+  workflow-dispatch: h3-video.yml
+  description:
+    - "Admit prepared H100/H200/B200 H3 sites and configurable measured request counts; retain full allocated GPU accounting and existing manual authorization. No LLM jobs are selected."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2916
+
+- config-keys: []
+  workflow-dispatch: h3-video.yml
+  description:
+    - "Allow an explicit H3 serving concurrency subset so missing cells can be completed without repeating finished GPU measurements. Preserve default C1/C2/C4 and per-cell evidence; select no LLM jobs."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2916
+
+- config-keys: []
+  workflow-dispatch: h3-video.yml
+  description:
+    - "Stage exact H3 weights on AMD through an opt-in CPU-only CI preparation job. Reuse verified shared files and retain source-run hashes; do not allocate GPUs or claim runtime compatibility. A separate node-inventory operation uses existing ownership receipts and at most eight GPUs for 15 minutes; it runs no generation."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2916
+
+- config-keys: []
+  workflow-dispatch: h3-video.yml
+  description:
+    - "Add bounded AMD cached-runtime preparation with full eight-GPU step ownership, immutable source checkout, HIP device mapping and retained package import results. Reuse task-owned rootfs receipts; do not upgrade packages or claim H3 generation compatibility."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2916
+
+- config-keys: []
+  workflow-dispatch: h3-video.yml
+  description:
+    - "Add explicit AMD H3 vendor binding and AITER/Ulysses launch validation. Match HIP to AMD SMI by PCI BDF, preserve foreign process evidence, use sampled socket power, and account for granted full-node GPU allocations. Runtime generation remains gated until a prepared AMD site passes smoke validation."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2916
+
+- config-keys: []
+  workflow-dispatch: h3-video.yml
+  description:
+    - "Seal AMD C1 serving inputs through CPU-only preparation after runtime inspection, reusing frozen model weights and the shared twenty-request eight-second workload. Record AITER/Ulysses layout and all eight allocated GPUs separately from four participating GPUs; generation compatibility remains unverified. Select no LLM jobs."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2916
+
+- config-keys: []
+  workflow-dispatch: h3-video.yml
+  description:
+    - "Add opt-in H3 server timing through an explicitly committed patch of the pinned SGLang runtime. Correlate HTTP receipt, accepted job, singleton forward and media-ready events by request ID; retain clock, batch, replica and patch identities. Historical data remains unavailable rather than inferred; select no LLM jobs."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2916
+
+- config-keys: []
+  workflow-dispatch: h3-video.yml
+  description:
+    - "Recover the retained MI355X runtime and run one audio/video warmup plus twenty frozen C1 attempts in the same eight-GPU allocation, with four participating GPUs. Enforce a 120-minute lease, allocation-wide 15-minute readiness gate and ten-minute cleanup reserve; retain the original CI artifact and release receipt. Select no LLM jobs."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2916

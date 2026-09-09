@@ -55,6 +55,22 @@ def test_ramp_clipping_separates_phases_and_excludes_client_decode():
     assert result["sample_series"][8]["aggregate_watts"] == 135
 
 
+def test_amd_energy_retains_sensor_source_and_rejects_mixed_sources():
+    role, run, samples = data()
+    for sample in samples:
+        sample["power_query"] = {"field": "amd-smi power.socket_power", "start_utc": sample["at"],
+                                 "start_monotonic_seconds": sample["monotonic_seconds"],
+                                 "end_monotonic_seconds": sample["monotonic_seconds"]}
+    result = analyze(role, run, samples)
+    assert result["valid"] is True
+    assert result["semantics"]["sensor"].startswith("amd-smi power.socket_power;")
+    assert result["phases"]["measurement"]["aggregate"]["energy_j"] == 450
+    samples[9]["power_query"]["field"] = "power.draw"
+    result = analyze(role, run, samples)
+    assert result["phases"]["measurement"]["aggregate"] is None
+    assert "power_sensor_source_inconsistent" in result["invalid_reasons"]
+
+
 @pytest.mark.parametrize("defect", ["missing_power", "nan", "negative", "missing_gpu", "duplicate_gpu", "foreign", "identity", "partition", "nonmonotonic", "clock_jump"])
 def test_invalid_telemetry_withholds_measurement_metrics(defect):
     role, run, samples = data()
