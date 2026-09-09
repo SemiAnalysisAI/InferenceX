@@ -220,6 +220,10 @@ Preflight cannot be combined with historical result reuse. Hardware sites have
 independent workflow concurrency groups; each retains its existing Slurm checks.
 
 The existing `serving-smoke` mode accepts 4–200 measured requests per concurrency
+and an optional site-level `concurrencies` subset, such as `[4]`, to complete a
+missing cell in a new run without repeating finished cells. Omission keeps
+`[1, 2, 4]`; the result contract and per-cell evidence remain unchanged.
+The request count is derived
 from `plan.cases × plan.repetitions`; concurrency remains 1, 2, and 4. Twenty per
 cell produces sixty measured requests plus three separate warmups when
 `warmup_runs: 1`. Failures and unstarted requests remain in the declared denominator.

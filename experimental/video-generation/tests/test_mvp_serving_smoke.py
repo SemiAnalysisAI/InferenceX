@@ -85,6 +85,28 @@ def test_single_runtime_supervisor_never_launches_candidate(spec, tmp_path, monk
     assert result["ci_accepted"] is False
 
 
+def test_selected_concurrency_does_not_repeat_completed_cells(spec, tmp_path, monkeypatch):
+    spec["plan"]["cases"] = spec["plan"]["cases"][:1]
+    spec["plan"]["repetitions"] = 20
+    spec["serving"] = {"concurrency": 1}
+    submitted = []
+    def execute(current, directory, *, serving_smoke):
+        submitted.append(current["serving"]["concurrency"])
+        return saved_single(current, directory)
+    monkeypatch.setattr(gpu, "run_gpu_job", execute)
+    result = smoke.run_matrix(spec, tmp_path, concurrencies=[4])
+    assert submitted == [4]
+    assert result["status"] == "complete"
+    assert result["completion"]["scheduled"] == result["completion"]["valid"] == 20
+    assert [cell["concurrency"] for cell in result["cells"]] == [4]
+
+
+@pytest.mark.parametrize("values", [[], [1, 1], [True], [8], "1,2,4"])
+def test_invalid_concurrency_selection_is_rejected(values):
+    with pytest.raises(ValueError, match="unique concurrency"):
+        smoke.validate_concurrencies(values)
+
+
 def test_interrupted_client_intent_is_counted_as_unfinished(spec, tmp_path, monkeypatch):
     spec["plan"]["cases"] = spec["plan"]["cases"][:1]
     spec["plan"]["repetitions"] = 4

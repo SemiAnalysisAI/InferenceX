@@ -76,6 +76,18 @@ def test_invalid_hardware_or_allocation_budget_is_rejected(tmp_path, change):
         ci.validate_config(cfg)
 
 
+def test_explicit_concurrency_selection_requires_serving_mode(tmp_path):
+    cfg = config(tmp_path)
+    cfg["concurrencies"] = [4]
+    with pytest.raises(ValueError, match="requires serving-smoke"):
+        ci.validate_config(cfg)
+    cfg["mode"] = "serving-smoke"
+    ci.validate_config(cfg)
+    cfg["concurrencies"] = [1, 1]
+    with pytest.raises(ValueError, match="unique concurrency"):
+        ci.validate_config(cfg)
+
+
 @pytest.mark.parametrize("mode", ["smoke", "serving-smoke"])
 def test_allocation_submits_from_receipted_work_directory(tmp_path, monkeypatch, mode):
     run_dir = tmp_path / "results"

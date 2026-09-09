@@ -18,6 +18,14 @@ from .mvp_runner import _summary
 CONCURRENCIES = (1, 2, 4)
 
 
+def validate_concurrencies(values) -> tuple[int, ...]:
+    if (not isinstance(values, (list, tuple)) or not values
+            or any(type(value) is not int or value not in CONCURRENCIES for value in values)
+            or len(set(values)) != len(values)):
+        raise ValueError("select unique concurrency values from 1, 2, 4")
+    return tuple(values)
+
+
 def validate_spec(spec: dict) -> dict:
     frozen = gpu.validate_gpu_job(spec)
     count = len(frozen["plan"]["cases"]) * frozen["plan"]["repetitions"]
@@ -61,20 +69,21 @@ def _report(root: Path, matrix: dict) -> None:
         + '</pre></details><section class="media-grid">' + ''.join(media) + '</section></main>', encoding="utf-8")
 
 
-def run_matrix(spec: dict, root: Path) -> dict:
+def run_matrix(spec: dict, root: Path, *, concurrencies=CONCURRENCIES) -> dict:
     from .mvp_power import analyze_power
 
     spec = validate_spec(spec)
+    concurrencies = validate_concurrencies(concurrencies)
     count = len(spec["plan"]["cases"]) * spec["plan"]["repetitions"]
     deadline = time.monotonic() + spec["limits"]["job_seconds"]
     matrix = {"schema_version": "1.0.0", "bundle_type": "h3_serving_smoke_matrix", "status": "running",
               "started_at": gpu._now(), "plan": spec["plan"], "runtime": spec["baseline"], "server": spec["server"], "gpu_uuids": spec["gpu_uuids"],
-              "scheduled": count * len(CONCURRENCIES), "requests_per_configuration": count,
+              "scheduled": count * len(concurrencies), "requests_per_configuration": count,
               "warmup_per_configuration": spec["plan"]["warmup_runs"],
               "ci_accepted": False, "release_qualified": False,
               "cells": [{"concurrency": concurrency, "status": "not_started", "verified": False,
                          "completion": {"scheduled": count, "attempted": 0, "completed": 0, "valid": 0, "failed": count, "not_started": count, "unfinished": 0}}
-                        for concurrency in CONCURRENCIES]}
+                        for concurrency in concurrencies]}
     path = root / "serving-smoke.json"
     gpu._write(path, matrix)
     try:

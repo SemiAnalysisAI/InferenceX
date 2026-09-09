@@ -6995,3 +6995,9 @@
   description:
     - "Admit prepared H100/H200/B200 H3 sites and configurable measured request counts; retain full allocated GPU accounting and existing manual authorization. No LLM jobs are selected."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2916
+
+- config-keys: []
+  workflow-dispatch: h3-video.yml
+  description:
+    - "Allow an explicit H3 serving concurrency subset so missing cells can be completed without repeating finished GPU measurements. Preserve default C1/C2/C4 and per-cell evidence; select no LLM jobs."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2916

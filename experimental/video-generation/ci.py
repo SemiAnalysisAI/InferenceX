@@ -87,13 +87,17 @@ def host_path(config: dict, container_path: str) -> Path:
 
 def validate_config(config: dict) -> dict:
     required = {"schema_version", "task_id", "workspace", "runtime", "spec", "resources", "allocation_receipts", "mode"}
-    need(required <= set(config) <= required | {"site"}, "Unknown or missing site configuration fields")
+    need(required <= set(config) <= required | {"site", "concurrencies"}, "Unknown or missing site configuration fields")
     site = config.get("site", DEFAULT_SITE)
     need(isinstance(site, dict) and set(site) == set(DEFAULT_SITE), "Invalid site fields")
     need(site["cluster"] in NVIDIA_CLUSTERS and site["gpu_model"] == NVIDIA_CLUSTERS[site["cluster"]], "Unsupported cluster or GPU model")
     need(all(isinstance(site[key], str) and NAME.fullmatch(site[key]) for key in ("account", "partition")), "Explicit scheduler account and partition required")
     need(config["schema_version"] == 1 and NAME.fullmatch(config["task_id"]), "Invalid schema_version/task_id")
     need(config["mode"] in {"smoke", "regression", "serving-smoke"}, "mode must be smoke, regression or serving-smoke")
+    if "concurrencies" in config:
+        need(config["mode"] == "serving-smoke", "Concurrency selection requires serving-smoke")
+        from evaluator.mvp_serving_smoke import validate_concurrencies
+        validate_concurrencies(config["concurrencies"])
     need(site["cluster"] == "h200-dgxc" or config["mode"] == "serving-smoke", "Cross-hardware sites currently require serving-smoke; paired export remains H200-only")
     need(set(config["workspace"]) == {"host", "container"}, "Invalid workspace mapping")
     for value in config["workspace"].values():
@@ -584,7 +588,7 @@ def inside(run_dir: Path) -> int:
         spec["allocation"] = {"mode": "dedicated_ci" if not active and context["exclusive_node"] else "cooperative_shared", "label": f"Slurm {expected}.{step} on {context['node']}"}
         if config["mode"] == "serving-smoke":
             from evaluator.mvp_serving_smoke import run_matrix
-            matrix = run_matrix(spec, run_dir)
+            matrix = run_matrix(spec, run_dir, concurrencies=config.get("concurrencies", (1, 2, 4)))
             complete = matrix["status"] == "complete"
             result.update(exit_code=0 if complete else 1, smoke_completed=complete,
                           measurement_status="complete" if complete else "incomplete",
