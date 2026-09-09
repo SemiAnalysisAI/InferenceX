@@ -3655,7 +3655,7 @@ dsr1-fp8-h200-dynamo-sglang:
           ep: 8
           dp-attn: true
 dsr1-fp4-b200-dynamo-sglang:
-  image: lmsysorg/sglang:v0.5.8.post1-cu130-runtime
+  image: lmsysorg/sglang:v0.5.19-cu130-runtime@sha256:710bc11443a7b1807d69803386468101bcfced35f86bf8fe92a8209e05a2f052
   model: deepseek-r1-fp4
   model-prefix: dsr1
   runner: cluster:b200-nscale
