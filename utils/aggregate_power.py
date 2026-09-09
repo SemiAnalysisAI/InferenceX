@@ -27,6 +27,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from statistics import mean
 
+if not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from infx.results.power import POWER_METRIC_SCHEMA_VERSION, WHOLE_METRIC_KEYS, with_power_metrics
+
 _POWER_COL_RE = re.compile(r"power", re.IGNORECASE)
 _POWER_EXCLUDE_RE = re.compile(r"limit|cap|max|min", re.IGNORECASE)
 _TIMESTAMP_COL_RE = re.compile(r"time", re.IGNORECASE)
@@ -36,21 +41,7 @@ _NUMBER_RE = re.compile(r"-?\d+(?:\.\d+)?")
 _INTEGRATION_METHOD = "per_device_trapezoidal_with_linear_boundary_interpolation"
 _DEFAULT_MAX_SAMPLE_GAP_S = 3.0
 _ACCUMULATOR_TOLERANCE = 0.05
-_POWER_METRIC_KEYS = {
-    "avg_power_w",
-    "avg_total_gpu_power_w",
-    "total_gpu_energy_j",
-    "joules_per_successful_query",
-    "joules_per_input_token",
-    "joules_per_output_token",
-    "joules_per_total_token",
-}
-
-# The unprefixed joules_per_* fields silently switched from role-local to
-# whole-deployment energy when multinode aggregation landed, and the values
-# alone cannot distinguish the two. Stamp the semantics so consumers fail
-# closed on unversioned rows instead of guessing.
-POWER_METRIC_SCHEMA_VERSION = 2
+_POWER_METRIC_KEYS = set(WHOLE_METRIC_KEYS)
 
 
 @dataclass(frozen=True)
@@ -758,19 +749,11 @@ def _patch_power_result(
 ) -> None:
     """Replace aggregate power fields with one validated metric set."""
     data = json.loads(agg_path.read_text(encoding="utf-8"))
-    for key in _POWER_METRIC_KEYS:
-        data.pop(key, None)
-    # Keep the canonical aggregate numeric-only for InferenceX-app's metric
-    # auto-capture. Detailed reason codes live in the validation sidecar.
-    data["power_metric_schema_version"] = POWER_METRIC_SCHEMA_VERSION
-    data["power_valid"] = int(power_valid)
-    data.pop("power_invalid_reasons", None)
-    if power_valid:
-        for key, value in metrics.items():
-            if value is None or not math.isfinite(value):
-                raise ValueError(f"non-finite power metric: {key}")
-            precision = 3 if key.endswith(("_w", "_j")) else 6
-            data[key] = round(value, precision)
+    data = with_power_metrics(
+        data, metric_keys=_POWER_METRIC_KEYS,
+        schema_version=POWER_METRIC_SCHEMA_VERSION,
+        power_valid=power_valid, metrics=metrics,
+    )
     _write_json_atomic(agg_path, data)
 
 

@@ -3,6 +3,7 @@ name: Test Process Result
 on:
   pull_request:
     paths:
+      - 'infx/results/**'
       - '.github/workflows/benchmark-multinode-tmpl.yml'
       - '.github/workflows/benchmark-tmpl.yml'
       - '.github/workflows/e2e-tests.yml'
