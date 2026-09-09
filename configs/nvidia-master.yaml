@@ -8176,7 +8176,7 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
       - spec-decoding: mtp
         conc-list: [256]
         kv-offloading: dram
-        kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
+        kv-offload-backend: { name: mooncake, version: "0.3.13.post1" }
         router: { name: dynamo-router, version: "1.4.0" }
         prefill:
           num-worker: 1
