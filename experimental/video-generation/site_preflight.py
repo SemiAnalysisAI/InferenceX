@@ -10,6 +10,33 @@ import shutil
 import subprocess
 
 
+def amd_runtime_observations() -> dict:
+    """A failed extraction can leave reusable files; inspect before rebuilding."""
+    root = Path("/it-share/data/wenyao-minimax-h3")
+    rootfs = root / "enroot-data/wenyao-minimax-h3-rocm"
+    files = {}
+    for path in (rootfs.with_suffix(".image.json"), rootfs / "etc/rc",
+                 rootfs / "etc/os-release", root / "work/campaigns/h3-cross-hardware/model-ready.json"):
+        files[str(path)] = path.read_text()[:16000] if path.is_file() else None
+    entries = {}
+    for name in ("usr/bin/python3", "usr/local/bin/python3", "opt/venv/bin/python3", "bin/bash", "etc/rc", "dev", "proc", "sys"):
+        path = rootfs / name
+        entries[name] = {"exists": path.exists(), "symlink": str(path.readlink()) if path.is_symlink() else None}
+    installed_sources = {}
+    for directory in (Path("/usr/local/lib/enroot"), Path("/usr/lib/enroot")):
+        for path in sorted(directory.glob("*.sh")):
+            lines = path.read_text().splitlines()
+            selected = set()
+            for i, line in enumerate(lines):
+                if any(word in line for word in ("unsquashfs", "runtime::create", "mksquashfs", "xattr")):
+                    selected.update(range(max(0, i - 4), min(len(lines), i + 60)))
+            if selected:
+                installed_sources[str(path)] = "\n".join(f"{i + 1}: {lines[i]}" for i in sorted(selected))[:30000]
+    return {"rootfs": str(rootfs), "exists": rootfs.is_dir(), "files": files,
+            "entries": entries, "installed_enroot_sources": installed_sources,
+            "gpu_allocation": False, "rootfs_changed": False}
+
+
 def allocation_observations(root: Path) -> list[dict]:
     """Read this task's saved scheduler receipts without requesting resources."""
     records = []
@@ -94,6 +121,7 @@ def inspect_site() -> dict:
         "runtime_candidates": candidates, "enroot_paths": enroot_paths, "persistent_storage": storage,
         "saved_allocations": allocation_observations(Path("/it-share/data/wenyao-minimax-h3/work/results/h3-cross-hardware"))
         if os.environ.get("H3_CLUSTER") == "mi355x-amds" and shutil.which("scontrol") else [],
+        "amd_runtime": amd_runtime_observations() if os.environ.get("H3_CLUSTER") == "mi355x-amds" else None,
         "gpu_execution": False, "runtime_compatibility": "not_tested",
     }
 
