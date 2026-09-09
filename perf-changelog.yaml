@@ -6959,3 +6959,54 @@
     - "Update vLLM ROCm image from vllm/vllm-openai-rocm:v0.27.1 (v0.27.1 release) to vllm/vllm-openai-rocm:nightly-d9105ea8001e0a6d77a96327d17515bb5791fb36 (2026-09-07 upstream ROCm nightly, digest sha256:74d4a95f3ae672ecddf9acb7296917def82d9eca51687fa2862ae72b03ff1907, tag commit vllm-project/vllm@d9105ea8; Docker Hub last pushed 2026-09-07T05:26:48Z). benchmarks/single_node/agentic/minimaxm3_fp8_mi300x_mtp.sh is unchanged: TRITON_ATTN attention, fp8 KV, block-size 128, EAGLE3 speculative decoding with the Inferact MiniMax-M3 EAGLE3-GQA draft and the committed golden synthetic acceptance length, minimax_m3 tool-call and reasoning parsers; the search space is unchanged. The upstream commit-pinned ROCm nightly is the same vllm commit the B200 MiniMax-M3 AgentX recipe moved to in #2860. Note that vllm-openai-rocm commit-nightly tags have expired from Docker Hub within days in the past; node squash caches keep merged configs running, but a re-pin to a durable tag may be needed later."
     - "Add --compilation-config cudagraph_mode=FULL_DECODE_ONLY to the serve command. The upstream nightly does not torch-compile MiniMaxM3SparseForConditionalGeneration, so with VLLM_USE_BREAKABLE_CUDAGRAPH=0 the default FULL_AND_PIECEWISE mode aborts at engine init with piecewise CUDA graphs unavailable (first sweep, run 34174124043, eval cell); full decode-only graphs are what the MI355X MiniMax-M3 sibling runs on its nightly (#2825)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2873
+
+- config-keys:
+    - qwen3.5-fp8-b200-sglang
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Bump the Qwen3.5 FP8 B200 SGLang image from lmsysorg/sglang:v0.5.14-cu130 to lmsysorg/sglang:v0.5.19-cu130."
+    - "Tune the 8k/1k serving recipe with --mamba-full-memory-ratio 0.37 and --linear-attn-prefill-backend flashinfer; raise max-prefill-tokens and chunked-prefill-size from 16384 to 32768 and mem-fraction-static from 0.8 to 0.86."
+    - "Expand the TP8 and TP4/EP1 sweep coverage through concurrency 640."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2866
+  
+
+- config-keys:
+    - dsv4-fp4-b200-sglang-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Replace the B200 DeepSeek-V4-Pro AgentX native EAGLE/MTP serving path with DSpark block size 6 on the DeepSeek-V4-Pro-0813 checkpoint."
+    - "Use one speculative step, seven draft tokens, and thinking-on golden synthetic acceptance length 3.77 for throughput; eval retains real DSpark verification."
+    - "Use SGLang's current W4A4 MegaMoE and DP LM-head flags for DP-attention instead of the deprecated MegaMoE environment variables."
+    - "Resolve draft-model jobs through the existing B200 SGLang speculative recipe and the staged DeepSeek-V4-Pro-0813 checkpoint."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2821
+
+- config-keys:
+    - dsv4-fp4-mi355x-vllm
+    - dsv4-fp4-mi355x-vllm-mtp
+    - dsv4-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - fixed-seq-len
+    - agentic-coding
+  description:
+    - "Repin all three DSv4 MI355X vLLM entries to vllm/vllm-openai-rocm:nightly-d9105ea8001e0a6d77a96327d17515bb5791fb36 (Docker Hub pushed 2026-09-07T05:26:48Z): the 8K/1K STP and MTP entries from nightly-7c5dc571cbd1064ecc8a9b1045637ff647aa22cb (#2792) and AgentX from nightly-e962733e08d10f7ca65dac4df99e116460b8b174 (#2841). d9105ea8 is the first ROCm nightly that ships vllm-project/vllm#53161 (vllm-project/vllm@de69e821), which fuses the DeepSeek-V4 native-FP8 shared expert into the MXFP4 routed-expert AITER kernel (FHMoE). The tag commit is 7 commits ahead of de69e821; the two superseded pins are 266 and 28 commits behind it, so both predate FHMoE."
+    - "No new serving flags. All three scripts already export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 (#2792 for 8K/1K STP and MTP, #2841 for AgentX), but on every nightly before de69e821 the request was inert: vLLM's eligibility check rejected this mixed FP4+FP8 checkpoint and the fusion self-disabled at startup. This pin is what makes the existing flag take effect, so the comments above it in the two 8K/1K scripts and on the two 8K/1K entries in configs/amd-master.yaml now say what the fusion does and which upstream commit it needs, instead of why it self-disables."
+    - "Fusion eligibility is gated on gfx950, tensor parallelism 8, data parallelism 1, no expert parallelism and no EPLB, --moe-backend aiter, BF16 model dtype, and the DeepSeek-V4 block-128 FP8 shared-expert quantization config. Both 8K/1K entries and the AgentX TP8 arm satisfy it; the AgentX dp-attn conc-64 arm runs data parallelism 8 and keeps the unfused path."
+    - "Export OMP_NUM_THREADS=1 from all three scripts. vLLM clamps torch threads itself, but only after the weights are loaded: the 'Reducing Torch threads from 16 to 1 for serving' line is emitted after 'Model loading took', so the checkpoint is read with 16 torch threads per worker across 8 workers. Setting it externally caps threads from process start, which is what that log line recommends."
+    - "Weight loading currently costs 5760-5946 s (96-99 min) per job on this runner, measured across the c1, c4, c56 and c64 AgentX jobs of run 34087124574 - roughly half of each ~3 h job. It does not affect any measured number: loading completes before warmup and the profiling phase. The effect is also only observable on this runner. A local EXT4 box serves the checkpoint from page cache and loads in ~40 s with or without the cap, so it never exercises the cold-read path. CI reads cold from WEKAFS, where each of the 8 ranks streams the full 805 GiB to slice its own shards - roughly 6.4 TB of aggregate network reads per job - and that is where oversubscribed reader threads cost real time."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2851
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260907."
+    - "Replace the unconditional --disable-shared-experts-fusion with --enforce-shared-experts-fusion, and move the disable to the EP > 1 branch only."
+    - "Add TORCH_BLAS_PREFER_HIPBLASLT=1 and SGLANG_OPT_USE_AITER_BATCHED_GEMM=1."
+    - "Set GPU_MAX_HW_QUEUES=5 on the DP-attention path, matching the spec-none sibling dsv4_fp4_mi355x_sglang.sh."
+    - "Add --enable-deepseek-v4-fp4-indexer."
+    - "Drop conc 8 from the TP8 no-offload arm, which now sweeps conc [1, 2, 4, 16, 32]."
+    - "Set SGLANG_PREFILL_DELAYER_MAX_PREFILL_BS_WINDOW_SIZE=1 on the DP-attention path."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2910

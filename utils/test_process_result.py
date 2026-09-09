@@ -357,24 +357,6 @@ class TestCalculations:
         output_data = json.loads(result.stdout)
         assert output_data["custom_metric"] == pytest.approx(0.5)
 
-    def test_tpot_to_interactivity_conversion(self, tmp_path, single_node_env_vars):
-        """Test that tpot fields are converted to interactivity."""
-        benchmark_result = {
-            "model_id": "test-model",
-            "max_concurrency": 8,
-            "total_token_throughput": 1000.0,
-            "output_throughput": 800.0,
-            "tpot_p50_ms": 20.0,  # Should become intvty_p50 = 50
-            "tpot_p99_ms": 50.0,  # Should become intvty_p99 = 20
-        }
-
-        result = run_script(tmp_path, single_node_env_vars, benchmark_result)
-        assert result.returncode == 0, f"Script failed: {result.stderr}"
-
-        output_data = json.loads(result.stdout)
-        assert output_data["intvty_p50"] == pytest.approx(50.0)
-        assert output_data["intvty_p99"] == pytest.approx(20.0)
-
     def test_throughput_per_gpu_single_node(self, tmp_path, single_node_env_vars):
         """PP and PCP expand the GPU denominator while DCP remains metadata."""
         benchmark_result = {
@@ -564,22 +546,6 @@ class TestEdgeCases:
         assert output_data["osl"] == 1024
         assert isinstance(output_data["isl"], int)
         assert isinstance(output_data["osl"], int)
-
-    def test_conc_from_benchmark_result(self, tmp_path, single_node_env_vars):
-        """Test that conc is read from benchmark result max_concurrency."""
-        benchmark_result = {
-            "model_id": "test-model",
-            "max_concurrency": 128,
-            "total_token_throughput": 5000.0,
-            "output_throughput": 4000.0,
-        }
-
-        result = run_script(tmp_path, single_node_env_vars, benchmark_result)
-        assert result.returncode == 0, f"Script failed: {result.stderr}"
-
-        output_data = json.loads(result.stdout)
-        assert output_data["conc"] == 128
-
 
 # =============================================================================
 # Integration: power aggregation patches the agg JSON

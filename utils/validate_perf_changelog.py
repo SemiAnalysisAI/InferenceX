@@ -15,7 +15,10 @@ import yaml
 from yaml.constructor import ConstructorError
 from yaml.resolver import BaseResolver
 
-from matrix_logic.validation import ChangelogEntry
+if not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from infx.matrix.validation import ChangelogEntry
 
 
 CANONICAL_PR_LINK = re.compile(

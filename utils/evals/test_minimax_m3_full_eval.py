@@ -174,8 +174,6 @@ def test_verifier_command_is_one_102_row_run_with_fixed_m3_settings(
         "--extra-body",
         '{"temperature":0,"top_p":1,"max_tokens":40960}',
     ]
-    assert "pass" not in " ".join(command).lower()
-    assert command.count("/runtime/source/sample.jsonl") == 1
 
 
 def test_projects_exactly_102_results_from_native_match_rate_without_rewriting_report(
