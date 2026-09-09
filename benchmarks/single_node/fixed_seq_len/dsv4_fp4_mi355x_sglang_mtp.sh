@@ -75,6 +75,9 @@ if [ "${DP_ATTENTION}" = "true" ]; then
         --dp "$TP"
         --enable-dp-attention
         --enable-prefill-delayer
+        # Safety valve for the delayer: without a watermark it keeps holding
+        # prefill back even when the KV pool is nearly empty.
+        --prefill-delayer-token-usage-low-watermark 0.7
     )
 fi
 if [ "${EP_SIZE:-1}" -gt 1 ]; then

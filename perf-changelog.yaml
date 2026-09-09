@@ -6980,4 +6980,6 @@
     - "Add TORCH_BLAS_PREFER_HIPBLASLT=1 and SGLANG_OPT_USE_AITER_BATCHED_GEMM=1."
     - "Set GPU_MAX_HW_QUEUES=5 on the DP-attention path, matching the spec-none sibling dsv4_fp4_mi355x_sglang.sh."
     - "Add --enable-deepseek-v4-fp4-indexer."
+    - "Add --prefill-delayer-token-usage-low-watermark 0.7 on the DP-attention path."
+    - "Drop conc 8 from the TP8 no-offload arm, which now sweeps conc [1, 2, 4, 16, 32]."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2910
