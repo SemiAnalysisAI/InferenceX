@@ -20,8 +20,9 @@ CONCURRENCIES = (1, 2, 4)
 
 def validate_spec(spec: dict) -> dict:
     frozen = gpu.validate_gpu_job(spec)
-    if not frozen.get("serving") or len(frozen["plan"]["cases"]) * frozen["plan"]["repetitions"] != 4:
-        raise ValueError("serving smoke requires exactly four measured requests per configuration")
+    count = len(frozen["plan"]["cases"]) * frozen["plan"]["repetitions"]
+    if not frozen.get("serving") or not 4 <= count <= 200:
+        raise ValueError("serving matrix requires 4–200 measured requests per configuration")
     return frozen
 
 
@@ -48,9 +49,9 @@ def _report(root: Path, matrix: dict) -> None:
     (report / "index.html").write_text(
         '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
         f'<title>H3 serving smoke</title><style>{_CSS}</style><main><h1>H3 serving smoke</h1>'
-        '<p>One hardware configuration; four measured requests at each concurrency. Warmups are separate. '
+        f'<p>One hardware configuration; {matrix["requests_per_configuration"]} measured requests at each concurrency. Warmups are separate. '
         'Latency is submit → downloaded media for technically valid clips. Throughput is valid clips / delivery wall seconds. '
-        'Four samples do not establish P90/P95 or sustainable capacity. Failed and unstarted requests remain counted.</p>'
+        'Percentiles from small samples are preliminary and do not establish sustainable capacity. Failed and unstarted requests remain counted.</p>'
         '<p><a href="../serving-smoke.json" download>Download summary and raw-evidence links</a></p>'
         '<div class="panel table-wrap"><table><thead><tr><th>Concurrency</th><th>Status</th><th>Scheduled</th>'
         '<th>Attempted</th><th>Valid</th><th>Failed</th><th>Not started</th><th>Delivery median (s)</th><th>Valid clips/s</th>'
@@ -64,13 +65,15 @@ def run_matrix(spec: dict, root: Path) -> dict:
     from .mvp_power import analyze_power
 
     spec = validate_spec(spec)
+    count = len(spec["plan"]["cases"]) * spec["plan"]["repetitions"]
     deadline = time.monotonic() + spec["limits"]["job_seconds"]
     matrix = {"schema_version": "1.0.0", "bundle_type": "h3_serving_smoke_matrix", "status": "running",
-              "started_at": gpu._now(), "plan": spec["plan"], "runtime": spec["baseline"], "gpu_uuids": spec["gpu_uuids"],
-              "scheduled": 12, "warmup_per_configuration": spec["plan"]["warmup_runs"],
+              "started_at": gpu._now(), "plan": spec["plan"], "runtime": spec["baseline"], "server": spec["server"], "gpu_uuids": spec["gpu_uuids"],
+              "scheduled": count * len(CONCURRENCIES), "requests_per_configuration": count,
+              "warmup_per_configuration": spec["plan"]["warmup_runs"],
               "ci_accepted": False, "release_qualified": False,
               "cells": [{"concurrency": concurrency, "status": "not_started", "verified": False,
-                         "completion": {"scheduled": 4, "attempted": 0, "completed": 0, "valid": 0, "failed": 4, "not_started": 4, "unfinished": 0}}
+                         "completion": {"scheduled": count, "attempted": 0, "completed": 0, "valid": 0, "failed": count, "not_started": count, "unfinished": 0}}
                         for concurrency in CONCURRENCIES]}
     path = root / "serving-smoke.json"
     gpu._write(path, matrix)
@@ -93,19 +96,19 @@ def run_matrix(spec: dict, root: Path) -> dict:
             if run_path.is_file():
                 raw = gpu._read(run_path)
                 cell["run"] = {"path": run_path.relative_to(root).as_posix(), "sha256": gpu._hash(run_path)}
-                summary = _summary(raw["records"], 4, raw["measurement"]["wall_seconds"])
+                summary = _summary(raw["records"], count, raw["measurement"]["wall_seconds"])
                 cell["completion"] = {key: summary[key] for key in ("scheduled", "completed", "valid", "failed")}
                 finished = {r["slot_id"] for r in raw["records"] if r["phase"] == "measurement" and r["attempted"]}
                 journal = directory / "baseline/events.jsonl"
                 events = [json.loads(line) for line in journal.read_text().splitlines()] if journal.exists() else []
                 started = finished | {event["slot_id"] for event in events if event["event"] == "attempt_started" and event["slot_id"].startswith("measurement-")}
-                cell["completion"].update(attempted=len(started), not_started=4-len(started), unfinished=len(started-finished))
+                cell["completion"].update(attempted=len(started), not_started=count-len(started), unfinished=len(started-finished))
             gpu._write(path, matrix)
             verified = verify_measurement_job(directory, deadline=deadline, require_success=True, serving_smoke=True)
             run, role = verified["runs"]["baseline"], receipt["roles"]["baseline"]
             cell.update(status="complete", verified=True, metrics={
                 "client_ready_p50_seconds": run["serving"]["client_ready_latency_seconds"]["p50"],
-                "valid_clips_per_second": _summary(run["records"], 4, run["measurement"]["wall_seconds"])["valid_clips_per_second"],
+                "valid_clips_per_second": _summary(run["records"], count, run["measurement"]["wall_seconds"])["valid_clips_per_second"],
                 "serving": run["serving"], "measurement": run["measurement"],
             })
             samples = [json.loads(line) for line in (directory / role["telemetry_path"]).read_text().splitlines()]

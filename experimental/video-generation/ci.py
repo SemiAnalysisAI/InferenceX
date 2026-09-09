@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""InferenceX H200 Slurm adapter for a prepared, trusted H3 runtime.
+"""InferenceX Slurm adapter for a prepared, trusted H3 runtime.
 
 No SSH, image import, dependency installation, or model download. The submit
 host and compute node share workspace.host, mounted at workspace.container by
@@ -28,6 +28,8 @@ from evaluator.mvp_gpu_job import cuda_devices
 
 PARTITION = "main"
 ACCOUNT = "sa-shared"
+DEFAULT_SITE = {"cluster": "h200-dgxc", "partition": PARTITION, "account": ACCOUNT, "gpu_model": "H200"}
+NVIDIA_CLUSTERS = {"h100-dgxc": "H100", "h200-dgxc": "H200", "b200-nscale": "B200"}
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,79}")
 SHA = re.compile(r"[0-9a-f]{64}")
 IDENTITY = ("JobId", "JobName", "Comment", "WorkDir", "Account", "Partition", "UserId")
@@ -84,9 +86,15 @@ def host_path(config: dict, container_path: str) -> Path:
 
 
 def validate_config(config: dict) -> dict:
-    need(set(config) == {"schema_version", "task_id", "workspace", "runtime", "spec", "resources", "allocation_receipts", "mode"}, "Unknown or missing site configuration fields")
+    required = {"schema_version", "task_id", "workspace", "runtime", "spec", "resources", "allocation_receipts", "mode"}
+    need(required <= set(config) <= required | {"site"}, "Unknown or missing site configuration fields")
+    site = config.get("site", DEFAULT_SITE)
+    need(isinstance(site, dict) and set(site) == set(DEFAULT_SITE), "Invalid site fields")
+    need(site["cluster"] in NVIDIA_CLUSTERS and site["gpu_model"] == NVIDIA_CLUSTERS[site["cluster"]], "Unsupported cluster or GPU model")
+    need(all(isinstance(site[key], str) and NAME.fullmatch(site[key]) for key in ("account", "partition")), "Explicit scheduler account and partition required")
     need(config["schema_version"] == 1 and NAME.fullmatch(config["task_id"]), "Invalid schema_version/task_id")
     need(config["mode"] in {"smoke", "regression", "serving-smoke"}, "mode must be smoke, regression or serving-smoke")
+    need(site["cluster"] == "h200-dgxc" or config["mode"] == "serving-smoke", "Cross-hardware sites currently require serving-smoke; paired export remains H200-only")
     need(set(config["workspace"]) == {"host", "container"}, "Invalid workspace mapping")
     for value in config["workspace"].values():
         path = absolute(value)
@@ -99,13 +107,21 @@ def validate_config(config: dict) -> dict:
     need(set(config["spec"]) == {"path", "sha256"} and SHA.fullmatch(config["spec"]["sha256"]), "Pinned prepared spec required")
     absolute(config["spec"]["path"])
     resources = config["resources"]
-    need(set(resources) == {"gpus", "cpus", "memory_gb", "minutes"}, "Invalid resource request")
-    for key, low, high in (("gpus", 1, 8), ("cpus", 1, 128), ("memory_gb", 1, 1400), ("minutes", 10, 90)):
-        need(type(resources[key]) is int and low <= resources[key] <= high, "Resource outside bounded H200 budget: " + key)
+    required_resources = {"gpus", "cpus", "memory_gb", "minutes"}
+    need(required_resources <= set(resources) <= required_resources | {"allocated_gpus"}, "Invalid resource request")
+    for key, low, high in (("gpus", 1, 8), ("cpus", 1, 128), ("memory_gb", 1, 1400), ("minutes", 10, 240)):
+        need(type(resources[key]) is int and low <= resources[key] <= high, "Resource outside bounded GPU budget: " + key)
+    reserved = allocation_gpus(config)
+    need(type(reserved) is int and resources["gpus"] <= reserved <= 8, "Allocated GPU budget must cover participating GPUs")
+    need(config["mode"] == "serving-smoke" or reserved == 8, "Paired measurements require a full eight-GPU allocation")
     need(isinstance(config["allocation_receipts"], list), "allocation_receipts must be a list")
     for path in config["allocation_receipts"]:
         absolute(path)
     return config
+
+
+def allocation_gpus(config: dict) -> int:
+    return config["resources"].get("allocated_gpus", config["resources"]["gpus"] if config["mode"] == "serving-smoke" else 8)
 
 
 def environment() -> dict[str, str]:
@@ -136,7 +152,8 @@ def verify_identity(receipt: dict, record: dict, task_id: str) -> None:
     expected = receipt["identity"]
     need(set(expected) == set(IDENTITY), "Incomplete allocation ownership receipt")
     need(all(record.get(key) == expected[key] for key in IDENTITY), "Slurm allocation identity differs from receipt")
-    need(record["Account"] == ACCOUNT and record["Partition"] == PARTITION, "Allocation is not in the SemiAnalysis H200 pool")
+    site = receipt.get("site", DEFAULT_SITE)
+    need(record["Account"] == site["account"] and record["Partition"] == site["partition"], "Allocation differs from its receipted scheduler pool")
     need(re.fullmatch(r"[^()]+\(" + str(os.getuid()) + r"\)", record["UserId"]), "Allocation Unix owner differs")
 
 
@@ -175,6 +192,9 @@ def recover(config: dict, result_root: Path, *, node: str | None = None) -> dict
             continue
         record = job_record(job)
         verify_identity(receipt, record, config["task_id"])
+        if receipt.get("site", DEFAULT_SITE) != config.get("site", DEFAULT_SITE):
+            reasons.append({"job_id": job, "reason": "allocation belongs to a different hardware site"})
+            continue
         state = record["JobState"]
         if state in TERMINAL:
             reasons.append({"job_id": job, "reason": state})
@@ -203,11 +223,15 @@ def allocate(config: dict, run_dir: Path, *, node: str | None = None) -> dict:
     need(NAME.fullmatch(job_name), "Invalid runner/job name")
     comment = "h3:" + nonce
     request = config["resources"]
+    site = config.get("site", DEFAULT_SITE)
     intent = {"task_id": config["task_id"], "job_name": job_name, "comment": comment,
               "work_dir": str(run_dir), "user_id": os.getuid(), "created_at": now()}
     write(run_dir / "allocation-intent.json", intent)
-    placement = ["--gres=gpu:" + str(request["gpus"])] if config["mode"] == "serving-smoke" else ["--exclusive", "--gres=gpu:8"]
-    argv = ["salloc", "--no-shell", "--no-bell", "--partition=" + PARTITION, "--account=" + ACCOUNT,
+    reserved = allocation_gpus(config)
+    placement = ["--gres=gpu:" + str(reserved)]
+    if reserved == 8:
+        placement.insert(0, "--exclusive")
+    argv = ["salloc", "--no-shell", "--no-bell", "--partition=" + site["partition"], "--account=" + site["account"],
             "--nodes=1", "--ntasks=1", *placement,
             "--cpus-per-task=" + str(request["cpus"]), "--mem=" + str(request["memory_gb"]) + "G",
             "--time=" + str(request["minutes"]), "--immediate=30",
@@ -223,9 +247,9 @@ def allocate(config: dict, run_dir: Path, *, node: str | None = None) -> dict:
     job = granted[0]
     # Save the expected identity before querying, so a lost query can be recovered.
     user = command(["id", "-un"]).strip()
-    receipt = {"task_id": config["task_id"], "created_at": now(), "identity": {
+    receipt = {"task_id": config["task_id"], "created_at": now(), "site": site, "identity": {
         "JobId": job, "JobName": job_name, "Comment": comment, "WorkDir": str(run_dir),
-        "Account": ACCOUNT, "Partition": PARTITION, "UserId": f"{user}({os.getuid()})"}}
+        "Account": site["account"], "Partition": site["partition"], "UserId": f"{user}({os.getuid()})"}}
     write(run_dir / "allocation.json", receipt)
     need(result.returncode == 0, "Slurm returned a failure after granting an allocation; reconcile receipt")
     return receipt
@@ -400,9 +424,9 @@ def launch(config: dict, output: Path) -> int:
     results.mkdir(parents=True, exist_ok=True)
     control.mkdir(parents=True, exist_ok=True)
     run_dir = results / f"github-{run_id}-{attempt}"
-    reserved_gpus = config["resources"]["gpus"] if config["mode"] == "serving-smoke" else 8
+    reserved_gpus = allocation_gpus(config)
     state = {"schema_version": 1, "task_id": config["task_id"], "run_id": run_id, "run_attempt": attempt,
-             "source_sha": sha, "started_at": now(), "phase": "preparing", "mode": config["mode"],
+             "source_sha": sha, "started_at": now(), "phase": "preparing", "mode": config["mode"], "site": config.get("site", DEFAULT_SITE),
              "ci_accepted": False, "release_qualified": False, "persistent_output": str(run_dir),
              "excluded_cache_paths": list(CACHE_PATHS),
              "ci": {"repository": os.environ.get("GITHUB_REPOSITORY"),
@@ -486,7 +510,8 @@ def launch(config: dict, output: Path) -> int:
             write(run_dir / "manifest.json", {"schema_version": 1, "task_id": config["task_id"],
                 "git_commit": sha, "ci": state["ci"], "run_id": run_id, "run_attempt": attempt,
                 "slurm_allocation": receipt, "runtime": config["runtime"], "prepared_spec": config["spec"],
-                "workload_plan": spec.get("plan"), "mode": config["mode"], "resources": state["resources"], "exit_code": code,
+                "workload_plan": spec.get("plan"), "mode": config["mode"], "site": config.get("site", DEFAULT_SITE),
+                "resources": state["resources"], "exit_code": code,
                 "evidence": {path: digest(run_dir / path) for path in links if (run_dir / path).is_file()},
                 "artifact_checksums": "SHA256SUMS", "excluded_persistent_caches": list(CACHE_PATHS)})
             collect(run_dir, output)
@@ -505,7 +530,7 @@ def enter(run_dir: Path) -> None:
     need(digest(config["runtime"]["entry"]) == config["runtime"]["entry_sha256"], "Entry changed on compute node")
     argv = ["/bin/bash", config["runtime"]["entry"], config["runtime"]["python"],
             str(mapped(config, Path(__file__).parent) / "ci.py"), "--inside", str(mapped(config, run_dir))]
-    os.execv(argv[0], argv)
+    os.execve(argv[0], argv, {**os.environ, "H3_EXPECTED_GPU_MODEL": config.get("site", DEFAULT_SITE)["gpu_model"]})
 
 
 def workload_complete(verified: dict) -> bool:

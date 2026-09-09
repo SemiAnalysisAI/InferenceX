@@ -4,6 +4,17 @@ run-name: H3 video smoke - ${{ github.ref_name }}
 on:
   workflow_dispatch:
     inputs:
+      cluster:
+        description: "Prepared H3 hardware site"
+        required: false
+        type: choice
+        options: [h200-dgxc, h100-dgxc, b200-nscale]
+        default: h200-dgxc
+      site-config:
+        description: "Pinned runner-local site JSON; empty uses the existing H200 configuration"
+        required: false
+        type: string
+        default: ""
       inventory-run-id:
         description: "Reuse a successful hardware inventory for CPU-only export"
         required: false
@@ -16,6 +27,14 @@ on:
         default: ""
   workflow_call:
     inputs:
+      cluster:
+        required: false
+        type: string
+        default: h200-dgxc
+      site-config:
+        required: false
+        type: string
+        default: ""
       inventory-run-id:
         required: false
         type: string
@@ -42,6 +61,7 @@ jobs:
     outputs:
       priority: ${{ steps.queue.outputs.priority }}
       queue-token: ${{ steps.queue.outputs.queue-token }}
+      gpu-model: ${{ steps.queue.outputs.gpu-model }}
     steps:
       - name: Authorize manual repository execution
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
@@ -68,13 +88,24 @@ jobs:
       - name: Prepare native queue identity
         id: queue
         env:
-          H3_SITE_CONFIG: ${{ vars.H3_SITE_CONFIG }}
+          H3_SITE_CONFIG: ${{ inputs.site-config || vars.H3_SITE_CONFIG }}
+          H3_CLUSTER: ${{ inputs.cluster }}
           PRIORITY_ENABLED: ${{ vars.PRIORITY_SCHEDULER_ENABLED }}
           NODE_SLOTS_ENABLED: ${{ vars.NODE_SLOT_SCHEDULER_ENABLED }}
           H3_SOURCE_RUN_IDS: ${{ inputs.source-run-ids }}
           H3_INVENTORY_RUN_ID: ${{ inputs.inventory-run-id }}
         run: |
           set -euo pipefail
+          case "$H3_CLUSTER" in
+            h200-dgxc) echo 'gpu-model=H200' >> "$GITHUB_OUTPUT" ;;
+            h100-dgxc) echo 'gpu-model=H100' >> "$GITHUB_OUTPUT" ;;
+            b200-nscale) echo 'gpu-model=B200' >> "$GITHUB_OUTPUT" ;;
+            *) echo 'Unsupported H3 hardware site.' >&2; exit 1 ;;
+          esac
+          if [[ "$H3_CLUSTER" != h200-dgxc && ( -n "$H3_SOURCE_RUN_IDS" || -n "$H3_INVENTORY_RUN_ID" ) ]]; then
+            echo 'Historical inventory reuse remains specific to the H200 inventory contract.' >&2
+            exit 1
+          fi
           if [[ -n "$H3_INVENTORY_RUN_ID" && ( -z "$H3_SOURCE_RUN_IDS" || ! "$H3_INVENTORY_RUN_ID" =~ ^[1-9][0-9]{0,19}$ ) ]]; then
             echo 'Hardware reuse needs one inventory run ID and explicit source executions.' >&2
             exit 1
@@ -88,7 +119,7 @@ jobs:
             echo 'H3 priority scheduling requires node-slot admission for nodes:1.' >&2
             exit 1
           fi
-          scored=$(printf '%s' '[{"runner":"cluster:h200-dgxc","framework":"sglang","node-count":1}]' |
+          scored=$(jq -nc --arg runner "cluster:$H3_CLUSTER" '[{runner:$runner,framework:"sglang","node-count":1}]' |
             uv run --no-project --with pyyaml --python 3.12 utils/ci_priority.py)
           echo "priority=$(jq -r '.[0].priority' <<<"$scored")" >> "$GITHUB_OUTPUT"
           python3 - <<'PY'
@@ -105,18 +136,19 @@ jobs:
     outputs:
       mode: ${{ steps.execute.outputs.mode }}
     if: ${{ inputs.inventory-run-id == '' }}
-    name: p${{ needs.prepare.outputs.priority }} | ${{ inputs.source-run-ids != '' && 'H3 H200 hardware inventory' || 'H3 video H200 smoke' }}
+    name: p${{ needs.prepare.outputs.priority }} | ${{ inputs.source-run-ids != '' && 'H3 H200 hardware inventory' || format('H3 video {0} smoke', needs.prepare.outputs.gpu-model) }}
     runs-on: >-
       ${{ fromJSON(
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
-        format('["self-hosted","cluster:h200-dgxc","nodes:1",{0},{1}]',
+        format('["self-hosted","cluster:{2}","nodes:1",{0},{1}]',
           toJSON(format('ci-job-{0}-{1}', needs.prepare.outputs.priority, needs.prepare.outputs.queue-token)),
-          toJSON(format('ci-attempt-{0}', github.run_attempt))) ||
-        '["cluster:h200-dgxc"]'
+          toJSON(format('ci-attempt-{0}', github.run_attempt)), inputs.cluster) ||
+        format('["cluster:{0}"]', inputs.cluster)
       ) }}
-    timeout-minutes: 105
+    timeout-minutes: 255
     env:
-      H3_SITE_CONFIG: ${{ vars.H3_SITE_CONFIG }}
+      H3_SITE_CONFIG: ${{ inputs.site-config || vars.H3_SITE_CONFIG }}
+      H3_CLUSTER: ${{ inputs.cluster }}
       H3_SOURCE_SHA: ${{ github.sha }}
       H3_REPOSITORY: ${{ github.repository }}
       H3_RUN_ID: ${{ github.run_id }}
@@ -143,9 +175,11 @@ jobs:
           python3 - <<'PY'
           import json, os, sys
           sys.path.insert(0, 'experimental/video-generation')
-          from ci import validate_config
+          from ci import DEFAULT_SITE, validate_config
           with open(os.environ['H3_SITE_CONFIG']) as stream:
               config = validate_config(json.load(stream))
+          if config.get('site', DEFAULT_SITE)['cluster'] != os.environ['H3_CLUSTER']:
+              raise ValueError('Prepared site does not match the selected CI hardware cluster')
           with open(os.environ['GITHUB_OUTPUT'], 'a') as stream:
               stream.write('mode=' + config['mode'] + '\n')
           PY

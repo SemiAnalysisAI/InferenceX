@@ -38,6 +38,44 @@ def save_receipt(root, receipt):
     return path
 
 
+def test_h100_site_keeps_full_allocation_separate_from_participating_gpus(tmp_path, monkeypatch):
+    monkeypatch.setenv("RUNNER_NAME", "h3-test-runner")
+    cfg = config(tmp_path)
+    cfg.update(mode="serving-smoke", site={"cluster": "h100-dgxc", "partition": "hpc-gpu-1", "account": "customer", "gpu_model": "H100"})
+    cfg["resources"].update(gpus=4, allocated_gpus=8)
+    ci.validate_config(cfg)
+    commands = []
+    def run(argv, **kwargs):
+        commands.append(argv)
+        return SimpleNamespace(stdout="salloc: Granted job allocation 123", stderr="", returncode=0)
+    monkeypatch.setattr(ci.subprocess, "run", run)
+    monkeypatch.setattr(ci, "command", lambda argv: "tester")
+    receipt = ci.allocate(cfg, tmp_path)
+    assert "--partition=hpc-gpu-1" in commands[0] and "--account=customer" in commands[0]
+    assert "--exclusive" in commands[0] and "--gres=gpu:8" in commands[0]
+    assert receipt["site"] == cfg["site"]
+    _, record = allocation(tmp_path)
+    record.update(receipt["identity"])
+    ci.verify_identity(receipt, record, cfg["task_id"])
+    step = ci.step_argv(cfg, receipt, record, tmp_path, tmp_path)
+    assert "--gpus-per-task=4" in step
+    record["Account"] = "other"
+    with pytest.raises(ValueError, match="identity differs"):
+        ci.verify_identity(receipt, record, cfg["task_id"])
+
+
+@pytest.mark.parametrize("change", [
+    {"site": {"cluster": "h100-dgxc", "partition": "hpc-gpu-1", "account": "customer", "gpu_model": "H200"}},
+    {"site": {"cluster": "unknown", "partition": "main", "account": "customer", "gpu_model": "H200"}},
+    {"resources": {"gpus": 4, "allocated_gpus": 2, "cpus": 32, "memory_gb": 512, "minutes": 90}},
+])
+def test_invalid_hardware_or_allocation_budget_is_rejected(tmp_path, change):
+    cfg = config(tmp_path)
+    cfg.update(change)
+    with pytest.raises(ValueError):
+        ci.validate_config(cfg)
+
+
 @pytest.mark.parametrize("mode", ["smoke", "serving-smoke"])
 def test_allocation_submits_from_receipted_work_directory(tmp_path, monkeypatch, mode):
     run_dir = tmp_path / "results"

@@ -332,7 +332,7 @@ def analyze_power(role: dict, run: dict, samples: list[dict], events: list[dict]
                                                 "submit_to_observed_provider_terminal; excludes_client_download_and_decode"),
                           "peak": "maximum_observed_sensor_sample_in_window; not_instantaneous_electrical_peak",
                           "energy_per_valid_clip": "sum_generation_energy_including_failed_or_invalid_completed_attempts_divided_by_technically_valid_clips",
-                          "sensor": "nvidia-smi power.draw; H200 NVML trailing_one_second_average; phase_edges_have_sensor_averaging_uncertainty",
+                          "sensor": "nvidia-smi power.draw; hardware_sensor_averaging_not_calibrated; phase_edges_have_sensor_averaging_uncertainty",
                           "clock_agreement_limit_seconds": _CLOCK_TOLERANCE_SECONDS,
                           "legacy_journal_agreement_limit_seconds": _LEGACY_JOURNAL_TOLERANCE_SECONDS},
             "clock_alignment": {"utc_minus_monotonic_seconds": offset, "observed_offset_spread_seconds": spread},

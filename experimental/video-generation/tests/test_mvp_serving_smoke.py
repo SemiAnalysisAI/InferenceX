@@ -38,9 +38,10 @@ def test_single_runtime_smoke_cannot_be_accepted_as_paired_evidence(spec, tmp_pa
 
 
 @pytest.mark.parametrize("fail_second", [False, True])
-def test_matrix_preserves_twelve_requests_without_doubling_roles(spec, tmp_path, monkeypatch, fail_second):
+@pytest.mark.parametrize("requests", [4, 20])
+def test_matrix_preserves_scheduled_requests_without_doubling_roles(spec, tmp_path, monkeypatch, fail_second, requests):
     spec["plan"]["cases"] = spec["plan"]["cases"][:1]
-    spec["plan"]["repetitions"] = 4
+    spec["plan"]["repetitions"] = requests
     spec["serving"] = {"concurrency": 1}
     submitted = []
     def execute(current, directory, *, serving_smoke):
@@ -51,15 +52,16 @@ def test_matrix_preserves_twelve_requests_without_doubling_roles(spec, tmp_path,
         return saved_single(current, directory)
     monkeypatch.setattr(gpu, "run_gpu_job", execute)
     result = smoke.run_matrix(spec, tmp_path)
-    assert result["completion"]["scheduled"] == 12
+    assert result["completion"]["scheduled"] == requests * 3
+    assert result["requests_per_configuration"] == requests
     assert [s["serving"]["concurrency"] for s in submitted] == ([1, 2] if fail_second else [1, 2, 4])
     assert all(s["plan"] == spec["plan"] for s in submitted)
-    assert result["completion"]["valid"] == (4 if fail_second else 12)
-    assert result["completion"]["not_started"] == (8 if fail_second else 0)
+    assert result["completion"]["valid"] == requests * (1 if fail_second else 3)
+    assert result["completion"]["not_started"] == (requests * 2 if fail_second else 0)
     assert result["status"] == ("failed" if fail_second else "complete")
     assert not result["ci_accepted"]
     report = (tmp_path / "report/index.html").read_text()
-    assert report.count("<video ") == (4 if fail_second else 12)
+    assert report.count("<video ") == requests * (1 if fail_second else 3)
     assert "../serving-smoke.json" in report
 
 

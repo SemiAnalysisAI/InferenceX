@@ -3,7 +3,7 @@
 **English** | [中文](README_zh.md)
 
 This experimental lane runs the existing H3 supervisor inside InferenceX CI on
-SemiAnalysis H200 resources. Its first target is a bounded same-build smoke:
+prepared SemiAnalysis NVIDIA resources. Its first target is a bounded same-build smoke:
 original generated MP4s, full video/audio validation, measured requests, and
 verified cleanup. It does not publish a native InferenceX database/UI result.
 Successful executions also publish a [versioned frontend result contract](RESULTS.md)
@@ -29,7 +29,9 @@ record, entry-only script and SHA256, container Python, frozen supervisor spec
 and SHA256, resource limits, task identity, and optional prior allocation receipts.
 The spec must record actual compute/model-use approval. Selecting the manual H3
 route requests only that configured, reviewed workload; dispatch accepts no shell
-command, model path, arbitrary config contents, or alternate provider.
+command, model path, arbitrary config contents, or alternate provider. The
+optional `h3-site-config` dispatch input selects an existing reviewed JSON file;
+`h3-cluster` must match its declared site before any allocation.
 
 The runner requires Python 3.11+, Git, the Slurm tools, and access to the declared
 shared paths. PyAV/NumPy and the pinned H3 runtime/model must already be prepared
@@ -54,12 +56,16 @@ locks and telemetry continue to use the assigned UUIDs.
 
 The adapter recovers task-owned allocation receipts before allocating. Imported
 receipts must match task identity, Unix ownership, and the scheduler's exact
-allocation identity; ambiguous intent blocks another submission. The fixed site
-is `main` / `sa-shared`. A new exclusive allocation reserves eight GPUs;
+allocation identity; ambiguous intent blocks another submission. The default H200 site
+is `main` / `sa-shared`. An explicit `site` records the cluster, partition, account,
+and expected GPU model. Currently admitted clusters are `h200-dgxc`, `h100-dgxc`,
+and `b200-nscale`; admission is implementation support, not a completed hardware run.
+`resources.allocated_gpus` records the full allocation separately from participating
+`resources.gpus`; set it to eight on whole-node H100. A paired allocation reserves eight GPUs;
 the example step selects four GPUs, 32 CPUs, and 1 TiB of host memory. The pinned
 four-rank loader exceeded 256 GiB during CPU weight staging; 1 TiB is a tested
 working allowance, not a measured minimum. Charge reserved capacity.
-`resources.minutes` is the total allocation cap, at most 90 minutes. The step
+`resources.minutes` is the total allocation cap, at most 240 minutes. The step
 reserves five minutes for outer cleanup, and the supervisor plus ten minutes
 must fit the allocation. For example: 90-minute allocation, 85-minute step,
 75-minute supervisor. Reused allocations need enough remaining time. Preserve
@@ -153,11 +159,11 @@ Serving runs require an uncalibrated policy. CPU fixtures test the harness;
 they do not establish H3 concurrency support or hardware performance.
 
 Set the reviewed site configuration to `"mode": "serving-smoke"` for the bounded
-C1/C2/C4 matrix. Its plan must contain exactly four measured requests, plus
-explicit warmups. It boots the baseline runtime once per cell in one allocation,
-runs twelve measured requests total, and stops after a failed cell. Allocation
-GPU count equals the requested count; ordinary paired smoke keeps its existing
-allocation behavior. `serving-smoke.json`, `gpu/cN/` and `report/index.html` retain
+C1/C2/C4 matrix. Its plan contains 4–200 measured requests per cell, plus
+explicit warmups. It boots the baseline runtime once per cell in one allocation
+and stops after a failed cell. Allocation GPU count defaults to the participating
+count; `resources.allocated_gpus` declares a larger required allocation explicitly.
+Ordinary paired smoke keeps its existing allocation behavior. `serving-smoke.json`, `gpu/cN/` and `report/index.html` retain
 the matrix, original request/media/telemetry evidence and playable report. An
 interrupted attempt is counted separately from an unstarted request. This mode
 skips the paired frontend export and cannot claim regression acceptance.
@@ -202,3 +208,15 @@ bash -n runtime-entry.example.sh
 [Test H3 Video](../../.github/workflows/test-h3-video.yml) runs these CPU checks
 and workflow linting on relevant changes. They make no model, scheduler, or GPU
 calls. Real CI execution and artifact inspection are separate acceptance evidence.
+
+## Cross-hardware serving matrices
+
+The existing `serving-smoke` mode accepts 4–200 measured requests per concurrency
+from `plan.cases × plan.repetitions`; concurrency remains 1, 2, and 4. Twenty per
+cell produces sixty measured requests plus three separate warmups when
+`warmup_runs: 1`. Failures and unstarted requests remain in the declared denominator.
+Freeze identical model files, prompts/seeds, video settings, and quality requirements
+across sites. Record different runtime builds and deployment topology explicitly.
+Small-sample percentiles are preliminary; this closed-loop sweep does not establish
+sustainable open-loop arrival capacity. AMD runtime/device admission is not yet
+implemented. Missing sites and measurements must not be represented by fixture data.

@@ -12,6 +12,16 @@ on:
                 required: false
                 type: boolean
                 default: false
+            h3-cluster:
+                description: "Prepared H3 site: h200-dgxc, h100-dgxc, or b200-nscale"
+                required: false
+                type: string
+                default: h200-dgxc
+            h3-site-config:
+                description: "Pinned runner-local H3 site JSON; empty uses existing H200 configuration"
+                required: false
+                type: string
+                default: ""
             h3-reuse-run-ids:
                 description: "Reprocess one or two accepted H3 CI runs (comma-separated); no new H3 generation"
                 required: false
@@ -122,6 +132,16 @@ on:
                 required: false
                 type: boolean
                 default: false
+            h3-cluster:
+                description: "Prepared H3 site: h200-dgxc, h100-dgxc, or b200-nscale"
+                required: false
+                type: string
+                default: h200-dgxc
+            h3-site-config:
+                description: "Pinned runner-local H3 site JSON; empty uses existing H200 configuration"
+                required: false
+                type: string
+                default: ""
             h3-reuse-run-ids:
                 description: "Reprocess one or two accepted H3 CI runs (comma-separated); no new H3 generation"
                 required: false
@@ -234,6 +254,8 @@ jobs:
             actions: read
         uses: ./.github/workflows/h3-video.yml
         with:
+            cluster: ${{ inputs.h3-cluster }}
+            site-config: ${{ inputs.h3-site-config }}
             source-run-ids: ${{ inputs.h3-reuse-run-ids }}
             inventory-run-id: ${{ inputs.h3-inventory-run-id }}
 
