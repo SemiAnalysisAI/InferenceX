@@ -78,7 +78,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: h3-video-${{ github.repository }}${{ inputs.cluster != 'h200-dgxc' && format('-{0}', inputs.cluster) || '' }}
+  group: h3-video-${{ github.repository }}${{ inputs.cluster != 'h200-dgxc' && format('-{0}', inputs.cluster) || '' }}${{ inputs.inspect-amd-node && '-node-inventory' || '' }}
   cancel-in-progress: false
 
 jobs:
