@@ -2,14 +2,14 @@ name: "minimax-m3-vllm-disagg-gb300-1p3d-tp2-tp2-c48-fp4-agentic"
 
 model:
   path: "nvidia/MiniMax-M3-NVFP4"
-  container: "vllm/vllm-openai:nightly-5e35a6f4f9bbc217c599692157ca985c894373f7"
+  container: "vllm/vllm-openai:v0.29.0"
   precision: "fp4"
 
 identity:
   model:
     repo: "nvidia/MiniMax-M3-NVFP4"
   container:
-    image: "vllm/vllm-openai:nightly-5e35a6f4f9bbc217c599692157ca985c894373f7"
+    image: "vllm/vllm-openai:v0.29.0"
   frameworks:
     dynamo: "1.4.0.dev20260730"
 

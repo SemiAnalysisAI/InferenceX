@@ -7643,7 +7643,7 @@ minimaxm3-fp4-b300-vllm-agentic-mtp:
       - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [24] }
 
 minimaxm3-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
-  image: vllm/vllm-openai:nightly-5e35a6f4f9bbc217c599692157ca985c894373f7
+  image: vllm/vllm-openai:v0.29.0
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: cluster:gb300-nv
