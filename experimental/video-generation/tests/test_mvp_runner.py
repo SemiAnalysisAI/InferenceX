@@ -557,7 +557,7 @@ def test_serving_unknown_remote_completion_stops_queued_requests(plan, tmp_path,
     assert len(state['posts']) == 2
     assert run['summary']['scheduled'] == run['summary']['failed'] == 4
     assert run['summary']['not_started'] == 2
-    assert run['serving']['outcomes']['timed_out'] == 2
+    assert run['serving']['outcomes']['timed_out'] == 2, run['records']
     assert run['serving']['outcomes']['not_started'] == 2
     assert run['serving']['peak_client_in_flight'] == 2
     assert run['serving']['client_ready_latency_seconds']['sample_count'] == 0
@@ -579,3 +579,15 @@ def test_invalid_serving_settings_fail_before_output(plan, tmp_path, mocked_medi
     with pytest.raises(ValueError):
         execute(plan, destination, 'http://localhost:9', serving_concurrency=concurrency, delivery_deadline_seconds=deadline)
     assert not destination.exists()
+
+
+@pytest.mark.parametrize("exception", [ConnectionError, AttributeError, ValueError])
+def test_watchdog_deadline_wins_over_socket_teardown_errors(plan, tmp_path, mocked_media, monkeypatch, exception):
+    plan['warmup_runs'] = 0
+    def stopped_transfer(*args, deadline, **kwargs):
+        time.sleep(max(0, deadline-time.monotonic()) + .001)
+        raise exception('CPU fixture: watchdog closed transport')
+    monkeypatch.setattr(mvp_runner, '_json_request', stopped_transfer)
+    run = execute(plan, tmp_path / 'deadline', 'http://127.0.0.1:1', serving_concurrency=1, timeout_seconds=.01)
+    assert run['serving']['outcomes']['timed_out'] == 1
+    assert run['summary']['not_started'] == 3

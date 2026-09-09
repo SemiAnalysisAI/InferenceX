@@ -681,7 +681,7 @@ def run_plan(
                     validate_media(record, deadline)
             except (Exception, KeyboardInterrupt) as exc:
                 # The deadline watchdog closes sockets, which can surface as EOF instead of socket.timeout.
-                if isinstance(exc, (OSError, http.client.HTTPException)) and time.monotonic() >= deadline:
+                if not isinstance(exc, KeyboardInterrupt) and record["outcome"] not in {"provider_failed", "provider_cancelled"} and time.monotonic() >= deadline:
                     exc = TimeoutError("attempt deadline exceeded")
                 record["error"] = _safe_error(exc)
                 if isinstance(exc, (TimeoutError, socket.timeout)):
