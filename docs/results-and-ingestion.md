@@ -206,6 +206,10 @@ C24/48 use DSpark4 with 3.36, and C96 has no speculation. Their serving settings
 are unchanged. Older artifacts retain their original DCP1/DRAM labels and require
 this identity caveat; metadata corrections do not change their measured values.
 
+The B200 launcher passes the plain DCGM exporter image name to its shared import
+helper, which converts the registry separator once. Cached exporter images are
+reused; an absent image uses the same valid NVIDIA registry URI.
+
 ### Raw inputs and aggregate schema
 
 [`process_agentic_result.py`](../utils/agentic/aggregation/process_agentic_result.py) resolves the current `results/aiperf_artifacts` layout and a one-child nested layout. It requires `profile_export.jsonl`. It reads these inputs when present:
