@@ -1,6 +1,4 @@
 name: gb200-fp4-glm5.2-agentx-agg
-slurm:
-  time_limit: '02:00:00'
 model:
   path: glm-5.2-fp4
   container: dynamo-sglang

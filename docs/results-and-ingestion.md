@@ -181,8 +181,8 @@ The GB200 GLM-5.2 aggregate AgentX recipe uses the shared custom-window
 producer, DCGM monitor, and post-job power adapter across its two four-GPU
 nodes. The launcher binds windows to the selected concurrencies and preserves
 native Slurm status, producer/exporter identity, and validation diagnostics
-before returning a failure. Its native Slurm limit is two hours; the serving
-configuration, including HiCache and synthetic acceptance, is unchanged.
+before returning a failure. The serving configuration, including HiCache and
+synthetic acceptance, and the ordinary Slurm time limit are unchanged.
 Other GB200 AgentX recipes retain their existing producer and power restrictions.
 
 ### Raw inputs and aggregate schema
