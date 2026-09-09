@@ -701,6 +701,8 @@ def run_plan(
                 if defer_validation:
                     record["timing_window"]["transport_end_monotonic_seconds"] = time.monotonic()
                     _event(journal, "transport_finished", slot_id=record["slot_id"])
+                from .mvp_runtime_timing import collect
+                record["server_timings"] = collect(record["job_id"])
         return record
 
     order = {slot["slot_id"]: index for index, slot in enumerate(slots)}

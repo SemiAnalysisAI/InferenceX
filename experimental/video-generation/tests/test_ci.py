@@ -276,10 +276,13 @@ def test_staging_reuses_identical_source_and_refuses_drift(tmp_path):
     (source / "evaluator").mkdir(parents=True)
     (source / "ci.py").write_text("entry")
     (source / "evaluator" / "__init__.py").write_text("")
+    (source / "runtime-patches").mkdir()
+    (source / "runtime-patches" / "timing.patch").write_text("CPU patch fixture")
     dest = tmp_path / "package"
     original = ci.stage_package(source, dest)
     assert ci.stage_package(source, dest) == original
-    (dest / "ci.py").write_text("tampered")
+    assert (dest / "runtime-patches" / "timing.patch").read_text() == "CPU patch fixture"
+    (dest / "runtime-patches" / "timing.patch").write_text("tampered")
     with pytest.raises(ValueError, match="source differs"):
         ci.stage_package(source, dest)
 

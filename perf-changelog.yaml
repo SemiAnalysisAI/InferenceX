@@ -7025,3 +7025,9 @@
   description:
     - "Seal AMD C1 serving inputs through CPU-only preparation after runtime inspection, reusing frozen model weights and the shared twenty-request eight-second workload. Record AITER/Ulysses layout and all eight allocated GPUs separately from four participating GPUs; generation compatibility remains unverified. Select no LLM jobs."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2916
+
+- config-keys: []
+  workflow-dispatch: h3-video.yml
+  description:
+    - "Add opt-in H3 server timing through an explicitly committed patch of the pinned SGLang runtime. Correlate HTTP receipt, accepted job, singleton forward and media-ready events by request ID; retain clock, batch, replica and patch identities. Historical data remains unavailable rather than inferred; select no LLM jobs."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2916

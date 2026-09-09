@@ -159,7 +159,9 @@ def _number(value: Any, label: str, minimum: float, maximum: float, integer: boo
 def validate_gpu_job(spec: dict) -> dict:
     """Pure validation: no filesystem probes, network, GPU calls, or execution."""
     frozen = json.loads(canonical_json_bytes(spec))
-    _keys(frozen, {"schema_version", "job_id", "authorization", "allocation", "gpu_uuids", "port", "lock_directory", "baseline", "candidate", "model", "server", "plan", "policy", "limits"}, "GPU job", optional={"serving", "gpu_vendor"})
+    _keys(frozen, {"schema_version", "job_id", "authorization", "allocation", "gpu_uuids", "port", "lock_directory", "baseline", "candidate", "model", "server", "plan", "policy", "limits"}, "GPU job", optional={"serving", "gpu_vendor", "server_timing"})
+    if "server_timing" in frozen and type(frozen["server_timing"]) is not bool:
+        raise ValueError("server_timing must be an explicit boolean")
     vendor = frozen.get("gpu_vendor", "nvidia")
     if vendor not in {"nvidia", "amd"}:
         raise ValueError("unsupported GPU vendor")
@@ -1081,6 +1083,17 @@ def _role(spec: dict, label: str, directory: Path, supervisor: _Supervisor, prob
     _write(directory / "gpu-job.json", receipt)
     identity = _source_identity(spec, label, env, supervisor.deadline, supervisor.cancelled)
     role["source_identity"] = identity
+    if spec.get("server_timing"):
+        from . import mvp_runtime_timing as timing
+        timing.validate_source(Path(spec[label]["source"]))
+        timing_path = metadata / "server-timings.jsonl"
+        timing_path.touch(mode=0o600, exist_ok=False)
+        env.update(VGBENCH_SERVER_TIMING_PATH=str(timing_path.resolve()), VGBENCH_SERVER_TIMING_INSTANCE=nonce)
+        role["server_timing_evidence"] = {**timing.identity(), "instance_id": nonce,
+            "path": timing_path.relative_to(directory).as_posix(), "sha256": None,
+            "boundary": "HTTP handler receipt / accepted job / singleton forward / validated stored media ready",
+            "limitations": ["CPU monotonic boundaries; no additional GPU synchronization.",
+                            "HTTP receipt follows framework routing/form parsing; excludes network ingress."]}
     snapshot = probe.snapshot()
     role["gpu_before"] = snapshot
     if not _idle(snapshot, spec["limits"]["max_idle_memory_mib"]):
@@ -1131,6 +1144,8 @@ def _role(spec: dict, label: str, directory: Path, supervisor: _Supervisor, prob
         sampler.begin_measurement()
         client_env = _runtime_env("", [], nonce, cache)
         client_env["PYTHONPATH"] = str(Path(__file__).resolve().parent.parent)
+        if spec.get("server_timing"):
+            client_env.update({name: env[name] for name in ("VGBENCH_SERVER_TIMING_PATH", "VGBENCH_SERVER_TIMING_INSTANCE")})
         hardware = ",".join(spec["gpu_uuids"])
         argv = [sys.executable, "-m", "evaluator.cli", "run", str(directory / "plan.json"), "--runtime", "sglang",
                 "--endpoint", f"http://127.0.0.1:{spec['port']}", "--runtime-revision", spec[label]["revision"],
@@ -1185,6 +1200,11 @@ def _role(spec: dict, label: str, directory: Path, supervisor: _Supervisor, prob
             role["cleanup"] = owner.close(deadline=cleanup_end)
             role["cleanup"].update(status="failed", idle_after=False, reason="telemetry did not start; GPU idle unverified")
         role["finished_at"] = _now()
+        if spec.get("server_timing"):
+            timing_path = directory / role["server_timing_evidence"]["path"]
+            with timing_path.open("rb") as timing_stream:
+                os.fsync(timing_stream.fileno())
+            role["server_timing_evidence"]["sha256"] = _hash(timing_path, supervisor.total_deadline)
         role["power_configuration_after"] = probe.power_configuration(deadline=supervisor.total_deadline)
         partial = directory / label / "run.json"
         if partial.is_file():
