@@ -691,6 +691,80 @@ def test_patch_agg_result_preserves_original_when_write_fails(
     assert agg.read_bytes() == original
 
 
+@pytest.fixture(params=["single", "multinode"])
+def patch_validated_power(request):
+    from aggregate_power import _patch_power_result
+    from aggregate_power_multinode import MultinodePowerAudit, _patch_agg
+
+    if request.param == "single":
+        return _patch_power_result
+    return lambda path, **kwargs: _patch_agg(path, MultinodePowerAudit(**kwargs))
+
+
+@pytest.mark.parametrize("valid", [True, False])
+def test_power_replacement_removes_stale_metrics(tmp_path, patch_validated_power, valid):
+    path = tmp_path / "agg.json"
+    path.write_text(json.dumps({
+        "hw": "fixture", "avg_power_w": 99, "total_gpu_energy_j": 50,
+        "power_invalid_reasons": ["stale"],
+    }))
+    patch_validated_power(path, power_valid=valid, metrics={
+        "avg_power_w": 12.34567, "joules_per_output_token": 0.12345678,
+    })
+    expected = {"hw": "fixture", "power_metric_schema_version": 2, "power_valid": int(valid)}
+    if valid:
+        expected.update(avg_power_w=12.346, joules_per_output_token=0.123457)
+    assert json.loads(path.read_text()) == expected
+
+
+@pytest.mark.parametrize("invalid", [None, float("nan"), float("inf"), -float("inf")])
+def test_power_replacement_rejects_nonfinite_without_overwriting(
+    tmp_path, patch_validated_power, invalid
+):
+    path = tmp_path / "agg.json"
+    original = b'{"hw":"fixture","avg_power_w":99}'
+    path.write_bytes(original)
+    with pytest.raises(ValueError, match="non-finite power metric: total_gpu_energy_j"):
+        patch_validated_power(path, power_valid=True, metrics={
+            "avg_power_w": 12, "total_gpu_energy_j": invalid,
+        })
+    assert path.read_bytes() == original
+
+
+@pytest.mark.parametrize(("raw", "error_type"), [
+    ("[]", TypeError), ('[["model","fixture"]]', TypeError),
+    ("null", AttributeError), ('"fixture"', AttributeError),
+    ("4", AttributeError), ("false", AttributeError),
+])
+def test_power_replacement_rejects_nonobject_json(
+    tmp_path, patch_validated_power, raw, error_type
+):
+    path = tmp_path / "agg.json"
+    path.write_text(raw)
+    with pytest.raises(error_type):
+        patch_validated_power(path, power_valid=False, metrics={})
+    assert path.read_text() == raw
+
+
+def test_power_transform_supports_another_metric_family_without_mutation():
+    from types import MappingProxyType
+    from infx.results.power import with_power_metrics
+
+    original = {"model": "fixture", "rack_energy_j": 99, "unrelated_metric": 7}
+    metrics = {"rack_energy_j": 12.34567, "joules_per_task": 0.12345678}
+    result = with_power_metrics(
+        MappingProxyType(original), metric_keys=("rack_energy_j", "joules_per_task"),
+        schema_version=3, power_valid=True, metrics=MappingProxyType(metrics),
+    )
+    assert result == {
+        "model": "fixture", "unrelated_metric": 7,
+        "power_metric_schema_version": 3, "power_valid": 1,
+        "rack_energy_j": 12.346, "joules_per_task": 0.123457,
+    }
+    assert original == {"model": "fixture", "rack_energy_j": 99, "unrelated_metric": 7}
+    assert metrics == {"rack_energy_j": 12.34567, "joules_per_task": 0.12345678}
+
+
 def test_run_emits_complete_whole_deployment_metric_contract(tmp_path: Path):
     base = 1_700_000_000.0
     csv = tmp_path / "gpu_metrics.csv"

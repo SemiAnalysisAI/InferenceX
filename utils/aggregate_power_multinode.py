@@ -41,7 +41,6 @@ from pathlib import Path, PurePosixPath
 
 try:
     from .aggregate_power import (
-        POWER_METRIC_SCHEMA_VERSION,
         BenchmarkData,
         _append_reason,
         _integrate_device,
@@ -50,13 +49,20 @@ try:
     )
 except ImportError:  # Direct execution: python utils/aggregate_power_multinode.py
     from aggregate_power import (
-        POWER_METRIC_SCHEMA_VERSION,
         BenchmarkData,
         _append_reason,
         _integrate_device,
         _load_benchmark_data,
         _write_json_atomic,
     )
+
+from infx.results.power import (
+    ALL_POWER_METRIC_KEYS as _ALL_POWER_METRIC_KEYS,
+    POWER_METRIC_SCHEMA_VERSION,
+    ROLE_METRIC_KEYS,
+    WHOLE_METRIC_KEYS,
+    with_power_metrics,
+)
 
 # --- srt-slurm dcgm-power v1 wire contract (mirrored constants) -------------
 
@@ -110,25 +116,6 @@ _STARTUP_FAILURE_REASONS = (
 )
 
 _INTEGRATION_METHOD = "per_device_trapezoidal_with_linear_boundary_interpolation"
-
-WHOLE_METRIC_KEYS = (
-    "avg_power_w",
-    "avg_total_gpu_power_w",
-    "total_gpu_energy_j",
-    "joules_per_successful_query",
-    "joules_per_input_token",
-    "joules_per_output_token",
-    "joules_per_total_token",
-)
-ROLE_METRIC_KEYS = (
-    "prefill_gpu_energy_j",
-    "decode_gpu_energy_j",
-    "prefill_avg_power_w",
-    "decode_avg_power_w",
-    "prefill_joules_per_input_token",
-    "decode_joules_per_output_token",
-)
-_ALL_POWER_METRIC_KEYS = WHOLE_METRIC_KEYS + ROLE_METRIC_KEYS
 
 
 def _dedupe(values: list[str]) -> tuple[str, ...]:
@@ -1188,17 +1175,11 @@ def _select_window_for_result(
 
 def _patch_agg(agg_path: Path, audit: MultinodePowerAudit) -> None:
     data = json.loads(agg_path.read_text(encoding="utf-8"))
-    for key in _ALL_POWER_METRIC_KEYS:
-        data.pop(key, None)
-    data["power_metric_schema_version"] = POWER_METRIC_SCHEMA_VERSION
-    data["power_valid"] = int(audit.power_valid)
-    data.pop("power_invalid_reasons", None)
-    if audit.power_valid:
-        for key, value in audit.metrics.items():
-            if value is None or not math.isfinite(value):
-                raise ValueError(f"non-finite power metric: {key}")
-            precision = 3 if key.endswith(("_w", "_j")) else 6
-            data[key] = round(value, precision)
+    data = with_power_metrics(
+        data, metric_keys=_ALL_POWER_METRIC_KEYS,
+        schema_version=POWER_METRIC_SCHEMA_VERSION,
+        power_valid=audit.power_valid, metrics=audit.metrics,
+    )
     _write_json_atomic(agg_path, data)
 
 

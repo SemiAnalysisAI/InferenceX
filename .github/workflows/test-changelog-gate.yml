@@ -74,7 +74,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install pytest "pydantic>=2" pyyaml tabulate
+          python -m pip install pytest pytest-xdist "pydantic>=2" pyyaml tabulate
 
       - name: Run validator, reuse, and gating tests
         run: |
@@ -91,4 +91,4 @@ jobs:
             utils/evals/test_batched_eval.py \
             utils/evals/test_run_eval_dispatch.py \
             runners/test_slurm_utils.py \
-            -v
+            -v -n 4

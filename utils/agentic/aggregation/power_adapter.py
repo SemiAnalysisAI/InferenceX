@@ -13,15 +13,19 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from utils.aggregate_power import (
+from infx.results.power import (
+    ALL_POWER_METRIC_KEYS as _ALL_POWER_METRIC_KEYS,
     POWER_METRIC_SCHEMA_VERSION,
+    with_power_metrics,
+)
+
+from utils.aggregate_power import (
     _empty_integration,
     _patch_power_result,
     _validation_payload,
     _write_json_atomic,
 )
 from utils.aggregate_power import run as run_power
-from utils.aggregate_power_multinode import _ALL_POWER_METRIC_KEYS
 from utils.aggregate_power_multinode import run as run_multinode_power
 
 from .process_agentic_result import _resolve_artifact_dir
@@ -397,11 +401,11 @@ def _record_multinode_adapter_failure(
     aggregate = json.loads(agg_result.read_text(encoding="utf-8"))
     if not isinstance(aggregate, dict):
         raise ValueError("AgentX aggregate must be a JSON object")
-    for key in _ALL_POWER_METRIC_KEYS:
-        aggregate.pop(key, None)
-    aggregate["power_metric_schema_version"] = POWER_METRIC_SCHEMA_VERSION
-    aggregate["power_valid"] = 0
-    aggregate.pop("power_invalid_reasons", None)
+    aggregate = with_power_metrics(
+        aggregate, metric_keys=_ALL_POWER_METRIC_KEYS,
+        schema_version=POWER_METRIC_SCHEMA_VERSION,
+        power_valid=False, metrics={},
+    )
     _write_json_atomic(agg_result, aggregate)
     _write_json_atomic(
         validation_result,
