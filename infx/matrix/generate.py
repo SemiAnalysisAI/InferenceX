@@ -234,21 +234,12 @@ def recipe_node_count(prefill: dict, decode: dict) -> int | None:
         # config topology remains the best available scheduling estimate.
         return None
 
-    recipe = yaml.safe_load(recipe_path.read_text())
-    resources = recipe["resources"]
+    resources = yaml.safe_load(recipe_path.read_text())["resources"]
     if "agg_nodes" in resources:
-        worker_nodes = int(resources["agg_nodes"])
-    elif "prefill_nodes" in resources and "decode_nodes" in resources:
-        worker_nodes = int(resources["prefill_nodes"]) + int(resources["decode_nodes"])
-    else:
-        raise ValueError(f"Recipe has no supported node resource fields: {recipe_path}")
-
-    # A recipe that isolates the benchmark client on its own allocation node
-    # (benchmark.client_dedicated_node: true) needs one more node than its workers.
-    dedicated_client_nodes = int(
-        (recipe.get("benchmark") or {}).get("client_dedicated_node") is True
-    )
-    return worker_nodes + dedicated_client_nodes
+        return int(resources["agg_nodes"])
+    if "prefill_nodes" in resources and "decode_nodes" in resources:
+        return int(resources["prefill_nodes"]) + int(resources["decode_nodes"])
+    raise ValueError(f"Recipe has no supported node resource fields: {recipe_path}")
 
 
 def worker_node_count(

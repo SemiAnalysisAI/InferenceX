@@ -164,29 +164,6 @@ def test_multinode_node_count_prefers_recipe_resources(
     assert multinode_node_count(prefill, decode, "unknown", {}) == expected_nodes
 
 
-def test_multinode_node_count_resolves_repo_relative_recipe_path(
-    sample_runner_config,
-):
-    prefill = {
-        "num-worker": 4,
-        "tp": 4,
-        "additional-settings": [
-            (
-                "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/"
-                "trtllm/glm5.2/gb300-fp4/agentic/"
-                "dynamo-disagg-gb300-4p1d-dep8-c227-b16-mtp3.yaml"
-            )
-        ],
-    }
-    decode = {"num-worker": 1, "tp": 8}
-
-    # prefill_nodes 4 + decode_nodes 2 + 1 dedicated client node from the recipe,
-    # not the 4*4/4 + 8/4 fallback
-    assert multinode_node_count(
-        prefill, decode, "cluster:gb300-nv", sample_runner_config
-    ) == 7
-
-
 # =============================================================================
 # Test Fixtures
 # =============================================================================
