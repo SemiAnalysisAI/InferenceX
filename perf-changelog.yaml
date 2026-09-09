@@ -6994,4 +6994,4 @@
     - "Use one speculative step, seven draft tokens, and thinking-on golden synthetic acceptance length 3.77 for throughput; eval retains real DSpark verification."
     - "Use SGLang's current W4A4 MegaMoE and DP LM-head flags for DP attention, with additional MegaMoE workspace headroom at concurrency 32, 64, and 128."
     - "Route the workload through the B300 DSXE launcher, read weights from /data/models, and mount a writable Hugging Face/Xet cache."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2918
