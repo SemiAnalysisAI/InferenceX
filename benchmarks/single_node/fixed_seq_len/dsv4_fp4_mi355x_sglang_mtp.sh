@@ -37,6 +37,8 @@ export SGLANG_DSV4_REASONING_EFFORT=max
 export SGLANG_USE_ROCM700A=0
 export SGLANG_HACK_FLASHMLA_BACKEND=unified_kv_triton
 export AITER_BF16_FP8_MOE_BOUND=0
+export TORCH_BLAS_PREFER_HIPBLASLT=1
+export SGLANG_OPT_USE_AITER_BATCHED_GEMM=1
 
 
 SERVER_LOG=/workspace/server.log
@@ -59,12 +61,14 @@ SPEC_FLAGS=(
     --speculative-eagle-topk 1
     --speculative-num-draft-tokens 4
 )
+SHARED_EXPERTS_ARGS=(--enforce-shared-experts-fusion)
 CHUNKED_PREFILL_SIZE=$ISL
 if [ "${DP_ATTENTION}" = "true" ]; then
     export SGLANG_SHARED_EXPERT_TP1=1
     export SGLANG_DP_SHARED_EXPERT_LOCAL=1
     export SGLANG_DP_USE_GATHERV=1
     export SGLANG_DP_USE_REDUCE_SCATTER=1
+    export GPU_MAX_HW_QUEUES=5
 
     CHUNKED_PREFILL_SIZE=$((ISL * TP))
     PARALLEL_ARGS+=(
@@ -75,6 +79,7 @@ if [ "${DP_ATTENTION}" = "true" ]; then
 fi
 if [ "${EP_SIZE:-1}" -gt 1 ]; then
     PARALLEL_ARGS+=(--ep-size "$EP_SIZE")
+    SHARED_EXPERTS_ARGS=(--disable-shared-experts-fusion)
 fi
 
 set -x
@@ -87,6 +92,7 @@ python3 -m sglang.launch_server \
     --trust-remote-code \
     --disable-radix-cache \
     --attention-backend dsv4 \
+    --enable-deepseek-v4-fp4-indexer \
     --cuda-graph-max-bs ${CONC} \
     --max-running-requests ${CONC} \
     --mem-fraction-static 0.90 \
@@ -95,7 +101,7 @@ python3 -m sglang.launch_server \
     --kv-cache-dtype fp8_e4m3 \
     --context-length $MAX_MODEL_LEN \
     --chunked-prefill-size $CHUNKED_PREFILL_SIZE \
-    --disable-shared-experts-fusion \
+    "${SHARED_EXPERTS_ARGS[@]}" \
     --tool-call-parser deepseekv4 \
     --reasoning-parser deepseek-v4 \
     --chat-template "$(dirname "$0")/../chat_templates/deepseek_v4_thinking.jinja" \
