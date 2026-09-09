@@ -167,6 +167,11 @@ artifact 检查是独立的验收证据。
 
 ## 跨硬件服务测量
 
+`h3-preflight-only=true` 仅记录所选 CI runner 的身份、SSH 主机公钥和命令路径，
+不分配或查询 GPU。独立的 `h3-site-preflight` 产物不代表性能结果或运行时验收。
+该模式支持 `mi355x-amds`；AMD 视频生成仍未接入。预检不可同时重放历史结果。
+各硬件站点使用独立的工作流并发组，并保留原有 Slurm 校验。
+
 现有 `serving-smoke` 模式支持每档 4–200 条测量请求，数量由
 `plan.cases × plan.repetitions` 决定；并发档位保持 1、2、4。每档 20 条
 产生 60 条测量请求，`warmup_runs: 1` 时另有 3 条独立预热。失败和未启动

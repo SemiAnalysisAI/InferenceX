@@ -211,6 +211,13 @@ calls. Real CI execution and artifact inspection are separate acceptance evidenc
 
 ## Cross-hardware serving matrices
 
+`h3-preflight-only=true` records the selected CI runner's identity, public SSH
+host keys, and command availability without reserving or querying GPUs. Its
+separate `h3-site-preflight` artifact is not benchmark or runtime qualification
+evidence. It also accepts `mi355x-amds`; actual AMD generation remains unsupported.
+Preflight cannot be combined with historical result reuse. Hardware sites have
+independent workflow concurrency groups; each retains its existing Slurm checks.
+
 The existing `serving-smoke` mode accepts 4–200 measured requests per concurrency
 from `plan.cases × plan.repetitions`; concurrency remains 1, 2, and 4. Twenty per
 cell produces sixty measured requests plus three separate warmups when
