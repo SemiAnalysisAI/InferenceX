@@ -208,7 +208,10 @@ AgentX 聚合的顶层身份和拓扑字段与基准摄取兼容。
 | 服务器指标 | `server_metrics.cache`、`kv_cache`、token 总数、来源详情，以及可能存在的 `warnings` |
 | 兼容性 | `kv_cache_pool_tokens` 镜像 `server_metrics.kv_cache.gpu_total_tokens` |
 
-当 `dynamo-sglang` 运行包含 `sglang:` 遥测时，处理器使用现有 SGLang 适配器聚合缓存、利用率和 token 指标。Dynamo 前端指标仍保留在原始服务器导出中；其抓取边界可能包含预热请求，因此不一定与仅含 profiling 请求的总数一致。此路径的逻辑 GPU KV 容量保持 `null` 并附带警告，因为 Dynamo 可能导出多个 TP rank 重复报告的容量值。只要服务器提供，HiCache 主机利用率和各缓存来源的计数仍会保留。缺少主机命中计数并不代表 CPU 缓存命中为零。Dynamo-vLLM 的聚合行为保持不变。
+当 `dynamo-sglang` 运行包含 `sglang:` 遥测时，处理器使用 SGLang 适配器
+聚合缓存、利用率和 token 指标。逻辑 GPU KV 容量保持 `null` 并附带警告，
+因为多个 TP rank 可能重复报告容量值。原始 Dynamo 前端总数可能包含预热请求。
+缺少主机命中计数并不代表 CPU 缓存命中为零。
 
 应用会将嵌套 AgentX v3 值展平为规范指标键。例如 `median_ttft`、`p95_e2el`、`total_tput_tps`、`tput_per_gpu`、`server_gpu_cache_hit_rate` 和 `gpu_kv_cache_usage_pct`。p50 映射为 `median`。存在 full-response ITL 字段时优先使用它。交互性百分位数按对应 ITL 百分位数的倒数派生，使历史记录和当前记录采用同一定义。
 

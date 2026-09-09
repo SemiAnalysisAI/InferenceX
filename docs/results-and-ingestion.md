@@ -215,14 +215,11 @@ Other important AgentX fields include:
 | Server metrics | `server_metrics.cache`, `kv_cache`, token totals, source details, and any `warnings` |
 | Compatibility | `kv_cache_pool_tokens` mirrors `server_metrics.kv_cache.gpu_total_tokens` |
 
-When a `dynamo-sglang` run includes `sglang:` telemetry, the processor uses the
-existing SGLang adapter for cache, utilization, and token metrics. Dynamo
-frontend metrics remain in the raw server export; their scrape boundaries can
-include warmup requests and need not match profiling-only request totals.
-Logical GPU KV capacity remains `null` with a warning on this path because
-Dynamo can expose replicated TP-rank capacity gauges. HiCache host utilization
-and cache-source counters remain available when emitted. A missing host-hit
-counter does not prove zero CPU cache hits. Dynamo-vLLM aggregation is unchanged.
+For a `dynamo-sglang` run with `sglang:` telemetry, the processor uses the
+SGLang adapter for cache, utilization, and token metrics. Logical GPU KV capacity
+remains `null` with a warning because TP ranks may report duplicate capacity
+values. Raw Dynamo frontend totals may include warmup requests. Missing host-hit
+counters do not imply zero CPU cache hits.
 
 The app flattens nested AgentX v3 values into canonical metric keys. Examples include `median_ttft`, `p95_e2el`, `total_tput_tps`, `tput_per_gpu`, `server_gpu_cache_hit_rate`, and `gpu_kv_cache_usage_pct`. It maps p50 to `median`. Full-response ITL fields take precedence when present, and interactivity percentiles are derived as the reciprocal of the matching ITL percentile so historical and current rows use one definition.
 
