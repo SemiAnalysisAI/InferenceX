@@ -177,6 +177,14 @@ as a clean comparison, reconcile issued, completed, cancelled, and errored
 requests with raw profiling records and token totals. GPU-board energy is
 separate from estimated whole-system power.
 
+The GB200 GLM-5.2 aggregate AgentX recipe uses the shared custom-window
+producer, DCGM monitor, and post-job power adapter across its two four-GPU
+nodes. The launcher binds windows to the selected concurrencies and preserves
+native Slurm status, producer/exporter identity, and validation diagnostics
+before returning a failure. Its native Slurm limit is two hours; the serving
+configuration, including HiCache and synthetic acceptance, is unchanged.
+Other GB200 AgentX recipes retain their existing producer and power restrictions.
+
 ### Raw inputs and aggregate schema
 
 [`process_agentic_result.py`](../utils/agentic/aggregation/process_agentic_result.py) resolves the current `results/aiperf_artifacts` layout and a one-child nested layout. It requires `profile_export.jsonl`. It reads these inputs when present:

@@ -7145,3 +7145,12 @@
     - "Update SGLang image from lmsysorg/sglang:nightly-dev-cu13-20260907-30705c00 (2026-09-07 cu13 dev nightly, build commit sgl-project/sglang@30705c00) to the v0.5.19 release image lmsysorg/sglang:v0.5.19-cu130 (digest sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9, build commit sgl-project/sglang@0bcd822377da7b5718e674eaf9c870d349424dd1, Docker Hub last pushed 2026-09-04T22:50:19Z)."
     - "The release image ships the same CUDA 13.0.3, FlashInfer 0.6.18 and sgl-kernel 0.4.6.post1 as the nightly. benchmarks/single_node/agentic/qwen3.5_fp8_h200_mtp.sh is unchanged: SGLANG_ENABLE_SPEC_V2 EAGLE MTP at 3 steps, golden acceptance length 3.39, flashinfer attention with allreduce fusion, fp8 quantization and fp8_e4m3 KV, HiCache kernel IO / page_first layout. TP8/EP1 DRAM HiCache concurrency 2 through 24 unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2966
+
+- config-keys:
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Collect shared measured GPU power for the existing two-node GB200 GLM-5.2 aggregate AgentX recipe with producer 80d7203e424f903c9017de4608ee2044afce9574, exact selected-concurrency windows, and post-job adapter validation. Preserve native status and invalid diagnostics before failure, and cap native Slurm jobs at two hours. Serving settings, other AgentX recipes, and fixed-sequence producer pins are unchanged."
+    - "为现有双节点 GB200 GLM-5.2 聚合 AgentX 配方接入共享 GPU 实测功耗，按所选并发绑定测量窗口，并在任务结束后通过适配器校验。返回失败前保留原生状态及无效诊断，原生 Slurm 任务限时两小时；服务配置、其他 AgentX 配方和固定序列 producer 版本保持不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2923

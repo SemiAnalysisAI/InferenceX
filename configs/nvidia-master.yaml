@@ -9162,6 +9162,7 @@ glm5.2-fp4-gb200-dynamo-sglang-agentic-agg:
           ep: 1
           dp-attn: false
           additional-settings:
+          # Shared GPU power telemetry; native Slurm jobs are capped at two hours.
           - "CONFIG_FILE=recipes/sglang/glm5.2/gb200-fp4/agentic/glm5.2-agentx-agg.yaml"
 glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg:
   image: lmsysorg/sglang:v0.5.17-cu130
