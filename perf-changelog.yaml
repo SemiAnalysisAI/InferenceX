@@ -7011,3 +7011,13 @@
     - "Run the upstream SGLang image as shipped and pin the PP recipes plus router identity to ai-dynamo/dynamo main commit 61c37bc33c3e88da3facaa39fa2b5caf616740ba."
     - "Match thinking-on Golden AL to SGLang speculative steps: 4.41 at C704 (5 steps), 3.97 at C565 (4 steps), and 4.8 for all three aggregate points (6 steps); select multi-node benchmark mode for the two-node TP8 point."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2812
+
+- config-keys:
+    - minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp
+    - minimaxm3-fp4-gb200-dynamo-vllm-agentic-disagg-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh the full GB200 Dynamo-vLLM AgentX configuration across the configured aggregate and disaggregated topology points."
+    - "Retain aggregate SimpleCPU-offload concurrency 20 and 30, and configure Mooncake host KV storage, NIXL over UCX, explicit thinking mode, and the committed MiniMax-M3 EAGLE3-GQA acceptance target."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2807
