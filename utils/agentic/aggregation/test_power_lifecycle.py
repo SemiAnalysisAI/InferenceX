@@ -13,6 +13,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 BENCHMARK_LIB = REPO_ROOT / "benchmarks" / "benchmark_lib.sh"
+POWERX_AGENTIC_DIR = REPO_ROOT / "benchmarks" / "single_node" / "agentic"
 
 
 def _run_lifecycle(
@@ -102,6 +103,64 @@ exit "$rc"
 
 def _events(tmp_path: Path) -> list[str]:
     return (tmp_path / "events.log").read_text().splitlines()
+
+
+def _build_replay_command(*, grace_period: int | None = None) -> str:
+    env = {
+        **os.environ,
+        "AIPERF_EXPERIMENTAL_FAST": "0",
+        "AIPERF_SERVER_METRICS_URLS": "",
+        "CONC": "4",
+        "DURATION": "3600",
+        "FRAMEWORK": "sglang",
+        "MAX_MODEL_LEN": "",
+        "MODEL": "example/model",
+        "PORT": "8000",
+    }
+    if grace_period is None:
+        env.pop("AIPERF_BENCHMARK_GRACE_PERIOD", None)
+    else:
+        env["AIPERF_BENCHMARK_GRACE_PERIOD"] = str(grace_period)
+    completed = subprocess.run(
+        [
+            "bash",
+            "-c",
+            f"source {str(BENCHMARK_LIB)!r}; "
+            "TRACE_SOURCE_FLAG='--public-dataset example'; "
+            "build_replay_cmd /tmp/aiperf-artifacts; "
+            "printf '%s\\n' \"$REPLAY_CMD\"",
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return completed.stdout
+
+
+@pytest.mark.parametrize(("override", "expected"), [(None, 30), (1800, 1800)])
+def test_replay_command_uses_bounded_configurable_grace(
+    override: int | None, expected: int
+) -> None:
+    command = _build_replay_command(grace_period=override)
+
+    assert command.count("--benchmark-grace-period") == 1
+    assert f"--benchmark-grace-period {expected}" in command
+
+
+def test_powerx_platform_launchers_share_1800_second_grace() -> None:
+    for hardware in ("b200", "b300"):
+        wrapper = (POWERX_AGENTIC_DIR / f"qwen3.5_fp8_{hardware}_sglang.sh").read_text()
+        assert "qwen3.5_fp8_blackwell_powerx.sh" in wrapper
+
+    for launcher in (
+        "qwen3.5_fp8_blackwell_powerx.sh",
+        "qwen3.5_fp8_mi355x_sglang.sh",
+    ):
+        source = (POWERX_AGENTIC_DIR / launcher).read_text()
+        assert re.findall(
+            r"^export AIPERF_BENCHMARK_GRACE_PERIOD=(\d+)$", source, re.MULTILINE
+        ) == ["1800"]
 
 
 @pytest.mark.parametrize(

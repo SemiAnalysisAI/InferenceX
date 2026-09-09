@@ -118,11 +118,11 @@ if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
     export SWEBENCH_AGENT_STEP_LIMIT=150
     run_eval --port "$PORT"
 else
-    build_replay_cmd "$RESULT_DIR"
     # Long AgentX responses admitted near the end of the measurement window can
     # take several minutes to finish. Bound their post-window drain without
     # extending the measured request-admission window.
-    REPLAY_CMD+=" --benchmark-grace-period 1800"
+    export AIPERF_BENCHMARK_GRACE_PERIOD=1800
+    build_replay_cmd "$RESULT_DIR"
     REPLAY_CMD+=" --server-metrics http://localhost:$PORT/metrics"
     run_agentic_replay_and_write_outputs "$RESULT_DIR"
 fi

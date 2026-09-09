@@ -3087,6 +3087,7 @@ AIPERF_DEPS_READY=0
 AIPERF_FAILED_REQUEST_THRESHOLD="${AIPERF_FAILED_REQUEST_THRESHOLD:-0.10}"
 AIPERF_LIVE_FAILED_REQUEST_THRESHOLD="${AIPERF_LIVE_FAILED_REQUEST_THRESHOLD:-$AIPERF_FAILED_REQUEST_THRESHOLD}"
 AIPERF_TRACE_IDLE_GAP_CAP_SECONDS="${AIPERF_TRACE_IDLE_GAP_CAP_SECONDS:-300}"
+AIPERF_BENCHMARK_GRACE_PERIOD="${AIPERF_BENCHMARK_GRACE_PERIOD:-30}"
 
 agentic_pip_install() {
     local pip_install=(python3 -m pip install)
@@ -3300,6 +3301,7 @@ build_replay_cmd() {
     REPLAY_CMD+=" --tokenizer ${INFERENCEX_TOKENIZER_PATH:-$MODEL}"
     REPLAY_CMD+=" --concurrency $CONC"
     REPLAY_CMD+=" --benchmark-duration $duration"
+    REPLAY_CMD+=" --benchmark-grace-period $AIPERF_BENCHMARK_GRACE_PERIOD"
     REPLAY_CMD+=" --stats-interval 30"
     REPLAY_CMD+=" --random-seed 42"
     # Fail runs early once the live error ratio crosses the configured limit.

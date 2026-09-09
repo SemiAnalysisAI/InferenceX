@@ -23,6 +23,7 @@ export ENABLE_AGENTX_POWER=1
 export REQUIRE_POWER=1
 export AIPERF_FAILED_REQUEST_THRESHOLD=0
 export AIPERF_LIVE_FAILED_REQUEST_THRESHOLD=0
+export AIPERF_BENCHMARK_GRACE_PERIOD=1800
 export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="sglang:"
 export AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES=0
 export WEKA_LOADER_OVERRIDE=semianalysis_cc_traces_weka_062126_256k
@@ -63,11 +64,13 @@ verify_trace_revision
 {
     printf 'model=%s\nmodel_revision=%s\nmodel_path=%s\nimage=%s\n' \
         "$MODEL" "$MODEL_REVISION" "$MODEL_PATH" "${IMAGE:-unknown}"
-    printf 'inferencex_commit=%s\naiperf_commit=%s\n' \
+    printf 'inferencex_commit=%s\naiperf_commit=%s\naiperf_source_url=%s\n' \
         "$(git -c safe.directory="$INFERENCEX_REPO_ROOT" -C "$INFERENCEX_REPO_ROOT" rev-parse HEAD)" \
-        "$(git -c safe.directory="$AIPERF_DIR" -C "$AIPERF_DIR" rev-parse HEAD)"
-    printf 'tp=%s\nep=%s\nconcurrency=%s\nduration=%s\nagentx_fast=%s\ncuda_visible_devices=%s\n' \
-        "$TP" "$EP_SIZE" "$CONC" "$DURATION" "${AIPERF_EXPERIMENTAL_FAST:-0}" "${CUDA_VISIBLE_DEVICES:-unset}"
+        "$(git -c safe.directory="$AIPERF_DIR" -C "$AIPERF_DIR" rev-parse HEAD)" \
+        "$(git -c safe.directory="$AIPERF_DIR" -C "$AIPERF_DIR" remote get-url origin)"
+    printf 'tp=%s\nep=%s\nconcurrency=%s\nduration=%s\nbenchmark_grace_period=%s\nagentx_fast=%s\ncuda_visible_devices=%s\n' \
+        "$TP" "$EP_SIZE" "$CONC" "$DURATION" "$AIPERF_BENCHMARK_GRACE_PERIOD" \
+        "${AIPERF_EXPERIMENTAL_FAST:-0}" "${CUDA_VISIBLE_DEVICES:-unset}"
     sha256sum "$MODEL_PATH/config.json" "$MODEL_PATH/tokenizer_config.json"
     nvidia-smi --query-gpu=index,uuid,name,driver_version,power.limit --format=csv
 } > "$RESULT_DIR/powerx_runtime.txt"

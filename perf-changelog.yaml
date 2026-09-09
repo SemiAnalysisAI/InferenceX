@@ -6940,3 +6940,14 @@
   description:
     - "Run a separate EOS-respecting long-context and cache correctness probe after PowerX evals, preserving complete request and response evidence without changing canonical AgentX replay."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2827
+
+- config-keys:
+    - qwen3.5-fp8-b200-sglang-agentic-powerx
+    - qwen3.5-fp8-b300-sglang-agentic-powerx
+    - qwen3.5-fp8-mi355x-sglang-agentic-powerx
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Pin the validated AgentX duration-cutoff drain fix and use a bounded 1800-second post-window drain for all three PowerX platforms."
+    - "Record the effective profiling grace and AIPerf source revision in each PowerX runtime artifact."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2827
