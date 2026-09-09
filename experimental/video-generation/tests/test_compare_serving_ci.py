@@ -85,7 +85,10 @@ def test_publication_retains_uncalibrated_failure_and_original_seals(tmp_path, m
     monkeypatch.setattr(fidelity, "write_report", report)
     output = tmp_path / "published"
     fidelity.publish(["123", "456"], output)
-    assert (output / "source-123/SHA256SUMS").read_bytes() == (originals / "123/SHA256SUMS").read_bytes()
+    assert (output / "sources/123/original-SHA256SUMS").read_bytes() == (originals / "123/SHA256SUMS").read_bytes()
+    assert ci.read(output / "sources/123/manifest.json")["git_commit"] == SHA
+    assert not (output / "source-123").exists()
+    assert not (output / "sources/123/gpu").exists()
     result = json.loads((output / "comparison.json").read_text())
     assert result["source_artifacts"][1]["ci"]["databaseId"] == 456
     receipt = ci.read(output / "reprocessing.json")

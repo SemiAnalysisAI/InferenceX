@@ -6,7 +6,9 @@ import argparse
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
+import tempfile
 
 import ci
 import export_ci
@@ -59,13 +61,25 @@ def publish(run_ids: list[str], output: Path) -> None:
     ci.need(run_id.isdigit() and attempt.isdigit()
             and os.environ.get("GITHUB_REPOSITORY") == export_ci.REPOSITORY, "GitHub producer identity required")
     output.mkdir(parents=True, exist_ok=False)
+    with tempfile.TemporaryDirectory(prefix="h3-fidelity-sources-") as scratch:
+        compare_sources(run_ids, output, Path(scratch), sha, run_id, attempt)
+
+
+def compare_sources(run_ids: list[str], output: Path, scratch: Path, sha: str, run_id: str, attempt: str) -> None:
     sources, directories = [], []
     for source in run_ids:
         metadata, artifact = export_ci.verified_execution(source)
-        target = output / ("source-" + source)
+        target = scratch / ("source-" + source)
         subprocess.run(["gh", "run", "download", source, "--repo", export_ci.REPOSITORY,
                         "--name", artifact["name"], "--dir", str(target)], check=True, timeout=300)
-        directories.append(selected_run(target, metadata))
+        selected = selected_run(target, metadata)
+        directories.append(selected)
+        snapshot = output / "sources" / source
+        snapshot.mkdir(parents=True)
+        for name in ("ci.json", "manifest.json", "serving-smoke.json"):
+            shutil.copyfile(target / name, snapshot / name)
+        shutil.copyfile(target / "SHA256SUMS", snapshot / "original-SHA256SUMS")
+        shutil.copyfile(selected / "run.json", snapshot / "c1-run.json")
         sources.append({"ci": metadata, "artifact": artifact,
                         "source_seal_sha256": ci.digest(target / "SHA256SUMS")})
     policy = ci.read(Path(__file__).parent / "mvp/example-uncalibrated.policy.json")
