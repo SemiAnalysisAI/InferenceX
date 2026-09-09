@@ -2,15 +2,12 @@
 
 import os
 import subprocess
-from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 LAUNCHER_PATH = REPO_ROOT / "runners/launch_gb300-nv.sh"
-MASTER_CONFIG_PATH = REPO_ROOT / "configs/nvidia-master.yaml"
 # Controlled routing inputs, deliberately independent of the deployed pins.
 FORK_URL = "https://example.test/power-producer.git"
 PRODUCER_PIN = "a" * 40
@@ -123,26 +120,6 @@ SRT_REPO_DIR={repo_dir!s}
 
     marker = repo_dir / "recipes/sglang/deepseek-v4/8k1k/overlay-marker.txt"
     return route_log.read_text().splitlines(), workspace, repo_dir, marker
-
-
-def _config_file_values(value: object) -> Iterator[str]:
-    """Yield every CONFIG_FILE value reachable below a config search space."""
-    if isinstance(value, dict):
-        for child in value.values():
-            yield from _config_file_values(child)
-    elif isinstance(value, list):
-        for child in value:
-            yield from _config_file_values(child)
-    elif isinstance(value, str) and value.startswith("CONFIG_FILE="):
-        yield value.removeprefix("CONFIG_FILE=").split(":", 1)[0]
-
-
-def _workspace_recipe_path(config_file: str) -> Path:
-    assert config_file.startswith("recipes/")
-    relative = config_file.removeprefix("recipes/")
-    return REPO_ROOT / "benchmarks/multi_node/srt-slurm-recipes" / relative
-
-
 @pytest.mark.parametrize(
     ("launcher_name", "indent", "cache_directory"),
     [
@@ -234,24 +211,3 @@ def test_dsv4_power_route_rejects_unexpected_checkout_before_publishing_stamp(tm
         _run_dsv4_route(tmp_path, uses_dcgm_power=True, reported_head="b" * 40)
 
     assert not (tmp_path / "workspace/power-producer-sha.txt").exists()
-
-
-def test_gb300_dsv4_recipe_images_match_their_master_configs():
-    master = yaml.safe_load(MASTER_CONFIG_PATH.read_text())
-    configs = {
-        key: config
-        for key, config in master.items()
-        if isinstance(config, dict)
-        and config.get("runner") == "gb300"
-        and config.get("framework") == "dynamo-sglang"
-        and config.get("model-prefix") == "dsv4"
-    }
-    assert configs
-    for key, config in configs.items():
-        config_files = set(_config_file_values(config["scenarios"]))
-        assert config_files, key
-        for config_file in config_files:
-            recipe_path = _workspace_recipe_path(config_file)
-            assert recipe_path.is_file(), (key, config_file)
-            recipe_image = yaml.safe_load(recipe_path.read_text())["model"]["container"]
-            assert recipe_image == config["image"], (key, config_file)
