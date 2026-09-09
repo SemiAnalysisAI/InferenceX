@@ -22,8 +22,10 @@ case "$RUNNER" in
     PRODUCT=h200; DEFAULT_TIME=45; REQUIRE_ACCOUNT=0
     SRUN_EXTRA=(--container-remap-root)
     ;;
-  b200-dgxc)
-    PRODUCT=b200; DEFAULT_TIME=30; REQUIRE_ACCOUNT=1
+  b200-nscale)
+    # Bare-metal B200 (nsc): native IB rails + gdrdrv make the deepep low-latency EP16 rows
+    # dispatchable, unlike the virtualized dgxc pool. 45 min covers first-run backend builds.
+    PRODUCT=b200; DEFAULT_TIME=45; REQUIRE_ACCOUNT=1
     ALLOC_EXTRA=(--mem=0)
     ;;
   b300)
@@ -47,7 +49,7 @@ TIME_MIN="${COLLX_TIME:-$DEFAULT_TIME}"
 IMAGE="$COLLX_IMAGE"
 TS="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
 case "$COLLX_BENCH" in
-  deepep-v2) ;;
+  deepep-v2 | uccl-ep | nccl-ep) ;;
   *) collx_die "unsupported $RUNNER EP backend: $COLLX_BENCH" ;;
 esac
 
@@ -76,10 +78,15 @@ collx_select_image "$IMAGE"
 MOUNT_SRC="$(collx_stage_path "$REPO_ROOT" "${COLLX_STAGE_DIR:-}")"
 collx_stage_repo "$REPO_ROOT" "$MOUNT_SRC"
 CONTAINER_MOUNTS="$MOUNT_SRC:/ix"
-# ---- backend-setup: pinned DeepEP source + isolated build cache -------------
-# The backend case above admits only deepep-v2, so its staging is unconditional.
-collx_prepare_deepep_source "$MOUNT_SRC" \
-  || collx_die "cannot stage the pinned backend source"
+# ---- backend-setup: pinned backend source + isolated build cache -------------
+# Stage the pinned source for the selected from-source backend before allocation (the
+# submit host has network; compute nodes may not).
+case "$COLLX_BENCH" in
+  deepep-v2) collx_prepare_deepep_source "$MOUNT_SRC" \
+    || collx_die "cannot stage the pinned DeepEP source" ;;
+  uccl-ep) collx_prepare_uccl_source "$MOUNT_SRC" \
+    || collx_die "cannot stage the pinned UCCL source" ;;
+esac
 export COLLX_BACKEND_SOURCE_ROOT=/ix/experimental/CollectiveX/.collx_sources
 collx_prepare_backend_cache "$COLLX_SQUASH_DIR" \
   || collx_die "cannot prepare the isolated backend cache"
@@ -109,16 +116,24 @@ for allocation_attempt in 1 2 3; do
   elif [ "$RUNNER" = b300 ] \
       && ! collx_validate_cuda_context_on_job "$JOB_ID" "$NODES" "$GPN"; then
     validation_failure=cuda-context
+  elif ! collx_validate_gpu_health_on_job "$JOB_ID" "$NODES" "$GPN"; then
+    validation_failure=gpu-health
   else
     break
   fi
   retryable=0
   [ "$RUNNER:$validation_failure" != h100-dgxc:network ] || retryable=1
   [ "$RUNNER:$validation_failure" != b300:cuda-context ] || retryable=1
+  # A throttled GPU paces every rank, so retrying on another node is right on every SKU.
+  [ "$validation_failure" != gpu-health ] || retryable=1
   if [ "$retryable" = 0 ] || [ "$allocation_attempt" = 3 ]; then
     if [ "$validation_failure" = network ]; then
       collx_log_tail "${COLLX_NETWORK_PROFILE_LOG:-}"
       collx_die "allocated nodes failed the network profile"
+    fi
+    if [ "$validation_failure" = gpu-health ]; then
+      collx_log_tail "${COLLX_GPU_HEALTH_LOG:-}"
+      collx_die "allocated nodes hold a thermally throttled GPU"
     fi
     collx_log_tail "$COLLX_CUDA_CONTEXT_LOG"
     collx_die "allocated nodes failed accelerator context validation"

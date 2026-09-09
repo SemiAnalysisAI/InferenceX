@@ -1,0 +1,99 @@
+{
+  "source": "https://raw.githubusercontent.com/MiniMax-AI/MiniMax-Provider-Verifier/c899f95e17bfc4a338ddd4cb1638279125885e55/sample.jsonl",
+  "ref": "c899f95e17bfc4a338ddd4cb1638279125885e55",
+  "indices": [
+    71
+  ],
+  "license": "MIT License\n\nCopyright (c) 2025 MiniMax Provider Verifier Contributors\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.",
+  "rows": [
+    {
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are MiniMax M2, an AI assistant developed by Minimax. You are a helpful assistant."
+        },
+        {
+          "role": "user",
+          "content": "Run a duplicate therapy check for patient P-009417 using the medication list at /mnt/clinical/emr/patients/P-009417/med_list_v3.json. Flag duplicates at the RxNorm ingredient level, consider only active meds (ignore discontinued and on_hold), include OTC items, require the same route to count as a duplicate, and return a detailed JSON report."
+        }
+      ],
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "flag_duplicate_therapies",
+            "description": "Analyze a patient's medication list to identify potential duplicate therapies by ingredient or class. Supports RxNorm and ATC classification, status filtering, route matching, and OTC inclusion. Returns structured results.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "patient_id": {
+                  "type": "string",
+                  "description": "Patient identifier"
+                },
+                "med_list_path": {
+                  "type": "string",
+                  "description": "Absolute file path to the medication list (JSON or CSV)"
+                },
+                "classification_scheme": {
+                  "type": "string",
+                  "description": "Classification used for duplicate detection",
+                  "enum": [
+                    "rxnorm_ingredient",
+                    "rxnorm_clinical_drug",
+                    "atc_class"
+                  ]
+                },
+                "overlap_policy": {
+                  "type": "string",
+                  "description": "How to determine concurrent therapy",
+                  "enum": [
+                    "current_only",
+                    "date_overlap"
+                  ]
+                },
+                "concurrency_window_days": {
+                  "type": "integer",
+                  "description": "If overlap_policy is date_overlap, the window in days to consider therapies overlapping (0 means exact date overlap)",
+                  "minimum": 0
+                },
+                "strict_route_matching": {
+                  "type": "boolean",
+                  "description": "Flag as duplicate only when routes match (e.g., oral vs inhalation)"
+                },
+                "include_otc": {
+                  "type": "boolean",
+                  "description": "Include over-the-counter medications in the analysis"
+                },
+                "ignore_statuses": {
+                  "type": "array",
+                  "description": "Medication statuses to exclude from analysis",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "active",
+                      "on_hold",
+                      "discontinued"
+                    ]
+                  }
+                },
+                "output_format": {
+                  "type": "string",
+                  "description": "Output report format",
+                  "enum": [
+                    "summary",
+                    "detailed_json"
+                  ]
+                }
+              },
+              "required": [
+                "patient_id",
+                "med_list_path"
+              ]
+            }
+          }
+        }
+      ],
+      "expected_tool_call": true
+    }
+  ]
+}

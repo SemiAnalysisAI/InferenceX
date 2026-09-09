@@ -6,7 +6,7 @@
 
 ## 为什么选择 SPEED-Bench
 
-[SPEED-Bench](https://arxiv.org/abs/2604.09557) 是一个统一的推测解码基准，覆盖多样的语义领域和真实的服务场景。其 Qualitative split 包含 880 个语义多样的提示词——11 个类别各 80 个——用于测量接受率（AR）和接受长度（AL）。其 Throughput splits 覆盖固定的 1K–32K 输入长度和多种熵区间，用于系统级评估。该基准使用真实提示词，因为随机 token 输入会扭曲接受行为、专家路由和吞吐量测量结果。
+[SPEED-Bench](https://arxiv.org/abs/2604.09557) 是一个统一的推测解码基准，覆盖多样的语义领域和真实的服务场景。其 Qualitative split 包含 880 个语义多样的提示词，分为 11 个类别，每类 80 个。该 split 用于测量接受率（AR）和接受长度（AL）。其 Throughput splits 覆盖固定的 1K–32K 输入长度和多种熵区间，用于系统级评估。该基准使用真实提示词，因为随机 token 输入会扭曲接受行为、专家路由和吞吐量测量结果。
 
 SPEED-Bench 是一个实用的跨引擎标准，而不是 InferenceX 独有的工作负载：
 
@@ -22,7 +22,7 @@ AL 取决于工作负载：草稿模型的预测在某些领域比其他领域�
 
 ## AgentX 公平性指南
 
-根据 AgentX 指南，每个模型、思考模式和草稿长度都有一个已提交的黄金 AL。当某个基准场景启用合成接受后，提交可以选择任意受支持的草稿长度，但不能替换为其他接受目标。不同模型保留各自基于 SPEED-Bench 测得的曲线；所有评估同一模型和模式的提交都使用同一条曲线。
+根据 AgentX 指南，每个模型、思考模式和草稿长度都有一个已提交的黄金 AL。当某个基准场景启用合成接受后，提交可以选择任意受支持的草稿长度，但不能替换为其他接受目标。不同模型保留各自基于 SPEED-Bench 测得的曲线。所有评估同一模型和模式的提交都使用同一条曲线。
 
 vLLM 通过合成拒绝采样支持这一策略。例如，EAGLE3 运行可以通过 `synthetic_acceptance_length` 注入所选 YAML 值：
 
@@ -38,6 +38,37 @@ vllm serve MODEL \
 ```
 
 该选项通过 [vllm-project/vllm#40662](https://github.com/vllm-project/vllm/pull/40662) 在 vLLM 的不同模型运行器中实现统一。
+
+SGLang 通过其模拟接受环境变量支持同一策略。这些变量设置在服务环境中（srt-slurm YAML 的 `aggregated_environment` / `decode_environment` 部分，或在基准脚本中于启动前导出）：
+
+```yaml
+SGLANG_SIMULATE_ACC_LEN: '3.24'   # 来自已提交黄金 YAML 的 AL
+SGLANG_SIMULATE_ACC_METHOD: match-expected
+SGLANG_SIMULATE_ACC_TOKEN_MODE: real-draft-token
+```
+
+TensorRT-LLM 通过 [`TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS`](https://github.com/NVIDIA/TensorRT-LLM/blob/2cbdaa0ffa36fbef7960a0ad9f0458373025fa9f/tensorrt_llm/_torch/speculative/interface.py#L1065-L1078) 支持该策略。**注意存在差一（off-by-one）：** 该变量只统计被接受的*草稿* token，不包括 bonus/验证 token，因此应设置为黄金 AL **减 1**。小数值也受支持。整数部分在每次迭代中始终被接受，小数部分是额外接受一个草稿 token 的概率。例如，黄金 AL 为 `3.5` 时应设置：
+
+```bash
+TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS=2.5
+```
+
+ATOM 通过 `--spec-decode-acceptance-length` 支持该策略，该参数直接接受黄金 AL：
+
+```bash
+python -m atom.entrypoints.openai_server \
+  --model MODEL \
+  --draft-model DRAFT_MODEL \
+  --method dspark \
+  --num-speculative-tokens 7 \
+  --spec-decode-acceptance-length 3.78
+```
+
+接受长度包含目标模型保证产出的验证 token，因此黄金 AL 可以原样填入，**不存在差一问题**，与 vLLM 的 `synthetic_acceptance_length` 和 SGLang 的 `SGLANG_SIMULATE_ACC_LEN` 单位一致。取值范围为 `[1, num_speculative_tokens + 1]`，并会解析为与 vLLM 相同的最小方差逐位置概率表，因此匹配的是接受长度的**分布**，而不仅仅是均值。被接受的位置输出真实的草稿 token，等价于 SGLang 的 `real-draft-token`。该参数还有一种等价的接受率写法 `--spec-decode-acceptance-rate`，取值为 `(AL - 1) / num_speculative_tokens`；两者互斥。相关支持见 [ROCm/ATOM#1948](https://github.com/ROCm/ATOM/pull/1948)。
+
+实测值可从服务端 `/debug/mtp_stats` 的 `average_tokens_per_forward` 字段读取，或从 `atom:mtp_average_tokens_per_forward` Prometheus 指标读取。ATOM 按 `1 + 已接受草稿 token 数 / 验证步数` 计算，与黄金曲线的收集公式相同，可直接比较。
+
+**DSpark 注意事项：** ATOM 禁止将强制接受与 DSpark 置信度调度器（`--dspark-config '{"confidence_schedule": true}'`）同时使用——后者在运行时决定每个请求的验证长度，可能把接受长度压到目标值以下，且无法提前检测。黄金 DSpark 曲线本身也是在未开启自适应验证的条件下收集的，因此关闭它同样是可比较的配置。
 
 这一策略遵循与 MLPerf Inference 相同的广义原则：规定可比较系统测量所需的工作负载规则。InferenceX 评估的是推理系统性能，而不是微调特定基准推测头的能力。
 
@@ -83,11 +114,11 @@ gh workflow run speedbench-al.yml \
 
 在接受更新后的曲线之前，审阅者应验证：
 
-- 所有请求的草稿长度和思考模式均已完成；
-- 详细输出内容连贯，并使用预期的思考模式；
-- 服务日志中没有回退、禁用草稿或聊天模板错误；
-- YAML 元数据与触发时使用的镜像、采样设置、模型和推测方法一致；
-- YAML 第一行链接了源 Actions run；并且
+- 所有请求的草稿长度和思考模式均已完成。
+- 详细输出内容连贯，并使用预期的思考模式。
+- 服务日志中没有回退、禁用草稿或聊天模板错误。
+- YAML 元数据与触发时使用的镜像、采样设置、模型和推测方法一致。
+- YAML 第一行链接了源 Actions run。
 - 提交的数值与工作流 artifact 完全一致。
 
 ## 当前黄金曲线
@@ -95,9 +126,15 @@ gh workflow run speedbench-al.yml \
 | 模型 | 方法 | 黄金 YAML | 源 run |
 | --- | --- | --- | --- |
 | DeepSeek V4 Pro | MTP | [`dsv4_mtp.yaml`](dsv4_mtp.yaml) | [27180633016](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27180633016) |
+| DeepSeek V4 Pro 0813 | DSpark（概率采样草稿） | [`dsv4-pro-0813-dspark.yaml`](dsv4-pro-0813-dspark.yaml) | [31742838308](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/31742838308) |
 | Qwen3.5 397B-A17B | MTP | [`qwen3.5_mtp.yaml`](qwen3.5_mtp.yaml) | [27317114007](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27317114007) |
 | Kimi K2.5 | EAGLE3 | [`kimik2.5_eagle3.yaml`](kimik2.5_eagle3.yaml) | [28122195822](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28122195822) |
+| Kimi K3 | DSpark | [`kimik3_dspark.yaml`](kimik3_dspark.yaml) | [30304797750](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/30304797750) |
+| Kimi K3 | DSpark（概率采样草稿 + 块验证） | [`kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml`](kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml) | [30316471205](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/30316471205) |
 | MiniMax-M3 | EAGLE3 | [`minimaxm3_eagle3.yaml`](minimaxm3_eagle3.yaml) | [28061204145](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28061204145) |
+| MiniMax-M3 | EAGLE3（GQA） | [`minimaxm3_eagle3_gqa.yaml`](minimaxm3_eagle3_gqa.yaml) | [29784780049](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/29784780049) |
+| GLM-5.2 | MTP | [`glm5.2_mtp.yaml`](glm5.2_mtp.yaml) | [28058352479](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28058352479) |
+| Qwen3.8-Flash-Next | MTP (native) | [`qwen3.8next_mtp.yaml`](qwen3.8next_mtp.yaml) | [33034290269](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/33034290269) |
 
 ## 主要参考资料
 
@@ -107,6 +144,7 @@ gh workflow run speedbench-al.yml \
 - [SPEED-Bench 数据集和数据集卡](https://huggingface.co/datasets/nvidia/SPEED-Bench)
 - [vLLM SPEED-Bench 集成](https://github.com/vllm-project/vllm/pull/36029)
 - [vLLM 合成接受支持](https://github.com/vllm-project/vllm/pull/40662)
+- [ATOM 强制接受长度支持](https://github.com/ROCm/ATOM/pull/1948)
 - [InferenceX 合成接受跟踪 issue](https://github.com/SemiAnalysisAI/InferenceX/issues/1651)
 - [InferenceX SPEED-Bench 工作流](../.github/workflows/speedbench-al.yml)
 - [InferenceX 早期参考值对齐 PR](https://github.com/SemiAnalysisAI/InferenceX/pull/1592)

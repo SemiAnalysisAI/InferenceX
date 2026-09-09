@@ -44,9 +44,9 @@ usage: generate_sweep_configs.py full-sweep
 
 If neither `--single-node` nor `--multi-node` is specified, both types are generated.
 
-By default, throughput runs for every generated config and eval-only jobs run for the selected 8k1k subset. `--no-evals` disables eval jobs, `--evals-only` emits only that selected subset, and adding `--all-evals` expands it to every fixed-sequence config. `--all-evals` alone is an equivalent eval-only shorthand; it cannot be combined with `--no-evals`.
+By default, throughput runs for every generated config and eval-only jobs run for the selected 8k1k subset. `--no-evals` disables eval jobs, `--evals-only` emits only that selected subset, and adding `--all-evals` expands it to every fixed-sequence config. `--all-evals` alone is an equivalent eval-only shorthand, but it cannot be combined with `--no-evals`.
 
-`--step-size` must be greater than 1 and applies to concurrency ranges. Explicit `conc-list` values are emitted directly and are filtered by `--min-conc` / `--max-conc` when provided; when both bounds are set, `--min-conc` must not exceed `--max-conc`.
+`--step-size` must be greater than 1 and applies to concurrency ranges. Explicit `conc-list` values are emitted directly and are filtered by `--min-conc` / `--max-conc` when provided. When both bounds are set, `--min-conc` must not exceed `--max-conc`.
 
 ### Examples
 
@@ -149,17 +149,47 @@ test-config --config-keys dsr1-fp8-h200-sglang --evals-only --all-evals --config
 
 ## PR Eval Modifiers
 
-Use `all-evals` and/or `evals-only` with one primary sweep label (`full-sweep-fail-fast` is the strongly recommended primary for full sweeps; use `full-sweep-enabled` only when jobs must keep running past a failure). `all-evals`
-covers every fixed-sequence config; each multi-node topology runs all
-`conc-list` values on one engine. `evals-only` suppresses throughput; together
+Use `all-evals` and/or `evals-only` with one primary sweep label. `full-sweep-fail-fast` is the strongly recommended primary for full sweeps. Use `full-sweep-enabled` only when jobs must keep running past a failure. `all-evals`
+covers every fixed-sequence config. Each multi-node topology runs all
+`conc-list` values on one engine. `evals-only` suppresses throughput. Together
 they run all evals only. The primary label still controls canary/fail-fast.
 `all-evals` full sweeps are reusable. Runs with `evals-only`, including runs
 with both modifiers, are not. Default full sweeps, including default evals,
 are also reusable.
 
+## AgentX Fast Mode
+
+Add `agentx-fast` alongside one primary sweep label to run one additional
+warmup request per AgentX lane after mandatory primers and a 20-minute profile
+for single- and multi-node AgentX throughput jobs. Fixed-sequence throughput
+and eval jobs retain their canonical settings. Adding or removing the modifier
+restarts the active sweep. Fast-mode runs are not eligible for artifact reuse
+after merge.
+
+## Trusted External-Fork Sweep Dispatch (PoC)
+
+Public-fork `pull_request` workflows receive no repository secrets. For an
+external PR, the ordinary `run-sweep.yml` run therefore validates the
+changelog but does not fan out onto GPU runners. A maintainer with `write`,
+`maintain`, or `admin` permission can add any modifier labels first, then apply
+one primary sweep label to approve the PR's exact current head SHA.
+`trusted-external-sweep.yml` then dispatches `e2e-tests.yml` from `main`, pins
+both the approved head and GitHub's merge SHA, and runs the generated matrix
+with the trusted workflow's secrets.
+
+The approval is revision-specific. A later push is not trusted automatically.
+Remove and re-add the primary sweep label to approve the new SHA. The trusted
+dispatcher never checks out or executes PR code itself.
+
+This proof of concept produces benchmark and evaluation artifacts through the
+End-to-End Tests workflow. Those runs are not yet eligible for
+`/reuse-sweep-run`, which currently accepts only `run-sweep.yml` runs. The PoC
+also fans out the selected matrix immediately. It does not reproduce
+`run-sweep.yml`'s canary-first sequencing.
+
 ## Reusing an Approved PR Full Sweep
 
-`[skip-sweep]` skips PR benchmark setup only; changelog and reuse checks still
+`[skip-sweep]` skips PR benchmark setup only. Changelog and reuse checks still
 run. Pushes to `main` ignore it.
 
 After an eligible full sweep (`full-sweep-enabled`,
@@ -178,7 +208,7 @@ in the PR. A run ID can pin an eligible successful or failed run:
 ```
 
 The latest matching comment by an `OWNER`, `MEMBER`, or `COLLABORATOR` wins.
-Comments do not trigger or cancel sweeps; later commits skip a new sweep after
+Comments do not trigger or cancel sweeps. Later commits skip a new sweep after
 changelog/matrix validation.
 Remove and re-add the sweep label to force one.
 
@@ -193,7 +223,7 @@ merge run. The normal ingestion code skips failed benchmark rows. Benchmark
 rows and public links retain source-run provenance. Source coverage is
 authoritative, so later matrix/eval policy changes do not invalidate reuse.
 
-Reuse fails closed when authorized but ineligible or invalid; without
+Reuse fails closed when authorized but ineligible or invalid. Without
 authorization, `main` runs the normal full sweep.
 
 ## Validation Architecture
@@ -210,7 +240,7 @@ The system validates **both ends** of the configuration pipeline:
 This dual-validation approach ensures:
 - No malformed configurations enter the pipeline
 - No invalid parameters reach the benchmark workflows
-- Workflow templates (`benchmark-tmpl.yml`, `benchmark-multinode-tmpl.yml`) can assume all inputs are valid—no runtime validation needed
+- Workflow templates (`benchmark-tmpl.yml`, `benchmark-multinode-tmpl.yml`) can assume all inputs are valid, with no runtime validation needed
 
 ### Input Validation: Master Config Files
 

@@ -1,4 +1,4 @@
-# Qwen3.5-397B-A17B-NVFP4 Disaggregated 7P1D wide-EP
+# Qwen3.5-397B-A17B-NVFP4-V2 Disaggregated 7P1D wide-EP
 # Prefill: 7 workers @ TP4/DP4/EP4 with DP-attn (per-node, DEP4)
 # Decode:  1 worker  @ TP16/DP16/EP16 with DP-attn + TBO (DEP16, 4 nodes)
 # Total: 44 GB300 GPUs (7*4 + 4*4); 8k1k concurrency 5120.
@@ -91,7 +91,7 @@ backend:
 
   sglang_config:
     prefill:
-      served-model-name: "nvidia/Qwen3.5-397B-A17B-NVFP4"
+      served-model-name: "nvidia/Qwen3.5-397B-A17B-NVFP4-V2"
       model-path: "/model/"
       trust-remote-code: true
 
@@ -126,7 +126,7 @@ backend:
       linear-attn-decode-backend: "flashinfer"
 
     decode:
-      served-model-name: "nvidia/Qwen3.5-397B-A17B-NVFP4"
+      served-model-name: "nvidia/Qwen3.5-397B-A17B-NVFP4-V2"
       model-path: "/model/"
       trust-remote-code: true
 
@@ -173,3 +173,16 @@ benchmark:
   concurrencies: "5120"
   req_rate: "inf"
   random_range_ratio: 0.8
+
+telemetry:
+  enabled: true
+  provider: dcgm-power
+  default_frequency: 1.0
+  storage_subdir: power
+  required: true
+  startup_timeout_seconds: 120
+  request_timeout_seconds: 2
+  collector_join_timeout_seconds: 10
+  dcgm_exporter:
+    container_image: dcgm-exporter
+    port: 19401

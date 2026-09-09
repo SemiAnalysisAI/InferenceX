@@ -25,12 +25,14 @@ name: CODEOWNER Sign-off Verify
 #   6. vLLM/SGLang configs run upstream images (hub.docker.com/u/vllm,
 #      hub.docker.com/u/lmsysorg) on established hardware, and vLLM/SGLang
 #      submissions land before additional frameworks (TRT-LLM, ATOM, ...).
-#   7. No benchmark hacks that change the model architecture / cut FLOPs.
-#   8. Speculative-decoding configs benchmark through chat templates.
-#   9. No patches to the inference engine / serving stack (the pinned image
+#   7. No submissions for models, scenarios, or model-scenario combinations
+#      deprecated in MODELS.md.
+#   8. No benchmark hacks that change the model architecture / cut FLOPs.
+#   9. Speculative-decoding configs benchmark through chat templates.
+#  10. No patches to the inference engine / serving stack (the pinned image
 #      runs as shipped) — the only exception is a patch covered by a
 #      filled-out docs/waiver/<PR_NUMBER>.md waiver.
-#  10. Agentic spec-decode configs simulate acceptance at the committed golden
+#  11. Agentic spec-decode configs simulate acceptance at the committed golden
 #      AL from golden_al_distribution/ (SGLang SGLANG_SIMULATE_ACC_* env vars,
 #      vLLM synthetic rejection sampling in --speculative-config).
 # If any of those are not to standard, Claude posts a single comment that
@@ -204,7 +206,7 @@ jobs:
       # files. Check out the trusted default branch; all PR content is read
       # read-only via the GitHub API (gh / MCP), never from the working tree.
       - name: Checkout repository (trusted default branch only)
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           ref: ${{ github.event.repository.default_branch }}
@@ -237,7 +239,7 @@ jobs:
           wc -c /tmp/codeowner-signoff-verify-prompt.md
 
       - name: Verify sign-off with Claude
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@0d0e0876d3eaa933f45dc692f7a4312c83caf36f # v1.0.218
         env:
           GH_TOKEN: ${{ secrets.CLAUDE_PAT }}
           GITHUB_TOKEN: ${{ secrets.CLAUDE_PAT }}

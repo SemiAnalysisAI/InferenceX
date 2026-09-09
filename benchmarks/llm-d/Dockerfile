@@ -22,7 +22,7 @@
 #     --build-arg EPP_FROM_IMAGE="$EPP_FROM_IMAGE" \
 #     --build-arg ROUTING_SIDECAR_IMAGE="$ROUTING_SIDECAR_IMAGE" \
 #     --build-arg ENVOY_FROM_IMAGE="$ENVOY_FROM_IMAGE" ...
-ARG VLLM_BASE=vllm/vllm-openai:v0.23.0
+ARG VLLM_BASE=vllm/vllm-openai:v0.26.0
 ARG EPP_FROM_IMAGE=ghcr.io/llm-d/llm-d-router-endpoint-picker:v0.9.0
 ARG ROUTING_SIDECAR_IMAGE=ghcr.io/llm-d/llm-d-router-disagg-sidecar:v0.9.0
 ARG ENVOY_FROM_IMAGE=envoyproxy/envoy:distroless-v1.33.2

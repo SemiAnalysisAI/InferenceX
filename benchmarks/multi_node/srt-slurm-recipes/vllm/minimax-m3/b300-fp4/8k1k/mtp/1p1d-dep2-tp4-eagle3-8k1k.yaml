@@ -2,7 +2,7 @@ name: "minimax-m3-vllm-disagg-b300-1p1d-dep2-tp4-fp4-8k1k-eagle3"
 
 model:
   path: "nvidia/MiniMax-M3-NVFP4"
-  container: "vllm/vllm-openai:nightly-8e981630c9336233ca9de91452f68918bddbc4e2"
+  container: "vllm/vllm-openai:nightly-5e35a6f4f9bbc217c599692157ca985c894373f7"
   precision: fp4
 
 resources:
@@ -31,12 +31,10 @@ backend:
 
   prefill_environment:
     VLLM_FLOAT32_MATMUL_PRECISION: high
-    VLLM_FLASHINFER_ALLREDUCE_BACKEND: trtllm
     UCX_TLS: cuda_copy,cuda_ipc,rc
 
   decode_environment:
     VLLM_FLOAT32_MATMUL_PRECISION: high
-    VLLM_FLASHINFER_ALLREDUCE_BACKEND: trtllm
     UCX_TLS: cuda_copy,cuda_ipc,rc
 
   vllm_config:
@@ -52,6 +50,7 @@ backend:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       attention-config: '{"backend": "FLASHINFER", "use_trtllm_attention": true, "indexer_kv_dtype": "fp8"}'
       block-size: 128
+      kv-cache-dtype: fp8
       gpu-memory-utilization: 0.95
       max-model-len: 9472
       language-model-only: true
@@ -68,8 +67,9 @@ backend:
       trust-remote-code: true
       no-enable-prefix-caching: true
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
-      attention-config: '{"backend": "FLASHINFER", "use_trtllm_attention": true, "indexer_kv_dtype": "fp8"}'
+      attention-config: '{"backend": "FLASHINFER", "use_trtllm_attention": true, "indexer_kv_dtype": "fp8", "minimax_m3_msa_decode_backend": "cutlass"}'
       block-size: 128
+      kv-cache-dtype: fp8
       gpu-memory-utilization: 0.95
       max-model-len: 9472
       language-model-only: true

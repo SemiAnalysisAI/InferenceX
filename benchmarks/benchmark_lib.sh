@@ -8,6 +8,12 @@
 export PYTHONDONTWRITEBYTECODE=1
 export PYTHONPYCACHEPREFIX="${PYTHONPYCACHEPREFIX:-/tmp/inferencex-pycache}"
 mkdir -p "$PYTHONPYCACHEPREFIX" 2>/dev/null || true
+INFERENCEX_BENCHMARK_LIB_DIR="$(
+    cd "$(dirname "${BASH_SOURCE[0]}")" && pwd
+)"
+INFERENCEX_REPO_ROOT="$(
+    cd "$INFERENCEX_BENCHMARK_LIB_DIR/.." && pwd
+)"
 
 # Inference server port shared by every benchmark recipe. Launchers that need
 # a non-default value (e.g. launch_mi355x-amds.sh derives PORT from RUNNER_NAME
@@ -67,6 +73,22 @@ require_agentic_kv_offload_backend() {
     esac
 }
 
+disable_trtllm_detailed_perf_metrics() {
+    local trtllm_root
+    local py_executor
+    local detailed_metrics_gate="enabled=getattr(self.llm_args, 'return_perf_metrics', False))"
+
+    trtllm_root=$(python3 -c 'from importlib.util import find_spec; from pathlib import Path; print(Path(find_spec("tensorrt_llm").origin).parent)')
+    py_executor="$trtllm_root/_torch/pyexecutor/py_executor.py"
+    if ! grep -Fq "$detailed_metrics_gate" "$py_executor"; then
+        echo "Error: unsupported TensorRT-LLM detailed metrics implementation in $py_executor" >&2
+        return 1
+    fi
+    sed -i "s/enabled=getattr(self.llm_args, 'return_perf_metrics', False))/enabled=False)/" "$py_executor"
+    grep -Fq "self.perf_manager = PerfMetricsManager(" "$py_executor"
+    grep -Fq "enabled=False)" "$py_executor"
+}
+
 # Agentic replays must use the model's native context limit. Ignore inherited
 # workflow or shell overrides so neither the server nor AIPerf applies a cap.
 _benchmark_caller="${BASH_SOURCE[1]:-}"
@@ -109,7 +131,10 @@ unset _benchmark_caller
 # --------------------------------
 
 GPU_MONITOR_PID=""
-GPU_METRICS_CSV="/workspace/gpu_metrics.csv"
+GPU_MONITOR_VENDOR=""
+GPU_MONITOR_INTERVAL=1
+GPU_METRICS_CSV="${GPU_METRICS_CSV:-gpu_metrics.csv}"
+NVIDIA_GPU_MONITOR_QUERY="timestamp,index,power.draw,temperature.gpu,clocks.current.sm,clocks.current.memory,utilization.gpu,utilization.memory"
 export GPU_METRICS_CSV
 
 # Start background GPU monitoring that logs metrics every second to CSV.
@@ -128,21 +153,33 @@ start_gpu_monitor() {
     done
 
     GPU_METRICS_CSV="$output"
+    GPU_MONITOR_INTERVAL="$interval"
     export GPU_METRICS_CSV
 
     if command -v nvidia-smi &>/dev/null; then
-        nvidia-smi --query-gpu=timestamp,index,power.draw,temperature.gpu,clocks.current.sm,clocks.current.memory,utilization.gpu,utilization.memory \
+        GPU_MONITOR_VENDOR="nvidia"
+        nvidia-smi --query-gpu="$NVIDIA_GPU_MONITOR_QUERY" \
             --format=csv -l "$interval" > "$output" 2>/dev/null &
         GPU_MONITOR_PID=$!
         echo "[GPU Monitor] Started NVIDIA (PID=$GPU_MONITOR_PID, interval=${interval}s, output=$output)"
     elif command -v amd-smi &>/dev/null; then
+        GPU_MONITOR_VENDOR="amd"
         # Use amd-smi native watch mode (-w) which includes timestamps automatically.
-        # Pipe through awk to: skip preamble lines, keep first CSV header, skip repeated headers.
-        amd-smi metric -p -c -t -u -w "$interval" --csv 2>/dev/null \
-            | awk '/^timestamp,/{if(!h){print;h=1};next} h{print}' > "$output" &
+        # PYTHONUNBUFFERED defeats the tool's own stdout block buffering (amd-smi is
+        # Python; measured on MI355X: trailing ticks were lost at kill without it).
+        # Pipe through awk to: skip preamble lines, keep first CSV header, skip repeated
+        # headers, and flush every row so killing the pipe cannot discard buffered samples.
+        PYTHONUNBUFFERED=1 amd-smi metric -p -c -t -u -w "$interval" --csv 2>/dev/null \
+            | awk '/^timestamp,/{if(!h){print;h=1};next} h{print;fflush()}' > "$output" &
         GPU_MONITOR_PID=$!
+        # Hardware energy-accumulator + identity snapshots; the end-side twin in
+        # stop_gpu_monitor lets auditors cross-check the integrated energy
+        # against the accumulator delta.
+        _write_amd_smi_sidecar "${output%.csv}_energy_start.csv" metric -E --csv
+        _write_amd_smi_sidecar "${output%.csv}_identity.json" static --json
         echo "[GPU Monitor] Started AMD (PID=$GPU_MONITOR_PID, interval=${interval}s, output=$output)"
     else
+        GPU_MONITOR_VENDOR=""
         echo "[GPU Monitor] No GPU monitoring tool found (nvidia-smi or amd-smi), skipping"
         return 0
     fi
@@ -151,8 +188,33 @@ start_gpu_monitor() {
 # Stop the background GPU monitor and report file size.
 stop_gpu_monitor() {
     if [[ -n "$GPU_MONITOR_PID" ]] && kill -0 "$GPU_MONITOR_PID" 2>/dev/null; then
+        # benchmark_end_time_unix is recorded shortly before the benchmark
+        # process exits, so the stream must cover one more sample past it for
+        # deterministic boundary interpolation. NVIDIA appends a one-shot
+        # post-exit sample below; amd-smi one-shot CSV has no timestamp column,
+        # so the AMD path instead lets the watch stream emit final ticks before
+        # the kill. Two extra intervals: amd-smi stamps integer seconds, so a
+        # tick in the same second as the window end still fails bracketing —
+        # the stream needs a tick at the NEXT whole second (measured on MI355X:
+        # end=...153.325 vs last sample ...153.0).
+        if [[ "$GPU_MONITOR_VENDOR" == "amd" ]]; then
+            sleep $(( ${GPU_MONITOR_INTERVAL:-1} + 2 ))
+        fi
         kill "$GPU_MONITOR_PID" 2>/dev/null
         wait "$GPU_MONITOR_PID" 2>/dev/null || true
+        case "$GPU_MONITOR_VENDOR" in
+            nvidia)
+                if _repair_truncated_gpu_metrics_tail; then
+                    nvidia-smi --query-gpu="$NVIDIA_GPU_MONITOR_QUERY" \
+                        --format=csv,noheader >> "$GPU_METRICS_CSV" 2>/dev/null ||
+                        echo "[GPU Monitor] Warning: final NVIDIA sample failed" >&2
+                fi
+                ;;
+            amd)
+                _repair_truncated_gpu_metrics_tail || true
+                _write_amd_smi_sidecar "${GPU_METRICS_CSV%.csv}_energy_end.csv" metric -E --csv
+                ;;
+        esac
         echo "[GPU Monitor] Stopped (PID=$GPU_MONITOR_PID)"
         if [[ -f "$GPU_METRICS_CSV" ]]; then
             local lines
@@ -161,6 +223,60 @@ stop_gpu_monitor() {
         fi
     fi
     GPU_MONITOR_PID=""
+    GPU_MONITOR_VENDOR=""
+}
+
+# Drop a partial trailing row left behind when the monitor dies mid-write.
+# Returns non-zero when a truncated row was detected but could not be removed.
+_repair_truncated_gpu_metrics_tail() {
+    local repaired_metrics="${GPU_METRICS_CSV}.repair.$$"
+    if [[ -s "$GPU_METRICS_CSV" ]] &&
+        ! tail -c 1 "$GPU_METRICS_CSV" | grep -q '^$'; then
+        if sed '$d' "$GPU_METRICS_CSV" > "$repaired_metrics" &&
+            mv "$repaired_metrics" "$GPU_METRICS_CSV"; then
+            echo "[GPU Monitor] Dropped truncated trailing sample"
+        else
+            rm -f "$repaired_metrics"
+            echo "[GPU Monitor] Warning: could not repair truncated trailing sample" >&2
+            return 1
+        fi
+    fi
+    return 0
+}
+
+# Write one best-effort amd-smi snapshot; remove the file rather than keep a
+# partial one when the invocation fails.
+_write_amd_smi_sidecar() {
+    local out="$1"
+    shift
+    if ! amd-smi "$@" > "$out" 2>/dev/null; then
+        rm -f "$out"
+        echo "[GPU Monitor] Warning: amd-smi $1 sidecar failed" >&2
+    fi
+}
+
+# Block until the GPUs have released a prior job's memory before starting a run.
+# Polls rocm-smi VRAM% every 10s for up to 15 minutes; succeeds once the busiest
+# GPU is at <=10% VRAM, otherwise returns 1 so the caller aborts rather than
+# starting a benchmark on GPUs still draining the previous run's memory.
+wait_for_amd_gpu_clean() {
+    local gpu_clean=false vram_max i
+    for i in $(seq 1 90); do
+        vram_max=$(rocm-smi --showmemuse 2>/dev/null \
+            | grep -oE "GPU Memory Allocated \(VRAM%\): [0-9]+" \
+            | awk '{if ($NF > m) m = $NF} END {print m+0}')
+        if [ "${vram_max:-0}" -le 10 ]; then
+            echo "GPUs clean (vram%max=$vram_max after $((i * 10))s)"
+            gpu_clean=true
+            break
+        fi
+        echo "waiting for prior-job GPU memory reclaim: vram%max=$vram_max"
+        sleep 10
+    done
+    if [ "$gpu_clean" != "true" ]; then
+        echo "Error: GPUs still draining prior job's memory after 15min" >&2
+        return 1
+    fi
 }
 
 # Return success only while a PID exists and is not a zombie waiting to be
@@ -249,37 +365,36 @@ check_env_vars() {
     fi
 }
 
-# Wait for server to be ready by polling the health endpoint
-# All parameters are required
-# Parameters:
-#   --port: Server port
-#   --server-log: Path to server log file
-#   --server-pid: Server process ID (required)
-#   --sleep-interval: Sleep interval between health checks (optional, default: 5)
-wait_for_server_ready() {
+# Poll an HTTP endpoint while streaming the owning process log.
+# Required: --endpoint, --log, --pid. A zero timeout waits indefinitely.
+wait_for_ready() {
     set +x
-    local port=""
-    local server_log=""
-    local server_pid=""
+    local endpoint=""
+    local process_log=""
+    local process_pid=""
     local sleep_interval=5
+    local timeout=0
 
-    # Parse arguments
     while [[ $# -gt 0 ]]; do
         case $1 in
-            --port)
-                port="$2"
+            --endpoint)
+                endpoint="$2"
                 shift 2
                 ;;
-            --server-log)
-                server_log="$2"
+            --log)
+                process_log="$2"
                 shift 2
                 ;;
-            --server-pid)
-                server_pid="$2"
+            --pid)
+                process_pid="$2"
                 shift 2
                 ;;
             --sleep-interval)
                 sleep_interval="$2"
+                shift 2
+                ;;
+            --timeout)
+                timeout="$2"
                 shift 2
                 ;;
             *)
@@ -289,41 +404,104 @@ wait_for_server_ready() {
         esac
     done
 
-    # Validate required parameters
-    if [[ -z "$port" ]]; then
-        echo "Error: --port is required"
+    if [[ -z "$endpoint" ]]; then
+        echo "Error: --endpoint is required"
         return 1
     fi
-    if [[ -z "$server_log" ]]; then
-        echo "Error: --server-log is required"
+    if [[ -z "$process_log" ]]; then
+        echo "Error: --log is required"
         return 1
     fi
-    if [[ -z "$server_pid" ]]; then
-        echo "Error: --server-pid is required"
+    if [[ -z "$process_pid" ]]; then
+        echo "Error: --pid is required"
+        return 1
+    fi
+    if [[ ! "$sleep_interval" =~ ^[1-9][0-9]*$ ]]; then
+        echo "Error: --sleep-interval must be a positive integer"
+        return 1
+    fi
+    if [[ ! "$timeout" =~ ^[0-9]+$ ]]; then
+        echo "Error: --timeout must be a non-negative integer"
         return 1
     fi
 
-    # Wait for server log file to be created (container startup may delay this)
-    while [ ! -f "$server_log" ]; do
-        if ! kill -0 "$server_pid" 2>/dev/null; then
-            echo "Server died before creating log file. Exiting."
+    local deadline=0
+    if [[ "$timeout" -gt 0 ]]; then
+        deadline=$((SECONDS + timeout))
+    fi
+
+    while [[ ! -f "$process_log" ]]; do
+        if ! kill -0 "$process_pid" 2>/dev/null; then
+            echo "Process died before creating $process_log." >&2
+            exit 1
+        fi
+        if [[ "$deadline" -gt 0 && "$SECONDS" -ge "$deadline" ]]; then
+            echo "Timed out waiting for $endpoint." >&2
             exit 1
         fi
         sleep 1
     done
 
-    # Show logs until server is ready
-    tail -f -n +1 "$server_log" &
-    local TAIL_PID=$!
-    until curl --output /dev/null --silent --fail http://0.0.0.0:$port/health; do
-        if ! kill -0 "$server_pid" 2>/dev/null; then
-            echo "Server died before becoming healthy. Exiting."
-            kill $TAIL_PID
+    tail -f -n +1 "$process_log" &
+    local tail_pid=$!
+    until curl --output /dev/null --silent --fail "$endpoint"; do
+        if ! kill -0 "$process_pid" 2>/dev/null; then
+            echo "Process died before $endpoint became ready." >&2
+            kill "$tail_pid" 2>/dev/null || true
+            exit 1
+        fi
+        if [[ "$deadline" -gt 0 && "$SECONDS" -ge "$deadline" ]]; then
+            echo "Timed out waiting for $endpoint." >&2
+            kill "$tail_pid" 2>/dev/null || true
             exit 1
         fi
         sleep "$sleep_interval"
     done
-    kill $TAIL_PID
+    kill "$tail_pid" 2>/dev/null || true
+    wait "$tail_pid" 2>/dev/null || true
+}
+
+wait_for_server_ready() {
+    local port=""
+    local server_log=""
+    local server_pid=""
+    local sleep_interval=5
+
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --port) port="$2"; shift 2 ;;
+            --server-log) server_log="$2"; shift 2 ;;
+            --server-pid) server_pid="$2"; shift 2 ;;
+            --sleep-interval) sleep_interval="$2"; shift 2 ;;
+            *) echo "Unknown parameter: $1"; return 1 ;;
+        esac
+    done
+
+    if [[ -z "$port" || -z "$server_log" || -z "$server_pid" ]]; then
+        echo "Error: --port, --server-log, and --server-pid are required"
+        return 1
+    fi
+
+    wait_for_ready \
+        --endpoint "http://0.0.0.0:${port}/health" \
+        --log "$server_log" \
+        --pid "$server_pid" \
+        --sleep-interval "$sleep_interval"
+}
+
+# Persist an argv array in shell-replayable form.
+write_command() {
+    local output_file="$1"
+    shift
+    printf '%q ' "$@" | tee "$output_file"
+    printf '\n' | tee -a "$output_file"
+}
+
+append_command() {
+    local output_file="$1"
+    shift
+    printf '%q ' "$@" >> "$output_file"
+    printf '\n' >> "$output_file"
 }
 
 # Run benchmark serving with standardized parameters
@@ -722,8 +900,839 @@ _install_lm_eval_deps() {
     fi
 }
 
+_prepare_vendor_verifier_python() {
+    local verifier_name="$1"
+    local runtime_prefix="$2"
+    local use_system_site_packages="${3:-false}"
+    local minimum_python_minor="${4:-12}"
+
+    VENDOR_VERIFIER_PYTHON=python3
+    VENDOR_VERIFIER_PYTHON_CLEANUP_DIR=""
+    export VENDOR_VERIFIER_PYTHON VENDOR_VERIFIER_PYTHON_CLEANUP_DIR
+
+    local system_python_is_compatible=false
+    if python3 -c \
+        'import sys; raise SystemExit(sys.version_info < (3, int(sys.argv[1])))' \
+        "$minimum_python_minor"; then
+        system_python_is_compatible=true
+        if [ "$use_system_site_packages" != "true" ]; then
+            return 0
+        fi
+    fi
+
+    local python_dir uv_prefix uv_bin venv_dir prepare_rc=0
+    python_dir="$(mktemp -d "/tmp/${runtime_prefix}-XXXXXX")" || {
+        echo "ERROR: could not create a temporary Python directory for ${verifier_name}" >&2
+        return 1
+    }
+    VENDOR_VERIFIER_PYTHON_CLEANUP_DIR="$python_dir"
+    export VENDOR_VERIFIER_PYTHON_CLEANUP_DIR
+
+    venv_dir="${python_dir}/venv"
+    if [ "$system_python_is_compatible" = "true" ]; then
+        python3 -m venv --system-site-packages "$venv_dir" || prepare_rc=$?
+    else
+        uv_prefix="${python_dir}/uv"
+        uv_bin="${uv_prefix}/bin/uv"
+        python3 -m pip install -q --no-cache-dir --break-system-packages \
+            --prefix "$uv_prefix" "uv==0.11.33" || prepare_rc=$?
+        if [ "$prepare_rc" -eq 0 ] && [ ! -x "$uv_bin" ]; then
+            echo "ERROR: pinned uv installation did not create ${uv_bin}" >&2
+            prepare_rc=1
+        fi
+        if [ "$prepare_rc" -eq 0 ]; then
+            local system_site_packages_args=()
+            if [ "$use_system_site_packages" = "true" ]; then
+                system_site_packages_args+=(--system-site-packages)
+            fi
+            UV_CACHE_DIR="${python_dir}/uv-cache" \
+            UV_PYTHON_INSTALL_DIR="${python_dir}/python" \
+                "$uv_bin" venv --python "3.${minimum_python_minor}" --seed \
+                    "${system_site_packages_args[@]}" "$venv_dir" \
+                || prepare_rc=$?
+        fi
+    fi
+    if [ "$prepare_rc" -eq 0 ] && [ ! -x "${venv_dir}/bin/python" ]; then
+        echo "ERROR: pinned Python setup did not create the ${verifier_name} interpreter" >&2
+        prepare_rc=1
+    fi
+    if [ "$prepare_rc" -ne 0 ]; then
+        rm -rf "$python_dir" || true
+        VENDOR_VERIFIER_PYTHON=python3
+        VENDOR_VERIFIER_PYTHON_CLEANUP_DIR=""
+        export VENDOR_VERIFIER_PYTHON VENDOR_VERIFIER_PYTHON_CLEANUP_DIR
+        return "$prepare_rc"
+    fi
+
+    VENDOR_VERIFIER_PYTHON="${venv_dir}/bin/python"
+    export VENDOR_VERIFIER_PYTHON
+}
+
+_install_kimi_vendor_eval_deps() {
+    local target_dir="$1"
+    local eval_suite="${2:-kimi_tool_call_schema}"
+    local -a packages=(
+        "httpx[http2]==0.28.1"
+        "openai==2.14.0"
+        "jsonschema==4.25.1"
+        "pytest==8.4.2"
+    )
+    if [ "$eval_suite" = "kimi_tool_call_schema_full" ]; then
+        packages+=("pytest-xdist==3.8.0")
+    fi
+    "${VENDOR_VERIFIER_PYTHON:-python3}" -m pip install -q --no-cache-dir \
+        --target "$target_dir" "${packages[@]}"
+}
+
+_prepare_kimi_vendor_runtime() {
+    local eval_suite="${1:-kimi_tool_call_schema}"
+    local runtime_dir install_rc=0
+    runtime_dir="$(mktemp -d /tmp/kimi-vendor-runtime-XXXXXX)" || return $?
+    _install_kimi_vendor_eval_deps "$runtime_dir" "$eval_suite" >&2 || install_rc=$?
+    if [ "$install_rc" -ne 0 ]; then
+        rm -rf "$runtime_dir"
+        return "$install_rc"
+    fi
+    printf '%s\n' "$runtime_dir"
+}
+
+_prepare_kimi_vendor_verifier() {
+    local repo_url="$1"
+    local verifier_ref="$2"
+    local expected_archive_sha256="$3"
+    local checkout_dir prepare_rc=0
+
+    checkout_dir="$(mktemp -d /tmp/kimi-vendor-verifier-XXXXXX)" || {
+        echo "ERROR: could not create a temporary directory for Kimi-Vendor-Verifier" >&2
+        return 1
+    }
+
+    "${VENDOR_VERIFIER_PYTHON:-python3}" - \
+        "$repo_url" "$verifier_ref" "$expected_archive_sha256" "$checkout_dir" \
+        < "${INFERENCEX_REPO_ROOT}/utils/evals/_kimi_verifier_archive.py" || prepare_rc=$?
+
+    if [ "$prepare_rc" -ne 0 ]; then
+        if ! rm -rf "$checkout_dir"; then
+            echo "ERROR: failed to remove partial Kimi-Vendor-Verifier directory ${checkout_dir}" >&2
+        fi
+        return "$prepare_rc"
+    fi
+
+    printf '%s\n' "$checkout_dir"
+}
+
+_cleanup_vendor_eval() {
+    local path
+    for path in "$@"; do
+        [ -z "$path" ] || rm -rf "$path" || true
+    done
+}
+
+_has_eval_result() {
+    local results_dir="$1"
+    local filename_prefix="$2"
+    local matches=("${results_dir}/${filename_prefix}"*.json)
+    [ -f "${matches[0]}" ]
+}
+
+_prepare_eval_artifact_family() {
+    local results_dir="$1"
+    local family="$2"
+    local artifact rm_rc=0
+    local artifacts=()
+
+    export EVAL_RESULT_DIR=""
+    case "$family" in
+        kimi)
+            artifacts=(
+                "${results_dir}"/results_kimi_vendor_*.json
+                "${results_dir}/kimi_vendor_report.json"
+            )
+            ;;
+        minimax)
+            artifacts=(
+                "${results_dir}"/results_minimax_vendor_*.json
+                "${results_dir}/minimax_vendor_report.json"
+                "${results_dir}/minimax_vendor_results.jsonl"
+            )
+            ;;
+        bfcl)
+            artifacts=(
+                "${results_dir}"/results_bfcl*.json
+                "${results_dir}/bfcl_report.json"
+                "${results_dir}/bfcl_upstream_artifacts.tar.gz"
+            )
+            ;;
+        *)
+            echo "ERROR: unsupported eval artifact family '${family}'" >&2
+            return 2
+            ;;
+    esac
+
+    for artifact in "${artifacts[@]}"; do
+        if [ -e "$artifact" ] || [ -L "$artifact" ]; then
+            rm -f -- "$artifact" || rm_rc=$?
+            if [ "$rm_rc" -ne 0 ]; then
+                echo "ERROR: failed to remove stale eval artifact ${artifact}" >&2
+                return "$rm_rc"
+            fi
+        fi
+    done
+    export EVAL_RESULT_DIR="$results_dir"
+}
+
+_write_kimi_vendor_integration_error() {
+    local adapter_path="$1"
+    local model_name="$2"
+    local results_dir="$3"
+    local task_name="$4"
+    local message="$5"
+
+    "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" \
+        --model "$model_name" \
+        --output-dir "$results_dir" \
+        --task-name "$task_name" \
+        --integration-error "$message"
+}
+
+_run_kimi_tool_call_schema_eval() {
+    local port="${PORT:-8888}"
+    local results_dir="${EVAL_RESULT_DIR:-$(mktemp -d /tmp/eval_out-XXXXXX)}"
+    local verifier_repo="https://github.com/MoonshotAI/Kimi-Vendor-Verifier.git"
+    local verifier_ref="3dad65a760a8867cda72f6dd8848d876a4e851b4"
+    local verifier_archive_sha256="ede9ea300c72ccfde9d8975ea4b1b54e423c7625690f6631ab1e65a715821e01"
+    local eval_suite="${EVAL_SUITE:-kimi_tool_call_schema}"
+    local timeout_seconds=900
+    if [ "$eval_suite" = "kimi_tool_call_schema_full" ]; then
+        timeout_seconds=7200
+    fi
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --port|--results-dir)
+                if [[ $# -lt 2 || -z "${2:-}" || "${2:-}" == --* ]]; then
+                    echo "ERROR: $1 requires a value" >&2
+                    return 2
+                fi
+                case "$1" in
+                    --port)        port="$2" ;;
+                    --results-dir) results_dir="$2" ;;
+                esac
+                shift 2
+                ;;
+            *)
+                echo "Unknown parameter: $1" >&2
+                return 2
+                ;;
+        esac
+    done
+
+
+    local model_name="${MODEL_NAME:-${MODEL:-}}"
+    local adapter_path="${INFERENCEX_REPO_ROOT}/utils/evals/kimi_vendor_eval.py"
+    local runtime_dir=""
+    local checkout_dir=""
+
+    mkdir -p "$results_dir" || return $?
+    results_dir="$(cd "$results_dir" && pwd)" || return $?
+    _prepare_eval_artifact_family "$results_dir" kimi || return $?
+
+    local setup_rc=0 integration_error=""
+    _prepare_vendor_verifier_python "Kimi-Vendor-Verifier" "kimi-vendor-python" || {
+        setup_rc=$?
+        integration_error="Kimi Vendor Verifier Python runtime preparation failed with exit code ${setup_rc}"
+    }
+    if [ "$setup_rc" -eq 0 ]; then
+        runtime_dir=$(_prepare_kimi_vendor_runtime "$eval_suite") || {
+            setup_rc=$?
+            integration_error="Kimi Vendor Verifier dependency installation failed with exit code ${setup_rc}"
+        }
+    fi
+    if [ "$setup_rc" -eq 0 ]; then
+        checkout_dir=$(
+            _prepare_kimi_vendor_verifier \
+                "$verifier_repo" "$verifier_ref" "$verifier_archive_sha256"
+        ) || {
+            setup_rc=$?
+            integration_error="Kimi Vendor Verifier checkout failed with exit code ${setup_rc}"
+        }
+    fi
+    if [ "$setup_rc" -ne 0 ]; then
+        echo "ERROR: ${integration_error}" >&2
+        local artifact_rc=0
+        _write_kimi_vendor_integration_error \
+            "$adapter_path" "$model_name" "$results_dir" "$eval_suite" \
+            "$integration_error" || artifact_rc=$?
+        if [ "$artifact_rc" -ne 0 ]; then
+            echo "ERROR: failed to write Kimi verifier failure artifact (exit code ${artifact_rc})" >&2
+        fi
+        _cleanup_vendor_eval \
+            "$runtime_dir" "$checkout_dir" "${VENDOR_VERIFIER_PYTHON_CLEANUP_DIR:-}"
+        return "$setup_rc"
+    fi
+
+    local eval_rc=0
+    PYTHONPATH="${runtime_dir}${PYTHONPATH:+:${PYTHONPATH}}" \
+        "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" \
+            --verifier-dir "$checkout_dir" \
+            --base-url "http://127.0.0.1:${port}/v1" \
+            --api-key EMPTY \
+            --model "$model_name" \
+            --model-prefix "${MODEL_PREFIX:-}" \
+            --output-dir "$results_dir" \
+            --task-name "$eval_suite" \
+            --timeout-seconds "$timeout_seconds" \
+            || eval_rc=$?
+    if [ "$eval_rc" -ne 0 ] \
+        && ! _has_eval_result "$results_dir" "results_kimi_vendor_"; then
+        integration_error="Kimi Vendor Verifier failed with exit code ${eval_rc}"
+        local artifact_rc=0
+        _write_kimi_vendor_integration_error \
+            "$adapter_path" "$model_name" "$results_dir" "$eval_suite" \
+            "$integration_error" || artifact_rc=$?
+        if [ "$artifact_rc" -ne 0 ]; then
+            echo "ERROR: failed to write Kimi verifier failure artifact (exit code ${artifact_rc})" >&2
+        fi
+    fi
+    _cleanup_vendor_eval \
+        "$runtime_dir" "$checkout_dir" "${VENDOR_VERIFIER_PYTHON_CLEANUP_DIR:-}"
+    return "$eval_rc"
+}
+
+run_kimi_vendor_eval() {
+    local eval_suite="${EVAL_SUITE:-kimi_tool_call_schema}"
+    export EVAL_SUITE="$eval_suite"
+
+    case "$eval_suite" in
+        kimi_tool_call_schema|kimi_tool_call_schema_full)
+            _run_kimi_tool_call_schema_eval "$@"
+            ;;
+        *)
+            echo "ERROR: unsupported Kimi Vendor Verifier suite '${eval_suite}'" >&2
+            export EVAL_RESULT_DIR=""
+            return 2
+            ;;
+    esac
+}
+
+_install_bfcl_eval_deps() {
+    local download_dir="$1"
+    local wheel_url="https://files.pythonhosted.org/packages/ba/41/ed458527c770c50225b60bae3b0c3444b26804ee455fa2d8f187018d2cb2/bfcl_eval-2026.3.23-py3-none-any.whl"
+    local wheel_sha256="3bb6dfa5f0c68ad403c9ec50b00db2bb3b4cc9b38ab1ff33f48fe30d853d3a0a"
+    local wheel_path="${download_dir}/bfcl_eval-2026.3.23-py3-none-any.whl"
+
+    "${VENDOR_VERIFIER_PYTHON:-python3}" - \
+        "$wheel_url" "$wheel_sha256" "$wheel_path" <<'PY' || return $?
+from hashlib import sha256
+from pathlib import Path
+import sys
+from urllib.request import Request, urlopen
+
+wheel_url, expected_sha256, wheel_path_arg = sys.argv[1:]
+wheel_path = Path(wheel_path_arg)
+digest = sha256()
+downloaded = 0
+request = Request(
+    wheel_url,
+    headers={"User-Agent": "InferenceX-BFCL-Smoke"},
+)
+
+try:
+    with urlopen(request, timeout=180) as response, wheel_path.open("xb") as output:
+        while chunk := response.read(1024 * 1024):
+            downloaded += len(chunk)
+            if downloaded > 512 * 1024 * 1024:
+                raise ValueError("BFCL wheel exceeds the 512 MiB safety limit")
+            digest.update(chunk)
+            output.write(chunk)
+    if downloaded == 0:
+        raise ValueError("downloaded BFCL wheel is empty")
+    actual_sha256 = digest.hexdigest()
+    if actual_sha256 != expected_sha256:
+        raise ValueError(
+            f"BFCL wheel SHA256 mismatch: expected {expected_sha256}, "
+            f"got {actual_sha256}"
+        )
+except Exception as error:
+    wheel_path.unlink(missing_ok=True)
+    print(f"ERROR: failed to download and verify the pinned BFCL wheel: {error}", file=sys.stderr)
+    raise SystemExit(1)
+PY
+
+    timeout 600 "${VENDOR_VERIFIER_PYTHON:-python3}" -m pip install \
+        -q --no-cache-dir "$wheel_path" "soundfile==0.13.1"
+}
+
+_prepare_bfcl_runtime() {
+    local runtime_dir install_rc=0
+    runtime_dir="$(mktemp -d /tmp/bfcl-runtime-XXXXXX)" || return $?
+    _install_bfcl_eval_deps "$runtime_dir" >&2 || install_rc=$?
+    if [ "$install_rc" -ne 0 ]; then
+        rm -rf "$runtime_dir"
+        return "$install_rc"
+    fi
+    printf '%s\n' "$runtime_dir"
+}
+
+_archive_bfcl_upstream_artifacts() {
+    local project_root="$1"
+    local archive_path="$2"
+
+    "${VENDOR_VERIFIER_PYTHON:-python3}" - "$project_root" "$archive_path" <<'PY'
+import gzip
+import os
+from pathlib import Path
+import tarfile
+import sys
+
+project_root = Path(sys.argv[1])
+archive_path = Path(sys.argv[2])
+temporary_path = archive_path.with_name(f".{archive_path.name}.tmp")
+temporary_path.unlink(missing_ok=True)
+
+try:
+    with (
+        temporary_path.open("xb") as raw_archive,
+        gzip.GzipFile(filename="", mode="wb", fileobj=raw_archive, mtime=0) as compressed,
+        tarfile.open(fileobj=compressed, mode="w", format=tarfile.PAX_FORMAT) as archive,
+    ):
+        for path in sorted(
+            project_root.rglob("*"),
+            key=lambda candidate: candidate.relative_to(project_root).as_posix(),
+        ):
+            relative_path = path.relative_to(project_root).as_posix()
+            if path.is_symlink():
+                raise ValueError(f"refusing to archive symbolic link: {relative_path}")
+            info = archive.gettarinfo(str(path), arcname=relative_path)
+            info.uid = 0
+            info.gid = 0
+            info.uname = ""
+            info.gname = ""
+            info.mtime = 0
+            if info.isdir():
+                archive.addfile(info)
+            elif info.isfile():
+                with path.open("rb") as source:
+                    archive.addfile(info, source)
+            else:
+                raise ValueError(f"refusing to archive special file: {relative_path}")
+    os.replace(temporary_path, archive_path)
+except BaseException:
+    temporary_path.unlink(missing_ok=True)
+    raise
+PY
+}
+
+_write_bfcl_integration_error() {
+    local adapter_path="$1"
+    local model_name="$2"
+    local results_dir="$3"
+    local message="$4"
+    local suite="$5"
+    local adapter_rc=0
+
+    # Integration errors deliberately make the adapter exit nonzero after
+    # publishing both score artifacts. Treat those artifacts, not that expected
+    # status, as proof that failure reporting succeeded.
+    "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" \
+        --model "$model_name" \
+        --output-dir "$results_dir" \
+        --suite "$suite" \
+        --integration-error "$message" \
+        || adapter_rc=$?
+    if [ -f "${results_dir}/bfcl_report.json" ] \
+        && [ -f "${results_dir}/results_bfcl.json" ]; then
+        return 0
+    fi
+    if [ "$adapter_rc" -eq 0 ]; then
+        return 1
+    fi
+    return "$adapter_rc"
+}
+
+_run_bfcl_suite_eval() {
+    local eval_suite="$1"
+    local num_threads="$2"
+    local process_timeout_seconds="$3"
+    local archive_upstream="$4"
+    shift 4
+
+    local port="${PORT:-8888}"
+    local results_dir="${EVAL_RESULT_DIR:-}"
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --port|--results-dir)
+                if [[ $# -lt 2 || -z "${2:-}" || "${2:-}" == --* ]]; then
+                    echo "ERROR: $1 requires a value" >&2
+                    return 2
+                fi
+                case "$1" in
+                    --port)        port="$2" ;;
+                    --results-dir) results_dir="$2" ;;
+                esac
+                shift 2
+                ;;
+            *)
+                echo "Unknown parameter: $1" >&2
+                return 2
+                ;;
+        esac
+    done
+
+    if [ -z "$results_dir" ]; then
+        results_dir="$(mktemp -d /tmp/eval_out-XXXXXX)" || return $?
+    fi
+
+    local model_name="${MODEL_NAME:-${MODEL:-}}"
+    local adapter_path="${INFERENCEX_REPO_ROOT}/utils/evals/bfcl_adapter.py"
+    local runtime_dir=""
+    local project_root=""
+
+    mkdir -p "$results_dir" || return $?
+    results_dir="$(cd "$results_dir" && pwd)" || return $?
+    _prepare_eval_artifact_family "$results_dir" bfcl || return $?
+
+    local setup_rc=0 integration_error=""
+    _prepare_vendor_verifier_python "BFCL" "bfcl-python" true 10 || {
+        setup_rc=$?
+        integration_error="BFCL Python runtime preparation failed with exit code ${setup_rc}"
+    }
+    if [ "$setup_rc" -eq 0 ]; then
+        runtime_dir=$(_prepare_bfcl_runtime) || {
+            setup_rc=$?
+            integration_error="BFCL dependency installation failed with exit code ${setup_rc}"
+        }
+    fi
+    if [ "$setup_rc" -eq 0 ]; then
+        project_root="$(mktemp -d /tmp/bfcl-project-root-XXXXXX)" || {
+            setup_rc=$?
+            integration_error="BFCL project root preparation failed with exit code ${setup_rc}"
+        }
+    fi
+    if [ "$setup_rc" -ne 0 ]; then
+        echo "ERROR: ${integration_error}" >&2
+        local artifact_rc=0
+        _write_bfcl_integration_error \
+            "$adapter_path" "$model_name" "$results_dir" "$integration_error" \
+            "$eval_suite" || artifact_rc=$?
+        if [ "$artifact_rc" -ne 0 ]; then
+            echo "ERROR: failed to write BFCL failure artifact (exit code ${artifact_rc})" >&2
+        fi
+        _cleanup_vendor_eval \
+            "$runtime_dir" "$project_root" "${VENDOR_VERIFIER_PYTHON_CLEANUP_DIR:-}"
+        return "$setup_rc"
+    fi
+
+    local eval_rc=0
+    local -a suite_args=()
+    if [ "$eval_suite" != "bfcl_smoke" ]; then
+        suite_args=(--suite "$eval_suite")
+    fi
+    timeout "$process_timeout_seconds" \
+        "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" \
+        --base-url "http://127.0.0.1:${port}/v1" \
+        --api-key EMPTY \
+        --model "$model_name" \
+        --output-dir "$results_dir" \
+        --bfcl-project-root "$project_root" \
+        "${suite_args[@]}" \
+        --num-threads "$num_threads" \
+        || eval_rc=$?
+    local archive_rc=0
+    if [ "$archive_upstream" = true ]; then
+        _archive_bfcl_upstream_artifacts \
+            "$project_root" "${results_dir}/bfcl_upstream_artifacts.tar.gz" \
+            || archive_rc=$?
+        if [ "$archive_rc" -ne 0 ]; then
+            echo "ERROR: failed to archive BFCL upstream artifacts (exit code ${archive_rc})" >&2
+        fi
+    fi
+    if [ "$eval_rc" -ne 0 ] \
+        && { [ ! -f "${results_dir}/bfcl_report.json" ] \
+            || [ ! -f "${results_dir}/results_bfcl.json" ]; }; then
+        local integration_error="BFCL evaluation failed with exit code ${eval_rc}"
+        local artifact_rc=0
+        _write_bfcl_integration_error \
+            "$adapter_path" "$model_name" "$results_dir" "$integration_error" \
+            "$eval_suite" || artifact_rc=$?
+        if [ "$artifact_rc" -ne 0 ]; then
+            echo "ERROR: failed to write BFCL failure artifact (exit code ${artifact_rc})" >&2
+        fi
+    fi
+    _cleanup_vendor_eval \
+        "$runtime_dir" "$project_root" "${VENDOR_VERIFIER_PYTHON_CLEANUP_DIR:-}"
+    if [ "$eval_rc" -ne 0 ]; then
+        return "$eval_rc"
+    fi
+    return "$archive_rc"
+}
+
+
+_run_bfcl_smoke_eval() {
+    _run_bfcl_suite_eval bfcl_smoke 4 900 false "$@"
+}
+
+run_bfcl_eval() {
+    local eval_suite="${EVAL_SUITE:-bfcl_smoke}"
+    export EVAL_SUITE="$eval_suite"
+
+    case "$eval_suite" in
+        bfcl_smoke)
+            _run_bfcl_smoke_eval "$@"
+            ;;
+        bfcl_vllm_minimax_m3)
+            _run_bfcl_suite_eval "$eval_suite" 8 7200 true "$@"
+            ;;
+        bfcl_vllm_kimi)
+            _run_bfcl_suite_eval "$eval_suite" 16 14400 true "$@"
+            ;;
+        *)
+            echo "ERROR: unsupported BFCL suite '${eval_suite}'" >&2
+            export EVAL_RESULT_DIR=""
+            return 2
+            ;;
+    esac
+}
+
+
+_write_minimax_vendor_integration_error() {
+    local adapter_path="$1"
+    local model_name="$2"
+    local results_dir="$3"
+    local message="$4"
+
+    # The failure path is stdlib-only, so it remains usable when runtime
+    # provisioning or dependency installation is what failed.
+    "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" failure \
+        --model "$model_name" \
+        --output-dir "$results_dir" \
+        --message "$message"
+}
+
+_run_minimax_m3_smoke_eval() {
+    local port="${PORT:-8888}"
+    local results_dir="${EVAL_RESULT_DIR:-}"
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --port|--results-dir)
+                if [[ $# -lt 2 || -z "${2:-}" || "${2:-}" == --* ]]; then
+                    echo "ERROR: $1 requires a value" >&2
+                    return 2
+                fi
+                case "$1" in
+                    --port)        port="$2" ;;
+                    --results-dir) results_dir="$2" ;;
+                esac
+                shift 2
+                ;;
+            *)
+                echo "Unknown parameter: $1" >&2
+                return 2
+                ;;
+        esac
+    done
+
+    if [ -z "$results_dir" ]; then
+        results_dir="$(mktemp -d /tmp/eval_out-XXXXXX)" || return $?
+    fi
+
+    local model_name="${MODEL_NAME:-${MODEL:-}}"
+    local adapter_path="${INFERENCEX_REPO_ROOT}/utils/evals/minimax_provider_eval.py"
+    local fixture_path="${INFERENCEX_REPO_ROOT}/utils/evals/minimax_m3_smoke.json"
+    local runtime_dir=""
+
+    mkdir -p "$results_dir" || return $?
+    results_dir="$(cd "$results_dir" && pwd)" || return $?
+    _prepare_eval_artifact_family "$results_dir" minimax || return $?
+
+    local setup_rc=0 integration_error=""
+    _prepare_vendor_verifier_python "MiniMax Provider Verifier" "minimax-vendor-python" || {
+        setup_rc=$?
+        integration_error="MiniMax Provider Verifier Python runtime preparation failed with exit code ${setup_rc}"
+    }
+    if [ "$setup_rc" -eq 0 ]; then
+        runtime_dir=$(_prepare_minimax_m3_full_runtime) || {
+            setup_rc=$?
+            integration_error="MiniMax Provider Verifier pinned runtime preparation failed with exit code ${setup_rc}"
+        }
+    fi
+    if [ "$setup_rc" -ne 0 ]; then
+        echo "ERROR: ${integration_error}" >&2
+        local artifact_rc=0
+        _write_minimax_vendor_integration_error \
+            "$adapter_path" "$model_name" "$results_dir" "$integration_error" \
+            || artifact_rc=$?
+        if [ "$artifact_rc" -ne 0 ]; then
+            echo "ERROR: failed to write MiniMax verifier failure artifact (exit code ${artifact_rc})" >&2
+        fi
+        _cleanup_vendor_eval \
+            "$runtime_dir" "${VENDOR_VERIFIER_PYTHON_CLEANUP_DIR:-}"
+        return "$setup_rc"
+    fi
+
+    local eval_rc=0
+    "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" run \
+        --python "${VENDOR_VERIFIER_PYTHON:-python3}" \
+        --source-dir "${runtime_dir}/source" \
+        --dependency-dir "${runtime_dir}/deps" \
+        --base-url "http://127.0.0.1:${port}/v1" \
+        --model "$model_name" \
+        --output-dir "$results_dir" \
+        --fixture "$fixture_path" \
+        || eval_rc=$?
+    if [ "$eval_rc" -ne 0 ] \
+        && ! _has_eval_result "$results_dir" "results_minimax_vendor_"; then
+        integration_error="MiniMax Provider Verifier failed with exit code ${eval_rc}"
+        local artifact_rc=0
+        _write_minimax_vendor_integration_error \
+            "$adapter_path" "$model_name" "$results_dir" "$integration_error" \
+            || artifact_rc=$?
+        if [ "$artifact_rc" -ne 0 ]; then
+            echo "ERROR: failed to write MiniMax verifier failure artifact (exit code ${artifact_rc})" >&2
+        fi
+    fi
+    _cleanup_vendor_eval \
+        "$runtime_dir" "${VENDOR_VERIFIER_PYTHON_CLEANUP_DIR:-}"
+    return "$eval_rc"
+}
+
+_install_minimax_m3_full_deps() {
+    local target_dir="$1"
+    "${VENDOR_VERIFIER_PYTHON:-python3}" -m pip install -q --no-cache-dir --target "$target_dir" \
+        "jsonschema==4.25.1" \
+        "loguru==0.7.3" \
+        "megfile==4.2.5" \
+        "numpy==2.3.4" \
+        "openai==2.7.1" \
+        "tqdm==4.67.1"
+}
+
+_prepare_minimax_m3_full_runtime() {
+    local source_adapter_path="${INFERENCEX_REPO_ROOT}/utils/evals/minimax_m3_full_eval.py"
+    local runtime_dir prepare_rc=0
+    runtime_dir="$(mktemp -d /tmp/minimax-m3-full-runtime-XXXXXX)" || return $?
+    "${VENDOR_VERIFIER_PYTHON:-python3}" "$source_adapter_path" prepare-source \
+        --source-dir "${runtime_dir}/source" >&2 || prepare_rc=$?
+    if [ "$prepare_rc" -eq 0 ]; then
+        _install_minimax_m3_full_deps "${runtime_dir}/deps" >&2 || prepare_rc=$?
+    fi
+    if [ "$prepare_rc" -ne 0 ]; then
+        rm -rf "$runtime_dir"
+        return "$prepare_rc"
+    fi
+    printf '%s\n' "$runtime_dir"
+}
+
+_run_minimax_m3_full_eval() {
+    local port="${PORT:-8888}"
+    local results_dir="${EVAL_RESULT_DIR:-}"
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --port|--results-dir)
+                if [[ $# -lt 2 || -z "${2:-}" || "${2:-}" == --* ]]; then
+                    echo "ERROR: $1 requires a value" >&2
+                    return 2
+                fi
+                case "$1" in
+                    --port)        port="$2" ;;
+                    --results-dir) results_dir="$2" ;;
+                esac
+                shift 2
+                ;;
+            *)
+                echo "Unknown parameter: $1" >&2
+                return 2
+                ;;
+        esac
+    done
+
+    if [ -z "$results_dir" ]; then
+        results_dir="$(mktemp -d /tmp/eval_out-XXXXXX)" || return $?
+    fi
+
+    local model_name="${MODEL_NAME:-${MODEL:-}}"
+    local adapter_path="${INFERENCEX_REPO_ROOT}/utils/evals/minimax_m3_full_eval.py"
+    local runtime_dir=""
+
+    mkdir -p "$results_dir" || return $?
+    results_dir="$(cd "$results_dir" && pwd)" || return $?
+    _prepare_eval_artifact_family "$results_dir" minimax || return $?
+
+    local setup_rc=0 integration_error=""
+    _prepare_vendor_verifier_python "MiniMax M3 full verifier" "minimax-m3-full-python" || {
+        setup_rc=$?
+        integration_error="MiniMax M3 full Python runtime preparation failed with exit code ${setup_rc}"
+    }
+    if [ "$setup_rc" -eq 0 ]; then
+        runtime_dir=$(_prepare_minimax_m3_full_runtime) || {
+            setup_rc=$?
+            integration_error="MiniMax M3 full pinned runtime preparation failed with exit code ${setup_rc}"
+        }
+    fi
+    if [ "$setup_rc" -ne 0 ]; then
+        echo "ERROR: ${integration_error}" >&2
+        local artifact_rc=0
+        _write_minimax_vendor_integration_error \
+            "$adapter_path" "$model_name" "$results_dir" "$integration_error" \
+            || artifact_rc=$?
+        if [ "$artifact_rc" -ne 0 ]; then
+            echo "ERROR: failed to write MiniMax full verifier failure artifact (exit code ${artifact_rc})" >&2
+        fi
+        _cleanup_vendor_eval \
+            "$runtime_dir" "${VENDOR_VERIFIER_PYTHON_CLEANUP_DIR:-}"
+        return "$setup_rc"
+    fi
+
+    local eval_rc=0
+    "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" run \
+        --python "${VENDOR_VERIFIER_PYTHON:-python3}" \
+        --source-dir "${runtime_dir}/source" \
+        --dependency-dir "${runtime_dir}/deps" \
+        --base-url "http://127.0.0.1:${port}/v1" \
+        --model "$model_name" \
+        --output-dir "$results_dir" \
+        || eval_rc=$?
+    if [ "$eval_rc" -ne 0 ] \
+        && ! _has_eval_result "$results_dir" "results_minimax_vendor_full_"; then
+        integration_error="MiniMax M3 full verifier failed with exit code ${eval_rc}"
+        local artifact_rc=0
+        _write_minimax_vendor_integration_error \
+            "$adapter_path" "$model_name" "$results_dir" "$integration_error" \
+            || artifact_rc=$?
+        if [ "$artifact_rc" -ne 0 ]; then
+            echo "ERROR: failed to write MiniMax full verifier failure artifact (exit code ${artifact_rc})" >&2
+        fi
+    fi
+    _cleanup_vendor_eval \
+        "$runtime_dir" "${VENDOR_VERIFIER_PYTHON_CLEANUP_DIR:-}"
+    return "$eval_rc"
+}
+
+
+run_minimax_vendor_eval() {
+    local eval_suite="${EVAL_SUITE:-minimax_m3_smoke}"
+    export EVAL_SUITE="$eval_suite"
+
+    case "$eval_suite" in
+        minimax_m3_smoke)
+            _run_minimax_m3_smoke_eval "$@"
+            ;;
+        minimax_m3_full)
+            _run_minimax_m3_full_eval "$@"
+            ;;
+        *)
+            echo "ERROR: unsupported MiniMax Provider Verifier suite '${eval_suite}'" >&2
+            export EVAL_RESULT_DIR=""
+            return 2
+            ;;
+    esac
+}
+
 _eval_patches_dir() {
-    cd "$(dirname "${BASH_SOURCE[0]}")/../utils/evals/patches" && pwd
+    printf '%s\n' "${INFERENCEX_REPO_ROOT}/utils/evals/patches"
 }
 
 _patch_lm_eval() {
@@ -832,13 +1841,14 @@ run_lm_eval() {
     done
 
     # Serving images may use a different WORKDIR.
-    local _repo_root
-    _repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    local _repo_root="$INFERENCEX_REPO_ROOT"
     if [[ "$tasks_dir" == *.yaml && "$tasks_dir" != /* \
           && ! -f "$tasks_dir" && -f "$_repo_root/$tasks_dir" ]]; then
         echo "run_lm_eval: anchoring relative task '$tasks_dir' to repo root -> $_repo_root/$tasks_dir"
         tasks_dir="$_repo_root/$tasks_dir"
     fi
+
+    export EVAL_TASKS_DIR="$tasks_dir"
 
     if [ "${INFERENCEX_LM_EVAL_RUNTIME_READY:-false}" != "true" ]; then
         _install_lm_eval_deps
@@ -954,6 +1964,160 @@ _eval_concs_to_json() {
     printf '[%s]' "$joined"
 }
 
+_env_is_true() {
+    case "${1:-}" in
+        1|[Tt][Rr][Uu][Ee]|[Yy][Ee][Ss]|[Oo][Nn]) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+_resolve_disagg_ep() {
+    local ep="${1:-1}"
+    local enable_flag="${2:-false}"
+    local tp_size="${3:-1}"
+    if [[ "$ep" == "1" ]] && _env_is_true "$enable_flag"; then
+        echo "$tp_size"
+    else
+        echo "$ep"
+    fi
+}
+
+_normalize_bool_json() {
+    if _env_is_true "${1:-false}"; then
+        echo "true"
+    else
+        echo "false"
+    fi
+}
+
+# Export TP/EP/DP metadata for append_lm_eval_summary / meta_env.json.
+# Prefer workflow PREFILL_EP/DECODE_EP and *_DP_ATTN (from job.slurm) over
+# ENABLE_* launch booleans so DEP8/DPA arms record the correct topology.
+bridge_disagg_eval_metadata() {
+    export TP="${PREFILL_TP:-${PREFILL_TP_SIZE:-${TP:-1}}}"
+    export PREFILL_TP="${PREFILL_TP:-${PREFILL_TP_SIZE:-${TP:-1}}}"
+    export PREFILL_EP="$(_resolve_disagg_ep "${PREFILL_EP:-${EP_SIZE:-${EP:-1}}}" "${PREFILL_ENABLE_EP:-false}" "${PREFILL_TP_SIZE:-${PREFILL_TP:-1}}")"
+    export EP_SIZE="${PREFILL_EP}"
+    export PREFILL_NUM_WORKERS="${PREFILL_NUM_WORKERS:-${xP:-1}}"
+    export DECODE_TP="${DECODE_TP:-${DECODE_TP_SIZE:-${TP:-1}}}"
+    export DECODE_EP="$(_resolve_disagg_ep "${DECODE_EP:-${EP_SIZE:-${EP:-1}}}" "${DECODE_ENABLE_EP:-false}" "${DECODE_TP_SIZE:-${DECODE_TP:-1}}")"
+    export DECODE_NUM_WORKERS="${DECODE_NUM_WORKERS:-${yD:-1}}"
+
+    local prefill_dp="${PREFILL_DP_ATTN:-${PREFILL_DP_ATTENTION:-${PREFILL_ENABLE_DP:-false}}}"
+    local decode_dp="${DECODE_DP_ATTN:-${DECODE_DP_ATTENTION:-${DECODE_ENABLE_DP:-false}}}"
+    export DP_ATTENTION="$(_normalize_bool_json "$prefill_dp")"
+    export PREFILL_DP_ATTENTION="$(_normalize_bool_json "$prefill_dp")"
+    export DECODE_DP_ATTENTION="$(_normalize_bool_json "$decode_dp")"
+}
+
+_write_lm_eval_meta_json() {
+    local meta_json="$1"
+    local batch_metadata="${2:-}"
+    local metadata_conc="${3:-${CONC:-1}}"
+
+    # Single-node jobs already export TP/EP/DP_ATTENTION. The disaggregated
+    # bridge defaults missing per-phase DP flags to false, so applying it to
+    # single-node jobs would overwrite their actual DP-attention setting.
+    if [ "${IS_MULTINODE:-false}" = "true" ]; then
+        bridge_disagg_eval_metadata
+    fi
+
+    local model_name="${MODEL_NAME:-$MODEL}"
+    local is_multinode_json="false"
+    if [ "${IS_MULTINODE:-false}" = "true" ]; then
+        is_multinode_json="true"
+    fi
+
+    local prefill_tp="${PREFILL_TP:-${TP:-1}}"
+    local prefill_pp="${PREFILL_PP_SIZE:-${PP_SIZE:-1}}"
+    local prefill_dcp_size="${PREFILL_DCP_SIZE:-${DCP_SIZE:-1}}"
+    local prefill_pcp_size="${PREFILL_PCP_SIZE:-${PCP_SIZE:-1}}"
+    local prefill_ep="${PREFILL_EP:-${EP_SIZE:-1}}"
+    local prefill_num_workers="${PREFILL_NUM_WORKERS:-1}"
+    local decode_tp="${DECODE_TP:-${TP:-1}}"
+    local decode_pp="${DECODE_PP_SIZE:-${PP_SIZE:-1}}"
+    local decode_dcp_size="${DECODE_DCP_SIZE:-${DCP_SIZE:-1}}"
+    local decode_pcp_size="${DECODE_PCP_SIZE:-${PCP_SIZE:-1}}"
+    local decode_ep="${DECODE_EP:-${EP_SIZE:-1}}"
+    local decode_num_workers="${DECODE_NUM_WORKERS:-1}"
+
+    local dp_json
+    dp_json="$(_normalize_bool_json "${DP_ATTENTION:-false}")"
+    local prefill_dp_json
+    prefill_dp_json="$(_normalize_bool_json "${PREFILL_DP_ATTENTION:-${DP_ATTENTION:-false}}")"
+    local decode_dp_json
+    decode_dp_json="$(_normalize_bool_json "${DECODE_DP_ATTENTION:-${DP_ATTENTION:-false}}")"
+
+    local fw="${FRAMEWORK:-}"
+    local prec="${PRECISION:-}"
+    if [[ -z "$fw" || -z "$prec" ]]; then
+        if [[ -n "${RESULT_FILENAME:-}" ]]; then
+            local parsed
+            parsed=$(echo "${RESULT_FILENAME}" | sed -n 's/.*_\([^_][^_]*\)_\([^_][^_]*\)_tp.*/\1 \2/p')
+            local p1="${parsed%% *}"
+            local p2="${parsed#* }"
+            if [[ -z "$prec" && -n "$p1" && "$p1" != "$parsed" ]]; then
+                prec="$p1"
+            fi
+            if [[ -z "$fw" && -n "$p2" && "$p2" != "$parsed" ]]; then
+                fw="$p2"
+            fi
+        fi
+    fi
+    local eval_suite="${EVAL_COMPLETED_SUITE:-${EVAL_SUITE:-}}"
+    if [ -z "$eval_suite" ] && [ -n "${EVAL_TASKS_DIR:-}" ]; then
+        eval_suite="$(basename "${EVAL_TASKS_DIR}")"
+        eval_suite="${eval_suite%.yaml}"
+        eval_suite="${eval_suite%.yml}"
+    fi
+    eval_suite="${eval_suite:-gsm8k}"
+
+    cat > "${meta_json}" <<META
+{
+  "is_multinode": ${is_multinode_json},
+  "framework": "${fw:-unknown}",
+  "precision": "${prec:-unknown}",
+  "spec_decoding": "${SPEC_DECODING:-}",
+  "eval_suite": "${eval_suite}",
+  "recipe_fingerprint": "${RECIPE_FINGERPRINT:-}",
+  "tp": ${TP:-1},
+  "pp": ${PP_SIZE:-1},
+  "dcp_size": ${DCP_SIZE:-1},
+  "pcp_size": ${PCP_SIZE:-1},
+  "conc": ${metadata_conc},
+${batch_metadata}  "ep": ${EP_SIZE:-1},
+  "dp_attention": ${dp_json},
+  "prefill_tp": ${prefill_tp},
+  "prefill_pp": ${prefill_pp},
+  "prefill_dcp_size": ${prefill_dcp_size},
+  "prefill_pcp_size": ${prefill_pcp_size},
+  "prefill_ep": ${prefill_ep},
+  "prefill_dp_attention": ${prefill_dp_json},
+  "prefill_num_workers": ${prefill_num_workers},
+  "decode_tp": ${decode_tp},
+  "decode_pp": ${decode_pp},
+  "decode_dcp_size": ${decode_dcp_size},
+  "decode_pcp_size": ${decode_pcp_size},
+  "decode_ep": ${decode_ep},
+  "decode_dp_attention": ${decode_dp_json},
+  "decode_num_workers": ${decode_num_workers},
+  "model": "${model_name:-}",
+  "infmax_model_prefix": "${MODEL_PREFIX:-unknown}",
+  "hw": "${RUNNER_TYPE:-unknown}",
+  "isl": "${ISL:-0}",
+  "osl": "${OSL:-0}"
+}
+META
+}
+
+rewrite_lm_eval_meta_env() {
+    if [ -n "${EVAL_BATCHED_CONCS:-}" ]; then
+        append_lm_eval_summary
+    else
+        _write_lm_eval_meta_json "./meta_env.json" "" "${CONC:-1}"
+    fi
+}
+
 append_lm_eval_summary() {
     local batch_concs="${EVAL_BATCHED_CONCS:-}"
     local results_dir="${EVAL_RESULT_DIR:-}"
@@ -991,121 +2155,56 @@ append_lm_eval_summary() {
         meta_json="${out_dir}/meta_env.json"
     fi
 
-    # Write minimal meta for collectors that expect it
-    local model_name="${MODEL_NAME:-$MODEL}"
-    local is_multinode_json="false"
-    if [ "${IS_MULTINODE:-false}" = "true" ]; then
-        is_multinode_json="true"
-    fi
-
-    local prefill_tp="${PREFILL_TP:-${TP:-1}}"
-    local prefill_pp="${PREFILL_PP_SIZE:-${PP_SIZE:-1}}"
-    local prefill_dcp_size="${PREFILL_DCP_SIZE:-${DCP_SIZE:-1}}"
-    local prefill_pcp_size="${PREFILL_PCP_SIZE:-${PCP_SIZE:-1}}"
-    local prefill_ep="${PREFILL_EP:-${EP_SIZE:-1}}"
-    local prefill_num_workers="${PREFILL_NUM_WORKERS:-1}"
-    local decode_tp="${DECODE_TP:-${TP:-1}}"
-    local decode_pp="${DECODE_PP_SIZE:-${PP_SIZE:-1}}"
-    local decode_dcp_size="${DECODE_DCP_SIZE:-${DCP_SIZE:-1}}"
-    local decode_pcp_size="${DECODE_PCP_SIZE:-${PCP_SIZE:-1}}"
-    local decode_ep="${DECODE_EP:-${EP_SIZE:-1}}"
-    local decode_num_workers="${DECODE_NUM_WORKERS:-1}"
-
-    local dp_json="false"
-    if [ "${DP_ATTENTION:-false}" = "true" ]; then dp_json="true"; fi
-    local prefill_dp_json="$dp_json"
-    if [ "${PREFILL_DP_ATTENTION:-${DP_ATTENTION:-false}}" = "true" ]; then
-        prefill_dp_json="true"
-    else
-        prefill_dp_json="false"
-    fi
-    local decode_dp_json="$dp_json"
-    if [ "${DECODE_DP_ATTENTION:-${DP_ATTENTION:-false}}" = "true" ]; then
-        decode_dp_json="true"
-    else
-        decode_dp_json="false"
-    fi
-
-    # Derive framework/precision from env, fallback to parsing RESULT_FILENAME
-    # RESULT_FILENAME format (from workflow):
-    #   <exp_name>_<precision>_<framework>_tp<...>_ep<...>_dpa_<...>_conc<...>_<runner>
-    local fw="${FRAMEWORK:-}"
-    local prec="${PRECISION:-}"
-    if [[ -z "$fw" || -z "$prec" ]]; then
-        if [[ -n "${RESULT_FILENAME:-}" ]]; then
-            # Extract the two fields immediately before "_tp"
-            # Handles arbitrary underscores in exp_name by matching from the end
-            local parsed
-            parsed=$(echo "${RESULT_FILENAME}" | sed -n 's/.*_\([^_][^_]*\)_\([^_][^_]*\)_tp.*/\1 \2/p')
-            local p1="${parsed%% *}"
-            local p2="${parsed#* }"
-            if [[ -z "$prec" && -n "$p1" && "$p1" != "$parsed" ]]; then
-                prec="$p1"
-            fi
-            if [[ -z "$fw" && -n "$p2" && "$p2" != "$parsed" ]]; then
-                fw="$p2"
-            fi
-        fi
-    fi
-    cat > "${meta_json}" <<META
-{
-  "is_multinode": ${is_multinode_json},
-  "framework": "${fw:-unknown}",
-  "precision": "${prec:-unknown}",
-  "spec_decoding": "${SPEC_DECODING:-}",
-  "tp": ${TP:-1},
-  "pp": ${PP_SIZE:-1},
-  "dcp_size": ${DCP_SIZE:-1},
-  "pcp_size": ${PCP_SIZE:-1},
-  "conc": ${metadata_conc},
-${batch_metadata}  "ep": ${EP_SIZE:-1},
-  "dp_attention": ${dp_json},
-  "prefill_tp": ${prefill_tp},
-  "prefill_pp": ${prefill_pp},
-  "prefill_dcp_size": ${prefill_dcp_size},
-  "prefill_pcp_size": ${prefill_pcp_size},
-  "prefill_ep": ${prefill_ep},
-  "prefill_dp_attention": ${prefill_dp_json},
-  "prefill_num_workers": ${prefill_num_workers},
-  "decode_tp": ${decode_tp},
-  "decode_pp": ${decode_pp},
-  "decode_dcp_size": ${decode_dcp_size},
-  "decode_pcp_size": ${decode_pcp_size},
-  "decode_ep": ${decode_ep},
-  "decode_dp_attention": ${decode_dp_json},
-  "decode_num_workers": ${decode_num_workers},
-  "model": "${model_name:-}",
-  "infmax_model_prefix": "${MODEL_PREFIX:-unknown}",
-  "hw": "${RUNNER_TYPE:-unknown}",
-  "isl": "${ISL:-0}",
-  "osl": "${OSL:-0}"
-}
-META
+    _write_lm_eval_meta_json "$meta_json" "$batch_metadata" "$metadata_conc"
 
     if [ -n "$batch_concs" ]; then
         echo "Prepared batched eval artifacts in: $(pwd)"
         return 0
     fi
 
-    # Move eval artifacts into PWD (no new directories in workspace)
-    if [ -f "${meta_json}" ]; then
-        mv -f "${meta_json}" ./ || echo "WARN: failed to move ${meta_json}" >&2
-    fi
-    if [ -d "${out_dir}" ]; then
-        while IFS= read -r -d '' jf; do
-            base=$(basename "$jf")
-            if [ "$base" != "meta_env.json" ]; then
-                mv -f "$jf" ./ || echo "WARN: failed to move ${jf}" >&2
-            fi
-        done < <(find "${out_dir}" -type f -name "*.json*" -print0 2>/dev/null)
-    fi
+    # Copy the complete allowlisted eval artifact set before removing its temp dir.
+    stage_eval_artifacts "$(pwd)" "$out_dir" || return $?
 
     # Best-effort cleanup of the temp directory
     if [ -n "${out_dir}" ] && [ -d "${out_dir}" ]; then
         rm -rf --one-file-system "${out_dir}" || rm -rf "${out_dir}" || true
     fi
 
-    echo "Moved eval artifacts to: $(pwd)"
+    echo "Staged eval artifacts in: $(pwd)"
+}
+
+stage_eval_artifacts() {
+    local destination="$1"
+    shift
+
+    mkdir -p "$destination" || return $?
+    local source_dir artifact
+    local copied=0
+    local artifacts=()
+    for source_dir in "$@"; do
+        [ -d "$source_dir" ] || continue
+        artifacts=(
+            "$source_dir"/meta_env.json
+            "$source_dir"/results*.json
+            "$source_dir"/*_report.json
+            "$source_dir"/*_results.jsonl
+            "$source_dir"/*_artifacts.tar.gz
+            "$source_dir"/sample*.jsonl
+            "$source_dir"/agent_preds.json
+            "$source_dir"/swebench_report_*.json
+            "$source_dir"/predictions.jsonl
+            "$source_dir"/*.traj*
+        )
+        for artifact in "${artifacts[@]}"; do
+            [ -f "$artifact" ] || continue
+            cp -f "$artifact" "$destination/" || return $?
+            copied=$((copied + 1))
+        done
+    done
+    if [ "$copied" -eq 0 ]; then
+        echo "ERROR: no eval artifacts found to stage" >&2
+        return 1
+    fi
 }
 
 
@@ -1113,7 +2212,7 @@ _install_swebench_agent_deps() {
     python3 -m pip install -q --no-cache-dir --break-system-packages \
         'mini-swe-agent==2.4.5' 'swe-rex[modal]==1.4.0' || true
     _patch_swebench_agent || \
-        echo "WARN: mini-swe-agent/swe-rex patches failed; sandboxes will leak until runtime_timeout and budget-exhausted instances will submit nothing" >&2
+        echo "WARN: mini-swe-agent/swe-rex patches failed; sandbox cleanup, submission fallback, or non-interactive stdin handling may be degraded" >&2
 }
 
 _patch_swebench_agent() {
@@ -1136,7 +2235,12 @@ _patch_swebench_scoring() {
 
 # SWE-bench requires ~/.modal.toml despite env credentials.
 _ensure_modal_credentials() {
-    if [ "${SWEBENCH_USE_MODAL:-false}" != "true" ]; then return 0; fi
+    # Agentic generation uses swerex_modal sandboxes even when scoring is local.
+    if [ "${SWEBENCH_USE_MODAL:-false}" != "true" ] \
+        && [ "${IS_AGENTIC:-0}" != "1" ] \
+        && [ "${SCENARIO_TYPE:-}" != "agentic-coding" ]; then
+        return 0
+    fi
     # CI secrets may include whitespace or quotes.
     if [ -n "${MODAL_TOKEN_ID:-}" ]; then
         MODAL_TOKEN_ID=$(printf %s "$MODAL_TOKEN_ID" | tr -d "[:space:]\"'")
@@ -1159,7 +2263,7 @@ _ensure_modal_credentials() {
         chmod 600 "$HOME/.modal.toml"
         echo "[swebench] wrote ~/.modal.toml from MODAL_TOKEN_ID/MODAL_TOKEN_SECRET env"
     else
-        echo "WARN: SWEBENCH_USE_MODAL=true but no ~/.modal.toml and no MODAL_TOKEN_ID/MODAL_TOKEN_SECRET env; Modal scoring will fail credential validation" >&2
+        echo "WARN: Modal credentials required but no ~/.modal.toml and no MODAL_TOKEN_ID/MODAL_TOKEN_SECRET env; Modal sandboxes will fail authentication" >&2
     fi
 }
 
@@ -1191,7 +2295,7 @@ import os, sys, yaml
 default_path, out_path = sys.argv[1], sys.argv[2]
 d = yaml.safe_load(open(default_path)) or {}
 d.setdefault("agent", {})
-step_limit = int(os.environ.get("SWEBENCH_AGENT_STEP_LIMIT", "75"))
+step_limit = int(os.environ.get("SWEBENCH_AGENT_STEP_LIMIT", "250"))
 guidance = f"""
 
 <additional_critical_guidance>
@@ -1246,7 +2350,7 @@ PYGEN
 
     export MSWEA_COST_TRACKING=ignore_errors
     local expected="${EVAL_LIMIT:-${SWEBENCH_EXPECTED_INSTANCES:-300}}"
-    echo "[swebench-agentic] mini-swe-agent: workers=${SWEBENCH_AGENT_WORKERS:-${CONC:-64}} step_limit=${SWEBENCH_AGENT_STEP_LIMIT:-75} slice=${EVAL_LIMIT:-full} expected=$expected"
+    echo "[swebench-agentic] mini-swe-agent: workers=${SWEBENCH_AGENT_WORKERS:-${CONC:-64}} step_limit=${SWEBENCH_AGENT_STEP_LIMIT:-250} slice=${EVAL_LIMIT:-full} expected=$expected"
     local agen_rc=0
     mini-extra swebench \
         -c "$cfg" \
@@ -1258,12 +2362,12 @@ PYGEN
     local mini_pid=$!
     # preds.json detects completion despite teardown hangs.
     local preds_file="$gen_dir/agent_out/preds.json"
-    local deadline=$(( $(date +%s) + ${SWEBENCH_AGENT_TIMEOUT:-14400} ))
+    local deadline=$(( $(date +%s) + ${SWEBENCH_AGENT_TIMEOUT:-21600} ))
     local grace_until=0
     local killed_after_complete=0
     while kill -0 "$mini_pid" 2>/dev/null; do
         if [ "$(date +%s)" -ge "$deadline" ]; then
-            echo "ERROR: generation exceeded SWEBENCH_AGENT_TIMEOUT (${SWEBENCH_AGENT_TIMEOUT:-14400}s); killing mini-extra" >&2
+            echo "ERROR: generation exceeded SWEBENCH_AGENT_TIMEOUT (${SWEBENCH_AGENT_TIMEOUT:-21600}s); killing mini-extra" >&2
             kill "$mini_pid" 2>/dev/null; sleep 5; kill -9 "$mini_pid" 2>/dev/null
             agen_rc=124
             break
@@ -1328,6 +2432,7 @@ PYSWEEP
 run_swebench_eval() {
     local out_dir="${EVAL_RESULT_DIR:-$(mktemp -d /tmp/eval_out-XXXXXX)}"
     local task_name="${SWEBENCH_TASK_NAME:-swebench_lite}"
+    export EVAL_SUITE="${EVAL_SUITE:-$task_name}"
     local gen_dir
     gen_dir=$(mktemp -d /tmp/swebench_gen-XXXXXX)
 
@@ -1436,6 +2541,101 @@ run_swebench_eval() {
     fi
 }
 
+_wait_for_openai_chat_route() {
+    local port="${PORT:-8888}"
+    local timeout_seconds="${EVAL_ENDPOINT_READY_TIMEOUT_SECONDS:-1800}"
+    local poll_seconds=5
+    local stabilization_seconds="${EVAL_MODEL_STABILIZATION_SECONDS:-30}"
+    local start_seconds=$SECONDS
+    local server_ready_since=-1
+    local next_report=0
+    local elapsed percent chat_status
+    local served_model="${SERVED_MODEL_NAME:-${MODEL:-}}"
+    local health_url models_url chat_url
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --port)
+                if [[ $# -lt 2 || -z "${2:-}" || "${2:-}" == --* ]]; then
+                    echo "ERROR: --port requires a value" >&2
+                    return 2
+                fi
+                port="$2"
+                shift 2
+                ;;
+            *) shift ;;
+        esac
+    done
+    if ! [[ "$timeout_seconds" =~ ^[1-9][0-9]*$ ]]; then
+        echo "ERROR: EVAL_ENDPOINT_READY_TIMEOUT_SECONDS must be a positive integer" >&2
+        return 2
+    fi
+    if ! [[ "$stabilization_seconds" =~ ^[0-9]+$ ]]; then
+        echo "ERROR: EVAL_MODEL_STABILIZATION_SECONDS must be a non-negative integer" >&2
+        return 2
+    fi
+    if [ -z "$served_model" ]; then
+        echo "ERROR: MODEL or SERVED_MODEL_NAME is required for chat endpoint readiness" >&2
+        return 2
+    fi
+    health_url="http://localhost:${port}/health"
+    models_url="http://localhost:${port}/v1/models"
+    chat_url="http://localhost:${port}/v1/chat/completions"
+
+    while true; do
+        local model_ready=false
+        local server_ready=false
+        if curl -fsS --max-time 10 "$health_url" >/dev/null 2>&1; then
+            server_ready=true
+        fi
+        if curl -fsS --max-time 10 "$models_url" 2>/dev/null \
+            | python3 -c '
+import json
+import sys
+
+expected = sys.argv[1]
+payload = json.load(sys.stdin)
+models = payload.get("data", [])
+raise SystemExit(0 if any(model.get("id") == expected for model in models) else 1)
+' "$served_model" >/dev/null 2>&1; then
+            model_ready=true
+        fi
+
+        chat_status=""
+        if [ "$model_ready" = true ]; then
+            chat_status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 \
+                "$chat_url" 2>/dev/null)" || true
+            case "$chat_status" in
+                401|403|405) break ;;
+            esac
+        fi
+        if [ "$server_ready" = true ]; then
+            if [ "$server_ready_since" -lt 0 ]; then
+                server_ready_since=$SECONDS
+            fi
+            if [ $((SECONDS - server_ready_since)) -ge "$stabilization_seconds" ]; then
+                break
+            fi
+        else
+            server_ready_since=-1
+        fi
+
+        elapsed=$((SECONDS - start_seconds))
+        if [ "$elapsed" -ge "$timeout_seconds" ]; then
+            echo "ERROR: chat endpoint for model '$served_model' did not become ready within ${timeout_seconds}s: $chat_url" >&2
+            return 1
+        fi
+        if [ "$elapsed" -ge "$next_report" ]; then
+            percent=$((elapsed * 100 / timeout_seconds))
+            echo "Waiting for chat endpoint for model '$served_model': ${elapsed}/${timeout_seconds}s (${percent}%)"
+            next_report=$((next_report + 60))
+        fi
+        sleep "$poll_seconds"
+    done
+    echo "OpenAI chat endpoint ready for model '$served_model': $chat_url"
+}
+
+
 # ------------------------------
 # Unified eval entrypoint
 # ------------------------------
@@ -1443,6 +2643,9 @@ run_swebench_eval() {
 run_eval() {
     local cli_framework=""
     local forwarded=()
+    # Keep runner-selected suite identity scoped to this invocation.
+    local EVAL_SUITE="${EVAL_SUITE:-}"
+    unset EVAL_COMPLETED_SUITE
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -1464,14 +2667,52 @@ run_eval() {
     local scenario_default="lm-eval"
     local scenario_is_agentic=0
     if [ "${IS_AGENTIC:-0}" = "1" ] || [ "${SCENARIO_TYPE:-}" = "agentic-coding" ]; then
-        scenario_default="swebench"
         scenario_is_agentic=1
     fi
 
     local framework="${EVAL_FRAMEWORK:-${cli_framework:-$scenario_default}}"
+    case "$framework" in
+        kimi-vendor)
+            [ -n "${EVAL_SUITE:-}" ] || EVAL_SUITE="kimi_tool_call_schema"
+            ;;
+        minimax-vendor)
+            [ -n "${EVAL_SUITE:-}" ] || EVAL_SUITE="minimax_m3_smoke"
+            ;;
+        bfcl)
+            [ -n "${EVAL_SUITE:-}" ] || EVAL_SUITE="bfcl_smoke"
+            ;;
+    esac
 
-    # Compute EVAL_MAX_MODEL_LEN if not already set by the calling script
-    if [ -z "${EVAL_MAX_MODEL_LEN:-}" ]; then
+    case "${EVAL_SUITE:-}" in
+        "") ;;
+        *[!A-Za-z0-9_.-]*)
+            echo "ERROR: EVAL_SUITE may contain only letters, digits, '.', '_', and '-'" >&2
+            return 2
+            ;;
+    esac
+
+    if [ -n "${EVAL_SUITE:-}" ] \
+        && [ "$framework" != "kimi-vendor" ] \
+        && [ "$framework" != "minimax-vendor" ] \
+        && [ "$framework" != "bfcl" ]; then
+        echo "ERROR: EVAL_SUITE is only supported with kimi-vendor, minimax-vendor, or bfcl" >&2
+        return 2
+    fi
+
+    if [ "${EVAL_ONLY:-false}" = "true" ]; then
+        case "$framework" in
+            kimi-vendor|minimax-vendor|bfcl)
+                _wait_for_openai_chat_route "${forwarded[@]}" || return $?
+                ;;
+        esac
+    fi
+
+    # Explicit verifier suites use fixed request budgets and do not consume
+    # EVAL_MAX_MODEL_LEN, so avoid loading model configuration for those paths.
+    if [ "$framework" != "kimi-vendor" ] \
+        && [ "$framework" != "minimax-vendor" ] \
+        && [ "$framework" != "bfcl" ] \
+        && [ -z "${EVAL_MAX_MODEL_LEN:-}" ]; then
         compute_eval_context_length "$MODEL" "${MAX_MODEL_LEN:-0}" > /dev/null
     fi
 
@@ -1538,26 +2779,46 @@ run_eval() {
         return 0
     fi
 
+    if [ -n "${EVAL_CONCURRENT_REQUESTS:-}" ]; then
+        export CONC="$EVAL_CONCURRENT_REQUESTS"
+    fi
+
     local eval_rc=0
     case "$framework" in
         lm-eval|lm_eval) run_lm_eval "${forwarded[@]}" || eval_rc=$? ;;
         swebench)        run_swebench_eval "${forwarded[@]}" || eval_rc=$? ;;
+        kimi-vendor)     run_kimi_vendor_eval "${forwarded[@]}" || eval_rc=$? ;;
+        minimax-vendor)  run_minimax_vendor_eval "${forwarded[@]}" || eval_rc=$? ;;
+        bfcl)           run_bfcl_eval "${forwarded[@]}" || eval_rc=$? ;;
         *)               echo "Unknown framework '${framework}'"; eval_rc=1 ;;
     esac
 
-    # Agentic eval-only recipes have no separate staging step.
-    if [ "${EVAL_ONLY:-false}" = "true" ] && [ "$scenario_is_agentic" = "1" ]; then
-        append_lm_eval_summary || true
+    if [ -n "${EVAL_SUITE:-}" ]; then
+        export EVAL_COMPLETED_SUITE="$EVAL_SUITE"
     fi
 
+    local stage_rc=0
+    # Agentic eval-only recipes have no separate staging step. Provider
+    # failures are staged before returning so diagnostic artifacts survive.
+    if { [ "${EVAL_ONLY:-false}" = "true" ] && [ "$scenario_is_agentic" = "1" ]; } \
+        || { { [ "$framework" = "kimi-vendor" ] \
+            || [ "$framework" = "minimax-vendor" ] \
+            || [ "$framework" = "bfcl" ]; } \
+            && [ "$eval_rc" -ne 0 ]; }; then
+        append_lm_eval_summary || stage_rc=$?
+    fi
     if [ "$eval_rc" -ne 0 ]; then
         echo "ERROR: run_eval failed with exit code $eval_rc" >&2
-        if [ "${EVAL_ONLY}" = "true" ]; then
+        if [ "${EVAL_ONLY:-false}" = "true" ]; then
             echo "Eval-only mode: failing after artifact collection" >&2
-            return "$eval_rc"
         fi
+        return "$eval_rc"
     fi
-    return $eval_rc
+    if [ "$stage_rc" -ne 0 ]; then
+        echo "ERROR: eval artifact staging failed with exit code $stage_rc" >&2
+        return "$stage_rc"
+    fi
+    return 0
 }
 
 
@@ -1577,6 +2838,8 @@ AIPERF_CLI="${AIPERF_VENV}/bin/aiperf"
 AIPERF_HF_CLI="${AIPERF_VENV}/bin/hf"
 AIPERF_DEPS_READY=0
 AIPERF_FAILED_REQUEST_THRESHOLD="${AIPERF_FAILED_REQUEST_THRESHOLD:-0.10}"
+AIPERF_LIVE_FAILED_REQUEST_THRESHOLD="${AIPERF_LIVE_FAILED_REQUEST_THRESHOLD:-$AIPERF_FAILED_REQUEST_THRESHOLD}"
+AIPERF_TRACE_IDLE_GAP_CAP_SECONDS="${AIPERF_TRACE_IDLE_GAP_CAP_SECONDS:-300}"
 
 agentic_pip_install() {
     local pip_install=(python3 -m pip install)
@@ -1611,20 +2874,26 @@ install_agentic_deps() {
         return
     fi
 
-    # AIPerf must not share site-packages with the inference server. Installing
-    # it into vLLM/SGLang's system Python can upgrade FastAPI, Starlette,
-    # transformers, or other packages while the server imports from that same
-    # environment.
-    if ! command -v git >/dev/null 2>&1; then
-        apt-get update && apt-get install -y git
-    fi
+    # Install from the checked-out aiperf source with uv. This path does not
+    # require git, and rootless Enroot containers cannot mutate dpkg.
 
     ensure_agentic_uv
     rm -rf "$AIPERF_VENV"
     mkdir -p "$AIPERF_UV_CACHE_DIR"
 
+    # Request an explicit interpreter version rather than binding to whatever
+    # `python3` resolves to in the server container. aiperf's pyproject.toml
+    # dropped Python 3.10 support (SemiAnalysisAI/aiperf#1107); the sglang-rocm
+    # /vllm-rocm images still ship 3.10.12 as their default python3, so
+    # `--python "$(command -v python3)"` pinned the venv to an interpreter that
+    # can no longer satisfy `requires-python = ">=3.11,<3.14"`, leaving the venv
+    # without aiperf/hf installed (silent until the aiperf/hf calls below hit
+    # "No such file or directory"). uv auto-downloads a standalone build of the
+    # requested version when the system doesn't have one (same network path
+    # already used to fetch uv itself above), so this doesn't depend on the
+    # container image bundling a new-enough Python.
     UV_CACHE_DIR="$AIPERF_UV_CACHE_DIR" \
-        "$AIPERF_UV_BIN" venv --python "$(command -v python3)" "$AIPERF_VENV"
+        "$AIPERF_UV_BIN" venv --python "${AIPERF_PYTHON_VERSION:-3.11}" "$AIPERF_VENV"
     UV_CACHE_DIR="$AIPERF_UV_CACHE_DIR" \
         "$AIPERF_UV_BIN" pip install --python "$AIPERF_PYTHON" \
         -r "$AGENTIC_DIR/requirements.txt" \
@@ -1660,7 +2929,7 @@ resolve_trace_source() {
     # WEKA_LOADER_OVERRIDE.
     local default_loader
     case "${MODEL_PREFIX:-}" in
-        dsv4*|glm5.2*|minimaxm3*)
+        dsv4*|glm5.2*|minimaxm3*|kimik3*)
             default_loader="semianalysis_cc_traces_weka_062126"
             ;;
         *)
@@ -1736,14 +3005,21 @@ build_replay_cmd() {
     # the worker threads the server's live assistant response back into the
     # session.
     #
-    # The scenario plugin locks: --cache-bust first_turn_prefix and
-    # --trace-idle-gap-cap-seconds 10 (per-trace idle-gap compression
-    # against parent + subagent request-start timestamps; supersedes the
-    # legacy --use-think-time-only / --inter-turn-delay-cap-seconds path),
-    # and auto-injects them — so we do not pass them. See
+    # The scenario plugin locks --cache-bust first_turn_prefix and a 10-second
+    # whole-system idle cap. InferenceX also applies a 300-second per-trajectory
+    # runtime idle cap below. Source end-to-start delays remain intact; either
+    # cap advances pending timers only while its scope is idle. See
     # utils/aiperf/docs/tutorials/agentx-mvp.md.
     local result_dir="$1"
     local duration="$DURATION"
+    local warmup_requests_per_lane="${AIPERF_WARMUP_REQUESTS_PER_LANE:-10}"
+
+    # Fast mode minimizes setup by advancing each trajectory lane only once
+    # and shortens profiling to 20 minutes.
+    if [[ "${AIPERF_EXPERIMENTAL_FAST:-0}" == "1" ]]; then
+        duration=1200
+        warmup_requests_per_lane=1
+    fi
 
     export AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES="${AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES:-0}"
     # Dataset configuration (load + reconstruct + inputs.json + mmap)
@@ -1756,29 +3032,50 @@ build_replay_cmd() {
     # aiperf validates that SERVICE_PROFILE_CONFIGURE_TIMEOUT >=
     # DATASET_CONFIGURATION_TIMEOUT at startup. Bump it in lockstep.
     export AIPERF_SERVICE_PROFILE_CONFIGURE_TIMEOUT=1800
+    # Headless realtime metrics are opt-in on current AIPerf main. Enable the
+    # rolling TTFT/ITL/throughput block and emit it every 30 seconds.
+    export AIPERF_UI_REALTIME_METRICS_ENABLED=true
     REPLAY_CMD="$AIPERF_CLI profile --scenario inferencex-agentx-mvp"
-    REPLAY_CMD+=" --url http://localhost:$PORT"
+    REPLAY_CMD+=" --url ${AIPERF_SERVER_URL:-http://localhost:$PORT}"
     REPLAY_CMD+=" --endpoint /v1/chat/completions"
     REPLAY_CMD+=" --endpoint-type chat"
     REPLAY_CMD+=" --streaming"
-    REPLAY_CMD+=" --model $MODEL"
+    # SERVED_MODEL_NAME overrides $MODEL when the frontend registers the
+    # model under a different name than the recipe's model.path alias (e.g.
+    # dynamo-trt srt-slurm recipes serve "DeepSeek-V4-Pro" while $MODEL is
+    # the HF id "deepseek-ai/DeepSeek-V4-Pro"). Mismatches 404 at warmup.
+    REPLAY_CMD+=" --model ${SERVED_MODEL_NAME:-$MODEL}"
+    # aiperf's dataset manager resolves the tokenizer from --model by
+    # default, but a SERVED_MODEL_NAME override (above) is a wire name, not
+    # necessarily a valid HF repo id (e.g. "Qwen3.5-397B-A17B-NVFP4-V2" vs
+    # the real "nvidia/Qwen3.5-397B-A17B-NVFP4-V2"), which 404s tokenizer
+    # loading. Always pass the real HF id explicitly.
+    REPLAY_CMD+=" --tokenizer $MODEL"
     REPLAY_CMD+=" --concurrency $CONC"
     REPLAY_CMD+=" --benchmark-duration $duration"
+    REPLAY_CMD+=" --stats-interval 30"
     REPLAY_CMD+=" --random-seed 42"
-    # Fail runs once more than 10% of requests error. This keeps known
-    # transient low-rate failures from killing long sweeps while still
-    # catching malformed payloads or server crashes before they get aggregated
-    # as benchmarkable data.
-    REPLAY_CMD+=" --failed-request-threshold $AIPERF_FAILED_REQUEST_THRESHOLD"
+    # Fail runs early once the live error ratio crosses the configured limit.
+    # Recipes with correlated low-concurrency trajectories may allow a larger
+    # live sample while retaining AIPERF_FAILED_REQUEST_THRESHOLD as the strict
+    # post-run validity gate below.
+    REPLAY_CMD+=" --failed-request-threshold $AIPERF_LIVE_FAILED_REQUEST_THRESHOLD"
     # Sample each trajectory's warmup start position uniformly from
     # [25%, 75%] of the trace's turn count, clamped by AIPerf to leave at
     # least one profile turn after warmup.
     REPLAY_CMD+=" --trajectory-start-min-ratio 0.25"
     REPLAY_CMD+=" --trajectory-start-max-ratio 0.75"
-    # After the normal t* snapshot warmup, continue those exact trajectories
-    # with one-token outputs and no idle delays for 10 minutes. Profiling begins
-    # only after those requests drain and resumes from the resulting live state.
-    REPLAY_CMD+=" --agentic-cache-warmup-duration 600"
+    # After the normal t* snapshot primers, advance every trajectory lane by
+    # this many additional one-token requests with no idle delay. Profiling
+    # begins after those requests drain and resumes from the resulting live
+    # state. Do not pass --burst-phase-starts: AIPerf main's spread default
+    # preserves each lane's recorded phase-start offset.
+    REPLAY_CMD+=" --warmup-requests-per-lane $warmup_requests_per_lane"
+    # Limit observed end-to-start idle time across each complete trajectory
+    # tree, including root and subagent streams. AIPerf advances that tree's
+    # pending timers uniformly without bypassing spawn/join dependencies or
+    # changing request order.
+    REPLAY_CMD+=" --trace-idle-gap-cap-seconds $AIPERF_TRACE_IDLE_GAP_CAP_SECONDS"
     # Give long-context warmup requests up to 30 minutes to drain before
     # declaring warmup failed. Recipes whose saturation arms carry a larger
     # in-flight working set may override via AGENTIC_WARMUP_GRACE_PERIOD
@@ -1792,12 +3089,23 @@ build_replay_cmd() {
     # CPU on minimax-m2.5 at high concurrency. Lossless for vLLM (server
     # usage is authoritative).
     REPLAY_CMD+=" --use-server-token-count"
+    if [ -n "${AIPERF_EXTRA_INPUTS:-}" ]; then
+        REPLAY_CMD+=" --extra-inputs $AIPERF_EXTRA_INPUTS"
+    fi
     # Dynamo's KV router needs an explicit conversation session binding to
     # keep later turns on the prefill worker that owns their prefix blocks.
     # X-Correlation-ID is useful tracing metadata but does not establish that
     # binding by itself. AIPerf emits nvext.session_control bind/close actions
     # keyed by the stable conversation correlation ID when this flag is set.
-    if [[ "${FRAMEWORK:-}" == dynamo-* ]]; then
+    # Opt-out: recipes set AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING=0 to skip this.
+    # aiperf's conv-aware routing emits nvext.session_control, a removed POC field
+    # (dynamo #9920 / v1.3.0-dev) that current dynamo builds reject with a 400
+    # (they moved to router/routing_constraints/agent_context). Default stays on.
+    # New recipes instead set AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID=true
+    # to route by X-Dynamo-Session-ID header, which needs no routing CLI flag.
+    if [[ "${FRAMEWORK:-}" == dynamo-* \
+          && "${AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING:-1}" != "0" \
+          && "${AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID:-false}" != "true" ]]; then
         REPLAY_CMD+=" --use-dynamo-conv-aware-routing"
         # The upstream 300s affinity TTL is shorter than an overloaded
         # high-concurrency agentic request. Keep bindings alive across long
@@ -1886,10 +3194,109 @@ write_agentic_result_json() {
     "$AIPERF_PYTHON" "$INFMAX_CONTAINER_WORKSPACE/utils/generate_aiperf_plots.py" "$result_dir" 2>&1 || true
 }
 
-run_agentic_replay_and_write_outputs() {
+validate_required_agentic_server_metrics() {
+    local result_dir="$1"
+    local required_prefix="${AIPERF_REQUIRED_SERVER_METRIC_PREFIX:-}"
+    local metrics_dir="$result_dir/aiperf_artifacts"
+    local metrics_json="$metrics_dir/server_metrics_export.json"
+    local metrics_csv="$metrics_dir/server_metrics_export.csv"
+
+    # Opt-in so existing AgentX configurations retain their current contract.
+    # Recipes that require trace charts set a metric prefix (for example
+    # `sglang:`) and fail loudly instead of publishing a partial trace artifact.
+    if [ -z "$required_prefix" ]; then
+        return 0
+    fi
+
+    if [ ! -s "$metrics_json" ] || [ ! -s "$metrics_csv" ]; then
+        echo "ERROR: required AIPerf server metrics artifacts are missing or empty in $metrics_dir" >&2
+        return 1
+    fi
+
+    # Avoid parsing the potentially multi-GiB JSON into memory. AIPerf writes
+    # metric names as JSON object keys, so a fixed-string scan establishes that
+    # backend engine metrics—not only frontend/router metrics—were captured.
+    if ! grep -F -m 1 -q "\"${required_prefix}" "$metrics_json"; then
+        echo "ERROR: $metrics_json contains no metric with required prefix '$required_prefix'" >&2
+        return 1
+    fi
+
+    echo "Validated required AIPerf server metrics prefix '$required_prefix'"
+}
+
+run_agentic_replay_and_write_outputs() (
     local result_dir="$1"
     local replay_rc
     local validation_rc
+    local power_rc=0
+    local agentx_power_enabled=0
+    local agentx_multinode_power_enabled=0
+    local agentx_monitor_stopped=1
+
+    case "${ENABLE_AGENTX_POWER:-1}" in
+        1|true|TRUE|yes|YES)
+            if [ "${IS_MULTINODE:-false}" = "true" ]; then
+                if [ -n "${SRT_MEASUREMENT_WINDOW_DIR:-}" ]; then
+                    agentx_multinode_power_enabled=1
+                fi
+            else
+                agentx_power_enabled=1
+            fi
+            ;;
+    esac
+
+    _stop_agentx_power_monitor() {
+        if [ "$agentx_monitor_stopped" = "0" ]; then
+            agentx_monitor_stopped=1
+            stop_gpu_monitor
+        fi
+    }
+
+    _write_agentx_multinode_window() {
+        local state="$1"
+        local -a power_args
+        power_args=(
+            --result-dir "$result_dir"
+            --concurrency "${CONC:?CONC must be set for multinode AgentX power}"
+            --write-multinode-window "$state"
+        )
+        case "${REQUIRE_POWER:-0}" in
+            1|true|TRUE|yes|YES) power_args+=(--require-power) ;;
+        esac
+        (
+            cd "$INFMAX_CONTAINER_WORKSPACE"
+            "$AIPERF_PYTHON" -m utils.agentic.aggregation.power_adapter "${power_args[@]}"
+        )
+    }
+
+    if [ "$agentx_power_enabled" = "1" ] || [ "$agentx_multinode_power_enabled" = "1" ]; then
+        # AIPerf currently exports naive local datetimes while SMI emits the
+        # same host wall clock. Capture the launch-time offset so the adapter
+        # can attach it explicitly before normalizing the profiling window.
+        date +%z > "$result_dir/agentic_power_timezone_offset.txt"
+    fi
+
+    if [ "$agentx_multinode_power_enabled" = "1" ]; then
+        set +e
+        _write_agentx_multinode_window running
+        power_rc=$?
+        set -e
+        if [ "$power_rc" -ne 0 ]; then
+            echo "ERROR: failed to publish the AgentX formal running power window" >&2
+            return "$power_rc"
+        fi
+    fi
+
+    if [ "$agentx_power_enabled" = "1" ]; then
+        start_gpu_monitor --output "$result_dir/gpu_metrics.csv"
+        agentx_monitor_stopped=0
+        # This function runs in a subshell, so these handlers cannot replace
+        # launcher-owned traps. The stopped flag keeps explicit and signal/EXIT
+        # cleanup idempotent.
+        trap '_stop_agentx_power_monitor' EXIT
+        trap '_stop_agentx_power_monitor; exit 130' INT
+        trap '_stop_agentx_power_monitor; exit 143' TERM
+    fi
 
     echo "$REPLAY_CMD" > "$result_dir/benchmark_command.txt"
 
@@ -1900,7 +3307,40 @@ run_agentic_replay_and_write_outputs() {
     set +x
     set -e
 
+    if [ "$agentx_power_enabled" = "1" ]; then
+        _stop_agentx_power_monitor
+        trap - EXIT INT TERM
+    fi
+
     write_agentic_result_json "$result_dir"
+
+    if [ "$agentx_multinode_power_enabled" = "1" ] && [ "$replay_rc" -eq 0 ]; then
+        set +e
+        _write_agentx_multinode_window completed
+        power_rc=$?
+        set -e
+    fi
+
+    if [ "$agentx_power_enabled" = "1" ]; then
+        local expected_num_gpus
+        local -a power_args
+        expected_num_gpus=$((${TP:-1} * ${PP_SIZE:-1} * ${PCP_SIZE:-1}))
+        power_args=(
+            --result-dir "$result_dir"
+            --agg-result "${AGENTIC_OUTPUT_DIR:-$INFMAX_CONTAINER_WORKSPACE}/$RESULT_FILENAME.json"
+            --expected-num-gpus "$expected_num_gpus"
+        )
+        case "${REQUIRE_POWER:-0}" in
+            1|true|TRUE|yes|YES) power_args+=(--require-power) ;;
+        esac
+        set +e
+        (
+            cd "$INFMAX_CONTAINER_WORKSPACE"
+            "$AIPERF_PYTHON" -m utils.agentic.aggregation.power_adapter "${power_args[@]}"
+        )
+        power_rc=$?
+        set -e
+    fi
 
     "$AIPERF_PYTHON" "$AGENTIC_DIR/scripts/analyze_benchmark_distributions.py" \
         "$result_dir/aiperf_artifacts" -o "$result_dir" 2>&1 || true
@@ -1924,4 +3364,11 @@ run_agentic_replay_and_write_outputs() {
         echo "ERROR: agentic trace replay produced invalid results after writing available artifacts" >&2
         return "$validation_rc"
     fi
-}
+
+    if [ "$power_rc" -ne 0 ]; then
+        echo "ERROR: AgentX power validation failed after writing audit artifacts" >&2
+        return "$power_rc"
+    fi
+
+    validate_required_agentic_server_metrics "$result_dir"
+)

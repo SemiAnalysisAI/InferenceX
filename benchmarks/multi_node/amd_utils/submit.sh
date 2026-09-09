@@ -113,9 +113,23 @@ export yD=$DECODE_WORKERS
 export PREFILL_TP_SIZE=$(( $PREFILL_NODES * $PREFILL_TP / $PREFILL_WORKERS ))
 export PREFILL_ENABLE_EP=${PREFILL_ENABLE_EP}
 export PREFILL_ENABLE_DP=${PREFILL_ENABLE_DP}
+export PREFILL_TP
+export PREFILL_EP=${PREFILL_EP:-1}
+export PREFILL_DP_ATTN=${PREFILL_DP_ATTN:-false}
+export PREFILL_NUM_WORKERS=${PREFILL_NUM_WORKERS:-$PREFILL_WORKERS}
+export PREFILL_PP_SIZE=${PREFILL_PP_SIZE:-1}
+export PREFILL_DCP_SIZE=${PREFILL_DCP_SIZE:-1}
+export PREFILL_PCP_SIZE=${PREFILL_PCP_SIZE:-1}
 export DECODE_TP_SIZE=$(( $DECODE_NODES * $DECODE_TP / $DECODE_WORKERS ))
 export DECODE_ENABLE_EP=${DECODE_ENABLE_EP}
 export DECODE_ENABLE_DP=${DECODE_ENABLE_DP}
+export DECODE_TP
+export DECODE_EP=${DECODE_EP:-1}
+export DECODE_DP_ATTN=${DECODE_DP_ATTN:-false}
+export DECODE_NUM_WORKERS=${DECODE_NUM_WORKERS:-$DECODE_WORKERS}
+export DECODE_PP_SIZE=${DECODE_PP_SIZE:-1}
+export DECODE_DCP_SIZE=${DECODE_DCP_SIZE:-1}
+export DECODE_PCP_SIZE=${DECODE_PCP_SIZE:-1}
 export DECODE_MTP_SIZE=${DECODE_MTP_SIZE}
 
 export NUM_NODES=$NUM_NODES
@@ -138,6 +152,9 @@ export DRY_RUN="${DRY_RUN:-0}"
 export RUN_EVAL="${RUN_EVAL:-false}"
 export EVAL_ONLY="${EVAL_ONLY:-false}"
 export EVAL_CONC="${EVAL_CONC:-}"
+export EVAL_FRAMEWORK="${EVAL_FRAMEWORK:-lm-eval}"
+export EVAL_SUITE="${EVAL_SUITE:-}"
+export SWEBENCH_GEN_MODE="${SWEBENCH_GEN_MODE:-}"
 export FRAMEWORK="${FRAMEWORK:-}"
 export PRECISION="${PRECISION:-}"
 export MODEL_PREFIX="${MODEL_PREFIX:-}"
@@ -145,6 +162,12 @@ export RUNNER_TYPE="${RUNNER_TYPE:-}"
 export RESULT_FILENAME="${RESULT_FILENAME:-}"
 export SPEC_DECODING="${SPEC_DECODING:-}"
 export IS_MULTINODE="${IS_MULTINODE:-false}"
+export SWEBENCH_USE_MODAL="${SWEBENCH_USE_MODAL:-false}"
+export MODAL_TOKEN_ID="${MODAL_TOKEN_ID:-}"
+export MODAL_TOKEN_SECRET="${MODAL_TOKEN_SECRET:-}"
+export HF_TOKEN="${HF_TOKEN:-}"
+export SCENARIO_TYPE="${SCENARIO_TYPE:-}"
+export EVAL_LIMIT="${EVAL_LIMIT:-}"
 
 # Log directory: must be on NFS (shared filesystem) so the submit host can read SLURM output.
 export BENCHMARK_LOGS_DIR="${BENCHMARK_LOGS_DIR:-$(pwd)/benchmark_logs}"
@@ -163,12 +186,80 @@ if [[ -n "${NODE_LIST//[[:space:]]/}" ]]; then
     NODELIST_OPT=(--nodelist "$NODELIST_CSV")
 fi
 
-# Optional: exclude specific nodes (e.g. nodes with broken Docker sockets).
-# Set SLURM_EXCLUDE_NODES env var to a comma-separated list of hostnames.
+# Optional: exclude specific nodes for known-bad (FRAMEWORK, MODEL_NAME)
+# combos (e.g. nodes with broken Docker sockets), looked up from
+# node_excludes.yaml. Set SLURM_EXCLUDE_NODES to override with an explicit
+# comma-separated hostname list (takes precedence over the file).
+#
+# Resolution must fail loudly (not silently yield an empty exclude list) if
+# it can't be trusted: a submit host missing python3/PyYAML, or a genuine
+# parse error, must not silently reintroduce the known-bad-node issue this
+# exclusion mechanism exists to prevent.
 EXCLUDE_OPT=()
-SLURM_EXCLUDE_NODES="${SLURM_EXCLUDE_NODES:-mia1-p01-g11,mia1-p01-g12,mia1-p01-g15}"
+NODE_EXCLUDES_YAML="$(dirname "$0")/node_excludes.yaml"
 if [[ -n "${SLURM_EXCLUDE_NODES:-}" ]]; then
-    EXCLUDE_OPT=(--exclude "$SLURM_EXCLUDE_NODES")
+    RESOLVED_EXCLUDE_NODES="$SLURM_EXCLUDE_NODES"
+elif [[ -f "$NODE_EXCLUDES_YAML" ]]; then
+    if command -v python3 >/dev/null 2>&1 && python3 -c "import yaml" >/dev/null 2>&1; then
+        RESOLVED_EXCLUDE_NODES=$(python3 -c "
+import yaml
+
+with open('${NODE_EXCLUDES_YAML}') as f:
+    cfg = yaml.safe_load(f) or {}
+
+framework = '${FRAMEWORK}'
+model = '${MODEL_NAME}'
+for rule in cfg.get('rules', []):
+    if rule.get('framework') == framework and model in (rule.get('models') or []):
+        print(rule.get('exclude_nodes', ''))
+        break
+")
+        PYTHON_EXCLUDE_RC=$?
+        if [[ $PYTHON_EXCLUDE_RC -ne 0 ]]; then
+            echo "Error: python3 failed (exit ${PYTHON_EXCLUDE_RC}) parsing ${NODE_EXCLUDES_YAML}" >&2
+            echo "Error: fix the YAML, or set SLURM_EXCLUDE_NODES to bypass this lookup." >&2
+            exit 1
+        fi
+    else
+        # Fall back to an awk parser (mirrors job.slurm's awk-based models.yaml
+        # parsing) matched to node_excludes.yaml's fixed rule/models/exclude_nodes
+        # shape. Only exercised when python3 or its yaml module is unavailable.
+        echo "Warning: python3/PyYAML unavailable on submit host; falling back to awk parsing of ${NODE_EXCLUDES_YAML}" >&2
+        RESOLVED_EXCLUDE_NODES=$(awk -v fw="$FRAMEWORK" -v model="$MODEL_NAME" '
+            /^  - framework:/ {
+                line = $0
+                sub(/^  - framework: */, "", line)
+                fw_match = (line == fw)
+                model_match = 0
+                next
+            }
+            fw_match && /^      - / {
+                m = $0
+                sub(/^      - */, "", m)
+                gsub(/^"|"$/, "", m)
+                if (m == model) model_match = 1
+                next
+            }
+            fw_match && model_match && /^    exclude_nodes:/ {
+                val = $0
+                sub(/^ *exclude_nodes: */, "", val)
+                gsub(/^"|"$/, "", val)
+                print val
+                exit
+            }
+        ' "$NODE_EXCLUDES_YAML")
+        AWK_EXCLUDE_RC=$?
+        if [[ $AWK_EXCLUDE_RC -ne 0 ]]; then
+            echo "Error: awk fallback failed (exit ${AWK_EXCLUDE_RC}) parsing ${NODE_EXCLUDES_YAML}" >&2
+            echo "Error: fix the YAML/parser, or set SLURM_EXCLUDE_NODES to bypass this lookup." >&2
+            exit 1
+        fi
+    fi
+else
+    RESOLVED_EXCLUDE_NODES=""
+fi
+if [[ -n "$RESOLVED_EXCLUDE_NODES" ]]; then
+    EXCLUDE_OPT=(--exclude "$RESOLVED_EXCLUDE_NODES")
 fi
 
 # =============================================================================

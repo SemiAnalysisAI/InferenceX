@@ -493,7 +493,8 @@ def build_config(
         + len(config.get("multi_node", {}).get("agentic", []) or []),
         "eval_jobs": len(config.get("evals", []) or [])
         + len(config.get("agentic_evals", []) or [])
-        + len(config.get("multinode_evals", []) or []),
+        + len(config.get("multinode_evals", []) or [])
+        + len(config.get("multinode_agentic_evals", []) or []),
     }
 
 

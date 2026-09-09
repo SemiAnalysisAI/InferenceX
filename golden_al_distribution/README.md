@@ -6,7 +6,7 @@ This directory contains the golden acceptance-length (AL) curves used to standar
 
 ## Why SPEED-Bench
 
-[SPEED-Bench](https://arxiv.org/abs/2604.09557) is a unified benchmark for speculative decoding across diverse semantic domains and realistic serving regimes. Its Qualitative split contains 880 semantically diverse prompts—80 prompts in each of 11 categories—and is designed to measure acceptance rate (AR) and acceptance length (AL). Its Throughput splits cover fixed 1K–32K input lengths and multiple entropy regimes for system-level evaluation. The benchmark uses real prompts because random-token inputs can distort acceptance behavior, expert routing, and measured throughput.
+[SPEED-Bench](https://arxiv.org/abs/2604.09557) is a unified benchmark for speculative decoding across diverse semantic domains and realistic serving regimes. Its Qualitative split contains 880 semantically diverse prompts, with 80 prompts in each of 11 categories. It is designed to measure acceptance rate (AR) and acceptance length (AL). Its Throughput splits cover fixed 1K–32K input lengths and multiple entropy regimes for system-level evaluation. The benchmark uses real prompts because random-token inputs can distort acceptance behavior, expert routing, and measured throughput.
 
 SPEED-Bench is a practical cross-engine standard rather than an InferenceX-only workload:
 
@@ -22,7 +22,7 @@ AL is workload-dependent: a draft model's predictions are easier to accept in so
 
 ## Fairness Guidelines for AgentX
 
-Under the AgentX Guidelines, each model, thinking mode, and draft length has one committed golden AL. Once synthetic acceptance is enabled for a benchmark scenario, a submission may choose any supported draft length, but it may not substitute a different acceptance target. Different models keep their own SPEED-Bench-derived curves; all submissions evaluating the same model and mode use the same curve.
+Under the AgentX Guidelines, each model, thinking mode, and draft length has one committed golden AL. Once synthetic acceptance is enabled for a benchmark scenario, a submission may choose any supported draft length, but it may not substitute a different acceptance target. Different models keep their own SPEED-Bench-derived curves. All submissions evaluating the same model and mode use the same curve.
 
 vLLM supports this through synthetic rejection sampling. For example, an EAGLE3 run can inject the selected YAML value through `synthetic_acceptance_length`:
 
@@ -38,6 +38,37 @@ vllm serve MODEL \
 ```
 
 The option was unified across vLLM model runners in [vllm-project/vllm#40662](https://github.com/vllm-project/vllm/pull/40662).
+
+SGLang supports the same policy through its simulated-acceptance environment variables, set in the server environment (the `aggregated_environment` / `decode_environment` sections of srt-slurm YAMLs, or exported before launch in benchmark scripts):
+
+```yaml
+SGLANG_SIMULATE_ACC_LEN: '3.24'   # AL from the committed golden YAML
+SGLANG_SIMULATE_ACC_METHOD: match-expected
+SGLANG_SIMULATE_ACC_TOKEN_MODE: real-draft-token
+```
+
+TensorRT-LLM supports it through [`TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS`](https://github.com/NVIDIA/TensorRT-LLM/blob/2cbdaa0ffa36fbef7960a0ad9f0458373025fa9f/tensorrt_llm/_torch/speculative/interface.py#L1065-L1078). **Note the off-by-one:** this variable counts accepted *draft* tokens only and excludes the bonus/verification token, so set it to the golden AL **minus 1**. Fractional values are supported. The integer part is accepted every iteration, and the fractional part is the probability of accepting one additional draft token. For example, a golden AL of `3.5` becomes:
+
+```bash
+TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS=2.5
+```
+
+ATOM supports it through `--spec-decode-acceptance-length`, which takes the golden AL directly:
+
+```bash
+python -m atom.entrypoints.openai_server \
+  --model MODEL \
+  --draft-model DRAFT_MODEL \
+  --method dspark \
+  --num-speculative-tokens 7 \
+  --spec-decode-acceptance-length 3.78
+```
+
+Acceptance length counts the target's guaranteed verification token, so the golden AL goes in unchanged — no off-by-one — matching vLLM's `synthetic_acceptance_length` and SGLang's `SGLANG_SIMULATE_ACC_LEN`. The value must fall in `[1, num_speculative_tokens + 1]`, and it resolves to the same minimum-variance per-position schedule vLLM derives, so the accepted-length *distribution* matches and not merely its mean. Accepted positions emit the real draft tokens, equivalent to SGLang's `real-draft-token`. The knob has an equivalent rate spelling, `--spec-decode-acceptance-rate`, which takes `(AL - 1) / num_speculative_tokens`; the two are mutually exclusive. Support landed in [ROCm/ATOM#1948](https://github.com/ROCm/ATOM/pull/1948).
+
+Read the realized value back from `average_tokens_per_forward` on the server's `/debug/mtp_stats`, or the `atom:mtp_average_tokens_per_forward` Prometheus metric. ATOM computes it as `1 + accepted draft tokens / verification steps`, the same formula used to collect the golden curves, so the two are directly comparable.
+
+**DSpark note:** ATOM rejects forced acceptance combined with the DSpark confidence scheduler (`--dspark-config '{"confidence_schedule": true}'`), which sizes each request's verify length at runtime and can cap acceptance below the requested length with no way to detect it. The golden DSpark curves were themselves collected without adaptive verification, so leaving it off is also the comparable configuration.
 
 This policy follows the same broad principle as MLPerf Inference: prescribe the workload rules needed for comparable system measurements. InferenceX is evaluating inference-system performance, not the ability to fine-tune a benchmark-specific speculative head.
 
@@ -83,21 +114,27 @@ gh workflow run speedbench-al.yml \
 
 Before accepting an updated curve, reviewers should verify:
 
-- every requested draft length and thinking mode completed;
-- detailed outputs are coherent and use the intended thinking mode;
-- server logs contain no fallback, draft-disable, or chat-template errors;
-- the YAML metadata matches the dispatched image, sampling settings, model, and speculative method;
-- the source Actions run is linked at the first line of the YAML; and
-- the committed values exactly match the workflow artifact.
+- Every requested draft length and thinking mode completed.
+- Detailed outputs are coherent and use the intended thinking mode.
+- Server logs contain no fallback, draft-disable, or chat-template errors.
+- The YAML metadata matches the dispatched image, sampling settings, model, and speculative method.
+- The source Actions run is linked at the first line of the YAML.
+- The committed values exactly match the workflow artifact.
 
 ## Current golden curves
 
 | Model | Method | Golden YAML | Source run |
 | --- | --- | --- | --- |
 | DeepSeek V4 Pro | MTP | [`dsv4_mtp.yaml`](dsv4_mtp.yaml) | [27180633016](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27180633016) |
+| DeepSeek V4 Pro 0813 | DSpark (probabilistic draft) | [`dsv4-pro-0813-dspark.yaml`](dsv4-pro-0813-dspark.yaml) | [31742838308](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/31742838308) |
 | Qwen3.5 397B-A17B | MTP | [`qwen3.5_mtp.yaml`](qwen3.5_mtp.yaml) | [27317114007](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27317114007) |
 | Kimi K2.5 | EAGLE3 | [`kimik2.5_eagle3.yaml`](kimik2.5_eagle3.yaml) | [28122195822](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28122195822) |
+| Kimi K3 | DSpark | [`kimik3_dspark.yaml`](kimik3_dspark.yaml) | [30304797750](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/30304797750) |
+| Kimi K3 | DSpark (probabilistic draft, block verify) | [`kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml`](kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml) | [30316471205](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/30316471205) |
 | MiniMax-M3 | EAGLE3 | [`minimaxm3_eagle3.yaml`](minimaxm3_eagle3.yaml) | [28061204145](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28061204145) |
+| MiniMax-M3 | EAGLE3 (GQA) | [`minimaxm3_eagle3_gqa.yaml`](minimaxm3_eagle3_gqa.yaml) | [29784780049](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/29784780049) |
+| GLM-5.2 | MTP | [`glm5.2_mtp.yaml`](glm5.2_mtp.yaml) | [28058352479](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28058352479) |
+| Qwen3.8-Flash-Next | MTP (native) | [`qwen3.8next_mtp.yaml`](qwen3.8next_mtp.yaml) | [33034290269](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/33034290269) |
 
 ## Primary references
 
@@ -107,6 +144,7 @@ Before accepting an updated curve, reviewers should verify:
 - [SPEED-Bench dataset and dataset card](https://huggingface.co/datasets/nvidia/SPEED-Bench)
 - [vLLM SPEED-Bench integration](https://github.com/vllm-project/vllm/pull/36029)
 - [vLLM synthetic acceptance support](https://github.com/vllm-project/vllm/pull/40662)
+- [ATOM forced acceptance-length support](https://github.com/ROCm/ATOM/pull/1948)
 - [InferenceX synthetic-acceptance tracking issue](https://github.com/SemiAnalysisAI/InferenceX/issues/1651)
 - [InferenceX SPEED-Bench workflow](../.github/workflows/speedbench-al.yml)
 - [InferenceX early reference-alignment PR](https://github.com/SemiAnalysisAI/InferenceX/pull/1592)

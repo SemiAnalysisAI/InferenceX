@@ -1,0 +1,148 @@
+name: Trusted External Sweep Dispatch
+run-name: Trusted external sweep - PR #${{ github.event.pull_request.number }} @ ${{ github.event.pull_request.head.sha }}
+
+# This workflow is intentionally control-plane only. It never checks out or
+# executes pull-request code. A write-authorized maintainer applies one primary
+# sweep label to approve the exact external head SHA, then this trusted event
+# dispatches the existing e2e workflow from main with repository secrets.
+on:
+    pull_request_target:
+        branches:
+            - main
+        types:
+            - labeled
+
+permissions:
+    actions: write
+    contents: read
+    pull-requests: write
+
+jobs:
+    dispatch:
+        if: >-
+            github.event.pull_request.head.repo.full_name != github.repository &&
+            contains(
+              fromJson('["sweep-enabled","full-sweep-enabled","non-canary-full-sweep-enabled","full-sweep-fail-fast","full-sweep-fail-fast-no-canary"]'),
+              github.event.label.name
+            )
+        runs-on: ubuntu-latest
+        steps:
+            - name: Authorize exact external revision and dispatch
+              uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+              with:
+                  github-token: ${{ github.token }}
+                  script: |
+                      const trustedPermissions = new Set(['admin', 'maintain', 'write']);
+                      const primaryLabels = new Set([
+                        'sweep-enabled',
+                        'full-sweep-enabled',
+                        'non-canary-full-sweep-enabled',
+                        'full-sweep-fail-fast',
+                        'full-sweep-fail-fast-no-canary',
+                      ]);
+
+                      const permission = await github.rest.repos.getCollaboratorPermissionLevel({
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        username: context.actor,
+                      });
+                      if (!trustedPermissions.has(permission.data.permission)) {
+                        core.setFailed(
+                          `@${context.actor} has ${permission.data.permission} permission; ` +
+                          'write, maintain, or admin permission is required to authorize external code.',
+                        );
+                        return;
+                      }
+
+                      const eventPull = context.payload.pull_request;
+                      const {data: pull} = await github.rest.pulls.get({
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        pull_number: eventPull.number,
+                      });
+                      if (pull.state !== 'open' || pull.draft) {
+                        core.setFailed('The pull request must be open and ready for review.');
+                        return;
+                      }
+                      if (pull.head.repo?.full_name === context.payload.repository.full_name) {
+                        core.setFailed('Trusted external dispatch is only for fork pull requests.');
+                        return;
+                      }
+                      if (pull.head.sha !== eventPull.head.sha) {
+                        core.setFailed(
+                          `The PR advanced from ${eventPull.head.sha} to ${pull.head.sha}; ` +
+                          'remove and re-add the sweep label to approve the new revision.',
+                        );
+                        return;
+                      }
+
+                      const labels = pull.labels.map((label) => label.name);
+                      const primary = labels.filter((label) => primaryLabels.has(label));
+                      if (primary.length !== 1 || primary[0] !== context.payload.label.name) {
+                        core.setFailed(`Expected exactly the newly applied primary sweep label; found ${primary}.`);
+                        return;
+                      }
+                      if (!pull.merge_commit_sha) {
+                        core.setFailed('GitHub has not produced a merge commit; resolve conflicts and re-add the label.');
+                        return;
+                      }
+
+                      const marker = `External PR #${pull.number} @ ${pull.head.sha.slice(0, 12)}`;
+                      const dispatchStarted = Date.now();
+                      await github.rest.actions.createWorkflowDispatch({
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        workflow_id: 'e2e-tests.yml',
+                        ref: context.payload.repository.default_branch,
+                        inputs: {
+                          'test-name': marker,
+                          'ref': pull.merge_commit_sha,
+                          'changelog-base-ref': pull.base.sha,
+                          'changelog-head-ref': pull.head.sha,
+                          'trim-conc': String(primary[0] === 'sweep-enabled'),
+                          'all-evals': String(labels.includes('all-evals')),
+                          'evals-only': String(labels.includes('evals-only')),
+                          'fail-fast': String(primary[0].includes('fail-fast')),
+                          'agentx-fast': String(labels.includes('agentx-fast')),
+                          'pr-labels-json': JSON.stringify(labels),
+                        },
+                      });
+
+                      let dispatchedRun;
+                      for (let attempt = 0; attempt < 15 && !dispatchedRun; attempt += 1) {
+                        await new Promise((resolve) => setTimeout(resolve, 2000));
+                        const runs = await github.rest.actions.listWorkflowRuns({
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          workflow_id: 'e2e-tests.yml',
+                          event: 'workflow_dispatch',
+                          per_page: 20,
+                        });
+                        dispatchedRun = runs.data.workflow_runs.find((run) =>
+                          run.display_title === `e2e Test - ${marker}` &&
+                          Date.parse(run.created_at) >= dispatchStarted - 5000
+                        );
+                      }
+
+                      const runLink = dispatchedRun
+                        ? `[trusted sweep run](${dispatchedRun.html_url})`
+                        : '[End-to-End Tests workflow](https://github.com/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml)';
+                      const body = [
+                        `Dispatched ${runLink} for approved external revision \`${pull.head.sha}\`.`,
+                        'New commits are not trusted automatically; remove and re-add the primary sweep label to approve a new SHA.',
+                        '',
+                        `已为获批的外部提交 \`${pull.head.sha}\` 调度${runLink}。`,
+                        '后续新提交不会自动获得信任；如需批准新的 SHA，请移除并重新添加主扫描标签。',
+                      ].join('\n');
+                      try {
+                        await github.rest.issues.createComment({
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          issue_number: pull.number,
+                          body,
+                        });
+                      } catch (error) {
+                        core.warning(
+                          `Sweep dispatched successfully, but the PR comment failed: ${error.message}`,
+                        );
+                      }

@@ -31,7 +31,7 @@ jobs:
       id-token: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -40,12 +40,28 @@ jobs:
           pip install -r .claude/requirements-mcp.txt
           mkdir -p /tmp/inferencemax-mcp
 
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
+      - name: Install Claude Code
+        id: claude-code
+        run: |
+          # The native installer can report success without creating its launcher.
+          npm install --prefix "$RUNNER_TEMP/claude-code" --no-audit --no-fund @anthropic-ai/claude-code@2.1.265
+          claude_path="$RUNNER_TEMP/claude-code/node_modules/.bin/claude"
+          "$claude_path" --version
+          echo "path=$claude_path" >> "$GITHUB_OUTPUT"
+
       - name: PR Review with Claude
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@0d0e0876d3eaa933f45dc692f7a4312c83caf36f # v1.0.218
         env:
           INFERENCEMAX_ROOT: ${{ github.workspace }}
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          path_to_claude_code_executable: ${{ steps.claude-code.outputs.path }}
           trigger_phrase: "@pr-claude"
           track_progress: true
           allowed_bots: ''
@@ -133,6 +149,16 @@ jobs:
             - If any new entry is inserted above/between existing entries rather than appended to the end:
               - This is a 🔴 **BLOCKING** issue
               - Comment: "New `perf-changelog.yaml` entries must be appended to the END of the file. The file is read chronologically (oldest at top, newest at bottom), so inserting in the middle or prepending breaks the ordering. Please move the new entry(ies) to the bottom of the file."
+
+            ### Append-only Perf Changelog Safety:
+            When a new `perf-changelog.yaml` entry contains `append-only: true`, verify the complete PR diff before approving it:
+            - Do not use a file allowlist. Supporting code, benchmark scripts, launchers, helpers, and other files may change. Inspect the complete diff and judge whether each benchmark-affecting change is behaviorally isolated to the appended points.
+            - Every newly added changelog entry must contain `append-only: true`; append-only and regular entries may not be mixed.
+            - Treat the generated base matrix as an immutable subset of the generated head matrix. Every existing point must remain present with the same image and complete recipe. Additions may include new concurrency values or entirely new recipe variants (for example, a new tensor-parallelism value) inside the selected existing config/scenario, but they must retain the existing visual curve's single non-null image.
+            - Benchmark or launch logic may change only when every changed behavior is on a control-flow path uniquely gated to the corresponding newly appended points. Trace the selected config and generated runtime values through every affected file into the condition. Confirm the path cannot be reached by any existing point. Unguarded/shared setup changes, or a branch also used by an existing concurrency/config/scenario, are blocking.
+            - No existing point, recipe variant, config, or scenario may be removed or replaced. New configs and scenarios are out of scope for append-only mode; new generated variants inside the selected existing config/scenario are allowed.
+            - Eval modifiers (`evals-only`, `all-evals`, `eval-min-prefill-ep`) are not allowed.
+            If any condition fails, report a 🔴 **BLOCKING** issue. Never reject a change merely because of its file path; reject it when its benchmark effect is not exclusive to the appended points or the exclusivity cannot be proven from the diff.
 
             ## Terminology:
             - **STP (Single Token Prediction)**: Standard autoregressive decoding — one token per forward pass. No speculative decoding or MTP. Benchmarks labeled "STP only" use vanilla decoding.
@@ -228,10 +254,10 @@ jobs:
             - PR claims feature X works a certain way → Read the source to confirm
             - PR has a bug related to KV cache → Look at vLLM's KV cache implementation
 
-            ## Line Count Report for generate_sweep_configs.py:
-            If `utils/matrix_logic/generate_sweep_configs.py` was modified in this PR:
+            ## Line Count Report for the matrix generator:
+            If `infx/matrix/generate.py` was modified in this PR:
             1. Count the total lines in the current (PR) version of the file
-            2. Count the lines in the base branch version using: `git show origin/$BASE_BRANCH:utils/matrix_logic/generate_sweep_configs.py | wc -l`
+            2. Count the lines in the base branch version of `infx/matrix/generate.py`. If that path does not exist in the base revision, use `utils/matrix_logic/generate_sweep_configs.py` from that revision instead. This fallback compares the implementation across the package migration rather than counting the new path as entirely new code.
             3. Calculate the difference (current - base)
             4. Add an inline comment on the file with this format:
                📊 **Line Count Report**

@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-import sys
 import json
+import math
 import re
+import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
 from tabulate import tabulate
 
 MODEL = "Model"
@@ -32,6 +35,7 @@ N_EFF = "N (eff)"
 SPEC_DECODING = "Spec Decode"
 
 CONC_SUFFIX_RE = re.compile(r"_conc(\d+)(?:_\d+)?\.json$")
+EVAL_RESULT_FORMAT = "inferencex-eval-v1"
 
 
 def load_json(path: Path) -> Optional[Dict[str, Any]]:
@@ -71,10 +75,10 @@ def result_concurrency(path: Path) -> Optional[int]:
 
 
 def detect_lm_eval_jsons(d: Path, batched: bool = False) -> List[Path]:
-    """Return lm-eval result JSONs from one artifact directory.
+    """Return the latest collector-compatible eval result JSONs.
 
-    Legacy artifacts contribute their latest result file. Batched artifacts
-    contribute the latest result file for each `_concN` suffix.
+    Result filenames contain sortable timestamps. Mtime remains a fallback for
+    legacy names, with the filename as a deterministic tie-breaker.
     """
     immediate_jsons = set(d.glob('results*.json'))
     immediate_jsons.update(
@@ -82,17 +86,45 @@ def detect_lm_eval_jsons(d: Path, batched: bool = False) -> List[Path]:
     )
     lm_paths = []
 
+    def recency_key(path: Path) -> Tuple[int, str]:
+        match = re.search(
+            r"\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}(?:\.\d+)?",
+            path.name,
+        )
+        if match:
+            try:
+                timestamp = match.group(0)
+                base, separator, fraction = timestamp.partition(".")
+                parsed = datetime.strptime(
+                    base,
+                    "%Y-%m-%dT%H-%M-%S",
+                ).replace(tzinfo=timezone.utc)
+                fractional_ns = (
+                    int((fraction + "000000000")[:9])
+                    if separator
+                    else 0
+                )
+                order_ns = (
+                    int(parsed.timestamp()) * 1_000_000_000
+                    + fractional_ns
+                )
+            except ValueError:
+                order_ns = path.stat().st_mtime_ns
+        else:
+            order_ns = path.stat().st_mtime_ns
+        return order_ns, path.name
+
     for p in immediate_jsons:
         data = load_json(p)
         if not isinstance(data, dict):
             continue
-        if 'lm_eval_version' in data:
+        if data.get('result_format') == EVAL_RESULT_FORMAT or 'lm_eval_version' in data:
             lm_paths.append(p)
 
     if not lm_paths:
         return []
     if not batched:
-        return [max(lm_paths, key=lambda path: path.stat().st_mtime)]
+        return [max(lm_paths, key=recency_key)]
 
     latest_by_conc: Dict[int, Path] = {}
     for path in lm_paths:
@@ -100,15 +132,28 @@ def detect_lm_eval_jsons(d: Path, batched: bool = False) -> List[Path]:
         if conc is None:
             continue
         current = latest_by_conc.get(conc)
-        if current is None or path.stat().st_mtime > current.stat().st_mtime:
+        if current is None or recency_key(path) > recency_key(current):
             latest_by_conc[conc] = path
     return [latest_by_conc[conc] for conc in sorted(latest_by_conc)]
 
 
-def detect_eval_jsons(d: Path) -> Tuple[Optional[Path], Optional[Path]]:
-    """Return the latest legacy lm-eval JSON and deprecated second slot."""
-    lm_paths = detect_lm_eval_jsons(d)
-    return (lm_paths[0] if lm_paths else None), None
+def has_invalid_effective_count(data: Dict[str, Any], task: str) -> bool:
+    """Return whether a task has an explicitly invalid effective count."""
+    if 'n-samples' not in data:
+        return False
+    sample_counts = data['n-samples']
+    if not isinstance(sample_counts, dict) or task not in sample_counts:
+        return True
+    task_samples = sample_counts[task]
+    if not isinstance(task_samples, dict) or 'effective' not in task_samples:
+        return True
+    effective = task_samples['effective']
+    return (
+        isinstance(effective, bool)
+        or not isinstance(effective, (int, float))
+        or not math.isfinite(effective)
+        or effective <= 0
+    )
 
 
 def extract_lm_metrics(json_path: Path) -> List[Dict[str, Any]]:
@@ -124,16 +169,68 @@ def extract_lm_metrics(json_path: Path) -> List[Dict[str, Any]]:
     """
     data = load_json(json_path) or {}
     results = data.get('results', {})
-    configs = data.get('configs', {})
+    raw_configs = data.get('configs', {})
+    configs = raw_configs if isinstance(raw_configs, dict) else {}
 
-    if not results:
+    if not isinstance(results, dict) or not results:
         return []
 
     extracted = []
 
     for task in results.keys():
         task_results = results[task]
-        task_config = configs.get(task, {})
+        raw_task_config = configs.get(task, {})
+        task_config = (
+            raw_task_config if isinstance(raw_task_config, dict) else {}
+        )
+        raw_metadata = task_config.get('metadata', {})
+        metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
+        model = data.get('model_name') or metadata.get('model')
+
+        sample_counts = data.get('n-samples')
+        raw_task_samples = (
+            sample_counts.get(task)
+            if isinstance(sample_counts, dict)
+            else None
+        )
+        n_eff = (
+            raw_task_samples.get('effective')
+            if isinstance(raw_task_samples, dict)
+            else None
+        )
+        invalid_effective_count = has_invalid_effective_count(data, task)
+        integration_error = data.get('integration_error')
+        if integration_error is None and invalid_effective_count:
+            integration_error = {
+                'type': 'InvalidEffectiveSampleCount',
+                'message': f'invalid effective sample count: {n_eff!r}',
+            }
+        if integration_error is None and not isinstance(task_results, dict):
+            integration_error = {
+                'type': 'InvalidTaskResults',
+                'message': f'invalid task results for {task!r}',
+            }
+        if integration_error is not None:
+            if not isinstance(integration_error, dict):
+                integration_error = {
+                    'type': 'IntegrationError',
+                    'message': str(integration_error),
+                }
+            extracted.append({
+                'task': task,
+                'strict': None,
+                'strict_se': None,
+                'flex': None,
+                'flex_se': None,
+                'accuracy': None,
+                'accuracy_se': None,
+                'n_eff': 0,
+                'model': model,
+                'source': str(json_path),
+                'infrastructure_success': False,
+                'integration_error': integration_error,
+            })
+            continue
 
         # Base metric: from config's metric_list
         metric_list = task_config.get('metric_list', [])
@@ -168,17 +265,13 @@ def extract_lm_metrics(json_path: Path) -> List[Dict[str, Any]]:
                 # SWE-bench uses resolved rate as its primary score.
                 if 'strict' in fname or 'resolved' in fname:
                     strict_val, strict_se = get_val_se(fname)
+                elif base_metric == 'acc' and fname == 'none':
+                    accuracy_val, accuracy_se = get_val_se(fname)
                 elif 'flex' in fname or 'extract' in fname:
                     flex_val, flex_se = get_val_se(fname)
 
         # N-samples (effective count)
         n_eff = data.get('n-samples', {}).get(task, {}).get('effective')
-
-        # Model name
-        model = (
-            data.get('model_name')
-            or task_config.get('metadata', {}).get('model')
-        )
 
         extracted.append({
             'task': task,
@@ -190,7 +283,9 @@ def extract_lm_metrics(json_path: Path) -> List[Dict[str, Any]]:
             'accuracy_se': accuracy_se,
             'n_eff': n_eff,
             'model': model,
-            'source': str(json_path)
+            'source': str(json_path),
+            'infrastructure_success': True,
+            'integration_error': None,
         })
 
     return extracted
@@ -282,7 +377,12 @@ def build_row(meta: Dict[str, Any], m: Dict[str, Any]) -> Dict[str, Any]:
         'em_flexible_se': m.get('flex_se'),
         'n_eff': m.get('n_eff'),
         'source': m.get('source'),
+        'infrastructure_success': m.get('infrastructure_success', True),
+        'integration_error': m.get('integration_error'),
     }
+
+    if 'eval_suite' in meta:
+        row['eval_suite'] = meta['eval_suite']
 
     # Add universal score field (primary metric for unified comparison)
     if m.get('strict') is not None:
@@ -293,6 +393,10 @@ def build_row(meta: Dict[str, Any], m: Dict[str, Any]) -> Dict[str, Any]:
         row['score'] = m.get('accuracy')
         row['score_name'] = 'accuracy'
         row['score_se'] = m.get('accuracy_se')
+    elif m.get('flex') is not None:
+        row['score'] = m.get('flex')
+        row['score_name'] = 'em_flexible'
+        row['score_se'] = m.get('flex_se')
     else:
         row['score'] = None
         row['score_name'] = None
@@ -326,6 +430,42 @@ def collect_eval_rows(root: Path) -> List[Dict[str, Any]]:
 
             metrics_list = extract_lm_metrics(lm_path)
             for metrics in metrics_list:
+                if metrics.get('infrastructure_success') is False:
+                    rows.append(build_row(row_meta, metrics))
+                    continue
+                primary_score = next(
+                    (
+                        metrics.get(name)
+                        for name in ('strict', 'accuracy', 'flex')
+                        if metrics.get(name) is not None
+                    ),
+                    None,
+                )
+                invalid_primary_score = (
+                    isinstance(primary_score, bool)
+                    or not isinstance(primary_score, (int, float))
+                    or not math.isfinite(primary_score)
+                    or not 0.0 <= primary_score <= 1.0
+                )
+                if invalid_primary_score:
+                    failed_metrics = {
+                        **metrics,
+                        'strict': None,
+                        'strict_se': None,
+                        'accuracy': None,
+                        'accuracy_se': None,
+                        'flex': None,
+                        'flex_se': None,
+                        'infrastructure_success': False,
+                        'integration_error': {
+                            'type': 'InvalidPrimaryScore',
+                            'message': (
+                                f'invalid primary score: {primary_score!r}'
+                            ),
+                        },
+                    }
+                    rows.append(build_row(row_meta, failed_metrics))
+                    continue
                 rows.append(build_row(row_meta, metrics))
     return rows
 
@@ -404,7 +544,7 @@ def main():
                     f"{pct(r['score'])}{se(r['score_se'])}",
                     f"{pct(r['em_strict'])}{se(r['em_strict_se'])}",
                     f"{pct(r['em_flexible'])}{se(r['em_flexible_se'])}",
-                    r['n_eff'] or '',
+                    r['n_eff'] if r['n_eff'] is not None else '',
                     r['model'],
                 ]
                 for r in single_node_rows
@@ -442,7 +582,7 @@ def main():
                     f"{pct(r['score'])}{se(r['score_se'])}",
                     f"{pct(r['em_strict'])}{se(r['em_strict_se'])}",
                     f"{pct(r['em_flexible'])}{se(r['em_flexible_se'])}",
-                    r['n_eff'] or '',
+                    r['n_eff'] if r['n_eff'] is not None else '',
                     r['model'],
                 ]
                 for r in multinode_rows

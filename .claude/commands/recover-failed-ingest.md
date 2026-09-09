@@ -10,13 +10,13 @@ from an earlier PR sweep. Do not add a one-off recovery workflow.
 Inputs from `$ARGUMENTS`:
 
 - Use the first argument as `FAILED_RUN_OR_JOB_URL`.
-- Use the optional second argument as `SOURCE_RUN_ID`; treat it as a candidate
+- Use the optional second argument as `SOURCE_RUN_ID`. Treat it as a candidate
   until all source, ancestry, scope, and artifact checks pass.
 
 The most common invocation is a forgotten `/reuse-sweep-run` before merge, where
 you are handed the original PR number and/or its `pull_request` sweep run (the
 source) rather than a target URL. The failed target is then the push-to-main run
-on that PR's merge commit — derive it in step 1. `inspect-target` needs a
+on that PR's merge commit. Derive it in step 1. `inspect-target` needs a
 run/job URL, not a bare ID.
 
 Run from a clean InferenceX checkout with authenticated `gh`, `git`, `jq`, and
@@ -29,7 +29,7 @@ Run from a clean InferenceX checkout with authenticated `gh`, `git`, `jq`, and
   `.github/workflows/run-sweep.yml` on `main` whose official ingest did not
   complete.
 - Reuse only a completed `pull_request` run of `run-sweep.yml`. Unpinned reuse
-  requires success. A specifically pinned failed run is allowed; normal
+  requires success. A specifically pinned failed run is allowed. Normal
   ingestion skips failed benchmark rows, so only completed points are recovered.
 - The source run must belong to the original PR being recovered.
 - Stop if that PR changed the recovered configuration's execution semantics
@@ -56,8 +56,8 @@ Run from a clean InferenceX checkout with authenticated `gh`, `git`, `jq`, and
 ## 1. Inspect the target
 
 Ensure `pydantic` and `pyyaml` are importable
-(`python3 -c 'import pydantic, yaml'`); they are usually already present. If not,
-install them — a plain `pip install` fails on PEP 668 managed Pythons, so use a
+(`python3 -c 'import pydantic, yaml'`). They are usually already present. If not,
+install them. A plain `pip install` fails on PEP 668 managed Pythons, so use a
 venv or `--break-system-packages`. Then inspect the target:
 
 ```bash
@@ -92,7 +92,7 @@ ORIGINAL_PR=$(gh api \
 ```
 
 If you were given the original PR number or the source sweep run instead of a
-target URL — the usual forgotten-`/reuse` case — derive the target push run from
+target URL, as in the usual forgotten-`/reuse` case, derive the target push run from
 the PR's merge commit:
 
 ```bash
@@ -108,16 +108,16 @@ TARGET_RUN_ID=<matching-run-id>
 ```
 
 Require event `push`, workflow path `.github/workflows/run-sweep.yml`, and branch
-`main`; confirm the target is no longer running before recovering. The
+`main`. Confirm the target is no longer running before recovering. The
 disqualifying state is broader than `failure`/`skipped`: when `/reuse-sweep-run`
 was forgotten before merge, setup leaves reuse disabled, the GPU jobs run (often
 `cancelled` to save cost), and because `collect-results`/`collect-evals` are not
 skipped, `trigger-ingest` still fires `always()` and lands a *bogus* ingest under
 the target's own `run_id`. So a target showing
 `trigger-ingest=success` (and concluding `success` or `cancelled`) can still hold
-no valid benchmark data — recovery is required. That bogus row is keyed on the
-target `run_id` and is superseded by the recovery ingest under a new `run_id`;
-leave it alone. Record the original PR and root cause.
+no valid benchmark data. Recovery is required. That bogus row is keyed on the
+target `run_id` and is superseded by the recovery ingest under a new `run_id`.
+Leave it alone. Record the original PR and root cause.
 
 Fetch history and inspect the exact original changelog delta:
 
@@ -171,7 +171,7 @@ grep -Eq '^(results_bmk|eval_results_all|bmk_agentic_)' \
 ```
 
 Require `SOURCE_CONCLUSION=success` unless this exact run ID was explicitly
-supplied; a pinned failure may recover only its completed points.
+supplied. A pinned failure may recover only its completed points.
 
 Verify that membership and fetch the final PR head:
 
@@ -199,7 +199,7 @@ model, and environment values. Stop only if execution semantics changed.
 From the exact changelog diff in step 1, record each original `config-keys`,
 `evals-only`, and `scenario-type` value. If the merge touched historical bytes
 or is not a clean append, inspect the original PR diff to recover its intended
-entries. Stop if the intended scope is ambiguous; do not copy malformed
+entries. Stop if the intended scope is ambiguous. Do not copy malformed
 historical changelog bytes into the recovery PR.
 
 ## 4. Bootstrap the recovery PR
@@ -243,9 +243,9 @@ Append recovery entries to the end of `perf-changelog.yaml`. Preserve the
 original entries' `config-keys`, `description`, `evals-only`, and
 `scenario-type` values so the recovery targets the same scope and the
 `InferenceX-app` changelog UI shows the meaningful configuration change. Copy
-each original description verbatim; put source-run IDs and recovery/retrigger
+each original description verbatim. Put source-run IDs and recovery/retrigger
 details in the recovery PR body and final audit comment instead. Use the new
-recovery PR URL. The current generator may produce a different matrix; that does
+recovery PR URL. The current generator may produce a different matrix. That does
 not invalidate reuse.
 
 This is not a transient trigger: `InferenceX-app` persists and displays the
@@ -337,7 +337,7 @@ gh pr checks "$RECOVERY_PR" \
 ```
 
 `reuse-sweep-gate` appears only once the `pull_request` `run-sweep.yml` run for
-the new head SHA registers; immediately after pushing, `gh pr checks` may list
+the new head SHA registers. Immediately after pushing, `gh pr checks` may list
 only CodeQL/`check-changelog`/`comment`. Confirm that run exists and carries
 `reuse-sweep-gate` before trusting a green result, or watch it directly:
 
@@ -349,7 +349,7 @@ gh run list --repo SemiAnalysisAI/InferenceX \
 ```
 
 On the PR (`pull_request`) gate, `setup` is itself skipped and `reuse-sweep-gate`
-does the validation; `setup` only runs on the push-to-main run in step 8.
+does the validation. `setup` only runs on the push-to-main run in step 8.
 
 ## 8. Merge and verify official ingest
 
@@ -390,16 +390,16 @@ gh run watch "$RECOVERY_RUN_ID" \
 
 The push-to-main `Run Sweep` must:
 
-- run `setup` even if the merge message contains `[skip-sweep]`;
-- resolve the recovery PR and pinned source run;
-- set `reuse-enabled=true`;
-- upload recovery changelog metadata;
+- run `setup` even if the merge message contains `[skip-sweep]`.
+- resolve the recovery PR and pinned source run.
+- set `reuse-enabled=true`.
+- upload recovery changelog metadata.
 - dispatch `source-run-id` and `merge-run-id` from `trigger-ingest`.
 
 Then locate the resulting `repository_dispatch` run in
 `SemiAnalysisAI/InferenceX-app`. In the forgotten-`/reuse` case the target's
 bogus ingest is also a recent successful `ingest-results` run, so do not pick by
-recency — pick the run whose `Prepare artifacts from InferenceX` step logs both
+recency. Pick the run whose `Prepare artifacts from InferenceX` step logs both
 the expected source run and recovery merge run. That app workflow must download
 the source artifacts, substitute the merge changelog, and complete ingestion:
 

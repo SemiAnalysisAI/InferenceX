@@ -1,8 +1,15 @@
 # KLAUD_DEBUG.md — Operational Knowledge for Recipe-Bump PRs
 
-A running playbook of failures the Klaud-Cold image-bump cron has hit, the diagnoses, and the fixes/workarounds applied. **Read this first** before debugging a new failing claude/* PR — most failure modes here recur.
+A running playbook of failures the Klaud-Cold image-bump cron has hit, the diagnoses, and the fixes/workarounds applied. **Read this first** before debugging a new failing claude/* PR because most failure modes here recur.
 
 When you fix something not yet listed, add it here so the next session doesn't re-learn it.
+
+**Klaud Cold permits zero runtime patching.** Historical workarounds below are
+diagnostic context, not permission to change the selected recipe's scope.
+Never rewrite installed engine/serving-stack sources, monkey-patch, overlay
+container files, install forked/rebuilt engine wheels or use a waiver to bypass
+this rule. If the selected launch path needs such a patch, classify the candidate
+as incompatible and stop until an unmodified supported image can run it.
 
 ---
 
@@ -14,7 +21,7 @@ When you fix something not yet listed, add it here so the next session doesn't r
 ValueError: Deletions are not allowed in /home/runner/work/InferenceX/InferenceX/perf-changelog.yaml.
 Only additions to the changelog are permitted. Found deleted line: ...
 ```
-**Root cause:** Cron-PR branches go stale; when main merges new changelog entries, the PR's local snapshot of `perf-changelog.yaml` no longer covers them, so the validator sees the missing lines as deletions. A naive rebase can also strip trailing whitespace from unrelated entries — same effect (e.g. `pr-link: ...1311  ` → `pr-link: ...1311`).
+**Root cause:** Cron-PR branches go stale. When main merges new changelog entries, the PR's local snapshot of `perf-changelog.yaml` no longer covers them, so the validator sees the missing lines as deletions. A naive rebase can also strip trailing whitespace from unrelated entries with the same effect (e.g. `pr-link: ...1311  ` → `pr-link: ...1311`).
 
 **Fix (canonical):**
 ```bash
@@ -31,7 +38,7 @@ EOF
 python3 -c "import yaml; yaml.safe_load(open('perf-changelog.yaml'))"
 ```
 
-Do **not** try a 3-way merge of `perf-changelog.yaml` — whitespace edits will silently re-trigger the deletion check.
+Do **not** try a 3-way merge of `perf-changelog.yaml`. Whitespace edits will silently re-trigger the deletion check.
 
 After committing and pushing the resolution, the synchronize run checks the
 changelog with the same matrix processor used by setup, then checks the reuse
@@ -52,9 +59,9 @@ and waits for the PR checks automatically.
 
 **Fix:** in `benchmarks/single_node/<recipe>.sh`, either:
 1. **Lower `--gpu-memory-utilization`** (`0.95 → 0.90`, sometimes 0.85). Matches the H100/H200/B200 NVIDIA pattern. Smallest blast radius.
-2. **Disable the profiler entirely** for cases where lowering isn't enough: `export VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0` before `vllm serve`. Matches `benchmarks/single_node/agentic/kimik2.5_fp4_b200.sh:65`.
+2. **Disable the profiler entirely** for cases where lowering isn't enough: `export VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0` before `vllm serve`. Matches `benchmarks/single_node/agentic/deprecated/kimik2.5_fp4_b200.sh:65`.
 
-Seen on: #1395 (kimik2.5-fp4-b200-vllm — needed env var), #1403 (gptoss-fp4-mi300x-vllm — needed 0.90), #1461 (dsv4-fp8-h200-vllm — needed 0.90).
+Seen on: #1395 (kimik2.5-fp4-b200-vllm, needed env var), #1403 (gptoss-fp4-mi300x-vllm, needed 0.90), #1461 (dsv4-fp8-h200-vllm, needed 0.90).
 
 ### 2.1 DEP CUDA-graph capture OOM on GB300
 
@@ -94,7 +101,7 @@ Seen on: #1460 (dsv4-fp8-h200-sglang+mtp).
 
 ## 4. Upstream sglang v0.5.12 B300 regressions
 
-Three distinct upstream regressions on NVIDIA B300 (Blackwell Ultra, `sm_103` — compute capability 10.3) shipped in `lmsysorg/sglang:v0.5.12-cu130`. (sm_120 is for *consumer* Blackwell / RTX 50 series, not B300 — don't propagate that.)
+Three distinct upstream regressions on NVIDIA B300 (Blackwell Ultra, compute capability 10.3 as `sm_103`) shipped in `lmsysorg/sglang:v0.5.12-cu130`. The `sm_120` architecture is for *consumer* Blackwell / RTX 50 series, not B300, so don't propagate that value.
 
 ### 4a. DeepGemm TMA-descriptor crash (GLM-5-FP8)
 **Symptom:** CUDA graph capture aborts with `CUDA_ERROR_ILLEGAL_ADDRESS (700)` at `/deepgemm/csrc/.../runtime_utils.hpp:143` on the **first batch size** for **every TP rank**. Server never serves a prompt.
@@ -107,7 +114,7 @@ Three distinct upstream regressions on NVIDIA B300 (Blackwell Ultra, `sm_103` �
 Filed upstream: sgl-project/sglang#25551. Seen on #1421.
 
 ### 4b. trtllm GEMM bug at bs=128 + MTP / EAGLE (GLM-5-NVFP4)
-**Symptom:** EAGLE draft CUDA graph capture crashes immediately at the largest batch size with `RuntimeError ... trtllm_batched_gemm_runner.cu:276 ... numBatches=256, GemmMNK 128x1024x6144`. The target model captures fine; only the draft model crashes.
+**Symptom:** EAGLE draft CUDA graph capture crashes immediately at the largest batch size with `RuntimeError ... trtllm_batched_gemm_runner.cu:276 ... numBatches=256, GemmMNK 128x1024x6144`. The target model captures fine. Only the draft model crashes.
 
 **Workarounds:**
 1. Cap `--cuda-graph-max-bs` and `--max-running-requests` to 64 in the launch script to avoid the bs=128 trigger.
@@ -122,9 +129,9 @@ Filed upstream: sgl-project/sglang#25563. Seen on #1420.
 File "/opt/venv/.../sglang/srt/layers/attention/flashattention_backend.py:..."
   assert sm_100 <= arch <= sm_110f
 ```
-B300 is `sm_103` (compute capability 10.3, Blackwell Ultra) — which is *nominally inside* the asserted `sm_100..sm_110f` range, yet the assertion still fires. Best guess is the cute kernel's `Arch.sm_110f` set only matches the architecture-specific feature-flag variants it was compiled for (e.g. `sm_100`, `sm_100f`, `sm_110`, `sm_110f`) and `sm_103` / `sm_103a` isn't in that explicit list. Server never becomes healthy; warmup times out at 600s.
+B300 is `sm_103` (compute capability 10.3, Blackwell Ultra), which is *nominally inside* the asserted `sm_100..sm_110f` range, yet the assertion still fires. Best guess is the cute kernel's `Arch.sm_110f` set only matches the architecture-specific feature-flag variants it was compiled for (e.g. `sm_100`, `sm_100f`, `sm_110`, `sm_110f`), and `sm_103` / `sm_103a` isn't in that explicit list. Server never becomes healthy, so warmup times out at 600s.
 
-**Fix:** Needs an sglang image with `flash_attn` that recognises `sm_103` / `sm_103a` — no local workaround. Pin to `v0.5.11-cu130` in the meantime.
+**Fix:** Needs an sglang image with `flash_attn` that recognises `sm_103` / `sm_103a`. There is no local workaround. Pin to `v0.5.11-cu130` in the meantime.
 
 Seen on #1422.
 
@@ -137,7 +144,7 @@ Seen on #1422.
 - **g19**: `Kill task failed (JobId=N StepId=N)`
 - **g37**: `permission issues with GHA runner workflows : Not responding` (down since Mar 2026)
 
-If a sweep job lands on any of these, it'll never start. Nothing to do at the recipe level — these stay drained until ops fixes them.
+If a sweep job lands on any of these, it'll never start. Nothing can be done at the recipe level. These stay drained until ops fixes them.
 
 ### 5.2 `mia1-p01-g11 / g12 / g31` — docker socket perms
 **Symptom:** mi355x jobs fail with `permission denied while trying to connect to the docker API at unix:///var/run/docker.sock` during the `docker stop $(docker ps -a -q)` cleanup step, cascading into SLURM job expiration.
@@ -146,7 +153,7 @@ If a sweep job lands on any of these, it'll never start. Nothing to do at the re
 ### 5.3 `chi-mi300x-049` — `/nvme_home` disk-full
 **Symptom:** pyxis container extraction fails with `No space left on device` writing to `/nvme_home/gharunner/.local/share/enroot/pyxis_*/opt/rocm-*/...`. The `/nvme_home` partition is hosted under `/` on this node and has been chronically near-full.
 
-**Fix already landed:** `runners/launch_mi300x-amds.sh` now pins salloc to only known-good mi300x nodes (`chi-mi300x-[034-036,054,057-058]`) — see PR #1462. `chi-mi300x-049` is held in `State=DOWN` by a watchdog on the controller (`/home/gharunner/_audit/drain_049_watchdog.sh`) that re-applies the drain every 10s if SLURM auto-clears it (which it does on dynamic-norm nodes).
+**Fix already landed:** `runners/launch_mi300x-amds.sh` now pins salloc to only known-good mi300x nodes (`chi-mi300x-[034-036,054,057-058]`). See PR #1462. `chi-mi300x-049` is held in `State=DOWN` by a watchdog on the controller (`/home/gharunner/_audit/drain_049_watchdog.sh`) that re-applies the drain every 10s if SLURM auto-clears it (which it does on dynamic-norm nodes).
 
 ### 5.4 `chi-mi325x-pod1-017` — orphaned port-8888 process
 **Symptom:** sglang server bind fails with `[Errno 98] Address already in use` on port 8888. Held by an MLPerf accuracy run started outside SLURM.
@@ -157,7 +164,7 @@ If a sweep job lands on any of these, it'll never start. Nothing to do at the re
 - **amd-vultr-mi325**: SLURM controller for 6 mi325x nodes.
 - **amd-tw-mi355**: jumpbox → ssh further to compute nodes (`mia1-p01-gNN`). 12 nodes (3 drained, see 5.1).
 - `/home` is NFS-mounted across clusters from `chi-mi325x-pod1-001:/nfs/homes`, **root-writable**.
-- `/tmp` and `/nvme_home` are per-node local; HF cache lives at node-local `/raid/hf-hub-cache/` (2.7T per mi300x node).
+- `/tmp` and `/nvme_home` are per-node local. HF cache lives at node-local `/raid/hf-hub-cache/` (2.7T per mi300x node).
 - Use `srun -w <FQDN>` (with the **full FQDN**, not the short hostname) from the controller to run admin commands on a compute node.
 
 ### 5.6 Drain watchdog pattern
@@ -174,13 +181,13 @@ nohup bash -c '
   done
 ' > /home/gharunner/_audit/drain_<node>_watchdog.log 2>&1 &
 ```
-Doesn't survive controller reboots — for permanent removal a SLURM admin should edit `slurm.conf`.
+Doesn't survive controller reboots. For permanent removal, a SLURM admin should edit `slurm.conf`.
 
 ---
 
 ## 6. Docker image tag gotchas
 
-**Don't invent a "release" tag pattern from a date-suffixed nightly.** `lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x` does **not** exist — only the dated `v0.5.12-rocm720-mi35x-20260517` does. All MI355X `sglang-rocm:rocm720` tags follow the dated-nightly pattern.
+**Don't invent a "release" tag pattern from a date-suffixed nightly.** `lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x` does **not** exist. Only the dated `v0.5.12-rocm720-mi35x-20260517` does. All MI355X `sglang-rocm:rocm720` tags follow the dated-nightly pattern.
 
 Before bumping an image, verify the target tag exists:
 ```bash
@@ -188,7 +195,7 @@ curl -sI "https://hub.docker.com/v2/repositories/lmsysorg/sglang-rocm/tags/v0.5.
 # 200 → exists; 404 → doesn't
 ```
 
-Or check whether any other recipe on main uses the proposed tag — if zero uses, suspect.
+Or check whether any other recipe on main uses the proposed tag. If zero recipes use it, be suspicious.
 
 ---
 
@@ -212,14 +219,48 @@ directory to the normal ingestion code. The only reuse-specific substitution is
 that changelog metadata comes from the merge run. A generator-policy change
 between the PR sweep and merge therefore does not require another GPU sweep.
 
+### 7.2 Capacity deferrals must release the candidate claim
+
+The planner ignores closed PRs but treats every matching `klaud/auto-*` branch
+as occupied. If the capacity check fails before a targeted dispatch, the final
+sweep transition or a recovery dispatch, first record a public-safe deferral and
+current attempt state in a comment on any existing PR. Cancel and confirm all owned runs,
+update the report with their terminal states, then remove sweep labels, return
+the PR to draft, close it, and delete its remote Klaud branch so a later sweep
+can select the candidate again. Without a PR, report the deferral in the agent's
+final response. A utilization increase after dispatch does not cancel healthy
+work. Closing the PR alone does not make the candidate eligible.
+
+Confirmed infrastructure blockers such as missing staged weights also require a
+failure/deferral report, confirmed child-run completion, PR closure and branch
+deletion at session termination. For image incompatibility, exhausted image
+repairs or uncertain causes, close the unsuccessful PR but retain its branch:
+this blocks the exact candidate without blocking newer releases for the family.
+Uncertain causes require manual review, not an incompatibility claim. Apply
+cleanup only to the session's own PR and runs.
+
+### 7.3 Final reusable sweeps require a ready PR
+
+`run-sweep.yml` skips PR jobs while the PR is a draft. After the trimmed smoke,
+append the changelog entry, mark the PR ready, then apply `full-sweep-enabled`.
+If that sweep fails, remove the label and return the PR to draft before pushing
+a repair, or each intermediate push starts another full sweep. The Klaud Stop
+hook verifies the `finish` receipt, including exact-head full matrix/result
+coverage, terminal children and failure/deferral reporting and branch cleanup.
+The next autosweep reconciles interrupted sessions recorded in `klaud-ownership`;
+old runs without that ownership record remain maintainer-managed. It ignores completed
+all-skipped runs from unrelated label events on that same SHA. The lookup window
+starts at the parent auto-sweep's original creation time. Candidate-job reruns
+are skipped; dispatch a new autosweep so recovery checks the old session first.
+
 ---
 
 ## 8. gh CLI gotchas
 
 - **`gh pr edit` silently aborts** on a Projects-classic deprecation GraphQL error. Title/body updates won't apply. Use `gh api -X PATCH "repos/<org>/<repo>/pulls/<N>" -f title="..." -F body=@file.md` instead.
-- Same issue for adding labels — use `gh api -X POST "repos/<org>/<repo>/issues/<N>/labels" -f "labels[]=<name>"`.
+- The same issue affects adding labels. Use `gh api -X POST "repos/<org>/<repo>/issues/<N>/labels" -f "labels[]=<name>"`.
 - `gh pr view ... --jq .headRefName` output can have a trailing `\r`. Strip it: `gh pr view <N> --json headRefName --jq .headRefName | tr -d '\r\n'`. Otherwise shell concatenation produces `branchunners/launch_mi300x-amds.sh`-style corruption.
-- `gh pr list --json statusCheckRollup` **truncates** each PR's rollup — never trust it for per-check filters. Re-query each PR individually with `gh pr view <N> --json statusCheckRollup`.
+- `gh pr list --json statusCheckRollup` **truncates** each PR's rollup. Never trust it for per-check filters. Re-query each PR individually with `gh pr view <N> --json statusCheckRollup`.
 - `gh` and the GitHub Actions API: `conclusion` is `""` (empty string, not `null`) for in-flight checks, so `jq`'s `// .status` fallback doesn't trigger. Use:
   ```jq
   def state: if (.conclusion // "") != "" then .conclusion else .status end;
@@ -230,20 +271,20 @@ between the PR sweep and merge therefore does not require another GPU sweep.
 ## 9. PR conventions for this repo
 
 - Image-bump / new-recipe PRs I open on behalf of the user (or that the user creates) get the **`[Klaud Cold]`** title prefix.
-- Add the `full-sweep-enabled` label so a canary-gated full sweep actually runs (`gh api -X POST ... labels[]=full-sweep-enabled`). Use `non-canary-full-sweep-enabled` instead only when the single-node canary is flaky or unrepresentative; it runs the full sweep without the canary gate. Without one of the sweep labels, the sweep is mostly SKIPPED.
-- After any code change that shifts a PR's scope (drops a recipe, changes an image tag), **update the PR title AND body in the same step** and **verify** with `gh pr view <N> --json title,body` — `gh pr edit` silently fails (see §8).
-- `utils/merge_with_reuse.sh <N>` is the merge entrypoint; it handles the `perf-changelog.yaml` auto-append.
+- Klaud Cold keeps targeted attempts draft and unlabeled; final validation requires a ready PR with `full-sweep-enabled` as its sole sweep label. Wait for successful completion on the exact head and reusable artifacts. See [the current Klaud guide](docs/klaud.md); generic manual-sweep recommendations do not override this flow.
+- After any code change that shifts a PR's scope (drops a recipe, changes an image tag), **update the PR title AND body in the same step** and **verify** with `gh pr view <N> --json title,body`. `gh pr edit` silently fails (see §8).
+- `utils/merge_with_reuse.sh <N>` is the merge entrypoint. It handles the `perf-changelog.yaml` auto-append.
 
 ---
 
 ## 10. Useful slash commands (defined in `.claude/commands/`)
 
-- `/find-mergeable-claude-prs` — lists `claude/*` PRs whose full sweep finished all-green.
-- `/list-claude-pr-status` — lists READY/RUNNING (and optionally FAILED) state per `claude/*` PR.
-- `/fix-klaud-cron-prs` — diagnoses failing `claude/*` PRs by reading their failed job logs.
-- `/merge-prs <N> [<N>...]` — sequential merge via `utils/merge_with_reuse.sh`.
+- `/find-mergeable-claude-prs` lists `claude/*` PRs whose full sweep finished all-green.
+- `/list-claude-pr-status` lists READY/RUNNING (and optionally FAILED) state per `claude/*` PR.
+- `/fix-klaud-cron-prs` diagnoses failing `claude/*` PRs by reading their failed job logs.
+- `/merge-prs <N> [<N>...]` performs a sequential merge via `utils/merge_with_reuse.sh`.
 
-Each command file is self-contained; read them to understand the exact jq filters they use.
+Each command file is self-contained. Read them to understand the exact jq filters they use.
 
 ---
 
@@ -263,16 +304,16 @@ CUDA graphs. The MSA prefill path slices the token dimension before calling
 contiguous when a worker has multiple local KV/index heads. Data-parallel
 attention forces TP1, exposing all four MiniMax M3 KV/index heads per worker.
 
-**Workaround:** Before server startup, patch the installed
-`vllm/models/minimax_m3/nvidia/sparse_attention_msa.py` assignment from:
-```python
-prefill_topk = topk[:, nd:num_tokens, :]
-```
-to:
-```python
-prefill_topk = topk[:, nd:num_tokens, :].contiguous()
-```
-Use an exact-source guard and remove the workaround once the image includes
-the fix.
+**Resolution:** use an upstream image that includes the contiguous-buffer fix.
+The historical installed-source workaround is prohibited for Klaud Cold,
+including under a waiver. Until the unmodified image supports this recipe,
+report incompatibility; do not rewrite `sparse_attention_msa.py` before serving.
 
 Seen on: #1834.
+
+### 7.4 Compatible capacity schema changes must not hide all candidates
+
+The dashboard advanced to schema version 7 while Klaud required exactly 6, so
+a fresh, available feed produced zero eligible clusters. Validate the consumed
+fields and invariants instead of gating on schemaVersion. Keep freshness, kind,
+availability, count consistency and the strict below-80% utilization checks.

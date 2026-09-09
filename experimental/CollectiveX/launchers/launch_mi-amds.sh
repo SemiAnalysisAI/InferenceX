@@ -34,7 +34,7 @@ NODELIST="${COLLX_NODELIST:-}"
 MOUNT_DIR=/ix
 TS="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
 case "$COLLX_BENCH" in
-  mori) ;;
+  mori | uccl-ep) ;;
   *) collx_die "unsupported AMD EP backend: $COLLX_BENCH" ;;
 esac
 
@@ -51,7 +51,6 @@ if [ "$NODES" -gt 1 ]; then
 else
   export COLLX_TRANSPORT=xgmi
 fi
-export COLLX_RUN_TIMEOUT="${COLLX_RUN_TIMEOUT:-1800}"
 collx_apply_network_profile "$NODES" "$COLLX_TRANSPORT"
 collx_require_vars COLLX_IMAGE COLLX_IMAGE_PLATFORM COLLX_PARTITION COLLX_SQUASH_DIR COLLX_STAGE_DIR
 PARTITION="$COLLX_PARTITION"; SQUASH_DIR="$COLLX_SQUASH_DIR"
@@ -61,6 +60,11 @@ collx_log "runner=$RUNNER nodes=$NODES x ${GPN}gpu world=$NGPUS bench=$COLLX_BEN
 # ---- repository-stage: compute-visible copy of the checkout -----------------
 MOUNT_SRC="$(collx_stage_path "$REPO_ROOT" "$COLLX_STAGE_DIR")"
 collx_stage_repo "$REPO_ROOT" "$MOUNT_SRC"
+# UCCL builds from source (mori ships in the image); stage the pinned tree pre-allocation.
+if [ "$COLLX_BENCH" = uccl-ep ]; then
+  collx_prepare_uccl_source "$MOUNT_SRC" || collx_die "cannot stage the pinned UCCL source"
+  export COLLX_BACKEND_SOURCE_ROOT=/ix/experimental/CollectiveX/.collx_sources
+fi
 collx_select_image "$IMAGE"
 
 # ---- scheduler-allocation + container-import: retry until nodes validate ----
@@ -118,6 +122,22 @@ for allocation_attempt in 1 2 3; do
 done
 unset COLLX_SALLOC_ATTEMPT COLLX_NETWORK_VALIDATION_ATTEMPT
 CONTAINER_MOUNTS="$MOUNT_SRC:$MOUNT_DIR$DEVICE_MOUNTS"
+# uccl-ep builds from source, so give it the same cross-allocation backend cache the single-slurm
+# launcher provides (built once per arch/image/commit under /cx-cache, reused each allocation).
+# mori ships in the image and needs no cache, so its mounts are left untouched.
+#
+# The cache parent is the runner-shared stage BASE, not SQUASH_DIR. single-slurm can use its
+# squash dir because that sits on shared storage, but this SKU's squash dir is node-local and
+# root-owned (/var/lib/squash), which fails twice over: the submit-side mkdir is denied to the
+# runner account, and even as root the directory it creates is not the one the compute node
+# would bind-mount. COLLX_STAGE_DIR is runner-owned and compute-visible, and the cache lands
+# beside job_<tag> rather than inside it, so it still survives stage cleanup between allocations.
+if [ "$COLLX_BENCH" = uccl-ep ]; then
+  collx_prepare_backend_cache "$COLLX_STAGE_DIR" \
+    || collx_die "cannot prepare the isolated backend cache"
+  CONTAINER_MOUNTS="$CONTAINER_MOUNTS,$COLLX_PREPARED_BACKEND_CACHE:/cx-cache"
+  export COLLX_BACKEND_CACHE_ROOT=/cx-cache
+fi
 
 # ---- container-launch -> artifact-collection (shared tail) ------------------
 COLLX_DISTRIBUTED_CONTAINER_ARGS=(--container-writable --container-remap-root)

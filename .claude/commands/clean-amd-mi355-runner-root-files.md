@@ -19,7 +19,7 @@ cleanup for every subsequent job on that runner.
 
 ## Access path
 
-The jumpbox has **no sudo**; the hop host has **passwordless sudo** on the
+The jumpbox has **no sudo**, while the hop host has **passwordless sudo** on the
 shared `/it-share`:
 
 ```bash
@@ -28,7 +28,7 @@ ssh -A -o BatchMode=yes amd-tw-mi355 "ssh -o BatchMode=yes mia1-vm-amd-prj3-slog
 
 ## Procedure
 
-1. **Read-only scan first — list every match, do not delete yet.** Scope the
+1. **Start with a read-only scan. List every match and do not delete yet.** Scope the
    scan to the runner `_work` workspaces only:
 
    ```bash
@@ -40,8 +40,8 @@ ssh -A -o BatchMode=yes amd-tw-mi355 "ssh -o BatchMode=yes mia1-vm-amd-prj3-slog
    `actions-runner/_work/` workspace (typically `.../InferenceX/InferenceX/benchmark_logs/...`).
    If anything outside `_work` shows up, STOP and report instead of deleting.
 
-3. **Delete the verified matches** (scoped to the same `_work` glob — never
-   `rm -rf` an unscoped `/it-share` path):
+3. **Delete the verified matches**, keeping the command scoped to the same `_work`
+   glob. **Never** `rm -rf` an unscoped `/it-share` path:
 
    ```bash
    ssh -A -o BatchMode=yes amd-tw-mi355 "ssh -o BatchMode=yes mia1-vm-amd-prj3-slog-001 \
@@ -52,13 +52,13 @@ ssh -A -o BatchMode=yes amd-tw-mi355 "ssh -o BatchMode=yes mia1-vm-amd-prj3-slog
 4. **Verify** the same scan now returns zero entries.
 
 5. **Rerun the affected sweeps.** For each failed run in `$ARGUMENTS` (or found
-   via `gh run list`): try `gh run rerun <id> --failed`; if GitHub refuses a
-   partial rerun (common after cancellation), use a full `gh run rerun <id>`;
-   as a last resort remove and re-add the PR's sweep label to force a fresh run.
+   via `gh run list`), try `gh run rerun <id> --failed`. If GitHub refuses a
+   partial rerun (common after cancellation), use a full `gh run rerun <id>`.
+   As a last resort, remove and re-add the PR's sweep label to force a fresh run.
 
-6. Optional forensics — identify what stranded the files: the dir name
+6. Optional forensics. Identify what stranded the files. The dir name
    `slurm_job-<id>` maps to slurm accounting (`sacct -j <id>` on the jumpbox
-   shows start/end/state; CANCELLED means teardown was skipped), and the GitHub
+   shows start/end/state, with CANCELLED indicating that teardown was skipped), and the GitHub
    job that submitted it is whichever job ran on that runner at the slurm start
    time (`gh api .../actions/runs/<run>/jobs` → match `runner_name` and
    `started_at` within seconds).

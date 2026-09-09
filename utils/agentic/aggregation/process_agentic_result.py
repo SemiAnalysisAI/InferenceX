@@ -216,6 +216,7 @@ def build_agg(
         "hw": os.environ.get("RUNNER_TYPE", ""),
         "conc": int(os.environ.get("CONC", "0")),
         "image": os.environ.get("IMAGE", ""),
+        "recipe_fingerprint": os.environ.get("RECIPE_FINGERPRINT", ""),
         "model": os.environ.get("MODEL", ""),
         "infmax_model_prefix": os.environ.get("MODEL_PREFIX", ""),
         "framework": framework,

@@ -16,12 +16,15 @@ Trusted by Operators of Trillion Dollar Token Factories such as OpenAI, Meta, Mi
 
 ## News
 
+- **[2026/08]** 🔥 **AgentX: World's First Fully Open Source Apache 2.0 Realistic 1Mil+ Long Context, Multi Turn Benchmark Live** [dashboard](https://inferencex.semianalysis.com/agentx)
+- **[2026/08]** 🔥 GLM5.3: continuous agentic benchmarks live too [dashboard](https://inferencex.semianalysis.com/)
+- **[2026/07]** 🔥 Kimi K3 2.8T: continuous benchmarks live since Day 0
 - **[2026/06]** 🔥 MiniMax M3: continuous benchmarks live since Day 0 [dashboard](https://inferencex.semianalysis.com/inference?preset=minimax-m3-launch)
 - **[2026/04]** 🔥 DeepSeek V4 Pro 1.6T: continuous benchmarks live since Day 0 [article](https://newsletter.semianalysis.com/p/deepseekv4-16t-day-0-to-day-43-performance), [dashboard](https://inferencex.semianalysis.com/inference?preset=dsv4-launch)
 - **[2026/03]** 🔥 Qwen3.5 397B: continuous benchmarks live since Day 0 [dashboard](https://inferencex.semianalysis.com/)
 - **[2026/03]** Added Kimi K2.5 (same architecture as Kimi 2.7-Code), GLM5 (same arch as GLM5.1), and MiniMax M2.5 (same arch as MiniMax M2.7) [dashboard](https://inferencex.semianalysis.com/)
 - **[2026/02]** GB300 NVL72: added to InferenceX & continuously benchmarked [SGLang Maintainer Lmsys Blog](https://www.lmsys.org/blog/2026-02-20-gb300-inferencex/)
-- **[2026/02]** 🔥 InferenceX v2 launch — NVIDIA Blackwell vs AMD vs Hopper [article](https://newsletter.semianalysis.com/p/inferencex-v2-nvidia-blackwell-vs)
+- **[2026/02]** 🔥 InferenceX v2 launch comparing NVIDIA Blackwell, AMD, and Hopper [article](https://newsletter.semianalysis.com/p/inferencex-v2-nvidia-blackwell-vs)
 - **[2025/10]** 🔥 InferenceX (formerly InferenceMAX) v1 launch [article](https://newsletter.semianalysis.com/p/inferencemax-open-source-inference)
 
 ## Introduction
@@ -73,6 +76,7 @@ This pace of software advancement creates a challenge: benchmarks conducted at a
 ## Contributing
 
 PRs are welcome! See [CONTRIBUTING.md](./CONTRIBUTING.md) for more details on the PR review flow, the [PR Review Checklist](./docs/PR_REVIEW_CHECKLIST.md), and the merge process.
+For the maintainer and agent documentation map, start with [`docs/index.md`](./docs/index.md). It links the architecture, configuration, workflow, eval, runner, and troubleshooting references.
 
 ## Acknowledgements & Supporters
 Thank you to Lisa Su and Anush Elangovan for providing the MI355X and CDNA3 GPUs for this free and open-source project. We want to recognize the many AMD contributors for their responsiveness and for debugging, optimizing, and validating performance across AMD GPUs. 

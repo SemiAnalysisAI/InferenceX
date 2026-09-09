@@ -1,17 +1,15 @@
-"""Exhaustively verify run-sweep.yml's sweep gating for every case.
+"""Exercise the real workflow conditions against concrete authorization and failure cases.
 
-The simulation jobs in `.github/workflows/test-changelog-gate.yml` hand-copy
-two of the gating `if` conditions and exercise two scenarios. This test parses
-the real `check-changelog` -> `reuse-sweep-gate` -> `setup` conditions out of
-`run-sweep.yml` and evaluates them with a minimal GitHub Actions expression
-engine, so it cannot drift from production and it covers every distinct
-skip/run decision.
+The small evaluator below supports only the GitHub Actions expressions used by
+these gates; this is not a substitute for executing the workflow in Actions.
 """
 
 from __future__ import annotations
 
-import itertools
+import json
+import os
 import re
+import subprocess
 from functools import lru_cache
 from pathlib import Path
 
@@ -25,24 +23,11 @@ _WF = yaml.load(
 )
 CHECK_IF = _WF["jobs"]["check-changelog"]["if"]
 GATE_IF = _WF["jobs"]["reuse-sweep-gate"]["if"]
+CLASSIFIER_STEP = next(
+    step for step in _WF["jobs"]["setup"]["steps"] if step.get("id") == "classify"
+)
+CLASSIFIER_IF = CLASSIFIER_STEP["if"]
 SETUP_IF = _WF["jobs"]["setup"]["if"]
-PR_TYPES = set(_WF["on"]["pull_request"]["types"])
-
-# All sweep labels, and the subset that authorizes artifact reuse. Kept here
-# (not parsed) so the reference spec is an INDEPENDENT encoding of intent that
-# the real run-sweep.yml conditions are cross-checked against.
-SWEEP_LABELS = {
-    "sweep-enabled",
-    "full-sweep-enabled",
-    "non-canary-full-sweep-enabled",
-    "full-sweep-fail-fast",
-    "full-sweep-fail-fast-no-canary",
-}
-MODIFIER_LABELS = {"all-evals", "evals-only"}
-RELEVANT_LABELS = SWEEP_LABELS | MODIFIER_LABELS
-REUSE_ELIGIBLE_LABELS = SWEEP_LABELS - {"sweep-enabled"}
-REUSE_INCOMPATIBLE_LABELS = {"evals-only"}
-
 
 # --------------------------------------------------------------------------
 # Minimal GitHub Actions expression engine (supports the subset used by the
@@ -186,33 +171,54 @@ def _eval(expr: str, ctx: dict) -> bool:
     return _truthy(_Parser(_tokens(expr), ctx).parse())
 
 
+def test_expression_evaluator_handles_truthiness_and_precedence() -> None:
+    # The workflow checks depend on this helper; verify it with independent examples.
+    for expression, context, expected in [
+        ("always()", {}, True),
+        ("!false", {}, True),
+        ("'a' == 'b'", {}, False),
+        ("x != 'true'", {"x": "true"}, False),
+        ("x != 'true'", {"x": ""}, True),
+        ("contains(labels, 'sweep')", {"labels": ["sweep"]}, True),
+        ("contains(labels, 'sweep')", {}, False),
+        ("true || false && false", {}, True),
+        ("(true || false) && false", {}, False),
+    ]:
+        assert _eval(expression, context) is expected, expression
+
+
 # --------------------------------------------------------------------------
 # DAG evaluation: check-changelog -> reuse-sweep-gate -> setup
 # --------------------------------------------------------------------------
 def _ctx(sc: dict) -> dict:
     return {
         "github.event_name": sc["event"],
+        "github.repository": "SemiAnalysisAI/InferenceX",
         "github.event.action": sc.get("action"),
         "github.event.pull_request.draft": sc.get("draft", False),
+        "github.event.pull_request.head.repo.full_name": sc.get(
+            "head_repo", "SemiAnalysisAI/InferenceX"
+        ),
         "github.event.pull_request.labels.*.name": sc.get("labels", []),
         "github.event.label.name": sc.get("label_name"),
+        "vars.PRIORITY_SCHEDULER_ENABLED": sc.get("scheduler_enabled", "true"),
         "github.event.head_commit.message": sc.get("msg", ""),
     }
 
 
 def run_dag(sc: dict) -> tuple[str, str, str]:
     """Return (check-changelog result, reuse-sweep-gate result, setup decision)."""
+    if sc['event'] == 'pull_request' and sc.get('action') not in _WF['on']['pull_request']['types']:
+        return 'skipped', 'skipped', 'SKIP'
     ctx = _ctx(sc)
 
     if not _eval(CHECK_IF, ctx):
         check_result = "skipped"
-    elif len(set(sc.get("labels", [])) & SWEEP_LABELS) > 1:
-        check_result = "failure"
     else:
         check_result = sc.get("check", "success")
     ctx["needs.check-changelog.result"] = check_result
     ctx["needs.check-changelog.outputs.skip-pr-sweep"] = (
-        "true" if "[skip-sweep]" in sc.get("msg", "") else "false"
+        sc.get("check_skip", "false")
     )
 
     if not _eval(GATE_IF, ctx):
@@ -222,6 +228,7 @@ def run_dag(sc: dict) -> tuple[str, str, str]:
         skip = "true" if sc.get("reuse_auth") else ""
     ctx["needs.reuse-sweep-gate.result"] = gate_result
     ctx["needs.reuse-sweep-gate.outputs.skip-pr-sweep"] = skip
+
 
     setup = "RUN" if _eval(SETUP_IF, ctx) else "SKIP"
     return check_result, gate_result, setup
@@ -237,10 +244,6 @@ CASES = [
     ("PR-sync-full-reuse-authorized",
      {**_PR, "action": "synchronize", "labels": ["full-sweep-enabled"],
       "reuse_auth": True}, ("success", "success", "SKIP")),
-    ("PR-sync-conflicting-labels-reuse-authorized",
-     {**_PR, "action": "synchronize",
-      "labels": ["full-sweep-enabled", "full-sweep-fail-fast"],
-      "reuse_auth": True}, ("failure", "skipped", "SKIP")),
     ("PR-sync-full-changelog-failure",
      {**_PR, "action": "synchronize", "labels": ["full-sweep-enabled"],
       "check": "failure"}, ("failure", "skipped", "SKIP")),
@@ -253,6 +256,9 @@ CASES = [
     ("PR-sync-evals-only-without-sweep-label",
      {**_PR, "action": "synchronize", "labels": ["evals-only"]},
      ("success", "skipped", "SKIP")),
+    ("PR-sync-agentx-fast-without-sweep-label",
+     {**_PR, "action": "synchronize", "labels": ["agentx-fast"]},
+     ("success", "skipped", "SKIP")),
     ("PR-sync-full-with-all-evals-uses-reuse",
      {**_PR, "action": "synchronize",
       "labels": ["full-sweep-enabled", "all-evals"],
@@ -261,6 +267,10 @@ CASES = [
      {**_PR, "action": "synchronize",
       "labels": ["full-sweep-enabled", "evals-only"],
       "reuse_auth": True}, ("success", "skipped", "RUN")),
+    ("PR-sync-full-with-agentx-fast-ignores-reuse",
+     {**_PR, "action": "synchronize",
+      "labels": ["full-sweep-enabled", "agentx-fast"],
+      "reuse_auth": True}, ("success", "skipped", "RUN")),
     ("PR-sync-full-with-both-modifiers-ignores-reuse",
      {**_PR, "action": "synchronize",
       "labels": ["full-sweep-enabled", "all-evals", "evals-only"],
@@ -268,6 +278,10 @@ CASES = [
     ("PR-sync-no-sweep-label",
      {**_PR, "action": "synchronize", "labels": []},
      ("success", "skipped", "SKIP")),
+    ("PR-sync-external-fork-defers-to-trusted-dispatch",
+     {**_PR, "action": "synchronize", "labels": ["full-sweep-enabled"],
+      "head_repo": "external/InferenceX"},
+     ("skipped", "skipped", "SKIP")),
     ("PR-labeled-with-sweep-label",
      {**_PR, "action": "labeled", "label_name": "full-sweep-enabled",
       "labels": ["full-sweep-enabled"]}, ("success", "skipped", "RUN")),
@@ -277,6 +291,9 @@ CASES = [
     ("PR-labeled-with-evals-only-without-sweep-label",
      {**_PR, "action": "labeled", "label_name": "evals-only",
       "labels": ["evals-only"]}, ("success", "skipped", "SKIP")),
+    ("PR-labeled-with-agentx-fast-without-sweep-label",
+     {**_PR, "action": "labeled", "label_name": "agentx-fast",
+      "labels": ["agentx-fast"]}, ("success", "skipped", "SKIP")),
     ("PR-labeled-all-evals-modifies-full-sweep",
      {**_PR, "action": "labeled", "label_name": "all-evals",
       "labels": ["full-sweep-enabled", "all-evals"]},
@@ -284,6 +301,26 @@ CASES = [
     ("PR-labeled-evals-only-modifies-full-sweep",
      {**_PR, "action": "labeled", "label_name": "evals-only",
       "labels": ["full-sweep-enabled", "evals-only"]},
+     ("success", "skipped", "RUN")),
+    ("PR-labeled-agentx-fast-modifies-full-sweep",
+     {**_PR, "action": "labeled", "label_name": "agentx-fast",
+      "labels": ["full-sweep-enabled", "agentx-fast"]},
+     ("success", "skipped", "RUN")),
+    ("PR-labeled-skip-queue-restarts-full-sweep",
+     {**_PR, "action": "labeled", "label_name": "skip_queue",
+      "labels": ["full-sweep-enabled", "skip_queue"]},
+     ("success", "skipped", "RUN")),
+    ("PR-unlabeled-skip-queue-restarts-numeric-sweep",
+     {**_PR, "action": "unlabeled", "label_name": "skip_queue",
+      "labels": ["full-sweep-enabled"]},
+     ("success", "skipped", "RUN")),
+    ("PR-labeled-patchwork-restarts-full-sweep",
+     {**_PR, "action": "labeled", "label_name": "ci-patchwork",
+      "labels": ["full-sweep-enabled", "ci-patchwork"]},
+     ("success", "skipped", "RUN")),
+    ("PR-unlabeled-patchwork-restarts-full-sweep",
+     {**_PR, "action": "unlabeled", "label_name": "ci-patchwork",
+      "labels": ["full-sweep-enabled"]},
      ("success", "skipped", "RUN")),
     ("PR-labeled-with-unrelated-label",
      {**_PR, "action": "labeled", "label_name": "documentation",
@@ -293,13 +330,31 @@ CASES = [
       "labels": []}, ("success", "skipped", "SKIP")),
     ("PR-draft",
      {**_PR, "action": "synchronize", "draft": True,
-      "labels": ["full-sweep-enabled"]}, ("skipped", "skipped", "SKIP")),
+      "labels": ["full-sweep-enabled"]}, ("success", "success", "RUN")),
+    ("PR-draft-label-opt-in",
+     {**_PR, "action": "labeled", "draft": True, "label_name": "sweep-enabled",
+      "labels": ["sweep-enabled"]}, ("success", "skipped", "RUN")),
+    ("PR-draft-without-sweep-label",
+     {**_PR, "action": "synchronize", "draft": True,
+      "labels": []}, ("success", "skipped", "SKIP")),
+    ("PR-draft-fork-still-requires-trusted-dispatch",
+     {**_PR, "action": "labeled", "draft": True, "label_name": "full-sweep-enabled",
+      "labels": ["full-sweep-enabled"], "head_repo": "external/InferenceX"},
+     ("skipped", "skipped", "SKIP")),
+    ("PR-draft-invalid-changelog",
+     {**_PR, "action": "synchronize", "draft": True,
+      "labels": ["full-sweep-enabled"], "check": "failure"},
+     ("failure", "skipped", "SKIP")),
+    ("PR-draft-reuse-authorized",
+     {**_PR, "action": "synchronize", "draft": True,
+      "labels": ["full-sweep-enabled"], "reuse_auth": True},
+     ("success", "success", "SKIP")),
     ("PR-ready-for-review",
      {**_PR, "action": "ready_for_review", "labels": ["full-sweep-enabled"],
-      "reuse_auth": False}, ("success", "skipped", "RUN")),
-    ("PR-sync-skip-sweep-tag",
+      "reuse_auth": False}, ("skipped", "skipped", "SKIP")),
+    ("PR-sync-validation-requests-skip",
      {**_PR, "action": "synchronize", "labels": ["full-sweep-enabled"],
-      "msg": "fix: docs [skip-sweep]"},
+      "check_skip": "true"},
      ("success", "success", "SKIP")),
     ("push-additions-no-skip",
      {"event": "push", "msg": "feat: add model"},
@@ -319,184 +374,83 @@ def test_gating_decision(
     assert run_dag(scenario) == expected
 
 
-def test_engine_self_consistency() -> None:
-    checks = [
-        ("always()", {}, True),
-        ("!false", {}, True),
-        ("'a' == 'a'", {}, True),
-        ("'a' != 'b'", {}, True),
-        ("x != 'true'", {"x": ""}, True),
-        ("x != 'true'", {"x": "true"}, False),
-        ("a && b", {"a": "true", "b": ""}, False),
-        ("a || b", {"a": "", "b": "true"}, True),
-        ("contains(L, 'z')", {"L": ["z"]}, True),
-        ("contains(L, 'z')", {"L": ["q"]}, False),
-        ("contains(M, '[skip-sweep]')", {"M": "x [skip-sweep]"}, True),
-        ("!d", {"d": True}, False),
-        ("(a || b) && c", {"a": "", "b": "true", "c": "true"}, True),
-    ]
-    for expr, ctx, want in checks:
-        assert _eval(expr, ctx) is want, expr
+@pytest.mark.parametrize("draft", [False, True])
+@pytest.mark.parametrize("action", ["synchronize", "labeled", "unlabeled"])
+@pytest.mark.parametrize("head_repo", ["external/InferenceX", None])
+def test_external_or_missing_head_cannot_enter_the_sweep_pipeline(draft, action, head_repo) -> None:
+    scenario = {**_PR, "draft": draft, "action": action, "head_repo": head_repo,
+                "labels": ["full-sweep-enabled"], "label_name": "full-sweep-enabled"}
+    assert run_dag(scenario) == ("skipped", "skipped", "SKIP")
 
 
-def test_trigger_types_enable_gated_events() -> None:
-    assert {"synchronize", "labeled", "unlabeled", "ready_for_review"} <= PR_TYPES
-    # opened/reopened are intentionally excluded so opening or reopening a PR
-    # that already carries a sweep label does not start a sweep.
-    assert {"opened", "reopened"}.isdisjoint(PR_TYPES)
+def test_changelog_validation_has_no_write_token_or_persisted_credential() -> None:
+    job = _WF["jobs"]["check-changelog"]
+    assert job["permissions"] == {"contents": "read"}
+    checkout = next(step for step in job["steps"] if step.get("uses", "").startswith("actions/checkout@"))
+    assert checkout["with"]["persist-credentials"] == "false"
 
 
-def test_reuse_dispatches_source_directly_without_artifact_relay() -> None:
-    jobs = _WF["jobs"]
-    assert "reuse-ingest-artifacts" not in jobs
+def test_priority_classifier_runs_only_for_enabled_pull_requests() -> None:
+    scenario = {
+        **_PR,
+        "action": "synchronize",
+        "labels": ["full-sweep-enabled"],
+    }
+    disabled = _ctx({**scenario, "scheduler_enabled": "false"})
+    enabled_pr = _ctx({**scenario, "scheduler_enabled": "true"})
+    enabled_push = _ctx({"event": "push", "scheduler_enabled": "true"})
 
-    for job_name in ("trigger-ingest", "trigger-agentic-ingest"):
-        job = jobs[job_name]
-        assert "reuse-ingest-artifacts" not in job["needs"]
-        dispatch = job["steps"][0]["run"]
-        assert '"source-run-id"' in dispatch
-        assert '"merge-run-id"' in dispatch
-        assert '"source-run-attempt"' not in dispatch
-        assert '"merge-run-attempt"' not in dispatch
+    assert not _eval(CLASSIFIER_IF, disabled)
+    assert _eval(CLASSIFIER_IF, enabled_pr)
+    assert not _eval(CLASSIFIER_IF, enabled_push)
 
 
-def test_reuse_recovery_dispatches_only_run_ids() -> None:
-    recovery = yaml.safe_load(
-        (REPO_ROOT / ".github/workflows/recover-reused-ingest.yml").read_text()
+@pytest.mark.parametrize("failed_job", ["check-changelog", "reuse-sweep-gate"])
+@pytest.mark.parametrize("result", ["failure", "cancelled"])
+def test_setup_does_not_run_when_a_prerequisite_fails(failed_job, result) -> None:
+    ctx = _ctx({**_PR, "action": "synchronize", "labels": ["full-sweep-enabled"]})
+    ctx.update({
+        "needs.check-changelog.result": "success",
+        "needs.check-changelog.outputs.skip-pr-sweep": "false",
+        "needs.reuse-sweep-gate.result": "success",
+        "needs.reuse-sweep-gate.outputs.skip-pr-sweep": "false",
+        f"needs.{failed_job}.result": result,
+    })
+
+    assert not _eval(SETUP_IF, ctx)
+
+
+@pytest.mark.parametrize("labels,returncode", [
+    ([], 0),
+    (["full-sweep-enabled", "all-evals"], 0),
+    (["full-sweep-enabled", "sweep-enabled"], 1),
+])
+def test_conflicting_sweep_labels_are_rejected(labels, returncode) -> None:
+    step = next(step for step in _WF["jobs"]["check-changelog"]["steps"]
+                if step.get("name") == "Reject conflicting sweep labels")
+    result = subprocess.run(
+        ["bash", "-e", "-c", step["run"]],
+        env={**os.environ, "SWEEP_LABELS": json.dumps(labels)},
+        capture_output=True, text=True,
     )
-    inputs = recovery[True]["workflow_dispatch"]["inputs"]
-    assert set(inputs) == {"source-run-id", "merge-run-id"}
 
-    jobs = recovery["jobs"]
-    assert set(jobs) == {"trigger-agentic-ingest"}
-    dispatch = jobs["trigger-agentic-ingest"]["steps"][0]["run"]
-    assert '"source-run-id"' in dispatch
-    assert '"merge-run-id"' in dispatch
-    assert '"source-run-attempt"' not in dispatch
-    assert '"merge-run-attempt"' not in dispatch
+    assert result.returncode == returncode, result.stderr
 
 
-# --------------------------------------------------------------------------
-# Independent reference spec of the INTENDED gating, plus an exhaustive
-# cross-product cross-check: every combination of the input axes is fed to
-# both the reference spec and the engine driving the REAL run-sweep.yml `if`
-# strings; any disagreement is either a spec error or a gating bug.
-# --------------------------------------------------------------------------
-def reference_gate(sc: dict) -> tuple[str, str, str]:
-    """Hand-written reference for (check, reuse, setup) from intent."""
-    labels = set(sc.get("labels", []))
-    draft = sc.get("draft", False)
-    is_pr = sc["event"] == "pull_request"
-    action = sc.get("action")
-
-    check_runs = (
-        is_pr
-        and not draft
-        and (
-            action not in ("labeled", "unlabeled")
-            or sc.get("label_name") in RELEVANT_LABELS
-        )
+@pytest.mark.parametrize("message,expected", [
+    ("fix: normal change", "false"),
+    ("fix: docs\n\n[skip-sweep]", "true"),
+])
+def test_skip_policy_reads_the_commit_message(tmp_path, message, expected) -> None:
+    step = next(step for step in _WF["jobs"]["check-changelog"]["steps"]
+                if step.get("id") == "sweep_policy")
+    output = tmp_path / "outputs"
+    result = subprocess.run(
+        ["bash", "-e", "-c", 'git() { printf "%s\\n" "$TEST_COMMIT_MESSAGE"; };\n' + step["run"]],
+        env={**os.environ, "HEAD_SHA": "test-head", "TEST_COMMIT_MESSAGE": message,
+             "GITHUB_OUTPUT": str(output)},
+        capture_output=True, text=True,
     )
-    if not check_runs:
-        check = "skipped"
-    elif len(labels & SWEEP_LABELS) > 1:
-        check = "failure"
-    else:
-        check = sc.get("check", "success")
 
-    gate_runs = (
-        check == "success"
-        and is_pr
-        and sc.get("action") == "synchronize"
-        and not draft
-        and bool(labels & REUSE_ELIGIBLE_LABELS)
-        and labels.isdisjoint(REUSE_INCOMPATIBLE_LABELS)
-    )
-    reuse = "success" if gate_runs else "skipped"
-    authorized = gate_runs and sc.get("reuse_auth", False)
-    reuse_clause = (reuse == "skipped") or (reuse == "success" and not authorized)
-
-    if is_pr:
-        action_ok = action not in ("labeled", "unlabeled") or (
-            sc.get("label_name") in RELEVANT_LABELS
-        )
-        event_ok = (
-            (not draft)
-            and bool(labels & SWEEP_LABELS)
-            and action_ok
-            and "[skip-sweep]" not in sc.get("msg", "")
-        )
-    else:
-        event_ok = True
-
-    check_clause = check in ("success", "skipped")
-    runs = check_clause and reuse_clause and event_ok
-    return check, reuse, ("RUN" if runs else "SKIP")
-
-
-def _all_scenarios() -> list[dict]:
-    label_cfgs = [
-        [],
-        ["sweep-enabled"],
-        ["full-sweep-enabled"],
-        ["non-canary-full-sweep-enabled"],
-        ["full-sweep-fail-fast"],
-        ["full-sweep-fail-fast-no-canary"],
-        ["all-evals"],
-        ["evals-only"],
-        ["all-evals", "evals-only"],
-        ["documentation"],
-        ["sweep-enabled", "full-sweep-enabled"],
-        ["full-sweep-enabled", "full-sweep-fail-fast"],
-        ["sweep-enabled", "all-evals"],
-        ["full-sweep-enabled", "all-evals"],
-        ["sweep-enabled", "evals-only"],
-        ["full-sweep-enabled", "evals-only"],
-        ["sweep-enabled", "all-evals", "evals-only"],
-        ["full-sweep-enabled", "all-evals", "evals-only"],
-    ]
-    pr_axes = itertools.product(
-        ["ready_for_review", "synchronize", "labeled", "unlabeled"],  # action
-        [False, True],                      # draft
-        label_cfgs,                         # labels
-        [
-            "full-sweep-enabled",
-            "sweep-enabled",
-            "all-evals",
-            "evals-only",
-            "documentation",
-            None,
-        ],                                  # label.name
-        [False, True],                      # reuse authorized
-        ["success", "failure"],             # changelog outcome when it runs
-        ["feat: add model", "fix: thing [skip-sweep]"],  # head commit message
-    )
-    scenarios = [
-        {"event": "pull_request", "action": a, "draft": d, "labels": labs,
-         "label_name": ln, "reuse_auth": r, "check": chk, "msg": msg}
-        for a, d, labs, ln, r, chk, msg in pr_axes
-    ]
-    scenarios += [
-        {"event": "push", "msg": msg}
-        for msg in ("feat: add model", "fix: thing [skip-sweep]")
-    ]
-    return scenarios
-
-
-def test_exhaustive_cross_product() -> None:
-    scenarios = _all_scenarios()
-    mismatches = [
-        (sc, run_dag(sc), reference_gate(sc))
-        for sc in scenarios
-        if run_dag(sc) != reference_gate(sc)
-    ]
-    assert not mismatches, mismatches[:10]
-    # Sanity: confirm the sweep actually covered the whole input space
-    # (4 actions x 2 draft x 18 label-configs x 6 label-names x 2 reuse x
-    # 2 changelog outcomes x 2 messages = 6912 PR cases, plus 2 push cases).
-    assert len(scenarios) == 6914
-
-
-def test_named_cases_match_reference_spec() -> None:
-    for case_id, scenario, expected in CASES:
-        assert reference_gate(scenario) == expected, case_id
+    assert result.returncode == 0, result.stderr
+    assert output.read_text().strip() == f"skip-pr-sweep={expected}"

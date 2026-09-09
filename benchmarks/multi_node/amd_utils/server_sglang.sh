@@ -165,6 +165,7 @@ no_dp = decode.get('no_dp', {})
 # Decode DP config
 print(f'DECODE_MAX_RUNNING_REQUESTS_DP=\"{dp.get(\"max_running_requests\", 4096)}\"')
 print(f'DECODE_CHUNKED_PREFILL_SIZE_DP=\"{eval_formula(dp.get(\"chunked_prefill_size\", 262144))}\"')
+print(f'DECODE_CONTEXT_LENGTH_DP=\"{dp.get(\"context_length\", \"\")}\"')
 s, e = parse_range(dp.get('cuda_graph_bs_range', '1-160'), 1, 160)
 print(f'DECODE_CUDA_GRAPH_BS_DP_START=\"{s}\"')
 print(f'DECODE_CUDA_GRAPH_BS_DP_END=\"{e}\"')
@@ -172,6 +173,7 @@ print(f'DECODE_CUDA_GRAPH_BS_DP_END=\"{e}\"')
 # Decode EP-only config (EP enabled but DP disabled)
 print(f'DECODE_MAX_RUNNING_REQUESTS_EP_ONLY=\"{ep_only.get(\"max_running_requests\", 256)}\"')
 print(f'DECODE_CHUNKED_PREFILL_SIZE_EP_ONLY=\"{eval_formula(ep_only.get(\"chunked_prefill_size\", 262144))}\"')
+print(f'DECODE_CONTEXT_LENGTH_EP_ONLY=\"{ep_only.get(\"context_length\", \"\")}\"')
 s, e = parse_range(ep_only.get('cuda_graph_bs_range', '1-256'), 1, 256)
 print(f'DECODE_CUDA_GRAPH_BS_EP_ONLY_START=\"{s}\"')
 print(f'DECODE_CUDA_GRAPH_BS_EP_ONLY_END=\"{e}\"')
@@ -179,6 +181,7 @@ print(f'DECODE_CUDA_GRAPH_BS_EP_ONLY_END=\"{e}\"')
 # Decode no-DP config
 print(f'DECODE_MAX_RUNNING_REQUESTS_NO_DP=\"{no_dp.get(\"max_running_requests\", 128)}\"')
 print(f'DECODE_CHUNKED_PREFILL_SIZE_NO_DP=\"{eval_formula(no_dp.get(\"chunked_prefill_size\", 262144))}\"')
+print(f'DECODE_CONTEXT_LENGTH_NO_DP=\"{no_dp.get(\"context_length\", \"\")}\"')
 s, e = parse_range(no_dp.get('cuda_graph_bs_range', '1-128'), 1, 128)
 print(f'DECODE_CUDA_GRAPH_BS_NO_DP_START=\"{s}\"')
 print(f'DECODE_CUDA_GRAPH_BS_NO_DP_END=\"{e}\"')
@@ -227,12 +230,23 @@ fi
 if [[ "$DECODE_ENABLE_DP" == "true" ]]; then
     decode_cuda_graph_bs=($(seq $DECODE_CUDA_GRAPH_BS_DP_START $DECODE_CUDA_GRAPH_BS_DP_END))
     decode_max_running_requests=$((DECODE_CUDA_GRAPH_BS_DP_END * DECODE_TP_SIZE))
+    decode_context_length=$DECODE_CONTEXT_LENGTH_DP
 elif [[ "$DECODE_ENABLE_EP" == "true" ]]; then
     decode_cuda_graph_bs=($(seq $DECODE_CUDA_GRAPH_BS_EP_ONLY_START $DECODE_CUDA_GRAPH_BS_EP_ONLY_END))
     decode_max_running_requests=$DECODE_MAX_RUNNING_REQUESTS_EP_ONLY
+    decode_context_length=$DECODE_CONTEXT_LENGTH_EP_ONLY
 else
     decode_cuda_graph_bs=($(seq $DECODE_CUDA_GRAPH_BS_NO_DP_START $DECODE_CUDA_GRAPH_BS_NO_DP_END))
     decode_max_running_requests=$DECODE_MAX_RUNNING_REQUESTS_NO_DP
+    decode_context_length=$DECODE_CONTEXT_LENGTH_NO_DP
+fi
+# In PD-disaggregation the decode must admit requests against the SAME context
+# length as prefill; otherwise decode accepts over-length requests that prefill
+# rejects, and those requests hang forever waiting for a KV transfer that never
+# comes (the 8k1k conc-500 straggler). Fall back to the prefill value if the
+# decode context_length is not set in the model config, so the two always agree.
+if [[ -z "$decode_context_length" ]]; then
+    decode_context_length=$prefill_context_length
 fi
 
 # When both DP and EP are enabled, override max-running-requests and dispatch tokens
@@ -288,6 +302,10 @@ DECODE_MODE_FLAGS="--mem-fraction-static ${DECODE_MEM_FRACTION_STATIC} --max-run
 if [[ "$DECODE_PREFILL_ROUND_ROBIN_BALANCE" == "True" ]] || [[ "$DECODE_PREFILL_ROUND_ROBIN_BALANCE" == "true" ]]; then
     DECODE_MODE_FLAGS="$DECODE_MODE_FLAGS --prefill-round-robin-balance"
 fi
+if [[ -n "$decode_context_length" ]]; then
+    DECODE_MODE_FLAGS="$DECODE_MODE_FLAGS --context-length ${decode_context_length}"
+fi
+
 if [[ "$DECODE_DISAGG_ENABLE_RADIX_CACHE" == "True" ]] || [[ "$DECODE_DISAGG_ENABLE_RADIX_CACHE" == "true" ]]; then
     DECODE_MODE_FLAGS="$DECODE_MODE_FLAGS --disaggregation-decode-enable-radix-cache"
 fi
@@ -425,7 +443,7 @@ build_server_config() {
         specific_config="$DECODE_MODE_FLAGS"
     fi
 
-    # Combine: parallel args + base config + ep config + mtp config (decode only) + dp config + specific config
+    # Combine: parallel args + base config + ep config + mtp config + dp config + specific config
     local full_config="$parallel_args"
     if [[ -n "$base_config" ]]; then
         full_config="$full_config $base_config"
@@ -433,7 +451,14 @@ build_server_config() {
     if [[ -n "$ep_config" ]]; then
         full_config="$full_config $ep_config"
     fi
-    if [[ -n "$mtp_config" ]] && [[ "$mode" == "decode" ]]; then
+    # MTP/speculative flags go to BOTH prefill and decode. In PD-disaggregation the
+    # draft (nextn) layers participate in prefill KV computation as well as decode
+    # verification, so the speculative config must match on both roles. Gating this to
+    # decode only left prefill without the nextn KV layer: prefill registered one fewer
+    # PD state component than decode, which newer sglang (v0.5.15+) rejects outright
+    # ("state component count mismatch") and older builds tolerated silently while
+    # feeding the decode's nextn verification uninitialized state (lossy greedy MTP).
+    if [[ -n "$mtp_config" ]]; then
         full_config="$full_config $mtp_config"
     fi
     if [[ -n "$dp_config" ]]; then
@@ -533,6 +558,12 @@ if [[ "$KV_OFFLOADING" != "none" && "$KV_OFFLOAD_BACKEND" == "hicache" ]]; then
     # per-node DRAM budget computed by the sweep generator (enforcement); fall
     # back to --hicache-ratio (relative to the GPU KV pool) when no budget is
     # provided, keeping configs that predate the budget unchanged.
+    # FORCE_HICACHE_RATIO lets a recipe opt into ratio-based sizing without
+    # unsetting TOTAL_CPU_DRAM_GB — that var is also the shared client-side
+    # gate (benchmark_lib.sh requires it whenever KV_OFFLOADING=dram) and is
+    # forwarded verbatim into client.env below, so unsetting it here would
+    # make the aiperf client container fail its own env validation before
+    # ever sending a request.
     HICACHE_RATIO="${HICACHE_RATIO:-5}"
     HICACHE_SIZING_FLAGS="--hicache-ratio ${HICACHE_RATIO}"
     # DeepSeek V4's hybrid HiCache pool rejects --hicache-size (requires
@@ -540,7 +571,9 @@ if [[ "$KV_OFFLOADING" != "none" && "$KV_OFFLOAD_BACKEND" == "hicache" ]]; then
     # See sglang _deepseek_v4_num_host_pages() (raises ValueError when
     # server_args.hicache_size > 0):
     # https://github.com/sgl-project/sglang/blob/9dd57ef8c48e2cd82292d849f01e2130c5203e67/python/sglang/srt/mem_cache/hybrid_cache/hybrid_pool_assembler.py#L262-L266
-    if [[ -n "${TOTAL_CPU_DRAM_GB:-}" && "${TOTAL_CPU_DRAM_GB}" -gt 0 && "${MODEL_NAME}" != *DeepSeek-V4* ]]; then
+    # FORCE_HICACHE_RATIO additionally lets a recipe opt into ratio-based sizing
+    # for any other model without unsetting TOTAL_CPU_DRAM_GB (see comment above).
+    if [[ "${FORCE_HICACHE_RATIO:-0}" != "1" && -n "${TOTAL_CPU_DRAM_GB:-}" && "${TOTAL_CPU_DRAM_GB}" -gt 0 && "${MODEL_NAME}" != *DeepSeek-V4* ]]; then
         # TOTAL_CPU_DRAM_GB is the prefill worker's per-node budget (only prefill
         # offloads KV to CPU DRAM today); --hicache-size is per rank per host
         # pool. A prefill server may span nodes (PREFILL_TP_SIZE is its total
@@ -771,26 +804,42 @@ if [ "$NODE_RANK" -eq 0 ]; then
     fi
     echo "Congratulations!!! All prefill and decode servers are up . . ."
 
-    # Router resilience: a single prefill worker doing huge long-context prefills
-    # (256K+ token agentic prompts in 65280-token chunks) can be slow to drain a
-    # concurrent burst. With defaults the circuit breaker opens after 10 failures
-    # and short-circuits the whole worker, so the aiperf profiling burst sees
-    # "No available prefill workers (all circuits open or unhealthy)" and aborts
-    # with 100% errors. Disable the breaker and relax health-check sensitivity so
-    # a busy-but-alive worker is not ejected. Override via ROUTER_RESILIENCE_FLAGS.
-    ROUTER_RESILIENCE_FLAGS="${ROUTER_RESILIENCE_FLAGS:---disable-circuit-breaker --health-failure-threshold 100 --health-check-timeout-secs 600 --health-check-interval-secs 30}"
+    if [[ "${IS_AGENTIC:-0}" == "1" || "${IS_AGENTIC:-}" == "true" ]]; then
+        # Agentic router config (main): long-context prefills can look unhealthy to
+        # the default circuit breaker during a concurrent burst. Disable the breaker
+        # and relax health-check sensitivity so a busy-but-alive worker is not
+        # ejected. cache_aware prefill routing exploits HiCache/radix prefix reuse
+        # across the agentic trace; round_robin decode keeps the single decode worker
+        # fed evenly. Override via ROUTER_RESILIENCE_FLAGS / ROUTER_POLICY_FLAGS.
+        ROUTER_RESILIENCE_FLAGS="${ROUTER_RESILIENCE_FLAGS:---disable-circuit-breaker --health-failure-threshold 100 --health-check-timeout-secs 600 --health-check-interval-secs 30}"
+        # server_sglang.sh previously read ROUTER_PREFILL_POLICY, but the recipe
+        # scripts export PREFILL_ROUTER_POLICY, so the recipe's policy override was
+        # silently ignored and the router always fell back to this hardcoded
+        # default. Also comment out ROUTER_DECODE_POLICY for now (superseded by
+        # --dp-aware below).
+        ROUTER_PREFILL_POLICY="${PREFILL_ROUTER_POLICY:-consistent_hashing}"
+        # ROUTER_DECODE_POLICY="${ROUTER_DECODE_POLICY:-round_robin}"
+        ROUTER_CACHE_THRESHOLD="${ROUTER_CACHE_THRESHOLD:-0.3}"
+        ROUTER_BALANCE_ABS_THRESHOLD="${ROUTER_BALANCE_ABS_THRESHOLD:-2}"
+        ROUTER_BALANCE_REL_THRESHOLD="${ROUTER_BALANCE_REL_THRESHOLD:-1.1}"
+        ROUTER_POLICY_FLAGS="${ROUTER_POLICY_FLAGS:---policy ${ROUTER_PREFILL_POLICY} --dp-aware --cache-threshold ${ROUTER_CACHE_THRESHOLD} --balance-abs-threshold ${ROUTER_BALANCE_ABS_THRESHOLD} --balance-rel-threshold ${ROUTER_BALANCE_REL_THRESHOLD}}"
+    else
+        # DI router config (8k1k branch, run 28696443568): with defaults the per-worker
+        # circuit stays OPEN for cb-timeout-duration-secs=60 before a half-open retrial.
+        # In that run every request 503'd from request #1 ("all circuits open or
+        # unhealthy") for ~31s and lm_eval (max_retries=5) then gave up -- i.e. the
+        # circuit was still open when the client budget ran out, so 0 result files were
+        # produced. Shortening the open->half-open window (and letting the router itself
+        # retry a failed worker selection) lets a transient trip re-close INSIDE the
+        # client retry budget instead of nuking the whole eval. The breaker stays fully
+        # ENABLED (thresholds unchanged); this only speeds recovery. Override via
+        # ROUTER_CB_ARGS / ROUTER_POLICY_FLAGS.
+        ROUTER_CB_ARGS="${ROUTER_CB_ARGS:---cb-timeout-duration-secs 15 --retry-max-retries 3}"
+        ROUTER_POLICY_FLAGS="${ROUTER_POLICY_FLAGS:---policy random --prefill-policy random --decode-policy random}"
+        ROUTER_RESILIENCE_FLAGS="${ROUTER_RESILIENCE_FLAGS:-${ROUTER_CB_ARGS}}"
+    fi
 
-    # Router scheduling policy. cache_aware prefill routing exploits HiCache/radix
-    # prefix reuse across the agentic trace; round_robin decode keeps the single
-    # decode worker fed evenly. cache_threshold / balance_*_threshold tune the
-    # cache_aware load-balancing (router defaults are 0.5 / 64 / 1.5). Override any
-    # of these via env.
-    ROUTER_PREFILL_POLICY="${ROUTER_PREFILL_POLICY:-cache_aware}"
-    ROUTER_DECODE_POLICY="${ROUTER_DECODE_POLICY:-round_robin}"
-    ROUTER_CACHE_THRESHOLD="${ROUTER_CACHE_THRESHOLD:-0.3}"
-    ROUTER_BALANCE_ABS_THRESHOLD="${ROUTER_BALANCE_ABS_THRESHOLD:-2}"
-    ROUTER_BALANCE_REL_THRESHOLD="${ROUTER_BALANCE_REL_THRESHOLD:-1.1}"
-    ROUTER_POLICY_FLAGS="${ROUTER_POLICY_FLAGS:---policy ${ROUTER_PREFILL_POLICY} --prefill-policy ${ROUTER_PREFILL_POLICY} --decode-policy ${ROUTER_DECODE_POLICY} --cache-threshold ${ROUTER_CACHE_THRESHOLD} --balance-abs-threshold ${ROUTER_BALANCE_ABS_THRESHOLD} --balance-rel-threshold ${ROUTER_BALANCE_REL_THRESHOLD}}"
+    echo "Router config: IS_AGENTIC=${IS_AGENTIC:-0} policy/resilience=${ROUTER_POLICY_FLAGS} ${ROUTER_RESILIENCE_FLAGS}"
 
     ROUTER_CMD="python -m sglang_router.launch_router \
         --pd-disaggregation \
@@ -841,6 +890,47 @@ if [ "$NODE_RANK" -eq 0 ]; then
             echo "DRY RUN: $HEALTH_BARRIER_CMD"
         else
             wait_or_die "$prefill0_pid" bash -c "$HEALTH_BARRIER_CMD" || exit 1
+        fi
+
+        # ---- End-to-end router readiness canary (run 28696443568) ----
+        # The /readiness barrier above only proves the router PROCESS is up; it does
+        # NOT prove the router can reach a prefill worker and complete a generation.
+        # In that run the eval fired the instant /readiness passed and EVERY request
+        # 503'd ("No available prefill workers (all circuits open or unhealthy)") from
+        # request #1 -> lm_eval gave up -> 0 result files -> "Verify eval scores" failed.
+        # Gate the benchmark on ONE successful generation THROUGH the router so the eval
+        # never starts against a router whose prefill path is not yet actually serving.
+        #
+        # Run the poll loop under wait_or_die (like the barriers above) rather than
+        # inline: the canary is the FIRST real generation through prefill, so a
+        # prefill crash right after /readiness passes is plausible. Without
+        # wait_or_die watching prefill0_pid, that just looks like repeated 503s and
+        # the loop burns the full ROUTER_CANARY_TIMEOUT (default 600s) instead of
+        # detecting the dead pid and aborting in ~5s.
+        run_router_canary() {
+            local canary_url="http://${NODE0_ADDR}:30000/v1/chat/completions"
+            local canary_model="${MODEL_DIR}/${MODEL_NAME}"
+            local canary_deadline=$(( $(date +%s) + ${ROUTER_CANARY_TIMEOUT:-600} ))
+            local canary_code
+            while [ "$(date +%s)" -lt "$canary_deadline" ]; do
+                canary_code=$(curl -s -o /tmp/router_canary.out -w '%{http_code}' \
+                    -m "${ROUTER_CANARY_REQ_TIMEOUT:-120}" \
+                    -X POST "$canary_url" -H 'Content-Type: application/json' \
+                    -d "{\"model\":\"${canary_model}\",\"messages\":[{\"role\":\"user\",\"content\":\"ping\"}],\"max_tokens\":1,\"temperature\":0}" 2>/dev/null)
+                if [ "$canary_code" = "200" ] && \
+                   ! grep -qE "circuits open|server_selection_failed|No available" /tmp/router_canary.out 2>/dev/null; then
+                    echo "Router readiness canary passed (end-to-end generation OK)"
+                    return 0
+                fi
+                echo "Router readiness canary not ready yet (http=${canary_code}); retrying in 5s . . ."
+                sleep 5
+            done
+            echo "ERROR: router readiness canary failed after ${ROUTER_CANARY_TIMEOUT:-600}s -- the router cannot complete a generation through a prefill worker (all circuits open/unhealthy). Refusing to start the eval against a non-serving router."
+            head -c 800 /tmp/router_canary.out 2>/dev/null
+            return 1
+        }
+        if [[ "${ROUTER_READINESS_CANARY:-1}" == "1" ]]; then
+            wait_or_die "$prefill0_pid" run_router_canary || exit 1
         fi
 
         echo "Router is ready for benchmarking"
@@ -926,11 +1016,12 @@ if [ "$NODE_RANK" -eq 0 ]; then
                       ENABLE_METRICS IS_AGENTIC CLEAR_CACHE_BETWEEN_CONC \
                       DISAGG IS_MULTINODE \
                       TP EP_SIZE DP_ATTENTION DCP_SIZE PCP_SIZE \
-                      PREFILL_NUM_WORKERS PREFILL_TP PREFILL_EP PREFILL_DP_ATTN PREFILL_HARDWARE \
-                      DECODE_NUM_WORKERS DECODE_TP DECODE_EP DECODE_DP_ATTN DECODE_HARDWARE \
+                      PREFILL_NUM_WORKERS PREFILL_TP PREFILL_EP PREFILL_DP_ATTN PREFILL_ENABLE_DP PREFILL_HARDWARE \
+                      DECODE_NUM_WORKERS DECODE_TP DECODE_EP DECODE_DP_ATTN DECODE_ENABLE_DP DECODE_HARDWARE \
                       KV_OFFLOADING KV_OFFLOAD_BACKEND KV_OFFLOAD_BACKEND_METADATA TOTAL_CPU_DRAM_GB KV_P2P_TRANSFER \
                       WEKA_LOADER_OVERRIDE AIPERF_FAILED_REQUEST_THRESHOLD \
-                      AIPERF_AGENTIC_CACHE_WARMUP_DURATION AIPERF_UNSAFE_OVERRIDE \
+                      AIPERF_WARMUP_REQUESTS_PER_LANE AIPERF_TRACE_IDLE_GAP_CAP_SECONDS \
+                      AIPERF_EXPERIMENTAL_FAST AIPERF_UNSAFE_OVERRIDE \
                       AIPERF_TRAJECTORY_START_MIN_RATIO AIPERF_TRAJECTORY_START_MAX_RATIO \
                       AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES ROUTER_PORT TQDM_MININTERVAL; do
                 if [[ -n "${!_v+x}" ]]; then
@@ -1000,7 +1091,7 @@ print(json.dumps(json.loads(sys.stdin.read())))' <<<"$_val")" || {
 
     # Run evaluation if requested (before killing router)
     if [[ "${RUN_EVAL:-false}" == "true" ]]; then
-        echo "Running lm-eval evaluation on Node 0..."
+        echo "Running lm-eval (GSM8K) evaluation on Node 0..."
 
         # Health check: verify the router is still serving before running eval.
         # The throughput benchmark may have crashed/exhausted decode workers.
@@ -1017,70 +1108,60 @@ print(json.dumps(json.loads(sys.stdin.read())))' <<<"$_val")" || {
         if [[ "$EVAL_HEALTH_OK" != "true" ]]; then
             echo "WARNING: Router health check failed after 3 attempts. Skipping eval."
         else
-            # Must run from repo root so utils/evals/${task}.yaml resolves
+            # Must run from repo root so utils/evals/gsm8k.yaml resolves
             pushd /workspace
 
-            # Source eval functions from benchmark_lib.sh
             source /workspace/benchmarks/benchmark_lib.sh
 
-            # Use EVAL_CONC from workflow if set, otherwise fall back to max of conc list
+            # Use EVAL_CONC from workflow if set, otherwise fall back to max of conc list.
+            # Export CONC before run_eval so meta_env.json matches validate_scores.py.
             if [[ -n "${EVAL_CONC:-}" ]]; then
                 export EVAL_CONCURRENT_REQUESTS="${EVAL_CONC}"
             else
                 export EVAL_CONCURRENT_REQUESTS=$(echo "$BENCH_MAX_CONCURRENCY" | tr 'x' '\n' | sort -n | tail -1)
             fi
+            export CONC="${EVAL_CONCURRENT_REQUESTS}"
 
             # Override eval context length with model's configured context_length
             if [[ -n "$prefill_context_length" ]]; then
                 export EVAL_MAX_MODEL_LEN="$prefill_context_length"
             fi
 
+            export ISL="${BENCH_INPUT_LEN:-0}"
+            export OSL="${BENCH_OUTPUT_LEN:-0}"
+            bridge_disagg_eval_metadata
+            # IS_MULTINODE, FRAMEWORK, PRECISION, MODEL_PREFIX, RUNNER_TYPE,
+            # RESULT_FILENAME are already set via Docker -e flags from job.slurm
+
             if [[ "$DRY_RUN" -eq 1 ]]; then
-                echo "DRY RUN: run_eval --framework lm-eval --port 30000 (conc=${EVAL_CONCURRENT_REQUESTS}, ctx=${EVAL_MAX_MODEL_LEN:-auto})"
+                echo "DRY RUN: run_eval --port 30000 (framework=${EVAL_FRAMEWORK:-lm-eval}, conc=${EVAL_CONCURRENT_REQUESTS}, ctx=${EVAL_MAX_MODEL_LEN:-auto})"
             else
-                # Run lm-eval against the router on port 30000
-                run_eval --framework lm-eval --port 30000
+                run_eval --port 30000
                 eval_rc=$?
 
                 if [[ $eval_rc -ne 0 ]]; then
-                    echo "ERROR: run_eval exited rc=$eval_rc; skipping metadata write and eval artifact staging" >&2
+                    echo "ERROR: run_eval exited rc=$eval_rc; preserving failure artifacts" >&2
                     EVAL_FAILED=1
                 else
-                    # Set metadata env vars for append_lm_eval_summary
-                    export TP="${PREFILL_TP_SIZE}"
-                    export CONC="${EVAL_CONCURRENT_REQUESTS}"
-                    export EP_SIZE=1
-                    [[ "${PREFILL_ENABLE_EP}" == "true" ]] && EP_SIZE="${PREFILL_TP_SIZE}"
-                    export PREFILL_TP="${PREFILL_TP_SIZE}"
-                    export PREFILL_EP=1
-                    [[ "${PREFILL_ENABLE_EP}" == "true" ]] && PREFILL_EP="${PREFILL_TP_SIZE}"
-                    export PREFILL_NUM_WORKERS="${xP}"
-                    export DECODE_TP="${DECODE_TP_SIZE}"
-                    export DECODE_EP=1
-                    [[ "${DECODE_ENABLE_EP}" == "true" ]] && DECODE_EP="${DECODE_TP_SIZE}"
-                    export DECODE_NUM_WORKERS="${yD}"
-                    export DP_ATTENTION="${PREFILL_ENABLE_DP}"
-                    export PREFILL_DP_ATTENTION="${PREFILL_ENABLE_DP}"
-                    export DECODE_DP_ATTENTION="${DECODE_ENABLE_DP}"
-                    export ISL="${BENCH_INPUT_LEN}"
-                    export OSL="${BENCH_OUTPUT_LEN}"
-                    # IS_MULTINODE, FRAMEWORK, PRECISION, MODEL_PREFIX, RUNNER_TYPE,
-                    # RESULT_FILENAME are already set via Docker -e flags from job.slurm
+                    # Always rewrite meta_env.json so EP/DPA match the workflow
+                    # topology even when run_eval() staged artifacts internally.
+                    rewrite_lm_eval_meta_env
 
-                    append_lm_eval_summary
-                    # Files (meta_env.json, results*.json, sample*.jsonl) are now in /workspace
+                    # Fixed-seq-len post-bench eval still needs append to move
+                    # results out of the temp EVAL_RESULT_DIR.
+                    if [[ "${EVAL_ONLY:-false}" != "true" || "$IS_AGENTIC_RUN" != "1" ]]; then
+                        append_lm_eval_summary
+                    fi
 
-                    # Copy eval artifacts to run_logs for NFS extraction by runner
-                    EVAL_COPY_DIR="/run_logs/slurm_job-${SLURM_JOB_ID}/eval_results"
-                    mkdir -p "$EVAL_COPY_DIR"
-                    for f in meta_env.json; do
-                        [ -e "/workspace/$f" ] && cp -f "/workspace/$f" "$EVAL_COPY_DIR/"
-                    done
-                    # Use find for glob patterns to avoid "no match" errors
-                    find /workspace -maxdepth 1 -name 'results*.json' -exec cp -f {} "$EVAL_COPY_DIR/" \;
-                    find /workspace -maxdepth 1 -name 'sample*.jsonl' -exec cp -f {} "$EVAL_COPY_DIR/" \;
+                fi
 
-                    echo "Eval completed. Artifacts staged in $EVAL_COPY_DIR"
+                EVAL_COPY_DIR="/run_logs/slurm_job-${SLURM_JOB_ID}/eval_results"
+                if stage_eval_artifacts \
+                    "$EVAL_COPY_DIR" /workspace "${EVAL_RESULT_DIR:-}"; then
+                    echo "Eval artifacts staged in $EVAL_COPY_DIR"
+                else
+                    echo "ERROR: failed to stage eval artifacts in $EVAL_COPY_DIR" >&2
+                    EVAL_FAILED=1
                 fi
             fi
 
@@ -1214,7 +1295,36 @@ else
         DECODE_MORI_MOE_ENV="SGLANG_MORI_MOE_MAX_INPUT_TOKENS=${MORI_MOE_MAX_INPUT_TOKENS_DECODE}"
     fi
     set +x
-    DECODE_CMD="SGLANG_MORI_COMBINE_DTYPE=${MORI_COMBINE_DTYPE_DECODE} ${DECODE_MORI_MOE_ENV} SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK_DECODE:-${MORI_MAX_DISPATCH_TOKENS_DECODE}} MORI_IO_SQ_BACKOFF_TIMEOUT_US=${MORI_IO_SQ_BACKOFF_TIMEOUT_US} MORI_IO_QP_MAX_SEND_WR=${MORI_IO_QP_MAX_SEND_WR} ${LAUNCH_PREFIX:-} python3 -m sglang.launch_server \
+
+    # Agentic trace replay doesn't reproduce real token-by-token traffic, so
+    # measured MTP/EAGLE acceptance there isn't representative (PR #2309
+    # review: https://github.com/SemiAnalysisAI/InferenceX/pull/2309#pullrequestreview-4778348624).
+    # Per the AgentX fairness guidelines (golden_al_distribution/README.md),
+    # agentic throughput benchmarks simulate acceptance at the model's
+    # committed golden AL instead of measuring real (non-representative)
+    # acceptance. Eval runs (RUN_EVAL / EVAL_ONLY) need real acceptance so
+    # GSM8K scores reflect actual MTP behavior. Golden curve source:
+    # golden_al_distribution/dsv4_mtp.yaml (thinking_on).
+    DECODE_SIM_ACC_ENV=""
+    if [[ "$DECODE_MTP_SIZE" -gt 0 ]] && { [[ "${IS_AGENTIC:-0}" == "1" ]] || [[ "${IS_AGENTIC:-}" == "true" ]]; }; then
+        if [[ "${EVAL_ONLY:-false}" == "true" ]] || [[ "${RUN_EVAL:-false}" == "true" ]]; then
+            echo "[INFO] Eval mode: synthetic MTP disabled (using real acceptance)"
+        else
+            DSV4_GOLDEN_AL=""
+            case "${MODEL_NAME}:${DECODE_MTP_SIZE}" in
+                *DeepSeek-V4*:1) DSV4_GOLDEN_AL=1.79 ;;
+                *DeepSeek-V4*:2) DSV4_GOLDEN_AL=2.27 ;;
+                *DeepSeek-V4*:3) DSV4_GOLDEN_AL=2.49 ;;
+            esac
+            if [[ -n "$DSV4_GOLDEN_AL" ]]; then
+                DECODE_SIM_ACC_ENV="SGLANG_SIMULATE_ACC_LEN=${DSV4_GOLDEN_AL} SGLANG_SIMULATE_ACC_METHOD=match-expected SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token"
+            else
+                echo "WARNING: agentic MTP run (model=${MODEL_NAME}, DECODE_MTP_SIZE=${DECODE_MTP_SIZE}) has no golden AL wired in server_sglang.sh -- falling back to real (unsimulated, non-representative) acceptance. Add a case in server_sglang.sh and golden_al_distribution/ before shipping this arm. See golden_al_distribution/README.md." >&2
+            fi
+        fi
+    fi
+
+    DECODE_CMD="SGLANG_MORI_COMBINE_DTYPE=${MORI_COMBINE_DTYPE_DECODE} ${DECODE_MORI_MOE_ENV} SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK_DECODE:-${MORI_MAX_DISPATCH_TOKENS_DECODE}} MORI_IO_SQ_BACKOFF_TIMEOUT_US=${MORI_IO_SQ_BACKOFF_TIMEOUT_US} MORI_IO_QP_MAX_SEND_WR=${MORI_IO_QP_MAX_SEND_WR} ${DECODE_SIM_ACC_ENV} ${LAUNCH_PREFIX:-} python3 -m sglang.launch_server \
         --model-path ${MODEL_DIR}/${MODEL_NAME} \
         --disaggregation-mode decode \
         --disaggregation-ib-device ${IBDEVICES} \

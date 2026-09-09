@@ -145,10 +145,12 @@ pf = bash_escape(m.get('prefill_flags', '--tensor-parallel-size 8'))
 df = bash_escape(m.get('decode_flags', '--tensor-parallel-size 8'))
 ev = bash_escape(m.get('env', ''))
 dev = bash_escape(m.get('decode_env', ''))
+pev = bash_escape(m.get('prefill_env', ''))
 print(f'PREFILL_SERVER_CONFIG=\"{pf}\"')
 print(f'DECODE_SERVER_CONFIG=\"{df}\"')
 print(f'MODEL_ENVS=\"{ev}\"')
 print(f'DECODE_MODEL_ENVS=\"{dev}\"')
+print(f'PREFILL_MODEL_ENVS=\"{pev}\"')
 ")"
 
 echo "Loaded model configuration for: $MODEL_NAME"
@@ -251,6 +253,11 @@ if [ "$NODE_RANK" -eq 0 ]; then
 
     setup_vllm_env
 
+    for env_pair in ${PREFILL_MODEL_ENVS}; do
+        export "$env_pair"
+        echo "[PREFILL_ENV] $env_pair"
+    done
+
     # Router is started as an external container by job.slurm (VLLM_ROUTER_IMAGE)
     echo "Using external vllm-router container (started by job.slurm on this node)"
 
@@ -348,13 +355,13 @@ if [ "$NODE_RANK" -eq 0 ]; then
             fi
 
             if [[ "$DRY_RUN" -eq 1 ]]; then
-                echo "DRY RUN: run_eval --framework lm-eval --port $ROUTER_PORT (conc=${EVAL_CONCURRENT_REQUESTS}, ctx=${EVAL_MAX_MODEL_LEN:-auto})"
+                echo "DRY RUN: run_eval --port $ROUTER_PORT (framework=${EVAL_FRAMEWORK:-lm-eval}, conc=${EVAL_CONCURRENT_REQUESTS}, ctx=${EVAL_MAX_MODEL_LEN:-auto})"
             else
-                run_eval --framework lm-eval --port "$ROUTER_PORT"
+                run_eval --port "$ROUTER_PORT"
                 eval_rc=$?
 
                 if [[ $eval_rc -ne 0 ]]; then
-                    echo "ERROR: run_eval exited rc=$eval_rc; skipping metadata write and eval artifact staging" >&2
+                    echo "ERROR: run_eval exited rc=$eval_rc; preserving failure artifacts" >&2
                     EVAL_FAILED=1
                 else
                     export TP="${PREFILL_TP_SIZE}"
@@ -377,15 +384,15 @@ if [ "$NODE_RANK" -eq 0 ]; then
 
                     append_lm_eval_summary
 
-                    EVAL_COPY_DIR="/run_logs/slurm_job-${SLURM_JOB_ID}/eval_results"
-                    mkdir -p "$EVAL_COPY_DIR"
-                    for f in meta_env.json; do
-                        [ -e "/workspace/$f" ] && cp -f "/workspace/$f" "$EVAL_COPY_DIR/"
-                    done
-                    find /workspace -maxdepth 1 -name 'results*.json' -exec cp -f {} "$EVAL_COPY_DIR/" \;
-                    find /workspace -maxdepth 1 -name 'sample*.jsonl' -exec cp -f {} "$EVAL_COPY_DIR/" \;
+                fi
 
-                    echo "Eval completed. Artifacts staged in $EVAL_COPY_DIR"
+                EVAL_COPY_DIR="/run_logs/slurm_job-${SLURM_JOB_ID}/eval_results"
+                if stage_eval_artifacts \
+                    "$EVAL_COPY_DIR" /workspace "${EVAL_RESULT_DIR:-}"; then
+                    echo "Eval artifacts staged in $EVAL_COPY_DIR"
+                else
+                    echo "ERROR: failed to stage eval artifacts in $EVAL_COPY_DIR" >&2
+                    EVAL_FAILED=1
                 fi
             fi
 
@@ -419,6 +426,11 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$xP" ]; then
     echo "Using prefill config: $PREFILL_SERVER_CONFIG"
 
     setup_vllm_env
+
+    for env_pair in ${PREFILL_MODEL_ENVS}; do
+        export "$env_pair"
+        echo "[PREFILL_ENV] $env_pair"
+    done
 
     SERVED_MODEL="${MODEL_NAME}"
     PREFILL_CMD="vllm serve ${MODEL_PATH} \

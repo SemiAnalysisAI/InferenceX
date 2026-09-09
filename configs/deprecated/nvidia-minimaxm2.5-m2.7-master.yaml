@@ -32,28 +32,6 @@ minimaxm2.5-fp8-b200-vllm:
 # its fixed-seq-len sweep is unaffected.
 #   - image: 'vllm/vllm-openai:v0.19.0-cu130' -> 'vllm/vllm-openai:v0.19.1'
 #   - runner: 'b200' -> 'b200-dgxc'
-minimaxm2.5-fp8-b200-vllm-agentic:
-  image: vllm/vllm-openai:v0.19.1
-  model: MiniMaxAI/MiniMax-M2.5
-  model-prefix: minimaxm2.5
-  runner: b200-dgxc
-  precision: fp8
-  framework: vllm
-  multinode: false
-  scenarios:
-    agentic-coding:
-    # B200 tp=4: compute ceiling ~50 (empirical), KV cliff ~48 (analytical).
-    # Push none past the KV cliff (96, 128) to make the no-offload throughput
-    # collapse visible; cpu range overlaps fully for same-conc comparison.
-    - duration: 1800
-      search-space:
-      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 48, 56, 64, 96, 128] }
-      - { tp: 4, offloading: cpu,  conc-list: [48, 56, 64, 96, 128] }
-
-  # NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/MiniMax/MiniMax-M2.html
-  # does not have a B300-specific recipe, so this config reuses the existing
-  # MiniMax-M2.5 FP8 B200 vLLM recipe as-is until B300-specific tuning is available.
-
 minimaxm2.5-fp8-b300-vllm:
   image: vllm/vllm-openai:v0.21.0
   model: MiniMaxAI/MiniMax-M2.5
@@ -82,27 +60,6 @@ minimaxm2.5-fp8-b300-vllm:
 # the original minimaxm2.5-fp8-b300-vllm entry is left identical to origin/main so
 # its fixed-seq-len sweep is unaffected.
 #   - image: 'vllm/vllm-openai:v0.19.0-cu130' -> 'vllm/vllm-openai:v0.19.1'
-minimaxm2.5-fp8-b300-vllm-agentic:
-  image: vllm/vllm-openai:v0.19.1
-  model: MiniMaxAI/MiniMax-M2.5
-  model-prefix: minimaxm2.5
-  runner: b300
-  precision: fp8
-  framework: vllm
-  multinode: false
-  scenarios:
-    agentic-coding:
-    # B300 tp=4: compute ceiling ~60 (empirical), KV cliff ~85 (analytical).
-    # Push none past the KV cliff (96, 128, 192) so the no-offload throughput
-    # collapse is visible; cpu range overlaps fully so each high-conc point
-    # has a same-conc no-offload counterpart for direct comparison.
-    # Dense sampling between 96 and 128 (step=4) to resolve the sharp dropoff
-    # observed in v6 cpu data right past conc=96.
-    - duration: 1800
-      search-space:
-      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 48, 64, 96, 100, 104, 108, 112, 116, 120, 124, 128, 192] }
-      - { tp: 4, offloading: cpu,  conc-list: [48, 64, 96, 100, 104, 108, 112, 116, 120, 124, 128, 192] }
-
 minimaxm2.5-fp4-b200-vllm:
   image: vllm/vllm-openai:v0.22.0
   model: nvidia/MiniMax-M2.5-NVFP4
@@ -140,24 +97,6 @@ minimaxm2.5-fp4-b200-vllm:
 # PR adds an agentic-coding scenarios block that differs from main
 # (either main had none or had a different conc/offload sweep).
 # The original minimaxm2.5-fp4-b200-vllm entry stays byte-identical to origin/main.
-minimaxm2.5-fp4-b200-vllm-agentic:
-  image: vllm/vllm-openai:v0.19.0-cu130
-  model: nvidia/MiniMax-M2.5-NVFP4
-  model-prefix: minimaxm2.5
-  runner: b200
-  precision: fp4
-  framework: vllm
-  multinode: false
-  scenarios:
-    agentic-coding:
-    - duration: 1800
-      search-space:
-      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
-
-  # NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/MiniMax/MiniMax-M2.html
-  # does not have a B300-specific recipe, so this config reuses the existing
-  # MiniMax-M2.5 FP4 B200 vLLM recipe as-is until B300-specific tuning is available.
-
 minimaxm2.5-fp4-b200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc18
   model: nvidia/MiniMax-M2.5-NVFP4
@@ -265,24 +204,6 @@ minimaxm2.5-fp8-h100-vllm:
 # PR adds an agentic-coding scenarios block that differs from main
 # (either main had none or had a different conc/offload sweep).
 # The original minimaxm2.5-fp8-h100-vllm entry stays byte-identical to origin/main.
-minimaxm2.5-fp8-h100-vllm-agentic:
-  image: vllm/vllm-openai:v0.20.2
-  model: MiniMaxAI/MiniMax-M2.5
-  model-prefix: minimaxm2.5
-  runner: h100
-  precision: fp8
-  framework: vllm
-  multinode: false
-  scenarios:
-    agentic-coding:
-    # H100 tp=4 ep=4: compute ceiling ~10 (empirical), KV cliff ~6 (analytical).
-    # Best cpu-offload demo SKU — 4-conc-point window between cliffs.
-    # Dense sampling 4-12 covers both cliffs; conc 16 confirms compute plateau.
-    - duration: 1800
-      search-space:
-      - { tp: 4, ep: 4, offloading: none, conc-list: [1, 2, 4, 5, 6, 7, 8, 10, 12, 16] }
-      - { tp: 4, ep: 4, offloading: cpu,  conc-list: [5, 6, 7, 8, 10, 12] }
-
 minimaxm2.5-fp8-h200-vllm:
   image: vllm/vllm-openai:v0.22.0
   model: MiniMaxAI/MiniMax-M2.5
@@ -307,23 +228,6 @@ minimaxm2.5-fp8-h200-vllm:
 # PR adds an agentic-coding scenarios block that differs from main
 # (either main had none or had a different conc/offload sweep).
 # The original minimaxm2.5-fp8-h200-vllm entry stays byte-identical to origin/main.
-minimaxm2.5-fp8-h200-vllm-agentic:
-  image: vllm/vllm-openai:v0.20.2
-  model: MiniMaxAI/MiniMax-M2.5
-  model-prefix: minimaxm2.5
-  runner: h200
-  precision: fp8
-  framework: vllm
-  multinode: false
-  scenarios:
-    agentic-coding:
-    # H200 tp=4: compute ceiling ~35 (empirical), KV cliff ~29 (analytical).
-    # cpu offload window conc 29-35 — dense sampling 24-40 captures both cliffs.
-    - duration: 1800
-      search-space:
-      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 24, 28, 32, 36, 48] }
-      - { tp: 4, offloading: cpu,  conc-list: [24, 28, 32, 36, 40, 48] }
-
 minimaxm2.5-fp4-gb300-dynamo-vllm:
   image: vllm/vllm-openai:v0.20.1
   model: nvidia/MiniMax-M2.5-NVFP4
@@ -638,7 +542,7 @@ minimaxm2.5-fp8-b200-dynamo-vllm:
   image: vllm/vllm-openai:v0.20.1
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
-  runner: b200-multinode
+  runner: cluster:b200-dgxc
   precision: fp8
   framework: dynamo-vllm
   multinode: true
@@ -1025,7 +929,7 @@ minimaxm2.5-fp4-b200-dynamo-vllm:
   image: vllm/vllm-openai:v0.20.1
   model: nvidia/MiniMax-M2.5-NVFP4
   model-prefix: minimaxm2.5
-  runner: b200-multinode
+  runner: cluster:b200-dgxc
   precision: fp4
   framework: dynamo-vllm
   multinode: true

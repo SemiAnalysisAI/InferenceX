@@ -75,7 +75,7 @@ permissions:
 env:
   HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
   HF_HUB_CACHE: '/mnt/hf_hub_cache/'
-  # Drive the single-node path in runners/launch_b300-nv.sh. MODEL is the HF id;
+  # Drive the single-node path in runners/launch_b300-dsxe.sh. MODEL is the HF id;
   # its basename (e.g. DeepSeek-V4-Pro) must be in the launcher's STAGED_MODELS so
   # the launcher resolves MODEL_PATH to the pre-staged local weights and mounts
   # them. The collector serves from MODEL_PATH (see SERVE_MODEL), so no download.
@@ -103,10 +103,70 @@ env:
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
 
 jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      priority: ${{ steps.score.outputs.priority }}
+      queue-token: ${{ steps.score.outputs.queue-token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { clean: true, persist-credentials: false }
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - id: score
+        env:
+          RUNNER: ${{ inputs.runner }}
+          MODEL_PREFIX: ${{ inputs.model-prefix }}
+        run: |
+          entry=$(jq -cn \
+            --arg runner "$RUNNER" \
+            --arg model_prefix "$MODEL_PREFIX" \
+            '[{
+              runner: $runner,
+              framework: "vllm",
+              "model-prefix": $model_prefix,
+              precision: "fp4",
+              "spec-decoding": "mtp"
+            }]')
+          scored=$(printf '%s' "$entry" |
+            uv run --no-project --with pyyaml --python 3.12 \
+              utils/ci_priority.py \
+              --queue-namespace "${{ github.run_id }}:${{ github.run_attempt }}")
+          echo "priority=$(jq -r '.[0].priority' <<<"$scored")" >> "$GITHUB_OUTPUT"
+          echo "queue-token=$(jq -r '.[0]["queue-token"]' <<<"$scored")" >> "$GITHUB_OUTPUT"
+
   collect-al:
-    runs-on: ${{ inputs.runner }}
+    needs: setup
+    runs-on: >-
+      ${{ fromJSON(
+        vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
+        (
+          vars.NODE_SLOT_SCHEDULER_ENABLED == 'true' &&
+          format(
+            '["self-hosted",{0},{1},{2},{3}]',
+            toJSON(inputs.runner),
+            toJSON('nodes:1'),
+            toJSON(format(
+              'ci-job-{0}-{1}',
+              needs.setup.outputs.priority,
+              needs.setup.outputs.queue-token
+            )),
+            toJSON(format('ci-attempt-{0}', github.run_attempt))
+          ) ||
+          format(
+            '["self-hosted",{0},{1},{2}]',
+            toJSON(inputs.runner),
+            toJSON(format(
+              'ci-job-{0}-{1}',
+              needs.setup.outputs.priority,
+              needs.setup.outputs.queue-token
+            )),
+            toJSON(format('ci-attempt-{0}', github.run_attempt))
+          )
+        ) ||
+        format('[{0}]', toJSON(inputs.runner))
+      ) }}
     timeout-minutes: 600
-    name: "SpeedBench AL matrix | ${{ inputs.category }} | mtp=[${{ inputs.mtp-list }}] | thinking=[${{ inputs.thinking-modes }}]"
+    name: "p${{ needs.setup.outputs.priority }} | SpeedBench AL matrix | ${{ inputs.category }} | mtp=[${{ inputs.mtp-list }}] | thinking=[${{ inputs.thinking-modes }}]"
     steps:
       - name: Resource cleanup (pre-run)
         run: &resource-cleanup |
@@ -135,7 +195,7 @@ jobs:
           # matrix from a previous run is never picked up as this job's output.
           rm -rf "${{ github.workspace }}/speedbench_results" 2>/dev/null || true
 
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           token: ${{ secrets.REPO_PAT }}
           fetch-depth: 0

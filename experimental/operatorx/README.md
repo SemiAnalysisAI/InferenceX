@@ -43,7 +43,7 @@ python3 scripts/submit_run.py nvidia
 ### TPU / Trainium
 
 These hosts have no SLURM, so `submit_run.py` (which submits `sbatch` jobs)
-does not apply — run the benchmark directly on the VM/instance:
+does not apply. Run the benchmark directly on the VM or instance:
 
 ```bash
 OPERATORX_CLUSTER=v6e_4x   python -m operatorx   # TPU     (default tpu cluster)
@@ -73,8 +73,8 @@ rather than running our old single-device dense fallback.
 | `OPERATORX_BACKENDS` | all backends for the platform | CSV allowlist. |
 | `OPERATORX_JOB_NAME` | `benchmark` | SLURM job name. Use `h-benchmark` for benchmark runs (see `CLUSTERS.md`). |
 
-`WORLD_SIZES` in the script is `[1, 2, 4, 8]` — single-node only (ws>8 is
-disabled: multi-node NCCL IB bring-up currently hangs on b200/b300).
+`WORLD_SIZES` in the script is `[1, 2, 4, 8]` and supports single-node runs only.
+Values above 8 are disabled because multi-node NCCL IB bring-up currently hangs on b200/b300.
 `MASTER_ADDR` is derived by parsing `SLURM_NODELIST`.
 
 ## Adding a backend / op
