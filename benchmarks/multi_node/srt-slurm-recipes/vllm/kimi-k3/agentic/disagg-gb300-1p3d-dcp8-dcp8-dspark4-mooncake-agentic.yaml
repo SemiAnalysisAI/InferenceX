@@ -2,14 +2,14 @@ name: "kimi-k3-vllm-disagg-gb300-1p3d-dcp8-dcp8-dspark4-mooncake-agentic"
 
 model:
   path: "moonshotai/Kimi-K3"
-  container: "vllm/vllm-openai:nightly-dev-arm64-cu13-3696c77"
+  container: "vllm/vllm-openai:v0.28.0"
   precision: "fp4"
 
 identity:
   model:
     repo: "moonshotai/Kimi-K3"
   container:
-    image: "vllm/vllm-openai:nightly-dev-arm64-cu13-3696c77"
+    image: "vllm/vllm-openai:v0.28.0"
   frameworks:
     dynamo: "ba83080ecd31c1ce918559e576d3c5bc9e092ff1"
 
