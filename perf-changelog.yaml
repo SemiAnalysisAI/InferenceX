@@ -7077,3 +7077,13 @@
   description:
     - "Use 128 GB host cache for native DRAM and tiered points. On-cluster default-thread DRAM startup and replay passed at this budget after 649 GB failed CUDA host registration; increase the tiered staging budget from 64 GB while retaining c14 to exercise disk."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2931
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  no-evals: true
+  description:
+    - "Backport merged upstream vLLM #55712 into the validation image to reject incomplete SWA load windows at unaligned cache-hit boundaries, after tiered runs failed the missing-block assertion."
+    - "Keep b0dc209c source-attribution changes, TP8/MTP, c8 DRAM and c14 NVMe/tiered, 128 GB host budgets, and runtime-default CPU threads unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2931
