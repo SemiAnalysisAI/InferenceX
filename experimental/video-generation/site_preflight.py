@@ -24,6 +24,14 @@ def inspect_site() -> dict:
         ["sacctmgr", "-nP", "show", "assoc", "where", f"user={user.pw_name}",
          "format=Account,Partition,QOS,DefaultQOS"], capture_output=True, text=True, timeout=10,
     ) if shutil.which("sacctmgr") else None
+    defaults = subprocess.run(
+        ["sacctmgr", "-nP", "show", "user", "where", f"name={user.pw_name}",
+         "format=User,DefaultAccount"], capture_output=True, text=True, timeout=10,
+    ) if shutil.which("sacctmgr") else None
+    active_accounts = subprocess.run(
+        ["squeue", "--noheader", "--user=" + user.pw_name, "--format=%a"],
+        capture_output=True, text=True, timeout=10,
+    ) if shutil.which("squeue") else None
     # Shared runtime/model cache candidates are metadata, not proof of compatibility.
     candidates = {}
     for name in ("/var/lib/squash", "/it-share/data", "/it-share/wenyao-minimax-h3",
@@ -44,6 +52,8 @@ def inspect_site() -> dict:
         "ssh_host_public_keys": public_keys,
         "previously_known_amd_jumpbox": known_jumpbox.stdout if known_jumpbox and known_jumpbox.returncode == 0 else None,
         "scheduler_associations": associations.stdout if associations and associations.returncode == 0 else None,
+        "scheduler_default_account": defaults.stdout if defaults and defaults.returncode == 0 else None,
+        "scheduler_active_accounts": sorted(set(active_accounts.stdout.split())) if active_accounts and active_accounts.returncode == 0 else None,
         "runtime_candidates": candidates, "enroot_paths": enroot_paths,
         "gpu_execution": False, "runtime_compatibility": "not_tested",
     }

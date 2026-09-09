@@ -39,8 +39,12 @@ def test_preflight_reads_only_public_keys_and_keeps_missing_data_explicit(monkey
     assert result["ssh_host_public_keys"] == ({"ed25519": "ssh-ed25519 public-test-key"} if available else {})
     assert reads == ([key] if available else [])
     assert result["scheduler_associations"] is None
+    assert result["scheduler_default_account"] is None
+    assert result["scheduler_active_accounts"] is None
     assert result["enroot_paths"] is None
     assert all(value is None for value in result["runtime_candidates"].values())
-    assert [command[0] for command in commands] == (["ssh-keygen", "sacctmgr"] if available else [])
+    assert [command[0] for command in commands] == (["ssh-keygen", "sacctmgr", "sacctmgr", "squeue"] if available else [])
     if available:
         assert "user=scheduler-user" in commands[1]
+        assert "name=scheduler-user" in commands[2]
+        assert "--user=scheduler-user" in commands[3]
