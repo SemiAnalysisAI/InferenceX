@@ -1,6 +1,7 @@
 """Prepare one task-owned cached ROCm runtime; generation is a separate gate."""
 from __future__ import annotations
 
+import argparse
 import os
 from pathlib import Path
 import subprocess
@@ -10,6 +11,78 @@ import ci
 REVISION = "71de97b264b04dcd514cf904003028aefe9775c8"
 IMAGE = Path("/var/lib/squash/lmsysorg_sglang-rocm_v0.5.18-rocm720-mi35x-20260828.sqsh")
 CONTAINER = "wenyao-minimax-h3-rocm"
+
+
+CPU_PROBE = r'''
+import importlib, importlib.metadata as metadata, json, sys
+from pathlib import Path
+result = {"python": sys.executable, "packages": {}, "imports": {}, "gpu_execution": False}
+for name in ("torch", "torchvision", "av", "numpy", "diffusers", "transformers", "sglang", "aiter", "triton", "amdsmi"):
+    try:
+        module = importlib.import_module(name)
+        result["imports"][name] = {"path": getattr(module, "__file__", None)}
+        try: result["packages"][name] = metadata.version(name)
+        except metadata.PackageNotFoundError: pass
+    except Exception as error:
+        result["imports"][name] = {"error": str(error)}
+Path(sys.argv[1]).write_text(json.dumps(result, indent=2) + "\n")
+'''
+
+
+def recover_rootfs(workspace: Path, output: Path) -> None:
+    root = workspace.parent
+    rootfs = root / "enroot-data" / CONTAINER
+    origin = rootfs.with_suffix(".image.json")
+    previous = workspace / "results/h3-cross-hardware/github-34344130223-1"
+    record = {"rootfs": str(rootfs), "image": str(IMAGE), "source_revision": REVISION,
+              "started_at": ci.now(), "gpu_allocation": False, "gpu_execution": False,
+              "predecessor_run": str(previous), "new_extraction": False}
+    output.mkdir(parents=True, exist_ok=True)
+    control = workspace / "campaigns/h3-cross-hardware"
+    with ci.task_lock(control / ".node-inventory.lock"), ci.task_lock(root / ".session.lock"):
+        try:
+            ci.need(rootfs.is_dir() and rootfs.stat().st_uid == os.getuid(), "Task-owned partial rootfs missing")
+            ci.need(ci.read(origin) == {"image": str(IMAGE), "status": "creating"}, "Unexpected rootfs creation receipt")
+            failed = ci.read(previous / "inventory-status.json")
+            ci.need(failed["allocation_cleanup"]["status"] == "released", "Prior allocation cleanup is not recorded")
+            log = (previous / "srun.log").read_text()
+            ci.need("Ignoring xattrs in filesystem" in log and "created 464452 files" in log
+                    and "created 11757 symlinks" in log, "Prior extraction did not reach the recorded completion footer")
+            ci.need((rootfs / "etc/rc").is_file(), "Extracted Enroot entrypoint missing")
+            prepare_source(workspace)
+            env = {**os.environ, "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                   "ENROOT_DATA_PATH": str(root / "enroot-data"), "ENROOT_CACHE_PATH": str(root / "cache"),
+                   "ENROOT_RUNTIME_PATH": str(output / "enroot-runtime"), "ENROOT_TEMP_PATH": str(output / "enroot-tmp"),
+                   "ROCR_VISIBLE_DEVICES": "", "HIP_VISIBLE_DEVICES": "", "CUDA_VISIBLE_DEVICES": ""}
+            # Enroot exited after extraction, before its native permission normalization.
+            subprocess.run(["bash", "-c", 'source /usr/local/lib/enroot/common.sh; common::fixperms "$1"',
+                            "recover", str(rootfs)], env=env, check=True, timeout=300)
+            record["permission_normalization"] = "completed using installed Enroot common::fixperms"
+            probe = output / "runtime-cpu-probe.py"
+            probe.write_text(CPU_PROBE)
+            persistent = control / f"rootfs-recovery-{os.environ['H3_RUN_ID']}-{os.environ['H3_RUN_ATTEMPT']}"
+            persistent.mkdir(exist_ok=False)
+            (persistent / probe.name).write_text(CPU_PROBE)
+            inside = Path("/work") / persistent.relative_to(workspace)
+            argv = ["/usr/local/bin/enroot", "start", "--rw", "--mount", str(workspace) + ":/work",
+                    "--env", "PYTHONDONTWRITEBYTECODE=1", "--env", "SGLANG_USE_AITER=1",
+                    "--env", "PYTHONPATH=/work/runtime-sglang-" + REVISION + "/python",
+                    "--env", "ROCR_VISIBLE_DEVICES=", "--env", "HIP_VISIBLE_DEVICES=", "--env", "CUDA_VISIBLE_DEVICES=",
+                    CONTAINER, "python3", str(inside / probe.name), str(inside / "runtime-cpu-probe.json")]
+            ci.write(output / "runtime-cpu-command.json", argv)
+            subprocess.run(argv, env=env, check=True, timeout=300)
+            result = ci.read(persistent / "runtime-cpu-probe.json")
+            ci.write(output / "runtime-cpu-probe.json", result)
+            record.update(status="recovered", probe=result,
+                          compatibility="CPU entry and imports only; HIP and H3 generation unverified")
+            ci.write(origin, {"image": str(IMAGE), "status": "created"})
+            ci.write(control / "rootfs-recovered.json", record)
+        except Exception as error:
+            record.update(status="failed", error=str(error))
+            raise
+        finally:
+            record["finished_at"] = ci.now()
+            ci.write(output / "rootfs-recovery.json", record)
 
 
 def prepare_source(workspace: Path) -> Path:
@@ -134,3 +207,11 @@ def prepare_on_node(workspace: Path, run_dir: Path) -> None:
                   status="inspected", compatibility="Imports and device enumeration only; H3 generation untested")
     ci.write(run_dir / "runtime-preparation.json", record)
     ci.write(workspace / "campaigns/h3-cross-hardware/runtime-inspected.json", record)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--workspace", required=True, type=Path)
+    parser.add_argument("--output", required=True, type=Path)
+    args = parser.parse_args()
+    recover_rootfs(args.workspace, args.output)
