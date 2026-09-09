@@ -930,7 +930,7 @@ dsv4-fp4-b200-sglang:
 
 dsv4-fp4-b200-sglang-agentic-hicache-mtp:
   image: lmsysorg/sglang:nightly-dev-20260827-20621aa1
-  model: deepseek-ai/DeepSeek-V4-Pro
+  model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:b200-nscale
   precision: fp4
@@ -940,9 +940,9 @@ dsv4-fp4-b200-sglang-agentic-hicache-mtp:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 3, 4, 5] }
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: mtp, conc-list: [8, 10, 16] }
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: mtp, conc-list: [64, 96, 128, 160], router: { name: sglang-router, version: "0.3.2" } }
+      - { tp: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 2, 3, 4, 5] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [8, 10, 16] }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [64, 96, 128, 160], router: { name: sglang-router, version: "0.3.2" } }
 
 dsv4-fp4-b200-vllm:
   image: vllm/vllm-openai:nightly-7c5dc571cbd1064ecc8a9b1045637ff647aa22cb
@@ -7231,7 +7231,7 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-pp-pareto:
           dp-attn: false
           additional-settings:
           - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=4.8"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=4.41"
           - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/disagg-gb300-3p2d-pp4-dep4-c704-mtp-hicache-nightly-20260831.yaml"
         decode:
           num-worker: 2
@@ -7251,7 +7251,7 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-pp-pareto:
           dp-attn: false
           additional-settings:
           - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=4.8"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.97"
           - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/disagg-gb300-3p4d-pp4-dep4-c565-mtp-hicache-nightly-20260831.yaml"
         decode:
           num-worker: 4
@@ -7286,7 +7286,7 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg-pareto:
           dp-attn: false
           additional-settings:
           - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=5.04"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=4.8"
           - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/agg-gb300-tp2-c44-b2-mtp-hicache-nightly-20260831.yaml"
       - spec-decoding: mtp
         kv-offloading: dram
@@ -7301,7 +7301,7 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg-pareto:
           dp-attn: false
           additional-settings:
           - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=5.04"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=4.8"
           - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/agg-gb300-tp2-c44-b1-mtp-hicache-nightly-20260831.yaml"
       - spec-decoding: mtp
         kv-offloading: dram
@@ -7316,7 +7316,7 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg-pareto:
           dp-attn: false
           additional-settings:
           - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=5.04"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=4.8"
           - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/agg-gb300-tp8-c7-b1-mtp-hicache-nightly-20260831.yaml"
 
     # ---------- 1k1k high-throughput (wide-EP decode, EAGLE MTP) ----------

@@ -2,15 +2,15 @@ name: Klaud Cold auto-sweep
 
 on:
   workflow_dispatch:
-  # schedule:
-  #   - cron: '0 */6 * * *'
+  schedule:
+    - cron: '0 */6 * * *'
 
 permissions:
   contents: read
   actions: read
 
 concurrency:
-  group: klaude-auto-sweep
+  group: klaud-auto-sweep
   cancel-in-progress: false
 
 jobs:
@@ -24,7 +24,7 @@ jobs:
       pull-requests: read
     env:
       # Total candidates per invocation; selected candidates run in parallel.
-      MAX_CANDIDATES_PER_RUN: '1'
+      MAX_CANDIDATES_PER_RUN: '2'
     outputs:
       selected: ${{ steps.select.outputs.selected }}
       candidates: ${{ steps.select.outputs.candidates }}
@@ -40,16 +40,16 @@ jobs:
         id: prepare
         env:
           GH_TOKEN: ${{ github.token }}
-          KLAUDE_DASHBOARD_API_KEY: ${{ secrets.KLAUDE_DASHBOARD_API_KEY }}
-        run: uv run --no-project --python 3.12 --with "pydantic>=2.10,<3" python -m utils.klaude plan --directory "$RUNNER_TEMP/klaude"
+          KLAUD_DASHBOARD_API_KEY: ${{ secrets.KLAUD_DASHBOARD_API_KEY }}
+        run: uv run --no-project --python 3.12 --with "pydantic>=2.10,<3" python -m utils.klaud plan --directory "$RUNNER_TEMP/klaud"
       - name: Check for overlapping open PRs
         id: review
         if: steps.prepare.outputs.has_candidates == 'true'
         continue-on-error: true
-        uses: anthropics/claude-code-action@d75b94d5ad426cb8546e6628b6f5f19b84e5cce1
+        uses: anthropics/claude-code-action@0d0e0876d3eaa933f45dc692f7a4312c83caf36f # v1.0.218
         env:
           GH_TOKEN: ${{ github.token }}
-          KLAUDE_EVIDENCE: ${{ runner.temp }}/klaude
+          KLAUD_EVIDENCE: ${{ runner.temp }}/klaud
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ github.token }}
@@ -59,11 +59,11 @@ jobs:
           claude_args: >-
             --model 'claude-opus-5'
             --max-turns 200
-            --add-dir '${{ runner.temp }}/klaude'
+            --add-dir '${{ runner.temp }}/klaud'
             --allowedTools "Read,Glob,Grep,Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh api --method GET:*),Bash(git show:*),Bash(git diff:*),Bash(git status:*),Bash(git log:*),Bash(git ls-tree:*)"
             --json-schema '${{ steps.prepare.outputs.review_schema }}'
           prompt: |
-            Use Read on candidates.json, open-prs.json and capacity.json under ${{ runner.temp }}/klaude/.
+            Use Read on candidates.json, open-prs.json and capacity.json under ${{ runner.temp }}/klaud/.
             Review candidates in the supplied shuffled order against current recipes and the complete open-PR index,
             including drafts and arbitrary branches. Changed-file paths are already fetched;
             inspect relevant PR bodies/diffs with direct gh pr view/diff commands. For API reads,
@@ -94,22 +94,22 @@ jobs:
       - name: Select reviewed candidates within the total cap
         id: select
         env:
-          KLAUDE_DASHBOARD_API_KEY: ${{ secrets.KLAUDE_DASHBOARD_API_KEY }}
-          KLAUDE_PR_REVIEW: ${{ steps.review.outputs.structured_output }}
-          KLAUDE_REVIEW_OUTCOME: ${{ steps.review.outcome }}
-          KLAUDE_REVIEW_EXECUTION: ${{ steps.review.outputs.execution_file }}
-        run: uv run --no-project --python 3.12 --with "pydantic>=2.10,<3" python -m utils.klaude select --max-candidates-per-run "$MAX_CANDIDATES_PER_RUN" --directory "$RUNNER_TEMP/klaude" --execution-file "${KLAUDE_REVIEW_EXECUTION:-$RUNNER_TEMP/claude-execution-output.json}"
+          KLAUD_DASHBOARD_API_KEY: ${{ secrets.KLAUD_DASHBOARD_API_KEY }}
+          KLAUD_PR_REVIEW: ${{ steps.review.outputs.structured_output }}
+          KLAUD_REVIEW_OUTCOME: ${{ steps.review.outcome }}
+          KLAUD_REVIEW_EXECUTION: ${{ steps.review.outputs.execution_file }}
+        run: uv run --no-project --python 3.12 --with "pydantic>=2.10,<3" python -m utils.klaud select --max-candidates-per-run "$MAX_CANDIDATES_PER_RUN" --directory "$RUNNER_TEMP/klaud" --execution-file "${KLAUD_REVIEW_EXECUTION:-$RUNNER_TEMP/claude-execution-output.json}"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
-          name: klaude-plan
+          name: klaud-plan
           # Deliberately exclude private capacity.json and arbitrary agent scratch files.
           path: |
-            ${{ runner.temp }}/klaude/candidates.json
-            ${{ runner.temp }}/klaude/open-prs.json
-            ${{ runner.temp }}/klaude/selection.json
-            ${{ runner.temp }}/klaude/review-diagnostics.json
-            ${{ runner.temp }}/klaude/*/candidate.json
+            ${{ runner.temp }}/klaud/candidates.json
+            ${{ runner.temp }}/klaud/open-prs.json
+            ${{ runner.temp }}/klaud/selection.json
+            ${{ runner.temp }}/klaud/review-diagnostics.json
+            ${{ runner.temp }}/klaud/*/candidate.json
           retention-days: 14
 
   candidates:
@@ -120,10 +120,10 @@ jobs:
       fail-fast: false
       matrix:
         candidate: ${{ fromJSON(needs.plan.outputs.candidates) }}
-    uses: ./.github/workflows/klaude-candidate.yml
+    uses: ./.github/workflows/klaud-candidate.yml
     with:
       candidate: ${{ matrix.candidate }}
     secrets:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       CLAUDE_PAT: ${{ secrets.CLAUDE_PAT }}
-      KLAUDE_DASHBOARD_API_KEY: ${{ secrets.KLAUDE_DASHBOARD_API_KEY }}
+      KLAUD_DASHBOARD_API_KEY: ${{ secrets.KLAUD_DASHBOARD_API_KEY }}
