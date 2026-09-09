@@ -155,7 +155,17 @@ case "$CONC" in
         STATE_CHECKPOINT_SLOTS=""
         NUM_SPEC_TOKENS=0
         SPEC_DECODE_AL=0
-        STATE_OFFLOAD_CPU_GIB=32
+        STATE_OFFLOAD_CPU_GIB=0
+        ;;
+    48)
+        MAX_NUM_SEQS=96
+        MAX_NUM_BATCHED_TOKENS=8192
+        GPU_MEM_UTIL=0.86
+        ATOM_ENABLE_REPLAYSSM=0
+        STATE_CHECKPOINT_SLOTS=""
+        NUM_SPEC_TOKENS=0
+        SPEC_DECODE_AL=0
+        STATE_OFFLOAD_CPU_GIB=0
         ;;
     56)
         MAX_NUM_SEQS=72
@@ -202,40 +212,51 @@ case "$KV_OFFLOAD_BACKEND" in
     lmcache)
         require_agentic_kv_offload_backend lmcache
 
-        # TOTAL_CPU_DRAM_GB is the AGGREGATE budget from the matrix generator.
-        # LMCACHE_MAX_LOCAL_CPU_SIZE and OFFLOAD_STATE_CPU_SIZE are per rank and
-        # every rank allocates its own, so the aggregate is divided by TP as the
-        # agentic README requires. Handing a rank the whole aggregate does not
-        # just overcommit -- it never finishes pinning and hangs the launch
-        # partway through.
-        PER_RANK_CPU_GB="$((TOTAL_CPU_DRAM_GB / TP))"
-        LMCACHE_CPU_GB="$((PER_RANK_CPU_GB - STATE_OFFLOAD_CPU_GIB))"
-
         export PYTHONHASHSEED=0
         export LMCACHE_LOCAL_CPU=True
-        export LMCACHE_MAX_LOCAL_CPU_SIZE="$LMCACHE_CPU_GB"
-        # DCP-locked: the offload hash block is block-size(128) x dcp(8) = 1024,
-        # so the KV grid and the state-checkpoint grid coincide and the joint
-        # load aims both legs at one boundary. 512 or 2048 misaligns it.
-        export LMCACHE_CHUNK_SIZE=1024
-        export OFFLOAD_KV_FOR_HYBRID=1
-        # Statistics only -- per-step offload counters in the connector. Kept on
-        # because the submitted numbers were measured with it on.
-        export OFFLOAD_PROFILE=1
 
-        if [ "$STATE_OFFLOAD_CPU_GIB" -gt 0 ]; then
-            # CPU state-offload tier for the attention state.
-            export OFFLOAD_STATE=1
-            export OFFLOAD_STATE_CPU_SIZE="$STATE_OFFLOAD_CPU_GIB"
-            export OFFLOAD_STATE_STAGING_GROUPS=8
-            export OFFLOAD_STATE_MIN_LOAD_TOKENS=0
-            # Must be set: the staging buffer defaults to 2 chunks (8 MiB), one
-            # K3 state entry is 54.78 MiB, and a buffer too small to hold one
-            # entry makes the tier decline to build -- one log line, then
-            # nothing offloads, which reads exactly like a tier that is on and
-            # idle.
-            export OFFLOAD_GPU_STAGING_CHUNKS=32
-        fi
+        case "$CONC" in
+            40|48)
+                # Validated LMCache tier for high-concurrency MiniMax ATOM runs:
+                # CPU only, chunk size 256, no hybrid state offload.
+                export LMCACHE_MAX_LOCAL_CPU_SIZE=256
+                export LMCACHE_CHUNK_SIZE=256
+                ;;
+            *)
+                # TOTAL_CPU_DRAM_GB is the AGGREGATE budget from the matrix generator.
+                # LMCACHE_MAX_LOCAL_CPU_SIZE and OFFLOAD_STATE_CPU_SIZE are per rank and
+                # every rank allocates its own, so the aggregate is divided by TP as the
+                # agentic README requires. Handing a rank the whole aggregate does not
+                # just overcommit -- it never finishes pinning and hangs the launch
+                # partway through.
+                PER_RANK_CPU_GB="$((TOTAL_CPU_DRAM_GB / TP))"
+                LMCACHE_CPU_GB="$((PER_RANK_CPU_GB - STATE_OFFLOAD_CPU_GIB))"
+
+                export LMCACHE_MAX_LOCAL_CPU_SIZE="$LMCACHE_CPU_GB"
+                # DCP-locked: the offload hash block is block-size(128) x dcp(8) = 1024,
+                # so the KV grid and the state-checkpoint grid coincide and the joint
+                # load aims both legs at one boundary. 512 or 2048 misaligns it.
+                export LMCACHE_CHUNK_SIZE=1024
+                export OFFLOAD_KV_FOR_HYBRID=1
+                # Statistics only -- per-step offload counters in the connector. Kept on
+                # because the submitted numbers were measured with it on.
+                export OFFLOAD_PROFILE=1
+
+                if [ "$STATE_OFFLOAD_CPU_GIB" -gt 0 ]; then
+                    # CPU state-offload tier for the attention state.
+                    export OFFLOAD_STATE=1
+                    export OFFLOAD_STATE_CPU_SIZE="$STATE_OFFLOAD_CPU_GIB"
+                    export OFFLOAD_STATE_STAGING_GROUPS=8
+                    export OFFLOAD_STATE_MIN_LOAD_TOKENS=0
+                    # Must be set: the staging buffer defaults to 2 chunks (8 MiB), one
+                    # K3 state entry is 54.78 MiB, and a buffer too small to hold one
+                    # entry makes the tier decline to build -- one log line, then
+                    # nothing offloads, which reads exactly like a tier that is on and
+                    # idle.
+                    export OFFLOAD_GPU_STAGING_CHUNKS=32
+                fi
+                ;;
+        esac
 
         OFFLOAD_ARGS=(
             --kv-transfer-config

@@ -6866,3 +6866,19 @@
   description:
     - "Bump ATOM image to rocm/atom-dev:nightly_202609080825-lirzhang-triton-build (includes merged PR #2147 KV-pool fixes) and drop runtime patch scripts."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2816
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add TP4 conc 40/48 LMCache DRAM offload points (CPU 256 GiB/rank, 256-token chunks, 500 GiB local disk tier)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2816
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Drop LMCache local disk tier for TP4 conc 40/48; keep CPU-only offload (256 GiB/rank, 256-token chunks)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2816
