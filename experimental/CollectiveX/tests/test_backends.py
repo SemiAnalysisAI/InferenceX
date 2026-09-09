@@ -149,7 +149,6 @@ class RoundtripStaging(unittest.TestCase):
         b = _StagingBackend(stage_device_work=True, fp8_consume="native")
         b.run_roundtrip(object(), staged="pre-materialised")
         self.assertEqual(b.calls, ["dispatch", "combine(pre-materialised)"])
-        self.assertNotIn("stage", b.calls)
 
     def test_an_unrecognised_consume_mode_fails_instead_of_silently_meaning_native(self):
         # The value is read at class-body evaluation, so a typo raises at import -- before
@@ -403,12 +402,15 @@ class TestSingleHandle(unittest.TestCase):
         """LL applies the gate in combine, so its weights wrapper must be cached: building one
         per timed combine puts a torch resolve and an np.asarray inside `time_us`."""
         ll = backend(ll=True)
+        ll._t = mock.Mock(side_effect=lambda value: types.SimpleNamespace(value=value))
         pa = problem(1)
         h = ll._ensure_handle(pa)
-        self.assertTrue(hasattr(h, "combine_weights_t"))
-        self.assertEqual(h.combine_weights_t, "w1")
+        first_weights = h.combine_weights_t
+        self.assertEqual(first_weights.value, "w1")
         # Re-entering the same problem reuses the handle and therefore the wrapper.
-        self.assertIs(ll._ensure_handle(pa).combine_weights_t, h.combine_weights_t)
+        ll._t.reset_mock()
+        self.assertIs(ll._ensure_handle(pa).combine_weights_t, first_weights)
+        ll._t.assert_not_called()
 
         ht = backend(ll=False)
         self.assertFalse(hasattr(ht._ensure_handle(problem(1)), "combine_weights_t"))
