@@ -7068,3 +7068,12 @@
   description:
     - "Use the Python frontend that exports the fork's cache-source metric; the Rust frontend has its own metrics implementation and does not yet consume the source breakdown. Retain the existing engine, attention, TP8/MTP, and offload settings."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2931
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  no-evals: true
+  description:
+    - "Use 128 GB host cache for native DRAM and tiered points. On-cluster default-thread DRAM startup and replay passed at this budget after 649 GB failed CUDA host registration; increase the tiered staging budget from 64 GB while retaining c14 to exercise disk."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2931

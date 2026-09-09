@@ -971,12 +971,12 @@ dsv4-fp4-b200-vllm-agentic-mtp:
   multinode: false
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.30
+    - dram-utilization: 0.0592
       search-space:
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-native }, spec-decoding: mtp, conc-list: [8] }
     - search-space:
       - { tp: 8, kv-offloading: nvme, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [14] }
-    - dram-utilization: 0.03
+    - dram-utilization: 0.0592
       search-space:
       - { tp: 8, kv-offloading: [dram, nvme], kv-offload-backend: { name: vllm-native }, spec-decoding: mtp, conc-list: [14] }
 
