@@ -244,6 +244,8 @@ Use the master entry to answer what should be benchmarked. Use runner config for
 
 Derived concurrency points, eval selection, topology defaults, names, and runner-derived facts belong in `generate_sweep_configs.py`. Workflows should forward matrix fields, not reimplement generator policy in expressions or shell.
 
+The `full-sweep` and `test-config` commands share fixed-sequence and AgentX row builders. Command-specific selection remains in the callers; the AgentX builder owns worker defaults, offload budgets, experiment names, node counts, and validation. It validates topology and offload budgets before filtering concurrency, preserves point and runner ordering, and filters AgentX bounds without inventing a capped concurrency point.
+
 ### Trigger selection is separate from configuration
 
 `perf-changelog.yaml` selects work and records why. It does not redefine a master entry. This makes the configuration catalog reusable while keeping a reviewable history of what each sweep intended to run.
