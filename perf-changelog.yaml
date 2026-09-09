@@ -7030,6 +7030,7 @@
     - "Validate vLLM cache-source attribution on the existing DeepSeek-V4-Pro B200 TP8 MTP AgentX recipe: native DRAM c8, Simple NVMe c14, and native DRAM+NVMe c14."
     - "Use cquil11/vllm-cache-sources:b0dc209c-swa-amd64-20260909, built from the exact upstream-base wheel plus cquil11/vllm#2 at b0dc209c14451e9a4e63f1db148ed492d881b765."
     - "Reduce GPU memory utilization to 0.85 and the tiered host cache to 64 GB to exercise filesystem promotions; retain canonical AgentX duration and collect AIPerf Prometheus exports."
+  no-evals: true
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2931
 
 - config-keys:
@@ -7038,6 +7039,7 @@
     - agentic-coding
   description:
     - "Use the r2 Docker Hub image with matching FlashInfer Python, cubin, and CUDA 13 JIT-cache packages at 0.6.18; retain the same three cache-source validation points."
+  no-evals: true
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2931
 
 - config-keys:
@@ -7046,6 +7048,7 @@
     - agentic-coding
   description:
     - "Set OMP_NUM_THREADS=1 explicitly to preserve the proven TP8 recipe's CPU parallelism; the new runtime otherwise selects 24 startup threads per worker on B200 Nscale."
+  no-evals: true
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2931
 
 - config-keys:
@@ -7054,4 +7057,5 @@
     - agentic-coding
   description:
     - "Remove the unproven OMP_NUM_THREADS override; keep the runtime default for official cache-source validation."
+  no-evals: true
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2931
