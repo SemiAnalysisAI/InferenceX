@@ -225,6 +225,7 @@ def build_agg(
         "disagg": env_bool("DISAGG"),
         "scenario_type": "agentic-coding",
         "is_multinode": env_bool("IS_MULTINODE"),
+        "num_gpus": num_gpus,
         "tp": tp,
         "ep": ep,
         "dp_attention": dp_attention,

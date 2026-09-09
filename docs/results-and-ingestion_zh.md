@@ -190,7 +190,13 @@ master 配置中的 DRAM 标签不代表实际使用了主机缓存。
 
 每条非空 JSONL 记录都会增加 `records_total`。`metadata.benchmark_phase` 不等于 `profiling` 的记录是 warmup 诊断，会被排除。含真值 `error` 的记录也会被排除并分类。没有 phase 的旧记录按 profiling 处理。保留记录数成为 `num_requests_successful`。完整计数保存在 `request_accounting` 中，包括 profiled、总丢弃、warmup 丢弃、错误丢弃和 `error_categories`。
 
-AgentX 聚合的顶层身份和拓扑字段与基准摄取兼容。重要 AgentX 字段包括：
+AgentX 聚合的顶层身份和拓扑字段与基准摄取兼容。
+
+`num_gpus` 明确记录共享处理器使用的物理 GPU 数。单节点运行使用
+`tp * pp * pcp_size`，EP 和 DCP 共享设备。使用结果时应优先读取该字段，
+避免仅根据并行参数推断 GPU 数。
+
+其他重要 AgentX 字段包括：
 
 | 字段组 | 重要字段 |
 | --- | --- |

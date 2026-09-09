@@ -198,7 +198,13 @@ master-config DRAM labels do not establish actual host-cache use.
 
 Every nonblank JSONL record increments `records_total`. Records with `metadata.benchmark_phase` other than `profiling` are warmup diagnostics and are excluded. Records with a truthy `error` are also excluded and categorized. Older records with no phase are treated as profiling. The retained count becomes `num_requests_successful`. The full accounting is preserved in `request_accounting` with profiled, total dropped, warmup dropped, error dropped, and `error_categories` fields.
 
-The AgentX aggregate has top-level identity and topology fields compatible with benchmark ingestion. Important AgentX fields include:
+The AgentX aggregate has top-level identity and topology fields compatible with benchmark ingestion.
+
+`num_gpus` explicitly records the physical count used by the shared processor.
+For single-node runs this is `tp * pp * pcp_size`; EP and DCP share devices.
+Consumers should prefer this count over inferring it from parallelism labels.
+
+Other important AgentX fields include:
 
 | Field group | Important fields |
 | --- | --- |
