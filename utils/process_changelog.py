@@ -430,6 +430,10 @@ def main():
         raise ValueError("No valid YAML entries found in the changelog additions.")
 
     parsed_entries = [ChangelogEntry.model_validate(entry) for entry in changelog_data]
+    if any(entry.no_evals for entry in parsed_entries) and (
+        args.all_evals or args.evals_only
+    ):
+        raise ValueError("no-evals entries cannot use all-evals or evals-only modifiers")
     has_append_only = any(entry.append_only for entry in parsed_entries)
     if has_append_only and not all(entry.append_only for entry in parsed_entries):
         raise ValueError(
@@ -522,7 +526,7 @@ def main():
                     head_results = append_only_delta(base_results, head_results)
                 all_benchmark_results.extend(head_results)
 
-        if entry.append_only:
+        if entry.append_only or entry.no_evals:
             continue
 
         eval_groups = group_unseen_scenarios(
