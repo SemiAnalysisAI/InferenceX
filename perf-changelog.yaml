@@ -7031,4 +7031,4 @@
     - "Use the committed thinking-on golden synthetic acceptance target for throughput and real DSpark verification for evaluation."
     - "Select the FlashMLA sparse DeepSeek-V4 attention backend and route draft-model jobs to the DSpark-specific benchmark script."
     - "Use the official vLLM image as shipped with CPU DRAM key-value cache offloading."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2946
