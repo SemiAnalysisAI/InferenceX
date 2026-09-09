@@ -13,6 +13,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 import xml.etree.ElementTree as ET
 
 import ci
@@ -68,7 +69,9 @@ def prepare(config: dict) -> tuple[dict, dict]:
     runtime = config["runtime"]
     ci.need(Path(runtime["rootfs"]).is_dir() and Path(runtime["ready_marker"]).is_file(), "Prepared persistent runtime/readiness missing")
     ci.need(ci.digest(runtime["entry"]) == runtime["entry_sha256"], "Persistent entry script changed")
-    ci.need(ci.host_path(config, runtime["python"]).is_file(), "Prepared interpreter missing")
+    interpreter = ci.host_path(config, runtime["python"])
+    # Absolute symlinks resolve inside Enroot, not against the submit host root.
+    ci.need(interpreter.is_file() or interpreter.is_symlink(), "Prepared interpreter missing")
     ci.need(ci.digest(config["spec"]["path"]) == config["spec"]["sha256"], "Prepared specification changed")
     spec = validate_gpu_job(ci.read(config["spec"]["path"]))
     approval = spec["authorization"]
@@ -79,16 +82,16 @@ def prepare(config: dict) -> tuple[dict, dict]:
 
 
 def source_target(config: dict, run_ids: list[str]) -> dict:
-    """Join trusted GitHub runs to sealed task-owned persistent hardware receipts."""
-    from export_ci import REPOSITORY, source_ids, trusted_source
+    """Join verified GitHub runs to sealed task-owned persistent hardware receipts."""
+    from export_ci import REPOSITORY, source_ids, verified_execution
     run_ids = source_ids(",".join(run_ids))
     results = Path(config["workspace"]["host"]) / "results" / config["task_id"]
     target = {"node": None, "gpu_uuids": None, "sources": []}
     for run_id in run_ids:
-        trusted, artifact = trusted_source(run_id)
-        ci.need(trusted["status"] == "completed" and trusted["conclusion"] == "success", "Inventory requires completed source execution")
-        attempt, sha = str(trusted["runAttempt"]), trusted["headSha"]
-        ci.need(attempt.isdigit() and re.fullmatch(r"[0-9a-f]{40}", sha), "Invalid trusted source identity")
+        source_ci, artifact = verified_execution(run_id)
+        ci.need(source_ci["status"] == "completed" and source_ci["conclusion"] == "success", "Inventory requires completed source execution")
+        attempt, sha = str(source_ci["runAttempt"]), source_ci["headSha"]
+        ci.need(attempt.isdigit() and re.fullmatch(r"[0-9a-f]{40}", sha), "Invalid verified source identity")
         directory = results / f"github-{run_id}-{attempt}"
         ci.need(directory.is_dir() and not directory.is_symlink(), "Original task-owned persistent source missing")
         sealed = {}
@@ -109,7 +112,7 @@ def source_target(config: dict, run_ids: list[str]) -> dict:
                 and manifest["git_commit"] == state["source_sha"] == context["source_sha"] == sha,
                 "Source CI/Git/task identities disagree")
         ci.need(manifest["ci"] == state["ci"] and manifest["ci"]["repository"] == REPOSITORY
-                and manifest["ci"]["run_url"] == trusted["url"] and manifest["exit_code"] == state["exit_code"] == 0
+                and manifest["ci"]["run_url"] == source_ci["url"] and manifest["exit_code"] == state["exit_code"] == 0
                 and state["phase"] == "complete" and state.get("smoke_completed") is True, "Source execution did not complete cleanly")
         allocation = manifest["slurm_allocation"]
         ci.need(allocation == state["allocation"] == context["allocation"], "Source allocation receipts disagree")
@@ -125,7 +128,7 @@ def source_target(config: dict, run_ids: list[str]) -> dict:
         ci.need(target["node"] in (None, node) and target["gpu_uuids"] in (None, devices), "Source runs used different physical hardware")
         target.update(node=node, gpu_uuids=devices)
         target["sources"].append({"run_id": run_id, "run_attempt": attempt, "git_commit": sha,
-                                  "trusted_ci": trusted, "artifact": artifact, "receipt_hashes": {name: sealed[name] for name in names}})
+                                  "verified_ci": source_ci, "artifact": artifact, "receipt_hashes": {name: sealed[name] for name in names}})
     return target
 
 def collect_inventory(config: dict, output: Path, *, source_run_ids: list[str] | None = None) -> int:
@@ -244,6 +247,10 @@ def inside(run_dir: Path) -> int:
     try:
         context = ci.read(run_dir / "context.json")
         config = ci.validate_config(context["config"])
+        ci.need(os.access(config["runtime"]["python"], os.X_OK)
+                and Path(config["runtime"]["python"]).samefile(sys.executable), "Inventory is not running the configured container interpreter")
+        interpreter = {"configured_path": config["runtime"]["python"], "executable": sys.executable,
+                       "version": sys.version.split()[0], "sha256": ci.digest(sys.executable)}
         job, step = context["allocation"]["identity"]["JobId"], os.environ.get("SLURM_STEP_ID", "")
         ci.need(os.environ.get("SLURM_JOB_ID") == job and re.fullmatch(r"[0-9]+", step)
                 and os.environ.get("SLURMD_NODENAME") == context["node"]
@@ -279,7 +286,7 @@ def inside(run_dir: Path) -> int:
         tdp = classify_tdp((run_dir / "nvidia-smi.xml").read_text(), devices)
         ci.write(run_dir / "hardware-profile.json", {"schema_version": 1, "observation_kind": "read_only_inventory",
                  "observed_at": ci.now(), "source_sha": context["source_sha"], "git_commit": context["source_sha"],
-                 "ci": context["ci"], "source_files": context["package_files"], "source_hardware": context["target"],
+                 "ci": context["ci"], "source_files": context["package_files"], "source_hardware": context["target"], "interpreter": interpreter,
                  "run_id": context["run_id"], "run_attempt": context["run_attempt"], "slurm": binding,
                  "gpu_uuids": devices, "gpus": after["gpus"], "dmi": dmi, "power_configuration": power,
                  "hardware_variant": tdp["hardware_variant"], "variant_status": tdp["status"], "tdp": tdp,
@@ -306,8 +313,14 @@ def main() -> int:
     if args.inside:
         return inside(args.inside)
     ci.need(args.config is not None and args.output is not None, "--config and --output required")
-    from export_ci import source_ids
-    return collect_inventory(ci.read(args.config), args.output, source_run_ids=source_ids(args.source_run_ids or os.environ.get("H3_SOURCE_RUN_IDS", "")))
+    try:
+        from export_ci import source_ids
+        return collect_inventory(ci.read(args.config), args.output, source_run_ids=source_ids(args.source_run_ids or os.environ.get("H3_SOURCE_RUN_IDS", "")))
+    except (Exception, KeyboardInterrupt) as error:
+        args.output.mkdir(parents=True, exist_ok=True)
+        ci.write(args.output / "preflight-error.json", {"operation": "hardware_inventory", "error": str(error), "exit_code": 2, "recorded_at": ci.now()})
+        print(str(error), file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":

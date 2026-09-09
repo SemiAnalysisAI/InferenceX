@@ -72,7 +72,7 @@ series remain downloadable even when derived measurements are withheld.
 Integration uses the shared InferenceX trapezoidal power integrator with linear
 boundary interpolation and no extrapolation. UUID/ownership, finite readings,
 ordered timestamps, phase overlap, clock agreement and maximum-gap checks gate
-power. The allowed gap is `max(3 seconds, 3 × requested sampling interval)`.
+power. The allowed gap is `3 × requested sampling interval` (3 seconds for these runs).
 Legacy UTC event reconstruction must agree with recorded monotonic durations;
 its startup window can be withheld when a boundary is not covered. H200 NVML
 power readings have a trailing averaging window, so phase edges also have sensor

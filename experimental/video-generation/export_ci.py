@@ -46,7 +46,7 @@ def api(path: str) -> dict:
     return json.loads(payload)
 
 
-def trusted_source(run_id: str) -> tuple[dict, dict]:
+def verified_execution(run_id: str) -> tuple[dict, dict]:
     run = api("actions/runs/" + run_id)
     current_export = (run_id == os.environ.get("GITHUB_RUN_ID")
                       and str(run["run_attempt"]) == os.environ.get("GITHUB_RUN_ATTEMPT")
@@ -69,9 +69,13 @@ def trusted_source(run_id: str) -> tuple[dict, dict]:
     ci.need(not artifact["expired"] and 0 < artifact["size_in_bytes"] <= 2 * 1024**3
             and artifact["workflow_run"]["id"] == run["id"]
             and artifact["workflow_run"]["head_sha"] == run["head_sha"], "Artifact identity, size or retention invalid")
+    public_artifact = {key: artifact.get(key) for key in
+                       ("id", "name", "digest", "size_in_bytes", "expired")}
+    public_artifact["workflow_run"] = {key: artifact["workflow_run"][key] for key in ("id", "head_sha")}
     return ({"databaseId": run["id"], "headSha": run["head_sha"], "runAttempt": run["run_attempt"],
              "event": run["event"], "status": run["status"], "conclusion": run["conclusion"],
-             "url": run["html_url"], "jobs": jobs["jobs"]}, artifact)
+             "url": run["html_url"], "jobs": [{key: job[key] for key in ("id", "name", "status", "conclusion")}
+                                             for job in jobs["jobs"]]}, public_artifact)
 
 
 def verified_hardware(root: Path, run_id: str, attempt: str, sha: str) -> dict:
@@ -127,14 +131,14 @@ def publish(run_ids: list[str], output: Path, hardware: Path | None) -> int:
     for source in run_ids:
         target = output / ("source-" + source)
         try:
-            trusted, artifact = trusted_source(source)
+            source_ci, artifact = verified_execution(source)
             subprocess.run(["gh", "run", "download", source, "--repo", REPOSITORY,
                             "--name", artifact["name"], "--dir", str(target)], check=True, timeout=180)
             original_checksums = (target / "SHA256SUMS").read_bytes()
             result = write_result(target, producer={**producer, "source_artifact": artifact},
-                                  source_ci=trusted, hardware_profile=profile)
+                                  source_ci=source_ci, hardware_profile=profile)
             (target / "source-SHA256SUMS").write_bytes(original_checksums)
-            ci.write(target / "source-ci.json", trusted)
+            ci.write(target / "source-ci.json", source_ci)
             ci.write(target / "source-artifact.json", artifact)
             if hardware is not None:
                 shutil.copytree(hardware, target / "hardware")

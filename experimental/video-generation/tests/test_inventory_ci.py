@@ -1,5 +1,6 @@
 """Fake-scheduler inventory tests; no GPU or model execution."""
 import copy
+import sys
 from pathlib import Path
 
 import pytest
@@ -102,6 +103,7 @@ def test_entry_retains_step_before_rejecting_changed_runtime(tmp_path, monkeypat
 
 def inside_context(tmp_path, monkeypatch):
     cfg = config(tmp_path)
+    cfg["runtime"]["python"] = sys.executable
     cfg["resources"] = dict(inv.RESOURCES)
     receipt, record = allocation(tmp_path)
     ci.write(tmp_path / "context.json", {"config": cfg, "allocation": receipt, "node": record["NodeList"],
@@ -222,15 +224,15 @@ def saved_source(tmp_path, run_id, *, node="h200-node", devices=None):
                 "ci": metadata, "exit_code": 0, "slurm_allocation": receipt, "evidence": ci.inventory(directory)}
     ci.write(directory / "manifest.json", manifest)
     (directory / "SHA256SUMS").write_text("".join(f"{digest}  {name}\n" for name, digest in ci.inventory(directory).items()))
-    trusted = {"databaseId": int(run_id), "runAttempt": 1, "headSha": "b" * 40, "status": "completed", "conclusion": "success", "url": url}
-    return directory, trusted
+    source_ci = {"databaseId": int(run_id), "runAttempt": 1, "headSha": "b" * 40, "status": "completed", "conclusion": "success", "url": url}
+    return directory, source_ci
 
 
 def test_source_pin_joins_both_successful_runs_to_same_hardware(tmp_path, monkeypatch):
     import export_ci
     _, first = saved_source(tmp_path, "101")
     _, second = saved_source(tmp_path, "102")
-    monkeypatch.setattr(export_ci, "trusted_source", lambda run: ({"101": first, "102": second}[run], {"name": "source-artifact"}))
+    monkeypatch.setattr(export_ci, "verified_execution", lambda run: ({"101": first, "102": second}[run], {"name": "source-artifact"}))
     target = inv.source_target(config(tmp_path), ["101", "102"])
     assert target["node"] == "h200-node" and len(target["gpu_uuids"]) == 4
     assert [source["run_id"] for source in target["sources"]] == ["101", "102"]
@@ -239,9 +241,9 @@ def test_source_pin_joins_both_successful_runs_to_same_hardware(tmp_path, monkey
 
 def test_source_pin_rejects_tampered_receipt_before_allocation(tmp_path, monkeypatch):
     import export_ci
-    directory, trusted = saved_source(tmp_path, "101")
+    directory, source_ci = saved_source(tmp_path, "101")
     (directory / "binding.json").write_text("{}")
-    monkeypatch.setattr(export_ci, "trusted_source", lambda run: (trusted, {}))
+    monkeypatch.setattr(export_ci, "verified_execution", lambda run: (source_ci, {}))
     with pytest.raises(ValueError, match="differs from its seal"):
         inv.source_target(config(tmp_path), ["101"])
 
@@ -250,7 +252,7 @@ def test_source_pin_rejects_different_historical_nodes(tmp_path, monkeypatch):
     import export_ci
     _, first = saved_source(tmp_path, "101")
     _, second = saved_source(tmp_path, "102", node="other-h200")
-    monkeypatch.setattr(export_ci, "trusted_source", lambda run: ({"101": first, "102": second}[run], {}))
+    monkeypatch.setattr(export_ci, "verified_execution", lambda run: ({"101": first, "102": second}[run], {}))
     with pytest.raises(ValueError, match="different physical hardware"):
         inv.source_target(config(tmp_path), ["101", "102"])
 
@@ -267,8 +269,53 @@ def test_inventory_rejects_valid_slurm_assignment_of_different_historical_gpu(tm
 
 def test_source_pin_rejects_local_receipts_for_another_trusted_commit(tmp_path, monkeypatch):
     import export_ci
-    _, trusted = saved_source(tmp_path, "101")
-    trusted["headSha"] = "c" * 40
-    monkeypatch.setattr(export_ci, "trusted_source", lambda run: (trusted, {}))
+    _, source_ci = saved_source(tmp_path, "101")
+    source_ci["headSha"] = "c" * 40
+    monkeypatch.setattr(export_ci, "verified_execution", lambda run: (source_ci, {}))
     with pytest.raises(ValueError, match="CI/Git/task identities"):
         inv.source_target(config(tmp_path), ["101"])
+
+
+def test_prepare_accepts_interpreter_symlink_resolved_only_inside_container(tmp_path, spec):
+    cfg = prepared(tmp_path, spec)
+    cfg["runtime"]["python"] = "/usr/bin/python3"
+    rootfs = Path(cfg["runtime"]["rootfs"])
+    interpreter = rootfs / "usr/bin/python3"
+    interpreter.parent.mkdir(parents=True)
+    interpreter.symlink_to("/etc/alternatives/h3-inventory-test-python")
+    target = rootfs / "etc/alternatives/h3-inventory-test-python"
+    target.parent.mkdir(parents=True)
+    target.write_text("container-only interpreter target")
+    assert interpreter.is_symlink() and not interpreter.is_file()
+    assert inv.prepare(cfg)[0]["runtime"]["python"] == "/usr/bin/python3"
+    interpreter.unlink()
+    with pytest.raises(ValueError, match="Prepared interpreter missing"):
+        inv.prepare(cfg)
+
+
+@pytest.mark.parametrize("fault", ["source_ids", "config"])
+def test_cli_retains_preflight_errors_without_allocation(tmp_path, monkeypatch, capsys, fault):
+    import sys
+    config_path = tmp_path / "invalid.json"
+    ci.write(config_path, {})
+    output = tmp_path / "diagnostics"
+    monkeypatch.setattr(sys, "argv", ["inventory_ci.py", "--config", str(config_path), "--output", str(output),
+                                     "--source-run-ids", "invalid" if fault == "source_ids" else "101"])
+    monkeypatch.setattr(ci, "allocate", lambda *args, **kwargs: pytest.fail("Preflight must not allocate"))
+    assert inv.main() == 2
+    error = ci.read(output / "preflight-error.json")
+    assert error["exit_code"] == 2 and error["error"]
+    assert error["error"] in capsys.readouterr().err
+
+
+def test_inside_rejects_different_interpreter_before_gpu_inventory(tmp_path, monkeypatch):
+    inside_context(tmp_path, monkeypatch)
+    other = tmp_path / "different-python"
+    other.write_text("test-only executable")
+    other.chmod(0o755)
+    context = ci.read(tmp_path / "context.json")
+    context["config"]["runtime"]["python"] = str(other)
+    ci.write(tmp_path / "context.json", context)
+    monkeypatch.setattr(inv, "cuda_devices", lambda: pytest.fail("Reject wrong interpreter before any GPU query"))
+    assert inv.inside(tmp_path) == 2
+    assert "configured container interpreter" in ci.read(tmp_path / "step-result.json")["error"]

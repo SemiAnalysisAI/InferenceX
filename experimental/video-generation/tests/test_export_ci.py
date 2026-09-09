@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 import hashlib
+from io import BytesIO
 import json
 from pathlib import Path
 import sys
@@ -13,6 +14,7 @@ import export_ci
 
 REPO = "SemiAnalysisAI/InferenceX"
 SHA = "a" * 40
+REAL_API = export_ci.api
 
 
 @pytest.fixture
@@ -44,19 +46,39 @@ def test_source_ids_preserve_order_without_shell_interpretation():
     assert export_ci.source_ids("34293342829,34291306687") == ["34293342829", "34291306687"]
 
 
+def test_authentication_stays_out_of_saved_public_ci_receipts(github, monkeypatch, tmp_path):
+    run, jobs, artifact = github
+    sentinel = "CPU-test-authentication-sentinel"
+    for value in (run, jobs["jobs"][0], artifact):
+        value["unexpected_auth_field"] = sentinel
+    responses = iter((run, jobs, {"artifacts": [artifact]}))
+    def response(request, timeout):
+        assert request.get_header("Authorization") == "Bearer " + sentinel
+        assert request.full_url.startswith("https://api.github.com/repos/" + REPO + "/")
+        return BytesIO(json.dumps(next(responses)).encode())
+    monkeypatch.setenv("GH_TOKEN", sentinel)
+    monkeypatch.setattr(export_ci, "api", REAL_API)
+    monkeypatch.setattr(export_ci, "urlopen", response)
+    source_ci, source_artifact = export_ci.verified_execution("123")
+    path = tmp_path / "public-ci.json"
+    export_ci.ci.write(path, {"source_ci": source_ci, "artifact": source_artifact})
+    assert sentinel not in path.read_text()
+    assert source_ci["databaseId"] == 123 and source_artifact["id"] == 789
+
+
 @pytest.mark.parametrize("job_name", ["h3-video / p1.500 | H3 video H200 smoke", "p1 | H3 video H200 smoke"])
-def test_trusted_source_returns_exact_attempt_and_artifact(github, job_name):
+def test_verified_execution_returns_exact_attempt_and_artifact(github, job_name):
     github[1]["jobs"][0]["name"] = job_name
-    trusted, artifact = export_ci.trusted_source("123")
-    assert (trusted["databaseId"], trusted["headSha"], trusted["runAttempt"]) == (123, SHA, 1)
-    assert trusted["jobs"][0]["id"] == 456
+    source_ci, artifact = export_ci.verified_execution("123")
+    assert (source_ci["databaseId"], source_ci["headSha"], source_ci["runAttempt"]) == (123, SHA, 1)
+    assert source_ci["jobs"][0]["id"] == 456
     assert artifact["id"] == 789
 
 
 @pytest.mark.parametrize("defect", ["fork", "repository", "event", "failed", "other_in_progress",
                                     "run_id", "job_failed", "job_not_completed", "job_name", "duplicate_job",
                                     "expired", "artifact_commit", "artifact_run", "empty_artifact", "oversized_artifact"])
-def test_trusted_source_rejects_wrong_execution_or_artifact_identity(github, defect):
+def test_verified_execution_rejects_wrong_execution_or_artifact_identity(github, defect):
     run, jobs, artifact = github
     if defect == "fork":
         run["head_repository"]["full_name"] = "someone/InferenceX"
@@ -89,7 +111,7 @@ def test_trusted_source_rejects_wrong_execution_or_artifact_identity(github, def
     else:
         artifact["size_in_bytes"] = 2 * 1024**3 + 1
     with pytest.raises(ValueError):
-        export_ci.trusted_source("123")
+        export_ci.verified_execution("123")
 
 
 @pytest.mark.parametrize("mismatch", [None, "commit", "attempt"])
@@ -103,11 +125,11 @@ def test_current_run_exception_requires_exact_producer_and_finished_h3_job(githu
         monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "2")
     if mismatch:
         with pytest.raises(ValueError):
-            export_ci.trusted_source("123")
+            export_ci.verified_execution("123")
     else:
-        trusted, _ = export_ci.trusted_source("123")
-        assert trusted["status"] == "in_progress"
-        assert trusted["jobs"][0]["conclusion"] == "success"
+        source_ci, _ = export_ci.verified_execution("123")
+        assert source_ci["status"] == "in_progress"
+        assert source_ci["jobs"][0]["conclusion"] == "success"
 
 
 def fake_download(monkeypatch):
