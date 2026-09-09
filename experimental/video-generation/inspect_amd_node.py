@@ -59,12 +59,13 @@ def inspect_node(run_dir: Path) -> None:
             identities = []
             for pid in sorted(pids):
                 proc = Path("/proc") / str(pid)
-                try:
-                    identities.append({"pid": pid, "exe": str((proc / "exe").resolve(strict=True)),
-                                       "comm": (proc / "comm").read_text().strip(),
-                                       "status": (proc / "status").read_text(), "cgroup": (proc / "cgroup").read_text()})
-                except OSError as error:
-                    identities.append({"pid": pid, "identity_error": str(error)})
+                identity = {"pid": pid}
+                for field in ("exe", "comm", "status", "cgroup"):
+                    try:
+                        identity[field] = str((proc / field).resolve(strict=True)) if field == "exe" else (proc / field).read_text().strip()
+                    except OSError as error:
+                        identity[field + "_error"] = str(error)
+                identities.append(identity)
             ci.write(run_dir / "observed-processes.json", identities)
     cache = Path("/var/lib/squash")
     images = [{"path": str(p), "size_bytes": p.stat().st_size} for p in sorted(cache.glob("*sglang*rocm*.sqsh"))]

@@ -25,11 +25,11 @@ def prepare_source(workspace: Path) -> Path:
 
 
 PROBE = r'''
-import ctypes, importlib, importlib.metadata as metadata, json, os, sys
+import ctypes, importlib, importlib.metadata as metadata, json, os, shutil, subprocess, sys
 from pathlib import Path
 out = Path(sys.argv[1])
 result = {"python": sys.executable, "packages": {}, "imports": {}, "generation_executed": False}
-for name in ("torch", "torchvision", "av", "numpy", "diffusers", "transformers", "sglang", "aiter", "triton"):
+for name in ("torch", "torchvision", "av", "numpy", "diffusers", "transformers", "sglang", "aiter", "triton", "amdsmi"):
     try:
         module = importlib.import_module(name)
         result["imports"][name] = {"path": getattr(module, "__file__", None)}
@@ -55,6 +55,27 @@ try:
     result["hip_devices"] = devices
 except Exception as error:
     result["device_error"] = str(error)
+result["smi_observations"] = []
+smi = shutil.which("amd-smi")
+if smi:
+    for option in ("version", "list", "static", "metric", "process"):
+        try:
+            call = subprocess.run([smi, option, "--json"], capture_output=True, text=True, timeout=20)
+            result["smi_observations"].append({"option": option, "path": smi, "exit_code": call.returncode,
+                                               "stdout": call.stdout, "stderr": call.stderr})
+        except Exception as error:
+            result["smi_observations"].append({"option": option, "error": str(error)})
+try:
+    import amdsmi
+    amdsmi.amdsmi_init()
+    result["smi_memory_bytes"] = [{"pci_bdf": amdsmi.amdsmi_get_gpu_device_bdf(handle),
+        "uuid": amdsmi.amdsmi_get_gpu_device_uuid(handle),
+        "total_bytes": amdsmi.amdsmi_get_gpu_memory_total(handle, amdsmi.AmdSmiMemoryType.VRAM),
+        "used_bytes": amdsmi.amdsmi_get_gpu_memory_usage(handle, amdsmi.AmdSmiMemoryType.VRAM)}
+        for handle in amdsmi.amdsmi_get_processor_handles()]
+    amdsmi.amdsmi_shut_down()
+except Exception as error:
+    result["smi_api_error"] = str(error)
 result["environment"] = {k: os.environ.get(k) for k in ("ROCR_VISIBLE_DEVICES", "HIP_VISIBLE_DEVICES", "CUDA_VISIBLE_DEVICES", "PYTHONPATH")}
 out.write_text(json.dumps(result, indent=2) + "\n")
 print(json.dumps(result))
