@@ -1,20 +1,28 @@
-name: "minimax-m3-vllm-agg-gb200-tp4-vllm-simple-agentic"
+name: "minimax-m3-vllm-agg-gb200-tp4-agentic-nightly-native"
 
 model:
   path: "minimax-m3-nvfp4"
-  container: "vllm/vllm-openai:v0.28.0"
+  container: "vllm/vllm-openai:nightly-9ea8f3ffc354901b740f0b31988900897b7221d7"
   precision: "fp4"
 
 identity:
   model: { repo: "nvidia/MiniMax-M3-NVFP4" }
-  container: { image: "vllm/vllm-openai:v0.28.0" }
-  frameworks: { dynamo: "1.5.0.dev20260906" }
+  container: { image: "vllm/vllm-openai:nightly-9ea8f3ffc354901b740f0b31988900897b7221d7" }
+  frameworks: { dynamo: "1.5.0.dev20260908" }
 
-dynamo: { version: "1.5.0.dev20260906", install: true }
+dynamo: { version: "1.5.0.dev20260908", install: true }
 environment: { ETCD_LEASE_TTL: "7200" }
+
 slurm: { time_limit: "12:00:00" }
 health_check: { max_attempts: 2160, interval_seconds: 10 }
-resources: { gpu_type: "gb200", gpus_per_node: 4, agg_nodes: 1, agg_workers: 1, gpus_per_agg: 4 }
+
+resources:
+  gpu_type: "gb200"
+  gpus_per_node: 4
+  agg_nodes: 1
+  agg_workers: 1
+  gpus_per_agg: 4
+
 infra: { etcd_nats_dedicated_node: false, nats_max_payload_mb: 32 }
 
 frontend:
@@ -22,11 +30,7 @@ frontend:
   enable_multiple_frontends: false
   env: { DYN_TCP_REQUEST_TIMEOUT: "60" }
   args:
-    dyn-chat-processor: "vllm"
     trust-remote-code: true
-    tool-call-parser: "minimax_m3"
-    reasoning-parser: "minimax_m3"
-    enable-auto-tool-choice: true
     router-mode: "kv"
     router-kv-events: true
     router-temperature: "0"
@@ -43,7 +47,6 @@ backend:
     VLLM_FLOAT32_MATMUL_PRECISION: "high"
     VLLM_FLASHINFER_ALLREDUCE_BACKEND: "trtllm"
     VLLM_LOG_STATS_INTERVAL: "1"
-    VLLM_USE_SIMPLE_KV_OFFLOAD: "1"
     NCCL_CUMEM_ENABLE: "1"
     NCCL_MNNVL_ENABLE: "1"
     NCCL_NVLS_ENABLE: "1"
@@ -60,15 +63,14 @@ backend:
       enable-prefix-caching: true
       kv-cache-metrics: true
       attention-config: '{"backend":"FLASHINFER","use_trtllm_attention":true,"indexer_kv_dtype":"fp8"}'
+      compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE"}'
       block-size: 128
       gpu-memory-utilization: 0.9
       max-model-len: 1048576
       language-model-only: true
       kv-cache-dtype: "fp8"
-      speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN"}'
-      kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":777389080576,"cpu_bytes_to_use_per_rank":194347270144,"lazy_offload":true}}'
+      speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASHINFER"}'
       stream-interval: 20
-      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY"}'
       max-cudagraph-capture-size: 512
       max-num-batched-tokens: 16384
       no-enable-flashinfer-autotune: true
