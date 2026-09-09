@@ -7004,8 +7004,10 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Enable shared deployment power telemetry for the existing B200 Kimi-K3 C1 recipe. Pin its current two-node vLLM runtime plus AgentX measurement-window support at srt-slurm 80d7203e424f903c9017de4608ee2044afce9574; join and validate power through the existing adapter after the job, retaining invalid diagnostics before failure. Other concurrency recipes and fixed-sequence producer pins are unchanged."
-    - "为现有 B200 Kimi-K3 C1 配方启用共享部署功耗遥测，固定兼容双节点 vLLM 与 AgentX 测量窗口的 producer 版本，任务结束后通过现有适配器校验并保留失败诊断。其他并发配方与固定序列 producer 版本保持不变。"
-    - "Correct all seven B200 K3 master rows to DCP8 and KV offload none, removing the inactive Mooncake offload-backend label. Serving recipes, the configured Mooncake connector, and synthetic acceptance remain unchanged; only C1 enables power telemetry. Historical artifacts retain their original DCP1/DRAM metadata."
-    - "将七个 B200 K3 master 配置修正为 DCP8、KV offload none，并移除未启用的 Mooncake offload-backend 标签。服务配方、已配置的 Mooncake connector 与合成接受率保持不变；仍仅 C1 启用功耗遥测。历史工件保留原有 DCP1/DRAM 元数据。"
+    - "Enable shared deployment power telemetry for all seven existing B200 Kimi-K3 recipes (C1/4/8/14/24/48/96), each with its own AgentX measurement window. Pin the current two-node vLLM runtime and shared power support at srt-slurm 80d7203e424f903c9017de4608ee2044afce9574; join and validate power through the existing adapter after the job, retaining invalid diagnostics before failure. Fixed-sequence producer pins remain unchanged."
+    - "为七个现有 B200 Kimi-K3 配方（C1/4/8/14/24/48/96）启用共享部署功耗遥测，各自声明 AgentX 测量窗口。固定兼容双节点 vLLM 与共享功耗采集的 producer 版本，任务结束后通过现有适配器校验并保留失败诊断；固定序列 producer 版本保持不变。"
+    - "Reuse C1 run 34384240556 as representative hardware-path evidence: all 16 GPU UUIDs and the full profiling window passed power validation with uploaded artifacts. Its 235/236 successful profiling requests and 11 warmup errors reject a clean comparison. C4/8/14/24/48/96 measured-data cells remain missing; their serving, model, and synthetic-acceptance settings are unchanged."
+    - "复用 C1 运行 34384240556 作为共享硬件路径证据：全部 16 个 GPU UUID 和完整 profiling 窗口通过功耗校验，工件已上传。该运行仅 235/236 个 profiling 请求成功，另有 11 个 warmup 错误，不能用于无错误的对比。C4/8/14/24/48/96 仍缺少实测数据；服务、模型和合成接受率设置保持不变。"
+    - "Correct all seven B200 K3 master rows to DCP8 and KV offload none, removing the inactive Mooncake offload-backend label. The configured Mooncake connector and serving behavior remain unchanged. Historical artifacts retain their original DCP1/DRAM metadata."
+    - "将七个 B200 K3 master 配置修正为 DCP8、KV offload none，并移除未启用的 Mooncake offload-backend 标签。已配置的 Mooncake connector 与服务行为保持不变。历史工件保留原有 DCP1/DRAM 元数据。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2926
