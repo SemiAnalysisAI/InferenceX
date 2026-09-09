@@ -1301,7 +1301,6 @@ class TestGenerateFullSweepSingleNode:
         )
         # 2 amd nodes (mi300x-amd_0, mi300x-amd_1), 1 conc value = 2 entries
         assert len(result) == 2
-        assert all("amd" in entry["runner"] for entry in result)
         runners = [entry["runner"] for entry in result]
         assert "mi300x-amd_0" in runners
         assert "mi300x-amd_1" in runners
@@ -1348,8 +1347,6 @@ class TestGenerateFullSweepMultiNode:
             sample_runner_config
         )
         entry = result[0]
-        assert "prefill" in entry
-        assert "decode" in entry
         assert entry["prefill"]["num-worker"] == 5
         assert entry["decode"]["num-worker"] == 1
         assert entry["disagg"] is True
@@ -1397,7 +1394,6 @@ class TestGenerateFullSweepMultiNode:
             sample_runner_config
         )
         entry = result[0]
-        assert isinstance(entry["conc"], list)
         assert entry["conc"] == [2150]
 
     def test_single_node_flag_skips_multinode(self, sample_multinode_config, sample_runner_config, full_sweep_args_single_node):
@@ -1460,7 +1456,6 @@ class TestGenerateFullSweepMultiNode:
         )
         # Only h200-cw_0 and h200-cw_1 match "cw" filter
         assert len(result) == 2
-        assert all("cw" in entry["runner"] for entry in result)
         runners = [entry["runner"] for entry in result]
         assert "h200-cw_0" in runners
         assert "h200-cw_1" in runners

@@ -119,21 +119,20 @@ if require_agentic_kv_offload_backend hicache; then
     # against a ~0.97 theoretical ceiling, so every turn re-prefills its
     # whole history; the host tier restores those hits at C2C bandwidth.
     # GLM-5.2 is DSA/MLA-family (attention_backend=dsa): every TP rank holds
-    # complete per-token KV. The original ratio 0.75 gives the main target
-    # host pool only 1,257,728 token slots, which saturates on the c12/c16
-    # working sets. Use an absolute main-pool size at those two points so the
-    # allocation is stable across changes in the HBM pool size. In SGLang
-    # v0.5.16, --hicache-size directly sizes only the target KV host pool;
-    # the DSA indexer and MTP draft pools inherit its token-slot count and use
-    # their own smaller bytes/token. A 270 GB target pool was measured as
-    # 270.00 + 61.88 + 3.46 = 335.34 GB/rank, or 2.683 TB across TP8, with
-    # 6,009,728 slots in each pool. Keep ratio 0.75 on the lower
-    # concurrencies, where the smaller working set does not need the extra
-    # pinned memory.
+    # complete per-token KV. The ratio 0.75 gives the main target host pool
+    # only 1,257,728 token slots. Use a 169 GB/rank absolute target pool at
+    # c12/c16 and keep ratio mode at the lower concurrencies, where the
+    # smaller working set does not need the larger pinned allocation.
+    #
+    # cluster:b200-nscale advertises 2,063,920 MiB and this config exposes 80%,
+    # giving the benchmark 1,731 GB. A 169 GB/rank packed target+MTP pool plus
+    # the coupled 38.73 GB/rank DSA indexer uses about 1,662 GB across TP8.
+    # Keep the 270 GB ceiling so deployments with more usable host DRAM can
+    # explicitly override the default.
     DEFAULT_HICACHE_RATIO=0.75
     DEFAULT_HICACHE_SIZE=0
     case "$CONC" in
-        12|16) DEFAULT_HICACHE_SIZE=270 ;;
+        12|16) DEFAULT_HICACHE_SIZE=169 ;;
     esac
     MAX_HICACHE_SIZE=270
     HICACHE_SIZE="${HICACHE_SIZE:-$DEFAULT_HICACHE_SIZE}"
@@ -257,6 +256,14 @@ MEM_FRACTION_STATIC="${MEM_FRACTION_STATIC:-0.83}"
 
 export PYTHONNOUSERSITE=1
 export TORCH_CUDA_ARCH_LIST=10.0
+# Each concurrency in a full sweep is a separate Slurm allocation, while the
+# Nscale home directory is shared. Keep SGLang's FlashInfer autotune, Triton,
+# Inductor, and CUDA JIT caches allocation-local so concurrent cells cannot
+# overwrite the same per-rank runtime-cache files. Non-Slurm launchers can
+# provide an explicit SGLANG_CACHE_DIR override.
+if [[ -n "${SLURM_JOB_ID:-}" ]]; then
+    export SGLANG_CACHE_DIR="${SGLANG_CACHE_DIR:-/tmp/sglang-cache-${SLURM_JOB_ID}}"
+fi
 # Agentic warmup dispatches hundreds of large prompts at once; allow up to
 # 15 minutes of TCP progress before AIPerf declares a connection dead.
 export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
@@ -276,10 +283,9 @@ export SGLANG_TIMEOUT_KEEP_ALIVE=900
 # One curve per model: it was collected on the FP8 checkpoint, and the NVFP4
 # checkpoint ships the same nextn head.
 #
-# SGLANG_SIMULATE_ACC_TOKEN_MODE only exists from SGLang v0.5.16, which is why
-# this recipe pins v0.5.16-cu130 rather than the STP sibling's v0.5.15.post1 --
-# an older image would silently honor ACC_LEN/ACC_METHOD and ignore the
-# token-mode half of the contract.
+# SGLANG_SIMULATE_ACC_TOKEN_MODE only exists from SGLang v0.5.16. An older
+# image would silently honor ACC_LEN/ACC_METHOD and ignore the token-mode half
+# of the contract.
 #
 # EVAL_ONLY leaves simulated acceptance off: it commits drafted tokens
 # regardless of the target logits, so generated text is wrong and the eval

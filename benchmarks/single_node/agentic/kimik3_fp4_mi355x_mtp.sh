@@ -81,6 +81,11 @@ case "$CONC" in
         MAX_NUM_SEQS="${MAX_NUM_SEQS:-4}"
         MAX_BATCHED_TOKENS="${MAX_BATCHED_TOKENS:-8192}"
         ;;
+    44|48|52)
+        SPEC_NUM_TOKENS=0
+        GPU_MEM_UTIL=0.9
+        MAX_NUM_BATCHED_TOKENS=8192
+        ;;
     *)
         DCP_SIZE="${DCP_SIZE:-8}"
         MAX_BATCHED_TOKENS="${MAX_BATCHED_TOKENS:-16384}"
