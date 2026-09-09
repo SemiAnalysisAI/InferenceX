@@ -156,6 +156,7 @@ jobs:
     name: p${{ needs.prepare.outputs.priority }} | ${{ inputs.preflight-only && format('H3 {0} site preflight', needs.prepare.outputs.gpu-model) || inputs.source-run-ids != '' && 'H3 H200 hardware inventory' || format('H3 video {0} smoke', needs.prepare.outputs.gpu-model) }}
     runs-on: >-
       ${{ fromJSON(
+        inputs.preflight-only && format('["self-hosted","cluster:{0}"]', inputs.cluster) ||
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
         format('["self-hosted","cluster:{2}","nodes:1",{0},{1}]',
           toJSON(format('ci-job-{0}-{1}', needs.prepare.outputs.priority, needs.prepare.outputs.queue-token)),
