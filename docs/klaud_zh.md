@@ -23,7 +23,7 @@ PR 检查使用 `claude-opus-5`（Opus 5），关闭 fast mode（`fastMode: fals
 
 两个 agent 都明确获得证据目录的访问权限。检查 agent 使用 Read/Glob/Grep 检查本地内容，每次 Bash 调用只执行一个允许的只读 gh/git 命令，避免 shell 包装和管道。两个 Klaud 工作流均不设置作业/步骤超时或 Bash 超时覆盖，使用 GitHub Actions 默认限制。预取也不设置整体截止时间。`selection.json` 记录延后原因，作业摘要报告所选/延后数量。`review-diagnostics.json` 仅保留时长、轮数、费用等数值指标、按工具汇总的拒绝次数及固定的 Bash 分类（例如 shell 包装或文件过滤）；不包含原始命令、路径、消息、结果或凭据。历史日志只提供拒绝次数，无法还原之前被拒绝的具体命令；新增分类和访问指令仍需实际运行验证。诊断文件缺失不阻止收尾。检查步骤之外的基础设施故障或整个作业被取消仍可能导致无法完成。
 
-私有容量门槛是 **节点利用率严格低于 20%**：`(summary.allocatedNodes + summary.mixedNodes) * 5 < summary.totalNodes`，不做舍入。完全分配和部分使用的节点均计入已使用节点；恰好 20% 时不放行。不扣除预留节点。要求至少有一个空闲节点，避免整个集群不可用时仍以 0% 利用率通过检查。缺失、无效、不一致、过期或不可用的数据均拒绝。硬件匹配只用于初筛；检查阶段必须解析每个实际目标，选择阶段重新检查这些精确 ID。完整物理节点需求的准入仍由调度器负责。
+私有容量门槛是 **节点利用率严格低于 20%**：`(summary.allocatedNodes + summary.mixedNodes) * 5 < summary.totalNodes`，不做舍入。完全分配和部分使用的节点均计入已使用节点；恰好 20% 时不放行。不扣除预留节点。要求至少有一个空闲节点，避免整个集群不可用时仍以 0% 利用率通过检查。缺失、无效、不一致、过期或不可用的数据均拒绝。硬件匹配只用于初筛；检查阶段必须解析每个实际目标，选择阶段重新检查这些精确 ID。完整物理节点需求的准入仍由调度器负责。兼容性按实际读取的字段判断，不依赖 `schemaVersion`；新增字段或版本变化不会排除其他方面均有效的集群。
 
 `klaud-plan` 产物仅显式包含 `candidates.json`、`open-prs.json`、`selection.json`、`review-diagnostics.json` 及每个所选候选的 `candidate.json`。本地 `capacity.json` 为检查阶段提供遥测 ID 和资格线索，**绝不上传**；任意临时文件也不会上传。每份交接文件包含公开观测、版本线索、检查原因、分支、基准 SHA、公开 API 发现 URL 和通过校验的 `pr-review`，不包含私有节点计数或原始遥测。所选候选并行运行，各自获得独立 Klaud Cold 会话。一个候选失败不会取消其他候选。不再复制模型/runner 目录，也不保留 `recipes.py`；agent 使用现有 InferenceX 配置和工具理解实际 recipe。
 

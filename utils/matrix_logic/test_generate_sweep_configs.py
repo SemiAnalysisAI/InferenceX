@@ -1301,7 +1301,6 @@ class TestGenerateFullSweepSingleNode:
         )
         # 2 amd nodes (mi300x-amd_0, mi300x-amd_1), 1 conc value = 2 entries
         assert len(result) == 2
-        assert all("amd" in entry["runner"] for entry in result)
         runners = [entry["runner"] for entry in result]
         assert "mi300x-amd_0" in runners
         assert "mi300x-amd_1" in runners
@@ -1348,8 +1347,6 @@ class TestGenerateFullSweepMultiNode:
             sample_runner_config
         )
         entry = result[0]
-        assert "prefill" in entry
-        assert "decode" in entry
         assert entry["prefill"]["num-worker"] == 5
         assert entry["decode"]["num-worker"] == 1
         assert entry["disagg"] is True
@@ -1397,7 +1394,6 @@ class TestGenerateFullSweepMultiNode:
             sample_runner_config
         )
         entry = result[0]
-        assert isinstance(entry["conc"], list)
         assert entry["conc"] == [2150]
 
     def test_single_node_flag_skips_multinode(self, sample_multinode_config, sample_runner_config, full_sweep_args_single_node):
@@ -1460,7 +1456,6 @@ class TestGenerateFullSweepMultiNode:
         )
         # Only h200-cw_0 and h200-cw_1 match "cw" filter
         assert len(result) == 2
-        assert all("cw" in entry["runner"] for entry in result)
         runners = [entry["runner"] for entry in result]
         assert "h200-cw_0" in runners
         assert "h200-cw_1" in runners
@@ -1944,6 +1939,43 @@ class TestEdgeCases:
 class TestCommandLine:
     """Tests for CLI input loading and sweep-selection behavior."""
 
+    @pytest.mark.parametrize("command", ["full-sweep", "test-config"])
+    @pytest.mark.parametrize("invalid", [False, True])
+    def test_script_from_another_directory(
+        self, tmp_path, sample_single_node_config, sample_runner_config,
+        command, invalid,
+    ):
+        """Direct scripts must resolve their own imports and caller-relative inputs."""
+        (tmp_path / "master config.yaml").write_text(yaml.safe_dump(sample_single_node_config))
+        (tmp_path / "runners.yaml").write_text(yaml.safe_dump(sample_runner_config))
+        script = Path(__file__).with_name("generate_sweep_configs.py")
+        args = [
+            command, "--config-files", "master config.yaml",
+            "--runner-config", "runners.yaml", "--seq-lens", "1k1k", "--no-evals",
+        ]
+        if command == "test-config":
+            args += ["--config-keys", "*"]
+        if invalid:
+            args += ["--all-evals"]
+
+        result = subprocess.run(
+            [sys.executable, str(script), *args], cwd=tmp_path,
+            capture_output=True, text=True, check=False,
+        )
+
+        if invalid:
+            assert result.returncode == 2
+            assert result.stdout == ""
+            assert "--all-evals cannot be combined with --no-evals" in result.stderr
+        else:
+            assert result.returncode == 0, result.stderr
+            assert result.stderr == ""
+            rows = json.loads(result.stdout)
+            assert [(r["isl"], r["osl"], r["conc"]) for r in rows] == [
+                (1024, 1024, 4), (1024, 1024, 8), (1024, 1024, 16),
+                (1024, 1024, 32), (1024, 1024, 64),
+            ]
+
     @pytest.mark.parametrize("runner_file", [None, "custom runners.yaml"])
     def test_cli_uses_selected_runner_file(
         self, tmp_path, monkeypatch, sample_single_node_config,
@@ -2314,8 +2346,101 @@ class TestGenerateTestConfigSweep:
 
         assert result == []
 
-    def test_runner_node_filter_expands_agentic_config_runner(self, sample_runner_config):
-        """Agentic test-config entries should support concrete runner targeting."""
+
+@pytest.fixture(params=["full-sweep", "test-config"])
+def agentic_mode(request):
+    return request.param
+
+
+@pytest.fixture
+def generate_agentic_sweep(agentic_mode, full_sweep_args_single_node):
+    def generate(config, runner_data, **filters):
+        args = copy.copy(full_sweep_args_single_node)
+        vars(args).update(
+            config_keys=list(config), conc=None, multi_node=True,
+            scenario_type=["agentic-coding"],
+        )
+        vars(args).update(filters)
+        generate = generate_full_sweep if agentic_mode == "full-sweep" else generate_test_config_sweep
+        return generate(args, config, runner_data)
+    return generate
+
+
+@pytest.fixture(params=["single", "aggregated", "disaggregated"])
+def agentic_config(request, sample_single_node_config):
+    config = copy.deepcopy(sample_single_node_config)
+    entry = next(iter(config.values()))
+    entry.update(runner="cluster:b300-nv", multinode=request.param != "single")
+    if request.param == "single":
+        benchmark = {"tp": 4, "kv-offloading": "none"}
+    elif request.param == "aggregated":
+        benchmark = {"num-nodes": 2, "worker": {"num-worker": 2, "tp": 8, "ep": 1, "dp-attn": False}}
+    else:
+        entry.update(disagg=True, **{"kv-p2p-transfer": "nixl"})
+        benchmark = {
+            "prefill": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
+            "decode": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
+        }
+    entry["scenarios"] = {"agentic-coding": [{"search-space": [benchmark]}]}
+    return config, benchmark
+
+
+class TestAgenticGeneration:
+    def test_point_order_and_input_preservation(
+        self, agentic_config, sample_runner_config, generate_agentic_sweep,
+    ):
+        config, benchmark = agentic_config
+        benchmark["conc-list"] = [32, 8, 32]
+        original = copy.deepcopy(config)
+        entries = generate_agentic_sweep(config, sample_runner_config, runner_node_filter="b300-nv_")
+        if next(iter(config.values()))["multinode"]:
+            expected = [
+                ("b300-nv_0", [32]), ("b300-nv_0", [8]), ("b300-nv_0", [32]),
+                ("b300-nv_1", [32]), ("b300-nv_1", [8]), ("b300-nv_1", [32]),
+            ]
+        else:
+            expected = [
+                ("b300-nv_0", 32), ("b300-nv_1", 32),
+                ("b300-nv_0", 8), ("b300-nv_1", 8),
+                ("b300-nv_0", 32), ("b300-nv_1", 32),
+            ]
+        assert [(e["runner"], e["conc"]) for e in entries] == expected
+        assert config == original
+
+    @pytest.mark.parametrize(("full_filters", "exact_filters", "expected"), [
+        ({}, {}, [3, 6, 10]),
+        ({"min_conc": 5, "max_conc": 9}, {"conc": [6, 9]}, [6]),
+        ({"max_conc": 2}, {"conc": [2]}, []),
+        ({"min_conc": 11}, {"conc": [11]}, []),
+    ])
+    def test_range_boundaries(
+        self, agentic_config, sample_runner_config, generate_agentic_sweep,
+        agentic_mode, full_filters, exact_filters, expected,
+    ):
+        config, benchmark = agentic_config
+        benchmark.update({"conc-start": 3, "conc-end": 10})
+        filters = full_filters if agentic_mode == "full-sweep" else exact_filters
+        entries = generate_agentic_sweep(config, sample_runner_config, **filters)
+        points = [entry["conc"] for entry in entries]
+        assert points == ([[c] for c in expected] if next(iter(config.values()))["multinode"] else expected)
+
+    def test_step_size_and_parallelism_caps_keep_command_semantics(
+        self, agentic_config, sample_runner_config, generate_agentic_sweep, agentic_mode,
+    ):
+        config, benchmark = agentic_config
+        benchmark.update({"conc-start": 3, "conc-end": 10})
+        # Agentic rows ignore the fixed-sequence TP/EP caps. Only full-sweep
+        # takes a custom range step; test-config always doubles concurrency.
+        entries = generate_agentic_sweep(
+            config, sample_runner_config, step_size=3, max_tp=1, max_ep=0,
+        )
+        expected = [3, 9, 10] if agentic_mode == "full-sweep" else [3, 6, 10]
+        assert [e["conc"] for e in entries] == (
+            [[c] for c in expected] if next(iter(config.values()))["multinode"] else expected
+        )
+
+    def test_runner_node_filter_expands_agentic_config_runner(self, sample_runner_config, generate_agentic_sweep):
+        """Agentic entries support concrete runner targeting through both commands."""
         config = {
             "qwen-agentic-hicache": {
                 "image": "sglang-rocm",
@@ -2343,15 +2468,8 @@ class TestGenerateTestConfigSweep:
                 },
             }
         }
-        args = argparse.Namespace(
-            config_keys=["qwen-agentic-hicache"],
-            seq_lens=None,
-            conc=None,
-            scenario_type=["agentic-coding"],
-            runner_node_filter="b300-nv_1",
-        )
 
-        result = generate_test_config_sweep(args, config, sample_runner_config)
+        result = generate_agentic_sweep(config, sample_runner_config, runner_node_filter="b300-nv_1")
 
         assert len(result) == 1
         assert result[0]["runner"] == "b300-nv_1"
@@ -2359,7 +2477,7 @@ class TestGenerateTestConfigSweep:
         assert result[0]["total-cpu-dram-gb"] == 2399
         assert result[0]["duration"] == 3600
 
-    def test_agentic_node_dram_uses_explicit_gpu_count(self, sample_runner_config):
+    def test_agentic_node_dram_uses_explicit_gpu_count(self, sample_runner_config, generate_agentic_sweep):
         config = {
             "dsv4-b300-agentic": {
                 "image": "vllm/vllm-openai:v0.23.0",
@@ -2407,15 +2525,8 @@ class TestGenerateTestConfigSweep:
                 },
             },
         }
-        args = argparse.Namespace(
-            config_keys=["dsv4-b300-agentic"],
-            seq_lens=None,
-            conc=None,
-            scenario_type=["agentic-coding"],
-            runner_node_filter=None,
-        )
 
-        result = generate_test_config_sweep(args, config, sample_runner_config)
+        result = generate_agentic_sweep(config, sample_runner_config)
 
         budgets = {
             (entry["pp"], entry["dcp-size"], entry["pcp-size"]): entry["total-cpu-dram-gb"]
@@ -2429,7 +2540,8 @@ class TestGenerateTestConfigSweep:
         }
         assert all(entry["duration"] == 3600 for entry in result)
 
-    def test_agentic_node_dram_rejects_tp_above_runner_gpus(self, sample_runner_config):
+    @pytest.mark.parametrize("filters", [{}, {"min_conc": 999, "conc": [999]}])
+    def test_agentic_node_dram_rejects_tp_above_runner_gpus(self, sample_runner_config, generate_agentic_sweep, filters):
         config = {
             "dsv4-b300-agentic": {
                 "image": "vllm/vllm-openai:v0.23.0",
@@ -2456,19 +2568,12 @@ class TestGenerateTestConfigSweep:
         }
         runner_config = copy.deepcopy(sample_runner_config)
         runner_config["hardware"]["cluster:b300-nv"]["gpus-per-node"] = 2
-        args = argparse.Namespace(
-            config_keys=["dsv4-b300-agentic"],
-            seq_lens=None,
-            conc=None,
-            scenario_type=["agentic-coding"],
-            runner_node_filter=None,
-        )
 
         with pytest.raises(ValueError, match="exceeds gpus-per-node"):
-            generate_test_config_sweep(args, config, runner_config)
+            generate_agentic_sweep(config, runner_config, **filters)
 
     def test_multinode_agentic_groups_concurrencies_per_search_entry(
-        self, sample_runner_config
+        self, sample_runner_config, generate_agentic_sweep
     ):
         """One server allocation should run exactly one concurrency (one task per conc)."""
         config = {
@@ -2497,15 +2602,8 @@ class TestGenerateTestConfigSweep:
                 },
             }
         }
-        args = argparse.Namespace(
-            config_keys=["dsv4-agentic-2p1d"],
-            seq_lens=None,
-            conc=[16, 32, 64, 128, 256],
-            scenario_type=["agentic-coding"],
-            runner_node_filter=None,
-        )
 
-        result = generate_test_config_sweep(args, config, sample_runner_config)
+        result = generate_agentic_sweep(config, sample_runner_config)
 
         assert len(result) == 5
         assert [entry["conc"] for entry in result] == [[16], [32], [64], [128], [256]]
@@ -2524,7 +2622,7 @@ class TestGenerateTestConfigSweep:
         assert result[0]["decode"]["pcp-size"] == 1
         assert {entry["node-count"] for entry in result} == {9}
 
-    def test_multinode_agentic_preserves_kv_offload_fields(self, sample_runner_config):
+    def test_multinode_agentic_preserves_kv_offload_fields(self, sample_runner_config, generate_agentic_sweep):
         config = {
             "dsv4-agentic-hicache": {
                 "image": "sglang-rocm",
@@ -2550,15 +2648,8 @@ class TestGenerateTestConfigSweep:
                 },
             },
         }
-        args = argparse.Namespace(
-            config_keys=["dsv4-agentic-hicache"],
-            seq_lens=None,
-            conc=None,
-            scenario_type=["agentic-coding"],
-            runner_node_filter=None,
-        )
 
-        result = generate_test_config_sweep(args, config, sample_runner_config)
+        result = generate_agentic_sweep(config, sample_runner_config)
 
         assert len(result) == 1
         assert result[0]["kv-offloading"] == "dram"
@@ -2570,7 +2661,7 @@ class TestGenerateTestConfigSweep:
         assert result[0]["total-cpu-dram-gb"] == 2399
 
     def test_multinode_agentic_budget_ignores_decode_topology(
-        self, sample_runner_config
+        self, sample_runner_config, generate_agentic_sweep
     ):
         """Only prefill offloads today, so decode's topology does not shrink it."""
         config = {
@@ -2599,22 +2690,15 @@ class TestGenerateTestConfigSweep:
                 },
             },
         }
-        args = argparse.Namespace(
-            config_keys=["dsv4-agentic-hicache-asym"],
-            seq_lens=None,
-            conc=None,
-            scenario_type=["agentic-coding"],
-            runner_node_filter=None,
-        )
 
-        result = generate_test_config_sweep(args, config, sample_runner_config)
+        result = generate_agentic_sweep(config, sample_runner_config)
 
         assert len(result) == 1
         # prefill 8/8 -> full budget, regardless of decode tp=4.
         assert result[0]["total-cpu-dram-gb"] == 2399
 
     def test_multinode_agentic_rejects_node_misaligned_prefill(
-        self, sample_runner_config
+        self, sample_runner_config, generate_agentic_sweep
     ):
         """A prefill worker whose GPU footprint does not tile the node is rejected."""
         config = {
@@ -2643,16 +2727,9 @@ class TestGenerateTestConfigSweep:
                 },
             },
         }
-        args = argparse.Namespace(
-            config_keys=["dsv4-agentic-hicache-misaligned"],
-            seq_lens=None,
-            conc=None,
-            scenario_type=["agentic-coding"],
-            runner_node_filter=None,
-        )
 
         with pytest.raises(ValueError, match="does not divide"):
-            generate_test_config_sweep(args, config, sample_runner_config)
+            generate_agentic_sweep(config, sample_runner_config)
 
 
 # =============================================================================

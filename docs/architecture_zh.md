@@ -35,8 +35,8 @@
 | [`configs/nvidia-master.yaml`](../configs/nvidia-master.yaml)、[`configs/amd-master.yaml`](../configs/amd-master.yaml) | 声明式的模型、镜像、框架、场景、拓扑和搜索空间意图 |
 | [`configs/runners.yaml`](../configs/runners.yaml) | 生成期间使用的调度标签、具体运行器名称和硬件信息 |
 | [`perf-changelog.yaml`](../perf-changelog.yaml) | 以仅追加方式选择要针对某项变更运行的配置键 |
-| [`utils/matrix_logic/validation.py`](../utils/matrix_logic/validation.py) | 强制执行的 Pydantic 模式和跨字段不变量 |
-| [`utils/matrix_logic/generate_sweep_configs.py`](../utils/matrix_logic/generate_sweep_configs.py) | 搜索空间展开、默认值、过滤器、派生元数据、运行器解析和评测选择 |
+| [`infx/matrix/validation.py`](../infx/matrix/validation.py) | 强制执行的 Pydantic 模式和跨字段不变量 |
+| [`infx/matrix/generate.py`](../infx/matrix/generate.py) | 搜索空间展开、默认值、过滤器、派生元数据、运行器解析和评测选择 |
 | [`utils/process_changelog.py`](../utils/process_changelog.py) | 新增变更日志提取、配置键展开、矩阵分桶和最终矩阵验证 |
 | [`.github/workflows/run-sweep.yml`](../.github/workflows/run-sweep.yml) | 触发策略、矩阵扇出、收集依赖和跨仓库摄取分派 |
 | [`.github/workflows/benchmark-tmpl.yml`](../.github/workflows/benchmark-tmpl.yml)、[`.github/workflows/benchmark-multinode-tmpl.yml`](../.github/workflows/benchmark-multinode-tmpl.yml) | 可复用作业输入契约、环境映射、启动器调用、结果检查和单作业上传 |
@@ -125,9 +125,15 @@ flowchart LR
 
 ## 阶段 2：验证与矩阵生成
 
-[`validation.py`](../utils/matrix_logic/validation.py) 在生成之前验证主文件和运行器数据。其严格模型负责接受的别名和跨字段规则。例如，互斥的并发形式、单节点与多节点形态、组件元数据作用域、预填充与解码硬件配对，以及智能体场景的集群标签要求。
+共享 Python 实现位于仓库根目录的 `infx` 包中。`infx.matrix.generate` 负责矩阵生成，`infx.matrix.validation` 负责模式校验。Python 调用方应通过这些规范路径导入；后续领域模块可在需要时加入 `infx`。
 
-随后，[`generate_sweep_configs.py`](../utils/matrix_logic/generate_sweep_configs.py) 将经过验证的意图展开为数据行。它负责以下决策：
+`utils/matrix_logic/generate_sweep_configs.py` 和 `validation.py` 保留为轻量兼容入口，旧导入路径指向同一个模块对象，避免重复创建模式类。现有脚本命令、参数、相对输入路径和依赖保持不变，从仓库检出目录运行时无需安装包。`process_changelog.py` 和 `validate_perf_changelog.py` 直接导入 `infx.matrix` 模块。
+
+对追加模式的历史比较，`generation_inputs_at_ref` 从同一个 Git 修订提取配置、旧入口及 `infx` 包（若该修订包含它）。包迁移前的修订继续运行其原有独立生成器；迁移后的修订使用自身的包代码。当前工作区中的源码和配置不会替代历史输入。
+
+[`validation.py`](../infx/matrix/validation.py) 在生成之前验证主文件和运行器数据。其严格模型负责接受的别名和跨字段规则。例如，互斥的并发形式、单节点与多节点形态、组件元数据作用域、预填充与解码硬件配对，以及智能体场景的集群标签要求。
+
+随后，[`infx.matrix.generate`](../infx/matrix/generate.py) 将经过验证的意图展开为数据行。它负责以下决策：
 
 - 从范围或列表生成具体并发点；
 - 默认并行度值；
@@ -242,7 +248,9 @@ bash ./runners/launch_${RUNNER_NAME%%_*}.sh
 
 ### 矩阵派生只有一套实现
 
-派生并发点、评测选择、拓扑默认值、名称和运行器派生信息属于 `generate_sweep_configs.py`。工作流应转发矩阵字段，而不应在表达式或 Shell 中重新实现生成器策略。
+派生并发点、评测选择、拓扑默认值、名称和运行器派生信息属于 `infx.matrix.generate`。工作流应转发矩阵字段，而不应在表达式或 Shell 中重新实现生成器策略。
+
+`full-sweep` 和 `test-config` 命令共用固定序列与 AgentX 的矩阵行构建逻辑。各命令的选择规则仍由调用方负责；AgentX 构建逻辑负责 worker 默认值、卸载预算、实验名称、节点数和验证。它在过滤并发度前验证拓扑与卸载预算，保留并发点和运行器的原有顺序，并仅按上下限过滤 AgentX 并发点，不会额外生成截断到上限的并发点。
 
 ### 触发选择与配置彼此独立
 
