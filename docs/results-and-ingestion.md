@@ -190,6 +190,14 @@ separate from estimated whole-system power.
 
 Every nonblank JSONL record increments `records_total`. Records with `metadata.benchmark_phase` other than `profiling` are warmup diagnostics and are excluded. Records with a truthy `error` are also excluded and categorized. Older records with no phase are treated as profiling. The retained count becomes `num_requests_successful`. The full accounting is preserved in `request_accounting` with profiled, total dropped, warmup dropped, error dropped, and `error_categories` fields.
 
+`request_metrics.tokens.output_expected` uses local trace metadata only from the
+exact `metadata.dataset.hf_dataset_name` declared by AIPerf. Since the export
+does not record a resolved dataset revision, the matching cache must contain
+exactly one snapshot. Missing identity, missing metadata, or multiple snapshots
+leave this distribution empty; cache modification times and other datasets
+are never used to guess. Actual tokens, GPU energy denominators, and AIPerf's
+theoretical cache-hit metric retain their existing sources.
+
 The AgentX aggregate has top-level identity and topology fields compatible with benchmark ingestion.
 
 `num_gpus` explicitly records the physical count used by the shared processor.

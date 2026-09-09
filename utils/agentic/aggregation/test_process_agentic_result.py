@@ -1576,6 +1576,9 @@ def test_processor_uses_aiperf_theoretical_cache_metric(tmp_path: Path):
                     "count": 4,
                     "sum": 1,
                 },
+                "metadata": {
+                    "dataset": {"hf_dataset_name": "semianalysisai/cc-traces-weka-042026"}
+                },
             },
             f,
         )
@@ -1637,6 +1640,44 @@ def test_processor_uses_aiperf_theoretical_cache_metric(tmp_path: Path):
     assert agg["request_metrics"]["tokens"]["output_expected"]["mean"] == pytest.approx(
         55.0
     )
+
+
+@pytest.mark.parametrize("cache_state", ["matching", "missing", "ambiguous", "no_identity"])
+def test_processor_expected_output_uses_declared_dataset(tmp_path: Path, cache_state: str):
+    result_dir = _write_fixture(tmp_path)
+    profile_path = result_dir / "aiperf_artifacts" / "profile_export_aiperf.json"
+    profile = json.loads(profile_path.read_text())
+    if cache_state == "no_identity":
+        del profile["metadata"]["dataset"]["hf_dataset_name"]
+    profile["theoretical_prefix_cache_hit"] = {"unit": "%", "avg": 25.0}
+    profile_path.write_text(json.dumps(profile))
+
+    hf_cache = tmp_path / "hf"
+    snapshots = [("cc-traces-weka-062126-256k", "newer", 900, 200)]
+    if cache_state != "missing":
+        snapshots.append(("cc-traces-weka-062126", "correct", 100, 100))
+    if cache_state == "ambiguous":
+        snapshots.append(("cc-traces-weka-062126", "another", 200, 300))
+    for dataset, revision, output, modified_at in snapshots:
+        snapshot = hf_cache / f"datasets--semianalysisai--{dataset}" / "snapshots" / revision
+        snapshot.mkdir(parents=True)
+        traces = [
+            {"id": trace_id, "requests": [{"type": "n", "out": output}] * turns}
+            for trace_id, turns in [("trace-A", 3), ("trace-B", 2)]
+        ]
+        (snapshot / "traces.jsonl").write_text("\n".join(json.dumps(trace) for trace in traces))
+        os.utime(snapshot, (modified_at, modified_at))
+
+    agg = _run_processor(result_dir, tmp_path / "out", {"HF_HUB_CACHE": str(hf_cache)})
+
+    expected = agg["request_metrics"]["tokens"]["output_expected"]
+    if cache_state == "matching":
+        assert expected["mean"] == 100
+    else:
+        assert expected == {}
+    assert agg["request_metrics"]["tokens"]["output_actual"]["mean"] == 55
+    assert agg["num_requests_successful"] == 5
+    assert agg["request_metrics"]["cache"]["theoretical_cache_hit_rate"] == 0.25
 
 
 def test_processor_supports_per_run_subdir_layout(tmp_path: Path):

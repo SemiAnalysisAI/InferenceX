@@ -184,6 +184,13 @@ raw tree:           results/**, excluding inputs.json and profile_export_raw.jso
 
 每条非空 JSONL 记录都会增加 `records_total`。`metadata.benchmark_phase` 不等于 `profiling` 的记录是 warmup 诊断，会被排除。含真值 `error` 的记录也会被排除并分类。没有 phase 的旧记录按 profiling 处理。保留记录数成为 `num_requests_successful`。完整计数保存在 `request_accounting` 中，包括 profiled、总丢弃、warmup 丢弃、错误丢弃和 `error_categories`。
 
+`request_metrics.tokens.output_expected` 只读取 AIPerf 在
+`metadata.dataset.hf_dataset_name` 中明确声明的数据集的本地 trace 元数据。
+由于导出内容没有记录实际解析到的数据集 revision，对应缓存必须恰好只有一个 snapshot。
+缺少数据集身份、缺少元数据或存在多个 snapshot 时，该分布保持为空；
+不会根据缓存修改时间或其他数据集进行猜测。实际 token 数、GPU 能耗的分母及
+AIPerf 理论缓存命中率继续使用各自原有的数据来源。
+
 AgentX 聚合的顶层身份和拓扑字段与基准摄取兼容。
 
 `num_gpus` 明确记录共享处理器使用的物理 GPU 数。单节点运行使用
