@@ -312,6 +312,29 @@ def test_known_failed_job_does_not_remove_other_scheduled_attempts(plan, tmp_pat
     assert run["abort_reason"] is None
 
 
+@pytest.mark.parametrize("mode", ["success", "job_failed", "http_error"])
+def test_request_timing_windows_preserve_observed_terminal_and_end(plan, tmp_path, mocked_media, fixture_server, mode):
+    plan.update(warmup_runs=0, repetitions=1, cases=plan["cases"][:1])
+    endpoint, _ = fixture_server(mode=mode)
+    before = time.monotonic()
+    run = execute(plan, tmp_path / mode, endpoint)
+    after = time.monotonic()
+    record = run["records"][0]
+    timing = record["timing_window"]
+    start, end = timing["start_monotonic_seconds"], timing["end_monotonic_seconds"]
+    assert before <= start < end <= after
+    assert math.isclose(end - start, record["latency_seconds"], rel_tol=1e-6, abs_tol=1e-9)
+    if mode == "http_error":
+        assert timing["terminal_monotonic_seconds"] is None
+        assert record["submit_to_terminal_seconds"] is None
+    else:
+        terminal = timing["terminal_monotonic_seconds"]
+        assert start < terminal <= end
+        assert math.isclose(terminal - start, record["submit_to_terminal_seconds"], rel_tol=1e-6, abs_tol=1e-9)
+    events = [json.loads(line) for line in (tmp_path / mode / "events.jsonl").read_text().splitlines()]
+    assert next(event["record"] for event in events if event["event"] == "attempt_finished") == record
+
+
 def test_timeout_is_bounded_and_retains_all_denominators(plan, tmp_path, mocked_media, fixture_server):
     plan["warmup_runs"] = 0
     endpoint, state = fixture_server(mode="timeout")

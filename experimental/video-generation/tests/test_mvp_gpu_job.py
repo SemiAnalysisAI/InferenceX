@@ -346,6 +346,86 @@ def test_nvidia_probe_parses_observed_metrics_and_pid(spec, monkeypatch):
     assert not gpu._idle(actual, 1000)
 
 
+def test_power_configuration_keeps_unavailable_fields_distinct_from_limits(monkeypatch):
+    monkeypatch.setattr(gpu, "_command", lambda *a, **k: f"{GPU}, 600, N/A, 700, NaN\n".encode())
+    result = gpu.GpuProbe([GPU], 0.1).power_configuration()
+    assert result["status"] == "recorded"
+    assert result["gpus"] == [{"uuid": GPU, "configured_limit_w": 600, "enforced_limit_w": None,
+                               "default_limit_w": 700, "maximum_limit_w": None}]
+
+
+@pytest.mark.parametrize("error", [RuntimeError("unsupported query"), FileNotFoundError("nvidia-smi"),
+                                  subprocess.TimeoutExpired("nvidia-smi", 0.1)])
+def test_optional_power_configuration_failure_returns_unavailable(monkeypatch, error):
+    def command(*args, **kwargs):
+        raise error
+    monkeypatch.setattr(gpu, "_command", command)
+    result = gpu.GpuProbe([GPU], 0.1).power_configuration()
+    assert result["status"] == "unavailable"
+    assert result["gpus"] == []
+    assert result["error"]
+
+
+def test_optional_power_configuration_respects_remaining_deadline(monkeypatch):
+    monkeypatch.setattr(gpu.time, "monotonic", lambda: 10.0)
+    budgets = []
+    def command(*args, **kwargs):
+        budgets.append(kwargs["timeout"])
+        return f"{GPU}, 600, 600, 700, 700\n".encode()
+    monkeypatch.setattr(gpu, "_command", command)
+    probe = gpu.GpuProbe([GPU], 30)
+    assert probe.power_configuration(deadline=10.25)["status"] == "recorded"
+    assert budgets == [0.25]
+    assert probe.power_configuration(deadline=9)["status"] == "unavailable"
+    assert budgets == [0.25]
+
+
+def test_power_acquisition_bracket_excludes_later_process_inventory(monkeypatch):
+    clock = [100.0]
+    monkeypatch.setattr(gpu.time, "monotonic", lambda: clock[0])
+    def command(argv, **kwargs):
+        if any(arg.startswith("--query-gpu=") for arg in argv):
+            clock[0] += 2
+            return f"0, {GPU}, Test H200, 141312, 70000, 95, 590.1, 400, 60, Disabled\n".encode()
+        clock[0] += 3
+        return f"{GPU}, 1234, 69000\n".encode()
+    monkeypatch.setattr(gpu, "_command", command)
+    sample = gpu.GpuProbe([GPU], 10).snapshot()
+    assert sample["power_query"]["start_monotonic_seconds"] == 100
+    assert sample["power_query"]["end_monotonic_seconds"] == 102
+    assert sample["monotonic_seconds"] == 105
+    assert sample["gpus"][0]["power_watts"] == 400
+
+
+@pytest.mark.parametrize("arrival", [True, False])
+def test_completion_bracket_waits_for_next_sample_without_passing_deadline(monkeypatch, arrival):
+    clock = [10.0]
+    sampler = SimpleNamespace(samples=[{"monotonic_seconds": 9}], failed=threading.Event())
+    monkeypatch.setattr(gpu.time, "monotonic", lambda: clock[0])
+    def sleep(seconds):
+        clock[0] += seconds
+        if arrival:
+            sampler.samples.append({"monotonic_seconds": clock[0]})
+    monkeypatch.setattr(gpu.time, "sleep", sleep)
+    assert gpu._Sampler.bracket_completion(sampler, 10.1) is arrival
+    assert 10 < clock[0] <= 10.1
+
+
+def test_sampler_retains_actual_idle_prelaunch_power_and_refuses_existing_compute(tmp_path):
+    sample = snapshot()
+    sample["gpus"][0]["power_watts"] = 77.25
+    path = tmp_path / "idle.jsonl"
+    probe = SimpleNamespace(devices=[GPU], timeout=0.1)
+    sampler = gpu._Sampler(probe, SimpleNamespace(), path, 1, initial_sample=sample)
+    retained = json.loads(path.read_text())
+    assert retained["gpus"][0]["power_watts"] == 77.25
+    assert retained["monotonic_seconds"] == sample["monotonic_seconds"]
+    assert retained["owned_compute_apps"] == retained["unowned_compute_apps"] == []
+    assert sampler.samples == [retained]
+    with pytest.raises(ValueError, match="empty compute"):
+        gpu._Sampler(probe, SimpleNamespace(), tmp_path / "busy.jsonl", 1, initial_sample=snapshot(pid=123))
+
+
 @pytest.mark.parametrize("gpu_row", [f"0, {GPU}, X, 100, N/A, 0, d, 1, 1, Disabled\n",
                                   f"0, {GPU}, X, 100, 0, 0, d, 1, 1, Enabled\n", ""])
 def test_incomplete_or_mig_gpu_metrics_fail_closed(monkeypatch, gpu_row):
@@ -943,7 +1023,7 @@ def test_role_safe_cleanup_preserves_known_candidate_failure(spec, tmp_path, mon
         def check_output_budget(self):
             pass
     class Sampler:
-        def __init__(self, probe, owner, path, interval):
+        def __init__(self, probe, owner, path, interval, *, initial_sample=None):
             path.touch()
             self.done = threading.Event()
             self.failed = threading.Event()
@@ -951,6 +1031,7 @@ def test_role_safe_cleanup_preserves_known_candidate_failure(spec, tmp_path, mon
         def start(self): pass
         def begin_measurement(self): pass
         def end_measurement(self): pass
+        def bracket_completion(self, deadline): return True
         def stop(self, **kwargs): pass
         def summary(self): return {"qualified": True}
     def spawn(argv, **kwargs):
@@ -972,7 +1053,8 @@ def test_role_safe_cleanup_preserves_known_candidate_failure(spec, tmp_path, mon
     monkeypatch.setattr(gpu, "_health", lambda *a: True)
     monkeypatch.setattr(gpu, "_Sampler", Sampler)
     monkeypatch.setattr(gpu, "_wait_client", lambda *a, **k: 1)
-    probe = SimpleNamespace(snapshot=lambda **kwargs: snapshot())
+    probe = SimpleNamespace(snapshot=lambda **kwargs: snapshot(),
+                            power_configuration=lambda **kwargs: {"status": "unavailable", "gpus": []})
     receipt = {"roles": {}}
     if startup_exits:
         with pytest.raises(RuntimeError, match="before readiness"):
@@ -982,6 +1064,9 @@ def test_role_safe_cleanup_preserves_known_candidate_failure(spec, tmp_path, mon
         assert result["status"] == "complete"
         assert result["run_status"] == "partial"
         assert result["client_exit_code"] == 1
+        timing = result["startup_timing_window"]
+        assert timing["start_monotonic_seconds"] < timing["end_monotonic_seconds"]
+        assert timing["end_monotonic_seconds"] - timing["start_monotonic_seconds"] == pytest.approx(result["startup_seconds"])
     assert receipt["roles"]["candidate"]["cleanup"]["status"] == "clean"
     assert cleanups and max(cleanups) <= supervisor.total_deadline
 

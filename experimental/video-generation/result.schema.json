@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SemiAnalysisAI/InferenceX/blob/main/experimental/video-generation/result.schema.json",
+  "title": "H3 benchmark frontend result 1.0.0",
+  "type": "object",
+  "required": ["schema_version", "bundle_type", "created_at", "producer", "status", "invalid_reasons", "workload_status", "regression_status", "release_qualified", "definitions", "execution", "hardware", "workload", "policy", "roles", "paired_fidelity", "files", "report", "report_links", "checksums", "limitations"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "bundle_type": {"const": "h3_benchmark_result"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "producer": {"type": "object", "required": ["git_commit"], "properties": {"git_commit": {"$ref": "#/$defs/gitCommit"}, "ci": {"type": "object"}}},
+    "status": {"enum": ["complete", "failed"]},
+    "invalid_reasons": {"$ref": "#/$defs/reasons"},
+    "workload_status": {"enum": ["passed", "failed", "unknown"]},
+    "regression_status": {"enum": ["pass", "fail", "inconclusive"]},
+    "release_qualified": {"const": false},
+    "definitions": {"type": "object", "required": ["latency", "valid_clips_per_second", "completion", "gpu_memory", "gpu_power", "gpu_energy", "gpu_energy_per_valid_clip", "media_integrity", "paired_fidelity", "hardware_tdp"], "additionalProperties": {"type": "object", "required": ["unit"], "properties": {"unit": {"type": "string"}}}},
+    "execution": {"type": ["object", "null"], "required": ["ci", "slurm", "source_manifest", "model", "runtime", "cleanup_status"], "properties": {"ci": {"type": "object", "required": ["git_commit", "run_id", "run_attempt", "run_url", "external_ci_verification"], "properties": {"git_commit": {"$ref": "#/$defs/gitCommit"}, "run_id": {"type": "string", "pattern": "^[0-9]+$"}, "run_attempt": {"type": "string", "pattern": "^[1-9][0-9]*$"}, "external_ci_verification": {"enum": ["passed", "not_supplied"]}}}, "source_manifest": {"$ref": "#/$defs/file"}, "cleanup_status": {"const": "clean"}}},
+    "hardware": {"type": ["object", "null"], "required": ["selected_gpu_count", "reserved_gpu_count", "gpu_uuids", "devices", "tdp", "configured_power_limits"], "properties": {"selected_gpu_count": {"type": "integer", "minimum": 1}, "reserved_gpu_count": {"type": ["integer", "null"], "minimum": 1}, "gpu_uuids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string"}}, "tdp": {"type": "object", "required": ["status", "watts_per_gpu"], "properties": {"status": {"enum": ["verified", "unavailable"]}, "watts_per_gpu": {"type": ["number", "null"], "exclusiveMinimum": 0}}}}},
+    "workload": {"type": ["object", "null"], "required": ["plan", "plan_sha256", "server", "comparison"], "properties": {"plan_sha256": {"$ref": "#/$defs/sha256"}, "comparison": {"enum": ["same_revision_A/A", "baseline_candidate"]}}},
+    "policy": {"type": ["object", "null"]},
+    "roles": {"type": "object", "additionalProperties": false, "properties": {"baseline": {"$ref": "#/$defs/role"}, "candidate": {"$ref": "#/$defs/role"}}},
+    "paired_fidelity": {"type": ["object", "null"]},
+    "files": {"type": "array", "items": {"$ref": "#/$defs/file"}},
+    "report": {"anyOf": [{"$ref": "#/$defs/file"}, {"type": "null"}]},
+    "report_links": {"type": "object", "properties": {"original": {"$ref": "#/$defs/file"}, "power": {"$ref": "#/$defs/file"}}, "additionalProperties": false},
+    "checksums": {"type": "object", "required": ["path", "scope"], "properties": {"path": {"const": "SHA256SUMS"}, "scope": {"type": "string"}}},
+    "limitations": {"$ref": "#/$defs/reasons"}
+  },
+  "allOf": [{"if": {"properties": {"status": {"const": "complete"}}}, "then": {"properties": {"workload_status": {"const": "passed"}, "invalid_reasons": {"maxItems": 0}, "execution": {"type": "object"}, "hardware": {"type": "object"}, "workload": {"type": "object"}, "roles": {"required": ["baseline", "candidate"]}, "report_links": {"required": ["original", "power"]}}}}],
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "gitCommit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "reasons": {"type": "array", "items": {"type": "string"}},
+    "file": {"type": "object", "required": ["path", "sha256"], "additionalProperties": false, "properties": {"path": {"type": "string", "minLength": 1, "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\\\]+$"}, "sha256": {"$ref": "#/$defs/sha256"}}},
+    "role": {"type": "object", "required": ["run_id", "metrics", "records", "power", "raw_telemetry", "media_evaluator"], "additionalProperties": false, "properties": {
+      "run_id": {"type": "string"},
+      "metrics": {"type": "object", "required": ["status"], "properties": {"status": {"enum": ["valid", "withheld"]}, "valid_clips_per_second": {"type": "number", "minimum": 0}}},
+      "records": {"type": "array", "items": {"type": "object", "required": ["slot_id", "phase", "status", "attempted", "media", "media_file"], "properties": {"phase": {"enum": ["warmup", "measurement"]}, "status": {"enum": ["succeeded", "failed"]}, "media_file": {"anyOf": [{"$ref": "#/$defs/file"}, {"type": "null"}]}}}},
+      "power": {"type": "object", "required": ["path", "sha256", "status", "phases", "windows"], "properties": {"path": {"type": "string", "pattern": "^power/(baseline|candidate)\\.json$"}, "sha256": {"$ref": "#/$defs/sha256"}, "status": {"enum": ["valid", "partial", "invalid"]}, "phases": {"type": "object", "required": ["startup", "warmup", "measurement"], "additionalProperties": {"$ref": "#/$defs/phase"}}, "windows": {"type": "array"}}},
+      "raw_telemetry": {"$ref": "#/$defs/file"}, "media_evaluator": {"type": ["object", "null"]}
+    }},
+    "phase": {"type": "object", "required": ["status", "valid", "invalid_reasons", "window_count", "valid_window_count", "aggregate", "per_gpu"], "properties": {"status": {"enum": ["valid", "invalid", "not_requested"]}, "valid": {"type": "boolean"}, "invalid_reasons": {"$ref": "#/$defs/reasons"}, "window_count": {"type": "integer", "minimum": 0}, "valid_window_count": {"type": "integer", "minimum": 0}, "aggregate": {"type": ["object", "null"], "required": ["energy_j", "avg_power_w", "observed_peak_power_w", "joules_per_valid_clip"], "additionalProperties": {"type": ["number", "null"], "minimum": 0}}, "per_gpu": {"type": ["object", "null"], "additionalProperties": {"type": "object", "required": ["energy_j", "avg_power_w", "observed_peak_power_w"], "additionalProperties": false, "properties": {"energy_j": {"type": "number", "minimum": 0}, "avg_power_w": {"type": "number", "minimum": 0}, "observed_peak_power_w": {"type": "number", "minimum": 0}}}}}, "allOf": [{"if": {"properties": {"valid": {"const": false}}}, "then": {"properties": {"aggregate": {"type": "null"}, "per_gpu": {"type": "null"}}}}, {"if": {"properties": {"valid": {"const": true}}}, "then": {"properties": {"status": {"const": "valid"}, "aggregate": {"type": "object"}, "per_gpu": {"type": "object", "minProperties": 1}, "invalid_reasons": {"maxItems": 0}}}}]}
+  }
+}

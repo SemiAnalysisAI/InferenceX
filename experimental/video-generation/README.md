@@ -6,6 +6,8 @@ This experimental lane runs the existing H3 supervisor inside InferenceX CI on
 SemiAnalysis H200 resources. Its first target is a bounded same-build smoke:
 original generated MP4s, full video/audio validation, measured requests, and
 verified cleanup. It does not publish a native InferenceX database/UI result.
+Successful executions also publish a [versioned frontend result contract](RESULTS.md)
+with validated GPU power/energy, original measurements and a portable power report.
 
 The runner supports two frozen 16:9 cells at 1344×768 and 24 FPS: a 4-second
 request resolves to 107 frames, while an 8-second request resolves to 192 frames.
@@ -91,6 +93,23 @@ verification remain distinct. This lane uses native workflow permission and
 scheduler admission; it does not add an OIDC service or claim independent
 hardware attestation.
 
+To export already accepted H3 evidence without repeating generation, supply one
+or two source run IDs through the same trusted route:
+
+```bash
+gh workflow run e2e-tests.yml --repo SemiAnalysisAI/InferenceX \
+  --ref feat/h3-video-ci -f h3-video=true \
+  -f h3-reuse-run-ids=34291306687,34293342829 -f test-name=h3-power-export
+```
+
+The sources must be successful manual executions in this repository. CI verifies
+their commit, original artifacts and persistent Slurm receipts. It inventories
+the same node and GPU UUIDs using the existing runtime, with a fixed ten-minute
+allocation cap (at most 1.3333 reserved GPU-hours), then releases its allocation.
+This records current hardware identity and power limits without loading H3.
+Later limits cannot establish historical generation settings. Existing task
+allocations are checked for reuse before requesting a new one.
+
 ## Results and local checks
 
 Every attempt uploads `h3-video-<run-id>-<attempt>` for 14 days, with compression
@@ -101,6 +120,17 @@ are excluded from the upload. Missing reports or media remain missing; fixtures 
 replace them. Persistent source evidence remains at the configured workspace.
 Retain/download the complete artifact before GitHub retention expires.
 
+The hosted export job publishes `h3-results-<run-id>-<attempt>` containing
+`index.json`, the JSON schema, bilingual metric definitions, and one source
+subdirectory per original execution. Each source contains `result.json`, original
+media/logs/report, per-GPU power series, phase integration/coverage and
+`power-report.html`. Reprocessing also publishes `h3-hardware-<run-id>-<attempt>`;
+the verified raw inventory is copied into each result. Original CI identities and
+checksum seals are preserved separately from exporter identities and new seals.
+Missing or invalid telemetry withholds power; export failures retain error logs
+and return an unsuccessful status. Original workload failures still upload their
+raw evidence even when export cannot start.
+
 In smoke mode, exit 0 means both roles completed every planned warmup and
 measurement with verified timing, fresh valid media, and clean teardown. Exit 1
 means a completed workload contains an invalid outcome; exit 2 means execution
@@ -110,9 +140,9 @@ Regression mode additionally requires the existing calibrated acceptance gate.
 
 ```bash
 cd experimental/video-generation
-uv run --no-project --python 3.12 \
+PYTHONPATH=../.. uv run --no-project --python 3.12 \
   --with 'av==16.1.0' --with 'numpy==2.3.5' \
-  --with 'pytest>=8,<9' python -m pytest -q
+  --with 'pytest>=8,<9' --with 'jsonschema>=4,<5' python -m pytest -q
 bash -n runtime-entry.example.sh
 ```
 

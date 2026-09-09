@@ -609,6 +609,8 @@ def run_plan(
             _event(journal, "attempt_started", slot_id=slot["slot_id"], payload_sha256=_digest(payload))
             record["attempted"] = True
             start = time.monotonic()
+            record["timing_window"] = {"start_monotonic_seconds": start, "start_utc": _timestamp(),
+                                       "terminal_monotonic_seconds": None, "end_monotonic_seconds": None}
             deadline = start + timeout_seconds
             remote_terminal = False
             try:
@@ -623,10 +625,12 @@ def run_plan(
                     if status in {"failed", "cancelled", "canceled"}:
                         remote_terminal = True
                         record["submit_to_terminal_seconds"] = time.monotonic() - start
+                        record["timing_window"]["terminal_monotonic_seconds"] = start + record["submit_to_terminal_seconds"]
                         raise _RequestError(f"provider job reported {status}; provider text omitted")
                     if status in {"completed", "succeeded", "success"}:
                         remote_terminal = True
                         record["submit_to_terminal_seconds"] = time.monotonic() - start
+                        record["timing_window"]["terminal_monotonic_seconds"] = start + record["submit_to_terminal_seconds"]
                         break
                     if status not in {"queued", "pending", "in_progress", "processing", "running"}:
                         raise _RequestError("provider job returned an unsupported status")
@@ -659,6 +663,7 @@ def run_plan(
                     abort_reason = record["error"]
             finally:
                 record["latency_seconds"] = max(0.0, time.monotonic() - start)
+                record["timing_window"]["end_monotonic_seconds"] = start + record["latency_seconds"]
                 _event(journal, "attempt_finished", record=record)
         if slot["phase"] == "warmup" and not (record["status"] == "succeeded" and record["media"]["valid"] is True):
             abort_reason = abort_reason or "warmup failed technical media contract"

@@ -26,6 +26,7 @@ import signal
 import socket
 import stat
 import subprocess
+import subprocess
 import sys
 import threading
 import time
@@ -694,12 +695,42 @@ class GpuProbe:
         self.devices = devices
         self.timeout = timeout
 
+    def power_configuration(self, *, deadline: float | None = None) -> dict:
+        fields = "uuid,power.limit,enforced.power.limit,power.default_limit,power.max_limit"
+        result = {"observed_at": _now(), "query": fields, "status": "unavailable", "gpus": []}
+        try:
+            _check_deadline(deadline)
+            timeout = self.timeout if deadline is None else min(self.timeout, max(0.001, deadline - time.monotonic()))
+            raw = _command(["nvidia-smi", "--query-gpu=" + fields, "--format=csv,noheader,nounits",
+                            "--id=" + ",".join(self.devices)], timeout=timeout).decode()
+            result["raw"] = raw
+            for row in csv.reader(io.StringIO(raw)):
+                if len(row) != 5:
+                    raise ValueError("incomplete power configuration")
+                device = {"uuid": row[0].strip()}
+                for key, value in zip(("configured_limit_w", "enforced_limit_w", "default_limit_w", "maximum_limit_w"), row[1:]):
+                    try:
+                        watts = float(value)
+                    except ValueError:
+                        watts = None
+                    device[key] = watts if watts is not None and math.isfinite(watts) and watts > 0 else None
+                result["gpus"].append(device)
+            if sorted(d["uuid"] for d in result["gpus"]) != sorted(self.devices):
+                raise ValueError("power configuration GPU inventory mismatch")
+            result["status"] = "recorded"
+        except (RuntimeError, ValueError, OSError, subprocess.TimeoutExpired, TimeoutError) as error:
+            result.update(error=str(error), gpus=[])
+        return result
+
     def snapshot(self, *, deadline: float | None = None) -> dict:
         def budget():
             _check_deadline(deadline)
             return self.timeout if deadline is None else min(self.timeout, max(0.001, deadline - time.monotonic()))
         fields = "index,uuid,name,memory.total,memory.used,utilization.gpu,driver_version,power.draw,temperature.gpu,mig.mode.current"
+        query_start = time.monotonic()
+        query_utc = _now()
         raw = _command(["nvidia-smi", "--query-gpu=" + fields, "--format=csv,noheader,nounits", "--id=" + ",".join(self.devices)], timeout=budget())
+        query_end = time.monotonic()
         rows = list(csv.reader(io.StringIO(raw.decode())))
         gpus = []
         for row in rows:
@@ -729,7 +760,9 @@ class GpuProbe:
             except ValueError:
                 memory = None
             apps.append({"gpu_uuid": row[0], "pid": int(row[1]), "memory_used_mib": memory})
-        return {"at": _now(), "monotonic_seconds": time.monotonic(), "gpus": gpus, "compute_apps": apps}
+        return {"at": _now(), "monotonic_seconds": time.monotonic(), "gpus": gpus, "compute_apps": apps,
+                "power_query": {"start_utc": query_utc, "start_monotonic_seconds": query_start,
+                                "end_monotonic_seconds": query_end, "field": "power.draw"}}
 
 
 def _idle(snapshot: dict, maximum: float) -> bool:
@@ -763,7 +796,7 @@ def summarize_gpu_samples(samples: list[dict], devices: list[str], interval: flo
 
 
 class _Sampler:
-    def __init__(self, probe: GpuProbe, owner: OwnedProcess, path: Path, interval: float):
+    def __init__(self, probe: GpuProbe, owner: OwnedProcess, path: Path, interval: float, *, initial_sample: dict | None = None):
         self.probe, self.owner, self.path, self.interval = probe, owner, path, interval
         self.phase = "startup"
         self.window_start = None
@@ -774,6 +807,13 @@ class _Sampler:
         self.errors = []
         self.thread = threading.Thread(target=self._loop, daemon=True)
         self.path.touch(exist_ok=False)
+        if initial_sample is not None:
+            if initial_sample.get("compute_apps") != []:
+                raise ValueError("Prelaunch sample must have an empty compute inventory")
+            sample = {**initial_sample, "phase": "startup", "owned_compute_apps": [], "unowned_compute_apps": [],
+                      "observation": "verified_idle_before_runtime_launch"}
+            self.samples.append(sample)
+            self.path.write_bytes(canonical_json_bytes(sample) + b"\n")
 
     def _loop(self):
         while not self.done.is_set():
@@ -822,6 +862,15 @@ class _Sampler:
     def end_measurement(self):
         self.window_end = time.monotonic()
         self.phase = "cleanup"
+
+    def bracket_completion(self, deadline: float) -> bool:
+        """Retain the next ordinary sample before ending the owned runtime."""
+        boundary = time.monotonic()
+        while time.monotonic() < deadline and not self.failed.is_set():
+            if self.samples and self.samples[-1]["monotonic_seconds"] >= boundary:
+                return True
+            time.sleep(min(0.05, max(0, deadline - time.monotonic())))
+        return False
 
     def stop(self, *, deadline: float):
         self.done.set()
@@ -983,6 +1032,7 @@ def _role(spec: dict, label: str, directory: Path, supervisor: _Supervisor, prob
     role["gpu_before"] = snapshot
     if not _idle(snapshot, spec["limits"]["max_idle_memory_mib"]):
         raise RuntimeError("leased GPUs have existing compute/memory use; no runtime started")
+    role["power_configuration_before"] = probe.power_configuration(deadline=supervisor.deadline)
     # This SGLang revision expects NVML ordinals. The child checks the CUDA
     # driver's UUID order before importing SGLang; NVML/CUDA order may differ.
     indices = {device["uuid"]: device["index"] for device in snapshot["gpus"]}
@@ -999,11 +1049,14 @@ def _role(spec: dict, label: str, directory: Path, supervisor: _Supervisor, prob
     client = None
     try:
         boot_started = time.monotonic()
+        role["startup_timing_window"] = {"start_monotonic_seconds": boot_started, "start_utc": _now(),
+                                        "end_monotonic_seconds": None}
         owner = supervisor.spawn(_server_argv(spec, label), cwd=metadata, env=env,
                                  stdout=metadata / "runtime.stdout.log", stderr=metadata / "runtime.stderr.log", nonce=nonce)
         role.update(status="starting", process_identity=owner.identity, launch_argv=_server_argv(spec, label), started_at=_now())
         _write(directory / "gpu-job.json", receipt)
-        sampler = _Sampler(probe, owner, metadata / "telemetry.jsonl", spec["limits"]["telemetry_interval_seconds"])
+        sampler = _Sampler(probe, owner, metadata / "telemetry.jsonl", spec["limits"]["telemetry_interval_seconds"],
+                           initial_sample=snapshot)
         sampler.start()
         ready_deadline = min(supervisor.deadline, time.monotonic() + spec["limits"]["startup_seconds"])
         while True:
@@ -1016,6 +1069,7 @@ def _role(spec: dict, label: str, directory: Path, supervisor: _Supervisor, prob
                 break
             time.sleep(0.1)
         role["startup_seconds"] = time.monotonic() - boot_started
+        role["startup_timing_window"]["end_monotonic_seconds"] = boot_started + role["startup_seconds"]
         role["status"] = "measuring"
         sampler.begin_measurement()
         client_env = _runtime_env("", [], nonce, cache)
@@ -1034,6 +1088,8 @@ def _role(spec: dict, label: str, directory: Path, supervisor: _Supervisor, prob
         code = _wait_client(client, owner, sampler, supervisor, client_deadline,
                             _AttemptMonitor(directory / label / "events.jsonl", spec["limits"]["request_seconds"]))
         role["client_exit_code"] = code
+        role["power_completion_bracket_recorded"] = sampler.bracket_completion(
+            min(supervisor.deadline, time.monotonic() + 3 * spec["limits"]["telemetry_interval_seconds"]))
         run_path = directory / label / "run.json"
         if run_path.is_file():
             run = _read(run_path)
@@ -1067,6 +1123,7 @@ def _role(spec: dict, label: str, directory: Path, supervisor: _Supervisor, prob
             role["cleanup"] = owner.close(deadline=cleanup_end)
             role["cleanup"].update(status="failed", idle_after=False, reason="telemetry did not start; GPU idle unverified")
         role["finished_at"] = _now()
+        role["power_configuration_after"] = probe.power_configuration(deadline=supervisor.total_deadline)
         partial = directory / label / "run.json"
         if partial.is_file():
             role["run_sha256"] = _hash(partial, supervisor.total_deadline)

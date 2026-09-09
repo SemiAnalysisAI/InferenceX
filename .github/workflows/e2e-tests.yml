@@ -12,6 +12,11 @@ on:
                 required: false
                 type: boolean
                 default: false
+            h3-reuse-run-ids:
+                description: "Reprocess one or two accepted H3 CI runs (comma-separated); no new H3 generation"
+                required: false
+                type: string
+                default: ""
             generate-cli-command:
                 description: "Command passed to generate matrix script"
                 required: false
@@ -112,6 +117,11 @@ on:
                 required: false
                 type: boolean
                 default: false
+            h3-reuse-run-ids:
+                description: "Reprocess one or two accepted H3 CI runs (comma-separated); no new H3 generation"
+                required: false
+                type: string
+                default: ""
             generate-cli-command:
                 description: "Command passed to generate matrix script"
                 required: false
@@ -213,6 +223,8 @@ jobs:
             contents: read
             actions: read
         uses: ./.github/workflows/h3-video.yml
+        with:
+            source-run-ids: ${{ inputs.h3-reuse-run-ids }}
 
     get-jobs:
         if: ${{ !inputs.h3-video }}

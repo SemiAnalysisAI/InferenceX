@@ -154,7 +154,7 @@ def capacity(record: dict, resources: dict, timestamp: datetime | None = None) -
     return None
 
 
-def recover(config: dict, result_root: Path) -> dict:
+def recover(config: dict, result_root: Path, *, node: str | None = None) -> dict:
     paths = set(result_root.glob("*/allocation.json")) | {Path(p) for p in config["allocation_receipts"]}
     # A crash between intent and acknowledgment must be reconciled, not retried.
     for intent in result_root.glob("*/allocation-intent.json"):
@@ -181,6 +181,9 @@ def recover(config: dict, result_root: Path) -> dict:
         if state != "RUNNING":
             waiting.append({"job_id": job, "state": state})
             continue
+        if node is not None and record["NodeList"] != node:
+            reasons.append({"job_id": job, "reason": "allocation is on a different physical node"})
+            continue
         reason = capacity(record, config["resources"])
         if reason:
             reasons.append({"job_id": job, "reason": reason})
@@ -192,7 +195,8 @@ def recover(config: dict, result_root: Path) -> dict:
     return {"action": "allocate", "reasons": reasons or [{"reason": "no saved allocations for this task"}]}
 
 
-def allocate(config: dict, run_dir: Path) -> dict:
+def allocate(config: dict, run_dir: Path, *, node: str | None = None) -> dict:
+    need(node is None or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.-]{0,252}", node), "Invalid target node")
     nonce = uuid.uuid4().hex
     job_name = os.environ.get("RUNNER_NAME", "h3-" + config["task_id"])
     need(NAME.fullmatch(job_name), "Invalid runner/job name")
@@ -206,6 +210,8 @@ def allocate(config: dict, run_dir: Path) -> dict:
             "--cpus-per-task=" + str(request["cpus"]), "--mem=" + str(request["memory_gb"]) + "G",
             "--time=" + str(request["minutes"]), "--immediate=30",
             "--job-name=" + job_name, "--comment=" + comment, "--chdir=" + str(run_dir)]
+    if node is not None:
+        argv.append("--nodelist=" + node)
     write(run_dir / "allocation-command.json", argv)
     # With --no-shell, Slurm records the caller's cwd rather than --chdir.
     result = subprocess.run(argv, text=True, capture_output=True, timeout=45, env=environment(), cwd=run_dir)
@@ -290,15 +296,18 @@ def collect(run_dir: Path, output: Path) -> None:
 
 
 def stage_package(source: Path, destination: Path) -> dict[str, str]:
-    selected = [source / "ci.py", *(source / "evaluator").glob("*.py")]
-    expected = {p.relative_to(source).as_posix(): digest(p) for p in selected}
+    selected = {p.relative_to(source).as_posix(): p for p in [*source.glob("*.py"), *(source / "evaluator").glob("*.py")]}
+    shared_power = source.parents[1] / "utils" / "aggregate_power.py"
+    if shared_power.is_file():
+        selected["utils/aggregate_power.py"] = shared_power
+    expected = {name: digest(path) for name, path in selected.items()}
     if destination.exists():
         need(inventory(destination) == expected, "Staged source differs from this GitHub commit")
     else:
         destination.mkdir(parents=True)
-        for path in selected:
-            target = destination / path.relative_to(source)
-            target.parent.mkdir(exist_ok=True)
+        for name, path in selected.items():
+            target = destination / name
+            target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(path, target)
     return expected
 
@@ -377,7 +386,7 @@ def launch(config: dict, output: Path) -> int:
     need(re.fullmatch(r"[0-9a-f]{40}", sha), "Exact H3_SOURCE_SHA required")
     source = Path(__file__).resolve().parent
     need(command(["git", "-C", str(source), "rev-parse", "HEAD"]).strip() == sha, "Checkout differs from admitted source SHA")
-    need(not command(["git", "-C", str(source), "status", "--porcelain", "--", str(source)]).strip(), "Harness checkout must be clean and committed")
+    need(not command(["git", "-C", str(source), "status", "--porcelain"]).strip(), "Harness checkout must be clean and committed")
     spec = prepared_spec(config)
     workspace = Path(config["workspace"]["host"])
     need(workspace.is_dir(), "Persistent workspace missing")

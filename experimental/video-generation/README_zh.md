@@ -82,6 +82,27 @@ LLM 扫描和收集任务，以及对应的成功率计算。外部 PR 事件不
 
 ## 结果与本地检查
 
+成功执行还会发布[前端结果契约](RESULTS_zh.md)：版本化的 `result.json`、
+逐卡功率序列、分阶段能量与覆盖率，以及可离线打开的 `power-report.html`。
+`h3-results-<run-id>-<attempt>` 包含索引、JSON Schema、双语指标说明，以及每次
+原始执行的媒体、测量、日志和报告。原始执行身份与校验文件和本次导出身份分开保留。
+遥测无效时功率和能量为空；导出失败会保留错误日志并返回失败状态。
+
+复用已成功的 A/A 结果时，在同一个可信调度入口增加参数：
+
+```bash
+gh workflow run e2e-tests.yml --repo SemiAnalysisAI/InferenceX \
+  --ref feat/h3-video-ci -f h3-video=true \
+  -f h3-reuse-run-ids=34291306687,34293342829 -f test-name=h3-power-export
+```
+
+CI 核对原始运行、提交、制品和持久化 Slurm 收据，在相同节点和 GPU UUID 上复用
+现有容器做只读硬件检查，不加载模型或重新生成视频。单次分配上限为十分钟，
+即最多 1.3333 个预留 GPU 小时；先检查任务已有分配是否可复用，结束后释放自有分配。
+`h3-hardware-<run-id>-<attempt>` 的原始硬件证据也会复制到每份结果中。
+后来观察到的功率限制不能补写为历史生成时的设置。原始工作负载失败时仍上传
+失败证据，但不会启动成功结果导出。
+
 每次尝试都会上传 `h3-video-<run-id>-<attempt>`，保留 14 天，并关闭媒体压缩。
 失败后也执行上传，内容包括 adapter 的完整输出：收据、原始 MP4、遥测、
 校验和，以及可用时的便携报告。缺失的报告或媒体保持缺失，不以测试素材替代。
@@ -94,9 +115,9 @@ LLM 扫描和收集任务，以及对应的成功率计算。外部 PR 事件不
 
 ```bash
 cd experimental/video-generation
-uv run --no-project --python 3.12 \
+PYTHONPATH=../.. uv run --no-project --python 3.12 \
   --with 'av==16.1.0' --with 'numpy==2.3.5' \
-  --with 'pytest>=8,<9' python -m pytest -q
+  --with 'pytest>=8,<9' --with 'jsonschema>=4,<5' python -m pytest -q
 bash -n runtime-entry.example.sh
 ```
 

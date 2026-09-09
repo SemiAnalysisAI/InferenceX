@@ -5,12 +5,14 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - 'experimental/video-generation/**'
+      - 'utils/aggregate_power.py'
       - '.github/workflows/h3-video.yml'
       - '.github/workflows/test-h3-video.yml'
       - '.github/workflows/e2e-tests.yml'
   push:
     paths:
       - 'experimental/video-generation/**'
+      - 'utils/aggregate_power.py'
       - '.github/workflows/h3-video.yml'
       - '.github/workflows/test-h3-video.yml'
       - '.github/workflows/e2e-tests.yml'
@@ -30,10 +32,12 @@ jobs:
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
       - name: Test CPU harness and CI control
         working-directory: experimental/video-generation
+        env:
+          PYTHONPATH: ${{ github.workspace }}
         run: >-
           uv run --no-project --python 3.12
           --with 'av==16.1.0' --with 'numpy==2.3.5'
-          --with 'pytest>=8,<9' python -m pytest -q
+          --with 'pytest>=8,<9' --with 'jsonschema>=4,<5' python -m pytest -q
       - name: Check entry shell syntax
         run: bash -n experimental/video-generation/runtime-entry.example.sh
       - name: Check workflow wiring

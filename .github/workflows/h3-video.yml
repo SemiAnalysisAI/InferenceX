@@ -3,7 +3,18 @@ run-name: H3 video smoke - ${{ github.ref_name }}
 
 on:
   workflow_dispatch:
+    inputs:
+      source-run-ids:
+        description: "One or two accepted H3 run IDs to reprocess; empty runs new generation"
+        required: false
+        type: string
+        default: ""
   workflow_call:
+    inputs:
+      source-run-ids:
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -51,9 +62,14 @@ jobs:
           H3_SITE_CONFIG: ${{ vars.H3_SITE_CONFIG }}
           PRIORITY_ENABLED: ${{ vars.PRIORITY_SCHEDULER_ENABLED }}
           NODE_SLOTS_ENABLED: ${{ vars.NODE_SLOT_SCHEDULER_ENABLED }}
+          H3_SOURCE_RUN_IDS: ${{ inputs.source-run-ids }}
         run: |
           set -euo pipefail
           [[ "$H3_SITE_CONFIG" = /* ]] || { echo 'Set H3_SITE_CONFIG to the reviewed runner-local JSON path.' >&2; exit 1; }
+          if [[ -n "$H3_SOURCE_RUN_IDS" && ! "$H3_SOURCE_RUN_IDS" =~ ^[1-9][0-9]{0,19}(,[1-9][0-9]{0,19})?$ ]]; then
+            echo 'Expected one or two comma-separated source run IDs.' >&2
+            exit 1
+          fi
           if [[ "$PRIORITY_ENABLED" == true && "$NODE_SLOTS_ENABLED" != true ]]; then
             echo 'H3 priority scheduling requires node-slot admission for nodes:1.' >&2
             exit 1
@@ -72,7 +88,7 @@ jobs:
 
   smoke:
     needs: prepare
-    name: p${{ needs.prepare.outputs.priority }} | H3 video H200 smoke
+    name: p${{ needs.prepare.outputs.priority }} | ${{ inputs.source-run-ids != '' && 'H3 H200 hardware inventory' || 'H3 video H200 smoke' }}
     runs-on: >-
       ${{ fromJSON(
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
@@ -103,17 +119,70 @@ jobs:
           path: h3-video-source-${{ github.run_id }}-${{ github.run_attempt }}
           persist-credentials: false
       - name: Execute configured H3 smoke
+        if: ${{ inputs.source-run-ids == '' }}
         run: |
           set -euo pipefail
           python3 experimental/video-generation/ci.py \
             --config "$H3_SITE_CONFIG" \
             --output "$RUNNER_TEMP/h3-video-$H3_RUN_ID-$H3_RUN_ATTEMPT"
+      - name: Inspect current H200 hardware and power configuration
+        if: ${{ inputs.source-run-ids != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          H3_SOURCE_RUN_IDS: ${{ inputs.source-run-ids }}
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="$PWD"
+          python3 experimental/video-generation/inventory_ci.py \
+            --config "$H3_SITE_CONFIG" \
+            --source-run-ids "$H3_SOURCE_RUN_IDS" \
+            --output "$RUNNER_TEMP/h3-video-$H3_RUN_ID-$H3_RUN_ATTEMPT"
       - name: Preserve H3 evidence, including incomplete attempts
         if: ${{ always() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: h3-video-${{ github.run_id }}-${{ github.run_attempt }}
+          name: ${{ inputs.source-run-ids != '' && 'h3-hardware' || 'h3-video' }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/h3-video-${{ github.run_id }}-${{ github.run_attempt }}/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+  export:
+    needs: smoke
+    name: Verify and export retained H3 results
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      GH_TOKEN: ${{ github.token }}
+      H3_SOURCE_RUN_IDS: ${{ inputs.source-run-ids || github.run_id }}
+      H3_REUSE: ${{ inputs.source-run-ids != '' }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        if: ${{ inputs.source-run-ids != '' }}
+        with:
+          name: h3-hardware-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/h3-hardware
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - name: Verify original execution and publish versioned measurements
+        run: |
+          set -euo pipefail
+          hardware_args=()
+          if [[ "$H3_REUSE" == true ]]; then hardware_args=(--hardware "$RUNNER_TEMP/h3-hardware"); fi
+          uv run --no-project --python 3.12 --with 'av==16.1.0' --with 'numpy==2.3.5' \
+            python experimental/video-generation/export_ci.py \
+            --source-run-ids "$H3_SOURCE_RUN_IDS" "${hardware_args[@]}" \
+            --output "$RUNNER_TEMP/h3-results"
+      - name: Preserve exported results and failure evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: h3-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/h3-results/
           if-no-files-found: error
           compression-level: 0
           retention-days: 14

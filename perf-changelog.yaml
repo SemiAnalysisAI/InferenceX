@@ -6971,3 +6971,9 @@
   description:
     - "Support the pinned H3 eight-second, 192-frame cell alongside the existing four-second cell for manually dispatched video workloads."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2894
+
+- config-keys: []
+  workflow-dispatch: h3-video.yml
+  description:
+    - "Add validated phase-specific H3 GPU power and energy, a versioned frontend artifact contract, and trusted CI reprocessing with bounded H200 hardware inventory. Preserve original A/A execution evidence; select no LLM benchmark jobs."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2894
