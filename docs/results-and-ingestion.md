@@ -177,6 +177,14 @@ as a clean comparison, reconcile issued, completed, cancelled, and errored
 requests with raw profiling records and token totals. GPU-board energy is
 separate from estimated whole-system power.
 
+The B200 Kimi-K3 C1 recipe uses a separate pinned producer that supports its
+current two-node vLLM runtime and the shared AgentX measurement-window contract.
+The launcher validates all deployment telemetry with the shared power adapter
+after the Slurm job and stages diagnostics before returning a validation failure.
+Other K3 concurrency recipes retain their existing producer until validated.
+The C1 recipe uses synthetic acceptance and disables Mooncake offload; its
+master-config DRAM labels do not establish actual host-cache use.
+
 ### Raw inputs and aggregate schema
 
 [`process_agentic_result.py`](../utils/agentic/aggregation/process_agentic_result.py) resolves the current `results/aiperf_artifacts` layout and a one-child nested layout. It requires `profile_export.jsonl`. It reads these inputs when present:

@@ -9813,6 +9813,7 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
           ep: 1
           dp-attn: false
           additional-settings:
+          # C1 includes deployment GPU power telemetry; other concurrency recipes await validation.
           - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-b200-tp8pp2-mooncake-c1-agentic.yaml"
           - "SYNTHETIC_ACCEPTANCE=true"
           - "SYNTHETIC_ACCEPTANCE_LENGTH=3.84"

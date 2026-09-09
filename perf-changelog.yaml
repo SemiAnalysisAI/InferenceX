@@ -6998,3 +6998,12 @@
     - "Drop conc 8 from the TP8 no-offload arm, which now sweeps conc [1, 2, 4, 16, 32]."
     - "Set SGLANG_PREFILL_DELAYER_MAX_PREFILL_BS_WINDOW_SIZE=1 on the DP-attention path."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2910
+
+- config-keys:
+    - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable shared deployment power telemetry for the existing B200 Kimi-K3 C1 recipe. Pin its current two-node vLLM runtime plus AgentX measurement-window support at srt-slurm 80d7203e424f903c9017de4608ee2044afce9574; join and validate power through the existing adapter after the job, retaining invalid diagnostics before failure. Other concurrency recipes and fixed-sequence producer pins are unchanged."
+    - "为现有 B200 Kimi-K3 C1 配方启用共享部署功耗遥测，固定兼容双节点 vLLM 与 AgentX 测量窗口的 producer 版本，任务结束后通过现有适配器校验并保留失败诊断。其他并发配方与固定序列 producer 版本保持不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2923

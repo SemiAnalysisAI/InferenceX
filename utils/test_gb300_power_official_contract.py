@@ -1,7 +1,11 @@
 """Exercise launcher routing and exporter imports without Slurm or network access."""
 
+import json
 import os
+import shlex
 import subprocess
+import sys
+import tarfile
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -14,11 +18,18 @@ MASTER_CONFIG_PATH = REPO_ROOT / "configs/nvidia-master.yaml"
 # Controlled routing inputs, deliberately independent of the deployed pins.
 FORK_URL = "https://example.test/power-producer.git"
 PRODUCER_PIN = "a" * 40
+AGENTX_PRODUCER_PIN = "b" * 40
 
 
-def _launcher_routing_source() -> str:
+def _launcher_routing_source(launcher_path: Path = LAUNCHER_PATH) -> str:
     """Extract the real clone-routing chain, not a copy of its implementation."""
-    launcher = LAUNCHER_PATH.read_text()
+    launcher = launcher_path.read_text()
+    if launcher_path.name == "launch_b200-nscale-slurm.sh":
+        return launcher[
+            launcher.index("USES_DCGM_POWER=0") : launcher.index(
+                '\nif [[ "${EVAL_FRAMEWORK:-lm-eval}" != "lm-eval" ]]'
+            )
+        ]
     route_start = launcher.index(
         'if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" '
         '&& $MODEL_PREFIX == "qwen3.5" ]]; then'
@@ -33,18 +44,29 @@ def _write_executable(path: Path, text: str) -> None:
     path.chmod(0o755)
 
 
-def _run_dsv4_route(
-    tmp_path: Path, uses_dcgm_power: bool, *, reported_head: str = ""
+def _run_power_route(
+    tmp_path: Path,
+    uses_dcgm_power: bool,
+    *,
+    reported_head: str = "",
+    launcher_path: Path = LAUNCHER_PATH,
+    model_prefix: str = "dsv4",
+    is_agentic: bool = False,
 ) -> tuple[list[str], Path, Path, Path]:
     """Execute only the real launcher routing region in a temporary checkout."""
     workspace = tmp_path / "workspace"
     stub_bin = tmp_path / "bin"
-    source = (
-        workspace
-        / "benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/8k1k"
+    recipe_relative = (
+        "vllm/kimi-k3/agentic" if model_prefix == "kimik3"
+        else "sglang/deepseek-v4/8k1k"
     )
+    source = workspace / "benchmarks/multi_node/srt-slurm-recipes" / recipe_relative
     source.mkdir(parents=True)
     (source / "overlay-marker.txt").write_text("from-workspace\n")
+    (source / "recipe.yaml").write_text(
+        "telemetry:\n  enabled: true\n  provider: dcgm-power\n"
+        if uses_dcgm_power else "benchmark:\n  type: custom\n"
+    )
     stub_bin.mkdir()
 
     route_log = tmp_path / "route.log"
@@ -96,20 +118,23 @@ exec /bin/cp -R "$2"/. "$3"
 """,
     )
 
-    routing = _launcher_routing_source()
-    repo_dir = workspace / "srt-slurm-route-test"
+    routing = _launcher_routing_source(launcher_path)
+    repo_dir = workspace / "srt-slurm"
     harness = tmp_path / "route.sh"
     harness.write_text(
         f"""#!/bin/bash
 set -eo pipefail
 POWER_SRT_SLURM_URL={FORK_URL}
 POWER_SRT_SLURM_PIN={PRODUCER_PIN}
-IS_AGENTIC=0
-FRAMEWORK=dynamo-sglang
-MODEL_PREFIX=dsv4
+AGENTX_POWER_SRT_SLURM_PIN={AGENTX_PRODUCER_PIN}
+IS_AGENTIC={int(is_agentic)}
+FRAMEWORK={"dynamo-vllm" if model_prefix == "kimik3" else "dynamo-sglang"}
+MODEL_PREFIX={model_prefix}
 PRECISION=fp4
+MODEL=fixture-model
 SPEC_DECODING=
 USES_DCGM_POWER={int(uses_dcgm_power)}
+CONFIG_FILE=recipes/{recipe_relative}/recipe.yaml
 GITHUB_WORKSPACE={workspace!s}
 SRT_REPO_DIR={repo_dir!s}
 {routing}
@@ -119,9 +144,9 @@ SRT_REPO_DIR={repo_dir!s}
     env["PATH"] = f"{stub_bin}:/usr/bin:/bin"
     env["ROUTE_LOG"] = str(route_log)
     env["STUB_HEAD"] = reported_head
-    subprocess.run(["/bin/bash", str(harness)], env=env, check=True)
+    subprocess.run(["/bin/bash", str(harness)], cwd=workspace, env=env, check=True)
 
-    marker = repo_dir / "recipes/sglang/deepseek-v4/8k1k/overlay-marker.txt"
+    marker = repo_dir / "recipes" / recipe_relative / "overlay-marker.txt"
     return route_log.read_text().splitlines(), workspace, repo_dir, marker
 
 
@@ -212,7 +237,7 @@ export -f flock unsquashfs enroot sha256sum
 
 
 def test_dsv4_power_route_executes_pinned_producer_and_overlay(tmp_path):
-    log, workspace, repo_dir, marker = _run_dsv4_route(tmp_path, uses_dcgm_power=True)
+    log, workspace, repo_dir, marker = _run_power_route(tmp_path, uses_dcgm_power=True)
 
     assert f"git clone {FORK_URL} {repo_dir}" in log
     assert f"git checkout {PRODUCER_PIN}" in log
@@ -221,7 +246,7 @@ def test_dsv4_power_route_executes_pinned_producer_and_overlay(tmp_path):
 
 
 def test_dsv4_non_power_route_uses_upstream_without_power_stamp(tmp_path):
-    log, workspace, repo_dir, marker = _run_dsv4_route(tmp_path, uses_dcgm_power=False)
+    log, workspace, repo_dir, marker = _run_power_route(tmp_path, uses_dcgm_power=False)
 
     assert f"git clone https://github.com/NVIDIA/srt-slurm.git {repo_dir}" in log
     assert all(FORK_URL not in entry and PRODUCER_PIN not in entry for entry in log)
@@ -231,9 +256,77 @@ def test_dsv4_non_power_route_uses_upstream_without_power_stamp(tmp_path):
 
 def test_dsv4_power_route_rejects_unexpected_checkout_before_publishing_stamp(tmp_path):
     with pytest.raises(subprocess.CalledProcessError):
-        _run_dsv4_route(tmp_path, uses_dcgm_power=True, reported_head="b" * 40)
+        _run_power_route(tmp_path, uses_dcgm_power=True, reported_head="b" * 40)
 
     assert not (tmp_path / "workspace/power-producer-sha.txt").exists()
+
+
+@pytest.mark.parametrize(
+    ("model_prefix", "is_agentic", "expected_pin"),
+    [("dsv4", False, PRODUCER_PIN), ("kimik3", True, AGENTX_PRODUCER_PIN)],
+)
+def test_b200_power_route_preserves_fixed_sequence_and_selects_agentx_producer(
+    tmp_path: Path, model_prefix: str, is_agentic: bool, expected_pin: str
+) -> None:
+    log, workspace, _, marker = _run_power_route(
+        tmp_path,
+        uses_dcgm_power=True,
+        launcher_path=REPO_ROOT / "runners/launch_b200-nscale-slurm.sh",
+        model_prefix=model_prefix,
+        is_agentic=is_agentic,
+    )
+
+    assert f"git clone {FORK_URL} srt-slurm" in log
+    assert f"git checkout {expected_pin}" in log
+    assert (workspace / "power-producer-sha.txt").read_text() == f"{expected_pin}\n"
+    assert marker.read_text() == "from-workspace\n"
+
+
+def test_b200_agentx_power_failure_stages_real_adapter_diagnostics(tmp_path: Path) -> None:
+    launcher = (REPO_ROOT / "runners/launch_b200-nscale-slurm.sh").read_text()
+    start = launcher.index("AGENTX_POWER_RC=0")
+    end = launcher.index('\nif [[ "${EVAL_ONLY:-false}" != "true" ]]', start)
+    source = launcher[start:end]
+    logs_root = tmp_path / "producer/logs"
+    result_dir = logs_root / "agentic/conc_1"
+    result_dir.mkdir(parents=True)
+    (logs_root / "sweep.log").write_text("producer finished without a formal window\n")
+    aggregate_path = tmp_path / "result_conc1.json"
+    aggregate_path.write_text(json.dumps({
+        "disagg": False, "num_prefill_gpu": 0, "num_decode_gpu": 16,
+        "power_valid": 1, "avg_power_w": 999,
+    }))
+    (tmp_path / "power-producer-sha.txt").write_text(AGENTX_PRODUCER_PIN)
+    (tmp_path / "exporter-image.sha256").write_text("fixture-exporter-hash\n")
+    env = os.environ.copy()
+    env.update(
+        GITHUB_WORKSPACE=str(tmp_path), LOGS_DIR=str(logs_root),
+        PYTHONPATH=str(REPO_ROOT), USES_AGENTX_POWER="1", USES_DCGM_POWER="1",
+        CONC_LIST="1", RESULT_FILENAME="result", EVAL_ONLY="false",
+        SELECTED_POWER_SRT_SLURM_PIN=AGENTX_PRODUCER_PIN,
+    )
+    result = subprocess.run(
+        ["/bin/bash"],
+        input=(
+            "set -euo pipefail\n"
+            f"source {shlex.quote(str(REPO_ROOT / 'runners/slurm_utils.sh'))}\n"
+            f"python() {{ {shlex.quote(sys.executable)} \"$@\"; }}\n"
+            + source
+        ),
+        text=True, capture_output=True, cwd=tmp_path, env=env,
+    )
+
+    assert result.returncode == 1
+    aggregate = json.loads(aggregate_path.read_text())
+    assert aggregate["power_valid"] == 0
+    assert "avg_power_w" not in aggregate
+    validation = json.loads(
+        (tmp_path / "LOGS/agentic/conc_1/power_validation.json").read_text()
+    )
+    assert validation["reasons"] == ["formal_benchmark_result_missing"]
+    assert (tmp_path / "LOGS/power/power-producer-sha.txt").read_text() == AGENTX_PRODUCER_PIN
+    with tarfile.open(tmp_path / "multinode_server_logs.tar.gz") as archive:
+        assert "./agentic/conc_1/power_validation.json" in archive.getnames()
 
 
 def test_gb300_dsv4_recipe_images_match_their_master_configs():
