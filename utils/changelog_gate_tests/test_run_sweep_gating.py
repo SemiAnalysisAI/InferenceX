@@ -281,7 +281,7 @@ CASES = [
     ("PR-sync-external-fork-defers-to-trusted-dispatch",
      {**_PR, "action": "synchronize", "labels": ["full-sweep-enabled"],
       "head_repo": "external/InferenceX"},
-     ("success", "success", "SKIP")),
+     ("skipped", "skipped", "SKIP")),
     ("PR-labeled-with-sweep-label",
      {**_PR, "action": "labeled", "label_name": "full-sweep-enabled",
       "labels": ["full-sweep-enabled"]}, ("success", "skipped", "RUN")),
@@ -340,7 +340,7 @@ CASES = [
     ("PR-draft-fork-still-requires-trusted-dispatch",
      {**_PR, "action": "labeled", "draft": True, "label_name": "full-sweep-enabled",
       "labels": ["full-sweep-enabled"], "head_repo": "external/InferenceX"},
-     ("success", "skipped", "SKIP")),
+     ("skipped", "skipped", "SKIP")),
     ("PR-draft-invalid-changelog",
      {**_PR, "action": "synchronize", "draft": True,
       "labels": ["full-sweep-enabled"], "check": "failure"},
@@ -372,6 +372,22 @@ def test_gating_decision(
     expected: tuple[str, str, str],
 ) -> None:
     assert run_dag(scenario) == expected
+
+
+@pytest.mark.parametrize("draft", [False, True])
+@pytest.mark.parametrize("action", ["synchronize", "labeled", "unlabeled"])
+@pytest.mark.parametrize("head_repo", ["external/InferenceX", None])
+def test_external_or_missing_head_cannot_enter_the_sweep_pipeline(draft, action, head_repo) -> None:
+    scenario = {**_PR, "draft": draft, "action": action, "head_repo": head_repo,
+                "labels": ["full-sweep-enabled"], "label_name": "full-sweep-enabled"}
+    assert run_dag(scenario) == ("skipped", "skipped", "SKIP")
+
+
+def test_changelog_validation_has_no_write_token_or_persisted_credential() -> None:
+    job = _WF["jobs"]["check-changelog"]
+    assert job["permissions"] == {"contents": "read"}
+    checkout = next(step for step in job["steps"] if step.get("uses", "").startswith("actions/checkout@"))
+    assert checkout["with"]["persist-credentials"] == "false"
 
 
 def test_priority_classifier_runs_only_for_enabled_pull_requests() -> None:
