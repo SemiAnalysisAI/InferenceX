@@ -19,7 +19,8 @@ It does not predict serving throughput without a separate correlation study.
 
 ## Matrix
 
-The implemented workload is `deepseek-v3`: hidden 7168, top-k 8, 256 routed experts, packed
+The implemented workload is `deepseek-v4-pro` (DeepSeek-V4-Pro 1.6T, the `dsv4` model the rest of
+InferenceX benchmarks): hidden 7168, top-k 6, 384 routed experts, packed
 placement, and one pinned fixed resource profile per backend/topology. Combine is always BF16.
 Dispatch precision is a swept dimension, with a BF16 control and, on the backends whose FP8 dispatch is
 supported upstream (DeepEP V2, MoRI, UCCL-EP, FlashInfer EP), an FP8 dispatch (`bf16`, `fp8`),
@@ -87,7 +88,7 @@ emits a case for a precision it does not support. `normal`-mode cases use the
 `layout-and-dispatch-v1` semantics. `low-latency` cases use each backend's decode-kernel semantics
 (detailed below).
 
-- `ep-core`: uniform routing over the workload's token ladders, which for `deepseek-v3` include decode
+- `ep-core`: uniform routing over the workload's token ladders, which for `deepseek-v4-pro` include decode
   T=1..512 powers of two and prefill T=1024..8192 powers of two. Ladders are model-specific and
   live with the workload in `configs/sweep.json`.
 
@@ -210,13 +211,17 @@ EP8 on MI300X/MI325X/MI355X, and UCCL-EP EP8 on H100/H200/B200 only (the legacy
 `Buffer` low-latency kernels, which at EP8 run `cudaIpc` over NVLink, not the CPU-proxy RDMA path,
 because the adapter passes `is_intranode` and UCCL then never starts its proxies. The AMD SKUs drop
 LL: upstream raised `kNumMaxTopK` 9 -> 16 six days before our pin, and the resulting host assert
-cannot hold on AMD's 16 warp groups), and NCCL EP EP8 on all six NVIDIA SKUs. Its
+cannot hold on AMD's 16 warp groups). NCCL EP low-latency is HELD on every SKU. Its
 `LOW_LATENCY` algorithm is the DeepEP-derived decode path, EXPERT_MAJOR receive with a source-side
-weighted-kernel-sum combine. Those rows were dropped while every LL leg wedged on stale peer signals
-([NVIDIA/nccl#2303](https://github.com/NVIDIA/nccl/issues/2303)) and restored once the single-handle
-adapter removed the aliasing that caused it. B300 carries NCCL EP as its only
-low-latency row, and it is a `candidate` transport, so that SKU publishes no production decode
-coverage. Whether a given SKU/backend/EP/mode cell is attempted is a capability
+weighted-kernel-sum combine — but its combine recv pipeline is a port of DeepEP's PRE-FIX code,
+missing the `fence.proxy.async.shared::cta` DeepEP added in #642, and the shared-memory race that
+fence closes is present on every rung, not only the T=256 rung where it was observed (1-in-5,
+bimodal error 0.47 vs 0.0039 on gb300 EP8). The earlier T<=128 ladder clamp reduced exposure; it
+was never a safety boundary, so a green clamped row is not publication-valid and the rows are held
+in the registry until a fenced wheel ships. (Historically those rows also wedged on stale peer
+signals, [NVIDIA/nccl#2303](https://github.com/NVIDIA/nccl/issues/2303), fixed by the single-handle
+adapter.) B300 therefore publishes no low-latency coverage beyond DeepEP V2 EP8.
+Whether a given SKU/backend/EP/mode cell is attempted is a capability
 fact. Whether it succeeded is decided only by the emitted artifact.
 
 ## Workload Identity
@@ -385,18 +390,20 @@ ranks between pairs adds its own ~10µs and removes the cross-pair overlap the m
 capture. That is a differently-defined quantity that must never share a column with the free-running
 period.
 
-One backend's timed window omits a cost the others pay, deliberately. nccl-ep binds routing with
-`ncclEpUpdateHandle`, a collective whose cost scales with the group's token capacity rather than the
-token count, so charging it per iteration would import a ladder-max-proportional term into dispatch
--- the same artifact that sizing HT's combine input to the ladder maximum used to put under combine.
-It is bound during the untimed warm-up, as NVIDIA's own `ep_bench` does (CUDA events around dispatch
-and combine only, handle update outside the loop). Low-latency mode has nothing to exclude:
-`ncclEpUpdateHandle` returns immediately and the kernel reads the cached routing inside the timed
-dispatch. Every other backend's layout cost scales with tokens and belongs in the window -- uccl-ep
-calls `get_dispatch_layout` inside dispatch, while deepep-v2, MoRI and FlashInfer pass routing on every
-call.
-
-The artifact records the mode so a reader can keep distinct measurement contracts separate.
+Every backend's timed HT dispatch now carries its routing work. nccl-ep binds routing with
+`ncclEpUpdateHandle`, documented as a "per-step collective: prepare the handle for the given top-k
+routing decisions" — and production routing changes every MoE layer, so a serving step pays that
+collective before every dispatch, at the handle's full token capacity. Earlier generations excluded
+it (as NVIDIA's own `ep_bench` does: CUDA events around dispatch and combine only, handle update
+outside the loop) on the argument that its capacity-proportional cost would import a ladder-max
+term into dispatch; that argument describes exactly what production pays, since engines size the
+handle to their max token capacity and update it per step. The timed window now includes the
+update; rows carry `kernel_generation` `nccl-ep-ht-routed`, and pre-change `nccl-ep-ht` rows are a
+different measurement contract — the discriminator the earlier NCCL changes lacked. Low-latency
+mode has nothing to include: `ncclEpUpdateHandle` returns immediately there and the kernel reads
+the cached routing inside the timed dispatch. The other backends already carried this cost --
+uccl-ep calls `get_dispatch_layout` inside dispatch, while deepep-v2, MoRI and FlashInfer pass
+routing on every call.
 
 Every measured component uses one fixed timing profile, defined once in `configs/sweep.json`
 and baked into every scheduled case:
@@ -441,20 +448,26 @@ one-sided kernel within 4% across eight byte-normalized points.
 
 Logical payload bandwidth is:
 
-`logical_payload_bytes / measured_latency_seconds`
+`wire_payload_bytes / measured_latency_seconds`
 
-Payload bytes use rank-deduplicated token-rank activations and exclude expert metadata,
-padding, and backend buffer capacity. BF16 moves 2 bytes per value with no scale payload. An FP8
-dispatch moves 1 byte per value, plus per-128-block FP32 scales for every blockwise codec here (
-DeepEP V2, UCCL-EP and FlashInfer EP, which carries them as a fourth dispatch payload), and none for
-MoRI's plain e4m3 cast, while combine stays BF16, so the dispatch and combine directions can carry
-different byte counts and the roundtrip is their per-field sum. The rank-deduplicated count is exact
-for the normal-mode layout, and for a low-latency kernel that deduplicates per rank (MoRI's
-`IntraNodeLL`, whose combine is an unweighted rank-sum). The low-latency kernels that apply top-k
-weights inside combine instead send one copy per (token, expert) assignment rather than per
-(token, rank), so for a token whose experts share a destination rank this logical count is a lower
-bound on the bytes those kernels move. Each row states which basis it used in `logical_copies`, so
-the two are never silently mixed. Latency (the headline) is
+Every row carries two byte accountings and each excludes expert metadata, padding, and backend
+buffer capacity. `byte_provenance` is the canonical comparable basis: rank-deduplicated
+token-rank activations, one copy per unique (token, dest-rank) pair. `wire_byte_provenance` is
+what the kernels actually move: identical to the canonical basis for every layout that
+deduplicates per rank (all normal modes, and MoRI's low-latency kernels, whose combine is an
+unweighted rank-sum), and one copy per (token, expert) assignment for the low-latency kernels
+that apply top-k weights inside combine (DeepEP V2, UCCL-EP, NCCL EP). For a token whose experts
+share a destination rank the deduplicated count is a lower bound on those kernels' traffic —
+34% low on nccl-ep low-latency EP8 at T=128 — which is why every emitted GB/s divides from the
+WIRE basis; a rate derived from `byte_provenance` on such a row is a lower bound, not the wire
+rate, and is not comparable across backends. Artifacts written before `wire_byte_provenance`
+existed fall back to the deduplicated basis, which only ever understates. `logical_copies`
+states each row's wire basis (`routed`, `assignments`, `wire`), so the two are never silently
+mixed. BF16 moves 2 bytes per value with no scale payload. An FP8 dispatch moves 1 byte per
+value, plus per-128-block FP32 scales for every blockwise codec here (DeepEP V2, UCCL-EP and
+FlashInfer EP, which carries them as a fourth dispatch payload), and none for MoRI's plain e4m3
+cast, while combine stays BF16, so the dispatch and combine directions can carry different byte
+counts and the roundtrip is their per-field sum. Latency (the headline) is
 measured directly and is unaffected. Algorithm bandwidth, bus bandwidth,
 wire utilization, and physical-link utilization are not emitted without a defined primitive model or
 transport counters. Logical bandwidth must never be labeled physical bandwidth. Payload and token
