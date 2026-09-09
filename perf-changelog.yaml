@@ -7031,3 +7031,11 @@
     - "Use cquil11/vllm-cache-sources:b0dc209c-swa-amd64-20260909, built from the exact upstream-base wheel plus cquil11/vllm#2 at b0dc209c14451e9a4e63f1db148ed492d881b765."
     - "Reduce GPU memory utilization to 0.85 and the tiered host cache to 64 GB to exercise filesystem promotions; retain canonical AgentX duration and collect AIPerf Prometheus exports."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2931
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use the r2 Docker Hub image with matching FlashInfer Python, cubin, and CUDA 13 JIT-cache packages at 0.6.18; retain the same three cache-source validation points."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2931
