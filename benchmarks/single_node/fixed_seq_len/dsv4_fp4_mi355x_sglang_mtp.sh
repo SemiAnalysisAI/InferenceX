@@ -69,15 +69,13 @@ if [ "${DP_ATTENTION}" = "true" ]; then
     export SGLANG_DP_USE_GATHERV=1
     export SGLANG_DP_USE_REDUCE_SCATTER=1
     export GPU_MAX_HW_QUEUES=5
+    export SGLANG_PREFILL_DELAYER_MAX_PREFILL_BS_WINDOW_SIZE=1
 
     CHUNKED_PREFILL_SIZE=$((ISL * TP))
     PARALLEL_ARGS+=(
         --dp "$TP"
         --enable-dp-attention
         --enable-prefill-delayer
-        # Safety valve for the delayer: without a watermark it keeps holding
-        # prefill back even when the KV pool is nearly empty.
-        --prefill-delayer-token-usage-low-watermark 0.7
     )
 fi
 if [ "${EP_SIZE:-1}" -gt 1 ]; then
