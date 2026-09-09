@@ -254,10 +254,10 @@ jobs:
             - PR claims feature X works a certain way → Read the source to confirm
             - PR has a bug related to KV cache → Look at vLLM's KV cache implementation
 
-            ## Line Count Report for generate_sweep_configs.py:
-            If `utils/matrix_logic/generate_sweep_configs.py` was modified in this PR:
+            ## Line Count Report for the matrix generator:
+            If `infx/matrix/generate.py` was modified in this PR:
             1. Count the total lines in the current (PR) version of the file
-            2. Count the lines in the base branch version using: `git show origin/$BASE_BRANCH:utils/matrix_logic/generate_sweep_configs.py | wc -l`
+            2. Count the lines in the base branch version of `infx/matrix/generate.py`. If that path does not exist in the base revision, use `utils/matrix_logic/generate_sweep_configs.py` from that revision instead. This fallback compares the implementation across the package migration rather than counting the new path as entirely new code.
             3. Calculate the difference (current - base)
             4. Add an inline comment on the file with this format:
                📊 **Line Count Report**
