@@ -176,9 +176,11 @@ def available_clusters(feed: Feed, policy: Policy, now: datetime) -> set[str]:
     try:
         raw = feed.payload
         if (feed.error or not fresh(feed.retrieved_at, now, policy)
-                or raw['schemaVersion'] != 6 or raw['kind'] != 'inferencex.status.clusters'
+                or raw['kind'] != 'inferencex.status.clusters'
                 or not fresh(raw['generatedAt'], now, policy) or raw['data']['available'] is not True):
             return set()
+        # Validate the consumed fields, not schemaVersion: additive API changes
+        # must not turn healthy capacity into an empty candidate list.
         available: set[str] = set()
         seen: set[str] = set()
         for cluster in raw['data']['clusters']:

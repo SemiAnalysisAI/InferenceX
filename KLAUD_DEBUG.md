@@ -224,6 +224,14 @@ can select the candidate again. Without a PR, report the deferral in the agent's
 final response. A utilization increase after dispatch does not cancel healthy
 work. Closing the PR alone does not make the candidate eligible.
 
+Confirmed infrastructure blockers such as missing staged weights also require a
+failure/deferral report, confirmed child-run completion, PR closure and branch
+deletion at session termination. For image incompatibility, exhausted image
+repairs or uncertain causes, close the unsuccessful PR but retain its branch:
+this blocks the exact candidate without blocking newer releases for the family.
+Uncertain causes require manual review, not an incompatibility claim. Apply
+cleanup only to the session's own PR and runs.
+
 ### 7.3 Final reusable sweeps require a ready PR
 
 `run-sweep.yml` skips PR jobs while the PR is a draft. After targeted validation,
@@ -300,3 +308,10 @@ Use an exact-source guard and remove the workaround once the image includes
 the fix.
 
 Seen on: #1834.
+
+### 7.4 Compatible capacity schema changes must not hide all candidates
+
+The dashboard advanced to schema version 7 while Klaud required exactly 6, so
+a fresh, available feed produced zero eligible clusters. Validate the consumed
+fields and invariants instead of gating on schemaVersion. Keep freshness, kind,
+availability, count consistency and the strict below-20% utilization checks.

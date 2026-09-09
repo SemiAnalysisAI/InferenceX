@@ -2,8 +2,8 @@ name: Klaud Cold auto-sweep
 
 on:
   workflow_dispatch:
-  # schedule:
-  #   - cron: '0 */6 * * *'
+  schedule:
+    - cron: '0 */6 * * *'
 
 permissions:
   contents: read
@@ -24,7 +24,7 @@ jobs:
       pull-requests: read
     env:
       # Total candidates per invocation; selected candidates run in parallel.
-      MAX_CANDIDATES_PER_RUN: '1'
+      MAX_CANDIDATES_PER_RUN: '2'
     outputs:
       selected: ${{ steps.select.outputs.selected }}
       candidates: ${{ steps.select.outputs.candidates }}
@@ -46,7 +46,7 @@ jobs:
         id: review
         if: steps.prepare.outputs.has_candidates == 'true'
         continue-on-error: true
-        uses: anthropics/claude-code-action@d75b94d5ad426cb8546e6628b6f5f19b84e5cce1
+        uses: anthropics/claude-code-action@0d0e0876d3eaa933f45dc692f7a4312c83caf36f # v1.0.218
         env:
           GH_TOKEN: ${{ github.token }}
           KLAUD_EVIDENCE: ${{ runner.temp }}/klaud
