@@ -5,7 +5,7 @@
 # Self-contained because Nscale has its own Slurm and storage layout.
 #
 # Scope: multi-node Dynamo-vLLM DeepSeek-V4-Pro and Kimi K2.6 FP4 runs, plus
-# DeepSeek-V4-Pro FP4 Dynamo-SGLang STP and MTP runs, on the
+# DeepSeek-V4-Pro FP4 Dynamo-SGLang STP and MTP runs and Kimi-K3 AgentX, on the
 # b200-nscale runner label.
 # Anything else exits non-zero.
 
@@ -13,6 +13,7 @@ SLURM_PARTITION="batch_1"
 SLURM_ACCOUNT="benchmark"
 POWER_SRT_SLURM_URL="https://github.com/edwingao28/srt-slurm.git"
 POWER_SRT_SLURM_PIN="e5c837f06a362dc888dfea2ee588e9f19c298270"
+AGENTX_POWER_SRT_SLURM_PIN="80d7203e424f903c9017de4608ee2044afce9574"
 TILERT_SRT_SLURM_URL="https://github.com/SemiAnalysisAI/srt-slurm.git"
 TILERT_SRT_SLURM_PIN="d1e6c97b3baf3e87103b6d83189544c3c7d61c38"
 
@@ -63,6 +64,7 @@ if [[ $FRAMEWORK != "dynamo-vllm" ]] &&
 fi
 
 USES_DCGM_POWER=0
+USES_AGENTX_POWER=0
 _POWER_CONFIG_FILE="${CONFIG_FILE:-}"
 if [[ "${EVAL_ONLY:-false}" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
     _POWER_CONFIG_FILE="$EVAL_CONFIG_FILE"
@@ -78,14 +80,17 @@ if [[ -n "$_POWER_CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
 ' "$_RECIPE_SRC"; then
     USES_DCGM_POWER=1
 fi
-if [[ "$USES_DCGM_POWER" == "1" && (
+if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" &&
+    "$MODEL_PREFIX" == "kimik3" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-vllm" ]]; then
+    USES_AGENTX_POWER=1
+elif [[ "$USES_DCGM_POWER" == "1" && (
     "${IS_AGENTIC:-0}" == "1" ||
     "$PRECISION" != "fp4" ||
     ( "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" != "dynamo-sglang" && "$FRAMEWORK" != "dynamo-vllm" ) ||
     ( "$MODEL_PREFIX" == "kimik2.6" && "$FRAMEWORK" != "dynamo-vllm" ) ||
     ( "$MODEL_PREFIX" != "dsv4" && "$MODEL_PREFIX" != "kimik2.6" )
 ) ]]; then
-    echo "Error: B200 nscale dcgm-power is limited to fixed-sequence DSV4/Kimi-K2.6 FP4 lanes" >&2
+    echo "Error: B200 nscale dcgm-power requires a supported fixed-sequence lane or Kimi-K3 AgentX vLLM" >&2
     exit 1
 fi
 
@@ -95,12 +100,20 @@ echo "Cloning srt-slurm repository..."
 SRT_REPO_DIR="srt-slurm"
 rm -rf "$SRT_REPO_DIR"
 if [[ "$USES_DCGM_POWER" == "1" ]]; then
+    SELECTED_POWER_SRT_SLURM_PIN="$POWER_SRT_SLURM_PIN"
+    if [[ "$USES_AGENTX_POWER" == "1" ]]; then
+        SELECTED_POWER_SRT_SLURM_PIN="$AGENTX_POWER_SRT_SLURM_PIN"
+    fi
     git clone "$POWER_SRT_SLURM_URL" "$SRT_REPO_DIR" || exit 1
     cd "$SRT_REPO_DIR" || exit 1
-    git checkout "$POWER_SRT_SLURM_PIN" || exit 1
-    test "$(git rev-parse HEAD)" = "$POWER_SRT_SLURM_PIN" || { echo "Error: srt-slurm HEAD does not match POWER_SRT_SLURM_PIN=$POWER_SRT_SLURM_PIN" >&2; exit 1; }
+    git checkout "$SELECTED_POWER_SRT_SLURM_PIN" || exit 1
+    test "$(git rev-parse HEAD)" = "$SELECTED_POWER_SRT_SLURM_PIN" || { echo "Error: srt-slurm HEAD does not match selected power producer $SELECTED_POWER_SRT_SLURM_PIN" >&2; exit 1; }
     git rev-parse HEAD > "$GITHUB_WORKSPACE/power-producer-sha.txt"
-    if [[ "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
+    if [[ "$USES_AGENTX_POWER" == "1" ]]; then
+        mkdir -p recipes/vllm/kimi-k3/agentic || exit 1
+        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
+            recipes/vllm/kimi-k3/agentic || exit 1
+    elif [[ "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
         mkdir -p recipes/sglang/deepseek-v4
         cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4" recipes/sglang/deepseek-v4
     elif [[ "$MODEL_PREFIX" == "dsv4" ]]; then
@@ -346,6 +359,12 @@ sed -i 's/^  max_attempts: [0-9]*/  max_attempts: 720/' "$CONFIG_PATH"
 
 inject_synthetic_acceptance "$CONFIG_PATH" "$FRAMEWORK" || exit 1
 
+if [[ "$USES_AGENTX_POWER" == "1" ]]; then
+    read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
+    python "$GITHUB_WORKSPACE/runners/inject_srt_power_concurrencies.py" \
+        "$CONFIG_PATH" "${POWER_CONCURRENCIES[@]}" || exit 1
+fi
+
 SRTCTL_PREFLIGHT_ARGS=()
 # These weights are staged on the Slurm compute nodes, not the login node.
 if [[ $MODEL_PREFIX == "kimik2.6" ]] ||
@@ -385,6 +404,24 @@ if [ ! -d "$LOGS_DIR" ]; then
     exit 1
 fi
 
+AGENTX_POWER_RC=0
+if [[ "$USES_AGENTX_POWER" == "1" && "${EVAL_ONLY:-false}" != "true" ]]; then
+    POWER_LOGS_ROOT=$(cd "$LOGS_DIR" && pwd -P)
+    read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
+    for concurrency in "${POWER_CONCURRENCIES[@]}"; do
+        (
+            cd "$GITHUB_WORKSPACE" || exit 1
+            python -m utils.agentic.aggregation.power_adapter \
+                --result-dir "$POWER_LOGS_ROOT/agentic/conc_${concurrency}" \
+                --agg-result "$GITHUB_WORKSPACE/${RESULT_FILENAME}_conc${concurrency}.json" \
+                --power-dir "$POWER_LOGS_ROOT/power" \
+                --logs-root "$POWER_LOGS_ROOT" \
+                --expected-producer-sha "$SELECTED_POWER_SRT_SLURM_PIN" \
+                --require-power
+        ) || AGENTX_POWER_RC=$?
+    done
+fi
+
 if [[ "$USES_DCGM_POWER" == "1" ]]; then
     mkdir -p "$LOGS_DIR/power"
     cp "$GITHUB_WORKSPACE/exporter-image.sha256" "$LOGS_DIR/power/exporter-image.sha256"
@@ -393,6 +430,11 @@ fi
 
 cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
 bundle_server_logs "$LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"
+
+if [[ "$AGENTX_POWER_RC" != "0" ]]; then
+    echo "ERROR: AgentX power validation failed; available audit and server artifacts were staged" >&2
+    exit "$AGENTX_POWER_RC"
+fi
 
 if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
     RESULT_SUBDIRS=$(find "$LOGS_DIR" -maxdepth 1 -type d -name "*isl*osl*" 2>/dev/null)
