@@ -1202,7 +1202,8 @@ jobs:
                   script: |
                       const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
                       const visualizerUrl = new URL('http://infmax-tools.nvidia.com/');
-                      visualizerUrl.searchParams.set('baselineUrl', runUrl);
+                      visualizerUrl.searchParams.set('baselineLatest', '1');
+                      visualizerUrl.searchParams.set('comparisonUrl', runUrl);
                       const body = `see unofficial run visualizer at ${visualizerUrl.toString()}`;
                       await github.rest.issues.createComment({
                           owner: context.repo.owner,
