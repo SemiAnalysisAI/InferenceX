@@ -166,7 +166,7 @@ The later inventory recorded configured, enforced, default and maximum limits of
 inventory's original profile classified the variant as unknown because its PCI
 IDs omitted `0x`; the exporter now reclassifies the retained XML with its own
 producer commit, preserving the source profile and making no new GPU query.
-Use the [CPU-only replay command](README.md#dispatch-through-inferencex) to reuse
+Use the [CPU-only replay command](https://github.com/SemiAnalysisAI/InferenceX/blob/a526907b1154901744bc6c058d213face64a3fef/experimental/video-generation/README.md#dispatch-through-inferencex) to reuse
 this verified inventory with the original H3 artifacts.
 
 The earlier four-second A/A execution remains available in

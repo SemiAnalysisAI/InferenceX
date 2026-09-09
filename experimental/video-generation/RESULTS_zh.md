@@ -143,7 +143,7 @@ H3 生成测量区间支持 Oren 的假设。该标准不是经过校准的基�
 后续盘点中，四张卡的配置、实际执行、默认及最大功率上限均为 700 W；原始生成
 时的设置仍未知。原始盘点 profile 因 PCI 编号未带 `0x` 而将形态记为 unknown；
 导出器现用自身 producer 提交重新解析保留的 XML，保留源 profile，不发起新的
-GPU 查询。可使用[仅 CPU 的重放命令](README_zh.md#结果与本地检查)，将此次已验证
+GPU 查询。可使用[仅 CPU 的重放命令](https://github.com/SemiAnalysisAI/InferenceX/blob/a526907b1154901744bc6c058d213face64a3fef/experimental/video-generation/README_zh.md#结果与本地检查)，将此次已验证
 盘点与原始 H3 产物一起复用。
 
 此前四秒 A/A 运行保存在
