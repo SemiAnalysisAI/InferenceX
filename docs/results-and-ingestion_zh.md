@@ -171,13 +171,28 @@ raw tree:           results/**, excluding inputs.json and profile_export_raw.jso
 不代表请求计数或模型质量通过验证。用于可靠对比前，应将已发出、已完成、已取消及
 出错请求数与原始 profiling 记录和 token 总数核对。GPU 板卡能耗与整机功耗估算分开报告。
 
-B200 Kimi-K3 C1 配方使用独立固定版本的 producer，兼容当前双节点 vLLM
-运行时及共享 AgentX 测量窗口接口。Slurm 任务结束后，launcher 通过共享功耗
-适配器校验整个部署的遥测，并在返回校验失败前保留诊断工件。其他 K3 并发配方
-在验证前继续使用原有 producer。七个 B200 K3 配置均记录 TP8/PP2/DCP8 和
-`kv-offloading: none`，与服务配方一致；Mooncake connector 仍已配置，但 offload
-保持禁用。C1 使用合成接受率。旧工件保留原有 DCP1/DRAM 标签，解读时必须说明
-这一身份偏差；此次元数据修正不会改变其服务配置或测量值。
+七个 B200 Kimi-K3 配方（C1/4/8/14/24/48/96）使用独立固定版本的 producer，
+兼容双节点 vLLM 运行时及共享 AgentX 测量窗口接口。各配方声明自己的并发数。
+Slurm 任务结束后，launcher 通过共享功耗适配器校验整个部署的遥测，
+并在返回校验失败前保留诊断工件。
+[C1 运行 34384240556](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34384240556)
+已验证全部 16 个 GPU UUID 和完整 profiling 窗口，并保留上传的原始功耗与聚合工件。
+这验证了共享功耗采集路径；C4/8/14/24/48/96 仍缺少各自的实测数据。
+C1 的 236 个 profiling 请求中有 235 个成功，另有 11 个 warmup 错误，
+因此即使 GPU 遥测有效，也不能作为无错误的对比测量。
+
+B200 K3 配方使用 producer 发现的逻辑 worker leader 指标 URL。AIPerf 也会
+发现推理端点，并合并完全相同的 URL。若覆盖为 `localhost`，同一引擎会以两个
+不同的 URL 标签被重复采集，导致服务器 token 与缓存计数翻倍。C1 的已保留工件
+存在此问题；原始请求计数核对和 GPU 能耗仍然有效，但请求错误使其不能用于
+无错误的对比。不要将服务器累计计数用作原始请求或能耗的分母。理论缓存命中率
+来自 AIPerf 的 profile 聚合；预期输出 trace 元数据另有数据集身份要求。
+
+七个 B200 K3 配置均记录 TP8/PP2/DCP8 和 `kv-offloading: none`，
+与服务配方一致；Mooncake connector 仍已配置，但 offload 保持禁用。
+C1/4/8/14 使用 DSpark7 和合成接受长度 3.84，C24/48 使用 DSpark4 和 3.36，
+C96 不使用推测解码。这些服务设置保持不变。旧工件保留原有 DCP1/DRAM 标签，
+解读时必须说明这一身份偏差；元数据修正不会改变其测量值。
 
 GLM-5.1 FP8 TileRT 1P1D B200 配方使用独立固定版本的 producer，在保留 TileRT
 运行时与隐式 DCGM 架构的基础上复用共享 custom-window 生命周期。原始回放工件
