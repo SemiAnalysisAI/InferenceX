@@ -2543,6 +2543,7 @@ run_swebench_eval() {
 
 _wait_for_openai_chat_route() {
     local port="${PORT:-8888}"
+    local host="localhost"
     local timeout_seconds="${EVAL_ENDPOINT_READY_TIMEOUT_SECONDS:-1800}"
     local poll_seconds=5
     local stabilization_seconds="${EVAL_MODEL_STABILIZATION_SECONDS:-30}"
@@ -2563,6 +2564,14 @@ _wait_for_openai_chat_route() {
                 port="$2"
                 shift 2
                 ;;
+            --host)
+                if [[ $# -lt 2 || -z "${2:-}" || "${2:-}" == --* ]]; then
+                    echo "ERROR: --host requires a value" >&2
+                    return 2
+                fi
+                host="$2"
+                shift 2
+                ;;
             *) shift ;;
         esac
     done
@@ -2578,9 +2587,9 @@ _wait_for_openai_chat_route() {
         echo "ERROR: MODEL or SERVED_MODEL_NAME is required for chat endpoint readiness" >&2
         return 2
     fi
-    health_url="http://localhost:${port}/health"
-    models_url="http://localhost:${port}/v1/models"
-    chat_url="http://localhost:${port}/v1/chat/completions"
+    health_url="http://${host}:${port}/health"
+    models_url="http://${host}:${port}/v1/models"
+    chat_url="http://${host}:${port}/v1/chat/completions"
 
     while true; do
         local model_ready=false

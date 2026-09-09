@@ -1,8 +1,8 @@
-name: dynamo-disagg-gb300-8p1d-dep16-c259-b16-mtp3
+name: dynamo-disagg-gb300-4p1d-dep8-c227-b16-mtp3
 
 model:
   path: nvidia/GLM-5.2-NVFP4
-  container: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc22.post1
+  container: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc26.dev202609040000
   precision: fp4
 
 dynamo:
@@ -17,12 +17,12 @@ health_check:
 resources:
   gpu_type: gb300
   gpus_per_node: 4
-  prefill_nodes: 8
-  prefill_workers: 8
+  prefill_nodes: 4
+  prefill_workers: 4
   gpus_per_prefill: 4
-  decode_nodes: 4
+  decode_nodes: 2
   decode_workers: 1
-  gpus_per_decode: 16
+  gpus_per_decode: 8
 
 backend:
   type: trtllm
@@ -38,6 +38,8 @@ backend:
     NCCL_GRAPH_MIXING_SUPPORT: "0"
     MIMALLOC_PURGE_DELAY: "0"
     PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+    TRTLLM_FUSED_DSA_METADATA: "1"
+    TRTLLM_DSA_INDEXER_BF16: "1"
     TRTLLM_SERVE_ENABLE_MSGSPEC: "1"
     TLLM_ADP_ROUTER_MATCH_RATE_THRESHOLD: "0.10"
     TRTLLM_KV_CACHE_TRANSFER_TIMEOUT_SEC: "600"
@@ -113,6 +115,7 @@ backend:
         enable_block_reuse: false
         event_buffer_max_size: 0
         free_gpu_memory_fraction: 0.9
+        host_cache_size: 137438953472
         tokens_per_block: 64
       max_batch_size: 16
       max_num_tokens: 128
@@ -120,7 +123,7 @@ backend:
       moe_config:
         backend: CUTEDSL
         use_low_precision_moe_combine: true
-      moe_expert_parallel_size: 16
+      moe_expert_parallel_size: 8
       num_postprocess_workers: 4
       pipeline_parallel_size: 1
       print_iter_log: true
@@ -130,12 +133,11 @@ backend:
         algorithm: dsa
         enable_heuristic_topk: true
         use_cute_dsl_paged_mqa_logits: true
-        use_cute_dsl_topk: true
       speculative_config:
         decoding_type: MTP
         max_draft_len: 3
       stream_interval: 20
-      tensor_parallel_size: 16
+      tensor_parallel_size: 8
   publish_events_and_metrics: false
 
 frontend:
@@ -161,6 +163,7 @@ frontend:
 
 benchmark:
   type: custom
+  client_dedicated_node: true
   client_placement: head
   command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
   env:
@@ -180,9 +183,3 @@ benchmark:
     AIPERF_REQUIRED_SERVER_METRIC_PREFIX: trtllm_kv_cache_utilization
     OPENAI_API_KEY: EMPTY
     KV_OFFLOADING: dram
-    MODEL: nvidia/GLM-5.2-NVFP4
-    MODEL_PREFIX: glm5.2
-    FRAMEWORK: dynamo-trt
-    PRECISION: fp4
-    CONC: '259'
-    DURATION: '3600'

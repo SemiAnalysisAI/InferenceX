@@ -7021,3 +7021,11 @@
     - "Refresh the full GB200 Dynamo-vLLM AgentX configuration across the configured aggregate and disaggregated topology points."
     - "Retain aggregate SimpleCPU-offload concurrency 20 and 30, and configure Mooncake host KV storage, NIXL over UCX, explicit thinking mode, and the committed MiniMax-M3 EAGLE3-GQA acceptance target."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2807
+- config-keys:
+    - glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh the GB300 GLM-5.2 NVFP4 AgentX disaggregated Pareto curve: move the 5P+1D DEP16 point to concurrency 260, replace the 6P+1D DEP8 concurrency-227 point with 4P+1D plus a 128 GiB decode host KV cache, retire the 8P+1D DEP16 concurrency-259 point, add a 1P+1D concurrency-1 point, and remove the separate glm5.2-fp4-gb300-dynamo-trt-agentic-agg-mtp key."
+    - "Bump all six recipes to tensorrt-llm/release:1.3.0rc26.dev202609040000, add TRTLLM_FUSED_DSA_METADATA=1 and TRTLLM_DSA_INDEXER_BF16=1, and run the AgentX client on a dedicated allocation node."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
