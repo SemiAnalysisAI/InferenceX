@@ -212,10 +212,8 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
           token: ${{ secrets.CLAUDE_PAT }}
 
-      - name: Setup MCP Server
-        run: |
-          pip3 install -r .claude/requirements-mcp.txt
-          mkdir -p /tmp/inferencemax-mcp
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
       # The verifier prompt lives in .github/codeowner-signoff-verify-prompt.md:
       # GitHub caps any ${{ }}-bearing workflow scalar at 21000 characters and
@@ -258,7 +256,7 @@ jobs:
 
           claude_args: |
             --model 'claude-fable-5-1'
-            --mcp-config '{"mcpServers": {"fetch": {"command": "npx", "args": ["-y", "@anthropic-ai/mcp-server-fetch@latest"]}, "inferencemax-repos": {"command": "python3", "args": ["${{ github.workspace }}/.claude/mcp/server.py"], "env": {"INFERENCEMAX_ROOT": "${{ github.workspace }}"}}}}'
+            --mcp-config .github/mcp-ci.json '{"mcpServers": {"fetch": {"command": "npx", "args": ["-y", "@anthropic-ai/mcp-server-fetch@latest"]}}}'
             --allowedTools "Read,Glob,Grep,WebFetch,mcp__github__*,mcp__github_ci__*,mcp__fetch__*,mcp__inferencemax-repos__*,Bash"
           prompt: |
             Read the file /tmp/codeowner-signoff-verify-prompt.md and follow the
