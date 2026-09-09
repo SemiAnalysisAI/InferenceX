@@ -159,7 +159,7 @@ values, `spec-decoding` set where intended. Ensure both yaml files keep a traili
 ## Step 7 — PR + label + monitor
 
 ```bash
-git add -A && git commit -m "<key>: <one-line>" -m "Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
+git add -A && git commit -m "<key>: <one-line>"
 git push -u origin feat/<model>-<sku>[-mtp]-dayzero
 gh pr create --repo SemiAnalysisAI/InferenceX --base main \
   --title "[Klaud Cold] <key>: day-zero <MODEL> <SKU> recipe" --body "<summary>"
