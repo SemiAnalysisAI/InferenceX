@@ -30,7 +30,8 @@ def test_invalid_amd_step_assignment(value):
 
 
 @pytest.mark.parametrize("reused", [False, True])
-def test_failed_inventory_drains_only_owned_step_and_preserves_borrowed_allocation(tmp_path, monkeypatch, reused):
+@pytest.mark.parametrize("prepare_runtime", [False, True])
+def test_failed_inventory_drains_only_owned_step_and_preserves_borrowed_allocation(tmp_path, monkeypatch, reused, prepare_runtime):
     monkeypatch.setenv("H3_RUN_ID", "456")
     monkeypatch.setenv("H3_RUN_ATTEMPT", "1")
     account = "cameronamd@semianalysis.com"
@@ -47,12 +48,19 @@ def test_failed_inventory_drains_only_owned_step_and_preserves_borrowed_allocati
         return receipt
     monkeypatch.setattr(ci, "allocate", allocate)
     monkeypatch.setattr(ci, "job_record", lambda job: record)
-    monkeypatch.setattr(ci, "run_step", lambda *args: 1)
+    import prepare_amd_runtime
+    monkeypatch.setattr(prepare_amd_runtime, "prepare_source", lambda workspace: workspace)
+    def fail_step(argv, log, timeout):
+        assert "--gres=gpu:8" in argv
+        assert "--time=" + ("55" if prepare_runtime else "10") in argv
+        assert timeout == (3360 if prepare_runtime else 660)
+        return 1
+    monkeypatch.setattr(ci, "run_step", fail_step)
     cleanup = []
     monkeypatch.setattr(ci, "drain_step", lambda owned, task, root: cleanup.append(("step", owned["identity"]["JobId"])) or {"status": "ended"})
     monkeypatch.setattr(ci, "stop_allocation", lambda owned, task: cleanup.append(("allocation", owned["identity"]["JobId"])) or {"status": "released"})
     output = tmp_path / "output"
-    assert amd.inspect(tmp_path / "work", output) == 2
+    assert amd.inspect(tmp_path / "work", output, prepare_runtime=prepare_runtime) == 2
     assert cleanup == [("step", "123")] + ([] if reused else [("allocation", "123")])
     assert ci.read(output / "inventory-status.json")["generation_executed"] is False
     assert (output / "SHA256SUMS").is_file()

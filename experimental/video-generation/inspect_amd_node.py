@@ -52,6 +52,20 @@ def inspect_node(run_dir: Path) -> None:
     if smi:
         commands += [[smi, option, "--json"] for option in ("list", "static", "metric", "process")]
         commands += [[smi, "version", "--json"]]
+        processes = observation([smi, "process", "--json"])
+        if processes.get("exit_code") == 0:
+            pids = {item["process_info"]["pid"] for gpu in json.loads(processes["stdout"])
+                    for item in gpu.get("process_list", []) if isinstance(item.get("process_info", {}).get("pid"), int)}
+            identities = []
+            for pid in sorted(pids):
+                proc = Path("/proc") / str(pid)
+                try:
+                    identities.append({"pid": pid, "exe": str((proc / "exe").resolve(strict=True)),
+                                       "comm": (proc / "comm").read_text().strip(),
+                                       "status": (proc / "status").read_text(), "cgroup": (proc / "cgroup").read_text()})
+                except OSError as error:
+                    identities.append({"pid": pid, "identity_error": str(error)})
+            ci.write(run_dir / "observed-processes.json", identities)
     cache = Path("/var/lib/squash")
     images = [{"path": str(p), "size_bytes": p.stat().st_size} for p in sorted(cache.glob("*sglang*rocm*.sqsh"))]
     ci.write(run_dir / "node-inventory.json", {
@@ -59,9 +73,12 @@ def inspect_node(run_dir: Path) -> None:
         "cached_images": images, "observations": [observation(argv) for argv in commands],
         "generation_executed": False, "runtime_compatibility": "not_tested", "observed_at": ci.now(),
     })
+    if context.get("prepare_runtime"):
+        from prepare_amd_runtime import prepare_on_node
+        prepare_on_node(Path(context["workspace"]), run_dir)
 
 
-def inspect(workspace: Path, output: Path) -> int:
+def inspect(workspace: Path, output: Path, *, prepare_runtime: bool = False) -> int:
     ci.need(workspace.is_absolute(), "Persistent workspace must be absolute")
     run_id, attempt = os.environ["H3_RUN_ID"], os.environ["H3_RUN_ATTEMPT"]
     ci.need(run_id.isdigit() and attempt.isdigit(), "Invalid CI identity")
@@ -74,6 +91,8 @@ def inspect(workspace: Path, output: Path) -> int:
     config = {"task_id": "h3-cross-hardware", "mode": "serving-smoke", "allocation_receipts": [],
               "site": {"cluster": "mi355x-amds", "partition": "compute", "account": account, "gpu_model": "MI355X"},
               "resources": {"gpus": 8, "allocated_gpus": 8, "cpus": 8, "memory_gb": 64, "minutes": 15}}
+    if prepare_runtime:
+        config["resources"].update(cpus=32, memory_gb=256, minutes=60)
     state = {"status": "starting", "started_at": ci.now(), "config": config,
              "purpose": "Observe actual AMD device identities, telemetry formats and cached runtimes before adding a GPU adapter",
              "source_sha": os.environ.get("H3_SOURCE_SHA"), "generation_executed": False}
@@ -82,6 +101,9 @@ def inspect(workspace: Path, output: Path) -> int:
     control.mkdir(parents=True, exist_ok=True)
     with ci.task_lock(control / ".node-inventory.lock"):
         try:
+            if prepare_runtime:
+                from prepare_amd_runtime import prepare_source
+                prepare_source(workspace)
             recovery = ci.recover(config, root)
             ci.write(run_dir / "recovery.json", recovery)
             ci.need(recovery["action"] != "wait", "Task-owned AMD allocation is waiting; do not submit another")
@@ -101,14 +123,15 @@ def inspect(workspace: Path, output: Path) -> int:
             # verifies the full eight-GPU Slurm step binding before device queries.
             reason = ci.capacity(record, {**config["resources"], "gpus": 0})
             ci.need(reason is None, "Owned AMD allocation: " + str(reason))
-            ci.write(run_dir / "context.json", {"allocation": receipt, "node": record["NodeList"]})
+            ci.write(run_dir / "context.json", {"allocation": receipt, "node": record["NodeList"],
+                                               "workspace": str(workspace), "prepare_runtime": prepare_runtime})
             # The source checkout and result directory are on the shared filesystem.
             argv = ["srun", "--jobid=" + record["JobId"], "--nodelist=" + record["NodeList"],
-                    "--nodes=1", "--ntasks=1", "--gres=gpu:8", "--cpus-per-task=8", "--cpu-bind=cores",
-                    "--time=10", "--export=NONE", "/usr/bin/python3", str(Path(__file__).resolve()),
+                    "--nodes=1", "--ntasks=1", "--gres=gpu:8", "--cpus-per-task=" + str(config["resources"]["cpus"]), "--cpu-bind=cores",
+                    "--time=" + str(config["resources"]["minutes"] - 5), "--export=NONE", "/usr/bin/python3", str(Path(__file__).resolve()),
                     "--inside", str(run_dir)]
             ci.write(run_dir / "step-command.json", argv)
-            code = ci.run_step(argv, run_dir / "srun.log", 660)
+            code = ci.run_step(argv, run_dir / "srun.log", (config["resources"]["minutes"] - 4) * 60)
             ci.need(code == 0 and (run_dir / "node-inventory.json").is_file(), "AMD inventory step failed; inspect retained logs")
             state["status"] = "complete"
         except Exception as error:
@@ -135,8 +158,9 @@ if __name__ == "__main__":
     parser.add_argument("--workspace", type=Path)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--inside", type=Path)
+    parser.add_argument("--prepare-runtime", action="store_true")
     args = parser.parse_args()
     if args.inside:
         inspect_node(args.inside)
     else:
-        raise SystemExit(inspect(args.workspace, args.output))
+        raise SystemExit(inspect(args.workspace, args.output, prepare_runtime=args.prepare_runtime))
