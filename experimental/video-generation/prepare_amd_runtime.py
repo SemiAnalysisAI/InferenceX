@@ -49,15 +49,13 @@ def recover_rootfs(workspace: Path, output: Path) -> None:
             ci.need("Ignoring xattrs in filesystem" in log and "created 464452 files" in log
                     and "created 11757 symlinks" in log, "Prior extraction did not reach the recorded completion footer")
             ci.need((rootfs / "etc/rc").is_file(), "Extracted Enroot entrypoint missing")
+            record["entrypoint"] = (rootfs / "etc/rc").read_text()
             prepare_source(workspace)
             env = {**os.environ, "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
                    "ENROOT_DATA_PATH": str(root / "enroot-data"), "ENROOT_CACHE_PATH": str(root / "cache"),
-                   "ENROOT_RUNTIME_PATH": str(output / "enroot-runtime"), "ENROOT_TEMP_PATH": str(output / "enroot-tmp"),
+                   "ENROOT_RUNTIME_PATH": str(root / "runtime-cpu-recovery"), "ENROOT_TEMP_PATH": str(root / "tmp-cpu-recovery"),
                    "ROCR_VISIBLE_DEVICES": "", "HIP_VISIBLE_DEVICES": "", "CUDA_VISIBLE_DEVICES": ""}
-            # Enroot exited after extraction, before its native permission normalization.
-            subprocess.run(["bash", "-c", 'source /usr/local/lib/enroot/common.sh; common::fixperms "$1"',
-                            "recover", str(rootfs)], env=env, check=True, timeout=300)
-            record["permission_normalization"] = "completed using installed Enroot common::fixperms"
+            record["permission_normalization"] = "Prior full-tree normalization exceeded 300s; test entry before repairing any specific permission"
             probe = output / "runtime-cpu-probe.py"
             probe.write_text(CPU_PROBE)
             persistent = control / f"rootfs-recovery-{os.environ['H3_RUN_ID']}-{os.environ['H3_RUN_ATTEMPT']}"
@@ -75,7 +73,7 @@ def recover_rootfs(workspace: Path, output: Path) -> None:
             ci.write(output / "runtime-cpu-probe.json", result)
             record.update(status="recovered", probe=result,
                           compatibility="CPU entry and imports only; HIP and H3 generation unverified")
-            ci.write(origin, {"image": str(IMAGE), "status": "created"})
+            ci.write(origin, {"image": str(IMAGE), "status": "recovered"})
             ci.write(control / "rootfs-recovered.json", record)
         except Exception as error:
             record.update(status="failed", error=str(error))
@@ -173,7 +171,8 @@ def prepare_on_node(workspace: Path, run_dir: Path) -> None:
         Path(env[key]).mkdir(parents=True, exist_ok=True)
     origin = rootfs.with_suffix(".image.json")
     if rootfs.is_dir():
-        ci.need(origin.is_file() and ci.read(origin) == {"image": str(IMAGE), "status": "created"},
+        ci.need(origin.is_file() and ci.read(origin) in (
+                    {"image": str(IMAGE), "status": "created"}, {"image": str(IMAGE), "status": "recovered"}),
                 "Existing AMD rootfs has no completed task-owned image receipt; inspect before reuse")
     if not rootfs.is_dir():
         ci.need(IMAGE.is_file(), "Validated cached ROCm image is missing on this node")
