@@ -151,3 +151,19 @@ Before accepting an updated curve, reviewers should verify:
 - [InferenceX initial AL collector PR](https://github.com/SemiAnalysisAI/InferenceX/pull/1650)
 - [InferenceX multi-model AL collectors PR](https://github.com/SemiAnalysisAI/InferenceX/pull/1706)
 - [InferenceX multi-node synthetic-acceptance bring-up](https://github.com/SemiAnalysisAI/InferenceX/pull/1789)
+
+### DeepSeek-V4.1-Flash DSpark
+
+The `dsv41flash` collector uses the dedicated `deepseekv41-flash-0909` image,
+TP4 and Engram UVA offload on B200. Collect `mtp-list=5`, `thinking-modes=off on`,
+`category=coding`, and `output-len=4096`. It measures probabilistic drafting and
+block rejection with adaptive verification disabled, matching the fixed draft
+length methodology above. Thinking is explicitly enabled or disabled for each
+cell. The collector fails unless all 80 coding prompts succeed and valid
+acceptance counters are present. The generated artifact is a candidate; add the
+source run URL and review detailed outputs before committing it as a golden curve.
+
+Dispatch `speedbench-al.yml` on the collector branch with `runner=cluster:b200-nscale`,
+`tp=4`, `model=deepseek-ai/DeepSeek-V4.1-Flash`, `model-prefix=dsv41flash`, and the
+image above. The historical `_b300_` collector filename is the workflow lookup
+convention; it does not select the allocation hardware.

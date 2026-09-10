@@ -16,7 +16,8 @@ def run_bash(command: str, *args: Path | str) -> subprocess.CompletedProcess[str
     )
 
 
-def test_b200_v41_uses_hf_cache_without_mounting_model_id(tmp_path: Path) -> None:
+@pytest.mark.parametrize("override", ["", "benchmarks/single_node/speedbench/dsv41flash_fp4_b300_vllm.sh"])
+def test_b200_v41_uses_hf_cache_without_mounting_model_id(tmp_path: Path, override: str) -> None:
     log = tmp_path / "launch.jsonl"
     result = run_bash(
         '''
@@ -30,11 +31,12 @@ def test_b200_v41_uses_hf_cache_without_mounting_model_id(tmp_path: Path) -> Non
         export MODEL=deepseek-ai/DeepSeek-V4.1-Flash IS_MULTINODE=false
         export SPEC_DECODING=mtp TP=4 RUNNER_NAME=b200-test IS_AGENTIC=1
         export SCENARIO_SUBDIR=agentic/ EXP_NAME=dsv41flash_tp4_conc1
+        export BENCH_SCRIPT_OVERRIDE="$3"
         export IMAGE=vllm/test:fixture GITHUB_WORKSPACE="$1" SRUN_LOG="$2"
         cd "$GITHUB_WORKSPACE"
         source runners/launch_b200-nscale-compat.sh
         ''',
-        REPO_ROOT, log,
+        REPO_ROOT, log, override,
     )
     assert result.returncode == 0, result.stderr
     serve = json.loads(log.read_text().splitlines()[-1])
@@ -46,3 +48,6 @@ def test_b200_v41_uses_hf_cache_without_mounting_model_id(tmp_path: Path) -> Non
     assert "deepseek-ai/" not in mounts
     assert serve["args"][-2] == "bash"
     assert (REPO_ROOT / serve["args"][-1]).is_file()
+
+    if override:
+        assert serve["args"][-1] == override

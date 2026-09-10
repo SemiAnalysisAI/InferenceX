@@ -517,6 +517,9 @@ else
     if [[ ! -f "$BENCH_SCRIPT" ]]; then
         BENCH_SCRIPT="${BENCH_BASE}${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh"
     fi
+    if [[ -n "${BENCH_SCRIPT_OVERRIDE:-}" ]]; then
+        BENCH_SCRIPT="$BENCH_SCRIPT_OVERRIDE"
+    fi
     LOCK_FILE="${SQUASH_FILE}.lock"
 
     # TODO(Cam): lmsysorg/sglang:deepseek-v4-blackwell installs sglang editable at
