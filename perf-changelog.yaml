@@ -7021,3 +7021,10 @@
     - "Refresh the full GB200 Dynamo-vLLM AgentX configuration across the configured aggregate and disaggregated topology points."
     - "Retain aggregate SimpleCPU-offload concurrency 20 and 30, and configure Mooncake host KV storage, NIXL over UCX, explicit thinking mode, and the committed MiniMax-M3 EAGLE3-GQA acceptance target."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2807
+
+- config-keys:
+    - qwen3.5-fp4-b300-sglang-mtp
+  description:
+    - "Update SGLang image from lmsysorg/sglang:v0.5.14-cu130 to lmsysorg/sglang:v0.5.19-cu130 (digest sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9)."
+    - "Model nvidia/Qwen3.5-397B-A17B-NVFP4-V2, TP4/EP1 and TP2/EP2 topologies, the 8k/1k workload, EAGLE (3,1,4) MTP settings and the launch script are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2950
