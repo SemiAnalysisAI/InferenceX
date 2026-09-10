@@ -23,6 +23,10 @@ import pytest
 
 from utils.agentic.aggregation.request_metrics import compute_request_metrics
 from utils.agentic.aggregation.process_agentic_result import _gpu_shape
+from utils.agentic.aggregation.process_agentic_result import (
+    optional_component_metadata,
+    optional_kv_offload_backend_metadata,
+)
 from utils.agentic.aggregation.server_metrics import compute_server_metrics
 
 
@@ -388,6 +392,37 @@ def test_processor_omits_component_metadata_when_absent(tmp_path: Path):
 
     assert "router" not in agg
     assert "kv_p2p_transfer" not in agg
+
+
+@pytest.mark.parametrize("parser", [
+    optional_component_metadata, optional_kv_offload_backend_metadata,
+])
+@pytest.mark.parametrize("raw", [None, "", "null"])
+def test_optional_metadata_accepts_unset_values(monkeypatch, parser, raw):
+    if raw is None:
+        monkeypatch.delenv("TEST_METADATA", raising=False)
+    else:
+        monkeypatch.setenv("TEST_METADATA", raw)
+    assert parser("TEST_METADATA") is None
+
+
+@pytest.mark.parametrize(("parser", "raw", "message"), [
+    (optional_component_metadata, "{", "must contain valid JSON"),
+    (optional_component_metadata, "[]", "must contain exactly 'name' and 'version'"),
+    (optional_component_metadata, '{"name":"router"}', "must contain exactly 'name' and 'version'"),
+    (optional_component_metadata, '{"name":"router","version":0}', "name and version must be non-empty strings"),
+    (optional_kv_offload_backend_metadata, "{", "must contain valid JSON"),
+    (optional_kv_offload_backend_metadata, "[]", "may contain only 'name' and 'version'"),
+    (optional_kv_offload_backend_metadata, '{"name":"cache","extra":1}', "may contain only 'name' and 'version'"),
+    (optional_kv_offload_backend_metadata, "{}", "must contain 'name' and optional 'version'"),
+    (optional_kv_offload_backend_metadata, '{"version":"1"}', "must contain 'name' and optional 'version'"),
+    (optional_kv_offload_backend_metadata, '{"name":"cache","version":""}', "values must be non-empty strings"),
+])
+def test_optional_metadata_preserves_cli_errors(monkeypatch, parser, raw, message):
+    monkeypatch.setenv("TEST_METADATA", raw)
+    with pytest.raises(SystemExit) as error:
+        parser("TEST_METADATA")
+    assert error.value.code == f"TEST_METADATA {message}"
 
 
 @pytest.mark.parametrize(

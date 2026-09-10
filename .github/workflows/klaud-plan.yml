@@ -8,6 +8,7 @@ on:
 permissions:
   contents: read
   actions: read
+  pull-requests: read
 
 concurrency:
   group: klaud-auto-sweep
@@ -24,7 +25,7 @@ jobs:
       pull-requests: read
     env:
       # Total candidates per invocation; selected candidates run in parallel.
-      MAX_CANDIDATES_PER_RUN: '2'
+      MAX_CANDIDATES_PER_RUN: '5'
     outputs:
       selected: ${{ steps.select.outputs.selected }}
       candidates: ${{ steps.select.outputs.candidates }}
@@ -36,12 +37,17 @@ jobs:
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
         with:
           python-version: '3.12'
+      - name: Reconcile interrupted owned candidates
+        env:
+          # Recovery mutates only sessions recorded by this workflow after their parent finishes.
+          GH_TOKEN: ${{ secrets.CLAUDE_PAT }}
+        run: uv run --no-project --exclude-newer PT12H --python 3.12 --with "pydantic>=2.10,<3" python -m utils.klaud recover
       - name: Prepare eligible candidates and open PRs
         id: prepare
         env:
           GH_TOKEN: ${{ github.token }}
           KLAUD_DASHBOARD_API_KEY: ${{ secrets.KLAUD_DASHBOARD_API_KEY }}
-        run: uv run --no-project --python 3.12 --with "pydantic>=2.10,<3" python -m utils.klaud plan --directory "$RUNNER_TEMP/klaud"
+        run: uv run --no-project --exclude-newer PT12H --python 3.12 --with "pydantic>=2.10,<3" --with pyyaml python -m utils.klaud plan --directory "$RUNNER_TEMP/klaud"
       - name: Check for overlapping open PRs
         id: review
         if: steps.prepare.outputs.has_candidates == 'true'
@@ -73,7 +79,10 @@ jobs:
             Read docs/index.md and AGENTS.md. Titles alone cannot exclude
             overlap; incomplete file lists require investigation, not assumptions.
 
-            Resolve each reviewed candidate to one current configs/*-master.yaml:KEY family.
+            Each candidate names its live configs/*-master.yaml:KEY family and a matching public
+            observation from the canonical matrix generator. Verify that exact family; never substitute
+            a sibling or a retired workload. Duplicate means overlapping edits or shared dependencies,
+            not merely the same model/image on a different family.
             Resolve ALL possible target clusters from its runner and configs/runners.yaml to the
             exact IDs in capacity.json. Same-hardware sibling clusters cannot stand in for the
             recipe's target. Proceed only if every target is in eligible-telemetry-clusters;
@@ -98,7 +107,13 @@ jobs:
           KLAUD_PR_REVIEW: ${{ steps.review.outputs.structured_output }}
           KLAUD_REVIEW_OUTCOME: ${{ steps.review.outcome }}
           KLAUD_REVIEW_EXECUTION: ${{ steps.review.outputs.execution_file }}
-        run: uv run --no-project --python 3.12 --with "pydantic>=2.10,<3" python -m utils.klaud select --max-candidates-per-run "$MAX_CANDIDATES_PER_RUN" --directory "$RUNNER_TEMP/klaud" --execution-file "${KLAUD_REVIEW_EXECUTION:-$RUNNER_TEMP/claude-execution-output.json}"
+        run: uv run --no-project --exclude-newer PT12H --python 3.12 --with "pydantic>=2.10,<3" python -m utils.klaud select --max-candidates-per-run "$MAX_CANDIDATES_PER_RUN" --directory "$RUNNER_TEMP/klaud" --execution-file "${KLAUD_REVIEW_EXECUTION:-$RUNNER_TEMP/claude-execution-output.json}"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: klaud-ownership
+          path: ${{ runner.temp }}/klaud/ownership.json
+          if-no-files-found: error
+          retention-days: 90
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:

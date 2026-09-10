@@ -4,6 +4,13 @@ A running playbook of failures the Klaud-Cold image-bump cron has hit, the diagn
 
 When you fix something not yet listed, add it here so the next session doesn't re-learn it.
 
+**Klaud Cold permits zero runtime patching.** Historical workarounds below are
+diagnostic context, not permission to change the selected recipe's scope.
+Never rewrite installed engine/serving-stack sources, monkey-patch, overlay
+container files, install forked/rebuilt engine wheels or use a waiver to bypass
+this rule. If the selected launch path needs such a patch, classify the candidate
+as incompatible and stop until an unmodified supported image can run it.
+
 ---
 
 ## 1. PR setup-stage failures
@@ -217,7 +224,7 @@ between the PR sweep and merge therefore does not require another GPU sweep.
 The planner ignores closed PRs but treats every matching `klaud/auto-*` branch
 as occupied. If the capacity check fails before a targeted dispatch, the final
 sweep transition or a recovery dispatch, first record a public-safe deferral and
-current attempt state in any existing PR. Cancel and confirm all owned runs,
+current attempt state in a comment on any existing PR. Cancel and confirm all owned runs,
 update the report with their terminal states, then remove sweep labels, return
 the PR to draft, close it, and delete its remote Klaud branch so a later sweep
 can select the candidate again. Without a PR, report the deferral in the agent's
@@ -234,15 +241,17 @@ cleanup only to the session's own PR and runs.
 
 ### 7.3 Final reusable sweeps require a ready PR
 
-`run-sweep.yml` skips PR jobs while the PR is a draft. After targeted validation,
+`run-sweep.yml` skips PR jobs while the PR is a draft. After the trimmed smoke,
 append the changelog entry, mark the PR ready, then apply `full-sweep-enabled`.
 If that sweep fails, remove the label and return the PR to draft before pushing
 a repair, or each intermediate push starts another full sweep. The Klaud Stop
-hook tracks a labeled final sweep by candidate branch and exact head SHA and
-requires a successful run with reusable artifacts. It ignores completed
+hook verifies the `finish` receipt, including exact-head full matrix/result
+coverage, terminal children and failure/deferral reporting and branch cleanup.
+The next autosweep reconciles interrupted sessions recorded in `klaud-ownership`;
+old runs without that ownership record remain maintainer-managed. It ignores completed
 all-skipped runs from unrelated label events on that same SHA. The lookup window
-starts at the parent auto-sweep's original creation time so a candidate-job rerun
-still sees targeted and final sweeps created by its earlier attempt.
+starts at the parent auto-sweep's original creation time. Candidate-job reruns
+are skipped; dispatch a new autosweep so recovery checks the old session first.
 
 ---
 
@@ -262,7 +271,7 @@ still sees targeted and final sweeps created by its earlier attempt.
 ## 9. PR conventions for this repo
 
 - Image-bump / new-recipe PRs I open on behalf of the user (or that the user creates) get the **`[Klaud Cold]`** title prefix.
-- Add the `full-sweep-fail-fast` label so a canary-gated full sweep actually runs (`gh api -X POST ... labels[]=full-sweep-fail-fast`). This is the default for image bumps: the first failure cancels the rest of that matrix instead of wasting GPU time. Use `full-sweep-enabled` only when a flaky job must not cancel its matrix's in-flight work, or `full-sweep-fail-fast-no-canary` when the single-node canary is flaky or unrepresentative. Without a primary sweep label, the sweep is mostly SKIPPED.
+- Klaud Cold keeps targeted attempts draft and unlabeled; final validation requires a ready PR with `full-sweep-enabled` as its sole sweep label. Wait for successful completion on the exact head and reusable artifacts. See [the current Klaud guide](docs/klaud.md); generic manual-sweep recommendations do not override this flow.
 - After any code change that shifts a PR's scope (drops a recipe, changes an image tag), **update the PR title AND body in the same step** and **verify** with `gh pr view <N> --json title,body`. `gh pr edit` silently fails (see §8).
 - `utils/merge_with_reuse.sh <N>` is the merge entrypoint. It handles the `perf-changelog.yaml` auto-append.
 
@@ -295,17 +304,10 @@ CUDA graphs. The MSA prefill path slices the token dimension before calling
 contiguous when a worker has multiple local KV/index heads. Data-parallel
 attention forces TP1, exposing all four MiniMax M3 KV/index heads per worker.
 
-**Workaround:** Before server startup, patch the installed
-`vllm/models/minimax_m3/nvidia/sparse_attention_msa.py` assignment from:
-```python
-prefill_topk = topk[:, nd:num_tokens, :]
-```
-to:
-```python
-prefill_topk = topk[:, nd:num_tokens, :].contiguous()
-```
-Use an exact-source guard and remove the workaround once the image includes
-the fix.
+**Resolution:** use an upstream image that includes the contiguous-buffer fix.
+The historical installed-source workaround is prohibited for Klaud Cold,
+including under a waiver. Until the unmodified image supports this recipe,
+report incompatibility; do not rewrite `sparse_attention_msa.py` before serving.
 
 Seen on: #1834.
 
@@ -314,4 +316,4 @@ Seen on: #1834.
 The dashboard advanced to schema version 7 while Klaud required exactly 6, so
 a fresh, available feed produced zero eligible clusters. Validate the consumed
 fields and invariants instead of gating on schemaVersion. Keep freshness, kind,
-availability, count consistency and the strict below-20% utilization checks.
+availability, count consistency and the strict below-80% utilization checks.
