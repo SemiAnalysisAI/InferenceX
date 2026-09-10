@@ -8795,13 +8795,13 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2:
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-gb200-tp8pp2-mooncake-c96-agentic.yaml"
 dsv4-fp4-gb300-dynamo-sglang-agentic-agg:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260829-89816a21
+  image: lmsysorg/sglang:v0.5.19-cu130@sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9
   model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:gb300-nv
   precision: fp4
   framework: dynamo-sglang
-  router: { name: dynamo-router, version: "1.5.0.dev20260902" }
+  router: { name: dynamo-router, version: "1.5.0.dev20260910" }
   multinode: true
   disagg: false
   scenarios:
