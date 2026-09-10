@@ -66,7 +66,13 @@ export SGLANG_TIMEOUT_KEEP_ALIVE=900
 # v1 dispatches to the precompiled HIP op in sgl-kernel (upstream MI355X CI
 # runs DSA models the same way).
 export SGLANG_OPT_USE_TOPK_V2=false
- 
+# Optional quick-reduce quantisation (F-2 probe). Set in runner .env to activate;
+# leave unset for baseline behaviour (falls back to NCCL/custom-AR).
+#   ROCM_QUICK_REDUCE_QUANTIZATION=INT4  — INT4 quick-reduce (tensor >= 16 MB for TP4/bf16)
+#   ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16=1 — use faster fp16 kernels on ROCm (recommended with INT4)
+[[ -n "${ROCM_QUICK_REDUCE_QUANTIZATION:-}" ]]    && export ROCM_QUICK_REDUCE_QUANTIZATION
+[[ -n "${ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16:-}" ]] && export ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16
+
 # HiCache L2 (host DRAM), optionally extended with Mooncake L3.
 # KV_OFFLOADING=dram requires KV_OFFLOAD_BACKEND=hicache or mooncake.
 #
