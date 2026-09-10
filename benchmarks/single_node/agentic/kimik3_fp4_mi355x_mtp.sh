@@ -88,7 +88,9 @@ export SAFETENSORS_FAST_GPU=1
 export VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4=1
 export AITER_SITUV2_A8W4=1
 export AITER_BF16_FP8_MOE_BOUND=0
-export VLLM_USE_BREAKABLE_CUDAGRAPH=0
+# 385dce36 rejects FULL_AND_PIECEWISE when the model is not torch-compiled and
+# breakable graphs are off ("piecewise CUDA graphs unavailable"). Overridable.
+export VLLM_USE_BREAKABLE_CUDAGRAPH="${VLLM_USE_BREAKABLE_CUDAGRAPH:-1}"
 export AITER_QUICK_REDUCE_QUANTIZATION=INT4
 
 # Workaround for MEC FW <177 RCCL memory reclaim issue (shared with the other
@@ -290,12 +292,12 @@ if [ "$SPEC_NUM_TOKENS" -gt 0 ]; then
 if [ "${EVAL_ONLY:-false}" = "true" ]; then
     SPEC_ARGS=(
         --speculative-config
-        "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"block\"}"
+        "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"ROCM_AITER_MLA\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"block\"}"
     )
 else
     SPEC_ARGS=(
         --speculative-config
-        "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
+        "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"ROCM_AITER_MLA\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
     )
     fi
 fi
