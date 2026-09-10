@@ -7122,6 +7122,12 @@
     - "Update SGLang image from lmsysorg/sglang:v0.5.12-cu130 to lmsysorg/sglang:v0.5.19-cu130 (digest sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9, sglang commit 0bcd822377da7b5718e674eaf9c870d349424dd1); recipe script, TP8/EP1 topology and EAGLE/MTP settings unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2955
 
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-agg
+  description:
+    - "Update the SGLang image from nightly-dev-cu13-20260829-89816a21 to the digest-pinned v0.5.19-cu130 release (lmsysorg/sglang:v0.5.19-cu130@sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9)."
+    - "Move the TP8 and TP4 low-latency recipes and the master router metadata from Dynamo 1.5.0.dev20260902 to 1.5.0.dev20260910, the nightly that carries the ServerArgs.get_model_config()/use_mla_backend() compatibility fix for SGLang #36972 and pins sglang==0.5.19."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2969
 
 - config-keys:
     - dsv41flash-fp4-h100-vllm-agentic-dspark
