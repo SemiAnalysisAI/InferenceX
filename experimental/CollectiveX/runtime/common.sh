@@ -48,15 +48,18 @@ COLLX_DEEPEP_V2_BUILD_GEN="dlarch1"
 COLLX_UCCL_REPO="https://github.com/uccl-project/uccl"
 COLLX_UCCL_COMMIT="fc1b582031221645ea9fce58aeb57187713145e3"
 
-# NCCL EP (NVIDIA's native MoE dispatch/combine on the NCCL Device API). Primary path is the
-# published nccl4py wheel — it bundles libnccl_ep.so's JIT runtime and pulls the matching
-# nvidia-nccl-cu13 (>= 2.30, carrying the Device API + GIN nccl.ep needs). The from-source pins
-# below are the fallback, deferred until on-metal bring-up shows the wheel is insufficient:
-# contrib/nccl_ep is absent from the v2.29.x / v2.30.4 release tags, so any such build must use
-# this post-merge master commit (which contains contrib/nccl_ep), NOT a release tag.
-COLLX_NCCL4PY_SPEC="nccl4py[cu13]==0.3.1"
-COLLX_NCCL_EP_REPO="https://github.com/NVIDIA/nccl"
-COLLX_NCCL_EP_COMMIT="9d22d5dfec8391ee65b56df139d471f8e08e921e"
+# NCCL EP v0.2 (NVIDIA's native MoE dispatch/combine on the NCCL Device API). Shipped as the
+# nccl-extensions package (github.com/NVIDIA/nccl-extensions): it owns the nccl.ep module
+# (libnccl_ep.so JIT runtime + bindings) — nccl4py stopped bundling nccl/ep at 0.4 — and pulls
+# nccl4py for nccl.core plus nvidia-nccl-cu13==2.30.7 (Device API + GIN). nccl4py is pinned
+# alongside so a cache rebuild resolves the same tree instead of whatever pip picks that day.
+# v0.2 ships the combine-recv fence the v0.1 port of DeepEP lacked (the #642 analogue:
+# fence_view_async_shared before mbarrier_arrive(emptyBarriers) in ll_ep.cuh — present in the
+# published wheel's headers), which is what releases the low-latency ladder clamp, and fixes
+# the x86 EP16 GIN fault on B200. Two whitespace-separated pip specs: the install site
+# word-splits this deliberately, and the whole string keys the shared cache dir, so this
+# change forces a reinstall.
+COLLX_NCCL_EP_SPEC="nccl-extensions[cu13]==0.1.0 nccl4py[cu13]==0.5.0"
 
 # Print bounded command output without maintaining a parallel failure taxonomy.
 collx_log_tail() {
