@@ -247,14 +247,6 @@ collx_apply_network_profile() {
   # NVLink, so those rails carry init-time control traffic only. HCA_LIST wins over
   # the baked PE mapping (NVSHMEM warns and honors HCA_LIST) — verified on-metal
   # 2026-07-08 (b300-010, production shape, PASS with and without the baked mapping).
-  # On an EFA pool there is no verbs HCA for NVSHMEM to bind single-node control traffic to:
-  # its default ibrc/IBGDA transport scans the RDMA devices, finds only EFA (unspecified link
-  # layer) and aborts init with "nvshmem detect topo failed" (b300-dsxe run 34521825749). With
-  # allow_nvlink_for_low_latency_mode every intra-node byte rides NVLink, so tell NVSHMEM there
-  # is no remote transport at all instead of letting it hunt for one.
-  if [ "$nodes" -le 1 ] && [ "${COLLX_RDMA_FABRIC:-}" = efa ]; then
-    export NVSHMEM_REMOTE_TRANSPORT=none NVSHMEM_IB_ENABLE_IBGDA=0
-  fi
   if [ "$nodes" -le 1 ] && [ -n "${COLLX_SINGLE_NODE_RDMA_DEVICES:-}" ]; then
     [[ "$COLLX_SINGLE_NODE_RDMA_DEVICES" =~ ^[A-Za-z][A-Za-z0-9_.-]{0,31}(:[1-9][0-9]*)?(,[A-Za-z][A-Za-z0-9_.-]{0,31}(:[1-9][0-9]*)?)*$ ]] \
       || collx_die "invalid private single-node RDMA device selector"
