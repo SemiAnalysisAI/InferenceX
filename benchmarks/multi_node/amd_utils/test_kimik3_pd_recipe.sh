@@ -35,7 +35,7 @@ assert arm["spec-decoding"] == "none"
 assert arm["conc-list"] == [1, 40, 48, 70]
 assert arm["kv-offloading"] == "dram"
 assert arm["kv-offload-backend"]["name"] == "lmcache-k3"
-assert arm["kv-offload-backend"]["version"] == "0.5.5.dev104+rocm7.2"
+assert arm["kv-offload-backend"]["version"] == "nightly-rocm"
 settings = arm["prefill"]["additional-settings"] + arm["decode"]["additional-settings"]
 assert "DECODE_CP_KV_CACHE_INTERLEAVE_SIZE=1536" in settings
 assert "PREFILL_CP_KV_CACHE_INTERLEAVE_SIZE=1536" in settings
@@ -154,7 +154,7 @@ for scale_arm, num_decode_workers, concurrencies in zip(
     assert "LMCACHE_L1_READ_TTL_SECONDS=1800" in scale_settings
     assert scale_arm["kv-offload-backend"] == {
         "name": "lmcache-k3",
-        "version": "0.5.5.dev104+rocm7.2",
+        "version": "nightly-rocm",
     }
 assert "mooncake" not in repr(scale_recipe).lower()
 
@@ -181,7 +181,7 @@ assert "LMCACHE_L1_READ_TTL_SECONDS=1800" in balanced_settings
 assert "LMCACHE_ON_DECODE=true" not in repr(balanced_arm)
 assert balanced_arm["kv-offload-backend"] == {
     "name": "lmcache-k3",
-    "version": "0.5.5.dev104+rocm7.2",
+    "version": "nightly-rocm",
 }
 
 k3 = models["Kimi-K3"]

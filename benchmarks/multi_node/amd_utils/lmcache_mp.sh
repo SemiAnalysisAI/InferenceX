@@ -18,7 +18,7 @@ lmcache_mp_install_native_deps() {
 }
 
 lmcache_mp_install() {
-    local version="${LMCACHE_VERSION:-0.5.5.dev104+rocm7.2}"
+    local version="${LMCACHE_VERSION:-latest-rocm}"
     local index="${LMCACHE_ROCM_INDEX:-https://github.com/LMCache/LMCache/releases/expanded_assets/nightly-rocm}"
     lmcache_mp_install_native_deps || return 1
 
