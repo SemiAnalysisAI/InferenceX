@@ -2,7 +2,7 @@
 set -eo pipefail
 
 # Native DeepSeek-V4.1-Flash DSpark and Engram UVA weight offload.
-# https://github.com/vllm-project/recipes/blob/main/models/deepseek-ai/DeepSeek-V4.1-Flash.yaml
+# https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flash
 source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
 require_agentic_kv_offload_none
@@ -23,14 +23,12 @@ mkdir -p "$RESULT_DIR"
 SERVER_LOG="$RESULT_DIR/server.log"
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_USE_RUST_FRONTEND=1
-export VLLM_USE_V2_MODEL_RUNNER=1
 export PYTHONUNBUFFERED=1
 
-# Match the sibling's scheduler headroom for AgentX subagent fan-out.
-MAX_NUM_SEQS=$((2 * CONC))
+# Preserve the upstream scheduler defaults; size graph capture for the sweep.
 NUM_SPEC_TOKENS=5
 CAPTURE_SIZE=1
-while (( CAPTURE_SIZE < MAX_NUM_SEQS * (1 + NUM_SPEC_TOKENS) && CAPTURE_SIZE < 2048 )); do
+while (( CAPTURE_SIZE < CONC * (1 + NUM_SPEC_TOKENS) && CAPTURE_SIZE < 2048 )); do
     CAPTURE_SIZE=$((CAPTURE_SIZE * 2))
 done
 
@@ -52,9 +50,7 @@ VLLM_CMD=(
     --engram-config '{"cpu_offload":true}'
     --speculative-config '{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":true}'
     --max-model-len 1048576
-    --max-num-seqs "$MAX_NUM_SEQS"
     --max-cudagraph-capture-size "$CAPTURE_SIZE"
-    --max-num-batched-tokens 16384
     --disable-uvicorn-access-log
 )
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
