@@ -43,7 +43,7 @@ from .common import (
     BenchmarkData,
     _append_reason,
     _integrate_device,
-    _p90_total_power,
+    _percentile_total_power,
     _load_benchmark_data,
     _write_json_atomic,
     audit_metrics,
@@ -1063,12 +1063,17 @@ def validate_and_integrate(
     duration_s = window.end_unix - window.start_unix
     total_energy = sum(per_gpu_energy.values())
     total_tokens = benchmark.total_input_tokens + benchmark.total_output_tokens
-    p90_total = _p90_total_power(
-        [sorted(per_key_samples[device.key]) for device in expected_devices],
-        start_unix=window.start_unix, end_unix=window.end_unix,
+    device_samples = [sorted(per_key_samples[device.key]) for device in expected_devices]
+    p75_total = _percentile_total_power(
+        device_samples, start_unix=window.start_unix, end_unix=window.end_unix, quantile=0.75,
+    )
+    p90_total = _percentile_total_power(
+        device_samples, start_unix=window.start_unix, end_unix=window.end_unix, quantile=0.9,
     )
     metrics = {
         "avg_power_w": total_energy / duration_s / len(expected_devices),
+        "p75_power_w": p75_total / len(expected_devices),
+        "p75_total_gpu_power_w": p75_total,
         "p90_power_w": p90_total / len(expected_devices),
         "p90_total_gpu_power_w": p90_total,
         "avg_total_gpu_power_w": total_energy / duration_s,

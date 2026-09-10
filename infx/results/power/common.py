@@ -76,13 +76,14 @@ def _integrate_device(
     return energy_j
 
 
-def _p90_total_power(
+def _percentile_total_power(
     device_samples: list[list[tuple[float, float]]],
     *,
     start_unix: float,
     end_unix: float,
+    quantile: float,
 ) -> float:
-    """Time-weighted P90 of synchronized fleet power with linear interpolation.
+    """Time-weighted quantile of synchronized fleet power with linear interpolation.
 
     Sum device curves before taking the percentile. Each linear segment's
     distribution is uniform over its power range, weighted by elapsed time;
@@ -115,7 +116,7 @@ def _p90_total_power(
         total_power = next_power
     lower = min(low for low, _, _ in segments)
     upper = max(high for _, high, _ in segments)
-    target_time = (end_unix - start_unix) * 0.9
+    target_time = (end_unix - start_unix) * quantile
     # Bisection includes point masses without averaging device percentiles.
     for _ in range(60):
         value = lower + (upper - lower) / 2

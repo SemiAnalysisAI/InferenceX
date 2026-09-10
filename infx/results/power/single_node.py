@@ -32,7 +32,7 @@ from .common import (
     BenchmarkData,
     _append_reason,
     _integrate_device,
-    _p90_total_power,
+    _percentile_total_power,
     _interpolate_power,
     _load_benchmark_data,
     _write_json_atomic,
@@ -66,6 +66,8 @@ class PowerIntegration:
     per_gpu_energy_j: dict[str, float]
     device_issues: dict[str, list[str]]
     avg_power_w: float | None = None
+    p75_power_w: float | None = None
+    p75_total_gpu_power_w: float | None = None
     p90_power_w: float | None = None
     p90_total_gpu_power_w: float | None = None
     avg_total_gpu_power_w: float | None = None
@@ -433,8 +435,11 @@ def integrate_power(
         avg_total_gpu_power_w = total_gpu_energy_j / duration_s
         avg_power_w = avg_total_gpu_power_w / len(observed_gpu_ids)
 
-    p90_total = None if reasons else _p90_total_power(
-        device_samples, start_unix=start_unix, end_unix=end_unix
+    p75_total = None if reasons else _percentile_total_power(
+        device_samples, start_unix=start_unix, end_unix=end_unix, quantile=0.75
+    )
+    p90_total = None if reasons else _percentile_total_power(
+        device_samples, start_unix=start_unix, end_unix=end_unix, quantile=0.9
     )
     return PowerIntegration(
         power_valid=not reasons,
@@ -446,6 +451,8 @@ def integrate_power(
         per_gpu_energy_j=per_gpu_energy_j,
         device_issues=device_issues,
         avg_power_w=avg_power_w,
+        p75_power_w=p75_total / len(observed_gpu_ids) if p75_total is not None else None,
+        p75_total_gpu_power_w=p75_total,
         p90_power_w=p90_total / len(observed_gpu_ids) if p90_total is not None else None,
         p90_total_gpu_power_w=p90_total,
         avg_total_gpu_power_w=avg_total_gpu_power_w,
@@ -605,6 +612,8 @@ def _derived_metrics(
     """Return whole-deployment energy metrics for a valid measurement."""
     if (
         integration.avg_power_w is None
+        or integration.p75_power_w is None
+        or integration.p75_total_gpu_power_w is None
         or integration.p90_power_w is None
         or integration.p90_total_gpu_power_w is None
         or integration.avg_total_gpu_power_w is None
@@ -617,6 +626,8 @@ def _derived_metrics(
     total_tokens = benchmark.total_input_tokens + benchmark.total_output_tokens
     return {
         "avg_power_w": avg_power_w,
+        "p75_power_w": integration.p75_power_w,
+        "p75_total_gpu_power_w": integration.p75_total_gpu_power_w,
         "p90_power_w": integration.p90_power_w,
         "p90_total_gpu_power_w": integration.p90_total_gpu_power_w,
         "avg_total_gpu_power_w": avg_total_gpu_power_w,

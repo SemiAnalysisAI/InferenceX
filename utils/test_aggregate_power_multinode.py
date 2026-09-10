@@ -246,6 +246,8 @@ class TestValidPackage:
         assert agg["power_metric_schema_version"] == 2
         assert agg["power_valid"] == 1
         assert agg["avg_power_w"] == 350.0
+        assert agg["p75_power_w"] == 350.0
+        assert agg["p75_total_gpu_power_w"] == 1400.0
         assert agg["p90_power_w"] == 350.0
         assert agg["p90_total_gpu_power_w"] == 1400.0
         assert agg["avg_total_gpu_power_w"] == 1400.0
@@ -293,6 +295,8 @@ class TestValidPackage:
         assert agg["decode_avg_power_w"] == pytest.approx(316.0)
         assert agg["avg_total_gpu_power_w"] == pytest.approx(1432.0)
         assert agg["avg_power_w"] == pytest.approx(358.0)
+        assert agg["p75_total_gpu_power_w"] == pytest.approx(1447.0)
+        assert agg["p75_power_w"] == pytest.approx(361.75)
         assert agg["p90_total_gpu_power_w"] == pytest.approx(1456.0)
         assert agg["p90_power_w"] == pytest.approx(364.0)
 
