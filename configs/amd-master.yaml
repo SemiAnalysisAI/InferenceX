@@ -637,8 +637,8 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
     - dram-utilization: 0.60
       search-space:
       - { tp: 8, ep: 1, dcp-size: 1, kv-offloading: none, conc-list: [1] , spec-decoding: mtp}
-      - { tp: 8, ep: 1, dcp-size: 1, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.5.dev89+rocm7.2" }, conc-list: [4, 8, 10, 12, 14], spec-decoding: mtp }
-      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.5.dev89+rocm7.2" }, conc-list: [44, 48, 52], spec-decoding: mtp }
+      - { tp: 8, ep: 1, dcp-size: 1, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.5.dev114+rocm7.2" }, conc-list: [4, 8, 10, 12, 14], spec-decoding: mtp }
+      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.5.dev114+rocm7.2" }, conc-list: [44, 48], spec-decoding: mtp }
 
 # Kimi-K3 MXFP4 agentic-coding benchmark on MI355X via ATOM with DSpark
 # speculative decoding. Acceptance is pinned to the committed golden curve in
@@ -1738,7 +1738,7 @@ glm5.2-fp4-mi355x-atom-agentic-mtp:
 
 
 dsv4-fp4-mi355x-sglang-agentic-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260902
+  image: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260907
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:mi355x-amds
@@ -1749,7 +1749,6 @@ dsv4-fp4-mi355x-sglang-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 4, ep: 1, dp-attn: false, kv-offloading: none, conc-list: [1, 4, 8], spec-decoding: mtp }
+      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, conc-list: [1, 4, 16], spec-decoding: mtp }
       - { tp: 8, ep: 1, dp-attn: false, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [32, 48], spec-decoding: mtp }
-      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, conc-list: [16], spec-decoding: mtp }
-      - { tp: 8, ep: 1, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [64, 96, 128, 160], spec-decoding: mtp }
+      - { tp: 8, ep: 1, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [128, 256], spec-decoding: mtp }

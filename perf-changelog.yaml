@@ -6976,7 +6976,6 @@
     - "Tune the 8k/1k serving recipe with --mamba-full-memory-ratio 0.37 and --linear-attn-prefill-backend flashinfer; raise max-prefill-tokens and chunked-prefill-size from 16384 to 32768 and mem-fraction-static from 0.8 to 0.86."
     - "Expand the TP8 and TP4/EP1 sweep coverage through concurrency 640."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2866
-  
 
 - config-keys:
     - dsv4-fp4-b200-sglang-agentic-hicache-mtp
@@ -6988,6 +6987,15 @@
     - "Use SGLang's current W4A4 MegaMoE and DP LM-head flags for DP-attention instead of the deprecated MegaMoE environment variables."
     - "Resolve draft-model jobs through the existing B200 SGLang speculative recipe and the staged DeepSeek-V4-Pro-0813 checkpoint."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2821
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Upgrade the Kimi-K3 MI355X vLLM AgentX LMCache build from 0.5.5.dev89+rocm7.2 to 0.5.5.dev114+rocm7.2 from the nightly ROCm release index; the rolling release no longer publishes the intermediate 0.5.5.dev104+rocm7.2 wheel."
+    - "Preserve the image, runtime settings, and topology from the full sweep in Actions run 33773561410; run concurrency 1 without offload and LMCache concurrencies 4, 8, 10, 12, 14, 44, and 48, with 48 as the upper bound."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2889
 
 - config-keys:
     - dsv4-fp4-mi355x-vllm
@@ -7040,3 +7048,44 @@
     - "Refresh the full GB200 Dynamo-vLLM AgentX configuration across the configured aggregate and disaggregated topology points."
     - "Retain aggregate SimpleCPU-offload concurrency 20 and 30, and configure Mooncake host KV storage, NIXL over UCX, explicit thinking mode, and the committed MiniMax-M3 EAGLE3-GQA acceptance target."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2807
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-agg
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Replace the GB300 DeepSeek-V4-Pro AgentX MTP serving path with DSpark block size 6 across aggregate and disaggregated recipes."
+    - "Use the DeepSeek-V4-Pro-0813 checkpoint, SGLang 20260829 CUDA 13 nightly, public Dynamo 1.5.0.dev20260902 wheels containing the upstream SGLang config-parser compatibility fix, and thinking-on golden synthetic acceptance length 3.77 for throughput; eval retains real DSpark verification."
+    - "Retune the Pareto ladder to concurrency 1, 4, 8, 320, 640, 960, and 1280, while retaining the concurrency-1152 2P DEP8 prefill plus DEP12 decode efficiency point."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2623
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Increase the DEP16 concurrency ladder from 320, 640, 960, and 1280 to 480, 960, 1440, and 1920 after profiling showed request-starved prefill workers at the lower values."
+    - "Retain the independently tuned concurrency-1152 2P DEP8 prefill plus DEP12 decode efficiency point."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2623
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Remove the unstable concurrency-1152 2P DEP8 prefill plus DEP12 decode point after repeated benchmark failures."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2623
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260907."
+    - "Keep TP-only chunked-prefill at 8192 for TP4 and 16384 for TP8. The DP-attention path uses an 8192 per-rank budget (engine-wide 8192*TP, 65536 at TP8) instead of scaling the TP8 16384 base."
+    - "DP-attention serving: drop --enable-two-batch-overlap; set mem-fraction-static to 0.92 (pure TP stays 0.86); keep --enforce-shared-experts-fusion and move --disable-shared-experts-fusion to the EP branch only; keep swa-full-tokens-ratio at 0.10; add --prefill-delayer-token-usage-low-watermark 0.7."
+    - "Remove the 256 cap on max-running-requests."
+    - "MTP draft length by concurrency: speculative-num-steps 3 (golden AL 2.49) below conc 256, and 1 (golden AL 1.79) at and above it."
+    - "Trim the search space to TP8 no-offload conc [1, 4, 16], TP8 hicache conc [32, 48], and TP8 DP-attention hicache conc [128, 256]."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2885
