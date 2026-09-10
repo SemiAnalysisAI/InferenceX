@@ -109,8 +109,8 @@ def _load_tokenizer(tokenizer_id, tokenizer_mode, trust_remote_code):
     transformers). Prefer backend_request_func.get_tokenizer on fallback so
     client tokenization stays aligned with the sglang server (#1381, #1428).
     """
-    if tokenizer_mode == "deepseek_v4":
-        # HF AutoTokenizer may not recognize deepseek_v4; use vLLM's loader.
+    if tokenizer_mode in ("deepseek_v4", "deepseek_v41"):
+        # DeepSeek custom prompt encoders require vLLM's tokenizer loader.
         try:
             from vllm.tokenizers import get_tokenizer as _vllm_get_tokenizer
         except ImportError:
@@ -1268,7 +1268,7 @@ if __name__ == "__main__":
         '--tokenizer-mode',
         type=str,
         default="auto",
-        choices=['auto', 'slow', 'mistral', 'custom', 'deepseek_v4'],
+        choices=['auto', 'slow', 'mistral', 'custom', 'deepseek_v4', 'deepseek_v41'],
         help='The tokenizer mode.\n\n* "auto" will use the '
         'fast tokenizer if available.\n* "slow" will '
         'always use the slow tokenizer. \n* '

@@ -533,3 +533,43 @@ def test_eval_only_acceptance_rewrite_allows_non_speculative_recipe(
 
     assert result.returncode == 0, result.stderr
     assert recipe.read_text() == original
+
+
+@pytest.mark.parametrize("serve_exit", [0, 42])
+def test_gb300_direct_vllm_uses_one_tray_and_propagates_failure(
+    tmp_path: Path, serve_exit: int,
+) -> None:
+    log = tmp_path / "srun.jsonl"
+    result = run_bash(
+        '''
+        mkdir() { :; }
+        srun() {
+            python3 -c 'import json,sys; open(sys.argv[1], "a").write(json.dumps(sys.argv[2:])+"\\n")' "$SRUN_LOG" "$@"
+            case " $* " in
+                *" --container-image="*) return "$SERVE_EXIT" ;;
+            esac
+        }
+        export MODEL_PREFIX=dsv41flash PRECISION=fp4 FRAMEWORK=vllm
+        export MODEL=deepseek-ai/DeepSeek-V4.1-Flash IS_MULTINODE=false
+        export SPEC_DECODING=mtp TP=4 RUNNER_NAME=gb300-test
+        export IMAGE=vllm/test:fixture GITHUB_WORKSPACE="$1"
+        export SRUN_LOG="$2" SERVE_EXIT="$3"
+        cd "$GITHUB_WORKSPACE"
+        source runners/launch_gb300-nv.sh
+        ''',
+        REPO_ROOT, log, str(serve_exit),
+    )
+    assert result.returncode == serve_exit, result.stderr
+    calls = [json.loads(line) for line in log.read_text().splitlines()]
+    serve = calls[-1]
+    assert "--nodes=1" in serve
+    assert "--ntasks=1" in serve
+    assert "--gpus=4" in serve
+    assert "--mem=0" in serve
+    assert "--job-name=gb300-test" in serve
+    mounts = next(arg for arg in serve if arg.startswith("--container-mounts="))
+    assert f"{REPO_ROOT}:/workspace," in mounts
+    assert mounts.endswith(":/hf-cache")
+    script = REPO_ROOT / serve[-1]
+    assert serve[-2] == "bash" and script.is_file()
+    assert all("nginx" not in " ".join(call) for call in calls)

@@ -37,7 +37,10 @@ mkdir -p "$DYNAMO_WHEELS_CACHE_HOST_PATH"
 
 export MODEL_PATH=$MODEL
 
-if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
+if [[ "$MODEL_PREFIX" == "dsv41flash" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "vllm" && "${IS_MULTINODE:-false}" != "true" ]]; then
+    # Download the new checkpoint into the persistent shared HF cache.
+    export MODEL_PATH="$MODEL"
+elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
     export SERVED_MODEL_NAME="deepseek-r1-fp4"
     export MODEL_PATH=/scratch/models/DeepSeek-R1-0528-NVFP4-v2
     export SRT_SLURM_MODEL_PREFIX="dsr1"
@@ -145,6 +148,26 @@ import_squash() {
 }
 
 import_squash "$SQUASH_FILE" "$IMAGE"
+# Direct vLLM single-node bring-up uses the same four-GPU tray and shared
+# storage as srt-slurm. Keep this before the router import and srtctl setup.
+if [[ "$MODEL_PREFIX" == "dsv41flash" && "$FRAMEWORK" == "vllm" && "${IS_MULTINODE:-false}" != "true" ]]; then
+    BENCH_SCRIPT="benchmarks/single_node/fixed_seq_len/${MODEL_PREFIX}_${PRECISION}_gb300_${FRAMEWORK}_mtp.sh"
+    [[ "${SPEC_DECODING:-}" == "mtp" && -f "$BENCH_SCRIPT" ]] || {
+        echo "Unsupported single-node recipe: $BENCH_SCRIPT" >&2
+        exit 1
+    }
+    export HF_HUB_CACHE=/hf-cache
+    srun --account="$SLURM_ACCOUNT" --partition="$SLURM_PARTITION" \
+        --nodes=1 --ntasks=1 --gpus="${TP:?}" --exclusive --mem=0 \
+        --time="${SALLOC_TIME_LIMIT:-480}" --job-name="$RUNNER_NAME" \
+        --mpi=none --container-image="$SQUASH_FILE" \
+        --container-mounts="$GITHUB_WORKSPACE:/workspace,$HF_HUB_CACHE_HOST_PATH:/hf-cache" \
+        --no-container-mount-home --container-remap-root \
+        --container-workdir=/workspace --no-container-entrypoint \
+        --export=ALL,PORT=8888 bash "$BENCH_SCRIPT"
+    exit $?
+fi
+
 import_squash "$NGINX_SQUASH_FILE" "$NGINX_IMAGE"
 
 # Power lane detection: a recipe opts in via an enabled dcgm-power telemetry
