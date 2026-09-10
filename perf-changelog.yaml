@@ -7067,5 +7067,4 @@
     - "Bump the MI355X MiniMax-M3 AgentX image from vllm/vllm-openai-rocm:nightly-8a728663c1c3eeace834a95f5654fa653cc1998c to the latest immutable nightly, vllm/vllm-openai-rocm:nightly-2a02f6efe319c885e3ccbcecde402e0028f9ec1e"
     - "Pick up the optimized FP8 MiniMax-M3 aiter indexer from vLLM PRs #52664"
     - "hand-tuned graph capture range; increased max-num-batched-tokens to 65536"
-  pr-link:
-  
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2959
