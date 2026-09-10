@@ -217,7 +217,11 @@ probe accepts the unspecified link layer for the listed `rdma_devices` (which mu
 on every node), the IB selector family (`NCCL_IB_*`, `NVSHMEM_HCA_LIST`/IBGDA, MoRI, UCCL) stays
 unset, `NCCL_NET_PLUGIN=ofi` and `FI_PROVIDER=efa` select the plugin, NVSHMEM is pointed at its
 libfabric transport, and backend setup fails unless the plugin library is present in the container.
-NCCL GIN then rides the plugin's own GIN implementation (`OFI_NCCL_GIN_TYPE` selects proxy or GDAKI).
+NCCL GIN then rides the plugin's own GIN implementation (`OFI_NCCL_GIN_TYPE` selects proxy or GDAKI),
+which requires GDRCopy 2.5+ (`gdrdrv` loaded, `libgdrapi` present) on the node: without it the plugin's
+GIN init fails, NCCL disables the Device API for the communicator, and `ncclEpCreateGroup` returns
+`ncclInvalidUsage` (verified on b300-dsxe 2026-09-11; that pool ships no gdrcopy, so its EP16 legs are
+withheld from the registry until it does).
 
 `stage_dir` is a pre-existing, runner-owned, non-symlinked base outside the checkout and workflow
 workspace. It is not group- or world-writable and is visible at the same path on the runner and every
