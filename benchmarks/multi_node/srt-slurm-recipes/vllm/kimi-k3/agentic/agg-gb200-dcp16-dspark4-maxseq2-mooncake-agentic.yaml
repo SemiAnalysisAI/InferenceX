@@ -40,11 +40,12 @@ frontend:
   type: dynamo
   enable_multiple_frontends: false
   args:
-    dyn-chat-processor: "vllm"
+    # vLLM moved vllm/entrypoints/openai/cli_args.py (vllm-project/vllm#53659,
+    # 2026-08-25), which Dynamo's `--dyn-chat-processor vllm` path imports, so
+    # this image runs the native Dynamo chat processor. Tool-call and reasoning
+    # parsing stay on kimi_k3 through the workers' dyn-tool-call-parser and
+    # dyn-reasoning-parser registration below.
     trust-remote-code: true
-    tool-call-parser: "kimi_k3"
-    reasoning-parser: "kimi_k3"
-    enable-auto-tool-choice: true
     router-mode: "random"
     router-session-affinity-ttl-secs: 900
   env:
