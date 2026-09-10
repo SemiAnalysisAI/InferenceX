@@ -43,6 +43,8 @@
 | [`runners/`](../runners/) | 特定机群的模型路径、挂载、容器或 Slurm 设置以及基准测试脚本路由 |
 | [`benchmarks/benchmark_lib.sh`](../benchmarks/benchmark_lib.sh) | 共享的服务器就绪检查、基准测试客户端、评测、AgentX 重放和输出行为 |
 | [`benchmarks/`](../benchmarks/) | 特定于框架和拓扑的服务器与客户端命令 |
+| [`infx/github.py`](../infx/github.py) | 工作流操作共用的 GitHub REST、分页和评论表态基础操作 |
+| [`infx/workflows/`](../infx/workflows/) | 复用命令解析、授权查找、源 Run 验证及表态反馈；现有复用 CLI 保持兼容 |
 | [`infx/results/`](../infx/results/) | 可导入的结果构建函数、组件元数据解析和功耗指标转换；[`utils/process_result.py`](../utils/process_result.py) 保留固定序列处理的 CLI |
 | [`.github/workflows/collect-results.yml`](../.github/workflows/collect-results.yml)、[`.github/workflows/collect-evals.yml`](../.github/workflows/collect-evals.yml) | 运行级基准测试和评测工件聚合 |
 
@@ -168,6 +170,8 @@ bash ./runners/launch_${RUNNER_NAME%%_*}.sh
 ```
 
 因此，第一个下划线之前的前缀标识机群启动器。运行器命名和启动器文件名共同构成一项路由契约。
+
+`infx.github` 负责共享 REST、分页及评论表态基础操作。`infx.workflows.reuse` 负责复用选择和验证，`infx.workflows.reuse_comment` 负责评论表态反馈。两者均可作为包模块执行。`utils/find_reusable_sweep_run.py` 保留直接脚本执行和旧导入路径，旧路径指向同一个规范模块。这些辅助模块仅依赖标准库。
 
 ## 阶段 4：启动器与运行时执行
 
