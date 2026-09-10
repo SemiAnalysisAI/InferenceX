@@ -7070,3 +7070,13 @@
     - "MTP draft length by concurrency: speculative-num-steps 3 (golden AL 2.49) below conc 256, and 1 (golden AL 1.79) at and above it."
     - "Trim the search space to TP8 no-offload conc [1, 4, 16], TP8 hicache conc [32, 48], and TP8 DP-attention hicache conc [128, 256]."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2885
+
+- config-keys:
+    - minimaxm3-fp4-gb200-dynamo-trt-agentic-agg-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add MiniMax-M3 NVFP4 TensorRT-LLM AgentX on GB200 with Dynamo aggregated serving: TP4 + EAGLE3-GQA (3 draft tokens, committed golden acceptance length 2.78) at concurrency 5, 10, 15, 20, 25, 30 and 40, one srt-slurm recipe per concurrency, 128 GiB per-rank host KV cache, container nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc23.post1, Dynamo 1.4.0.dev20260807 frontend."
+    - "Route dynamo-trt minimaxm3/fp4 in runners/launch_gb200-nv.sh (model alias minimax-m3-nvfp4) and pin NVIDIA/srt-slurm v1.0.91, which runs aggregated TRT-LLM workers under numactl -m 0,1."
+    - "Add a TensorRT-LLM synthetic-acceptance injector (frameworks trt and dynamo-trt) that sets TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS = AL - 1 in the recipe worker environment for throughput runs and removes it for eval-only runs; the recipes carry no forced acceptance and the master entry sets SYNTHETIC_ACCEPTANCE=true / SYNTHETIC_ACCEPTANCE_LENGTH=2.78, so AgentX evals verify against real acceptance."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
