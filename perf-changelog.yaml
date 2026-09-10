@@ -7128,3 +7128,13 @@
     - "Update the SGLang image from nightly-dev-cu13-20260829-89816a21 to the digest-pinned v0.5.19-cu130 release (lmsysorg/sglang:v0.5.19-cu130@sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9)."
     - "Move the TP8 and TP4 low-latency recipes and the master router metadata from Dynamo 1.5.0.dev20260902 to 1.5.0.dev20260910, the nightly that carries the ServerArgs.get_model_config()/use_mla_backend() compatibility fix for SGLang #36972 and pins sglang==0.5.19."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2969
+
+- config-keys:
+    - minimaxm3-fp4-gb200-dynamo-trt-agentic-agg-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add MiniMax-M3 NVFP4 TensorRT-LLM AgentX on GB200 with Dynamo aggregated serving, TP4 plus EAGLE3-GQA with three draft tokens, seven concurrency-specific recipes, and 128 GiB per-rank host KV cache."
+    - "Add the GB200 launcher route and use NVIDIA/srt-slurm v1.0.91 for aggregated TensorRT-LLM workers."
+    - "Add TensorRT-LLM synthetic-acceptance injection for AgentX throughput runs while leaving eval-only runs on real acceptance."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
