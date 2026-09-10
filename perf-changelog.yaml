@@ -7351,3 +7351,9 @@
   description:
     - "Pin AgentX to semianalysis_cc_traces_weka_062126, preventing the 256k corpus override"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2962
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  description:
+    - "Use thinking-on golden synthetic AL 3.51 for five-token DSpark throughput; disable adaptive verification and retain real verification for evals"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2962

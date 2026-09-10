@@ -48,7 +48,13 @@ export AIPERF_SERVER_METRICS_URLS="${AIPERF_SERVER_URL}/metrics"
 export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="vllm:"
 echo "Using vLLM endpoint ${AIPERF_SERVER_URL}"
 
-# Both throughput and eval use real target verification, never synthetic AL.
+# Golden AL: golden_al_distribution/dsv41flash_dspark.yaml, thinking_on, five draft tokens.
+# Accuracy evals keep real block rejection; throughput fixes acceptance to AL 3.51.
+if [[ "${EVAL_ONLY:-false}" == true ]]; then
+    SPEC_CONFIG='{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":true}'
+else
+    SPEC_CONFIG='{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"synthetic","synthetic_acceptance_length":3.51,"enable_adaptive_verification":false}'
+fi
 VLLM_CMD=(
     vllm serve "$MODEL_PATH" --served-model-name "$MODEL"
     --host 0.0.0.0 --port "$PORT" --tensor-parallel-size "$TP"
@@ -58,7 +64,7 @@ VLLM_CMD=(
     --reasoning-parser deepseek_v41
     --moe-backend aiter_triton_mxfp4_bf16
     --gpu-memory-utilization 0.9
-    --speculative-config '{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":true}'
+    --speculative-config "$SPEC_CONFIG"
     --max-model-len 1048576
     --max-num-seqs "$MAX_NUM_SEQS"
     --max-cudagraph-capture-size "$CAPTURE_SIZE"
