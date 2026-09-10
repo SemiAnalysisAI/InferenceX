@@ -91,28 +91,12 @@ if agentic_kv_offload_enabled; then
         # env-var override for maximum throughput on nodes with >4 TB DRAM.
         HICACHE_RATIO="${HICACHE_RATIO:-1.5}"
     fi
-    # The ratios above are sized against the agentic corpus, but TOTAL_CPU_DRAM_GB
-    # is only this server's share of the node: agentic_dram_offload_gb() clamps
-    # node DRAM to MAX_AGENTIC_AVAILABLE_CPU_DRAM_MIB, scales by
-    # dram-utilization, then by gpu_count/gpus-per-node, so TP4 on
-    # cluster:mi355x-amds gets 1199 GB while a job on the node's other 4 GPUs
-    # owns an equal share. At ratio 1.5 the host pool takes 679 GB of that
-    # share; being pinned it is unreclaimable, and overshooting does not fail at
-    # allocation time -- the pool allocates, the server reports ready, then the
-    # OOM killer SIGKILLs it once the first request batch touches those pages.
-    #
-    # EVAL_ONLY serves GSM8K (~1k-token prompts at conc 12) and never fills a
-    # pool that size, so size it absolutely instead. HiCache stays enabled
-    # because covering the host<->device KV copy path is most of what this eval
-    # is worth: 16 GB/rank still holds ~350k tokens, so the write policy's DRAM
-    # writes and the 5-shot prefix hits both keep going through the host tier.
+    # GSM8K never fills the agentic host pool; ratio 1.5 OOMs the TP4 DRAM share.
     if [ "${EVAL_ONLY:-false}" = "true" ]; then
         HICACHE_EVAL_SIZE_GB="${HICACHE_EVAL_SIZE_GB:-16}"
         HICACHE_POOL_ARGS=(--hicache-size "$HICACHE_EVAL_SIZE_GB")
         HICACHE_POOL_DESC="size=${HICACHE_EVAL_SIZE_GB} GB/rank (eval-only)"
     else
-        # --hicache-size 0 leaves the ratio in charge of host-pool sizing; 0 is
-        # the server default, stated explicitly for the Mooncake arm.
         HICACHE_POOL_ARGS=(--hicache-ratio "$HICACHE_RATIO" --hicache-size 0)
         HICACHE_POOL_DESC="ratio=$HICACHE_RATIO"
     fi
