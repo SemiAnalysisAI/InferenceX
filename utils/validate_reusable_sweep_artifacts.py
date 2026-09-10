@@ -10,9 +10,15 @@ import re
 import shutil
 import sys
 from collections import Counter
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Optional
+
+if not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from infx.results.evals import is_eval_result
+from infx.results.evals import result_concurrency as _result_concurrency
+from infx.results.evals import result_order as _result_order
 
 
 def as_bool(value: Any) -> bool:
@@ -638,63 +644,6 @@ def validate_run_stats(artifacts_dir: Path, required: bool) -> list[str]:
 # with no result file are left in place for validation to reject. Eval-only;
 # fixed-sequence and agentic artifacts are untouched.
 
-# lm-eval result files are ``results_<ISO>.json`` (optionally a ``_concN`` /
-# staging suffix). Timestamped names and legacy mtimes are both converted to
-# epoch nanoseconds so mixed naming schemes have one coherent ordering.
-_TIMESTAMP_RE = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}(?:\.\d+)?")
-_EVAL_RESULT_FORMAT = "inferencex-eval-v1"
-
-# Batched result files carry their concurrency as a ``_concN`` suffix (kept in
-# sync with ``collect_eval_results.CONC_SUFFIX_RE``).
-_CONC_SUFFIX_RE = re.compile(r"_conc(\d+)(?:_\d+)?\.json$")
-
-
-def _result_concurrency(name: str) -> Optional[int]:
-    """Extract a batched eval concurrency from a staged result file name."""
-    match = _CONC_SUFFIX_RE.search(name)
-    return int(match.group(1)) if match else None
-
-
-def _result_timestamp(name: str) -> Optional[str]:
-    """Extract the sortable lm-eval timestamp from a result file name."""
-    match = _TIMESTAMP_RE.search(name)
-    return match.group(0) if match else None
-
-
-def _timestamp_ns(stamp: str) -> int:
-    """Convert an lm-eval filename timestamp to UTC epoch nanoseconds."""
-    date, clock = stamp.split("T", 1)
-    hms, separator, fraction = clock.partition(".")
-    parsed = datetime.strptime(
-        f"{date}T{hms}",
-        "%Y-%m-%dT%H-%M-%S",
-    ).replace(tzinfo=timezone.utc)
-    epoch = datetime(1970, 1, 1, tzinfo=timezone.utc)
-    delta = parsed - epoch
-    fractional_ns = (
-        int((fraction + "000000000")[:9]) if separator else 0
-    )
-    return (
-        delta.days * 86_400_000_000_000
-        + delta.seconds * 1_000_000_000
-        + fractional_ns
-    )
-
-
-def _result_order(path: Path) -> tuple[int, str]:
-    """Return one deterministic recency key for timestamped and legacy files."""
-    stamp = _result_timestamp(path.name)
-    try:
-        recency = (
-            _timestamp_ns(stamp)
-            if stamp is not None
-            else path.stat().st_mtime_ns
-        )
-    except ValueError:
-        recency = path.stat().st_mtime_ns
-    return recency, path.name
-
-
 def _recognized_eval_result_paths(paths: Iterable[Path]) -> list[Path]:
     """Return result JSONs carrying a collector-recognized eval marker."""
     recognized: list[Path] = []
@@ -703,10 +652,7 @@ def _recognized_eval_result_paths(paths: Iterable[Path]) -> list[Path]:
             data = load_json(path)
         except (OSError, UnicodeDecodeError, json.JSONDecodeError):
             continue
-        if isinstance(data, dict) and (
-            "lm_eval_version" in data
-            or data.get("result_format") == _EVAL_RESULT_FORMAT
-        ):
+        if is_eval_result(data):
             recognized.append(path)
     return recognized
 
@@ -721,10 +667,7 @@ def _raw_result_error(path: Path) -> Optional[str]:
         return "is not an object"
     if "integration_error" in data:
         return "reports an integration error"
-    if (
-        "lm_eval_version" not in data
-        and data.get("result_format") != _EVAL_RESULT_FORMAT
-    ):
+    if not is_eval_result(data):
         return "has no recognized eval result format"
 
     results = data.get("results")

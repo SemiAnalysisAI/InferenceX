@@ -1,16 +1,109 @@
 """Tests for changelog-driven sweep generation."""
 
 import json
+import shutil
 import subprocess
 import sys
 from contextlib import nullcontext
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import yaml
 
 import process_changelog
 from matrix_logic.generate_sweep_configs import generate_test_config_sweep
 from matrix_logic.validation import validate_master_config
+
+
+@pytest.fixture
+def generation_repo(tmp_path, monkeypatch):
+    """An isolated history containing the real generator and controlled inputs."""
+    source = Path(__file__).resolve().parents[1]
+    for directory in ("utils/matrix_logic", "infx"):
+        if (source / directory).exists():
+            shutil.copytree(source / directory, tmp_path / directory)
+    (tmp_path / "configs").mkdir()
+    (tmp_path / "configs/amd-master.yaml").write_text("{}\n")
+    (tmp_path / "configs/runners.yaml").write_text("labels: {fixture: [node-a]}\nhardware: {}\n")
+
+    def git(*args):
+        return subprocess.run(
+            ["git", *args], cwd=tmp_path, capture_output=True, text=True, check=True,
+        ).stdout.strip()
+
+    git("init", "-q")
+    git("config", "user.name", "Test")
+    git("config", "user.email", "test@example.com")
+    for revision, conc in (("older", 2), ("newer", 6)):
+        master = {"fixture": {
+            "image": "example/image:stable", "model": revision, "model-prefix": "dsr1",
+            "precision": "fp8", "framework": "sglang", "runner": "fixture",
+            "multinode": False,
+            "scenarios": {"fixed-seq-len": [{
+                "isl": 1024, "osl": 1024, "search-space": [{"tp": 1, "conc-list": [conc]}],
+            }]},
+        }}
+        (tmp_path / "configs/nvidia-master.yaml").write_text(yaml.safe_dump(master))
+        git("add", ".")
+        git("commit", "-qm", revision)
+        git("tag", revision)
+
+    # Neither uncommitted source nor inputs may leak into historical generation.
+    (tmp_path / "configs/nvidia-master.yaml").write_text("invalid working tree\n")
+    for directory in ("utils/matrix_logic", "infx"):
+        for path in (tmp_path / directory).rglob("*.py"):
+            path.write_text('raise RuntimeError("working tree source was used")\n')
+    monkeypatch.chdir(tmp_path)
+    return tmp_path, git
+
+
+@pytest.mark.parametrize("revision,expected", [("older", ("older", 2)), ("newer", ("newer", 6))])
+def test_historical_generation_uses_committed_source_and_inputs(generation_repo, revision, expected):
+    with process_changelog.generation_inputs_at_ref(revision) as inputs:
+        result = subprocess.run(
+            [sys.executable, inputs.generator_script, "test-config", "--config-files",
+             *inputs.config_files, "--runner-config", inputs.runner_config,
+             "--config-keys", "fixture", "--no-evals"],
+            capture_output=True, text=True, check=True,
+        )
+        rows = json.loads(result.stdout)
+        assert [(row["model"], row["conc"]) for row in rows] == [expected]
+        assert result.stderr == ""
+        extracted_script = Path(inputs.generator_script)
+    assert not extracted_script.exists()
+
+
+def test_historical_generation_rejects_missing_inputs(generation_repo):
+    _, git = generation_repo
+    git("rm", "-f", "configs/runners.yaml")
+    git("commit", "-qm", "missing runner inventory")
+
+    with pytest.raises(ValueError, match="missing generation inputs.*configs/runners.yaml"):
+        with process_changelog.generation_inputs_at_ref("HEAD"):
+            pytest.fail("an incomplete snapshot must not be used for generation")
+
+
+def test_historical_generation_supports_legacy_script_layout(generation_repo):
+    root, git = generation_repo
+    git("rm", "-rf", "--ignore-unmatch", "infx")
+    # The historical command is an external collaborator: exercise extraction
+    # and sibling imports without freezing a past copy of the matrix algorithm.
+    script = root / "utils/matrix_logic/generate_sweep_configs.py"
+    schema = script.with_name("validation.py")
+    script.write_text("from validation import revision\nprint(revision)\n")
+    schema.write_text('revision = "legacy snapshot"\n')
+    git("add", str(script), str(schema))
+    git("commit", "-qm", "legacy generator")
+    schema.write_text('raise RuntimeError("wrong revision")\n')
+
+    with process_changelog.generation_inputs_at_ref("HEAD") as inputs:
+        result = subprocess.run(
+            [sys.executable, inputs.generator_script],
+            capture_output=True, text=True, check=True,
+        )
+        assert result.stdout == "legacy snapshot\n"
+        assert result.stderr == ""
 
 
 def _fixed_matrix_row(
@@ -916,6 +1009,43 @@ def changelog_run(monkeypatch, capsys):
         process_changelog.main()
         return json.loads(capsys.readouterr().out), commands
     return run
+
+
+@pytest.mark.parametrize("skip", [False, True])
+def test_no_evals_preserves_throughput_and_metadata(changelog_run, skip):
+    output, commands = changelog_run(
+        [{"no-evals": skip}], generated=lambda _: [_fixed_matrix_row(8)],
+    )
+    assert [row["conc"] for row in output["single_node"]["8k1k"]] == [8]
+    assert len(output["evals"]) == (0 if skip else 1)
+    assert output["agentic_evals"] == []
+    assert output["multinode_evals"] == []
+    assert output["multinode_agentic_evals"] == []
+    assert len(commands) == (1 if skip else 2)
+    assert output["changelog_metadata"]["entries"][0]["no-evals"] is skip
+
+
+def test_no_evals_does_not_suppress_another_entry(changelog_run):
+    _, commands = changelog_run([
+        {"config-keys": ["config-a"], "no-evals": True},
+        {"config-keys": ["config-b"]},
+    ])
+    eval_commands = [command for command in commands if "--evals-only" in command]
+    assert len(eval_commands) == 1
+    assert eval_commands[0][eval_commands[0].index("--config-keys") + 1] == "config-b"
+
+
+@pytest.mark.parametrize("flags", [{"evals-only": True}, {"all-evals": True},
+                                   {"eval-min-prefill-ep": 2}])
+def test_no_evals_rejects_conflicting_entry_options(changelog_run, flags):
+    with pytest.raises(ValueError, match="no-evals cannot be combined"):
+        changelog_run([{"no-evals": True, **flags}])
+
+
+@pytest.mark.parametrize("flag", ["--all-evals", "--evals-only"])
+def test_no_evals_rejects_conflicting_pr_modifiers(changelog_run, flag):
+    with pytest.raises(ValueError, match="no-evals entries cannot use"):
+        changelog_run([{"no-evals": True}], [flag])
 
 
 # The table is the contract: CLI expansion preserves throughput, whereas an

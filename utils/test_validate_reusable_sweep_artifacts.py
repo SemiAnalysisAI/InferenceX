@@ -2,20 +2,54 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from validate_reusable_sweep_artifacts import (
+    _result_order,
     agentic_key,
     benchmark_key,
     dedupe_reran_evals,
     eval_key,
     eval_result_key,
-    main,
     validate_agentic_artifacts,
     validate_eval_artifacts,
     validate_fixed_artifacts,
 )
+
+
+@pytest.mark.parametrize("name,expected_ns", [
+    ("results_1970-01-01T00-00-00.json", 0),
+    ("results_1970-01-01T00-00-01.000000009.json", 1_000_000_009),
+    ("results_1970-01-01T00-00-00.1234567899_conc4_2.json", 123_456_789),
+    ("results_1969-12-31T23-59-59.75.json", -250_000_000),
+    ("results_1970-01-02T00-00-00.json", 86_400_000_000_000),
+    ("results_2026-99-99T99-99-99.json", 9_000_000_000),
+    ("results_legacy.json", 9_000_000_000),
+])
+def test_result_order_preserves_nanoseconds_and_legacy_fallback(
+    tmp_path: Path, name: str, expected_ns: int,
+) -> None:
+    path = tmp_path / name
+    path.write_text("{}")
+    os.utime(path, ns=(9_000_000_000, 9_000_000_000))
+    assert _result_order(path) == (expected_ns, name)
+
+
+def test_result_order_breaks_equal_recency_by_filename(tmp_path: Path) -> None:
+    from collect_eval_results import detect_lm_eval_jsons
+
+    early = tmp_path / "results_a_1970-01-01T00-00-01.1.json"
+    late = tmp_path / "results_z_1970-01-01T00-00-01.100000000.json"
+    for path in (late, early):
+        path.write_text('{"lm_eval_version":"0.4.0"}')
+    os.utime(early, ns=(9_000_000_000, 9_000_000_000))
+    os.utime(late, ns=(1_000_000_000, 1_000_000_000))
+    assert _result_order(early) < _result_order(late)
+    assert detect_lm_eval_jsons(tmp_path) == [late]
 
 
 def write_eval_aggregate(
@@ -816,23 +850,27 @@ def test_agentic_validation_handles_mapping_kv_offload_backend(
     assert "agentic point artifacts contain 1 duplicate row(s)" in errors
 
 
-def test_eval_only_main_does_not_require_benchmark_artifacts(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
+def test_eval_only_cli_runs_outside_checkout_without_benchmark_artifacts(tmp_path: Path) -> None:
     write_eval_aggregate(tmp_path, [single_eval_result(32)])
     write_raw_eval_artifact(tmp_path, 32)
-    monkeypatch.setattr(
-        sys,
-        "argv",
+    env = dict(os.environ)
+    env.pop("PYTHONPATH", None)
+    completed = subprocess.run(
         [
-            "validate_reusable_sweep_artifacts.py",
+            sys.executable,
+            str(Path(__file__).with_name("validate_reusable_sweep_artifacts.py")),
             "--artifacts-dir",
             str(tmp_path),
         ],
+        cwd=tmp_path, env=env, capture_output=True, text=True, timeout=10,
     )
 
-    assert main() == 0
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stderr == ""
+    assert completed.stdout == (
+        "Reusable sweep artifacts validated: "
+        "0 fixed-sequence row(s), 0 agentic row(s), 1 eval row(s).\n"
+    )
 
 
 # ── dedupe_reran_evals ────────────────────────────────────────────────────────
