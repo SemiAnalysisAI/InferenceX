@@ -209,6 +209,7 @@ VLLM_CMD=(
     --attention-backend ROCM_AITER_UNIFIED_ATTN
     --moe-backend aiter
     --kv-cache-dtype fp8
+    --attention-config '{"indexer_kv_dtype": "fp8"}'
     --tool-call-parser minimax_m3
     --reasoning-parser minimax_m3
     --enable-auto-tool-choice
