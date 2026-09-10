@@ -580,14 +580,22 @@ validate_container_network() {
     return 0
   fi
   collx_restore_exact_hca_selector || return 1
-  [ -n "${GLOO_SOCKET_IFNAME:-}" ] && [ -n "${NCCL_IB_HCA:-}" ] \
+  local rdma_selector="${NCCL_IB_HCA:-}"
+  if [ "${COLLX_RDMA_FABRIC:-}" = efa ]; then
+    # No verbs selector on EFA; the probe-validated device list is the contract, and the
+    # libfabric NCCL plugin the enroot hook mounts is what actually carries the traffic.
+    rdma_selector="${COLLX_RDMA_DEVICES:-}"
+    [ -r /opt/amazon/ofi-nccl/lib/libnccl-net-ofi.so ] \
+      || { collx_log "ERROR: aws-ofi-nccl plugin is absent inside the container"; return 1; }
+  fi
+  [ -n "${GLOO_SOCKET_IFNAME:-}" ] && [ -n "$rdma_selector" ] \
     || { collx_log "ERROR: scale-out network selectors are unavailable"; return 1; }
   IFS=, read -r -a interfaces <<< "$GLOO_SOCKET_IFNAME"
   for interface in "${interfaces[@]}"; do
     [ -d "/sys/class/net/$interface" ] \
       || { collx_log "ERROR: configured scale-out socket interface is absent"; return 1; }
   done
-  IFS=, read -r -a devices <<< "$NCCL_IB_HCA"
+  IFS=, read -r -a devices <<< "$rdma_selector"
   for device in "${devices[@]}"; do
     device="${device#=}"
     rdma_name="${device%%:*}"

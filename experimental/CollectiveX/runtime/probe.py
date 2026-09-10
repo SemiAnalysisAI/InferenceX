@@ -198,7 +198,7 @@ def _emit(marker: str) -> None:
     print(f"[collectivex-private] {marker}")
 
 
-def _check_port(port_path: Path, ordinal: int, gid_index: str, profile: str):
+def _check_port(port_path: Path, ordinal: int, gid_index: str, profile: str, fabric: str = ""):
     # Return the port's link layer ("roce"/"infiniband") when it is active, carries a
     # non-empty GID at the pinned index, and agrees with any already-seen link layer;
     # otherwise emit the matching rdma-port-<ordinal>=<reason> marker and return None.
@@ -217,6 +217,10 @@ def _check_port(port_path: Path, ordinal: int, gid_index: str, profile: str):
     if not link.is_file():
         _emit(f"rdma-port-{ordinal}=link-layer-missing"); return None
     layer = {"Ethernet": "roce", "InfiniBand": "infiniband"}.get(link.read_text().strip())
+    # AWS EFA is a verbs device whose port carries no link layer (sysfs says Unspecified or
+    # Unknown, rdma-core names it rdmap*). Only an operator-declared EFA fabric may accept that.
+    if layer is None and fabric == "efa" and link.read_text().strip() in ("Unspecified", "Unknown"):
+        layer = "efa"
     if layer is None:
         _emit(f"rdma-port-{ordinal}=link-layer-invalid"); return None
     if profile and profile != layer:
@@ -270,6 +274,7 @@ def _emit_fabric_inventory(sys_root: Path = Path("/sys"),
         if line.strip(): _emit(f"fabric-inventory-topo {line.rstrip()}")
 
 def validate_network_profile(socket_names: str, rdma_devices: str, gid_index: str,
+                             fabric: str = "",
                              sys_root: Path = Path("/sys"),
                              route_path: Path = Path("/proc/net/route")) -> None:
     # Prove the operator-pinned scale-out fabric on this node: resolve the cross-node socket
@@ -298,13 +303,13 @@ def validate_network_profile(socket_names: str, rdma_devices: str, gid_index: st
         if not ports.is_dir():
             _emit(f"rdma-device-{ordinal}=missing"); raise SystemExit(1)
         if configured_port:
-            layer = _check_port(ports / configured_port, ordinal, gid_index, profile)
+            layer = _check_port(ports / configured_port, ordinal, gid_index, profile, fabric)
             if layer is None: raise SystemExit(1)
             profile = layer
         else:
             active = False
             for port_path in sorted(p for p in ports.iterdir() if p.is_dir()):
-                layer = _check_port(port_path, ordinal, gid_index, profile)
+                layer = _check_port(port_path, ordinal, gid_index, profile, fabric)
                 if layer is not None:
                     profile, active = layer, True
             if not active: raise SystemExit(1)
@@ -319,7 +324,7 @@ def main() -> None:
     command = commands.add_parser("cuda-context"); command.add_argument("expected", type=int)
     command = commands.add_parser("image-digest"); command.add_argument("image")
     commands.add_parser("gpu-health")
-    command = commands.add_parser("network-profile"); command.add_argument("socket_names"); command.add_argument("rdma_devices"); command.add_argument("gid_index")
+    command = commands.add_parser("network-profile"); command.add_argument("socket_names"); command.add_argument("rdma_devices"); command.add_argument("gid_index"); command.add_argument("fabric", nargs="?", default="")
     args = parser.parse_args()
     if args.command == "default-route-interface": print(default_route_interface(), end="")
     elif args.command == "prepare-cache": print(prepare_cache(args.parent), end="")
@@ -328,7 +333,7 @@ def main() -> None:
     elif args.command == "gpu-health": validate_gpu_health()
     else:
         try:
-            validate_network_profile(args.socket_names, args.rdma_devices, args.gid_index)
+            validate_network_profile(args.socket_names, args.rdma_devices, args.gid_index, args.fabric)
         except SystemExit as exc:
             if exc.code: _emit_fabric_inventory()
             raise
