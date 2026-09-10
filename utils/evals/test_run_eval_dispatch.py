@@ -4,6 +4,7 @@ import hashlib
 import io
 import json
 import os
+import signal
 import stat
 import subprocess
 import sys
@@ -937,7 +938,7 @@ def _serve_archive(payload: bytes, *, transient_failures: int = 0):
             pass
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), ArchiveHandler)
-    thread = threading.Thread(target=server.serve_forever)
+    thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01})
     thread.start()
     try:
         yield (
@@ -2026,6 +2027,20 @@ echo SANITIZED_OK
     assert "SANITIZED_OK" in res.stdout
 
 
+# Advance the watchdog's clock by requested waits. The small real yield lets
+# child processes run; their sleep, signal handling, and exit status stay real.
+_AGENTIC_TEST_CLOCK = r"""
+_test_now=0
+date() {
+    if [[ "$*" == "+%s" ]]; then printf '%s\n' "$_test_now"; else command date "$@"; fi
+}
+sleep() {
+    _test_now=$((_test_now + $1))
+    command sleep 0.01
+}
+"""
+
+
 def test_agentic_generation_invokes_mini_swe_agent(tmp_path):
     shim = tmp_path / "shim"
     shim.mkdir()
@@ -2048,7 +2063,7 @@ def test_agentic_generation_invokes_mini_swe_agent(tmp_path):
 
     gen_dir = tmp_path / "gen"
     gen_dir.mkdir()
-    script = r"""
+    script = _AGENTIC_TEST_CLOCK + r"""
 source "$BENCHMARK_LIB" 2>/dev/null
 _install_swebench_agent_deps() { :; }
 _ensure_modal_credentials() { :; }
@@ -2095,7 +2110,7 @@ def _agentic_shim(tmp_path, mini_body):
 
 
 def _run_agentic(shim, gen_dir, extra_env=None):
-    script = r"""
+    script = _AGENTIC_TEST_CLOCK + r"""
 source "$BENCHMARK_LIB" 2>/dev/null
 _install_swebench_agent_deps() { :; }
 _ensure_modal_credentials() { :; }
@@ -2114,7 +2129,7 @@ echo "GEN_RC=$?"
         **(extra_env or {}),
     }
     return subprocess.run(
-        ["bash", "-c", script], env=env, text=True, capture_output=True
+        ["bash", "-c", script], env=env, text=True, capture_output=True, timeout=10
     )
 
 
@@ -2124,14 +2139,25 @@ def test_agentic_watchdog_kills_hung_mini(tmp_path):
         'out=""; prev=""\n'
         'for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done\n'
         'mkdir -p "$out"\n'
+        'printf "%s\\n" "$$" > "$out/mini.pid"\n'
         'printf \'{"i1": {"instance_id": "i1", "model_patch": "d"}}\' > "$out/preds.json"\n'
         "exec sleep 600 </dev/null >/dev/null 2>&1\n",
     )
-    res = _run_agentic(
-        shim, gen_dir, {"EVAL_LIMIT": "1", "SWEBENCH_AGENT_EXIT_GRACE": "2"}
-    )
-    assert "GEN_RC=0" in res.stdout, res.stdout + res.stderr
-    assert "hung after completing all instances" in res.stdout + res.stderr
+    pid_file = gen_dir / "agent_out/mini.pid"
+    try:
+        res = _run_agentic(
+            shim, gen_dir, {"EVAL_LIMIT": "1", "SWEBENCH_AGENT_EXIT_GRACE": "2"}
+        )
+        assert "GEN_RC=0" in res.stdout, res.stdout + res.stderr
+        assert "hung after completing all instances" in res.stdout + res.stderr
+        with pytest.raises(ProcessLookupError):
+            os.kill(int(pid_file.read_text()), 0)
+    finally:
+        if pid_file.exists():
+            try:
+                os.kill(int(pid_file.read_text()), signal.SIGKILL)
+            except ProcessLookupError:
+                pass
 
 
 def test_agentic_salvage_partial_preds_on_failure(tmp_path):

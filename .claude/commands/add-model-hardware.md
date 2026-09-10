@@ -149,7 +149,7 @@ new entry is **required** for CI to run your config.
 ```bash
 bash -n benchmarks/single_node/fixed_seq_len/<script>
 python3 -c "import yaml; yaml.safe_load(open('configs/<nvidia|amd>-master.yaml')); yaml.safe_load(open('perf-changelog.yaml'))"
-uv run --no-project --with pydantic --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
   utils/matrix_logic/generate_sweep_configs.py test-config \
   --config-files configs/<nvidia|amd>-master.yaml --config-keys <key>
 ```
@@ -159,7 +159,7 @@ values, `spec-decoding` set where intended. Ensure both yaml files keep a traili
 ## Step 7 — PR + label + monitor
 
 ```bash
-git add -A && git commit -m "<key>: <one-line>" -m "Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
+git add -A && git commit -m "<key>: <one-line>"
 git push -u origin feat/<model>-<sku>[-mtp]-dayzero
 gh pr create --repo SemiAnalysisAI/InferenceX --base main \
   --title "[Klaud Cold] <key>: day-zero <MODEL> <SKU> recipe" --body "<summary>"

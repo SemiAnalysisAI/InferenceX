@@ -208,6 +208,8 @@ def _ctx(sc: dict) -> dict:
 
 def run_dag(sc: dict) -> tuple[str, str, str]:
     """Return (check-changelog result, reuse-sweep-gate result, setup decision)."""
+    if sc['event'] == 'pull_request' and sc.get('action') not in _WF['on']['pull_request']['types']:
+        return 'skipped', 'skipped', 'SKIP'
     ctx = _ctx(sc)
 
     if not _eval(CHECK_IF, ctx):
@@ -279,7 +281,7 @@ CASES = [
     ("PR-sync-external-fork-defers-to-trusted-dispatch",
      {**_PR, "action": "synchronize", "labels": ["full-sweep-enabled"],
       "head_repo": "external/InferenceX"},
-     ("success", "success", "SKIP")),
+     ("skipped", "skipped", "SKIP")),
     ("PR-labeled-with-sweep-label",
      {**_PR, "action": "labeled", "label_name": "full-sweep-enabled",
       "labels": ["full-sweep-enabled"]}, ("success", "skipped", "RUN")),
@@ -328,10 +330,28 @@ CASES = [
       "labels": []}, ("success", "skipped", "SKIP")),
     ("PR-draft",
      {**_PR, "action": "synchronize", "draft": True,
-      "labels": ["full-sweep-enabled"]}, ("skipped", "skipped", "SKIP")),
+      "labels": ["full-sweep-enabled"]}, ("success", "success", "RUN")),
+    ("PR-draft-label-opt-in",
+     {**_PR, "action": "labeled", "draft": True, "label_name": "sweep-enabled",
+      "labels": ["sweep-enabled"]}, ("success", "skipped", "RUN")),
+    ("PR-draft-without-sweep-label",
+     {**_PR, "action": "synchronize", "draft": True,
+      "labels": []}, ("success", "skipped", "SKIP")),
+    ("PR-draft-fork-still-requires-trusted-dispatch",
+     {**_PR, "action": "labeled", "draft": True, "label_name": "full-sweep-enabled",
+      "labels": ["full-sweep-enabled"], "head_repo": "external/InferenceX"},
+     ("skipped", "skipped", "SKIP")),
+    ("PR-draft-invalid-changelog",
+     {**_PR, "action": "synchronize", "draft": True,
+      "labels": ["full-sweep-enabled"], "check": "failure"},
+     ("failure", "skipped", "SKIP")),
+    ("PR-draft-reuse-authorized",
+     {**_PR, "action": "synchronize", "draft": True,
+      "labels": ["full-sweep-enabled"], "reuse_auth": True},
+     ("success", "success", "SKIP")),
     ("PR-ready-for-review",
      {**_PR, "action": "ready_for_review", "labels": ["full-sweep-enabled"],
-      "reuse_auth": False}, ("success", "skipped", "RUN")),
+      "reuse_auth": False}, ("skipped", "skipped", "SKIP")),
     ("PR-sync-validation-requests-skip",
      {**_PR, "action": "synchronize", "labels": ["full-sweep-enabled"],
       "check_skip": "true"},
@@ -352,6 +372,22 @@ def test_gating_decision(
     expected: tuple[str, str, str],
 ) -> None:
     assert run_dag(scenario) == expected
+
+
+@pytest.mark.parametrize("draft", [False, True])
+@pytest.mark.parametrize("action", ["synchronize", "labeled", "unlabeled"])
+@pytest.mark.parametrize("head_repo", ["external/InferenceX", None])
+def test_external_or_missing_head_cannot_enter_the_sweep_pipeline(draft, action, head_repo) -> None:
+    scenario = {**_PR, "draft": draft, "action": action, "head_repo": head_repo,
+                "labels": ["full-sweep-enabled"], "label_name": "full-sweep-enabled"}
+    assert run_dag(scenario) == ("skipped", "skipped", "SKIP")
+
+
+def test_changelog_validation_has_no_write_token_or_persisted_credential() -> None:
+    job = _WF["jobs"]["check-changelog"]
+    assert job["permissions"] == {"contents": "read"}
+    checkout = next(step for step in job["steps"] if step.get("uses", "").startswith("actions/checkout@"))
+    assert checkout["with"]["persist-credentials"] == "false"
 
 
 def test_priority_classifier_runs_only_for_enabled_pull_requests() -> None:
