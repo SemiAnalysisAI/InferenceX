@@ -1,0 +1,20 @@
+# Source evidence: https://github.com/rahulunair/qwen38-agentx/tree/1db65c09555636a19ccf1aa4c160f69dff397ba4/10-serve/acceptance/evidence/9306bc5ccdc73c15
+# Acceptance Length (AL) reference values measured with SPEED-Bench.
+# dataset: coding | output_len: 4096
+# thinking_on : temp 1.0 top_p 0.95 top_k 20 presence_penalty 0.0 | chat_template_kwargs: {"enable_thinking": true}
+# Measured on qwen3.8-27b (dense, AWQ-INT4-g128; four Intel Arc Pro B70, SGLang
+# 0.0.0.dev15740+g1eee8fbdc.d20260728 native MTP), per num_speculative_tokens.
+# Collected with 00-setup/calibrate-acceptance-sglang.sh in the source-evidence
+# repository, not speedbench-al.yml: this checkpoint/MTP pair has no qualified
+# B300 or vLLM route. Prompt population, sampling, output length, EOS handling
+# and the AL formula are unchanged from the standard collector.
+# AL = 1 + sum(spec_num_correct_drafts) / sum(spec_verify_ct)
+#    = 1 + 149574 / 55993 = 3.67129820 -> 3.67
+# Only num_speculative_tokens=7 is measured; that is the sole draft length this
+# server is qualified for. Other lengths are intentionally absent rather than
+# interpolated.
+#
+# key = num_speculative_tokens (MTP level); value = golden AL
+qwen3.8-27b:
+  thinking_on:
+    7: 3.67

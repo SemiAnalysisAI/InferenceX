@@ -136,6 +136,7 @@ Before accepting an updated curve, reviewers should verify:
 | MiniMax-M3 | EAGLE3 (GQA) | [`minimaxm3_eagle3_gqa.yaml`](minimaxm3_eagle3_gqa.yaml) | [29784780049](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/29784780049) |
 | GLM-5.2 | MTP | [`glm5.2_mtp.yaml`](glm5.2_mtp.yaml) | [28058352479](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28058352479) |
 | Qwen3.8-Flash-Next | MTP (native) | [`qwen3.8next_mtp.yaml`](qwen3.8next_mtp.yaml) | [33034290269](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/33034290269) |
+| Qwen3.8-27B (dense) | MTP (native) | [`qwen3.8_mtp.yaml`](qwen3.8_mtp.yaml) | [SGLang B70 evidence bundle](https://github.com/rahulunair/qwen38-agentx/tree/1db65c09555636a19ccf1aa4c160f69dff397ba4/10-serve/acceptance/evidence/9306bc5ccdc73c15) |
 
 ## Primary references
 
