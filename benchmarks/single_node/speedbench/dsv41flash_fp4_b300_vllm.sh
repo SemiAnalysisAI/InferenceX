@@ -7,7 +7,7 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 
 MODEL="${MODEL:?}"
 TP="${TP:-4}"
-MTP_LIST="${MTP_LIST:-1 2 3 4 5}"
+MTP_LIST="${MTP_LIST:-1 2 3 4 5 6 7 8}"
 THINKING_MODES="${THINKING_MODES:-off on}"
 CATEGORY="${CATEGORY:-coding}"
 SPEEDBENCH_OUTPUT_LEN="${SPEEDBENCH_OUTPUT_LEN:-4096}"
@@ -17,9 +17,9 @@ CHAT_TEMPLATE_KWARGS_ON="${CHAT_TEMPLATE_KWARGS_ON:-$DEFAULT_THINKING}"
 RESULTS_DIR="${RESULTS_DIR:-/ix/speedbench_results}"
 SPEEDBENCH_DIR="${SPEEDBENCH_DIR:-/ix/speed_bench_data}"
 OUT_YAML="${OUT_YAML:-/ix/speedbench-reference-al.yaml}"
-# The checkpoint declares dspark_block_size=5; calibrate every prefix length.
+# Collect the requested draft lengths; runtime failures remain visible per length.
 for mtp in $MTP_LIST; do
-    [[ "$mtp" =~ ^[1-5]$ ]] || { echo 'DSv4.1 Flash draft lengths must be in 1..5' >&2; exit 1; }
+    [[ "$mtp" =~ ^[1-8]$ ]] || { echo 'DSv4.1 Flash draft lengths must be in 1..8' >&2; exit 1; }
 done
 for mode in $THINKING_MODES; do
     [[ "$mode" == on || "$mode" == off ]] || exit 1
@@ -79,16 +79,24 @@ for mtp in $MTP_LIST; do
     # A fresh server per draft length keeps model configuration and counters isolated.
     # Adaptive verification would make the measured target dependent on profiling.
     SPEC_CONFIG=$(printf '{"method":"dspark","num_speculative_tokens":%s,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":false}' "$mtp")
+    CAPTURE_SIZE=256
+    while (( CAPTURE_SIZE < CONCURRENCY * (mtp + 1) )); do
+        CAPTURE_SIZE=$((CAPTURE_SIZE * 2))
+    done
     setsid vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
         --host 0.0.0.0 --port "$PORT" --tensor-parallel-size "$TP" \
         --language-model-only --tokenizer-mode deepseek_v41 \
         --tool-call-parser deepseek_v41 --enable-auto-tool-choice \
         --reasoning-parser deepseek_v41 --engram-config '{"cpu_offload":true}' \
         --speculative-config "$SPEC_CONFIG" --max-model-len 16384 \
-        --no-enable-prefix-caching --max-cudagraph-capture-size 256 \
+        --no-enable-prefix-caching --max-cudagraph-capture-size "$CAPTURE_SIZE" \
         --disable-uvicorn-access-log > "$RESULTS_DIR/server_dspark${mtp}.log" 2>&1 &
     SERVER_PID=$!
-    wait_for_server_ready --port "$PORT" --server-log "$RESULTS_DIR/server_dspark${mtp}.log" --server-pid "$SERVER_PID"
+    if ! (wait_for_server_ready --port "$PORT" --server-log "$RESULTS_DIR/server_dspark${mtp}.log" --server-pid "$SERVER_PID"); then
+        echo "Draft length $mtp failed startup; retaining logs and attempting the next length" >&2
+        cleanup_server
+        continue
+    fi
 
     # Keep one server for both modes. Counter deltas exclude startup and other cells.
     for mode in $THINKING_MODES; do

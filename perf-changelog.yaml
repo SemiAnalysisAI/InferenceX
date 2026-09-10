@@ -7129,3 +7129,10 @@
     - "Collect the full DSv4.1 Flash golden AL curve: draft lengths 1 through 5 for thinking off and on"
     - "Restart the server for each draft length and validate every cell against its own acceptance bound"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2964
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-agentic-dspark
+  description:
+    - "Extend DSv4.1 Flash SPEED-Bench collection to draft lengths 1-8, allowing a separate 6-8 run"
+    - "Retain per-length startup failures and size graph capture for the selected draft length"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2964

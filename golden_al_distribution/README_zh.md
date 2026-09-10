@@ -155,7 +155,7 @@ gh workflow run speedbench-al.yml \
 ### DeepSeek-V4.1-Flash DSpark
 
 `dsv41flash` 采集器在 B200 上使用专用 `deepseekv41-flash-0909` 镜像、TP4
-和 Engram UVA offload。采集参数为 `mtp-list=1 2 3 4 5`、`thinking-modes=off on`、
+和 Engram UVA offload。采集参数为 `mtp-list=1 2 3 4 5 6 7 8`、`thinking-modes=off on`、
 `category=coding`、`output-len=4096`。采用 probabilistic 草稿采样和 block 拒绝采样，
 关闭 adaptive verification，与上述固定草稿长度的采集方法一致。每个单元显式设置
 thinking 开关。只有全部 80 个 coding prompt 成功且 acceptance counter 有效时
