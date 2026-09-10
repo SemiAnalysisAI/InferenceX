@@ -223,6 +223,35 @@ def _check_port(port_path: Path, ordinal: int, gid_index: str, profile: str):
     return layer
 
 
+def _emit_fabric_inventory(sys_root: Path = Path("/sys"),
+                           route_path: Path = Path("/proc/net/route")) -> None:
+    # Failure-path diagnostic only. When the operator-pinned profile does not match the node
+    # (a pool moved under an existing SKU, as b300-nv -> b300-dsxe did), the launcher's log tail
+    # is the only view an operator without shell access has of the node, so say what IS there:
+    # every non-loopback interface with its operstate, and every RDMA device with its ports'
+    # state and link layer. The marker prefix stays outside the launcher's failure vocabulary.
+    nets = []
+    net_root = sys_root / "class" / "net"
+    for net in sorted(net_root.iterdir()) if net_root.is_dir() else []:
+        if net.name == "lo": continue
+        oper = net / "operstate"
+        nets.append(f"{net.name}={oper.read_text().strip() if oper.is_file() else '?'}")
+    rdma = []
+    ib_root = sys_root / "class" / "infiniband"
+    for dev in sorted(ib_root.iterdir()) if ib_root.is_dir() else []:
+        ports = []
+        for port in sorted(p for p in (dev / "ports").iterdir() if p.is_dir()) if (dev / "ports").is_dir() else []:
+            state = port / "state"; link = port / "link_layer"
+            ports.append(f"{port.name}:{state.read_text().split()[0].rstrip(':') if state.is_file() else '?'}"
+                         f"/{link.read_text().strip() if link.is_file() else '?'}")
+        rdma.append(f"{dev.name}({','.join(ports)})")
+    try: default = default_route_interface(route_path)
+    except OSError: default = ""
+    _emit(f"fabric-inventory-default-route={default or 'none'}")
+    _emit(f"fabric-inventory-net={','.join(nets) or 'none'}")
+    _emit(f"fabric-inventory-rdma={','.join(rdma) or 'none'}")
+
+
 def validate_network_profile(socket_names: str, rdma_devices: str, gid_index: str,
                              sys_root: Path = Path("/sys"),
                              route_path: Path = Path("/proc/net/route")) -> None:
@@ -280,7 +309,12 @@ def main() -> None:
     elif args.command == "cuda-context": validate_cuda_context(args.expected)
     elif args.command == "image-digest": print(resolve_image_digest(args.image), end="")
     elif args.command == "gpu-health": validate_gpu_health()
-    else: validate_network_profile(args.socket_names, args.rdma_devices, args.gid_index)
+    else:
+        try:
+            validate_network_profile(args.socket_names, args.rdma_devices, args.gid_index)
+        except SystemExit as exc:
+            if exc.code: _emit_fabric_inventory()
+            raise
 
 
 if __name__ == "__main__": main()
