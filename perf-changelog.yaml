@@ -7070,3 +7070,9 @@
     - "MTP draft length by concurrency: speculative-num-steps 3 (golden AL 2.49) below conc 256, and 1 (golden AL 1.79) at and above it."
     - "Trim the search space to TP8 no-offload conc [1, 4, 16], TP8 hicache conc [32, 48], and TP8 DP-attention hicache conc [128, 256]."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2885
+
+- config-keys:
+    - qwen3.5-fp8-h100-sglang
+  description:
+    - "Update SGLang image from lmsysorg/sglang:v0.5.14-cu130 to lmsysorg/sglang:v0.5.19-cu130 (digest sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9); recipe script, TP8/EP1 and TP8/EP8 topology, 8k1k workload and concurrency range unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2968
