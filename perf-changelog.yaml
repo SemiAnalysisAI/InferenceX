@@ -7128,4 +7128,4 @@
   description:
     - "Add GB300 TP4 AgentX through concurrency 128 with Engram UVA DRAM offload and native five-token DSpark"
     - "Use deepseekv41-flash-0909 with adaptive verification and available-port selection"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2961
