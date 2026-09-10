@@ -167,6 +167,46 @@ Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../AGENTS.md#non-nego
 7. Add script + master entry + launcher routing + changelog together.
 8. Run Bash syntax and generation checks. Inspect `spec-decoding`, draft/native method, token count, chat-template use, capture range, and resolved script.
 
+### DeepSeek-V4.1-Flash DSpark on H100
+
+`dsv41flash-fp4-h100-vllm-agentic-dspark` is the H100 AgentX arm of the
+DeepSeek-V4.1-Flash recipe, added after the H200 arm and deliberately separate from
+it. H100 is **not** in the upstream hardware table, which lists h200, gb200, gb300, and
+mi350x.
+
+Unlike the other SKUs, H100 does not use the shared `dsv41flash_fp4_vllm_mtp.sh`. It has
+its own copy, because the shared flags cannot serve 1M context on an 80 GB card. At 1M
+context the sparse attention indexer allocates a
+`[max-num-batched-tokens, max-model-len]` logits buffer in `fp8_fp4_paged_mqa_logits`:
+at the shared script's effective 8192 batched tokens that is 8192 x 1048576 x 2 bytes,
+exactly 16.00 GiB. It is a fixed cost paid during startup memory profiling, independent
+of concurrency, so it OOMed at concurrency 1 in run
+[34467029236](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34467029236)
+next to roughly 35.9 GiB per GPU of resident weights — trimming the concurrency list
+cannot help.
+
+The H100 script therefore caps `--max-num-batched-tokens` at 4096, putting the indexer
+buffer at 8 GiB. Capping `--max-model-len` instead would shrink it just as well, but a
+context cap forces the 256k-capped trace corpus onto a model that serves 1M, so batched
+tokens is the right lever. The script also sets `--max-num-seqs` to twice the trajectory
+concurrency rather than inheriting vLLM's default of 1024, sets
+`--gpu-memory-utilization 0.92`, and enables `expandable_segments` because the failing
+allocation left 1.04 GiB reserved but unallocated.
+
+The concurrency list stops at 8. That is a starting point, not a measured frontier: the
+KV cliff on this SKU is unknown until GPU evidence lands. Validate with a single
+concurrency-1 `agentx-fast` run before dispatching a canonical sweep — a full sweep that
+OOMs at startup wastes every leg.
+
+`runners/launch_h100-dgxc-slurm.sh` previously resolved only the untagged
+`_h100[_mtp].sh` script name, so no framework-tagged script could run on this cluster at
+all. It now prefers `_h100_<framework>[_mtp].sh` first, as the h200 launchers have since
+#392, and falls back to the untagged name for the recipes that predate framework tags. It
+also mounts the repository at `/ix` for this recipe so AgentX runtime directories are not
+created under `/workspace`.
+
+Source: [upstream recipe](https://github.com/vllm-project/recipes/blob/main/models/deepseek-ai/DeepSeek-V4.1-Flash.yaml).
+
 ## Validate
 
 Run the smallest checks that cover the edited layers.

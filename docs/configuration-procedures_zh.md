@@ -167,6 +167,38 @@ llm-d 不是 srt-slurm 路径：InferenceX 自己持有 Slurm allocation，并�
 7. 同时添加脚本 + 主配置条目 + launcher 路由 + changelog。
 8. 运行 Bash 语法和生成检查；检查 `spec-decoding`、draft/native 方法、token 数、chat-template 使用、capture 范围和解析出的脚本。
 
+### H100 上的 DeepSeek-V4.1-Flash DSpark
+
+`dsv41flash-fp4-h100-vllm-agentic-dspark` 是 DeepSeek-V4.1-Flash 配方的 H100 AgentX
+分支，在 H200 分支之后加入，并有意与其分开。H100 **不在**上游硬件表中（该表列出
+h200、gb200、gb300、mi350x）。
+
+与其他 SKU 不同，H100 不使用共享的 `dsv41flash_fp4_vllm_mtp.sh`，而是拥有独立副本，
+因为共享参数无法在 80 GB 卡上服务 1M 上下文。在 1M 上下文下，稀疏注意力 indexer 会在
+`fp8_fp4_paged_mqa_logits` 中分配 `[max-num-batched-tokens, max-model-len]` 的 logits
+缓冲区：按共享脚本实际生效的 8192 batched tokens 计算，即 8192 x 1048576 x 2 字节，
+恰好 16.00 GiB。这是启动阶段显存 profiling 固定支付的开销，与并发无关，因此在
+[34467029236](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34467029236)
+中于并发 1 即 OOM（此时每 GPU 驻留权重约 35.9 GiB）—— 收窄并发列表无济于事。
+
+因此 H100 脚本将 `--max-num-batched-tokens` 限制为 4096，使 indexer 缓冲区降至 8 GiB。
+改为收窄 `--max-model-len` 同样有效，但上下文上限会迫使一个服务 1M 上下文的模型使用
+256k 截断语料，因此 batched tokens 才是正确的调节点。脚本还将 `--max-num-seqs` 设为
+轨迹并发的两倍（而非沿用 vLLM 默认的 1024）、设置 `--gpu-memory-utilization 0.92`，
+并启用 `expandable_segments`，因为失败的分配留下了 1.04 GiB 已保留但未分配的显存。
+
+并发列表到 8 为止。这是起点而非实测前沿：该 SKU 的 KV 悬崖位置在 GPU 证据落地前仍属未知。
+在调度正式 sweep 之前，应先用单个并发 1 的 `agentx-fast` 运行验证 —— 启动即 OOM 的全量
+sweep 会浪费每一个 leg。
+
+`runners/launch_h100-dgxc-slurm.sh` 此前只解析不带 framework 的 `_h100[_mtp].sh` 名称，
+因此该集群上根本无法运行任何带 framework 的脚本。现在它优先解析
+`_h100_<framework>[_mtp].sh`（与 h200 launcher 自 #392 起的行为一致），并对早于 framework
+标签的配方回退到不带 framework 的名称。它还为该配方将仓库挂载到 `/ix`，避免在
+`/workspace` 下创建 AgentX 运行目录。
+
+来源：[上游配方](https://github.com/vllm-project/recipes/blob/main/models/deepseek-ai/DeepSeek-V4.1-Flash.yaml)。
+
 ## 验证
 
 运行覆盖被修改层的最小检查。
