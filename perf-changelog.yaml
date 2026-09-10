@@ -7121,3 +7121,11 @@
   description:
     - "Update SGLang image from lmsysorg/sglang:v0.5.12-cu130 to lmsysorg/sglang:v0.5.19-cu130 (digest sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9, sglang commit 0bcd822377da7b5718e674eaf9c870d349424dd1); recipe script, TP8/EP1 topology and EAGLE/MTP settings unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2955
+
+
+- config-keys:
+    - dsv41flash-fp4-gb200-vllm-agentic-dspark
+  description:
+    - "Add GB200 TP4 AgentX concurrency 1-128 with native DSpark and Engram UVA DRAM offload"
+    - "Use the official single-node recipe and full semianalysis_cc_traces_weka_062126 traces"
+  pr-link: TBD
