@@ -7089,3 +7089,10 @@
     - "MTP draft length by concurrency: speculative-num-steps 3 (golden AL 2.49) below conc 256, and 1 (golden AL 1.79) at and above it."
     - "Trim the search space to TP8 no-offload conc [1, 4, 16], TP8 hicache conc [32, 48], and TP8 DP-attention hicache conc [128, 256]."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2885
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-agentic-dspark
+  description:
+    - "Add B200 TP4 AgentX through concurrency 128 with Engram UVA DRAM offload and native five-token DSpark"
+    - "Use deepseekv41-flash-0909 with adaptive verification and available-port selection"
+  pr-link: TBD
