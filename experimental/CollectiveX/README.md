@@ -190,22 +190,34 @@ selectors. Operator documents can override the defaults. Launchers
 declare and check the fields they actually require. `sweep_matrix.py` derives EP topology from the
 placement fields. The sweep includes every registered SKU by default.
 
-Every selected non-MNNVL EP16 placement additionally requires `socket_ifname` and `rdma_devices` for
-its operator-approved fabric. Optional `ib_gid_index`, `rdma_service_level`, `rdma_traffic_class`,
-and `rail_isolated` are also allowlisted. Service level and traffic class are mapped into MoRI's
-RDMA/IO QoS environment.
+Every selected non-MNNVL EP16 placement additionally requires `rdma_devices` for its
+operator-approved fabric. `socket_ifname` pins the cross-node socket interface; without it the
+allocated node's default-route interface is used (h200-dgxc, b300). Optional `ib_gid_index`,
+`rdma_service_level`, `rdma_traffic_class`, `rail_isolated` and `rdma_fabric` are also allowlisted.
+Service level and traffic class are mapped into MoRI's RDMA/IO QoS environment.
 CollectiveX does not heuristically select a management route or HCA. After allocation, every
 non-MNNVL scale-out node must prove that all configured interfaces and active HCA ports exist before
 backend setup. Scale-up and MNNVL jobs clear these overrides. Scale-out NCCL/RCCL is pinned to `IB`
 with exact-match HCA selectors so a socket fallback fails instead of being mislabeled as RDMA.
 Scale-out also disables NCCL dual-port NIC fusion (`NCCL_IB_MERGE_NICS=0`): a fused device disables
 NCCL GIN, which the DeepEP V2 EP16 hybrid path requires, and a rail-isolated fabric
-(`rail_isolated=1`, e.g. B300's multi-plane RoCE) additionally sets `NCCL_CROSS_NIC=0`.
+(`rail_isolated=1`, per-port rail subnets with no cross-rail routing) additionally sets
+`NCCL_CROSS_NIC=0`.
 
 `ib_gid_index` is applied only when every selected HCA port reports an Ethernet link layer, where it
 selects the operator-approved RoCE GID. Native InfiniBand profiles retain explicit HCA and service
 level pinning but leave the RoCE-only GID override unset so NVSHMEM/NCCL can use the native LID path.
 Mixed Ethernet and InfiniBand HCA lists are rejected.
+
+`rdma_fabric: "efa"` declares an AWS Elastic Fabric Adapter cluster (b300 is a p6-b300.48xlarge
+pool with 16 EFA devices per node). EFA is not a verbs HCA: its ports report no link layer, it has
+no GID table, service level or traffic class, and NCCL reaches it only through the aws-ofi-nccl
+libfabric plugin that the cluster's enroot hook mounts into every container. On such a fabric the
+probe accepts the unspecified link layer for the listed `rdma_devices` (which must still be ACTIVE
+on every node), the IB selector family (`NCCL_IB_*`, `NVSHMEM_HCA_LIST`/IBGDA, MoRI, UCCL) stays
+unset, `NCCL_NET_PLUGIN=ofi` and `FI_PROVIDER=efa` select the plugin, NVSHMEM is pointed at its
+libfabric transport, and backend setup fails unless the plugin library is present in the container.
+NCCL GIN then rides the plugin's own GIN implementation (`OFI_NCCL_GIN_TYPE` selects proxy or GDAKI).
 
 `stage_dir` is a pre-existing, runner-owned, non-symlinked base outside the checkout and workflow
 workspace. It is not group- or world-writable and is visible at the same path on the runner and every
