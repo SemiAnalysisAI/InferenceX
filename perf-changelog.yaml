@@ -7108,3 +7108,10 @@
   description:
     - "Update SGLang image from lmsysorg/sglang:v0.5.14-cu130 to lmsysorg/sglang:v0.5.19-cu130 (digest sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9); recipe script, TP8/EP8 topology and EAGLE/MTP settings unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2952
+
+- config-keys:
+    - qwen3.5-fp4-b200-sglang
+  description:
+    - "Update SGLang image from lmsysorg/sglang:v0.5.14-cu130 to lmsysorg/sglang:v0.5.19-cu130 (digest sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9)."
+    - "Model nvidia/Qwen3.5-397B-A17B-NVFP4-V2, TP4/EP1 and TP2/EP1 topologies, the 8k/1k workload and the launch script are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2954
