@@ -179,15 +179,16 @@ weights determine the recipe's `precision: fp4` label.
 
 The GPU-specific entry points share the text-only serving script, `deepseek_v41` tokenizer and
 parsers, 1M context, and the shared AgentX trace replay, power, metrics, and eval
-helpers. Concurrency is 1–128 with scheduler capacity of twice the trajectory
-concurrency. The launchers mount the repository at `/ix` for this recipe so
+helpers. Concurrency is 1–128. Model-runner selection and scheduler batching follow the
+official single-node TP recipe defaults; graph capture covers concurrency times
+the six-token DSpark verification block. The launchers mount the repository at `/ix` for this recipe so
 AgentX runtime directories are not created under `/workspace`. Launcher-specific model paths and persistent caches are reused.
 The recipe probes the serving port on the compute node and selects an available
 port if the preferred one is occupied. Serving, replay, metrics, and eval share
 that endpoint.
 GPU sweep and eval evidence is required before calling any recipe validated.
 
-Source: [upstream recipe](https://github.com/vllm-project/recipes/blob/main/models/deepseek-ai/DeepSeek-V4.1-Flash.yaml).
+Source: [upstream recipe](https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flash).
 
 ## Validate
 
