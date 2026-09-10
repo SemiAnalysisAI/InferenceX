@@ -187,9 +187,20 @@ h200、gb200、gb300、mi350x）。
 轨迹并发的两倍（而非沿用 vLLM 默认的 1024）、设置 `--gpu-memory-utilization 0.92`，
 并启用 `expandable_segments`，因为失败的分配留下了 1.04 GiB 已保留但未分配的显存。
 
-并发列表到 8 为止。这是起点而非实测前沿：该 SKU 的 KV 悬崖位置在 GPU 证据落地前仍属未知。
-在调度正式 sweep 之前，应先用单个并发 1 的 `agentx-fast` 运行验证 —— 启动即 OOM 的全量
-sweep 会浪费每一个 leg。
+这些上限在调度任何 sweep 之前，已由单个并发 1 的 `agentx-fast` 运行
+（[34485694183](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34485694183)）
+验证 —— 这一顺序很重要：启动即 OOM 的全量 sweep 会浪费每一个 leg。该运行健康启动，并
+报告了当前并发列表所依据的预算：
+
+```
+Available KV cache memory: 13.47 GiB
+GPU KV cache size: 7,022,899 tokens
+Maximum concurrency for 1,048,576 tokens per request: 6.70x
+```
+
+因此该分支扫描并发 1–4，处于 6.70x 上限之下，避免接近满上下文的轨迹把批次推入抢占。
+若要获得更多 KV，需要进一步缩小 indexer —— `--max-num-batched-tokens 2048` 可再释放约
+4 GiB —— 代价是长轨迹 prefill 的分块更细。待有跨并发的吞吐数据后可重新权衡。
 
 `runners/launch_h100-dgxc-slurm.sh` 此前只解析不带 framework 的 `_h100[_mtp].sh` 名称，
 因此该集群上根本无法运行任何带 framework 的脚本。现在它优先解析

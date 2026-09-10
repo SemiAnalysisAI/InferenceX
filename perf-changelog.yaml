@@ -7126,6 +7126,7 @@
 - config-keys:
     - dsv41flash-fp4-h100-vllm-agentic-dspark
   description:
-    - "Add the H100 AgentX arm for DeepSeek-V4.1-Flash at TP8 with native five-token DSpark and adaptive real verification, concurrency 1-8"
+    - "Add the H100 AgentX arm for DeepSeek-V4.1-Flash at TP8 with native five-token DSpark and adaptive real verification, concurrency 1-4"
     - "Cap max-num-batched-tokens at 4096 so the sparse attention indexer's [batched-tokens, max-model-len] buffer fits an 80 GB card at 1M context, and keep the uncapped 062126 trace corpus"
+    - "Measured at c1: 13.47 GiB KV per GPU, 7,022,899 tokens, 6.70x maximum concurrency at 1M tokens per request; the concurrency list stays under that ceiling"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2974

@@ -193,10 +193,23 @@ concurrency rather than inheriting vLLM's default of 1024, sets
 `--gpu-memory-utilization 0.92`, and enables `expandable_segments` because the failing
 allocation left 1.04 GiB reserved but unallocated.
 
-The concurrency list stops at 8. That is a starting point, not a measured frontier: the
-KV cliff on this SKU is unknown until GPU evidence lands. Validate with a single
-concurrency-1 `agentx-fast` run before dispatching a canonical sweep — a full sweep that
-OOMs at startup wastes every leg.
+Those caps were validated with a single concurrency-1 `agentx-fast` run
+([34485694183](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34485694183))
+before any sweep was dispatched, which is the right order here: a full sweep that OOMs at
+startup wastes every leg. That run came up healthy and reported the budget the
+concurrency list is now derived from:
+
+```
+Available KV cache memory: 13.47 GiB
+GPU KV cache size: 7,022,899 tokens
+Maximum concurrency for 1,048,576 tokens per request: 6.70x
+```
+
+So the arm sweeps concurrency 1–4, under the 6.70x ceiling, so a trajectory replaying
+near full context does not drive the batch into preemption. Buying more KV means
+shrinking the indexer further — `--max-num-batched-tokens 2048` would free about 4 GiB
+more — at the cost of chunking long-trace prefill harder. That trade is worth revisiting
+once there is throughput data across the range.
 
 `runners/launch_h100-dgxc-slurm.sh` previously resolved only the untagged
 `_h100[_mtp].sh` script name, so no framework-tagged script could run on this cluster at

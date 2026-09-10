@@ -10196,8 +10196,8 @@ glm5.1-fp8-b200-tilert-agentic:
 # shared symlink: the sparse attention indexer's
 # [max-num-batched-tokens, max-model-len] buffer is 16 GiB at the shared flags'
 # 8192 batched tokens and OOMs an 80 GB card at concurrency 1, so the script
-# caps batched tokens at 4096. Concurrency stops at 8 until GPU evidence
-# establishes where the KV cliff actually is.
+# caps batched tokens at 4096. Concurrency is bounded by the measured KV
+# ceiling rather than a guess; see the search-space comment.
 dsv41flash-fp4-h100-vllm-agentic-dspark:
   image: vllm/vllm-openai:deepseekv41-flash-0909
   model: deepseek-ai/DeepSeek-V4.1-Flash
@@ -10210,6 +10210,8 @@ dsv41flash-fp4-h100-vllm-agentic-dspark:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      # Engram offload leaves ~35.9 GiB/GPU of weights out of 80 GB; the KV
-      # cache and the 8 GiB indexer buffer share what is left.
-      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8] }
+      # Measured at c1 on the cluster (run 34485694183): 13.47 GiB KV per GPU,
+      # 7,022,899 tokens, "Maximum concurrency for 1,048,576 tokens per
+      # request: 6.70x". The list stays under that ceiling so a trajectory
+      # replaying near full context does not drive the batch into preemption.
+      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4] }
