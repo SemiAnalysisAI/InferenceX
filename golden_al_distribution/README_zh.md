@@ -168,3 +168,9 @@ thinking 开关。只有全部 80 个 coding prompt 成功且 acceptance counter
 采集器通过 `--chat-template-kwargs` 使用 SPEED-Bench 原生 chat template；
 该镜像的 benchmark CLI 不支持 `--use-chat-template`。加载模型前会检查
 已安装 CLI 是否支持所需的客户端参数。
+
+`deepseekv41-flash-0909` 镜像在 `SpeculativeConfig` 验证阶段拒绝草稿长度
+6、7、8：这些值必须能被 `n_predict=5` 整除。
+[运行 34494319147](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34494319147/job/102928852667)
+已逐一尝试这三个长度；它们没有实测 AL，不能写入数值形式的黄金结果。
+该证据并不能证明更大的五的倍数可正常运行。

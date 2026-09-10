@@ -171,3 +171,9 @@ convention; it does not select the allocation hardware.
 The collector uses SPEED-Bench's native chat templating with `--chat-template-kwargs`;
 `--use-chat-template` is not supported by this image's benchmark CLI. Client
 options are checked against the installed CLI before model loading.
+
+The `deepseekv41-flash-0909` image rejects draft lengths 6, 7, and 8 during
+`SpeculativeConfig` validation: each must be divisible by `n_predict=5`.
+All three were attempted in [run 34494319147](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34494319147/job/102928852667).
+They have no measured AL and must not be represented as numeric golden values.
+This evidence does not establish runtime support for larger multiples of five.
