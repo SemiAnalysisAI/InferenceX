@@ -7128,3 +7128,13 @@
     - "Update the SGLang image from nightly-dev-cu13-20260829-89816a21 to the digest-pinned v0.5.19-cu130 release (lmsysorg/sglang:v0.5.19-cu130@sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9)."
     - "Move the TP8 and TP4 low-latency recipes and the master router metadata from Dynamo 1.5.0.dev20260902 to 1.5.0.dev20260910, the nightly that carries the ServerArgs.get_model_config()/use_mla_backend() compatibility fix for SGLang #36972 and pins sglang==0.5.19."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2969
+
+- config-keys:
+    - minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the MiniMax-M3 GB200 aggregate configuration to TP4 resident, TP4 lazy SimpleCPU KV offload, and two-node TP8 resident variants."
+    - "Pin vLLM nightly-9ea8f3ffc354901b740f0b31988900897b7221d7, Dynamo 1.5.0.dev20260908, and NVIDIA/srt-slurm d50ee7280c33d469df8708e363e23be2456e94fb."
+    - "Use Dynamo-native MiniMax parsing, EAGLE3 with FlashInfer, FULL_AND_PIECEWISE CUDA graphs, and wait for the OpenAI chat route before AgentX trace replay."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2925
