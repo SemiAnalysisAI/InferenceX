@@ -74,10 +74,10 @@ def test_teardown_requires_free_port_and_no_gpu_processes(tmp_path, occupied_por
             listener.listen()
         else:
             listener.close()
-        result = subprocess.run(["bash", "-c", "source benchmarks/benchmark_lib.sh; wait_for_server_resources_released"],
+        result = subprocess.run(["bash", "-c", 'source benchmarks/benchmark_lib.sh; export PORT="$TEST_PORT"; wait_for_server_resources_released'],
             cwd=Path(__file__).resolve().parents[1], capture_output=True, text=True,
             env={**os.environ, "PATH": str(tmp_path) + os.pathsep + os.environ["PATH"],
-                 "PORT": str(port), "SERVER_TEARDOWN_TIMEOUT_S": "0", "TEST_GPU_PID": gpu_pid})
+                 "TEST_PORT": str(port), "SERVER_TEARDOWN_TIMEOUT_S": "0", "TEST_GPU_PID": gpu_pid})
     assert (result.returncode == 0) is success
     if not success:
         assert "Server teardown timed out" in result.stderr

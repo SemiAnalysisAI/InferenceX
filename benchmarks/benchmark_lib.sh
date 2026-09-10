@@ -42,10 +42,17 @@ while True:
         probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             probe.bind(("0.0.0.0", port))
+            probe.listen()
             port_free = True
         except OSError as exc:
             if exc.errno != errno.EADDRINUSE:
                 raise
+            port_free = False
+    # Wildcard SO_REUSEADDR binds can coexist with a loopback listener on some
+    # platforms. Check the actual local endpoint as well.
+    with socket.socket() as live:
+        live.settimeout(0.2)
+        if live.connect_ex(("127.0.0.1", port)) == 0:
             port_free = False
     gpu_processes = subprocess.check_output(
         ["nvidia-smi", "--query-compute-apps=pid", "--format=csv,noheader"],
