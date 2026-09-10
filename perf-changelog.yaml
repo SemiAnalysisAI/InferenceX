@@ -7013,3 +7013,14 @@
     - "Remove the localhost server-metrics override from the seven B200 K3 recipes. Use the existing producer-discovered leader URL so AIPerf deduplicates it with the inference endpoint instead of counting one engine twice. This changes metric collection only; raw request and GPU energy denominators remain unchanged."
     - "移除七个 B200 K3 配方中的 localhost 服务器指标覆盖，使用现有 producer 发现的 leader URL，让 AIPerf 与推理端点去重，避免重复统计同一引擎。仅调整指标采集，原始请求与 GPU 能耗分母保持不变。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2926
+
+- config-keys:
+    - glm5.1-fp8-b200-tilert-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable shared required deployment power collection for the existing GLM-5.1 FP8 TileRT 1P1D B200 recipe. Preserve serving commands, role images, setup, topology, and the production four-hour limit. Pin TileRT-compatible srt-slurm d24ac27bbe65698bf7b68cb7d98eb0f8860d4941 with the shared custom-window lifecycle; retain native status, raw replay artifacts, provenance, and adapter diagnostics before strict failure."
+    - "为现有 GLM-5.1 FP8 TileRT 1P1D B200 配方启用共享必需部署功耗采集，保留服务命令、各角色镜像、安装流程、拓扑与正式四小时时限。固定兼容 TileRT 与共享 custom-window 生命周期的 producer；严格失败前保留原生状态、回放原始工件、来源信息与适配器诊断。"
+    - "For the bounded qualification, use a prepared, hash-recorded wheelhouse for serving-role setup only; preserve the existing install commands and benchmark-client environment. Offline pip resolution covers the image-specific dependencies without replacing Torch. Native import and GPU checks remain separate acceptance gates."
+    - "仅在有限资格验证中为服务角色安装使用已准备并记录哈希的 wheelhouse，保留现有安装命令与 benchmark 客户端环境。离线 pip 解析覆盖各镜像所需依赖且不替换 Torch；原生 import 与 GPU 检查仍是独立验收条件。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2934

@@ -77,12 +77,25 @@ health_check:
   max_attempts: 720
   interval_seconds: 5
 
+telemetry:
+  enabled: true
+  required: true
+  default_frequency: 1.0
+  dcgm_exporter:
+    container_image: dcgm-exporter
+    port: 9401
+  startup_timeout_seconds: 120
+  request_timeout_seconds: 2
+  collector_join_timeout_seconds: 12
+  storage_subdir: power
+
 benchmark:
   type: custom
+  concurrencies: [1]
   command: |
     set -euo pipefail
-    mkdir -p /infmax-workspace/LOGS/agentic
-    export RESULT_DIR=/infmax-workspace/LOGS/agentic
+    mkdir -p /logs/agentic
+    export RESULT_DIR=/logs/agentic
     export AGENTIC_OUTPUT_DIR=/infmax-workspace
     exec bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
   env:

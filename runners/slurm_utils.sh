@@ -165,3 +165,26 @@ bundle_server_logs() {
         return 0
     }
 }
+
+# Retain the native terminal verdict; accounting can lag squeue removal briefly.
+record_slurm_completion_status() {
+    local job_id="$1" output_dir="$2" status_attempt
+    mkdir -p "$output_dir" || return 1
+    for status_attempt in 1 2 3; do
+        echo "$status_attempt" > "$output_dir/native-job-status-attempts.txt"
+        sacct -X -n -P -j "$job_id" --format=JobIDRaw,State,ExitCode \
+            > "$output_dir/native-job-status.txt" \
+            2>> "$output_dir/native-job-status.stderr" || true
+        if awk -F'|' -v job="$job_id" '
+            $1 == job && $2 !~ /^(PENDING|RUNNING|COMPLETING)$/ { found = 1 }
+            END { exit !found }
+        ' "$output_dir/native-job-status.txt"; then
+            break
+        fi
+        if [[ "$status_attempt" != "3" ]]; then sleep 5; fi
+    done
+    awk -F'|' -v job="$job_id" '
+        $1 == job { found = 1; if ($2 != "COMPLETED" || $3 != "0:0") failed = 1 }
+        END { exit (!found || failed) }
+    ' "$output_dir/native-job-status.txt"
+}
