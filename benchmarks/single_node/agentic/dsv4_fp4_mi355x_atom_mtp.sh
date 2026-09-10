@@ -8,6 +8,24 @@ set -x
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
+# Targeted validation override for ROCm/ATOM#2190.  The base image is kept
+# identical to PR #2912; replace only the RCCL prepare/finalize source file so
+# this C64 run isolates the AITER EP top-k sentinel fix.
+ATOM_TOPK_FIX_SHA=1c5a3bc49d85cee9684cb1b2555d9856c021e3ea
+ATOM_TOPK_FIX_BLOB=926578523518be4b6405f9a47307ee50cee8acbb
+ATOM_SOURCE_DIR=/app/ATOM
+git -C "$ATOM_SOURCE_DIR" -c safe.directory="$ATOM_SOURCE_DIR" fetch \
+    --depth=1 origin "$ATOM_TOPK_FIX_SHA"
+git -C "$ATOM_SOURCE_DIR" -c safe.directory="$ATOM_SOURCE_DIR" checkout \
+    "$ATOM_TOPK_FIX_SHA" -- atom/model_ops/fused_moe/rccl_prepare_finalize.py
+actual_blob=$(git -C "$ATOM_SOURCE_DIR" hash-object \
+    atom/model_ops/fused_moe/rccl_prepare_finalize.py)
+if [[ "$actual_blob" != "$ATOM_TOPK_FIX_BLOB" ]]; then
+    echo "ERROR: RCCL top-k fix blob mismatch: $actual_blob" >&2
+    exit 1
+fi
+echo "Applied ROCm/ATOM top-k fix $ATOM_TOPK_FIX_SHA ($actual_blob)"
+
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
