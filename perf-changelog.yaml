@@ -7070,3 +7070,11 @@
     - "MTP draft length by concurrency: speculative-num-steps 3 (golden AL 2.49) below conc 256, and 1 (golden AL 1.79) at and above it."
     - "Trim the search space to TP8 no-offload conc [1, 4, 16], TP8 hicache conc [32, 48], and TP8 DP-attention hicache conc [128, 256]."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2885
+
+- config-keys:
+    - glm5.2-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump image from lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260728 to lmsysorg/sglang-rocm:v0.5.19-rocm10-mi35x-20260908"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2917
