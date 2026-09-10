@@ -198,6 +198,12 @@ framework 的名称。两个 launcher 都为该配方将仓库挂载到 `/ix`，
 解析模型，而不依赖各节点的独立路径。配方在计算节点探测服务端口，首选端口被占用时选择
 可用端口，服务、回放、指标和 eval 共用同一端点。
 
+轨迹语料：两个分支都回放未截断的 `semianalysis_cc_traces_weka_062126` 语料，而不是
+256k 截断的 `..._062126_256k` 变体，因为该模型服务 1M 上下文。配方本身并未指定语料 ——
+`resolve_trace_source` 选中未截断的默认值，仅仅是因为其 `dsv4*` 分支同时匹配了
+`dsv41flash` 前缀。这一依赖在调用处并不可见却至关重要，因此由
+`runners/test_dsv41flash_hopper.py` 固定；收窄该分支会静默地降级本配方的轨迹。
+
 两个分支都必须获得 GPU sweep 和 eval 证据后才能视为已验证。
 
 来源：[上游配方](https://github.com/vllm-project/recipes/blob/main/models/deepseek-ai/DeepSeek-V4.1-Flash.yaml)。

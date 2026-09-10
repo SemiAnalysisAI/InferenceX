@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+BENCHMARK_LIB = REPO_ROOT / "benchmarks" / "benchmark_lib.sh"
 
 LAUNCH_HARNESS = '''
     salloc() { :; }
@@ -89,3 +90,43 @@ def test_h100_still_resolves_scripts_without_a_framework_tag(tmp_path: Path) -> 
     mounts = next(arg for arg in serve["args"] if arg.startswith("--container-mounts="))
     assert f"{REPO_ROOT}:/workspace/," in mounts
     assert serve["result_dir"] == "/workspace/results"
+
+
+def resolve_loader(model_prefix: str) -> str:
+    """The public-dataset loader `resolve_trace_source` picks for a prefix."""
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            # Stub the CLI bootstrap *after* sourcing, so the real one does
+            # not overwrite the stub, and no dataset is actually downloaded.
+            'source "$BENCHMARK_LIB"; ensure_hf_cli() { AIPERF_HF_CLI=true; }; '
+            "resolve_trace_source",
+        ],
+        env={
+            "PATH": "/usr/bin:/bin:/usr/local/bin",
+            "HOME": str(REPO_ROOT),
+            "BENCHMARK_LIB": str(BENCHMARK_LIB),
+            "MODEL_PREFIX": model_prefix,
+        },
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.split("public-dataset: ")[1].split(" ")[0]
+
+
+def test_flash_replays_the_uncapped_1m_trace_corpus() -> None:
+    """DeepSeek-V4.1-Flash serves 1M context, so it must not get the 256k corpus.
+
+    This lives with the recipe rather than in the benchmark_lib tests because
+    the recipe never names a corpus: it inherits one from `resolve_trace_source`
+    only because the `dsv4*` case arm also matches the `dsv41flash` prefix.
+    Narrowing that arm would silently downgrade this recipe's traces.
+    """
+    assert resolve_loader("dsv41flash") == "semianalysis_cc_traces_weka_062126"
+
+
+def test_short_context_families_still_get_the_capped_corpus() -> None:
+    """The uncapped default is context-driven, not a blanket default."""
+    assert resolve_loader("qwen3.8next") == "semianalysis_cc_traces_weka_062126_256k"

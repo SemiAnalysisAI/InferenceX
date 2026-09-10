@@ -205,6 +205,13 @@ resolves the model through `HF_HUB_CACHE` rather than a per-node path. The recip
 the serving port on the compute node and selects an available one if the preferred port is
 occupied; serving, replay, metrics, and eval share that endpoint.
 
+Trace corpus: both arms replay the uncapped `semianalysis_cc_traces_weka_062126`
+corpus, not the 256k-capped `..._062126_256k` variant, because the model serves 1M
+context. The recipe never names a corpus — `resolve_trace_source` picks the uncapped
+default only because its `dsv4*` case arm also matches the `dsv41flash` prefix. That is
+load-bearing and invisible at the call site, so `runners/test_dsv41flash_hopper.py` pins
+it; narrowing the arm would silently downgrade this recipe's traces.
+
 GPU sweep and eval evidence is required before calling either arm validated.
 
 Source: [upstream recipe](https://github.com/vllm-project/recipes/blob/main/models/deepseek-ai/DeepSeek-V4.1-Flash.yaml).
