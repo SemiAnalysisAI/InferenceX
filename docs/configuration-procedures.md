@@ -172,8 +172,7 @@ Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../AGENTS.md#non-nego
 `dsv41flash-fp4-h200-vllm-agentic-dspark` is the H200 AgentX arm of the
 DeepSeek-V4.1-Flash recipe. It shares `vllm/vllm-openai:deepseekv41-flash-0909` and the
 text-only serving script with the Blackwell arms: `deepseek_v41` tokenizer and parsers,
-1M context, native five-token DSpark with probabilistic drafting, block rejection, and
-adaptive verification, and real target verification for both throughput and eval.
+1M context, native five-token DSpark with probabilistic drafting. Throughput uses the [committed golden AL](../golden_al_distribution/dsv41flash_dspark.yaml) of 3.51 for thinking on and five draft tokens, with synthetic rejection sampling and adaptive verification disabled. Accuracy evals retain real block rejection and adaptive verification.
 
 The arm runs **TP8**, not the upstream TP4. Upstream verifies TP4 on one GB200 NVL4 tray
 and states that the same layout becomes TP8 per role on 8-GPU nodes, which is what an
