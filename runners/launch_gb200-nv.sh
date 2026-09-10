@@ -398,8 +398,8 @@ if [ -d "$SRT_REPO_DIR" ]; then
     rm -rf "$SRT_REPO_DIR"
 fi
 
-# GLM-5.2 and MiniMax-M3 AgentX use v1.0.50 for complete logical-worker
-# metrics discovery across aggregate, DP-attention, and disaggregated topologies.
+# GLM-5.2 uses v1.0.50 for complete logical-worker metrics discovery across
+# aggregate, DP-attention, and disaggregated topologies.
 if [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "glm5.2" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
     git clone --branch v1.0.50 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
@@ -411,10 +411,12 @@ if [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "glm5.2" && "$PRECISION" == "fp
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5.2/gb200-fp4/agentic" \
         recipes/sglang/glm5.2/gb200-fp4/agentic
 elif [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "minimaxm3" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-vllm" ]]; then
-    git clone --branch v1.0.50 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    SRT_SLURM_MINIMAX_PIN="d50ee7280c33d469df8708e363e23be2456e94fb"
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
-    test "$(git rev-parse HEAD)" = "e4019633c9e2bc25f38c44b81edf52bb0504d937" || {
-        echo "Error: NVIDIA/srt-slurm v1.0.50 resolved to an unexpected commit" >&2
+    git checkout "$SRT_SLURM_MINIMAX_PIN"
+    test "$(git rev-parse HEAD)" = "$SRT_SLURM_MINIMAX_PIN" || {
+        echo "Error: NVIDIA/srt-slurm MiniMax-M3 revision resolved to an unexpected commit" >&2
         exit 1
     }
     mkdir -p recipes/vllm/minimax-m3/gb200-fp4/agentic
