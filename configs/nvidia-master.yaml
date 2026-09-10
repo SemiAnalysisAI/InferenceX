@@ -978,6 +978,23 @@ dsv4-fp4-b200-vllm-agentic-mtp:
       # DEP8 SimpleCPU + MTP
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [32, 64, 96, 128, 160, 196], router: { name: vllm-router, version: "0.1.14" } }
 
+dsv4-fp4-b200-vllm-agentic-dspark:
+  # Native DSpark draft heads on the 0813 checkpoint, agentic coding only.
+  # Throughput pins synthetic acceptance to the committed thinking-on golden AL
+  # for num_speculative_tokens=6; EVAL_ONLY uses real DSpark verification.
+  image: vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-426e59f
+  model: deepseek-ai/DeepSeek-V4-Pro-0813
+  model-prefix: dsv4
+  runner: cluster:b200-nscale
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: draft_model, conc-list: [1, 4, 8, 14] }
+
 dsv4-fp4-b200-trt:
   image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066
   model: deepseek-ai/DeepSeek-V4-Pro
