@@ -8537,7 +8537,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic:
           - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-gb200-dep16-throughput-vllm-simple-offload-agentic.yaml"
 # Kimi-K3 GB200 TP16/DCP16 profiles using Mooncake DRAM offload.
 kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg:
-  image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-75c2eef
+  image: vllm/vllm-openai:nightly-dev-arm64-cu13-3696c77@sha256:42e17a3c600c043c45e0623e4568cd4d5903dd76525a85f5df6ca6fa65358b12
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:gb200-nv

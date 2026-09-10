@@ -3,14 +3,14 @@ name: "kimi-k3-vllm-agg-gb200-dcp16-dspark4-maxseq2-mooncake-agentic"
 
 model:
   path: "kimi-k3"
-  container: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-75c2eef"
+  container: "vllm/vllm-openai:nightly-dev-arm64-cu13-3696c77@sha256:42e17a3c600c043c45e0623e4568cd4d5903dd76525a85f5df6ca6fa65358b12"
   precision: "fp4"
 
 identity:
   model:
     repo: "moonshotai/Kimi-K3"
   container:
-    image: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-75c2eef"
+    image: "vllm/vllm-openai:nightly-dev-arm64-cu13-3696c77@sha256:42e17a3c600c043c45e0623e4568cd4d5903dd76525a85f5df6ca6fa65358b12"
   frameworks:
     dynamo: "ba83080ecd31c1ce918559e576d3c5bc9e092ff1"
 
