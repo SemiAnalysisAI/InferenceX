@@ -7129,4 +7129,4 @@
   description:
     - "Add Hopper AgentX arms for DeepSeek-V4.1-Flash at TP8 with native five-token DSpark and adaptive real verification"
     - "Engram tables offload to host DRAM through UVA while the KV cache stays GPU-resident; H200 runs concurrency 1-128 and H100 stops at 16 on its smaller KV headroom"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2963
