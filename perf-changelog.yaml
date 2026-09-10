@@ -7109,4 +7109,4 @@
   description:
     - "Add SPEED-Bench golden AL collection for DSv4.1 Flash native five-token DSpark on B200 TP4"
     - "Measure real probabilistic/block acceptance with UVA offload and adaptive verification disabled"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2964
