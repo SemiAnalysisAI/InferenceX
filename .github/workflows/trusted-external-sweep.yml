@@ -2,7 +2,7 @@ name: Trusted External Sweep Dispatch
 run-name: Trusted external sweep - PR #${{ github.event.pull_request.number }} @ ${{ github.event.pull_request.head.sha }}
 
 # This workflow is intentionally control-plane only. It never checks out or
-# executes pull-request code. A write-authorized maintainer applies one primary
+# executes pull-request code. A write-authorized collaborator applies one primary
 # sweep label to approve the exact external head SHA, then this trusted event
 # dispatches the existing e2e workflow from main with repository secrets.
 on:
@@ -32,7 +32,6 @@ jobs:
               with:
                   github-token: ${{ github.token }}
                   script: |
-                      const trustedPermissions = new Set(['admin', 'maintain', 'write']);
                       const primaryLabels = new Set([
                         'sweep-enabled',
                         'full-sweep-enabled',
@@ -41,15 +40,21 @@ jobs:
                         'full-sweep-fail-fast-no-canary',
                       ]);
 
-                      const permission = await github.rest.repos.getCollaboratorPermissionLevel({
+                      const {data: access} = await github.rest.repos.getCollaboratorPermissionLevel({
                         owner: context.repo.owner,
                         repo: context.repo.repo,
                         username: context.actor,
                       });
-                      if (!trustedPermissions.has(permission.data.permission)) {
+                      if (typeof access?.permission !== 'string' || !access.permission ||
+                          typeof access?.role_name !== 'string' || !access.role_name) {
+                        throw new Error('Invalid repository permission response.');
+                      }
+                      const {permission, role_name: role} = access;
+                      const trustedPermissions = ['admin', 'maintain', 'write'];
+                      if (!trustedPermissions.includes(permission) || !trustedPermissions.includes(role)) {
                         core.setFailed(
-                          `@${context.actor} has ${permission.data.permission} permission; ` +
-                          'write, maintain, or admin permission is required to authorize external code.',
+                          `@${context.actor} has repository permission "${permission}" and role "${role}"; ` +
+                          'both must be write, maintain, or admin to authorize external code.',
                         );
                         return;
                       }

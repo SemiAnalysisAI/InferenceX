@@ -68,14 +68,14 @@ not need to repeat on every equivalent parser topology.
 Generate the complete deployment-smoke matrices with:
 
 ```bash
-uv run --no-project --with pydantic --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
   python utils/matrix_logic/generate_sweep_configs.py full-sweep \
   --config-files configs/nvidia-master.yaml configs/amd-master.yaml \
   --model-prefix kimik3 \
   --scenario-type agentic-coding \
   --evals-only --all-evals --trim-conc
 
-uv run --no-project --with pydantic --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
   python utils/matrix_logic/generate_sweep_configs.py full-sweep \
   --config-files configs/nvidia-master.yaml configs/amd-master.yaml \
   --model-prefix minimaxm3 \

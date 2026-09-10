@@ -220,6 +220,8 @@ result = build_result(raw_benchmark, runtime_env)
 
 对于仅评测作业，不要求吞吐量输出。工作流改为要求至少存在一个 `results*.json`。对于标记为运行评测的作业，上传内容可能包含 `meta_env.json`、`results*.json`、`sample*.jsonl`、SWE-bench 预测和报告以及轨迹文件。[`utils/evals/validate_scores.py`](../utils/evals/validate_scores.py) 会检查生成的评测分数。
 
+[`infx.results.evals`](../infx/results/evals.py) 为评测收集器和可复用工件验证器共享格式标记识别、暂存文件的并发数后缀解析，以及结果时间排序逻辑。文件名中的时间戳和旧格式文件的修改时间统一转换为 Unix 纪元纳秒数，时间相同时按文件名排序。各调用方保留自己的文件查找、指标验证、诊断和工件写入逻辑；识别出格式并不意味着结果有效或可复用。
+
 智能体吞吐量作业采用不同的契约。它们使用 [`utils/agentic/validation/validate_agentic_result.py`](../utils/agentic/validation/validate_agentic_result.py) 验证 AIPerf 输出，上传聚合的 `bmk_agentic_<suffix>` 工件，并上传包含追踪重放材料的原始 `agentic_<suffix>` 同级工件。InferenceX-app 通过它们共享的后缀对这些同级工件进行配对。智能体仅评测作业改为遵循评测输出契约，不要求吞吐量结果。
 
 服务器日志和 GPU 指标是诊断辅助工件。它们通过 `always()` 上传，因此失败的运行仍可供调查。它们的存在不会将失败的基准测试转变为有效结果。
@@ -344,7 +346,7 @@ AgentX 追踪导出的体积更大，并且需要追踪发现、时间线处理�
 3. **验证：** 仅生成该确切键并检查 JSON，不要只查看退出码。
 
    ```bash
-   uv run --no-project --with pydantic --with pyyaml --python 3.12 \
+   uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
      utils/matrix_logic/generate_sweep_configs.py test-config \
      --config-files configs/nvidia-master.yaml configs/amd-master.yaml \
      --runner-config configs/runners.yaml \
