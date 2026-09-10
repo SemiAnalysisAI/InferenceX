@@ -7130,6 +7130,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2969
 
 - config-keys:
+    - minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the MiniMax-M3 GB200 aggregate configuration to TP4 resident, TP4 lazy SimpleCPU KV offload, and two-node TP8 resident variants."
+    - "Pin vLLM nightly-9ea8f3ffc354901b740f0b31988900897b7221d7, Dynamo 1.5.0.dev20260908, and NVIDIA/srt-slurm d50ee7280c33d469df8708e363e23be2456e94fb."
+    - "Use Dynamo-native MiniMax parsing, EAGLE3 with FlashInfer, FULL_AND_PIECEWISE CUDA graphs, and wait for the OpenAI chat route before AgentX trace replay."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2925
+
+- config-keys:
     - dsv41flash-fp4-gb300-vllm-agentic-dspark
   description:
     - "Add GB300 TP4 AgentX through concurrency 128 with Engram UVA DRAM offload and native five-token DSpark"
