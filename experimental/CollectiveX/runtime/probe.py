@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import re
+import subprocess
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -223,34 +224,50 @@ def _check_port(port_path: Path, ordinal: int, gid_index: str, profile: str):
     return layer
 
 
+def _read(path: Path) -> str:
+    try: return path.read_text().strip() if path.is_file() else "?"
+    except OSError: return "?"
+
+
 def _emit_fabric_inventory(sys_root: Path = Path("/sys"),
                            route_path: Path = Path("/proc/net/route")) -> None:
     # Failure-path diagnostic only. When the operator-pinned profile does not match the node
     # (a pool moved under an existing SKU, as b300-nv -> b300-dsxe did), the launcher's log tail
     # is the only view an operator without shell access has of the node, so say what IS there:
     # every non-loopback interface with its operstate, and every RDMA device with its ports'
-    # state and link layer. The marker prefix stays outside the launcher's failure vocabulary.
+    # state, link layer, physical state, rate and bound netdevs. The marker prefix stays outside
+    # the launcher's failure vocabulary. The per-device lines and the GPU<->NIC topology are
+    # emitted from relative node zero only so a multi-node probe still fits the 100-line tail.
     nets = []
     net_root = sys_root / "class" / "net"
     for net in sorted(net_root.iterdir()) if net_root.is_dir() else []:
         if net.name == "lo": continue
-        oper = net / "operstate"
-        nets.append(f"{net.name}={oper.read_text().strip() if oper.is_file() else '?'}")
-    rdma = []
-    ib_root = sys_root / "class" / "infiniband"
-    for dev in sorted(ib_root.iterdir()) if ib_root.is_dir() else []:
-        ports = []
-        for port in sorted(p for p in (dev / "ports").iterdir() if p.is_dir()) if (dev / "ports").is_dir() else []:
-            state = port / "state"; link = port / "link_layer"
-            ports.append(f"{port.name}:{state.read_text().split()[0].rstrip(':') if state.is_file() else '?'}"
-                         f"/{link.read_text().strip() if link.is_file() else '?'}")
-        rdma.append(f"{dev.name}({','.join(ports)})")
+        nets.append(f"{net.name}={_read(net / 'operstate')}")
     try: default = default_route_interface(route_path)
     except OSError: default = ""
     _emit(f"fabric-inventory-default-route={default or 'none'}")
     _emit(f"fabric-inventory-net={','.join(nets) or 'none'}")
-    _emit(f"fabric-inventory-rdma={','.join(rdma) or 'none'}")
-
+    if os.environ.get("SLURM_NODEID", "0") != "0":
+        return
+    ib_root = sys_root / "class" / "infiniband"
+    for dev in sorted(ib_root.iterdir()) if ib_root.is_dir() else []:
+        ports = []
+        ports_root = dev / "ports"
+        for port in sorted(p for p in ports_root.iterdir() if p.is_dir()) if ports_root.is_dir() else []:
+            ports.append(f"{port.name}:{_read(port / 'state').split(':')[0]}"
+                         f"/{_read(port / 'link_layer')}/{_read(port / 'phys_state').split(':')[0]}"
+                         f"/{_read(port / 'rate').split(' ')[0]}")
+        net_dir = dev / "device" / "net"
+        netdevs = ",".join(sorted(n.name for n in net_dir.iterdir())) if net_dir.is_dir() else "-"
+        _emit(f"fabric-inventory-rdma-device={dev.name} ports={';'.join(ports) or '-'} "
+              f"hca={_read(dev / 'hca_type')} fw={_read(dev / 'fw_ver')} "
+              f"pci={_read(dev / 'device' / 'vendor')}:{_read(dev / 'device' / 'device')} netdev={netdevs}")
+    try:
+        topo = subprocess.run(["nvidia-smi", "topo", "-m"], capture_output=True, text=True, timeout=30).stdout
+    except (OSError, subprocess.SubprocessError):
+        topo = ""
+    for line in topo.splitlines()[:40]:
+        if line.strip(): _emit(f"fabric-inventory-topo {line.rstrip()}")
 
 def validate_network_profile(socket_names: str, rdma_devices: str, gid_index: str,
                              sys_root: Path = Path("/sys"),
