@@ -4,6 +4,7 @@ import hashlib
 import json
 import re
 import subprocess
+import sys
 import tempfile
 from collections import defaultdict
 from contextlib import contextmanager
@@ -11,9 +12,17 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
-from constants import GENERATE_SWEEPS_PY_SCRIPT, MASTER_CONFIGS
-from matrix_logic.generate_sweep_configs import seq_len_to_str
-from matrix_logic.validation import (
+from constants import GENERATE_SWEEPS_PY_SCRIPT, MASTER_CONFIGS, RUNNER_CONFIG
+
+if not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from infx.matrix.generate import (
+    freeze_config_value,
+    seq_len_to_str,
+    trim_conc,
+)
+from infx.matrix.validation import (
     ChangelogEntry,
     ChangelogMatrixEntry,
     load_config_files,
@@ -27,17 +36,6 @@ class GenerationInputs:
     config_files: list[str]
     generator_script: str
     runner_config: str
-
-
-def _freeze_config_value(value):
-    """Convert JSON-shaped config values into deterministic hashable values."""
-    if isinstance(value, dict):
-        return tuple(
-            sorted((key, _freeze_config_value(item)) for key, item in value.items())
-        )
-    if isinstance(value, list):
-        return tuple(_freeze_config_value(item) for item in value)
-    return value
 
 
 def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:
@@ -65,54 +63,6 @@ def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:
             added_lines.append(line[1:])
 
     return "\n".join(added_lines)
-
-
-def trim_conc(entries: list[dict]) -> list[dict]:
-    """Trim each parallelism config's concurrency sweep to its lowest point.
-
-    Non-full-sweep PRs only need a single concurrency point per parallelism
-    config to validate a change runs end-to-end, so the shared cluster stays
-    clear. Push-to-main and ``full-sweep-enabled`` PRs skip this reduction.
-
-    The retained value is the minimum configured concurrency — independent of
-    the source ordering of ``conc-list`` / ``conc-start``.
-
-    Input comes from ``json.loads(subprocess.stdout)`` so ``conc`` is always
-    ``int`` (single-node) or ``list`` (multi-node). Other fields may contain
-    nested dictionaries or lists, such as KV-offload backend metadata.
-
-    - Single-node entries: group by every configuration field other than
-      ``conc`` and the generated ``exp-name``, then keep only the entry with
-      the lowest ``conc`` per group.
-    - Multi-node entries: trim the ``conc`` list in place to ``[min(conc)]``.
-    """
-    groups: dict[tuple, list[int]] = {}
-    out: list[dict] = []
-
-    for entry in entries:
-        if entry.get("prefill") is not None:
-            conc = entry.get("conc")
-            if isinstance(conc, list) and len(conc) > 1:
-                entry = {**entry, "conc": [min(conc)]}
-            out.append(entry)
-            continue
-
-        key = tuple(
-            sorted(
-                (k, _freeze_config_value(v))
-                for k, v in entry.items()
-                if k not in {"conc", "exp-name"}
-            )
-        )
-        groups.setdefault(key, []).append(len(out))
-        out.append(entry)
-
-    drop: set[int] = set()
-    for idxs in groups.values():
-        if len(idxs) > 1:
-            keep = min(idxs, key=lambda i: out[i]["conc"])
-            drop.update(i for i in idxs if i != keep)
-    return [e for i, e in enumerate(out) if i not in drop]
 
 
 def filter_eval_rows_by_prefill_ep(
@@ -169,6 +119,7 @@ def generation_inputs_at_ref(ref: str):
                 ref,
                 "--",
                 "utils/matrix_logic",
+                "infx",
                 *MASTER_CONFIGS,
                 "configs/runners.yaml",
             ],
@@ -210,7 +161,7 @@ def _matrix_curve_key(entry: dict) -> tuple:
     """Identify one curve while deliberately excluding point-level fields."""
     return tuple(
         sorted(
-            (key, _freeze_config_value(value))
+            (key, freeze_config_value(value))
             for key, value in entry.items()
             if key not in {"conc", "exp-name", "recipe-fingerprint"}
         )
@@ -397,6 +348,59 @@ def validate_append_only_scope(
                 continue
 
 
+def group_unseen_scenarios(
+    config_keys: list[str],
+    scenarios: tuple[str, ...],
+    seen: dict[str, set[str]],
+) -> dict[tuple[str, ...], list[str]]:
+    """Claim unseen config/scenario pairs in canonical scenario and input-key order.
+
+    Benchmark and eval callers pass separate coverage maps; grouping one must
+    never suppress work in the other.
+    """
+    groups: dict[tuple[str, ...], list[str]] = defaultdict(list)
+    for config in config_keys:
+        unseen = tuple(
+            scenario for scenario in SCENARIO_TYPES
+            if scenario in scenarios and scenario not in seen[config]
+        )
+        if unseen:
+            seen[config].update(unseen)
+            groups[unseen].append(config)
+    return groups
+
+
+def generate_matrix(
+    config_keys: list[str],
+    flags: list[str],
+    inputs: GenerationInputs | None = None,
+) -> list[dict]:
+    """Run the selected generator in its own process and decode its matrix.
+
+    Explicit inputs include a runner override for current/historical benchmark
+    comparisons. Eval callers retain the generator's existing runner default.
+    Keep child-error diagnostics on stdout for compatibility with the CLI.
+    """
+    command = [
+        "python3",
+        inputs.generator_script if inputs else GENERATE_SWEEPS_PY_SCRIPT,
+        "test-config",
+        "--config-keys",
+        *config_keys,
+        "--config-files",
+        *(inputs.config_files if inputs else MASTER_CONFIGS),
+    ]
+    if inputs is not None:
+        command.extend(["--runner-config", inputs.runner_config])
+    command.extend(flags)
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, check=True)
+    except subprocess.CalledProcessError as exc:
+        print(exc.stderr)
+        raise
+    return json.loads(result.stdout)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-ref", type=str, required=True)
@@ -426,6 +430,10 @@ def main():
         raise ValueError("No valid YAML entries found in the changelog additions.")
 
     parsed_entries = [ChangelogEntry.model_validate(entry) for entry in changelog_data]
+    if any(entry.no_evals for entry in parsed_entries) and (
+        args.all_evals or args.evals_only
+    ):
+        raise ValueError("no-evals entries cannot use all-evals or evals-only modifiers")
     has_append_only = any(entry.append_only for entry in parsed_entries)
     if has_append_only and not all(entry.append_only for entry in parsed_entries):
         raise ValueError(
@@ -457,6 +465,7 @@ def main():
     benchmark_scenarios_seen = defaultdict(set)
     eval_scenarios_seen = defaultdict(set)
 
+    head_inputs = GenerationInputs(MASTER_CONFIGS, GENERATE_SWEEPS_PY_SCRIPT, RUNNER_CONFIG)
     master_config = load_config_files(MASTER_CONFIGS)
     resolved_entries = []
     for entry in parsed_entries:
@@ -504,109 +513,30 @@ def main():
         )
 
         if not suppress_throughput:
-            # Generate benchmark entries (no evals)
-            benchmark_groups = defaultdict(list)
-            for config in all_configs:
-                unseen_scenarios = tuple(
-                    scenario for scenario in SCENARIO_TYPES
-                    if (
-                        scenario in entry_scenarios
-                        and scenario not in benchmark_scenarios_seen[config]
-                    )
-                )
-                if unseen_scenarios:
-                    benchmark_scenarios_seen[config].update(unseen_scenarios)
-                    benchmark_groups[unseen_scenarios].append(config)
-
+            benchmark_groups = group_unseen_scenarios(
+                all_configs, entry_scenarios, benchmark_scenarios_seen)
             for scenarios, benchmark_configs in benchmark_groups.items():
-                head_cmd = [
-                    "python3",
-                    GENERATE_SWEEPS_PY_SCRIPT,
-                    "test-config",
-                    "--config-keys",
-                    *benchmark_configs,
-                    "--config-files",
-                    *MASTER_CONFIGS,
-                    "--runner-config",
-                    "configs/runners.yaml",
-                    "--no-evals",
-                ]
+                flags = ["--no-evals"]
                 if scenarios != SCENARIO_TYPES:
-                    head_cmd.extend(["--scenario-type", *scenarios])
-                try:
-                    result = subprocess.run(
-                        head_cmd,
-                        capture_output=True,
-                        text=True,
-                        check=True,
-                    )
-                    head_results = json.loads(result.stdout)
-                    if entry.append_only:
-                        base_cmd = head_cmd.copy()
-                        base_cmd[1] = base_inputs.generator_script
-                        config_files_index = base_cmd.index("--config-files") + 1
-                        base_cmd[
-                            config_files_index:config_files_index + len(MASTER_CONFIGS)
-                        ] = base_inputs.config_files
-                        runner_config_index = base_cmd.index("--runner-config") + 1
-                        base_cmd[runner_config_index] = base_inputs.runner_config
-                        base_result = subprocess.run(
-                            base_cmd,
-                            capture_output=True,
-                            text=True,
-                            check=True,
-                        )
-                        head_results = append_only_delta(
-                            json.loads(base_result.stdout), head_results
-                        )
-                except subprocess.CalledProcessError as e:
-                    print(e.stderr)
-                    raise
+                    flags.extend(["--scenario-type", *scenarios])
+                head_results = generate_matrix(benchmark_configs, flags, head_inputs)
+                if entry.append_only:
+                    assert base_inputs is not None
+                    base_results = generate_matrix(benchmark_configs, flags, base_inputs)
+                    head_results = append_only_delta(base_results, head_results)
                 all_benchmark_results.extend(head_results)
 
-        if entry.append_only:
+        if entry.append_only or entry.no_evals:
             continue
 
-        eval_groups = defaultdict(list)
-        for config in all_configs:
-            unseen_scenarios = tuple(
-                scenario for scenario in SCENARIO_TYPES
-                if (
-                    scenario in entry_scenarios
-                    and scenario not in eval_scenarios_seen[config]
-                )
-            )
-            if unseen_scenarios:
-                eval_scenarios_seen[config].update(unseen_scenarios)
-                eval_groups[unseen_scenarios].append(config)
-
+        eval_groups = group_unseen_scenarios(
+            all_configs, entry_scenarios, eval_scenarios_seen)
         for scenarios, eval_configs in eval_groups.items():
-            eval_flags = ["--evals-only"]
+            flags = ["--evals-only"]
             if expand_all_evals:
-                eval_flags.append("--all-evals")
-            base_cmd = [
-                "python3",
-                GENERATE_SWEEPS_PY_SCRIPT,
-                "test-config",
-                "--config-keys",
-                *eval_configs,
-                "--config-files",
-                *MASTER_CONFIGS,
-                *eval_flags,
-                "--scenario-type",
-                *scenarios,
-            ]
-            try:
-                eval_result = subprocess.run(
-                    base_cmd,
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                )
-            except subprocess.CalledProcessError as e:
-                print(e.stderr)
-                raise
-            entry_eval_results = json.loads(eval_result.stdout)
+                flags.append("--all-evals")
+            flags.extend(["--scenario-type", *scenarios])
+            entry_eval_results = generate_matrix(eval_configs, flags)
             entry_eval_results = filter_eval_rows_by_prefill_ep(
                 entry_eval_results, entry.eval_min_prefill_ep
             )

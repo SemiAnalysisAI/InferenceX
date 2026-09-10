@@ -1,19 +1,93 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from validate_reusable_sweep_artifacts import (
+    _result_order,
+    _raw_result_error,
     agentic_key,
     benchmark_key,
-    eval_key,
     dedupe_reran_evals,
-    main,
+    eval_key,
+    eval_result_key,
     validate_agentic_artifacts,
     validate_eval_artifacts,
     validate_fixed_artifacts,
 )
+
+
+@pytest.mark.parametrize("metrics,config,expected_score,expected_error", [
+    ({"exact_match,custom": 0.5}, {"filter_list": [{"name": "custom"}]}, None, None),
+    ({"strict_metric,extract": 0.75},
+     {"metric_list": [{"metric": "strict_metric"}],
+      "filter_list": [{"name": "plain"}, {"name": "extract"}]},
+     0.75, "has no score for task 'task'"),
+    ({"exact_match,strict-first": -0.1, "exact_match,strict-last": 0.75},
+     {"filter_list": [{"name": "strict-first"}, {"name": "strict-last"}]},
+     0.75, "has invalid score 'exact_match,strict-first' for task 'task': -0.1"),
+])
+def test_reuse_preserves_stricter_and_distinct_metric_selection(
+    tmp_path: Path, metrics: dict, config: dict, expected_score: float | None,
+    expected_error: str | None,
+) -> None:
+    from collect_eval_results import collect_eval_rows
+
+    (tmp_path / "meta_env.json").write_text("{}")
+    path = tmp_path / "results.json"
+    path.write_text(json.dumps({
+        "lm_eval_version": "test", "results": {"task": metrics},
+        "configs": {"task": config},
+    }))
+
+    assert _raw_result_error(path) == expected_error
+    [row] = collect_eval_rows(tmp_path)
+    assert row["score"] == expected_score
+    assert row["infrastructure_success"] is (expected_score is not None)
+
+
+def test_reuse_rejects_present_null_integration_error(tmp_path: Path) -> None:
+    path = tmp_path / "results.json"
+    path.write_text(json.dumps({
+        **raw_eval_result(), "integration_error": None,
+    }))
+    assert _raw_result_error(path) == "reports an integration error"
+
+
+@pytest.mark.parametrize("name,expected_ns", [
+    ("results_1970-01-01T00-00-00.json", 0),
+    ("results_1970-01-01T00-00-01.000000009.json", 1_000_000_009),
+    ("results_1970-01-01T00-00-00.1234567899_conc4_2.json", 123_456_789),
+    ("results_1969-12-31T23-59-59.75.json", -250_000_000),
+    ("results_1970-01-02T00-00-00.json", 86_400_000_000_000),
+    ("results_2026-99-99T99-99-99.json", 9_000_000_000),
+    ("results_legacy.json", 9_000_000_000),
+])
+def test_result_order_preserves_nanoseconds_and_legacy_fallback(
+    tmp_path: Path, name: str, expected_ns: int,
+) -> None:
+    path = tmp_path / name
+    path.write_text("{}")
+    os.utime(path, ns=(9_000_000_000, 9_000_000_000))
+    assert _result_order(path) == (expected_ns, name)
+
+
+def test_result_order_breaks_equal_recency_by_filename(tmp_path: Path) -> None:
+    from collect_eval_results import detect_lm_eval_jsons
+
+    early = tmp_path / "results_a_1970-01-01T00-00-01.1.json"
+    late = tmp_path / "results_z_1970-01-01T00-00-01.100000000.json"
+    for path in (late, early):
+        path.write_text('{"lm_eval_version":"0.4.0"}')
+    os.utime(early, ns=(9_000_000_000, 9_000_000_000))
+    os.utime(late, ns=(1_000_000_000, 1_000_000_000))
+    assert _result_order(early) < _result_order(late)
+    assert detect_lm_eval_jsons(tmp_path) == [late]
 
 
 def write_eval_aggregate(
@@ -32,8 +106,9 @@ def single_eval_result(
     runner: str = "h100-dgxc-slurm",
     isl: int = 8192,
     osl: int = 1024,
+    eval_suite: str | None = None,
 ) -> dict:
-    return {
+    row = {
         "is_multinode": False,
         "hw": runner.upper(),
         "model_prefix": "gptoss",
@@ -51,6 +126,9 @@ def single_eval_result(
         "conc": conc,
         "task": "gsm8k",
     }
+    if eval_suite is not None:
+        row["eval_suite"] = eval_suite
+    return row
 
 
 def single_eval_meta(
@@ -58,10 +136,35 @@ def single_eval_meta(
     runner: str = "h100-dgxc-slurm",
     isl: int = 8192,
     osl: int = 1024,
+    eval_suite: str | None = None,
 ) -> dict:
-    row = single_eval_result(conc, runner, isl, osl)
+    row = single_eval_result(conc, runner, isl, osl, eval_suite)
     row["infmax_model_prefix"] = row.pop("model_prefix")
     return row
+
+
+def raw_eval_result(
+    score: float = 0.9,
+    *,
+    effective: object = 10,
+    task: str = "gsm8k",
+) -> dict:
+    return {
+        "lm_eval_version": "0.4.0",
+        "results": {
+            task: {
+                "exact_match,strict-match": score,
+                "exact_match_stderr,strict-match": 0.01,
+            },
+        },
+        "configs": {
+            task: {
+                "metric_list": [{"metric": "exact_match"}],
+                "filter_list": [{"name": "strict-match"}],
+            },
+        },
+        "n-samples": {task: {"effective": effective}},
+    }
 
 
 def write_raw_eval_artifact(
@@ -72,11 +175,23 @@ def write_raw_eval_artifact(
     physical_runner: str = "h100-dgxc-slurm_00",
     isl: int = 8192,
     osl: int = 1024,
+    eval_suite: str | None = None,
 ) -> None:
     artifact_dir = root / f"eval_result_conc{conc}_{physical_runner}"
     artifact_dir.mkdir()
     (artifact_dir / "meta_env.json").write_text(
-        json.dumps(single_eval_meta(conc, logical_runner, isl, osl))
+        json.dumps(
+            single_eval_meta(
+                conc,
+                logical_runner,
+                isl,
+                osl,
+                eval_suite,
+            )
+        )
+    )
+    (artifact_dir / "results_test.json").write_text(
+        json.dumps(raw_eval_result())
     )
 
 
@@ -112,16 +227,19 @@ def write_raw_batched_eval_artifact(
 ) -> None:
     artifact_dir = root / "eval_gptoss_8k1k_batch"
     artifact_dir.mkdir()
+    completed = concs if completed_concs is None else completed_concs
     meta = multinode_eval_result(concs[0])
     meta["infmax_model_prefix"] = meta.pop("model_prefix")
     meta["eval_concs"] = concs
-    meta["completed_eval_concs"] = (
-        concs if completed_concs is None else completed_concs
-    )
+    meta["completed_eval_concs"] = completed
     meta["failed_eval_concs"] = (
         [] if failed_concs is None else failed_concs
     )
     (artifact_dir / "meta_env.json").write_text(json.dumps(meta))
+    for conc in completed:
+        (artifact_dir / f"results_test_conc{conc}.json").write_text(
+            json.dumps(raw_eval_result())
+        )
 
 
 def fixed_result(conc: int) -> dict:
@@ -147,7 +265,7 @@ def fixed_result(conc: int) -> dict:
 
 def agentic_result(conc: int = 16) -> dict:
     return {
-        "hw": "b200-dgxc",
+        "hw": "b200-nscale",
         "infmax_model_prefix": "dsv4",
         "framework": "vllm",
         "precision": "fp4",
@@ -182,7 +300,7 @@ def test_single_node_reusable_keys_normalize_legacy_parallelism_and_separate_var
         assert identity({**row, "pcp_size": 2}) != identity(row), name
 
 
-def test_multinode_agentic_identity_fields_match() -> None:
+def test_multinode_keys_normalize_legacy_parallelism_and_separate_topologies() -> None:
     row = {
         "hw": "gb200",
         "infmax_model_prefix": "dsv4",
@@ -209,31 +327,6 @@ def test_multinode_agentic_identity_fields_match() -> None:
         "conc": 64,
     }
 
-    assert agentic_key(row) == (
-        "multi",
-        "gb200",
-        "dsv4",
-        "dynamo-sglang",
-        "fp8",
-        "none",
-        True,
-        4,
-        2,
-        2,
-        2,
-        2,
-        True,
-        2,
-        8,
-        2,
-        4,
-        1,
-        4,
-        False,
-        3,
-        64,
-    )
-
     for identity in (benchmark_key, agentic_key, eval_key):
         legacy_row = dict(row)
         for field in (
@@ -256,14 +349,18 @@ def test_multinode_agentic_identity_fields_match() -> None:
         }
         assert identity(legacy_row) == identity(default_row)
         for field in (
+            "prefill_tp",
             "prefill_pp",
             "prefill_dcp_size",
             "prefill_pcp_size",
+            "prefill_num_workers",
+            "decode_tp",
             "decode_pp",
             "decode_dcp_size",
             "decode_pcp_size",
+            "decode_num_workers",
         ):
-            assert identity({**default_row, field: 2}) != identity(default_row)
+            assert identity({**default_row, field: default_row[field] + 1}) != identity(default_row)
 
 
 def test_agentic_identity_freezes_nested_kv_offload_backend() -> None:
@@ -279,8 +376,8 @@ def test_agentic_identity_freezes_nested_kv_offload_backend() -> None:
 
     identity = agentic_key(row)
 
-    assert isinstance(hash(identity), int)
-    assert identity == agentic_key(
+    # Equivalent nested metadata must be usable as the same dictionary/set key.
+    assert {identity} == {agentic_key(
         {
             **row,
             "kv_offload_backend": {
@@ -288,7 +385,7 @@ def test_agentic_identity_freezes_nested_kv_offload_backend() -> None:
                 "name": "native",
             },
         }
-    )
+    )}
     assert identity != agentic_key(
         {
             **row,
@@ -313,24 +410,7 @@ def write_agentic_artifacts(
     (root / f"agentic_{result_name}").mkdir()
 
 
-def test_eval_validation_requires_raw_result_dirs_not_eval_debug_dirs(
-    tmp_path: Path,
-) -> None:
-    write_eval_aggregate(
-        tmp_path,
-        [single_eval_result(32), single_eval_result(64)],
-    )
-
-    (tmp_path / "eval_server_logs_gptoss_8k1k_runner").mkdir()
-    (tmp_path / "eval_gpu_metrics_gptoss_8k1k_runner").mkdir()
-    write_raw_eval_artifact(tmp_path, 32)
-
-    errors = validate_eval_artifacts(tmp_path)
-
-    assert any("unexpected" in error for error in errors)
-
-
-def test_eval_validation_accepts_matching_raw_and_aggregate(
+def test_eval_validation_accepts_legacy_results_alongside_debug_artifacts(
     tmp_path: Path,
 ) -> None:
     write_eval_aggregate(
@@ -343,8 +423,42 @@ def test_eval_validation_accepts_matching_raw_and_aggregate(
         64,
         physical_runner="h100-dgxc-slurm_01",
     )
+    (tmp_path / "eval_server_logs_fixture").mkdir()
+    (tmp_path / "eval_gpu_metrics_fixture").mkdir()
 
     assert validate_eval_artifacts(tmp_path) == []
+
+
+def test_eval_validation_separates_explicit_suite_identities(
+    tmp_path: Path,
+) -> None:
+    gsm8k = single_eval_result(32, eval_suite="gsm8k")
+    tool_use = single_eval_result(
+        32,
+        eval_suite="kimi_tool_call_schema",
+    )
+    write_eval_aggregate(tmp_path, [gsm8k, tool_use])
+    write_raw_eval_artifact(
+        tmp_path,
+        32,
+        eval_suite="gsm8k",
+    )
+    write_raw_eval_artifact(
+        tmp_path,
+        32,
+        physical_runner="h100-dgxc-slurm_01",
+        eval_suite="kimi_tool_call_schema",
+    )
+
+    assert eval_key(gsm8k) != eval_key(tool_use)
+    assert validate_eval_artifacts(tmp_path) == []
+
+
+def test_eval_result_key_includes_task_identity() -> None:
+    gsm8k = single_eval_result(32, eval_suite="tool_use")
+    bfcl = {**gsm8k, "task": "bfcl_smoke"}
+
+    assert eval_result_key(gsm8k) != eval_result_key(bfcl)
 
 
 def test_eval_validation_distinguishes_sequence_lengths(tmp_path: Path) -> None:
@@ -402,7 +516,7 @@ def test_eval_validation_uses_logical_runner_from_metadata(
         tmp_path,
         64,
         logical_runner="mi300x",
-        physical_runner="mi300x-amds_04",
+        physical_runner="mi300x-amd_04",
     )
 
     assert validate_eval_artifacts(tmp_path) == []
@@ -421,7 +535,24 @@ def test_eval_validation_expands_one_batched_multinode_artifact(
     assert validate_eval_artifacts(tmp_path) == []
 
 
-def test_eval_validation_accepts_completed_points_from_failed_batch(
+def test_eval_validation_accepts_legacy_batch_without_failed_list(
+    tmp_path: Path,
+) -> None:
+    concs = [4, 16]
+    write_eval_aggregate(
+        tmp_path,
+        [multinode_eval_result(conc) for conc in concs],
+    )
+    write_raw_batched_eval_artifact(tmp_path, concs)
+    meta_path = tmp_path / "eval_gptoss_8k1k_batch" / "meta_env.json"
+    meta = json.loads(meta_path.read_text())
+    meta.pop("failed_eval_concs")
+    meta_path.write_text(json.dumps(meta))
+
+    assert validate_eval_artifacts(tmp_path) == []
+
+
+def test_eval_validation_rejects_failed_batch(
     tmp_path: Path,
 ) -> None:
     requested_concs = [4, 16, 64]
@@ -437,7 +568,9 @@ def test_eval_validation_accepts_completed_points_from_failed_batch(
         failed_concs=[16],
     )
 
-    assert validate_eval_artifacts(tmp_path) == []
+    errors = validate_eval_artifacts(tmp_path)
+
+    assert any("reports failed eval concurrencies" in error for error in errors)
 
 
 def test_eval_aggregate_validation_is_exact(tmp_path: Path) -> None:
@@ -472,6 +605,195 @@ def test_eval_aggregate_validation_rejects_duplicate_identity(
     )
 
 
+def test_eval_aggregate_validation_rejects_non_list_file(
+    tmp_path: Path,
+) -> None:
+    write_raw_eval_artifact(tmp_path, 32)
+    eval_dir = tmp_path / "eval_results_all"
+    eval_dir.mkdir()
+    (eval_dir / "agg_eval_all.json").write_text(
+        json.dumps(single_eval_result(32))
+    )
+
+    errors = validate_eval_artifacts(tmp_path)
+
+    assert any("is not a list" in error for error in errors)
+
+
+def test_eval_aggregate_validation_rejects_non_object_row(
+    tmp_path: Path,
+) -> None:
+    write_raw_eval_artifact(tmp_path, 32)
+    eval_dir = tmp_path / "eval_results_all"
+    eval_dir.mkdir()
+    (eval_dir / "agg_eval_all.json").write_text(
+        json.dumps([single_eval_result(32), "not-a-row"])
+    )
+
+    errors = validate_eval_artifacts(tmp_path)
+
+    assert any("row 1 is not an object" in error for error in errors)
+
+
+def test_eval_validation_rejects_scores_outside_unit_interval(
+    tmp_path: Path,
+) -> None:
+    for index, score in enumerate((-0.01, 1.01)):
+        root = tmp_path / str(index)
+        root.mkdir()
+        write_raw_eval_artifact(root, 32)
+        result_path = next(
+            (root / "eval_result_conc32_h100-dgxc-slurm_00").glob(
+                "results*.json"
+            )
+        )
+        result_path.write_text(json.dumps(raw_eval_result(score)))
+        write_eval_aggregate(root, [single_eval_result(32)])
+
+        errors = validate_eval_artifacts(root)
+
+        assert any("invalid score" in error for error in errors)
+
+
+def test_eval_validation_rejects_directory_with_only_markerless_results(
+    tmp_path: Path,
+) -> None:
+    write_raw_eval_artifact(tmp_path, 32)
+    result_path = next(
+        (
+            tmp_path / "eval_result_conc32_h100-dgxc-slurm_00"
+        ).glob("results*.json")
+    )
+    data = json.loads(result_path.read_text())
+    data.pop("lm_eval_version")
+    result_path.write_text(json.dumps(data))
+    write_eval_aggregate(tmp_path, [single_eval_result(32)])
+
+    errors = validate_eval_artifacts(tmp_path)
+
+    assert any("has no recognized eval result" in error for error in errors)
+
+
+def test_eval_validation_accepts_neutral_result_format_marker(
+    tmp_path: Path,
+) -> None:
+    write_raw_eval_artifact(tmp_path, 32)
+    result_path = next(
+        (
+            tmp_path / "eval_result_conc32_h100-dgxc-slurm_00"
+        ).glob("results*.json")
+    )
+    data = json.loads(result_path.read_text())
+    data.pop("lm_eval_version")
+    data["result_format"] = "inferencex-eval-v1"
+    result_path.write_text(json.dumps(data))
+    write_eval_aggregate(tmp_path, [single_eval_result(32)])
+
+    assert validate_eval_artifacts(tmp_path) == []
+
+
+def test_eval_validation_accepts_neutral_filter_primary_score(
+    tmp_path: Path,
+) -> None:
+    write_raw_eval_artifact(tmp_path, 32, eval_suite="bfcl_smoke")
+    result_path = next(tmp_path.glob("eval_*/results*.json"))
+    data = json.loads(result_path.read_text())
+    data["results"]["gsm8k"] = {
+        "acc,none": 1.0,
+        "acc_stderr,none": 0.0,
+    }
+    data["configs"]["gsm8k"] = {
+        "metric_list": [{"metric": "acc"}],
+        "filter_list": [{"name": "none"}],
+    }
+    result_path.write_text(json.dumps(data))
+    write_eval_aggregate(
+        tmp_path,
+        [single_eval_result(32, eval_suite="bfcl_smoke")],
+    )
+
+    assert validate_eval_artifacts(tmp_path) == []
+
+
+def test_eval_validation_accepts_multiple_tasks_from_one_artifact(
+    tmp_path: Path,
+) -> None:
+    write_raw_eval_artifact(tmp_path, 32, eval_suite="tool_use")
+    result_path = next(tmp_path.glob("eval_*/results*.json"))
+    data = json.loads(result_path.read_text())
+    data["results"]["bfcl_smoke"] = {
+        "exact_match,strict-match": 1.0,
+        "exact_match_stderr,strict-match": 0.0,
+    }
+    data["configs"]["bfcl_smoke"] = data["configs"]["gsm8k"]
+    data["n-samples"]["bfcl_smoke"] = {"effective": 1}
+    result_path.write_text(json.dumps(data))
+    base_row = single_eval_result(32, eval_suite="tool_use")
+    write_eval_aggregate(
+        tmp_path,
+        [base_row, {**base_row, "task": "bfcl_smoke"}],
+    )
+
+    assert validate_eval_artifacts(tmp_path) == []
+
+
+def test_eval_validation_rejects_invalid_legacy_concurrency(
+    tmp_path: Path,
+) -> None:
+    for index, conc in enumerate((0, -1, True, "4")):
+        root = tmp_path / str(index)
+        root.mkdir()
+        artifact_dir = root / "eval_invalid_legacy"
+        artifact_dir.mkdir()
+        (artifact_dir / "meta_env.json").write_text(
+            json.dumps({**single_eval_meta(4), "conc": conc})
+        )
+        (artifact_dir / "results_test.json").write_text(
+            json.dumps(raw_eval_result())
+        )
+
+        errors = validate_eval_artifacts(root)
+
+        assert any("invalid legacy concurrency" in error for error in errors)
+
+
+def test_eval_validation_rejects_malformed_batch_metadata(
+    tmp_path: Path,
+) -> None:
+    cases = (
+        ({"eval_concs": [4, True]}, "invalid eval_concs"),
+        ({"eval_concs": [4, 4]}, "duplicate eval_concs"),
+        ({"completed_eval_concs": [4, 4]}, "duplicate completed_eval_concs"),
+        ({"failed_eval_concs": [16, 16]}, "duplicate failed_eval_concs"),
+        ({"completed_eval_concs": [4, 16], "failed_eval_concs": [16]}, "overlapping"),
+        ({"completed_eval_concs": [4, 32]}, "unexpected"),
+        ({"completed_eval_concs": [4], "failed_eval_concs": [32]}, "failed unexpected"),
+        ({"completed_eval_concs": "4"}, "invalid batched concurrency metadata"),
+        ({"completed_eval_concs": [4], "failed_eval_concs": [16]}, "reports failed"),
+        ({"failed_eval_concs": None}, "invalid batched concurrency metadata"),
+        ({"eval_concs": [], "completed_eval_concs": []}, "empty eval_concs"),
+    )
+    for index, (overrides, expected) in enumerate(cases):
+        root = tmp_path / str(index)
+        root.mkdir()
+        artifact_dir = root / "eval_invalid_batch"
+        artifact_dir.mkdir()
+        meta = _dd_meta(0)
+        meta.update(
+            {
+                "eval_concs": [4, 16],
+                "completed_eval_concs": [4, 16],
+                "failed_eval_concs": [],
+            }
+        )
+        meta.update(overrides)
+        (artifact_dir / "meta_env.json").write_text(json.dumps(meta))
+
+        errors = validate_eval_artifacts(root)
+
+        assert any(expected in error for error in errors), errors
+
+
 def test_fixed_sequence_validation_accepts_unique_source_rows(tmp_path: Path) -> None:
     results = tmp_path / "results_bmk"
     results.mkdir()
@@ -494,12 +816,6 @@ def test_fixed_sequence_validation_rejects_duplicate_identity(
     errors = validate_fixed_artifacts(tmp_path)
 
     assert "fixed-sequence artifacts contain 1 duplicate row(s)" in errors
-
-
-def test_agentic_validation_checks_points_and_raw_artifacts(tmp_path: Path) -> None:
-    write_agentic_artifacts(tmp_path)
-
-    assert validate_agentic_artifacts(tmp_path) == []
 
 
 def test_agentic_validation_accepts_run_sweep_point_artifacts(
@@ -572,23 +888,27 @@ def test_agentic_validation_handles_mapping_kv_offload_backend(
     assert "agentic point artifacts contain 1 duplicate row(s)" in errors
 
 
-def test_eval_only_main_does_not_require_benchmark_artifacts(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
+def test_eval_only_cli_runs_outside_checkout_without_benchmark_artifacts(tmp_path: Path) -> None:
     write_eval_aggregate(tmp_path, [single_eval_result(32)])
     write_raw_eval_artifact(tmp_path, 32)
-    monkeypatch.setattr(
-        sys,
-        "argv",
+    env = dict(os.environ)
+    env.pop("PYTHONPATH", None)
+    completed = subprocess.run(
         [
-            "validate_reusable_sweep_artifacts.py",
+            sys.executable,
+            str(Path(__file__).with_name("validate_reusable_sweep_artifacts.py")),
             "--artifacts-dir",
             str(tmp_path),
         ],
+        cwd=tmp_path, env=env, capture_output=True, text=True, timeout=10,
     )
 
-    assert main() == 0
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stderr == ""
+    assert completed.stdout == (
+        "Reusable sweep artifacts validated: "
+        "0 fixed-sequence row(s), 0 agentic row(s), 1 eval row(s).\n"
+    )
 
 
 # ── dedupe_reran_evals ────────────────────────────────────────────────────────
@@ -640,7 +960,9 @@ def _dd_write_legacy_raw(
     artifact_dir.mkdir()
     (artifact_dir / "meta_env.json").write_text(json.dumps(_dd_meta(conc)))
     if timestamp is not None:
-        (artifact_dir / f"results_{timestamp}.json").write_text("{}")
+        (artifact_dir / f"results_{timestamp}.json").write_text(
+            json.dumps(raw_eval_result())
+        )
 
 
 def test_dedupe_keeps_latest_legacy_rerun(tmp_path: Path) -> None:
@@ -676,9 +998,9 @@ def test_dedupe_keeps_latest_legacy_rerun(tmp_path: Path) -> None:
     assert any("kept 1 of 3" in message for message in messages)
 
 
-def test_dedupe_leaves_ambiguous_duplicates_for_validation(tmp_path: Path) -> None:
-    # Duplicate raw identities with no result timestamps cannot be ordered, so
-    # dedupe must leave them and validation must still reject them.
+def test_dedupe_leaves_ambiguous_artifacts_for_validation(tmp_path: Path) -> None:
+    # Result-less raw artifacts cannot be ordered or reused. Dedupe leaves them
+    # for validation to reject as missing recognized results.
     for name in ("eval_minimaxm3_conc4096_b300-nv_01", "eval_minimaxm3_conc4096_b300-nv_02"):
         _dd_write_legacy_raw(tmp_path, name, 4096, None)
     _dd_write_aggregate(
@@ -687,7 +1009,10 @@ def test_dedupe_leaves_ambiguous_duplicates_for_validation(tmp_path: Path) -> No
     )
 
     assert dedupe_reran_evals(tmp_path) == []
-    assert any("duplicate" in e for e in validate_eval_artifacts(tmp_path))
+    assert any(
+        "no recognized eval result" in error
+        for error in validate_eval_artifacts(tmp_path)
+    )
 
 
 def test_dedupe_is_noop_for_clean_artifacts(tmp_path: Path) -> None:
@@ -718,9 +1043,12 @@ def test_dedupe_prunes_superseded_batched_conc(tmp_path: Path) -> None:
         meta = _dd_meta(0)
         meta["eval_concs"] = concs
         meta["completed_eval_concs"] = list(concs)
+        meta["failed_eval_concs"] = []
         (artifact_dir / "meta_env.json").write_text(json.dumps(meta))
         for conc in concs:
-            (artifact_dir / f"results_{stamp}_conc{conc}.json").write_text("{}")
+            (artifact_dir / f"results_{stamp}_conc{conc}.json").write_text(
+                json.dumps(raw_eval_result())
+            )
     _dd_write_aggregate(
         tmp_path,
         [
@@ -735,7 +1063,369 @@ def test_dedupe_prunes_superseded_batched_conc(tmp_path: Path) -> None:
 
     assert validate_eval_artifacts(tmp_path) == []
     assert json.loads((older / "meta_env.json").read_text())["completed_eval_concs"] == [16]
+    assert json.loads((older / "meta_env.json").read_text())["eval_concs"] == [16]
     assert not (older / "results_2026-06-26T10-00-00.000000_conc32.json").exists()
     assert (older / "results_2026-06-26T10-00-00.000000_conc16.json").exists()
     rows = json.loads((tmp_path / "eval_results_all" / "agg_eval_all.json").read_text())
     assert [r["em_strict"] for r in rows if r["conc"] == 32] == [0.90]
+
+
+def test_dedupe_orders_timestamped_and_legacy_results_coherently(
+    tmp_path: Path,
+) -> None:
+    timestamped = "eval_minimaxm3_conc4096_b300-nv_timestamped"
+    legacy = "eval_minimaxm3_conc4096_b300-nv_legacy"
+    _dd_write_legacy_raw(
+        tmp_path,
+        timestamped,
+        4096,
+        "2026-06-27T04-28-31.838775",
+    )
+    _dd_write_legacy_raw(tmp_path, legacy, 4096, "retry")
+    legacy_result = next((tmp_path / legacy).glob("results*.json"))
+    future_ns = 2_000_000_000_000_000_000
+    os.utime(legacy_result, ns=(future_ns, future_ns))
+    _dd_write_aggregate(
+        tmp_path,
+        [
+            _dd_agg_row(
+                4096,
+                f"eval_results/{timestamped}/results_2026-06-27T04-28-31.838775.json",
+                0.5,
+            ),
+            _dd_agg_row(
+                4096,
+                f"eval_results/{legacy}/results_retry.json",
+                0.9,
+            ),
+        ],
+    )
+
+    dedupe_reran_evals(tmp_path)
+
+    assert validate_eval_artifacts(tmp_path) == []
+    assert (tmp_path / legacy).is_dir()
+    assert not (tmp_path / timestamped).exists()
+    rows = json.loads(
+        (tmp_path / "eval_results_all" / "agg_eval_all.json").read_text()
+    )
+    assert [row["em_strict"] for row in rows] == [0.9]
+
+
+def test_dedupe_collapses_identity_across_aggregate_files(
+    tmp_path: Path,
+) -> None:
+    old = "eval_minimaxm3_conc4096_b300-nv_old"
+    new = "eval_minimaxm3_conc4096_b300-nv_new"
+    _dd_write_legacy_raw(
+        tmp_path,
+        old,
+        4096,
+        "2026-06-26T01-00-00.000000",
+    )
+    _dd_write_legacy_raw(
+        tmp_path,
+        new,
+        4096,
+        "2026-06-27T01-00-00.000000",
+    )
+    aggregate_dir = tmp_path / "eval_results_all"
+    aggregate_dir.mkdir()
+    old_path = aggregate_dir / "old.json"
+    new_path = aggregate_dir / "new.json"
+    old_path.write_text(
+        json.dumps(
+            [
+                _dd_agg_row(
+                    4096,
+                    f"eval_results/{old}/results_2026-06-26T01-00-00.000000.json",
+                    0.4,
+                )
+            ]
+        )
+    )
+    new_path.write_text(
+        json.dumps(
+            [
+                _dd_agg_row(
+                    4096,
+                    f"eval_results/{new}/results_2026-06-27T01-00-00.000000.json",
+                    0.9,
+                )
+            ]
+        )
+    )
+
+    messages = dedupe_reran_evals(tmp_path)
+
+    assert json.loads(old_path.read_text()) == []
+    assert [
+        row["em_strict"]
+        for row in json.loads(new_path.read_text())
+    ] == [0.9]
+    assert not (tmp_path / old).exists()
+    assert (tmp_path / new).is_dir()
+    assert validate_eval_artifacts(tmp_path) == []
+    assert any("old.json: kept 0 of 1" in message for message in messages)
+
+
+def test_dedupe_accepts_zero_score_as_structurally_valid(
+    tmp_path: Path,
+) -> None:
+    old = "eval_minimaxm3_conc4096_b300-nv_old"
+    new = "eval_minimaxm3_conc4096_b300-nv_new"
+    _dd_write_legacy_raw(tmp_path, old, 4096, "2026-06-26T01-00-00.000000")
+    _dd_write_legacy_raw(tmp_path, new, 4096, "2026-06-27T01-00-00.000000")
+    new_result = next((tmp_path / new).glob("results*.json"))
+    new_result.write_text(json.dumps(raw_eval_result(0.0)))
+    _dd_write_aggregate(
+        tmp_path,
+        [
+            _dd_agg_row(4096, f"eval_results/{old}/results_2026-06-26T01-00-00.000000.json", 0.8),
+            _dd_agg_row(4096, f"eval_results/{new}/results_2026-06-27T01-00-00.000000.json", 0.0),
+        ],
+    )
+
+    dedupe_reran_evals(tmp_path)
+
+    assert validate_eval_artifacts(tmp_path) == []
+    assert (tmp_path / new).is_dir()
+    assert not (tmp_path / old).exists()
+
+
+def test_dedupe_does_not_resurrect_stale_result_after_integration_error(
+    tmp_path: Path,
+) -> None:
+    name = "eval_minimaxm3_conc4096_b300-nv_retry"
+    _dd_write_legacy_raw(
+        tmp_path,
+        name,
+        4096,
+        "2026-06-26T01-00-00.000000",
+    )
+    new_result = (
+        tmp_path
+        / name
+        / "results_2026-06-27T01-00-00.000000.json"
+    )
+    failed = raw_eval_result(0.0)
+    failed["integration_error"] = {
+        "type": "RuntimeError",
+        "message": "verifier checkout failed",
+    }
+    new_result.write_text(json.dumps(failed))
+    _dd_write_aggregate(
+        tmp_path,
+        [_dd_agg_row(4096, f"eval_results/{name}/results_old.json", 0.8)],
+    )
+
+    assert dedupe_reran_evals(tmp_path) == []
+    errors = validate_eval_artifacts(tmp_path)
+
+    assert any("integration error" in error for error in errors)
+    assert (tmp_path / name).is_dir()
+
+
+def test_newer_foreign_result_does_not_suppress_recognized_result(
+    tmp_path: Path,
+) -> None:
+    markerless = raw_eval_result()
+    markerless.pop("lm_eval_version")
+    for index, contents in enumerate(("{not-json", json.dumps(markerless))):
+        root = tmp_path / str(index)
+        root.mkdir()
+        name = "eval_minimaxm3_conc4096_b300-nv_retry"
+        _dd_write_legacy_raw(
+            root,
+            name,
+            4096,
+            "2026-06-26T01-00-00.000000",
+        )
+        (
+            root
+            / name
+            / "results_2026-06-27T01-00-00.000000.json"
+        ).write_text(contents)
+        _dd_write_aggregate(
+            root,
+            [_dd_agg_row(4096, f"eval_results/{name}/results_old.json", 0.8)],
+        )
+
+        assert dedupe_reran_evals(root) == []
+        assert validate_eval_artifacts(root) == []
+
+
+def test_dedupe_does_not_prune_when_latest_recognized_result_is_invalid(
+    tmp_path: Path,
+) -> None:
+    cases = (
+        (json.dumps({**raw_eval_result(), "results": {}}), "empty or malformed"),
+        (json.dumps({**raw_eval_result(), "results": []}), "empty or malformed"),
+        (
+            json.dumps(
+                {
+                    **raw_eval_result(),
+                    "results": {
+                        "gsm8k": {"exact_match,strict-match": "invalid"}
+                    },
+                }
+            ),
+            "invalid score",
+        ),
+        (
+            json.dumps(
+                {
+                    **raw_eval_result(),
+                    "results": {"gsm8k": {"alias": "gsm8k"}},
+                }
+            ),
+            "no score",
+        ),
+        (json.dumps(raw_eval_result(effective=0)), "invalid effective sample count"),
+        (
+            json.dumps(raw_eval_result(effective="unknown")),
+            "invalid effective sample count",
+        ),
+        (json.dumps(raw_eval_result(effective=True)), "invalid effective sample count"),
+        (
+            json.dumps(
+                {
+                    **raw_eval_result(),
+                    "n-samples": {"gsm8k": {}},
+                }
+            ),
+            "malformed effective sample count",
+        ),
+    )
+    for index, (contents, expected) in enumerate(cases):
+        root = tmp_path / str(index)
+        root.mkdir()
+        name = "eval_minimaxm3_conc4096_b300-nv_retry"
+        _dd_write_legacy_raw(
+            root,
+            name,
+            4096,
+            "2026-06-26T01-00-00.000000",
+        )
+        (
+            root
+            / name
+            / "results_2026-06-27T01-00-00.000000.json"
+        ).write_text(contents)
+        _dd_write_aggregate(
+            root,
+            [_dd_agg_row(4096, f"eval_results/{name}/results_old.json", 0.8)],
+        )
+
+        assert dedupe_reran_evals(root) == []
+        errors = validate_eval_artifacts(root)
+
+        assert any(expected in error for error in errors), errors
+        assert (root / name).is_dir()
+
+
+def test_dedupe_requires_aggregate_row_for_latest_raw_directory(
+    tmp_path: Path,
+) -> None:
+    old = "eval_minimaxm3_conc4096_b300-nv_old"
+    new = "eval_minimaxm3_conc4096_b300-nv_new"
+    _dd_write_legacy_raw(tmp_path, old, 4096, "2026-06-26T01-00-00.000000")
+    _dd_write_legacy_raw(tmp_path, new, 4096, "2026-06-27T01-00-00.000000")
+    agg_path = _dd_write_aggregate(
+        tmp_path,
+        [
+            _dd_agg_row(
+                4096,
+                f"eval_results/{new}-unrelated/results_old.json",
+                0.8,
+            )
+        ],
+    )
+    before = agg_path.read_text()
+
+    assert dedupe_reran_evals(tmp_path) == []
+    assert agg_path.read_text() == before
+    assert (tmp_path / old).is_dir()
+    assert (tmp_path / new).is_dir()
+    assert any("duplicate" in error for error in validate_eval_artifacts(tmp_path))
+
+
+
+def test_eval_validation_accepts_extract_filter_primary_score(
+    tmp_path: Path,
+) -> None:
+    write_raw_eval_artifact(tmp_path, 32, eval_suite="gpqa")
+    raw_path = next(tmp_path.glob("eval_*/results*.json"))
+    data = raw_eval_result(task="gpqa")
+    data["results"]["gpqa"] = {
+        "exact_match,extract_abcd": 0.75,
+        "exact_match_stderr,extract_abcd": 0.02,
+        "answer_token_count": 42,
+    }
+    data["configs"]["gpqa"]["filter_list"] = [{"name": "extract_abcd"}]
+    raw_path.write_text(json.dumps(data))
+    write_eval_aggregate(
+        tmp_path,
+        [
+            {
+                **single_eval_result(32, eval_suite="gpqa"),
+                "task": "gpqa",
+            }
+        ],
+    )
+
+    assert validate_eval_artifacts(tmp_path) == []
+
+
+def test_eval_dedupe_leaves_invalid_suite_for_validation(
+    tmp_path: Path,
+) -> None:
+    write_raw_eval_artifact(tmp_path, 32)
+    raw_dir = next(tmp_path.glob("eval_*"))
+    meta_path = raw_dir / "meta_env.json"
+    meta = json.loads(meta_path.read_text())
+    meta["eval_suite"] = []
+    meta_path.write_text(json.dumps(meta))
+    row = single_eval_result(32)
+    row["eval_suite"] = []
+    write_eval_aggregate(tmp_path, [row])
+
+    assert dedupe_reran_evals(tmp_path) == []
+    errors = validate_eval_artifacts(tmp_path)
+    assert any("invalid eval_suite" in error for error in errors)
+
+
+def test_dedupe_uses_winning_legacy_result_mtime_for_aggregate(
+    tmp_path: Path,
+) -> None:
+    artifact_name = "eval_minimaxm3_conc4096_b300-nv_retry"
+    _dd_write_legacy_raw(tmp_path, artifact_name, 4096, "a")
+    artifact_dir = tmp_path / artifact_name
+    older = artifact_dir / "results_b.json"
+    older.write_text(json.dumps(raw_eval_result()))
+    newer = artifact_dir / "results_a.json"
+    os.utime(older, ns=(1_000_000_000, 1_000_000_000))
+    os.utime(newer, ns=(2_000_000_000, 2_000_000_000))
+    _dd_write_aggregate(
+        tmp_path,
+        [
+            _dd_agg_row(
+                4096,
+                f"eval_results/{artifact_name}/results_b.json",
+                0.1,
+            ),
+            _dd_agg_row(
+                4096,
+                f"eval_results/{artifact_name}/results_a.json",
+                0.9,
+            ),
+        ],
+    )
+
+    dedupe_reran_evals(tmp_path)
+
+    rows = json.loads(
+        (tmp_path / "eval_results_all" / "agg_eval_all.json").read_text()
+    )
+    assert [row["em_strict"] for row in rows] == [0.9]
+    assert validate_eval_artifacts(tmp_path) == []

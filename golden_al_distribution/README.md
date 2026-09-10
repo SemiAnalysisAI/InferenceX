@@ -127,6 +127,7 @@ Before accepting an updated curve, reviewers should verify:
 | --- | --- | --- | --- |
 | DeepSeek V4 Pro | MTP | [`dsv4_mtp.yaml`](dsv4_mtp.yaml) | [27180633016](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27180633016) |
 | DeepSeek V4 Pro 0813 | DSpark (probabilistic draft) | [`dsv4-pro-0813-dspark.yaml`](dsv4-pro-0813-dspark.yaml) | [31742838308](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/31742838308) |
+| DeepSeek V4.1 Flash | DSpark (probabilistic draft, block verify) | [`dsv41flash_dspark.yaml`](dsv41flash_dspark.yaml) | [34493175056](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34493175056) |
 | Qwen3.5 397B-A17B | MTP | [`qwen3.5_mtp.yaml`](qwen3.5_mtp.yaml) | [27317114007](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27317114007) |
 | Kimi K2.5 | EAGLE3 | [`kimik2.5_eagle3.yaml`](kimik2.5_eagle3.yaml) | [28122195822](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28122195822) |
 | Kimi K3 | DSpark | [`kimik3_dspark.yaml`](kimik3_dspark.yaml) | [30304797750](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/30304797750) |
@@ -134,6 +135,7 @@ Before accepting an updated curve, reviewers should verify:
 | MiniMax-M3 | EAGLE3 | [`minimaxm3_eagle3.yaml`](minimaxm3_eagle3.yaml) | [28061204145](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28061204145) |
 | MiniMax-M3 | EAGLE3 (GQA) | [`minimaxm3_eagle3_gqa.yaml`](minimaxm3_eagle3_gqa.yaml) | [29784780049](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/29784780049) |
 | GLM-5.2 | MTP | [`glm5.2_mtp.yaml`](glm5.2_mtp.yaml) | [28058352479](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28058352479) |
+| Qwen3.8-Flash-Next | MTP (native) | [`qwen3.8next_mtp.yaml`](qwen3.8next_mtp.yaml) | [33034290269](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/33034290269) |
 
 ## Primary references
 
@@ -150,3 +152,5 @@ Before accepting an updated curve, reviewers should verify:
 - [InferenceX initial AL collector PR](https://github.com/SemiAnalysisAI/InferenceX/pull/1650)
 - [InferenceX multi-model AL collectors PR](https://github.com/SemiAnalysisAI/InferenceX/pull/1706)
 - [InferenceX multi-node synthetic-acceptance bring-up](https://github.com/SemiAnalysisAI/InferenceX/pull/1789)
+
+DeepSeek V4.1 Flash includes measured draft lengths 1–5 for thinking off/on. The same image rejected lengths 6–8 before serving in [run 34494319147](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34494319147); no AL values are assigned to those lengths.

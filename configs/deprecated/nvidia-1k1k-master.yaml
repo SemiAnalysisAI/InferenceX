@@ -5,7 +5,7 @@ dsr1-fp4-b200-dynamo-trt:
   image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post1
   model: deepseek-r1-fp4
   model-prefix: dsr1
-  runner: b200-multinode
+  runner: cluster:b200-dgxc
   precision: fp4
   framework: dynamo-trt
   router: { name: dynamo-router, version: "0.8.1.post1" }
@@ -198,7 +198,7 @@ dsr1-fp8-b200-dynamo-trt:
   image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post2
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
-  runner: b200-multinode
+  runner: cluster:b200-dgxc
   precision: fp8
   framework: dynamo-trt
   router: { name: dynamo-router, version: "0.8.1.post2" }
@@ -2355,7 +2355,7 @@ dsr1-fp8-h200-dynamo-trt:
   image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post1
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
-  runner: h200-multinode
+  runner: cluster:h200-dgxc
   precision: fp8
   framework: dynamo-trt
   router: { name: dynamo-router, version: "0.8.1.post1" }
@@ -2634,7 +2634,7 @@ dsr1-fp8-h100-dynamo-trt:
   image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post3
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
-  runner: h100-multinode
+  runner: cluster:h100-dgxc
   precision: fp8
   framework: dynamo-trt
   router: { name: dynamo-router, version: "0.8.1.post3" }
@@ -2933,7 +2933,7 @@ dsr1-fp8-h100-dynamo-sglang:
   image: lmsysorg/sglang:v0.5.8-cu130
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
-  runner: h100-multinode
+  runner: cluster:h100-dgxc
   precision: fp8
   framework: dynamo-sglang
   router: { name: dynamo-router, version: "0.8.0" }
@@ -4126,7 +4126,7 @@ dsr1-fp8-h200-dynamo-sglang:
   image: lmsysorg/sglang:v0.5.8.post1-cu130
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
-  runner: h200-multinode
+  runner: cluster:h200-dgxc
   precision: fp8
   framework: dynamo-sglang
   router: { name: dynamo-router, version: "0.8.0" }
@@ -4232,7 +4232,7 @@ dsr1-fp4-b200-dynamo-sglang:
   image: lmsysorg/sglang:v0.5.8.post1-cu130-runtime
   model: deepseek-r1-fp4
   model-prefix: dsr1
-  runner: b200-multinode
+  runner: cluster:b200-dgxc
   precision: fp4
   framework: dynamo-sglang
   router: { name: dynamo-router, version: "0.8.0" }
@@ -4301,7 +4301,7 @@ dsr1-fp8-b200-dynamo-sglang:
   image: lmsysorg/sglang:v0.5.8.post1-cu130-amd64
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
-  runner: b200-multinode
+  runner: cluster:b200-dgxc
   precision: fp8
   framework: dynamo-sglang
   kv-p2p-transfer: nixl
@@ -4373,7 +4373,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
   image: lmsysorg/sglang:v0.5.8.post1-cu130-amd64
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
-  runner: b200-multinode
+  runner: cluster:b200-dgxc
   precision: fp8
   framework: dynamo-sglang
   kv-p2p-transfer: nixl
@@ -4468,7 +4468,7 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
   image: "lmsysorg/sglang:v0.5.12.post1"
   model: deepseek-r1-fp4
   model-prefix: dsr1
-  runner: b200-multinode
+  runner: cluster:b200-dgxc
   precision: fp4
   framework: dynamo-sglang
   router: { name: dynamo-router, version: "5b4bc1dd70965017a737c71b19db5a0aeaa88727" }

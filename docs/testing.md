@@ -12,6 +12,7 @@ Use the narrowest check that can falsify the change, then widen only when the ch
 
 - [Sources of truth](#sources-of-truth)
 - [Testing layers](#testing-layers)
+- [Test quality](#test-quality)
 - [Local checks](#local-checks)
 - [Smoke, sweep, and eval](#smoke-sweep-and-eval)
 - [Evidence standard](#evidence-standard)
@@ -41,6 +42,19 @@ These sources outrank this guide when behavior changes. Update the English page 
 
 A green later layer does not erase missing earlier evidence. For example, a green collector can aggregate an empty set, so review must inspect the underlying executed jobs and artifacts.
 
+## Test quality
+
+Tests protect behavior, not coverage numbers. During review, ask what plausible bug each test would catch and whether it exercises the implementation that ships.
+
+- Prefer a small input with a hand-worked expected result, including relevant boundary, malformed-input, or failure cases. Do not copy the implementation's calculation or call the same helper to produce the expected result.
+- Do not snapshot the current recipe count, model/hardware inventory, image pin, enum definition, or source text. Adding a valid recipe or refactoring equivalent code should not force unrelated assertion changes.
+- Preserve genuine contracts: numerical results, rejected invalid inputs, stable artifact formats, and agreement between independently consumed configurations. Assert only the parts of the contract the consumer needs.
+- Mock external services or processes when necessary, but run the actual behavior under test. A copied parser, filter, or fake implementation cannot detect a regression in the real one.
+- Control clocks and long waits in timing tests. Synchronize on observable readiness, keep process termination and artifact writes real when testing those contracts, and bound waits and cleanup so regressions cannot strand test workers.
+- Delete redundant tests without replacement. Extend existing fixtures only when there is a meaningful gap; do not build a new test framework to preserve a test count.
+
+See [Randy Coulman's Tautological Tests](https://randycoulman.com/blog/2016/12/20/tautological-tests/) for the distinction between independent expectations and assertions that merely repeat the implementation.
+
 ## Local checks
 
 Run checks from the repository root and replace placeholders with the exact changed path or key.
@@ -58,13 +72,13 @@ Parsing is only the first gate. Do not report a YAML parse as matrix validation.
 ### Exact config, then filtered family
 
 ```bash
-uv run --no-project --with pydantic --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
   utils/matrix_logic/generate_sweep_configs.py test-config \
   --config-files configs/<nvidia|amd>-master.yaml \
   --runner-config configs/runners.yaml \
   --config-keys <exact-key>
 
-uv run --no-project --with pydantic --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
   utils/matrix_logic/generate_sweep_configs.py full-sweep \
   --config-files configs/<nvidia|amd>-master.yaml \
   --runner-config configs/runners.yaml \
@@ -100,6 +114,17 @@ python3 utils/validate_perf_changelog.py \
 Its contract is implemented in [`validate_perf_changelog.py`](../utils/validate_perf_changelog.py). This check validates the generated matrix and rejects prohibited content changes, but whitespace-only historical deletions can be invisible to its diff reader. Inspect the exact byte diff as a separate evidence gate. Do not rewrite or normalize historical `perf-changelog.yaml` bytes.
 
 A local matrix cannot prove Slurm allocation or llm-d endpoint discovery. Multi-node recipe changes still require the upstream recipe checker and an execution on the intended fleet, as described in [configuration validation](./configuration-procedures.md#validate).
+
+### Full local suite in parallel
+
+With the test dependencies installed, add [`pytest-xdist`](https://pytest-xdist.readthedocs.io/en/stable/distribution.html) to the same Python environment and run all local suites with four workers:
+
+```bash
+python -m pip install pytest-xdist
+python -m pytest utils/ runners/ experimental/CollectiveX/tests/ -n 4
+```
+
+Use `-n 0` for serial debugging. Tests must keep temporary files and ports isolated and collect deterministic parameter cases across workers. The changelog-gate CI job also uses four workers; parallel execution preserves its test selection and assertions.
 
 ## Smoke, sweep, and eval
 

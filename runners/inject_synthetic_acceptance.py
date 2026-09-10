@@ -1,18 +1,13 @@
 #!/usr/bin/env python3
-"""Inject synthetic acceptance parameters into an srt-slurm recipe (generic driver).
+"""Configure speculative acceptance in an srt-slurm recipe.
 
-This is the framework-agnostic half of the synthetic-acceptance mechanism. It
-decides *whether* to inject (the ``SYNTHETIC_ACCEPTANCE`` flag) and *what* mean
-acceptance length to inject, then delegates the actual recipe rewrite to a
-framework-specific backend (see ``runners/synthetic_injectors/``).
-
-The script is a no-op (exit 0, file untouched) when:
-  - SYNTHETIC_ACCEPTANCE is unset/false,
-so existing callers that do not opt in get exactly the previous behavior. When
-enabled it requires a backend registered for the given framework; the vLLM
-backend is added in a follow-up framework-support change.
+Eval-only runs remove synthetic acceptance so generated text is checked against
+the target model. Throughput runs inject a configured synthetic acceptance
+length only when ``SYNTHETIC_ACCEPTANCE=true``. Framework-specific rewriting
+lives under ``runners/synthetic_injectors/``.
 
 Environment variables:
+  EVAL_ONLY                   "true" to restore real target verification
   SYNTHETIC_ACCEPTANCE         "true" to enable (default: "false")
   SYNTHETIC_ACCEPTANCE_LENGTH  target mean acceptance length; if unset, it is
                                auto-resolved from the reference AL YAML using
@@ -76,7 +71,9 @@ def _lookup_al(model_block, num_spec_tokens):
     if isinstance(model_block, dict):
         # Thinking matrix form: pick the requested mode, then index by level.
         if any(str(k).startswith("thinking") for k in model_block):
-            mode = os.environ.get("THINKING_MODE", "thinking_on").strip() or "thinking_on"
+            mode = (
+                os.environ.get("THINKING_MODE", "thinking_on").strip() or "thinking_on"
+            )
             mode_block = model_block.get(mode)
             if mode_block is None:
                 sys.exit(
@@ -119,7 +116,9 @@ def _resolve_al(config_text, injector, ref_yaml):
 
     al = _lookup_al(model_block, num_spec_tokens)
     if al is None:
-        sys.exit(f"ERROR: num_spec_tokens={num_spec_tokens} not found for {key} in {ref_yaml}")
+        sys.exit(
+            f"ERROR: num_spec_tokens={num_spec_tokens} not found for {key} in {ref_yaml}"
+        )
 
     _log(
         f"Auto-resolved AL={al} from {ref_yaml} "
@@ -129,14 +128,30 @@ def _resolve_al(config_text, injector, ref_yaml):
 
 
 def inject(config_file, framework):
+    injector = get_injector(framework)
+
     if _enabled("EVAL_ONLY"):
-        print("[Synthetic AL] EVAL_ONLY=true: keeping real MTP recipe")
+        if injector is None or not hasattr(injector, "rewrite_real"):
+            print(
+                f"[Synthetic AL] EVAL_ONLY=true: no real-acceptance rewriter "
+                f"for FRAMEWORK='{framework}'"
+            )
+            return 0
+
+        with open(config_file) as f:
+            content = f.read()
+        new_content, count = injector.rewrite_real(content, _log)
+        if count:
+            with open(config_file, "w") as f:
+                f.write(new_content)
+            _log(f"Restored real acceptance in {count} speculative-config entries")
+        else:
+            _log("EVAL_ONLY=true: recipe already uses real acceptance")
         return 0
 
     if not _enabled("SYNTHETIC_ACCEPTANCE"):
         return 0
 
-    injector = get_injector(framework)
     if injector is None:
         sys.exit(
             "ERROR: SYNTHETIC_ACCEPTANCE=true but no synthetic-acceptance "
@@ -149,7 +164,12 @@ def inject(config_file, framework):
     al = _resolve_al(
         content,
         injector,
-        os.path.join(os.path.dirname(__file__), "..", "benchmarks", "speedbench-reference-al.yaml"),
+        os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "benchmarks",
+            "speedbench-reference-al.yaml",
+        ),
     )
 
     _log(f"Injecting synthetic acceptance (length={al}) into {config_file}")

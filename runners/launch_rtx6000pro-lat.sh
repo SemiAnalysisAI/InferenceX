@@ -106,7 +106,9 @@ docker run \
     --env NUM_SPEC_TOKENS \
     --env RUN_EVAL \
     --env EVAL_ONLY \
+    --env EVAL_FRAMEWORK \
     --env EVAL_LIMIT \
+    --env EVAL_SUITE \
     --env EVAL_MAX_MODEL_LEN \
     --env RUNNER_TYPE \
     --env RUNNER_NAME \

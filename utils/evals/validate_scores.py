@@ -2,9 +2,11 @@
 """Validate eval scores against per-task and per-model thresholds."""
 
 from __future__ import annotations
+
 import argparse
 import glob
 import json
+import math
 import os
 import re
 import sys
@@ -67,6 +69,49 @@ def resolve_threshold(config: dict, prefix: str | None, task: str, fallback: flo
     if task in default:
         return default[task], "default"
     return fallback, "min-score"
+
+def invalid_effective_count(data: dict, task: str) -> tuple[bool, object]:
+    """Return whether an explicitly present effective count is invalid."""
+    if "n-samples" not in data:
+        return False, None
+    sample_counts = data["n-samples"]
+    if not isinstance(sample_counts, dict) or task not in sample_counts:
+        return True, sample_counts
+    task_samples = sample_counts[task]
+    if not isinstance(task_samples, dict) or "effective" not in task_samples:
+        return True, task_samples
+    effective = task_samples["effective"]
+    invalid = (
+        isinstance(effective, bool)
+        or not isinstance(effective, (int, float))
+        or not math.isfinite(effective)
+        or effective <= 0
+    )
+    return invalid, effective
+
+def metric_prefixes(data: dict, task: str, override: str | None) -> tuple[str, ...]:
+    """Resolve score metric prefixes from an explicit override or task config."""
+    if override is not None:
+        return (override,)
+    task_config = data.get("configs", {}).get(task, {})
+    metric_list = task_config.get("metric_list", [])
+    declared = tuple(
+        f"{item['metric']},"
+        for item in metric_list
+        if isinstance(item, dict)
+        and isinstance(item.get("metric"), str)
+        and item["metric"]
+    )
+    return declared or ("exact_match,",)
+
+
+def integration_error_message(error: object) -> str:
+    """Render the structured integration error fields for a direct failure."""
+    if isinstance(error, dict):
+        error_type = error.get("type", "unknown")
+        message = error.get("message", "")
+        return f"{error_type}: {message}"
+    return f"unknown: {error}"
 
 
 def validate_batch_manifest(
@@ -197,8 +242,9 @@ def main() -> int:
         help="Override the detected model prefix (default: read from meta_env.json / $MODEL_PREFIX)",
     )
     parser.add_argument(
-        "--metric-prefix", default="exact_match,",
-        help="Only check metrics whose name starts with this prefix (default: 'exact_match,')",
+        "--metric-prefix",
+        default=None,
+        help="Override task-config metric selection with one metric prefix",
     )
     parser.add_argument(
         "--results-glob", default="results*.json",
@@ -277,10 +323,28 @@ def main() -> int:
         conc_label = f"[conc={match.group(1)}] " if match else ""
         with open(f) as fh:
             data = json.load(fh)
+        if "integration_error" in data:
+            print(
+                f"FAIL: {conc_label}integration failure: "
+                f"{integration_error_message(data['integration_error'])}",
+                file=sys.stderr,
+            )
+            failed = True
+            continue
         for task, metrics in data.get("results", {}).items():
+            invalid_effective, effective = invalid_effective_count(data, task)
+            if invalid_effective:
+                print(
+                    f"FAIL: {conc_label}{task} invalid effective sample count: "
+                    f"{effective!r}",
+                    file=sys.stderr,
+                )
+                failed = True
+                continue
             min_score, source = resolve_threshold(config, prefix, task, args.min_score)
+            prefixes = metric_prefixes(data, task, args.metric_prefix)
             for name, val in metrics.items():
-                if not name.startswith(args.metric_prefix) or "stderr" in name:
+                if not name.startswith(prefixes) or "stderr" in name:
                     continue
                 if not isinstance(val, (int, float)):
                     continue
@@ -297,7 +361,8 @@ def main() -> int:
                     )
 
     if checked == 0:
-        print("WARN: no metrics matched prefix '{}'".format(args.metric_prefix), file=sys.stderr)
+        selector = args.metric_prefix or "declared task metrics"
+        print(f"WARN: no metrics matched {selector!r}", file=sys.stderr)
 
     return 1 if (failed or checked == 0) else 0
 

@@ -2,6 +2,11 @@ name: Template - Benchmark
 on:
   workflow_call:
     inputs:
+      klaud-run:
+        description: "Run Klaud Cold benchmarks at background priority"
+        required: false
+        type: boolean
+        default: false
       runner:
         required: true
         type: string
@@ -90,6 +95,16 @@ on:
         type: boolean
         required: false
         default: false
+      eval-framework:
+        description: "Eval runner (lm-eval, swebench, kimi-vendor, minimax-vendor, or bfcl)"
+        type: string
+        required: false
+        default: "lm-eval"
+      eval-suite:
+        description: "Eval suite (kimi_tool_call_schema, kimi_tool_call_schema_full, minimax_m3_smoke, minimax_m3_full, bfcl_smoke, bfcl_vllm_minimax_m3, or bfcl_vllm_kimi); empty for lm-eval and swebench"
+        type: string
+        required: false
+        default: ""
       random-range-ratio:
         required: false
         type: string
@@ -179,6 +194,8 @@ env:
   DISAGG: ${{ inputs.disagg }}
   RUN_EVAL: ${{ inputs.run-eval }}
   EVAL_ONLY: ${{ inputs.eval-only }}
+  EVAL_FRAMEWORK: ${{ inputs.eval-framework }}
+  EVAL_SUITE: ${{ inputs.eval-suite }}
   # Agentic-coding env. Fixed-seq-len jobs leave these empty.
   SCENARIO_TYPE: ${{ inputs.scenario-type }}
   SCENARIO_SUBDIR: ${{ inputs.scenario-type == 'agentic-coding' && 'agentic/' || 'fixed_seq_len/' }}
@@ -202,8 +219,6 @@ env:
   SWEBENCH_USE_MODAL: 'true'
   MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
   MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
-  # These b300 nodes are currently broken.
-  SALLOC_EXCLUDE: 'b300-005,b300-006'
 
 permissions:
   contents: read
@@ -214,26 +229,47 @@ jobs:
       ${{ fromJSON(
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
         (
-          inputs.skip-queue-pr != '' &&
-          format(
-            '["self-hosted",{0},{1},{2},{3}]',
-            toJSON(inputs.runner),
-            toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
-            toJSON(format('ci-attempt-{0}', github.run_attempt)),
-            toJSON(format('ci-skip-queue-pr-{0}', inputs.skip-queue-pr))
+          vars.NODE_SLOT_SCHEDULER_ENABLED == 'true' &&
+          (
+            inputs.skip-queue-pr != '' &&
+            format(
+              '["self-hosted",{0},{1},{2},{3},{4}]',
+              toJSON(inputs.runner),
+              toJSON('nodes:1'),
+              toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
+              toJSON(format('ci-attempt-{0}', github.run_attempt)),
+              toJSON(format('ci-skip-queue-pr-{0}', inputs.skip-queue-pr))
+            ) ||
+            format(
+              '["self-hosted",{0},{1},{2},{3}]',
+              toJSON(inputs.runner),
+              toJSON('nodes:1'),
+              toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
+              toJSON(format('ci-attempt-{0}', github.run_attempt))
+            )
           ) ||
-          format(
-            '["self-hosted",{0},{1},{2}]',
-            toJSON(inputs.runner),
-            toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
-            toJSON(format('ci-attempt-{0}', github.run_attempt))
+          (
+            inputs.skip-queue-pr != '' &&
+            format(
+              '["self-hosted",{0},{1},{2},{3}]',
+              toJSON(inputs.runner),
+              toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
+              toJSON(format('ci-attempt-{0}', github.run_attempt)),
+              toJSON(format('ci-skip-queue-pr-{0}', inputs.skip-queue-pr))
+            ) ||
+            format(
+              '["self-hosted",{0},{1},{2}]',
+              toJSON(inputs.runner),
+              toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
+              toJSON(format('ci-attempt-{0}', github.run_attempt))
+            )
           )
         ) ||
         format('[{0}]', toJSON(inputs.runner))
       ) }}
     timeout-minutes: 500
     name: >-
-      p${{ inputs.priority }} | ${{ inputs.model-prefix }} ${{ inputs.precision }} ${{ inputs.runner }} ${{ inputs.framework == 'sglang' && 'sgl' || inputs.framework == 'dynamo-sglang' && 'dyn-sgl' || inputs.framework == 'sglang-disagg' && 'sgl-disagg' || inputs.framework }}
+      ${{ inputs.klaud-run && 'klaud | ' || '' }}p${{ inputs.priority }} | ${{ inputs.model-prefix }} ${{ inputs.precision }} ${{ inputs.runner }} ${{ inputs.framework == 'sglang' && 'sgl' || inputs.framework == 'dynamo-sglang' && 'dyn-sgl' || inputs.framework == 'sglang-disagg' && 'sgl-disagg' || inputs.framework }}
       TP${{ inputs.tp }}${{ inputs.pp != '' && inputs.pp != '1' && format('/PP{0}', inputs.pp) || '' }}${{ inputs.dcp-size != '' && inputs.dcp-size != '1' && format('/DCP{0}', inputs.dcp-size) || '' }}${{ inputs.pcp-size != '' && inputs.pcp-size != '1' && format('/PCP{0}', inputs.pcp-size) || '' }}${{ inputs.ep != '' && inputs.ep != '1' && format('/EP{0}', inputs.ep) || '' }}${{ inputs.dp-attn && '/DPA' || '' }}
       ${{ inputs.spec-decoding != 'none' && inputs.spec-decoding || '' }}
       ${{ inputs.kv-offloading != '' && inputs.kv-offloading != 'none' && format('{0} KV offload', inputs.kv-offloading) || '' }}
@@ -242,6 +278,13 @@ jobs:
     steps:
       - name: Resource cleanup (pre-run)
         run: &resource-cleanup |
+          # Containerized AMD Slurm jobs can leave root-owned artifacts when
+          # interrupted before their launcher EXIT trap runs. Repair ownership
+          # before checkout cleanup and again after the job via this shared step.
+          if [[ "${{ inputs.runner }}" == "cluster:mi355x-amds" && -d "$GITHUB_WORKSPACE" ]]; then
+            sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE"
+          fi
+
           # Cleanup Docker resources
           if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
             echo "[Docker] Cleaning up resources ..."
@@ -288,7 +331,7 @@ jobs:
             done
           fi
 
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           token: ${{ secrets.REPO_PAT }}
           fetch-depth: 0
@@ -305,10 +348,14 @@ jobs:
           # We'll publish a single combined eval table in the collection job instead.
           GITHUB_STEP_SUMMARY: ''
         run: |
-          export RESULT_FILENAME="$RESULT_FILENAME_BASE"
-          if [ -n "$RECIPE_FINGERPRINT" ]; then
-            export RESULT_FILENAME="${RESULT_FILENAME}_recipe-${RECIPE_FINGERPRINT:0:16}"
+          if [[ -f utils/result_filename.py ]]; then
+            RESULT_FILENAME=$(python3 utils/result_filename.py)
+          else
+            # Older measured commits predate the helper; preserve safe identity.
+            RESULT_FILENAME=$(printf '%s\0' "$RESULT_FILENAME_BASE" "$RECIPE_FINGERPRINT" | sha256sum)
+            RESULT_FILENAME="${RESULT_FILENAME%% *}"
           fi
+          export RESULT_FILENAME
           export GPU_COUNT=$((TP * PP_SIZE * PCP_SIZE))
           echo "GPU_COUNT=${GPU_COUNT}" >> "$GITHUB_ENV"
 
@@ -422,10 +469,13 @@ jobs:
         if: ${{ always() && (env.RUN_EVAL == 'true' || inputs.eval-only) }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: eval_${{ env.EXP_NAME }}_${{ env.RESULT_FILENAME }}
+          name: eval_${{ env.RESULT_FILENAME }}_${{ env.EVAL_FRAMEWORK }}_${{ env.EVAL_SUITE }}_${{ github.run_attempt }}
           path: |
             meta_env.json
             results*.json
+            *_report.json
+            *_results.jsonl
+            *_artifacts.tar.gz
             sample*.jsonl
             agent_preds.json
             predictions.jsonl
@@ -443,7 +493,10 @@ jobs:
           rm -f meta_env.json || true
           # Remove any eval results JSONs that were moved into workspace
           rm -f results*.json || true
+          rm -f -- ./*_report.json || true
+          rm -f -- ./*_results.jsonl || true
           rm -f sample*.jsonl || true
+          rm -f -- ./*_artifacts.tar.gz || true
           rm -f agent_preds.json predictions.jsonl swebench_report_*.json *.traj* || true
           
       - name: Resource cleanup (post-run)

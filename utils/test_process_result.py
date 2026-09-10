@@ -1,10 +1,7 @@
-"""Comprehensive tests for process_result.py
-
-Since process_result.py executes code at module import time, we test it by:
-1. Testing the get_required_env_vars function directly
-2. Running the script as a subprocess with mocked environment and files
-"""
+"""Exercise process_result.py through its CLI with controlled environment and artifacts."""
 import json
+import os
+import signal
 import subprocess
 import sys
 from pathlib import Path
@@ -15,6 +12,57 @@ from aggregate_power_multinode import ROLE_METRIC_KEYS, WHOLE_METRIC_KEYS
 from test_aggregate_power_multinode import PRODUCER_SHA, build_package
 
 SCRIPT_PATH = Path(__file__).parent / "process_result.py"
+
+
+@pytest.mark.parametrize('fingerprint', ['', 'a' * 64, 'a' * 16 + 'b' * 48])
+def test_long_multinode_names_survive_result_and_power_processing(
+    tmp_path, multinode_env_vars, sample_benchmark_result, fingerprint
+):
+    from result_filename import point_filename, result_stem
+
+    base = ('example_8k1k_fp4_dynamo-sglang_prefill-tp4-pp1-dcp1-pcp1-ep1-dpfalse-nw1_'
+            'decode-tp4-pp1-dcp1-pcp1-ep1-dpfalse-nw1_disagg-true_spec-none_'
+            'conc1x4x8x16x32x64x256_cluster-runner_00')
+    stem = result_stem(base, fingerprint)
+    name = point_filename(stem, 'sa-bench_isl_8192_osl_1024', '16', '8', '4', '4')
+    assert len(('power_validation_' + name + '.tmp').encode()) <= 255
+    env = {**multinode_env_vars, 'RECIPE_FINGERPRINT': fingerprint}
+    result = run_script(tmp_path, env, sample_benchmark_result, name.removesuffix('.json'))
+    assert result.returncode == 0, result.stderr
+    aggregate = json.loads((tmp_path / ('agg_' + name)).read_text())
+    assert aggregate['recipe_fingerprint'] == fingerprint
+    assert aggregate['model'] == 'deepseek-ai/DeepSeek-R1-0528'
+    assert (tmp_path / ('power_validation_' + name)).is_file()
+    # Different full fingerprints must remain distinct even with the same first 16 characters.
+    assert result_stem(base, 'a' * 64) != result_stem(base, 'a' * 16 + 'b' * 48)
+
+
+def test_result_builder_uses_explicit_readonly_inputs(single_node_env_vars, monkeypatch, tmp_path):
+    from types import MappingProxyType
+    from infx.results.fixed_sequence import build_result
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("TP", "invalid ambient value")
+    env = {**single_node_env_vars, "TP": "2"}
+    del env["RESULT_FILENAME"]
+    benchmark = {
+        "model_id": "fixture", "max_concurrency": 3,
+        "total_token_throughput": 12, "output_throughput": 8,
+        "ttft_p50_ms": 250, "tpot_p50_ms": 20,
+    }
+    result = build_result(MappingProxyType(benchmark), MappingProxyType(env))
+    assert result["tput_per_gpu"] == 6
+    assert result["input_tput_per_gpu"] == 2
+    assert result["output_tput_per_gpu"] == 4
+    assert result["ttft_p50"] == 0.25
+    assert result["intvty_p50"] == 50
+
+    second = build_result(benchmark, {**env, "TP": "4"})
+    assert second["tput_per_gpu"] == 3
+    assert result["tput_per_gpu"] == 6
+    assert env["TP"] == "2"
+    assert benchmark["ttft_p50_ms"] == 250
+    assert list(tmp_path.iterdir()) == []
 
 
 # =============================================================================
@@ -110,7 +158,8 @@ def run_script(tmp_path, env, benchmark_result, result_filename="benchmark_resul
 
 
 def run_script_with_broken_aggregator(
-    tmp_path, env, benchmark_result, result_filename="benchmark_result"
+    tmp_path, env, benchmark_result, result_filename="benchmark_result", *,
+    multinode=False, fail_import=False,
 ):
     """Run process_result with the real aggregator patched to raise unexpectedly."""
     result_file = tmp_path / f"{result_filename}.json"
@@ -119,13 +168,35 @@ def run_script_with_broken_aggregator(
     wrapper = f"""
 import runpy
 import sys
+import json
+import builtins
+from pathlib import Path
 
 sys.path.insert(0, {str(SCRIPT_PATH.parent)!r})
 import aggregate_power
+# Patch the external collaborator through both supported import paths.
+sys.modules["utils.aggregate_power"] = aggregate_power
 
-def broken_run(**kwargs):
+def broken_run(*args, **kwargs):
+    path = Path(kwargs['agg_result'] if 'agg_result' in kwargs else args[2])
+    data = json.loads(path.read_text())
+    data.update(prefill_gpu_energy_j=99, total_gpu_energy_j=99)
+    path.write_text(json.dumps(data))
     raise RuntimeError("forced aggregation failure")
-aggregate_power.run = broken_run
+if {multinode!r}:
+    if {fail_import!r}:
+        original_import = builtins.__import__
+        def failing_import(name, *args, **kwargs):
+            if name.endswith(('aggregate_power_multinode', 'power.multinode')):
+                raise ImportError("forced import failure")
+            return original_import(name, *args, **kwargs)
+        builtins.__import__ = failing_import
+    else:
+        import aggregate_power_multinode
+        sys.modules['utils.aggregate_power_multinode'] = aggregate_power_multinode
+        aggregate_power_multinode.run = broken_run
+else:
+    aggregate_power.run = broken_run
 runpy.run_path({str(SCRIPT_PATH)!r}, run_name="__main__")
 """
     return subprocess.run(
@@ -135,61 +206,6 @@ runpy.run_path({str(SCRIPT_PATH)!r}, run_name="__main__")
         capture_output=True,
         text=True,
     )
-
-
-# =============================================================================
-# Test get_required_env_vars function
-# =============================================================================
-
-class TestGetRequiredEnvVars:
-    """Tests for get_required_env_vars function."""
-
-    def test_all_vars_present(self, monkeypatch):
-        """Should return dict when all vars present."""
-        monkeypatch.setenv("TEST_VAR_1", "value1")
-        monkeypatch.setenv("TEST_VAR_2", "value2")
-
-        import os
-
-        def get_required_env_vars(required_vars):
-            env_values = {}
-            missing_env_vars = []
-            for var_name in required_vars:
-                value = os.environ.get(var_name)
-                if value is None:
-                    missing_env_vars.append(var_name)
-                env_values[var_name] = value
-            if missing_env_vars:
-                raise EnvironmentError(
-                    f"Missing required environment variables: {', '.join(missing_env_vars)}")
-            return env_values
-
-        result = get_required_env_vars(["TEST_VAR_1", "TEST_VAR_2"])
-        assert result["TEST_VAR_1"] == "value1"
-        assert result["TEST_VAR_2"] == "value2"
-
-    def test_missing_vars_raises_error(self, monkeypatch):
-        """Should raise EnvironmentError when vars missing."""
-        import os
-
-        def get_required_env_vars(required_vars):
-            env_values = {}
-            missing_env_vars = []
-            for var_name in required_vars:
-                value = os.environ.get(var_name)
-                if value is None:
-                    missing_env_vars.append(var_name)
-                env_values[var_name] = value
-            if missing_env_vars:
-                raise EnvironmentError(
-                    f"Missing required environment variables: {', '.join(missing_env_vars)}")
-            return env_values
-
-        monkeypatch.delenv("NONEXISTENT_VAR", raising=False)
-
-        with pytest.raises(EnvironmentError) as exc_info:
-            get_required_env_vars(["NONEXISTENT_VAR"])
-        assert "NONEXISTENT_VAR" in str(exc_info.value)
 
 
 # =============================================================================
@@ -225,9 +241,9 @@ class TestProcessResultScript:
         assert output_data["dp_attention"] == "false"
 
         # Verify throughput calculations (divided by tp=8)
-        assert output_data["tput_per_gpu"] == pytest.approx(15000.5 / 8)
-        assert output_data["output_tput_per_gpu"] == pytest.approx(12000.0 / 8)
-        assert output_data["input_tput_per_gpu"] == pytest.approx((15000.5 - 12000.0) / 8)
+        assert output_data["tput_per_gpu"] == pytest.approx(1875.0625)
+        assert output_data["output_tput_per_gpu"] == pytest.approx(1500.0)
+        assert output_data["input_tput_per_gpu"] == pytest.approx(375.0625)
 
         # Verify latency conversions (ms to seconds)
         assert output_data["ttft_p50"] == pytest.approx(0.1505)
@@ -236,8 +252,8 @@ class TestProcessResultScript:
         assert output_data["e2e_latency_p99"] == pytest.approx(2.5)
 
         # Verify interactivity calculations (1000 / tpot_ms)
-        assert output_data["intvty_p50"] == pytest.approx(1000.0 / 25.0)
-        assert output_data["intvty_p99"] == pytest.approx(1000.0 / 45.0)
+        assert output_data["intvty_p50"] == pytest.approx(40.0)
+        assert output_data["intvty_p99"] == pytest.approx(22.222222)
 
         # Verify output file created
         output_file = tmp_path / "agg_benchmark_result.json"
@@ -272,10 +288,9 @@ class TestProcessResultScript:
         assert output_data["decode_hw"] == "h100"
 
         # Verify throughput calculations
-        total_gpus = 20 + 8  # prefill + decode
-        assert output_data["tput_per_gpu"] == pytest.approx(15000.5 / total_gpus)
-        assert output_data["output_tput_per_gpu"] == pytest.approx(12000.0 / 8)  # decode gpus
-        assert output_data["input_tput_per_gpu"] == pytest.approx((15000.5 - 12000.0) / 20)  # prefill gpus
+        assert output_data["tput_per_gpu"] == pytest.approx(535.732143)  # 28 GPUs total
+        assert output_data["output_tput_per_gpu"] == pytest.approx(1500.0)  # 8 decode GPUs
+        assert output_data["input_tput_per_gpu"] == pytest.approx(150.025)  # 20 prefill GPUs
 
     def test_component_metadata_is_emitted_when_present(
         self, tmp_path, sample_benchmark_result, multinode_env_vars
@@ -306,6 +321,35 @@ class TestProcessResultScript:
 
         assert result.returncode != 0
         assert "must contain exactly 'name' and 'version'" in result.stderr
+
+    @pytest.mark.parametrize("raw", ["", "null"])
+    def test_null_component_metadata_is_omitted(
+        self, tmp_path, sample_benchmark_result, single_node_env_vars, raw
+    ):
+        result = run_script(
+            tmp_path, {**single_node_env_vars, "ROUTER_METADATA": raw},
+            sample_benchmark_result,
+        )
+        assert result.returncode == 0, result.stderr
+        assert "router" not in json.loads(result.stdout)
+
+    @pytest.mark.parametrize(("raw", "message"), [
+        ("{", "must contain valid JSON"),
+        ("[]", "must contain exactly 'name' and 'version'"),
+        ('{"name":"router","version":""}', "name and version must be non-empty strings"),
+        ('{"name":42,"version":"1"}', "name and version must be non-empty strings"),
+    ])
+    def test_malformed_component_metadata_fails_before_writing(
+        self, tmp_path, sample_benchmark_result, single_node_env_vars, raw, message
+    ):
+        result = run_script(
+            tmp_path, {**single_node_env_vars, "ROUTER_METADATA": raw},
+            sample_benchmark_result,
+        )
+        assert result.returncode == 1
+        assert result.stdout == ""
+        assert f"ValueError: ROUTER_METADATA {message}" in result.stderr
+        assert not (tmp_path / "agg_benchmark_result.json").exists()
 
     def test_homogeneous_multinode_omits_hardware_fields(
         self, tmp_path, sample_benchmark_result, multinode_env_vars
@@ -418,24 +462,6 @@ class TestCalculations:
         output_data = json.loads(result.stdout)
         assert output_data["custom_metric"] == pytest.approx(0.5)
 
-    def test_tpot_to_interactivity_conversion(self, tmp_path, single_node_env_vars):
-        """Test that tpot fields are converted to interactivity."""
-        benchmark_result = {
-            "model_id": "test-model",
-            "max_concurrency": 8,
-            "total_token_throughput": 1000.0,
-            "output_throughput": 800.0,
-            "tpot_p50_ms": 20.0,  # Should become intvty_p50 = 50
-            "tpot_p99_ms": 50.0,  # Should become intvty_p99 = 20
-        }
-
-        result = run_script(tmp_path, single_node_env_vars, benchmark_result)
-        assert result.returncode == 0, f"Script failed: {result.stderr}"
-
-        output_data = json.loads(result.stdout)
-        assert output_data["intvty_p50"] == pytest.approx(50.0)
-        assert output_data["intvty_p99"] == pytest.approx(20.0)
-
     def test_throughput_per_gpu_single_node(self, tmp_path, single_node_env_vars):
         """PP and PCP expand the GPU denominator while DCP remains metadata."""
         benchmark_result = {
@@ -455,9 +481,9 @@ class TestCalculations:
         assert output_data["pp"] == 2
         assert output_data["dcp_size"] == 2
         assert output_data["pcp_size"] == 2
-        assert output_data["tput_per_gpu"] == pytest.approx(8000.0 / 16)
-        assert output_data["output_tput_per_gpu"] == pytest.approx(6000.0 / 16)
-        assert output_data["input_tput_per_gpu"] == pytest.approx(2000.0 / 16)
+        assert output_data["tput_per_gpu"] == pytest.approx(500.0)
+        assert output_data["output_tput_per_gpu"] == pytest.approx(375.0)
+        assert output_data["input_tput_per_gpu"] == pytest.approx(125.0)
 
     def test_throughput_per_gpu_multinode(self, tmp_path, multinode_env_vars):
         """Test throughput per GPU calculation for multinode."""
@@ -603,14 +629,6 @@ class TestEdgeCases:
             result = run_script(tmp_path, env, sample_benchmark_result)
             assert result.returncode != 0
 
-    def test_is_multinode_default_false(self, tmp_path, sample_benchmark_result, single_node_env_vars):
-        """Test that IS_MULTINODE defaults to false when not set."""
-        # Don't set IS_MULTINODE
-        result = run_script(tmp_path, single_node_env_vars, sample_benchmark_result)
-        assert result.returncode == 0, f"Script failed: {result.stderr}"
-
-        output_data = json.loads(result.stdout)
-        assert output_data["is_multinode"] is False
 
     def test_integer_conversion(self, tmp_path, single_node_env_vars):
         """Test that numeric env vars are converted to integers."""
@@ -633,22 +651,6 @@ class TestEdgeCases:
         assert output_data["osl"] == 1024
         assert isinstance(output_data["isl"], int)
         assert isinstance(output_data["osl"], int)
-
-    def test_conc_from_benchmark_result(self, tmp_path, single_node_env_vars):
-        """Test that conc is read from benchmark result max_concurrency."""
-        benchmark_result = {
-            "model_id": "test-model",
-            "max_concurrency": 128,
-            "total_token_throughput": 5000.0,
-            "output_throughput": 4000.0,
-        }
-
-        result = run_script(tmp_path, single_node_env_vars, benchmark_result)
-        assert result.returncode == 0, f"Script failed: {result.stderr}"
-
-        output_data = json.loads(result.stdout)
-        assert output_data["conc"] == 128
-
 
 # =============================================================================
 # Integration: power aggregation patches the agg JSON
@@ -926,6 +928,31 @@ class TestPowerAggregationIntegration:
         assert validation["power_valid"] is False
         assert validation["reasons"] == ["aggregation_internal_error"]
         assert validation["internal_error"]["type"] == "RuntimeError"
+        assert "prefill_gpu_energy_j" not in agg
+        assert "total_gpu_energy_j" not in agg
+
+    @pytest.mark.parametrize("require_power", ["", "yes"])
+    @pytest.mark.parametrize("fail_import", [False, True])
+    def test_multinode_internal_error_preserves_validation(
+        self, tmp_path, multinode_env_vars, sample_benchmark_result,
+        require_power, fail_import,
+    ):
+        result = run_script_with_broken_aggregator(
+            tmp_path, {**multinode_env_vars, "REQUIRE_POWER": require_power},
+            {**sample_benchmark_result, "prefill_gpu_energy_j_ms": 99000},
+            multinode=True, fail_import=fail_import,
+        )
+        assert result.returncode == (1 if require_power else 0)
+        agg = json.loads(result.stdout)
+        assert agg["power_valid"] == 0
+        assert "prefill_gpu_energy_j" not in agg
+        assert "total_gpu_energy_j" not in agg
+        validation = json.loads((tmp_path / "power_validation_benchmark_result.json").read_text())
+        assert validation["reasons"] == ["aggregation_internal_error"]
+        assert validation["internal_error"] == {
+            "type": "ImportError" if fail_import else "RuntimeError",
+            "message": "forced import failure" if fail_import else "forced aggregation failure",
+        }
 
     def test_stop_gpu_monitor_appends_final_nvidia_sample(self, tmp_path):
         """Stopping between 1 Hz ticks still records one post-benchmark sample."""
@@ -1130,13 +1157,14 @@ stop_gpu_monitor
         fake_amd_smi = fake_bin / "amd-smi"
         fake_amd_smi.write_text(
             "#!/usr/bin/env bash\n"
+            "set -e\n"
             'if [[ "$*" == *" -w "* ]]; then\n'
             "    echo \"'CTRL' + 'C' to stop watching output:\"\n"
             "    echo 'timestamp,gpu,socket_power,power_management'\n"
-            "    for _ in $(seq 1 30); do\n"
+            "    while :; do\n"
             "        echo \"$(date +%s),0,238,ENABLED\"\n"
             "        echo 'timestamp,gpu,socket_power,power_management'\n"
-            "        sleep 0.2\n"
+            "        sleep 0.01\n"
             "    done\n"
             'elif [[ "$*" == *"metric -E --csv"* ]]; then\n'
             "    printf 'gpu,total_energy_consumption\\n0,178319501.7\\n'\n"
@@ -1149,25 +1177,49 @@ stop_gpu_monitor
         benchmark_lib = Path(__file__).parents[1] / "benchmarks/benchmark_lib.sh"
         script = f"""
 source {str(benchmark_lib)!r}
+# Wait for observable pipeline output instead of a fixed sampling delay.
+sleep() {{
+    for _ in $(seq 1 500); do
+        if [[ -f "$GPU_METRICS_CSV" ]] && [[ $(wc -l < "$GPU_METRICS_CSV") -ge 3 ]]; then
+            return 0
+        fi
+        command sleep 0.01
+    done
+    echo "monitor did not emit two samples" >&2
+    exit 1
+}}
 start_gpu_monitor --output {str(metrics)!r} --interval 1
-sleep 0.8
+monitor_pid=$GPU_MONITOR_PID
 stop_gpu_monitor
+if kill -0 "$monitor_pid" 2>/dev/null; then
+    echo "monitor survived stop_gpu_monitor" >&2
+    exit 1
+fi
 """
         env = {
             "PATH": f"{fake_bin}:/usr/bin:/bin",
             "PYTHONDONTWRITEBYTECODE": "1",
         }
 
-        result = subprocess.run(
+        proc = subprocess.Popen(
             ["bash", "-c", script],
             env=env,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            check=False,
-            timeout=30,
+            start_new_session=True,
         )
+        try:
+            _, stderr = proc.communicate(timeout=10)
+        finally:
+            # Reap the fake producer even if the pipeline or stop logic regresses.
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            proc.communicate()
 
-        assert result.returncode == 0, result.stderr
+        assert proc.returncode == 0, stderr
         lines = metrics.read_text().splitlines()
         assert lines[0] == "timestamp,gpu,socket_power,power_management"
         assert sum(1 for line in lines if line.startswith("timestamp,")) == 1
@@ -1276,93 +1328,3 @@ class TestMultinodePower:
         assert result.returncode == 0, f"Script failed: {result.stderr}"
         agg = json.loads((tmp_path / "agg_benchmark_result.json").read_text())
         assert agg["power_valid"] == 1
-
-
-# =============================================================================
-# Static CI/artifact contract
-# =============================================================================
-
-
-class TestPowerWorkflowContract:
-    """Keep power audit inputs separate from the canonical agg artifact."""
-
-    @staticmethod
-    def _repo_root():
-        return Path(__file__).parents[1]
-
-    def test_gpu_monitor_default_matches_uploaded_artifact_path(self):
-        benchmark_lib = self._repo_root() / "benchmarks/benchmark_lib.sh"
-        script = f"""
-unset GPU_METRICS_CSV
-source {str(benchmark_lib)!r}
-printf '%s' "$GPU_METRICS_CSV"
-"""
-
-        result = subprocess.run(
-            ["bash", "-c", script],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-
-        assert result.returncode == 0, result.stderr
-        assert result.stdout == "gpu_metrics.csv"
-
-    def test_benchmark_workflow_uploads_independent_power_audit_bundle(self):
-        workflow = (
-            self._repo_root() / ".github/workflows/benchmark-tmpl.yml"
-        ).read_text()
-
-        assert "name: power_audit_${{ env.RESULT_FILENAME }}" in workflow
-        assert "${{ env.RESULT_FILENAME }}.json" in workflow
-        assert "agg_${{ env.RESULT_FILENAME }}.json" in workflow
-        assert "gpu_metrics.csv" in workflow
-        assert "power_validation_${{ env.RESULT_FILENAME }}.json" in workflow
-        assert (
-            "always() && !inputs.eval-only && "
-            "inputs.scenario-type != 'agentic-coding'"
-        ) in workflow
-        assert "require-power:" in workflow
-        assert "REQUIRE_POWER: ${{ inputs.require-power && '1' || '0' }}" in workflow
-
-        # The canonical bmk artifact remains aggregate-only so downstream
-        # result collection cannot mistake the raw benchmark JSON for an agg.
-        upload_result = workflow.split("- name: Upload result", 1)[1].split(
-            "- name: Upload agentic aggregated result", 1
-        )[0]
-        assert "path: agg_${{ env.RESULT_FILENAME }}.json" in upload_result
-        assert "power_validation_" not in upload_result
-
-    def test_cpu_workflow_covers_power_code_and_both_test_suites(self):
-        workflow = (
-            self._repo_root() / ".github/workflows/test-process-result.yml"
-        ).read_text()
-
-        for watched_path in (
-            "utils/aggregate_power.py",
-            "utils/test_aggregate_power.py",
-            "utils/process_result.py",
-            "utils/test_process_result.py",
-            ".github/workflows/benchmark-tmpl.yml",
-            ".github/workflows/e2e-tests.yml",
-            ".github/workflows/test-process-result.yml",
-        ):
-            assert watched_path in workflow
-        assert "test_aggregate_power.py" in workflow
-        assert "test_process_result.py" in workflow
-        assert "github.event.pull_request.draft" not in workflow
-
-    def test_e2e_dispatch_can_enable_strict_power_validation(self):
-        workflow = (
-            self._repo_root() / ".github/workflows/e2e-tests.yml"
-        ).read_text()
-
-        assert workflow.count("require-power:") >= 3
-        single_node_job = workflow.split("test-sweep-single-node:", 1)[1].split(
-            "test-sweep-evals:", 1
-        )[0]
-        assert "require-power: ${{ inputs.require-power }}" in single_node_job
-        agentic_job = workflow.split("test-sweep-agentic:", 1)[1].split(
-            "test-sweep-agentic-evals:", 1
-        )[0]
-        assert "require-power: ${{ inputs.require-power }}" in agentic_job

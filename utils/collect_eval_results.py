@@ -1,10 +1,18 @@
 #!/usr/bin/env python3
-import sys
 import json
-import re
+import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
+
 from tabulate import tabulate
+
+if not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from infx.results.evals import (
+    EVAL_RESULT_FORMAT, as_int, build_row, build_rows, is_eval_result, result_order,
+)
+from infx.results.evals import result_concurrency as _result_concurrency
 
 MODEL = "Model"
 HARDWARE = "Hardware"
@@ -30,8 +38,6 @@ EM_STRICT = "EM Strict"
 EM_FLEXIBLE = "EM Flexible"
 N_EFF = "N (eff)"
 SPEC_DECODING = "Spec Decode"
-
-CONC_SUFFIX_RE = re.compile(r"_conc(\d+)(?:_\d+)?\.json$")
 
 
 def load_json(path: Path) -> Optional[Dict[str, Any]]:
@@ -66,15 +72,14 @@ def find_eval_sets(root: Path) -> List[Path]:
 
 def result_concurrency(path: Path) -> Optional[int]:
     """Extract a batched eval concurrency from a staged result filename."""
-    match = CONC_SUFFIX_RE.search(path.name)
-    return int(match.group(1)) if match else None
+    return _result_concurrency(path.name)
 
 
 def detect_lm_eval_jsons(d: Path, batched: bool = False) -> List[Path]:
-    """Return lm-eval result JSONs from one artifact directory.
+    """Return the latest collector-compatible eval result JSONs.
 
-    Legacy artifacts contribute their latest result file. Batched artifacts
-    contribute the latest result file for each `_concN` suffix.
+    Result filenames contain sortable timestamps. Mtime remains a fallback for
+    legacy names, with the filename as a deterministic tie-breaker.
     """
     immediate_jsons = set(d.glob('results*.json'))
     immediate_jsons.update(
@@ -84,15 +89,13 @@ def detect_lm_eval_jsons(d: Path, batched: bool = False) -> List[Path]:
 
     for p in immediate_jsons:
         data = load_json(p)
-        if not isinstance(data, dict):
-            continue
-        if 'lm_eval_version' in data:
+        if is_eval_result(data):
             lm_paths.append(p)
 
     if not lm_paths:
         return []
     if not batched:
-        return [max(lm_paths, key=lambda path: path.stat().st_mtime)]
+        return [max(lm_paths, key=result_order)]
 
     latest_by_conc: Dict[int, Path] = {}
     for path in lm_paths:
@@ -100,100 +103,9 @@ def detect_lm_eval_jsons(d: Path, batched: bool = False) -> List[Path]:
         if conc is None:
             continue
         current = latest_by_conc.get(conc)
-        if current is None or path.stat().st_mtime > current.stat().st_mtime:
+        if current is None or result_order(path) > result_order(current):
             latest_by_conc[conc] = path
     return [latest_by_conc[conc] for conc in sorted(latest_by_conc)]
-
-
-def detect_eval_jsons(d: Path) -> Tuple[Optional[Path], Optional[Path]]:
-    """Return the latest legacy lm-eval JSON and deprecated second slot."""
-    lm_paths = detect_lm_eval_jsons(d)
-    return (lm_paths[0] if lm_paths else None), None
-
-
-def extract_lm_metrics(json_path: Path) -> List[Dict[str, Any]]:
-    """Extract metrics from lm-eval harness result JSON.
-
-    Returns a list of metric dicts, one per task in the results.
-
-    Uses explicit structure from the JSON file:
-    - Task names from results keys
-    - Metric name from configs.metric_list
-    - Filter names from configs.filter_list
-    - Values from results[task][metric,filter]
-    """
-    data = load_json(json_path) or {}
-    results = data.get('results', {})
-    configs = data.get('configs', {})
-
-    if not results:
-        return []
-
-    extracted = []
-
-    for task in results.keys():
-        task_results = results[task]
-        task_config = configs.get(task, {})
-
-        # Base metric: from config's metric_list
-        metric_list = task_config.get('metric_list', [])
-        base_metric = metric_list[0]['metric'] if metric_list else 'exact_match'
-
-        # Filters: from config's filter_list
-        filter_list = task_config.get('filter_list', [])
-
-        strict_val, strict_se = None, None
-        flex_val, flex_se = None, None
-        accuracy_val, accuracy_se = None, None
-
-        # Helper to get value/stderr pair for filtered metrics
-        def get_val_se(filter_name: str) -> Tuple[Optional[float], Optional[float]]:
-            val_key = f"{base_metric},{filter_name}"
-            se_key = f"{base_metric}_stderr,{filter_name}"
-            return task_results.get(val_key), task_results.get(se_key)
-
-        # Extract metrics based on filter_list
-        if not filter_list:
-            # No filters - check for accuracy or use base metric
-            if 'acc' in task_results:
-                accuracy_val = task_results.get('acc')
-                accuracy_se = task_results.get('acc_stderr')
-            else:
-                strict_val = task_results.get(base_metric)
-                strict_se = task_results.get(f"{base_metric}_stderr")
-        else:
-            # Extract metrics for each filter
-            for f in filter_list:
-                fname = f['name']
-                # SWE-bench uses resolved rate as its primary score.
-                if 'strict' in fname or 'resolved' in fname:
-                    strict_val, strict_se = get_val_se(fname)
-                elif 'flex' in fname or 'extract' in fname:
-                    flex_val, flex_se = get_val_se(fname)
-
-        # N-samples (effective count)
-        n_eff = data.get('n-samples', {}).get(task, {}).get('effective')
-
-        # Model name
-        model = (
-            data.get('model_name')
-            or task_config.get('metadata', {}).get('model')
-        )
-
-        extracted.append({
-            'task': task,
-            'strict': strict_val,
-            'strict_se': strict_se,
-            'flex': flex_val,
-            'flex_se': flex_se,
-            'accuracy': accuracy_val,
-            'accuracy_se': accuracy_se,
-            'n_eff': n_eff,
-            'model': model,
-            'source': str(json_path)
-        })
-
-    return extracted
 
 
 def pct(x: Any) -> str:
@@ -210,95 +122,6 @@ def se(x: Any) -> str:
         return f" ±{float(x)*100:.2f}%"
     except Exception:
         return ''
-
-
-def as_int(x: Any, default: int = 0) -> int:
-    """Convert a metadata field to int with a fallback."""
-    try:
-        return int(x)
-    except Exception:
-        return default
-
-
-def as_bool(x: Any, default: bool = False) -> bool:
-    """Parse a metadata boolean stored as bool/string/int."""
-    if isinstance(x, bool):
-        return x
-    if x is None:
-        return default
-    return str(x).lower() == 'true'
-
-
-def build_row(meta: Dict[str, Any], m: Dict[str, Any]) -> Dict[str, Any]:
-    """Build a result row from metadata and extracted metrics."""
-    is_multinode = as_bool(meta.get('is_multinode'), False)
-    prefill_tp = as_int(meta.get('prefill_tp', meta.get('tp', 1)), 1)
-    prefill_ep = as_int(meta.get('prefill_ep', meta.get('ep', 1)), 1)
-    prefill_num_workers = as_int(meta.get('prefill_num_workers', 1), 1)
-    decode_tp = as_int(meta.get('decode_tp', meta.get('tp', 1)), 1)
-    decode_ep = as_int(meta.get('decode_ep', meta.get('ep', 1)), 1)
-    decode_num_workers = as_int(meta.get('decode_num_workers', 1), 1)
-    prefill_dp_attention = meta.get('prefill_dp_attention')
-    decode_dp_attention = meta.get('decode_dp_attention')
-    dp_attention = meta.get('dp_attention', 'none')
-
-    if prefill_dp_attention is None:
-        prefill_dp_attention = dp_attention
-    if decode_dp_attention is None:
-        decode_dp_attention = dp_attention
-
-    if is_multinode:
-        if prefill_dp_attention == decode_dp_attention:
-            dp_attention = prefill_dp_attention
-        else:
-            dp_attention = f"prefill={str(prefill_dp_attention).lower()},decode={str(decode_dp_attention).lower()}"
-
-    row = {
-        'is_multinode': is_multinode,
-        'model_prefix': meta.get('infmax_model_prefix', 'unknown'),
-        'model': m.get('model') or meta.get('model', 'unknown'),
-        'hw': meta.get('hw', 'unknown').upper(),
-        'framework': meta.get('framework', 'unknown').lower(),
-        'precision': meta.get('precision', 'unknown').lower(),
-        'spec_decoding': meta.get('spec_decoding', 'unknown'),
-        'isl': as_int(meta.get('isl', 0), 0),
-        'osl': as_int(meta.get('osl', 0), 0),
-        'tp': as_int(meta.get('tp', prefill_tp), prefill_tp),
-        'ep': as_int(meta.get('ep', prefill_ep), prefill_ep),
-        'prefill_tp': prefill_tp,
-        'prefill_ep': prefill_ep,
-        'prefill_num_workers': prefill_num_workers,
-        'decode_tp': decode_tp,
-        'decode_ep': decode_ep,
-        'decode_num_workers': decode_num_workers,
-        'conc': as_int(meta.get('conc', 0), 0),
-        'dp_attention': str(dp_attention).lower(),
-        'prefill_dp_attention': str(prefill_dp_attention).lower(),
-        'decode_dp_attention': str(decode_dp_attention).lower(),
-        'task': m.get('task', 'unknown'),
-        'em_strict': m.get('strict'),
-        'em_strict_se': m.get('strict_se'),
-        'em_flexible': m.get('flex'),
-        'em_flexible_se': m.get('flex_se'),
-        'n_eff': m.get('n_eff'),
-        'source': m.get('source'),
-    }
-
-    # Add universal score field (primary metric for unified comparison)
-    if m.get('strict') is not None:
-        row['score'] = m.get('strict')
-        row['score_name'] = 'em_strict'
-        row['score_se'] = m.get('strict_se')
-    elif m.get('accuracy') is not None:
-        row['score'] = m.get('accuracy')
-        row['score_name'] = 'accuracy'
-        row['score_se'] = m.get('accuracy_se')
-    else:
-        row['score'] = None
-        row['score_name'] = None
-        row['score_se'] = None
-
-    return row
 
 
 def collect_eval_rows(root: Path) -> List[Dict[str, Any]]:
@@ -324,9 +147,7 @@ def collect_eval_rows(root: Path) -> List[Dict[str, Any]]:
                     continue
                 row_meta = {**meta, 'conc': conc}
 
-            metrics_list = extract_lm_metrics(lm_path)
-            for metrics in metrics_list:
-                rows.append(build_row(row_meta, metrics))
+            rows.extend(build_rows(load_json(lm_path) or {}, row_meta, source=str(lm_path)))
     return rows
 
 
@@ -404,7 +225,7 @@ def main():
                     f"{pct(r['score'])}{se(r['score_se'])}",
                     f"{pct(r['em_strict'])}{se(r['em_strict_se'])}",
                     f"{pct(r['em_flexible'])}{se(r['em_flexible_se'])}",
-                    r['n_eff'] or '',
+                    r['n_eff'] if r['n_eff'] is not None else '',
                     r['model'],
                 ]
                 for r in single_node_rows
@@ -442,7 +263,7 @@ def main():
                     f"{pct(r['score'])}{se(r['score_se'])}",
                     f"{pct(r['em_strict'])}{se(r['em_strict_se'])}",
                     f"{pct(r['em_flexible'])}{se(r['em_flexible_se'])}",
-                    r['n_eff'] or '',
+                    r['n_eff'] if r['n_eff'] is not None else '',
                     r['model'],
                 ]
                 for r in multinode_rows

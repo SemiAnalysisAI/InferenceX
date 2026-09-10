@@ -21,18 +21,45 @@ COLLX_DEEPEP_V2_REPO="https://github.com/deepseek-ai/DeepEP"
 # resolution for pip wheels. The backend cache is keyed on this value, so a change forces a rebuild.
 COLLX_DEEPEP_V2_COMMIT="01dc3aaac82068020353dce2c302e38153c0bfaa"
 
+# NVSHMEM wheel for the DeepEP V2 build. Must match the image's CUDA line: the cu12
+# wheel's r12 host library on the cu130 images survives on sm90/sm100 but poisons the
+# CUDA context during symmetric-heap init over MNNVL on sm103 (gb300) — buffer creation
+# returns, then every subsequent CUDA call fails cudaErrorUnknown. Stock in-image deep_ep
+# (built against this exact cu13 wheel) runs clean on the same nodes/driver, which is how
+# the wheel was isolated. Folded into the venv cache key, so a change forces a rebuild.
+COLLX_DEEPEP_V2_NVSHMEM_SPEC="nvidia-nvshmem-cu13==3.4.5"
+
+# Torch for the DeepEP V2 venv. 2.10.0+cu130's bundled CUDA userland poisons the CUDA
+# context during nvshmem symmetric-heap init over MNNVL on sm103/driver 580.159.03 (gb300):
+# buffer creation returns, every rank's next CUDA call fails cudaErrorUnknown. Isolated by
+# a same-recipe venv that differs ONLY in torch (2.11.0 green, 2.10.0 red, on the same
+# nodes; jobs 27760 vs 27430) — the pin, the nvshmem wheel, the rack and the driver were
+# each falsified first. 2.11.0 is also what the cu130 image itself ships. Folded into the
+# venv cache key, so a change forces a rebuild.
+COLLX_DEEPEP_V2_TORCH_SPEC="torch==2.11.0"
+
+# Build-recipe generation for the DeepEP venv cache key. Bump when the BUILD FLAGS
+# change without any pin changing — "dlarch1" marks the fix that pins the RDC
+# device-link arch via NVCC_PREPEND_FLAGS (the bare dlink defaulted to sm_75 and
+# produced unloadable kernels; venvs built before this carry .ready and would
+# otherwise be reused broken).
+COLLX_DEEPEP_V2_BUILD_GEN="dlarch1"
+
 COLLX_UCCL_REPO="https://github.com/uccl-project/uccl"
 COLLX_UCCL_COMMIT="fc1b582031221645ea9fce58aeb57187713145e3"
 
-# NCCL EP (NVIDIA's native MoE dispatch/combine on the NCCL Device API). Primary path is the
-# published nccl4py wheel — it bundles libnccl_ep.so's JIT runtime and pulls the matching
-# nvidia-nccl-cu13 (>= 2.30, carrying the Device API + GIN nccl.ep needs). The from-source pins
-# below are the fallback, deferred until on-metal bring-up shows the wheel is insufficient:
-# contrib/nccl_ep is absent from the v2.29.x / v2.30.4 release tags, so any such build must use
-# this post-merge master commit (which contains contrib/nccl_ep), NOT a release tag.
-COLLX_NCCL4PY_SPEC="nccl4py[cu13]==0.3.1"
-COLLX_NCCL_EP_REPO="https://github.com/NVIDIA/nccl"
-COLLX_NCCL_EP_COMMIT="9d22d5dfec8391ee65b56df139d471f8e08e921e"
+# NCCL EP v0.2 (NVIDIA's native MoE dispatch/combine on the NCCL Device API). Shipped as the
+# nccl-extensions package (github.com/NVIDIA/nccl-extensions): it owns the nccl.ep module
+# (libnccl_ep.so JIT runtime + bindings) — nccl4py stopped bundling nccl/ep at 0.4 — and pulls
+# nccl4py for nccl.core plus nvidia-nccl-cu13==2.30.7 (Device API + GIN). nccl4py is pinned
+# alongside so a cache rebuild resolves the same tree instead of whatever pip picks that day.
+# v0.2 ships the combine-recv fence the v0.1 port of DeepEP lacked (the #642 analogue:
+# fence_view_async_shared before mbarrier_arrive(emptyBarriers) in ll_ep.cuh — present in the
+# published wheel's headers), which is what releases the low-latency ladder clamp, and fixes
+# the x86 EP16 GIN fault on B200. Two whitespace-separated pip specs: the install site
+# word-splits this deliberately, and the whole string keys the shared cache dir, so this
+# change forces a reinstall.
+COLLX_NCCL_EP_SPEC="nccl-extensions[cu13]==0.1.0 nccl4py[cu13]==0.5.0"
 
 # Print bounded command output without maintaining a parallel failure taxonomy.
 collx_log_tail() {
@@ -48,6 +75,10 @@ collx_log_tail() {
 # before any SKU-specific work.
 collx_launcher_prologue() {
   JOB_ID=""
+  # One stable timestamp per launcher invocation: the refresh path discards only
+  # squashes staged before this moment, across salloc retries and both nodes.
+  : "${COLLX_LAUNCH_EPOCH:=$(date +%s)}"
+  export COLLX_LAUNCH_EPOCH
   collx_install_launcher_fail_safe
   [ -n "${COLLX_SHARD_FILE:-}" ] || collx_die "COLLX_SHARD_FILE is required"
   collx_load_operator_config
@@ -90,7 +121,7 @@ collx_load_operator_config() {
   unset ENROOT_CACHE_PATH
   unset COLLX_EXCLUDE_NODES COLLX_NODELIST COLLX_LOCK_DIR COLLX_MASTER_PORT
   unset COLLX_SOCKET_IFNAME COLLX_RDMA_DEVICES COLLX_IB_GID_INDEX COLLX_RDMA_SERVICE_LEVEL
-  unset COLLX_RDMA_TRAFFIC_CLASS COLLX_RAIL_ISOLATED
+  unset COLLX_RDMA_TRAFFIC_CLASS COLLX_RAIL_ISOLATED COLLX_SINGLE_NODE_RDMA_DEVICES
   unset MASTER_ADDR MASTER_PORT RANK WORLD_SIZE LOCAL_RANK LOCAL_WORLD_SIZE
   config_path="${COLLECTIVEX_OPERATOR_CONFIG:-${XDG_CONFIG_HOME:-${HOME}/.config}/inferencex/collectivex.json}"
   if [ ! -e "$config_path" ]; then
@@ -190,6 +221,21 @@ collx_apply_network_profile() {
   # NVLink/XGMI path (DeepEP's allow_nvlink_for_low_latency_mode; MoRI's IntraNodeLL), so
   # they need no scale-out RDMA env and must NOT force IBGDA — verified on h200 EP8 with
   # /dev/gdrdrv absent (forcing IBGDA there would fail, as it did historically on b300).
+  #
+  # Exception: a SKU may pin a single-node HCA list. DeepEP's legacy LL Buffer
+  # self-enables IBGDA even single-node, and on b300 the image's baked
+  # NVSHMEM_HCA_PE_MAPPING steers that init onto the GPU-fabric RoCE rails, where
+  # ibv_create_ah fails at every GID index (ibgda.cpp "Unable to create ah" ->
+  # "create DCT share err"). The storage-IB rails accept AH/DCT creation, and with
+  # allow_nvlink_for_low_latency_mode the kernels move all intra-node traffic over
+  # NVLink, so those rails carry init-time control traffic only. HCA_LIST wins over
+  # the baked PE mapping (NVSHMEM warns and honors HCA_LIST) — verified on-metal
+  # 2026-07-08 (b300-010, production shape, PASS with and without the baked mapping).
+  if [ "$nodes" -le 1 ] && [ -n "${COLLX_SINGLE_NODE_RDMA_DEVICES:-}" ]; then
+    [[ "$COLLX_SINGLE_NODE_RDMA_DEVICES" =~ ^[A-Za-z][A-Za-z0-9_.-]{0,31}(:[1-9][0-9]*)?(,[A-Za-z][A-Za-z0-9_.-]{0,31}(:[1-9][0-9]*)?)*$ ]] \
+      || collx_die "invalid private single-node RDMA device selector"
+    export NVSHMEM_HCA_LIST="$COLLX_SINGLE_NODE_RDMA_DEVICES"
+  fi
   { [ "$nodes" -gt 1 ] && [ "$transport" != mnnvl ]; } || return 0
   [ -n "${COLLX_RDMA_DEVICES:-}" ] \
     || collx_die "RDMA execution requires a private device selector"
@@ -424,10 +470,24 @@ exec python3 bench/run_ep.py "$@"
 BASH
 }
 
+# Slurm job name for dashboard correlation. inferencex-dash's cluster collector
+# samples allocation names (sacct JobName) and the dashboard joins them against
+# the GHA job's runner_name — the production runners' convention
+# (--job-name="$RUNNER_NAME"). Fall back to a fixed label for hand-driven runs;
+# reject anything that is not a plain Slurm-safe token rather than quoting it.
+collx_slurm_job_name() {
+  local name="${RUNNER_NAME:-}"
+  [[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]] || name="collectivex"
+  printf '%s' "$name"
+}
+
 # Allocate via salloc's stable grant message and assign JOB_ID in this shell.
 # Record it so workflow cleanup can release a launcher interrupted by Actions.
+# The job name is prepended so a caller-supplied --job-name still wins (salloc
+# takes the last occurrence).
 collx_salloc_jobid() {
   local log_label=scheduler-allocation log job_id root="${COLLX_JOB_ROOT:-}"
+  set -- --job-name="$(collx_slurm_job_name)" "$@"
   case "${COLLX_SALLOC_ATTEMPT:-1}" in
     1) ;;
     2|3) log_label+="-a${COLLX_SALLOC_ATTEMPT}" ;;
@@ -479,12 +539,26 @@ collx_cleanup_allocation() {
 }
 
 # Import uses the configured tag because Enroot cannot reliably import a
-# digest-qualified Docker Hub reference non-interactively.
+# digest-qualified Docker Hub reference non-interactively. The digest resolved
+# here (best-effort registry HEAD, submit host) only stamps/checks the staged
+# squash's sidecar: a moved tag re-imports, an unresolved digest reuses what is
+# staged (COLLX_IMAGE_REFRESH=1 is then the update hatch).
 collx_select_image() {
-  local image="$1"
+  local image="$1" digest
   [[ "$image" =~ ^[A-Za-z0-9._/-]+:[A-Za-z0-9._-]+$ ]] \
     || collx_die "configured image reference is malformed"
   export COLLECTIVEX_IMAGE="$image"
+  if [[ ! "${COLLX_IMAGE_DIGEST:-}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+    digest="$(python3 "$COLLX_RUNTIME_DIR/probe.py" image-digest "$image" \
+      2>/dev/null)" || digest=""
+    if [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+      export COLLX_IMAGE_DIGEST="$digest"
+      collx_log "image digest $digest"
+    else
+      unset COLLX_IMAGE_DIGEST
+      collx_log "image digest unresolved; staged squash reused as-is"
+    fi
+  fi
 }
 
 # Create a per-UID cache under validated cluster-local storage. Only the fixed
@@ -632,28 +706,50 @@ collx_prepare_stage_dir() {
   export COLLX_STAGE_DIR
 }
 
+# One squash per (platform, image reference) — never per run (the run-scoped key
+# is what used to re-copy 30-65GB every run) and never per digest (a digest-scoped
+# key made a transient registry blip miss the staged file and re-import). The
+# resolved digest lives in a `<sq>.digest` sidecar instead and decides staleness.
 collx_squash_path() {
-  local squash_dir="$1" image="$2" key platform run_scope
+  local squash_dir="$1" image="$2" platform
   case "${COLLX_IMAGE_PLATFORM:-}" in
     linux/amd64) platform="" ;;
     linux/arm64) platform="_linux_arm64" ;;
     *) return 1 ;;
   esac
-  run_scope="${GITHUB_RUN_ID:-${COLLECTIVEX_EXECUTION_ID:-manual}}-${GITHUB_RUN_ATTEMPT:-1}"
-  run_scope="$(printf '%s' "$run_scope" | tr -cs 'A-Za-z0-9_.-' '-')" || return 1
-  run_scope="${run_scope#-}"; run_scope="${run_scope%-}"
-  [ -n "$run_scope" ] || return 1
-  key="${platform}_${run_scope}_$(
-    printf '%s' "$image" | sed 's#[/:@#]#_#g'
-  )"
-  printf '%s' "$squash_dir/${key}.sqsh"
+  printf '%s' "$squash_dir/${platform}_$(printf '%s' "$image" | sed 's#[/:@#]#_#g').sqsh"
+}
+
+# Reuse decision for a staged squash (pure read, callers hold the import lock):
+# echoes "reuse", or why to re-import. An unresolved digest reuses whatever is
+# staged (prefer downloaded over re-import); a resolved digest that differs from
+# the sidecar stamp means the tag moved upstream — that is the update path.
+# refresh_epoch (COLLX_IMAGE_REFRESH=1) discards only files staged before this
+# launch, so concurrent legs of the refreshing run still import exactly once.
+collx_squash_verdict() {
+  local sq="$1" digest="$2" refresh_epoch="$3" stamp="" mtime
+  [ -e "$sq" ] || { printf 'absent'; return; }
+  if [ -n "$refresh_epoch" ]; then
+    # GNU stat on the clusters; the BSD fallback keeps the seam testable on macOS.
+    mtime="$(stat -c %Y "$sq" 2>/dev/null || stat -f %m "$sq" 2>/dev/null || echo 0)"
+    [ "$mtime" -ge "$refresh_epoch" ] || { printf 'refresh-requested'; return; }
+  fi
+  [ ! -f "$sq.digest" ] || IFS= read -r stamp < "$sq.digest" || stamp=""
+  if [ -n "$digest" ] && [ -n "$stamp" ] && [ "$stamp" != "$digest" ]; then
+    printf 'digest-moved'; return
+  fi
+  printf 'reuse'
 }
 
 # collx_ensure_squash <squash_dir> <image>  ->  echoes the squash file path.
-# Imports via Enroot only if a valid squash is not already present, under a lock.
+# Imports via Enroot only when collx_squash_verdict says the staged file cannot
+# be reused (or it fails validation), under a lock.
 collx_ensure_squash() {
-  local squash_dir="$1" image="$2" key sq locks lock_fd log
+  local squash_dir="$1" image="$2" key sq locks lock_fd log verdict refresh_epoch=""
   local enroot_local="" import_rc=0 machine
+  if [ "${COLLX_IMAGE_REFRESH:-0}" = 1 ]; then
+    refresh_epoch="${COLLX_LAUNCH_EPOCH:-$(date +%s)}"
+  fi
   log="$(collx_private_log_path container-import)"
   machine="$(uname -m)"
   case "${COLLX_IMAGE_PLATFORM:-}:$machine" in
@@ -671,18 +767,22 @@ collx_ensure_squash() {
     || { collx_log_tail "$log"; return 1; }
   { exec {lock_fd}>"$locks/${key}.lock"; } 2>> "$log" \
     || { collx_log_tail "$log"; return 1; }
-  # A concurrent leg of the same run holds this lock for its full import
-  # (measured ~18 minutes for the 32 GB sglang squash on b300), so the wait
-  # must outlast an import and a timeout must say so — the empty import log
-  # would otherwise make this the only silent launcher death.
+  # The lock is content-keyed like the squash, so any concurrent leg — same run
+  # or another run importing the same image — holds it for its full import
+  # (measured ~18 minutes for the 32 GB sglang squash on b300); the wait must
+  # outlast an import and a timeout must say so — the empty import log would
+  # otherwise make this the only silent launcher death. The winner's import is
+  # everyone else's cache hit.
   flock -w 2700 "$lock_fd" 2>> "$log" \
     || { collx_log "ERROR: timed out waiting for the container import lock"
          collx_log_tail "$log"; return 1; }
-  if unsquashfs -l "$sq" >/dev/null 2>&1; then
-    collx_log "container squash ready"
+  verdict="$(collx_squash_verdict "$sq" "${COLLX_IMAGE_DIGEST:-}" "$refresh_epoch")"
+  [ "$verdict" != reuse ] || unsquashfs -l "$sq" >/dev/null 2>&1 || verdict=invalid
+  if [ "$verdict" = reuse ]; then
+    collx_log "container squash ready (reusing staged import)"
   else
-    collx_log "importing configured container image"
-    rm -f "$sq" 2>> "$log" \
+    collx_log "importing configured container image ($verdict)"
+    rm -f "$sq" "$sq.digest" 2>> "$log" \
       || { collx_log_tail "$log"; return 1; }
     # </dev/null: never block on an interactive password prompt.
     if [ "${COLLX_ENROOT_LOCAL_IMPORT:-0}" = 1 ]; then
@@ -707,6 +807,16 @@ collx_ensure_squash() {
     fi
     unsquashfs -l "$sq" >> "$log" 2>&1 \
       || { collx_log_tail "$log"; return 1; }
+    # World-readable so a different account's launcher can reuse this staging
+    # instead of dying on pyxis's "Invalid image format" against a 0600 file.
+    # The sidecar records what was imported; empty when the digest was unresolved.
+    chmod a+r "$sq" 2>/dev/null || true
+    printf '%s\n' "${COLLX_IMAGE_DIGEST:-}" > "$sq.digest" 2>> "$log" || true
+    # Retired per-run names of this image never get touched again; the age gate
+    # spares a file a concurrent old-generation run may still be reading.
+    find "$squash_dir" -maxdepth 1 -type f \
+      -name "*_$(printf '%s' "$image" | sed 's#[/:@#]#_#g').sqsh" ! -name "${sq##*/}" \
+      -mmin +2880 -delete 2>/dev/null || true
   fi
   flock -u "$lock_fd"
   exec {lock_fd}>&-
@@ -717,7 +827,10 @@ collx_ensure_squash() {
 # architecture. The squash directory must be shared with the submit host.
 collx_ensure_squash_on_job() {
   local job_id="$1" squash_dir="$2" image="$3" lock_dir="${4:-}" sq key lock
-  local log_label=container-import log attempt rc
+  local log_label=container-import log attempt rc refresh_epoch=""
+  if [ "${COLLX_IMAGE_REFRESH:-0}" = 1 ]; then
+    refresh_epoch="${COLLX_LAUNCH_EPOCH:-$(date +%s)}"
+  fi
   # The import writes tens of GB to whatever the operator gave as squash storage, and on some
   # clusters that storage is a SOFT-mounted network filesystem, i.e. one that returns an error
   # rather than blocking when its transport is briefly unavailable. gb300's /data is NFSv3 over
@@ -753,10 +866,12 @@ collx_ensure_squash_on_job() {
     srun --jobid="$job_id" --nodes="${COLLX_NODES:-1}" --ntasks="${COLLX_NODES:-1}" \
       --ntasks-per-node=1 --chdir=/tmp \
       --export="$(collx_host_exports)" \
-      bash -s -- "$sq" "$lock" "$image" "$COLLX_IMAGE_PLATFORM" \
+      bash -s -- "$sq" "$lock" "$image" "$COLLX_IMAGE_PLATFORM" "$refresh_epoch" \
+      "${COLLX_IMAGE_DIGEST:-}" "$(printf '%s' "$image" | sed 's#[/:@#]#_#g')" \
       > "$log" 2>&1 <<'BASH' || rc=$?
 set -euo pipefail
 sq="$1"; lock="$2"; image="$3"; platform="$4"
+refresh_epoch="${5:-}"; digest="${6:-}"; sanitized="${7:-}"
 machine="$(uname -m)"
 case "$platform:$machine" in
   linux/amd64:x86_64|linux/amd64:amd64|linux/arm64:aarch64|linux/arm64:arm64) ;;
@@ -774,12 +889,37 @@ mkdir -p "$(dirname "$sq")" "$(dirname "$lock")" \
 exec 9>"$lock"
 # Shared storage serializes the import; node-local storage imports in parallel.
 flock 9
-if unsquashfs -l "$sq" >/dev/null 2>&1; then
-  echo 'container squash ready'
+# Same reuse rules as collx_squash_verdict, evaluated per node (storage may be
+# node-local): a refresh discards only files staged before this launcher started
+# (a sibling node's fresh import stays); a resolved digest that differs from the
+# sidecar stamp means the tag moved; an unresolved digest reuses what is staged.
+reuse=yes
+if [ ! -e "$sq" ]; then
+  reuse=absent
+elif [ -n "$refresh_epoch" ] \
+    && [ "$(stat -c %Y "$sq" 2>/dev/null || echo 0)" -lt "$refresh_epoch" ]; then
+  reuse=refresh-requested
 else
-  rm -f -- "$sq"
+  stamp=""
+  [ ! -f "$sq.digest" ] || IFS= read -r stamp < "$sq.digest" || stamp=""
+  if [ -n "$digest" ] && [ -n "$stamp" ] && [ "$stamp" != "$digest" ]; then
+    reuse=digest-moved
+  fi
+fi
+[ "$reuse" != yes ] || unsquashfs -l "$sq" >/dev/null 2>&1 || reuse=invalid
+if [ "$reuse" = yes ]; then
+  echo 'container squash ready (reusing staged import)'
+else
+  echo "importing configured container image ($reuse)"
+  rm -f -- "$sq" "$sq.digest"
   enroot import -o "$sq" "docker://$image" </dev/null
   unsquashfs -l "$sq" >/dev/null 2>&1
+  chmod a+r "$sq" 2>/dev/null || true
+  printf '%s\n' "$digest" > "$sq.digest" || true
+  # Retired per-run names of this image never get touched again; the age gate
+  # spares a file a concurrent old-generation run may still be reading.
+  find "$(dirname "$sq")" -maxdepth 1 -type f -name "*_${sanitized}.sqsh" \
+    ! -name "${sq##*/}" -mmin +2880 -delete 2>/dev/null || true
 fi
 BASH
     [ "$rc" = 0 ] && { printf '%s' "$sq"; return 0; }

@@ -195,26 +195,6 @@ def test_multinode_formal_window_is_left_running_when_replay_is_interrupted(tmp_
     assert "--write-multinode-window running" in adapters[0]
 
 
-def test_shared_lifecycle_installs_idempotent_signal_cleanup():
-    benchmark_lib = BENCHMARK_LIB.read_text()
-
-    assert "trap '_stop_agentx_power_monitor; exit 130' INT" in benchmark_lib
-    assert "trap '_stop_agentx_power_monitor; exit 143' TERM" in benchmark_lib
-    assert 'if [ "$agentx_monitor_stopped" = "0" ]' in benchmark_lib
-
-
-def test_single_node_workflow_uploads_agentx_power_audit_artifacts():
-    workflow = (REPO_ROOT / ".github/workflows/benchmark-tmpl.yml").read_text()
-    agentic_upload = workflow.split(
-        "- name: Upload agentic raw results", 1
-    )[1].split("- name:", 1)[0]
-
-    assert "results/**" in agentic_upload
-    assert "!results/**/gpu_metrics" not in agentic_upload
-    assert "!results/**/power_validation.json" not in agentic_upload
-    assert "!results/**/agentic_power_window.json" not in agentic_upload
-
-
 @pytest.mark.parametrize(
     ("sent_signal", "expected_rc"),
     [(signal.SIGINT, 130), (signal.SIGTERM, 143)],
@@ -231,7 +211,10 @@ start_gpu_monitor() {{
     printf 'monitor-pid:%s\n' "${{BASHPID:-$$}}" >> {str(event_log)!r}
 }}
 stop_gpu_monitor() {{ printf 'monitor-stop\n' >> {str(event_log)!r}; }}
-fake_replay() {{ sleep 30; }}
+fake_replay() {{
+    printf 'replay-ready\n' >> {str(event_log)!r}
+    exec sleep 30
+}}
 trap 'printf "parent-exit\\n" >> {str(event_log)!r}' EXIT
 trap 'printf "parent-int\\n" >> {str(event_log)!r}; exit 130' INT
 trap 'printf "parent-term\\n" >> {str(event_log)!r}; exit 143' TERM
@@ -248,18 +231,25 @@ run_agentic_replay_and_write_outputs {str(result_dir)!r}
         text=True,
         start_new_session=True,
     )
-    monitor_pid = None
-    for _ in range(100):
-        if event_log.exists():
-            first_event = event_log.read_text().splitlines()[0]
-            if first_event.startswith("monitor-pid:"):
-                monitor_pid = int(first_event.split(":", 1)[1])
+    try:
+        # The monitor starts before the production signal traps are installed.
+        # Wait for replay so the signal actually exercises those traps.
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            if event_log.exists() and "replay-ready" in event_log.read_text().splitlines():
                 break
-        time.sleep(0.01)
-    assert monitor_pid is not None
+            time.sleep(0.01)
+        else:
+            pytest.fail("replay did not start")
 
-    os.killpg(proc.pid, sent_signal)
-    _, stderr = proc.communicate(timeout=5)
+        os.killpg(proc.pid, sent_signal)
+        _, stderr = proc.communicate(timeout=5)
+    finally:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        proc.communicate()
 
     assert proc.returncode == expected_rc, stderr
     events = _events(tmp_path)
