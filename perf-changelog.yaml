@@ -7128,4 +7128,4 @@
   description:
     - "Add GB200 TP4 AgentX concurrency 1-128 with native DSpark and Engram UVA DRAM offload"
     - "Use the official single-node recipe and full semianalysis_cc_traces_weka_062126 traces"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2971
