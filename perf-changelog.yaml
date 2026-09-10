@@ -6606,11 +6606,15 @@
 
 - config-keys:
     - kimik3-fp4-mi355x-vllm-disagg-agentic
+    - kimik3-fp4-mi355x-vllm-disagg-agentic-prefill-scale
+    - kimik3-fp4-mi355x-vllm-disagg-agentic-decode-scale
+    - kimik3-fp4-mi355x-vllm-disagg-agentic-balanced-scale
+    - kimik3-fp4-mi355x-vllm-disagg-agentic-dspark
   scenario-type:
     - agentic-coding
   description:
-    - "Refresh the Kimi-K3 MI355X LMCacheMP ROCm nightly pin from dev94 to dev104 after older development wheels were removed from the release index; retain the validated connector, cache geometry, and runtime configuration."
-    - "由于旧版开发 wheel 已从发布索引移除，将 Kimi-K3 MI355X 的 LMCacheMP ROCm nightly 固定版本从 dev94 更新到 dev104；保持已验证的连接器、缓存几何和运行配置不变。"
+    - "Stop pinning LMCacheMP to per-dev ROCm wheels that rotate off the release index; install from the rolling nightly-rocm assets via LMCACHE_VERSION=latest-rocm on every Kimi-K3 disagg arm while matrix metadata stays nightly-rocm."
+    - "不再将 LMCacheMP 固定到会从发布索引下架的 dev wheel；所有 Kimi-K3 disagg arm 通过 LMCACHE_VERSION=latest-rocm 从 rolling nightly-rocm 安装，矩阵元数据仍标注 nightly-rocm。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
 
 - config-keys:

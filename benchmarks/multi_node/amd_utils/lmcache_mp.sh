@@ -19,6 +19,10 @@ lmcache_mp_install_native_deps() {
 
 lmcache_mp_install() {
     local version="${LMCACHE_VERSION:-latest-rocm}"
+    # Matrix metadata uses nightly-rocm; install resolves the rolling index.
+    if [[ "$version" == nightly-rocm ]]; then
+        version=latest-rocm
+    fi
     local index="${LMCACHE_ROCM_INDEX:-https://github.com/LMCache/LMCache/releases/expanded_assets/nightly-rocm}"
     lmcache_mp_install_native_deps || return 1
 

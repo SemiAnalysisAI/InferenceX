@@ -44,6 +44,7 @@ assert "LMCACHE_CHUNK_SIZE=12288" in settings
 assert "LMCACHE_L1_SIZE_GB=1799" in settings
 assert "LMCACHE_L1_READ_TTL_SECONDS=1800" in settings
 assert "LMCACHE_MAX_GPU_WORKERS=8" in settings
+assert "LMCACHE_VERSION=latest-rocm" in settings
 assert "GPU_MEMORY_UTILIZATION=0.88" in settings
 assert "SERVER_UP_TIMEOUT=900" in settings
 assert "VLLM_K3_FORK_REF=k3-pd-recovery-integration" in settings
@@ -74,6 +75,7 @@ for expected in (
     "TOTAL_CPU_DRAM_GB=1799",
     "LMCACHE_L1_SIZE_GB=1799",
     "LMCACHE_MAX_GPU_WORKERS=8",
+    "LMCACHE_VERSION=latest-rocm",
     "VLLM_K3_FORK_REF=k3-pd-recovery-integration",
     "VLLM_K3_FORK_SHA=710a6cbef37aa7b7fb88255e09795729483943ad",
 ):
@@ -152,6 +154,7 @@ for scale_arm, num_decode_workers, concurrencies in zip(
         item.startswith("VLLM_K3_FORK_SHA=710a6cbef") for item in scale_settings
     )
     assert "LMCACHE_L1_READ_TTL_SECONDS=1800" in scale_settings
+    assert "LMCACHE_VERSION=latest-rocm" in scale_settings
     assert scale_arm["kv-offload-backend"] == {
         "name": "lmcache-k3",
         "version": "nightly-rocm",
@@ -178,6 +181,7 @@ balanced_settings = (
 assert "PREFILL_NODES=2" in balanced_settings
 assert "DECODE_NODES=2" in balanced_settings
 assert "LMCACHE_L1_READ_TTL_SECONDS=1800" in balanced_settings
+assert "LMCACHE_VERSION=latest-rocm" in balanced_settings
 assert "LMCACHE_ON_DECODE=true" not in repr(balanced_arm)
 assert balanced_arm["kv-offload-backend"] == {
     "name": "lmcache-k3",
@@ -253,16 +257,25 @@ for expected in (
 assert "--speculative-config" not in flags
 
 comp = json.loads(re.search(r"--compilation-config '(\{.*\})'", flags).group(1))
-assert comp["cudagraph_mode"] == "FULL_AND_PIECEWISE"
-assert comp["max_cudagraph_capture_size"] == 4096
-assert comp["cudagraph_capture_sizes"] == list(range(1, 81)) + [128, 256, 512, 1024, 2048, 4096]
+assert comp["cudagraph_mode"] == "PIECEWISE"
+assert comp["max_cudagraph_capture_size"] == 512
+assert comp["cudagraph_capture_sizes"] == (
+    list(range(1, 17)) + [24, 32, 48, 64, 96, 128, 256, 512]
+)
 
 decode_comp = json.loads(
     re.search(r"--compilation-config '(\{.*\})'", k3["decode_flags"]).group(1)
 )
 assert decode_comp["cudagraph_mode"] == "FULL_DECODE_ONLY"
 assert decode_comp["max_cudagraph_capture_size"] == 4096
-assert decode_comp["cudagraph_capture_sizes"] == comp["cudagraph_capture_sizes"]
+assert decode_comp["cudagraph_capture_sizes"] == list(range(1, 81)) + [
+    128,
+    256,
+    512,
+    1024,
+    2048,
+    4096,
+]
 PY
 
 echo "Kimi-K3 PD recipe tests passed"
