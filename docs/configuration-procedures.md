@@ -167,6 +167,28 @@ Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../AGENTS.md#non-nego
 7. Add script + master entry + launcher routing + changelog together.
 8. Run Bash syntax and generation checks. Inspect `spec-decoding`, draft/native method, token count, chat-template use, capture range, and resolved script.
 
+### DeepSeek-V4.1-Flash DSpark
+
+The AgentX-only `dsv41flash-fp4-<sku>-vllm-agentic-dspark` recipes use
+`vllm/vllm-openai:deepseekv41-flash-0909` at TP4 with native five-token DSpark,
+probabilistic drafting, block rejection, and adaptive verification. Throughput
+and eval both use real target verification. `--engram-config '{"cpu_offload":true}'`
+stores Engram embedding tables in pinned host DRAM accessed through UVA;
+`kv-offloading: none` describes the separate, GPU-resident KV cache. MXFP4 expert
+weights determine the recipe's `precision: fp4` label.
+
+The GPU-specific entry points share the text-only serving script, `deepseek_v41` tokenizer and
+parsers, 1M context, and the shared AgentX trace replay, power, metrics, and eval
+helpers. Concurrency is 1–128 with scheduler capacity of twice the trajectory
+concurrency. The launchers mount the repository at `/ix` for this recipe so
+AgentX runtime directories are not created under `/workspace`. Launcher-specific model paths and persistent caches are reused.
+The recipe probes the serving port on the compute node and selects an available
+port if the preferred one is occupied. Serving, replay, metrics, and eval share
+that endpoint.
+GPU sweep and eval evidence is required before calling any recipe validated.
+
+Source: [upstream recipe](https://github.com/vllm-project/recipes/blob/main/models/deepseek-ai/DeepSeek-V4.1-Flash.yaml).
+
 ## Validate
 
 Run the smallest checks that cover the edited layers.
