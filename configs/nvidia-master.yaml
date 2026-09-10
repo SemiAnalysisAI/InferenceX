@@ -10191,11 +10191,14 @@ glm5.1-fp8-b200-tilert-agentic:
           additional-settings:
           - "DECODE_NODES=1"
 
-# Hopper AgentX arms for DeepSeek-V4.1-Flash. Upstream marks h200 verified and
-# says the GB200 NVL4 TP4 layout becomes TP8 on 8-GPU nodes, so both Hopper
-# arms are TP8. `precision: fp4` labels the checkpoint's MXFP4 routed experts,
-# as on the Blackwell and MI355X arms; Hopper has no FP4 tensor cores, so the
-# MXFP4 experts run through the upconverting MoE path.
+# H200 AgentX arm for DeepSeek-V4.1-Flash. Upstream marks h200 verified and says
+# the GB200 NVL4 TP4 layout becomes TP8 on 8-GPU nodes, so this is TP8.
+# `precision: fp4` labels the checkpoint's MXFP4 routed experts, as on the
+# Blackwell and MI355X arms; Hopper has no FP4 tensor cores, so the MXFP4
+# experts run through the upconverting MoE path. The H100 arm is deferred: the
+# sparse attention indexer allocates a [max-num-batched-tokens, max-model-len]
+# buffer at startup, which is 16 GiB at 1M context and does not fit 80 GB
+# alongside the weights. Tracked separately.
 dsv41flash-fp4-h200-vllm-agentic-dspark:
   image: vllm/vllm-openai:deepseekv41-flash-0909
   model: deepseek-ai/DeepSeek-V4.1-Flash
@@ -10211,21 +10214,3 @@ dsv41flash-fp4-h200-vllm-agentic-dspark:
       # 8x141 GB holds the 511 GB checkpoint minus the UVA-offloaded Engram
       # tables, so the KV cache stays GPU-resident across the full range.
       - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
-
-# H100 is not in the upstream hardware table. It is reachable only because
-# `--engram-config '{"cpu_offload":true}'` moves the 189 GiB Engram tables to
-# host DRAM: 8x80 GB = 640 GB against a 322 GB resident checkpoint. The KV
-# headroom is far smaller than H200's, so the arm stops at concurrency 16.
-dsv41flash-fp4-h100-vllm-agentic-dspark:
-  image: vllm/vllm-openai:deepseekv41-flash-0909
-  model: deepseek-ai/DeepSeek-V4.1-Flash
-  model-prefix: dsv41flash
-  runner: cluster:h100-dgxc
-  precision: fp4
-  framework: vllm
-  multinode: false
-  scenarios:
-    agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
-      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16] }

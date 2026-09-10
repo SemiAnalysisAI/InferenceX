@@ -287,31 +287,13 @@ else
         fi
     "
 
-    # Prefer the framework-tagged script name, as the h200 launchers do, and
-    # keep the untagged name working for the recipes that predate frameworks.
-    BENCH_BASE="benchmarks/single_node/${SCENARIO_SUBDIR}${EXP_NAME%%_*}_${PRECISION}_h100"
-    BENCH_SCRIPT="${BENCH_BASE}_${FRAMEWORK}${SPEC_SUFFIX}.sh"
-    if [[ ! -f "$BENCH_SCRIPT" ]]; then
-        BENCH_SCRIPT="${BENCH_BASE}${SPEC_SUFFIX}.sh"
-    fi
-
-    # DeepSeek-V4.1-Flash creates AgentX runtime directories next to the
-    # repository, which must not land under /workspace.
-    if [[ "$MODEL_PREFIX" == "dsv41flash" ]]; then
-        CONTAINER_MOUNT_DIR=/ix
-        export INFMAX_CONTAINER_WORKSPACE=/ix
-        export RESULT_DIR=/ix/results
-    else
-        CONTAINER_MOUNT_DIR=/workspace
-    fi
-
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
-        --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache \
+        --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache \
         --no-container-mount-home \
-        --container-workdir=$CONTAINER_MOUNT_DIR/ \
+        --container-workdir=/workspace/ \
         --no-container-entrypoint --export=ALL,PORT=8888,AIPERF_DATASET_MMAP_CACHE_DIR=/aiperf_mmap_cache \
-        bash "$BENCH_SCRIPT"
+        bash benchmarks/single_node/${SCENARIO_SUBDIR}${EXP_NAME%%_*}_${PRECISION}_h100${SPEC_SUFFIX}.sh
 
     scancel $JOB_ID
 

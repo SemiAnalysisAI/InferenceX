@@ -167,44 +167,43 @@ llm-d 不是 srt-slurm 路径：InferenceX 自己持有 Slurm allocation，并�
 7. 同时添加脚本 + 主配置条目 + launcher 路由 + changelog。
 8. 运行 Bash 语法和生成检查；检查 `spec-decoding`、draft/native 方法、token 数、chat-template 使用、capture 范围和解析出的脚本。
 
-### Hopper 上的 DeepSeek-V4.1-Flash DSpark
+### H200 上的 DeepSeek-V4.1-Flash DSpark
 
-`dsv41flash-fp4-h200-vllm-agentic-dspark` 和 `dsv41flash-fp4-h100-vllm-agentic-dspark`
-是 DeepSeek-V4.1-Flash 配方的 Hopper AgentX 分支。它们与 Blackwell 分支共用
-`vllm/vllm-openai:deepseekv41-flash-0909` 和同一份纯文本服务脚本：`deepseek_v41`
-tokenizer 和解析器、1M 上下文、原生五 token DSpark（概率采样草稿、块拒绝采样、自适应
-验证），吞吐测试与 eval 均由目标模型进行真实验证。
+`dsv41flash-fp4-h200-vllm-agentic-dspark` 是 DeepSeek-V4.1-Flash 配方的 H200 AgentX
+分支。它与 Blackwell 分支共用 `vllm/vllm-openai:deepseekv41-flash-0909` 和纯文本服务
+脚本：`deepseek_v41` tokenizer 和解析器、1M 上下文、原生五 token DSpark（概率采样草稿、
+块拒绝采样、自适应验证），吞吐测试与 eval 均由目标模型进行真实验证。
 
-两个分支都使用 **TP8**，而非上游的 TP4。上游在一个 GB200 NVL4 tray 上验证 TP4，并说明
-在 8 GPU 节点上同一布局每个角色变为 TP8，而 Hopper DGXC 节点正是 8 GPU 节点。
+该分支使用 **TP8**，而非上游的 TP4。上游在一个 GB200 NVL4 tray 上验证 TP4，并说明在
+8 GPU 节点上同一布局每个角色变为 TP8，而 H200 DGXC 节点正是 8 GPU 节点。
 
-`precision: fp4` 标记检查点中 MXFP4 的路由专家权重，与同一检查点的 Blackwell 和 MI355X
-分支保持一致。Hopper 没有 FP4 tensor core，因此这些权重走上转换的 MoE 路径；该标签描述
-检查点，而非 SKU 的原生算力。
+`precision: fp4` 标记检查点中 MXFP4 的路由专家权重，与同一检查点的 Blackwell 和
+MI355X 分支保持一致。Hopper 没有 FP4 tensor core，因此这些权重走上转换的 MoE 路径；
+该标签描述检查点，而非 SKU 的原生算力。
 
-`--engram-config '{"cpu_offload":true}'` 将 189 GiB 的 Engram 表放在固定页主机 DRAM 中，
-通过 UVA 访问；`kv-offloading: none` 描述的是另行驻留 GPU 的 KV cache。这正是 Hopper 上
-显存账目成立的原因：511 GB 的检查点驻留部分降至约 322 GB。H200 为 8x141 GB，扫描并发
-1–128；H100 为 8x80 GB，KV 余量小得多，其分支到并发 16 为止。
+`--engram-config '{"cpu_offload":true}'` 将 Engram 表放在固定页主机 DRAM 中，通过 UVA
+访问；`kv-offloading: none` 描述的是另行驻留 GPU 的 KV cache。集群实测：卸载在 8 个 rank
+上为两张表各移出每 rank 11.80 GiB，共 188.8 GiB，使每 GPU 的驻留权重从 141 GiB 中约占
+35.9 GiB。
 
-**H100 不在上游硬件表中** —— 上游列出的已验证硬件为 h200、gb200、gb300 和 mi350x。
-纳入 H100 分支的理由是 Engram 卸载把驻留占用压到 640 GB 以下，且它走的是与 H200 分支
-相同的 Hopper 服务路径。在其 sweep 和 eval 证据落地前，它只是候选配方。
-
-H100 launcher 此前只解析不带 framework 的 `_h100[_mtp].sh` 脚本名；现在它与 H200
-launcher 一样优先解析带 framework 的名称，并对早于 framework 标签的配方回退到不带
-framework 的名称。两个 launcher 都为该配方将仓库挂载到 `/ix`，避免在 `/workspace`
-下创建 AgentX 运行目录；两者本来就挂载了共享 HF 缓存，因此脚本通过 `HF_HUB_CACHE`
-解析模型，而不依赖各节点的独立路径。配方在计算节点探测服务端口，首选端口被占用时选择
-可用端口，服务、回放、指标和 eval 共用同一端点。
-
-轨迹语料：两个分支都回放未截断的 `semianalysis_cc_traces_weka_062126` 语料，而不是
-256k 截断的 `..._062126_256k` 变体，因为该模型服务 1M 上下文。配方本身并未指定语料 ——
+轨迹语料：该分支回放未截断的 `semianalysis_cc_traces_weka_062126` 语料，而不是 256k
+截断的 `..._062126_256k` 变体，因为该模型服务 1M 上下文。配方本身并未指定语料 ——
 `resolve_trace_source` 选中未截断的默认值，仅仅是因为其 `dsv4*` 分支同时匹配了
 `dsv41flash` 前缀。这一依赖在调用处并不可见却至关重要，因此由
-`runners/test_dsv41flash_hopper.py` 固定；收窄该分支会静默地降级本配方的轨迹。
+`runners/test_dsv41flash_h200.py` 固定；收窄该分支会静默地降级本配方的轨迹。
 
-两个分支都必须获得 GPU sweep 和 eval 证据后才能视为已验证。
+**为何没有 H100 分支。** H100 不在上游硬件表中，且瓶颈不在权重。在 1M 上下文下，稀疏
+注意力 indexer 会在 `fp8_fp4_paged_mqa_logits` 中分配一个
+`[max-num-batched-tokens, max-model-len]` 的 logits 缓冲区，在默认 8192 batched tokens
+下恰好为 16 GiB。这是显存 profiling 阶段固定支付的启动开销，与并发无关，因此即使驻留
+权重放得下，在 80 GB 卡上并发 1 也会失败。收窄 `--max-num-batched-tokens` 可按比例缩小
+该缓冲区；收窄 `--max-model-len` 同样有效，但会强制使用 256k 截断的轨迹语料。H100 分支
+需要独立脚本而非共享符号链接，另行跟踪。
+
+launcher 为该配方将仓库挂载到 `/ix`，避免在 `/workspace` 下创建 AgentX 运行目录；它本来
+就挂载了共享 HF 缓存，因此脚本通过 `HF_HUB_CACHE` 解析模型，而不依赖各节点的独立路径。
+配方在计算节点探测服务端口，首选端口被占用时选择可用端口，服务、回放、指标和 eval 共用
+同一端点。
 
 来源：[上游配方](https://github.com/vllm-project/recipes/blob/main/models/deepseek-ai/DeepSeek-V4.1-Flash.yaml)。
 

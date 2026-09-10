@@ -2,8 +2,6 @@ import json
 import subprocess
 from pathlib import Path
 
-import pytest
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BENCHMARK_LIB = REPO_ROOT / "benchmarks" / "benchmark_lib.sh"
 
@@ -42,8 +40,8 @@ def launch(sku: str, log: Path, **env: str) -> dict:
     return json.loads(log.read_text().splitlines()[-1])
 
 
-@pytest.mark.parametrize("sku", ["h100", "h200"])
-def test_hopper_flash_runs_the_vllm_script_from_an_ix_mount(sku: str, tmp_path: Path) -> None:
+def test_h200_flash_runs_the_vllm_script_from_an_ix_mount(tmp_path: Path) -> None:
+    sku = "h200"
     serve = launch(
         sku,
         tmp_path / "launch.jsonl",
@@ -67,29 +65,6 @@ def test_hopper_flash_runs_the_vllm_script_from_an_ix_mount(sku: str, tmp_path: 
     assert "/workspace" not in mounts
     assert serve["result_dir"] == "/ix/results"
     assert "--container-workdir=/ix/" in serve["args"]
-
-
-def test_h100_still_resolves_scripts_without_a_framework_tag(tmp_path: Path) -> None:
-    """The pre-framework h100 recipes keep working after the suffix change."""
-    serve = launch(
-        "h100",
-        tmp_path / "launch.jsonl",
-        MODEL_PREFIX="qwen3.5",
-        MODEL="Qwen/Qwen3.5-397B-A17B-FP8",
-        PRECISION="fp8",
-        FRAMEWORK="sglang",
-        SPEC_DECODING="mtp",
-        TP="8",
-        RUNNER_NAME="h100-test",
-        EXP_NAME="qwen3.5_tp8_conc1",
-    )
-    script = serve["args"][-1]
-    assert script == "benchmarks/single_node/agentic/qwen3.5_fp8_h100_mtp.sh"
-    assert (REPO_ROOT / script).is_file()
-
-    mounts = next(arg for arg in serve["args"] if arg.startswith("--container-mounts="))
-    assert f"{REPO_ROOT}:/workspace/," in mounts
-    assert serve["result_dir"] == "/workspace/results"
 
 
 def resolve_loader(model_prefix: str) -> str:
