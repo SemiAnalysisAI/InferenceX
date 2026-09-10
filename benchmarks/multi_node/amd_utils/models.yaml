@@ -10,11 +10,6 @@
 #     base_flags: str          # Common flags for both prefill and decode
 #     mtp_flags: str           # Appended to decode when DECODE_MTP_SIZE > 0
 #     dp_flags: str            # Appended when DP attention is enabled (prefill or decode)
-#     no_dp_flags: str         # Appended when DP attention is disabled. Mutually exclusive
-#                              # with dp_flags -- use this (not base_flags) for any flag
-#                              # that conflicts with one in dp_flags (e.g. shared-experts
-#                              # fusion), so the two conflicting flags are never both
-#                              # emitted onto the same command line.
 #     ep_flags: str            # Appended when EP is enabled. EP-specific MoE knobs only
 #                              # (a2a backend, deepep mode, ep-dispatch algorithm). With
 #                              # ep=1 these are dropped so the MoE runs tensor-parallel (TP).
@@ -369,13 +364,8 @@ DeepSeek-R1-0528-MXFP4-v2:
       cuda_graph_bs_range: "1-128"
 
 DeepSeek-V4-Pro-AgentX: &DeepSeek-V4-Pro-AgentX
-  base_flags: "--enable-deepseek-v4-fp4-indexer --watchdog-timeout 3600 --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend dsv4 --page-size 256 --swa-full-tokens-ratio 0.1 --tool-call-parser deepseekv4 --reasoning-parser deepseek-v4 --disaggregation-transfer-backend mori --log-level info --log-level-http error"
-  # --enforce-shared-experts-fusion and dp_flags' --disable-shared-experts-fusion
-  # are documented by sglang as mutually exclusive (server_args.py), so each lives
-  # in its own bucket (no_dp_flags / dp_flags) rather than both riding on the
-  # command line at once relying on DeepseekV4ForCausalLM's internal check order.
-  no_dp_flags: "--enforce-shared-experts-fusion"
-  dp_flags: "--enable-dp-attention --enforce-shared-experts-fusion --swa-full-tokens-ratio 0.15 --enable-dp-attention-local-control-broadcast --tokenizer-worker-num 8 --stream-interval 20 --prefill-decode-interval 10"
+  base_flags: "--enable-deepseek-v4-fp4-indexer --watchdog-timeout 3600 --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend dsv4 --page-size 256 --swa-full-tokens-ratio 0.1 --enforce-shared-experts-fusion --tool-call-parser deepseekv4 --reasoning-parser deepseek-v4 --disaggregation-transfer-backend mori --tokenizer-worker-num 8 --stream-interval 20 --log-level info --log-level-http error"
+  dp_flags: "--enable-dp-attention --swa-full-tokens-ratio 0.15 --enable-dp-attention-local-control-broadcast"
   ep_flags: "--ep-dispatch-algorithm fake --moe-a2a-backend mori --deepep-mode normal"
   mtp_flags: "--speculative-algorithm EAGLE --speculative-eagle-topk 1"
   prefill:
@@ -407,12 +397,10 @@ DeepSeek-V4-Pro-AgentX: &DeepSeek-V4-Pro-AgentX
       cuda_graph_bs_range: "1-BENCH_MAX_CONC_VALUE*2"
 
 # Alias for the -0813 dated checkpoint: same serving flags/behavior as the base
-# DeepSeek-V4-Pro AgentX recipe (native EAGLE/MTP), just a different staged
-# checkpoint. Not to be confused with the DSpark-specific recipes elsewhere,
-# which use spec-decoding: draft_model and DSpark CLI flags instead.
+# DeepSeek-V4-Pro AgentX recipe 
 DeepSeek-V4-Pro-0813-AgentX: *DeepSeek-V4-Pro-AgentX
 
-DeepSeek-V4-Pro-DI: &DeepSeek-V4-Pro-DI
+DeepSeek-V4-Pro-DI:
   base_flags: "--decode-log-interval 100 --log-level info --watchdog-timeout 3600 --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend dsv4 --page-size 256 --swa-full-tokens-ratio 0.1 --disable-shared-experts-fusion --tool-call-parser deepseekv4 --reasoning-parser deepseek-v4 --disaggregation-transfer-backend mori"
   # DeepSeek-V4 built-in MTP: load via the EAGLE spec path with eagle-topk 1 (a single
   # MTP chain). NOT NEXTN -- the V3/R1 NEXTN loader crashes the dsv4 decode server at
@@ -448,8 +436,3 @@ DeepSeek-V4-Pro-DI: &DeepSeek-V4-Pro-DI
     no_dp:
       max_running_requests: 128
       cuda_graph_bs_range: "1-128"
-
-# Alias for the -0813 dated checkpoint: same serving flags/behavior as the base
-# DeepSeek-V4-Pro DI recipe (native EAGLE/MTP), just a different staged
-# checkpoint. See the AgentX alias above for details.
-DeepSeek-V4-Pro-0813-DI: *DeepSeek-V4-Pro-DI

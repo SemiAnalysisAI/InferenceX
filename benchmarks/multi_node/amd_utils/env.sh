@@ -357,6 +357,7 @@ else
         # export SGLANG_OPT_USE_FUSED_COMPRESS=true
         export SGLANG_HACK_FLASHMLA_BACKEND=unified_kv_triton
         # export SGLANG_OPT_FP8_WO_A_GEMM=false
+        export SGLANG_OPT_FP8_WO_A_FUSED_INVROPE=1
         # export SGLANG_OPT_USE_JIT_INDEXER_METADATA=false
         # export SGLANG_OPT_USE_TOPK_V2=false
         # export SGLANG_OPT_USE_AITER_INDEXER=${SGLANG_OPT_USE_AITER_INDEXER:-true}
