@@ -1031,6 +1031,7 @@ class ChangelogEntry(BaseModel):
     pr_link: str = Field(alias="pr-link")
     evals_only: bool = Field(alias="evals-only", default=False)
     all_evals: bool = Field(alias="all-evals", default=False)
+    no_evals: bool = Field(alias="no-evals", default=False)
     append_only: bool = Field(
         alias="append-only",
         default=False,
@@ -1054,6 +1055,10 @@ class ChangelogEntry(BaseModel):
     @model_validator(mode="after")
     def validate_append_only_mode(self):
         """Append-only entries are throughput deltas, never eval-only requests."""
+        if self.no_evals and (
+            self.evals_only or self.all_evals or self.eval_min_prefill_ep is not None
+        ):
+            raise ValueError("no-evals cannot be combined with eval selection fields")
         if self.append_only and (
             self.evals_only or self.all_evals or self.eval_min_prefill_ep is not None
         ):

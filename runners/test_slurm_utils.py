@@ -26,6 +26,27 @@ def run_bash(command: str, *args: Path | str) -> subprocess.CompletedProcess[str
     )
 
 
+def test_copy_fixed_sequence_results_bounds_long_utf8_config_names(tmp_path: Path) -> None:
+    source = tmp_path / 'source'
+    workspace = tmp_path / 'workspace'
+    workspace.mkdir()
+    for suffix in ('a', 'b'):
+        directory = source / ('isl8192_osl1024_' + '长' * 50 + suffix)
+        directory.mkdir(parents=True)
+        (directory / 'results_concurrency_16_gpus_8_ctx_4_gen_4.json').write_text('{"completed": 16}')
+    result = run_bash(
+        'set -eo pipefail; source "$1"; copy_fixed_sequence_results "$2" "$3" "$4"',
+        SLURM_UTILS, source, workspace, 'r' * 120,
+    )
+    assert result.returncode == 0, result.stderr
+    outputs = list(workspace.glob('*.json'))
+    assert len(outputs) == 2
+    for path in outputs:
+        assert path.name.endswith('_conc16_gpus_8_ctx_4_gen_4.json')
+        assert len(('power_validation_' + path.name + '.tmp').encode()) <= 255
+        assert json.loads(path.read_text()) == {'completed': 16}
+
+
 def test_copy_fixed_sequence_results_preserves_names_contents_and_discovery(
     tmp_path: Path,
 ) -> None:
