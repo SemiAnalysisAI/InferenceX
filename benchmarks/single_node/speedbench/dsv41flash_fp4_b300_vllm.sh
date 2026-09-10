@@ -33,13 +33,20 @@ BENCH_ARGS=(
     --tokenizer-mode deepseek_v41 --temperature 1.0
     --save-result --save-detailed --result-dir "$RESULTS_DIR"
 )
-# Catch CLI/image mismatches before spending minutes loading and warming GPUs.
-vllm bench serve --help > "$RESULTS_DIR/benchmark_cli_help.txt"
-for arg in "${BENCH_ARGS[@]}" --port --chat-template-kwargs --result-filename; do
-    if [[ "$arg" == --* ]] && ! grep -Fq -- "$arg" "$RESULTS_DIR/benchmark_cli_help.txt"; then
-        echo "Unsupported vllm bench serve option: $arg" >&2
-        exit 1
-    fi
+# Parse the exact client arguments with the installed benchmark parser. The
+# abbreviated --help output omits valid options, so it cannot validate support.
+for kwargs in '{"thinking":false}' "$CHAT_TEMPLATE_KWARGS_ON"; do
+    python3 - "${BENCH_ARGS[@]}" --port "${PORT:-8888}" \
+        --chat-template-kwargs "$kwargs" --result-filename preflight.json <<'PYEOF'
+import sys
+from vllm.benchmarks.serve import add_cli_args
+from vllm.utils.argparse_utils import FlexibleArgumentParser
+
+parser = FlexibleArgumentParser(description="SPEED-Bench client preflight")
+add_cli_args(parser)
+parser.parse_args(sys.argv[1:])
+print("SPEED-Bench client arguments accepted by installed vLLM parser")
+PYEOF
 done
 if [[ -n "${MODEL_PATH:-}" && "$MODEL_PATH" != "$MODEL" ]]; then
     hf download "$MODEL" --local-dir "$MODEL_PATH"

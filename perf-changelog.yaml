@@ -7116,3 +7116,9 @@
   description:
     - "Fix SPEED-Bench CLI compatibility: use native chat templating and preflight client flags before model startup"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2964
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-agentic-dspark
+  description:
+    - "Validate SPEED-Bench arguments with the installed parser instead of abbreviated help output"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2964
