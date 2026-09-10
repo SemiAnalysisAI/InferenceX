@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 import json
 import math
-import re
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from tabulate import tabulate
+
+if not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from infx.results.evals import EVAL_RESULT_FORMAT, is_eval_result, result_order
+from infx.results.evals import result_concurrency as _result_concurrency
 
 MODEL = "Model"
 HARDWARE = "Hardware"
@@ -33,9 +37,6 @@ EM_STRICT = "EM Strict"
 EM_FLEXIBLE = "EM Flexible"
 N_EFF = "N (eff)"
 SPEC_DECODING = "Spec Decode"
-
-CONC_SUFFIX_RE = re.compile(r"_conc(\d+)(?:_\d+)?\.json$")
-EVAL_RESULT_FORMAT = "inferencex-eval-v1"
 
 
 def load_json(path: Path) -> Optional[Dict[str, Any]]:
@@ -70,8 +71,7 @@ def find_eval_sets(root: Path) -> List[Path]:
 
 def result_concurrency(path: Path) -> Optional[int]:
     """Extract a batched eval concurrency from a staged result filename."""
-    match = CONC_SUFFIX_RE.search(path.name)
-    return int(match.group(1)) if match else None
+    return _result_concurrency(path.name)
 
 
 def detect_lm_eval_jsons(d: Path, batched: bool = False) -> List[Path]:
@@ -86,45 +86,15 @@ def detect_lm_eval_jsons(d: Path, batched: bool = False) -> List[Path]:
     )
     lm_paths = []
 
-    def recency_key(path: Path) -> Tuple[int, str]:
-        match = re.search(
-            r"\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}(?:\.\d+)?",
-            path.name,
-        )
-        if match:
-            try:
-                timestamp = match.group(0)
-                base, separator, fraction = timestamp.partition(".")
-                parsed = datetime.strptime(
-                    base,
-                    "%Y-%m-%dT%H-%M-%S",
-                ).replace(tzinfo=timezone.utc)
-                fractional_ns = (
-                    int((fraction + "000000000")[:9])
-                    if separator
-                    else 0
-                )
-                order_ns = (
-                    int(parsed.timestamp()) * 1_000_000_000
-                    + fractional_ns
-                )
-            except ValueError:
-                order_ns = path.stat().st_mtime_ns
-        else:
-            order_ns = path.stat().st_mtime_ns
-        return order_ns, path.name
-
     for p in immediate_jsons:
         data = load_json(p)
-        if not isinstance(data, dict):
-            continue
-        if data.get('result_format') == EVAL_RESULT_FORMAT or 'lm_eval_version' in data:
+        if is_eval_result(data):
             lm_paths.append(p)
 
     if not lm_paths:
         return []
     if not batched:
-        return [max(lm_paths, key=recency_key)]
+        return [max(lm_paths, key=result_order)]
 
     latest_by_conc: Dict[int, Path] = {}
     for path in lm_paths:
@@ -132,7 +102,7 @@ def detect_lm_eval_jsons(d: Path, batched: bool = False) -> List[Path]:
         if conc is None:
             continue
         current = latest_by_conc.get(conc)
-        if current is None or recency_key(path) > recency_key(current):
+        if current is None or result_order(path) > result_order(current):
             latest_by_conc[conc] = path
     return [latest_by_conc[conc] for conc in sorted(latest_by_conc)]
 
