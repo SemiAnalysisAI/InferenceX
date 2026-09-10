@@ -167,3 +167,7 @@ Dispatch `speedbench-al.yml` on the collector branch with `runner=cluster:b200-n
 `tp=4`, `model=deepseek-ai/DeepSeek-V4.1-Flash`, `model-prefix=dsv41flash`, and the
 image above. The historical `_b300_` collector filename is the workflow lookup
 convention; it does not select the allocation hardware.
+
+The collector uses SPEED-Bench's native chat templating with `--chat-template-kwargs`;
+`--use-chat-template` is not supported by this image's benchmark CLI. Client
+options are checked against the installed CLI before model loading.

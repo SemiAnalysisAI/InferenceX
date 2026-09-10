@@ -164,3 +164,7 @@ thinking 开关。只有全部 80 个 coding prompt 成功且 acceptance counter
 在采集器分支调度 `speedbench-al.yml`，设置 `runner=cluster:b200-nscale`、
 `tp=4`、`model=deepseek-ai/DeepSeek-V4.1-Flash`、`model-prefix=dsv41flash`
 及上述镜像。文件名中沿用的 `_b300_` 是工作流查找约定，不决定分配的硬件。
+
+采集器通过 `--chat-template-kwargs` 使用 SPEED-Bench 原生 chat template；
+该镜像的 benchmark CLI 不支持 `--use-chat-template`。加载模型前会检查
+已安装 CLI 是否支持所需的客户端参数。

@@ -23,6 +23,24 @@ for mode in $THINKING_MODES; do
     [[ "$mode" == on || "$mode" == off ]] || exit 1
 done
 mkdir -p "$RESULTS_DIR"
+# SPEED-Bench applies its chat template by default. This CLI has no
+# --use-chat-template switch (that belongs to other benchmark entry points).
+BENCH_ARGS=(
+    --model "$MODEL" --tokenizer "${MODEL_PATH:-$MODEL}"
+    --dataset-name speed_bench --dataset-path "$SPEEDBENCH_DIR"
+    --speed-bench-category "$CATEGORY" --speed-bench-output-len "$SPEEDBENCH_OUTPUT_LEN"
+    --num-prompts -1 --max-concurrency "$CONCURRENCY"
+    --tokenizer-mode deepseek_v41 --temperature 1.0
+    --save-result --save-detailed --result-dir "$RESULTS_DIR"
+)
+# Catch CLI/image mismatches before spending minutes loading and warming GPUs.
+vllm bench serve --help > "$RESULTS_DIR/benchmark_cli_help.txt"
+for arg in "${BENCH_ARGS[@]}" --port --chat-template-kwargs --result-filename; do
+    if [[ "$arg" == --* ]] && ! grep -Fq -- "$arg" "$RESULTS_DIR/benchmark_cli_help.txt"; then
+        echo "Unsupported vllm bench serve option: $arg" >&2
+        exit 1
+    fi
+done
 if [[ -n "${MODEL_PATH:-}" && "$MODEL_PATH" != "$MODEL" ]]; then
     hf download "$MODEL" --local-dir "$MODEL_PATH"
 else
@@ -67,13 +85,8 @@ for mode in $THINKING_MODES; do
     kwargs='{"thinking":false}'
     [[ "$mode" == off ]] || kwargs="$CHAT_TEMPLATE_KWARGS_ON"
     curl -fSs "http://localhost:$PORT/metrics" > "$RESULTS_DIR/before_${mode}.prom"
-    vllm bench serve --model "$MODEL" --tokenizer "$MODEL_PATH" --port "$PORT" \
-        --dataset-name speed_bench --dataset-path "$SPEEDBENCH_DIR" \
-        --speed-bench-category "$CATEGORY" --speed-bench-output-len "$SPEEDBENCH_OUTPUT_LEN" \
-        --num-prompts -1 --max-concurrency "$CONCURRENCY" \
-        --tokenizer-mode deepseek_v41 --use-chat-template --chat-template-kwargs "$kwargs" \
-        --temperature 1.0 --save-result --save-detailed --result-dir "$RESULTS_DIR" \
-        --result-filename "speedbench_${mode}_mtp5.json"
+    vllm bench serve "${BENCH_ARGS[@]}" --port "$PORT" \
+        --chat-template-kwargs "$kwargs" --result-filename "speedbench_${mode}_mtp5.json"
     curl -fSs "http://localhost:$PORT/metrics" > "$RESULTS_DIR/after_${mode}.prom"
 done
 python3 utils/speedbench_al.py --results-dir "$RESULTS_DIR" --output "$OUT_YAML" \
