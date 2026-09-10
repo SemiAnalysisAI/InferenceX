@@ -80,7 +80,7 @@ case "$KV_OFFLOAD_BACKEND" in
         # LMCache settings
         export PYTHONHASHSEED=0
         export LMCACHE_LOCAL_CPU=True
-        export LMCACHE_MAX_LOCAL_CPU_SIZE="$TOTAL_CPU_DRAM_GB"
+        export LMCACHE_MAX_LOCAL_CPU_SIZE=512  # GiB per TP rank (recipe value); 2 TiB total for TP4
         export LMCACHE_NUMA_MODE=auto
         export LMCACHE_CHUNK_SIZE=256
         export OFFLOAD_MIN_LOAD_TOKENS=8192
@@ -104,6 +104,8 @@ export PYTHONNOUSERSITE=1
 # ---- ATOM env ----
 export AITER_QUICK_REDUCE_QUANTIZATION=INT4
 export AITER_USE_FLYDSL_MOE_SORTING=1
+export ATOM_MLA_PAGE_SIZE=1
+export ATOM_DCP_REPLICATE_INDEX_CACHE="${ATOM_DCP_REPLICATE_INDEX_CACHE:-0}"
 
 # CUDA/HIPGRAPH settings
 case "$CONC" in
@@ -164,6 +166,7 @@ ATOM_CMD=(
     --host 0.0.0.0
     --server-port "$PORT"
     "${PARALLEL_ARGS[@]}"
+    --gpu-memory-utilization 0.95
     --online_quant_config '{"global_quant_config":"ptpc_fp8","exclude_layer":["lm_head","model.embed_tokens","*.mlp.gate","*expert*"]}'
     --max-num-seqs "$((2 * CONC))"
     --cudagraph-capture-sizes "$CUDAGRAPH_CAPTURE_SIZES"
