@@ -81,7 +81,11 @@
    ], "nccl-ep": [
     8
    ]},
-      "ll_backends": {"deepep-v2": [8], "nccl-ep": [8]},
+      "ll_backends": {
+   "nccl-ep": [
+    8
+   ]
+  },
       "fabric": {
     "nic": "AWS EFA (p6-b300.48xlarge, 16 x 400G per node)",
     "switch": "AWS EFA fabric (SRD)"

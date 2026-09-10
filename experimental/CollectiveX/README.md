@@ -221,7 +221,10 @@ NCCL GIN then rides the plugin's own GIN implementation (`OFI_NCCL_GIN_TYPE` sel
 which requires GDRCopy 2.5+ (`gdrdrv` loaded, `libgdrapi` present) on the node: without it the plugin's
 GIN init fails, NCCL disables the Device API for the communicator, and `ncclEpCreateGroup` returns
 `ncclInvalidUsage` (verified on b300-dsxe 2026-09-11; that pool ships no gdrcopy, so its EP16 legs are
-withheld from the registry until it does).
+withheld from the registry until it does). DeepEP V2 low-latency is also withheld there: its legacy
+Buffer initialises NVSHMEM with an RDMA transport even single-node, and on that pool NVSHMEM aborts
+with "nvshmem detect topo failed" (status 28) with and without `NVSHMEM_REMOTE_TRANSPORT=none`
+(runs 34521825749, 34523594787); the HT ElasticBuffer path, which needs no NVSHMEM, passes.
 
 `stage_dir` is a pre-existing, runner-owned, non-symlinked base outside the checkout and workflow
 workspace. It is not group- or world-writable and is visible at the same path on the runner and every
