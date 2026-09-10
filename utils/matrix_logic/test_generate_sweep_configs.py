@@ -2386,6 +2386,34 @@ def agentic_config(request, sample_single_node_config):
 
 
 class TestAgenticGeneration:
+    @pytest.mark.parametrize(("mode", "runtime", "budget"), [
+        ("dram", "dram", 1199),
+        ("nvme", "nvme", 0),
+        (["dram", "nvme"], "dram+nvme", 1199),
+    ])
+    def test_offload_modes_preserve_budget_and_artifact_identity(
+        self, sample_single_node_config, sample_runner_config,
+        generate_agentic_sweep, mode, runtime, budget,
+    ):
+        config = copy.deepcopy(sample_single_node_config)
+        entry = next(iter(config.values()))
+        entry.update(runner="cluster:b300-nv", multinode=False)
+        entry["scenarios"] = {"agentic-coding": [{
+            "dram-utilization": 0.80,
+            "search-space": [{
+                "tp": 4, "kv-offloading": mode,
+                "kv-offload-backend": {"name": "vllm-native"}, "conc-list": [8],
+            }],
+        }]}
+        original = copy.deepcopy(config)
+        rows = generate_agentic_sweep(config, sample_runner_config)
+        assert rows
+        for row in rows:
+            assert row["kv-offloading"] == runtime
+            assert row["total-cpu-dram-gb"] == budget
+            assert f"kv{runtime}-vllm-native" in row["exp-name"]
+        assert config == original
+
     def test_point_order_and_input_preservation(
         self, agentic_config, sample_runner_config, generate_agentic_sweep,
     ):

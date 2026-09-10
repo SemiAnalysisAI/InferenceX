@@ -266,6 +266,10 @@ git diff --check origin/main...HEAD
 
 权威来源：[完整失败摄取恢复命令](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.claude/commands/recover-failed-ingest.md)。
 
+## B200 Nscale NVMe 清理
+
+B200 兼容 launcher 会在释放 allocation 前，最多等待五分钟删除该任务专属的 NVMe 缓存。较大的分层缓存可能需要超过一分钟才能删除。清理超时仍会使任务失败，并报告残留路径；检查该确切目录，在同一节点上获得 allocation 后再删除，避免干扰其他基准测试。
+
 ## AMD root-owned 工作区的预防与恢复
 
 ### 防止复发

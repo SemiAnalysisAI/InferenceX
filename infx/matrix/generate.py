@@ -395,7 +395,7 @@ def agentic_dram_offload_gb(
       budgeted separately if it ever gains its own pool).
     """
     kv_offloading = benchmark.get(Fields.KV_OFFLOADING.value, "none")
-    if kv_offloading != "dram":
+    if kv_offloading not in ("dram", ["dram", "nvme"]):
         return 0
 
     available_mib = min(
@@ -429,13 +429,14 @@ def agentic_dram_offload_gb(
 
 
 def agentic_kv_offload_suffix(
-    kv_offloading: str,
+    kv_offloading: str | list[str],
     kv_offload_backend: dict | None,
 ) -> str:
     """Return a compact exp-name suffix for agentic KV offload settings."""
     if kv_offloading == "none":
         return "kvnone"
-    return f"kv{kv_offloading}-{kv_offload_backend['name']}"
+    mode = "+".join(kv_offloading) if isinstance(kv_offloading, list) else kv_offloading
+    return f"kv{mode}-{kv_offload_backend['name']}"
 
 
 def multinode_agentic_exp_name(
@@ -941,7 +942,9 @@ def _agentic_entries(
                 + (f"_spec-{spec_decoding}" if spec_decoding != "none" else "")
             )
         entry.update({
-            Fields.KV_OFFLOADING.value: kv_offloading,
+            Fields.KV_OFFLOADING.value: (
+                "+".join(kv_offloading) if isinstance(kv_offloading, list) else kv_offloading
+            ),
             Fields.TOTAL_CPU_DRAM_GB.value: total_cpu_dram_gb,
             Fields.DURATION.value: DEFAULT_AGENTIC_DURATION_SECONDS,
             Fields.EXP_NAME.value: exp_name,

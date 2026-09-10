@@ -14,6 +14,9 @@ import yaml
 
 CLUSTER_LABEL_PREFIX = "cluster:"
 DEFAULT_AGENTIC_DURATION_SECONDS = 3600
+KVOffloadingConfig = Union[
+    Literal["none", "dram", "nvme"], List[Literal["dram", "nvme"]]
+]
 
 """
     The below class defines the field names expected to be present in the JSON entries
@@ -328,7 +331,7 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
         default="none", alias=Fields.SPEC_DECODING.value
     )
     conc: int
-    kv_offloading: Literal["none", "dram"] = Field(
+    kv_offloading: Literal["none", "dram", "nvme", "dram+nvme"] = Field(
         alias=Fields.KV_OFFLOADING.value
     )
     kv_offload_backend: Optional[KVOffloadBackendMetadata] = Field(
@@ -531,7 +534,10 @@ def _validate_kv_offload_fields(self):
                 f"{Fields.KV_OFFLOADING.value}"
             )
         return self
-    if self.kv_offloading == "none":
+    if isinstance(self.kv_offloading, list):
+        if self.kv_offloading != ["dram", "nvme"]:
+            raise ValueError("The only supported tier list is ['dram', 'nvme']")
+    elif self.kv_offloading == "none":
         if backend is not None:
             raise ValueError(
                 f"{Fields.KV_OFFLOAD_BACKEND.value} can only be set when "
@@ -662,7 +668,7 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
     decode: Optional[WorkerConfig] = None
     num_nodes: Optional[int] = Field(
         default=None, alias=Fields.NUM_NODES.value, gt=0, strict=True)
-    kv_offloading: Optional[Literal["none", "dram"]] = Field(
+    kv_offloading: Optional[KVOffloadingConfig] = Field(
         default=None, alias=Fields.KV_OFFLOADING.value
     )
     kv_offload_backend: Optional[KVOffloadBackendMetadata] = Field(
@@ -710,6 +716,8 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
                 )
             _validate_tp_context_topology(self)
         if has_aggregate_worker or has_complete_multinode:
+            if self.kv_offloading in ("nvme", ["dram", "nvme"]):
+                raise ValueError("NVMe offloading currently requires a single-node entry")
             explicitly_single_node_fields = {
                 "pp",
                 "dcp_size",
@@ -744,7 +752,7 @@ class AgenticCodingConfig(BaseModel):
     @model_validator(mode='after')
     def validate_dram_offload_capacity(self):
         for entry in self.search_space:
-            if entry.kv_offloading != "dram":
+            if entry.kv_offloading not in ("dram", ["dram", "nvme"]):
                 continue
             if self.dram_utilization is None:
                 raise ValueError(

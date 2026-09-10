@@ -7021,3 +7021,88 @@
     - "Refresh the full GB200 Dynamo-vLLM AgentX configuration across the configured aggregate and disaggregated topology points."
     - "Retain aggregate SimpleCPU-offload concurrency 20 and 30, and configure Mooncake host KV storage, NIXL over UCX, explicit thinking mode, and the committed MiniMax-M3 EAGLE3-GQA acceptance target."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2807
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Validate vLLM cache-source attribution on the existing DeepSeek-V4-Pro B200 TP8 MTP AgentX recipe: native DRAM c8, Simple NVMe c14, and native DRAM+NVMe c14."
+    - "Use cquil11/vllm-cache-sources:b0dc209c-swa-amd64-20260909, built from the exact upstream-base wheel plus cquil11/vllm#2 at b0dc209c14451e9a4e63f1db148ed492d881b765."
+    - "Reduce GPU memory utilization to 0.85 and the tiered host cache to 64 GB to exercise filesystem promotions; retain canonical AgentX duration and collect AIPerf Prometheus exports."
+  no-evals: true
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2931
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use the r2 Docker Hub image with matching FlashInfer Python, cubin, and CUDA 13 JIT-cache packages at 0.6.18; retain the same three cache-source validation points."
+  no-evals: true
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2931
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Set OMP_NUM_THREADS=1 explicitly to preserve the proven TP8 recipe's CPU parallelism; the new runtime otherwise selects 24 startup threads per worker on B200 Nscale."
+  no-evals: true
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2931
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Remove the unproven OMP_NUM_THREADS override; keep the runtime default for official cache-source validation."
+  no-evals: true
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2931
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  no-evals: true
+  description:
+    - "Use the Python frontend that exports the fork's cache-source metric; the Rust frontend has its own metrics implementation and does not yet consume the source breakdown. Retain the existing engine, attention, TP8/MTP, and offload settings."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2931
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  no-evals: true
+  description:
+    - "Use 128 GB host cache for native DRAM and tiered points. On-cluster default-thread DRAM startup and replay passed at this budget after 649 GB failed CUDA host registration; increase the tiered staging budget from 64 GB while retaining c14 to exercise disk."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2931
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  no-evals: true
+  description:
+    - "Backport merged upstream vLLM #55712 into the validation image to reject incomplete SWA load windows at unaligned cache-hit boundaries, after tiered runs failed the missing-block assertion."
+    - "Keep b0dc209c source-attribution changes, TP8/MTP, c8 DRAM and c14 NVMe/tiered, 128 GB host budgets, and runtime-default CPU threads unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2931
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  no-evals: true
+  description:
+    - "Backport upstream vLLM #50014 unread-promotion protection into the separate validation image after direct B200 diagnostics reproduced native tiered promotion thrashing. Retain the merged #55712 SWA coverage fix and unchanged b0dc209c metrics implementation."
+    - "Keep the same three TP8/MTP points, 128 GB host budgets, GPU utilization 0.85, runtime-default CPU threads, and full AgentX duration. Pinning restored blocks can also delay new stores; this is a backend-fix validation, not a performance-neutral metrics-only comparison."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2931
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  no-evals: true
+  description:
+    - "Allow five minutes for B200 NVMe cache cleanup: run 34412940233 completed all three benchmark profiles, but the tiered job failed when the 60-second cleanup deadline interrupted deletion. Keep the image, metrics code, and three benchmark points unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2931

@@ -266,6 +266,10 @@ After pushing, never rebase, locally squash, amend, or force-push this carrier c
 
 Canonical source: [complete failed-ingest recovery command](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.claude/commands/recover-failed-ingest.md).
 
+## B200 Nscale NVMe cleanup
+
+The B200 compatibility launcher allows five minutes to remove its job-specific NVMe cache before releasing the allocation. Large tiered caches can take more than one minute to delete. A cleanup timeout still fails the job and reports the remaining path; inspect that exact directory and remove it under an allocation on the same node, without interfering with another benchmark.
+
 ## AMD root-owned workspace prevention and recovery
 
 ### Prevent recurrence

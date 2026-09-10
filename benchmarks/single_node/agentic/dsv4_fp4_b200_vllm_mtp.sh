@@ -11,7 +11,7 @@ set -x
 #   --speculative-config: synthetic acceptance length 2.49 (throughput) vs real MTP (EVAL_ONLY); see the SPEC_CONFIG block
 #   cudagraph capture sizes expressed in TOKENS (see the capture block below).
 #
-# The throughput sweep uses DEP8 with SimpleCPUOffloadConnector only. The recipe
+# The recipe supports TP8 and DEP8 with explicit KV offload backends. It
 # uses FP8 KV cache, sparse DeepSeek-V4 FlashInfer attention with an FP4 indexer
 # cache, mega-MoE, long-prefill chunking, and FULL_DECODE_ONLY CUDA graphs with
 # every decode batch captured explicitly.
@@ -19,7 +19,7 @@ set -x
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
 #
-# DEP8 offloads KV to host DRAM with KV_OFFLOAD_BACKEND=vllm-simple.
+# Native offloading supports DRAM or DRAM+NVMe; Simple supports DRAM or NVMe.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -101,7 +101,7 @@ export VLLM_ENGINE_READY_TIMEOUT_S=3600
 # store mask. 32k matches the trace-replay tuning validated for this workload.
 export VLLM_PREFIX_CACHE_RETENTION_INTERVAL=32768
 export VLLM_USE_V2_MODEL_RUNNER=1
-export VLLM_USE_RUST_FRONTEND=1
+export VLLM_USE_RUST_FRONTEND=0
 export VLLM_DSV4_MEGA_FP8_COMBINE=1
 export VLLM_RPC_TIMEOUT=600000
 
@@ -121,7 +121,7 @@ case "$KV_OFFLOAD_BACKEND" in
         require_agentic_kv_offload_none
         ;;
     vllm-simple)
-        require_agentic_kv_offload_backend vllm-simple
+        require_agentic_kv_offload_backend vllm-simple "dram nvme"
         CPU_BYTES_PER_RANK=$(( TOTAL_CPU_DRAM_GB * 1000 * 1000 * 1000 / GPU_COUNT ))
         # Identical prefixes must hash to identical block keys across DP ranks.
         export PYTHONHASHSEED=42
@@ -137,9 +137,26 @@ case "$KV_OFFLOAD_BACKEND" in
 }
 EOF
 )
+        if [ "$KV_OFFLOADING" = "nvme" ]; then
+            : "${NVME_OFFLOAD_DIR:?NVMe cache directory must be mounted by the launcher}"
+            OFFLOAD_CONFIG="{\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"kv_offload_backend\":\"disk\",\"disk_path\":\"$NVME_OFFLOAD_DIR/cache.bin\",\"disk_capacity_bytes\":$((1000000000000 / GPU_COUNT)),\"disk_buffer_slots\":4,\"lazy_offload\":false}}"
+        fi
         OFFLOAD_ARGS=(
             --kv-transfer-config
             "$OFFLOAD_CONFIG"
+        )
+        ;;
+    vllm-native)
+        require_agentic_kv_offload_backend vllm-native "dram dram+nvme"
+        export PYTHONHASHSEED=42
+        SECONDARY_TIERS='[]'
+        if [ "$KV_OFFLOADING" = "dram+nvme" ]; then
+            : "${NVME_OFFLOAD_DIR:?NVMe cache directory must be mounted by the launcher}"
+            SECONDARY_TIERS="[{\"type\":\"fs\",\"root_dir\":\"$NVME_OFFLOAD_DIR\",\"locality\":\"LOCAL\"}]"
+        fi
+        OFFLOAD_ARGS=(
+            --kv-transfer-config
+            "{\"kv_connector\":\"OffloadingConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"spec_name\":\"TieringOffloadingSpec\",\"cpu_bytes_to_use\":$((TOTAL_CPU_DRAM_GB * 1000000000)),\"secondary_tiers\":$SECONDARY_TIERS}}"
         )
         ;;
     mooncake)
@@ -280,7 +297,8 @@ echo "Starting vllm server..."
 export TORCH_CUDA_ARCH_LIST="10.0"
 export PYTHONNOUSERSITE=1
 export VLLM_FLOAT32_MATMUL_PRECISION=high
-GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.90}"
+# Reduced cache headroom for source validation; model weights need ~137 GiB/GPU.
+GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.85}"
 
 { set +x; } 2>/dev/null
 VLLM_CMD=(
