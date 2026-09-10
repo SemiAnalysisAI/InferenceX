@@ -151,19 +151,21 @@ import_squash "$SQUASH_FILE" "$IMAGE"
 # Direct vLLM single-node bring-up uses the same four-GPU tray and shared
 # storage as srt-slurm. Keep this before the router import and srtctl setup.
 if [[ "$MODEL_PREFIX" == "dsv41flash" && "$FRAMEWORK" == "vllm" && "${IS_MULTINODE:-false}" != "true" ]]; then
-    BENCH_SCRIPT="benchmarks/single_node/fixed_seq_len/${MODEL_PREFIX}_${PRECISION}_gb300_${FRAMEWORK}_mtp.sh"
-    [[ "${SPEC_DECODING:-}" == "mtp" && -f "$BENCH_SCRIPT" ]] || {
+    BENCH_SCRIPT="benchmarks/single_node/agentic/${MODEL_PREFIX}_${PRECISION}_gb300_${FRAMEWORK}_mtp.sh"
+    [[ "${IS_AGENTIC:-0}" == "1" && "${SPEC_DECODING:-}" == "mtp" && -f "$BENCH_SCRIPT" ]] || {
         echo "Unsupported single-node recipe: $BENCH_SCRIPT" >&2
         exit 1
     }
     export HF_HUB_CACHE=/hf-cache
+    export INFMAX_CONTAINER_WORKSPACE=/ix
+    export RESULT_DIR=/ix/results
     srun --account="$SLURM_ACCOUNT" --partition="$SLURM_PARTITION" \
         --nodes=1 --ntasks=1 --gpus="${TP:?}" --exclusive --mem=0 \
         --time="${SALLOC_TIME_LIMIT:-480}" --job-name="$RUNNER_NAME" \
         --mpi=none --container-image="$SQUASH_FILE" \
-        --container-mounts="$GITHUB_WORKSPACE:/workspace,$HF_HUB_CACHE_HOST_PATH:/hf-cache" \
+        --container-mounts="$GITHUB_WORKSPACE:/ix,$HF_HUB_CACHE_HOST_PATH:/hf-cache" \
         --no-container-mount-home --container-remap-root \
-        --container-workdir=/workspace --no-container-entrypoint \
+        --container-workdir=/ix --no-container-entrypoint \
         --export=ALL,PORT=8888 bash "$BENCH_SCRIPT"
     exit $?
 fi

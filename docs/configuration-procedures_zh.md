@@ -169,19 +169,18 @@ llm-d 不是 srt-slurm 路径：InferenceX 自己持有 Slurm allocation，并�
 
 ### DeepSeek-V4.1-Flash DSpark
 
-`dsv41flash-fp4-{b300,gb300}-vllm-mtp` 配方使用专用镜像
-`vllm/vllm-openai:deepseekv41-flash-0909`，采用 TP4、原生五 token
-DSpark、概率采样草稿、块拒绝采样和自适应验证。
-`--engram-config '{"cpu_offload":true}'` 将 Engram 嵌入表放在固定页主机
-DRAM 中，通过 UVA 访问。这是嵌入权重卸载；配方不启用 KV cache 卸载。
-checkpoint 的专家权重为 MXFP4，其他权重采用混合精度，因此标记为 `precision: fp4`。
+仅运行 AgentX 的 `dsv41flash-fp4-{b300,gb300}-vllm-agentic-dspark` 配方使用
+`vllm/vllm-openai:deepseekv41-flash-0909`，采用 TP4、原生五 token DSpark、
+概率采样草稿、块拒绝采样和自适应验证。吞吐测试与 eval 均由目标模型进行真实验证。
+`--engram-config '{"cpu_offload":true}'` 将 Engram 嵌入表放在固定页主机 DRAM
+中，通过 UVA 访问；`kv-offloading: none` 描述的是另行保留在 GPU 上的 KV cache。
+专家权重为 MXFP4，因此配方标记为 `precision: fp4`。
 
-服务端和基准客户端均选择 `--tokenizer-mode deepseek_v41`；
-`--use-chat-template` 调用该 tokenizer 的 V4.1 编码器。不要使用仅适用于
-V4 的 `--dsv4` 编码器。初始纯文本 8k1k sweep 覆盖并发 1–32，使用场景计算的
-上下文长度，并禁用前缀缓存。B300 使用现有单节点 launcher；GB300 通过直接
-vLLM 路径使用一个计算托盘，将持久化 HF 缓存挂载到 `/hf-cache`。
-两个配方都必须获得 GPU sweep 和 eval 证据后才能视为已验证。
+两个 GPU 共用纯文本服务脚本，使用 `deepseek_v41` tokenizer 和解析器、1M 上下文，
+以及共享的 AgentX 轨迹回放、功耗、指标和 eval helper。并发范围为 1–32，调度器容量
+为轨迹并发的两倍。两个 launcher 都为该配方将仓库挂载到 `/ix`，避免在 `/workspace`
+下创建 AgentX 运行目录。GB300 将权重下载到持久化 HF 缓存。changelog 显式启用
+AgentX eval。两个配方都必须获得 GPU sweep 和 eval 证据后才能视为已验证。
 
 来源：[上游配方](https://github.com/vllm-project/recipes/blob/main/models/deepseek-ai/DeepSeek-V4.1-Flash.yaml)。
 

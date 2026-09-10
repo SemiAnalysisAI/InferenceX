@@ -169,21 +169,21 @@ Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../AGENTS.md#non-nego
 
 ### DeepSeek-V4.1-Flash DSpark
 
-The `dsv41flash-fp4-{b300,gb300}-vllm-mtp` recipes use the dedicated
-`vllm/vllm-openai:deepseekv41-flash-0909` image at TP4, with native five-token
-DSpark, probabilistic drafting, block rejection, and adaptive verification.
-`--engram-config '{"cpu_offload":true}'` stores Engram embedding tables in
-pinned host DRAM accessed through UVA. This is embedding-weight offload;
-the recipe does not enable KV-cache offload. The checkpoint uses MXFP4 experts
-with mixed-precision non-expert weights, represented as `precision: fp4`.
+The AgentX-only `dsv41flash-fp4-{b300,gb300}-vllm-agentic-dspark` recipes use
+`vllm/vllm-openai:deepseekv41-flash-0909` at TP4 with native five-token DSpark,
+probabilistic drafting, block rejection, and adaptive verification. Throughput
+and eval both use real target verification. `--engram-config '{"cpu_offload":true}'`
+stores Engram embedding tables in pinned host DRAM accessed through UVA;
+`kv-offloading: none` describes the separate, GPU-resident KV cache. MXFP4 expert
+weights determine the recipe's `precision: fp4` label.
 
-Both server and benchmark client select `--tokenizer-mode deepseek_v41`;
-`--use-chat-template` invokes that tokenizer's V4.1 encoder. Do not use the
-V4-only `--dsv4` encoder. The initial text-only 8k1k sweep uses concurrency
-1–32, scenario-derived context, and disables prefix caching. B300 uses its
-existing single-node launcher; GB300 uses a direct one-tray vLLM path with
-the persistent HF cache mounted at `/hf-cache`. GPU sweep and eval evidence
-is required before treating either recipe as validated.
+Both GPUs use the same text-only serving script, `deepseek_v41` tokenizer and
+parsers, 1M context, and the shared AgentX trace replay, power, metrics, and eval
+helpers. Concurrency is 1–32 with scheduler capacity of twice the trajectory
+concurrency. Both launchers mount the repository at `/ix` for this recipe so
+AgentX runtime directories are not created under `/workspace`. GB300 downloads
+weights into its persistent HF cache. The changelog opts into AgentX evals.
+GPU sweep and eval evidence is required before calling either recipe validated.
 
 Source: [upstream recipe](https://github.com/vllm-project/recipes/blob/main/models/deepseek-ai/DeepSeek-V4.1-Flash.yaml).
 

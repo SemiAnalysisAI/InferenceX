@@ -10191,7 +10191,7 @@ glm5.1-fp8-b200-tilert-agentic:
           additional-settings:
           - "DECODE_NODES=1"
 
-dsv41flash-fp4-b300-vllm-mtp:
+dsv41flash-fp4-b300-vllm-agentic-dspark:
   image: vllm/vllm-openai:deepseekv41-flash-0909
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
@@ -10200,13 +10200,13 @@ dsv41flash-fp4-b300-vllm-mtp:
   framework: vllm
   multinode: false
   scenarios:
-    fixed-seq-len:
-    - isl: 8192
-      osl: 1024
+    agentic-coding:
+    - dram-utilization: 0.80
       search-space:
-      - { tp: 4, conc-start: 1, conc-end: 32, spec-decoding: mtp }
+      # Engram weights use UVA DRAM; the KV cache stays GPU-resident.
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32] }
 
-dsv41flash-fp4-gb300-vllm-mtp:
+dsv41flash-fp4-gb300-vllm-agentic-dspark:
   image: vllm/vllm-openai:deepseekv41-flash-0909
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
@@ -10215,8 +10215,8 @@ dsv41flash-fp4-gb300-vllm-mtp:
   framework: vllm
   multinode: false
   scenarios:
-    fixed-seq-len:
-    - isl: 8192
-      osl: 1024
+    agentic-coding:
+    - dram-utilization: 0.80
       search-space:
-      - { tp: 4, conc-start: 1, conc-end: 32, spec-decoding: mtp }
+      # Engram weights use UVA DRAM; the KV cache stays GPU-resident.
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32] }

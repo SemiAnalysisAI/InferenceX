@@ -551,7 +551,7 @@ def test_gb300_direct_vllm_uses_one_tray_and_propagates_failure(
         }
         export MODEL_PREFIX=dsv41flash PRECISION=fp4 FRAMEWORK=vllm
         export MODEL=deepseek-ai/DeepSeek-V4.1-Flash IS_MULTINODE=false
-        export SPEC_DECODING=mtp TP=4 RUNNER_NAME=gb300-test
+        export SPEC_DECODING=mtp TP=4 RUNNER_NAME=gb300-test IS_AGENTIC=1
         export IMAGE=vllm/test:fixture GITHUB_WORKSPACE="$1"
         export SRUN_LOG="$2" SERVE_EXIT="$3"
         cd "$GITHUB_WORKSPACE"
@@ -568,7 +568,7 @@ def test_gb300_direct_vllm_uses_one_tray_and_propagates_failure(
     assert "--mem=0" in serve
     assert "--job-name=gb300-test" in serve
     mounts = next(arg for arg in serve if arg.startswith("--container-mounts="))
-    assert f"{REPO_ROOT}:/workspace," in mounts
+    assert f"{REPO_ROOT}:/ix," in mounts
     assert mounts.endswith(":/hf-cache")
     script = REPO_ROOT / serve[-1]
     assert serve[-2] == "bash" and script.is_file()
