@@ -10,15 +10,10 @@ on:
   workflow_dispatch:
     inputs:
       runner:
-        description: "Self-hosted GPU runner label (B300 or B200)"
+        description: "Self-hosted GPU runner label (B300)"
         required: false
         type: string
         default: 'b300'
-      tp:
-        description: "Tensor parallel size"
-        required: false
-        type: string
-        default: '8'
       model:
         description: "HF model id (basename must be in launcher STAGED_MODELS for pre-staged local weights)"
         required: false
@@ -90,7 +85,7 @@ env:
   FRAMEWORK: vllm
   EXP_NAME: ${{ inputs.model-prefix }}_speedbench
   IMAGE: ${{ inputs.image }}
-  TP: ${{ inputs.tp }}
+  TP: '8'
   EP_SIZE: '1'
   DP_ATTENTION: 'false'
   SPEC_DECODING: mtp
@@ -103,7 +98,7 @@ env:
   CATEGORY: ${{ inputs.category }}
   SPEEDBENCH_OUTPUT_LEN: ${{ inputs.output-len }}
   CHAT_TEMPLATE_KWARGS_ON: ${{ inputs.thinking-kwargs }}
-  OUT_YAML: ${{ inputs.model-prefix == 'dsv41flash' && '/ix/speedbench-reference-al.yaml' || '/workspace/speedbench-reference-al.yaml' }}
+  OUT_YAML: /workspace/speedbench-reference-al.yaml
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
 
@@ -158,9 +153,8 @@ jobs:
             toJSON(format('ci-attempt-{0}', github.run_attempt))
           ) ||
           format(
-            '["self-hosted",{0},{1},{2},{3}]',
+            '["self-hosted",{0},{1},{2}]',
             toJSON(inputs.runner),
-            toJSON('nodes:1'),
             toJSON(format(
               'ci-job-{0}-{1}',
               needs.setup.outputs.priority,
@@ -283,9 +277,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: speedbench_detailed_results-${{ inputs.model-prefix }}
-          path: |
-            speedbench_results/speedbench_*
-            speedbench_results/*.prom
+          path: speedbench_results/speedbench_*
           if-no-files-found: ignore
 
       - name: Resource cleanup (post-run)

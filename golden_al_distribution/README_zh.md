@@ -153,28 +153,4 @@ gh workflow run speedbench-al.yml \
 - [InferenceX 多模型 AL 收集器 PR](https://github.com/SemiAnalysisAI/InferenceX/pull/1706)
 - [InferenceX 多节点合成接受验证](https://github.com/SemiAnalysisAI/InferenceX/pull/1789)
 
-### DeepSeek-V4.1-Flash DSpark
-
-`dsv41flash` 采集器在 B200 上使用专用 `deepseekv41-flash-0909` 镜像、TP4
-和 Engram UVA offload。采集参数为 `mtp-list=1 2 3 4 5 6 7 8`、`thinking-modes=off on`、
-`category=coding`、`output-len=4096`。采用 probabilistic 草稿采样和 block 拒绝采样，
-关闭 adaptive verification，与上述固定草稿长度的采集方法一致。每个单元显式设置
-thinking 开关。只有全部 80 个 coding prompt 成功且 acceptance counter 有效时
-才生成候选值。提交黄金曲线前，必须补充来源 run URL 并审查详细输出。
-
-在采集器分支调度 `speedbench-al.yml`，设置 `runner=cluster:b200-nscale`、
-`tp=4`、`model=deepseek-ai/DeepSeek-V4.1-Flash`、`model-prefix=dsv41flash`
-及上述镜像。文件名中沿用的 `_b300_` 是工作流查找约定，不决定分配的硬件。
-
-采集器通过 `--chat-template-kwargs` 使用 SPEED-Bench 原生 chat template；
-该镜像的 benchmark CLI 不支持 `--use-chat-template`。加载模型前会检查
-已安装 CLI 是否支持所需的客户端参数。
-
-`deepseekv41-flash-0909` 镜像在 `SpeculativeConfig` 验证阶段拒绝草稿长度
-6、7、8：这些值必须能被 `n_predict=5` 整除。
-[运行 34494319147](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34494319147/job/102928852667)
-已逐一尝试这三个长度；它们没有实测 AL，不能写入数值形式的黄金结果。
-该证据并不能证明更大的五的倍数可正常运行。
-
-DSv4.1 Flash 采集强制要求 `tp=4`。重启服务前，采集器最多等待 120 秒，
-确认服务端口和 GPU 计算进程已释放；超时则使运行失败，避免启动重叠的服务。
+DeepSeek V4.1 Flash 包含草稿长度 1–5 在 thinking 开关两种模式下的实测值。同一镜像在[运行 34494319147](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34494319147) 中于服务启动前拒绝长度 6–8，因此未为这些长度填写 AL 数值。

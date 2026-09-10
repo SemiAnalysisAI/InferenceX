@@ -22,69 +22,6 @@ INFERENCEX_REPO_ROOT="$(
 # nothing upstream set it.
 export PORT="${PORT:-8888}"
 
-# Opt-in for recipes running in the host network namespace. Probe the preferred
-# port on the compute node; fall back to an OS-selected port if it is occupied.
-# Call immediately before server launch and construct client URLs afterward.
-# Wait for a terminated single-node server to release its port and GPU contexts.
-# Call only on an exclusive allocation; any remaining GPU process blocks restart.
-wait_for_server_resources_released() {
-    python3 - "${PORT:?}" "${SERVER_TEARDOWN_TIMEOUT_S:-120}" <<'PYEOF'
-import errno
-import socket
-import subprocess
-import sys
-import time
-
-port, timeout = int(sys.argv[1]), float(sys.argv[2])
-deadline = time.monotonic() + timeout
-while True:
-    with socket.socket() as probe:
-        probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        try:
-            probe.bind(("0.0.0.0", port))
-            probe.listen()
-            port_free = True
-        except OSError as exc:
-            if exc.errno != errno.EADDRINUSE:
-                raise
-            port_free = False
-    # Wildcard SO_REUSEADDR binds can coexist with a loopback listener on some
-    # platforms. Check the actual local endpoint as well.
-    with socket.socket() as live:
-        live.settimeout(0.2)
-        if live.connect_ex(("127.0.0.1", port)) == 0:
-            port_free = False
-    gpu_processes = subprocess.check_output(
-        ["nvidia-smi", "--query-compute-apps=pid", "--format=csv,noheader"],
-        text=True,
-    ).strip()
-    if port_free and not gpu_processes:
-        break
-    if time.monotonic() >= deadline:
-        raise SystemExit("Server teardown timed out: port or GPU contexts still occupied")
-    time.sleep(min(1, max(0, deadline - time.monotonic())))
-PYEOF
-}
-
-select_available_server_port() {
-    PORT=$(python3 - "${PORT:-8888}" <<'PYPORT'
-import errno
-import socket
-import sys
-
-with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-    try:
-        sock.bind(("0.0.0.0", int(sys.argv[1])))
-    except OSError as exc:
-        if exc.errno != errno.EADDRINUSE:
-            raise
-        sock.bind(("0.0.0.0", 0))
-    print(sock.getsockname()[1])
-PYPORT
-    ) || return $?
-    export PORT
-}
-
 agentic_kv_offload_enabled() {
     if [[ -z "${KV_OFFLOADING+x}" || -z "$KV_OFFLOADING" ]]; then
         echo "Error: KV_OFFLOADING must be set for agentic benchmarks" >&2
