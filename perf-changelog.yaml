@@ -7122,3 +7122,10 @@
   description:
     - "Validate SPEED-Bench arguments with the installed parser instead of abbreviated help output"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2964
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-agentic-dspark
+  description:
+    - "Collect the full DSv4.1 Flash golden AL curve: draft lengths 1 through 5 for thinking off and on"
+    - "Restart the server for each draft length and validate every cell against its own acceptance bound"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2964

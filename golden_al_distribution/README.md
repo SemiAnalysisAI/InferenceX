@@ -155,7 +155,7 @@ Before accepting an updated curve, reviewers should verify:
 ### DeepSeek-V4.1-Flash DSpark
 
 The `dsv41flash` collector uses the dedicated `deepseekv41-flash-0909` image,
-TP4 and Engram UVA offload on B200. Collect `mtp-list=5`, `thinking-modes=off on`,
+TP4 and Engram UVA offload on B200. Collect `mtp-list=1 2 3 4 5`, `thinking-modes=off on`,
 `category=coding`, and `output-len=4096`. It measures probabilistic drafting and
 block rejection with adaptive verification disabled, matching the fixed draft
 length methodology above. Thinking is explicitly enabled or disabled for each

@@ -7,7 +7,7 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 
 MODEL="${MODEL:?}"
 TP="${TP:-4}"
-MTP_LIST="${MTP_LIST:-5}"
+MTP_LIST="${MTP_LIST:-1 2 3 4 5}"
 THINKING_MODES="${THINKING_MODES:-off on}"
 CATEGORY="${CATEGORY:-coding}"
 SPEEDBENCH_OUTPUT_LEN="${SPEEDBENCH_OUTPUT_LEN:-4096}"
@@ -17,8 +17,10 @@ CHAT_TEMPLATE_KWARGS_ON="${CHAT_TEMPLATE_KWARGS_ON:-$DEFAULT_THINKING}"
 RESULTS_DIR="${RESULTS_DIR:-/ix/speedbench_results}"
 SPEEDBENCH_DIR="${SPEEDBENCH_DIR:-/ix/speed_bench_data}"
 OUT_YAML="${OUT_YAML:-/ix/speedbench-reference-al.yaml}"
-# V4.1's native trained DSpark block is five tokens. Do not invent other levels.
-[[ "$MTP_LIST" == 5 ]] || { echo 'DSv4.1 Flash collection requires mtp-list=5' >&2; exit 1; }
+# The checkpoint declares dspark_block_size=5; calibrate every prefix length.
+for mtp in $MTP_LIST; do
+    [[ "$mtp" =~ ^[1-5]$ ]] || { echo 'DSv4.1 Flash draft lengths must be in 1..5' >&2; exit 1; }
+done
 for mode in $THINKING_MODES; do
     [[ "$mode" == on || "$mode" == off ]] || exit 1
 done
@@ -73,31 +75,34 @@ cleanup_server() {
 }
 trap cleanup_server EXIT
 
-# Fixed five-token verification matches existing golden DSpark methodology.
-# Adaptive verification would make the measured target dependent on profiling.
-SPEC_CONFIG='{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":false}'
-setsid vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
-    --host 0.0.0.0 --port "$PORT" --tensor-parallel-size "$TP" \
-    --language-model-only --tokenizer-mode deepseek_v41 \
-    --tool-call-parser deepseek_v41 --enable-auto-tool-choice \
-    --reasoning-parser deepseek_v41 --engram-config '{"cpu_offload":true}' \
-    --speculative-config "$SPEC_CONFIG" --max-model-len 16384 \
-    --no-enable-prefix-caching --max-cudagraph-capture-size 256 \
-    --disable-uvicorn-access-log > "$RESULTS_DIR/server_dspark5.log" 2>&1 &
-SERVER_PID=$!
-wait_for_server_ready --port "$PORT" --server-log "$RESULTS_DIR/server_dspark5.log" --server-pid "$SERVER_PID"
+for mtp in $MTP_LIST; do
+    # A fresh server per draft length keeps model configuration and counters isolated.
+    # Adaptive verification would make the measured target dependent on profiling.
+    SPEC_CONFIG=$(printf '{"method":"dspark","num_speculative_tokens":%s,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":false}' "$mtp")
+    setsid vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
+        --host 0.0.0.0 --port "$PORT" --tensor-parallel-size "$TP" \
+        --language-model-only --tokenizer-mode deepseek_v41 \
+        --tool-call-parser deepseek_v41 --enable-auto-tool-choice \
+        --reasoning-parser deepseek_v41 --engram-config '{"cpu_offload":true}' \
+        --speculative-config "$SPEC_CONFIG" --max-model-len 16384 \
+        --no-enable-prefix-caching --max-cudagraph-capture-size 256 \
+        --disable-uvicorn-access-log > "$RESULTS_DIR/server_dspark${mtp}.log" 2>&1 &
+    SERVER_PID=$!
+    wait_for_server_ready --port "$PORT" --server-log "$RESULTS_DIR/server_dspark${mtp}.log" --server-pid "$SERVER_PID"
 
-# Keep one server for both modes. Counter deltas exclude startup and other cells.
-for mode in $THINKING_MODES; do
-    kwargs='{"thinking":false}'
-    [[ "$mode" == off ]] || kwargs="$CHAT_TEMPLATE_KWARGS_ON"
-    curl -fSs "http://localhost:$PORT/metrics" > "$RESULTS_DIR/before_${mode}.prom"
-    vllm bench serve "${BENCH_ARGS[@]}" --port "$PORT" \
-        --chat-template-kwargs "$kwargs" --result-filename "speedbench_${mode}_mtp5.json"
-    curl -fSs "http://localhost:$PORT/metrics" > "$RESULTS_DIR/after_${mode}.prom"
+    # Keep one server for both modes. Counter deltas exclude startup and other cells.
+    for mode in $THINKING_MODES; do
+        kwargs='{"thinking":false}'
+        [[ "$mode" == off ]] || kwargs="$CHAT_TEMPLATE_KWARGS_ON"
+        curl -fSs "http://localhost:$PORT/metrics" > "$RESULTS_DIR/before_${mode}_mtp${mtp}.prom"
+        vllm bench serve "${BENCH_ARGS[@]}" --port "$PORT" \
+            --chat-template-kwargs "$kwargs" --result-filename "speedbench_${mode}_mtp${mtp}.json"
+        curl -fSs "http://localhost:$PORT/metrics" > "$RESULTS_DIR/after_${mode}_mtp${mtp}.prom"
+    done
+    cleanup_server
 done
 python3 utils/speedbench_al.py --results-dir "$RESULTS_DIR" --output "$OUT_YAML" \
-    --modes $THINKING_MODES --thinking-kwargs "$CHAT_TEMPLATE_KWARGS_ON" \
+    --draft-lengths $MTP_LIST --modes $THINKING_MODES --thinking-kwargs "$CHAT_TEMPLATE_KWARGS_ON" \
     --model "$MODEL" --image "${IMAGE:?}" --tp "$TP" --category "$CATEGORY" \
     --output-len "$SPEEDBENCH_OUTPUT_LEN"
 cat "$OUT_YAML"

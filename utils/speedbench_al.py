@@ -23,7 +23,7 @@ def read_counters(text: str) -> tuple[float, float]:
     return values[0], values[1]
 
 
-def measure_al(before: str, after: str, benchmark: dict, draft_length: int = 5) -> float:
+def measure_al(before: str, after: str, benchmark: dict, draft_length: int) -> float:
     # SPEED-Bench Qualitative coding has 80 prompts. Partial/errorful runs must
     # never silently become a golden value, even if their metric delta is valid.
     if benchmark.get("completed") != 80 or benchmark.get("failed", 0) != 0:
@@ -41,6 +41,7 @@ def main() -> None:
     parser.add_argument("--results-dir", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--modes", nargs="+", choices=["on", "off"], required=True)
+    parser.add_argument("--draft-lengths", nargs="+", type=int, required=True)
     parser.add_argument("--thinking-kwargs", required=True)
     parser.add_argument("--model", required=True)
     parser.add_argument("--image", required=True)
@@ -60,11 +61,17 @@ def main() -> None:
         "deepseek-v4.1-flash:",
     ]
     for mode in args.modes:
-        root = args.results_dir
-        al = measure_al((root / f"before_{mode}.prom").read_text(),
-                        (root / f"after_{mode}.prom").read_text(),
-                        json.loads((root / f"speedbench_{mode}_mtp5.json").read_text()))
-        lines += [f"  thinking_{mode}:", f"    5: {al:.2f}"]
+        lines.append(f"  thinking_{mode}:")
+        for draft_length in args.draft_lengths:
+            if draft_length < 1:
+                raise ValueError("Draft lengths must be positive")
+            root = args.results_dir
+            cell = f"{mode}_mtp{draft_length}"
+            al = measure_al((root / f"before_{cell}.prom").read_text(),
+                            (root / f"after_{cell}.prom").read_text(),
+                            json.loads((root / f"speedbench_{cell}.json").read_text()),
+                            draft_length)
+            lines.append(f"    {draft_length}: {al:.2f}")
     args.output.write_text("\n".join(lines) + "\n")
 
 
