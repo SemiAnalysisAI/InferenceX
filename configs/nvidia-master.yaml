@@ -2777,7 +2777,7 @@ dsr1-fp8-gb200-dynamo-trt:
           dp-attn: false
 
 dsr1-fp8-gb200-dynamo-sglang:
-  image: lmsysorg/sglang:v0.5.8.post1-cu130
+  image: lmsysorg/sglang:v0.5.19-cu130@sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: gb200
