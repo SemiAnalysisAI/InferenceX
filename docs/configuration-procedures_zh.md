@@ -180,7 +180,9 @@ llm-d 不是 srt-slurm 路径：InferenceX 自己持有 Slurm allocation，并�
 以及共享的 AgentX 轨迹回放、功耗、指标和 eval helper。并发范围为 1–32，调度器容量
 为轨迹并发的两倍。两个 launcher 都为该配方将仓库挂载到 `/ix`，避免在 `/workspace`
 下创建 AgentX 运行目录。GB300 将权重下载到持久化 HF 缓存。changelog 显式启用
-AgentX eval。两个配方都必须获得 GPU sweep 和 eval 证据后才能视为已验证。
+AgentX eval。配方在计算节点探测服务端口，首选端口被占用时选择可用端口，
+服务、回放、指标和 eval 共用同一端点。两个配方都必须获得 GPU sweep 和 eval
+证据后才能视为已验证。
 
 来源：[上游配方](https://github.com/vllm-project/recipes/blob/main/models/deepseek-ai/DeepSeek-V4.1-Flash.yaml)。
 

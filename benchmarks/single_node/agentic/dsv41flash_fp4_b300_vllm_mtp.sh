@@ -25,8 +25,6 @@ export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_USE_RUST_FRONTEND=1
 export VLLM_USE_V2_MODEL_RUNNER=1
 export PYTHONUNBUFFERED=1
-export AIPERF_SERVER_METRICS_URLS="http://localhost:${PORT}/metrics"
-export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="vllm:"
 
 # Match the sibling's scheduler headroom for AgentX subagent fan-out.
 MAX_NUM_SEQS=$((2 * CONC))
@@ -35,6 +33,13 @@ CAPTURE_SIZE=1
 while (( CAPTURE_SIZE < MAX_NUM_SEQS * (1 + NUM_SPEC_TOKENS) && CAPTURE_SIZE < 2048 )); do
     CAPTURE_SIZE=$((CAPTURE_SIZE * 2))
 done
+
+# Pyxis shares the host network; port 8888 can already belong to a host service.
+select_available_server_port
+export AIPERF_SERVER_URL="http://localhost:${PORT}"
+export AIPERF_SERVER_METRICS_URLS="${AIPERF_SERVER_URL}/metrics"
+export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="vllm:"
+echo "Using vLLM endpoint ${AIPERF_SERVER_URL}"
 
 # Both throughput and eval use real target verification, never synthetic AL.
 VLLM_CMD=(

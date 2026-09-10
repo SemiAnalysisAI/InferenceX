@@ -183,6 +183,9 @@ helpers. Concurrency is 1–32 with scheduler capacity of twice the trajectory
 concurrency. Both launchers mount the repository at `/ix` for this recipe so
 AgentX runtime directories are not created under `/workspace`. GB300 downloads
 weights into its persistent HF cache. The changelog opts into AgentX evals.
+The recipe probes the serving port on the compute node and selects an available
+port if the preferred one is occupied. Serving, replay, metrics, and eval share
+that endpoint.
 GPU sweep and eval evidence is required before calling either recipe validated.
 
 Source: [upstream recipe](https://github.com/vllm-project/recipes/blob/main/models/deepseek-ai/DeepSeek-V4.1-Flash.yaml).
