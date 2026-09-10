@@ -24,6 +24,8 @@ fi
 export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_USE_AITER_MOE=1
 export OMP_NUM_THREADS=1
+# Pin the full-context corpus for this 1M-context recipe.
+export WEKA_LOADER_OVERRIDE=semianalysis_cc_traces_weka_062126
 resolve_trace_source
 install_agentic_deps
 mkdir -p "$RESULT_DIR"

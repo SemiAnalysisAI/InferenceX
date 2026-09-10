@@ -7345,3 +7345,9 @@
     - "Add draft DeepSeek-V4.1-Flash FP4 AgentX on MI355X: TP4, concurrency 1-32, native five-token DSpark with adaptive real verification"
     - "Use upstream ROCm AITER recipe with GPU-resident KV; image publication, Engram compatibility, and GPU validation pending"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2962
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  description:
+    - "Pin AgentX to semianalysis_cc_traces_weka_062126, preventing the 256k corpus override"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2962
