@@ -2,6 +2,8 @@
 
 import json
 import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -10,9 +12,47 @@ from collect_eval_results import (
     EVAL_RESULT_FORMAT,
     build_row,
     collect_eval_rows,
+    detect_lm_eval_jsons,
+    result_concurrency,
 )
 from evals.kimi_vendor_eval import RESULT_FORMAT as KIMI_VENDOR_RESULT_FORMAT
 from evals.minimax_provider_eval import RESULT_FORMAT as MINIMAX_RESULT_FORMAT
+
+
+@pytest.mark.parametrize("payload,recognized", [
+    ({"lm_eval_version": "0.4.0"}, True),
+    ({"lm_eval_version": None}, True),
+    ({"result_format": "inferencex-eval-v1"}, True),
+    ({"result_format": "foreign", "lm_eval_version": False}, True),
+    ({"result_format": "foreign"}, False),
+    ({"result_format": ["inferencex-eval-v1"]}, False),
+    ({"results": {}}, False), (None, False), ([], False),
+])
+def test_result_readers_recognize_format_markers(
+    tmp_path: Path, payload: object, recognized: bool,
+) -> None:
+    from validate_reusable_sweep_artifacts import _recognized_eval_result_paths
+
+    path = tmp_path / "results.json"
+    path.write_text(json.dumps(payload))
+    expected = [path] if recognized else []
+    assert detect_lm_eval_jsons(tmp_path) == expected
+    assert _recognized_eval_result_paths([path]) == expected
+
+
+@pytest.mark.parametrize("name,expected", [
+    ("results_conc16.json", 16), ("results_conc16_2.json", 16),
+    ("results_conc0004.json", 4), ("results_conc0.json", 0),
+    ("results_conc4_conc16_2.json", 16),
+    ("results_conc-4.json", None), ("results_conc4_extra.json", None),
+    ("results_conc4.json.bak", None), ("results_conc4_2_3.json", None),
+    ("results.json", None),
+])
+def test_result_readers_parse_concurrency_suffixes(name: str, expected: int | None) -> None:
+    from validate_reusable_sweep_artifacts import _result_concurrency
+
+    assert result_concurrency(Path(name)) == expected
+    assert _result_concurrency(name) == expected
 
 
 def test_build_row_preserves_sequence_lengths() -> None:
@@ -64,6 +104,43 @@ def _write_lm_eval_result(
         },
         "n-samples": {task: {"effective": 10}},
     }))
+
+
+def test_collector_discovers_custom_names_but_not_metadata_or_nested_files(
+    tmp_path: Path,
+) -> None:
+    custom = tmp_path / "custom.json"
+    _write_lm_eval_result(custom, 0.75)
+    _write_lm_eval_result(tmp_path / "meta_env.json", 0.25)
+    nested = tmp_path / "nested"
+    nested.mkdir()
+    _write_lm_eval_result(nested / "results.json", 0.5)
+    assert detect_lm_eval_jsons(tmp_path) == [custom]
+
+
+def test_collector_cli_runs_outside_checkout(tmp_path: Path) -> None:
+    artifact = tmp_path / "eval_input"
+    artifact.mkdir()
+    (artifact / "meta_env.json").write_text('{"conc": 4}')
+    result = artifact / "custom.json"
+    _write_lm_eval_result(result, 0.75)
+    env = dict(os.environ)
+    env.pop("PYTHONPATH", None)
+
+    completed = subprocess.run(
+        [sys.executable, str(Path(__file__).with_name("collect_eval_results.py")),
+         str(artifact), "test"],
+        cwd=tmp_path, env=env, capture_output=True, text=True, timeout=10,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stderr == ""
+    assert "### Single-Node Eval Results" in completed.stdout
+    rows = json.loads((tmp_path / "agg_eval_test.json").read_text())
+    assert len(rows) == 1
+    assert rows[0]["score"] == 0.75
+    assert rows[0]["conc"] == 4
+    assert rows[0]["source"] == str(result)
 
 
 def test_collect_eval_rows_expands_batched_concurrencies(
