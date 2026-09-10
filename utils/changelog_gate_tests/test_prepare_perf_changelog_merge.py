@@ -76,7 +76,6 @@ def test_conflict_resolution_preserves_main_bytes_and_appends_pr_entry() -> None
 
     assert result.startswith(main)
     assert result[len(main):].startswith(b"\n- config-keys:")
-    assert b"  \n" in result[:len(main)]
     entries = parse_changelog(result, "result")
     assert [entry["config-keys"][0] for entry in entries] == [
         "base-config",

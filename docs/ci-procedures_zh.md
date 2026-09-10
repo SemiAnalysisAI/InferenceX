@@ -20,6 +20,8 @@
 | 选择 PR 扫描标签 | [PR 主标签与修饰标签](#pr-主标签与修饰标签) |
 | 理解提前取消行为 | [Canary 与 Fail-fast 语义](#canary-与-fail-fast-语义) |
 | 诊断或重跑 Workflow | [监控与重跑](#监控与重跑) |
+| 检查特权 Workflow 的访问权限 | [基于仓库角色的授权](#基于仓库角色的授权) |
+| 管理 CI Python 依赖 | [CI Python 环境](#ci-python-环境) |
 | 将 PR Run 发布到预发布环境 | [暂存结果](#暂存结果) |
 | 合并时不重复已批准的扫描 | [产物复用与 merge-with-reuse](#产物复用与-merge-with-reuse) |
 | 恢复仅追加 Changelog 的冲突 | [Changelog 冲突恢复](#changelog-冲突恢复) |
@@ -72,7 +74,7 @@ gh workflow view e2e-tests.yml --repo SemiAnalysisAI/InferenceX --ref main --yam
 
 ```bash
 MATRIX=/tmp/inferencex-matrix.json
-uv run --no-project --with pydantic --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
   utils/matrix_logic/generate_sweep_configs.py test-config \
   --config-files configs/nvidia-master.yaml \
   --config-keys dsr1-fp8-h200-sglang \
@@ -85,7 +87,7 @@ python3 -m json.tool "$MATRIX" >/dev/null
 多个 Key 应逐个放在 `--config-keys` 之后。通配模式必须加引号，防止 Shell 展开：
 
 ```bash
-uv run --no-project --with pydantic --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
   utils/matrix_logic/generate_sweep_configs.py test-config \
   --config-files configs/nvidia-master.yaml \
   --config-keys '*-b200-*' \
@@ -98,7 +100,7 @@ uv run --no-project --with pydantic --with pyyaml --python 3.12 \
 `full-sweep` 不一定表示所有配置。可按模型、精度、框架、Runner、序列长度、拓扑、并发、TP/EP 或 Scenario 类型缩小范围：
 
 ```bash
-uv run --no-project --with pydantic --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
   utils/matrix_logic/generate_sweep_configs.py full-sweep \
   --config-files configs/nvidia-master.yaml \
   --single-node \
@@ -146,7 +148,7 @@ Eval 开关语义是明确的：
 对每个修改过的 YAML 文件执行语法解析。它能发现畸形 YAML，但不能验证 GitHub 表达式或 Workflow 依赖连线：
 
 ```bash
-uv run --no-project --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
   python -c 'import sys, yaml; [yaml.safe_load(open(path, encoding="utf-8")) for path in sys.argv[1:]]' \
   configs/nvidia-master.yaml perf-changelog.yaml .github/workflows/e2e-tests.yml
 ```
@@ -161,7 +163,7 @@ uv run --no-project --with pyyaml --python 3.12 \
 
 ```bash
 git fetch origin main
-uv run --no-project --with pydantic --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
   utils/validate_perf_changelog.py \
   --changelog-file perf-changelog.yaml \
   --base-ref origin/main \
@@ -214,6 +216,10 @@ RUN_ID=$(gh run list \
 
 ## PR 主标签与修饰标签
 
+同仓库 PR 无论处于草稿还是 ready 状态，都由 sweep 标签授权 GPU 运行。草稿状态控制是否开始审阅，不决定 sweep 资格；fork PR 仍使用受信任调度路径。添加 sweep 标签或在保留标签时推送提交可以启动 sweep。标记为 ready 不会调度或重复运行。已带标签但尚无运行的草稿，可先移除再重新添加对应 sweep 标签来启动。
+
+同仓库检查既在 changelog 验证检出 PR 代码前执行，也在 GPU setup 前执行。验证明确使用只读 token，checkout 不持久保存凭据。外部 PR 仍须经单独的受信任调度器：具有写权限的维护者为打开且 ready 的 PR 添加标签，批准精确 head；后续外部提交需重新批准。仅添加标签不会使 fork 进入普通 sweep 流程。
+
 [`run-sweep.yml`](../.github/workflows/run-sweep.yml) 会拒绝多个主标签。必须且只能应用一个：
 
 | 主标签 | 矩阵范围 | Canary | 矩阵 Fail-fast |
@@ -265,6 +271,8 @@ gh api "/repos/SemiAnalysisAI/InferenceX/actions/runs/$RUN_ID" \
 - **策略/Gate 失败：** 标签冲突、Changelog 无效、缺少授权、合并冲突或产物不合格。修正 Gate；重跑 GPU 无法解决。
 - **已被取代的 Run：** 后续 Commit 或被识别的标签变更通过 Workflow Concurrency 将其取消。应监控替代 Run，不要复活过期证据。
 
+[`PR Review` Workflow](../.github/workflows/claude-pr-review.yml) 安装固定版本的官方 Claude Code npm 包，并在将可执行文件路径传给审阅 Action 前检查 `claude --version`。安装或启动失败表示审阅没有执行，既不是代码审阅发现的问题，也不代表审阅通过。重试前应先检查安装步骤。
+
 ### 安全重跑
 
 不要盲目重跑仍在执行的 Run。已结束的失败 Run 可以只重跑失败 Job 及其依赖项：
@@ -281,9 +289,53 @@ gh run rerun <RUN_ID> --repo SemiAnalysisAI/InferenceX
 
 重跑沿用同一个 Workflow Run ID，但 Attempt 会增加。Artifact API 可能包含多个 Attempt 上传的产物；必须保留 `run_attempt` 并检查 Artifact 时间戳。`run-stats` 会有意统计所有 Attempt 的 Job。如果源码需要变化，不应重跑旧代码：推送修复并监控新 Run。移除再重新添加主扫描标签会强制创建新的 Labeled Run；后续 Commit 也可能使复用资格失效。
 
+## CI Python 环境
+
+需要 Python 包的托管 Job 使用固定 Commit 的 `astral-sh/setup-uv` Action，
+并通过 `uv run --no-project --exclude-newer PT12H --python 3.12` 运行命令。
+使用 `--with` 声明依赖，或通过 `--with-requirements` 复用已有的依赖文件；
+通常无需单独的依赖安装步骤。
+选项统一按以下顺序排列：`--no-project`、`--exclude-newer`、`--python`、
+`--with`、`--with-requirements`，最后是要执行的命令及其参数。
+
+12 小时冷却期同时适用于包索引中的直接依赖和传递依赖。缺少上传时间戳的
+分发文件不可用；不得为了通过依赖解析而关闭冷却期。CollectiveX 使用全新的
+虚拟环境和 `uv pip install --exclude-newer PT12H --torch-backend cpu`：仅从
+CPU 索引获取 PyTorch 包，其他依赖从 PyPI 获取，因为 CPU 索引中的这些依赖
+镜像缺少上传时间戳。该 Job 确认安装的 Wheel 不包含 CUDA 或 ROCm 后端。
+
+审阅 Workflow 共用 [`.github/mcp-ci.json`](../.github/mcp-ci.json)，
+通过 uv 和原有依赖文件启动 Python MCP Server。Server 使用 MCP 1.x API；
+依赖文件排除不兼容的 SDK 2.x，CI 在不克隆仓库的情况下验证 Server 构造与发现功能。
+Checkout Ref、凭据和审阅
+策略保持不变。矩阵和 CollectiveX 单元测试现在也会在草稿 PR 上运行，
+以便在请求审阅前验证 CI 环境变更。
+
+仅依赖标准库的辅助程序继续使用 Runner 自带的 Python。基准容器及其框架
+环境仍由现有启动器管理；此次 CI 依赖迁移不会修改这些环境。
+
+## 基于仓库角色的授权
+
+结果暂存和可信外部扫描派发直接通过 `actions/github-script` 检查仓库权限，
+使用其已通过 `GITHUB_TOKEN` 认证的客户端。两项操作都要求 Write、Maintain 或
+Admin 权限；Read、Triage 以及没有仓库访问权限的用户不能执行这些操作。
+
+授权要求原有基础 `permission` 和有效 `role_name` 均为 `admin`、`maintain` 或
+`write`。字段缺失或格式无效会终止 Workflow；未知角色和自定义角色会被拒绝，
+绝不回退到旧版权限字段来放行。API 错误也会终止 Workflow。这些更严格的拒绝
+行为属于有意变更；标准 Write 权限仍然足够。GitHub 的基础 `permission` 字段
+会将 Maintain 报告为 Write。拒绝消息会同时显示两个字段。组织成员身份和
+`author_association` 不会通过这些检查赋予访问权限，也无需查询团队成员身份的额外 Token。
+
+结果暂存检查评论作者；外部批准检查原始 `github.actor`，重跑时也不改用重跑者
+身份。授权检查保留在各自的可信 Workflow 中，无需仓库 Checkout 或 Python
+辅助程序。现有 PR、SHA、标签历史、Source Run、Artifact 和 CODEOWNER 检查
+保持不变。其他 Workflow（包括恢复流程）保留原有的授权和派发行为。
+执行凭据和 GitHub 保护措施仍在 Workflow 中明确配置。
+
 ## 暂存结果
 
-[`stage-results.yml`](../.github/workflows/stage-results.yml) 是维护者专用的 PR 结果预发布路径，不能替代合并或生产入库。
+[`stage-results.yml`](../.github/workflows/stage-results.yml) 允许具有 Write、Maintain 或 Admin 权限的用户将 PR 结果发布到预发布环境。它不会执行合并或生产入库。
 
 请求只有在全部满足下列条件时才可暂存：
 
@@ -365,7 +417,7 @@ Helper 会从 Index Stage 1/2/3 读取 Merge Base、PR 与 Main 字节，验证 
 提交后，对 `origin/main` 运行准确 Gate：
 
 ```bash
-uv run --no-project --with pydantic --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
   utils/validate_perf_changelog.py \
   --changelog-file perf-changelog.yaml \
   --base-ref origin/main \

@@ -8,15 +8,16 @@ and this gates nothing (see docs/methodology.md):
   B. alpha/beta fit -- OLS of p50 latency vs bytes, latency ~= alpha + bytes/beta, which
      separates the bandwidth term from the per-call floor that dominates small T.
 
-Bytes are LOGICAL payload (one copy per unique (token, dest-rank) pair), excluding
-protocol/padding. Reading them against a link's peak needs two adjustments: logical bytes
-include the copies a rank routes to itself, which never cross the interconnect, so wire
-traffic is (1 - routing.locality.local_rank_fraction) x these figures; and beta is a
-MARGINAL rate, so it legitimately sits above every measured point.
-
-This basis is goodput; low-latency layouts send one copy per (token, expert), so their wire
-traffic is topk/fanout higher (~1.5x at EP8) and their GB/s is not comparable to a normal row
-or to a vendor table counting every expert copy.
+Bytes are the WIRE basis (`wire_byte_provenance`): one copy per unique (token, dest-rank)
+pair for rank-deduplicating layouts, one copy per (token, expert) for the low-latency
+kernels that do not deduplicate — whichever the row's `logical_copies.wire` declares. That
+makes GB/s comparable across backends and modes. Two adjustments still apply when reading
+against a link's peak: these bytes include the copies a rank routes to itself, which never
+cross the interconnect, so fabric traffic is (1 - routing.locality.local_rank_fraction) x
+these figures; and beta is a MARGINAL rate, so it legitimately sits above every measured
+point. Pre-wire artifacts fall back to the rank-deduplicated `byte_provenance`, which for
+per-assignment LL rows understates the wire rate (a lower bound, ~34% low on nccl-ep LL
+EP8 at T=128), never overstates it.
 
 A line through a ladder is a MODEL and a positive slope alone is not evidence, so every Fit
 carries its own quality and beta is withheld unless it clears both gates below. Deliberately
@@ -108,8 +109,7 @@ def fit_alpha_beta(document: dict, component: str, pct: str = "p50") -> Fit | No
         if not row.get("correctness", {}).get("passed", True):
             excluded += 1
             continue
-        usable.append((row["byte_provenance"][component]["total_logical_bytes"],
-                       percentiles[pct]))
+        usable.append((_wire_bytes(row, component), percentiles[pct]))
     if len(usable) < MIN_FIT_POINTS or len({x for x, _ in usable}) < 2:
         return None  # too few points, or zero-variance x (e.g. a degenerate ladder)
     xs, ys = [x for x, _ in usable], [y for _, y in usable]
@@ -127,6 +127,18 @@ def fit_alpha_beta(document: dict, component: str, pct: str = "p50") -> Fit | No
     )
 
 
+def _wire_bytes(row: dict, component: str) -> int:
+    """Bytes the kernels actually move for this component.
+
+    Prefers `wire_byte_provenance` (per-assignment for token-expert LL receives); artifacts
+    written before that field carry only the rank-deduplicated `byte_provenance`, which for
+    those LL rows is a LOWER BOUND on wire traffic (~topk/fanout below it), so a bandwidth
+    derived from the fallback understates the wire rate rather than overstating it.
+    """
+    provenance = row.get("wire_byte_provenance") or row["byte_provenance"]
+    return provenance[component]["total_logical_bytes"]
+
+
 def _format_fit(component: str, fit: Fit) -> str:
     """One component's fit, withholding what the data does not support."""
     if not fit.beta_is_reliable:
@@ -142,7 +154,7 @@ def _cell(row: dict, component: str, ep: int) -> str:
     percentiles = row["components"][component]["percentiles_us"]
     if not percentiles:
         return f"{component}=n/a"
-    nbytes = row["byte_provenance"][component]["total_logical_bytes"]
+    nbytes = _wire_bytes(row, component)
     p50 = _algbw_per_gpu(nbytes, percentiles["p50"], ep)
     p99 = _algbw_per_gpu(nbytes, percentiles["p99"], ep)
     return f"{component}=n/a" if p50 is None or p99 is None \
@@ -170,7 +182,7 @@ def _provenance(document: dict) -> str:
 
 def render(documents: list[dict]) -> str:
     lines = [
-        "## CollectiveX EP bandwidth (per-GPU, logical payload)",
+        "## CollectiveX EP bandwidth (per-GPU, wire-basis payload)",
         "",
         "GB/s at p50/p99 *latency* -- the p99-latency figure is worst-case bandwidth, not a "
         f"'p99 bandwidth'. `fit`: latency ~= alpha + bytes/beta over the ladder; beta is "

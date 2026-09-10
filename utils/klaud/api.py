@@ -112,12 +112,8 @@ def feed_issues(feed: Feed | None, now: datetime, policy: Policy) -> list[str]:
     age = (utc(now) - utc(feed.retrieved_at)).total_seconds()
     if age < -policy.clock_skew_seconds or age > policy.public_max_age_seconds:
         issues.append("feed-retrieval-stale")
-    try:
-        age_header = int(feed.headers.get("age", "0"))
-        if age_header < 0 or age + age_header > policy.public_max_age_seconds:
-            issues.append("feed-cache-stale")
-    except ValueError:
-        issues.append("feed-cache-age-invalid")
+    # The public API/CDN owns cache freshness. Age is time in a shared cache,
+    # not the age of the benchmark data; do not impose a second CDN TTL here.
     return issues
 
 
@@ -159,24 +155,32 @@ def catalog(images: Feed | None, releases: Feed | None, now: datetime, policy: P
 
 
 def fetch_catalog(policy: Policy) -> tuple[list[dict], list[str]]:
-    return catalog(fetch('images'), fetch('releases'), datetime.now(timezone.utc), policy)
+    feeds = {}
+    for resource in ('images', 'releases'):
+        try:
+            feeds[resource] = fetch(resource)
+        except ReadError as error:
+            raise ReadError(f'{resource}:{error}') from None
+    return catalog(feeds['images'], feeds['releases'], datetime.now(timezone.utc), policy)
 
 
 def fresh(value: Any, now: datetime, policy: Policy) -> bool:
     try:
-        return -policy.clock_skew_seconds <= (utc(now) - utc(value)).total_seconds() <= policy.telemetry_max_age_seconds
+        return -policy.clock_skew_seconds <= (utc(now) - utc(value)).total_seconds() <= policy.response_max_age_seconds
     except (ValueError, TypeError, AttributeError):
         return False
 
 
 def available_clusters(feed: Feed, policy: Policy, now: datetime) -> set[str]:
-    """Return clusters below 20% node utilization; never publish private status."""
+    """Return clusters below 80% node utilization; never publish private status."""
     try:
         raw = feed.payload
         if (feed.error or not fresh(feed.retrieved_at, now, policy)
-                or raw['schemaVersion'] != 6 or raw['kind'] != 'inferencex.status.clusters'
+                or raw['kind'] != 'inferencex.status.clusters'
                 or not fresh(raw['generatedAt'], now, policy) or raw['data']['available'] is not True):
             return set()
+        # Validate the consumed fields, not schemaVersion: additive API changes
+        # must not turn healthy capacity into an empty candidate list.
         available: set[str] = set()
         seen: set[str] = set()
         for cluster in raw['data']['clusters']:
@@ -184,9 +188,13 @@ def available_clusters(feed: Feed, policy: Policy, now: datetime) -> set[str]:
             if not isinstance(cluster_id, str) or not cluster_id or cluster_id in seen:
                 return set()
             seen.add(cluster_id)
-            if (cluster['stale'] is not False
-                    or not fresh(cluster['observedAt'], now, policy)
-                    or not fresh(cluster['receivedAt'], now, policy)):
+            # The API owns the cluster-age cutoff. Check timestamp validity/order,
+            # but do not impose a second cutoff on its current snapshots.
+            observed, received = utc(cluster['observedAt']), utc(cluster['receivedAt'])
+            generated = utc(raw['generatedAt'])
+            if (cluster['stale'] is not False or cluster['status'] not in ('operational', 'degraded')
+                    or (observed - received).total_seconds() > policy.clock_skew_seconds
+                    or (received - generated).total_seconds() > policy.clock_skew_seconds):
                 continue
             summary = cluster['summary']
             total = summary['totalNodes']
@@ -194,7 +202,8 @@ def available_clusters(feed: Feed, policy: Policy, now: datetime) -> set[str]:
             if (type(total) is not int or total <= 0
                     or any(type(n) is not int or n < 0 for n in counts) or sum(counts) != total):
                 continue
-            if (summary['allocatedNodes'] + summary['mixedNodes']) * 5 < total:
+            # An entirely down/unavailable cluster can also report 0% utilization.
+            if summary['idleNodes'] > 0 and (summary['allocatedNodes'] + summary['mixedNodes']) * 5 < total * 4:
                 available.add(cluster_id)
         return available
     except (KeyError, ValueError, TypeError, AttributeError):
@@ -202,5 +211,17 @@ def available_clusters(feed: Feed, policy: Policy, now: datetime) -> set[str]:
 
 
 def fetch_capacity(policy: Policy) -> set[str]:
-    return available_clusters(fetch('clusters', token=os.environ.get('KLAUDE_DASHBOARD_API_KEY')),
+    return available_clusters(fetch('clusters', token=os.environ.get('KLAUD_DASHBOARD_API_KEY')),
                               policy, datetime.now(timezone.utc))
+
+
+def capacity_context(policy: Policy) -> dict:
+    """Private routing hints for review, without node counts or raw responses."""
+    feed = fetch('clusters', token=os.environ.get('KLAUD_DASHBOARD_API_KEY'))
+    available = available_clusters(feed, policy, datetime.now(timezone.utc))
+    try:
+        clusters = sorted({cluster['clusterId'] for cluster in feed.payload['data']['clusters']
+                           if isinstance(cluster['clusterId'], str)})
+    except (KeyError, TypeError):
+        clusters = []
+    return {'telemetry-clusters': clusters, 'eligible-telemetry-clusters': sorted(available)}
