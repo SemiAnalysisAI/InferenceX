@@ -27,12 +27,15 @@ jobs:
           path: eval_results/
           pattern: ${{ inputs.result-prefix && format('eval_{0}_*', inputs.result-prefix) || 'eval_*' }}
 
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+
       - name: Summarize evals
         run: |
-          pip install tabulate
           echo "## Eval Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          python3 utils/collect_eval_results.py eval_results/ ${{ inputs.result-prefix || 'all' }} >> $GITHUB_STEP_SUMMARY
+          uv run --no-project --exclude-newer PT12H --python 3.12 --with tabulate \
+            utils/collect_eval_results.py eval_results/ ${{ inputs.result-prefix || 'all' }} >> $GITHUB_STEP_SUMMARY
 
       - name: Upload aggregated evals
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

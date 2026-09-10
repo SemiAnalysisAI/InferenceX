@@ -348,10 +348,14 @@ jobs:
           # We'll publish a single combined eval table in the collection job instead.
           GITHUB_STEP_SUMMARY: ''
         run: |
-          export RESULT_FILENAME="$RESULT_FILENAME_BASE"
-          if [ -n "$RECIPE_FINGERPRINT" ]; then
-            export RESULT_FILENAME="${RESULT_FILENAME}_recipe-${RECIPE_FINGERPRINT:0:16}"
+          if [[ -f utils/result_filename.py ]]; then
+            RESULT_FILENAME=$(python3 utils/result_filename.py)
+          else
+            # Older measured commits predate the helper; preserve safe identity.
+            RESULT_FILENAME=$(printf '%s\0' "$RESULT_FILENAME_BASE" "$RECIPE_FINGERPRINT" | sha256sum)
+            RESULT_FILENAME="${RESULT_FILENAME%% *}"
           fi
+          export RESULT_FILENAME
           export GPU_COUNT=$((TP * PP_SIZE * PCP_SIZE))
           echo "GPU_COUNT=${GPU_COUNT}" >> "$GITHUB_ENV"
 
