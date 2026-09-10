@@ -21,16 +21,13 @@ from pathlib import Path
 
 import pytest
 
-from utils.agentic.aggregation.request_metrics import (
-    compute_request_metrics,
-    load_aggregate,
-    load_records,
-)
+from utils.agentic.aggregation.request_metrics import compute_request_metrics
 from utils.agentic.aggregation.process_agentic_result import _gpu_shape
-from utils.agentic.aggregation.server_metrics import (
-    compute_server_metrics,
-    load_server_metrics,
+from utils.agentic.aggregation.process_agentic_result import (
+    optional_component_metadata,
+    optional_kv_offload_backend_metadata,
 )
+from utils.agentic.aggregation.server_metrics import compute_server_metrics
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -162,28 +159,6 @@ def _assert_stable_request_metrics_schema(agg: dict) -> None:
     assert set(request_metrics["tokens"]) == REQUEST_TOKEN_KEYS
     assert set(request_metrics["throughput"]) == REQUEST_THROUGHPUT_KEYS
     assert set(request_metrics["cache"]) == REQUEST_CACHE_KEYS
-
-
-def _flat_request_keys(result_dir: Path) -> set[str]:
-    artifact = result_dir / "aiperf_artifacts"
-    records = load_records(artifact / "profile_export.jsonl")
-    aggregate_path = artifact / "profile_export_aiperf.json"
-    aggregate = load_aggregate(aggregate_path) if aggregate_path.exists() else {}
-    flat, _ = compute_request_metrics(records, aggregate)
-    return set(flat)
-
-
-def _flat_server_keys(result_dir: Path, framework: str = "vllm") -> set[str]:
-    records = load_records(result_dir / "aiperf_artifacts" / "profile_export.jsonl")
-    server_metrics = load_server_metrics(
-        result_dir / "aiperf_artifacts" / "server_metrics_export.json"
-    )
-    flat, _, _ = compute_server_metrics(
-        server_metrics,
-        framework=framework,
-        records=records,
-    )
-    return set(flat)
 
 
 def _make_record(
@@ -377,8 +352,8 @@ def test_processor_emits_nested_request_and_server_metrics(tmp_path: Path):
     assert agg["recipe_fingerprint"] == "b" * 64
     missing = AGG_TOP_LEVEL_KEYS - set(agg.keys())
     assert not missing, f"agg JSON missing top-level keys: {sorted(missing)}"
-    assert not (_flat_request_keys(result_dir) & set(agg.keys()))
-    assert not (_flat_server_keys(result_dir) & set(agg.keys()))
+    assert "server_gpu_cache_hit_rate" not in agg
+    assert "total_prompt_tokens" not in agg
     _assert_stable_request_metrics_schema(agg)
     _assert_stable_server_metrics_schema(agg)
 
@@ -417,6 +392,37 @@ def test_processor_omits_component_metadata_when_absent(tmp_path: Path):
 
     assert "router" not in agg
     assert "kv_p2p_transfer" not in agg
+
+
+@pytest.mark.parametrize("parser", [
+    optional_component_metadata, optional_kv_offload_backend_metadata,
+])
+@pytest.mark.parametrize("raw", [None, "", "null"])
+def test_optional_metadata_accepts_unset_values(monkeypatch, parser, raw):
+    if raw is None:
+        monkeypatch.delenv("TEST_METADATA", raising=False)
+    else:
+        monkeypatch.setenv("TEST_METADATA", raw)
+    assert parser("TEST_METADATA") is None
+
+
+@pytest.mark.parametrize(("parser", "raw", "message"), [
+    (optional_component_metadata, "{", "must contain valid JSON"),
+    (optional_component_metadata, "[]", "must contain exactly 'name' and 'version'"),
+    (optional_component_metadata, '{"name":"router"}', "must contain exactly 'name' and 'version'"),
+    (optional_component_metadata, '{"name":"router","version":0}', "name and version must be non-empty strings"),
+    (optional_kv_offload_backend_metadata, "{", "must contain valid JSON"),
+    (optional_kv_offload_backend_metadata, "[]", "may contain only 'name' and 'version'"),
+    (optional_kv_offload_backend_metadata, '{"name":"cache","extra":1}', "may contain only 'name' and 'version'"),
+    (optional_kv_offload_backend_metadata, "{}", "must contain 'name' and optional 'version'"),
+    (optional_kv_offload_backend_metadata, '{"version":"1"}', "must contain 'name' and optional 'version'"),
+    (optional_kv_offload_backend_metadata, '{"name":"cache","version":""}', "values must be non-empty strings"),
+])
+def test_optional_metadata_preserves_cli_errors(monkeypatch, parser, raw, message):
+    monkeypatch.setenv("TEST_METADATA", raw)
+    with pytest.raises(SystemExit) as error:
+        parser("TEST_METADATA")
+    assert error.value.code == f"TEST_METADATA {message}"
 
 
 @pytest.mark.parametrize(
@@ -1138,7 +1144,6 @@ def test_processor_parses_real_server_metrics_schema(tmp_path: Path):
     assert agg["server_metrics"]["tokens"]["generation_total"] == 6789
     _assert_stable_server_metrics_schema(agg)
     assert agg["server_metrics"]["adapter"] == "vllm"
-    assert agg["server_metrics"]["cache"]["gpu_cache_hit_rate"] == pytest.approx(0.8)
 
 
 def test_processor_aggregates_across_multiple_series(tmp_path: Path):

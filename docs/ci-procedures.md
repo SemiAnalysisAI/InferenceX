@@ -20,6 +20,8 @@ Use this page for matrix generation, CI dispatch, PR sweeps, result staging, art
 | Select PR sweep labels | [PR primary and modifier labels](#pr-primary-and-modifier-labels) |
 | Understand early cancellation | [Canary and fail-fast semantics](#canary-and-fail-fast-semantics) |
 | Diagnose or rerun a workflow | [Monitoring and reruns](#monitoring-and-reruns) |
+| Check privileged workflow access | [Repository-role authorization](#repository-role-authorization) |
+| Manage CI Python dependencies | [CI Python environments](#ci-python-environments) |
 | Publish a PR run to staging | [Stage results](#stage-results) |
 | Merge without repeating an approved sweep | [Artifact reuse and merge-with-reuse](#artifact-reuse-and-merge-with-reuse) |
 | Recover an append-only changelog conflict | [Changelog conflict recovery](#changelog-conflict-recovery) |
@@ -72,7 +74,7 @@ Use `test-config` for exact keys or quoted `*`/`?` patterns. `--conc` must be pr
 
 ```bash
 MATRIX=/tmp/inferencex-matrix.json
-uv run --no-project --with pydantic --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
   utils/matrix_logic/generate_sweep_configs.py test-config \
   --config-files configs/nvidia-master.yaml \
   --config-keys dsr1-fp8-h200-sglang \
@@ -85,7 +87,7 @@ python3 -m json.tool "$MATRIX" >/dev/null
 For multiple keys, pass each key after `--config-keys`. Quote wildcard patterns so the shell does not expand them:
 
 ```bash
-uv run --no-project --with pydantic --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
   utils/matrix_logic/generate_sweep_configs.py test-config \
   --config-files configs/nvidia-master.yaml \
   --config-keys '*-b200-*' \
@@ -98,7 +100,7 @@ uv run --no-project --with pydantic --with pyyaml --python 3.12 \
 `full-sweep` does not necessarily mean every configuration. Narrow it by model, precision, framework, runner, sequence length, topology, concurrency, TP/EP, or scenario type:
 
 ```bash
-uv run --no-project --with pydantic --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
   utils/matrix_logic/generate_sweep_configs.py full-sweep \
   --config-files configs/nvidia-master.yaml \
   --single-node \
@@ -154,7 +156,7 @@ Eval switches are exact:
 Run a syntax parse on every touched YAML file. This catches malformed YAML but does not validate GitHub expressions or workflow dependency wiring:
 
 ```bash
-uv run --no-project --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
   python -c 'import sys, yaml; [yaml.safe_load(open(path, encoding="utf-8")) for path in sys.argv[1:]]' \
   configs/nvidia-master.yaml perf-changelog.yaml .github/workflows/e2e-tests.yml
 ```
@@ -169,7 +171,7 @@ The validator reads Git objects, not uncommitted working-tree bytes. Commit the 
 
 ```bash
 git fetch origin main
-uv run --no-project --with pydantic --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
   utils/validate_perf_changelog.py \
   --changelog-file perf-changelog.yaml \
   --base-ref origin/main \
@@ -222,6 +224,10 @@ Do not continue if `RUN_ID` is empty. Run metadata describes the dispatch workfl
 
 ## PR primary and modifier labels
 
+Sweep labels authorize GPU work for same-repository PRs whether draft or ready. Draft status controls review readiness, not sweep eligibility; fork PRs retain their trusted-dispatch path. Adding a sweep label or pushing with one present can start a sweep. Marking ready does not dispatch or repeat one. To start an already-labeled draft that has no run, remove and reapply its sweep label.
+
+The same-repository check applies before checking out PR code in changelog validation as well as before GPU setup. Validation explicitly uses a read-only token without persisted checkout credentials. External PRs still require the separate trusted dispatcher: a write-authorized maintainer labels an open, ready PR and approves its exact head; subsequent external commits require fresh approval. Labels alone never make a fork eligible for the normal sweep pipeline.
+
 [`run-sweep.yml`](../.github/workflows/run-sweep.yml) rejects more than one primary label. Apply exactly one:
 
 | Primary label | Matrix scope | Canary | Matrix fail-fast |
@@ -273,6 +279,8 @@ Watch the first canary or matrix failure, then classify it before rerunning:
 - **Policy/gate failure:** conflicting labels, invalid changelog, missing authorization, merge conflict, or ineligible artifacts. Correct the gate. GPU reruns will not fix it.
 - **Superseded run:** a later commit or recognized label change cancelled it through workflow concurrency. Monitor the replacement run rather than reviving stale evidence.
 
+The [`PR Review` workflow](../.github/workflows/claude-pr-review.yml) installs a pinned official Claude Code npm package and checks `claude --version` before passing its executable path to the review action. An installation or startup failure means the review did not run; it is not a review finding or a successful review. Check the installation step before retrying.
+
 ### Rerun safely
 
 Do not rerun an in-progress run blindly. A completed failed run can rerun only failed jobs and their dependents:
@@ -289,9 +297,60 @@ gh run rerun <RUN_ID> --repo SemiAnalysisAI/InferenceX
 
 A rerun remains the same workflow run ID with a higher attempt. Artifact APIs can contain uploads from multiple attempts, so preserve `run_attempt` and inspect artifact timestamps. `run-stats` intentionally counts jobs from all attempts. If the source must change, do not rerun old code. Push the fix and monitor the new run. Removing and re-adding the primary sweep label forces a fresh labeled run. A later commit can invalidate reuse eligibility.
 
+## CI Python environments
+
+Hosted jobs that need Python packages use the pinned `astral-sh/setup-uv` action
+and `uv run --no-project --exclude-newer PT12H --python 3.12`. Declare dependencies
+with `--with`, or use `--with-requirements` for an existing requirements file.
+Keep options in this order: `--no-project`, `--exclude-newer`, `--python`,
+`--with`, `--with-requirements`, then the command and its arguments.
+
+The 12-hour cooldown applies to direct and transitive registry dependencies.
+Distributions with missing upload timestamps are unavailable; do not disable the
+cutoff to make resolution pass. CollectiveX uses a fresh venv and `uv pip install
+--exclude-newer PT12H --torch-backend cpu`: only PyTorch packages come from its CPU
+index, whose mirrors of other packages lack timestamps. Other dependencies come
+from PyPI. The job verifies that the installed wheel has no CUDA or ROCm backend.
+
+The review workflows share [`.github/mcp-ci.json`](../.github/mcp-ci.json), which
+starts their Python MCP server through uv using the existing requirements file.
+The server uses the MCP 1.x API; the requirements exclude incompatible SDK 2.x,
+and CI exercises server construction and discovery without cloning repositories.
+Their checkout refs, credentials, and review policy are unchanged. Matrix and
+CollectiveX unit tests now run on draft PRs too, allowing CI environment changes
+to be verified before requesting review.
+
+Standard-library-only helpers continue using the runner's Python. Benchmark
+containers and their framework environments remain managed by their existing
+launchers; this CI dependency migration does not change those environments.
+
+## Repository-role authorization
+
+Staging and trusted external sweep dispatch check repository permissions directly
+through `actions/github-script`, using its authenticated `GITHUB_TOKEN` client.
+Both operations require Write, Maintain, or Admin access; Read, Triage, and users
+without repository access cannot perform these operations.
+
+Authorization requires both the original base `permission` and effective
+`role_name` to be one of `admin`, `maintain`, or `write`. Missing or malformed
+fields stop the workflow. Unknown and custom roles are denied without falling
+back to the legacy permission field, and API errors stop the workflow. These
+stricter denials are intentional; standard Write access remains sufficient.
+GitHub reports Maintain as Write in the base `permission` field. Denial messages
+include both fields. Organization membership and `author_association` do not
+grant access through these checks; no team-membership token is needed.
+
+Staging checks the comment author; external approval checks the original
+`github.actor`, including on reruns. Authorization lives in each trusted workflow
+and needs no repository checkout or Python helper. Existing PR, SHA,
+label-history, source-run, artifact, and CODEOWNER checks remain in place.
+Other workflows, including recovery, retain their original authorization and
+dispatch behavior. Execution credentials and GitHub protections remain explicit
+in the workflows.
+
 ## Stage results
 
-[`stage-results.yml`](../.github/workflows/stage-results.yml) is a maintainer-only publication path for PR results, not a substitute for merge or production ingestion.
+[`stage-results.yml`](../.github/workflows/stage-results.yml) publishes PR results to staging for users with Write, Maintain, or Admin access. It does not merge or publish to production.
 
 A request is stageable only when all of the following hold:
 
@@ -373,7 +432,7 @@ The helper reads merge-base/PR/main bytes from index stages 1/2/3, validates the
 After committing, run the exact gate against `origin/main`:
 
 ```bash
-uv run --no-project --with pydantic --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
   utils/validate_perf_changelog.py \
   --changelog-file perf-changelog.yaml \
   --base-ref origin/main \

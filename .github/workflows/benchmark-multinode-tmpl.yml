@@ -3,6 +3,11 @@ name: Template - Multi-Node Benchmark
 on:
   workflow_call:
     inputs:
+      klaud-run:
+        description: "Run Klaud Cold benchmarks at background priority"
+        required: false
+        type: boolean
+        default: false
       runner:
         required: true
         type: string
@@ -347,7 +352,7 @@ jobs:
     # recipe's 12-hour Slurm limit for checkout, staging, and artifact upload.
     timeout-minutes: ${{ inputs.scenario-type == 'agentic-coding' && 780 || 480 }}
     name: >-
-      p${{ inputs.priority }} | ${{ inputs.model-prefix }} ${{ inputs.precision }} ${{ inputs.runner }} ${{ inputs.framework == 'sglang' && 'sgl' || inputs.framework == 'dynamo-sglang' && 'dyn-sgl' || inputs.framework == 'sglang-disagg' && 'sgl-disagg' || inputs.framework }}
+      ${{ inputs.klaud-run && 'klaud | ' || '' }}p${{ inputs.priority }} | ${{ inputs.model-prefix }} ${{ inputs.precision }} ${{ inputs.runner }} ${{ inputs.framework == 'sglang' && 'sgl' || inputs.framework == 'dynamo-sglang' && 'dyn-sgl' || inputs.framework == 'sglang-disagg' && 'sgl-disagg' || inputs.framework }}
       ${{ inputs.disagg == 'true' && format('{0}P ', inputs.prefill-num-worker) || '' }}(TP${{ inputs.prefill-tp }}${{ inputs.prefill-pp != '' && inputs.prefill-pp != '1' && format('/PP{0}', inputs.prefill-pp) || '' }}${{ inputs.prefill-dcp-size != '' && inputs.prefill-dcp-size != '1' && format('/DCP{0}', inputs.prefill-dcp-size) || '' }}${{ inputs.prefill-pcp-size != '' && inputs.prefill-pcp-size != '1' && format('/PCP{0}', inputs.prefill-pcp-size) || '' }}${{ inputs.prefill-ep != '' && inputs.prefill-ep != '1' && format('/EP{0}', inputs.prefill-ep) || '' }}${{ inputs.prefill-dp-attn == 'true' && '/DPA' || '' }})
       ${{ inputs.disagg == 'true' && format('x {0}D (TP{1}{2}{3}{4}{5}{6})', inputs.decode-num-worker, inputs.decode-tp, inputs.decode-pp != '' && inputs.decode-pp != '1' && format('/PP{0}', inputs.decode-pp) || '', inputs.decode-dcp-size != '' && inputs.decode-dcp-size != '1' && format('/DCP{0}', inputs.decode-dcp-size) || '', inputs.decode-pcp-size != '' && inputs.decode-pcp-size != '1' && format('/PCP{0}', inputs.decode-pcp-size) || '', inputs.decode-ep != '' && inputs.decode-ep != '1' && format('/EP{0}', inputs.decode-ep) || '', inputs.decode-dp-attn == 'true' && '/DPA' || '') || '' }}
       ${{ inputs.spec-decoding != 'none' && inputs.spec-decoding || '' }}
@@ -394,7 +399,7 @@ jobs:
             done
           fi
 
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           token: ${{ secrets.REPO_PAT }}
           fetch-depth: 0
@@ -409,10 +414,14 @@ jobs:
           RESULT_FILENAME_BASE: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_prefill-tp${{ env.PREFILL_TP }}-pp${{ env.PREFILL_PP_SIZE }}-dcp${{ env.PREFILL_DCP_SIZE }}-pcp${{ env.PREFILL_PCP_SIZE }}-ep${{ env.PREFILL_EP }}-dp${{ env.PREFILL_DP_ATTN }}-nw${{ env.PREFILL_NUM_WORKERS }}_decode-tp${{ env.DECODE_TP }}-pp${{ env.DECODE_PP_SIZE }}-dcp${{ env.DECODE_DCP_SIZE }}-pcp${{ env.DECODE_PCP_SIZE }}-ep${{ env.DECODE_EP }}-dp${{ env.DECODE_DP_ATTN }}-nw${{ env.DECODE_NUM_WORKERS }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ join(fromJson(inputs.conc-list), 'x') }}_${{ runner.name }}
         run: |
           set -x
-          export RESULT_FILENAME="$RESULT_FILENAME_BASE"
-          if [ -n "$RECIPE_FINGERPRINT" ]; then
-            export RESULT_FILENAME="${RESULT_FILENAME}_recipe-${RECIPE_FINGERPRINT:0:16}"
+          if [[ -f utils/result_filename.py ]]; then
+            RESULT_FILENAME=$(python3 utils/result_filename.py)
+          else
+            # Older measured commits predate the helper; preserve safe identity.
+            RESULT_FILENAME=$(printf '%s\0' "$RESULT_FILENAME_BASE" "$RECIPE_FINGERPRINT" | sha256sum)
+            RESULT_FILENAME="${RESULT_FILENAME%% *}"
           fi
+          export RESULT_FILENAME
           # Export RESULT_FILENAME early so it's available for artifact uploads even if cancelled
           echo "RESULT_FILENAME=${RESULT_FILENAME}" >> "$GITHUB_ENV"
           echo "EVAL_ARTIFACT_RECIPE=${RECIPE_FINGERPRINT:0:16}" >> "$GITHUB_ENV"

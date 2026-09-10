@@ -11,6 +11,16 @@ Use this page to add and run graded evals, operate AgentX trace replays, preserv
 
 ## 1. Pick the correct execution mode
 
+For a throughput-only PR sweep, set `no-evals: true` on its
+`perf-changelog.yaml` entries and use a normal primary sweep label, including
+`full-sweep-enabled`. This skips all eval job families for those entries without
+changing benchmark duration or Prometheus artifacts. The flag defaults to false
+and is retained in changelog metadata. Another entry requesting the same config
+can still select its evals; mark every applicable entry to suppress them entirely.
+Combining `no-evals` with `all-evals`, `evals-only`, or `eval-min-prefill-ep`
+on the entry, or with either eval PR modifier, is rejected. Such a run provides
+throughput evidence, not model-evaluation evidence.
+
 There are two distinct layers: the matrix generator decides **which jobs exist**, while runtime variables decide **what a launched job does**.
 
 | Need | Generator/workflow mode | Runtime behavior |
@@ -39,7 +49,7 @@ gh pr edit <PR_NUMBER> --repo SemiAnalysisAI/InferenceX \
 Preview the exact matrix before consuming a runner:
 
 ```bash
-uv run --no-project --with pydantic --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
   utils/matrix_logic/generate_sweep_configs.py \
   test-config \
   --config-keys qwen3.5-fp8-b200-sglang-agentic \

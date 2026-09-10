@@ -38,8 +38,8 @@ BACKEND_PRECISIONS = {
     "deepep-v2": ("bf16", "fp8"),
     "mori": ("bf16", "fp8"),
     "uccl-ep": ("bf16", "fp8"),
-    # NCCL EP is BF16-only on the strength of RELEASE.md's "No FP8 support" row, which is
-    # worth re-testing — see the note in bench/ep_nccl.py.
+    # NCCL EP is BF16-only now; NCCL EP v0.2 supports FP8 dispatch, but the integration is
+    # pending (see bench/ep_nccl.py).
     "nccl-ep": ("bf16",),
     # FlashInfer FP8 is dispatch-side only (scales as a fourth payload, combine stays BF16),
     # and uses the same per-128-block e4m3 recipe as deepep-v2/uccl-ep so the axis is
