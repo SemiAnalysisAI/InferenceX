@@ -7049,3 +7049,10 @@
   description:
     - "Remove the unstable concurrency-1152 2P DEP8 prefill plus DEP12 decode point after repeated benchmark failures."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2623
+
+- config-keys:
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg
+  description:
+    - "Bump the vLLM image from vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-75c2eef to vllm/vllm-openai:nightly-dev-arm64-cu13-3696c77 pinned by digest sha256:42e17a3c600c043c45e0623e4568cd4d5903dd76525a85f5df6ca6fa65358b12."
+    - "Run the Dynamo frontend with its native chat processor because vLLM moved vllm/entrypoints/openai/cli_args.py (vllm-project/vllm#53659), which the pinned Dynamo ba83080 vLLM chat-processor path imports; tool-call and reasoning parsing stay on kimi_k3 through the worker dyn-tool-call-parser and dyn-reasoning-parser registration."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2956
