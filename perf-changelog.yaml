@@ -6957,7 +6957,6 @@
     - "Tune the 8k/1k serving recipe with --mamba-full-memory-ratio 0.37 and --linear-attn-prefill-backend flashinfer; raise max-prefill-tokens and chunked-prefill-size from 16384 to 32768 and mem-fraction-static from 0.8 to 0.86."
     - "Expand the TP8 and TP4/EP1 sweep coverage through concurrency 640."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2866
-  
 
 - config-keys:
     - dsv4-fp4-b200-sglang-agentic-hicache-mtp
@@ -7058,3 +7057,16 @@
   description:
     - "Remove the unstable concurrency-1152 2P DEP8 prefill plus DEP12 decode point after repeated benchmark failures."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2623
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260907."
+    - "Keep TP-only chunked-prefill at 8192 for TP4 and 16384 for TP8. The DP-attention path uses an 8192 per-rank budget (engine-wide 8192*TP, 65536 at TP8) instead of scaling the TP8 16384 base."
+    - "DP-attention serving: drop --enable-two-batch-overlap; set mem-fraction-static to 0.92 (pure TP stays 0.86); keep --enforce-shared-experts-fusion and move --disable-shared-experts-fusion to the EP branch only; keep swa-full-tokens-ratio at 0.10; add --prefill-delayer-token-usage-low-watermark 0.7."
+    - "Remove the 256 cap on max-running-requests."
+    - "MTP draft length by concurrency: speculative-num-steps 3 (golden AL 2.49) below conc 256, and 1 (golden AL 1.79) at and above it."
+    - "Trim the search space to TP8 no-offload conc [1, 4, 16], TP8 hicache conc [32, 48], and TP8 DP-attention hicache conc [128, 256]."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2885
