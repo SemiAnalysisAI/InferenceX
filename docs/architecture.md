@@ -220,6 +220,8 @@ Test builders with small, independently worked examples and read-only inputs. Fo
 
 For eval-only jobs, throughput output is not required. The workflow instead requires at least one `results*.json`. For jobs marked to run eval, uploads may contain `meta_env.json`, `results*.json`, `sample*.jsonl`, SWE-bench predictions and reports, and trajectory files. [`utils/evals/validate_scores.py`](../utils/evals/validate_scores.py) checks produced eval scores.
 
+[`infx.results.evals`](../infx/results/evals.py) shares format-marker recognition, staged concurrency suffix parsing, and result recency ordering between the eval collector and reusable-artifact validator. Filename timestamps and legacy file mtimes use epoch nanoseconds, with filenames breaking ties. Each caller retains its own file discovery, metric validation, diagnostics, and artifact writes; recognizing a format does not imply that its results are valid or reusable.
+
 Agentic throughput jobs have a different contract. They validate AIPerf output with [`utils/agentic/validation/validate_agentic_result.py`](../utils/agentic/validation/validate_agentic_result.py), upload an aggregate `bmk_agentic_<suffix>` artifact, and upload the raw `agentic_<suffix>` sibling containing trace-replay material. InferenceX-app pairs those siblings by their shared suffix. Agentic eval-only jobs follow the eval output contract instead and do not require a throughput result.
 
 Server logs and GPU metrics are diagnostic side artifacts. They are uploaded with `always()` so a failed run can still be investigated. Their presence does not turn a failed benchmark into a valid result.
