@@ -1234,7 +1234,7 @@ qwen3.5-fp8-b200-sglang-agentic-mtp:
       - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 18, 20, 22, 24, 28, 32] }
 
 qwen3.5-fp4-b200-sglang:
-  image: lmsysorg/sglang:v0.5.14-cu130
+  image: lmsysorg/sglang:v0.5.19-cu130
   model: nvidia/Qwen3.5-397B-A17B-NVFP4-V2
   model-prefix: qwen3.5
   runner: cluster:b200-nscale
@@ -1365,7 +1365,7 @@ qwen3.5-fp4-rtx6000pro-sglang-mtp:
       - { tp: 4, ep: 4, conc-list: [1, 4, 16, 64], spec-decoding: mtp }
 
 qwen3.5-fp4-b300-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.14-cu130
+  image: lmsysorg/sglang:v0.5.19-cu130
   model: nvidia/Qwen3.5-397B-A17B-NVFP4-V2
   model-prefix: qwen3.5
   runner: b300
@@ -1556,7 +1556,7 @@ dsr1-fp8-h200-sglang:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
 dsr1-fp8-h200-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.12-cu130
+  image: lmsysorg/sglang:v0.5.19-cu130
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: h200
@@ -6427,7 +6427,7 @@ qwen3.5-fp8-h100-sglang:
       - { tp: 8, ep: 8, conc-start: 16, conc-end: 256 }
 
 qwen3.5-fp8-h100-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.14-cu130
+  image: lmsysorg/sglang:v0.5.19-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: h100
@@ -8823,13 +8823,13 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2:
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-gb200-tp8pp2-mooncake-c96-agentic.yaml"
 dsv4-fp4-gb300-dynamo-sglang-agentic-agg:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260829-89816a21
+  image: lmsysorg/sglang:v0.5.19-cu130@sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9
   model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:gb300-nv
   precision: fp4
   framework: dynamo-sglang
-  router: { name: dynamo-router, version: "1.5.0.dev20260902" }
+  router: { name: dynamo-router, version: "1.5.0.dev20260910" }
   multinode: true
   disagg: false
   scenarios:
