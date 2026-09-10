@@ -169,6 +169,8 @@ Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../AGENTS.md#non-nego
 
 ### DeepSeek-V4.1-Flash DSpark on H100
 
+Throughput uses the [committed golden AL](../golden_al_distribution/dsv41flash_dspark.yaml) of 3.51 for thinking on and five draft tokens, with synthetic rejection sampling and adaptive verification disabled. Accuracy evals retain real block rejection and adaptive verification.
+
 `dsv41flash-fp4-h100-vllm-agentic-dspark` is the H100 AgentX arm of the
 DeepSeek-V4.1-Flash recipe, added after the H200 arm and deliberately separate from
 it. H100 is **not** in the upstream hardware table, which lists h200, gb200, gb300, and

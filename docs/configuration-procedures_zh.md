@@ -169,6 +169,8 @@ llm-d 不是 srt-slurm 路径：InferenceX 自己持有 Slurm allocation，并�
 
 ### H100 上的 DeepSeek-V4.1-Flash DSpark
 
+吞吐测试使用[已提交的黄金 AL](../golden_al_distribution/dsv41flash_dspark.yaml)：thinking 开启、五个草稿 token 对应 3.51，采用合成拒绝采样并关闭自适应验证。准确率 eval 保留真实块拒绝采样和自适应验证。
+
 `dsv41flash-fp4-h100-vllm-agentic-dspark` 是 DeepSeek-V4.1-Flash 配方的 H100 AgentX
 分支，在 H200 分支之后加入，并有意与其分开。H100 **不在**上游硬件表中（该表列出
 h200、gb200、gb300、mi350x）。
