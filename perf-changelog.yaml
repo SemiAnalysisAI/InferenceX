@@ -6996,6 +6996,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2816
 
 - config-keys:
+    - minimaxm3-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Remove the --hf-overrides use_index_cache/index_topk_freq serve-time model-config rewrite from the MiniMax-M3 ATOM AgentX launcher; sparse-PA index-cache behavior now follows the checkpoint and pinned ATOM image (per PR_REVIEW_CHECKLIST.md)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2816
+
+- config-keys:
     - dsv4-fp4-mi355x-sglang-mtp
   scenario-type:
     - fixed-seq-len

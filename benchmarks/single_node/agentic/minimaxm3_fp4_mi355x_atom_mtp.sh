@@ -11,8 +11,9 @@ set -x
 # TP2 and TP4 follow the official ATOM MiniMax-M3 MXFP4 recipe. TP8 is also
 # accepted for larger-memory variants and manual smoke tests.
 #
-# The ATOM image is launched with the official MiniMax attention/index-cache
-# settings; Kimi-specific vLLM patches are not sourced here.
+# The ATOM image is launched with the official MiniMax FP8 KV/index-cache dtype
+# settings; sparse-PA behavior comes from the checkpoint and image, not
+# --hf-overrides. Kimi-specific vLLM patches are not sourced here.
 #
 # Required env vars:
 #   MODEL, MODEL_PATH, TP, DCP_SIZE, CONC, KV_OFFLOADING, KV_OFFLOAD_BACKEND,
@@ -304,7 +305,6 @@ ATOM_CMD=(
     --max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS"
     --gpu-memory-utilization "$GPU_MEM_UTIL"
     --index-cache-dtype fp8
-    --hf-overrides '{"use_index_cache": true, "index_topk_freq": 4}'
     --online_quant_config '{"global_quant_config":"ptpc_fp8","exclude_layer":["lm_head","model.embed_tokens","vision_tower","multi_modal_projector","patch_merge_mlp","*block_sparse_moe"]}'
     --default-chat-template-kwargs '{"thinking_mode":"enabled"}'
     "${SPEC_ARGS[@]}"
