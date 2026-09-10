@@ -9117,7 +9117,7 @@ glm5.2-fp4-b300-dynamo-sglang-agentic-agg:
   image: lmsysorg/sglang:nightly-dev-cu13-20260824-95f5ecd3
   model: nvidia/GLM-5.2-NVFP4
   model-prefix: glm5.2
-  runner: cluster:b300-nv
+  runner: cluster:b300-dsxe
   precision: fp4
   framework: dynamo-sglang
   router: { name: dynamo-router, version: "71eb001e17fa73c742f0afe1a6ed96836cb135fd" }
@@ -9168,7 +9168,7 @@ glm5.2-fp4-b300-dynamo-sglang-agentic-disagg:
   image: lmsysorg/sglang:nightly-dev-cu13-20260824-95f5ecd3
   model: nvidia/GLM-5.2-NVFP4
   model-prefix: glm5.2
-  runner: cluster:b300-nv
+  runner: cluster:b300-dsxe
   precision: fp4
   framework: dynamo-sglang
   router: { name: dynamo-router, version: "71eb001e17fa73c742f0afe1a6ed96836cb135fd" }
