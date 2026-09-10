@@ -169,7 +169,7 @@ Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../AGENTS.md#non-nego
 
 ### DeepSeek-V4.1-Flash DSpark
 
-The AgentX-only `dsv41flash-fp4-{b200,b300,gb300}-vllm-agentic-dspark` recipes use
+The AgentX-only `dsv41flash-fp4-<sku>-vllm-agentic-dspark` recipes use
 `vllm/vllm-openai:deepseekv41-flash-0909` at TP4 with native five-token DSpark,
 probabilistic drafting, block rejection, and adaptive verification. Throughput
 and eval both use real target verification. `--engram-config '{"cpu_offload":true}'`
@@ -177,12 +177,11 @@ stores Engram embedding tables in pinned host DRAM accessed through UVA;
 `kv-offloading: none` describes the separate, GPU-resident KV cache. MXFP4 expert
 weights determine the recipe's `precision: fp4` label.
 
-All three GPUs use the same text-only serving script, `deepseek_v41` tokenizer and
+The GPU-specific entry points share the text-only serving script, `deepseek_v41` tokenizer and
 parsers, 1M context, and the shared AgentX trace replay, power, metrics, and eval
-helpers. Concurrency is 1–32 with scheduler capacity of twice the trajectory
-concurrency. All three launchers mount the repository at `/ix` for this recipe so
-AgentX runtime directories are not created under `/workspace`. B200 and GB300 download
-weights into their persistent HF caches. The changelog opts into AgentX evals.
+helpers. Concurrency is 1–128 with scheduler capacity of twice the trajectory
+concurrency. The launchers mount the repository at `/ix` for this recipe so
+AgentX runtime directories are not created under `/workspace`. Launcher-specific model paths and persistent caches are reused.
 The recipe probes the serving port on the compute node and selects an available
 port if the preferred one is occupied. Serving, replay, metrics, and eval share
 that endpoint.

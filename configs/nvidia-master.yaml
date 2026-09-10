@@ -10204,34 +10204,4 @@ dsv41flash-fp4-b300-vllm-agentic-dspark:
     - dram-utilization: 0.80
       search-space:
       # Engram weights use UVA DRAM; the KV cache stays GPU-resident.
-      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32] }
-
-dsv41flash-fp4-gb300-vllm-agentic-dspark:
-  image: vllm/vllm-openai:deepseekv41-flash-0909
-  model: deepseek-ai/DeepSeek-V4.1-Flash
-  model-prefix: dsv41flash
-  runner: cluster:gb300-nv
-  precision: fp4
-  framework: vllm
-  multinode: false
-  scenarios:
-    agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
-      # Engram weights use UVA DRAM; the KV cache stays GPU-resident.
-      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32] }
-
-dsv41flash-fp4-b200-vllm-agentic-dspark:
-  image: vllm/vllm-openai:deepseekv41-flash-0909
-  model: deepseek-ai/DeepSeek-V4.1-Flash
-  model-prefix: dsv41flash
-  runner: cluster:b200-nscale
-  precision: fp4
-  framework: vllm
-  multinode: false
-  scenarios:
-    agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
-      # Engram weights use UVA DRAM; the KV cache stays GPU-resident.
-      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32] }
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }

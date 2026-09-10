@@ -169,18 +169,17 @@ llm-d 不是 srt-slurm 路径：InferenceX 自己持有 Slurm allocation，并�
 
 ### DeepSeek-V4.1-Flash DSpark
 
-仅运行 AgentX 的 `dsv41flash-fp4-{b200,b300,gb300}-vllm-agentic-dspark` 配方使用
+仅运行 AgentX 的 `dsv41flash-fp4-<sku>-vllm-agentic-dspark` 配方使用
 `vllm/vllm-openai:deepseekv41-flash-0909`，采用 TP4、原生五 token DSpark、
 概率采样草稿、块拒绝采样和自适应验证。吞吐测试与 eval 均由目标模型进行真实验证。
 `--engram-config '{"cpu_offload":true}'` 将 Engram 嵌入表放在固定页主机 DRAM
 中，通过 UVA 访问；`kv-offloading: none` 描述的是另行保留在 GPU 上的 KV cache。
 专家权重为 MXFP4，因此配方标记为 `precision: fp4`。
 
-三个 GPU 共用纯文本服务脚本，使用 `deepseek_v41` tokenizer 和解析器、1M 上下文，
-以及共享的 AgentX 轨迹回放、功耗、指标和 eval helper。并发范围为 1–32，调度器容量
-为轨迹并发的两倍。三个 launcher 都为该配方将仓库挂载到 `/ix`，避免在 `/workspace`
-下创建 AgentX 运行目录。B200 和 GB300 将权重下载到各自的持久化 HF 缓存。changelog 显式启用
-AgentX eval。配方在计算节点探测服务端口，首选端口被占用时选择可用端口，
+各 GPU 入口共用纯文本服务脚本，使用 `deepseek_v41` tokenizer 和解析器、1M 上下文，
+以及共享的 AgentX 轨迹回放、功耗、指标和 eval helper。并发范围为 1–128，调度器容量
+为轨迹并发的两倍。launcher 都为该配方将仓库挂载到 `/ix`，避免在 `/workspace`
+下创建 AgentX 运行目录。沿用各 launcher 的模型路径和持久化缓存。配方在计算节点探测服务端口，首选端口被占用时选择可用端口，
 服务、回放、指标和 eval 共用同一端点。所有配方都必须获得 GPU sweep 和 eval
 证据后才能视为已验证。
 

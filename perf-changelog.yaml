@@ -7125,22 +7125,7 @@
 
 - config-keys:
     - dsv41flash-fp4-b300-vllm-agentic-dspark
-    - dsv41flash-fp4-gb300-vllm-agentic-dspark
   description:
-    - "Add AgentX-only DeepSeek-V4.1-Flash TP4 on B300 and GB300 using deepseekv41-flash-0909"
-    - "Enable Engram pinned-DRAM UVA offload and native five-token DSpark adaptive verification"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2958
-
-- config-keys:
-    - dsv41flash-fp4-b300-vllm-agentic-dspark
-    - dsv41flash-fp4-gb300-vllm-agentic-dspark
-  description:
-    - "Select an available serving port for V4.1 Flash AgentX after GB300 port-8888 bind failures"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2958
-
-- config-keys:
-    - dsv41flash-fp4-b200-vllm-agentic-dspark
-  description:
-    - "Add B200 TP4 AgentX with Engram UVA DRAM offload and native five-token DSpark adaptive verification"
-    - "Reuse the V4.1 Flash image and shared serving recipe with available-port selection"
+    - "Add B300 TP4 AgentX through concurrency 128 with Engram UVA DRAM offload and native five-token DSpark"
+    - "Use deepseekv41-flash-0909 with adaptive verification and available-port selection"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2958
