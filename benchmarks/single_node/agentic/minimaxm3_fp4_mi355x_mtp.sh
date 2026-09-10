@@ -186,14 +186,8 @@ export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_USE_AITER_MOE=1
 export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
-# The AITER page-16 sparse-attention path requires exactly one KV head per
-# tensor-parallel rank. MiniMax-M3 has four KV heads, so TP4 uses that fast
-# path while TP2 uses vLLM's supported Triton sparse-attention fallback.
-if [ "$TP" -eq 4 ]; then
-    export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1
-else
-    export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=0
-fi
+export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1
+
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 export VLLM_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16=0
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION_MIN_SIZE_KB=256
@@ -206,10 +200,10 @@ VLLM_CMD=(
     "${PARALLEL_ARGS[@]}"
     --trust-remote-code
     --block-size 128
-    --gpu-memory-utilization 0.85
+    --gpu-memory-utilization 0.92
     --enable-chunked-prefill
-    --max-num-batched-tokens 32768
-    --compilation-config '{"cudagraph_mode":"FULL_DECODE_ONLY"}'
+    --max-num-batched-tokens 65536
+    --compilation-config '{"cudagraph_mode":"FULL_DECODE_ONLY", "cudagraph_capture_sizes": [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,20,22,24,26,28,30,32,34,36,48,64,72,80,88,96,104,112,120,128]}'
     --language-model-only
     --enable-prefix-caching
     --attention-backend ROCM_AITER_UNIFIED_ATTN
