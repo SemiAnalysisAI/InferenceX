@@ -290,11 +290,11 @@ if [[ "$DECODE_ENABLE_DP" == "true" ]] && [[ "$DECODE_ENABLE_EP" == "true" ]]; t
 fi
 
 # Build the composed config strings (equivalent to the old MODEL_PREFILL_CONFIGS / MODEL_DECODE_CONFIGS)
-# disable_cuda_graph (model-level) routes prefill to --disable-cuda-graph instead of --cuda-graph-bs.
+# disable_cuda_graph (model-level) routes prefill to --disable-cuda-graph instead of --cuda-graph-bs-prefill.
 if [[ "$PREFILL_DISABLE_CUDA_GRAPH" == "True" ]] || [[ "$PREFILL_DISABLE_CUDA_GRAPH" == "true" ]]; then
     PREFILL_MODE_FLAGS="--mem-fraction-static ${prefill_mem_fraction_static} --max-running-requests ${prefill_max_running_requests} --chunked-prefill-size ${prefill_chunked_prefill_size} --disable-cuda-graph "
 else
-    PREFILL_MODE_FLAGS="--mem-fraction-static ${prefill_mem_fraction_static} --max-running-requests ${prefill_max_running_requests} --chunked-prefill-size ${prefill_chunked_prefill_size} --cuda-graph-bs ${prefill_cuda_graph_bs[*]} "
+    PREFILL_MODE_FLAGS="--mem-fraction-static ${prefill_mem_fraction_static} --max-running-requests ${prefill_max_running_requests} --chunked-prefill-size ${prefill_chunked_prefill_size} --cuda-graph-bs-prefill ${prefill_cuda_graph_bs[*]} "
 fi
 
 if [[ "$PREFILL_DISABLE_RADIX_CACHE" == "True" ]] || [[ "$PREFILL_DISABLE_RADIX_CACHE" == "true" ]]; then
@@ -315,7 +315,7 @@ if [[ "$prefill_enable_two_batch_overlap" == "True" ]] || [[ "$prefill_enable_tw
     PREFILL_SDMA_ENV="MORI_ENABLE_SDMA=true"
 fi
 
-DECODE_MODE_FLAGS="--mem-fraction-static ${decode_mem_fraction_static} --max-running-requests ${decode_max_running_requests} --cuda-graph-bs ${decode_cuda_graph_bs[*]} "
+DECODE_MODE_FLAGS="--mem-fraction-static ${decode_mem_fraction_static} --max-running-requests ${decode_max_running_requests} --cuda-graph-bs-decode ${decode_cuda_graph_bs[*]} "
 
 if [[ "$DECODE_PREFILL_ROUND_ROBIN_BALANCE" == "True" ]] || [[ "$DECODE_PREFILL_ROUND_ROBIN_BALANCE" == "true" ]]; then
     DECODE_MODE_FLAGS="$DECODE_MODE_FLAGS --prefill-round-robin-balance"
