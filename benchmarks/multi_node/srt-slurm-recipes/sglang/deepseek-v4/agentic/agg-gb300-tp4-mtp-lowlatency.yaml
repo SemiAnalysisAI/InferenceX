@@ -1,24 +1,25 @@
 name: "agg-gb300-tp4-mtp-lowlatency"
 
 # Low-latency AgentX aggregate topology: one TP4 worker occupies one
-# four-GPU GB300 node and serves both prefill and decode.
+# four-GPU GB300 node and serves both prefill and decode with DSpark K=6.
 
 model:
-  path: "deepseek-v4-pro"
+  path: "deepseek-v4-pro-0813"
   container: "dynamo-sglang"
   precision: "fp4"
 
 identity:
   model:
-    repo: "deepseek-ai/DeepSeek-V4-Pro"
+    repo: "deepseek-ai/DeepSeek-V4-Pro-0813"
   container:
-    image: "lmsysorg/sglang:nightly-dev-cu13-20260821-f825d729"
-  frameworks:
-    dynamo: "1.4.0"
+    image: "lmsysorg/sglang:nightly-dev-cu13-20260829-89816a21"
 
 dynamo:
   install: true
-  wheel: "1.4.0"
+  wheel: "1.5.0.dev20260902"
+
+slurm:
+  time_limit: "4:00:00"
 
 health_check:
   max_attempts: 1440
@@ -53,10 +54,12 @@ frontend:
 backend:
   type: sglang
   aggregated_environment:
+    SGLANG_RAGGED_VERIFY_MODE: "static"
     SGLANG_DEFAULT_THINKING: "1"
     SGLANG_DSV4_REASONING_EFFORT: high
     PIP_BREAK_SYSTEM_PACKAGES: "1"
     SGLANG_JIT_DEEPGEMM_PRECOMPILE: "1"
+    SGLANG_ENABLE_PREFILL_WAR_READ_DONE: "1"
     SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
     SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: "1"
     SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2: "1"
@@ -67,15 +70,19 @@ backend:
 
   sglang_config:
     aggregated:
-      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro-0813"
       enable-metrics: true
+      enable-cache-report: true
       trust-remote-code: true
+      weight-loader-prefetch-checkpoints: true
       stream-interval: 10
       watchdog-timeout: 1000000
       mem-fraction-static: 0.94
+      page-size: 256
       chunked-prefill-size: 8192
       max-prefill-tokens: 8192
       moe-runner-backend: "flashinfer_mxfp4"
+      enable-deepseek-v4-fp4-indexer: true
       disable-flashinfer-autotune: true
       swa-full-tokens-ratio: 0.1
       max-running-requests: 32
@@ -84,10 +91,11 @@ backend:
       dp-size: 1
       tp-size: 4
       ep-size: 1
-      speculative-algorithm: EAGLE
-      speculative-num-steps: 3
+      speculative-algorithm: DSPARK
+      speculative-dspark-block-size: 6
+      speculative-num-steps: 1
       speculative-eagle-topk: 1
-      speculative-num-draft-tokens: 4
+      speculative-num-draft-tokens: 7
 
 sbatch_directives:
   mem: "0"
