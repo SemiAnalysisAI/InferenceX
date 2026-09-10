@@ -63,6 +63,19 @@ set +x
 export NCCL_IB_HCA=${NCCL_IB_HCA:-$IBDEVICES}
 
 # =============================================================================
+# Shared: runner hardware family
+# =============================================================================
+# Reduce the runner label to its GPU family, mirroring
+# infx/matrix/generate.py::_hardware_family. RUNNER_TYPE reaches the container
+# either abstract ("mi325x") or fleet-scoped ("cluster:mi325x-amds",
+# "cluster:mi325x-tw"); configs/runners.yaml maps both onto the same
+# mi325x-amds_NN machines, so the family is what SKU-specific settings gate on.
+# Exported for server_sglang.sh, which sources this file.
+RUNNER_FAMILY="${RUNNER_TYPE:-}"
+RUNNER_FAMILY="${RUNNER_FAMILY#cluster:}"
+export RUNNER_FAMILY="${RUNNER_FAMILY%%-*}"
+
+# =============================================================================
 # MoRI-specific environment
 # =============================================================================
 # Shared by the vLLM MoRIIOConnector and the SGLang/MoRI KV-transfer path.
@@ -283,13 +296,14 @@ else
     # --chunked-prefill-size (via the models.yaml formula) and the inter-kernel
     # switch threshold below, so it must not move for other SKUs or models.
     #
-    # RUNNER_TYPE is this repo's hardware identifier: configs/*-master.yaml declares
-    # it per entry ("runner: mi325x"), job.slurm forwards it into the container, and
-    # benchmark_lib.sh records it as the result "hw" field. Matched as a prefix so
-    # label variants such as mi325x-disagg are covered. Deliberately not RUNNER_NAME:
-    # that is the GitHub runner instance (mi325x-amds_00) used host-side to pick the
-    # launcher, and it is never forwarded into the container.
-    if [[ "$MODEL_NAME" == "DeepSeek-R1-0528" ]] && [[ "${RUNNER_TYPE:-}" == mi325x* ]]; then
+    # RUNNER_FAMILY is the GPU family derived from RUNNER_TYPE at the top of this
+    # file. configs/*-master.yaml declares the label per entry ("runner: mi325x" or
+    # "runner: cluster:mi325x-amds"), job.slurm forwards RUNNER_TYPE into the
+    # container, and benchmark_lib.sh records it as the result "hw" field.
+    # Deliberately not RUNNER_NAME: that is the GitHub runner instance
+    # (mi325x-amds_00) used host-side to pick the launcher, and it is never
+    # forwarded into the container.
+    if [[ "$MODEL_NAME" == "DeepSeek-R1-0528" ]] && [[ "$RUNNER_FAMILY" == "mi325x" ]]; then
         export MORI_MAX_DISPATCH_TOKENS_DECODE=4096
         echo "[INFO] $RUNNER_TYPE + $MODEL_NAME: MORI_MAX_DISPATCH_TOKENS_DECODE=$MORI_MAX_DISPATCH_TOKENS_DECODE (conc-32 DP+EP cross-node dispatch buffer)"
     fi
