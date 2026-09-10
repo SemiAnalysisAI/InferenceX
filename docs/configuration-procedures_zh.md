@@ -374,3 +374,11 @@ python -m pytest utils/matrix_logic/ -v
 - YAML、Bash、严格 schema、精确 key 生成、launcher 模拟或配方验证失败。
 
 只有当所有可执行文件一致、精确 key 能生成、运行时路由存在、changelog 能选择该 key，且以上各层检查全部通过时，配置才可以进入 sweep。
+
+## MI355X 上的 DeepSeek-V4.1-Flash
+
+草案配方 `dsv41flash-fp4-mi355x-vllm-agentic-dspark` 将 [#2958](https://github.com/SemiAnalysisAI/InferenceX/pull/2958) 扩展至 MI355X AgentX：TP4、并发 1–32、原生五 token DSpark 和自适应验证，吞吐测试与 eval 均使用真实目标模型验证。FP4 表示 MXFP4 专家权重；检查点还包含 MXFP8 权重。
+
+遵循[上游配方 #946](https://github.com/vllm-project/recipes/pull/946) 的 AMD 设置：`VLLM_ROCM_USE_AITER=1`、`VLLM_ROCM_USE_AITER_MOE=1` 和 `--moe-backend aiter_triton_mxfp4_bf16`。KV 驻留 GPU；Engram 沿用上游 AMD 默认设置。不要复制 NVIDIA 的 `--engram-config` 选项：上游目前在 ROCm 上拒绝该选项。MI355X launcher 使用共享 HF 缓存，并将此模型的仓库挂载至 `/ix`。
+
+**运行时验证受阻：** 2026-09-10，Docker Hub 对上游文档指定的 `vllm/vllm-openai-rocm:deepseekv41-flash-0909` 返回 HTTP 404。上游共享 Engram 实现还默认启用 CPU 卸载，而显式配置拒绝 ROCm；须确认发布的 AMD 构建已解决此不一致。调度前须确认镜像已发布且包含 AMD 实现。随后使用 `agentx-fast` 对此配置键运行并发 1，检查服务端与回放产物，再按 [AgentX 流程](./eval-agentx-procedures_zh.md) 运行正式 sweep 和 eval。本地矩阵生成不等于 GPU 验证。

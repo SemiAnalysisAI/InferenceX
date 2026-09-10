@@ -576,3 +576,53 @@ def test_eval_only_acceptance_rewrite_allows_non_speculative_recipe(
 
     assert result.returncode == 0, result.stderr
     assert recipe.read_text() == original
+
+
+@pytest.mark.parametrize(
+    ("model", "prefix", "mount", "cache"),
+    [
+        ("deepseek-ai/DeepSeek-V4.1-Flash", "dsv41flash", "/ix", "/it-share/hf-hub-cache/"),
+        ("deepseek-ai/DeepSeek-V4-Pro", "dsv4", "/workspace", "/it-share/hf-hub-cache/"),
+    ],
+)
+def test_mi355x_agentic_model_mount_and_routing(
+    tmp_path: Path, model: str, prefix: str, mount: str, cache: str,
+) -> None:
+    capture = tmp_path / "launch.txt"
+    env = {
+        **os.environ,
+        "IS_MULTINODE": "false", "MODEL": model,
+        "EXP_NAME": f"{prefix}_tp4_conc1", "FRAMEWORK": "vllm",
+        "PRECISION": "fp4", "SPEC_DECODING": "mtp",
+        "SCENARIO_SUBDIR": "agentic/", "TP": "4", "GPU_COUNT": "4",
+        "RUNNER_NAME": "mi355x-amds_01", "IMAGE": "test/image:mock",
+        "GITHUB_WORKSPACE": str(REPO_ROOT), "HF_HUB_CACHE": "/mnt/hf_hub_cache/",
+        "RESULT_DIR": "/workspace/results", "CAPTURE": str(capture),
+    }
+    result = subprocess.run(
+        ["bash", "-c", '''
+        salloc() { :; }
+        squeue() { echo 123; }
+        scancel() { :; }
+        srun() {
+            case "$*" in
+                *--container-image=*)
+                    printf '%s\n' "$@" > "$CAPTURE"
+                    printf 'RESULT_DIR=%s\n' "$RESULT_DIR" >> "$CAPTURE"
+                    ;;
+            esac
+        }
+        source runners/launch_mi355x-amds.sh
+        '''], cwd=REPO_ROOT, env=env, capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    args = capture.read_text().splitlines()
+    assert f"--container-workdir={mount}/" in args
+    assert f"RESULT_DIR={mount}/results" in args
+    assert (
+        f"--container-mounts={REPO_ROOT}:{mount}/,{cache}:/mnt/hf_hub_cache/,"
+        "/it-share/aiperf-cache/:/aiperf_mmap_cache"
+    ) in args
+    script = f"benchmarks/single_node/agentic/{prefix}_fp4_mi355x_vllm_mtp.sh"
+    assert args[-2] == script
+    assert (REPO_ROOT / script).is_file()

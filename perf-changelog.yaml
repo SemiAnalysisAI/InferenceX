@@ -7338,3 +7338,10 @@
     - "Resolve the requested H100 SGLang container instead of a hardcoded older image, and stop benchmark/eval clients when their ready server or required worker exits."
     - "H100 SGLang 使用所请求的容器而非硬编码旧镜像；已就绪的服务或必需工作进程退出后，停止其 benchmark/评测客户端。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3020
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  description:
+    - "Add draft DeepSeek-V4.1-Flash FP4 AgentX on MI355X: TP4, concurrency 1-32, native five-token DSpark with adaptive real verification"
+    - "Use upstream ROCm AITER recipe with GPU-resident KV; image publication, Engram compatibility, and GPU validation pending"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2962

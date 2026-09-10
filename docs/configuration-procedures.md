@@ -396,3 +396,11 @@ Stop before dispatching GPU work or claiming the configuration complete when any
 - YAML, Bash, strict schema, exact-key generation, launcher simulation, or recipe validation fails.
 
 A configuration is ready for sweep only when the executable files agree, the exact key generates, the runtime route exists, the changelog selects it, and all layer-specific checks above pass.
+
+## DeepSeek-V4.1-Flash on MI355X
+
+The draft `dsv41flash-fp4-mi355x-vllm-agentic-dspark` recipe extends [#2958](https://github.com/SemiAnalysisAI/InferenceX/pull/2958) to MI355X AgentX: TP4, concurrency 1–32, native five-token DSpark with adaptive verification, and real target verification for throughput and eval. FP4 describes the MXFP4 experts; the checkpoint also contains MXFP8 weights.
+
+Follow the AMD overrides in [upstream recipe #946](https://github.com/vllm-project/recipes/pull/946): `VLLM_ROCM_USE_AITER=1`, `VLLM_ROCM_USE_AITER_MOE=1`, and `--moe-backend aiter_triton_mxfp4_bf16`. KV stays GPU-resident; Engram follows upstream AMD defaults. Do not copy the NVIDIA `--engram-config` option: upstream currently rejects it on ROCm. The MI355X launcher uses the shared HF cache and mounts this model's repository at `/ix`.
+
+**Runtime validation is blocked:** Docker Hub returned HTTP 404 for the upstream-documented `vllm/vllm-openai-rocm:deepseekv41-flash-0909` on 2026-09-10. The upstream shared Engram implementation also defaults to CPU offload while its explicit configuration rejects ROCm; verify that the published AMD build resolves this inconsistency. Verify the image exists and includes the AMD implementation before dispatch. Then run the exact key at concurrency 1 with `agentx-fast`, inspect the server and replay artifacts, and run the canonical sweep plus evals using the [AgentX procedure](./eval-agentx-procedures.md#7-run-agentx-fast-feedback-versus-canonical-evidence). Local generation is not GPU evidence.
