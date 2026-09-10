@@ -306,7 +306,7 @@ else
     # SGLang/MoRI env knobs are pinned here; CLI flags live in models.yaml and
     # the cluster NIC/socket vars stay runner-derived.
     # =========================================================================
-    if [[ "$MODEL_NAME" == "DeepSeek-V4-Pro" ]]; then
+    if [[ "$MODEL_NAME" == DeepSeek-V4-Pro* ]]; then
         export SGLANG_AITER_MLA_PERSIST=0
         ## resolve the OOR issue
         export HSA_NO_SCRATCH_RECLAIM=0
