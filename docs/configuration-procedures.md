@@ -167,6 +167,48 @@ Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../AGENTS.md#non-nego
 7. Add script + master entry + launcher routing + changelog together.
 8. Run Bash syntax and generation checks. Inspect `spec-decoding`, draft/native method, token count, chat-template use, capture range, and resolved script.
 
+### DeepSeek-V4.1-Flash DSpark on Hopper
+
+`dsv41flash-fp4-h200-vllm-agentic-dspark` and `dsv41flash-fp4-h100-vllm-agentic-dspark`
+are the Hopper AgentX arms of the DeepSeek-V4.1-Flash recipe. They share
+`vllm/vllm-openai:deepseekv41-flash-0909` and the same text-only serving script as the
+Blackwell arms: `deepseek_v41` tokenizer and parsers, 1M context, native five-token
+DSpark with probabilistic drafting, block rejection, and adaptive verification, and real
+target verification for both throughput and eval.
+
+Both arms run **TP8**, not the upstream TP4. Upstream verifies TP4 on one GB200 NVL4 tray
+and states that the same layout becomes TP8 per role on 8-GPU nodes, which is what a
+Hopper DGXC node is.
+
+`precision: fp4` labels the checkpoint's MXFP4 routed expert weights, matching the
+Blackwell and MI355X arms on the identical checkpoint. Hopper has no FP4 tensor cores, so
+those weights run through the upconverting MoE path; the label describes the checkpoint,
+not the SKU's native arithmetic.
+
+`--engram-config '{"cpu_offload":true}'` keeps the 189 GiB Engram tables in pinned host
+DRAM reached through UVA, and `kv-offloading: none` describes the separate, GPU-resident
+KV cache. This is what makes the memory arithmetic work on Hopper: the 511 GB checkpoint
+drops to roughly 322 GB resident. H200 has 8x141 GB and sweeps concurrency 1-128; H100
+has 8x80 GB, so its KV headroom is far smaller and its arm stops at concurrency 16.
+
+**H100 is not in the upstream hardware table** — upstream lists h200, gb200, gb300, and
+mi350x as verified. The H100 arm is included because Engram offload brings the resident
+footprint under 640 GB, and it is the same Hopper serving path the H200 arm exercises. It
+is a candidate until its sweep and eval evidence lands.
+
+The H100 launcher previously resolved only the untagged `_h100[_mtp].sh` script name; it
+now prefers the framework-tagged name first, as the H200 launchers already did, and falls
+back to the untagged name for the recipes that predate framework tags. Both launchers
+mount the repository at `/ix` for this recipe so AgentX runtime directories are not
+created under `/workspace`, and both already mount the shared HF cache, so the script
+resolves the model through `HF_HUB_CACHE` rather than a per-node path. The recipe probes
+the serving port on the compute node and selects an available one if the preferred port is
+occupied; serving, replay, metrics, and eval share that endpoint.
+
+GPU sweep and eval evidence is required before calling either arm validated.
+
+Source: [upstream recipe](https://github.com/vllm-project/recipes/blob/main/models/deepseek-ai/DeepSeek-V4.1-Flash.yaml).
+
 ## Validate
 
 Run the smallest checks that cover the edited layers.

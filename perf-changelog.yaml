@@ -7121,3 +7121,12 @@
   description:
     - "Update SGLang image from lmsysorg/sglang:v0.5.12-cu130 to lmsysorg/sglang:v0.5.19-cu130 (digest sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9, sglang commit 0bcd822377da7b5718e674eaf9c870d349424dd1); recipe script, TP8/EP1 topology and EAGLE/MTP settings unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2955
+
+
+- config-keys:
+    - dsv41flash-fp4-h200-vllm-agentic-dspark
+    - dsv41flash-fp4-h100-vllm-agentic-dspark
+  description:
+    - "Add Hopper AgentX arms for DeepSeek-V4.1-Flash at TP8 with native five-token DSpark and adaptive real verification"
+    - "Engram tables offload to host DRAM through UVA while the KV cache stays GPU-resident; H200 runs concurrency 1-128 and H100 stops at 16 on its smaller KV headroom"
+  pr-link: TBD
