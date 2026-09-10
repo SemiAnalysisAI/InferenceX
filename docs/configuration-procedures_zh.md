@@ -171,7 +171,7 @@ llm-d 不是 srt-slurm 路径：InferenceX 自己持有 Slurm allocation，并�
 
 仅运行 AgentX 的 `dsv41flash-fp4-<sku>-vllm-agentic-dspark` 配方使用
 `vllm/vllm-openai:deepseekv41-flash-0909`，采用 TP4、原生五 token DSpark、
-概率采样草稿、块拒绝采样和自适应验证。吞吐测试与 eval 均由目标模型进行真实验证。
+概率采样草稿。吞吐测试使用[已提交的黄金 AL](../golden_al_distribution/dsv41flash_dspark.yaml)：thinking 开启、五个草稿 token 对应 3.51，采用合成拒绝采样并关闭自适应验证。准确率 eval 保留真实块拒绝采样和自适应验证。
 `--engram-config '{"cpu_offload":true}'` 将 Engram 嵌入表放在固定页主机 DRAM
 中，通过 UVA 访问；`kv-offloading: none` 描述的是另行保留在 GPU 上的 KV cache。
 专家权重为 MXFP4，因此配方标记为 `precision: fp4`。
