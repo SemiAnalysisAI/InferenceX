@@ -7146,4 +7146,4 @@
   description:
     - "Add a Qwen3.5 NVFP4 B300 Dynamo-SGLang AgentX configuration with aggregate MTP recipes for TP2/EP2, TP2, and TP4 worker layouts."
     - "Use the pinned lmsysorg/sglang:nightly-dev-cu13-20260901-07c8f729 image and validate each recipe's MTP step count against the committed Qwen3.5 thinking-on golden acceptance-length curve."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2978
