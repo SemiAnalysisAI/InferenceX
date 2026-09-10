@@ -60,6 +60,39 @@ class PRReview(Contract):
     decisions: list[CandidateReview]
 
 
+class OwnedCandidate(Contract):
+    id: str = Field(pattern=r'^[0-9a-f]{16}-[0-9a-f]{16}$')
+    family: str = Field(pattern=r'^configs/[^/:]+-master\.yaml:[^\s:]+$')
+    base: str = Field(pattern=r'^[0-9a-f]{40}$')
+
+
+class Ownership(Contract):
+    run_id: int = Field(gt=0)
+    candidates: list[OwnedCandidate] = Field(max_length=256)
+
+
+class CandidateOutcome(Contract):
+    # Only fixed categories and numeric GitHub IDs are safe to publish.
+    outcome: Literal['validated', 'capacity-deferred', 'readiness-blocked', 'incompatible',
+                     'duplicate', 'retired', 'already-updated', 'uncertain', 'failed', 'handoff', 'unexpected-error']
+    phase: Literal['resolve', 'baseline', 'targeted', 'final-sweep', 'cleanup', 'unknown']
+    pull_request: Annotated[int, Field(gt=0)] | None
+    run_ids: list[Annotated[int, Field(gt=0)]] = Field(max_length=256)
+    repairs_used: int | None = Field(ge=0)
+
+    @model_validator(mode='after')
+    def consistent_outcome(self) -> CandidateOutcome:
+        if self.outcome != 'unexpected-error' and self.phase == 'unknown':
+            raise ValueError('Completed outcomes require a known phase')
+        if self.outcome in ('validated', 'handoff') and self.pull_request is None:
+            raise ValueError('This outcome requires a PR')
+        if self.outcome == 'validated' and (not self.run_ids or self.phase != 'final-sweep'):
+            raise ValueError('Validated requires final-sweep evidence')
+        if len(set(self.run_ids)) != len(self.run_ids):
+            raise ValueError('Run IDs must be distinct')
+        return self
+
+
 class Feed(Contract):
     url: str
     retrieved_at: str

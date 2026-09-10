@@ -1011,6 +1011,43 @@ def changelog_run(monkeypatch, capsys):
     return run
 
 
+@pytest.mark.parametrize("skip", [False, True])
+def test_no_evals_preserves_throughput_and_metadata(changelog_run, skip):
+    output, commands = changelog_run(
+        [{"no-evals": skip}], generated=lambda _: [_fixed_matrix_row(8)],
+    )
+    assert [row["conc"] for row in output["single_node"]["8k1k"]] == [8]
+    assert len(output["evals"]) == (0 if skip else 1)
+    assert output["agentic_evals"] == []
+    assert output["multinode_evals"] == []
+    assert output["multinode_agentic_evals"] == []
+    assert len(commands) == (1 if skip else 2)
+    assert output["changelog_metadata"]["entries"][0]["no-evals"] is skip
+
+
+def test_no_evals_does_not_suppress_another_entry(changelog_run):
+    _, commands = changelog_run([
+        {"config-keys": ["config-a"], "no-evals": True},
+        {"config-keys": ["config-b"]},
+    ])
+    eval_commands = [command for command in commands if "--evals-only" in command]
+    assert len(eval_commands) == 1
+    assert eval_commands[0][eval_commands[0].index("--config-keys") + 1] == "config-b"
+
+
+@pytest.mark.parametrize("flags", [{"evals-only": True}, {"all-evals": True},
+                                   {"eval-min-prefill-ep": 2}])
+def test_no_evals_rejects_conflicting_entry_options(changelog_run, flags):
+    with pytest.raises(ValueError, match="no-evals cannot be combined"):
+        changelog_run([{"no-evals": True, **flags}])
+
+
+@pytest.mark.parametrize("flag", ["--all-evals", "--evals-only"])
+def test_no_evals_rejects_conflicting_pr_modifiers(changelog_run, flag):
+    with pytest.raises(ValueError, match="no-evals entries cannot use"):
+        changelog_run([{"no-evals": True}], [flag])
+
+
 # The table is the contract: CLI expansion preserves throughput, whereas an
 # entry requesting all evals is eval-only. Trimming affects throughput alone.
 @pytest.mark.parametrize("cli_flags,expected_modes", [
