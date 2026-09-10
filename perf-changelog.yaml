@@ -7130,4 +7130,3 @@
     - "Add AgentX-only DeepSeek-V4.1-Flash TP4 on B300 and GB300 using deepseekv41-flash-0909"
     - "Enable Engram pinned-DRAM UVA offload and native five-token DSpark adaptive verification"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2958
-  all-evals: true
