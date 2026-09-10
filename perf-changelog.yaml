@@ -7128,4 +7128,4 @@
   description:
     - "Add the H100 AgentX arm for DeepSeek-V4.1-Flash at TP8 with native five-token DSpark and adaptive real verification, concurrency 1-8"
     - "Cap max-num-batched-tokens at 4096 so the sparse attention indexer's [batched-tokens, max-model-len] buffer fits an 80 GB card at 1M context, and keep the uncapped 062126 trace corpus"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2974
