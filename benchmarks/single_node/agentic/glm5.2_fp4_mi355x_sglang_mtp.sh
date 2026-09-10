@@ -61,6 +61,10 @@ export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
 # inter-turn idle gaps can reuse a socket exactly as the server closes it.
 # Outlast the client pool so the race cannot occur.
 export SGLANG_TIMEOUT_KEEP_ALIVE=900
+# /health does a 1-token generate. First real-MTP (eval-only) request can
+# JIT mha_varlen for ~40s; the default 20s timeout marks the server
+# UnHealthy and GSM8K then hits a dead port (mi355x-amds_09 2026-09-09).
+export SGLANG_HEALTH_CHECK_TIMEOUT=120
 # The DSA indexer's top-k v2 kernel (default since v0.5.14) is JIT-compiled
 # from CUDA-only source (cooperative_groups.h) and cannot build for gfx950;
 # v1 dispatches to the precompiled HIP op in sgl-kernel (upstream MI355X CI
