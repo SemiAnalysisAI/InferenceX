@@ -174,3 +174,6 @@ thinking 开关。只有全部 80 个 coding prompt 成功且 acceptance counter
 [运行 34494319147](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34494319147/job/102928852667)
 已逐一尝试这三个长度；它们没有实测 AL，不能写入数值形式的黄金结果。
 该证据并不能证明更大的五的倍数可正常运行。
+
+DSv4.1 Flash 采集强制要求 `tp=4`。重启服务前，采集器最多等待 120 秒，
+确认服务端口和 GPU 计算进程已释放；超时则使运行失败，避免启动重叠的服务。

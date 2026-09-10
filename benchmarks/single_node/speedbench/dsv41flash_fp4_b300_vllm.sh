@@ -7,6 +7,7 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 
 MODEL="${MODEL:?}"
 TP="${TP:-4}"
+[[ "$TP" == 4 ]] || { echo "DSv4.1 Flash golden AL requires TP=4" >&2; exit 1; }
 MTP_LIST="${MTP_LIST:-1 2 3 4 5 6 7 8}"
 THINKING_MODES="${THINKING_MODES:-off on}"
 CATEGORY="${CATEGORY:-coding}"
@@ -71,6 +72,7 @@ cleanup_server() {
         wait "$SERVER_PID" 2>/dev/null || true
         kill -9 -- "-$SERVER_PID" 2>/dev/null || true
         SERVER_PID=""
+        wait_for_server_resources_released
     fi
 }
 trap cleanup_server EXIT

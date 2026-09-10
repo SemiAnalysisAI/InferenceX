@@ -25,6 +25,40 @@ export PORT="${PORT:-8888}"
 # Opt-in for recipes running in the host network namespace. Probe the preferred
 # port on the compute node; fall back to an OS-selected port if it is occupied.
 # Call immediately before server launch and construct client URLs afterward.
+# Wait for a terminated single-node server to release its port and GPU contexts.
+# Call only on an exclusive allocation; any remaining GPU process blocks restart.
+wait_for_server_resources_released() {
+    python3 - "${PORT:?}" "${SERVER_TEARDOWN_TIMEOUT_S:-120}" <<'PYEOF'
+import errno
+import socket
+import subprocess
+import sys
+import time
+
+port, timeout = int(sys.argv[1]), float(sys.argv[2])
+deadline = time.monotonic() + timeout
+while True:
+    with socket.socket() as probe:
+        probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            probe.bind(("0.0.0.0", port))
+            port_free = True
+        except OSError as exc:
+            if exc.errno != errno.EADDRINUSE:
+                raise
+            port_free = False
+    gpu_processes = subprocess.check_output(
+        ["nvidia-smi", "--query-compute-apps=pid", "--format=csv,noheader"],
+        text=True,
+    ).strip()
+    if port_free and not gpu_processes:
+        break
+    if time.monotonic() >= deadline:
+        raise SystemExit("Server teardown timed out: port or GPU contexts still occupied")
+    time.sleep(min(1, max(0, deadline - time.monotonic())))
+PYEOF
+}
+
 select_available_server_port() {
     PORT=$(python3 - "${PORT:-8888}" <<'PYPORT'
 import errno

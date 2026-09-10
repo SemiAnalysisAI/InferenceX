@@ -55,3 +55,29 @@ def test_emitter_keeps_all_draft_lengths_and_thinking_modes(tmp_path, monkeypatc
     assert output.read_text().endswith(
         "deepseek-v4.1-flash:\n  thinking_on:\n    1: 1.50\n    3: 3.00\n"
         "  thinking_off:\n    1: 1.50\n    3: 3.00\n")
+
+
+@pytest.mark.parametrize("occupied_port,gpu_pid,success", [(False, "", True), (True, "", False), (False, "123", False)])
+def test_teardown_requires_free_port_and_no_gpu_processes(tmp_path, occupied_port, gpu_pid, success) -> None:
+    import os
+    import socket
+    import subprocess
+    from pathlib import Path
+
+    smi = tmp_path / "nvidia-smi"
+    smi.write_text('#!/bin/sh\nprintf "%s" "$TEST_GPU_PID"\n')
+    smi.chmod(0o755)
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        port = listener.getsockname()[1]
+        if occupied_port:
+            listener.listen()
+        else:
+            listener.close()
+        result = subprocess.run(["bash", "-c", "source benchmarks/benchmark_lib.sh; wait_for_server_resources_released"],
+            cwd=Path(__file__).resolve().parents[1], capture_output=True, text=True,
+            env={**os.environ, "PATH": str(tmp_path) + os.pathsep + os.environ["PATH"],
+                 "PORT": str(port), "SERVER_TEARDOWN_TIMEOUT_S": "0", "TEST_GPU_PID": gpu_pid})
+    assert (result.returncode == 0) is success
+    if not success:
+        assert "Server teardown timed out" in result.stderr

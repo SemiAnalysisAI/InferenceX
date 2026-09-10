@@ -177,3 +177,7 @@ The `deepseekv41-flash-0909` image rejects draft lengths 6, 7, and 8 during
 All three were attempted in [run 34494319147](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34494319147/job/102928852667).
 They have no measured AL and must not be represented as numeric golden values.
 This evidence does not establish runtime support for larger multiples of five.
+
+DSv4.1 Flash collection requires `tp=4`. Before restarting a server, the collector
+waits up to 120 seconds for the serving port and GPU compute processes to clear;
+a timeout fails the run instead of starting an overlapping server.
