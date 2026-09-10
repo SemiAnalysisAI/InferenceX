@@ -930,7 +930,7 @@ dsv4-fp4-b200-sglang:
 
 dsv4-fp4-b200-sglang-agentic-hicache-mtp:
   image: lmsysorg/sglang:nightly-dev-20260827-20621aa1
-  model: deepseek-ai/DeepSeek-V4-Pro
+  model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:b200-nscale
   precision: fp4
@@ -940,9 +940,9 @@ dsv4-fp4-b200-sglang-agentic-hicache-mtp:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 3, 4, 5] }
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: mtp, conc-list: [8, 10, 16] }
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: mtp, conc-list: [64, 96, 128, 160], router: { name: sglang-router, version: "0.3.2" } }
+      - { tp: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 2, 3, 4, 5] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [8, 10, 16] }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [64, 96, 128, 160], router: { name: sglang-router, version: "0.3.2" } }
 
 dsv4-fp4-b200-vllm:
   image: vllm/vllm-openai:nightly-7c5dc571cbd1064ecc8a9b1045637ff647aa22cb
@@ -1200,7 +1200,7 @@ dsv4-fp4-b300-sglang-mtp:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 32, spec-decoding: mtp }
 
 qwen3.5-fp8-b200-sglang:
-  image: lmsysorg/sglang:v0.5.14-cu130
+  image: lmsysorg/sglang:v0.5.19-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:b200-nscale
@@ -1212,8 +1212,9 @@ qwen3.5-fp8-b200-sglang:
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 4 }
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
+      - { tp: 8, conc-start: 1, conc-end: 4 }
+      - { tp: 4, ep: 1, conc-start: 2, conc-end: 512 }
+      - { tp: 4, ep: 1, conc-list: [320, 384, 448, 640] }
 
 qwen3.5-fp8-b200-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.16-cu130
@@ -7199,6 +7200,125 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-disagg:
           ep: 1
           dp-attn: false
 
+# Five-point Qwen3.5 AgentX Pareto refresh on the 2026-08-31 nightly. The
+# throughput and high-curve points use PP4 prefill workers; the two C44
+# fingerprints and C7 point below retain their measured aggregate TP shapes.
+# PR #36248 breakable prefill CUDA Graph settings are intentionally excluded.
+qwen3.5-fp4-gb300-dynamo-sglang-agentic-pp-pareto:
+  image: lmsysorg/sglang:nightly-dev-cu13-20260831-bb5e6198
+  model: nvidia/Qwen3.5-397B-A17B-NVFP4
+  model-prefix: qwen3.5
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-sglang
+  router: { name: dynamo-router, version: "61c37bc33c3e88da3facaa39fa2b5caf616740ba" }
+  kv-p2p-transfer: mooncake
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.90
+      search-space:
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        conc-list: [704]
+        prefill:
+          num-worker: 3
+          tp: 1
+          pp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=4.41"
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/disagg-gb300-3p2d-pp4-dep4-c704-mtp-hicache-nightly-20260831.yaml"
+        decode:
+          num-worker: 2
+          tp: 4
+          pp: 1
+          ep: 4
+          dp-attn: true
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        conc-list: [565]
+        prefill:
+          num-worker: 3
+          tp: 1
+          pp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.97"
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/disagg-gb300-3p4d-pp4-dep4-c565-mtp-hicache-nightly-20260831.yaml"
+        decode:
+          num-worker: 4
+          tp: 4
+          pp: 1
+          ep: 4
+          dp-attn: true
+
+qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg-pareto:
+  image: lmsysorg/sglang:nightly-dev-cu13-20260831-bb5e6198
+  model: nvidia/Qwen3.5-397B-A17B-NVFP4
+  model-prefix: qwen3.5
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-sglang
+  multinode: true
+  disagg: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.90
+      search-space:
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        conc-list: [44]
+        num-nodes: 1
+        worker:
+          num-worker: 1
+          tp: 2
+          pp: 1
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=4.8"
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/agg-gb300-tp2-c44-b2-mtp-hicache-nightly-20260831.yaml"
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        conc-list: [44]
+        num-nodes: 1
+        worker:
+          num-worker: 1
+          tp: 2
+          pp: 1
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=4.8"
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/agg-gb300-tp2-c44-b1-mtp-hicache-nightly-20260831.yaml"
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        conc-list: [7]
+        num-nodes: 2
+        worker:
+          num-worker: 1
+          tp: 8
+          pp: 1
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=4.8"
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/agg-gb300-tp8-c7-b1-mtp-hicache-nightly-20260831.yaml"
+
     # ---------- 1k1k high-throughput (wide-EP decode, EAGLE MTP) ----------
 qwen3.5-fp8-b300-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.16-cu130
@@ -7388,7 +7508,7 @@ qwen3.5-fp8-h100-sglang-agentic:
 # fixed-seq-len H200 MTP entry already runs conc 4-128 at TP8/EP8 versus H100's
 # 4-32, so the GPU-resident arm extends to 24 and HiCache to 48.
 qwen3.5-fp8-h200-sglang-agentic-mtp:
-  image: lmsysorg/sglang:v0.5.16-cu130
+  image: lmsysorg/sglang:nightly-dev-cu13-20260907-30705c00
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:h200-dgxc
@@ -7424,7 +7544,7 @@ qwen3.8next-fp8-h200-sglang-agentic-mtp:
 # H200 AgentX MTP frontier with DRAM HiCache. This is intentionally an MTP-only
 # submission; the model's non-speculative AgentX arm is not included.
 qwen3.5-fp8-h200-sglang-agentic-hicache-mtp:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260815-a5ba081f
+  image: lmsysorg/sglang:nightly-dev-cu13-20260907-30705c00
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:h200-dgxc
@@ -7529,7 +7649,7 @@ minimaxm3-fp8-h100-vllm-agentic-mtp:
       - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [6, 8] }
 
 minimaxm3-fp8-h200-vllm-agentic-mtp:
-  image: vllm/vllm-openai:v0.27.1
+  image: vllm/vllm-openai:nightly-d9105ea8001e0a6d77a96327d17515bb5791fb36
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: cluster:h200-dgxc
@@ -7810,8 +7930,8 @@ minimaxm3-fp4-b200-trtllm-agentic-mtp:
       search-space:
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [5, 10, 15, 20, 25, 30, 35, 40, 45] }
       - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [1, 5] }
-# Preserve the B200 TP4 search space and add the GB200 Pareto candidates found
-# by direct DEP and P/D tuning.
+# Retain the GB200 aggregate SimpleCPU-offload configuration at concurrency 20
+# and 30.
 minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp:
   image: vllm/vllm-openai:v0.27.1
   model: nvidia/MiniMax-M3-NVFP4
@@ -7827,22 +7947,9 @@ minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp:
     - dram-utilization: 0.61
       search-space:
       - spec-decoding: mtp
-        kv-offloading: none
-        conc-list: [1, 2, 5, 8, 10, 12, 15, 20]
-        num-nodes: 1
-        worker:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3/gb200-fp4/agentic/agg-tp4-agentic.yaml"
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.78"
-      - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: vllm-simple }
-        conc-list: [20, 30, 40]
+        conc-list: [20, 30]
         num-nodes: 1
         worker:
           num-worker: 1
@@ -7853,75 +7960,65 @@ minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp:
           - "CONFIG_FILE=recipes/vllm/minimax-m3/gb200-fp4/agentic/agg-tp4-vllm-simple-agentic.yaml"
           - "SYNTHETIC_ACCEPTANCE=true"
           - "SYNTHETIC_ACCEPTANCE_LENGTH=2.78"
-      - spec-decoding: mtp
-        kv-offloading: none
-        conc-list: [4, 32]
-        num-nodes: 1
-        worker:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3/gb200-fp4/agentic/agg-dep4-agentic.yaml"
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.78"
-      - spec-decoding: mtp
-        kv-offloading: dram
-        kv-offload-backend: { name: vllm-simple }
-        conc-list: [32, 40]
-        num-nodes: 1
-        worker:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3/gb200-fp4/agentic/agg-dep4-vllm-simple-agentic.yaml"
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.78"
-      - spec-decoding: mtp
-        kv-offloading: none
-        conc-list: [48]
-        num-nodes: 2
-        worker:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3/gb200-fp4/agentic/agg-dep8-agentic.yaml"
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.78"
 
 minimaxm3-fp4-gb200-dynamo-vllm-agentic-disagg-mtp:
-  image: vllm/vllm-openai:v0.27.1
+  image: vllm/vllm-openai@sha256:b9104b7ef3048e42f79fba9ab5da06e5aff8164aca9968692ec2f569aaaf34c6
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: cluster:gb200-nv
   precision: fp4
   framework: dynamo-vllm
-  router: { name: dynamo-router, version: "1.3.1" }
+  router: { name: dynamo-router, version: "1.5.0.dev20260819" }
   kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.61
+    # Each active four-rank prefill node reserves 150 GB/rank in Mooncake.
+    - dram-utilization: 0.665
       search-space:
       - spec-decoding: mtp
-        kv-offloading: none
-        conc-list: [48]
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.12.post1" }
+        conc-list: [1]
         prefill:
           num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
+          tp: 4
+          ep: 4
+          dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3/gb200-fp4/agentic/disagg-1p1d-dep8-dep4-agentic.yaml"
+          - "CONFIG_FILE=recipes/vllm/minimax-m3/gb200-fp4/agentic/disagg-1p1d-tp4-tp8-c1-agentic.yaml"
           - "SYNTHETIC_ACCEPTANCE=true"
           - "SYNTHETIC_ACCEPTANCE_LENGTH=2.78"
-        decode: { num-worker: 1, tp: 4, ep: 4, dp-attn: true }
+        decode: { num-worker: 1, tp: 8, ep: 8, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.12.post1" }
+        conc-list: [8, 16]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/minimax-m3/gb200-fp4/agentic/disagg-1p2d-tp4-tp4-c8-c16-agentic.yaml"
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.78"
+        decode: { num-worker: 2, tp: 4, ep: 4, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.12.post1" }
+        conc-list: [24]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/minimax-m3/gb200-fp4/agentic/disagg-1p1d-tp4-tp4-c24-agentic.yaml"
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.78"
+        decode: { num-worker: 1, tp: 4, ep: 4, dp-attn: false }
 
 dsv4-fp4-gb200-dynamo-vllm-agentic-mtp-agg:
   image: vllm/vllm-openai:nightly-3ee2df30337a301164c46ae444b76ee67e71c106
@@ -9635,10 +9732,10 @@ qwen3.5-fp8-gb200-dynamo-sglang-mtp:
           ep: 16
           dp-attn: true
 
-# Kimi-K3 GB300 p90-ITL Pareto points. Each DCP8 worker spans two 4-GPU
-# trays: 1P1D uses 16 GPUs and 1P2D uses 24 GPUs.
+# Kimi-K3 GB300 points on the measured global p90-ITL Pareto front. Each
+# DCP8 worker spans two 4-GPU nodes.
 kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
-  image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-75c2eef
+  image: vllm/vllm-openai:nightly-dev-arm64-cu13-3696c77
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:gb300-nv
@@ -9650,14 +9747,14 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
   disagg: true
   scenarios:
     agentic-coding:
-    # 0.1664 resolves to 150 GB of host DRAM per 4-GPU server node on
+    # 0.1775 resolves to 160 GB of host DRAM per 4-GPU server node on
     # cluster:gb300-nv, matching the recipe's Mooncake segment size.
-    - dram-utilization: 0.1664
+    - dram-utilization: 0.1775
       search-space:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.12.post1" }
-        conc-list: [64]
+        conc-list: [48, 52, 56]
         prefill:
           num-worker: 1
           tp: 8
@@ -9672,7 +9769,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.12.post1" }
-        conc-list: [48]
+        conc-list: [32, 48, 64]
         prefill:
           num-worker: 1
           tp: 8
@@ -9684,11 +9781,39 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
           - "SYNTHETIC_ACCEPTANCE_LENGTH=3.36"
           - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/disagg-gb300-1p2d-dcp8-dcp8-dspark4-mooncake-agentic.yaml"
         decode: { num-worker: 2, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.12.post1" }
+        conc-list: [1]
+        prefill:
+          num-worker: 1
+          tp: 8
+          dcp-size: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.84"
+          - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/disagg-gb300-1p3d-dcp8-dcp8-dspark7-mooncake-agentic.yaml"
+        decode: { num-worker: 3, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.12.post1" }
+        conc-list: [32, 48]
+        prefill:
+          num-worker: 1
+          tp: 8
+          dcp-size: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.36"
+          - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/disagg-gb300-1p3d-dcp8-dcp8-dspark4-mooncake-agentic.yaml"
+        decode: { num-worker: 3, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
 
-# Aggregate p90-ITL Pareto points. One TP8 x DCP8 worker spans two 4-GPU nodes
-# and serves both phases; decode num-worker is zero so GPUs are counted once.
 kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg:
-  image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-75c2eef
+  image: vllm/vllm-openai:nightly-dev-arm64-cu13-3696c77
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:gb300-nv
@@ -9698,7 +9823,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg:
   disagg: false
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.1664
+    - dram-utilization: 0.1775
       search-space:
       - spec-decoding: mtp
         kv-offloading: dram
@@ -9713,15 +9838,13 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg:
           dp-attn: false
           additional-settings:
           - "SYNTHETIC_ACCEPTANCE=true"
-          # Golden AL at DSpark K=7 on the probabilistic/block curve, matching
-          # the B300 low-latency arm.
           - "SYNTHETIC_ACCEPTANCE_LENGTH=3.84"
           - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-gb300-dcp8-dspark7-maxseq2-mooncake-agentic.yaml"
 
-# High-throughput aggregate p90-ITL Pareto points without speculative decoding
-# or a max-num-seqs override.
+# Aggregate no-spec points measured at concurrency 48 and 70. One TP8 x DCP8 worker
+# spans two 4-GPU nodes and serves both phases.
 kimik3-fp4-gb300-dynamo-vllm-agentic-mooncake-dcp8-agg:
-  image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-75c2eef
+  image: vllm/vllm-openai:nightly-dev-arm64-cu13-3696c77
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:gb300-nv
@@ -9731,11 +9854,11 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-mooncake-dcp8-agg:
   disagg: false
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.1664
+    - dram-utilization: 0.1775
       search-space:
       - kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.12.post1" }
-        conc-list: [48, 70, 74]
+        conc-list: [48, 70]
         num-nodes: 2
         worker:
           num-worker: 1

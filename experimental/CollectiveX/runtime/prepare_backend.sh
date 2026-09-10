@@ -129,8 +129,17 @@ deepep_cache_root() {
   base="${COLLX_BACKEND_CACHE_ROOT:-}"
   [[ "$base" = /* ]] || return 1
   image="$(printf '%s' "${COLLECTIVEX_IMAGE:-manual}" | tr -cs 'A-Za-z0-9_.-' '-')"
-  printf '%s/deepep-v2-%s-sm%s-%s-%s' \
-    "$base" "$cpu" "${arch/./}" "${image#-}" "${COLLX_DEEPEP_V2_COMMIT:0:12}"
+  # The NVSHMEM wheel is part of the built venv's identity (see common.sh: the cu12
+  # wheel on cu130 images broke sm103), so it keys the cache and a spec change rebuilds.
+  local nvshmem_key="${COLLX_DEEPEP_V2_NVSHMEM_SPEC#nvidia-}"
+  nvshmem_key="${nvshmem_key//==/-}"
+  local torch_key="${COLLX_DEEPEP_V2_TORCH_SPEC//==/-}"
+  local build_gen="${COLLX_DEEPEP_V2_BUILD_GEN:?}"
+  [[ "$nvshmem_key" =~ ^[A-Za-z0-9._-]+$ && "$torch_key" =~ ^[A-Za-z0-9._-]+$ \
+     && "$build_gen" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
+  printf '%s/deepep-v2-%s-sm%s-%s-%s-%s-%s-%s' \
+    "$base" "$cpu" "${arch/./}" "${image#-}" "${COLLX_DEEPEP_V2_COMMIT:0:12}" \
+    "$torch_key" "$nvshmem_key" "$build_gen"
 }
 
 deepep_activate() {
@@ -145,7 +154,7 @@ deepep_activate() {
   nccl_root="$(nvidia_package_root "$venv/bin/python" nvidia-nccl-cu13 nccl)" \
     || { collx_log "ERROR: DeepEP V2 NCCL package root is unavailable"; return 1; }
   nvshmem_package="$(nvidia_package_root \
-    "$venv/bin/python" nvidia-nvshmem-cu12 nvshmem)" \
+    "$venv/bin/python" "${COLLX_DEEPEP_V2_NVSHMEM_SPEC%%==*}" nvshmem)" \
     || { collx_log "ERROR: DeepEP V2 NVSHMEM package root is unavailable"; return 1; }
   overlay="$(deepep_nvshmem_overlay "$root" "$nvshmem_package")" || return 1
   toolchain="$(cuda_toolchain_paths)" || return 1
@@ -203,10 +212,10 @@ deepep_install() {
   pip=("$venv/bin/python" -m pip install -q --disable-pip-version-check --no-input)
   "${pip[@]}" \
     "pip==26.1.2" "setuptools==82.0.1" "wheel==0.47.0" "ninja==1.13.0" \
-    "numpy==2.2.6" "nvidia-nvshmem-cu12==3.3.9" >&2 2>&1 \
+    "numpy==2.2.6" "$COLLX_DEEPEP_V2_NVSHMEM_SPEC" >&2 2>&1 \
     || { collx_log "ERROR: DeepEP V2 build-tool installation failed"; return 1; }
   "${pip[@]}" --index-url https://download.pytorch.org/whl/cu130 \
-    --extra-index-url https://pypi.org/simple "torch==2.10.0" >&2 2>&1 \
+    --extra-index-url https://pypi.org/simple "$COLLX_DEEPEP_V2_TORCH_SPEC" >&2 2>&1 \
     || { collx_log "ERROR: torch 2.10.0+cu130 installation failed"; return 1; }
   # Torch pins NCCL 2.28.9; ElasticBuffer requires 2.30.4.
   "${pip[@]}" --force-reinstall --no-deps "nvidia-nccl-cu13==2.30.4" >&2 2>&1 \
@@ -215,7 +224,15 @@ deepep_install() {
     || { collx_log "ERROR: DeepEP V2 environment activation failed"; return 1; }
   collx_materialize_deepep_source "$source_dir" \
     || { collx_log "ERROR: DeepEP V2 staged source is invalid"; return 1; }
+  # The RDC device-link step (nvcc -dlink) receives NO -gencode from the extension
+  # build, so nvcc falls back to ITS default arch (sm_75 on CUDA 13) and relinks the
+  # correctly-compiled sm-specific objects into an sm_75 device image — kernels that
+  # can never load on the target GPU (gb300/sm103: cudaErrorUnknown at first launch;
+  # proven by build log: every compile line -gencode sm_103, step 9/9 -dlink bare).
+  # NVCC_PREPEND_FLAGS reaches every nvcc invocation including the dlink.
+  local gencode="-gencode=arch=compute_${arch/./},code=sm_${arch/./}"
   (cd "$source_dir" && TORCH_CUDA_ARCH_LIST="$arch" MAX_JOBS=16 \
+    NVCC_PREPEND_FLAGS="$gencode ${NVCC_PREPEND_FLAGS:-}" \
     "$venv/bin/python" -m pip install -q --no-build-isolation --no-deps \
       --force-reinstall .) >&2 2>&1 \
     || { collx_log "ERROR: DeepEP V2 build failed"; return 1; }
@@ -406,7 +423,7 @@ uccl_prepare() {
 
 # ---- NCCL EP lifecycle ------------------------------------------------------
 
-# Slug of the pinned pip spec, safe as a cache-dir path component.
+# Slug of the pinned pip specs, safe as a cache-dir path component.
 nccl_ep_spec_slug() {
   printf '%s' "$COLLX_NCCL_EP_SPEC" | tr -cs 'A-Za-z0-9_.-' '-'
 }
@@ -429,9 +446,8 @@ nccl_ep_cache_root() {
 
 # Put the installed wheel ($root/site) on PYTHONPATH for the probe and rank tasks, and the
 # wheel-bundled NCCL runtime lib dir ahead of the image torch's older NCCL on the loader path
-# (nccl.ep needs a Device API + GIN capable NCCL — the nccl-extensions[cu13] extra pins 2.30.7 —
-# while the image torch bundles an older one). Both PYTHONPATH and LD_LIBRARY_PATH are already
-# carried to the ranks by write_rank_env.
+# (nccl.ep needs NCCL >= 2.29.3's Device API + GIN; the image torch bundles an older NCCL). Both
+# PYTHONPATH and LD_LIBRARY_PATH are already carried to the ranks by write_rank_env.
 nccl_ep_activate() {
   local root="$1" site="$1/site" nccl_lib
   [ -d "$site" ] || { collx_log "ERROR: NCCL EP cache site is unavailable"; return 1; }
@@ -453,18 +469,26 @@ nccl_ep_probe() {
   # import torch FIRST so libc10/libnccl are resident before the nccl.ep extension dlopens; then
   # nccl.core (libnccl.so) and nccl.ep (libnccl_ep.so JIT runtime). nccl.ep.__init__ runs its own
   # libnccl/libnccl_ep CUDA-major consistency check on import and raises ImportError on mismatch.
+  # The version line pins down WHICH libnccl_ep.so actually loaded — the one truth that matters
+  # when a stale cache or an image-bundled copy shadows the pinned wheel.
   python3 - <<'PY'
+import sys
+
 import torch  # noqa: F401
 import nccl.core  # noqa: F401
-import nccl.ep  # noqa: F401
+import nccl.ep
+
+print(
+    f"nccl.ep: libnccl_ep {nccl.ep.get_lib_version()} at {nccl.ep.get_lib_path()}",
+    file=sys.stderr,
+)
 PY
 }
 
-# Primary install: the published nccl-extensions[cu13] wheel + deps into $root/site via pip
-# --target (self-contained; the runtime imports it through PYTHONPATH, so cache-hit and cache-miss
-# paths import identically — mirrors uccl_install's copy-to-cache scheme). The from-source fallback
-# (OpenMPI + build NCCL + nccl_ep from COLLX_NCCL_EP_COMMIT, with a matching launcher
-# source-staging arm) is deferred until bring-up shows the wheel does not ship libnccl_ep.so.
+# Primary install: the published nccl-extensions[cu13] wheel (owner of nccl.ep) plus the
+# pinned nccl4py (nccl.core) into $root/site via pip --target (self-contained; the runtime
+# imports it through PYTHONPATH, so cache-hit and cache-miss paths import identically —
+# mirrors uccl_install's copy-to-cache scheme).
 nccl_ep_install() {
   local root="$1" site="$1/site"
   if [ -e "$root" ] || [ -L "$root" ]; then
@@ -475,8 +499,11 @@ nccl_ep_install() {
   collx_log "NCCL EP: installing $COLLX_NCCL_EP_SPEC (pip --target)"
   # --target installs into an isolated tree and does not touch the system env, so PEP 668 does
   # not apply; torch is imported from the image at runtime (nccl.ep's torch interop resolver).
+  # $COLLX_NCCL_EP_SPEC is unquoted ON PURPOSE: it carries two whitespace-separated pip specs
+  # (nccl-extensions + the pinned nccl4py it would otherwise resolve unpinned).
+  # shellcheck disable=SC2086
   python3 -m pip install -q --disable-pip-version-check --no-input \
-      --target "$site" "$COLLX_NCCL_EP_SPEC" >&2 2>&1 \
+      --target "$site" $COLLX_NCCL_EP_SPEC >&2 2>&1 \
     || { collx_log "ERROR: NCCL EP wheel install failed"; return 1; }
   nccl_ep_activate "$root" \
     || { collx_log "ERROR: NCCL EP environment activation failed"; return 1; }

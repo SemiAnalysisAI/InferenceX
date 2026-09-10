@@ -102,6 +102,16 @@ InferenceX-app treats routing fields as columns or config dimensions and stores 
 
 Each eval upload is named `eval_<EXP_NAME>_<RESULT_FILENAME>`. Its current allowed payload includes `meta_env.json`, `results*.json`, sample JSONL, predictions, SWE-bench reports, and trajectory files. The collector uses only the metadata and lm-eval result JSON for aggregate rows.
 
+The shared eval metadata writer preserves single-node `DP_ATTENTION` and uses it
+as the default for both `prefill_dp_attention` and `decode_dp_attention`. Only
+`IS_MULTINODE=true` jobs bridge the separate prefill/decode environment variables;
+those jobs may have different DP-attention settings on each side. The collector
+does not reconstruct topology from artifact names or server logs. Older artifacts
+affected by the unconditional bridge can report `false` for a single-node
+DP-attention eval. Fixing the writer does not repair those artifacts or existing
+database rows: verify the original job configuration and server logs before
+correcting metadata, regenerating aggregates, and re-ingesting affected results.
+
 [`utils/collect_eval_results.py`](../utils/collect_eval_results.py) applies these rules:
 
 1. An eval set is a root or immediate child directory containing `meta_env.json`.

@@ -12,6 +12,11 @@ on:
                 required: false
                 type: string
                 default: ""
+            klaud-run:
+                description: "Run Klaud Cold benchmarks at background priority"
+                required: false
+                type: boolean
+                default: false
             test-name:
                 description: "Name for this test run"
                 required: false
@@ -102,6 +107,11 @@ on:
                 required: false
                 type: string
                 default: ""
+            klaud-run:
+                description: "Run Klaud Cold benchmarks at background priority"
+                required: false
+                type: boolean
+                default: false
             test-name:
                 description: "Name for this test run"
                 required: false
@@ -201,7 +211,7 @@ jobs:
         steps:
             - name: Checkout code (ref)
               if: ${{ inputs.ref && inputs.ref != '' }}
-              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                 ref: ${{ inputs.ref }}
                 fetch-depth: 0
@@ -209,18 +219,18 @@ jobs:
 
             - name: Checkout code (default)
               if: ${{ !inputs.ref || inputs.ref == '' }}
-              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                 ref: ${{ github.sha }}
             - name: Checkout priority scheduler tooling
               if: ${{ inputs.ref && inputs.ref != '' }}
-              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                 ref: ${{ github.workflow_sha }}
                 path: .ci-priority
                 persist-credentials: false
 
-            - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+            - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
             - id: get-jobs
               env:
                   PR_LABELS: ${{ inputs.pr-labels-json || toJson(github.event.pull_request.labels.*.name) }}
@@ -240,7 +250,7 @@ jobs:
                       exit 1
                     fi
                     CMD=(
-                      uv run --no-project --with pydantic --with pyyaml --python 3.12
+                      uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml
                       "${PRIORITY_ROOT}/utils/process_changelog.py"
                       --changelog-file "${GITHUB_WORKSPACE}/perf-changelog.yaml"
                       --base-ref "$CHANGELOG_BASE_REF"
@@ -273,13 +283,13 @@ jobs:
                     if [ "$EVALS_ONLY" = "true" ]; then
                       GENERATE_ARGS+=(--evals-only)
                     fi
-                    CONFIG_JSON=$(uv run --no-project --with pydantic --with pyyaml --python 3.12 \
+                    CONFIG_JSON=$(uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
                       "${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py" \
                       "${GENERATE_ARGS[@]}")
                   fi
                   score_matrix() {
                     local family="$1"
-                    uv run --no-project --with pyyaml --python 3.12 "${PRIORITY_ROOT}/utils/ci_priority.py" \
+                    uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml "${PRIORITY_ROOT}/utils/ci_priority.py" \
                       --policy "${PRIORITY_ROOT}/configs/ci-priority.yaml" \
                       --event-name "${{ github.event_name }}" \
                       --queue-namespace "${{ github.run_id }}:${{ github.run_attempt }}:${family}" \
@@ -315,6 +325,7 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.multi-node-config) }}
         secrets: inherit
         with:
+            klaud-run: ${{ inputs.klaud-run }}
             isl: ${{ matrix.config.isl }}
             osl: ${{ matrix.config.osl }}
             max-model-len: ${{ matrix.config.max-model-len }}
@@ -370,6 +381,7 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.multi-node-eval-config) }}
         secrets: inherit
         with:
+            klaud-run: ${{ inputs.klaud-run }}
             isl: ${{ matrix.config.isl }}
             osl: ${{ matrix.config.osl }}
             max-model-len: ${{ matrix.config.max-model-len }}
@@ -429,6 +441,7 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.agentic-config) }}
         secrets: inherit
         with:
+            klaud-run: ${{ inputs.klaud-run }}
             exp-name: ${{ matrix.config.exp-name }}
             recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             runner: ${{ matrix.config.runner }}
@@ -475,6 +488,7 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.agentic-eval-config) }}
         secrets: inherit
         with:
+            klaud-run: ${{ inputs.klaud-run }}
             exp-name: ${{ matrix.config.exp-name }}
             recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             runner: ${{ matrix.config.runner }}
@@ -525,6 +539,7 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.multi-node-agentic-config) }}
         secrets: inherit
         with:
+            klaud-run: ${{ inputs.klaud-run }}
             exp-name: ${{ matrix.config.exp-name }}
             recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             isl: '0'
@@ -585,6 +600,7 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.multi-node-agentic-eval-config) }}
         secrets: inherit
         with:
+            klaud-run: ${{ inputs.klaud-run }}
             exp-name: ${{ matrix.config.exp-name }}
             recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             isl: '0'
@@ -648,6 +664,7 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.single-node-config) }}
         secrets: inherit
         with:
+            klaud-run: ${{ inputs.klaud-run }}
             exp-name: ${{ matrix.config.exp-name }}
             recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             isl: ${{ matrix.config.isl }}
@@ -687,6 +704,7 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.eval-config) }}
         secrets: inherit
         with:
+            klaud-run: ${{ inputs.klaud-run }}
             exp-name: ${{ matrix.config.exp-name }}
             recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             isl: ${{ matrix.config.isl }}
@@ -744,7 +762,7 @@ jobs:
             GITHUB_TOKEN: ${{ secrets.REPO_PAT }}
 
         steps:
-            - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                   token: ${{ secrets.REPO_PAT }}
                   fetch-depth: 0
@@ -755,11 +773,13 @@ jobs:
                   path: ${{ env.RESULTS_DIR }}
                   pattern: results_*
 
-            - name: Install python dependencies
-              run: pip install PyGithub
+            - name: Set up uv
+              uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
             - name: Calculate success rate
-              run: python3 utils/calc_success_rate.py "$STATS_FILENAME"
+              run: >-
+                  uv run --no-project --exclude-newer PT12H --python 3.12 --with PyGithub --with pyyaml
+                  utils/calc_success_rate.py "$STATS_FILENAME"
 
             - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
               with:

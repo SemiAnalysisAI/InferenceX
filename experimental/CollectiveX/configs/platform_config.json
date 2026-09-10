@@ -84,7 +84,7 @@
         "account": "benchmark",
         "qos": "batch_1_qos",
         "squash_dir": "/data/home/sa-shared/sqsh",
-        "exclude_nodes": "b300-005,b300-009,b300-018"
+        "exclude_nodes": "b300-001,b300-005,b300-009,b300-016,b300-018"
       },
       "network": {
         "socket_ifname": "bond0",
@@ -164,7 +164,7 @@
     "mi355x": {
       "arch": "gfx950",
       "product": "mi355x",
-      "image": "rocm/sgl-dev:sglang-0.5.14-rocm720-mi35x-mori-0701",
+      "image": "rocm/sgl-dev:v0.5.18-rocm720-mi35x-20260830",
       "image_platform": "linux/amd64",
       "gpus_per_node": 8,
       "scale_up_domain": 8,
