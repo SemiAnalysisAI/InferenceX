@@ -9,9 +9,17 @@ set -x
 # MI355X is ROCm, so this arm is FP8 (Qwen/Qwen3.8-Flash-Next-FP8).
 # NVFP4 is not available on AMD GPUs. Attention backend is aiter (ROCm).
 #
+# Image: lmsysorg/sglang-rocm:v0.5.19-rocm700-mi35x-20260909 includes
+# SGLang PR #37500 (merged 2026-09-08), which adds full Qwen3.8-Flash-Next
+# model support — no runtime patches needed.
+#
 # The SGLang cookbook (docs.sglang.io) verified flags for MI355X are:
 #   --tp-size 8 --attention-backend aiter --page-size 32 --kv-cache-dtype auto
 #   --chunked-prefill-size 16384 --watchdog-timeout 1200 --mem-fraction-static 0.9
+#
+# Decode CUDA graphs are disabled due to a tilelang MFMA warp partition bug
+# (N must be divisible by 16, but got 8) in the v0.5.19-rocm700-mi35x-20260909
+# image. This will be re-enabled once the upstream fix lands.
 #
 # Speculative decoding uses NEXTN (the Qwen3.8 Flash Next native MTP head),
 # 3 steps, eagle-topk 1, 4 draft tokens — mirroring the H200 agentic recipe.
@@ -115,152 +123,6 @@ MAX_RUNNING_REQUESTS=$((2 * CONC))
 CUDA_GRAPH_MAX_BS="$CONC"
 [ "$CUDA_GRAPH_MAX_BS" -gt 128 ] && CUDA_GRAPH_MAX_BS=128
 
-# ---- SGLang runtime patches (FP8 PLE weight_scale — SGLang PR #36497) -------
-# The qwen38flashnext Docker image predates the FP8 PLE weight_scale fix.
-# Rather than rebuilding the image we apply 5 targeted in-place patches to the
-# container's sglang source before launching the server.
-#
-# Patched file: /workspace/sglang-qwen-next/python/sglang/srt/models/qwen4_exp.py
-# Commit ref:   sgl-project/sglang@3003ddf1574ef5004e21a10e36aaabc364766921
-#
-# The patches are idempotent — safe to run multiple times, already-applied
-# patches are skipped.
-_SGLANG_ROOT="${SGLANG_ROOT:-/workspace/sglang-qwen-next/python/sglang}"
-_QWEN4_EXP="${_SGLANG_ROOT}/srt/models/qwen4_exp.py"
-
-if [[ -f "$_QWEN4_EXP" ]]; then
-    echo "Applying SGLang runtime patches to $_QWEN4_EXP ..."
-
-    # Patch 1: Register weight_scale buffer in Qwen4ExpNGramEmbedding.__init__
-    if ! grep -q 'weight_scale.*torch.ones' "$_QWEN4_EXP"; then
-        echo "  PATCH 1: Registering weight_scale buffer in Qwen4ExpNGramEmbedding"
-        python3 -c "
-import sys
-with open('$_QWEN4_EXP', 'r') as f:
-    content = f.read()
-old = 'self.short_conv_dilation = self.ple_embedding.ngram_size'
-if old not in content:
-    print('  PATCH 1: Target line not found, skipping', file=sys.stderr)
-    sys.exit(0)
-new = '''self.ple_embedding.ngram_embedding.register_buffer(
-            \"weight_scale\", torch.ones(1, dtype=torch.bfloat16), persistent=True
-        )
-        self.short_conv_dilation = self.ple_embedding.ngram_size'''
-content = content.replace(old, new, 1)
-with open('$_QWEN4_EXP', 'w') as f:
-    f.write(content)
-print('  PATCH 1: Applied successfully')
-"
-    else
-        echo "  PATCH 1: Already applied"
-    fi
-
-    # Patch 2: Multiply embeddings by weight_scale in forward()
-    if ! grep -q 'embeddings \* self.ngram_embedding.weight_scale' "$_QWEN4_EXP"; then
-        echo "  PATCH 2: Adding weight_scale multiply in forward()"
-        python3 -c "
-import sys
-with open('$_QWEN4_EXP', 'r') as f:
-    content = f.read()
-old = 'embeddings = self.ngram_embedding(lookup_ids)\n        return self._finish_embedding_lookup('
-if old not in content:
-    print('  PATCH 2: Target pattern not found, skipping', file=sys.stderr)
-    sys.exit(0)
-new = '''embeddings = self.ngram_embedding(lookup_ids)
-        embeddings = embeddings * self.ngram_embedding.weight_scale
-        return self._finish_embedding_lookup('''
-content = content.replace(old, new, 1)
-with open('$_QWEN4_EXP', 'w') as f:
-    f.write(content)
-print('  PATCH 2: Applied successfully')
-"
-    else
-        echo "  PATCH 2: Already applied"
-    fi
-
-    # Patch 3: Add weight_scale to PLE buffer allowlist in _load_qwen4_exp_ple_buffer
-    if ! grep -q '"weight_scale"' "$_QWEN4_EXP" 2>/dev/null || \
-       ! python3 -c "
-with open('$_QWEN4_EXP') as f:
-    content = f.read()
-assert '\"weight_scale\",' in content and 'ngram_heads_vocab_sizes' in content
-idx_ws = content.index('\"weight_scale\",')
-idx_nv = content.index('\"ngram_heads_vocab_sizes\"')
-assert abs(idx_ws - idx_nv) < 200
-" 2>/dev/null; then
-        echo "  PATCH 3: Adding weight_scale to PLE buffer allowlist"
-        python3 -c "
-import sys
-with open('$_QWEN4_EXP', 'r') as f:
-    content = f.read()
-old = '''\"ngram_heads_vocab_sizes\",
-        }:'''
-if old not in content:
-    print('  PATCH 3: Target pattern not found, skipping', file=sys.stderr)
-    sys.exit(0)
-new = '''\"ngram_heads_vocab_sizes\",
-            \"weight_scale\",
-        }:'''
-content = content.replace(old, new, 1)
-with open('$_QWEN4_EXP', 'w') as f:
-    f.write(content)
-print('  PATCH 3: Applied successfully')
-"
-    else
-        echo "  PATCH 3: Already applied"
-    fi
-
-    # Patch 4: weight_scale multiply in offloaded PLE reduce path
-    if ! grep -q 'ngram_embedding.reduce(embeddings)\n.*\* self.ple_embedding.ngram_embedding.weight_scale' "$_QWEN4_EXP" 2>/dev/null; then
-        echo "  PATCH 4: Adding weight_scale multiply in offloaded PLE reduce path"
-        python3 -c "
-import sys
-with open('$_QWEN4_EXP', 'r') as f:
-    content = f.read()
-old = 'embeddings = self.ple_embedding.ngram_embedding.reduce(embeddings)\n        embeddings = self.ple_embedding._finish_embedding_lookup('
-if old not in content:
-    print('  PATCH 4: Target pattern not found, skipping', file=sys.stderr)
-    sys.exit(0)
-new = '''embeddings = self.ple_embedding.ngram_embedding.reduce(embeddings)
-        embeddings = embeddings * self.ple_embedding.ngram_embedding.weight_scale
-        embeddings = self.ple_embedding._finish_embedding_lookup('''
-content = content.replace(old, new, 1)
-with open('$_QWEN4_EXP', 'w') as f:
-    f.write(content)
-print('  PATCH 4: Applied successfully')
-"
-    else
-        echo "  PATCH 4: Already applied"
-    fi
-
-    # Patch 5: Register weight_scale in Qwen4ExpPinnedHostEmbedding
-    if ! grep -q 'register_buffer.*"weight_scale".*embedding.weight_scale' "$_QWEN4_EXP" 2>/dev/null; then
-        echo "  PATCH 5: Registering weight_scale in Qwen4ExpPinnedHostEmbedding"
-        python3 -c "
-import sys
-with open('$_QWEN4_EXP', 'r') as f:
-    content = f.read()
-old = 'cpu_weight.weight_loader = self.weight_loader\n        self.register_parameter(\"weight\", cpu_weight)'
-if old not in content:
-    print('  PATCH 5: Target pattern not found, skipping', file=sys.stderr)
-    sys.exit(0)
-new = '''cpu_weight.weight_loader = self.weight_loader
-        self.register_parameter(\"weight\", cpu_weight)
-        self.register_buffer(\"weight_scale\", embedding.weight_scale, persistent=True)'''
-content = content.replace(old, new, 1)
-with open('$_QWEN4_EXP', 'w') as f:
-    f.write(content)
-print('  PATCH 5: Applied successfully')
-"
-    else
-        echo "  PATCH 5: Already applied"
-    fi
-
-    echo "All SGLang runtime patches applied."
-else
-    echo "WARNING: qwen4_exp.py not found at $_QWEN4_EXP; running with container defaults" >&2
-fi
-
 # ---- ROCm / aiter environment -----------------------------------------------
 export PYTHONNOUSERSITE=1
 export SGLANG_USE_AITER=1
@@ -318,6 +180,7 @@ SGLANG_CMD=(
     --watchdog-timeout 1200
     --chunked-prefill-size 16384
     --mamba-ssm-dtype bfloat16
+    --cuda-graph-backend-decode disabled
     --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
     --scheduler-recv-interval "$SCHEDULER_RECV_INTERVAL"
