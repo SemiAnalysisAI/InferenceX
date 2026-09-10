@@ -50,6 +50,37 @@ assert "VLLM_K3_FORK_REF=k3-pd-recovery-integration" in settings
 assert any(item.startswith("VLLM_K3_FORK_SHA=710a6cbef") for item in settings)
 assert "mooncake" not in repr(recipe).lower()
 
+prefill_scale_recipe = config[
+    "kimik3-fp4-mi355x-vllm-disagg-agentic-prefill-scale"
+]
+prefill_scale_point = prefill_scale_recipe["scenarios"]["agentic-coding"][0]
+assert len(prefill_scale_point["search-space"]) == 1
+prefill_scale_arm = prefill_scale_point["search-space"][0]
+assert prefill_scale_arm["conc-list"] == [48]
+assert prefill_scale_arm["spec-decoding"] == "none"
+assert prefill_scale_arm["prefill"]["num-worker"] == 2
+assert prefill_scale_arm["decode"]["num-worker"] == 1
+assert prefill_scale_arm["prefill"]["dcp-size"] == 8
+assert prefill_scale_arm["decode"]["dcp-size"] == 8
+prefill_scale_settings = (
+    prefill_scale_arm["prefill"]["additional-settings"]
+    + prefill_scale_arm["decode"]["additional-settings"]
+)
+for expected in (
+    "PREFILL_NODES=2",
+    "DECODE_NODES=1",
+    "PREFILL_CP_KV_CACHE_INTERLEAVE_SIZE=1536",
+    "DECODE_CP_KV_CACHE_INTERLEAVE_SIZE=1536",
+    "TOTAL_CPU_DRAM_GB=1799",
+    "LMCACHE_L1_SIZE_GB=1799",
+    "LMCACHE_MAX_GPU_WORKERS=8",
+    "VLLM_K3_FORK_REF=k3-pd-recovery-integration",
+    "VLLM_K3_FORK_SHA=710a6cbef37aa7b7fb88255e09795729483943ad",
+):
+    assert expected in prefill_scale_settings
+assert "LMCACHE_ON_DECODE=true" not in repr(prefill_scale_arm)
+assert "mooncake" not in repr(prefill_scale_recipe).lower()
+
 dspark_recipe = config["kimik3-fp4-mi355x-vllm-disagg-agentic-dspark"]
 dspark_point = dspark_recipe["scenarios"]["agentic-coding"][0]
 assert len(dspark_point["search-space"]) == 1
