@@ -1,0 +1,23 @@
+# Source GitHub Actions run: https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34493175056
+# Draft lengths 6-8 rejected by the image (no measured AL): https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34494319147
+# Acceptance Length (AL) measured with SPEED-Bench Qualitative coding.
+# model: deepseek-ai/DeepSeek-V4.1-Flash | image: vllm/vllm-openai:deepseekv41-flash-0909 | TP: 4
+# temperature: 1.0 | output_len: 4096
+# thinking_on chat_template_kwargs: {"thinking":true,"reasoning_effort":"high"}
+# thinking_off chat_template_kwargs: {"thinking":false}
+# method: dspark | draft_sample_method: probabilistic | rejection_sample_method: block
+# enable_adaptive_verification: false | engram cpu_offload: true
+# key = num_speculative_tokens; AL includes the target verification token.
+deepseek-v4.1-flash:
+  thinking_off:
+    1: 1.88
+    2: 2.62
+    3: 3.27
+    4: 3.73
+    5: 4.07
+  thinking_on:
+    1: 1.81
+    2: 2.43
+    3: 2.90
+    4: 3.26
+    5: 3.51
