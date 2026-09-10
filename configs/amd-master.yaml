@@ -1547,7 +1547,7 @@ minimaxm3-fp8-mi300x-vllm-agentic-mtp:
 # GPU-resident-KV c1/c2/c3/c4/c5/c6/c8 curve from Actions run 29657732517
 # and enables EAGLE MTP with the committed thinking-on golden AL.
 glm5.2-fp8-mi325x-sglang-agentic-mtp:
-  image: lmsysorg/sglang:v0.5.16-rocm720-mi30x
+  image: lmsysorg/sglang:v0.5.19-rocm720-mi30x
   model: zai-org/GLM-5.2-FP8
   model-prefix: glm5.2
   runner: cluster:mi325x-amds
