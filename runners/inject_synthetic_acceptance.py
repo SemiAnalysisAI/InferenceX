@@ -26,6 +26,7 @@ clone before invoking this):
   python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" "${CONFIG_FILE%%:*}" "$FRAMEWORK"
 """
 
+import math
 import os
 import sys
 
@@ -39,6 +40,16 @@ MODEL_PREFIX_TO_YAML_KEY = {
     # dated 0813), distinct from the plain MTP checkpoint above.
     "dsv4dspark": "deepseek-v4-pro-0813",
     "dsv4dsparkprob": "deepseek-v4-pro-0813",
+}
+
+# Committed golden curves are the authority for AgentX synthetic acceptance.
+# Keep this mapping explicit: a model prefix must select one unambiguous curve
+# (some models have multiple draft heads / sampling methods).
+GOLDEN_AL_REFERENCES = {
+    "qwen3.5": (
+        "qwen3.5_mtp.yaml",
+        "qwen3.5-397b-a17b-nvfp4",
+    ),
 }
 
 
@@ -87,41 +98,107 @@ def _lookup_al(model_block, num_spec_tokens):
     return None
 
 
-def _resolve_al(config_text, injector, ref_yaml):
-    explicit = os.environ.get("SYNTHETIC_ACCEPTANCE_LENGTH", "").strip()
-    if explicit:
-        return float(explicit)
-
+def _load_reference(ref_yaml, yaml_key, num_spec_tokens):
     if not os.path.isfile(ref_yaml):
-        sys.exit(
-            "ERROR: SYNTHETIC_ACCEPTANCE_LENGTH not set and reference YAML not "
-            f"found: {ref_yaml}"
-        )
+        sys.exit(f"ERROR: golden acceptance reference YAML not found: {ref_yaml}")
 
-    import yaml  # local import: only needed on the auto-lookup path
+    import yaml
 
     with open(ref_yaml) as f:
         data = yaml.safe_load(f)
 
-    key = _yaml_key(os.environ.get("MODEL_PREFIX", ""))
-    model_block = data.get(key)
+    model_block = data.get(yaml_key)
     if model_block is None:
-        sys.exit(f'ERROR: model key "{key}" not found in {ref_yaml}')
-
-    nst_env = os.environ.get("NUM_SPEC_TOKENS", "").strip()
-    if nst_env:
-        num_spec_tokens = int(nst_env)
-    else:
-        num_spec_tokens = injector.spec_tokens_from_recipe(config_text) or 2
+        sys.exit(f'ERROR: model key "{yaml_key}" not found in {ref_yaml}')
 
     al = _lookup_al(model_block, num_spec_tokens)
     if al is None:
         sys.exit(
-            f"ERROR: num_spec_tokens={num_spec_tokens} not found for {key} in {ref_yaml}"
+            f"ERROR: num_spec_tokens={num_spec_tokens} not found for "
+            f"{yaml_key} in {ref_yaml}"
+        )
+    return float(al)
+
+
+def _resolve_al(config_text, injector, legacy_ref_yaml):
+    model_prefix = os.environ.get("MODEL_PREFIX", "").strip()
+    explicit = os.environ.get("SYNTHETIC_ACCEPTANCE_LENGTH", "").strip()
+
+    nst_env = os.environ.get("NUM_SPEC_TOKENS", "").strip()
+    recipe_spec_tokens = injector.spec_tokens_from_recipe(config_text)
+
+    # Curves listed here are fail closed.  In particular, an explicit AL must
+    # not bypass the recipe's actual speculative step count and silently select
+    # the next row of the golden table.
+    reference = GOLDEN_AL_REFERENCES.get(model_prefix)
+    if reference:
+        if recipe_spec_tokens is None:
+            sys.exit(
+                "ERROR: cannot validate golden AL because the recipe does not "
+                "declare a speculative-token count"
+            )
+        validator = getattr(injector, "validate_speculative_shape", None)
+        if validator is not None:
+            validator(config_text)
+        if nst_env and int(nst_env) != recipe_spec_tokens:
+            sys.exit(
+                f"ERROR: NUM_SPEC_TOKENS={nst_env} disagrees with recipe "
+                f"speculative-num-steps={recipe_spec_tokens}"
+            )
+
+        filename, key = reference
+        ref_yaml = os.path.join(
+            os.path.dirname(__file__), "..", "golden_al_distribution", filename
+        )
+        golden_al = _load_reference(ref_yaml, key, recipe_spec_tokens)
+        if explicit and not math.isclose(
+            float(explicit), golden_al, rel_tol=0.0, abs_tol=1e-9
+        ):
+            sys.exit(
+                f"ERROR: explicit SYNTHETIC_ACCEPTANCE_LENGTH={explicit} does "
+                f"not match golden AL={golden_al:g} for MODEL_PREFIX={model_prefix}, "
+                f"num_spec_tokens={recipe_spec_tokens} ({ref_yaml})"
+            )
+        _log(
+            f"Verified golden AL={golden_al:g} from {ref_yaml} "
+            f"(model={key}, num_spec_tokens={recipe_spec_tokens})"
+        )
+        return golden_al
+
+    # Preserve the legacy reference format for model families that have not yet
+    # been assigned an unambiguous committed curve above.
+    if explicit:
+        return float(explicit)
+
+    if not os.path.isfile(legacy_ref_yaml):
+        sys.exit(
+            "ERROR: SYNTHETIC_ACCEPTANCE_LENGTH not set and reference YAML not "
+            f"found: {legacy_ref_yaml}"
+        )
+
+    import yaml
+
+    with open(legacy_ref_yaml) as f:
+        data = yaml.safe_load(f)
+
+    key = _yaml_key(model_prefix)
+    model_block = data.get(key)
+    if model_block is None:
+        sys.exit(f'ERROR: model key "{key}" not found in {legacy_ref_yaml}')
+
+    num_spec_tokens = (
+        int(nst_env) if nst_env else (recipe_spec_tokens if recipe_spec_tokens else 2)
+    )
+
+    al = _lookup_al(model_block, num_spec_tokens)
+    if al is None:
+        sys.exit(
+            f"ERROR: num_spec_tokens={num_spec_tokens} not found for {key} in "
+            f"{legacy_ref_yaml}"
         )
 
     _log(
-        f"Auto-resolved AL={al} from {ref_yaml} "
+        f"Auto-resolved AL={al} from {legacy_ref_yaml} "
         f"(model={key}, num_spec_tokens={num_spec_tokens})"
     )
     return float(al)
