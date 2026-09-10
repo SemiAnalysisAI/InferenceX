@@ -50,6 +50,7 @@
 - 不要把当前配方数量、模型或硬件清单、镜像 pin、枚举定义或源码文本写成快照断言。新增有效配方或进行等价重构，不应迫使开发者修改无关断言。
 - 保留真正的契约：数值结果、无效输入拒绝行为、稳定的产物格式，以及由不同组件独立读取的配置之间的一致性。只断言使用方真正依赖的部分。
 - 必要时可以模拟外部服务或进程，但必须运行被测行为本身。测试里复制的解析器、过滤逻辑或假实现，无法发现真实实现中的回归。
+- 在涉及时间的测试中控制时钟和长时间等待，以可观察到的就绪状态进行同步。测试进程终止或产物写入契约时，应保留真实操作，并为等待和清理设置上限，避免回归导致测试进程一直挂起。
 - 冗余测试应直接删除，不必一一补上。只有存在实质性覆盖缺口时才扩展已有 fixture；不要为了维持测试数量而新建测试框架。
 
 参见 [Randy Coulman 的 Tautological Tests](https://randycoulman.com/blog/2016/12/20/tautological-tests/)，了解独立预期结果与仅仅重复实现的断言之间的区别。
@@ -71,13 +72,13 @@ bash -n runners/launch_<cluster>.sh
 ### 先精确配置，再过滤配置族
 
 ```bash
-uv run --no-project --with pydantic --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
   utils/matrix_logic/generate_sweep_configs.py test-config \
   --config-files configs/<nvidia|amd>-master.yaml \
   --runner-config configs/runners.yaml \
   --config-keys <exact-key>
 
-uv run --no-project --with pydantic --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
   utils/matrix_logic/generate_sweep_configs.py full-sweep \
   --config-files configs/<nvidia|amd>-master.yaml \
   --runner-config configs/runners.yaml \
@@ -113,6 +114,17 @@ python3 utils/validate_perf_changelog.py \
 其契约实现在 [`validate_perf_changelog.py`](../utils/validate_perf_changelog.py) 中。该检查会验证生成矩阵并拒绝禁止的内容变更，但其差异读取器可能看不到仅空白的历史删除。应把精确字节差异检查作为独立证据门禁；不要改写或规范化 `perf-changelog.yaml` 历史字节。
 
 本地矩阵不能证明 Slurm 分配或 llm-d 端点发现。多节点配方变更仍然需要上游配方检查器，并在目标集群上实际执行；详见[配置验证](./configuration-procedures.md#validate)。
+
+### 并行运行完整本地测试套件
+
+安装好测试所需依赖后，在同一 Python 环境中添加 [`pytest-xdist`](https://pytest-xdist.readthedocs.io/en/stable/distribution.html)，使用四个 worker 运行全部本地测试套件：
+
+```bash
+python -m pip install pytest-xdist
+python -m pytest utils/ runners/ experimental/CollectiveX/tests/ -n 4
+```
+
+串行调试时使用 `-n 0`。测试必须隔离临时文件和端口，并确保各 worker 收集到的参数化用例一致。changelog-gate CI 任务同样使用四个 worker；并行执行不改变其测试范围和断言。
 
 ## 冒烟、扫描与评测
 

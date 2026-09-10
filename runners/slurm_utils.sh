@@ -63,7 +63,7 @@ copy_to_workspace() {
     echo "Copied $(basename "$source_file") to $destination_file"
 }
 
-# Preserve the legacy SRT filenames and the caller's shell error mode. Call
+# Preserve short SRT filenames and the caller's shell error mode. Call
 # directly: testing this function's status would suppress errexit inside it.
 copy_fixed_sequence_results() {
     local logs_dir="$1" workspace="$2" result_filename="$3"
@@ -91,11 +91,8 @@ copy_fixed_sequence_results() {
 
                     echo "Processing concurrency $concurrency with $gpus GPUs (ctx: $ctx, gen: $gen): $result_file"
 
-                    if [ -n "$ctx" ] && [ -n "$gen" ]; then
-                        workspace_result_file="$workspace/${result_filename}_${config_name}_conc${concurrency}_gpus_${gpus}_ctx_${ctx}_gen_${gen}.json"
-                    else
-                        workspace_result_file="$workspace/${result_filename}_${config_name}_conc${concurrency}_gpus_${gpus}.json"
-                    fi
+                    workspace_result_file="$workspace/$(python3 "$(dirname "${BASH_SOURCE[0]}")/../utils/result_filename.py" \
+                        --point "$result_filename" "$config_name" "$concurrency" "$gpus" "$ctx" "$gen")"
                     cp "$result_file" "$workspace_result_file"
 
                     echo "Copied result file to: $workspace_result_file"
