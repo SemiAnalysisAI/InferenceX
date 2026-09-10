@@ -42,7 +42,7 @@
 | 单节点与多节点产物上传 | [`.github/workflows/benchmark-tmpl.yml`](../.github/workflows/benchmark-tmpl.yml)、[`.github/workflows/benchmark-multinode-tmpl.yml`](../.github/workflows/benchmark-multinode-tmpl.yml) |
 | 吞吐量与 Eval 聚合 | [`.github/workflows/collect-results.yml`](../.github/workflows/collect-results.yml)、[`.github/workflows/collect-evals.yml`](../.github/workflows/collect-evals.yml)、[`utils/collect_results.py`](../utils/collect_results.py)、[`utils/collect_eval_results.py`](../utils/collect_eval_results.py) |
 | Changelog 字节、Diff 与矩阵 Gate | [`utils/validate_perf_changelog.py`](../utils/validate_perf_changelog.py)、[`utils/process_changelog.py`](../utils/process_changelog.py) |
-| 复用授权与源 Run 选择 | [`utils/find_reusable_sweep_run.py`](../utils/find_reusable_sweep_run.py) |
+| 复用授权与源 Run 选择 | [`infx/workflows/reuse.py`](../infx/workflows/reuse.py) |
 | 受支持的复用合并与冲突准备 | [`utils/merge_with_reuse.sh`](../utils/merge_with_reuse.sh)、[`utils/prepare_perf_changelog_merge.py`](../utils/prepare_perf_changelog_merge.py) |
 | 预发布请求与回调 | [`.github/workflows/stage-results.yml`](../.github/workflows/stage-results.yml)、[`.github/workflows/stage-results-callback.yml`](../.github/workflows/stage-results-callback.yml) |
 | 复用 Agentic 入库的重新派发 | [`.github/workflows/recover-reused-ingest.yml`](../.github/workflows/recover-reused-ingest.yml) |
@@ -362,13 +362,19 @@ Admin 权限；Read、Triage 以及没有仓库访问权限的用户不能执行
 
 ### 资格与授权
 
-1. PR 必须保留且只保留一个完整扫描主标签：`full-sweep-enabled`、`non-canary-full-sweep-enabled`、`full-sweep-fail-fast` 或 `full-sweep-fail-fast-no-canary`。
+`infx.github` 提供仓库范围的 REST 调用、分页及评论表态基础操作，不包含扫描策略。`infx.workflows.reuse` 负责命令解析、授权查找及源 Run 的选择和验证。`infx.workflows.reuse_comment` 使用相同规则提供表态反馈。工作流通过 `python3 -m` 调用这些模块；现有 `utils/find_reusable_sweep_run.py` 命令和导入路径保持兼容。包仅使用标准库，从检出目录运行时无需安装。
+
+1. 复用不要求扫描标签。标签用于选择新的 GPU 工作；移除主标签不会使已有源 Run 失效。Changelog 验证和合并辅助脚本仍会拒绝冲突的主标签。
 2. `evals-only` 与 `agentx-fast` 会令 Run 不可复用。默认完整扫描以及带 `all-evals` 的完整扫描仍可复用。
 3. 源 Run 必须是已结束的 PR `run-sweep.yml` Run，其 Head SHA 仍在 PR Commit 列表中，并拥有未过期的 `results_bmk`、`eval_results_all` 或 `bmk_agentic_*` 结果产物。
 4. `OWNER`、`MEMBER` 或 `COLLABORATOR` 通过 `/reuse-sweep-run` 或 `/reuse-sweep-run <run_id>` 授权复用。最新的合格授权命令决定自动选择还是固定源 Run。
 5. 不指定 ID 时，自动选择要求最新的合格源 Run 成功。指定 Run 是维护者的明确决定，允许结论为 `success`、`failure` 或 `cancelled`；下游入库只保留存在且有效的行，因此应将其报告为部分数据，而不是绿色 Run。
 
-评论本身不会触发 Run。在之后的 PR `synchronize` 事件上，复用 Gate 会在 Changelog 验证后跳过另一轮 PR 扫描。在 `main` 上，映射不明确、指向无效 Run 或与标签冲突的授权会 Fail Closed。没有授权时，`main` 执行正常扫描。
+评论会触发轻量验证工作流，使用默认分支代码和 `GITHUB_TOKEN`。接受后在原评论上添加 👍，拒绝时添加 👎；拒绝原因显示在 Actions 运行摘要中。不发布额外评论，也不启动 GPU 工作。编辑命令时会清除机器人的旧表态并检查新请求。用户的表态保持不变，仍以最新的合格授权命令为准。
+
+接受表示验证当时存在合格的源 Run；表态本身不构成复用授权。PR 同步及合并时仍会重新验证源 Run，产物缺失、过期或源 Commit 无效时仍会 Fail Closed。不指定 Run ID 的请求保持现有规则，每次选择最新成功 Run；如需指定某次运行，请固定 Run ID。
+
+在之后的 PR `synchronize` 事件上，复用 Gate 只有在 Changelog 和源 Run 验证均通过后才会跳过另一轮 PR 扫描。在 `main` 上，映射不明确、指向无效 Run 或与标签冲突的授权会 Fail Closed。没有授权时，`main` 执行正常扫描。
 
 ### 受支持的合并路径
 
@@ -378,7 +384,7 @@ Admin 权限；Read、Triage 以及没有仓库访问权限的用户不能执行
 utils/merge_with_reuse.sh <pr-number>
 ```
 
-[`merge_with_reuse.sh`](../utils/merge_with_reuse.sh) 会验证合格的成功源产物、发布授权、把 `origin/main` 合并进 PR Branch、只解决 `perf-changelog.yaml` 冲突、规范化追加条目中的 `XXX` Link、按需创建并推送 Synchronization Commit、等待 `check-changelog` 和全部 PR Check、再次确认 Head 未移动，最后执行 Admin Squash Merge。它会拒绝 Fork、脏 Working Tree、多个主标签、不兼容修饰标签、意外冲突、缺少产物、失败 Check 或移动过的 PR Head。
+[`merge_with_reuse.sh`](../utils/merge_with_reuse.sh) 会验证合格的成功源产物、发布固定到该 Run 的授权、把 `origin/main` 合并进 PR Branch、只解决 `perf-changelog.yaml` 冲突、规范化追加条目中的 `XXX` Link、按需创建并推送 Synchronization Commit、等待 `check-changelog` 和全部 PR Check、再次确认 Head 未移动，最后执行 Admin Squash Merge。它会拒绝 Fork、脏 Working Tree、多个主标签、不兼容修饰标签、意外冲突、缺少产物、失败 Check 或移动过的 PR Head。
 
 不要只手工复制该序列的一半。尤其是，只发表评论后直接 Squash Merge、却不执行 Synchronization/Check 阶段，可能导致 Merge Run 无法选择预期源 Run。
 

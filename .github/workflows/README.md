@@ -192,9 +192,8 @@ also fans out the selected matrix immediately. It does not reproduce
 `[skip-sweep]` skips PR benchmark setup only. Changelog and reuse checks still
 run. Pushes to `main` ignore it.
 
-After an eligible full sweep (`full-sweep-enabled`,
-`non-canary-full-sweep-enabled`, or either fail-fast variant), an authorized
-maintainer can comment:
+An authorized maintainer can reuse an eligible completed sweep without keeping
+a sweep label on the PR:
 
 ```
 /reuse-sweep-run
@@ -208,8 +207,12 @@ in the PR. A run ID can pin an eligible successful or failed run:
 ```
 
 The latest matching comment by an `OWNER`, `MEMBER`, or `COLLABORATOR` wins.
-Comments do not trigger or cancel sweeps. Later commits skip a new sweep after
-changelog/matrix validation.
+The bot reacts with 👍 after validating the request, or 👎 on rejection; details
+are in the Actions run summary. Edits replace the bot's old reaction. No separate
+comment is posted. Comments do not trigger or cancel GPU sweeps. Later commits
+skip a new sweep after changelog/matrix and source-run validation. Merge-time
+validation remains authoritative; an acknowledgment cannot override expired or
+invalid artifacts. `evals-only` and `agentx-fast` remain incompatible with reuse.
 Remove and re-add the sweep label to force one.
 
 `utils/merge_with_reuse.sh <pr-number>` is the supported merge path for reuse.
