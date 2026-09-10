@@ -7021,3 +7021,9 @@
     - "Refresh the full GB200 Dynamo-vLLM AgentX configuration across the configured aggregate and disaggregated topology points."
     - "Retain aggregate SimpleCPU-offload concurrency 20 and 30, and configure Mooncake host KV storage, NIXL over UCX, explicit thinking mode, and the committed MiniMax-M3 EAGLE3-GQA acceptance target."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2807
+
+- config-keys:
+    - minimaxm3-fp8-h200-vllm-agentic-mtp
+  description:
+    - "Update vLLM image from vllm/vllm-openai:nightly-d9105ea8001e0a6d77a96327d17515bb5791fb36 (2026-09-07 upstream nightly, tag commit vllm-project/vllm@d9105ea8) to vllm/vllm-openai:v0.29.0 pinned by manifest digest sha256:c2914767605584b6d8f45686b82de173ecc99e781897aa3d0a66dacd72c51ae1 (vLLM release v0.29.0, tag commit vllm-project/vllm@98dff2a8, Docker Hub tag pushed 2026-09-09T06:06Z, CUDA 13.0 build). benchmarks/single_node/agentic/minimaxm3_fp8_h200_mtp.sh is unchanged: TRITON_ATTN attention, fp8 KV, EAGLE3 with the Inferact MiniMax-M3 EAGLE3-GQA draft and the committed golden synthetic acceptance length 2.78, Mooncake 0.3.11.post1 DRAM offload on the host-tier arm; the resident TP8 c1/c2/c4/c6/c8/c10 and Mooncake DRAM offload c12/c14 grid is unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2953
