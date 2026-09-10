@@ -7097,3 +7097,12 @@
     - "Backport upstream vLLM #50014 unread-promotion protection into the separate validation image after direct B200 diagnostics reproduced native tiered promotion thrashing. Retain the merged #55712 SWA coverage fix and unchanged b0dc209c metrics implementation."
     - "Keep the same three TP8/MTP points, 128 GB host budgets, GPU utilization 0.85, runtime-default CPU threads, and full AgentX duration. Pinning restored blocks can also delay new stores; this is a backend-fix validation, not a performance-neutral metrics-only comparison."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2931
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  no-evals: true
+  description:
+    - "Allow five minutes for B200 NVMe cache cleanup: run 34412940233 completed all three benchmark profiles, but the tiered job failed when the 60-second cleanup deadline interrupted deletion. Keep the image, metrics code, and three benchmark points unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2931

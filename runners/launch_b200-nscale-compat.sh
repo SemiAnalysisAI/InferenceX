@@ -542,7 +542,7 @@ else
     cleanup_offload_cache() {
         local rc=$?
         if [[ -n "$NVME_HOST_DIR" ]]; then
-            timeout --kill-after=10s 60s srun --jobid="$JOB_ID" \
+            timeout --kill-after=10s 300s srun --jobid="$JOB_ID" \
                 rm -rf -- "$NVME_HOST_DIR" || {
                     echo "NVMe cleanup failed: $NVME_HOST_DIR on job $JOB_ID" >&2
                     rc=1
