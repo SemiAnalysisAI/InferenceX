@@ -159,27 +159,43 @@ select_srt_slurm_version() {
 SRT_REPO_DIR="srt-slurm"
 rm -rf "$SRT_REPO_DIR"
 
-if [[ "$USES_DCGM_POWER" == "1" ]]; then
-    SRT_SLURM_REPO="$POWER_SRT_SLURM_URL"
-    SRT_SLURM_REF="$POWER_SRT_SLURM_PIN"
+if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp4" ]]; then
+    # GLM-5.2 B300 sglang AgentX: srt-slurm main carries the agentx-mvp scenario,
+    # session-affinity frontend, and custom benchmark schema these recipes need.
+    # Only glm5.2/b300-fp4 recipes get copied onto this pinned fork checkout --
+    # its recipes/ tree follows a contract other models haven't adopted yet.
+    echo "Cloning srt-slurm (https://github.com/NVIDIA/srt-slurm.git, pinned to open PR #313)..."
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
+    cd "$SRT_REPO_DIR" || exit 1
+    # NVIDIA/srt-slurm#313 is still open, so pin its reviewed recipe contract.
+    git fetch origin pull/313/head || exit 1
+    git checkout --detach 93fae852166a30f3cc054c8616228bf62c69c48c || exit 1
+    git rev-parse HEAD > "$GITHUB_WORKSPACE/srt-slurm-sha.txt"
+    mkdir -p recipes/sglang/glm5.2/b300-fp4
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5.2/b300-fp4" recipes/sglang/glm5.2/b300-fp4 || exit 1
 else
-    select_srt_slurm_version
-fi
+    if [[ "$USES_DCGM_POWER" == "1" ]]; then
+        SRT_SLURM_REPO="$POWER_SRT_SLURM_URL"
+        SRT_SLURM_REF="$POWER_SRT_SLURM_PIN"
+    else
+        select_srt_slurm_version
+    fi
 
-echo "Cloning srt-slurm ($SRT_SLURM_REPO @ $SRT_SLURM_REF)..."
-git clone "$SRT_SLURM_REPO" "$SRT_REPO_DIR" || exit 1
-cd "$SRT_REPO_DIR" || exit 1
-git checkout --quiet "$SRT_SLURM_REF" || exit 1
-git rev-parse HEAD > "$GITHUB_WORKSPACE/srt-slurm-sha.txt"
-if [[ "$USES_DCGM_POWER" == "1" ]]; then
-    test "$(git rev-parse HEAD)" = "$POWER_SRT_SLURM_PIN" \
-        || { echo "Error: srt-slurm HEAD does not match POWER_SRT_SLURM_PIN=$POWER_SRT_SLURM_PIN" >&2; exit 1; }
-    cp "$GITHUB_WORKSPACE/srt-slurm-sha.txt" "$GITHUB_WORKSPACE/power-producer-sha.txt"
-fi
+    echo "Cloning srt-slurm ($SRT_SLURM_REPO @ $SRT_SLURM_REF)..."
+    git clone "$SRT_SLURM_REPO" "$SRT_REPO_DIR" || exit 1
+    cd "$SRT_REPO_DIR" || exit 1
+    git checkout --quiet "$SRT_SLURM_REF" || exit 1
+    git rev-parse HEAD > "$GITHUB_WORKSPACE/srt-slurm-sha.txt"
+    if [[ "$USES_DCGM_POWER" == "1" ]]; then
+        test "$(git rev-parse HEAD)" = "$POWER_SRT_SLURM_PIN" \
+            || { echo "Error: srt-slurm HEAD does not match POWER_SRT_SLURM_PIN=$POWER_SRT_SLURM_PIN" >&2; exit 1; }
+        cp "$GITHUB_WORKSPACE/srt-slurm-sha.txt" "$GITHUB_WORKSPACE/power-producer-sha.txt"
+    fi
 
-# Recipes live in this repo; overlay all of them onto the checkout's recipes/ dir.
-mkdir -p recipes
-cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes" recipes || exit 1
+    # Recipes live in this repo; overlay all of them onto the checkout's recipes/ dir.
+    mkdir -p recipes
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes" recipes || exit 1
+fi
 
 if [[ "${EVAL_FRAMEWORK:-lm-eval}" != "lm-eval" ]]; then
     python3 "$GITHUB_WORKSPACE/runners/patch_srt_eval_dispatch.py" "$(pwd)" || exit 1
@@ -293,7 +309,11 @@ SRTCTL_APPLY_ARGS=(
     --no-preflight
     --tags "b300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)"
 )
-SRTCTL_OUTPUT=$(srtctl apply "${SRTCTL_APPLY_ARGS[@]}" 2>&1)
+if [[ "$MODEL_PREFIX" == "glm5.2" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
+    SRTCTL_OUTPUT=$(env -u UCX_TLS srtctl apply "${SRTCTL_APPLY_ARGS[@]}" 2>&1)
+else
+    SRTCTL_OUTPUT=$(srtctl apply "${SRTCTL_APPLY_ARGS[@]}" 2>&1)
+fi
 echo "$SRTCTL_OUTPUT"
 
 # Extract JOB_ID from srtctl output
