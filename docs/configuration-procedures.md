@@ -171,8 +171,7 @@ Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../AGENTS.md#non-nego
 
 The AgentX-only `dsv41flash-fp4-<sku>-vllm-agentic-dspark` recipes use
 `vllm/vllm-openai:deepseekv41-flash-0909` at TP4 with native five-token DSpark,
-probabilistic drafting, block rejection, and adaptive verification. Throughput
-and eval both use real target verification. `--engram-config '{"cpu_offload":true}'`
+probabilistic drafting. Throughput uses the [committed golden AL](../golden_al_distribution/dsv41flash_dspark.yaml) of 3.51 for thinking on and five draft tokens, with synthetic rejection sampling and adaptive verification disabled. Accuracy evals retain real block rejection and adaptive verification. `--engram-config '{"cpu_offload":true}'`
 stores Engram embedding tables in pinned host DRAM accessed through UVA;
 `kv-offloading: none` describes the separate, GPU-resident KV cache. MXFP4 expert
 weights determine the recipe's `precision: fp4` label.
