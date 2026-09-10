@@ -80,7 +80,8 @@ case "$KV_OFFLOAD_BACKEND" in
         # LMCache settings
         export PYTHONHASHSEED=0
         export LMCACHE_LOCAL_CPU=True
-        export LMCACHE_MAX_LOCAL_CPU_SIZE=512  # GiB per TP rank (recipe value); 2 TiB total for TP4
+        # Cap at 512 GiB/rank (recipe value for large clusters); use dram-utilization budget on smaller nodes
+        export LMCACHE_MAX_LOCAL_CPU_SIZE=$(( TOTAL_CPU_DRAM_GB < 512 ? TOTAL_CPU_DRAM_GB : 512 ))
         export LMCACHE_NUMA_MODE=auto
         export LMCACHE_CHUNK_SIZE=256
         export OFFLOAD_MIN_LOAD_TOKENS=8192
