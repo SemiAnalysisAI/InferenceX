@@ -160,6 +160,7 @@ echo "DCP_SIZE=${DCP_SIZE:-1} SIMULATE_ACC_LEN=$SIMULATE_ACC_LEN NUM_SPEC_TOKENS
 ATOM_CMD=(
     python -m atom.entrypoints.openai_server
     --model "$MODEL_PATH"
+    --served-model-name "$MODEL"
     --host 0.0.0.0
     --server-port "$PORT"
     "${PARALLEL_ARGS[@]}"
