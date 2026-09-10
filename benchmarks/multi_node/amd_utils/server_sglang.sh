@@ -169,7 +169,6 @@ print(f'PREFILL_CUDA_GRAPH_BS_NO_DP_START=\"{s}\"')
 print(f'PREFILL_CUDA_GRAPH_BS_NO_DP_END=\"{e}\"')
 
 print(f'DECODE_MEM_FRACTION_STATIC=\"{decode.get(\"mem_fraction_static\", 0.85)}\"')
-print(f'DECODE_PREFILL_ROUND_ROBIN_BALANCE=\"{decode.get(\"prefill_round_robin_balance\", True)}\"')
 print(f'DECODE_DISAGG_ENABLE_RADIX_CACHE=\"{decode.get(\"disagg_decode_enable_radix_cache\", False)}\"')
 
 dp = decode.get('dp', {})
@@ -317,9 +316,6 @@ fi
 
 DECODE_MODE_FLAGS="--mem-fraction-static ${decode_mem_fraction_static} --max-running-requests ${decode_max_running_requests} --cuda-graph-bs-decode ${decode_cuda_graph_bs[*]} "
 
-if [[ "$DECODE_PREFILL_ROUND_ROBIN_BALANCE" == "True" ]] || [[ "$DECODE_PREFILL_ROUND_ROBIN_BALANCE" == "true" ]]; then
-    DECODE_MODE_FLAGS="$DECODE_MODE_FLAGS --prefill-round-robin-balance"
-fi
 if [[ -n "$decode_context_length" ]]; then
     DECODE_MODE_FLAGS="$DECODE_MODE_FLAGS --context-length ${decode_context_length}"
 fi
