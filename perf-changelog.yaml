@@ -7003,3 +7003,40 @@
     - "Export OMP_NUM_THREADS=1 from all three scripts. vLLM clamps torch threads itself, but only after the weights are loaded: the 'Reducing Torch threads from 16 to 1 for serving' line is emitted after 'Model loading took', so the checkpoint is read with 16 torch threads per worker across 8 workers. Setting it externally caps threads from process start, which is what that log line recommends."
     - "Weight loading currently costs 5760-5946 s (96-99 min) per job on this runner, measured across the c1, c4, c56 and c64 AgentX jobs of run 34087124574 - roughly half of each ~3 h job. It does not affect any measured number: loading completes before warmup and the profiling phase. The effect is also only observable on this runner. A local EXT4 box serves the checkpoint from page cache and loads in ~40 s with or without the cap, so it never exercises the cold-read path. CI reads cold from WEKAFS, where each of the 8 ranks streams the full 805 GiB to slice its own shards - roughly 6.4 TB of aggregate network reads per job - and that is where oversubscribed reader threads cost real time."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2851
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260907."
+    - "Replace the unconditional --disable-shared-experts-fusion with --enforce-shared-experts-fusion, and move the disable to the EP > 1 branch only."
+    - "Add TORCH_BLAS_PREFER_HIPBLASLT=1 and SGLANG_OPT_USE_AITER_BATCHED_GEMM=1."
+    - "Set GPU_MAX_HW_QUEUES=5 on the DP-attention path, matching the spec-none sibling dsv4_fp4_mi355x_sglang.sh."
+    - "Add --enable-deepseek-v4-fp4-indexer."
+    - "Drop conc 8 from the TP8 no-offload arm, which now sweeps conc [1, 2, 4, 16, 32]."
+    - "Set SGLANG_PREFILL_DELAYER_MAX_PREFILL_BS_WINDOW_SIZE=1 on the DP-attention path."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2910
+
+- config-keys:
+    - qwen3.5-fp4-gb300-dynamo-sglang-agentic-pp-pareto
+    - qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg-pareto
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add five GB300 Qwen3.5 NVFP4 AgentX Pareto points on lmsysorg/sglang:nightly-dev-cu13-20260831-bb5e6198."
+    - "Use PP4 prefill with DEP4 decode at concurrency 704 and 565, plus two distinct TP2 aggregate concurrency-44 recipes and one TP8 aggregate concurrency-7 recipe."
+    - "Keep full MTP and HiCache in every recipe; throughput uses the committed synthetic acceptance lengths while EVAL_ONLY keeps real MTP behavior."
+    - "Run the upstream SGLang image as shipped and pin the PP recipes plus router identity to ai-dynamo/dynamo main commit 61c37bc33c3e88da3facaa39fa2b5caf616740ba."
+    - "Match thinking-on Golden AL to SGLang speculative steps: 4.41 at C704 (5 steps), 3.97 at C565 (4 steps), and 4.8 for all three aggregate points (6 steps); select multi-node benchmark mode for the two-node TP8 point."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2812
+
+- config-keys:
+    - minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp
+    - minimaxm3-fp4-gb200-dynamo-vllm-agentic-disagg-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh the full GB200 Dynamo-vLLM AgentX configuration across the configured aggregate and disaggregated topology points."
+    - "Retain aggregate SimpleCPU-offload concurrency 20 and 30, and configure Mooncake host KV storage, NIXL over UCX, explicit thinking mode, and the committed MiniMax-M3 EAGLE3-GQA acceptance target."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2807

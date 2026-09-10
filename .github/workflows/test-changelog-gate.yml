@@ -7,12 +7,19 @@ on:
       - main
     paths:
       - ".claude/commands/recover-failed-ingest.md"
+      - ".claude/mcp/**"
+      - ".claude/requirements-mcp.txt"
+      - ".github/mcp-ci.json"
+      - ".github/workflows/claude-pr-review.yml"
+      - ".github/workflows/claude.yml"
+      - ".github/workflows/codeowner-signoff-verify.yml"
       - ".github/workflows/benchmark-tmpl.yml"
       - ".github/workflows/benchmark-multinode-tmpl.yml"
       - ".github/workflows/collectivex-sweep.yml"
       - ".github/workflows/profile.yml"
       - ".github/workflows/e2e-tests.yml"
       - ".github/workflows/run-sweep.yml"
+      - ".github/workflows/stage-results.yml"
       - ".github/workflows/speedbench-al.yml"
       - ".github/workflows/test-changelog-gate.yml"
       - ".github/workflows/trusted-external-sweep.yml"
@@ -43,6 +50,8 @@ on:
       - "utils/validate_reusable_sweep_artifacts.py"
       - "utils/changelog_gate_tests/test_validate_perf_changelog.py"
       - "utils/changelog_gate_tests/test_run_sweep_gating.py"
+      - "utils/changelog_gate_tests/test_workflow_authorization.py"
+      - "utils/changelog_gate_tests/workflow_script_runner.cjs"
       - "utils/changelog_gate_tests/conftest.py"
       - "utils/merge_with_reuse.sh"
       - "utils/matrix_logic/**"
@@ -66,29 +75,40 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.12"
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
-      - name: Install dependencies
+      - name: Verify MCP server compatibility
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install pytest "pydantic>=2" pyyaml tabulate
+          uv run --no-project --exclude-newer PT12H --python 3.12 \
+            --with-requirements .claude/requirements-mcp.txt python - <<'PY'
+          import asyncio
+          import runpy
+
+          module = runpy.run_path(".claude/mcp/server.py")
+          server = module["InferenceXMCPServer"]()
+          tools = asyncio.run(server.list_tools())
+          assert any(tool.name == "list_versions" for tool in tools)
+          assert asyncio.run(server.list_resources()) == []
+          print("MCP server construction and discovery passed.")
+          PY
 
       - name: Run validator, reuse, and gating tests
         run: |
-          python -m pytest \
+          uv run --no-project --exclude-newer PT12H --python 3.12 \
+            --with pytest --with pytest-xdist --with "pydantic>=2" --with pyyaml --with tabulate \
+            python -m pytest \
             utils/changelog_gate_tests/test_validate_perf_changelog.py \
             utils/test_find_reusable_sweep_run.py \
             utils/changelog_gate_tests/test_prepare_perf_changelog_merge.py \
             utils/changelog_gate_tests/test_recover_failed_ingest.py \
             utils/test_validate_reusable_sweep_artifacts.py \
             utils/changelog_gate_tests/test_run_sweep_gating.py \
+            utils/changelog_gate_tests/test_workflow_authorization.py \
             utils/test_ci_priority.py \
             utils/test_process_changelog.py \
             utils/test_collect_eval_results.py \
             utils/evals/test_batched_eval.py \
             utils/evals/test_run_eval_dispatch.py \
             runners/test_slurm_utils.py \
-            -v
+            -v -n 4
