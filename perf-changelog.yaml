@@ -7179,3 +7179,12 @@
   description:
     - "Use the pinned SGLang nightly-dev-cu13-20260901-07c8f729 image with FlashInfer 0.6.18, which includes the BF16 TRTLLM MoE allocation fix for small-batch Blackwell execution. Model, TP8, HiCache, MTP settings and concurrency grid are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2994
+
+- config-keys:
+    - dsv4-fp4-b200-sglang-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the B200 DeepSeek-V4-Pro-0813 SGLang AgentX image from lmsysorg/sglang:nightly-dev-20260827-20621aa1 (2026-08-27 dev nightly, sglang commit 20621aa1) to the lmsysorg/sglang:v0.5.19-cu130 release (Docker Hub digest sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9, release commit 0bcd8223, published 2026-09-05). The release branch contains every commit of the pinned nightly."
+    - "benchmarks/single_node/agentic/dsv4_fp4_b200_sglang_mtp.sh is unchanged: DSpark block size 6 with one speculative step and seven draft tokens, golden synthetic acceptance length 3.77, HiCache ratio 2.75 for TP8 and 8 for DP-attention, W4A4 MXFP4 MegaMoE plus the FP4 indexer on the DP-attention path, and sglang-router 0.3.2 cache-aware routing; the search space and cluster:b200-nscale runner are unchanged. Between the two images every server flag and SGLANG_* variable used by the script keeps its definition; --enable-w4a4-mxfp4-megamoe now selects DeepGEMM's mxf4xmxf4 MMA type directly instead of exporting DG_USE_FP4_ACTS/DG_USE_MXF4_KIND, DeepGEMM moves from 0.1.5.post2 to 0.1.7 and FlashInfer from 0.6.17 to 0.6.18."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3012
