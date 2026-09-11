@@ -3,6 +3,8 @@ model:
   path: qwen3.5-fp4
   container: lmsysorg/sglang:nightly-dev-cu13-20260901-07c8f729
   precision: fp4
+slurm:
+  time_limit: '08:00:00'
 identity:
   model: { repo: nvidia/Qwen3.5-397B-A17B-NVFP4 }
   container: { image: lmsysorg/sglang:nightly-dev-cu13-20260901-07c8f729 }
