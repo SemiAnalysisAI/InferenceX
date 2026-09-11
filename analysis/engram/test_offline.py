@@ -298,10 +298,16 @@ def test_meter_records_contribution_and_ablation_zeroes_it(tmp_path, monkeypatch
     meter = str(tmp_path)
     monkeypatch.setenv(gate_probe.METER_DIR_ENV, meter)
 
+    masks = []
+
     class Fake:
         layer_hash_index = 0
 
         def forward(self, hidden_states, hash_ids, token_mask=None):
+            masks.append(token_mask)
+            # Mirrors the real module: an all-False mask passes through.
+            if token_mask is not None and not token_mask.any():
+                return hidden_states.clone()
             return hidden_states + 0.05 * torch.ones_like(hidden_states)
 
     saved = gate_probe._find_engram_class
@@ -311,15 +317,18 @@ def test_meter_records_contribution_and_ablation_zeroes_it(tmp_path, monkeypatch
         obj, h = Fake(), torch.ones(4, 2, 8)
 
         gate_probe.set_ablate(meter, False)
-        out = Fake.forward(obj, h, None)
+        obj_hash = torch.zeros(4, 2, dtype=torch.long)
+        out = Fake.forward(obj, h, obj_hash)
         assert not torch.equal(out, h), "baseline must pass the real output through"
         base = gate_probe.read_meter(meter)
         assert base["calls"] == 1 and base["mean_rel_norm"] > 1e-6
 
         gate_probe.clear_meter(meter)
         gate_probe.set_ablate(meter, True)
-        out = Fake.forward(obj, h, None)
+        out = Fake.forward(obj, h, obj_hash)
         assert torch.equal(out, h), "ablated must hand back the input untouched"
+        assert masks and masks[-1] is not None and not masks[-1].any(), \
+            "ablation must go through the module's all-False token_mask path"
         abl = gate_probe.read_meter(meter)
         assert abl["calls"] == 1 and abl["max_rel_norm"] == 0.0
         assert "engram0" in abl["per_layer"]

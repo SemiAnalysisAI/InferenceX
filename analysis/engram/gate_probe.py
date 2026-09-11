@@ -397,13 +397,23 @@ def install_meter() -> None:
         out = original(self, hidden_states, hash_ids, token_mask)
         if state["returns_updated_hidden"] is None:
             state["returns_updated_hidden"] = _looks_like_updated_hidden(out, hidden_states)
+            _say("meter: rel-norm of the real contribution = %.6f"
+                 % float((out.float() - hidden_states.float()).norm()
+                         / (hidden_states.float().norm() + 1e-12)))
         ablate = bool(meter_dir) and os.path.exists(
             os.path.join(meter_dir, _ABLATE_SENTINEL)
         )
         if ablate:
-            returned = hidden_states if state["returns_updated_hidden"] else torch.zeros_like(
-                hidden_states
+            # Use the module's own gate-shutting path rather than guessing what
+            # forward returns. Its docstring is explicit: "token_mask: [T],
+            # False shuts the gate so those positions pass through untouched."
+            # An all-False mask is therefore an exact, supported ablation, and
+            # it is applied by the same fused kernel that normally consumes the
+            # gate -- no assumption about return conventions at all.
+            shut = torch.zeros(
+                hash_ids.shape[0], dtype=torch.bool, device=hidden_states.device
             )
+            returned = original(self, hidden_states, hash_ids, shut)
         else:
             returned = out
         if meter_dir:
