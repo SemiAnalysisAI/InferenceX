@@ -10379,6 +10379,11 @@ dsv41flash-fp4-b300-vllm-agentic-dspark:
       search-space:
       # Engram weights use UVA DRAM; the KV cache stays GPU-resident.
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+      # TEP4: TP attention, routed experts sharded across the 4 GPUs (--enable-expert-parallel).
+      - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [32, 64, 128] }
+      # DEP4: one attention rank per GPU (--data-parallel-size 4) behind vllm-router
+      # consistent-hash session affinity; experts sharded as in TEP4.
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [32, 64, 128], router: { name: vllm-router, version: "0.1.14" } }
 
 dsv41flash-fp4-b200-vllm-agentic-dspark:
   image: vllm/vllm-openai:deepseekv41-flash-0909
