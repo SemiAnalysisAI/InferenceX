@@ -76,11 +76,10 @@ export SGLANG_OPT_USE_TOPK_V2=false
 #
 # Per-arm L2 ratio (sizing rationale below) applies to both backends unless
 # overridden via HICACHE_RATIO. TP arm (182.7 GB/rank device pool): the
-# agentic-coding corpus saturates any fixed DRAM pool at conc ≥ 10; ratio 1.5
-# (~2.9 TB pinned) is the safe default for cluster:mi355x-amds nodes (~3.0 TB
-# available DRAM per runners.yaml). ratio=2.5 (~4.8 TB) yields higher
-# throughput at conc 10-12 but exceeds physical DRAM on these nodes and must
-# be set via HICACHE_RATIO env-var override on nodes that can accommodate it.
+# agentic-coding corpus saturates any fixed DRAM pool at conc ≥ 10; ratio 1.0
+# (~453 GB pinned at TP4) is the default. Larger ratios trade DRAM headroom
+# for host-tier capacity and must be set via the HICACHE_RATIO env-var
+# override on nodes that can accommodate them.
 # The DP-attention arm (159.4 GB/rank) only runs at conc >= 32, where the host
 # tier just absorbs overflow - ratio 0.5 (~1.2 TB pinned, ~1.8 TB of load
 # headroom) at negligible hit-rate cost (ratio 1.5 OOMs the host mid-storm at
@@ -90,20 +89,9 @@ if agentic_kv_offload_enabled; then
     if [ "$DP_ATTENTION" = "true" ]; then
         HICACHE_RATIO="${HICACHE_RATIO:-0.5}"
     else
-        # ratio=1.5 (~2.9 TB pinned): safe default within the ~3.0 TB DRAM
-        # available on cluster:mi355x-amds nodes. Set HICACHE_RATIO=2.5 via
-        # env-var override for maximum throughput on nodes with >4 TB DRAM.
-        HICACHE_RATIO="${HICACHE_RATIO:-1.5}"
-    fi
-
-    # GSM8K never fills the agentic host pool; ratio 1.5 OOMs the TP4 DRAM share.
-    if [ "${EVAL_ONLY:-false}" = "true" ]; then
-        HICACHE_EVAL_SIZE_GB="${HICACHE_EVAL_SIZE_GB:-16}"
-        HICACHE_POOL_ARGS=(--hicache-size "$HICACHE_EVAL_SIZE_GB")
-        HICACHE_POOL_DESC="size=${HICACHE_EVAL_SIZE_GB} GB/rank (eval-only)"
-    else
-        HICACHE_POOL_ARGS=(--hicache-ratio "$HICACHE_RATIO" --hicache-size 0)
-        HICACHE_POOL_DESC="ratio=$HICACHE_RATIO"
+        # ratio=1.0 (~113 GB/rank, ~453 GB pinned at TP4). Raise via the
+        # HICACHE_RATIO env-var override on nodes with more DRAM headroom.
+        HICACHE_RATIO="${HICACHE_RATIO:-1.0}"
     fi
 
     HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through}"
@@ -112,10 +100,10 @@ if agentic_kv_offload_enabled; then
     HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first_direct}"
     case "$KV_OFFLOAD_BACKEND" in
         hicache)
-            echo "HiCache (GPU+host DRAM only): $HICACHE_POOL_DESC, write_policy=$HICACHE_WRITE_POLICY, io_backend=$HICACHE_IO_BACKEND, mem_layout=$HICACHE_MEM_LAYOUT"
+            echo "HiCache (GPU+host DRAM only): ratio=$HICACHE_RATIO, write_policy=$HICACHE_WRITE_POLICY, io_backend=$HICACHE_IO_BACKEND, mem_layout=$HICACHE_MEM_LAYOUT"
             CACHE_ARGS=(
                 --enable-hierarchical-cache
-                "${HICACHE_POOL_ARGS[@]}"
+                --hicache-ratio "$HICACHE_RATIO"
                 --hicache-write-policy "$HICACHE_WRITE_POLICY"
                 --hicache-io-backend "$HICACHE_IO_BACKEND"
                 --hicache-mem-layout "$HICACHE_MEM_LAYOUT"
@@ -146,10 +134,11 @@ EOF
             MOONCAKE_MASTER_PID=$!
             sleep 2
             kill -0 "$MOONCAKE_MASTER_PID"
-            echo "HiCache+Mooncake: $HICACHE_POOL_DESC, l3_per_rank=${L3_PER_RANK_GB} GB, dram_budget=${TOTAL_CPU_DRAM_GB} GB"
+            echo "HiCache+Mooncake: ratio=$HICACHE_RATIO, l3_per_rank=${L3_PER_RANK_GB} GB, dram_budget=${TOTAL_CPU_DRAM_GB} GB"
             CACHE_ARGS=(
                 --enable-hierarchical-cache
-                "${HICACHE_POOL_ARGS[@]}"
+                --hicache-ratio "$HICACHE_RATIO"
+                --hicache-size 0
                 --hicache-write-policy "$HICACHE_WRITE_POLICY"
                 --hicache-io-backend "$HICACHE_IO_BACKEND"
                 --hicache-mem-layout "$HICACHE_MEM_LAYOUT"

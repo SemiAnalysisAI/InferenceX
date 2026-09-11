@@ -6975,6 +6975,7 @@
     - "Update the SGLang ROCm image from lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260728 to lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260910."
     - "Pick up our recent SGLang main-branch optimizations for GLM-5.2-MXFP4 serving."
     - "Restore HiCache write_through as the default write policy to optimize GLM-5.2-MXFP4 output interactivity and per-GPU throughput in the MI355X AgentX configuration."
+    - "Lower the TP HiCache host-pool ratio from 1.5 to 1.0 (DP-attention arm stays at 0.5). Eval and sweep still share the same ratio-based sizing; the smaller pool cuts pinned host DRAM on the TP4 arm (~453 GB vs ~679 GB)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2900
 
 - config-keys:
