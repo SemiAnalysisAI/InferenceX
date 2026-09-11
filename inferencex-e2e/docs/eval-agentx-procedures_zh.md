@@ -271,7 +271,7 @@ Runner 会在 replay 前写入命令，并在聚合后校验原始结果（[执�
 
 ## 9. 用实时证据调试长时间 AgentX 运行
 
-原生 SGLang router 通过 `SRTCTL_FRONTEND_TYPE=sglang` 标识其类型。
+原生 SGLang router 通过 `SRTCTL_FRONTEND_TYPE=sglang-router` 标识其类型。
 客户端在不同并发点之间检查所有已公布的 worker，要求运行、等待及分离式传输队列
 连续三次轮询均为空。缺少必要指标或 L1/L2 缓存清理失败时，原生运行会报错；
 L3 清理仍为可选操作。Qwen3.5 MI300X AgentX 运行（包括快速验证）通过

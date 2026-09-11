@@ -274,7 +274,7 @@ The runner writes the command before replay and validates raw results after aggr
 
 ## 9. Debug long AgentX runs from live evidence
 
-Native SGLang routers advertise `SRTCTL_FRONTEND_TYPE=sglang`. Between points,
+Native SGLang routers advertise `SRTCTL_FRONTEND_TYPE=sglang-router`. Between points,
 the client requires three idle polls across all advertised workers, including
 running, waiting, and disaggregation transfer queues. Missing gauges or failed
 L1/L2 cache flushes fail the native run; L3 clearing remains optional. Qwen3.5

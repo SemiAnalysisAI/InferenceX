@@ -1,13 +1,11 @@
-# AgentX Qwen3.5 FP8: DEP8 prefill and DEP8 decode, native MORI IO/EP.
-# Both roles have attention TP=1; keep Mamba/GQA transfer layouts homogeneous.
-# Source-audited candidate, not yet runtime-validated.
+# AgentX Qwen3.5 FP8: native SGLang Router, MORI KV transfer, TP8/EP8 per role.
 # Uses the srt-slurm AMD runtime and native Qwen3.5 MTP.
 # Concurrency candidates are untuned; fast runs are not performance submissions.
 # The shared launcher supplies the cluster profile and workspace/results mounts.
 # srt-slurm and Pyxis own model caching and the container lifecycle.
 
 schema: 2
-name: mi300x-qwen35-agentx-mori-disagg-1p1d-dep8-mtp
+name: mi300x-qwen35-agentx-mori-disagg-1p1d-tep8-mtp
 
 model:
   path: hf:Qwen/Qwen3.5-397B-A17B-FP8
@@ -22,7 +20,7 @@ identity:
       lmsysorg/sglang-rocm:v0.5.19-rocm720-mi30x-20260910@sha256:985488daa99010f6c72f17286b05804165e26c683be932325487d10b4ea6fd49
 
 slurm:
-  time_limit: "24:00:00"
+  time_limit: "12:00:00"
 
 resources:
   gpu_type: mi300x
@@ -34,7 +32,6 @@ frontend:
     prefill-policy: cache_aware
     decode-policy: round_robin
     cache-threshold: 0.3
-    dp-aware: true
     health-check-timeout-secs: 600
     health-check-interval-secs: 30
 
@@ -71,10 +68,6 @@ roles:
       MORI_IO_QP_MAX_CQE: "32768"
       MORI_IO_QP_MAX_SGE: "2"
       MORI_SHMEM_MODE: ISOLATION
-      # SGLang divides the 8192-token prefill chunk by DP8 before MoRI setup.
-      SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "1024"
-      # Cache-aware routing can select a rank other than bootstrap_room % DP.
-      SGLANG_DISAGGREGATION_FORCE_QUERY_PREFILL_DP_RANK: "1"
       SGLANG_USE_AITER: "1"
       SGLANG_USE_AITER_UNIFIED_ATTN: "1"
       AITER_FLYDSL_FORCE: "1"
@@ -90,12 +83,8 @@ roles:
       served-model-name: Qwen/Qwen3.5-397B-A17B-FP8
       trust-remote-code: true
       tensor-parallel-size: 8
-      dp-size: 8
-      enable-dp-attention: true
+      data-parallel-size: 1
       expert-parallel-size: 8
-      moe-a2a-backend: mori
-      deepep-mode: normal
-      disable-shared-experts-fusion: true
       disaggregation-transfer-backend: mori
       disaggregation-ib-device:
         bnxt_re_bond0,bnxt_re_bond1,bnxt_re_bond2,bnxt_re_bond3,bnxt_re_bond4,bnxt_re_bond5,bnxt_re_bond6,bnxt_re_bond7
@@ -117,7 +106,7 @@ roles:
       context-length: 262144
       disable-radix-cache: false
       mem-fraction-static: 0.75
-      max-running-requests: 128
+      max-running-requests: 64
       max-prefill-tokens: 32768
       chunked-prefill-size: 8192
       scheduler-recv-interval: 30
@@ -134,14 +123,9 @@ roles:
 
     env:
       <<: *worker_environment
-      # 128 global requests / DP8 * 4 MTP tokens = 64 tokens per rank.
-      # Keep dispatch capacity above the admission-derived token bound.
-      SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "512"
     args:
       <<: *worker_config
-      tensor-parallel-size: 8
-      expert-parallel-size: 8
-      dp-size: 8
+      chunked-prefill-size: 8192
 
 srun_options:
   container-writable: ""
@@ -169,7 +153,7 @@ benchmark:
     AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
     WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126_256k
     CLEAR_CACHE_BETWEEN_CONC: "1"
-    FLUSH_DRAIN_TIMEOUT: "120"
     RESULT_DIR: /logs/agentic
     AGENTIC_OUTPUT_DIR: /logs
     PORT: '8000'
+    FLUSH_DRAIN_TIMEOUT: '120'

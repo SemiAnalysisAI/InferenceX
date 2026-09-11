@@ -141,26 +141,9 @@ benchmark:
   command: bash /infmax-workspace/benchmarks/srt_agentic.sh
   env:
     INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
-    MODEL: Qwen/Qwen3.5-397B-A17B-FP8
-    MODEL_PREFIX: qwen3.5
-    FRAMEWORK: sglang-disagg
-    PRECISION: fp8
-    DURATION: "3600"
-    RESULT_FILENAME: qwen35_mi300x_agentx_mori_pure_tp8_mtp
-    RUNNER_TYPE: mi300x
     IMAGE: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi30x-20260910
     IS_MULTINODE: "true"
     DISAGG: "true"
-    SPEC_DECODING: mtp
-    KV_OFFLOADING: none
-    PREFILL_NUM_WORKERS: "1"
-    PREFILL_TP: "8"
-    PREFILL_EP: "1"
-    PREFILL_DP_ATTN: "false"
-    DECODE_NUM_WORKERS: "1"
-    DECODE_TP: "8"
-    DECODE_EP: "1"
-    DECODE_DP_ATTN: "false"
     HF_HOME: /hf-cache
     HF_HUB_CACHE: /hf-cache/hub
     HUGGINGFACE_HUB_CACHE: /hf-cache/hub

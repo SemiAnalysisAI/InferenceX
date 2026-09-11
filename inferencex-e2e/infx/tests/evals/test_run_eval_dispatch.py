@@ -2491,7 +2491,7 @@ curl() {
         env={
             **base_env,
             "EVAL_ONLY": "false",
-            "SRTCTL_FRONTEND_TYPE": "sglang",
+            "SRTCTL_FRONTEND_TYPE": "sglang-router",
             "CLEAR_CACHE_BETWEEN_CONC": "1",
             "FLUSH_DRAIN_TIMEOUT": "120",
         },
