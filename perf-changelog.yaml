@@ -7318,4 +7318,4 @@
   description:
     - "Resolve the requested H100 SGLang container instead of a hardcoded older image, and stop benchmark/eval clients when their ready server or required worker exits."
     - "H100 SGLang 使用所请求的容器而非硬编码旧镜像；已就绪的服务或必需工作进程退出后，停止其 benchmark/评测客户端。"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/compare/main...fix/klaud-reliability-and-reporting
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3020
