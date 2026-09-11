@@ -4,6 +4,8 @@ run-name: "Config Parsing Pytests PR #${{ github.event.pull_request.number }}"
 on:
   pull_request:
     paths:
+      - '.github/workflows/test-matrix-logic.yml'
+      - 'infx/**'
       - 'utils/matrix_logic/**'
 
 permissions:
@@ -11,7 +13,6 @@ permissions:
 
 jobs:
   test:
-    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -20,22 +21,19 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: '3.12'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install pytest pydantic pyyaml
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
       - name: test_generate_sweep_configs tests
         run: |
           cd utils/matrix_logic
-          pytest test_generate_sweep_configs.py -v
+          uv run --no-project --exclude-newer PT12H --python 3.12 \
+            --with pytest --with pydantic --with pyyaml \
+            python -m pytest test_generate_sweep_configs.py -v
 
       - name: test_validation tests
         run: |
           cd utils/matrix_logic
-          pytest test_validation.py -v
+          uv run --no-project --exclude-newer PT12H --python 3.12 \
+            --with pytest --with pydantic --with pyyaml \
+            python -m pytest test_validation.py -v

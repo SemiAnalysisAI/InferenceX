@@ -35,15 +35,17 @@ This page explains how a declared benchmark becomes a validated job, a runtime r
 | [`configs/nvidia-master.yaml`](../configs/nvidia-master.yaml), [`configs/amd-master.yaml`](../configs/amd-master.yaml) | Declarative model, image, framework, scenario, topology, and search-space intent |
 | [`configs/runners.yaml`](../configs/runners.yaml) | Scheduling labels, concrete runner names, and hardware facts used during generation |
 | [`perf-changelog.yaml`](../perf-changelog.yaml) | Append-only selection of config keys to run for a change |
-| [`utils/matrix_logic/validation.py`](../utils/matrix_logic/validation.py) | Enforced Pydantic schemas and cross-field invariants |
-| [`utils/matrix_logic/generate_sweep_configs.py`](../utils/matrix_logic/generate_sweep_configs.py) | Search-space expansion, defaults, filters, derived metadata, runner resolution, and eval selection |
+| [`infx/matrix/validation.py`](../infx/matrix/validation.py) | Enforced Pydantic schemas and cross-field invariants |
+| [`infx/matrix/generate.py`](../infx/matrix/generate.py) | Search-space expansion, defaults, filters, derived metadata, runner resolution, and eval selection |
 | [`utils/process_changelog.py`](../utils/process_changelog.py) | Added-changelog extraction, config-key expansion, matrix bucketing, and final matrix validation |
 | [`.github/workflows/run-sweep.yml`](../.github/workflows/run-sweep.yml) | Trigger policy, matrix fan-out, collection dependencies, and cross-repository ingest dispatch |
 | [`.github/workflows/benchmark-tmpl.yml`](../.github/workflows/benchmark-tmpl.yml), [`.github/workflows/benchmark-multinode-tmpl.yml`](../.github/workflows/benchmark-multinode-tmpl.yml) | Reusable job input contract, environment projection, launcher invocation, result checks, and per-job uploads |
 | [`runners/`](../runners/) | Fleet-specific model paths, mounts, container or Slurm setup, and benchmark-script routing |
 | [`benchmarks/benchmark_lib.sh`](../benchmarks/benchmark_lib.sh) | Shared server readiness, benchmark client, eval, AgentX replay, and output behavior |
 | [`benchmarks/`](../benchmarks/) | Framework and topology-specific server and client commands |
-| [`utils/process_result.py`](../utils/process_result.py) | Fixed-sequence result normalization and aggregation before upload |
+| [`infx/github.py`](../infx/github.py) | GitHub REST, pagination, and comment reactions shared by workflow operations |
+| [`infx/workflows/`](../infx/workflows/) | Reuse command parsing, authorization lookup, source-run validation, and reaction feedback; the existing reuse CLI remains compatible |
+| [`infx/results/`](../infx/results/) | Importable result builders, component metadata parsing, and power-metric transformations; [`utils/process_result.py`](../utils/process_result.py) preserves the fixed-sequence CLI |
 | [`.github/workflows/collect-results.yml`](../.github/workflows/collect-results.yml), [`.github/workflows/collect-evals.yml`](../.github/workflows/collect-evals.yml) | Run-level benchmark and eval artifact aggregation |
 
 ### InferenceX-app consumers
@@ -125,9 +127,15 @@ This split has two consequences.
 
 ## Stage 2: validation and matrix generation
 
-[`validation.py`](../utils/matrix_logic/validation.py) validates master files and runner data before generation. Its strict models own accepted aliases and cross-field rules. Examples include mutually exclusive concurrency forms, single-node versus multi-node shapes, component metadata scope, prefill and decode hardware pairing, and cluster-label requirements for agentic scenarios.
+Shared Python implementation lives in the repository-root `infx` package. `infx.matrix.generate` owns generation and `infx.matrix.validation` owns schemas. Python callers should import these canonical paths; further domain modules can join `infx` as needed.
 
-[`generate_sweep_configs.py`](../utils/matrix_logic/generate_sweep_configs.py) then expands validated intent into rows. It owns decisions such as:
+`utils/matrix_logic/generate_sweep_configs.py` and `validation.py` remain thin compatibility entrypoints. Legacy imports resolve to the same module objects, avoiding duplicate schema classes. Existing script commands, arguments, relative input paths, and dependencies are unchanged; running from a checkout requires no package installation. `process_changelog.py` and `validate_perf_changelog.py` import the `infx.matrix` modules directly.
+
+For append-only historical comparisons, `generation_inputs_at_ref` extracts configs, legacy entrypoints, and the `infx` package (when present) from the same Git revision. Revisions before this migration continue to run their standalone generator; newer revisions use their own package code. Working-tree source and configs do not replace historical inputs.
+
+[`validation.py`](../infx/matrix/validation.py) validates master files and runner data before generation. Its strict models own accepted aliases and cross-field rules. Examples include mutually exclusive concurrency forms, single-node versus multi-node shapes, component metadata scope, prefill and decode hardware pairing, and cluster-label requirements for agentic scenarios.
+
+[`infx.matrix.generate`](../infx/matrix/generate.py) then expands validated intent into rows. It owns decisions such as:
 
 - concrete concurrency points from ranges or lists.
 - default parallelism values.
@@ -163,6 +171,8 @@ bash ./runners/launch_${RUNNER_NAME%%_*}.sh
 
 The prefix before the first underscore therefore identifies the fleet launcher. Runner naming and launcher filenames are one routing contract.
 
+`infx.github` owns the shared REST, pagination, and comment-reaction primitives. `infx.workflows.reuse` owns reuse selection and validation, while `infx.workflows.reuse_comment` owns comment reaction feedback. Both are executable package modules. `utils/find_reusable_sweep_run.py` preserves direct script execution and legacy imports, which resolve to the same canonical module. These helpers use only the standard library.
+
 ## Stage 4: launcher and runtime execution
 
 A launcher under [`runners/`](../runners/) adapts logical job metadata to one physical fleet. Depending on the fleet and topology, it may:
@@ -187,7 +197,43 @@ The single-node template computes a stable `RESULT_FILENAME` from experiment ide
 
 For fixed-sequence throughput jobs, the workflow requires `<RESULT_FILENAME>.json`, then runs [`utils/process_result.py`](../utils/process_result.py) and uploads `agg_<RESULT_FILENAME>.json` as `bmk_<RESULT_FILENAME>`.
 
+### Reusing and extending result processing
+
+[`infx.results.fixed_sequence.build_result`](../infx/results/fixed_sequence.py) accepts a loaded benchmark mapping and an explicit environment mapping. It returns the aggregate dictionary without reading process environment or performing file I/O. Library callers do not need `RESULT_FILENAME`. The existing CLI validates its environment, reads the raw artifact, calls the builder, writes the aggregate, and runs power aggregation with the existing best-effort or `REQUIRE_POWER` policy.
+
+```python
+from infx.results.fixed_sequence import build_result
+
+result = build_result(raw_benchmark, runtime_env)
+```
+
+New formats should expose their own typed builder under `infx/results/`, accepting the inputs that format needs and returning a dictionary. Compose shared transformations as ordinary function calls; keep file discovery, environment defaults, error presentation, and serialization in the format's CLI adapter. Existing AgentX topology and request/server processing retain their own policies.
+
+The current processing paths share these helpers:
+
+- [`parse_component_metadata`](../infx/results/metadata.py) accepts a raw JSON value and diagnostic label. Callers select whether `version` is optional and whether invalid input raises `ValueError` or `SystemExit`, preserving their existing contracts.
+- [`Parallelism`](../infx/results/topology.py) shares GPU-count calculation, parallelism result fields, and normalization when there are no separate decode GPUs. Fixed-sequence results retain explicit allocation counts; AgentX derives counts from its workers. Each caller retains its environment defaults, validation order, errors, and throughput denominators.
+- [`with_power_metrics`](../infx/results/power/__init__.py) returns a copy with the supplied metric family replaced, removes stale validity reasons, and validates and rounds new metrics. Callers supply metric keys and schema version, then own artifact writes and validation sidecars. This allows another metric family to reuse the transformation without changing its implementation.
+
+Power telemetry engines also live in [`infx.results.power`](../infx/results/power/): `single_node.run` consumes GPU-monitor CSVs, while `multinode.run` validates srt-slurm artifact packages. They share benchmark-window parsing, per-device integration, aggregate replacement, and audit serialization through `common.py`, while retaining their own telemetry validation and failure policies. Fixed-sequence and AgentX adapters import these engines directly; new result formats can supply their benchmark window and token counts to the matching engine.
+
+The existing `utils/aggregate_power.py` and `utils/aggregate_power_multinode.py` commands remain compatibility entrypoints, including direct execution outside the checkout. Legacy imports resolve to the canonical engine modules, so both paths refer to the same classes and functions. The `infx` package runs independently of these wrappers, with no installation step or new runtime dependency. The engines are also callable with `python -m infx.results.power.single_node` and `python -m infx.results.power.multinode` from the repository root.
+
+Test builders with small, independently worked examples and read-only inputs. For changes to an existing adapter, also compare CLI status, diagnostics, and generated artifacts with the previous implementation, including invalid inputs and strict/best-effort power failures.
+
+### Eval and AgentX outputs
+
 For eval-only jobs, throughput output is not required. The workflow instead requires at least one `results*.json`. For jobs marked to run eval, uploads may contain `meta_env.json`, `results*.json`, `sample*.jsonl`, SWE-bench predictions and reports, and trajectory files. [`utils/evals/validate_scores.py`](../utils/evals/validate_scores.py) checks produced eval scores.
+
+[`infx.results.evals`](../infx/results/evals.py) provides `extract_metrics` for loaded eval JSON and `build_rows` for collector output. Both accept explicit inputs without file I/O or input mutation. The builder applies metadata defaults and primary-score precedence, retaining failed evaluations as diagnostic rows. The CLI owns file discovery, concurrency selection, reporting, and artifact writes.
+
+```python
+from infx.results.evals import build_rows
+
+rows = build_rows(raw_eval, metadata, source="eval_job/results.json")
+```
+
+The collector and reusable-artifact validator share format recognition, concurrency suffix parsing, result ordering, metric-family classification, and numeric validity rules. Filename timestamps and legacy mtimes use epoch nanoseconds, with filenames breaking ties. Reuse retains its stricter structural checks and checks every applicable primary metric; the collector keeps the last configured value per metric family for reporting. Recognizing a format does not imply that its results are valid or reusable.
 
 Agentic throughput jobs have a different contract. They validate AIPerf output with [`utils/agentic/validation/validate_agentic_result.py`](../utils/agentic/validation/validate_agentic_result.py), upload an aggregate `bmk_agentic_<suffix>` artifact, and upload the raw `agentic_<suffix>` sibling containing trace-replay material. InferenceX-app pairs those siblings by their shared suffix. Agentic eval-only jobs follow the eval output contract instead and do not require a throughput result.
 
@@ -242,7 +288,7 @@ Use the master entry to answer what should be benchmarked. Use runner config for
 
 ### Matrix derivation has one implementation
 
-Derived concurrency points, eval selection, topology defaults, names, and runner-derived facts belong in `generate_sweep_configs.py`. Workflows should forward matrix fields, not reimplement generator policy in expressions or shell.
+Derived concurrency points, eval selection, topology defaults, names, and runner-derived facts belong in `infx.matrix.generate`. Workflows should forward matrix fields, not reimplement generator policy in expressions or shell.
 
 The `full-sweep` and `test-config` commands share fixed-sequence and AgentX row builders. Command-specific selection remains in the callers; the AgentX builder owns worker defaults, offload budgets, experiment names, node counts, and validation. It validates topology and offload budgets before filtering concurrency, preserves point and runner ordering, and filters AgentX bounds without inventing a capped concurrency point.
 
@@ -313,7 +359,7 @@ Use this procedure when a row is missing, mislabeled, or unexpected.
 3. **Validation:** Generate only the exact key and inspect the JSON, not just the exit code.
 
    ```bash
-   uv run --no-project --with pydantic --with pyyaml --python 3.12 \
+   uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
      utils/matrix_logic/generate_sweep_configs.py test-config \
      --config-files configs/nvidia-master.yaml configs/amd-master.yaml \
      --runner-config configs/runners.yaml \

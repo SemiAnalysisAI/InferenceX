@@ -9,6 +9,9 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from infx.results.metadata import parse_component_metadata
+from infx.results.topology import Parallelism, validate_parallelism
+
 from .aggregation_common import round_floats
 from .request_metrics import compute_request_metrics, load_aggregate, load_records_with_accounting
 from .server_log_metrics import find_server_log_paths
@@ -37,43 +40,15 @@ def required_env(name: str) -> str:
 
 
 def optional_component_metadata(env_name: str) -> dict[str, str] | None:
-    """Parse strict optional component metadata from a JSON environment value."""
-    raw_value = os.environ.get(env_name)
-    if raw_value in (None, "", "null"):
-        return None
-
-    try:
-        metadata = json.loads(raw_value)
-    except json.JSONDecodeError as exc:
-        raise SystemExit(f"{env_name} must contain valid JSON") from exc
-
-    if not isinstance(metadata, dict) or set(metadata) != {"name", "version"}:
-        raise SystemExit(f"{env_name} must contain exactly 'name' and 'version'")
-    if not all(isinstance(metadata[key], str) and metadata[key] for key in metadata):
-        raise SystemExit(f"{env_name} name and version must be non-empty strings")
-    return metadata
+    return parse_component_metadata(
+        os.environ.get(env_name), env_name, error_type=SystemExit,
+    )
 
 
-def optional_kv_offload_backend_metadata(
-    env_name: str,
-) -> dict[str, str] | None:
-    """Parse KV offload backend metadata with an optional version."""
-    raw_value = os.environ.get(env_name)
-    if raw_value in (None, "", "null"):
-        return None
-
-    try:
-        metadata = json.loads(raw_value)
-    except json.JSONDecodeError as exc:
-        raise SystemExit(f"{env_name} must contain valid JSON") from exc
-
-    if not isinstance(metadata, dict) or not set(metadata) <= {"name", "version"}:
-        raise SystemExit(f"{env_name} may contain only 'name' and 'version'")
-    if set(metadata) not in ({"name"}, {"name", "version"}):
-        raise SystemExit(f"{env_name} must contain 'name' and optional 'version'")
-    if not all(isinstance(value, str) and value for value in metadata.values()):
-        raise SystemExit(f"{env_name} values must be non-empty strings")
-    return metadata
+def optional_kv_offload_backend_metadata(env_name: str) -> dict[str, str] | None:
+    return parse_component_metadata(
+        os.environ.get(env_name), env_name, version_optional=True, error_type=SystemExit,
+    )
 
 
 def _validate_kv_offload_env() -> tuple[str, dict[str, str] | None]:
@@ -100,91 +75,57 @@ def _gpu_shape() -> tuple[dict[str, Any], int, int, int, str]:
     tp = env_int("TP", 1)
     ep = env_int("EP_SIZE", 1)
     dp_attention = os.environ.get("DP_ATTENTION", "false")
-    fields: dict[str, Any] = {}
-
     if not is_multinode:
-        pp = env_int("PP_SIZE", 1)
-        dcp_size = env_int("DCP_SIZE", 1)
-        pcp_size = env_int("PCP_SIZE", 1)
-        if pp <= 0 or dcp_size <= 0 or pcp_size <= 0:
-            raise SystemExit(
-                "PP_SIZE, DCP_SIZE, and PCP_SIZE must be positive integers."
-            )
-        fields.update({"pp": pp, "dcp_size": dcp_size, "pcp_size": pcp_size})
-        return fields, tp * pp * pcp_size, tp, ep, dp_attention
+        parallelism = Parallelism(
+            tp=tp, pp=env_int("PP_SIZE", 1), dcp_size=env_int("DCP_SIZE", 1),
+            pcp_size=env_int("PCP_SIZE", 1), ep=ep,
+        )
+        validate_parallelism(parallelism, error_type=SystemExit)
+        fields = {"pp": parallelism.pp, "dcp_size": parallelism.dcp_size, "pcp_size": parallelism.pcp_size}
+        return fields, parallelism.gpus_per_worker, tp, ep, dp_attention
 
     prefill_num_workers = env_int("PREFILL_NUM_WORKERS")
-    prefill_tp = env_int("PREFILL_TP")
-    prefill_pp = env_int("PREFILL_PP_SIZE", 1)
-    prefill_dcp_size = env_int("PREFILL_DCP_SIZE", 1)
-    prefill_pcp_size = env_int("PREFILL_PCP_SIZE", 1)
-    prefill_ep = env_int("PREFILL_EP", 1)
+    prefill = Parallelism(
+        tp=env_int("PREFILL_TP"), pp=env_int("PREFILL_PP_SIZE", 1),
+        dcp_size=env_int("PREFILL_DCP_SIZE", 1), pcp_size=env_int("PREFILL_PCP_SIZE", 1),
+        ep=env_int("PREFILL_EP", 1),
+    )
     prefill_dp_attention = os.environ.get("PREFILL_DP_ATTN", "false")
     decode_num_workers = env_int("DECODE_NUM_WORKERS")
-    decode_tp = env_int("DECODE_TP")
-    decode_pp = env_int("DECODE_PP_SIZE", 1)
-    decode_dcp_size = env_int("DECODE_DCP_SIZE", 1)
-    decode_pcp_size = env_int("DECODE_PCP_SIZE", 1)
-    decode_ep = env_int("DECODE_EP", 1)
-    decode_dp_attention = os.environ.get("DECODE_DP_ATTN", "false")
-    worker_parallelism = (
-        prefill_pp,
-        prefill_dcp_size,
-        prefill_pcp_size,
-        decode_pp,
-        decode_dcp_size,
-        decode_pcp_size,
+    decode = Parallelism(
+        tp=env_int("DECODE_TP"), pp=env_int("DECODE_PP_SIZE", 1),
+        dcp_size=env_int("DECODE_DCP_SIZE", 1), pcp_size=env_int("DECODE_PCP_SIZE", 1),
+        ep=env_int("DECODE_EP", 1),
     )
-    if any(value <= 0 for value in worker_parallelism):
-        raise SystemExit(
-            "Multinode PP, DCP, and PCP sizes must be positive integers."
-        )
+    decode_dp_attention = os.environ.get("DECODE_DP_ATTN", "false")
+    validate_parallelism(prefill, decode, error_type=SystemExit)
     prefill_hardware = os.environ.get("PREFILL_HARDWARE", "")
     decode_hardware = os.environ.get("DECODE_HARDWARE", "")
     if bool(prefill_hardware) != bool(decode_hardware):
         raise SystemExit(
             "PREFILL_HARDWARE and DECODE_HARDWARE must be specified together."
         )
-    num_prefill_gpu = prefill_num_workers * prefill_tp * prefill_pp * prefill_pcp_size
-    num_decode_gpu = decode_num_workers * decode_tp * decode_pp * decode_pcp_size
+    num_prefill_gpu = prefill_num_workers * prefill.gpus_per_worker
+    num_decode_gpu = decode_num_workers * decode.gpus_per_worker
     num_gpus = num_prefill_gpu + num_decode_gpu
-    # Aggregated configs set decode num-worker 0 (prefill+decode co-located on one
-    # worker), so there are no separate decode GPUs. Mirror process_result.py and drop
-    # the decode-side parallelism, so TP/EP and the per-GPU throughput denominator
-    # reflect the single aggregated worker instead of double-counting its GPUs.
-    if num_decode_gpu <= 0:
-        decode_tp = 0
-        decode_ep = 0
-        decode_pp = 1
-        decode_dcp_size = 1
-        decode_pcp_size = 1
-    tp = prefill_tp + decode_tp
-    ep = max(prefill_ep, decode_ep)
+    decode = decode.for_decode(num_decode_gpu)
+    tp = prefill.tp + decode.tp
+    ep = max(prefill.ep, decode.ep)
     dp_attention = (
         "true"
         if env_bool("PREFILL_DP_ATTN") or env_bool("DECODE_DP_ATTN")
         else "false"
     )
-    fields.update(
-        {
-            "prefill_num_workers": prefill_num_workers,
-            "prefill_tp": prefill_tp,
-            "prefill_pp": prefill_pp,
-            "prefill_dcp_size": prefill_dcp_size,
-            "prefill_pcp_size": prefill_pcp_size,
-            "prefill_ep": prefill_ep,
-            "prefill_dp_attention": prefill_dp_attention,
-            "num_prefill_gpu": num_prefill_gpu,
-            "decode_num_workers": decode_num_workers,
-            "decode_tp": decode_tp,
-            "decode_pp": decode_pp,
-            "decode_dcp_size": decode_dcp_size,
-            "decode_pcp_size": decode_pcp_size,
-            "decode_ep": decode_ep,
-            "decode_dp_attention": decode_dp_attention,
-            "num_decode_gpu": num_decode_gpu,
-        }
-    )
+    fields = {
+        "prefill_num_workers": prefill_num_workers,
+        **prefill.fields("prefill_"),
+        "prefill_dp_attention": prefill_dp_attention,
+        "num_prefill_gpu": num_prefill_gpu,
+        "decode_num_workers": decode_num_workers,
+        **decode.fields("decode_"),
+        "decode_dp_attention": decode_dp_attention,
+        "num_decode_gpu": num_decode_gpu,
+    }
     if prefill_hardware:
         fields["prefill_hw"] = prefill_hardware
         fields["decode_hw"] = decode_hardware
@@ -225,6 +166,7 @@ def build_agg(
         "disagg": env_bool("DISAGG"),
         "scenario_type": "agentic-coding",
         "is_multinode": env_bool("IS_MULTINODE"),
+        "num_gpus": num_gpus,
         "tp": tp,
         "ep": ep,
         "dp_attention": dp_attention,

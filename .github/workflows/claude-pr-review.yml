@@ -35,10 +35,8 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup MCP Server
-        run: |
-          pip install -r .claude/requirements-mcp.txt
-          mkdir -p /tmp/inferencemax-mcp
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
       - name: Setup Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
@@ -69,7 +67,8 @@ jobs:
             {"fastMode": true}
 
           claude_args: |
-            --model 'claude-fable-5'
+            --model 'claude-fable-5-1'
+            --mcp-config .github/mcp-ci.json
             --allowedTools "mcp__github_inline_comment__create_inline_comment,mcp__inferencemax-repos__*,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
           prompt: |
             REPO: ${{ github.repository }}
@@ -254,10 +253,10 @@ jobs:
             - PR claims feature X works a certain way → Read the source to confirm
             - PR has a bug related to KV cache → Look at vLLM's KV cache implementation
 
-            ## Line Count Report for generate_sweep_configs.py:
-            If `utils/matrix_logic/generate_sweep_configs.py` was modified in this PR:
+            ## Line Count Report for the matrix generator:
+            If `infx/matrix/generate.py` was modified in this PR:
             1. Count the total lines in the current (PR) version of the file
-            2. Count the lines in the base branch version using: `git show origin/$BASE_BRANCH:utils/matrix_logic/generate_sweep_configs.py | wc -l`
+            2. Count the lines in the base branch version of `infx/matrix/generate.py`. If that path does not exist in the base revision, use `utils/matrix_logic/generate_sweep_configs.py` from that revision instead. This fallback compares the implementation across the package migration rather than counting the new path as entirely new code.
             3. Calculate the difference (current - base)
             4. Add an inline comment on the file with this format:
                📊 **Line Count Report**
