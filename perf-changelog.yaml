@@ -7185,8 +7185,8 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Bump the image to lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260909."
+    - "Bump the image to lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260911."
     - "Move the MI355X DeepSeek-V4-Pro AgentX SGLang serving path from MTP to DSpark block size 6 and switch model to the DeepSeek-V4-Pro-0813 checkpoint, whose bundled dspark_* head."
     - "DP-attention serving adds --enable-dp-lm-head, which SGLang requires for DSpark under DP attention, and TP-only serving adds --prefill-decode-interval 10 to fix scheduler issue."
-    - "Use --cuda-graph-max-bs-decode instead of --cuda-graph-max-bs: the 20260909 image split the flag per phase and ships no legacy alias, so the old spelling aborts argument parsing as an ambiguous prefix."
+    - "Use --cuda-graph-max-bs-decode instead of --cuda-graph-max-bs: the 20260911 image split the flag per phase and ships no legacy alias, so the old spelling aborts argument parsing as an ambiguous prefix."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3001
