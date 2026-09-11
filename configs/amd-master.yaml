@@ -1872,7 +1872,7 @@ qwen3.5-fp8-mi300x-sglang-disagg-dep16-agentic-mtp:
     - dram-utilization: 0.80
       search-space:
       - spec-decoding: mtp
-        conc-list: [16, 32]
+        conc-list: [16, 32, 64]
         kv-offloading: none
         prefill:
           num-worker: 1

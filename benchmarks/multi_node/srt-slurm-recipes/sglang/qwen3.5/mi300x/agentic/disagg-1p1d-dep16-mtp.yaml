@@ -170,7 +170,7 @@ benchmark:
     FRAMEWORK: sglang-disagg
     PRECISION: fp8
     CONC: "16"
-    CONC_LIST: "16 32"
+    CONC_LIST: "16 32 64"
     DURATION: "3600"
     RESULT_FILENAME: qwen35_mi300x_agentx_mori_dep8_dep16_mtp
     RUNNER_TYPE: mi300x
