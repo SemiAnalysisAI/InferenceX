@@ -290,3 +290,38 @@ def test_ablation_diagnostics_go_to_stderr_not_the_logger(capsys, monkeypatch):
     assert "forward returns updated hidden states" in err
     assert "forward call count = 1" in err
     assert "forward call count = 10" in err
+
+
+def test_meter_records_contribution_and_ablation_zeroes_it(tmp_path, monkeypatch):
+    """The meter measures ||returned - hidden|| / ||hidden||, which is the
+    contribution the rest of the model actually receives."""
+    meter = str(tmp_path)
+    monkeypatch.setenv(gate_probe.METER_DIR_ENV, meter)
+
+    class Fake:
+        layer_hash_index = 0
+
+        def forward(self, hidden_states, hash_ids, token_mask=None):
+            return hidden_states + 0.05 * torch.ones_like(hidden_states)
+
+    saved = gate_probe._find_engram_class
+    gate_probe._find_engram_class = lambda: Fake
+    try:
+        gate_probe.install_meter()
+        obj, h = Fake(), torch.ones(4, 2, 8)
+
+        gate_probe.set_ablate(meter, False)
+        out = Fake.forward(obj, h, None)
+        assert not torch.equal(out, h), "baseline must pass the real output through"
+        base = gate_probe.read_meter(meter)
+        assert base["calls"] == 1 and base["mean_rel_norm"] > 1e-6
+
+        gate_probe.clear_meter(meter)
+        gate_probe.set_ablate(meter, True)
+        out = Fake.forward(obj, h, None)
+        assert torch.equal(out, h), "ablated must hand back the input untouched"
+        abl = gate_probe.read_meter(meter)
+        assert abl["calls"] == 1 and abl["max_rel_norm"] == 0.0
+        assert "engram0" in abl["per_layer"]
+    finally:
+        gate_probe._find_engram_class = saved

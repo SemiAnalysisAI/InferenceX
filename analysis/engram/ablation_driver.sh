@@ -34,7 +34,17 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 # [batched-tokens x max-model-len x 2B] at startup and 1M OOMs an 80 GB card.
 EVAL_CONTEXT=8192
 export EVAL_MAX_MODEL_LEN="$EVAL_CONTEXT"
-EVAL_TASKS="${ENGRAM_EVAL_TASKS:-utils/evals/gsm8k.yaml utils/evals/gpqa_diamond.yaml}"
+# task:repeats. The code suites are the interesting ones -- the n-gram tables
+# put every one of the ten strongest 4-grams in code -- and they have headroom
+# that gsm8k (96-97% baseline) does not. They are repeated so within-arm noise
+# can be compared against the between-arm delta: the last run's two baselines
+# differed by 0.0045, more than the ablation effect it was trying to measure.
+# gsm8k stays as a single control, being the one suite known to run here.
+# gpqa_diamond is dropped: Idavidrein/gpqa is gated on the Hub.
+EVAL_TASKS="${ENGRAM_EVAL_TASKS:-gsm8k:1 humaneval_instruct:2 mbpp_instruct:2}"
+# HumanEval and MBPP score by executing model-generated code. The pinned
+# lm-eval requires this opt-in; execution stays inside the job's container.
+export HF_ALLOW_CODE_EVAL=1
 
 cd "$INFERENCEX_REPO_ROOT"
 # vllm serve is launched from this shell, so PYTHONPATH must carry the
@@ -96,11 +106,17 @@ run_one() {
 
     grep -aE "engram-ablate|engram-probe" "$log" | head -20 || true
 
-    for task in $EVAL_TASKS; do
-        local suite
+    local spec task repeats suite r
+    for spec in $EVAL_TASKS; do
+        task="${spec%%:*}"
+        repeats="${spec##*:}"
         suite=$(basename "$task" .yaml)
-        EVAL_CONCURRENT_REQUESTS=32 run_lm_eval \
-            --port "$PORT" --task "$task" --results-dir "$out/$suite" || true
+        for r in $(seq 1 "$repeats"); do
+            echo "--- $mode / $suite / repeat $r"
+            EVAL_CONCURRENT_REQUESTS=32 run_lm_eval \
+                --port "$PORT" --task "$task" \
+                --results-dir "$out/${suite}_r${r}" || true
+        done
     done
 
     # The forward-call count is what distinguishes a real ablation from a
@@ -114,6 +130,21 @@ run_one() {
     sleep 20
 }
 
+# Confirm Engram is used at all, and that the ablation removes its
+# contribution, before spending two hours on evals that assume both.
+echo "=== contribution check ==="
+export PYTHONPATH="$BOOTSTRAP:$INFERENCEX_REPO_ROOT/analysis${PYTHONPATH:+:$PYTHONPATH}"
+# `set -e` would abort before VERIFY_RC could be read, losing the reason.
+VERIFY_RC=0
+python3 analysis/engram/verify_contribution.py --tp "$TP" --out "$RESULT_DIR/engram_verify" \
+    || VERIFY_RC=$?
+echo "contribution check exit=$VERIFY_RC"
+if [[ "$VERIFY_RC" != 0 ]]; then
+    echo "REFUSING to run the evals: the ablation could not be shown to remove" >&2
+    echo "the Engram contribution, so any eval delta would be uninterpretable." >&2
+    exit 1
+fi
+
 run_one baseline
 run_one ablated
 
@@ -125,20 +156,36 @@ root = os.environ["RESULT_DIR"]
 out = {}
 for mode in ("baseline", "ablated"):
     merged = {}
-    for hit in sorted(glob.glob(f"{root}/eval_{mode}/**/results*.json", recursive=True)):
+    for hit in sorted(glob.glob(f"{root}/eval_{mode}/*/**/results*.json", recursive=True)):
+        repeat = hit[len(f"{root}/eval_{mode}/"):].split("/")[0]
         with open(hit) as fh:
             for task, metrics in json.load(fh).get("results", {}).items():
-                merged[task] = {
-                    k: v for k, v in metrics.items() if isinstance(v, (int, float))
+                merged[f"{task}@{repeat}"] = {
+                    k: v for k, v in metrics.items()
+                    if isinstance(v, (int, float)) and "stderr" not in k
                 }
     out[mode] = merged or None
 print(json.dumps(out, indent=2))
-for task in (out.get("baseline") or {}):
-    base = out["baseline"][task]
-    abl = (out.get("ablated") or {}).get(task, {})
+for key in sorted(out.get("baseline") or {}):
+    base = out["baseline"][key]
+    abl = (out.get("ablated") or {}).get(key, {})
     for metric, value in base.items():
-        if metric in abl and "stderr" not in metric:
-            print(f"DELTA {task}/{metric}: {value:.4f} -> {abl[metric]:.4f} "
+        if metric in abl:
+            print(f"DELTA {key}/{metric}: {value:.4f} -> {abl[metric]:.4f} "
                   f"({abl[metric] - value:+.4f})")
+
+# Within-arm spread across repeats of the same suite bounds what a
+# between-arm delta can mean.
+import collections, re, statistics
+for mode, tables in out.items():
+    groups = collections.defaultdict(list)
+    for key, metrics in (tables or {}).items():
+        suite = re.sub(r"@.*_r\d+$", "", key)
+        for metric, value in metrics.items():
+            groups[(suite, metric)].append(value)
+    for (suite, metric), vals in sorted(groups.items()):
+        if len(vals) > 1:
+            print(f"NOISE {mode}/{suite}/{metric}: {[round(v, 4) for v in vals]} "
+                  f"spread {max(vals) - min(vals):+.4f}")
 PYEOF
 echo "===ENGRAM_ABLATION_SUMMARY_END==="

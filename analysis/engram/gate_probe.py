@@ -20,6 +20,7 @@ from __future__ import annotations
 import importlib
 import logging
 import os
+import sys
 
 import torch
 
@@ -283,8 +284,6 @@ def install_ablation() -> None:
 
 def _say(message: str) -> None:
     """Diagnostics that must survive the server's logging config."""
-    import sys
-
     sys.stderr.write("engram-ablate: %s\n" % message)
     sys.stderr.flush()
 
@@ -323,3 +322,109 @@ if __name__ == "__main__":  # `python3 -m engram.gate_probe <analysis_dir>`
     import sys as _sys
 
     print(write_bootstrap(_sys.argv[1] if len(_sys.argv) > 1 else "analysis"))
+
+
+METER_DIR_ENV = "ENGRAM_METER_DIR"
+_ABLATE_SENTINEL = "ABLATE_NOW"
+
+
+def set_ablate(meter_dir: str, on: bool) -> None:
+    """Toggle ablation for the worker processes via a sentinel file.
+
+    The workers are separate interpreters, so the driver cannot flip a global
+    in them. A file check per call costs microseconds and keeps baseline and
+    ablated measurements inside one process lifetime, which is the whole point
+    -- same weights, same allocation, one variable.
+    """
+    path = os.path.join(meter_dir, _ABLATE_SENTINEL)
+    if on:
+        open(path, "w").close()
+    elif os.path.exists(path):
+        os.unlink(path)
+
+
+def clear_meter(meter_dir: str) -> None:
+    for name in os.listdir(meter_dir):
+        if name.startswith("M") and name.endswith(".npy"):
+            os.unlink(os.path.join(meter_dir, name))
+
+
+def read_meter(meter_dir: str) -> dict:
+    """Aggregate the per-call contribution records the workers wrote."""
+    import numpy as np
+
+    rows = []
+    for name in sorted(os.listdir(meter_dir)):
+        if not name.startswith("M") or not name.endswith(".npy"):
+            continue
+        try:
+            rows.append(np.load(os.path.join(meter_dir, name)))
+        except Exception:
+            continue
+    if not rows:
+        return {}
+    arr = np.concatenate([r.reshape(-1, 3) for r in rows])
+    by_layer = {}
+    for layer in sorted({int(v) for v in arr[:, 0]}):
+        sel = arr[arr[:, 0] == layer]
+        by_layer[f"engram{layer}"] = {
+            "calls": int(sel.shape[0]),
+            "mean_rel_norm": round(float(sel[:, 1].mean()), 8),
+            "max_rel_norm": round(float(sel[:, 1].max()), 8),
+            "mean_max_gate": round(float(sel[:, 2].mean()), 6),
+        }
+    return {
+        "calls": int(arr.shape[0]),
+        "mean_rel_norm": round(float(arr[:, 1].mean()), 8),
+        "max_rel_norm": round(float(arr[:, 1].max()), 8),
+        "per_layer": by_layer,
+    }
+
+
+def install_meter() -> None:
+    """Wrap Engram.forward to record the contribution it hands back."""
+    cls = _find_engram_class()
+    if getattr(cls, "_gate_meter_installed", False):
+        return
+    original = cls.forward
+    state = {"returns_updated_hidden": None}
+
+    def forward(self, hidden_states, hash_ids, token_mask=None):
+        meter_dir = os.environ.get(METER_DIR_ENV)
+        out = original(self, hidden_states, hash_ids, token_mask)
+        if state["returns_updated_hidden"] is None:
+            state["returns_updated_hidden"] = _looks_like_updated_hidden(out, hidden_states)
+        ablate = bool(meter_dir) and os.path.exists(
+            os.path.join(meter_dir, _ABLATE_SENTINEL)
+        )
+        if ablate:
+            returned = hidden_states if state["returns_updated_hidden"] else torch.zeros_like(
+                hidden_states
+            )
+        else:
+            returned = out
+        if meter_dir:
+            try:
+                _record(self, meter_dir, returned, hidden_states)
+            except Exception:
+                _say("meter failed: %r" % (sys.exc_info()[1],))
+        return returned
+
+    cls.forward = forward
+    cls._gate_meter_installed = True
+    _say("meter installed")
+
+
+@torch.no_grad()
+def _record(self, meter_dir, returned, hidden_states) -> None:
+    import numpy as np
+
+    delta = (returned.float() - hidden_states.float()).norm()
+    rel = float(delta / (hidden_states.float().norm() + 1e-12))
+    row = np.array(
+        [[float(self.layer_hash_index), rel, 0.0]], dtype=np.float64
+    )
+    name = f"M{self.layer_hash_index}_{os.getpid()}_{len(os.listdir(meter_dir))}.npy"
+    tmp = os.path.join(meter_dir, "." + name)
+    np.save(tmp, row)
+    os.replace(tmp, os.path.join(meter_dir, name))
