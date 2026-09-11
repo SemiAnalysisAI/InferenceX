@@ -84,7 +84,7 @@ if [[ "$KV_OFFLOADING" != "none" && "${KV_OFFLOAD_BACKEND:-}" == "hicache" ]]; t
   # DSV4 uses page-size 256 (set in models.yaml); HiCache must match.
   export HICACHE_PAGE_SIZE="${HICACHE_PAGE_SIZE:-256}"
   # HiCache ratio (host pool = ratio * GPU KV pool).
-  export HICACHE_RATIO="${HICACHE_RATIO:-3}"
+  export HICACHE_RATIO="${HICACHE_RATIO:-2.5}"
   # DSv4 wants the ratio-based pool, but server_sglang.sh prefers
   # --hicache-size over --hicache-ratio when TOTAL_CPU_DRAM_GB is set.
   # Opt out via FORCE_HICACHE_RATIO instead of unsetting TOTAL_CPU_DRAM_GB
