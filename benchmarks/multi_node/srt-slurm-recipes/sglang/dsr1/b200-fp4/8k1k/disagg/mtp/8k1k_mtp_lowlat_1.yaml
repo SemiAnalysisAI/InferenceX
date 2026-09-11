@@ -6,7 +6,7 @@ name: "b200-fp4-mtp-low-latency-1p-tp4-3d-tp8"
 # layout (sglang/<model>/<hw>-<precision>/<seq>/disagg/<variant>/...).
 
 dynamo:
-  hash: "5b4bc1dd70965017a737c71b19db5a0aeaa88727"
+  wheel: "1.5.0.dev20260910"
   install: true
 
 frontend:
@@ -17,7 +17,7 @@ frontend:
 
 model:
   path: "dsr1"
-  container: "lmsysorg/sglang:v0.5.12.post1"
+  container: "lmsysorg/sglang:v0.5.19-cu130"
   precision: "fp4"
 
 resources:

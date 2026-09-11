@@ -9,7 +9,7 @@
 name: b200-fp4-dsr1_8k1k_mtp_4p1d_c2048
 model:
   path: "dsr1"
-  container: "lmsysorg/sglang:v0.5.12.post1"
+  container: "lmsysorg/sglang:v0.5.19-cu130"
   precision: fp4
 resources:
   gpu_type: b200
@@ -22,7 +22,7 @@ resources:
 frontend:
   type: dynamo
 dynamo:
-  hash: "5b4bc1dd70965017a737c71b19db5a0aeaa88727"
+  wheel: "1.5.0.dev20260910"
   install: true
 backend:
   prefill_environment: &env

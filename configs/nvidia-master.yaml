@@ -3990,13 +3990,13 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
           dp-attn: true
 
 dsr1-fp4-b200-dynamo-sglang-mtp:
-  image: "lmsysorg/sglang:v0.5.12.post1"
+  image: "lmsysorg/sglang:v0.5.19-cu130"
   model: deepseek-r1-fp4
   model-prefix: dsr1
   runner: cluster:b200-nscale
   precision: fp4
   framework: dynamo-sglang
-  router: { name: dynamo-router, version: "5b4bc1dd70965017a737c71b19db5a0aeaa88727" }
+  router: { name: dynamo-router, version: "1.5.0.dev20260910" }
   kv-p2p-transfer: nixl
   multinode: true
   disagg: true
