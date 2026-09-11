@@ -99,6 +99,30 @@ import_squash() {
     ) || exit 1
 }
 
+# Direct single-tray AgentX uses the existing shared image and HF caches.
+if [[ "$MODEL_PREFIX" == "dsv41flash" && "$FRAMEWORK" == "vllm" && "${IS_MULTINODE:-false}" != "true" ]]; then
+    BENCH_SCRIPT="benchmarks/single_node/agentic/${MODEL_PREFIX}_${PRECISION}_gb200_${FRAMEWORK}_mtp.sh"
+    [[ "${IS_AGENTIC:-0}" == "1" && "${SPEC_DECODING:-}" == "mtp" && -f "$BENCH_SCRIPT" ]] || {
+        echo "Unsupported single-node recipe: $BENCH_SCRIPT" >&2
+        exit 1
+    }
+    HF_HUB_CACHE_HOST_PATH="/mnt/lustre01/users-public/sa-shared/hf-hub-cache"
+    mkdir -p "$HF_HUB_CACHE_HOST_PATH"
+    export MODEL_PATH="$MODEL" HF_HUB_CACHE=/hf-cache
+    export INFMAX_CONTAINER_WORKSPACE=/ix RESULT_DIR=/ix/results
+    SQUASH_FILE="$SQUASH_DIR/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    import_squash "$SQUASH_FILE" "$IMAGE"
+    srun --account="$SLURM_ACCOUNT" --partition="$SLURM_PARTITION" \
+        --nodes=1 --ntasks=1 --gpus="${TP:?}" --exclusive --mem=0 \
+        --time="${SALLOC_TIME_LIMIT:-480}" --job-name="$RUNNER_NAME" \
+        --mpi=none --container-image="$SQUASH_FILE" \
+        --container-mounts="$GITHUB_WORKSPACE:/ix,$HF_HUB_CACHE_HOST_PATH:/hf-cache" \
+        --no-container-mount-home --container-remap-root \
+        --container-workdir=/ix --no-container-entrypoint \
+        --export=ALL,PORT=8888 bash "$BENCH_SCRIPT"
+    exit $?
+fi
+
 if [[ "$FRAMEWORK" == "llmd-vllm" ]]; then
     if [[ "$MODEL_PREFIX" == "dsv4" && "$PRECISION" == "fp4" ]]; then
         export MODEL_PATH="/mnt/numa1/models/DeepSeek-V4-Pro"
