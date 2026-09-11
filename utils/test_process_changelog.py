@@ -631,20 +631,23 @@ exec "$TEST_PYTHON" "$@"
 
 
 
-def test_validator_loads_its_package_while_reading_another_checkout(committed_planning_repo):
+def test_validator_uses_trusted_entrypoints_while_reading_another_checkout(committed_planning_repo):
     root, base, head = committed_planning_repo
     source = Path(__file__).resolve().parents[1]
     tooling = root / ".tooling"
     tooling.mkdir()
     shutil.move(root / "infx", tooling / "infx")
     shutil.rmtree(root / "utils")
+    (tooling / "utils").mkdir()
+    for script in ("validate_perf_changelog.py", "process_changelog.py"):
+        shutil.copy(source / "utils" / script, tooling / "utils" / script)
     (root / "infx").mkdir()
     (root / "infx/__init__.py").write_text("raise RuntimeError('wrong tooling checkout')\n")
     env = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"}
     result = subprocess.run(
-        [sys.executable, "-P", "-m", "infx.workflows.validate_perf_changelog",
+        [sys.executable, str(tooling / "utils/validate_perf_changelog.py"),
          "--base-ref", base, "--head-ref", head],
-        cwd=root, env={**env, "PYTHONPATH": str(tooling)}, capture_output=True, text=True, timeout=10,
+        cwd=root, env=env, capture_output=True, text=True, timeout=10,
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout == "Validated perf-changelog.yaml: final newline present and matrix generated\n"

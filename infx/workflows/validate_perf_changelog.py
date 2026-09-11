@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import subprocess
 import sys
@@ -309,7 +308,7 @@ def validate_generated_config(
     """Run the same changelog processor used by sweep setup."""
     command = [
         sys.executable,
-        "-P", "-m", "infx.matrix.plan",
+        str(Path(__file__).resolve().parents[2] / "utils/process_changelog.py"),
         "--changelog-file",
         path,
         "--base-ref",
@@ -325,12 +324,6 @@ def validate_generated_config(
         command,
         capture_output=True,
         text=True,
-        env={
-            **os.environ,
-            "PYTHONPATH": os.pathsep.join(filter(None, (
-                str(Path(__file__).resolve().parents[2]), os.environ.get("PYTHONPATH"),
-            ))),
-        },
     )
     if result.returncode != 0:
         detail = result.stderr.strip() or result.stdout.strip()
