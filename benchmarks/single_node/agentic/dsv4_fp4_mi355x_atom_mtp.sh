@@ -3,8 +3,8 @@ set -euo pipefail
 set -x
 
 # Agentic trace replay benchmark for DeepSeek-V4-Pro FP4 on MI355X using
-# ATOM MTP. Throughput runs use the committed golden synthetic acceptance;
-# eval-only runs use the model's real MTP acceptance.
+# ATOM MTP. TP throughput runs use the committed golden synthetic acceptance;
+# DEP and eval-only runs use the model's real MTP acceptance.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -46,26 +46,39 @@ export ATOM_DEBUG_PREFIX_HITS=1
 export ATOM_PROFILER_MORE=0
 export ATOM_PROFILER_TIMEOUT=1200
 
-# DP-attention runs layer ATOM's DPA routing and two-batch-overlap knobs on top of
-# the TP settings above (recipe section "Server - DP attention"); exported only for
-# the DP band. ATOM_DP_SESSION_AFFINITY is not optional: without it a session's
-# turns scatter across DP ranks, the prefix KV written by one turn is unreachable
-# by the next, and the multi-turn agentic workload collapses to cold prefill.
-# GPU_MAX_HW_QUEUES and ATOM_NUMA_BIND are prerequisites of --enable-tbo.
-DP_ATTN_ARGS=()
+# EP is config-driven so the TP band remains TP-only while DEP uses one expert
+# shard per GPU.
+EP_ARGS=()
+if [ "$EP_SIZE" -gt 1 ]; then
+    EP_ARGS=(--enable-expert-parallel)
+fi
+
+# The high-concurrency band uses ATOM's native RCCL DEP transport. Session
+# affinity is required: otherwise consecutive turns can land on another DPA
+# rank and lose access to the prefix KV produced by the previous turn.
+DEP_ARGS=()
+STATE_CHECKPOINT_INTERVAL_TOKENS=8192
 if [ "$DP_ATTENTION" = "true" ]; then
-    export GPU_MAX_HW_QUEUES=5
-    export ATOM_NUMA_BIND=1
+    if [ "$EP_SIZE" -ne "$TP" ]; then
+        echo "ERROR: native RCCL DEP requires EP_SIZE=$TP for TP=$TP, got EP_SIZE=$EP_SIZE" >&2
+        exit 1
+    fi
+    # Keep only runtime controls that are not already expressed by DEP_ARGS.
     export ATOM_DP_SESSION_AFFINITY=1
     export ATOM_DP_LB_REQ_EQUIV=512
     export ATOM_ENABLE_PREFILL_DELAYER=1
     export ATOM_PREFILL_DECODE_INTERVAL=10
     # Client-side counterpart to session affinity: make AIPerf emit a stable
-    # session id (x-dynamo-session-id, falling back to the always-sent
-    # x-correlation-id) so the DPA router pins each conversation to one rank.
-    export AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID=true
-    export AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID=true
-    DP_ATTN_ARGS=(--enable-dp-attention --enable-tbo)
+    # session id from its correlation id so the DPA router pins each
+    # conversation to one rank.
+    export AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID=1
+    export AGENTIC_WARMUP_GRACE_PERIOD=3600
+    DEP_ARGS=(
+        --enable-dp-attention
+        --all2all-backend rccl
+        --dp-load-balance least_tokens
+        --moe-backend standard
+    )
 fi
 
 # Raise the AIPerf HTTP TCP user timeout to 900000 ms (15 min), well above the
@@ -103,19 +116,21 @@ trap 'exit 143' TERM
 # request bursts produced by subagent fan-out.
 MAX_NUM_SEQS=$((2 * CONC))
 
-# golden_al_distribution/dsv4_mtp.yaml: thinking_on, 3 draft tokens -> AL 2.49
+# golden_al_distribution/dsv4_mtp.yaml: thinking_on, 3 draft tokens -> AL 2.49.
 # https://github.com/SemiAnalysisAI/InferenceX/blob/main/golden_al_distribution/dsv4_mtp.yaml
+# Native RCCL DEP was validated with the model's real acceptance, so only the
+# TP throughput band applies the synthetic golden value.
 NUM_SPEC_TOKENS=3
 SPEC_DECODE_AL=2.49
 SPEC_ARGS=(
     --method mtp
     --num-speculative-tokens "$NUM_SPEC_TOKENS"
 )
-if [ "${EVAL_ONLY:-false}" != "true" ]; then
+if [ "${EVAL_ONLY:-false}" != "true" ] && [ "$DP_ATTENTION" != "true" ]; then
     SPEC_ARGS+=(--spec-decode-acceptance-length "$SPEC_DECODE_AL")
 fi
 
-echo "Starting ATOM server with MAX_NUM_SEQS=$MAX_NUM_SEQS NUM_SPEC_TOKENS=$NUM_SPEC_TOKENS SPEC_DECODE_AL=$SPEC_DECODE_AL EVAL_ONLY=${EVAL_ONLY:-false}"
+echo "Starting ATOM server with MAX_NUM_SEQS=$MAX_NUM_SEQS NUM_SPEC_TOKENS=$NUM_SPEC_TOKENS STATE_CHECKPOINT_INTERVAL_TOKENS=$STATE_CHECKPOINT_INTERVAL_TOKENS DP_ATTENTION=$DP_ATTENTION EP_SIZE=$EP_SIZE EVAL_ONLY=${EVAL_ONLY:-false}"
 ATOM_CMD=(
     python3 -u -m atom.entrypoints.openai_server
     --model "$MODEL_PATH"
@@ -129,17 +144,19 @@ ATOM_CMD=(
     # warmup request aborts the whole run. Outlast the client idle window.
     --timeout-keep-alive 900
     --tensor-parallel-size "$TP"
+    --data-parallel-size 1
     --kv-cache-dtype fp8
     --index-cache-dtype fp4
     --enable-prefix-caching
     --gpu-memory-utilization 0.9
     --max-num-batched-tokens 16384
     --attn-prefill-chunk-size 16384
-    --state-checkpoint-interval-tokens 8192
+    --state-checkpoint-interval-tokens "$STATE_CHECKPOINT_INTERVAL_TOKENS"
     --level 3
     --cudagraph-mode FULL
     "${SPEC_ARGS[@]}"
-    "${DP_ATTN_ARGS[@]}"
+    "${EP_ARGS[@]}"
+    "${DEP_ARGS[@]}"
     --max-num-seqs "$MAX_NUM_SEQS"
 )
 write_command "$RESULT_DIR/server_command.txt" "${ATOM_CMD[@]}"

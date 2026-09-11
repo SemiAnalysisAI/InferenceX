@@ -6968,6 +6968,17 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2873
 
 - config-keys:
+    - dsv4-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the ATOM image from rocm/atom-dev:nightly_202608280858 to rocm/atom-dev:nightly_202609071454 (digest sha256:f252ec9a30e3d17b91f15887ea32baa1a0c5503b775f5adf42ff7cee8cfff769), built from ROCm/ATOM merge commit 5a9c2068 containing native RCCL DEP."
+    - "Move the concurrency 48/64/96/128/256 ATOM AgentX band from DPA with TBO and the default MoE transport to native RCCL DEP (TP8/DPA8/EP8), while preserving the TP-only concurrency 1/2/4/8/16 band."
+    - "Match the validated DEP run: disable EPLB and TBO, use least-tokens routing with session affinity and zero request equivalence, set the state checkpoint interval to 32768 tokens, and use real MTP acceptance on DEP."
+    - "Carry over the validated AgentX transport, terminal-MTP, and AIPerf timeout/failure settings for stable multi-turn replay."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2886
+
+- config-keys:
     - qwen3.5-fp8-b200-sglang
   scenario-type:
     - fixed-seq-len
