@@ -353,6 +353,20 @@ printf 'temporary inspection directory: %s\n' "$tmp"
 rm -rf -- "$tmp"
 ```
 
+## P75 and P90 measured GPU power
+
+Validated single-node SMI and multinode DCGM results also emit `p75_total_gpu_power_w`,
+`p75_power_w`, `p90_total_gpu_power_w`, and `p90_power_w`. The total fields are
+the time-weighted 75th and 90th percentiles of the sum of
+all participating GPU-board power curves during the same formal benchmark window
+used for energy integration. Device samples are aligned with piecewise-linear
+interpolation before summing; elapsed time, rather than sample count, weights the
+percentile. Each per-chip field divides its fleet percentile by the participating GPU count.
+It is not an individual GPU's percentile or the average of device percentiles.
+All four values are withheld when telemetry validation fails. Older results remain
+missing until their original raw traces can be replayed; average watts cannot
+supply P75 or P90. The validation sidecar records `power_percentile_method`.
+
 ## Verification and stop conditions
 
 A handoff is verified only when all applicable checks pass.
