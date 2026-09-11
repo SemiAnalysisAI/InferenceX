@@ -222,6 +222,14 @@ RUN_ID=$(gh run list \
 
 Do not continue if `RUN_ID` is empty. Run metadata describes the dispatch workflow ref, which may not equal input `ref`. Verify the unique title, generator command, and checkout ref in `get-jobs` before interpreting GPU results.
 
+## Kimi-K3 AgentX power backfills
+
+The Kimi-K3 B200, H200, GB200 and GB300 multi-node recipes enable required DCGM telemetry and run the custom AgentX client on the serving head. Their launchers select the immutable AgentX power runtime, stamp its commit, wait for Slurm completion and telemetry drain, then validate each requested concurrency before staging results. The shared result collector preserves failed native jobs and stages available power diagnostics before returning a failure. Single-node B300 and MI355X use the shared AgentX collector; it waits for a real sample beyond the measurement end before stopping the monitor.
+
+For a missing-power backfill, generate only the missing recipe/concurrency combinations, set `require-power: true`, and leave `agentx-fast: false` and the duration override empty. The normal AgentX profile is one hour. Verify a first missing point on each newly enabled runtime/cluster before scheduling its remaining points. A rendered recipe or an online GitHub runner does not establish live collector readiness or Slurm capacity. Preserve the existing validated points, and keep new performance and power values paired with their own run; never attach a new run's energy to an older performance row. Manual `e2e-tests.yml` artifacts still require the normal reviewed ingestion path before they appear in the dashboard.
+
+B200 Kimi recipes use DCP8 with Mooncake offload disabled. The master config records `dcp-size: 8` and `kv-offloading: none` to match those commands; this metadata correction does not enable offload.
+
 ## PR primary and modifier labels
 
 Sweep labels authorize GPU work for same-repository PRs whether draft or ready. Draft status controls review readiness, not sweep eligibility; fork PRs retain their trusted-dispatch path. Adding a sweep label or pushing with one present can start a sweep. Marking ready does not dispatch or repeat one. To start an already-labeled draft that has no run, remove and reapply its sweep label.

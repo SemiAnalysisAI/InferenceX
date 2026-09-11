@@ -7338,3 +7338,23 @@
     - "Resolve the requested H100 SGLang container instead of a hardcoded older image, and stop benchmark/eval clients when their ready server or required worker exits."
     - "H100 SGLang 使用所请求的容器而非硬编码旧镜像；已就绪的服务或必需工作进程退出后，停止其 benchmark/评测客户端。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3020
+
+- config-keys:
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-mooncake-dcp16-agg
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-mooncake-dcp8-agg
+    - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
+    - kimik3-fp4-h200-vllm-agentic
+    - kimik3-fp4-b300-vllm-agentic-dspark
+    - kimik3-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable required Kimi-K3 AgentX power on B200, H200, GB200 and GB300 with exact-window validation and failed-job audit artifacts."
+    - "Wait for complete AMD telemetry before teardown, use the active B300 cluster label, and correct B200 DCP/offload metadata to match its serving commands."
+    - "为 B200、H200、GB200 和 GB300 启用 Kimi-K3 AgentX 必需功耗采集、精确测量窗口验证及失败任务审计产物。"
+    - "AMD 遥测覆盖完整窗口后再收尾；使用现有 B300 集群标签，并修正 B200 的 DCP/Offload 元数据以匹配实际服务命令。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3030
