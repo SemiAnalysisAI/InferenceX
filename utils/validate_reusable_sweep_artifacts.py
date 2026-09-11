@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import re
 import shutil
 import sys
@@ -16,7 +15,9 @@ from typing import Any, Iterable, Optional
 if not __package__:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from infx.results.evals import is_eval_result
+from infx.results.evals import (
+    is_eval_result, is_valid_effective_count, is_valid_score, metric_family,
+)
 from infx.results.evals import result_concurrency as _result_concurrency
 from infx.results.evals import result_order as _result_order
 
@@ -719,12 +720,12 @@ def _raw_result_error(path: Path) -> Optional[str]:
             strict_names = [
                 name
                 for name in configured_names
-                if "strict" in name or "resolved" in name
+                if metric_family(name) == "strict"
             ]
             fallback_names = [
                 name
                 for name in configured_names
-                if "flex" in name or "extract" in name
+                if metric_family(name) == "flex"
             ]
             primary_names = strict_names or fallback_names or configured_names
         else:
@@ -734,13 +735,7 @@ def _raw_result_error(path: Path) -> Optional[str]:
 
         for name in primary_names:
             score = metrics[name]
-            if (
-                isinstance(score, bool)
-                or not isinstance(score, (int, float))
-                or not math.isfinite(score)
-                or score < 0
-                or score > 1
-            ):
+            if not is_valid_score(score):
                 return (
                     f"has invalid score {name!r} for task {task!r}: "
                     f"{score!r}"
@@ -750,12 +745,7 @@ def _raw_result_error(path: Path) -> Optional[str]:
             if not isinstance(task_counts, dict) or "effective" not in task_counts:
                 return f"has malformed effective sample count for task {task!r}"
             effective = task_counts["effective"]
-            if (
-                isinstance(effective, bool)
-                or not isinstance(effective, (int, float))
-                or not math.isfinite(effective)
-                or effective <= 0
-            ):
+            if not is_valid_effective_count(effective):
                 return (
                     f"has invalid effective sample count for task {task!r}: "
                     f"{effective!r}"

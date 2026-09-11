@@ -43,6 +43,8 @@ This page explains how a declared benchmark becomes a validated job, a runtime r
 | [`runners/`](../runners/) | Fleet-specific model paths, mounts, container or Slurm setup, and benchmark-script routing |
 | [`benchmarks/benchmark_lib.sh`](../benchmarks/benchmark_lib.sh) | Shared server readiness, benchmark client, eval, AgentX replay, and output behavior |
 | [`benchmarks/`](../benchmarks/) | Framework and topology-specific server and client commands |
+| [`infx/github.py`](../infx/github.py) | GitHub REST, pagination, and comment reactions shared by workflow operations |
+| [`infx/workflows/`](../infx/workflows/) | Reuse command parsing, authorization lookup, source-run validation, and reaction feedback; the existing reuse CLI remains compatible |
 | [`infx/results/`](../infx/results/) | Importable result builders, component metadata parsing, and power-metric transformations; [`utils/process_result.py`](../utils/process_result.py) preserves the fixed-sequence CLI |
 | [`.github/workflows/collect-results.yml`](../.github/workflows/collect-results.yml), [`.github/workflows/collect-evals.yml`](../.github/workflows/collect-evals.yml) | Run-level benchmark and eval artifact aggregation |
 
@@ -169,6 +171,8 @@ bash ./runners/launch_${RUNNER_NAME%%_*}.sh
 
 The prefix before the first underscore therefore identifies the fleet launcher. Runner naming and launcher filenames are one routing contract.
 
+`infx.github` owns the shared REST, pagination, and comment-reaction primitives. `infx.workflows.reuse` owns reuse selection and validation, while `infx.workflows.reuse_comment` owns comment reaction feedback. Both are executable package modules. `utils/find_reusable_sweep_run.py` preserves direct script execution and legacy imports, which resolve to the same canonical module. These helpers use only the standard library.
+
 ## Stage 4: launcher and runtime execution
 
 A launcher under [`runners/`](../runners/) adapts logical job metadata to one physical fleet. Depending on the fleet and topology, it may:
@@ -220,7 +224,15 @@ Test builders with small, independently worked examples and read-only inputs. Fo
 
 For eval-only jobs, throughput output is not required. The workflow instead requires at least one `results*.json`. For jobs marked to run eval, uploads may contain `meta_env.json`, `results*.json`, `sample*.jsonl`, SWE-bench predictions and reports, and trajectory files. [`utils/evals/validate_scores.py`](../utils/evals/validate_scores.py) checks produced eval scores.
 
-[`infx.results.evals`](../infx/results/evals.py) shares format-marker recognition, staged concurrency suffix parsing, and result recency ordering between the eval collector and reusable-artifact validator. Filename timestamps and legacy file mtimes use epoch nanoseconds, with filenames breaking ties. Each caller retains its own file discovery, metric validation, diagnostics, and artifact writes; recognizing a format does not imply that its results are valid or reusable.
+[`infx.results.evals`](../infx/results/evals.py) provides `extract_metrics` for loaded eval JSON and `build_rows` for collector output. Both accept explicit inputs without file I/O or input mutation. The builder applies metadata defaults and primary-score precedence, retaining failed evaluations as diagnostic rows. The CLI owns file discovery, concurrency selection, reporting, and artifact writes.
+
+```python
+from infx.results.evals import build_rows
+
+rows = build_rows(raw_eval, metadata, source="eval_job/results.json")
+```
+
+The collector and reusable-artifact validator share format recognition, concurrency suffix parsing, result ordering, metric-family classification, and numeric validity rules. Filename timestamps and legacy mtimes use epoch nanoseconds, with filenames breaking ties. Reuse retains its stricter structural checks and checks every applicable primary metric; the collector keeps the last configured value per metric family for reporting. Recognizing a format does not imply that its results are valid or reusable.
 
 Agentic throughput jobs have a different contract. They validate AIPerf output with [`utils/agentic/validation/validate_agentic_result.py`](../utils/agentic/validation/validate_agentic_result.py), upload an aggregate `bmk_agentic_<suffix>` artifact, and upload the raw `agentic_<suffix>` sibling containing trace-replay material. InferenceX-app pairs those siblings by their shared suffix. Agentic eval-only jobs follow the eval output contract instead and do not require a throughput result.
 
