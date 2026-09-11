@@ -256,7 +256,7 @@ For each concurrency retain:
 - server/frontend logs and every metrics endpoint represented.
 - run URL/ID, attempt, head SHA, recipe/config identity, image, topology, fast flag, and any override.
 
-The runner writes the command before replay and validates raw results after aggregation ([execution path](../benchmarks/benchmark_lib.sh#L2320-L2360)). Aggregation preserves dataset provenance and hardware/model/topology fields ([aggregate construction](../utils/agentic/aggregation/process_agentic_result.py#L194-L272)). Raw workflow uploads intentionally omit very large `inputs.json` and `profile_export_raw.jsonl`. If those are required for an investigation, preserve them from the live allocation before cleanup ([single-node artifact contract](../.github/workflows/benchmark-tmpl.yml#L349-L358), [multi-node contract](../.github/workflows/benchmark-multinode-tmpl.yml#L455-L464)).
+The runner writes the command before replay and validates raw results after aggregation ([execution path](../benchmarks/benchmark_lib.sh#L2320-L2360)). Aggregation preserves dataset provenance and hardware/model/topology fields ([aggregate construction](../infx/results/agentic/__init__.py)). Raw workflow uploads intentionally omit very large `inputs.json` and `profile_export_raw.jsonl`. If those are required for an investigation, preserve them from the live allocation before cleanup ([single-node artifact contract](../.github/workflows/benchmark-tmpl.yml#L349-L358), [multi-node contract](../.github/workflows/benchmark-multinode-tmpl.yml#L455-L464)).
 
 ## 9. Debug long AgentX runs from live evidence
 

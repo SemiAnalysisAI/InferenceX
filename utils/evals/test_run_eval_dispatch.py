@@ -5,6 +5,7 @@ import io
 import json
 import os
 import signal
+import socket
 import stat
 import subprocess
 import sys
@@ -3254,3 +3255,27 @@ _cleanup_vendor_eval "$cleanup_dir"
     assert f"SELECTED_PYTHON=<{python_root / 'venv/bin/python'}>" in result.stdout
     assert "--prefix" not in result.stdout
     assert not python_root.exists()
+
+
+@pytest.mark.parametrize("occupied", [False, True])
+def test_select_available_server_port_avoids_an_existing_listener(occupied: bool) -> None:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+        listener.bind(("0.0.0.0", 0))
+        preferred = listener.getsockname()[1]
+        if occupied:
+            listener.listen()
+        else:
+            listener.close()
+        result = subprocess.run(
+            ["bash", "-c", 'source "$BENCHMARK_LIB"; select_available_server_port; '
+             'python3 -c \'import os; print(os.environ["PORT"])\''],
+            env={**os.environ, "BENCHMARK_LIB": str(BENCHMARK_LIB), "PORT": str(preferred)},
+            text=True, capture_output=True, check=True,
+        )
+        selected = int(result.stdout.strip())
+        if occupied:
+            assert selected != preferred
+        else:
+            assert selected == preferred
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
+            server.bind(("0.0.0.0", selected))
