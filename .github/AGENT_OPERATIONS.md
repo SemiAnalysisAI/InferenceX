@@ -36,7 +36,7 @@ A PR sweep requires exactly one primary label:
 
 Modifiers:
 
-- `all-evals` expands eval selection to every generated fixed-sequence configuration without suppressing throughput. It remains reuse-eligible with an eligible full-sweep label.
+- `all-evals` expands eval selection to every generated fixed-sequence configuration without suppressing throughput. It remains reuse-eligible; artifact reuse does not require a current sweep label.
 - `evals-only` suppresses throughput. Combining it with `all-evals` runs every eval and no throughput. It is not reuse-eligible.
 - `agentx-fast` uses one deterministic warmup request per lane and a 20-minute AgentX profile. It does not affect fixed-sequence or eval jobs and is not reuse-eligible.
 

@@ -43,7 +43,9 @@
 | [`runners/`](../runners/) | 特定机群的模型路径、挂载、容器或 Slurm 设置以及基准测试脚本路由 |
 | [`benchmarks/benchmark_lib.sh`](../benchmarks/benchmark_lib.sh) | 共享的服务器就绪检查、基准测试客户端、评测、AgentX 重放和输出行为 |
 | [`benchmarks/`](../benchmarks/) | 特定于框架和拓扑的服务器与客户端命令 |
-| [`utils/process_result.py`](../utils/process_result.py) | 上传前对固定序列结果进行规范化和聚合 |
+| [`infx/github.py`](../infx/github.py) | 工作流操作共用的 GitHub REST、分页和评论表态基础操作 |
+| [`infx/workflows/`](../infx/workflows/) | 复用命令解析、授权查找、源 Run 验证及表态反馈；现有复用 CLI 保持兼容 |
+| [`infx/results/`](../infx/results/) | 可导入的结果构建函数、组件元数据解析和功耗指标转换；[`utils/process_result.py`](../utils/process_result.py) 保留固定序列处理的 CLI |
 | [`.github/workflows/collect-results.yml`](../.github/workflows/collect-results.yml)、[`.github/workflows/collect-evals.yml`](../.github/workflows/collect-evals.yml) | 运行级基准测试和评测工件聚合 |
 
 ### InferenceX-app 使用方
@@ -169,6 +171,8 @@ bash ./runners/launch_${RUNNER_NAME%%_*}.sh
 
 因此，第一个下划线之前的前缀标识机群启动器。运行器命名和启动器文件名共同构成一项路由契约。
 
+`infx.github` 负责共享 REST、分页及评论表态基础操作。`infx.workflows.reuse` 负责复用选择和验证，`infx.workflows.reuse_comment` 负责评论表态反馈。两者均可作为包模块执行。`utils/find_reusable_sweep_run.py` 保留直接脚本执行和旧导入路径，旧路径指向同一个规范模块。这些辅助模块仅依赖标准库。
+
 ## 阶段 4：启动器与运行时执行
 
 [`runners/`](../runners/) 下的启动器会将逻辑作业元数据适配到某个物理机群。根据机群和拓扑，它可能会：
@@ -193,7 +197,42 @@ bash ./runners/launch_${RUNNER_NAME%%_*}.sh
 
 对于固定序列吞吐量作业，工作流要求存在 `<RESULT_FILENAME>.json`，随后运行 [`utils/process_result.py`](../utils/process_result.py)，并将 `agg_<RESULT_FILENAME>.json` 作为 `bmk_<RESULT_FILENAME>` 上传。
 
+### 复用与扩展结果处理
+
+[`infx.results.fixed_sequence.build_result`](../infx/results/fixed_sequence.py) 接收已加载的基准测试映射和显式传入的环境变量映射，返回聚合结果字典，不读取进程环境，也不执行文件 I/O。库调用方无需提供 `RESULT_FILENAME`。现有 CLI 会验证环境变量、读取原始工件、调用构建函数、写入聚合结果，并按照原有的尽力处理或 `REQUIRE_POWER` 策略执行功耗聚合。
+
+```python
+from infx.results.fixed_sequence import build_result
+
+result = build_result(raw_benchmark, runtime_env)
+```
+
+新增格式应在 `infx/results/` 下提供带类型标注的构建函数，接收该格式所需的输入并返回字典。通过普通函数调用组合共享转换；文件查找、环境默认值、错误呈现和序列化由该格式的 CLI 适配器负责。现有 AgentX 拓扑及请求和服务器指标处理保留各自的策略。
+
+当前处理路径共享两个辅助函数：
+
+- [`parse_component_metadata`](../infx/results/metadata.py) 接收原始 JSON 值和诊断标签。调用方选择 `version` 是否可省略，以及无效输入应抛出 `ValueError` 还是 `SystemExit`，从而保留现有契约。
+- [`with_power_metrics`](../infx/results/power/__init__.py) 返回替换了指定指标族的副本，移除旧的有效性原因，并验证、舍入新指标。调用方提供指标键和模式版本，再自行写入工件及验证附属文件。其他指标族因此可以直接复用该转换，无需修改其实现。
+
+功耗遥测处理引擎也位于 [`infx.results.power`](../infx/results/power/)：`single_node.run` 读取 GPU 监控 CSV，`multinode.run` 验证 srt-slurm 工件包。两者通过 `common.py` 共享基准窗口解析、单设备能量积分、聚合结果替换及审计序列化，同时保留各自的遥测校验和失败策略。固定序列及 AgentX 适配器直接导入这些引擎；新结果格式可以将其基准窗口和 token 计数提供给匹配的引擎。
+
+现有 `utils/aggregate_power.py` 和 `utils/aggregate_power_multinode.py` 命令继续作为兼容入口，包括从检出目录之外直接执行。旧导入路径解析到对应的引擎模块，因此两种路径引用的是相同的类和函数。`infx` 包可独立于这些入口运行，无需安装步骤或新增运行时依赖。还可以从仓库根目录运行 `python -m infx.results.power.single_node` 和 `python -m infx.results.power.multinode` 来调用引擎。
+
+构建函数测试应使用独立计算预期结果的小样例和只读输入。修改现有适配器时，还应与旧实现比较 CLI 退出状态、诊断信息和生成工件，覆盖无效输入以及严格模式和尽力处理模式下的功耗失败。
+
+### 评测与 AgentX 输出
+
 对于仅评测作业，不要求吞吐量输出。工作流改为要求至少存在一个 `results*.json`。对于标记为运行评测的作业，上传内容可能包含 `meta_env.json`、`results*.json`、`sample*.jsonl`、SWE-bench 预测和报告以及轨迹文件。[`utils/evals/validate_scores.py`](../utils/evals/validate_scores.py) 会检查生成的评测分数。
+
+[`infx.results.evals`](../infx/results/evals.py) 提供 `extract_metrics`，用于解析已加载的评测 JSON，并提供 `build_rows`，用于构建收集器输出。两者均接收显式输入，不执行文件 I/O，也不修改输入。构建函数应用元数据默认值和主分数优先级，并将失败评测保留为诊断行。CLI 负责文件查找、并发数选择、报告输出和工件写入。
+
+```python
+from infx.results.evals import build_rows
+
+rows = build_rows(raw_eval, metadata, source="eval_job/results.json")
+```
+
+收集器和可复用工件验证器共享格式识别、并发数后缀解析、结果排序、指标族分类及数值有效性规则。文件名时间戳和旧格式文件的修改时间统一使用 Unix 纪元纳秒数，时间相同时按文件名排序。复用验证保留更严格的结构检查，并验证所有适用的主指标；收集器则保留每个指标族中最后配置的值用于报告。识别出格式并不意味着结果有效或可复用。
 
 智能体吞吐量作业采用不同的契约。它们使用 [`utils/agentic/validation/validate_agentic_result.py`](../utils/agentic/validation/validate_agentic_result.py) 验证 AIPerf 输出，上传聚合的 `bmk_agentic_<suffix>` 工件，并上传包含追踪重放材料的原始 `agentic_<suffix>` 同级工件。InferenceX-app 通过它们共享的后缀对这些同级工件进行配对。智能体仅评测作业改为遵循评测输出契约，不要求吞吐量结果。
 
@@ -319,7 +358,7 @@ AgentX 追踪导出的体积更大，并且需要追踪发现、时间线处理�
 3. **验证：** 仅生成该确切键并检查 JSON，不要只查看退出码。
 
    ```bash
-   uv run --no-project --with pydantic --with pyyaml --python 3.12 \
+   uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
      utils/matrix_logic/generate_sweep_configs.py test-config \
      --config-files configs/nvidia-master.yaml configs/amd-master.yaml \
      --runner-config configs/runners.yaml \

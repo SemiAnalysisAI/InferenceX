@@ -23,6 +23,10 @@ import pytest
 
 from utils.agentic.aggregation.request_metrics import compute_request_metrics
 from utils.agentic.aggregation.process_agentic_result import _gpu_shape
+from utils.agentic.aggregation.process_agentic_result import (
+    optional_component_metadata,
+    optional_kv_offload_backend_metadata,
+)
 from utils.agentic.aggregation.server_metrics import compute_server_metrics
 
 
@@ -37,6 +41,7 @@ AGG_TOP_LEVEL_KEYS = {
     "conc",
     "scenario_type",
     "is_multinode",
+    "num_gpus",
     "tp",
     "pp",
     "dcp_size",
@@ -390,6 +395,37 @@ def test_processor_omits_component_metadata_when_absent(tmp_path: Path):
     assert "kv_p2p_transfer" not in agg
 
 
+@pytest.mark.parametrize("parser", [
+    optional_component_metadata, optional_kv_offload_backend_metadata,
+])
+@pytest.mark.parametrize("raw", [None, "", "null"])
+def test_optional_metadata_accepts_unset_values(monkeypatch, parser, raw):
+    if raw is None:
+        monkeypatch.delenv("TEST_METADATA", raising=False)
+    else:
+        monkeypatch.setenv("TEST_METADATA", raw)
+    assert parser("TEST_METADATA") is None
+
+
+@pytest.mark.parametrize(("parser", "raw", "message"), [
+    (optional_component_metadata, "{", "must contain valid JSON"),
+    (optional_component_metadata, "[]", "must contain exactly 'name' and 'version'"),
+    (optional_component_metadata, '{"name":"router"}', "must contain exactly 'name' and 'version'"),
+    (optional_component_metadata, '{"name":"router","version":0}', "name and version must be non-empty strings"),
+    (optional_kv_offload_backend_metadata, "{", "must contain valid JSON"),
+    (optional_kv_offload_backend_metadata, "[]", "may contain only 'name' and 'version'"),
+    (optional_kv_offload_backend_metadata, '{"name":"cache","extra":1}', "may contain only 'name' and 'version'"),
+    (optional_kv_offload_backend_metadata, "{}", "must contain 'name' and optional 'version'"),
+    (optional_kv_offload_backend_metadata, '{"version":"1"}', "must contain 'name' and optional 'version'"),
+    (optional_kv_offload_backend_metadata, '{"name":"cache","version":""}', "values must be non-empty strings"),
+])
+def test_optional_metadata_preserves_cli_errors(monkeypatch, parser, raw, message):
+    monkeypatch.setenv("TEST_METADATA", raw)
+    with pytest.raises(SystemExit) as error:
+        parser("TEST_METADATA")
+    assert error.value.code == f"TEST_METADATA {message}"
+
+
 @pytest.mark.parametrize(
     "metadata",
     [
@@ -619,10 +655,42 @@ def test_processor_throughput_per_gpu(tmp_path: Path):
     assert agg["pp"] == 2
     assert agg["dcp_size"] == 2
     assert agg["pcp_size"] == 2
+    assert agg["num_gpus"] == 16
     # 840 input + 275 output tokens over 4.1 seconds on 16 GPUs.
     assert per_gpu["total_tput_tps"] == pytest.approx(16.99695)
     assert per_gpu["input_tput_tps"] == pytest.approx(12.80488)
     assert per_gpu["output_tput_tps"] == pytest.approx(4.19207)
+
+
+def test_processor_serializes_shared_expert_gpus_without_changing_power(tmp_path: Path):
+    from utils.agentic.aggregation.power_adapter import run_agentic_power
+
+    result_dir = _write_fixture(tmp_path)
+    output_dir = tmp_path / "out"
+    agg = _run_processor(result_dir, output_dir, env_overrides={"TP": "4", "EP_SIZE": "4"})
+    assert agg["num_gpus"] == 4
+
+    profile_path = result_dir / "aiperf_artifacts/profile_export_aiperf.json"
+    profile = json.loads(profile_path.read_text())
+    profile.update(start_time="1970-01-01T00:00:01+00:00", end_time="1970-01-01T00:00:05.1+00:00")
+    profile_path.write_text(json.dumps(profile))
+    (result_dir / "gpu_metrics.csv").write_text(
+        "timestamp, index, power.draw [W]\n"
+        + "".join(f"{t}, {gpu}, 100 W\n" for t in range(1, 7) for gpu in range(4))
+    )
+    output_path = output_dir / "agg_test.json"
+    assert run_agentic_power(
+        result_dir=result_dir,
+        agg_result=output_path,
+        expected_num_gpus=4,
+        require_power=True,
+    ) == 0
+    powered = json.loads(output_path.read_text())
+    assert powered["num_gpus"] == 4
+    assert powered["power_valid"] == 1
+    # Four 100 W GPUs over 4.1 seconds: EP shares devices with TP.
+    assert powered["avg_total_gpu_power_w"] == 400
+    assert powered["total_gpu_energy_j"] == 1640
 
 
 def test_processor_aggregates_full_response_itl_and_interactivity(tmp_path: Path):
@@ -1508,6 +1576,9 @@ def test_processor_uses_aiperf_theoretical_cache_metric(tmp_path: Path):
                     "count": 4,
                     "sum": 1,
                 },
+                "metadata": {
+                    "dataset": {"hf_dataset_name": "semianalysisai/cc-traces-weka-042026"}
+                },
             },
             f,
         )
@@ -1569,6 +1640,44 @@ def test_processor_uses_aiperf_theoretical_cache_metric(tmp_path: Path):
     assert agg["request_metrics"]["tokens"]["output_expected"]["mean"] == pytest.approx(
         55.0
     )
+
+
+@pytest.mark.parametrize("cache_state", ["matching", "missing", "ambiguous", "no_identity"])
+def test_processor_expected_output_uses_declared_dataset(tmp_path: Path, cache_state: str):
+    result_dir = _write_fixture(tmp_path)
+    profile_path = result_dir / "aiperf_artifacts" / "profile_export_aiperf.json"
+    profile = json.loads(profile_path.read_text())
+    if cache_state == "no_identity":
+        del profile["metadata"]["dataset"]["hf_dataset_name"]
+    profile["theoretical_prefix_cache_hit"] = {"unit": "%", "avg": 25.0}
+    profile_path.write_text(json.dumps(profile))
+
+    hf_cache = tmp_path / "hf"
+    snapshots = [("cc-traces-weka-062126-256k", "newer", 900, 200)]
+    if cache_state != "missing":
+        snapshots.append(("cc-traces-weka-062126", "correct", 100, 100))
+    if cache_state == "ambiguous":
+        snapshots.append(("cc-traces-weka-062126", "another", 200, 300))
+    for dataset, revision, output, modified_at in snapshots:
+        snapshot = hf_cache / f"datasets--semianalysisai--{dataset}" / "snapshots" / revision
+        snapshot.mkdir(parents=True)
+        traces = [
+            {"id": trace_id, "requests": [{"type": "n", "out": output}] * turns}
+            for trace_id, turns in [("trace-A", 3), ("trace-B", 2)]
+        ]
+        (snapshot / "traces.jsonl").write_text("\n".join(json.dumps(trace) for trace in traces))
+        os.utime(snapshot, (modified_at, modified_at))
+
+    agg = _run_processor(result_dir, tmp_path / "out", {"HF_HUB_CACHE": str(hf_cache)})
+
+    expected = agg["request_metrics"]["tokens"]["output_expected"]
+    if cache_state == "matching":
+        assert expected["mean"] == 100
+    else:
+        assert expected == {}
+    assert agg["request_metrics"]["tokens"]["output_actual"]["mean"] == 55
+    assert agg["num_requests_successful"] == 5
+    assert agg["request_metrics"]["cache"]["theoretical_cache_hit_rate"] == 0.25
 
 
 def test_processor_supports_per_run_subdir_layout(tmp_path: Path):
