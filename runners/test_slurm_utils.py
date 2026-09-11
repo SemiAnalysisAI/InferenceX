@@ -111,6 +111,10 @@ def test_srt_adapter_preserves_explicit_sglang_settings_and_eval_contract(tmp_pa
     throughput, _ = prepare(recipe, {}, env, **paths)
     assert throughput["backend"] == recipe["backend"]
 
+    with pytest.raises(ValueError, match="separate EVAL_ONLY=true job"):
+        prepare(recipe, {}, {**env, "RUN_EVAL": "true", "EVAL_ONLY": "false"}, **paths)
+    assert recipe["backend"] == throughput["backend"]
+
     evaluation, _ = prepare(recipe, {}, {**env, "EVAL_ONLY": "true", "EVAL_CONC": "64"}, **paths)
     roles = ("aggregated",) if aggregated else ("prefill", "decode")
     for role in roles:
@@ -163,8 +167,9 @@ def test_srt_result_collection_is_job_scoped_and_preserves_artifact_names(tmp_pa
     assert json.loads(artifact.read_text()) == {"job": "42"}
     assert not list(workspace.glob("*srt-99*"))
 
-    with pytest.raises(ValueError, match="No eval metadata"):
-        collect(submission, {**env, "EVAL_ONLY": "true"}, workspace=workspace, results_root=results_root)
+    for flag in ("EVAL_ONLY", "RUN_EVAL"):
+        with pytest.raises(ValueError, match="No eval metadata"):
+            collect(submission, {**env, flag: "true"}, workspace=workspace, results_root=results_root)
 
 
 def run_bash(command: str, *args: Path | str) -> subprocess.CompletedProcess[str]:

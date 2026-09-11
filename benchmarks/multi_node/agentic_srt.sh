@@ -258,7 +258,7 @@ for index in "${!CONCURRENCIES[@]}"; do
     mkdir -p "$RESULT_DIR"
 
     echo "Running agentic concurrency $concurrency of: ${CONCURRENCIES[*]}"
-    if [[ "${CLEAR_CACHE_BETWEEN_CONC:-1}" == "1" ]]; then
+    if [[ "${CLEAR_CACHE_BETWEEN_CONC:-0}" == "1" ]]; then
         clear_agentic_worker_caches
     fi
     build_replay_cmd "$RESULT_DIR"

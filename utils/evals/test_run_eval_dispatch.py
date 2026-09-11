@@ -2637,6 +2637,10 @@ install_agentic_deps() { echo deps >> "$EVENTS"; }
 _wait_for_openai_chat_route() { echo "ready $*" >> "$EVENTS"; }
 build_replay_cmd() { echo build >> "$EVENTS"; }
 run_agentic_replay_and_write_outputs() { echo replay >> "$EVENTS"; }
+curl() {
+    echo flush >> "$EVENTS"
+    printf 'Cache flushed 200'
+}
 """,
         encoding="utf-8",
     )
@@ -2653,6 +2657,7 @@ run_agentic_replay_and_write_outputs() { echo replay >> "$EVENTS"; }
         "RESULT_FILENAME": "result",
         "RESULT_DIR": str(tmp_path / "results"),
         "DURATION": "1",
+        "AIPERF_SERVER_METRICS_URLS": "http://worker.invalid:9000/metrics",
     }
     expected_without_readiness = ["resolve", "deps", "build", "replay"]
 
@@ -2669,6 +2674,16 @@ run_agentic_replay_and_write_outputs() { echo replay >> "$EVENTS"; }
             check=True,
         )
         assert events_path.read_text().splitlines() == expected
+
+    events_path.unlink()
+    subprocess.run(
+        ["bash", str(MULTINODE_AGENTIC_SCRIPT)],
+        env={**base_env, "EVAL_ONLY": "false", "AIPERF_DRAIN_BACKEND": "sglang", "CLEAR_CACHE_BETWEEN_CONC": "1"},
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    assert events_path.read_text().splitlines() == ["resolve", "deps", "flush", "flush", "build", "replay"]
 
 
 def test_env_can_force_bfcl_on_agentic_eval() -> None:

@@ -266,6 +266,11 @@ running, waiting, and disaggregation transfer queues. Missing gauges or failed
 L1/L2 cache flushes fail the native run; L3 clearing remains optional. Qwen3.5
 MI300X AgentX runs retain golden acceptance length 3.39, including fast bring-up.
 Real-output diagnostics and evals are separate from golden-AL AgentX replay.
+The shared srt-slurm adapter requires a separate `EVAL_ONLY=true` job when
+evaluation is requested; it does not combine golden-AL throughput with accuracy
+evaluation on the same workers. Cache flushing is explicit opt-in through
+`CLEAR_CACHE_BETWEEN_CONC=1`, as set by the native MI300X recipes, and defaults
+off for existing non-SGLang consumers.
 Fast runs are not canonical frontier results.
 
 GitHub Actions is the orchestration/final-status view. The cluster is the live diagnostic source. Obtain the SSH alias, runner user, and access-controlled paths from the InferenceX Clusters canvas. Never guess or publish private infrastructure coordinates.

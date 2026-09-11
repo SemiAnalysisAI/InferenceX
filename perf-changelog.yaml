@@ -7266,3 +7266,15 @@
     - "Screen 32768-token chunks on dedicated TP8 prefill to reduce passes for long uncached prompts; preserve the decode chunk setting at 8192."
     - "Keep mem-fraction-static 0.75 and AITER's automatic workspace reserve, homogeneous TP8, BF16 KV/Mamba, stock MORI, and golden acceptance length 3.39 unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2984
+
+- config-keys:
+    - qwen3.5-fp8-mi300x-sglang-disagg-agentic-mtp
+    - qwen3.5-fp8-mi300x-sglang-disagg-1p2d-agentic-mtp
+    - qwen3.5-fp8-mi300x-sglang-disagg-2p2d-agentic-mtp
+    - qwen3.5-fp8-mi300x-sglang-disagg-dep16-agentic-mtp
+    - qwen3.5-fp8-mi300x-sglang-disagg-colocated-agentic-mtp
+    - qwen3.5-fp8-mi300x-sglang-srt-agg-agentic-mtp
+  description:
+    - "Require separate eval-only jobs in the shared srt-slurm adapter so accuracy evaluation cannot be silently skipped or mixed with golden-AL throughput."
+    - "Make shared cache flushing opt-in; retain the existing explicit MI300X setting while preserving unrelated non-SGLang replay behavior."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2984

@@ -263,7 +263,10 @@ Runner 会在 replay 前写入命令，并在聚合后校验原始结果（[执�
 连续三次轮询均为空。缺少必要指标或 L1/L2 缓存清理失败时，原生运行会报错；
 L3 清理仍为可选操作。Qwen3.5 MI300X AgentX 运行（包括快速验证）均保留
 golden acceptance length 3.39。真实输出诊断和 eval 与 golden-AL AgentX replay
-分开执行。快速运行不能作为 canonical Pareto frontier 结果。
+分开执行。共享 srt-slurm adapter 要求 eval 使用独立的 `EVAL_ONLY=true` 作业，
+不在同一组 worker 上混合 golden-AL 吞吐测试和准确率评估。缓存清理必须通过
+`CLEAR_CACHE_BETWEEN_CONC=1` 显式启用，原生 MI300X recipe 已设置此项；
+现有非 SGLang 使用方默认不执行缓存清理。快速运行不能作为 canonical Pareto frontier 结果。
 
 GitHub Actions 是 orchestration/最终状态视图；cluster 是实时诊断来源。从 InferenceX Clusters canvas 获取 SSH alias、runner user 和受访问控制的路径。绝不要猜测或公开私有基础设施坐标。
 

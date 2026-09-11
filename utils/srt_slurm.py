@@ -124,7 +124,9 @@ def _configure_evaluation(recipe: dict[str, Any], environment: Mapping[str, str]
     benchmark_env = recipe["benchmark"]["env"]
     eval_only = environment.get("EVAL_ONLY", "false").lower() == "true"
     run_eval = environment.get("RUN_EVAL", "false").lower() == "true"
-    if eval_only or run_eval:
+    if run_eval and not eval_only:
+        raise ValueError("srt-slurm requires a separate EVAL_ONLY=true job for evaluation")
+    if eval_only:
         benchmark_env["SRTCTL_LM_EVAL_RESULT_DIR"] = "/results/{job_id}/eval"
         backend = recipe.get("backend", {})
         for role in ("prefill", "decode", "aggregated"):
@@ -165,10 +167,7 @@ def _configure_evaluation(recipe: dict[str, Any], environment: Mapping[str, str]
         for key, value in topology_defaults.items():
             benchmark_env.setdefault(key, value)
 
-        if eval_only:
-            recipe["benchmark"]["command"] = _EVAL_COMMAND
-        else:
-            recipe["benchmark"]["command"] = recipe["benchmark"]["command"].rstrip() + "\n" + _EVAL_COMMAND
+        recipe["benchmark"]["command"] = _EVAL_COMMAND
 
 
 def collect_results(
@@ -225,7 +224,7 @@ def collect_results(
 
     if eval_only or environment.get("RUN_EVAL", "false").lower() == "true":
         eval_dir = result_dir / "eval"
-        if eval_only and not (eval_dir / "meta_env.json").is_file():
+        if not (eval_dir / "meta_env.json").is_file():
             raise ValueError(f"No eval metadata found in {eval_dir}")
         for artifact in eval_dir.glob("*"):
             if artifact.is_file():
