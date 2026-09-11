@@ -159,6 +159,24 @@ The aggregate artifact matches the `bmk_*` collection pattern and therefore also
 
 Server logs are separate `server_logs_<RESULT_FILENAME>` artifacts. The app uses the fully stripped suffix fallback so AgentX rows can find a server log even though the log artifact has no `agentic_` prefix.
 
+Ordinary single-node AgentX runs enable the shared GPU power monitor by default.
+Their `power_audit_<RESULT_FILENAME>` artifact retains the raw telemetry, GPU
+identity, formal measurement window, timezone offset, and validation verdict
+from `results/`. Multinode runs retain the deployment telemetry under
+`LOGS/power/` and per-concurrency window/validation files under `LOGS/agentic/`
+in the same audit artifact. Available audits and AgentX aggregates upload even
+when a benchmark fails. Missing files do not establish power support: a
+multinode recipe also needs a compatible producer and launcher adapter.
+When that measurement-window contract is absent, the aggregate records
+`power_valid: 0` and the audit names `multinode_power_contract_missing`;
+`REQUIRE_POWER=1` also fails the job after preserving available results.
+
+Treat `power_valid: 1` with `power_metric_schema_version: 2` as a GPU telemetry
+verdict, not a request-accounting or model-quality verdict. Before using a point
+as a clean comparison, reconcile issued, completed, cancelled, and errored
+requests with raw profiling records and token totals. GPU-board energy is
+separate from estimated whole-system power.
+
 ### Raw inputs and aggregate schema
 
 [`process_agentic_result.py`](../utils/agentic/aggregation/process_agentic_result.py) resolves the current `results/aiperf_artifacts` layout and a one-child nested layout. It requires `profile_export.jsonl`. It reads these inputs when present:
@@ -172,7 +190,13 @@ Server logs are separate `server_logs_<RESULT_FILENAME>` artifacts. The app uses
 
 Every nonblank JSONL record increments `records_total`. Records with `metadata.benchmark_phase` other than `profiling` are warmup diagnostics and are excluded. Records with a truthy `error` are also excluded and categorized. Older records with no phase are treated as profiling. The retained count becomes `num_requests_successful`. The full accounting is preserved in `request_accounting` with profiled, total dropped, warmup dropped, error dropped, and `error_categories` fields.
 
-The AgentX aggregate has top-level identity and topology fields compatible with benchmark ingestion. Important AgentX fields include:
+The AgentX aggregate has top-level identity and topology fields compatible with benchmark ingestion.
+
+`num_gpus` explicitly records the physical count used by the shared processor.
+For single-node runs this is `tp * pp * pcp_size`; EP and DCP share devices.
+Consumers should prefer this count over inferring it from parallelism labels.
+
+Other important AgentX fields include:
 
 | Field group | Important fields |
 | --- | --- |
