@@ -43,6 +43,8 @@ This page explains how a declared benchmark becomes a validated job, a runtime r
 | [`runners/`](../runners/) | Fleet-specific model paths, mounts, container or Slurm setup, and benchmark-script routing |
 | [`benchmarks/benchmark_lib.sh`](../benchmarks/benchmark_lib.sh) | Shared server readiness, benchmark client, eval, AgentX replay, and output behavior |
 | [`benchmarks/`](../benchmarks/) | Framework and topology-specific server and client commands |
+| [`infx/github.py`](../infx/github.py) | GitHub REST, pagination, and comment reactions shared by workflow operations |
+| [`infx/workflows/`](../infx/workflows/) | Reuse command parsing, authorization lookup, source-run validation, and reaction feedback; the existing reuse CLI remains compatible |
 | [`infx/results/`](../infx/results/) | Importable result builders, component metadata parsing, and power-metric transformations; [`utils/process_result.py`](../utils/process_result.py) preserves the fixed-sequence CLI |
 | [`.github/workflows/collect-results.yml`](../.github/workflows/collect-results.yml), [`.github/workflows/collect-evals.yml`](../.github/workflows/collect-evals.yml) | Run-level benchmark and eval artifact aggregation |
 
@@ -169,6 +171,8 @@ bash ./runners/launch_${RUNNER_NAME%%_*}.sh
 
 The prefix before the first underscore therefore identifies the fleet launcher. Runner naming and launcher filenames are one routing contract.
 
+`infx.github` owns the shared REST, pagination, and comment-reaction primitives. `infx.workflows.reuse` owns reuse selection and validation, while `infx.workflows.reuse_comment` owns comment reaction feedback. Both are executable package modules. `utils/find_reusable_sweep_run.py` preserves direct script execution and legacy imports, which resolve to the same canonical module. These helpers use only the standard library.
+
 ## Stage 4: launcher and runtime execution
 
 A launcher under [`runners/`](../runners/) adapts logical job metadata to one physical fleet. Depending on the fleet and topology, it may:
@@ -205,9 +209,21 @@ result = build_result(raw_benchmark, runtime_env)
 
 New formats should expose their own typed builder under `infx/results/`, accepting the inputs that format needs and returning a dictionary. Compose shared transformations as ordinary function calls; keep file discovery, environment defaults, error presentation, and serialization in the format's CLI adapter. Existing AgentX topology and request/server processing retain their own policies.
 
-Two helpers are shared by the current processing paths:
+[`infx.results.agentic.build_result`](../infx/results/agentic/__init__.py) owns AgentX aggregate construction, including request metrics, backend selection, server metrics, and per-GPU throughput. It accepts loaded AIPerf records, profile and server-metric mappings, and an explicit environment mapping. Optional `traces` are raw trace objects from the declared dataset; optional `server_logs` contain one decoded file head per item. The builder does not open files or read process environment. It returns unrounded metrics and does not mutate inputs; dataset and request-accounting mappings remain shared with the result.
+
+```python
+from infx.results.agentic import build_result
+
+result = build_result(records, profile, server_metrics, runtime_env,
+                      traces=trace_objects, server_logs=log_texts)
+```
+
+The existing `python -m utils.agentic.aggregation.process_agentic_result` command retains artifact discovery, record filtering/accounting, trace-cache lookup, bounded log reads, rounding, diagnostics, and output writes. It supplies lazy trace and log iterators so metadata validation still precedes trace reads and backends only read logs they use. Request/server algorithms and backend precedence remain inside the package. Dataset matching, cache precedence, and ambiguous-snapshot handling remain in the CLI's shared artifact loader, which also serves the power adapter. Internal Python imports use `infx.results.agentic`; command paths, environment variables, and artifact schemas are unchanged.
+
+The current processing paths share these helpers:
 
 - [`parse_component_metadata`](../infx/results/metadata.py) accepts a raw JSON value and diagnostic label. Callers select whether `version` is optional and whether invalid input raises `ValueError` or `SystemExit`, preserving their existing contracts.
+- [`Parallelism`](../infx/results/topology.py) shares GPU-count calculation, parallelism result fields, and normalization when there are no separate decode GPUs. Fixed-sequence results retain explicit allocation counts; AgentX derives counts from its workers. Each caller retains its environment defaults, validation order, errors, and throughput denominators.
 - [`with_power_metrics`](../infx/results/power/__init__.py) returns a copy with the supplied metric family replaced, removes stale validity reasons, and validates and rounds new metrics. Callers supply metric keys and schema version, then own artifact writes and validation sidecars. This allows another metric family to reuse the transformation without changing its implementation.
 
 Power telemetry engines also live in [`infx.results.power`](../infx/results/power/): `single_node.run` consumes GPU-monitor CSVs, while `multinode.run` validates srt-slurm artifact packages. They share benchmark-window parsing, per-device integration, aggregate replacement, and audit serialization through `common.py`, while retaining their own telemetry validation and failure policies. Fixed-sequence and AgentX adapters import these engines directly; new result formats can supply their benchmark window and token counts to the matching engine.

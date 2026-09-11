@@ -100,16 +100,8 @@ SWEEP_LABELS="$(jq -c '
     ]
 ' <<<"$PR_INFO")"
 SWEEP_LABEL_COUNT="$(jq 'length' <<<"$SWEEP_LABELS")"
-[ "$SWEEP_LABEL_COUNT" -eq 1 ] \
-    || die "PR #${PR} must have exactly one sweep label"
-SELECTED_SWEEP_LABEL="$(jq -r '.[0]' <<<"$SWEEP_LABELS")"
-case "$SELECTED_SWEEP_LABEL" in
-    full-sweep-enabled|non-canary-full-sweep-enabled|full-sweep-fail-fast|full-sweep-fail-fast-no-canary)
-        ;;
-    *)
-        die "PR #${PR} must use a full-sweep label for artifact reuse"
-        ;;
-esac
+[ "$SWEEP_LABEL_COUNT" -le 1 ] \
+    || die "PR #${PR} has multiple conflicting sweep labels"
 REUSE_INCOMPATIBLE_LABELS="$(
     jq -r '
         [.labels[].name | select(. == "evals-only" or . == "agentx-fast")] |
@@ -146,8 +138,8 @@ if [ -z "$ELIGIBLE_RUN" ]; then
 fi
 
 # --- step 1: comment ---------------------------------------------------------
-log "Posting /reuse-sweep-run on PR #${PR}"
-gh pr comment "$PR" --repo "$REPO" --body "/reuse-sweep-run" >/dev/null
+log "Posting /reuse-sweep-run ${ELIGIBLE_RUN} on PR #${PR}"
+gh pr comment "$PR" --repo "$REPO" --body "/reuse-sweep-run ${ELIGIBLE_RUN}" >/dev/null
 ok "Comment posted"
 
 # --- step 2: merge main into PR branch --------------------------------------

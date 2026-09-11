@@ -167,6 +167,107 @@ llm-d 不是 srt-slurm 路径：InferenceX 自己持有 Slurm allocation，并�
 7. 同时添加脚本 + 主配置条目 + launcher 路由 + changelog。
 8. 运行 Bash 语法和生成检查；检查 `spec-decoding`、draft/native 方法、token 数、chat-template 使用、capture 范围和解析出的脚本。
 
+### DeepSeek-V4.1-Flash DSpark
+
+仅运行 AgentX 的 `dsv41flash-fp4-<sku>-vllm-agentic-dspark` 配方使用
+`vllm/vllm-openai:deepseekv41-flash-0909`，在 Blackwell SKU 上采用 TP4、原生五 token DSpark、
+概率采样草稿。吞吐测试使用[已提交的黄金 AL](../golden_al_distribution/dsv41flash_dspark.yaml)：thinking 开启、五个草稿 token 对应 3.51，采用合成拒绝采样并关闭自适应验证。准确率 eval 保留真实块拒绝采样和自适应验证。
+`--engram-config '{"cpu_offload":true}'` 将 Engram 嵌入表放在固定页主机 DRAM
+中，通过 UVA 访问；`kv-offloading: none` 描述的是另行保留在 GPU 上的 KV cache。
+专家权重为 MXFP4，因此配方标记为 `precision: fp4`。
+
+各 GPU 入口共用纯文本服务脚本，使用 `deepseek_v41` tokenizer 和解析器、1M 上下文，
+以及共享的 AgentX 轨迹回放、功耗、指标和 eval helper。并发范围为 1–128。模型 runner 选择和调度批处理沿用官方单节点 TP 配方的默认值；
+CUDA graph capture 覆盖并发数乘以六 token DSpark 验证块。launcher 都为该配方将仓库挂载到 `/ix`，避免在 `/workspace`
+下创建 AgentX 运行目录。沿用各 launcher 的模型路径和持久化缓存。配方在计算节点探测服务端口，首选端口被占用时选择可用端口，
+服务、回放、指标和 eval 共用同一端点。所有配方都必须获得 GPU sweep 和 eval
+证据后才能视为已验证。
+
+GB300 launcher 将引擎就绪等待时间设为 7200 秒。在[运行 34504969146](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34504969146) 中，仅模型加载就耗时 18–23 分钟；Rust frontend 达到 3600 秒期限时，引擎仍在捕获 CUDA graph。此次仅延长启动等待时间，基准测试时长和解码设置保持不变。
+
+来源：[上游配方](https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flash)。
+
+### H200 上的 DeepSeek-V4.1-Flash DSpark
+
+`dsv41flash-fp4-h200-vllm-agentic-dspark` 是 DeepSeek-V4.1-Flash 配方的 H200 AgentX
+分支。它与 Blackwell 分支共用 `vllm/vllm-openai:deepseekv41-flash-0909` 和纯文本服务
+脚本：`deepseek_v41` tokenizer 和解析器、1M 上下文、原生五 token DSpark（概率采样草稿）。吞吐测试使用[已提交的黄金 AL](../golden_al_distribution/dsv41flash_dspark.yaml)：thinking 开启、五个草稿 token 对应 3.51，采用合成拒绝采样并关闭自适应验证。准确率 eval 保留真实块拒绝采样和自适应验证。
+
+该分支使用 **TP8**，而非上游的 TP4。上游在一个 GB200 NVL4 tray 上验证 TP4，并说明在
+8 GPU 节点上同一布局每个角色变为 TP8，而 H200 DGXC 节点正是 8 GPU 节点。
+
+`precision: fp4` 标记检查点中 MXFP4 的路由专家权重，与同一检查点的 Blackwell 和
+MI355X 分支保持一致。Hopper 没有 FP4 tensor core，因此这些权重走上转换的 MoE 路径；
+该标签描述检查点，而非 SKU 的原生算力。
+
+`--engram-config '{"cpu_offload":true}'` 将 Engram 表放在固定页主机 DRAM 中，通过 UVA
+访问；`kv-offloading: none` 描述的是另行驻留 GPU 的 KV cache。集群实测：卸载在 8 个 rank
+上为两张表各移出每 rank 11.80 GiB，共 188.8 GiB，使每 GPU 的驻留权重从 141 GiB 中约占
+35.9 GiB。
+
+轨迹语料：该分支回放未截断的 `semianalysis_cc_traces_weka_062126` 语料，而不是 256k
+截断的 `..._062126_256k` 变体，因为该模型服务 1M 上下文。配方本身并未指定语料 ——
+`resolve_trace_source` 选中未截断的默认值，仅仅是因为其 `dsv4*` 分支同时匹配了
+`dsv41flash` 前缀。这一依赖在调用处并不可见却至关重要，因此由
+`runners/test_dsv41flash_h200.py` 固定；收窄该分支会静默地降级本配方的轨迹。
+
+**H100 分支单独实现。** H100 不在上游硬件表中，且瓶颈不在权重。在 1M 上下文下，稀疏
+注意力 indexer 会在 `fp8_fp4_paged_mqa_logits` 中分配一个
+`[max-num-batched-tokens, max-model-len]` 的 logits 缓冲区，在默认 8192 batched tokens
+下恰好为 16 GiB。这是显存 profiling 阶段固定支付的启动开销，与并发无关，因此即使驻留
+权重放得下，在 80 GB 卡上并发 1 也会失败。因此 H100 分支使用独立脚本并收窄 batched
+tokens，而非共享符号链接，详见下文 H100 小节。
+
+launcher 为该配方将仓库挂载到 `/ix`，避免在 `/workspace` 下创建 AgentX 运行目录；它本来
+就挂载了共享 HF 缓存，因此脚本通过 `HF_HUB_CACHE` 解析模型，而不依赖各节点的独立路径。
+配方在计算节点探测服务端口，首选端口被占用时选择可用端口，服务、回放、指标和 eval 共用
+同一端点。
+
+### H100 上的 DeepSeek-V4.1-Flash DSpark
+
+吞吐测试使用[已提交的黄金 AL](../golden_al_distribution/dsv41flash_dspark.yaml)：thinking 开启、五个草稿 token 对应 3.51，采用合成拒绝采样并关闭自适应验证。准确率 eval 保留真实块拒绝采样和自适应验证。
+
+`dsv41flash-fp4-h100-vllm-agentic-dspark` 是 DeepSeek-V4.1-Flash 配方的 H100 AgentX
+分支，在 H200 分支之后加入，并有意与其分开。H100 **不在**上游硬件表中（该表列出
+h200、gb200、gb300、mi350x）。
+
+与其他 SKU 不同，H100 不使用共享的 `dsv41flash_fp4_vllm_mtp.sh`，而是拥有独立副本，
+因为共享参数无法在 80 GB 卡上服务 1M 上下文。在 1M 上下文下，稀疏注意力 indexer 会在
+`fp8_fp4_paged_mqa_logits` 中分配 `[max-num-batched-tokens, max-model-len]` 的 logits
+缓冲区：按共享脚本实际生效的 8192 batched tokens 计算，即 8192 x 1048576 x 2 字节，
+恰好 16.00 GiB。这是启动阶段显存 profiling 固定支付的开销，与并发无关，因此在
+[34467029236](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34467029236)
+中于并发 1 即 OOM（此时每 GPU 驻留权重约 35.9 GiB）—— 收窄并发列表无济于事。
+
+因此 H100 脚本将 `--max-num-batched-tokens` 限制为 4096，使 indexer 缓冲区降至 8 GiB。
+改为收窄 `--max-model-len` 同样有效，但上下文上限会迫使一个服务 1M 上下文的模型使用
+256k 截断语料，因此 batched tokens 才是正确的调节点。脚本还将 `--max-num-seqs` 设为
+轨迹并发的两倍（而非沿用 vLLM 默认的 1024）、设置 `--gpu-memory-utilization 0.92`，
+并启用 `expandable_segments`，因为失败的分配留下了 1.04 GiB 已保留但未分配的显存。
+
+这些上限在调度任何 sweep 之前，已由单个并发 1 的 `agentx-fast` 运行
+（[34485694183](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34485694183)）
+验证 —— 这一顺序很重要：启动即 OOM 的全量 sweep 会浪费每一个 leg。该运行健康启动，并
+报告了当前并发列表所依据的预算：
+
+```
+Available KV cache memory: 13.47 GiB
+GPU KV cache size: 7,022,899 tokens
+Maximum concurrency for 1,048,576 tokens per request: 6.70x
+```
+
+因此该分支扫描并发 1–4，处于 6.70x 上限之下，避免接近满上下文的轨迹把批次推入抢占。
+若要获得更多 KV，需要进一步缩小 indexer —— `--max-num-batched-tokens 2048` 可再释放约
+4 GiB —— 代价是长轨迹 prefill 的分块更细。待有跨并发的吞吐数据后可重新权衡。
+
+`runners/launch_h100-dgxc-slurm.sh` 此前只解析不带 framework 的 `_h100[_mtp].sh` 名称，
+因此该集群上根本无法运行任何带 framework 的脚本。现在它优先解析
+`_h100_<framework>[_mtp].sh`（与 h200 launcher 自 #392 起的行为一致），并对早于 framework
+标签的配方回退到不带 framework 的名称。它还为该配方将仓库挂载到 `/ix`，避免在
+`/workspace` 下创建 AgentX 运行目录。
+
+来源：[上游配方](https://github.com/vllm-project/recipes/blob/main/models/deepseek-ai/DeepSeek-V4.1-Flash.yaml)。
+
 ## 验证
 
 运行覆盖被修改层的最小检查。

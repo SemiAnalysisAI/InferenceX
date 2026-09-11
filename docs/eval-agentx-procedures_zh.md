@@ -254,7 +254,7 @@ gh run download "$RUN_ID" --repo SemiAnalysisAI/InferenceX \
 - server/frontend 日志以及所代表的每个 metrics endpoint；
 - run URL/ID、attempt、head SHA、recipe/config 标识、image、topology、fast 标志和所有 override。
 
-Runner 会在 replay 前写入命令，并在聚合后校验原始结果（[执行路径](../benchmarks/benchmark_lib.sh#L2320-L2360)）。聚合会保留 dataset provenance 以及硬件/模型/拓扑字段（[aggregate 构造](../utils/agentic/aggregation/process_agentic_result.py#L194-L272)）。工作流的 raw upload 会有意排除体积很大的 `inputs.json` 和 `profile_export_raw.jsonl`；如果调查需要这些文件，应在清理前从实时 allocation 保存（[单节点 artifact 约定](../.github/workflows/benchmark-tmpl.yml#L349-L358)、[多节点约定](../.github/workflows/benchmark-multinode-tmpl.yml#L455-L464)）。
+Runner 会在 replay 前写入命令，并在聚合后校验原始结果（[执行路径](../benchmarks/benchmark_lib.sh#L2320-L2360)）。聚合会保留 dataset provenance 以及硬件/模型/拓扑字段（[aggregate 构造](../infx/results/agentic/__init__.py)）。工作流的 raw upload 会有意排除体积很大的 `inputs.json` 和 `profile_export_raw.jsonl`；如果调查需要这些文件，应在清理前从实时 allocation 保存（[单节点 artifact 约定](../.github/workflows/benchmark-tmpl.yml#L349-L358)、[多节点约定](../.github/workflows/benchmark-multinode-tmpl.yml#L455-L464)）。
 
 ## 9. 用实时证据调试长时间 AgentX 运行
 
