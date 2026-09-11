@@ -55,3 +55,42 @@ def test_gb300_direct_vllm_uses_one_tray_and_propagates_failure(
     assert serve[-2] == "bash" and script.is_file()
     assert all("nginx" not in " ".join(call) for call in calls)
 
+
+@pytest.mark.parametrize("eval_only", ["false", "true"])
+def test_upstream_gb300_command_changes_only_throughput_acceptance(tmp_path: Path, eval_only: str) -> None:
+    import os
+    result = subprocess.run(
+        ["bash", "-c", r'''
+        source() { :; }
+        check_env_vars() { :; }
+        require_agentic_kv_offload_none() { :; }
+        hf() { :; }
+        nvidia-smi() { :; }
+        resolve_trace_source() { :; }
+        install_agentic_deps() { :; }
+        select_available_server_port() { export PORT=23456; }
+        vllm() {
+          python3 -c 'import json,os,sys; open(os.environ["RESULT_DIR"]+"/command.json","w").write(json.dumps({"args":sys.argv[1:],"timeout":os.environ["VLLM_ENGINE_READY_TIMEOUT_S"],"rust":os.environ["VLLM_USE_RUST_FRONTEND"]}))' "$@"
+        }
+        wait_for_server_ready() { wait "$SERVER_PID"; }
+        run_eval() { :; }
+        build_replay_cmd() { :; }
+        run_agentic_replay_and_write_outputs() { :; }
+        builtin source "$1"
+        ''', "bash", str(REPO_ROOT / "benchmarks/single_node/agentic/dsv41flash_fp4_gb300_vllm_mtp.sh")],
+        env={**os.environ, "MODEL": "deepseek-ai/DeepSeek-V4.1-Flash", "TP": "4", "CONC": "1", "RESULT_DIR": str(tmp_path), "EVAL_ONLY": eval_only, "VLLM_ENGINE_READY_TIMEOUT_S": "7200"},
+        capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    command = json.loads((tmp_path / "command.json").read_text())
+    args = command["args"]
+    spec_index = args.index("--speculative-config") + 1
+    spec = json.loads(args[spec_index])
+    expected_spec = {"method": "dspark", "num_speculative_tokens": 5, "draft_sample_method": "probabilistic", "rejection_sample_method": "block", "enable_adaptive_verification": True}
+    if eval_only == "false":
+        expected_spec.update(rejection_sample_method="synthetic", synthetic_acceptance_length=3.51)
+    assert spec == expected_spec
+    args[spec_index] = "SPEC"
+    assert args == ["serve", "deepseek-ai/DeepSeek-V4.1-Flash", "--tokenizer-mode", "deepseek_v41", "--tensor-parallel-size", "4", "--tool-call-parser", "deepseek_v41", "--enable-auto-tool-choice", "--reasoning-parser", "deepseek_v41", "--speculative-config", "SPEC", "--language-model-only", "--port", "23456"]
+    assert command["timeout"] == "3600"
+    assert command["rust"] == "1"

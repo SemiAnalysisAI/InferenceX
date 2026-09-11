@@ -7164,3 +7164,10 @@
   description:
     - "Allow 7200 seconds for GB300 DSv4.1 Flash engine startup; the one-hour frontend deadline interrupted cold graph capture"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2961
+
+- config-keys:
+    - dsv41flash-fp4-gb300-vllm-agentic-dspark
+  description:
+    - "Diagnostic GB300 run matching the upstream TP4 text-only recipe, replacing only DSpark rejection with synthetic AL 3.51 while retaining adaptive verification."
+    - "Remove forced Engram CPU offload and custom graph capture sizing; restore upstream engine readiness timeout and model context defaults."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2961
