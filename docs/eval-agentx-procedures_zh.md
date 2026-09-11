@@ -63,7 +63,7 @@ uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with p
 1. 按照 lm-evaluation-harness task 格式添加 `utils/evals/<task>.yaml`。固定 dataset/split、确定性生成设置、prompt 约定、filter 和主指标。可参考仓库内的 [`gsm8k.yaml`](../utils/evals/gsm8k.yaml) 或 [`gpqa_diamond.yaml`](../utils/evals/gpqa_diamond.yaml)。
 2. 为 `task:` 指定稳定名称。分数阈值以该精确名称为键，收集后的行中也会出现该名称。
 3. 在 [`utils/evals/thresholds.yaml`](../utils/evals/thresholds.yaml) 中添加最低可接受分数。通用下限放在 `default`；只有在确有依据需要模型专用下限时，才添加 `models.<model-prefix>.<task>`。
-4. 如果 task 的主结果与 collector 的 strict/extract/accuracy 规则不兼容，请扩展 [`extract_lm_metrics()`](../utils/collect_eval_results.py#L115-L197)。不要发布 `score` 为 null 的行。
+4. 如果 task 的主结果与 collector 的 strict/extract/accuracy 规则不兼容，请扩展 [`infx.results.evals`](../infx/results/evals.py) 中的 `extract_metrics()`。该函数接收已加载的 JSON 和显式来源信息；`build_rows()` 应用收集器的分数验证及元数据转换规则。发布为成功结果的行必须具有非 null 的 `score`。
 5. 先运行一个显式的小切片并检查样本，再运行完整 split。`EVAL_LIMIT` 是 smoke test 控制项，不是可发布分数的运行设置。
 
 对已经健康的 OpenAI-compatible 服务执行：

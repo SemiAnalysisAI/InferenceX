@@ -42,7 +42,7 @@ These files are the contract. Follow the target ref's source rather than copying
 | Single- and multi-node artifact uploads | [`.github/workflows/benchmark-tmpl.yml`](../.github/workflows/benchmark-tmpl.yml), [`.github/workflows/benchmark-multinode-tmpl.yml`](../.github/workflows/benchmark-multinode-tmpl.yml) |
 | Throughput and eval aggregation | [`.github/workflows/collect-results.yml`](../.github/workflows/collect-results.yml), [`.github/workflows/collect-evals.yml`](../.github/workflows/collect-evals.yml), [`utils/collect_results.py`](../utils/collect_results.py), [`utils/collect_eval_results.py`](../utils/collect_eval_results.py) |
 | Changelog byte/diff/matrix gate | [`utils/validate_perf_changelog.py`](../utils/validate_perf_changelog.py), [`utils/process_changelog.py`](../utils/process_changelog.py) |
-| Reuse authorization and source-run selection | [`utils/find_reusable_sweep_run.py`](../utils/find_reusable_sweep_run.py) |
+| Reuse authorization and source-run selection | [`infx/workflows/reuse.py`](../infx/workflows/reuse.py) |
 | Supported reuse merge and conflict preparation | [`utils/merge_with_reuse.sh`](../utils/merge_with_reuse.sh), [`utils/prepare_perf_changelog_merge.py`](../utils/prepare_perf_changelog_merge.py) |
 | Staging request and callback | [`.github/workflows/stage-results.yml`](../.github/workflows/stage-results.yml), [`.github/workflows/stage-results-callback.yml`](../.github/workflows/stage-results-callback.yml) |
 | Reused agentic-ingest redispatch | [`.github/workflows/recover-reused-ingest.yml`](../.github/workflows/recover-reused-ingest.yml) |
@@ -377,13 +377,21 @@ Reuse prevents an approved full PR sweep from being rerun on `main`. It is not a
 
 ### Eligibility and authorization
 
-1. The PR must retain exactly one full-sweep primary label: `full-sweep-enabled`, `non-canary-full-sweep-enabled`, `full-sweep-fail-fast`, or `full-sweep-fail-fast-no-canary`.
+`infx.github` provides repository-scoped REST calls, pagination, and comment-reaction primitives. It contains no sweep policy. `infx.workflows.reuse` owns command parsing, authorization lookup, and source-run selection/validation. `infx.workflows.reuse_comment` uses those same rules for reaction feedback. Workflows run these modules with `python3 -m`; the existing `utils/find_reusable_sweep_run.py` command and imports remain compatible. The package uses only the standard library and requires no installation from a checkout.
+
+1. Reuse does not require a sweep label. Labels select new GPU work; removing a primary label does not invalidate an existing source run. Conflicting primary labels remain rejected by changelog validation and the merge helper.
 2. `evals-only` and `agentx-fast` make the run ineligible. A default full sweep and a full sweep with `all-evals` remain eligible.
 3. The source must be a completed PR `run-sweep.yml` run whose head SHA is still in the PR commit list and which has an unexpired `results_bmk`, `eval_results_all`, or `bmk_agentic_*` result artifact.
 4. An `OWNER`, `MEMBER`, or `COLLABORATOR` authorizes reuse with `/reuse-sweep-run` or `/reuse-sweep-run <run_id>`. The newest authorized matching command determines whether source selection is automatic or pinned.
 5. Unpinned selection requires the latest eligible source run to be successful. A pinned run is an explicit maintainer decision and may have conclusion `success`, `failure`, or `cancelled`. Downstream ingestion keeps only available/valid rows, so report it as partial rather than green.
 
-The comment does not trigger a run. On a later PR `synchronize` event, the reuse gate skips another PR sweep after changelog validation. On `main`, authorization that maps ambiguously, points to an invalid run, or conflicts with labels fails closed. With no authorization, `main` performs the normal sweep.
+Reuse validation checks source identity and available artifacts, not full-matrix coverage. A successful `sweep-enabled` (trimmed) source is eligible, including for automatic selection, and publishes only its recorded points on `main`. Acceptance does not certify a green full sweep or satisfy that review requirement. To reuse a full sweep specifically, verify its coverage and pin its run ID.
+
+The comment starts a lightweight validation workflow using default-branch code and `GITHUB_TOKEN`. It adds 👍 to the original comment when accepted, or 👎 when rejected; the Actions run summary explains a rejection. It posts no separate comment and starts no GPU work. Editing the command clears the bot's old reaction and checks the new request. Human reactions are preserved; the newest authorized command still takes precedence.
+
+Acceptance means the request has an eligible source at validation time. Reactions do not authorize reuse themselves. The source is revalidated on PR synchronization and merge, so missing/expired artifacts or invalid source commits still fail closed. An unpinned request retains its existing latest-successful-run selection; pin a run ID to select a particular run.
+
+On a later PR `synchronize` event, the reuse gate skips another PR sweep only after changelog and source-run validation. On `main`, authorization that maps ambiguously, points to an invalid run, or conflicts with labels fails closed. With no authorization, `main` performs the normal sweep.
 
 ### Supported merge path
 
@@ -393,7 +401,7 @@ Run from a clean checkout with authenticated `gh`, `git`, `jq`, and Python:
 utils/merge_with_reuse.sh <pr-number>
 ```
 
-[`merge_with_reuse.sh`](../utils/merge_with_reuse.sh) verifies an eligible successful source artifact, posts the authorization, merges `origin/main` into the PR branch, resolves only a `perf-changelog.yaml` conflict, canonicalizes appended `XXX` links, creates/pushes a synchronization commit when needed, waits for `check-changelog` and all PR checks, verifies the head did not move, and admin squash-merges. It refuses forks, dirty worktrees, multiple primary labels, incompatible modifiers, unexpected conflicts, missing artifacts, failed checks, or a moving PR head.
+[`merge_with_reuse.sh`](../utils/merge_with_reuse.sh) verifies an eligible successful source artifact, posts the authorization pinned to that run, merges `origin/main` into the PR branch, resolves only a `perf-changelog.yaml` conflict, canonicalizes appended `XXX` links, creates/pushes a synchronization commit when needed, waits for `check-changelog` and all PR checks, verifies the head did not move, and admin squash-merges. It refuses forks, dirty worktrees, multiple primary labels, incompatible modifiers, unexpected conflicts, missing artifacts, failed checks, or a moving PR head.
 
 Do not manually reproduce only half of this sequence. In particular, posting the comment and squash-merging without the synchronization/check phase can leave the merge run unable to select the intended source.
 

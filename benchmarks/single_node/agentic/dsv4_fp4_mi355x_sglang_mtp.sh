@@ -121,25 +121,24 @@ if agentic_kv_offload_enabled; then
 fi
 
 # ---- Parallelism ------------------------------------------------------------
-# NOTE: the DP-attention path below is currently DORMANT (no dp-attn arms in
-# amd-master.yaml for this key). It is kept so a future arm can enable it
-# without rebuilding the router plumbing: sglang-router fronts the DP ranks
-# with consistent hashing on the AIPerf correlation id, keeping multi-turn
-# sessions on the DP rank that holds their radix/hicache prefix.
+# The DP-attention path below is live: sglang-router fronts the DP ranks with
+# consistent hashing on the AIPerf correlation id, keeping multi-turn sessions
+# on the DP rank that holds their radix/hicache prefix.
 USE_SGLANG_ROUTER=false
 SGLANG_BACKEND_PORT="$PORT"
-# Small prefill chunks interleave long-context agentic prefills across
-# requests instead of letting one ~100K-token prefill monopolize the engine
-# (the conc>=16 queue-saturation / decode-stall failure mode). 8192 = 32*256,
-# a page-size multiple well under the dsv4 compressor kernel's uint16 token
-# cap; same value the multi-node DeepSeek-V4-Pro-AgentX no_dp profile uses.
-if [ "$TP" -eq 8 ]; then
+# Small prefill chunks interleave long-context agentic prefills. The flag is
+# engine-wide and DP divides it by dp_size (=TP), so DP uses 8192*TP to keep
+# 8192 per rank. TP-only: 8192 at TP4, 16384 at TP8.
+case "$TP" in
+    4|8) ;;
+    *) echo "Error: unsupported TP '$TP' (expected: 4 or 8)" >&2; exit 1 ;;
+esac
+if [ "$DP_ATTENTION" = "true" ]; then
+    CHUNKED_PREFILL_SIZE=$((8192 * TP))
+elif [ "$TP" -eq 8 ]; then
     CHUNKED_PREFILL_SIZE=16384
-elif [ "$TP" -eq 4 ]; then
-    CHUNKED_PREFILL_SIZE=8192
 else
-    echo "Error: unsupported TP '$TP' (expected: 4 or 8)" >&2
-    exit 1
+    CHUNKED_PREFILL_SIZE=8192
 fi
 MEM_FRACTION_STATIC="${MEM_FRACTION_STATIC:-0.86}"
 PARALLEL_ARGS=(--tensor-parallel-size "$TP")
@@ -158,32 +157,29 @@ if [ "$DP_ATTENTION" = "true" ]; then
     export SGLANG_DP_USE_GATHERV=1
     export SGLANG_DP_USE_REDUCE_SCATTER=1
     export GPU_MAX_HW_QUEUES="${GPU_MAX_HW_QUEUES_DP:-5}"
-    SHARED_EXPERTS_ARGS=(--disable-shared-experts-fusion)
-    SWA_FULL_TOKENS_RATIO="${SWA_FULL_TOKENS_RATIO_DP:-0.15}"
+    MEM_FRACTION_STATIC="${MEM_FRACTION_STATIC_DP:-0.92}"
 
-    # Chunked prefill is a whole-engine budget, so widen it by the DP degree.
-    CHUNKED_PREFILL_SIZE=$((CHUNKED_PREFILL_SIZE * TP))
     PARALLEL_ARGS+=(
         --dp "$TP"
         --enable-dp-attention
         --enable-prefill-delayer
-        --enable-two-batch-overlap
         --enable-dp-attention-local-control-broadcast
         --tokenizer-worker-num "$TP"
         --stream-interval 20
         --prefill-decode-interval 10
+        --prefill-delayer-token-usage-low-watermark "${DP_PREFILL_DELAYER_LOW_WATERMARK:-0.7}"
     )
 fi
 
 if [ "$EP_SIZE" -gt 1 ]; then
     PARALLEL_ARGS+=(--ep-size "$EP_SIZE")
+    SHARED_EXPERTS_ARGS=(--disable-shared-experts-fusion)
 fi
 
 # AgentX concurrency counts live session trees, not individual requests.
 # Subagent fan-out can push instantaneous request concurrency above CONC, so
 # leave 2x headroom rather than clipping those bursts at the scheduler.
 MAX_RUNNING_REQUESTS=$((2 * CONC))
-[ "$MAX_RUNNING_REQUESTS" -gt 256 ] && MAX_RUNNING_REQUESTS=256
 CUDA_GRAPH_MAX_BS=$MAX_RUNNING_REQUESTS
 [ "$CUDA_GRAPH_MAX_BS" -gt 128 ] && CUDA_GRAPH_MAX_BS=128
 
@@ -196,24 +192,32 @@ fi
 # ---- Speculative decoding ---------------------------------------------------
 # DeepSeek-V4 ships a built-in MTP head, loaded through the EAGLE spec path
 # with eagle-topk 1 (a single MTP chain); NOT NEXTN, whose V3/R1 loader
-# crashes on the V4 architecture. Depth 3 matches the vLLM agentic sibling
-# (dsv4-fp4-mi355x-vllm-agentic-mtp) and the fixed-seq-len SGLang MTP recipe.
+# crashes on the V4 architecture.
+if [ "$CONC" -ge 256 ]; then
+    DSV4_SPEC_NUM_STEPS=1
+    DSV4_GOLDEN_AL=1.79
+else
+    DSV4_SPEC_NUM_STEPS=3
+    DSV4_GOLDEN_AL=2.49
+fi
+
 SPEC_ARGS=(
     --speculative-algorithm EAGLE
-    --speculative-num-steps 3
+    --speculative-num-steps "$DSV4_SPEC_NUM_STEPS"
     --speculative-eagle-topk 1
-    --speculative-num-draft-tokens 4
+    --speculative-num-draft-tokens $((DSV4_SPEC_NUM_STEPS + 1))
 )
 
 # Throughput runs pin acceptance to the committed golden AL for this model,
-# thinking mode, and draft length (golden_al_distribution/dsv4_mtp.yaml:
-# thinking_on, 3 -> 2.49). Eval-only runs keep real target verification so
-# accuracy stays meaningful.
+# thinking mode, and draft length (golden_al_distribution/dsv4_mtp.yaml,
+# thinking_on column: 3 -> 2.49, 1 -> 1.79). Eval-only runs keep real target
+# verification so accuracy stays meaningful.
 if [ "${EVAL_ONLY:-false}" != "true" ]; then
-    export SGLANG_SIMULATE_ACC_LEN=2.49
+    export SGLANG_SIMULATE_ACC_LEN="$DSV4_GOLDEN_AL"
     export SGLANG_SIMULATE_ACC_METHOD=match-expected
     export SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token
 fi
+echo "MTP draft length: num_steps=$DSV4_SPEC_NUM_STEPS (conc $CONC), golden AL=$DSV4_GOLDEN_AL"
 
 # ---- Launch -----------------------------------------------------------------
 # No --chat-template: the AgentX traces are tool-heavy, and
