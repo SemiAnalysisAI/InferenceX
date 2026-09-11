@@ -99,6 +99,30 @@ import_squash() {
     ) || exit 1
 }
 
+# Direct single-tray AgentX uses the existing shared image and HF caches.
+if [[ "$MODEL_PREFIX" == "dsv41flash" && "$FRAMEWORK" == "vllm" && "${IS_MULTINODE:-false}" != "true" ]]; then
+    BENCH_SCRIPT="benchmarks/single_node/agentic/${MODEL_PREFIX}_${PRECISION}_gb200_${FRAMEWORK}_mtp.sh"
+    [[ "${IS_AGENTIC:-0}" == "1" && "${SPEC_DECODING:-}" == "mtp" && -f "$BENCH_SCRIPT" ]] || {
+        echo "Unsupported single-node recipe: $BENCH_SCRIPT" >&2
+        exit 1
+    }
+    HF_HUB_CACHE_HOST_PATH="/mnt/lustre01/users-public/sa-shared/hf-hub-cache"
+    mkdir -p "$HF_HUB_CACHE_HOST_PATH"
+    export MODEL_PATH="$MODEL" HF_HUB_CACHE=/hf-cache
+    export INFMAX_CONTAINER_WORKSPACE=/ix RESULT_DIR=/ix/results
+    SQUASH_FILE="$SQUASH_DIR/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    import_squash "$SQUASH_FILE" "$IMAGE"
+    srun --account="$SLURM_ACCOUNT" --partition="$SLURM_PARTITION" \
+        --nodes=1 --ntasks=1 --gpus="${TP:?}" --exclusive --mem=0 \
+        --time="${SALLOC_TIME_LIMIT:-480}" --job-name="$RUNNER_NAME" \
+        --mpi=none --container-image="$SQUASH_FILE" \
+        --container-mounts="$GITHUB_WORKSPACE:/ix,$HF_HUB_CACHE_HOST_PATH:/hf-cache" \
+        --no-container-mount-home --container-remap-root \
+        --container-workdir=/ix --no-container-entrypoint \
+        --export=ALL,PORT=8888 bash "$BENCH_SCRIPT"
+    exit $?
+fi
+
 if [[ "$FRAMEWORK" == "llmd-vllm" ]]; then
     if [[ "$MODEL_PREFIX" == "dsv4" && "$PRECISION" == "fp4" ]]; then
         export MODEL_PATH="/mnt/numa1/models/DeepSeek-V4-Pro"
@@ -404,8 +428,8 @@ if [ -d "$SRT_REPO_DIR" ]; then
     rm -rf "$SRT_REPO_DIR"
 fi
 
-# GLM-5.2 and MiniMax-M3 AgentX use v1.0.50 for complete logical-worker
-# metrics discovery across aggregate, DP-attention, and disaggregated topologies.
+# GLM-5.2 uses v1.0.50 for complete logical-worker metrics discovery across
+# aggregate, DP-attention, and disaggregated topologies.
 if [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "glm5.2" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
     git clone --branch v1.0.50 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
@@ -417,10 +441,12 @@ if [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "glm5.2" && "$PRECISION" == "fp
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5.2/gb200-fp4/agentic" \
         recipes/sglang/glm5.2/gb200-fp4/agentic
 elif [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "minimaxm3" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-vllm" ]]; then
-    git clone --branch v1.0.50 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    SRT_SLURM_MINIMAX_PIN="d50ee7280c33d469df8708e363e23be2456e94fb"
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
-    test "$(git rev-parse HEAD)" = "e4019633c9e2bc25f38c44b81edf52bb0504d937" || {
-        echo "Error: NVIDIA/srt-slurm v1.0.50 resolved to an unexpected commit" >&2
+    git checkout "$SRT_SLURM_MINIMAX_PIN"
+    test "$(git rev-parse HEAD)" = "$SRT_SLURM_MINIMAX_PIN" || {
+        echo "Error: NVIDIA/srt-slurm MiniMax-M3 revision resolved to an unexpected commit" >&2
         exit 1
     }
     mkdir -p recipes/vllm/minimax-m3/gb200-fp4/agentic

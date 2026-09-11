@@ -50,7 +50,7 @@ Preview the exact matrix before consuming a runner:
 
 ```bash
 uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
-  utils/matrix_logic/generate_sweep_configs.py \
+  python -m infx.matrix.generate \
   test-config \
   --config-keys qwen3.5-fp8-b200-sglang-agentic \
   --conc 1 \
@@ -62,10 +62,10 @@ A correct AgentX eval row contains `"scenario-type": "agentic-coding"`, `"run-ev
 
 ## 2. Add a graded eval
 
-1. Add `utils/evals/<task>.yaml` using the lm-evaluation-harness task format. Pin the dataset/split, deterministic generation settings, prompt contract, filters, and primary metric. Use [`gsm8k.yaml`](../utils/evals/gsm8k.yaml) or [`gpqa_diamond.yaml`](../utils/evals/gpqa_diamond.yaml) as an in-tree pattern.
+1. Add `infx/evals/<task>.yaml` using the lm-evaluation-harness task format. Pin the dataset/split, deterministic generation settings, prompt contract, filters, and primary metric. Use [`gsm8k.yaml`](../infx/evals/gsm8k.yaml) or [`gpqa_diamond.yaml`](../infx/evals/gpqa_diamond.yaml) as an in-tree pattern.
 2. Give `task:` a stable name. That exact name is the key used by score thresholds and appears in collected rows.
-3. Add the minimum accepted score to [`utils/evals/thresholds.yaml`](../utils/evals/thresholds.yaml). Put a general floor under `default`. Add `models.<model-prefix>.<task>` only when a justified model-specific floor is required.
-4. If the task's primary result is not compatible with the collector's strict/extract/accuracy rules, extend [`extract_lm_metrics()`](../utils/collect_eval_results.py#L115-L197). Do not publish a row whose `score` is null.
+3. Add the minimum accepted score to [`infx/evals/thresholds.yaml`](../infx/evals/thresholds.yaml). Put a general floor under `default`. Add `models.<model-prefix>.<task>` only when a justified model-specific floor is required.
+4. If the task's primary result is not compatible with the collector's strict/extract/accuracy rules, extend `extract_metrics()` in [`infx.results.evals`](../infx/results/evals.py). It accepts loaded JSON and explicit source provenance; `build_rows()` applies collector score validation and metadata conversion. A successful published row must have a non-null `score`.
 5. Run a small explicit slice, inspect samples, then run the full split. `EVAL_LIMIT` is a smoke-test control, not a publishable score setting.
 
 Against an already healthy OpenAI-compatible server:
@@ -76,12 +76,12 @@ export MODEL='<HF_MODEL_ID>'
 export MODEL_NAME='<SERVED_MODEL_NAME>'
 export MODEL_PREFIX='<MODEL_PREFIX>'
 export PORT='<PORT>'
-export EVAL_TASKS_DIR='utils/evals/<task>.yaml'
+export EVAL_TASKS_DIR='infx/evals/<task>.yaml'
 export EVAL_CONCURRENT_REQUESTS='16'
 export EVAL_LIMIT='10'
 run_eval --framework lm-eval --port "$PORT"
 append_lm_eval_summary
-python3 utils/evals/validate_scores.py \
+python3 -m infx.evals.validate_scores \
   --model-prefix "$MODEL_PREFIX" \
   --results-glob 'results*.json'
 ```
@@ -92,7 +92,7 @@ For the full eval, unset the limit and repeat against a clean, correctly configu
 unset EVAL_LIMIT
 run_eval --framework lm-eval --port "$PORT"
 append_lm_eval_summary
-python3 utils/evals/validate_scores.py --model-prefix "$MODEL_PREFIX"
+python3 -m infx.evals.validate_scores --model-prefix "$MODEL_PREFIX"
 ```
 
 `run_lm_eval` passes concurrency through `num_concurrent` in `--model_args`. It is deliberately an environment variable, not a `run_eval` CLI option. The exact invocation is in [`run_lm_eval()`](../benchmarks/benchmark_lib.sh#L1080-L1162).
@@ -118,11 +118,11 @@ A space-separated `EVAL_CONCURRENT_REQUESTS` value runs several concurrency poin
 ```bash
 source benchmarks/benchmark_lib.sh
 export MODEL='<HF_MODEL_ID>' MODEL_NAME='<SERVED_MODEL_NAME>' MODEL_PREFIX='<MODEL_PREFIX>'
-export PORT='<PORT>' EVAL_TASKS_DIR='utils/evals/gsm8k.yaml'
+export PORT='<PORT>' EVAL_TASKS_DIR='infx/evals/gsm8k.yaml'
 export EVAL_CONCURRENT_REQUESTS='16 32 64'
 run_eval --framework lm-eval --port "$PORT"
 append_lm_eval_summary
-python3 utils/evals/validate_scores.py --expected-concs '16 32 64'
+python3 -m infx.evals.validate_scores --expected-concs '16 32 64'
 ```
 
 The batch runner creates a fresh temporary output directory per point, stages files with `_conc<N>` suffixes, and writes these arrays to `meta_env.json`:
@@ -131,7 +131,7 @@ The batch runner creates a fresh temporary output directory per point, stages fi
 - `completed_eval_concs`: eval and staging both succeeded.
 - `failed_eval_concs`: either eval or staging failed.
 
-A failed point is deferred so artifacts from every attempted point can upload. The post-upload validator then fails the job. Batched mode accepts positive integers and supports only `lm-eval`. See [`run_eval` batching](../benchmarks/benchmark_lib.sh#L1839-L1900), [artifact suffixing](../benchmarks/benchmark_lib.sh#L1163-L1222), and [manifest validation](../utils/evals/validate_scores.py#L72-L171).
+A failed point is deferred so artifacts from every attempted point can upload. The post-upload validator then fails the job. Batched mode accepts positive integers and supports only `lm-eval`. See [`run_eval` batching](../benchmarks/benchmark_lib.sh#L1839-L1900), [artifact suffixing](../benchmarks/benchmark_lib.sh#L1163-L1222), and [manifest validation](../infx/evals/validate_scores.py#L72-L171).
 
 For multi-node `all-evals`, the workflow constructs `EVAL_CONC` by joining the topology's concurrency list ([dispatch](../.github/workflows/e2e-tests.yml#L397-L400)). Never compare a point if its `_conc<N>` result or completed-manifest entry is missing.
 
@@ -140,8 +140,8 @@ For multi-node `all-evals`, the workflow constructs `EVAL_CONC` by joining the t
 Run:
 
 ```bash
-python3 utils/evals/validate_scores.py \
-  --thresholds utils/evals/thresholds.yaml \
+python3 -m infx.evals.validate_scores \
+  --thresholds infx/evals/thresholds.yaml \
   --meta-env meta_env.json \
   --results-glob 'results*.json'
 ```
@@ -149,18 +149,18 @@ python3 utils/evals/validate_scores.py \
 For a batch, add the independently expected points:
 
 ```bash
-python3 utils/evals/validate_scores.py \
+python3 -m infx.evals.validate_scores \
   --expected-concs '16 32 64' \
-  --thresholds utils/evals/thresholds.yaml
+  --thresholds infx/evals/thresholds.yaml
 ```
 
-Validation resolves the threshold in this order: `models.<prefix>.<task>`, `default.<task>`, then `--min-score` (default `0.85`). By default it checks numeric, non-stderr metrics beginning with `exact_match,`. It fails when a score is below threshold, no metric matches, a requested concurrency is absent, metadata has duplicates/invalid values, any point is marked failed, or result suffixes do not match the manifest. Current floors are authoritative in [`thresholds.yaml`](../utils/evals/thresholds.yaml). See [threshold resolution](../utils/evals/validate_scores.py#L61-L69) and the [validation flow](../utils/evals/validate_scores.py#L174-L302).
+Validation resolves the threshold in this order: `models.<prefix>.<task>`, `default.<task>`, then `--min-score` (default `0.85`). By default it checks numeric, non-stderr metrics beginning with `exact_match,`. It fails when a score is below threshold, no metric matches, a requested concurrency is absent, metadata has duplicates/invalid values, any point is marked failed, or result suffixes do not match the manifest. Current floors are authoritative in [`thresholds.yaml`](../infx/evals/thresholds.yaml). See [threshold resolution](../infx/evals/validate_scores.py#L61-L69) and the [validation flow](../infx/evals/validate_scores.py#L174-L302).
 
 A manual combined throughput+eval recipe uploads eval output but the template's automatic score gate is specific to eval-only jobs. Run the validator explicitly for manual or combined runs.
 
 ## 6. Collect and inspect eval artifacts
 
-The collection workflow downloads `eval_*`, aggregates raw sets with `utils/collect_eval_results.py`, uploads `eval_results_all/agg_eval_all.json`, and writes the table to the step summary ([`collect-evals.yml`](../.github/workflows/collect-evals.yml)).
+The collection workflow downloads `eval_*`, aggregates raw sets with `infx/results/collect_eval_results.py`, uploads `eval_results_all/agg_eval_all.json`, and writes the table to the step summary ([`collect-evals.yml`](../.github/workflows/collect-evals.yml)).
 
 ```bash
 RUN_ID='<RUN_ID>'
@@ -256,7 +256,7 @@ For each concurrency retain:
 - server/frontend logs and every metrics endpoint represented.
 - run URL/ID, attempt, head SHA, recipe/config identity, image, topology, fast flag, and any override.
 
-The runner writes the command before replay and validates raw results after aggregation ([execution path](../benchmarks/benchmark_lib.sh#L2320-L2360)). Aggregation preserves dataset provenance and hardware/model/topology fields ([aggregate construction](../utils/agentic/aggregation/process_agentic_result.py#L194-L272)). Raw workflow uploads intentionally omit very large `inputs.json` and `profile_export_raw.jsonl`. If those are required for an investigation, preserve them from the live allocation before cleanup ([single-node artifact contract](../.github/workflows/benchmark-tmpl.yml#L349-L358), [multi-node contract](../.github/workflows/benchmark-multinode-tmpl.yml#L455-L464)).
+The runner writes the command before replay and validates raw results after aggregation ([execution path](../benchmarks/benchmark_lib.sh#L2320-L2360)). Aggregation preserves dataset provenance and hardware/model/topology fields ([aggregate construction](../infx/results/agentic/__init__.py)). Raw workflow uploads intentionally omit very large `inputs.json` and `profile_export_raw.jsonl`. If those are required for an investigation, preserve them from the live allocation before cleanup ([single-node artifact contract](../.github/workflows/benchmark-tmpl.yml#L349-L358), [multi-node contract](../.github/workflows/benchmark-multinode-tmpl.yml#L455-L464)).
 
 ## 9. Debug long AgentX runs from live evidence
 
@@ -326,7 +326,7 @@ Recommend stopping early when direct evidence is already disqualifying:
 - persistent near-100% KV usage plus a growing queue and unusable latency.
 - throughput has plateaued while more concurrency only worsens TTFT/TPOT.
 - any disaggregated pool or required metrics source never registers.
-- AIPerf validation shows zero completed requests or error rate above the configured `0.10` limit ([validator](../utils/agentic/validation/validate_agentic_result.py#L49-L87)).
+- AIPerf validation shows zero completed requests or error rate above the configured `0.10` limit ([validator](../infx/results/agentic/validate_agentic_result.py#L49-L87)).
 
 Do **not** stop merely because model loading, dataset configuration, warmup, cutoff drain, or profiling is slow while completions advance and queues remain stable. Before any cancellation, capture timestamps, exact topology, relevant log lines, at least two metric samples showing the trend, current phase, and diagnosis.
 

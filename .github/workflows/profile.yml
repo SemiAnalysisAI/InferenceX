@@ -62,13 +62,13 @@ jobs:
         name: Generate matrix via script
         run: |
           CLI_ARGS="test-config --config-files ${{ inputs.config-file }} --config-keys ${{ inputs.config-key }} --conc ${{ inputs.conc }}"
-          CONFIG_JSON=$(uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py $CLI_ARGS)
+          CONFIG_JSON=$(uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml python "${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py" $CLI_ARGS)
           PRIORITY_ROOT="${GITHUB_WORKSPACE}"
           if [ -d "${GITHUB_WORKSPACE}/.ci-priority" ]; then
             PRIORITY_ROOT="${GITHUB_WORKSPACE}/.ci-priority"
           fi
-          CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
-            "${PRIORITY_ROOT}/utils/ci_priority.py" \
+          CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | env PYTHONPATH="$PRIORITY_ROOT" uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
+            python -P "${PRIORITY_ROOT}/utils/ci_priority.py" \
             --policy "${PRIORITY_ROOT}/configs/ci-priority.yaml" \
             --event-name "${{ github.event_name }}" \
             --queue-namespace "${{ github.run_id }}:${{ github.run_attempt }}" \

@@ -378,7 +378,7 @@ EOF
             esac
             (
                 cd "$GITHUB_WORKSPACE"
-                python -m utils.agentic.aggregation.power_adapter "${power_args[@]}"
+                python -m infx.results.agentic.power_adapter "${power_args[@]}"
             ) || exit 1
         done
         mkdir -p "$LOGS_DIR/power"
@@ -462,10 +462,16 @@ else
         BENCH_SCRIPT="${BENCH_BASE}${LEGACY_FW_SUFFIX}${SPEC_SUFFIX}.sh"
     fi
 
-    if [[ "$IMAGE" == *deepseek-v4-hopper* ]]; then
+    # DeepSeek-V4.1-Flash creates AgentX runtime directories next to the
+    # repository, which must not land under /workspace.
+    if [[ "$IMAGE" == *deepseek-v4-hopper* || "$MODEL_PREFIX" == "dsv41flash" ]]; then
         CONTAINER_MOUNT_DIR=/ix
     else
         CONTAINER_MOUNT_DIR=/workspace
+    fi
+    if [[ "$MODEL_PREFIX" == "dsv41flash" ]]; then
+        export INFMAX_CONTAINER_WORKSPACE=/ix
+        export RESULT_DIR=/ix/results
     fi
 
     srun --jobid=$JOB_ID \

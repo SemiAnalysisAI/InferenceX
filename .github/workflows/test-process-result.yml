@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'infx/results/**'
+      - 'infx/bench_serving/**'
       - '.github/workflows/benchmark-multinode-tmpl.yml'
       - '.github/workflows/benchmark-tmpl.yml'
       - '.github/workflows/e2e-tests.yml'
@@ -26,11 +27,7 @@ on:
       - 'runners/inject_srt_power_concurrencies.py'
       - 'utils/aggregate_power.py'
       - 'utils/aggregate_power_multinode.py'
-      - 'utils/agentic/aggregation/power_adapter.py'
-      - 'utils/agentic/aggregation/test_power_adapter.py'
-      - 'utils/agentic/aggregation/test_power_lifecycle.py'
-      - 'utils/agentic/aggregation/process_agentic_result.py'
-      - 'utils/agentic/aggregation/test_process_agentic_result.py'
+      - 'utils/agentic/aggregation/**'
       - 'utils/pytest.ini'
       - 'utils/bench_serving/benchmark_serving.py'
       - 'utils/process_result.py'
@@ -60,4 +57,4 @@ jobs:
         run: |
           cd utils
           uv run --no-project --exclude-newer PT12H --python 3.12 --with pytest --with pyyaml \
-            python -m pytest test_aggregate_power.py test_aggregate_power_multinode.py agentic/aggregation/test_power_adapter.py agentic/aggregation/test_power_lifecycle.py agentic/aggregation/test_process_agentic_result.py test_gb300_power_official_contract.py test_inject_srt_power_concurrencies.py test_process_result.py -v
+            python -m pytest test_aggregate_power.py test_aggregate_power_multinode.py agentic/aggregation/ test_gb300_power_official_contract.py test_inject_srt_power_concurrencies.py test_process_result.py -v

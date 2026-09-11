@@ -24,7 +24,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from aggregate_power import (  # noqa: E402
+from infx.results.power.single_node import (  # noqa: E402
     _detect_columns,
     _parse_power,
     _parse_timestamp,
@@ -694,8 +694,8 @@ def test_patch_agg_result_preserves_original_when_write_fails(
 
 @pytest.fixture(params=["single", "multinode"])
 def patch_validated_power(request):
-    from aggregate_power import _patch_power_result
-    from aggregate_power_multinode import MultinodePowerAudit, _patch_agg
+    from infx.results.power.single_node import _patch_power_result
+    from infx.results.power.multinode import MultinodePowerAudit, _patch_agg
 
     if request.param == "single":
         return _patch_power_result
@@ -1376,8 +1376,8 @@ def test_power_artifact_replace_failure_preserves_published_state(
 
 
 def test_power_sidecars_keep_audit_precision_and_omit_nonfinite_metrics(power_artifacts):
-    import aggregate_power as single
-    import aggregate_power_multinode as multinode
+    from infx.results.power import single_node as single
+    from infx.results.power import multinode
 
     case = power_artifacts
     package = case["package"]
@@ -1417,3 +1417,48 @@ def test_packaged_power_runs_without_legacy_scripts(power_artifacts, tmp_path):
     assert result.returncode == 0, result.stderr
     assert power_artifacts["package"].agg()["total_gpu_energy_j"] == 84000
     assert power_artifacts["package"].sidecar()["power_valid"] is True
+
+
+def test_power_percentiles_uses_synchronized_total_not_device_percentiles(tmp_path):
+    csv_path = tmp_path / "power.csv"
+    # Opposing device ramps keep the fleet draw constant at 600 W.
+    _write_amd_csv(csv_path, [(0, 0, 100), (1, 0, 500), (0, 1, 500), (1, 1, 100)])
+    result = integrate_power(csv_path, start_unix=0, end_unix=1, expected_num_gpus=2)
+    assert result.power_valid
+    assert result.p75_total_gpu_power_w == pytest.approx(600)
+    assert result.p75_power_w == pytest.approx(300)
+    assert result.p90_total_gpu_power_w == pytest.approx(600)
+    assert result.p90_power_w == pytest.approx(300)
+
+
+def test_power_percentiles_weights_time_and_clips_the_validated_window(tmp_path):
+    csv_path = tmp_path / "power.csv"
+    # Dense readings near the high end must not bias a uniform linear ramp.
+    _write_amd_csv(csv_path, [(0, 0, 0), (1, 0, 100), (1.9, 0, 190), (2, 0, 200)])
+    result = integrate_power(csv_path, start_unix=0.5, end_unix=1.5, expected_num_gpus=1)
+    assert result.power_valid
+    assert result.p75_power_w == pytest.approx(125)
+    assert result.p90_power_w == pytest.approx(140)
+
+
+def test_power_percentiles_is_withheld_for_invalid_telemetry(tmp_path):
+    csv_path = tmp_path / "power.csv"
+    _write_amd_csv(csv_path, [(0, 0, 100), (10, 0, 500)])
+    result = integrate_power(csv_path, start_unix=0, end_unix=10, expected_num_gpus=1)
+    assert not result.power_valid
+    assert result.p75_power_w is None
+    assert result.p75_total_gpu_power_w is None
+    assert result.p90_power_w is None
+
+
+def test_power_percentiles_aligns_asynchronous_gpu_samples(tmp_path):
+    csv_path = tmp_path / "power.csv"
+    _write_amd_csv(csv_path, [
+        (0, 0, 100), (1, 0, 300), (-0.5, 1, 600), (0.5, 1, 400), (1.5, 1, 200)
+    ])
+    result = integrate_power(csv_path, start_unix=0, end_unix=1, expected_num_gpus=2)
+    assert result.power_valid
+    assert result.p75_total_gpu_power_w == pytest.approx(600)
+    assert result.p75_power_w == pytest.approx(300)
+    assert result.p90_total_gpu_power_w == pytest.approx(600)
+    assert result.p90_power_w == pytest.approx(300)

@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 import yaml
 
-from validate_perf_changelog import (
+from infx.workflows.validate_perf_changelog import (
     ChangelogValidationError,
     compare_entries,
     parse_changelog,
