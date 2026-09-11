@@ -122,3 +122,46 @@ def test_dialogue_turns_render_from_role_content_dicts():
     row = {"messages": [{"role": "user", "content": " hi "}, {"role": "assistant", "content": "yo"}]}
     assert corpora._render(row, "messages") == "hi\nyo"
     assert corpora._render({"dialog": [" a ", "b"]}, "dialog") == "a\nb"
+
+
+def test_take_chunks_shards_lazily_and_respects_the_cap():
+    """The cap is the wall-clock knob, so it must bind exactly, per shard."""
+    class Tok:
+        def __call__(self, batch, add_special_tokens=False):
+            return types.SimpleNamespace(input_ids=[[ord(c) for c in s] for s in batch])
+
+    pieces = ["abcdefghij"] * 100  # 1000 tokens
+    got = list(scan._take_chunks(iter(pieces), Tok(), 10, 0, 0, 1))
+    assert len(got) == 100 and got[0] == [ord(c) for c in "abcdefghij"]
+
+    capped = list(scan._take_chunks(iter(pieces), Tok(), 10, 7, 0, 1))
+    assert len(capped) == 7
+
+    # Three shards partition the chunk stream with no overlap and no loss.
+    shards = [list(scan._take_chunks(iter(pieces), Tok(), 10, 0, s, 3)) for s in range(3)]
+    assert sum(len(s) for s in shards) == 100
+    assert [len(s) for s in shards] == [34, 33, 33]
+
+    # A stream that ends mid-chunk drops the tail rather than emitting a short one.
+    assert list(scan._take_chunks(iter(["abc"]), Tok(), 10, 0, 0, 1)) == []
+
+
+def test_take_chunks_is_lazy():
+    """It must not drain the stream past the cap; the streams are effectively infinite."""
+    import itertools
+
+    class Tok:
+        def __call__(self, batch, add_special_tokens=False):
+            return types.SimpleNamespace(input_ids=[[1] * 10 for _ in batch])
+
+    pulled = 0
+
+    def endless():
+        nonlocal pulled
+        for _ in itertools.count():
+            pulled += 1
+            yield "x"
+
+    got = list(scan._take_chunks(endless(), Tok(), 10, 5, 0, 1))
+    assert len(got) == 5
+    assert pulled < 200, pulled

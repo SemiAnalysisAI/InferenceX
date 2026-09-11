@@ -134,3 +134,59 @@ def build(domains: list[str] | None = None) -> dict[str, str]:
         raise RuntimeError("no domain corpora could be loaded")
     logger.info("corpora built: %s", {k: len(v) for k, v in sorted(out.items())})
     return out
+
+
+# Large streaming sources, added so a multi-hour scan has something to read:
+# the reference-study corpora are small (MBPP is 96k chars total, GSM8K 3.9M,
+# WikiText-2 ~11M) and are exhausted in minutes.
+STREAM_DOMAINS: dict[str, list] = {
+    "web": [
+        ("HuggingFaceFW/fineweb-edu", {"name": "sample-10BT", "split": "train"}, "text", None),
+        ("allenai/c4", {"name": "en", "split": "train"}, "text", None),
+    ],
+    "wiki_full": [
+        ("wikimedia/wikipedia", {"name": "20231101.en", "split": "train"}, "text", None),
+    ],
+    "math_web": [
+        ("open-web-math/open-web-math", {"split": "train"}, "text", None),
+        ("EleutherAI/proof-pile-2", {"name": "open-web-math", "split": "train"}, "text", None),
+    ],
+}
+
+
+def iter_texts(domain: str):
+    """Yield text pieces for a domain, unbounded, from the first source that loads.
+
+    Streamed rather than materialized: a five-hour scan reads far more than
+    fits in a char budget, and the budget in DOMAINS only ever existed to keep
+    the eager build cheap.
+    """
+    import itertools
+
+    from datasets import load_dataset
+
+    sources = STREAM_DOMAINS.get(domain) or DOMAINS[domain][1]
+    for path, kwargs, field, where in sources:
+        try:
+            rows = iter(load_dataset(path, streaming=True, **kwargs))
+            first = next(rows)  # fail fast on gated / script-based / renamed
+        except Exception:
+            logger.exception("corpus %s: source %s unusable", domain, path)
+            continue
+        logger.info("corpus %s: streaming from %s", domain, path)
+        for row in itertools.chain([first], rows):
+            if where is not None and not where(row):
+                continue
+            try:
+                piece = _render(row, field).strip()
+            except Exception:
+                continue
+            if piece:
+                yield piece
+        logger.info("corpus %s: source %s exhausted", domain, path)
+        return
+    logger.error("corpus %s: no usable source; SKIPPED", domain)
+
+
+def all_domains() -> list[str]:
+    return list(DOMAINS) + list(STREAM_DOMAINS)

@@ -40,8 +40,11 @@ def main() -> int:
     ap.add_argument("--shard", type=int, default=0)
     ap.add_argument("--num-shards", type=int, default=1)
     ap.add_argument("--chunk-tokens", type=int, default=3584)
-    ap.add_argument("--max-chunks-per-domain", type=int, default=64,
-                    help="per shard; 0 = all. Bounds wall-clock across many domains.")
+    ap.add_argument("--max-chunks-per-domain", type=int, default=4000,
+                    help="per shard; 0 = all. This is the wall-clock knob: the ten "
+                         "streaming domains will always hit it, the small "
+                         "reference corpora exhaust first. See README for the "
+                         "chunks-to-hours mapping.")
     ap.add_argument("--strong-quantile", type=float, default=0.99)
     ap.add_argument("--top-k", type=int, default=50)
     ap.add_argument("--min-count", type=int, default=3)
@@ -66,7 +69,8 @@ def main() -> int:
     from vllm import LLM, SamplingParams
 
     tokenizer = AutoTokenizer.from_pretrained(args.model, trust_remote_code=True)
-    texts = corpora.build()
+    domains = sorted(corpora.all_domains())
+    logger.info("scanning %d domains: %s", len(domains), ", ".join(domains))
 
     # A short context keeps the sparse-attention indexer's
     # [batched-tokens, max-model-len] buffer small; this is a prefill scan, so
@@ -91,15 +95,20 @@ def main() -> int:
     gate_hist: dict[tuple, list] = collections.defaultdict(list)
     seen_tokens = collections.Counter()
 
-    for domain, text in sorted(texts.items()):
-        ids = tokenizer(text, add_special_tokens=False).input_ids
-        chunks = [
-            ids[i : i + args.chunk_tokens]
-            for i in range(0, len(ids) - args.chunk_tokens, args.chunk_tokens)
-        ]
-        chunks = chunks[args.shard :: args.num_shards]
-        if args.max_chunks_per_domain:
-            chunks = chunks[: args.max_chunks_per_domain]
+    for domain in domains:
+        chunks = list(
+            _take_chunks(
+                corpora.iter_texts(domain),
+                tokenizer,
+                args.chunk_tokens,
+                args.max_chunks_per_domain,
+                args.shard,
+                args.num_shards,
+            )
+        )
+        if not chunks:
+            logger.warning("domain %s: no chunks (source unusable or empty)", domain)
+            continue
         logger.info("domain %s: %d chunks on shard %d", domain, len(chunks), args.shard)
 
         # Pass 1 collects gates; the threshold is per (domain, layer).
@@ -172,6 +181,48 @@ def main() -> int:
         logger.error("no gates captured for any domain; the probe never fired")
         return 1
     return 0
+
+
+
+def _take_chunks(pieces, tokenizer, chunk_tokens, limit, shard, num_shards):
+    """Yield this shard's token chunks, tokenizing lazily as the stream is read.
+
+    The corpora are streamed, so they cannot be tokenized up front -- a
+    five-hour scan reads more text than fits in memory. Tokenizing in row
+    batches keeps the fast tokenizer's batching win without materializing the
+    corpus.
+    """
+    buffer: list[int] = []
+    produced = 0
+    index = 0
+    batch: list[str] = []
+
+    def flush(batch):
+        nonlocal buffer, produced, index
+        if not batch:
+            return
+        for ids in tokenizer(batch, add_special_tokens=False).input_ids:
+            buffer.extend(ids)
+            while len(buffer) >= chunk_tokens:
+                chunk, buffer = buffer[:chunk_tokens], buffer[chunk_tokens:]
+                if index % num_shards == shard:
+                    yield chunk
+                    produced += 1
+                index += 1
+                if limit and produced >= limit:
+                    return
+
+    for piece in pieces:
+        batch.append(piece)
+        if len(batch) < 64:
+            continue
+        for chunk in flush(batch):
+            yield chunk
+        batch = []
+        if limit and produced >= limit:
+            return
+    for chunk in flush(batch):
+        yield chunk
 
 
 def _supports_lmo() -> bool:
