@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..aggregation_common import gauge_stat, normalize_fraction, rate, sum_stat
+from ..common import gauge_stat, normalize_fraction, rate, sum_stat
 from .vllm import VllmBackend, first_counter_total
 
 
@@ -14,6 +14,10 @@ class DynamoVllmBackend(VllmBackend):
     def matches(self, metrics: dict[str, dict[str, Any]], framework: str) -> bool:
         metric_names = set(metrics)
         framework = framework.lower()
+        if framework == "dynamo-sglang" and any(
+            name.startswith("sglang:") for name in metric_names
+        ):
+            return False
         return framework.startswith("dynamo") or any(
             name.startswith("dynamo_") for name in metric_names
         )

@@ -7130,6 +7130,110 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2969
 
 - config-keys:
+    - minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the MiniMax-M3 GB200 aggregate configuration to TP4 resident, TP4 lazy SimpleCPU KV offload, and two-node TP8 resident variants."
+    - "Pin vLLM nightly-9ea8f3ffc354901b740f0b31988900897b7221d7, Dynamo 1.5.0.dev20260908, and NVIDIA/srt-slurm d50ee7280c33d469df8708e363e23be2456e94fb."
+    - "Use Dynamo-native MiniMax parsing, EAGLE3 with FlashInfer, FULL_AND_PIECEWISE CUDA graphs, and wait for the OpenAI chat route before AgentX trace replay."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2925
+
+- config-keys:
+    - qwen3.5-fp8-h200-sglang-agentic-hicache-mtp
+  description:
+    - "Update SGLang image from lmsysorg/sglang:nightly-dev-cu13-20260907-30705c00 (2026-09-07 cu13 dev nightly, build commit sgl-project/sglang@30705c00) to the v0.5.19 release image lmsysorg/sglang:v0.5.19-cu130 (digest sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9, build commit sgl-project/sglang@0bcd822377da7b5718e674eaf9c870d349424dd1, Docker Hub last pushed 2026-09-04T22:50:19Z)."
+    - "The release image ships the same CUDA 13.0.3, FlashInfer 0.6.18 and sgl-kernel 0.4.6.post1 as the nightly. benchmarks/single_node/agentic/qwen3.5_fp8_h200_mtp.sh is unchanged: SGLANG_ENABLE_SPEC_V2 EAGLE MTP at 3 steps, golden acceptance length 3.39, flashinfer attention with allreduce fusion, fp8 quantization and fp8_e4m3 KV, HiCache kernel IO / page_first layout. TP8/EP1 DRAM HiCache concurrency 2 through 24 unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2966
+
+- config-keys:
+    - dsv41flash-fp4-h200-vllm-agentic-dspark
+  description:
+    - "Add the H200 AgentX arm for DeepSeek-V4.1-Flash at TP8 with native five-token DSpark and adaptive real verification"
+    - "Engram tables offload to host DRAM through UVA while the KV cache stays GPU-resident; concurrency 1-128 on the uncapped 062126 trace corpus"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2963
+
+- config-keys:
+    - glm5.2-fp4-b300-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Extend the GLM-5.2 NVFP4 B300 SGLang AgentX MTP TP8 HiCache curve from concurrency 16 to 48 with new points at 20, 24, 28, 32, 40, and 48."
+    - "Move the recipe from the retired cluster:b300-nv fleet to cluster:b300-dsxe so the sweep can be generated and scheduled again."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2829
+
+- config-keys:
+    - glm5.2-fp4-b300-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use the pinned SGLang nightly-dev-cu13-20260901-07c8f729 image with FlashInfer 0.6.18, which includes the BF16 TRTLLM MoE allocation fix for small-batch Blackwell execution. Model, TP8, HiCache, MTP settings and concurrency grid are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2829
+
+- config-keys:
+    - glm5.2-fp4-b300-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Extend the GLM-5.2 NVFP4 B300 SGLang AgentX MTP TP8 HiCache curve from concurrency 16 to 48 with new points at 20, 24, 28, 32, 40, and 48."
+    - "Move the recipe from the retired cluster:b300-nv fleet to cluster:b300-dsxe so the sweep can be generated and scheduled again."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2994
+
+- config-keys:
+    - glm5.2-fp4-b300-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use the pinned SGLang nightly-dev-cu13-20260901-07c8f729 image with FlashInfer 0.6.18, which includes the BF16 TRTLLM MoE allocation fix for small-batch Blackwell execution. Model, TP8, HiCache, MTP settings and concurrency grid are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2994
+
+- config-keys:
+    - dsv41flash-fp4-gb300-vllm-agentic-dspark
+  description:
+    - "Add GB300 TP4 AgentX through concurrency 128 with Engram UVA DRAM offload and native five-token DSpark"
+    - "Use deepseekv41-flash-0909 with adaptive verification and available-port selection"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2961
+
+- config-keys:
+    - dsv41flash-fp4-gb300-vllm-agentic-dspark
+  description:
+    - "Align with the official single-node TP recipe: default model runner and scheduler batching"
+    - "Keep AgentX concurrency 1-128, UVA offload, DSpark, and concurrency-sized graph capture"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2961
+
+- config-keys:
+    - dsv41flash-fp4-gb300-vllm-agentic-dspark
+  description:
+    - "Use thinking-on golden synthetic AL 3.51 for five-token DSpark throughput; disable adaptive verification and retain real verification for evals"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2961
+
+- config-keys:
+    - dsv41flash-fp4-gb300-vllm-agentic-dspark
+  description:
+    - "Allow 7200 seconds for GB300 DSv4.1 Flash engine startup; the one-hour frontend deadline interrupted cold graph capture"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2961
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-agentic-dspark
+  description:
+    - "Add B200 TP4 AgentX through concurrency 128 with Engram UVA DRAM offload and native five-token DSpark"
+    - "Use deepseekv41-flash-0909 with adaptive verification and available-port selection"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2960
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-agentic-dspark
+  description:
+    - "Align with the official single-node TP recipe: default model runner and scheduler batching"
+    - "Keep AgentX concurrency 1-128, UVA offload, DSpark, and concurrency-sized graph capture"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2960
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-agentic-dspark
+  description:
+    - "Use thinking-on golden synthetic AL 3.51 for five-token DSpark throughput; disable adaptive verification and retain real verification for evals"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2960
+
+- config-keys:
     - dsv41flash-fp4-gb200-vllm-agentic-dspark
   description:
     - "Add GB200 TP4 AgentX concurrency 1-128 with native DSpark and Engram UVA DRAM offload"
