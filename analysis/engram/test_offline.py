@@ -1,5 +1,5 @@
 """Offline check of the pieces that don't need a GPU: gate math, stitching, ranking."""
-import os, sys, types, tempfile
+import json, os, sys, types, tempfile
 import numpy as np, torch
 
 sys.path.insert(0, os.path.abspath("analysis"))
@@ -161,3 +161,20 @@ def test_take_chunks_is_lazy():
     got = list(scan._take_chunks(endless(), Tok(), 10, 5, 0, 1))
     assert len(got) == 5
     assert pulled < 200, pulled
+
+
+def test_parts_are_written_per_domain_and_merged(tmp_path):
+    """A killed scan must keep completed domains; a rerun must reuse them."""
+    out = str(tmp_path)
+    a = {"wiki/engram0/2gram": [{"ngram": "x", "count": 3, "avg_gate": 0.5}], "_tokens": 100}
+    b = {"math/engram0/2gram": [{"ngram": "y", "count": 4, "avg_gate": 0.6}], "_tokens": 200}
+    for domain, part in (("wiki", a), ("math", b)):
+        with open(scan._part_path(out, 0, domain), "w") as fh:
+            json.dump(part, fh)
+
+    report, tokens = scan._merge_parts(out, 0, ["wiki", "math", "absent"])
+    assert tokens == {"wiki": 100, "math": 200}
+    assert set(report) == {"wiki/engram0/2gram", "math/engram0/2gram"}
+    assert "_tokens" not in report
+    # A shard's parts never collide with another shard's.
+    assert scan._part_path(out, 1, "wiki") != scan._part_path(out, 0, "wiki")

@@ -182,5 +182,23 @@ def iter_texts(domain: str):
     logger.error("corpus %s: no usable source; SKIPPED", domain)
 
 
+# Scan order, not alphabetical: a scan can be cut short by the Slurm
+# allocation limit, so the domains that carry the argument go first and the
+# large streaming corpora -- which only ever add depth -- go last.
+PRIORITY = [
+    # the reference-study four
+    "wiki", "chat", "math", "code_mbpp",
+    # Chinese
+    "wiki_zh", "chat_zh", "web_zh",
+    # code, most-used languages first
+    "code_python", "code_javascript", "code_java", "code_go", "code_php", "code_ruby",
+    # depth
+    "web", "wiki_full", "math_web",
+]
+
+
 def all_domains() -> list[str]:
-    return list(DOMAINS) + list(STREAM_DOMAINS)
+    known = list(DOMAINS) + list(STREAM_DOMAINS)
+    missing = [d for d in known if d not in PRIORITY]
+    assert not missing, f"PRIORITY is missing {missing}"
+    return [d for d in PRIORITY if d in known]

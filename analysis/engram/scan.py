@@ -45,6 +45,8 @@ def main() -> int:
                          "streaming domains will always hit it, the small "
                          "reference corpora exhaust first. See README for the "
                          "chunks-to-hours mapping.")
+    ap.add_argument("--no-resume", action="store_true",
+                    help="Rescan domains that already have a part file on disk.")
     ap.add_argument("--strong-quantile", type=float, default=0.99)
     ap.add_argument("--top-k", type=int, default=50)
     ap.add_argument("--min-count", type=int, default=3)
@@ -69,7 +71,7 @@ def main() -> int:
     from vllm import LLM, SamplingParams
 
     tokenizer = AutoTokenizer.from_pretrained(args.model, trust_remote_code=True)
-    domains = sorted(corpora.all_domains())
+    domains = corpora.all_domains()  # priority order; see corpora.PRIORITY
     logger.info("scanning %d domains: %s", len(domains), ", ".join(domains))
 
     # A short context keeps the sparse-attention indexer's
@@ -96,6 +98,10 @@ def main() -> int:
     seen_tokens = collections.Counter()
 
     for domain in domains:
+        part_path = _part_path(args.out, args.shard, domain)
+        if os.path.exists(part_path) and not args.no_resume:
+            logger.info("domain %s: already on disk, skipping (%s)", domain, part_path)
+            continue
         chunks = list(
             _take_chunks(
                 corpora.iter_texts(domain),
@@ -158,12 +164,31 @@ def main() -> int:
                         slot[0] += 1
                         slot[1] += float(gate)
 
-    report = _render(stats, tokenizer, args.top_k, args.min_count)
+        # Write each domain the moment it finishes. The 180-minute Slurm
+        # allocation killed a three-hour scan that held everything until the
+        # end, losing 14 completed domains; a partial scan now keeps its work
+        # and a rerun resumes from here.
+        part = _render(
+            {k: v for k, v in stats.items() if k[0] == domain},
+            tokenizer, args.top_k, args.min_count,
+        )
+        part["_tokens"] = seen_tokens[domain]
+        tmp = part_path + ".tmp"
+        with open(tmp, "w") as handle:
+            json.dump(part, handle, indent=2)
+        os.replace(tmp, part_path)
+        logger.info("domain %s: wrote %s", domain, part_path)
+        for key in [k for k in stats if k[0] == domain]:
+            del stats[key]
+        for key in [k for k in gate_hist if k[0] == domain]:
+            del gate_hist[key]
+
+    report, tokens = _merge_parts(args.out, args.shard, domains)
     report["meta"] = {
         "model": args.model,
         "shard": args.shard,
         "num_shards": args.num_shards,
-        "tokens_scanned": dict(seen_tokens),
+        "tokens_scanned": tokens,
         "strong_quantile": args.strong_quantile,
         "ngram_sizes": list(NGRAM_SIZES),
     }
@@ -175,13 +200,33 @@ def main() -> int:
     print("===ENGRAM_SCAN_JSON_BEGIN===")
     print(json.dumps(report))
     print("===ENGRAM_SCAN_JSON_END===")
-    if not seen_tokens:
+    if not tokens:
         # The first run emitted an empty report and still exited 0, which read
         # as "ran fine" when the probe had in fact never fired. Fail loudly.
         logger.error("no gates captured for any domain; the probe never fired")
         return 1
     return 0
 
+
+
+
+def _part_path(out_dir, shard, domain):
+    return os.path.join(out_dir, f"part_shard{shard}_{domain}.json")
+
+
+def _merge_parts(out_dir, shard, domains):
+    """Assemble the final report from the per-domain files on disk."""
+    report, tokens = {}, {}
+    for domain in domains:
+        path = _part_path(out_dir, shard, domain)
+        if not os.path.exists(path):
+            logger.warning("domain %s: no part file; absent from the report", domain)
+            continue
+        with open(path) as handle:
+            part = json.load(handle)
+        tokens[domain] = part.pop("_tokens", 0)
+        report.update(part)
+    return report, tokens
 
 
 def _take_chunks(pieces, tokenizer, chunk_tokens, limit, shard, num_shards):
