@@ -98,6 +98,7 @@ uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with p
 | 矩阵模式或生成 | `python -m pytest utils/matrix_logic/ -v` |
 | Changelog 内容或 PR 门禁 | `python -m pytest utils/test_process_changelog.py utils/changelog_gate_tests/ -v` |
 | 结果处理与拓扑 | `python -m pytest utils/test_process_result.py utils/agentic/aggregation/test_process_agentic_result.py utils/test_aggregate_power.py utils/test_calc_success_rate.py -v` |
+| AgentX 聚合与工件加载 | `python -m pytest utils/agentic/aggregation/ -v` |
 | 评测分发、批处理或补丁 | `python -m pytest utils/evals/ -v` |
 | 评测收集 | `python -m pytest utils/test_collect_eval_results.py -v` |
 | 扫描复用或可复用制品 | `python -m pytest utils/test_github.py utils/test_find_reusable_sweep_run.py utils/test_acknowledge_sweep_reuse.py utils/test_validate_reusable_sweep_artifacts.py -v` |
