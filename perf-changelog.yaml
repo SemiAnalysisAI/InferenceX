@@ -7147,6 +7147,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2966
 
 - config-keys:
+    - dsv41flash-fp4-h200-vllm-agentic-dspark
+  description:
+    - "Add the H200 AgentX arm for DeepSeek-V4.1-Flash at TP8 with native five-token DSpark and adaptive real verification"
+    - "Engram tables offload to host DRAM through UVA while the KV cache stays GPU-resident; concurrency 1-128 on the uncapped 062126 trace corpus"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2963
+
+- config-keys:
     - glm5.2-fp4-b300-sglang-agentic-mtp
   scenario-type:
     - agentic-coding
