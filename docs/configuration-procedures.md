@@ -273,3 +273,15 @@ Stop before dispatching GPU work or claiming the configuration complete when any
 - YAML, Bash, strict schema, exact-key generation, launcher simulation, or recipe validation fails.
 
 A configuration is ready for sweep only when the executable files agree, the exact key generates, the runtime route exists, the changelog selects it, and all layer-specific checks above pass.
+
+## DeepSeek V4.1 Flash Mooncake on GB200
+
+`dsv41flash-fp4-gb200-vllm-agentic-dspark-mooncake` runs AgentX at TP4, with concurrency 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, full `semianalysis_cc_traces_weka_062126` traces and 1M context. It follows the [upstream embedded Mooncake recipe](https://github.com/vllm-project/recipes/blob/main/kv_store/kv_store_distributed_mooncake.yaml): `MooncakeStoreConnector`, `kv_both`, RDMA and one local metadata master. The helper pins Mooncake 0.3.11.post1 and selects the wheel for the image's CUDA major version.
+
+The generated host budget is 40% of the runner's allocated DRAM. Reserve 208 GB for Engram UVA tables and 4 GiB of Mooncake transfer buffer per GPU, then divide the remainder into per-rank KV segments. `enable_offload: false` disables Mooncake's secondary storage tier; the embedded DRAM KV store remains enabled. Both server and master are cleaned up on exit.
+
+Throughput keeps five-token DSpark at thinking-on golden synthetic AL 3.51 with adaptive verification disabled; eval uses real block verification. Startup allows 7200 seconds. H100 retains its 4096-token prefill-batch cap. Higher concurrencies are experimental and require GPU validation.
+
+Mooncake sizes are emitted as integer bytes so its binary `GB` parser cannot exceed the decimal host budget. Offload CUDA graphs capture at most 512 tokens; larger batches use the uncaptured path, retaining concurrency 512 and 1M context.
+
+GB200 uses a 360 GB aggregate host budget after OOM kills during Mooncake registration at 541 GB. After the 208 GB Engram reservation and four 4 GiB transfer buffers, this leaves 33,705,032,704 bytes per KV segment. This is a conservative memory-pressure mitigation; the replacement GPU sweep must verify it. Startup and failure logs include NUMA memory and OOM counters.
