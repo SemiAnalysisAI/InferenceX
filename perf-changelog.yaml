@@ -7311,3 +7311,12 @@
     - "Reserve 144 CPU cores for the GB300 single-node serving task"
     - "为 GB300 单节点服务任务预留 144 个 CPU 核心"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3017
+
+- config-keys:
+    - glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-1p1d-hicache
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a 1P1D GLM-5.2 FP8 H200 AgentX configuration with six-step EAGLE MTP."
+    - "Enable prefill-only hierarchical KV cache offload to host DRAM with the layer_first memory layout; keep decode KV cache GPU-resident."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
