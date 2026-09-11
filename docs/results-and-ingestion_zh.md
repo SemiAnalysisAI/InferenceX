@@ -184,6 +184,13 @@ raw tree:           results/**, excluding inputs.json and profile_export_raw.jso
 
 每条非空 JSONL 记录都会增加 `records_total`。`metadata.benchmark_phase` 不等于 `profiling` 的记录是 warmup 诊断，会被排除。含真值 `error` 的记录也会被排除并分类。没有 phase 的旧记录按 profiling 处理。保留记录数成为 `num_requests_successful`。完整计数保存在 `request_accounting` 中，包括 profiled、总丢弃、warmup 丢弃、错误丢弃和 `error_categories`。
 
+`request_metrics.tokens.output_expected` 只读取 AIPerf 在
+`metadata.dataset.hf_dataset_name` 中明确声明的数据集的本地 trace 元数据。
+由于导出内容没有记录实际解析到的数据集 revision，对应缓存必须恰好只有一个 snapshot。
+缺少数据集身份、缺少元数据或存在多个 snapshot 时，该分布保持为空；
+不会根据缓存修改时间或其他数据集进行猜测。实际 token 数、GPU 能耗的分母及
+AIPerf 理论缓存命中率继续使用各自原有的数据来源。
+
 AgentX 聚合的顶层身份和拓扑字段与基准摄取兼容。
 
 `num_gpus` 明确记录共享处理器使用的物理 GPU 数。单节点运行使用
@@ -200,6 +207,11 @@ AgentX 聚合的顶层身份和拓扑字段与基准摄取兼容。
 | 请求指标 | `request_metrics.qps`，包含 TTFT/E2EL/ITL/TPOT/交互性的 `latency` 块，token 分布、吞吐量、缓存和每 GPU 吞吐量 |
 | 服务器指标 | `server_metrics.cache`、`kv_cache`、token 总数、来源详情，以及可能存在的 `warnings` |
 | 兼容性 | `kv_cache_pool_tokens` 镜像 `server_metrics.kv_cache.gpu_total_tokens` |
+
+当 `dynamo-sglang` 运行包含 `sglang:` 遥测时，处理器使用 SGLang 适配器
+聚合缓存、利用率和 token 指标。逻辑 GPU KV 容量保持 `null` 并附带警告，
+因为多个 TP rank 可能重复报告容量值。原始 Dynamo 前端总数可能包含预热请求。
+缺少主机命中计数并不代表 CPU 缓存命中为零。
 
 应用会将嵌套 AgentX v3 值展平为规范指标键。例如 `median_ttft`、`p95_e2el`、`total_tput_tps`、`tput_per_gpu`、`server_gpu_cache_hit_rate` 和 `gpu_kv_cache_usage_pct`。p50 映射为 `median`。存在 full-response ITL 字段时优先使用它。交互性百分位数按对应 ITL 百分位数的倒数派生，使历史记录和当前记录采用同一定义。
 

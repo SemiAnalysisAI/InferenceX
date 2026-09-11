@@ -9081,24 +9081,19 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-2p2d:
 # GLM-5.2's built-in nextn head (num-steps 3,
 # eagle-topk 1, 4 draft tokens = 3 speculative tokens), with acceptance pinned
 # to the golden AL 2.99 (golden_al_distribution/glm5.2_mtp.yaml, thinking_on,
-# K=3) through SGLANG_SIMULATE_ACC_*. Image is bumped to v0.5.16-cu130: it is
-# the first release that reads SGLANG_SIMULATE_ACC_TOKEN_MODE.
+# K=3) through SGLANG_SIMULATE_ACC_*. The pinned nightly includes FlashInfer
+# 0.6.18's BF16 TRTLLM MoE allocation fix for small-batch Blackwell execution
+# in GLM-5.2's unquantized EAGLE draft head.
 #
-# Cookbook low-latency arm (TP8, fp8 KV, cutedsl bf16 GEMM) only, on the AgentX
-# MTP concurrency grid [1, 4, 8, 12, 16]: steps of at least 2 because
-# single-step sampling cannot separate configurations by more than run-to-run
-# noise on the agentic corpus, and a hard stop at conc 16. A DEP throughput arm
-# is deliberately not included — its measured frontier peak is conc
-# 48, well above that cap, and at conc <= 16 attention-DP leaves 2 sessions per
-# rank and is strictly dominated by TP8, so it would spend a GPU job per point
-# to re-measure a worse curve. This recipe offloads to host DRAM: without
-# HiCache the working set outgrows HBM past conc
-# 8 and the radix hit rate collapses to <0.1.
+# Higher concurrencies sample the throughput curve nearer 95 P90 tokens/s/user
+# while preserving the cookbook low-latency arm (TP8, fp8 KV, cutedsl bf16 GEMM).
+# HiCache host-DRAM offload is required because the working set outgrows HBM
+# past conc 8 without it and the radix hit rate collapses to <0.1.
 glm5.2-fp4-b300-sglang-agentic-mtp:
-  image: lmsysorg/sglang:v0.5.16-cu130
+  image: lmsysorg/sglang:nightly-dev-cu13-20260901-07c8f729
   model: nvidia/GLM-5.2-NVFP4
   model-prefix: glm5.2
-  runner: cluster:b300-nv
+  runner: cluster:b300-dsxe
   precision: fp4
   framework: sglang
   multinode: false
@@ -9106,7 +9101,7 @@ glm5.2-fp4-b300-sglang-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 4, 8, 12, 16] }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 4, 8, 12, 16, 20, 24, 28, 32, 40, 48] }
 
 # First GLM-5.2 AgentX recipe on B200, shipped spec-decode-only per the AgentX
 # policy that agentic arms enable speculative decoding rather than running a
@@ -9118,7 +9113,7 @@ glm5.2-fp4-b300-sglang-agentic-mtp:
 # nightly includes FlashInfer 0.6.18's BF16 TRTLLM MoE allocation fix, which is
 # required by GLM-5.2's unquantized EAGLE draft head at CUDA-graph capture.
 #
-# Same single arm and concurrency grid as glm5.2-fp4-b300-sglang-agentic-mtp:
+# Same single arm as glm5.2-fp4-b300-sglang-agentic-mtp:
 # cookbook low-latency TP8 with HiCache host-DRAM offload, conc
 # [1, 4, 8, 12, 16] (steps of at least 2, hard stop at 16). TP8-only for
 # memory as well as comparability -- the ~433 GB NVFP4

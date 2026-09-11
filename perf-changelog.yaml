@@ -7147,6 +7147,40 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2966
 
 - config-keys:
+    - glm5.2-fp4-b300-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Extend the GLM-5.2 NVFP4 B300 SGLang AgentX MTP TP8 HiCache curve from concurrency 16 to 48 with new points at 20, 24, 28, 32, 40, and 48."
+    - "Move the recipe from the retired cluster:b300-nv fleet to cluster:b300-dsxe so the sweep can be generated and scheduled again."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2829
+
+- config-keys:
+    - glm5.2-fp4-b300-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use the pinned SGLang nightly-dev-cu13-20260901-07c8f729 image with FlashInfer 0.6.18, which includes the BF16 TRTLLM MoE allocation fix for small-batch Blackwell execution. Model, TP8, HiCache, MTP settings and concurrency grid are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2829
+
+- config-keys:
+    - glm5.2-fp4-b300-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Extend the GLM-5.2 NVFP4 B300 SGLang AgentX MTP TP8 HiCache curve from concurrency 16 to 48 with new points at 20, 24, 28, 32, 40, and 48."
+    - "Move the recipe from the retired cluster:b300-nv fleet to cluster:b300-dsxe so the sweep can be generated and scheduled again."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2994
+
+- config-keys:
+    - glm5.2-fp4-b300-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use the pinned SGLang nightly-dev-cu13-20260901-07c8f729 image with FlashInfer 0.6.18, which includes the BF16 TRTLLM MoE allocation fix for small-batch Blackwell execution. Model, TP8, HiCache, MTP settings and concurrency grid are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2994
+
+- config-keys:
     - glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp
   description:
     - "Update the SGLang image from lmsysorg/sglang:nightly-dev-cu13-20260805-211ee642 (2026-08-05 cu13 dev nightly, build commit sgl-project/sglang@211ee642) to the digest-pinned v0.5.19 release lmsysorg/sglang:v0.5.19-cu130@sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9 (build commit sgl-project/sglang@0bcd822377da7b5718e674eaf9c870d349424dd1, Docker Hub last pushed 2026-09-04T22:50:19Z)."
