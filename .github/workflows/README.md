@@ -1,9 +1,9 @@
 # How to Test Workflows
 
-In order to test configurations described in `configs`, the primary workflow file used is `.github/workflows/e2e-tests.yml`. As input, this workflow takes in the CLI arguments for the `utils/matrix_logic/generate_sweep_configs.py` script. The usage for this script is shown below:
+In order to test configurations described in `configs`, the primary workflow file used is `.github/workflows/e2e-tests.yml`. As input, this workflow takes in the CLI arguments for the `python -m infx.matrix.generate` command. The command usage is shown below:
 
 ```
-usage: generate_sweep_configs.py [-h] {full-sweep,test-config} ...
+usage: python -m infx.matrix.generate [-h] {full-sweep,test-config} ...
 
 Generate benchmark configurations from YAML config files
 
@@ -26,7 +26,7 @@ options:
 The `full-sweep` command generates benchmark configurations with optional filtering. You can specify `--single-node`, `--multi-node`, or both. If neither is specified, both types are generated.
 
 ```
-usage: generate_sweep_configs.py full-sweep
+usage: python -m infx.matrix.generate full-sweep
     --config-files CONFIG_FILES [CONFIG_FILES ...]
     [--runner-config RUNNER_CONFIG]
     [--no-evals | --evals-only] [--all-evals]
@@ -95,7 +95,7 @@ full-sweep --scenario-type agentic-coding --config-files configs/nvidia-master.y
 The `test-config` command generates the full sweep for one or more specific config keys. This is useful for testing individual configurations without filtering by model prefix, framework, etc.
 
 ```
-usage: generate_sweep_configs.py test-config
+usage: python -m infx.matrix.generate test-config
     --config-files CONFIG_FILES [CONFIG_FILES ...]
     [--runner-config RUNNER_CONFIG]
     [--no-evals | --evals-only] [--all-evals]
@@ -192,9 +192,8 @@ also fans out the selected matrix immediately. It does not reproduce
 `[skip-sweep]` skips PR benchmark setup only. Changelog and reuse checks still
 run. Pushes to `main` ignore it.
 
-After an eligible full sweep (`full-sweep-enabled`,
-`non-canary-full-sweep-enabled`, or either fail-fast variant), an authorized
-maintainer can comment:
+An authorized maintainer can reuse an eligible completed sweep without keeping
+a sweep label on the PR:
 
 ```
 /reuse-sweep-run
@@ -207,9 +206,19 @@ in the PR. A run ID can pin an eligible successful or failed run:
 /reuse-sweep-run <run_id>
 ```
 
+Source validation checks identity and artifacts, not full-matrix coverage.
+A successful `sweep-enabled` trim sweep can also be selected automatically;
+reusing it publishes only its recorded points on `main`. Acceptance does not
+certify a green full sweep. Verify coverage and pin the run ID when a full sweep
+is required by the review process.
+
 The latest matching comment by an `OWNER`, `MEMBER`, or `COLLABORATOR` wins.
-Comments do not trigger or cancel sweeps. Later commits skip a new sweep after
-changelog/matrix validation.
+The bot reacts with 👍 after validating the request, or 👎 on rejection; details
+are in the Actions run summary. Edits replace the bot's old reaction. No separate
+comment is posted. Comments do not trigger or cancel GPU sweeps. Later commits
+skip a new sweep after changelog/matrix and source-run validation. Merge-time
+validation remains authoritative; an acknowledgment cannot override expired or
+invalid artifacts. `evals-only` and `agentx-fast` remain incompatible with reuse.
 Remove and re-add the sweep label to force one.
 
 `utils/merge_with_reuse.sh <pr-number>` is the supported merge path for reuse.
@@ -228,7 +237,7 @@ authorization, `main` runs the normal full sweep.
 
 ## Validation Architecture
 
-The benchmarking system uses a strict validation methodology to ensure correctness at every stage. This is implemented in `utils/matrix_logic/validation.py` using Pydantic models.
+The benchmarking system uses a strict validation methodology to ensure correctness at every stage. This is implemented in `infx/matrix/validation.py` using Pydantic models.
 
 ### Validation Methodology
 

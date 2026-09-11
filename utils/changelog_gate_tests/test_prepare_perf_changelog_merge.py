@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from prepare_perf_changelog_merge import (
+from infx.workflows.prepare_perf_changelog_merge import (
     canonicalize_appended_links,
     resolve_conflict_bytes,
 )
-from validate_perf_changelog import ChangelogValidationError, parse_changelog
+from infx.workflows.validate_perf_changelog import ChangelogValidationError, parse_changelog
 
 
 def block(key: str, link: str) -> bytes:

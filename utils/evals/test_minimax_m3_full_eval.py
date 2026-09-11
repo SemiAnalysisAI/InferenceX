@@ -8,7 +8,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import minimax_m3_full_eval as full
+import infx.evals.minimax_m3_full_eval as full
 
 
 def _write_native_run(

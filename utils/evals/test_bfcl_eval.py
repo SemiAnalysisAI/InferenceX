@@ -12,8 +12,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import bfcl_adapter as be
-import validate_scores as vs
+import infx.evals.bfcl_adapter as be
+import infx.evals.validate_scores as vs
 
 
 def _compatibility_path(output_dir: Path) -> Path:

@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-PATCH_DIR = Path(__file__).resolve().parent / "patches"
+PATCH_DIR = Path(__file__).resolve().parents[2] / "infx/evals/patches"
 
 
 def _load_patch_module(name: str):

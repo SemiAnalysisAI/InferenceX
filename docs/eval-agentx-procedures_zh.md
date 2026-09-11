@@ -48,7 +48,7 @@ gh pr edit <PR_NUMBER> --repo SemiAnalysisAI/InferenceX \
 
 ```bash
 uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
-  utils/matrix_logic/generate_sweep_configs.py \
+  python -m infx.matrix.generate \
   test-config \
   --config-keys qwen3.5-fp8-b200-sglang-agentic \
   --conc 1 \
@@ -60,10 +60,10 @@ uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with p
 
 ## 2. 添加评分 eval
 
-1. 按照 lm-evaluation-harness task 格式添加 `utils/evals/<task>.yaml`。固定 dataset/split、确定性生成设置、prompt 约定、filter 和主指标。可参考仓库内的 [`gsm8k.yaml`](../utils/evals/gsm8k.yaml) 或 [`gpqa_diamond.yaml`](../utils/evals/gpqa_diamond.yaml)。
+1. 按照 lm-evaluation-harness task 格式添加 `infx/evals/<task>.yaml`。固定 dataset/split、确定性生成设置、prompt 约定、filter 和主指标。可参考仓库内的 [`gsm8k.yaml`](../infx/evals/gsm8k.yaml) 或 [`gpqa_diamond.yaml`](../infx/evals/gpqa_diamond.yaml)。
 2. 为 `task:` 指定稳定名称。分数阈值以该精确名称为键，收集后的行中也会出现该名称。
-3. 在 [`utils/evals/thresholds.yaml`](../utils/evals/thresholds.yaml) 中添加最低可接受分数。通用下限放在 `default`；只有在确有依据需要模型专用下限时，才添加 `models.<model-prefix>.<task>`。
-4. 如果 task 的主结果与 collector 的 strict/extract/accuracy 规则不兼容，请扩展 [`extract_lm_metrics()`](../utils/collect_eval_results.py#L115-L197)。不要发布 `score` 为 null 的行。
+3. 在 [`infx/evals/thresholds.yaml`](../infx/evals/thresholds.yaml) 中添加最低可接受分数。通用下限放在 `default`；只有在确有依据需要模型专用下限时，才添加 `models.<model-prefix>.<task>`。
+4. 如果 task 的主结果与 collector 的 strict/extract/accuracy 规则不兼容，请扩展 [`infx.results.evals`](../infx/results/evals.py) 中的 `extract_metrics()`。该函数接收已加载的 JSON 和显式来源信息；`build_rows()` 应用收集器的分数验证及元数据转换规则。发布为成功结果的行必须具有非 null 的 `score`。
 5. 先运行一个显式的小切片并检查样本，再运行完整 split。`EVAL_LIMIT` 是 smoke test 控制项，不是可发布分数的运行设置。
 
 对已经健康的 OpenAI-compatible 服务执行：
@@ -74,12 +74,12 @@ export MODEL='<HF_MODEL_ID>'
 export MODEL_NAME='<SERVED_MODEL_NAME>'
 export MODEL_PREFIX='<MODEL_PREFIX>'
 export PORT='<PORT>'
-export EVAL_TASKS_DIR='utils/evals/<task>.yaml'
+export EVAL_TASKS_DIR='infx/evals/<task>.yaml'
 export EVAL_CONCURRENT_REQUESTS='16'
 export EVAL_LIMIT='10'
 run_eval --framework lm-eval --port "$PORT"
 append_lm_eval_summary
-python3 utils/evals/validate_scores.py \
+python3 -m infx.evals.validate_scores \
   --model-prefix "$MODEL_PREFIX" \
   --results-glob 'results*.json'
 ```
@@ -90,7 +90,7 @@ python3 utils/evals/validate_scores.py \
 unset EVAL_LIMIT
 run_eval --framework lm-eval --port "$PORT"
 append_lm_eval_summary
-python3 utils/evals/validate_scores.py --model-prefix "$MODEL_PREFIX"
+python3 -m infx.evals.validate_scores --model-prefix "$MODEL_PREFIX"
 ```
 
 `run_lm_eval` 通过 `--model_args` 中的 `num_concurrent` 传递并发；它刻意采用环境变量，而不是 `run_eval` CLI 选项。准确调用见 [`run_lm_eval()`](../benchmarks/benchmark_lib.sh#L1080-L1162)。
@@ -116,11 +116,11 @@ python3 utils/evals/validate_scores.py --model-prefix "$MODEL_PREFIX"
 ```bash
 source benchmarks/benchmark_lib.sh
 export MODEL='<HF_MODEL_ID>' MODEL_NAME='<SERVED_MODEL_NAME>' MODEL_PREFIX='<MODEL_PREFIX>'
-export PORT='<PORT>' EVAL_TASKS_DIR='utils/evals/gsm8k.yaml'
+export PORT='<PORT>' EVAL_TASKS_DIR='infx/evals/gsm8k.yaml'
 export EVAL_CONCURRENT_REQUESTS='16 32 64'
 run_eval --framework lm-eval --port "$PORT"
 append_lm_eval_summary
-python3 utils/evals/validate_scores.py --expected-concs '16 32 64'
+python3 -m infx.evals.validate_scores --expected-concs '16 32 64'
 ```
 
 批量 runner 会为每个点创建新的临时输出目录，用 `_conc<N>` 后缀暂存文件，并向 `meta_env.json` 写入以下数组：
@@ -129,7 +129,7 @@ python3 utils/evals/validate_scores.py --expected-concs '16 32 64'
 - `completed_eval_concs`：eval 与 staging 均成功的点；
 - `failed_eval_concs`：eval 或 staging 失败的点。
 
-失败点会延迟报错，使所有已尝试点的 artifact 都能上传；随后 post-upload validator 会使作业失败。批量模式只接受正整数，且仅支持 `lm-eval`。参见 [`run_eval` batching](../benchmarks/benchmark_lib.sh#L1839-L1900)、[artifact 后缀处理](../benchmarks/benchmark_lib.sh#L1163-L1222) 和[manifest 校验](../utils/evals/validate_scores.py#L72-L171)。
+失败点会延迟报错，使所有已尝试点的 artifact 都能上传；随后 post-upload validator 会使作业失败。批量模式只接受正整数，且仅支持 `lm-eval`。参见 [`run_eval` batching](../benchmarks/benchmark_lib.sh#L1839-L1900)、[artifact 后缀处理](../benchmarks/benchmark_lib.sh#L1163-L1222) 和[manifest 校验](../infx/evals/validate_scores.py#L72-L171)。
 
 对于多节点 `all-evals`，工作流通过连接拓扑的并发列表构造 `EVAL_CONC`（[分派](../.github/workflows/e2e-tests.yml#L397-L400)）。如果缺少某点的 `_conc<N>` 结果或 completed manifest 条目，绝不能比较该点。
 
@@ -138,8 +138,8 @@ python3 utils/evals/validate_scores.py --expected-concs '16 32 64'
 运行：
 
 ```bash
-python3 utils/evals/validate_scores.py \
-  --thresholds utils/evals/thresholds.yaml \
+python3 -m infx.evals.validate_scores \
+  --thresholds infx/evals/thresholds.yaml \
   --meta-env meta_env.json \
   --results-glob 'results*.json'
 ```
@@ -147,18 +147,18 @@ python3 utils/evals/validate_scores.py \
 批量运行还应加入独立确认的预期点：
 
 ```bash
-python3 utils/evals/validate_scores.py \
+python3 -m infx.evals.validate_scores \
   --expected-concs '16 32 64' \
-  --thresholds utils/evals/thresholds.yaml
+  --thresholds infx/evals/thresholds.yaml
 ```
 
-阈值按以下顺序解析：`models.<prefix>.<task>`、`default.<task>`，最后是 `--min-score`（默认 `0.85`）。默认检查名称以 `exact_match,` 开头、数值类型且非 stderr 的指标。当分数低于阈值、没有匹配指标、缺少请求的并发、metadata 有重复或无效值、任何点被标记为失败，或结果后缀与 manifest 不一致时，校验都会失败。当前权威下限位于 [`thresholds.yaml`](../utils/evals/thresholds.yaml)。参见[阈值解析](../utils/evals/validate_scores.py#L61-L69)与[校验流程](../utils/evals/validate_scores.py#L174-L302)。
+阈值按以下顺序解析：`models.<prefix>.<task>`、`default.<task>`，最后是 `--min-score`（默认 `0.85`）。默认检查名称以 `exact_match,` 开头、数值类型且非 stderr 的指标。当分数低于阈值、没有匹配指标、缺少请求的并发、metadata 有重复或无效值、任何点被标记为失败，或结果后缀与 manifest 不一致时，校验都会失败。当前权威下限位于 [`thresholds.yaml`](../infx/evals/thresholds.yaml)。参见[阈值解析](../infx/evals/validate_scores.py#L61-L69)与[校验流程](../infx/evals/validate_scores.py#L174-L302)。
 
 手动的吞吐量+eval 组合 recipe 会上传 eval 输出，但模板的自动分数 gate 专用于 eval-only 作业。对手动或组合运行必须显式执行 validator。
 
 ## 6. 收集并检查 eval artifact
 
-收集工作流会下载 `eval_*`，用 `utils/collect_eval_results.py` 聚合原始集合，上传 `eval_results_all/agg_eval_all.json`，并将表格写入 step summary（[`collect-evals.yml`](../.github/workflows/collect-evals.yml)）。
+收集工作流会下载 `eval_*`，用 `infx/results/collect_eval_results.py` 聚合原始集合，上传 `eval_results_all/agg_eval_all.json`，并将表格写入 step summary（[`collect-evals.yml`](../.github/workflows/collect-evals.yml)）。
 
 ```bash
 RUN_ID='<RUN_ID>'
@@ -254,7 +254,7 @@ gh run download "$RUN_ID" --repo SemiAnalysisAI/InferenceX \
 - server/frontend 日志以及所代表的每个 metrics endpoint；
 - run URL/ID、attempt、head SHA、recipe/config 标识、image、topology、fast 标志和所有 override。
 
-Runner 会在 replay 前写入命令，并在聚合后校验原始结果（[执行路径](../benchmarks/benchmark_lib.sh#L2320-L2360)）。聚合会保留 dataset provenance 以及硬件/模型/拓扑字段（[aggregate 构造](../utils/agentic/aggregation/process_agentic_result.py#L194-L272)）。工作流的 raw upload 会有意排除体积很大的 `inputs.json` 和 `profile_export_raw.jsonl`；如果调查需要这些文件，应在清理前从实时 allocation 保存（[单节点 artifact 约定](../.github/workflows/benchmark-tmpl.yml#L349-L358)、[多节点约定](../.github/workflows/benchmark-multinode-tmpl.yml#L455-L464)）。
+Runner 会在 replay 前写入命令，并在聚合后校验原始结果（[执行路径](../benchmarks/benchmark_lib.sh#L2320-L2360)）。聚合会保留 dataset provenance 以及硬件/模型/拓扑字段（[aggregate 构造](../infx/results/agentic/__init__.py)）。工作流的 raw upload 会有意排除体积很大的 `inputs.json` 和 `profile_export_raw.jsonl`；如果调查需要这些文件，应在清理前从实时 allocation 保存（[单节点 artifact 约定](../.github/workflows/benchmark-tmpl.yml#L349-L358)、[多节点约定](../.github/workflows/benchmark-multinode-tmpl.yml#L455-L464)）。
 
 ## 9. 用实时证据调试长时间 AgentX 运行
 
@@ -324,7 +324,7 @@ date -u
 - KV usage 长期接近 100%，queue 持续增长且 latency 已不可用；
 - 吞吐量已经平台化，而更高并发只会恶化 TTFT/TPOT；
 - 任意 disaggregated pool 或必需 metrics source 始终未注册；
-- AIPerf 校验显示 completed request 为零，或错误率超过配置的 `0.10` 上限（[validator](../utils/agentic/validation/validate_agentic_result.py#L49-L87)）。
+- AIPerf 校验显示 completed request 为零，或错误率超过配置的 `0.10` 上限（[validator](../infx/results/agentic/validate_agentic_result.py#L49-L87)）。
 
 如果 completion 持续增加且 queue 稳定，不要仅因模型加载、dataset 配置、warmup、cutoff drain 或 profiling 较慢而停止。任何取消前，都要捕获时间戳、准确拓扑、相关日志行、至少两个体现趋势的 metric sample、当前 phase 和诊断结论。
 
