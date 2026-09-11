@@ -36,6 +36,12 @@ RESUME_FLAG=""
 if [[ -z "${ENGRAM_RESUME:-}" ]]; then
     RESUME_FLAG="--no-resume"
 fi
+# conc 9 is the sentinel for the ablation eval rather than a scan shard: it
+# runs baseline and gate-zeroed evals back to back in one allocation.
+if [[ "$CONC" == 9 ]]; then
+    exec bash "$INFERENCEX_REPO_ROOT/analysis/engram/ablation_driver.sh"
+fi
+
 SHARD=$((CONC - 1))
 echo "=== Engram gate scan: shard ${SHARD} of ${NUM_SHARDS}, TP=${TP} ==="
 

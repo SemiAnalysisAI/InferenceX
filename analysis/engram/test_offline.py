@@ -215,3 +215,51 @@ def test_collect_stitches_two_dimensional_gates():
     got = scan._collect(d, 10)
     assert got[0].shape == (10, 4), got[0].shape
     assert got[0][0].max() == 0 and got[0][9].max() == 1
+
+
+def test_ablation_detects_the_return_convention():
+    """Zeroing the wrong thing yields a broken model, not an ablated one."""
+    h = torch.randn(6, 4, 8)
+    delta = 0.02 * torch.randn_like(h)
+    # Convention A: forward returns hidden + gate*value -> nearly parallel to h.
+    assert gate_probe._looks_like_updated_hidden(h + delta, h) is True
+    assert gate_probe._looks_like_updated_hidden(h, h) is True
+    # Convention B: forward returns only the contribution -> not parallel.
+    assert gate_probe._looks_like_updated_hidden(delta, h) is False
+    assert gate_probe._looks_like_updated_hidden(torch.zeros_like(h), h) is False
+
+
+def test_ablation_returns_the_input_and_never_calls_through_twice():
+    calls = []
+
+    class Fake:
+        def forward(self, hidden_states, hash_ids, token_mask=None):
+            calls.append(1)
+            return hidden_states + 0.01 * torch.ones_like(hidden_states)
+
+    saved = gate_probe._find_engram_class
+    gate_probe._find_engram_class = lambda: Fake
+    try:
+        gate_probe.install_ablation()
+        obj, h = Fake(), torch.randn(3, 2, 4)
+        first = Fake.forward(obj, h, None)
+        assert torch.equal(first, h), "the first call must already be ablated"
+        second = Fake.forward(obj, h, None)
+        assert torch.equal(second, h)
+        assert len(calls) == 1, "the real forward runs once, only to detect the convention"
+    finally:
+        gate_probe._find_engram_class = saved
+
+
+def test_bootstrap_arms_the_ablation_when_only_ablate_is_set(tmp_path, monkeypatch):
+    import subprocess
+
+    boot = gate_probe.write_bootstrap(str(tmp_path))
+    env = dict(os.environ, PYTHONPATH=boot, ENGRAM_ABLATE="1")
+    env.pop("ENGRAM_PROBE_DIR", None)
+    done = subprocess.run(
+        [sys.executable, "-c", "import sitecustomize; print('ok')"],
+        capture_output=True, text=True, env=env,
+    )
+    assert done.returncode == 0, done.stderr
+    assert "ok" in done.stdout

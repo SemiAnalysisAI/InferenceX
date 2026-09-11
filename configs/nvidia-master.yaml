@@ -10230,3 +10230,5 @@ dsv41flash-fp4-h100-vllm-agentic-dspark:
     - dram-utilization: 0.80
       search-space:
       - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2] }
+      # conc 9 is the Engram ablation eval, not a scan shard (one node).
+      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [9] }

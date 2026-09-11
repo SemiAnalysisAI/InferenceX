@@ -165,10 +165,7 @@ def install_in_workers(analysis_dir: str) -> str:
     that installs the wrapper the moment the Engram module shows up in
     sys.modules -- which happens during model load, minutes before any forward.
     """
-    bootstrap = os.path.join(analysis_dir, "_probe_bootstrap")
-    os.makedirs(bootstrap, exist_ok=True)
-    with open(os.path.join(bootstrap, "sitecustomize.py"), "w") as fh:
-        fh.write(_BOOTSTRAP.format(analysis_dir=analysis_dir))
+    bootstrap = write_bootstrap(analysis_dir)
     existing = os.environ.get("PYTHONPATH", "")
     parts = [bootstrap, analysis_dir] + ([existing] if existing else [])
     os.environ["PYTHONPATH"] = os.pathsep.join(parts)
@@ -199,7 +196,7 @@ for _entry in [p for p in sys.path if os.path.abspath(p) != _self]:
             pass
         break
 
-if os.environ.get("ENGRAM_PROBE_DIR"):
+if os.environ.get("ENGRAM_PROBE_DIR") or os.environ.get("ENGRAM_ABLATE"):
     sys.path.insert(0, {analysis_dir!r})
 
     def _arm(deadline=3600.0, interval=0.05):
@@ -211,8 +208,12 @@ if os.environ.get("ENGRAM_PROBE_DIR"):
                 try:
                     from engram import gate_probe
 
-                    gate_probe.install()
-                    sys.stderr.write("engram-probe: armed in pid %d\\n" % os.getpid())
+                    if os.environ.get("ENGRAM_ABLATE"):
+                        gate_probe.install_ablation()
+                        sys.stderr.write("engram-ablate: armed in pid %d\\n" % os.getpid())
+                    else:
+                        gate_probe.install()
+                        sys.stderr.write("engram-probe: armed in pid %d\\n" % os.getpid())
                 except Exception as exc:  # never break a worker
                     sys.stderr.write("engram-probe: arm failed: %r\\n" % (exc,))
                 return
@@ -220,3 +221,89 @@ if os.environ.get("ENGRAM_PROBE_DIR"):
 
     threading.Thread(target=_arm, daemon=True, name="engram-probe-arm").start()
 '''
+
+
+ABLATE_ENV = "ENGRAM_ABLATE"
+
+
+def install_ablation() -> None:
+    """Force the Engram contribution to zero, leaving the rest of the model intact.
+
+    The gate is consumed inside the fused kernel, so it cannot be set to zero
+    directly; the contribution is removed by not applying it at all.
+
+    `Engram.forward` could return either the updated hidden states
+    (`hidden + gate * value`) or just the delta (`gate * value`), and the
+    correct ablation differs -- return the input unchanged in the first case,
+    zeros in the second. Returning the wrong one would leave a model that
+    still runs and quietly produces garbage, which would look like a dramatic
+    ablation result. So the convention is detected on the first call, from the
+    cosine similarity between the real output and the input: the mean gate is
+    ~0.02, so an updated-hidden return is nearly parallel to its input, while
+    a delta return is not.
+    """
+    cls = _find_engram_class()
+    if getattr(cls, "_gate_ablation_installed", False):
+        return
+    original = cls.forward
+    try:
+        import inspect
+
+        logger.info("engram-ablate: Engram.forward source:\n%s", inspect.getsource(original))
+    except Exception:
+        logger.info("engram-ablate: Engram.forward source unavailable")
+
+    state = {"returns_updated_hidden": None}
+
+    def forward(self, hidden_states, hash_ids, token_mask=None):
+        if state["returns_updated_hidden"] is None:
+            out = original(self, hidden_states, hash_ids, token_mask)
+            state["returns_updated_hidden"] = _looks_like_updated_hidden(out, hidden_states)
+            logger.info(
+                "engram-ablate: forward returns %s; ablating by returning %s",
+                "updated hidden states" if state["returns_updated_hidden"] else "the delta",
+                "the input" if state["returns_updated_hidden"] else "zeros",
+            )
+            # Discard this one real output so even the first token is ablated.
+        if state["returns_updated_hidden"]:
+            return hidden_states
+        return torch.zeros_like(hidden_states)
+
+    cls.forward = forward
+    cls._gate_ablation_installed = True
+
+
+@torch.no_grad()
+def _looks_like_updated_hidden(out, hidden_states) -> bool:
+    if out is hidden_states:
+        return True
+    try:
+        a = out.reshape(-1).float()
+        b = hidden_states.reshape(-1).float()
+        if a.shape != b.shape:
+            return False
+        cos = torch.dot(a, b) / (a.norm() * b.norm() + 1e-12)
+        logger.info("engram-ablate: cos(out, hidden) = %.6f", float(cos))
+        return bool(cos > 0.5)
+    except Exception:
+        logger.exception("engram-ablate: convention detection failed; assuming updated hidden")
+        return True
+
+
+def write_bootstrap(analysis_dir: str) -> str:
+    """Write the worker bootstrap and return its directory, without touching env.
+
+    `vllm serve` is launched from a shell, so the shell needs the path to put
+    on PYTHONPATH itself.
+    """
+    bootstrap = os.path.join(analysis_dir, "_probe_bootstrap")
+    os.makedirs(bootstrap, exist_ok=True)
+    with open(os.path.join(bootstrap, "sitecustomize.py"), "w") as fh:
+        fh.write(_BOOTSTRAP.format(analysis_dir=analysis_dir))
+    return bootstrap
+
+
+if __name__ == "__main__":  # `python3 -m engram.gate_probe <analysis_dir>`
+    import sys as _sys
+
+    print(write_bootstrap(_sys.argv[1] if len(_sys.argv) > 1 else "analysis"))
