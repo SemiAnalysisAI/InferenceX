@@ -287,3 +287,5 @@ Mooncake 容量以整数字节数传入，避免其二进制 `GB` 解析规则�
 H200 故障修复：预览镜像缺少 [vLLM #54853](https://github.com/vllm-project/vllm/pull/54853)。在启动 Mooncake 前应用其三个生产文件的原始补丁（commit `0b066293f3c738a0cbd3a087bf893f2f4dcd61f2`），先检查全部补丁块，并兼容已应用状态。修复为每个已调度请求解析当前 block table，包括没有新分配 block 的保存请求；不屏蔽 missing-table 断言。
 
 c512 的权重加载耗时 1,630 秒：vLLM 检测到 VIRTIOFS 后明确关闭了自动预取，因此启用 `--safetensors-load-strategy prefetch`。随后 5,677 个请求的 warmup 长时间仅有约一个活跃 prefill、数百个请求排队。设置 `--long-prefill-token-threshold 1024`，让多个 prefill 共享原有的 8,192-token 单步预算，并设置 Mooncake `lookup_async: true`，避免远端 prefix 查询阻塞调度器。保留每 lane 十个 warmup 请求、原始轨迹、1M 上下文、AL、并发列表和 180 分钟 Slurm 时限。运行验证应检查 warmup 进度和队列是否改善，而不只检查服务是否启动。
+
+预览镜像没有 `git` 可执行文件。回移 helper 使用 Python 应用随仓库提供的上游补丁块，在写入前验证所有源文件，并兼容已应用状态。

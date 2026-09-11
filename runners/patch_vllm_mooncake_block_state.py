@@ -9,33 +9,65 @@ from __future__ import annotations
 import ast
 import importlib.util
 from pathlib import Path
-import subprocess
 
 PATCH = Path(__file__).with_name('vllm_mooncake_block_state.patch')
 
 
+def patch_hunks() -> dict[str, list[tuple[str, str]]]:
+    """Read the bundled upstream text hunks without external executables."""
+    files: dict[str, list[tuple[str, str]]] = {}
+    path = ""
+    old: list[str] = []
+    new: list[str] = []
+    active = False
+
+    def finish() -> None:
+        if active:
+            files[path].append(("".join(old), "".join(new)))
+
+    for line in PATCH.read_text().splitlines(keepends=True):
+        if line.startswith("diff --git "):
+            finish()
+            active = False
+        elif line.startswith("+++ b/"):
+            path = line[6:].strip()
+            if not path.startswith("vllm/") or ".." in Path(path).parts:
+                raise RuntimeError(f"Invalid bundled patch path: {path}")
+            files[path] = []
+        elif line.startswith("@@ "):
+            finish()
+            old, new, active = [], [], True
+        elif active:
+            if line.startswith((" ", "-")):
+                old.append(line[1:])
+            if line.startswith((" ", "+")):
+                new.append(line[1:])
+    finish()
+    return files
+
+
 def apply_patch(root: Path) -> bool:
-    """Check the complete upstream patch before modifying installed vLLM."""
-    command = ['git', 'apply', '--check', str(PATCH)]
-    check = subprocess.run(command, cwd=root, capture_output=True, text=True)
-    if check.returncode:
-        reverse = subprocess.run(
-            ['git', 'apply', '--reverse', '--check', str(PATCH)],
-            cwd=root, capture_output=True, text=True,
-        )
-        if reverse.returncode == 0:
-            print('Mooncake block-state backport already applied')
-            return False
-        raise RuntimeError('Unsupported vLLM source; refusing partial backport:\n' + check.stderr)
-    subprocess.run(['git', 'apply', str(PATCH)], cwd=root, check=True)
-    for path in (
-        'vllm/v1/core/sched/output.py',
-        'vllm/v1/core/sched/scheduler.py',
-        'vllm/distributed/kv_transfer/kv_connector/v1/mooncake/store/scheduler.py',
-    ):
-        ast.parse((root / path).read_text(), filename=path)
-    print('Applied upstream vLLM #54853 Mooncake block-state fix')
-    return True
+    """Validate every hunk and Python module before writing any source file."""
+    changes: dict[Path, str] = {}
+    for relative, hunks in patch_hunks().items():
+        path = root / relative
+        original = source = path.read_text()
+        for old, new in hunks:
+            if source.count(new) == 1:
+                continue
+            if not old or source.count(old) != 1:
+                raise RuntimeError(
+                    f"Unsupported vLLM source in {relative}; refusing partial backport"
+                )
+            source = source.replace(old, new, 1)
+        ast.parse(source, filename=relative)
+        if source != original:
+            changes[path] = source
+    for path, source in changes.items():
+        path.write_text(source)
+    print("Applied upstream vLLM #54853 Mooncake block-state fix"
+          if changes else "Mooncake block-state backport already applied")
+    return bool(changes)
 
 
 if __name__ == '__main__':
