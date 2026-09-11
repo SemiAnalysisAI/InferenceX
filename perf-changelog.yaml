@@ -7205,3 +7205,9 @@
   description:
     - "Allow 7200 seconds for GB300 DSv4.1 Flash engine startup; the one-hour frontend deadline interrupted cold graph capture"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2961
+
+- config-keys:
+    - dsv41flash-fp4-gb300-vllm-agentic-dspark
+  description:
+    - "Select batch_3 explicitly in the GB300 launcher so inherited runner defaults cannot redirect the allocation"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3005
