@@ -28,7 +28,21 @@ else
 fi
 
 export PATH="$HOME/.local/bin:$PATH"
-python3 -m pip install -q --no-input --break-system-packages harbor modal 2>&1 | tail -2 || true
+# `harbor` alone is not enough: the run reached "0/66 Running trials" and then
+# died on ModuleNotFoundError: dockerfile_parse. The README installs the modal
+# extra ('harbor[modal]'), which carries the task-environment dependencies, so
+# install that and name dockerfile-parse explicitly as a belt-and-braces.
+python3 -m pip install --no-input --break-system-packages     'harbor[modal]' modal dockerfile-parse 2>&1 | tail -15 || true
+python3 - <<'PYCHK'
+import importlib
+missing = [m for m in ("harbor", "modal", "dockerfile_parse") if not importlib.util.find_spec(m)]
+print("MISSING MODULES:", missing or "none")
+raise SystemExit(1 if missing else 0)
+PYCHK
+if [[ $? != 0 ]]; then
+    echo "FATAL: harbor dependencies incomplete; see the pip output above" >&2
+    exit 1
+fi
 HARBOR=(harbor); command -v harbor >/dev/null 2>&1 || HARBOR=(python3 -m harbor)
 
 # Capture help in full. The previous attempt piped to head, and SIGPIPE
