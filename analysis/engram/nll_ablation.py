@@ -159,13 +159,13 @@ def main() -> int:
     # A zero contribution in the first chunk means the ablation never engaged,
     # and every delta below would be noise.
     first = next(iter(per_domain.values()))["contribution_first_chunk"]
-    base_norm = (first.get("baseline") or {}).get("mean_rel_norm", 0)
-    abl_norm = (first.get("ablated") or {}).get("max_rel_norm", 1)
-    if not base_norm or abl_norm != 0.0:
-        logger.error(
-            "ablation not verified (baseline rel-norm %s, ablated max %s)",
-            base_norm, abl_norm,
-        )
+    verdict = gate_probe.ablation_verdict(first.get("baseline"), first.get("ablated"))
+    report["ablation_verdict"] = verdict
+    logger.info("ABLATION VERDICT %s", json.dumps(verdict))
+    with open(os.path.join(args.out, "nll_ablation.json"), "w") as handle:
+        json.dump(report, handle, indent=2)
+    if not verdict["ok"]:
+        logger.error("ablation not verified; the deltas above are not interpretable")
         return 1
     return 0
 

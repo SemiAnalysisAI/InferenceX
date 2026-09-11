@@ -453,3 +453,22 @@ def _record(self, meter_dir, returned, hidden_states) -> None:
     tmp = os.path.join(meter_dir, "." + name)
     np.save(tmp, row)
     os.replace(tmp, os.path.join(meter_dir, name))
+
+
+# The gate-shut path should make the contribution bitwise zero, but a strict
+# `== 0.0` would fail the whole run on any last-bit residue, so allow a floor
+# that is still ~6 orders of magnitude below a real contribution.
+ABLATION_FLOOR = 1e-6
+
+
+def ablation_verdict(baseline: dict, ablated: dict) -> dict:
+    """Did Engram contribute, and did the ablation remove it?"""
+    base = float((baseline or {}).get("mean_rel_norm", 0.0) or 0.0)
+    abl = float((ablated or {}).get("max_rel_norm", 1.0) or 0.0)
+    return {
+        "baseline_mean_rel_norm": round(base, 8),
+        "ablated_max_rel_norm": round(abl, 8),
+        "engram_used_in_baseline": base > ABLATION_FLOOR,
+        "contribution_removed": abl <= ABLATION_FLOOR,
+        "ok": base > ABLATION_FLOOR and abl <= ABLATION_FLOOR,
+    }

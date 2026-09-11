@@ -351,3 +351,14 @@ def test_bootstrap_arms_for_every_mode_env_var(tmp_path):
         assert var in src, var
     # The meter must win when set: it does the ablation itself, via its toggle.
     assert src.index("ENGRAM_METER_DIR") < src.index("install_ablation")
+
+
+def test_ablation_verdict_is_shared_and_tolerant_of_last_bit_residue():
+    ok = gate_probe.ablation_verdict({"mean_rel_norm": 0.45}, {"max_rel_norm": 0.0})
+    assert ok["ok"] and ok["engram_used_in_baseline"] and ok["contribution_removed"]
+    # Bitwise-zero is expected, but a last-bit residue must not fail the run.
+    assert gate_probe.ablation_verdict({"mean_rel_norm": 0.45}, {"max_rel_norm": 1e-9})["ok"]
+    # The two failure modes that produced uninterpretable numbers today.
+    assert not gate_probe.ablation_verdict({}, {})["ok"]                      # never armed
+    assert not gate_probe.ablation_verdict(
+        {"mean_rel_norm": 0.45}, {"max_rel_norm": 1.0})["ok"]                 # wiped the stream

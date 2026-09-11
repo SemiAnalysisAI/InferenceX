@@ -84,21 +84,19 @@ def main() -> int:
 
     base = report["baseline"]["contribution"]
     abl = report["ablated"]["contribution"]
-    report["verdict"] = {
-        "engram_used_in_baseline": bool(base and base.get("mean_rel_norm", 0) > 1e-6),
-        "contribution_zero_when_ablated": bool(abl and abl.get("max_rel_norm", 1) == 0.0),
-        "completions_changed": sum(
-            a != b for a, b in zip(report["baseline"]["completions"], report["ablated"]["completions"])
-        ),
-    }
+    verdict = gate_probe.ablation_verdict(base, abl)
+    verdict["completions_changed"] = sum(
+        a != b
+        for a, b in zip(report["baseline"]["completions"], report["ablated"]["completions"])
+    )
+    report["verdict"] = verdict
     with open(os.path.join(args.out, "verify.json"), "w") as handle:
         json.dump(report, handle, indent=2)
     print("===ENGRAM_VERIFY_JSON_BEGIN===")
     print(json.dumps(report))
     print("===ENGRAM_VERIFY_JSON_END===")
-    v = report["verdict"]
-    logger.info("VERDICT %s", json.dumps(v))
-    return 0 if v["engram_used_in_baseline"] and v["contribution_zero_when_ablated"] else 1
+    logger.info("VERDICT %s", json.dumps(report["verdict"]))
+    return 0 if report["verdict"]["ok"] else 1
 
 
 if __name__ == "__main__":
