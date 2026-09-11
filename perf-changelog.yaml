@@ -7286,3 +7286,9 @@
   description:
     - "Use thinking-on golden synthetic AL 3.51 for five-token DSpark throughput; disable adaptive verification and retain real verification for evals"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2974
+
+- config-keys:
+    - dsr1-fp8-h200-sglang
+  description:
+    - "Update the DeepSeek-R1-0528 FP8 H200 SGLang image from v0.5.12-cu130 to v0.5.19-cu130. Model, TP8 topology, 8k1k workload, concurrency grid, launch flags and evals are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3010
