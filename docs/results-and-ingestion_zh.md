@@ -171,6 +171,12 @@ raw tree:           results/**, excluding inputs.json and profile_export_raw.jso
 不代表请求计数或模型质量通过验证。用于可靠对比前，应将已发出、已完成、已取消及
 出错请求数与原始 profiling 记录和 token 总数核对。GPU 板卡能耗与整机功耗估算分开报告。
 
+GB200 GLM-5.2 聚合部署的 AgentX 配方通过共享 custom-window producer、DCGM
+监控器和任务结束后的功耗适配器，覆盖两个各含四块 GPU 的节点。launcher 按实际
+选择的并发数绑定测量窗口，在返回失败前保留 Slurm 原生状态、producer 和 exporter
+身份以及校验诊断。普通 Slurm 时限以及包括 HiCache 和合成接受率在内的
+服务配置保持不变。其他 GB200 AgentX 配方继续使用原有 producer 与功耗限制。
+
 ### 原始输入和聚合架构
 
 [`process_agentic_result.py`](../utils/agentic/aggregation/process_agentic_result.py) 可解析当前的 `results/aiperf_artifacts` 布局，也可解析只含一个子目录的嵌套布局。它要求存在 `profile_export.jsonl`，并在存在时读取以下输入：
