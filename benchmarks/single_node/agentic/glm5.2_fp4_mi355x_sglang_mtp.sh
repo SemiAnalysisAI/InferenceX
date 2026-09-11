@@ -91,6 +91,15 @@ if agentic_kv_offload_enabled; then
         # env-var override for maximum throughput on nodes with >4 TB DRAM.
         HICACHE_RATIO="${HICACHE_RATIO:-1.5}"
     fi
+    # GSM8K never fills the agentic host pool; ratio 1.5 OOMs the TP4 DRAM share.
+    if [ "${EVAL_ONLY:-false}" = "true" ]; then
+        HICACHE_EVAL_SIZE_GB="${HICACHE_EVAL_SIZE_GB:-16}"
+        HICACHE_POOL_ARGS=(--hicache-size "$HICACHE_EVAL_SIZE_GB")
+        HICACHE_POOL_DESC="size=${HICACHE_EVAL_SIZE_GB} GB/rank (eval-only)"
+    else
+        HICACHE_POOL_ARGS=(--hicache-ratio "$HICACHE_RATIO" --hicache-size 0)
+        HICACHE_POOL_DESC="ratio=$HICACHE_RATIO"
+    fi
     # write_through_selective skips DRAM writes for non-reusable KV blocks,
     # reducing host-bus traffic without affecting the cache hit rate.
     HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through_selective}"
@@ -98,10 +107,10 @@ if agentic_kv_offload_enabled; then
     HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first_direct}"
     case "$KV_OFFLOAD_BACKEND" in
         hicache)
-            echo "HiCache (GPU+host DRAM only): ratio=$HICACHE_RATIO, write_policy=$HICACHE_WRITE_POLICY, io_backend=$HICACHE_IO_BACKEND, mem_layout=$HICACHE_MEM_LAYOUT"
+            echo "HiCache (GPU+host DRAM only): $HICACHE_POOL_DESC, write_policy=$HICACHE_WRITE_POLICY, io_backend=$HICACHE_IO_BACKEND, mem_layout=$HICACHE_MEM_LAYOUT"
             CACHE_ARGS=(
                 --enable-hierarchical-cache
-                --hicache-ratio "$HICACHE_RATIO"
+                "${HICACHE_POOL_ARGS[@]}"
                 --hicache-write-policy "$HICACHE_WRITE_POLICY"
                 --hicache-io-backend "$HICACHE_IO_BACKEND"
                 --hicache-mem-layout "$HICACHE_MEM_LAYOUT"
@@ -132,11 +141,10 @@ EOF
             MOONCAKE_MASTER_PID=$!
             sleep 2
             kill -0 "$MOONCAKE_MASTER_PID"
-            echo "HiCache+Mooncake: ratio=$HICACHE_RATIO, l3_per_rank=${L3_PER_RANK_GB} GB, dram_budget=${TOTAL_CPU_DRAM_GB} GB"
+            echo "HiCache+Mooncake: $HICACHE_POOL_DESC, l3_per_rank=${L3_PER_RANK_GB} GB, dram_budget=${TOTAL_CPU_DRAM_GB} GB"
             CACHE_ARGS=(
                 --enable-hierarchical-cache
-                --hicache-ratio "$HICACHE_RATIO"
-                --hicache-size 0
+                "${HICACHE_POOL_ARGS[@]}"
                 --hicache-write-policy "$HICACHE_WRITE_POLICY"
                 --hicache-io-backend "$HICACHE_IO_BACKEND"
                 --hicache-mem-layout "$HICACHE_MEM_LAYOUT"
