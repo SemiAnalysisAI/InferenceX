@@ -2,8 +2,8 @@
 set -eo pipefail
 set -x
 
-# Agentic trace replay benchmark for DeepSeek-V4-Pro FP4 on MI355X using SGLang
-# with EAGLE/MTP speculative decoding.
+# Agentic trace replay benchmark for DeepSeek-V4-Pro-0813 FP4 on MI355X using
+# SGLang with DSpark speculative decoding.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -162,13 +162,16 @@ if [ "$DP_ATTENTION" = "true" ]; then
     PARALLEL_ARGS+=(
         --dp "$TP"
         --enable-dp-attention
+        --enable-dp-lm-head
         --enable-prefill-delayer
         --enable-dp-attention-local-control-broadcast
         --tokenizer-worker-num "$TP"
         --stream-interval 20
-        --prefill-decode-interval 10
+        --prefill-decode-interval "${PREFILL_DECODE_INTERVAL:-10}"
         --prefill-delayer-token-usage-low-watermark "${DP_PREFILL_DELAYER_LOW_WATERMARK:-0.7}"
     )
+else
+    PARALLEL_ARGS+=(--prefill-decode-interval "${PREFILL_DECODE_INTERVAL:-10}")
 fi
 
 if [ "$EP_SIZE" -gt 1 ]; then
@@ -190,34 +193,33 @@ if [ "$CONC" -ge 32 ]; then
 fi
 
 # ---- Speculative decoding ---------------------------------------------------
-# DeepSeek-V4 ships a built-in MTP head, loaded through the EAGLE spec path
-# with eagle-topk 1 (a single MTP chain); NOT NEXTN, whose V3/R1 loader
-# crashes on the V4 architecture.
-if [ "$CONC" -ge 256 ]; then
-    DSV4_SPEC_NUM_STEPS=1
-    DSV4_GOLDEN_AL=1.79
-else
-    DSV4_SPEC_NUM_STEPS=3
-    DSV4_GOLDEN_AL=2.49
-fi
+# DeepSeek-V4-Pro-0813 bundles the DSpark draft head in the target checkpoint
+# (dspark_block_size / dspark_markov_rank / dspark_target_layer_ids in
+# config.json), so --speculative-draft-model-path defaults to --model-path and
+# no separate draft checkpoint is needed.
+#
+# gamma=6 is the AL-optimal draft length on the committed golden curve.
+DSV4_DSPARK_GAMMA="${DSV4_DSPARK_GAMMA:-6}"
 
 SPEC_ARGS=(
-    --speculative-algorithm EAGLE
-    --speculative-num-steps "$DSV4_SPEC_NUM_STEPS"
+    --speculative-algorithm DSPARK
+    --speculative-dspark-block-size "$DSV4_DSPARK_GAMMA"
+    --speculative-num-steps 1
     --speculative-eagle-topk 1
-    --speculative-num-draft-tokens $((DSV4_SPEC_NUM_STEPS + 1))
+    --speculative-num-draft-tokens $((DSV4_DSPARK_GAMMA + 1))
 )
 
 # Throughput runs pin acceptance to the committed golden AL for this model,
-# thinking mode, and draft length (golden_al_distribution/dsv4_mtp.yaml,
-# thinking_on column: 3 -> 2.49, 1 -> 1.79). Eval-only runs keep real target
+# thinking mode, and draft length (golden_al_distribution/dsv4-pro-0813-dspark.yaml,
+# thinking_on column, key = gamma: 6 -> 3.77). Eval-only runs keep real target
 # verification so accuracy stays meaningful.
+DSV4_GOLDEN_AL=3.77
 if [ "${EVAL_ONLY:-false}" != "true" ]; then
     export SGLANG_SIMULATE_ACC_LEN="$DSV4_GOLDEN_AL"
     export SGLANG_SIMULATE_ACC_METHOD=match-expected
     export SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token
 fi
-echo "MTP draft length: num_steps=$DSV4_SPEC_NUM_STEPS (conc $CONC), golden AL=$DSV4_GOLDEN_AL"
+echo "DSpark draft length: gamma=$DSV4_DSPARK_GAMMA (verify window $((DSV4_DSPARK_GAMMA + 1))), golden AL=$DSV4_GOLDEN_AL"
 
 # ---- Launch -----------------------------------------------------------------
 # No --chat-template: the AgentX traces are tool-heavy, and
@@ -244,10 +246,10 @@ SGLANG_CMD=(
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
     --mem-fraction-static "$MEM_FRACTION_STATIC"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
-    --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
+    --cuda-graph-max-bs-decode "$CUDA_GRAPH_MAX_BS"
     "${SPEC_ARGS[@]}"
     "${CACHE_ARGS[@]}"
-    # MTP draft-token forward passes under long-context agentic load block the
+    # Draft-token forward passes under long-context agentic load block the
     # scheduler long enough to trip the 1800s watchdog mid-warmup.
     --watchdog-timeout 3600
     --enable-metrics
