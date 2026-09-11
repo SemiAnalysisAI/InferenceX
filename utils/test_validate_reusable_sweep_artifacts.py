@@ -794,6 +794,26 @@ def test_eval_validation_rejects_malformed_batch_metadata(
         assert any(expected in error for error in errors), errors
 
 
+def test_reuse_reports_unexpected_results_before_missing_concurrency(tmp_path: Path) -> None:
+    from validate_reusable_sweep_artifacts import raw_eval_key_rows
+
+    write_raw_batched_eval_artifact(tmp_path, [16, 4])
+    artifact = tmp_path / "eval_gptoss_8k1k_batch"
+    (artifact / "results_test_conc4.json").unlink()
+    for name in ("results_test.json", "results_test_conc8.json"):
+        (artifact / name).write_text(json.dumps(raw_eval_result()))
+
+    rows, errors = raw_eval_key_rows(tmp_path)
+
+    assert len(rows) == 1
+    prefix = "raw eval artifact 'eval_gptoss_8k1k_batch'"
+    assert set(errors[:-1]) == {
+        f"{prefix} has batched result 'results_test.json' without a concurrency suffix",
+        f"{prefix} has result 'results_test_conc8.json' for unexpected concurrency 8",
+    }
+    assert errors[-1] == f"{prefix} has no recognized eval result for concurrency 4"
+
+
 def test_fixed_sequence_validation_accepts_unique_source_rows(tmp_path: Path) -> None:
     results = tmp_path / "results_bmk"
     results.mkdir()

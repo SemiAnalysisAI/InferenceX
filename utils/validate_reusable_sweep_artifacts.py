@@ -17,6 +17,7 @@ if not __package__:
 
 from infx.results.evals import (
     is_eval_result, is_valid_effective_count, is_valid_score, metric_family,
+    select_latest_result,
 )
 from infx.results.evals import result_concurrency as _result_concurrency
 from infx.results.evals import result_order as _result_order
@@ -531,19 +532,14 @@ def raw_eval_key_rows(
                     )
 
         for _, conc in contributions:
-            candidates = [
-                path
-                for path in result_paths
-                if not batched or _result_concurrency(path.name) == conc
-            ]
+            latest = select_latest_result(result_paths, concurrency=conc)
             conc_label = f" for concurrency {conc}" if conc is not None else ""
-            if not candidates:
+            if latest is None:
                 errors.append(
                     f"raw eval artifact {artifact_dir.name!r} has no "
                     f"recognized eval result{conc_label}"
                 )
                 continue
-            latest = max(candidates, key=_result_order)
             result_error = _raw_result_error(latest)
             if result_error is not None:
                 errors.append(
@@ -801,19 +797,14 @@ def _eval_winners(artifacts_dir: Path) -> dict[tuple[Any, ...], Path]:
         tuple[tuple[int, str], str, Path],
     ] = {}
     for artifact_dir in raw_eval_artifact_dirs(artifacts_dir):
-        contributions, _, batched = _raw_dir_contributions(artifact_dir)
+        contributions, _, _ = _raw_dir_contributions(artifact_dir)
         result_paths = _recognized_eval_result_paths(
             artifact_dir.glob("results*.json")
         )
         for key, key_conc in contributions:
-            candidates = [
-                path
-                for path in result_paths
-                if not batched or _result_concurrency(path.name) == key_conc
-            ]
-            if not candidates:
+            latest = select_latest_result(result_paths, concurrency=key_conc)
+            if latest is None:
                 continue
-            latest = max(candidates, key=_result_order)
             candidate = (_result_order(latest), artifact_dir.name, latest)
             current = best.get(key)
             if current is None or candidate[:2] > current[:2]:
