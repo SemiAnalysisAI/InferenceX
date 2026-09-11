@@ -7286,3 +7286,10 @@
   description:
     - "Use thinking-on golden synthetic AL 3.51 for five-token DSpark throughput; disable adaptive verification and retain real verification for evals"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2974
+
+- config-keys:
+    - dsv41flash-fp4-gb300-vllm-agentic-dspark
+  description:
+    - "Reserve 144 CPU cores for the GB300 single-node serving task"
+    - "为 GB300 单节点服务任务预留 144 个 CPU 核心"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
