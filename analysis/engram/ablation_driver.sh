@@ -41,10 +41,49 @@ export EVAL_MAX_MODEL_LEN="$EVAL_CONTEXT"
 # differed by 0.0045, more than the ablation effect it was trying to measure.
 # gsm8k stays as a single control, being the one suite known to run here.
 # gpqa_diamond is dropped: Idavidrein/gpqa is gated on the Hub.
-EVAL_TASKS="${ENGRAM_EVAL_TASKS:-gsm8k:1 humaneval_instruct:2 mbpp_instruct:2}"
+# gsm8k comes from the repo YAML, not lm-eval's built-in task: the built-in
+# declares `dataset_path: gsm8k`, and current huggingface_hub rejects bare
+# canonical ids ("Repository id must be 'namespace/name'"). The repo YAML uses
+# openai/gsm8k. The code suites have no repo YAML, so their built-ins are
+# patched in place below -- the same class of breakage that took out wikitext
+# and daily_dialog in the corpora.
+EVAL_TASKS="${ENGRAM_EVAL_TASKS:-utils/evals/gsm8k.yaml:1 humaneval_instruct:2 mbpp_instruct:2}"
 # HumanEval and MBPP score by executing model-generated code. The pinned
 # lm-eval requires this opt-in; execution stays inside the job's container.
 export HF_ALLOW_CODE_EVAL=1
+
+# Namespace the built-in code tasks' dataset paths. Idempotent, and it reports
+# what it touched so a silent no-op cannot masquerade as success.
+python3 - <<'PYPATCH'
+import glob, os, re, sys
+
+RENAMES = {
+    "openai_humaneval": "openai/openai_humaneval",
+    "mbpp": "google-research-datasets/mbpp",
+}
+try:
+    import lm_eval.tasks as T
+except Exception as exc:
+    print("lm_eval.tasks not importable:", exc)
+    sys.exit(0)
+
+root = os.path.dirname(T.__file__)
+changed = []
+for path in glob.glob(f"{root}/humaneval/*.yaml") + glob.glob(f"{root}/mbpp/*.yaml"):
+    text = open(path).read()
+    new = text
+    for bare, full in RENAMES.items():
+        new = re.sub(rf"^(dataset_path:\s*){re.escape(bare)}\s*$", rf"\g<1>{full}",
+                     new, flags=re.M)
+    if new != text:
+        open(path, "w").write(new)
+        changed.append(os.path.basename(path))
+print("patched dataset_path in:", changed or "nothing (already namespaced?)")
+for path in glob.glob(f"{root}/humaneval/*.yaml") + glob.glob(f"{root}/mbpp/*.yaml"):
+    for line in open(path):
+        if line.startswith("dataset_path:"):
+            print(" ", os.path.basename(path), line.strip())
+PYPATCH
 
 cd "$INFERENCEX_REPO_ROOT"
 # vllm serve is launched from this shell, so PYTHONPATH must carry the
