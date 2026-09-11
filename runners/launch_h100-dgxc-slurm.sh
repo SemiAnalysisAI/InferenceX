@@ -260,6 +260,31 @@ else
 
     export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
 
+    # THROWAWAY ANALYSIS BRANCH: conc 11 probes this host -- the Slurm login
+    # node, where the launcher itself runs -- for a container runtime. Harbor
+    # (Terminal-Bench) needs one, and the compute-node container has none.
+    # Exits before salloc so it costs no GPU allocation.
+    if [[ "${MODEL_PREFIX:-}" == "dsv41flash" && "${CONC:-}" == "11" ]]; then
+        echo "=== login-node container runtime probe ($(hostname)) ==="
+        for tool in docker podman nerdctl enroot singularity apptainer; do
+            if command -v "$tool" >/dev/null 2>&1; then
+                echo "FOUND $tool -> $($tool --version 2>&1 | head -1)"
+            else
+                echo "absent $tool"
+            fi
+        done
+        if command -v docker >/dev/null 2>&1; then
+            echo "--- docker info"
+            timeout 30 docker info 2>&1 | head -25
+            echo "--- docker run hello (can it actually start a container?)"
+            timeout 120 docker run --rm hello-world 2>&1 | tail -5
+        fi
+        echo "--- can this host reach a compute node? (harbor would need the vLLM endpoint)"
+        sinfo -h -p "$SLURM_PARTITION" -o '%n %t' 2>&1 | head -5
+        echo "=== probe done ==="
+        exit 0
+    fi
+
     salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$GPU_COUNT --exclusive --time=${SLURM_ALLOC_MINUTES:-330} --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
     if [[ -z "$JOB_ID" ]]; then
