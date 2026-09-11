@@ -55,8 +55,11 @@ echo "Using vLLM endpoint ${AIPERF_SERVER_URL}"
 
 # Golden AL: golden_al_distribution/dsv41flash_dspark.yaml, thinking_on, five draft tokens.
 # Accuracy evals keep real block rejection; throughput fixes acceptance to AL 3.51.
+# Adaptive verification stays off in both modes on ROCm: it trims verification
+# requests on device, which DeepseekV4IndexerBackend does not support, so the
+# engine refused to start with it enabled (run 34651830283, eval-only c32).
 if [[ "${EVAL_ONLY:-false}" == true ]]; then
-    SPEC_CONFIG='{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":true}'
+    SPEC_CONFIG='{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":false}'
 else
     SPEC_CONFIG='{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"synthetic","synthetic_acceptance_length":3.51,"enable_adaptive_verification":false}'
 fi
