@@ -7168,3 +7168,9 @@
   description:
     - "Add H200 DSv4.1 Flash embedded Mooncake DRAM KV offload, golden synthetic AL 3.51 and concurrency 1-512"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3000
+
+- config-keys:
+    - dsv41flash-fp4-h200-vllm-agentic-dspark-mooncake
+  description:
+    - "Correct Mooncake decimal host-memory budget using exact bytes and 4 GiB transfer buffers; cap offload CUDA graph capture at 512 tokens to preserve KV memory at high concurrency"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3000

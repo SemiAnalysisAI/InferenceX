@@ -3421,13 +3421,15 @@ run_agentic_replay_and_write_outputs() (
 setup_agentic_mooncake() {
     require_agentic_kv_offload_backend mooncake || return 1
     check_env_vars GPU_COUNT RESULT_DIR MOONCAKE_HOST_RESERVE_GB
-    local per_rank_gb
-    per_rank_gb=$(python3 - "$TOTAL_CPU_DRAM_GB" "$GPU_COUNT" "$MOONCAKE_HOST_RESERVE_GB" <<'PYMCBUDGET'
+    local per_rank_bytes
+    per_rank_bytes=$(python3 - "$TOTAL_CPU_DRAM_GB" "$GPU_COUNT" "$MOONCAKE_HOST_RESERVE_GB" <<'PYMCBUDGET'
 import sys
 budget, ranks, reserved = map(int, sys.argv[1:])
 if ranks <= 0 or reserved < 0:
     raise SystemExit("Invalid Mooncake rank count or host-memory reservation")
-segment = (budget - reserved) // ranks - 4
+# Runner budgets use decimal GB; Mooncake's string GB suffix means GiB.
+# Pass integer bytes and account for the actual 4 GiB transfer buffer.
+segment = (budget - reserved) * 1_000_000_000 // ranks - 4 * 1024**3
 if segment <= 0:
     raise SystemExit("Host budget cannot fit model reservation, Mooncake buffers and KV segments")
 print(segment)
@@ -3445,7 +3447,7 @@ PYMCBUDGET
     MOONCAKE_MASTER_PORT=$(PORT=0; select_available_server_port; printf '%s' "$PORT") || return $?
     export MOONCAKE_CONFIG_PATH="$RESULT_DIR/mooncake_config.json"
     export PYTHONHASHSEED=0
-    python3 - "$MOONCAKE_CONFIG_PATH" "$MOONCAKE_MASTER_PORT" "$per_rank_gb" <<'PYMCCONFIG'
+    python3 - "$MOONCAKE_CONFIG_PATH" "$MOONCAKE_MASTER_PORT" "$per_rank_bytes" <<'PYMCCONFIG'
 import json
 import os
 import sys
@@ -3455,14 +3457,14 @@ with open(path, "w") as output:
         "mode": "embedded",
         "metadata_server": "P2PHANDSHAKE",
         "master_server_address": f"127.0.0.1:{port}",
-        "global_segment_size": f"{segment}GB",
-        "local_buffer_size": "4GB",
+        "global_segment_size": int(segment),
+        "local_buffer_size": 4 * 1024**3,
         "protocol": "rdma",
         "device_name": os.environ.get("MOONCAKE_DEVICE_NAME", ""),
         "enable_offload": False,
     }, output, indent=2)
 PYMCCONFIG
-    echo "Mooncake: ${per_rank_gb} GB per rank; ${MOONCAKE_HOST_RESERVE_GB} GB reserved for model host memory"
+    echo "Mooncake: ${per_rank_bytes} bytes per rank; ${MOONCAKE_HOST_RESERVE_GB} GB reserved for model host memory"
     mooncake_master --port="$MOONCAKE_MASTER_PORT" \
         --default_kv_lease_ttl=30s \
         --eviction_high_watermark_ratio=0.95 --eviction_ratio=0.1 \
