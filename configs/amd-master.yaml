@@ -1580,7 +1580,7 @@ minimaxm3-fp8-mi325x-vllm-agentic-mtp:
       - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8, 10, 12, 14, 16, 18] }
 
 dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260909
+  image: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260911
   model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:mi355x-amds
