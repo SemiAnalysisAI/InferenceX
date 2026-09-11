@@ -7339,3 +7339,53 @@
     - "Stop llm-d workers through the coordinator's final status instead of cancelling successful allocations, and preserve failed concurrency outcomes."
     - "通过协调进程的最终状态停止 llm-d 工作进程，避免取消成功的分配，并保留并发点的失败状态。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3026
+
+- config-keys:
+  - dsr1-fp4-mi355x-sglang
+  - dsr1-fp4-mi355x-sglang-mtp
+  - dsr1-fp4-mi355x-atom
+  - dsr1-fp4-mi355x-atom-mtp
+  - dsr1-fp8-mi300x-sglang
+  - dsr1-fp8-mi325x-sglang
+  - dsv4-fp8-mi300x-vllm
+  - dsv4-fp8-mi300x-vllm-mtp
+  - dsr1-fp8-mi355x-sglang
+  - dsr1-fp8-mi355x-sglang-mtp
+  - qwen3.5-fp8-mi325x-sglang
+  - qwen3.5-fp8-mi355x-sglang
+  - qwen3.5-fp8-mi355x-sglang-mtp
+  - qwen3.5-fp8-mi355x-atom
+  - qwen3.5-fp8-mi355x-atom-mtp
+  - qwen3.5-fp8-mi355x-sglang-disagg
+  - qwen3.5-fp4-mi355x-sglang
+  - qwen3.5-fp4-mi355x-atom
+  - qwen3.5-fp4-mi355x-sglang-mtp
+  - qwen3.5-fp4-mi355x-sglang-disagg
+  - qwen3.5-fp8-mi300x-sglang
+  - dsr1-fp8-mi355x-atom
+  - dsr1-fp8-mi355x-atom-mtp
+  - dsr1-fp8-mi355x-sglang-disagg
+  - dsr1-fp8-mi355x-sglang-disagg-mtp
+  - dsr1-fp4-mi355x-sglang-disagg
+  - dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp
+  - dsv4-fp4-mi355x-sglang-disagg
+  - dsv4-fp4-mi355x-sglang-disagg-mtp
+  - dsv4-fp4-mi355x-sglang
+  - dsv4-fp4-mi355x-sglang-mtp
+  - dsv4-fp4-mi355x-vllm
+  - dsv4-fp4-mi355x-vllm-mtp
+  - dsv4-fp4-mi355x-atom
+  - dsv4-fp4-mi355x-atom-mtp
+  - dsr1-fp8-mi325x-sglang-mtp
+  - qwen3.5-fp8-mi325x-sglang-mtp
+  - dsr1-fp4-mi355x-sglang-disagg-mtp
+  - dsv4-fp4-mi355x-atom-disagg
+  - dsv4-fp8-mi325x-vllm
+  - dsv4-fp8-mi325x-vllm-mtp
+  scenario-type:
+  - fixed-seq-len
+  description:
+  - Collect native AMD power across every 8K/1K worker node, preserve device identity and stop-window coverage,
+    and reject incomplete role telemetry.
+  - 为 8K/1K 各 AMD 工作节点采集原生功耗，保留设备身份和停止窗口覆盖，并拒绝不完整的角色遥测。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2767

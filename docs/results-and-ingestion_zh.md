@@ -96,6 +96,12 @@ shape:    array of benchmark row objects
 
 InferenceX-app 将路由字段作为列或配置维度，并把数值测量存入 `benchmark_results.metrics` JSONB。映射器支持共享拓扑的 v1、拆分 prefill/decode 拓扑的 v2，以及嵌套 AgentX 指标的 v3。未知数值指标会被保留并产生警告，因此架构可以扩展，同时不会无提示地丢失数值数据。
 
+### 功耗遥测停止与校验
+
+[`benchmark_lib.sh`](../benchmarks/benchmark_lib.sh) 中的单节点 AMD 监控会等待每个已观测 GPU 都记录到有效的正数功耗样本，且时间戳不早于停止请求之后的第一个整秒。`AMD_MONITOR_STOP_TIMEOUT_S` 限制等待时长（默认 `30`；设为 `0` 可跳过等待）。没有可用 Unix 时间戳样本的数据流沿用原有的固定尾部等待。超时不代表覆盖有效：聚合器仍会拒绝未被样本完整包围的基准窗口。AgentX 取消运行时会跳过覆盖等待并停止监控，即使取消发生在正常停止的等待过程中。
+
+[`single_node.py`](../infx/results/power/single_node.py) 不会将正式窗口之外的无效功耗行用于积分或边界覆盖。在边界搜索范围内，这些行会按 GPU 计入 `power_validation.json` 的 `boundary_degenerate_rows`，即使最终没有任何可用样本也会保留计数。窗口内的校验规则保持不变；这些计数仅供诊断，不能替代实测数据。
+
 ### 固定序列基准结果状态与 PowerX 审计
 
 服务客户端在保存原始结果前写入 `benchmark_outcome`，保留现有的 5% 最大请求失败率，以及请求总数、完成数和失败数。处理器检查该记录并复制到聚合结果中；即使遥测有效，请求失败率超限仍返回失败。零成功请求会保留诊断聚合结果，但不会生成不存在的延迟倒数。没有状态元数据的历史结果仍可区分；功耗有效不能证明基准成功或答案质量。

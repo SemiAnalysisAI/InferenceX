@@ -11,6 +11,9 @@ ENGINE="${ENGINE:-sglang-disagg}"
 WS_PATH="${WS_PATH:-${SGLANG_WS_PATH:-${VLLM_WS_PATH:-${ATOM_WS_PATH:-$(dirname "${BASH_SOURCE[0]}")}}}}"
 export WS_PATH ENGINE
 
+source "$WS_PATH/power.sh"
+start_amd_multinode_power || exit 1
+
 echo "[DISPATCHER] ENGINE=$ENGINE  WS_PATH=$WS_PATH"
 
 if [[ "$ENGINE" == "vllm-disagg" ]]; then

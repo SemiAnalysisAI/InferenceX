@@ -52,6 +52,9 @@ profile_folder="${log_path}/${ENGINE}_isl_${chosen_isl}_osl_${chosen_osl}"
 mkdir -p "$profile_folder"
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
+source "$(dirname "$0")/power.sh"
+wait_amd_multinode_power ready || exit 1
+benchmark_exit_code=0
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 
@@ -101,6 +104,7 @@ for max_concurrency in "${chosen_concurrencies[@]}"; do
         fi
     fi
 
+    point_exit_code=0
     run_benchmark_serving \
         --bench-serving-dir "$REPO_ROOT" \
         --model "$BENCH_MODEL" \
@@ -113,7 +117,8 @@ for max_concurrency in "${chosen_concurrencies[@]}"; do
         --max-concurrency "$max_concurrency" \
         --result-filename "$export_file" \
         --result-dir /workspace/ \
-        $extra_flags
+        $extra_flags || point_exit_code=$?
+    if [[ "$point_exit_code" != 0 ]]; then benchmark_exit_code=$point_exit_code; break; fi
 
     echo "-----------------------------------------"
 
@@ -123,3 +128,7 @@ for max_concurrency in "${chosen_concurrencies[@]}"; do
         sleep 10
     fi
 done
+
+# Stop every node while all prefill/decode servers are still alive.
+wait_amd_multinode_power done || benchmark_exit_code=1
+exit "$benchmark_exit_code"

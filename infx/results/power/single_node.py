@@ -9,7 +9,11 @@ Ordinary benchmark runs are best-effort: invalid telemetry is recorded in the
 aggregate and a validation sidecar, but does not fail the benchmark. Power
 studies can set ``REQUIRE_POWER=1`` to fail after those audit artifacts exist.
 The aggregate carries numeric ``power_valid`` (1/0) for metric ingestion; the
-sidecar is the canonical source for boolean validity and reason codes.
+sidecar is the canonical source for boolean validity and reason codes. Rows in
+the ingest band but outside the formal window whose power is missing,
+non-finite, or <= 0 are teardown noise: they are skipped and counted in the
+sidecar's ``boundary_degenerate_rows`` instead of poisoning validity or faking
+window bracketing.
 """
 
 from __future__ import annotations
@@ -22,7 +26,7 @@ import math
 import os
 import re
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from statistics import mean
@@ -65,6 +69,10 @@ class PowerIntegration:
     per_gpu_max_sample_gap_s: dict[str, float]
     per_gpu_energy_j: dict[str, float]
     device_issues: dict[str, list[str]]
+    # Rows in the ingest band but outside the formal window whose power was
+    # missing/N-A/non-finite/<=0, skipped and counted per GPU; "unknown"
+    # buckets rows without a GPU identity.
+    boundary_degenerate_rows: dict[str, int] = field(default_factory=dict)
     avg_power_w: float | None = None
     p75_power_w: float | None = None
     p75_total_gpu_power_w: float | None = None
@@ -78,7 +86,7 @@ class PowerIntegration:
         return len(self.observed_gpu_ids)
 
 
-def _parse_timestamp(value: str) -> float | None:
+def _parse_timestamp(value: str, *, naive_timezone: timezone | None = None) -> float | None:
     """Best-effort timestamp parse to Unix epoch seconds (local wall clock).
 
     Handles the formats observed in practice:
@@ -96,7 +104,7 @@ def _parse_timestamp(value: str) -> float | None:
     # nvidia-smi: "YYYY/MM/DD HH:MM:SS.ffffff"
     for fmt in ("%Y/%m/%d %H:%M:%S.%f", "%Y/%m/%d %H:%M:%S"):
         try:
-            return datetime.strptime(value, fmt).timestamp()
+            return datetime.strptime(value, fmt).replace(tzinfo=naive_timezone).timestamp()
         except ValueError:
             pass
     # ISO 8601 (amd-smi variants). fromisoformat tolerates 'T' or space separator
@@ -108,7 +116,7 @@ def _parse_timestamp(value: str) -> float | None:
         return None
     if dt.tzinfo is None:
         # Treat naive timestamps as local time (matches nvidia-smi convention).
-        return dt.timestamp()
+        return dt.replace(tzinfo=naive_timezone).timestamp()
     return dt.astimezone(timezone.utc).timestamp()
 
 
@@ -146,6 +154,16 @@ def _detect_columns(header: list[str]) -> tuple[str | None, str | None, str | No
     return timestamp_col, power_col, gpu_col
 
 
+def _telemetry_timezone(csv_path: Path) -> timezone | None:
+    context = csv_path.with_name(f"{csv_path.stem}_context.json")
+    if not context.is_file():
+        return None
+    payload = json.loads(context.read_text())
+    if not isinstance(payload, dict) or payload.get("timestamp_timezone") != "UTC":
+        raise ValueError("unsupported_telemetry_timezone")
+    return timezone.utc
+
+
 def aggregate_power(
     csv_path: Path,
     start_unix: float,
@@ -162,6 +180,7 @@ def aggregate_power(
         return None
 
     try:
+        timestamp_timezone = _telemetry_timezone(csv_path)
         with csv_path.open("r", newline="", encoding="utf-8", errors="replace") as f:
             reader = csv.DictReader(f, skipinitialspace=True)
             header = [c.strip() for c in (reader.fieldnames or [])]
@@ -189,7 +208,7 @@ def aggregate_power(
             for row in reader:
                 ts_raw = (row.get(timestamp_col) or "").strip()
                 pw_raw = (row.get(power_col) or "").strip()
-                ts = _parse_timestamp(ts_raw)
+                ts = _parse_timestamp(ts_raw, naive_timezone=timestamp_timezone)
                 pw = _parse_power(pw_raw)
                 if ts is None or pw is None:
                     continue
@@ -237,6 +256,7 @@ def _empty_integration(
     *,
     expected_num_gpus: int | None,
     reasons: list[str],
+    boundary_degenerate_rows: dict[str, int] | None = None,
 ) -> PowerIntegration:
     """Build an invalid integration result when no device data is available."""
     return PowerIntegration(
@@ -248,6 +268,7 @@ def _empty_integration(
         per_gpu_max_sample_gap_s={},
         per_gpu_energy_j={},
         device_issues={},
+        boundary_degenerate_rows=boundary_degenerate_rows or {},
     )
 
 
@@ -308,8 +329,10 @@ def integrate_power(
     # expose timestamps at lower resolution than their sampling cadence, so
     # duplicate-timestamp readings are averaged rather than treated as corrupt.
     raw_samples: dict[str, dict[float, list[float]]] = {}
+    boundary_degenerate: dict[str, int] = {}
     saw_missing_gpu_identity = False
     try:
+        timestamp_timezone = _telemetry_timezone(csv_path)
         with csv_path.open("r", newline="", encoding="utf-8", errors="replace") as f:
             reader = csv.DictReader(f, skipinitialspace=True)
             header = [column.strip() for column in (reader.fieldnames or [])]
@@ -332,7 +355,7 @@ def integrate_power(
                 )
 
             for row in reader:
-                timestamp = _parse_timestamp((row.get(timestamp_col) or "").strip())
+                timestamp = _parse_timestamp((row.get(timestamp_col) or "").strip(), naive_timezone=timestamp_timezone)
                 if timestamp is None or not math.isfinite(timestamp):
                     _append_reason(reasons, "invalid_timestamp_sample")
                     continue
@@ -348,6 +371,15 @@ def integrate_power(
 
                 power = _parse_power((row.get(power_col) or "").strip())
                 gpu_id = (row.get(gpu_col) or "").strip()
+                if (power is None or not math.isfinite(power) or power <= 0.0) and (
+                    timestamp < start_unix or timestamp > end_unix
+                ):
+                    # SMI teardown rows can carry N/A or 0 W cells: outside the
+                    # formal window they are counted, never used to satisfy
+                    # bracketing or to poison in-window validity.
+                    key = gpu_id or "unknown"
+                    boundary_degenerate[key] = boundary_degenerate.get(key, 0) + 1
+                    continue
                 if power is None:
                     _append_reason(reasons, "invalid_power_sample")
                     continue
@@ -359,11 +391,12 @@ def integrate_power(
                     continue
                 values = raw_samples.setdefault(gpu_id, {}).setdefault(timestamp, [])
                 values.append(power)
-    except (OSError, csv.Error):
+    except (OSError, csv.Error, ValueError):
         _append_reason(reasons, "telemetry_file_unreadable")
         return _empty_integration(
             expected_num_gpus=expected_num_gpus,
             reasons=reasons,
+            boundary_degenerate_rows=boundary_degenerate,
         )
 
     if saw_missing_gpu_identity:
@@ -373,6 +406,7 @@ def integrate_power(
         return _empty_integration(
             expected_num_gpus=expected_num_gpus,
             reasons=reasons,
+            boundary_degenerate_rows=boundary_degenerate,
         )
 
     observed_gpu_ids = tuple(sorted(raw_samples, key=_gpu_sort_key))
@@ -450,6 +484,7 @@ def integrate_power(
         per_gpu_max_sample_gap_s=per_gpu_max_sample_gap_s,
         per_gpu_energy_j=per_gpu_energy_j,
         device_issues=device_issues,
+        boundary_degenerate_rows=boundary_degenerate,
         avg_power_w=avg_power_w,
         p75_power_w=p75_total / len(observed_gpu_ids) if p75_total is not None else None,
         p75_total_gpu_power_w=p75_total,
@@ -485,6 +520,7 @@ def _read_energy_snapshot(path: Path) -> dict[str, float] | None:
 def _stream_samples_by_gpu(csv_path: Path) -> dict[str, list[tuple[float, float]]]:
     """Group every parseable (timestamp, watt) sample per GPU, sorted in time."""
     samples: dict[str, list[tuple[float, float]]] = {}
+    timestamp_timezone = _telemetry_timezone(csv_path)
     with csv_path.open("r", newline="", encoding="utf-8", errors="replace") as f:
         reader = csv.DictReader(f, skipinitialspace=True)
         header = [column.strip() for column in (reader.fieldnames or [])]
@@ -493,7 +529,7 @@ def _stream_samples_by_gpu(csv_path: Path) -> dict[str, list[tuple[float, float]
         if not timestamp_col or not power_col or not gpu_col:
             return {}
         for row in reader:
-            timestamp = _parse_timestamp((row.get(timestamp_col) or "").strip())
+            timestamp = _parse_timestamp((row.get(timestamp_col) or "").strip(), naive_timezone=timestamp_timezone)
             power = _parse_power((row.get(power_col) or "").strip())
             gpu_id = (row.get(gpu_col) or "").strip()
             if timestamp is None or power is None or not gpu_id:
@@ -679,6 +715,7 @@ def _validation_payload(
         "per_gpu_max_sample_gap_s": integration.per_gpu_max_sample_gap_s,
         "per_gpu_energy_j": integration.per_gpu_energy_j,
         "device_issues": integration.device_issues,
+        "boundary_degenerate_rows": integration.boundary_degenerate_rows,
         "accumulator_check": accumulator_check,
         "metrics": audit_metrics(metrics),
     }
@@ -754,7 +791,7 @@ def run(
 
     try:
         accumulator_check = cross_check_accumulator(csv_path)
-    except (OSError, csv.Error):
+    except (OSError, csv.Error, ValueError):
         accumulator_check = {"available": False, "reason": "cross_check_error"}
 
     try:
