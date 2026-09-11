@@ -134,6 +134,7 @@ jobs:
         needs: check-changelog
         runs-on: ubuntu-latest
         permissions:
+            actions: read
             contents: read
             issues: read
             pull-requests: read
@@ -143,13 +144,7 @@ jobs:
             github.event_name == 'pull_request' &&
             github.event.action == 'synchronize' &&
             !contains(github.event.pull_request.labels.*.name, 'evals-only') &&
-            !contains(github.event.pull_request.labels.*.name, 'agentx-fast') &&
-            (
-              contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') ||
-              contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled') ||
-              contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') ||
-              contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary')
-            )
+            !contains(github.event.pull_request.labels.*.name, 'agentx-fast')
         outputs:
             skip-pr-sweep: ${{ steps.gate.outputs.skip-pr-sweep }}
         steps:
@@ -161,7 +156,7 @@ jobs:
               env:
                   GH_TOKEN: ${{ github.token }}
               run: |
-                  python3 "${GITHUB_WORKSPACE}/utils/find_reusable_sweep_run.py" \
+                  python3 -m infx.workflows.reuse \
                     --repo "${{ github.repository }}" \
                     --commit-sha "${{ github.event.pull_request.head.sha }}" \
                     --event-name "${{ github.event_name }}" \
@@ -351,7 +346,7 @@ jobs:
                     --criteria-json "$PRIORITY_CRITERIA")
 
                   echo "search-space-config=$CONFIG_JSON" >> "$GITHUB_OUTPUT"
-                  python3 "${GITHUB_WORKSPACE}/utils/find_reusable_sweep_run.py" \
+                  python3 -m infx.workflows.reuse \
                     --repo "${{ github.repository }}" \
                     --commit-sha "${{ github.sha }}" \
                     --event-name "${{ github.event_name }}" \

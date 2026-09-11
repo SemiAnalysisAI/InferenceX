@@ -158,6 +158,11 @@ start_gpu_monitor() {
 
     if command -v nvidia-smi &>/dev/null; then
         GPU_MONITOR_VENDOR="nvidia"
+        if ! nvidia-smi --query-gpu=index,uuid,pci.bus_id,name,driver_version \
+            --format=csv > "${output%.csv}_identity.csv" 2>/dev/null; then
+            rm -f "${output%.csv}_identity.csv"
+            echo "[GPU Monitor] Warning: NVIDIA identity sidecar failed" >&2
+        fi
         nvidia-smi --query-gpu="$NVIDIA_GPU_MONITOR_QUERY" \
             --format=csv -l "$interval" > "$output" 2>/dev/null &
         GPU_MONITOR_PID=$!
@@ -257,20 +262,28 @@ _write_amd_smi_sidecar() {
 
 # Block until the GPUs have released a prior job's memory before starting a run.
 # Polls rocm-smi VRAM% every 10s for up to 15 minutes; succeeds once the busiest
-# GPU is at <=10% VRAM, otherwise returns 1 so the caller aborts rather than
-# starting a benchmark on GPUs still draining the previous run's memory.
+# GPU is at <= the threshold percent VRAM (default 10), otherwise returns 1 so the
+# caller aborts rather than starting a benchmark on GPUs still draining the
+# previous run's memory.
+#
+# Pass a stricter threshold when the run sizes its KV cache from the device-wide
+# free memory (torch.cuda.mem_get_info): on the 288 GB parts the default 10% gate
+# still admits ~28.8 GB of prior-job residual, which the engine then counts as
+# used, folds into its non_torch term, and subtracts from the KV pool -- so the
+# pool drifts run to run by whatever slipped under the gate.
 wait_for_amd_gpu_clean() {
+    local threshold="${1:-10}"
     local gpu_clean=false vram_max i
     for i in $(seq 1 90); do
         vram_max=$(rocm-smi --showmemuse 2>/dev/null \
             | grep -oE "GPU Memory Allocated \(VRAM%\): [0-9]+" \
             | awk '{if ($NF > m) m = $NF} END {print m+0}')
-        if [ "${vram_max:-0}" -le 10 ]; then
-            echo "GPUs clean (vram%max=$vram_max after $((i * 10))s)"
+        if [ "${vram_max:-0}" -le "$threshold" ]; then
+            echo "GPUs clean (vram%max=$vram_max <= $threshold after $((i * 10))s)"
             gpu_clean=true
             break
         fi
-        echo "waiting for prior-job GPU memory reclaim: vram%max=$vram_max"
+        echo "waiting for prior-job GPU memory reclaim: vram%max=$vram_max (target <= $threshold)"
         sleep 10
     done
     if [ "$gpu_clean" != "true" ]; then
@@ -3231,6 +3244,7 @@ run_agentic_replay_and_write_outputs() (
     local power_rc=0
     local agentx_power_enabled=0
     local agentx_multinode_power_enabled=0
+    local agentx_multinode_contract_missing=0
     local agentx_monitor_stopped=1
 
     case "${ENABLE_AGENTX_POWER:-1}" in
@@ -3238,6 +3252,8 @@ run_agentic_replay_and_write_outputs() (
             if [ "${IS_MULTINODE:-false}" = "true" ]; then
                 if [ -n "${SRT_MEASUREMENT_WINDOW_DIR:-}" ]; then
                     agentx_multinode_power_enabled=1
+                else
+                    agentx_multinode_contract_missing=1
                 fi
             else
                 agentx_power_enabled=1
@@ -3321,15 +3337,19 @@ run_agentic_replay_and_write_outputs() (
         set -e
     fi
 
-    if [ "$agentx_power_enabled" = "1" ]; then
+    if [ "$agentx_power_enabled" = "1" ] || [ "$agentx_multinode_contract_missing" = "1" ]; then
         local expected_num_gpus
         local -a power_args
-        expected_num_gpus=$((${TP:-1} * ${PP_SIZE:-1} * ${PCP_SIZE:-1}))
         power_args=(
             --result-dir "$result_dir"
             --agg-result "${AGENTIC_OUTPUT_DIR:-$INFMAX_CONTAINER_WORKSPACE}/$RESULT_FILENAME.json"
-            --expected-num-gpus "$expected_num_gpus"
         )
+        if [ "$agentx_multinode_contract_missing" = "1" ]; then
+            power_args+=(--multinode-contract-missing)
+        else
+            expected_num_gpus=$((${TP:-1} * ${PP_SIZE:-1} * ${PCP_SIZE:-1}))
+            power_args+=(--expected-num-gpus "$expected_num_gpus")
+        fi
         case "${REQUIRE_POWER:-0}" in
             1|true|TRUE|yes|YES) power_args+=(--require-power) ;;
         esac

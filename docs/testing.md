@@ -100,7 +100,7 @@ Inspect the emitted values, not only the exit code or row count: config key, mod
 | Result processing | `python -m pytest utils/test_process_result.py utils/test_aggregate_power.py utils/test_calc_success_rate.py -v` |
 | Eval dispatch, batching, or patches | `python -m pytest utils/evals/ -v` |
 | Eval collection | `python -m pytest utils/test_collect_eval_results.py -v` |
-| Sweep reuse or reusable artifacts | `python -m pytest utils/test_find_reusable_sweep_run.py utils/test_validate_reusable_sweep_artifacts.py -v` |
+| Sweep reuse or reusable artifacts | `python -m pytest utils/test_github.py utils/test_find_reusable_sweep_run.py utils/test_acknowledge_sweep_reuse.py utils/test_validate_reusable_sweep_artifacts.py -v` |
 
 For an edited changelog, also run the same matrix-compatibility validator used by setup, with real base and head refs:
 
