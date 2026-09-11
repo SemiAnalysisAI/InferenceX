@@ -221,9 +221,9 @@ SGLANG_CMD=(
     "${PARALLEL_ARGS[@]}"
     --kv-cache-dtype fp8_e4m3
     # The triton DSA prefill/decode backends only exist after sgl-project/sglang
-    # PR #30575 (salexspb/sglang@07f8440fdc462ee48380d10020565e89d49e4769); on an
-    # image built before that commit these flags are rejected at startup, so the
-    # image pin must stay at or ahead of it.
+    # PR #30575 (commit 8a6ab89bf0b90304b3b454a833fcdcaefb777c29); on an image
+    # built before that commit these flags are rejected at startup, so the image
+    # pin must stay at or ahead of it.
     --dsa-prefill-backend triton
     --dsa-decode-backend triton
     # GLM-5.2 emits the GLM-4.7-style tool-call format; glm47 is required for
