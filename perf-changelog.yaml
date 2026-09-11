@@ -7286,3 +7286,30 @@
   description:
     - "Use thinking-on golden synthetic AL 3.51 for five-token DSpark throughput; disable adaptive verification and retain real verification for evals"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2974
+
+- config-keys:
+    - qwen3.5-fp8-mi300x-sglang-disagg-dep8-agentic-mtp
+  no-evals: true
+  description:
+    - "Add focused MI300X Qwen3.5 AgentX MORI disaggregation: DEP8 prefill/decode at c32 and c64."
+    - "Use native srt-slurm coordination, cache-aware SGLang routing, the stock September 10 ROCm 7.2.0 image, and golden acceptance length 3.39; accuracy jobs disable acceptance simulation."
+    - "Keep attention layouts homogeneous because the pinned MORI implementation does not preserve Qwen convolution-state group ordering across attention TP8 to TP1."
+    - "Forward the recipe fingerprint into benchmark artifacts and retain existing workflow scheduling and full-sweep policy."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2984
+
+- config-keys:
+    - qwen3.5-fp8-mi300x-sglang-disagg-pure-tp8-agentic-mtp
+  no-evals: true
+  description:
+    - "Add low-concurrency MI300X Qwen3.5 AgentX MORI disaggregation with pure TP8/EP1 prefill and decode at c1 and c4."
+    - "Keep the same stock ROCm 7.2.0 image, BF16 KV/Mamba state, native dense-MLP TP defaults, and golden acceptance length 3.39; validate accuracy separately without acceptance simulation."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2984
+
+- config-keys:
+    - qwen3.5-fp8-mi300x-sglang-disagg-tep8-agentic-mtp
+  no-evals: true
+  description:
+    - "Add homogeneous MI300X Qwen3.5 AgentX 1P TEP8 / 1D TEP8 at session concurrencies 1, 4, 8 and 16 to the official full sweep."
+    - "Retain the proven screening recipe: stock ROCm 7.2.0, MORI transfer, TP8/EP8 on both roles, 8192-token prefill chunks, memory fraction 0.75, and golden acceptance length 3.39."
+    - "Use full default warmup and 3600-second profiling; skip evals as requested."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2984
