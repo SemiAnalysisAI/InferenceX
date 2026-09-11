@@ -7237,3 +7237,11 @@
     - "Explore a larger packed TP4 cache budget with mem-fraction-static 0.85 on both roles, retaining AITER's automatic long-context workspace reserve."
     - "Keep topology, BF16 KV/Mamba state, native MTP and golden acceptance length 3.39 unchanged for a memory-only screening comparison."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2984
+
+- config-keys:
+    - qwen3.5-fp8-mi300x-sglang-disagg-colocated-agentic-mtp
+  description:
+    - "Add native one-node MI300X Qwen3.5 AgentX colocation: TP4/EP4 prefill on four GPUs and TP4/EP4 decode on the other four, accounting for all eight physical GPUs."
+    - "Use decode_nodes=0 placement, round-robin decode routing, stock MORI transfer, and mem-fraction-static 0.85 on both roles; preserve BF16 KV/Mamba, native MTP and golden acceptance length 3.39."
+    - "Screen session concurrency 1, 4, 8 and 16; placement and generated accounting are not runtime correctness or performance evidence."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2984
