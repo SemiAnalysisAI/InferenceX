@@ -111,7 +111,9 @@ backend:
       speculative-num-draft-tokens: 4
       context-length: 262144
       disable-radix-cache: false
-      mem-fraction-static: 0.75
+      # Reserve more prefix-cache capacity as session concurrency increases.
+      # AITER still applies its automatic long-context workspace reserve.
+      mem-fraction-static: 0.85
       max-running-requests: 64
       max-prefill-tokens: 32768
       chunked-prefill-size: 8192
@@ -124,6 +126,7 @@ backend:
       log-level: info
     decode:
       <<: *worker_config
+      mem-fraction-static: 0.75
 
 srun_options:
   container-writable: ""

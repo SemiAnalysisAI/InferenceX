@@ -7245,3 +7245,10 @@
     - "Use decode_nodes=0 placement, round-robin decode routing, stock MORI transfer, and mem-fraction-static 0.85 on both roles; preserve BF16 KV/Mamba, native MTP and golden acceptance length 3.39."
     - "Screen session concurrency 1, 4, 8 and 16; placement and generated accounting are not runtime correctness or performance evidence."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2984
+
+- config-keys:
+    - qwen3.5-fp8-mi300x-sglang-disagg-1p2d-agentic-mtp
+  description:
+    - "Explore higher-concurrency 1P2D serving with a larger prefill prefix-cache budget: mem-fraction-static 0.85 on prefill and 0.75 on decode."
+    - "Retain AITER's automatic workspace reserve, stock MORI, BF16 KV/Mamba and golden acceptance length 3.39; measure the c32 candidate before selecting final frontier points."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2984
