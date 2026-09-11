@@ -1395,16 +1395,21 @@ def test_eval_dedupe_leaves_invalid_suite_for_validation(
     assert any("invalid eval_suite" in error for error in errors)
 
 
-def test_dedupe_uses_winning_legacy_result_mtime_for_aggregate(
-    tmp_path: Path,
+@pytest.mark.parametrize("newer_name,older_ns", [
+    ("results_a.json", 1_000_000_000),
+    ("results_c.json", 2_000_000_000),
+])
+def test_dedupe_uses_winning_legacy_result_for_aggregate(
+    tmp_path: Path, newer_name: str, older_ns: int,
 ) -> None:
     artifact_name = "eval_minimaxm3_conc4096_b300-nv_retry"
-    _dd_write_legacy_raw(tmp_path, artifact_name, 4096, "a")
+    _dd_write_legacy_raw(tmp_path, artifact_name, 4096, None)
     artifact_dir = tmp_path / artifact_name
     older = artifact_dir / "results_b.json"
     older.write_text(json.dumps(raw_eval_result()))
-    newer = artifact_dir / "results_a.json"
-    os.utime(older, ns=(1_000_000_000, 1_000_000_000))
+    newer = artifact_dir / newer_name
+    newer.write_text(json.dumps(raw_eval_result()))
+    os.utime(older, ns=(older_ns, older_ns))
     os.utime(newer, ns=(2_000_000_000, 2_000_000_000))
     _dd_write_aggregate(
         tmp_path,
@@ -1416,7 +1421,7 @@ def test_dedupe_uses_winning_legacy_result_mtime_for_aggregate(
             ),
             _dd_agg_row(
                 4096,
-                f"eval_results/{artifact_name}/results_a.json",
+                f"eval_results/{artifact_name}/{newer_name}",
                 0.9,
             ),
         ],
@@ -1429,3 +1434,72 @@ def test_dedupe_uses_winning_legacy_result_mtime_for_aggregate(
     )
     assert [row["em_strict"] for row in rows] == [0.9]
     assert validate_eval_artifacts(tmp_path) == []
+
+
+@pytest.mark.parametrize("separator", ["/", "\\"])
+def test_dedupe_breaks_ties_by_directory_then_aggregate_location(
+    tmp_path: Path, separator: str,
+) -> None:
+    # Equal result timestamps and filenames choose the last directory name;
+    # repeated rows for that file choose the last aggregate filename and index.
+    stamp = "2026-06-27T01-00-00.000000"
+    for name in ("eval_retry_z", "eval_retry_a"):
+        _dd_write_legacy_raw(tmp_path, name, 16, stamp)
+    source = separator.join(["eval_results", "eval_retry_z", f"results_{stamp}.json"])
+    first = _dd_write_aggregate(tmp_path, [
+        _dd_agg_row(16, f"eval_results/eval_retry_a/results_{stamp}.json", 0.1),
+        _dd_agg_row(16, source, 0.2),
+    ])
+    last = first.with_name("z.json")
+    chosen = _dd_agg_row(16, source, 0.4)
+    last.write_text(json.dumps([_dd_agg_row(16, source, 0.3), chosen]))
+
+    assert dedupe_reran_evals(tmp_path) == [
+        "agg_eval_all.json: kept 0 of 2 eval row(s)",
+        "z.json: kept 1 of 2 eval row(s)",
+        "removed superseded raw eval dir 'eval_retry_a'",
+    ]
+    assert json.loads(first.read_text()) == []
+    assert json.loads(last.read_text()) == [chosen]
+    assert not (tmp_path / "eval_retry_a").exists()
+    assert (tmp_path / "eval_retry_z" / f"results_{stamp}.json").is_file()
+    assert validate_eval_artifacts(tmp_path) == []
+    assert dedupe_reran_evals(tmp_path) == []
+
+
+def test_dedupe_selects_result_files_per_batched_concurrency(tmp_path: Path) -> None:
+    name = "eval_retry_batch"
+    _dd_write_legacy_raw(tmp_path, name, 0, None)
+    meta = {**_dd_meta(0), "eval_concs": [16, 32], "completed_eval_concs": [16, 32]}
+    meta_path = tmp_path / name / "meta_env.json"
+    meta_path.write_text(json.dumps(meta))
+    rows = []
+    for conc, suffix, mtime, score in (
+        (16, "a", 10, 0.1), (16, "b", 20, 0.6),
+        (32, "a", 20, 0.9), (32, "b", 10, 0.2),
+    ):
+        path = tmp_path / name / f"results_{suffix}_conc{conc}.json"
+        path.write_text(json.dumps(raw_eval_result(score)))
+        os.utime(path, (mtime, mtime))
+        rows.append(_dd_agg_row(conc, f"eval_results/{name}/{path.name}", score))
+    aggregate = _dd_write_aggregate(tmp_path, rows)
+    raw_bytes = {path: path.read_bytes() for path in (tmp_path / name).iterdir()}
+
+    assert dedupe_reran_evals(tmp_path) == ["agg_eval_all.json: kept 2 of 4 eval row(s)"]
+    assert [row["em_strict"] for row in json.loads(aggregate.read_text())] == [0.6, 0.9]
+    assert {path: path.read_bytes() for path in (tmp_path / name).iterdir()} == raw_bytes
+    assert validate_eval_artifacts(tmp_path) == []
+
+
+def test_dedupe_leaves_rows_without_the_selected_result_filename(tmp_path: Path) -> None:
+    name = "eval_retry"
+    _dd_write_legacy_raw(tmp_path, name, 16, "latest")
+    aggregate = _dd_write_aggregate(tmp_path, [
+        _dd_agg_row(16, f"eval_results/{name}/results_old.json", 0.1),
+        _dd_agg_row(16, f"eval_results/{name}/results_other.json", 0.9),
+    ])
+    before = aggregate.read_bytes()
+
+    assert dedupe_reran_evals(tmp_path) == []
+    assert aggregate.read_bytes() == before
+    assert any("duplicate" in error for error in validate_eval_artifacts(tmp_path))
