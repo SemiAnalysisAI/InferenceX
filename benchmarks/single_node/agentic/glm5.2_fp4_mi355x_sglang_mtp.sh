@@ -72,11 +72,10 @@ export SGLANG_OPT_USE_TOPK_V2=false
 #
 # Per-arm L2 ratio (sizing rationale below) applies to both backends unless
 # overridden via HICACHE_RATIO. TP arm (182.7 GB/rank device pool): the
-# agentic-coding corpus saturates any fixed DRAM pool at conc ≥ 10; ratio 1.5
-# (~2.9 TB pinned) is the safe default for cluster:mi355x-amds nodes (~3.0 TB
-# available DRAM per runners.yaml). ratio=2.5 (~4.8 TB) yields higher
-# throughput at conc 10-12 but exceeds physical DRAM on these nodes and must
-# be set via HICACHE_RATIO env-var override on nodes that can accommodate it.
+# agentic-coding corpus saturates any fixed DRAM pool at conc ≥ 10; ratio 1.0
+# (~453 GB pinned at TP4) is the default. Larger ratios trade DRAM headroom
+# for host-tier capacity and must be set via the HICACHE_RATIO env-var
+# override on nodes that can accommodate them.
 # The DP-attention arm (159.4 GB/rank) only runs at conc >= 32, where the host
 # tier just absorbs overflow - ratio 0.5 (~1.2 TB pinned, ~1.8 TB of load
 # headroom) at negligible hit-rate cost (ratio 1.5 OOMs the host mid-storm at
@@ -86,10 +85,9 @@ if agentic_kv_offload_enabled; then
     if [ "$DP_ATTENTION" = "true" ]; then
         HICACHE_RATIO="${HICACHE_RATIO:-0.5}"
     else
-        # ratio=1.5 (~2.9 TB pinned): safe default within the ~3.0 TB DRAM
-        # available on cluster:mi355x-amds nodes. Set HICACHE_RATIO=2.5 via
-        # env-var override for maximum throughput on nodes with >4 TB DRAM.
-        HICACHE_RATIO="${HICACHE_RATIO:-1.5}"
+        # ratio=1.0 (~113 GB/rank, ~453 GB pinned at TP4). Raise via the
+        # HICACHE_RATIO env-var override on nodes with more DRAM headroom.
+        HICACHE_RATIO="${HICACHE_RATIO:-1.0}"
     fi
     # write_through_selective skips DRAM writes for non-reusable KV blocks,
     # reducing host-bus traffic without affecting the cache hit rate.
