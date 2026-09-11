@@ -7230,3 +7230,10 @@
     - "Add a matched stock-image TP8/EP8 aggregated control to distinguish software-stack gains from disaggregation gains."
     - "Keep native serving settings in recipes and remove legacy derived admission overrides; disable golden acceptance simulation for every evaluated worker role."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2984
+
+- config-keys:
+    - qwen3.5-fp8-mi300x-sglang-disagg-2p2d-agentic-mtp
+  description:
+    - "Explore a larger packed TP4 cache budget with mem-fraction-static 0.85 on both roles, retaining AITER's automatic long-context workspace reserve."
+    - "Keep topology, BF16 KV/Mamba state, native MTP and golden acceptance length 3.39 unchanged for a memory-only screening comparison."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2984
