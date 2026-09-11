@@ -362,3 +362,27 @@ def test_ablation_verdict_is_shared_and_tolerant_of_last_bit_residue():
     assert not gate_probe.ablation_verdict({}, {})["ok"]                      # never armed
     assert not gate_probe.ablation_verdict(
         {"mean_rel_norm": 0.45}, {"max_rel_norm": 1.0})["ok"]                 # wiped the stream
+
+
+def test_gate_matches_the_kernels_sign_and_clamp_branches():
+    """Pin the two branches that the Triton source makes explicit: the clamp
+    floor, and negation driven by the sign of dot (not of the clamped value)."""
+    import math
+
+    def kernel_gate(dot, clamp=1e-6):
+        gi = math.sqrt(max(abs(dot), clamp))
+        if dot < 0:
+            gi = -gi
+        return 1.0 / (1.0 + math.exp(-gi))
+
+    for dot in (5.0, 0.5, 1e-9, -1e-9, -0.5, -5.0):
+        mine = float(
+            torch.sigmoid(
+                torch.sqrt(torch.tensor(abs(dot)).clamp_min(1e-6))
+                * torch.sign(torch.tensor(dot))
+            )
+        )
+        assert abs(mine - kernel_gate(dot)) < 1e-6, (dot, mine, kernel_gate(dot))
+    # Documented divergence at exactly zero: sign(0)==0 here, kernel goes positive.
+    assert abs(float(torch.sigmoid(torch.tensor(0.0))) - 0.5) < 1e-9
+    assert abs(kernel_gate(0.0) - 0.5) < 1e-3

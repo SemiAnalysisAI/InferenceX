@@ -13,6 +13,27 @@ tensors, and mirror the kernel's arithmetic exactly:
 Only public attributes are touched (wkv, embed, q_weight, k_weight, hc_mult,
 dim, eps, clamp_value), so this survives the module-path and kernel-name
 churn between the 0909 image and vLLM main.
+
+VERIFIED against the shipped `_fused_engram_post_wkv_kernel` (dumped from the
+0909 image by `_dump_sources`, run 34630139069). The kernel computes:
+
+    hidden_rms = rsqrt(sum(hidden*hidden) / DIM + eps)
+    key_rms    = rsqrt(sum(key*key) / DIM + eps)
+    dot        = sum(hidden * q * k * key) * hidden_rms * key_rms * rsqrt(DIM)
+    gate_input = sqrt(max(abs(dot), clamp_value)), negated where dot < 0
+    gate       = sigmoid(gate_input); where a token_mask is given and False,
+                 gate is forced to 0
+    store      = hidden + gate * value      # value = kv[..., HC_MULT*DIM:]
+
+which is what `_gate` below reimplements, including the key layout
+kv[t, hc_idx*DIM + d]. One deliberate divergence: at exactly dot == 0 the
+kernel takes the positive branch (sigmoid(+sqrt(clamp)) ~ 0.50025) while
+sign(0) == 0 here gives 0.5. With clamp_value 1e-6 that is a 2.5e-4
+difference on a measure-zero set.
+
+The mask semantics also confirm the ablation: an all-False token_mask makes
+gate 0 everywhere, so output == hidden exactly -- which is why the ablated
+contribution measures 0.0 and not merely small.
 """
 
 from __future__ import annotations
