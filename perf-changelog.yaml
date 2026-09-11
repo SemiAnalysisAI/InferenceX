@@ -7319,3 +7319,10 @@
     - "Resolve the requested H100 SGLang container instead of a hardcoded older image, and stop benchmark/eval clients when their ready server or required worker exits."
     - "H100 SGLang 使用所请求的容器而非硬编码旧镜像；已就绪的服务或必需工作进程退出后，停止其 benchmark/评测客户端。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3020
+
+- config-keys:
+    - qwen3.5-fp8-b200-sglang-mtp
+  description:
+    - "Update the Qwen3.5-397B-A17B-FP8 B200 SGLang MTP image from lmsysorg/sglang:v0.5.14-cu130 to lmsysorg/sglang:v0.5.19-cu130. Model, TP8/TP4 EP1 topology, EAGLE MTP speculation, 8k1k workload, concurrency grid, launch flags and evals are unchanged."
+    - "将 Qwen3.5-397B-A17B-FP8 B200 SGLang MTP 镜像从 lmsysorg/sglang:v0.5.14-cu130 更新为 lmsysorg/sglang:v0.5.19-cu130。模型、TP8/TP4 EP1 拓扑、EAGLE MTP 投机解码、8k1k 工作负载、并发网格、启动参数与评测均保持不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3023
