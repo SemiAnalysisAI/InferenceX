@@ -65,9 +65,10 @@ def test_store_reserves_model_and_transfer_buffers(tmp_path: Path, budget: int) 
     result = run_setup(tmp_path, budget)
     assert result.returncode == 0, result.stderr
     config = json.loads((tmp_path / "mooncake_config.json").read_text())
-    # 40 model + 4 * (13 segment + 4 buffer) = 108 GB, with at most 1 GB unused.
-    assert config["global_segment_size"] == "13GB"
-    assert config["local_buffer_size"] == "4GB"
+    # Independently calculated byte budgets, including the 4 GiB buffers.
+    assert config["global_segment_size"] == {108: 12_705_032_704, 109: 12_955_032_704}[budget]
+    assert config["local_buffer_size"] == 4_294_967_296
+    assert 40_000_000_000 + 4 * (config["global_segment_size"] + config["local_buffer_size"]) <= budget * 1_000_000_000
     assert config["mode"] == "embedded"
     assert config["enable_offload"] is False
     assert config["protocol"] == "rdma"

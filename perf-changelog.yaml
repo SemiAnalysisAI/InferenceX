@@ -7191,3 +7191,9 @@
   description:
     - "Clear incompatible expandable-segment allocator settings for H100 Mooncake KV registration"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2999
+
+- config-keys:
+    - dsv41flash-fp4-h100-vllm-agentic-dspark-mooncake
+  description:
+    - "Correct Mooncake decimal host-memory budget using exact bytes and 4 GiB transfer buffers"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2999

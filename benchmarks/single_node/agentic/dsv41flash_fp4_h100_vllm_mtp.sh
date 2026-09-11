@@ -75,6 +75,16 @@ MOONCAKE_MASTER_PID=""
 cleanup() {
     local rc=$?
     trap - EXIT INT TERM
+    if (( rc != 0 )) && [[ "${KV_OFFLOAD_BACKEND:-}" == mooncake ]]; then
+        # Preserve host OOM evidence that vLLM's generic "cancelled" error omits.
+        for memory_file in /proc/meminfo /sys/fs/cgroup/memory.events /sys/fs/cgroup/memory.current /sys/fs/cgroup/memory.max; do
+            if [[ -r "$memory_file" ]]; then
+                echo "Host memory diagnostic: $memory_file"
+                cat "$memory_file" || true
+            fi
+        done
+        [[ ! -f "$RESULT_DIR/mooncake_master.log" ]] || tail -n 80 "$RESULT_DIR/mooncake_master.log" || true
+    fi
     stop_background_process_tree "$SERVER_PID" "vLLM server" 60
     stop_background_process_tree "$MOONCAKE_MASTER_PID" "Mooncake master" 10
     exit "$rc"
