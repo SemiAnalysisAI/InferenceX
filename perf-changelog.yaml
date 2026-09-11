@@ -7182,6 +7182,7 @@
 
 - config-keys:
     - qwen3.5-fp8-mi300x-sglang-disagg-dep8-agentic-mtp
+  no-evals: true
   description:
     - "Add focused MI300X Qwen3.5 AgentX MORI disaggregation: DEP8 prefill/decode at c32 and c64."
     - "Use native srt-slurm coordination, cache-aware SGLang routing, the stock September 10 ROCm 7.2.0 image, and golden acceptance length 3.39; accuracy jobs disable acceptance simulation."
@@ -7191,6 +7192,7 @@
 
 - config-keys:
     - qwen3.5-fp8-mi300x-sglang-disagg-pure-tp8-agentic-mtp
+  no-evals: true
   description:
     - "Add low-concurrency MI300X Qwen3.5 AgentX MORI disaggregation with pure TP8/EP1 prefill and decode at c1 and c4."
     - "Keep the same stock ROCm 7.2.0 image, BF16 KV/Mamba state, native dense-MLP TP defaults, and golden acceptance length 3.39; validate accuracy separately without acceptance simulation."
