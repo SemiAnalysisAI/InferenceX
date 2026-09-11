@@ -6976,7 +6976,7 @@
     - "Pick up our recent SGLang main-branch optimizations for GLM-5.2-MXFP4 serving."
     - "Lower the TP HiCache host-pool ratio from 1.5 to 1.0 (DP-attention arm stays at 0.5). Eval and sweep still share the same ratio-based sizing; the smaller pool cuts pinned host DRAM on the TP4 arm (~453 GB vs ~679 GB). Keep the write policy at write_through: evals-only run 34569310922 passed with ratio 1.0 and write_through, so write_through_selective was unrelated to the earlier failure."
     - "Remove the SGLANG_HEALTH_CHECK_TIMEOUT=120 override and its stale first-request JIT explanation; successful evals-only run 34569310922 used the default health-check timeout."
-    - "Replace --cuda-graph-max-bs with --cuda-graph-max-bs-prefill and --cuda-graph-max-bs-decode (same cap, min(2*CONC, 64)). v0.5.19 split the unsuffixed flag, so argparse rejects it as ambiguous against the two new names and the 20260910 image exits before serving."
+    - "Replace the removed decode-only alias --cuda-graph-max-bs with its canonical name --cuda-graph-max-bs-decode, retaining the same min(2*CONC, 64) cap. The 20260910 image includes sgl-project/sglang#38375, so argparse interprets the removed spelling as an ambiguous prefix of the decode and prefill options and exits before serving. Leave --cuda-graph-max-bs-prefill unset: it controls a separate prefill token-capture ceiling, not request concurrency."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2900
 
 - config-keys:

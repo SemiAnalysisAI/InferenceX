@@ -199,11 +199,11 @@ fi
 # than CONC sessions; headroom prevents scheduler stalls under burst.
 MAX_RUNNING_REQUESTS=$((2 * CONC))
 [ "$MAX_RUNNING_REQUESTS" -gt 256 ] && MAX_RUNNING_REQUESTS=256
-# SGLang interpolates a bs list [1..max_bs] automatically; cap at 64 to
-# keep graph-capture memory bounded without giving up coverage.
-# v0.5.19 split --cuda-graph-max-bs into prefill/decode; the un-suffixed
-# flag is ambiguous and exits at argparse.
-CUDA_GRAPH_MAX_BS=$(( MAX_RUNNING_REQUESTS < 64 ? MAX_RUNNING_REQUESTS : 64 ))
+# SGLang interpolates the decode bs list automatically; cap at 64 to keep
+# graph-capture memory bounded without giving up coverage.
+# --cuda-graph-max-bs was a deprecated alias for the decode setting only.
+# The 20260910 image removed that alias, making its old spelling ambiguous.
+CUDA_GRAPH_MAX_BS_DECODE=$(( MAX_RUNNING_REQUESTS < 64 ? MAX_RUNNING_REQUESTS : 64 ))
 
 if [ "${EVAL_ONLY:-false}" != "true" ]; then
     export SGLANG_SIMULATE_ACC_LEN=3.61
@@ -230,8 +230,7 @@ SGLANG_CMD=(
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
     --mem-fraction-static "$MEM_FRACTION_STATIC"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
-    --cuda-graph-max-bs-prefill "$CUDA_GRAPH_MAX_BS"
-    --cuda-graph-max-bs-decode "$CUDA_GRAPH_MAX_BS"
+    --cuda-graph-max-bs-decode "$CUDA_GRAPH_MAX_BS_DECODE"
     --speculative-algorithm EAGLE
     --speculative-num-steps 5
     --speculative-eagle-topk 1
