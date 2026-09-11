@@ -220,8 +220,8 @@ SGLANG_CMD=(
     --trust-remote-code
     "${PARALLEL_ARGS[@]}"
     --kv-cache-dtype fp8_e4m3
-    --dsa-prefill-backend tilelang
-    --dsa-decode-backend tilelang
+    --dsa-prefill-backend triton
+    --dsa-decode-backend triton
     # GLM-5.2 emits the GLM-4.7-style tool-call format; glm47 is required for
     # structured message.tool_calls (SWE-bench agentic evals die without it).
     # The glm45 reasoning parser keeps hybrid thinking in reasoning_content.
