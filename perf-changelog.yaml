@@ -7234,6 +7234,26 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2960
 
 - config-keys:
+    - dsv41flash-fp4-b300-vllm-agentic-dspark
+  description:
+    - "Add B300 TP4 AgentX through concurrency 128 with Engram UVA DRAM offload and native five-token DSpark"
+    - "Use deepseekv41-flash-0909 with adaptive verification and available-port selection"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2958
+
+- config-keys:
+    - dsv41flash-fp4-b300-vllm-agentic-dspark
+  description:
+    - "Align with the official single-node TP recipe: default model runner and scheduler batching"
+    - "Keep AgentX concurrency 1-128, UVA offload, DSpark, and concurrency-sized graph capture"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2958
+
+- config-keys:
+    - dsv41flash-fp4-b300-vllm-agentic-dspark
+  description:
+    - "Use thinking-on golden synthetic AL 3.51 for five-token DSpark throughput; disable adaptive verification and retain real verification for evals"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2958
+
+- config-keys:
     - dsv41flash-fp4-gb200-vllm-agentic-dspark
   description:
     - "Add GB200 TP4 AgentX concurrency 1-128 with native DSpark and Engram UVA DRAM offload"
