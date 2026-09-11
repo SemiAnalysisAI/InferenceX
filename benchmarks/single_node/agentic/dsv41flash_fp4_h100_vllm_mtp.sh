@@ -45,7 +45,7 @@ python3 analysis/engram/scan.py \
     --tp "$TP" \
     --shard "$SHARD" \
     --num-shards "$NUM_SHARDS" \
-    --max-chunks-per-domain "${ENGRAM_MAX_CHUNKS:-96}" \
+    --max-chunks-per-domain "${ENGRAM_MAX_CHUNKS:-5000}" \
     $RESUME_FLAG \
     --out "$RESULT_DIR/engram_scan"
 
