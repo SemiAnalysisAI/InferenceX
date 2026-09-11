@@ -37,7 +37,7 @@
 | [`perf-changelog.yaml`](../perf-changelog.yaml) | 以仅追加方式选择要针对某项变更运行的配置键 |
 | [`infx/matrix/validation.py`](../infx/matrix/validation.py) | 强制执行的 Pydantic 模式和跨字段不变量 |
 | [`infx/matrix/generate.py`](../infx/matrix/generate.py) | 搜索空间展开、默认值、过滤器、派生元数据、运行器解析和评测选择 |
-| [`utils/process_changelog.py`](../utils/process_changelog.py) | 新增变更日志提取、配置键展开、矩阵分桶和最终矩阵验证 |
+| [`infx/matrix/plan.py`](../infx/matrix/plan.py) | 变更日志选择、配置键展开、追加模式比较、矩阵分桶及最终验证；`utils/process_changelog.py` 保留 CLI |
 | [`.github/workflows/run-sweep.yml`](../.github/workflows/run-sweep.yml) | 触发策略、矩阵扇出、收集依赖和跨仓库摄取分派 |
 | [`.github/workflows/benchmark-tmpl.yml`](../.github/workflows/benchmark-tmpl.yml)、[`.github/workflows/benchmark-multinode-tmpl.yml`](../.github/workflows/benchmark-multinode-tmpl.yml) | 可复用作业输入契约、环境映射、启动器调用、结果检查和单作业上传 |
 | [`runners/`](../runners/) | 特定机群的模型路径、挂载、容器或 Slurm 设置以及基准测试脚本路由 |
@@ -129,9 +129,15 @@ flowchart LR
 
 共享 Python 实现位于仓库根目录的 `infx` 包中。`infx.matrix.generate` 负责矩阵生成，`infx.matrix.validation` 负责模式校验。Python 调用方应通过这些规范路径导入；后续领域模块可在需要时加入 `infx`。
 
-`utils/matrix_logic/generate_sweep_configs.py` 和 `validation.py` 保留为轻量兼容入口，旧导入路径指向同一个模块对象，避免重复创建模式类。现有脚本命令、参数、相对输入路径和依赖保持不变，从仓库检出目录运行时无需安装包。`process_changelog.py` 和 `validate_perf_changelog.py` 直接导入 `infx.matrix` 模块。
+默认仓库路径定义在 [`infx/config.py`](../infx/config.py) 中；`utils/constants.py` 保留旧导入方式。包的 `__init__.py` 文件保持精简。
 
-对追加模式的历史比较，`generation_inputs_at_ref` 从同一个 Git 修订提取配置、旧入口及 `infx` 包（若该修订包含它）。包迁移前的修订继续运行其原有独立生成器；迁移后的修订使用自身的包代码。当前工作区中的源码和配置不会替代历史输入。
+`utils/process_changelog.py`、`utils/matrix_logic/generate_sweep_configs.py` 和 `validation.py` 保留为轻量兼容入口，旧导入路径指向同一个模块对象，避免重复创建模式类。现有脚本命令、参数、相对输入路径和依赖保持不变，从仓库检出目录运行时无需安装包。`process_changelog.py` 指向 `infx.matrix.plan`；`validate_perf_changelog.py` 保留现有处理器 CLI 边界和诊断。
+
+`infx.matrix.plan.build_plan(changelog_data, base_ref=..., head_ref=...)` 返回完整扫描的已验证 `ChangelogMatrixEntry`，统一负责条目优先级、基准测试与评测各自的场景覆盖、裁剪、指纹及输出分桶。当前主配置文件只加载一次，运行器元数据在首次生成时加载一次；每组选中的配置直接调用 `infx.matrix.generate.generate_config_matrix`。当前输入来自传入的路径（默认为检出目录中的路径），`head_ref` 仍用作来源元数据。规划过程假设这些文件在本次操作期间保持稳定。
+
+`generate_config_matrix` 接受已验证的配置和运行器字典，以及明确的评测模式（`default`、`none`、`subset` 或 `all`），与生成器 CLI 共用展开和评测选择逻辑，包括读取仓库中已提交的配方以确定物理节点数。其 JSON 规范化保留旧有值转换和拒绝语义，并防止不同生成批次共享嵌套结果对象。规划失败时不会发布不完整矩阵；CLI 保留拒绝状态和诊断消息，堆栈帧则反映新的模块位置。
+
+对追加模式的历史比较，`generation_inputs_at_ref` 从同一个 Git 修订提取配置、旧入口及 `infx` 包（若该修订包含它）。包迁移前的修订继续运行其原有独立生成器；迁移后的修订使用自身的包代码。当前工作区中的源码和配置不会替代历史输入。历史子进程继续保持隔离，提取的输入生命周期限定在本次规划操作内，包括失败路径。
 
 [`validation.py`](../infx/matrix/validation.py) 在生成之前验证主文件和运行器数据。其严格模型负责接受的别名和跨字段规则。例如，互斥的并发形式、单节点与多节点形态、组件元数据作用域、预填充与解码硬件配对，以及智能体场景的集群标签要求。
 
@@ -145,7 +151,7 @@ flowchart LR
 - 运行器节点过滤和硬件派生值；
 - 常规评测子集、`--all-evals`、`--evals-only` 和 `--no-evals` 行为。
 
-`process_changelog.py` 将生成的数据行放入不同的 JSON 桶中。当前桶包括按序列族划分的 `single_node`、按序列族划分的 `multi_node`、`evals`、`agentic_evals`、`multinode_evals` 和 `changelog_metadata`。它会在打印最终对象之前使用 `ChangelogMatrixEntry` 对其进行验证。
+`infx.matrix.plan` 将生成的数据行放入不同的 JSON 桶中。当前桶包括按序列族划分的 `single_node`、按序列族划分的 `multi_node`、`evals`、`agentic_evals`、`multinode_evals`、`multinode_agentic_evals` 和 `changelog_metadata`。它会在打印最终对象之前使用 `ChangelogMatrixEntry` 对其进行验证。
 
 发出的矩阵是可执行的 CI 契约，但不是可供编辑的持久化来源。应修改上游主配置、验证器或生成器，然后重新生成矩阵。
 

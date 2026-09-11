@@ -1,4 +1,7 @@
-MASTER_CONFIGS = ["configs/amd-master.yaml",
-                  "configs/nvidia-master.yaml"]
-RUNNER_CONFIG = "configs/runners.yaml"
-GENERATE_SWEEPS_PY_SCRIPT = "utils/matrix_logic/generate_sweep_configs.py"
+"""Compatibility imports for the sweep planner's default input paths."""
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from infx.config import GENERATE_SWEEPS_PY_SCRIPT, MASTER_CONFIGS, RUNNER_CONFIG
