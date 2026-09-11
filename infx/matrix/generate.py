@@ -5,6 +5,7 @@ import math
 import re
 from decimal import Decimal
 from pathlib import Path
+from typing import Literal
 
 import yaml
 
@@ -1214,12 +1215,23 @@ def _runner_values_for_filter(runner: str, runner_data: dict, runner_node_filter
 
 
 def generate_test_config_sweep(args, all_config_data, runner_data=None):
-    """Generate full sweep for specific config keys.
+    """Compatibility API for selected-key expansion without eval selection."""
+    return _expand_selected_configs(
+        args.config_keys, all_config_data, runner_data,
+        runner_node_filter=getattr(args, "runner_node_filter", None),
+        seq_lens=getattr(args, "seq_lens", None),
+        scenario_types=getattr(args, "scenario_type", None),
+        concurrencies=getattr(args, "conc", None),
+    )
 
-    Validates that all specified config keys exist before generating.
-    Expands all configs fully without any filtering.
-    """
-    resolved_keys = expand_config_keys(args.config_keys, all_config_data.keys())
+
+def _expand_selected_configs(
+    config_keys: list[str], all_config_data: dict, runner_data: dict | None,
+    *, runner_node_filter: str | None = None, seq_lens: list[str] | None = None,
+    scenario_types: tuple[str, ...] | list[str] | None = None,
+    concurrencies: list[int] | None = None,
+) -> list[dict]:
+    resolved_keys = expand_config_keys(config_keys, all_config_data.keys())
 
     matrix_values = []
 
@@ -1230,16 +1242,16 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
 
         runner = val[Fields.RUNNER.value]
         runners_for_entry = _runner_values_for_filter(
-            runner, runner_data, getattr(args, 'runner_node_filter', None))
+            runner, runner_data, runner_node_filter)
         if not runners_for_entry:
             continue
 
         # Build seq-len filter if --seq-lens was provided
         seq_lens_filter = None
-        if getattr(args, 'seq_lens', None):
-            seq_lens_filter = {seq_len_stoi[s] for s in args.seq_lens}
+        if seq_lens:
+            seq_lens_filter = {seq_len_stoi[s] for s in seq_lens}
 
-        scenario_filter = set(args.scenario_type) if getattr(args, 'scenario_type', None) else None
+        scenario_filter = set(scenario_types) if scenario_types else None
         fixed_configs = val[Fields.SCENARIOS.value].get(Fields.FIXED_SEQ_LEN.value, []) if (scenario_filter is None or 'fixed-seq-len' in scenario_filter) else []
         for seq_len_config in fixed_configs:
             isl = seq_len_config[Fields.ISL.value]
@@ -1255,8 +1267,8 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                     conc_values = _concurrency_range(
                         bmk[Fields.CONC_START.value], bmk[Fields.CONC_END.value], 2)
 
-                if getattr(args, 'conc', None):
-                    conc_values = [c for c in conc_values if c in args.conc]
+                if concurrencies:
+                    conc_values = [c for c in conc_values if c in concurrencies]
                     if not conc_values:
                         continue
 
@@ -1269,7 +1281,7 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
             for benchmark in scenario[Fields.SEARCH_SPACE.value]:
                 matrix_values.extend(_agentic_entries(
                     val, benchmark, scenario, runners_for_entry, runner_data,
-                    conc_filter=getattr(args, 'conc', None),
+                    conc_filter=concurrencies,
                 ))
 
     return matrix_values
@@ -1340,6 +1352,52 @@ def apply_node_type_defaults(args):
             args.single_node = True
             args.multi_node = True
     return args
+
+
+EvalMode = Literal["default", "none", "subset", "all", "smoke"]
+
+
+def select_matrix_evals(
+    rows: list[dict], *, mode: EvalMode = "default", trim: bool = False,
+) -> list[dict]:
+    """Apply eval policy and optional trimming to freshly generated rows."""
+    if mode not in ("default", "none", "subset", "all", "smoke"):
+        raise ValueError(f"Unknown eval mode: {mode!r}")
+    if mode == "smoke" and trim:
+        raise ValueError("smoke cannot be combined with trimming")
+    if mode != "none":
+        rows = mark_eval_entries(rows, include_agentic=mode in ("subset", "all", "smoke"))
+        if mode == "all":
+            rows = mark_all_eval_entries(rows)
+    if mode == "smoke":
+        return smoke_entries(rows)
+    if trim:
+        rows = trim_conc(rows)
+    if mode in ("subset", "all"):
+        rows = [row for row in rows if row.get(Fields.RUN_EVAL.value, False)]
+        for row in rows:
+            row[Fields.EVAL_ONLY.value] = True
+    return rows
+
+
+def generate_config_matrix(
+    config_keys: list[str], master_config: dict, runner_data: dict,
+    *, scenario_types: tuple[str, ...] | list[str] | None = None,
+    eval_mode: EvalMode = "default",
+) -> list[dict]:
+    """Build selected configs and evals without a generator subprocess.
+
+    Every call builds independent rows. The caller loads master/runner inputs;
+    node-count resolution still reads checked-in recipes. Default,
+    throughput-only, subset-only, all-eval, and smoke modes use the same policy as the CLI.
+    """
+    rows = _expand_selected_configs(
+        config_keys, master_config, runner_data, scenario_types=scenario_types,
+    )
+    rows = select_matrix_evals(rows, mode=eval_mode)
+    # Retain the former JSON boundary: values and nested objects cannot leak
+    # between generation passes, and unsupported values still reject.
+    return json.loads(json.dumps(rows))
 
 
 def main():
@@ -1575,22 +1633,12 @@ def main():
     if args.smoke and (args.trim_conc or args.no_evals or args.evals_only or args.all_evals):
         parser.error('--smoke cannot be combined with trimming or eval overrides')
 
-    # Apply the existing eval policy first, then expand it when requested.
-    if not args.no_evals:
-        matrix_values = mark_eval_entries(matrix_values, include_agentic=args.smoke or args.evals_only or args.all_evals)
-        if args.all_evals:
-            matrix_values = mark_all_eval_entries(matrix_values)
-
-    if args.trim_conc:
-        matrix_values = trim_conc(matrix_values)
-
-    if args.smoke:
-        matrix_values = smoke_entries(matrix_values)
-
-    if args.evals_only or args.all_evals:
-        matrix_values = [e for e in matrix_values if e.get(Fields.RUN_EVAL.value, False)]
-        for entry in matrix_values:
-            entry[Fields.EVAL_ONLY.value] = True
+    matrix_values = select_matrix_evals(
+        matrix_values,
+        mode=("smoke" if args.smoke else "none" if args.no_evals else "all" if args.all_evals
+              else "subset" if args.evals_only else "default"),
+        trim=args.trim_conc,
+    )
 
     print(json.dumps(matrix_values))
     return matrix_values

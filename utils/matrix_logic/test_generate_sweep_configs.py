@@ -2142,15 +2142,22 @@ class TestCommandLine:
         assert result[0]['eval-conc'] == 4
         assert result[0]['run-eval'] is True
 
+    @pytest.mark.parametrize('entrypoint', ['cli', 'api'])
     def test_smoke_keeps_canonical_eval_instead_of_throughput_minimum(
-        self, monkeypatch, sample_single_node_config, sample_runner_config,
+        self, monkeypatch, sample_single_node_config, sample_runner_config, entrypoint,
     ):
         monkeypatch.setattr(generate_sweep_configs, 'load_config_files', lambda _: sample_single_node_config)
         monkeypatch.setattr(generate_sweep_configs, 'load_runner_file', lambda _: sample_runner_config)
         monkeypatch.setattr(sys, 'argv', ['generate_sweep_configs.py', 'test-config',
                                          '--config-files', 'dummy.yaml', '--config-keys',
                                          'dsr1-fp8-mi300x-sglang', '--smoke'])
-        result = generate_sweep_configs.main()
+        if entrypoint == 'api':
+            result = generate_sweep_configs.generate_config_matrix(
+                ['dsr1-fp8-mi300x-sglang'], sample_single_node_config,
+                sample_runner_config, eval_mode='smoke',
+            )
+        else:
+            result = generate_sweep_configs.main()
         benchmarks = [row for row in result if not row.get('eval-only')]
         evals = [row for row in result if row.get('eval-only')]
         assert {row['conc'] for row in benchmarks} == {4}
