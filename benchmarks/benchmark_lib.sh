@@ -22,6 +22,28 @@ INFERENCEX_REPO_ROOT="$(
 # nothing upstream set it.
 export PORT="${PORT:-8888}"
 
+# Opt-in for recipes running in the host network namespace. Probe the preferred
+# port on the compute node; fall back to an OS-selected port if it is occupied.
+# Call immediately before server launch and construct client URLs afterward.
+select_available_server_port() {
+    PORT=$(python3 - "${PORT:-8888}" <<'PYPORT'
+import errno
+import socket
+import sys
+
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+    try:
+        sock.bind(("0.0.0.0", int(sys.argv[1])))
+    except OSError as exc:
+        if exc.errno != errno.EADDRINUSE:
+            raise
+        sock.bind(("0.0.0.0", 0))
+    print(sock.getsockname()[1])
+PYPORT
+    ) || return $?
+    export PORT
+}
+
 agentic_kv_offload_enabled() {
     if [[ -z "${KV_OFFLOADING+x}" || -z "$KV_OFFLOADING" ]]; then
         echo "Error: KV_OFFLOADING must be set for agentic benchmarks" >&2
