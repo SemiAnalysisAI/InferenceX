@@ -24,6 +24,13 @@ AL is workload-dependent: a draft model's predictions are easier to accept in so
 
 Under the AgentX Guidelines, each model, thinking mode, and draft length has one committed golden AL. Once synthetic acceptance is enabled for a benchmark scenario, a submission may choose any supported draft length, but it may not substitute a different acceptance target. Different models keep their own SPEED-Bench-derived curves. All submissions evaluating the same model and mode use the same curve.
 
+For Qwen3.5 srt-slurm launches, `runners/inject_synthetic_acceptance.py`
+resolves the committed curve by the recipe's `speculative-num-steps`, even when
+`SYNTHETIC_ACCEPTANCE_LENGTH` is explicitly set. The launch fails if that value
+does not match the golden row, if `NUM_SPEC_TOKENS` disagrees with the recipe,
+or if `speculative-num-draft-tokens` is not `steps + 1`. The verification token
+must not be counted as an additional MTP step.
+
 vLLM supports this through synthetic rejection sampling. For example, an EAGLE3 run can inject the selected YAML value through `synthetic_acceptance_length`:
 
 ```bash

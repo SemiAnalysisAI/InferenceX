@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import runpy
 import subprocess
 from pathlib import Path
@@ -483,6 +484,203 @@ def test_eval_only_removes_sglang_simulated_acceptance(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     environment = yaml.safe_load(recipe.read_text())["backend"]["sglang_config"]["decode_environment"]
     assert environment == {"KEEP_ME": "unchanged"}
+
+
+def test_sglang_throughput_injects_nested_override_environment(
+    tmp_path: Path,
+) -> None:
+    recipe = tmp_path / "recipe.yaml"
+    recipe.write_text(
+        "base:\n"
+        "  backend:\n"
+        "    aggregated_environment:\n"
+        "      KEEP_ME: unchanged\n"
+        "    sglang_config:\n"
+        "      aggregated:\n"
+        "        speculative-num-steps: 5\n"
+        "        speculative-num-draft-tokens: 6\n"
+    )
+
+    result = subprocess.run(
+        ["python3", str(INJECT_ACCEPTANCE), str(recipe), "dynamo-sglang"],
+        env={
+            **os.environ,
+            "SYNTHETIC_ACCEPTANCE": "true",
+            "SYNTHETIC_ACCEPTANCE_LENGTH": "4.41",
+            "MODEL_PREFIX": "qwen3.5",
+        },
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    environment = yaml.safe_load(recipe.read_text())["base"]["backend"][
+        "aggregated_environment"
+    ]
+    assert environment == {
+        "KEEP_ME": "unchanged",
+        "SGLANG_SIMULATE_ACC_LEN": "4.41",
+        "SGLANG_SIMULATE_ACC_METHOD": "match-expected",
+        "SGLANG_SIMULATE_ACC_TOKEN_MODE": "real-draft-token",
+    }
+
+
+def test_qwen35_explicit_acceptance_must_match_recipe_golden_al(
+    tmp_path: Path,
+) -> None:
+    recipe = tmp_path / "recipe.yaml"
+    original = (
+        "base:\n"
+        "  backend:\n"
+        "    aggregated_environment:\n"
+        "      KEEP_ME: unchanged\n"
+        "    sglang_config:\n"
+        "      aggregated:\n"
+        "        speculative-num-steps: 5\n"
+        "        speculative-num-draft-tokens: 6\n"
+    )
+    recipe.write_text(original)
+
+    result = subprocess.run(
+        ["python3", str(INJECT_ACCEPTANCE), str(recipe), "dynamo-sglang"],
+        env={
+            **os.environ,
+            "SYNTHETIC_ACCEPTANCE": "true",
+            "SYNTHETIC_ACCEPTANCE_LENGTH": "4.80",
+            "MODEL_PREFIX": "qwen3.5",
+        },
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "does not match golden AL=4.41" in result.stderr
+    assert "num_spec_tokens=5" in result.stderr
+    assert recipe.read_text() == original
+
+
+def test_qwen35_auto_lookup_uses_committed_golden_distribution(
+    tmp_path: Path,
+) -> None:
+    recipe = tmp_path / "recipe.yaml"
+    recipe.write_text(
+        "base:\n"
+        "  backend:\n"
+        "    aggregated_environment:\n"
+        "      KEEP_ME: unchanged\n"
+        "    sglang_config:\n"
+        "      aggregated:\n"
+        "        speculative-num-steps: 6\n"
+        "        speculative-num-draft-tokens: 7\n"
+    )
+
+    result = subprocess.run(
+        ["python3", str(INJECT_ACCEPTANCE), str(recipe), "dynamo-sglang"],
+        env={
+            **os.environ,
+            "SYNTHETIC_ACCEPTANCE": "true",
+            "MODEL_PREFIX": "qwen3.5",
+        },
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "golden_al_distribution/qwen3.5_mtp.yaml" in result.stdout
+    assert 'SGLANG_SIMULATE_ACC_LEN: "4.8"' in recipe.read_text()
+
+
+def test_qwen35_acceptance_rejects_wrong_draft_window(tmp_path: Path) -> None:
+    recipe = tmp_path / "recipe.yaml"
+    original = (
+        "base:\n"
+        "  backend:\n"
+        "    aggregated_environment:\n"
+        "      KEEP_ME: unchanged\n"
+        "    sglang_config:\n"
+        "      aggregated:\n"
+        "        speculative-num-steps: 6\n"
+        "        speculative-num-draft-tokens: 6\n"
+    )
+    recipe.write_text(original)
+
+    result = subprocess.run(
+        ["python3", str(INJECT_ACCEPTANCE), str(recipe), "dynamo-sglang"],
+        env={
+            **os.environ,
+            "SYNTHETIC_ACCEPTANCE": "true",
+            "SYNTHETIC_ACCEPTANCE_LENGTH": "4.80",
+            "MODEL_PREFIX": "qwen3.5",
+        },
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "must equal speculative-num-steps + 1 (7)" in result.stderr
+    assert recipe.read_text() == original
+
+
+def test_b300_qwen35_pareto_points_match_thinking_on_golden_al() -> None:
+    master = yaml.safe_load((REPO_ROOT / "configs/nvidia-master.yaml").read_text())
+    points = master["qwen3.5-fp4-b300-dynamo-sglang-agentic-pareto"][
+        "scenarios"
+    ]["agentic-coding"][0]["search-space"]
+    golden = yaml.safe_load(
+        (REPO_ROOT / "golden_al_distribution/qwen3.5_mtp.yaml").read_text()
+    )["qwen3.5-397b-a17b-nvfp4"]["thinking_on"]
+    recipe_root = REPO_ROOT / "benchmarks/multi_node/srt-slurm-recipes"
+    expected = {
+        64: (3, 3.39),
+        44: (7, 5.04),
+        36: (7, 5.04),
+        40: (5, 4.41),
+        4: (6, 4.80),
+    }
+
+    actual = {}
+    for point in points:
+        settings = dict(
+            item.split("=", 1)
+            for item in point["worker"]["additional-settings"]
+        )
+        recipe_rel = settings["CONFIG_FILE"].split(":", 1)[0]
+        recipe_rel = recipe_rel.removeprefix("recipes/")
+        recipe_text = (recipe_root / recipe_rel).read_text()
+        steps = {
+            int(value)
+            for value in re.findall(r"speculative-num-steps:\s*(\d+)", recipe_text)
+        }
+        drafts = {
+            int(value)
+            for value in re.findall(
+                r"speculative-num-draft-tokens:\s*(\d+)", recipe_text
+            )
+        }
+        assert len(steps) == 1
+        assert len(drafts) == 1
+        step = next(iter(steps))
+        assert next(iter(drafts)) == step + 1
+        al = float(settings["SYNTHETIC_ACCEPTANCE_LENGTH"])
+        assert al == float(golden[step])
+        actual[point["conc-list"][0]] = (step, al)
+
+    assert actual == expected
+
+
+def test_b300_dsxe_acceptance_driver_is_unconditional_and_fail_closed() -> None:
+    content = (REPO_ROOT / "runners/launch_b300-dsxe.sh").read_text()
+    command = 'python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py"'
+    command_index = content.index(command)
+
+    assert content.rfind("\nfi", 0, command_index) > content.rfind(
+        "\nif ", 0, command_index
+    )
+    assert "|| exit 1" in content[command_index : command_index + 180]
 
 
 def test_sglang_throughput_rejects_existing_simulated_acceptance(

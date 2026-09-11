@@ -63,8 +63,10 @@ declare -A MODEL_ALIASES=(
     [nvidia/MiniMax-M3-NVFP4]="MiniMax-M3-NVFP4"
     [minimax-m3-mxfp8]="MiniMax-M3-MXFP8"
     [MiniMaxAI/MiniMax-M3-MXFP8]="MiniMax-M3-MXFP8"
-    [qwen3.5-fp4]="Qwen3.5-397B-A17B-NVFP4-V2"
+    [qwen3.5-fp4]="Qwen3.5-397B-A17B-NVFP4"
+    [nvidia/Qwen3.5-397B-A17B-NVFP4]="Qwen3.5-397B-A17B-NVFP4"
     [qwen3.5-fp8]="Qwen3.5-397B-A17B-FP8"
+    [qwen3.5-fp4-v2]="Qwen3.5-397B-A17B-NVFP4-V2"
     [nvidia/Qwen3.5-397B-A17B-NVFP4-V2]="Qwen3.5-397B-A17B-NVFP4-V2"
 )
 
@@ -280,10 +282,12 @@ fi
 
 # Override the job name in the recipe with the runner name.
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
-if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
-    python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
-        "$CONFIG_PATH" "$FRAMEWORK" || exit 1
-fi
+# Throughput recipes opt into synthetic acceptance through the master config.
+# Eval-only jobs remove those settings so generated tokens use real target-model
+# verification. The injector handles both modes and is a no-op for recipes that
+# do not opt in.
+python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
+    "$CONFIG_PATH" "$FRAMEWORK" || exit 1
 
 # Weights live on node-local MODEL_ROOT, which this login host cannot stat, so
 # srtctl's preflight model.path check is always skipped. Runtime loading still
