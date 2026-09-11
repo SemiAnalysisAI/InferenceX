@@ -65,6 +65,64 @@ def test_result_builder_uses_explicit_readonly_inputs(single_node_env_vars, monk
     assert list(tmp_path.iterdir()) == []
 
 
+def test_multinode_explicit_gpu_counts_control_decode_fields_and_denominators(
+    multinode_env_vars, sample_benchmark_result,
+):
+    from infx.results.fixed_sequence import build_result
+
+    # Worker dimensions describe 48 prefill and 180 decode GPUs. The supplied
+    # allocation counts, 20 and 0, remain authoritative for this collector.
+    env = {**multinode_env_vars, "PREFILL_NUM_WORKERS": "2", "PREFILL_TP": "3",
+           "PREFILL_PP_SIZE": "2", "PREFILL_PCP_SIZE": "4", "DECODE_NUM_WORKERS": "3",
+           "DECODE_TP": "6", "DECODE_EP": "5", "DECODE_PP_SIZE": "2",
+           "DECODE_DCP_SIZE": "3", "DECODE_PCP_SIZE": "5", "DECODE_GPUS": "0"}
+    benchmark = {**sample_benchmark_result, "total_token_throughput": 600,
+                 "output_throughput": 400}
+    result = build_result(benchmark, env)
+    assert [result[key] for key in ("decode_tp", "decode_ep", "decode_pp",
+                                   "decode_dcp_size", "decode_pcp_size")] == [0, 0, 1, 1, 1]
+    assert result["decode_num_workers"] == 3
+    assert result["num_prefill_gpu"] == 20
+    assert result["num_decode_gpu"] == 0
+    assert result["tput_per_gpu"] == 30
+    assert result["input_tput_per_gpu"] == 10
+    assert result["output_tput_per_gpu"] == 20
+
+    result = build_result(benchmark, {**env, "DECODE_GPUS": "4"})
+    assert [result[key] for key in ("decode_tp", "decode_ep", "decode_pp",
+                                   "decode_dcp_size", "decode_pcp_size")] == [6, 5, 2, 3, 5]
+    assert result["tput_per_gpu"] == 25
+    assert result["output_tput_per_gpu"] == 100
+
+
+@pytest.mark.parametrize("overrides,message", [
+    ({"DECODE_HARDWARE": "", "PREFILL_TP": "invalid"},
+     "PREFILL_HARDWARE and DECODE_HARDWARE must be specified together."),
+    ({"PREFILL_PP_SIZE": "0", "DECODE_GPUS": "-20"},
+     "Multinode PP, DCP, and PCP sizes must be positive integers."),
+    ({"DECODE_PP_SIZE": "0", "DECODE_GPUS": "0"},
+     "Multinode PP, DCP, and PCP sizes must be positive integers."),
+])
+def test_multinode_topology_preserves_validation_order(
+    multinode_env_vars, sample_benchmark_result, overrides, message,
+):
+    from infx.results.fixed_sequence import build_result
+
+    with pytest.raises(ValueError) as error:
+        build_result(sample_benchmark_result, {**multinode_env_vars, **overrides})
+    assert str(error.value) == message
+
+
+@pytest.mark.parametrize("name", ["PP_SIZE", "DCP_SIZE", "PCP_SIZE"])
+def test_fixed_topology_rejects_empty_parallelism(
+    single_node_env_vars, sample_benchmark_result, name,
+):
+    from infx.results.fixed_sequence import build_result
+
+    with pytest.raises(ValueError, match="invalid literal for int"):
+        build_result(sample_benchmark_result, {**single_node_env_vars, name: ""})
+
+
 # =============================================================================
 # Test Fixtures - Based on real benchmark output structure
 # =============================================================================

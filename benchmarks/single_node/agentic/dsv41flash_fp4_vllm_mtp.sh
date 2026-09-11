@@ -21,7 +21,7 @@ resolve_trace_source
 install_agentic_deps
 mkdir -p "$RESULT_DIR"
 SERVER_LOG="$RESULT_DIR/server.log"
-export VLLM_ENGINE_READY_TIMEOUT_S=3600
+export VLLM_ENGINE_READY_TIMEOUT_S="${VLLM_ENGINE_READY_TIMEOUT_S:-3600}"
 export VLLM_USE_RUST_FRONTEND=1
 export PYTHONUNBUFFERED=1
 
