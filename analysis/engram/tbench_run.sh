@@ -34,8 +34,10 @@ export PATH="$HOME/.local/bin:$PATH"
 # install that and name dockerfile-parse explicitly as a belt-and-braces.
 python3 -m pip install --no-input --break-system-packages     'harbor[modal]' modal dockerfile-parse 2>&1 | tail -15 || true
 python3 - <<'PYCHK'
-import importlib
-missing = [m for m in ("harbor", "modal", "dockerfile_parse") if not importlib.util.find_spec(m)]
+import importlib.util  # `import importlib` alone does not bind .util
+
+missing = [m for m in ("harbor", "modal", "dockerfile_parse")
+           if importlib.util.find_spec(m) is None]
 print("MISSING MODULES:", missing or "none")
 raise SystemExit(1 if missing else 0)
 PYCHK
