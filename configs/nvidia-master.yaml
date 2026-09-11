@@ -9451,37 +9451,10 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg:
           ep: 16
           dp-attn: true
 
-# GLM-5.2 NVFP4 TensorRT-LLM AgentX on GB300 with Dynamo aggregated serving.
-# One TP8 worker serves prefill and decode on the same eight GPUs at concurrency 1.
-glm5.2-fp4-gb300-dynamo-trt-agentic-agg-mtp:
-  image: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc22.post1
-  model: nvidia/GLM-5.2-NVFP4
-  model-prefix: glm5.2
-  runner: cluster:gb300-nv
-  precision: fp4
-  framework: dynamo-trt
-  router: { name: dynamo-router, version: "1.4.0.dev20260807" }
-  multinode: true
-  disagg: false
-  scenarios:
-    agentic-coding:
-    - search-space:
-      - spec-decoding: mtp
-        conc-list: [1]
-        kv-offloading: none
-        num-nodes: 2
-        worker:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2/gb300-fp4/agentic/dynamo-agg-gb300-tp8-c1-b2-mtp8.yaml"
-          - "SLURM_PARTITION=batch_1"
 # GLM-5.2 NVFP4 TensorRT-LLM AgentX on GB300 with Dynamo disaggregated serving.
-# Seven topology variants use NIXL KV transfer and MTP3/MTP5 decoding.
+# Six topology variants use NIXL KV transfer and MTP3/MTP5 decoding.
 glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
-  image: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc22.post1
+  image: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc26.dev202609040000
   model: nvidia/GLM-5.2-NVFP4
   model-prefix: glm5.2
   runner: cluster:gb300-nv
@@ -9498,7 +9471,7 @@ glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
       - spec-decoding: mtp
         conc-list: [1]
         kv-offloading: dram
-        kv-offload-backend: { name: native, version: "1.3.0rc22.post1" }
+        kv-offload-backend: { name: native, version: "1.3.0rc26.dev202609040000" }
         prefill:
           num-worker: 1
           tp: 4
@@ -9515,7 +9488,7 @@ glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
       - spec-decoding: mtp
         conc-list: [30]
         kv-offloading: dram
-        kv-offload-backend: { name: native, version: "1.3.0rc22.post1" }
+        kv-offload-backend: { name: native, version: "1.3.0rc26.dev202609040000" }
         prefill:
           num-worker: 1
           tp: 4
@@ -9532,7 +9505,7 @@ glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
       - spec-decoding: mtp
         conc-list: [20]
         kv-offloading: dram
-        kv-offload-backend: { name: native, version: "1.3.0rc22.post1" }
+        kv-offload-backend: { name: native, version: "1.3.0rc26.dev202609040000" }
         prefill:
           num-worker: 1
           tp: 4
@@ -9549,7 +9522,7 @@ glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
       - spec-decoding: mtp
         conc-list: [60]
         kv-offloading: dram
-        kv-offload-backend: { name: native, version: "1.3.0rc22.post1" }
+        kv-offload-backend: { name: native, version: "1.3.0rc26.dev202609040000" }
         prefill:
           num-worker: 3
           tp: 4
@@ -9564,33 +9537,16 @@ glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
           ep: 4
           dp-attn: false
       - spec-decoding: mtp
-        conc-list: [152]
+        conc-list: [260]
         kv-offloading: dram
-        kv-offload-backend: { name: native, version: "1.3.0rc22.post1" }
+        kv-offload-backend: { name: native, version: "1.3.0rc26.dev202609040000" }
         prefill:
           num-worker: 5
           tp: 4
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2/gb300-fp4/agentic/dynamo-disagg-gb300-5p1d-dep16-c152-b16-mtp3.yaml"
-          - "SLURM_PARTITION=batch_1"
-        decode:
-          num-worker: 1
-          tp: 16
-          ep: 16
-          dp-attn: true
-      - spec-decoding: mtp
-        conc-list: [259]
-        kv-offloading: dram
-        kv-offload-backend: { name: native, version: "1.3.0rc22.post1" }
-        prefill:
-          num-worker: 8
-          tp: 4
-          ep: 4
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2/gb300-fp4/agentic/dynamo-disagg-gb300-8p1d-dep16-c259-b16-mtp3.yaml"
+          - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2/gb300-fp4/agentic/dynamo-disagg-gb300-5p1d-dep16-c260-b16-mtp3.yaml"
           - "SLURM_PARTITION=batch_1"
         decode:
           num-worker: 1
@@ -9600,14 +9556,14 @@ glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
       - spec-decoding: mtp
         conc-list: [227]
         kv-offloading: dram
-        kv-offload-backend: { name: native, version: "1.3.0rc22.post1" }
+        kv-offload-backend: { name: native, version: "1.3.0rc26.dev202609040000" }
         prefill:
-          num-worker: 6
+          num-worker: 4
           tp: 4
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2/gb300-fp4/agentic/dynamo-disagg-gb300-6p1d-dep8-c227-b16-mtp3.yaml"
+          - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2/gb300-fp4/agentic/dynamo-disagg-gb300-4p1d-dep8-c227-b16-mtp3.yaml"
           - "SLURM_PARTITION=batch_1"
         decode:
           num-worker: 1
@@ -10213,3 +10169,112 @@ glm5.1-fp8-b200-tilert-agentic:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=1"
+
+# H100 AgentX arm for DeepSeek-V4.1-Flash. H100 is not in the upstream hardware
+# table (h200, gb200, gb300, mi350x are). It needs its own script, not the
+# shared symlink: the sparse attention indexer's
+# [max-num-batched-tokens, max-model-len] buffer is 16 GiB at the shared flags'
+# 8192 batched tokens and OOMs an 80 GB card at concurrency 1, so the script
+# caps batched tokens at 4096. Concurrency is bounded by the measured KV
+# ceiling rather than a guess; see the search-space comment.
+dsv41flash-fp4-h100-vllm-agentic-dspark:
+  image: vllm/vllm-openai:deepseekv41-flash-0909
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:h100-dgxc
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      # Measured at c1 on the cluster (run 34485694183): 13.47 GiB KV per GPU,
+      # 7,022,899 tokens, "Maximum concurrency for 1,048,576 tokens per
+      # request: 6.70x". The list stays under that ceiling so a trajectory
+      # replaying near full context does not drive the batch into preemption.
+      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4] }
+
+dsv41flash-fp4-gb200-vllm-agentic-dspark:
+  image: vllm/vllm-openai:deepseekv41-flash-0909
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:gb200-nv
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      # Engram weights use UVA DRAM; the KV cache stays GPU-resident.
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+
+dsv41flash-fp4-b300-vllm-agentic-dspark:
+  image: vllm/vllm-openai:deepseekv41-flash-0909
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:b300-dsxe
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      # Engram weights use UVA DRAM; the KV cache stays GPU-resident.
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+
+dsv41flash-fp4-b200-vllm-agentic-dspark:
+  image: vllm/vllm-openai:deepseekv41-flash-0909
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:b200-nscale
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      # Engram weights use UVA DRAM; the KV cache stays GPU-resident.
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+
+dsv41flash-fp4-gb300-vllm-agentic-dspark:
+  image: vllm/vllm-openai:deepseekv41-flash-0909
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      # Engram weights use UVA DRAM; the KV cache stays GPU-resident.
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+
+# H200 AgentX arm for DeepSeek-V4.1-Flash. Upstream marks h200 verified and says
+# the GB200 NVL4 TP4 layout becomes TP8 on 8-GPU nodes, so this is TP8.
+# `precision: fp4` labels the checkpoint's MXFP4 routed experts, as on the
+# Blackwell and MI355X arms; Hopper has no FP4 tensor cores, so the MXFP4
+# experts run through the upconverting MoE path. The H100 arm is deferred: the
+# sparse attention indexer allocates a [max-num-batched-tokens, max-model-len]
+# buffer at startup, which is 16 GiB at 1M context and does not fit 80 GB
+# alongside the weights. Tracked separately.
+dsv41flash-fp4-h200-vllm-agentic-dspark:
+  image: vllm/vllm-openai:deepseekv41-flash-0909
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:h200-dgxc
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      # 8x141 GB holds the 511 GB checkpoint minus the UVA-offloaded Engram
+      # tables, so the KV cache stays GPU-resident across the full range.
+      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }

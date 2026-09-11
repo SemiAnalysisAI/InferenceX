@@ -17,7 +17,11 @@ set -x
 # portability, but we resolve to pre-staged paths here to avoid repeated
 # downloading on every Nscale node. Runs for both single-node and multinode
 # launches.
-if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
+if [[ "$MODEL_PREFIX" == "dsv41flash" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "vllm" && "$IS_MULTINODE" != "true" ]]; then
+    export MODEL_PATH="$MODEL"
+    export HF_HUB_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/hf-hub-cache"
+    mkdir -p "$HF_HUB_CACHE_HOST_PATH"
+elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/scratch/models/DeepSeek-R1-0528-NVFP4-v2"
     export SRT_SLURM_MODEL_PREFIX="dsr1"
 elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
@@ -526,6 +530,16 @@ else
         CONTAINER_MOUNT_DIR=/workspace
     fi
 
+    if [[ "$MODEL_PREFIX" == "dsv41flash" ]]; then
+        CONTAINER_MOUNT_DIR=/ix
+        export INFMAX_CONTAINER_WORKSPACE=/ix
+        export RESULT_DIR=/ix/results
+        export HF_HUB_CACHE=/hf-cache
+        CONTAINER_MOUNTS="$GITHUB_WORKSPACE:/ix,$HF_HUB_CACHE_HOST_PATH:/hf-cache,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache"
+    else
+        CONTAINER_MOUNTS="$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR,$MODEL_PATH:$MODEL_PATH,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache"
+    fi
+
     # The runner lease reserves the Slurm nodes before this single-node job is
     # submitted to the Nscale batch_1 partition.
     export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
@@ -556,7 +570,7 @@ else
 
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
-        --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR,$MODEL_PATH:$MODEL_PATH,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache \
+        --container-mounts="$CONTAINER_MOUNTS" \
         --no-container-mount-home \
         --container-workdir=$CONTAINER_MOUNT_DIR \
         --no-container-entrypoint --export=ALL,PORT=8888,AIPERF_DATASET_MMAP_CACHE_DIR=/aiperf_mmap_cache \
