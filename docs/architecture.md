@@ -37,7 +37,7 @@ This page explains how a declared benchmark becomes a validated job, a runtime r
 | [`perf-changelog.yaml`](../perf-changelog.yaml) | Append-only selection of config keys to run for a change |
 | [`infx/matrix/validation.py`](../infx/matrix/validation.py) | Enforced Pydantic schemas and cross-field invariants |
 | [`infx/matrix/generate.py`](../infx/matrix/generate.py) | Search-space expansion, defaults, filters, derived metadata, runner resolution, and eval selection |
-| [`utils/process_changelog.py`](../utils/process_changelog.py) | Added-changelog extraction, config-key expansion, matrix bucketing, and final matrix validation |
+| [`infx/matrix/plan.py`](../infx/matrix/plan.py) | Changelog selection, config-key expansion, append-only comparison, matrix bucketing, and final validation; `utils/process_changelog.py` preserves the CLI |
 | [`.github/workflows/run-sweep.yml`](../.github/workflows/run-sweep.yml) | Trigger policy, matrix fan-out, collection dependencies, and cross-repository ingest dispatch |
 | [`.github/workflows/benchmark-tmpl.yml`](../.github/workflows/benchmark-tmpl.yml), [`.github/workflows/benchmark-multinode-tmpl.yml`](../.github/workflows/benchmark-multinode-tmpl.yml) | Reusable job input contract, environment projection, launcher invocation, result checks, and per-job uploads |
 | [`runners/`](../runners/) | Fleet-specific model paths, mounts, container or Slurm setup, and benchmark-script routing |
@@ -129,9 +129,13 @@ This split has two consequences.
 
 Shared Python implementation lives in the repository-root `infx` package. `infx.matrix.generate` owns generation and `infx.matrix.validation` owns schemas. Python callers should import these canonical paths; further domain modules can join `infx` as needed.
 
-`utils/matrix_logic/generate_sweep_configs.py` and `validation.py` remain thin compatibility entrypoints. Legacy imports resolve to the same module objects, avoiding duplicate schema classes. Existing script commands, arguments, relative input paths, and dependencies are unchanged; running from a checkout requires no package installation. `process_changelog.py` and `validate_perf_changelog.py` import the `infx.matrix` modules directly.
+`utils/process_changelog.py`, `utils/matrix_logic/generate_sweep_configs.py`, and `validation.py` remain thin compatibility entrypoints. Legacy imports resolve to the same module objects, avoiding duplicate schema classes. Existing script commands, arguments, relative input paths, and dependencies are unchanged; running from a checkout requires no package installation. `process_changelog.py` resolves to `infx.matrix.plan`; `validate_perf_changelog.py` retains its existing processor CLI boundary and diagnostics.
 
-For append-only historical comparisons, `generation_inputs_at_ref` extracts configs, legacy entrypoints, and the `infx` package (when present) from the same Git revision. Revisions before this migration continue to run their standalone generator; newer revisions use their own package code. Working-tree source and configs do not replace historical inputs.
+`infx.matrix.plan.build_plan(changelog_data, base_ref=..., head_ref=...)` returns the validated `ChangelogMatrixEntry` for the complete sweep. It owns entry precedence, separate benchmark/eval scenario coverage, trimming, fingerprints, and output buckets. Current master files are loaded once, and runner metadata is loaded once on first generation; each selected group calls `infx.matrix.generate.generate_config_matrix` directly. Current inputs come from the supplied paths (the checkout defaults), while `head_ref` remains provenance metadata. Planning assumes those files are stable during the operation.
+
+`generate_config_matrix` takes validated config/runner dictionaries and an explicit eval mode (`default`, `none`, `subset`, or `all`). It shares expansion and eval selection with the generator CLI, including checked-in recipe reads for physical node counts. Its JSON normalization preserves legacy value/rejection semantics and prevents nested result objects from leaking between passes. The planner publishes no partial matrix on failure; the CLI retains rejection status and diagnostic messages, while traceback frames reflect the new module locations.
+
+For append-only historical comparisons, `generation_inputs_at_ref` extracts configs, legacy entrypoints, and the `infx` package (when present) from the same Git revision. Revisions before this migration continue to run their standalone generator; newer revisions use their own package code. Working-tree source and configs do not replace historical inputs. Historical subprocesses remain isolated, and extracted inputs are scoped to the planning operation, including failure paths.
 
 [`validation.py`](../infx/matrix/validation.py) validates master files and runner data before generation. Its strict models own accepted aliases and cross-field rules. Examples include mutually exclusive concurrency forms, single-node versus multi-node shapes, component metadata scope, prefill and decode hardware pairing, and cluster-label requirements for agentic scenarios.
 
@@ -145,7 +149,7 @@ For append-only historical comparisons, `generation_inputs_at_ref` extracts conf
 - runner-node filtering and hardware-derived values.
 - the normal eval subset, `--all-evals`, `--evals-only`, and `--no-evals` behavior.
 
-`process_changelog.py` places generated rows into distinct JSON buckets. Current buckets are `single_node` by sequence family, `multi_node` by sequence family, `evals`, `agentic_evals`, `multinode_evals`, and `changelog_metadata`. It validates that final object with `ChangelogMatrixEntry` before printing it.
+`infx.matrix.plan` places generated rows into distinct JSON buckets. Current buckets are `single_node` by sequence family, `multi_node` by sequence family, `evals`, `agentic_evals`, `multinode_evals`, `multinode_agentic_evals`, and `changelog_metadata`. It validates that final object with `ChangelogMatrixEntry` before printing it.
 
 The emitted matrix is the executable CI contract, but it is not a durable source to edit. Change the upstream master config, validator, or generator and regenerate it.
 
