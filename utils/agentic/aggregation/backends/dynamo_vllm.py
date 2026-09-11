@@ -14,6 +14,10 @@ class DynamoVllmBackend(VllmBackend):
     def matches(self, metrics: dict[str, dict[str, Any]], framework: str) -> bool:
         metric_names = set(metrics)
         framework = framework.lower()
+        if framework == "dynamo-sglang" and any(
+            name.startswith("sglang:") for name in metric_names
+        ):
+            return False
         return framework.startswith("dynamo") or any(
             name.startswith("dynamo_") for name in metric_names
         )
