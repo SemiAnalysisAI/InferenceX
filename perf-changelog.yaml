@@ -7179,3 +7179,9 @@
   description:
     - "Use the pinned SGLang nightly-dev-cu13-20260901-07c8f729 image with FlashInfer 0.6.18, which includes the BF16 TRTLLM MoE allocation fix for small-batch Blackwell execution. Model, TP8, HiCache, MTP settings and concurrency grid are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2994
+
+- config-keys:
+    - dsr1-fp8-h200-sglang
+  description:
+    - "Update the DeepSeek-R1-0528 FP8 H200 SGLang image from v0.5.12-cu130 to v0.5.19-cu130. Model, TP8 topology, 8k1k workload, concurrency grid, launch flags and evals are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3010
