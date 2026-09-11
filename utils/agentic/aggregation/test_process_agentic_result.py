@@ -827,6 +827,53 @@ def test_multinode_processor_rejects_one_sided_hardware(
         _gpu_shape()
 
 
+@pytest.mark.parametrize("env", [{}, {"PP_SIZE": "", "DCP_SIZE": "", "PCP_SIZE": ""}])
+def test_gpu_shape_defaults_empty_parallelism_to_one(monkeypatch, env):
+    monkeypatch.setattr(os, "environ", env)
+    assert _gpu_shape() == ({"pp": 1, "dcp_size": 1, "pcp_size": 1}, 1, 1, 1, "false")
+
+
+@pytest.mark.parametrize("decode_workers,expected_gpus,expected_decode", [
+    ("3", 78, (2, 11, 1, 9, 5)),
+    ("0", 48, (0, 0, 1, 1, 1)),
+])
+def test_gpu_shape_counts_workers_and_normalizes_absent_decode(
+    monkeypatch, decode_workers, expected_gpus, expected_decode,
+):
+    monkeypatch.setattr(os, "environ", {
+        "IS_MULTINODE": "true", "PREFILL_NUM_WORKERS": "2", "PREFILL_TP": "3",
+        "PREFILL_PP_SIZE": "2", "PREFILL_PCP_SIZE": "4", "PREFILL_DCP_SIZE": "7",
+        "PREFILL_EP": "8", "PREFILL_DP_ATTN": "YES", "DECODE_NUM_WORKERS": decode_workers,
+        "DECODE_TP": "2", "DECODE_EP": "11", "DECODE_PP_SIZE": "1",
+        "DECODE_DCP_SIZE": "9", "DECODE_PCP_SIZE": "5", "DECODE_DP_ATTN": "false",
+        "PREFILL_GPUS": "999", "DECODE_GPUS": "999",
+    })
+    fields, num_gpus, tp, ep, attention = _gpu_shape()
+    # Two 24-GPU prefill workers plus either three 10-GPU decode workers or
+    # no decode workers. EP and DCP do not allocate extra GPUs.
+    assert num_gpus == expected_gpus
+    assert fields["num_prefill_gpu"] == 48
+    assert fields["num_decode_gpu"] == (30 if decode_workers == "3" else 0)
+    assert tuple(fields[key] for key in ("decode_tp", "decode_ep", "decode_pp",
+                                        "decode_dcp_size", "decode_pcp_size")) == expected_decode
+    assert (tp, ep, attention) == ((5, 11, "true") if decode_workers == "3" else (3, 8, "true"))
+    assert fields["prefill_dp_attention"] == "YES"
+    assert fields["decode_dp_attention"] == "false"
+
+
+@pytest.mark.parametrize("env,error_type,message", [
+    ({"IS_MULTINODE": "true", "TP": "bad"}, ValueError, "invalid literal for int"),
+    ({"IS_MULTINODE": "true", "PREFILL_PP_SIZE": "0", "PREFILL_HARDWARE": "gpu"},
+     SystemExit, "Multinode PP, DCP, and PCP sizes must be positive integers."),
+    ({"IS_MULTINODE": "true", "DECODE_NUM_WORKERS": "0", "DECODE_PCP_SIZE": "0"},
+     SystemExit, "Multinode PP, DCP, and PCP sizes must be positive integers."),
+])
+def test_gpu_shape_preserves_parsing_and_validation_order(monkeypatch, env, error_type, message):
+    monkeypatch.setattr(os, "environ", env)
+    with pytest.raises(error_type, match=message):
+        _gpu_shape()
+
+
 def test_processor_surfaces_request_accounting(tmp_path: Path):
     result_dir = tmp_path / "results"
     artifact = result_dir / "aiperf_artifacts"
@@ -1291,7 +1338,8 @@ def test_processor_ignores_server_warmup_metrics_for_headline_stats(
     assert agg["server_metrics"]["tokens"]["prompt_total"] == 1000
 
 
-def test_processor_normalizes_sglang_server_metrics(tmp_path: Path):
+@pytest.mark.parametrize("framework", ["sglang", "dynamo-sglang"])
+def test_processor_normalizes_sglang_server_metrics(tmp_path: Path, framework: str):
     result_dir = _write_fixture(tmp_path)
     artifact = result_dir / "aiperf_artifacts"
     server_metrics = {
@@ -1331,13 +1379,30 @@ def test_processor_normalizes_sglang_server_metrics(tmp_path: Path):
             },
         }
     }
+    if framework == "dynamo-sglang":
+        server_metrics["metrics"].update(
+            {
+                "dynamo_frontend_input_sequence_tokens": {
+                    "type": "counter",
+                    "series": [{"stats": {"total": 1100.0}}],
+                },
+                "sglang:max_total_num_tokens": {
+                    "type": "gauge",
+                    "series": [
+                        {"labels": {"tp_rank": "0"}, "stats": {"max": 1000.0}},
+                        {"labels": {"tp_rank": "1"}, "stats": {"max": 1000.0}},
+                    ],
+                },
+            }
+        )
+        (result_dir / "server.log").write_text("max_total_num_tokens=1000, dp_size=1")
     with open(artifact / "server_metrics_export.json", "w") as f:
         json.dump(server_metrics, f)
 
     agg = _run_processor(
         result_dir,
         tmp_path / "out",
-        env_overrides={"FRAMEWORK": "sglang"},
+        env_overrides={"FRAMEWORK": framework},
     )
 
     assert agg["server_metrics"]["adapter"] == "sglang"
@@ -1349,6 +1414,15 @@ def test_processor_normalizes_sglang_server_metrics(tmp_path: Path):
     assert agg["server_metrics"]["kv_cache"]["gpu_usage_pct"] == pytest.approx(0.75)
     assert agg["server_metrics"]["kv_cache"]["cpu_usage_pct"] == pytest.approx(0.3)
     assert agg["server_metrics"]["tokens"]["prompt_by_source"]["computed"] == 500.0
+
+    assert agg["server_metrics"]["tokens"]["prompt_total"] == 1000
+    assert agg["server_metrics"]["tokens"]["generation_total"] == 200
+    if framework == "dynamo-sglang":
+        assert agg["server_metrics"]["kv_cache"]["gpu_total_tokens"] is None
+        assert agg["kv_cache_pool_tokens"] is None
+        assert any(
+            "rank replicas are not normalized" in warning for warning in agg["warnings"]
+        )
 
 
 def test_processor_normalizes_trtllm_server_metrics(tmp_path: Path):
@@ -1576,6 +1650,9 @@ def test_processor_uses_aiperf_theoretical_cache_metric(tmp_path: Path):
                     "count": 4,
                     "sum": 1,
                 },
+                "metadata": {
+                    "dataset": {"hf_dataset_name": "semianalysisai/cc-traces-weka-042026"}
+                },
             },
             f,
         )
@@ -1637,6 +1714,44 @@ def test_processor_uses_aiperf_theoretical_cache_metric(tmp_path: Path):
     assert agg["request_metrics"]["tokens"]["output_expected"]["mean"] == pytest.approx(
         55.0
     )
+
+
+@pytest.mark.parametrize("cache_state", ["matching", "missing", "ambiguous", "no_identity"])
+def test_processor_expected_output_uses_declared_dataset(tmp_path: Path, cache_state: str):
+    result_dir = _write_fixture(tmp_path)
+    profile_path = result_dir / "aiperf_artifacts" / "profile_export_aiperf.json"
+    profile = json.loads(profile_path.read_text())
+    if cache_state == "no_identity":
+        del profile["metadata"]["dataset"]["hf_dataset_name"]
+    profile["theoretical_prefix_cache_hit"] = {"unit": "%", "avg": 25.0}
+    profile_path.write_text(json.dumps(profile))
+
+    hf_cache = tmp_path / "hf"
+    snapshots = [("cc-traces-weka-062126-256k", "newer", 900, 200)]
+    if cache_state != "missing":
+        snapshots.append(("cc-traces-weka-062126", "correct", 100, 100))
+    if cache_state == "ambiguous":
+        snapshots.append(("cc-traces-weka-062126", "another", 200, 300))
+    for dataset, revision, output, modified_at in snapshots:
+        snapshot = hf_cache / f"datasets--semianalysisai--{dataset}" / "snapshots" / revision
+        snapshot.mkdir(parents=True)
+        traces = [
+            {"id": trace_id, "requests": [{"type": "n", "out": output}] * turns}
+            for trace_id, turns in [("trace-A", 3), ("trace-B", 2)]
+        ]
+        (snapshot / "traces.jsonl").write_text("\n".join(json.dumps(trace) for trace in traces))
+        os.utime(snapshot, (modified_at, modified_at))
+
+    agg = _run_processor(result_dir, tmp_path / "out", {"HF_HUB_CACHE": str(hf_cache)})
+
+    expected = agg["request_metrics"]["tokens"]["output_expected"]
+    if cache_state == "matching":
+        assert expected["mean"] == 100
+    else:
+        assert expected == {}
+    assert agg["request_metrics"]["tokens"]["output_actual"]["mean"] == 55
+    assert agg["num_requests_successful"] == 5
+    assert agg["request_metrics"]["cache"]["theoretical_cache_hit_rate"] == 0.25
 
 
 def test_processor_supports_per_run_subdir_layout(tmp_path: Path):

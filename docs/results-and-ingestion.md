@@ -190,6 +190,14 @@ separate from estimated whole-system power.
 
 Every nonblank JSONL record increments `records_total`. Records with `metadata.benchmark_phase` other than `profiling` are warmup diagnostics and are excluded. Records with a truthy `error` are also excluded and categorized. Older records with no phase are treated as profiling. The retained count becomes `num_requests_successful`. The full accounting is preserved in `request_accounting` with profiled, total dropped, warmup dropped, error dropped, and `error_categories` fields.
 
+`request_metrics.tokens.output_expected` uses local trace metadata only from the
+exact `metadata.dataset.hf_dataset_name` declared by AIPerf. Since the export
+does not record a resolved dataset revision, the matching cache must contain
+exactly one snapshot. Missing identity, missing metadata, or multiple snapshots
+leave this distribution empty; cache modification times and other datasets
+are never used to guess. Actual tokens, GPU energy denominators, and AIPerf's
+theoretical cache-hit metric retain their existing sources.
+
 The AgentX aggregate has top-level identity and topology fields compatible with benchmark ingestion.
 
 `num_gpus` explicitly records the physical count used by the shared processor.
@@ -206,6 +214,12 @@ Other important AgentX fields include:
 | Request metrics | `request_metrics.qps`, `latency` blocks for TTFT/E2EL/ITL/TPOT/interactivity, token distributions, throughput, cache, and per-GPU throughput |
 | Server metrics | `server_metrics.cache`, `kv_cache`, token totals, source details, and any `warnings` |
 | Compatibility | `kv_cache_pool_tokens` mirrors `server_metrics.kv_cache.gpu_total_tokens` |
+
+For a `dynamo-sglang` run with `sglang:` telemetry, the processor uses the
+SGLang adapter for cache, utilization, and token metrics. Logical GPU KV capacity
+remains `null` with a warning because TP ranks may report duplicate capacity
+values. Raw Dynamo frontend totals may include warmup requests. Missing host-hit
+counters do not imply zero CPU cache hits.
 
 The app flattens nested AgentX v3 values into canonical metric keys. Examples include `median_ttft`, `p95_e2el`, `total_tput_tps`, `tput_per_gpu`, `server_gpu_cache_hit_rate`, and `gpu_kv_cache_usage_pct`. It maps p50 to `median`. Full-response ITL fields take precedence when present, and interactivity percentiles are derived as the reciprocal of the matching ITL percentile so historical and current rows use one definition.
 
