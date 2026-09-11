@@ -229,12 +229,16 @@ def test_ablation_detects_the_return_convention():
     assert gate_probe._looks_like_updated_hidden(torch.zeros_like(h), h) is False
 
 
-def test_ablation_returns_the_input_and_never_calls_through_twice():
-    calls = []
+def test_ablation_always_goes_through_the_shut_mask():
+    """No convention guessing: every call runs the real forward with an
+    all-False token_mask, which the module documents as shutting the gate."""
+    masks = []
 
     class Fake:
         def forward(self, hidden_states, hash_ids, token_mask=None):
-            calls.append(1)
+            masks.append(token_mask)
+            if token_mask is not None and not token_mask.any():
+                return hidden_states.clone()
             return hidden_states + 0.01 * torch.ones_like(hidden_states)
 
     saved = gate_probe._find_engram_class
@@ -242,11 +246,14 @@ def test_ablation_returns_the_input_and_never_calls_through_twice():
     try:
         gate_probe.install_ablation()
         obj, h = Fake(), torch.randn(3, 2, 4)
-        first = Fake.forward(obj, h, None)
-        assert torch.equal(first, h), "the first call must already be ablated"
-        second = Fake.forward(obj, h, None)
-        assert torch.equal(second, h)
-        assert len(calls) == 1, "the real forward runs once, only to detect the convention"
+        hash_ids = torch.zeros(3, 2, dtype=torch.long)
+        for _ in range(3):
+            out = Fake.forward(obj, h, hash_ids)
+            assert torch.equal(out, h)
+        assert len(masks) == 3
+        assert all(m is not None and not m.any() and m.dtype == torch.bool for m in masks)
+        # The mask length must follow hash_ids (pre sequence-parallel shard).
+        assert all(m.shape == (3,) for m in masks)
     finally:
         gate_probe._find_engram_class = saved
 
@@ -280,16 +287,15 @@ def test_ablation_diagnostics_go_to_stderr_not_the_logger(capsys, monkeypatch):
     try:
         gate_probe.install_ablation()
         obj, h = Fake(), torch.randn(3, 2, 4)
+        hash_ids = torch.zeros(3, 2, dtype=torch.long)
         for _ in range(10):
-            Fake.forward(obj, h, None)
+            Fake.forward(obj, h, hash_ids)
     finally:
         gate_probe._find_engram_class = saved
 
     err = capsys.readouterr().err
-    assert "cos(out, hidden)" in err
-    assert "forward returns updated hidden states" in err
-    assert "forward call count = 1" in err
-    assert "forward call count = 10" in err
+    assert "gate-shut forward call count = 1" in err
+    assert "gate-shut forward call count = 10" in err
 
 
 def test_meter_records_contribution_and_ablation_zeroes_it(tmp_path, monkeypatch):

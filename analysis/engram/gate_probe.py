@@ -250,39 +250,51 @@ def install_ablation() -> None:
     if getattr(cls, "_gate_ablation_installed", False):
         return
     original = cls.forward
-    try:
-        import inspect
+    _dump_sources(cls, original)
 
-        _say("Engram.forward source:\n" + inspect.getsource(original))
-    except Exception:
-        _say("Engram.forward source unavailable")
-
-    state = {"returns_updated_hidden": None, "calls": 0}
+    state = {"calls": 0}
 
     def forward(self, hidden_states, hash_ids, token_mask=None):
-        if state["returns_updated_hidden"] is None:
-            out = original(self, hidden_states, hash_ids, token_mask)
-            state["returns_updated_hidden"] = _looks_like_updated_hidden(out, hidden_states)
-            _say(
-                "forward returns %s; ablating by returning %s"
-                % (
-                    "updated hidden states" if state["returns_updated_hidden"] else "the delta",
-                    "the input" if state["returns_updated_hidden"] else "zeros",
-                )
-            )
-            # Discard this one real output so even the first token is ablated.
-        # The call count is the evidence that the ablation engaged at all. A
-        # zero count means the patch was installed but never reached, and any
-        # eval delta would then be run-to-run noise rather than an ablation.
+        # The module's own documented mechanism: "token_mask: [T], False shuts
+        # the gate so those positions pass through untouched." The real kernel
+        # performs the ablation, so nothing depends on what forward returns --
+        # the earlier guess at that produced a uniform-output model.
         state["calls"] += 1
         if state["calls"] in (1, 10, 100) or state["calls"] % 5000 == 0:
-            _say("forward call count = %d" % state["calls"])
-        if state["returns_updated_hidden"]:
-            return hidden_states
-        return torch.zeros_like(hidden_states)
+            _say("gate-shut forward call count = %d" % state["calls"])
+        shut = torch.zeros(
+            hash_ids.shape[0], dtype=torch.bool, device=hidden_states.device
+        )
+        return original(self, hidden_states, hash_ids, shut)
 
     cls.forward = forward
     cls._gate_ablation_installed = True
+
+
+def _dump_sources(cls, original) -> None:
+    """Log Engram.forward and the fused kernel it calls.
+
+    gate_probe._gate reimplements the gate in torch from a formula that was
+    *inferred*; the whole n-gram report rests on it. Printing the kernel makes
+    that checkable instead of assumed.
+    """
+    import inspect
+    import sys as _sys
+
+    try:
+        _say("Engram.forward source:\n" + inspect.getsource(original))
+    except Exception:
+        _say("Engram.forward source unavailable")
+    module = _sys.modules.get(cls.__module__)
+    for name in dir(module or ()):
+        if "engram" not in name.lower() or "kernel" not in name.lower():
+            continue
+        fn = getattr(module, name, None)
+        target = getattr(fn, "fn", fn)  # triton JITFunction wraps the python fn
+        try:
+            _say("%s source:\n%s" % (name, inspect.getsource(target)))
+        except Exception:
+            _say("%s source unavailable" % name)
 
 
 def _say(message: str) -> None:
