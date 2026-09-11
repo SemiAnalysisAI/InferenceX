@@ -2,81 +2,12 @@
 
 from __future__ import annotations
 
-import json
 import math
 import statistics
 from collections.abc import Iterable
-from pathlib import Path
 from typing import Any
 
-from .aggregation_common import percentile, stats_for, to_float, to_int
-from .trace_metadata import expected_output_lengths
-
-
-def load_aggregate(path: Path) -> dict[str, Any]:
-    with open(path) as f:
-        return json.load(f)
-
-
-def load_records(path: Path) -> list[dict[str, Any]]:
-    records, _ = load_records_with_accounting(path)
-    return records
-
-
-def load_records_with_accounting(path: Path) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    """Load profiling records from profile_export.jsonl.
-
-    Warmup rows are diagnostics only. Older artifacts did not have
-    metadata.benchmark_phase, so missing phase is treated as profiling.
-    """
-    records: list[dict[str, Any]] = []
-    accounting: dict[str, Any] = {
-        "records_total": 0,
-        "records_profiled": 0,
-        "records_dropped_total": 0,
-        "records_warmup_dropped": 0,
-        "records_error_dropped": 0,
-        "error_categories": {},
-    }
-    with open(path) as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            obj = json.loads(line)
-            accounting["records_total"] += 1
-            phase = obj.get("metadata", {}).get("benchmark_phase")
-            is_warmup = phase is not None and phase != "profiling"
-            error = obj.get("error")
-            if is_warmup:
-                accounting["records_warmup_dropped"] += 1
-            if error:
-                accounting["records_error_dropped"] += 1
-                category = _error_category(error)
-                categories = accounting["error_categories"]
-                categories[category] = categories.get(category, 0) + 1
-            if error or is_warmup:
-                continue
-            records.append(obj)
-    accounting["records_profiled"] = len(records)
-    accounting["records_dropped_total"] = accounting["records_total"] - len(records)
-    return records, accounting
-
-
-def _error_category(error: Any) -> str:
-    if isinstance(error, dict):
-        for key in ("type", "error_type", "code", "class", "status"):
-            value = error.get(key)
-            if value not in (None, ""):
-                return str(value)
-        message = error.get("message") or error.get("error")
-    else:
-        message = error
-
-    if not message:
-        return "unknown"
-    first_line = str(message).strip().splitlines()[0]
-    return (first_line.split(":", 1)[0] or "unknown")[:120]
+from .common import percentile, stats_for, to_float, to_int
 
 
 def _metric_value(record: dict[str, Any], key: str) -> Any:
@@ -270,7 +201,7 @@ def compute_qps_stats(records: list[dict[str, Any]]) -> tuple[dict[str, Any], di
 
 
 def compute_workload_stats(
-    records: list[dict[str, Any]], hf_dataset_name: str | None
+    records: list[dict[str, Any]], traces: Iterable[dict[str, Any]]
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     input_tokens = extract_per_record_ints(records, "input_sequence_length")
     output_tokens = extract_per_record_ints(records, "output_sequence_length")
@@ -279,7 +210,7 @@ def compute_workload_stats(
     flat.update(_distribution("input_tokens", input_tokens))
     flat.update(_distribution("output_tokens_actual", output_tokens))
 
-    expected = expected_output_lengths(records, hf_dataset_name)
+    expected = _expected_output_lengths(records, traces)
     if expected:
         flat.update(_distribution("output_tokens_expected", expected))
 
@@ -369,19 +300,15 @@ def compute_cache_stats(
 def compute_request_metrics(
     records: list[dict[str, Any]],
     aggregate: dict[str, Any] | None = None,
+    *,
+    traces: Iterable[dict[str, Any]] = (),
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     aggregate = aggregate or {}
     flat: dict[str, Any] = {}
     nested: dict[str, Any] = {}
-    metadata = aggregate.get("metadata")
-    dataset = metadata.get("dataset") if isinstance(metadata, dict) else None
-    hf_dataset_name = dataset.get("hf_dataset_name") if isinstance(dataset, dict) else None
-    if not isinstance(hf_dataset_name, str):
-        hf_dataset_name = None
-
     qps_flat, qps_nested = compute_qps_stats(records)
     latency_flat, latency_nested = compute_latency_stats(records)
-    workload_flat, workload_nested = compute_workload_stats(records, hf_dataset_name)
+    workload_flat, workload_nested = compute_workload_stats(records, traces)
     cache_flat, cache_nested = compute_cache_stats(records, aggregate)
     throughput_flat, throughput_nested = compute_throughput_stats(records)
 
@@ -398,3 +325,51 @@ def compute_request_metrics(
         }
     )
     return flat, nested
+
+
+def _trace_metadata(traces: Iterable[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    """Index trace turns in input order; the last nonempty duplicate wins."""
+    out: dict[str, list[dict[str, Any]]] = {}
+    for blob in traces:
+        trace_id = blob.get("id")
+        if not trace_id:
+            continue
+        per_turn: list[dict[str, Any]] = []
+        for req in blob.get("requests", []):
+            if req.get("type") not in ("n", "s"):
+                continue
+            output_length = req.get("output_length")
+            if output_length is None:
+                output_length = req.get("out")
+            per_turn.append(
+                {
+                    "hash_ids": list(req.get("hash_ids") or []),
+                    "output_length": int(output_length or 0),
+                }
+            )
+        if per_turn:
+            out[str(trace_id)] = per_turn
+
+    return out
+
+
+def _expected_output_lengths(
+    records: list[dict[str, Any]], traces: Iterable[dict[str, Any]]
+) -> list[int]:
+    metadata = _trace_metadata(traces)
+    if not metadata:
+        return []
+
+    expected: list[int] = []
+    for record in records:
+        record_metadata = record.get("metadata", {})
+        conv_id = record_metadata.get("conversation_id")
+        trace_id = conv_id.split("::", 1)[0] if conv_id else None
+        turn_index = record_metadata.get("turn_index")
+        if trace_id is None or turn_index is None:
+            continue
+        turns = metadata.get(trace_id)
+        if not turns or turn_index >= len(turns):
+            continue
+        expected.append(int(turns[int(turn_index)]["output_length"]))
+    return expected

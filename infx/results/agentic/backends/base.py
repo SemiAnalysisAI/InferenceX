@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from collections.abc import Iterable
 from typing import Any
 
 
@@ -42,7 +42,7 @@ class ServerMetricsBackend:
     def gpu_kv_capacity_tokens(
         self,
         metrics: dict[str, dict[str, Any]],
-        server_log_paths: list[Path],
+        server_logs: Iterable[str | None],
     ) -> int | None:
         return None
 

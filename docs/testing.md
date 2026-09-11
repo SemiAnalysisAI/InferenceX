@@ -98,6 +98,7 @@ Inspect the emitted values, not only the exit code or row count: config key, mod
 | Matrix schema or generation | `python -m pytest utils/matrix_logic/ -v` |
 | Changelog content or PR gating | `python -m pytest utils/test_process_changelog.py utils/changelog_gate_tests/ -v` |
 | Result processing and topology | `python -m pytest utils/test_process_result.py utils/agentic/aggregation/test_process_agentic_result.py utils/test_aggregate_power.py utils/test_calc_success_rate.py -v` |
+| AgentX aggregation and artifact loading | `python -m pytest utils/agentic/aggregation/ -v` |
 | Eval dispatch, batching, or patches | `python -m pytest utils/evals/ -v` |
 | Eval collection | `python -m pytest utils/test_collect_eval_results.py -v` |
 | Sweep reuse or reusable artifacts | `python -m pytest utils/test_github.py utils/test_find_reusable_sweep_run.py utils/test_acknowledge_sweep_reuse.py utils/test_validate_reusable_sweep_artifacts.py -v` |
