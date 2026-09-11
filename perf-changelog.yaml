@@ -7338,3 +7338,10 @@
     - "Restore the reference prefill chunk to 8192 after the controlled c16 screening trial with 32768-token chunks reduced P90 normalized interactivity 17.5% without a throughput gain."
     - "Preserve the homogeneous TP8/EP8 layout, memory fraction 0.75, stock MORI image and AgentX golden acceptance length 3.39."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2984
+
+- config-keys:
+    - qwen3.5-fp8-mi300x-sglang-disagg-2p1d-agentic-mtp
+  description:
+    - "Add a separate 24-GPU AgentX screening candidate with two TP8/EP8 prefill workers and one TP8/EP8 decode worker at concurrency 16, 24 and 32."
+    - "Use prefill memory fraction 0.85, decode 0.75, 8192-token prefill chunks, cache-aware prefill routing and round-robin decode routing; retain stock MORI and golden acceptance length 3.39."
+  pr-link: TBD
