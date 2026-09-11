@@ -65,7 +65,7 @@ A correct AgentX eval row contains `"scenario-type": "agentic-coding"`, `"run-ev
 1. Add `utils/evals/<task>.yaml` using the lm-evaluation-harness task format. Pin the dataset/split, deterministic generation settings, prompt contract, filters, and primary metric. Use [`gsm8k.yaml`](../utils/evals/gsm8k.yaml) or [`gpqa_diamond.yaml`](../utils/evals/gpqa_diamond.yaml) as an in-tree pattern.
 2. Give `task:` a stable name. That exact name is the key used by score thresholds and appears in collected rows.
 3. Add the minimum accepted score to [`utils/evals/thresholds.yaml`](../utils/evals/thresholds.yaml). Put a general floor under `default`. Add `models.<model-prefix>.<task>` only when a justified model-specific floor is required.
-4. If the task's primary result is not compatible with the collector's strict/extract/accuracy rules, extend [`extract_lm_metrics()`](../utils/collect_eval_results.py#L115-L197). Do not publish a row whose `score` is null.
+4. If the task's primary result is not compatible with the collector's strict/extract/accuracy rules, extend `extract_metrics()` in [`infx.results.evals`](../infx/results/evals.py). It accepts loaded JSON and explicit source provenance; `build_rows()` applies collector score validation and metadata conversion. A successful published row must have a non-null `score`.
 5. Run a small explicit slice, inspect samples, then run the full split. `EVAL_LIMIT` is a smoke-test control, not a publishable score setting.
 
 Against an already healthy OpenAI-compatible server:

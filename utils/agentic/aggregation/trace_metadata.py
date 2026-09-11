@@ -8,9 +8,6 @@ from pathlib import Path
 from typing import Any
 
 
-_TRACE_METADATA_CACHE: dict[str, list[dict[str, Any]]] | None = None
-
-
 def conversation_id_to_trace_id(conv_id: str | None) -> str | None:
     """Strip aiperf's ``::sa:<agent>`` suffix to recover the parent trace id."""
     if not conv_id:
@@ -18,7 +15,10 @@ def conversation_id_to_trace_id(conv_id: str | None) -> str | None:
     return conv_id.split("::", 1)[0]
 
 
-def _hf_traces_dir() -> Path | None:
+def _hf_traces_dir(hf_dataset_name: str | None) -> Path | None:
+    if not hf_dataset_name:
+        return None
+
     hub_cache = os.environ.get("HF_HUB_CACHE") or os.environ.get("HUGGINGFACE_HUB_CACHE")
     if hub_cache:
         cache_root = Path(hub_cache)
@@ -26,21 +26,13 @@ def _hf_traces_dir() -> Path | None:
         home = os.environ.get("HF_HOME")
         cache_root = Path(home) / "hub" if home else Path.home() / ".cache" / "huggingface" / "hub"
 
-    if not cache_root.is_dir():
+    snap_root = cache_root / f"datasets--{hf_dataset_name.replace('/', '--')}" / "snapshots"
+    if not snap_root.is_dir():
         return None
 
-    snapshots: list[Path] = []
-    for dataset_dir in cache_root.glob("datasets--semianalysisai--cc-traces-weka*"):
-        snap_root = dataset_dir / "snapshots"
-        if not snap_root.is_dir():
-            continue
-        snapshots.extend(p for p in snap_root.iterdir() if p.is_dir())
-    snapshots.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-
-    for candidate in snapshots:
-        if any(candidate.glob("*.jsonl")) or any(candidate.glob("*.json")):
-            return candidate
-    return None
+    # The export has no resolved revision; multiple snapshots are ambiguous.
+    snapshots = [path for path in snap_root.iterdir() if path.is_dir()]
+    return snapshots[0] if len(snapshots) == 1 else None
 
 
 def _iter_trace_blobs(traces_dir: Path):
@@ -66,16 +58,11 @@ def _iter_trace_blobs(traces_dir: Path):
             continue
 
 
-def load_trace_metadata() -> dict[str, list[dict[str, Any]]]:
+def load_trace_metadata(hf_dataset_name: str | None) -> dict[str, list[dict[str, Any]]]:
     """Build {trace_id: [{hash_ids, output_length}, ...]} from local HF cache."""
-    global _TRACE_METADATA_CACHE
-    if _TRACE_METADATA_CACHE is not None:
-        return _TRACE_METADATA_CACHE
-
     out: dict[str, list[dict[str, Any]]] = {}
-    traces_dir = _hf_traces_dir()
+    traces_dir = _hf_traces_dir(hf_dataset_name)
     if traces_dir is None:
-        _TRACE_METADATA_CACHE = out
         return out
 
     for blob in _iter_trace_blobs(traces_dir):
@@ -98,12 +85,13 @@ def load_trace_metadata() -> dict[str, list[dict[str, Any]]]:
         if per_turn:
             out[str(trace_id)] = per_turn
 
-    _TRACE_METADATA_CACHE = out
     return out
 
 
-def expected_output_lengths(records: list[dict[str, Any]]) -> list[int]:
-    metadata = load_trace_metadata()
+def expected_output_lengths(
+    records: list[dict[str, Any]], hf_dataset_name: str | None
+) -> list[int]:
+    metadata = load_trace_metadata(hf_dataset_name)
     if not metadata:
         return []
 

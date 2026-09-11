@@ -15,6 +15,10 @@ POWER_METRIC_SCHEMA_VERSION = 2
 
 WHOLE_METRIC_KEYS = (
     "avg_power_w",
+    "p75_power_w",
+    "p75_total_gpu_power_w",
+    "p90_power_w",
+    "p90_total_gpu_power_w",
     "avg_total_gpu_power_w",
     "total_gpu_energy_j",
     "joules_per_successful_query",
