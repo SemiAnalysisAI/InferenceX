@@ -94,3 +94,31 @@ langs = [d for d in corpora.DOMAINS if d.startswith("code_")]
 assert len(langs) >= 10, langs
 print(f"corpora: rendering, filtering, budget truncation OK ({len(langs)} code domains)")
 print("\nALL OFFLINE CHECKS PASSED")
+
+
+def test_worker_bootstrap_is_importable_and_arms_only_when_asked(tmp_path, monkeypatch):
+    """The sitecustomize must be valid at site time, when vllm is not importable."""
+    import subprocess
+
+    monkeypatch.delenv("ENGRAM_PROBE_DIR", raising=False)
+    monkeypatch.setenv("PYTHONPATH", "")
+    analysis_dir = str(tmp_path)
+    bootstrap = gate_probe.install_in_workers(analysis_dir)
+    assert bootstrap in os.environ["PYTHONPATH"].split(os.pathsep)
+
+    # A fresh interpreter must import it cleanly with no probe dir set.
+    env = dict(os.environ, PYTHONPATH=bootstrap)
+    env.pop("ENGRAM_PROBE_DIR", None)
+    done = subprocess.run(
+        [sys.executable, "-c", "import sitecustomize, sys; print(sitecustomize.__file__)"],
+        capture_output=True, text=True, env=env,
+    )
+    assert done.returncode == 0, done.stderr
+    assert bootstrap in done.stdout
+
+
+def test_dialogue_turns_render_from_role_content_dicts():
+    """UltraChat rows are [{role, content}], not DailyDialog's plain strings."""
+    row = {"messages": [{"role": "user", "content": " hi "}, {"role": "assistant", "content": "yo"}]}
+    assert corpora._render(row, "messages") == "hi\nyo"
+    assert corpora._render({"dialog": [" a ", "b"]}, "dialog") == "a\nb"

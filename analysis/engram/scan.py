@@ -56,8 +56,11 @@ def main() -> int:
     # Workers inherit this, so the wrapper knows where to write.
     os.environ[gate_probe.PROBE_DIR_ENV] = probe_dir
 
-    # Patch before the engine builds the model.
+    # Patch the driver, then arm the spawned TP workers -- which is where the
+    # model actually lives, and where the first run captured nothing.
     gate_probe.install()
+    analysis_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    logger.info("engram-probe: worker bootstrap at %s", gate_probe.install_in_workers(analysis_dir))
 
     from transformers import AutoTokenizer
     from vllm import LLM, SamplingParams
@@ -163,6 +166,11 @@ def main() -> int:
     print("===ENGRAM_SCAN_JSON_BEGIN===")
     print(json.dumps(report))
     print("===ENGRAM_SCAN_JSON_END===")
+    if not seen_tokens:
+        # The first run emitted an empty report and still exited 0, which read
+        # as "ran fine" when the probe had in fact never fired. Fail loudly.
+        logger.error("no gates captured for any domain; the probe never fired")
+        return 1
     return 0
 
 

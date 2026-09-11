@@ -1,7 +1,7 @@
 """Domain corpora for the Engram gate-activation scan.
 
-The first four domains match the reference study (WikiText-2, DailyDialog,
-GSM8K, MBPP) so those n-gram tables stay directly comparable. The rest widen
+The first four domains stand in for the reference study (WikiText-2,
+UltraChat for open-domain dialogue, GSM8K, MBPP) so those n-gram tables stay directly comparable. The rest widen
 the code side beyond MBPP's Python-only word problems: CodeSearchNet supplies
 real repository functions in six languages, and Rosetta Code adds a smaller
 sample of languages CodeSearchNet does not carry.
@@ -41,8 +41,20 @@ def _rosetta(language_name: str):
 # domain -> (char budget, [(path, load kwargs, field, row filter), ...])
 DOMAINS: dict[str, tuple[int, list]] = {
     # --- reference study domains ---
-    "wiki": (REFERENCE_CHARS, [("wikitext", {"name": "wikitext-2-raw-v1", "split": "train"}, "text", None)]),
-    "chat": (REFERENCE_CHARS, [("daily_dialog", {"split": "train"}, "dialog", None)]),
+    "wiki": (
+        REFERENCE_CHARS,
+        [
+            ("Salesforce/wikitext", {"name": "wikitext-2-raw-v1", "split": "train"}, "text", None),
+            ("wikimedia/wikipedia", {"name": "20231101.en", "split": "train"}, "text", None),
+        ],
+    ),
+    "chat": (
+        REFERENCE_CHARS,
+        [
+            ("HuggingFaceH4/ultrachat_200k", {"split": "train_sft"}, "messages", None),
+            ("allenai/soda", {"split": "train"}, "dialogue", None),
+        ],
+    ),
     "math": (REFERENCE_CHARS, [("openai/gsm8k", {"name": "main", "split": "train"}, ("question", "answer"), None)]),
     "code_mbpp": (REFERENCE_CHARS, [("google-research-datasets/mbpp", {"name": "full", "split": "train"}, ("text", "code"), None)]),
     # --- real repository code, six languages ---
@@ -66,8 +78,14 @@ def _render(row, field) -> str:
     if isinstance(field, tuple):
         return "\n".join(str(row[f]) for f in field if row.get(f))
     value = row[field]
-    if isinstance(value, list):  # DailyDialog turns
-        return "\n".join(str(v).strip() for v in value)
+    if isinstance(value, list):  # dialogue turns: plain strings or {role, content}
+        turns = []
+        for v in value:
+            text = v.get("content", "") if isinstance(v, dict) else v
+            text = str(text).strip()
+            if text:
+                turns.append(text)
+        return "\n".join(turns)
     return str(value)
 
 
@@ -75,9 +93,9 @@ def _load_one(path, kwargs, field, where, budget):
     from datasets import load_dataset
 
     try:
-        ds = load_dataset(path, **kwargs)
+        ds = load_dataset(path, streaming=True, **kwargs)
     except Exception:
-        ds = load_dataset(path, trust_remote_code=True, **kwargs)
+        ds = load_dataset(path, **kwargs)
     chunks, total = [], 0
     for row in ds:
         if where is not None and not where(row):
