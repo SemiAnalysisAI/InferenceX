@@ -209,6 +209,17 @@ result = build_result(raw_benchmark, runtime_env)
 
 新增格式应在 `infx/results/` 下提供带类型标注的构建函数，接收该格式所需的输入并返回字典。通过普通函数调用组合共享转换；文件查找、环境默认值、错误呈现和序列化由该格式的 CLI 适配器负责。现有 AgentX 拓扑及请求和服务器指标处理保留各自的策略。
 
+[`infx.results.agentic.build_result`](../infx/results/agentic/__init__.py) 负责构建 AgentX 聚合结果，包括请求指标、后端选择、服务器指标和每 GPU 吞吐量。它接收已加载的 AIPerf 请求记录、profile 和服务器指标映射，以及显式传入的环境变量映射。可选的 `traces` 提供声明数据集中的原始轨迹对象，`server_logs` 的每个元素对应一个已解码的日志文件头。构建函数不打开文件，也不读取进程环境；返回的指标未经舍入，输入不会被修改，但结果中的数据集和请求统计映射仍与输入共享。
+
+```python
+from infx.results.agentic import build_result
+
+result = build_result(records, profile, server_metrics, runtime_env,
+                      traces=trace_objects, server_logs=log_texts)
+```
+
+现有的 `python -m utils.agentic.aggregation.process_agentic_result` 命令继续负责工件查找、请求过滤与统计、轨迹缓存查找、有大小上限的日志读取、舍入、诊断信息和输出文件写入。它以惰性迭代器提供轨迹和日志，确保元数据校验仍先于轨迹读取，且后端只读取自身需要的日志。请求与服务器指标算法及后端优先级由包内代码统一负责。数据集匹配、缓存优先级和快照歧义处理保留在 CLI 的共享工件加载器中，功耗适配器也使用该加载器。内部 Python 导入改用 `infx.results.agentic`；命令路径、环境变量和工件模式保持不变。
+
 当前处理路径共享以下辅助工具：
 
 - [`parse_component_metadata`](../infx/results/metadata.py) 接收原始 JSON 值和诊断标签。调用方选择 `version` 是否可省略，以及无效输入应抛出 `ValueError` 还是 `SystemExit`，从而保留现有契约。

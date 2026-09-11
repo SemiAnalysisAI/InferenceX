@@ -3,18 +3,18 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
+from collections.abc import Iterable
 from typing import Any
 
-from ..aggregation_common import (
+from ..common import (
     gauge_stat,
     label_equals,
     normalize_fraction,
     rate,
     sum_by_label,
     sum_stat,
+    sum_server_log_capacities,
 )
-from ..server_log_metrics import sum_server_log_capacities
 from .base import ServerMetricsBackend, counter_int
 
 
@@ -144,10 +144,10 @@ class SglangBackend(ServerMetricsBackend):
     def gpu_kv_capacity_tokens(
         self,
         metrics: dict[str, dict[str, Any]],
-        server_log_paths: list[Path],
+        server_logs: Iterable[str | None],
     ) -> int | None:
         return sum_server_log_capacities(
-            server_log_paths,
+            server_logs,
             self.kv_cache_pool_tokens_from_server_log,
         )
 
