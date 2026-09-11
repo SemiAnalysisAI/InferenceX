@@ -1,10 +1,10 @@
 """Domain corpora for the Engram gate-activation scan.
 
 The first four domains stand in for the reference study (WikiText-2,
-UltraChat for open-domain dialogue, GSM8K, MBPP) so those n-gram tables stay directly comparable. The rest widen
-the code side beyond MBPP's Python-only word problems: CodeSearchNet supplies
-real repository functions in six languages, and Rosetta Code adds a smaller
-sample of languages CodeSearchNet does not carry.
+UltraChat for open-domain dialogue, GSM8K, MBPP) so those n-gram tables stay directly comparable. CodeSearchNet
+widens the code side beyond MBPP's Python-only word problems with real
+repository functions in six languages. Natural-language corpora are English
+and Chinese only.
 
 Each domain lists candidate sources in preference order; the first that loads
 wins, and a domain that loads nothing is skipped loudly rather than silently
@@ -19,23 +19,12 @@ logger = logging.getLogger(__name__)
 
 REFERENCE_CHARS = 5_000_000
 CODE_CHARS = 3_000_000
-SMALL_CHARS = 1_000_000
 
 CSN = "code-search-net/code_search_net"
-ROSETTA = "christopher/rosetta-code"
 
 
 def _csn(lang: str):
     return (CSN, {"name": lang, "split": "train"}, "whole_func_string", None)
-
-
-def _rosetta(language_name: str):
-    return (
-        ROSETTA,
-        {"split": "train"},
-        "code",
-        lambda row, want=language_name: row.get("language_name") == want,
-    )
 
 
 # domain -> (char budget, [(path, load kwargs, field, row filter), ...])
@@ -64,13 +53,6 @@ DOMAINS: dict[str, tuple[int, list]] = {
     "code_go": (CODE_CHARS, [_csn("go")]),
     "code_php": (CODE_CHARS, [_csn("php")]),
     "code_ruby": (CODE_CHARS, [_csn("ruby")]),
-    # --- languages CodeSearchNet lacks; Rosetta is small, so budgets are too ---
-    "code_c": (SMALL_CHARS, [_rosetta("C")]),
-    "code_cpp": (SMALL_CHARS, [_rosetta("C++")]),
-    "code_rust": (SMALL_CHARS, [_rosetta("Rust")]),
-    "code_kotlin": (SMALL_CHARS, [_rosetta("Kotlin")]),
-    "code_haskell": (SMALL_CHARS, [_rosetta("Haskell")]),
-    "code_typescript": (SMALL_CHARS, [_rosetta("TypeScript")]),
 }
 
 
@@ -150,6 +132,18 @@ STREAM_DOMAINS: dict[str, list] = {
     "math_web": [
         ("open-web-math/open-web-math", {"split": "train"}, "text", None),
         ("EleutherAI/proof-pile-2", {"name": "open-web-math", "split": "train"}, "text", None),
+    ],
+    # --- Chinese, mirroring the English streaming domains ---
+    "wiki_zh": [
+        ("wikimedia/wikipedia", {"name": "20231101.zh", "split": "train"}, "text", None),
+    ],
+    "web_zh": [
+        ("HuggingFaceFW/fineweb-2", {"name": "cmn_Hani", "split": "train"}, "text", None),
+        ("opencsg/chinese-fineweb-edu", {"split": "train"}, "text", None),
+    ],
+    "chat_zh": [
+        ("BelleGroup/train_1M_CN", {"split": "train"}, ("instruction", "output"), None),
+        ("YeungNLP/firefly-train-1.1M", {"split": "train"}, ("input", "target"), None),
     ],
 }
 

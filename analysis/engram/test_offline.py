@@ -66,22 +66,14 @@ assert corpora._render({"dialog": [" hi ", " yo "]}, "dialog") == "hi\nyo"
 assert corpora._render({"q": "Q", "a": "A"}, ("q", "a")) == "Q\nA"
 assert corpora._render({"q": "Q", "a": ""}, ("q", "a")) == "Q"
 
-rows = [
-    {"language_name": "C++", "code": "int main(){}"},
-    {"language_name": "Rust", "code": "fn main(){}"},
-    {"language_name": "C++", "code": "auto x = 1;"},
-]
-_, srcs = corpora.DOMAINS["code_cpp"]
-where = srcs[0][3]
-assert [r["code"] for r in rows if where(r)] == ["int main(){}", "auto x = 1;"]
-
 import sys as _sys, types as _types
 fake = _types.ModuleType("datasets")
+rows = [{"code": "int main(){}"}, {"code": "auto x = 1;"}]
 fake.load_dataset = lambda path, **kw: rows
 _saved = _sys.modules.get("datasets")
 _sys.modules["datasets"] = fake
 try:
-    text = corpora._load_one("x", {}, "code", where, budget=1_000)
+    text = corpora._load_one("x", {}, "code", None, budget=1_000)
     assert text == "int main(){}\nauto x = 1;", text
     assert len(corpora._load_one("x", {}, "code", None, budget=5)) == 5
 finally:
@@ -91,8 +83,12 @@ finally:
         del _sys.modules["datasets"]
 
 langs = [d for d in corpora.DOMAINS if d.startswith("code_")]
-assert len(langs) >= 10, langs
-print(f"corpora: rendering, filtering, budget truncation OK ({len(langs)} code domains)")
+assert len(langs) == 7, langs  # 6 CodeSearchNet languages + MBPP
+assert not any("rosetta" in str(v).lower() for v in corpora.DOMAINS.values())
+# English and Chinese only: every natural-language domain is tagged or English.
+zh = [d for d in corpora.all_domains() if d.endswith("_zh")]
+assert sorted(zh) == ["chat_zh", "web_zh", "wiki_zh"], zh
+print(f"corpora: {len(langs)} code domains, {len(zh)} Chinese domains, no Rosetta")
 print("\nALL OFFLINE CHECKS PASSED")
 
 
