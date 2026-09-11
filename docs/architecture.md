@@ -209,9 +209,10 @@ result = build_result(raw_benchmark, runtime_env)
 
 New formats should expose their own typed builder under `infx/results/`, accepting the inputs that format needs and returning a dictionary. Compose shared transformations as ordinary function calls; keep file discovery, environment defaults, error presentation, and serialization in the format's CLI adapter. Existing AgentX topology and request/server processing retain their own policies.
 
-Two helpers are shared by the current processing paths:
+The current processing paths share these helpers:
 
 - [`parse_component_metadata`](../infx/results/metadata.py) accepts a raw JSON value and diagnostic label. Callers select whether `version` is optional and whether invalid input raises `ValueError` or `SystemExit`, preserving their existing contracts.
+- [`Parallelism`](../infx/results/topology.py) shares GPU-count calculation, parallelism result fields, and normalization when there are no separate decode GPUs. Fixed-sequence results retain explicit allocation counts; AgentX derives counts from its workers. Each caller retains its environment defaults, validation order, errors, and throughput denominators.
 - [`with_power_metrics`](../infx/results/power/__init__.py) returns a copy with the supplied metric family replaced, removes stale validity reasons, and validates and rounds new metrics. Callers supply metric keys and schema version, then own artifact writes and validation sidecars. This allows another metric family to reuse the transformation without changing its implementation.
 
 Power telemetry engines also live in [`infx.results.power`](../infx/results/power/): `single_node.run` consumes GPU-monitor CSVs, while `multinode.run` validates srt-slurm artifact packages. They share benchmark-window parsing, per-device integration, aggregate replacement, and audit serialization through `common.py`, while retaining their own telemetry validation and failure policies. Fixed-sequence and AgentX adapters import these engines directly; new result formats can supply their benchmark window and token counts to the matching engine.
