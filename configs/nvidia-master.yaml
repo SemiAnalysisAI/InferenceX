@@ -10213,3 +10213,20 @@ glm5.1-fp8-b200-tilert-agentic:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=1"
+
+# THROWAWAY ANALYSIS BRANCH -- not a benchmark recipe. conc-list [1,2,3] exists
+# only to fan the Engram gate scan across three H100 nodes (CONC-1 = shard
+# index, 8 GPUs each). Do not merge.
+dsv41flash-fp4-h100-vllm-agentic-dspark:
+  image: vllm/vllm-openai:deepseekv41-flash-0909
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:h100-dgxc
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 3] }
