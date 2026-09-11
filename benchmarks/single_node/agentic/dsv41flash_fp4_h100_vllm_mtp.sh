@@ -37,7 +37,7 @@ python3 analysis/engram/scan.py \
     --tp "$TP" \
     --shard "$SHARD" \
     --num-shards 3 \
-    --max-chunks-per-domain "${ENGRAM_MAX_CHUNKS:-3000}" \
+    --max-chunks-per-domain "${ENGRAM_MAX_CHUNKS:-1750}" \
     --out "$RESULT_DIR/engram_scan"
 
 echo "=== scan complete for shard ${SHARD} ==="

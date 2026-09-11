@@ -40,7 +40,7 @@ def main() -> int:
     ap.add_argument("--shard", type=int, default=0)
     ap.add_argument("--num-shards", type=int, default=1)
     ap.add_argument("--chunk-tokens", type=int, default=3584)
-    ap.add_argument("--max-chunks-per-domain", type=int, default=3000,
+    ap.add_argument("--max-chunks-per-domain", type=int, default=1750,
                     help="per shard; 0 = all. This is the wall-clock knob: the ten "
                          "streaming domains will always hit it, the small "
                          "reference corpora exhaust first. See README for the "
