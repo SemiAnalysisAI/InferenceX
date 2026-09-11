@@ -117,20 +117,25 @@ rows -- they are the legible ones.
 
 | gate | count | domain / layer | 4-gram | what it is |
 | --: | --: | --- | --- | --- |
-| 0.2903 | 3 | `wiki` / 0 | ` " Run Run Rudolph` | Chuck Berry, 1958. |
-| 0.2747 | 3 | `wiki` / 0 | ` Treehouse of Horror` | The Simpsons' Halloween episodes. |
-| 0.4092 | 3 | `wiki` / 1 | `ane Clown Pos` | Insane Clown Posse, mid-token. |
-| 0.6037 | 5 | `wiki_full` / 1 | ` Sabbath Bloody Sabbath` | Black Sabbath, 1973. |
+| 0.4387 | 3 | `wiki` / 1 | ` " Run Run Rudolph` | Chuck Berry, 1958. |
+| 0.5060 | 3 | `wiki` / 1 | `able Kimmy Schmidt` | Unbreakable Kimmy Schmidt, caught mid-word. |
+| 0.4092 | 3 | `wiki` / 1 | `ane Clown Pos` | Insane Clown Posse -- gate opens inside a word. |
 | 0.5489 | 3 | `wiki` / 1 | ` , Super Mario Land` | Game Boy, 1989. |
-| 0.4619 | 3 | `wiki` / 1 | `ll Always Have Paris` | Casablanca, via a TNG episode title. |
-| 0.5619 | 6 | `wiki` / 1 | ` Life Is Worth Living` | Fulton Sheen's 1950s TV show. |
+| 0.6037 | 5 | `wiki_full` / 1 | ` Sabbath Bloody Sabbath` | Black Sabbath, 1973. |
+| 0.7682 | 12 | `web` / 1 | ` Johannes Gutenberg University` | Mainz. |
+| 0.7911 | 3 | `web` / 1 | ` All Rights Reserved.` | Boilerplate, fully determined. |
+| 0.7598 | 3 | `web` / 1 | ` material from the Wikipedia` | Attribution boilerplate. |
+| 0.8667 | 3 | `web_zh` / 1 | `免责声明】本文` | Chinese disclaimer header. |
+| 0.7326 | 10 | `web_zh` / 1 | `本文僅代表作者` | 'views are the author's own', traditional script. |
+| 0.6592 | 12 | `web_zh` / 1 | ` 未经授权禁止` | 'reproduction without authorisation prohibited'. |
+| 0.6199 | 6 | `web_zh` / 1 | `Copyright 2010` | A year the model cannot guess, only recall. |
 | 0.3174 | 54 | `web_zh` / 0 | `玄奘西游记` | Xuanzang's Journey to the West. |
-| 0.2824 | 8 | `chat_zh` / 0 | `《荒岛余生` | Cast Away, in Chinese. |
-| 0.2365 | 3 | `math` / 0 | ` pints of frozen yogurt` | A GSM8K word-problem prop. |
-| 0.2572 | 9 | `math` / 0 | `g of packing peanuts` | Another one. |
-| 0.2755 | 3 | `math` / 0 | ` The Fancy Salon` | An invented GSM8K business. |
-
-_Not present in this sample (they were selected from an earlier, smaller run): ` Wright : Ace Attorney` in wiki/engram0/4gram, ` The Spectacular Spider` in wiki_full/engram1/4gram, `xpialidocious` in chat_zh/engram0/4gram, `.141592653` in chat_zh/engram0/4gram, ` a truth universally acknowledged` in chat_zh/engram0/4gram, `KING OF ZIPANGU` in wiki_zh/engram0/4gram, ` 10 Baby Ruth` in math/engram0/4gram, ` Wisteria Lane` in wiki/engram0/4gram, ` Angiosperm Phylogen` in wiki_full/engram1/4gram, ` Elders of Zion` in web/engram0/4gram, `The Life of Pablo` in chat/engram0/4gram._
+| 0.3444 | 7 | `chat_zh` / 1 | `imedia.org/wikipedia` | A URL stem, mid-token. |
+| 0.3330 | 9 | `code_javascript` / 0 | ` @namespace SugarNamespace` | A framework's docblock tag. |
+| 0.9995 | 5 | `math_web` / 0 | `@@ -1,` | A unified-diff hunk header. |
+| 0.9957 | 17 | `code_python` / 0 | ` \| QtCore.Q` | PyQt flag-OR idiom. |
+| 0.9981 | 5 | `code_go` / 0 | `\treturn func(_ context` | Go middleware signature. |
+| 1.0000 | 3 | `code_ruby` / 0 | `http://id.loc` | Library of Congress URI namespace. |
 
 The pattern across all of them: a rare multi-token name whose later pieces
 are unguessable from the model's weights but fully determined once the
@@ -139,6 +144,34 @@ opens in the middle of a word, on a boundary that exists only because of how
 the tokenizer split a band's name. The maths rows show the same mechanism on
 invented props: once a GSM8K problem has said "pints of frozen", the next
 token is not in doubt.
+
+## Gate distribution
+
+Measured over every gate value, not just the strong tail -- earlier runs
+kept only the top 1%, so the observed maximum was an artifact of
+selection. Per hyper-connection copy, combined across both shards.
+
+| domain / layer | mean | q99 | q99.99 | max |
+| --- | --: | --: | --: | --: |
+| `code_go` / 0 | 0.0298 | 0.2125 | 0.2775 | **0.99999** |
+| `code_python` / 0 | 0.0279 | 0.2075 | 0.2825 | **0.99998** |
+| `code_javascript` / 0 | 0.0276 | 0.2125 | 0.2850 | **0.99998** |
+| `code_java` / 0 | 0.0300 | 0.2225 | 0.2925 | **0.99998** |
+| `code_php` / 0 | 0.0309 | 0.2175 | 0.2925 | **0.99998** |
+| `code_ruby` / 0 | 0.0289 | 0.2075 | 0.2725 | **0.99998** |
+| `math_web` / 0 | 0.0247 | 0.1925 | 0.2925 | **0.99953** |
+| `chat` / 0 | 0.0229 | 0.1825 | 0.2825 | **0.99933** |
+| `web` / 0 | 0.0234 | 0.1900 | 0.2925 | **0.99926** |
+| `wiki_full` / 0 | 0.0252 | 0.2075 | 0.3025 | **0.99914** |
+| `web_zh` / 0 | 0.0283 | 0.1925 | 0.2725 | **0.99612** |
+| `math_web` / 1 | 0.0212 | 0.2050 | 0.7400 | **0.99103** |
+
+The gate is a sigmoid, so it is bounded by 1 and approaches it only
+asymptotically; the largest value measured here is **0.99999**. It is
+shut almost everywhere -- mean 0.0243, 99th
+percentile around 0.21 -- and opens hard on a thin tail. The copies are
+markedly asymmetric at layer 1, where two of the four carry nearly all
+of the signal.
 
 ## Reference-study domains
 

@@ -146,29 +146,25 @@ w("")
 
 # --- Notable -------------------------------------------------------------
 NOTABLE = [
-    ("wiki/engram0/4gram", " Wright : Ace Attorney", "The game subtitle, memorized whole."),
-    ("wiki/engram0/4gram", ' " Run Run Rudolph', "Chuck Berry, 1958."),
-    ("wiki/engram0/4gram", " Treehouse of Horror", "The Simpsons' Halloween episodes."),
-    ("wiki/engram1/4gram", "ane Clown Pos", "Insane Clown Posse, mid-token."),
-    ("wiki_full/engram1/4gram", " Sabbath Bloody Sabbath", "Black Sabbath, 1973."),
-    ("wiki_full/engram1/4gram", " The Spectacular Spider", "...-Man."),
-    ("wiki/engram1/4gram", " , Super Mario Land", "Game Boy, 1989."),
-    ("wiki/engram1/4gram", "ll Always Have Paris", "Casablanca, via a TNG episode title."),
-    ("wiki/engram1/4gram", " Life Is Worth Living", "Fulton Sheen's 1950s TV show."),
-    ("chat_zh/engram0/4gram", "xpialidocious", "The tail of supercalifragilistic-."),
-    ("chat_zh/engram0/4gram", ".141592653", "Nine digits of pi after the point."),
-    ("chat_zh/engram0/4gram", " a truth universally acknowledged", "Pride and Prejudice, opening line."),
-    ("wiki_zh/engram0/4gram", "KING OF ZIPANGU", "A 1990s NHK drama's romanized title."),
-    ("web_zh/engram0/4gram", "玄奘西游记", "Xuanzang's Journey to the West."),
-    ("chat_zh/engram0/4gram", "《荒岛余生", "Cast Away, in Chinese."),
-    ("math/engram0/4gram", " pints of frozen yogurt", "A GSM8K word-problem prop."),
-    ("math/engram0/4gram", "g of packing peanuts", "Another one."),
-    ("math/engram0/4gram", " The Fancy Salon", "An invented GSM8K business."),
-    ("math/engram0/4gram", " 10 Baby Ruth", "Candy bars, being counted."),
-    ("wiki/engram0/4gram", " Wisteria Lane", "Desperate Housewives."),
-    ("wiki_full/engram1/4gram", " Angiosperm Phylogen", "...y Group, the botanical classification."),
-    ("web/engram0/4gram", " Elders of Zion", "From a Project Gutenberg catalogue page."),
-    ("chat/engram0/4gram", "The Life of Pablo", "Kanye West, 2016."),
+    ('wiki/engram1/4gram', ' " Run Run Rudolph', 'Chuck Berry, 1958.'),
+    ('wiki/engram1/4gram', 'able Kimmy Schmidt', 'Unbreakable Kimmy Schmidt, caught mid-word.'),
+    ('wiki/engram1/4gram', 'ane Clown Pos', 'Insane Clown Posse -- gate opens inside a word.'),
+    ('wiki/engram1/4gram', ' , Super Mario Land', 'Game Boy, 1989.'),
+    ('wiki_full/engram1/4gram', ' Sabbath Bloody Sabbath', 'Black Sabbath, 1973.'),
+    ('web/engram1/4gram', ' Johannes Gutenberg University', 'Mainz.'),
+    ('web/engram1/4gram', ' All Rights Reserved.', 'Boilerplate, fully determined.'),
+    ('web/engram1/4gram', ' material from the Wikipedia', 'Attribution boilerplate.'),
+    ('web_zh/engram1/4gram', '免责声明】本文', 'Chinese disclaimer header.'),
+    ('web_zh/engram1/4gram', '本文僅代表作者', "'views are the author's own', traditional script."),
+    ('web_zh/engram1/4gram', ' 未经授权禁止', "'reproduction without authorisation prohibited'."),
+    ('web_zh/engram1/4gram', 'Copyright 2010', 'A year the model cannot guess, only recall.'),
+    ('web_zh/engram0/4gram', '玄奘西游记', "Xuanzang's Journey to the West."),
+    ('chat_zh/engram1/4gram', 'imedia.org/wikipedia', 'A URL stem, mid-token.'),
+    ('code_javascript/engram0/4gram', ' @namespace SugarNamespace', "A framework's docblock tag."),
+    ('math_web/engram0/4gram', '@@ -1,', 'A unified-diff hunk header.'),
+    ('code_python/engram0/4gram', ' | QtCore.Q', 'PyQt flag-OR idiom.'),
+    ('code_go/engram0/4gram', '\treturn func(_ context', 'Go middleware signature.'),
+    ('code_ruby/engram0/4gram', 'http://id.loc', 'Library of Congress URI namespace.'),
 ]
 index = {
     (table, r["ngram"]): r
@@ -205,6 +201,49 @@ w("the tokenizer split a band's name. The maths rows show the same mechanism on"
 w("invented props: once a GSM8K problem has said \"pints of frozen\", the next")
 w("token is not in doubt.")
 w("")
+
+
+# --- Gate distribution -----------------------------------------------------
+dists = d.get("gate_distribution") or {}
+agg = {}
+for shard, doms in dists.items():
+    for dom, layers in doms.items():
+        for lname, st in layers.items():
+            if not (isinstance(st, dict) and st.get("max") is not None):
+                continue
+            # Shards scanned different text; combine rather than listing each.
+            cur = agg.setdefault((dom, lname), {"max": 0.0, "mean": [], "q99": [], "q9999": []})
+            cur["max"] = max(cur["max"], st["max"])
+            cur["mean"].append(st.get("mean", 0.0))
+            cur["q99"].append(st.get("q0.99", 0.0))
+            cur["q9999"].append(st.get("q0.9999", 0.0))
+
+if agg:
+    w("## Gate distribution")
+    w("")
+    w("Measured over every gate value, not just the strong tail -- earlier runs")
+    w("kept only the top 1%, so the observed maximum was an artifact of")
+    w("selection. Per hyper-connection copy, combined across both shards.")
+    w("")
+    w("| domain / layer | mean | q99 | q99.99 | max |")
+    w("| --- | --: | --: | --: | --: |")
+    ranked = sorted(agg.items(), key=lambda kv: -kv[1]["max"])
+    for (dom, lname), st in ranked[:12]:
+        mean = sum(st["mean"]) / len(st["mean"])
+        q99 = sum(st["q99"]) / len(st["q99"])
+        q9999 = sum(st["q9999"]) / len(st["q9999"])
+        w(f"| `{dom}` / {lname[-1]} | {mean:.4f} | {q99:.4f} | {q9999:.4f} "
+          f"| **{st['max']:.5f}** |")
+    w("")
+    peak = max(st["max"] for st in agg.values())
+    means = [m for st in agg.values() for m in st["mean"]]
+    w(f"The gate is a sigmoid, so it is bounded by 1 and approaches it only")
+    w(f"asymptotically; the largest value measured here is **{peak:.5f}**. It is")
+    w(f"shut almost everywhere -- mean {sum(means)/len(means):.4f}, 99th")
+    w("percentile around 0.21 -- and opens hard on a thin tail. The copies are")
+    w("markedly asymmetric at layer 1, where two of the four carry nearly all")
+    w("of the signal.")
+    w("")
 
 
 for heading, doms in ORDER:
