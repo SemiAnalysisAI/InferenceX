@@ -381,4 +381,4 @@ python -m pytest utils/matrix_logic/ -v
 
 遵循[上游配方 #946](https://github.com/vllm-project/recipes/pull/946) 的 AMD 设置：`VLLM_ROCM_USE_AITER=1`、`VLLM_ROCM_USE_AITER_MOE=1` 和 `--moe-backend aiter_triton_mxfp4_bf16`。配方通过 `WEKA_LOADER_OVERRIDE` 固定使用完整语料 `semianalysis_cc_traces_weka_062126`。KV 驻留 GPU；Engram 沿用上游 AMD 默认设置。不要复制 NVIDIA 的 `--engram-config` 选项：上游目前在 ROCm 上拒绝该选项。MI355X launcher 使用共享 HF 缓存，并将此模型的仓库挂载至 `/ix`。
 
-**运行时验证受阻：** 2026-09-10，Docker Hub 对上游文档指定的 `vllm/vllm-openai-rocm:deepseekv41-flash-0909` 返回 HTTP 404。上游共享 Engram 实现还默认启用 CPU 卸载，而显式配置拒绝 ROCm；须确认发布的 AMD 构建已解决此不一致。调度前须确认镜像已发布且包含 AMD 实现。随后使用 `agentx-fast` 对此配置键运行并发 1，检查服务端与回放产物，再按 [AgentX 流程](./eval-agentx-procedures_zh.md) 运行正式 sweep 和 eval。本地矩阵生成不等于 GPU 验证。
+**GPU 验证尚待完成：** 配方使用 `public.ecr.aws/q9t5s3a7/vllm-release-repo:79a7108d9aea27ddab99ce1779290d300b17fc23-rocm`。2026-09-11 已验证其公开 manifest，镜像元数据包含 ROCm 和 `gfx950`。此镜像替代了在运行 34466680355 中返回 HTTP 404 的 Docker Hub 标签。Engram 行为与服务兼容性仍需 GPU 验证。请按 [AgentX 流程](./eval-agentx-procedures_zh.md) 获取运行时证据；本地矩阵生成和镜像元数据不等于 GPU 验证。

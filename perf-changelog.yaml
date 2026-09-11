@@ -7357,3 +7357,10 @@
   description:
     - "Use thinking-on golden synthetic AL 3.51 for five-token DSpark throughput; disable adaptive verification and retain real verification for evals"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2962
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  description:
+    - "Replace unavailable Docker Hub image with public.ecr.aws/q9t5s3a7/vllm-release-repo:79a7108d9aea27ddab99ce1779290d300b17fc23-rocm"
+    - "Keep TP4, DSpark settings, and the full-context semianalysis_cc_traces_weka_062126 corpus"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2962
