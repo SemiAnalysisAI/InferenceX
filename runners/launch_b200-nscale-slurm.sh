@@ -5,8 +5,8 @@
 # Self-contained because Nscale has its own Slurm and storage layout.
 #
 # Scope: multi-node Dynamo-vLLM DeepSeek-V4-Pro and Kimi K2.6 FP4 runs, plus
-# DeepSeek-V4-Pro FP4 Dynamo-SGLang STP and MTP runs, on the
-# b200-nscale runner label.
+# DeepSeek-V4-Pro and GLM-5.2 FP4 Dynamo-SGLang runs, on the b200-nscale
+# runner label.
 # Anything else exits non-zero.
 
 SLURM_PARTITION="batch_1"
@@ -49,6 +49,10 @@ elif [[ $MODEL_PREFIX == "kimik2.6" && $PRECISION == "fp4" ]]; then
 elif [[ $MODEL_PREFIX == "kimik3" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="${MODEL_PATH:-$NSCALE_MODEL_ROOT/Kimi-K3}"
     export SRT_SLURM_MODEL_PREFIX="kimik3"
+elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp4" ]]; then
+    export MODEL_PATH="${MODEL_PATH:-$NSCALE_MODEL_ROOT/GLM-5.2-NVFP4}"
+    # This alias must match model.path in the checked-in GLM-5.2 recipes.
+    export SRT_SLURM_MODEL_PREFIX="glm-5.2-fp4"
 elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp8" && $FRAMEWORK == "tilert" ]]; then
     export SRT_SLURM_MODEL_PREFIX="glm5.1-fp8"
 else
@@ -58,6 +62,7 @@ fi
 if [[ $FRAMEWORK != "dynamo-vllm" ]] &&
    [[ $MODEL_PREFIX != "dsv4" || $PRECISION != "fp4" || $FRAMEWORK != "dynamo-sglang" ||
       ( $SPEC_DECODING != "none" && $SPEC_DECODING != "mtp" ) ]] &&
+   [[ $MODEL_PREFIX != "glm5.2" || $PRECISION != "fp4" || $FRAMEWORK != "dynamo-sglang" || $SPEC_DECODING != "mtp" ]] &&
    [[ $MODEL_PREFIX != "glm5.1" || $PRECISION != "fp8" || $FRAMEWORK != "tilert" || $SPEC_DECODING != "mtp" ]]; then
     run_compat_launcher
 fi
@@ -130,6 +135,18 @@ elif [[ "$IS_AGENTIC" == "1" && $MODEL_PREFIX == "kimik3" ]]; then
     mkdir -p recipes/vllm/kimi-k3/agentic || exit 1
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
         recipes/vllm/kimi-k3/agentic || exit 1
+elif [[ $MODEL_PREFIX == "glm5.2" && $FRAMEWORK == "dynamo-sglang" ]]; then
+    # Pin the renderer used for the validated checked-in recipes.
+    git clone --branch v1.0.53 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
+    cd "$SRT_REPO_DIR" || exit 1
+    test "$(git rev-parse HEAD)" = "217f94387abeddfed7149a71955dc523e07cd765" || {
+        echo "Error: srt-slurm v1.0.53 did not resolve to the pinned commit" >&2
+        exit 1
+    }
+    mkdir -p recipes/sglang/glm5.2/b200-fp4/agentic || exit 1
+    cp -rT \
+        "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5.2/b200-fp4/agentic" \
+        recipes/sglang/glm5.2/b200-fp4/agentic || exit 1
 elif [[ $MODEL_PREFIX == "dsv4" && $FRAMEWORK == "dynamo-sglang" ]]; then
     git clone --branch main --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
     cd "$SRT_REPO_DIR" || exit 1

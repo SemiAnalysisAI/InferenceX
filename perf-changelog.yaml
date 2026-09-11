@@ -7145,3 +7145,15 @@
     - "Update SGLang image from lmsysorg/sglang:nightly-dev-cu13-20260907-30705c00 (2026-09-07 cu13 dev nightly, build commit sgl-project/sglang@30705c00) to the v0.5.19 release image lmsysorg/sglang:v0.5.19-cu130 (digest sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9, build commit sgl-project/sglang@0bcd822377da7b5718e674eaf9c870d349424dd1, Docker Hub last pushed 2026-09-04T22:50:19Z)."
     - "The release image ships the same CUDA 13.0.3, FlashInfer 0.6.18 and sgl-kernel 0.4.6.post1 as the nightly. benchmarks/single_node/agentic/qwen3.5_fp8_h200_mtp.sh is unchanged: SGLANG_ENABLE_SPEC_V2 EAGLE MTP at 3 steps, golden acceptance length 3.39, flashinfer attention with allreduce fusion, fp8 quantization and fp8_e4m3 KV, HiCache kernel IO / page_first layout. TP8/EP1 DRAM HiCache concurrency 2 through 24 unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2966
+
+- config-keys:
+    - glm5.2-fp4-b200-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-b200-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a GLM-5.2 NVFP4 B200 Dynamo-SGLang AgentX curve on the NScale runner."
+    - "Cover Pareto aggregate TP8 points at concurrency 1, 4, and 8, disaggregated 1P(DEP8)4D(TP4) at concurrency 48, and disaggregated 1P(DEP8)1D(DEP8) at concurrency 64."
+    - "Use lmsysorg/sglang:nightly-dev-20260910-00840301 with its bundled Dynamo 1.5.0.dev20260909, EAGLE speculative decoding, and 110 GB HiCache write-back DRAM offload per prefill rank."
+    - "Allow up to 1800 seconds for NIXL UCX engine initialization while registering the prefill HiCache pools."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
