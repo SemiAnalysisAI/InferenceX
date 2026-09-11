@@ -9,6 +9,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from infx.results.metadata import parse_component_metadata
+
 from .aggregation_common import round_floats
 from .request_metrics import compute_request_metrics, load_aggregate, load_records_with_accounting
 from .server_log_metrics import find_server_log_paths
@@ -37,43 +39,15 @@ def required_env(name: str) -> str:
 
 
 def optional_component_metadata(env_name: str) -> dict[str, str] | None:
-    """Parse strict optional component metadata from a JSON environment value."""
-    raw_value = os.environ.get(env_name)
-    if raw_value in (None, "", "null"):
-        return None
-
-    try:
-        metadata = json.loads(raw_value)
-    except json.JSONDecodeError as exc:
-        raise SystemExit(f"{env_name} must contain valid JSON") from exc
-
-    if not isinstance(metadata, dict) or set(metadata) != {"name", "version"}:
-        raise SystemExit(f"{env_name} must contain exactly 'name' and 'version'")
-    if not all(isinstance(metadata[key], str) and metadata[key] for key in metadata):
-        raise SystemExit(f"{env_name} name and version must be non-empty strings")
-    return metadata
+    return parse_component_metadata(
+        os.environ.get(env_name), env_name, error_type=SystemExit,
+    )
 
 
-def optional_kv_offload_backend_metadata(
-    env_name: str,
-) -> dict[str, str] | None:
-    """Parse KV offload backend metadata with an optional version."""
-    raw_value = os.environ.get(env_name)
-    if raw_value in (None, "", "null"):
-        return None
-
-    try:
-        metadata = json.loads(raw_value)
-    except json.JSONDecodeError as exc:
-        raise SystemExit(f"{env_name} must contain valid JSON") from exc
-
-    if not isinstance(metadata, dict) or not set(metadata) <= {"name", "version"}:
-        raise SystemExit(f"{env_name} may contain only 'name' and 'version'")
-    if set(metadata) not in ({"name"}, {"name", "version"}):
-        raise SystemExit(f"{env_name} must contain 'name' and optional 'version'")
-    if not all(isinstance(value, str) and value for value in metadata.values()):
-        raise SystemExit(f"{env_name} values must be non-empty strings")
-    return metadata
+def optional_kv_offload_backend_metadata(env_name: str) -> dict[str, str] | None:
+    return parse_component_metadata(
+        os.environ.get(env_name), env_name, version_optional=True, error_type=SystemExit,
+    )
 
 
 def _validate_kv_offload_env() -> tuple[str, dict[str, str] | None]:
@@ -225,6 +199,7 @@ def build_agg(
         "disagg": env_bool("DISAGG"),
         "scenario_type": "agentic-coding",
         "is_multinode": env_bool("IS_MULTINODE"),
+        "num_gpus": num_gpus,
         "tp": tp,
         "ep": ep,
         "dp_attention": dp_attention,

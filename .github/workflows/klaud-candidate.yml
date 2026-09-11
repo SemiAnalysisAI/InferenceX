@@ -50,7 +50,7 @@ jobs:
           cp -R "$RUNNER_TEMP/plan/$CANDIDATE" "$RUNNER_TEMP/klaud"
           echo "KLAUD_EVIDENCE=$RUNNER_TEMP/klaud" >> "$GITHUB_ENV"
           rm -r "$RUNNER_TEMP/plan"
-          outcome_schema=$(uv run --no-project --python 3.12 --with "pydantic>=2.10,<3" python -m utils.klaud outcome-schema)
+          outcome_schema=$(uv run --no-project --exclude-newer PT12H --python 3.12 --with "pydantic>=2.10,<3" python -m utils.klaud outcome-schema)
           echo "outcome-schema=$outcome_schema" >> "$GITHUB_OUTPUT"
       - name: Let Klaud Cold own the candidate PR
         id: claude
@@ -67,7 +67,7 @@ jobs:
               "hooks": {
                 "Stop": [{"hooks": [{
                   "type": "command",
-                  "command": "cd \"$GITHUB_WORKSPACE\" && uv run --no-project --python 3.12 --with 'pydantic>=2.10,<3' python -m utils.klaud check-stop"
+                  "command": "cd \"$GITHUB_WORKSPACE\" && uv run --no-project --exclude-newer PT12H --python 3.12 --with 'pydantic>=2.10,<3' python -m utils.klaud check-stop"
                 }]}]
               }
             }
@@ -103,6 +103,14 @@ jobs:
             - Open one draft PR after a real change. Title: "[Klaud Cold] " + English / Simplified
               Chinese description. Record family and supporting evidence.
 
+            Upstream changes:
+            Compare the actual old/new image's engine source at its bundled tags/commits in the
+            relevant vLLM, SGLang, ATOM or TensorRT-LLM repository, plus coupled serving dependencies.
+            Inspect used flags/config parsers and execution paths for changed defaults/semantics,
+            renamed/removed options and useful new options; release notes alone are insufficient.
+            Confirm image-to-source provenance; flag uncertainty rather than guessing from latest main.
+            Record source links, relevant deltas and in-scope decisions in attempt comments.
+
             Edit scope:
             Only the family's master image and already referenced, unshared srt-slurm YAML image/backend
             compatibility settings. Match model.container and any identity.container.image to the master.
@@ -121,9 +129,9 @@ jobs:
             Handoff supersedes the cleanup, terminal-job waiting and PR-report mutations below.
 
             Capacity:
-            Before edits/branch/PR creation, every targeted dispatch, final-sweep ready/label transition
+            Before edits/branch/PR creation, every targeted dispatch, final-sweep label transition
             and capacity-related recovery, check ALL exact current recipe/runner targets (repeat --cluster):
-            uv run --no-project --python 3.12 --with "pydantic>=2.10,<3" python -m utils.klaud check-capacity --cluster TELEMETRY_CLUSTER_ID
+            uv run --no-project --exclude-newer PT12H --python 3.12 --with "pydantic>=2.10,<3" python -m utils.klaud check-capacity --cluster TELEMETRY_CLUSTER_ID
             Exit 0 requires fresh telemetry, available nodes and utilization <80% on every target.
             Queue eligible jobs; the scheduler decides when their full node demand can start.
             Otherwise defer: record the current attempt state in a comment, then use finish below.
@@ -164,16 +172,18 @@ jobs:
             Final validation:
             After smoke benchmarks/selected evals pass, append and validate one perf-changelog.yaml
             entry at the physical tail with the PR URL, preserving every prior byte. Commit/push it,
-            check capacity, gh pr ready, then apply full-sweep-enabled as the sole sweep-related label.
+            check capacity, keep the PR DRAFT and apply full-sweep-enabled as the sole sweep-related label.
             Use the exact family key, no scenario/eval-selection/append-only modifiers. Success requires
             the complete run-sweep.yml on the exact PR head, all required points/default evals and reusable
-            artifacts. On failure remove the label and return to draft BEFORE repair pushes; diagnose,
+            artifacts. Never mark ready yourself: readiness triggers reviews and belongs to finish.
+            On failure remove the label and keep draft BEFORE repair pushes; diagnose,
             repair within the remaining budget and repeat. Recheck capacity before capacity-related recovery.
 
             Final PR disposition:
             Finalize attempt comments and write the supplied outcome JSON to $KLAUD_EVIDENCE/requested-outcome.json.
-            Then run: uv run --no-project --python 3.12 --with "pydantic>=2.10,<3" python -m utils.klaud finish --outcome-file "$KLAUD_EVIDENCE/requested-outcome.json"
-            finish verifies full matrix/result coverage for validated success and keeps that PR open/ready.
+            Then run: uv run --no-project --exclude-newer PT12H --python 3.12 --with "pydantic>=2.10,<3" python -m utils.klaud finish --outcome-file "$KLAUD_EVIDENCE/requested-outcome.json"
+            finish verifies full matrix/result coverage for validated success, then marks the PR ready.
+            Report regressions; positive deltas are not required. Readiness starts no new sweep.
             Otherwise it cancels owned runs, checks terminal state, removes sweep labels, returns the PR
             to draft, closes it and posts the bilingual completion report. If cancellation or label-event
             jobs are pending, wait for them and retry finish; a failed finish is not completion.
@@ -218,7 +228,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           printf '%s' "$KLAUD_STRUCTURED_OUTCOME" > "$RUNNER_TEMP/candidate-outcome.json"
-          uv run --no-project --python 3.12 --with "pydantic>=2.10,<3" python -m utils.klaud diagnostics \
+          uv run --no-project --exclude-newer PT12H --python 3.12 --with "pydantic>=2.10,<3" python -m utils.klaud diagnostics \
             --execution-file "${KLAUD_EXECUTION:-$RUNNER_TEMP/claude-execution-output.json}" \
             --structured-outcome-file "$RUNNER_TEMP/candidate-outcome.json" \
             --outcome "${KLAUD_OUTCOME:-unknown}" --output "$RUNNER_TEMP/candidate-diagnostics.json"

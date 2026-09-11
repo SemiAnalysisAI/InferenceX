@@ -13,16 +13,19 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from utils.aggregate_power import (
+from infx.results.power import (
+    ALL_POWER_METRIC_KEYS as _ALL_POWER_METRIC_KEYS,
     POWER_METRIC_SCHEMA_VERSION,
-    _empty_integration,
-    _patch_power_result,
-    _validation_payload,
-    _write_json_atomic,
+    with_power_metrics,
 )
-from utils.aggregate_power import run as run_power
-from utils.aggregate_power_multinode import _ALL_POWER_METRIC_KEYS
-from utils.aggregate_power_multinode import run as run_multinode_power
+
+from infx.results.power.single_node import (
+    _patch_power_result,
+    _write_json_atomic,
+    invalid_validation_payload,
+)
+from infx.results.power.single_node import run as run_power
+from infx.results.power.multinode import run as run_multinode_power
 
 from .process_agentic_result import _resolve_artifact_dir
 from .request_metrics import extract_per_record_ints, load_aggregate, load_records
@@ -155,20 +158,12 @@ def _record_adapter_failure(
     csv_path = result_dir / "gpu_metrics.csv"
     window_path = result_dir / "agentic_power_window.json"
     validation_path = result_dir / "power_validation.json"
-    integration = _empty_integration(
-        expected_num_gpus=expected_num_gpus,
-        reasons=reasons,
-    )
     _patch_power_result(agg_result, power_valid=False, metrics={})
-    payload = _validation_payload(
+    payload = invalid_validation_payload(
         csv_path=csv_path,
         bench_result=window_path,
-        benchmark=None,
-        integration=integration,
-        power_valid=False,
+        expected_num_gpus=expected_num_gpus,
         reasons=reasons,
-        metrics={},
-        accumulator_check=None,
     )
     payload["window_source"] = "aiperf_profile_lifecycle"
     _write_json_atomic(validation_path, payload)
@@ -397,12 +392,16 @@ def _record_multinode_adapter_failure(
     aggregate = json.loads(agg_result.read_text(encoding="utf-8"))
     if not isinstance(aggregate, dict):
         raise ValueError("AgentX aggregate must be a JSON object")
-    for key in _ALL_POWER_METRIC_KEYS:
-        aggregate.pop(key, None)
-    aggregate["power_metric_schema_version"] = POWER_METRIC_SCHEMA_VERSION
-    aggregate["power_valid"] = 0
-    aggregate.pop("power_invalid_reasons", None)
+    aggregate = with_power_metrics(
+        aggregate, metric_keys=_ALL_POWER_METRIC_KEYS,
+        schema_version=POWER_METRIC_SCHEMA_VERSION,
+        power_valid=False, metrics={},
+    )
     _write_json_atomic(agg_result, aggregate)
+    _write_multinode_failure_validation(validation_result, reasons)
+
+
+def _write_multinode_failure_validation(validation_result: Path, reasons: list[str]) -> None:
     _write_json_atomic(
         validation_result,
         {
@@ -516,6 +515,7 @@ def main() -> int:
     parser.add_argument("--result-dir", type=Path, required=True)
     parser.add_argument("--agg-result", type=Path)
     parser.add_argument("--expected-num-gpus", type=int)
+    parser.add_argument("--multinode-contract-missing", action="store_true")
     parser.add_argument("--write-multinode-window", choices=("running", "completed"))
     parser.add_argument("--concurrency", type=int)
     parser.add_argument("--power-dir", type=Path)
@@ -527,6 +527,34 @@ def main() -> int:
         default=os.environ.get("REQUIRE_POWER", "").lower() in {"1", "true", "yes"},
     )
     args = parser.parse_args()
+    if args.multinode_contract_missing:
+        if args.agg_result is None:
+            parser.error("--agg-result is required with --multinode-contract-missing")
+        validation_result = args.result_dir / "power_validation.json"
+        reasons = ["multinode_power_contract_missing"]
+        try:
+            _record_multinode_adapter_failure(
+                agg_result=args.agg_result,
+                validation_result=validation_result,
+                reasons=reasons,
+            )
+        except (OSError, json.JSONDecodeError, ValueError) as exc:
+            print(
+                f"[agentx_power] Failed to record multinode adapter failure: {exc}",
+                file=sys.stderr,
+            )
+            # Preserve the invalid verdict even when there is no usable aggregate.
+            try:
+                _write_multinode_failure_validation(validation_result, reasons)
+            except (OSError, ValueError) as validation_exc:
+                print(
+                    f"[agentx_power] Failed to write power validation: {validation_exc}",
+                    file=sys.stderr,
+                )
+        return _fail_multinode_adapter(
+            "Multinode AgentX power is unavailable: producer measurement-window contract missing",
+            require_power=args.require_power,
+        )
     if args.write_multinode_window is not None:
         if args.concurrency is None:
             parser.error("--concurrency is required with --write-multinode-window")
