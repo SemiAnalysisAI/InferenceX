@@ -7179,3 +7179,19 @@
   description:
     - "Use the pinned SGLang nightly-dev-cu13-20260901-07c8f729 image with FlashInfer 0.6.18, which includes the BF16 TRTLLM MoE allocation fix for small-batch Blackwell execution. Model, TP8, HiCache, MTP settings and concurrency grid are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2994
+
+- config-keys:
+    - qwen3.5-fp8-mi300x-sglang-disagg-dep8-agentic-mtp
+  description:
+    - "Add focused MI300X Qwen3.5 AgentX MORI disaggregation: DEP8 prefill/decode at c32 and c64."
+    - "Use native srt-slurm coordination, cache-aware SGLang routing, the stock September 10 ROCm 7.2.0 image, and golden acceptance length 3.39; accuracy jobs disable acceptance simulation."
+    - "Keep attention layouts homogeneous because the pinned MORI implementation does not preserve Qwen convolution-state group ordering across attention TP8 to TP1."
+    - "Forward the recipe fingerprint into benchmark artifacts and retain existing workflow scheduling and full-sweep policy."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2984
+
+- config-keys:
+    - qwen3.5-fp8-mi300x-sglang-disagg-pure-tp8-agentic-mtp
+  description:
+    - "Add low-concurrency MI300X Qwen3.5 AgentX MORI disaggregation with pure TP8/EP1 prefill and decode at c1 and c4."
+    - "Keep the same stock ROCm 7.2.0 image, BF16 KV/Mamba state, native dense-MLP TP defaults, and golden acceptance length 3.39; validate accuracy separately without acceptance simulation."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2984
