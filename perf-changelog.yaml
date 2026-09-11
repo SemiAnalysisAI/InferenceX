@@ -7286,3 +7286,10 @@
   description:
     - "Use thinking-on golden synthetic AL 3.51 for five-token DSpark throughput; disable adaptive verification and retain real verification for evals"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2974
+
+- config-keys:
+    - qwen3.5-fp8-mi300x-sglang
+  description:
+    - "Update SGLang ROCm image from lmsysorg/sglang:v0.5.12-rocm720-mi30x (v0.5.12 release, build commit sgl-project/sglang@127b9e3283f7c2a43234b852ff5c9f1796d53624) to the v0.5.19 release image lmsysorg/sglang:v0.5.19-rocm720-mi30x (digest sha256:a0ffcdd013af6d79c9b7c4348c42b14a79a48f6c43dd3ca0235ec3802da45f75, build commit sgl-project/sglang@0bcd822377da7b5718e674eaf9c870d349424dd1, Docker Hub last pushed 2026-09-04T21:24:05Z)."
+    - "Both images build docker/rocm.Dockerfile stage gfx942-rocm720 on rocm/pytorch:rocm7.2_ubuntu22.04_py3.10_pytorch_release_2.9.1; AITER moves from a6bb4993 to c16d44b9 and Triton stays at 42270451. benchmarks/single_node/fixed_seq_len/qwen3.5_fp8_mi300x.sh is unchanged: aiter attention with allreduce fusion, radix cache disabled, mem-fraction-static 0.75; TP8 8k/1k concurrency 4 through 64 and the gsm8k eval policy unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3011
