@@ -119,23 +119,58 @@ say "--- local endpoint check (authenticated)"
 curl -sS -m 60 -H "Authorization: Bearer $API_KEY" "http://localhost:$PORT/v1/models" \
     | head -c 300 | tee -a "$RESULT_DIR/tbench_run.txt"; echo
 
-"$BIN" tunnel --no-autoupdate --url "http://localhost:$PORT" \
-    > "$RESULT_DIR/cloudflared.log" 2>&1 &
-TUNNEL_PID=$!
+# Quick tunnels are account-less and cloudflared says so itself: "no uptime
+# guarantee". Creation has already failed once with a client timeout against
+# api.trycloudflare.com, after four tunnels from this IP. Retry with backoff,
+# then fall back to localhost.run, which also needs no account (over ssh).
+open_tunnel() {
+    local attempt
+    for attempt in 1 2 3; do
+        say "  cloudflared attempt $attempt"
+        "$BIN" tunnel --no-autoupdate --url "http://localhost:$PORT" \
+            > "$RESULT_DIR/cloudflared.log" 2>&1 &
+        TUNNEL_PID=$!
+        for _ in $(seq 1 25); do
+            PUBLIC=$(grep -aoE 'https://[a-z0-9]+(-[a-z0-9]+){2,}\.trycloudflare\.com' \
+                     "$RESULT_DIR/cloudflared.log" | head -1 || true)
+            [[ -n "$PUBLIC" ]] && return 0
+            sleep 3
+        done
+        say "  attempt $attempt failed: $(tail -2 "$RESULT_DIR/cloudflared.log" | tr '\n' ' ')"
+        kill "$TUNNEL_PID" 2>/dev/null || true
+        sleep 20
+    done
+
+    if command -v ssh >/dev/null 2>&1; then
+        say "  falling back to localhost.run (no account needed)"
+        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+            -o ServerAliveInterval=30 -R "80:localhost:$PORT" nokey@localhost.run \
+            > "$RESULT_DIR/localhostrun.log" 2>&1 &
+        TUNNEL_PID=$!
+        for _ in $(seq 1 20); do
+            PUBLIC=$(grep -aoE 'https://[a-z0-9]+\.lhr\.life|https://[a-z0-9-]+\.localhost\.run' \
+                     "$RESULT_DIR/localhostrun.log" | head -1 || true)
+            [[ -n "$PUBLIC" ]] && return 0
+            sleep 3
+        done
+        say "  localhost.run failed: $(tail -3 "$RESULT_DIR/localhostrun.log" | tr '\n' ' ')"
+        kill "$TUNNEL_PID" 2>/dev/null || true
+    else
+        say "  no ssh client for the localhost.run fallback"
+    fi
+    return 1
+}
+
 PUBLIC=""
-for _ in $(seq 1 40); do
-    PUBLIC=$(grep -aoE 'https://[a-z0-9]+(-[a-z0-9]+){2,}\.trycloudflare\.com' "$RESULT_DIR/cloudflared.log" | head -1 || true)
-    [[ -n "$PUBLIC" ]] && break
-    sleep 3
-done
-[[ -z "$PUBLIC" ]] && { say "FATAL: no tunnel URL"; tail -20 "$RESULT_DIR/cloudflared.log"; exit 1; }
-# The previous run pointed every agent at api.trycloudflare.com -- cloudflared's
-# control endpoint, which answers 405 Method Not Allowed -- and burned 30
-# minutes. Refuse anything that is not a four-word quick-tunnel hostname.
-if [[ "$PUBLIC" == https://api.trycloudflare.com* ]] \
-   || [[ "$(tr -dc '-' <<<"$PUBLIC" | wc -c)" -lt 2 ]]; then
-    say "FATAL: refusing bogus tunnel host '$PUBLIC'"
-    tail -20 "$RESULT_DIR/cloudflared.log"
+if ! open_tunnel; then
+    say "FATAL: could not open any tunnel. Every other part of the path is"
+    say "proven -- egress 200, Modal authenticates, and an earlier run had"
+    say "Modal-side agents driving real task containers through a tunnel."
+    say "This needs a named Cloudflare tunnel (account token) or --env daytona."
+    exit 1
+fi
+if [[ "$PUBLIC" == https://api.trycloudflare.com* ]]; then
+    say "FATAL: refusing cloudflared's control endpoint as origin"
     exit 1
 fi
 say "tunnel: $PUBLIC  (api key withheld from this log)"
