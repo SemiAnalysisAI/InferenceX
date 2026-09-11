@@ -62,10 +62,8 @@ export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
 # Outlast the client pool so the race cannot occur.
 export SGLANG_TIMEOUT_KEEP_ALIVE=900
 # The DSA indexer's top-k v2 kernel (default since v0.5.14) is JIT-compiled
-# from CUDA-only source (cooperative_groups.h) and cannot build for gfx950;
-# v1 dispatches to the precompiled HIP op in sgl-kernel (upstream MI355X CI
-# runs DSA models the same way).
-export SGLANG_OPT_USE_TOPK_V2=false
+# PR #36684 & PR #36851 turned the v2 fused top-k on for GLM-5.x on ROCm
+export SGLANG_OPT_USE_TOPK_V2=true
  
 # HiCache L2 (host DRAM), optionally extended with Mooncake L3.
 # KV_OFFLOADING=dram requires KV_OFFLOAD_BACKEND=hicache or mooncake.
@@ -222,8 +220,12 @@ SGLANG_CMD=(
     --trust-remote-code
     "${PARALLEL_ARGS[@]}"
     --kv-cache-dtype fp8_e4m3
-    --dsa-prefill-backend tilelang
-    --dsa-decode-backend tilelang
+    # The triton DSA prefill/decode backends only exist after sgl-project/sglang
+    # PR #30575 (commit 8a6ab89bf0b90304b3b454a833fcdcaefb777c29); on an image
+    # built before that commit these flags are rejected at startup, so the image
+    # pin must stay at or ahead of it.
+    --dsa-prefill-backend triton
+    --dsa-decode-backend triton
     # GLM-5.2 emits the GLM-4.7-style tool-call format; glm47 is required for
     # structured message.tool_calls (SWE-bench agentic evals die without it).
     # The glm45 reasoning parser keeps hybrid thinking in reasoning_content.

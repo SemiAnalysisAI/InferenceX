@@ -7311,3 +7311,14 @@
     - "Reserve 144 CPU cores for the GB300 single-node serving task"
     - "为 GB300 单节点服务任务预留 144 个 CPU 核心"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3017
+
+- config-keys:
+    - glm5.2-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Set SGLANG_OPT_USE_TOPK_V2=true in benchmarks/single_node/agentic/glm5.2_fp4_mi355x_sglang_mtp.sh. The recipe forced the v1 top-k because the DSA indexer's v2 fused kernel would not build for gfx950; sgl-project/sglang PR #36684 and PR #36851 add the ROCm path, so v2 now dispatches natively."
+    - "Switch --dsa-prefill-backend and --dsa-decode-backend from tilelang to triton in the same script. The triton DSA backends require sgl-project/sglang PR #30575 (commit 8a6ab89bf0b90304b3b454a833fcdcaefb777c29)."
+    - "Bump the image from lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260728 to lmsysorg/sglang-rocm:v0.5.19-rocm10-mi35x-20260910, which carries both the ROCm top-k v2 path and the triton DSA backends."
+    - "No other recipe change: the TP4/EP4 HiCache and TP8/EP1 resident arms, MTP speculative decoding with the committed golden acceptance length, and the concurrency grids are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2915
