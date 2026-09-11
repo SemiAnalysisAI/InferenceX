@@ -281,3 +281,5 @@ A configuration is ready for sweep only when the executable files agree, the exa
 The generated host budget is 60% of the runner's allocated DRAM. Reserve 208 GB for Engram UVA tables and 4 GB of Mooncake transfer buffer per GPU, then divide the remainder into per-rank KV segments. `enable_offload: false` disables Mooncake's secondary storage tier; the embedded DRAM KV store remains enabled. Both server and master are cleaned up on exit.
 
 Throughput keeps five-token DSpark at thinking-on golden synthetic AL 3.51 with adaptive verification disabled; eval uses real block verification. Startup allows 7200 seconds. H100 retains its 4096-token prefill-batch cap. Higher concurrencies are experimental and require GPU validation.
+
+H100 clears `PYTORCH_ALLOC_CONF` and `PYTORCH_CUDA_ALLOC_CONF` when Mooncake is selected. Expandable segments can remap registered KV memory and are rejected by vLLM without a compatible CuMem allocator; the non-offload path retains its original allocator setting.

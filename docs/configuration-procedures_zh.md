@@ -281,3 +281,5 @@ python -m pytest utils/matrix_logic/ -v
 生成的主机内存预算为 runner 分配 DRAM 的 60%。先预留 208 GB 给 Engram UVA 表，并为每个 GPU 预留 4 GB Mooncake 传输缓冲区，再将剩余容量均分为各 rank 的 KV segment。`enable_offload: false` 关闭的是 Mooncake 的二级存储层，嵌入式 DRAM KV 存储仍然启用。退出时清理 server 和 master。
 
 吞吐测试保留五 token DSpark、thinking 开启时的黄金合成 AL 3.51，并关闭自适应验证；eval 使用真实块验证。启动等待期限为 7200 秒。H100 保留 4096 token 的 prefill batch 上限。更高并发属于实验配置，需通过 GPU 验证。
+
+H100 在选择 Mooncake 时清除 `PYTORCH_ALLOC_CONF` 和 `PYTORCH_CUDA_ALLOC_CONF`。Expandable segments 可能重映射已注册的 KV 内存，因此没有兼容 CuMem allocator 时会被 vLLM 拒绝；非卸载路径保留原有分配器设置。

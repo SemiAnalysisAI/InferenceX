@@ -1,7 +1,10 @@
 import json
+import os
 import re
 import subprocess
 from pathlib import Path
+
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 H100_SCRIPT = (
@@ -106,3 +109,50 @@ def test_h100_caps_the_scheduler_batch_to_the_trajectory_concurrency() -> None:
     script = H100_SCRIPT.read_text()
     assert "--max-num-seqs" in script
     assert re.search(r"^MAX_NUM_SEQS=\$\(\(2 \* CONC\)\)$", script, re.M)
+
+
+@pytest.mark.parametrize("backend", ["mooncake", ""])
+@pytest.mark.parametrize("eval_only", ["false", "true"])
+def test_h100_allocator_environment_matches_kv_backend(
+    tmp_path: Path, backend: str, eval_only: str,
+) -> None:
+    env = {
+        **os.environ,
+        "MODEL": "fixture", "TP": "8", "CONC": "1",
+        "KV_OFFLOADING": "dram" if backend else "none",
+        "KV_OFFLOAD_BACKEND": backend, "TOTAL_CPU_DRAM_GB": "1000",
+        "RESULT_DIR": str(tmp_path), "DURATION": "1", "PORT": "18888",
+        "EVAL_ONLY": eval_only,
+        "PYTORCH_ALLOC_CONF": "expandable_segments:True",
+        "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",
+    }
+    result = subprocess.run(
+        ["bash", "-c", r'''
+source() { :; }
+check_env_vars() { :; }
+require_agentic_kv_offload_none() { :; }
+require_agentic_kv_offload_backend() { :; }
+hf() { :; }
+nvidia-smi() { :; }
+resolve_trace_source() { :; }
+install_agentic_deps() { :; }
+select_available_server_port() { :; }
+setup_agentic_mooncake() { :; }
+stop_background_process_tree() { :; }
+wait_for_server_ready() { wait "$SERVER_PID"; }
+build_replay_cmd() { :; }
+run_agentic_replay_and_write_outputs() { :; }
+run_eval() { :; }
+vllm() {
+    python3 -c 'import json,os; json.dump({key:os.environ.get(key) for key in ["PYTORCH_ALLOC_CONF","PYTORCH_CUDA_ALLOC_CONF"]},open(os.environ["RESULT_DIR"]+"/allocator.json","w"))'
+}
+builtin source "$1"
+''', "bash", str(H100_SCRIPT)],
+        env=env, capture_output=True, text=True, timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+    allocator = json.loads((tmp_path / "allocator.json").read_text())
+    if backend == "mooncake":
+        assert allocator == {"PYTORCH_ALLOC_CONF": None, "PYTORCH_CUDA_ALLOC_CONF": None}
+    else:
+        assert allocator["PYTORCH_CUDA_ALLOC_CONF"] == "expandable_segments:True"

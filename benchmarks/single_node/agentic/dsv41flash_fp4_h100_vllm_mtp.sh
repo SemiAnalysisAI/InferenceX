@@ -41,9 +41,14 @@ export VLLM_ENGINE_READY_TIMEOUT_S=7200
 export VLLM_USE_RUST_FRONTEND=1
 export VLLM_USE_V2_MODEL_RUNNER=1
 export PYTHONUNBUFFERED=1
-# The failing allocation left 1.04 GiB reserved but unallocated, and the
-# indexer buffer is large enough that fragmentation costs a KV block.
-export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+if [[ "${KV_OFFLOAD_BACKEND:-}" == mooncake ]]; then
+    # Mooncake registers KV memory: expandable segments can remap its pages.
+    # Clear both the current PyTorch variable and its legacy CUDA alias.
+    unset PYTORCH_ALLOC_CONF PYTORCH_CUDA_ALLOC_CONF
+else
+    # Reduce fragmentation for the original GPU-resident KV recipe.
+    export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+fi
 
 # The indexer buffer scales linearly with batched tokens: 4096 puts it at
 # 8 GiB. Anything larger did not fit alongside the weights on this SKU.
