@@ -12,10 +12,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
-from constants import GENERATE_SWEEPS_PY_SCRIPT, MASTER_CONFIGS, RUNNER_CONFIG
-
 if not __package__:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from utils.constants import GENERATE_SWEEPS_PY_SCRIPT, MASTER_CONFIGS, RUNNER_CONFIG
 
 from infx.matrix.generate import (
     freeze_config_value,

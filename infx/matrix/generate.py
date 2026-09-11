@@ -121,6 +121,25 @@ def trim_conc(entries: list[dict]) -> list[dict]:
     return [entry for index, entry in enumerate(out) if index not in drop]
 
 
+def smoke_entries(entries: list[dict]) -> list[dict]:
+    """Minimum-concurrency throughput plus one canonical eval per deployment shape.
+
+    Eval concurrency comes from the existing default selection, never from the
+    throughput minimum. Keep separate eval-only rows so neither client is run twice.
+    """
+    benchmarks = trim_conc([{**row, 'run-eval': False} for row in entries])
+    evals = []
+    for row in entries:
+        if not row.get('run-eval'):
+            continue
+        row = {**row, 'eval-only': True}
+        if row.get('prefill') is not None:
+            row['conc'] = [row['eval-conc']]
+            row['eval-all-concs'] = False
+        evals.append(row)
+    return benchmarks + trim_conc(evals)
+
+
 def runner_labels(runner_data: dict) -> dict:
     """Return runner scheduling labels."""
     return runner_data["labels"]
@@ -1357,6 +1376,11 @@ def main():
         )
     )
     parent_parser.add_argument(
+        '--smoke',
+        action='store_true',
+        help='Minimum-concurrency throughput plus canonical representative evals.'
+    )
+    parent_parser.add_argument(
         '--trim-conc',
         action='store_true',
         help=(
@@ -1548,14 +1572,20 @@ def main():
             parser.error(str(error))
         
 
+    if args.smoke and (args.trim_conc or args.no_evals or args.evals_only or args.all_evals):
+        parser.error('--smoke cannot be combined with trimming or eval overrides')
+
     # Apply the existing eval policy first, then expand it when requested.
     if not args.no_evals:
-        matrix_values = mark_eval_entries(matrix_values, include_agentic=args.evals_only or args.all_evals)
+        matrix_values = mark_eval_entries(matrix_values, include_agentic=args.smoke or args.evals_only or args.all_evals)
         if args.all_evals:
             matrix_values = mark_all_eval_entries(matrix_values)
 
     if args.trim_conc:
         matrix_values = trim_conc(matrix_values)
+
+    if args.smoke:
+        matrix_values = smoke_entries(matrix_values)
 
     if args.evals_only or args.all_evals:
         matrix_values = [e for e in matrix_values if e.get(Fields.RUN_EVAL.value, False)]

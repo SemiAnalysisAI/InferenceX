@@ -95,6 +95,10 @@ For recovery, follow [`.claude/commands/clean-amd-mi355-runner-root-files.md`](.
 
 [`wait_for_server_ready`](../benchmarks/benchmark_lib.sh) distinguishes “server died before log,” “server died before healthy,” and a live process whose `/health` endpoint has not passed. Preserve the server log and PID status. The workflow's final timeout alone is not a diagnosis.
 
+After readiness, the shared helper snapshots the server and recognized persistent engine workers. Benchmark, AgentX and eval clients use `utils/server_watch.py`: a missing process, zombie or reused PID stops only the owned client process group. Healthy slow work has no new time cutoff. Recipes using a different readiness path need explicit server monitoring; a live wrapper alone is insufficient proof that its workers are alive.
+
+Client dependency setup uses uv's bounded HTTP retries and a 120-second read timeout, retaining its download cache. A network/download failure is infrastructure evidence, not a reason to change engine flags. H100 srt-slurm resolves the requested image to its own squash path and checks staged model/image assets; B300 checks node-local staged model configuration on the allocated compute node before launching its container. Missing assets are readiness blockers, never grounds to substitute an old image or different weights.
+
 Use the earliest specific signature:
 
 - **Image pull/tag failure:** verify the exact registry tag or digest exists before touching runtime flags. [`KLAUD_DEBUG.md` §6](../KLAUD_DEBUG.md#6-docker-image-tag-gotchas) warns against deriving release tags from dated nightlies.
