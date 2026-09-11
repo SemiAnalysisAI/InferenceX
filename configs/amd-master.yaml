@@ -1753,9 +1753,9 @@ dsv4-fp4-mi355x-sglang-agentic-mtp:
       - { tp: 8, ep: 1, dp-attn: false, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [32, 48], spec-decoding: mtp }
       - { tp: 8, ep: 1, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [128, 256], spec-decoding: mtp }
 
-# ROCm release image; MI355X runtime validation is pending.
+# Official upstream ROCm image from the vLLM recipe; MI355X runtime validation is pending.
 dsv41flash-fp4-mi355x-vllm-agentic-dspark:
-  image: public.ecr.aws/q9t5s3a7/vllm-release-repo:79a7108d9aea27ddab99ce1779290d300b17fc23-rocm
+  image: vllm/vllm-openai-rocm:deepseekv41-flash-0909
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi355x-amds
