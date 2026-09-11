@@ -140,15 +140,15 @@ flowchart LR
 | `infx.datasets` | AgentX 轨迹采样、转换、数据集构建及分布图 |
 | `infx.klaud` | Klaud 编排、生命周期、GitHub/API 适配器和模式 |
 
-从仓库根目录使用 `python -m infx.<package>.<module>` 运行命令。依赖仍由各命令分别管理；导入 `infx` 不会加载基准测试客户端或评测依赖。在调用方迁移期间，旧 `utils/` Python 文件作为兼容入口保留，旧评测资源路径链接到规范文件。测试和运行器配置 Shell 脚本仍位于 `utils/`；外部 `utils/aiperf` 子模块保持不变。
+从仓库根目录使用 `python -m infx.<package>.<module>` 运行命令。依赖仍由各命令分别管理；导入 `infx` 不会加载基准测试客户端或评测依赖。旧 `utils/` Python 文件作为稳定的兼容入口保留，旧评测资源路径链接到规范文件。测试和运行器配置 Shell 脚本仍位于 `utils/`；外部 `utils/aiperf` 子模块保持不变。
 
-复制到隔离环境中的评测适配器和补丁使用 `infx/evals` 下的实际文件，因此仍可独立运行。可信工作流辅助模块会明确选择工具代码所在的检出目录。可复用工作流仅在明确选择的旧修订缺少包模块时使用旧入口。
+复制到隔离环境中的评测适配器和补丁使用 `infx/evals` 下的实际文件，因此仍可独立运行。可信工作流辅助模块会明确选择工具代码所在的检出目录。需要支持旧目标修订的工作流步骤直接调用稳定的 `utils/` 入口：当前的轻量入口转调 `infx`，旧提交则运行原有实现。调用处无需检查包模块是否存在。
 
 默认仓库路径定义在 [`infx/config.py`](../infx/config.py) 中；`utils/constants.py` 保留旧导入方式。包的 `__init__.py` 文件保持精简。
 
 `utils/process_changelog.py`、`utils/matrix_logic/generate_sweep_configs.py` 和 `validation.py` 保留为轻量兼容入口，旧导入路径指向同一个模块对象，避免重复创建模式类。现有脚本命令、参数、相对输入路径和依赖保持不变，从仓库检出目录运行时无需安装包。`process_changelog.py` 指向 `infx.matrix.plan`；`validate_perf_changelog.py` 保留现有处理器 CLI 边界和诊断。
 
-当前工作流从仓库根目录调用 `python -m infx.matrix.plan`、`python -m infx.matrix.generate` 和 `python -m infx.results.fixed_sequence`。测试直接导入规范的 `infx` 模块。可信调度通过 `PYTHONPATH` 和 Python 的 `-P` 选项明确指定工具代码所在的检出目录，同时仍以目标检出目录作为工作目录读取输入。恢复、性能分析及基准测试工作流在目标修订尚无对应包模块时保留旧脚本回退；追加模式的历史提取仍使用各修订自身的兼容入口。
+使用当前工具代码的工作流直接调用 `infx` 模块，测试也导入规范模块。可信调度通过 `PYTHONPATH` 和 Python 的 `-P` 选项明确指定工具代码所在的检出目录，同时仍以目标检出目录作为工作目录读取输入。手动矩阵生成、性能分析及基准测试步骤使用稳定的脚本入口来支持旧修订；追加模式的历史提取也使用各修订自身的兼容入口。
 
 `infx.matrix.plan.build_plan(changelog_data, base_ref=..., head_ref=...)` 返回完整扫描的已验证 `ChangelogMatrixEntry`，统一负责条目优先级、基准测试与评测各自的场景覆盖、裁剪、指纹及输出分桶。当前主配置文件只加载一次，运行器元数据在首次生成时加载一次；每组选中的配置直接调用 `infx.matrix.generate.generate_config_matrix`。当前输入来自传入的路径（默认为检出目录中的路径），`head_ref` 仍用作来源元数据。规划过程假设这些文件在本次操作期间保持稳定。
 

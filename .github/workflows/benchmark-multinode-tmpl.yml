@@ -414,9 +414,7 @@ jobs:
           RESULT_FILENAME_BASE: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_prefill-tp${{ env.PREFILL_TP }}-pp${{ env.PREFILL_PP_SIZE }}-dcp${{ env.PREFILL_DCP_SIZE }}-pcp${{ env.PREFILL_PCP_SIZE }}-ep${{ env.PREFILL_EP }}-dp${{ env.PREFILL_DP_ATTN }}-nw${{ env.PREFILL_NUM_WORKERS }}_decode-tp${{ env.DECODE_TP }}-pp${{ env.DECODE_PP_SIZE }}-dcp${{ env.DECODE_DCP_SIZE }}-pcp${{ env.DECODE_PCP_SIZE }}-ep${{ env.DECODE_EP }}-dp${{ env.DECODE_DP_ATTN }}-nw${{ env.DECODE_NUM_WORKERS }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ join(fromJson(inputs.conc-list), 'x') }}_${{ runner.name }}
         run: |
           set -x
-          if [[ -f infx/results/result_filename.py ]]; then
-            RESULT_FILENAME=$(python3 -m infx.results.result_filename)
-          elif [[ -f utils/result_filename.py ]]; then
+          if [[ -f utils/result_filename.py ]]; then
             RESULT_FILENAME=$(python3 utils/result_filename.py)
           else
             # Older measured commits predate the helper; preserve safe identity.
@@ -482,10 +480,6 @@ jobs:
             export POWER_PRODUCER_SHA="$(cat power-producer-sha.txt)"
             echo "POWER_PRODUCER_SHA derived from launcher stamp: $POWER_PRODUCER_SHA"
           fi
-          PROCESSOR=(python3 -m infx.results.fixed_sequence)
-          if [ ! -f infx/results/fixed_sequence.py ]; then
-            PROCESSOR=(python3 utils/process_result.py)
-          fi
           # Process each result file
           for result_file in ${RESULT_FILENAME}_*.json; do
             if [ -f "$result_file" ]; then
@@ -502,7 +496,7 @@ jobs:
                   decode_gpus=0
                 fi
                 echo "Extracted: gpus=$gpus, prefill_gpus=$prefill_gpus, decode_gpus=$decode_gpus"
-                RESULT_FILENAME=${result_file%.json} IS_MULTINODE=true PREFILL_GPUS="$prefill_gpus" DECODE_GPUS="$decode_gpus" "${PROCESSOR[@]}"
+                RESULT_FILENAME=${result_file%.json} IS_MULTINODE=true PREFILL_GPUS="$prefill_gpus" DECODE_GPUS="$decode_gpus" python3 utils/process_result.py
               fi
             fi
           done
@@ -582,11 +576,7 @@ jobs:
           if [[ -z "${expected_concs}" ]]; then
             expected_concs="$(printf '%s\n' "${CONC_LIST}" | tr ' ' '\n' | sort -n | tail -1)"
           fi
-          VALIDATE_SCORES=(python3 -m infx.evals.validate_scores)
-          if [ ! -f infx/evals/validate_scores.py ]; then
-            VALIDATE_SCORES=(python3 utils/evals/validate_scores.py)
-          fi
-          "${VALIDATE_SCORES[@]}" --expected-concs "${expected_concs}"
+          python3 utils/evals/validate_scores.py --expected-concs "${expected_concs}"
 
       - name: Cleanup eval outputs (post-upload)
         if: ${{ always() && (inputs.run-eval || inputs.eval-only) }}

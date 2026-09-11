@@ -348,9 +348,7 @@ jobs:
           # We'll publish a single combined eval table in the collection job instead.
           GITHUB_STEP_SUMMARY: ''
         run: |
-          if [[ -f infx/results/result_filename.py ]]; then
-            RESULT_FILENAME=$(python3 -m infx.results.result_filename)
-          elif [[ -f utils/result_filename.py ]]; then
+          if [[ -f utils/result_filename.py ]]; then
             RESULT_FILENAME=$(python3 utils/result_filename.py)
           else
             # Older measured commits predate the helper; preserve safe identity.
@@ -390,11 +388,7 @@ jobs:
             fi
 
             if [ "${{ inputs.scenario-type }}" = "agentic-coding" ]; then
-              VALIDATE_AGENTIC=(python3 -m infx.results.agentic.validate_agentic_result)
-              if [ ! -f infx/results/agentic/validate_agentic_result.py ]; then
-                VALIDATE_AGENTIC=(python3 -m utils.agentic.validation.validate_agentic_result)
-              fi
-              "${VALIDATE_AGENTIC[@]}" \
+              python3 -m utils.agentic.validation.validate_agentic_result \
                 results/aiperf_artifacts \
                 --failed-request-threshold "$AIPERF_FAILED_REQUEST_THRESHOLD"
             fi
@@ -405,11 +399,7 @@ jobs:
         env:
           RUNNER_TYPE: ${{ inputs.runner }}
         run: |
-          PROCESSOR=(python3 -m infx.results.fixed_sequence)
-          if [ ! -f infx/results/fixed_sequence.py ]; then
-            PROCESSOR=(python3 utils/process_result.py)
-          fi
-          "${PROCESSOR[@]}"
+          python3 utils/process_result.py
 
       - name: Upload result
         if: ${{ !inputs.eval-only && inputs.scenario-type != 'agentic-coding' }}
@@ -504,12 +494,7 @@ jobs:
 
       - name: Verify eval scores
         if: ${{ (success() || failure()) && inputs.eval-only }}
-        run: |
-          VALIDATE_SCORES=(python3 -m infx.evals.validate_scores)
-          if [ ! -f infx/evals/validate_scores.py ]; then
-            VALIDATE_SCORES=(python3 utils/evals/validate_scores.py)
-          fi
-          "${VALIDATE_SCORES[@]}"
+        run: python3 utils/evals/validate_scores.py
 
       - name: Cleanup eval outputs (post-upload)
         if: ${{ always() && (env.RUN_EVAL == 'true' || inputs.eval-only) }}

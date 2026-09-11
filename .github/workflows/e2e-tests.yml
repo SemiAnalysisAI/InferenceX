@@ -284,21 +284,14 @@ jobs:
                     if [ "$EVALS_ONLY" = "true" ]; then
                       GENERATE_ARGS+=(--evals-only)
                     fi
-                    GENERATOR=(python -m infx.matrix.generate)
-                    # Explicit refs may predate the infx package.
-                    if [ ! -f "${GITHUB_WORKSPACE}/infx/matrix/generate.py" ]; then
-                      GENERATOR=(python "${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py")
-                    fi
                     CONFIG_JSON=$(uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
-                      "${GENERATOR[@]}" "${GENERATE_ARGS[@]}")
-                  fi
-                  PRIORITY=(python -P -m infx.workflows.ci_priority)
-                  if [ ! -f "${PRIORITY_ROOT}/infx/workflows/ci_priority.py" ]; then
-                    PRIORITY=(python "${PRIORITY_ROOT}/utils/ci_priority.py")
+                      python "${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py" \
+                      "${GENERATE_ARGS[@]}")
                   fi
                   score_matrix() {
                     local family="$1"
-                    env PYTHONPATH="$PRIORITY_ROOT" uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml "${PRIORITY[@]}" \
+                    env PYTHONPATH="$PRIORITY_ROOT" uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
+                      python -P "${PRIORITY_ROOT}/utils/ci_priority.py" \
                       --policy "${PRIORITY_ROOT}/configs/ci-priority.yaml" \
                       --event-name "${{ github.event_name }}" \
                       --queue-namespace "${{ github.run_id }}:${{ github.run_attempt }}:${family}" \

@@ -18,15 +18,12 @@ MODULE_COMMAND = [sys.executable, "-m", "infx.results.fixed_sequence"]
 
 
 @pytest.mark.parametrize("workflow_name", ["benchmark-tmpl.yml", "benchmark-multinode-tmpl.yml", "profile.yml"])
-@pytest.mark.parametrize("packaged", [False, True])
-def test_workflow_processes_results_from_package_or_legacy_checkout(
-    tmp_path, workflow_name, packaged, single_node_env_vars, multinode_env_vars, sample_benchmark_result,
+def test_workflow_processes_results_through_compatibility_entrypoint(
+    tmp_path, workflow_name, single_node_env_vars, multinode_env_vars, sample_benchmark_result,
 ):
-    if packaged:
-        shutil.copytree(REPO_ROOT / "infx", tmp_path / "infx")
-    else:
-        (tmp_path / "utils").mkdir()
-        (tmp_path / "utils/process_result.py").symlink_to(REPO_ROOT / "utils/process_result.py")
+    shutil.copytree(REPO_ROOT / "infx", tmp_path / "infx")
+    (tmp_path / "utils").mkdir()
+    shutil.copy(REPO_ROOT / "utils/process_result.py", tmp_path / "utils/process_result.py")
     workflow = yaml.safe_load((REPO_ROOT / ".github/workflows" / workflow_name).read_text())
     step = next(step for job in workflow["jobs"].values() for step in job.get("steps", [])
                 if step.get("name", "").startswith("Process result"))

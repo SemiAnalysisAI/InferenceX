@@ -581,17 +581,17 @@ def committed_planning_repo(planning_repo):
 
 @pytest.mark.parametrize("trusted", [False, True])
 @pytest.mark.parametrize("trim", [False, True])
-def test_workflow_runs_package_without_stubs_and_preserves_tooling_origin(
+def test_workflow_runs_real_entrypoints_and_preserves_tooling_origin(
     committed_planning_repo, trusted, trim,
 ):
     root, base, head = committed_planning_repo
     source = Path(__file__).resolve().parents[1]
-    # No compatibility scripts are available to the shipped workflow.
-    shutil.rmtree(root / "utils")
+    shutil.copy(source / "utils/ci_priority.py", root / "utils/ci_priority.py")
     if trusted:
         tooling = root / ".ci-priority"
         tooling.mkdir()
         shutil.move(root / "infx", tooling / "infx")
+        shutil.move(root / "utils", tooling / "utils")
         # An unrelated package in the data checkout must not supply the planner.
         (root / "infx").mkdir()
         (root / "infx/__init__.py").write_text("raise RuntimeError('wrong tooling checkout')\n")
