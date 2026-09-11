@@ -167,6 +167,26 @@ llm-d 不是 srt-slurm 路径：InferenceX 自己持有 Slurm allocation，并�
 7. 同时添加脚本 + 主配置条目 + launcher 路由 + changelog。
 8. 运行 Bash 语法和生成检查；检查 `spec-decoding`、draft/native 方法、token 数、chat-template 使用、capture 范围和解析出的脚本。
 
+### DeepSeek-V4.1-Flash DSpark
+
+仅运行 AgentX 的 `dsv41flash-fp4-<sku>-vllm-agentic-dspark` 配方使用
+`vllm/vllm-openai:deepseekv41-flash-0909`，在 Blackwell SKU 上采用 TP4、原生五 token DSpark、
+概率采样草稿。吞吐测试使用[已提交的黄金 AL](../golden_al_distribution/dsv41flash_dspark.yaml)：thinking 开启、五个草稿 token 对应 3.51，采用合成拒绝采样并关闭自适应验证。准确率 eval 保留真实块拒绝采样和自适应验证。
+`--engram-config '{"cpu_offload":true}'` 将 Engram 嵌入表放在固定页主机 DRAM
+中，通过 UVA 访问；`kv-offloading: none` 描述的是另行保留在 GPU 上的 KV cache。
+专家权重为 MXFP4，因此配方标记为 `precision: fp4`。
+
+各 GPU 入口共用纯文本服务脚本，使用 `deepseek_v41` tokenizer 和解析器、1M 上下文，
+以及共享的 AgentX 轨迹回放、功耗、指标和 eval helper。并发范围为 1–128。模型 runner 选择和调度批处理沿用官方单节点 TP 配方的默认值；
+CUDA graph capture 覆盖并发数乘以六 token DSpark 验证块。launcher 都为该配方将仓库挂载到 `/ix`，避免在 `/workspace`
+下创建 AgentX 运行目录。沿用各 launcher 的模型路径和持久化缓存。配方在计算节点探测服务端口，首选端口被占用时选择可用端口，
+服务、回放、指标和 eval 共用同一端点。所有配方都必须获得 GPU sweep 和 eval
+证据后才能视为已验证。
+
+GB300 launcher 将引擎就绪等待时间设为 7200 秒。在[运行 34504969146](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34504969146) 中，仅模型加载就耗时 18–23 分钟；Rust frontend 达到 3600 秒期限时，引擎仍在捕获 CUDA graph。此次仅延长启动等待时间，基准测试时长和解码设置保持不变。
+
+来源：[上游配方](https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flash)。
+
 ### H200 上的 DeepSeek-V4.1-Flash DSpark
 
 `dsv41flash-fp4-h200-vllm-agentic-dspark` 是 DeepSeek-V4.1-Flash 配方的 H200 AgentX

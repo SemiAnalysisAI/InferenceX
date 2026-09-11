@@ -7186,3 +7186,29 @@
   description:
     - "Use the pinned SGLang nightly-dev-cu13-20260901-07c8f729 image with FlashInfer 0.6.18, which includes the BF16 TRTLLM MoE allocation fix for small-batch Blackwell execution. Model, TP8, HiCache, MTP settings and concurrency grid are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2994
+
+- config-keys:
+    - dsv41flash-fp4-gb300-vllm-agentic-dspark
+  description:
+    - "Add GB300 TP4 AgentX through concurrency 128 with Engram UVA DRAM offload and native five-token DSpark"
+    - "Use deepseekv41-flash-0909 with adaptive verification and available-port selection"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2961
+
+- config-keys:
+    - dsv41flash-fp4-gb300-vllm-agentic-dspark
+  description:
+    - "Align with the official single-node TP recipe: default model runner and scheduler batching"
+    - "Keep AgentX concurrency 1-128, UVA offload, DSpark, and concurrency-sized graph capture"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2961
+
+- config-keys:
+    - dsv41flash-fp4-gb300-vllm-agentic-dspark
+  description:
+    - "Use thinking-on golden synthetic AL 3.51 for five-token DSpark throughput; disable adaptive verification and retain real verification for evals"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2961
+
+- config-keys:
+    - dsv41flash-fp4-gb300-vllm-agentic-dspark
+  description:
+    - "Allow 7200 seconds for GB300 DSv4.1 Flash engine startup; the one-hour frontend deadline interrupted cold graph capture"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2961
