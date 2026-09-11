@@ -71,6 +71,11 @@ if [[ "${EVAL_ONLY}" == "true" ]]; then
     _wait_for_openai_chat_route --port "$PORT"
 fi
 
+# Preserve DP-attention session routing within this single concurrency point.
+if [[ "${PREFILL_DP_ATTN:-}" == "true" ]]; then
+    export AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID=true
+fi
+
 # Keep the multi-node artifact suffix; single-node collection uses the caller's name.
 if [[ -n "${CONC_LIST:-}" ]]; then
     export RESULT_FILENAME="${RESULT_FILENAME}_conc${CONC}"
