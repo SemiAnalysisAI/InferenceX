@@ -521,7 +521,21 @@ wait_for_server_ready() {
         --endpoint "http://0.0.0.0:${port}/health" \
         --log "$server_log" \
         --pid "$server_pid" \
-        --sleep-interval "$sleep_interval"
+        --sleep-interval "$sleep_interval" || return $?
+    INFERENCEX_SERVER_STATE=$(mktemp /tmp/inferencex-server-state.XXXXXX) || return 1
+    python3 "$INFERENCEX_REPO_ROOT/utils/server_watch.py" capture --pid "$server_pid" \
+        > "$INFERENCEX_SERVER_STATE" || return 1
+    INFERENCEX_SERVER_PID="$server_pid"
+}
+
+# Keep client process groups separate; on confirmed server/worker death only
+# this client's descendants are stopped. There is no elapsed-time cutoff.
+run_server_client() {
+    if [[ -n "${INFERENCEX_SERVER_STATE:-}" ]]; then
+        python3 "$INFERENCEX_REPO_ROOT/utils/server_watch.py" run --state "$INFERENCEX_SERVER_STATE" -- "$@"
+    else
+        "$@"
+    fi
 }
 
 # Persist an argv array in shell-replayable form.
@@ -776,33 +790,15 @@ run_benchmark_serving() {
         benchmark_cmd+=(--tokenizer-mode "$tokenizer_mode")
     fi
 
-    # Run benchmark with optional server monitoring
-    set -x
-    if [[ -n "$server_pid" ]]; then
-        # Run benchmark in background and monitor server health
-        "${benchmark_cmd[@]}" &
-        local benchmark_pid=$!
-
-        # Monitor loop: check both benchmark and server status
-        while kill -0 "$benchmark_pid" 2>/dev/null; do
-            if ! kill -0 "$server_pid" 2>/dev/null; then
-                echo "ERROR: Server process $server_pid died during benchmark"
-                kill "$benchmark_pid" 2>/dev/null
-                wait "$benchmark_pid" 2>/dev/null
-                set +x
-                return 1
-            fi
-            sleep 2
-        done
-
-        # Benchmark finished, get its exit code
-        wait "$benchmark_pid"
-        local benchmark_exit_code=$?
-    else
-        # No server monitoring, run benchmark directly
-        "${benchmark_cmd[@]}"
-        local benchmark_exit_code=$?
+    if [[ -n "$server_pid" && "$server_pid" != "${INFERENCEX_SERVER_PID:-}" ]]; then
+        INFERENCEX_SERVER_STATE=$(mktemp /tmp/inferencex-server-state.XXXXXX) || return 1
+        python3 "$INFERENCEX_REPO_ROOT/utils/server_watch.py" capture --pid "$server_pid" \
+            > "$INFERENCEX_SERVER_STATE" || return 1
+        INFERENCEX_SERVER_PID="$server_pid"
     fi
+    local benchmark_exit_code=0
+    set -x
+    run_server_client "${benchmark_cmd[@]}" || benchmark_exit_code=$?
     set +x
 
     # If profiling, move trace to relay-upload location
@@ -1208,7 +1204,7 @@ _run_kimi_tool_call_schema_eval() {
 
     local eval_rc=0
     PYTHONPATH="${runtime_dir}${PYTHONPATH:+:${PYTHONPATH}}" \
-        "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" \
+        run_server_client "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" \
             --verifier-dir "$checkout_dir" \
             --base-url "http://127.0.0.1:${port}/v1" \
             --api-key EMPTY \
@@ -1464,7 +1460,7 @@ _run_bfcl_suite_eval() {
     if [ "$eval_suite" != "bfcl_smoke" ]; then
         suite_args=(--suite "$eval_suite")
     fi
-    timeout "$process_timeout_seconds" \
+    run_server_client timeout "$process_timeout_seconds" \
         "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" \
         --base-url "http://127.0.0.1:${port}/v1" \
         --api-key EMPTY \
@@ -1608,7 +1604,7 @@ _run_minimax_m3_smoke_eval() {
     fi
 
     local eval_rc=0
-    "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" run \
+    run_server_client "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" run \
         --python "${VENDOR_VERIFIER_PYTHON:-python3}" \
         --source-dir "${runtime_dir}/source" \
         --dependency-dir "${runtime_dir}/deps" \
@@ -1722,7 +1718,7 @@ _run_minimax_m3_full_eval() {
     fi
 
     local eval_rc=0
-    "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" run \
+    run_server_client "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" run \
         --python "${VENDOR_VERIFIER_PYTHON:-python3}" \
         --source-dir "${runtime_dir}/source" \
         --dependency-dir "${runtime_dir}/deps" \
@@ -1907,7 +1903,7 @@ run_lm_eval() {
     # Export for append_lm_eval_summary to pick up
     export EVAL_RESULT_DIR="$results_dir"
     set -x
-    python3 -m lm_eval --model local-chat-completions --apply_chat_template \
+    run_server_client python3 -m lm_eval --model local-chat-completions --apply_chat_template \
       ${include_path:+--include_path "$include_path"} \
       --tasks "${tasks_dir}" \
       --output_path "${results_dir}" \
@@ -2912,7 +2908,7 @@ install_agentic_deps() {
     # Install from the checked-out aiperf source with uv. This path does not
     # require git, and rootless Enroot containers cannot mutate dpkg.
 
-    ensure_agentic_uv
+    ensure_agentic_uv || return $?
     rm -rf "$AIPERF_VENV"
     mkdir -p "$AIPERF_UV_CACHE_DIR"
 
@@ -2928,15 +2924,18 @@ install_agentic_deps() {
     # already used to fetch uv itself above), so this doesn't depend on the
     # container image bundling a new-enough Python.
     UV_CACHE_DIR="$AIPERF_UV_CACHE_DIR" \
-        "$AIPERF_UV_BIN" venv --python "${AIPERF_PYTHON_VERSION:-3.11}" "$AIPERF_VENV"
-    UV_CACHE_DIR="$AIPERF_UV_CACHE_DIR" \
+        "$AIPERF_UV_BIN" venv --python "${AIPERF_PYTHON_VERSION:-3.11}" "$AIPERF_VENV" || return $?
+    UV_CACHE_DIR="$AIPERF_UV_CACHE_DIR" UV_HTTP_TIMEOUT=120 UV_HTTP_RETRIES=3 \
         "$AIPERF_UV_BIN" pip install --python "$AIPERF_PYTHON" \
         -r "$AGENTIC_DIR/requirements.txt" \
         -e "$AIPERF_DIR" \
         "datasets>=4.7.0" \
         "huggingface_hub[cli]>=0.25.0" \
         urllib3 \
-        requests
+        requests || {
+            echo "ERROR: benchmark client dependency bootstrap failed; inspect network/package resolution before recipe repairs" >&2
+            return 1
+        }
 
     if [ ! -x "$AIPERF_CLI" ] || [ ! -x "$AIPERF_HF_CLI" ]; then
         echo "ERROR: isolated AIPerf environment is incomplete at $AIPERF_VENV" >&2
@@ -3340,7 +3339,7 @@ run_agentic_replay_and_write_outputs() (
 
     set +e
     set -x
-    $REPLAY_CMD 2>&1 | tee "$result_dir/benchmark.log"
+    run_server_client $REPLAY_CMD 2>&1 | tee "$result_dir/benchmark.log"
     replay_rc=${PIPESTATUS[0]}
     set +x
     set -e

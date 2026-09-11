@@ -11,7 +11,9 @@ from urllib.parse import urlencode
 from . import github
 from .github import VerificationError
 from .models import CandidateOutcome, OwnedCandidate, Ownership, utc
+from .reporting import translated
 from .validation import verify_sweep
+from . import claims
 
 BOT = 'Klaud-Cold'
 RELEASE = {'capacity-deferred', 'readiness-blocked'}
@@ -33,6 +35,13 @@ class Session:
         self.recovering = recovering
         self.branch = f'klaud/auto-{candidate.id}'
         self.marker = f'<!-- klaud-outcome:{parent["id"]}:{candidate.id}\n'
+        self.validations = {}
+
+    def validation(self, run: dict):
+        key = (run['id'], run['head_sha'], run['run_attempt'])
+        if key not in self.validations:
+            self.validations[key] = verify_sweep(self.repository, run, self.candidate.family)
+        return self.validations[key]
 
     def pulls(self) -> list[dict]:
         query = urlencode({'state': 'all', 'head': self.repository.split('/')[0] + ':' + self.branch,
@@ -110,6 +119,17 @@ class Session:
         refs = github.items(self.repository, 'git/matching-refs/heads/' + self.branch)
         return any(ref['ref'] == 'refs/heads/' + self.branch for ref in refs)
 
+    def retry_released(self, pull: dict) -> bool:
+        marker = f'<!-- klaud-retry-release:{self.parent["id"]}:{self.candidate.id}:{pull["head"]["sha"]} -->'
+        comments = github.items(self.repository, f'issues/{pull["number"]}/comments?per_page=100')
+        for comment in comments:
+            actor = comment['user']['login']
+            if actor != BOT and comment['body'].startswith(marker):
+                permission = github.read(self.repository, f'collaborators/{actor}/permission')['permission']
+                if permission in ('admin', 'maintain', 'write'):
+                    return True
+        return False
+
     def verify(self, outcome: CandidateOutcome, *, require_report: bool = True,
                require_ready: bool = True) -> None:
         pulls = self.pulls()
@@ -147,12 +167,13 @@ class Session:
                 if not any(a['name'] == 'klaud-sweep-manifest' and not a['expired'] for a in inventory):
                     raise VerificationError('Verified sweep artifacts have expired')
             if not receipt or receipt.get('validation') != proof:
-                verify_sweep(self.repository, latest, self.candidate.family)
+                self.validation(latest)
         else:
             if pull and (pull['state'] != 'closed' or not pull['draft'] or any(
                     label['name'] in SWEEP_LABELS for label in pull['labels'])):
                 raise VerificationError('Failure/deferral PR cleanup is incomplete')
-            if pull and self.branch_exists() != (outcome.outcome not in RELEASE):
+            if pull and self.branch_exists() != (outcome.outcome not in RELEASE) and not (
+                    outcome.outcome not in RELEASE and self.retry_released(pull)):
                 raise VerificationError('Incorrect cleanup branch disposition')
         if pull and require_report:
             receipt = self.report(pull)
@@ -173,9 +194,14 @@ class Session:
             raise VerificationError('No explicit maintainer handoff')
         outcome = outcome.model_copy(update={'pull_request': pull['number'] if pull else None,
                                             'run_ids': sorted(run['id'] for run in runs)})
-        if outcome.outcome == 'validated' and pull and pull['draft']:
-            # Reviews start at this transition: prove the final sweep before notifying anyone.
+        if outcome.outcome == 'validated' and pull:
+            # Reviews start at this transition: prove AND publish results first.
             self.verify(outcome, require_report=False, require_ready=False)
+            from .reporting import publish_final
+            final = max((run for run in runs if run['event'] == 'pull_request'
+                         and run['head_sha'] == pull['head']['sha'] and run['conclusion'] != 'skipped'),
+                        key=lambda run: run['created_at'])
+            publish_final(self, final, self.validation(final))
             current = self.refresh(pull)
             if current['draft']:
                 subprocess_ready(self.repository, pull['number'], undo=False)
@@ -185,9 +211,9 @@ class Session:
                 if not self.pending(pull):
                     pending = self.marker.replace('klaud-outcome:', 'klaud-cleanup:')
                     request = {'head': pull['head']['sha'], 'outcome': outcome.model_dump(by_alias=True)}
-                    body = (pending + json.dumps(request) + '\n-->\n'
-                            f'Klaud Cold: **{outcome.outcome}**. Finishing cleanup; owned child runs will be stopped and checked before closure.\n\n---\n\n'
-                            f'Klaud Cold：**{outcome.outcome}**。正在完成清理；将先停止并确认自有子运行的状态，再关闭 PR。')
+                    body = pending + json.dumps(request) + '\n-->\n' + translated(
+                        f'**{outcome.outcome}** · Cleanup pending. Stop and confirm owned runs before closing.',
+                        f'**{outcome.outcome}** · 清理待完成。先停止并确认自有运行结束，再关闭 PR。')
                     github.write(self.repository, f'issues/{pull["number"]}/comments', 'POST', {'body': body})
             for run in runs:
                 if not terminal(run):
@@ -195,12 +221,6 @@ class Session:
                     if pull:
                         self.refresh(pull)
                     github.write(self.repository, f'actions/runs/{run["id"]}/cancel', 'POST')
-            if self.recovering:
-                for run in self.runs():
-                    if not terminal(run):
-                        # Wait for cancellation without an extra agent or custom workflow timeout.
-                        subprocess.run(['gh', 'run', 'watch', str(run['id']), '--repo', self.repository,
-                                        '--interval', '15'], check=True, capture_output=True)
             if any(not terminal(run) for run in self.runs()):
                 raise PendingCleanup('Cancellation requested; wait for terminal jobs then finish again')
             if pull:
@@ -235,19 +255,18 @@ class Session:
             record = {'head': pull['head']['sha'], 'outcome': outcome.model_dump(by_alias=True), 'validation': proof}
             if self.report(pull) != record:
                 links = ', '.join(f'[{run}](https://github.com/{self.repository}/actions/runs/{run})' for run in outcome.run_ids) or '—'
-                body = (self.marker + json.dumps(record) + '\n-->\n'
-                        f'Klaud Cold: **{outcome.outcome}**. All owned runs are terminal. '
-                        f'Repairs: {outcome.repairs_used if outcome.repairs_used is not None else "unknown"}. Runs: {links}.\n\n'
-                        + ('The full sweep is verified; this PR remains ready for review.' if proof else
-                           'PR closed; branch deleted for retry.' if outcome.outcome in RELEASE else
-                           'PR closed; the exact-candidate branch is retained for manual review. The interruption does not prove image incompatibility.')
-                        + '\n\n---\n\n'
-                        f'Klaud Cold：**{outcome.outcome}**。所有自有运行均已结束。'
-                        f'修复次数：{outcome.repairs_used if outcome.repairs_used is not None else "未知"}。运行：{links}。\n\n'
-                        + ('完整 sweep 已通过验证；PR 保持就绪，等待审查。' if proof else
-                           'PR 已关闭；分支已删除，后续可以重试。' if outcome.outcome in RELEASE else
-                           'PR 已关闭；保留该候选的分支，等待人工审查。运行中断不能证明镜像不兼容。'))
+                repairs = outcome.repairs_used if outcome.repairs_used is not None else 'unknown'
+                body = self.marker + json.dumps(record) + '\n-->\n' + translated(
+                    f'**{outcome.outcome}** · Repairs: {repairs} · Runs: {links}  \nAll owned runs ended. '
+                    + ('Full sweep verified; ready for review.' if proof else
+                       'PR closed; branch deleted for retry.' if outcome.outcome in RELEASE else
+                       'PR closed; exact-candidate branch retained pending maintainer review.'),
+                    f'**{outcome.outcome}** · 修复次数：{repairs} · 运行：{links}  \n所有自有运行均已结束。'
+                    + ('完整 sweep 已验证；已就绪，等待审查。' if proof else
+                       'PR 已关闭；分支已删除，可重新尝试。' if outcome.outcome in RELEASE else
+                       'PR 已关闭；保留精确候选分支，等待维护者检查。'))
                 github.write(self.repository, f'issues/{pull["number"]}/comments', 'POST', {'body': body})
+        claims.release_family(self.repository, self.candidate, self.parent['id'])
         return outcome
 
 
@@ -262,6 +281,41 @@ def current_session() -> Session:
     repository = os.environ['GITHUB_REPOSITORY']
     parent = github.read(repository, f'actions/runs/{int(os.environ["GITHUB_RUN_ID"])}')
     return Session(repository, parent, candidate)
+
+
+def release_candidate(session: Session, expected_head: str) -> None:
+    """Explicit maintainer retry after a verified closed session, never an agent action."""
+    actor = json.loads(subprocess.check_output(['gh', 'api', 'user'], text=True, timeout=60))['login']
+    permission = github.read(session.repository, f'collaborators/{actor}/permission')['permission']
+    if actor == BOT or permission not in ('admin', 'maintain', 'write'):
+        raise VerificationError('Only a repository maintainer can release a retained candidate')
+    session.check_parent()
+    pull = session.pulls()[0]
+    if pull['head']['sha'] != expected_head or pull['state'] != 'closed' or pull['merged_at']:
+        raise VerificationError('Retry release requires the reviewed closed PR head')
+    receipt = session.report(pull)
+    if not receipt:
+        raise VerificationError('Finish session cleanup before releasing its retry claim')
+    outcome = CandidateOutcome.model_validate(receipt['outcome'])
+    if outcome.outcome in ('validated', 'handoff') or outcome.outcome in RELEASE:
+        raise VerificationError('This outcome has no retained failure claim to release')
+    session.verify(outcome)
+    if not session.branch_exists() and session.retry_released(pull):
+        return  # A previous invocation already completed the approved deletion.
+    session.refresh(pull)
+    branch = github.read(session.repository, 'git/ref/heads/' + session.branch)
+    if branch['object']['sha'] != expected_head:
+        raise VerificationError('Retained branch changed; leave maintainer work intact')
+    # The outcome remains historically true. This explicit receipt records why the
+    # absence of its retained branch must no longer be treated as incomplete cleanup.
+    github.write(session.repository, f'issues/{pull["number"]}/comments', 'POST', {'body':
+        f'<!-- klaud-retry-release:{session.parent["id"]}:{session.candidate.id}:{expected_head} -->\n'
+        + translated('Maintainer approved a fresh selection after reviewing the blocker; previous results remain historical.',
+                     '维护者检查阻塞原因后已批准重新选择该候选；之前的结果保留为历史证据。')})
+    session.refresh(pull)
+    if github.read(session.repository, 'git/ref/heads/' + session.branch)['object']['sha'] != expected_head:
+        raise VerificationError('Retained branch changed; leave maintainer work intact')
+    github.write(session.repository, 'git/refs/heads/' + session.branch, 'DELETE')
 
 
 def reconcile(session: Session) -> bool:
@@ -280,78 +334,86 @@ def reconcile(session: Session) -> bool:
     # Preserve a completed successful sweep even if the agent died before reporting.
     final = [run for run in runs if pull and run['event'] == 'pull_request'
              and run['head_sha'] == pull['head']['sha'] and run['conclusion'] != 'skipped']
-    if not pending and final and not terminal(max(final, key=lambda r: r['created_at'])):
-        session.refresh(pull)
-        latest = max(final, key=lambda r: r['created_at'])
-        # A dispatched final sweep can still deliver complete evidence without an agent.
-        subprocess.run(['gh', 'run', 'watch', str(latest['id']), '--repo', session.repository,
-                        '--interval', '15'], check=True, capture_output=True)
-        return reconcile(session)
+    if not pending and any(not terminal(run) for run in runs):
+        # An interruption is not permission to stop healthy child work or block planning.
+        # The durable ownership receipt keeps this family excluded until a later pass.
+        raise PendingCleanup('Owned work is still running; retained for the next recovery pass')
     validated = bool(final and terminal(max(final, key=lambda r: r['created_at']))
                      and max(final, key=lambda r: r['created_at'])['conclusion'] == 'success')
+    if validated and not pending:
+        try:
+            session.validation(max(final, key=lambda r: r['created_at']))
+        except VerificationError:
+            # A completed but uncertifiable run is a terminal inspection outcome,
+            # not an indefinitely open draft. API/ownership uncertainty still bubbles
+            # up and preserves work; no incompatibility is inferred from this failure.
+            validated = False
     outcome = pending or CandidateOutcome(outcome='validated' if validated else 'unexpected-error',
                                phase='final-sweep' if validated else 'cleanup',
                                pull_request=pull['number'] if pull else None,
                                run_ids=[r['id'] for r in runs], repairs_used=None)
     # Unknown interruption retains the exact-candidate claim for manual review.
-    while True:
-        try:
-            session.finish(outcome)
-            break
-        except PendingCleanup:
-            session.check_parent()
-            for run in session.runs():
-                if not terminal(run):
-                    subprocess.run(['gh', 'run', 'watch', str(run['id']), '--repo', session.repository,
-                                    '--interval', '15'], check=True, capture_output=True)
+    session.finish(outcome)
     return True
 
 
 def recover() -> None:
     repository = os.environ['GITHUB_REPOSITORY']
     inventory = github.items(repository, 'actions/artifacts?name=klaud-ownership&per_page=100', 'artifacts')
-    seen = set()
-    failed = False
-    for artifact in sorted(inventory, key=lambda a: a['id'], reverse=True):
+    # Refs cover a crash before artifact upload; artifacts cover legacy sessions.
+    # Validate the entire inventory before mutating any owned work.
+    owners = [(owner, None) for owner in claims.family_owners(repository)]
+    for artifact in inventory:
         if artifact['expired']:
             continue
         parent = github.read(repository, f'actions/runs/{artifact["workflow_run"]["id"]}')
-        if (parent['head_branch'] != 'main'
-                or parent['path'] != '.github/workflows/klaud-plan.yml'
+        if (parent['head_branch'] != 'main' or parent['path'] != '.github/workflows/klaud-plan.yml'
                 or parent['event'] not in ('schedule', 'workflow_dispatch')):
             continue
         with tempfile.TemporaryDirectory(prefix='klaud-ownership-') as temp:
             github.download_json(repository, artifact, Path(temp))
-            ownership = Ownership.model_validate_json((Path(temp) / 'ownership.json').read_text())
-        if ownership.run_id != parent['id']:
+            owner = Ownership.model_validate_json((Path(temp) / 'ownership.json').read_text())
+        if owner.run_id != parent['id']:
             raise VerificationError('Ownership parent mismatch')
-        resolved = terminal(parent)
-        for candidate in ownership.candidates:
-            if candidate.id in seen:
-                resolved = False
+        owners.append((owner, artifact))
+    parents = {owner.run_id: github.read(repository, f'actions/runs/{owner.run_id}') for owner, _ in owners}
+    if any(parent['head_branch'] != 'main' or parent['path'] != '.github/workflows/klaud-plan.yml'
+           or parent['event'] not in ('schedule', 'workflow_dispatch') for parent in parents.values()):
+        raise VerificationError('Untrusted ownership parent')
+    results = {}
+    blocked = set()
+    for owner, _ in sorted(owners, key=lambda pair: pair[0].run_id, reverse=True):
+        parent = parents[owner.run_id]
+        for candidate in owner.candidates:
+            key = (parent['id'], candidate.id)
+            if key in results:
                 continue
-            seen.add(candidate.id)
+            results[key] = False
             if not terminal(parent):
+                blocked.add(candidate.family)
                 continue
             session = Session(repository, parent, candidate, recovering=True)
             try:
+                if not claims.recovery_lease(repository, parent['id'], candidate):
+                    blocked.add(candidate.family)
+                    continue
                 changed = reconcile(session)
+                claims.release_family(repository, candidate, parent['id'])
             except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
-                failed = True
-                resolved = False
+                blocked.add(candidate.family)
                 reason = str(error) if isinstance(error, VerificationError) else 'state unavailable or invalid'
-                status = f'needs inspection / 需要检查 ({reason})'
+                status = ('pending / 等待后续收尾' if isinstance(error, PendingCleanup) else 'needs inspection / 需要检查') + f' ({reason})'
             else:
+                results[key] = True
                 status = 'reconciled / 已收尾' if changed else None
             if status and (summary := os.environ.get('GITHUB_STEP_SUMMARY')):
                 with open(summary, 'a') as output:
                     output.write(f'Klaud `{candidate.id}`: {status}. '
                                  f'[Parent run / 父运行](https://github.com/{repository}/actions/runs/{parent["id"]})\n\n')
-        if resolved:
-            current = github.read(repository, f'actions/runs/{parent["id"]}')
-            if terminal(current) and current.get('run_attempt') == parent.get('run_attempt'):
-                # The public plan, outcome artifacts and PR reports remain. Retire only the
-                # tiny pending-work receipt so future sweeps do not rescan completed history.
+    for owner, artifact in owners:
+        if artifact and all(results[(owner.run_id, candidate.id)] for candidate in owner.candidates):
+            current = github.read(repository, f'actions/runs/{owner.run_id}')
+            if terminal(current) and current['run_attempt'] == parents[owner.run_id]['run_attempt']:
                 github.write(repository, f'actions/artifacts/{artifact["id"]}', 'DELETE')
-    if failed:
-        raise VerificationError('Some owned sessions could not be reconciled; new dispatches withheld')
+    # Candidate failures are isolated, but their entire families remain unavailable.
+    (Path(os.environ['RUNNER_TEMP']) / 'klaud-recovery.json').write_text(json.dumps(sorted(blocked)))

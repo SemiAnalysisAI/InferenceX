@@ -472,7 +472,7 @@ EOF
     tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" .
 
     if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
-        copy_fixed_sequence_results "$LOGS_DIR" "$GITHUB_WORKSPACE" "$RESULT_FILENAME"
+        copy_fixed_sequence_results "$LOGS_DIR" "$GITHUB_WORKSPACE" "$RESULT_FILENAME" || exit 1
     else
         echo "EVAL_ONLY=true: Skipping benchmark result collection"
     fi

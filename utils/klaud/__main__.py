@@ -85,6 +85,7 @@ def choose(items: list[dict], available: set[str], occupied: set[str],
 
 
 def plan(root: Path, directory: Path) -> None:
+    from . import claims
     policy = Policy()
     repository = os.environ['GITHUB_REPOSITORY']
     items, issues = fetch_catalog(policy)
@@ -99,6 +100,11 @@ def plan(root: Path, directory: Path) -> None:
     capacity = capacity_context(policy)
     available = set(capacity['eligible-telemetry-clusters'])
     candidates = choose(items, available, occupied, live_families(root))
+    blocked = {candidate.family for owner in claims.family_owners(repository) for candidate in owner.candidates}
+    recovery_file = Path(os.environ.get('RUNNER_TEMP', directory.parent)) / 'klaud-recovery.json'
+    if recovery_file.exists():
+        blocked.update(json.loads(recovery_file.read_text()))
+    candidates = [candidate for candidate in candidates if candidate['family'] not in blocked]
     base = subprocess.check_output(['git', '-C', str(root), 'rev-parse', 'HEAD'], text=True, timeout=30).strip()
     contexts = [{**candidate, 'base': base, 'repository': repository,
                  'public-api': {'schema': PUBLIC + '/api/openapi.json',
@@ -174,6 +180,7 @@ def execution_diagnostics(path: Path) -> dict:
                 'error_max_structured_output_retries'}
     subtype = result.get('subtype')
     return {'execution-log': 'available', 'result-present': bool(result), **metrics,
+            'structured-output-present': isinstance(result.get('structured_output'), dict),
             'termination': subtype if isinstance(subtype, str) and subtype in subtypes else 'unknown',
             'is-error': result.get('is_error') if type(result.get('is_error')) is bool else None,
             'permission-denials': dict(denied_tools),
@@ -200,15 +207,34 @@ def check_stop() -> dict:
 def save_diagnostics(execution_file: Path, outcome_file: Path, action_outcome: str, output: Path) -> bool:
     diagnostics = {'action-outcome': action_outcome, **execution_diagnostics(execution_file)}
     try:
-        outcome = CandidateOutcome.model_validate_json(outcome_file.read_text())
-        if action_outcome != 'success':
-            raise ValueError('Action did not complete successfully')
         from .lifecycle import current_session
-        current_session().verify(outcome)
+        session = current_session()
+        pulls, runs = session.pulls(), session.runs()
+        diagnostics['observed-session'] = {
+            'pull-request': pulls[0]['number'] if pulls else None,
+            'head': pulls[0]['head']['sha'] if pulls else None,
+            'runs': [{'id': run['id'], 'attempt': run['run_attempt'],
+                      'terminal': run['status'] == 'completed'} for run in runs]}
+        receipt = session.report(pulls[0]) if pulls else None
+        if pulls and session.handed_off(pulls[0]):
+            outcome = CandidateOutcome(outcome='handoff', phase='cleanup', pull_request=pulls[0]['number'],
+                                       run_ids=[run['id'] for run in runs], repairs_used=None)
+            diagnostics['outcome-source'] = 'maintainer-handoff'
+        elif receipt:
+            outcome = CandidateOutcome.model_validate(receipt['outcome'])
+            diagnostics['outcome-source'] = 'verified-receipt'
+        else:
+            # The durable lifecycle receipt is authoritative even when the SDK fails
+            # to return structured_output. A JSON response alone is never success.
+            outcome = CandidateOutcome.model_validate_json(outcome_file.read_text())
+            diagnostics['outcome-source'] = 'structured-response'
+        session.verify(outcome)
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
         # Never echo invalid structured output, which could contain private data.
+        observed = diagnostics.get('observed-session', {})
         outcome = CandidateOutcome(outcome='unexpected-error', phase='unknown',
-                                   pull_request=None, run_ids=[], repairs_used=None)
+                                   pull_request=observed.get('pull-request'),
+                                   run_ids=[run['id'] for run in observed.get('runs', [])], repairs_used=None)
         diagnostics['outcome-report'] = 'unavailable-or-invalid'
     else:
         diagnostics['outcome-report'] = 'available'
@@ -229,6 +255,7 @@ def save_diagnostics(execution_file: Path, outcome_file: Path, action_outcome: s
 
 
 def select(directory: Path, max_candidates: int, execution_file: Path | None = None) -> None:
+    from . import claims
     contexts = json.loads((directory / 'candidates.json').read_text())
     review = PRReview(decisions=[])
     deferred = None
@@ -264,6 +291,9 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
             continue
         if not set(decision.telemetry_clusters) <= available:
             capacity_deferred.append(candidate['id'])
+            continue
+        owned = OwnedCandidate.model_validate({key: candidate[key] for key in ('id', 'family', 'base')})
+        if not claims.claim_family(os.environ['GITHUB_REPOSITORY'], owned, int(os.environ['GITHUB_RUN_ID'])):
             continue
         selected.append({**candidate, 'pr-review': decision.model_dump(by_alias=True)})
         families.add(decision.family)
@@ -311,6 +341,22 @@ def main() -> int:
     capacity.add_argument('--cluster', required=True, action='append', help='Exact telemetry cluster; repeat for every possible recipe target')
     commands.add_parser('check-stop', help='Claude Stop hook: require finished runs and validated, closed or handed-off PRs')
     commands.add_parser('recover', help='Reconcile interrupted sessions from completed autosweeps')
+    commands.add_parser('recover-current', help='Reconcile after an interrupted agent without waiting for healthy children')
+    preflight = commands.add_parser('check-final', help='Check a generated final matrix against the complete exact-head family')
+    preflight.add_argument('--matrix-file', type=Path, required=True)
+    release = commands.add_parser('release-candidate', help='Maintainer-only release of a verified closed candidate after its blocker is fixed')
+    release.add_argument('--parent-run-id', type=int, required=True)
+    release.add_argument('--candidate-file', type=Path, required=True, help='Original candidate.json')
+    release.add_argument('--head', required=True, help='Reviewed closed PR head SHA')
+    baseline = commands.add_parser('prepare-baseline', help='Fetch and freeze matched published data locally before attempts')
+    baseline.add_argument('--model', required=True, help='Display model name from the public OpenAPI enum')
+    baseline.add_argument('--goal-file', type=Path, required=True, help='JSON with en/zh goal sentences naming the engine and old/new images')
+    baseline.add_argument('--output', type=Path, required=True)
+    report = commands.add_parser('report', help='Publish a typed baseline or owned-attempt record using canonical templates')
+    report.add_argument('--kind', choices=['baseline', 'attempt'], required=True)
+    report.add_argument('--file', type=Path, required=True)
+    schema = commands.add_parser('report-schema', help='Print the baseline or attempt JSON schema')
+    schema.add_argument('--kind', choices=['baseline', 'attempt'], required=True)
     finish = commands.add_parser('finish', help='Verify validation or finish owned cleanup and reporting')
     finish.add_argument('--outcome-file', type=Path, required=True)
     commands.add_parser('outcome-schema', help='Print the public-safe candidate outcome schema')
@@ -321,6 +367,52 @@ def main() -> int:
     diagnostics.add_argument('--outcome', choices=['success', 'failure', 'cancelled', 'skipped', 'unknown'], default='unknown')
     args = parser.parse_args()
     try:
+        if args.command == 'release-candidate':
+            from .lifecycle import Session, release_candidate
+            context = json.loads(args.candidate_file.read_text())
+            candidate = OwnedCandidate.model_validate({key: context[key] for key in ('id', 'family', 'base')})
+            repository = os.environ['GITHUB_REPOSITORY']
+            parent = github_read(repository, f'actions/runs/{args.parent_run_id}')
+            if parent['path'] != '.github/workflows/klaud-plan.yml' or parent['head_branch'] != 'main':
+                raise VerificationError('Untrusted ownership parent')
+            release_candidate(Session(repository, parent, candidate, recovering=True), args.head)
+            return 0
+        if args.command in ('report', 'report-schema', 'prepare-baseline'):
+            from .reporting import Baseline, Attempt, Prose, prepare_baseline, publish
+            from .lifecycle import current_session
+            if args.command == 'prepare-baseline':
+                if args.output.exists():
+                    Baseline.model_validate_json(args.output.read_text())
+                    return 0  # A retry never silently refreshes the baseline.
+                session = current_session()
+                context = json.loads((Path(os.environ['KLAUD_EVIDENCE']) / 'candidate.json').read_text())
+                goal = Prose.model_validate_json(args.goal_file.read_text())
+                record = prepare_baseline(session, context, args.model, goal)
+                with args.output.open('x') as output:
+                    output.write(record.model_dump_json(by_alias=True) + '\n')
+                return 0
+            model = Baseline if args.kind == 'baseline' else Attempt
+            if args.command == 'report-schema':
+                print(json.dumps(model.model_json_schema(by_alias=True)))
+            else:
+                publish(current_session(), model.model_validate_json(args.file.read_text()))
+            return 0
+        if args.command == 'check-final':
+            from .lifecycle import current_session
+            from .validation import canonical_matrix, check_matrix
+            session = current_session()
+            pull = session.pulls()[0]
+            head = pull['head']['sha']
+            check_matrix(json.loads(args.matrix_file.read_text()),
+                         canonical_matrix(session.repository, head, session.candidate.family), head, session.candidate.family)
+            return 0
+        if args.command == 'recover-current':
+            from .lifecycle import current_session, reconcile, PendingCleanup
+            try:
+                reconcile(current_session())
+            except PendingCleanup:
+                pass  # Ownership persists; the next autosweep will revisit these children.
+            return 0
         if args.command == 'recover':
             from .lifecycle import recover
             recover()

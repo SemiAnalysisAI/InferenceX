@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import io
+import base64
 import json
 from pathlib import Path, PurePosixPath
 import subprocess
 import zipfile
+from urllib.parse import quote
 
 
 class VerificationError(ValueError):
@@ -39,6 +41,17 @@ def write(repository: str, path: str, method: str, payload: dict | None = None) 
 
 def artifacts(repository: str, run_id: int) -> list[dict]:
     return items(repository, f'actions/runs/{run_id}/artifacts?per_page=100', 'artifacts')
+
+
+def file_at(repository: str, head: str, path: str) -> bytes:
+    """Read data at an immutable revision; callers never execute downloaded code."""
+    import re
+    if not re.fullmatch(r'[0-9a-f]{40}', head):
+        raise VerificationError('Expected an immutable source revision')
+    result = read(repository, f'contents/{quote(path, safe="/")}?ref={head}')
+    if result.get('type') != 'file' or result.get('encoding') != 'base64' or result['size'] > 4 * 1024 * 1024:
+        raise VerificationError('Source data unavailable or too large')
+    return base64.b64decode(result['content'])
 
 
 def download_json(repository: str, artifact: dict, destination: Path) -> None:

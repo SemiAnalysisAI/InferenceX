@@ -21,6 +21,9 @@ ENDPOINTS = {
     "images": PUBLIC + "/api/v1/latest-images",
     "releases": PUBLIC + "/api/v1/framework-releases",
     "clusters": PRIVATE + "/api/status/clusters",
+    "benchmarks": PUBLIC + "/api/v1/benchmarks",
+    "workflow-info": PUBLIC + "/api/v1/workflow-info",
+    "evaluations": PUBLIC + "/api/v1/evaluations",
 }
 USER_AGENT = "InferenceX-Klaud-Cold/1.0"
 MAX_BYTES = 16 * 1024 * 1024
@@ -48,9 +51,19 @@ def finite_float(value: str) -> float:
 
 def fetch(resource: str, *, token: str | None = None,
           model: str | None = None,
+          date: str | None = None,
           clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc), opener=None) -> Feed:
-    url = (PUBLIC + "/api/v1/benchmarks?" + urllib.parse.urlencode({"model": model})
-           if resource == "benchmarks" and model else ENDPOINTS[resource])
+    query = {}
+    if resource == 'benchmarks' and model:
+        query['model'] = model
+    if resource in ('benchmarks', 'workflow-info') and date:
+        from datetime import date as calendar_date
+        if calendar_date.fromisoformat(date).isoformat() != date:
+            raise ReadError('invalid-baseline-date')
+        query['date'] = date
+        if resource == 'benchmarks':
+            query['exact'] = 'true'
+    url = ENDPOINTS[resource] + ('?' + urllib.parse.urlencode(query) if query else '')
     headers = {"Accept": "application/json", "User-Agent": USER_AGENT}
     if resource == "clusters":
         if not token or not token.strip():

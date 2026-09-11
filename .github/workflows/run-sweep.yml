@@ -750,6 +750,8 @@ jobs:
             conc: ${{ matrix.config.conc }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
+            eval-framework: ${{ matrix.config['eval-framework'] || 'lm-eval' }}
+            eval-suite: ${{ matrix.config['eval-suite'] || '' }}
             run-eval: true
             eval-only: true
 
@@ -806,6 +808,8 @@ jobs:
             max-model-len: '0'
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ 'false' }}
+            eval-framework: ${{ matrix.config['eval-framework'] || 'lm-eval' }}
+            eval-suite: ${{ matrix.config['eval-suite'] || '' }}
             run-eval: true
             eval-only: true
             scenario-type: agentic-coding
@@ -868,9 +872,11 @@ jobs:
             decode-ep: ${{ matrix.config.decode.ep }}
             decode-dp-attn: ${{ matrix.config.decode.dp-attn }}
             decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
+            eval-framework: ${{ matrix.config['eval-framework'] || 'lm-eval' }}
+            eval-suite: ${{ matrix.config['eval-suite'] || '' }}
             run-eval: true
             eval-only: true
-            eval-conc: ${{ matrix.config['eval-all-concs'] && join(matrix.config.conc, ' ') || matrix.config['eval-conc'] }}
+            eval-conc: ${{ (matrix.config['eval-framework'] || 'lm-eval') == 'lm-eval' && matrix.config['eval-all-concs'] && join(matrix.config.conc, ' ') || matrix.config['eval-conc'] }}
 
     # Multi-node agentic GSM8K eval rows carry the agentic input shape, so
     # they are dispatched with sweep-multi-node-agentic's inputs rather than
@@ -942,6 +948,8 @@ jobs:
             kv-offload-backend-metadata: ${{ matrix.config['kv-offload-backend'] && toJson(matrix.config['kv-offload-backend']) || '' }}
             total-cpu-dram-gb: ${{ matrix.config['total-cpu-dram-gb'] }}
             duration: ${{ matrix.config.duration }}
+            eval-framework: ${{ matrix.config['eval-framework'] || 'lm-eval' }}
+            eval-suite: ${{ matrix.config['eval-suite'] || '' }}
             run-eval: true
             eval-only: true
             eval-conc: ${{ matrix.config['eval-conc'] }}
