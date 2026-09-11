@@ -7292,4 +7292,4 @@
   description:
     - "Reserve 144 CPU cores for the GB300 single-node serving task"
     - "为 GB300 单节点服务任务预留 144 个 CPU 核心"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3017
