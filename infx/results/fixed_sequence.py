@@ -11,6 +11,7 @@ from typing import Any
 
 from .metadata import parse_component_metadata
 from .power import ALL_POWER_METRIC_KEYS, POWER_METRIC_SCHEMA_VERSION, with_power_metrics
+from .topology import Parallelism, validate_parallelism
 
 
 _BASE_ENV_VARS = (
@@ -76,31 +77,24 @@ def build_result(benchmark: Mapping[str, Any], env: Mapping[str, str]) -> dict[s
         prefill_gpus = int(env['PREFILL_GPUS'])
         decode_gpus = int(env['DECODE_GPUS'])
         prefill_num_workers = int(env['PREFILL_NUM_WORKERS'])
-        prefill_tp = int(env['PREFILL_TP'])
-        prefill_pp = int(env.get('PREFILL_PP_SIZE', '1'))
-        prefill_dcp_size = int(env.get('PREFILL_DCP_SIZE', '1'))
-        prefill_pcp_size = int(env.get('PREFILL_PCP_SIZE', '1'))
-        prefill_ep = int(env['PREFILL_EP'])
+        prefill = Parallelism(
+            tp=int(env['PREFILL_TP']),
+            pp=int(env.get('PREFILL_PP_SIZE', '1')),
+            dcp_size=int(env.get('PREFILL_DCP_SIZE', '1')),
+            pcp_size=int(env.get('PREFILL_PCP_SIZE', '1')),
+            ep=int(env['PREFILL_EP']),
+        )
         prefill_dp_attn = env['PREFILL_DP_ATTN']
         decode_num_workers = int(env['DECODE_NUM_WORKERS'])
-        decode_tp = int(env['DECODE_TP'])
-        decode_pp = int(env.get('DECODE_PP_SIZE', '1'))
-        decode_dcp_size = int(env.get('DECODE_DCP_SIZE', '1'))
-        decode_pcp_size = int(env.get('DECODE_PCP_SIZE', '1'))
-        decode_ep = int(env['DECODE_EP'])
-        decode_dp_attn = env['DECODE_DP_ATTN']
-        worker_parallelism = (
-            prefill_pp,
-            prefill_dcp_size,
-            prefill_pcp_size,
-            decode_pp,
-            decode_dcp_size,
-            decode_pcp_size,
+        decode = Parallelism(
+            tp=int(env['DECODE_TP']),
+            pp=int(env.get('DECODE_PP_SIZE', '1')),
+            dcp_size=int(env.get('DECODE_DCP_SIZE', '1')),
+            pcp_size=int(env.get('DECODE_PCP_SIZE', '1')),
+            ep=int(env['DECODE_EP']),
         )
-        if any(value <= 0 for value in worker_parallelism):
-            raise ValueError(
-                "Multinode PP, DCP, and PCP sizes must be positive integers."
-            )
+        decode_dp_attn = env['DECODE_DP_ATTN']
+        validate_parallelism(prefill, decode)
 
         total_gpus = prefill_gpus + decode_gpus
         if total_gpus <= 0:
@@ -109,26 +103,14 @@ def build_result(benchmark: Mapping[str, Any], env: Mapping[str, str]) -> dict[s
             raise ValueError("Multinode results require at least one prefill GPU.")
 
         output_tput_denominator = decode_gpus if decode_gpus > 0 else total_gpus
-        output_decode_tp = decode_tp if decode_gpus > 0 else 0
-        output_decode_ep = decode_ep if decode_gpus > 0 else 0
-        output_decode_pp = decode_pp if decode_gpus > 0 else 1
-        output_decode_dcp_size = decode_dcp_size if decode_gpus > 0 else 1
-        output_decode_pcp_size = decode_pcp_size if decode_gpus > 0 else 1
+        decode = decode.for_decode(decode_gpus)
 
         multi_node_data = {
             'is_multinode': True,
-            'prefill_tp': prefill_tp,
-            'prefill_pp': prefill_pp,
-            'prefill_dcp_size': prefill_dcp_size,
-            'prefill_pcp_size': prefill_pcp_size,
-            'prefill_ep': prefill_ep,
+            **prefill.fields('prefill_'),
             'prefill_dp_attention': prefill_dp_attn,
             'prefill_num_workers': prefill_num_workers,
-            'decode_tp': output_decode_tp,
-            'decode_pp': output_decode_pp,
-            'decode_dcp_size': output_decode_dcp_size,
-            'decode_pcp_size': output_decode_pcp_size,
-            'decode_ep': output_decode_ep,
+            **decode.fields('decode_'),
             'decode_dp_attention': decode_dp_attn,
             'decode_num_workers': decode_num_workers,
             'num_prefill_gpu': prefill_gpus,
@@ -150,20 +132,19 @@ def build_result(benchmark: Mapping[str, Any], env: Mapping[str, str]) -> dict[s
         tp_size = int(env['TP'])
         ep_size = int(env['EP_SIZE'])
         dp_attention = env['DP_ATTENTION']
-        pp = int(env.get('PP_SIZE', '1'))
-        dcp_size = int(env.get('DCP_SIZE', '1'))
-        pcp_size = int(env.get('PCP_SIZE', '1'))
-        if pp <= 0 or dcp_size <= 0 or pcp_size <= 0:
-            raise ValueError("PP_SIZE, DCP_SIZE, and PCP_SIZE must be positive integers.")
-        num_gpus = tp_size * pp * pcp_size
+        parallelism = Parallelism(
+            tp=tp_size,
+            pp=int(env.get('PP_SIZE', '1')),
+            dcp_size=int(env.get('DCP_SIZE', '1')),
+            pcp_size=int(env.get('PCP_SIZE', '1')),
+            ep=ep_size,
+        )
+        validate_parallelism(parallelism)
+        num_gpus = parallelism.gpus_per_worker
 
         single_node_data = {
             'is_multinode': False,
-            'tp': tp_size,
-            'pp': pp,
-            'dcp_size': dcp_size,
-            'pcp_size': pcp_size,
-            'ep': ep_size,
+            **parallelism.fields(),
             'dp_attention': dp_attention,
             'tput_per_gpu': float(benchmark['total_token_throughput']) / num_gpus,
             'output_tput_per_gpu': float(benchmark['output_throughput']) / num_gpus,

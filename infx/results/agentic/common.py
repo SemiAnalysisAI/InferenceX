@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 import statistics
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from typing import Any
 
 
@@ -209,3 +209,18 @@ def sum_by_label(
             continue
         out[label] = out.get(label, 0.0) + value
     return out
+
+
+def sum_server_log_capacities(
+    logs: Iterable[str | None],
+    parser: Callable[[str | None], int | None],
+) -> int | None:
+    total = 0
+    found = False
+    for text in logs:
+        value = parser(text)
+        if value is None:
+            continue
+        total += value
+        found = True
+    return total if found else None
