@@ -220,21 +220,73 @@ because its `dsv4*` case arm also matches the `dsv41flash` prefix. That is load-
 and invisible at the call site, so `runners/test_dsv41flash_h200.py` pins it; narrowing
 the arm would silently downgrade this recipe's traces.
 
-**Why there is no H100 arm.** H100 is not in the upstream hardware table, and the
+**The H100 arm is separate.** H100 is not in the upstream hardware table, and the
 blocker is not the weights. At 1M context the sparse attention indexer allocates a
 `[max-num-batched-tokens, max-model-len]` logits buffer in
 `fp8_fp4_paged_mqa_logits`, which at the default 8192 batched tokens is exactly 16 GiB.
 That is a fixed startup cost paid during memory profiling, independent of concurrency, so
-it fails at concurrency 1 on an 80 GB card even though the resident weights fit. Capping
-`--max-num-batched-tokens` shrinks it proportionally; capping `--max-model-len` would too,
-but that would force the 256k-capped trace corpus. An H100 arm needs its own script rather
-than the shared symlink, and is tracked separately.
+it fails at concurrency 1 on an 80 GB card even though the resident weights fit. The H100
+arm therefore ships its own script with capped batched tokens instead of the shared
+symlink; see the H100 section below.
 
 The launcher mounts the repository at `/ix` for this recipe so AgentX runtime directories
 are not created under `/workspace`, and it already mounts the shared HF cache, so the
 script resolves the model through `HF_HUB_CACHE` rather than a per-node path. The recipe
 probes the serving port on the compute node and selects an available one if the preferred
 port is occupied; serving, replay, metrics, and eval share that endpoint.
+
+### DeepSeek-V4.1-Flash DSpark on H100
+
+Throughput uses the [committed golden AL](../golden_al_distribution/dsv41flash_dspark.yaml) of 3.51 for thinking on and five draft tokens, with synthetic rejection sampling and adaptive verification disabled. Accuracy evals retain real block rejection and adaptive verification.
+
+`dsv41flash-fp4-h100-vllm-agentic-dspark` is the H100 AgentX arm of the
+DeepSeek-V4.1-Flash recipe, added after the H200 arm and deliberately separate from
+it. H100 is **not** in the upstream hardware table, which lists h200, gb200, gb300, and
+mi350x.
+
+Unlike the other SKUs, H100 does not use the shared `dsv41flash_fp4_vllm_mtp.sh`. It has
+its own copy, because the shared flags cannot serve 1M context on an 80 GB card. At 1M
+context the sparse attention indexer allocates a
+`[max-num-batched-tokens, max-model-len]` logits buffer in `fp8_fp4_paged_mqa_logits`:
+at the shared script's effective 8192 batched tokens that is 8192 x 1048576 x 2 bytes,
+exactly 16.00 GiB. It is a fixed cost paid during startup memory profiling, independent
+of concurrency, so it OOMed at concurrency 1 in run
+[34467029236](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34467029236)
+next to roughly 35.9 GiB per GPU of resident weights — trimming the concurrency list
+cannot help.
+
+The H100 script therefore caps `--max-num-batched-tokens` at 4096, putting the indexer
+buffer at 8 GiB. Capping `--max-model-len` instead would shrink it just as well, but a
+context cap forces the 256k-capped trace corpus onto a model that serves 1M, so batched
+tokens is the right lever. The script also sets `--max-num-seqs` to twice the trajectory
+concurrency rather than inheriting vLLM's default of 1024, sets
+`--gpu-memory-utilization 0.92`, and enables `expandable_segments` because the failing
+allocation left 1.04 GiB reserved but unallocated.
+
+Those caps were validated with a single concurrency-1 `agentx-fast` run
+([34485694183](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34485694183))
+before any sweep was dispatched, which is the right order here: a full sweep that OOMs at
+startup wastes every leg. That run came up healthy and reported the budget the
+concurrency list is now derived from:
+
+```
+Available KV cache memory: 13.47 GiB
+GPU KV cache size: 7,022,899 tokens
+Maximum concurrency for 1,048,576 tokens per request: 6.70x
+```
+
+So the arm sweeps concurrency 1–4, under the 6.70x ceiling, so a trajectory replaying
+near full context does not drive the batch into preemption. Buying more KV means
+shrinking the indexer further — `--max-num-batched-tokens 2048` would free about 4 GiB
+more — at the cost of chunking long-trace prefill harder. That trade is worth revisiting
+once there is throughput data across the range.
+
+`runners/launch_h100-dgxc-slurm.sh` previously resolved only the untagged
+`_h100[_mtp].sh` script name, so no framework-tagged script could run on this cluster at
+all. It now prefers `_h100_<framework>[_mtp].sh` first, as the h200 launchers have since
+#392, and falls back to the untagged name for the recipes that predate framework tags. It
+also mounts the repository at `/ix` for this recipe so AgentX runtime directories are not
+created under `/workspace`.
 
 Source: [upstream recipe](https://github.com/vllm-project/recipes/blob/main/models/deepseek-ai/DeepSeek-V4.1-Flash.yaml).
 
