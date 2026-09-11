@@ -127,6 +127,7 @@ gh workflow run speedbench-al.yml \
 | --- | --- | --- | --- |
 | DeepSeek V4 Pro | MTP | [`dsv4_mtp.yaml`](dsv4_mtp.yaml) | [27180633016](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27180633016) |
 | DeepSeek V4 Pro 0813 | DSpark（概率采样草稿） | [`dsv4-pro-0813-dspark.yaml`](dsv4-pro-0813-dspark.yaml) | [31742838308](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/31742838308) |
+| DeepSeek V4.1 Flash | DSpark（概率采样草稿 + 块验证） | [`dsv41flash_dspark.yaml`](dsv41flash_dspark.yaml) | [34493175056](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34493175056) |
 | Qwen3.5 397B-A17B | MTP | [`qwen3.5_mtp.yaml`](qwen3.5_mtp.yaml) | [27317114007](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27317114007) |
 | Kimi K2.5 | EAGLE3 | [`kimik2.5_eagle3.yaml`](kimik2.5_eagle3.yaml) | [28122195822](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28122195822) |
 | Kimi K3 | DSpark | [`kimik3_dspark.yaml`](kimik3_dspark.yaml) | [30304797750](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/30304797750) |
@@ -151,3 +152,5 @@ gh workflow run speedbench-al.yml \
 - [InferenceX 初始 AL 收集器 PR](https://github.com/SemiAnalysisAI/InferenceX/pull/1650)
 - [InferenceX 多模型 AL 收集器 PR](https://github.com/SemiAnalysisAI/InferenceX/pull/1706)
 - [InferenceX 多节点合成接受验证](https://github.com/SemiAnalysisAI/InferenceX/pull/1789)
+
+DeepSeek V4.1 Flash 包含草稿长度 1–5 在 thinking 开关两种模式下的实测值。同一镜像在[运行 34494319147](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34494319147) 中于服务启动前拒绝长度 6–8，因此未为这些长度填写 AL 数值。
