@@ -10213,3 +10213,28 @@ glm5.1-fp8-b200-tilert-agentic:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=1"
+
+# H100 AgentX arm for DeepSeek-V4.1-Flash. H100 is not in the upstream hardware
+# table (h200, gb200, gb300, mi350x are). It needs its own script, not the
+# shared symlink: the sparse attention indexer's
+# [max-num-batched-tokens, max-model-len] buffer is 16 GiB at the shared flags'
+# 8192 batched tokens and OOMs an 80 GB card at concurrency 1, so the script
+# caps batched tokens at 4096. Mooncake adds a DRAM prefix-cache tier;
+# the higher concurrency points are experimental.
+dsv41flash-fp4-h100-vllm-agentic-dspark-mooncake:
+  image: vllm/vllm-openai:deepseekv41-flash-0909
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:h100-dgxc
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.60
+      search-space:
+      # Measured at c1 on the cluster (run 34485694183): 13.47 GiB KV per GPU,
+      # 7,022,899 tokens, "Maximum concurrency for 1,048,576 tokens per
+      # request: 6.70x". Offload preserves reusable prefixes in host DRAM;
+      # higher concurrency may still preempt when active GPU KV is exhausted.
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32] }
