@@ -124,11 +124,20 @@ curl -sS -m 60 -H "Authorization: Bearer $API_KEY" "http://localhost:$PORT/v1/mo
 TUNNEL_PID=$!
 PUBLIC=""
 for _ in $(seq 1 40); do
-    PUBLIC=$(grep -aoE 'https://[a-z0-9-]+\.trycloudflare\.com' "$RESULT_DIR/cloudflared.log" | head -1 || true)
+    PUBLIC=$(grep -aoE 'https://[a-z0-9]+(-[a-z0-9]+){2,}\.trycloudflare\.com' "$RESULT_DIR/cloudflared.log" | head -1 || true)
     [[ -n "$PUBLIC" ]] && break
     sleep 3
 done
 [[ -z "$PUBLIC" ]] && { say "FATAL: no tunnel URL"; tail -20 "$RESULT_DIR/cloudflared.log"; exit 1; }
+# The previous run pointed every agent at api.trycloudflare.com -- cloudflared's
+# control endpoint, which answers 405 Method Not Allowed -- and burned 30
+# minutes. Refuse anything that is not a four-word quick-tunnel hostname.
+if [[ "$PUBLIC" == https://api.trycloudflare.com* ]] \
+   || [[ "$(tr -dc '-' <<<"$PUBLIC" | wc -c)" -lt 2 ]]; then
+    say "FATAL: refusing bogus tunnel host '$PUBLIC'"
+    tail -20 "$RESULT_DIR/cloudflared.log"
+    exit 1
+fi
 say "tunnel: $PUBLIC  (api key withheld from this log)"
 
 ENV_FILE="$RESULT_DIR/harbor.env"

@@ -66,7 +66,7 @@ if [[ -x "$BIN" ]]; then
     TUNNEL_PID=$!
     PUBLIC=""
     for _ in $(seq 1 40); do
-        PUBLIC=$(grep -aoE 'https://[a-z0-9-]+\.trycloudflare\.com' "$RESULT_DIR/cloudflared.log" \
+        PUBLIC=$(grep -aoE 'https://[a-z0-9]+(-[a-z0-9]+){2,}\.trycloudflare\.com' "$RESULT_DIR/cloudflared.log" \
                  | head -1 || true)
         [[ -n "$PUBLIC" ]] && break
         sleep 3
