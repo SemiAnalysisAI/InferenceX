@@ -283,3 +283,7 @@ python -m pytest utils/matrix_logic/ -v
 吞吐测试保留五 token DSpark、thinking 开启时的黄金合成 AL 3.51，并关闭自适应验证；eval 使用真实块验证。启动等待期限为 7200 秒。H100 保留 4096 token 的 prefill batch 上限。更高并发属于实验配置，需通过 GPU 验证。
 
 Mooncake 容量以整数字节数传入，避免其二进制 `GB` 解析规则超出十进制主机内存预算。卸载模式的 CUDA graph 最多捕获 512 tokens；更大的 batch 使用非捕获路径，保留并发 512 和 1M 上下文。
+
+H200 故障修复：预览镜像缺少 [vLLM #54853](https://github.com/vllm-project/vllm/pull/54853)。在启动 Mooncake 前应用其三个生产文件的原始补丁（commit `0b066293f3c738a0cbd3a087bf893f2f4dcd61f2`），先检查全部补丁块，并兼容已应用状态。修复为每个已调度请求解析当前 block table，包括没有新分配 block 的保存请求；不屏蔽 missing-table 断言。
+
+c512 的权重加载耗时 1,630 秒：vLLM 检测到 VIRTIOFS 后明确关闭了自动预取，因此启用 `--safetensors-load-strategy prefetch`。随后 5,677 个请求的 warmup 长时间仅有约一个活跃 prefill、数百个请求排队。设置 `--long-prefill-token-threshold 1024`，让多个 prefill 共享原有的 8,192-token 单步预算，并设置 Mooncake `lookup_async: true`，避免远端 prefix 查询阻塞调度器。保留每 lane 十个 warmup 请求、原始轨迹、1M 上下文、AL、并发列表和 180 分钟 Slurm 时限。运行验证应检查 warmup 进度和队列是否改善，而不只检查服务是否启动。

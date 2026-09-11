@@ -74,7 +74,10 @@ trap 'exit 143' TERM
 export MOONCAKE_HOST_RESERVE_GB=208
 OFFLOAD_ARGS=()
 if [[ "${KV_OFFLOAD_BACKEND:-}" == mooncake ]]; then
+    python3 "$(dirname "$0")/../../../runners/patch_vllm_mooncake_block_state.py"
     setup_agentic_mooncake
+    # Do not block the engine loop on a remote prefix lookup.
+    OFFLOAD_ARGS=(--kv-transfer-config '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"lookup_async":true}}')
 fi
 
 # Golden AL: golden_al_distribution/dsv41flash_dspark.yaml, thinking_on, five draft tokens.
@@ -88,6 +91,10 @@ VLLM_CMD=(
     vllm serve "$MODEL_PATH" --served-model-name "$MODEL"
     --host 0.0.0.0 --port "$PORT" --tensor-parallel-size "$TP"
     --language-model-only
+    # VIRTIOFS is not auto-prefetched by the preview image.
+    --safetensors-load-strategy prefetch
+    # Allow several long prefills to share the 8192-token step budget.
+    --long-prefill-token-threshold 1024
     --tokenizer-mode deepseek_v41
     --tool-call-parser deepseek_v41 --enable-auto-tool-choice
     --reasoning-parser deepseek_v41

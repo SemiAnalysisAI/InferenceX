@@ -116,10 +116,22 @@ build_replay_cmd() { :; }
 run_agentic_replay_and_write_outputs() { :; }
 run_eval() { :; }
 vllm() { command python3 -c 'import json,sys,os; json.dump(sys.argv[1:],open(os.environ["RESULT_DIR"]+"/args.json","w"))' "$@"; }
+python3() {
+    if [[ "$1" == */patch_vllm_mooncake_block_state.py ]]; then
+        return 0
+    fi
+    command python3 "$@"
+}
 builtin source "$1/benchmarks/single_node/agentic/dsv41flash_fp4_vllm_mtp.sh"
 """, "bash", str(REPO_ROOT)], env=env, capture_output=True, text=True, timeout=15)
     assert result.returncode == 0, result.stderr
     args = json.loads((tmp_path / "args.json").read_text())
+    assert args[args.index("--safetensors-load-strategy") + 1] == "prefetch"
+    assert args[args.index("--long-prefill-token-threshold") + 1] == "1024"
+    if backend == "mooncake":
+        connector = json.loads(args[args.index("--kv-transfer-config") + 1])
+        assert connector["kv_connector_extra_config"]["lookup_async"] is True
+        assert connector["kv_role"] == "kv_both"
     assert int(args[args.index("--max-cudagraph-capture-size") + 1]) == expected
     assert args[args.index("--max-model-len") + 1] == "1048576"
     spec = json.loads(args[args.index("--speculative-config") + 1])
