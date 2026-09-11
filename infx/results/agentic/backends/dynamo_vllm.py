@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..aggregation_common import gauge_stat, normalize_fraction, rate, sum_stat
+from ..common import gauge_stat, normalize_fraction, rate, sum_stat
 from .vllm import VllmBackend, first_counter_total
 
 

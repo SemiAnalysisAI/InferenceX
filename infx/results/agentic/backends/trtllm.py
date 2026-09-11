@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from collections.abc import Iterable
 from typing import Any
 
-from ..aggregation_common import (
+from ..common import (
     gauge_stat,
     label_value,
     normalize_fraction,
@@ -130,9 +130,9 @@ class TrtllmBackend(ServerMetricsBackend):
     def gpu_kv_capacity_tokens(
         self,
         metrics: dict[str, dict[str, Any]],
-        server_log_paths: list[Path],
+        server_logs: Iterable[str | None],
     ) -> int | None:
-        del server_log_paths
+        del server_logs
         max_blocks = sum_stat(
             metrics,
             "trtllm_kv_cache_max_blocks",

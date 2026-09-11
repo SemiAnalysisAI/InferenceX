@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+from infx.results.agentic.request_metrics import extract_per_record_ints
 from infx.results.power import (
     ALL_POWER_METRIC_KEYS as _ALL_POWER_METRIC_KEYS,
     POWER_METRIC_SCHEMA_VERSION,
@@ -27,8 +28,7 @@ from infx.results.power.single_node import (
 from infx.results.power.single_node import run as run_power
 from infx.results.power.multinode import run as run_multinode_power
 
-from .process_agentic_result import _resolve_artifact_dir
-from .request_metrics import extract_per_record_ints, load_aggregate, load_records
+from .artifacts import load_aggregate, load_records, resolve_artifact_dir
 
 _UTC_OFFSET_RE = re.compile(r"^([+-])(\d{2}):?(\d{2})$")
 _COMMIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -82,7 +82,7 @@ def _parse_profile_timestamp(value: Any, *, fallback_tz: timezone | None) -> flo
 
 def build_power_window(result_dir: Path) -> tuple[dict[str, int | float] | None, list[str]]:
     """Build a strict benchmark window from successful profiling requests."""
-    artifact_dir = _resolve_artifact_dir(result_dir)
+    artifact_dir = resolve_artifact_dir(result_dir)
     aggregate_path = artifact_dir / "profile_export_aiperf.json"
     records_path = artifact_dir / "profile_export.jsonl"
     if not aggregate_path.is_file() or not records_path.is_file():
