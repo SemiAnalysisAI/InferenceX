@@ -10224,7 +10224,7 @@ dsv41flash-fp4-gb200-vllm-agentic-dspark-mooncake:
   multinode: false
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.60
+    - dram-utilization: 0.40
       search-space:
       # Reserve host memory for Engram UVA tables before sizing Mooncake KV segments.
       - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512] }

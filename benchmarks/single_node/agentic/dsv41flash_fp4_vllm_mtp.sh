@@ -55,7 +55,7 @@ cleanup() {
     trap - EXIT INT TERM
     if (( rc != 0 )) && [[ "${KV_OFFLOAD_BACKEND:-}" == mooncake ]]; then
         # Preserve host OOM evidence that vLLM's generic "cancelled" error omits.
-        for memory_file in /proc/meminfo /sys/fs/cgroup/memory.events /sys/fs/cgroup/memory.current /sys/fs/cgroup/memory.max; do
+        for memory_file in /proc/meminfo /sys/fs/cgroup/memory.events /sys/fs/cgroup/memory.current /sys/fs/cgroup/memory.max /sys/devices/system/node/node*/meminfo; do
             if [[ -r "$memory_file" ]]; then
                 echo "Host memory diagnostic: $memory_file"
                 cat "$memory_file" || true
@@ -74,6 +74,13 @@ trap 'exit 143' TERM
 export MOONCAKE_HOST_RESERVE_GB=208
 OFFLOAD_ARGS=()
 if [[ "${KV_OFFLOAD_BACKEND:-}" == mooncake ]]; then
+    # Record placement before pinning memory; /proc/meminfo alone hides NUMA pressure.
+    for memory_file in /proc/self/status /sys/devices/system/node/node*/meminfo /sys/devices/system/node/node*/cpulist /sys/fs/cgroup/memory.events; do
+        if [[ -r "$memory_file" ]]; then
+            echo "Pre-offload memory diagnostic: $memory_file"
+            cat "$memory_file" || true
+        fi
+    done
     setup_agentic_mooncake
 fi
 
