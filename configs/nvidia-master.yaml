@@ -10232,4 +10232,4 @@ dsv41flash-fp4-h100-vllm-agentic-dspark:
       - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2] }
       # conc 9/10/11 are not scan shards: ablation eval, likelihood ablation,
       # and the Terminal-Bench feasibility probe. One node each.
-      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [9, 10, 11] }
+      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [9, 10, 11, 12] }

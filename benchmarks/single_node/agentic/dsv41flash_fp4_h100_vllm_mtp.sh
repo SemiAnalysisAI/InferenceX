@@ -50,7 +50,11 @@ if [[ "$CONC" == 10 ]]; then
         --out "$RESULT_DIR/engram_nll"
 fi
 # conc 11: Terminal-Bench 4.0 feasibility probe (no GPU work of its own).
-if [[ "$CONC" == 11 ]]; then
+# conc 11 is intercepted by the launcher before salloc (login-node container
+# probe, added on this branch by another session). conc 12 is the Modal
+# egress / tunnel-ingress probe, which must run ON a compute node because
+# that is where a vLLM server would live.
+if [[ "$CONC" == 12 ]]; then
     exec bash "$INFERENCEX_REPO_ROOT/analysis/engram/tbench_driver.sh"
 fi
 
