@@ -15,7 +15,7 @@ from pathlib import Path
 
 import yaml
 
-from . import GENERATE_SWEEPS_PY_SCRIPT, MASTER_CONFIGS, RUNNER_CONFIG
+from ..config import GENERATE_SWEEPS_PY_SCRIPT, MASTER_CONFIGS, RUNNER_CONFIG
 from .generate import (
     EvalMode,
     freeze_config_value,

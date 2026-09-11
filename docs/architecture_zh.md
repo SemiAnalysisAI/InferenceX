@@ -129,6 +129,8 @@ flowchart LR
 
 共享 Python 实现位于仓库根目录的 `infx` 包中。`infx.matrix.generate` 负责矩阵生成，`infx.matrix.validation` 负责模式校验。Python 调用方应通过这些规范路径导入；后续领域模块可在需要时加入 `infx`。
 
+默认仓库路径定义在 [`infx/config.py`](../infx/config.py) 中；`utils/constants.py` 保留旧导入方式。包的 `__init__.py` 文件保持精简。
+
 `utils/process_changelog.py`、`utils/matrix_logic/generate_sweep_configs.py` 和 `validation.py` 保留为轻量兼容入口，旧导入路径指向同一个模块对象，避免重复创建模式类。现有脚本命令、参数、相对输入路径和依赖保持不变，从仓库检出目录运行时无需安装包。`process_changelog.py` 指向 `infx.matrix.plan`；`validate_perf_changelog.py` 保留现有处理器 CLI 边界和诊断。
 
 `infx.matrix.plan.build_plan(changelog_data, base_ref=..., head_ref=...)` 返回完整扫描的已验证 `ChangelogMatrixEntry`，统一负责条目优先级、基准测试与评测各自的场景覆盖、裁剪、指纹及输出分桶。当前主配置文件只加载一次，运行器元数据在首次生成时加载一次；每组选中的配置直接调用 `infx.matrix.generate.generate_config_matrix`。当前输入来自传入的路径（默认为检出目录中的路径），`head_ref` 仍用作来源元数据。规划过程假设这些文件在本次操作期间保持稳定。

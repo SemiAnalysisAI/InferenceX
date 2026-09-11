@@ -129,6 +129,8 @@ This split has two consequences.
 
 Shared Python implementation lives in the repository-root `infx` package. `infx.matrix.generate` owns generation and `infx.matrix.validation` owns schemas. Python callers should import these canonical paths; further domain modules can join `infx` as needed.
 
+Default repository paths live in [`infx/config.py`](../infx/config.py); `utils/constants.py` preserves the legacy imports. Package `__init__.py` files stay minimal.
+
 `utils/process_changelog.py`, `utils/matrix_logic/generate_sweep_configs.py`, and `validation.py` remain thin compatibility entrypoints. Legacy imports resolve to the same module objects, avoiding duplicate schema classes. Existing script commands, arguments, relative input paths, and dependencies are unchanged; running from a checkout requires no package installation. `process_changelog.py` resolves to `infx.matrix.plan`; `validate_perf_changelog.py` retains its existing processor CLI boundary and diagnostics.
 
 `infx.matrix.plan.build_plan(changelog_data, base_ref=..., head_ref=...)` returns the validated `ChangelogMatrixEntry` for the complete sweep. It owns entry precedence, separate benchmark/eval scenario coverage, trimming, fingerprints, and output buckets. Current master files are loaded once, and runner metadata is loaded once on first generation; each selected group calls `infx.matrix.generate.generate_config_matrix` directly. Current inputs come from the supplied paths (the checkout defaults), while `head_ref` remains provenance metadata. Planning assumes those files are stable during the operation.
