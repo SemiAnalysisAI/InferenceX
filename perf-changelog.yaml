@@ -7162,3 +7162,10 @@
   description:
     - "Use the pinned SGLang nightly-dev-cu13-20260901-07c8f729 image with FlashInfer 0.6.18, which includes the BF16 TRTLLM MoE allocation fix for small-batch Blackwell execution. Model, TP8, HiCache, MTP settings and concurrency grid are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2829
+
+- config-keys:
+    - dsr1-fp4-b200-sglang
+  description:
+    - "Update SGLang image from lmsysorg/sglang:v0.5.16-cu130 (build commit sgl-project/sglang@fdebc938f7f4d16fe6b9f55dcd9a767cf0899ea1, CUDA 13.0.1, FlashInfer 0.6.14, sgl-kernel 0.4.5) to the v0.5.19 release image lmsysorg/sglang:v0.5.19-cu130 (digest sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9, build commit sgl-project/sglang@0bcd822377da7b5718e674eaf9c870d349424dd1, CUDA 13.0.3, FlashInfer 0.6.18, sgl-kernel 0.4.6.post1)."
+    - "benchmarks/single_node/fixed_seq_len/dsr1_fp4_b200.sh is unchanged: nvidia/DeepSeek-R1-0528-FP4-V2 with modelopt_fp4, trtllm_mla attention, flashinfer_trtllm MoE, fp8_e4m3 KV cache, TP4/EP1 concurrency 1-32 and TP4/EP4 DP-attention concurrency 64-256 on the 8k1k workload."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2989
