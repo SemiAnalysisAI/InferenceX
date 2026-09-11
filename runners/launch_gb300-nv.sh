@@ -253,7 +253,10 @@ if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "qw
 elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "glm5.2" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
-    git checkout v1.0.38
+    # The GB300 AgentX recipes put the benchmark client on its own allocation node
+    # (client_dedicated_node), a schema added in srt-slurm v1.0.62; v1.0.72 is the
+    # release this runner's Dynamo TRT path already exercises.
+    git checkout v1.0.72
     TRTLLM_RECIPES_DIR="benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2"
     mkdir -p "$TRTLLM_RECIPES_DIR"
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2" \
