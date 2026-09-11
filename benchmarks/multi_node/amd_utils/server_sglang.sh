@@ -632,6 +632,243 @@ if [[ "$KV_OFFLOADING" != "none" && "$KV_OFFLOAD_BACKEND" == "hicache" ]]; then
     if [[ "$HICACHE_STORAGE_BACKEND" == "mooncake" ]]; then
         echo "[HiCache] Mooncake store: master=${MC_MASTER_ADDR} metadata=${MC_METADATA_SERVER} protocol=${MC_PROTOCOL} device=${MC_DEVICE} segment=${MC_GLOBAL_SEG} threads=${MC_MASTER_THREADS} eviction_watermark=${MC_EVICTION_HIGH_WATERMARK}"
     fi
+elif [[ "$KV_OFFLOADING" != "none" && "$KV_OFFLOAD_BACKEND" == umbp-linker* ]]; then
+    # =========================================================================
+    # UMBP as a DIRECT external store for the unified radix tree (PD disagg).
+    #
+    # Ported from benchmarks/single_node/agentic/dsv4_fp4_mi355x_sglang_mtp.sh,
+    # which is where this arm exists today. It is a SEPARATE sglang code path
+    # from the HiCache branch above, not a variation of it: the tree loads and
+    # offloads pages against UMBP with NO host cache tier in between, and
+    # sglang rejects the combination outright (server_args.py::_handle_hicache
+    # raises when --enable-hierarchical-cache or --hicache-storage-backend is
+    # set alongside it). So none of the L2 knobs apply here or may be passed,
+    # and this branch deliberately shares no code with the one above.
+    #
+    # PREFILL ONLY, exactly like HiCache on this path: only the prefill worker
+    # offloads KV, and the tier metric (sglang:prefill_effective_tokens) is
+    # emitted by the prefill engine alone. Decode is untouched -- it already
+    # carries --page-size 256 from the DeepSeek-V4-Pro-AgentX base_flags in
+    # models.yaml, so it needs no mirror flag the way the HiCache branch does
+    # (that branch sets HICACHE_PAGE_SIZE and has to restate it).
+    # =========================================================================
+
+    # DP-ONLY ON PURPOSE, same refusal the single-node recipe carries. Under
+    # pure TP the linker's object keys carry a per-rank suffix and MLA KV is
+    # replicated across TP, so a TP8 prefill worker yields EIGHT keyspaces and
+    # the tier holds eight copies of the same tokens -- its effective
+    # distinct-token capacity is an eighth of what the byte budget suggests.
+    # Under DP attention the keys collapse to tp0 and the tier is one shared
+    # keyspace. Refuse rather than silently measure a derated tier: a result
+    # file from the derated arm is indistinguishable from a real one.
+    if [[ "$PREFILL_ENABLE_DP" != "true" ]]; then
+        echo "Error: KV_OFFLOAD_BACKEND '$KV_OFFLOAD_BACKEND' is supported only with prefill dp-attn: true. Under pure TP the linker keyspace is per rank, so the tier holds TP copies of the same tokens and the arm measures a different system than the DP one." >&2
+        exit 1
+    fi
+
+    # Multi-node prefill workers are not supported here. The tier is a
+    # per-node process and each node would hold its own keyspace, so a prefill
+    # worker spanning nodes would silently shard the store by node.
+    if [[ "$PREFILL_NODES_PER_WORKER" -ne 1 ]]; then
+        echo "Error: KV_OFFLOAD_BACKEND '$KV_OFFLOAD_BACKEND' supports single-node prefill workers only (PREFILL_NODES_PER_WORKER=${PREFILL_NODES_PER_WORKER}); the UMBP tier is a per-node process and a multi-node prefill worker would shard its keyspace by node." >&2
+        exit 1
+    fi
+
+    # Upstream renamed both the flag pair and the class when this line was
+    # rebased (unified-tree-connector -> unified-cache-external-linker,
+    # UMBPTreeConnector -> UMBPDirectLinker). Detect rather than pin: the image
+    # decides which vocabulary is valid, and a pinned name means editing this
+    # file on every image bump. Search the whole sglang.srt TREE, not
+    # server_args.py alone -- the flag lived in server_args.py on mori-0905 and
+    # moved into arg_groups/fields/memory.py by mori-0908 (0.5.19 split the
+    # server args into per-group dataclasses), so a detector pinned to
+    # server_args.py reports "this image cannot drive UMBP" on an image that
+    # can. find_spec, not sglang.__file__: sglang installs as a namespace
+    # package in these images, so __file__ is None.
+    SGLANG_SRT_DIR="$(python3 -c 'import importlib.util as u, os; s = u.find_spec("sglang.srt.server_args"); print(os.path.dirname(s.origin) if s else "")' 2>/dev/null)"
+    [[ -d "${SGLANG_SRT_DIR:-}" ]] || { echo "Error: cannot locate the installed sglang.srt tree" >&2; exit 1; }
+    echo "[UMBP] probing $SGLANG_SRT_DIR for the linker flag vocabulary"
+    if grep -rqs "enable_unified_cache_external_linker" "$SGLANG_SRT_DIR"; then
+        UMBP_LINKER_FLAGS="--enable-unified-cache-external-linker --unified-cache-external-linker-backend mori"
+    elif grep -rqs "enable_unified_tree_connector" "$SGLANG_SRT_DIR"; then
+        UMBP_LINKER_FLAGS="--enable-unified-tree-connector --unified-tree-connector-backend mori"
+    else
+        echo "Error: this image's sglang exposes neither --enable-unified-cache-external-linker nor --enable-unified-tree-connector, so it cannot drive UMBP as a direct external store. Use a linker-capable image (e.g. rocm/mori-dev:sglang-0.5.19-rocm720-mi35x-mori-0908-pr38269-638c6a61)." >&2
+        exit 1
+    fi
+
+    # ---- Tier capacity ----------------------------------------------------
+    # 1.5 TB, the same NODE total the single-node linker arms run with, so a
+    # PD linker number can be read against them without restating the size.
+    # TOTAL_CPU_DRAM_GB is NOT the bound here: that is the HiCache budget the
+    # sweep generator hands down (available-cpu-dram-mib scaled by
+    # dram-utilization) and the HiCache control arm does not even apply it
+    # (FORCE_HICACHE_RATIO=1 makes it size by ratio instead). The guard that
+    # matters is the box's own memory: the 806 GB checkpoint's page cache, the
+    # sglang ranks and the co-located AIPerf client all live in what is left,
+    # so refuse a tier above half of MemTotal.
+    UMBP_DRAM_BYTES="${UMBP_DRAM_BYTES:-1500000000000}"
+    UMBP_DRAM_GB=$((UMBP_DRAM_BYTES / 1000000000))
+    UMBP_HOST_MEMTOTAL_GB=$(awk '/^MemTotal:/ {printf "%d", $2 / 1000000}' /proc/meminfo)
+    echo "[UMBP] tier sizing: ${UMBP_DRAM_GB} GB requested, host MemTotal ${UMBP_HOST_MEMTOTAL_GB} GB, ceiling $((UMBP_HOST_MEMTOTAL_GB / 2)) GB (TOTAL_CPU_DRAM_GB=${TOTAL_CPU_DRAM_GB:-unset} is the HiCache budget and does not bound this arm)"
+    if [[ "$UMBP_DRAM_GB" -gt "$((UMBP_HOST_MEMTOTAL_GB / 2))" ]]; then
+        echo "Error: UMBP tier ${UMBP_DRAM_GB} GB exceeds half of the host's ${UMBP_HOST_MEMTOTAL_GB} GB MemTotal; the checkpoint's page cache and the server's working set need the rest. Lower UMBP_DRAM_BYTES." >&2
+        exit 1
+    fi
+    # These nodes run with HugePages_Total=0 and the allocator silently demotes
+    # to 4 KiB pages. The linker registers the GPU KV buffers, not the host
+    # pool, so small pages cost locality here, not correctness.
+    UMBP_DRAM_USE_HUGEPAGES="${UMBP_DRAM_USE_HUGEPAGES:-0}"
+
+    # ---- Standalone server, prefill nodes only ----------------------------
+    # server_sglang.sh runs on every node; only the prefill nodes need a tier.
+    # NODE_RANK < NODE_OFFSET is exactly the prefill-node test the launch
+    # dispatch further down uses.
+    if [[ "$NODE_RANK" -lt "$NODE_OFFSET" ]]; then
+        # The container's own /tmp (the HOST /tmp is bind-mounted at /run_logs),
+        # so the socket dies with the container and cannot collide with another
+        # runner on this node.
+        UMBP_SA_DIR="${UMBP_SA_DIR:-/tmp/umbp_sa_${SLURM_JOB_ID:-$$}}"
+        mkdir -p "$UMBP_SA_DIR"
+        export UMBP_STANDALONE_ADDRESS="${UMBP_STANDALONE_ADDRESS:-unix://${UMBP_SA_DIR}/sa.grpc.sock}"
+        UMBP_SA_LOG="/run_logs/slurm_job-${SLURM_JOB_ID}/umbp_standalone_$(hostname).log"
+
+        # Take the standalone server from the mori that is actually importable,
+        # not a stale copy elsewhere in the image: client and server must agree
+        # on capabilities or the linker aborts with "requires a standalone
+        # server whose inner backend advertises ranged multi-buffer I/O
+        # support" -- which reads like a mori version problem but means the two
+        # halves disagree.
+        if [[ -z "${UMBP_SA_BIN:-}" ]]; then
+            for _cand in \
+                "$(python3 -c 'import os, mori; print(os.path.dirname(os.path.realpath(mori.__file__)))' 2>/dev/null)/umbp_standalone_server" \
+                /sgl-workspace/mori/python/mori/umbp_standalone_server \
+                /sgl-workspace/mori/build_umbp/src/umbp/umbp_standalone_server; do
+                if [[ -x "$_cand" ]]; then UMBP_SA_BIN="$_cand"; break; fi
+            done
+        fi
+        [[ -x "${UMBP_SA_BIN:-}" ]] || { echo "Error: umbp_standalone_server not found in this image; it does not ship UMBP standalone mode." >&2; exit 1; }
+        echo "[UMBP] standalone server binary: $UMBP_SA_BIN"
+        export LD_LIBRARY_PATH="$(dirname "$UMBP_SA_BIN"):${LD_LIBRARY_PATH:-}"
+
+        echo "[UMBP] starting standalone server at $UMBP_STANDALONE_ADDRESS (tier ${UMBP_DRAM_GB} GB, hugepages=${UMBP_DRAM_USE_HUGEPAGES}), log -> $UMBP_SA_LOG"
+        # UMBP_SSD_ENABLED is atoi()'d by the server (UMBPConfig::
+        # FromEnvironment), so it needs 1/0 -- atoi("true") is 0, which happens
+        # to be right but only by accident.
+        env UMBP_DRAM_CAPACITY="$UMBP_DRAM_BYTES" \
+            UMBP_DRAM_USE_HUGEPAGES="$UMBP_DRAM_USE_HUGEPAGES" \
+            UMBP_SSD_ENABLED=0 \
+            MORI_UMBP_LOG_LEVEL="${MORI_UMBP_LOG_LEVEL:-info}" \
+            "$UMBP_SA_BIN" "$UMBP_STANDALONE_ADDRESS" > "$UMBP_SA_LOG" 2>&1 &
+        UMBP_SA_PID=$!
+        echo "[UMBP] standalone server PID: $UMBP_SA_PID"
+        trap '[[ -n "${UMBP_SA_PID:-}" ]] && kill "$UMBP_SA_PID" 2>/dev/null || true' EXIT
+
+        # Three waits, all bounded by wall time rather than by a guess at how
+        # fast this node is. Bind time for a 549 GB tier measured 120 s on
+        # n08-21 and over 300 s on n09-25 -- same hardware, but n09-25 was
+        # holding 1.9 TB of page cache and the allocation had to reclaim
+        # through it. At 1.5 TB that spread only widens, so the ceiling is
+        # generous; a dead server is still caught in the first second by the
+        # kill -0 probe, so a generous ceiling costs nothing when something is
+        # actually broken.
+        UMBP_SA_WAIT_SECONDS="${UMBP_SA_WAIT_SECONDS:-1800}"
+        UMBP_SA_SOCK="${UMBP_STANDALONE_ADDRESS#unix://}"
+
+        # 1. The socket appears as soon as grpc listens.
+        UMBP_SA_T0=$SECONDS
+        UMBP_SA_READY=false
+        for _ in $(seq 1 "$UMBP_SA_WAIT_SECONDS"); do
+            if ! kill -0 "$UMBP_SA_PID" 2>/dev/null; then
+                echo "[UMBP] standalone server died during startup. Log follows:" >&2
+                cat "$UMBP_SA_LOG" >&2 || true
+                exit 1
+            fi
+            [[ -S "$UMBP_SA_SOCK" ]] && { UMBP_SA_READY=true; break; }
+            sleep 1
+        done
+        [[ "$UMBP_SA_READY" == "true" ]] || { echo "Error: UMBP standalone server never bound $UMBP_SA_SOCK within ${UMBP_SA_WAIT_SECONDS} s" >&2; cat "$UMBP_SA_LOG" >&2 || true; exit 1; }
+        echo "[UMBP] bound $UMBP_SA_SOCK after $((SECONDS - UMBP_SA_T0)) s"
+
+        # 2. But the socket is bound before the server can serve: the DRAM tier
+        # still has to register its host memory. sglang launched into that
+        # window dies at linker construction with
+        #   RuntimeError: StandaloneProcessClient: server is not ready
+        # and takes the whole arm with it, minutes in, for a reason that has
+        # nothing to do with what the run was measuring. "data plane" is the
+        # first line the server prints once it will answer.
+        UMBP_SA_T1=$SECONDS
+        UMBP_SA_SERVING=false
+        for _ in $(seq 1 "$UMBP_SA_WAIT_SECONDS"); do
+            if ! kill -0 "$UMBP_SA_PID" 2>/dev/null; then
+                echo "[UMBP] standalone server died while registering its tier. Log follows:" >&2
+                cat "$UMBP_SA_LOG" >&2 || true
+                exit 1
+            fi
+            grep -q "data plane" "$UMBP_SA_LOG" 2>/dev/null && { UMBP_SA_SERVING=true; break; }
+            sleep 1
+        done
+        [[ "$UMBP_SA_SERVING" == "true" ]] || { echo "Error: UMBP standalone server bound $UMBP_SA_SOCK but never reached its data plane within ${UMBP_SA_WAIT_SECONDS} s" >&2; cat "$UMBP_SA_LOG" >&2 || true; exit 1; }
+        echo "[UMBP] data plane up after $((SECONDS - UMBP_SA_T1)) s ($SECONDS s total): $(grep -m1 'data plane' "$UMBP_SA_LOG")"
+
+        # 3. And the data plane answers before the tier is usable from the GPU.
+        # HostTierRegistration hands hipHostRegister to a worker thread for any
+        # tier above its sync threshold, so "data plane" can print with the
+        # region still unpinned -- and mori says what that costs: "the GPU
+        # gather path stays off and copies fall back to pageable hipMemcpy". An
+        # arm that starts serving inside that window measures the fallback path
+        # for its first several minutes.
+        if [[ "${UMBP_SA_WAIT_REGISTERED:-1}" == "1" ]]; then
+            UMBP_SA_T2=$SECONDS
+            UMBP_SA_REGISTERED=false
+            for _ in $(seq 1 "$UMBP_SA_WAIT_SECONDS"); do
+                if ! kill -0 "$UMBP_SA_PID" 2>/dev/null; then
+                    echo "[UMBP] standalone server died while registering its tier for GPU access. Log follows:" >&2
+                    cat "$UMBP_SA_LOG" >&2 || true
+                    exit 1
+                fi
+                if grep -q "host memory registered for GPU access" "$UMBP_SA_LOG" 2>/dev/null; then
+                    UMBP_SA_REGISTERED=true
+                    break
+                fi
+                if grep -q "hipHostRegister of .* failed" "$UMBP_SA_LOG" 2>/dev/null; then
+                    echo "Error: hipHostRegister failed for the UMBP tier; every copy would take the pageable fallback path" >&2
+                    grep -m1 "hipHostRegister of .* failed" "$UMBP_SA_LOG" >&2 || true
+                    exit 1
+                fi
+                sleep 1
+            done
+            [[ "$UMBP_SA_REGISTERED" == "true" ]] || { echo "Error: the UMBP tier was still not registered for GPU access after ${UMBP_SA_WAIT_SECONDS} s" >&2; exit 1; }
+            echo "[UMBP] tier registered for GPU access after $((SECONDS - UMBP_SA_T2)) s past the data plane: $(grep -m1 'host memory registered for GPU access' "$UMBP_SA_LOG")"
+        fi
+    else
+        echo "[UMBP] node rank ${NODE_RANK} runs decode only; no tier here (offload is prefill-side on this path)"
+    fi
+
+    # The linker requires RadixAttention, same as HiCache; strip any
+    # --disable-radix-cache from the prefill config.
+    PREFILL_SERVER_CONFIG="${PREFILL_SERVER_CONFIG//--disable-radix-cache/}"
+
+    # Device KV pool left at whatever mem-fraction-static profiles, same as the
+    # HiCache control, so the linker is compared against it at an IDENTICAL
+    # pool rather than at a capped one. UMBP_MAX_TOTAL_TOKENS caps it if the
+    # profiled pool swallows the whole working set and the arm ends up
+    # measuring nothing about UMBP -- sglang takes min(requested, profiled), so
+    # it can only shrink the pool, and the effective value has to be read back
+    # from the server log either way.
+    UMBP_POOL_FLAGS=""
+    [[ -n "${UMBP_MAX_TOTAL_TOKENS:-}" ]] && UMBP_POOL_FLAGS="--max-total-tokens ${UMBP_MAX_TOTAL_TOKENS}"
+
+    # StandaloneProcess drops the client-side sizing keys: the server owns the
+    # tier and takes UMBP_DRAM_CAPACITY from its own environment, so the extra
+    # config is empty. It is still passed because the linker reads the flag.
+    # Single-quoted so it survives the later `eval` of the launch command as
+    # one argument, matching build_storage_flags() above.
+    PREFILL_SERVER_CONFIG="$PREFILL_SERVER_CONFIG ${UMBP_LINKER_FLAGS} ${UMBP_POOL_FLAGS} --hicache-storage-backend-extra-config '{}' --enable-cache-report"
+
+    echo "[UMBP] direct linker on prefill: tier=${UMBP_DRAM_GB} GB, address=${UMBP_STANDALONE_ADDRESS:-<decode node, none>}, prefill tp=${PREFILL_TP_SIZE} dp-attn=${PREFILL_ENABLE_DP}, device pool=${UMBP_MAX_TOTAL_TOKENS:-profiled}, no host cache tier"
+    echo "[UMBP] flags: ${UMBP_LINKER_FLAGS} ${UMBP_POOL_FLAGS}"
+    echo "[UMBP] decode untouched; --page-size 256 already comes from the models.yaml base_flags"
 else
     echo "[HiCache] KV_OFFLOADING=${KV_OFFLOADING} backend=${KV_OFFLOAD_BACKEND:-none} (HiCache disabled)"
 fi
@@ -661,6 +898,13 @@ run_barrier_or_die() {
 }
 
 echo "Waiting at the container creation barrier on $host_name"
+# The 300s default is too tight on the umbp-linker path: rank 0 does not open
+# port 5000 until umbp_standalone_server has registered the whole DRAM tier for
+# GPU access, which is strongly node-dependent (305.7s on one node vs >780s on
+# another). The peer that came up first then times out and kills an otherwise
+# healthy run. Raise it per-arm via CONTAINER_BARRIER_TIMEOUT, above
+# UMBP_SA_WAIT_SECONDS so UMBP's own wait is the binding one, not the barrier.
+# Unset keeps the historical 300s for every other arm.
 run_barrier_or_die "container creation barrier" "python3 $SGLANG_WS_PATH/sync.py barrier \
     --local-ip ${host_ip} \
     --local-port 5000 \
@@ -668,7 +912,7 @@ run_barrier_or_die "container creation barrier" "python3 $SGLANG_WS_PATH/sync.py
     --node-ips ${IPADDRS} \
     --node-ports 5000 \
     --wait-for-all-ports \
-    --timeout 300"
+    --timeout ${CONTAINER_BARRIER_TIMEOUT:-300}"
 
 
 # =============================================================================
