@@ -310,6 +310,7 @@ else
     if [[ "$MODEL" == "deepseek-ai/DeepSeek-V4.1-Flash" ]]; then
         export HF_HUB_CACHE_MOUNT="/it-share/hf-hub-cache/"
         CONTAINER_REPO=/ix
+        export INFMAX_CONTAINER_WORKSPACE="$CONTAINER_REPO"
         case "${RESULT_DIR:-}" in
             /workspace/*) export RESULT_DIR="/ix/${RESULT_DIR#/workspace/}" ;;
         esac

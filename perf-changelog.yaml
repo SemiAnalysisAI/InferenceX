@@ -7364,3 +7364,9 @@
     - "Replace unavailable Docker Hub image with public.ecr.aws/q9t5s3a7/vllm-release-repo:79a7108d9aea27ddab99ce1779290d300b17fc23-rocm"
     - "Keep TP4, DSpark settings, and the full-context semianalysis_cc_traces_weka_062126 corpus"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2962
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  description:
+    - "Set INFMAX_CONTAINER_WORKSPACE=/ix for the MI355X DS V4.1 mount so AgentX dependencies and outputs resolve correctly"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2962

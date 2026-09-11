@@ -609,6 +609,8 @@ def test_mi355x_agentic_model_mount_and_routing(
                 *--container-image=*)
                     printf '%s\n' "$@" > "$CAPTURE"
                     printf 'RESULT_DIR=%s\n' "$RESULT_DIR" >> "$CAPTURE"
+                    bash -c 'source benchmarks/benchmark_lib.sh;
+                        printf "%s\n" "$INFMAX_CONTAINER_WORKSPACE" "$AGENTIC_DIR" "$AIPERF_DIR"' > "$CAPTURE.paths"
                     ;;
             esac
         }
@@ -619,6 +621,9 @@ def test_mi355x_agentic_model_mount_and_routing(
     args = capture.read_text().splitlines()
     assert f"--container-workdir={mount}/" in args
     assert f"RESULT_DIR={mount}/results" in args
+    assert Path(f"{capture}.paths").read_text().splitlines() == [
+        mount, f"{mount}/utils/agentic-benchmark", f"{mount}/utils/aiperf",
+    ]
     assert (
         f"--container-mounts={REPO_ROOT}:{mount}/,{cache}:/mnt/hf_hub_cache/,"
         "/it-share/aiperf-cache/:/aiperf_mmap_cache"
