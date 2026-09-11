@@ -1649,7 +1649,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp:
       - spec-decoding: "mtp"
         conc-list: [ 128, 192, 256 ]
         kv-offloading: dram
-        kv-offload-backend: { name: hicache }
+        kv-offload-backend: { name: umbp-linker }
         prefill:
           num-worker: 1
           tp: 8
@@ -1668,30 +1668,6 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp:
           # settings immediately before the recipe, so this wins over the
           # recipe's ${PREFILL_ROUTER_POLICY:-consistent_hashing} default.
           - "PREFILL_ROUTER_POLICY=consistent_hashing"
-          # DRAM PARITY. The linker takes a flat UMBP_DRAM_BYTES=1.5e12 (1,500 GB).
-          # HiCache has no absolute knob on this path -- server_sglang.sh skips
-          # --hicache-size for DeepSeek-V4 and FORCE_HICACHE_RATIO=1 pins ratio
-          # sizing -- so the ratio is chosen to land on the same total.
-          #
-          # Measured, not assumed: single-node 29691 at ratio 1.5 allocated
-          # 174.27 + 10.89 + 5.63 + 0.68 = 191.47 GB per rank, 8 ranks (one line
-          # each in server.log), = 1,531.8 GB. sglang reports these as decimal GB
-          # (memory_pool_host.py: requested_bytes / 1e9). Scaling by this key's
-          # device pool (c4 3,697,856 vs 29691's 3,781,824, x0.978) gives:
-          #
-          #   ratio 1.5 -> 1,498 GB   (-0.1% vs the linker's 1,500 GB)
-          #   ratio 2.0 -> 1,997 GB   (+33%)
-          #   ratio 3.0 -> 2,996 GB   (+100%, and OOMs a ~2.4 TB node)
-          #
-          # So 1.5 is the parity point and the recipe's default 3 was never
-          # survivable here: job 30038 died in DeepSeekV4PagedHostPool with
-          # "Requesting 21.30 GB but only have 18.66 GB free" because the
-          # unified-KV path doubles the device pool the ratio multiplies.
-          #
-          # Host tier occupancy still has to be reported with any result: at
-          # single-node c128 this size peaked at 44.6%, but c256 may saturate it,
-          # and a saturated tier makes the outcome a capacity statement.
-          - "HICACHE_RATIO=1.5"
           # Rank 0 opens the barrier port only after umbp_standalone_server has
           # registered the 1.5 TB tier for GPU access; that took 305.7s on n08-25
           # but had not finished after 780s on n09-29, which killed job 29871 at
