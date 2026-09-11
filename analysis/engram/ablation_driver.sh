@@ -52,9 +52,7 @@ EVAL_TASKS="${ENGRAM_EVAL_TASKS:-utils/evals/gsm8k.yaml:1 humaneval_instruct:2 m
 # lm-eval requires this opt-in; execution stays inside the job's container.
 export HF_ALLOW_CODE_EVAL=1
 
-# Namespace the built-in code tasks' dataset paths. Idempotent, and it reports
-# what it touched so a silent no-op cannot masquerade as success.
-python3 - <<'PYPATCH'
+'
 import glob, os, re, sys
 
 RENAMES = {
@@ -110,6 +108,59 @@ pick_port() {
     return 1
 }
 
+
+# Run after lm-eval is installed (run_lm_eval installs it lazily on first use);
+# an earlier version ran before that and silently no-opped with
+# "lm_eval.tasks not importable".
+patch_lm_eval_dataset_paths() {
+    python3 <<'PYPATCH'
+import glob, os, re, sys
+
+RENAMES = {
+    "openai_humaneval": "openai/openai_humaneval",
+    "mbpp": "google-research-datasets/mbpp",
+}
+try:
+    import lm_eval.tasks as T
+except Exception as exc:
+    print("lm_eval.tasks STILL not importable:", exc)
+    sys.exit(0)
+
+root = os.path.dirname(T.__file__)
+targets = glob.glob(f"{root}/humaneval/*.yaml") + glob.glob(f"{root}/mbpp/*.yaml")
+changed = []
+for path in targets:
+    text = open(path).read()
+    new = text
+    for bare, full in RENAMES.items():
+        new = re.sub(rf"^(dataset_path:[ \t]*){re.escape(bare)}[ \t]*$", rf"\g<1>{full}",
+                     new, flags=re.M)
+    if new != text:
+        open(path, "w").write(new)
+        changed.append(os.path.basename(path))
+print("patched dataset_path in:", changed or "nothing (already namespaced)")
+for path in targets:
+    for line in open(path):
+        if line.startswith("dataset_path:"):
+            print("  ", os.path.basename(path), line.strip())
+PYPATCH
+}
+
+# HumanEval and MBPP are marked unsafe because scoring executes model-generated
+# code: "Attempted to run task ... which is marked as unsafe. Set
+# confirm_run_unsafe_code=True". run_lm_eval builds a fixed command with no way
+# to pass that, so the code suites are invoked directly, with the same
+# model_args run_lm_eval uses. Execution stays inside this job's container.
+run_code_eval() {
+    local task="$1" out="$2"
+    mkdir -p "$out"
+    python3 -m lm_eval --model local-chat-completions --apply_chat_template \
+        --tasks "$task" --output_path "$out" --log_samples \
+        --model_args "model=${MODEL},base_url=http://0.0.0.0:${PORT}/v1/chat/completions,api_key=EMPTY,eos_string=</s>,max_retries=5,num_concurrent=32,timeout=1800,tokenized_requests=False,max_length=${EVAL_CONTEXT}" \
+        --gen_kwargs "max_tokens=4096,temperature=0,top_p=1" \
+        --confirm_run_unsafe_code
+}
+
 run_one() {
     local mode="$1"          # baseline | ablated
     local out="$RESULT_DIR/eval_$mode"
@@ -152,9 +203,15 @@ run_one() {
         suite=$(basename "$task" .yaml)
         for r in $(seq 1 "$repeats"); do
             echo "--- $mode / $suite / repeat $r"
-            EVAL_CONCURRENT_REQUESTS=32 run_lm_eval \
-                --port "$PORT" --task "$task" \
-                --results-dir "$out/${suite}_r${r}" || true
+            if [[ "$task" == *.yaml ]]; then
+                EVAL_CONCURRENT_REQUESTS=32 run_lm_eval \
+                    --port "$PORT" --task "$task" \
+                    --results-dir "$out/${suite}_r${r}" || true
+                # lm-eval now exists, so the task YAMLs can be patched.
+                patch_lm_eval_dataset_paths || true
+            else
+                run_code_eval "$task" "$out/${suite}_r${r}" || true
+            fi
         done
     done
 
