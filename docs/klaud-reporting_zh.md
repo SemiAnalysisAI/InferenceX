@@ -6,7 +6,7 @@
 
 </div>
 
-[`utils/klaud/reporting.py`](../utils/klaud/reporting.py) 统一管理数据结构、差值计算和渲染。agent 只提供简短观察和经过核实的证据，不手算差值。PR 正文仅包含目标和基线；评论记录尝试；生命周期完成记录证明收尾已验证。数值表只展示一次，说明文字按英文、`---`、自然简体中文排列。不提及用户、不请求审查、不发布原始日志或私有遥测，也不添加 limitations 章节。
+[`utils/klaud/reporting.py`](../utils/klaud/reporting.py) 统一管理数据结构、差值计算和渲染。agent 只提供简短观察和经过核实的证据，不手算差值。PR 正文仅包含目标和基线；评论记录尝试；生命周期完成记录证明收尾已验证。生成的 PR 正文及评论（包括表格和生命周期报告）仅使用英文。该 Klaud 专用例外优先于通用双语规范；不添加中文翻译或语言分隔线。不提及用户、不请求审查、不发布原始日志或私有遥测，也不添加 limitations 章节。
 
 ## 命令
 
@@ -16,7 +16,7 @@
 KLAUD=(uv run --no-project --exclude-newer PT12H --python 3.12 \
   --with 'pydantic>=2.10,<3' --with pyyaml python -m utils.klaud)
 
-# goal.json 仅包含 {"en": "...", "zh": "..."}。
+# goal.json 是 JSON 字符串："Update the selected image."
 # 先通过公开 OpenAPI 确认模型显示名称。
 "${KLAUD[@]}" prepare-baseline --model 'DISPLAY MODEL NAME' \
   --goal-file "$KLAUD_EVIDENCE/goal.json" --output "$KLAUD_EVIDENCE/baseline.json"
@@ -37,7 +37,7 @@ KLAUD=(uv run --no-project --exclude-newer PT12H --python 3.12 \
 
 比较键通过 `reporting.point_key()` 从规范生成的配置点计算，仅排除镜像、配置点名称、生产指纹和排队元数据。工作负载、拓扑、并发数及其他设置都必须保留。`reporting.values()` 读取 collector/API 指标，将秒换算为毫秒。不能为使结果匹配而编造别名或比较键。AgentX 还须独立匹配数据集。基线缺失或为零、配置失败、数据集或统计口径不一致时记为 N/A。吞吐量差值为 `(new / old - 1) * 100`；评测分数使用 0–1，差值以百分点展示，并匹配 suite、metric、拓扑和样本量。
 
-每次尝试记录所属 run ID、精确 head、运行次数、类型和编号、状态、双语变更/结论/下一步、分别统计的 benchmark 与 eval 应有和通过数量，以及全部配置和评测结果。保留失败、取消和请求错误。初始变更编号为 0，修复为 1–5。已确认的临时基础设施问题单独记为 infrastructure-retry，不消耗 recipe 修复次数；prompt 将其限制为每次尝试最多两次。不能因为吞吐量通过就把评测失败的 smoke 写成成功。
+每次尝试记录所属 run ID、精确 head、运行次数、类型和编号、状态、以纯英文字符串记录的变更/结论/下一步、分别统计的 benchmark 与 eval 应有和通过数量，以及全部配置和评测结果。保留失败、取消和请求错误。初始变更编号为 0，修复为 1–5。已确认的临时基础设施问题单独记为 infrastructure-retry，不消耗 recipe 修复次数；prompt 将其限制为每次尝试最多两次。不能因为吞吐量通过就把评测失败的 smoke 写成成功。
 
 调度后立即发布记录，再等待运行。发生实质变化或等待满 30 分钟时，更新该 run/attempt 的同一条评论；完成的尝试保留为历史。大记录拆成编号评论分段，不丢弃配置点，也不限制配置族大小。正文最多展示 12 行基线；全部数值和来源保存在基线评论。记录以 parent/candidate/run/attempt 为幂等身份，只持久化类型化公开字段，不上传整个临时目录或执行记录。
 
@@ -48,16 +48,11 @@ Update FAMILY from OLD_IMAGE to NEW_IMAGE.
 
 Baseline: PUBLISHED_DATE · OLD_IMAGE · public API sources
 
-| Point / 配置 | Total tok/s/GPU | Output tok/s/GPU | TTFT ms | TPOT ms |
+| Point | Total tok/s/GPU | Output tok/s/GPU | TTFT ms | TPOT ms |
 | --- | ---: | ---: | ---: | ---: |
 | shape and concurrency | value | value | value | value |
 
 Eval baseline: suite/metric, score, sample count; N/A where unavailable.
-
----
-
-将 FAMILY 从 OLD_IMAGE 更新到 NEW_IMAGE。
-基线日期、来源及配置数值见上；延迟采用均值，单位为毫秒。
 ```
 
 ## 尝试评论格式
@@ -70,7 +65,7 @@ Measured: IMAGE · HEAD · run link and attempt
 Change: one sentence
 Coverage: benchmarks passed/expected; evals passed/expected
 
-| Point / 配置 | Result | Output tok/s/GPU | Δ output | Δ TTFT | Δ TPOT |
+| Point | Result | Output tok/s/GPU | Δ output | Δ TTFT | Δ TPOT |
 | --- | --- | ---: | ---: | ---: | ---: |
 | shape and concurrency | status, errors or N/A reason | value | signed % | signed % | signed % |
 
@@ -80,14 +75,6 @@ Coverage: benchmarks passed/expected; evals passed/expected
 
 Finding: observed result; distinguish hypotheses from evidence
 Next: specific action or verified final disposition
-
----
-
-### 初次尝试 / 第 N/5 次修复 / 第 N 次基础设施重试 / 最终完整 sweep
-
-状态、变更及覆盖范围的简洁中文说明。
-结论：实测结果；区分假设与证据。
-下一步：具体操作或已验证的最终处置。
 ```
 
 正常结束和中断恢复均由 `finish` 使用已验证产物和冻结基线生成最终报告，并在**标记就绪之前**发布。缺失的历史基线明确记为 N/A，不编造差值，也不另跑基线。成功 sweep 可以存在性能回归；就绪表示工作和验证结束，而非每项指标都提升。Klaud 不授权 reuse，也不合并 PR。

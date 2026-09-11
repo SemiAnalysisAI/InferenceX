@@ -211,8 +211,7 @@ class Session:
                     pending = self.marker.replace('klaud-outcome:', 'klaud-cleanup:')
                     request = {'head': pull['head']['sha'], 'outcome': outcome.model_dump(by_alias=True)}
                     body = (pending + json.dumps(request) + '\n-->\n'
-                            f'Klaud Cold: **{outcome.outcome}**. Finishing cleanup; owned child runs will be stopped and checked before closure.\n\n---\n\n'
-                            f'Klaud Cold：**{outcome.outcome}**。正在完成清理；将先停止并确认自有子运行的状态，再关闭 PR。')
+                            f'Klaud Cold: **{outcome.outcome}**. Finishing cleanup; owned child runs will be stopped and checked before closure.')
                     github.write(self.repository, f'issues/{pull["number"]}/comments', 'POST', {'body': body})
             for run in runs:
                 if not terminal(run):
@@ -259,13 +258,7 @@ class Session:
                         f'Repairs: {outcome.repairs_used if outcome.repairs_used is not None else "unknown"}. Runs: {links}.\n\n'
                         + ('The full sweep is verified; this PR remains ready for review.' if proof else
                            'PR closed; branch deleted for retry.' if outcome.outcome in RELEASE else
-                           'PR closed; the exact-candidate branch is retained. See the attempt report for the failure and retry condition.')
-                        + '\n\n---\n\n'
-                        f'Klaud Cold：**{outcome.outcome}**。所有自有运行均已结束。'
-                        f'修复次数：{outcome.repairs_used if outcome.repairs_used is not None else "未知"}。运行：{links}。\n\n'
-                        + ('完整 sweep 已通过验证；PR 保持就绪，等待审查。' if proof else
-                           'PR 已关闭；分支已删除，后续可以重试。' if outcome.outcome in RELEASE else
-                           'PR 已关闭；保留该候选的分支。失败原因及重试条件见尝试报告。'))
+                           'PR closed; the exact-candidate branch is retained. See the attempt report for the failure and retry condition.'))
                 github.write(self.repository, f'issues/{pull["number"]}/comments', 'POST', {'body': body})
         claims.release_family(self.repository, self.candidate, self.parent['id'])
         return outcome
@@ -312,8 +305,7 @@ def release_candidate(session: Session, expected_head: str) -> None:
     github.write(session.repository, f'issues/{pull["number"]}/comments', 'POST', {'body':
         f'<!-- klaud-retry-release:{session.parent["id"]}:{session.candidate.id}:{expected_head} -->\n'
         'A maintainer approved releasing this completed candidate for a fresh selection after reviewing its blocker. '
-        'The previous results remain historical evidence.\n\n---\n\n'
-        '维护者审查阻塞原因后，已批准释放该结束候选，允许重新参与选择；之前的结果保留为历史证据。'})
+        'The previous results remain historical evidence.'})
     session.refresh(pull)
     if github.read(session.repository, 'git/ref/heads/' + session.branch)['object']['sha'] != expected_head:
         raise VerificationError('Retained branch changed; leave maintainer work intact')

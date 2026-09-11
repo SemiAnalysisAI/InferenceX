@@ -9,29 +9,29 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import json
 import re
+import unicodedata
 from typing import Annotated, Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import AfterValidator, Field, field_validator, model_validator
 
 from . import github
 from .github import VerificationError
 from .models import Contract, identity
 
 Number = Annotated[float, Field(ge=0, allow_inf_nan=False)]
-Text = Annotated[str, Field(max_length=700)]
 SHA = Annotated[str, Field(pattern=r'^[0-9a-f]{40}$')]
 
 
-class Prose(Contract):
-    en: Text
-    zh: Text
+def public_prose(value: str) -> str:
+    if any(char in value for char in ('@', '<', '>', '\n', '|')):
+        raise ValueError('Use one sentence of public prose without mentions, HTML or tables')
+    if any(unicodedata.name(char, '').startswith(('CJK UNIFIED IDEOGRAPH', 'CJK COMPATIBILITY IDEOGRAPH')) for char in value):
+        raise ValueError('Klaud PR bodies and comments must be English-only')
+    return value
 
-    @field_validator('en', 'zh')
-    @classmethod
-    def public_prose(cls, value: str) -> str:
-        if any(char in value for char in ('@', '<', '>', '\n', '|')):
-            raise ValueError('Use one sentence of public prose without mentions, HTML or tables')
-        return value
+
+Prose = Annotated[str, Field(min_length=1, max_length=700, description='One concise English sentence'),
+                  AfterValidator(public_prose)]
 
 
 class Values(Contract):
@@ -204,7 +204,7 @@ def point_table(points: list[Point], baseline: Baseline | None = None) -> str:
         rows.append([point.label, f'{point.result}; errors={number(b.request_errors)}{reason}', number(b.output_tps_gpu),
                      delta(a.output_tps_gpu, b.output_tps_gpu, comparable),
                      delta(a.ttft_ms, b.ttft_ms, comparable), delta(a.tpot_ms, b.tpot_ms, comparable)])
-    return table(['Point / 配置', 'Result', 'Output tok/s/GPU', 'Δ output', 'Δ TTFT', 'Δ TPOT'], rows)
+    return table(['Point', 'Result', 'Output tok/s/GPU', 'Δ output', 'Δ TTFT', 'Δ TPOT'], rows)
 
 
 def eval_table(rows: list[Evaluation], baseline: Baseline | None) -> str:
@@ -224,41 +224,32 @@ def eval_table(rows: list[Evaluation], baseline: Baseline | None) -> str:
 def baseline_table(points: list[Point]) -> str:
     rows = [[p.label, number(p.values.total_tps_gpu), number(p.values.output_tps_gpu),
              number(p.values.ttft_ms), number(p.values.tpot_ms)] for p in points]
-    return table(['Point / 配置', 'Total tok/s/GPU', 'Output tok/s/GPU', 'TTFT ms', 'TPOT ms'], rows)
+    return table(['Point', 'Total tok/s/GPU', 'Output tok/s/GPU', 'TTFT ms', 'TPOT ms'], rows)
 
 
 def render_body(baseline: Baseline) -> str:
     statistic = '/'.join(sorted({point.values.latency_statistic for point in baseline.points})) or 'N/A'
     sources = ', '.join(f'[API {i + 1}]({url})' for i, url in enumerate(baseline.sources)) or 'N/A'
-    return (f'{baseline.goal.en}\n\n**Baseline:** {baseline.date} · `{baseline.image}` · {sources}\n\n'
+    return (f'{baseline.goal}\n\n**Baseline:** {baseline.date} · `{baseline.image}` · {sources}\n\n'
             + baseline_table(baseline.points[:12])
             + f'\n\n{min(12, len(baseline.points))}/{len(baseline.points)} baseline points shown. Latency: {statistic}. Missing values are N/A; all values and producer IDs are in the frozen baseline comments.\n\n'
-            + ('Eval baseline: ' + '; '.join(f'{r.suite}/{r.metric} {number(r.score * 100 if r.score is not None else None)}%, n={r.samples or "N/A"}' for r in baseline.evals) if baseline.evals else 'Eval baseline: N/A (no matched published evidence).')
-            + f'\n\n---\n\n{baseline.goal.zh}\n\n**基线：**{baseline.date}，旧镜像及公开来源见上。'
-              f'表中吞吐量按 GPU 归一化，延迟统计口径为 {statistic}，单位为毫秒。缺失值记为 N/A；生产运行及完整配置身份保存在冻结基线评论中。')
+            + ('Eval baseline: ' + '; '.join(f'{r.suite}/{r.metric} {number(r.score * 100 if r.score is not None else None)}%, n={r.samples or "N/A"}' for r in baseline.evals) if baseline.evals else 'Eval baseline: N/A (no matched published evidence).'))
 
 
 def render_attempt(record: Attempt, baseline: Baseline | None, repository: str) -> str:
-    titles = {'initial': ('Initial attempt', '初次尝试'), 'repair': (f'Repair {record.number}/5', f'第 {record.number}/5 次修复'),
-              'infrastructure-retry': (f'Infrastructure retry {record.number}', f'第 {record.number} 次基础设施重试'),
-              'final': ('Final full sweep', '最终完整 sweep')}
-    en, zh = titles[record.kind]
-    status_zh = {'queued': '排队中', 'running': '运行中', 'passed': '通过', 'failed': '失败',
-                 'cancelled': '已取消', 'deferred': '已延期'}[record.status]
+    titles = {'initial': 'Initial attempt', 'repair': f'Repair {record.number}/5',
+              'infrastructure-retry': f'Infrastructure retry {record.number}', 'final': 'Final full sweep'}
     coverage = f'benchmarks {record.benchmarks_passed}/{record.benchmarks_expected}; evals {record.evals_passed}/{record.evals_expected}'
     details = point_table(record.points, baseline) + ('\n\n' + eval_table(record.evals, baseline) if record.evals else '')
     if len(record.points) > 12:
-        details = '<details>\n<summary>All point results / 全部配置结果</summary>\n\n' + details + '\n\n</details>'
-    return (f'### {en}\n\n**Status:** {record.status} · {datetime.now(timezone.utc):%Y-%m-%d %H:%M UTC}\n\n'
+        details = '<details>\n<summary>All point results</summary>\n\n' + details + '\n\n</details>'
+    return (f'### {titles[record.kind]}\n\n**Status:** {record.status} · {datetime.now(timezone.utc):%Y-%m-%d %H:%M UTC}\n\n'
             f'**Measured:** `{record.image}` · `{record.head[:12]}` · '
             f'[run {record.run_id}](https://github.com/{repository}/actions/runs/{record.run_id}), attempt {record.run_attempt}\n\n'
-            f'**Change:** {record.change.en}\n\n**Coverage:** {coverage}.\n\n{details}\n\n'
+            f'**Change:** {record.change}\n\n**Coverage:** {coverage}.\n\n{details}\n\n'
             'Throughput: higher is better; latency: lower is better. N/A means missing/zero baseline, '
             'failed point, or unproven matching identity, dataset or statistic. The run attempt may retain earlier successful jobs from this same run; absent per-point attempt provenance stays unknown. No significance claim.\n\n'
-            f'**Finding:** {record.finding.en}\n\n**Next:** {record.next.en}\n\n---\n\n### {zh}\n\n'
-            f'**状态：**{status_zh}。\n\n**变更：**{record.change.zh}\n\n**覆盖范围：**benchmark {record.benchmarks_passed}/{record.benchmarks_expected}；评测 {record.evals_passed}/{record.evals_expected}。\n\n'
-            '上表共用数值；吞吐量越高越好，延迟越低越好。基线缺失或为零、配置失败，或配置身份、数据集、统计口径无法匹配时记为 N/A。同一运行可能保留前次成功作业；缺失的逐点 attempt 来源保持未知。不据此声称统计显著性。\n'
-            f'\n**结论：**{record.finding.zh}\n\n**下一步：**{record.next.zh}')
+            f'**Finding:** {record.finding}\n\n**Next:** {record.next}')
 
 
 def marker(session, name: str) -> str:
@@ -319,7 +310,7 @@ def publish(session, record: Baseline | Attempt) -> None:
                 raise VerificationError('Baseline is frozen; do not silently replace it')
             initialize_body(session, pull, record)
             return
-        text = 'Frozen public baseline; producer references and numeric evidence are recorded here.\n\n---\n\n公开基线已冻结；此处保存生产运行引用及数值证据。'
+        text = 'Frozen public baseline; producer references and numeric evidence are recorded here.'
     else:
         runs = [run for run in session.runs() if run['id'] == record.run_id]
         if len(runs) != 1 or runs[0]['head_sha'] != record.head or runs[0]['run_attempt'] != record.run_attempt:
@@ -349,7 +340,7 @@ def publish(session, record: Baseline | Attempt) -> None:
         packed = {'record': packed, 'chunks': chunks}
         if isinstance(record, Attempt):
             text = render_attempt(record.model_copy(update={'points': [], 'evals': []}), baseline_for(session, pull), session.repository)
-        text += '\n\nFull numeric evidence follows in numbered report parts.\n\n完整数值证据见编号报告分段。'
+        text += '\n\nFull numeric evidence follows in numbered report parts.'
     elif isinstance(record, Baseline):
         text += '\n\n' + baseline_table(record.points)
         if record.evals:
@@ -395,11 +386,9 @@ def publish_final(session, run: dict, evidence: tuple[dict, list[dict], list[dic
         raise VerificationError('Final report contains mixed images')
     publish(session, Attempt(kind='final', number=0, head=run['head_sha'], image=images.pop(),
             run_id=run['id'], run_attempt=run['run_attempt'], status='passed',
-            change=Prose(en='Validate the complete updated-image family at this head.', zh='验证此提交中更新镜像后的完整配置族。'),
-            finding=Prose(en='Complete benchmark coverage and required default eval artifacts verified. Measured results and deltas are shown above.',
-                          zh='完整 benchmark 覆盖范围及必需的默认评测产物已验证，实测差值见表。'),
-            next=Prose(en='Finish will mark this completed PR ready for maintainer review; regressions remain visible.',
-                       zh='收尾步骤将把已完成的 PR 标记为就绪，等待维护者审查；回归结果会如实保留。'),
+            change='Validate the complete updated-image family at this head.',
+            finding='Complete benchmark coverage and required default eval artifacts verified. Measured results and deltas are shown above.',
+            next='Finish will mark this completed PR ready for maintainer review; regressions remain visible.',
             benchmarks_expected=len(generated), benchmarks_passed=len(points),
             evals_expected=len(expected_evals(matrix)), evals_passed=len(expected_evals(matrix)),
             points=sorted(points, key=lambda point: (point.conc, point.label)), evals=evaluations))

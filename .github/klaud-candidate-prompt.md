@@ -88,7 +88,9 @@ PR body: ONLY goal and baseline. Use the canonical renderer, not handcrafted spr
 tables. Comments contain vertical Initial attempt, Repair N/5, Infrastructure retry and
 Final full sweep records, with compact numeric comparisons. Update that attempt's comment
 on material changes or after 30 minutes waiting; retain completed attempts as history.
-English prose, divider, natural Simplified Chinese; numeric tables once. Report observable
+PR bodies and comments must be English-only, overriding repository translation guidance:
+no Chinese text, translation sections or language dividers, including tables and cleanup.
+Use plain English strings in report records. Report observable
 status/diagnosis, not internal deliberation. No limitations section or redundant milestones.
 Show failures, missing data, request errors, eval suite/metric/sample sizes and regressions.
 Use consistent units/statistics; percentage-point eval deltas are distinct from throughput
