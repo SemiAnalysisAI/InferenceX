@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from utils.agentic.aggregation.backends.dynamo_vllm import DynamoVllmBackend
-from utils.agentic.aggregation.backends.sglang import SglangBackend
-from utils.agentic.aggregation.backends.vllm import VllmBackend
-from utils.agentic.aggregation.server_log_metrics import (
+from infx.results.agentic.backends.dynamo_vllm import DynamoVllmBackend
+from infx.results.agentic.backends.sglang import SglangBackend
+from infx.results.agentic.backends.vllm import VllmBackend
+from utils.agentic.aggregation.artifacts import (
     find_server_log_paths,
     load_server_log_head,
 )
@@ -100,7 +100,7 @@ def test_kv_cache_pool_tokens_sums_multiple_log_files(tmp_path: Path) -> None:
         "INFO (EngineCore_DP0 pid=200) GPU KV cache size: 7,000,000 tokens"
     )
 
-    assert VllmBackend().gpu_kv_capacity_tokens({}, [first, second]) == 18_500_000
+    assert VllmBackend().gpu_kv_capacity_tokens({}, (load_server_log_head(p) for p in (first, second))) == 18_500_000
 
 
 def test_dynamo_vllm_uses_vllm_server_log_capacity_parser(tmp_path: Path) -> None:
@@ -114,7 +114,7 @@ def test_dynamo_vllm_uses_vllm_server_log_capacity_parser(tmp_path: Path) -> Non
         )
     )
 
-    assert DynamoVllmBackend().gpu_kv_capacity_tokens({}, [worker_log]) == 11_500_000
+    assert DynamoVllmBackend().gpu_kv_capacity_tokens({}, [load_server_log_head(worker_log)]) == 11_500_000
 
 
 def test_find_server_log_paths_includes_multinode_watchtower_logs(tmp_path: Path) -> None:
