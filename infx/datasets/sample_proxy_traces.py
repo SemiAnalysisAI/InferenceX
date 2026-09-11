@@ -544,7 +544,10 @@ def _sort_and_limit(rows: list[dict], args: argparse.Namespace) -> list[dict]:
         seed = str(args.seed)
         rows = sorted(
             rows,
-            key=lambda r: hashlib.md5((r["session_id"] + seed).encode("utf-8")).hexdigest(),
+            # Stable sampling order matching Postgres, not a security boundary.
+            key=lambda r: hashlib.md5(
+                (r["session_id"] + seed).encode("utf-8"), usedforsecurity=False,
+            ).hexdigest(),
         )
     if args.limit is not None:
         rows = rows[: args.limit]
