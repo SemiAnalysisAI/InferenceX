@@ -1662,84 +1662,6 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp:
           dp-attn: true
           additional-settings:
           - "PREFILL_NODES=1"
-          - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260907"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=3"
-
-# UMBP direct-linker arm of dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp.
-#
-# ONE variable against that key's DEP8 arm: kv-offload-backend hicache ->
-# umbp-linker. Same 1P1D topology (prefill TP8/EP8/dp-attn, decode TP8/EP8/
-# dp-attn), same MTP size, same agentic-coding scenario, same
-# dram-utilization, same pinned CLIENT_IMAGE, same conc points 128 and 192 --
-# so a diff between the two keys is exactly the backend and nothing else.
-#
-# TWO things are NOT held constant and both are deliberate:
-#
-#  1. IMAGE. The HiCache PD arm runs lmsysorg/sglang-rocm:v0.5.17-...-20260817;
-#     no v0.5.17 image carries the external linker, so the arm cannot exist on
-#     it. This key takes the image the single-node linker runs on
-#     (rocm/mori-dev:sglang-0.5.19-...-mori-0908-pr38269-638c6a61, CI run
-#     34319044495 / slurm 29816), which ships PR #38269 "Support DeepSeek-V4
-#     unified KV in direct external linkers". That makes 0.5.19-vs-0.5.17 a
-#     confound against the archived HiCache numbers, so the HiCache control on
-#     THIS image has to be rerun before any delta here is attributable to the
-#     backend. It also makes this the first PD run on a mori-dev image at all.
-#
-#  2. TIER SIZE. HiCache on this path sizes by --hicache-ratio 3-4 off the
-#     device pool (FORCE_HICACHE_RATIO=1 makes it ignore TOTAL_CPU_DRAM_GB);
-#     measured 19.66M tokens/rank on job 26530 at conc 128, ~44% occupied. The
-#     linker takes a flat 1.5 TB node total (UMBP_DRAM_BYTES in the recipe),
-#     matching the single-node linker arms. The two are not byte-matched and
-#     the comparison must say so.
-#
-# conc 128 and 192 only: those are the two points where the DEP8 arm is the
-# right topology AND, at 192, where the archived HiCache runs are all broken
-# (prefill mem-fraction-static 0.85 instead of 0.72; TTFT p50 134-204 s), so
-# there is no usable control there yet either way.
-dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-mtp:
-  image: aigmkt/mori-dev:sglang-0.5.19-rocm720-mi35x-mori-0908-pr38269-638c6a61
-  model: deepseek-ai/DeepSeek-V4-Pro-0813
-  model-prefix: dsv4
-  runner: cluster:mi355x-amds
-  precision: fp4
-  framework: sglang-disagg
-  kv-p2p-transfer: mori
-  multinode: true
-  disagg: true
-  scenarios:
-    agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
-      - spec-decoding: "mtp"
-        # Aligned to InferenceX PR #2823 (89f8817c) -- the DP-attention tuning
-        # pass on the sibling HiCache key. conc-list, tp, ep, dp-attn and
-        # CLIENT_IMAGE are now byte-identical to that PR's DEP arm, so the two
-        # keys differ only in backend (umbp-linker vs hicache), router policy
-        # (round_robin vs the recipe default) and the server image, which has to
-        # carry PR #38269 for the linker to exist at all.
-        #
-        # ep 8 -> 1 comes from that PR: with dp-attn on, the MoE runs
-        # tensor-parallel and ep_flags (mori a2a / deepep) are dropped.
-        #
-        # Every c128/c192 number taken before this alignment ran ONE tokenizer
-        # worker and ep=8, so none of them are a control for these points.
-        conc-list: [ 128, 192, 256 ]
-        kv-offloading: dram
-        kv-offload-backend: { name: umbp-linker }
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: true
-          additional-settings:
-          - "PREFILL_NODES=1"
           # The recipe defaults PREFILL_ROUTER_POLICY to consistent_hashing, so
           # the first PD linker run (CI 34335368832) routed by prefix affinity:
           # 94.5% of prompt tokens came from the DEVICE radix cache and only
@@ -1750,75 +1672,31 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-mtp:
           # which all ran round_robin. benchmark-multinode-tmpl.yml exports these
           # settings immediately before the recipe, so this wins over the
           # recipe's ${PREFILL_ROUTER_POLICY:-consistent_hashing} default.
-          - "PREFILL_ROUTER_POLICY=round_robin"
-          # Rank 0 opens the barrier port only after umbp_standalone_server has
-          # registered the 1.5 TB tier for GPU access; that took 305.7s on n08-25
-          # but had not finished after 780s on n09-29, which killed job 29871 at
-          # the 900s default. Sit above UMBP_SA_WAIT_SECONDS (1800) so UMBP's own
-          # wait is the binding one rather than the barrier.
-          - "CONTAINER_BARRIER_TIMEOUT=2400"
-          - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260907"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=3"
-
-# Consistent-hashing twin of dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-mtp.
-# The two keys are identical except for PREFILL_ROUTER_POLICY, so the pair
-# isolates router policy on the umbp-linker backend and nothing else: same
-# image, same checkpoint, same ep=1/dp-attn topology, same conc points, same
-# barrier, same client image.
-#
-# This is the affinity arm. consistent_hashing routes by prefix, which on the
-# first PD linker run (CI 34335368832) served 94.5% of prompt tokens from the
-# DEVICE radix cache and only 0.81% from the host/external tier -- the linker
-# was barely exercised as a tier at all. That is a poor stress test of the
-# linker but it is the realistic agentic-session regime, and it is the number
-# the round_robin arm has to be read against. Run both or neither.
-dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-ch-mtp:
-  image: aigmkt/mori-dev:sglang-0.5.19-rocm720-mi35x-mori-0908-pr38269-638c6a61
-  model: deepseek-ai/DeepSeek-V4-Pro-0813
-  model-prefix: dsv4
-  runner: cluster:mi355x-amds
-  precision: fp4
-  framework: sglang-disagg
-  kv-p2p-transfer: mori
-  multinode: true
-  disagg: true
-  scenarios:
-    agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
-      - spec-decoding: "mtp"
-        # Aligned to InferenceX PR #2823 (89f8817c) -- the DP-attention tuning
-        # pass on the sibling HiCache key. conc-list, tp, ep, dp-attn and
-        # CLIENT_IMAGE are byte-identical to that PR's DEP arm.
-        #
-        # ep 8 -> 1 comes from that PR: with dp-attn on, the MoE runs
-        # tensor-parallel and ep_flags (mori a2a / deepep) are dropped.
-        #
-        # Every c128/c192 number taken before this alignment ran ONE tokenizer
-        # worker and ep=8, so none of them are a control for these points.
-        conc-list: [ 128, 192, 256 ]
-        kv-offloading: dram
-        kv-offload-backend: { name: umbp-linker }
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: true
-          additional-settings:
-          - "PREFILL_NODES=1"
-          # Set explicitly rather than relying on the recipe's
-          # ${PREFILL_ROUTER_POLICY:-consistent_hashing} default, so the policy
-          # under test is visible in the config and survives a change to that
-          # default. benchmark-multinode-tmpl.yml exports these settings
-          # immediately before the recipe, so this wins over the default.
           - "PREFILL_ROUTER_POLICY=consistent_hashing"
+          # DRAM PARITY. The linker takes a flat UMBP_DRAM_BYTES=1.5e12 (1,500 GB).
+          # HiCache has no absolute knob on this path -- server_sglang.sh skips
+          # --hicache-size for DeepSeek-V4 and FORCE_HICACHE_RATIO=1 pins ratio
+          # sizing -- so the ratio is chosen to land on the same total.
+          #
+          # Measured, not assumed: single-node 29691 at ratio 1.5 allocated
+          # 174.27 + 10.89 + 5.63 + 0.68 = 191.47 GB per rank, 8 ranks (one line
+          # each in server.log), = 1,531.8 GB. sglang reports these as decimal GB
+          # (memory_pool_host.py: requested_bytes / 1e9). Scaling by this key's
+          # device pool (c4 3,697,856 vs 29691's 3,781,824, x0.978) gives:
+          #
+          #   ratio 1.5 -> 1,498 GB   (-0.1% vs the linker's 1,500 GB)
+          #   ratio 2.0 -> 1,997 GB   (+33%)
+          #   ratio 3.0 -> 2,996 GB   (+100%, and OOMs a ~2.4 TB node)
+          #
+          # So 1.5 is the parity point and the recipe's default 3 was never
+          # survivable here: job 30038 died in DeepSeekV4PagedHostPool with
+          # "Requesting 21.30 GB but only have 18.66 GB free" because the
+          # unified-KV path doubles the device pool the ratio multiplies.
+          #
+          # Host tier occupancy still has to be reported with any result: at
+          # single-node c128 this size peaked at 44.6%, but c256 may saturate it,
+          # and a saturated tier makes the outcome a capacity statement.
+          - "HICACHE_RATIO=1.5"
           # Rank 0 opens the barrier port only after umbp_standalone_server has
           # registered the 1.5 TB tier for GPU access; that took 305.7s on n08-25
           # but had not finished after 780s on n09-29, which killed job 29871 at
