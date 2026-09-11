@@ -1155,10 +1155,10 @@ dsv4-fp4-b300-sglang:
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 4096, conc-end: 4096 }
 
 dsv4-fp4-b300-sglang-agentic-hicache-mtp:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260827-20621aa1
-  model: deepseek-ai/DeepSeek-V4-Pro
+  image: lmsysorg/sglang:nightly-dev-20260901-07c8f729
+  model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
-  runner: cluster:b300-nv
+  runner: cluster:b300-dsxe
   precision: fp4
   framework: sglang
   multinode: false
@@ -1166,10 +1166,10 @@ dsv4-fp4-b300-sglang-agentic-hicache-mtp:
     agentic-coding:
     - dram-utilization: 0.95
       search-space:
-      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 8, 16, 32] }
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: mtp, conc-list: [32, 256, 384, 512, 576], router: { name: sglang-router, version: "0.3.2" } }
+      - { tp: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 4, 8, 16, 32] }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [32, 64, 128, 256, 384, 512, 576], router: { name: sglang-router, version: "0.3.2" } }
 
-  # DeepSeek-V4-Pro on B300 with EAGLE/MTP speculative decoding. Recipe is
+  # DeepSeek-V4-Pro-0813 on B300 with DSpark speculative decoding. Recipe is
   # selected inside benchmarks/single_node/dsv4_fp4_b300_sglang_mtp.sh by
   # DP_ATTENTION:
   #   dp-attn: false -> TP-only + flashinfer_mxfp4 + chunked-prefill 8192
@@ -1178,7 +1178,8 @@ dsv4-fp4-b300-sglang-agentic-hicache-mtp:
   #                     + chunked-prefill 65536 + mem-fraction 0.90
   #                     + swa-full-tokens-ratio 0.075
   #                     + prefill-decode-interval 20
-  # Both paths share EAGLE (3,1,4) and max-running-requests 2*CONC.
+  # Both paths share DSpark K=6 (1 step, 7 draft tokens) and
+  # max-running-requests 2*CONC.
 dsv4-fp4-b300-sglang-mtp:
   image: lmsysorg/sglang:nightly-dev-cu13-20260610-f332e526
   model: deepseek-ai/DeepSeek-V4-Pro
