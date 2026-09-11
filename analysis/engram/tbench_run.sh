@@ -1,0 +1,162 @@
+#!/usr/bin/env bash
+# Terminal-Bench 4.0 for real: vLLM behind a Cloudflare tunnel, Harbor on Modal.
+#
+# Established by the earlier probes:
+#   - no container runtime on the compute node OR the login node, so Harbor's
+#     local backend is out and --env modal is the only route with our own model
+#   - egress to api.modal.com is 200 and MODAL_TOKEN_ID/SECRET (already wired in
+#     benchmark-tmpl.yml for SWE-bench) authenticate: `modal app list` works
+#   - a quick tunnel comes up, but the node cannot resolve *.trycloudflare.com,
+#     so it cannot self-verify. Modal resolves from its own network, so the
+#     only test that settles it is the real run -- this one.
+#
+# The endpoint is public for the duration, so it is served WITH an api key and
+# the key reaches the agent only through harbor's --env-file.
+set -eo pipefail
+
+source "$(dirname "$0")/../../benchmarks/benchmark_lib.sh"
+check_env_vars MODEL TP RESULT_DIR
+export GPU_COUNT="$TP"
+mkdir -p "$RESULT_DIR"
+HELP_DIR="$RESULT_DIR/harbor_help"; mkdir -p "$HELP_DIR"
+say() { echo "$@" | tee -a "$RESULT_DIR/tbench_run.txt"; }
+
+if [[ -n "${MODEL_PATH:-}" && "$MODEL_PATH" != "$MODEL" ]]; then
+    hf download "$MODEL" --local-dir "$MODEL_PATH"
+else
+    hf download "$MODEL"; export MODEL_PATH="$MODEL"
+fi
+
+export PATH="$HOME/.local/bin:$PATH"
+python3 -m pip install -q --no-input --break-system-packages harbor modal 2>&1 | tail -2 || true
+HARBOR=(harbor); command -v harbor >/dev/null 2>&1 || HARBOR=(python3 -m harbor)
+
+# Capture help in full. The previous attempt piped to head, and SIGPIPE
+# truncated the agent list mid-word (exit 141).
+say "=== harbor help (full, in $HELP_DIR) ==="
+export COLUMNS=200
+for sub in "" "run" "job" "job start"; do
+    # shellcheck disable=SC2086
+    "${HARBOR[@]}" $sub --help > "$HELP_DIR/help_${sub// /_}.txt" 2>&1 || true
+done
+AGENTS=$(sed 's/\x1b\[[0-9;]*[a-zA-Z]//g' "$HELP_DIR/help_run.txt" \
+         | tr -d '\n' | grep -oE '\-\-agent +-a +\[[^]]*\]' | head -1 || true)
+say "agent choices: ${AGENTS:-<not parsed; see help_run.txt>}"
+say "task/dataset flags:"
+sed 's/\x1b\[[0-9;]*[a-zA-Z]//g' "$HELP_DIR/help_run.txt" | grep -iE '^\s*-.*(task|dataset)' \
+    | tee -a "$RESULT_DIR/tbench_run.txt" || true
+
+# Terminus is Terminal-Bench's own agent and the right default for a
+# LiteLLM-addressable endpoint; fall back to whatever this build offers.
+AGENT=""
+for candidate in terminus-2 terminus codex-cli aider; do
+    if grep -q "$candidate" "$HELP_DIR/help_run.txt" 2>/dev/null; then AGENT="$candidate"; break; fi
+done
+if [[ -z "$AGENT" ]]; then
+    say "FATAL: no known agent in this harbor build; see $HELP_DIR/help_run.txt"
+    exit 1
+fi
+say "using agent: $AGENT"
+
+API_KEY="sk-engram-$(head -c 18 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+EVAL_CONTEXT=65536
+# Indexer buffer is batched-tokens x max-model-len x 2B: 4096 x 65536 x 2 =
+# 0.5 GiB, unlike the 16 GiB that 1M context would cost on an 80 GB card.
+pick_port() {
+    local c; for c in $(seq 8890 8960); do
+        (exec 3<>"/dev/tcp/127.0.0.1/$c") 2>/dev/null || { PORT="$c"; export PORT; return 0; }
+    done; return 1
+}
+pick_port
+SERVER_LOG="$RESULT_DIR/server_tbench.log"
+export VLLM_ENGINE_READY_TIMEOUT_S=3600 PYTHONUNBUFFERED=1
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
+vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
+    --host 0.0.0.0 --port "$PORT" --tensor-parallel-size "$TP" \
+    --api-key "$API_KEY" \
+    --language-model-only --tokenizer-mode deepseek_v41 \
+    --tool-call-parser deepseek_v41 --enable-auto-tool-choice \
+    --reasoning-parser deepseek_v41 \
+    --engram-config '{"cpu_offload":true}' \
+    --max-model-len "$EVAL_CONTEXT" --max-num-batched-tokens 4096 \
+    --max-num-seqs 16 --gpu-memory-utilization 0.92 --enforce-eager \
+    --disable-uvicorn-access-log > "$SERVER_LOG" 2>&1 &
+SERVER_PID=$!
+
+BIN="$RESULT_DIR/cloudflared"
+[[ -x "$BIN" ]] || { curl -sSL -m 120 -o "$BIN" \
+    https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
+    && chmod +x "$BIN"; }
+
+cleanup() {
+    say "--- cleanup: tearing down tunnel and server"
+    [[ -n "${TUNNEL_PID:-}" ]] && kill "$TUNNEL_PID" 2>/dev/null || true
+    [[ -n "${SERVER_PID:-}" ]] && kill "$SERVER_PID" 2>/dev/null || true
+}
+trap cleanup EXIT
+
+wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
+say "--- local endpoint check (authenticated)"
+curl -sS -m 60 -H "Authorization: Bearer $API_KEY" "http://localhost:$PORT/v1/models" \
+    | head -c 300 | tee -a "$RESULT_DIR/tbench_run.txt"; echo
+
+"$BIN" tunnel --no-autoupdate --url "http://localhost:$PORT" \
+    > "$RESULT_DIR/cloudflared.log" 2>&1 &
+TUNNEL_PID=$!
+PUBLIC=""
+for _ in $(seq 1 40); do
+    PUBLIC=$(grep -aoE 'https://[a-z0-9-]+\.trycloudflare\.com' "$RESULT_DIR/cloudflared.log" | head -1 || true)
+    [[ -n "$PUBLIC" ]] && break
+    sleep 3
+done
+[[ -z "$PUBLIC" ]] && { say "FATAL: no tunnel URL"; tail -20 "$RESULT_DIR/cloudflared.log"; exit 1; }
+say "tunnel: $PUBLIC  (api key withheld from this log)"
+
+ENV_FILE="$RESULT_DIR/harbor.env"
+umask 077
+cat > "$ENV_FILE" <<ENV
+OPENAI_API_KEY=$API_KEY
+OPENAI_BASE_URL=$PUBLIC/v1
+OPENAI_API_BASE=$PUBLIC/v1
+ENV
+say "wrote $ENV_FILE (mode $(stat -c %a "$ENV_FILE" 2>/dev/null || echo '?'))"
+
+# -k 1 and aggressive multipliers bound both wall-clock and Modal spend: the
+# published default is an 8-hour agent timeout per task.
+say "=== harbor run (env modal) ==="
+set +e
+timeout 5400 "${HARBOR[@]}" run \
+    -d terminal-bench/terminal-bench@4.0.0 \
+    --agent "$AGENT" \
+    --model "openai/$MODEL" \
+    --env-file "$ENV_FILE" \
+    --env modal \
+    -k "${TBENCH_ATTEMPTS:-1}" \
+    --n-concurrent "${TBENCH_CONCURRENT:-8}" \
+    --timeout-multiplier "${TBENCH_TIMEOUT_MULT:-0.1}" \
+    --agent-timeout-multiplier "${TBENCH_TIMEOUT_MULT:-0.1}" \
+    --job-name "engram-tbench-$(date +%s)" \
+    --jobs-dir "$RESULT_DIR/harbor_jobs" \
+    --yes 2>&1 | tee -a "$RESULT_DIR/tbench_run.txt"
+HARBOR_RC=${PIPESTATUS[0]}
+set -e
+say "harbor exit=$HARBOR_RC"
+
+say "=== results ==="
+find "$RESULT_DIR/harbor_jobs" -name '*.json' | head -20 | tee -a "$RESULT_DIR/tbench_run.txt" || true
+python3 - <<'PYEOF' 2>&1 | tee -a "$RESULT_DIR/tbench_run.txt" || true
+import glob, json, os
+root = os.path.join(os.environ["RESULT_DIR"], "harbor_jobs")
+for path in sorted(glob.glob(f"{root}/**/*.json", recursive=True)):
+    if os.path.getsize(path) > 2_000_000:
+        continue
+    try:
+        data = json.load(open(path))
+    except Exception:
+        continue
+    if isinstance(data, dict) and any(k in data for k in ("results", "accuracy", "resolved", "n_resolved")):
+        print("===", path)
+        print(json.dumps(data, indent=2)[:3000])
+PYEOF
+exit "$HARBOR_RC"

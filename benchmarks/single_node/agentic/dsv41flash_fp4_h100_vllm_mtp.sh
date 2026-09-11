@@ -57,6 +57,11 @@ fi
 if [[ "$CONC" == 12 ]]; then
     exec bash "$INFERENCEX_REPO_ROOT/analysis/engram/tbench_driver.sh"
 fi
+# conc 13: the real Terminal-Bench 4.0 run -- vLLM behind a Cloudflare tunnel,
+# Harbor executing task containers on Modal.
+if [[ "$CONC" == 13 ]]; then
+    exec bash "$INFERENCEX_REPO_ROOT/analysis/engram/tbench_run.sh"
+fi
 
 SHARD=$((CONC - 1))
 echo "=== Engram gate scan: shard ${SHARD} of ${NUM_SHARDS}, TP=${TP} ==="
