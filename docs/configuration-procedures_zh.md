@@ -273,3 +273,19 @@ python -m pytest utils/matrix_logic/ -v
 - YAML、Bash、严格 schema、精确 key 生成、launcher 模拟或配方验证失败。
 
 只有当所有可执行文件一致、精确 key 能生成、运行时路由存在、changelog 能选择该 key，且以上各层检查全部通过时，配置才可以进入 sweep。
+
+## H200 上的 DeepSeek V4.1 Flash Mooncake
+
+`dsv41flash-fp4-h200-vllm-agentic-dspark-mooncake` 以 TP8 运行 AgentX，并发为 1, 2, 4, 8, 16, 32, 64, 128, 256, 512，使用完整 `semianalysis_cc_traces_weka_062126` 轨迹和 1M 上下文。配方遵循[上游嵌入式 Mooncake 配置](https://github.com/vllm-project/recipes/blob/main/kv_store/kv_store_distributed_mooncake.yaml)：`MooncakeStoreConnector`、`kv_both`、RDMA 和单个本地 metadata master。helper 固定使用 Mooncake 0.3.11.post1，并按镜像的 CUDA 主版本选择 wheel。
+
+生成的主机内存预算为 runner 分配 DRAM 的 60%。先预留 208 GB 给 Engram UVA 表，并为每个 GPU 预留 4 GiB Mooncake 传输缓冲区，再将剩余容量均分为各 rank 的 KV segment。`enable_offload: false` 关闭的是 Mooncake 的二级存储层，嵌入式 DRAM KV 存储仍然启用。退出时清理 server 和 master。
+
+吞吐测试保留五 token DSpark、thinking 开启时的黄金合成 AL 3.51，并关闭自适应验证；eval 使用真实块验证。启动等待期限为 7200 秒。H100 保留 4096 token 的 prefill batch 上限。更高并发属于实验配置，需通过 GPU 验证。
+
+Mooncake 容量以整数字节数传入，避免其二进制 `GB` 解析规则超出十进制主机内存预算。卸载模式的 CUDA graph 最多捕获 512 tokens；更大的 batch 使用非捕获路径，保留并发 512 和 1M 上下文。
+
+H200 故障修复：预览镜像缺少 [vLLM #54853](https://github.com/vllm-project/vllm/pull/54853)。在启动 Mooncake 前应用其三个生产文件的原始补丁（commit `0b066293f3c738a0cbd3a087bf893f2f4dcd61f2`），先检查全部补丁块，并兼容已应用状态。修复为每个已调度请求解析当前 block table，包括没有新分配 block 的保存请求；不屏蔽 missing-table 断言。
+
+c512 的权重加载耗时 1,630 秒：vLLM 检测到 VIRTIOFS 后明确关闭了自动预取，因此启用 `--safetensors-load-strategy prefetch`。随后 5,677 个请求的 warmup 长时间仅有约一个活跃 prefill、数百个请求排队。设置 `--long-prefill-token-threshold 1024`，让多个 prefill 共享原有的 8,192-token 单步预算，并设置 Mooncake `lookup_async: true`，避免远端 prefix 查询阻塞调度器。保留每 lane 十个 warmup 请求、原始轨迹、1M 上下文、AL、并发列表和 180 分钟 Slurm 时限。运行验证应检查 warmup 进度和队列是否改善，而不只检查服务是否启动。
+
+预览镜像没有 `git` 可执行文件。回移 helper 使用 Python 应用随仓库提供的上游补丁块，在写入前验证所有源文件，并兼容已应用状态。
