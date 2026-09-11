@@ -28,16 +28,25 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 python3 -m pip install -q --no-input datasets 2>&1 | tail -2 || true
 
+# Two nodes for this pass: conc-list [1,2] -> shards 0 and 1.
+NUM_SHARDS=${ENGRAM_NUM_SHARDS:-2}
+# Part files from the previous 3-shard run sit in the same NFS output dir under
+# colliding names, and they hold copy-averaged gates. Rescan unless asked not to.
+RESUME_FLAG=""
+if [[ -z "${ENGRAM_RESUME:-}" ]]; then
+    RESUME_FLAG="--no-resume"
+fi
 SHARD=$((CONC - 1))
-echo "=== Engram gate scan: shard ${SHARD} of 3, TP=${TP} ==="
+echo "=== Engram gate scan: shard ${SHARD} of ${NUM_SHARDS}, TP=${TP} ==="
 
 cd "$INFERENCEX_REPO_ROOT"
 python3 analysis/engram/scan.py \
     --model "$MODEL_PATH" \
     --tp "$TP" \
     --shard "$SHARD" \
-    --num-shards 3 \
-    --max-chunks-per-domain "${ENGRAM_MAX_CHUNKS:-1750}" \
+    --num-shards "$NUM_SHARDS" \
+    --max-chunks-per-domain "${ENGRAM_MAX_CHUNKS:-96}" \
+    $RESUME_FLAG \
     --out "$RESULT_DIR/engram_scan"
 
 echo "=== scan complete for shard ${SHARD} ==="

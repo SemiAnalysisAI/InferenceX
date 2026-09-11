@@ -147,8 +147,10 @@ def _gate(self, hidden_states, hash_ids, token_mask):
     gate = torch.sigmoid(torch.sqrt(dot.abs().clamp_min(self.clamp_value)) * dot.sign())
     if token_mask is not None:
         gate = gate * token_mask.view(-1, 1).to(gate.dtype)
-    # One scalar per token: average over the hyper-connection copies.
-    return gate.mean(dim=1).to(torch.float32).cpu().numpy(), start
+    # Keep the hyper-connection axis: [tokens, hc]. Averaging over the four
+    # copies was suppressing the peak -- if one copy opens and three stay shut,
+    # the mean understates the gate by ~4x.
+    return gate.to(torch.float32).cpu().numpy(), start
 
 
 def install_in_workers(analysis_dir: str) -> str:

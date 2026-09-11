@@ -28,7 +28,8 @@ for t in range(T):
         dot *= hr * kr / np.sqrt(D)
         gi = np.sign(dot) * np.sqrt(max(abs(dot), clamp))
         ref[t, h] = 1/(1+np.exp(-gi))
-assert np.allclose(gate, ref.mean(axis=1), atol=1e-5), (gate, ref.mean(axis=1))
+assert gate.shape == (T, HC), gate.shape
+assert np.allclose(gate, ref, atol=1e-5), (gate, ref)
 assert start == 0
 print("gate math matches hand-computed kernel formula")
 
@@ -172,9 +173,45 @@ def test_parts_are_written_per_domain_and_merged(tmp_path):
         with open(scan._part_path(out, 0, domain), "w") as fh:
             json.dump(part, fh)
 
-    report, tokens = scan._merge_parts(out, 0, ["wiki", "math", "absent"])
+    report, tokens, dists = scan._merge_parts(out, 0, ["wiki", "math", "absent"])
     assert tokens == {"wiki": 100, "math": 200}
+    assert dists == {"wiki": {}, "math": {}}
     assert set(report) == {"wiki/engram0/2gram", "math/engram0/2gram"}
     assert "_tokens" not in report
     # A shard's parts never collide with another shard's.
     assert scan._part_path(out, 1, "wiki") != scan._part_path(out, 0, "wiki")
+
+
+def test_gate_probe_keeps_the_hyper_connection_axis():
+    """Averaging the four copies was hiding the peak; the probe must not."""
+    gate, start = gate_probe._gate(mod, hidden, torch.zeros(T, 1, dtype=torch.long), None)
+    assert gate.shape == (T, HC), gate.shape
+    assert start == 0
+    assert ((gate > 0) & (gate < 1)).all(), "a sigmoid cannot leave (0, 1)"
+
+
+def test_distribution_captures_max_quantiles_and_per_copy():
+    acc = scan._new_dist()
+    g = np.zeros((100, 4), dtype=np.float32)
+    g[:, 0] = 0.02          # copy 0 shut
+    g[:, 1] = 0.50
+    g[:, 3] = 0.97          # copy 3 wide open
+    scan._accumulate_dist(acc, g)
+    out = scan._finalize_dist(acc)
+    assert out["max"] == 0.97
+    assert out["n_gate_values"] == 400
+    assert out["per_copy_mean"] == [0.02, 0.5, 0.0, 0.97]
+    assert out["per_copy_max"] == [0.02, 0.5, 0.0, 0.97]
+    # The copy-max is 4x the copy-mean here, which is the error being fixed.
+    assert abs(out["mean"] - 0.3725) < 1e-4
+    assert sum(out["hist"]) == 400
+    assert 0.9 < out["q0.99"] <= 1.0
+
+
+def test_collect_stitches_two_dimensional_gates():
+    d = tempfile.mkdtemp()
+    np.save(os.path.join(d, "L0_r0_s0_n4_c1_1.npy"), np.zeros((4, 4), dtype=np.float32))
+    np.save(os.path.join(d, "L0_r1_s4_n6_c1_2.npy"), np.ones((6, 4), dtype=np.float32))
+    got = scan._collect(d, 10)
+    assert got[0].shape == (10, 4), got[0].shape
+    assert got[0][0].max() == 0 and got[0][9].max() == 1

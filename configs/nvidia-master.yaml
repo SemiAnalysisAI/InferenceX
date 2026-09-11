@@ -10229,4 +10229,4 @@ dsv41flash-fp4-h100-vllm-agentic-dspark:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 3] }
+      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2] }

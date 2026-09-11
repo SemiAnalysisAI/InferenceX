@@ -21,6 +21,7 @@ import json
 import logging
 import os
 import sys
+import time
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", stream=sys.stdout
@@ -45,6 +46,9 @@ def main() -> int:
                          "streaming domains will always hit it, the small "
                          "reference corpora exhaust first. See README for the "
                          "chunks-to-hours mapping.")
+    ap.add_argument("--probe-dir", default=os.environ.get("ENGRAM_PROBE_SCRATCH"),
+                    help="Node-local scratch for the probe's .npy files. "
+                         "Must not be on NFS.")
     ap.add_argument("--no-resume", action="store_true",
                     help="Rescan domains that already have a part file on disk.")
     ap.add_argument("--strong-quantile", type=float, default=0.99)
@@ -56,8 +60,12 @@ def main() -> int:
     args = ap.parse_args()
 
     os.makedirs(args.out, exist_ok=True)
-    probe_dir = os.path.join(args.out, "probe")
+    # Deliberately NOT under --out: that is NFS-backed (/ix), and every chunk
+    # writes 16 small files (8 ranks x 2 layers) and reads them all back. The
+    # probe was costing 0.52s of the 0.73s per chunk.
+    probe_dir = args.probe_dir or f"/dev/shm/engram_probe_shard{args.shard}"
     os.makedirs(probe_dir, exist_ok=True)
+    logger.info("engram-probe: writing gates to %s", probe_dir)
     # Workers inherit this, so the wrapper knows where to write.
     os.environ[gate_probe.PROBE_DIR_ENV] = probe_dir
 
@@ -95,6 +103,9 @@ def main() -> int:
         lambda: collections.defaultdict(lambda: [0, 0.0])
     )
     gate_hist: dict[tuple, list] = collections.defaultdict(list)
+    # Full gate distribution per (domain, layer) -- the earlier runs only kept
+    # the strong tail, so the observed maximum was an artifact of selection.
+    dist: dict[tuple, dict] = collections.defaultdict(_new_dist)
     seen_tokens = collections.Counter()
 
     for domain in domains:
@@ -119,19 +130,40 @@ def main() -> int:
 
         # Pass 1 collects gates; the threshold is per (domain, layer).
         per_chunk: list[tuple[list[int], dict[int, "object"]]] = []
+        timing = collections.Counter()
         for idx, chunk in enumerate(chunks):
+            t0 = time.perf_counter()
             _clear(probe_dir)
+            t1 = time.perf_counter()
             llm.generate({"prompt_token_ids": chunk}, sampling, use_tqdm=False)
+            t2 = time.perf_counter()
             captured = _collect(probe_dir, len(chunk))
+            t3 = time.perf_counter()
+            timing["clear"] += t1 - t0
+            timing["prefill"] += t2 - t1
+            timing["collect"] += t3 - t2
             if not captured:
                 logger.warning("domain %s chunk %d: no gates captured", domain, idx)
                 continue
-            per_chunk.append((chunk, captured))
+            per_chunk.append((chunk, {l: g.max(axis=1) for l, g in captured.items()}))
             for layer, gates in captured.items():
-                gate_hist[(domain, layer)].append(gates)
+                # Threshold and rank on the strongest hyper-connection copy.
+                gate_hist[(domain, layer)].append(gates.max(axis=1))
+                _accumulate_dist(dist[(domain, layer)], gates)
             seen_tokens[domain] += len(chunk)
+            timing["accumulate"] += time.perf_counter() - t3
             if idx % 25 == 0:
                 logger.info("domain %s: %d/%d chunks", domain, idx + 1, len(chunks))
+
+        if chunks:
+            n = len(chunks)
+            logger.info(
+                "domain %s timing per chunk: prefill %.3fs collect %.3fs "
+                "clear %.3fs accumulate %.3fs (total %.3fs)",
+                domain, timing["prefill"] / n, timing["collect"] / n,
+                timing["clear"] / n, timing["accumulate"] / n,
+                sum(timing.values()) / n,
+            )
 
         thresholds = {}
         for (dom, layer), arrays in list(gate_hist.items()):
@@ -173,6 +205,11 @@ def main() -> int:
             tokenizer, args.top_k, args.min_count,
         )
         part["_tokens"] = seen_tokens[domain]
+        part["_gate_dist"] = {
+            f"engram{layer}": _finalize_dist(acc)
+            for (dom, layer), acc in dist.items()
+            if dom == domain
+        }
         tmp = part_path + ".tmp"
         with open(tmp, "w") as handle:
             json.dump(part, handle, indent=2)
@@ -182,13 +219,16 @@ def main() -> int:
             del stats[key]
         for key in [k for k in gate_hist if k[0] == domain]:
             del gate_hist[key]
+        for key in [k for k in dist if k[0] == domain]:
+            del dist[key]
 
-    report, tokens = _merge_parts(args.out, args.shard, domains)
+    report, tokens, dists = _merge_parts(args.out, args.shard, domains)
     report["meta"] = {
         "model": args.model,
         "shard": args.shard,
         "num_shards": args.num_shards,
         "tokens_scanned": tokens,
+        "gate_distribution": dists,
         "strong_quantile": args.strong_quantile,
         "ngram_sizes": list(NGRAM_SIZES),
     }
@@ -210,13 +250,75 @@ def main() -> int:
 
 
 
+
+# Gate histogram over [0, 1); the gate is a sigmoid so it cannot leave that range.
+_DIST_BINS = 200
+
+
+def _new_dist():
+    import numpy as np
+
+    return {
+        "hist": np.zeros(_DIST_BINS, dtype=np.int64),
+        "max": 0.0,
+        "sum": 0.0,
+        "n": 0,
+        "per_copy_sum": None,
+        "per_copy_max": None,
+    }
+
+
+def _accumulate_dist(acc, gates):
+    """Fold one chunk's [tokens, hc] gates into the running distribution."""
+    import numpy as np
+
+    flat = gates.reshape(-1)
+    acc["hist"] += np.bincount(
+        np.clip((flat * _DIST_BINS).astype(np.int64), 0, _DIST_BINS - 1),
+        minlength=_DIST_BINS,
+    )
+    acc["max"] = max(acc["max"], float(flat.max()))
+    acc["sum"] += float(flat.sum())
+    acc["n"] += int(flat.size)
+    copies = gates.shape[1]
+    if acc["per_copy_sum"] is None:
+        acc["per_copy_sum"] = np.zeros(copies, dtype=np.float64)
+        acc["per_copy_max"] = np.zeros(copies, dtype=np.float64)
+    acc["per_copy_sum"] += gates.sum(axis=0)
+    acc["per_copy_max"] = np.maximum(acc["per_copy_max"], gates.max(axis=0))
+
+
+def _finalize_dist(acc):
+    if not acc["n"]:
+        return {}
+    import numpy as np
+
+    hist = acc["hist"]
+    cum = np.cumsum(hist) / acc["n"]
+    quantiles = {
+        f"q{q}": float(np.searchsorted(cum, q) + 0.5) / _DIST_BINS
+        for q in (0.5, 0.9, 0.99, 0.999, 0.9999)
+    }
+    tokens = acc["n"] // len(acc["per_copy_sum"])
+    return {
+        "max": round(acc["max"], 5),
+        "mean": round(acc["sum"] / acc["n"], 5),
+        "n_gate_values": acc["n"],
+        **{k: round(v, 5) for k, v in quantiles.items()},
+        "per_copy_mean": [round(v / tokens, 5) for v in acc["per_copy_sum"]],
+        "per_copy_max": [round(float(v), 5) for v in acc["per_copy_max"]],
+        "hist_bins": _DIST_BINS,
+        "hist": hist.tolist(),
+    }
+
+
 def _part_path(out_dir, shard, domain):
     return os.path.join(out_dir, f"part_shard{shard}_{domain}.json")
 
 
 def _merge_parts(out_dir, shard, domains):
     """Assemble the final report from the per-domain files on disk."""
-    report, tokens = {}, {}
+    report, tokens, dists = {}, {}, {}
     for domain in domains:
         path = _part_path(out_dir, shard, domain)
         if not os.path.exists(path):
@@ -225,8 +327,9 @@ def _merge_parts(out_dir, shard, domains):
         with open(path) as handle:
             part = json.load(handle)
         tokens[domain] = part.pop("_tokens", 0)
+        dists[domain] = part.pop("_gate_dist", {})
         report.update(part)
-    return report, tokens
+    return report, tokens, dists
 
 
 def _take_chunks(pieces, tokenizer, chunk_tokens, limit, shard, num_shards):
