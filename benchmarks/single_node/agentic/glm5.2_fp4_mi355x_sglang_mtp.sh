@@ -234,7 +234,10 @@ SGLANG_CMD=(
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
     --mem-fraction-static "$MEM_FRACTION_STATIC"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
-    --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
+    # The 0910 image splits cuda-graph sizing into per-phase flags; the old
+    # unified --cuda-graph-max-bs is no longer accepted by argparse and the
+    # server dies at startup. Decode is the phase this cap was ever meant for.
+    --cuda-graph-max-bs-decode "$CUDA_GRAPH_MAX_BS"
     --speculative-algorithm EAGLE
     --speculative-num-steps 5
     --speculative-eagle-topk 1
