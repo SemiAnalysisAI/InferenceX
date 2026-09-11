@@ -10,6 +10,7 @@ import pytest
 
 from validate_reusable_sweep_artifacts import (
     _result_order,
+    _raw_result_error,
     agentic_key,
     benchmark_key,
     dedupe_reran_evals,
@@ -19,6 +20,43 @@ from validate_reusable_sweep_artifacts import (
     validate_eval_artifacts,
     validate_fixed_artifacts,
 )
+
+
+@pytest.mark.parametrize("metrics,config,expected_score,expected_error", [
+    ({"exact_match,custom": 0.5}, {"filter_list": [{"name": "custom"}]}, None, None),
+    ({"strict_metric,extract": 0.75},
+     {"metric_list": [{"metric": "strict_metric"}],
+      "filter_list": [{"name": "plain"}, {"name": "extract"}]},
+     0.75, "has no score for task 'task'"),
+    ({"exact_match,strict-first": -0.1, "exact_match,strict-last": 0.75},
+     {"filter_list": [{"name": "strict-first"}, {"name": "strict-last"}]},
+     0.75, "has invalid score 'exact_match,strict-first' for task 'task': -0.1"),
+])
+def test_reuse_preserves_stricter_and_distinct_metric_selection(
+    tmp_path: Path, metrics: dict, config: dict, expected_score: float | None,
+    expected_error: str | None,
+) -> None:
+    from collect_eval_results import collect_eval_rows
+
+    (tmp_path / "meta_env.json").write_text("{}")
+    path = tmp_path / "results.json"
+    path.write_text(json.dumps({
+        "lm_eval_version": "test", "results": {"task": metrics},
+        "configs": {"task": config},
+    }))
+
+    assert _raw_result_error(path) == expected_error
+    [row] = collect_eval_rows(tmp_path)
+    assert row["score"] == expected_score
+    assert row["infrastructure_success"] is (expected_score is not None)
+
+
+def test_reuse_rejects_present_null_integration_error(tmp_path: Path) -> None:
+    path = tmp_path / "results.json"
+    path.write_text(json.dumps({
+        **raw_eval_result(), "integration_error": None,
+    }))
+    assert _raw_result_error(path) == "reports an integration error"
 
 
 @pytest.mark.parametrize("name,expected_ns", [

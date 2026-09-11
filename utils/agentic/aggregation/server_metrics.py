@@ -57,9 +57,16 @@ def compute_server_metrics(
     nested["adapter"] = adapter.name
     adapter.populate(metrics, flat, nested)
 
-    capacity = adapter.gpu_kv_capacity_tokens(metrics, log_paths)
-    if capacity is not None:
-        nested["kv_cache"]["gpu_total_tokens"] = capacity
+    if framework.lower() == "dynamo-sglang" and adapter.name == "sglang":
+        # Dynamo can export replicated TP-rank gauges for one logical KV pool.
+        nested["kv_cache"]["gpu_total_tokens"] = None
+        warnings.append(
+            "Dynamo-SGLang logical KV capacity is unsupported: rank replicas are not normalized"
+        )
+    else:
+        capacity = adapter.gpu_kv_capacity_tokens(metrics, log_paths)
+        if capacity is not None:
+            nested["kv_cache"]["gpu_total_tokens"] = capacity
 
     apply_profile_totals(flat, records)
     if nested["tokens"]["prompt_total"] is None:

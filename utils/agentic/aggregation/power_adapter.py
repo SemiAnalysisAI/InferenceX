@@ -398,6 +398,10 @@ def _record_multinode_adapter_failure(
         power_valid=False, metrics={},
     )
     _write_json_atomic(agg_result, aggregate)
+    _write_multinode_failure_validation(validation_result, reasons)
+
+
+def _write_multinode_failure_validation(validation_result: Path, reasons: list[str]) -> None:
     _write_json_atomic(
         validation_result,
         {
@@ -511,6 +515,7 @@ def main() -> int:
     parser.add_argument("--result-dir", type=Path, required=True)
     parser.add_argument("--agg-result", type=Path)
     parser.add_argument("--expected-num-gpus", type=int)
+    parser.add_argument("--multinode-contract-missing", action="store_true")
     parser.add_argument("--write-multinode-window", choices=("running", "completed"))
     parser.add_argument("--concurrency", type=int)
     parser.add_argument("--power-dir", type=Path)
@@ -522,6 +527,34 @@ def main() -> int:
         default=os.environ.get("REQUIRE_POWER", "").lower() in {"1", "true", "yes"},
     )
     args = parser.parse_args()
+    if args.multinode_contract_missing:
+        if args.agg_result is None:
+            parser.error("--agg-result is required with --multinode-contract-missing")
+        validation_result = args.result_dir / "power_validation.json"
+        reasons = ["multinode_power_contract_missing"]
+        try:
+            _record_multinode_adapter_failure(
+                agg_result=args.agg_result,
+                validation_result=validation_result,
+                reasons=reasons,
+            )
+        except (OSError, json.JSONDecodeError, ValueError) as exc:
+            print(
+                f"[agentx_power] Failed to record multinode adapter failure: {exc}",
+                file=sys.stderr,
+            )
+            # Preserve the invalid verdict even when there is no usable aggregate.
+            try:
+                _write_multinode_failure_validation(validation_result, reasons)
+            except (OSError, ValueError) as validation_exc:
+                print(
+                    f"[agentx_power] Failed to write power validation: {validation_exc}",
+                    file=sys.stderr,
+                )
+        return _fail_multinode_adapter(
+            "Multinode AgentX power is unavailable: producer measurement-window contract missing",
+            require_power=args.require_power,
+        )
     if args.write_multinode_window is not None:
         if args.concurrency is None:
             parser.error("--concurrency is required with --write-multinode-window")

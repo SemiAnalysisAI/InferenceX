@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -21,6 +22,57 @@ def test_cli_is_importable_from_launcher_working_directory():
     )
 
     assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize("require_power", [False, True])
+@pytest.mark.parametrize(
+    "aggregate_bytes",
+    [
+        None,
+        b"{malformed",
+        b"[]",
+        b'{"model":"fixture","power_valid":1,"avg_power_w":900,"total_gpu_energy_j":999}',
+    ],
+)
+def test_contract_missing_cli_preserves_invalid_verdict_and_requested_strictness(
+    tmp_path: Path, require_power: bool, aggregate_bytes: bytes | None
+) -> None:
+    aggregate = tmp_path / "aggregate.json"
+    result_dir = tmp_path / "results"
+    if aggregate_bytes is not None:
+        aggregate.write_bytes(aggregate_bytes)
+    command = [
+        sys.executable, "-m", "utils.agentic.aggregation.power_adapter",
+        "--result-dir", str(result_dir), "--agg-result", str(aggregate),
+        "--multinode-contract-missing",
+    ]
+    if require_power:
+        command.append("--require-power")
+    result = subprocess.run(
+        command,
+        cwd=Path(__file__).resolve().parents[3],
+        env={**os.environ, "REQUIRE_POWER": "0"},
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == int(require_power), result.stderr
+    assert "Traceback" not in result.stderr
+    assert "producer measurement-window contract missing" in result.stderr
+    assert json.loads((result_dir / "power_validation.json").read_text()) == {
+        "power_valid": False, "reasons": ["multinode_power_contract_missing"],
+        "window_source": "aiperf_multinode_custom_benchmark",
+    }
+    if aggregate_bytes is None:
+        assert not aggregate.exists()
+    elif aggregate_bytes in (b"{malformed", b"[]"):
+        assert aggregate.read_bytes() == aggregate_bytes
+    else:
+        assert json.loads(aggregate.read_text()) == {
+            "model": "fixture", "power_valid": 0, "power_metric_schema_version": 2,
+        }
+    if aggregate_bytes is None or aggregate_bytes in (b"{malformed", b"[]"):
+        assert "Failed to record multinode adapter failure" in result.stderr
 
 
 def _record(
