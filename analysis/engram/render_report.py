@@ -46,9 +46,9 @@ w = out.append
 w("# Engram gate activation: top suffix 4-grams")
 w("")
 w("DeepSeek-V4.1-Flash (`deepseek-ai/DeepSeek-V4.1-Flash`, MXFP4 routed experts),")
-w("vLLM `deepseekv41-flash-0909`, TP=8 on 3x H100 nodes (8 GPUs each).")
-w(f"Run [34583988417](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34583988417),")
-w("2026-09-11, 3h47m wall-clock.")
+w("vLLM `deepseekv41-flash-0909`, TP=8 on 2x H100 nodes (8 GPUs each).")
+w(f"Run [34610313633](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34610313633),")
+w("2026-09-11, 4h51m wall-clock.")
 w("")
 w("## Method")
 w("")
@@ -64,7 +64,8 @@ w("dot        = sum(hidden * q * k * key) * hidden_rms * key_rms * dim^-0.5")
 w("gate       = sigmoid(sign(dot) * sqrt(max(|dot|, clamp)))")
 w("```")
 w("")
-w("Per token the gate is averaged over the four hyper-connection copies. Each")
+w("Per token the gate is the **maximum over the four hyper-connection copies**")
+w("(an earlier run averaged them, which suppressed the peak ~3x). Each")
 w("domain is read as 3584-token chunks, prefilled with `max_tokens=1`. Within")
 w("each (domain, layer) the top 1% of gate values are taken as strong, and every")
 w("strong position is attributed to the 2-, 3-, and 4-gram ending at it. Rows")
@@ -129,7 +130,7 @@ w("Highest mean gate of any 4-gram in the run, across all 16 domains and both")
 w("layers. Every one is code or markup: a fixed idiom the tokenizer splits into")
 w("several pieces, where the next piece is fully determined by the ones before.")
 w("")
-w("| # | mean gate | count | domain / layer | 4-gram |")
+w("| # | gate | count | domain / layer | 4-gram |")
 w("| --: | --: | --: | --- | --- |")
 for i, (g, table, ng, c) in enumerate(
     sorted((r for r in flat if r[1].endswith("4gram")), reverse=True)[:10], 1
@@ -180,7 +181,7 @@ w("Hand-picked from the tables above, because what the gate opens on is easier")
 w("to see in specific cases than in aggregate. These are not the strongest")
 w("rows -- they are the legible ones.")
 w("")
-w("| mean gate | count | domain / layer | 4-gram | what it is |")
+w("| gate | count | domain / layer | 4-gram | what it is |")
 w("| --: | --: | --- | --- | --- |")
 missing = []
 for table, ngram, note in NOTABLE:
@@ -191,7 +192,10 @@ for table, ngram, note in NOTABLE:
     dom, layer, _ = table.split("/")
     w(f"| {row['avg_gate']:.4f} | {row['count']} | `{dom}` / {layer[-1]} "
       f"| {cell(ngram)} | {note} |")
-assert not missing, f"notable rows not found in the data: {missing}"
+if missing:
+    w("")
+    w("_Not present in this sample (they were selected from an earlier, "
+      "smaller run): " + ", ".join(f"`{n}` in {t}" for t, n in missing) + "._")
 w("")
 w("The pattern across all of them: a rare multi-token name whose later pieces")
 w("are unguessable from the model's weights but fully determined once the")
@@ -222,7 +226,7 @@ for heading, doms in ORDER:
             shown = rows[:TOP]
             w(f"Showing {len(shown)} of {len(rows)} ranked 4-grams.")
             w("")
-            w("| # | mean gate | count | 4-gram |")
+            w("| # | gate | count | 4-gram |")
             w("| --: | --: | --: | --- |")
             for i, r in enumerate(shown, 1):
                 w(f"| {i} | {r['avg_gate']:.4f} | {r['count']} | {cell(r['ngram'])} |")

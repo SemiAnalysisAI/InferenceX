@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
-# Engram ablation: does zeroing the n-gram memory's contribution change evals?
+# Engram ablation: does removing the n-gram memory change eval accuracy?
 #
-# Serves DeepSeek-V4.1-Flash twice in one job -- baseline, then with the
-# Engram contribution forced to zero -- and runs the same lm-eval suite
-# against each. Both halves share one allocation deliberately: a delta between
-# two separately-scheduled jobs would also carry node and image differences.
+# Serves DeepSeek-V4.1-Flash twice in one allocation -- baseline, then with the
+# Engram contribution removed -- and runs the same suites against each. One
+# allocation deliberately: a delta between separately-scheduled jobs would also
+# carry node and image differences.
 #
-# The gate is consumed inside a fused Triton kernel, so it cannot be set to
-# zero directly. analysis/engram/gate_probe.py:install_ablation drops the
-# contribution instead, detecting at runtime whether forward returns the
-# updated hidden states or only the delta.
+# The ablation passes an all-False token_mask through the real Engram.forward.
+# Its docstring documents that path ("False shuts the gate so those positions
+# pass through untouched") and the shipped Triton kernel confirms it:
+# `gate = where(active, gate, 0.0)` then `store hidden + gate * value`. An
+# earlier version guessed the return convention instead and produced a
+# uniform-output model.
 set -eo pipefail
 
 source "$(dirname "$0")/../../benchmarks/benchmark_lib.sh"
@@ -34,83 +36,53 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 # [batched-tokens x max-model-len x 2B] at startup and 1M OOMs an 80 GB card.
 EVAL_CONTEXT=8192
 export EVAL_MAX_MODEL_LEN="$EVAL_CONTEXT"
-# task:repeats. The code suites are the interesting ones -- the n-gram tables
-# put every one of the ten strongest 4-grams in code -- and they have headroom
-# that gsm8k (96-97% baseline) does not. They are repeated so within-arm noise
-# can be compared against the between-arm delta: the last run's two baselines
-# differed by 0.0045, more than the ablation effect it was trying to measure.
-# gsm8k stays as a single control, being the one suite known to run here.
-# gpqa_diamond is dropped: Idavidrein/gpqa is gated on the Hub.
-# gsm8k comes from the repo YAML, not lm-eval's built-in task: the built-in
-# declares `dataset_path: gsm8k`, and current huggingface_hub rejects bare
-# canonical ids ("Repository id must be 'namespace/name'"). The repo YAML uses
-# openai/gsm8k. The code suites have no repo YAML, so their built-ins are
-# patched in place below -- the same class of breakage that took out wikitext
-# and daily_dialog in the corpora.
+
+# task:repeats. gsm8k comes from the repo YAML -- lm-eval's built-in declares
+# `dataset_path: gsm8k` and current huggingface_hub rejects bare canonical ids.
+# The code suites are the interesting ones (every one of the ten strongest
+# 4-grams in the scan is code) and they have headroom gsm8k lacks at a ~97%
+# baseline, so they repeat twice: within-arm spread has to be reported next to
+# the delta, because two identical baselines once differed by 0.0045.
 EVAL_TASKS="${ENGRAM_EVAL_TASKS:-utils/evals/gsm8k.yaml:1 humaneval_instruct:2 mbpp_instruct:2}"
-# HumanEval and MBPP score by executing model-generated code. The pinned
-# lm-eval requires this opt-in; execution stays inside the job's container.
+# HumanEval and MBPP score by executing model-generated code.
 export HF_ALLOW_CODE_EVAL=1
 
-'
-import glob, os, re, sys
-
-RENAMES = {
-    "openai_humaneval": "openai/openai_humaneval",
-    "mbpp": "google-research-datasets/mbpp",
-}
-try:
-    import lm_eval.tasks as T
-except Exception as exc:
-    print("lm_eval.tasks not importable:", exc)
-    sys.exit(0)
-
-root = os.path.dirname(T.__file__)
-changed = []
-for path in glob.glob(f"{root}/humaneval/*.yaml") + glob.glob(f"{root}/mbpp/*.yaml"):
-    text = open(path).read()
-    new = text
-    for bare, full in RENAMES.items():
-        new = re.sub(rf"^(dataset_path:\s*){re.escape(bare)}\s*$", rf"\g<1>{full}",
-                     new, flags=re.M)
-    if new != text:
-        open(path, "w").write(new)
-        changed.append(os.path.basename(path))
-print("patched dataset_path in:", changed or "nothing (already namespaced?)")
-for path in glob.glob(f"{root}/humaneval/*.yaml") + glob.glob(f"{root}/mbpp/*.yaml"):
-    for line in open(path):
-        if line.startswith("dataset_path:"):
-            print(" ", os.path.basename(path), line.strip())
-PYPATCH
-
 cd "$INFERENCEX_REPO_ROOT"
-# vllm serve is launched from this shell, so PYTHONPATH must carry the
-# bootstrap that arms the patch inside the spawned TP workers.
 BOOTSTRAP=$(python3 -c "
 import sys; sys.path.insert(0, 'analysis')
 from engram import gate_probe
 print(gate_probe.write_bootstrap('$INFERENCEX_REPO_ROOT/analysis'))")
 echo "engram bootstrap: $BOOTSTRAP"
 
-# benchmark_lib on this branch has no select_available_server_port (it lands
-# with the H100 recipe PR), and pyxis shares the host network, so port 8888 can
-# already belong to a host service.
+# Confirm Engram is used and that the ablation removes it, before spending
+# hours on evals that assume both.
+echo "=== contribution check ==="
+export PYTHONPATH="$BOOTSTRAP:$INFERENCEX_REPO_ROOT/analysis${PYTHONPATH:+:$PYTHONPATH}"
+VERIFY_RC=0
+python3 analysis/engram/verify_contribution.py --tp "$TP" \
+    --out "$RESULT_DIR/engram_verify" || VERIFY_RC=$?
+echo "contribution check exit=$VERIFY_RC"
+if [[ "$VERIFY_RC" != 0 ]]; then
+    echo "REFUSING to run the evals: the ablation could not be shown to remove" >&2
+    echo "the Engram contribution, so any eval delta would be uninterpretable." >&2
+    exit 1
+fi
+
+# benchmark_lib on this branch has no select_available_server_port, and pyxis
+# shares the host network, so 8888 can already belong to a host service.
 pick_port() {
     local candidate
     for candidate in $(seq 8890 8960); do
         if ! (exec 3<>"/dev/tcp/127.0.0.1/$candidate") 2>/dev/null; then
-            PORT="$candidate"
-            export PORT
-            return 0
+            PORT="$candidate"; export PORT; return 0
         fi
     done
     echo "no free port in 8890-8960" >&2
     return 1
 }
 
-
-# Run after lm-eval is installed (run_lm_eval installs it lazily on first use);
-# an earlier version ran before that and silently no-opped with
+# Must run AFTER lm-eval exists: run_lm_eval installs it lazily on first use,
+# and an earlier version ran before that and no-opped with
 # "lm_eval.tasks not importable".
 patch_lm_eval_dataset_paths() {
     python3 <<'PYPATCH'
@@ -133,8 +105,8 @@ for path in targets:
     text = open(path).read()
     new = text
     for bare, full in RENAMES.items():
-        new = re.sub(rf"^(dataset_path:[ \t]*){re.escape(bare)}[ \t]*$", rf"\g<1>{full}",
-                     new, flags=re.M)
+        new = re.sub(rf"^(dataset_path:[ \t]*){re.escape(bare)}[ \t]*$",
+                     rf"\g<1>{full}", new, flags=re.M)
     if new != text:
         open(path, "w").write(new)
         changed.append(os.path.basename(path))
@@ -146,11 +118,10 @@ for path in targets:
 PYPATCH
 }
 
-# HumanEval and MBPP are marked unsafe because scoring executes model-generated
+# The code suites are marked unsafe because scoring executes model-generated
 # code: "Attempted to run task ... which is marked as unsafe. Set
 # confirm_run_unsafe_code=True". run_lm_eval builds a fixed command with no way
-# to pass that, so the code suites are invoked directly, with the same
-# model_args run_lm_eval uses. Execution stays inside this job's container.
+# to pass that, so they are invoked directly with the same model_args.
 run_code_eval() {
     local task="$1" out="$2"
     mkdir -p "$out"
@@ -162,20 +133,19 @@ run_code_eval() {
 }
 
 run_one() {
-    local mode="$1"          # baseline | ablated
+    local mode="$1"
     local out="$RESULT_DIR/eval_$mode"
     local log="$RESULT_DIR/server_$mode.log"
     mkdir -p "$out"
 
     if [[ "$mode" == ablated ]]; then
         export ENGRAM_ABLATE=1
-        export PYTHONPATH="$BOOTSTRAP:$INFERENCEX_REPO_ROOT/analysis${PYTHONPATH:+:$PYTHONPATH}"
     else
         unset ENGRAM_ABLATE
-        # Baseline runs with the bootstrap on PYTHONPATH too, so the only
-        # difference between the two halves is the env var it reads.
-        export PYTHONPATH="$BOOTSTRAP:$INFERENCEX_REPO_ROOT/analysis${PYTHONPATH:+:$PYTHONPATH}"
     fi
+    # The bootstrap is on PYTHONPATH for both arms, so the only difference
+    # between them is the env var it reads.
+    export PYTHONPATH="$BOOTSTRAP:$INFERENCEX_REPO_ROOT/analysis${PYTHONPATH:+:$PYTHONPATH}"
 
     pick_port
     echo "=== $mode: serving on port $PORT (ENGRAM_ABLATE=${ENGRAM_ABLATE:-unset}) ==="
@@ -194,8 +164,6 @@ run_one() {
     local pid=$!
     wait_for_server_ready --port "$PORT" --server-log "$log" --server-pid "$pid"
 
-    grep -aE "engram-ablate|engram-probe" "$log" | head -20 || true
-
     local spec task repeats suite r
     for spec in $EVAL_TASKS; do
         task="${spec%%:*}"
@@ -207,7 +175,6 @@ run_one() {
                 EVAL_CONCURRENT_REQUESTS=32 run_lm_eval \
                     --port "$PORT" --task "$task" \
                     --results-dir "$out/${suite}_r${r}" || true
-                # lm-eval now exists, so the task YAMLs can be patched.
                 patch_lm_eval_dataset_paths || true
             else
                 run_code_eval "$task" "$out/${suite}_r${r}" || true
@@ -215,38 +182,21 @@ run_one() {
         done
     done
 
-    # The forward-call count is what distinguishes a real ablation from a
-    # patch that was installed but never reached.
+    # A nonzero forward-call count is the evidence the ablation engaged.
     echo "--- $mode engram markers ---"
-    grep -aE "engram-ablate:" "$log" | grep -vc "armed in pid" || true
-    grep -aE "engram-ablate: (forward|cos|Engram)" "$log" | tail -8 || true
+    grep -aE "engram-ablate: (gate-shut|Engram)" "$log" | tail -5 || true
 
     kill "$pid" 2>/dev/null || true
     wait "$pid" 2>/dev/null || true
     sleep 20
 }
 
-# Confirm Engram is used at all, and that the ablation removes its
-# contribution, before spending two hours on evals that assume both.
-echo "=== contribution check ==="
-export PYTHONPATH="$BOOTSTRAP:$INFERENCEX_REPO_ROOT/analysis${PYTHONPATH:+:$PYTHONPATH}"
-# `set -e` would abort before VERIFY_RC could be read, losing the reason.
-VERIFY_RC=0
-python3 analysis/engram/verify_contribution.py --tp "$TP" --out "$RESULT_DIR/engram_verify" \
-    || VERIFY_RC=$?
-echo "contribution check exit=$VERIFY_RC"
-if [[ "$VERIFY_RC" != 0 ]]; then
-    echo "REFUSING to run the evals: the ablation could not be shown to remove" >&2
-    echo "the Engram contribution, so any eval delta would be uninterpretable." >&2
-    exit 1
-fi
-
 run_one baseline
 run_one ablated
 
 echo "===ENGRAM_ABLATION_SUMMARY_BEGIN==="
-python3 - <<'PYEOF'
-import glob, json, os
+python3 <<'PYEOF'
+import collections, glob, json, os, re, statistics
 
 root = os.environ["RESULT_DIR"]
 out = {}
@@ -262,6 +212,7 @@ for mode in ("baseline", "ablated"):
                 }
     out[mode] = merged or None
 print(json.dumps(out, indent=2))
+
 for key in sorted(out.get("baseline") or {}):
     base = out["baseline"][key]
     abl = (out.get("ablated") or {}).get(key, {})
@@ -270,9 +221,7 @@ for key in sorted(out.get("baseline") or {}):
             print(f"DELTA {key}/{metric}: {value:.4f} -> {abl[metric]:.4f} "
                   f"({abl[metric] - value:+.4f})")
 
-# Within-arm spread across repeats of the same suite bounds what a
-# between-arm delta can mean.
-import collections, re, statistics
+# Within-arm spread across repeats bounds what a between-arm delta can mean.
 for mode, tables in out.items():
     groups = collections.defaultdict(list)
     for key, metrics in (tables or {}).items():
