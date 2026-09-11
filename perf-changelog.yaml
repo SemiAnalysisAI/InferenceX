@@ -7259,3 +7259,10 @@
     - "Include c1 and c8 in the matched modern single-node control, spanning c1, c4, c8, c16 and c24 for latency-throughput comparisons with disaggregation."
     - "Keep serving settings, stock image, BF16 KV/Mamba and golden acceptance length 3.39 unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2984
+
+- config-keys:
+    - qwen3.5-fp8-mi300x-sglang-disagg-agentic-mtp
+  description:
+    - "Screen 32768-token chunks on dedicated TP8 prefill to reduce passes for long uncached prompts; preserve the decode chunk setting at 8192."
+    - "Keep mem-fraction-static 0.75 and AITER's automatic workspace reserve, homogeneous TP8, BF16 KV/Mamba, stock MORI, and golden acceptance length 3.39 unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2984

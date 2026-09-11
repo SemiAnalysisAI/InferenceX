@@ -1754,6 +1754,7 @@ dsv4-fp4-mi355x-sglang-agentic-mtp:
       - { tp: 8, ep: 1, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [128, 256], spec-decoding: mtp }
 
 # MI300X AgentX: one TP8/EP8 node per role, native SGLang Router and MORI KV transfer.
+# Dedicated TP8 prefill uses 32K chunks; decode retains the 8K setting.
 qwen3.5-fp8-mi300x-sglang-disagg-agentic-mtp:
   image: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi30x-20260910
   model: Qwen/Qwen3.5-397B-A17B-FP8
