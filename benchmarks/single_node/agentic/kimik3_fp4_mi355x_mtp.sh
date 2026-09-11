@@ -68,6 +68,7 @@ trap 'exit 143' TERM
 
 SPEC_ARGS=()
 SPEC_ROWS=1
+KDA_ARGS=()
 case "$CONC" in
     1|2|4|8)
         DCP_SIZE="${DCP_SIZE:-1}"
@@ -93,6 +94,7 @@ case "$CONC" in
             echo "MTP: k=$SPEC_NUM_TOKENS synthetic_accept=$SYNTHETIC_ACCEPT_LEN draft_kv=$DRAFT_KV_DTYPE"
         fi
         SPEC_ROWS=$(( SPEC_NUM_TOKENS + 1 ))
+        KDA_ARGS=(--additional-config '{"kda_prefill_backend":"triton"}')
         MAX_NUM_SEQS="${MAX_NUM_SEQS:-$(( CONC > 4 ? CONC : 4 ))}"
         MAX_BATCHED_TOKENS="${MAX_BATCHED_TOKENS:-8192}"
         ;;
@@ -106,11 +108,11 @@ case "$CONC" in
 esac
 export DCP_SIZE
 
-GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.89}"
+GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.90}"
 CUDAGRAPH_MODE="${CUDAGRAPH_MODE:-FULL_DECODE_ONLY}"
 
 LADDER=$(( MAX_NUM_SEQS * SPEC_ROWS ))
-CUDAGRAPH_CAPTURE_SIZES=$(seq -s, "$SPEC_ROWS" "$SPEC_ROWS" "$LADDER")
+CUDAGRAPH_CAPTURE_SIZES=$(seq -s, 1 "$LADDER")
 COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"$CUDAGRAPH_MODE\",\"max_cudagraph_capture_size\":$LADDER,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}")
 
 CP_ARGS=(--attention-backend ROCM_AITER_MLA)
@@ -154,6 +156,7 @@ VLLM_CMD=(
     "${CP_ARGS[@]}"
     "${EP_ARGS[@]}"
     "${SPEC_ARGS[@]}"
+    "${KDA_ARGS[@]}"
     "${COMPILATION_CONFIG_ARGS[@]}"
 )
 
