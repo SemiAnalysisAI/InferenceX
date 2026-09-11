@@ -159,6 +159,24 @@ The aggregate artifact matches the `bmk_*` collection pattern and therefore also
 
 Server logs are separate `server_logs_<RESULT_FILENAME>` artifacts. The app uses the fully stripped suffix fallback so AgentX rows can find a server log even though the log artifact has no `agentic_` prefix.
 
+Ordinary single-node AgentX runs enable the shared GPU power monitor by default.
+Their `power_audit_<RESULT_FILENAME>` artifact retains the raw telemetry, GPU
+identity, formal measurement window, timezone offset, and validation verdict
+from `results/`. Multinode runs retain the deployment telemetry under
+`LOGS/power/` and per-concurrency window/validation files under `LOGS/agentic/`
+in the same audit artifact. Available audits and AgentX aggregates upload even
+when a benchmark fails. Missing files do not establish power support: a
+multinode recipe also needs a compatible producer and launcher adapter.
+When that measurement-window contract is absent, the aggregate records
+`power_valid: 0` and the audit names `multinode_power_contract_missing`;
+`REQUIRE_POWER=1` also fails the job after preserving available results.
+
+Treat `power_valid: 1` with `power_metric_schema_version: 2` as a GPU telemetry
+verdict, not a request-accounting or model-quality verdict. Before using a point
+as a clean comparison, reconcile issued, completed, cancelled, and errored
+requests with raw profiling records and token totals. GPU-board energy is
+separate from estimated whole-system power.
+
 ### Raw inputs and aggregate schema
 
 [`process_agentic_result.py`](../utils/agentic/aggregation/process_agentic_result.py) resolves the current `results/aiperf_artifacts` layout and a one-child nested layout. It requires `profile_export.jsonl`. It reads these inputs when present:
@@ -172,7 +190,21 @@ Server logs are separate `server_logs_<RESULT_FILENAME>` artifacts. The app uses
 
 Every nonblank JSONL record increments `records_total`. Records with `metadata.benchmark_phase` other than `profiling` are warmup diagnostics and are excluded. Records with a truthy `error` are also excluded and categorized. Older records with no phase are treated as profiling. The retained count becomes `num_requests_successful`. The full accounting is preserved in `request_accounting` with profiled, total dropped, warmup dropped, error dropped, and `error_categories` fields.
 
-The AgentX aggregate has top-level identity and topology fields compatible with benchmark ingestion. Important AgentX fields include:
+`request_metrics.tokens.output_expected` uses local trace metadata only from the
+exact `metadata.dataset.hf_dataset_name` declared by AIPerf. Since the export
+does not record a resolved dataset revision, the matching cache must contain
+exactly one snapshot. Missing identity, missing metadata, or multiple snapshots
+leave this distribution empty; cache modification times and other datasets
+are never used to guess. Actual tokens, GPU energy denominators, and AIPerf's
+theoretical cache-hit metric retain their existing sources.
+
+The AgentX aggregate has top-level identity and topology fields compatible with benchmark ingestion.
+
+`num_gpus` explicitly records the physical count used by the shared processor.
+For single-node runs this is `tp * pp * pcp_size`; EP and DCP share devices.
+Consumers should prefer this count over inferring it from parallelism labels.
+
+Other important AgentX fields include:
 
 | Field group | Important fields |
 | --- | --- |
@@ -182,6 +214,12 @@ The AgentX aggregate has top-level identity and topology fields compatible with 
 | Request metrics | `request_metrics.qps`, `latency` blocks for TTFT/E2EL/ITL/TPOT/interactivity, token distributions, throughput, cache, and per-GPU throughput |
 | Server metrics | `server_metrics.cache`, `kv_cache`, token totals, source details, and any `warnings` |
 | Compatibility | `kv_cache_pool_tokens` mirrors `server_metrics.kv_cache.gpu_total_tokens` |
+
+For a `dynamo-sglang` run with `sglang:` telemetry, the processor uses the
+SGLang adapter for cache, utilization, and token metrics. Logical GPU KV capacity
+remains `null` with a warning because TP ranks may report duplicate capacity
+values. Raw Dynamo frontend totals may include warmup requests. Missing host-hit
+counters do not imply zero CPU cache hits.
 
 The app flattens nested AgentX v3 values into canonical metric keys. Examples include `median_ttft`, `p95_e2el`, `total_tput_tps`, `tput_per_gpu`, `server_gpu_cache_hit_rate`, and `gpu_kv_cache_usage_pct`. It maps p50 to `median`. Full-response ITL fields take precedence when present, and interactivity percentiles are derived as the reciprocal of the matching ITL percentile so historical and current rows use one definition.
 
@@ -352,6 +390,20 @@ Remove only the temporary directory you just created after inspection:
 printf 'temporary inspection directory: %s\n' "$tmp"
 rm -rf -- "$tmp"
 ```
+
+## P75 and P90 measured GPU power
+
+Validated single-node SMI and multinode DCGM results also emit `p75_total_gpu_power_w`,
+`p75_power_w`, `p90_total_gpu_power_w`, and `p90_power_w`. The total fields are
+the time-weighted 75th and 90th percentiles of the sum of
+all participating GPU-board power curves during the same formal benchmark window
+used for energy integration. Device samples are aligned with piecewise-linear
+interpolation before summing; elapsed time, rather than sample count, weights the
+percentile. Each per-chip field divides its fleet percentile by the participating GPU count.
+It is not an individual GPU's percentile or the average of device percentiles.
+All four values are withheld when telemetry validation fails. Older results remain
+missing until their original raw traces can be replayed; average watts cannot
+supply P75 or P90. The validation sidecar records `power_percentile_method`.
 
 ## Verification and stop conditions
 

@@ -1,11 +1,13 @@
-"""Shell-contract tests for the shared single-node AgentX power lifecycle."""
+"""Shell-contract tests for the shared AgentX power lifecycle."""
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import signal
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -23,6 +25,7 @@ def _run_lifecycle(
     enable_power: bool = True,
     require_power: bool = False,
     formal_multinode_power: bool = False,
+    real_power_adapter: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     result_dir = tmp_path / "results"
     result_dir.mkdir()
@@ -50,6 +53,10 @@ fake_python() {{
     case "$*" in
         *utils.agentic.aggregation.power_adapter*)
             printf 'adapter:%s\n' "$*" >> {str(event_log)!r}
+            if [ {'1' if real_power_adapter else '0'} = 1 ]; then
+                PYTHONPATH={str(REPO_ROOT)!r} {sys.executable!r} "$@"
+                return $?
+            fi
             ;;
         *validate_agentic_result*)
             printf 'validate\n' >> {str(event_log)!r}
@@ -138,23 +145,84 @@ def test_single_node_invokes_adapter_with_gpu_shape_and_strict_mode(tmp_path: Pa
     assert "--require-power" in adapter_event
 
 
-@pytest.mark.parametrize(
-    ("is_multinode", "enable_power"),
-    [(True, True), (False, False)],
-)
-def test_multinode_and_explicit_opt_out_skip_local_power(
-    tmp_path: Path, is_multinode: bool, enable_power: bool
-):
+def test_explicit_opt_out_skips_power(tmp_path: Path):
     result = _run_lifecycle(
         tmp_path,
-        is_multinode=is_multinode,
-        enable_power=enable_power,
+        enable_power=False,
     )
 
     assert result.returncode == 0, result.stderr
     events = _events(tmp_path)
     assert not any(event.startswith("monitor-") for event in events)
     assert not any(event.startswith("adapter:") for event in events)
+
+
+@pytest.mark.parametrize("require_power", [False, True])
+def test_multinode_missing_contract_records_invalid_power_and_enforces_strict_mode(
+    tmp_path: Path, require_power: bool
+):
+    result = _run_lifecycle(
+        tmp_path,
+        is_multinode=True,
+        require_power=require_power,
+        real_power_adapter=True,
+    )
+
+    assert result.returncode == int(require_power), result.stderr
+    events = _events(tmp_path)
+    assert not any(event.startswith("monitor-") for event in events)
+    adapter_event = next(event for event in events if event.startswith("adapter:"))
+    assert events.index("aggregate") < events.index(adapter_event)
+    aggregate = json.loads((tmp_path / "agg_agentx.json").read_text())
+    validation = json.loads((tmp_path / "results/power_validation.json").read_text())
+    assert aggregate["power_valid"] == 0
+    assert "total_gpu_energy_j" not in aggregate
+    assert validation["power_valid"] is False
+    assert validation["reasons"] == ["multinode_power_contract_missing"]
+
+
+@pytest.mark.parametrize("identity_fails", [False, True])
+def test_nvidia_monitor_preserves_identity_without_requiring_it(
+    tmp_path: Path, identity_fails: bool
+):
+    metrics_path = tmp_path / "gpu_metrics.csv"
+    script = f"""
+source {str(BENCHMARK_LIB)!r}
+nvidia-smi() {{
+    case "$*" in
+        --query-gpu=index,uuid,pci.bus_id,name,driver_version*)
+            printf 'index, uuid, pci.bus_id, name, driver_version\\n'
+            if [ {'1' if identity_fails else '0'} = 1 ]; then return 1; fi
+            printf '0, GPU-device-a, 00000000:01:00.0, NVIDIA Test GPU, 590.00\\n'
+            ;;
+        *)
+            printf '2026/09/09 00:00:00.000, 0, 200 W, 40, 1500, 1200, 80, 30\\n'
+            if [[ "$*" == *" -l "* ]]; then exec sleep 30; fi
+            ;;
+    esac
+}}
+set -e
+start_gpu_monitor --output {str(metrics_path)!r}
+stop_gpu_monitor
+"""
+    result = subprocess.run(
+        ["bash", "-c", script],
+        env={**os.environ, "PATH": "/usr/bin:/bin"},
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=5,
+    )
+
+    assert result.returncode == 0, result.stderr
+    identity_path = tmp_path / "gpu_metrics_identity.csv"
+    if identity_fails:
+        assert not identity_path.exists()
+        assert "NVIDIA identity sidecar failed" in result.stderr
+    else:
+        assert "0, GPU-device-a, 00000000:01:00.0, NVIDIA Test GPU, 590.00" in identity_path.read_text()
+    assert "Started NVIDIA" in result.stdout
+    assert "Stopped" in result.stdout
 
 
 def test_multinode_formal_window_wraps_replay_without_local_monitor(tmp_path: Path):
