@@ -16,7 +16,7 @@
 | [`utils/process_result.py`](../utils/process_result.py) | 固定序列吞吐量聚合架构及派生的每 GPU 指标 |
 | [`utils/collect_results.py`](../utils/collect_results.py)、[`collect-results.yml`](../.github/workflows/collect-results.yml) | 将基准结果递归收集为 `agg_<prefix>.json` 和 `results_<prefix>` |
 | [`utils/collect_eval_results.py`](../utils/collect_eval_results.py)、[`collect-evals.yml`](../.github/workflows/collect-evals.yml) | 评测发现、指标提取、批量并发选择及 `eval_results_<prefix>` |
-| [`process_agentic_result.py`](../utils/agentic/aggregation/process_agentic_result.py)、[`request_metrics.py`](../utils/agentic/aggregation/request_metrics.py) | AgentX 聚合架构、原始记录过滤、请求计数和派生指标 |
+| [`infx.results.agentic`](../infx/results/agentic/__init__.py)、[`request_metrics.py`](../infx/results/agentic/request_metrics.py)、[`artifacts.py`](../utils/agentic/aggregation/artifacts.py) | AgentX 聚合架构、原始记录过滤、请求计数和派生指标 |
 | [`validate_agentic_result.py`](../utils/agentic/validation/validate_agentic_result.py) | AgentX 上传前错误率门禁 |
 | [`run-sweep.yml`](../.github/workflows/run-sweep.yml)、[`recover-reused-ingest.yml`](../.github/workflows/recover-reused-ingest.yml) | 应用分发载荷及 source/merge 运行身份 |
 | [InferenceX-app `prepare-ci-artifacts.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/prepare-ci-artifacts.ts)、[`ci-artifact-preparation.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/lib/ci-artifact-preparation.ts) | 跨运行工件选择、attempt 及复用来源信息 |
