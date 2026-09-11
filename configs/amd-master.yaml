@@ -745,11 +745,12 @@ kimik3-fp4-mi355x-vllm-disagg-agentic:
           - "DECODE_DCP_COMM=a2a"
           - "DECODE_CP_KV_CACHE_INTERLEAVE_SIZE=1536"
 
-# Kimi-K3 DCP8 PD with DSpark synthetic acceptance. All settings inherit the
-# validated no-spec 1P1D c48 recipe except the explicitly listed spec/DCP
-# requirements. P and D both load the draft so their cache-group layouts match.
+# Kimi-K3 DCP8 PD with DSpark synthetic acceptance. Target verification uses
+# native AITER CPRR and the DCP-sharded draft uses AITER mask0. P runs eager;
+# D retains full decode graphs. Both roles load the draft so their cache-group
+# layouts match.
 kimik3-fp4-mi355x-vllm-disagg-agentic-dspark:
-  image: vllm/vllm-openai-rocm:nightly@sha256:91e381f072d6a44e1e4c97c82dce06e50e5189905cb3999a11471c5a8fc6a563
+  image: vllm/vllm-openai-rocm:nightly@sha256:659b28319fef4ea0e3d8f33e25b4c35d6f663f5d818a5b2fa06dceaf859234e4
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:mi355x-amds
@@ -776,10 +777,11 @@ kimik3-fp4-mi355x-vllm-disagg-agentic-dspark:
           additional-settings:
           - "PREFILL_NODES=1"
           - "GPU_MEMORY_UTILIZATION=0.88"
+          # P is eager, so return the graph-memory headroom to its prefix cache.
+          - "PREFILL_KV_CACHE_MEMORY_BYTES=59430781440"
           - "TOTAL_CPU_DRAM_GB=1799"
-          # DSpark adds cache groups whose DCP-scaled block size is 24576;
-          # LMCache requires its chunk size to be a multiple of every group.
-          - "LMCACHE_CHUNK_SIZE=24576"
+          # AITER target/draft FP8 caches merge into 1536-token physical groups.
+          - "LMCACHE_CHUNK_SIZE=12288"
           - "LMCACHE_L1_SIZE_GB=1799"
           - "LMCACHE_L1_READ_TTL_SECONDS=1800"
           - "LMCACHE_MAX_GPU_WORKERS=8"
@@ -787,21 +789,24 @@ kimik3-fp4-mi355x-vllm-disagg-agentic-dspark:
           - "LMCACHE_WORKER_REGISTRATION_GRACE_SECONDS=7200"
           - "SERVER_UP_TIMEOUT=900"
           - "IX_AIPERF_TOKENIZER=moonshotai/Kimi-K3"
-          - "VLLM_K3_FORK_REF=yichaozhu/k3-pd-dspark-mr-align"
-          - "VLLM_K3_FORK_SHA=4510af190bb5e7b840df837e691a040a01033021"
+          - "VLLM_K3_FORK_REF=yichaozhu/k3-pd-dspark-native-cprr"
+          - "VLLM_K3_FORK_SHA=698883d914273285a2c22fca9941022dd76a6fb7"
+          - "VLLM_K3_FULL_SOURCE_OVERLAY=1"
           - "VLLM_ROCM_PAGE_ALIGN_KV=1"
+          - "VLLM_ROCM_AITER_NATIVE_DCP_VERIFY=1"
           - "HF_HUB_CACHE=/models/.cache/huggingface/hub"
           - "PREFILL_DCP_COMM=a2a"
           - "PREFILL_CP_KV_CACHE_INTERLEAVE_SIZE=1"
           - "SPEC_NUM_TOKENS=4"
           - "SPEC_MODEL=/models/Inferact-Kimi-K3-DSpark"
-          - "SPEC_ATTN_BACKEND=TRITON_MLA"
+          - "SPEC_ATTN_BACKEND=ROCM_AITER_MLA"
+          - "SPEC_KV_CACHE_DTYPE=fp8"
           - "SPEC_DRAFT_SAMPLE_METHOD=probabilistic"
           - "SPEC_REJECTION_SAMPLE_METHOD=synthetic"
           - "SPEC_SYNTHETIC_ACCEPTANCE_LENGTH=3.36"
-          - "SPEC_MAX_NUM_SEQS=16"
-          - "SPEC_MAX_NUM_BATCHED_TOKENS=4096"
-          - "SPEC_PREFILL_CUDAGRAPH_MODE=FULL_AND_PIECEWISE"
+          - "SPEC_MAX_NUM_SEQS=80"
+          - "SPEC_MAX_NUM_BATCHED_TOKENS=16384"
+          - "SPEC_PREFILL_CUDAGRAPH_MODE=NONE"
         decode:
           num-worker: 1
           tp: 8
@@ -810,21 +815,26 @@ kimik3-fp4-mi355x-vllm-disagg-agentic-dspark:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=1"
-          - "VLLM_K3_FORK_REF=yichaozhu/k3-pd-dspark-mr-align"
-          - "VLLM_K3_FORK_SHA=4510af190bb5e7b840df837e691a040a01033021"
+          - "VLLM_K3_FORK_REF=yichaozhu/k3-pd-dspark-native-cprr"
+          - "VLLM_K3_FORK_SHA=698883d914273285a2c22fca9941022dd76a6fb7"
+          - "VLLM_K3_FULL_SOURCE_OVERLAY=1"
           - "VLLM_ROCM_PAGE_ALIGN_KV=1"
+          - "VLLM_ROCM_AITER_NATIVE_DCP_VERIFY=1"
           - "HF_HUB_CACHE=/models/.cache/huggingface/hub"
           - "DECODE_DCP_COMM=a2a"
           - "DECODE_CP_KV_CACHE_INTERLEAVE_SIZE=1"
           - "SPEC_NUM_TOKENS=4"
           - "SPEC_MODEL=/models/Inferact-Kimi-K3-DSpark"
-          - "SPEC_ATTN_BACKEND=TRITON_MLA"
+          - "SPEC_ATTN_BACKEND=ROCM_AITER_MLA"
+          - "SPEC_KV_CACHE_DTYPE=fp8"
           - "SPEC_DRAFT_SAMPLE_METHOD=probabilistic"
           - "SPEC_REJECTION_SAMPLE_METHOD=synthetic"
           - "SPEC_SYNTHETIC_ACCEPTANCE_LENGTH=3.36"
-          - "SPEC_MAX_NUM_SEQS=16"
-          - "SPEC_MAX_NUM_BATCHED_TOKENS=4096"
+          - "SPEC_MAX_NUM_SEQS=80"
+          - "SPEC_MAX_NUM_BATCHED_TOKENS=16384"
           - "SPEC_DECODE_CUDAGRAPH_MODE=FULL_DECODE_ONLY"
+          - "SPEC_MAX_CUDAGRAPH_CAPTURE_SIZE=512"
+          - "SPEC_CUDAGRAPH_CAPTURE_SIZES=1,2,4,8,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,136,144,152,160,168,176,184,192,200,208,216,224,232,240,248,256,272,288,304,320,336,352,368,384,400,416,432,448,464,480,496,512"
 
 # Decode-scaling comparison for the validated Kimi-K3 1P1D baseline. Kept in
 # a separate key so a targeted --conc 40 dispatch does not rerun the baseline.

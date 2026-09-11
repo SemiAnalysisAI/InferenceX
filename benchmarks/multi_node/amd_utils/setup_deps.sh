@@ -122,6 +122,7 @@ install_transformers_glm5() {
 #   VLLM_K3_FORK_REPO (default https://github.com/YukioZzz/vllm)
 #   VLLM_K3_FORK_REF  branch, tag, or commit
 #   VLLM_K3_FORK_SHA  optional required resolved commit
+#   VLLM_K3_FULL_SOURCE_OVERLAY=1 copies every Python module from the fork
 # ---------------------------------------------------------------------------
 install_kimi_k3_vllm_fork() {
     local ref="${VLLM_K3_FORK_REF:-}"
@@ -143,7 +144,11 @@ install_kimi_k3_vllm_fork() {
         exit 1
     fi
 
-    local marker="${src}/.inferencex_installed_${resolved_sha}"
+    local overlay_mode=allowlist
+    if [[ "${VLLM_K3_FULL_SOURCE_OVERLAY:-0}" == 1 ]]; then
+        overlay_mode=full-python
+    fi
+    local marker="${src}/.inferencex_installed_${resolved_sha}_${overlay_mode}"
     if [[ -f "$marker" ]]; then
         echo "[SETUP] Kimi-K3 vLLM fork already overlaid (${resolved_sha})"
         return 0
@@ -174,18 +179,30 @@ install_kimi_k3_vllm_fork() {
 import os, shutil, sys
 
 srcroot, dstroot = sys.argv[1:]
-files = [
-    "distributed/kv_transfer/kv_connector/v1/moriio/moriio_common.py",
-    "distributed/kv_transfer/kv_connector/v1/moriio/moriio_connector.py",
-    "distributed/kv_transfer/kv_connector/v1/moriio/moriio_engine.py",
-    "distributed/kv_transfer/kv_connector/v1/moriio/moriio_layout.py",
-    "v1/core/kv_cache_manager.py",
-    "v1/core/sched/scheduler.py",
-    "model_executor/layers/mamba/gdn/kimi_gdn_linear_attn.py",
-    "model_executor/models/qwen3_dflash.py",
-]
-if os.environ.get("SPEC_DECODING") == "mtp":
-    files.append("v1/attention/backends/mla/triton_mla.py")
+if os.environ.get("VLLM_K3_FULL_SOURCE_OVERLAY") == "1":
+    files = [
+        os.path.relpath(os.path.join(root, name), srcroot)
+        for root, _, names in os.walk(srcroot)
+        for name in names
+        if name.endswith(".py")
+    ]
+else:
+    files = [
+        "distributed/kv_transfer/kv_connector/v1/moriio/moriio_common.py",
+        "distributed/kv_transfer/kv_connector/v1/moriio/moriio_connector.py",
+        "distributed/kv_transfer/kv_connector/v1/moriio/moriio_engine.py",
+        "distributed/kv_transfer/kv_connector/v1/moriio/moriio_layout.py",
+        "v1/core/kv_cache_manager.py",
+        "v1/core/sched/scheduler.py",
+        "model_executor/layers/mamba/gdn/kimi_gdn_linear_attn.py",
+        "model_executor/models/qwen3_dflash.py",
+    ]
+    if os.environ.get("SPEC_DECODING") == "mtp":
+        files.extend([
+            "v1/attention/backends/mla/rocm_aiter_mla.py",
+            "v1/attention/backends/mla/triton_mla.py",
+            "v1/worker/gpu/spec_decode/dspark/utils.py",
+        ])
 for rel in files:
     src = os.path.join(srcroot, rel)
     dst = os.path.join(dstroot, rel)
@@ -193,7 +210,8 @@ for rel in files:
         raise SystemExit(f"missing overlay source: {src}")
     os.makedirs(os.path.dirname(dst), exist_ok=True)
     shutil.copy2(src, dst)
-print(f"[SETUP] overlaid {len(files)} allowlisted Python files -> {dstroot}")
+mode = "full" if os.environ.get("VLLM_K3_FULL_SOURCE_OVERLAY") == "1" else "allowlisted"
+print(f"[SETUP] overlaid {len(files)} {mode} Python files -> {dstroot}")
 PY
 
     if [[ "${VLLM_ROCM_PAGE_ALIGN_KV:-0}" == 1 ]]; then

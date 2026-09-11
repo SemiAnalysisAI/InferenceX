@@ -231,12 +231,27 @@ apply_vllm_gpu_memory_utilization() {
     fi
 }
 
+apply_vllm_kv_cache_memory_bytes() {
+    local cfg="$1"
+    local bytes="${2:-}"
+
+    if [[ -z "$bytes" ]]; then
+        echo "$cfg"
+    elif echo "$cfg" | grep -q -- '--kv-cache-memory-bytes'; then
+        echo "$cfg" | sed -E "s/--kv-cache-memory-bytes[[:space:]]+[^[:space:]]+/--kv-cache-memory-bytes ${bytes}/g"
+    else
+        echo "$cfg --kv-cache-memory-bytes $bytes"
+    fi
+}
+
 PREFILL_SERVER_CONFIG="$(apply_vllm_dp_config "$PREFILL_SERVER_CONFIG" "${PREFILL_TP_SIZE}" "${PREFILL_ENABLE_DP:-false}")"
 DECODE_SERVER_CONFIG="$(apply_vllm_dp_config "$DECODE_SERVER_CONFIG" "${DECODE_TP_SIZE}" "${DECODE_ENABLE_DP:-false}")"
 PREFILL_SERVER_CONFIG="$(apply_vllm_dcp_config "$PREFILL_SERVER_CONFIG" "${PREFILL_DCP_SIZE:-1}" "${PREFILL_DCP_COMM:-a2a}" "${PREFILL_CP_KV_CACHE_INTERLEAVE_SIZE:-1}")"
 DECODE_SERVER_CONFIG="$(apply_vllm_dcp_config "$DECODE_SERVER_CONFIG" "${DECODE_DCP_SIZE:-1}" "${DECODE_DCP_COMM:-a2a}" "${DECODE_CP_KV_CACHE_INTERLEAVE_SIZE:-1}")"
 PREFILL_SERVER_CONFIG="$(apply_vllm_gpu_memory_utilization "$PREFILL_SERVER_CONFIG" "${GPU_MEMORY_UTILIZATION:-}")"
 DECODE_SERVER_CONFIG="$(apply_vllm_gpu_memory_utilization "$DECODE_SERVER_CONFIG" "${GPU_MEMORY_UTILIZATION:-}")"
+PREFILL_SERVER_CONFIG="$(apply_vllm_kv_cache_memory_bytes "$PREFILL_SERVER_CONFIG" "${PREFILL_KV_CACHE_MEMORY_BYTES:-}")"
+DECODE_SERVER_CONFIG="$(apply_vllm_kv_cache_memory_bytes "$DECODE_SERVER_CONFIG" "${DECODE_KV_CACHE_MEMORY_BYTES:-}")"
 
 if [[ "${MODEL_NAME:-}" == "Kimi-K3" && "${SPEC_DECODING:-}" == "mtp" ]]; then
     apply_numeric_serve_flag() {
@@ -276,7 +291,7 @@ config = {
     "num_speculative_tokens": int(os.environ.get("SPEC_NUM_TOKENS", "4")),
     "method": "dspark",
     "attention_backend": os.environ.get("SPEC_ATTN_BACKEND", "TRITON_MLA"),
-    "kv_cache_dtype": "auto",
+    "kv_cache_dtype": os.environ.get("SPEC_KV_CACHE_DTYPE", "auto"),
     "draft_sample_method": os.environ.get(
         "SPEC_DRAFT_SAMPLE_METHOD", "probabilistic"
     ),
@@ -299,7 +314,7 @@ PY
     spec_cudagraph_mode=${SPEC_CUDAGRAPH_MODE:-FULL_AND_PIECEWISE}
     spec_prefill_cudagraph_mode=${SPEC_PREFILL_CUDAGRAPH_MODE:-$spec_cudagraph_mode}
     spec_decode_cudagraph_mode=${SPEC_DECODE_CUDAGRAPH_MODE:-$spec_cudagraph_mode}
-    spec_capture_size=$((spec_max_num_seqs * (${SPEC_NUM_TOKENS:-4} + 1)))
+    spec_capture_size=${SPEC_MAX_CUDAGRAPH_CAPTURE_SIZE:-$((spec_max_num_seqs * (${SPEC_NUM_TOKENS:-4} + 1)))}
     for role in PREFILL DECODE; do
         cfg_name="${role}_SERVER_CONFIG"
         cfg=${!cfg_name}
@@ -308,7 +323,32 @@ PY
         else
             role_cudagraph_mode=$spec_decode_cudagraph_mode
         fi
-        spec_compilation_config="{\"mode\":3,\"cudagraph_mode\":\"${role_cudagraph_mode}\",\"max_cudagraph_capture_size\":${spec_capture_size},\"custom_ops\":[\"+fused_rms_norm_gated\"]}"
+        spec_compilation_config=$( \
+            SPEC_ROLE_CUDAGRAPH_MODE="$role_cudagraph_mode" \
+            SPEC_CAPTURE_SIZE="$spec_capture_size" \
+            python3 - <<'PY'
+import json
+import os
+
+max_size = int(os.environ["SPEC_CAPTURE_SIZE"])
+config = {
+    "mode": 3,
+    "cudagraph_mode": os.environ["SPEC_ROLE_CUDAGRAPH_MODE"],
+    "max_cudagraph_capture_size": max_size,
+    "custom_ops": ["+fused_rms_norm_gated"],
+}
+raw_sizes = os.environ.get("SPEC_CUDAGRAPH_CAPTURE_SIZES", "").strip()
+if raw_sizes:
+    sizes = [int(value) for value in raw_sizes.split(",")]
+    if sizes != sorted(set(sizes)) or sizes[0] <= 0 or sizes[-1] > max_size:
+        raise ValueError(
+            "SPEC_CUDAGRAPH_CAPTURE_SIZES must be sorted, unique, positive, "
+            "and no larger than SPEC_MAX_CUDAGRAPH_CAPTURE_SIZE"
+        )
+    config["cudagraph_capture_sizes"] = sizes
+print(json.dumps(config, separators=(",", ":")))
+PY
+        )
         cfg=$(apply_numeric_serve_flag "$cfg" --max-num-seqs "$spec_max_num_seqs")
         cfg=$(apply_numeric_serve_flag \
             "$cfg" --max-num-batched-tokens "$spec_max_num_batched_tokens")
