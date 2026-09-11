@@ -7278,3 +7278,15 @@
     - "Require separate eval-only jobs in the shared srt-slurm adapter so accuracy evaluation cannot be silently skipped or mixed with golden-AL throughput."
     - "Make shared cache flushing opt-in; retain the existing explicit MI300X setting while preserving unrelated non-SGLang replay behavior."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2984
+
+- config-keys:
+    - qwen3.5-fp8-mi300x-sglang-disagg-agentic-mtp
+    - qwen3.5-fp8-mi300x-sglang-disagg-1p2d-agentic-mtp
+    - qwen3.5-fp8-mi300x-sglang-disagg-2p2d-agentic-mtp
+    - qwen3.5-fp8-mi300x-sglang-disagg-dep16-agentic-mtp
+    - qwen3.5-fp8-mi300x-sglang-disagg-colocated-agentic-mtp
+    - qwen3.5-fp8-mi300x-sglang-srt-agg-agentic-mtp
+  description:
+    - "Pin the srt-slurm fix that resolves multi-node SGLang distributed rendezvous through the configured network interface."
+    - "Use the management network for startup coordination while retaining the configured Broadcom devices for MORI IO and expert communication; no container or engine patch is applied."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2984

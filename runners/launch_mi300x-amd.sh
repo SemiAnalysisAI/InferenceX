@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if [[ -n "${CONFIG_FILE:-}" ]]; then
-    export SRT_SLURM_COMMIT="${SRT_SLURM_COMMIT:-fadd098f45f65ef9c2464bfd4cf39c51c8a02a1e}"
+    export SRT_SLURM_COMMIT="${SRT_SLURM_COMMIT:-c6dc2f05061e504c59b8e7baa30cfeacabc93645}"
     export SRT_SLURM_CLUSTER_CONFIG="${SRT_SLURM_CLUSTER_CONFIG:-${GITHUB_WORKSPACE}/benchmarks/multi_node/srt-slurm-recipes/cluster-configs/mi300x-amd.yaml}"
     export SRT_SLURM_SHARED_BASE="${SRT_SLURM_SHARED_BASE:-$HOME/inferencex/srt-slurm}"
     export AIPERF_MMAP_CACHE_HOST_PATH="${AIPERF_MMAP_CACHE_HOST_PATH:-$HOME/inferencex/aiperf-cache}"
