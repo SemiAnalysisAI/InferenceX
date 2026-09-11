@@ -7123,6 +7123,17 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2955
 
 - config-keys:
+    - glm5.2-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GLM-5.2 MXFP4 MI355X ATOM agentic MTP recipe aligned with ATOM PR #2117 reference script."
+    - "Image: rocm/atom-dev:ubuntu24.04_py3.12_pytorch_release_2.10.0_glm52_agentic_0902."
+    - "TP4 + LMCache DRAM offload, conc-list [1, 2, 4, 8, 10, 12]; DCP arm (dcp-size=4) at conc [16]."
+    - "Add --served-model-name to match AIPerf model name; LMCACHE_MAX_LOCAL_CPU_SIZE=min(TOTAL_CPU_DRAM_GB, 512) GiB/rank; ATOM_MLA_PAGE_SIZE=1; --gpu-memory-utilization 0.95; --max-num-batched-tokens 16384; spec-decode-acceptance-length=3.33 with 4 draft tokens."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2975
+
+- config-keys:
     - dsv4-fp4-gb300-dynamo-sglang-agentic-agg
   description:
     - "Update the SGLang image from nightly-dev-cu13-20260829-89816a21 to the digest-pinned v0.5.19-cu130 release (lmsysorg/sglang:v0.5.19-cu130@sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9)."

@@ -80,7 +80,9 @@ case "$KV_OFFLOAD_BACKEND" in
         # LMCache settings
         export PYTHONHASHSEED=0
         export LMCACHE_LOCAL_CPU=True
-        export LMCACHE_MAX_LOCAL_CPU_SIZE="$TOTAL_CPU_DRAM_GB"
+        # Cap at 512 GiB/rank (recipe value for large clusters); use dram-utilization budget on smaller nodes
+        export LMCACHE_MAX_LOCAL_CPU_SIZE=$(( TOTAL_CPU_DRAM_GB < 512 ? TOTAL_CPU_DRAM_GB : 512 ))
+        export LMCACHE_NUMA_MODE=auto
         export LMCACHE_CHUNK_SIZE=256
         export OFFLOAD_MIN_LOAD_TOKENS=8192
 
@@ -103,6 +105,8 @@ export PYTHONNOUSERSITE=1
 # ---- ATOM env ----
 export AITER_QUICK_REDUCE_QUANTIZATION=INT4
 export AITER_USE_FLYDSL_MOE_SORTING=1
+export ATOM_MLA_PAGE_SIZE=1
+export ATOM_DCP_REPLICATE_INDEX_CACHE="${ATOM_DCP_REPLICATE_INDEX_CACHE:-0}"
 
 # CUDA/HIPGRAPH settings
 case "$CONC" in
@@ -120,25 +124,29 @@ case "$CONC" in
 esac
 
 # PARALLEL settings
-PARALLEL_ARGS=(--tensor-parallel-size "$TP") #TP
-if [ "$DP_ATTENTION" = "true" ]; then
+PARALLEL_ARGS=(--tensor-parallel-size "$TP")
+if [ "${DCP_SIZE:-1}" -gt 1 ]; then
+    # DCP mode (large concurrency, C16+): adds decode-context parallelism, no spec decoding
+    PARALLEL_ARGS+=(--decode-context-parallel-size "$DCP_SIZE")
+elif [ "$DP_ATTENTION" = "true" ]; then
     # DPA+EP
-    if [ "$EP_SIZE" -gt 1 ]; then #DP+EP
+    if [ "$EP_SIZE" -gt 1 ]; then
         PARALLEL_ARGS=(--tensor-parallel-size "$TP" --enable-dp-attention --enable-expert-parallel)
     # DPA+TP
-    else 
-        PARALLEL_ARGS=(--tensor-parallel-size "$TP" --enable-dp-attention )
+    else
+        PARALLEL_ARGS=(--tensor-parallel-size "$TP" --enable-dp-attention)
     fi
 fi
 
 # SPEC settings
 # SIMULATE_ACC_LEN and NUM_SPEC_TOKENS reference:
-# https://github.com/SemiAnalysisAI/InferenceX/blob/main/golden_al_distribution/glm5.2_mtp.yaml
-SIMULATE_ACC_LEN=2.99
-NUM_SPEC_TOKENS=3
-# spec-decode-acceptance-rate = (SIMULATE_ACC_LEN - 1) / NUM_SPEC_TOKENS
-SPEC_ACCEPTANCE_RATE=$(awk "BEGIN{print ($SIMULATE_ACC_LEN-1)/$NUM_SPEC_TOKENS}")
-if [ "${EVAL_ONLY}" = "true" ]; then
+# https://github.com/ROCm/ATOM/pull/2117
+# DCP mode disables speculative decoding entirely.
+SIMULATE_ACC_LEN=3.33
+NUM_SPEC_TOKENS=4
+if [ "${DCP_SIZE:-1}" -gt 1 ]; then
+    SPEC_ARGS=()
+elif [ "${EVAL_ONLY}" = "true" ]; then
     SPEC_ARGS=(
         --method mtp
         --num-speculative-tokens "$NUM_SPEC_TOKENS"
@@ -147,17 +155,19 @@ else
     SPEC_ARGS=(
         --method mtp
         --num-speculative-tokens "$NUM_SPEC_TOKENS"
-        --spec-decode-acceptance-rate "$SPEC_ACCEPTANCE_RATE"
+        --spec-decode-acceptance-length "$SIMULATE_ACC_LEN"
     )
 fi
-echo "SIMULATE_ACC_LEN=$SIMULATE_ACC_LEN NUM_SPEC_TOKENS=$NUM_SPEC_TOKENS SPEC_ACCEPTANCE_RATE=$SPEC_ACCEPTANCE_RATE"
+echo "DCP_SIZE=${DCP_SIZE:-1} SIMULATE_ACC_LEN=$SIMULATE_ACC_LEN NUM_SPEC_TOKENS=$NUM_SPEC_TOKENS"
 
 ATOM_CMD=(
     python -m atom.entrypoints.openai_server
     --model "$MODEL_PATH"
+    --served-model-name "$MODEL"
     --host 0.0.0.0
     --server-port "$PORT"
     "${PARALLEL_ARGS[@]}"
+    --gpu-memory-utilization 0.95
     --online_quant_config '{"global_quant_config":"ptpc_fp8","exclude_layer":["lm_head","model.embed_tokens","*.mlp.gate","*expert*"]}'
     --max-num-seqs "$((2 * CONC))"
     --cudagraph-capture-sizes "$CUDAGRAPH_CAPTURE_SIZES"
