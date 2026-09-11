@@ -10213,3 +10213,112 @@ glm5.1-fp8-b200-tilert-agentic:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=1"
+
+# H100 AgentX arm for DeepSeek-V4.1-Flash. H100 is not in the upstream hardware
+# table (h200, gb200, gb300, mi350x are). It needs its own script, not the
+# shared symlink: the sparse attention indexer's
+# [max-num-batched-tokens, max-model-len] buffer is 16 GiB at the shared flags'
+# 8192 batched tokens and OOMs an 80 GB card at concurrency 1, so the script
+# caps batched tokens at 4096. Concurrency is bounded by the measured KV
+# ceiling rather than a guess; see the search-space comment.
+dsv41flash-fp4-h100-vllm-agentic-dspark:
+  image: vllm/vllm-openai:deepseekv41-flash-0909
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:h100-dgxc
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      # Measured at c1 on the cluster (run 34485694183): 13.47 GiB KV per GPU,
+      # 7,022,899 tokens, "Maximum concurrency for 1,048,576 tokens per
+      # request: 6.70x". The list stays under that ceiling so a trajectory
+      # replaying near full context does not drive the batch into preemption.
+      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4] }
+
+dsv41flash-fp4-gb200-vllm-agentic-dspark:
+  image: vllm/vllm-openai:deepseekv41-flash-0909
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:gb200-nv
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      # Engram weights use UVA DRAM; the KV cache stays GPU-resident.
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+
+dsv41flash-fp4-b300-vllm-agentic-dspark:
+  image: vllm/vllm-openai:deepseekv41-flash-0909
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:b300-dsxe
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      # Engram weights use UVA DRAM; the KV cache stays GPU-resident.
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+
+dsv41flash-fp4-b200-vllm-agentic-dspark:
+  image: vllm/vllm-openai:deepseekv41-flash-0909
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:b200-nscale
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      # Engram weights use UVA DRAM; the KV cache stays GPU-resident.
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+
+dsv41flash-fp4-gb300-vllm-agentic-dspark:
+  image: vllm/vllm-openai:deepseekv41-flash-0909
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      # Engram weights use UVA DRAM; the KV cache stays GPU-resident.
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+
+# H200 AgentX arm for DeepSeek-V4.1-Flash. Upstream marks h200 verified and says
+# the GB200 NVL4 TP4 layout becomes TP8 on 8-GPU nodes, so this is TP8.
+# `precision: fp4` labels the checkpoint's MXFP4 routed experts, as on the
+# Blackwell and MI355X arms; Hopper has no FP4 tensor cores, so the MXFP4
+# experts run through the upconverting MoE path. The H100 arm is deferred: the
+# sparse attention indexer allocates a [max-num-batched-tokens, max-model-len]
+# buffer at startup, which is 16 GiB at 1M context and does not fit 80 GB
+# alongside the weights. Tracked separately.
+dsv41flash-fp4-h200-vllm-agentic-dspark:
+  image: vllm/vllm-openai:deepseekv41-flash-0909
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:h200-dgxc
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      # 8x141 GB holds the 511 GB checkpoint minus the UVA-offloaded Engram
+      # tables, so the KV cache stays GPU-resident across the full range.
+      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
