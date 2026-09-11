@@ -122,6 +122,25 @@ def trim_conc(entries: list[dict]) -> list[dict]:
     return [entry for index, entry in enumerate(out) if index not in drop]
 
 
+def smoke_entries(entries: list[dict]) -> list[dict]:
+    """Minimum-concurrency throughput plus one canonical eval per deployment shape.
+
+    Eval concurrency comes from the existing default selection, never from the
+    throughput minimum. Keep separate eval-only rows so neither client is run twice.
+    """
+    benchmarks = trim_conc([{**row, 'run-eval': False} for row in entries])
+    evals = []
+    for row in entries:
+        if not row.get('run-eval'):
+            continue
+        row = {**row, 'eval-only': True}
+        if row.get('prefill') is not None:
+            row['conc'] = [row['eval-conc']]
+            row['eval-all-concs'] = False
+        evals.append(row)
+    return benchmarks + trim_conc(evals)
+
+
 def runner_labels(runner_data: dict) -> dict:
     """Return runner scheduling labels."""
     return runner_data["labels"]
@@ -1335,19 +1354,23 @@ def apply_node_type_defaults(args):
     return args
 
 
-EvalMode = Literal["default", "none", "subset", "all"]
+EvalMode = Literal["default", "none", "subset", "all", "smoke"]
 
 
 def select_matrix_evals(
     rows: list[dict], *, mode: EvalMode = "default", trim: bool = False,
 ) -> list[dict]:
     """Apply eval policy and optional trimming to freshly generated rows."""
-    if mode not in ("default", "none", "subset", "all"):
+    if mode not in ("default", "none", "subset", "all", "smoke"):
         raise ValueError(f"Unknown eval mode: {mode!r}")
+    if mode == "smoke" and trim:
+        raise ValueError("smoke cannot be combined with trimming")
     if mode != "none":
-        rows = mark_eval_entries(rows, include_agentic=mode in ("subset", "all"))
+        rows = mark_eval_entries(rows, include_agentic=mode in ("subset", "all", "smoke"))
         if mode == "all":
             rows = mark_all_eval_entries(rows)
+    if mode == "smoke":
+        return smoke_entries(rows)
     if trim:
         rows = trim_conc(rows)
     if mode in ("subset", "all"):
@@ -1366,7 +1389,7 @@ def generate_config_matrix(
 
     Every call builds independent rows. The caller loads master/runner inputs;
     node-count resolution still reads checked-in recipes. Default,
-    throughput-only, subset-only, and all-eval modes use the same policy as the CLI.
+    throughput-only, subset-only, all-eval, and smoke modes use the same policy as the CLI.
     """
     rows = _expand_selected_configs(
         config_keys, master_config, runner_data, scenario_types=scenario_types,
@@ -1409,6 +1432,11 @@ def main():
             'Expand eval selection to every generated fixed-sequence config. '
             'Can be combined with --evals-only; used alone, it also emits eval-only jobs.'
         )
+    )
+    parent_parser.add_argument(
+        '--smoke',
+        action='store_true',
+        help='Minimum-concurrency throughput plus canonical representative evals.'
     )
     parent_parser.add_argument(
         '--trim-conc',
@@ -1602,9 +1630,12 @@ def main():
             parser.error(str(error))
         
 
+    if args.smoke and (args.trim_conc or args.no_evals or args.evals_only or args.all_evals):
+        parser.error('--smoke cannot be combined with trimming or eval overrides')
+
     matrix_values = select_matrix_evals(
         matrix_values,
-        mode=("none" if args.no_evals else "all" if args.all_evals
+        mode=("smoke" if args.smoke else "none" if args.no_evals else "all" if args.all_evals
               else "subset" if args.evals_only else "default"),
         trim=args.trim_conc,
     )
