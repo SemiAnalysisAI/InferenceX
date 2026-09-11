@@ -269,7 +269,9 @@ def compute_qps_stats(records: list[dict[str, Any]]) -> tuple[dict[str, Any], di
     return flat, {"window_seconds": window, "samples": len(qps_values), **_nest_stats("qps", flat)}
 
 
-def compute_workload_stats(records: list[dict[str, Any]]) -> tuple[dict[str, Any], dict[str, Any]]:
+def compute_workload_stats(
+    records: list[dict[str, Any]], hf_dataset_name: str | None
+) -> tuple[dict[str, Any], dict[str, Any]]:
     input_tokens = extract_per_record_ints(records, "input_sequence_length")
     output_tokens = extract_per_record_ints(records, "output_sequence_length")
 
@@ -277,7 +279,7 @@ def compute_workload_stats(records: list[dict[str, Any]]) -> tuple[dict[str, Any
     flat.update(_distribution("input_tokens", input_tokens))
     flat.update(_distribution("output_tokens_actual", output_tokens))
 
-    expected = expected_output_lengths(records)
+    expected = expected_output_lengths(records, hf_dataset_name)
     if expected:
         flat.update(_distribution("output_tokens_expected", expected))
 
@@ -371,10 +373,15 @@ def compute_request_metrics(
     aggregate = aggregate or {}
     flat: dict[str, Any] = {}
     nested: dict[str, Any] = {}
+    metadata = aggregate.get("metadata")
+    dataset = metadata.get("dataset") if isinstance(metadata, dict) else None
+    hf_dataset_name = dataset.get("hf_dataset_name") if isinstance(dataset, dict) else None
+    if not isinstance(hf_dataset_name, str):
+        hf_dataset_name = None
 
     qps_flat, qps_nested = compute_qps_stats(records)
     latency_flat, latency_nested = compute_latency_stats(records)
-    workload_flat, workload_nested = compute_workload_stats(records)
+    workload_flat, workload_nested = compute_workload_stats(records, hf_dataset_name)
     cache_flat, cache_nested = compute_cache_stats(records, aggregate)
     throughput_flat, throughput_nested = compute_throughput_stats(records)
 
