@@ -7179,3 +7179,15 @@
   description:
     - "Use the pinned SGLang nightly-dev-cu13-20260901-07c8f729 image with FlashInfer 0.6.18, which includes the BF16 TRTLLM MoE allocation fix for small-batch Blackwell execution. Model, TP8, HiCache, MTP settings and concurrency grid are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2994
+
+- config-keys:
+    - glm5.2-fp4-b200-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-b200-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a GLM-5.2 NVFP4 B200 Dynamo-SGLang AgentX curve on the NScale runner."
+    - "Cover Pareto aggregate TP8 points at concurrency 1, 4, and 8, disaggregated 1P(DEP8)4D(TP4) at concurrency 48, and disaggregated 1P(DEP8)1D(DEP8) at concurrency 64."
+    - "Use lmsysorg/sglang:nightly-dev-20260910-00840301 with its bundled Dynamo 1.5.0.dev20260909, EAGLE speculative decoding, and 110 GB HiCache write-back DRAM offload per prefill rank."
+    - "Allow up to 3600 seconds for NIXL UCX engine initialization in the 1P(DEP8)4D(TP4) configuration while registering its larger set of HiCache pools."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2995
