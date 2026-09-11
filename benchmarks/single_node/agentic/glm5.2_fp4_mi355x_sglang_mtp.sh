@@ -94,7 +94,9 @@ if agentic_kv_offload_enabled; then
         HICACHE_RATIO="${HICACHE_RATIO:-1.0}"
     fi
 
-    HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through}"
+    # write_through_selective skips DRAM writes for non-reusable KV blocks,
+    # reducing host-bus traffic without affecting the cache hit rate.
+    HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through_selective}"
 
     HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
     HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first_direct}"
