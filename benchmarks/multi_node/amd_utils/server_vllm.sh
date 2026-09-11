@@ -231,12 +231,27 @@ apply_vllm_gpu_memory_utilization() {
     fi
 }
 
+apply_vllm_kv_cache_memory_bytes() {
+    local cfg="$1"
+    local bytes="${2:-}"
+
+    if [[ -z "$bytes" ]]; then
+        echo "$cfg"
+    elif echo "$cfg" | grep -q -- '--kv-cache-memory-bytes'; then
+        echo "$cfg" | sed -E "s/--kv-cache-memory-bytes[[:space:]]+[^[:space:]]+/--kv-cache-memory-bytes ${bytes}/g"
+    else
+        echo "$cfg --kv-cache-memory-bytes $bytes"
+    fi
+}
+
 PREFILL_SERVER_CONFIG="$(apply_vllm_dp_config "$PREFILL_SERVER_CONFIG" "${PREFILL_TP_SIZE}" "${PREFILL_ENABLE_DP:-false}")"
 DECODE_SERVER_CONFIG="$(apply_vllm_dp_config "$DECODE_SERVER_CONFIG" "${DECODE_TP_SIZE}" "${DECODE_ENABLE_DP:-false}")"
 PREFILL_SERVER_CONFIG="$(apply_vllm_dcp_config "$PREFILL_SERVER_CONFIG" "${PREFILL_DCP_SIZE:-1}" "${PREFILL_DCP_COMM:-a2a}" "${PREFILL_CP_KV_CACHE_INTERLEAVE_SIZE:-1}")"
 DECODE_SERVER_CONFIG="$(apply_vllm_dcp_config "$DECODE_SERVER_CONFIG" "${DECODE_DCP_SIZE:-1}" "${DECODE_DCP_COMM:-a2a}" "${DECODE_CP_KV_CACHE_INTERLEAVE_SIZE:-1}")"
 PREFILL_SERVER_CONFIG="$(apply_vllm_gpu_memory_utilization "$PREFILL_SERVER_CONFIG" "${GPU_MEMORY_UTILIZATION:-}")"
 DECODE_SERVER_CONFIG="$(apply_vllm_gpu_memory_utilization "$DECODE_SERVER_CONFIG" "${GPU_MEMORY_UTILIZATION:-}")"
+PREFILL_SERVER_CONFIG="$(apply_vllm_kv_cache_memory_bytes "$PREFILL_SERVER_CONFIG" "${PREFILL_KV_CACHE_MEMORY_BYTES:-}")"
+DECODE_SERVER_CONFIG="$(apply_vllm_kv_cache_memory_bytes "$DECODE_SERVER_CONFIG" "${DECODE_KV_CACHE_MEMORY_BYTES:-}")"
 
 if [[ "${MODEL_NAME:-}" == "Kimi-K3" && "${SPEC_DECODING:-}" == "mtp" ]]; then
     apply_numeric_serve_flag() {
@@ -276,7 +291,7 @@ config = {
     "num_speculative_tokens": int(os.environ.get("SPEC_NUM_TOKENS", "4")),
     "method": "dspark",
     "attention_backend": os.environ.get("SPEC_ATTN_BACKEND", "TRITON_MLA"),
-    "kv_cache_dtype": "auto",
+    "kv_cache_dtype": os.environ.get("SPEC_KV_CACHE_DTYPE", "auto"),
     "draft_sample_method": os.environ.get(
         "SPEC_DRAFT_SAMPLE_METHOD", "probabilistic"
     ),

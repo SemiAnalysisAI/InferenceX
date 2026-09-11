@@ -87,6 +87,10 @@ dspark_recipe = config["kimik3-fp4-mi355x-vllm-disagg-agentic-dspark"]
 dspark_point = dspark_recipe["scenarios"]["agentic-coding"][0]
 assert len(dspark_point["search-space"]) == 1
 dspark_arm = dspark_point["search-space"][0]
+assert dspark_recipe["image"] == (
+    "vllm/vllm-openai-rocm:nightly@"
+    "sha256:659b28319fef4ea0e3d8f33e25b4c35d6f663f5d818a5b2fa06dceaf859234e4"
+)
 assert dspark_arm["conc-list"] == [48]
 assert dspark_arm["spec-decoding"] == "mtp"
 assert dspark_arm["prefill"]["num-worker"] == 1
@@ -105,22 +109,40 @@ for expected in (
     "PREFILL_CP_KV_CACHE_INTERLEAVE_SIZE=1",
     "DECODE_CP_KV_CACHE_INTERLEAVE_SIZE=1",
     "SPEC_NUM_TOKENS=4",
-    "SPEC_ATTN_BACKEND=TRITON_MLA",
+    "SPEC_ATTN_BACKEND=ROCM_AITER_MLA",
+    "SPEC_KV_CACHE_DTYPE=fp8",
     "SPEC_REJECTION_SAMPLE_METHOD=synthetic",
     "SPEC_SYNTHETIC_ACCEPTANCE_LENGTH=3.36",
-    "SPEC_MAX_NUM_SEQS=16",
-    "SPEC_MAX_NUM_BATCHED_TOKENS=4096",
+    "SPEC_MAX_NUM_SEQS=80",
+    "SPEC_MAX_NUM_BATCHED_TOKENS=16384",
     "SPEC_PREFILL_CUDAGRAPH_MODE=FULL_AND_PIECEWISE",
     "SPEC_DECODE_CUDAGRAPH_MODE=FULL_DECODE_ONLY",
-    "LMCACHE_CHUNK_SIZE=24576",
+    "VLLM_K3_FULL_SOURCE_OVERLAY=1",
+    "PREFILL_KV_CACHE_MEMORY_BYTES=32212254720",
+    "LMCACHE_CHUNK_SIZE=12288",
     "LMCACHE_VERSION=latest-rocm",
     "LMCACHE_WORKER_REGISTRATION_GRACE_SECONDS=7200",
     "VLLM_ROCM_PAGE_ALIGN_KV=1",
+    "VLLM_ROCM_AITER_NATIVE_DCP_VERIFY=1",
 ):
     assert expected in dspark_settings
 assert all(
-    "VLLM_K3_FORK_SHA=4510af190bb5e7b840df837e691a040a01033021"
+    "VLLM_K3_FORK_SHA=698883d914273285a2c22fca9941022dd76a6fb7"
     in settings
+    for settings in (
+        dspark_arm["prefill"]["additional-settings"],
+        dspark_arm["decode"]["additional-settings"],
+    )
+)
+assert all(
+    "VLLM_K3_FULL_SOURCE_OVERLAY=1" in settings
+    for settings in (
+        dspark_arm["prefill"]["additional-settings"],
+        dspark_arm["decode"]["additional-settings"],
+    )
+)
+assert all(
+    "VLLM_K3_FORK_REF=k3-aiter-native-dcp-verify-exp" in settings
     for settings in (
         dspark_arm["prefill"]["additional-settings"],
         dspark_arm["decode"]["additional-settings"],
@@ -212,6 +234,7 @@ for expected in (
     "SPEC_NUM_TOKENS",
     "SPEC_MODEL",
     "SPEC_ATTN_BACKEND",
+    "SPEC_KV_CACHE_DTYPE",
     "SPEC_DRAFT_SAMPLE_METHOD",
     "SPEC_REJECTION_SAMPLE_METHOD",
     "SPEC_SYNTHETIC_ACCEPTANCE_LENGTH",
@@ -222,15 +245,25 @@ for expected in (
     "SPEC_DECODE_CUDAGRAPH_MODE",
 ):
     assert f"-e {expected}=" in job_slurm
+assert "-e VLLM_ROCM_AITER_NATIVE_DCP_VERIFY=" in job_slurm
+assert "-e VLLM_K3_FULL_SOURCE_OVERLAY=" in job_slurm
+assert "-e PREFILL_KV_CACHE_MEMORY_BYTES=" in job_slurm
+assert "-e DECODE_KV_CACHE_MEMORY_BYTES=" in job_slurm
+assert 'os.environ.get("VLLM_K3_FULL_SOURCE_OVERLAY") == "1"' in setup_deps
+assert 'if name.endswith(".py")' in setup_deps
+assert "apply_vllm_kv_cache_memory_bytes" in server_vllm
 assert '"${MODEL_NAME:-}" == "Kimi-K3"' in server_vllm
 assert '"${SPEC_DECODING:-}" == "mtp"' in server_vllm
 assert "--speculative-config '${spec_config}'" in server_vllm
+assert 'os.environ.get("SPEC_KV_CACHE_DTYPE", "auto")' in server_vllm
 assert "spec_capture_size=" in server_vllm
 assert "SPEC_PREFILL_CUDAGRAPH_MODE" in server_vllm
 assert "SPEC_DECODE_CUDAGRAPH_MODE" in server_vllm
 assert "role_cudagraph_mode=$spec_prefill_cudagraph_mode" in server_vllm
 assert "role_cudagraph_mode=$spec_decode_cudagraph_mode" in server_vllm
 assert '"v1/attention/backends/mla/triton_mla.py"' in setup_deps
+assert '"v1/attention/backends/mla/rocm_aiter_mla.py"' in setup_deps
+assert '"v1/worker/gpu/spec_decode/dspark/utils.py"' in setup_deps
 assert "VLLM_ROCM_PAGE_ALIGN_KV" in setup_deps
 assert "alignment_offset = (-allocation.data_ptr()) % page_size" in setup_deps
 assert "-e VLLM_ROCM_PAGE_ALIGN_KV=" in job_slurm
