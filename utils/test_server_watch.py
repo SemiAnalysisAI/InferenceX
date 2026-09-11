@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from utils import server_watch
+from infx.bench_serving import server_watch
 
 
 @pytest.mark.parametrize('state', [None, ('Z', 'original'), ('S', 'reused')])

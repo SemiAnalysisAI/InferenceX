@@ -163,7 +163,7 @@ if [ "$merge_status" -ne 0 ]; then
         die "Unexpected conflict(s) in: ${unresolved} — only ${CHANGELOG} is auto-resolved"
     fi
     log "Resolving ${CHANGELOG} conflict"
-    if ! python3 "$SCRIPT_DIR/prepare_perf_changelog_merge.py" \
+    if ! PYTHONPATH="$SCRIPT_DIR/..${PYTHONPATH:+:$PYTHONPATH}" python3 -m infx.workflows.prepare_perf_changelog_merge \
         resolve-conflict \
         --changelog-file "$CHANGELOG" \
         --pr-number "$PR" \
@@ -176,7 +176,7 @@ if [ "$merge_status" -ne 0 ]; then
 fi
 
 HEAD_AFTER_MERGE="$(git rev-parse HEAD)"
-python3 "$SCRIPT_DIR/prepare_perf_changelog_merge.py" \
+PYTHONPATH="$SCRIPT_DIR/..${PYTHONPATH:+:$PYTHONPATH}" python3 -m infx.workflows.prepare_perf_changelog_merge \
     canonicalize \
     --changelog-file "$CHANGELOG" \
     --base-ref origin/main \

@@ -116,7 +116,7 @@ A field crossing a boundary is not automatically authoritative in the next layer
 
 The master YAML files describe possible work. A config key binds the model, image, model prefix, precision, framework, runner label, scenario definitions, and one or more search-space entries. [`configs/runners.yaml`](../configs/runners.yaml) resolves scheduling labels and supplies generation-time hardware facts.
 
-A master entry is inert until selected. On the main sweep path, additions to [`perf-changelog.yaml`](../perf-changelog.yaml) select exact config keys or key patterns. [`utils/process_changelog.py`](../utils/process_changelog.py) reads only added changelog lines between the base and head references. It validates each added entry, expands key patterns against the loaded master configs, and invokes the matrix generator for the selected keys.
+A master entry is inert until selected. On the main sweep path, additions to [`perf-changelog.yaml`](../perf-changelog.yaml) select exact config keys or key patterns. [`infx.matrix.plan`](../infx/matrix/plan.py) reads only added changelog lines between the base and head references. It validates each added entry, expands key patterns against the loaded master configs, and invokes the matrix generator for the selected keys.
 
 This split has two consequences.
 
@@ -129,9 +129,26 @@ This split has two consequences.
 
 Shared Python implementation lives in the repository-root `infx` package. `infx.matrix.generate` owns generation and `infx.matrix.validation` owns schemas. Python callers should import these canonical paths; further domain modules can join `infx` as needed.
 
+The remaining Python tools are grouped by responsibility:
+
+| Package | Owns |
+| --- | --- |
+| `infx.workflows` | Priority scoring, changelog validation and merge preparation, reuse validation, recovery, and run statistics |
+| `infx.results` | Result collection, comparison, filenames, power, plots, and AgentX artifact processing |
+| `infx.evals` | Eval adapters, score validation, task YAML, fixtures, and runtime patches |
+| `infx.bench_serving` | The benchmark client and its request, encoding, and export helpers |
+| `infx.datasets` | AgentX trace sampling, conversion, dataset assembly, and distribution plots |
+| `infx.klaud` | Klaud orchestration, lifecycle, GitHub/API adapters, and schemas |
+
+Run commands with `python -m infx.<package>.<module>` from the checkout root. Dependencies remain specific to each command; importing `infx` does not load benchmark-client or eval dependencies. The old `utils/` Python files remain stable compatibility entrypoints, and old eval asset paths link to their canonical files. Tests and runner-provisioning shell scripts remain under `utils/`; the external `utils/aiperf` submodule is unchanged.
+
+Eval adapters and patches copied into isolated environments use the actual files under `infx/evals`, so they remain standalone. Trusted workflow helpers explicitly select their tooling checkout. Workflow steps that support older target revisions call the stable `utils/` entrypoints directly: current stubs delegate to `infx`, while older commits run their original implementations. Call sites need no package-presence checks.
+
 Default repository paths live in [`infx/config.py`](../infx/config.py); `utils/constants.py` preserves the legacy imports. Package `__init__.py` files stay minimal.
 
 `utils/process_changelog.py`, `utils/matrix_logic/generate_sweep_configs.py`, and `validation.py` remain thin compatibility entrypoints. Legacy imports resolve to the same module objects, avoiding duplicate schema classes. Existing script commands, arguments, relative input paths, and dependencies are unchanged; running from a checkout requires no package installation. `process_changelog.py` resolves to `infx.matrix.plan`; `validate_perf_changelog.py` retains its existing processor CLI boundary and diagnostics.
+
+Workflows using current tooling call `infx` modules directly, and tests import canonical modules. Trusted dispatch selects its tooling checkout explicitly through `PYTHONPATH` and Python's `-P` option while keeping the target checkout as the working directory for inputs. Manual matrix generation, profiling, and benchmark steps use stable script entrypoints to support older revisions; historical append-only extraction also uses each revision's compatibility entrypoint.
 
 `infx.matrix.plan.build_plan(changelog_data, base_ref=..., head_ref=...)` returns the validated `ChangelogMatrixEntry` for the complete sweep. It owns entry precedence, separate benchmark/eval scenario coverage, trimming, fingerprints, and output buckets. Current master files are loaded once, and runner metadata is loaded once on first generation; each selected group calls `infx.matrix.generate.generate_config_matrix` directly. Current inputs come from the supplied paths (the checkout defaults), while `head_ref` remains provenance metadata. Planning assumes those files are stable during the operation.
 
@@ -161,7 +178,7 @@ The emitted matrix is the executable CI contract, but it is not a durable source
 
 1. It triggers on `perf-changelog.yaml` changes to `main` and eligible pull-request events.
 2. It validates changelog additions and applies PR label policy.
-3. Its setup job runs `process_changelog.py`, then applies CI priority metadata with [`utils/ci_priority.py`](../utils/ci_priority.py).
+3. Its setup job runs `python -m infx.matrix.plan`, then applies CI priority metadata with [`infx/workflows/ci_priority.py`](../infx/workflows/ci_priority.py).
 4. It exposes the entire matrix as the `search-space-config` job output.
 5. Matrix jobs consume the appropriate bucket and call either `benchmark-tmpl.yml` or `benchmark-multinode-tmpl.yml`.
 6. Benchmark, eval, and agentic rows use separate fan-out jobs because their required input shapes differ.
@@ -224,7 +241,7 @@ result = build_result(records, profile, server_metrics, runtime_env,
                       traces=trace_objects, server_logs=log_texts)
 ```
 
-The existing `python -m utils.agentic.aggregation.process_agentic_result` command retains artifact discovery, record filtering/accounting, trace-cache lookup, bounded log reads, rounding, diagnostics, and output writes. It supplies lazy trace and log iterators so metadata validation still precedes trace reads and backends only read logs they use. Request/server algorithms and backend precedence remain inside the package. Dataset matching, cache precedence, and ambiguous-snapshot handling remain in the CLI's shared artifact loader, which also serves the power adapter. Internal Python imports use `infx.results.agentic`; command paths, environment variables, and artifact schemas are unchanged.
+The existing `python -m infx.results.agentic.process_agentic_result` command retains artifact discovery, record filtering/accounting, trace-cache lookup, bounded log reads, rounding, diagnostics, and output writes. It supplies lazy trace and log iterators so metadata validation still precedes trace reads and backends only read logs they use. Request/server algorithms and backend precedence remain inside the package. Dataset matching, cache precedence, and ambiguous-snapshot handling remain in the CLI's shared artifact loader, which also serves the power adapter. Internal Python imports use `infx.results.agentic`; command paths, environment variables, and artifact schemas are unchanged.
 
 The current processing paths share these helpers:
 
@@ -240,7 +257,7 @@ Test builders with small, independently worked examples and read-only inputs. Fo
 
 ### Eval and AgentX outputs
 
-For eval-only jobs, throughput output is not required. The workflow instead requires at least one `results*.json`. For jobs marked to run eval, uploads may contain `meta_env.json`, `results*.json`, `sample*.jsonl`, SWE-bench predictions and reports, and trajectory files. [`utils/evals/validate_scores.py`](../utils/evals/validate_scores.py) checks produced eval scores.
+For eval-only jobs, throughput output is not required. The workflow instead requires at least one `results*.json`. For jobs marked to run eval, uploads may contain `meta_env.json`, `results*.json`, `sample*.jsonl`, SWE-bench predictions and reports, and trajectory files. [`infx/evals/validate_scores.py`](../infx/evals/validate_scores.py) checks produced eval scores.
 
 [`infx.results.evals`](../infx/results/evals.py) provides `extract_metrics` for loaded eval JSON and `build_rows` for collector output. Both accept explicit inputs without file I/O or input mutation. The builder applies metadata defaults and primary-score precedence, retaining failed evaluations as diagnostic rows. The CLI owns file discovery, concurrency eligibility, reporting, and artifact writes.
 
@@ -252,7 +269,7 @@ rows = build_rows(raw_eval, metadata, source="eval_job/results.json")
 
 The collector and reusable-artifact validator share format recognition, concurrency suffix parsing, result selection, metric-family classification, and numeric validity rules. `select_latest_result` selects the latest candidate overall or for a specified concurrency; `select_latest_results` also supports selecting one candidate per concurrency in numeric order. These helpers receive candidate paths; callers retain their discovery and eligibility rules. Filename timestamps and legacy mtimes use epoch nanoseconds, with filenames breaking ties. Reuse retains its stricter structural checks and checks every applicable primary metric; the collector keeps the last configured value per metric family for reporting. Recognizing a format does not imply that its results are valid or reusable.
 
-Agentic throughput jobs have a different contract. They validate AIPerf output with [`utils/agentic/validation/validate_agentic_result.py`](../utils/agentic/validation/validate_agentic_result.py), upload an aggregate `bmk_agentic_<suffix>` artifact, and upload the raw `agentic_<suffix>` sibling containing trace-replay material. InferenceX-app pairs those siblings by their shared suffix. Agentic eval-only jobs follow the eval output contract instead and do not require a throughput result.
+Agentic throughput jobs have a different contract. They validate AIPerf output with [`infx/results/agentic/validate_agentic_result.py`](../infx/results/agentic/validate_agentic_result.py), upload an aggregate `bmk_agentic_<suffix>` artifact, and upload the raw `agentic_<suffix>` sibling containing trace-replay material. InferenceX-app pairs those siblings by their shared suffix. Agentic eval-only jobs follow the eval output contract instead and do not require a throughput result.
 
 Server logs and GPU metrics are diagnostic side artifacts. They are uploaded with `always()` so a failed run can still be investigated. Their presence does not turn a failed benchmark into a valid result.
 
@@ -260,8 +277,8 @@ Server logs and GPU metrics are diagnostic side artifacts. They are uploaded wit
 
 Per-job artifacts remain useful for diagnosis and detailed ingestion. Two collectors also create stable run-level aggregates.
 
-- [`collect-results.yml`](../.github/workflows/collect-results.yml) downloads `bmk_*`, runs [`utils/collect_results.py`](../utils/collect_results.py), and uploads `results_bmk/agg_bmk.json`.
-- [`collect-evals.yml`](../.github/workflows/collect-evals.yml) downloads `eval_*`, runs [`utils/collect_eval_results.py`](../utils/collect_eval_results.py), and uploads `eval_results_all/agg_eval_all.json`.
+- [`collect-results.yml`](../.github/workflows/collect-results.yml) downloads `bmk_*`, runs [`infx/results/collect_results.py`](../infx/results/collect_results.py), and uploads `results_bmk/agg_bmk.json`.
+- [`collect-evals.yml`](../.github/workflows/collect-evals.yml) downloads `eval_*`, runs [`infx/results/collect_eval_results.py`](../infx/results/collect_eval_results.py), and uploads `eval_results_all/agg_eval_all.json`.
 - `run-sweep.yml` separately uploads `changelog-metadata/changelog_metadata.json` and `run-stats/run_stats.json` when applicable.
 
 Artifact names are part of the cross-repository interface. InferenceX-app's `ingest-ci-run.ts` names `results_bmk`, `run-stats`, `eval_results_all`, and `changelog-metadata` explicitly. It also discovers per-job `bmk_*`, `eval_*`, logs, and agentic sibling directories.
@@ -377,7 +394,7 @@ Use this procedure when a row is missing, mislabeled, or unexpected.
 
    ```bash
    uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
-     utils/matrix_logic/generate_sweep_configs.py test-config \
+     python -m infx.matrix.generate test-config \
      --config-files configs/nvidia-master.yaml configs/amd-master.yaml \
      --runner-config configs/runners.yaml \
      --config-keys <exact-key>

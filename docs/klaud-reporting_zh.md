@@ -14,7 +14,7 @@
 
 ```bash
 KLAUD=(uv run --no-project --exclude-newer PT12H --python 3.12 \
-  --with 'pydantic>=2.10,<3' --with pyyaml python -m utils.klaud)
+  --with 'pydantic>=2.10,<3' --with pyyaml python -m infx.klaud)
 
 # goal.json：{"en":"Update ENGINE image from `OLD` to `NEW`.","zh":"将 ENGINE 镜像从 `OLD` 更新为 `NEW`。"}
 # 先通过公开 OpenAPI 确认模型显示名称。

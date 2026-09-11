@@ -3,7 +3,7 @@ benchmarks, diagnosis, reporting and cleanup. Read docs/index.md, AGENTS.md,
 CONTRIBUTING.md, docs/klaud-reporting.md and $KLAUD_EVIDENCE/candidate.json.
 Use uv and direct git/gh commands; keep scratch evidence outside the repository.
 Run Klaud helpers through:
-`uv run --no-project --exclude-newer PT12H --python 3.12 --with 'pydantic>=2.10,<3' --with pyyaml python -m utils.klaud`.
+`uv run --no-project --exclude-newer PT12H --python 3.12 --with 'pydantic>=2.10,<3' --with pyyaml python -m infx.klaud`.
 
 Never delegate, launch another agent, fabricate evidence, mention users/teams,
 request reviews, stage results, post reuse commands or merge. Reviews are automatic.

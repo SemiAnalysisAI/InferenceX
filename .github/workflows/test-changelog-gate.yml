@@ -6,6 +6,8 @@ on:
     branches-ignore:
       - main
     paths:
+      - "infx/**"
+      - "utils/test_module_entrypoints.py"
       - ".claude/commands/recover-failed-ingest.md"
       - ".claude/mcp/**"
       - ".claude/requirements-mcp.txt"
@@ -113,6 +115,9 @@ jobs:
             utils/changelog_gate_tests/test_run_sweep_gating.py \
             utils/changelog_gate_tests/test_workflow_authorization.py \
             utils/test_ci_priority.py \
+            utils/test_calc_success_rate.py \
+            utils/test_server_watch.py \
+            utils/test_module_entrypoints.py \
             utils/test_process_changelog.py \
             utils/test_collect_eval_results.py \
             utils/evals/test_batched_eval.py \

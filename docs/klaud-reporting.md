@@ -14,7 +14,7 @@ Run from the checkout with the candidate environment provided by the workflow:
 
 ```bash
 KLAUD=(uv run --no-project --exclude-newer PT12H --python 3.12 \
-  --with 'pydantic>=2.10,<3' --with pyyaml python -m utils.klaud)
+  --with 'pydantic>=2.10,<3' --with pyyaml python -m infx.klaud)
 
 # goal.json: {"en":"Update ENGINE image from `OLD` to `NEW`.","zh":"将 ENGINE 镜像从 `OLD` 更新为 `NEW`。"}
 # Resolve the display model name from the public OpenAPI document first.

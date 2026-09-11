@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-import aggregate_power_multinode as apm
+from infx.results.power import multinode as apm
 
 PRODUCER_SHA = "a" * 40
 WINDOW_START = 1000.0
@@ -330,7 +330,7 @@ class TestValidPackage:
         assert set(pkg.sidecar()["per_gpu_role"].values()) == {"agg"}
 
     def test_agentx_adapter_consumes_a_real_custom_benchmark_package(self, tmp_path):
-        from utils.agentic.aggregation.power_adapter import run_multinode_agentic_power
+        from infx.results.agentic.power_adapter import run_multinode_agentic_power
 
         pkg = build_package(tmp_path)
         result_dir = pkg.logs_root / "agentic" / "conc_4"

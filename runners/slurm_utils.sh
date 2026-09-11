@@ -117,7 +117,7 @@ copy_fixed_sequence_results() {
 
                     echo "Processing concurrency $concurrency with $gpus GPUs (ctx: $ctx, gen: $gen): $result_file"
 
-                    workspace_result_file=$(python3 "$INFERENCEX_SLURM_UTILS_DIR/../utils/result_filename.py" \
+                    workspace_result_file=$(PYTHONPATH="$INFERENCEX_SLURM_UTILS_DIR/..${PYTHONPATH:+:$PYTHONPATH}" python3 -m infx.results.result_filename \
                         --point "$result_filename" "$config_name" "$concurrency" "$gpus" "$ctx" "$gen") || return 1
                     workspace_result_file="$workspace/$workspace_result_file"
                     copy_to_workspace "$result_file" "$workspace_result_file" || return 1

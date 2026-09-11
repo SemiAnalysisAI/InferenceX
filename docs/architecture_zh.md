@@ -116,7 +116,7 @@ flowchart LR
 
 主 YAML 文件描述可能执行的工作。配置键将模型、镜像、模型前缀、精度、框架、运行器标签、场景定义以及一个或多个搜索空间条目绑定在一起。[`configs/runners.yaml`](../configs/runners.yaml) 解析调度标签，并提供生成时使用的硬件信息。
 
-主条目在被选中之前不会生效。在主扫描路径上，[`perf-changelog.yaml`](../perf-changelog.yaml) 的新增内容会选择确切的配置键或键模式。[`utils/process_changelog.py`](../utils/process_changelog.py) 仅读取基础引用与头部引用之间新增的变更日志行。它会验证每个新增条目，针对已加载的主配置展开键模式，并为选中的键调用矩阵生成器。
+主条目在被选中之前不会生效。在主扫描路径上，[`perf-changelog.yaml`](../perf-changelog.yaml) 的新增内容会选择确切的配置键或键模式。[`infx.matrix.plan`](../infx/matrix/plan.py) 仅读取基础引用与头部引用之间新增的变更日志行。它会验证每个新增条目，针对已加载的主配置展开键模式，并为选中的键调用矩阵生成器。
 
 这种拆分有两个结果。
 
@@ -129,9 +129,26 @@ flowchart LR
 
 共享 Python 实现位于仓库根目录的 `infx` 包中。`infx.matrix.generate` 负责矩阵生成，`infx.matrix.validation` 负责模式校验。Python 调用方应通过这些规范路径导入；后续领域模块可在需要时加入 `infx`。
 
+其余 Python 工具按职责划分：
+
+| 包 | 职责 |
+| --- | --- |
+| `infx.workflows` | 优先级评分、变更日志验证及合并准备、复用验证、恢复和运行统计 |
+| `infx.results` | 结果收集、比较、文件命名、功耗、绘图及 AgentX 产物处理 |
+| `infx.evals` | 评测适配器、分数验证、任务 YAML、样例数据和运行时补丁 |
+| `infx.bench_serving` | 基准测试客户端及其请求、编码和导出辅助函数 |
+| `infx.datasets` | AgentX 轨迹采样、转换、数据集构建及分布图 |
+| `infx.klaud` | Klaud 编排、生命周期、GitHub/API 适配器和模式 |
+
+从仓库根目录使用 `python -m infx.<package>.<module>` 运行命令。依赖仍由各命令分别管理；导入 `infx` 不会加载基准测试客户端或评测依赖。旧 `utils/` Python 文件作为稳定的兼容入口保留，旧评测资源路径链接到规范文件。测试和运行器配置 Shell 脚本仍位于 `utils/`；外部 `utils/aiperf` 子模块保持不变。
+
+复制到隔离环境中的评测适配器和补丁使用 `infx/evals` 下的实际文件，因此仍可独立运行。可信工作流辅助模块会明确选择工具代码所在的检出目录。需要支持旧目标修订的工作流步骤直接调用稳定的 `utils/` 入口：当前的轻量入口转调 `infx`，旧提交则运行原有实现。调用处无需检查包模块是否存在。
+
 默认仓库路径定义在 [`infx/config.py`](../infx/config.py) 中；`utils/constants.py` 保留旧导入方式。包的 `__init__.py` 文件保持精简。
 
 `utils/process_changelog.py`、`utils/matrix_logic/generate_sweep_configs.py` 和 `validation.py` 保留为轻量兼容入口，旧导入路径指向同一个模块对象，避免重复创建模式类。现有脚本命令、参数、相对输入路径和依赖保持不变，从仓库检出目录运行时无需安装包。`process_changelog.py` 指向 `infx.matrix.plan`；`validate_perf_changelog.py` 保留现有处理器 CLI 边界和诊断。
+
+使用当前工具代码的工作流直接调用 `infx` 模块，测试也导入规范模块。可信调度通过 `PYTHONPATH` 和 Python 的 `-P` 选项明确指定工具代码所在的检出目录，同时仍以目标检出目录作为工作目录读取输入。手动矩阵生成、性能分析及基准测试步骤使用稳定的脚本入口来支持旧修订；追加模式的历史提取也使用各修订自身的兼容入口。
 
 `infx.matrix.plan.build_plan(changelog_data, base_ref=..., head_ref=...)` 返回完整扫描的已验证 `ChangelogMatrixEntry`，统一负责条目优先级、基准测试与评测各自的场景覆盖、裁剪、指纹及输出分桶。当前主配置文件只加载一次，运行器元数据在首次生成时加载一次；每组选中的配置直接调用 `infx.matrix.generate.generate_config_matrix`。当前输入来自传入的路径（默认为检出目录中的路径），`head_ref` 仍用作来源元数据。规划过程假设这些文件在本次操作期间保持稳定。
 
@@ -161,7 +178,7 @@ flowchart LR
 
 1. 它由提交到 `main` 的 `perf-changelog.yaml` 变更和符合条件的拉取请求事件触发。
 2. 它验证新增的变更日志内容并应用 PR 标签策略。
-3. 其设置作业运行 `process_changelog.py`，然后通过 [`utils/ci_priority.py`](../utils/ci_priority.py) 应用 CI 优先级元数据。
+3. 其设置作业运行 `python -m infx.matrix.plan`，然后通过 [`infx/workflows/ci_priority.py`](../infx/workflows/ci_priority.py) 应用 CI 优先级元数据。
 4. 它将整个矩阵作为 `search-space-config` 作业输出公开。
 5. 矩阵作业使用相应的桶，并调用 `benchmark-tmpl.yml` 或 `benchmark-multinode-tmpl.yml`。
 6. 基准测试、评测和智能体数据行使用独立的扇出作业，因为它们所需的输入形态不同。
@@ -224,7 +241,7 @@ result = build_result(records, profile, server_metrics, runtime_env,
                       traces=trace_objects, server_logs=log_texts)
 ```
 
-现有的 `python -m utils.agentic.aggregation.process_agentic_result` 命令继续负责工件查找、请求过滤与统计、轨迹缓存查找、有大小上限的日志读取、舍入、诊断信息和输出文件写入。它以惰性迭代器提供轨迹和日志，确保元数据校验仍先于轨迹读取，且后端只读取自身需要的日志。请求与服务器指标算法及后端优先级由包内代码统一负责。数据集匹配、缓存优先级和快照歧义处理保留在 CLI 的共享工件加载器中，功耗适配器也使用该加载器。内部 Python 导入改用 `infx.results.agentic`；命令路径、环境变量和工件模式保持不变。
+现有的 `python -m infx.results.agentic.process_agentic_result` 命令继续负责工件查找、请求过滤与统计、轨迹缓存查找、有大小上限的日志读取、舍入、诊断信息和输出文件写入。它以惰性迭代器提供轨迹和日志，确保元数据校验仍先于轨迹读取，且后端只读取自身需要的日志。请求与服务器指标算法及后端优先级由包内代码统一负责。数据集匹配、缓存优先级和快照歧义处理保留在 CLI 的共享工件加载器中，功耗适配器也使用该加载器。内部 Python 导入改用 `infx.results.agentic`；命令路径、环境变量和工件模式保持不变。
 
 当前处理路径共享以下辅助工具：
 
@@ -240,7 +257,7 @@ result = build_result(records, profile, server_metrics, runtime_env,
 
 ### 评测与 AgentX 输出
 
-对于仅评测作业，不要求吞吐量输出。工作流改为要求至少存在一个 `results*.json`。对于标记为运行评测的作业，上传内容可能包含 `meta_env.json`、`results*.json`、`sample*.jsonl`、SWE-bench 预测和报告以及轨迹文件。[`utils/evals/validate_scores.py`](../utils/evals/validate_scores.py) 会检查生成的评测分数。
+对于仅评测作业，不要求吞吐量输出。工作流改为要求至少存在一个 `results*.json`。对于标记为运行评测的作业，上传内容可能包含 `meta_env.json`、`results*.json`、`sample*.jsonl`、SWE-bench 预测和报告以及轨迹文件。[`infx/evals/validate_scores.py`](../infx/evals/validate_scores.py) 会检查生成的评测分数。
 
 [`infx.results.evals`](../infx/results/evals.py) 提供 `extract_metrics`，用于解析已加载的评测 JSON，并提供 `build_rows`，用于构建收集器输出。两者均接收显式输入，不执行文件 I/O，也不修改输入。构建函数应用元数据默认值和主分数优先级，并将失败评测保留为诊断行。CLI 负责文件查找、并发数资格筛选、报告输出和工件写入。
 
@@ -252,7 +269,7 @@ rows = build_rows(raw_eval, metadata, source="eval_job/results.json")
 
 收集器和可复用工件验证器共享格式识别、并发数后缀解析、结果选择、指标族分类及数值有效性规则。`select_latest_result` 从全部候选中或指定并发数的候选中选择最新结果；`select_latest_results` 还支持为每个并发数选择一个候选，并按并发数的数值顺序返回。这些辅助函数接收候选路径，调用方仍保留各自的文件查找和资格筛选规则。文件名时间戳和旧格式文件的修改时间统一使用 Unix 纪元纳秒数，时间相同时按文件名排序。复用验证保留更严格的结构检查，并验证所有适用的主指标；收集器则保留每个指标族中最后配置的值用于报告。识别出格式并不意味着结果有效或可复用。
 
-智能体吞吐量作业采用不同的契约。它们使用 [`utils/agentic/validation/validate_agentic_result.py`](../utils/agentic/validation/validate_agentic_result.py) 验证 AIPerf 输出，上传聚合的 `bmk_agentic_<suffix>` 工件，并上传包含追踪重放材料的原始 `agentic_<suffix>` 同级工件。InferenceX-app 通过它们共享的后缀对这些同级工件进行配对。智能体仅评测作业改为遵循评测输出契约，不要求吞吐量结果。
+智能体吞吐量作业采用不同的契约。它们使用 [`infx/results/agentic/validate_agentic_result.py`](../infx/results/agentic/validate_agentic_result.py) 验证 AIPerf 输出，上传聚合的 `bmk_agentic_<suffix>` 工件，并上传包含追踪重放材料的原始 `agentic_<suffix>` 同级工件。InferenceX-app 通过它们共享的后缀对这些同级工件进行配对。智能体仅评测作业改为遵循评测输出契约，不要求吞吐量结果。
 
 服务器日志和 GPU 指标是诊断辅助工件。它们通过 `always()` 上传，因此失败的运行仍可供调查。它们的存在不会将失败的基准测试转变为有效结果。
 
@@ -260,8 +277,8 @@ rows = build_rows(raw_eval, metadata, source="eval_job/results.json")
 
 单作业工件对于诊断和详细摄取仍然有用。两个收集器还会创建稳定的运行级聚合。
 
-- [`collect-results.yml`](../.github/workflows/collect-results.yml) 下载 `bmk_*`，运行 [`utils/collect_results.py`](../utils/collect_results.py)，并上传 `results_bmk/agg_bmk.json`。
-- [`collect-evals.yml`](../.github/workflows/collect-evals.yml) 下载 `eval_*`，运行 [`utils/collect_eval_results.py`](../utils/collect_eval_results.py)，并上传 `eval_results_all/agg_eval_all.json`。
+- [`collect-results.yml`](../.github/workflows/collect-results.yml) 下载 `bmk_*`，运行 [`infx/results/collect_results.py`](../infx/results/collect_results.py)，并上传 `results_bmk/agg_bmk.json`。
+- [`collect-evals.yml`](../.github/workflows/collect-evals.yml) 下载 `eval_*`，运行 [`infx/results/collect_eval_results.py`](../infx/results/collect_eval_results.py)，并上传 `eval_results_all/agg_eval_all.json`。
 - `run-sweep.yml` 还会在适用时单独上传 `changelog-metadata/changelog_metadata.json` 和 `run-stats/run_stats.json`。
 
 工件名称是跨仓库接口的一部分。InferenceX-app 的 `ingest-ci-run.ts` 会明确指定 `results_bmk`、`run-stats`、`eval_results_all` 和 `changelog-metadata`。它还会发现单作业 `bmk_*`、`eval_*`、日志和智能体同级目录。
@@ -377,7 +394,7 @@ AgentX 追踪导出的体积更大，并且需要追踪发现、时间线处理�
 
    ```bash
    uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
-     utils/matrix_logic/generate_sweep_configs.py test-config \
+     python -m infx.matrix.generate test-config \
      --config-files configs/nvidia-master.yaml configs/amd-master.yaml \
      --runner-config configs/runners.yaml \
      --config-keys <exact-key>

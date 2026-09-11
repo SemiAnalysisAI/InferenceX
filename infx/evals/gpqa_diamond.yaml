@@ -1,0 +1,37 @@
+# YAML from https://github.com/EleutherAI/lm-evaluation-harness/blob/main/lm_eval/tasks/gsm8k/gsm8k.yaml 
+# Changed doc_to_text so model answers properly. Also see lm-evaluation-harness#3411.
+dataset_path: Idavidrein/gpqa
+dataset_name: gpqa_diamond
+task: gpqa_diamond_cot_n_shot 
+output_type: generate_until
+training_split: train
+validation_split: train
+test_split: null
+
+process_docs: !function utils.process_docs
+
+doc_to_text: |
+  {{Question}}
+
+  (A) {{A}}
+  (B) {{B}}
+  (C) {{C}}
+  (D) {{D}}
+
+  Express your final answer as the corresponding option 'A', 'B', 'C', or 'D'.
+doc_to_target: answer
+
+filter_list:
+  - name: extract_abcd
+    filter:
+      - function: regex
+        # last standalone A-D, optionally in parentheses
+        regex_pattern: "(?i)\\b\\(?([A-D])\\)?\\b"
+        group_select: -1
+      - function: take_first
+
+metric_list:
+  - metric: exact_match
+    aggregation: mean
+    higher_is_better: true
+    ignore_case: true

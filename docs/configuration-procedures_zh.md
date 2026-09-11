@@ -289,7 +289,7 @@ bash -n runners/launch_<cluster>.sh
 
 ```bash
 uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
-  utils/matrix_logic/generate_sweep_configs.py test-config \
+  python -m infx.matrix.generate test-config \
   --config-files configs/<nvidia|amd>-master.yaml \
   --runner-config configs/runners.yaml \
   --config-keys <exact-key>
@@ -299,7 +299,7 @@ uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with p
 
 ```bash
 uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
-  utils/matrix_logic/generate_sweep_configs.py full-sweep \
+  python -m infx.matrix.generate full-sweep \
   --config-files configs/<nvidia|amd>-master.yaml \
   --runner-config configs/runners.yaml \
   --model-prefix <prefix> \

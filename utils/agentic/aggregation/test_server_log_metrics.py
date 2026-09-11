@@ -5,7 +5,7 @@ from pathlib import Path
 from infx.results.agentic.backends.dynamo_vllm import DynamoVllmBackend
 from infx.results.agentic.backends.sglang import SglangBackend
 from infx.results.agentic.backends.vllm import VllmBackend
-from utils.agentic.aggregation.artifacts import (
+from infx.results.agentic.artifacts import (
     find_server_log_paths,
     load_server_log_head,
 )

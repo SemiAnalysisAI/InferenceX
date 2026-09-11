@@ -1,0 +1,39 @@
+# Official scoring replaces lm-eval's placeholder metric.
+task: swebench_lite
+dataset_path: princeton-nlp/SWE-bench_Lite
+output_type: generate_until
+test_split: test
+
+doc_to_text: |
+  You are an expert software engineer fixing a real GitHub issue in the
+  repository `{{repo}}` at commit {{base_commit}}.
+
+  <issue>
+  {{problem_statement}}
+  </issue>
+
+  Respond with ONLY a unified diff (a git patch) that resolves the issue, using
+  real repository file paths. Do not include explanations. Wrap the patch in a
+  single fenced block exactly like:
+
+  ```diff
+  diff --git a/path/to/file.py b/path/to/file.py
+  --- a/path/to/file.py
+  +++ b/path/to/file.py
+  @@ ... @@
+  ```
+# lm-eval requires a target even though scoring ignores it.
+doc_to_target: "{{patch}}"
+
+generation_kwargs:
+  until: []
+  do_sample: false
+  temperature: 0.0
+
+metric_list:
+  - metric: exact_match
+    aggregation: mean
+    higher_is_better: true
+
+metadata:
+  version: 0.1
