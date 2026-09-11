@@ -200,9 +200,9 @@ VLLM_CMD=(
     "${PARALLEL_ARGS[@]}"
     --trust-remote-code
     --block-size 128
-    --gpu-memory-utilization 0.92
+    --gpu-memory-utilization 0.90
     --enable-chunked-prefill
-    --max-num-batched-tokens 65536
+    --max-num-batched-tokens 32768
     --compilation-config '{"cudagraph_mode":"FULL_DECODE_ONLY", "cudagraph_capture_sizes": [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,20,22,24,26,28,30,32,34,36,48,64,72,80,88,96,104,112,120,128]}'
     --language-model-only
     --enable-prefix-caching
