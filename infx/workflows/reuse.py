@@ -1,0 +1,479 @@
+#!/usr/bin/env python3
+"""Find an approved pull-request sweep run that can be reused after merge.
+
+This script is used by ``run-sweep.yml`` on push-to-main runs.  It only enables
+reuse when the merge commit maps unambiguously to one pull request and a
+maintainer has left a ``/reuse-sweep-run`` comment on that PR.  The comment
+may include a specific source run ID; without one, the latest successful
+``pull_request`` ``run-sweep.yml`` run for the PR head is used.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import sys
+import urllib.parse
+from typing import Any
+
+from .. import github
+# Preserve the existing helper imports used through the legacy entrypoint.
+from ..github import api as github_api, paginate as paginated_github_api
+
+
+DEFAULT_ALLOWED_AUTHOR_ASSOCIATIONS = ("OWNER", "MEMBER", "COLLABORATOR")
+REUSE_INCOMPATIBLE_LABELS = {"evals-only", "agentx-fast"}
+REUSABLE_AGGREGATE_ARTIFACTS = {
+    "results_bmk",
+    "eval_results_all",
+}
+
+
+def label_names(pr: dict[str, Any]) -> set[str]:
+    """Return label names from a pull request payload."""
+    return {
+        str(label.get("name"))
+        for label in pr.get("labels", [])
+        if isinstance(label, dict) and label.get("name")
+    }
+
+
+def write_outputs(path: str | None, outputs: dict[str, str]) -> None:
+    """Write outputs for GitHub Actions."""
+    if not path:
+        return
+    with open(path, "a") as handle:
+        for key, value in outputs.items():
+            handle.write(f"{key}={value}\n")
+
+
+def result(
+    *,
+    enabled: bool,
+    reason: str,
+    skip_pr_sweep: bool = False,
+    source_run_id: str = "",
+    source_run_attempt: str = "",
+    source_run_url: str = "",
+    source_pr_number: str = "",
+    source_head_sha: str = "",
+) -> dict[str, str]:
+    """Build the result payload."""
+    return {
+        "reuse-enabled": "true" if enabled else "false",
+        "skip-pr-sweep": "true" if skip_pr_sweep else "false",
+        "reuse-source-run-id": source_run_id,
+        "reuse-source-run-attempt": source_run_attempt,
+        "reuse-source-run-url": source_run_url,
+        "reuse-source-pr-number": source_pr_number,
+        "reuse-source-head-sha": source_head_sha,
+        "reuse-reason": reason,
+    }
+
+
+def parse_reuse_command(body: str, command: str = "/reuse-sweep-run") -> tuple[bool, int | None]:
+    """Use the last standalone command in a comment, preserving unpinned requests."""
+    matches = re.findall(rf"(?m)^\s*{re.escape(command)}(?:\s+(\d+))?\s*$", body)
+    if not matches:
+        return False, None
+    return True, int(matches[-1]) if matches[-1] else None
+
+
+def find_reuse_request(
+    repo: str,
+    pr_number: int,
+    token: str,
+    command: str,
+    allowed_author_associations: set[str],
+) -> tuple[dict[str, Any] | None, int | None]:
+    """Find the most recent maintainer-authorized reuse comment on a PR."""
+    comments = github.paginate(
+        repo,
+        f"/issues/{pr_number}/comments",
+        token,
+        "",
+    )
+    comments.sort(key=lambda comment: str(comment.get("created_at") or ""))
+    for comment in reversed(comments):
+        association = str(comment.get("author_association") or "")
+        if association not in allowed_author_associations:
+            continue
+        matches, pinned_run_id = parse_reuse_command(str(comment.get("body") or ""), command)
+        if not matches:
+            continue
+        return comment, pinned_run_id
+    return None, None
+
+
+def find_reuse_authorization(
+    repo: str,
+    pr_number: int,
+    token: str,
+    command: str,
+    allowed_author_associations: set[str],
+) -> tuple[bool, int | None]:
+    comment, pinned_run_id = find_reuse_request(
+        repo, pr_number, token, command, allowed_author_associations,
+    )
+    return comment is not None, pinned_run_id
+
+
+def find_latest_successful_pr_run(
+    repo: str,
+    workflow_id: str,
+    head_branch: str,
+    valid_shas: set[str],
+    token: str,
+) -> dict[str, Any] | None:
+    """Latest successful PR sweep run whose head_sha is in ``valid_shas``.
+
+    Filters by branch (rather than head SHA) so that runs for earlier commits
+    on the PR remain discoverable after an additional commit lands on it.
+    """
+    if not head_branch or not valid_shas:
+        return None
+    encoded_workflow = urllib.parse.quote(workflow_id, safe="")
+    runs = github.paginate(
+        repo,
+        f"/actions/workflows/{encoded_workflow}/runs",
+        token,
+        "workflow_runs",
+        {
+            "event": "pull_request",
+            "branch": head_branch,
+            "status": "completed",
+        },
+    )
+    # GitHub returns runs newest-first.  Skip gated no-op runs (synchronize
+    # events suppressed by a /reuse-sweep-run comment) which complete as
+    # "success" but produce no benchmark or eval artifacts.
+    for run in runs:
+        if run.get("conclusion") != "success":
+            continue
+        if str(run.get("head_sha") or "") not in valid_shas:
+            continue
+        names = artifact_names(repo, int(run["id"]), token)
+        if not has_reusable_result_artifacts(names):
+            continue
+        return run
+    return None
+
+
+def workflow_path(workflow_id: str) -> str:
+    """Return the Actions run path expected for a workflow id/path."""
+    if workflow_id.startswith(".github/"):
+        return workflow_id
+    return f".github/workflows/{workflow_id}"
+
+
+def pr_commit_shas(repo: str, pr_number: int, token: str) -> set[str]:
+    """Return the set of commit SHAs currently on a PR.
+
+    The Actions ``run.pull_requests`` field is dynamically recomputed and only
+    lists PRs whose *current* head matches the run's ``head_sha``.  After any
+    additional commit lands on the PR (e.g. a ``main`` merge to resolve a
+    ``perf-changelog.yaml`` conflict), the pinned source run drops out of that
+    field even though its commit is still part of the PR.  Checking the PR
+    commit list directly survives that case.
+    """
+    commits = github.paginate(
+        repo,
+        f"/pulls/{pr_number}/commits",
+        token,
+        "",
+    )
+    return {
+        str(commit.get("sha"))
+        for commit in commits
+        if isinstance(commit, dict) and commit.get("sha")
+    }
+
+
+def validate_reusable_run(
+    repo: str,
+    workflow_id: str,
+    pr_number: int,
+    run: dict[str, Any],
+    token: str,
+    allow_failed: bool = False,
+) -> None:
+    """Fail closed unless an Actions run is a valid reusable source run."""
+    run_id = int(run["id"])
+    if run.get("event") != "pull_request":
+        raise RuntimeError(f"Reusable source run {run_id} is not a pull_request run.")
+    if run.get("status") != "completed":
+        raise RuntimeError(f"Reusable source run {run_id} is not completed.")
+    # A pinned run is an explicit maintainer choice, so incomplete sweeps are
+    # allowed: ingestion skips rows without results, leaving only the completed
+    # points.  ``cancelled`` belongs here alongside ``failure`` because a
+    # fail-fast sweep cancels its remaining jobs, so a run whose benchmark jobs
+    # all passed still concludes ``cancelled`` when a later job is cut short.
+    allowed_conclusions = (
+        {"success", "failure", "cancelled"} if allow_failed else {"success"}
+    )
+    if run.get("conclusion") not in allowed_conclusions:
+        expected = (
+            "success, failure, or cancelled" if allow_failed else "success"
+        )
+        raise RuntimeError(
+            f"Reusable source run {run_id} has conclusion {run.get('conclusion')!r}; "
+            f"expected {expected}."
+        )
+    expected_path = workflow_path(workflow_id)
+    run_path = str(run.get("path") or "")
+    if run_path and run_path != expected_path:
+        raise RuntimeError(
+            f"Reusable source run {run_id} is from {run_path}, expected {expected_path}."
+        )
+    run_head_sha = str(run.get("head_sha") or "")
+    if not run_head_sha:
+        raise RuntimeError(f"Reusable source run {run_id} has no head_sha.")
+    pr_shas = pr_commit_shas(repo, pr_number, token)
+    if run_head_sha not in pr_shas:
+        raise RuntimeError(
+            f"Reusable source run {run_id} head {run_head_sha} is not in PR #{pr_number}'s "
+            f"commit list; pin a run whose commit is still part of the PR."
+        )
+
+    names = artifact_names(repo, run_id, token)
+    if not has_reusable_result_artifacts(names):
+        raise RuntimeError(
+            f"Reusable source run {run_id} has no benchmark, eval, or "
+            "agentic result artifact."
+        )
+
+
+def has_reusable_result_artifacts(names: set[str]) -> bool:
+    """Return whether a run produced ingest-relevant result artifacts."""
+    return bool(names & REUSABLE_AGGREGATE_ARTIFACTS) or any(
+        name.startswith("bmk_agentic_") for name in names
+    )
+
+
+def artifact_names(repo: str, run_id: int, token: str) -> set[str]:
+    """Return unexpired artifact names from a workflow run."""
+    artifacts = github.paginate(
+        repo,
+        f"/actions/runs/{run_id}/artifacts",
+        token,
+        "artifacts",
+    )
+    return {
+        str(artifact.get("name"))
+        for artifact in artifacts
+        if isinstance(artifact, dict)
+        and artifact.get("name")
+        and not artifact.get("expired", False)
+    }
+
+
+def resolve_reusable_run(
+    repo: str,
+    workflow_id: str,
+    pr_number: int,
+    pr: dict[str, Any],
+    token: str,
+    pinned_run_id: int | None,
+    *,
+    incompatible_labels: set[str] = REUSE_INCOMPATIBLE_LABELS,
+    command: str = "/reuse-sweep-run",
+) -> dict[str, Any]:
+    """Select and validate the same source at acknowledgment, PR sync, and merge."""
+    incompatible_present = incompatible_labels.intersection(label_names(pr))
+    if incompatible_present:
+        names = ", ".join(sorted(incompatible_present))
+        raise RuntimeError(
+            f"PR #{pr_number} has {command} authorization but "
+            f"uses reuse-incompatible label(s): {names}."
+        )
+    if pinned_run_id is not None:
+        run = github.api(repo, f"/actions/runs/{pinned_run_id}", token)
+    else:
+        pr_shas = pr_commit_shas(repo, pr_number, token)
+        if not pr_shas:
+            raise RuntimeError(f"PR #{pr_number} has no commits.")
+        run = find_latest_successful_pr_run(
+            repo, workflow_id, str(pr.get("head", {}).get("ref") or ""), pr_shas, token,
+        )
+        if not run:
+            raise RuntimeError(
+                f"PR #{pr_number} has {command} authorization but no "
+                f"successful {workflow_id} pull_request run was found for any of "
+                f"its {len(pr_shas)} commit(s); pin a specific run with "
+                f"`{command} <run_id>`."
+            )
+    validate_reusable_run(
+        repo, workflow_id, pr_number, run, token, allow_failed=pinned_run_id is not None,
+    )
+    return run
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--repo", required=True)
+    parser.add_argument("--commit-sha", required=True)
+    parser.add_argument("--event-name", required=True)
+    parser.add_argument("--event-action", default="")
+    parser.add_argument("--pr-number", type=int)
+    parser.add_argument("--ref", required=True)
+    parser.add_argument("--workflow-id", default="run-sweep.yml")
+    parser.add_argument(
+        "--reuse-incompatible-label",
+        default=",".join(sorted(REUSE_INCOMPATIBLE_LABELS)),
+        help="Comma-separated PR labels that make sweep artifacts ineligible for reuse.",
+    )
+    parser.add_argument("--pinned-run-command", default="/reuse-sweep-run")
+    parser.add_argument(
+        "--allowed-author-associations",
+        default=",".join(DEFAULT_ALLOWED_AUTHOR_ASSOCIATIONS),
+        help="Comma-separated GitHub author_association values allowed to pin a source run.",
+    )
+    parser.add_argument("--github-output", default=os.environ.get("GITHUB_OUTPUT"))
+    args = parser.parse_args()
+
+    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+    if not token:
+        raise RuntimeError("GH_TOKEN or GITHUB_TOKEN is required")
+    allowed_author_associations = {
+        value.strip()
+        for value in args.allowed_author_associations.split(",")
+        if value.strip()
+    }
+
+    incompatible_labels = {
+        value.strip() for value in args.reuse_incompatible_label.split(",") if value.strip()
+    }
+
+    if args.event_name == "pull_request":
+        if args.event_action != "synchronize":
+            outputs = result(
+                enabled=False,
+                reason=f"pull_request action {args.event_action or 'unknown'} is not synchronize",
+            )
+        else:
+            if args.pr_number is None:
+                raise RuntimeError("--pr-number is required for pull_request synchronize")
+            authorized, pinned_run_id = find_reuse_authorization(
+                args.repo,
+                args.pr_number,
+                token,
+                args.pinned_run_command,
+                allowed_author_associations,
+            )
+            if authorized:
+                pr = github.api(args.repo, f"/pulls/{args.pr_number}", token)
+                resolve_reusable_run(
+                    args.repo, args.workflow_id, args.pr_number, pr, token, pinned_run_id,
+                    incompatible_labels=incompatible_labels,
+                    command=args.pinned_run_command,
+                )
+            outputs = result(
+                enabled=False,
+                skip_pr_sweep=authorized,
+                reason=(
+                    f"PR #{args.pr_number} has {args.pinned_run_command} authorization"
+                    if authorized
+                    else f"PR #{args.pr_number} has no {args.pinned_run_command} authorization"
+                ),
+                source_pr_number=str(args.pr_number),
+            )
+        write_outputs(args.github_output, outputs)
+        print(json.dumps(outputs, indent=2))
+        return 0
+
+    if args.event_name != "push" or args.ref != "refs/heads/main":
+        outputs = result(enabled=False, reason="not a push to main")
+        write_outputs(args.github_output, outputs)
+        print(json.dumps(outputs, indent=2))
+        return 0
+
+    pulls = github.api(args.repo, f"/commits/{args.commit_sha}/pulls", token)
+    if not isinstance(pulls, list) or len(pulls) == 0:
+        outputs = result(enabled=False, reason="no associated pull request")
+        write_outputs(args.github_output, outputs)
+        print(json.dumps(outputs, indent=2))
+        return 0
+
+    if len(pulls) > 1:
+        authorized_prs: list[int] = []
+        for pr in pulls:
+            if not pr.get("number"):
+                continue
+            pr_number = int(pr["number"])
+            authorized, _ = find_reuse_authorization(
+                args.repo,
+                pr_number,
+                token,
+                args.pinned_run_command,
+                allowed_author_associations,
+            )
+            if authorized:
+                authorized_prs.append(pr_number)
+        if authorized_prs:
+            numbers = ", ".join(str(pr.get("number")) for pr in pulls)
+            authorized = ", ".join(f"#{n}" for n in authorized_prs)
+            raise RuntimeError(
+                f"Commit {args.commit_sha} maps to multiple PRs ({numbers}); "
+                f"found reuse authorization on {authorized}; refusing to reuse artifacts."
+            )
+        outputs = result(enabled=False, reason="multiple associated pull requests")
+        write_outputs(args.github_output, outputs)
+        print(json.dumps(outputs, indent=2))
+        return 0
+
+    pr_number = int(pulls[0]["number"])
+    authorized, pinned_run_id = find_reuse_authorization(
+        args.repo,
+        pr_number,
+        token,
+        args.pinned_run_command,
+        allowed_author_associations,
+    )
+    if not authorized:
+        outputs = result(
+            enabled=False,
+            reason=f"PR #{pr_number} has no {args.pinned_run_command} authorization",
+            source_pr_number=str(pr_number),
+        )
+        write_outputs(args.github_output, outputs)
+        print(json.dumps(outputs, indent=2))
+        return 0
+
+    pr = github.api(args.repo, f"/pulls/{pr_number}", token)
+    if not pr.get("merged_at"):
+        raise RuntimeError(f"PR #{pr_number} is not marked as merged.")
+    run = resolve_reusable_run(
+        args.repo, args.workflow_id, pr_number, pr, token, pinned_run_id,
+        incompatible_labels=incompatible_labels,
+        command=args.pinned_run_command,
+    )
+    run_id = int(run["id"])
+    reason = f"PR #{pr_number} approved sweep reuse from run {run_id}"
+
+    outputs = result(
+        enabled=True,
+        reason=reason,
+        source_run_id=str(run_id),
+        source_run_attempt=str(run.get("run_attempt") or "1"),
+        source_run_url=str(run.get("html_url") or ""),
+        source_pr_number=str(pr_number),
+        source_head_sha=str(run.get("head_sha") or ""),
+    )
+    write_outputs(args.github_output, outputs)
+    print(json.dumps(outputs, indent=2))
+    return 0
+
+
+def cli() -> None:
+    """Keep the same error presentation for package and legacy entrypoints."""
+    try:
+        raise SystemExit(main())
+    except Exception as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        raise SystemExit(1)
+
+
+if __name__ == "__main__":
+    cli()
