@@ -263,3 +263,30 @@ def test_bootstrap_arms_the_ablation_when_only_ablate_is_set(tmp_path, monkeypat
     )
     assert done.returncode == 0, done.stderr
     assert "ok" in done.stdout
+
+
+def test_ablation_diagnostics_go_to_stderr_not_the_logger(capsys, monkeypatch):
+    """vLLM's logging config swallowed logger.info in the server, which left the
+    first ablation run unable to prove the patch was ever reached."""
+    calls = []
+
+    class Fake:
+        def forward(self, hidden_states, hash_ids, token_mask=None):
+            calls.append(1)
+            return hidden_states + 0.01 * torch.ones_like(hidden_states)
+
+    saved = gate_probe._find_engram_class
+    gate_probe._find_engram_class = lambda: Fake
+    try:
+        gate_probe.install_ablation()
+        obj, h = Fake(), torch.randn(3, 2, 4)
+        for _ in range(10):
+            Fake.forward(obj, h, None)
+    finally:
+        gate_probe._find_engram_class = saved
+
+    err = capsys.readouterr().err
+    assert "cos(out, hidden)" in err
+    assert "forward returns updated hidden states" in err
+    assert "forward call count = 1" in err
+    assert "forward call count = 10" in err

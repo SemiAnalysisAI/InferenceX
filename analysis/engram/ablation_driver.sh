@@ -34,7 +34,7 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 # [batched-tokens x max-model-len x 2B] at startup and 1M OOMs an 80 GB card.
 EVAL_CONTEXT=8192
 export EVAL_MAX_MODEL_LEN="$EVAL_CONTEXT"
-EVAL_TASK="${ENGRAM_EVAL_TASK:-utils/evals/gsm8k.yaml}"
+EVAL_TASKS="${ENGRAM_EVAL_TASKS:-utils/evals/gsm8k.yaml utils/evals/gpqa_diamond.yaml}"
 
 cd "$INFERENCEX_REPO_ROOT"
 # vllm serve is launched from this shell, so PYTHONPATH must carry the
@@ -96,8 +96,18 @@ run_one() {
 
     grep -aE "engram-ablate|engram-probe" "$log" | head -20 || true
 
-    EVAL_CONCURRENT_REQUESTS=32 run_lm_eval \
-        --port "$PORT" --task "$EVAL_TASK" --results-dir "$out" || true
+    for task in $EVAL_TASKS; do
+        local suite
+        suite=$(basename "$task" .yaml)
+        EVAL_CONCURRENT_REQUESTS=32 run_lm_eval \
+            --port "$PORT" --task "$task" --results-dir "$out/$suite" || true
+    done
+
+    # The forward-call count is what distinguishes a real ablation from a
+    # patch that was installed but never reached.
+    echo "--- $mode engram markers ---"
+    grep -aE "engram-ablate:" "$log" | grep -vc "armed in pid" || true
+    grep -aE "engram-ablate: (forward|cos|Engram)" "$log" | tail -8 || true
 
     kill "$pid" 2>/dev/null || true
     wait "$pid" 2>/dev/null || true
@@ -114,16 +124,14 @@ import glob, json, os
 root = os.environ["RESULT_DIR"]
 out = {}
 for mode in ("baseline", "ablated"):
-    hit = sorted(glob.glob(f"{root}/eval_{mode}/**/results*.json", recursive=True))
-    if not hit:
-        out[mode] = None
-        continue
-    with open(hit[-1]) as fh:
-        res = json.load(fh).get("results", {})
-    out[mode] = {
-        task: {k: v for k, v in metrics.items() if isinstance(v, (int, float))}
-        for task, metrics in res.items()
-    }
+    merged = {}
+    for hit in sorted(glob.glob(f"{root}/eval_{mode}/**/results*.json", recursive=True)):
+        with open(hit) as fh:
+            for task, metrics in json.load(fh).get("results", {}).items():
+                merged[task] = {
+                    k: v for k, v in metrics.items() if isinstance(v, (int, float))
+                }
+    out[mode] = merged or None
 print(json.dumps(out, indent=2))
 for task in (out.get("baseline") or {}):
     base = out["baseline"][task]

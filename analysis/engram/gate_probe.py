@@ -249,28 +249,44 @@ def install_ablation() -> None:
     try:
         import inspect
 
-        logger.info("engram-ablate: Engram.forward source:\n%s", inspect.getsource(original))
+        _say("Engram.forward source:\n" + inspect.getsource(original))
     except Exception:
-        logger.info("engram-ablate: Engram.forward source unavailable")
+        _say("Engram.forward source unavailable")
 
-    state = {"returns_updated_hidden": None}
+    state = {"returns_updated_hidden": None, "calls": 0}
 
     def forward(self, hidden_states, hash_ids, token_mask=None):
         if state["returns_updated_hidden"] is None:
             out = original(self, hidden_states, hash_ids, token_mask)
             state["returns_updated_hidden"] = _looks_like_updated_hidden(out, hidden_states)
-            logger.info(
-                "engram-ablate: forward returns %s; ablating by returning %s",
-                "updated hidden states" if state["returns_updated_hidden"] else "the delta",
-                "the input" if state["returns_updated_hidden"] else "zeros",
+            _say(
+                "forward returns %s; ablating by returning %s"
+                % (
+                    "updated hidden states" if state["returns_updated_hidden"] else "the delta",
+                    "the input" if state["returns_updated_hidden"] else "zeros",
+                )
             )
             # Discard this one real output so even the first token is ablated.
+        # The call count is the evidence that the ablation engaged at all. A
+        # zero count means the patch was installed but never reached, and any
+        # eval delta would then be run-to-run noise rather than an ablation.
+        state["calls"] += 1
+        if state["calls"] in (1, 10, 100) or state["calls"] % 5000 == 0:
+            _say("forward call count = %d" % state["calls"])
         if state["returns_updated_hidden"]:
             return hidden_states
         return torch.zeros_like(hidden_states)
 
     cls.forward = forward
     cls._gate_ablation_installed = True
+
+
+def _say(message: str) -> None:
+    """Diagnostics that must survive the server's logging config."""
+    import sys
+
+    sys.stderr.write("engram-ablate: %s\n" % message)
+    sys.stderr.flush()
 
 
 @torch.no_grad()
@@ -283,10 +299,10 @@ def _looks_like_updated_hidden(out, hidden_states) -> bool:
         if a.shape != b.shape:
             return False
         cos = torch.dot(a, b) / (a.norm() * b.norm() + 1e-12)
-        logger.info("engram-ablate: cos(out, hidden) = %.6f", float(cos))
+        _say("cos(out, hidden) = %.6f" % float(cos))
         return bool(cos > 0.5)
-    except Exception:
-        logger.exception("engram-ablate: convention detection failed; assuming updated hidden")
+    except Exception as exc:
+        _say("convention detection failed (%r); assuming updated hidden" % (exc,))
         return True
 
 
