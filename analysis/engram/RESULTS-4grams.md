@@ -84,6 +84,70 @@ Two specific results:
   `未经授权禁止`, `本文仅代表作者`. The same templated-structure behavior as
   English, in a corpus-specific vocabulary.
 
+## Top 10 overall
+
+Highest mean gate of any 4-gram in the run, across all 16 domains and both
+layers. Every one is code or markup: a fixed idiom the tokenizer splits into
+several pieces, where the next piece is fully determined by the ones before.
+
+| # | mean gate | count | domain / layer | 4-gram |
+| --: | --: | --: | --- | --- |
+| 1 | 0.4486 | 28 | `code_php` / 0 | `' => $in` |
+| 2 | 0.4313 | 7 | `code_python` / 0 | `    response = ur` |
+| 3 | 0.4298 | 16 | `code_python` / 0 | `        response = ur` |
+| 4 | 0.4296 | 12 | `code_python` / 0 | `            response = ur` |
+| 5 | 0.4232 | 8 | `math_web` / 1 | `:=PCGroup([` |
+| 6 | 0.4231 | 10 | `code_java` / 0 | `.class).in(S` |
+| 7 | 0.4059 | 3 | `code_python` / 0 | ` None) or get` |
+| 8 | 0.3934 | 3 | `code_python` / 0 | `        with open(re` |
+| 9 | 0.3799 | 3 | `math_web` / 1 | ` The Best Or Nothing` |
+| 10 | 0.3606 | 5 | `math_web` / 1 | `: 17 Dec` |
+
+The PHP leader `' => $in` is an array-literal fragment; the three
+`response = ur` rows are the same `urllib` call at three indentation depths,
+which the tokenizer makes into three distinct 4-grams. `:=PCGroup([` is GAP
+computer-algebra syntax from a maths forum.
+
+## Notable entries
+
+Hand-picked from the tables above, because what the gate opens on is easier
+to see in specific cases than in aggregate. These are not the strongest
+rows -- they are the legible ones.
+
+| mean gate | count | domain / layer | 4-gram | what it is |
+| --: | --: | --- | --- | --- |
+| 0.0916 | 10 | `wiki` / 0 | ` Wright : Ace Attorney` | The game subtitle, memorized whole. |
+| 0.1155 | 3 | `wiki` / 0 | ` " Run Run Rudolph` | Chuck Berry, 1958. |
+| 0.1112 | 3 | `wiki` / 0 | ` Treehouse of Horror` | The Simpsons' Halloween episodes. |
+| 0.1797 | 3 | `wiki` / 1 | `ane Clown Pos` | Insane Clown Posse, mid-token. |
+| 0.1804 | 3 | `wiki_full` / 1 | ` Sabbath Bloody Sabbath` | Black Sabbath, 1973. |
+| 0.1751 | 3 | `wiki_full` / 1 | ` The Spectacular Spider` | ...-Man. |
+| 0.2123 | 3 | `wiki` / 1 | ` , Super Mario Land` | Game Boy, 1989. |
+| 0.1234 | 3 | `wiki` / 1 | `ll Always Have Paris` | Casablanca, via a TNG episode title. |
+| 0.1830 | 3 | `wiki` / 1 | ` Life Is Worth Living` | Fulton Sheen's 1950s TV show. |
+| 0.1062 | 17 | `chat_zh` / 0 | `xpialidocious` | The tail of supercalifragilistic-. |
+| 0.1075 | 7 | `chat_zh` / 0 | `.141592653` | Nine digits of pi after the point. |
+| 0.1125 | 27 | `chat_zh` / 0 | ` a truth universally acknowledged` | Pride and Prejudice, opening line. |
+| 0.1098 | 3 | `wiki_zh` / 0 | `KING OF ZIPANGU` | A 1990s NHK drama's romanized title. |
+| 0.1282 | 18 | `web_zh` / 0 | `玄奘西游记` | Xuanzang's Journey to the West. |
+| 0.1083 | 4 | `chat_zh` / 0 | `《荒岛余生` | Cast Away, in Chinese. |
+| 0.0839 | 3 | `math` / 0 | ` pints of frozen yogurt` | A GSM8K word-problem prop. |
+| 0.0965 | 9 | `math` / 0 | `g of packing peanuts` | Another one. |
+| 0.0791 | 3 | `math` / 0 | ` The Fancy Salon` | An invented GSM8K business. |
+| 0.0790 | 3 | `math` / 0 | ` 10 Baby Ruth` | Candy bars, being counted. |
+| 0.0838 | 4 | `wiki` / 0 | ` Wisteria Lane` | Desperate Housewives. |
+| 0.1778 | 7 | `wiki_full` / 1 | ` Angiosperm Phylogen` | ...y Group, the botanical classification. |
+| 0.1178 | 3 | `web` / 0 | ` Elders of Zion` | From a Project Gutenberg catalogue page. |
+| 0.1033 | 5 | `chat` / 0 | `The Life of Pablo` | Kanye West, 2016. |
+
+The pattern across all of them: a rare multi-token name whose later pieces
+are unguessable from the model's weights but fully determined once the
+earlier pieces are known. `ane Clown Pos` is the clearest case -- the gate
+opens in the middle of a word, on a boundary that exists only because of how
+the tokenizer split a band's name. The maths rows show the same mechanism on
+invented props: once a GSM8K problem has said "pints of frozen", the next
+token is not in doubt.
+
 ## Reference-study domains
 
 ### `wiki`
