@@ -63,25 +63,11 @@ export DOCKER_CONT_NAME
 : "${BENCHMARK_LOGS_DIR:?BENCHMARK_LOGS_DIR not set}"
 DOCKER_MOUNT_PATH="/workspace"
 
-cleanup() {
-    echo "[${SLURM_JOB_ID}] cleanup on $(hostname)"
-    [[ -n "${WATCHER_PID:-}" ]] && kill "$WATCHER_PID" 2>/dev/null || true
-}
-trap cleanup INT TERM HUP EXIT
-
-# Coordinator-done watcher. server.sh on the decode coordinator writes
-# this marker after the bench finishes; we then scancel the allocation
-# from outside the container (the image has no SLURM client tools).
-# Without this, workers `wait` on local vLLM forever and the job runs
-# to TIME_LIMIT.
+# Workers exit through server.sh after reading the coordinator's final status.
+# Normal completion must not cancel an otherwise successful allocation.
 BENCH_DONE_MARKER="$BENCHMARK_LOGS_DIR/.bench_done.$SLURM_JOB_ID"
 rm -f "$BENCH_DONE_MARKER"
-(
-    while [[ ! -f "$BENCH_DONE_MARKER" ]]; do sleep 5; done
-    echo "[${SLURM_JOB_ID}] coordinator finished; scancel'ing job"
-    scancel "$SLURM_JOB_ID" 2>/dev/null || true
-) &
-WATCHER_PID=$!
+main_rc=0
 
 # Container engine: 'docker' (default) for clusters where the SLURM
 # user can talk to /var/run/docker.sock (e.g. h200-dgxc-slurm); 'pyxis'
@@ -173,7 +159,7 @@ exec docker run --rm \
         ${DOCKER_MOUNT_PATH}/benchmarks/multi_node/llm-d/server.sh \
             2>&1 | tee /benchmark_logs/slurm_job-'\"\$SLURM_JOB_ID\"'_rank_'\"\$SLURM_PROCID\"'.log
     '
-"
+" || main_rc=$?
 
     srun bash -c "docker ps -aq --filter name=\"^${DOCKER_CONT_NAME}_\" | xargs -r docker rm -f" || true
 
@@ -257,9 +243,11 @@ export MODEL_DIR=/models
 export BENCHMARK_LOGS_DIR=/benchmark_logs
 '"$DOCKER_MOUNT_PATH"'/benchmarks/multi_node/llm-d/server.sh \
     2>&1 | tee /benchmark_logs/slurm_job-${SLURM_JOB_ID}_rank_${SLURM_PROCID}.log
-'
+' || main_rc=$?
 
 else
     echo "Unsupported LLMD_CONTAINER_ENGINE: $LLMD_CONTAINER_ENGINE (expected docker|pyxis)" >&2
     exit 1
 fi
+
+exit "$main_rc"

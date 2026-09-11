@@ -576,3 +576,47 @@ def test_eval_only_acceptance_rewrite_allows_non_speculative_recipe(
 
     assert result.returncode == 0, result.stderr
     assert recipe.read_text() == original
+
+
+@pytest.mark.parametrize('state,exit_code,expected', [
+    ('COMPLETED', '0:0', 0), ('FAILED', '1:0', 1), ('TIMEOUT', '0:15', 1),
+    ('COMPLETED', '1:0', 1), ('CANCELLED', '0:15', 1),
+])
+def test_slurm_terminal_allocation_status_is_required(tmp_path, state, exit_code, expected):
+    result = run_bash(
+        f'source "$1"; export GITHUB_WORKSPACE="$2"; '
+        f'sacct() {{ printf "42|{state}|{exit_code}\\n42.batch|COMPLETED|0:0\\n"; }}; '
+        'scontrol() { return 1; }; verify_slurm_job_completion 42',
+        SLURM_UTILS, tmp_path,
+    )
+    assert result.returncode == expected, result.stderr
+    assert (tmp_path / 'slurm_job_42_outcome.txt').read_text().strip() == f'42|{state}|{exit_code}'
+
+
+def test_slurm_recent_completion_falls_back_to_controller(tmp_path):
+    result = run_bash(
+        'source "$1"; export GITHUB_WORKSPACE="$2"; sacct() { return 0; }; '
+        'scontrol() { echo "JobId=42 JobState=COMPLETED ExitCode=0:0"; }; '
+        'verify_slurm_job_completion 42', SLURM_UTILS, tmp_path,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_slurm_unknown_terminal_state_is_not_success(tmp_path):
+    result = run_bash(
+        'source "$1"; export GITHUB_WORKSPACE="$2"; sacct() { return 1; }; '
+        'scontrol() { return 1; }; verify_slurm_job_completion 42', SLURM_UTILS, tmp_path,
+    )
+    assert result.returncode == 1
+    assert 'state=unknown' in result.stderr
+
+
+def test_slurm_exit_before_log_retains_terminal_receipt(tmp_path):
+    result = run_bash(
+        'source "$1"; export GITHUB_WORKSPACE="$2"; '
+        'slurm_job_is_active() { return 1; }; '
+        'sacct() { printf "42|FAILED|1:0\\n"; }; '
+        'stream_slurm_job_log 42 "$2/missing.log"', SLURM_UTILS, tmp_path,
+    )
+    assert result.returncode == 1
+    assert (tmp_path / 'slurm_job_42_outcome.txt').read_text().strip() == '42|FAILED|1:0'

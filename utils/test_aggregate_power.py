@@ -708,6 +708,7 @@ def test_power_replacement_removes_stale_metrics(tmp_path, patch_validated_power
     path.write_text(json.dumps({
         "hw": "fixture", "avg_power_w": 99, "total_gpu_energy_j": 50,
         "power_invalid_reasons": ["stale"],
+        "power_audit": {"source": "previous-run.json"},
     }))
     patch_validated_power(path, power_valid=valid, metrics={
         "avg_power_w": 12.34567, "joules_per_output_token": 0.12345678,

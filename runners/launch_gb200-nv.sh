@@ -158,7 +158,8 @@ if [[ "$FRAMEWORK" == "llmd-vllm" ]]; then
     trap 'bundle_server_logs "$BENCHMARK_LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"; scancel "$JOB_ID" 2>/dev/null || true' EXIT INT TERM HUP
 
     LOG_FILE="${BENCHMARK_LOGS_DIR}/slurm_job-${JOB_ID}.out"
-    stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || exit 1
+    SRT_JOB_RC=0
+    stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || SRT_JOB_RC=$?
 
     while IFS= read -r -d '' result_file; do
         copy_to_workspace "$result_file" "$GITHUB_WORKSPACE/$(basename "$result_file")" || exit 1
@@ -173,7 +174,7 @@ if [[ "$FRAMEWORK" == "llmd-vllm" ]]; then
     fi
 
     scancel "$JOB_ID" 2>/dev/null || true
-    exit 0
+    exit "$SRT_JOB_RC"
 fi
 
 # MODEL_PATH: Override with pre-downloaded paths on GB200 runner
@@ -806,11 +807,12 @@ trap 'exit 143' TERM HUP
 LOGS_DIR="outputs/$JOB_ID/logs"
 LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
 
-stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || exit 1
+SRT_JOB_RC=0
+stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || SRT_JOB_RC=$?
 
 set -x
 
-echo "Job $JOB_ID completed!"
+echo "Job $JOB_ID finished with status $SRT_JOB_RC; collecting evidence"
 echo "Collecting results..."
 
 if [ -d "$LOGS_DIR" ]; then
@@ -892,3 +894,5 @@ fi
 if [[ "${RUN_EVAL:-false}" == "true" || "${EVAL_ONLY:-false}" == "true" ]]; then
     copy_eval_artifacts "$LOGS_DIR/eval_results" "$GITHUB_WORKSPACE" || exit 1
 fi
+
+exit "$SRT_JOB_RC"

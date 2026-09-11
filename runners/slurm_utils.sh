@@ -45,6 +45,27 @@ slurm_job_is_active() {
     squeue -j "$job_id" --noheader 2>/dev/null | grep -q "$job_id"
 }
 
+verify_slurm_job_completion() {
+    local job_id="$1" records record state exit_code
+    # Disappearance from squeue only means the job is no longer active. Read
+    # the allocation's terminal record, not a successful batch/extern step.
+    records=$(sacct -j "$job_id" --noheader --parsable2 --format=JobIDRaw,State,ExitCode 2>/dev/null) || records=""
+    record=$(printf '%s\n' "$records" | awk -F'|' -v job="$job_id" '$1 == job {print; exit}')
+    if [[ -n "$record" ]]; then
+        IFS='|' read -r _ state exit_code <<< "$record"
+    else
+        # Recently completed jobs can precede accounting visibility.
+        record=$(scontrol show job "$job_id" --oneliner 2>/dev/null) || record=""
+        state=$(printf '%s\n' "$record" | sed -n 's/.*JobState=\([^ ]*\).*/\1/p')
+        exit_code=$(printf '%s\n' "$record" | sed -n 's/.*ExitCode=\([^ ]*\).*/\1/p')
+    fi
+    printf '%s\n' "$record" > "${GITHUB_WORKSPACE:-.}/slurm_job_${job_id}_outcome.txt"
+    if [[ "$state" != "COMPLETED" || "$exit_code" != "0:0" ]]; then
+        echo "ERROR: Slurm job $job_id ended with state=${state:-unknown} exit=${exit_code:-unknown}" >&2
+        return 1
+    fi
+}
+
 stream_slurm_job_log() {
     local job_id="$1"
     local log_file="$2"
@@ -52,7 +73,7 @@ stream_slurm_job_log() {
     while [[ ! -f "$log_file" ]]; do
         if ! slurm_job_is_active "$job_id"; then
             echo "ERROR: job $job_id failed before creating $log_file" >&2
-            scontrol show job "$job_id" || true
+            verify_slurm_job_completion "$job_id" || true
             return 1
         fi
         sleep 5
@@ -68,6 +89,7 @@ stream_slurm_job_log() {
     echo "Tailing $log_file"
     tail -F -s 2 -n+1 "$log_file" --pid="$poll_pid" 2>/dev/null
     wait "$poll_pid"
+    verify_slurm_job_completion "$job_id"
 }
 
 copy_to_workspace() {

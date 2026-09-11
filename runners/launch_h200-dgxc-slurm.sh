@@ -348,11 +348,12 @@ EOF
     LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
     trap 'rc=$?; bundle_server_logs "$LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT INT TERM HUP
 
-    stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || exit 1
+    SRT_JOB_RC=0
+    stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || SRT_JOB_RC=$?
 
     set -x
 
-    echo "Job $JOB_ID completed!"
+    echo "Job $JOB_ID finished with status $SRT_JOB_RC; collecting evidence"
     echo "Collecting results..."
 
     if [ ! -d "$LOGS_DIR" ]; then
@@ -421,6 +422,8 @@ EOF
         sleep 10
     done
     find . -name '.nfs*' -delete 2>/dev/null || true
+
+    if [[ "$SRT_JOB_RC" != "0" ]]; then exit "$SRT_JOB_RC"; fi
 
 else
     SQUASH_FILE="/data/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"

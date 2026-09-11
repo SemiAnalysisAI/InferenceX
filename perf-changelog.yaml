@@ -7319,3 +7319,23 @@
     - "Resolve the requested H100 SGLang container instead of a hardcoded older image, and stop benchmark/eval clients when their ready server or required worker exits."
     - "H100 SGLang 使用所请求的容器而非硬编码旧镜像；已就绪的服务或必需工作进程退出后，停止其 benchmark/评测客户端。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3020
+
+- config-keys:
+    - qwen3.5-fp8-b200-sglang
+    - qwen3.5-fp8-h100-sglang
+    - qwen3.5-fp8-gb200-dynamo-sglang
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Preserve request and Slurm failure outcomes, retain all available fixed-sequence diagnostics, and reject incomplete concurrency batches before publishing benchmark artifacts."
+    - "保留请求与 Slurm 失败状态及全部可用的固定序列诊断信息；发布基准产物前拒绝缺失并发点的批次。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3026
+
+- config-keys:
+    - dsv4-fp4-gb200-llmd-vllm
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Stop llm-d workers through the coordinator's final status instead of cancelling successful allocations, and preserve failed concurrency outcomes."
+    - "通过协调进程的最终状态停止 llm-d 工作进程，避免取消成功的分配，并保留并发点的失败状态。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3026
