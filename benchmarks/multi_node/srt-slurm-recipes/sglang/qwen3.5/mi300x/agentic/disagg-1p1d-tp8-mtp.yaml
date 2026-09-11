@@ -116,7 +116,7 @@ backend:
       max-prefill-tokens: 32768
       # Dedicated prefill can amortize long cache misses across fewer passes.
       # Keep the existing memory reserve while screening larger chunks.
-      chunked-prefill-size: 32768
+      chunked-prefill-size: 8192
       scheduler-recv-interval: 30
       tokenizer-worker-num: 6
       cuda-graph-max-bs-decode: 64

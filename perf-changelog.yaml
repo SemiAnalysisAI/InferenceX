@@ -7314,3 +7314,10 @@
     - "Include c64 alongside c16 and c32 to exercise DEP16 decode throughput under AgentX session think time, within the configured global admission limit of 128."
     - "Retain serving settings and measure actual DP-rank utilization, cache capacity and per-GPU performance before treating this candidate as a frontier point."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2984
+
+- config-keys:
+    - qwen3.5-fp8-mi300x-sglang-disagg-agentic-mtp
+  description:
+    - "Restore the reference prefill chunk to 8192 after the controlled c16 screening trial with 32768-token chunks reduced P90 normalized interactivity 17.5% without a throughput gain."
+    - "Preserve the homogeneous TP8/EP8 layout, memory fraction 0.75, stock MORI image and AgentX golden acceptance length 3.39."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2984
