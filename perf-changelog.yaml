@@ -7179,3 +7179,11 @@
   description:
     - "Use the pinned SGLang nightly-dev-cu13-20260901-07c8f729 image with FlashInfer 0.6.18, which includes the BF16 TRTLLM MoE allocation fix for small-batch Blackwell execution. Model, TP8, HiCache, MTP settings and concurrency grid are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2994
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Image : vllm/vllm-openai-rocm:nightly-e7edf17cea217e52701f913cd8491fcacf2d9490"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/
