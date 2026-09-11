@@ -7130,6 +7130,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2969
 
 - config-keys:
+    - minimaxm3-fp4-gb200-dynamo-trt-agentic-agg-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add MiniMax-M3 NVFP4 TensorRT-LLM AgentX on GB200 with Dynamo aggregated serving, TP4 plus EAGLE3-GQA with three draft tokens, seven concurrency-specific recipes, and 128 GiB per-rank host KV cache."
+    - "Add the GB200 launcher route and use NVIDIA/srt-slurm v1.0.91 for aggregated TensorRT-LLM workers."
+    - "Add TensorRT-LLM synthetic-acceptance injection for AgentX throughput runs while leaving eval-only runs on real acceptance."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2977
+
+- config-keys:
     - minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp
   scenario-type:
     - agentic-coding
