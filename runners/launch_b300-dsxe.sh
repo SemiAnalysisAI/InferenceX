@@ -145,8 +145,9 @@ fi
 # Default is the newest tag. Add a branch here to pin a ref per model / precision /
 # framework when a recipe needs one, so results stay reproducible.
 select_srt_slurm_version() {
-    if false; then
-        :
+    if [[ "$IS_AGENTIC" == "1" && "$FRAMEWORK" == "dynamo-trt" && "$MODEL_PREFIX" == "glm5.2" ]]; then
+        SRT_SLURM_REPO="https://github.com/Thunderbeee/srt-slurm.git"
+        SRT_SLURM_REF="824c15e8eccd447bdf79c39d264ebafd10b1dba3"
     else
         SRT_SLURM_REPO="https://github.com/NVIDIA/srt-slurm.git"
         SRT_SLURM_REF="v1.0.87"
@@ -221,6 +222,38 @@ export ISL="$ISL"
 export OSL="$OSL"
 export EVAL_ONLY="${EVAL_ONLY:-false}"
 
+SRT_EXTRA_CLUSTER_CONFIG=""
+if [[ "$IS_AGENTIC" == "1" && "$FRAMEWORK" == "dynamo-trt" && "$MODEL_PREFIX" == "glm5.2" ]]; then
+    CTX_HCA_PIN_HOST_DIR="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2/b300-fp4/agentic"
+    CTX_HCA_PIN_SCRIPT="$CTX_HCA_PIN_HOST_DIR/b300_ctx_hca_pin.sh"
+    if [[ ! -f "$CTX_HCA_PIN_SCRIPT" ]]; then
+        echo "Error: context HCA pinning preamble not found at $CTX_HCA_PIN_SCRIPT" >&2
+        exit 1
+    fi
+
+    AIPERF_MMAP_CACHE_HOST_PATH="/data/home/sa-gha-runner/aiperf-cache"
+    HF_HUB_CACHE_HOST_PATH="/data/home/sa-gha-runner/hf-hub-cache"
+    TRTLLM_JIT_CACHE_HOST_PATH="/data/home/sa-gha-runner/trtllm-jit-cache"
+    mkdir -p \
+        "$AIPERF_MMAP_CACHE_HOST_PATH" \
+        "$HF_HUB_CACHE_HOST_PATH" \
+        "$TRTLLM_JIT_CACHE_HOST_PATH"
+    chmod 0777 \
+        "$AIPERF_MMAP_CACHE_HOST_PATH" \
+        "$HF_HUB_CACHE_HOST_PATH" \
+        "$TRTLLM_JIT_CACHE_HOST_PATH" 2>/dev/null || true
+
+    SRT_EXTRA_CLUSTER_CONFIG=$(cat <<EOF
+default_mounts:
+  "${CTX_HCA_PIN_HOST_DIR}": "/srt-preamble"
+  "${AIPERF_MMAP_CACHE_HOST_PATH}": "/aiperf_mmap_cache"
+  "${HF_HUB_CACHE_HOST_PATH}": "/hf_hub_cache"
+  "${TRTLLM_JIT_CACHE_HOST_PATH}": "/trtllm-jit-cache"
+default_bash_preamble: ". /srt-preamble/b300_ctx_hca_pin.sh"
+EOF
+)
+fi
+
 # ---------------------------------------------------------------------------
 # srtslurm.yaml: cluster defaults, every model alias, container aliases.
 # ---------------------------------------------------------------------------
@@ -251,6 +284,9 @@ EOF
         printf '  dcgm-exporter: "%s"\n' "$DCGM_EXPORTER_SQSH"
     fi
     echo "use_exclusive_sbatch_directive: true"
+    if [[ -n "$SRT_EXTRA_CLUSTER_CONFIG" ]]; then
+        printf '%s\n' "$SRT_EXTRA_CLUSTER_CONFIG"
+    fi
 } > srtslurm.yaml
 
 echo "Generated srtslurm.yaml:"
