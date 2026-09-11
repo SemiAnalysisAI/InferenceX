@@ -1703,8 +1703,10 @@ minimaxm3-fp4-mi355x-vllm-agentic-mtp:
 #     concurrency; GPU-resident KV keeps latency independent of DRAM bandwidth.
 #     c6 and c8 removed after sweep validation: dominated by TP4/EP4 arm.
 # SA selects the Pareto-optimal arm per concurrency point.
+# v0.5.19 image bump: includes SGLang #37124 (fused DSA metadata kernels) + #37133.
+# Full Pareto re-sweep: TP4/EP4 no-KV, TP8/EP1 no-KV, TP4/EP4 HiCache.
 glm5.2-fp4-mi355x-sglang-agentic-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260728
+  image: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260908
   model: amd/GLM-5.2-MXFP4
   model-prefix: glm5.2
   runner: cluster:mi355x-amds
@@ -1715,8 +1717,9 @@ glm5.2-fp4-mi355x-sglang-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.8
       search-space:
-      - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 2, 4, 8, 10, 12], spec-decoding: mtp }
-      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 10], spec-decoding: mtp }
+      - { tp: 4, ep: 4, kv-offloading: none, conc-list: [1, 2, 4, 6, 8], spec-decoding: mtp }
+      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4], spec-decoding: mtp }
+      - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 2, 4, 8, 10], spec-decoding: mtp }
 # GLM-5.2 FP4 agentic-coding benchmark on MI355X via ATOM with MTP speculative
 # decoding. TP4 uses LMCache DRAM offload; TP8 is GPU-resident with no KV offload.
 # Recipe is from PR https://github.com/ROCm/ATOM/pull/1877
