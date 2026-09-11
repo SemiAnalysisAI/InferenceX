@@ -325,3 +325,14 @@ def test_meter_records_contribution_and_ablation_zeroes_it(tmp_path, monkeypatch
         assert "engram0" in abl["per_layer"]
     finally:
         gate_probe._find_engram_class = saved
+
+
+def test_bootstrap_arms_for_every_mode_env_var(tmp_path):
+    """The meter has its own env var, and the bootstrap once gated only on the
+    other two -- so it never armed in the workers and measured nothing."""
+    boot = gate_probe.write_bootstrap(str(tmp_path))
+    src = open(os.path.join(boot, "sitecustomize.py")).read()
+    for var in ("ENGRAM_PROBE_DIR", "ENGRAM_ABLATE", "ENGRAM_METER_DIR"):
+        assert var in src, var
+    # The meter must win when set: it does the ablation itself, via its toggle.
+    assert src.index("ENGRAM_METER_DIR") < src.index("install_ablation")

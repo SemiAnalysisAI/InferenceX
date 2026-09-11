@@ -41,6 +41,18 @@ fi
 if [[ "$CONC" == 9 ]]; then
     exec bash "$INFERENCEX_REPO_ROOT/analysis/engram/ablation_driver.sh"
 fi
+# conc 10: likelihood ablation -- one measurement per token instead of one per
+# eval question, which is the only way an 0.4pp-scale effect is measurable.
+if [[ "$CONC" == 10 ]]; then
+    cd "$INFERENCEX_REPO_ROOT"
+    exec python3 analysis/engram/nll_ablation.py --tp "$TP" \
+        --chunks-per-domain "${ENGRAM_NLL_CHUNKS:-200}" \
+        --out "$RESULT_DIR/engram_nll"
+fi
+# conc 11: Terminal-Bench 4.0 feasibility probe (no GPU work of its own).
+if [[ "$CONC" == 11 ]]; then
+    exec bash "$INFERENCEX_REPO_ROOT/analysis/engram/tbench_driver.sh"
+fi
 
 SHARD=$((CONC - 1))
 echo "=== Engram gate scan: shard ${SHARD} of ${NUM_SHARDS}, TP=${TP} ==="

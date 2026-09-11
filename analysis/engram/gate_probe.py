@@ -197,7 +197,7 @@ for _entry in [p for p in sys.path if os.path.abspath(p) != _self]:
             pass
         break
 
-if os.environ.get("ENGRAM_PROBE_DIR") or os.environ.get("ENGRAM_ABLATE"):
+if any(os.environ.get(v) for v in ("ENGRAM_PROBE_DIR", "ENGRAM_ABLATE", "ENGRAM_METER_DIR")):
     sys.path.insert(0, {analysis_dir!r})
 
     def _arm(deadline=3600.0, interval=0.05):
@@ -209,7 +209,10 @@ if os.environ.get("ENGRAM_PROBE_DIR") or os.environ.get("ENGRAM_ABLATE"):
                 try:
                     from engram import gate_probe
 
-                    if os.environ.get("ENGRAM_ABLATE"):
+                    if os.environ.get("ENGRAM_METER_DIR"):
+                        gate_probe.install_meter()
+                        sys.stderr.write("engram-meter: armed in pid %d\\n" % os.getpid())
+                    elif os.environ.get("ENGRAM_ABLATE"):
                         gate_probe.install_ablation()
                         sys.stderr.write("engram-ablate: armed in pid %d\\n" % os.getpid())
                     else:
