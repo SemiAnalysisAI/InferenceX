@@ -23,6 +23,11 @@ if [[ -n "${ROCR_VISIBLE_DEVICES:-}" ]]; then
 fi
 export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_USE_AITER_MOE=1
+# DeepseekV41ForCausalLM is not torch-compiled upstream, so the default
+# cudagraph_mode=FULL_AND_PIECEWISE aborts at engine init with "piecewise CUDA
+# graphs unavailable" (run 34566727564). The model is built for the breakable
+# cudagraph path -- amd/attention.py uses eager_break_during_capture.
+export VLLM_USE_BREAKABLE_CUDAGRAPH=1
 export OMP_NUM_THREADS=1
 # Pin the full-context corpus for this 1M-context recipe.
 export WEKA_LOADER_OVERRIDE=semianalysis_cc_traces_weka_062126

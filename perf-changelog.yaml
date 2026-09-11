@@ -7370,3 +7370,9 @@
   description:
     - "Set INFMAX_CONTAINER_WORKSPACE=/ix for the MI355X DS V4.1 mount so AgentX dependencies and outputs resolve correctly"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2962
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  description:
+    - "Set VLLM_USE_BREAKABLE_CUDAGRAPH=1. Upstream does not torch-compile DeepseekV41ForCausalLM, so the default cudagraph_mode=FULL_AND_PIECEWISE aborted at engine init with piecewise CUDA graphs unavailable (run 34566727564, all concurrencies); the model targets the breakable cudagraph path"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2962
