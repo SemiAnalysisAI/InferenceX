@@ -357,9 +357,12 @@ CONFIG_PATH="${CONFIG_FILE%%:*}"
 
 # Override the job name in the config file with the runner name
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
-# Bump recipe health-check timeout from 360x10s=3600s to 720x10s=7200s so
-# large-model loads finish in time.
-sed -i 's/^  max_attempts: [0-9]*/  max_attempts: 720/' "$CONFIG_PATH"
+# Give recipes at least 720 attempts without shortening a larger model-specific
+# load budget (GLM-5.2 intentionally requests 1440x10s).
+RECIPE_MAX_ATTEMPTS=$(sed -n 's/^  max_attempts: \([0-9][0-9]*\)$/\1/p' "$CONFIG_PATH" | head -1)
+if [[ $RECIPE_MAX_ATTEMPTS =~ ^[0-9]+$ ]] && (( RECIPE_MAX_ATTEMPTS < 720 )); then
+    sed -i 's/^  max_attempts: [0-9]*/  max_attempts: 720/' "$CONFIG_PATH"
+fi
 
 inject_synthetic_acceptance "$CONFIG_PATH" "$FRAMEWORK" || exit 1
 
@@ -367,6 +370,7 @@ SRTCTL_PREFLIGHT_ARGS=()
 # These weights are staged on the Slurm compute nodes, not the login node.
 if [[ $MODEL_PREFIX == "kimik2.6" ]] ||
    [[ $MODEL_PREFIX == "kimik3" ]] ||
+   [[ $MODEL_PREFIX == "glm5.2" ]] ||
    [[ $MODEL_PREFIX == "dsv4" ]]; then
     SRTCTL_PREFLIGHT_ARGS+=(--no-preflight)
 fi

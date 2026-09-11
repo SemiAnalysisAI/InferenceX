@@ -827,6 +827,53 @@ def test_multinode_processor_rejects_one_sided_hardware(
         _gpu_shape()
 
 
+@pytest.mark.parametrize("env", [{}, {"PP_SIZE": "", "DCP_SIZE": "", "PCP_SIZE": ""}])
+def test_gpu_shape_defaults_empty_parallelism_to_one(monkeypatch, env):
+    monkeypatch.setattr(os, "environ", env)
+    assert _gpu_shape() == ({"pp": 1, "dcp_size": 1, "pcp_size": 1}, 1, 1, 1, "false")
+
+
+@pytest.mark.parametrize("decode_workers,expected_gpus,expected_decode", [
+    ("3", 78, (2, 11, 1, 9, 5)),
+    ("0", 48, (0, 0, 1, 1, 1)),
+])
+def test_gpu_shape_counts_workers_and_normalizes_absent_decode(
+    monkeypatch, decode_workers, expected_gpus, expected_decode,
+):
+    monkeypatch.setattr(os, "environ", {
+        "IS_MULTINODE": "true", "PREFILL_NUM_WORKERS": "2", "PREFILL_TP": "3",
+        "PREFILL_PP_SIZE": "2", "PREFILL_PCP_SIZE": "4", "PREFILL_DCP_SIZE": "7",
+        "PREFILL_EP": "8", "PREFILL_DP_ATTN": "YES", "DECODE_NUM_WORKERS": decode_workers,
+        "DECODE_TP": "2", "DECODE_EP": "11", "DECODE_PP_SIZE": "1",
+        "DECODE_DCP_SIZE": "9", "DECODE_PCP_SIZE": "5", "DECODE_DP_ATTN": "false",
+        "PREFILL_GPUS": "999", "DECODE_GPUS": "999",
+    })
+    fields, num_gpus, tp, ep, attention = _gpu_shape()
+    # Two 24-GPU prefill workers plus either three 10-GPU decode workers or
+    # no decode workers. EP and DCP do not allocate extra GPUs.
+    assert num_gpus == expected_gpus
+    assert fields["num_prefill_gpu"] == 48
+    assert fields["num_decode_gpu"] == (30 if decode_workers == "3" else 0)
+    assert tuple(fields[key] for key in ("decode_tp", "decode_ep", "decode_pp",
+                                        "decode_dcp_size", "decode_pcp_size")) == expected_decode
+    assert (tp, ep, attention) == ((5, 11, "true") if decode_workers == "3" else (3, 8, "true"))
+    assert fields["prefill_dp_attention"] == "YES"
+    assert fields["decode_dp_attention"] == "false"
+
+
+@pytest.mark.parametrize("env,error_type,message", [
+    ({"IS_MULTINODE": "true", "TP": "bad"}, ValueError, "invalid literal for int"),
+    ({"IS_MULTINODE": "true", "PREFILL_PP_SIZE": "0", "PREFILL_HARDWARE": "gpu"},
+     SystemExit, "Multinode PP, DCP, and PCP sizes must be positive integers."),
+    ({"IS_MULTINODE": "true", "DECODE_NUM_WORKERS": "0", "DECODE_PCP_SIZE": "0"},
+     SystemExit, "Multinode PP, DCP, and PCP sizes must be positive integers."),
+])
+def test_gpu_shape_preserves_parsing_and_validation_order(monkeypatch, env, error_type, message):
+    monkeypatch.setattr(os, "environ", env)
+    with pytest.raises(error_type, match=message):
+        _gpu_shape()
+
+
 def test_processor_surfaces_request_accounting(tmp_path: Path):
     result_dir = tmp_path / "results"
     artifact = result_dir / "aiperf_artifacts"
