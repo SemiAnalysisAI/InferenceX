@@ -57,4 +57,40 @@ rows = rep["chat/engram0/2gram"]
 assert [r["ngram"] for r in rows] == ["1|2", "3|4"], rows
 assert rows[0]["avg_gate"] == 0.95 and rows[0]["count"] == 5
 print("ranking: mean gate, ordering, and min-count filter all correct")
+
+# --- 4. corpora: rendering, per-language filtering, budget truncation ---
+from engram import corpora
+
+assert corpora._render({"text": "a"}, "text") == "a"
+assert corpora._render({"dialog": [" hi ", " yo "]}, "dialog") == "hi\nyo"
+assert corpora._render({"q": "Q", "a": "A"}, ("q", "a")) == "Q\nA"
+assert corpora._render({"q": "Q", "a": ""}, ("q", "a")) == "Q"
+
+rows = [
+    {"language_name": "C++", "code": "int main(){}"},
+    {"language_name": "Rust", "code": "fn main(){}"},
+    {"language_name": "C++", "code": "auto x = 1;"},
+]
+_, srcs = corpora.DOMAINS["code_cpp"]
+where = srcs[0][3]
+assert [r["code"] for r in rows if where(r)] == ["int main(){}", "auto x = 1;"]
+
+import sys as _sys, types as _types
+fake = _types.ModuleType("datasets")
+fake.load_dataset = lambda path, **kw: rows
+_saved = _sys.modules.get("datasets")
+_sys.modules["datasets"] = fake
+try:
+    text = corpora._load_one("x", {}, "code", where, budget=1_000)
+    assert text == "int main(){}\nauto x = 1;", text
+    assert len(corpora._load_one("x", {}, "code", None, budget=5)) == 5
+finally:
+    if _saved is not None:
+        _sys.modules["datasets"] = _saved
+    else:
+        del _sys.modules["datasets"]
+
+langs = [d for d in corpora.DOMAINS if d.startswith("code_")]
+assert len(langs) >= 10, langs
+print(f"corpora: rendering, filtering, budget truncation OK ({len(langs)} code domains)")
 print("\nALL OFFLINE CHECKS PASSED")

@@ -40,7 +40,8 @@ def main() -> int:
     ap.add_argument("--shard", type=int, default=0)
     ap.add_argument("--num-shards", type=int, default=1)
     ap.add_argument("--chunk-tokens", type=int, default=3584)
-    ap.add_argument("--max-chunks-per-domain", type=int, default=0, help="0 = all")
+    ap.add_argument("--max-chunks-per-domain", type=int, default=64,
+                    help="per shard; 0 = all. Bounds wall-clock across many domains.")
     ap.add_argument("--strong-quantile", type=float, default=0.99)
     ap.add_argument("--top-k", type=int, default=50)
     ap.add_argument("--min-count", type=int, default=3)
@@ -134,11 +135,12 @@ def main() -> int:
                 if thr is None:
                     continue
                 for t, gate in enumerate(gates):
-                    if gate < thr:
+                    # A chunk boundary truncates the lookback, so the first
+                    # max(n)-1 positions have incomplete n-grams for some tier.
+                    # Skipping them keeps every tier over the same positions.
+                    if t + 1 < max(NGRAM_SIZES) or gate < thr:
                         continue
                     for n in NGRAM_SIZES:
-                        if t + 1 < n:
-                            continue
                         key = tuple(chunk[t + 1 - n : t + 1])
                         slot = stats[(domain, layer, n)][key]
                         slot[0] += 1
