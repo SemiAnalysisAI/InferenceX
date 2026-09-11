@@ -99,12 +99,17 @@ export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
 
 SERVER_LOG="$RESULT_DIR/server.log"
 MOONCAKE_MASTER_LOG="$RESULT_DIR/mooncake_master.log"
+LMCACHE_LOG="$RESULT_DIR/lmcache_server.log"
 mkdir -p "$RESULT_DIR"
 MOONCAKE_MASTER_PID=""
+LMCACHE_PID=""
 
 cleanup() {
     if [[ -n "$MOONCAKE_MASTER_PID" ]]; then
         kill "$MOONCAKE_MASTER_PID" 2>/dev/null || true
+    fi
+    if [[ -n "$LMCACHE_PID" ]]; then
+        stop_background_process_tree "$LMCACHE_PID" "LMCache server"
     fi
 }
 trap cleanup EXIT
@@ -188,8 +193,64 @@ EOF
             '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false}}'
         )
         ;;
+    lmcache)
+        require_agentic_kv_offload_backend lmcache
+        # cp_kv_cache_interleave_size stays at vLLM's default of 1 on this
+        # image, so the connector needs no interleave handling and any DCP-
+        # capable build works. rc2 is the CUDA 13 wheel.
+        LMCACHE_VERSION=0.5.5rc2
+        # LMCache's transfer-channel layer imports mooncake-transfer-engine at
+        # module load; the wheel ships none of its native libs.
+        agentic_pip_install --quiet --no-cache-dir --no-deps \
+            "mooncake-transfer-engine-cuda13==0.3.11.post1"
+        agentic_pip_install --quiet --no-cache-dir --no-deps \
+            "lmcache==$LMCACHE_VERSION"
+        python3 -c "from lmcache.integration.vllm.lmcache_mp_connector import LMCacheMPConnector" >/dev/null
+
+        # Under DCP the chunk must be a multiple of block size x DCP_SIZE.
+        # Kimi-K3's hybrid groups resolve a local block of 1536, so DCP 8
+        # gives 12288.
+        LMCACHE_CHUNK_SIZE=$((1536 * DCP_SIZE))
+        LMCACHE_PORT=$((PORT + 13000))
+        LMCACHE_HTTP_PORT=$((PORT + 14000))
+
+        LMCACHE_CMD=(
+            lmcache server
+            --host 127.0.0.1
+            --port "$LMCACHE_PORT"
+            --http-host 127.0.0.1
+            --http-port "$LMCACHE_HTTP_PORT"
+            --l1-size-gb "$TOTAL_CPU_DRAM_GB"
+            --l1-init-size-gb 10
+            --l1-read-ttl-seconds 3600
+            --chunk-size "$LMCACHE_CHUNK_SIZE"
+            --separate-object-groups
+            --enable-extra-logging
+            --extra-logging-interval 30
+            --max-cpu-workers 8
+            --max-gpu-workers "${LMCACHE_GPU_WORKERS:-8}"
+            --eviction-policy LRU
+            --supported-transfer-mode lmcache_driven
+            --shm-name ""
+        )
+        append_command "$RESULT_DIR/lmcache_command.txt" "${LMCACHE_CMD[@]}"
+        "${LMCACHE_CMD[@]}" > "$LMCACHE_LOG" 2>&1 &
+        LMCACHE_PID=$!
+        wait_for_ready \
+            --endpoint "http://127.0.0.1:${LMCACHE_HTTP_PORT}/healthcheck" \
+            --log "$LMCACHE_LOG" \
+            --pid "$LMCACHE_PID" \
+            --sleep-interval 1 \
+            --timeout 600
+
+        # 90k-290k-token agentic prefixes make single retrieves large.
+        OFFLOAD_ARGS=(
+            --kv-transfer-config
+            "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_connector_module_path\":\"lmcache.integration.vllm.lmcache_mp_connector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.port\":$LMCACHE_PORT,\"lmcache.mp.mq_timeout\":6000.0}}"
+        )
+        ;;
     *)
-        echo "Error: unsupported KV_OFFLOAD_BACKEND='$KV_OFFLOAD_BACKEND' (expected empty or mooncake)" >&2
+        echo "Error: unsupported KV_OFFLOAD_BACKEND='$KV_OFFLOAD_BACKEND' (expected empty, mooncake, or lmcache)" >&2
         exit 1
         ;;
 esac
@@ -221,6 +282,15 @@ if [ "$NUM_SPEC_TOKENS" -gt 0 ]; then
         SPEC_CONFIG="{\"method\": \"dspark\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"TOKENSPEED_MLA\", \"draft_sample_method\": \"probabilistic\", \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
     fi
     SPEC_ARGS=(--speculative-config "$SPEC_CONFIG")
+fi
+
+# The LMCache MP connector shares the KV tensors with its out-of-process server
+# over CUDA IPC, and cuMem-allocated memory has no legacy IPC handle:
+# _share_cuda_() returns cudaErrorInvalidValue and the worker dies during
+# initialize_from_config. No other LMCache recipe in the repo enables cumem.
+CUMEM_ARGS=(--enable-cumem-allocator)
+if [ "${KV_OFFLOAD_BACKEND:-}" = "lmcache" ]; then
+    CUMEM_ARGS=()
 fi
 
 MAX_NUM_SEQS=$((2 * CONC))
@@ -275,7 +345,7 @@ VLLM_CMD=(
     --load-format fastsafetensors
     --moe-backend auto
     --no-enable-flashinfer-autotune
-    --enable-cumem-allocator
+    "${CUMEM_ARGS[@]}"
     --enable-prefix-caching
     --prefix-match-unit 128
     --kv-cache-dtype fp8

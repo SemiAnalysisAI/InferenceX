@@ -7145,3 +7145,15 @@
     - "Update SGLang image from lmsysorg/sglang:nightly-dev-cu13-20260907-30705c00 (2026-09-07 cu13 dev nightly, build commit sgl-project/sglang@30705c00) to the v0.5.19 release image lmsysorg/sglang:v0.5.19-cu130 (digest sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9, build commit sgl-project/sglang@0bcd822377da7b5718e674eaf9c870d349424dd1, Docker Hub last pushed 2026-09-04T22:50:19Z)."
     - "The release image ships the same CUDA 13.0.3, FlashInfer 0.6.18 and sgl-kernel 0.4.6.post1 as the nightly. benchmarks/single_node/agentic/qwen3.5_fp8_h200_mtp.sh is unchanged: SGLANG_ENABLE_SPEC_V2 EAGLE MTP at 3 steps, golden acceptance length 3.39, flashinfer attention with allreduce fusion, fp8 quantization and fp8_e4m3 KV, HiCache kernel IO / page_first layout. TP8/EP1 DRAM HiCache concurrency 2 through 24 unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2966
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add an LMCache 0.5.5rc2 DRAM offload arm at concurrency 56 and 70, where the GPU prefix cache hit rate falls to 88.0% and 59.9%."
+    - "Size the LMCache chunk as block size x DCP size (1536 x 8 = 12288), required for chunking under decode context parallel."
+    - "Raise the LMCache L1 read-lock TTL to 3600s: the lock is held from prefetch to retrieve, and at concurrency 70 a queued request can exceed the 300s default, which fails the retrieve."
+    - "Move the recipe from the decommissioned cluster:b300-nv to cluster:b300-dsxe; the resolved DRAM budget is unchanged at 2249 GB."
+    - "Replace the garbage-collected nightly-dev-x86_64-cu13.0.1-5894fdf image with nightly-dev-x86_64-cu13-3696c77."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2802
