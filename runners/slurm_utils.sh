@@ -91,7 +91,7 @@ copy_fixed_sequence_results() {
 
                     echo "Processing concurrency $concurrency with $gpus GPUs (ctx: $ctx, gen: $gen): $result_file"
 
-                    workspace_result_file="$workspace/$(python3 "$(dirname "${BASH_SOURCE[0]}")/../utils/result_filename.py" \
+                    workspace_result_file="$workspace/$(PYTHONPATH="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)${PYTHONPATH:+:$PYTHONPATH}" python3 -m infx.results.result_filename \
                         --point "$result_filename" "$config_name" "$concurrency" "$gpus" "$ctx" "$gen")"
                     cp "$result_file" "$workspace_result_file"
 

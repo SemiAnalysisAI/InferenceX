@@ -14,10 +14,10 @@ Use this page to identify benchmark artifacts, inspect their contracts, and deci
 | --- | --- |
 | [`benchmark-tmpl.yml`](../.github/workflows/benchmark-tmpl.yml), [`benchmark-multinode-tmpl.yml`](../.github/workflows/benchmark-multinode-tmpl.yml) | Per-config names, files, and upload rules for throughput, eval, and AgentX artifacts |
 | [`utils/process_result.py`](../utils/process_result.py) | Fixed-sequence throughput aggregate schema and derived per-GPU metrics |
-| [`utils/collect_results.py`](../utils/collect_results.py), [`collect-results.yml`](../.github/workflows/collect-results.yml) | Recursive benchmark collection into `agg_<prefix>.json` and `results_<prefix>` |
-| [`utils/collect_eval_results.py`](../utils/collect_eval_results.py), [`collect-evals.yml`](../.github/workflows/collect-evals.yml) | Eval discovery, metric extraction, batched-concurrency selection, and `eval_results_<prefix>` |
-| [`infx.results.agentic`](../infx/results/agentic/__init__.py), [`request_metrics.py`](../infx/results/agentic/request_metrics.py), [`artifacts.py`](../utils/agentic/aggregation/artifacts.py) | AgentX aggregate schema, raw-record filtering, request accounting, and derived metrics |
-| [`validate_agentic_result.py`](../utils/agentic/validation/validate_agentic_result.py) | AgentX pre-upload error-rate gate |
+| [`infx/results/collect_results.py`](../infx/results/collect_results.py), [`collect-results.yml`](../.github/workflows/collect-results.yml) | Recursive benchmark collection into `agg_<prefix>.json` and `results_<prefix>` |
+| [`infx/results/collect_eval_results.py`](../infx/results/collect_eval_results.py), [`collect-evals.yml`](../.github/workflows/collect-evals.yml) | Eval discovery, metric extraction, batched-concurrency selection, and `eval_results_<prefix>` |
+| [`infx.results.agentic`](../infx/results/agentic/__init__.py), [`request_metrics.py`](../infx/results/agentic/request_metrics.py), [`artifacts.py`](../infx/results/agentic/artifacts.py) | AgentX aggregate schema, raw-record filtering, request accounting, and derived metrics |
+| [`validate_agentic_result.py`](../infx/results/agentic/validate_agentic_result.py) | AgentX pre-upload error-rate gate |
 | [`run-sweep.yml`](../.github/workflows/run-sweep.yml), [`recover-reused-ingest.yml`](../.github/workflows/recover-reused-ingest.yml) | App dispatch payload and source/merge run identities |
 | [InferenceX-app `prepare-ci-artifacts.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/prepare-ci-artifacts.ts), [`ci-artifact-preparation.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/lib/ci-artifact-preparation.ts) | Cross-run artifact selection, attempts, and reuse provenance |
 | [InferenceX-app `ingest-ci-run.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/ingest-ci-run.ts) | End-to-end ingest ordering, pairing, skips, summaries, and refresh |
@@ -69,7 +69,7 @@ file:     agg_<RESULT_FILENAME>.json
 
 The multinode template encodes prefill and decode topology, worker counts, mode, concurrency, and runner in its base name. It can place several `agg_<RESULT_FILENAME>_*.json` files in one `bmk_<RESULT_FILENAME>` artifact.
 
-[`collect-results.yml`](../.github/workflows/collect-results.yml) normally receives `result-prefix: bmk`. It downloads `bmk_*`, and [`utils/collect_results.py`](../utils/collect_results.py) recursively loads every JSON file into one array. The handoff identity is then:
+[`collect-results.yml`](../.github/workflows/collect-results.yml) normally receives `result-prefix: bmk`. It downloads `bmk_*`, and [`infx/results/collect_results.py`](../infx/results/collect_results.py) recursively loads every JSON file into one array. The handoff identity is then:
 
 ```text
 artifact: results_bmk
@@ -112,7 +112,7 @@ DP-attention eval. Fixing the writer does not repair those artifacts or existing
 database rows: verify the original job configuration and server logs before
 correcting metadata, regenerating aggregates, and re-ingesting affected results.
 
-[`utils/collect_eval_results.py`](../utils/collect_eval_results.py) applies these rules:
+[`infx/results/collect_eval_results.py`](../infx/results/collect_eval_results.py) applies these rules:
 
 1. An eval set is a root or immediate child directory containing `meta_env.json`.
 2. Candidate result files must parse as objects and contain `lm_eval_version`.
@@ -179,7 +179,7 @@ separate from estimated whole-system power.
 
 ### Raw inputs and aggregate schema
 
-[`process_agentic_result.py`](../utils/agentic/aggregation/process_agentic_result.py) resolves the current `results/aiperf_artifacts` layout and a one-child nested layout. It requires `profile_export.jsonl`. It reads these inputs when present:
+[`process_agentic_result.py`](../infx/results/agentic/process_agentic_result.py) resolves the current `results/aiperf_artifacts` layout and a one-child nested layout. It requires `profile_export.jsonl`. It reads these inputs when present:
 
 | Input | Role |
 | --- | --- |
@@ -223,7 +223,7 @@ counters do not imply zero CPU cache hits.
 
 The app flattens nested AgentX v3 values into canonical metric keys. Examples include `median_ttft`, `p95_e2el`, `total_tput_tps`, `tput_per_gpu`, `server_gpu_cache_hit_rate`, and `gpu_kv_cache_usage_pct`. It maps p50 to `median`. Full-response ITL fields take precedence when present, and interactivity percentiles are derived as the reciprocal of the matching ITL percentile so historical and current rows use one definition.
 
-Before normal upload, the single-node workflow runs [`validate_agentic_result.py`](../utils/agentic/validation/validate_agentic_result.py). It requires an aggregate object, a numeric non-negative `request_count.avg`, positive completed requests, and an error rate at or below the configured threshold. Passing this gate does not mean no requests failed. Failed request records remain visible through `request_accounting` but do not contribute to performance metrics.
+Before normal upload, the single-node workflow runs [`validate_agentic_result.py`](../infx/results/agentic/validate_agentic_result.py). It requires an aggregate object, a numeric non-negative `request_count.avg`, positive completed requests, and an error rate at or below the configured threshold. Passing this gate does not mean no requests failed. Failed request records remain visible through `request_accounting` but do not contribute to performance metrics.
 
 ## App handoff and reused runs
 

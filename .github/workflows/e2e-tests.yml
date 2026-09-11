@@ -66,7 +66,7 @@ on:
                 type: string
                 default: ""
             changelog-base-ref:
-                description: "Trusted-dispatch mode: base SHA for process_changelog.py"
+                description: "Trusted-dispatch mode: base SHA for infx.matrix.plan"
                 required: false
                 type: string
                 default: ""
@@ -161,7 +161,7 @@ on:
                 type: string
                 default: ""
             changelog-base-ref:
-                description: "Trusted-dispatch mode: base SHA for process_changelog.py"
+                description: "Trusted-dispatch mode: base SHA for infx.matrix.plan"
                 required: false
                 type: string
                 default: ""
@@ -250,8 +250,9 @@ jobs:
                       exit 1
                     fi
                     CMD=(
+                      env PYTHONPATH="$PRIORITY_ROOT"
                       uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml
-                      "${PRIORITY_ROOT}/utils/process_changelog.py"
+                      python -P -m infx.matrix.plan
                       --changelog-file "${GITHUB_WORKSPACE}/perf-changelog.yaml"
                       --base-ref "$CHANGELOG_BASE_REF"
                       --head-ref "$CHANGELOG_HEAD_REF"
@@ -283,13 +284,21 @@ jobs:
                     if [ "$EVALS_ONLY" = "true" ]; then
                       GENERATE_ARGS+=(--evals-only)
                     fi
+                    GENERATOR=(python -m infx.matrix.generate)
+                    # Explicit refs may predate the infx package.
+                    if [ ! -f "${GITHUB_WORKSPACE}/infx/matrix/generate.py" ]; then
+                      GENERATOR=(python "${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py")
+                    fi
                     CONFIG_JSON=$(uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
-                      "${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py" \
-                      "${GENERATE_ARGS[@]}")
+                      "${GENERATOR[@]}" "${GENERATE_ARGS[@]}")
+                  fi
+                  PRIORITY=(python -P -m infx.workflows.ci_priority)
+                  if [ ! -f "${PRIORITY_ROOT}/infx/workflows/ci_priority.py" ]; then
+                    PRIORITY=(python "${PRIORITY_ROOT}/utils/ci_priority.py")
                   fi
                   score_matrix() {
                     local family="$1"
-                    uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml "${PRIORITY_ROOT}/utils/ci_priority.py" \
+                    env PYTHONPATH="$PRIORITY_ROOT" uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml "${PRIORITY[@]}" \
                       --policy "${PRIORITY_ROOT}/configs/ci-priority.yaml" \
                       --event-name "${{ github.event_name }}" \
                       --queue-namespace "${{ github.run_id }}:${{ github.run_attempt }}:${family}" \
@@ -779,7 +788,7 @@ jobs:
             - name: Calculate success rate
               run: >-
                   uv run --no-project --exclude-newer PT12H --python 3.12 --with PyGithub --with pyyaml
-                  utils/calc_success_rate.py "$STATS_FILENAME"
+                  python -m infx.workflows.calc_success_rate "$STATS_FILENAME"
 
             - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
               with:

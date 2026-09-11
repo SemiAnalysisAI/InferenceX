@@ -1,24 +1,58 @@
-"""Exercise process_result.py through its CLI with controlled environment and artifacts."""
+"""Exercise the fixed-sequence module CLI with controlled environment and artifacts."""
 import json
 import os
+import shutil
 import signal
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
-from aggregate_power_multinode import ROLE_METRIC_KEYS, WHOLE_METRIC_KEYS
+from infx.results.power.multinode import ROLE_METRIC_KEYS, WHOLE_METRIC_KEYS
 from test_aggregate_power_multinode import PRODUCER_SHA, build_package
 
-SCRIPT_PATH = Path(__file__).parent / "process_result.py"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+MODULE_COMMAND = [sys.executable, "-m", "infx.results.fixed_sequence"]
+
+
+@pytest.mark.parametrize("workflow_name", ["benchmark-tmpl.yml", "benchmark-multinode-tmpl.yml", "profile.yml"])
+@pytest.mark.parametrize("packaged", [False, True])
+def test_workflow_processes_results_from_package_or_legacy_checkout(
+    tmp_path, workflow_name, packaged, single_node_env_vars, multinode_env_vars, sample_benchmark_result,
+):
+    if packaged:
+        shutil.copytree(REPO_ROOT / "infx", tmp_path / "infx")
+    else:
+        (tmp_path / "utils").mkdir()
+        (tmp_path / "utils/process_result.py").symlink_to(REPO_ROOT / "utils/process_result.py")
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows" / workflow_name).read_text())
+    step = next(step for job in workflow["jobs"].values() for step in job.get("steps", [])
+                if step.get("name", "").startswith("Process result"))
+    multinode = workflow_name == "benchmark-multinode-tmpl.yml"
+    stem = "fixture_gpus_28_ctx_20_gen_8" if multinode else "fixture"
+    (tmp_path / f"{stem}.json").write_text(json.dumps({
+        **sample_benchmark_result, "total_token_throughput": 56, "output_throughput": 28,
+    }))
+    env = {**(multinode_env_vars if multinode else single_node_env_vars),
+           "RESULT_FILENAME": "fixture" if multinode else stem, "POWER_PRODUCER_SHA": "",
+           "PATH": f"{Path(sys.executable).parent}:{os.environ['PATH']}"}
+    result = subprocess.run(["bash", "-euo", "pipefail", "-c", step["run"]],
+                            cwd=tmp_path, env=env, capture_output=True, text=True, timeout=10)
+    assert result.returncode == 0, result.stderr
+    data = json.loads((tmp_path / f"agg_{stem}.json").read_text())
+    assert data["conc"] == 64
+    assert data["disagg"] is multinode
+    assert data["tput_per_gpu"] == (2 if multinode else 7)
+    assert (tmp_path / f"power_validation_{stem}.json").is_file()
 
 
 @pytest.mark.parametrize('fingerprint', ['', 'a' * 64, 'a' * 16 + 'b' * 48])
 def test_long_multinode_names_survive_result_and_power_processing(
     tmp_path, multinode_env_vars, sample_benchmark_result, fingerprint
 ):
-    from result_filename import point_filename, result_stem
+    from infx.results.result_filename import point_filename, result_stem
 
     base = ('example_8k1k_fp4_dynamo-sglang_prefill-tp4-pp1-dcp1-pcp1-ep1-dpfalse-nw1_'
             'decode-tp4-pp1-dcp1-pcp1-ep1-dpfalse-nw1_disagg-true_spec-none_'
@@ -205,9 +239,10 @@ def run_script(tmp_path, env, benchmark_result, result_filename="benchmark_resul
 
     env = env.copy()
     env["RESULT_FILENAME"] = result_filename
+    env["PYTHONPATH"] = str(REPO_ROOT)
 
     return subprocess.run(
-        [sys.executable, str(SCRIPT_PATH)],
+        MODULE_COMMAND,
         cwd=tmp_path,
         env=env,
         capture_output=True,
@@ -230,10 +265,8 @@ import json
 import builtins
 from pathlib import Path
 
-sys.path.insert(0, {str(SCRIPT_PATH.parent)!r})
-import aggregate_power
-# Patch the external collaborator through both supported import paths.
-sys.modules["utils.aggregate_power"] = aggregate_power
+sys.path.insert(0, {str(REPO_ROOT)!r})
+from infx.results.power import single_node as aggregate_power
 
 def broken_run(*args, **kwargs):
     path = Path(kwargs['agg_result'] if 'agg_result' in kwargs else args[2])
@@ -245,17 +278,16 @@ if {multinode!r}:
     if {fail_import!r}:
         original_import = builtins.__import__
         def failing_import(name, *args, **kwargs):
-            if name.endswith(('aggregate_power_multinode', 'power.multinode')):
+            if name.endswith('power.multinode'):
                 raise ImportError("forced import failure")
             return original_import(name, *args, **kwargs)
         builtins.__import__ = failing_import
     else:
-        import aggregate_power_multinode
-        sys.modules['utils.aggregate_power_multinode'] = aggregate_power_multinode
+        from infx.results.power import multinode as aggregate_power_multinode
         aggregate_power_multinode.run = broken_run
 else:
     aggregate_power.run = broken_run
-runpy.run_path({str(SCRIPT_PATH)!r}, run_name="__main__")
+runpy.run_module("infx.results.fixed_sequence", run_name="__main__")
 """
     return subprocess.run(
         [sys.executable, "-c", wrapper],
@@ -441,9 +473,9 @@ class TestProcessResultScript:
         result_file.write_text(json.dumps(sample_benchmark_result))
 
         result = subprocess.run(
-            [sys.executable, str(SCRIPT_PATH)],
+            MODULE_COMMAND,
             cwd=tmp_path,
-            env={"PATH": "/usr/bin", "RESULT_FILENAME": "benchmark_result"},
+            env={"PATH": "/usr/bin", "RESULT_FILENAME": "benchmark_result", "PYTHONPATH": str(REPO_ROOT)},
             capture_output=True,
             text=True,
         )
@@ -485,9 +517,10 @@ class TestProcessResultScript:
         """Test that missing result file causes failure."""
         env = single_node_env_vars.copy()
         env["RESULT_FILENAME"] = "nonexistent"
+        env["PYTHONPATH"] = str(REPO_ROOT)
 
         result = subprocess.run(
-            [sys.executable, str(SCRIPT_PATH)],
+            MODULE_COMMAND,
             cwd=tmp_path,
             env=env,
             capture_output=True,

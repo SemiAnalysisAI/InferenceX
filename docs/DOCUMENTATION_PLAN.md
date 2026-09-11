@@ -37,7 +37,7 @@ This table records the repository state before the staged consolidation below.
 | Recurring CI and cluster failures | `KLAUD_DEBUG.md` | Valuable recovery steps are mixed with historical failure context |
 | Config schema and topology | `configs/CONFIGS.md`, `utils/matrix_logic/validation.py` | Schema reference exists, but change workflow and consumer path are separate |
 | Matrix generation and sweep reuse | `.github/workflows/README.md`, `.github/workflows/*.yml` | Operational guide is under `.github`, outside the main docs path |
-| Evals and score gates | `utils/evals/EVALS.md`, `utils/evals/thresholds.yaml` | Detailed reference exists, but its relationship to throughput and collection is not obvious |
+| Evals and score gates | `utils/evals/EVALS.md`, `infx/evals/thresholds.yaml` | Detailed reference exists, but its relationship to throughput and collection is not obvious |
 | Multi-node recipes | `benchmarks/multi_node/srt-slurm-recipes/RECIPES.md` | Recipe/master-config coupling should be visible before editing either file |
 | Runner setup | `utils/runner_setup/RUNNER_SETUP.md`, `runners/` | Provisioning and runtime launcher concerns are separated |
 | Model and hardware catalog | `MODELS.md`, `configs/*-master.yaml` | Public model list and runnable config list serve different audiences |

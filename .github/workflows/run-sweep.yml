@@ -117,7 +117,7 @@ jobs:
               run: |
                   CMD=(
                       uv run --no-project --exclude-newer PT12H --python 3.12
-                      --with "pydantic>=2" --with pyyaml utils/validate_perf_changelog.py
+                      --with "pydantic>=2" --with pyyaml python -m infx.workflows.validate_perf_changelog
                       --changelog-file perf-changelog.yaml
                       --base-ref "origin/${{ github.base_ref }}"
                       --head-ref "${{ github.event.pull_request.head.sha }}"
@@ -321,7 +321,7 @@ jobs:
 
                   CMD=(
                       uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
-                      "${GITHUB_WORKSPACE}/utils/process_changelog.py"
+                      python -m infx.matrix.plan
                       --changelog-file "${GITHUB_WORKSPACE}/perf-changelog.yaml"
                       --base-ref "$BASE_REF"
                       --head-ref "$HEAD_REF"
@@ -338,7 +338,7 @@ jobs:
 
                   CONFIG_JSON=$("${CMD[@]}")
                   CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
-                    "${GITHUB_WORKSPACE}/utils/ci_priority.py" \
+                    python -m infx.workflows.ci_priority \
                     --event-name "${{ github.event_name }}" \
                     --queue-namespace "${{ github.run_id }}:${{ github.run_attempt }}" \
                     --labels-json "$PR_LABELS" \
@@ -1052,7 +1052,7 @@ jobs:
             - name: Calculate success rate
               run: >-
                   uv run --no-project --exclude-newer PT12H --python 3.12 --with PyGithub --with pyyaml
-                  utils/calc_success_rate.py "$STATS_FILENAME"
+                  python -m infx.workflows.calc_success_rate "$STATS_FILENAME"
 
             - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
               with:
@@ -1089,7 +1089,7 @@ jobs:
             - name: Compare results against main
               run: >-
                   uv run --no-project --exclude-newer PT12H --python 3.12 --with psycopg2-binary --with tabulate
-                  utils/compare_results.py results/ >> "$GITHUB_STEP_SUMMARY"
+                  python -m infx.results.compare_results results/ >> "$GITHUB_STEP_SUMMARY"
 
     trigger-ingest:
         needs:

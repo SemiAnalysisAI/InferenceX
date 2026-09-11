@@ -11,8 +11,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-import generate_sweep_configs
-from generate_sweep_configs import (
+from infx.matrix import generate as generate_sweep_configs
+from infx.matrix.generate import (
     MIN_EVAL_CONC,
     add_multinode_node_count,
     apply_node_type_defaults,
@@ -152,7 +152,7 @@ def test_multinode_node_count_prefers_recipe_resources(
     recipe.write_text(yaml.safe_dump({"resources": resources}))
     monkeypatch.setattr(
         generate_sweep_configs, "__file__",
-        str(tmp_path / "utils/matrix_logic/generate_sweep_configs.py"),
+        str(tmp_path / "infx/matrix/generate.py"),
     )
     prefill = {
         "num-worker": 1, "tp": 8,
@@ -2015,7 +2015,7 @@ class TestCommandLine:
         still only evaluates 8k1k (1k1k entries are excluded)."""
         import sys
 
-        import generate_sweep_configs
+        from infx.matrix import generate as generate_sweep_configs
 
         monkeypatch.setattr(
             generate_sweep_configs,
@@ -2055,7 +2055,7 @@ class TestCommandLine:
     ):
         import sys
 
-        import generate_sweep_configs
+        from infx.matrix import generate as generate_sweep_configs
 
         monkeypatch.setattr(
             generate_sweep_configs,
@@ -2093,7 +2093,7 @@ class TestCommandLine:
     ):
         import sys
 
-        import generate_sweep_configs
+        from infx.matrix import generate as generate_sweep_configs
 
         monkeypatch.setattr(
             generate_sweep_configs,
@@ -2150,7 +2150,7 @@ class TestCommandLine:
     ):
         import sys
 
-        import generate_sweep_configs
+        from infx.matrix import generate as generate_sweep_configs
 
         config = sample_multinode_config
         seq_entry = (
@@ -2193,7 +2193,7 @@ class TestCommandLine:
     def test_all_evals_cannot_combine_with_no_evals(self, monkeypatch):
         import sys
 
-        import generate_sweep_configs
+        from infx.matrix import generate as generate_sweep_configs
 
         monkeypatch.setattr(sys, 'argv', [
             'generate_sweep_configs.py',
@@ -3023,15 +3023,17 @@ def split_e2e_configs(tmp_path):
     # Actions resolves these expressions before invoking Bash. Their values
     # are irrelevant to routing, so use a harmless nonempty command/context.
     script = re.sub(r"\$\{\{.*?\}\}", "fixture", step["run"])
-    boundary_stubs = r"""
-uv() {
-  case "$*" in
-    *generate_sweep_configs.py*) cat "$MATRIX_FIXTURE" ;;
-    *ci_priority.py*) cat ;;
-    *) return 1 ;;
-  esac
-}
+    boundary_stubs = r"""#!/bin/bash
+case "$*" in
+  *generate_sweep_configs.py*|*infx.matrix.generate*) cat "$MATRIX_FIXTURE" ;;
+  *ci_priority.py*|*infx.workflows.ci_priority*) cat ;;
+  *) exit 1 ;;
+esac
 """
+    tools = tmp_path / "bin"
+    tools.mkdir()
+    (tools / "uv").write_text(boundary_stubs)
+    (tools / "uv").chmod(0o755)
 
     def run(entries):
         matrix_file = tmp_path / "matrix.json"
@@ -3039,11 +3041,11 @@ uv() {
         output_file = tmp_path / "outputs"
         output_file.write_text("")
         subprocess.run(
-            ["bash", "-euo", "pipefail", "-c", boundary_stubs + script],
+            ["bash", "-euo", "pipefail", "-c", script],
             cwd=tmp_path, check=True, capture_output=True, text=True, timeout=30,
             env={
                 **os.environ,
-                "PATH": f"{Path(sys.executable).parent}{os.pathsep}{os.environ['PATH']}",
+                "PATH": f"{tools}:{Path(sys.executable).parent}{os.pathsep}{os.environ['PATH']}",
                 "GITHUB_WORKSPACE": str(tmp_path), "GITHUB_OUTPUT": str(output_file),
                 "MATRIX_FIXTURE": str(matrix_file), "PR_LABELS": "[]",
                 "CHANGELOG_BASE_REF": "", "CHANGELOG_HEAD_REF": "",

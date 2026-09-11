@@ -1,6 +1,8 @@
 """Tests for changelog-driven sweep generation."""
 
 import json
+import os
+import re
 import shutil
 import subprocess
 import sys
@@ -10,9 +12,9 @@ from types import SimpleNamespace
 import pytest
 import yaml
 
-import process_changelog
-from matrix_logic.generate_sweep_configs import generate_test_config_sweep
-from matrix_logic.validation import validate_master_config
+from infx.matrix import plan as process_changelog
+from infx.matrix.generate import generate_test_config_sweep
+from infx.matrix.validation import validate_master_config
 
 
 @pytest.fixture
@@ -553,6 +555,100 @@ def planning_repo(tmp_path, monkeypatch):
     (tmp_path / "configs/nvidia-master.yaml").write_text(yaml.safe_dump(master, sort_keys=False))
     monkeypatch.chdir(tmp_path)
     return tmp_path, master, runners
+
+
+@pytest.fixture
+def committed_planning_repo(planning_repo):
+    root, _, _ = planning_repo
+    entry = {"config-keys": ["single"], "description": ["Fixture change"],
+             "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1",
+             "scenario-type": ["fixed-seq-len"], "no-evals": True}
+    (root / "perf-changelog.yaml").write_text("")
+    def git(*args):
+        return subprocess.check_output(["git", *args], cwd=root, text=True).strip()
+    git("init", "-q")
+    git("config", "user.email", "test@example.com")
+    git("config", "user.name", "Test")
+    git("add", ".")
+    git("commit", "-qm", "base")
+    base = git("rev-parse", "HEAD")
+    (root / "perf-changelog.yaml").write_text(yaml.safe_dump([entry]))
+    git("add", "perf-changelog.yaml")
+    git("commit", "-qm", "head")
+    head = git("rev-parse", "HEAD")
+    return root, base, head
+
+
+@pytest.mark.parametrize("trusted", [False, True])
+@pytest.mark.parametrize("trim", [False, True])
+def test_workflow_runs_package_without_stubs_and_preserves_tooling_origin(
+    committed_planning_repo, trusted, trim,
+):
+    root, base, head = committed_planning_repo
+    source = Path(__file__).resolve().parents[1]
+    # No compatibility scripts are available to the shipped workflow.
+    shutil.rmtree(root / "utils")
+    if trusted:
+        tooling = root / ".ci-priority"
+        tooling.mkdir()
+        shutil.move(root / "infx", tooling / "infx")
+        # An unrelated package in the data checkout must not supply the planner.
+        (root / "infx").mkdir()
+        (root / "infx/__init__.py").write_text("raise RuntimeError('wrong tooling checkout')\n")
+    policy_root = tooling if trusted else root
+    (policy_root / "configs").mkdir(exist_ok=True)
+    shutil.copy(source / "configs/ci-priority.yaml", policy_root / "configs")
+    workflow = yaml.safe_load((source / ".github/workflows/e2e-tests.yml").read_text())
+    step = next(s for s in workflow["jobs"]["get-jobs"]["steps"] if s.get("id") == "get-jobs")
+    command = "test-config --config-files configs/nvidia-master.yaml --config-keys single --seq-lens 8k1k --scenario-type fixed-seq-len --no-evals"
+    script = re.sub(r"\$\{\{.*?\}\}", command, step["run"])
+    tools = root / "bin"
+    tools.mkdir()
+    # Use installed test dependencies; execute the real planner and priority helper.
+    uv = tools / "uv"
+    uv.write_text('''#!/bin/bash
+while [ "$1" != python ]; do shift; done
+shift
+exec "$TEST_PYTHON" "$@"
+''')
+    uv.chmod(0o755)
+    output = root / "outputs"
+    env = {**os.environ, "PATH": f"{tools}:{Path(sys.executable).parent}:{os.environ['PATH']}",
+           "TEST_PYTHON": sys.executable, "GITHUB_WORKSPACE": str(root), "GITHUB_OUTPUT": str(output),
+           "PR_LABELS": "[]", "CHANGELOG_BASE_REF": base if trusted else "",
+           "CHANGELOG_HEAD_REF": head if trusted else "", "TRIM_CONC": str(trim).lower(),
+           "ALL_EVALS": "false", "EVALS_ONLY": "false"}
+    env.pop("PYTHONPATH", None)
+    result = subprocess.run(["bash", "-euo", "pipefail", "-c", script], cwd=root,
+                            env=env, capture_output=True, text=True, timeout=20)
+    assert result.returncode == 0, result.stderr
+    outputs = {key: json.loads(value) for line in output.read_text().splitlines()
+               for key, value in [line.split("=", 1)]}
+    rows = outputs.pop("single-node-config")
+    assert [row["conc"] for row in rows] == ([16] if trim else [16, 32, 64])
+    assert all(row["model"] == "single" for row in rows)
+    assert all(value == [] for value in outputs.values())
+
+
+
+def test_validator_loads_its_package_while_reading_another_checkout(committed_planning_repo):
+    root, base, head = committed_planning_repo
+    source = Path(__file__).resolve().parents[1]
+    tooling = root / ".tooling"
+    tooling.mkdir()
+    shutil.move(root / "infx", tooling / "infx")
+    shutil.rmtree(root / "utils")
+    (root / "infx").mkdir()
+    (root / "infx/__init__.py").write_text("raise RuntimeError('wrong tooling checkout')\n")
+    env = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"}
+    result = subprocess.run(
+        [sys.executable, "-P", "-m", "infx.workflows.validate_perf_changelog",
+         "--base-ref", base, "--head-ref", head],
+        cwd=root, env={**env, "PYTHONPATH": str(tooling)}, capture_output=True, text=True, timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == "Validated perf-changelog.yaml: final newline present and matrix generated\n"
+    assert result.stderr == ""
 
 
 @pytest.fixture
