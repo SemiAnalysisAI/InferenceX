@@ -30,10 +30,14 @@ export VLLM_ENGINE_READY_TIMEOUT_S=7200
 export VLLM_USE_RUST_FRONTEND=1
 export PYTHONUNBUFFERED=1
 
-# Preserve the upstream scheduler defaults; size graph capture for the sweep.
+# Preserve scheduler concurrency; cap offload graphs to leave room for KV cache.
 NUM_SPEC_TOKENS=5
+CAPTURE_LIMIT=2048
+if [[ "${KV_OFFLOAD_BACKEND:-}" == mooncake ]]; then
+    CAPTURE_LIMIT=512
+fi
 CAPTURE_SIZE=1
-while (( CAPTURE_SIZE < CONC * (1 + NUM_SPEC_TOKENS) && CAPTURE_SIZE < 2048 )); do
+while (( CAPTURE_SIZE < CONC * (1 + NUM_SPEC_TOKENS) && CAPTURE_SIZE < CAPTURE_LIMIT )); do
     CAPTURE_SIZE=$((CAPTURE_SIZE * 2))
 done
 
@@ -49,6 +53,16 @@ MOONCAKE_MASTER_PID=""
 cleanup() {
     local rc=$?
     trap - EXIT INT TERM
+    if (( rc != 0 )) && [[ "${KV_OFFLOAD_BACKEND:-}" == mooncake ]]; then
+        # Preserve host OOM evidence that vLLM's generic "cancelled" error omits.
+        for memory_file in /proc/meminfo /sys/fs/cgroup/memory.events /sys/fs/cgroup/memory.current /sys/fs/cgroup/memory.max; do
+            if [[ -r "$memory_file" ]]; then
+                echo "Host memory diagnostic: $memory_file"
+                cat "$memory_file" || true
+            fi
+        done
+        [[ ! -f "$RESULT_DIR/mooncake_master.log" ]] || tail -n 80 "$RESULT_DIR/mooncake_master.log" || true
+    fi
     stop_background_process_tree "$SERVER_PID" "vLLM server" 60
     stop_background_process_tree "$MOONCAKE_MASTER_PID" "Mooncake master" 10
     exit "$rc"
