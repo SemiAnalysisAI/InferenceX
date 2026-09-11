@@ -5,14 +5,22 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import re
 import shutil
 import sys
 from collections import Counter
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Optional
+
+if not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from infx.results.evals import (
+    is_eval_result, is_valid_effective_count, is_valid_score, metric_family,
+    select_latest_result,
+)
+from infx.results.evals import result_concurrency as _result_concurrency
+from infx.results.evals import result_order as _result_order
 
 
 def as_bool(value: Any) -> bool:
@@ -524,19 +532,14 @@ def raw_eval_key_rows(
                     )
 
         for _, conc in contributions:
-            candidates = [
-                path
-                for path in result_paths
-                if not batched or _result_concurrency(path.name) == conc
-            ]
+            latest = select_latest_result(result_paths, concurrency=conc)
             conc_label = f" for concurrency {conc}" if conc is not None else ""
-            if not candidates:
+            if latest is None:
                 errors.append(
                     f"raw eval artifact {artifact_dir.name!r} has no "
                     f"recognized eval result{conc_label}"
                 )
                 continue
-            latest = max(candidates, key=_result_order)
             result_error = _raw_result_error(latest)
             if result_error is not None:
                 errors.append(
@@ -638,63 +641,6 @@ def validate_run_stats(artifacts_dir: Path, required: bool) -> list[str]:
 # with no result file are left in place for validation to reject. Eval-only;
 # fixed-sequence and agentic artifacts are untouched.
 
-# lm-eval result files are ``results_<ISO>.json`` (optionally a ``_concN`` /
-# staging suffix). Timestamped names and legacy mtimes are both converted to
-# epoch nanoseconds so mixed naming schemes have one coherent ordering.
-_TIMESTAMP_RE = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}(?:\.\d+)?")
-_EVAL_RESULT_FORMAT = "inferencex-eval-v1"
-
-# Batched result files carry their concurrency as a ``_concN`` suffix (kept in
-# sync with ``collect_eval_results.CONC_SUFFIX_RE``).
-_CONC_SUFFIX_RE = re.compile(r"_conc(\d+)(?:_\d+)?\.json$")
-
-
-def _result_concurrency(name: str) -> Optional[int]:
-    """Extract a batched eval concurrency from a staged result file name."""
-    match = _CONC_SUFFIX_RE.search(name)
-    return int(match.group(1)) if match else None
-
-
-def _result_timestamp(name: str) -> Optional[str]:
-    """Extract the sortable lm-eval timestamp from a result file name."""
-    match = _TIMESTAMP_RE.search(name)
-    return match.group(0) if match else None
-
-
-def _timestamp_ns(stamp: str) -> int:
-    """Convert an lm-eval filename timestamp to UTC epoch nanoseconds."""
-    date, clock = stamp.split("T", 1)
-    hms, separator, fraction = clock.partition(".")
-    parsed = datetime.strptime(
-        f"{date}T{hms}",
-        "%Y-%m-%dT%H-%M-%S",
-    ).replace(tzinfo=timezone.utc)
-    epoch = datetime(1970, 1, 1, tzinfo=timezone.utc)
-    delta = parsed - epoch
-    fractional_ns = (
-        int((fraction + "000000000")[:9]) if separator else 0
-    )
-    return (
-        delta.days * 86_400_000_000_000
-        + delta.seconds * 1_000_000_000
-        + fractional_ns
-    )
-
-
-def _result_order(path: Path) -> tuple[int, str]:
-    """Return one deterministic recency key for timestamped and legacy files."""
-    stamp = _result_timestamp(path.name)
-    try:
-        recency = (
-            _timestamp_ns(stamp)
-            if stamp is not None
-            else path.stat().st_mtime_ns
-        )
-    except ValueError:
-        recency = path.stat().st_mtime_ns
-    return recency, path.name
-
-
 def _recognized_eval_result_paths(paths: Iterable[Path]) -> list[Path]:
     """Return result JSONs carrying a collector-recognized eval marker."""
     recognized: list[Path] = []
@@ -703,10 +649,7 @@ def _recognized_eval_result_paths(paths: Iterable[Path]) -> list[Path]:
             data = load_json(path)
         except (OSError, UnicodeDecodeError, json.JSONDecodeError):
             continue
-        if isinstance(data, dict) and (
-            "lm_eval_version" in data
-            or data.get("result_format") == _EVAL_RESULT_FORMAT
-        ):
+        if is_eval_result(data):
             recognized.append(path)
     return recognized
 
@@ -721,10 +664,7 @@ def _raw_result_error(path: Path) -> Optional[str]:
         return "is not an object"
     if "integration_error" in data:
         return "reports an integration error"
-    if (
-        "lm_eval_version" not in data
-        and data.get("result_format") != _EVAL_RESULT_FORMAT
-    ):
+    if not is_eval_result(data):
         return "has no recognized eval result format"
 
     results = data.get("results")
@@ -776,12 +716,12 @@ def _raw_result_error(path: Path) -> Optional[str]:
             strict_names = [
                 name
                 for name in configured_names
-                if "strict" in name or "resolved" in name
+                if metric_family(name) == "strict"
             ]
             fallback_names = [
                 name
                 for name in configured_names
-                if "flex" in name or "extract" in name
+                if metric_family(name) == "flex"
             ]
             primary_names = strict_names or fallback_names or configured_names
         else:
@@ -791,13 +731,7 @@ def _raw_result_error(path: Path) -> Optional[str]:
 
         for name in primary_names:
             score = metrics[name]
-            if (
-                isinstance(score, bool)
-                or not isinstance(score, (int, float))
-                or not math.isfinite(score)
-                or score < 0
-                or score > 1
-            ):
+            if not is_valid_score(score):
                 return (
                     f"has invalid score {name!r} for task {task!r}: "
                     f"{score!r}"
@@ -807,12 +741,7 @@ def _raw_result_error(path: Path) -> Optional[str]:
             if not isinstance(task_counts, dict) or "effective" not in task_counts:
                 return f"has malformed effective sample count for task {task!r}"
             effective = task_counts["effective"]
-            if (
-                isinstance(effective, bool)
-                or not isinstance(effective, (int, float))
-                or not math.isfinite(effective)
-                or effective <= 0
-            ):
+            if not is_valid_effective_count(effective):
                 return (
                     f"has invalid effective sample count for task {task!r}: "
                     f"{effective!r}"
@@ -846,8 +775,8 @@ def _source_names_raw_dir(source: Any, artifact_name: str) -> bool:
     return artifact_name in re.split(r"[\\/]+", str(source or ""))
 
 
-def _eval_winners(artifacts_dir: Path) -> dict[tuple[Any, ...], str]:
-    """Pick structurally valid, aggregate-backed latest raw results."""
+def _eval_winners(artifacts_dir: Path) -> dict[tuple[Any, ...], Path]:
+    """Retain the selected result path for each valid, aggregate-backed identity."""
     aggregate_sources: dict[tuple[Any, ...], list[Any]] = {}
     aggregate_dir = artifacts_dir / "eval_results_all"
     for path in sorted(aggregate_dir.glob("*.json")):
@@ -868,25 +797,20 @@ def _eval_winners(artifacts_dir: Path) -> dict[tuple[Any, ...], str]:
         tuple[tuple[int, str], str, Path],
     ] = {}
     for artifact_dir in raw_eval_artifact_dirs(artifacts_dir):
-        contributions, _, batched = _raw_dir_contributions(artifact_dir)
+        contributions, _, _ = _raw_dir_contributions(artifact_dir)
         result_paths = _recognized_eval_result_paths(
             artifact_dir.glob("results*.json")
         )
         for key, key_conc in contributions:
-            candidates = [
-                path
-                for path in result_paths
-                if not batched or _result_concurrency(path.name) == key_conc
-            ]
-            if not candidates:
+            latest = select_latest_result(result_paths, concurrency=key_conc)
+            if latest is None:
                 continue
-            latest = max(candidates, key=_result_order)
             candidate = (_result_order(latest), artifact_dir.name, latest)
             current = best.get(key)
             if current is None or candidate[:2] > current[:2]:
                 best[key] = candidate
 
-    winners: dict[tuple[Any, ...], str] = {}
+    winners: dict[tuple[Any, ...], Path] = {}
     for key, (_, artifact_name, path) in best.items():
         if _raw_result_error(path) is not None:
             continue
@@ -894,12 +818,12 @@ def _eval_winners(artifacts_dir: Path) -> dict[tuple[Any, ...], str]:
             _source_names_raw_dir(source, artifact_name)
             for source in aggregate_sources.get(key, [])
         ):
-            winners[key] = artifact_name
+            winners[key] = path
     return winners
 
 
 def _dedupe_eval_aggregate(
-    artifacts_dir: Path, winners: dict[tuple[Any, ...], str]
+    artifacts_dir: Path, winners: dict[tuple[Any, ...], Path]
 ) -> list[str]:
     """Keep one aggregate row per winning identity across all aggregate files."""
     eval_dir = artifacts_dir / "eval_results_all"
@@ -929,25 +853,6 @@ def _dedupe_eval_aggregate(
         path: set(range(len(data)))
         for path, data in loaded.items()
     }
-    winner_result_names: dict[tuple[Any, ...], str] = {}
-    for key, artifact_name in winners.items():
-        artifact_dir = artifacts_dir / artifact_name
-        contributions, _, batched = _raw_dir_contributions(artifact_dir)
-        conc = next(
-            (candidate_conc for candidate_key, candidate_conc in contributions
-             if candidate_key == key),
-            None,
-        )
-        candidates = [
-            path
-            for path in _recognized_eval_result_paths(
-                artifact_dir.glob("results*.json")
-            )
-            if not batched or _result_concurrency(path.name) == conc
-        ]
-        if candidates:
-            winner_result_names[key] = max(candidates, key=_result_order).name
-
     for key, entries in groups.items():
         artifact_key = key[:-1]
         winner = winners.get(artifact_key)
@@ -956,16 +861,15 @@ def _dedupe_eval_aggregate(
         matching = [
             entry
             for entry in entries
-            if _source_names_raw_dir(entry[2].get("source"), winner)
+            if _source_names_raw_dir(entry[2].get("source"), winner.parent.name)
         ]
-        winner_result_name = winner_result_names.get(artifact_key)
         exact_matching = [
             entry
             for entry in matching
             if re.split(
                 r"[\\/]+",
                 str(entry[2].get("source") or ""),
-            )[-1] == winner_result_name
+            )[-1] == winner.name
         ]
         if not exact_matching:
             continue
@@ -995,7 +899,7 @@ def _dedupe_eval_aggregate(
 
 
 def _prune_raw_eval_dir(
-    artifact_dir: Path, winners: dict[tuple[Any, ...], str]
+    artifact_dir: Path, winners: dict[tuple[Any, ...], Path]
 ) -> Optional[str]:
     """Drop a raw dir's identities that a newer dir supersedes."""
     contributions, meta, batched = _raw_dir_contributions(artifact_dir)
@@ -1005,7 +909,7 @@ def _prune_raw_eval_dir(
 
     def superseded(key: tuple[Any, ...]) -> bool:
         winner = winners.get(key)
-        return winner is not None and winner != name
+        return winner is not None and winner.parent.name != name
 
     if not batched:
         if superseded(contributions[0][0]):
