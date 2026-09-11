@@ -1,4 +1,4 @@
-name: qwen35-gb200-dynsg-agentic-mtp-agg-tp4-k5
+name: qwen35-gb200-dynsg-agentic-mtp-agg-tp4-k5-parity
 
 model:
   path: qwen3.5-fp4
@@ -58,15 +58,18 @@ backend:
       fp4-gemm-backend: flashinfer_cutlass
       kv-cache-dtype: fp8_e4m3
       mamba-ssm-dtype: bfloat16
-      mamba-scheduler-strategy: extra_buffer
-      mamba-track-interval: 8192
+      mamba-scheduler-strategy: extra_buffer_lazy
+      mamba-track-interval: 1048576
       attention-backend: trtllm_mha
+      linear-attn-prefill-backend: flashinfer
       linear-attn-decode-backend: flashinfer
       moe-runner-backend: flashinfer_trtllm
       speculative-algorithm: NEXTN
       speculative-num-steps: 5
       speculative-eagle-topk: 1
       speculative-num-draft-tokens: 6
+      enable-linear-replayssm-spec: true
+      linear-replayssm-cache-len: 8
       cuda-graph-max-bs: 64
       max-running-requests: 80
       max-prefill-tokens: 16384

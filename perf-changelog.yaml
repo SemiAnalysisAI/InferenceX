@@ -7050,6 +7050,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2807
 
 - config-keys:
+    - qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh the GB200 Qwen3.5 NVFP4 Dynamo-SGLang AgentX matrix with an updated TP4/TP2-EP2 concurrency frontier."
+    - "Route the matrix through Dynamo over SGLang with a pinned srt-slurm revision, and restore the current writable Watchtower shared root and Slurm partition/account for GB200 workspaces, squash images, and AgentX caches."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2945
+
+- config-keys:
     - dsv4-fp4-gb300-dynamo-sglang-agentic-agg
     - dsv4-fp4-gb300-dynamo-sglang-agentic-disagg
   scenario-type:
