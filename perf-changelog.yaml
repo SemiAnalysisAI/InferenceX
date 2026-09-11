@@ -7145,3 +7145,88 @@
     - "Update SGLang image from lmsysorg/sglang:nightly-dev-cu13-20260907-30705c00 (2026-09-07 cu13 dev nightly, build commit sgl-project/sglang@30705c00) to the v0.5.19 release image lmsysorg/sglang:v0.5.19-cu130 (digest sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9, build commit sgl-project/sglang@0bcd822377da7b5718e674eaf9c870d349424dd1, Docker Hub last pushed 2026-09-04T22:50:19Z)."
     - "The release image ships the same CUDA 13.0.3, FlashInfer 0.6.18 and sgl-kernel 0.4.6.post1 as the nightly. benchmarks/single_node/agentic/qwen3.5_fp8_h200_mtp.sh is unchanged: SGLANG_ENABLE_SPEC_V2 EAGLE MTP at 3 steps, golden acceptance length 3.39, flashinfer attention with allreduce fusion, fp8 quantization and fp8_e4m3 KV, HiCache kernel IO / page_first layout. TP8/EP1 DRAM HiCache concurrency 2 through 24 unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2966
+
+- config-keys:
+    - qwen3.5-fp8-mi300x-sglang-disagg-agentic-mtp
+  description:
+    - "Start MI300X Qwen3.5 FP8 AgentX MTP 1P1D bring-up using the native srt-slurm SGLang router and MORI transfer."
+    - "Pin the September 10 MI30x ROCm 7.2.4 image and register initial AgentX session concurrency candidates 4, 16, and 24; hardware validation and measured Pareto results remain pending."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2984
+
+- config-keys:
+    - qwen3.5-fp8-mi300x-sglang-disagg-agentic-mtp
+  description:
+    - "Wire the CCS MI300X GitHub runner to the srt-slurm AMD stack and add the initial c1 AgentX functional lane with TP8/EP8 prefill and decode workers."
+    - "Use native SGLang queue-aware drain and confirmed worker cache flushes; fast bring-up disables acceptance simulation and checks real router responses before replay."
+    - "Pin srt-slurm PR7 controller-state completion handling so jobs can finish when Slurm accounting is unavailable."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2984
+
+- config-keys:
+    - qwen3.5-fp8-mi300x-sglang-disagg-agentic-mtp
+  description:
+    - "Use the current SGLang decode CUDA-graph batch-size flag, preserving the configured maximum of 64 with the September 10 image."
+    - "Remove the retired prefill-round-robin-balance flag from the single-prefill-worker recipe."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2984
+
+- config-keys:
+    - qwen3.5-fp8-mi300x-sglang-disagg-agentic-mtp
+  description:
+    - "Use the shared AMD srt-slurm launcher and portable adapter; remove bespoke MI300X staging and diagnostic scripts."
+    - "Retain Qwen3.5 golden acceptance length 3.39 for all AgentX runs, including fast bring-up."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2984
+
+- config-keys:
+    - qwen3.5-fp8-mi300x-sglang-disagg-agentic-mtp
+  description:
+    - "Let Slurm select any available nodes in the compute partition instead of pinning the initial validation pair."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2984
+
+- config-keys:
+    - qwen3.5-fp8-mi300x-sglang-disagg-agentic-mtp
+  description:
+    - "Use the pinned SGLang image's model-aware Mamba cache default for Qwen3.5 paging and overlap; remove the incompatible no_buffer override and obsolete speculative-v2 environment switch."
+    - "Inherit full-node CPU and memory allocation from the MI300X cluster profile."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2984
+
+- config-keys:
+    - qwen3.5-fp8-mi300x-sglang-disagg-agentic-mtp
+  description:
+    - "Pin the srt-slurm SGLang router fix that honors the configured management interface for worker addresses and readiness checks."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2984
+
+- config-keys:
+    - qwen3.5-fp8-mi300x-sglang-disagg-agentic-mtp
+  description:
+    - "Use the September 10 official MI300X ROCm 7.2.0 image instead of the same-day ROCm 7.2.4 flavor."
+    - "The unmodified image passes two-node CPU RDMA and GPU MORI read/write checks with its bundled Broadcom provider; retain TP8/EP8 per role and AgentX golden acceptance length 3.39."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2984
+
+- config-keys:
+    - qwen3.5-fp8-mi300x-sglang-disagg-agentic-mtp
+    - qwen3.5-fp8-mi300x-sglang-disagg-1p2d-agentic-mtp
+    - qwen3.5-fp8-mi300x-sglang-disagg-2p2d-agentic-mtp
+  description:
+    - "Explore MI300X Qwen3.5 AgentX MORI role balance: 1P1D TEP8, 1P2D TEP8, and packed 2P2D TEP4."
+    - "Use cache-aware prefill routing and power-of-two decode routing; preserve the stock September 10 ROCm 7.2.0 image, BF16 KV, and golden acceptance length 3.39."
+    - "Expand the reference concurrency range for latency-throughput characterization; exploratory fast runs are not canonical frontier submissions."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2984
+
+- config-keys:
+    - qwen3.5-fp8-mi300x-sglang-disagg-agentic-mtp
+    - qwen3.5-fp8-mi300x-sglang-disagg-1p2d-agentic-mtp
+    - qwen3.5-fp8-mi300x-sglang-disagg-2p2d-agentic-mtp
+  description:
+    - "Extract the MI300X AgentX recipes and required shared srt-slurm adapter onto current main for the official MI300X-only sweep."
+    - "Preserve existing workflow policy, MI355X launchers and configurations, and historical changelog bytes; retain stock ROCm 7.2.0, MORI transfer, and golden acceptance length 3.39."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2984
+
+- config-keys:
+    - qwen3.5-fp8-mi300x-sglang-disagg-agentic-mtp
+    - qwen3.5-fp8-mi300x-sglang-disagg-dep16-agentic-mtp
+    - qwen3.5-fp8-mi300x-sglang-srt-agg-agentic-mtp
+  description:
+    - "Use round-robin decode routing for single-worker layouts; power-of-two requires multiple decode workers."
+    - "Explore DEP8 prefill with two-node DEP16 decode using MORI IO and expert all-to-all, with homogeneous attention TP1 and explicit per-role admission and dispatch capacity."
+    - "Add a matched stock-image TP8/EP8 aggregated control to distinguish software-stack gains from disaggregation gains."
+    - "Keep native serving settings in recipes and remove legacy derived admission overrides; disable golden acceptance simulation for every evaluated worker role."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2984

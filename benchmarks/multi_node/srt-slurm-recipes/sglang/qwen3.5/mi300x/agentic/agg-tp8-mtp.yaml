@@ -1,0 +1,150 @@
+# Matched single-node control for the MI300X AgentX MORI disaggregation recipes.
+# Same stock image, TP8/EP8, BF16 KV cache, native MTP, and golden AL 3.39.
+# One aggregated worker performs both prefill and decode on eight GPUs.
+
+name: mi300x-qwen35-agentx-agg-tp8-mtp
+
+model:
+  path: hf:Qwen/Qwen3.5-397B-A17B-FP8
+  container: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi30x-20260910
+  precision: fp8
+
+identity:
+  model:
+    repo: Qwen/Qwen3.5-397B-A17B-FP8
+  container:
+    image: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi30x-20260910@sha256:985488daa99010f6c72f17286b05804165e26c683be932325487d10b4ea6fd49
+
+slurm:
+  time_limit: "12:00:00"
+
+resources:
+  gpu_type: mi300x
+  gpus_per_node: 8
+  agg_nodes: 1
+  agg_workers: 1
+  gpus_per_agg: 8
+
+frontend:
+  type: sglang
+  enable_multiple_frontends: false
+  args:
+    policy: cache_aware
+    cache-threshold: 0.3
+    health-check-timeout-secs: 600
+    health-check-interval-secs: 30
+
+backend:
+  type: sglang
+  aggregated_environment:
+    HF_HOME: /hf-cache
+    HF_HUB_CACHE: /hf-cache/hub
+    HUGGINGFACE_HUB_CACHE: /hf-cache/hub
+    PYTHONDONTWRITEBYTECODE: "1"
+    PYTHONUNBUFFERED: "1"
+    PYTHONNOUSERSITE: "1"
+    GLOO_SOCKET_IFNAME: ens50f1np1
+    NCCL_SOCKET_IFNAME: ens50f1np1
+    NCCL_IB_TC: "104"
+    NCCL_IB_SL: "3"
+    NCCL_IB_GID_INDEX: "3"
+    SGLANG_USE_AITER: "1"
+    SGLANG_USE_AITER_UNIFIED_ATTN: "1"
+    AITER_FLYDSL_FORCE: "1"
+    SGLANG_MAMBA_SSM_DTYPE: bfloat16
+    SGLANG_HEALTH_CHECK_TIMEOUT: "600"
+    SGLANG_TIMEOUT_KEEP_ALIVE: "1800"
+    SGLANG_SIMULATE_ACC_LEN: "3.39"
+    SGLANG_SIMULATE_ACC_METHOD: match-expected
+    SGLANG_SIMULATE_ACC_TOKEN_MODE: real-draft-token
+  sglang_config:
+    aggregated:
+      served-model-name: Qwen/Qwen3.5-397B-A17B-FP8
+      trust-remote-code: true
+      tensor-parallel-size: 8
+      data-parallel-size: 1
+      expert-parallel-size: 8
+      dtype: bfloat16
+      # auto follows the explicit BF16 model activation dtype, not FP8 weights.
+      kv-cache-dtype: auto
+      attention-backend: aiter
+      # Image enables INT8 quick-reduce; do not combine with allreduce fusion.
+      enable-aiter-allreduce-fusion: false
+      page-size: 16
+      mamba-ssm-dtype: bfloat16
+      moe-dense-tp-size: 1
+      reasoning-parser: qwen3
+      tool-call-parser: qwen3_coder
+      speculative-algorithm: EAGLE
+      speculative-num-steps: 3
+      speculative-eagle-topk: 1
+      speculative-num-draft-tokens: 4
+      context-length: 262144
+      disable-radix-cache: false
+      mem-fraction-static: 0.75
+      max-running-requests: 64
+      max-prefill-tokens: 32768
+      chunked-prefill-size: 8192
+      scheduler-recv-interval: 30
+      tokenizer-worker-num: 6
+      cuda-graph-max-bs-decode: 64
+      watchdog-timeout: 3600
+      enable-metrics: true
+      enable-cache-report: true
+      log-level: info
+
+srun_options:
+  container-writable: ""
+  container-remap-root: ""
+
+health_check:
+  max_attempts: 720
+  interval_seconds: 5
+
+output:
+  record_launch_plan: true
+
+benchmark:
+  type: custom
+  command: |
+    set -euo pipefail
+    export PORT="${SRT_FRONTEND_PORT}"
+    export AIPERF_SERVER_URL="http://${SRT_FRONTEND_HOST}:${SRT_FRONTEND_PORT}"
+    export RESULT_DIR="/results/${SLURM_JOB_ID}/agentic"
+    export AGENTIC_OUTPUT_DIR="/results/${SLURM_JOB_ID}"
+    mkdir -p "$RESULT_DIR" "$AGENTIC_OUTPUT_DIR"
+    exec bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+  env:
+    INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
+    MODEL: Qwen/Qwen3.5-397B-A17B-FP8
+    MODEL_PREFIX: qwen3.5
+    FRAMEWORK: sglang
+    PRECISION: fp8
+    CONC: "4"
+    CONC_LIST: "4 16 24"
+    DURATION: "3600"
+    RESULT_FILENAME: qwen35_mi300x_agentx_agg_tp8_mtp
+    RUNNER_TYPE: mi300x
+    IMAGE: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi30x-20260910
+    IS_AGENTIC: "1"
+    IS_MULTINODE: "false"
+    DISAGG: "false"
+    TP: "8"
+    EP_SIZE: "8"
+    DP_ATTENTION: "false"
+    PP_SIZE: "1"
+    DCP_SIZE: "1"
+    PCP_SIZE: "1"
+    SPEC_DECODING: mtp
+    KV_OFFLOADING: none
+    HF_HOME: /hf-cache
+    HF_HUB_CACHE: /hf-cache/hub
+    HUGGINGFACE_HUB_CACHE: /hf-cache/hub
+    PYTHONDONTWRITEBYTECODE: "1"
+    TOKENIZERS_PARALLELISM: "false"
+    TRANSFORMERS_VERBOSITY: error
+    AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
+    AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
+    AIPERF_DRAIN_BACKEND: sglang
+    WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126_256k
+    CLEAR_CACHE_BETWEEN_CONC: "1"

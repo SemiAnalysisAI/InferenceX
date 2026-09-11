@@ -1,0 +1,183 @@
+# AgentX Qwen3.5 FP8: one TEP8 prefill worker and two TEP8 decode workers.
+# Uses the srt-slurm AMD runtime and native Qwen3.5 MTP.
+# Concurrency candidates are untuned; fast runs are not performance submissions.
+# The shared launcher supplies the cluster profile and workspace/results mounts.
+# srt-slurm and Pyxis own model caching and the container lifecycle.
+
+name: mi300x-qwen35-agentx-mori-disagg-1p2d-tp8-mtp
+
+model:
+  path: hf:Qwen/Qwen3.5-397B-A17B-FP8
+  container: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi30x-20260910
+  precision: fp8
+
+identity:
+  model:
+    repo: Qwen/Qwen3.5-397B-A17B-FP8
+  container:
+    image: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi30x-20260910@sha256:985488daa99010f6c72f17286b05804165e26c683be932325487d10b4ea6fd49
+
+slurm:
+  time_limit: "12:00:00"
+
+resources:
+  gpu_type: mi300x
+  gpus_per_node: 8
+  prefill_nodes: 1
+  decode_nodes: 2
+  prefill_workers: 1
+  decode_workers: 2
+  gpus_per_prefill: 8
+  gpus_per_decode: 8
+
+frontend:
+  type: sglang
+  enable_multiple_frontends: false
+  args:
+    prefill-policy: cache_aware
+    decode-policy: power_of_two
+    cache-threshold: 0.3
+    health-check-timeout-secs: 600
+    health-check-interval-secs: 30
+
+backend:
+  type: sglang
+  prefill_environment: &worker_environment
+    HF_HOME: /hf-cache
+    HF_HUB_CACHE: /hf-cache/hub
+    HUGGINGFACE_HUB_CACHE: /hf-cache/hub
+    PYTHONDONTWRITEBYTECODE: "1"
+    PYTHONUNBUFFERED: "1"
+    PYTHONNOUSERSITE: "1"
+    GLOO_SOCKET_IFNAME: ens50f1np1
+    NCCL_SOCKET_IFNAME: ens50f1np1
+    MORI_SOCKET_IFNAME: ens50f1np1
+    MORI_RDMA_DEVICES: bnxt_re_bond0,bnxt_re_bond1,bnxt_re_bond2,bnxt_re_bond3,bnxt_re_bond4,bnxt_re_bond5,bnxt_re_bond6,bnxt_re_bond7
+    IBDEVICES: bnxt_re_bond0,bnxt_re_bond1,bnxt_re_bond2,bnxt_re_bond3,bnxt_re_bond4,bnxt_re_bond5,bnxt_re_bond6,bnxt_re_bond7
+    MORI_IB_GID_INDEX: "3"
+    MORI_RDMA_TC: "104"
+    MORI_RDMA_SL: "3"
+    MORI_IO_TC: "104"
+    MORI_IO_SL: "3"
+    NCCL_IB_TC: "104"
+    NCCL_IB_SL: "3"
+    NCCL_IB_GID_INDEX: "3"
+    MORI_IO_SQ_BACKOFF_TIMEOUT_US: "50000"
+    MORI_IO_QP_MAX_SEND_WR: "16384"
+    MORI_IO_QP_MAX_CQE: "32768"
+    MORI_IO_QP_MAX_SGE: "2"
+    MORI_SHMEM_MODE: ISOLATION
+    SGLANG_USE_AITER: "1"
+    SGLANG_USE_AITER_UNIFIED_ATTN: "1"
+    AITER_FLYDSL_FORCE: "1"
+    SGLANG_MAMBA_SSM_DTYPE: bfloat16
+    SGLANG_MORI_QP_PER_TRANSFER: "4"
+    SGLANG_MORI_NUM_WORKERS: "4"
+    SGLANG_DISAGGREGATION_NUM_PRE_ALLOCATE_REQS: "32"
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "3600"
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "3600"
+    SGLANG_HEALTH_CHECK_TIMEOUT: "600"
+    SGLANG_TIMEOUT_KEEP_ALIVE: "1800"
+  decode_environment:
+    <<: *worker_environment
+    # AgentX throughput uses the existing Qwen3.5 native-MTP golden target.
+    # Retained for every AgentX run, including fast bring-up; evals disable them.
+    SGLANG_SIMULATE_ACC_LEN: "3.39"
+    SGLANG_SIMULATE_ACC_METHOD: match-expected
+    SGLANG_SIMULATE_ACC_TOKEN_MODE: real-draft-token
+  sglang_config:
+    prefill: &worker_config
+      served-model-name: Qwen/Qwen3.5-397B-A17B-FP8
+      trust-remote-code: true
+      tensor-parallel-size: 8
+      data-parallel-size: 1
+      expert-parallel-size: 8
+      disaggregation-transfer-backend: mori
+      disaggregation-ib-device: bnxt_re_bond0,bnxt_re_bond1,bnxt_re_bond2,bnxt_re_bond3,bnxt_re_bond4,bnxt_re_bond5,bnxt_re_bond6,bnxt_re_bond7
+      dtype: bfloat16
+      # auto follows the explicit BF16 model activation dtype, not FP8 weights.
+      kv-cache-dtype: auto
+      attention-backend: aiter
+      # Image enables INT8 quick-reduce; do not combine with allreduce fusion.
+      enable-aiter-allreduce-fusion: false
+      page-size: 16
+      mamba-ssm-dtype: bfloat16
+      moe-dense-tp-size: 1
+      reasoning-parser: qwen3
+      tool-call-parser: qwen3_coder
+      speculative-algorithm: EAGLE
+      speculative-num-steps: 3
+      speculative-eagle-topk: 1
+      speculative-num-draft-tokens: 4
+      context-length: 262144
+      disable-radix-cache: false
+      mem-fraction-static: 0.75
+      max-running-requests: 64
+      max-prefill-tokens: 32768
+      chunked-prefill-size: 8192
+      scheduler-recv-interval: 30
+      tokenizer-worker-num: 6
+      cuda-graph-max-bs-decode: 64
+      watchdog-timeout: 3600
+      enable-metrics: true
+      enable-cache-report: true
+      log-level: info
+    decode:
+      <<: *worker_config
+
+srun_options:
+  container-writable: ""
+  container-remap-root: ""
+
+health_check:
+  max_attempts: 720
+  interval_seconds: 5
+
+output:
+  record_launch_plan: true
+
+benchmark:
+  type: custom
+  command: |
+    set -euo pipefail
+    export PORT="${SRT_FRONTEND_PORT}"
+    export AIPERF_SERVER_URL="http://${SRT_FRONTEND_HOST}:${SRT_FRONTEND_PORT}"
+    export RESULT_DIR="/results/${SLURM_JOB_ID}/agentic"
+    export AGENTIC_OUTPUT_DIR="/results/${SLURM_JOB_ID}"
+    mkdir -p "$RESULT_DIR" "$AGENTIC_OUTPUT_DIR"
+    exec bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+  env:
+    INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
+    MODEL: Qwen/Qwen3.5-397B-A17B-FP8
+    MODEL_PREFIX: qwen3.5
+    FRAMEWORK: sglang-disagg
+    PRECISION: fp8
+    CONC: "1"
+    CONC_LIST: "4 16 32"
+    DURATION: "3600"
+    RESULT_FILENAME: qwen35_mi300x_agentx_mori_1p2d_tp8_mtp
+    RUNNER_TYPE: mi300x
+    IMAGE: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi30x-20260910
+    IS_MULTINODE: "true"
+    DISAGG: "true"
+    SPEC_DECODING: mtp
+    KV_OFFLOADING: none
+    PREFILL_NUM_WORKERS: "1"
+    PREFILL_TP: "8"
+    PREFILL_EP: "8"
+    PREFILL_DP_ATTN: "false"
+    DECODE_NUM_WORKERS: "2"
+    DECODE_TP: "8"
+    DECODE_EP: "8"
+    DECODE_DP_ATTN: "false"
+    HF_HOME: /hf-cache
+    HF_HUB_CACHE: /hf-cache/hub
+    HUGGINGFACE_HUB_CACHE: /hf-cache/hub
+    PYTHONDONTWRITEBYTECODE: "1"
+    TOKENIZERS_PARALLELISM: "false"
+    TRANSFORMERS_VERBOSITY: error
+    AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
+    AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
+    AIPERF_DRAIN_BACKEND: sglang
+    WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126_256k
+    CLEAR_CACHE_BETWEEN_CONC: "1"

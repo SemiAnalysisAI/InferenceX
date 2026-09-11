@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ -n "${CONFIG_FILE:-}" ]]; then
+    export SRT_SLURM_COMMIT="${SRT_SLURM_COMMIT:-fadd098f45f65ef9c2464bfd4cf39c51c8a02a1e}"
+    export SRT_SLURM_CLUSTER_CONFIG="${SRT_SLURM_CLUSTER_CONFIG:-${GITHUB_WORKSPACE}/benchmarks/multi_node/srt-slurm-recipes/cluster-configs/mi300x-amd.yaml}"
+    export SRT_SLURM_SHARED_BASE="${SRT_SLURM_SHARED_BASE:-$HOME/inferencex/srt-slurm}"
+    export AIPERF_MMAP_CACHE_HOST_PATH="${AIPERF_MMAP_CACHE_HOST_PATH:-$HOME/inferencex/aiperf-cache}"
+    exec bash "$(dirname "${BASH_SOURCE[0]}")/launch_srt_slurm.sh"
+fi
+
 export HF_HUB_CACHE_MOUNT="/raid/inferencex/models/hub"
 export AIPERF_MMAP_CACHE_MOUNT="/raid/inferencex/aiperf-mmap-cache"
 export AIPERF_DATASET_MMAP_CACHE_DIR="/aiperf_mmap_cache"

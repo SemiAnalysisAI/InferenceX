@@ -1752,3 +1752,164 @@ dsv4-fp4-mi355x-sglang-agentic-mtp:
       - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, conc-list: [1, 4, 16], spec-decoding: mtp }
       - { tp: 8, ep: 1, dp-attn: false, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [32, 48], spec-decoding: mtp }
       - { tp: 8, ep: 1, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [128, 256], spec-decoding: mtp }
+
+# MI300X AgentX: one TP8/EP8 node per role, native SGLang Router and MORI KV transfer.
+qwen3.5-fp8-mi300x-sglang-disagg-agentic-mtp:
+  image: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi30x-20260910
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  runner: cluster:mi300x-amd
+  precision: fp8
+  framework: sglang-disagg
+  router: { name: sglang-router, version: "0.3.2" }
+  kv-p2p-transfer: mori
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - spec-decoding: mtp
+        conc-list: [1, 4, 8, 16, 24, 32]
+        kv-offloading: none
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/mi300x/agentic/disagg-1p1d-tp8-mtp.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: false
+          additional-settings:
+          - "DECODE_MTP_SIZE=3"
+
+qwen3.5-fp8-mi300x-sglang-disagg-1p2d-agentic-mtp:
+  image: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi30x-20260910
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  runner: cluster:mi300x-amd
+  precision: fp8
+  framework: sglang-disagg
+  router: { name: sglang-router, version: "0.3.2" }
+  kv-p2p-transfer: mori
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - spec-decoding: mtp
+        conc-list: [4, 16, 32]
+        kv-offloading: none
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/mi300x/agentic/disagg-1p2d-tp8-mtp.yaml"
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: false
+          additional-settings:
+          - "DECODE_MTP_SIZE=3"
+
+
+qwen3.5-fp8-mi300x-sglang-disagg-2p2d-agentic-mtp:
+  image: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi30x-20260910
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  runner: cluster:mi300x-amd
+  precision: fp8
+  framework: sglang-disagg
+  router: { name: sglang-router, version: "0.3.2" }
+  kv-p2p-transfer: mori
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - spec-decoding: mtp
+        conc-list: [8, 16, 32]
+        kv-offloading: none
+        prefill:
+          num-worker: 2
+          tp: 4
+          ep: 4
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/mi300x/agentic/disagg-2p2d-tp4-mtp.yaml"
+        decode:
+          num-worker: 2
+          tp: 4
+          ep: 4
+          dp-attn: false
+          additional-settings:
+          - "DECODE_MTP_SIZE=3"
+
+
+qwen3.5-fp8-mi300x-sglang-disagg-dep16-agentic-mtp:
+  image: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi30x-20260910
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  runner: cluster:mi300x-amd
+  precision: fp8
+  framework: sglang-disagg
+  router: { name: sglang-router, version: "0.3.2" }
+  kv-p2p-transfer: mori
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - spec-decoding: mtp
+        conc-list: [16, 32]
+        kv-offloading: none
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/mi300x/agentic/disagg-1p1d-dep16-mtp.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+          additional-settings:
+          - "DECODE_MTP_SIZE=3"
+
+qwen3.5-fp8-mi300x-sglang-srt-agg-agentic-mtp:
+  image: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi30x-20260910
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  runner: cluster:mi300x-amd
+  precision: fp8
+  framework: sglang
+  router: { name: sglang-router, version: "0.3.2" }
+  multinode: true
+  disagg: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - spec-decoding: mtp
+        conc-list: [4, 16, 24]
+        kv-offloading: none
+        num-nodes: 1
+        worker:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/mi300x/agentic/agg-tp8-mtp.yaml"
