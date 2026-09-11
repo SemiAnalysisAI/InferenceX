@@ -779,8 +779,8 @@ def _source_names_raw_dir(source: Any, artifact_name: str) -> bool:
     return artifact_name in re.split(r"[\\/]+", str(source or ""))
 
 
-def _eval_winners(artifacts_dir: Path) -> dict[tuple[Any, ...], str]:
-    """Pick structurally valid, aggregate-backed latest raw results."""
+def _eval_winners(artifacts_dir: Path) -> dict[tuple[Any, ...], Path]:
+    """Retain the selected result path for each valid, aggregate-backed identity."""
     aggregate_sources: dict[tuple[Any, ...], list[Any]] = {}
     aggregate_dir = artifacts_dir / "eval_results_all"
     for path in sorted(aggregate_dir.glob("*.json")):
@@ -819,7 +819,7 @@ def _eval_winners(artifacts_dir: Path) -> dict[tuple[Any, ...], str]:
             if current is None or candidate[:2] > current[:2]:
                 best[key] = candidate
 
-    winners: dict[tuple[Any, ...], str] = {}
+    winners: dict[tuple[Any, ...], Path] = {}
     for key, (_, artifact_name, path) in best.items():
         if _raw_result_error(path) is not None:
             continue
@@ -827,12 +827,12 @@ def _eval_winners(artifacts_dir: Path) -> dict[tuple[Any, ...], str]:
             _source_names_raw_dir(source, artifact_name)
             for source in aggregate_sources.get(key, [])
         ):
-            winners[key] = artifact_name
+            winners[key] = path
     return winners
 
 
 def _dedupe_eval_aggregate(
-    artifacts_dir: Path, winners: dict[tuple[Any, ...], str]
+    artifacts_dir: Path, winners: dict[tuple[Any, ...], Path]
 ) -> list[str]:
     """Keep one aggregate row per winning identity across all aggregate files."""
     eval_dir = artifacts_dir / "eval_results_all"
@@ -862,25 +862,6 @@ def _dedupe_eval_aggregate(
         path: set(range(len(data)))
         for path, data in loaded.items()
     }
-    winner_result_names: dict[tuple[Any, ...], str] = {}
-    for key, artifact_name in winners.items():
-        artifact_dir = artifacts_dir / artifact_name
-        contributions, _, batched = _raw_dir_contributions(artifact_dir)
-        conc = next(
-            (candidate_conc for candidate_key, candidate_conc in contributions
-             if candidate_key == key),
-            None,
-        )
-        candidates = [
-            path
-            for path in _recognized_eval_result_paths(
-                artifact_dir.glob("results*.json")
-            )
-            if not batched or _result_concurrency(path.name) == conc
-        ]
-        if candidates:
-            winner_result_names[key] = max(candidates, key=_result_order).name
-
     for key, entries in groups.items():
         artifact_key = key[:-1]
         winner = winners.get(artifact_key)
@@ -889,16 +870,15 @@ def _dedupe_eval_aggregate(
         matching = [
             entry
             for entry in entries
-            if _source_names_raw_dir(entry[2].get("source"), winner)
+            if _source_names_raw_dir(entry[2].get("source"), winner.parent.name)
         ]
-        winner_result_name = winner_result_names.get(artifact_key)
         exact_matching = [
             entry
             for entry in matching
             if re.split(
                 r"[\\/]+",
                 str(entry[2].get("source") or ""),
-            )[-1] == winner_result_name
+            )[-1] == winner.name
         ]
         if not exact_matching:
             continue
@@ -928,7 +908,7 @@ def _dedupe_eval_aggregate(
 
 
 def _prune_raw_eval_dir(
-    artifact_dir: Path, winners: dict[tuple[Any, ...], str]
+    artifact_dir: Path, winners: dict[tuple[Any, ...], Path]
 ) -> Optional[str]:
     """Drop a raw dir's identities that a newer dir supersedes."""
     contributions, meta, batched = _raw_dir_contributions(artifact_dir)
@@ -938,7 +918,7 @@ def _prune_raw_eval_dir(
 
     def superseded(key: tuple[Any, ...]) -> bool:
         winner = winners.get(key)
-        return winner is not None and winner != name
+        return winner is not None and winner.parent.name != name
 
     if not batched:
         if superseded(contributions[0][0]):
