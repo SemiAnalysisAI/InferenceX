@@ -4,6 +4,9 @@ base:
     path: glm-5.2-fp4
     container: dynamo-sglang
     precision: fp4
+  identity:
+    container:
+      image: lmsysorg/sglang:v0.5.19-cu130@sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9
   resources:
     gpu_type: gb300
     gpus_per_node: 4
@@ -21,8 +24,8 @@ base:
       active-prefill-tokens-threshold-frac: None
       router-session-affinity-ttl-secs: 3600
   dynamo:
-    hash: 71eb001e17fa73c742f0afe1a6ed96836cb135fd
     install: true
+    wheel: "1.5.0.dev20260910"
   backend:
     type: sglang
     prefill_environment:

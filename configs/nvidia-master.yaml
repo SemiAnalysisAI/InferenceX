@@ -9352,13 +9352,13 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-agg:
           additional-settings:
           - "CONFIG_FILE=recipes/sglang/glm5.2/gb300-fp4/agentic/glm5.2-agentx-agg.yaml"
 glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260805-211ee642
+  image: lmsysorg/sglang:v0.5.19-cu130@sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9
   model: nvidia/GLM-5.2-NVFP4
   model-prefix: glm5.2
   runner: cluster:gb300-nv
   precision: fp4
   framework: dynamo-sglang
-  router: { name: dynamo-router, version: "71eb001e17fa73c742f0afe1a6ed96836cb135fd" }
+  router: { name: dynamo-router, version: "1.5.0.dev20260910" }
   kv-p2p-transfer: nixl
   multinode: true
   disagg: true
