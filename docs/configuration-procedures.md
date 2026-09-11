@@ -273,3 +273,15 @@ Stop before dispatching GPU work or claiming the configuration complete when any
 - YAML, Bash, strict schema, exact-key generation, launcher simulation, or recipe validation fails.
 
 A configuration is ready for sweep only when the executable files agree, the exact key generates, the runtime route exists, the changelog selects it, and all layer-specific checks above pass.
+
+## DeepSeek V4.1 Flash Mooncake on H100
+
+`dsv41flash-fp4-h100-vllm-agentic-dspark-mooncake` runs AgentX at TP8, with concurrency 1, 2, 4, 8, 16, 32, full `semianalysis_cc_traces_weka_062126` traces and 1M context. It follows the [upstream embedded Mooncake recipe](https://github.com/vllm-project/recipes/blob/main/kv_store/kv_store_distributed_mooncake.yaml): `MooncakeStoreConnector`, `kv_both`, RDMA and one local metadata master. The helper pins Mooncake 0.3.11.post1 and selects the wheel for the image's CUDA major version.
+
+The generated host budget is 60% of the runner's allocated DRAM. Reserve 208 GB for Engram UVA tables and 4 GiB of Mooncake transfer buffer per GPU, then divide the remainder into per-rank KV segments. `enable_offload: false` disables Mooncake's secondary storage tier; the embedded DRAM KV store remains enabled. Both server and master are cleaned up on exit.
+
+Throughput keeps five-token DSpark at thinking-on golden synthetic AL 3.51 with adaptive verification disabled; eval uses real block verification. Startup allows 7200 seconds. H100 retains its 4096-token prefill-batch cap. Higher concurrencies are experimental and require GPU validation.
+
+H100 clears `PYTORCH_ALLOC_CONF` and `PYTORCH_CUDA_ALLOC_CONF` when Mooncake is selected. Expandable segments can remap registered KV memory and are rejected by vLLM without a compatible CuMem allocator; the non-offload path retains its original allocator setting.
+
+Mooncake sizes are emitted as integer bytes so its binary `GB` parser cannot exceed the decimal host budget.

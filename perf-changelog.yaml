@@ -7179,3 +7179,21 @@
   description:
     - "Use the pinned SGLang nightly-dev-cu13-20260901-07c8f729 image with FlashInfer 0.6.18, which includes the BF16 TRTLLM MoE allocation fix for small-batch Blackwell execution. Model, TP8, HiCache, MTP settings and concurrency grid are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2994
+
+- config-keys:
+    - dsv41flash-fp4-h100-vllm-agentic-dspark-mooncake
+  description:
+    - "Add H100 DSv4.1 Flash embedded Mooncake DRAM KV offload, golden synthetic AL 3.51 and concurrency 1-32"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2999
+
+- config-keys:
+    - dsv41flash-fp4-h100-vllm-agentic-dspark-mooncake
+  description:
+    - "Clear incompatible expandable-segment allocator settings for H100 Mooncake KV registration"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2999
+
+- config-keys:
+    - dsv41flash-fp4-h100-vllm-agentic-dspark-mooncake
+  description:
+    - "Correct Mooncake decimal host-memory budget using exact bytes and 4 GiB transfer buffers"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2999

@@ -22,6 +22,28 @@ INFERENCEX_REPO_ROOT="$(
 # nothing upstream set it.
 export PORT="${PORT:-8888}"
 
+# Opt-in for recipes running in the host network namespace. Probe the preferred
+# port on the compute node; fall back to an OS-selected port if it is occupied.
+# Call immediately before server launch and construct client URLs afterward.
+select_available_server_port() {
+    PORT=$(python3 - "${PORT:-8888}" <<'PYPORT'
+import errno
+import socket
+import sys
+
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+    try:
+        sock.bind(("0.0.0.0", int(sys.argv[1])))
+    except OSError as exc:
+        if exc.errno != errno.EADDRINUSE:
+            raise
+        sock.bind(("0.0.0.0", 0))
+    print(sock.getsockname()[1])
+PYPORT
+    ) || return $?
+    export PORT
+}
+
 agentic_kv_offload_enabled() {
     if [[ -z "${KV_OFFLOADING+x}" || -z "$KV_OFFLOADING" ]]; then
         echo "Error: KV_OFFLOADING must be set for agentic benchmarks" >&2
@@ -3392,3 +3414,83 @@ run_agentic_replay_and_write_outputs() (
 
     validate_required_agentic_server_metrics "$result_dir"
 )
+
+# Start the upstream embedded Mooncake CPU KV tier. TOTAL_CPU_DRAM_GB is
+# the generated aggregate host budget; reserve model memory and rank buffers
+# before dividing the remaining segment capacity across GPU_COUNT ranks.
+setup_agentic_mooncake() {
+    require_agentic_kv_offload_backend mooncake || return 1
+    check_env_vars GPU_COUNT RESULT_DIR MOONCAKE_HOST_RESERVE_GB
+    local per_rank_bytes
+    per_rank_bytes=$(python3 - "$TOTAL_CPU_DRAM_GB" "$GPU_COUNT" "$MOONCAKE_HOST_RESERVE_GB" <<'PYMCBUDGET'
+import sys
+budget, ranks, reserved = map(int, sys.argv[1:])
+if ranks <= 0 or reserved < 0:
+    raise SystemExit("Invalid Mooncake rank count or host-memory reservation")
+# Runner budgets use decimal GB; Mooncake's string GB suffix means GiB.
+# Pass integer bytes and account for the actual 4 GiB transfer buffer.
+segment = (budget - reserved) * 1_000_000_000 // ranks - 4 * 1024**3
+if segment <= 0:
+    raise SystemExit("Host budget cannot fit model reservation, Mooncake buffers and KV segments")
+print(segment)
+PYMCBUDGET
+    ) || return $?
+
+    local package=mooncake-transfer-engine
+    if [[ "$(python3 -c 'import torch; print((torch.version.cuda or "").split(".")[0])')" == 13 ]]; then
+        package=mooncake-transfer-engine-cuda13
+    fi
+    agentic_pip_install --quiet --no-cache-dir --no-deps --force-reinstall "${package}==0.3.11.post1" || return $?
+    python3 -c 'from mooncake.store import MooncakeDistributedStore' || return $?
+
+    # A separate free port avoids arithmetic overflow and host-network collisions.
+    MOONCAKE_MASTER_PORT=$(PORT=0; select_available_server_port; printf '%s' "$PORT") || return $?
+    export MOONCAKE_CONFIG_PATH="$RESULT_DIR/mooncake_config.json"
+    export PYTHONHASHSEED=0
+    python3 - "$MOONCAKE_CONFIG_PATH" "$MOONCAKE_MASTER_PORT" "$per_rank_bytes" <<'PYMCCONFIG'
+import json
+import os
+import sys
+path, port, segment = sys.argv[1:]
+with open(path, "w") as output:
+    json.dump({
+        "mode": "embedded",
+        "metadata_server": "P2PHANDSHAKE",
+        "master_server_address": f"127.0.0.1:{port}",
+        "global_segment_size": int(segment),
+        "local_buffer_size": 4 * 1024**3,
+        "protocol": "rdma",
+        "device_name": os.environ.get("MOONCAKE_DEVICE_NAME", ""),
+        "enable_offload": False,
+    }, output, indent=2)
+PYMCCONFIG
+    echo "Mooncake: ${per_rank_bytes} bytes per rank; ${MOONCAKE_HOST_RESERVE_GB} GB reserved for model host memory"
+    mooncake_master --port="$MOONCAKE_MASTER_PORT" \
+        --default_kv_lease_ttl=30s \
+        --eviction_high_watermark_ratio=0.95 --eviction_ratio=0.1 \
+        > "$RESULT_DIR/mooncake_master.log" 2>&1 &
+    MOONCAKE_MASTER_PID=$!
+    local attempt
+    for attempt in {1..30}; do
+        if ! kill -0 "$MOONCAKE_MASTER_PID" 2>/dev/null; then
+            cat "$RESULT_DIR/mooncake_master.log" >&2
+            return 1
+        fi
+        if python3 - "$MOONCAKE_MASTER_PORT" <<'PYMCPING'
+import socket
+import sys
+try:
+    with socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=1):
+        pass
+except OSError:
+    raise SystemExit(1)
+PYMCPING
+        then
+            OFFLOAD_ARGS=(--kv-transfer-config '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both"}')
+            return 0
+        fi
+        sleep 1
+    done
+    echo "Mooncake master did not become ready within 30 attempts" >&2
+    return 1
+}

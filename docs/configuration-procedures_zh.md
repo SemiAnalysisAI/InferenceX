@@ -273,3 +273,15 @@ python -m pytest utils/matrix_logic/ -v
 - YAML、Bash、严格 schema、精确 key 生成、launcher 模拟或配方验证失败。
 
 只有当所有可执行文件一致、精确 key 能生成、运行时路由存在、changelog 能选择该 key，且以上各层检查全部通过时，配置才可以进入 sweep。
+
+## H100 上的 DeepSeek V4.1 Flash Mooncake
+
+`dsv41flash-fp4-h100-vllm-agentic-dspark-mooncake` 以 TP8 运行 AgentX，并发为 1, 2, 4, 8, 16, 32，使用完整 `semianalysis_cc_traces_weka_062126` 轨迹和 1M 上下文。配方遵循[上游嵌入式 Mooncake 配置](https://github.com/vllm-project/recipes/blob/main/kv_store/kv_store_distributed_mooncake.yaml)：`MooncakeStoreConnector`、`kv_both`、RDMA 和单个本地 metadata master。helper 固定使用 Mooncake 0.3.11.post1，并按镜像的 CUDA 主版本选择 wheel。
+
+生成的主机内存预算为 runner 分配 DRAM 的 60%。先预留 208 GB 给 Engram UVA 表，并为每个 GPU 预留 4 GiB Mooncake 传输缓冲区，再将剩余容量均分为各 rank 的 KV segment。`enable_offload: false` 关闭的是 Mooncake 的二级存储层，嵌入式 DRAM KV 存储仍然启用。退出时清理 server 和 master。
+
+吞吐测试保留五 token DSpark、thinking 开启时的黄金合成 AL 3.51，并关闭自适应验证；eval 使用真实块验证。启动等待期限为 7200 秒。H100 保留 4096 token 的 prefill batch 上限。更高并发属于实验配置，需通过 GPU 验证。
+
+H100 在选择 Mooncake 时清除 `PYTORCH_ALLOC_CONF` 和 `PYTORCH_CUDA_ALLOC_CONF`。Expandable segments 可能重映射已注册的 KV 内存，因此没有兼容 CuMem allocator 时会被 vLLM 拒绝；非卸载路径保留原有分配器设置。
+
+Mooncake 容量以整数字节数传入，避免其二进制 `GB` 解析规则超出十进制主机内存预算。
