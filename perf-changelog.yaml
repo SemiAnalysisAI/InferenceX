@@ -7286,3 +7286,12 @@
   description:
     - "Use thinking-on golden synthetic AL 3.51 for five-token DSpark throughput; disable adaptive verification and retain real verification for evals"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2974
+
+- config-keys:
+    - glm5.2-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump SGLang image from v0.5.16-rocm720-mi35x-20260728 to v0.5.19-rocm720-mi35x-20260908. v0.5.19 includes SGLang PR #37124 (fused DSA metadata kernels for GLM-5.2 Dual-Sparse Attention), which reduces prefill latency on long-context agentic traces and raises norm_intvty_p90 by +18–19% at conc 4 and conc 6 relative to the v0.5.16 baseline (validated on run 34333529180)."
+    - "Restore the 3-arm Pareto search-space from PR #2853: TP4/EP4 GPU-resident KV (kv-offloading: none) at conc-list [1,2,4,6,8]; TP8/EP1 GPU-resident KV at conc-list [1,2,4]; TP4/EP4 HiCache DRAM offload at conc-list [1,2,4,8,10]. The previous entry (PR #2777) had trimmed the TP8/EP1 arm to [4,10] and used HiCache as the primary arm; with v0.5.19 the GPU-resident no-KV path is re-validated across the full concurrency range."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3014
