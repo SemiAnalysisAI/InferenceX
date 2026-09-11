@@ -162,7 +162,7 @@ if [[ "$MODEL_PREFIX" == "dsv41flash" && "$FRAMEWORK" == "vllm" && "${IS_MULTINO
     # Cold model loading and graph capture exceeded the one-hour frontend deadline.
     export VLLM_ENGINE_READY_TIMEOUT_S=7200
     srun --account="$SLURM_ACCOUNT" --partition="$SLURM_PARTITION" \
-        --nodes=1 --ntasks=1 --gpus="${TP:?}" --exclusive --mem=0 \
+        --nodes=1 --ntasks=1 --gpus="${TP:?}" --cpus-per-task=144 --exclusive --mem=0 \
         --time="${SALLOC_TIME_LIMIT:-480}" --job-name="$RUNNER_NAME" \
         --mpi=none --container-image="$SQUASH_FILE" \
         --container-mounts="$GITHUB_WORKSPACE:/ix,$HF_HUB_CACHE_HOST_PATH:/hf-cache" \

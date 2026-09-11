@@ -7304,3 +7304,10 @@
     - "Bump all six recipes to tensorrt-llm/release:1.3.0rc26.dev202609040000, add TRTLLM_FUSED_DSA_METADATA=1 and TRTLLM_DSA_INDEXER_BF16=1, and run the AgentX client on a dedicated allocation node."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2939
   
+
+- config-keys:
+    - dsv41flash-fp4-gb300-vllm-agentic-dspark
+  description:
+    - "Reserve 144 CPU cores for the GB300 single-node serving task"
+    - "为 GB300 单节点服务任务预留 144 个 CPU 核心"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3017
