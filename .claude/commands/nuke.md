@@ -108,13 +108,12 @@ For each family, run strictly sequentially because git checkouts can't be parall
 
 ```bash
 git checkout main -q && git reset --hard origin/main -q
-branch="klaud-cold/<basekey>-<TAG>"
+branch="klaud/<basekey>-<TAG>"
 git checkout -b "$branch" -q
 python3 /tmp/edit_image.py <master.yaml> <NEW_IMAGE> <key> [<key>-mtp]
 python3 /tmp/append_changelog.py perf-changelog.yaml "<DESC>" <key> [<key>-mtp]
 git add -A
-git commit -q -m "[Klaud Cold] Update <basekey>[ (+mtp)] <PHRASE> to <TAG>" \
-  -m "Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
+git commit -q -m "[Klaud Cold] Update <basekey>[ (+mtp)] <PHRASE> to <TAG>"
 git push -u origin "$branch" -q --force-with-lease
 url=$(gh pr create --repo SemiAnalysisAI/InferenceX --base main --head "$branch" \
       --title "[Klaud Cold] Update <basekey>[ (+mtp)] <PHRASE> to <TAG>" \

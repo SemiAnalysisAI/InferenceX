@@ -35,15 +35,17 @@
 | [`configs/nvidia-master.yaml`](../configs/nvidia-master.yaml)、[`configs/amd-master.yaml`](../configs/amd-master.yaml) | 声明式的模型、镜像、框架、场景、拓扑和搜索空间意图 |
 | [`configs/runners.yaml`](../configs/runners.yaml) | 生成期间使用的调度标签、具体运行器名称和硬件信息 |
 | [`perf-changelog.yaml`](../perf-changelog.yaml) | 以仅追加方式选择要针对某项变更运行的配置键 |
-| [`utils/matrix_logic/validation.py`](../utils/matrix_logic/validation.py) | 强制执行的 Pydantic 模式和跨字段不变量 |
-| [`utils/matrix_logic/generate_sweep_configs.py`](../utils/matrix_logic/generate_sweep_configs.py) | 搜索空间展开、默认值、过滤器、派生元数据、运行器解析和评测选择 |
-| [`utils/process_changelog.py`](../utils/process_changelog.py) | 新增变更日志提取、配置键展开、矩阵分桶和最终矩阵验证 |
+| [`infx/matrix/validation.py`](../infx/matrix/validation.py) | 强制执行的 Pydantic 模式和跨字段不变量 |
+| [`infx/matrix/generate.py`](../infx/matrix/generate.py) | 搜索空间展开、默认值、过滤器、派生元数据、运行器解析和评测选择 |
+| [`infx/matrix/plan.py`](../infx/matrix/plan.py) | 变更日志选择、配置键展开、追加模式比较、矩阵分桶及最终验证；`utils/process_changelog.py` 保留 CLI |
 | [`.github/workflows/run-sweep.yml`](../.github/workflows/run-sweep.yml) | 触发策略、矩阵扇出、收集依赖和跨仓库摄取分派 |
 | [`.github/workflows/benchmark-tmpl.yml`](../.github/workflows/benchmark-tmpl.yml)、[`.github/workflows/benchmark-multinode-tmpl.yml`](../.github/workflows/benchmark-multinode-tmpl.yml) | 可复用作业输入契约、环境映射、启动器调用、结果检查和单作业上传 |
 | [`runners/`](../runners/) | 特定机群的模型路径、挂载、容器或 Slurm 设置以及基准测试脚本路由 |
 | [`benchmarks/benchmark_lib.sh`](../benchmarks/benchmark_lib.sh) | 共享的服务器就绪检查、基准测试客户端、评测、AgentX 重放和输出行为 |
 | [`benchmarks/`](../benchmarks/) | 特定于框架和拓扑的服务器与客户端命令 |
-| [`utils/process_result.py`](../utils/process_result.py) | 上传前对固定序列结果进行规范化和聚合 |
+| [`infx/github.py`](../infx/github.py) | 工作流操作共用的 GitHub REST、分页和评论表态基础操作 |
+| [`infx/workflows/`](../infx/workflows/) | 复用命令解析、授权查找、源 Run 验证及表态反馈；现有复用 CLI 保持兼容 |
+| [`infx/results/`](../infx/results/) | 可导入的结果构建函数、组件元数据解析和功耗指标转换；[`utils/process_result.py`](../utils/process_result.py) 保留固定序列处理的 CLI |
 | [`.github/workflows/collect-results.yml`](../.github/workflows/collect-results.yml)、[`.github/workflows/collect-evals.yml`](../.github/workflows/collect-evals.yml) | 运行级基准测试和评测工件聚合 |
 
 ### InferenceX-app 使用方
@@ -125,9 +127,21 @@ flowchart LR
 
 ## 阶段 2：验证与矩阵生成
 
-[`validation.py`](../utils/matrix_logic/validation.py) 在生成之前验证主文件和运行器数据。其严格模型负责接受的别名和跨字段规则。例如，互斥的并发形式、单节点与多节点形态、组件元数据作用域、预填充与解码硬件配对，以及智能体场景的集群标签要求。
+共享 Python 实现位于仓库根目录的 `infx` 包中。`infx.matrix.generate` 负责矩阵生成，`infx.matrix.validation` 负责模式校验。Python 调用方应通过这些规范路径导入；后续领域模块可在需要时加入 `infx`。
 
-随后，[`generate_sweep_configs.py`](../utils/matrix_logic/generate_sweep_configs.py) 将经过验证的意图展开为数据行。它负责以下决策：
+默认仓库路径定义在 [`infx/config.py`](../infx/config.py) 中；`utils/constants.py` 保留旧导入方式。包的 `__init__.py` 文件保持精简。
+
+`utils/process_changelog.py`、`utils/matrix_logic/generate_sweep_configs.py` 和 `validation.py` 保留为轻量兼容入口，旧导入路径指向同一个模块对象，避免重复创建模式类。现有脚本命令、参数、相对输入路径和依赖保持不变，从仓库检出目录运行时无需安装包。`process_changelog.py` 指向 `infx.matrix.plan`；`validate_perf_changelog.py` 保留现有处理器 CLI 边界和诊断。
+
+`infx.matrix.plan.build_plan(changelog_data, base_ref=..., head_ref=...)` 返回完整扫描的已验证 `ChangelogMatrixEntry`，统一负责条目优先级、基准测试与评测各自的场景覆盖、裁剪、指纹及输出分桶。当前主配置文件只加载一次，运行器元数据在首次生成时加载一次；每组选中的配置直接调用 `infx.matrix.generate.generate_config_matrix`。当前输入来自传入的路径（默认为检出目录中的路径），`head_ref` 仍用作来源元数据。规划过程假设这些文件在本次操作期间保持稳定。
+
+`generate_config_matrix` 接受已验证的配置和运行器字典，以及明确的评测模式（`default`、`none`、`subset`、`all` 或 `smoke`），与生成器 CLI 共用展开和评测选择逻辑，包括读取仓库中已提交的配方以确定物理节点数。Smoke 保留最低并发吞吐量测试，并单独保留规范选出的代表性评测。其 JSON 规范化保留旧有值转换和拒绝语义，并防止不同生成批次共享嵌套结果对象。规划失败时不会发布不完整矩阵；CLI 保留拒绝状态和诊断消息，堆栈帧则反映新的模块位置。
+
+对追加模式的历史比较，`generation_inputs_at_ref` 从同一个 Git 修订提取配置、旧入口及 `infx` 包（若该修订包含它）。包迁移前的修订继续运行其原有独立生成器；迁移后的修订使用自身的包代码。当前工作区中的源码和配置不会替代历史输入。历史子进程继续保持隔离，提取的输入生命周期限定在本次规划操作内，包括失败路径。
+
+[`validation.py`](../infx/matrix/validation.py) 在生成之前验证主文件和运行器数据。其严格模型负责接受的别名和跨字段规则。例如，互斥的并发形式、单节点与多节点形态、组件元数据作用域、预填充与解码硬件配对，以及智能体场景的集群标签要求。
+
+随后，[`infx.matrix.generate`](../infx/matrix/generate.py) 将经过验证的意图展开为数据行。它负责以下决策：
 
 - 从范围或列表生成具体并发点；
 - 默认并行度值；
@@ -137,7 +151,7 @@ flowchart LR
 - 运行器节点过滤和硬件派生值；
 - 常规评测子集、`--all-evals`、`--evals-only` 和 `--no-evals` 行为。
 
-`process_changelog.py` 将生成的数据行放入不同的 JSON 桶中。当前桶包括按序列族划分的 `single_node`、按序列族划分的 `multi_node`、`evals`、`agentic_evals`、`multinode_evals` 和 `changelog_metadata`。它会在打印最终对象之前使用 `ChangelogMatrixEntry` 对其进行验证。
+`infx.matrix.plan` 将生成的数据行放入不同的 JSON 桶中。当前桶包括按序列族划分的 `single_node`、按序列族划分的 `multi_node`、`evals`、`agentic_evals`、`multinode_evals`、`multinode_agentic_evals` 和 `changelog_metadata`。它会在打印最终对象之前使用 `ChangelogMatrixEntry` 对其进行验证。
 
 发出的矩阵是可执行的 CI 契约，但不是可供编辑的持久化来源。应修改上游主配置、验证器或生成器，然后重新生成矩阵。
 
@@ -163,6 +177,8 @@ bash ./runners/launch_${RUNNER_NAME%%_*}.sh
 
 因此，第一个下划线之前的前缀标识机群启动器。运行器命名和启动器文件名共同构成一项路由契约。
 
+`infx.github` 负责共享 REST、分页及评论表态基础操作。`infx.workflows.reuse` 负责复用选择和验证，`infx.workflows.reuse_comment` 负责评论表态反馈。两者均可作为包模块执行。`utils/find_reusable_sweep_run.py` 保留直接脚本执行和旧导入路径，旧路径指向同一个规范模块。这些辅助模块仅依赖标准库。
+
 ## 阶段 4：启动器与运行时执行
 
 [`runners/`](../runners/) 下的启动器会将逻辑作业元数据适配到某个物理机群。根据机群和拓扑，它可能会：
@@ -187,7 +203,54 @@ bash ./runners/launch_${RUNNER_NAME%%_*}.sh
 
 对于固定序列吞吐量作业，工作流要求存在 `<RESULT_FILENAME>.json`，随后运行 [`utils/process_result.py`](../utils/process_result.py)，并将 `agg_<RESULT_FILENAME>.json` 作为 `bmk_<RESULT_FILENAME>` 上传。
 
+### 复用与扩展结果处理
+
+[`infx.results.fixed_sequence.build_result`](../infx/results/fixed_sequence.py) 接收已加载的基准测试映射和显式传入的环境变量映射，返回聚合结果字典，不读取进程环境，也不执行文件 I/O。库调用方无需提供 `RESULT_FILENAME`。现有 CLI 会验证环境变量、读取原始工件、调用构建函数、写入聚合结果，并按照原有的尽力处理或 `REQUIRE_POWER` 策略执行功耗聚合。
+
+```python
+from infx.results.fixed_sequence import build_result
+
+result = build_result(raw_benchmark, runtime_env)
+```
+
+新增格式应在 `infx/results/` 下提供带类型标注的构建函数，接收该格式所需的输入并返回字典。通过普通函数调用组合共享转换；文件查找、环境默认值、错误呈现和序列化由该格式的 CLI 适配器负责。现有 AgentX 拓扑及请求和服务器指标处理保留各自的策略。
+
+[`infx.results.agentic.build_result`](../infx/results/agentic/__init__.py) 负责构建 AgentX 聚合结果，包括请求指标、后端选择、服务器指标和每 GPU 吞吐量。它接收已加载的 AIPerf 请求记录、profile 和服务器指标映射，以及显式传入的环境变量映射。可选的 `traces` 提供声明数据集中的原始轨迹对象，`server_logs` 的每个元素对应一个已解码的日志文件头。构建函数不打开文件，也不读取进程环境；返回的指标未经舍入，输入不会被修改，但结果中的数据集和请求统计映射仍与输入共享。
+
+```python
+from infx.results.agentic import build_result
+
+result = build_result(records, profile, server_metrics, runtime_env,
+                      traces=trace_objects, server_logs=log_texts)
+```
+
+现有的 `python -m utils.agentic.aggregation.process_agentic_result` 命令继续负责工件查找、请求过滤与统计、轨迹缓存查找、有大小上限的日志读取、舍入、诊断信息和输出文件写入。它以惰性迭代器提供轨迹和日志，确保元数据校验仍先于轨迹读取，且后端只读取自身需要的日志。请求与服务器指标算法及后端优先级由包内代码统一负责。数据集匹配、缓存优先级和快照歧义处理保留在 CLI 的共享工件加载器中，功耗适配器也使用该加载器。内部 Python 导入改用 `infx.results.agentic`；命令路径、环境变量和工件模式保持不变。
+
+当前处理路径共享以下辅助工具：
+
+- [`parse_component_metadata`](../infx/results/metadata.py) 接收原始 JSON 值和诊断标签。调用方选择 `version` 是否可省略，以及无效输入应抛出 `ValueError` 还是 `SystemExit`，从而保留现有契约。
+- [`Parallelism`](../infx/results/topology.py) 共享 GPU 数量计算、并行度结果字段，以及没有独立解码 GPU 时的字段规范化。固定序列结果继续使用显式分配的 GPU 数量，AgentX 则根据 worker 拓扑推导数量。各调用方保留自己的环境默认值、验证顺序、错误处理和吞吐量分母。
+- [`with_power_metrics`](../infx/results/power/__init__.py) 返回替换了指定指标族的副本，移除旧的有效性原因，并验证、舍入新指标。调用方提供指标键和模式版本，再自行写入工件及验证附属文件。其他指标族因此可以直接复用该转换，无需修改其实现。
+
+功耗遥测处理引擎也位于 [`infx.results.power`](../infx/results/power/)：`single_node.run` 读取 GPU 监控 CSV，`multinode.run` 验证 srt-slurm 工件包。两者通过 `common.py` 共享基准窗口解析、单设备能量积分、聚合结果替换及审计序列化，同时保留各自的遥测校验和失败策略。固定序列及 AgentX 适配器直接导入这些引擎；新结果格式可以将其基准窗口和 token 计数提供给匹配的引擎。
+
+现有 `utils/aggregate_power.py` 和 `utils/aggregate_power_multinode.py` 命令继续作为兼容入口，包括从检出目录之外直接执行。旧导入路径解析到对应的引擎模块，因此两种路径引用的是相同的类和函数。`infx` 包可独立于这些入口运行，无需安装步骤或新增运行时依赖。还可以从仓库根目录运行 `python -m infx.results.power.single_node` 和 `python -m infx.results.power.multinode` 来调用引擎。
+
+构建函数测试应使用独立计算预期结果的小样例和只读输入。修改现有适配器时，还应与旧实现比较 CLI 退出状态、诊断信息和生成工件，覆盖无效输入以及严格模式和尽力处理模式下的功耗失败。
+
+### 评测与 AgentX 输出
+
 对于仅评测作业，不要求吞吐量输出。工作流改为要求至少存在一个 `results*.json`。对于标记为运行评测的作业，上传内容可能包含 `meta_env.json`、`results*.json`、`sample*.jsonl`、SWE-bench 预测和报告以及轨迹文件。[`utils/evals/validate_scores.py`](../utils/evals/validate_scores.py) 会检查生成的评测分数。
+
+[`infx.results.evals`](../infx/results/evals.py) 提供 `extract_metrics`，用于解析已加载的评测 JSON，并提供 `build_rows`，用于构建收集器输出。两者均接收显式输入，不执行文件 I/O，也不修改输入。构建函数应用元数据默认值和主分数优先级，并将失败评测保留为诊断行。CLI 负责文件查找、并发数资格筛选、报告输出和工件写入。
+
+```python
+from infx.results.evals import build_rows
+
+rows = build_rows(raw_eval, metadata, source="eval_job/results.json")
+```
+
+收集器和可复用工件验证器共享格式识别、并发数后缀解析、结果选择、指标族分类及数值有效性规则。`select_latest_result` 从全部候选中或指定并发数的候选中选择最新结果；`select_latest_results` 还支持为每个并发数选择一个候选，并按并发数的数值顺序返回。这些辅助函数接收候选路径，调用方仍保留各自的文件查找和资格筛选规则。文件名时间戳和旧格式文件的修改时间统一使用 Unix 纪元纳秒数，时间相同时按文件名排序。复用验证保留更严格的结构检查，并验证所有适用的主指标；收集器则保留每个指标族中最后配置的值用于报告。识别出格式并不意味着结果有效或可复用。
 
 智能体吞吐量作业采用不同的契约。它们使用 [`utils/agentic/validation/validate_agentic_result.py`](../utils/agentic/validation/validate_agentic_result.py) 验证 AIPerf 输出，上传聚合的 `bmk_agentic_<suffix>` 工件，并上传包含追踪重放材料的原始 `agentic_<suffix>` 同级工件。InferenceX-app 通过它们共享的后缀对这些同级工件进行配对。智能体仅评测作业改为遵循评测输出契约，不要求吞吐量结果。
 
@@ -242,7 +305,9 @@ bash ./runners/launch_${RUNNER_NAME%%_*}.sh
 
 ### 矩阵派生只有一套实现
 
-派生并发点、评测选择、拓扑默认值、名称和运行器派生信息属于 `generate_sweep_configs.py`。工作流应转发矩阵字段，而不应在表达式或 Shell 中重新实现生成器策略。
+派生并发点、评测选择、拓扑默认值、名称和运行器派生信息属于 `infx.matrix.generate`。工作流应转发矩阵字段，而不应在表达式或 Shell 中重新实现生成器策略。
+
+`full-sweep` 和 `test-config` 命令共用固定序列与 AgentX 的矩阵行构建逻辑。各命令的选择规则仍由调用方负责；AgentX 构建逻辑负责 worker 默认值、卸载预算、实验名称、节点数和验证。它在过滤并发度前验证拓扑与卸载预算，保留并发点和运行器的原有顺序，并仅按上下限过滤 AgentX 并发点，不会额外生成截断到上限的并发点。
 
 ### 触发选择与配置彼此独立
 
@@ -311,7 +376,7 @@ AgentX 追踪导出的体积更大，并且需要追踪发现、时间线处理�
 3. **验证：** 仅生成该确切键并检查 JSON，不要只查看退出码。
 
    ```bash
-   uv run --no-project --with pydantic --with pyyaml --python 3.12 \
+   uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
      utils/matrix_logic/generate_sweep_configs.py test-config \
      --config-files configs/nvidia-master.yaml configs/amd-master.yaml \
      --runner-config configs/runners.yaml \

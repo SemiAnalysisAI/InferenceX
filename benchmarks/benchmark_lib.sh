@@ -22,6 +22,28 @@ INFERENCEX_REPO_ROOT="$(
 # nothing upstream set it.
 export PORT="${PORT:-8888}"
 
+# Opt-in for recipes running in the host network namespace. Probe the preferred
+# port on the compute node; fall back to an OS-selected port if it is occupied.
+# Call immediately before server launch and construct client URLs afterward.
+select_available_server_port() {
+    PORT=$(python3 - "${PORT:-8888}" <<'PYPORT'
+import errno
+import socket
+import sys
+
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+    try:
+        sock.bind(("0.0.0.0", int(sys.argv[1])))
+    except OSError as exc:
+        if exc.errno != errno.EADDRINUSE:
+            raise
+        sock.bind(("0.0.0.0", 0))
+    print(sock.getsockname()[1])
+PYPORT
+    ) || return $?
+    export PORT
+}
+
 agentic_kv_offload_enabled() {
     if [[ -z "${KV_OFFLOADING+x}" || -z "$KV_OFFLOADING" ]]; then
         echo "Error: KV_OFFLOADING must be set for agentic benchmarks" >&2
@@ -158,6 +180,11 @@ start_gpu_monitor() {
 
     if command -v nvidia-smi &>/dev/null; then
         GPU_MONITOR_VENDOR="nvidia"
+        if ! nvidia-smi --query-gpu=index,uuid,pci.bus_id,name,driver_version \
+            --format=csv > "${output%.csv}_identity.csv" 2>/dev/null; then
+            rm -f "${output%.csv}_identity.csv"
+            echo "[GPU Monitor] Warning: NVIDIA identity sidecar failed" >&2
+        fi
         nvidia-smi --query-gpu="$NVIDIA_GPU_MONITOR_QUERY" \
             --format=csv -l "$interval" > "$output" 2>/dev/null &
         GPU_MONITOR_PID=$!
@@ -257,20 +284,28 @@ _write_amd_smi_sidecar() {
 
 # Block until the GPUs have released a prior job's memory before starting a run.
 # Polls rocm-smi VRAM% every 10s for up to 15 minutes; succeeds once the busiest
-# GPU is at <=10% VRAM, otherwise returns 1 so the caller aborts rather than
-# starting a benchmark on GPUs still draining the previous run's memory.
+# GPU is at <= the threshold percent VRAM (default 10), otherwise returns 1 so the
+# caller aborts rather than starting a benchmark on GPUs still draining the
+# previous run's memory.
+#
+# Pass a stricter threshold when the run sizes its KV cache from the device-wide
+# free memory (torch.cuda.mem_get_info): on the 288 GB parts the default 10% gate
+# still admits ~28.8 GB of prior-job residual, which the engine then counts as
+# used, folds into its non_torch term, and subtracts from the KV pool -- so the
+# pool drifts run to run by whatever slipped under the gate.
 wait_for_amd_gpu_clean() {
+    local threshold="${1:-10}"
     local gpu_clean=false vram_max i
     for i in $(seq 1 90); do
         vram_max=$(rocm-smi --showmemuse 2>/dev/null \
             | grep -oE "GPU Memory Allocated \(VRAM%\): [0-9]+" \
             | awk '{if ($NF > m) m = $NF} END {print m+0}')
-        if [ "${vram_max:-0}" -le 10 ]; then
-            echo "GPUs clean (vram%max=$vram_max after $((i * 10))s)"
+        if [ "${vram_max:-0}" -le "$threshold" ]; then
+            echo "GPUs clean (vram%max=$vram_max <= $threshold after $((i * 10))s)"
             gpu_clean=true
             break
         fi
-        echo "waiting for prior-job GPU memory reclaim: vram%max=$vram_max"
+        echo "waiting for prior-job GPU memory reclaim: vram%max=$vram_max (target <= $threshold)"
         sleep 10
     done
     if [ "$gpu_clean" != "true" ]; then
@@ -486,7 +521,21 @@ wait_for_server_ready() {
         --endpoint "http://0.0.0.0:${port}/health" \
         --log "$server_log" \
         --pid "$server_pid" \
-        --sleep-interval "$sleep_interval"
+        --sleep-interval "$sleep_interval" || return $?
+    INFERENCEX_SERVER_STATE=$(mktemp /tmp/inferencex-server-state.XXXXXX) || return 1
+    python3 "$INFERENCEX_REPO_ROOT/utils/server_watch.py" capture --pid "$server_pid" \
+        > "$INFERENCEX_SERVER_STATE" || return 1
+    INFERENCEX_SERVER_PID="$server_pid"
+}
+
+# Keep client process groups separate; on confirmed server/worker death only
+# this client's descendants are stopped. There is no elapsed-time cutoff.
+run_server_client() {
+    if [[ -n "${INFERENCEX_SERVER_STATE:-}" ]]; then
+        python3 "$INFERENCEX_REPO_ROOT/utils/server_watch.py" run --state "$INFERENCEX_SERVER_STATE" -- "$@"
+    else
+        "$@"
+    fi
 }
 
 # Persist an argv array in shell-replayable form.
@@ -502,14 +551,6 @@ append_command() {
     shift
     printf '%q ' "$@" >> "$output_file"
     printf '\n' >> "$output_file"
-}
-
-# Persist an argv array in shell-replayable form.
-write_command() {
-    local output_file="$1"
-    shift
-    printf '%q ' "$@" | tee "$output_file"
-    printf '\n' | tee -a "$output_file"
 }
 
 # Run benchmark serving with standardized parameters
@@ -749,33 +790,15 @@ run_benchmark_serving() {
         benchmark_cmd+=(--tokenizer-mode "$tokenizer_mode")
     fi
 
-    # Run benchmark with optional server monitoring
-    set -x
-    if [[ -n "$server_pid" ]]; then
-        # Run benchmark in background and monitor server health
-        "${benchmark_cmd[@]}" &
-        local benchmark_pid=$!
-
-        # Monitor loop: check both benchmark and server status
-        while kill -0 "$benchmark_pid" 2>/dev/null; do
-            if ! kill -0 "$server_pid" 2>/dev/null; then
-                echo "ERROR: Server process $server_pid died during benchmark"
-                kill "$benchmark_pid" 2>/dev/null
-                wait "$benchmark_pid" 2>/dev/null
-                set +x
-                return 1
-            fi
-            sleep 2
-        done
-
-        # Benchmark finished, get its exit code
-        wait "$benchmark_pid"
-        local benchmark_exit_code=$?
-    else
-        # No server monitoring, run benchmark directly
-        "${benchmark_cmd[@]}"
-        local benchmark_exit_code=$?
+    if [[ -n "$server_pid" && "$server_pid" != "${INFERENCEX_SERVER_PID:-}" ]]; then
+        INFERENCEX_SERVER_STATE=$(mktemp /tmp/inferencex-server-state.XXXXXX) || return 1
+        python3 "$INFERENCEX_REPO_ROOT/utils/server_watch.py" capture --pid "$server_pid" \
+            > "$INFERENCEX_SERVER_STATE" || return 1
+        INFERENCEX_SERVER_PID="$server_pid"
     fi
+    local benchmark_exit_code=0
+    set -x
+    run_server_client "${benchmark_cmd[@]}" || benchmark_exit_code=$?
     set +x
 
     # If profiling, move trace to relay-upload location
@@ -1016,240 +1039,8 @@ _prepare_kimi_vendor_verifier() {
     }
 
     "${VENDOR_VERIFIER_PYTHON:-python3}" - \
-        "$repo_url" "$verifier_ref" "$expected_archive_sha256" "$checkout_dir" <<'PY' || prepare_rc=$?
-from hashlib import sha256
-from pathlib import Path
-import re
-import socket
-import sys
-import tarfile
-import tempfile
-import time
-from urllib.error import HTTPError, URLError
-from urllib.parse import quote, urlsplit, urlunsplit
-from urllib.request import Request, urlopen
-
-
-repo_url, verifier_ref, expected_archive_sha256, checkout_dir_arg = sys.argv[1:]
-checkout_dir = Path(checkout_dir_arg)
-stage = "derive the pinned archive URL"
-
-
-def archive_member_parts(name):
-    if not name or "\x00" in name or "\\" in name or name.startswith("/"):
-        raise ValueError(f"unsafe archive member path: {name!r}")
-    normalized = name.rstrip("/")
-    parts = normalized.split("/")
-    if not normalized or any(part in ("", ".", "..") for part in parts):
-        raise ValueError(f"unsafe archive member path: {name!r}")
-    return tuple(parts)
-
-
-try:
-    if not re.fullmatch(r"[0-9a-fA-F]{40}", verifier_ref):
-        raise ValueError(f"expected a 40-character commit SHA, got {verifier_ref!r}")
-    if not re.fullmatch(r"[0-9a-fA-F]{64}", expected_archive_sha256):
-        raise ValueError(
-            "expected a 64-character archive SHA256, got "
-            f"{expected_archive_sha256!r}"
-        )
-
-    parsed_repo_url = urlsplit(repo_url)
-    if parsed_repo_url.scheme not in ("http", "https") or not parsed_repo_url.netloc:
-        raise ValueError(f"unsupported repository URL: {repo_url!r}")
-    if parsed_repo_url.query or parsed_repo_url.fragment:
-        raise ValueError(f"repository URL must not contain a query or fragment: {repo_url!r}")
-    repo_path = parsed_repo_url.path.rstrip("/")
-    if repo_path.endswith(".git"):
-        repo_path = repo_path[:-4]
-    if not repo_path:
-        raise ValueError(f"repository URL has no repository path: {repo_url!r}")
-    archive_path = f"{repo_path}/archive/{quote(verifier_ref, safe='')}.tar.gz"
-    archive_url = urlunsplit(
-        (parsed_repo_url.scheme, parsed_repo_url.netloc, archive_path, "", "")
-    )
-
-    stage = f"download {archive_url}"
-    request = Request(
-        archive_url,
-        headers={"User-Agent": "InferenceX-Kimi-Vendor-Verifier"},
-    )
-    with tempfile.TemporaryFile() as archive_file:
-        downloaded = 0
-        for attempt in range(1, 4):
-            archive_file.seek(0)
-            archive_file.truncate()
-            downloaded = 0
-            digest = sha256()
-            deadline = time.monotonic() + 60
-            try:
-                with urlopen(request, timeout=60) as response:
-                    while True:
-                        remaining = deadline - time.monotonic()
-                        if remaining <= 0:
-                            raise TimeoutError(
-                                "archive download exceeded the 60-second deadline"
-                            )
-                        sock = getattr(getattr(response, "fp", None), "raw", None)
-                        sock = getattr(sock, "_sock", None)
-                        if sock is not None:
-                            sock.settimeout(max(0.001, remaining))
-                        try:
-                            chunk = response.read(1024 * 1024)
-                        except socket.timeout as error:
-                            raise TimeoutError(
-                                "archive download exceeded the 60-second deadline"
-                            ) from error
-                        if not chunk:
-                            break
-                        downloaded += len(chunk)
-                        if downloaded > 128 * 1024 * 1024:
-                            raise ValueError(
-                                "archive download exceeds the 128 MiB safety limit"
-                            )
-                        archive_file.write(chunk)
-                        digest.update(chunk)
-                break
-            except HTTPError as error:
-                if error.code not in (408, 429) and not 500 <= error.code < 600:
-                    raise
-                if attempt == 3:
-                    raise
-                print(
-                    f"WARN: Kimi-Vendor-Verifier archive download attempt "
-                    f"{attempt}/3 failed: {error}; retrying",
-                    file=sys.stderr,
-                )
-                time.sleep(attempt)
-            except (TimeoutError, URLError, ConnectionError) as error:
-                if attempt == 3:
-                    raise
-                print(
-                    f"WARN: Kimi-Vendor-Verifier archive download attempt "
-                    f"{attempt}/3 failed: {error}; retrying",
-                    file=sys.stderr,
-                )
-                time.sleep(attempt)
-        if downloaded == 0:
-            raise ValueError("downloaded archive is empty")
-        actual_archive_sha256 = digest.hexdigest()
-        if actual_archive_sha256 != expected_archive_sha256:
-            raise ValueError(
-                "Kimi-Vendor-Verifier archive SHA256 mismatch: expected "
-                f"{expected_archive_sha256}, got {actual_archive_sha256}"
-            )
-        archive_file.seek(0)
-
-        stage = "validate the downloaded archive"
-        required_files = {
-            "pyproject.toml",
-            "tests/conftest.py",
-            "tests/__init__.py",
-            "tests/tool_call_json_schema/conftest.py",
-            "tests/tool_call_json_schema/__init__.py",
-            "tests/tool_call_json_schema/test_tool_call_json_schema.py",
-            "tests/tool_call_json_schema/validator.py",
-            "testdata/walle_validator_cases/validator_cases/TestAdditionalProperties/valid.jsonl",
-            "testdata/walle_validator_cases/validator_cases/TestAnyOf/valid.jsonl",
-            "testdata/walle_validator_cases/validator_cases/TestBasicTypes/valid.jsonl",
-            "testdata/walle_validator_cases/validator_cases/TestDefs/valid.jsonl",
-            "testdata/walle_validator_cases/validator_cases/TestDescription/valid.jsonl",
-            "testdata/walle_validator_cases/validator_cases/TestEnforcerCases/valid.jsonl",
-            "testdata/walle_validator_cases/validator_cases/TestID/valid.jsonl",
-            "testdata/walle_validator_cases/validator_cases/TestKeywordsValidation/valid.jsonl",
-            "testdata/walle_validator_cases/validator_cases/TestNestedDefsDepth/valid.jsonl",
-            "testdata/walle_validator_cases/validator_cases/TestNumberFormat/valid.jsonl",
-            "testdata/walle_validator_cases/validator_cases/TestRangeConstraints/valid.jsonl",
-            "testdata/walle_validator_cases/validator_cases/TestRefInProperties/valid.jsonl",
-            "testdata/walle_validator_cases/validator_cases/TestReferences/valid.jsonl",
-            "testdata/walle_validator_cases/validator_cases/TestRequired/valid.jsonl",
-            "testdata/walle_validator_cases/validator_cases/TestSingleTypeInArray/valid.jsonl",
-            "testdata/walle_validator_cases/validator_cases/TestTypeLocation/valid.jsonl",
-        }
-        selected_files = {}
-        archive_roots = set()
-        member_count = 0
-        archive_size = 0
-        selected_size = 0
-
-        with tarfile.open(fileobj=archive_file, mode="r|gz") as archive:
-            for member in archive:
-                member_count += 1
-                if member_count > 100_000:
-                    raise ValueError("archive contains more than 100000 members")
-                if member.size < 0:
-                    raise ValueError(
-                        f"archive member has a negative size: {member.name!r}"
-                    )
-                archive_size += member.size
-                if archive_size > 512 * 1024 * 1024:
-                    raise ValueError("expanded archive exceeds the 512 MiB safety limit")
-
-                parts = archive_member_parts(member.name)
-                archive_roots.add(parts[0])
-                if len(archive_roots) > 1:
-                    roots = ", ".join(sorted(archive_roots))
-                    raise ValueError(f"archive has multiple roots: {roots}")
-                if not (member.isdir() or member.isfile()):
-                    raise ValueError(
-                        f"archive member has unsafe type: {member.name!r}"
-                    )
-                if len(parts) == 1:
-                    continue
-
-                relative_path = "/".join(parts[1:])
-                if relative_path not in required_files:
-                    continue
-                if relative_path in selected_files:
-                    raise ValueError(
-                        f"archive contains duplicate selected path: {relative_path!r}"
-                    )
-                if not member.isfile():
-                    raise ValueError(
-                        f"required path is not a regular file: {relative_path}"
-                    )
-                selected_size += member.size
-                if selected_size > 256 * 1024 * 1024:
-                    raise ValueError(
-                        "selected archive subset exceeds the 256 MiB safety limit"
-                    )
-                source = archive.extractfile(member)
-                if source is None:
-                    raise ValueError(f"could not read archive member: {member.name!r}")
-                with source:
-                    content = source.read(member.size + 1)
-                if len(content) != member.size:
-                    raise ValueError(
-                        f"archive member size mismatch: {member.name!r}"
-                    )
-                selected_files[relative_path] = content
-
-        if member_count == 0:
-            raise ValueError("archive contains no members")
-        if len(archive_roots) != 1:
-            raise ValueError("archive does not have exactly one root")
-        missing_files = sorted(required_files - selected_files.keys())
-        if missing_files:
-            raise ValueError(
-                "archive is missing required files: " + ", ".join(missing_files)
-            )
-
-        stage = "extract the verified archive subset"
-        if any(checkout_dir.iterdir()):
-            raise ValueError(f"checkout directory is not empty: {checkout_dir}")
-        for relative_path, content in selected_files.items():
-            destination = checkout_dir.joinpath(*relative_path.split("/"))
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            with destination.open("xb") as output:
-                output.write(content)
-except Exception as error:
-    print(
-        f"ERROR: failed to {stage} for Kimi-Vendor-Verifier "
-        f"at {verifier_ref}: {error}",
-        file=sys.stderr,
-    )
-    raise SystemExit(1)
-PY
+        "$repo_url" "$verifier_ref" "$expected_archive_sha256" "$checkout_dir" \
+        < "${INFERENCEX_REPO_ROOT}/utils/evals/_kimi_verifier_archive.py" || prepare_rc=$?
 
     if [ "$prepare_rc" -ne 0 ]; then
         if ! rm -rf "$checkout_dir"; then
@@ -1413,7 +1204,7 @@ _run_kimi_tool_call_schema_eval() {
 
     local eval_rc=0
     PYTHONPATH="${runtime_dir}${PYTHONPATH:+:${PYTHONPATH}}" \
-        "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" \
+        run_server_client "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" \
             --verifier-dir "$checkout_dir" \
             --base-url "http://127.0.0.1:${port}/v1" \
             --api-key EMPTY \
@@ -1669,7 +1460,7 @@ _run_bfcl_suite_eval() {
     if [ "$eval_suite" != "bfcl_smoke" ]; then
         suite_args=(--suite "$eval_suite")
     fi
-    timeout "$process_timeout_seconds" \
+    run_server_client timeout "$process_timeout_seconds" \
         "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" \
         --base-url "http://127.0.0.1:${port}/v1" \
         --api-key EMPTY \
@@ -1813,7 +1604,7 @@ _run_minimax_m3_smoke_eval() {
     fi
 
     local eval_rc=0
-    "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" run \
+    run_server_client "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" run \
         --python "${VENDOR_VERIFIER_PYTHON:-python3}" \
         --source-dir "${runtime_dir}/source" \
         --dependency-dir "${runtime_dir}/deps" \
@@ -1863,18 +1654,6 @@ _prepare_minimax_m3_full_runtime() {
         return "$prepare_rc"
     fi
     printf '%s\n' "$runtime_dir"
-}
-
-_write_minimax_m3_full_integration_error() {
-    local adapter_path="$1"
-    local model_name="$2"
-    local results_dir="$3"
-    local message="$4"
-
-    "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" failure \
-        --model "$model_name" \
-        --output-dir "$results_dir" \
-        --message "$message"
 }
 
 _run_minimax_m3_full_eval() {
@@ -1927,7 +1706,7 @@ _run_minimax_m3_full_eval() {
     if [ "$setup_rc" -ne 0 ]; then
         echo "ERROR: ${integration_error}" >&2
         local artifact_rc=0
-        _write_minimax_m3_full_integration_error \
+        _write_minimax_vendor_integration_error \
             "$adapter_path" "$model_name" "$results_dir" "$integration_error" \
             || artifact_rc=$?
         if [ "$artifact_rc" -ne 0 ]; then
@@ -1939,7 +1718,7 @@ _run_minimax_m3_full_eval() {
     fi
 
     local eval_rc=0
-    "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" run \
+    run_server_client "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" run \
         --python "${VENDOR_VERIFIER_PYTHON:-python3}" \
         --source-dir "${runtime_dir}/source" \
         --dependency-dir "${runtime_dir}/deps" \
@@ -1951,7 +1730,7 @@ _run_minimax_m3_full_eval() {
         && ! _has_eval_result "$results_dir" "results_minimax_vendor_full_"; then
         integration_error="MiniMax M3 full verifier failed with exit code ${eval_rc}"
         local artifact_rc=0
-        _write_minimax_m3_full_integration_error \
+        _write_minimax_vendor_integration_error \
             "$adapter_path" "$model_name" "$results_dir" "$integration_error" \
             || artifact_rc=$?
         if [ "$artifact_rc" -ne 0 ]; then
@@ -2124,7 +1903,7 @@ run_lm_eval() {
     # Export for append_lm_eval_summary to pick up
     export EVAL_RESULT_DIR="$results_dir"
     set -x
-    python3 -m lm_eval --model local-chat-completions --apply_chat_template \
+    run_server_client python3 -m lm_eval --model local-chat-completions --apply_chat_template \
       ${include_path:+--include_path "$include_path"} \
       --tasks "${tasks_dir}" \
       --output_path "${results_dir}" \
@@ -2267,7 +2046,12 @@ _write_lm_eval_meta_json() {
     local batch_metadata="${2:-}"
     local metadata_conc="${3:-${CONC:-1}}"
 
-    bridge_disagg_eval_metadata
+    # Single-node jobs already export TP/EP/DP_ATTENTION. The disaggregated
+    # bridge defaults missing per-phase DP flags to false, so applying it to
+    # single-node jobs would overwrite their actual DP-attention setting.
+    if [ "${IS_MULTINODE:-false}" = "true" ]; then
+        bridge_disagg_eval_metadata
+    fi
 
     local model_name="${MODEL_NAME:-$MODEL}"
     local is_multinode_json="false"
@@ -3124,7 +2908,7 @@ install_agentic_deps() {
     # Install from the checked-out aiperf source with uv. This path does not
     # require git, and rootless Enroot containers cannot mutate dpkg.
 
-    ensure_agentic_uv
+    ensure_agentic_uv || return $?
     rm -rf "$AIPERF_VENV"
     mkdir -p "$AIPERF_UV_CACHE_DIR"
 
@@ -3140,15 +2924,18 @@ install_agentic_deps() {
     # already used to fetch uv itself above), so this doesn't depend on the
     # container image bundling a new-enough Python.
     UV_CACHE_DIR="$AIPERF_UV_CACHE_DIR" \
-        "$AIPERF_UV_BIN" venv --python "${AIPERF_PYTHON_VERSION:-3.11}" "$AIPERF_VENV"
-    UV_CACHE_DIR="$AIPERF_UV_CACHE_DIR" \
+        "$AIPERF_UV_BIN" venv --python "${AIPERF_PYTHON_VERSION:-3.11}" "$AIPERF_VENV" || return $?
+    UV_CACHE_DIR="$AIPERF_UV_CACHE_DIR" UV_HTTP_TIMEOUT=120 UV_HTTP_RETRIES=3 \
         "$AIPERF_UV_BIN" pip install --python "$AIPERF_PYTHON" \
         -r "$AGENTIC_DIR/requirements.txt" \
         -e "$AIPERF_DIR" \
         "datasets>=4.7.0" \
         "huggingface_hub[cli]>=0.25.0" \
         urllib3 \
-        requests
+        requests || {
+            echo "ERROR: benchmark client dependency bootstrap failed; inspect network/package resolution before recipe repairs" >&2
+            return 1
+        }
 
     if [ ! -x "$AIPERF_CLI" ] || [ ! -x "$AIPERF_HF_CLI" ]; then
         echo "ERROR: isolated AIPerf environment is incomplete at $AIPERF_VENV" >&2
@@ -3478,6 +3265,7 @@ run_agentic_replay_and_write_outputs() (
     local power_rc=0
     local agentx_power_enabled=0
     local agentx_multinode_power_enabled=0
+    local agentx_multinode_contract_missing=0
     local agentx_monitor_stopped=1
 
     case "${ENABLE_AGENTX_POWER:-1}" in
@@ -3485,6 +3273,8 @@ run_agentic_replay_and_write_outputs() (
             if [ "${IS_MULTINODE:-false}" = "true" ]; then
                 if [ -n "${SRT_MEASUREMENT_WINDOW_DIR:-}" ]; then
                     agentx_multinode_power_enabled=1
+                else
+                    agentx_multinode_contract_missing=1
                 fi
             else
                 agentx_power_enabled=1
@@ -3549,7 +3339,7 @@ run_agentic_replay_and_write_outputs() (
 
     set +e
     set -x
-    $REPLAY_CMD 2>&1 | tee "$result_dir/benchmark.log"
+    run_server_client $REPLAY_CMD 2>&1 | tee "$result_dir/benchmark.log"
     replay_rc=${PIPESTATUS[0]}
     set +x
     set -e
@@ -3568,15 +3358,19 @@ run_agentic_replay_and_write_outputs() (
         set -e
     fi
 
-    if [ "$agentx_power_enabled" = "1" ]; then
+    if [ "$agentx_power_enabled" = "1" ] || [ "$agentx_multinode_contract_missing" = "1" ]; then
         local expected_num_gpus
         local -a power_args
-        expected_num_gpus=$((${TP:-1} * ${PP_SIZE:-1} * ${PCP_SIZE:-1}))
         power_args=(
             --result-dir "$result_dir"
             --agg-result "${AGENTIC_OUTPUT_DIR:-$INFMAX_CONTAINER_WORKSPACE}/$RESULT_FILENAME.json"
-            --expected-num-gpus "$expected_num_gpus"
         )
+        if [ "$agentx_multinode_contract_missing" = "1" ]; then
+            power_args+=(--multinode-contract-missing)
+        else
+            expected_num_gpus=$((${TP:-1} * ${PP_SIZE:-1} * ${PCP_SIZE:-1}))
+            power_args+=(--expected-num-gpus "$expected_num_gpus")
+        fi
         case "${REQUIRE_POWER:-0}" in
             1|true|TRUE|yes|YES) power_args+=(--require-power) ;;
         esac

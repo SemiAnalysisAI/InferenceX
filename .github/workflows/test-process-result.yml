@@ -3,6 +3,7 @@ name: Test Process Result
 on:
   pull_request:
     paths:
+      - 'infx/results/**'
       - '.github/workflows/benchmark-multinode-tmpl.yml'
       - '.github/workflows/benchmark-tmpl.yml'
       - '.github/workflows/e2e-tests.yml'
@@ -25,11 +26,7 @@ on:
       - 'runners/inject_srt_power_concurrencies.py'
       - 'utils/aggregate_power.py'
       - 'utils/aggregate_power_multinode.py'
-      - 'utils/agentic/aggregation/power_adapter.py'
-      - 'utils/agentic/aggregation/test_power_adapter.py'
-      - 'utils/agentic/aggregation/test_power_lifecycle.py'
-      - 'utils/agentic/aggregation/process_agentic_result.py'
-      - 'utils/agentic/aggregation/test_process_agentic_result.py'
+      - 'utils/agentic/aggregation/**'
       - 'utils/pytest.ini'
       - 'utils/bench_serving/benchmark_serving.py'
       - 'utils/process_result.py'
@@ -50,19 +47,13 @@ jobs:
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: '3.12'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install pytest pyyaml
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
       - name: Run pytest
         run: |
           cd utils
-          python -m pytest test_aggregate_power.py test_aggregate_power_multinode.py agentic/aggregation/test_power_adapter.py agentic/aggregation/test_power_lifecycle.py agentic/aggregation/test_process_agentic_result.py test_gb300_power_official_contract.py test_inject_srt_power_concurrencies.py test_process_result.py -v
+          uv run --no-project --exclude-newer PT12H --python 3.12 --with pytest --with pyyaml \
+            python -m pytest test_aggregate_power.py test_aggregate_power_multinode.py agentic/aggregation/ test_gb300_power_official_contract.py test_inject_srt_power_concurrencies.py test_process_result.py -v

@@ -2,6 +2,11 @@ name: Template - Benchmark
 on:
   workflow_call:
     inputs:
+      klaud-run:
+        description: "Run Klaud Cold benchmarks at background priority"
+        required: false
+        type: boolean
+        default: false
       runner:
         required: true
         type: string
@@ -264,7 +269,7 @@ jobs:
       ) }}
     timeout-minutes: 500
     name: >-
-      p${{ inputs.priority }} | ${{ inputs.model-prefix }} ${{ inputs.precision }} ${{ inputs.runner }} ${{ inputs.framework == 'sglang' && 'sgl' || inputs.framework == 'dynamo-sglang' && 'dyn-sgl' || inputs.framework == 'sglang-disagg' && 'sgl-disagg' || inputs.framework }}
+      ${{ inputs.klaud-run && 'klaud | ' || '' }}p${{ inputs.priority }} | ${{ inputs.model-prefix }} ${{ inputs.precision }} ${{ inputs.runner }} ${{ inputs.framework == 'sglang' && 'sgl' || inputs.framework == 'dynamo-sglang' && 'dyn-sgl' || inputs.framework == 'sglang-disagg' && 'sgl-disagg' || inputs.framework }}
       TP${{ inputs.tp }}${{ inputs.pp != '' && inputs.pp != '1' && format('/PP{0}', inputs.pp) || '' }}${{ inputs.dcp-size != '' && inputs.dcp-size != '1' && format('/DCP{0}', inputs.dcp-size) || '' }}${{ inputs.pcp-size != '' && inputs.pcp-size != '1' && format('/PCP{0}', inputs.pcp-size) || '' }}${{ inputs.ep != '' && inputs.ep != '1' && format('/EP{0}', inputs.ep) || '' }}${{ inputs.dp-attn && '/DPA' || '' }}
       ${{ inputs.spec-decoding != 'none' && inputs.spec-decoding || '' }}
       ${{ inputs.kv-offloading != '' && inputs.kv-offloading != 'none' && format('{0} KV offload', inputs.kv-offloading) || '' }}
@@ -326,7 +331,7 @@ jobs:
             done
           fi
 
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           token: ${{ secrets.REPO_PAT }}
           fetch-depth: 0
@@ -343,10 +348,14 @@ jobs:
           # We'll publish a single combined eval table in the collection job instead.
           GITHUB_STEP_SUMMARY: ''
         run: |
-          export RESULT_FILENAME="$RESULT_FILENAME_BASE"
-          if [ -n "$RECIPE_FINGERPRINT" ]; then
-            export RESULT_FILENAME="${RESULT_FILENAME}_recipe-${RECIPE_FINGERPRINT:0:16}"
+          if [[ -f utils/result_filename.py ]]; then
+            RESULT_FILENAME=$(python3 utils/result_filename.py)
+          else
+            # Older measured commits predate the helper; preserve safe identity.
+            RESULT_FILENAME=$(printf '%s\0' "$RESULT_FILENAME_BASE" "$RECIPE_FINGERPRINT" | sha256sum)
+            RESULT_FILENAME="${RESULT_FILENAME%% *}"
           fi
+          export RESULT_FILENAME
           export GPU_COUNT=$((TP * PP_SIZE * PCP_SIZE))
           echo "GPU_COUNT=${GPU_COUNT}" >> "$GITHUB_ENV"
 
@@ -439,10 +448,13 @@ jobs:
             gpu_metrics_energy_start.csv
             gpu_metrics_energy_end.csv
             gpu_metrics_identity.json
+            gpu_metrics_identity.csv
+            results/gpu_metrics*.csv
+            results/gpu_metrics_identity.json
           if-no-files-found: ignore
 
       - name: Upload power audit bundle
-        if: ${{ always() && !inputs.eval-only && inputs.scenario-type != 'agentic-coding' }}
+        if: ${{ always() && !inputs.eval-only }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: power_audit_${{ env.RESULT_FILENAME }}
@@ -453,7 +465,13 @@ jobs:
             gpu_metrics_energy_start.csv
             gpu_metrics_energy_end.csv
             gpu_metrics_identity.json
+            gpu_metrics_identity.csv
             power_validation_${{ env.RESULT_FILENAME }}.json
+            results/gpu_metrics*.csv
+            results/gpu_metrics_identity.json
+            results/agentic_power_window.json
+            results/agentic_power_timezone_offset.txt
+            results/power_validation.json
           if-no-files-found: ignore
 
       - name: Upload eval results (if any)

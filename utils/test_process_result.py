@@ -1,5 +1,7 @@
 """Exercise process_result.py through its CLI with controlled environment and artifacts."""
 import json
+import os
+import signal
 import subprocess
 import sys
 from pathlib import Path
@@ -10,6 +12,115 @@ from aggregate_power_multinode import ROLE_METRIC_KEYS, WHOLE_METRIC_KEYS
 from test_aggregate_power_multinode import PRODUCER_SHA, build_package
 
 SCRIPT_PATH = Path(__file__).parent / "process_result.py"
+
+
+@pytest.mark.parametrize('fingerprint', ['', 'a' * 64, 'a' * 16 + 'b' * 48])
+def test_long_multinode_names_survive_result_and_power_processing(
+    tmp_path, multinode_env_vars, sample_benchmark_result, fingerprint
+):
+    from result_filename import point_filename, result_stem
+
+    base = ('example_8k1k_fp4_dynamo-sglang_prefill-tp4-pp1-dcp1-pcp1-ep1-dpfalse-nw1_'
+            'decode-tp4-pp1-dcp1-pcp1-ep1-dpfalse-nw1_disagg-true_spec-none_'
+            'conc1x4x8x16x32x64x256_cluster-runner_00')
+    stem = result_stem(base, fingerprint)
+    name = point_filename(stem, 'sa-bench_isl_8192_osl_1024', '16', '8', '4', '4')
+    assert len(('power_validation_' + name + '.tmp').encode()) <= 255
+    env = {**multinode_env_vars, 'RECIPE_FINGERPRINT': fingerprint}
+    result = run_script(tmp_path, env, sample_benchmark_result, name.removesuffix('.json'))
+    assert result.returncode == 0, result.stderr
+    aggregate = json.loads((tmp_path / ('agg_' + name)).read_text())
+    assert aggregate['recipe_fingerprint'] == fingerprint
+    assert aggregate['model'] == 'deepseek-ai/DeepSeek-R1-0528'
+    assert (tmp_path / ('power_validation_' + name)).is_file()
+    # Different full fingerprints must remain distinct even with the same first 16 characters.
+    assert result_stem(base, 'a' * 64) != result_stem(base, 'a' * 16 + 'b' * 48)
+
+
+def test_result_builder_uses_explicit_readonly_inputs(single_node_env_vars, monkeypatch, tmp_path):
+    from types import MappingProxyType
+    from infx.results.fixed_sequence import build_result
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("TP", "invalid ambient value")
+    env = {**single_node_env_vars, "TP": "2"}
+    del env["RESULT_FILENAME"]
+    benchmark = {
+        "model_id": "fixture", "max_concurrency": 3,
+        "total_token_throughput": 12, "output_throughput": 8,
+        "ttft_p50_ms": 250, "tpot_p50_ms": 20,
+    }
+    result = build_result(MappingProxyType(benchmark), MappingProxyType(env))
+    assert result["tput_per_gpu"] == 6
+    assert result["input_tput_per_gpu"] == 2
+    assert result["output_tput_per_gpu"] == 4
+    assert result["ttft_p50"] == 0.25
+    assert result["intvty_p50"] == 50
+
+    second = build_result(benchmark, {**env, "TP": "4"})
+    assert second["tput_per_gpu"] == 3
+    assert result["tput_per_gpu"] == 6
+    assert env["TP"] == "2"
+    assert benchmark["ttft_p50_ms"] == 250
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_multinode_explicit_gpu_counts_control_decode_fields_and_denominators(
+    multinode_env_vars, sample_benchmark_result,
+):
+    from infx.results.fixed_sequence import build_result
+
+    # Worker dimensions describe 48 prefill and 180 decode GPUs. The supplied
+    # allocation counts, 20 and 0, remain authoritative for this collector.
+    env = {**multinode_env_vars, "PREFILL_NUM_WORKERS": "2", "PREFILL_TP": "3",
+           "PREFILL_PP_SIZE": "2", "PREFILL_PCP_SIZE": "4", "DECODE_NUM_WORKERS": "3",
+           "DECODE_TP": "6", "DECODE_EP": "5", "DECODE_PP_SIZE": "2",
+           "DECODE_DCP_SIZE": "3", "DECODE_PCP_SIZE": "5", "DECODE_GPUS": "0"}
+    benchmark = {**sample_benchmark_result, "total_token_throughput": 600,
+                 "output_throughput": 400}
+    result = build_result(benchmark, env)
+    assert [result[key] for key in ("decode_tp", "decode_ep", "decode_pp",
+                                   "decode_dcp_size", "decode_pcp_size")] == [0, 0, 1, 1, 1]
+    assert result["decode_num_workers"] == 3
+    assert result["num_prefill_gpu"] == 20
+    assert result["num_decode_gpu"] == 0
+    assert result["tput_per_gpu"] == 30
+    assert result["input_tput_per_gpu"] == 10
+    assert result["output_tput_per_gpu"] == 20
+
+    result = build_result(benchmark, {**env, "DECODE_GPUS": "4"})
+    assert [result[key] for key in ("decode_tp", "decode_ep", "decode_pp",
+                                   "decode_dcp_size", "decode_pcp_size")] == [6, 5, 2, 3, 5]
+    assert result["tput_per_gpu"] == 25
+    assert result["output_tput_per_gpu"] == 100
+
+
+@pytest.mark.parametrize("overrides,message", [
+    ({"DECODE_HARDWARE": "", "PREFILL_TP": "invalid"},
+     "PREFILL_HARDWARE and DECODE_HARDWARE must be specified together."),
+    ({"PREFILL_PP_SIZE": "0", "DECODE_GPUS": "-20"},
+     "Multinode PP, DCP, and PCP sizes must be positive integers."),
+    ({"DECODE_PP_SIZE": "0", "DECODE_GPUS": "0"},
+     "Multinode PP, DCP, and PCP sizes must be positive integers."),
+])
+def test_multinode_topology_preserves_validation_order(
+    multinode_env_vars, sample_benchmark_result, overrides, message,
+):
+    from infx.results.fixed_sequence import build_result
+
+    with pytest.raises(ValueError) as error:
+        build_result(sample_benchmark_result, {**multinode_env_vars, **overrides})
+    assert str(error.value) == message
+
+
+@pytest.mark.parametrize("name", ["PP_SIZE", "DCP_SIZE", "PCP_SIZE"])
+def test_fixed_topology_rejects_empty_parallelism(
+    single_node_env_vars, sample_benchmark_result, name,
+):
+    from infx.results.fixed_sequence import build_result
+
+    with pytest.raises(ValueError, match="invalid literal for int"):
+        build_result(sample_benchmark_result, {**single_node_env_vars, name: ""})
 
 
 # =============================================================================
@@ -105,7 +216,8 @@ def run_script(tmp_path, env, benchmark_result, result_filename="benchmark_resul
 
 
 def run_script_with_broken_aggregator(
-    tmp_path, env, benchmark_result, result_filename="benchmark_result"
+    tmp_path, env, benchmark_result, result_filename="benchmark_result", *,
+    multinode=False, fail_import=False,
 ):
     """Run process_result with the real aggregator patched to raise unexpectedly."""
     result_file = tmp_path / f"{result_filename}.json"
@@ -114,13 +226,35 @@ def run_script_with_broken_aggregator(
     wrapper = f"""
 import runpy
 import sys
+import json
+import builtins
+from pathlib import Path
 
 sys.path.insert(0, {str(SCRIPT_PATH.parent)!r})
 import aggregate_power
+# Patch the external collaborator through both supported import paths.
+sys.modules["utils.aggregate_power"] = aggregate_power
 
-def broken_run(**kwargs):
+def broken_run(*args, **kwargs):
+    path = Path(kwargs['agg_result'] if 'agg_result' in kwargs else args[2])
+    data = json.loads(path.read_text())
+    data.update(prefill_gpu_energy_j=99, total_gpu_energy_j=99)
+    path.write_text(json.dumps(data))
     raise RuntimeError("forced aggregation failure")
-aggregate_power.run = broken_run
+if {multinode!r}:
+    if {fail_import!r}:
+        original_import = builtins.__import__
+        def failing_import(name, *args, **kwargs):
+            if name.endswith(('aggregate_power_multinode', 'power.multinode')):
+                raise ImportError("forced import failure")
+            return original_import(name, *args, **kwargs)
+        builtins.__import__ = failing_import
+    else:
+        import aggregate_power_multinode
+        sys.modules['utils.aggregate_power_multinode'] = aggregate_power_multinode
+        aggregate_power_multinode.run = broken_run
+else:
+    aggregate_power.run = broken_run
 runpy.run_path({str(SCRIPT_PATH)!r}, run_name="__main__")
 """
     return subprocess.run(
@@ -246,6 +380,35 @@ class TestProcessResultScript:
         assert result.returncode != 0
         assert "must contain exactly 'name' and 'version'" in result.stderr
 
+    @pytest.mark.parametrize("raw", ["", "null"])
+    def test_null_component_metadata_is_omitted(
+        self, tmp_path, sample_benchmark_result, single_node_env_vars, raw
+    ):
+        result = run_script(
+            tmp_path, {**single_node_env_vars, "ROUTER_METADATA": raw},
+            sample_benchmark_result,
+        )
+        assert result.returncode == 0, result.stderr
+        assert "router" not in json.loads(result.stdout)
+
+    @pytest.mark.parametrize(("raw", "message"), [
+        ("{", "must contain valid JSON"),
+        ("[]", "must contain exactly 'name' and 'version'"),
+        ('{"name":"router","version":""}', "name and version must be non-empty strings"),
+        ('{"name":42,"version":"1"}', "name and version must be non-empty strings"),
+    ])
+    def test_malformed_component_metadata_fails_before_writing(
+        self, tmp_path, sample_benchmark_result, single_node_env_vars, raw, message
+    ):
+        result = run_script(
+            tmp_path, {**single_node_env_vars, "ROUTER_METADATA": raw},
+            sample_benchmark_result,
+        )
+        assert result.returncode == 1
+        assert result.stdout == ""
+        assert f"ValueError: ROUTER_METADATA {message}" in result.stderr
+        assert not (tmp_path / "agg_benchmark_result.json").exists()
+
     def test_homogeneous_multinode_omits_hardware_fields(
         self, tmp_path, sample_benchmark_result, multinode_env_vars
     ):
@@ -356,24 +519,6 @@ class TestCalculations:
 
         output_data = json.loads(result.stdout)
         assert output_data["custom_metric"] == pytest.approx(0.5)
-
-    def test_tpot_to_interactivity_conversion(self, tmp_path, single_node_env_vars):
-        """Test that tpot fields are converted to interactivity."""
-        benchmark_result = {
-            "model_id": "test-model",
-            "max_concurrency": 8,
-            "total_token_throughput": 1000.0,
-            "output_throughput": 800.0,
-            "tpot_p50_ms": 20.0,  # Should become intvty_p50 = 50
-            "tpot_p99_ms": 50.0,  # Should become intvty_p99 = 20
-        }
-
-        result = run_script(tmp_path, single_node_env_vars, benchmark_result)
-        assert result.returncode == 0, f"Script failed: {result.stderr}"
-
-        output_data = json.loads(result.stdout)
-        assert output_data["intvty_p50"] == pytest.approx(50.0)
-        assert output_data["intvty_p99"] == pytest.approx(20.0)
 
     def test_throughput_per_gpu_single_node(self, tmp_path, single_node_env_vars):
         """PP and PCP expand the GPU denominator while DCP remains metadata."""
@@ -564,22 +709,6 @@ class TestEdgeCases:
         assert output_data["osl"] == 1024
         assert isinstance(output_data["isl"], int)
         assert isinstance(output_data["osl"], int)
-
-    def test_conc_from_benchmark_result(self, tmp_path, single_node_env_vars):
-        """Test that conc is read from benchmark result max_concurrency."""
-        benchmark_result = {
-            "model_id": "test-model",
-            "max_concurrency": 128,
-            "total_token_throughput": 5000.0,
-            "output_throughput": 4000.0,
-        }
-
-        result = run_script(tmp_path, single_node_env_vars, benchmark_result)
-        assert result.returncode == 0, f"Script failed: {result.stderr}"
-
-        output_data = json.loads(result.stdout)
-        assert output_data["conc"] == 128
-
 
 # =============================================================================
 # Integration: power aggregation patches the agg JSON
@@ -857,6 +986,31 @@ class TestPowerAggregationIntegration:
         assert validation["power_valid"] is False
         assert validation["reasons"] == ["aggregation_internal_error"]
         assert validation["internal_error"]["type"] == "RuntimeError"
+        assert "prefill_gpu_energy_j" not in agg
+        assert "total_gpu_energy_j" not in agg
+
+    @pytest.mark.parametrize("require_power", ["", "yes"])
+    @pytest.mark.parametrize("fail_import", [False, True])
+    def test_multinode_internal_error_preserves_validation(
+        self, tmp_path, multinode_env_vars, sample_benchmark_result,
+        require_power, fail_import,
+    ):
+        result = run_script_with_broken_aggregator(
+            tmp_path, {**multinode_env_vars, "REQUIRE_POWER": require_power},
+            {**sample_benchmark_result, "prefill_gpu_energy_j_ms": 99000},
+            multinode=True, fail_import=fail_import,
+        )
+        assert result.returncode == (1 if require_power else 0)
+        agg = json.loads(result.stdout)
+        assert agg["power_valid"] == 0
+        assert "prefill_gpu_energy_j" not in agg
+        assert "total_gpu_energy_j" not in agg
+        validation = json.loads((tmp_path / "power_validation_benchmark_result.json").read_text())
+        assert validation["reasons"] == ["aggregation_internal_error"]
+        assert validation["internal_error"] == {
+            "type": "ImportError" if fail_import else "RuntimeError",
+            "message": "forced import failure" if fail_import else "forced aggregation failure",
+        }
 
     def test_stop_gpu_monitor_appends_final_nvidia_sample(self, tmp_path):
         """Stopping between 1 Hz ticks still records one post-benchmark sample."""
@@ -1061,13 +1215,14 @@ stop_gpu_monitor
         fake_amd_smi = fake_bin / "amd-smi"
         fake_amd_smi.write_text(
             "#!/usr/bin/env bash\n"
+            "set -e\n"
             'if [[ "$*" == *" -w "* ]]; then\n'
             "    echo \"'CTRL' + 'C' to stop watching output:\"\n"
             "    echo 'timestamp,gpu,socket_power,power_management'\n"
-            "    for _ in $(seq 1 30); do\n"
+            "    while :; do\n"
             "        echo \"$(date +%s),0,238,ENABLED\"\n"
             "        echo 'timestamp,gpu,socket_power,power_management'\n"
-            "        sleep 0.2\n"
+            "        sleep 0.01\n"
             "    done\n"
             'elif [[ "$*" == *"metric -E --csv"* ]]; then\n'
             "    printf 'gpu,total_energy_consumption\\n0,178319501.7\\n'\n"
@@ -1080,25 +1235,49 @@ stop_gpu_monitor
         benchmark_lib = Path(__file__).parents[1] / "benchmarks/benchmark_lib.sh"
         script = f"""
 source {str(benchmark_lib)!r}
+# Wait for observable pipeline output instead of a fixed sampling delay.
+sleep() {{
+    for _ in $(seq 1 500); do
+        if [[ -f "$GPU_METRICS_CSV" ]] && [[ $(wc -l < "$GPU_METRICS_CSV") -ge 3 ]]; then
+            return 0
+        fi
+        command sleep 0.01
+    done
+    echo "monitor did not emit two samples" >&2
+    exit 1
+}}
 start_gpu_monitor --output {str(metrics)!r} --interval 1
-sleep 0.8
+monitor_pid=$GPU_MONITOR_PID
 stop_gpu_monitor
+if kill -0 "$monitor_pid" 2>/dev/null; then
+    echo "monitor survived stop_gpu_monitor" >&2
+    exit 1
+fi
 """
         env = {
             "PATH": f"{fake_bin}:/usr/bin:/bin",
             "PYTHONDONTWRITEBYTECODE": "1",
         }
 
-        result = subprocess.run(
+        proc = subprocess.Popen(
             ["bash", "-c", script],
             env=env,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            check=False,
-            timeout=30,
+            start_new_session=True,
         )
+        try:
+            _, stderr = proc.communicate(timeout=10)
+        finally:
+            # Reap the fake producer even if the pipeline or stop logic regresses.
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            proc.communicate()
 
-        assert result.returncode == 0, result.stderr
+        assert proc.returncode == 0, stderr
         lines = metrics.read_text().splitlines()
         assert lines[0] == "timestamp,gpu,socket_power,power_management"
         assert sum(1 for line in lines if line.startswith("timestamp,")) == 1

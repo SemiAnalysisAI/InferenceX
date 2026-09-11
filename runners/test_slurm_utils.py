@@ -26,6 +26,150 @@ def run_bash(command: str, *args: Path | str) -> subprocess.CompletedProcess[str
     )
 
 
+def test_copy_fixed_sequence_results_bounds_long_utf8_config_names(tmp_path: Path) -> None:
+    source = tmp_path / 'source'
+    workspace = tmp_path / 'workspace'
+    workspace.mkdir()
+    for suffix in ('a', 'b'):
+        directory = source / ('isl8192_osl1024_' + '长' * 50 + suffix)
+        directory.mkdir(parents=True)
+        (directory / 'results_concurrency_16_gpus_8_ctx_4_gen_4.json').write_text('{"completed": 16}')
+    result = run_bash(
+        'set -eo pipefail; source "$1"; copy_fixed_sequence_results "$2" "$3" "$4"',
+        SLURM_UTILS, source, workspace, 'r' * 120,
+    )
+    assert result.returncode == 0, result.stderr
+    outputs = list(workspace.glob('*.json'))
+    assert len(outputs) == 2
+    for path in outputs:
+        assert path.name.endswith('_conc16_gpus_8_ctx_4_gen_4.json')
+        assert len(('power_validation_' + path.name + '.tmp').encode()) <= 255
+        assert json.loads(path.read_text()) == {'completed': 16}
+
+
+def test_copy_fixed_sequence_results_preserves_names_contents_and_discovery(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    for relative, content in {
+        "isl128_osl256/nested/results_concurrency_16_gpus_8_ctx_128_gen_256.json": b'{"completed": 16}\n',
+        "isl32_osl64/results_concurrency_2_gpus_16.json": b'{"completed": 2}\n',
+        "isl32_osl64/server.json": b"ignored",
+        "unrelated/results_concurrency_4_gpus_8.json": b"ignored",
+        "results_concurrency_1_gpus_8.json": b"ignored",
+    }.items():
+        path = source / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+
+    result = run_bash(
+        'set -eo pipefail; source "$1"; copy_fixed_sequence_results "$2" "$3" run',
+        SLURM_UTILS,
+        source,
+        workspace,
+    )
+
+    assert result.returncode == 0, result.stderr
+    expected = {
+        "run_isl128_osl256_conc16_gpus_8_ctx_128_gen_256.json": b'{"completed": 16}\n',
+        "run_isl32_osl64_conc2_gpus_16.json": b'{"completed": 2}\n',
+    }
+    assert {path.name: path.read_bytes() for path in workspace.iterdir()} == expected
+    for name in expected:
+        assert f"Copied result file to: {workspace / name}\n" in result.stdout
+    assert result.stdout.endswith("All result files processed\n")
+
+
+def test_copy_fixed_sequence_results_allows_empty_discovery(tmp_path: Path) -> None:
+    result = run_bash(
+        'set -e; source "$1"; copy_fixed_sequence_results "$2" "$2" run',
+        SLURM_UTILS,
+        tmp_path,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == (
+        f"Warning: No result subdirectories found in {tmp_path}\n"
+        "All result files processed\n"
+    )
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize("errexit", [False, True])
+@pytest.mark.parametrize("failure", ["discovery", "copy"])
+def test_copy_fixed_sequence_results_preserves_caller_error_mode(
+    tmp_path: Path, errexit: bool, failure: str,
+) -> None:
+    source = tmp_path / "source"
+    if failure == "copy":
+        result_dir = source / "isl1_osl1"
+        result_dir.mkdir(parents=True)
+        (result_dir / "results_concurrency_1_gpus_8.json").write_text("{}\n")
+
+    result = run_bash(
+        f'set {"-e" if errexit else "+e"}; source "$1"; '
+        'copy_fixed_sequence_results "$2" "$3" run; echo continued',
+        SLURM_UTILS,
+        source,
+        tmp_path / "missing-workspace",
+    )
+
+    assert result.returncode == (1 if errexit else 0)
+    assert ("continued\n" in result.stdout) is not errexit
+    assert "All result files processed\n" not in result.stdout
+    if failure == "copy":
+        assert result.stderr
+        assert "Copied result file to:" not in result.stdout
+    else:
+        assert not result.stderr
+        assert "No result subdirectories found" not in result.stdout
+
+
+def test_result_copy_uses_source_location_after_chdir(tmp_path: Path) -> None:
+    source = tmp_path / 'results' / 'isl8192_osl1024'
+    source.mkdir(parents=True)
+    (source / 'results_concurrency_4_gpus_8.json').write_text('{"completed": 40}')
+    workspace = tmp_path / 'workspace'
+    workspace.mkdir()
+    result = run_bash('cd "$1"; source runners/slurm_utils.sh; cd "$2"; '
+                      'copy_fixed_sequence_results "$3" "$4" run',
+                      REPO_ROOT, tmp_path, source.parent, workspace)
+    assert result.returncode == 0, result.stderr
+    assert [json.loads(p.read_text()) for p in workspace.glob('*.json')] == [{'completed': 40}]
+
+
+def test_filename_failure_in_conditional_is_not_reported_as_copied(tmp_path: Path) -> None:
+    source = tmp_path / 'isl8192_osl1024'
+    source.mkdir()
+    (source / 'results_concurrency_4_gpus_8.json').write_text('{}')
+    result = run_bash('source "$1"; python3() { return 1; }; '
+                      'if copy_fixed_sequence_results "$2" "$2" run; then echo unexpected-success; fi',
+                      SLURM_UTILS, tmp_path)
+    assert 'unexpected-success' not in result.stdout
+    assert 'Copied result file' not in result.stdout
+    assert 'All result files processed' not in result.stdout
+
+
+def test_h100_srt_mapping_uses_requested_image(tmp_path: Path) -> None:
+    result = run_bash('source "$1"; resolve_h100_srt_container "$2" dynamo-sglang; '
+                      'printf "%s\\n%s\\n" "$CONTAINER_KEY" "$SQUASH_FILE"',
+                      SLURM_UTILS, 'example/engine:v-next')
+    assert result.returncode == 0
+    assert result.stdout.splitlines() == ['example/engine:v-next', '/mnt/nfs/lustre/containers/example_engine_v-next.sqsh']
+
+
+def test_staged_asset_check_rejects_missing_model(tmp_path: Path) -> None:
+    result = run_bash('source "$1"; unsquashfs() { return 0; }; check_staged_srt_assets "$2" image.sqsh',
+                      SLURM_UTILS, tmp_path)
+    assert result.returncode == 1
+    (tmp_path / 'config.json').write_text('{}')
+    result = run_bash('source "$1"; unsquashfs() { return 1; }; check_staged_srt_assets "$2" image.sqsh',
+                      SLURM_UTILS, tmp_path)
+    assert result.returncode == 1
+
+
 def test_copy_agentic_results_stages_only_matching_points(tmp_path: Path) -> None:
     source = tmp_path / "source"
     workspace = tmp_path / "workspace"

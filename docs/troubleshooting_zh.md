@@ -95,6 +95,10 @@ Setup 阶段的删除错误通常意味着陈旧分支或改变空白的合并�
 
 [`wait_for_server_ready`](../benchmarks/benchmark_lib.sh) 会区分“服务器在日志出现前死亡”“服务器在健康前死亡”和进程存活但 `/health` 尚未通过。保留服务器日志和 PID 状态；仅有工作流最终超时不能构成诊断。
 
+就绪后，共享 helper 会记录服务器及已识别的持久 engine worker。Benchmark、AgentX 和 eval 客户端通过 `utils/server_watch.py` 监控：进程消失、成为 zombie 或 PID 被复用时，仅停止所属客户端进程组。健康但缓慢的工作没有新增时限。使用其他就绪路径的 recipe 需要显式监控服务器；wrapper 存活不能单独证明 worker 健康。
+
+客户端依赖安装使用 uv 有限次 HTTP 重试和 120 秒读取超时，并保留下载缓存。网络或下载失败属于基础设施证据，不应据此更改 engine 参数。H100 srt-slurm 将请求镜像解析到其独立 squash 路径并检查已暂存的模型/镜像资源；B300 在分配到的计算节点上检查节点本地模型配置，再启动容器。资源缺失属于就绪性阻塞，不能替换为旧镜像或其他权重。
+
 使用最早出现的具体特征：
 
 - **镜像拉取/tag 失败：**修改运行时标志前验证精确 registry tag 或 digest 是否存在。[`KLAUD_DEBUG.md` §6](../KLAUD_DEBUG.md#6-docker-image-tag-gotchas) 警告不要从带日期的 nightly 推导 release tag。

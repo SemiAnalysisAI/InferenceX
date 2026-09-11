@@ -1,5 +1,32 @@
 #!/usr/bin/env bash
 
+# Launchers source this file before changing into srt-slurm.
+INFERENCEX_SLURM_UTILS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Use the requested image's cache identity, never a convenient older squash file.
+resolve_h100_srt_container() {
+    local image="$1" framework="$2"
+    [[ -n "$image" && "$image" != *[[:space:]]* ]] || return 1
+    CONTAINER_KEY="${image/nvcr.io\//nvcr.io#}"
+    case "$framework" in
+        dynamo-sglang)
+            SQUASH_FILE="/mnt/nfs/lustre/containers/$(printf '%s' "$image" | sed 's/[\/:@#]/_/g').sqsh"
+            ;;
+        dynamo-trt)
+            SQUASH_FILE="/mnt/nfs/sa-shared/containers/$(printf '%s' "${image#nvcr.io/}" | sed 's/[\/:@#]/+/g').sqsh"
+            ;;
+        *) return 1 ;;
+    esac
+}
+
+check_staged_srt_assets() {
+    local model="$1" image="$2"
+    if [[ ! -r "$model/config.json" ]] || ! unsquashfs -s "$image" >/dev/null 2>&1; then
+        echo 'ERROR: readiness-blocked: staged model/config or requested container is unavailable' >&2
+        return 1
+    fi
+}
+
 # Optionally inject synthetic acceptance into a recipe's speculative-config when
 # SYNTHETIC_ACCEPTANCE=true (no-op otherwise). Call after the job-name override
 # and before `srtctl apply` so the rendered job picks it up. Returns non-zero if
@@ -61,6 +88,47 @@ copy_to_workspace() {
         return 1
     fi
     echo "Copied $(basename "$source_file") to $destination_file"
+}
+
+# Preserve short SRT filenames and report failures even inside an `if`/`||` caller.
+copy_fixed_sequence_results() {
+    local logs_dir="$1" workspace="$2" result_filename="$3"
+    local result_subdirs result_subdir result_files result_file config_name
+    local filename concurrency gpus ctx gen workspace_result_file
+
+    result_subdirs=$(find "$logs_dir" -maxdepth 1 -type d -name "*isl*osl*" 2>/dev/null) || return 1
+
+    if [ -z "$result_subdirs" ]; then
+        echo "Warning: No result subdirectories found in $logs_dir"
+    else
+        for result_subdir in $result_subdirs; do
+            echo "Processing result subdirectory: $result_subdir"
+            config_name=$(basename "$result_subdir")
+            result_files=$(find "$result_subdir" -name "results_concurrency_*.json" 2>/dev/null) || return 1
+
+            for result_file in $result_files; do
+                if [ -f "$result_file" ]; then
+                    # Both disaggregated (_ctx_C_gen_D) and aggregated names occur.
+                    filename=$(basename "$result_file")
+                    concurrency=$(echo "$filename" | sed -n 's/results_concurrency_\([0-9]*\)_gpus_.*/\1/p')
+                    gpus=$(echo "$filename" | sed -n 's/results_concurrency_[0-9]*_gpus_\([0-9][0-9]*\).*/\1/p')
+                    ctx=$(echo "$filename" | sed -n 's/.*_ctx_\([0-9]*\)_gen_.*/\1/p')
+                    gen=$(echo "$filename" | sed -n 's/.*_gen_\([0-9]*\)\.json/\1/p')
+
+                    echo "Processing concurrency $concurrency with $gpus GPUs (ctx: $ctx, gen: $gen): $result_file"
+
+                    workspace_result_file=$(python3 "$INFERENCEX_SLURM_UTILS_DIR/../utils/result_filename.py" \
+                        --point "$result_filename" "$config_name" "$concurrency" "$gpus" "$ctx" "$gen") || return 1
+                    workspace_result_file="$workspace/$workspace_result_file"
+                    copy_to_workspace "$result_file" "$workspace_result_file" || return 1
+
+                    echo "Copied result file to: $workspace_result_file"
+                fi
+            done
+        done
+    fi
+
+    echo "All result files processed"
 }
 
 copy_agentic_results() {

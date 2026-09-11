@@ -1,0 +1,109 @@
+name: Klaud Cold candidate
+
+on:
+  workflow_call:
+    secrets:
+      ANTHROPIC_API_KEY:
+        required: true
+      CLAUDE_PAT:
+        required: true
+      KLAUD_DASHBOARD_API_KEY:
+        required: true
+    inputs:
+      candidate:
+        type: string
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+
+jobs:
+  claude:
+    name: Klaud Cold
+    if: github.run_attempt == 1
+    runs-on: ubuntu-latest
+    env:
+      # Repair attempts after the initial update; the baseline is already published.
+      MAX_REPAIRS: '5'
+      KLAUD_BRANCH: klaud/auto-${{ inputs.candidate }}
+      KLAUD_TEST_NAME: klaud-${{ github.run_id }}-${{ inputs.candidate }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: klaud-plan
+          path: ${{ runner.temp }}/plan
+      - name: Prepare candidate context
+        id: context
+        env:
+          CANDIDATE: ${{ inputs.candidate }}
+        run: |
+          [[ "$CANDIDATE" =~ ^[0-9a-f]{16}-[0-9a-f]{16}$ ]]
+          cp -R "$RUNNER_TEMP/plan/$CANDIDATE" "$RUNNER_TEMP/klaud"
+          echo "KLAUD_EVIDENCE=$RUNNER_TEMP/klaud" >> "$GITHUB_ENV"
+          rm -r "$RUNNER_TEMP/plan"
+          outcome_schema=$(uv run --no-project --exclude-newer PT12H --python 3.12 --with "pydantic>=2.10,<3" python -m utils.klaud outcome-schema)
+          echo "outcome-schema=$outcome_schema" >> "$GITHUB_OUTPUT"
+      - name: Let Klaud Cold own the candidate PR
+        id: claude
+        continue-on-error: true
+        uses: anthropics/claude-code-action@0d0e0876d3eaa933f45dc692f7a4312c83caf36f # v1.0.218
+        env:
+          GH_TOKEN: ${{ secrets.CLAUDE_PAT }}
+          KLAUD_DASHBOARD_API_KEY: ${{ secrets.KLAUD_DASHBOARD_API_KEY }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.CLAUDE_PAT }}
+          settings: |
+            {
+              "fastMode": false,
+              "hooks": {
+                "Stop": [{"hooks": [{
+                  "type": "command",
+                  "command": "cd \"$GITHUB_WORKSPACE\" && uv run --no-project --exclude-newer PT12H --python 3.12 --with 'pydantic>=2.10,<3' --with pyyaml python -m utils.klaud check-stop"
+                }]}]
+              }
+            }
+          claude_args: >-
+            --model 'claude-fable-5-1'
+            --max-turns 500
+            --json-schema '${{ steps.context.outputs.outcome-schema }}'
+            --add-dir '${{ runner.temp }}/klaud'
+            --allowedTools "Read,Write,Edit,Glob,Grep,Bash,WebFetch,WebSearch"
+          prompt: |
+            Read .github/klaud-candidate-prompt.md and follow it for the candidate in
+            ${{ runner.temp }}/klaud/candidate.json. MAX_REPAIRS, KLAUD_BRANCH,
+            KLAUD_TEST_NAME and KLAUD_EVIDENCE are provided in your environment.
+      - name: Recover an interrupted agent
+        if: always() && steps.claude.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ secrets.CLAUDE_PAT }}
+        run: uv run --no-project --exclude-newer PT12H --python 3.12 --with "pydantic>=2.10,<3" --with pyyaml python -m utils.klaud recover-current
+      - name: Save sanitized candidate diagnostics
+        if: always()
+        env:
+          KLAUD_EXECUTION: ${{ steps.claude.outputs.execution_file }}
+          KLAUD_OUTCOME: ${{ steps.claude.outcome }}
+          KLAUD_STRUCTURED_OUTCOME: ${{ steps.claude.outputs.structured_output }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          printf '%s' "$KLAUD_STRUCTURED_OUTCOME" > "$RUNNER_TEMP/candidate-outcome.json"
+          uv run --no-project --exclude-newer PT12H --python 3.12 --with "pydantic>=2.10,<3" --with pyyaml python -m utils.klaud diagnostics \
+            --execution-file "${KLAUD_EXECUTION:-$RUNNER_TEMP/claude-execution-output.json}" \
+            --structured-outcome-file "$RUNNER_TEMP/candidate-outcome.json" \
+            --outcome "${KLAUD_OUTCOME:-unknown}" --output "$RUNNER_TEMP/candidate-diagnostics.json"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: klaud-candidate-${{ inputs.candidate }}
+          # Never upload the execution transcript or private API/scratch data.
+          path: ${{ runner.temp }}/candidate-diagnostics.json
+          retention-days: 14

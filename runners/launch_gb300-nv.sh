@@ -37,7 +37,10 @@ mkdir -p "$DYNAMO_WHEELS_CACHE_HOST_PATH"
 
 export MODEL_PATH=$MODEL
 
-if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
+if [[ "$MODEL_PREFIX" == "dsv41flash" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "vllm" && "${IS_MULTINODE:-false}" != "true" ]]; then
+    # Download the new checkpoint into the persistent shared HF cache.
+    export MODEL_PATH="$MODEL"
+elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
     export SERVED_MODEL_NAME="deepseek-r1-fp4"
     export MODEL_PATH=/scratch/models/DeepSeek-R1-0528-NVFP4-v2
     export SRT_SLURM_MODEL_PREFIX="dsr1"
@@ -45,6 +48,9 @@ elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
     export SERVED_MODEL_NAME="deepseek-r1-fp8"
     export MODEL_PATH=/scratch/models/DeepSeek-R1-0528
     export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
+elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" && $MODEL == "deepseek-ai/DeepSeek-V4-Pro-0813" ]]; then
+    export MODEL_PATH="/scratch/models/DeepSeek-V4-Pro-0813"
+    export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro-0813"
 elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
     # Use the node-local /scratch SSD for the 806 GB DSv4-Pro
     # checkpoint. Faster than the Vast NFS path, but this dir only
@@ -142,6 +148,30 @@ import_squash() {
 }
 
 import_squash "$SQUASH_FILE" "$IMAGE"
+# Direct vLLM single-node bring-up uses the same four-GPU tray and shared
+# storage as srt-slurm. Keep this before the router import and srtctl setup.
+if [[ "$MODEL_PREFIX" == "dsv41flash" && "$FRAMEWORK" == "vllm" && "${IS_MULTINODE:-false}" != "true" ]]; then
+    BENCH_SCRIPT="benchmarks/single_node/agentic/${MODEL_PREFIX}_${PRECISION}_gb300_${FRAMEWORK}_mtp.sh"
+    [[ "${IS_AGENTIC:-0}" == "1" && "${SPEC_DECODING:-}" == "mtp" && -f "$BENCH_SCRIPT" ]] || {
+        echo "Unsupported single-node recipe: $BENCH_SCRIPT" >&2
+        exit 1
+    }
+    export HF_HUB_CACHE=/hf-cache
+    export INFMAX_CONTAINER_WORKSPACE=/ix
+    export RESULT_DIR=/ix/results
+    # Cold model loading and graph capture exceeded the one-hour frontend deadline.
+    export VLLM_ENGINE_READY_TIMEOUT_S=7200
+    srun --account="$SLURM_ACCOUNT" --partition="$SLURM_PARTITION" \
+        --nodes=1 --ntasks=1 --gpus="${TP:?}" --cpus-per-task=144 --exclusive --mem=0 \
+        --time="${SALLOC_TIME_LIMIT:-480}" --job-name="$RUNNER_NAME" \
+        --mpi=none --container-image="$SQUASH_FILE" \
+        --container-mounts="$GITHUB_WORKSPACE:/ix,$HF_HUB_CACHE_HOST_PATH:/hf-cache" \
+        --no-container-mount-home --container-remap-root \
+        --container-workdir=/ix --no-container-entrypoint \
+        --export=ALL,PORT=8888 bash "$BENCH_SCRIPT"
+    exit $?
+fi
+
 import_squash "$NGINX_SQUASH_FILE" "$NGINX_IMAGE"
 
 # Power lane detection: a recipe opts in via an enabled dcgm-power telemetry
@@ -180,12 +210,14 @@ POWER_SRT_SLURM_PIN="6fc1bed01a0b82dae0088a105c03ce0cfb353443"
 
 if [[ "$USES_DCGM_POWER" == "1" ]]; then
     DCGM_EXPORTER_IMAGE="nvcr.io/nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless"
+    # enroot resolves bare paths against Docker Hub; nvcr.io pulls need the registry# form
+    DCGM_EXPORTER_ENROOT_REF="${DCGM_EXPORTER_IMAGE/nvcr.io\//nvcr.io#}"
     DCGM_EXPORTER_SQSH="/data/home/sa-shared/gharunners/squash/$(echo "$DCGM_EXPORTER_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     # Note (wenyao): import_squash treats an existing unsquashfs-valid file
     # as a cache hit but does not re-validate a fresh import, so check
     # explicitly — on a compute node, like the import itself (login node is
     # x86, nodes aarch64).
-    import_squash "$DCGM_EXPORTER_SQSH" "$DCGM_EXPORTER_IMAGE"
+    import_squash "$DCGM_EXPORTER_SQSH" "$DCGM_EXPORTER_ENROOT_REF"
     test -r "$DCGM_EXPORTER_SQSH" || { echo "Error: DCGM exporter squash not readable: $DCGM_EXPORTER_SQSH" >&2; exit 1; }
     srun --account="$SLURM_ACCOUNT" --partition="$SLURM_PARTITION" --exclusive --time=30 bash -c "unsquashfs -l \"$DCGM_EXPORTER_SQSH\" > /dev/null" || { echo "Error: DCGM exporter squash invalid: $DCGM_EXPORTER_SQSH" >&2; exit 1; }
     sha256sum "$DCGM_EXPORTER_SQSH" > "$GITHUB_WORKSPACE/exporter-image.sha256"
@@ -221,7 +253,10 @@ if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "qw
 elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "glm5.2" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
-    git checkout v1.0.38
+    # The GB300 AgentX recipes put the benchmark client on its own allocation node
+    # (client_dedicated_node), a schema added in srt-slurm v1.0.62; v1.0.72 is the
+    # release this runner's Dynamo TRT path already exercises.
+    git checkout v1.0.72
     TRTLLM_RECIPES_DIR="benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2"
     mkdir -p "$TRTLLM_RECIPES_DIR"
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2" \
@@ -252,15 +287,16 @@ elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX =
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5" \
         recipes/sglang/qwen3.5
 elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
-    # DSv4 GB300 SGLang agentic uses NVIDIA/srt-slurm v1.0.38. In addition to
+    # DSv4 GB300 SGLang agentic uses NVIDIA/srt-slurm v1.0.40. In addition to
     # the nginx body-size fix, session-affinity frontend, and custom benchmark
     # schema required by these recipes, this release injects every logical
-    # SGLang worker leader's /metrics URL into AIPERF_SERVER_METRICS_URLS.
+    # SGLang worker leader's /metrics URL into AIPERF_SERVER_METRICS_URLS and
+    # supports long-lived nginx keepalive for multi-turn AgentX replay.
     # AgentX forwards that list to aiperf's --server-metrics argument so its
     # trace artifacts include backend metrics for every engine.
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
-    git checkout v1.0.38
+    git checkout v1.0.40
     mkdir -p recipes/sglang/deepseek-v4/agentic
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/agentic" \
         recipes/sglang/deepseek-v4/agentic
@@ -654,48 +690,7 @@ if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
         exit 1
     fi
 
-    # Find all result subdirectories
-    RESULT_SUBDIRS=$(find "$LOGS_DIR" -maxdepth 1 -type d -name "*isl*osl*" 2>/dev/null)
-
-    if [ -z "$RESULT_SUBDIRS" ]; then
-        echo "Warning: No result subdirectories found in $LOGS_DIR"
-    else
-        # Process results from all configurations
-        for result_subdir in $RESULT_SUBDIRS; do
-            echo "Processing result subdirectory: $result_subdir"
-
-            # Extract configuration info from directory name
-            CONFIG_NAME=$(basename "$result_subdir")
-
-            # Find all result JSON files
-            RESULT_FILES=$(find "$result_subdir" -name "results_concurrency_*.json" 2>/dev/null)
-
-            for result_file in $RESULT_FILES; do
-                if [ -f "$result_file" ]; then
-                    # Extract metadata from filename
-                    # Files may be "results_concurrency_N_gpus_G_ctx_C_gen_D.json" (disagg) or "results_concurrency_N_gpus_G.json" (non-disagg)
-                    filename=$(basename "$result_file")
-                    concurrency=$(echo "$filename" | sed -n 's/results_concurrency_\([0-9]*\)_gpus_.*/\1/p')
-                    gpus=$(echo "$filename" | sed -n 's/results_concurrency_[0-9]*_gpus_\([0-9][0-9]*\).*/\1/p')
-                    ctx=$(echo "$filename" | sed -n 's/.*_ctx_\([0-9]*\)_gen_.*/\1/p')
-                    gen=$(echo "$filename" | sed -n 's/.*_gen_\([0-9]*\)\.json/\1/p')
-
-                    echo "Processing concurrency $concurrency with $gpus GPUs (ctx: $ctx, gen: $gen): $result_file"
-
-                    if [ -n "$ctx" ] && [ -n "$gen" ]; then
-                        WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${CONFIG_NAME}_conc${concurrency}_gpus_${gpus}_ctx_${ctx}_gen_${gen}.json"
-                    else
-                        WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${CONFIG_NAME}_conc${concurrency}_gpus_${gpus}.json"
-                    fi
-                    cp "$result_file" "$WORKSPACE_RESULT_FILE"
-
-                    echo "Copied result file to: $WORKSPACE_RESULT_FILE"
-                fi
-            done
-        done
-    fi
-
-    echo "All result files processed"
+    copy_fixed_sequence_results "$LOGS_DIR" "$GITHUB_WORKSPACE" "$RESULT_FILENAME"
 else
     echo "EVAL_ONLY=true: Skipping benchmark result collection"
 fi
