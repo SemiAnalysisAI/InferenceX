@@ -95,8 +95,10 @@ vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
     --tool-call-parser deepseek_v41 --enable-auto-tool-choice \
     --reasoning-parser deepseek_v41 \
     --engram-config '{"cpu_offload":true}' \
+    --speculative-config '{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":true}' \
     --max-model-len "$EVAL_CONTEXT" --max-num-batched-tokens 4096 \
-    --max-num-seqs 16 --gpu-memory-utilization 0.92 --enforce-eager \
+    --max-num-seqs 16 --gpu-memory-utilization 0.92 \
+    --max-cudagraph-capture-size 128 \
     --disable-uvicorn-access-log > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 
@@ -142,14 +144,14 @@ say "wrote $ENV_FILE (mode $(stat -c %a "$ENV_FILE" 2>/dev/null || echo '?'))"
 # published default is an 8-hour agent timeout per task.
 say "=== harbor run (env modal) ==="
 set +e
-timeout 5400 "${HARBOR[@]}" run \
+timeout "${TBENCH_TIMEOUT_S:-16200}" "${HARBOR[@]}" run \
     -d terminal-bench/terminal-bench@4.0.0 \
     --agent "$AGENT" \
     --model "openai/$MODEL" \
     --env-file "$ENV_FILE" \
     --env modal \
     -k "${TBENCH_ATTEMPTS:-1}" \
-    --n-concurrent "${TBENCH_CONCURRENT:-8}" \
+    --n-concurrent "${TBENCH_CONCURRENT:-4}" \
     --timeout-multiplier "${TBENCH_TIMEOUT_MULT:-0.1}" \
     --agent-timeout-multiplier "${TBENCH_TIMEOUT_MULT:-0.1}" \
     --job-name "engram-tbench-$(date +%s)" \
@@ -158,6 +160,11 @@ timeout 5400 "${HARBOR[@]}" run \
 HARBOR_RC=${PIPESTATUS[0]}
 set -e
 say "harbor exit=$HARBOR_RC"
+
+say "=== cloudflare origin timeouts (524) seen during the run ==="
+say "count: $(grep -ac 'error_code.: 524' "$RESULT_DIR/tbench_run.txt" || echo 0)"
+say "A nonzero count means the 120s quick-tunnel read timeout is still cutting"
+say "requests short, and any score below is a floor rather than a measurement."
 
 say "=== results ==="
 find "$RESULT_DIR/harbor_jobs" -name '*.json' | head -20 | tee -a "$RESULT_DIR/tbench_run.txt" || true
