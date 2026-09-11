@@ -6976,5 +6976,6 @@
     - agentic-coding
   description:
     - "Set SGLANG_OPT_USE_TOPK_V2=true in benchmarks/single_node/agentic/glm5.2_fp4_mi355x_sglang_mtp.sh. The recipe forced the v1 top-k because the DSA indexer's v2 fused kernel would not build for gfx950; sgl-project/sglang PR #36684 and PR #36851 add the ROCm path, so v2 now dispatches natively."
+    - "Switch --dsa-prefill-backend and --dsa-decode-backend from tilelang to triton in the same script."
     - "No other recipe change: image, TP4/EP4 HiCache and TP8/EP1 resident arms, MTP, and concurrency grids are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2915
