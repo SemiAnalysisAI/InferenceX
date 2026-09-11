@@ -1937,7 +1937,7 @@ qwen3.5-fp8-mi300x-sglang-srt-agg-agentic-mtp:
     - dram-utilization: 0.80
       search-space:
       - spec-decoding: mtp
-        conc-list: [4, 16, 24]
+        conc-list: [1, 4, 8, 16, 24]
         kv-offloading: none
         num-nodes: 1
         worker:

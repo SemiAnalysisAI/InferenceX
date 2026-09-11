@@ -121,7 +121,7 @@ benchmark:
     FRAMEWORK: sglang
     PRECISION: fp8
     CONC: "4"
-    CONC_LIST: "4 16 24"
+    CONC_LIST: "1 4 8 16 24"
     DURATION: "3600"
     RESULT_FILENAME: qwen35_mi300x_agentx_agg_tp8_mtp
     RUNNER_TYPE: mi300x

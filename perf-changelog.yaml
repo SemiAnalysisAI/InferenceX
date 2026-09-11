@@ -7252,3 +7252,10 @@
     - "Explore higher-concurrency 1P2D serving with a larger prefill prefix-cache budget: mem-fraction-static 0.85 on prefill and 0.75 on decode."
     - "Retain AITER's automatic workspace reserve, stock MORI, BF16 KV/Mamba and golden acceptance length 3.39; measure the c32 candidate before selecting final frontier points."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2984
+
+- config-keys:
+    - qwen3.5-fp8-mi300x-sglang-srt-agg-agentic-mtp
+  description:
+    - "Include c1 and c8 in the matched modern single-node control, spanning c1, c4, c8, c16 and c24 for latency-throughput comparisons with disaggregation."
+    - "Keep serving settings, stock image, BF16 KV/Mamba and golden acceptance length 3.39 unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2984
