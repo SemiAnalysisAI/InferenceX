@@ -1291,7 +1291,8 @@ def test_processor_ignores_server_warmup_metrics_for_headline_stats(
     assert agg["server_metrics"]["tokens"]["prompt_total"] == 1000
 
 
-def test_processor_normalizes_sglang_server_metrics(tmp_path: Path):
+@pytest.mark.parametrize("framework", ["sglang", "dynamo-sglang"])
+def test_processor_normalizes_sglang_server_metrics(tmp_path: Path, framework: str):
     result_dir = _write_fixture(tmp_path)
     artifact = result_dir / "aiperf_artifacts"
     server_metrics = {
@@ -1331,13 +1332,30 @@ def test_processor_normalizes_sglang_server_metrics(tmp_path: Path):
             },
         }
     }
+    if framework == "dynamo-sglang":
+        server_metrics["metrics"].update(
+            {
+                "dynamo_frontend_input_sequence_tokens": {
+                    "type": "counter",
+                    "series": [{"stats": {"total": 1100.0}}],
+                },
+                "sglang:max_total_num_tokens": {
+                    "type": "gauge",
+                    "series": [
+                        {"labels": {"tp_rank": "0"}, "stats": {"max": 1000.0}},
+                        {"labels": {"tp_rank": "1"}, "stats": {"max": 1000.0}},
+                    ],
+                },
+            }
+        )
+        (result_dir / "server.log").write_text("max_total_num_tokens=1000, dp_size=1")
     with open(artifact / "server_metrics_export.json", "w") as f:
         json.dump(server_metrics, f)
 
     agg = _run_processor(
         result_dir,
         tmp_path / "out",
-        env_overrides={"FRAMEWORK": "sglang"},
+        env_overrides={"FRAMEWORK": framework},
     )
 
     assert agg["server_metrics"]["adapter"] == "sglang"
@@ -1349,6 +1367,15 @@ def test_processor_normalizes_sglang_server_metrics(tmp_path: Path):
     assert agg["server_metrics"]["kv_cache"]["gpu_usage_pct"] == pytest.approx(0.75)
     assert agg["server_metrics"]["kv_cache"]["cpu_usage_pct"] == pytest.approx(0.3)
     assert agg["server_metrics"]["tokens"]["prompt_by_source"]["computed"] == 500.0
+
+    assert agg["server_metrics"]["tokens"]["prompt_total"] == 1000
+    assert agg["server_metrics"]["tokens"]["generation_total"] == 200
+    if framework == "dynamo-sglang":
+        assert agg["server_metrics"]["kv_cache"]["gpu_total_tokens"] is None
+        assert agg["kv_cache_pool_tokens"] is None
+        assert any(
+            "rank replicas are not normalized" in warning for warning in agg["warnings"]
+        )
 
 
 def test_processor_normalizes_trtllm_server_metrics(tmp_path: Path):

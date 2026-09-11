@@ -208,6 +208,11 @@ AgentX 聚合的顶层身份和拓扑字段与基准摄取兼容。
 | 服务器指标 | `server_metrics.cache`、`kv_cache`、token 总数、来源详情，以及可能存在的 `warnings` |
 | 兼容性 | `kv_cache_pool_tokens` 镜像 `server_metrics.kv_cache.gpu_total_tokens` |
 
+当 `dynamo-sglang` 运行包含 `sglang:` 遥测时，处理器使用 SGLang 适配器
+聚合缓存、利用率和 token 指标。逻辑 GPU KV 容量保持 `null` 并附带警告，
+因为多个 TP rank 可能重复报告容量值。原始 Dynamo 前端总数可能包含预热请求。
+缺少主机命中计数并不代表 CPU 缓存命中为零。
+
 应用会将嵌套 AgentX v3 值展平为规范指标键。例如 `median_ttft`、`p95_e2el`、`total_tput_tps`、`tput_per_gpu`、`server_gpu_cache_hit_rate` 和 `gpu_kv_cache_usage_pct`。p50 映射为 `median`。存在 full-response ITL 字段时优先使用它。交互性百分位数按对应 ITL 百分位数的倒数派生，使历史记录和当前记录采用同一定义。
 
 正常上传前，单节点工作流会运行 [`validate_agentic_result.py`](../utils/agentic/validation/validate_agentic_result.py)。它要求聚合为对象，`request_count.avg` 是非负数值，已完成请求数为正，错误率不高于配置阈值。通过该门禁不表示没有失败请求。失败请求记录仍可通过 `request_accounting` 观察，但不参与性能指标计算。

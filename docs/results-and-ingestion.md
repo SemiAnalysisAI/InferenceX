@@ -215,6 +215,12 @@ Other important AgentX fields include:
 | Server metrics | `server_metrics.cache`, `kv_cache`, token totals, source details, and any `warnings` |
 | Compatibility | `kv_cache_pool_tokens` mirrors `server_metrics.kv_cache.gpu_total_tokens` |
 
+For a `dynamo-sglang` run with `sglang:` telemetry, the processor uses the
+SGLang adapter for cache, utilization, and token metrics. Logical GPU KV capacity
+remains `null` with a warning because TP ranks may report duplicate capacity
+values. Raw Dynamo frontend totals may include warmup requests. Missing host-hit
+counters do not imply zero CPU cache hits.
+
 The app flattens nested AgentX v3 values into canonical metric keys. Examples include `median_ttft`, `p95_e2el`, `total_tput_tps`, `tput_per_gpu`, `server_gpu_cache_hit_rate`, and `gpu_kv_cache_usage_pct`. It maps p50 to `median`. Full-response ITL fields take precedence when present, and interactivity percentiles are derived as the reciprocal of the matching ITL percentile so historical and current rows use one definition.
 
 Before normal upload, the single-node workflow runs [`validate_agentic_result.py`](../utils/agentic/validation/validate_agentic_result.py). It requires an aggregate object, a numeric non-negative `request_count.avg`, positive completed requests, and an error rate at or below the configured threshold. Passing this gate does not mean no requests failed. Failed request records remain visible through `request_accounting` but do not contribute to performance metrics.
