@@ -11,6 +11,7 @@ from urllib.parse import urlencode
 from . import github
 from .github import VerificationError
 from .models import CandidateOutcome, OwnedCandidate, Ownership, utc
+from .reporting import translated
 from .validation import verify_sweep
 from . import claims
 
@@ -210,8 +211,9 @@ class Session:
                 if not self.pending(pull):
                     pending = self.marker.replace('klaud-outcome:', 'klaud-cleanup:')
                     request = {'head': pull['head']['sha'], 'outcome': outcome.model_dump(by_alias=True)}
-                    body = (pending + json.dumps(request) + '\n-->\n'
-                            f'Klaud Cold: **{outcome.outcome}**. Finishing cleanup; owned child runs will be stopped and checked before closure.')
+                    body = pending + json.dumps(request) + '\n-->\n' + translated(
+                        f'**{outcome.outcome}** · Cleanup pending. Stop and confirm owned runs before closing.',
+                        f'**{outcome.outcome}** · 清理待完成。先停止并确认自有运行结束，再关闭 PR。')
                     github.write(self.repository, f'issues/{pull["number"]}/comments', 'POST', {'body': body})
             for run in runs:
                 if not terminal(run):
@@ -253,12 +255,16 @@ class Session:
             record = {'head': pull['head']['sha'], 'outcome': outcome.model_dump(by_alias=True), 'validation': proof}
             if self.report(pull) != record:
                 links = ', '.join(f'[{run}](https://github.com/{self.repository}/actions/runs/{run})' for run in outcome.run_ids) or '—'
-                body = (self.marker + json.dumps(record) + '\n-->\n'
-                        f'Klaud Cold: **{outcome.outcome}**. All owned runs are terminal. '
-                        f'Repairs: {outcome.repairs_used if outcome.repairs_used is not None else "unknown"}. Runs: {links}.\n\n'
-                        + ('The full sweep is verified; this PR remains ready for review.' if proof else
-                           'PR closed; branch deleted for retry.' if outcome.outcome in RELEASE else
-                           'PR closed; the exact-candidate branch is retained. See the attempt report for the failure and retry condition.'))
+                repairs = outcome.repairs_used if outcome.repairs_used is not None else 'unknown'
+                body = self.marker + json.dumps(record) + '\n-->\n' + translated(
+                    f'**{outcome.outcome}** · Repairs: {repairs} · Runs: {links}  \nAll owned runs ended. '
+                    + ('Full sweep verified; ready for review.' if proof else
+                       'PR closed; branch deleted for retry.' if outcome.outcome in RELEASE else
+                       'PR closed; exact-candidate branch retained pending maintainer review.'),
+                    f'**{outcome.outcome}** · 修复次数：{repairs} · 运行：{links}  \n所有自有运行均已结束。'
+                    + ('完整 sweep 已验证；已就绪，等待审查。' if proof else
+                       'PR 已关闭；分支已删除，可重新尝试。' if outcome.outcome in RELEASE else
+                       'PR 已关闭；保留精确候选分支，等待维护者检查。'))
                 github.write(self.repository, f'issues/{pull["number"]}/comments', 'POST', {'body': body})
         claims.release_family(self.repository, self.candidate, self.parent['id'])
         return outcome
@@ -304,8 +310,8 @@ def release_candidate(session: Session, expected_head: str) -> None:
     # absence of its retained branch must no longer be treated as incomplete cleanup.
     github.write(session.repository, f'issues/{pull["number"]}/comments', 'POST', {'body':
         f'<!-- klaud-retry-release:{session.parent["id"]}:{session.candidate.id}:{expected_head} -->\n'
-        'A maintainer approved releasing this completed candidate for a fresh selection after reviewing its blocker. '
-        'The previous results remain historical evidence.'})
+        + translated('Maintainer approved a fresh selection after reviewing the blocker; previous results remain historical.',
+                     '维护者检查阻塞原因后已批准重新选择该候选；之前的结果保留为历史证据。')})
     session.refresh(pull)
     if github.read(session.repository, 'git/ref/heads/' + session.branch)['object']['sha'] != expected_head:
         raise VerificationError('Retained branch changed; leave maintainer work intact')

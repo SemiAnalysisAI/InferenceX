@@ -6,7 +6,7 @@
 
 </div>
 
-[`utils/klaud/reporting.py`](../utils/klaud/reporting.py) owns the schemas, arithmetic and rendering. The agent supplies concise observations and verified evidence, not hand-calculated deltas. The PR body contains only the goal and baseline. Comments own attempts; the lifecycle receipt owns verified completion. All generated PR bodies and comments, including tables and lifecycle reports, are English-only. This Klaud-specific exception overrides shared bilingual guidance; do not add Chinese translations or language dividers. No mentions, review requests, raw logs, private telemetry or limitations section.
+[`utils/klaud/reporting.py`](../utils/klaud/reporting.py) owns the schemas, arithmetic and rendering. The agent supplies concise observations and verified evidence, not hand-calculated deltas. The PR body contains only the goal and baseline. Comments own attempts; the lifecycle receipt owns verified completion. Keep English visible and put Simplified Chinese in one collapsed `<details><summary>中文</summary>` section. Numeric tables appear once; Chinese prose refers to those tables. Apply this layout to lifecycle comments too. No mentions, review requests, raw logs, private telemetry or limitations section.
 
 ## Commands
 
@@ -16,7 +16,7 @@ Run from the checkout with the candidate environment provided by the workflow:
 KLAUD=(uv run --no-project --exclude-newer PT12H --python 3.12 \
   --with 'pydantic>=2.10,<3' --with pyyaml python -m utils.klaud)
 
-# goal.json is a JSON string: "Update the selected image."
+# goal.json: {"en":"Update ENGINE image from `OLD` to `NEW`.","zh":"将 ENGINE 镜像从 `OLD` 更新为 `NEW`。"}
 # Resolve the display model name from the public OpenAPI document first.
 "${KLAUD[@]}" prepare-baseline --model 'DISPLAY MODEL NAME' \
   --goal-file "$KLAUD_EVIDENCE/goal.json" --output "$KLAUD_EVIDENCE/baseline.json"
@@ -37,44 +37,63 @@ Create the draft body with `<!-- klaud-baseline -->`. The helper replaces that p
 
 Comparison keys come from `reporting.point_key()` on the canonical generated point, excluding only image, point name, producer fingerprint and queue metadata. Preserve workload, topology, concurrency and all remaining settings. `reporting.values()` reads collector/API metrics and converts seconds to milliseconds. Do not invent an alias or key to make two points match. Dataset identity must match independently for AgentX. Missing/zero baselines, failed points and mismatched datasets/statistics produce N/A. Throughput change is `(new / old - 1) * 100`; eval scores are normalized to 0–1 and differences shown in percentage points, matching suite, metric, shape and sample counts.
 
-Each attempt records its owned run ID, exact head and run attempt, kind/number, status, plain English strings for change/finding/next, separate expected/passed benchmark and eval counts, all points and evals. Keep failures, cancelled points and request errors visible. Initial update is number 0; repairs are 1–5. Confirmed transient infrastructure retries have their own kind and do not consume a recipe repair; the prompt bounds these to two per attempt. Do not call a failed eval a passed smoke because throughput passed.
+Each attempt records its owned run ID, exact head and run attempt, kind/number, status, en/zh sentences for change/next, separate expected/passed benchmark and eval counts, all points and evals. The goal also uses en/zh sentences naming the engine and exact old/new images. Optional finding text stores diagnostic evidence; neither finding nor coverage counters are rendered. Keep failures, cancelled points and request errors visible. Initial update is number 0; repairs are 1–5. Confirmed transient infrastructure retries have their own kind and do not consume a recipe repair; the prompt bounds these to two per attempt. Do not call a failed eval a passed smoke because throughput passed.
 
 Publish immediately after dispatch and before waiting. Update that run/attempt's comment on material changes or after 30 minutes; retain completed attempt history. Large records are split into numbered comment parts without dropping points or limiting the family size. The compact body shows up to 12 baseline rows; all rows and provenance persist in baseline comments. Reports are idempotent by parent/candidate/run/attempt. Only the typed public record is persisted, never the full scratch directory or execution transcript.
+
+Use compact metadata lines, exact `8k/1k` shorthand and shared settings above the tables. Only collapse point labels to concurrency when the displayed workload/topology/statistic is shared and concurrencies are unique; otherwise retain distinct full labels. Cells contain the new value and parenthesized delta. Eval samples show `N each` only when both counts match; otherwise show old/new counts. Keep failures, request errors and reasons for unavailable comparisons as short notes. No Result column, Coverage/Finding paragraphs, legends, storage boilerplate or redundant status summary. Next names only the next subgoal. English content stays visible, including all result tables; only Chinese is collapsed.
 
 ## Body layout
 
 ```markdown
-Update FAMILY from OLD_IMAGE to NEW_IMAGE.
+**Goal:** Update ENGINE image from `OLD_IMAGE` to `NEW_IMAGE`.\
+**Baseline:** DATE · `OLD_IMAGE`\
+8k/1k · TP8/EP1 · Mean latency · Sources: API links
 
-Baseline: PUBLISHED_DATE · OLD_IMAGE · public API sources
+| Concurrency | Total tok/s/GPU ↑ | Output tok/s/GPU ↑ | TTFT ms ↓ | TPOT ms ↓ |
+| ---: | ---: | ---: | ---: | ---: |
+| C | value | value | value | value |
 
-| Point | Total tok/s/GPU | Output tok/s/GPU | TTFT ms | TPOT ms |
-| --- | ---: | ---: | ---: | ---: |
-| shape and concurrency | value | value | value | value |
+| Eval | Score ↑ | Samples |
+| --- | ---: | ---: |
+| SUITE/METRIC · cN | SCORE% | N |
 
-Eval baseline: suite/metric, score, sample count; N/A where unavailable.
+<details>
+<summary>中文</summary>
+
+**目标：**将 ENGINE 镜像从 `OLD_IMAGE` 更新为 `NEW_IMAGE`。\
+**基线：**DATE · `OLD_IMAGE`\
+8k/1k · TP8/EP1 · 平均延迟 · 来源：API 链接；数值及异常说明见上表。
+
+</details>
 ```
 
 ## Attempt layout
 
 ```markdown
-### Initial attempt / Repair N/5 / Infrastructure retry N / Final full sweep
+**Repair N/5 · STATUS** · [Run ID / attempt N](RUN_URL) · UTC_TIMESTAMP\
+`IMAGE` · `HEAD` · 8k/1k · TP8/EP1 · Mean latency\
+**Change:** One sentence with relevant source links.
 
-Status: STATUS · UTC timestamp
-Measured: IMAGE · HEAD · run link and attempt
-Change: one sentence
-Coverage: benchmarks passed/expected; evals passed/expected
+| Concurrency | Output tok/s/GPU ↑ | TTFT ms ↓ | TPOT ms ↓ |
+| ---: | ---: | ---: | ---: |
+| C | 110 (+10%) | 180 (-10%) | 19 (-5%) |
 
-| Point | Result | Output tok/s/GPU | Δ output | Δ TTFT | Δ TPOT |
-| --- | --- | ---: | ---: | ---: | ---: |
-| shape and concurrency | status, errors or N/A reason | value | signed % | signed % | signed % |
+| Eval | Score ↑ | Samples |
+| --- | ---: | ---: |
+| SUITE/METRIC · cN | 97% (+0.50 pp) | 1,000 each |
 
-| Eval suite / metric | Baseline % | Updated % | Δ pp | n (old/new) | Result |
-| --- | ---: | ---: | ---: | --- | --- |
-| suite/metric | value | value | signed pp | counts | result |
+**Next:** Run the final full sweep.
 
-Finding: observed result; distinguish hypotheses from evidence
-Next: specific action or verified final disposition
+<details>
+<summary>中文</summary>
+
+**修复 N/5 · 状态** · [Run ID / attempt N](RUN_URL) · UTC_TIMESTAMP\
+`IMAGE` · `HEAD` · 8k/1k · TP8/EP1 · 平均延迟\
+**变更：**简短中文翻译；数值及异常说明见上表。\
+**下一步：**运行最终完整 sweep。
+
+</details>
 ```
 
 `finish` generates the final report from verified artifacts and the frozen baseline for both normal execution and interrupted-session recovery. It publishes the report **before** marking ready. Missing historical baseline data is explicitly N/A; it never invents deltas or launches a replacement baseline. A successful sweep may contain regressions; readiness means work and validation are complete, not that every metric improved. Klaud neither authorizes reuse nor merges the PR.

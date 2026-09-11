@@ -6,7 +6,7 @@
 
 </div>
 
-[`utils/klaud/reporting.py`](../utils/klaud/reporting.py) 统一管理数据结构、差值计算和渲染。agent 只提供简短观察和经过核实的证据，不手算差值。PR 正文仅包含目标和基线；评论记录尝试；生命周期完成记录证明收尾已验证。生成的 PR 正文及评论（包括表格和生命周期报告）仅使用英文。该 Klaud 专用例外优先于通用双语规范；不添加中文翻译或语言分隔线。不提及用户、不请求审查、不发布原始日志或私有遥测，也不添加 limitations 章节。
+[`utils/klaud/reporting.py`](../utils/klaud/reporting.py) 统一管理数据结构、差值计算和渲染。agent 只提供简短观察和经过核实的证据，不手算差值。PR 正文仅包含目标和基线；评论记录尝试；生命周期完成记录证明收尾已验证。英文默认展开，简体中文放入一个默认折叠的 `<details><summary>中文</summary>` 区块。数值表格只展示一次，中文引用共用表格；生命周期评论也使用这一布局。不提及用户、不请求审查、不发布原始日志或私有遥测，也不添加 limitations 章节。
 
 ## 命令
 
@@ -16,7 +16,7 @@
 KLAUD=(uv run --no-project --exclude-newer PT12H --python 3.12 \
   --with 'pydantic>=2.10,<3' --with pyyaml python -m utils.klaud)
 
-# goal.json 是 JSON 字符串："Update the selected image."
+# goal.json：{"en":"Update ENGINE image from `OLD` to `NEW`.","zh":"将 ENGINE 镜像从 `OLD` 更新为 `NEW`。"}
 # 先通过公开 OpenAPI 确认模型显示名称。
 "${KLAUD[@]}" prepare-baseline --model 'DISPLAY MODEL NAME' \
   --goal-file "$KLAUD_EVIDENCE/goal.json" --output "$KLAUD_EVIDENCE/baseline.json"
@@ -37,44 +37,63 @@ KLAUD=(uv run --no-project --exclude-newer PT12H --python 3.12 \
 
 比较键通过 `reporting.point_key()` 从规范生成的配置点计算，仅排除镜像、配置点名称、生产指纹和排队元数据。工作负载、拓扑、并发数及其他设置都必须保留。`reporting.values()` 读取 collector/API 指标，将秒换算为毫秒。不能为使结果匹配而编造别名或比较键。AgentX 还须独立匹配数据集。基线缺失或为零、配置失败、数据集或统计口径不一致时记为 N/A。吞吐量差值为 `(new / old - 1) * 100`；评测分数使用 0–1，差值以百分点展示，并匹配 suite、metric、拓扑和样本量。
 
-每次尝试记录所属 run ID、精确 head、运行次数、类型和编号、状态、以纯英文字符串记录的变更/结论/下一步、分别统计的 benchmark 与 eval 应有和通过数量，以及全部配置和评测结果。保留失败、取消和请求错误。初始变更编号为 0，修复为 1–5。已确认的临时基础设施问题单独记为 infrastructure-retry，不消耗 recipe 修复次数；prompt 将其限制为每次尝试最多两次。不能因为吞吐量通过就把评测失败的 smoke 写成成功。
+每次尝试记录所属 run ID、精确 head、运行次数、类型和编号、状态、以 en/zh 句子记录的变更/下一步、分别统计的 benchmark 与 eval 应有和通过数量，以及全部配置和评测结果。目标同样使用 en/zh 句子，明确引擎及精确的新旧镜像。可选 finding 字段保存诊断证据；finding 和覆盖计数均不渲染。保留失败、取消和请求错误。初始变更编号为 0，修复为 1–5。已确认的临时基础设施问题单独记为 infrastructure-retry，不消耗 recipe 修复次数；prompt 将其限制为每次尝试最多两次。不能因为吞吐量通过就把评测失败的 smoke 写成成功。
 
 调度后立即发布记录，再等待运行。发生实质变化或等待满 30 分钟时，更新该 run/attempt 的同一条评论；完成的尝试保留为历史。大记录拆成编号评论分段，不丢弃配置点，也不限制配置族大小。正文最多展示 12 行基线；全部数值和来源保存在基线评论。记录以 parent/candidate/run/attempt 为幂等身份，只持久化类型化公开字段，不上传整个临时目录或执行记录。
+
+使用紧凑元数据行、精确的 `8k/1k` 简写，并将共用配置放在表格上方。只有展示的工作负载、拓扑、统计口径一致且并发数唯一时，才仅用并发数标识行；否则保留可区分的完整标签。单元格显示新值和括号内的差值。评测样本量仅在新旧计数相同时显示 `N each`，否则分别列出新旧计数。失败、请求错误和无法比较的原因以简短备注保留。不添加 Result 列、Coverage/Finding 段落、图例、存储机制说明或重复状态总结；Next 仅写下一子目标。英文及全部结果表格保持展开，只折叠中文。
 
 ## 正文格式
 
 ```markdown
-Update FAMILY from OLD_IMAGE to NEW_IMAGE.
+**Goal:** Update ENGINE image from `OLD_IMAGE` to `NEW_IMAGE`.\
+**Baseline:** DATE · `OLD_IMAGE`\
+8k/1k · TP8/EP1 · Mean latency · Sources: API links
 
-Baseline: PUBLISHED_DATE · OLD_IMAGE · public API sources
+| Concurrency | Total tok/s/GPU ↑ | Output tok/s/GPU ↑ | TTFT ms ↓ | TPOT ms ↓ |
+| ---: | ---: | ---: | ---: | ---: |
+| C | value | value | value | value |
 
-| Point | Total tok/s/GPU | Output tok/s/GPU | TTFT ms | TPOT ms |
-| --- | ---: | ---: | ---: | ---: |
-| shape and concurrency | value | value | value | value |
+| Eval | Score ↑ | Samples |
+| --- | ---: | ---: |
+| SUITE/METRIC · cN | SCORE% | N |
 
-Eval baseline: suite/metric, score, sample count; N/A where unavailable.
+<details>
+<summary>中文</summary>
+
+**目标：**将 ENGINE 镜像从 `OLD_IMAGE` 更新为 `NEW_IMAGE`。\
+**基线：**DATE · `OLD_IMAGE`\
+8k/1k · TP8/EP1 · 平均延迟 · 来源：API 链接；数值及异常说明见上表。
+
+</details>
 ```
 
 ## 尝试评论格式
 
 ```markdown
-### Initial attempt / Repair N/5 / Infrastructure retry N / Final full sweep
+**Repair N/5 · STATUS** · [Run ID / attempt N](RUN_URL) · UTC_TIMESTAMP\
+`IMAGE` · `HEAD` · 8k/1k · TP8/EP1 · Mean latency\
+**Change:** One sentence with relevant source links.
 
-Status: STATUS · UTC timestamp
-Measured: IMAGE · HEAD · run link and attempt
-Change: one sentence
-Coverage: benchmarks passed/expected; evals passed/expected
+| Concurrency | Output tok/s/GPU ↑ | TTFT ms ↓ | TPOT ms ↓ |
+| ---: | ---: | ---: | ---: |
+| C | 110 (+10%) | 180 (-10%) | 19 (-5%) |
 
-| Point | Result | Output tok/s/GPU | Δ output | Δ TTFT | Δ TPOT |
-| --- | --- | ---: | ---: | ---: | ---: |
-| shape and concurrency | status, errors or N/A reason | value | signed % | signed % | signed % |
+| Eval | Score ↑ | Samples |
+| --- | ---: | ---: |
+| SUITE/METRIC · cN | 97% (+0.50 pp) | 1,000 each |
 
-| Eval suite / metric | Baseline % | Updated % | Δ pp | n (old/new) | Result |
-| --- | ---: | ---: | ---: | --- | --- |
-| suite/metric | value | value | signed pp | counts | result |
+**Next:** Run the final full sweep.
 
-Finding: observed result; distinguish hypotheses from evidence
-Next: specific action or verified final disposition
+<details>
+<summary>中文</summary>
+
+**修复 N/5 · 状态** · [Run ID / attempt N](RUN_URL) · UTC_TIMESTAMP\
+`IMAGE` · `HEAD` · 8k/1k · TP8/EP1 · 平均延迟\
+**变更：**简短中文翻译；数值及异常说明见上表。\
+**下一步：**运行最终完整 sweep。
+
+</details>
 ```
 
 正常结束和中断恢复均由 `finish` 使用已验证产物和冻结基线生成最终报告，并在**标记就绪之前**发布。缺失的历史基线明确记为 N/A，不编造差值，也不另跑基线。成功 sweep 可以存在性能回归；就绪表示工作和验证结束，而非每项指标都提升。Klaud 不授权 reuse，也不合并 PR。

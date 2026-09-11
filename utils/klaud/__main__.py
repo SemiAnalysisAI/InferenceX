@@ -350,7 +350,7 @@ def main() -> int:
     release.add_argument('--head', required=True, help='Reviewed closed PR head SHA')
     baseline = commands.add_parser('prepare-baseline', help='Fetch and freeze matched published data locally before attempts')
     baseline.add_argument('--model', required=True, help='Display model name from the public OpenAPI enum')
-    baseline.add_argument('--goal-file', type=Path, required=True, help='JSON string containing one English goal sentence')
+    baseline.add_argument('--goal-file', type=Path, required=True, help='JSON with en/zh goal sentences naming the engine and old/new images')
     baseline.add_argument('--output', type=Path, required=True)
     report = commands.add_parser('report', help='Publish a typed baseline or owned-attempt record using canonical templates')
     report.add_argument('--kind', choices=['baseline', 'attempt'], required=True)
@@ -378,7 +378,6 @@ def main() -> int:
             release_candidate(Session(repository, parent, candidate, recovering=True), args.head)
             return 0
         if args.command in ('report', 'report-schema', 'prepare-baseline'):
-            from pydantic import TypeAdapter
             from .reporting import Baseline, Attempt, Prose, prepare_baseline, publish
             from .lifecycle import current_session
             if args.command == 'prepare-baseline':
@@ -387,7 +386,7 @@ def main() -> int:
                     return 0  # A retry never silently refreshes the baseline.
                 session = current_session()
                 context = json.loads((Path(os.environ['KLAUD_EVIDENCE']) / 'candidate.json').read_text())
-                goal = TypeAdapter(Prose).validate_json(args.goal_file.read_text(), strict=True)
+                goal = Prose.model_validate_json(args.goal_file.read_text())
                 record = prepare_baseline(session, context, args.model, goal)
                 with args.output.open('x') as output:
                     output.write(record.model_dump_json(by_alias=True) + '\n')

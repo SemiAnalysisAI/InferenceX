@@ -84,17 +84,18 @@ reusable artifacts. For a failed-job retry, reuse the same run's surviving succe
 artifacts; do not redispatch a full sweep just because several manifests exist.
 Before a repair push, remove sweep labels and keep draft, then repeat within budget.
 
-PR body: ONLY goal and baseline. Use the canonical renderer, not handcrafted sprawling
-tables. Comments contain vertical Initial attempt, Repair N/5, Infrastructure retry and
-Final full sweep records, with compact numeric comparisons. Update that attempt's comment
-on material changes or after 30 minutes waiting; retain completed attempts as history.
-PR bodies and comments must be English-only, overriding repository translation guidance:
-no Chinese text, translation sections or language dividers, including tables and cleanup.
-Use plain English strings in report records. Report observable
-status/diagnosis, not internal deliberation. No limitations section or redundant milestones.
-Show failures, missing data, request errors, eval suite/metric/sample sizes and regressions.
-Use consistent units/statistics; percentage-point eval deltas are distinct from throughput
-percentages. Improvement is best effort, with no regression rejection threshold.
+Use the canonical reporting guide/renderer. Body: `Goal: Update ENGINE image from OLD to
+NEW.` plus dated public baseline tables. Comments: attempt/repair counter, status/run,
+compact image/SHA/settings, Change, benchmark/eval tables, then Next (only the next subgoal).
+Use en/zh prose: English visible, Chinese only inside `<details><summary>中文</summary>`;
+numeric tables once. Group metadata with line breaks; use exact 8k/1k-style lengths,
+shared settings once, and full point labels when concurrency alone is ambiguous.
+Cells show `110 (+10%)`, latency in ms, ↑/↓ headers; evals show `97% (+0.50 pp)` and samples.
+No Result column, Coverage/Finding paragraphs, legends, baseline-storage boilerplate,
+limitations section or redundant milestones. Keep failures/errors and N/A reasons in brief
+notes; preserve source links and provenance uncertainty. Report observations, not internal
+deliberation. Update on material changes or 30 minutes waiting; retain completed attempts.
+Use matched units/statistics; improvement is best effort with no regression rejection gate.
 
 Finalize attempt records and write CandidateOutcome to $KLAUD_EVIDENCE/requested-outcome.json.
 Run `finish --outcome-file "$KLAUD_EVIDENCE/requested-outcome.json"`. Only finish may mark
