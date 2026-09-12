@@ -369,7 +369,13 @@ DeepSeek-R1-0528-MXFP4-v2:
       cuda_graph_bs_range: "1-128"
 
 DeepSeek-V4-Pro-AgentX:
-  base_flags: "--enable-deepseek-v4-fp4-indexer --watchdog-timeout 3600 --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend dsv4 --page-size 256 --swa-full-tokens-ratio 0.1 --tool-call-parser deepseekv4 --reasoning-parser deepseek-v4 --disaggregation-transfer-backend mori --log-level info --log-level-http error"
+  base_flags: "--enable-deepseek-v4-fp4-indexer --watchdog-timeout 3600 --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend dsv4 --page-size 256 --swa-full-tokens-ratio 0.1 --tool-call-parser deepseekv4 --reasoning-parser deepseek-v4 --disaggregation-transfer-backend mori --optimistic-prefill-attempts 2 --log-level info --log-level-http error"
+  # --optimistic-prefill-attempts only acts on the prefill role (the decode server
+  # parses it but never reads it), so it rides in base_flags for want of a
+  # prefill-only bucket. sglang resets it to 0 whenever hierarchical cache runs a
+  # write policy other than write_back, and server_sglang.sh defaults
+  # HICACHE_WRITE_POLICY to write_through -- on the HiCache arms this is inert
+  # until the image carries sglang PR #38978.
   # --enforce-shared-experts-fusion and dp_flags' --disable-shared-experts-fusion
   # are documented by sglang as mutually exclusive (server_args.py), so each lives
   # in its own bucket (no_dp_flags / dp_flags) rather than both riding on the
