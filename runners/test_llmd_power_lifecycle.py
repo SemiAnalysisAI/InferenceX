@@ -8,12 +8,12 @@ import sys
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-LIFECYCLE = ROOT / 'benchmarks/native_power_lifecycle.sh'
 JOB = ROOT / 'benchmarks/multi_node/llm-d/job.slurm'
 
 
 @pytest.mark.parametrize('main_rc', [0, 7])
-def test_llmd_job_stages_native_evidence_and_keeps_main_step_status(tmp_path, main_rc):
+@pytest.mark.parametrize('enabled', [False, True])
+def test_llmd_job_stages_native_evidence_and_keeps_main_step_status(tmp_path, main_rc, enabled):
     repo = tmp_path / 'repo'
     cwd = repo / 'benchmarks/multi_node/llm-d'
     cwd.mkdir(parents=True)
@@ -30,6 +30,9 @@ args = sys.argv[1:]
 with open(os.environ['CALLS'], 'a') as f:
     f.write(json.dumps(args) + '\n')
 if any(a.startswith('--container-image=') for a in args):
+    if os.environ['POWERX_NATIVE_ENABLED'] != '1':
+        assert not any('/powerx_native' in a for a in args)
+        sys.exit(int(os.environ['MAIN_RC']))
     for rank in range(2):
         out = pathlib.Path(os.environ['POWERX_RAW_ROOT']) / f'node-{rank}'
         out.mkdir(parents=True, exist_ok=True)
@@ -56,11 +59,15 @@ for rank in range(2):
            'NUM_NODES':'2','PREFILL_NODES':'1','DECODE_NODES':'1','GPUS_PER_NODE':'2',
            'MODEL_DIR':str(model),'MODEL_NAME':'fixture','BENCHMARK_LOGS_DIR':str(logs),
            'LLMD_CONTAINER_ENGINE':'pyxis','LLMD_SQUASH_FILE':str(squash),
-           'POWERX_NATIVE_ENABLED':'1','POWERX_RAW_ROOT':str(tmp_path/'raw'),
+           'POWERX_NATIVE_ENABLED':'1' if enabled else '0','POWERX_RAW_ROOT':str(tmp_path/'raw'),
            'MAIN_RC':str(main_rc),'CALLS':str(tmp_path/'calls.jsonl')}
     result = subprocess.run(['bash', str(JOB)], cwd=cwd, env=env,
                             capture_output=True, text=True, timeout=20)
     assert result.returncode == main_rc, result.stderr + result.stdout
+    if not enabled:
+        assert not (repo / 'LOGS/native_power').exists()
+        assert not (tmp_path / 'raw').exists()
+        return
     for rank in range(2):
         saved = repo / f'LOGS/native_power/node-{rank}/manifest.json'
         assert json.loads(saved.read_text()) == {'rank':rank,'synthetic':True}

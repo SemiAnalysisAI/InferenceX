@@ -68,11 +68,14 @@ DOCKER_MOUNT_PATH="/workspace"
 BENCH_DONE_MARKER="$BENCHMARK_LOGS_DIR/.bench_done.$SLURM_JOB_ID"
 rm -f "$BENCH_DONE_MARKER"
 POWERX_NATIVE_ENABLED="${POWERX_NATIVE_ENABLED:-0}"
-export POWERX_HOST_UID="$(id -u)" POWERX_HOST_GID="$(id -g)"
-export POWERX_COLLECTOR_REVISION="$(git -C "$DI_REPO_DIR" rev-parse HEAD)"
-export POWERX_RAW_ROOT="${POWERX_RAW_ROOT:-/tmp/inferencex-native-$SLURM_JOB_ID}"
-srun --nodes="$NUM_NODES" --ntasks-per-node=1 mkdir -p "$POWERX_RAW_ROOT"
+export POWERX_HOST_UID="" POWERX_HOST_GID="" POWERX_COLLECTOR_REVISION=""
+POWERX_DOCKER_MOUNT=""
 if [[ "$POWERX_NATIVE_ENABLED" == 1 ]]; then
+    export POWERX_HOST_UID="$(id -u)" POWERX_HOST_GID="$(id -g)"
+    export POWERX_COLLECTOR_REVISION="$(git -C "$DI_REPO_DIR" rev-parse HEAD)"
+    export POWERX_RAW_ROOT="${POWERX_RAW_ROOT:-/tmp/inferencex-native-$SLURM_JOB_ID}"
+    POWERX_DOCKER_MOUNT="-v ${POWERX_RAW_ROOT}:/powerx_native"
+    srun --nodes="$NUM_NODES" --ntasks-per-node=1 mkdir -p "$POWERX_RAW_ROOT"
     mkdir -p "$BENCHMARK_LOGS_DIR/power_control-$SLURM_JOB_ID" "$DI_REPO_DIR/LOGS/native_power"
     chmod 777 "$BENCHMARK_LOGS_DIR/power_control-$SLURM_JOB_ID"
     srun --nodes="$NUM_NODES" --ntasks-per-node=1 chmod 777 "$POWERX_RAW_ROOT"
@@ -137,7 +140,7 @@ exec docker run --rm \
     --privileged \
     -v ${MODEL_DIR}:/models:ro \
     -v ${BENCHMARK_LOGS_DIR}:/benchmark_logs \
-    -v ${POWERX_RAW_ROOT}:/powerx_native \
+    $POWERX_DOCKER_MOUNT \
     -v ${DI_REPO_DIR}:${DOCKER_MOUNT_PATH} \
     -v ${DI_REPO_DIR}/benchmarks/multi_node/llm-d-recipes:/etc/llmd-recipes:ro \
     -v ${DI_REPO_DIR}/benchmarks/llm-d/epp-config.yaml:/etc/epp/config.yaml:ro \
@@ -235,7 +238,10 @@ elif [[ "$LLMD_CONTAINER_ENGINE" == "pyxis" ]]; then
     PYXIS_ENV_LIST+=",RUNNER_TYPE,RESULT_FILENAME,SPEC_DECODING,IS_MULTINODE,CONFIG_FILE"
 
     PYXIS_MOUNTS="${MODEL_DIR}:/models:ro"
-    PYXIS_MOUNTS+=",${BENCHMARK_LOGS_DIR}:/benchmark_logs,${POWERX_RAW_ROOT}:/powerx_native"
+    PYXIS_MOUNTS+=",${BENCHMARK_LOGS_DIR}:/benchmark_logs"
+    if [[ "$POWERX_NATIVE_ENABLED" == 1 ]]; then
+        PYXIS_MOUNTS+=",${POWERX_RAW_ROOT}:/powerx_native"
+    fi
     PYXIS_MOUNTS+=",${DI_REPO_DIR}:${DOCKER_MOUNT_PATH}"
     PYXIS_MOUNTS+=",${DI_REPO_DIR}/benchmarks/multi_node/llm-d-recipes:/etc/llmd-recipes:ro"
     PYXIS_MOUNTS+=",${DI_REPO_DIR}/benchmarks/llm-d/epp-config.yaml:/etc/epp/config.yaml:ro"
