@@ -69,3 +69,18 @@ exit "$SERVING_RC"
     assert receipt.exists() == (not is_required)
     assert ('inconsistent AMD node topology' if fault == 'topology' else
             'uneven per-node TP layout') in result.stderr
+
+
+@pytest.mark.parametrize('required', ['', '0', 'false', '1', 'true', 'YES'])
+@pytest.mark.parametrize('serving_rc', [0, 7])
+@pytest.mark.parametrize('staging_rc', [0, 9])
+def test_amd_staging_failure_preserves_serving_outcome(tmp_path, required, serving_rc, staging_rc):
+    tail = (ROOT / 'benchmarks/multi_node/amd_utils/job.slurm').read_text().split(
+        'BENCHMARK_STEP_RC=$?', 1)[1]
+    script = 'BENCHMARK_STEP_RC=$SERVING_RC\nstage_native_power() { return "$STAGING_RC"; }\n' + tail
+    result = subprocess.run(['bash', '-euo', 'pipefail', '-c', script],
+                            env={**os.environ, 'REQUIRE_POWER': required, 'SERVING_RC': str(serving_rc),
+                                 'STAGING_RC': str(staging_rc), 'KEEP_CONTAINERS': '1'},
+                            capture_output=True, text=True, timeout=5)
+    expected = serving_rc or int(staging_rc != 0 and required in ['1', 'true', 'YES'])
+    assert result.returncode == expected, result.stderr

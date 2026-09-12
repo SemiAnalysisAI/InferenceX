@@ -813,7 +813,13 @@ exit \$DOCKER_EXIT_CODE
 BENCHMARK_STEP_RC=$?
 # Each host copies its own node-local, root-created artifacts as the runner user.
 # No raw telemetry is written as root into the shared checkout.
-stage_native_power || BENCHMARK_STEP_RC=1
+if ! stage_native_power; then
+    echo 'PowerX: failed to stage native telemetry' >&2
+    case "${REQUIRE_POWER:-0}" in
+        1|true|TRUE|yes|YES)
+            if [[ "$BENCHMARK_STEP_RC" == 0 ]]; then BENCHMARK_STEP_RC=1; fi ;;
+    esac
+fi
 
 if [[ "${KEEP_CONTAINERS}" != "1" ]]; then
     srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c 'eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD rm -f '"$DOCKER_CONT_NAME"' '"$CLIENT_CONT_NAME"' 2>/dev/null || true'
