@@ -540,6 +540,7 @@ jobs:
             power_validation_${{ env.RESULT_FILENAME }}_*.json
             slurm_job_*_outcome.txt
             LOGS/power/**
+            LOGS/native_power/**
             result_processing_${{ env.RESULT_FILENAME }}.json
             LOGS/*/results_*.json
             LOGS/agentic/**/agentic_power_concurrency_*.json

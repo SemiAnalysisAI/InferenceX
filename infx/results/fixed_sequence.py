@@ -248,6 +248,21 @@ def aggregate_power_result(
         expected_num_gpus = int(env['TP']) * int(env.get('PP_SIZE', '1')) * int(env.get('PCP_SIZE', '1'))
     try:
         if is_multinode:
+            native_dir = Path(env.get('POWERX_NATIVE_DIR', 'LOGS/native_power'))
+            if env.get('POWERX_NATIVE_DIR') or native_dir.is_dir():
+                if source.is_dir() and source != native_dir:
+                    raise ValueError('Both native and SRT power packages are present')
+                source = native_dir
+                from .power.native_multinode import run
+
+                return run(
+                    native_dir, bench_path, agg_path,
+                    expected_prefill_gpus=prefill_gpus,
+                    expected_decode_gpus=decode_gpus,
+                    expected_aggregate_gpus=aggregate_gpus,
+                    validation_result=validation_path,
+                    require_power=require_power,
+                )
             from .power.multinode import run
 
             return run(

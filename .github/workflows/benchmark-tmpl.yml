@@ -449,11 +449,13 @@ jobs:
           name: ${{ inputs.eval-only && 'eval_gpu_metrics_' || 'gpu_metrics_' }}${{ env.RESULT_FILENAME }}
           path: |
             gpu_metrics.csv
+            gpu_metrics*_context.json
             gpu_metrics_energy_start.csv
             gpu_metrics_energy_end.csv
             gpu_metrics_identity.json
             gpu_metrics_identity.csv
             results/gpu_metrics*.csv
+            results/gpu_metrics*_context.json
             results/gpu_metrics_identity.json
           if-no-files-found: ignore
 
@@ -466,6 +468,7 @@ jobs:
             ${{ env.RESULT_FILENAME }}.json
             agg_${{ env.RESULT_FILENAME }}.json
             gpu_metrics.csv
+            gpu_metrics*_context.json
             gpu_metrics_energy_start.csv
             gpu_metrics_energy_end.csv
             gpu_metrics_identity.json
@@ -473,6 +476,7 @@ jobs:
             power_validation_${{ env.RESULT_FILENAME }}.json
             slurm_job_*_outcome.txt
             results/gpu_metrics*.csv
+            results/gpu_metrics*_context.json
             results/gpu_metrics_identity.json
             results/agentic_power_window.json
             results/agentic_power_timezone_offset.txt
