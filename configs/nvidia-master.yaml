@@ -10235,6 +10235,8 @@ dsv41flash-fp4-b200-vllm-agentic-dspark:
       # conc 15 = CRUXEval-O ablation, conc 16 = likelihood ablation with the
       # prefill-only / decode-only phase arms. TP4, one node per task.
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [15, 16] }
+      # conc 17 = Terminal-Bench validation slice, TP8, one node, 90 minutes.
+      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [17] }
 dsv41flash-fp4-h100-vllm-agentic-dspark:
   image: vllm/vllm-openai:deepseekv41-flash-0909
   model: deepseek-ai/DeepSeek-V4.1-Flash

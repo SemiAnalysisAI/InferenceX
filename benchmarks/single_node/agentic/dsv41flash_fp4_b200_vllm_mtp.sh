@@ -18,6 +18,19 @@ if [[ "$CONC" == 14 ]]; then
     exec bash "$INFERENCEX_REPO_ROOT/analysis/engram/tbench_run.sh"
 fi
 
+# conc 17 = Terminal-Bench validation slice. One node, 90 minutes, baseline
+# Engram. Its only job is to show the zero-output-budget rejections are gone
+# before another 15 node-hours go into a paired run: the first pair scored
+# 0.045/0.030 against a published 31.2 because 164 and 32 turns respectively
+# were rejected with "max_tokens must be at least 1, got 0".
+if [[ "$CONC" == 17 ]]; then
+    export TBENCH_TIMEOUT_S=5400
+    # Default agent timeout is 8h, so 0.1 caps a task at 48 min and most
+    # finish inside the 90-minute window rather than all timing out.
+    export TBENCH_TIMEOUT_MULT=0.1
+    exec bash "$INFERENCEX_REPO_ROOT/analysis/engram/tbench_run.sh"
+fi
+
 # conc 15/16 are the TP4 single-node analysis tasks, one node each:
 #   15 = CRUXEval-O output prediction, baseline vs Engram removed, nothing executed
 #   16 = likelihood ablation with the phase arms (prefill-only / decode-only)
