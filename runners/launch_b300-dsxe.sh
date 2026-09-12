@@ -53,6 +53,7 @@ declare -A MODEL_ALIASES=(
     [dsr1-fp8]="DeepSeek-R1-0528"
     [deepseek-v4-pro]="DeepSeek-V4-Pro"
     [deepseek-ai/DeepSeek-V4-Pro]="DeepSeek-V4-Pro"
+    [deepseek-v4.1-flash]="DeepSeek-V4.1-Flash"
     [glm-5.2-fp4]="GLM-5.2-NVFP4"
     [nvidia/GLM-5.2-NVFP4]="GLM-5.2-NVFP4"
     [kimi-k2.6-nvfp4]="Kimi-K2.6-NVFP4"
@@ -237,7 +238,11 @@ srtctl_root: "${SRTCTL_ROOT}"
 model_paths:
 EOF
     for alias in "${!MODEL_ALIASES[@]}"; do
-        printf '  "%s": "%s/%s"\n' "$alias" "$MODEL_ROOT" "${MODEL_ALIASES[$alias]}"
+        model_root="$MODEL_ROOT"
+        if [[ "$alias" == "deepseek-v4.1-flash" ]]; then
+            model_root="$WRITABLE_MODELS_DIR"
+        fi
+        printf '  "%s": "%s/%s"\n' "$alias" "$model_root" "${MODEL_ALIASES[$alias]}"
     done | sort
     cat <<EOF
 containers:
