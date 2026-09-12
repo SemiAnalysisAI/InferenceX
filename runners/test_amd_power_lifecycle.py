@@ -39,3 +39,33 @@ def test_amd_collector_failure_respects_requirement(tmp_path, phase, required, s
     expected = 1 if required and phase == 'ready' else serving_rc or int(bool(required))
     assert result.returncode == expected, result.stderr
     assert receipt.exists() == (not required or phase != 'ready')
+
+
+@pytest.mark.parametrize('fault', ['topology', 'uneven_tp'])
+@pytest.mark.parametrize('required', ['', '0', 'false', '1', 'true', 'YES'])
+@pytest.mark.parametrize('serving_rc', [0, 7])
+def test_amd_start_failure_respects_requirement(tmp_path, fault, required, serving_rc):
+    scripts = tmp_path / 'amd_utils'
+    scripts.mkdir()
+    for name in ['server.sh', 'power.sh']:
+        shutil.copyfile(ROOT / 'benchmarks/multi_node/amd_utils' / name, scripts / name)
+    receipt = tmp_path / 'called'
+    (scripts / 'server_sglang.sh').write_text('''printf 'called\\n' > "$CALL_RECEIPT"
+exit "$SERVING_RC"
+''')
+    result = subprocess.run(['bash', str(scripts / 'server.sh')],
+                            env={**os.environ, 'WS_PATH': str(scripts),
+                                 'ENGINE': 'sglang-disagg', 'BENCH_INPUT_LEN': '8192',
+                                 'BENCH_OUTPUT_LEN': '1024', 'EVAL_ONLY': 'false',
+                                 'IS_AGENTIC': '0', 'DRY_RUN': '0',
+                                 'GPUS_PER_NODE': '8', 'PREFILL_TP_SIZE': '9',
+                                 'DECODE_TP_SIZE': '8', 'xP': '1', 'yD': '1',
+                                 'NNODES': '2' if fault == 'topology' else '3',
+                                 'NODE_RANK': '0', 'REQUIRE_POWER': required,
+                                 'SERVING_RC': str(serving_rc), 'CALL_RECEIPT': str(receipt)},
+                            capture_output=True, text=True, timeout=5)
+    is_required = required in ['1', 'true', 'YES']
+    assert result.returncode == (1 if is_required else serving_rc), result.stderr
+    assert receipt.exists() == (not is_required)
+    assert ('inconsistent AMD node topology' if fault == 'topology' else
+            'uneven per-node TP layout') in result.stderr
