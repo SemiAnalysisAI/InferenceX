@@ -467,6 +467,7 @@ jobs:
             gpu_metrics_identity.json
             gpu_metrics_identity.csv
             power_validation_${{ env.RESULT_FILENAME }}.json
+            slurm_job_*_outcome.txt
             results/gpu_metrics*.csv
             results/gpu_metrics_identity.json
             results/agentic_power_window.json

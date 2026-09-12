@@ -373,11 +373,12 @@ LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
 
 # Waits for the log file to appear, fails fast if the job dies first, then
 # streams until the job leaves the queue.
-stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || exit 1
+SRT_JOB_RC=0
+stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || SRT_JOB_RC=$?
 
 set -x
 
-echo "Job $JOB_ID completed!"
+echo "Job $JOB_ID finished with status $SRT_JOB_RC; collecting evidence"
 echo "Collecting results..."
 
 if [ ! -d "$LOGS_DIR" ]; then
@@ -448,3 +449,5 @@ for i in 1 2 3 4 5; do
     sleep 10
 done
 find . -name '.nfs*' -delete 2>/dev/null || true
+
+if [[ "$SRT_JOB_RC" != "0" ]]; then exit "$SRT_JOB_RC"; fi
