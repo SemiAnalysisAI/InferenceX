@@ -230,24 +230,18 @@ if [[ "$PUBLIC" == https://api.trycloudflare.com* ]]; then
 fi
 say "tunnel: $PUBLIC  (api key withheld from this log)"
 
-MODEL_INFO=$(python3 -c "
-import json
-ctx = $EVAL_CONTEXT
-print(json.dumps({
-    # Reasoning is emitted as output tokens, so the answer needs room after
-    # the thinking: a 8192 budget truncated every summarisation.
-    # Bounded by the tunnel, not the model: harbor cannot stream
-    # ("Streaming is not supported for T bench yet"), so every response must
-    # COMPLETE inside Cloudflare's 120s read timeout. The timed canary below
-    # measures whether this budget actually fits.
-    'max_input_tokens': ctx - 6144,
-    'max_output_tokens': 6144,
-    'max_tokens': ctx,
-    'input_cost_per_token': 0,
-    'output_cost_per_token': 0,
-    'litellm_provider': 'openai',
-    'mode': 'chat',
-}))")
+# terminus-2 asks litellm for the context limit; litellm has no entry for a
+# custom openai/ model and falls back to 1,000,000, so the agent never
+# summarises and overflows the real window. Declare the true numbers.
+#
+# The output budget is bounded by the tunnel rather than the model: harbor
+# cannot stream, so each response must finish inside Cloudflare's 120s read
+# timeout. The timed canary above measured 267 tok/s, so 6144 tokens is ~23s.
+#
+# Built with printf, not python -c: a comment containing double quotes inside
+# the -c string terminated the shell quoting and broke the JSON.
+MODEL_INFO=$(printf '{"max_input_tokens": %d, "max_output_tokens": %d, "max_tokens": %d, "input_cost_per_token": 0, "output_cost_per_token": 0, "litellm_provider": "openai", "mode": "chat"}' \
+    "$((EVAL_CONTEXT - 6144))" 6144 "$EVAL_CONTEXT")
 say "model_info for terminus-2: $MODEL_INFO"
 
 ENV_FILE="$RESULT_DIR/harbor.env"
