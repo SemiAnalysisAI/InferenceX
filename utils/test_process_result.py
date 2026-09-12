@@ -1623,3 +1623,19 @@ def test_public_power_audit_bounds_text_and_device_identifiers():
     assert audit['exporter_image_sha256'] == 'a' * 64
     assert len(audit['observed_gpu_ids']) == 1024
     assert audit['observed_gpu_ids'][:2] == ['gpu0', 'gpu1']
+
+
+@pytest.mark.parametrize('step_name', ['Upload GPU metrics', 'Upload power audit bundle'])
+def test_workflow_retains_context_for_each_metrics_csv(tmp_path, step_name):
+    import yaml
+
+    workflow = yaml.safe_load((REPO_ROOT / '.github/workflows/benchmark-tmpl.yml').read_text())
+    step = next(step for job in workflow['jobs'].values() for step in job.get('steps', [])
+                if step.get('name') == step_name)
+    patterns = step['with']['path'].splitlines()
+    for relative in ['gpu_metrics_concurrency_4_context.json',
+                     'results/gpu_metrics_concurrency_4_context.json']:
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('{"timestamp_timezone":"UTC"}')
+        assert any(path in tmp_path.glob(pattern.strip()) for pattern in patterns)
