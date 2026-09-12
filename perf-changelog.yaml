@@ -7440,3 +7440,10 @@
     allocation and retain both role exit statuses.
   - 仅对 TileRT 8k1k 要求原生功耗；原生启动始终使用本任务分配，并保留两个角色退出状态。
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3057
+
+- config-keys:
+    - glm5.1-fp8-b200-tilert
+  description:
+    - "Bound the isolated TileRT E2E check to 60 Slurm minutes and reuse existing image and converted-weight caches."
+    - "将 TileRT E2E 验证限制为 60 Slurm 分钟，复用现有镜像和转换后的权重缓存。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3057

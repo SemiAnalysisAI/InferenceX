@@ -1,0 +1,65 @@
+# Separate time/cache overrides keep the PR's production recipe unchanged.
+glm5.1-fp8-b200-tilert:
+  image: ghcr.io/tile-ai/tilert:0.1.5
+  model: zai-org/GLM-5.1-FP8
+  model-prefix: glm5.1
+  runner: cluster:b200-nscale
+  precision: fp8
+  framework: tilert
+  router:
+    name: tilert-pd-router
+    version: 0.1.5.post3
+  multinode: true
+  disagg: true
+  kv-p2p-transfer: nixl
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - spec-decoding: mtp
+        conc-list:
+        - 1
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - PREFILL_IMAGE=vllm/vllm-openai:v0.26.0
+          - PREFILL_NODES=1
+          - SALLOC_TIME_LIMIT=60
+          - B200_SQUASH_DIR=/data/home/sa-shared/containers
+          - TILERT_WEIGHTS_DIR=/data/home/sa-shared/gharunners/tilert-cache/glm5.1-fp8-8shard
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - DECODE_NODES=1
+    - isl: 8192
+      osl: 1024
+      require-power: true
+      search-space:
+      - spec-decoding: mtp
+        conc-list:
+        - 1
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - PREFILL_IMAGE=vllm/vllm-openai:v0.26.0
+          - PREFILL_NODES=1
+          - SALLOC_TIME_LIMIT=60
+          - B200_SQUASH_DIR=/data/home/sa-shared/containers
+          - TILERT_WEIGHTS_DIR=/data/home/sa-shared/gharunners/tilert-cache/glm5.1-fp8-8shard
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - DECODE_NODES=1
