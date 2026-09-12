@@ -261,7 +261,7 @@ say "wrote $ENV_FILE (mode $(stat -c %a "$ENV_FILE" 2>/dev/null || echo '?'))"
 # published default is an 8-hour agent timeout per task.
 say "=== harbor run (env modal) ==="
 set +e
-timeout "${TBENCH_TIMEOUT_S:-16200}" "${HARBOR[@]}" run \
+timeout "${TBENCH_TIMEOUT_S:-2700}" "${HARBOR[@]}" run \
     -d terminal-bench/terminal-bench@4.0.0 \
     --agent "$AGENT" \
     --model "openai/$MODEL" \
