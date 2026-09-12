@@ -209,6 +209,12 @@ def main() -> int:
         max_model_len=args.max_model_len,
         gpu_memory_utilization=0.90,
         trust_remote_code=True,
+        # Required, not a precaution. The meter wraps Engram.forward with host
+        # work -- a second forward under a mask, then a numpy write -- and
+        # doing that inside a CUDA graph capture invalidates the stream
+        # (cudaErrorStreamCaptureInvalidated killed the first attempt). The
+        # likelihood run is eager for the same reason.
+        enforce_eager=True,
         # The two arms score the same prompts; a shared prefix cache would let
         # the ablated arm reuse KV computed while Engram was still on.
         enable_prefix_caching=False,
