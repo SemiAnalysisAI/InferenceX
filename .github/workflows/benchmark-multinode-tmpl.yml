@@ -498,6 +498,7 @@ jobs:
             ${{ env.RESULT_FILENAME }}_*.json
             agg_${{ env.RESULT_FILENAME }}_*.json
             power_validation_${{ env.RESULT_FILENAME }}_*.json
+            slurm_job_*_outcome.txt
             LOGS/power/**
             result_processing_${{ env.RESULT_FILENAME }}.json
             LOGS/*/results_*.json

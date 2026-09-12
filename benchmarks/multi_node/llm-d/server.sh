@@ -114,6 +114,27 @@ else
     DP_ADDR="$DECODE_DP_ADDR"
 fi
 
+# One coordinator publishes the benchmark status; workers leave normally when
+# it finishes so Slurm can distinguish success from cancellation.
+BENCH_DONE_MARKER="$BENCHMARK_LOGS_DIR/.bench_done.$SLURM_JOB_ID"
+BENCH_RC=0
+
+finish_llmd_node() {
+    local rc=$? pid
+    trap - EXIT
+    if [[ "$NODE_RANK" == "$PREFILL_NODES" ]]; then
+        printf '%s\n' "$rc" > "$BENCH_DONE_MARKER.tmp" &&
+            mv -f "$BENCH_DONE_MARKER.tmp" "$BENCH_DONE_MARKER" || rc=1
+    fi
+    for pid in "${ENVOY_PID:-}" "${EPP_PID:-}" "${SIDECAR_PID:-}" "${VLLM_PID:-}"; do
+        [[ -z "$pid" ]] || kill -TERM "$pid" 2>/dev/null || true
+    done
+    exit "$rc"
+}
+trap finish_llmd_node EXIT
+trap 'exit 143' TERM HUP
+trap 'exit 130' INT
+
 DP_SIZE_LOCAL="$GPUS_PER_NODE"
 START_RANK=$((LWS_WORKER_INDEX * DP_SIZE_LOCAL))
 
@@ -327,11 +348,7 @@ fi
 # ================================================================
 # Coordinator (decode leader): endpoints, EPP, Envoy, bench, eval
 # ================================================================
-if [[ "$ROLE" == "decode" && "$LWS_WORKER_INDEX" -eq 0 ]]; then
-
-    # Release the allocation whenever the coordinator exits.
-    BENCH_DONE_MARKER="$BENCHMARK_LOGS_DIR/.bench_done.$SLURM_JOB_ID"
-    trap 'touch "$BENCH_DONE_MARKER" 2>/dev/null || true' EXIT
+if [[ "$NODE_RANK" == "$PREFILL_NODES" ]]; then
 
     # ---- Write endpoints.yaml (file-discovery) ----
     # namespace must match EPP's --pool-namespace (file-discovery filters by it;
@@ -582,10 +599,8 @@ PY
             )
         fi
 
-        # Non-fatal: a failed or timed-out conc point must not abort the sweep
-        # or (under set -e) skip the allocation release below. The EXIT trap
-        # releases the allocation regardless, but continuing here lets a
-        # multi-conc sweep record every point it can.
+        # Continue collecting available points after a failure, retaining the
+        # nonzero verdict for the coordinator's final status and worker shutdown.
         run_benchmark_serving \
             --bench-serving-dir /workspace \
             --tokenizer /models \
@@ -600,7 +615,7 @@ PY
             --result-filename "${RESULT_FILENAME}_c${max_concurrency}_gpus_${_bench_total_gpus}_ctx_${_bench_prefill_gpus}_gen_${_bench_decode_gpus}" \
             --result-dir "$BENCHMARK_LOGS_DIR/" \
             "${bench_extra_args[@]}" \
-            || echo "WARNING: benchmark conc=$max_concurrency failed/timed out (rc=$?)"
+            || { BENCH_RC=$?; echo "WARNING: benchmark conc=$max_concurrency failed/timed out (rc=$BENCH_RC)"; }
     done
     fi
 
@@ -631,10 +646,11 @@ PY
         )
     fi
 
-    # Signal job.slurm (outside the container, where scancel exists) to release
-    # the allocation; without it workers wait until TIME_LIMIT.
-    touch "$BENCHMARK_LOGS_DIR/.bench_done.$SLURM_JOB_ID"
+    exit "$BENCH_RC"
 else
-    # Workers (prefill leader, prefill/decode workers): keep vLLM alive.
-    wait
+    while [[ ! -f "$BENCH_DONE_MARKER" ]]; do
+        kill -0 "$VLLM_PID" 2>/dev/null || exit 1
+        sleep 2
+    done
+    exit "$(cat "$BENCH_DONE_MARKER")"
 fi

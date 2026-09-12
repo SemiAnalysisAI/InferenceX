@@ -631,3 +631,60 @@ def test_mi355x_agentic_model_mount_and_routing(
     script = f"benchmarks/single_node/agentic/{prefix}_fp4_mi355x_vllm_mtp.sh"
     assert args[-2] == script
     assert (REPO_ROOT / script).is_file()
+
+
+@pytest.mark.parametrize('state,exit_code,expected', [
+    ('COMPLETED', '0:0', 0), ('FAILED', '1:0', 1), ('TIMEOUT', '0:15', 1),
+    ('COMPLETED', '1:0', 1), ('CANCELLED', '0:15', 1),
+])
+def test_slurm_terminal_allocation_status_is_required(tmp_path, state, exit_code, expected):
+    result = run_bash(
+        f'source "$1"; export GITHUB_WORKSPACE="$2"; '
+        f'sacct() {{ printf "42|{state}|{exit_code}\\n42.batch|COMPLETED|0:0\\n"; }}; '
+        'scontrol() { echo "JobId=42 JobState=COMPLETED ExitCode=0:0"; }; '
+        'verify_slurm_job_completion 42', SLURM_UTILS, tmp_path,
+    )
+    assert result.returncode == expected, result.stderr
+    assert (tmp_path / 'slurm_job_42_outcome.txt').read_text().strip() == f'42|{state}|{exit_code}'
+
+
+@pytest.mark.parametrize('accounting_state,controller_state,exit_code,expected', [
+    ('', 'COMPLETED', '0:0', 0),
+    ('RUNNING', 'COMPLETED', '0:0', 0),
+    ('COMPLETING', 'COMPLETED', '0:0', 0),
+    ('RUNNING', 'FAILED', '1:0', 1),
+    ('RUNNING', 'RUNNING', '0:0', 1),
+])
+def test_slurm_recent_completion_falls_back_to_controller(
+    tmp_path, accounting_state, controller_state, exit_code, expected,
+):
+    record = f'42|{accounting_state}|0:0' if accounting_state else ''
+    controller = f'JobId=42 JobState={controller_state} ExitCode={exit_code}'
+    result = run_bash(
+        'source "$1"; export GITHUB_WORKSPACE="$2"; '
+        f'sacct() {{ echo "{record}"; }}; '
+        f'scontrol() {{ echo "{controller}"; }}; '
+        'verify_slurm_job_completion 42', SLURM_UTILS, tmp_path,
+    )
+    assert result.returncode == expected, result.stderr
+    assert (tmp_path / 'slurm_job_42_outcome.txt').read_text().strip() == controller
+
+
+def test_slurm_unknown_terminal_state_is_not_success(tmp_path):
+    result = run_bash(
+        'source "$1"; export GITHUB_WORKSPACE="$2"; sacct() { return 1; }; '
+        'scontrol() { return 1; }; verify_slurm_job_completion 42', SLURM_UTILS, tmp_path,
+    )
+    assert result.returncode == 1
+    assert 'state=unknown' in result.stderr
+
+
+def test_slurm_exit_before_log_retains_terminal_receipt(tmp_path):
+    result = run_bash(
+        'source "$1"; export GITHUB_WORKSPACE="$2"; '
+        'slurm_job_is_active() { return 1; }; '
+        'sacct() { printf "42|FAILED|1:0\\n"; }; '
+        'stream_slurm_job_log 42 "$2/missing.log"', SLURM_UTILS, tmp_path,
+    )
+    assert result.returncode == 1
+    assert (tmp_path / 'slurm_job_42_outcome.txt').read_text().strip() == '42|FAILED|1:0'

@@ -106,6 +106,10 @@ For multinode fixed-sequence jobs, `utils/process_result.py --all` processes eve
 
 Processing and diagnostic power-audit uploads run after launcher or validation failure, retaining raw and aggregate JSON. Normal `bmk_*` upload requires successful benchmark and processing steps, so an incomplete batch or failed Slurm job does not publish diagnostic rows. The main-branch ingest trigger can still publish other successful configurations from a partially failed sweep; it does not establish complete fleet coverage. Downstream importers can use the retained outcome to reject explicitly failed benchmarks.
 
+### Slurm completion receipts
+
+Shared Slurm waiting verifies the terminal allocation state and exit code, consulting `scontrol` when `sacct` is missing or non-terminal and retaining `slurm_job_*_outcome.txt`. Launchers stage available evidence before returning failure. llm-d workers exit using the coordinator’s atomically published status-bearing completion marker; normal completion no longer cancels the allocation.
+
 ## Eval artifacts
 
 ### Per-config identity and collection
