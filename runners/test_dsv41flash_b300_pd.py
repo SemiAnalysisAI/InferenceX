@@ -36,7 +36,9 @@ def test_dsv41flash_pd_uses_nixl_without_external_kv_store() -> None:
         speculative = json.loads(config["speculative-config"])
         assert speculative["method"] == "dspark"
         assert speculative["num_speculative_tokens"] == 5
-        assert speculative["rejection_sample_method"] == "block"
+        assert speculative["rejection_sample_method"] == "synthetic"
+        assert speculative["synthetic_acceptance_length"] == 3.51
+        assert speculative["enable_adaptive_verification"] is False
 
     raw = RECIPE.read_text().lower()
     assert "mooncakestoreconnector" not in raw
