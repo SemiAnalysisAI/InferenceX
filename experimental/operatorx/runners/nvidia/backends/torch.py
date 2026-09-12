@@ -80,7 +80,7 @@ def _prepare_attention_mha(op: Op) -> dict:
     for k in ("dtype_q", "dtype_k", "dtype_v"):
         if a[k] == "fp8":
             raise UnsupportedOpError(
-                f"torch SDPA doesn't support fp8 ({k}={a[k]}); use flashinfer for fp8 attention"
+                f"torch SDPA doesn't support fp8 ({k}={a[k]})"
             )
     if not (a["dtype_q"] == a["dtype_k"] == a["dtype_v"]):
         raise UnsupportedOpError(
@@ -271,7 +271,7 @@ def _kernel_combine(ctx: dict) -> None:
     _kernel_dispatch(ctx)
 
 
-# moe_forward is owned by the sglang and flashinfer backends (production MoE
+# moe_forward is owned by the sglang backend (production MoE
 # kernels). The torch backend doesn't expose its own MoE module.
 
 

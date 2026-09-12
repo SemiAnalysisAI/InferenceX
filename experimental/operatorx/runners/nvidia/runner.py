@@ -6,7 +6,7 @@ import torch
 
 from operatorx.core import BackendImpl, Op, Result, UnsupportedOpError
 
-_BACKENDS = ["torch", "deepgemm", "flashinfer", "deepep", "sglang", "flashinfer_comm", "sglang_comm"]
+_BACKENDS = ["torch", "deepgemm", "deepep", "sglang", "sglang_comm"]
 _DISPATCH: dict[tuple[str, str], BackendImpl] = {}
 _L2_BUF: dict[int, torch.Tensor] = {}
 
