@@ -23,6 +23,14 @@ if [[ -n "${ROCR_VISIBLE_DEVICES:-}" ]]; then
 fi
 export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_USE_AITER_MOE=1
+# AITER's Triton MoE GEMM warns on every call that Gluon is unavailable and it
+# is falling back to Triton. Gluon supports only gfx1250, so on gfx950 that is
+# a fixed property rather than a condition worth reporting, and it was 98% of
+# the lines in a gsm8k server log (411k of 417k, 30 MiB of 32 MiB). Every
+# warning aiter.ops.triton emits is about Gluon availability, so raising the
+# threshold loses nothing actionable here. Log hygiene only: the emits cost
+# 0.03% of wall time per worker, so this is not a throughput change.
+export AITER_TRITON_LOG_LEVEL=ERROR
 # DeepseekV41ForCausalLM is not torch-compiled upstream, so the default
 # cudagraph_mode=FULL_AND_PIECEWISE aborts at engine init with "piecewise CUDA
 # graphs unavailable" (run 34566727564). The model is built for the breakable
