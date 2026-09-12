@@ -37,9 +37,15 @@ mkdir -p "$DYNAMO_WHEELS_CACHE_HOST_PATH"
 
 export MODEL_PATH=$MODEL
 
-if [[ "$MODEL_PREFIX" == "dsv41flash" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "vllm" && "${IS_MULTINODE:-false}" != "true" ]]; then
-    # Download the new checkpoint into the persistent shared HF cache.
-    export MODEL_PATH="$MODEL"
+if [[ "$MODEL_PREFIX" == "dsv41flash" && "$PRECISION" == "fp4" ]]; then
+    # Both direct and Dynamo-vLLM paths resolve the V4.1 Flash checkpoint from
+    # the persistent shared HF cache. The alias must match model.path in the
+    # checked-in P/D recipe.
+    DSV41_CACHE="$HF_HUB_CACHE_HOST_PATH/models--deepseek-ai--DeepSeek-V4.1-Flash"
+    DSV41_REVISION=$(cat "$DSV41_CACHE/refs/main") || exit 1
+    export MODEL_PATH="$DSV41_CACHE/snapshots/$DSV41_REVISION"
+    test -r "$MODEL_PATH/config.json" || { echo "Missing cached DeepSeek V4.1 Flash snapshot: $MODEL_PATH" >&2; exit 1; }
+    export SRT_SLURM_MODEL_PREFIX="deepseek-v4.1-flash"
 elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
     export SERVED_MODEL_NAME="deepseek-r1-fp4"
     export MODEL_PATH=/scratch/models/DeepSeek-R1-0528-NVFP4-v2
@@ -231,6 +237,10 @@ fi
 
 export ISL="$ISL"
 export OSL="$OSL"
+DSV41_BLOBS_MOUNT=""
+if [[ "$MODEL_PREFIX" == "dsv41flash" ]]; then
+    DSV41_BLOBS_MOUNT="  \"${DSV41_CACHE}/blobs\": \"/blobs\""
+fi
 
 echo "Cloning srt-slurm repository..."
 RUN_KEY=$(printf "%s" "${RESULT_FILENAME:-${RUNNER_NAME:-gb300-nv}}" | sha1sum | cut -c1-12)
@@ -339,6 +349,9 @@ elif [[ "$IS_AGENTIC" == "1" ]]; then
     mkdir -p recipes/vllm/deepseek-v4/agentic || exit 1
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
         recipes/vllm/deepseek-v4/agentic || exit 1
+    mkdir -p recipes/vllm/deepseek-v4.1-flash/agentic || exit 1
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4.1-flash/agentic" \
+        recipes/vllm/deepseek-v4.1-flash/agentic || exit 1
     mkdir -p recipes/vllm/minimax-m3/agentic || exit 1
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3/agentic" \
         recipes/vllm/minimax-m3/agentic || exit 1
@@ -517,6 +530,7 @@ srtctl_root: "${SRTCTL_ROOT}"
 default_mounts:
   "${AIPERF_MMAP_CACHE_HOST_PATH}": "/aiperf_mmap_cache"
   "${HF_HUB_CACHE_HOST_PATH}": "/hf_hub_cache"
+${DSV41_BLOBS_MOUNT}
   # Warm dynamo source-build cache (nested over the auto /configs mount) so the
   # hash-pinned install is a cache hit (pip-only, no apt/root) on every job.
   "${DYNAMO_WHEELS_CACHE_HOST_PATH}": "/configs/dynamo-wheels"

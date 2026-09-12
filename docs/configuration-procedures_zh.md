@@ -187,6 +187,13 @@ CUDA graph capture 覆盖并发数乘以六 token DSpark 验证块。launcher �
 
 GB300 launcher 将引擎就绪等待时间设为 7200 秒。在[运行 34504969146](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34504969146) 中，仅模型加载就耗时 18–23 分钟；Rust frontend 达到 3600 秒期限时，引擎仍在捕获 CUDA graph。此次仅延长启动等待时间，基准测试时长和解码设置保持不变。
 
+`dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg` 在五节点 1P/1D
+部署中复用该 GB300 镜像、模型、1M 上下文、Engram UVA 和五 token DSpark 配置：
+并发 64、128 和 256 下使用一个 DEP4 prefill worker 和一个 DEP16 decode worker。NIXL 将 KV
+从 prefill 直接传给 decode。KV cache 保持在 GPU 上（`kv-offloading: none`）；
+配方不包含 MooncakeStore 配置、外部 prefix-cache 查询或 DRAM KV 池。吞吐测试使用
+合成 AL 3.51，eval 则恢复真实 block 验证。
+
 来源：[上游配方](https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flash)。
 
 ### H200 上的 DeepSeek-V4.1-Flash DSpark

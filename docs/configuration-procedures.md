@@ -189,6 +189,14 @@ port if the preferred one is occupied. Serving, replay, metrics, and eval share
 that endpoint.
 The GB300 launcher allows 7200 seconds for engine readiness. In [run 34504969146](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34504969146), the Rust frontend exhausted its 3600-second deadline while the engine was still capturing graphs; model loading alone took 18–23 minutes. This extends startup time without changing the benchmark duration or decoding settings.
 
+`dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg` reuses that GB300
+image, model, 1M context, Engram UVA, and five-token DSpark configuration in a
+five-node 1P/1D deployment: one DEP4 prefill worker and one DEP16 decode worker
+at concurrency 64, 128, and 256. NIXL transfers KV directly from prefill to decode. The KV
+cache remains GPU-resident (`kv-offloading: none`); the recipe has no
+MooncakeStore configuration, external prefix-cache lookup, or DRAM KV pool.
+Throughput uses synthetic AL 3.51, while eval restores real block verification.
+
 GPU sweep and eval evidence is required before calling any recipe validated.
 
 Source: [upstream recipe](https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flash).
