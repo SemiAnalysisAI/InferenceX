@@ -7363,6 +7363,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2962
 
 - config-keys:
+    - dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg
+  description:
+    - "Add DeepSeek-V4.1-Flash GB300 AgentX 1P/1D with NIXL P/D transfer, GPU-resident KV, Engram UVA, DSpark5 synthetic AL 3.51 and concurrency 64, 128, 256"
+    - "新增 DeepSeek-V4.1-Flash GB300 AgentX 1P/1D：使用 NIXL P/D 传输、GPU 驻留 KV、Engram UVA、DSpark5 合成 AL 3.51 和并发 64、128、256"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/0
+
+- config-keys:
     - dsv41flash-fp4-mi355x-vllm-agentic-dspark
   description:
     - "Pin AgentX to semianalysis_cc_traces_weka_062126, preventing the 256k corpus override"

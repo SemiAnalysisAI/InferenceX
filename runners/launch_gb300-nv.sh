@@ -37,9 +37,12 @@ mkdir -p "$DYNAMO_WHEELS_CACHE_HOST_PATH"
 
 export MODEL_PATH=$MODEL
 
-if [[ "$MODEL_PREFIX" == "dsv41flash" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "vllm" && "${IS_MULTINODE:-false}" != "true" ]]; then
-    # Download the new checkpoint into the persistent shared HF cache.
+if [[ "$MODEL_PREFIX" == "dsv41flash" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "vllm" ]]; then
+    # Both direct and Dynamo-vLLM paths resolve the V4.1 Flash checkpoint from
+    # the persistent shared HF cache. The alias must match model.path in the
+    # checked-in P/D recipe.
     export MODEL_PATH="$MODEL"
+    export SRT_SLURM_MODEL_PREFIX="deepseek-v4.1-flash"
 elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
     export SERVED_MODEL_NAME="deepseek-r1-fp4"
     export MODEL_PATH=/scratch/models/DeepSeek-R1-0528-NVFP4-v2
@@ -339,6 +342,9 @@ elif [[ "$IS_AGENTIC" == "1" ]]; then
     mkdir -p recipes/vllm/deepseek-v4/agentic || exit 1
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
         recipes/vllm/deepseek-v4/agentic || exit 1
+    mkdir -p recipes/vllm/deepseek-v4.1-flash/agentic || exit 1
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4.1-flash/agentic" \
+        recipes/vllm/deepseek-v4.1-flash/agentic || exit 1
     mkdir -p recipes/vllm/minimax-m3/agentic || exit 1
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3/agentic" \
         recipes/vllm/minimax-m3/agentic || exit 1
