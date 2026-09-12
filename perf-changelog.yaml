@@ -7432,7 +7432,7 @@
   description:
     - "Verify terminal Slurm receipts and exit llm-d workers normally after preserving available evidence."
     - "验证 Slurm 最终状态，并在保留已有证据后正常退出 llm-d 工作进程。"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3026
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3052
 
 - config-keys:
   - dsv4-fp4-gb200-llmd-vllm

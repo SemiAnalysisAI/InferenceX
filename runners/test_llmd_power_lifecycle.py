@@ -64,5 +64,3 @@ for rank in range(2):
     for rank in range(2):
         saved = repo / f'LOGS/native_power/node-{rank}/manifest.json'
         assert json.loads(saved.read_text()) == {'rank':rank,'synthetic':True}
-
-
