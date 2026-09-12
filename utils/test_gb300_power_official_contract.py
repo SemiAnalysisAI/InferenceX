@@ -1,6 +1,8 @@
 """Exercise launcher routing and exporter imports without Slurm or network access."""
 
 import os
+import json
+import sys
 import subprocess
 from collections.abc import Iterator
 from pathlib import Path
@@ -255,3 +257,54 @@ def test_gb300_dsv4_recipe_images_match_their_master_configs():
             assert recipe_path.is_file(), (key, config_file)
             recipe_image = yaml.safe_load(recipe_path.read_text())["model"]["container"]
             assert recipe_image == config["image"], (key, config_file)
+
+
+@pytest.mark.parametrize(
+    ("job_state", "concurrencies", "expected_rc"),
+    [("COMPLETED|0:0", [4], 0), ("FAILED|1:0", [4], 1), ("COMPLETED|0:0", [4, 8], 1)],
+)
+def test_agentx_collection_preserves_failed_jobs_and_incomplete_sweeps(
+    tmp_path, job_state, concurrencies, expected_rc,
+):
+    from utils.test_aggregate_power_multinode import build_package, RESULT_STEM
+
+    package = build_package(tmp_path)
+    result_dir = package.logs_root / "agentic/conc_4"
+    result_dir.mkdir(parents=True)
+    stem = "agentic_power_concurrency_4"
+    package.original_result.replace(result_dir / f"{stem}.json")
+    old_window = package.windows_dir / f"{RESULT_STEM}.json"
+    window = json.loads(old_window.read_text())
+    window.update(benchmark_type="custom", result_path=f"agentic/conc_4/{stem}.json")
+    old_window.unlink()
+    (package.windows_dir / f"{stem}.json").write_text(json.dumps(window))
+    manifest_path = package.power_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["expected_windows"] = [{"benchmark_type": "custom", "concurrency": 4}]
+    manifest["window_validations"][0].update(
+        benchmark_type="custom", window_file=f"windows/{stem}.json",
+    )
+    manifest_path.write_text(json.dumps(manifest))
+    source = tmp_path / "compute-workspace"
+    source.mkdir()
+    (source / "run_conc4.json").write_text(json.dumps({
+        "conc": 4, "disagg": True, "num_prefill_gpu": 2, "num_decode_gpu": 2,
+    }))
+    env = os.environ.copy()
+    env.pop("PYTHONPATH", None)
+    env["PATH"] = f"{Path(sys.executable).parent}:{env['PATH']}"
+    result = subprocess.run(
+        ["bash", "-c",
+         'source "$1"; export TEST_JOB_STATE="$2"; sacct() { printf "12345|%s\\n" "$TEST_JOB_STATE"; }; '
+         'shift 2; collect_agentic_power_results "$@"',
+         "bash", str(REPO_ROOT / "runners/slurm_utils.sh"), job_state,
+         "12345", str(package.logs_root), str(source), str(tmp_path),
+         "run", PRODUCER_PIN, *map(str, concurrencies)],
+        env=env, text=True, capture_output=True,
+    )
+    assert result.returncode == expected_rc, result.stdout + result.stderr
+    aggregate = json.loads((tmp_path / "run_conc4.json").read_text())
+    assert aggregate["power_valid"] == 1
+    assert aggregate["total_gpu_energy_j"] == 84000.0
+    assert (result_dir / "power_validation.json").is_file()
+    assert (package.power_dir / "native-job-status.txt").read_text() == f"12345|{job_state}\n"
