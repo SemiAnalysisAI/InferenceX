@@ -41,7 +41,10 @@ if [[ "$MODEL_PREFIX" == "dsv41flash" && "$PRECISION" == "fp4" ]]; then
     # Both direct and Dynamo-vLLM paths resolve the V4.1 Flash checkpoint from
     # the persistent shared HF cache. The alias must match model.path in the
     # checked-in P/D recipe.
-    export MODEL_PATH="$MODEL"
+    DSV41_CACHE="$HF_HUB_CACHE_HOST_PATH/models--deepseek-ai--DeepSeek-V4.1-Flash"
+    DSV41_REVISION=$(cat "$DSV41_CACHE/refs/main") || exit 1
+    export MODEL_PATH="$DSV41_CACHE/snapshots/$DSV41_REVISION"
+    test -r "$MODEL_PATH/config.json" || { echo "Missing cached DeepSeek V4.1 Flash snapshot: $MODEL_PATH" >&2; exit 1; }
     export SRT_SLURM_MODEL_PREFIX="deepseek-v4.1-flash"
 elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
     export SERVED_MODEL_NAME="deepseek-r1-fp4"
