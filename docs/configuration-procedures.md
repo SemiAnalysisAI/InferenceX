@@ -114,6 +114,10 @@ The runner-name prefix is load-bearing: workflow routing uses `launch_${RUNNER_N
 6. Verify every runner is **Idle** in [repository runner settings](https://github.com/SemiAnalysisAI/InferenceX/settings/actions/runners) before adding it to sweep traffic.
 7. Verify launcher mounts for `_work`, HF cache, staged weights, and squash images from a compute node. Root containers must not leave root-owned files in the shared workspace.
 
+## Opt-in NVIDIA SRT power
+
+With `REQUIRE_POWER=1`, fixed 8192/1024 SRT launches select runtime `3f3b7af26e34acc8b62b39971bec839a19ac57a2`. Preparation resolves the selected override, injects matrix concurrencies, translates the DeepSeek-V4 tokenizer setting and requires DCGM telemetry. No master scenario enables this path yet. AgentX and eval-only retain existing routing. Available logs and producer provenance survive failure. Each hardware/framework scope needs its own full sweep and applicable evals.
+
 ## Register an srt-slurm recipe
 
 Mapping source: [`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md). Checked-in recipes: [`benchmarks/multi_node/srt-slurm-recipes/`](../benchmarks/multi_node/srt-slurm-recipes/).

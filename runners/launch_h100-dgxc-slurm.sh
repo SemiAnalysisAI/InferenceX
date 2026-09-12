@@ -3,6 +3,8 @@ set -e
 
 # shellcheck source=runners/slurm_utils.sh
 source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
+# shellcheck source=runners/powerx_8k1k.sh
+source "$(dirname "${BASH_SOURCE[0]}")/powerx_8k1k.sh"
 
 # System-specific configuration for H100 DGXC Slurm cluster
 SLURM_PARTITION="hpc-gpu-1"
@@ -15,6 +17,8 @@ SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
 set -x
 
 if [[ "$IS_MULTINODE" == "true" ]]; then
+    USES_DCGM_POWER=0
+    if powerx_fixed_8k1k; then USES_DCGM_POWER=1; fi
 
     # MODEL_PATH: Override with pre-downloaded paths on H100 runner
     # The yaml files specify HuggingFace model IDs for portability, but we use
@@ -49,7 +53,9 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     fi
 
     # TODO(CJQ): make first class upon srt-slurm upstream refactor
-    if [[ "$IS_AGENTIC" == "1" ]]; then
+    if powerx_fixed_8k1k; then
+        powerx_clone_srt "$SRT_REPO_DIR" || exit 1
+    elif [[ "$IS_AGENTIC" == "1" ]]; then
         git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR"
     else
@@ -91,6 +97,34 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     resolve_h100_srt_container "$IMAGE" "$FRAMEWORK" || exit 1
     check_staged_srt_assets "$MODEL_PATH" "$SQUASH_FILE" || exit 1
 
+    if [[ "$USES_DCGM_POWER" == "1" ]]; then
+        DCGM_EXPORTER_IMAGE="nvcr.io/nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless"
+        # enroot resolves bare paths against Docker Hub; nvcr.io pulls need the registry# form
+        DCGM_EXPORTER_ENROOT_REF="${DCGM_EXPORTER_IMAGE/nvcr.io\//nvcr.io#}"
+        DCGM_EXPORTER_SQSH="/mnt/nfs/sa-shared/containers/$(echo "$DCGM_EXPORTER_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+        if ! unsquashfs -l "$DCGM_EXPORTER_SQSH" >/dev/null 2>&1; then
+            DCGM_EXPORTER_LOCK="${DCGM_EXPORTER_SQSH}.lock"
+            mkdir -p "$(dirname "$DCGM_EXPORTER_SQSH")"
+            srun --partition="$SLURM_PARTITION" --account="$SLURM_ACCOUNT" \
+                --nodes=1 --ntasks=1 --time=30 --job-name="$RUNNER_NAME" \
+                bash -c "
+                    set -euo pipefail
+                    exec 9>\"$DCGM_EXPORTER_LOCK\"
+                    flock -w 1800 9
+                    if unsquashfs -l \"$DCGM_EXPORTER_SQSH\" >/dev/null 2>&1; then
+                        exit 0
+                    fi
+                    rm -f \"$DCGM_EXPORTER_SQSH\"
+                    export ENROOT_CACHE_PATH=\${HOME}/.cache/enroot
+                    mkdir -p \"\$ENROOT_CACHE_PATH\"
+                    enroot import -o \"$DCGM_EXPORTER_SQSH\" \"docker://$DCGM_EXPORTER_ENROOT_REF\"
+                "
+        fi
+        test -r "$DCGM_EXPORTER_SQSH" || { echo "Error: DCGM exporter squash is not readable: $DCGM_EXPORTER_SQSH" >&2; exit 1; }
+        unsquashfs -l "$DCGM_EXPORTER_SQSH" >/dev/null || { echo "Error: DCGM exporter squash is invalid: $DCGM_EXPORTER_SQSH" >&2; exit 1; }
+        sha256sum "$DCGM_EXPORTER_SQSH" > "$GITHUB_WORKSPACE/exporter-image.sha256"
+    fi
+
     export ISL="$ISL"
     export OSL="$OSL"
     export EVAL_ONLY="${EVAL_ONLY:-false}"
@@ -125,6 +159,11 @@ use_segment_sbatch_directive: false
 use_exclusive_sbatch_directive: false
 EOF
 
+    if [[ "$USES_DCGM_POWER" == "1" ]]; then
+        sed -i "/^  nginx-sqsh:/a\\  dcgm-exporter: ${DCGM_EXPORTER_SQSH}" srtslurm.yaml
+        grep -q "^  dcgm-exporter: " srtslurm.yaml || exit 1
+    fi
+
     echo "Generated srtslurm.yaml:"
     cat srtslurm.yaml
 
@@ -142,6 +181,7 @@ EOF
         exit 1
     fi
 
+    powerx_prepare_srt || exit 1
     # Override the job name in the config file with the runner name
     sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
     # Raise sglang's torch-distributed TCPStore timeout from the 600s gloo default
@@ -169,6 +209,7 @@ EOF
     # srtctl creates logs in outputs/JOB_ID/logs/
     LOGS_DIR="outputs/$JOB_ID/logs"
     LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
+    trap powerx_snapshot_srt EXIT
 
     # Wait for log file to appear (also check job is still alive)
     while ! ls "$LOG_FILE" &>/dev/null; do
@@ -210,7 +251,14 @@ EOF
 
     echo "Found logs directory: $LOGS_DIR"
 
-    cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
+    if [[ "$USES_DCGM_POWER" == "1" ]]; then
+        mkdir -p "$LOGS_DIR/power"
+        cp "$GITHUB_WORKSPACE/exporter-image.sha256" "$LOGS_DIR/power/"
+        cp "$GITHUB_WORKSPACE/power-producer-sha.txt" "$LOGS_DIR/power/"
+    fi
+
+    mkdir -p "$GITHUB_WORKSPACE/LOGS"
+    cp -a "$LOGS_DIR/." "$GITHUB_WORKSPACE/LOGS/"
     tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" .
 
     if [[ "${EVAL_ONLY:-false}" != "true" ]]; then

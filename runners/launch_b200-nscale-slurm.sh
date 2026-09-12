@@ -27,6 +27,8 @@ SQUASH_LOCK_TIMEOUT=3600
 
 # shellcheck source=runners/slurm_utils.sh
 source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
+# shellcheck source=runners/powerx_8k1k.sh
+source "$(dirname "${BASH_SOURCE[0]}")/powerx_8k1k.sh"
 
 set -x
 
@@ -63,6 +65,7 @@ if [[ $FRAMEWORK != "dynamo-vllm" ]] &&
 fi
 
 USES_DCGM_POWER=0
+if powerx_fixed_8k1k; then USES_DCGM_POWER=1; fi
 _POWER_CONFIG_FILE="${CONFIG_FILE:-}"
 if [[ "${EVAL_ONLY:-false}" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
     _POWER_CONFIG_FILE="$EVAL_CONFIG_FILE"
@@ -78,7 +81,7 @@ if [[ -n "$_POWER_CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
 ' "$_RECIPE_SRC"; then
     USES_DCGM_POWER=1
 fi
-if [[ "$USES_DCGM_POWER" == "1" && (
+if ! powerx_fixed_8k1k && [[ "$USES_DCGM_POWER" == "1" && (
     "${IS_AGENTIC:-0}" == "1" ||
     "$PRECISION" != "fp4" ||
     ( "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" != "dynamo-sglang" && "$FRAMEWORK" != "dynamo-vllm" ) ||
@@ -94,7 +97,9 @@ export SERVED_MODEL_NAME=$MODEL
 echo "Cloning srt-slurm repository..."
 SRT_REPO_DIR="srt-slurm"
 rm -rf "$SRT_REPO_DIR"
-if [[ "$USES_DCGM_POWER" == "1" ]]; then
+if powerx_fixed_8k1k; then
+    powerx_clone_srt "$SRT_REPO_DIR" || exit 1
+elif [[ "$USES_DCGM_POWER" == "1" ]]; then
     git clone "$POWER_SRT_SLURM_URL" "$SRT_REPO_DIR" || exit 1
     cd "$SRT_REPO_DIR" || exit 1
     git checkout "$POWER_SRT_SLURM_PIN" || exit 1
@@ -336,6 +341,7 @@ if [[ -z "$CONFIG_FILE" ]]; then
 fi
 
 # Strip any :override[N] selector so sed and the injector operate on the file.
+powerx_prepare_srt || exit 1
 CONFIG_PATH="${CONFIG_FILE%%:*}"
 
 # Override the job name in the config file with the runner name
@@ -370,6 +376,7 @@ echo "Extracted JOB_ID: $JOB_ID"
 
 LOGS_DIR="outputs/$JOB_ID/logs"
 LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
+trap powerx_snapshot_srt EXIT
 
 # Waits for the log file to appear, fails fast if the job dies first, then
 # streams until the job leaves the queue.
@@ -392,7 +399,8 @@ if [[ "$USES_DCGM_POWER" == "1" ]]; then
     cp "$GITHUB_WORKSPACE/power-producer-sha.txt" "$LOGS_DIR/power/power-producer-sha.txt"
 fi
 
-cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
+mkdir -p "$GITHUB_WORKSPACE/LOGS"
+cp -a "$LOGS_DIR/." "$GITHUB_WORKSPACE/LOGS/"
 bundle_server_logs "$LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"
 
 if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
