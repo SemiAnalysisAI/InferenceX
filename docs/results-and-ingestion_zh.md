@@ -92,9 +92,21 @@ shape:    array of benchmark row objects
 | 延迟和交互性 | 基准输入中每个以 `ms` 结尾的键都会从毫秒换算为秒，并移除 `_ms`。包含 `tpot` 的键还会产生其倒数 `intvty`。 |
 | 可选运行时元数据 | 形式必须精确为 `{name, version}` 的 `router`、`kv_p2p_transfer`，以及在可用时由 `gpu_metrics.csv` 补入的实测功耗 |
 
-单节点 GPU 数为 `tp * pp * pcp_size`。DCP 不会增加物理 GPU 数。多节点每 GPU 指标的分母使用声明的 prefill 和 decode GPU 数。无效或缺失的必需元数据会使转换失败。功耗聚合明确采用尽力而为模式，不能导致基准聚合失败。
+单节点 GPU 数为 `tp * pp * pcp_size`。DCP 不会增加物理 GPU 数。多节点每 GPU 指标的分母使用声明的 prefill 和 decode GPU 数。无效或缺失的必需元数据会使转换失败。功耗聚合默认尽力而为；当设置 `REQUIRE_POWER=1` 时，功耗验证失败会在保留已有结果和审计后使任务失败。
 
 InferenceX-app 将路由字段作为列或配置维度，并把数值测量存入 `benchmark_results.metrics` JSONB。映射器支持共享拓扑的 v1、拆分 prefill/decode 拓扑的 v2，以及嵌套 AgentX 指标的 v3。未知数值指标会被保留并产生警告，因此架构可以扩展，同时不会无提示地丢失数值数据。
+
+### 固定序列基准结果状态与 PowerX 审计
+
+服务客户端在保存原始结果前写入 `benchmark_outcome`，保留现有的 5% 最大请求失败率，以及请求总数、完成数和失败数。处理器检查该记录并复制到聚合结果中；即使遥测有效，请求失败率超限仍返回失败。零成功请求会保留诊断聚合结果，但不会生成不存在的延迟倒数。请求计数无效时，失败诊断状态保留原始 `requested`/`completed` 值和 `error`，不生成无依据的失败数或失败率；客户端先保存原始 JSON 再退出，处理器仍拒绝该结果。没有状态元数据的历史结果仍可区分；功耗有效不能证明基准成功或答案质量。
+
+`power_invalid_reasons` 和 `power_audit` 在数值指标旁携带有界摘要，包括可用的测量窗口、预期与观测 GPU 数、采样诊断、观测设备标识和生产者版本。`source` 指向保留的 `power_validation_*.json` 工件名称。设备标识保留采集器原有语义，本地 SMI 序号不是物理 UUID 的证明。
+
+对于多节点固定序列任务，`utils/process_result.py --all` 先处理所有已有结果，再返回失败。它接受 `_c<N>_gpus_...`、`_conc<N>_gpus_...` 和 AMD 的 `_concurrency_<N>_req_rate_<R>_gpus_...` 文件名，也支持 `inf` 请求速率。它将结果并发度与 `CONC_LIST` 比较，拒绝重复或矛盾的点身份，并将遗漏和错误记录到 `result_processing_<RESULT_FILENAME>.json`。共享工作池通过 `AGGREGATE_GPUS` 及零值角色 GPU 数进行遥测验证；独立的 prefill/decode 能耗保持缺失。当 `DISAGG=true` 的配置组中某个点没有 decode worker 时，聚合行会有意设置 `disagg: false` 并记录 `num_aggregate_gpu`；文件名、工件名和工作流输入仍保留配置组身份。下游应按聚合行的拓扑解释测量结果。
+
+PR changelog 选择具有代表性的 NVIDIA 和 AMD 覆盖，并非所有受影响配置的完整列表；共享处理逻辑的变更适用于所有固定序列配置。
+
+启动器或验证失败后仍会运行处理和功耗诊断上传，并在审计工件中保留原始及聚合 JSON。正常 `bmk_*` 上传要求基准和处理步骤成功，因此不完整批次或 Slurm 失败不会发布诊断数据。主分支的入库触发器仍可发布部分失败 sweep 中其他成功配置的数据；这并不证明整个硬件范围已完成覆盖。下游导入器可利用保留的状态拒绝明确失败的基准结果。
 
 ### Slurm 完成状态文件
 
