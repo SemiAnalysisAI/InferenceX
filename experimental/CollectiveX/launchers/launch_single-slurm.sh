@@ -64,9 +64,10 @@ export NCCL_CUMEM_ENABLE=1
 collx_apply_network_profile "$NODES" "$COLLX_TRANSPORT"
 collx_require_vars COLLX_IMAGE COLLX_IMAGE_PLATFORM COLLX_PARTITION COLLX_SQUASH_DIR
 [ "$REQUIRE_ACCOUNT" = 0 ] || collx_require_vars COLLX_ACCOUNT
-# b300 /home and /scratch are node-local; h100-dgxc /home is login-local (absent on
-# compute nodes) — on both, the implicit passwd-home stage base is compute-invisible,
-# so the operator config must pin an explicit compute-visible stage_dir.
+# h100-dgxc /home is login-local (absent on compute nodes), so the implicit passwd-home
+# stage base is compute-invisible and the operator config must pin an explicit stage_dir.
+# b300 (DSXE) homes live on the shared Lustre /data, but the prologue still isolates its
+# stage per execution, so the variable must have resolved by now on both.
 case "$RUNNER" in
   b300|h100-dgxc) collx_require_vars COLLX_STAGE_DIR ;;
 esac

@@ -38,7 +38,7 @@ class PlatformRegistryTests(unittest.TestCase):
     NETWORK_FIELDS = {
         "socket_ifname", "rdma_devices", "ib_gid_index",
         "rdma_service_level", "rdma_traffic_class", "rail_isolated",
-        "single_node_rdma_devices",
+        "single_node_rdma_devices", "rdma_fabric",
     }
 
     def test_every_platform_entry_is_complete_and_typed(self) -> None:
@@ -322,7 +322,7 @@ class StageTests(unittest.TestCase):
 
 # Probe output is consumed by the launcher to select an interface and link layer.
 SOCKET_MARKER = r"^\[collectivex-private\] socket-interface-selected=([A-Za-z][A-Za-z0-9_.-]{0,31})$"
-LINK_MARKER = r"^\[collectivex-private\] rdma-link-layer=(roce|infiniband)$"
+LINK_MARKER = r"^\[collectivex-private\] rdma-link-layer=(roce|infiniband|efa)$"
 FAILURE_MARKER = (
     r"(socket-interface|rdma-(device|port))-[0-9]+="
     r"(missing|down|inactive|default-route-missing|gid-missing|gid-empty|"
@@ -375,6 +375,45 @@ class NetworkProfileContract(unittest.TestCase):
             self.assertEqual(rc, 1)
             failures = [line for line in lines if re.search(FAILURE_MARKER, line)]
             self.assertTrue(any("rdma-port-1=inactive" in line for line in failures), failures)
+
+    def _efa_fabric(self, root: Path) -> None:
+        # An EFA node as sysfs shows it: default-route interface up, verbs device whose port is
+        # ACTIVE but carries link_layer Unspecified and no usable GID table (rdma-core -> rdmap*).
+        net = root / "class" / "net" / "enp71s0"
+        net.mkdir(parents=True)
+        (net / "operstate").write_text("up\n")
+        port = root / "class" / "infiniband" / "rdmap86s0" / "ports" / "1"
+        (port / "gids").mkdir(parents=True)
+        (port / "state").write_text("4: ACTIVE\n")
+        (port / "link_layer").write_text("Unspecified\n")
+
+    def _run_efa(self, root: Path, route: Path, fabric: str):
+        buffer = io.StringIO()
+        rc = 0
+        try:
+            with contextlib.redirect_stdout(buffer):
+                probe.validate_network_profile("enp71s0", "rdmap86s0", "", fabric,
+                                                sys_root=root, route_path=route)
+        except SystemExit:
+            rc = 1
+        return rc, buffer.getvalue().splitlines()
+
+    def test_declared_efa_fabric_accepts_the_unspecified_link_layer(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._efa_fabric(root)
+            rc, lines = self._run_efa(root, root / "route", "efa")
+            self.assertEqual(rc, 0, lines)
+            self.assertEqual(self._captures(SOCKET_MARKER, lines), ["enp71s0"])
+            self.assertEqual(self._captures(LINK_MARKER, lines), ["efa"])
+
+    def test_undeclared_fabric_still_rejects_the_unspecified_link_layer(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._efa_fabric(root)
+            rc, lines = self._run_efa(root, root / "route", "")
+            self.assertEqual(rc, 1)
+            self.assertIn("[collectivex-private] rdma-port-1=link-layer-invalid", lines)
 
 # config.py case-args is the single case→invocation codec: collx_run_shard decodes one
 # null-delimited argv per case and hands it verbatim to bench/run_ep.py. Parse the

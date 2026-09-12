@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import re
+import subprocess
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -197,7 +198,7 @@ def _emit(marker: str) -> None:
     print(f"[collectivex-private] {marker}")
 
 
-def _check_port(port_path: Path, ordinal: int, gid_index: str, profile: str):
+def _check_port(port_path: Path, ordinal: int, gid_index: str, profile: str, fabric: str = ""):
     # Return the port's link layer ("roce"/"infiniband") when it is active, carries a
     # non-empty GID at the pinned index, and agrees with any already-seen link layer;
     # otherwise emit the matching rdma-port-<ordinal>=<reason> marker and return None.
@@ -216,6 +217,10 @@ def _check_port(port_path: Path, ordinal: int, gid_index: str, profile: str):
     if not link.is_file():
         _emit(f"rdma-port-{ordinal}=link-layer-missing"); return None
     layer = {"Ethernet": "roce", "InfiniBand": "infiniband"}.get(link.read_text().strip())
+    # AWS EFA is a verbs device whose port carries no link layer (sysfs says Unspecified or
+    # Unknown, rdma-core names it rdmap*). Only an operator-declared EFA fabric may accept that.
+    if layer is None and fabric == "efa" and link.read_text().strip() in ("Unspecified", "Unknown"):
+        layer = "efa"
     if layer is None:
         _emit(f"rdma-port-{ordinal}=link-layer-invalid"); return None
     if profile and profile != layer:
@@ -223,7 +228,53 @@ def _check_port(port_path: Path, ordinal: int, gid_index: str, profile: str):
     return layer
 
 
+def _read(path: Path) -> str:
+    try: return path.read_text().strip() if path.is_file() else "?"
+    except OSError: return "?"
+
+
+def _emit_fabric_inventory(sys_root: Path = Path("/sys"),
+                           route_path: Path = Path("/proc/net/route")) -> None:
+    # Failure-path diagnostic only. When the operator-pinned profile does not match the node
+    # (a pool moved under an existing SKU, as b300-nv -> b300-dsxe did), the launcher's log tail
+    # is the only view an operator without shell access has of the node, so say what IS there:
+    # every non-loopback interface with its operstate, and every RDMA device with its ports'
+    # state, link layer, physical state, rate and bound netdevs. The marker prefix stays outside
+    # the launcher's failure vocabulary. The per-device lines and the GPU<->NIC topology are
+    # emitted from relative node zero only so a multi-node probe still fits the 100-line tail.
+    nets = []
+    net_root = sys_root / "class" / "net"
+    for net in sorted(net_root.iterdir()) if net_root.is_dir() else []:
+        if net.name == "lo": continue
+        nets.append(f"{net.name}={_read(net / 'operstate')}")
+    try: default = default_route_interface(route_path)
+    except OSError: default = ""
+    _emit(f"fabric-inventory-default-route={default or 'none'}")
+    _emit(f"fabric-inventory-net={','.join(nets) or 'none'}")
+    if os.environ.get("SLURM_NODEID", "0") != "0":
+        return
+    ib_root = sys_root / "class" / "infiniband"
+    for dev in sorted(ib_root.iterdir()) if ib_root.is_dir() else []:
+        ports = []
+        ports_root = dev / "ports"
+        for port in sorted(p for p in ports_root.iterdir() if p.is_dir()) if ports_root.is_dir() else []:
+            ports.append(f"{port.name}:{_read(port / 'state').split(':')[0]}"
+                         f"/{_read(port / 'link_layer')}/{_read(port / 'phys_state').split(':')[0]}"
+                         f"/{_read(port / 'rate').split(' ')[0]}")
+        net_dir = dev / "device" / "net"
+        netdevs = ",".join(sorted(n.name for n in net_dir.iterdir())) if net_dir.is_dir() else "-"
+        _emit(f"fabric-inventory-rdma-device={dev.name} ports={';'.join(ports) or '-'} "
+              f"hca={_read(dev / 'hca_type')} fw={_read(dev / 'fw_ver')} "
+              f"pci={_read(dev / 'device' / 'vendor')}:{_read(dev / 'device' / 'device')} netdev={netdevs}")
+    try:
+        topo = subprocess.run(["nvidia-smi", "topo", "-m"], capture_output=True, text=True, timeout=30).stdout
+    except (OSError, subprocess.SubprocessError):
+        topo = ""
+    for line in topo.splitlines()[:40]:
+        if line.strip(): _emit(f"fabric-inventory-topo {line.rstrip()}")
+
 def validate_network_profile(socket_names: str, rdma_devices: str, gid_index: str,
+                             fabric: str = "",
                              sys_root: Path = Path("/sys"),
                              route_path: Path = Path("/proc/net/route")) -> None:
     # Prove the operator-pinned scale-out fabric on this node: resolve the cross-node socket
@@ -252,13 +303,13 @@ def validate_network_profile(socket_names: str, rdma_devices: str, gid_index: st
         if not ports.is_dir():
             _emit(f"rdma-device-{ordinal}=missing"); raise SystemExit(1)
         if configured_port:
-            layer = _check_port(ports / configured_port, ordinal, gid_index, profile)
+            layer = _check_port(ports / configured_port, ordinal, gid_index, profile, fabric)
             if layer is None: raise SystemExit(1)
             profile = layer
         else:
             active = False
             for port_path in sorted(p for p in ports.iterdir() if p.is_dir()):
-                layer = _check_port(port_path, ordinal, gid_index, profile)
+                layer = _check_port(port_path, ordinal, gid_index, profile, fabric)
                 if layer is not None:
                     profile, active = layer, True
             if not active: raise SystemExit(1)
@@ -273,14 +324,19 @@ def main() -> None:
     command = commands.add_parser("cuda-context"); command.add_argument("expected", type=int)
     command = commands.add_parser("image-digest"); command.add_argument("image")
     commands.add_parser("gpu-health")
-    command = commands.add_parser("network-profile"); command.add_argument("socket_names"); command.add_argument("rdma_devices"); command.add_argument("gid_index")
+    command = commands.add_parser("network-profile"); command.add_argument("socket_names"); command.add_argument("rdma_devices"); command.add_argument("gid_index"); command.add_argument("fabric", nargs="?", default="")
     args = parser.parse_args()
     if args.command == "default-route-interface": print(default_route_interface(), end="")
     elif args.command == "prepare-cache": print(prepare_cache(args.parent), end="")
     elif args.command == "cuda-context": validate_cuda_context(args.expected)
     elif args.command == "image-digest": print(resolve_image_digest(args.image), end="")
     elif args.command == "gpu-health": validate_gpu_health()
-    else: validate_network_profile(args.socket_names, args.rdma_devices, args.gid_index)
+    else:
+        try:
+            validate_network_profile(args.socket_names, args.rdma_devices, args.gid_index, args.fabric)
+        except SystemExit as exc:
+            if exc.code: _emit_fabric_inventory()
+            raise
 
 
 if __name__ == "__main__": main()
