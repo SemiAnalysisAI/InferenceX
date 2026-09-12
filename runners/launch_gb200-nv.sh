@@ -243,8 +243,14 @@ elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
         export MODEL_PATH="/mnt/lustre01/slurm-shared/glm-model/GLM-5-NVFP4"
         export SERVED_MODEL_NAME="glm-5-nvfp4"
         export SRT_SLURM_MODEL_PREFIX="nvidia/GLM-5-NVFP4"
+    elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" ]]; then
+        # Same checkpoint and model.path alias as the dynamo-vllm MiniMax-M3
+        # lanes; the dynamo-trt AgentX recipes use model.path: minimax-m3-nvfp4.
+        export MODEL_PATH="/mnt/lustre01/models/MiniMax-M3-NVFP4"
+        export SERVED_MODEL_NAME="nvidia/MiniMax-M3-NVFP4"
+        export SRT_SLURM_MODEL_PREFIX="minimax-m3-nvfp4"
     else
-        echo "Unsupported model prefix: $MODEL_PREFIX. Supported prefixes are: gptoss, dsr1, kimik2.5, or glm5"
+        echo "Unsupported model prefix: $MODEL_PREFIX. Supported prefixes are: gptoss, dsr1, kimik2.5, glm5, or minimaxm3 (fp4)"
         exit 1
     fi
 elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
@@ -476,6 +482,16 @@ elif [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "kimik3" ]]; then
     mkdir -p recipes/vllm/kimi-k3/agentic || exit 1
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
         recipes/vllm/kimi-k3/agentic || exit 1
+elif [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "minimaxm3" ]]; then
+    # Select this before the generic Agentic fallback. v1.0.91 carries
+    # srt-slurm #384 (numactl -m 0,1 on aggregated TRT-LLM workers).
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
+    cd "$SRT_REPO_DIR" || exit 1
+    git checkout v1.0.91 || exit 1
+    # Preserve the repository-relative CONFIG_FILE paths inside this checkout.
+    RECIPE_DIR="benchmarks/multi_node/srt-slurm-recipes/trtllm/minimax-m3/gb200-fp4/agentic"
+    mkdir -p "$RECIPE_DIR" || exit 1
+    cp -rT "$GITHUB_WORKSPACE/$RECIPE_DIR" "$RECIPE_DIR" || exit 1
 # TODO(CJQ): migrate the remaining Agentic model paths to released srt-slurm.
 elif [[ "$IS_AGENTIC" == "1" ]]; then
     # Agentic multi-node pins cquil11/srt-slurm-nv revisions that provide:

@@ -118,13 +118,56 @@ def test_copy_fixed_sequence_results_preserves_caller_error_mode(
 
     assert result.returncode == (1 if errexit else 0)
     assert ("continued\n" in result.stdout) is not errexit
-    assert ("All result files processed\n" in result.stdout) is not errexit
+    assert "All result files processed\n" not in result.stdout
     if failure == "copy":
         assert result.stderr
-        assert ("Copied result file to:" in result.stdout) is not errexit
+        assert "Copied result file to:" not in result.stdout
     else:
         assert not result.stderr
-        assert ("No result subdirectories found" in result.stdout) is not errexit
+        assert "No result subdirectories found" not in result.stdout
+
+
+def test_result_copy_uses_source_location_after_chdir(tmp_path: Path) -> None:
+    source = tmp_path / 'results' / 'isl8192_osl1024'
+    source.mkdir(parents=True)
+    (source / 'results_concurrency_4_gpus_8.json').write_text('{"completed": 40}')
+    workspace = tmp_path / 'workspace'
+    workspace.mkdir()
+    result = run_bash('cd "$1"; source runners/slurm_utils.sh; cd "$2"; '
+                      'copy_fixed_sequence_results "$3" "$4" run',
+                      REPO_ROOT, tmp_path, source.parent, workspace)
+    assert result.returncode == 0, result.stderr
+    assert [json.loads(p.read_text()) for p in workspace.glob('*.json')] == [{'completed': 40}]
+
+
+def test_filename_failure_in_conditional_is_not_reported_as_copied(tmp_path: Path) -> None:
+    source = tmp_path / 'isl8192_osl1024'
+    source.mkdir()
+    (source / 'results_concurrency_4_gpus_8.json').write_text('{}')
+    result = run_bash('source "$1"; python3() { return 1; }; '
+                      'if copy_fixed_sequence_results "$2" "$2" run; then echo unexpected-success; fi',
+                      SLURM_UTILS, tmp_path)
+    assert 'unexpected-success' not in result.stdout
+    assert 'Copied result file' not in result.stdout
+    assert 'All result files processed' not in result.stdout
+
+
+def test_h100_srt_mapping_uses_requested_image(tmp_path: Path) -> None:
+    result = run_bash('source "$1"; resolve_h100_srt_container "$2" dynamo-sglang; '
+                      'printf "%s\\n%s\\n" "$CONTAINER_KEY" "$SQUASH_FILE"',
+                      SLURM_UTILS, 'example/engine:v-next')
+    assert result.returncode == 0
+    assert result.stdout.splitlines() == ['example/engine:v-next', '/mnt/nfs/lustre/containers/example_engine_v-next.sqsh']
+
+
+def test_staged_asset_check_rejects_missing_model(tmp_path: Path) -> None:
+    result = run_bash('source "$1"; unsquashfs() { return 0; }; check_staged_srt_assets "$2" image.sqsh',
+                      SLURM_UTILS, tmp_path)
+    assert result.returncode == 1
+    (tmp_path / 'config.json').write_text('{}')
+    result = run_bash('source "$1"; unsquashfs() { return 1; }; check_staged_srt_assets "$2" image.sqsh',
+                      SLURM_UTILS, tmp_path)
+    assert result.returncode == 1
 
 
 def test_copy_agentic_results_stages_only_matching_points(tmp_path: Path) -> None:
@@ -533,3 +576,58 @@ def test_eval_only_acceptance_rewrite_allows_non_speculative_recipe(
 
     assert result.returncode == 0, result.stderr
     assert recipe.read_text() == original
+
+
+@pytest.mark.parametrize(
+    ("model", "prefix", "mount", "cache"),
+    [
+        ("deepseek-ai/DeepSeek-V4.1-Flash", "dsv41flash", "/ix", "/it-share/hf-hub-cache/"),
+        ("deepseek-ai/DeepSeek-V4-Pro", "dsv4", "/workspace", "/it-share/hf-hub-cache/"),
+    ],
+)
+def test_mi355x_agentic_model_mount_and_routing(
+    tmp_path: Path, model: str, prefix: str, mount: str, cache: str,
+) -> None:
+    capture = tmp_path / "launch.txt"
+    env = {
+        **os.environ,
+        "IS_MULTINODE": "false", "MODEL": model,
+        "EXP_NAME": f"{prefix}_tp4_conc1", "FRAMEWORK": "vllm",
+        "PRECISION": "fp4", "SPEC_DECODING": "mtp",
+        "SCENARIO_SUBDIR": "agentic/", "TP": "4", "GPU_COUNT": "4",
+        "RUNNER_NAME": "mi355x-amds_01", "IMAGE": "test/image:mock",
+        "GITHUB_WORKSPACE": str(REPO_ROOT), "HF_HUB_CACHE": "/mnt/hf_hub_cache/",
+        "RESULT_DIR": "/workspace/results", "CAPTURE": str(capture),
+    }
+    result = subprocess.run(
+        ["bash", "-c", '''
+        salloc() { :; }
+        squeue() { echo 123; }
+        scancel() { :; }
+        srun() {
+            case "$*" in
+                *--container-image=*)
+                    printf '%s\n' "$@" > "$CAPTURE"
+                    printf 'RESULT_DIR=%s\n' "$RESULT_DIR" >> "$CAPTURE"
+                    bash -c 'source benchmarks/benchmark_lib.sh;
+                        printf "%s\n" "$INFMAX_CONTAINER_WORKSPACE" "$AGENTIC_DIR" "$AIPERF_DIR"' > "$CAPTURE.paths"
+                    ;;
+            esac
+        }
+        source runners/launch_mi355x-amds.sh
+        '''], cwd=REPO_ROOT, env=env, capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    args = capture.read_text().splitlines()
+    assert f"--container-workdir={mount}/" in args
+    assert f"RESULT_DIR={mount}/results" in args
+    assert Path(f"{capture}.paths").read_text().splitlines() == [
+        mount, f"{mount}/utils/agentic-benchmark", f"{mount}/utils/aiperf",
+    ]
+    assert (
+        f"--container-mounts={REPO_ROOT}:{mount}/,{cache}:/mnt/hf_hub_cache/,"
+        "/it-share/aiperf-cache/:/aiperf_mmap_cache"
+    ) in args
+    script = f"benchmarks/single_node/agentic/{prefix}_fp4_mi355x_vllm_mtp.sh"
+    assert args[-2] == script
+    assert (REPO_ROOT / script).is_file()

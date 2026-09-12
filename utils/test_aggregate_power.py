@@ -24,7 +24,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from aggregate_power import (  # noqa: E402
+from infx.results.power.single_node import (  # noqa: E402
     _detect_columns,
     _parse_power,
     _parse_timestamp,
@@ -694,8 +694,8 @@ def test_patch_agg_result_preserves_original_when_write_fails(
 
 @pytest.fixture(params=["single", "multinode"])
 def patch_validated_power(request):
-    from aggregate_power import _patch_power_result
-    from aggregate_power_multinode import MultinodePowerAudit, _patch_agg
+    from infx.results.power.single_node import _patch_power_result
+    from infx.results.power.multinode import MultinodePowerAudit, _patch_agg
 
     if request.param == "single":
         return _patch_power_result
@@ -1376,8 +1376,8 @@ def test_power_artifact_replace_failure_preserves_published_state(
 
 
 def test_power_sidecars_keep_audit_precision_and_omit_nonfinite_metrics(power_artifacts):
-    import aggregate_power as single
-    import aggregate_power_multinode as multinode
+    from infx.results.power import single_node as single
+    from infx.results.power import multinode
 
     case = power_artifacts
     package = case["package"]

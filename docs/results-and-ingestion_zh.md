@@ -14,10 +14,10 @@
 | --- | --- |
 | [`benchmark-tmpl.yml`](../.github/workflows/benchmark-tmpl.yml)、[`benchmark-multinode-tmpl.yml`](../.github/workflows/benchmark-multinode-tmpl.yml) | 吞吐量、评测和 AgentX 工件的单配置名称、文件及上传规则 |
 | [`utils/process_result.py`](../utils/process_result.py) | 固定序列吞吐量聚合架构及派生的每 GPU 指标 |
-| [`utils/collect_results.py`](../utils/collect_results.py)、[`collect-results.yml`](../.github/workflows/collect-results.yml) | 将基准结果递归收集为 `agg_<prefix>.json` 和 `results_<prefix>` |
-| [`utils/collect_eval_results.py`](../utils/collect_eval_results.py)、[`collect-evals.yml`](../.github/workflows/collect-evals.yml) | 评测发现、指标提取、批量并发选择及 `eval_results_<prefix>` |
-| [`infx.results.agentic`](../infx/results/agentic/__init__.py)、[`request_metrics.py`](../infx/results/agentic/request_metrics.py)、[`artifacts.py`](../utils/agentic/aggregation/artifacts.py) | AgentX 聚合架构、原始记录过滤、请求计数和派生指标 |
-| [`validate_agentic_result.py`](../utils/agentic/validation/validate_agentic_result.py) | AgentX 上传前错误率门禁 |
+| [`infx/results/collect_results.py`](../infx/results/collect_results.py)、[`collect-results.yml`](../.github/workflows/collect-results.yml) | 将基准结果递归收集为 `agg_<prefix>.json` 和 `results_<prefix>` |
+| [`infx/results/collect_eval_results.py`](../infx/results/collect_eval_results.py)、[`collect-evals.yml`](../.github/workflows/collect-evals.yml) | 评测发现、指标提取、批量并发选择及 `eval_results_<prefix>` |
+| [`infx.results.agentic`](../infx/results/agentic/__init__.py)、[`request_metrics.py`](../infx/results/agentic/request_metrics.py)、[`artifacts.py`](../infx/results/agentic/artifacts.py) | AgentX 聚合架构、原始记录过滤、请求计数和派生指标 |
+| [`validate_agentic_result.py`](../infx/results/agentic/validate_agentic_result.py) | AgentX 上传前错误率门禁 |
 | [`run-sweep.yml`](../.github/workflows/run-sweep.yml)、[`recover-reused-ingest.yml`](../.github/workflows/recover-reused-ingest.yml) | 应用分发载荷及 source/merge 运行身份 |
 | [InferenceX-app `prepare-ci-artifacts.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/prepare-ci-artifacts.ts)、[`ci-artifact-preparation.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/lib/ci-artifact-preparation.ts) | 跨运行工件选择、attempt 及复用来源信息 |
 | [InferenceX-app `ingest-ci-run.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/ingest-ci-run.ts) | 端到端摄取顺序、配对、跳过、汇总和刷新 |
@@ -69,7 +69,7 @@ file:     agg_<RESULT_FILENAME>.json
 
 多节点模板在基础名称中编码 prefill 和 decode 拓扑、worker 数、模式、并发及 runner。一个 `bmk_<RESULT_FILENAME>` 工件中可以包含多个 `agg_<RESULT_FILENAME>_*.json` 文件。
 
-[`collect-results.yml`](../.github/workflows/collect-results.yml) 通常接收 `result-prefix: bmk`。它下载 `bmk_*`，[`utils/collect_results.py`](../utils/collect_results.py) 再递归加载每个 JSON 文件，形成一个数组。交接身份为：
+[`collect-results.yml`](../.github/workflows/collect-results.yml) 通常接收 `result-prefix: bmk`。它下载 `bmk_*`，[`infx/results/collect_results.py`](../infx/results/collect_results.py) 再递归加载每个 JSON 文件，形成一个数组。交接身份为：
 
 ```text
 artifact: results_bmk
@@ -111,7 +111,7 @@ DP attention 的单节点评测记录为 `false`。修复写入器不会修复�
 已有数据库记录：应先核实原始任务配置和服务端日志，再更正元数据、重新生成
 聚合结果并重新摄取受影响的数据。
 
-[`utils/collect_eval_results.py`](../utils/collect_eval_results.py) 执行以下规则：
+[`infx/results/collect_eval_results.py`](../infx/results/collect_eval_results.py) 执行以下规则：
 
 1. 评测集是包含 `meta_env.json` 的根目录或一级子目录。
 2. 候选结果文件必须能解析为对象并包含 `lm_eval_version`。
@@ -173,7 +173,7 @@ raw tree:           results/**, excluding inputs.json and profile_export_raw.jso
 
 ### 原始输入和聚合架构
 
-[`process_agentic_result.py`](../utils/agentic/aggregation/process_agentic_result.py) 可解析当前的 `results/aiperf_artifacts` 布局，也可解析只含一个子目录的嵌套布局。它要求存在 `profile_export.jsonl`，并在存在时读取以下输入：
+[`process_agentic_result.py`](../infx/results/agentic/process_agentic_result.py) 可解析当前的 `results/aiperf_artifacts` 布局，也可解析只含一个子目录的嵌套布局。它要求存在 `profile_export.jsonl`，并在存在时读取以下输入：
 
 | 输入 | 作用 |
 | --- | --- |
@@ -215,7 +215,7 @@ AgentX 聚合的顶层身份和拓扑字段与基准摄取兼容。
 
 应用会将嵌套 AgentX v3 值展平为规范指标键。例如 `median_ttft`、`p95_e2el`、`total_tput_tps`、`tput_per_gpu`、`server_gpu_cache_hit_rate` 和 `gpu_kv_cache_usage_pct`。p50 映射为 `median`。存在 full-response ITL 字段时优先使用它。交互性百分位数按对应 ITL 百分位数的倒数派生，使历史记录和当前记录采用同一定义。
 
-正常上传前，单节点工作流会运行 [`validate_agentic_result.py`](../utils/agentic/validation/validate_agentic_result.py)。它要求聚合为对象，`request_count.avg` 是非负数值，已完成请求数为正，错误率不高于配置阈值。通过该门禁不表示没有失败请求。失败请求记录仍可通过 `request_accounting` 观察，但不参与性能指标计算。
+正常上传前，单节点工作流会运行 [`validate_agentic_result.py`](../infx/results/agentic/validate_agentic_result.py)。它要求聚合为对象，`request_count.avg` 是非负数值，已完成请求数为正，错误率不高于配置阈值。通过该门禁不表示没有失败请求。失败请求记录仍可通过 `request_accounting` 观察，但不参与性能指标计算。
 
 ## 应用交接和复用运行
 
