@@ -3,7 +3,7 @@ set -eo pipefail
 
 # DeepSeek-V4.1-Flash on MI355X: native DSpark and GPU-resident KV.
 # Follow upstream AMD defaults for Engram; storage behavior needs verification.
-# Image: vllm/vllm-openai-rocm:deepseekv41-flash-0909 (configured in amd-master.yaml); GPU validation is pending.
+# Image: vllm/vllm-openai-rocm:nightly-TBD (configured in amd-master.yaml); GPU validation is pending.
 # https://github.com/vllm-project/recipes/blob/main/models/deepseek-ai/DeepSeek-V4.1-Flash.yaml
 source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
